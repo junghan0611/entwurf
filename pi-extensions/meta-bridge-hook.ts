@@ -286,12 +286,17 @@ function main(): void {
 		// this pid owns.
 		//
 		// AND ONLY ON AN EVENT THAT CAN ARM THE REPLACEMENT (cross-review, 2026-09-04). This
-		// block sits before the UserPromptSubmit early-return, so without this condition a
-		// stale or out-of-order UPS envelope — one naming a session this pid has already left —
-		// would disarm the garden the operator is actually in and be structurally unable to put
-		// the doorbell back, because UPS cannot emit watchPaths. Retiring a watch is only honest
-		// from a run that will arm one; `armProvenanceFor` is the same predicate the arm block
-		// below uses, so the two can never disagree about which events those are.
+		// block sits before the UserPromptSubmit early-return, and UPS cannot emit watchPaths —
+		// so a retirement reached from there would take a doorbell down with nothing in the same
+		// run able to put one back. A watch is retired only by a run that arms one; that is the
+		// whole rule. `armProvenanceFor` is the same predicate the arm block below uses, so the
+		// two can never disagree about which events those are.
+		//
+		// It is NOT a defence against a keystroke from a session this pid has left: measured on
+		// oracle 2026-09-04 (raw lab S1-S6, meta-bridge-hook.log), every UserPromptSubmit named
+		// the native id its own pid's preceding SessionStart had established — 8 of 8, none
+		// otherwise. The hook runs synchronously inside the session's own process, so a UPS
+		// envelope is that session speaking, and the sender pointer it moves is authoritative.
 		const previous =
 			armProvenanceFor(eventName) !== null
 				? readMetaSenderMarker({ backend: "claude-code", ownerPid, verifyOwner: false })

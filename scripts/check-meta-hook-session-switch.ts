@@ -291,17 +291,16 @@ ok(
 	"a keystroke (UserPromptSubmit, which cannot re-arm) retires NOTHING",
 	readMetaReceiverMarker({ gardenId: REAL_GID, receiversDir: ROOTS.receiversDir })?.ownerPid === process.pid,
 );
-// …and the same is true of a MISMATCHED one (cross-review, 2026-09-04). The cell above only
-// proves the same-garden branch; this one drives a UPS envelope naming a session this pid has
-// already left — a stale or out-of-order envelope — which is the shape that would actually
-// destroy something: the retirement rule would see a changed garden and disarm the citizen the
-// operator is sitting in, with no way to re-arm from an event that cannot emit watchPaths.
+// …and the same holds when the garden DISAGREES (cross-review, 2026-09-04). The cell above
+// exercises only the same-garden branch, so the retirement's guard could be the garden
+// comparison alone and still look green; this one drives a UPS envelope naming a different
+// session and pins the OTHER half — the event class. UPS cannot emit watchPaths, so a
+// retirement reached from there could only ever subtract a doorbell.
 //
-// The sender POINTER does follow the last event here (pre-existing hook behaviour, not this
-// lane's contract), so between this envelope and the next keystroke the join reads the live
-// garden as not-armed. That direction is fail-closed — a refused send, never a false one — and
-// the next ordinary UserPromptSubmit moves the pointer back. What must not happen, and is what
-// this cell pins, is a marker being deleted.
+// This is a mechanism cell, not a threat model: a keystroke from a session the process has
+// already left is not something this host produces (measured: every UPS named its own pid's
+// current session, 8 of 8). The rule it pins is simply that a watch is retired by a run that
+// arms one, and this envelope is the cheapest way to reach the wrong branch on purpose.
 driveHook({
 	event: "UserPromptSubmit",
 	nativeSessionId: GHOST_NATIVE,

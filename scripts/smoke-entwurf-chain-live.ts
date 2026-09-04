@@ -54,8 +54,11 @@ import fsp from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { resolveMailboxReceiverFacts } from "../pi-extensions/lib/entwurf-deliverability.ts";
 import {
 	readMetaInbox,
+	readMetaReceiverMarker,
+	readMetaSenderMarker,
 	upsertMetaSession,
 	writeMetaReceiverMarker,
 	writeMetaSenderMarker,
@@ -190,45 +193,46 @@ async function main(): Promise<void> {
 		dir: sessionsDir,
 	});
 	const gidD = terminus.record.gardenId;
-	// The receiver marker alone is no longer the whole fixture (#101): a `claude-code-cli` watch
-	// owner is deliverable only while ITS OWN sender marker still names the garden it is armed
-	// for — that join is what refuses a session which switched away in place. A receiver marker
-	// with no sender marker beside it models a state the product now treats as retired, so this
-	// smoke would fail on its own fixture instead of on the rail it exists to prove.
-	//
-	// THE OWNER IS A SPAWNED IDLE PROCESS, NOT THIS ONE, and that is specific to this smoke:
-	// hop 1 is a native `claude` child of THIS process, and the bridge resolves a sender's
-	// identity through its ancestry. A terminus marker under this pid therefore puts TWO garden
-	// citizens on one host process, which the bridge refuses outright as ambiguous sender
-	// identity — measured on oracle 2026-09-04, where hop 1 came back "refused: ambiguous sender
-	// identity (…-f34713, …-912b42)" and the chain never started. The sibling smokes keep
-	// `process.pid` because their children are pi/ACP sessions carrying their own identity, or
-	// tmux siblings that are not descendants at all.
-	const terminusOwner = spawn(process.execPath, ["-e", "setTimeout(() => {}, 900000)"], { stdio: "ignore" });
-	const terminusOwnerPid = terminusOwner.pid;
-	if (typeof terminusOwnerPid !== "number") throw new Error("could not spawn the terminus owner process");
-	writeMetaReceiverMarker({
-		gardenId: gidD,
-		backend: "claude-code",
-		nativeSessionId: terminus.record.nativeSessionId,
-		ownerPid: terminusOwnerPid,
-		armProvenance: "session-start",
-		receiversDir,
-	});
-	writeMetaSenderMarker({
-		backend: "claude-code",
-		gardenId: gidD,
-		nativeSessionId: terminus.record.nativeSessionId,
-		cwd: world,
-		ownerPid: terminusOwnerPid,
-		sendersDir,
-	});
-	console.error(`[smoke-entwurf-chain-live] D:      ${gidD} (mailbox terminus)`);
-
 	const children: ChildProcess[] = [];
+	let terminusOwner: ChildProcess | null = null;
 	let streamB = "";
 	let streamC = "";
 	try {
+		// The receiver marker alone is no longer the whole fixture (#101): a `claude-code-cli` watch
+		// owner is deliverable only while ITS OWN sender marker still names the garden it is armed
+		// for — that join is what refuses a session which switched away in place. A receiver marker
+		// with no sender marker beside it models a state the product now treats as retired, so this
+		// smoke would fail on its own fixture instead of on the rail it exists to prove.
+		//
+		// THE OWNER IS A SPAWNED IDLE PROCESS, NOT THIS ONE, and that is specific to this smoke:
+		// hop 1 is a native `claude` child of THIS process, and the bridge resolves a sender's
+		// identity through its ancestry. A terminus marker under this pid therefore puts TWO garden
+		// citizens on one host process, which the bridge refuses outright as ambiguous sender
+		// identity — measured on oracle 2026-09-04, where hop 1 came back "refused: ambiguous sender
+		// identity (…-f34713, …-912b42)" and the chain never started. The sibling smokes keep
+		// `process.pid` because their children are pi/ACP sessions carrying their own identity, or
+		// tmux siblings that are not descendants at all.
+		terminusOwner = spawn(process.execPath, ["-e", "setTimeout(() => {}, 900000)"], { stdio: "ignore" });
+		const terminusOwnerPid = terminusOwner.pid;
+		if (typeof terminusOwnerPid !== "number") throw new Error("could not spawn the terminus owner process");
+		writeMetaReceiverMarker({
+			gardenId: gidD,
+			backend: "claude-code",
+			nativeSessionId: terminus.record.nativeSessionId,
+			ownerPid: terminusOwnerPid,
+			armProvenance: "session-start",
+			receiversDir,
+		});
+		writeMetaSenderMarker({
+			backend: "claude-code",
+			gardenId: gidD,
+			nativeSessionId: terminus.record.nativeSessionId,
+			cwd: world,
+			ownerPid: terminusOwnerPid,
+			sendersDir,
+		});
+		console.error(`[smoke-entwurf-chain-live] D:      ${gidD} (mailbox terminus)`);
+
 		// ── C: the ACP Claude Sonnet citizen (spawned first so B can be told its id) ──
 		const known = new Set((await readRecords(sessionsDir)).map((r) => r.gardenId));
 		const c = spawn(
@@ -315,6 +319,21 @@ async function main(): Promise<void> {
 		ok("A is distinct from every other citizen", !new Set([gidB, gidC, gidD]).has(gidA as string));
 		console.error(`[smoke-entwurf-chain-live] A:      ${gidA} (native Claude Code)`);
 
+		// ── the fixture must still be a deliverable citizen when the chain arrives ──
+		// The terminus is only reachable while its owner is alive AND that owner's sender marker
+		// still names it (#101). Both are fixture state this smoke owns, and both can decay while
+		// three model turns run. Asserting it here separates "the chain did not arrive" from "the
+		// target stopped being addressable", which cost a LIVE run to tell apart once.
+		const terminusFacts = resolveMailboxReceiverFacts(terminus.record, {
+			readReceiverMarker: (gardenId: string) => readMetaReceiverMarker({ gardenId, receiversDir }),
+			readSenderMarker: (backend: string, pid: number) =>
+				readMetaSenderMarker({ backend: backend as "claude-code", ownerPid: pid, sendersDir }),
+		});
+		ok(
+			"fixture: the terminus is a deliverable citizen at the moment the chain starts",
+			terminusFacts.ownerAlive && terminusFacts.watchArmed,
+		);
+
 		// ── the chain runs on its own from here; wait for the terminus ───────────
 		const boxDir = path.join(mailboxDir, gidD);
 		const until = Date.now() + CHAIN_TIMEOUT_MS;
@@ -327,6 +346,20 @@ async function main(): Promise<void> {
 			await sleep(POLL_MS);
 		}
 		if (msgs.length === 0) {
+			let ownerAlive = false;
+			try {
+				process.kill(terminusOwnerPid, 0);
+				ownerAlive = true;
+			} catch {}
+			const facts = resolveMailboxReceiverFacts(terminus.record, {
+				readReceiverMarker: (gardenId: string) => readMetaReceiverMarker({ gardenId, receiversDir }),
+				readSenderMarker: (backend: string, pid: number) =>
+					readMetaSenderMarker({ backend: backend as "claude-code", ownerPid: pid, sendersDir }),
+			});
+			console.error(
+				`[smoke-entwurf-chain-live] terminus fixture at timeout: ownerPid=${terminusOwnerPid} alive=${ownerAlive} ` +
+					`ownerAlive=${facts.ownerAlive} watchArmed=${facts.watchArmed}`,
+			);
 			// The FULL turn, not a 1500-char head: that slice cut the JSON before its `result`
 			// field, so the one line that says what A actually did — the tool outcome it was told
 			// to echo back — was the first thing this diagnostic dropped. A failure that hides its
@@ -387,7 +420,7 @@ async function main(): Promise<void> {
 	} finally {
 		for (const ch of children) await terminateChild(ch).catch(() => undefined);
 		try {
-			terminusOwner.kill("SIGTERM");
+			terminusOwner?.kill("SIGTERM");
 		} catch {}
 	}
 

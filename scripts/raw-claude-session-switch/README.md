@@ -54,6 +54,12 @@ answered:
 `UserPromptSubmit` carries **no** `source` at all (`source=(unset)`) — worth knowing, since it is
 the event that rewrites the sender marker on every keystroke and must retire nothing.
 
+It also always names the session it belongs to. Across the four lab pids, **8 of 8**
+`UserPromptSubmit` events carried the native id their own pid's preceding `SessionStart` had
+established, and none carried any other. The hook runs synchronously inside the session's own
+process, so a keystroke envelope is that session speaking — which is why the pointer it moves is
+treated as authoritative rather than as something to defend against.
+
 ## Verbatim receipts
 
 **S1 — bare `claude`.** One SessionStart, a fresh garden, `source=startup`. Then one turn, whose

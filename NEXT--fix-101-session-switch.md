@@ -20,8 +20,9 @@
       predicate의 reason을 싣고 surface가 렌더한다.
 - [x] **D. 관측면** — `PeerFact`에 `receiver`(active|inactive|none|n/a|unobserved) +
       `transcript`(exists|absent|unobserved). 사실이지 verb가 아니다.
-- [x] **E. 게이트 + 뮤턴트** — `check-meta-hook-session-switch` (24 assertions, `check:hermetic`
-      등록) + `scripts/mutants/meta-hook-session-switch.json` (11 claim).
+- [x] **E. 게이트 + 뮤턴트** — `check-meta-hook-session-switch` (**28 assertions**, `check:hermetic`
+      등록) + `scripts/mutants/meta-hook-session-switch.json` (**17 claim**, QK 라벨과 1:1).
+      (크로스 리뷰 amendment 후의 수치다. 최초 랜딩은 24 assertions / 11 claim이었다.)
 - [x] **F. raw lab 실행** — GLG 승인 후 oracle에서 S1–S6 전부 돌렸다(Claude Code 2.1.260, haiku).
       영수증은 `scripts/raw-claude-session-switch/README.md`에 훅 로그 **verbatim**으로 있다.
       **상속된 문장 하나가 반증됐다:** resume picker는 SessionStart를 **한 번만** 쏜다(S2/S3).
@@ -88,6 +89,14 @@ chain4 실행, A의 turn 결과에 `refused: ambiguous sender identity (…-f347
 아님)는 주석에 적었다. 덤으로 이 실패가 자기 원인을 숨기고 있었다 — 진단 출력이 A의 turn JSON을
 1500자에서 잘라 `result` 필드를 버렸다. 전량 출력으로 바꿨다.
 
+**2라운드 amendment에서 chain-live 1회가 hop 3에서 `mailbox-undeliverable(idle-watch not armed)`로
+빨갛게 났고, 원인을 특정하지 못했다.** 앞뒤 두 번(chain5·chain7)은 통과했고, 재현되지 않는다.
+그 시각 rejection은 join이 그 순간 거짓이었다고 말하므로 fixture가 실행 중에 상했다는 뜻이다 —
+가장 그럴듯한 것은 idle owner 프로세스가 (그 무렵 이 호스트의 메모리 압박으로) 죽은 것이지만
+**측정한 것이 아니라 가설이다.** 다음에 같은 일이 나면 즉답이 나오도록 스모크에 fixture 계측을
+넣었다: 체인 시작 직전 terminus가 deliverable인지 단언하고, 타임아웃 시 ownerPid 생존과
+`ownerAlive/watchArmed`를 찍는다.
+
 리뷰가 PASS로 판정한 것: A(거짓 배달 폐쇄 — seam·self·dead-fallback·executor 모두 같은 합성),
 B(copilot 무영향·omp 제외), C(순서·자기-pid 가드·record 무삭제), E(fixture 3개 수정은 비현실
 상태 제거이지 약화 아님), F(observe seam real default).
@@ -99,9 +108,12 @@ B(copilot 무영향·omp 제외), C(순서·자기-pid 가드·record 무삭제)
   하나뿐이다. lane을 넓힐 때 이 비대칭부터 측정한다.
 - **observe seam footgun:** custom `metaEntries`를 주면서 observer를 주입하지 않으면 기본 관측자가
   다른 루트를 stat한다. 새 caller/gate는 `observe` 주입이 규율이고, 그 이유는 provider 헤더에 있다.
-- **stale UPS의 sender pointer:** mismatched UPS는 marker를 지우지는 않지만 pid→가든 포인터를
-  옮긴다(기존 훅 동작). 그 사이 join은 live 가든을 not-armed로 읽는다 — fail-closed이고 다음
-  키스트로크에 자가 복구된다. 게이트에 셀로 박아뒀다.
+- **UPS는 현재 세션의 authoritative event다 (위협 모델 하나 폐기).** 리뷰 2라운드에서 "떠난
+  세션의 stale UPS"를 방어 대상으로 적었다가 걷어냈다 — 그것을 참으로 두면 "포인터는 stale이라
+  못 믿는다"와 "포인터는 발신자 권위다"를 동시에 주장하게 된다. 측정이 정리했다: lab 네 pid의
+  UserPromptSubmit **8건 전부** 자기 pid의 직전 SessionStart가 세운 native id를 실었고, 다른 것을
+  실은 건 0건이다(훅은 세션 자기 프로세스 안에서 동기 실행된다). 은퇴의 arm-capable 제한은
+  유지하되 근거는 하나다 — **watch는 그것을 다시 arm할 실행에서만 은퇴한다.**
 
 # 다음 한 걸음
 
@@ -110,7 +122,7 @@ B(copilot 무영향·omp 제외), C(순서·자기-pid 가드·record 무삭제)
 2. **push 없음.** 배포는 끝났다(`entwurf setup` green, `doctor-meta-bridge: PASS`, 2026-09-04).
    설치본 훅은 이제 브랜치 코드다. 그 이전에 열린 세션들은 다음 SessionStart까지 옛 거동이다.
 3. **#99로 넘길 재료 하나:** 이 레인은 "주장된 셀만 재증명하던" qualification에 claude 훅
-   lane을 처음으로 만들었다(11 claim). #99의 결정(전수 qualification을 언제 돌릴지)은 이제
+   lane을 처음으로 만들었다(17 claim). #99의 결정(전수 qualification을 언제 돌릴지)은 이제
    사례 하나를 손에 들고 있다.
 
 # 검증

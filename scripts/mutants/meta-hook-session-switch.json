@@ -4,7 +4,7 @@
 	"mutants": [
 		{
 			"claim": "MHSS-RETIRE-PREV-GARDEN",
-			"title": "a hook that never retires the garden its pid stopped serving leaves the placeholder citizen advertising a doorbell nobody holds — the ghost registration measured on oracle, where a real message sat unread in its mailbox for an hour",
+			"title": "a hook that never retires the garden its pid stopped serving leaves the abandoned startup session advertising a doorbell nobody holds — the abandoned-session registration measured on oracle, where a real message sat unread in its mailbox for an hour",
 			"subject": "pi-extensions/meta-bridge-hook.ts",
 			"find": ["\t\tif (previous && previous.gardenId !== gardenId) {"],
 			"replace": ["\t\tif (false && previous && previous.gardenId !== gardenId) {"],
@@ -141,7 +141,7 @@
 		},
 		{
 			"claim": "MHSS-RETIRE-ARM-CAPABLE-ONLY",
-			"title": "retiring from an event that cannot arm lets a stale or out-of-order keystroke disarm the citizen the operator is sitting in, with nothing able to put the doorbell back — the repair turned into the destructive half of the defect it closes",
+			"title": "retiring from an event that cannot arm subtracts a doorbell with nothing in the same run able to restore one — UserPromptSubmit cannot emit watchPaths, so a retirement reached from there is a one-way disarm",
 			"subject": "pi-extensions/meta-bridge-hook.ts",
 			"find": [
 				"\t\tconst previous =\n\t\t\tarmProvenanceFor(eventName) !== null\n\t\t\t\t? readMetaSenderMarker({ backend: \"claude-code\", ownerPid, verifyOwner: false })\n\t\t\t\t: null;"
