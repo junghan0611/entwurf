@@ -71,6 +71,14 @@ CHANGELOG `## Unreleased`가 구현 범위 `v0.15.1..19ad90c` **30커밋** 전�
      OOM/kill 줄 없음, systemd-oomd kill 기록 없음, earlyoom 비활성). 다음 발생 때 갈라줄 자리는
      체인 시작 전 fixture 단언과 `terminus fixture at timeout: ownerPid=… alive=… ownerAlive=…
      watchArmed=…` 줄이며, 그 계측은 `f4dbe32`·`69bee12`로 이미 들어가 있다.
+     **리드 하나 (영수증 아님, 2026-09-04 릴리즈 레인에서 나옴):** Claude Code 하네스의
+     **저메모리 워치독**이 커널 OOM과 무관하게 백그라운드 도구 호출을 죽인다 — 릴리즈 담당
+     세션에서 `Background command … was stopped because the system is running low on memory`,
+     직후 `free -h` **available 13Gi**, 저널에 OOM/kill 0건. Fable 세션(dbf654)도 같은 날 같은
+     문구로 두 건, 직후 available **12996 MB**. 저널에 흔적이 없는 경로가 커널이 아니라
+     워치독이라면 위의 OOM 반증 측정은 전부 참이면서도 다른 킬러를 본 것이 된다.
+     **미측정:** 그 chain-live가 백그라운드 도구 호출 안에서 돌았는지, 워치독이 실제로 idle
+     owner를 골랐는지. 확인하려면 그 세션의 killed-task 알림 유무를 본다.
 - **#99로 넘길 재료:** claude 훅에 처음 생긴 뮤턴트 lane(17 claim)과, "전수 뮤턴트를 언제 돌릴
   것인가"의 실측 — 오늘 전체 바닥 **완주 5회 / 3회**, 한 번에 약 35분. 대부분이 산문 수정 뒤
   재검증이었다. 수치 정본은 #101 종결 댓글 §비용.

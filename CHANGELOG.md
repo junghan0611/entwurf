@@ -4,6 +4,133 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+## 0.18.0 - 2026-09-04
+
+### Fixed
+
+- **A Claude window that changes which session it serves no longer leaves an armed receiver behind
+  (#101).** One process serves one garden at a time but can change which: open a bare `claude` and
+  then `/resume` or `/clear` inside it, and a second `SessionStart` arrives under the same pid,
+  seconds later, naming a different session. The garden it stopped serving kept a receiver marker
+  naming a LIVE owner, so dispatch read an armed doorbell nobody held — a sibling's message was
+  reported as sent and then sat unread in that mailbox for over 50 minutes (oracle, 2026-09-04; that
+  unread letter is what opened the issue).
+  - **Deliverability now asks about *now*, not *ever*.** `watchArmed` was a copy of the identity
+    match; it is a measurement — the receiver owner's own sender marker
+    (`meta-senders/<backend>/<pid>.json`) must still name the same garden. Both consumers, the v2
+    production seam and `entwurf_self`, go through one shared composition, so a citizen's
+    self-report and dispatch cannot disagree.
+  - **The hook retires what it stopped serving** — the marker only, never the record (a record is a
+    citizen's identity, not sweepable state), only a marker its own pid owns, and only on an
+    arm-capable event. `UserPromptSubmit` cannot emit `watchPaths`, so retiring on a keystroke would
+    disarm the session the operator is sitting in with no way to re-arm. The vendor's `source` is
+    logged on every line and branched on nowhere: the switch is settled by what is on disk.
+  - **The join is scoped by the marker's `ownerKind`, not by backend** — today that is
+    `claude-code-cli`. A Copilot watch lives in a forked extension child with its own pid while its
+    sender marker carries the CLI's `process.ppid`, so applying the same check there would make
+    every Copilot citizen permanently `mailbox-undeliverable`. That is a scope decision with a
+    measured reason, not an omission.
+
+### Added
+
+- **A rejected delivery now names which receiver axis failed (#101).** A bare `mailbox-undeliverable`
+  sent one sibling hunting for a live session it had read as dead. The rejection now says whether
+  the doorbell is not armed, the owner is not alive, or there is no record.
+- **`entwurf_peers` separates a live citizen from a phantom (#101).** Every claude-code row reads
+  `liveness=unsupported`, so two rows were byte-identical whether or not anyone was home. Each row
+  now carries two observed facts — `receiver=` (doorbell state) and `transcript=` (whether a
+  conversation was ever written):
+
+  ```text
+  - 20260904T072015-e09b66  liveness=unsupported  receiver=active    transcript=exists
+  - 20260904T093135-ac7a1a  liveness=unsupported  receiver=inactive  transcript=absent
+  ```
+
+- **`check-meta-hook-session-switch` (28 assertions) and the first mutant lane the Claude hook has
+  ever had (#101).** The gate drives the shipped launcher twice under one fake owner pid and
+  requires that exactly one of the two gardens is deliverable — and that it is the one the operator
+  is sitting in. `scripts/mutants/meta-hook-session-switch.json` carries **17 claims**, 1:1 with the
+  gate's `[QK:…]` labels, each re-planting the defect this lane closed and requiring the gate to go
+  red at its claimed signature. Three of those six new mutants exist because cross-review found two
+  QK labels with no mutant behind them and three real weakenings walking straight through: the
+  join's `ownerKind` scope, the sender marker's start-key guard, and its backend equality.
+
+### Changed
+
+- **One inherited sentence about the resume picker is retired, and it was retired by measurement
+  (#101).** The diagnosis said the picker fires `SessionStart` twice — a placeholder id, then the
+  picked one. Six LIVE cells on this host (Claude Code 2.1.260, hook log verbatim in
+  `scripts/raw-claude-session-switch/README.md`) show it fires **once**, carrying the real id,
+  whether the id comes from the picker or from argv. The two-`SessionStart` shape is a bare `claude`
+  followed by an in-session `/resume` or `/clear` — which is exactly what the field case did, four
+  seconds before its second envelope. The repair is unaffected (either way one pid stops serving one
+  garden), so only the prose moved, in four places. Compaction, manual and automatic, re-fires
+  `SessionStart` for the **same** native id and retires nothing; the same-garden rule already
+  covered it.
+- **A `UserPromptSubmit` envelope is trusted for the receiver join, on a measured footing.** The
+  cross-review threat model ("a stale or out-of-order UPS") was withdrawn rather than defended: it
+  claimed the sender pointer is untrustworthy for the join while the same pointer stays authoritative
+  for sender identity — two incompatible readings of one file. Across the raw lab's four pids, every
+  `UserPromptSubmit` named the native id its own pid's preceding `SessionStart` had established,
+  **8 of 8**. The arm-capable restriction stays on its own footing.
+- **Three LIVE smokes stopped depending on a fixture the new join reads as retired.** Five smokes
+  seeded a receiver marker with no sender marker beside it — three of them release MUSTs — so each
+  would have failed on its own fixture rather than on the rail it exists to prove. They now seed
+  both and sandbox the senders root, the shape `smoke-mux-lifecycle-live` and `smoke-omp-fresh-live`
+  already had. `smoke-entwurf-chain-live` additionally gives its terminus an owner **outside hop 1's
+  ancestry**: seeding it under the smoke's own pid put two garden citizens on one host process and
+  the bridge refused the hop outright with `ambiguous sender identity`.
+
+### Upgrade note
+
+**Run `entwurf setup` once after upgrading — every rail, not just Claude.** This release changes
+`pi-extensions/lib/meta-session.ts` and the Claude hook, and **four install paths deploy that
+file** — `install-meta-bridge` (Claude), `install-omp-bridge` and `install-omp-receive` (OMP),
+`install-copilot-bridge` (Copilot). Every one of them present on the host now carries a STALE
+writer until it is re-installed, and its own doctor says so by name. Re-installing only the Claude
+rail leaves the others stale, and that does not surface until a LIVE gate turns red — measured in
+the 0.17.2 cut, where it blocked `smoke-omp-receive-live` and made the first `--cut` run BLOCKED.
+
+`entwurf setup` is presence-driven and re-synthesizes exactly the units this host has, which is why
+it is the upgrade command rather than any single `install-*`. An already-open Claude Code session
+keeps the old manifest until it restarts — and, for this release specifically, an already-open
+session also keeps the old hook, which is the code that retires a switched-away receiver.
+
+### Verification
+
+All of the following ran on oracle (Linux, Claude Code 2.1.260, node 24.18.1, pi 0.84.4, omp 18.0.0).
+
+- **`pnpm run check:full` — exit 0**, 440s on the prepared tree and 446s inside the release gate.
+- **`LIVE=1 ./run.sh release-gate /tmp/entwurf-release-gate-0.18.0c.xZlKjZ --cut` — `cut: OK`,
+  exit 0.** **MUST PASS=23 FAIL=0 SKIP=0**, **BEHAVIOR PASS=1 FAIL=0 SKIP=0**. Run 18:57→19:48 KST
+  on `faee8f6`, with `env -u CLAUDE_CONFIG_DIR -u PI_SESSION_ID -u PI_AGENT_ID`. Log:
+  `/tmp/entwurf-release-gate-0.18.0c.xZlKjZ/release-gate.log`. It carried `check:full` and
+  `check-gate-qualification` (**364/364 KILLED**, up from 347 — the 17 new claims are this lane's
+  `MHSS-*`) as MUST steps.
+- **This lane's own gate: `check-meta-hook-session-switch` — 28 assertions passed**, and all 17
+  `MHSS-*` mutants killed at their claimed signatures inside that qualification run.
+- **The three LIVE smokes whose fixtures this lane changed are green**, including
+  `smoke-entwurf-chain-live` — **24 assertions**, four citizens across three harnesses, and its new
+  pre-flight cell `fixture: the terminus is a deliverable citizen at the moment the chain starts`
+  passed before the chain ran.
+- **One unattributed `smoke-entwurf-chain-live` failure is on the record and is NOT closed.** During
+  the lane (2026-09-04 16:58 KST) one run rejected at hop 3 with `mailbox-undeliverable (observed
+  liveness: unsupported)`; the runs before and after it passed and it has not reproduced. A
+  start-key race and an early idle-owner exit were excluded by measurement; a memory-pressure
+  hypothesis is neither confirmed nor refuted (no OOM or kill entries in the host journal for that
+  window). The instrument that will split the next occurrence shipped in this release — the fixture
+  pre-flight assertion above, plus a `terminus fixture at timeout:` line naming owner liveness and
+  both receiver facts.
+- **The first `--cut` attempt of this cut was BLOCKED, and the cause was operator error, not the
+  product.** `check-gate-qualification` aborted with `origin HEAD changed during qualification`
+  because a commit was created while the gate was running. Every other MUST step in that run passed
+  (`MUST PASS=22 FAIL=1 SKIP=0`). The run above is the re-measurement on a frozen HEAD. One LIVE
+  gate run before that was killed by the host harness's low-memory watchdog rather than by any
+  assertion, and was re-run under tmux.
+- **Exact-SHA CI on the pre-version HEAD `e56eee0`** — `check`, `install-surface`,
+  `artifact-consumer` all `success`.
+  Run: https://github.com/junghan0611/entwurf/actions/runs/33853363923
+
 ## 0.17.2 - 2026-09-03
 
 ### Added

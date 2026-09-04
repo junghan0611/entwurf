@@ -290,6 +290,11 @@ Do not expect a fixed PASS count. Record actual output. Do not waive a MUST
 failure without diagnosing and explicitly classifying the failing axis. Do not
 hide a BEHAVIOR failure.
 
+**Create no commit while the gate is running.** `check-gate-qualification` pins the origin HEAD it
+started on and aborts with `origin HEAD changed during qualification` if that moves, discarding a
+~50-minute run. Editing the working tree is harmless; moving HEAD is not. Queue any commit request
+that arrives mid-run (including one from GLG) until the gate reports its verdict.
+
 ## P6. Apply release-specific pre-commit acceptance
 
 `NEXT.md` and `VERIFY.md` may require gates beyond `pnpm run check:full` and the LIVE
