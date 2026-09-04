@@ -138,6 +138,86 @@
 			"timeoutSeconds": 300,
 			"signature": "[QK:MHSS-PEERS-COLUMNS-RENDERED]",
 			"signatureSource": "scripts/check-meta-hook-session-switch.ts"
+		},
+		{
+			"claim": "MHSS-RETIRE-ARM-CAPABLE-ONLY",
+			"title": "retiring from an event that cannot arm lets a stale or out-of-order keystroke disarm the citizen the operator is sitting in, with nothing able to put the doorbell back — the repair turned into the destructive half of the defect it closes",
+			"subject": "pi-extensions/meta-bridge-hook.ts",
+			"find": [
+				"\t\tconst previous =\n\t\t\tarmProvenanceFor(eventName) !== null\n\t\t\t\t? readMetaSenderMarker({ backend: \"claude-code\", ownerPid, verifyOwner: false })\n\t\t\t\t: null;"
+			],
+			"replace": [
+				"\t\tconst previous = readMetaSenderMarker({ backend: \"claude-code\", ownerPid, verifyOwner: false });"
+			],
+			"gate": ["bash", "run.sh", "check-meta-hook-session-switch"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:MHSS-RETIRE-ARM-CAPABLE-ONLY]",
+			"signatureSource": "scripts/check-meta-hook-session-switch.ts"
+		},
+		{
+			"claim": "MHSS-RECORDS-SURVIVE",
+			"title": "a retirement that takes the RECORD with the marker deletes identity to clean up presence — the store-certification and fresh-cut rules exist because a record is the only address a citizen has",
+			"subject": "pi-extensions/meta-bridge-hook.ts",
+			"find": ["\t\t\tconst retired = removeMetaReceiverMarker({ gardenId: previous.gardenId, ownerPid });"],
+			"replace": [
+				"\t\t\tconst retired = removeMetaReceiverMarker({ gardenId: previous.gardenId, ownerPid });\n\t\t\tfs.rmSync(path.join(defaultMetaSessionsDir(), `${previous.gardenId}.meta.json`), { force: true });"
+			],
+			"gate": ["bash", "run.sh", "check-meta-hook-session-switch"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:MHSS-RECORDS-SURVIVE]",
+			"signatureSource": "scripts/check-meta-hook-session-switch.ts"
+		},
+		{
+			"claim": "MHSS-EXACTLY-ONE-DELIVERABLE",
+			"title": "forcing the watch fact closed refuses the citizen the operator is actually in — fail-closed is not free when it closes on every live session too",
+			"subject": "pi-extensions/lib/entwurf-v2-production.ts",
+			"find": ["\t\t\townerAlive,\n\t\t\twatchArmed,\n\t\t});"],
+			"replace": ["\t\t\townerAlive,\n\t\t\twatchArmed: false,\n\t\t});"],
+			"gate": ["bash", "run.sh", "check-meta-hook-session-switch"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:MHSS-EXACTLY-ONE-DELIVERABLE]",
+			"signatureSource": "scripts/check-meta-hook-session-switch.ts"
+		},
+		{
+			"claim": "MHSS-JOIN-SCOPE-OWNERKIND",
+			"title": "admitting copilot-extension into the sender-marker join makes every Copilot citizen permanently mailbox-undeliverable: its watch owner is a forked child whose pid never carries a sender marker, so the join can only ever answer no",
+			"subject": "pi-extensions/lib/entwurf-deliverability.ts",
+			"find": ["export const SENDER_JOINED_RECEIVER_OWNER_KINDS: readonly string[] = [\"claude-code-cli\"];"],
+			"replace": [
+				"export const SENDER_JOINED_RECEIVER_OWNER_KINDS: readonly string[] = [\"claude-code-cli\", \"copilot-extension\"];"
+			],
+			"gate": ["bash", "run.sh", "check-meta-hook-session-switch"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:MHSS-JOIN-SCOPE-OWNERKIND]",
+			"signatureSource": "scripts/check-meta-hook-session-switch.ts"
+		},
+		{
+			"claim": "MHSS-SENDER-START-KEY-VERIFIED",
+			"title": "reading the sender marker without the pid-reuse guard lets a dead session's leftover file answer \"which garden does this pid serve now?\" — the join then vouches for a watch nobody holds",
+			"subject": "pi-extensions/lib/entwurf-v2-production.ts",
+			"find": [
+				"\t\t\t((backend: string, ownerPid: number) => readMetaSenderMarker({ backend: requireBackend(backend), ownerPid })),"
+			],
+			"replace": [
+				"\t\t\t((backend: string, ownerPid: number) =>\n\t\t\t\treadMetaSenderMarker({ backend: requireBackend(backend), ownerPid, verifyOwner: false })),"
+			],
+			"gate": ["bash", "run.sh", "check-meta-hook-session-switch"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:MHSS-SENDER-START-KEY-VERIFIED]",
+			"signatureSource": "scripts/check-meta-hook-session-switch.ts"
+		},
+		{
+			"claim": "MHSS-JOIN-BACKEND-EQUALITY",
+			"title": "comparing only the garden id lets a marker written by another backend under the same pid vouch for this receiver — two harnesses can key markers under one process",
+			"subject": "pi-extensions/lib/entwurf-deliverability.ts",
+			"find": [
+				"\treturn !!senderMarker && senderMarker.gardenId === marker.gardenId && senderMarker.backend === marker.backend;"
+			],
+			"replace": ["\treturn !!senderMarker && senderMarker.gardenId === marker.gardenId;"],
+			"gate": ["bash", "run.sh", "check-meta-hook-session-switch"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:MHSS-JOIN-BACKEND-EQUALITY]",
+			"signatureSource": "scripts/check-meta-hook-session-switch.ts"
 		}
 	]
 }

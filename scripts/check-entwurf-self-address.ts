@@ -484,6 +484,13 @@ ok(
 	!/ownerAlive:\s*active/.test(metaBody) && !/watchArmed:\s*active/.test(metaBody),
 );
 ok(
+	// #101 (cross-review): both markers are read with their liveness guards ON. A reader that
+	// opted out would accept a dead session's leftover file as "which garden this pid serves
+	// now", and every fixture pid in a gate is live, so nothing dynamic here could tell.
+	"buildTrustedMetaSenderEnvelope reads neither marker with the owner guard disabled",
+	!/verifyOwner:\s*false/.test(metaBody),
+);
+ok(
 	"buildTrustedMetaSenderEnvelope keeps meta identity + derived replyable (inactive → not null)",
 	/origin:\s*"meta-session"/.test(metaBody) && /replyable:\s*self\.replyable/.test(metaBody),
 );

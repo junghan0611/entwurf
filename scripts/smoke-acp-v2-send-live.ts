@@ -79,7 +79,11 @@ import * as os from "node:os";
 import * as path from "node:path";
 import * as readline from "node:readline";
 import { fileURLToPath } from "node:url";
-import { upsertMetaSession, writeMetaReceiverMarker } from "../pi-extensions/lib/meta-session.ts";
+import {
+	upsertMetaSession,
+	writeMetaReceiverMarker,
+	writeMetaSenderMarker,
+} from "../pi-extensions/lib/meta-session.ts";
 import { terminateChild } from "./lib/acp-child-cleanup.ts";
 import { skipLive } from "./lib/live-skip.ts";
 import { PI_BOOT_TIMEOUT_MS, waitForPiRecord } from "./lib/pi-record-discovery.ts";
@@ -210,7 +214,8 @@ async function main(): Promise<void> {
 	const sessionsDir = path.join(world, "sessions");
 	const mailboxDir = path.join(world, "mailbox");
 	const receiversDir = path.join(world, "receivers");
-	for (const d of [sessionsDir, mailboxDir, receiversDir]) await fsp.mkdir(d, { recursive: true });
+	const sendersDir = path.join(world, "senders");
+	for (const d of [sessionsDir, mailboxDir, receiversDir, sendersDir]) await fsp.mkdir(d, { recursive: true });
 
 	const nonce = `ACPV2-${crypto.randomBytes(5).toString("hex").toUpperCase()}`;
 
@@ -225,6 +230,13 @@ async function main(): Promise<void> {
 	});
 	const receiverGid = receiver.record.gardenId;
 	// armed = a presence marker owned by THIS (live) process → deliverable.
+	//
+	// The receiver marker alone is no longer the whole fixture (#101): a `claude-code-cli` watch
+	// owner is deliverable only while ITS OWN sender marker still names the garden it is armed
+	// for — that join is what refuses a session which switched away in place. A receiver marker
+	// with no sender marker beside it models a state the product now treats as retired, so this
+	// smoke would fail on its own fixture instead of on the rail it exists to prove. Same shape
+	// as smoke-mux-lifecycle-live / smoke-omp-fresh-live, which already seeded both.
 	writeMetaReceiverMarker({
 		gardenId: receiverGid,
 		backend: "claude-code",
@@ -232,6 +244,14 @@ async function main(): Promise<void> {
 		ownerPid: process.pid,
 		armProvenance: "session-start",
 		receiversDir,
+	});
+	writeMetaSenderMarker({
+		backend: "claude-code",
+		gardenId: receiverGid,
+		nativeSessionId: receiver.record.nativeSessionId,
+		cwd: world,
+		ownerPid: process.pid,
+		sendersDir,
 	});
 	console.error(`[smoke-acp-v2-send-live] peer:  ${receiverGid} (armed mailbox receiver)`);
 
@@ -252,6 +272,7 @@ async function main(): Promise<void> {
 					ENTWURF_META_SESSIONS_DIR: sessionsDir,
 					ENTWURF_META_MAILBOX_DIR: mailboxDir,
 					ENTWURF_META_RECEIVERS_DIR: receiversDir,
+					ENTWURF_META_SENDERS_DIR: sendersDir,
 				},
 			},
 		);

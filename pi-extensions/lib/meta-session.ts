@@ -2039,9 +2039,11 @@ export interface RemoveMetaReceiverMarkerOptions {
  * the claim that a doorbell is armed for it, which is exactly the claim that stopped
  * being true.
  *
- * Fail-closed the other way too: the marker is read back first and removed ONLY when
- * it names this ownerPid, so a hook can never retire a watch another live process
- * holds. Returns whether a marker was actually removed. Never throws — a retirement
+ * Fail-closed the other way too: the marker is read back first and removed ONLY when its
+ * `ownerPid` field equals the one passed here — pid equality, which is what a caller can
+ * actually check; it does not prove the same PROCESS wrote it (a reused pid compares equal),
+ * and the reader-side start-key guard is where that finer distinction lives. It is enough for
+ * the rule this serves: a hook never retires a watch some other pid is holding. Returns whether a marker was actually removed. Never throws — a retirement
  * that cannot happen is a log line, not a broken session start.
  */
 export function removeMetaReceiverMarker(opts: RemoveMetaReceiverMarkerOptions): boolean {

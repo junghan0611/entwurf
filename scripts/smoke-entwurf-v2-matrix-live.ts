@@ -62,6 +62,7 @@ import {
 	metaRecordExistsByGardenId,
 	upsertMetaSession,
 	writeMetaReceiverMarker,
+	writeMetaSenderMarker,
 } from "../pi-extensions/lib/meta-session.ts";
 import { terminateChild } from "./lib/acp-child-cleanup.ts";
 import { skipLive } from "./lib/live-skip.ts";
@@ -187,10 +188,15 @@ async function main(): Promise<void> {
 	const mailboxDir = path.join(tmp, "mailbox");
 	const lockDir = path.join(tmp, "locks");
 	const receiversDir = path.join(tmp, "receivers");
-	for (const d of [sessionsDir, mailboxDir, lockDir, receiversDir]) await fsp.mkdir(d, { recursive: true });
+	const sendersDir = path.join(tmp, "senders");
+	for (const d of [sessionsDir, mailboxDir, lockDir, receiversDir, sendersDir]) await fsp.mkdir(d, { recursive: true });
 	// The receiver marker is read through defaultMetaReceiversDir() (env-overridable); point it
 	// (and the store/mailbox defaults, belt-and-suspenders to the opts dirs) at the temp world.
+	// The SENDER dir joins that list for #101: deliverability now also reads the receiver owner's
+	// sender marker, and leaving this one pointed at the operator's real root would have the
+	// fixture judged against markers this smoke never wrote.
 	process.env.ENTWURF_META_RECEIVERS_DIR = receiversDir;
+	process.env.ENTWURF_META_SENDERS_DIR = sendersDir;
 	process.env.ENTWURF_META_SESSIONS_DIR = sessionsDir;
 	process.env.ENTWURF_META_MAILBOX_DIR = mailboxDir;
 
@@ -341,6 +347,14 @@ async function main(): Promise<void> {
 			const gid = minted.record.gardenId;
 			artifacts["C2.gid"] = gid;
 			// armed = a presence marker owned by THIS (live) process → deliverable.
+			//
+			// The receiver marker alone is no longer the whole fixture (#101): a `claude-code-cli`
+			// watch owner is deliverable only while ITS OWN sender marker still names the garden it
+			// is armed for — that join is what refuses a session which switched away in place. A
+			// receiver marker with no sender marker beside it models a state the product now treats
+			// as retired, so this smoke would fail on its own fixture instead of on the rail it
+			// exists to prove. Same shape as smoke-mux-lifecycle-live / smoke-omp-fresh-live, which
+			// already seeded both.
 			writeMetaReceiverMarker({
 				gardenId: gid,
 				backend: "claude-code",
@@ -348,6 +362,14 @@ async function main(): Promise<void> {
 				ownerPid: process.pid,
 				armProvenance: "session-start",
 				receiversDir,
+			});
+			writeMetaSenderMarker({
+				backend: "claude-code",
+				gardenId: gid,
+				nativeSessionId: minted.record.nativeSessionId,
+				cwd: tmp,
+				ownerPid: process.pid,
+				sendersDir,
 			});
 
 			const result: EntwurfV2RunResult = await runEntwurfV2(

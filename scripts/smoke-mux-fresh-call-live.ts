@@ -194,7 +194,10 @@ async function main(): Promise<void> {
 		const callerGid = caller.record.gardenId;
 		// A record proves identity; only an ARMED receiver marker makes the mailbox deliverable —
 		// without it the callbacks would be refused as mailbox-undeliverable and this smoke would
-		// measure nothing.
+		// measure nothing. Since #101 the marker is half of that: a `claude-code-cli` watch owner
+		// is deliverable only while ITS OWN sender marker still names the garden it is armed for,
+		// which is what refuses a session that switched away in place. Both, or the fixture models
+		// a retired watch — the same shape smoke-mux-lifecycle-live already seeds.
 		meta.writeMetaReceiverMarker({
 			gardenId: callerGid,
 			backend: "claude-code",
@@ -202,9 +205,16 @@ async function main(): Promise<void> {
 			ownerPid: process.pid,
 			armProvenance: "session-start",
 		});
+		const callerSenderMarker = meta.writeMetaSenderMarker({
+			backend: "claude-code",
+			gardenId: callerGid,
+			nativeSessionId,
+			cwd: scratch,
+			ownerPid: process.pid,
+		});
 		ok(
-			"fixture: the caller citizen was minted INSIDE the fixture store and its mailbox is armed",
-			Boolean(callerGid) && caller.path.startsWith(root),
+			"fixture: the caller citizen was minted INSIDE the fixture store, with an armed mailbox and a sender marker",
+			Boolean(callerGid) && caller.path.startsWith(root) && callerSenderMarker.startsWith(root),
 		);
 
 		// ── One private tmux server per backend ──────────────────────────────────

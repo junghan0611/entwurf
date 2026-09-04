@@ -284,7 +284,18 @@ function main(): void {
 		//
 		// Only the marker, never the record (see removeMetaReceiverMarker), and only a marker
 		// this pid owns.
-		const previous = readMetaSenderMarker({ backend: "claude-code", ownerPid, verifyOwner: false });
+		//
+		// AND ONLY ON AN EVENT THAT CAN ARM THE REPLACEMENT (cross-review, 2026-09-04). This
+		// block sits before the UserPromptSubmit early-return, so without this condition a
+		// stale or out-of-order UPS envelope — one naming a session this pid has already left —
+		// would disarm the garden the operator is actually in and be structurally unable to put
+		// the doorbell back, because UPS cannot emit watchPaths. Retiring a watch is only honest
+		// from a run that will arm one; `armProvenanceFor` is the same predicate the arm block
+		// below uses, so the two can never disagree about which events those are.
+		const previous =
+			armProvenanceFor(eventName) !== null
+				? readMetaSenderMarker({ backend: "claude-code", ownerPid, verifyOwner: false })
+				: null;
 		if (previous && previous.gardenId !== gardenId) {
 			const retired = removeMetaReceiverMarker({ gardenId: previous.gardenId, ownerPid });
 			logLine(

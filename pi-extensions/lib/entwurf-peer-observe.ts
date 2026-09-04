@@ -3,7 +3,7 @@
  *
  * `entwurf_peers` used to answer a claude-code citizen with `liveness=unsupported` and
  * nothing else, because the control-socket probe genuinely does not apply to a self-fetch
- * backend. Two same-cwd rows — one a live conversation, one a placeholder registration
+ * backend. Two same-cwd rows — one a live conversation, one an abandoned startup session
  * whose transcript was never written — were therefore byte-identical in the listing, and
  * a caller picking "the newest record in this cwd" (the natural heuristic, and the one the
  * surface encourages) picked the phantom as often as the real one. Both halves of the

@@ -67,6 +67,7 @@ import {
 	readActiveStoreEntries,
 	readMetaReceiverMarker,
 	readMetaSenderMarker,
+	upsertMetaSession,
 	writeMetaReceiverMarker,
 } from "../pi-extensions/lib/meta-session.ts";
 
@@ -168,6 +169,14 @@ function driveHook(opts: { event: string; nativeSessionId: string; source: strin
 	assert.equal(result.status, 0, `hook drive ${opts.nativeSessionId} exited ${result.status}: ${result.stderr}`);
 }
 
+/** The gate's own marker readers, pointed at the sandbox — one definition, so every cell that
+ * composes receiver facts reads the same two files the production seam would. */
+const gateReaders = {
+	readReceiverMarker: (gardenId: string) => readMetaReceiverMarker({ gardenId, receiversDir: ROOTS.receiversDir }),
+	readSenderMarker: (backend: string, ownerPid: number) =>
+		readMetaSenderMarker({ backend: backend as "claude-code", ownerPid, sendersDir: ROOTS.sendersDir }),
+};
+
 function gardenIdFor(nativeSessionId: string): string {
 	const { identities } = listAllMetaIdentitiesDir(ROOTS.sessionsDir);
 	const hit = identities.find((i) => i.nativeSessionId === nativeSessionId);
@@ -182,11 +191,11 @@ function identityFor(gardenId: string): MetaIdentity {
 	return hit;
 }
 
-// ── the switch: one pid, a placeholder SessionStart, then the resumed one ───────
-// The placeholder's transcript is NEVER written — that is what "the TUI has not started
-// a conversation yet" looks like on disk, and it is why the ghost was invisible to every
+// ── the switch: one pid, a startup session, then the one the operator resumed ───
+// The abandoned session's transcript is NEVER written — that is what a session opened and
+// left before its first turn looks like on disk, and it is why it was invisible to every
 // surface that only reads records.
-const GHOST_NATIVE = "79e05f96-ghost-placeholder";
+const GHOST_NATIVE = "79e05f96-abandoned-startup";
 const REAL_NATIVE = "f654eed7-resumed-conversation";
 const REAL_TRANSCRIPT = path.join(CWD, `${REAL_NATIVE}.jsonl`);
 writeFileSync(REAL_TRANSCRIPT, "");
@@ -199,7 +208,7 @@ driveHook({
 });
 const GHOST_GID = gardenIdFor(GHOST_NATIVE);
 ok(
-	"placeholder SessionStart arms a receiver marker (the state the switch has to clean up)",
+	"the startup session arms a receiver marker (the state the switch has to clean up)",
 	readMetaReceiverMarker({ gardenId: GHOST_GID, receiversDir: ROOTS.receiversDir })?.ownerPid === process.pid,
 );
 
@@ -248,16 +257,25 @@ ok(
 // SessionStart can re-fire for the session already being served. A retirement rule that
 // only asked "did the sender marker exist?" would delete the live citizen's own doorbell
 // on the next keystroke — a worse failure than the one being repaired.
-driveHook({
-	event: "SessionStart",
-	nativeSessionId: REAL_NATIVE,
-	source: "startup",
-	transcriptPath: REAL_TRANSCRIPT,
-});
-ok(
-	"a same-garden SessionStart keeps the live receiver marker",
-	readMetaReceiverMarker({ gardenId: REAL_GID, receiversDir: ROOTS.receiversDir })?.ownerPid === process.pid,
-);
+// A same-garden re-registration must retire nothing — and must not even CLAIM to. The marker
+// alone cannot say so on this path: the arm block later in the same run rewrites it, so an
+// unconditional retirement would be invisible in the filesystem and visible only in the log it
+// wrote on the way past. The log is therefore the assertion.
+{
+	const before = readFileSync(HOOK_LOG, "utf8").length;
+	driveHook({
+		event: "SessionStart",
+		nativeSessionId: REAL_NATIVE,
+		source: "startup",
+		transcriptPath: REAL_TRANSCRIPT,
+	});
+	const delta = readFileSync(HOOK_LOG, "utf8").slice(before);
+	ok(
+		"a same-garden re-registration retires nothing, and claims no retirement [QK:MHSS-RETIRE-KEEPS-CURRENT]",
+		!/retired receiver marker/.test(delta) &&
+			readMetaReceiverMarker({ gardenId: REAL_GID, receiversDir: ROOTS.receiversDir })?.ownerPid === process.pid,
+	);
+}
 // UserPromptSubmit is the cell that MATTERS here, and it is why the guard is a
 // garden COMPARISON rather than "did a sender marker exist?". It rewrites the sender
 // marker on every keystroke but CANNOT re-arm the watch (watchPaths is not emittable
@@ -270,9 +288,38 @@ driveHook({
 	transcriptPath: REAL_TRANSCRIPT,
 });
 ok(
-	"a keystroke (UserPromptSubmit, which cannot re-arm) retires NOTHING [QK:MHSS-RETIRE-KEEPS-CURRENT]",
+	"a keystroke (UserPromptSubmit, which cannot re-arm) retires NOTHING",
 	readMetaReceiverMarker({ gardenId: REAL_GID, receiversDir: ROOTS.receiversDir })?.ownerPid === process.pid,
 );
+// …and the same is true of a MISMATCHED one (cross-review, 2026-09-04). The cell above only
+// proves the same-garden branch; this one drives a UPS envelope naming a session this pid has
+// already left — a stale or out-of-order envelope — which is the shape that would actually
+// destroy something: the retirement rule would see a changed garden and disarm the citizen the
+// operator is sitting in, with no way to re-arm from an event that cannot emit watchPaths.
+//
+// The sender POINTER does follow the last event here (pre-existing hook behaviour, not this
+// lane's contract), so between this envelope and the next keystroke the join reads the live
+// garden as not-armed. That direction is fail-closed — a refused send, never a false one — and
+// the next ordinary UserPromptSubmit moves the pointer back. What must not happen, and is what
+// this cell pins, is a marker being deleted.
+driveHook({
+	event: "UserPromptSubmit",
+	nativeSessionId: GHOST_NATIVE,
+	source: "startup",
+	transcriptPath: path.join(CWD, `${GHOST_NATIVE}.jsonl`),
+});
+ok(
+	"a MISMATCHED keystroke cannot disarm the live citizen either [QK:MHSS-RETIRE-ARM-CAPABLE-ONLY]",
+	readMetaReceiverMarker({ gardenId: REAL_GID, receiversDir: ROOTS.receiversDir })?.ownerPid === process.pid,
+);
+// Put the pointer back where the operator's session left it, so the cells below measure the
+// switch and not this deliberate corruption.
+driveHook({
+	event: "UserPromptSubmit",
+	nativeSessionId: REAL_NATIVE,
+	source: "startup",
+	transcriptPath: REAL_TRANSCRIPT,
+});
 
 // ── B. the reader is fail-closed even when the stale marker is still there ────
 // Re-plant exactly what the pre-repair hook left behind: a receiver marker for the
@@ -289,18 +336,13 @@ writeMetaReceiverMarker({
 const ghostIdentity = identityFor(GHOST_GID);
 const realIdentity = identityFor(REAL_GID);
 {
-	const readers = {
-		readReceiverMarker: (gardenId: string) => readMetaReceiverMarker({ gardenId, receiversDir: ROOTS.receiversDir }),
-		readSenderMarker: (backend: string, ownerPid: number) =>
-			readMetaSenderMarker({ backend: backend as "claude-code", ownerPid, sendersDir: ROOTS.sendersDir }),
-	};
-	const ghostFacts = resolveMailboxReceiverFacts(ghostIdentity, readers);
+	const ghostFacts = resolveMailboxReceiverFacts(ghostIdentity, gateReaders);
 	ok("the re-planted stale marker still passes the identity match (ownerAlive)", ghostFacts.ownerAlive);
 	ok(
 		"…but its watch is NOT armed — measured against the owner's sender marker, never copied [QK:MHSS-SENDER-JOIN-MEASURED]",
 		ghostFacts.watchArmed === false,
 	);
-	const realFacts = resolveMailboxReceiverFacts(realIdentity, readers);
+	const realFacts = resolveMailboxReceiverFacts(realIdentity, gateReaders);
 	ok(
 		"the served garden is alive AND armed (the join is not a blanket refusal)",
 		realFacts.ownerAlive && realFacts.watchArmed,
@@ -377,6 +419,79 @@ ok(
 	);
 }
 
+// ── the join's THREE edges, each of which a mutant would otherwise walk through ─
+// (cross-review, 2026-09-04: the cells above never varied ownerKind, never planted a stale
+// sender start-key, and never disagreed on backend, so three real weakenings survived them.)
+{
+	// EDGE 1 — the join is scoped by ownerKind, and outside that scope its ABSENCE is not a
+	// failure. A Copilot watch lives in a forked first-party extension child with its own pid,
+	// so `meta-senders/copilot/<that pid>.json` never exists by construction. If the join were
+	// applied there, every Copilot citizen would be permanently undeliverable — a regression on
+	// a shipped lane dressed as a fix.
+	const copilot = upsertMetaSession({
+		input: {
+			backend: "copilot",
+			nativeSessionId: "copilot-extension-owned",
+			transcriptPath: REAL_TRANSCRIPT,
+			cwd: CWD,
+		},
+		dir: ROOTS.sessionsDir,
+	});
+	writeMetaReceiverMarker({
+		gardenId: copilot.record.gardenId,
+		backend: "copilot",
+		nativeSessionId: copilot.record.nativeSessionId,
+		ownerPid: process.pid,
+		ownerKind: "copilot-extension",
+		armProvenance: "extension-join",
+		receiversDir: ROOTS.receiversDir,
+	});
+	const facts = resolveMailboxReceiverFacts(copilot.record, gateReaders);
+	ok(
+		"a copilot-extension watch is ARMED with no sender marker of its own — the join does not apply there [QK:MHSS-JOIN-SCOPE-OWNERKIND]",
+		facts.ownerAlive && facts.watchArmed,
+	);
+}
+{
+	// EDGE 2 — the sender marker is trusted only while its owner is the SAME live process. A
+	// marker left by a dead session (or a reused pid) must not answer "which garden does this
+	// pid serve now?", and the reader's start-key guard is what refuses it. A production reader
+	// that asked with `verifyOwner: false` would accept this file, and every fixture pid here is
+	// live, so nothing else in this gate could tell the difference.
+	const senderFile = path.join(ROOTS.sendersDir, "claude-code", `${process.pid}.json`);
+	const good = readFileSync(senderFile, "utf8");
+	writeFileSync(senderFile, good.replace(/"ownerStartKey": "[^"]*"/, '"ownerStartKey": "STALE-FROM-A-DEAD-SESSION"'));
+	const decision = (await deps().decide({
+		target: REAL_GID,
+		intent: "fire-and-forget",
+		message: "with a stale sender marker",
+	})) as DispatchDecision;
+	ok(
+		"a sender marker whose owner start-key no longer matches is refused, not read [QK:MHSS-SENDER-START-KEY-VERIFIED]",
+		decision.kind === "reject" && decision.receipt.reason === "mailbox-undeliverable",
+	);
+	writeFileSync(senderFile, good);
+}
+{
+	// EDGE 3 — the join compares backend as well as garden id. Two backends can key markers under
+	// one pid (a Claude CLI that also hosts another harness's writer), and a marker whose body
+	// names a different backend than the receiver it is being joined to is not that receiver's
+	// evidence. Every fixture above shares one backend, so the comparison was free to disappear.
+	const senderFile = path.join(ROOTS.sendersDir, "claude-code", `${process.pid}.json`);
+	const good = readFileSync(senderFile, "utf8");
+	writeFileSync(senderFile, good.replace(/"backend": "claude-code"/, '"backend": "copilot"'));
+	const decision = (await deps().decide({
+		target: REAL_GID,
+		intent: "fire-and-forget",
+		message: "with a backend-drifted sender marker",
+	})) as DispatchDecision;
+	ok(
+		"a sender marker naming another backend does not vouch for this receiver [QK:MHSS-JOIN-BACKEND-EQUALITY]",
+		decision.kind === "reject" && decision.receipt.reason === "mailbox-undeliverable",
+	);
+	writeFileSync(senderFile, good);
+}
+
 // ── D. the listing has to SHOW the difference (#101 갭 D) ────────────────────
 // This is the surface a caller actually reads before dispatching. Both citizens are
 // `liveness=unsupported` (claude-code has no control socket to probe), same cwd, same
@@ -396,14 +511,14 @@ ok(
 		ghostRow?.liveness === "unsupported" && realRow?.liveness === "unsupported",
 	);
 	ok(
-		"the placeholder row shows a transcript that was never written [QK:MHSS-PEERS-TRANSCRIPT-OBSERVED]",
+		"the abandoned row shows a transcript that was never written [QK:MHSS-PEERS-TRANSCRIPT-OBSERVED]",
 		ghostRow?.transcript === "absent" && realRow?.transcript === "exists",
 	);
 	// The stale marker re-planted above is still on disk, so the ghost reads `inactive`
 	// (a marker that fails the join) rather than `none` (no marker at all) — the split a
 	// reader needs to tell "was armed, no longer valid" from "never armed".
 	ok(
-		"the placeholder row shows an inactive receiver beside the live one [QK:MHSS-PEERS-RECEIVER-OBSERVED]",
+		"the abandoned row shows an inactive receiver beside the live one [QK:MHSS-PEERS-RECEIVER-OBSERVED]",
 		ghostRow?.receiver === "inactive" && realRow?.receiver === "active",
 	);
 	const { text } = renderEntwurfPeers(listing);

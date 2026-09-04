@@ -54,7 +54,12 @@ import fsp from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { readMetaInbox, upsertMetaSession, writeMetaReceiverMarker } from "../pi-extensions/lib/meta-session.ts";
+import {
+	readMetaInbox,
+	upsertMetaSession,
+	writeMetaReceiverMarker,
+	writeMetaSenderMarker,
+} from "../pi-extensions/lib/meta-session.ts";
 import { terminateChild } from "./lib/acp-child-cleanup.ts";
 import { skipLive } from "./lib/live-skip.ts";
 
@@ -155,11 +160,13 @@ async function main(): Promise<void> {
 	const sessionsDir = path.join(world, "sessions");
 	const mailboxDir = path.join(world, "mailbox");
 	const receiversDir = path.join(world, "receivers");
-	for (const d of [sessionsDir, mailboxDir, receiversDir]) await fsp.mkdir(d, { recursive: true });
+	const sendersDir = path.join(world, "senders");
+	for (const d of [sessionsDir, mailboxDir, receiversDir, sendersDir]) await fsp.mkdir(d, { recursive: true });
 	const worldEnv = {
 		ENTWURF_META_SESSIONS_DIR: sessionsDir,
 		ENTWURF_META_MAILBOX_DIR: mailboxDir,
 		ENTWURF_META_RECEIVERS_DIR: receiversDir,
+		ENTWURF_META_SENDERS_DIR: sendersDir,
 	};
 	// The MCP bridge prefers PI_SESSION_ID+PI_AGENT_ID over a meta-sender marker when both
 	// are present. A runner that is itself a pi --entwurf-control session (release-gate,
@@ -183,6 +190,12 @@ async function main(): Promise<void> {
 		dir: sessionsDir,
 	});
 	const gidD = terminus.record.gardenId;
+	// The receiver marker alone is no longer the whole fixture (#101): a `claude-code-cli` watch
+	// owner is deliverable only while ITS OWN sender marker still names the garden it is armed
+	// for — that join is what refuses a session which switched away in place. A receiver marker
+	// with no sender marker beside it models a state the product now treats as retired, so this
+	// smoke would fail on its own fixture instead of on the rail it exists to prove. Same shape
+	// as smoke-mux-lifecycle-live / smoke-omp-fresh-live, which already seeded both.
 	writeMetaReceiverMarker({
 		gardenId: gidD,
 		backend: "claude-code",
@@ -190,6 +203,14 @@ async function main(): Promise<void> {
 		ownerPid: process.pid,
 		armProvenance: "session-start",
 		receiversDir,
+	});
+	writeMetaSenderMarker({
+		backend: "claude-code",
+		gardenId: gidD,
+		nativeSessionId: terminus.record.nativeSessionId,
+		cwd: world,
+		ownerPid: process.pid,
+		sendersDir,
 	});
 	console.error(`[smoke-entwurf-chain-live] D:      ${gidD} (mailbox terminus)`);
 
