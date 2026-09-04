@@ -31,36 +31,55 @@ CHANGELOG `## Unreleased`가 구현 범위 `v0.15.1..19ad90c` **30커밋** 전�
       세 번의 재컷이 `cut: BLOCKED`로 끝났고 GLG가 네 번째를 금했다 — 그 구멍은 CHANGELOG 0.17.0
       Verification에 이름으로 적혀 있고, 반올림하지 않았다.
 
-현재 좌표: 1–10 완료 · **0.16.1 make는 열린 채 PAUSED** · **0.17.2 레인 진행 중**(0.17.1은 태그·GH
-릴리즈까지 갔고 npm 미발행). 푸시·태그는 `entwurf-release` 4모드 몫이다 (CalVer `tag-release`가 아님).
+- [x] **11. 0.17.2 cut + npm** — `v0.17.2` @ `c82576c`, GitHub 릴리즈 + **npm `latest` = 0.17.2**
+      (GLG가 직접 publish, 2026-09-03). 0.17선이 처음으로 레지스트리에 올랐다. #94·#98을 실었다.
+- [ ] **12. #101 랜딩 · 0.18.0 컷** ← CURRENT: 한 pid 안의 세션 전환이 만든 유령 시민과 거짓
+      배달을 닫은 커밋 7개(`3ca8220 → 5763bfa`)를 main에 올리고 0.18.0으로 컷한다.
 
-# NOW — 0.17.2: #94·#98을 싣고 0.17선을 처음으로 npm에
+현재 좌표: 1–11 완료 → 12 진행 중(#101 랜딩·0.18.0 컷) · **0.16.1 make는 열린 채 PAUSED**. 푸시·태그는
+`entwurf-release` 4모드 몫이다 (CalVer `tag-release`가 아님).
 
-- **Stem:** 0.17.1은 초록 컷을 받고 태그(`v0.17.1` @ `ec0f402`)와 GitHub 릴리즈까지 갔지만
-  **npm에 오르지 않았다.** 그 사이 두 레인이 끝났다 — #94(컴팩션 소유권 반환)는 커밋 둘로,
-  #98(딜리버리 투명성)은 Phase 1 랩 + Phase 2 제품으로. 0.17.2가 둘을 싣고 0.17선의 첫 `latest`가 된다.
-- **0.17.1 npm publish는 건너뛴다** — 몇 분 뒤 0.17.2가 첫 `latest`가 되는데 두 번 올릴 이유가 없다.
-  CHANGELOG 0.17.1 절에 "tagged, not published to npm; superseded by 0.17.2" 한 줄. **이 결정 자체는
-  publish 게이트에서 GLG가 확정한다.**
-- **이 레인이 싣는 것:**
-  - #94 — `autoCompactEnabled` / `env.DISABLE_AUTOCOMPACT`가 managed → retired로 이동
-    (`3bb0f9e`, `2f53a97`). CHANGELOG에는 옛 env 키가 2.1.259에서 **no-op였다**는 정정도 함께 간다.
-  - #98 — Phase 1 랩 영수증(`6306f93`), Phase 2 제품(`c10b904`). 자세한 것은 CARRIED의 #98 항목.
-- **Upgrade note (CHANGELOG에 반드시 들어갈 것):** pull 뒤 **`install-meta-bridge` 1회**.
-  플러그인 템플릿에 `rewakeSummary`/`rewakeMessage`가 생겨서, 안 하면 doctor가
-  `installed manifest DIFFERS … Re-run ./run.sh install-meta-bridge`로 빨개진다. 열린 Claude 세션은
-  옛 manifest를 캐시하므로 재시작 전까지 옛 화면이다. oracle이 첫 대상.
-- **Next:** `entwurf-release` 4모드 — `land`(exact-SHA CI) → `prepare 0.17.2` → `make`(LIVE
-  release-gate `--cut`, 0.17.1이 초록 컷을 받은 절차 그대로) → `publish`.
-  **push·make·publish는 각각 GLG의 명시 승인 후에만.** 커밋 요청이 푸시를 함의하지 않는다.
-- **알려진 잡음 — 정확히 말할 것:** `smoke-meta-async-drift`는 `pass=12 fail=0 drift=1`로 끝나고
-  **exit 1**이다(`***** DRIFT DETECTED *****`). "pass"라고만 쓰면 거짓이다. 원인은 codex 0.148이 핀
-  `0.144`를 벗어난 것으로 **#98 이전부터 사전 존재**한다. 핀 범프를 이 레인에 섞지 않는다 — 컷 게이트가
-  이 스크립트를 MUST로 잡으면 그 사실을 GLG에게 보고하고 멈춘다.
-- **Read:** CHANGELOG `## 0.17.1` Verification · CARRIED의 #94·#98 항목 · `entwurf-release` 스킬.
-- **Do not touch:** 0.17.0/0.17.1 태그와 그 CHANGELOG 절 · `mux-launch.ts`/`mux-placement.ts`
-  import fence · 0.16.1 make를 이 레인에 섞는 것 · 랩 파일 내용(커밋만 했다) ·
-  제품 `doorbell.sh`의 `dirname` 성질.
+# NOW — #101 랜딩과 0.18.0 컷
+
+- **Stem:** `fix/101-session-switch` 커밋 7개(`3ca8220 → 5763bfa`)를 main에 fast-forward하고
+  **0.18.0**으로 컷한다. 한 pid 안에서 세션을 갈아타면 처음 열렸던 빈 세션이 계속 "살아있는
+  형제"로 등록돼 있어 편지가 허공으로 갔다 — 그 유령을 은퇴시키고, 배달 가능 판정을 "지금도 그
+  주소를 듣고 있는가"로 좁히고, 거절이 이유를 말하게 하고, 형제 목록에 `receiver=`/`transcript=`
+  두 컬럼을 붙였다. 사람 말 정본은 **#101 종결 댓글**이다.
+- **버전이 minor인 이유:** `entwurf_peers` 줄의 컬럼 두 개와 거절 이유 문장은 **additive surface
+  변경**이다. 제거도 의미 변경도 없으므로 patch가 아니라 minor.
+- **Upgrade note (CHANGELOG 필수):** 이 릴리즈는 `pi-extensions/lib/meta-session.ts`와 Claude 훅을
+  바꾼다 → **네 install 경로**(`install-meta-bridge` / `install-omp-bridge` / `install-omp-receive` /
+  `install-copilot-bridge`)의 배포 writer가 동시에 낡는다. **업그레이드 명령은 `entwurf setup` 하나**다.
+  0.17.2에서 Claude 레일만 재설치했다가 첫 `--cut`이 `smoke-omp-receive-live`로 BLOCKED된 그 교훈
+  그대로이며, CHANGELOG 0.17.2 Upgrade note가 그 SSOT다.
+- **Next:** `entwurf-release` 4모드 — `land 0.18.0`(exact-SHA CI 3잡) → `prepare 0.18.0` →
+  `make 0.18.0` → `publish 0.18.0 <candidate.tgz> latest`.
+- **이월 관측 (#101이 남긴 것 — 수정이 아니라 다음 레인 재료):**
+  1. **omp-host 후보 조건 하나 더.** sender↔receiver 교차검증은 지금 `ownerKind = claude-code-cli`로
+     스코프된다. OMP `unarm`의 marker 삭제 실패는 catch 후 진행하고
+     (`meta-bridge-receive-omp.ts:610-636`) omp에는 reader-side join이 없어 방어막이 writer 하나뿐이다.
+     lane을 넓히려면 이 비대칭부터 측정한다. Copilot은 구조적으로 제외다 — receiver marker owner가
+     포크된 확장 자식의 pid이고 sender marker는 CLI의 ppid라 영구 `mailbox-undeliverable`이 된다.
+  2. **observe seam footgun.** custom `metaEntries`를 주면서 observer를 주입하지 않으면 기본
+     관측자가 다른 루트를 stat한다. 새 caller/gate는 `observe` 주입이 규율이고, 이유는 provider
+     헤더에 있다.
+  3. **원인 미상 1건 — 열린 채로 둔다.** `smoke-entwurf-chain-live` 1회가 hop3에서
+     `rejected: mailbox-undeliverable (observed liveness: unsupported)`로 실패했다
+     (2026-09-04 16:58 KST). 앞뒤 두 번은 통과, 재현 안 됨. start-key 레이스와 idle owner 조기
+     종료는 측정으로 배제됐고, OOM 가설은 저널에 근거가 없다(Fable 측정: journalctl 16:50–17:02에
+     OOM/kill 줄 없음, systemd-oomd kill 기록 없음, earlyoom 비활성). 다음 발생 때 갈라줄 자리는
+     체인 시작 전 fixture 단언과 `terminus fixture at timeout: ownerPid=… alive=… ownerAlive=…
+     watchArmed=…` 줄이며, 그 계측은 `f4dbe32`·`69bee12`로 이미 들어가 있다.
+- **#99로 넘길 재료:** claude 훅에 처음 생긴 뮤턴트 lane(17 claim)과, "전수 뮤턴트를 언제 돌릴
+  것인가"의 실측 — 오늘 전체 바닥 **완주 5회 / 3회**, 한 번에 약 35분. 대부분이 산문 수정 뒤
+  재검증이었다. 수치 정본은 #101 종결 댓글 §비용.
+- **Read:** #101 종결 댓글(사람 말 정본) · `scripts/raw-claude-session-switch/README.md`
+  (S1–S6 훅 로그 verbatim, UPS native id 8/8) · `entwurf-release` 스킬.
+- **Do not touch:** 0.17.0/0.17.1/0.17.2 태그와 그 CHANGELOG 절 ·
+  `mux-launch.ts`/`mux-placement.ts` import fence ·
+  이 호스트의 `~/.pi/agent/meta-mailbox/20260904T093135-ac7a1a/` 편지·표식·기록(#101 재현 증거) ·
+  `source` 값에 분기하는 로직(로그로만 남긴다 — 호스트 독립성이 이유다).
 
 <details><summary>0.17.1의 원래 NOW (C1b 원인 닫힘 — 태그·GH 릴리즈 완료, npm 미발행)</summary>
 
@@ -201,6 +220,7 @@ CHANGELOG `## Unreleased`가 구현 범위 `v0.15.1..19ad90c` **30커밋** 전�
 - #87: https://github.com/junghan0611/entwurf/issues/87
 - #90 (claude-code model 필드, CLOSED — 측정 완료, 리더 수정만 남음): https://github.com/junghan0611/entwurf/issues/90
 - #98 (딜리버리 투명성 — `6306f93` 랩 영수증 + `c10b904` 제품, 푸시 전): https://github.com/junghan0611/entwurf/issues/98
+- #101 (세션 전환 유령 시민과 거짓 배달 — 수리 랜딩, 0.18.0에 실린다): https://github.com/junghan0611/entwurf/issues/101
 - Admission path: `docs/adding-a-harness.md`
 - OMP operator boundary: `docs/setup-clean-host.md` §4b
 - OMP tool-surface dialect: `docs/external-mcp-host.md` OMP row
