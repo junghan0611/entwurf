@@ -144,6 +144,7 @@ Usage:
   ./run.sh check-meta-mailbox-state-write # deterministic gate (0.11 Stage 0 step 3D-4 commit2): post-cut receipt is state-only — meta-record file byte-identical across enqueue/read, state carries lastEnqueuedAt/lastReadAt (field isolation), empty inbox no-op on record+state, drift surfaces; no API
   ./run.sh check-meta-receiver-marker # deterministic gate (SE-2): receiver marker round-trip/start-key/provenance, UserPromptSubmit cannot mint presence, reader does not gate on record existence — marker SEMANTICS only; launch topology moved to check-hook-launch-topology
   ./run.sh check-hook-launch-topology # #51 gate 1: shipped hooks.json is exec form through hook-launch.sh, launcher is loud on an empty argv (older Claude's silent args drop), exec preserves the pid so the hook's parent is Claude, and a space/$/backtick plugin path survives as one argv element
+  ./run.sh check-meta-hook-session-switch # #101 gate: ONE Claude pid, TWO SessionStarts (resume picker placeholder -> resumed id). The hook retires the marker of the garden it stopped serving (records untouched, same-garden re-registration retires nothing), the reader stays fail-closed on a re-planted stale marker (watchArmed measured against the owner's sender marker, never copied), production dispatch refuses the retired garden and NAMES the failing axis, and exactly one of the two gardens is deliverable. Sandboxed roots, no API
   ./run.sh check-meta-identity-consumers # deterministic gate: V3-only consumer seam — per-entry targeted read + addressable read snapshot uniqueness, non-regular rivals never read, drift/unparseable rivals unreachable, unreadable regular rivals fail loud; strict upsert refuses an unreadable store before any write, no API
   ./run.sh check-meta-capability-source # deterministic gate (0.11 Stage 0 step 3D-3): capability-source cut-over — mint/parse read wakeMode/deliveryLevel from the registry (metaCapabilityFor, registry-driven via injection), not META_BACKEND_DESCRIPTORS; behaviour-preserving (registry ≡ const); the record.delivery slot 3D-3 preserved was deleted by 3D-4, no API
   ./run.sh check-socket-probe          # deterministic gate (0.11 Stage 0, F3): three-valued control-socket liveness (alive|dead|indeterminate) — GC reclaims dead only, indeterminate survives; pure classify + 2-socket integration, no API
@@ -892,6 +893,23 @@ check_meta_receiver_marker() {
   # UserPromptSubmit cannot mint presence; reader does NOT gate on record existence
   # (recordBacked is the deliverability predicate's fact). Real tmpdir, no API.
   run_ts scripts/check-meta-receiver-marker.ts
+}
+
+check_meta_hook_session_switch() {
+  # #101 gate: a Claude Code SESSION SWITCH — one native process that stops serving one
+  # garden and starts serving another. The resume picker (and `/clear`) fire SessionStart
+  # twice inside one pid: once for the TUI's placeholder id, once for the id the operator
+  # picked. Before this gate nothing asked "one owner pid, two gardens", so a placeholder
+  # citizen stayed registered with an armed-looking doorbell and real mail rotted in it.
+  # Plays Claude the way check-hook-launch-topology does (spawn the SHIPPED launcher with
+  # the manifest's argv, so the hook's parent is this process = one fake owner pid) with
+  # every meta root sandboxed. Asserts: both records survive (marker retired, never the
+  # record); the retired garden's marker is gone; a same-garden re-registration retires
+  # NOTHING; a re-planted stale marker is still undeliverable (the sender-marker join,
+  # fail-closed at the reader); production dispatch refuses it and carries the predicate's
+  # reason to the rendered surface; exactly one garden is deliverable and it is the served
+  # one. Real tmpdir, no API.
+  run_ts scripts/check-meta-hook-session-switch.ts
 }
 
 check_copilot_birth_hook() {
@@ -5699,6 +5717,9 @@ case "$cmd" in
     ;;
   check-meta-receiver-marker)
     check_meta_receiver_marker
+    ;;
+  check-meta-hook-session-switch)
+    check_meta_hook_session_switch
     ;;
   check-meta-identity-consumers)
     check_meta_identity_consumers

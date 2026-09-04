@@ -736,19 +736,43 @@ writeMetaReceiverMarker({
   receiversDir,
 });
 
-// RECEIVER — a DIFFERENT citizen, armed by a live owner pid (this process). An unarmed
-// target is correctly fail-closed as mailbox-undeliverable, so an unarmed probe could
-// never separate "the artifact cannot read its registry" from "nobody is listening".
+// RECEIVER — a DIFFERENT citizen, armed by a DIFFERENT live owner pid. An unarmed target
+// is correctly fail-closed as mailbox-undeliverable, so an unarmed probe could never
+// separate "the artifact cannot read its registry" from "nobody is listening".
+//
+// The owner is a spawned idle process, not this one (#101): a claude-code watch owner
+// serves exactly one garden at a time, and deliverability asks whether that owner's sender
+// marker still names the garden being addressed. This probe's own pid already carries the
+// SENDER citizen's marker, so arming the receiver under it would model a session switch —
+// a retired watch — and the probe would report a delivery failure that is really the
+// fixture. It cannot be the probe's parent either: the bridge resolves its own sender
+// identity through its ancestry, and an ancestor holding two gardens is the "ambiguous
+// sender identity" refusal. A live pid outside that ancestry is what a second native CLI
+// actually looks like.
+const receiverOwner = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 300000)'], { stdio: 'ignore' });
+const receiverOwnerPid = receiverOwner.pid;
+if (typeof receiverOwnerPid !== 'number') {
+  console.error('could not spawn the stand-in receiver owner process');
+  process.exit(1);
+}
 const receiver = upsertMetaSession({
   input: { backend: 'claude-code', nativeSessionId: `doctor-delivery-receiver-${process.pid}`, cwd: tmp },
   dir: sessionsDir,
 });
 const gid = receiver.record.gardenId;
+writeMetaSenderMarker({
+  backend: 'claude-code',
+  gardenId: gid,
+  nativeSessionId: receiver.record.nativeSessionId,
+  cwd: tmp,
+  ownerPid: receiverOwnerPid,
+  sendersDir,
+});
 writeMetaReceiverMarker({
   gardenId: gid,
   backend: 'claude-code',
   nativeSessionId: receiver.record.nativeSessionId,
-  ownerPid: process.pid,
+  ownerPid: receiverOwnerPid,
   armProvenance: 'session-start',
   receiversDir,
 });
@@ -845,6 +869,7 @@ try {
   bail(String(e instanceof Error ? e.message : e));
 } finally {
   try { child?.kill('SIGTERM'); } catch {}
+  try { receiverOwner.kill('SIGTERM'); } catch {}
   await fsp.rm(tmp, { recursive: true, force: true });
 }
 if (verdict === 0) console.log('delivered: one .msg landed + doorbell poked; seeded meta-sender identity joined');

@@ -207,11 +207,13 @@ async function main(): Promise<void> {
 		ok("target-locked: diagnostic carried", d.kind === "reject" && d.diagnostic?.kind === "target-locked");
 		ok(
 			"target-locked: diagnostic holder pid preserved",
-			d.kind === "reject" && d.diagnostic?.conflict.holder?.pid === 4242,
+			d.kind === "reject" && d.diagnostic?.kind === "target-locked" && d.diagnostic.conflict.holder?.pid === 4242,
 		);
 		ok(
 			"target-locked: diagnostic lockPath preserved",
-			d.kind === "reject" && d.diagnostic?.conflict.lockPath === `/fake/locks/${GID}.lock`,
+			d.kind === "reject" &&
+				d.diagnostic?.kind === "target-locked" &&
+				d.diagnostic.conflict.lockPath === `/fake/locks/${GID}.lock`,
 		);
 	}
 
@@ -253,7 +255,8 @@ async function main(): Promise<void> {
 		ok(
 			"target-locked(corrupt): diagnostic detail preserved",
 			d.kind === "reject" &&
-				d.diagnostic?.conflict.detail === "lockfile is empty, corrupt, or holds a different garden id",
+				d.diagnostic?.kind === "target-locked" &&
+				d.diagnostic.conflict.detail === "lockfile is empty, corrupt, or holds a different garden id",
 		);
 	}
 

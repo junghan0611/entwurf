@@ -90,7 +90,7 @@ A `--entwurf-control` pi session is a citizen for the same reason a native bridg
 
 - **control-socket domain (currently `pi`)**: socket liveness, per-target lock, live send, and a dormant cell that rejects.
 - **No relaunch transport exists inside delivery.** `spawn-bg` — a detached, window-less resume child — was removed under the visible-first rule, not deprecated behind a reject, and `entwurf_v2` still starts no process: a dormant socket-domain citizen is refused as `dormant-fire-forget-unsupported`. Reopening one is the separate lifecycle verb `entwurf_resume_call`, which is pi-only (`target-not-pi` otherwise), returns a LAUNCH receipt and an OBSERVATION receipt that are never merged, releases its per-gid lock on every path, and on an unobserved socket leaves the visible window open rather than retrying. No watcher, no retry, no supervisor. Do not re-route it through `entwurf_v2` and do not describe a spawn domain that does not exist.
-- **self-fetch domain (Claude Code, Copilot CLI)**: active receiver + mailbox deliverability; no resume authority. The two arm that receiver through different vendor surfaces — a Claude hook that emits watchPaths, a Copilot first-party extension that holds the watch in a forked child — and the marker records which, because the pid a reader verifies differs.
+- **self-fetch domain (Claude Code, Copilot CLI)**: active receiver + mailbox deliverability; no resume authority. The two arm that receiver through different vendor surfaces — a Claude hook that emits watchPaths, a Copilot first-party extension that holds the watch in a forked child — and the marker records which, because the pid a reader verifies differs. A live marker is not by itself an armed doorbell: where the watch owner IS the process the sender marker is keyed to (`ownerKind: claude-code-cli`), that owner may switch sessions in place, so deliverability also requires its sender marker to still name the same garden. That join is `ownerKind`-scoped by construction — a Copilot watch lives in a forked child with its own pid, so the join does not exist there and must never be applied to it (#101).
 - **native-push domain (currently Antigravity)**: adapter probe + direct injection; no mailbox and no resume authority.
 - `origin: "pi-session" | "meta-session" | "external-mcp"` records sender provenance. It is not the citizen identity schema and not a hierarchy.
 - `entwurf_peers` reports record citizens and liveness facts only. It never embeds routing verbs or socket addresses for peers.
@@ -172,6 +172,7 @@ implement → affected focused gates → independent review → one amendment bu
 | `pi-extensions/lib/entwurf-v2-*.ts` | v2 contract, decider, transports, runner, production wiring; visible resume keeps launch injected |
 | `pi-extensions/lib/mux-*.ts` | same-tmux placement plus narrow fresh-call and visible-resume launch compositions |
 | `pi-extensions/lib/entwurf-fact*.ts` | record citizens + transport-specific liveness facts |
+| `pi-extensions/lib/entwurf-peer-observe.ts` | the IO half of the observed peer facts (receiver / transcript) |
 | `pi-extensions/lib/native-push/` | native-push adapter/probe/register leaf |
 | `pi-extensions/acp-provider.ts` | `entwurf` provider registration |
 | `pi-extensions/lib/acp/` | ACP adapter rail, config/overlay, augment, turn loop, event mapping |

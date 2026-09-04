@@ -2017,6 +2017,48 @@ export function readMetaReceiverMarker(opts: ReadMetaReceiverMarkerOptions): Met
 	}
 }
 
+export interface RemoveMetaReceiverMarkerOptions {
+	gardenId: string;
+	/** Only remove a marker this pid owns — a retirement must never reach another process's watch. */
+	ownerPid: number;
+	receiversDir?: string;
+}
+
+/**
+ * Retire a receiver presence marker THIS owner pid wrote (#101 결함 A).
+ *
+ * A native process that switches sessions in place — Claude Code's resume picker and
+ * `/clear` both fire a second SessionStart inside the same pid under a new native
+ * session id — leaves the previous garden's marker behind, naming a live owner whose
+ * watch is gone. Measured on oracle 2026-09-04: one pid (143742) held two gardens'
+ * markers four seconds apart, and mail sent to the retired one sat unread.
+ *
+ * ONLY THE MARKER. The meta-record stays: records are identity, and deleting one
+ * outside `meta-bridge-fresh-cut` would fight store certification (Hard Rule 7/8).
+ * A retired citizen keeps its record, its transcript and its listing — it loses only
+ * the claim that a doorbell is armed for it, which is exactly the claim that stopped
+ * being true.
+ *
+ * Fail-closed the other way too: the marker is read back first and removed ONLY when
+ * it names this ownerPid, so a hook can never retire a watch another live process
+ * holds. Returns whether a marker was actually removed. Never throws — a retirement
+ * that cannot happen is a log line, not a broken session start.
+ */
+export function removeMetaReceiverMarker(opts: RemoveMetaReceiverMarkerOptions): boolean {
+	try {
+		const receiversDir = opts.receiversDir ?? defaultMetaReceiversDir();
+		const file = metaReceiverMarkerPath(opts.gardenId, receiversDir);
+		// verifyOwner:false — the point is the OWNERSHIP field, not the owner's liveness;
+		// a marker whose owner already died is still this pid's to clean up when it names it.
+		const marker = readMetaReceiverMarker({ markerPath: file, verifyOwner: false });
+		if (!marker || marker.ownerPid !== opts.ownerPid) return false;
+		fs.unlinkSync(file);
+		return true;
+	} catch {
+		return false;
+	}
+}
+
 export interface UpsertMetaSessionOptions {
 	input: MetaIdentityMintInput;
 	/** Override the store directory (defaults to {@link defaultMetaSessionsDir}). */

@@ -128,13 +128,24 @@ export type ExecutionPlan =
 // claim so 5c's at-most-once re-resolve runs under the same nonce) and null for the
 // lock-free meta-mailbox path (？7).
 //
-// A reject's optional machine-readable diagnostic. Only `target-locked` carries one:
-// the `LockConflict` (holder pid/host/createdAt, lockPath, human detail) the lock
-// primitive produced on contention. It rides ALONGSIDE the receipt — the receipt
-// schema is unchanged; 5d's surface renders it onto the reject. (B3: without this the
-// holder evidence was dropped at the decider boundary, so a PID-reuse permanent lock
-// could not be observed/cleared — F2-P2 "관측 가능해야 수용".)
-export type RejectDiagnostic = { kind: "target-locked"; conflict: LockConflict };
+// A reject's optional machine-readable diagnostic, riding ALONGSIDE the receipt — the
+// receipt schema is unchanged and 5d's surface renders the diagnostic onto the reject.
+// Two kinds, both here for the same reason: the evidence that decided the reject was
+// produced one layer down and would otherwise be dropped at this boundary, leaving the
+// caller a verdict with no way to see or clear its cause (F2-P2 "관측 가능해야 수용").
+//
+//   target-locked         the `LockConflict` (holder pid/host/createdAt, lockPath, human
+//                         detail) the lock primitive produced on contention. B3: without
+//                         it a PID-reuse permanent lock could not be observed/cleared.
+//   mailbox-undeliverable WHICH receiver axis failed, in the deliverability predicate's own
+//                         words — no backing record vs. a dead owner vs. a watch that is no
+//                         longer armed are three different situations with three different
+//                         fixes, and the bare `mailbox-undeliverable` reason told a caller
+//                         none of them (#101 갭 C). The predicate already computes the
+//                         sentence; this carries it instead of discarding it.
+export type RejectDiagnostic =
+	| { kind: "target-locked"; conflict: LockConflict }
+	| { kind: "mailbox-undeliverable"; reason: string };
 
 export type DispatchDecision =
 	| { kind: "reject"; receipt: RejectReceipt; diagnostic?: RejectDiagnostic }
@@ -327,7 +338,14 @@ export async function decideDispatch(input: DispatchInput, deps: DispatchDecider
 		// fail-closed (SE-2 2d-3). resolveDispatch then routes intent × deliverable.
 		const deliverability = await deps.mailboxDeliverabilityFor(identity);
 		const receipt = resolveDispatch(input.intent, "unsupported", deliverability.deliverable);
-		if (!receipt.ok) return reject(receipt);
+		// The predicate's reason travels with the reject (#101 갭 C). It is attached only when
+		// undeliverability is what produced the reject — an intent-shaped refusal on a
+		// DELIVERABLE target must not be dressed up as a receiver problem.
+		if (!receipt.ok) {
+			return deliverability.deliverable
+				? reject(receipt)
+				: reject(receipt, { kind: "mailbox-undeliverable", reason: deliverability.reason });
+		}
 		// the only allow cell here is fire-and-forget → meta-mailbox send.
 		const plan: ExecutionPlan = {
 			transport: "meta-mailbox",

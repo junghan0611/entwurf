@@ -19,7 +19,12 @@
  *     socket-dir-read-error diagnostic (P2e②),
  *   - diagnostics are kind-tagged and sorted.
  *
- * No IO — meta entries/reader and socket dir/readdir/probe are injected fakes.
+ * No IO — meta entries/reader and socket dir/readdir/probe are injected fakes, and so is
+ * the #101 `observe` seam. That seam is the one dep whose PRODUCTION default is real IO
+ * (one default is safer than two wiring sites each passing their own observer), so a gate
+ * that left it out would quietly stat the operator's real garden roots for fabricated
+ * garden ids. It is injected here for that reason, and the cell below proves the injected
+ * observation actually reaches the fact rather than being dropped on the way.
  */
 
 import assert from "node:assert/strict";
@@ -74,6 +79,11 @@ function deps(
 ): EntwurfFactsDeps {
 	const symlinkSet = new Set(opts.symlinks ?? []);
 	return {
+		// Injected observation (see the header): a per-identity fake, never the real IO.
+		observe: (identity) => ({
+			receiver: identity.backend === "claude-code" ? "inactive" : "n/a",
+			transcript: identity.gardenId === GID_CLAUDE ? "absent" : "exists",
+		}),
 		// Kind-carrying entries, like the real bindings: the listing must be able to refuse a
 		// symlinked record without following it. `irregularMeta` names the ones that are not
 		// regular files.
@@ -143,6 +153,17 @@ async function main(): Promise<void> {
 				`record-less-socket diagnostic keyset drift: ${keys.join(",")}`,
 			);
 			ok("basic: record-less-socket diagnostic keyset exact", true);
+		}
+		// #101: the injected observation rides onto each peer. A provider that dropped the
+		// seam would return `unobserved` rows — visible, but useless to the caller the
+		// columns exist for.
+		{
+			const claude = r.facts.peers.find((p) => p.gardenId === GID_CLAUDE);
+			const pi = r.facts.peers.find((p) => p.gardenId === GID_PI);
+			ok(
+				"basic: the injected observation reaches every peer fact",
+				claude?.receiver === "inactive" && claude?.transcript === "absent" && pi?.receiver === "n/a",
+			);
 		}
 		// A DEAD record-less socket groups under a different (stale) message — no fresh-cut
 		// pointer for a leftover file, so same-state sockets aggregate per liveness.

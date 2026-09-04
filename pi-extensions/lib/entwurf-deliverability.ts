@@ -109,6 +109,110 @@ export function receiverMarkerMatchesIdentity(
 	);
 }
 
+// ── the watch-owner ↔ sender-marker join (#101 결함 B) ──────────────────────
+// A receiver marker proves "a LIVE process once armed a watch for this garden".
+// It does NOT prove "that process is serving this garden RIGHT NOW". One native
+// process can hold markers for several gardens and drain exactly one of them:
+// Claude Code's session switch (the TUI resume picker and `/clear`) fires a second
+// SessionStart inside the SAME pid under a NEW native session id, so the first
+// garden's marker keeps naming a live owner forever while the doorbell it advertises
+// is gone. Measured on oracle 2026-09-04 (#101): one pid held both markers, a
+// 09:33 enqueue to the retired garden sat unread as a bare `.msg` for ≥50 minutes —
+// the "enqueue into a void" this module's header exists to refuse.
+//
+// The join that decides it is already on disk: the SENDER marker is keyed by owner
+// pid and rewritten with the CURRENT garden on every arm/prompt, so
+// `meta-senders/<backend>/<ownerPid>.json.gardenId` is the answer to "which garden
+// does this process serve now?". A receiver marker naming a different garden than
+// its own owner's sender marker is a retired watch.
+//
+// SCOPE IS NOT UNIVERSAL, AND THE MARKER SAYS SO. The join only exists where the
+// watch owner IS the process the sender marker is keyed to. That is true for the
+// Claude hook (one `ownerPid` variable writes both markers —
+// `meta-bridge-hook.ts` sender + receiver arm) and false BY CONSTRUCTION for
+// Copilot, whose watch lives in a forked first-party extension child
+// (`extension.mjs` writes `ownerPid: process.pid`) while its sender marker is keyed
+// to the CLI parent (`meta-bridge-hook-copilot.ts` uses `process.ppid`). Applying
+// the join there would make every Copilot citizen permanently undeliverable — a
+// regression on a shipped lane, not a fix. `ownerKind` is recorded on the marker for
+// exactly this reason ("the marker records which, because the pid a reader verifies
+// differs" — AGENTS.md, self-fetch domain), so it is the axis, not `backend`.
+//
+// `omp-host` is a CANDIDATE, deliberately not admitted here: OMP already retires the
+// previous garden in-process on its `/new` edge (the unarm the claude hook lacked),
+// so the cell this join closes has a different owner there. Admitting it needs its
+// own measurement, not this file's optimism.
+export const SENDER_JOINED_RECEIVER_OWNER_KINDS: readonly string[] = ["claude-code-cli"];
+
+/** Does this watch owner share its pid with the backend's sender marker? */
+export function receiverOwnerKindJoinsSender(ownerKind: string): boolean {
+	return SENDER_JOINED_RECEIVER_OWNER_KINDS.includes(ownerKind);
+}
+
+/** The receiver-marker fields the join reads (a structural shape, like ReceiverIdentityFacts). */
+export interface ReceiverOwnerFacts extends ReceiverIdentityFacts {
+	ownerPid: number;
+	ownerKind: string;
+}
+
+/** The sender-marker fields the join reads: which garden this owner pid serves NOW. */
+export interface SenderOwnerFacts {
+	gardenId: string;
+	backend: string;
+}
+
+/**
+ * Is the watch owner still serving THIS garden? Fail-closed inside the join's scope:
+ * an absent/unreadable sender marker, or one naming another garden or backend, means
+ * the watch is retired. Outside the scope (an ownerKind whose watch owner is not the
+ * sender-marker process) the join does not apply and the marker's own live-owner guard
+ * is the whole rule — returning true here is NOT optimism, it is "this axis says
+ * nothing", and the caller has already required the marker to match the identity.
+ */
+export function receiverOwnerServesGarden(
+	marker: ReceiverOwnerFacts,
+	senderMarker: SenderOwnerFacts | null | undefined,
+): boolean {
+	if (!receiverOwnerKindJoinsSender(marker.ownerKind)) return true;
+	return !!senderMarker && senderMarker.gardenId === marker.gardenId && senderMarker.backend === marker.backend;
+}
+
+/** The two marker readers the mailbox receiver facts are composed from (injected — this module does no IO). */
+export interface MailboxReceiverReaders {
+	/** Read the receiver presence marker for a garden id (null = absent/corrupt/dead owner). */
+	readReceiverMarker: (gardenId: string) => ReceiverOwnerFacts | null;
+	/** Read the sender marker for an owner pid (null = absent/corrupt/dead owner). */
+	readSenderMarker: (backend: string, ownerPid: number) => SenderOwnerFacts | null;
+}
+
+/**
+ * THE single composition of the two mailbox receiver facts, over injected readers.
+ * Both production consumers — the v2 `mailboxDeliverabilityFor` seam and the MCP
+ * bridge's `entwurf_self` — call THIS, so a direct send, a re-resolved fallback send
+ * and a citizen's own replyability can never drift to different verdicts.
+ *
+ *   ownerAlive  — a live-owner marker that names THIS identity (the reader already ran
+ *                 the plausibility + start-key guards; this adds the identity match).
+ *   watchArmed  — that owner is still serving this garden (the join above). It is a
+ *                 MEASUREMENT, never a copy of ownerAlive: copying it is what let a
+ *                 retired watch read as an armed doorbell (#101 결함 B).
+ *
+ * `recordBacked` is NOT decided here — it stays the caller's explicit fact, so an
+ * absent record and a dead owner stay distinguishable in the reason string.
+ */
+export function resolveMailboxReceiverFacts(
+	identity: ReceiverIdentityFacts,
+	readers: MailboxReceiverReaders,
+): { ownerAlive: boolean; watchArmed: boolean } {
+	const marker = readers.readReceiverMarker(identity.gardenId);
+	const ownerAlive = receiverMarkerMatchesIdentity(marker, identity);
+	if (!ownerAlive || !marker) return { ownerAlive: false, watchArmed: false };
+	const senderMarker = receiverOwnerKindJoinsSender(marker.ownerKind)
+		? readers.readSenderMarker(marker.backend, marker.ownerPid)
+		: null;
+	return { ownerAlive, watchArmed: receiverOwnerServesGarden(marker, senderMarker) };
+}
+
 export interface MailboxDeliverabilityFacts extends MetaReceiverActiveFacts {
 	/** The target backend's wake mode (from the capability registry). */
 	wakeMode?: WakeMode | string;

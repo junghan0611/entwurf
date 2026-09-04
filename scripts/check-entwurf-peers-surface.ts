@@ -47,7 +47,12 @@ const FORBIDDEN = ["sendable", "resumable", "dispatch", "action", "transport", "
 // #50 C4: socket-shaped identity must not reappear on this surface.
 const FORBIDDEN_C4_KEYS = ["sessions", "socketOnly", "controlDir", "socketPath", "count"];
 
-function peer(gardenId: string, backend: MetaCitizenBackend, liveness: FactLiveness): PeerFact {
+function peer(
+	gardenId: string,
+	backend: MetaCitizenBackend,
+	liveness: FactLiveness,
+	observed: Partial<Pick<PeerFact, "receiver" | "transcript">> = {},
+): PeerFact {
 	return {
 		gardenId,
 		backend,
@@ -57,6 +62,8 @@ function peer(gardenId: string, backend: MetaCitizenBackend, liveness: FactLiven
 		createdAt: "2026-06-11T00:00:00.000Z",
 		recordUpdatedAt: "2026-06-11T00:00:00.000Z",
 		liveness,
+		receiver: observed.receiver ?? "n/a",
+		transcript: observed.transcript ?? "exists",
 	};
 }
 
@@ -91,7 +98,7 @@ function main(): void {
 				peer(GID_PI_ALIVE, "pi", "alive"),
 				peer(GID_PI_DEAD, "pi", "dead"),
 				peer(GID_PI_INDET, "pi", "indeterminate"),
-				peer(GID_CLAUDE, "claude-code", "unsupported"),
+				peer(GID_CLAUDE, "claude-code", "unsupported", { receiver: "inactive", transcript: "absent" }),
 			],
 			// The provider has already folded these into diagnostics; the render layer
 			// never re-renders them as a section (facts carry them for the union math).
@@ -116,6 +123,17 @@ function main(): void {
 		ok("C4: payload is exactly { peers, diagnostics }", true);
 	}
 	ok("peers carry all 4 citizens (unsupported NOT dropped)", payload.peers.length === 4);
+	// #101: the two observed axes are the only thing separating two same-cwd claude rows,
+	// since `liveness` reads `unsupported` for every one of them. They are FACTS on the
+	// row — the forbidden-word scans below still apply to them unchanged.
+	ok(
+		"observed receiver + transcript ride the row in text",
+		new RegExp(`${GID_CLAUDE}.*receiver=inactive.*transcript=absent`).test(text),
+	);
+	ok(
+		"observed axes ride the JSON payload too",
+		payload.peers.some((p) => p.gardenId === GID_CLAUDE && p.receiver === "inactive" && p.transcript === "absent"),
+	);
 	ok(
 		"unsupported citizen present in peers",
 		payload.peers.some((p) => p.gardenId === GID_CLAUDE && p.liveness === "unsupported"),

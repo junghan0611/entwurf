@@ -138,7 +138,8 @@ for (const backend of META_CITIZEN_BACKENDS) {
 	ok("passthrough recordUpdatedAt", fact.recordUpdatedAt === id.recordUpdatedAt);
 }
 
-// ── facts-only keyset: identity facts + liveness, NO verb-routing/transcript ─
+// ── facts-only keyset: identity facts + liveness + the two observed axes, and
+// still NO verb-routing / no transcript PATH ────────────────────────────────
 {
 	const fact = resolvePeerFact(identity("pi"), "alive");
 	const keys = Object.keys(fact).sort();
@@ -151,9 +152,23 @@ for (const backend of META_CITIZEN_BACKENDS) {
 		"model",
 		"nativeSessionId",
 		"recordUpdatedAt",
+		"receiver",
+		"transcript",
 	].sort();
 	assert.deepStrictEqual(keys, expected, `PeerFact keyset drift: got ${keys.join(",")}`);
-	ok("facts-only keyset exact (identity facts + liveness)", true);
+	ok("facts-only keyset exact (identity facts + liveness + observed receiver/transcript)", true);
+
+	// #101: an unmeasured row says so. `unobserved` is the default for a caller that
+	// injected no observer — never `none`/`absent`, which would be a fabricated fact.
+	ok(
+		"an observer-less composition reports both axes as unobserved (never a default fact)",
+		fact.receiver === "unobserved" && fact.transcript === "unobserved",
+	);
+	const observed = resolvePeerFact(identity("claude-code"), null, { receiver: "inactive", transcript: "absent" });
+	ok(
+		"an injected observation rides onto the fact verbatim",
+		observed.receiver === "inactive" && observed.transcript === "absent",
+	);
 
 	const FORBIDDEN = [
 		"resumable",

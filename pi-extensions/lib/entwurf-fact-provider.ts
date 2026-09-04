@@ -27,7 +27,13 @@
  * one diagnostic carries the fact. (pi + same-gid socket = the normal merge.)
  */
 
-import { type FactList, isOutOfSocketDomainGardenIdConflict, resolveFactList } from "./entwurf-facts.ts";
+import {
+	type FactList,
+	isOutOfSocketDomainGardenIdConflict,
+	type PeerObserver,
+	resolveFactList,
+} from "./entwurf-facts.ts";
+import { observePeerFacts } from "./entwurf-peer-observe.ts";
 import { isLivenessSupported } from "./entwurf-v2-contract.ts";
 import {
 	type ActiveStoreEntry,
@@ -93,6 +99,12 @@ export interface EntwurfFactsDeps {
 	readRecord: (filename: string) => string;
 	/** Socket axis: injected into scanSocketProbes (controlDir/readdir/probe). */
 	socket?: Partial<SocketScanDeps>;
+	/** Observation axis (#101): per-citizen receiver + transcript facts. Defaults to the
+	 * REAL measurement — the same seam shape `makeProductionEntwurfV2Deps` uses, so the two
+	 * wiring sites (MCP + pi-native) cannot drift by each passing their own observer, and a
+	 * gate still drives the assembly with a fake and no filesystem. A caller that injects
+	 * nothing gets facts; a caller that injects `() => UNOBSERVED_PEER` says so on every row. */
+	observe?: PeerObserver;
 }
 
 function diagnosticSortKey(d: EntwurfDiagnostic): string {
@@ -113,10 +125,12 @@ function diagnosticSortKey(d: EntwurfDiagnostic): string {
 }
 
 /**
- * Assemble the facts-only listing. Pure over its injected deps (no direct IO) so
- * the gate drives it without a filesystem; slice 4c supplies the real readdir /
- * readFile / probe. Probes are gid + liveness only (#50 C4 — the per-socket
- * get_info enrich left with the socket-only quasi-citizen listing).
+ * Assemble the facts-only listing. Driven entirely through injected deps, so the gate
+ * runs it without a filesystem; slice 4c supplies the real readdir / readFile / probe.
+ * The one dep with a REAL default is `observe` (#101) — see its comment: a per-citizen
+ * measurement both wiring sites must make identically is safer as one default than as two
+ * call-site arguments. Probes are gid + liveness only (#50 C4 — the per-socket get_info
+ * enrich left with the socket-only quasi-citizen listing).
  */
 export async function listEntwurfFacts(deps: EntwurfFactsDeps): Promise<EntwurfFactsResult> {
 	const diagnostics: EntwurfDiagnostic[] = [];
@@ -183,7 +197,7 @@ export async function listEntwurfFacts(deps: EntwurfFactsDeps): Promise<EntwurfF
 	//    fire as the last line of defense, never caught here.
 	const cleanIdentities = identities.filter((i) => !conflictGids.has(i.gardenId));
 	const cleanProbes = probes.filter((p) => !conflictGids.has(p.gardenId));
-	const facts: FactList = resolveFactList(cleanIdentities, cleanProbes);
+	const facts: FactList = resolveFactList(cleanIdentities, cleanProbes, deps.observe ?? observePeerFacts);
 
 	// 5. #50 C4 demotion: a record-less socket is a diagnostic, not a listing
 	//    section. One diagnostic per socket (subjects aggregate at render, F8);

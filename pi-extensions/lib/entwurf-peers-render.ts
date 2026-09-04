@@ -39,9 +39,20 @@ export interface EntwurfPeersRender {
 	payload: EntwurfPeersPayload;
 }
 
+// `receiver` and `transcript` are OBSERVED facts, not routing (#101): they say what was
+// found on disk for this citizen, and a caller still asks entwurf_v2 what may be done
+// about it. They earn a column because for every claude-code row `liveness` reads
+// `unsupported` — the socket probe does not apply — so two rows in one cwd, a live
+// conversation and a placeholder registration whose transcript was never written, used to
+// be indistinguishable here. `receiver=active|inactive|none|n/a` is a projection of the
+// same measurement dispatch uses; `transcript=exists|absent` is the record's transcript,
+// existence only, never the path.
 function renderPeerLine(p: PeerFact): string {
 	const model = p.model ?? "(unknown)";
-	return `- ${p.gardenId}  backend=${p.backend}  liveness=${p.liveness}  cwd=${p.cwd}  model=${model}`;
+	return (
+		`- ${p.gardenId}  backend=${p.backend}  liveness=${p.liveness}  receiver=${p.receiver}  ` +
+		`transcript=${p.transcript}  cwd=${p.cwd}  model=${model}`
+	);
 }
 
 function renderDiagnosticLine(d: EntwurfDiagnostic): string {

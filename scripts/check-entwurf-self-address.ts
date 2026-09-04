@@ -469,8 +469,19 @@ const metaBody = functionBody("buildTrustedMetaSenderEnvelope");
 ok("buildTrustedMetaSenderEnvelope calls computeSelfAddressability", /computeSelfAddressability\s*\(/.test(metaBody));
 ok("buildTrustedMetaSenderEnvelope no longer hardcodes `replyable: true`", !/replyable:\s*true/.test(metaBody));
 ok(
-	"buildTrustedMetaSenderEnvelope derives active-receiver from the receiver marker (identity-matched)",
-	/readMetaReceiverMarker\s*\(/.test(metaBody) && /receiverMarkerMatchesIdentity\s*\(/.test(metaBody),
+	// #101: the identity match alone is no longer the whole answer. `entwurf_self` composes
+	// the SAME `resolveMailboxReceiverFacts` the v2 dispatch seam uses — reading the receiver
+	// marker AND, where the watch owner is the sender-marker process, the join that says that
+	// owner is still serving this garden. A citizen's self-reported replyability and what
+	// dispatch decides about it come from one measurement, so they cannot disagree.
+	"buildTrustedMetaSenderEnvelope derives active-receiver from the SHARED receiver composition (both markers)",
+	/resolveMailboxReceiverFacts\s*\(/.test(metaBody) &&
+		/readMetaReceiverMarker\s*\(/.test(metaBody) &&
+		/readMetaSenderMarker\s*\(/.test(metaBody),
+);
+ok(
+	"buildTrustedMetaSenderEnvelope no longer copies one match into both receiver facts",
+	!/ownerAlive:\s*active/.test(metaBody) && !/watchArmed:\s*active/.test(metaBody),
 );
 ok(
 	"buildTrustedMetaSenderEnvelope keeps meta identity + derived replyable (inactive → not null)",

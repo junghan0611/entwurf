@@ -66,7 +66,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 
 import { controlSocketPathIn, defaultControlSocketDir } from "../../../pi-extensions/lib/control-socket-path.js";
-import { receiverMarkerMatchesIdentity } from "../../../pi-extensions/lib/entwurf-deliverability.ts";
+import { resolveMailboxReceiverFacts } from "../../../pi-extensions/lib/entwurf-deliverability.ts";
 import { listEntwurfFacts } from "../../../pi-extensions/lib/entwurf-fact-provider.ts";
 import { renderEntwurfPeers } from "../../../pi-extensions/lib/entwurf-peers-render.ts";
 import { computeSelfAddressability, type MetaDeliveryDomain } from "../../../pi-extensions/lib/entwurf-self-address.ts";
@@ -91,6 +91,8 @@ import {
 	readActiveStoreEntries,
 	readMetaInbox,
 	readMetaReceiverMarker,
+	readMetaSenderMarker,
+	requireBackend,
 } from "../../../pi-extensions/lib/meta-session.ts";
 import { freshCall, renderFreshCall } from "../../../pi-extensions/lib/mux-fresh-call.ts";
 import { RESUME_CALL_REJECT_HINT, resumeCall } from "../../../pi-extensions/lib/mux-resume-call.ts";
@@ -272,9 +274,12 @@ async function buildTrustedMetaSenderEnvelope(cwd: string = process.cwd()): Prom
 	//     admits another self-fetch citizen.
 	//   none        ← neither. omp today: no mailbox drain, no native-push adapter. Rendering
 	//     this as self-fetch printed a mailboxPath nothing drains.
-	//   self-fetch (claude-code/copilot): can this citizen's own inbox wake? → the receiver
-	//     presence marker (readMetaReceiverMarker folds a dead/reused owner to null, so a match
-	//     means a live, ARMED receiver — the sender marker proves identity, never an armed watch).
+	//   self-fetch (claude-code/copilot): can this citizen's own inbox wake? → the SHARED
+	//     receiver composition `resolveMailboxReceiverFacts`, the same one the v2 dispatch seam
+	//     uses, so a citizen's self-reported replyability can never disagree with what dispatch
+	//     decides about it. It reads the presence marker (a dead/reused owner already folds to
+	//     null) AND, where the watch owner is the sender-marker process, the #101 join that says
+	//     the owner is still serving THIS garden rather than one it switched away from.
 	//   native-push (antigravity): there is no inbox and no watch. A reply is injected into a
 	//     live app-server conversation, so only an adapter probe can answer. Composing the
 	//     receiver atom here would demand `watchArmed` from a backend that never arms one, and
@@ -298,14 +303,17 @@ async function buildTrustedMetaSenderEnvelope(cwd: string = process.cwd()): Prom
 				}
 			: metaDeliveryDomain === "self-fetch"
 				? (() => {
-						const receiver = readMetaReceiverMarker({ gardenId: identity.gardenId });
-						const active = receiverMarkerMatchesIdentity(receiver, identity);
+						const receiver = resolveMailboxReceiverFacts(identity, {
+							readReceiverMarker: (gardenId: string) => readMetaReceiverMarker({ gardenId }),
+							readSenderMarker: (backend: string, ownerPid: number) =>
+								readMetaSenderMarker({ backend: requireBackend(backend), ownerPid }),
+						});
 						return {
 							origin: "meta-session" as const,
 							metaDeliveryDomain,
 							recordBacked: true,
-							ownerAlive: active,
-							watchArmed: active,
+							ownerAlive: receiver.ownerAlive,
+							watchArmed: receiver.watchArmed,
 						};
 					})()
 				: {

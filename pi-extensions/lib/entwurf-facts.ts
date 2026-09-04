@@ -19,6 +19,9 @@
  *     a peer-facing fact; `entwurf_peers` exposes identity + cwd-history, not
  *     filesystem internals. (who-can / dispatch read it via the meta-record
  *     directly when they genuinely need it — it does not belong in the listing.)
+ *     Whether that transcript EXISTS is a different thing and is carried (#101):
+ *     the path stays private, the fact that a citizen has never written a turn
+ *     does not.
  *
  * The 4-value liveness (`alive|dead|indeterminate|unsupported`, R3b) and the
  * out-of-domain → `unsupported` rule (R1: never coerce an unprobed backend to
@@ -47,7 +50,43 @@ export interface PeerFact {
 	recordUpdatedAt: string;
 	// — the single computed fact: 4-value liveness (R1/R3b). NOT a verb. —
 	liveness: FactLiveness;
+	// — observed state (#101). Facts, not verbs: they say what was found on disk, not
+	//   what a caller may do about it. For claude-code every row reads
+	//   `liveness=unsupported` — the control-socket probe does not apply — so the listing
+	//   showed nothing that separated a live citizen from a phantom, and a caller picking
+	//   "the newest record in this cwd" picked the phantom as often as the real one.
+	receiver: ReceiverObservation;
+	transcript: TranscriptObservation;
 }
+
+/**
+ * The mailbox receiver axis, as OBSERVED for this citizen.
+ *   active     a presence marker whose owner is live AND still serving this garden.
+ *   inactive   a marker exists but fails that test (dead owner, drifted identity, or an
+ *              owner that switched to another garden).
+ *   none       no marker at all — never armed, or retired.
+ *   n/a        this backend has no mailbox receiver axis (pi, antigravity).
+ *   unobserved nobody measured it. Only reachable when a caller drives the fact core
+ *              without an observer; it is the honest word for "not looked at", never a
+ *              quiet stand-in for `none`.
+ */
+export type ReceiverObservation = "active" | "inactive" | "none" | "n/a" | "unobserved";
+
+/** Does the recorded transcript exist on disk? `absent` is what a never-used registration
+ * looks like: a record with no conversation behind it. */
+export type TranscriptObservation = "exists" | "absent" | "unobserved";
+
+export interface PeerObservations {
+	receiver: ReceiverObservation;
+	transcript: TranscriptObservation;
+}
+
+/** What a caller that measured nothing must say. Explicit and greppable — a row that
+ * silently defaulted to `none`/`absent` would be a fabricated fact. */
+export const UNOBSERVED_PEER: PeerObservations = { receiver: "unobserved", transcript: "unobserved" };
+
+/** Measure the two observed axes for one citizen. Injected, so this module stays pure. */
+export type PeerObserver = (identity: MetaIdentity) => PeerObservations;
 
 /**
  * Compose a `PeerFact` from a citizen's identity and an optional socket probe.
@@ -61,7 +100,11 @@ export interface PeerFact {
  *
  * Pure: same inputs → same output, no IO.
  */
-export function resolvePeerFact(identity: MetaIdentity, socket: SocketLiveness | null): PeerFact {
+export function resolvePeerFact(
+	identity: MetaIdentity,
+	socket: SocketLiveness | null,
+	observations: PeerObservations = UNOBSERVED_PEER,
+): PeerFact {
 	return {
 		gardenId: identity.gardenId,
 		backend: identity.backend,
@@ -71,6 +114,8 @@ export function resolvePeerFact(identity: MetaIdentity, socket: SocketLiveness |
 		createdAt: identity.createdAt,
 		recordUpdatedAt: identity.recordUpdatedAt,
 		liveness: factLivenessOf(identity.backend, socket),
+		receiver: observations.receiver,
+		transcript: observations.transcript,
 	};
 }
 
@@ -172,7 +217,11 @@ export interface FactList {
  * A gardenId is never emitted as both a `PeerFact` and a `RecordLessSocketFact`;
  * a record-less socket becomes a `PeerFact` the moment a record claims the gid.
  */
-export function resolveFactList(identities: MetaIdentity[], socketProbes: SocketProbe[]): FactList {
+export function resolveFactList(
+	identities: MetaIdentity[],
+	socketProbes: SocketProbe[],
+	observe: PeerObserver = () => UNOBSERVED_PEER,
+): FactList {
 	const probeMap = new Map<string, SocketProbe>();
 	for (const probe of socketProbes) {
 		if (probeMap.has(probe.gardenId)) {
@@ -207,7 +256,7 @@ export function resolveFactList(identities: MetaIdentity[], socketProbes: Socket
 			}
 			socket = null;
 		}
-		peers.push(resolvePeerFact(identity, socket));
+		peers.push(resolvePeerFact(identity, socket, observe(identity)));
 		consumed.add(gid);
 	}
 

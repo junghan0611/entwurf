@@ -39,7 +39,7 @@ import {
 import {
 	type MailboxDeliverabilityResult,
 	mailboxConversationalDeliverable,
-	receiverMarkerMatchesIdentity,
+	resolveMailboxReceiverFacts,
 } from "./entwurf-deliverability.ts";
 import { isOutOfSocketDomainGardenIdConflict } from "./entwurf-facts.ts";
 import { isLivenessSupported } from "./entwurf-v2-contract.ts";
@@ -75,10 +75,13 @@ import {
 	enqueueMetaMessage,
 	type MetaIdentity,
 	type MetaReceiverMarker,
+	type MetaSenderMarker,
 	metaCapabilityFor,
 	metaRecordExistsByGardenId,
 	readAddressableMetaIdentity,
 	readMetaReceiverMarker,
+	readMetaSenderMarker,
+	requireBackend,
 } from "./meta-session.ts";
 import {
 	type NativePushAdapter,
@@ -111,6 +114,10 @@ export interface ProductionEntwurfV2Seams {
 	 * SE-2 2d-3 active-receiver source; the factory's `mailboxDeliverabilityFor` closure verifies
 	 * its identity match. */
 	readReceiverMarker: (gardenId: string) => MetaReceiverMarker | null;
+	/** Read the sender marker keyed to a receiver's owner pid — the "which garden does this
+	 * process serve NOW?" fact the #101 watch-owner join reads. Null = absent / dead owner /
+	 * corrupt, which the join treats as a retired watch inside its scope. */
+	readSenderMarker: (backend: string, ownerPid: number) => MetaSenderMarker | null;
 	/** Record-side lstat of the EXACT target socket path (no connect) for the pre-probe conflict. */
 	inspectPath: (socketPath: string) => Promise<TargetSocketInspection>;
 	acquireLock: (gid: string, deps: { dir?: string }) => AcquireLockResult;
@@ -183,6 +190,9 @@ export function makeProductionEntwurfV2Deps(opts: ProductionEntwurfV2Opts): Entw
 		metaRecordExists: s.metaRecordExists ?? metaRecordExistsByGardenId,
 		readIdentity: s.readIdentity ?? readAddressableMetaIdentity,
 		readReceiverMarker: s.readReceiverMarker ?? ((gid: string) => readMetaReceiverMarker({ gardenId: gid })),
+		readSenderMarker:
+			s.readSenderMarker ??
+			((backend: string, ownerPid: number) => readMetaSenderMarker({ backend: requireBackend(backend), ownerPid })),
 		inspectPath: s.inspectPath ?? inspectControlSocketPath,
 		acquireLock: s.acquireLock ?? realAcquireLock,
 		releaseLock: s.releaseLock ?? realReleaseLock,
@@ -207,22 +217,32 @@ export function makeProductionEntwurfV2Deps(opts: ProductionEntwurfV2Opts): Entw
 	});
 
 	// ── ONE deliverability seam (SE-2 2d-3): wake-mode capability AND a live active-
-	// receiver (a presence marker that matches THIS identity). The SAME closure is injected
-	// into the decider AND the dead-fallback, so a direct send and a re-resolved fallback
-	// send can never drift to different deliverability verdicts. recordBacked is true by
-	// construction — resolveTarget already proved the record exists before any unsupported-
-	// backend mailbox route, and the closure is only consulted on that route. A null /
-	// dead-owner / identity-mismatched marker is fail-closed to inactive (SE-2): a reply to a
-	// terminated self-fetch citizen is rejected, not enqueued as mailbox garbage. ──────────
+	// receiver. The SAME closure is injected into the decider AND the dead-fallback, so a
+	// direct send and a re-resolved fallback send can never drift to different deliverability
+	// verdicts. recordBacked is true by construction — resolveTarget already proved the record
+	// exists before any unsupported-backend mailbox route, and the closure is only consulted on
+	// that route. A null / dead-owner / identity-mismatched marker is fail-closed to inactive
+	// (SE-2): a reply to a terminated self-fetch citizen is rejected, not enqueued as mailbox
+	// garbage.
+	//
+	// The two receiver facts come from the SHARED composition (#101 결함 B), never from one
+	// value copied into both slots. `ownerAlive` is the marker↔identity match on a live owner;
+	// `watchArmed` is the separate measurement that this owner is STILL serving this garden.
+	// They were the same expression until a Claude session switch inside one pid left a retired
+	// garden's marker reading as an armed doorbell and a real message rotted unread in its
+	// mailbox. `entwurf_self` calls the same composition, so a citizen's own replyability can
+	// never disagree with what dispatch decided about it. ──────────
 	const mailboxDeliverabilityFor = (identity: MetaIdentity): MailboxDeliverabilityResult => {
 		const wakeMode = metaCapabilityFor(identity.backend).wakeMode;
-		const marker = io.readReceiverMarker(identity.gardenId);
-		const matched = receiverMarkerMatchesIdentity(marker, identity);
+		const { ownerAlive, watchArmed } = resolveMailboxReceiverFacts(identity, {
+			readReceiverMarker: io.readReceiverMarker,
+			readSenderMarker: io.readSenderMarker,
+		});
 		return mailboxConversationalDeliverable({
 			wakeMode,
 			recordBacked: true,
-			ownerAlive: matched,
-			watchArmed: matched,
+			ownerAlive,
+			watchArmed,
 		});
 	};
 

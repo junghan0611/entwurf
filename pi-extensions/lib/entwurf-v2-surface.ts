@@ -138,6 +138,12 @@ export function renderEntwurfV2Result(result: EntwurfV2RunResult): EntwurfV2Surf
 					`\n  ${c.detail}` +
 					(c.holder ? `\n  holder: pid ${c.holder.pid} on ${c.holder.hostname} since ${c.holder.createdAt}` : "");
 			}
+			// #101 갭 C: name WHICH receiver axis failed. "mailbox-undeliverable" alone sent a
+			// caller looking for a dead session when the session was alive and had simply
+			// switched to another garden — the predicate knew that and the surface threw it away.
+			if (result.diagnostic?.kind === "mailbox-undeliverable") {
+				text += `\n  mailbox-undeliverable: ${result.diagnostic.reason}`;
+			}
 			return { text, isError: true };
 		}
 		case "executed": {

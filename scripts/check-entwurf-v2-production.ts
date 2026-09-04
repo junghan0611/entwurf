@@ -13,6 +13,9 @@
  *   E. Q3 + Q5 — a dead control send re-resolves (claude-code citizen) to the mailbox and
  *      enqueues through the SAME sendViaMailbox instance (same enqueue spy) on the SAME dirs
  *      the direct hand used — direct send and fallback send never drift.
+ *   E4. #101 — the deliverability seam reads BOTH markers: a live receiver marker whose
+ *      owner's sender marker names ANOTHER garden is undeliverable. The SAME closure serves
+ *      the direct send and the dead-control fallback, so neither can be fooled alone.
  *
  * No real IO — every seam is a spy; the factory's COMPOSITION is what is under test.
  */
@@ -26,7 +29,7 @@ import {
 } from "../pi-extensions/lib/entwurf-v2-production.ts";
 import { runEntwurfV2 } from "../pi-extensions/lib/entwurf-v2-runner.ts";
 import type { ControlSocketPlan, MetaMailboxPlan } from "../pi-extensions/lib/entwurf-v2-send.ts";
-import type { MetaIdentity, MetaReceiverMarker } from "../pi-extensions/lib/meta-session.ts";
+import type { MetaIdentity, MetaReceiverMarker, MetaSenderMarker } from "../pi-extensions/lib/meta-session.ts";
 import type { NativePushAdapter, NativePushProbeResult } from "../pi-extensions/lib/native-push/adapter.ts";
 import type { TargetSocketInspection } from "../pi-extensions/lib/socket-discovery.ts";
 
@@ -38,6 +41,8 @@ function ok(label: string, cond: boolean): void {
 }
 
 const GID = "20260613T100000-aaaaaa";
+/** The garden a switched-away owner serves instead (#101). */
+const OTHER_GID = "20260613T100000-bbbbbb";
 const LOCK_DIR = "/fake/locks";
 const SESSIONS_DIR = "/fake/sessions";
 const MAILBOX_DIR = "/fake/mailbox";
@@ -70,6 +75,19 @@ function receiverMarker(gid: string, backend: string, nativeSessionId = "n"): Me
 		ownerStartKey: "x",
 		ownerKind: "claude-code-cli",
 		armProvenance: "session-start",
+		updatedAt: "t",
+	};
+}
+
+/** The receiver owner's sender marker — "which garden does this pid serve NOW?" (#101). */
+function senderMarker(gardenId: string, backend: string, ownerPid: number): MetaSenderMarker {
+	return {
+		gardenId,
+		backend: backend as MetaSenderMarker["backend"],
+		nativeSessionId: "n",
+		cwd: "/cwd",
+		ownerPid,
+		ownerStartKey: "x",
 		updatedAt: "t",
 	};
 }
@@ -133,6 +151,11 @@ function makeSpiedFactory(over: {
 	/** SE-2 2d-3 — the target's receiver presence marker: "active" (matches identity,
 	 * default), "absent" (terminated/never-armed), or "mismatch" (drifted native id). */
 	receiverMarker?: "active" | "absent" | "mismatch";
+	/** #101 — the receiver owner's SENDER marker, i.e. which garden that pid serves NOW:
+	 * "same" (still this one, default), "other-garden" (the owner switched sessions in
+	 * place — a live marker whose watch is retired), or "absent" (no sender marker at all).
+	 * Injected rather than defaulted so this gate never stats the operator's real roots. */
+	senderMarker?: "same" | "other-garden" | "absent";
 }) {
 	const spies: Spies = {
 		acquire: [],
@@ -160,6 +183,10 @@ function makeSpiedFactory(over: {
 				if (over.receiverMarker === "absent") return null;
 				const nsid = over.receiverMarker === "mismatch" ? "DRIFT" : "n";
 				return receiverMarker(gid, over.backend ?? "pi", nsid);
+			},
+			readSenderMarker: (backend, ownerPid) => {
+				if (over.senderMarker === "absent") return null;
+				return senderMarker(over.senderMarker === "other-garden" ? OTHER_GID : GID, backend, ownerPid);
 			},
 			inspectPath: async (socketPath) => {
 				spies.inspectPath.push({ socketPath });
@@ -386,6 +413,50 @@ async function main(): Promise<void> {
 		const res = await deps.executor.sendControl(CONTROL_PLAN, lockClaim());
 		ok("E3: drifted marker → rejected (not active)", res.outcome === "rejected");
 		ok("E3: drifted marker → enqueue NEVER called (presence ≠ identity match)", spies.enqueue.length === 0);
+	}
+
+	// ── E4: #101 — a LIVE receiver marker whose owner switched gardens. Every axis the
+	// pre-#101 seam looked at says "active": the marker exists, its owner is live, and it
+	// matches this identity exactly. Only the owner's sender marker — which garden that pid
+	// serves NOW — says the watch is retired. This is the cell where a real message was
+	// enqueued into a mailbox nobody was draining (oracle, 2026-09-04). ─────────────────
+	{
+		const { deps, spies } = makeSpiedFactory({
+			backend: "claude-code",
+			rpc: "dead-throw",
+			classifyDead: true,
+			receiverMarker: "active",
+			senderMarker: "other-garden",
+		});
+		const res = await deps.executor.sendControl(CONTROL_PLAN, lockClaim());
+		ok(
+			"E4: owner switched gardens → rejected (mailbox-undeliverable), never fallback-sent",
+			res.outcome === "rejected" && res.rejectReason === "mailbox-undeliverable",
+		);
+		ok("E4: nothing enqueued into the retired garden's mailbox", spies.enqueue.length === 0);
+		// …and the same wiring still DELIVERS when that owner is serving this garden, so the
+		// join is a measurement and not a blanket refusal.
+		const served = makeSpiedFactory({
+			backend: "claude-code",
+			rpc: "dead-throw",
+			classifyDead: true,
+			receiverMarker: "active",
+			senderMarker: "same",
+		});
+		const ok2 = await served.deps.executor.sendControl(CONTROL_PLAN, lockClaim());
+		ok("E4: the served garden still falls back to a real mailbox enqueue", ok2.outcome === "fallback-sent");
+		ok(
+			"E4: a MISSING sender marker is fail-closed, not optimistic",
+			(
+				await makeSpiedFactory({
+					backend: "claude-code",
+					rpc: "dead-throw",
+					classifyDead: true,
+					receiverMarker: "active",
+					senderMarker: "absent",
+				}).deps.executor.sendControl(CONTROL_PLAN, lockClaim())
+			).outcome === "rejected",
+		);
 	}
 
 	// ── F: #50 C4 — record-LESS control socket → pre-probe record-less-socket reject ──

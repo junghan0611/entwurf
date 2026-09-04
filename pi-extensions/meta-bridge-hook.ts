@@ -28,6 +28,16 @@
  * a UserPromptSubmit fire does a degraded RECORD backfill (upsert) but cannot
  * re-arm the idle watch — the record's address is restored, the wake is not.
  *
+ * SESSION SWITCH (#101). One Claude process serves one session at a time, but it can
+ * change which: the resume picker fires SessionStart for a placeholder id and then again
+ * for the id the operator picked, four seconds apart under the same pid, and `/clear` has
+ * the same shape. The garden it stopped serving keeps a receiver marker naming a LIVE
+ * owner, so a sender reads an armed doorbell nobody holds. This hook therefore reads the
+ * sender marker BEFORE overwriting it and retires the previous garden's receiver marker
+ * (marker only — records are identity and are never deleted here; and only a marker this
+ * pid owns). The envelope's `source` is logged beside it and decides nothing: the switch
+ * is settled by what is on disk, which holds on every host and vendor version.
+ *
  * LAUNCH: never invoked directly by Claude. `hooks.json` declares the EXEC form
  * (`command` = `<plugin-root>/scripts/hook-launch.sh`, `args` = [node, this file]),
  * and the launcher `exec`s that argv — so this process inherits the launcher's pid
@@ -51,6 +61,8 @@ import {
 	defaultMetaSessionsDir,
 	isPlausibleOwnerPid,
 	type MetaReceiverArmProvenance,
+	readMetaSenderMarker,
+	removeMetaReceiverMarker,
 	upsertMetaSession,
 	writeMetaReceiverMarker,
 	writeMetaSenderMarker,
@@ -191,6 +203,13 @@ function main(): void {
 				? env.model_id
 				: undefined;
 	const eventName = typeof env.hook_event_name === "string" ? env.hook_event_name : "SessionStart";
+	// `source` (startup | resume | clear | compact) is Claude's own word for WHY this
+	// SessionStart fired. It is logged on every line below and decides nothing: a session
+	// switch is settled by what is on disk (the sender marker's garden), which is true on
+	// every host and every vendor version. Logging it is how this host finally gets a
+	// receipt for the envelope order the #101 diagnosis could only read from vendor docs —
+	// and the raw lab (scripts/raw-claude-session-switch) reads these lines, not a guess.
+	const source = typeof env.source === "string" && env.source.length > 0 ? env.source : "(unset)";
 
 	if (!sessionId || !transcriptPath) {
 		// A degraded envelope: cannot mint an honest reference record. Log + no-op
@@ -213,7 +232,10 @@ function main(): void {
 			input: { backend: "claude-code", nativeSessionId: sessionId, transcriptPath, cwd, model },
 		});
 		gardenId = result.record.gardenId;
-		logLine("INFO", `${result.action} record ${path.basename(result.path)} (event=${eventName}, native=${sessionId})`);
+		logLine(
+			"INFO",
+			`${result.action} record ${path.basename(result.path)} (event=${eventName}, source=${source}, native=${sessionId})`,
+		);
 	} catch (err) {
 		// Best-effort: a broken record store must surface via the doctor, not by
 		// breaking the user's session open. Log and continue with no arm. This is
@@ -241,9 +263,35 @@ function main(): void {
 	// an env var. Missing launcher provenance or an implausible parent yields no marker.
 	const ownerPid = resolveMetaHookOwnerPid();
 	if (ownerPid !== null) {
+		// SESSION SWITCH RETIREMENT (#101 결함 A). One Claude process serves ONE session at a
+		// time, but it can switch which: the resume picker fires a SessionStart for a
+		// placeholder native id and then a second one for the id the operator actually picked,
+		// four seconds apart under the same pid (measured on oracle, meta-bridge-hook.log
+		// 2026-09-04 09:31:35 → 09:31:39); `/clear` has the same shape. Whatever it was serving
+		// before is no longer being drained, so the marker advertising its doorbell has to go.
+		//
+		// The evidence is the sender marker as it stands RIGHT NOW — pid → the garden this
+		// process serves — which is why this reads it BEFORE the write below overwrites it with
+		// the new garden. No vendor field is consulted: `source` is logged, not branched on, so
+		// a host or version that words it differently changes nothing here. A same-garden
+		// re-registration (every UserPromptSubmit, a CwdChanged, a re-fired SessionStart) finds
+		// an equal garden id and retires NOTHING — the marker it would remove is the live one.
+		//
+		// Only the marker, never the record (see removeMetaReceiverMarker), and only a marker
+		// this pid owns.
+		const previous = readMetaSenderMarker({ backend: "claude-code", ownerPid, verifyOwner: false });
+		if (previous && previous.gardenId !== gardenId) {
+			const retired = removeMetaReceiverMarker({ gardenId: previous.gardenId, ownerPid });
+			logLine(
+				"INFO",
+				retired
+					? `retired receiver marker ${previous.gardenId} — owner pid ${ownerPid} switched to ${gardenId} (event=${eventName}, source=${source})`
+					: `no receiver marker to retire for ${previous.gardenId} — owner pid ${ownerPid} switched to ${gardenId} (event=${eventName}, source=${source})`,
+			);
+		}
 		try {
 			writeMetaSenderMarker({ backend: "claude-code", gardenId, nativeSessionId: sessionId, cwd, ownerPid });
-			logLine("INFO", `sender marker ${ownerPid} -> ${gardenId} (event=${eventName})`);
+			logLine("INFO", `sender marker ${ownerPid} -> ${gardenId} (event=${eventName}, source=${source})`);
 		} catch (err) {
 			logLine(
 				"WARN",
@@ -294,7 +342,7 @@ function main(): void {
 					ownerPid,
 					armProvenance,
 				});
-				logLine("INFO", `receiver marker ${gardenId} owner=${ownerPid} arm=${eventName}`);
+				logLine("INFO", `receiver marker ${gardenId} owner=${ownerPid} arm=${eventName} source=${source}`);
 			} catch (err) {
 				logLine(
 					"WARN",

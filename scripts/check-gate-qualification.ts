@@ -814,6 +814,7 @@ console.log(`\n[gate-qualification] self-test: ${passed} checks passed`);
 		"copilot-receive": 18,
 		"fresh-cut": 1,
 		"meta-facts": 4,
+		"meta-hook-session-switch": 11,
 		"meta-identity": 4,
 		"meta-retire": 3,
 		"mux-boundary": 14,

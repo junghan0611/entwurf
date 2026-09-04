@@ -181,16 +181,40 @@ writeMetaReceiverMarker({
 
 // RECEIVER — a different armed self-fetch citizen. A dead/unarmed target must remain
 // mailbox-undeliverable, so this marker isolates artifact delivery from target liveness.
+//
+// It is owned by a DIFFERENT live pid than the sender, and that is not decoration (#101):
+// a claude-code watch owner serves exactly one garden at a time, and deliverability now
+// requires that owner's sender marker to still name the garden being addressed. Two
+// citizens armed under ONE pid is a state the real world does not produce — it is what a
+// session switch leaves behind — so a fixture that modelled it would be asking the
+// artifact to deliver into a retired watch.
+//
+// The stand-in second native CLI is a spawned idle process, NOT this gate's parent: the
+// subject bridge resolves its own sender identity through its ancestry, and an ancestor
+// holding a second garden's marker is the "ambiguous sender identity" refusal the bridge
+// already ships. A live pid outside that ancestry is what a real second CLI looks like.
+// It exits on its own timer, and is killed in the outer finally.
+const receiverOwner = spawn(process.execPath, ["-e", "setTimeout(() => {}, 300000)"], { stdio: "ignore" });
+const receiverOwnerPid = receiverOwner.pid;
+if (typeof receiverOwnerPid !== "number") throw new Error("could not spawn the stand-in receiver owner process");
 const receiver = upsertMetaSession({
 	input: { backend: "claude-code", nativeSessionId: `bridge-delivery-receiver-${process.pid}`, cwd: tmp },
 	dir: sessionsDir,
 });
 const gid = receiver.record.gardenId;
+writeMetaSenderMarker({
+	backend: "claude-code",
+	gardenId: gid,
+	nativeSessionId: receiver.record.nativeSessionId,
+	cwd: tmp,
+	ownerPid: receiverOwnerPid,
+	sendersDir,
+});
 writeMetaReceiverMarker({
 	gardenId: gid,
 	backend: "claude-code",
 	nativeSessionId: receiver.record.nativeSessionId,
-	ownerPid: process.pid,
+	ownerPid: receiverOwnerPid,
 	armProvenance: "session-start",
 	receiversDir,
 });
@@ -471,6 +495,20 @@ try {
 	await fsp.writeFile(receiverRecordFile, receiverRecordV3Bytes);
 	const anonSendersDir = path.join(tmp, "meta-senders-anon");
 	await fsp.mkdir(anonSendersDir, { recursive: true });
+	// The TARGET's owner marker still belongs in this dir (#101). Anonymity is about the
+	// CALLER — no marker under the bridge child's own owner pid — while deliverability asks
+	// a different question of a different pid: is the target's watch owner still serving the
+	// target's garden? Leaving it out would make every cell below fail as
+	// mailbox-undeliverable and prove nothing about the anonymous hatch. In production no
+	// one swaps this dir; the split exists only because this fixture does.
+	writeMetaSenderMarker({
+		backend: "claude-code",
+		gardenId: gid,
+		nativeSessionId: receiver.record.nativeSessionId,
+		cwd: tmp,
+		ownerPid: receiverOwnerPid,
+		sendersDir: anonSendersDir,
+	});
 	const oneShotV2 = async (
 		cellEnv: NodeJS.ProcessEnv,
 		message: string,
@@ -581,6 +619,9 @@ try {
 } finally {
 	try {
 		child?.kill("SIGTERM");
+	} catch {}
+	try {
+		receiverOwner.kill("SIGTERM");
 	} catch {}
 	await fsp.rm(tmp, { recursive: true, force: true });
 }

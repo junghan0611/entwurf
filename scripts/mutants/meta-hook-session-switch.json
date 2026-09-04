@@ -1,0 +1,143 @@
+{
+	"schemaVersion": 1,
+	"lane": "meta-hook-session-switch",
+	"mutants": [
+		{
+			"claim": "MHSS-RETIRE-PREV-GARDEN",
+			"title": "a hook that never retires the garden its pid stopped serving leaves the placeholder citizen advertising a doorbell nobody holds — the ghost registration measured on oracle, where a real message sat unread in its mailbox for an hour",
+			"subject": "pi-extensions/meta-bridge-hook.ts",
+			"find": ["\t\tif (previous && previous.gardenId !== gardenId) {"],
+			"replace": ["\t\tif (false && previous && previous.gardenId !== gardenId) {"],
+			"gate": ["bash", "run.sh", "check-meta-hook-session-switch"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:MHSS-RETIRE-PREV-GARDEN]",
+			"signatureSource": "scripts/check-meta-hook-session-switch.ts"
+		},
+		{
+			"claim": "MHSS-RETIRE-KEEPS-CURRENT",
+			"title": "retiring on ANY previous sender marker instead of a CHANGED one disarms the live session's own inbox on its next keystroke — the repair eating the citizen it exists to protect, which is worse than the defect",
+			"subject": "pi-extensions/meta-bridge-hook.ts",
+			"find": ["\t\tif (previous && previous.gardenId !== gardenId) {"],
+			"replace": ["\t\tif (previous) {"],
+			"gate": ["bash", "run.sh", "check-meta-hook-session-switch"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:MHSS-RETIRE-KEEPS-CURRENT]",
+			"signatureSource": "scripts/check-meta-hook-session-switch.ts"
+		},
+		{
+			"claim": "MHSS-RETIRE-ONLY-OWN-OWNER",
+			"title": "dropping the owner-pid guard lets one session's SessionStart delete a marker another LIVE process holds — a silent cross-session disarm, not a stale-marker cleanup",
+			"subject": "pi-extensions/lib/meta-session.ts",
+			"find": ["\t\tif (!marker || marker.ownerPid !== opts.ownerPid) return false;"],
+			"replace": ["\t\tif (!marker) return false;"],
+			"gate": ["bash", "run.sh", "check-meta-hook-session-switch"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:MHSS-RETIRE-ONLY-OWN-OWNER]",
+			"signatureSource": "scripts/check-meta-hook-session-switch.ts"
+		},
+		{
+			"claim": "MHSS-SOURCE-LOGGED",
+			"title": "dropping the vendor's `source` from the log leaves this host with no receipt for WHY a SessionStart fired — the exact evidence the #101 diagnosis had to inherit from vendor docs because nothing here recorded it",
+			"subject": "pi-extensions/meta-bridge-hook.ts",
+			"find": [
+				"\tconst source = typeof env.source === \"string\" && env.source.length > 0 ? env.source : \"(unset)\";"
+			],
+			"replace": ["\tconst source = \"(unset)\";"],
+			"gate": ["bash", "run.sh", "check-meta-hook-session-switch"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:MHSS-SOURCE-LOGGED]",
+			"signatureSource": "scripts/check-meta-hook-session-switch.ts"
+		},
+		{
+			"claim": "MHSS-SENDER-JOIN-MEASURED",
+			"title": "a join that always answers yes turns the receiver marker back into proof of something it never proved — that the process holding it is still serving THIS garden",
+			"subject": "pi-extensions/lib/entwurf-deliverability.ts",
+			"find": [
+				"\treturn !!senderMarker && senderMarker.gardenId === marker.gardenId && senderMarker.backend === marker.backend;"
+			],
+			"replace": ["\treturn true;"],
+			"gate": ["bash", "run.sh", "check-meta-hook-session-switch"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:MHSS-SENDER-JOIN-MEASURED]",
+			"signatureSource": "scripts/check-meta-hook-session-switch.ts"
+		},
+		{
+			"claim": "MHSS-SEAM-USES-JOIN",
+			"title": "restoring `watchArmed` as a copy of the identity match at the production seam re-ships the false deliverable even with the join intact — the shipped line that let a message be enqueued into a void",
+			"subject": "pi-extensions/lib/entwurf-v2-production.ts",
+			"find": [
+				"\t\tconst { ownerAlive, watchArmed } = resolveMailboxReceiverFacts(identity, {\n\t\t\treadReceiverMarker: io.readReceiverMarker,\n\t\t\treadSenderMarker: io.readSenderMarker,\n\t\t});"
+			],
+			"replace": [
+				"\t\tconst { ownerAlive } = resolveMailboxReceiverFacts(identity, {\n\t\t\treadReceiverMarker: io.readReceiverMarker,\n\t\t\treadSenderMarker: io.readSenderMarker,\n\t\t});\n\t\tconst watchArmed = ownerAlive;"
+			],
+			"gate": ["bash", "run.sh", "check-meta-hook-session-switch"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:MHSS-SEAM-USES-JOIN]",
+			"signatureSource": "scripts/check-meta-hook-session-switch.ts"
+		},
+		{
+			"claim": "MHSS-REJECT-CARRIES-REASON",
+			"title": "dropping the deliverability reason at the decider boundary hands the caller a verdict with no cause — the bare `mailbox-undeliverable` that sent a sibling looking for a dead session when the session was alive and had moved",
+			"subject": "pi-extensions/lib/entwurf-v2-decider.ts",
+			"find": [
+				"\t\t\treturn deliverability.deliverable\n\t\t\t\t? reject(receipt)\n\t\t\t\t: reject(receipt, { kind: \"mailbox-undeliverable\", reason: deliverability.reason });"
+			],
+			"replace": ["\t\t\treturn reject(receipt);"],
+			"gate": ["bash", "run.sh", "check-meta-hook-session-switch"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:MHSS-REJECT-CARRIES-REASON]",
+			"signatureSource": "scripts/check-meta-hook-session-switch.ts"
+		},
+		{
+			"claim": "MHSS-REASON-RENDERED",
+			"title": "a surface that carries the diagnostic and prints nothing is the same silence one layer up — the operator still reads only `mailbox-undeliverable`",
+			"subject": "pi-extensions/lib/entwurf-v2-surface.ts",
+			"find": ["\t\t\t\ttext += `\\n  mailbox-undeliverable: ${result.diagnostic.reason}`;"],
+			"replace": ["\t\t\t\ttext += \"\";"],
+			"gate": ["bash", "run.sh", "check-meta-hook-session-switch"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:MHSS-REASON-RENDERED]",
+			"signatureSource": "scripts/check-meta-hook-session-switch.ts"
+		},
+		{
+			"claim": "MHSS-PEERS-RECEIVER-OBSERVED",
+			"title": "collapsing `inactive` into `none` erases the distinction a reader needs — a watch that was armed and is no longer valid looks exactly like one that was never armed, which is the listing telling a caller nothing again",
+			"subject": "pi-extensions/lib/entwurf-peer-observe.ts",
+			"find": ["\treturn fs.existsSync(metaReceiverMarkerPath(identity.gardenId)) ? \"inactive\" : \"none\";"],
+			"replace": ["\treturn \"none\";"],
+			"gate": ["bash", "run.sh", "check-meta-hook-session-switch"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:MHSS-PEERS-RECEIVER-OBSERVED]",
+			"signatureSource": "scripts/check-meta-hook-session-switch.ts"
+		},
+		{
+			"claim": "MHSS-PEERS-TRANSCRIPT-OBSERVED",
+			"title": "reporting every transcript as present hides exactly the phantom this column exists to show: a registration minted at SessionStart with no conversation ever written behind it",
+			"subject": "pi-extensions/lib/entwurf-peer-observe.ts",
+			"find": [
+				"\t\treturn identity.transcriptPath && fs.existsSync(identity.transcriptPath) ? \"exists\" : \"absent\";"
+			],
+			"replace": ["\t\treturn \"exists\";"],
+			"gate": ["bash", "run.sh", "check-meta-hook-session-switch"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:MHSS-PEERS-TRANSCRIPT-OBSERVED]",
+			"signatureSource": "scripts/check-meta-hook-session-switch.ts"
+		},
+		{
+			"claim": "MHSS-PEERS-COLUMNS-RENDERED",
+			"title": "measuring both axes and printing neither returns the listing to two identical rows for a live citizen and a phantom — the surface gap that made a sibling dispatch into a void",
+			"subject": "pi-extensions/lib/entwurf-peers-render.ts",
+			"find": [
+				"\t\t`- ${p.gardenId}  backend=${p.backend}  liveness=${p.liveness}  receiver=${p.receiver}  ` +\n\t\t`transcript=${p.transcript}  cwd=${p.cwd}  model=${model}`"
+			],
+			"replace": [
+				"\t\t`- ${p.gardenId}  backend=${p.backend}  liveness=${p.liveness}  ` + `cwd=${p.cwd}  model=${model}`"
+			],
+			"gate": ["bash", "run.sh", "check-meta-hook-session-switch"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:MHSS-PEERS-COLUMNS-RENDERED]",
+			"signatureSource": "scripts/check-meta-hook-session-switch.ts"
+		}
+	]
+}

@@ -42,6 +42,7 @@ import {
 	type DispatchDecision,
 	decideDispatch,
 	type ExecutionPlan,
+	type RejectDiagnostic,
 	type TargetResolution,
 } from "../pi-extensions/lib/entwurf-v2-decider.ts";
 import type { AcquireLockResult, LockClaim } from "../pi-extensions/lib/entwurf-v2-lock.ts";
@@ -156,7 +157,10 @@ type LockClass = "none" | "held" | "mailbox-null" | "released" | "acquire-fail";
 
 type Expect =
 	| { decision: "execute"; transport: EntwurfV2Transport; lock: LockClass }
-	| { decision: "reject"; reason: string; lock: LockClass; diagnostic?: boolean };
+	// `diagnostic` names the KIND a reject must carry, not a boolean: two reject cells now
+	// carry machine-readable evidence, and the axis has to say which — a reject that carried
+	// the wrong diagnostic would pass a yes/no cell (#101 갭 C).
+	| { decision: "reject"; reason: string; lock: LockClass; diagnostic?: RejectDiagnostic["kind"] };
 
 /**
  * Which IO seams the decider is ALLOWED to touch — the "어느 축을 만지면 안 되는지"
@@ -211,7 +215,7 @@ const ROWS: Row[] = [
 		targetKind: "pi, lock held by another",
 		intent: "fire-and-forget",
 		scenario: { resolution: { identity: identity("pi"), preProbeAddressConflict: false }, lock: "conflict" },
-		expect: { decision: "reject", reason: "target-locked", lock: "acquire-fail", diagnostic: true },
+		expect: { decision: "reject", reason: "target-locked", lock: "acquire-fail", diagnostic: "target-locked" },
 	},
 	{
 		name: "unsupported self-fetch active → meta-mailbox",
@@ -231,7 +235,8 @@ const ROWS: Row[] = [
 			resolution: { identity: identity("claude-code"), preProbeAddressConflict: false },
 			mailboxDeliverable: false,
 		},
-		expect: { decision: "reject", reason: "mailbox-undeliverable", lock: "none" },
+		// #101 갭 C: an undeliverable mailbox reject carries the receiver axis that failed.
+		expect: { decision: "reject", reason: "mailbox-undeliverable", lock: "none", diagnostic: "mailbox-undeliverable" },
 	},
 	{
 		name: "in-domain live ff → control-socket",
@@ -338,8 +343,8 @@ async function runRow(row: Row): Promise<void> {
 		}
 		if (row.expect.diagnostic) {
 			ok(
-				`${row.name}: carries target-locked diagnostic`,
-				d.kind === "reject" && d.diagnostic?.kind === "target-locked",
+				`${row.name}: carries the ${row.expect.diagnostic} diagnostic`,
+				d.kind === "reject" && d.diagnostic?.kind === row.expect.diagnostic,
 			);
 		} else {
 			ok(`${row.name}: no diagnostic`, d.kind === "reject" && d.diagnostic === undefined);
