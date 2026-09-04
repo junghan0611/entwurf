@@ -194,13 +194,24 @@ async function main(): Promise<void> {
 	// owner is deliverable only while ITS OWN sender marker still names the garden it is armed
 	// for — that join is what refuses a session which switched away in place. A receiver marker
 	// with no sender marker beside it models a state the product now treats as retired, so this
-	// smoke would fail on its own fixture instead of on the rail it exists to prove. Same shape
-	// as smoke-mux-lifecycle-live / smoke-omp-fresh-live, which already seeded both.
+	// smoke would fail on its own fixture instead of on the rail it exists to prove.
+	//
+	// THE OWNER IS A SPAWNED IDLE PROCESS, NOT THIS ONE, and that is specific to this smoke:
+	// hop 1 is a native `claude` child of THIS process, and the bridge resolves a sender's
+	// identity through its ancestry. A terminus marker under this pid therefore puts TWO garden
+	// citizens on one host process, which the bridge refuses outright as ambiguous sender
+	// identity — measured on oracle 2026-09-04, where hop 1 came back "refused: ambiguous sender
+	// identity (…-f34713, …-912b42)" and the chain never started. The sibling smokes keep
+	// `process.pid` because their children are pi/ACP sessions carrying their own identity, or
+	// tmux siblings that are not descendants at all.
+	const terminusOwner = spawn(process.execPath, ["-e", "setTimeout(() => {}, 900000)"], { stdio: "ignore" });
+	const terminusOwnerPid = terminusOwner.pid;
+	if (typeof terminusOwnerPid !== "number") throw new Error("could not spawn the terminus owner process");
 	writeMetaReceiverMarker({
 		gardenId: gidD,
 		backend: "claude-code",
 		nativeSessionId: terminus.record.nativeSessionId,
-		ownerPid: process.pid,
+		ownerPid: terminusOwnerPid,
 		armProvenance: "session-start",
 		receiversDir,
 	});
@@ -209,7 +220,7 @@ async function main(): Promise<void> {
 		gardenId: gidD,
 		nativeSessionId: terminus.record.nativeSessionId,
 		cwd: world,
-		ownerPid: process.pid,
+		ownerPid: terminusOwnerPid,
 		sendersDir,
 	});
 	console.error(`[smoke-entwurf-chain-live] D:      ${gidD} (mailbox terminus)`);
@@ -316,7 +327,11 @@ async function main(): Promise<void> {
 			await sleep(POLL_MS);
 		}
 		if (msgs.length === 0) {
-			console.error(`[smoke-entwurf-chain-live] A turn output:\n${claudeOut.slice(0, 1500)}`);
+			// The FULL turn, not a 1500-char head: that slice cut the JSON before its `result`
+			// field, so the one line that says what A actually did — the tool outcome it was told
+			// to echo back — was the first thing this diagnostic dropped. A failure that hides its
+			// own cause costs another LIVE run to re-learn.
+			console.error(`[smoke-entwurf-chain-live] A turn output:\n${claudeOut}`);
 			console.error(`[smoke-entwurf-chain-live] B stream tail:\n${streamB.slice(-2000)}`);
 			console.error(`[smoke-entwurf-chain-live] C stream tail:\n${streamC.slice(-2000)}`);
 		}
@@ -371,6 +386,9 @@ async function main(): Promise<void> {
 		console.error(`[smoke-entwurf-chain-live] chain: ${gidA} → ${gidB} → ${gidC} → ${gidD}`);
 	} finally {
 		for (const ch of children) await terminateChild(ch).catch(() => undefined);
+		try {
+			terminusOwner.kill("SIGTERM");
+		} catch {}
 	}
 
 	console.log(

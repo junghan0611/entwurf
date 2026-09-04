@@ -77,6 +77,17 @@ claude가 없던 그 은퇴를 갖고 있다 — 이번 claude 은퇴와 **같�
    게이트·`entwurf-peer-observe.ts`·`entwurf-peers-render.ts`를 그 어휘로 통일. README 안의 옛
    문장 인용은 tombstone이라 유지.
 
+**1번을 닫는 과정에서 내 fixture 수정이 스스로 회귀를 만들었고, 그것을 측정으로 잡았다.**
+chain-live의 terminus를 이 프로세스 pid로 소유시키자 hop 1(네이티브 `claude` 자식)이
+`ambiguous sender identity`로 거부됐다 — 브리지는 발신자 신원을 **조상 pid**로 푸는데, 그
+프로세스가 이미 D의 marker를 들고 있어 한 호스트에 시민이 둘이 된 것이다(영수증: 2026-09-04
+chain4 실행, A의 turn 결과에 `refused: ambiguous sender identity (…-f34713, …-912b42)`).
+귀속은 pre-#101 트리(`c82576c`)에서 같은 스모크가 **통과**하는 것으로 확정했다. 처방은
+`check-bridge-delivery`와 같다: terminus를 **조상 밖의 살아있는 pid**(스폰한 idle 프로세스)가
+소유한다. 형제 스모크들이 `process.pid`를 유지하는 이유(자식이 pi/ACP이거나 tmux 형제라 후손이
+아님)는 주석에 적었다. 덤으로 이 실패가 자기 원인을 숨기고 있었다 — 진단 출력이 A의 turn JSON을
+1500자에서 잘라 `result` 필드를 버렸다. 전량 출력으로 바꿨다.
+
 리뷰가 PASS로 판정한 것: A(거짓 배달 폐쇄 — seam·self·dead-fallback·executor 모두 같은 합성),
 B(copilot 무영향·omp 제외), C(순서·자기-pid 가드·record 무삭제), E(fixture 3개 수정은 비현실
 상태 제거이지 약화 아님), F(observe seam real default).
