@@ -89,13 +89,35 @@ chain4 실행, A의 turn 결과에 `refused: ambiguous sender identity (…-f347
 아님)는 주석에 적었다. 덤으로 이 실패가 자기 원인을 숨기고 있었다 — 진단 출력이 A의 turn JSON을
 1500자에서 잘라 `result` 필드를 버렸다. 전량 출력으로 바꿨다.
 
-**2라운드 amendment에서 chain-live 1회가 hop 3에서 `mailbox-undeliverable(idle-watch not armed)`로
-빨갛게 났고, 원인을 특정하지 못했다.** 앞뒤 두 번(chain5·chain7)은 통과했고, 재현되지 않는다.
-그 시각 rejection은 join이 그 순간 거짓이었다고 말하므로 fixture가 실행 중에 상했다는 뜻이다 —
-가장 그럴듯한 것은 idle owner 프로세스가 (그 무렵 이 호스트의 메모리 압박으로) 죽은 것이지만
-**측정한 것이 아니라 가설이다.** 다음에 같은 일이 나면 즉답이 나오도록 스모크에 fixture 계측을
-넣었다: 체인 시작 직전 terminus가 deliverable인지 단언하고, 타임아웃 시 ownerPid 생존과
-`ownerAlive/watchArmed`를 찍는다.
+## 원인 미상 1건 — 열린 채로 남긴다
+
+2라운드 amendment 중 `smoke-entwurf-chain-live` **1회(2026-09-04 16:58 KST)가 hop 3에서 빨갛게
+났고 원인은 여전히 미상이다.** 앞뒤 두 번(fence 전·후)은 통과했고 재현되지 않았다. 결정적 줄만
+verbatim으로 옮긴다 — 로그는 이 호스트 스크래치에만 있어 다음 형제에게 안 보인다:
+
+```
+[smoke-entwurf-chain-live] nonce:  ENTWURF-CHAIN-64A93C03B3
+[smoke-entwurf-chain-live] D:      20260904T165055-883abc (mailbox terminus)
+[smoke-entwurf-chain-live] A:      20260904T165100-f32e09 (native Claude Code)
+hop1 (A, native claude): entwurf_v2 control-socket → sent
+hop2 (B, pi gpt-5.6-luna): entwurf_v2 control-socket → sent
+hop3 (C, pi ACP claude-sonnet-5): entwurf_v2 rejected: mailbox-undeliverable
+      (observed liveness: unsupported) — self-fetch receiver inactive, idle-watch not armed.
+그 뒤 C는 "type":"agent_end" 로 정상 종료, 단언 실패: the chain reached the mailbox terminus (0 .msg)
+```
+
+hop 1·2는 도달했고 C의 턴도 정상 종료했다. 거부 문구는 **그 순간 join이 거짓**이었다고 말하므로
+이 스모크가 소유한 fixture가 실행 중에 상했다는 뜻이다.
+
+- **배제한 것(측정):** spawn→marker write 사이의 start-key 레이스 — 로컬 실험에서 spawn 직후
+  start key가 즉시 읽히고 write/read가 왕복함. idle owner의 조기 종료 — 같은 커맨드로 20초 생존 확인.
+- **뒷받침되지 않는 것:** "idle owner가 메모리 압박에 죽었다"는 내 가설은 이 호스트 저널로
+  **확인도 반증도 되지 않았다** — Fable 측정: `journalctl --since 16:50 --until 17:02`(system+user)에
+  OOM/kill 줄 없음, `systemd-oomd`는 active지만 kill 기록 없음, earlyoom 비활성.
+- **다음에 갈라줄 자리:** 새 fixture 계측이 두 갈래를 한 줄로 가른다 — 체인 시작 직전
+  `fixture: the terminus is a deliverable citizen…` 단언이 빨가면 fixture가 **처음부터** 상한 것이고,
+  그 단언이 초록인데 타임아웃이 나면 `terminus fixture at timeout: ownerPid=… alive=… ownerAlive=…
+  watchArmed=…` 줄이 owner 사망인지 join 붕괴인지 체인 미도달인지를 그 자리에서 말한다.
 
 리뷰가 PASS로 판정한 것: A(거짓 배달 폐쇄 — seam·self·dead-fallback·executor 모두 같은 합성),
 B(copilot 무영향·omp 제외), C(순서·자기-pid 가드·record 무삭제), E(fixture 3개 수정은 비현실
