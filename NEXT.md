@@ -33,28 +33,36 @@ CHANGELOG `## Unreleased`가 구현 범위 `v0.15.1..19ad90c` **30커밋** 전�
 
 - [x] **11. 0.17.2 cut + npm** — `v0.17.2` @ `c82576c`, GitHub 릴리즈 + **npm `latest` = 0.17.2**
       (GLG가 직접 publish, 2026-09-03). 0.17선이 처음으로 레지스트리에 올랐다. #94·#98을 실었다.
-- [ ] **12. #101 랜딩 · 0.18.0 컷** ← CURRENT: 한 pid 안의 세션 전환이 만든 유령 시민과 거짓
-      배달을 닫은 커밋 7개(`3ca8220 → 5763bfa`)를 main에 올리고 0.18.0으로 컷한다.
+- [x] **12. #101 랜딩 · 0.18.0 컷 + npm** — 한 pid 안의 세션 전환이 만든 유령 시민과 거짓 배달을
+      닫은 커밋 7개(`3ca8220 → 5763bfa`)가 main에 올라가고 **`v0.18.0` @ `2934807`**로 컷됐다.
+      GitHub 릴리즈 공개 + **npm `latest` = 0.18.0**. exact-SHA CI run `33866330016` 3잡 초록,
+      LIVE 게이트 `cut: OK`(MUST 23/0/0, qualification 364/364). 발행된 integrity가 수용 candidate의
+      것과 동일해 리팩이 없었음이 레지스트리에서 확인된다. npm 토큰이 만료돼 있어 발행은 GLG가
+      직접 했다(0.17.2와 같은 방식).
+- [ ] **13. 다음 레인 미정** ← CURRENT: GLG가 stem을 고른다 (후보는 NOW)
 
-현재 좌표: 1–11 완료 → 12 진행 중(#101 랜딩·0.18.0 컷) · **0.16.1 make는 열린 채 PAUSED**. 푸시·태그는
+현재 좌표: 1–12 완료 → 13 stem 선택 대기 · **0.16.1 make는 열린 채 PAUSED**. 푸시·태그는
 `entwurf-release` 4모드 몫이다 (CalVer `tag-release`가 아님).
 
-# NOW — #101 랜딩과 0.18.0 컷
+# NOW — 0.18.0 착지 후, 다음 stem 대기
 
-- **Stem:** `fix/101-session-switch` 커밋 7개(`3ca8220 → 5763bfa`)를 main에 fast-forward하고
-  **0.18.0**으로 컷한다. 한 pid 안에서 세션을 갈아타면 처음 열렸던 빈 세션이 계속 "살아있는
+- **Stem: 없다. GLG가 고른다.** 0.18.0이 태그·GitHub 릴리즈·npm `latest`까지 전부 닫혔다
+  (`v0.18.0` @ `2934807`, 2026-09-04). 이 리포에 지금 열려 있는 릴리즈 레인은 없다.
+- **이 레인이 실은 것:** `fix/101-session-switch` 커밋 7개(`3ca8220 → 5763bfa`). 한 pid 안에서 세션을 갈아타면 처음 열렸던 빈 세션이 계속 "살아있는
   형제"로 등록돼 있어 편지가 허공으로 갔다 — 그 유령을 은퇴시키고, 배달 가능 판정을 "지금도 그
   주소를 듣고 있는가"로 좁히고, 거절이 이유를 말하게 하고, 형제 목록에 `receiver=`/`transcript=`
   두 컬럼을 붙였다. 사람 말 정본은 **#101 종결 댓글**이다.
-- **버전이 minor인 이유:** `entwurf_peers` 줄의 컬럼 두 개와 거절 이유 문장은 **additive surface
+- **버전이 minor였던 이유:** `entwurf_peers` 줄의 컬럼 두 개와 거절 이유 문장은 **additive surface
   변경**이다. 제거도 의미 변경도 없으므로 patch가 아니라 minor.
-- **Upgrade note (CHANGELOG 필수):** 이 릴리즈는 `pi-extensions/lib/meta-session.ts`와 Claude 훅을
+- **Upgrade note (CHANGELOG에 실렸다, SSOT는 거기다):** 이 릴리즈는 `pi-extensions/lib/meta-session.ts`와 Claude 훅을
   바꾼다 → **네 install 경로**(`install-meta-bridge` / `install-omp-bridge` / `install-omp-receive` /
   `install-copilot-bridge`)의 배포 writer가 동시에 낡는다. **업그레이드 명령은 `entwurf setup` 하나**다.
   0.17.2에서 Claude 레일만 재설치했다가 첫 `--cut`이 `smoke-omp-receive-live`로 BLOCKED된 그 교훈
   그대로이며, CHANGELOG 0.17.2 Upgrade note가 그 SSOT다.
-- **Next:** `entwurf-release` 4모드 — `land 0.18.0`(exact-SHA CI 3잡) → `prepare 0.18.0` →
-  `make 0.18.0` → `publish 0.18.0 <candidate.tgz> latest`.
+- **이 레인은 닫혔다.** 다음 stem은 GLG가 고른다. 남아 있던 후보는 여전히 유효하다 — codex 핀
+  범프(`smoke-meta-async-drift` drift=1), 0.16.1 make(prepare 끝, make만 대기), #98 P4 관측창
+  승격 결정, #94 잔여 관측 둘, 별건 마이그레이션 둘(`lastDeliveredAt` 제거,
+  `stampMailboxReceipt` 2-writer lost-update).
 - **이월 관측 (#101이 남긴 것 — 수정이 아니라 다음 레인 재료):**
   1. **omp-host 후보 조건 하나 더.** sender↔receiver 교차검증은 지금 `ownerKind = claude-code-cli`로
      스코프된다. OMP `unarm`의 marker 삭제 실패는 catch 후 진행하고
@@ -82,6 +90,24 @@ CHANGELOG `## Unreleased`가 구현 범위 `v0.15.1..19ad90c` **30커밋** 전�
 - **#99로 넘길 재료:** claude 훅에 처음 생긴 뮤턴트 lane(17 claim)과, "전수 뮤턴트를 언제 돌릴
   것인가"의 실측 — 오늘 전체 바닥 **완주 5회 / 3회**, 한 번에 약 35분. 대부분이 산문 수정 뒤
   재검증이었다. 수치 정본은 #101 종결 댓글 §비용.
+- **이번 컷이 남긴 운영 교훈 (반복 방지, 전부 이번에 실제로 당한 것):**
+  1. **릴리즈 게이트가 도는 동안 커밋을 만들지 않는다.** 첫 `--cut`이 50분을 쓰고
+     `origin HEAD changed during qualification`으로 무효화됐다 — 게이트 중간에 온 커밋 요청을
+     즉시 처리한 결과다. 워킹트리 편집은 무해하고, HEAD 이동만 치명적이다. 규율은
+     `entwurf-release` 스킬 P5에 박아뒀다.
+  2. **`.claude/skills/entwurf-release/SKILL.md`는 ASCII 전용이다.** `check-install-surface`의
+     S7e가 `skillIsAscii`로 전 코드포인트 ≤127을 요구한다(`scripts/check-install-surface.ts:494`).
+     그 스킬에 한글이나 em dash(—)를 한 글자라도 넣으면 `check:full`이 exit 1이다. 이번에
+     실제로 그랬다 — Fable의 지시 문장을 그대로 옮겨 적다가 em dash 두 개가 들어갔고, prep 커밋을
+     amend해서 고쳤다(`dea16d5` → `2934807`). **규율 한 줄을 추가하는 일조차 게이트를 깬다.**
+  3. **그 게이트는 워킹트리가 아니라 git index를 읽는다.** `readCandidate`가
+     `git show :<file>`이다(`check-install-surface.ts:436-445`). 파일만 고치고 재실행하면
+     영원히 빨간 것처럼 보인다 — `git add` 후에 다시 돌려야 한다.
+  4. **`entwurf setup`을 LIVE 게이트 **전에** 돌린다.** 게이트 직전 doctor 4종을 쳤더니 셋이
+     STALE이었다(`installed=dd9df442d945 vs source=796aa7630133`). 0.17.2가 첫 `--cut`을
+     `smoke-omp-receive-live`로 날린 그 축이고, 이번엔 50분을 쓰기 전에 잡았다.
+  5. **긴 명령은 tmux로.** 이 하네스의 저메모리 워치독이 백그라운드 도구 호출을 죽인다 — LIVE
+     게이트 1회를 그렇게 잃었다. tmux 세션은 그 밖이라 끝까지 간다.
 - **Read:** #101 종결 댓글(사람 말 정본) · `scripts/raw-claude-session-switch/README.md`
   (S1–S6 훅 로그 verbatim, UPS native id 8/8) · `entwurf-release` 스킬.
 - **Do not touch:** 0.17.0/0.17.1/0.17.2 태그와 그 CHANGELOG 절 ·
