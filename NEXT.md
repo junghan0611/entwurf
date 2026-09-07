@@ -80,37 +80,42 @@ CHANGELOG `## Unreleased`가 구현 범위 `v0.15.1..19ad90c` **30커밋** 전�
       subject 라 필터가 본체를 돌렸고(`1 of 2 … run_body=true`), 네 번째 축이 그 success 를 읽었다.
       sol(gpt-5.6-sol) 독립 검수 Defect 4+2 전부 amendment 로 닫힘. 4번째 qualification 전수는 **GLG 결정으로
       생략**(red 1건은 `smoke-omp-bridge-state` 호스트 omp 스캔, 우리 diff 밖 — 아래 이월 관측).
-- [ ] **19. npm publish 0.18.2** ← CURRENT: GLG 몫(토큰). 수용된 **정확히 그 파일**만(리팩 금지):
-      `/tmp/entwurf-release-candidate-0.18.2.AnEbKY/junghanacs-entwurf-0.18.2.tgz`
-      sha256 `27df97adc8651764a61dba98d3ed70a8dfb140cf5726547646b40048ecfe84e5`(12,505,816 bytes), dist-tag `latest`.
-      발행 뒤 0.18.1 과 같은 사후 integrity 대조(sha512/sha1/sha256 + `cmp`)를 형제가 돌리고 여기 한 줄.
-- [ ] **20. #105 — Fresh project-seat placement / no-turn retirement / remote-host** — 0.18.2 뒤 다음 stem
+- [x] **19. npm publish 0.18.2 + 사후 integrity 대조** — GLG 가 직접 발행(2026-09-07 12:xx KST).
+      [측정 oracle 12:2x] `dist.integrity` sha512-`sZencZe+…d9V8kg==` ≡ candidate sha512 · `dist.shasum`
+      `7e4c0820ff3797fbb09ed13982c302c99c066eb3` ≡ sha1 · 레지스트리 tarball 12,505,816 bytes sha256
+      `27df97ad…84e5` ≡ 수용 sha, `cmp` **바이트 동일** · dist-tags `latest`=0.18.2, `repair`=0.12.8-repair.1 보존. 리팩 없음.
+- [ ] **20. #105 — Fresh project-seat placement / no-turn retirement / remote-host** ← CURRENT: 새 Fable 이 이슈 파악부터. 0.18.2 뒤 다음 stem
       (GLG 지정 2026-09-07). 첫 slice 는 **① placement**(`entwurf_fresh_call` 에 `placement.tmuxSession` +
       `ifMissing`) — `mux-fresh-call.ts` 의 좁은 확장이고 acceptance 1·2 가 하루 안에 측정된다. ② retire 는
       V3 레코드에 이벤트를 붙이는 순간 Hard Rule 7 store 계약이 움직이니 별도 무게, ③ remote 는 research.
       이슈 하나로 두되 slice 순서는 스레드에 박고 시작한다.
 
-현재 좌표: 1–18 완료 → 19 npm 발행 대기(GLG) → 20 다음 stem · **0.16.1 make는 열린 채 PAUSED**.
+현재 좌표: 1–19 완료(0.18.2 레인 전부 닫힘) → **20 #105 착수** · **0.16.1 make는 열린 채 PAUSED**.
 푸시·태그는 `entwurf-release` 4모드 몫이다 (CalVer `tag-release`가 아님).
 
-# NOW — v0.18.2 태그·릴리즈 완료, npm 발행만 남았다 → 다음 stem #105
+# NOW — 0.18.2 전부 닫힘 → #105 착수 (GLG: "오랜만에 들어가는 완전 핵심 새 기능")
 
-- **Stem:** 0.18.2 는 발행 한 단계만 남기고 닫혔다. 그 뒤 stem 은 **#105 slice ① placement**.
-- **좌표:** `v0.18.2` @ `5a640d7` = `main` = `origin/main`. 릴리즈
-  https://github.com/junghan0611/entwurf/releases/tag/v0.18.2 · #103 closed @ `0f6667d`.
-  npm 은 아직 `latest`=0.18.1 [측정 2026-09-07 12:0x KST].
-- **Next (GLG):** `npm publish /tmp/entwurf-release-candidate-0.18.2.AnEbKY/junghanacs-entwurf-0.18.2.tgz --tag latest`
-  — 발행 전 `latest`=0.18.1 / `repair`=0.12.8-repair.1 이니 발행 뒤 `latest`=0.18.2, `repair` 불변이어야 한다.
-  candidate 디렉터리가 `/tmp` 라 재부팅 전에 발행하거나 파일을 옮겨 둔다(sha256 로 동일성 확인).
-- **Next (형제, 발행 뒤):** integrity 사후 대조 → RAIL 19 [x] → `entwurf-release` SKILL.md publish 모드에
-  그 절차가 없다는 관측(U4 후보) 은 GLG 가 원할 때만 한 절 추가(ASCII 전용 파일).
-- **Next (#105 착수 때):** `gh issue view 105` 본문 + 이 RAIL 20 의 slice 순서 → 브랜치 `feat/105-placement` +
-  `NEXT--feat_105-placement.md` → 설계 한 단락(바꿀 파일 `mux-fresh-call.ts`/`mux-placement.ts`/MCP 스키마,
-  receipt 필드, `ifMissing` 거절 형태) → 구현. 팀이면 첫 task 는 형성만(entwurf-dev 스킬).
-- **Blocker:** 없음(publish 는 권한축 — GLG 토큰).
-- **Read:** CHANGELOG `## 0.18.2` · #103 종결 댓글 3개(관측 표·dispatch·종결) · #99 stage-2 댓글 §2·§3 · `scripts/ci-qualify-decide.sh` 머리 주석.
-- **Do not touch:** candidate 재pack · `v0.18.2` 태그와 CHANGELOG 0.18.2 절 · `- run: ./run.sh check-gate-qualification` 줄의 키 순서(`if:` 는 `run:` 뒤 — 8a 리터럴과 오라클 스텝 이름이 걸려 있다) · 0.16.1 make 를 섞는 것.
-- **이번 주 운영 규율(전부 실제로 당한 것):** 게이트 도는 동안 커밋 금지 · 긴 명령은 tmux(저메모리 워치독이 백그라운드 워처를 이번 레인에서 4번 죽였다, 60초 간격 워처만 생존) · `check-install-surface` 는 git index 를 읽는다 · SKILL.md 는 ASCII 전용 · `entwurf setup` 을 LIVE 전에 · codex 레일 셋이 한꺼번에 죽으면 `quota` 먼저 · 형제에게 가는 사실 문장엔 증거 상태.
+- **Stem:** #105 — fresh project-seat placement / no-turn retirement / remote-host Entwurf. 코디네이터는
+  새 Fable(2026-09-07 12:3x 개시), 구현 형제는 GLG 가 정한다.
+- **좌표:** `v0.18.2` @ `5a640d7`, npm `latest`=0.18.2, `main` = `origin/main`. 열린 이슈 6(구현 97·78·76·105 = 4/5).
+- **Next:** (1) `gh issue view 105` 본문 전체 + AGENTS "mux is launch-only" 문단·Hard Rule 2/7/8/16 을 원본으로 읽는다
+  (2) 현재 좌표 실측: `pi-extensions/lib/mux-fresh-call.ts`·`mux-placement.ts`·`classify-tmux-cwd.ts`·
+  `mcp/entwurf-bridge/src/index.ts` 의 fresh-call 스키마, `meta-session.ts` 의 V3 writer/integrity, Claude 마커의
+  `isPlausibleOwnerPid` — 이슈 "First executable step" 그대로 (3) slice 순서를 #105 스레드에 박는다:
+  **① placement**(`placement.tmuxSession` + `ifMissing: create|reject`, receipt 에 관측 session/window/pane +
+  created 여부) → ② `entwurf_retire`(Claude Code 부터, 프로세스 소유권 증명 위, 레코드 이벤트 = V3 store 계약 변경)
+  → ③ remote 는 research 로 분리 여부 GLG 결정 (4) GLG 에게 설계 한 단락 보고 → 승인 뒤 브랜치
+  `feat/105-placement` + `NEXT--feat_105-placement.md`.
+- **이슈 규율 마찰(착수 때 GLG 결정):** #105 는 원인 셋·acceptance 6 이 세 갈래 — AGENTS "우산 트래커 금지" 와 닿는다.
+  이슈 하나로 두고 slice 순서를 스레드에 박거나, ②③ 을 갈라낸다. 슬롯 여유 1.
+- **Blocker:** 없음.
+- **Read:** #105 본문 · `docs/mux-launch-rail.md` §11(import 금지 그래프) · CHANGELOG 0.18.2 · #103 종결 댓글.
+- **Do not touch:** tmux 를 주소·liveness·delivery 로 승격하는 것(Hard Rule 16) · `cwd` 와 `tmuxSession` 을 서로 추론하는 것 ·
+  추측 PID kill · 레코드 밖 두 번째 identity 축 · `v0.18.2` 태그/CHANGELOG 절 · 0.16.1 make 섞기.
+- **이번 주 운영 규율(전부 실제로 당한 것):** 게이트 도는 동안 커밋 금지 · 긴 명령은 tmux(저메모리 워치독이 백그라운드
+  워처를 4번 죽였다, 60초 간격 워처만 생존) · `check-install-surface` 는 git index 를 읽는다 · SKILL.md 는 ASCII 전용 ·
+  `entwurf setup` 을 LIVE 전에 · codex 레일 셋이 한꺼번에 죽으면 `quota` 먼저 · 형제에게 가는 사실 문장엔 증거 상태 ·
+  리뷰는 sol(gpt-5.6-sol) 독립 검수가 이번에 Defect 6 을 잡았다 — 같은 패턴 유지.
 
 <details><summary>0.18.1 착지 NOW (닫힘 — #103 이월 관측은 이 안에 남는다)</summary>
 
