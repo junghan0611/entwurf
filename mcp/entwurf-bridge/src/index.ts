@@ -722,8 +722,8 @@ server.tool(
 		"prompt, so the sibling could not call you back at all). An optional " +
 		"cwd starts the sibling in ONE literal absolute existing directory (cross-repo fresh) — never pick resume " +
 		"for a dormant record's cwd; resume is continuity-only. Omitted/empty cwd means the caller's own directory. " +
-		"An optional placement.tmuxSession opens it in ONE EXISTING session of this agent's own tmux server, not " +
-		"only its own session; an absent one is refused and NOTHING is created. " +
+		"An optional placement.tmuxSession opens it in ONE EXISTING session of this agent's own tmux server; an " +
+		"absent SESSION is tmux-session-missing and NOTHING is created. Omit placement for the caller's own session. " +
 		"There are no arbitrary command/env knobs. Do not put secrets in the task — model and task argv are visible to " +
 		"same-user processes on this host. Requires that this agent itself runs " +
 		"inside tmux: without a pane anchor there is no session to open a sibling beside.",

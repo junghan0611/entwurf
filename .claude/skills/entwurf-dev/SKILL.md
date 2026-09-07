@@ -45,8 +45,14 @@ transcript를 가진 garden citizen이다.
 - `placement`는 선택 입력 하나: `{ tmuxSession: "<정확한 이름>" }`. caller **자신의 tmux 서버**에
   **이미 있는** 세션에 형제를 연다(운영자의 프로젝트 자리). **세션을 만들지 않는다** — 없으면
   `tmux-session-missing`, 문법 밖 이름이면 `tmux-session-name-invalid`로 거절되고 창도 세션도 생기지
-  않는다. 그때는 GLG에게 그 자리를 먼저 만들어 달라고 말하고 다시 부른다. `cwd`와 `placement`는
-  서로 독립이며 한쪽에서 다른 쪽을 추론하지 않는다.
+  않는다. 그때는 GLG에게 그 자리를 먼저 만들어 달라고 말하고 다시 부른다.
+  이름 문법은 `[A-Za-z0-9][A-Za-z0-9_-]*` 하나뿐이다 — `.`, `:`, `#`, 공백, 선행 `_`/`-` 는
+  `tmux-session-name-invalid` 로 거절된다(세션 이름을 그렇게 지었으면 GLG에게 문법에 맞는 세션을
+  요청한다).
+  `cwd`와 `placement`는 서로 독립이며 한쪽에서 다른 쪽을 추론하지 않는다. **긍정형이 더 중요하다:
+  `cwd`를 생략하고 seat만 주면 새 pane은 이 에이전트(caller 프로세스)의 cwd에서 시작한다**(측정) —
+  타깃 세션의 path도, 그 세션 active pane의 경로도 물려받지 않는다. 즉 `org` 자리에 열었다고 형제가
+  `org` 프로젝트 디렉터리에 있는 것이 아니다. 다른 디렉터리를 원하면 `cwd`를 함께 준다.
 - 기본 정책은 Pi=`openai-codex/gpt-5.6-luna`, Claude Code=`claude-sonnet-5`다.
 - GLG가 “entwurf 소넷”이라고 하면 Pi + `entwurf/claude-sonnet-5`다.
 - **Provider budget:** sibling launch에 OpenRouter를 쓰지 않는다. 이는 GLG 개인의 embedding/image 전용 제한 rail이다. Claude Code 구독, Pi의 승인된 GPT/Codex·xAI 구독, 또는 direct endpoint로 이미 설정된 회사 API만 쓴다. model label은 billing rail 증거가 아니다. 요청된 model이 현재 OpenRouter로 resolve되면 launch·test turn·login check·probe script를 하지 말고 그 한 사실만 즉시 보고한다. GLG가 이미 승인한 rail의 형제를 요청하면 credential/login을 다시 묻거나 찾지 말고 fresh-call을 바로 한 번 호출한다.

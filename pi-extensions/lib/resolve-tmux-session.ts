@@ -25,12 +25,15 @@
  *   3. some names cannot be addressed at all, for two different measured reasons. `#` is
  *      FORMAT-EXPANDED when `new-session -s` stores it (`a#{x}` stored as `a`), so the
  *      requested name never exists; and `.`/`:` are tmux's own PANE/WINDOW separators inside a
- *      `-t` target, so `-t '=a.b'` answers `can't find pane: b` and `-t '=a:b'` answers
- *      `can't find window: b` (or `can't find session: a`, depending on whether a session `a`
- *      happens to exist). Both are ALSO normalised to `_` when stored — `a.b` and `a:b` are
- *      the same stored name `a_b`, so whichever is created second is a `duplicate session`
- *      error rather than a second seat — but the lookup half is the load-bearing one: whatever
- *      tmux stored, the REQUESTED name can never address it.
+ *      `-t` target, so the requested name is SPLIT before any session is matched. Measured
+ *      with this leaf's own engine: `list-windows -t '=my.project'` → rc=1
+ *      `can't find pane: project`, and `list-windows -t '=my:project'` → rc=1
+ *      `can't find session: my`. The exact wording is NOT contract — it moves with which
+ *      sessions happen to exist (`can't find window: project` once a session `my` is there) —
+ *      the fact is that the split happens at all. Both characters are ALSO normalised to `_`
+ *      when stored, so `a.b` and `a:b` are the same stored name `a_b` and whichever is created
+ *      second is a `duplicate session` error rather than a second seat. The lookup half is the
+ *      load-bearing one: whatever tmux stored, the REQUESTED name can never address it.
  *      NOTE the difference from `classify-tmux-cwd.ts`: there `#(…)`
  *      was observed EXECUTING inside a `-c` value; here it expands but does NOT execute (a
  *      `q#(touch …)q` name stored as `qq` and wrote no file). Do not copy that leaf's

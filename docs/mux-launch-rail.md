@@ -413,7 +413,8 @@ provider/settings knob는 여전히 없다(cwd는 아래 문단의 좁은 별도
 **Cwd도 explicit launch input이다 (#73, 2026-08-13).** cross-repo fresh 상담이 target repo의 cwd를 얻으려고
 dormant record를 `entwurf_resume_call`로 되세우는 압력이 실측됐다(2026-08-10 incident) — resume은 continuity
 verb이지 placement 우회로가 아니다. 그래서 fresh surface는 `{backend, model, task, cwd?}`로 좁게 한 번 더
-확장됐다. 규칙은 좁다: `undefined`와 정확한 `""`만 생략(기존 no-`-c` 동작 그대로)이고, 그 외는 **literal**
+확장됐다. 그 다음 #105 가 optional `placement.tmuxSession` 을 같은 규칙으로 더했다 — 입력 하나, literal,
+생략이 기존 동작, 실패는 이름 있는 거절(§8 개정 블록). 규칙은 좁다: `undefined`와 정확한 `""`만 생략(기존 no-`-c` 동작 그대로)이고, 그 외는 **literal**
 절대경로다 — trim도 realpath도 project-name resolution도 store/peers/record 조회도 없다. caller가 유일한
 cwd 출처다. 분류는 resume과 **공유하는 `classify-tmux-cwd.ts` leaf**가 지고(4개 reason 문자열 동일; measured
 tmux 3.6a 사실도 그 leaf에 있다), `-c`는 fresh 자신의 argv builder가 resume과 대칭인 token 위치(`-t` 뒤,
@@ -479,7 +480,8 @@ exact evidence로 인정되는 것은 둘뿐이다.
   이름 하나**가 예외로 열려 있고, 어디서 멈추는지는 명시적이다 — caller **자신의 tmux 서버**에 이미
   있는 세션의 **정확한 이름 하나**를 lookup 하고, 그 결과인 native `$id` 로만 target 한다. 이름은
   argv 에 절대 도달하지 않는다. **세션을 만들지 않는다**(`new-session` 도, `ifMissing`/`create` 축도
-  제품에 없다 — GLG 2026-09-07): 없으면 `tmux-session-missing` 거절이고 창도 세션도 생기지 않으므로
+  제품에 없다 — GLG 2026-09-07): 없으면 `tmux-session-missing`, 문법 밖 이름이면
+  `tmux-session-name-invalid` 거절이고 어느 쪽이든 창도 세션도 생기지 않으므로
   운영자가 자리를 만들고 다시 부른다. **window** 이름·command·env carrier 는 그대로 금지다. 왜
   열었는가: 운영자의 자리는 프로젝트별 세션이고, 그 전까지 형제를 그 자리에 두는 유일한 방법은 창을
   손으로 옮기는 것이었다.
@@ -523,7 +525,7 @@ gate, LIVE smoke, release 배선을 전부 제거했다.
 |---|---|---|
 | `entwurf` contract/decider/runner | garden id 주소 해석, envelope, rail 선택, delivery receipt/reject | creation, model 선택, task 분해, supervision |
 | 기존 delivery composition (`entwurf-v2-production.ts`) | contract와 이미 출하된 socket/mailbox/native-push hands의 조립 | fresh launch, tmux placement, 프로젝트 정책 |
-| tmux placement leaf (`mux-placement.ts`) | caller placement, same-session append, stable handle close | harness launch, identity, delivery |
+| tmux placement leaf (`mux-placement.ts`) | caller placement, same-session append, stable handle close (#105 이후 **server-bound** — 핸들이 caller 세션 밖 창을 가리킬 수 있다) | harness launch, identity, delivery |
 | T1-a launch composition (`mux-launch.ts`) | 고정 runtime의 precondition 증명, 같은 session에 window+runtime 한 번의 mutation, 로컬 handle receipt | garden identity, record 조회, task delivery, supervision, 어떤 carrier도 |
 | pi/ACP harness adapter | official runtime/session lifecycle, auth, model, transcript, record birth | 프로젝트의 작업자 선택·backlog |
 | tmux session lookup leaf (`resolve-tmux-session.ts`) | caller가 준 세션 **이름** 의 문법 판정과 이름→native `$id` 해석 하나 — 엔진은 `list-windows -t '=NAME' -F '#{session_id}'` 고정, 부재는 rc 로 판정(`-f` 필터는 이름 안 `}` 하나로 전 세션 오탐, `display-message` 는 존재해도 빈 출력; 둘 다 측정) | tmux 실행(runner 는 주입), argv, hint 문구(consumer 소유), 세션 **생성**, fallback 세션, 다른 서버 |
