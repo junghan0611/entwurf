@@ -22,7 +22,10 @@ wait_carrier() {
   local pid="$1" key="$2" i=0
   while [ "$i" -lt 50 ]; do
     if kill -0 "$pid" 2>/dev/null && [ -r "/proc/$pid/environ" ]; then
-      if tr '\0' '\n' < "/proc/$pid/environ" 2>/dev/null | grep -q "^${key}"; then
+      # `-c` not `-q`, for the reason in omp-bridge-doctor.sh's carrier scan: under
+      # pipefail an early-exiting grep SIGPIPEs `tr` and the pipeline reports failure even
+      # on a match. Here that only costs a retry, but the hazard is the same one.
+      if [ "$(tr '\0' '\n' < "/proc/$pid/environ" 2>/dev/null | grep -cE "^${key}" || true)" -gt 0 ]; then
         return 0
       fi
     fi
@@ -103,7 +106,7 @@ CARRIER_PID=$!
 wait_carrier "$CARRIER_PID" "PI_SESSION_ID=foreign-garden"
 if OUT="$(ENTWURF_OMP_CARRIER_PIDS="$CARRIER_PID" "$RUN" doctor-omp-bridge 2>&1)"; then
   printf '%s\n' "$OUT" >&2
-  die "doctor accepted the live omp fixture with nonblank inherited PI carriers"
+  die "[QK:OMP-DOCTOR-CARRIER-NONBLANK-IS-RED] doctor accepted the live omp fixture with nonblank inherited PI carriers"
 fi
 printf '%s\n' "$OUT" | grep -q "live omp process(es).* $CARRIER_PID" || die "doctor red without naming the nonblank-carrier fixture"
 ok "a nonblank inherited PI carrier on a live omp process remains red"

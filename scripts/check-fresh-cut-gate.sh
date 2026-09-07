@@ -403,10 +403,42 @@ fi
 # #86 A5 credential tripwire: the retired sync_auth mutation (OAuth alias copy +
 # auth.json.bak) must never resurrect as an invocable surface in run.sh. Comments
 # documenting the removal are allowed; a function definition or call is not.
-if awk '!/^[[:space:]]*#/' "$REPO/run.sh" | grep -q 'sync_auth'; then
+# THE PREDICATE IS A FUNCTION so the self-test below can run the SAME code against a planted
+# fixture. A self-test that re-typed this pipeline would keep passing while the real one went
+# blind, which is precisely the failure this cell exists to prevent.
+#
+# `grep -c`, never `grep -q`. This file runs under pipefail, and a `-q` grep exits at the FIRST
+# match, closing the pipe while `awk` is still writing the remaining ~200KB of a 433KB run.sh.
+# `awk` dies of SIGPIPE (141), pipefail promotes that to the pipeline's status, and the `if`
+# takes the ELSE branch — so this tripwire went blind EXACTLY when a sync_auth surface existed
+# and reported "no credential surface remains". Unlike the omp doctor's load-dependent race this
+# one was deterministic, because the producer is far larger than the pipe buffer.
+sync_auth_surface_count() {
+  awk '!/^[[:space:]]*#/' "$1" | grep -c 'sync_auth' || true
+}
+sync_auth_hits="$(sync_auth_surface_count "$REPO/run.sh")"
+if [ "${sync_auth_hits:-0}" -gt 0 ]; then
   bad "D4b the retired sync_auth credential mutation reappeared as code in run.sh"
 else
   ok "D4b no sync_auth credential surface remains in run.sh (comments only)"
+fi
+
+# D4b-self. The cell above is green on a clean run.sh — which is exactly the state in which a
+# blind tripwire and a working one are indistinguishable. This plants the surface it exists to
+# catch and requires the SAME predicate to see it. The plant goes NEAR THE TOP of the real,
+# large run.sh on purpose: the defect only appears when the consumer can exit while the producer
+# still has bulk left to write, so a small synthetic fixture would pass even with `grep -q` and
+# would prove nothing. It is a copy under mktemp; run.sh is never written.
+fc_probe="$(mktemp -t fresh-cut-syncauth-probe.XXXXXX)"
+awk 'NR==2{print "sync_auth() { cp \"$HOME/.claude/.credentials.json\" \"$HOME/.claude/auth.json.bak\"; }"}1' \
+  "$REPO/run.sh" >"$fc_probe"
+fc_planted="$(sync_auth_surface_count "$fc_probe")"
+fc_clean="$(sync_auth_surface_count "$REPO/run.sh")"
+rm -f "$fc_probe"
+if [ "${fc_planted:-0}" -gt 0 ] && [ "${fc_clean:-0}" -eq 0 ]; then
+  ok "D4b-self the tripwire actually FIRES on a planted sync_auth surface (planted=$fc_planted clean=$fc_clean)"
+else
+  bad "[QK:FRESHCUT-SYNCAUTH-TRIPWIRE-FIRES] D4b's predicate did not see a planted sync_auth surface (planted=$fc_planted clean=$fc_clean) — the credential tripwire is blind and a green D4b means nothing"
 fi
 
 ilp_gate=$(awk '/^install_local_package\(\)/,/^}/{ if ($0 ~ /preflight_v3_store install/) { print NR; exit } }' "$REPO/run.sh")
@@ -425,10 +457,30 @@ else
   bad "D6 meta-bridge-install.sh's doctor call is missing or sits after the state snapshot (doctor=$mb_gate prepare=$mb_write)"
 fi
 
-if grep -n 'preflight_v3_store()' -A 40 "$REPO/run.sh" | grep -qE 'run_ts scripts/meta-bridge-fresh-cut\.ts'; then
+# Same hazard as D4b. This producer happens to emit less than one pipe buffer today, so
+# no SIGPIPE window exists — but that is a size coincidence, not a property, and it moves
+# the moment run.sh grows another match. Counted rather than short-circuited.
+preflight_cut_count() {
+  grep -n 'preflight_v3_store()' -A 40 "$1" | grep -cE 'run_ts scripts/meta-bridge-fresh-cut\.ts' || true
+}
+cut_in_preflight="$(preflight_cut_count "$REPO/run.sh")"
+if [ "${cut_in_preflight:-0}" -gt 0 ]; then
   bad "D7 the preflight invokes fresh-cut — an install must never cut a generation by itself"
 else
   ok "D7 the preflight only ever asks the doctor (never runs the cut)"
+fi
+
+# D7-self, same argument as D4b-self: a forbidding cell that is green on a clean tree proves
+# nothing until it is shown catching the thing it forbids. A synthetic fixture is enough here
+# because this producer has no SIGPIPE window to reproduce — what is being proven is detection.
+d7_probe="$(mktemp -t fresh-cut-preflight-probe.XXXXXX)"
+printf '%s\n' 'preflight_v3_store() {' '  run_ts scripts/meta-bridge-fresh-cut.ts' '}' >"$d7_probe"
+d7_planted="$(preflight_cut_count "$d7_probe")"
+rm -f "$d7_probe"
+if [ "${d7_planted:-0}" -gt 0 ] && [ "${cut_in_preflight:-0}" -eq 0 ]; then
+  ok "D7-self the cell actually FIRES on a preflight that does call fresh-cut (planted=$d7_planted real=$cut_in_preflight)"
+else
+  bad "[QK:FRESHCUT-PREFLIGHT-CUT-DETECTED] D7's predicate did not see a planted fresh-cut call in a preflight (planted=$d7_planted real=$cut_in_preflight)"
 fi
 
 if [ -e "$FRESH_CUT_GATE_CLAUDE_SENTINEL" ]; then

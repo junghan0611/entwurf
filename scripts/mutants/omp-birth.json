@@ -158,15 +158,28 @@
 		},
 		{
 			"claim": "OMP-DOCTOR-CARRIER-TRIMS",
-			"title": "treating an empty or whitespace-only PI carrier as an inherited identity makes Bundle C's deliberate tmux `-e NAME=` scrub fail the deterministic floor whenever a visible fresh omp citizen is alive",
+			"title": "treating an empty or whitespace-only PI carrier as an inherited identity makes Bundle C's deliberate tmux `-e NAME=` scrub fail the deterministic floor whenever a visible fresh omp citizen is alive. Re-anchored when the carrier scan moved from an early-exiting `grep -q` to `grep -c` (the SIGPIPE/pipefail repair); the replanted defect is unchanged — only the line it attaches to moved",
 			"subject": "scripts/omp-bridge-doctor.sh",
 			"find": [
-				"    if tr '\\0' '\\n' < \"$ENVIRON\" 2>/dev/null | grep -qE '^(PI_SESSION_ID|PI_AGENT_ID)=.*[^[:space:]]'; then"
+				"    HITS=\"$(tr '\\0' '\\n' < \"$ENVIRON\" 2>/dev/null | grep -cE '^(PI_SESSION_ID|PI_AGENT_ID)=.*[^[:space:]]' || true)\""
 			],
-			"replace": ["    if tr '\\0' '\\n' < \"$ENVIRON\" 2>/dev/null | grep -qE '^(PI_SESSION_ID|PI_AGENT_ID)='; then"],
+			"replace": [
+				"    HITS=\"$(tr '\\0' '\\n' < \"$ENVIRON\" 2>/dev/null | grep -cE '^(PI_SESSION_ID|PI_AGENT_ID)=' || true)\""
+			],
 			"gate": ["bash", "run.sh", "smoke-omp-bridge-state"],
 			"timeoutSeconds": 300,
 			"signature": "[QK:OMP-DOCTOR-CARRIER-TRIMS]",
+			"signatureSource": "scripts/smoke-omp-bridge-state.sh"
+		},
+		{
+			"claim": "OMP-DOCTOR-CARRIER-NONBLANK-IS-RED",
+			"title": "the doctor stops flagging a live omp process that carries a NONBLANK inherited PI_SESSION_ID/PI_AGENT_ID, so a session whose MCP children would speak under the parent pi garden id reads as clean and the doctor prints PASS. The real defect was subtler than this replant, which is why the replant is written this way: `grep -q` exited at the first match, SIGPIPEd `tr` mid-environ, and pipefail turned a MATCH into a failed pipeline — a race on how far `tr` got, misreading ~15% of runs, so a `-q` replant would SURVIVE most of the time and prove nothing. This one makes the same false-clean deterministic",
+			"subject": "scripts/omp-bridge-doctor.sh",
+			"find": ["    if [ \"${HITS:-0}\" -gt 0 ]; then"],
+			"replace": ["    if [ \"${HITS:-0}\" -gt 99 ]; then"],
+			"gate": ["bash", "run.sh", "smoke-omp-bridge-state"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:OMP-DOCTOR-CARRIER-NONBLANK-IS-RED]",
 			"signatureSource": "scripts/smoke-omp-bridge-state.sh"
 		}
 	]

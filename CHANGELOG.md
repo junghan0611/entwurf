@@ -4,6 +4,185 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+## 0.19.0 - 2026-09-07
+
+One lane: #105 slice ①, the project seat. `entwurf_fresh_call` gains an optional
+`placement.tmuxSession` so a fresh sibling can open in the operator's project session instead of the
+caller's own, and `closeWindow` binds to the server half so a window placed elsewhere can still be
+closed by its handle. Minor rather than patch: an optional input appears on all three public
+surfaces at once and a shipped contract moves. Slices ② (no-turn retirement) and ③ (remote routing)
+did not ship and were carried out of the issue intact before it closed, so nothing about them is
+inferred from what landed here.
+
+It also carries two repairs that were not planned: verifying this release ran the deterministic floor
+often enough to expose a defect class the repo had already written down and not finished applying —
+an early-exiting `grep -q` whose producer dies of SIGPIPE, which `pipefail` then promotes into the
+CLEAN branch of an `if`. One instance was a shipped operator doctor; the other was a credential
+tripwire that had been dead since it was written.
+
+### Added
+
+- **One project seat: `placement: { tmuxSession }` (#105).** The exact name of an EXISTING session
+  on the caller's own tmux server. **It creates nothing** — an absent session is
+  `tmux-session-missing`, a name outside `[A-Za-z0-9][A-Za-z0-9_-]*` is `tmux-session-name-invalid`,
+  and both leave no window and no session behind. There is no `ifMissing`/`create` axis and no
+  `new-session` verb anywhere in the product (GLG, 2026-09-07: "없으면 reject … 다 자동화하면
+  테스트·검증 비용이 커진다"). The operator makes the seat and calls again. Omitting `placement`
+  keeps today's behaviour exactly.
+- **`pi-extensions/lib/resolve-tmux-session.ts`** — an import-free leaf owning the name grammar and
+  the name → native `$id` lookup, with its tmux runner injected so it cannot run tmux itself. The
+  engine is `list-windows -t '=NAME' -F '#{session_id}'` with absence read from the exit code, and
+  every rule in its header is a measured tmux 3.6a behaviour: the `-f` filter engine matched **every**
+  session when a name contained `}` (6/6), `display-message -p -t '=NAME'` answers rc=0 with empty
+  output for a name that does not exist, `#` is format-expanded when the name is stored, `.` and `:`
+  are tmux's own pane/window separators inside a target, and a session NAMED `$0` loses to the id
+  `$0`. Only the resolved id ever reaches `-t`.
+- **Nine kill-qualified claims and their exact-once replants, inventory 373 → 382:**
+  `TMUXSESSION-LOOKUP-ENGINE`, `TMUXSESSION-NAME-GRAMMAR`, `RESOLVE-TMUX-SESSION-IMPORT-FREE`,
+  `FRESHCALL-PLACEMENT-MISSING-REJECTS`, `FRESHCALL-PLACEMENT-TARGET-ARGV`,
+  `FRESHCALL-PLACEMENT-RECEIPT-TARGET`, `FRESHCALL-PLACEMENT-SURFACE-PARITY`,
+  `FRESHCALL-PLACEMENT-BACKEND-PARITY` and `MUX-CLOSE-SERVER-BOUND`.
+
+### Changed
+
+- **`closeWindow` binds to the SERVER half (`requireSameServer`), not the session.** A placed window
+  may legitimately live outside the caller's session, so the old handle↔now context check would have
+  refused a normal close. The session half was measured to add no protection and real harm: window
+  ids are never reused within one server's lifetime (`@1` killed → next is `@2`; a whole session
+  killed → the counter still moves), so a vanished session's handle already reaches the existing
+  `already-gone` outcome, and a session clause would have turned that into a throw. `isSameContext` /
+  `requireSameContext` are untouched and still guard `appendWindow` / `launchPi`.
+- **The seat is stated the same way on every surface an operator reads.** A documentation review
+  (pi `grok-4.6`) read README, the skill and the tool schema as three independent readers and found
+  five places where each was correct alone but a caller reading only one got the seat wrong — the
+  README's v2 section did not mention the seat at all, `docs/external-mcp-host.md` advertised the
+  verb as `{backend, model, task, cwd?}`, "an absent one is refused" read equally as an absent
+  session and an omitted placement, and the grammar lived only inside a schema `describe`. The most
+  expensive misreading had no positive statement anywhere: **naming the `org` seat does not put the
+  sibling in the `org` directory.** That is now said as a fact, not as a prohibition.
+- **A symlinked `cwd` shows two spellings of one place, and the docs now say so.** entwurf never
+  resolves the path — it hands the literal string to tmux — so the launch receipt echoes what was
+  requested while the record, the transcript path, the callback envelope and `pane_current_path` all
+  carry what the OS resolved it to. The resolved one is what `entwurf_resume_call` later reopens,
+  which is why recording it that way is load-bearing rather than incidental.
+
+### Fixed
+
+- **`entwurf doctor-omp-bridge` could report a contaminated omp process as clean.** Its carrier scan
+  read `/proc/<pid>/environ` through `tr '\0' '\n' | grep -qE …` under `set -o pipefail`. `grep -q`
+  exits at the FIRST match and closes the pipe; `tr` — still writing the rest of a ~12 KB environ —
+  dies of SIGPIPE (141); `pipefail` makes that the pipeline's status, and the `if` takes the clean
+  branch. So a live omp session whose MCP children would speak under a PARENT pi citizen's garden id
+  was reported as no contamination, and the doctor printed PASS. It is a race on how far `tr` got, so
+  it read as flakiness rather than a defect: measured on one live fixture at 5–15% of reads depending
+  on load (6/40 and 1/40 in two independent measurements; 0/40 with `pipefail` off, and the shipped
+  doctor answered PASS on 3 of 60 runs against a genuinely contaminated fixture). The scan now counts
+  with `grep -c`, which consumes all of stdin, so there is no early close and nothing to race. The
+  predicate itself is unchanged byte-for-byte — `grep -qz` would have removed the pipeline entirely
+  but also quietly changes what counts as a carrier in both directions (a `PI_SESSION_ID=` inside
+  another variable's value; a value containing a newline), so transport was fixed and contract left
+  alone. `smoke-omp-bridge-state`'s own `wait_carrier` carried the same shape, where it cost only a
+  retry, and was fixed with it.
+- **The `sync_auth` credential tripwire had never been able to fire (`check-fresh-cut-gate` D4b).**
+  Same cause, deterministic rather than racy: the producer is `awk` over a 433 KB `run.sh` emitting
+  ~229 KB, so an early-exiting `grep -q` guarantees SIGPIPE. Measured with one `sync_auth` line
+  injected as code into a copy of `run.sh`: the pipeline exited 141 on **100 of 100** runs and the
+  gate printed `ok — no sync_auth credential surface remains`, while a clean `run.sh` exits 1 and is
+  correctly green. The tripwire was blind exactly when it had something to catch, which is why a
+  green floor never revealed it. After the repair the injected copy fires 50/50 and the clean copy
+  stays silent. D7 — the cell that forbids an install from cutting a generation by itself — carried
+  the same shape and is under one pipe buffer today, so it had no SIGPIPE window; that is a size
+  coincidence rather than a property, and it was counted too.
+
+### Verification
+
+All on oracle (Linux, node 24.18.1, pi 0.85.1, tmux 3.6a).
+
+- **`LIVE=1 ./run.sh release-gate /tmp/entwurf-release-gate-0.19.0.0HsnIq --cut` → `cut: OK`.**
+  **MUST: PASS=23 FAIL=0 SKIP=0**, BEHAVIOR: PASS=1 FAIL=0 SKIP=0, exit 0, 06:06:31→07:05:45
+  (59m14s). `check-gate-qualification` as its MUST step: **385/385 KILLED**. `pnpm run check:full`
+  inside it: exit 0, 507s.
+- **`check-gate-qualification` 381/381 KILLED** on the frozen `a39b637` candidate;
+  `pnpm run check:full` exit 0 (554s).
+- **`LIVE=1 ./run.sh smoke-mux-fresh-call-live` 39/39** — four launches covering the
+  {cwd omitted, cwd requested} × {caller session, seat} matrix, reading `pane_current_path` by stable
+  pane id after a settle delay, with the seat session's own `session_path` a fourth directory no cell
+  may land in. On-demand, not a release MUST (VERIFY.md).
+- **`check-mux-launch-tmux` 36** including a real-tmux seat cell that calls production
+  `freshCall`/`closeWindow` against a second session on a private server; `check-mux-fresh-call`
+  186/186; `check-gate-manifests` 383 mutants across 40 lanes.
+- **For the two repairs above:** `smoke-omp-bridge-state` 20 consecutive green runs (it was 1 red in
+  5 before) and `check-fresh-cut-gate` 169/169 with its two new self-test cells. Three replants,
+  inventory 383 → 385, each KILLED 3/3 deterministically at its own signature:
+  `OMP-DOCTOR-CARRIER-NONBLANK-IS-RED`, `FRESHCUT-SYNCAUTH-TRIPWIRE-FIRES` and
+  `FRESHCUT-PREFLIGHT-CUT-DETECTED`. The middle one replants the ACTUAL defect — `grep -c` back to
+  `grep -q` — and that is only a valid replant because the self-test plants its surface early in a
+  file far larger than the pipe buffer, which makes the SIGPIPE deterministic. The omp one cannot be
+  written that way: there the same restoration fails only ~15% of runs and would SURVIVE
+  qualification, so it makes the identical false-clean deterministic by another route. Same defect,
+  two replant strategies, and the difference is recorded in the manifests rather than smoothed over.
+
+### Notes
+
+- **The seat's first pass over the real MCP wire was the operator's, not a gate's.** Both mux LIVE
+  smokes were blind to that seam by construction: `smoke-mux-fresh-call-live` imports `freshCall` and
+  calls it directly, and `smoke-mux-lifecycle-live` does enter through `tools/call` but passes no
+  `placement`. Between them the bridge handler's pass-through was proven by a tools/list schema and a
+  source regex — by construction, never by execution. GLG's hand-driven review on 2026-09-07 closed
+  that: four `tools/call entwurf_fresh_call` invocations (seat, seat + cwd, absent session, off-grammar
+  name), receipts read as receipts, with the whole-server `list-windows -a` byte-identical across both
+  refusals and exactly one added line across the successes.
+- **Every seat assertion this repo owned was written against `pi`.** The unit block, the real-tmux
+  seat cell and both LIVE seat cells all passed `backend: "pi"`, so a later branch making the seat a
+  pi-only input would have gone unnoticed — while the cwd axis (#73) had carried four-backend parity
+  since it landed. The production path was already uniform (the seat becomes `targetSessionId`, the
+  backend becomes `backendArgs`, and `buildFreshCallArgs` takes them as separate parameters); what was
+  missing was an oracle saying so. `FRESHCALL-PLACEMENT-BACKEND-PARITY` is that oracle, and
+  `check-gate-manifests` caught the omission that came with it — a manifest set that drifted from its
+  declared inventory is red before any mutant runs.
+- **Two ceilings are close enough to name.** The composed ACP first-user augment sits **311 bytes**
+  under its 50 KB cap (measured: 50,889 / 51,200 with the shipped repo AGENTS.md plus a 12 KB global
+  baseline), and the MCP `entwurf_fresh_call` description sits **28 chars** under the 2048-char host
+  cap (measured: 2020). The first already bit once during this lane: the initial qualification run
+  went CONTROL-RED on `check-acp-carrier-augment` because the feature's +1207 B to AGENTS.md breached
+  a cap that had 932 B of headroom, and the text was compressed to +616 B rather than the cap moved.
+  Neither number is a gate threshold to tune; both are room that the next lane has to spend
+  deliberately.
+- **Independent review is where the second defect came from.** A `zai/glm-5.3` sibling was asked to
+  review the doctor repair and to try to disprove it, reproducing everything in an isolated snapshot
+  rather than trusting the implementer's summary. It confirmed the mechanism, corrected two claims —
+  the measured miss rate is load-dependent rather than a fixed 15%, and Copilot's immunity comes from
+  a TypeScript `readFileSync` reader rather than the Python one that was asserted — rejected the
+  `grep -qz` alternative on evidence the implementer did not have, and then found the dead credential
+  tripwire, which is the more severe of the two and was in a different lane entirely.
+- **A forbidding cell that is green on a clean tree cannot tell blindness from compliance.** That is
+  why D4b was dead for as long as it was: it printed `ok` on every run this repo ever took, and it
+  would have printed `ok` on the run that mattered. Both cells now carry a self-test that plants the
+  thing they forbid and requires the SAME predicate — factored into a function precisely so a
+  re-typed copy cannot keep passing while the real one goes blind — to see it. The `sync_auth` plant
+  goes near the TOP of the real 433 KB `run.sh` rather than into a small synthetic fixture, because
+  the defect only exists when the consumer can exit while the producer still has bulk to write; a
+  tidy fixture would pass under the very mutant that must kill it.
+- **A MUST gate can fail with the wiring intact.** `smoke-mux-lifecycle-live` is release-blocking on
+  the stated ground that a gate which TELLS the model which tool to call owns its own failures. This
+  cut met the case that rule does not describe: the wiring delivered perfectly — launch receipt, a
+  born citizen with its own garden id, the mandated first-action prompt verbatim on the visible pane —
+  and the model spent its one turn advising the operator to go to bed instead of calling back. Twice,
+  at 00:00 and 01:04, with the same cause and different wording, then green on the first daytime run.
+  Nothing was changed to make it pass: adjusting a shipped prompt to a current model's habit would
+  outlive the habit. Recorded because "MUST because failure is ours" now has a measured exception.
+- **The long-command discipline earned its receipt.** The harness low-memory watchdog killed a
+  background tool call mid-cut while `free` reported 7 GB available and the kernel logged no OOM —
+  the lead recorded in 0.18.0's notes, met directly on a release lane for the first time. The gate
+  itself, running under tmux, was untouched every time. "Long commands go in tmux" stops being a
+  preference at that point.
+- **An agent asking tmux where it is will answer wrong from a seat.** A seated sibling is opened
+  detached, so `tmux display-message -p` without `-t "$TMUX_PANE"` resolves to the target session's
+  ACTIVE window, not the sibling's own — measured, while the carrier itself was correct
+  (`TMUX_PANE=%181` in the process env). entwurf's own facts are unaffected: the launch receipt and
+  `list-windows` both name the right window. This is an agent-instruction gap and is tracked outside
+  this repo (junghan0611/sorge#7).
+
 ## 0.18.2 - 2026-09-07
 
 One lane: #103, the second stage of the CI evidence budget (#99). The mutant body — 373 replants,

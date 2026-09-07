@@ -12,6 +12,32 @@
 			"timeoutSeconds": 180,
 			"signature": "[QK:FRESH-CUT-COLLISION-NO-MOVE]",
 			"signatureSource": "scripts/check-fresh-cut-gate.sh"
+		},
+		{
+			"claim": "FRESHCUT-SYNCAUTH-TRIPWIRE-FIRES",
+			"title": "the retired-credential tripwire goes blind again. This replants the ACTUAL defect rather than a stand-in: under pipefail a `-q` grep exits at the first match and SIGPIPEs the awk still writing ~200KB of a 433KB run.sh, so the pipeline reports 141 and the `if` takes the CLEAN branch — the cell reported no sync_auth surface EXACTLY when one existed. It was deterministic here (100/100 measured) because the producer dwarfs the pipe buffer, which is why the self-test plants its surface near the TOP of the real run.sh: a small synthetic fixture would pass under this mutant and prove nothing",
+			"subject": "scripts/check-fresh-cut-gate.sh",
+			"find": ["  awk '!/^[[:space:]]*#/' \"$1\" | grep -c 'sync_auth' || true"],
+			"replace": ["  awk '!/^[[:space:]]*#/' \"$1\" | grep -q 'sync_auth' && echo 1 || echo 0"],
+			"gate": ["bash", "run.sh", "check-fresh-cut-gate"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:FRESHCUT-SYNCAUTH-TRIPWIRE-FIRES]",
+			"signatureSource": "scripts/check-fresh-cut-gate.sh"
+		},
+		{
+			"claim": "FRESHCUT-PREFLIGHT-CUT-DETECTED",
+			"title": "the cell forbidding an install from cutting a generation by itself stops SEEING the call it forbids — the context window silently narrows to the matched line, so a fresh-cut invocation one line into preflight_v3_store() reads as absent and D7 stays green. A forbidding cell that is green on a clean tree cannot tell blindness from compliance, which is what the self-test exists to separate",
+			"subject": "scripts/check-fresh-cut-gate.sh",
+			"find": [
+				"  grep -n 'preflight_v3_store()' -A 40 \"$1\" | grep -cE 'run_ts scripts/meta-bridge-fresh-cut\\.ts' || true"
+			],
+			"replace": [
+				"  grep -n 'preflight_v3_store()' -A 0 \"$1\" | grep -cE 'run_ts scripts/meta-bridge-fresh-cut\\.ts' || true"
+			],
+			"gate": ["bash", "run.sh", "check-fresh-cut-gate"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:FRESHCUT-PREFLIGHT-CUT-DETECTED]",
+			"signatureSource": "scripts/check-fresh-cut-gate.sh"
 		}
 	]
 }

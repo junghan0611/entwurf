@@ -266,7 +266,17 @@ if [ -d /proc ]; then
     case "$pid" in *[!0-9]*) continue ;; esac
     ENVIRON="/proc/$pid/environ"
     [ -r "$ENVIRON" ] || continue
-    if tr '\0' '\n' < "$ENVIRON" 2>/dev/null | grep -qE '^(PI_SESSION_ID|PI_AGENT_ID)=.*[^[:space:]]'; then
+    # `grep -c`, never `grep -q`. This file runs under `set -o pipefail` (line 26), and a
+    # `-q` grep EXITS AT THE FIRST MATCH, closing the pipe while `tr` is still writing the
+    # rest of an ~12KB environ. `tr` dies of SIGPIPE (141), pipefail promotes that to the
+    # pipeline's status, and the `if` takes the CLEAN branch — so a genuinely contaminated
+    # process was reported as clean, and the doctor printed PASS. It is a RACE on how far
+    # `tr` got, which is why it read as flakiness: measured on this host, 6 misses in 40
+    # reads of one live fixture carrying PI_SESSION_ID=foreign-garden. `-c` consumes all of
+    # stdin, so there is no early close and nothing to race. The same lesson is already
+    # written at smoke-omp-mcp-state.sh:91 — it had not reached this reader.
+    HITS="$(tr '\0' '\n' < "$ENVIRON" 2>/dev/null | grep -cE '^(PI_SESSION_ID|PI_AGENT_ID)=.*[^[:space:]]' || true)"
+    if [ "${HITS:-0}" -gt 0 ]; then
       CONTAMINATED="$CONTAMINATED $pid"
     fi
   done
