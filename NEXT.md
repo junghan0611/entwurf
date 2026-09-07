@@ -73,10 +73,48 @@ CHANGELOG `## Unreleased`가 구현 범위 `v0.15.1..19ad90c` **30커밋** 전�
       dispatch 복구 `34066181211` = `event=workflow_dispatch`, 본체 success, 오라클 PASS.
       `fetch-depth: 0` 실비용 **0초**(checkout 2s = depth 1 과 동일). #103 닫힘.
 
-현재 좌표: 1–17 완료 · **0.16.1 make는 열린 채 PAUSED**. 푸시·태그는
-`entwurf-release` 4모드 몫이다 (CalVer `tag-release`가 아님).
+- [x] **18. v0.18.2 컷 (#103 합본)** — `v0.18.2` @ `5a640d7`, GitHub 릴리즈 공개(2026-09-07 11:58 KST).
+      land run `34070192960`(4축 오라클 PASS @ `0f6667d`) → P5 LIVE `--cut` **MUST 23/0/0**, qualification
+      **373/373**, 55m05s → M2 prepared-HEAD run `34076217321` 4축 PASS → M3 수용(no repack). **이 컷이
+      자기 오라클로 판정됐다**: 릴리즈 커밋은 `CHANGELOG.md`+`package.json` 뿐인데 `package.json` 이 뮤턴트
+      subject 라 필터가 본체를 돌렸고(`1 of 2 … run_body=true`), 네 번째 축이 그 success 를 읽었다.
+      sol(gpt-5.6-sol) 독립 검수 Defect 4+2 전부 amendment 로 닫힘. 4번째 qualification 전수는 **GLG 결정으로
+      생략**(red 1건은 `smoke-omp-bridge-state` 호스트 omp 스캔, 우리 diff 밖 — 아래 이월 관측).
+- [ ] **19. npm publish 0.18.2** ← CURRENT: GLG 몫(토큰). 수용된 **정확히 그 파일**만(리팩 금지):
+      `/tmp/entwurf-release-candidate-0.18.2.AnEbKY/junghanacs-entwurf-0.18.2.tgz`
+      sha256 `27df97adc8651764a61dba98d3ed70a8dfb140cf5726547646b40048ecfe84e5`(12,505,816 bytes), dist-tag `latest`.
+      발행 뒤 0.18.1 과 같은 사후 integrity 대조(sha512/sha1/sha256 + `cmp`)를 형제가 돌리고 여기 한 줄.
+- [ ] **20. #105 — Fresh project-seat placement / no-turn retirement / remote-host** — 0.18.2 뒤 다음 stem
+      (GLG 지정 2026-09-07). 첫 slice 는 **① placement**(`entwurf_fresh_call` 에 `placement.tmuxSession` +
+      `ifMissing`) — `mux-fresh-call.ts` 의 좁은 확장이고 acceptance 1·2 가 하루 안에 측정된다. ② retire 는
+      V3 레코드에 이벤트를 붙이는 순간 Hard Rule 7 store 계약이 움직이니 별도 무게, ③ remote 는 research.
+      이슈 하나로 두되 slice 순서는 스레드에 박고 시작한다.
 
-# NOW — v0.18.1 전부 닫힘 (npm 발행 + 레지스트리 integrity 대조 완료)
+현재 좌표: 1–18 완료 → 19 npm 발행 대기(GLG) → 20 다음 stem · **0.16.1 make는 열린 채 PAUSED**.
+푸시·태그는 `entwurf-release` 4모드 몫이다 (CalVer `tag-release`가 아님).
+
+# NOW — v0.18.2 태그·릴리즈 완료, npm 발행만 남았다 → 다음 stem #105
+
+- **Stem:** 0.18.2 는 발행 한 단계만 남기고 닫혔다. 그 뒤 stem 은 **#105 slice ① placement**.
+- **좌표:** `v0.18.2` @ `5a640d7` = `main` = `origin/main`. 릴리즈
+  https://github.com/junghan0611/entwurf/releases/tag/v0.18.2 · #103 closed @ `0f6667d`.
+  npm 은 아직 `latest`=0.18.1 [측정 2026-09-07 12:0x KST].
+- **Next (GLG):** `npm publish /tmp/entwurf-release-candidate-0.18.2.AnEbKY/junghanacs-entwurf-0.18.2.tgz --tag latest`
+  — 발행 전 `latest`=0.18.1 / `repair`=0.12.8-repair.1 이니 발행 뒤 `latest`=0.18.2, `repair` 불변이어야 한다.
+  candidate 디렉터리가 `/tmp` 라 재부팅 전에 발행하거나 파일을 옮겨 둔다(sha256 로 동일성 확인).
+- **Next (형제, 발행 뒤):** integrity 사후 대조 → RAIL 19 [x] → `entwurf-release` SKILL.md publish 모드에
+  그 절차가 없다는 관측(U4 후보) 은 GLG 가 원할 때만 한 절 추가(ASCII 전용 파일).
+- **Next (#105 착수 때):** `gh issue view 105` 본문 + 이 RAIL 20 의 slice 순서 → 브랜치 `feat/105-placement` +
+  `NEXT--feat_105-placement.md` → 설계 한 단락(바꿀 파일 `mux-fresh-call.ts`/`mux-placement.ts`/MCP 스키마,
+  receipt 필드, `ifMissing` 거절 형태) → 구현. 팀이면 첫 task 는 형성만(entwurf-dev 스킬).
+- **Blocker:** 없음(publish 는 권한축 — GLG 토큰).
+- **Read:** CHANGELOG `## 0.18.2` · #103 종결 댓글 3개(관측 표·dispatch·종결) · #99 stage-2 댓글 §2·§3 · `scripts/ci-qualify-decide.sh` 머리 주석.
+- **Do not touch:** candidate 재pack · `v0.18.2` 태그와 CHANGELOG 0.18.2 절 · `- run: ./run.sh check-gate-qualification` 줄의 키 순서(`if:` 는 `run:` 뒤 — 8a 리터럴과 오라클 스텝 이름이 걸려 있다) · 0.16.1 make 를 섞는 것.
+- **이번 주 운영 규율(전부 실제로 당한 것):** 게이트 도는 동안 커밋 금지 · 긴 명령은 tmux(저메모리 워치독이 백그라운드 워처를 이번 레인에서 4번 죽였다, 60초 간격 워처만 생존) · `check-install-surface` 는 git index 를 읽는다 · SKILL.md 는 ASCII 전용 · `entwurf setup` 을 LIVE 전에 · codex 레일 셋이 한꺼번에 죽으면 `quota` 먼저 · 형제에게 가는 사실 문장엔 증거 상태.
+
+<details><summary>0.18.1 착지 NOW (닫힘 — #103 이월 관측은 이 안에 남는다)</summary>
+
+## Archived NOW — v0.18.1 전부 닫힘 (npm 발행 + 레지스트리 integrity 대조 완료)
 
 - **Stem:** 없다. 이 릴리즈 레인은 발행까지 전부 닫혔다. 다음 stem 은 GLG 가 고른다.
 - **좌표:** `v0.18.1` @ `cabecf6` — 태그·GitHub 릴리즈·npm `latest` 가 전부 그 지점이다.
@@ -127,6 +165,8 @@ CHANGELOG `## Unreleased`가 구현 범위 `v0.15.1..19ad90c` **30커밋** 전�
   **Dep bump(별도 트랙)** 2026-09-06 두 항목 · #102 종결 댓글의 CI 영수증.
 - **Do not touch:** candidate 를 다시 pack 하는 것(수용된 바이트는 그 파일 하나다) ·
   `v0.18.1` 태그와 CHANGELOG 0.18.1 절 · 0.16.1 make 를 이 레인에 섞는 것.
+
+</details>
 
 <details><summary>0.18.0 착지 직후의 NOW (레인 닫힘 — 이월 관측은 여기 남는다)</summary>
 
