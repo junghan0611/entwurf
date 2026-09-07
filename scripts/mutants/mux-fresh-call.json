@@ -486,6 +486,17 @@
 			"signatureSource": "test/mux-fresh-call.test.ts"
 		},
 		{
+			"claim": "FRESHCALL-PLACEMENT-BACKEND-PARITY",
+			"title": "the project seat becomes a pi capability — the grammar refusal is gated on the backend, so claude-code, copilot and omp fall past the seat check into runtime resolution and answer with the wrong reason. Every seat assertion that existed when #105 landed was written against backend pi alone, so nothing would have noticed",
+			"subject": "pi-extensions/lib/mux-fresh-call.ts",
+			"find": ["\t\tif (badSeat) return { ok: false, reason: badSeat };"],
+			"replace": ["\t\tif (badSeat && params.backend === \"pi\") return { ok: false, reason: badSeat };"],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:FRESHCALL-PLACEMENT-BACKEND-PARITY]",
+			"signatureSource": "test/mux-fresh-call.test.ts"
+		},
+		{
 			"claim": "FRESHCALL-PLACEMENT-RECEIPT-TARGET",
 			"title": "the receipt copies the CALLER's session id again — the window is in the seat, the receipt names the caller's session, and every later close/lookup built on that receipt addresses the wrong session. Proof is in two halves: this mutant dies on the source-text assembly assert in the fast lane, and the behavioural oracle independent of that source is the real-tmux seat cell in check-mux-launch-tmux (receipt.sessionId === seatId !== callerId, read from the server's own inventory)",
 			"subject": "pi-extensions/lib/mux-fresh-call.ts",

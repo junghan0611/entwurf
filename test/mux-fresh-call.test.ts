@@ -737,6 +737,34 @@ describe("optional project seat — cross-session fresh placement (#105)", () =>
 		expect(() => buildFreshCallArgs("org", "/bin/sh", ["PROMPT"])).toThrow();
 	});
 
+	it("[QK:FRESHCALL-PLACEMENT-BACKEND-PARITY] the seat is not a pi capability — every backend in the fixed set gets the SAME grammar refusal, decided before the runtime is resolved and before the copilot/omp capability preflights, and the SAME `-t` target in argv, because the target session and the backend dialect are separate parameters rather than one branch. The cwd axis (#73) already carries this parity; the seat axis landed with every behavioural assertion in this repo written against `pi` alone, which is exactly the shape in which a later backend branch would go unnoticed", () => {
+		// Behavioural half: no tmux, no runtime on PATH, no capability units — the grammar check is
+		// step one, so the reason must be the seat's for ALL four, not just the one that was tested.
+		for (const backend of FRESH_CALL_BACKENDS) {
+			expect(
+				reasonOf(
+					freshCall(
+						{ backend, model: PI_MODEL, task: TASK, callerGardenId: GID, placement: { tmuxSession: "a.b" } },
+						{},
+					),
+				),
+				backend,
+			).toBe("tmux-session-name-invalid");
+		}
+		// Argv half: the backend only ever becomes the tail after `--`; the resolved target reaches
+		// `-t` identically, so no dialect can silently redirect a seated launch to another window.
+		for (const backend of FRESH_CALL_BACKENDS) {
+			const args = buildFreshCallArgs(
+				TARGET_SESSION,
+				"/bin/sh",
+				buildBackendArgs(backend, { prompt: "PROMPT", bootstrapPayload: "PAYLOAD" }, PI_MODEL),
+			);
+			expect(args[args.indexOf("-t") + 1], backend).toBe(`${TARGET_SESSION}:{end}`);
+			expect(args.indexOf("-t"), backend).toBeLessThan(args.indexOf("--"));
+			expect(args, backend).not.toContain(`${CALLER_SESSION}:{end}`);
+		}
+	});
+
 	it("[QK:FRESHCALL-PLACEMENT-RECEIPT-TARGET] the receipt reports the OBSERVED target session and echoes the REQUESTED name — production assembles `sessionId` from the resolved target rather than copying the caller's, and there is no observed-cwd and no created-session field, because nothing here observes a pane path or creates a session", () => {
 		// Production assembly half, structural for the same reason as the cwd receipt above. Its
 		// behavioural oracle lives outside this file: `check-mux-launch-tmux`'s seat cell reads

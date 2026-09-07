@@ -42,6 +42,11 @@ transcript를 가진 garden citizen이다.
 - `entwurf_fresh_call` backend는 정확히 `pi | claude-code | copilot | omp`이고 model은 required다. `cwd`는
   선택 입력 하나: literal 절대경로(존재하는 디렉터리, `#`·trim·realpath 없음), 생략·`""`면
   caller cwd에서 시작한다. cross-repo fresh 절 참조.
+  **심링크를 주면 두 문자열이 보이는데 정상이다**: entwurf는 경로를 해석하지 않고 tmux에 그대로
+  넘기므로 receipt의 `cwd:`는 요청한 문자열 그대로이고, record·transcript 경로·callback envelope·
+  `pane_current_path`는 OS가 해석한 실제 경로다(측정: `~/org` 요청 → record `/home/junghan/sync/org`).
+  같은 곳이며, 나중에 `entwurf_resume_call`이 되세우는 것은 해석된 쪽이다. 형제에게 "네 cwd"를
+  물으면 셋 중 어느 표면을 읽었는지에 따라 다르게 답할 수 있으니 어긋났다고 보고하지 않는다.
 - `placement`는 선택 입력 하나: `{ tmuxSession: "<정확한 이름>" }`. caller **자신의 tmux 서버**에
   **이미 있는** 세션에 형제를 연다(운영자의 프로젝트 자리). **세션을 만들지 않는다** — 없으면
   `tmux-session-missing`, 문법 밖 이름이면 `tmux-session-name-invalid`로 거절되고 창도 세션도 생기지
