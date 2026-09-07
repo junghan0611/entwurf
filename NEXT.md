@@ -84,38 +84,41 @@ CHANGELOG `## Unreleased`가 구현 범위 `v0.15.1..19ad90c` **30커밋** 전�
       [측정 oracle 12:2x] `dist.integrity` sha512-`sZencZe+…d9V8kg==` ≡ candidate sha512 · `dist.shasum`
       `7e4c0820ff3797fbb09ed13982c302c99c066eb3` ≡ sha1 · 레지스트리 tarball 12,505,816 bytes sha256
       `27df97ad…84e5` ≡ 수용 sha, `cmp` **바이트 동일** · dist-tags `latest`=0.18.2, `repair`=0.12.8-repair.1 보존. 리팩 없음.
-- [ ] **20. #105 — Fresh project-seat placement / no-turn retirement / remote-host** ← CURRENT: 새 Fable 이 이슈 파악부터. 0.18.2 뒤 다음 stem
-      (GLG 지정 2026-09-07). 첫 slice 는 **① placement**(`entwurf_fresh_call` 에 `placement.tmuxSession` +
-      `ifMissing`) — `mux-fresh-call.ts` 의 좁은 확장이고 acceptance 1·2 가 하루 안에 측정된다. ② retire 는
-      V3 레코드에 이벤트를 붙이는 순간 Hard Rule 7 store 계약이 움직이니 별도 무게, ③ remote 는 research.
-      이슈 하나로 두되 slice 순서는 스레드에 박고 시작한다.
+- [x] **20. #105 ① fresh project-seat placement — `feat/105-placement` 착지 (2026-09-07 12:12–17:10 KST).**
+      조사 lane: OMP Opus `20260907T123530-a87cdb` + pi 형제 4(terra/grok/glm/sonnet) + scout 3 → R1–R8 50분, 정본
+      `.agent-reports/105-research-20260907.md`(로컬). GLG 결정: **없으면 reject, 생성 없음** — `ifMissing`/`create` 축 자체를
+      두지 않는다("다 자동화하면 테스트·검증 비용이 커진다"). 구현 Claude Code Opus `20260907T141316-a1c1a1` →
+      `a39b637 feat(mux)`(22 파일, 새 leaf `resolve-tmux-session.ts`, `closeWindow` 서버 바인딩) · sol 독립 검수 Blocker 0 /
+      Defect 3+1 → amendment 1 bundle · qualification **381/381** · `check:full` exit 0 554s · LIVE `smoke-mux-fresh-call-live`
+      39/39(4 launch, seat×cwd 2×2) · grok 문서·이해 검수 Blocker 0 / Defect 5 → `5a6c21c docs(fresh-call)`.
+      #105 스레드 댓글 2건이 계약 정본(본문은 스냅샷). ② retire / ③ remote 는 착수 때 새 이슈.
+- [ ] **21. 0.19.0 — `entwurf-release` land → prepare → make → publish** ← CURRENT: land(main push + exact-SHA CI, qualification 본체
+      포함) 승인·실행 → prepare 0.19.0 → make → publish. 모드마다 GLG 별도 승인.
 
-현재 좌표: 1–19 완료(0.18.2 레인 전부 닫힘) → **20 #105 착수** · **0.16.1 make는 열린 채 PAUSED**.
+현재 좌표: 1–20 완료 → **21 land 부터** · **0.16.1 make는 열린 채 PAUSED**.
 푸시·태그는 `entwurf-release` 4모드 몫이다 (CalVer `tag-release`가 아님).
 
-# NOW — 0.18.2 전부 닫힘 → #105 착수 (GLG: "오랜만에 들어가는 완전 핵심 새 기능")
+# NOW — #105 ① 착지 → 0.19.0 릴리즈 lane (GLG: "main 올리고 배포 준비는 꼼꼼하게")
 
-- **Stem:** #105 — fresh project-seat placement / no-turn retirement / remote-host Entwurf. 코디네이터는
-  새 Fable(2026-09-07 12:3x 개시), 구현 형제는 GLG 가 정한다.
-- **좌표:** `v0.18.2` @ `5a640d7`, npm `latest`=0.18.2, `main` = `origin/main`. 열린 이슈 6(구현 97·78·76·105 = 4/5).
-- **Next:** (1) `gh issue view 105` 본문 전체 + AGENTS "mux is launch-only" 문단·Hard Rule 2/7/8/16 을 원본으로 읽는다
-  (2) 현재 좌표 실측: `pi-extensions/lib/mux-fresh-call.ts`·`mux-placement.ts`·`classify-tmux-cwd.ts`·
-  `mcp/entwurf-bridge/src/index.ts` 의 fresh-call 스키마, `meta-session.ts` 의 V3 writer/integrity, Claude 마커의
-  `isPlausibleOwnerPid` — 이슈 "First executable step" 그대로 (3) slice 순서를 #105 스레드에 박는다:
-  **① placement**(`placement.tmuxSession` + `ifMissing: create|reject`, receipt 에 관측 session/window/pane +
-  created 여부) → ② `entwurf_retire`(Claude Code 부터, 프로세스 소유권 증명 위, 레코드 이벤트 = V3 store 계약 변경)
-  → ③ remote 는 research 로 분리 여부 GLG 결정 (4) GLG 에게 설계 한 단락 보고 → 승인 뒤 브랜치
-  `feat/105-placement` + `NEXT--feat_105-placement.md`.
-- **이슈 규율 마찰(착수 때 GLG 결정):** #105 는 원인 셋·acceptance 6 이 세 갈래 — AGENTS "우산 트래커 금지" 와 닿는다.
-  이슈 하나로 두고 slice 순서를 스레드에 박거나, ②③ 을 갈라낸다. 슬롯 여유 1.
-- **Blocker:** 없음.
-- **Read:** #105 본문 · `docs/mux-launch-rail.md` §11(import 금지 그래프) · CHANGELOG 0.18.2 · #103 종결 댓글.
-- **Do not touch:** tmux 를 주소·liveness·delivery 로 승격하는 것(Hard Rule 16) · `cwd` 와 `tmuxSession` 을 서로 추론하는 것 ·
-  추측 PID kill · 레코드 밖 두 번째 identity 축 · `v0.18.2` 태그/CHANGELOG 절 · 0.16.1 make 섞기.
-- **이번 주 운영 규율(전부 실제로 당한 것):** 게이트 도는 동안 커밋 금지 · 긴 명령은 tmux(저메모리 워치독이 백그라운드
-  워처를 4번 죽였다, 60초 간격 워처만 생존) · `check-install-surface` 는 git index 를 읽는다 · SKILL.md 는 ASCII 전용 ·
-  `entwurf setup` 을 LIVE 전에 · codex 레일 셋이 한꺼번에 죽으면 `quota` 먼저 · 형제에게 가는 사실 문장엔 증거 상태 ·
-  리뷰는 sol(gpt-5.6-sol) 독립 검수가 이번에 Defect 6 을 잡았다 — 같은 패턴 유지.
+- **Stem:** 0.19.0 = #105 ① placement. minor 인 이유: `entwurf_fresh_call` 스키마에 optional `placement` 가 생기고 `closeWindow`
+  계약이 서버 바인딩으로 바뀐다(호출자 호환, 세 surface 동시).
+- **좌표:** `main` = `origin/main` = `7a6778c` + 브랜치 `feat/105-placement` 3 commit(`a39b637` feat · `5a6c21c` docs · NEXT 닫기).
+  fast-forward 가능. 열린 이슈 6(구현 97·78·76·105 = 4/5, research 95·88) — #105 는 머지 SHA 로 close.
+- **Next:** (1) `entwurf-release land` — L0 clean·non-diverged main, L1 push, L2 도장, L3 `verify-exact-ci.sh <SHA> wait`(이 push 는
+  mutants/gates 를 건드렸으므로 `ci-qualify-decide` 가 본체를 켜야 한다; skipped 면 dispatch 복구) (2) `prepare 0.19.0` — CHANGELOG
+  `## Unreleased` 는 비어 있다; 0.19.0 절 재료는 `a39b637`·`5a6c21c` 본문 + 아래 CARRIED 관측(AGENTS augment cap, MCP description cap)
+  · version/lockfile · `check:full` · `LIVE=1 release-gate <scratch> --cut`(MUST 에 `smoke-mux-lifecycle-live` 포함 — 이 lane 이
+  안 돌린 유일한 mux LIVE; `requireSameServer` 전환의 same-session 경로가 여기서 처음 실 검증된다) · on-demand
+  `smoke-mux-fresh-call-live` 는 `5a6c21c` 가 문서 전용이라 `a39b637` 의 39/39 가 유효 (3) `make` (4) `publish`.
+- **Blocker:** 없음(permission: 각 모드 GLG 승인).
+- **Read:** #105 스레드 댓글 2건 · `a39b637`/`5a6c21c` 본문 · `.agent-reports/105-research-20260907.md` · `docs/mux-launch-rail.md` §8·§11.
+- **Do not touch:** `ifMissing`/`create`/`new-session` 을 제품에 되살리는 것(GLG 결정) · `isSameContext` 완화 · tmux 를 주소·liveness·delivery 로
+  승격(Hard Rule 16) · `cwd` ↔ `tmuxSession` 상호 추론 · v2 frozen reject enum · 0.16.1 make 섞기.
+- **이번 주 운영 규율(전부 실제로 당한 것):** 게이트 도는 동안 커밋 금지 · 긴 명령은 tmux(저메모리 워치독) · `check-install-surface` 는 git
+  index 를 읽는다 · `entwurf-release/SKILL.md` 만 ASCII 전용 · `entwurf setup` 을 LIVE 전에 · codex 레일 셋이 한꺼번에 죽으면 `quota` 먼저 ·
+  형제에게 가는 사실 문장엔 증거 상태 · 독립 검수(sol 코드 / grok 문서·오독 테스트) 패턴 유지 · **frozen 중 untracked `dist/` stale 로
+  `check-bridge-delivery` 가 붉을 수 있다 — `build-bridge` 재빌드는 candidate 를 안 바꾼다** · 첫 qualification 이 CONTROL-RED 면 원인
+  게이트를 먼저 본다(`pnpm check` 에 없는 hermetic 게이트일 수 있다).
 
 <details><summary>0.18.1 착지 NOW (닫힘 — #103 이월 관측은 이 안에 남는다)</summary>
 
@@ -325,6 +328,19 @@ CHANGELOG `## Unreleased`가 구현 범위 `v0.15.1..19ad90c` **30커밋** 전�
 - **2026-08-27:** OMP vendor measurement and real TUI/subagent observations closed the Bundle A admission basis.
 
 # CARRIED
+
+- **AGENTS.md 가 ACP first-user augment 50KB cap 천장에 붙어 있다 (#105 lane 측정 2026-09-07).** HEAD `7a6778c` 기준 여유 932B,
+  `a39b637` 뒤 316B(`buildPiContextAugment` claude, repo AGENTS + 12KB global baseline, `check-acp-carrier-augment`
+  `[QK:AUGMENT-BUDGET-FITS]`). 그 게이트는 `check:hermetic` 소속이라 `pnpm check` 로는 안 보이고 full floor/qualification 에서 처음
+  터진다 — AGENTS 한 문단 추가 lane 은 그 전까지 벽을 못 본다. 같은 계열: **MCP `entwurf_fresh_call` description 2028B/2048B(여유 20B)**.
+  조치 후보(GLG 결정, 이슈 여부 포함): cap 상향 · AGENTS 감량 lane · core 에 값싼 budget tripwire.
+- **#105 조사 lane 이월(②③ 착수 때 읽을 것):** ② retire — 제3자 receiver 마커 삭제 authority 불필요(죽은 소유자 마커는
+  `readMetaReceiverMarker(verifyOwner)` 가 null, 측정 2건), 남은 어려움은 backend 별 소유 pid 비대칭(pi 는 pid 없음, antigravity 는
+  receiver 마커 없음)과 사후 사실의 자리(sidecar `meta-events/<gid>.jsonl`, `.meta.json` 필터로 store 안 안전); acceptance "transcript
+  byte-identical" 은 **레이스 의존**(Claude 2.1.263 이 종료 경로에서 `last-prompt` 한 줄 append, 2/2) → "신호 전 길이 N 의 `head -c N` 해시
+  동일" 로; machine identity 는 `os.hostname()` + `entwurf-v2-lock.ts:119-120` seam, `~/.current-device` 는 load-bearing 금지.
+  ③ remote — ROADMAP:216·853 fail-fast 유지, research. 운영 관측: foreground tool call 에 갇힌 pi 형제는 `mode:steer` 를 못 읽는다 ·
+  doorbell 이 드레인된 편지를 중복 통지 · `resolve-tmux-session` 의 rc≠0 는 EACCES 류도 `missing` 으로 읽는다(두 번째 consumer 생기면 재분리).
 
 - **`release_gate()` does not run `check-pack-install`** — measured 2026-09-06 while landing #104
   (`awk` over the function body: 0 hits; the gate is `prepublishOnly` + the CI install-surface
