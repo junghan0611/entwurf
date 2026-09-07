@@ -4,6 +4,75 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+## 0.18.2 - 2026-09-07
+
+One lane: #103, the second stage of the CI evidence budget (#99). The mutant body — 373 replants,
+~30 minutes — stops running on every branch push, and the release oracle stops accepting a run that
+did not carry it. Nothing in the runtime surface moves.
+
+### Changed
+
+- **The exact-SHA release oracle requires the qualification BODY, not three green job names (#103
+  piece 1).** `verify-exact-ci.sh` reads a fourth axis over one guard: the `check` job's
+  `Run ./run.sh check-gate-qualification` step must conclude `success`, with absent, skipped and
+  failed each named separately in the refusal. It also stops filtering to `--event push`, so a
+  `workflow_dispatch` run at the same SHA is admissible evidence — which is exactly when the
+  always-present `headSha` check starts carrying load, because `gh workflow run --ref` takes a
+  branch and never a SHA. A skipped body is not evidence: the oracle refuses that SHA and prints the
+  dispatch command that fixes it. This landed BEFORE the skip could exist.
+- **The body runs only on a branch push that moved the qualification surface (#103 piece 2).**
+  `scripts/ci-qualify-decide.sh` diffs the two-dot push range GitHub itself compares and intersects
+  it with a path set **derived from `scripts/mutants/*.json` at runtime** — no copy in YAML, so a new
+  mutant subject cannot land outside the filter. Five numbered fail-opens, each naming itself in the
+  log: an all-zero base, a forced push (whose base GitHub does not document), a dispatch without
+  `qualify=true` or a schedule, an unreadable range, and `pull_request`. `workflow_dispatch -f
+  qualify=true` and a weekly schedule run the body unconditionally; `fetch-depth: 0` on the check job
+  is what keeps the base readable, and it measured free (2s checkout, the same as depth 1).
+- **Measured on real runs, not argued.** A code push ran the body and took 36m24s
+  ([34047559085](https://github.com/junghan0611/entwurf/actions/runs/34047559085)); a docs-only push
+  skipped it and took 6m13s
+  ([34065841309](https://github.com/junghan0611/entwurf/actions/runs/34065841309)); the four-axis
+  oracle **refused** that second SHA while all three of its jobs were green, and the documented
+  dispatch recovery turned the refusal back into a pass
+  ([34066181211](https://github.com/junghan0611/entwurf/actions/runs/34066181211)). The historical
+  justification is replayed rather than remembered: all five qualification reds this repo's CI has
+  ever produced still run the body under the filter.
+
+### Added
+
+- Three kill-qualified claims and their exact-once replants, inventory 370 → 373:
+  `RELEASE-SHA-QUALIFIED-IN-CI` (the fourth axis), `QUALIFY-FILTER-COVERS-SUBJECTS` (every manifest
+  subject and signatureSource decides `run_body=true`, asserted behaviourally against the shipped
+  script), and `QUALIFY-FILTER-READS-PUSH-RANGE` (a hermetic throwaway repo with a docs-only tip over
+  a commit that touched a subject — the two-dot reading, proven without repo history).
+  `QUALIFY-FILTER-REPLAYS-PAST-CATCHES` replays the five reds from recorded file lists.
+- `scripts/fixtures/qualify-replay.json` — the five historical reds as the push ranges GitHub
+  compared, measured once here because history is not readable everywhere the gate runs.
+
+### Verification
+
+All on oracle (Linux, node 24.18.1, pi 0.85.1, omp 18.1.12 — updated from 18.0.0 during this lane).
+
+- **`LIVE=1 ./run.sh release-gate /tmp/entwurf-release-gate-0.18.2.JlEU88 --cut` → `cut: OK`.**
+  **MUST: PASS=23 FAIL=0 SKIP=0**, BEHAVIOR: PASS=1 FAIL=0 SKIP=0, exit 0, 3305s (55m05s).
+  `check-gate-qualification` as its MUST step: **373/373 KILLED**.
+- `pnpm run check:full` on the prepared tree: exit 0, 504s.
+- Pre-version landing run for `0f6667d`: CI run
+  [34070192960](https://github.com/junghan0611/entwurf/actions/runs/34070192960), all three jobs
+  success — and this is the first release landing judged by the fourth axis the same release adds:
+  the oracle read that run's qualification step, not just its job names.
+
+### Notes
+
+- **A gate that reads repo history cannot live in the qualification snapshot.** The replay cell first
+  read live git objects and went CONTROL-RED inside the snapshot's fresh baseline, costing the whole
+  release-gate lane its 17 kills. That is why the fixture carries file lists and the range semantics
+  are proven hermetically instead.
+- **Key order in `ci.yml` is a contract.** The body step keeps `run:` as its leading key: cell 8a
+  counts that sequence-item form exactly once, and the oracle matches GitHub's rendered
+  `Run <command>` step name, so an `if:` placed first — or any `name:` — would break both. Confirmed
+  on a real run after the filter landed.
+
 ## 0.18.1 - 2026-09-06
 
 Two lanes, both landing on `main` after `v0.18.0`: the CI evidence-budget stage 1 (#102, from
