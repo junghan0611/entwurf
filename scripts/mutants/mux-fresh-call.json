@@ -438,6 +438,76 @@
 			"timeoutSeconds": 180,
 			"signature": "[QK:FRESHCALL-BACKEND-SET-SURFACE-PARITY-PI]",
 			"signatureSource": "test/fresh-call-surfaces.contract.test.ts"
+		},
+		{
+			"claim": "TMUXSESSION-LOOKUP-ENGINE",
+			"title": "the seat lookup goes back to the `-f` filter engine, which was measured to match EVERY session when the name contains a '}' — a fresh sibling then opens in whichever session tmux listed first",
+			"subject": "pi-extensions/lib/resolve-tmux-session.ts",
+			"find": ["\treturn [\"list-windows\", \"-t\", `=${name}`, \"-F\", \"#{session_id}\"];"],
+			"replace": ["\treturn [\"list-sessions\", \"-f\", `#{==:#{session_name},${name}}`, \"-F\", \"#{session_id}\"];"],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:TMUXSESSION-LOOKUP-ENGINE]",
+			"signatureSource": "test/mux-fresh-call.test.ts"
+		},
+		{
+			"claim": "TMUXSESSION-NAME-GRAMMAR",
+			"title": "the seat name grammar is widened to 'anything non-empty' — tmux then stores a DIFFERENT name than the one requested (or splits it on '.'/':') and the seat can never be found, reported as 'missing' instead of as a shape this rail does not address",
+			"subject": "pi-extensions/lib/resolve-tmux-session.ts",
+			"find": ["const SESSION_NAME = /^[A-Za-z0-9][A-Za-z0-9_-]*$/;"],
+			"replace": ["const SESSION_NAME = /^.+$/;"],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:TMUXSESSION-NAME-GRAMMAR]",
+			"signatureSource": "test/mux-fresh-call.test.ts"
+		},
+		{
+			"claim": "FRESHCALL-PLACEMENT-MISSING-REJECTS",
+			"title": "an absent seat is read as success — tmux's exit code is ignored, so a missing session falls through to the caller's own session and the launch looks like the seat worked. Proof is in two halves: this mutant dies on the leaf's injected-runner assert plus the source-text ordering assert in the fast lane, and the behavioural oracle independent of that source is the real-tmux seat cell in check-mux-launch-tmux (refusal by name with a byte-identical list-windows -a before and after)",
+			"subject": "pi-extensions/lib/resolve-tmux-session.ts",
+			"find": ["\tif (result.status !== 0) return { ok: false, reason: \"tmux-session-missing\" };"],
+			"replace": [
+				"\tif (result.status !== 0 && result.stdout.length > 0) return { ok: false, reason: \"tmux-session-missing\" };"
+			],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:FRESHCALL-PLACEMENT-MISSING-REJECTS]",
+			"signatureSource": "test/mux-fresh-call.test.ts"
+		},
+		{
+			"claim": "FRESHCALL-PLACEMENT-TARGET-ARGV",
+			"title": "the launch argv targets the caller's own session again — a seated fresh call silently opens beside the caller instead of in the operator's project session, and the receipt still looks right",
+			"subject": "pi-extensions/lib/mux-fresh-call.ts",
+			"find": ["\t\t`${targetSessionId}:{end}`,"],
+			"replace": ["\t\t`$0:{end}`,"],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:FRESHCALL-PLACEMENT-TARGET-ARGV]",
+			"signatureSource": "test/mux-fresh-call.test.ts"
+		},
+		{
+			"claim": "FRESHCALL-PLACEMENT-RECEIPT-TARGET",
+			"title": "the receipt copies the CALLER's session id again — the window is in the seat, the receipt names the caller's session, and every later close/lookup built on that receipt addresses the wrong session. Proof is in two halves: this mutant dies on the source-text assembly assert in the fast lane, and the behavioural oracle independent of that source is the real-tmux seat cell in check-mux-launch-tmux (receipt.sessionId === seatId !== callerId, read from the server's own inventory)",
+			"subject": "pi-extensions/lib/mux-fresh-call.ts",
+			"find": ["\t\t\tsessionId: targetSessionId,"],
+			"replace": ["\t\t\tsessionId: placement.sessionId,"],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:FRESHCALL-PLACEMENT-RECEIPT-TARGET]",
+			"signatureSource": "test/mux-fresh-call.test.ts"
+		},
+		{
+			"claim": "FRESHCALL-PLACEMENT-SURFACE-PARITY",
+			"title": "one surface drops the optional seat from its schema, so opening a sibling in the operator's project session works from pi and silently cannot exist from the MCP bridge",
+			"subject": "mcp/entwurf-bridge/src/index.ts",
+			"find": [
+				"\t\tplacement: z\n\t\t\t.object({\n\t\t\t\ttmuxSession: z\n\t\t\t\t\t.string()\n\t\t\t\t\t.describe(\n\t\t\t\t\t\t\"EXACT name of an EXISTING session on this agent's own tmux server. Nothing is created: an absent session is refused as tmux-session-missing, and a name outside [A-Za-z0-9][A-Za-z0-9_-]* as tmux-session-name-invalid.\",\n\t\t\t\t\t),\n\t\t\t})\n\t\t\t.optional()\n\t\t\t.describe(\n\t\t\t\t\"Optional project seat: open the sibling in ONE EXISTING tmux session of this agent's own server instead of the caller's session. Nothing is ever created — an absent session is a refusal, not a new session. Independent of cwd; neither is inferred from the other. The receipt echoes the REQUESTED name and reports the resolved target session id.\",\n\t\t\t),\n"
+			],
+			"replace": [""],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:FRESHCALL-PLACEMENT-SURFACE-PARITY]",
+			"signatureSource": "test/fresh-call-surfaces.contract.test.ts"
 		}
 	]
 }

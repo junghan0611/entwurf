@@ -26,10 +26,11 @@
  *                       this read is the receipt.
  *   - entwurf_register_native — explicit/manual fallback binding an ALREADY-RUNNING native
  *                       conversation (antigravity) to a garden id. Never a spawn.
- *   - entwurf_fresh_call — open ONE fresh visible sibling in the operator's own tmux session,
- *                       optionally at ONE literal requested cwd (cross-repo fresh, #73);
- *                       returns a LAUNCH receipt only, and the new address arrives later as the
- *                       sender envelope of the sibling's nonce callback.
+ *   - entwurf_fresh_call — open ONE fresh visible sibling in the operator's tmux — the caller's own
+ *                       session, or ONE EXISTING named session on the same server (the project
+ *                       seat, #105; nothing is ever created), optionally at ONE literal requested
+ *                       cwd (cross-repo fresh, #73); returns a LAUNCH receipt only, and the new
+ *                       address arrives later as the sender envelope of the sibling's nonce callback.
  *   - entwurf_resume_call — reopen ONE DORMANT pi citizen under its OWN garden id in a visible
  *                       window; target-only, runs no turn, LAUNCH and OBSERVATION receipts stay
  *                       apart.
@@ -706,7 +707,7 @@ server.tool(
 // against that answer would call home to a garden id nobody holds.
 server.tool(
 	"entwurf_fresh_call",
-	"Open ONE fresh visible sibling in the operator's own tmux session and hand it a first task. Four fixed " +
+	"Open ONE fresh visible sibling in the operator's tmux and hand it a first task. Four fixed " +
 		"backends only: pi, claude-code, copilot, omp. The sibling's FIRST action is a callback to you carrying a nonce, and the " +
 		"sender envelope of that callback is its garden id — that is how you learn the address of something that " +
 		"did not exist a moment ago. This returns a LAUNCH receipt (tmux window/pane plus that nonce) and nothing " +
@@ -721,6 +722,8 @@ server.tool(
 		"prompt, so the sibling could not call you back at all). An optional " +
 		"cwd starts the sibling in ONE literal absolute existing directory (cross-repo fresh) — never pick resume " +
 		"for a dormant record's cwd; resume is continuity-only. Omitted/empty cwd means the caller's own directory. " +
+		"An optional placement.tmuxSession opens it in ONE EXISTING session of this agent's own tmux server, not " +
+		"only its own session; an absent one is refused and NOTHING is created. " +
 		"There are no arbitrary command/env knobs. Do not put secrets in the task — model and task argv are visible to " +
 		"same-user processes on this host. Requires that this agent itself runs " +
 		"inside tmux: without a pane anchor there is no session to open a sibling beside.",
@@ -757,8 +760,20 @@ server.tool(
 			.describe(
 				"Optional literal ABSOLUTE path of an existing directory to start the sibling in (cross-repo fresh). Omit or pass \"\" to start in this agent's own cwd. Taken exactly as given — no trim, no realpath, no project-name resolution; '#' is refused (tmux format expansion). The receipt echoes what was REQUESTED, never an observation.",
 			),
+		placement: z
+			.object({
+				tmuxSession: z
+					.string()
+					.describe(
+						"EXACT name of an EXISTING session on this agent's own tmux server. Nothing is created: an absent session is refused as tmux-session-missing, and a name outside [A-Za-z0-9][A-Za-z0-9_-]* as tmux-session-name-invalid.",
+					),
+			})
+			.optional()
+			.describe(
+				"Optional project seat: open the sibling in ONE EXISTING tmux session of this agent's own server instead of the caller's session. Nothing is ever created — an absent session is a refusal, not a new session. Independent of cwd; neither is inferred from the other. The receipt echoes the REQUESTED name and reports the resolved target session id.",
+			),
 	},
-	async ({ backend, model, task, cwd }) => {
+	async ({ backend, model, task, cwd, placement }) => {
 		let callerGardenId: string | null = null;
 		try {
 			const self = await buildAuthoritativeSelfEnvelope();
@@ -775,7 +790,7 @@ server.tool(
 			callerGardenId = null;
 		}
 		try {
-			const rendered = renderFreshCall(freshCall({ backend, model, task, cwd, callerGardenId }));
+			const rendered = renderFreshCall(freshCall({ backend, model, task, cwd, placement, callerGardenId }));
 			return rendered.isError ? textErr(rendered.text) : textOk(rendered.text);
 		} catch (err) {
 			return textErr(`entwurf_fresh_call error: ${err instanceof Error ? err.message : String(err)}`);

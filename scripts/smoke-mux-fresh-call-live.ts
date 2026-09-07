@@ -2,7 +2,9 @@
  * smoke-mux-fresh-call-live — the ONE axis a deterministic gate cannot reach: a real window, a
  * real runtime, a real first turn, and a real callback arriving on a real inbound surface.
  *
- * OUT of `pnpm check`. Needs `LIVE=1`. Costs two model turns (one pi, one Claude Code).
+ * OUT of `pnpm check`. Needs `LIVE=1`. Costs FOUR model turns (three pi, one Claude Code): two
+ * open in the caller's own session, and #105 added two more in a second SEAT session on the same
+ * private server so the seat x cwd matrix is read on real panes rather than argued about.
  *
  * ── Isolate the WRITES, keep the runtimes real ──
  *
@@ -59,6 +61,17 @@ const REAL_CONTROL_DIR = path.join(REAL_HOME, ".pi", "entwurf-control");
 // so the real-HOME Claude cell can be given exact operator-env parity (issue #67).
 const ORIGINAL_XDG = snapshotOriginalXdg(process.env);
 
+// The #105 seat fixture. A second session on the SAME private server, its own session_path, and
+// two distinct requested cwds — three directories that must never be confusable with each other.
+const SEAT_SESSION = "seat";
+const SEAT_HOME = (root: string): string => path.join(root, "seat-home");
+const CROSS_REPO_A = (root: string): string => path.join(root, "cross-repo-a");
+const CROSS_REPO_B = (root: string): string => path.join(root, "cross-repo-b");
+/** tmux fills `#{pane_current_path}` with the SERVER's cwd at creation time and only becomes
+ * true 0.2–0.6s later (measured ×2, #105 R1) — so acceptance reads it after a delay, never from
+ * the launch receipt. */
+const PANE_CWD_SETTLE_SECONDS = "3";
+
 let passed = 0;
 function ok(label: string, cond: boolean): void {
 	if (!cond) throw new Error(`${LABEL}: FAILED — ${label}`);
@@ -87,6 +100,13 @@ function entrySet(dir: string): string {
 function tmux(socket: string, args: string[], env: NodeJS.ProcessEnv): { status: number | null; stdout: string } {
 	const r = spawnSync("tmux", ["-S", socket, ...args], { env, encoding: "utf8" });
 	return { status: r.status, stdout: (r.stdout ?? "").trim() };
+}
+
+/** The session the caller's own anchor pane sits in — tmux's answer, never a name we assembled. */
+function inspectedSessionId(socket: string, env: NodeJS.ProcessEnv): string {
+	return tmux(socket, ["display-message", "-p", "-t", String(env.TMUX_PANE), "#{session_id}"], env).stdout.split(
+		"\n",
+	)[0];
 }
 
 function pidIsAlive(pid: number): boolean {
@@ -150,6 +170,10 @@ async function main(): Promise<void> {
 	};
 	for (const dir of Object.values(fenced)) fs.mkdirSync(dir, { recursive: true });
 	fs.mkdirSync(scratch, { recursive: true });
+	// The #105 seat cells need three directories that are all DIFFERENT from each other and from
+	// the scratch cwd, so "the pane landed here" can only be true for one reason. `seatHome` is
+	// the second session's own `session_path` — the candidate the cwd must NOT come from.
+	for (const dir of [SEAT_HOME(root), CROSS_REPO_A(root), CROSS_REPO_B(root)]) fs.mkdirSync(dir, { recursive: true });
 	// A runtime dir is a private surface by convention and tmux checks it.
 	fs.chmodSync(fenced.XDG_RUNTIME_DIR, 0o700);
 	for (const [k, v] of Object.entries(fenced)) process.env[k] = v;
@@ -160,7 +184,7 @@ async function main(): Promise<void> {
 	// Import the meta layer only AFTER the redirects — a module that resolved its roots at import
 	// time would have captured the operator's.
 	const meta = await import("../pi-extensions/lib/meta-session.ts");
-	const { freshCall } = await import("../pi-extensions/lib/mux-fresh-call.ts");
+	const { freshCall, renderFreshCall } = await import("../pi-extensions/lib/mux-fresh-call.ts");
 
 	const siblingGids = new Set<string>();
 	const siblingPids = new Set<number>();
@@ -223,6 +247,11 @@ async function main(): Promise<void> {
 		// onboarding instead of exercising the configured runtime. Separate servers preserve
 		// those backend-native environments without adding an env carrier to the product.
 		const nonces = new Map<string, string>();
+		/** Every launched cell's pane, with the directory the pane is REQUIRED to have settled in
+		 * — read after a delay, which is the only honest way to observe it (see the constant). */
+		const cwdCells: Array<{ label: string; socket: string; env: NodeJS.ProcessEnv; paneId: string; expect: string }> =
+			[];
+		const servers = new Map<string, { socket: string; inherited: NodeJS.ProcessEnv }>();
 		// Intentional: pi + claude-code only. Copilot clause-7 LIVE is operator-metered
 		// and is not a release MUST — do not add `copilot` to this loop (VERIFY.md).
 		for (const backend of ["pi", "claude-code"] as const) {
@@ -248,12 +277,17 @@ async function main(): Promise<void> {
 			const anchorPane = tmux(socket, ["display-message", "-p", "-t", "fixture:anchor", "#{pane_id}"], env).stdout;
 			const inherited: NodeJS.ProcessEnv = { ...env, TMUX: `${socket},0,0`, TMUX_PANE: anchorPane };
 			ok(`${backend}: tmux server is a private socket, never the operator's`, String(inherited.TMUX).startsWith(root));
+			servers.set(backend, { socket, inherited });
 
+			// The caller-session half of the #105 cwd matrix: pi omits the cwd, claude-code names
+			// one. Both open in the CALLER's own session, which is the pre-#105 behaviour.
+			const requestedCwd = backend === "claude-code" ? CROSS_REPO_A(root) : undefined;
 			const result = freshCall(
 				{
 					backend,
 					model: LIVE_MODEL[backend],
 					task: "Reply with the single word ACK and then stop. Do not read files.",
+					cwd: requestedCwd,
 					callerGardenId: callerGid,
 				},
 				inherited,
@@ -262,6 +296,13 @@ async function main(): Promise<void> {
 			if (!result.ok) return;
 			nonces.set(backend, result.receipt.nonce);
 			siblingPids.add(Number(result.receipt.panePid));
+			cwdCells.push({
+				label: `${backend} @caller-session cwd=${requestedCwd === undefined ? "(omitted)" : "requested"}`,
+				socket,
+				env: inherited,
+				paneId: result.receipt.paneId,
+				expect: requestedCwd ?? scratch,
+			});
 			ok(
 				`${backend}: the receipt carries tmux coordinates, requested model and nonce, and nothing about delivery`,
 				Boolean(
@@ -270,6 +311,113 @@ async function main(): Promise<void> {
 						result.receipt.model === LIVE_MODEL[backend] &&
 						result.receipt.nonce,
 				) && !("gardenId" in result.receipt),
+			);
+			ok(
+				`${backend}: with no seat requested the window is in the CALLER's own session and the receipt names no seat`,
+				result.receipt.sessionId === inspectedSessionId(socket, inherited) && result.receipt.tmuxSession === undefined,
+			);
+		}
+
+		// ── #105 acceptance: the optional project seat ───────────────────────────
+		// One extra session on the SAME private pi server (R6: a second session is one line and
+		// costs no extra server). Its own `-c` gives it a session_path that is neither the
+		// caller's cwd nor either requested cwd, so the cwd matrix below can only pass for one
+		// reason.
+		const pi = servers.get("pi");
+		if (!pi) throw new Error(`${LABEL}: the pi fixture server was not captured`);
+		const callerSessionId = inspectedSessionId(pi.socket, pi.inherited);
+		if (
+			tmux(pi.socket, ["new-session", "-d", "-s", SEAT_SESSION, "-c", SEAT_HOME(root), "-n", "anchor"], pi.inherited)
+				.status !== 0
+		) {
+			throw new Error(`${LABEL}: could not create the second fixture session ${SEAT_SESSION}`);
+		}
+		const seatSessionId = tmux(
+			pi.socket,
+			["list-windows", "-t", `=${SEAT_SESSION}`, "-F", "#{session_id}"],
+			pi.inherited,
+		).stdout.split("\n")[0];
+		ok(
+			"seat: the fixture now holds two sessions on ONE server, and the seat is not the caller's",
+			/^\$[0-9]+$/.test(seatSessionId) && seatSessionId !== callerSessionId,
+		);
+
+		// Acceptance 2 FIRST, because it is the one that must leave nothing behind. Both refusals
+		// are read against a byte-identical session/window inventory.
+		const inventory = (): string =>
+			tmux(pi.socket, ["list-windows", "-a", "-F", "#{session_id}|#{window_id}"], pi.inherited).stdout;
+		const beforeRefusals = inventory();
+		for (const [label, seat, reason] of [
+			["absent", "nosuchseat", "tmux-session-missing"],
+			["unresolvable", "no.such.seat", "tmux-session-name-invalid"],
+		] as const) {
+			const refused = freshCall(
+				{
+					backend: "pi",
+					model: LIVE_MODEL.pi,
+					task: "This task must never run.",
+					placement: { tmuxSession: seat },
+					callerGardenId: callerGid,
+				},
+				pi.inherited,
+			);
+			ok(
+				`seat: an ${label} seat is refused as ${reason}, and NOTHING was created`,
+				!refused.ok && refused.reason === reason && inventory() === beforeRefusals,
+			);
+			const rendered = renderFreshCall(refused);
+			ok(
+				`seat: the ${label} refusal says so in the operator's words`,
+				rendered.isError && rendered.text.includes("No window was opened"),
+			);
+		}
+
+		// Acceptance 1 + the other half of the cwd matrix: two seated pi siblings, one with the
+		// cwd omitted and one with a requested cwd.
+		for (const [label, requestedCwd] of [
+			["seat cwd=(omitted)", undefined],
+			["seat cwd=requested", CROSS_REPO_B(root)],
+		] as const) {
+			const callerWindowsBefore = tmux(
+				pi.socket,
+				["list-windows", "-t", callerSessionId, "-F", "#{window_id}"],
+				pi.inherited,
+			).stdout;
+			const seated = freshCall(
+				{
+					backend: "pi",
+					model: LIVE_MODEL.pi,
+					task: "Reply with the single word ACK and then stop. Do not read files.",
+					cwd: requestedCwd,
+					placement: { tmuxSession: SEAT_SESSION },
+					callerGardenId: callerGid,
+				},
+				pi.inherited,
+			);
+			ok(`${label}: launch receipt is ok`, seated.ok);
+			if (!seated.ok) return;
+			nonces.set(label, seated.receipt.nonce);
+			siblingPids.add(Number(seated.receipt.panePid));
+			cwdCells.push({
+				label: `pi @${label}`,
+				socket: pi.socket,
+				env: pi.inherited,
+				paneId: seated.receipt.paneId,
+				expect: requestedCwd ?? scratch,
+			});
+			ok(
+				`${label}: the receipt echoes the REQUESTED seat name and reports the RESOLVED target session, not the caller's`,
+				seated.receipt.tmuxSession === SEAT_SESSION &&
+					seated.receipt.sessionId === seatSessionId &&
+					seated.receipt.sessionId !== callerSessionId,
+			);
+			ok(
+				`${label}: the window really landed in the seat, and the caller's session is byte-identical`,
+				tmux(pi.socket, ["list-windows", "-t", seatSessionId, "-F", "#{window_id}"], pi.inherited).stdout.includes(
+					seated.receipt.windowId,
+				) &&
+					tmux(pi.socket, ["list-windows", "-t", callerSessionId, "-F", "#{window_id}"], pi.inherited).stdout ===
+						callerWindowsBefore,
 			);
 		}
 
@@ -295,8 +443,32 @@ async function main(): Promise<void> {
 			if (sender) siblingGids.add(sender);
 		}
 		ok(
-			"correlation: the two siblings reported DIFFERENT garden ids — the envelope identifies each one, not the launcher",
+			"correlation: every sibling reported a DIFFERENT garden id — the envelope identifies each one, not the launcher",
 			siblingGids.size === arrived.size && !siblingGids.has(callerGid),
+		);
+
+		// ── #105 acceptance 3: the seat and the cwd are ORTHOGONAL ───────────────
+		// Read AFTER a delay and from the stable %pane, never from the launch receipt: at
+		// creation time `#{pane_current_path}` reports the tmux SERVER's cwd in every cell
+		// (measured ×2), which is why the receipt reports the REQUESTED cwd and this is the
+		// acceptance that reports the observed one. The 2×2 is {cwd omitted, cwd requested} ×
+		// {caller session, seat}, and the seat's own `session_path` is a fourth directory that
+		// no cell may ever land in.
+		spawnSync("sleep", [PANE_CWD_SETTLE_SECONDS]);
+		for (const cell of cwdCells) {
+			const observed = tmux(
+				cell.socket,
+				["display-message", "-p", "-t", cell.paneId, "#{pane_current_path}"],
+				cell.env,
+			).stdout;
+			ok(
+				`cwd x seat: ${cell.label} settled in ${cell.expect} — never the target session's path, never the other cell's`,
+				observed === cell.expect && observed !== SEAT_HOME(root),
+			);
+		}
+		ok(
+			"cwd x seat: all four cells ran — {cwd omitted, cwd requested} x {caller session, seat}",
+			cwdCells.length === 4 && new Set(cwdCells.map((c) => c.expect)).size === 3,
 		);
 		ok(
 			"fence: those sibling records live in the FIXTURE store",

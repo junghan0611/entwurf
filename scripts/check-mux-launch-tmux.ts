@@ -24,6 +24,9 @@
  *     is still listed on an immediate re-read — which is why no post-launch presence check is
  *     performed and why the precondition runs before the window exists
  *   - a precondition refusal opens NO window at all
+ *   - the #105 seat, through the real `freshCall`: an absent seat refuses and creates nothing,
+ *     an existing one puts the window in THAT session with a receipt naming the resolved
+ *     target, and the resulting handle closes through `closeWindow` from outside that session
  */
 
 import assert from "node:assert/strict";
@@ -97,7 +100,7 @@ function alive(pid: string): boolean {
 	}
 }
 
-function main(): void {
+async function main(): Promise<void> {
 	if (spawnSync("tmux", ["-V"], { encoding: "utf8" }).status !== 0) {
 		skipLive(LABEL, "tmux is not installed — install tmux to run the launch acceptance");
 	}
@@ -298,6 +301,78 @@ function main(): void {
 			originalPanes.every((p) => panes().includes(p)),
 		);
 		ok("restored: focus never moved", windows().find((w) => w.endsWith("|1")) === activeBefore);
+
+		// ── the fresh-call composition, against a real server (#105) ──────────────────
+		// The seat's deterministic gate can prove the argv, the leaf and the refusals, but the
+		// two things that only exist once tmux has answered — WHICH session the window landed
+		// in, and what the receipt says about it — had no oracle independent of the production
+		// source. This cell is that oracle: the same hermetic runtime above, a SECOND session
+		// on this same private server, and the real `freshCall`, read through its return value
+		// and the server's own inventory.
+		{
+			const { freshCall } = await import("../pi-extensions/lib/mux-fresh-call.ts");
+			const { closeWindow } = await import("../pi-extensions/lib/mux-placement.ts");
+			const call = (placementInput?: { tmuxSession: string }) =>
+				freshCall(
+					{
+						backend: "pi",
+						model: "fixture/model",
+						task: "fixture task",
+						placement: placementInput,
+						callerGardenId: "20260101T000000-fixture",
+					},
+					inherited,
+				);
+			const inventory = (): string => fxLines("list-windows", "-a", "-F", "#{session_id}|#{window_id}").join(" ");
+
+			// (i) an ABSENT seat: named refusal, and the server is byte-identical afterwards.
+			const beforeAbsent = inventory();
+			const absent = call({ tmuxSession: "nosuchseat" });
+			ok(
+				"seat: an absent seat refuses as tmux-session-missing and creates NOTHING — no window, no session",
+				!absent.ok && absent.reason === "tmux-session-missing" && inventory() === beforeAbsent,
+			);
+
+			// (ii) an EXISTING seat on the same server: the window lands THERE, the caller's own
+			// session is untouched, and the receipt names the resolved target rather than the caller.
+			assert.equal(fx("new-session", "-d", "-s", `${SESSION}-seat`).status, 0, "fixture seat session");
+			const seatId = fxLines("list-windows", "-t", `=${SESSION}-seat`, "-F", "#{session_id}")[0];
+			const callerWindowsBefore = fxLines("list-windows", "-t", placement.sessionId, "-F", "#{window_id}").join(" ");
+			const seated = call({ tmuxSession: `${SESSION}-seat` });
+			assert.ok(seated.ok, `the seated fresh call must succeed: ${seated.ok ? "" : seated.reason}`);
+			const receipt = seated.receipt;
+			ok(
+				"seat: the receipt reports the RESOLVED target session and echoes the REQUESTED name — not the caller's session",
+				receipt.sessionId === seatId &&
+					receipt.sessionId !== placement.sessionId &&
+					receipt.tmuxSession === `${SESSION}-seat`,
+			);
+			ok(
+				"seat: tmux agrees — the window is in the seat, and the caller's own session is byte-identical",
+				fxLines("list-windows", "-t", seatId, "-F", "#{window_id}").includes(receipt.windowId) &&
+					fxLines("list-windows", "-t", placement.sessionId, "-F", "#{window_id}").join(" ") === callerWindowsBefore,
+			);
+			ok(
+				"seat: an omitted seat still lands in the caller's own session and the receipt names none",
+				(() => {
+					const own = call();
+					if (!own.ok) return false;
+					const here = own.receipt.sessionId === placement.sessionId && own.receipt.tmuxSession === undefined;
+					process.kill(Number(own.receipt.panePid), "SIGKILL");
+					return here;
+				})(),
+			);
+
+			// (iii) the close side: that handle closes through the production verb, in a session
+			// that is NOT the caller's — the reason close binds to the server half.
+			ok(
+				"seat: the placed window closes through its own handle and tmux stops listing it",
+				closeWindow(receipt, inherited) === "closed" &&
+					!fxLines("list-windows", "-a", "-F", "#{window_id}").includes(receipt.windowId),
+			);
+			fx("kill-session", "-t", seatId);
+			ok("seat: the fixture is back to one session", sessionCount() === 1);
+		}
 	} finally {
 		fx("kill-server");
 		if (fs.existsSync(SOCKET)) fs.rmSync(SOCKET, { force: true });
@@ -313,4 +388,4 @@ function main(): void {
 	console.log(`\n${LABEL}: ${passed} checks passed`);
 }
 
-main();
+await main();

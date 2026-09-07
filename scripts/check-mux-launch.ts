@@ -19,6 +19,7 @@
  *   MUX-LAUNCH-NO-SHELL-ARGV       the fixed runtime is passed after `--`, never as a string
  *   MUX-LAUNCH-NO-CARRIER          argv is the append shape plus the runtime, nothing else
  *   MUX-LAUNCH-CORE-IMPORT-FREE    the launch module and entwurf delivery never import each other
+ *   RESOLVE-TMUX-SESSION-IMPORT-FREE  the session-lookup leaf imports nothing at all
  */
 
 import assert from "node:assert/strict";
@@ -269,6 +270,22 @@ function main(): void {
 		ok(
 			"boundary: the placement leaf does not import the launch module — the leaf stays deletable on its own",
 			!importsLaunch("pi-extensions/lib/mux-placement.ts"),
+		);
+		// ── the session-lookup leaf imports NOTHING (docs §11, #105) ─────────────────
+		// It is the one leaf whose entire safety argument is that it cannot acquire an
+		// opinion: no tmux of its own (the runner is injected), no mux module, no entwurf
+		// core, and not even a node builtin. §11 states that; nothing held it, and the first
+		// `import { runTmux } from "./mux-placement.ts"` would quietly turn a decision leaf
+		// into a second place that can run tmux.
+		ok(
+			"[QK:RESOLVE-TMUX-SESSION-IMPORT-FREE] the session-lookup leaf imports nothing at all — not mux, not entwurf core, not even a node builtin — so the only power it has is the runner its caller injects",
+			importsOf(fs.readFileSync("pi-extensions/lib/resolve-tmux-session.ts", "utf8")).length === 0,
+		);
+		ok(
+			"boundary: the fresh-call composition is the ONLY shipped source that imports that leaf",
+			PRODUCTION_SOURCES.filter((m) =>
+				importsOf(fs.readFileSync(m, "utf8")).some((spec) => spec.includes("resolve-tmux-session")),
+			).join(",") === FRESH_CALL_MODULE,
 		);
 		// Prose is not behaviour: the module header names identity vocabulary precisely to say
 		// it owns none of it, so this assertion reads CODE with the comments stripped. A check

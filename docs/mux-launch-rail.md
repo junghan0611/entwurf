@@ -473,7 +473,16 @@ exact evidence로 인정되는 것은 둘뿐이다.
 - record watcher, timeout/retry, unknown-id discovery
 - unknown/new record birth 또는 liveness를 발견하려는 대기 (S1의 known-id socket observation은 한 번의 bounded startup observation으로 출하됨)
 - generic driver/registry, labels/metadata
-- caller-supplied command/env/window-name carrier, 또는 model·cwd 외 별도 provider/settings carrier (fresh의 cwd는 §6-a의 좁은 literal 시작 디렉터리 입력이지 generic carrier가 아니고, project-name resolver도 아니다)
+- caller-supplied command/env/**window**-name carrier, 또는 model·cwd·session seat 외 별도 provider/settings carrier (fresh의 cwd는 §6-a의 좁은 literal 시작 디렉터리 입력이지 generic carrier가 아니고, project-name resolver도 아니다)
+
+  **2026-09-07 개정 (#105).** 이 줄은 원래 "caller가 주는 이름"을 통째로 금지했다. 지금은 **세션
+  이름 하나**가 예외로 열려 있고, 어디서 멈추는지는 명시적이다 — caller **자신의 tmux 서버**에 이미
+  있는 세션의 **정확한 이름 하나**를 lookup 하고, 그 결과인 native `$id` 로만 target 한다. 이름은
+  argv 에 절대 도달하지 않는다. **세션을 만들지 않는다**(`new-session` 도, `ifMissing`/`create` 축도
+  제품에 없다 — GLG 2026-09-07): 없으면 `tmux-session-missing` 거절이고 창도 세션도 생기지 않으므로
+  운영자가 자리를 만들고 다시 부른다. **window** 이름·command·env carrier 는 그대로 금지다. 왜
+  열었는가: 운영자의 자리는 프로젝트별 세션이고, 그 전까지 형제를 그 자리에 두는 유일한 방법은 창을
+  손으로 옮기는 것이었다.
 - raw PTY input, capture/history API
 - 모든 tmux session을 관리하는 registry
 - zmx adapter, 설치, self-fetch, fallback
@@ -517,11 +526,12 @@ gate, LIVE smoke, release 배선을 전부 제거했다.
 | tmux placement leaf (`mux-placement.ts`) | caller placement, same-session append, stable handle close | harness launch, identity, delivery |
 | T1-a launch composition (`mux-launch.ts`) | 고정 runtime의 precondition 증명, 같은 session에 window+runtime 한 번의 mutation, 로컬 handle receipt | garden identity, record 조회, task delivery, supervision, 어떤 carrier도 |
 | pi/ACP harness adapter | official runtime/session lifecycle, auth, model, transcript, record birth | 프로젝트의 작업자 선택·backlog |
+| tmux session lookup leaf (`resolve-tmux-session.ts`) | caller가 준 세션 **이름** 의 문법 판정과 이름→native `$id` 해석 하나 — 엔진은 `list-windows -t '=NAME' -F '#{session_id}'` 고정, 부재는 rc 로 판정(`-f` 필터는 이름 안 `}` 하나로 전 세션 오탐, `display-message` 는 존재해도 빈 출력; 둘 다 측정) | tmux 실행(runner 는 주입), argv, hint 문구(consumer 소유), 세션 **생성**, fallback 세션, 다른 서버 |
 | cwd classification leaf (`classify-tmux-cwd.ts`) | `-c` 후보의 분류 하나 — 4개 stable reason(absolute / `#` 없음 / 존재 / 디렉터리; tmux가 `-c`를 format-expand하고 없는 경로를 조용히 `$HOME`으로 폴백하기 때문) | argv, tmux 실행, hint 문구(각 consumer가 자기 표현을 소유), fallback 디렉터리 |
 | resume-call composition (`mux-resume-call.ts`) | record가 준 cwd에서의 same-session append(`-c`) — 분류는 공유 leaf, "recorded cwd" hint 표현, launch receipt | garden identity, record 조회, lock, delivery, supervision |
-| fresh-call composition (`mux-fresh-call.ts`) | backend별 fixed runtime + argv dialect, explicit model CLI token, optional **requested** cwd(caller가 유일한 출처; `undefined`/`""`만 생략, literal·no-trim, 같은 leaf로 pre-mutation 분류, resume 대칭 `-c` 위치), first-turn framing(callback→task 순서), nonce 민팅, launch receipt | garden identity(표면이 공급), cwd 추측·resolve, delivery transport, task 분해, supervision |
+| fresh-call composition (`mux-fresh-call.ts`) | backend별 fixed runtime + argv dialect, explicit model CLI token, optional **requested** cwd(caller가 유일한 출처; `undefined`/`""`만 생략, literal·no-trim, 같은 leaf로 pre-mutation 분류, resume 대칭 `-c` 위치), optional **requested** session seat(#105 — 이름은 pre-mutation 문법 판정 후 lookup leaf 로 `$id` 해석, `-t` 에는 `$id` 만, `-d` 필수, 없으면 거절·생성 없음), first-turn framing(callback→task 순서), nonce 민팅, launch receipt(요청 이름 echo + 해석된 target `$id`, 관측 cwd 없음) | garden identity(표면이 공급), cwd 추측·resolve, 세션 생성, delivery transport, task 분해, supervision |
 | copilot capability preflight leaf (`copilot-fresh-preflight.ts`) | Copilot fresh **한 건**에 대한 pre-mutation 판정 — birth·MCP hand·receiver·visible footer 네 축의 **설치/설정 사실**과 축마다 하나인 named reason + repair 문구 | runtime 사실(벤더 spawn·live process·연결 여부는 doctor와 LIVE 소유), mutation, 다른 backend, generic doctor로의 성장 |
-| public surfaces (`entwurf-control.ts` · MCP `index.ts`) | fresh의 record-backed caller identity와 `{backend, model, task, cwd?}` schema, resume의 target-only schema, 양쪽 렌더, resume launch seam 조립 | argv 문법, placement, identity 민팅 |
+| public surfaces (`entwurf-control.ts` · MCP `index.ts`) | fresh의 record-backed caller identity와 `{backend, model, task, cwd?, placement?}` schema, resume의 target-only schema, 양쪽 렌더, resume launch seam 조립 | argv 문법, placement, identity 민팅 |
 | project policy (repo 밖) | 누구를·언제·무엇으로 부를지, fan-out 횟수, 실패 후 판단 | transport 내부 구현 |
 
 강제 가능한 import 금지선은 넓은 일반론이 아니라 좁은 몇 줄이다. `entwurf-v2-production.ts`는 이미
@@ -535,9 +545,10 @@ mux-placement                                  -X-> entwurf core
 mux-launch                                     -X-> entwurf core
 mux-placement                                  -X-> mux-launch        (leaf는 혼자 삭제 가능해야 한다)
 mux-launch                                      -> mux-placement
-mux-fresh-call                                  -> mux-launch + mux-placement + classify-tmux-cwd + copilot-fresh-preflight
+mux-fresh-call                                  -> mux-launch + mux-placement + classify-tmux-cwd + resolve-tmux-session + copilot-fresh-preflight
 mux-resume-call                                 -> mux-launch + mux-placement + classify-tmux-cwd
 classify-tmux-cwd                              -X-> 모든 mux/entwurf 모듈   (공유 분류 leaf; node 표준만 본다)
+resolve-tmux-session                           -X-> 모든 mux/entwurf 모듈   (세션 lookup leaf; import 0, runner 주입)
 copilot-fresh-preflight                        -X-> 모든 mux/entwurf 모듈   (좁은 backend leaf; node 표준만 본다)
 entwurf-v2-visible-resume                      -X-> mux-*            (launch는 표면이 주입하는 seam)
 public surfaces                                 -> mux-resume-call + entwurf-v2-visible-resume  (composition root)
@@ -547,6 +558,10 @@ all other shipped production sources           -X-> mux-launch
 `check-mux-launch`는 출하 source 전체(`pi-extensions/**` + `mcp/**`, build artifact 제외)를 스캔해
 `mux-fresh-call.ts`와 `mux-resume-call.ts` **둘만** launch를 import하도록 강제하고(정확한 집합이며 `mux-*` 접두 규칙이 아니다 — 세 번째 모듈은 결정이어야 한다), delivery/core의 역의존을 금지한다.
 `MUX-LAUNCH-CORE-IMPORT-FREE` mutant는 delivery production root에 금지 import를 심어 이 경계를 죽인다.
+같은 게이트가 `resolve-tmux-session.ts`의 **import 0**(node builtin 조차 없음)과 그 leaf의 유일한 출하 importer가
+`mux-fresh-call.ts`뿐임을 함께 강제한다 — `RESOLVE-TMUX-SESSION-IMPORT-FREE` mutant는 그 leaf에
+`import { runTmux } from "./mux-placement.ts"`를 심어 경계를 죽인다. 이 leaf의 안전 논거 전체가
+"주입된 runner 말고는 tmux를 돌릴 수단이 없다"이므로, import 하나가 그 논거를 조용히 무효화한다.
 
 leaf가 T1-a composition에 여는 seam도 여기 적는다. `mux-placement.ts`는 세 동사 외에 `runTmux`와
 `requireSameContext`를 export하는데, 이것은 **네 번째 동사도 public operator surface도 아니고 좁은 내부

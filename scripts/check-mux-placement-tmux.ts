@@ -27,6 +27,8 @@
  *   - handles are stable @window/%pane
  *   - the rc=0 trap is real, and inspectPlacement refuses it instead of guessing
  *   - close reports `closed` for a live window and `already-gone` after a natural exit
+ *   - a window placed in ANOTHER session of the same server closes through its own handle,
+ *     while a handle from another SERVER is still refused (#105 close-side binding)
  */
 
 import assert from "node:assert/strict";
@@ -259,9 +261,10 @@ function main(): void {
 			/context changed/,
 			"appendWindow must refuse a placement from another session",
 		);
+		// Close binds to the SERVER half (#105), so its refusal names that half by its own word.
 		assert.throws(
 			() => closeWindow({ ...w4, serverPid: "999999" }, inherited),
-			/context changed/,
+			/server changed/,
 			"closeWindow must refuse a handle from another server",
 		);
 		ok("binding: append/close refuse a foreign server or session before mutating", windows().length === 4);
@@ -305,6 +308,63 @@ function main(): void {
 			originalPanes.every((p) => panes().includes(p)),
 		);
 		ok("restored: focus never moved", windows().find((w) => w.endsWith("|1")) === activeBefore);
+
+		// ── close binds to the SERVER, not the session (#105) ─────────────────────────
+		// Since #105 a launched window may live in a session that is not the caller's, so the
+		// close side had to stop requiring the session half. This is that decision judged
+		// against a real server: a SECOND session, a window opened into it from the caller's
+		// pane the way the fresh-call composition does, and a close through the same handle.
+		// Both foreign-server refusal and the two close outcomes above stay exactly as they
+		// were — the session half is what changed, and only for close.
+		assert.equal(fx("new-session", "-d", "-s", `${SESSION}-b`).status, 0, "fixture second session");
+		ok("cross-session: the fixture now holds two sessions", sessionCount() === 2);
+		const otherSessionId = fxLines("list-windows", "-t", `=${SESSION}-b`, "-F", "#{session_id}")[0];
+		ok("cross-session: the second session resolves to a native id by exact name", /^\$[0-9]+$/.test(otherSessionId));
+		const placedRow = fxLines(
+			"new-window",
+			"-d",
+			"-a",
+			"-t",
+			`${otherSessionId}:{end}`,
+			"-P",
+			"-F",
+			"#{window_id}|#{window_index}|#{pane_id}|#{pane_pid}",
+		)[0].split("|");
+		const placed = {
+			serverPid: placement.serverPid,
+			sessionId: otherSessionId,
+			windowId: placedRow[0],
+			windowIndex: placedRow[1],
+			paneId: placedRow[2],
+			panePid: placedRow[3],
+		};
+		ok(
+			"cross-session: the window really landed in the OTHER session, and the caller's session is untouched",
+			fxLines("list-windows", "-t", otherSessionId, "-F", "#{window_id}").includes(placed.windowId) &&
+				!fxLines("list-windows", "-t", placement.sessionId, "-F", "#{window_id}").includes(placed.windowId),
+		);
+		ok(
+			"cross-session: the caller's own session still shows windows 1,2 and its focus is unmoved",
+			fxLines("list-windows", "-t", placement.sessionId, "-F", "#{window_id}").length === 2 &&
+				windows().find((w) => w.endsWith("|1")) === activeBefore,
+		);
+		// The predicate change, stated as the two facts that had to move together.
+		assert.throws(
+			() => closeWindow({ ...placed, serverPid: "999999" }, inherited),
+			/server changed/,
+			"closeWindow must still refuse a handle from another server",
+		);
+		ok(
+			"cross-session: a window in another session of the SAME server closes through its own handle — the release lifecycle smoke's close path reaches a placed window",
+			closeWindow(placed, inherited) === "closed",
+		);
+		ok(
+			"cross-session: it is gone from the other session, and nothing else moved",
+			!fxLines("list-windows", "-a", "-F", "#{window_id}").includes(placed.windowId) &&
+				fxLines("list-windows", "-t", placement.sessionId, "-F", "#{window_id}").length === 2,
+		);
+		fx("kill-session", "-t", otherSessionId);
+		ok("cross-session: the fixture is back to one session", sessionCount() === 1);
 	} finally {
 		fx("kill-server");
 		if (fs.existsSync(SOCKET)) fs.rmSync(SOCKET, { force: true });

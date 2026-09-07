@@ -37,7 +37,11 @@ import {
 	renderFreshCall,
 	TASK_MAX_CHARS,
 } from "../pi-extensions/lib/mux-fresh-call.ts";
-import type { Placement } from "../pi-extensions/lib/mux-placement.ts";
+import {
+	buildTmuxSessionLookupArgs,
+	classifyTmuxSessionName,
+	resolveTmuxSessionId,
+} from "../pi-extensions/lib/resolve-tmux-session.ts";
 
 const REPO_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -507,14 +511,9 @@ describe("omp capability preflight, decided before any window exists (step 9 cla
 });
 
 describe("optional cwd — cross-repo fresh placement (#73)", () => {
-	const PLACEMENT: Placement = {
-		serverPid: "4242",
-		sessionId: "$0",
-		windowId: "@1",
-		windowIndex: "1",
-		paneId: "%1",
-		panePid: "4243",
-	};
+	/** The TARGET session id the argv builder takes since #105 — here the caller's own, which
+	 * is what an omitted `placement` resolves to. */
+	const TARGET_SESSION = "$0";
 
 	/** Directory fixtures plus a hermetic executable runtime, because `buildFreshCallArgs`
 	 * proves the runtime is real before any argv exists. */
@@ -543,7 +542,7 @@ describe("optional cwd — cross-repo fresh placement (#73)", () => {
 		withCwdFixture(({ runtime }) => {
 			for (const backend of FRESH_CALL_BACKENDS) {
 				const args = buildFreshCallArgs(
-					PLACEMENT,
+					TARGET_SESSION,
 					runtime,
 					buildBackendArgs(backend, { prompt: "PROMPT", bootstrapPayload: "PAYLOAD" }, "m"),
 				);
@@ -562,9 +561,9 @@ describe("optional cwd — cross-repo fresh placement (#73)", () => {
 
 	it("[QK:FRESHCALL-CWD-OMITTED-NO-CARRIER] an omitted cwd emits no -c, and the exact empty string means the SAME omit — the argv keeps the pre-#73 shape and the sibling starts in the caller's own directory", () => {
 		withCwdFixture(({ runtime }) => {
-			const args = buildFreshCallArgs(PLACEMENT, runtime, ["PROMPT"]);
+			const args = buildFreshCallArgs(TARGET_SESSION, runtime, ["PROMPT"]);
 			expect(args).not.toContain("-c");
-			expect(buildFreshCallArgs(PLACEMENT, runtime, ["PROMPT"], undefined)).toEqual(args);
+			expect(buildFreshCallArgs(TARGET_SESSION, runtime, ["PROMPT"], undefined)).toEqual(args);
 		});
 		// "" is an omit, never a classification candidate: with a hermetic runtime on PATH and
 		// no tmux, the refusal must be the leaf's no-tmux-context, not cwd-not-absolute.
@@ -576,7 +575,7 @@ describe("optional cwd — cross-repo fresh placement (#73)", () => {
 
 	it("[QK:FRESHCALL-CWD-ARGV] a valid absolute directory reaches tmux as exactly one `-c <dir>` at the resume-symmetric token position — after the -t target, before -P -F", () => {
 		withCwdFixture(({ runtime, realDir }) => {
-			const args = buildFreshCallArgs(PLACEMENT, runtime, ["PROMPT"], realDir);
+			const args = buildFreshCallArgs(TARGET_SESSION, runtime, ["PROMPT"], realDir);
 			const c = args.indexOf("-c");
 			expect(args.slice(0, c)).toEqual([
 				"new-window",
@@ -608,7 +607,7 @@ describe("optional cwd — cross-repo fresh placement (#73)", () => {
 
 	it("a cwd that classification refuses can never be built into argv either — the builder re-checks rather than trusting its caller", () => {
 		withCwdFixture(({ runtime, tmp }) => {
-			expect(() => buildFreshCallArgs(PLACEMENT, runtime, ["PROMPT"], path.join(tmp, "#x"))).toThrow(
+			expect(() => buildFreshCallArgs(TARGET_SESSION, runtime, ["PROMPT"], path.join(tmp, "#x"))).toThrow(
 				/cwd-format-token/,
 			);
 		});
@@ -616,7 +615,7 @@ describe("optional cwd — cross-repo fresh placement (#73)", () => {
 
 	it("whitespace stays measured-OK through the fresh consumer: a directory with spaces arrives intact, while a lone space is a real UNTRIMMED value refused as not absolute — nothing repairs a path into a different directory", () => {
 		withCwdFixture(({ runtime, spaceDir }) => {
-			const args = buildFreshCallArgs(PLACEMENT, runtime, ["PROMPT"], spaceDir);
+			const args = buildFreshCallArgs(TARGET_SESSION, runtime, ["PROMPT"], spaceDir);
 			expect(args[args.indexOf("-c") + 1]).toBe(spaceDir);
 		});
 		expect(reasonOf(freshCall({ backend: "pi", model: PI_MODEL, task: TASK, callerGardenId: GID, cwd: " " }, {}))).toBe(
@@ -647,6 +646,151 @@ describe("optional cwd — cross-repo fresh placement (#73)", () => {
 		const withCwd = renderFreshCall({ ok: true, receipt: { ...receipt, cwd: "/repos/other-project" } });
 		expect(withCwd.text).toContain("cwd:      /repos/other-project");
 		expect(withCwd.text).toMatch(/requested start directory — not an observation/);
+	});
+});
+
+describe("optional project seat — cross-session fresh placement (#105)", () => {
+	const CALLER_SESSION = "$0";
+	const TARGET_SESSION = "$7";
+
+	/** The leaf's injected seam, answering the way tmux 3.6a was MEASURED to (2026-09-07,
+	 * private `-S` servers). This is not a fake tmux standing in for a server: the leaf takes
+	 * its runner as a parameter precisely so its decision — grammar, exit code, id parse — is
+	 * decidable without one. The real-window axis stays with smoke-mux-fresh-call-live. */
+	function runner(answers: { status: number; stdout?: string; stderr?: string }) {
+		const calls: string[][] = [];
+		return {
+			calls,
+			run: (args: string[]) => {
+				calls.push(args);
+				return { status: answers.status, stdout: answers.stdout ?? "", stderr: answers.stderr ?? "" };
+			},
+		};
+	}
+
+	it("[QK:TMUXSESSION-LOOKUP-ENGINE] the seat is resolved by `list-windows -t '=NAME' -F '#{session_id}'` and by nothing else — `-t` performs no format expansion, while the `-f` filter engine was measured to match EVERY session when the name contains a '}', and `display-message` answers rc=0 with empty output for a name that does not exist", () => {
+		expect(buildTmuxSessionLookupArgs("org")).toEqual(["list-windows", "-t", "=org", "-F", "#{session_id}"]);
+		const engine = runner({ status: 0, stdout: `${TARGET_SESSION}\n${TARGET_SESSION}\n` });
+		expect(resolveTmuxSessionId("org", engine.run)).toEqual({ ok: true, sessionId: TARGET_SESSION });
+		// Exactly one lookup, and nothing that could mutate: no filter, no probe, no second call.
+		expect(engine.calls).toHaveLength(1);
+		expect(engine.calls[0]).not.toContain("-f");
+		expect(engine.calls[0]?.[0]).toBe("list-windows");
+		// An rc=0 answer that is not one native session id is an operational anomaly, never an
+		// answer about the session — it is raised rather than laundered into a refusal.
+		expect(() => resolveTmuxSessionId("org", runner({ status: 0, stdout: "org\n" }).run)).toThrow(
+			/not one native session id/,
+		);
+		expect(() => resolveTmuxSessionId("org", runner({ status: null as unknown as number }).run)).toThrow(
+			/killed by a signal/,
+		);
+	});
+
+	it("[QK:TMUXSESSION-NAME-GRAMMAR] a name outside this rail's grammar is its OWN refusal, never 'missing' — the two are different repairs. Part of the refused set tmux truly cannot resolve ('a#{x}' is stored as 'a'; '.' and ':' are its pane/window separators inside a target; a name '$0' loses to the id '$0'), and part ('a}b', 'a|b', 'a b', 'a;b', '_a') tmux resolves EXACTLY and this rail declines anyway to keep one narrow grammar — so the reason may not claim they could never be found", () => {
+		for (const good of ["org", "a", "0", "a-b_c", "Z9"]) expect(classifyTmuxSessionName(good)).toBeNull();
+		for (const bad of ["a#{x}", "a.b", "a:b", "a|b", "a b", "a}b", "$0", "=foo", "-x", "_a", "", "a;b"]) {
+			expect(classifyTmuxSessionName(bad), bad).toBe("tmux-session-name-invalid");
+		}
+		// The hint an operator reads must not give a false cause: it names the unresolvable
+		// shapes as such and calls the rest a narrowing, never "could never be found".
+		const hint = renderFreshCall({ ok: false, reason: "tmux-session-name-invalid" }).text;
+		expect(hint).not.toMatch(/could never be found/);
+		expect(hint).toContain("shape this rail addresses");
+		// The name check is decided WITHOUT tmux and before it: with no tmux context at all the
+		// named reason is still the seat's, so an unresolvable name never reaches a lookup.
+		expect(
+			reasonOf(
+				freshCall(
+					{ backend: "pi", model: PI_MODEL, task: TASK, callerGardenId: GID, placement: { tmuxSession: "a.b" } },
+					{},
+				),
+			),
+		).toBe("tmux-session-name-invalid");
+		// The builder re-checks rather than trusting its caller, same as the cwd builder does.
+		expect(() => buildTmuxSessionLookupArgs("a.b")).toThrow(/unresolvable session name/);
+	});
+
+	it("[QK:FRESHCALL-PLACEMENT-MISSING-REJECTS] an absent seat is `tmux-session-missing` and NOTHING is created — absence is read from the EXIT CODE (tmux prints its refusal on stderr, not an empty success), the resolution happens BEFORE the window mutation, and there is no fallback to the caller's own session", () => {
+		const missing = runner({ status: 1, stderr: "can't find session: org" });
+		expect(resolveTmuxSessionId("org", missing.run)).toEqual({ ok: false, reason: "tmux-session-missing" });
+		expect(missing.calls).toEqual([["list-windows", "-t", "=org", "-F", "#{session_id}"]]);
+		// Ordering half: production resolves the seat before it builds or runs the new-window
+		// argv, so a refusal cannot leave a window behind. (freshCall cannot succeed without a
+		// real tmux — this repo keeps no fake one — so the ordering is a structural contract on
+		// the composition body, the same shape as the cwd receipt assembly above. The oracle
+		// INDEPENDENT of this source is the real-tmux seat cell in `check-mux-launch-tmux`,
+		// which calls the production freshCall against a private server and reads the refusal
+		// plus a byte-identical `list-windows -a` from tmux itself.)
+		const resolvedAt = MODULE_SRC.indexOf("const resolved = resolveTmuxSessionId(seat,");
+		const mutatedAt = MODULE_SRC.indexOf("buildFreshCallArgs(targetSessionId,");
+		expect(resolvedAt).toBeGreaterThan(0);
+		expect(resolvedAt).toBeLessThan(mutatedAt);
+		expect(MODULE_SRC).toContain("if (!resolved.ok) return { ok: false, reason: resolved.reason };");
+	});
+
+	it("[QK:FRESHCALL-PLACEMENT-TARGET-ARGV] the RESOLVED target id is what reaches `-t`, and `-d` rides with it — the builder takes a session id rather than the caller's placement, so a cross-session launch cannot silently open in the caller's own session, and without `-d` a window opened into another session was measured to steal that session's focus", () => {
+		const args = buildFreshCallArgs(TARGET_SESSION, "/bin/sh", ["PROMPT"]);
+		expect(args[args.indexOf("-t") + 1]).toBe(`${TARGET_SESSION}:{end}`);
+		expect(args).not.toContain(`${CALLER_SESSION}:{end}`);
+		expect(args[1]).toBe("-d");
+		// A name never reaches the argv: only a native id is addressable.
+		expect(() => buildFreshCallArgs("org", "/bin/sh", ["PROMPT"])).toThrow();
+	});
+
+	it("[QK:FRESHCALL-PLACEMENT-RECEIPT-TARGET] the receipt reports the OBSERVED target session and echoes the REQUESTED name — production assembles `sessionId` from the resolved target rather than copying the caller's, and there is no observed-cwd and no created-session field, because nothing here observes a pane path or creates a session", () => {
+		// Production assembly half, structural for the same reason as the cwd receipt above. Its
+		// behavioural oracle lives outside this file: `check-mux-launch-tmux`'s seat cell reads
+		// `receipt.sessionId === seatId !== callerId` against a real second session.
+		expect(MODULE_SRC).toContain("sessionId: targetSessionId,");
+		expect(MODULE_SRC).toContain("...(seat === undefined ? {} : { tmuxSession: seat }),");
+		// No created-session field, because nothing here creates one; the no-observed-cwd half is
+		// the module's standing rule, held by FRESHCALL-CWD-RECEIPT-REQUESTED above.
+		expect(MODULE_SRC).not.toContain("sessionCreated");
+		const receipt: FreshCallReceipt = {
+			serverPid: "1",
+			sessionId: TARGET_SESSION,
+			windowId: "@9",
+			windowIndex: "3",
+			paneId: "%9",
+			panePid: "3",
+			backend: "pi",
+			model: PI_MODEL,
+			runtimePath: "/usr/bin/pi",
+			nonce: NONCE,
+		};
+		const without = renderFreshCall({ ok: true, receipt });
+		expect(without.text).not.toMatch(/seat:/);
+		const seated = renderFreshCall({ ok: true, receipt: { ...receipt, tmuxSession: "org" } });
+		expect(seated.text).toContain(`seat:     org (requested tmux session, resolved to ${TARGET_SESSION})`);
+		expect(seated.text).toContain(`in session ${TARGET_SESSION}`);
+	});
+
+	it("an omitted seat keeps the pre-#105 behaviour and stays orthogonal to the cwd — neither input is inferred from the other", () => {
+		// No placement: the composition never asks tmux about a session name at all, so with a
+		// hermetic runtime on PATH the refusal is still the placement leaf's own.
+		const bare = withPiRuntime((env) =>
+			freshCall({ backend: "pi", model: PI_MODEL, task: TASK, callerGardenId: GID }, env),
+		);
+		expect(reasonOf(bare)).toBe("no-tmux-context");
+		// The two axes are separate parameters and separate classifications: an unusable cwd is
+		// still the cwd's reason even when a perfectly good seat is named beside it.
+		expect(
+			reasonOf(
+				freshCall(
+					{
+						backend: "pi",
+						model: PI_MODEL,
+						task: TASK,
+						callerGardenId: GID,
+						cwd: "relative/path",
+						placement: { tmuxSession: "org" },
+					},
+					{},
+				),
+			),
+		).toBe("cwd-not-absolute");
+		// And the seat never becomes a cwd source: the module reads no session path format token.
+		expect(MODULE_SRC).not.toContain("#{session_path}");
 	});
 });
 

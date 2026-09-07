@@ -8,11 +8,17 @@
  * session the operator is looking at. Inheriting the environment IS the addressing: this
  * module never takes a socket path or a session name from a caller.
  *
+ * That sentence is still exactly true of THIS leaf, and #105 is where it started to be worth
+ * saying precisely. The fresh-call composition above may now be handed one session NAME by its
+ * caller, but it resolves that name to a native `$id` through its own leaf before anything
+ * reaches here — `appendWindow` still appends only to the caller's own session, and no function
+ * in this file has ever seen or will see a session name.
+ *
  * Three actions, deliberately not four:
  *
  *   inspectPlacement()   the caller's own $session/@window/%pane, or a named refusal
  *   appendWindow()       one default-shell window at the end of that same session
- *   closeWindow()        that window, by stable id, in the context it was opened in
+ *   closeWindow()        that window, by stable id, on the server it was opened on
  *
  * What this module is NOT: a delivery transport, an address, a liveness fact, a launcher.
  * It opens a place. `entwurf_v2` still owns delivery (`V2-DELIVERY-EXCLUDES-MUX`), and
@@ -51,8 +57,20 @@
  * 4. BINDING. A `Placement` is a fact about one server and one session, and the environment
  *    passed to a later call could name a different — or restarted — server where the same
  *    `$3`/`@7` mean something else entirely. Every mutation re-reads the caller's placement
- *    and refuses unless the server pid and session id still match the ones the handle was
- *    born in.
+ *    before it runs.
+ *
+ *    The two mutations bind to DIFFERENT halves of that fact, because they are answering
+ *    different questions. `appendWindow` asks "is the target the caller gave me still the
+ *    caller's own seat?" and needs both halves — `isSameContext`. `closeWindow` asks "is this
+ *    handle still the window it was born as?" and needs only the SERVER half — a `@id` is
+ *    unique for the life of one server, so the session half adds nothing there. `[측정
+ *    2026-09-07, private server]` ids are handed out monotonically and are never recycled:
+ *    after `@2` was killed the next window was `@3`, and after a whole session holding `@4`
+ *    and `@5` was killed the next was `@6`. Requiring the handle's session to still exist
+ *    would also break the more informative answer below — a window whose session is gone is
+ *    `already-gone`, which is a fact the caller wants, not an error. Since #105 a launched
+ *    window may legitimately live in a session that is not the caller's, and that is exactly
+ *    when this distinction stops being academic.
  *
  * The machine-readable rows carry ONLY native ids and decimal numbers, joined by `|`. The
  * free-form fields tmux could also report (`socket_path`, `session_name`) are deliberately
@@ -124,10 +142,13 @@ export interface Placement {
 }
 
 /**
- * A window this module opened, carrying the context it was born in. `serverPid`/`sessionId`
- * are what let a later close prove it is acting on the same server and session rather than a
- * restarted one that happens to reuse the id. Index is reported for the human, never used as
- * a handle.
+ * A window this module opened, carrying the context it was born in. `serverPid` is what a later
+ * close binds to: a restarted tmux server hands out `@7` again, so without it a close could act
+ * on some other server's window. `sessionId` rides along as the RECEIPT of where the window was
+ * put — since #105 that may be a session other than the caller's — and it is deliberately not a
+ * close precondition, because `@id`s are unique for one server's whole life (measured: after
+ * `@2` was killed the next window was `@3`, and after a session holding `@4`/`@5` was killed the
+ * next was `@6`). Index is reported for the human, never used as a handle.
  */
 export interface WindowHandle {
 	serverPid: string;
@@ -358,6 +379,40 @@ export function requireSameContext(label: string, origin: PlacementContext, env:
 	}
 }
 
+/**
+ * Same server, whatever the session. The close-side half of boundary 4, kept as its own pure
+ * predicate for the same reason `isSameContext` is one: the decision is what a deterministic
+ * gate can pin, and the re-read around it is not.
+ */
+export function isSameServer(origin: PlacementContext, now: PlacementContext): boolean {
+	return origin.serverPid === now.serverPid;
+}
+
+/**
+ * Re-read the caller's placement and refuse unless the handle was born on the SAME SERVER. The
+ * close-side half of boundary 4, and deliberately NOT `requireSameContext`: since #105 a handle
+ * can name a window in a session that is not the caller's, and the session half would refuse a
+ * legitimate close. What it must still refuse is a handle from a DIFFERENT — or restarted —
+ * server, where `@7` names some other window entirely.
+ *
+ * The session half is not lost, it is covered better: `@id`s are unique for one server's whole
+ * life (measured — see boundary 4), so on a matching server the id alone identifies the window,
+ * and a window whose session has since been killed is proven absent by `closeWindow`'s own
+ * `list-windows -a` read and reported as `already-gone`.
+ */
+export function requireSameServer(label: string, origin: PlacementContext, env: NodeJS.ProcessEnv): void {
+	const now = inspectPlacement(env);
+	if (!now.ok) {
+		throw new Error(`mux-placement: ${label} refused — the caller's placement is not resolvable (${now.reason})`);
+	}
+	if (!isSameServer(origin, now.placement)) {
+		throw new Error(
+			`mux-placement: ${label} refused — server changed (handle was born on server ${origin.serverPid}, ` +
+				`this environment names server ${now.placement.serverPid})`,
+		);
+	}
+}
+
 /** One detached default-shell window at the end of the caller's own session. */
 export function appendWindow(placement: Placement, env: NodeJS.ProcessEnv = process.env): WindowHandle {
 	requireSameContext("appendWindow", placement, env);
@@ -367,11 +422,11 @@ export function appendWindow(placement: Placement, env: NodeJS.ProcessEnv = proc
 }
 
 /**
- * Close one window by stable id, in the context it was opened in. Reports whether it was
- * closed or had already gone.
+ * Close one window by stable id, on the server it was opened on. Reports whether it was closed
+ * or had already gone. The binding is the server, not the session — see `requireSameServer`.
  */
 export function closeWindow(handle: WindowHandle, env: NodeJS.ProcessEnv = process.env): CloseOutcome {
-	requireSameContext("closeWindow", handle, env);
+	requireSameServer("closeWindow", handle, env);
 	const run = runTmux(buildCloseArgs(handle.windowId), env);
 	if (run.status === 0) return "closed";
 	// A signal kill is not a "tmux said no" — it is the call failing, and it carries no

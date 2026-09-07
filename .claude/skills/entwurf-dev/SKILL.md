@@ -42,6 +42,11 @@ transcript를 가진 garden citizen이다.
 - `entwurf_fresh_call` backend는 정확히 `pi | claude-code | copilot | omp`이고 model은 required다. `cwd`는
   선택 입력 하나: literal 절대경로(존재하는 디렉터리, `#`·trim·realpath 없음), 생략·`""`면
   caller cwd에서 시작한다. cross-repo fresh 절 참조.
+- `placement`는 선택 입력 하나: `{ tmuxSession: "<정확한 이름>" }`. caller **자신의 tmux 서버**에
+  **이미 있는** 세션에 형제를 연다(운영자의 프로젝트 자리). **세션을 만들지 않는다** — 없으면
+  `tmux-session-missing`, 문법 밖 이름이면 `tmux-session-name-invalid`로 거절되고 창도 세션도 생기지
+  않는다. 그때는 GLG에게 그 자리를 먼저 만들어 달라고 말하고 다시 부른다. `cwd`와 `placement`는
+  서로 독립이며 한쪽에서 다른 쪽을 추론하지 않는다.
 - 기본 정책은 Pi=`openai-codex/gpt-5.6-luna`, Claude Code=`claude-sonnet-5`다.
 - GLG가 “entwurf 소넷”이라고 하면 Pi + `entwurf/claude-sonnet-5`다.
 - **Provider budget:** sibling launch에 OpenRouter를 쓰지 않는다. 이는 GLG 개인의 embedding/image 전용 제한 rail이다. Claude Code 구독, Pi의 승인된 GPT/Codex·xAI 구독, 또는 direct endpoint로 이미 설정된 회사 API만 쓴다. model label은 billing rail 증거가 아니다. 요청된 model이 현재 OpenRouter로 resolve되면 launch·test turn·login check·probe script를 하지 말고 그 한 사실만 즉시 보고한다. GLG가 이미 승인한 rail의 형제를 요청하면 credential/login을 다시 묻거나 찾지 말고 fresh-call을 바로 한 번 호출한다.
@@ -119,11 +124,15 @@ citizen의 맥락을 요구한 경우에만 그 exact id로 `entwurf_v2`를 보�
 
 4. task에 secret, token, credential, private payload를 넣지 않는다. model과 task는 같은 사용자
    프로세스가 볼 수 있는 launch argv에 실린다.
-5. `entwurf_fresh_call`을 `{backend, model, task, cwd?}`로 정확히 한 번 호출한다. 같은 repo면 `cwd`를
-   생략하고, cross-repo면 위 절의 literal 절대경로를 넣는다. 실패나 callback 지연을 이유로 자동 재시도하지 않는다.
+5. `entwurf_fresh_call`을 `{backend, model, task, cwd?, placement?}`로 정확히 한 번 호출한다. 같은 repo면
+   `cwd`를 생략하고, cross-repo면 위 절의 literal 절대경로를 넣는다. GLG가 자리를 지정하면(예: “org 세션에
+   열어”) `placement: { tmuxSession: "org" }`을 넣고, 아니면 생략해 caller 세션에 연다. 실패나 callback
+   지연을 이유로 자동 재시도하지 않는다.
 6. receipt의 model은 runtime CLI에 요청한 값만 증명한다. 실제 선택/turn 완료 증거로 읽지 않는다.
 7. 반환값을 **launch receipt**로만 설명한다. window/pane과 nonce는 “창을 열도록
    tmux에 요청했다”는 증거이며 runtime 시작, 첫 turn, callback, task 완료 증거가 아니다.
+   `placement`를 줬다면 receipt의 `seat:` 줄이 요청한 이름과 해석된 session id를 함께 보여준다 —
+   이름은 요청이고 id가 창이 실제로 들어간 자리다.
 8. receipt의 nonce를 현재 대화의 pending correlation으로 보존하고 callback을 기다린다.
    polling, transcript grep, newest-peer 추측을 하지 않는다. 창은 보이므로 callback이
    없으면 GLG가 직접 창을 관측할 수 있다고 말한다.

@@ -22,6 +22,7 @@
  *   MUX-TMUX-FAILURE-LOUD    a nonzero/signalled tmux run is raised, never read as a fact
  *   MUX-APPEND-END-DETACHED  append is `-d -a -t <session_id>:{end}`, no carrier
  *   MUX-CONTEXT-BOUND-MUTATION a mutation matches the server pid AND the session id
+ *   MUX-CLOSE-SERVER-BOUND   a close binds to the server half only — same server, any session
  *   MUX-CLOSE-BY-WINDOW-ID   close targets `@window`, and absence needs positive proof
  */
 
@@ -38,6 +39,7 @@ import {
 	isDecimal,
 	isPaneId,
 	isSameContext,
+	isSameServer,
 	isSessionId,
 	isWindowId,
 	parsePlacement,
@@ -252,6 +254,37 @@ function main(): void {
 				!isSameContext(origin, { serverPid: "8150", sessionId: "$12" }) &&
 				!isSameContext(origin, { serverPid: "9999", sessionId: "$12" })
 			);
+		})(),
+	);
+	// ── a close binds to the server, and the session half is covered by id uniqueness ────
+	// `appendWindow` and `closeWindow` are answering different questions, so they bind to
+	// different halves of the same fact. Append asks "is this target still the caller's own
+	// seat?" and needs both. Close asks "is this handle still the window it was born as?" —
+	// and since #105 a launched window may legitimately live in a session that is not the
+	// caller's, so requiring the session half would refuse a legitimate close. `[측정
+	// 2026-09-07]` window ids are handed out monotonically and never recycled within one
+	// server's life (after `@2` was killed the next was `@3`; after a whole session holding
+	// `@4`/`@5` was killed the next was `@6`), so on a matching server the `@id` alone
+	// identifies the window. What must still be refused is a handle from a DIFFERENT or
+	// restarted server, where the same id names something else.
+	ok(
+		"[QK:MUX-CLOSE-SERVER-BOUND] a close-side context matches on the server pid ALONE — another session on the same server is accepted, and every foreign server is refused however familiar its session id looks",
+		(() => {
+			const origin = { serverPid: "8150", sessionId: "$11" };
+			return (
+				isSameServer(origin, { serverPid: "8150", sessionId: "$11" }) &&
+				isSameServer(origin, { serverPid: "8150", sessionId: "$12" }) &&
+				!isSameServer(origin, { serverPid: "9999", sessionId: "$11" }) &&
+				!isSameServer(origin, { serverPid: "9999", sessionId: "$12" })
+			);
+		})(),
+	);
+	ok(
+		"binding: the two predicates are different contracts — append's refuses a foreign session that close's accepts, so neither may be expressed in terms of the other",
+		(() => {
+			const origin = { serverPid: "8150", sessionId: "$11" };
+			const otherSession = { serverPid: "8150", sessionId: "$12" };
+			return !isSameContext(origin, otherSession) && isSameServer(origin, otherSession);
 		})(),
 	);
 	ok(

@@ -191,6 +191,30 @@
 			"timeoutSeconds": 60,
 			"signature": "[QK:MUX-LAUNCH-CORE-IMPORT-FREE]",
 			"signatureSource": "scripts/check-mux-launch.ts"
+		},
+		{
+			"claim": "MUX-CLOSE-SERVER-BOUND",
+			"title": "the close-side predicate accepts a foreign SERVER — a restarted server hands out the same `@id`, and a close would kill whatever window now wears it",
+			"subject": "pi-extensions/lib/mux-placement.ts",
+			"find": ["\treturn origin.serverPid === now.serverPid;\n}"],
+			"replace": ["\treturn true;\n}"],
+			"gate": ["bash", "run.sh", "check-mux-placement"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:MUX-CLOSE-SERVER-BOUND]",
+			"signatureSource": "scripts/check-mux-placement.ts"
+		},
+		{
+			"claim": "RESOLVE-TMUX-SESSION-IMPORT-FREE",
+			"title": "the session-lookup leaf reaches into the placement leaf for runTmux — the one decision leaf that must not be able to run tmux acquires exactly that power, and the injected-runner seam its whole safety argument rests on stops being the only way in",
+			"subject": "pi-extensions/lib/resolve-tmux-session.ts",
+			"find": ["export type TmuxSessionRejectReason = \"tmux-session-name-invalid\" | \"tmux-session-missing\";"],
+			"replace": [
+				"import { runTmux } from \"./mux-placement.ts\";\nvoid runTmux;\nexport type TmuxSessionRejectReason = \"tmux-session-name-invalid\" | \"tmux-session-missing\";"
+			],
+			"gate": ["bash", "run.sh", "check-mux-launch"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:RESOLVE-TMUX-SESSION-IMPORT-FREE]",
+			"signatureSource": "scripts/check-mux-launch.ts"
 		}
 	]
 }

@@ -111,7 +111,13 @@ describe("provider conversion — the schema that actually rides the wire", () =
 		const model = tool?.input_schema?.properties?.model;
 		expect(model?.minLength).toBe(1);
 		expect(model?.maxLength).toBe(200);
-		expect(Object.keys(tool?.input_schema?.properties ?? {}).sort()).toEqual(["backend", "cwd", "model", "task"]);
+		expect(Object.keys(tool?.input_schema?.properties ?? {}).sort()).toEqual([
+			"backend",
+			"cwd",
+			"model",
+			"placement",
+			"task",
+		]);
 		// The optional cwd survives conversion as OPTIONAL: declared on the wire, not required.
 		expect(tool?.input_schema?.required).not.toContain("cwd");
 	});

@@ -1,6 +1,7 @@
 /**
- * mux-fresh-call — open ONE visible sibling in the caller's own tmux session, hand it its first
- * task in the launch argv, and let it name itself back to the caller.
+ * mux-fresh-call — open ONE visible sibling in the caller's own tmux server (its own session by
+ * default, or one named existing session on that server since #105), hand it its first task in
+ * the launch argv, and let it name itself back to the caller.
  *
  * ── Why this is a third module and not a parameter on the leaf ──
  *
@@ -43,6 +44,36 @@
  *   - the receipt echoes what was REQUESTED, exactly as `runtimePath` does. It never reports
  *     `pane_current_path`: proving where the pane actually landed belongs to acceptance, not
  *     to the launch receipt.
+ *
+ * ── The optional project seat (issue #105) ──
+ *
+ * A fresh sibling opens in the caller's own tmux session — unless the caller names ONE session
+ * on the SAME server. That input exists because the operator's seats are per-project: a sibling
+ * opened for the `org` project belongs in the `org` session, and before this the only way to
+ * put it there was for the operator to move the window by hand. The rules are as narrow as the
+ * cwd input's, and for the same reason:
+ *
+ *   - `undefined` means the caller's own session, and the argv is byte-identical to the
+ *     pre-#105 shape. A named session is resolved to its native `$id` by the shared
+ *     `resolve-tmux-session.ts` leaf and ONLY that id ever reaches `-t`.
+ *   - a session that does not exist is `tmux-session-missing` and NOTHING is created — not the
+ *     window, not the session. There is no `ifMissing` axis and no `new-session` verb anywhere
+ *     in this product (GLG, 2026-09-07): the operator creates the seat and calls again. A name
+ *     outside the leaf's grammar is the separate `tmux-session-name-invalid` — a different
+ *     repair, because that name is a shape this rail does not address rather than a session
+ *     that is absent. The leaf owns which shapes and why; part of that set tmux genuinely
+ *     cannot resolve and part is a narrowing this rail chose, and it says which is which.
+ *   - `-d` is what makes this safe to do to a session someone is looking at. `[측정]` without
+ *     it, a `new-window` into another session changes THAT session's active window and steals
+ *     the operator's focus. It was already fixed in this argv; #105 is where it became
+ *     load-bearing.
+ *   - the seat is ORTHOGONAL to the cwd. `[측정 ×2]` with `-c` omitted, a window opened into
+ *     another session lands in the cwd of the process that ran `new-window` — not the target
+ *     session's `session_path` and not its active pane. Neither input is ever inferred from
+ *     the other.
+ *   - the receipt echoes the REQUESTED name and carries the OBSERVED target `$id`, which is
+ *     the session the window is actually in. It still reports no `pane_current_path`, and
+ *     there is no "session created" field because nothing here creates one.
  */
 
 import { randomBytes } from "node:crypto";
@@ -63,7 +94,6 @@ import {
 	assertSelector,
 	assertTmuxOk,
 	inspectPlacement,
-	type Placement,
 	type PlacementRejectReason,
 	parseWindowFields,
 	requireSameContext,
@@ -71,6 +101,7 @@ import {
 	type WindowHandle,
 } from "./mux-placement.ts";
 import { OMP_PREFLIGHT_HINT, type OmpPreflightRejectReason, ompFreshPreflight } from "./omp-fresh-preflight.ts";
+import { classifyTmuxSessionName, resolveTmuxSessionId, type TmuxSessionRejectReason } from "./resolve-tmux-session.ts";
 
 /** The backends this rail can open. Fixed set, not a profile — a further one is a decision,
  * not a config entry. `copilot` was added by #82 RAIL 9 under the step 9 admission contract, and
@@ -341,6 +372,7 @@ export type FreshCallRejectReason =
 	| PlacementRejectReason
 	| LaunchRejectReason
 	| TmuxCwdRejectReason
+	| TmuxSessionRejectReason
 	| CopilotPreflightRejectReason
 	| OmpPreflightRejectReason
 	| "caller-identity-unavailable"
@@ -348,6 +380,14 @@ export type FreshCallRejectReason =
 	| "model-invalid"
 	| "task-empty"
 	| "task-too-long";
+
+/** The optional project seat: ONE existing session on the caller's own tmux server, named
+ * literally. An object rather than a bare string so the seat axis can never be confused with
+ * the cwd axis at a call site — and so a future seat fact, if one is ever measured to be
+ * needed, does not arrive as a second top-level parameter. */
+export interface FreshCallPlacement {
+	tmuxSession: string;
+}
 
 /** Coordinates plus what was handed to tmux. Read `runtimePath` as "what we asked to start".
  * There is deliberately NO field here for the callback, the nonce's arrival, or the sibling's
@@ -359,6 +399,10 @@ export interface FreshCallReceipt extends WindowHandle {
 	 * of fact as `runtimePath`: what tmux was asked for, never an observation of where the pane
 	 * landed. */
 	cwd?: string;
+	/** The REQUESTED session name — present only when the caller named a seat. The RESOLVED
+	 * target is the inherited `sessionId`, which is the session the window is actually in; this
+	 * field is the request that produced it, exactly as `cwd` is. */
+	tmuxSession?: string;
 	runtimePath: string;
 	nonce: string;
 }
@@ -403,14 +447,21 @@ const SCRUBBED_INHERITED_ENV = ["PI_SESSION_ID=", "PI_AGENT_ID="] as const;
 
 /** Launch argv: the leaf's detached-append shape, the identity scrub, optionally `-c` at the
  * resume-symmetric token position (after `-t`, before `-P -F`), the runtime, then the backend's
- * dialect. An omitted cwd adds no `-c` carrier at all. */
+ * dialect. An omitted cwd adds no `-c` carrier at all.
+ *
+ * The first parameter is the TARGET session id, not the caller's placement. Since #105 those
+ * are not always the same session, and taking a `Placement` here would invite exactly the
+ * defect this signature prevents: copying the caller's own id into a cross-session launch. A
+ * name never reaches this function — the seat is resolved to a native `$id` before it is
+ * called, and `assertSelector` refuses anything that is not one. `-d` is not optional: without
+ * it a window opened into another session steals that session's focus (measured). */
 export function buildFreshCallArgs(
-	placement: Placement,
+	targetSessionId: string,
 	runtimePath: string,
 	backendArgs: readonly string[],
 	cwd?: string,
 ): string[] {
-	assertSelector("session", placement.sessionId);
+	assertSelector("session", targetSessionId);
 	assertLaunchTarget(runtimePath);
 	if (cwd !== undefined) {
 		const bad = classifyTmuxCwd(cwd);
@@ -422,7 +473,7 @@ export function buildFreshCallArgs(
 		"-a",
 		...SCRUBBED_INHERITED_ENV.flatMap((assignment) => ["-e", assignment]),
 		"-t",
-		`${placement.sessionId}:{end}`,
+		`${targetSessionId}:{end}`,
 		...(cwd === undefined ? [] : ["-c", cwd]),
 		"-P",
 		"-F",
@@ -443,7 +494,14 @@ export function buildFreshCallArgs(
  * against a store, or guesses it: an empty value is a named refusal, not a lookup.
  */
 export function freshCall(
-	params: { backend: FreshCallBackend; model: string; task: string; cwd?: string; callerGardenId: string | null },
+	params: {
+		backend: FreshCallBackend;
+		model: string;
+		task: string;
+		cwd?: string;
+		placement?: FreshCallPlacement;
+		callerGardenId: string | null;
+	},
 	env: NodeJS.ProcessEnv = process.env,
 	nonce: string = mintNonce(),
 ): FreshCallResult {
@@ -463,6 +521,16 @@ export function freshCall(
 	if (cwd !== undefined) {
 		const badCwd = classifyTmuxCwd(cwd);
 		if (badCwd) return { ok: false, reason: badCwd };
+	}
+	// The seat's NAME is classified here, beside the cwd and for the same reason: it is decidable
+	// without tmux, so an unresolvable name is answered before anything else runs. Whether that
+	// session EXISTS is a tmux question and is asked below, after the caller's own context is
+	// proven — a name check that needed a live server would refuse for the wrong reason on a
+	// host with no tmux at all.
+	const seat = params.placement?.tmuxSession;
+	if (seat !== undefined) {
+		const badSeat = classifyTmuxSessionName(seat);
+		if (badSeat) return { ok: false, reason: badSeat };
 	}
 
 	let runtimePath: string;
@@ -493,6 +561,17 @@ export function freshCall(
 	const placement = inspected.placement;
 	requireSameContext("freshCall", placement, env);
 
+	// The caller's own context is now proven, which is what makes the next lookup's exit code
+	// readable as "that session is not here" rather than "there is no server". Only the resolved
+	// native id continues; the name does not travel past this line. STILL PRE-MUTATION: an
+	// absent seat refuses with no window anywhere.
+	let targetSessionId = placement.sessionId;
+	if (seat !== undefined) {
+		const resolved = resolveTmuxSessionId(seat, (args) => runTmux(args, env));
+		if (!resolved.ok) return { ok: false, reason: resolved.reason };
+		targetSessionId = resolved.sessionId;
+	}
+
 	const composition: FreshCallComposition = {
 		prompt: buildFreshCallPrompt({
 			backend: params.backend,
@@ -503,7 +582,7 @@ export function freshCall(
 		bootstrapPayload: buildOmpBootstrapPayload({ callerGardenId: params.callerGardenId, nonce, task }),
 	};
 	const run = runTmux(
-		buildFreshCallArgs(placement, runtimePath, buildBackendArgs(params.backend, composition, model), cwd),
+		buildFreshCallArgs(targetSessionId, runtimePath, buildBackendArgs(params.backend, composition, model), cwd),
 		env,
 	);
 	assertTmuxOk("new-window", run);
@@ -516,7 +595,7 @@ export function freshCall(
 		// to find "the new one" is the guess this rail forbids everywhere else, so name the orphan.
 		throw new Error(
 			`mux-fresh-call: launched ${runtimePath} but could not read the window handle tmux printed — a window may ` +
-				`be open in session ${placement.sessionId} that this call cannot identify or close: ${
+				`be open in session ${targetSessionId} that this call cannot identify or close: ${
 					err instanceof Error ? err.message : String(err)
 				}`,
 		);
@@ -526,11 +605,12 @@ export function freshCall(
 		ok: true,
 		receipt: {
 			serverPid: placement.serverPid,
-			sessionId: placement.sessionId,
+			sessionId: targetSessionId,
 			...fields,
 			backend: params.backend,
 			model,
 			...(cwd === undefined ? {} : { cwd }),
+			...(seat === undefined ? {} : { tmuxSession: seat }),
 			runtimePath,
 			nonce,
 		},
@@ -557,6 +637,10 @@ const REJECT_HINT: Record<FreshCallRejectReason, string> = {
 	"cwd-missing":
 		"the requested cwd does not exist; tmux would not report this, it would open the window in $HOME and look successful",
 	"cwd-not-directory": "the requested cwd exists but is not a directory",
+	"tmux-session-name-invalid":
+		"the requested tmux session name is outside the shape this rail addresses (start with a letter or digit, then letters, digits, '_' or '-') — some other shapes tmux cannot resolve at all ('#' is expanded when the name is stored; '.' and ':' are its own pane/window separators inside a target; a name like '$0' loses to the session id '$0'), and the rest are declined to keep one narrow grammar, so rename the session or open one whose name fits",
+	"tmux-session-missing":
+		"no session with that exact name answers on this agent's tmux server (or that server stopped answering) — nothing was created, so open the session yourself and call again",
 	"model-empty": "model is empty after trimming; fresh calls require an explicit model",
 	"model-invalid": `model must be one ${MODEL_MAX_CHARS}-character argv-safe id/alias without whitespace or tmux syntax`,
 	"task-empty": "task is empty after trimming",
@@ -592,6 +676,9 @@ export function renderFreshCall(result: FreshCallResult): { text: string; isErro
 			`  backend:  ${r.backend} (${r.runtimePath})\n` +
 			`  model:    ${r.model} (requested on the runtime CLI)\n` +
 			(r.cwd === undefined ? "" : `  cwd:      ${r.cwd} (requested start directory — not an observation)\n`) +
+			(r.tmuxSession === undefined
+				? ""
+				: `  seat:     ${r.tmuxSession} (requested tmux session, resolved to ${r.sessionId})\n`) +
 			`  window:   ${r.windowId} (index ${r.windowIndex}) in session ${r.sessionId}\n` +
 			`  pane:     ${r.paneId} pid ${r.panePid}\n` +
 			`  nonce:    ${r.nonce}\n` +
