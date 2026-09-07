@@ -304,8 +304,10 @@ LIVE release gate (P5) runs the body as its own MUST step, and the exact-SHA CI
 `check` job (M2) requires it on the release commit. Do not add a manual
 qualification rerun here.
 
-CI runs on branch pushes only. Pushing the release tag creates no run, so the
-exact-SHA oracle above always reads the BRANCH push run for that commit.
+Pushing the release tag creates no run, so the exact-SHA oracle never reads a
+tag run. It reads whichever run at that commit carries the body: the branch push
+when the push touched the qualification surface, otherwise the dispatch run the
+recovery above creates.
 
 ## P5. Run the LIVE release gate from fresh scratch
 

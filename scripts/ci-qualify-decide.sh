@@ -63,6 +63,9 @@ matches_qualification_surface() {
 		scripts/mutants/*) echo "glob:scripts/mutants/**"; return 0 ;;
 		scripts/check-*) echo "glob:scripts/check-*"; return 0 ;;
 		scripts/lib/*) echo "glob:scripts/lib/**"; return 0 ;;
+		# The replay fixture is the independent oracle input cell 8e reads. Once a
+		# claim rests on it, changing it changes what the body is qualified against.
+		scripts/fixtures/*) echo "glob:scripts/fixtures/**"; return 0 ;;
 		.github/workflows/*) echo "glob:.github/workflows/**"; return 0 ;;
 		run.sh) echo "exact:run.sh"; return 0 ;;
 		package.json) echo "exact:package.json"; return 0 ;;

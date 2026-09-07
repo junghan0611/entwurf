@@ -440,9 +440,9 @@ function runSubcommand(sub: string, env: Record<string, string | undefined>): { 
 	const axis: string[] = [];
 	if (!ciOracle.includes('QUAL_JOB = "check"') || !ciOracle.includes('"Run ./run.sh check-gate-qualification"'))
 		axis.push("the oracle does not name the check job's check-gate-qualification step");
-	if (!ciOracle.includes('steps[QUAL_STEP] != "success"'))
-		axis.push("the oracle does not require that step's conclusion to be 'success'");
-	if (!ciOracle.includes('steps[QUAL_STEP] == "skipped"'))
+	if (!ciOracle.includes('qual != "success"'))
+		axis.push("the oracle does not guard that step's conclusion against 'success'");
+	if (!ciOracle.includes('qual == "skipped"'))
 		axis.push("the oracle does not classify a SKIPPED body as a failure of its own");
 	assert.ok(
 		axis.length === 0,
@@ -513,10 +513,14 @@ function runSubcommand(sub: string, env: Record<string, string | undefined>): { 
 //     The fixture carries what history said, measured once, in a repo where the
 //     objects are present.
 //
-//     The two-dot READING itself is proven separately, below — and that is where
-//     this pair's kill-power lives: this cell carries no committed mutant,
-//     because all five ranges also touch a manifest subject, so any mutation
-//     that could redden it reddens 8d first and would die at the wrong claim.
+//     It has its own replant, and the reason is the SHAPE of the input: 8d feeds
+//     ONE path per call, this feeds a whole push at once. A matcher that only
+//     looked at the first entry would leave 8d green — every single-file call is
+//     its own first entry — while every one of these five pushes opens with a
+//     non-surface path (DELIVERY.md, AGENTS.md, NEXT.md, AGENTS.md,
+//     demo/demo-baseline.sh). Invisible to 8d, fatal here.
+//
+//     The two-dot READING itself is proven separately, below.
 // ===========================================================================
 {
 	const decider = join(REPO_DIR, "scripts/ci-qualify-decide.sh");
@@ -537,12 +541,11 @@ function runSubcommand(sub: string, env: Record<string, string | undefined>): { 
 	}
 	assert.ok(
 		wrong.length === 0,
-		"every qualification RED in this repo's CI history must still run the body under the filter, over the " +
-			"two-dot push range GitHub compares — the measurement that overturned the tip-commit reading and " +
-			"justified filtering at all. Directly asserted, with no committed replant: every one of the five ranges " +
-			"also carries a manifest subject, so any single-arm mutation that could turn this red is caught one cell " +
-			"earlier by QUALIFY-FILTER-COVERS-SUBJECTS — a replant here would die at the wrong claim (measured " +
-			"2026-09-06). The two-dot READING has its own kill-qualified claim below. " +
+		"[QK:QUALIFY-FILTER-REPLAYS-PAST-CATCHES] every qualification RED in this repo's CI history must still " +
+			"run the body under the filter, over the two-dot push range GitHub compares — the measurement that " +
+			"overturned the tip-commit reading and justified filtering at all. This reads a whole push at once, " +
+			"which 8d cannot: each of these five opens with a non-surface path, so a matcher that stopped after " +
+			"the first entry would pass every single-file check 8d makes and fail here. " +
 			`Broken: ${wrong.join("; ")}`,
 	);
 }

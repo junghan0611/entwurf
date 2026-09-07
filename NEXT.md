@@ -59,7 +59,21 @@ CHANGELOG `## Unreleased`가 구현 범위 `v0.15.1..19ad90c` **30커밋** 전�
       리팩이 없었다. `latest`=0.18.1 / `repair`=0.12.8-repair.1 (보존됨).
       수치는 아래 NOW 의 integrity 영수증 한 줄이 진다.
 
-현재 좌표: 1–16 완료(0.18.1 레인 전부 닫혔다) · **0.16.1 make는 열린 채 PAUSED**. 푸시·태그는
+- [x] **17. #103 — CI qualification budget stage 2 (조각 1+2)** — 브랜치 `ci/99-stage2` 가 main 에
+      fast-forward 로 들어갔다. **조각 1**: 정확-SHA 릴리즈 오라클에 네 번째 축 —
+      그 run 의 `check` 잡 안에서 `Run ./run.sh check-gate-qualification` 스텝이 success 였는가
+      (skipped 는 실패). dispatch run 도 증거로 받되 `headSha` 재확인이 그때 하중을 받는다.
+      **조각 2**: 본체는 qualification 표면이 움직인 브랜치 push 에서만 돈다 —
+      `scripts/ci-qualify-decide.sh` 가 경로 집합을 **매니페스트에서 런타임 산출**하고,
+      fail-open 다섯이 각자 번호를 로그에 남긴다. `workflow_dispatch -f qualify=true` 와 주 1회
+      schedule 은 무조건. 게이트 셋(8c/8d/8e/8f)과 뮤턴트 셋이 이를 진다. 인벤토리 **373**.
+      **GitHub 실관측 [측정 2026-09-06/07]**: 코드 push `34047559085` = 본체 success, `check` 잡
+      **36m24s** · docs-only push `34065841309` = 본체 **skipped**, **6m13s** · 그 SHA 에 4축 오라클은
+      **ABORT**(초록 run 인데 릴리즈 증거로는 거부 — 조각 1 이 먼저여야 했던 이유) ·
+      dispatch 복구 `34066181211` = `event=workflow_dispatch`, 본체 success, 오라클 PASS.
+      `fetch-depth: 0` 실비용 **0초**(checkout 2s = depth 1 과 동일). #103 닫힘.
+
+현재 좌표: 1–17 완료 · **0.16.1 make는 열린 채 PAUSED**. 푸시·태그는
 `entwurf-release` 4모드 몫이다 (CalVer `tag-release`가 아님).
 
 # NOW — v0.18.1 전부 닫힘 (npm 발행 + 레지스트리 integrity 대조 완료)
@@ -97,6 +111,18 @@ CHANGELOG `## Unreleased`가 구현 범위 `v0.15.1..19ad90c` **30커밋** 전�
      GLG 가 `pi update` 하고 뜬 세션을 껐다. 그 경험이 CHANGELOG Upgrade note 의 3단계다.
 - **미측정 (다음 레인으로):** 압축 `completed` 분기 · `usage-markdown.ts`(#1085) 소비 경로 ·
   `packages/chord` 내용물이 우리 표면에 닿는지. (레지스트리 integrity 대조는 위에서 측정돼 빠졌다.)
+- **#103 이 남긴 이월 관측 (일 안 연다):**
+  - **`smoke-omp-bridge-state` 는 호스트에 살아 있는 omp 프로세스를 스캔해 판정한다** → 뮤턴트
+    control-pre/post 가 61초 사이 호스트 상태로 갈릴 수 있다 [측정 2026-09-07 oracle 1회:
+    control-pre green → 뮤턴트 60.8s → control-post RED, 같은 셀이 clean tree 에서는 연속 2회
+    exit 0]. 게이트 결정성 축이지만 **이슈는 만들지 않는다**(GLG 결정) — 필요해지면 그때.
+  - 8f 의 fixture 커밋에 `-c commit.gpgsign=false` 를 더하면 전역 서명 설정이 있는 호스트에서 더
+    안전하다 [측정: 이 호스트·CI 러너 모두 미설정 → 지금 red 위험 0].
+  - 8d 는 경로마다 bash+python 을 새로 띄운다(약 70회). 인벤토리가 크게 자라면 묶는 최적화 후보.
+  - PR 은 three-dot 으로 좁힐 수 있으나 안 한다(fail-open 5). 개행이 든 파일명은 line 기반
+    matcher 를 우회하고, submodule 내부 subject 는 미지원.
+  - `scripts/ci-qualify-decide.sh` 와 `scripts/fixtures/` 가 npm 패키지에 실린다(`files: scripts/`).
+    `scripts/check-*` 선례와 같고 소비자 표면이 아니다.
 - **Read:** CHANGELOG `## 0.18.1` Verification(두 컷 다 기록돼 있다) · ROADMAP
   **Dep bump(별도 트랙)** 2026-09-06 두 항목 · #102 종결 댓글의 CI 영수증.
 - **Do not touch:** candidate 를 다시 pack 하는 것(수용된 바이트는 그 파일 하나다) ·

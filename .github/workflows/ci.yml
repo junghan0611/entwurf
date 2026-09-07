@@ -13,9 +13,9 @@ on:
   # The release path fires this when the qualification BODY did not run at the
   # SHA it is about to tag: `verify-exact-ci.sh` requires that step's success as
   # its fourth axis (#103). `qualify` is the operator's explicit "run the body"
-  # request; the body has no condition on it yet, so today it only records intent
-  # -- but the input must EXIST for `gh workflow run ci.yml -f qualify=true` to
-  # be accepted at all.
+  # request: the decision step below runs the body for a dispatch ONLY when it is
+  # true, so a dispatch without it is a floor-only rerun that leaves the release
+  # oracle still refusing that SHA.
   workflow_dispatch:
     inputs:
       qualify:
@@ -65,9 +65,10 @@ jobs:
       # check-gate-manifests, and the BODY runs here. CI machine time re-proves
       # the gates' kill-power on a BRANCH push that touched the qualification
       # surface (see the decision step below); a tag push rebuilds nothing,
-      # because the same SHA's branch run already carries this job. So the
-      # "exact release SHA has all CI jobs green" axis keeps full qualification
-      # strength on exactly one run per SHA.
+      # because a tag names a SHA some branch push already built. A release SHA
+      # whose push was filtered has NO body here, and verify-exact-ci.sh refuses
+      # it by name rather than reading three green job names -- the operator
+      # dispatches the body with qualify=true and the oracle then reads that run.
       # Which pushes still owe the body (#103 piece 2). The path set is READ FROM
       # THE MANIFESTS at runtime, so a new mutant subject cannot fall outside the
       # filter without anyone noticing; scripts/check-release-gate-outcomes.ts

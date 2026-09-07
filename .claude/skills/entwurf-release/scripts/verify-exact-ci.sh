@@ -90,19 +90,25 @@ for name in required:
         errors.append(f"job {name!r} conclusion={conclusion!r}, expected 'success'")
 
 steps = {step.get("name"): step.get("conclusion") for step in (jobs.get(QUAL_JOB) or {}).get("steps", [])}
-if QUAL_STEP not in steps:
-    errors.append(
-        f"job {QUAL_JOB!r} has no step named {QUAL_STEP!r} -- the qualification BODY did not run at this SHA. "
-        "GitHub renders an unnamed `- run: <command>` step as 'Run <command>', so giving that step a `name:` "
-        "in ci.yml also lands here; keep it unnamed, or update this literal with it."
-    )
-elif steps[QUAL_STEP] == "skipped":
-    errors.append(
-        f"step {QUAL_STEP!r} conclusion='skipped' -- a skipped body is NOT evidence. Force it with "
-        "`gh workflow run ci.yml --ref <branch> -f qualify=true`, then re-run this oracle."
-    )
-elif steps[QUAL_STEP] != "success":
-    errors.append(f"step {QUAL_STEP!r} conclusion={steps[QUAL_STEP]!r}, expected 'success'")
+# ONE guard owns this axis, so removing it removes the axis whole. Absent,
+# skipped and failed are three ways for the body not to have concluded success
+# here, and a structure that tested them separately could lose one and still
+# look armed.
+qual = steps.get(QUAL_STEP)
+if qual != "success":
+    if qual is None:
+        errors.append(
+            f"job {QUAL_JOB!r} has no step named {QUAL_STEP!r} -- the qualification BODY did not run at this SHA. "
+            "GitHub renders an unnamed `- run: <command>` step as 'Run <command>', so giving that step a `name:` "
+            "in ci.yml also lands here; keep it unnamed, or update this literal with it."
+        )
+    elif qual == "skipped":
+        errors.append(
+            f"step {QUAL_STEP!r} conclusion='skipped' -- a skipped body is NOT evidence. Force it with "
+            "`gh workflow run ci.yml --ref <branch> -f qualify=true`, then re-run this oracle."
+        )
+    else:
+        errors.append(f"step {QUAL_STEP!r} conclusion={qual!r}, expected 'success'")
 
 if errors:
     print("ABORT: exact-SHA CI contract failed:", file=sys.stderr)
