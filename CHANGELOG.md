@@ -38,6 +38,19 @@ All notable changes to this project will be documented here. Format follows [Kee
   mutant's `find`/`replace` are untouched — it still plants the same defect (filtering the cortex
   rows out of the real entry).
 
+### Fixed
+
+- **The Cortex overlay's `realHome` guard now states path-flavor absoluteness, not the host it runs
+  on.** `ensureCortexDualHomeOverlay` refused a non-absolute `realHome` with `startsWith("/")`, so a
+  drive/UNC path (`C:\Users\x`, `\\server\share`) read as relative. The guard is now
+  `isAbsolute(realHome) || win32.isAbsolute(realHome)`; the error text and the D10 contract sentence
+  are unchanged. First evidence: PR #77 (@yizixu) found the defect. The flavor-explicit form is what
+  makes it killable on a Linux host — `check-acp-cortex` gained two positive cells (drive and UNC,
+  `realSnowflakeHome` pinned under tmp so only the guard is exercised) plus an empty-string negative
+  cell, and mutant `CORTEX-REALHOME-PLATFORM-NEUTRAL` replants `startsWith("/")` and dies at
+  `[QK:CORTEX-REALHOME-PLATFORM-NEUTRAL]`. This claims no native-Windows support; the certified
+  platform axis is unchanged.
+
 ## 0.19.0 - 2026-09-07
 
 One lane: #105 slice ①, the project seat. `entwurf_fresh_call` gains an optional

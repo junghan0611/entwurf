@@ -46,7 +46,7 @@ import {
 	writeFileSync,
 } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { isAbsolute, join, win32 } from "node:path";
 
 import type { AcpMcpServer } from "./config.js";
 
@@ -416,7 +416,11 @@ function cortexLinkIfExists(realPath: string, overlayPath: string): void {
  * Returns the isolated HOME/SNOWFLAKE_HOME the spawn env must carry.
  */
 export function ensureCortexDualHomeOverlay(params: CortexOverlayParams): CortexOverlayResult {
-	if (!params.realHome || !params.realHome.startsWith("/")) {
+	// Absoluteness is judged in BOTH path flavors so the guard states the contract
+	// ("the parent captured an absolute HOME") instead of the host it happens to run
+	// on. This asserts nothing about native-Windows support; it only stops a POSIX
+	// host from silently accepting a drive/UNC path as "relative".
+	if (!params.realHome || !(isAbsolute(params.realHome) || win32.isAbsolute(params.realHome))) {
 		throw new Error(
 			`entwurf: cortex dual-HOME overlay requires an absolute realHome captured by the parent (got ${JSON.stringify(params.realHome)})`,
 		);

@@ -70,6 +70,17 @@
 			"signatureSource": "scripts/check-acp-cortex.ts"
 		},
 		{
+			"claim": "CORTEX-REALHOME-PLATFORM-NEUTRAL",
+			"title": "re-deriving realHome absoluteness from the POSIX flavor alone makes a drive/UNC HOME read as relative — the guard would state the host it runs on instead of the contract (PR #77, @yizixu)",
+			"subject": "pi-extensions/lib/acp/overlay.ts",
+			"find": ["\tif (!params.realHome || !(isAbsolute(params.realHome) || win32.isAbsolute(params.realHome))) {"],
+			"replace": ["\tif (!params.realHome || !params.realHome.startsWith(\"/\")) {"],
+			"gate": ["bash", "run.sh", "check-acp-cortex"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:CORTEX-REALHOME-PLATFORM-NEUTRAL]",
+			"signatureSource": "scripts/check-acp-cortex.ts"
+		},
+		{
 			"claim": "CORTEX-BRIDGE-DUAL-HOME",
 			"title": "dropping the bridge-only real-HOME restore leaves the garden store cut off — tools reach the model but see an empty garden (D10)",
 			"subject": "pi-extensions/lib/acp/overlay.ts",

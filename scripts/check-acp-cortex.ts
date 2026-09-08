@@ -323,6 +323,47 @@ const enrichedServers: AcpMcpServer[] = [
 			/absolute realHome/,
 			"a non-absolute realHome must refuse (the child must never re-derive it)",
 		);
+		assert.throws(
+			() =>
+				ensureCortexDualHomeOverlay({
+					scopeKey: "pi:sess-empty",
+					mcpServers: [],
+					realHome: "",
+					overlaysRoot,
+					isPidAlive: () => true,
+				}),
+			/absolute realHome/,
+			"an empty realHome must refuse — the contract sentence is 'absolute', and '' is not",
+		);
+		// …and the guard states PATH-FLAVOR absoluteness, not the host it runs on:
+		// a drive/UNC realHome is absolute in the win32 flavor, so a POSIX host must
+		// NOT read it as relative. (This asserts nothing about native-Windows support
+		// — only that the refusal rule is decided by the path, not by process.platform.)
+		// realSnowflakeHome is pinned under tmp so the positive cells exercise the
+		// GUARD alone: the win32-flavored realHome never reaches a POSIX join for fs
+		// work, and every path the overlay materializes stays under overlaysRoot.
+		for (const winFlavored of ["C:\\Users\\x", "\\\\server\\share"]) {
+			let winOverlay: ReturnType<typeof ensureCortexDualHomeOverlay> | undefined;
+			assert.doesNotThrow(
+				() => {
+					winOverlay = ensureCortexDualHomeOverlay({
+						scopeKey: `pi:sess-win-${winFlavored.length}`,
+						mcpServers: [],
+						realHome: winFlavored,
+						realSnowflakeHome: realSnowflake,
+						overlaysRoot,
+						isPidAlive: () => true,
+					});
+				},
+				`a win32-flavored absolute realHome (${JSON.stringify(winFlavored)}) must PASS the guard — absoluteness is judged by PATH FLAVOR, never by the host the gate runs on [QK:CORTEX-REALHOME-PLATFORM-NEUTRAL]`,
+			);
+			assert.ok(
+				winOverlay !== undefined &&
+					winOverlay.scopeDir.startsWith(overlaysRoot) &&
+					existsSync(join(winOverlay.snowflakeHome, "cortex")),
+				"the accepted win32-flavored realHome must still materialize entirely under the overlays root (the guard is the only thing the flavor cell widens)",
+			);
+		}
 	} finally {
 		rmSync(root, { recursive: true, force: true });
 	}

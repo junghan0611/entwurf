@@ -256,6 +256,11 @@ Cortex containment was measured against the live CLI rather than copied from Cla
   exact-writes an overlay-private `cortex/mcp.json`. Non-stdio declarations fail before
   spawn. Only the `entwurf-bridge` entry receives the real operator HOME required to
   see the garden store.
+- **`realHome` absoluteness:** the D10 guard judges the captured `realHome` in BOTH
+  path flavors (POSIX and win32), so the refusal rule states the contract rather than
+  the host it happens to run on. This claims no native-Windows support — the certified
+  axis is unchanged; it only stops a POSIX host from reading a drive/UNC path as
+  relative, which is what made the defect unkillable on Linux (PR #77).
 - **Carrier:** Cortex has no `_meta.systemPrompt` contract. The engraving is placed at
   the head of the first-user augment; claiming a system-prompt engraving is false.
 
