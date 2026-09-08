@@ -584,11 +584,31 @@ own stdin:
   "progressToken":1},
   "name":"entwurf_peers","arguments":{}}}
 ```
-`[source]` `core/src/mcp_tool_call.rs:1238-1263` — `build_mcp_tool_call_request_meta` inserts
-`callId` and the `x-codex-turn-metadata` object built by
-`core/src/turn_metadata.rs:230-…` (`current_meta_value_for_mcp_request`). **Honest limit:** the
-top-level `threadId`, `itemId` and `progressToken` keys were observed on the wire but their
-construction site was NOT located in source; those three rest on the capture alone.
+`[source]` Every key above is a member of `_meta` (none is a top-level `params` member), and
+three of the four are traced:
+- `callId` and `x-codex-turn-metadata` — `core/src/mcp_tool_call.rs:1238-1263`
+  (`build_mcp_tool_call_request_meta`), the metadata object itself built by
+  `core/src/turn_metadata.rs:230-…` (`current_meta_value_for_mcp_request`).
+- `threadId` and `itemId` — `core/src/mcp_tool_call.rs:1328-1349`
+  (`with_mcp_tool_call_ids_meta` inserts `MCP_TOOL_THREAD_ID_META_KEY` unconditionally and
+  `MCP_TOOL_ITEM_ID_META_KEY` only when an originating item exists; the two key constants are
+  the literals `"threadId"` / `"itemId"` at `:1183-1184`), called for the MCP tool call at
+  `:506-516`. **Corrected 2026-09-08 after independent audit (terra).** The first draft said
+  these were capture-only; that was wrong, and the reason it was wrong is worth keeping: the
+  keys are inserted through CONSTANTS, so a grep for the string `"threadId"` in the call path
+  finds nothing. A literal search is not a source search.
+
+**Honest limit, now one key instead of three:** `progressToken` has no located insertion site.
+The vendor tree carries the constant `MCP_PROGRESS_TOKEN_META_KEY`
+(`rmcp-client/src/elicitation_client_service.rs:32`) and downstream readers, but nothing that
+puts it on an outgoing `tools/call`. That key rests on the wire capture alone.
+
+*(One coordinate in the same audit did not verify here: it cited
+`core/src/mcp_tool_call.rs:1753-1791` as tests covering the overwrite and no-prior-meta cases.
+`with_mcp_tool_call_ids_meta` occurs exactly twice in that file — the definition at `:1328` and
+the call at `:512` — and `:1753` is unrelated `_meta` UI-resource extraction. The two insertion
+sites above stand on their own reading; the test citation does not, and is recorded rather than
+repeated.)*
 
 By contrast `initialize` carries no identity at all and is byte-identical between the two
 children — `clientInfo` is the fixed literal `Implementation::new("codex-mcp-client",
@@ -650,9 +670,9 @@ external-MCP-host row of `docs/external-mcp-host.md` behaving as designed.
 - *(Two entries lived here until 2026-09-08 and are now **closed by measurement**, not moved:
   "clause 4 has no working candidate" was retired by **S1b-B**, and "the hook trust gate has no
   measured non-interactive path" by **S1b-A**. What each one costs is stated in its section.)*
-- The MCP tool-call `_meta` observed in **S1b-D** is a `[host]` wire fact. Its `callId` and
-  `x-codex-turn-metadata` halves are traced to source there; the top-level `threadId`/`itemId`/
-  `progressToken` keys were NOT traced to a construction site and rest on the wire capture alone.
+- Of the MCP tool-call `_meta` observed in **S1b-D**, `callId`, `x-codex-turn-metadata`,
+  `threadId` and `itemId` are traced to vendor insertion sites there. **`progressToken` alone**
+  has no located construction site and rests on the wire capture.
 - Whether `/new`, resume or fork returns `thread_name` to `None` — and therefore whether a birth
   payload must re-arm the visible id — is **not measured**. Observation, not a claim (terra,
   2026-09-08).

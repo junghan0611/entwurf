@@ -29,7 +29,7 @@ documentation defects, both fixed in this commit). **S1b-D has no second reader.
 | S1b-A hook trust | managed `/etc/codex` hook runs with **no prompt**, in both modes; `--dangerously-bypass-hook-trust` also works but **kills auto-attach** | `[host]` |
 | S1b-B clause 4 | `thread/name/set` + `[tui] status_line` holds a garden id, **wins in both orderings** | `[host]`+`[source]` |
 | S1b-C the join | two citizens on one app-server share **one `ppid`** → parent-pid marker cannot separate them | `[host]` |
-| S1b-D the key | **it rides every `tools/call`**: `_meta.threadId` + `x-codex-turn-metadata.{session_id,thread_id,turn_id}`, and that id **equals the hook's `session_id`** | `[host]`+`[source]` |
+| S1b-D the key | **it rides every `tools/call`**: `_meta.threadId` + `x-codex-turn-metadata.{session_id,thread_id,turn_id}`, and that id **equals the hook's `session_id`** | `[host]`+`[source]`; only `_meta.progressToken` is capture-only |
 
 ## What step 2/3 inherits
 

@@ -169,6 +169,9 @@ is step 8 work; it is recorded here so the next reader does not inherit a D6 as 
   `x-codex-turn-metadata.{session_id,thread_id,turn_id}` block, so the caller names itself on
   each call — and that id is byte-identical to the hook's `session_id`, so birth, delivery and
   tool calls share ONE identifier and `record.nativeSessionId = threadId` needs no mapping.
+  Both halves are vendor-traced, not just captured: `core/src/mcp_tool_call.rs:1328-1349`
+  inserts `threadId` unconditionally (constant at `:1184`) from the call site at `:506-516`,
+  and `:1238-1263` carries the turn-metadata block.
   (The registry's pre-existing `nativeIdLabel: "threadId"` is right on that axis; its `D6` on
   the same row still is not.) Consuming `_meta` is new bridge code and is step 6, unstarted.
 - **Both admission questions this lane opened have since been CLOSED by measurement**, and
