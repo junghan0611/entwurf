@@ -603,12 +603,18 @@ The vendor tree carries the constant `MCP_PROGRESS_TOKEN_META_KEY`
 (`rmcp-client/src/elicitation_client_service.rs:32`) and downstream readers, but nothing that
 puts it on an outgoing `tools/call`. That key rests on the wire capture alone.
 
-*(One coordinate in the same audit did not verify here: it cited
-`core/src/mcp_tool_call.rs:1753-1791` as tests covering the overwrite and no-prior-meta cases.
-`with_mcp_tool_call_ids_meta` occurs exactly twice in that file — the definition at `:1328` and
-the call at `:512` — and `:1753` is unrelated `_meta` UI-resource extraction. The two insertion
-sites above stand on their own reading; the test citation does not, and is recorded rather than
-repeated.)*
+The vendor also tests it: `core/src/mcp_tool_call_tests.rs:1753-1791`
+(`mcp_tool_call_ids_are_added_to_request_meta`) calls `with_mcp_tool_call_ids_meta` directly and
+pins three cases — a stale `threadId`/`itemId` is OVERWRITTEN with the live pair, a `None` prior
+meta becomes `{"threadId": …}` with no `itemId`, and a non-object meta passes through unchanged.
+
+*(Two corrections happened at this coordinate and both are kept, because the second one is mine.
+The audit first cited `:1753-1791` without the file name; that line in `mcp_tool_call.rs` is
+unrelated `_meta` UI-resource extraction, so this file briefly recorded "the test citation does
+not stand." It does — the test lives in the sibling `mcp_tool_call_tests.rs`, which codex mounts
+with `#[path]`, so the two files share a line-number space and a bare `:1753-1791` is ambiguous
+between them. Read here, 2026-09-08. Retracted claims are recorded with the receipt that retired
+them, including when the retired claim is the reviewer's and when it is the author's.)*
 
 By contrast `initialize` carries no identity at all and is byte-identical between the two
 children — `clientInfo` is the fixed literal `Implementation::new("codex-mcp-client",
