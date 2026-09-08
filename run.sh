@@ -2667,8 +2667,8 @@ check_acp_provider_surface() {
   # provider lib modules AND compiles + drives the REAL entry against a fake pi,
   # asserting: one surface name, the no-auth sentinel shape, full
   # ProviderModelConfig rows on the curated claude anchor, the EXACT curated model
-  # set both adapters contribute (claude 2 + cortex 4 —
-  # [QK:CORTEX-PROVIDER-SIX-ROW-SURFACE], the claim that catches an entry which
+  # set both adapters contribute (claude 3 + cortex 4 —
+  # [QK:CORTEX-PROVIDER-EXACT-ROW-SURFACE], the claim that catches an entry which
   # silently drops a whole backend), and that streamSimple is the real
   # streamShellAcp backend (checked BY NAME, never invoked — invoking spawns an
   # ACP child). Pure, no pi runtime, no API.
@@ -3564,6 +3564,7 @@ _check_pack_install_impl() {
   local loader_ids loader_expected
   loader_ids=$(awk '$1 == "entwurf" { print $2 }' <<<"$loader_out" | LC_ALL=C sort)
   loader_expected=$(printf '%s\n' \
+    claude-fable-5-1 \
     claude-opus-5 \
     claude-sonnet-5 \
     cortex-auto \
@@ -3571,7 +3572,7 @@ _check_pack_install_impl() {
     cortex-claude-sonnet-5 \
     cortex-openai-gpt-5.4 | LC_ALL=C sort)
   if [ "$loader_ids" != "$loader_expected" ]; then
-    fail "[check-pack-install] installed provider model set drifted — expected exactly 6 curated ids (claude 2 + cortex 4):"
+    fail "[check-pack-install] installed provider model set drifted — expected exactly 7 curated ids (claude 3 + cortex 4):"
     echo "  expected:" >&2
     echo "$loader_expected" | sed 's/^/    /' >&2
     echo "  actual (entwurf rows):" >&2
@@ -3582,8 +3583,8 @@ _check_pack_install_impl() {
   fi
   # Name the set on SUCCESS too, not only in the failure branch — same principle as
   # the pinned-pi version assert above: a gate that cannot name what it proved has
-  # proved nothing, and "6 rows" without the ids cannot be audited from a CI log.
-  echo "[check-pack-install] pi loader smoke pass (entwurf registered; exact 6-row curated set: claude 2 + cortex 4):"
+  # proved nothing, and a row COUNT without the ids cannot be audited from a CI log.
+  echo "[check-pack-install] pi loader smoke pass (entwurf registered; exact curated set: claude 3 + cortex 4):"
   echo "$loader_ids" | sed 's/^/    /'
 
   # npm-managed neutral install regression — the README's PRIMARY install path is

@@ -197,7 +197,7 @@ operator's repair named.
 
 | Seam | Claude | Cortex Code |
 |---|---|---|
-| Model ids | unprefixed `claude-sonnet-5`, `claude-opus-5` | `cortex-auto`, `cortex-claude-opus-5`, `cortex-claude-sonnet-5`, `cortex-openai-gpt-5.4`; prefix stripped before set-model |
+| Model ids | unprefixed `claude-sonnet-5`, `claude-opus-5`, `claude-fable-5-1` | `cortex-auto`, `cortex-claude-opus-5`, `cortex-claude-sonnet-5`, `cortex-openai-gpt-5.4`; prefix stripped before set-model |
 | Launch | bundled `claude-agent-acp`; `CLAUDE_AGENT_ACP_COMMAND` override | `cortex acp serve`; optional connection; `CORTEX_ACP_COMMAND` override; never a launch-time `-m` |
 | Model authority | per-turn ACP set-model | per-turn ACP set-model; an unavailable curated id fails before prompt |
 | Carrier | engraving in `_meta.systemPrompt` | no system-prompt carrier; engraving rides the first-user augment |

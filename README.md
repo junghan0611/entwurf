@@ -303,7 +303,8 @@ host evidence boundaries are [VERIFY.md](./VERIFY.md) and [BASELINE.md](./BASELI
 2. **`require.resolve(...)` against the bundled package dependency** (`@agentclientprotocol/claude-agent-acp`). This is the default path; no extra global install needed.
 3. **`PATH:claude-agent-acp` fallback** — used when the package resolution fails (e.g. a hand-edited `node_modules`).
 
-The curated model registry exposes unprefixed Claude ids plus `cortex-` rows.
+The curated model registry exposes unprefixed Claude ids — `claude-opus-5`, `claude-sonnet-5`,
+`claude-fable-5-1` — plus the `cortex-` rows below.
 Codex is not an ACP backend or a shipped managed citizen lane: it has verified
 native-delivery probe evidence only. No managed Codex support is claimed; lifecycle,
 identity, installation, and doctors remain prerequisites for any such lane.

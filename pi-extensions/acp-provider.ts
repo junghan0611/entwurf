@@ -14,7 +14,7 @@
 // registry (backend-adapter.ts), NOT a per-backend list spelled here. Adding a
 // backend therefore never edits this file. check-acp-provider-surface pins that
 // the compiled entry really registers the EXACT union
-// ([QK:CORTEX-PROVIDER-SIX-ROW-SURFACE]).
+// ([QK:CORTEX-PROVIDER-EXACT-ROW-SURFACE]).
 //
 // Fence: this entry rides the emit-capable root tsconfig (it is not in the root
 // `exclude` list); its lib modules are imported with `.js` suffixes (the root

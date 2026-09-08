@@ -821,7 +821,7 @@ let manifestCount: number;
 	// Extend this inventory and the manifests TOGETHER, never silently.
 	const EXPECTED_LANE_MUTANTS: Record<string, number> = {
 		"acp-augment": 10,
-		"acp-cortex": 12,
+		"acp-cortex": 13,
 		"acp-launch-namespace": 2,
 		"acp-overlay": 1,
 		"acp-prompt-lifecycle": 15,

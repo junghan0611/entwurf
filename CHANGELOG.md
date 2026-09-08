@@ -4,6 +4,40 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+### Added
+
+- **`claude-fable-5-1` joins the curated ACP model surface.** The `entwurf` provider now registers
+  three unprefixed Claude ids (`claude-opus-5`, `claude-sonnet-5`, `claude-fable-5-1`) beside the
+  four `cortex-` rows. Routing needed no change: `backend-adapter.ts` derives `SUPPORTED_CLAUDE_IDS`
+  from the same constant, and `curatedClaudeModels()` filters the pi-ai registry — which carries
+  `claude-fable-5-1` (measured: `getModels("anthropic")` lists it beside `claude-fable-5`). The
+  curation comment's "verify across both axes" commitment is met by a live citizen: GLG opened B on
+  `entwurf/claude-fable-5-1` (garden `20260908T181437-30802a`, `backend=pi`, `liveness=alive`) and a
+  fire-and-forget send to it went out on the control-socket rail.
+- **Two exact-set pins moved with the surface, and one of them was the real gap.**
+  `check-acp-provider-surface` counts the curated constants (6 → 7) and
+  `check-pack-install` enumerates the installed provider's own model list — that second one is a
+  package gate in `check:full`/`prepublishOnly` and would have gone red on the next release with a
+  drift message rather than a missing-support message. `check-acp-cortex` asks presence
+  (`includes`), not an exact set, so it needed nothing.
+- **`[QK:CLAUDE-CURATED-THREE-ROWS]` — the claude curated list gets its own oracle.** The cortex list
+  has had `CORTEX-CURATED-FOUR-ROWS` since 0.13.0; the claude list had none, and it could not borrow
+  the exact-set comparison beside it: `expectedIds` derives from the same constant, so a dropped
+  claude row moves expected and captured together and that assertion stays green. The independent
+  count is what catches it, so the count now carries the claim and a committed mutant plants the
+  real defect (dropping `claude-fable-5-1` from `SUPPORTED_ANTHROPIC_MODEL_IDS`). Lane inventory
+  `acp-cortex` 12 → 13; total 386 → 387.
+
+### Changed
+
+- **`[QK:CORTEX-PROVIDER-SIX-ROW-SURFACE]` → `[QK:CORTEX-PROVIDER-EXACT-ROW-SURFACE]`.** The claim's
+  substance is "the compiled entry registers the EXACT union of every adapter's curated rows", which
+  is count-independent; the old id carried a row count that this change made false and that any
+  future curation change would falsify again. Gate assertion, mutant manifest (`claim` +
+  `signature`), the `acp-provider.ts` comment and the `run.sh` usage line moved together. The
+  mutant's `find`/`replace` are untouched — it still plants the same defect (filtering the cortex
+  rows out of the real entry).
+
 ## 0.19.0 - 2026-09-07
 
 One lane: #105 slice ①, the project seat. `entwurf_fresh_call` gains an optional

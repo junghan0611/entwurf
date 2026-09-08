@@ -138,19 +138,22 @@ try {
 	// Set comparison (sorted, exact) — not `includes`: a substring/anchor probe
 	// cannot see a row that VANISHED, and the cortex ids contain the claude ids as
 	// substrings. Expected is derived from the two source id constants so there is
-	// one SSOT; the literal 6 below is the independent floor that catches a
-	// curation list mutated to empty (which would move expected and captured
-	// together).
+	// one SSOT; the literal 7 below is the independent floor that catches a
+	// curation list that SHRANK — expected derives from the same constants, so a
+	// dropped row moves expected and captured together and the set comparison
+	// stays green. That is why the count is asserted separately and carries its
+	// own claim: the cortex list has `CORTEX-CURATED-FOUR-ROWS` for exactly this
+	// failure, and the claude list needs its own oracle rather than borrowing it.
 	const expectedIds = [...SUPPORTED_ANTHROPIC_MODEL_IDS, ...SUPPORTED_CORTEX_MODEL_IDS].slice().sort();
 	assert.equal(
 		expectedIds.length,
-		6,
-		`curated id constants must total 6 rows (claude 2 + cortex 4) — got ${expectedIds.length}: ${expectedIds.join(", ")}`,
+		7,
+		`[QK:CLAUDE-CURATED-THREE-ROWS] curated id constants must total 7 rows (claude 3 + cortex 4) — got ${expectedIds.length}: ${expectedIds.join(", ")}`,
 	);
 	assert.deepEqual(
 		capIds.slice().sort(),
 		expectedIds,
-		`[QK:CORTEX-PROVIDER-SIX-ROW-SURFACE] compiled entry must register the EXACT curated set of both adapters (claude 2 + cortex 4) — got: ${capIds.join(", ") || "none"}`,
+		`[QK:CORTEX-PROVIDER-EXACT-ROW-SURFACE] compiled entry must register the EXACT curated set of both adapters (claude 3 + cortex 4) — got: ${capIds.join(", ") || "none"}`,
 	);
 	assert.equal(typeof cap.cfg.streamSimple, "function", "entry streamSimple must be a function");
 	// Regression guard: the entry must wire the REAL backend (streamShellAcp),

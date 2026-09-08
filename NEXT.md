@@ -103,29 +103,40 @@ CHANGELOG `## Unreleased`가 구현 범위 `v0.15.1..19ad90c` **30커밋** 전�
       독립 검수(pi `zai/glm-5.3`)가 두 번째를 **다른 레인에서** 찾아왔고, 첫 컷의 `MUTANT-STALE` 이 조용히 무효가 된 뮤턴트의 출하를 막았다.
       인벤토리 382 → **385**. #105 는 닫혔고 ②③ 는 sorge#8·#9 로, 잔여 관측은 sorge#7·#10 으로 나갔다.
 
-현재 좌표: 1–21 완료 → **다음 stem 은 버그픽스 레인**(GLG, 2026-09-08) · **0.16.1 make는 열린 채 PAUSED**.
+현재 좌표: 1–21 완료 → **stem 은 ACP fable 지원 랜딩**(GLG, 2026-09-08). #109 openclaw 다리는 **닫혔다**(요청자가 컨테이너를 나왔다) · **0.16.1 make는 열린 채 PAUSED**.
 푸시·태그는 `entwurf-release` 4모드 몫이다 (CalVer `tag-release`가 아님).
 
-# NOW — 다음 stem: 버그픽스 레인 (GLG: "다음에 할일은 당분간 버그픽스")
+# NOW — stem: ACP `claude-fable-5-1` 지원 (GLG, 2026-09-08: "entwurf acp fable 지원을 넣어줘. 그래야 계속 부를 수 있어")
 
-- **Stem:** 열린 릴리즈 레인 없다. 0.19.0 이 태그·GitHub 릴리즈·npm `latest`·integrity 대조까지 전부 닫혔다.
-  다음은 **버그픽스**다 — 무엇부터인지는 GLG 가 고른다.
-- **좌표:** `main` = `origin/main` = `v0.19.0` = `96b60e3`. 그 위에 이 NEXT 갱신 커밋만 쌓인다(코드 변경 0).
-  열린 이슈 5(구현 97·78·76 = 3/5, research 95·88) — #105 가 닫히며 구현 칸에 두 자리 생겼다.
+- **Stem:** **`claude-fable-5-1` 을 curated ACP 모델 표면에 싣는다.** GLG 가 B 를 그 모델로 이미 불렀고(`entwurf/claude-fable-5-1`,
+  garden `20260908T181437-30802a`, `backend=pi`, `liveness=alive`), 계속 부를 수 있게 표면·게이트·문서를 정합화하는 것이 이 stem 이다.
+  **당분간 루프는 직접 만들어 쓴다 — openclaw 로 가는 길은 멀다(GLG 결정).**
+- **좌표:** `main` = `v0.19.0` = `96b60e3` + NEXT 갱신 커밋. 이 stem 의 변경은 `models.ts`(GLG 손) · `check-acp-provider-surface`(6→7, GLG 손)
+  · **`run.sh` pack-install 정확-집합 핀(내가 채운 구멍 — `check:full`/`prepublishOnly` 소속이라 다음 릴리즈에서 붉었을 것)**
+  · **claim 둘**(`CORTEX-PROVIDER-SIX-ROW-SURFACE` → `…EXACT-ROW-SURFACE` 개명, `CLAUDE-CURATED-THREE-ROWS` 신설 + 뮤턴트 1개)
+  · 인벤토리 `acp-cortex` 12→13, 총 **386 → 387** · README·`docs/acp-backend-rail.md:200`·CHANGELOG.
+  열린 이슈 8 — 구현 5/5(97·78·76·106·108), research 3(95·88·107). **#109 닫으며 상한 복귀.**
+- **#109 가 남긴 것 (닫혔지만 버려지지 않는다):** 컨테이너 축 여섯 판독 + openclaw SDK 삼중 잠금 argv 는 이슈 스레드가 정본이다.
+  **호스트 축 결함 다섯**은 openclaw 와 무관하게 남아 있다 — `entwurf_self` 의 connect-프로브 없는 `existsSync` 거짓 양성
+  (`mcp/entwurf-bridge/src/index.ts:231-234`) · listing 의 relative transcript resolve(`entwurf-peer-observe.ts:67`) ·
+  `kill(pid,0)` 만으로 lock 훔치기(`entwurf-v2-lock.ts:138-151`) · fresh-cut/`gcStaleSockets` 파괴적 ·
+  **게이트가 거짓 문장을 지킨다**(`resume-launch-identity.ts:11` "no consumer" ↔ 게이트 `:238` + 뮤턴트 `RESUME-ID-GATE-SSOT`).
+- **U5(pid-ns 제3 상태)는 설계만 깎여 있다 — 착수 안 함.** 계약 구멍은 실재하지만 급한 소비자가 없다("실제 결함, 현재 소비자 없음").
+  설계 정본은 #109 댓글: frozen 전부 동결 · `receiver`/`transcript` 에 `unverifiable` · marker 리더를 `classifyMarkerOwner` 로 관통 ·
+  composite `(bootId,pidNsInode,mountNsInode)` 매 읽기 계산 · matrix 9→10행 · 확정 MUTANT-STALE 1건(`RESUME-ID-MISSING-TRANSCRIPT-CAUSE`).
 - **버그픽스 후보 (0.19.0 이 남긴 것):**
-  1. **같은 결함 등급이 정적으로 금지되지 않는다.** `pipefail` + 조기 종료 grep + 큰 생산자. 이번에 인스턴스 셋을 고쳤지만
-     규칙은 여전히 `smoke-omp-mcp-state.sh:91` 주석 한 줄에 갇혀 있다. 남은 동형(저위험 판정): `check-fresh-cut-gate.sh:314`
-     (빌트인 `printf` 생산자, 공인 capture-then-match), `raw-async-delivery/*` 의 `tmux capture-pane | grep -q` 재시도 루프.
-     tripwire 를 둘지는 GLG 판단 — 그 자체가 또 검증 기계다.
-  2. **placement 이 실 MCP wire 를 지나는 자동 증거가 없다** (sorge#10). `smoke-mux-lifecycle-live` 의 `tools/call` 셀에
-     `placement` 를 실으면 되고, 그건 이미 release MUST 라 새 LIVE 비용 0(세션 하나 추가 = `new-session -d` 한 줄).
+  1. **같은 결함 등급이 정적으로 금지되지 않는다.** `pipefail` + 조기 종료 grep + 큰 생산자. 인스턴스 셋은 고쳤지만
+     규칙은 `smoke-omp-mcp-state.sh:91` 주석 한 줄에 갇혀 있다. tripwire 를 둘지는 GLG 판단 — 그 자체가 또 검증 기계다.
+  2. **#108 placement 이 실 MCP wire 를 지나는 자동 증거가 없다.** `smoke-mux-lifecycle-live` 의 `tools/call` 셀에
+     `placement` 를 실으면 되고, 그건 이미 release MUST 라 새 LIVE 비용 0.
   3. **codex 핀 범프** (`smoke-meta-async-drift` drift=1) · **#98 P4 관측창 승격 결정** · **#94 잔여 관측 둘** ·
      별건 마이그레이션 둘(`lastDeliveredAt` 제거, `stampMailboxReceipt` 2-writer lost-update).
 - **Blocker:** 없음.
-- **Read:** CHANGELOG `## 0.19.0` — Fixed 두 항목과 Notes 다섯이 이번 레인의 정본이다 · sorge#7·#8·#9·#10.
-- **Do not touch:** `ifMissing`/`create`/`new-session` 부활(GLG 결정) · `isSameContext` 완화 · tmux 를 주소·liveness·delivery 로
-  승격(Hard Rule 16) · `cwd` ↔ `tmuxSession` 상호 추론 · v2 frozen reject enum · 0.16.1 make 섞기 ·
-  **수용된 0.19.0 candidate 를 다시 pack 하는 것**.
+- **Read:** CHANGELOG `## Unreleased`(이 stem 의 정본) · #109 스레드(컨테이너 축 판독 + U5 설계) ·
+  `models.ts:52-60` 의 "verify across both axes" 커미트먼트.
+- **Do not touch:** curated 집합을 게이트 없이 늘리는 것(`run.sh` pack-install 핀과 `check-acp-provider-surface` 카운트가 함께 움직여야 한다) ·
+  `CURATED_ANCHOR_MODEL_ID`(=`claude-opus-5`) 변경 · openclaw 벤더 패치·provider 주입(#109 제약, 유보된 레인) ·
+  tmux 소켓 마운트 · v2 frozen reject enum · 0.16.1 make 섞기.
 - **이번 컷이 새로 가르쳐 준 것 셋:**
   1. **배선이 멀쩡한데 MUST 가 붉을 수 있다.** `smoke-mux-lifecycle-live` 가 00:00 과 01:04 에 두 번 붉었는데, 형제가 프롬프트를
      읽고 콜백 대신 **GLG 에게 자라고 권했다**. 낮 첫 시도에 초록. 프롬프트를 고치지 않았다 — 지금 모델 습관에 제품을 맞추면

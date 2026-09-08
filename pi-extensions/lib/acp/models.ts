@@ -53,13 +53,13 @@ export const ENTWURF_ACP_NO_AUTH_SENTINEL = "entwurf-no-auth";
 // both axes (protocol smoke + agent interview) — do not extend casually.
 // Exported so the claude backend adapter (backend-adapter.ts) can answer
 // `routeModel` without re-deriving the set from curatedClaudeModels().
-export const SUPPORTED_ANTHROPIC_MODEL_IDS = ["claude-sonnet-5", "claude-opus-5"] as const;
+export const SUPPORTED_ANTHROPIC_MODEL_IDS = ["claude-sonnet-5", "claude-opus-5", "claude-fable-5-1"] as const;
 
 /** The anchor model whose absence is a hard registry regression, not a soft skip. */
 export const CURATED_ANCHOR_MODEL_ID = "claude-opus-5";
 
-// Anthropic's registry reports 1M for both Sonnet 5 and Opus 5, and the
-// entwurf surface exposes the full 1M for BOTH. Sonnet 5's 1M window is the
+// Anthropic's registry reports 1M for Sonnet 5, Opus 5 and Fable 5.1, and the
+// entwurf surface exposes the full 1M for all three. Sonnet 5's 1M window is the
 // whole point of the 0.12.3 bump — it is the compact-free long-context floor the
 // earlier 200K Sonnet cap could not provide. We still clamp to a 1M ceiling so a
 // future registry value can't silently inflate the surface past what we verify.
