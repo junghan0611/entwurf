@@ -16,8 +16,13 @@ Evidence-state vocabulary: **[source]** = read at `file:line` in the vendor chec
 Source-layer claims here were independently audited on 2026-09-08 (terra, against commit
 `87ac7ad`): 20/20 quotations CONFIRMED, 0 corrected. Its three prose defects are folded in and
 marked `Corrected 2026-09-08 after independent audit`. `source-audit.md` holds the per-claim
-receipts a reviewer opens instead of re-deriving. Sections **M-A**, **M-B** and **M-C** were
-measured after that audit and have not been through it.
+receipts a reviewer opens instead of re-deriving. The **S1b-*** sections were measured after
+that audit and have not been through it.
+
+**Section ids.** `M1`–`M8` are the step-1 measurements and `M-B` is the raw delivery probe —
+those ids are cited by the first commit and by the independent audit, so they do not move.
+The follow-up round is `S1b-A`–`S1b-D`, on its own axis, because the first draft named one of
+them `M-B` too and two sections cannot share an id.
 
 ## Vendor identity
 
@@ -87,7 +92,7 @@ measured after that audit and have not been through it.
   they do not carry the claim.**
 
   **[host] The escape is not a hypothesis any more — it was run, and it works.** See
-  **M-A** below. A hook declared in the managed `/etc/codex/config.toml` layer runs with **no
+  **S1b-A** below. A hook declared in the managed `/etc/codex/config.toml` layer runs with **no
   trust prompt at all**, in both the embedded and the app-server-attached mode. The price is
   named there and it is the real constraint: that path is `/etc`, i.e. **root**, not something
   an operator-level `entwurf setup` can write.
@@ -191,9 +196,11 @@ Two enum members are candidate carriers, and both are weak:
   name is therefore contested by the vendor's own titler. **[hypothesis]** it would be
   overwritten on the next auto-title; not yet measured.
 
-So `docs/adding-a-harness.md` clause 4 is **OPEN** for codex: an operator-visible persistent
-identity surface exists, but no measured way to hold entwurf's own string in it. This is a
-step-9 admission question, not a step-1 gap to paper over.
+*(The paragraph above is the pre-Step-1b reading and its `[hypothesis]` was **wrong**. The
+auto-titler does NOT overwrite an explicitly set name: it is guarded on the thread having no
+name at all, and an explicit set wins in both orderings — measured in **S1b-B**. Clause 4 is
+CLOSED for codex, with the two costs named there. The paragraph is kept because the hypothesis
+it carried is what S1b-B was run to settle.)*
 
 **Receive.** `[source]` the app-server JSON-RPC surface still carries `turn/start`,
 `turn/steer`, `thread/inject_items`, `thread/status/changed` — and now also a queue family
@@ -241,7 +248,7 @@ was published without a label.** `[source]` supports it
 (`app-server/src/request_processors/initialize_processor.rs:63-68` is a multi-client
 shared-thread surface), but the run above shows the parent of ONE attached TUI; reading N from
 one is not a measurement. Independent audit (terra, 2026-09-08) caught the missing label.
-**It has since been measured directly — see M-C below — and the answer is the one the
+**It has since been measured directly — see S1b-C below — and the answer is the one the
 inference guessed:** two live threads on one app-server, two separate visible TUIs, and every
 hook and every MCP child of BOTH threads reports the same `ppid`.
 
@@ -395,7 +402,7 @@ the archived 0.136 probe and B was asked to re-run it as shipped.
 4. **WS transport, no auth on the UDS** — **[host]** unchanged: the shipped python client's
    handshake returned `HTTP/1.1 101 Switching Protocols` with no token.
 
-## M-A — the hook-trust escape, RUN (2026-09-08, Step 1b)
+## S1b-A — the hook-trust escape, RUN (2026-09-08)
 
 M1 left "is there a non-interactive path?" open. It is now closed, in the affirmative, with a
 constraint that matters more than the answer.
@@ -457,7 +464,7 @@ step**, comparable in kind to a system service install — not a per-user unit. 
 tested with `/etc/codex` genuinely present on a host; the overlay proves codex's behaviour, not
 an installer's.
 
-## M-B — clause 4's carrier, RUN (2026-09-08, Step 1b)
+## S1b-B — clause 4's carrier, RUN (2026-09-08)
 
 M4 left `thread-title` as a candidate the vendor might auto-title over. **It survives, in both
 orderings, and the source says why.**
@@ -504,7 +511,7 @@ Not established: whether any OTHER persistent operator-visible surface exists. `
 is the only enum member that can hold arbitrary text (`status_line_setup.rs:56-155`), and no
 non-statusline persistent surface was found — but absence of a find is not a proof of absence.
 
-## M-C — two citizens, one app-server (2026-09-08, Step 1b)
+## S1b-C — two citizens, one app-server (2026-09-08)
 
 The M5 sharing claim, measured instead of inferred. Two plain `codex` TUIs auto-attached to one
 `codex app-server --listen`, each with its own thread and its own visible window, each woken by
@@ -529,13 +536,106 @@ cannot distinguish these two citizens. `[host]`, not `[source]`, and not an infe
 (Timing incidentally re-confirms M1: the MCP children start at attach — 14:15:31 / 14:15:40 —
 while `SessionStart` waits for the first turn — 14:16:01 / 14:16:05.)
 
+## S1b-D — the join key, found on the wire (2026-09-08)
+
+S1b-C proved the parent-pid join cannot separate two codex citizens. It did not prove there is
+no key at all — and there is one. Three reads, no new unit, no marker written.
+
+**D1 — nothing in the MCP child's process image distinguishes the thread. `[host]`** Two live
+threads on one app-server, each with its OWN bridge child (`51517` and `51767` — separate pids,
+so the children are not shared):
+
+```
+cmdline:  node --experimental-strip-types … mcp/entwurf-bridge/src/index.ts     # both, identical
+cwd:      /home/junghan/repos/gh/entwurf                                        # both, identical
+environ:  diff -> no output                                                     # BYTE-IDENTICAL
+env var names (10, values withheld):
+  HOME LANG LC_ALL LOGNAME PATH PWD SHELL SHLVL TERM USER
+```
+**[host]** What is measured: there is **no `CODEX_THREAD_ID`, no `CODEX_SESSION_ID`, no `CODEX_*`
+at all** in an MCP child, and no `PI_*` either — even though this host's hook processes DID see a
+planted `PI_SESSION_ID` (M5). The child env is 10 names wide against a hook env that carried the
+launching shell's whole environment. So on the evidence, **the foreign-identity-carrier hazard
+of M5 does not reach the bridge on codex.**
+
+**[hypothesis]** that this is `inherit: Core` rather than `All`. It is only *consistent* with
+`UNIX_CORE_ENV_VARS` (`protocol/src/shell_environment.rs:162-165`) and does not match it: the
+child has `PWD`, `SHLVL` and `TERM`, which that list does not contain (a `bash` wrapper sat in
+this probe's chain and could add all three), and it lacks `TMPDIR`/`TEMP`/`TMP`/`LC_CTYPE`, which
+may simply be unset in the parent. **Nobody read the MCP child's env-composition site in source.**
+The negative above stands on the observed absence; the mechanism behind it does not.
+
+**D2 — the identity rides the CALL. `[host]`** One real `tools/call`, captured on the child's
+own stdin:
+
+```json
+{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"_meta":{
+  "callId":"exec-1ef58158-c495-4225-85cc-e7e15075ff78",
+  "x-codex-turn-metadata":{
+    "session_id":"01a0816b-976f-7061-96e4-0d7f9ae53838",
+    "thread_id":"01a0816b-976f-7061-96e4-0d7f9ae53838",
+    "turn_id":"01a0816c-f799-7431-a41a-a95e94a9b7f9",
+    "turn_started_at_unix_ms":1788877797276,
+    "workspaces":{"/home/junghan/repos/gh/entwurf":{…,"latest_git_commit_hash":"e2711ae…"}},
+    "thread_source":"user","sandbox":"seccomp","sandbox_mode":"workspace-write",
+    "model":"gpt-6-astra","reasoning_effort":"low", …},
+  "threadId":"01a0816b-976f-7061-96e4-0d7f9ae53838",
+  "itemId":"ctc_0f30971853352535016aa01bea708487d0ad36b74408dc1e98",
+  "progressToken":1},
+  "name":"entwurf_peers","arguments":{}}}
+```
+`[source]` `core/src/mcp_tool_call.rs:1238-1263` — `build_mcp_tool_call_request_meta` inserts
+`callId` and the `x-codex-turn-metadata` object built by
+`core/src/turn_metadata.rs:230-…` (`current_meta_value_for_mcp_request`). **Honest limit:** the
+top-level `threadId`, `itemId` and `progressToken` keys were observed on the wire but their
+construction site was NOT located in source; those three rest on the capture alone.
+
+By contrast `initialize` carries no identity at all and is byte-identical between the two
+children — `clientInfo` is the fixed literal `Implementation::new("codex-mcp-client",
+CARGO_PKG_VERSION).with_title("Codex")` (`codex-mcp/src/rmcp_client.rs:1035-1039`):
+```json
+{"method":"initialize","params":{"protocolVersion":"2025-06-18",
+ "capabilities":{"elicitation":{"form":{},"url":{}}},
+ "clientInfo":{"name":"codex-mcp-client","title":"Codex","version":"0.153.4"}}}
+```
+So a codex bridge child cannot know who it serves at startup, and does not need to: **it learns
+per call, which is exactly when it needs to know.**
+
+**D3 — the hook's `session_id` and the app-server's `threadId` are the same string. `[host]`**
+Two threads, hook stdin beside `thread/loaded/list`:
+
+```
+HOOK 14:29:57.725 label=SessionStart session_id=01a0816b-976f-7061-96e4-0d7f9ae53838
+HOOK 14:30:02.910 label=SessionStart session_id=01a0816b-bb92-7c81-abde-90820345d58e
+thread/loaded/list -> ["01a0816b-976f-7061-96e4-0d7f9ae53838",
+                       "01a0816b-bb92-7c81-abde-90820345d58e"]
+```
+Byte-identical, both of them. So **birth, delivery and the tool-call `_meta` all name the same
+identifier**, and `record.nativeSessionId = threadId` needs no mapping layer. The pre-existing
+`nativeIdLabel: "threadId"` in `pi/entwurf-capabilities.json` is, on this axis, correct — which
+is worth saying precisely, because its `deliveryLevel: "D6"` on the same row still is not.
+
+**What this changes.** The step-6 question "who sent this?" does not need a parent-pid marker on
+codex, and the answer S1b-C ruled out was the wrong shape rather than a dead end: the caller is
+named on every call. `[source]` today's bridge reads a `PI_SESSION_ID`/`PI_AGENT_ID` pair or a
+native marker looked up by parent pid, and neither exists here — so consuming `_meta` would be
+new bridge code. **That is step 6, and nothing here implements it.**
+
+One vendor fact this run also surfaced, recorded because it belongs to step 9 clause 2: the
+first `tools/call` raised an interactive approval prompt —
+`Allow the entwurf-bridge MCP server to run tool "entwurf_peers"?` — under the default approval
+mode, and the permission surface spells the tool `entwurf-bridge.entwurf_peers`, a THIRD dialect
+beside the model-facing `mcp__entwurf_bridge__entwurf_peers`. Copilot's "one tool, two dialects"
+lesson repeats here. `entwurf_peers` itself answered from that session, which is the plain
+external-MCP-host row of `docs/external-mcp-host.md` behaving as designed.
+
 ## What this measurement does NOT establish
 
 - The source layer WAS independently audited on 2026-09-08 (terra, on commit `87ac7ad`):
   **20/20 quotations CONFIRMED, 0 corrected, 0 unverifiable**, tag identity re-derived
   independently (`rust-v0.153.4^{}` = `3d2ee51ca2d5db578f328aa75e20aa22c0197c9a`). Three prose
   defects it raised are folded in above and marked as corrections; none was a wrong vendor
-  fact. Sections M-A/M-B/M-C were added AFTER that audit and carry no second reader yet.
+  fact. The S1b-* sections were added AFTER that audit and carry no second reader yet.
 - Evidence level L4 at best: one Linux host (`oracle`, aarch64, NixOS), one CLI version, one
   run per claim except M-B (three runs).
 - **No entwurf unit was built or installed.** No record, no hook, no marker, no doctor.
@@ -547,6 +647,12 @@ while `SessionStart` waits for the first turn — 14:16:01 / 14:16:05.)
   with no channel behind it, the exact failure `docs/adding-a-harness.md` step 8(c) names.
   It is also the declared pre-#82 legacy exception `check-harness-admission-parity` reads out
   of `DELIVERY.md`. Nothing here changes it; a reader should not take that D6 as evidence.
-- Clause 4 (visible identity) has no working candidate yet — see M4.
-- The hook trust gate (M1) has no measured non-interactive path. `bypass_hook_trust` and the
-  managed-requirements route were read in source, never exercised.
+- *(Two entries lived here until 2026-09-08 and are now **closed by measurement**, not moved:
+  "clause 4 has no working candidate" was retired by **S1b-B**, and "the hook trust gate has no
+  measured non-interactive path" by **S1b-A**. What each one costs is stated in its section.)*
+- The MCP tool-call `_meta` observed in **S1b-D** is a `[host]` wire fact. Its `callId` and
+  `x-codex-turn-metadata` halves are traced to source there; the top-level `threadId`/`itemId`/
+  `progressToken` keys were NOT traced to a construction site and rest on the wire capture alone.
+- Whether `/new`, resume or fork returns `thread_name` to `None` — and therefore whether a birth
+  payload must re-arm the visible id — is **not measured**. Observation, not a claim (terra,
+  2026-09-08).

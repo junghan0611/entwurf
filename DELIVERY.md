@@ -164,7 +164,13 @@ is step 8 work; it is recorded here so the next reader does not inherit a D6 as 
   that is now measured rather than inferred — two live threads on one app-server, two separate
   visible windows, **one `ppid` for every hook and every MCP child of both**, neither TUI in
   the chain. A parent-pid sender marker would be one marker for N citizens, which Hard Rule 7's
-  `nativeSessionId` uniqueness forbids. Finding a different key is Step 2/3 work.
+  `nativeSessionId` uniqueness forbids. **A different key was then found, and it is not a
+  marker at all:** every `tools/call` carries `_meta.threadId` plus an
+  `x-codex-turn-metadata.{session_id,thread_id,turn_id}` block, so the caller names itself on
+  each call — and that id is byte-identical to the hook's `session_id`, so birth, delivery and
+  tool calls share ONE identifier and `record.nativeSessionId = threadId` needs no mapping.
+  (The registry's pre-existing `nativeIdLabel: "threadId"` is right on that axis; its `D6` on
+  the same row still is not.) Consuming `_meta` is new bridge code and is step 6, unstarted.
 - **Both admission questions this lane opened have since been CLOSED by measurement**, and
   neither cost a design decision. The **hook trust prompt** has a real non-interactive path: a
   hook in the managed `/etc/codex/config.toml` layer runs with no prompt, in both launch modes,
