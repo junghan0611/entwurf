@@ -103,7 +103,7 @@ CHANGELOG `## Unreleased`가 구현 범위 `v0.15.1..19ad90c` **30커밋** 전�
       독립 검수(pi `zai/glm-5.3`)가 두 번째를 **다른 레인에서** 찾아왔고, 첫 컷의 `MUTANT-STALE` 이 조용히 무효가 된 뮤턴트의 출하를 막았다.
       인벤토리 382 → **385**. #105 는 닫혔고 ②③ 는 sorge#8·#9 로, 잔여 관측은 sorge#7·#10 으로 나갔다.
 
-현재 좌표: 1–21 완료 → **stem 은 ACP fable 지원 랜딩**(GLG, 2026-09-08). #109 openclaw 다리는 **닫혔다**(요청자가 컨테이너를 나왔다) · **0.16.1 make는 열린 채 PAUSED**.
+현재 좌표: 1–21 완료 → **22. ACP fable 지원 랜딩·푸시 완료**(`9816618`, 2026-09-08). #109 openclaw 다리는 **닫혔다**(요청자가 컨테이너를 나왔다) · **0.16.1 make는 열린 채 PAUSED**.
 푸시·태그는 `entwurf-release` 4모드 몫이다 (CalVer `tag-release`가 아님).
 
 # NOW — stem: ACP `claude-fable-5-1` 지원 (GLG, 2026-09-08: "entwurf acp fable 지원을 넣어줘. 그래야 계속 부를 수 있어")
@@ -111,11 +111,15 @@ CHANGELOG `## Unreleased`가 구현 범위 `v0.15.1..19ad90c` **30커밋** 전�
 - **Stem:** **`claude-fable-5-1` 을 curated ACP 모델 표면에 싣는다.** GLG 가 B 를 그 모델로 이미 불렀고(`entwurf/claude-fable-5-1`,
   garden `20260908T181437-30802a`, `backend=pi`, `liveness=alive`), 계속 부를 수 있게 표면·게이트·문서를 정합화하는 것이 이 stem 이다.
   **당분간 루프는 직접 만들어 쓴다 — openclaw 로 가는 길은 멀다(GLG 결정).**
-- **좌표:** `main` = `v0.19.0` = `96b60e3` + NEXT 갱신 커밋. 이 stem 의 변경은 `models.ts`(GLG 손) · `check-acp-provider-surface`(6→7, GLG 손)
+- **좌표:** `main` = `origin/main` = **`9816618`**(푸시·도장 완료, 릴리즈 아님 — 버전 범프 없음). 이 stem 의 변경은 `models.ts`(GLG 손) · `check-acp-provider-surface`(6→7, GLG 손)
   · **`run.sh` pack-install 정확-집합 핀(내가 채운 구멍 — `check:full`/`prepublishOnly` 소속이라 다음 릴리즈에서 붉었을 것)**
   · **claim 둘**(`CORTEX-PROVIDER-SIX-ROW-SURFACE` → `…EXACT-ROW-SURFACE` 개명, `CLAUDE-CURATED-THREE-ROWS` 신설 + 뮤턴트 1개)
   · 인벤토리 `acp-cortex` 12→13, 총 **386 → 387** · README·`docs/acp-backend-rail.md:200`·CHANGELOG.
   열린 이슈 8 — 구현 5/5(97·78·76·106·108), research 3(95·88·107). **#109 닫으며 상한 복귀.**
+- **랜딩 영수증 (oracle, 2026-09-08):** `check-gate-qualification` **387/387 KILLED** exit 0(40m, 뮤턴트 매니페스트 공백 재포맷 직전 candidate — claim/subject/find/replace 바이트 동일) ·
+  `pnpm run check:full` exit 0 **452s**(커밋된 candidate) · `check-pack-install` 단독 exit 0(`exact curated set: claude 3 + cortex 4`) ·
+  **exact-SHA CI PASS** run [`34215718330`](https://github.com/junghan0611/entwurf/actions/runs/34215718330) `event=push`, 3잡 전부 success,
+  **`check` 잡의 `Run ./run.sh check-gate-qualification` 스텝 success**(표면을 건드렸으므로 `ci-qualify-decide` 가 본체를 켰다).
 - **#109 가 남긴 것 (닫혔지만 버려지지 않는다):** 컨테이너 축 여섯 판독 + openclaw SDK 삼중 잠금 argv 는 이슈 스레드가 정본이다.
   **호스트 축 결함 다섯**은 openclaw 와 무관하게 남아 있다 — `entwurf_self` 의 connect-프로브 없는 `existsSync` 거짓 양성
   (`mcp/entwurf-bridge/src/index.ts:231-234`) · listing 의 relative transcript resolve(`entwurf-peer-observe.ts:67`) ·
