@@ -608,13 +608,18 @@ The vendor also tests it: `core/src/mcp_tool_call_tests.rs:1753-1791`
 pins three cases — a stale `threadId`/`itemId` is OVERWRITTEN with the live pair, a `None` prior
 meta becomes `{"threadId": …}` with no `itemId`, and a non-object meta passes through unchanged.
 
-*(Two corrections happened at this coordinate and both are kept, because the second one is mine.
-The audit first cited `:1753-1791` without the file name; that line in `mcp_tool_call.rs` is
-unrelated `_meta` UI-resource extraction, so this file briefly recorded "the test citation does
-not stand." It does — the test lives in the sibling `mcp_tool_call_tests.rs`, which codex mounts
-with `#[path]`, so the two files share a line-number space and a bare `:1753-1791` is ambiguous
-between them. Read here, 2026-09-08. Retracted claims are recorded with the receipt that retired
-them, including when the retired claim is the reviewer's and when it is the author's.)*
+*(Finding that test took two passes, and the miss is the reusable part. `:1753-1791` was first
+looked for inside `mcp_tool_call.rs`, where that line is unrelated `_meta` UI-resource
+extraction — so the search concluded the test did not exist. It does, one file over. The cause is
+ordinary and therefore general: **a line range cited without its file path is ambiguous across
+any multi-file source**, and the two files here happen to both have content at 1753
+(`mcp_tool_call.rs:1753` is `meta.and_then(|meta| {`; `mcp_tool_call_tests.rs:1753` is
+`fn mcp_tool_call_ids_are_added_to_request_meta() {`). It is NOT that they share a line-number
+space — the `#[cfg(test)] #[path = "mcp_tool_call_tests.rs"] mod tests;` at
+`core/src/mcp_tool_call.rs:2392-2394` includes the sibling as a module and nothing more. Read
+here, 2026-09-08, after that mechanism was itself asserted wrongly once. Sibling of the constants
+trap two paragraphs up: counting occurrences in the file you happen to have open is not counting
+them in the crate.)*
 
 By contrast `initialize` carries no identity at all and is byte-identical between the two
 children — `clientInfo` is the fixed literal `Implementation::new("codex-mcp-client",
