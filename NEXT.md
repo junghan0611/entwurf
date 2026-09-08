@@ -92,13 +92,54 @@ CHANGELOG `## Unreleased`가 구현 범위 `v0.15.1..19ad90c` **30커밋** 전�
       Defect 3+1 → amendment 1 bundle · qualification **381/381** · `check:full` exit 0 554s · LIVE `smoke-mux-fresh-call-live`
       39/39(4 launch, seat×cwd 2×2) · grok 문서·이해 검수 Blocker 0 / Defect 5 → `5a6c21c docs(fresh-call)`.
       #105 스레드 댓글 2건이 계약 정본(본문은 스냅샷). ② retire / ③ remote 는 착수 때 새 이슈.
-- [ ] **21. 0.19.0 — `entwurf-release` land → prepare → make → publish** ← CURRENT: land(main push + exact-SHA CI, qualification 본체
-      포함) 승인·실행 → prepare 0.19.0 → make → publish. 모드마다 GLG 별도 승인.
+- [x] **21. v0.19.0 컷 + npm — 4모드 전부 닫힘.** `v0.19.0` @ `96b60e3`, GitHub 릴리즈 공개, **npm `latest` = 0.19.0**(GLG 직접 발행).
+      land `1775b2d`(run `34112423341` 4축 PASS) → prepare `96b60e3` → make(run `34166283051` 4축 PASS, candidate 수용 no-repack,
+      태그·릴리즈·도장) → publish. **레지스트리 integrity 대조 [측정 2026-09-08]**: `dist.integrity` sha512-`PYPhtlfxWtu6…vn9XCw==`
+      ≡ candidate · `dist.shasum` `4de66c9a6c54a4e987ce5406c74c96af4190cc2c` ≡ sha1 · 레지스트리 tarball **12,535,258 bytes**
+      sha256 `5f6f24b3…3048` ≡ 수용 sha, `cmp` **바이트 동일** · dist-tags `latest`=0.19.0, `repair`=0.12.8-repair.1 보존. 리팩 없음.
+      **능력은 #105 ① 하나인데 검증이 결함 둘을 찾았다** — 출하된 `doctor-omp-bridge` 의 거짓 초록(부하 의존 5–15%)과 쓰인 이래 한 번도
+      발동 못 한 `sync_auth` credential 트립와이어(100%). 원인 하나: `pipefail` 아래 조기 종료 `grep -q` 가 생산자를 SIGPIPE 로 죽이고
+      141 이 `if` 의 clean 가지로 번역된다. 규칙은 `smoke-omp-mcp-state.sh:91` 에 이미 있었고 두 reader 에 닿지 않았다.
+      독립 검수(pi `zai/glm-5.3`)가 두 번째를 **다른 레인에서** 찾아왔고, 첫 컷의 `MUTANT-STALE` 이 조용히 무효가 된 뮤턴트의 출하를 막았다.
+      인벤토리 382 → **385**. #105 는 닫혔고 ②③ 는 sorge#8·#9 로, 잔여 관측은 sorge#7·#10 으로 나갔다.
 
-현재 좌표: 1–20 완료 → **21 land 부터** · **0.16.1 make는 열린 채 PAUSED**.
+현재 좌표: 1–21 완료 → **다음 stem 은 버그픽스 레인**(GLG, 2026-09-08) · **0.16.1 make는 열린 채 PAUSED**.
 푸시·태그는 `entwurf-release` 4모드 몫이다 (CalVer `tag-release`가 아님).
 
-# NOW — #105 ① 착지 → 0.19.0 릴리즈 lane (GLG: "main 올리고 배포 준비는 꼼꼼하게")
+# NOW — 다음 stem: 버그픽스 레인 (GLG: "다음에 할일은 당분간 버그픽스")
+
+- **Stem:** 열린 릴리즈 레인 없다. 0.19.0 이 태그·GitHub 릴리즈·npm `latest`·integrity 대조까지 전부 닫혔다.
+  다음은 **버그픽스**다 — 무엇부터인지는 GLG 가 고른다.
+- **좌표:** `main` = `origin/main` = `v0.19.0` = `96b60e3`. 그 위에 이 NEXT 갱신 커밋만 쌓인다(코드 변경 0).
+  열린 이슈 5(구현 97·78·76 = 3/5, research 95·88) — #105 가 닫히며 구현 칸에 두 자리 생겼다.
+- **버그픽스 후보 (0.19.0 이 남긴 것):**
+  1. **같은 결함 등급이 정적으로 금지되지 않는다.** `pipefail` + 조기 종료 grep + 큰 생산자. 이번에 인스턴스 셋을 고쳤지만
+     규칙은 여전히 `smoke-omp-mcp-state.sh:91` 주석 한 줄에 갇혀 있다. 남은 동형(저위험 판정): `check-fresh-cut-gate.sh:314`
+     (빌트인 `printf` 생산자, 공인 capture-then-match), `raw-async-delivery/*` 의 `tmux capture-pane | grep -q` 재시도 루프.
+     tripwire 를 둘지는 GLG 판단 — 그 자체가 또 검증 기계다.
+  2. **placement 이 실 MCP wire 를 지나는 자동 증거가 없다** (sorge#10). `smoke-mux-lifecycle-live` 의 `tools/call` 셀에
+     `placement` 를 실으면 되고, 그건 이미 release MUST 라 새 LIVE 비용 0(세션 하나 추가 = `new-session -d` 한 줄).
+  3. **codex 핀 범프** (`smoke-meta-async-drift` drift=1) · **#98 P4 관측창 승격 결정** · **#94 잔여 관측 둘** ·
+     별건 마이그레이션 둘(`lastDeliveredAt` 제거, `stampMailboxReceipt` 2-writer lost-update).
+- **Blocker:** 없음.
+- **Read:** CHANGELOG `## 0.19.0` — Fixed 두 항목과 Notes 다섯이 이번 레인의 정본이다 · sorge#7·#8·#9·#10.
+- **Do not touch:** `ifMissing`/`create`/`new-session` 부활(GLG 결정) · `isSameContext` 완화 · tmux 를 주소·liveness·delivery 로
+  승격(Hard Rule 16) · `cwd` ↔ `tmuxSession` 상호 추론 · v2 frozen reject enum · 0.16.1 make 섞기 ·
+  **수용된 0.19.0 candidate 를 다시 pack 하는 것**.
+- **이번 컷이 새로 가르쳐 준 것 셋:**
+  1. **배선이 멀쩡한데 MUST 가 붉을 수 있다.** `smoke-mux-lifecycle-live` 가 00:00 과 01:04 에 두 번 붉었는데, 형제가 프롬프트를
+     읽고 콜백 대신 **GLG 에게 자라고 권했다**. 낮 첫 시도에 초록. 프롬프트를 고치지 않았다 — 지금 모델 습관에 제품을 맞추면
+     그 비틀림이 습관보다 오래 산다. VERIFY 의 "도구를 알려주는 게이트는 실패가 우리 몫" 규칙에 측정된 예외가 생겼다.
+  2. **저메모리 워치독은 실재하고 tmux 는 그걸 피한다.** 이 컷 하나에서 백그라운드 도구 호출이 **세 번** 죽었고(available 6.5Gi,
+     커널 OOM 없음) tmux 게이트는 매번 살아남았다. "긴 명령은 tmux" 가 취향이 아닌 이유.
+  3. **기존 뮤턴트의 앵커를 깨뜨리면 자격검증이 먼저 잡는다.** 닥터 한 줄을 고치자 `OMP-DOCTOR-CARRIER-TRIMS` 가 `MUTANT-STALE`
+     이 됐고 첫 컷이 거기서 멈췄다. 소스를 고칠 때 **그 줄에 앵커를 건 기존 replant 를 함께 본다** — 새 것만 챙기면 반만 지킨 것이다.
+
+<details><summary>0.19.0 착지 NOW (닫힘)</summary>
+
+## Archived NOW — v0.19.0 전부 닫힘
+
+### 원래 NOW — #105 ① 착지 → 0.19.0 릴리즈 lane (GLG: "main 올리고 배포 준비는 꼼꼼하게")
 
 - **Stem:** 0.19.0 = #105 ① placement. minor 인 이유: `entwurf_fresh_call` 스키마에 optional `placement` 가 생기고 `closeWindow`
   계약이 서버 바인딩으로 바뀐다(호출자 호환, 세 surface 동시).
@@ -119,6 +160,9 @@ CHANGELOG `## Unreleased`가 구현 범위 `v0.15.1..19ad90c` **30커밋** 전�
   형제에게 가는 사실 문장엔 증거 상태 · 독립 검수(sol 코드 / grok 문서·오독 테스트) 패턴 유지 · **frozen 중 untracked `dist/` stale 로
   `check-bridge-delivery` 가 붉을 수 있다 — `build-bridge` 재빌드는 candidate 를 안 바꾼다** · 첫 qualification 이 CONTROL-RED 면 원인
   게이트를 먼저 본다(`pnpm check` 에 없는 hermetic 게이트일 수 있다).
+
+
+</details>
 
 <details><summary>0.18.1 착지 NOW (닫힘 — #103 이월 관측은 이 안에 남는다)</summary>
 
