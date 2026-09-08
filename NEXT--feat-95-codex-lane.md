@@ -1,35 +1,42 @@
 # NEXT — feat/95-codex-lane
 
-**Where the lane is.** `docs/adding-a-harness.md` **step 1 CLOSED**; steps 3–10 untouched.
-Nothing installed, no hook, no record. **Step 2 turned out to be already spent and wrong:**
-`codex` is in `META_BACKENDS`/`META_CITIZEN_BACKENDS` and graded `D6 direct-inject` in
+**Where the lane is.** `docs/adding-a-harness.md` **step 1 CLOSED**, including Step 1b's three
+follow-up measurements. Steps 3–10 untouched: nothing installed, no hook, no record.
+**Step 2 turned out to be already spent and wrong:** `codex` is in
+`META_BACKENDS`/`META_CITIZEN_BACKENDS` and graded `D6 direct-inject` in
 `pi/entwurf-capabilities.json` with no channel behind it. Not corrected here (step 8 work).
 
-**Landed.** `scripts/raw-codex-measure/{README.md,source-audit.md}` (six measurements + §3.5 +
-tool dialect + the join, each with `[source] file:line` or a `[host]` receipt); raw probe re-run
-green at 0.153.4; `DELIVERY.md` §Codex re-coordinated, 2026-08-01 decline marked reversed;
-`AGENTS.md:31` likewise; `PIN_CODEX_MINOR` 0.144 → **0.153** re-verified
-(`smoke-meta-async-drift` → `pass=13 fail=0 drift=0`).
+**Independent audit:** terra, against `87ac7ad` — **20/20 quotations CONFIRMED, 0 corrected**.
+Its three prose defects are folded into `raw-codex-measure/` and marked there. Sections
+M-A/M-B/M-C were measured after that audit and have no second reader.
 
-**Judgment material for Step 2/3 — three answered.**
+**Both Step-1b forks are GONE — measured, not decided.**
 
-1. **Trusted birth event: `SessionStart`.** Fires on the FIRST TURN (~47s after window open),
-   carries `session_id` + absolute `transcript_path` on stdin, nothing to guess. §3.5 is free —
-   a subagent raises `SubagentStart`, a different event name.
+- **Hook trust (was fork 1).** `[host]` A hook in the managed `/etc/codex/config.toml` layer
+  runs with **no trust prompt**, in the embedded AND the auto-attach mode, with a raw
+  `turn/start` wake working alongside it (README §M-A1, §M-A3). `[host]`
+  `--dangerously-bypass-hook-trust` also runs the hook but **kills auto-attach**
+  (`thread/loaded/list` → `[]`), so it is unusable for entwurf (§M-A2).
+  **The remaining constraint is ownership, not capability:** `/etc/codex/` is root-owned, so
+  this is a root-level operator step, never something `entwurf setup` can write (Hard Rule 17).
+- **Clause 4 visible identity (was fork 2).** `[host]` `thread/name/set` + `[tui] status_line =
+  ["thread-title", …]` renders a garden id and **survives turns in both orderings** — including
+  when the vendor auto-titles first (README §M-B). `[source]` the auto-titler is guarded on
+  `thread_name().is_none()` (`tui/src/app/thread_routing.rs:1841`), so this is structural, not
+  luck. Costs: the carrier is reached over the **app-server** (auto-attach only), and
+  `[tui] status_line` needs a config writer that owns exactly that key.
+
+**Judgment material for Step 2/3.**
+
+1. **Trusted birth event: `SessionStart`**, fired on the FIRST TURN, carrying `session_id` +
+   absolute `transcript_path`. §3.5 is free: a subagent raises `SubagentStart`.
 2. **Receive rail: native-push, not self-fetch.** The only measured wake is app-server
-   `turn/start` (full body injection + `thread/status/changed` completion), and it needs the
-   auto-attach launch mode. No `watchPaths`/`FileChanged` analogue exists at 0.153.4.
-3. **Join measured, and its owner moves with the mode.** Embedded: `hook.ppid == mcp.ppid ==
-   the TUI`. App-server-attached (the delivery-capable mode): both are the **shared
-   app-server**, so a parent-pid sender marker is one marker for N citizens — and the visible
-   window's launch env never reaches the hook, so an env-planted provenance token is dead there.
+   `turn/start`; there is no `watchPaths`/`FileChanged` analogue at 0.153.4.
+3. **The join is measured broken for identity, not merely suspected** (README §M-C): two
+   citizens on one app-server, two windows, **one `ppid` for every hook and MCP child of both**,
+   neither TUI in the chain. A parent-pid sender marker cannot separate them — Hard Rule 7
+   `nativeSessionId` uniqueness needs a different key. **This is the open design question the
+   next step has to answer**, and it is the only one left.
 
-**Two open blockers, before any Step 2 code** (plus one owed: an independent second-school
-audit — every `[source]` row is currently one reader's).
-
-- **Hook trust is interactive.** A new hook entry stops the TUI at "Hooks need review / Trust
-  all and continue", then writes `trusted_hash` into `config.toml`. Next measurement: exercise
-  `bypass_hook_trust` and managed requirements (`hooks/src/engine/discovery.rs:84-114`).
-- **Clause 4 has no carrier.** Statusline is a closed enum; the one writable slot
-  (`thread-title` via `thread/name/set`) is auto-titled by the vendor after the first turn.
-  Next measurement: does an auto-title overwrite a name set through `thread/name/set`?
+**Nothing here claims support.** The pi GPT-provider path and the ACP-backend prohibition are
+unchanged.

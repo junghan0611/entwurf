@@ -1,7 +1,11 @@
 Author: claude-opus-5 (entwurf fresh sibling, 2026-09-08) — source-layer receipts for #95 step 1.
-NOT an independent audit: the same reader took the measurements in `README.md` and wrote these
-receipts. A second-school audit is the named next measurement; until it runs, treat every row
-below as one reader's `file:line`, reopenable but unconfirmed.
+These rows were written by the same reader who took the measurements in `README.md`, so they were
+NOT self-certifying. They have since been independently audited: **terra (openai-codex), against
+commit `87ac7ad`, 2026-09-08 — 20/20 quotations CONFIRMED, 0 CORRECTED, 0 UNVERIFIABLE**, with the
+tag identity re-derived independently (`rust-v0.153.4^{}` =
+`3d2ee51ca2d5db578f328aa75e20aa22c0197c9a`). The three defects that audit raised were prose
+precision in `README.md`, not wrong vendor facts; they are folded in there and marked. Rows added
+to this file BY that amendment are marked `[post-audit]` and carry no second reader.
 
 Vendor: `~/repos/3rd/codex` at tag `rust-v0.153.4` (`3d2ee51`). Paths are relative to
 `codex-rs/`. Code is the oracle.
@@ -75,7 +79,30 @@ bypass_hook_trust }`; `:105-114` reads `allow_managed_hooks_only` from layer req
 one trust identity.
 `config/src/hook_config.rs:218-250` — `ManagedHooksRequirementsToml { managed_dir,
 windows_managed_dir, #[serde(flatten)] hooks }` + `managed_dir_for_current_platform()`.
-NOT exercised: no measurement drove `bypass_hook_trust` or a managed requirements file.
+
+`[post-audit]` **The coordinates that actually carry the trust claim** (terra's correction; the
+four lines above are the policy struct and the JSON path, which do not):
+`hooks/src/engine/discovery.rs:794-811` — `hook_trust_status`: `is_builtin → Trusted`,
+`is_managed → Managed`, otherwise compare `trusted_hash` against the current hash
+(`Some(eq) → Trusted`, `Some(_) → Modified`, `None → Untrusted`).
+`hooks/src/engine/discovery.rs:813-815` — `hook_enabled(is_managed, is_builtin, state)` is
+`is_builtin || is_managed || state.enabled != Some(false)`.
+`hooks/src/engine/discovery.rs:817-821` — `hook_trusted_hash` reads state ONLY when `!is_managed`.
+`hooks/src/engine/discovery.rs:676-679` — the per-handler site where those three are combined.
+`hooks/src/engine/discovery.rs:208-240` — `append_managed_requirement_handlers` enters with
+`is_managed: true`.
+`core/src/config/mod.rs:3253-3260` — the CLI bypass path and its operator warning.
+
+`[post-audit]` **Which layers are managed**: `hooks/src/engine/discovery.rs:823-839` —
+`System` (= `/etc/codex/config.toml`, `config/src/loader/mod.rs:66`), `Mdm`,
+`EnterpriseManaged`, and both `LegacyManagedConfigToml*` are `is_managed: true`. `User`,
+`Project`, `PackagedDefaults` and `SessionFlags` are not. `config/src/loader/mod.rs:746-748`
+puts the requirements file at `/etc/codex/requirements.toml`;
+`config/src/loader/layer_io.rs:22` puts managed config at `/etc/codex/managed_config.toml`.
+`config/src/state.rs:43-62` — `LoaderOverrides` can redirect all of those, but it is internal
+(no CLI flag reaches it outside `cli/src/debug_sandbox.rs`).
+**Exercised on 2026-09-08 — see `README.md` §M-A.** A hook in the managed layer ran with no
+trust prompt; `--dangerously-bypass-hook-trust` also ran the hook but killed auto-attach.
 
 ### H7. Stop is a turn boundary, not a wake
 `hooks/src/events/stop.rs:97-104` — `StopOutcome { should_stop, stop_reason, should_block,
@@ -183,8 +210,18 @@ status line".
 `strum(to_string="thread-id", serialize="session-id")`.
 `tui/src/chatwidget/status_surfaces.rs:776-784` — `ThreadTitle` renders `thread_name`, else the
 thread id.
-`app-server-protocol/src/protocol/common.rs:566` — `ThreadSetName => "thread/name/set"`.
-`[host]` the vendor auto-renames a thread after the first turn, so the name slot is contested.
+`app-server-protocol/src/protocol/common.rs:566` — `ThreadSetName => "thread/name/set"`;
+params `{thread_id, name}` (`app-server-protocol/src/protocol/v2/thread.rs:753-756`, camelCase
+on the wire).
+`[post-audit]` **The auto-titler is guarded on the thread being unnamed**:
+`tui/src/app/thread_routing.rs:1841` — `let automatic_title_user_message = if
+self.chat_widget.thread_name().is_none() && …`. Only inside that branch does the TUI call
+`thread_set_name` with a provisional title (`:1877-1888`) and then generate a model title
+(`tui/src/app/event_dispatch.rs:2579-2592`, which additionally re-checks the current name).
+`app-server/src/request_processors/thread_processor.rs:639-658` — the explicit setter carries
+no such guard.
+**Exercised on 2026-09-08 — see `README.md` §M-B.** An explicitly set name survives turns in
+both orderings.
 
 ### S3. App-server method surface at 0.153.4
 `app-server-protocol/src/protocol/` — the measured route survives: `turn/start`, `turn/steer`,
@@ -196,9 +233,11 @@ claim about it now.
 
 # Open at the source layer
 
-- No independent second-model confirmation of any row above.
-- H6: managed-hooks and `bypass_hook_trust` paths read, never run.
+- Rows added under `[post-audit]` have no second reader yet.
 - T4: name-collision hardening read, never triggered.
 - S3: the queue family read, never called.
-- Gotcha 2 of the archived probe (`-c` disables auto-attach) was NOT re-derived at 0.153.4;
-  `can_reuse_implicit_local_daemon` was not reopened.
+- Gotcha 2 of the archived probe (`-c` disables auto-attach) is now half-measured:
+  `tui/src/lib.rs:919-930` — `can_reuse_implicit_local_daemon` requires empty
+  `cli_kv_overrides`, default loader overrides, `!strict_config` and no non-replayable launch
+  overrides. `[host]` `--dangerously-bypass-hook-trust` was measured to defeat it (README
+  §M-A2); plain `-c` was not separately re-run at 0.153.4.

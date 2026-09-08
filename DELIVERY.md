@@ -158,14 +158,24 @@ is step 8 work; it is recorded here so the next reader does not inherit a D6 as 
   vendor-authoritative and costs nothing.
 - **The callback dialect is `mcp__entwurf_bridge__entwurf_v2`** — a fourth spelling; the
   sanitizer maps `-` to `_` but keeps the digit that omp's charset eats.
-- **The step-6 join holds in both launch modes, but its owner moves.** Embedded:
-  `hook.ppid == mcp.ppid == the TUI`. App-server-attached — the only delivery-capable mode —
-  both resolve to the **shared app-server**, so a parent-pid sender marker would be one marker
-  for N citizens. Deciding that is Step 2/3 work, not settled here.
-- **Two open admission questions**, both honest blockers rather than gaps: an interactive
-  **hook trust prompt** stands in front of any installed birth hook, and clause 4 (visible
-  identity) has no measured carrier — the statusline is a closed enum and the thread name the
-  vendor auto-titles.
+- **The step-6 join holds in both launch modes, but its owner moves — and in the
+  delivery-capable mode it cannot separate citizens.** Embedded:
+  `hook.ppid == mcp.ppid == the TUI`. App-server-attached: both resolve to the app-server, and
+  that is now measured rather than inferred — two live threads on one app-server, two separate
+  visible windows, **one `ppid` for every hook and every MCP child of both**, neither TUI in
+  the chain. A parent-pid sender marker would be one marker for N citizens, which Hard Rule 7's
+  `nativeSessionId` uniqueness forbids. Finding a different key is Step 2/3 work.
+- **Both admission questions this lane opened have since been CLOSED by measurement**, and
+  neither cost a design decision. The **hook trust prompt** has a real non-interactive path: a
+  hook in the managed `/etc/codex/config.toml` layer runs with no prompt, in both launch modes,
+  with `turn/start` wake intact — while `--dangerously-bypass-hook-trust` runs the hook but
+  kills auto-attach and is therefore unusable here. The remaining constraint is ownership:
+  `/etc/codex/` is root-owned, so that is a root-level operator step, not something `setup`
+  writes (Hard Rule 17). **Clause 4** has a working carrier: `thread/name/set` plus
+  `[tui] status_line = ["thread-title", …]` renders a garden id and survives turns in both
+  orderings, because the vendor's auto-titler is guarded on the thread being unnamed
+  (`tui/src/app/thread_routing.rs:1841`). It is reachable only over the app-server, and the
+  config key needs a writer that owns exactly it.
 
 ### Copilot CLI: one citizen, two rails, one pending receipt
 

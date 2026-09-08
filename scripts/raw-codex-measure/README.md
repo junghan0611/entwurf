@@ -13,9 +13,11 @@ Evidence-state vocabulary: **[source]** = read at `file:line` in the vendor chec
 **[host]** = measured on this host (`oracle`, 2026-09-08 KST) with the receipt named;
 **[hypothesis]** = a structure→behaviour inference not yet confirmed by a run.
 
-Source-layer claims here have **not** been independently audited by a second model. That
-audit is the named next measurement for this step; `source-audit.md` holds the per-claim
-receipts a reviewer opens instead of re-deriving.
+Source-layer claims here were independently audited on 2026-09-08 (terra, against commit
+`87ac7ad`): 20/20 quotations CONFIRMED, 0 corrected. Its three prose defects are folded in and
+marked `Corrected 2026-09-08 after independent audit`. `source-audit.md` holds the per-claim
+receipts a reviewer opens instead of re-deriving. Sections **M-A**, **M-B** and **M-C** were
+measured after that audit and have not been through it.
 
 ## Vendor identity
 
@@ -72,11 +74,23 @@ receipts a reviewer opens instead of re-deriving.
   [hooks.state."<CODEX_HOME>/config.toml:session_start:0:0"]
   trusted_hash = "sha256:679495a037c2aaa8bbbe9b304c5cdeb256a3b56a30575867ca8b60bb766257d1"
   ```
-  Until an operator answers that prompt, **an installed birth hook does not run**. This has no
-  analogue on any shipped backend and is the largest single admission question for step 3.
-  `[source]` the non-interactive escapes exist but are policy-level, not installer-level:
-  `bypass_hook_trust` and managed requirements (`allow_managed_hooks_only`, `managed_dir`)
-  in `hooks/src/engine/discovery.rs:84-114`, `:339-343`.
+  Until an operator answers that prompt, **a USER-level birth hook does not run**. This has no
+  analogue on any shipped backend.
+  `[source]` the trust decision itself: `hook_trust_status` returns `Managed` for a managed
+  handler and only consults `trusted_hash` for a non-managed one
+  (`hooks/src/engine/discovery.rs:794-819`); `hook_enabled` is
+  `is_builtin || is_managed || …` (`:813-815`); managed requirement handlers enter with
+  `is_managed: true` (`:208-240`), and the enabled/trust state is resolved per handler at
+  `:676-733`. The CLI bypass and its warning are at `core/src/config/mod.rs:3253-3260`.
+  **Corrected 2026-09-08 after independent audit (terra): the earlier draft cited
+  `discovery.rs:84-114` / `:339-343`, which are the policy struct and the `hooks.json` path —
+  they do not carry the claim.**
+
+  **[host] The escape is not a hypothesis any more — it was run, and it works.** See
+  **M-A** below. A hook declared in the managed `/etc/codex/config.toml` layer runs with **no
+  trust prompt at all**, in both the embedded and the app-server-attached mode. The price is
+  named there and it is the real constraint: that path is `/etc`, i.e. **root**, not something
+  an operator-level `entwurf setup` can write.
 - **[source]** There is **no filesystem-wake vocabulary**: `watchPaths`, `FileChanged` and
   `asyncRewake` appear nowhere in the Rust workspace except in a Claude-hooks IMPORTER, which
   SKIPS any hook carrying them (`external-agent-migration/src/hooks_cla.rs:158-161`). Codex
@@ -104,9 +118,17 @@ receipts a reviewer opens instead of re-deriving.
   command = "<scratch>/hook-probe.sh SessionStart"
   timeout = 30
   ```
-- **[source]** `command` is a SHELL STRING, not an exec-form argv: it is handed to
-  `$SHELL -lc` (fallback `/bin/sh -lc`) — `hooks/src/engine/command_runner.rs:391-411`,
-  `:428-453`. **Codex offers no exec-form hook launcher**, so entwurf's Hard Rule 14
+- **[source]** `command` is a SHELL STRING, never an exec-form argv — and that, not the
+  particular shell, is the load-bearing fact. `HookHandlerConfig::Command` carries one
+  `command: String` (`config/src/hook_config.rs:161-184`) and no argv variant exists in the
+  enum. How it is run depends on the configured shell: `build_command`
+  (`hooks/src/engine/command_runner.rs:396-418`) uses `shell.program` + `shell.args` when a
+  program is configured, and only falls back to `default_shell_command` — `$SHELL`, fallback
+  `/bin/sh`, argument `-lc` (`:428-453`) — when `shell.program.is_empty()`. The turn's shell
+  can supply that program (`core/src/session/mod.rs:4666-4674`). **Corrected 2026-09-08 after
+  independent audit (terra): the earlier draft claimed `$SHELL -lc` unconditionally. It is the
+  DEFAULT path, not the only one.** The conclusion is unchanged and does not depend on the
+  correction: **codex offers no exec-form hook launcher at all**, so entwurf's Hard Rule 14
   ("no shell-form fallback", derived from Claude's exec manifest) has no counterpart to bind
   to here; a codex unit's provenance story has to be built on something else.
 - **[host]** SessionStart stdin envelope, verbatim (secrets redacted nowhere — there are none
@@ -211,11 +233,23 @@ pid=1733 (entwurf-bridge) ppid=1393   # 1393 = codex app-server --listen
 pid=1616                              # = the plain codex TUI. Not the parent.
 ```
 
-So in the delivery-capable mode the join still holds — `hook.ppid == mcp.ppid` — but **both
-resolve to the app-server, which is SHARED by every attached thread**. A sender marker keyed
-by parent pid would be one marker for N citizens, which is precisely the uniqueness the V3
-store contract (Hard Rule 7, `nativeSessionId` ownership) forbids. **This is the load-bearing
-result of the whole step**, and it is a design input for step 6, not a defect to fix here.
+So in the delivery-capable mode the join still holds — `hook.ppid == mcp.ppid` — but both
+resolve to the app-server.
+
+**That the app-server is SHARED across citizens was an inference in the first draft, and it
+was published without a label.** `[source]` supports it
+(`app-server/src/request_processors/initialize_processor.rs:63-68` is a multi-client
+shared-thread surface), but the run above shows the parent of ONE attached TUI; reading N from
+one is not a measurement. Independent audit (terra, 2026-09-08) caught the missing label.
+**It has since been measured directly — see M-C below — and the answer is the one the
+inference guessed:** two live threads on one app-server, two separate visible TUIs, and every
+hook and every MCP child of BOTH threads reports the same `ppid`.
+
+**[host]** So this is now a measured fact rather than a structural read: **a sender marker
+keyed by parent pid would be one marker for N citizens**, which is precisely the uniqueness the
+V3 store contract (Hard Rule 7, `nativeSessionId` ownership) forbids. **This is the
+load-bearing result of the whole step**, and it is a design input for step 6, not a defect to
+fix here.
 
 **[host]** A second consequence, measured on the same two runs: the hook's environment is the
 HOST process's snapshot, so it changes with the mode.
@@ -361,10 +395,147 @@ the archived 0.136 probe and B was asked to re-run it as shipped.
 4. **WS transport, no auth on the UDS** — **[host]** unchanged: the shipped python client's
    handshake returned `HTTP/1.1 101 Switching Protocols` with no token.
 
+## M-A — the hook-trust escape, RUN (2026-09-08, Step 1b)
+
+M1 left "is there a non-interactive path?" open. It is now closed, in the affirmative, with a
+constraint that matters more than the answer.
+
+**Method note first, because it is the part that must not be copied carelessly.** `/etc` was
+never written. Each run used a user namespace carrying an overlayfs whose `lowerdir` is the
+real `/etc` and whose `upperdir` supplied only `codex/config.toml`:
+
+```
+unshare --map-root-user --mount bash -c \
+  'mount -t overlay overlay -o lowerdir=/etc,upperdir=<scratch>/etc-upper,workdir=<scratch>/etc-work /etc \
+   && exec env CODEX_HOME=<scratch>/home codex'
+```
+Before and after every run, `ls /etc/codex` on the host is `No such file or directory`.
+
+**A1 — a managed hook runs with NO trust prompt.** `[host]` The hook was declared in the
+overlay's `/etc/codex/config.toml`, which is the `System` config layer and therefore
+`is_managed: true` (`hooks/src/engine/discovery.rs:826`). The TUI showed the ordinary
+directory-trust question and **never showed the "Hooks need review" screen**. After one turn:
+
+```
+=== 2026-09-08T14:17:32.016Z MANAGED-HOOK-FIRED label=SessionStart-MANAGED pid=42169 ppid=41459
+```
+
+**A2 — `--dangerously-bypass-hook-trust` also works, and it costs the delivery rail.** `[host]`
+A USER-level hook, no trust prompt, a banner instead:
+
+```
+⚠ `--dangerously-bypass-hook-trust` is enabled. Enabled hooks may run without review for this invocation.
+=== 2026-09-08T14:18:46.837Z USER-HOOK-FIRED label=SessionStart-USER pid=43308 ppid=42714
+```
+But an app-server was listening on that `CODEX_HOME`'s default control socket for the whole
+run, and both before and after the turn:
+```
+thread/loaded/list -> {"id": 2, "result": {"data": [], "nextCursor": null}}
+```
+**The flag is a loader override, so auto-attach never happens and the session is unaddressable.**
+This is the archived 0.136 gotcha 2 measured at 0.153.4 on the flag that matters: for entwurf,
+`--dangerously-bypass-hook-trust` and the delivery rail are mutually exclusive.
+
+**A3 — the managed path does NOT have that problem.** `[host]` Same overlay, plus an app-server
+on the scratch `CODEX_HOME`'s default control socket. A plain `codex` (no flags) attached, and
+a raw `turn/start` woke it:
+```
+thread/loaded/list -> {"data": ["01a08163-5040-7830-bf24-dcba2e3b47c4"]}
+{"ok": true, "threadId": "01a08163-5040-…", "turnId": "01a08163-a403-7752-9a96-31484a5bfca5",
+ "status_seen": ["active","active","idle"]}
+  • A3-OK          # visible TUI, zero typing
+=== 2026-09-08T14:19:46.479Z MANAGED-HOOK-FIRED label=SessionStart-MANAGED pid=44298 ppid=43784
+```
+Managed hook + auto-attach + raw wake, all three at once.
+
+**What this closes and what it does not.** It closes "can a codex birth hook run without an
+operator answering a prompt" — yes, through the managed layer, with the delivery rail intact.
+It does NOT make that an installer capability: `/etc/codex/` is **root-owned**, so
+`entwurf setup` running as the operator cannot write it, and Hard Rule 17 ("setup composes what
+the operator already chose") points the same way. The honest shape is a **root-level operator
+step**, comparable in kind to a system service install — not a per-user unit. Nothing here was
+tested with `/etc/codex` genuinely present on a host; the overlay proves codex's behaviour, not
+an installer's.
+
+## M-B — clause 4's carrier, RUN (2026-09-08, Step 1b)
+
+M4 left `thread-title` as a candidate the vendor might auto-title over. **It survives, in both
+orderings, and the source says why.**
+
+`[source]` The automatic titler is guarded on the thread having no name at all:
+`tui/src/app/thread_routing.rs:1841` — `if self.chat_widget.thread_name().is_none() && …`. A
+named thread never enters the branch that generates a title. The explicit setter
+(`thread/name/set` → `thread_set_name`, `app-server/src/request_processors/thread_processor.rs:639-658`)
+carries no such guard.
+
+`[host]` With `[tui] status_line = ["thread-title", "model", "current-dir"]`:
+
+```
+# unset -> falls back to the thread UUID, as source predicts
+  01a0815b-d30d-7b63-a257-9011682f0e3a · gpt-6-astra · ~/repos/gh/ent…
+
+# thread/name/set {"threadId":"01a0815b-…","name":"entwurf 20260908T224329-2680e2"} -> {"result":{}}
+  entwurf 20260908T224329-2680e2 · gpt-6-astra · ~/repos/gh/entwurf ·…
+
+# first turn  (TITLE-PROBE-OK)  -> name UNCHANGED
+# second turn (TITLE-PROBE-2)   -> name UNCHANGED
+  entwurf 20260908T224329-2680e2 · gpt-6-astra · ~/repos/gh/entwurf ·…
+```
+
+And the ordering race, which is the question a birth-at-first-turn hook actually raises — the
+auto-titler wins first, then entwurf sets the name:
+
+```
+# fresh thread, no name, one turn (RACE-1): the vendor claims the slot
+  Reply with RACE-1 · gpt-6-astra · ~/repos/gh/entwurf · ← for agents
+# thread/name/set {"name":"entwurf 20260908T999999-race02"} -> {"result":{}}
+  entwurf 20260908T999999-race02 · gpt-6-astra · ~/repos/gh/entwurf ·…
+# one more turn (RACE-2) -> still ours
+  entwurf 20260908T999999-race02 · gpt-6-astra · ~/repos/gh/entwurf ·…
+```
+
+**So clause 4 has a working carrier and the ordering does not matter** — a birth payload may set
+the name after the first turn and still win. Two costs to carry into step 4/10, neither
+hypothetical: the carrier is reached over the **app-server**, not from the hook process, so it
+is only available in the auto-attach mode; and `[tui] status_line` is an operator config key,
+so it needs a writer that owns exactly that key (the `scripts/omp-config-xdev.py` shape).
+
+Not established: whether any OTHER persistent operator-visible surface exists. `thread-title`
+is the only enum member that can hold arbitrary text (`status_line_setup.rs:56-155`), and no
+non-statusline persistent surface was found — but absence of a find is not a proof of absence.
+
+## M-C — two citizens, one app-server (2026-09-08, Step 1b)
+
+The M5 sharing claim, measured instead of inferred. Two plain `codex` TUIs auto-attached to one
+`codex app-server --listen`, each with its own thread and its own visible window, each woken by
+its own `turn/start`. `[host]`:
+
+```
+app-server pid = 39226
+visible TUI pids = 39410, 39956          # two separate windows
+
+=== label=MCP-child      self_pid=39797 ppid=39226
+=== label=MCP-child      self_pid=40074 ppid=39226
+=== label=SessionStart   self_pid=40507 ppid=39226   session_id=01a0815f-c28e-7080-894c-05200f91ef6b
+=== label=UserPromptSubmit self_pid=40530 ppid=39226 session_id=01a0815f-c28e-7080-894c-05200f91ef6b
+=== label=SessionStart   self_pid=40632 ppid=39226   session_id=01a0815f-e2d1-7f30-930f-da4c1728906d
+=== label=UserPromptSubmit self_pid=40655 ppid=39226 session_id=01a0815f-e2d1-7f30-930f-da4c1728906d
+```
+
+Two DIFFERENT `session_id`s, two different windows, **one `ppid` for every hook and every MCP
+child of both**, and neither TUI pid appears anywhere in the chain. The parent-pid join key
+cannot distinguish these two citizens. `[host]`, not `[source]`, and not an inference from one.
+
+(Timing incidentally re-confirms M1: the MCP children start at attach — 14:15:31 / 14:15:40 —
+while `SessionStart` waits for the first turn — 14:16:01 / 14:16:05.)
+
 ## What this measurement does NOT establish
 
-- No independent source audit yet (see the header). Every `[source]` line above is one
-  reader's.
+- The source layer WAS independently audited on 2026-09-08 (terra, on commit `87ac7ad`):
+  **20/20 quotations CONFIRMED, 0 corrected, 0 unverifiable**, tag identity re-derived
+  independently (`rust-v0.153.4^{}` = `3d2ee51ca2d5db578f328aa75e20aa22c0197c9a`). Three prose
+  defects it raised are folded in above and marked as corrections; none was a wrong vendor
+  fact. Sections M-A/M-B/M-C were added AFTER that audit and carry no second reader yet.
 - Evidence level L4 at best: one Linux host (`oracle`, aarch64, NixOS), one CLI version, one
   run per claim except M-B (three runs).
 - **No entwurf unit was built or installed.** No record, no hook, no marker, no doctor.
