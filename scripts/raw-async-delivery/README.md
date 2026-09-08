@@ -457,7 +457,16 @@ Still true and documented rather than fixed: a hard link produces `CREATE` with
 no `CLOSE_WRITE` and is not reported (nothing writes mailbox messages that way),
 and `IN_IGNORED` for a deleted garden directory is not handled (harmless).
 
-## Codex raw delivery status (0.136.0)
+## Codex raw delivery status (0.136.0 — re-verified at 0.153.4)
+
+> **0.153.4 pointer (2026-09-08, lane #95).** Everything in this section still holds; the two
+> shipped scripts were re-run AS SHIPPED at codex-cli 0.153.4 and went green (`ok: true`,
+> `status_seen: ["active","active","idle"]`, model reply in the visible TUI with zero typing).
+> The current coordinates, the six step-1 vendor measurements, and the source receipts live in
+> [`../raw-codex-measure/README.md`](../raw-codex-measure/README.md) and its `source-audit.md`.
+> One method correction belongs here: at 0.153.4 the rollout JSONL is materialized LAZILY, so
+> the "newest rollout's session_meta id" recipe below can hand you a thread from weeks ago.
+> Ask the app-server instead — `thread/loaded/list` returns the live thread ids.
 
 Measured against `@openai/codex` 0.136.0 (source: `~/repos/3rd/codex`). **Codex IS
 breakable for local raw idle-wake — without managed standalone and without cloud.**

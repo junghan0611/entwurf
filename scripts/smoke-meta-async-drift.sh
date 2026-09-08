@@ -62,11 +62,13 @@ RAW_DIR="$HERE/raw-async-delivery"
 # 1.0 -> 1.1) is the real "re-verify the markers + Gotchas + raw/LIVE probes"
 # trigger and DOES scream.
 PIN_CLAUDE_MINOR="2.1"
-# codex 0.144 (2026-07-14): OBSERVED bump, not a re-verification. Codex is not a shipped
-# native-citizen lane in 0.12.x; the probe evidence in DELIVERY.md §Codex was measured at
-# 0.136.0 and has NOT been re-run on 0.144 — that explicit verdict lives there. Re-run the
-# raw probes before building any codex adapter on this line.
-PIN_CODEX_MINOR="0.144"
+# codex 0.153 (2026-09-08): RE-VERIFIED, not merely observed. The archived 0.136.0 raw probe
+# (codex-local-appserver.sh + raw-codex-ws-turn-start.py) was re-run AS SHIPPED on codex-cli
+# 0.153.4 and went green — idle plain `codex` auto-attached to a bare `codex app-server
+# --listen` woke with zero typing and the model replied in the same visible session. Receipts
+# and the six step-1 vendor measurements: scripts/raw-codex-measure/README.md (see raw-codex-
+# measure); coordinates restated in DELIVERY.md §Codex. Codex is still NOT a citizen backend.
+PIN_CODEX_MINOR="0.153"
 # agy 1.1 (2026-07-14): re-verified live — entwurf_self called without a permission prompt,
 # bidirectional native-push reply on the same gid, LIVE=1 smoke-agy-native-push-live 13/13
 # at agy 1.1.0 (evidence recorded in DELIVERY.md §Antigravity).

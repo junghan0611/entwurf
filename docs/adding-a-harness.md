@@ -32,8 +32,10 @@ document's worked examples — do not re-derive them, reopen them there.
 | `agy` | independent vendor | native-push: record + probe-alive gRPC `send-message`; no mailbox, no receiver marker | n/a — push rail | not openable; the declared pre-#82 legacy exception |
 | `omp` | **a pi fork** — inherits pi's env vocabulary (step 1(6)) | self-fetch mailbox: Claude's SHAPE, but the watch runs IN-PROCESS in the operator's TUI; announce-only doorbell via the vendor's own `sendUserMessage` | `mcp__entwurf_bridge_entwurf_v` — the sanitizer eats the digit | bare `omp`, NO positional prompt: the two-stage `--entwurf-bootstrap` payload |
 
-(Codex has a verified delivery probe and a deliberate decision against a native lane — pi already
-supplies the official GPT route. It is a row in `DELIVERY.md`, not a sixth gauge.)
+(Codex is a sixth harness now walking this gauge, not a settled row: GLG reversed the 2026-08-01
+decline on 2026-09-08 and opened lane #95. It has closed step 1 only — measurements in
+`scripts/raw-codex-measure/` — so it has no table row above, mints no record, and is not
+openable. The prohibition on shipping it as an ACP backend is untouched.)
 
 Two facts this table exists to make obvious:
 
