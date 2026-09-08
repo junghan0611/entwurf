@@ -342,8 +342,8 @@ started on and aborts with `origin HEAD changed during qualification` if that mo
 that arrives mid-run (including one from GLG) until the gate reports its verdict.
 
 **When the gate reports its verdict, run P9 before doing anything else.** This is the
-heaviest resource event in the whole release — the full floor, `check-gate-qualification`
-and every LIVE smoke on one host — and it is where residue is BOTH largest and freshest,
+heaviest resource event in the whole release (the full floor, `check-gate-qualification`
+and every LIVE smoke on one host), and it is where residue is BOTH largest and freshest,
 so the prefix a leak carries still names the gate that produced it. Do it here, not only
 at P8: by P8 the trail is cold. Report the P9 numbers together with the gate's own
 verdict; a large residue at this point is a finding about a gate, not housekeeping.
@@ -405,7 +405,7 @@ what they leave behind is invisible until a disk fills. Measure it on the host t
 just ran them, and reclaim only what nothing is using.
 
 A gate that ends RED ends by THROWING, so any teardown written as its last statement is
-skipped — that is how `oracle` reached ~9,200 stale roots and 3.8G under `/tmp` before
+skipped. That is how `oracle` reached ~9,200 stale roots and 3.8G under `/tmp` before
 2026-09-08. Gates now register their roots with `scripts/lib/reclaim-on-exit.ts`, so this
 step should find LITTLE. A large number here is not routine housekeeping: it names a gate
 that still reclaims on its last line, or a fixture child with no parent-death watchdog.
@@ -413,14 +413,14 @@ Report the prefix, do not just delete it.
 
 **Census prefix-blind; delete by a prefix this repo can prove it owns.** The first
 version of this step looked only at `entwurf-*` and reported a clean host while 5,329
-roots sat under `psa-*`, `acp-*` and `omp-*` — a census that only counts what it already
+roots sat under `psa-*`, `acp-*` and `omp-*`: a census that only counts what it already
 suspects will always confirm the fix it was written for. So the report below counts every
 directory this operator owns under `/tmp`, while the DELETE list is derived from the
 gates' own `mkdtempSync` prefixes at run time. A hand-kept name list would rot on the
 next gate; a prefix-blind `rm` would take `nix-shell`, editor and toolchain state that is
 not ours.
 
-Report — read-only, prefix-blind, and never counts a root some live process is using:
+Report (read-only, prefix-blind, and never counts a root some live process is using):
 
 ```bash
 mapfile -t IN_USE < <({ ps -eo args --no-headers | grep -oE '/tmp/[A-Za-z0-9._-]+';
@@ -434,8 +434,8 @@ ps -eo pid,ppid,args --no-headers | awk '$2==1' | grep -cF '/tmp/'
 The last line counts REPARENTED processes holding a `/tmp` path. A non-zero count is a
 finding, not debris: name the prefix to GLG before anything is killed.
 
-Reclaim — only prefixes the checkout itself mints, only roots older than the run, only
-roots nothing holds:
+Reclaim (only prefixes the checkout itself mints, only roots older than the run, only
+roots nothing holds):
 
 ```bash
 mapfile -t OWNED < <(grep -rhoE 'mkdtempSync\(\s*(path\.)?join\([^"]*tmpdir\(\)[^"]*"[^"]+"' scripts test |
