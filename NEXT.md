@@ -103,7 +103,15 @@ CHANGELOG `## Unreleased`가 구현 범위 `v0.15.1..19ad90c` **30커밋** 전�
       독립 검수(pi `zai/glm-5.3`)가 두 번째를 **다른 레인에서** 찾아왔고, 첫 컷의 `MUTANT-STALE` 이 조용히 무효가 된 뮤턴트의 출하를 막았다.
       인벤토리 382 → **385**. #105 는 닫혔고 ②③ 는 sorge#8·#9 로, 잔여 관측은 sorge#7·#10 으로 나갔다.
 
-현재 좌표: 1–21 완료 → **22. ACP fable 지원 랜딩·푸시 완료**(`9816618`, 2026-09-08). #109 openclaw 다리는 **닫혔다**(요청자가 컨테이너를 나왔다) · **0.16.1 make는 열린 채 PAUSED**.
+- [x] **23. #78 First evidence 착지 — Cortex overlay `realHome` 가드 flavor 명시 + kill-proof 게이트** — 브랜치 `fix/78-realhome-flavor`
+      → main fast-forward (`d67aff9`, 2026-09-08 22:xx KST). GLG 가 세운 팀: 코디네이터 fable `20260908T211235-485de8` · 구현 Opus
+      `20260908T211458-5bbccd` · 검수 terra `20260908T212236-d157ee`(Blocker 0/Defect 0/Observation 0) · 판례 조사 Sonnet `20260908T221802-3e8543`.
+      영수증(구현자 measured, oracle): qualification **388/388 KILLED** 2454s(`CORTEX-REALHOME-PLATFORM-NEUTRAL: KILLED in 0.6s`) ·
+      `check:full` exit 0 450s(첫 실행은 gitignore `dist/` mtime 으로 `check-bridge-delivery` 붉음 → NEXT 규율대로 `build-bridge` 후 재실행, candidate 불변).
+      **워크트리 금지·브랜치 작업**(GLG 결정, #110 이 그 자리를 비켜간 근거). PR #77(@yizixu) 은 이 SHA 로 close + 답글 + CHANGELOG credit(PR #40 선례).
+      주장 범위: 가드가 더 이상 POSIX 전용이 아님(게이트 증명). **native Windows 지원 주장 없음** — #78 나머지 셀은 물리 호스트 필요, #78 은 열린 채.
+
+현재 좌표: 1–23 완료 → **22. ACP fable 지원 랜딩·푸시 완료**(`9816618`, 2026-09-08). #109 openclaw 다리는 **닫혔다**(요청자가 컨테이너를 나왔다) · **0.16.1 make는 열린 채 PAUSED**.
 푸시·태그는 `entwurf-release` 4모드 몫이다 (CalVer `tag-release`가 아님).
 
 # NOW — stem: ACP `claude-fable-5-1` 지원 (GLG, 2026-09-08: "entwurf acp fable 지원을 넣어줘. 그래야 계속 부를 수 있어")
@@ -116,6 +124,7 @@ CHANGELOG `## Unreleased`가 구현 범위 `v0.15.1..19ad90c` **30커밋** 전�
   · **claim 둘**(`CORTEX-PROVIDER-SIX-ROW-SURFACE` → `…EXACT-ROW-SURFACE` 개명, `CLAUDE-CURATED-THREE-ROWS` 신설 + 뮤턴트 1개)
   · 인벤토리 `acp-cortex` 12→13, 총 **386 → 387** · README·`docs/acp-backend-rail.md:200`·CHANGELOG.
   열린 이슈 8 — 구현 5/5(97·78·76·106·108), research 3(95·88·107). **#109 닫으며 상한 복귀.**
+  **갱신 2026-09-08 22:xx:** #97·#106 CLOSED NOT_PLANNED, #110 OPEN(개발환경 결함, 사용자층 축 안 막음 — sorge·코디네이터 재측정 `npm pack --dry-run` 에 `.pi/` 0건). 구현 5/5 = #110 #108 #95 #78 #76 · research #107 #88 · OPEN 7/10. 다음 값싼 칸 후보: #95(codex 0.147 raw probe 재측정).
 - **랜딩 영수증 (oracle, 2026-09-08):** `check-gate-qualification` **387/387 KILLED** exit 0(40m, 뮤턴트 매니페스트 공백 재포맷 직전 candidate — claim/subject/find/replace 바이트 동일) ·
   `pnpm run check:full` exit 0 **452s**(커밋된 candidate) · `check-pack-install` 단독 exit 0(`exact curated set: claude 3 + cortex 4`) ·
   **exact-SHA CI PASS** run [`34215718330`](https://github.com/junghan0611/entwurf/actions/runs/34215718330) `event=push`, 3잡 전부 success,
