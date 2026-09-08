@@ -52,6 +52,7 @@ import {
 	serializeMetaIdentity,
 } from "../pi-extensions/lib/meta-session.ts";
 import { birthPiCitizen } from "../pi-extensions/lib/pi-citizen-birth.ts";
+import { reclaimOnExit } from "./lib/reclaim-on-exit.ts";
 
 let passed = 0;
 function ok(label: string, cond: boolean): void {
@@ -103,7 +104,7 @@ const v2Body = `${JSON.stringify(
 
 /** Run `body` against a store dir seeded by `seed`, then remove it. */
 function withStore(seed: (dir: string) => void, body: (dir: string) => void): void {
-	const dir = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "psa-idcons-case-"));
+	const dir = reclaimOnExit(fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "psa-idcons-case-")));
 	try {
 		seed(dir);
 		body(dir);
@@ -129,7 +130,7 @@ const record = (dir: string, gardenId: string, nativeSessionId: string): void =>
 	write(dir, `${gardenId}.meta.json`, serializeMetaIdentity(identity(gardenId, nativeSessionId)));
 const recordCount = (dir: string): number => fs.readdirSync(dir).filter((f) => f.endsWith(".meta.json")).length;
 
-const dir = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "psa-idcons-"));
+const dir = reclaimOnExit(fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "psa-idcons-")));
 try {
 	record(dir, GID_A, "native-a");
 	record(dir, GID_B, "native-b");
@@ -355,7 +356,7 @@ withStore(
 // entries with the right kind. A pure-only proof would have passed while the fs path
 // still did a bare-name readdir and followed symlinks — which is exactly what shipped.
 {
-	const tmp = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "psa-idcons-addr-"));
+	const tmp = reclaimOnExit(fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "psa-idcons-addr-")));
 	try {
 		// A symlink whose target lives OUTSIDE the store and holds the same native id.
 		const dir = path.join(tmp, "symlink-store");
@@ -444,7 +445,7 @@ withStore(
 // into foreign bytes while every "is it a symlink" test on a settled store stayed green.
 // A plain already-a-symlink read cannot fail that way, so it cannot prove this.
 {
-	const tmp = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "psa-idcons-toctou-"));
+	const tmp = reclaimOnExit(fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "psa-idcons-toctou-")));
 	try {
 		const dir = path.join(tmp, "store");
 		const outside = path.join(tmp, "outside");
@@ -700,7 +701,7 @@ withStore(
 // where they live and a probe of this directory cannot certify them.
 withStore(
 	(dir) => {
-		const outside = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "psa-idcons-outside-"));
+		const outside = reclaimOnExit(fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "psa-idcons-outside-")));
 		fs.writeFileSync(path.join(outside, "real.json"), serializeMetaIdentity(identity(GID_C, "native-symlinked")));
 		fs.symlinkSync(path.join(outside, "real.json"), path.join(dir, `${GID_C}.meta.json`));
 	},
@@ -889,7 +890,7 @@ withStore(
 // clean "no such citizen" — the fail-open shape (2026-07-25 fresh-eyes review). ENOENT
 // alone is absence; a broken store SHAPE (ENOTDIR here) is a failure to inspect.
 {
-	const tmp = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "psa-idcons-shape-"));
+	const tmp = reclaimOnExit(fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "psa-idcons-shape-")));
 	try {
 		const brokenStore = path.join(tmp, "store-is-actually-a-file");
 		fs.writeFileSync(brokenStore, "not a store\n");
@@ -927,7 +928,7 @@ withStore(
 // — the doctor and the install preflight would call an unreadable host clean. ENOENT
 // alone is an absent store (a host that never had a generation is not broken).
 {
-	const tmp = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "psa-idcons-unreadable-"));
+	const tmp = reclaimOnExit(fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "psa-idcons-unreadable-")));
 	try {
 		ok(
 			"an absent store still certifies as empty (ENOENT alone)",

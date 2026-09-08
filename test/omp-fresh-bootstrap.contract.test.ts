@@ -715,6 +715,7 @@ describe("defect 1 — a birth edge ends the epoch, and the native id is not the
 		// than a claim it has to trust. The hook log resolves under the same root.
 		const store = fs.mkdtempSync(path.join(os.tmpdir(), "omp-epoch-"));
 		const sessionsDir = path.join(store, "meta-sessions");
+		let sessionsExisted = true;
 		const previous = process.env.ENTWURF_META_SESSIONS_DIR;
 		process.env.ENTWURF_META_SESSIONS_DIR = sessionsDir;
 		try {
@@ -724,14 +725,18 @@ describe("defect 1 — a birth edge ends the epoch, and the native id is not the
 		} finally {
 			if (previous === undefined) delete process.env.ENTWURF_META_SESSIONS_DIR;
 			else process.env.ENTWURF_META_SESSIONS_DIR = previous;
+			// Read the fact and reclaim the root in the SAME finally: the assertions below
+			// throw on failure, and a removal written after them is skipped on exactly the
+			// runs that matter. `store` outlives the read only as a boolean.
+			sessionsExisted = fs.existsSync(sessionsDir);
+			fs.rmSync(store, { recursive: true, force: true });
 		}
 
 		fx.emit("turn_end", {});
 		// One message ever left: the callback-only prompt. The task died with the epoch.
 		expect(fx.sent).toHaveLength(1);
 		// And the bail really was a bail — no record store came into existence.
-		expect(fs.existsSync(sessionsDir)).toBe(false);
-		fs.rmSync(store, { recursive: true, force: true });
+		expect(sessionsExisted).toBe(false);
 	});
 });
 

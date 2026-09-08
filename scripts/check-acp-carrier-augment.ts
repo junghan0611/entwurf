@@ -31,8 +31,9 @@ import { loadEngraving } from "../pi-extensions/lib/acp/engraving.ts";
 import { bridgeConfigSignature, contextMessageSignatures } from "../pi-extensions/lib/acp/session-store.ts";
 import { buildClaudeSessionMeta } from "../pi-extensions/lib/acp/tool-surface.ts";
 import { ENTWURF_PROJECT_CONTEXT_OPEN_TAG } from "../protocol.js";
+import { reclaimOnExit } from "./lib/reclaim-on-exit.ts";
 
-const tmp = mkdtempSync(join(tmpdir(), "acp-carrier-augment-"));
+const tmp = reclaimOnExit(mkdtempSync(join(tmpdir(), "acp-carrier-augment-")));
 const REPO_DIR = fileURLToPath(new URL("..", import.meta.url));
 const BRIDGE_MARK = "operating through entwurf";
 
@@ -241,8 +242,8 @@ function ctxWith(firstUser: string): Context {
 //          absent → keep it. Home AGENTS.md always survives.
 // ===========================================================================
 {
-	const home = mkdtempSync(join(tmpdir(), "acp-home-"));
-	const proj = mkdtempSync(join(tmpdir(), "acp-proj-"));
+	const home = reclaimOnExit(mkdtempSync(join(tmpdir(), "acp-home-")));
+	const proj = reclaimOnExit(mkdtempSync(join(tmpdir(), "acp-proj-")));
 	writeFileSync(join(home, "AGENTS.md"), "HOME-AGENTS-CONTENT");
 	writeFileSync(join(proj, "AGENTS.md"), "CWD-AGENTS-CONTENT");
 
@@ -295,7 +296,7 @@ function ctxWith(firstUser: string): Context {
 	assert.match(dateLine as string, /^Current date: \d{4}-\d{2}-\d{2}$/, "date is day-granularity only (no clock time)");
 
 	// > 50KB cwd AGENTS.md → augment truncated with the marker.
-	const bigHome = mkdtempSync(join(tmpdir(), "acp-big-"));
+	const bigHome = reclaimOnExit(mkdtempSync(join(tmpdir(), "acp-big-")));
 	writeFileSync(join(bigHome, "AGENTS.md"), "X".repeat(80 * 1024));
 	const big = buildPiContextAugment({ backend: "claude", cwd: tmp, mcpServerNames: [], homeDir: bigHome });
 	assert.ok(Buffer.byteLength(big, "utf8") <= 50 * 1024, "augment is truncated to the 50KB cap");
@@ -313,7 +314,7 @@ function ctxWith(firstUser: string): Context {
 //    remains an honest fallback; the maintained package prompt must not hit it.
 // ===========================================================================
 {
-	const budgetHome = mkdtempSync(join(tmpdir(), "acp-budget-home-"));
+	const budgetHome = reclaimOnExit(mkdtempSync(join(tmpdir(), "acp-budget-home-")));
 	writeFileSync(join(budgetHome, "AGENTS.md"), "H".repeat(12 * 1024));
 	const actual = buildPiContextAugment({
 		backend: "claude",

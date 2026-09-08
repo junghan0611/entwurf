@@ -41,6 +41,7 @@ import {
 	startKeyScheme,
 	writeMetaReceiverMarker,
 } from "../pi-extensions/lib/meta-session.ts";
+import { reclaimOnExit } from "./lib/reclaim-on-exit.ts";
 
 let passed = 0;
 function ok(label: string, cond: boolean): void {
@@ -50,7 +51,7 @@ function ok(label: string, cond: boolean): void {
 }
 
 const REPO_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const DIR = mkdtempSync(path.join(tmpdir(), "psa-meta-receivers-"));
+const DIR = reclaimOnExit(mkdtempSync(path.join(tmpdir(), "psa-meta-receivers-")));
 const GARDEN = "20260614T120000-aaaaaa";
 
 // ── write → read round-trip, garden-id keyed ────────────────────────────────

@@ -45,6 +45,7 @@ import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSyn
 import { tmpdir } from "node:os";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
+import { reclaimOnExit } from "./lib/reclaim-on-exit.ts";
 
 let passed = 0;
 function ok(label: string, cond: boolean): void {
@@ -272,7 +273,7 @@ function hookEnv(agentRoot: string, pluginRoot: string): NodeJS.ProcessEnv {
 }
 
 function driveHook(label: string, pluginRoot: string, nativeSessionId: string): void {
-	const agentRoot = mkdtempSync(path.join(tmpdir(), "psa-hook-topology-"));
+	const agentRoot = reclaimOnExit(mkdtempSync(path.join(tmpdir(), "psa-hook-topology-")));
 	const leaf = leafOf("SessionStart");
 	const exe = resolveEl(leaf.command ?? "", pluginRoot);
 	const argv = (leaf.args ?? []).map((a) => resolveEl(a, pluginRoot));
@@ -317,7 +318,7 @@ function driveHook(label: string, pluginRoot: string, nativeSessionId: string): 
 }
 
 {
-	const plain = mkdtempSync(path.join(tmpdir(), "psa-hook-bundle-"));
+	const plain = reclaimOnExit(mkdtempSync(path.join(tmpdir(), "psa-hook-bundle-")));
 	makeBundle(plain);
 	driveHook("exec direct topology", plain, "native-exec-direct");
 }
@@ -329,7 +330,7 @@ function driveHook(label: string, pluginRoot: string, nativeSessionId: string): 
 // path was pasted into a command string and would have been word-split or
 // command-substituted; under exec form each element is one opaque argv slot.
 {
-	const holder = mkdtempSync(path.join(tmpdir(), "psa-hook-meta-"));
+	const holder = reclaimOnExit(mkdtempSync(path.join(tmpdir(), "psa-hook-meta-")));
 	const nasty = path.join(holder, "plug in $HOME `id` ;& dir");
 	makeBundle(nasty);
 	ok("metachar fixture root really contains space/$/backtick/;&", /[ $`;&]/.test(path.basename(nasty)));
@@ -345,9 +346,9 @@ function driveHook(label: string, pluginRoot: string, nativeSessionId: string): 
 // it. The launcher's provenance token is what makes this fail CLOSED — the record still
 // lands (best-effort, as always), but no presence is claimed that cannot be backed.
 {
-	const pluginRoot = mkdtempSync(path.join(tmpdir(), "psa-hook-oldcmd-"));
+	const pluginRoot = reclaimOnExit(mkdtempSync(path.join(tmpdir(), "psa-hook-oldcmd-")));
 	makeBundle(pluginRoot);
-	const agentRoot = mkdtempSync(path.join(tmpdir(), "psa-hook-oldcmd-agent-"));
+	const agentRoot = reclaimOnExit(mkdtempSync(path.join(tmpdir(), "psa-hook-oldcmd-agent-")));
 	const result = spawnSync(process.execPath, [path.join(pluginRoot, "meta-bridge-hook.ts")], {
 		encoding: "utf8",
 		input: JSON.stringify({

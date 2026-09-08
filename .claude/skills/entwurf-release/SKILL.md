@@ -341,6 +341,13 @@ started on and aborts with `origin HEAD changed during qualification` if that mo
 ~50-minute run. Editing the working tree is harmless; moving HEAD is not. Queue any commit request
 that arrives mid-run (including one from GLG) until the gate reports its verdict.
 
+**When the gate reports its verdict, run P9 before doing anything else.** This is the
+heaviest resource event in the whole release — the full floor, `check-gate-qualification`
+and every LIVE smoke on one host — and it is where residue is BOTH largest and freshest,
+so the prefix a leak carries still names the gate that produced it. Do it here, not only
+at P8: by P8 the trail is cold. Report the P9 numbers together with the gate's own
+verdict; a large residue at this point is a finding about a gate, not housekeeping.
+
 ## P6. Apply release-specific pre-commit acceptance
 
 `NEXT.md` and `VERIFY.md` may require gates beyond `pnpm run check:full` and the LIVE
@@ -385,6 +392,73 @@ Report:
 - actual `BEHAVIOR: PASS=n FAIL=n`
 - release-specific work deliberately deferred to `make`
 - clean-tree result
+- host residue before and after P9, by prefix
+
+## P9. Reclaim the host
+
+Run this **twice**: once the moment P5's release gate reports its verdict (freshest
+trail, largest residue), and again here at the end of `prepare`. `publish` calls it a
+third time after U3. It is the same procedure each time.
+
+The floor and the LIVE gates are the heaviest resource consumers this repo has, and
+what they leave behind is invisible until a disk fills. Measure it on the host that
+just ran them, and reclaim only what nothing is using.
+
+A gate that ends RED ends by THROWING, so any teardown written as its last statement is
+skipped — that is how `oracle` reached ~9,200 stale roots and 3.8G under `/tmp` before
+2026-09-08. Gates now register their roots with `scripts/lib/reclaim-on-exit.ts`, so this
+step should find LITTLE. A large number here is not routine housekeeping: it names a gate
+that still reclaims on its last line, or a fixture child with no parent-death watchdog.
+Report the prefix, do not just delete it.
+
+**Census prefix-blind; delete by a prefix this repo can prove it owns.** The first
+version of this step looked only at `entwurf-*` and reported a clean host while 5,329
+roots sat under `psa-*`, `acp-*` and `omp-*` — a census that only counts what it already
+suspects will always confirm the fix it was written for. So the report below counts every
+directory this operator owns under `/tmp`, while the DELETE list is derived from the
+gates' own `mkdtempSync` prefixes at run time. A hand-kept name list would rot on the
+next gate; a prefix-blind `rm` would take `nix-shell`, editor and toolchain state that is
+not ours.
+
+Report — read-only, prefix-blind, and never counts a root some live process is using:
+
+```bash
+mapfile -t IN_USE < <({ ps -eo args --no-headers | grep -oE '/tmp/[A-Za-z0-9._-]+';
+  for l in /proc/[0-9]*/cwd; do readlink "$l" 2>/dev/null; done; } |
+  sed -E 's#(/tmp/[^/]+).*#\1#' | sort -u)
+census() { find /tmp -maxdepth 1 -user "$(id -un)" -type d "$@" 2>/dev/null; }
+census | sed -E 's#^(/tmp/[^/]*?)[.-][A-Za-z0-9]{6}$#\1#' | sort | uniq -c | sort -rn | head -20
+ps -eo pid,ppid,args --no-headers | awk '$2==1' | grep -cF '/tmp/'
+```
+
+The last line counts REPARENTED processes holding a `/tmp` path. A non-zero count is a
+finding, not debris: name the prefix to GLG before anything is killed.
+
+Reclaim — only prefixes the checkout itself mints, only roots older than the run, only
+roots nothing holds:
+
+```bash
+mapfile -t OWNED < <(grep -rhoE 'mkdtempSync\(\s*(path\.)?join\([^"]*tmpdir\(\)[^"]*"[^"]+"' scripts test |
+  grep -oE '"[^"]+"$' | tr -d '"' | sort -u)
+RESIDUE=$(mktemp -t entwurf-residue.XXXXXX)
+while IFS= read -r d; do
+  for u in "${IN_USE[@]:-}"; do [ "$d" = "$u" ] && continue 2; done
+  b=$(basename "$d")
+  for o in "${OWNED[@]}"; do case "$b" in "$o"*) printf '%s\n' "$d"; break ;; esac; done
+done < <(census -mmin +60 | sort) > "$RESIDUE"
+printf 'reclaimable roots: %d\n' "$(wc -l < "$RESIDUE")"
+du -sch --files0-from=<(tr '\n' '\0' < "$RESIDUE") 2>/dev/null | tail -1
+sed -E 's#^(/tmp/[^/]*?)[.-][A-Za-z0-9]{6}$#\1#' "$RESIDUE" | sort | uniq -c | sort -rn | head -20
+xargs -r -a "$RESIDUE" rm -rf --   # read the list above FIRST; it is the whole delete set
+rm -f "$RESIDUE"
+```
+
+Four fences make that safe and none is optional: `-user` keeps it to this operator,
+`-mmin +60` keeps it off a concurrently running gate, the in-use filter (argv AND
+`/proc/*/cwd`) keeps it off a root some process still holds, and `OWNED` keeps it to
+prefixes this checkout provably mints. Never widen it to a bare `rm -rf /tmp/*` or to
+the prefix-blind census list, and never kill reparented processes as a batch without
+naming their prefix first.
 
 End with both harness forms:
 
@@ -750,6 +824,10 @@ The output must include `entwurf` and the curated Claude anchors, with no
 `Unknown provider` or `No models matching` error. A failed registry smoke is a
 stop-and-classify event; do not notify downstream consumers.
 
+Then run **P9** again on this host: `publish` runs a registry install and a pi
+session of its own, and the release is not finished while its leftovers are still
+on the disk.
+
 For the current #51 contract, the final Linux recovery proof remains:
 
 1. Install the approved package on the maintainer and target host.
@@ -771,3 +849,4 @@ For the current #51 contract, the final Linux recovery proof remains:
 | Wrong local tag; not pushed | Delete the local tag and rerun preflight. |
 | Wrong pushed tag | Do not force; report to GLG. |
 | npm publish succeeded; registry smoke failed | Stop and classify; do not notify downstream consumers. |
+| P9 reports a large residue or any reparented `/tmp/entwurf-*` process | Name the prefix and its owning gate to GLG; reclaim the reported list only. A gate reclaiming on its last line is a defect to fix, not to sweep every release. |

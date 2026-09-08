@@ -13,6 +13,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
+import { reclaimOnExit } from "./lib/reclaim-on-exit.ts";
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const SCRIPT = path.join(REPO, "scripts", "copilot-statusline.sh");
@@ -27,7 +28,8 @@ function ok(label: string, cond: boolean): void {
 	passed++;
 }
 
-const root = mkdtempSync(path.join(tmpdir(), "entwurf-copilot-statusline."));
+const root = reclaimOnExit(mkdtempSync(path.join(tmpdir(), "entwurf-copilot-statusline.")));
+
 const home = path.join(root, "home");
 const store = path.join(root, "meta-sessions");
 mkdirSync(home);

@@ -52,6 +52,7 @@ import { resolveFactList } from "../pi-extensions/lib/entwurf-facts.ts";
 import { nativePushSupported } from "../pi-extensions/lib/entwurf-v2-contract.ts";
 import { META_SENDER_BACKENDS, resolveTrustedMetaSenderIdentity } from "../pi-extensions/lib/meta-sender-identity.ts";
 import { listAllMetaIdentitiesDir, processStartKey } from "../pi-extensions/lib/meta-session.ts";
+import { reclaimOnExit } from "./lib/reclaim-on-exit.ts";
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const PLUGIN = "entwurf-meta-receive-copilot";
@@ -63,7 +64,8 @@ function ok(label: string, cond: boolean): void {
 	passed++;
 }
 
-const root = mkdtempSync(path.join(tmpdir(), "entwurf-copilot-birth."));
+const root = reclaimOnExit(mkdtempSync(path.join(tmpdir(), "entwurf-copilot-birth.")));
+
 const asm = path.join(root, "asm");
 
 // ── 1. the real assembler ────────────────────────────────────────────────────

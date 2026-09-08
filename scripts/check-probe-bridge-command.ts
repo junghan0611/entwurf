@@ -13,6 +13,7 @@ import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { reclaimOnExit } from "./lib/reclaim-on-exit.ts";
 import { EXPECTED_TOOLS, probeBridgeCommand } from "./probe-bridge-command.ts";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -32,7 +33,8 @@ function ok(label: string, cond: boolean, detail?: string): void {
 	passed++;
 }
 
-const dir = mkdtempSync(join(tmpdir(), "entwurf-probe-gate-"));
+const dir = reclaimOnExit(mkdtempSync(join(tmpdir(), "entwurf-probe-gate-")));
+
 const stub = (name: string, body: string): string => {
 	const p = join(dir, name);
 	writeFileSync(p, body);

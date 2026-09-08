@@ -66,6 +66,7 @@ import {
 	validateManifest,
 	validateManifestSet,
 } from "./lib/mutation-qualify.ts";
+import { reclaimOnExit } from "./lib/reclaim-on-exit.ts";
 
 const REPO_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MUTANTS_DIR = path.join(REPO_DIR, "scripts", "mutants");
@@ -135,7 +136,7 @@ function checkVitestAttribution(): void {
 		],
 	});
 
-	const dir = fs.mkdtempSync(path.join(os.tmpdir(), "entwurf-attribution-selftest-"));
+	const dir = reclaimOnExit(fs.mkdtempSync(path.join(os.tmpdir(), "entwurf-attribution-selftest-")));
 	const reportPath = path.join(dir, "vitest-report.json");
 	try {
 		fs.writeFileSync(reportPath, report);
@@ -422,10 +423,10 @@ if (process.argv.includes("--attribution-self-test")) {
 // ═══ Phase 1c — the pipeline over a synthetic fixture repo ══════════════════
 
 function buildFixtureOrigin(): { dir: string; externalTarget: string } {
-	const dir = fs.mkdtempSync(path.join(os.tmpdir(), "entwurf-qualify-fixture-"));
+	const dir = reclaimOnExit(fs.mkdtempSync(path.join(os.tmpdir(), "entwurf-qualify-fixture-")));
 	// A file OUTSIDE the fixture repo, reachable only through a tracked symlink — the
 	// P0-1 escape shape: mutating `linked.txt` would write THIS file.
-	const externalDir = fs.mkdtempSync(path.join(os.tmpdir(), "entwurf-qualify-external-"));
+	const externalDir = reclaimOnExit(fs.mkdtempSync(path.join(os.tmpdir(), "entwurf-qualify-external-")));
 	const externalTarget = path.join(externalDir, "external-target.txt");
 	fs.writeFileSync(externalTarget, "original-line outside the sandbox\n");
 	const write = (rel: string, body: string, mode = 0o644): void => {
@@ -745,7 +746,7 @@ const quiet = (): void => {};
 
 		// pgroup kill: the grandchild really dies on this host (hardening #6, Linux axis).
 		{
-			const invocationDir = fs.mkdtempSync(path.join(os.tmpdir(), "entwurf-qualify-pgk-"));
+			const invocationDir = reclaimOnExit(fs.mkdtempSync(path.join(os.tmpdir(), "entwurf-qualify-pgk-")));
 			const pidFile = path.join(invocationDir, "grandchild.pid");
 			const script = path.join(invocationDir, "spawner.sh");
 			fs.writeFileSync(script, `#!/usr/bin/env bash\nsleep 300 & echo $! > ${JSON.stringify(pidFile)}\nwait\n`);
@@ -773,7 +774,7 @@ const quiet = (): void => {};
 
 		// Stale-snapshot sweep: dead-pid residue is reclaimed, a live runner's dir survives.
 		{
-			const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), "entwurf-qualify-sweep-"));
+			const tmpRoot = reclaimOnExit(fs.mkdtempSync(path.join(os.tmpdir(), "entwurf-qualify-sweep-")));
 			const deadDir = path.join(tmpRoot, "entwurf-qualify-dead1");
 			fs.mkdirSync(deadDir);
 			fs.writeFileSync(path.join(deadDir, "runner.json"), JSON.stringify({ pid: 999_999_999, startedAt: 0 }));
@@ -833,7 +834,7 @@ let manifestCount: number;
 		"capability-cache": 3,
 		"copilot-birth": 19,
 		"copilot-launch": 14,
-		"copilot-receive": 18,
+		"copilot-receive": 19,
 		"fresh-cut": 3,
 		"gate-qualification": 2,
 		"meta-facts": 4,

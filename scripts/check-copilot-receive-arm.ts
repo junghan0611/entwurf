@@ -60,6 +60,7 @@ import {
 	upsertMetaSession,
 	writeMetaSenderMarker,
 } from "../pi-extensions/lib/meta-session.ts";
+import { killOnExit, reclaimNow, reclaimOnExit } from "./lib/reclaim-on-exit.ts";
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const UNIT = "entwurf-receive";
@@ -90,7 +91,7 @@ async function waitUntil(fn: () => boolean, ms = 15000): Promise<boolean> {
 	}
 }
 
-const root = mkdtempSync(path.join(tmpdir(), "entwurf-copilot-receive."));
+const root = reclaimOnExit(mkdtempSync(path.join(tmpdir(), "entwurf-copilot-receive.")));
 const home = path.join(root, "home");
 const store = path.join(root, "agent");
 const extRoot = path.join(root, "extensions");
@@ -260,6 +261,30 @@ writeFileSync(
 	path.join(stubDir, "register.mjs"),
 	`import { register } from "node:module";
 register("./loader.mjs", import.meta.url);
+// The vendor half this fixture MUST model. Production children are started by the CLI's
+// own bootstrap (\`preloads/extension_bootstrap.mjs\`), which exits the extension when its
+// parent disappears — checked at startup and then once a second — and the receiver's
+// owner-pid contract is built on that. A stub that omitted it made the fixture MORE
+// permissive than production: the stub's referenced timer kept every child alive after
+// the gate died, so each red run reparented its children to pid 1 forever (measured
+// 2026-09-07/08 on \`oracle\`: 360 such node processes, 720 temp roots). The check is
+// \`unref\`ed so it never becomes the reason a child stays up.
+//
+// KNOWN-OPEN, deliberately: under a subreaper (\`PR_SET_CHILD_SUBREAPER\`, systemd-run)
+// a parent that dies before this module's FIRST tick is already reparented to a LIVE
+// subreaper, so \`parentAtStart\` records that pid and never changes again. The obvious
+// patch — probing the recorded pid with signal 0 — closes nothing: Linux reparents in
+// \`forget_original_parent()\` BEFORE the old pid becomes unreachable, and a zombie
+// parent still answers signal 0, so the probe is false at startup in exactly the case
+// it was written for. The honest close is to watch the DECLARED parent
+// (\`COPILOT_EXTENSION_PARENT_PID\`), which this gate deliberately sets to a pid that is
+// not the child's real parent, so it is left documented rather than half-fixed. The
+// window is microseconds and no measured orphan on this host came through it.
+const parentAtStart = process.ppid;
+if (parentAtStart === 1) process.exit(0);
+setInterval(() => {
+	if (process.ppid !== parentAtStart) process.exit(0);
+}, 1000).unref();
 `,
 );
 
@@ -274,23 +299,25 @@ interface Harness {
 function launch(label: string, sessionId: string, extra: NodeJS.ProcessEnv = {}): Harness {
 	const box = path.join(root, `box-${label}`);
 	mkdirSync(box, { recursive: true });
-	const child = spawn(process.execPath, ["--import", path.join(stubDir, "register.mjs"), entry], {
-		env: {
-			...process.env,
-			HOME: home,
-			PI_CODING_AGENT_DIR: store,
-			STUB_BOX: box,
-			STUB_SDK: path.join(stubDir, "extension.js"),
-			STUB_SESSION_ID: sessionId,
-			SESSION_ID: sessionId,
-			// The vendor's carrier. This gate process IS the fork parent, which is also
-			// what makes the sender-marker join real rather than mocked: the marker below
-			// is written under the very pid the child will look itself up by.
-			COPILOT_EXTENSION_PARENT_PID: String(process.pid),
-			...extra,
-		},
-		stdio: ["ignore", "pipe", "pipe"],
-	});
+	const child = killOnExit(
+		spawn(process.execPath, ["--import", path.join(stubDir, "register.mjs"), entry], {
+			env: {
+				...process.env,
+				HOME: home,
+				PI_CODING_AGENT_DIR: store,
+				STUB_BOX: box,
+				STUB_SDK: path.join(stubDir, "extension.js"),
+				STUB_SESSION_ID: sessionId,
+				SESSION_ID: sessionId,
+				// The vendor's carrier. This gate process IS the fork parent, which is also
+				// what makes the sender-marker join real rather than mocked: the marker below
+				// is written under the very pid the child will look itself up by.
+				COPILOT_EXTENSION_PARENT_PID: String(process.pid),
+				...extra,
+			},
+			stdio: ["ignore", "pipe", "pipe"],
+		}),
+	);
 	child.stdout?.resume();
 	child.stderr?.resume();
 	return {
@@ -725,10 +752,69 @@ ok(
 	);
 }
 
-// ── 10. the installer's honest inverse ───────────────────────────────────────
+// ── 10. the fixture dies with its parent, like the vendor's child does ───────
+// This gate spawns real Node children that hold a referenced timer, so "the gate
+// stopped" and "the gate's children stopped" are two different facts. Production gets
+// the second one from the CLI's bootstrap; the stub loader has to supply it here, or a
+// red run (which ends by throwing, long before any cleanup statement) leaves a process
+// per launch on the host forever. Orphan one deliberately and require it to leave on
+// its own. The intermediate `bash` holds the child for two seconds first: a child whose
+// parent is ALREADY gone when its loader runs leaves at the watchdog's startup check,
+// which proves nothing about a session that was live when the gate died.
+{
+	const orphanBox = path.join(root, "box-orphan");
+	mkdirSync(orphanBox, { recursive: true });
+	const pidFile = path.join(root, "orphan.pid");
+	const ORPHAN_SESSION = "cop-recv-orphan";
+	spawnSync(
+		"bash",
+		[
+			"-c",
+			`${JSON.stringify(process.execPath)} --import ${JSON.stringify(path.join(stubDir, "register.mjs"))} ` +
+				`${JSON.stringify(entry)} </dev/null >/dev/null 2>&1 & echo $! > ${JSON.stringify(pidFile)}; sleep 2`,
+		],
+		{
+			env: {
+				...process.env,
+				HOME: home,
+				PI_CODING_AGENT_DIR: store,
+				STUB_BOX: orphanBox,
+				STUB_SDK: path.join(stubDir, "extension.js"),
+				STUB_SESSION_ID: ORPHAN_SESSION,
+				SESSION_ID: ORPHAN_SESSION,
+				COPILOT_EXTENSION_PARENT_PID: String(process.pid),
+			},
+			stdio: "ignore",
+		},
+	);
+	const orphanPid = Number(readFileSync(pidFile, "utf8").trim());
+	// Non-vacuity: it is only evidence if the process it names actually reached the
+	// same live state every other child in this gate reaches. Its log line is written
+	// during boot and outlives it, so reading it after the exit is not a race.
+	const booted = await waitUntil(() => {
+		const f = path.join(store, "meta-bridge-receive-copilot.log");
+		return existsSync(f) && readFileSync(f, "utf8").includes(`joined session=${ORPHAN_SESSION}`);
+	});
+	ok("the orphaned child booted the real unit (so its exit below is not a startup crash)", booted);
+	const gone = await waitUntil(() => {
+		try {
+			process.kill(orphanPid, 0);
+			return false;
+		} catch {
+			return true; // ESRCH — the pid is gone
+		}
+	});
+	ok(
+		"[QK:COPILOT-RECEIVE-STUB-CHILD-DIES-WITH-PARENT] a fixture child whose parent disappeared exits by " +
+			"itself — no pid-1 receiver survives a red or interrupted run",
+		gone,
+	);
+	if (!gone) process.kill(orphanPid, "SIGKILL");
+}
+
+// ── 11. the installer's honest inverse ───────────────────────────────────────
 execFileSync("bash", [path.join(REPO, "run.sh"), "uninstall-copilot-receive"], { env: installEnv, stdio: "pipe" });
 ok("uninstall removes the unit it installed and clears its state", !existsSync(unitDir) && !existsSync(stateFile));
 
-for (const c of running) c.kill("SIGKILL");
-rmSync(root, { recursive: true, force: true });
+reclaimNow();
 console.log(`\n[check-copilot-receive-arm] PASS (${passed} assertions)`);

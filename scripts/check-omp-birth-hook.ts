@@ -51,6 +51,7 @@ import {
 	processStartKey,
 	readMetaReceiverMarker,
 } from "../pi-extensions/lib/meta-session.ts";
+import { reclaimOnExit } from "./lib/reclaim-on-exit.ts";
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const UNIT = "entwurf-meta-omp";
@@ -62,7 +63,8 @@ function ok(label: string, cond: boolean): void {
 	passed++;
 }
 
-const root = mkdtempSync(path.join(tmpdir(), "entwurf-omp-birth."));
+const root = reclaimOnExit(mkdtempSync(path.join(tmpdir(), "entwurf-omp-birth.")));
+
 const asm = path.join(root, "asm");
 
 // ── 1. the real assembler ────────────────────────────────────────────────────
@@ -1045,5 +1047,4 @@ for (const cell of ROOT_CELLS) {
 	);
 }
 
-rmSync(root, { recursive: true, force: true });
 console.log(`[check-omp-birth-hook] ${passed} assertions ok`);

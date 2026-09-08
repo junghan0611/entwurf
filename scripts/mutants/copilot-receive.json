@@ -258,6 +258,21 @@
 			"timeoutSeconds": 300,
 			"signature": "[QK:COPILOT-RECEIVE-DOCTOR-PI-CARRIER-IS-RED]",
 			"signatureSource": "scripts/check-copilot-receive-arm.ts"
+		},
+		{
+			"claim": "COPILOT-RECEIVE-STUB-CHILD-DIES-WITH-PARENT",
+			"title": "a stub child with no parent-death watchdog outlives the gate forever — measured on `oracle` as 360 reparented Node receivers, because a red gate exits by THROWING and never reaches any teardown written below it",
+			"subject": "scripts/check-copilot-receive-arm.ts",
+			"find": [
+				"if (parentAtStart === 1) process.exit(0);",
+				"setInterval(() => {",
+				"\tif (process.ppid !== parentAtStart) process.exit(0);"
+			],
+			"replace": ["void parentAtStart;", "setInterval(() => {", "\t/* the vendor bootstrap's parent check, removed */"],
+			"gate": ["bash", "run.sh", "check-copilot-receive-arm"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:COPILOT-RECEIVE-STUB-CHILD-DIES-WITH-PARENT]",
+			"signatureSource": "scripts/check-copilot-receive-arm.ts"
 		}
 	]
 }

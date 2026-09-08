@@ -70,6 +70,7 @@ import {
 	upsertMetaSession,
 	writeMetaReceiverMarker,
 } from "../pi-extensions/lib/meta-session.ts";
+import { reclaimOnExit } from "./lib/reclaim-on-exit.ts";
 
 let passed = 0;
 function ok(label: string, cond: boolean): void {
@@ -112,9 +113,9 @@ function resolveEl(value: string, pluginRoot: string): string {
 }
 
 // ── one sandbox for the whole switch story (the pid is what ties it together) ──
-const AGENT_ROOT = mkdtempSync(path.join(tmpdir(), "psa-hook-switch-agent-"));
-const PLUGIN_ROOT = mkdtempSync(path.join(tmpdir(), "psa-hook-switch-plugin-"));
-const CWD = mkdtempSync(path.join(tmpdir(), "psa-hook-switch-cwd-"));
+const AGENT_ROOT = reclaimOnExit(mkdtempSync(path.join(tmpdir(), "psa-hook-switch-agent-")));
+const PLUGIN_ROOT = reclaimOnExit(mkdtempSync(path.join(tmpdir(), "psa-hook-switch-plugin-")));
+const CWD = reclaimOnExit(mkdtempSync(path.join(tmpdir(), "psa-hook-switch-cwd-")));
 makeBundle(PLUGIN_ROOT);
 
 const ROOTS = {

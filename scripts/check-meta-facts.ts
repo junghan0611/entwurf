@@ -33,6 +33,7 @@ import {
 	type MetaIdentity,
 	serializeMetaIdentity,
 } from "../pi-extensions/lib/meta-session.ts";
+import { reclaimOnExit } from "./lib/reclaim-on-exit.ts";
 
 let passed = 0;
 function ok(label: string, cond: boolean): void {
@@ -62,7 +63,7 @@ function record(gardenId: string, over: Partial<MetaIdentity> = {}): string {
 }
 
 function store(files: Record<string, string | Buffer>): string {
-	const dir = fs.mkdtempSync(path.join(os.tmpdir(), "entwurf-meta-facts-"));
+	const dir = reclaimOnExit(fs.mkdtempSync(path.join(os.tmpdir(), "entwurf-meta-facts-")));
 	for (const [name, body] of Object.entries(files)) fs.writeFileSync(path.join(dir, name), body);
 	return dir;
 }
@@ -148,7 +149,7 @@ function parseProjection(run: CliRun, label: string): Projection {
 
 // ── drift / symlink / invalid UTF-8 are in-band defects, exit 0 ─────────────
 {
-	const outside = fs.mkdtempSync(path.join(os.tmpdir(), "entwurf-meta-facts-outside-"));
+	const outside = reclaimOnExit(fs.mkdtempSync(path.join(os.tmpdir(), "entwurf-meta-facts-outside-")));
 	fs.writeFileSync(path.join(outside, "foreign.meta.json"), record(GID_C));
 	const dir = store({
 		[`${GID_A}.meta.json`]: record(GID_A),
@@ -206,7 +207,8 @@ function parseProjection(run: CliRun, label: string): Projection {
 
 // ── missing store = readable EMPTY store ────────────────────────────────────
 {
-	const gone = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "entwurf-meta-facts-")), "never-created");
+	const goneRoot = reclaimOnExit(fs.mkdtempSync(path.join(os.tmpdir(), "entwurf-meta-facts-")));
+	const gone = path.join(goneRoot, "never-created");
 	const facts = parseProjection(cli([gone]), "missing store");
 	ok(
 		"a store that does not exist is a readable empty store (ENOENT only)",
@@ -216,7 +218,7 @@ function parseProjection(run: CliRun, label: string): Projection {
 
 // ── unreadable store = exit 3, NO JSON ──────────────────────────────────────
 {
-	const base = fs.mkdtempSync(path.join(os.tmpdir(), "entwurf-meta-facts-"));
+	const base = reclaimOnExit(fs.mkdtempSync(path.join(os.tmpdir(), "entwurf-meta-facts-")));
 	const file = path.join(base, "not-a-dir");
 	fs.writeFileSync(file, "plain file");
 	const run = cli([path.join(file, "store")]); // ENOTDIR: the path runs THROUGH a regular file
