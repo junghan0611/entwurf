@@ -110,9 +110,52 @@ CHANGELOG `## Unreleased`가 구현 범위 `v0.15.1..19ad90c` **30커밋** 전�
       `check:full` exit 0 450s(첫 실행은 gitignore `dist/` mtime 으로 `check-bridge-delivery` 붉음 → NEXT 규율대로 `build-bridge` 후 재실행, candidate 불변).
       **워크트리 금지·브랜치 작업**(GLG 결정, #110 이 그 자리를 비켜간 근거). PR #77(@yizixu) 은 이 SHA 로 close + 답글 + CHANGELOG credit(PR #40 선례).
       주장 범위: 가드가 더 이상 POSIX 전용이 아님(게이트 증명). **native Windows 지원 주장 없음** — #78 나머지 셀은 물리 호스트 필요, #78 은 열린 채.
+      **exact-SHA CI PASS**: run [`34232316086`](https://github.com/junghan0611/entwurf/actions/runs/34232316086) `event=push` @ `da3af88`, 3잡 전부 success,
+      `check` 잡의 `Run ./run.sh check-gate-qualification` 스텝 **success**(뮤턴트·게이트 표면을 건드렸으므로 `ci-qualify-decide` 가 본체를 켰다).
 
-현재 좌표: 1–23 완료 → **22. ACP fable 지원 랜딩·푸시 완료**(`9816618`, 2026-09-08). #109 openclaw 다리는 **닫혔다**(요청자가 컨테이너를 나왔다) · **0.16.1 make는 열린 채 PAUSED**.
+- [x] **24. #95 codex 레인 step 1(vendor measurement) 착지** — GLG 가 2026-09-08 에 2026-08-01 의 codex native lane 거절을 **뒤집었다**.
+      브랜치 `feat/95-codex-lane` 6커밋 → main fast-forward. **문서·측정만, 소스/게이트/뮤턴트 바이트 0.** 영수증은 `scripts/raw-codex-measure/`.
+      팀: 코디네이터 `20260908T211235-485de8` · 측정 Opus `20260908T224329-2680e2` · 검수 terra `20260908T212236-d157ee`(4라운드, 인용 20/20 CONFIRMED, Blocker 0).
+      **GLG 결정처럼 보였던 갈림 둘이 측정으로 사라졌다** — hook trust 는 managed `/etc/codex` 레이어가 프롬프트 없이 열고, clause 4 는 `thread/name/set` 이 벤더 auto-titler 를 이긴다.
+      **join 키의 모양이 바뀌었다**: parent-pid 가 아니라 와이어 `_meta.threadId` 이고 hook `session_id` 와 같은 문자열이다. 마감 코멘트가 #95 스레드의 정본.
+
+현재 좌표: 1–24 완료 → **22. ACP fable 지원 랜딩·푸시 완료**(`9816618`, 2026-09-08). #109 openclaw 다리는 **닫혔다**(요청자가 컨테이너를 나왔다) · **0.16.1 make는 열린 채 PAUSED**.
 푸시·태그는 `entwurf-release` 4모드 몫이다 (CalVer `tag-release`가 아님).
+
+# NOW — stem: 사용자층 확보 = 설치면 다양화 (GLG, 2026-09-08: "설치면 다양화가 더 급하겠어")
+
+- **Stem:** **#78 의 macOS 행에 물리 증거 한 칸을 세운다.** GLG 가 「사용자층 확보 = 설치면 다양화 + 코덱스 지원」으로 축을 정했고,
+  둘 중 **설치면이 먼저**라고 정했다(2026-09-08). 우산은 [sorge#14](https://github.com/junghan0611/sorge/issues/14).
+- **왜 이 칸인가 — #78 은 한 레인이 아니라 비용이 다른 두 레인이다.**
+  **macOS 는 싸다**: `macos-latest` 러너가 곧 진짜 맥이라 호스트를 빌릴 필요가 없고, 지금 CI 잡 셋은 전부 `ubuntu-latest` 다.
+  **native Windows 는 제품 규모다**: bin 6개가 전부 bash 를 가리키고 `entwurf` bin 은 **6,725줄 `run.sh`** 라, #86 매트릭스대로
+  Node 프론트도어·심링크 없는 소스 노출·프로세스 seam 이 필요하다. 재진입 조건은 **GLG 의 명시적 product-scale 승인**이다. 열지 마라.
+  WSL2 는 계약상 리눅스의 연장이라 새 작업 없음.
+- **Next (#86 이 넘긴 「smallest proposed macOS measurement」 그대로):** `macos-latest` 잡 **하나**가 같은 packed candidate 를 소비한다 —
+  `npm pack`/install · packed `entwurf --help` · `check-bridge` · **하네스 전무** setup 의미론(SKIP 넷, 계산된 verdict, 하네스/인증 쓰기 0).
+  **인증하는 것은 Entwurf-only 설치 경로뿐**이고 Claude/Copilot/런타임 레일이 아니다. 작은 기존-표면 합성으로 안 되면 **제안으로 되돌린다**(#86 의 원문 조건).
+- **Blocker:** 없음. 다음 칸(프로바이더 부팅·ACP 실 턴)은 러너 인증이 필요해 성격이 다르다 — 1번 칸 결과를 보고 정한다.
+- **Read:** #78 본문 `## Evidence before a native-Windows claim`(남은 다섯 셀) · #78 코멘트의 #86 obstruction matrix(2026-08-27) ·
+  `docs/adding-a-harness.md` §10 · `.github/workflows/` 의 현행 3잡.
+- **Do not touch:** native Windows 프론트도어(승인 전) · WSL 을 native-Windows 증거로 재라벨 · 리눅스 릴리즈 플로어 약화 ·
+  물리 증거 없이 macOS 를 supported 로 승격(#78 본문: *"claim only what physical evidence proves"*).
+
+## codex 레인 — step 1 만 닫혔다. step 2 는 GLG 가 연다
+
+step 2/3 이 물려받는 것(정본은 `scripts/raw-codex-measure/` + #95 마감 코멘트):
+
+1. **Birth event: `SessionStart`**, 첫 턴에 발화, 추측할 필드 없음. §3.5 는 공짜(`SubagentStart` 가 갈라준다).
+2. **Receive rail: native-push**, app-server `turn/start`. `watchPaths` 대응물 없음. **app-server 상시 구동이 전제**다.
+3. **Identity key: thread id.** `record.nativeSessionId = threadId` 로 매핑 계층 불필요 — hook·app-server·tool-call `_meta` 가 같은 문자열.
+   **parent-pid sender marker 는 여기서 틀린 모양이다**; `_meta` 소비는 새 브리지 코드이고 **step 6** 이다.
+4. **능력이 아니라 소유권인 비용 둘.** 비대화형 birth 는 **root 레벨 `/etc/codex/` 단계**를 요구한다(`setup` 이 못 쓴다, Hard Rule 17).
+   `[tui] status_line` 은 그 키만 소유하는 writer 가 필요하다(`scripts/omp-config-xdev.py` 모양).
+5. **미측정 Observation (terra):** `/new`·resume·fork 가 `thread_name` 을 `None` 으로 되돌리는지 — 되돌리면 birth payload 가 가시 id 를 **재무장**해야 한다.
+   OMP 가 `/new` unarm 으로 같은 셀을 치렀다(`adding-a-harness.md` §7, `DELIVERY.md` §OMP). 재도출하지 마라.
+6. **선재 결함:** registry 가 codex 를 `direct-inject / D6` 로 등급 매겨놨는데 **채널이 없다**(step 8(c) 가 이름 붙인 실패 모양).
+   `nativeIdLabel:"threadId"` 는 맞고 `D6` 는 틀리다. 정정은 **step 8** 작업.
+
+<details><summary>ACP fable 지원 NOW (닫힘)</summary>
 
 # NOW — stem: ACP `claude-fable-5-1` 지원 (GLG, 2026-09-08: "entwurf acp fable 지원을 넣어줘. 그래야 계속 부를 수 있어")
 
@@ -158,6 +201,9 @@ CHANGELOG `## Unreleased`가 구현 범위 `v0.15.1..19ad90c` **30커밋** 전�
      커널 OOM 없음) tmux 게이트는 매번 살아남았다. "긴 명령은 tmux" 가 취향이 아닌 이유.
   3. **기존 뮤턴트의 앵커를 깨뜨리면 자격검증이 먼저 잡는다.** 닥터 한 줄을 고치자 `OMP-DOCTOR-CARRIER-TRIMS` 가 `MUTANT-STALE`
      이 됐고 첫 컷이 거기서 멈췄다. 소스를 고칠 때 **그 줄에 앵커를 건 기존 replant 를 함께 본다** — 새 것만 챙기면 반만 지킨 것이다.
+
+
+</details>
 
 <details><summary>0.19.0 착지 NOW (닫힘)</summary>
 
