@@ -12,8 +12,14 @@
 `check-gate-qualification` **388/388 killed**, step conclusion success), `install-surface`,
 `artifact-consumer`, and **`macos-install-surface` 65s, steps 10/10**.
 
-That job is now **required**, not `continue-on-error`. Everything after `70eda03` is uncommitted
-worktree.
+That job is now **required**, not `continue-on-error`.
+
+**The lane is committed and pushed.** `9cc5b09 feat(macos): make the shipped surface portable and
+stop discovery gaps reading as clean` (34 files) sits on top of `70eda03`, and its own CI run
+[`34316688064`](https://github.com/junghan0611/entwurf/actions/runs/34316688064) is **four jobs
+green with the `check` job's qualification step concluding success** — the four-axis release
+oracle would accept this SHA. A second, smaller commit closing the side-eye review is in the
+worktree on top of it.
 
 ## What the macOS run actually proved
 
@@ -76,15 +82,39 @@ Agent reports (gitignored) carry the per-slice receipts: `.agent-reports/macos-*
 
 ## Next
 
-1. Land the amendment bundle from the two independent reviews (terra: 2 Blocker / 4 Defect /
-   1 Observation; grok: 0 / 9 / 6). The Blockers are both the same class and both reachable on
-   Linux: a failed discovery command collapsing into a clean verdict.
-2. `pnpm run check:full` **once** on the frozen candidate. Nothing may edit the worktree while it
-   runs — including this file.
-3. GLG commits.
-4. Borrowed Mac: run `scripts/raw-macos-measure/probe.sh`, paste the output into the ledger under
-   a `[host-darwin]` heading. Checklist items 7–9 need this code landed first.
-5. 0.20.0 through the four release modes, each its own GLG approval.
+1. Close the side-eye review (grok, `20260909T151557-9eff5b`, on the pushed `9cc5b09`): **Blocker 0
+   / Defect 3 / Observation 5.** The one defect this lane itself created is D1 — opening the
+   install fences made `entwurf setup` on a Darwin host **with a harness present** print
+   `result: green`, because setup grades "detected + install completed" and never runs the doctor,
+   while the Darwin doctor is always nonzero. Documents and doctors stay honest; the command
+   operators actually type does not. D2/D3 were the two NEXT files disagreeing with each other,
+   and the uninstall refusal string still describing the retired install-side fence.
+2. `pnpm run check:full` once on the frozen candidate, then `check-gate-qualification` once —
+   this lane touched gates, mutants and manifests, so the scheduling contract requires the body.
+   Nothing may edit the worktree while either runs, including this file.
+3. GLG commits and pushes; CI must come back four-green with the qualification step success.
+4. Borrowed Mac: run `sh scripts/raw-macos-measure/probe.sh` **once** — no entwurf install, no
+   login, ~3.5s — and paste the whole output into the ledger under a `[host-darwin]` heading.
+   That single command closes acceptance items 1–6. Items 7–9 need a logged-in harness.
+5. GLG names 0.20.0. "macOS parity" would overclaim; "install surface CERTIFIED (CI) + shipped
+   path portable, rails pending the borrowed-Mac receipt" is what the evidence carries.
+6. 0.20.0 through the four release modes, each its own GLG approval.
+
+## Carried observations — named, not opened
+
+From the side-eye review; none is this lane's subject, all predate it:
+
+- **agy's two doctors fold `pgrep` the way omp did** (`scripts/agy-bridge.sh:425-448`,
+  `scripts/agy-statusline-bridge.sh:150-169`): exit 1, exit 2 and an absent `pgrep` all become
+  one `live: SKIP`, so a failed enumeration skips the only live-RED. Same shape as B1, different
+  axis (live-wiring, not identity).
+- **Doctor asymmetry.** The Claude doctor is always red on Darwin; omp-birth and copilot-birth
+  have no platform gate and can PASS with no live process. Only copilot-receive is always
+  `UNVERIFIABLE` without `/proc`. Reading "doctor green" as "rail certified" is misled by the
+  first two before it reaches the third.
+- **`command -v python3` is presence, not function.** A macOS CommandLineTools stub is on PATH
+  and fails when executed; the installer would die later, inside python. Probe cell M3 measures
+  exactly this — decide after the Mac, not before.
 
 ## Do not
 

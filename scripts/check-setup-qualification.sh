@@ -160,5 +160,26 @@ want "F: an EXPLICIT operator tools.xdev:true is refused by name, never overwrit
 want "F control: the disagreement is a component FAIL that leaves the other omp units composed" \
   "printf '%s' \"\$OUT\" | grep -q 'omp-birth: PASS' && printf '%s' \"\$OUT\" | grep -q 'omp-receive: PASS' && printf '%s' \"\$OUT\" | grep -q 'NON-GREEN'"
 
+# ── Cell G: a COMPLETED harness install on a platform whose RAIL has no receipt ──
+# 0.20.0 opened the harness installers to Darwin, which retired the only thing that
+# used to keep a detected Mac host non-green — the installer's own refusal. Install
+# portability and rail certification are separate evidence axes (Hard Rule 17) and
+# `setup` measures only the first, so the completed install must land as the NAMED
+# non-green, never as a PASS pointing at a doctor that refuses on that platform.
+# `uname` is faked on PATH, the same seam smoke-meta-install-state.sh uses for the
+# installer's platform gate; Cell E above is the certified-platform control (same
+# stub omp, same sandbox, unfaked platform → PASS rows).
+FAKE_UNAME="$SB/fake-uname"; mkdir -p "$FAKE_UNAME"
+printf '#!%s\nprintf "%%s\\n" Darwin\n' "$(command -v bash)" > "$FAKE_UNAME/uname"
+chmod +x "$FAKE_UNAME/uname"
+run_setup "$SB/home-g" "$SB/proj-g" "$FAKE_UNAME:$STUB_OMP:$SB/bin:$PATH" "$ABSENT" "" "$STUB_OMP/omp"
+# One assertion by design: the row, its REASON, and the ARTIFACT proving the install
+# actually completed. Drop the artifact half and the cell would also pass if the fake
+# platform had merely broken the installer — the opposite of what is being claimed.
+want "G: a completed install whose rail has no receipt is the named non-green, never a cosmetic PASS [QK:SETUP-DARWIN-RAIL-COSMETIC-PASS]" \
+  "printf '%s' \"\$OUT\" | grep -q 'omp-birth: FAIL' && ! printf '%s' \"\$OUT\" | grep -q 'omp-birth: PASS' && printf '%s' \"\$OUT\" | grep -q 'NOT CERTIFIED — pending physical host on Darwin' && [ -d '$SB/home-g/.omp/agent/extensions/entwurf-meta-omp' ]"
+want "G control: the reason reads as an evidence boundary, not an install refusal, and names the axis owner" \
+  "printf '%s' \"\$OUT\" | grep -q 'the wiring WAS written and nothing failed to install' && printf '%s' \"\$OUT\" | grep -qF \"owned by './run.sh doctor-omp-bridge'\" && ! printf '%s' \"\$OUT\" | grep -qi 'unsupported platform'"
+
 echo ""
 echo "check-setup-qualification: $PASS checks passed (mutation-attribution oracle only — behavior evidence lives in smoke-setup-verdict and check-pack-install)"

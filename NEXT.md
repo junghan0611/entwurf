@@ -124,21 +124,30 @@ CHANGELOG `## Unreleased`가 구현 범위 `v0.15.1..19ad90c` **30커밋** 전�
 
 # NOW — stem: 사용자층 확보 = 설치면 다양화 (GLG, 2026-09-08: "설치면 다양화가 더 급하겠어")
 
-- **Stem:** **#78 의 macOS 행에 물리 증거 한 칸을 세운다.** GLG 가 「사용자층 확보 = 설치면 다양화 + 코덱스 지원」으로 축을 정했고,
-  둘 중 **설치면이 먼저**라고 정했다(2026-09-08). 우산은 [sorge#14](https://github.com/junghan0611/sorge/issues/14).
-- **왜 이 칸인가 — #78 은 한 레인이 아니라 비용이 다른 두 레인이다.**
-  **macOS 는 싸다**: `macos-latest` 러너가 곧 진짜 맥이라 호스트를 빌릴 필요가 없고, 지금 CI 잡 셋은 전부 `ubuntu-latest` 다.
-  **native Windows 는 제품 규모다**: bin 6개가 전부 bash 를 가리키고 `entwurf` bin 은 **6,725줄 `run.sh`** 라, #86 매트릭스대로
+- **Stem:** **#78 의 macOS 축.** GLG 가 「사용자층 확보 = 설치면 다양화 + 코덱스 지원」으로 축을 정했고, 둘 중 **설치면이 먼저**라고 정했다
+  (2026-09-08). 우산은 [sorge#14](https://github.com/junghan0611/sorge/issues/14). **2026-09-09 에 GLG 가 축을 넓혔다** —
+  *"나는 macos에서 내가 리눅스에서 하는것처럼 해주려는거야. 어설프게 해서 0.20.0을 넣을수는 없거든"* — 그리고 **회사 맥을 빌린다**고 정했다.
+- **좌표:** 브랜치 `feat/78-macos-consumer-ci` @ **`9cc5b09`** 푸시됨. CI run
+  [`34316688064`](https://github.com/junghan0611/entwurf/actions/runs/34316688064) **4잡 전부 success**,
+  `check` 잡의 qualification 스텝 success. `macos-install-surface` 는 이제 **required** 다.
+- **⚠ 이전 판의 틀린 문장을 여기 남긴다:** 이 stem 은 *"macOS 는 싸다: `macos-latest` 러너가 곧 진짜 맥이라 **호스트를 빌릴 필요가 없고**"* 라고 적고 있었다.
+  **그건 틀렸다.** CI 러너는 하드웨어상 맥이지만 **로그인된 하네스가 없어** 레일을 인증하지 못한다 — 설치면만 준다. 그래서 빌린 맥이 필요하다.
+  이 리포에서 `certified` 는 **물리 호스트 닥터 초록**을 뜻하고, CI 가 주는 것은 그보다 약한 **CERTIFIED (CI)** 다. 세 상태를 섞지 마라:
+  **CERTIFIED (CI)** = macOS Entwurf-only 설치면 · **NOT CERTIFIED — pending physical host** = 모든 하네스 레일·마커 join·ACP 실턴·mux ·
+  **UNSUPPORTED** = native Windows 뿐.
+- **native Windows 는 제품 규모다**: bin 6개가 전부 bash 를 가리키고 `entwurf` bin 은 **6,725줄 `run.sh`** 라, #86 매트릭스대로
   Node 프론트도어·심링크 없는 소스 노출·프로세스 seam 이 필요하다. 재진입 조건은 **GLG 의 명시적 product-scale 승인**이다. 열지 마라.
   WSL2 는 계약상 리눅스의 연장이라 새 작업 없음.
-- **Next (#86 이 넘긴 「smallest proposed macOS measurement」 그대로):** `macos-latest` 잡 **하나**가 같은 packed candidate 를 소비한다 —
-  `npm pack`/install · packed `entwurf --help` · `check-bridge` · **하네스 전무** setup 의미론(SKIP 넷, 계산된 verdict, 하네스/인증 쓰기 0).
-  **인증하는 것은 Entwurf-only 설치 경로뿐**이고 Claude/Copilot/런타임 레일이 아니다. 작은 기존-표면 합성으로 안 되면 **제안으로 되돌린다**(#86 의 원문 조건).
-- **Blocker:** 없음. 다음 칸(프로바이더 부팅·ACP 실 턴)은 러너 인증이 필요해 성격이 다르다 — 1번 칸 결과를 보고 정한다.
-- **Read:** #78 본문 `## Evidence before a native-Windows claim`(남은 다섯 셀) · #78 코멘트의 #86 obstruction matrix(2026-08-27) ·
-  `docs/adding-a-harness.md` §10 · `.github/workflows/` 의 현행 3잡.
+- **Next:** (1) 빌린 맥에서 `sh scripts/raw-macos-measure/probe.sh` **한 번** — entwurf 설치도 로그인도 필요 없고, 수용 체크리스트 1–6 을 한 명령으로 닫는다.
+  출력을 `scripts/raw-macos-measure/README.md` 의 `[host-darwin]` 절에 붙인다. (2) 그 영수증으로 7–9(설치·`doctor-meta-bridge`·실 배달 왕복) 판단.
+  (3) 0.20.0 을 **무엇이라 부를지** GLG 가 고른다 — 「macOS parity」로 자르면 어설프고, 「설치면 CERTIFIED (CI) + 출하 경로 portable,
+  레일은 빌린 맥 영수증 후」면 정직하다(side-eye 검수 판정, 2026-09-09).
+- **Blocker:** 없음.
+- **Read:** 브랜치 `NEXT--feat-78-macos-consumer-ci.md`(재론 금지 결정 3건 포함) · `.agent-reports/macos-portability-audit-20260909.md`(1010줄 감사) ·
+  #78 본문 `## Evidence before a native-Windows claim` · #78 코멘트의 #86 obstruction matrix(2026-08-27).
 - **Do not touch:** native Windows 프론트도어(승인 전) · WSL 을 native-Windows 증거로 재라벨 · 리눅스 릴리즈 플로어 약화 ·
-  물리 증거 없이 macOS 를 supported 로 승격(#78 본문: *"claim only what physical evidence proves"*).
+  물리 증거 없이 macOS 를 supported 로 승격(#78 본문: *"claim only what physical evidence proves"*) ·
+  CI 러너를 물리 호스트 증거로 재라벨(이 stem 이 실제로 저지른 실수다).
 
 ## codex 레인 — step 1 만 닫혔다. step 2 는 GLG 가 연다
 

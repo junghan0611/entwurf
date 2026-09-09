@@ -4816,6 +4816,44 @@ setup_result() {  # $1=component $2=PASS|SKIP|FAIL $3=detail
   esac
 }
 
+# ── platform rail certification (#78 D1) ─────────────────────────────────────
+# ONE place answers "are entwurf's HARNESS RAILS certified on this platform?".
+# Every detected-harness branch in setup_all asks it through setup_harness_result
+# below instead of re-deciding it per backend — a verdict that is honest for one
+# harness and cosmetic for the next is its own defect, not half a fix.
+#
+# Today the answer is Linux and nothing else, and that is an EVIDENCE fact, not a
+# taste: every shipped rail proves live ownership by reading the per-process
+# ENVIRONMENT of live harness children, no portable Darwin equivalent has been
+# MEASURED, and BASELINE.md/README record each rail as `NOT CERTIFIED — pending
+# physical host`. The harness doctors own that axis and refuse on Darwin.
+#
+# What moves this line: a physical-host receipt — a real harness doctor exiting 0
+# on that platform, recorded in BASELINE.md. A green INSTALLER never moves it;
+# installation portability and rail/runtime support are separate evidence axes
+# (Hard Rule 17). Do not widen this to make a CI job green.
+harness_rail_certified_platform() {
+  [ "$(uname -s)" = "Linux" ]
+}
+
+# setup_harness_result — the verdict for a detected harness unit whose INSTALL
+# COMPLETED. It exists because "the wiring was written" and "the rail works here"
+# are two different facts and setup measures only the first: setup runs no doctor
+# (that is the doctor commands' own job). On a platform whose rails carry no
+# receipt a completed install is therefore a detected-but-INCOMPLETE integration,
+# which Hard Rule 17 names non-green rather than cosmetic success. setup_result
+# has exactly three verdicts, so FAIL IS that named non-green — and the detail
+# must say so in the operator's own words: nothing failed to install, the rail is
+# simply uncertified here. The wording stays deliberately distinct from the
+# install-failure FAIL each branch keeps for a real refusal.
+setup_harness_result() {  # $1=component $2=what got wired $3=doctor owning the rail axis
+  if harness_rail_certified_platform; then
+    setup_result "$1" PASS "$2 — verify: $3"
+    return 0
+  fi
+  setup_result "$1" FAIL "$2 — the wiring WAS written and nothing failed to install, but this harness rail is NOT CERTIFIED — pending physical host on $(uname -s). setup runs no doctor; the rail axis is owned by '$3', which refuses on this platform. Tracking: #78."
+}
+
 # Installed-vs-source is decided by PACKAGE LOCATION — the same `*/node_modules/*`
 # seam run_ts and the bridge launcher already branch on — never by which of
 # pnpm/pi happens to be missing (an accidental failure is not a mode gate).
@@ -4956,7 +4994,7 @@ setup_all() {
     if ! pi_version_in_range "${pi_ver:-0}" "$pi_range"; then
       setup_result pi FAIL "detected pi ${pi_ver:-<unreadable version>} is outside the supported range $pi_range — Pi wiring not written; align pi, then re-run setup"
     elif (install_local_package "$project_dir"); then
-      setup_result pi PASS "project + user-scope wiring complete (pi $pi_ver in $pi_range) — verify: ./run.sh doctor-pi-provider"
+      setup_harness_result pi "project + user-scope wiring complete (pi $pi_ver in $pi_range)" "./run.sh doctor-pi-provider"
     else
       setup_result pi FAIL "pi wiring did not complete (see above) — repair, then re-run setup"
     fi
@@ -4966,16 +5004,20 @@ setup_all() {
   # setup ALSO wires the native-harness meta-bridge so a relocate/clone needs ONE
   # command. Detection-gated ("있으면 설정, 없으면 담아준다");
   # meta-bridge-install.sh is idempotent and enforces the Claude floor + its own
-  # named prerequisites itself, so a below-floor or refused host lands here as a
-  # detected FAIL, never a cosmetic green. CLAUDE_BIN pins the probe for the
-  # hermetic smoke; production leaves it unset.
+  # named prerequisites itself, so a below-floor host lands here as a detected
+  # FAIL. It no longer REFUSES ON PLATFORM NAME (0.20.0 opened Darwin: the
+  # installer's own mechanism is portable), so the other half of that old
+  # guarantee — "never a cosmetic green" — is now carried by setup_harness_result:
+  # an install that completes where the RAIL has no receipt is the named
+  # non-green, never a PASS pointing at a doctor that would refuse. CLAUDE_BIN
+  # pins the probe for the hermetic smoke; production leaves it unset.
   local claude_bin="${CLAUDE_BIN:-claude}"
   if ! command -v "$claude_bin" >/dev/null 2>&1; then
     setup_result claude SKIP "claude not on PATH — zero meta-bridge wiring written"
   else
     section "meta-bridge install (native harness detected: Claude Code)"
     if (cd "$REPO_DIR" && bash scripts/meta-bridge-install.sh); then
-      setup_result claude PASS "meta-bridge wired — verify: ./run.sh doctor-meta-bridge"
+      setup_harness_result claude "meta-bridge wired" "./run.sh doctor-meta-bridge"
     else
       setup_result claude FAIL "detected Claude Code, but the meta-bridge integration did not complete (see above) — repair, then re-run setup"
     fi
@@ -5018,19 +5060,19 @@ setup_all() {
   else
     agy_rc=0; wire_agy_bridge || agy_rc=$?
     if [ "$agy_rc" -eq 0 ]; then
-      setup_result agy-bridge PASS "MCP bridge wired — verify: ./run.sh doctor-agy-bridge"
+      setup_harness_result agy-bridge "MCP bridge wired" "./run.sh doctor-agy-bridge"
     else
       setup_result agy-bridge FAIL "detected agy, but the MCP bridge integration did not complete (reason above) — repair, then re-run setup"
     fi
     agy_rc=0; wire_agy_statusline || agy_rc=$?
     if [ "$agy_rc" -eq 0 ]; then
-      setup_result agy-statusline PASS "statusLine wired — verify: ./run.sh doctor-agy-statusline"
+      setup_harness_result agy-statusline "statusLine wired" "./run.sh doctor-agy-statusline"
     else
       setup_result agy-statusline FAIL "detected agy, but the statusLine integration did not complete (reason above) — repair, then re-run setup"
     fi
     agy_rc=0; wire_agy_hooks || agy_rc=$?
     if [ "$agy_rc" -eq 0 ]; then
-      setup_result agy-hooks PASS "birth imprint wired — verify: ./run.sh doctor-agy-hooks"
+      setup_harness_result agy-hooks "birth imprint wired" "./run.sh doctor-agy-hooks"
     else
       setup_result agy-hooks FAIL "detected agy, but the birth-imprint integration did not complete (reason above) — repair, then re-run setup"
     fi
@@ -5054,13 +5096,13 @@ setup_all() {
     section "copilot units (native harness detected: GitHub Copilot CLI)"
     copilot_rc=0; (cd "$REPO_DIR" && bash scripts/copilot-bridge-install.sh) || copilot_rc=$?
     if [ "$copilot_rc" -eq 0 ]; then
-      setup_result copilot-birth PASS "birth plugin installed — verify: ./run.sh doctor-copilot-bridge"
+      setup_harness_result copilot-birth "birth plugin installed" "./run.sh doctor-copilot-bridge"
     else
       setup_result copilot-birth FAIL "detected copilot, but the birth plugin install did not complete (see above) — repair, then re-run setup"
     fi
     copilot_rc=0; (cd "$REPO_DIR" && bash scripts/copilot-mcp-bridge.sh install) || copilot_rc=$?
     if [ "$copilot_rc" -eq 0 ]; then
-      setup_result copilot-mcp PASS "MCP server registered — verify: ./run.sh doctor-copilot-mcp"
+      setup_harness_result copilot-mcp "MCP server registered" "./run.sh doctor-copilot-mcp"
     else
       setup_result copilot-mcp FAIL "detected copilot, but the MCP registration did not complete (see above) — repair, then re-run setup"
     fi
@@ -5078,14 +5120,14 @@ setup_all() {
     else
       copilot_rc=0; (cd "$REPO_DIR" && bash scripts/copilot-receive-bridge.sh install) || copilot_rc=$?
       if [ "$copilot_rc" -eq 0 ]; then
-        setup_result copilot-receive PASS "receiver extension installed — verify: ./run.sh doctor-copilot-receive"
+        setup_harness_result copilot-receive "receiver extension installed" "./run.sh doctor-copilot-receive"
       else
         setup_result copilot-receive FAIL "detected copilot, but the receiver extension install did not complete (see above) — repair, then re-run setup"
       fi
     fi
     copilot_rc=0; (cd "$REPO_DIR" && bash scripts/copilot-statusline-bridge.sh install) || copilot_rc=$?
     if [ "$copilot_rc" -eq 0 ]; then
-      setup_result copilot-statusline PASS "visible footer wired — verify: ./run.sh doctor-copilot-statusline"
+      setup_harness_result copilot-statusline "visible footer wired" "./run.sh doctor-copilot-statusline"
     else
       setup_result copilot-statusline FAIL "detected copilot, but the visible-footer integration did not complete (see above) — repair, then re-run setup"
     fi
@@ -5108,13 +5150,13 @@ setup_all() {
     section "omp units (native harness detected: oh-my-pi)"
     omp_rc=0; (cd "$REPO_DIR" && bash scripts/omp-bridge-install.sh) || omp_rc=$?
     if [ "$omp_rc" -eq 0 ]; then
-      setup_result omp-birth PASS "birth extension installed — verify: ./run.sh doctor-omp-bridge"
+      setup_harness_result omp-birth "birth extension installed" "./run.sh doctor-omp-bridge"
     else
       setup_result omp-birth FAIL "detected omp, but the birth extension install did not complete (see above) — repair, then re-run setup"
     fi
     omp_rc=0; (cd "$REPO_DIR" && bash scripts/omp-mcp-bridge.sh install) || omp_rc=$?
     if [ "$omp_rc" -eq 0 ]; then
-      setup_result omp-mcp PASS "MCP server registered — verify: ./run.sh doctor-omp-mcp"
+      setup_harness_result omp-mcp "MCP server registered" "./run.sh doctor-omp-mcp"
     else
       setup_result omp-mcp FAIL "detected omp, but the MCP registration did not complete (see above) — repair, then re-run setup"
     fi
@@ -5125,13 +5167,13 @@ setup_all() {
     # shipping a citizen whose tools nobody can call.
     omp_rc=0; (cd "$REPO_DIR" && bash scripts/omp-config-xdev.sh install) || omp_rc=$?
     if [ "$omp_rc" -eq 0 ]; then
-      setup_result omp-config PASS "tools.xdev: false written — verify: ./run.sh doctor-omp-mcp"
+      setup_harness_result omp-config "tools.xdev: false written" "./run.sh doctor-omp-mcp"
     else
       setup_result omp-config FAIL "detected omp, but the tools.xdev operator setting did not land (see above) — resolve it, then re-run setup"
     fi
     omp_rc=0; (cd "$REPO_DIR" && bash scripts/omp-receive-install.sh) || omp_rc=$?
     if [ "$omp_rc" -eq 0 ]; then
-      setup_result omp-receive PASS "receiver extension installed — verify: ./run.sh doctor-omp-receive"
+      setup_harness_result omp-receive "receiver extension installed" "./run.sh doctor-omp-receive"
     else
       setup_result omp-receive FAIL "detected omp, but the receiver extension install did not complete (see above) — repair, then re-run setup"
     fi

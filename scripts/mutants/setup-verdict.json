@@ -178,6 +178,19 @@
 			"timeoutSeconds": 180,
 			"signature": "[QK:SETUP-OMP-CONFIG-NO-OVERWRITE]",
 			"signatureSource": "scripts/check-setup-qualification.sh"
+		},
+		{
+			"claim": "SETUP-DARWIN-RAIL-COSMETIC-PASS",
+			"title": "the platform rail check is dropped, so a harness whose install completes on a platform with no rail receipt reads PASS and the whole setup reads green again — the 0.20.0 hole the installer's retired Darwin refusal used to cover",
+			"subject": "run.sh",
+			"find": [
+				"  if harness_rail_certified_platform; then\n    setup_result \"$1\" PASS \"$2 — verify: $3\"\n    return 0\n  fi"
+			],
+			"replace": ["  setup_result \"$1\" PASS \"$2 — verify: $3\"\n  return 0"],
+			"gate": ["bash", "scripts/check-setup-qualification.sh"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:SETUP-DARWIN-RAIL-COSMETIC-PASS]",
+			"signatureSource": "scripts/check-setup-qualification.sh"
 		}
 	]
 }

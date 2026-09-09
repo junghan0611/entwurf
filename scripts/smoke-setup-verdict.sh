@@ -287,6 +287,106 @@ rm -rf "$HOME/.omp" "$XDG_DATA_HOME/entwurf/omp-bridge" "$XDG_DATA_HOME/entwurf/
   "$XDG_DATA_HOME/entwurf/omp-config" "$XDG_DATA_HOME/entwurf/omp-receive" \
   "$XDG_DATA_HOME/entwurf/meta-bridge-omp" "$XDG_DATA_HOME/entwurf/omp-receive"
 
+# ── S-9: rail certification is a SEPARATE axis from install success (#78 D1) ──
+# The 0.20.0 macOS lane opened the installers to Darwin (meta-bridge-install.sh's
+# platform gate became its own python3/node dependency instead of the platform
+# name), and that removed the only thing which used to keep a detected Mac host
+# non-green: the installer's refusal. A detected harness on Darwin now INSTALLS,
+# every harness doctor still refuses there (NOT CERTIFIED — pending physical
+# host), and `setup` runs no doctor. Hard Rule 17 names that shape non-green, so
+# setup_harness_result does — and these cells are its ONLY executing consumer,
+# because nothing else in this repo ever takes the Darwin branch.
+#
+# `uname` is faked on PATH exactly the way smoke-meta-install-state.sh already
+# fakes it for the installer's own platform gate. Both directions are pinned so
+# the fixture cannot pass for the wrong reason: the Linux twin below is the SAME
+# sandbox, the SAME stub harnesses and the SAME fixture with one byte different,
+# and S-3/S-8 above are the unfaked real-host Linux evidence.
+FAKE_UNAME="$SB/fake-uname-darwin"; mkdir -p "$FAKE_UNAME"
+# Absolute bash in the shebang, same reason as the sibling fixture: a cell may
+# hand this script a PATH that does not carry `env`/`bash` itself.
+cat > "$FAKE_UNAME/uname" <<SH
+#!$(command -v bash)
+printf '%s\n' Darwin
+SH
+chmod +x "$FAKE_UNAME/uname"
+FAKE_UNAME_LINUX="$SB/fake-uname-linux"; mkdir -p "$FAKE_UNAME_LINUX"
+cat > "$FAKE_UNAME_LINUX/uname" <<SH
+#!$(command -v bash)
+printf '%s\n' Linux
+SH
+chmod +x "$FAKE_UNAME_LINUX/uname"
+
+omp_reset() {
+  rm -rf "$HOME/.omp" "$XDG_DATA_HOME/entwurf/omp-bridge" "$XDG_DATA_HOME/entwurf/omp-mcp" \
+    "$XDG_DATA_HOME/entwurf/omp-config" "$XDG_DATA_HOME/entwurf/omp-receive" \
+    "$XDG_DATA_HOME/entwurf/meta-bridge-omp"
+}
+
+# ── S-9a: fake Darwin + DETECTED harnesses → named non-green, install intact ──
+# Two harness FAMILIES on purpose (the pi adapter rail and the four omp units):
+# a rule applied to one backend and not the next is a new defect, not half a fix.
+echo "[smoke-setup-verdict] S-9a detected harnesses on an uncertified platform"
+PROJ9="$SB/proj9"; mkdir -p "$PROJ9"
+seed_auth
+set +e; OUT="$(PI_BIN="$SB/harness/pi-ok" OMP_BIN="$FAKE_OMP/omp" ENTWURF_OMP_AGENT_DIR="$HOME/.omp/agent" PATH="$FAKE_UNAME:$FAKE_OMP:$PATH" bash "$REPO_DIR/run.sh" setup "$PROJ9" 2>&1)"; RC=$?; set -e
+want "S-9a: a detected harness on an uncertified platform owns a nonzero setup exit" "[ '$RC' -ne 0 ]"
+want "S-9a: the pi adapter rail is named non-green, never a cosmetic PASS" \
+  "printf '%s' \"\$OUT\" | grep -q 'pi: FAIL' && ! printf '%s' \"\$OUT\" | grep -q 'pi: PASS'"
+want "S-9a: all four omp units are named non-green, none cosmetically PASS" \
+  "printf '%s' \"\$OUT\" | grep -q 'omp-birth: FAIL' && printf '%s' \"\$OUT\" | grep -q 'omp-mcp: FAIL' && printf '%s' \"\$OUT\" | grep -q 'omp-config: FAIL' && printf '%s' \"\$OUT\" | grep -q 'omp-receive: FAIL' && ! printf '%s' \"\$OUT\" | grep -q 'omp-[a-z]*: PASS'"
+want "S-9a: the reason says the wiring WAS written (this is not an install failure)" \
+  "printf '%s' \"\$OUT\" | grep -q 'the wiring WAS written and nothing failed to install'"
+want "S-9a: the reason names the RAIL evidence state and the platform" \
+  "printf '%s' \"\$OUT\" | grep -q 'NOT CERTIFIED — pending physical host on Darwin'"
+want "S-9a: the reason names the doctor that owns the rail axis, per component" \
+  "printf '%s' \"\$OUT\" | grep -qF \"owned by './run.sh doctor-omp-bridge'\" && printf '%s' \"\$OUT\" | grep -qF \"owned by './run.sh doctor-pi-provider'\""
+want "S-9a: the reason points at the tracking issue" "printf '%s' \"\$OUT\" | grep -q 'Tracking: #78'"
+want "S-9a: it never reads as an install refusal (no unsupported-platform / did-not-complete vocabulary)" \
+  "! printf '%s' \"\$OUT\" | grep -qi 'unsupported platform' && ! printf '%s' \"\$OUT\" | grep -q 'did not complete'"
+want "S-9a: the summary is NON-GREEN and names the uncertified components" \
+  "printf '%s' \"\$OUT\" | grep -q 'NON-GREEN (FAIL:' && ! printf '%s' \"\$OUT\" | grep -q 'result: green'"
+# The load-bearing half: the installs genuinely SUCCEEDED. Without this the cell
+# would also pass if the platform had merely broken the installers.
+want "S-9a: the wiring really landed — pi project settings plus both omp extensions and the MCP hand" \
+  "[ -f '$PROJ9/.pi/settings.json' ] && [ -d '$HOME/.omp/agent/extensions/entwurf-meta-omp' ] && [ -d '$HOME/.omp/agent/extensions/entwurf-receive-omp' ] && [ -f '$HOME/.omp/agent/mcp.json' ]"
+want_auth_untouched "S-9a"
+omp_reset
+
+# ── S-9b: the Linux twin — same fixture, one byte different → still PASS/green ──
+# This is the regression axis that matters most: the certified platform's behavior
+# must not have moved at all.
+echo "[smoke-setup-verdict] S-9b the same detected harnesses on the certified platform"
+PROJ9B="$SB/proj9b"; mkdir -p "$PROJ9B"
+seed_auth
+set +e; OUT="$(PI_BIN="$SB/harness/pi-ok" OMP_BIN="$FAKE_OMP/omp" ENTWURF_OMP_AGENT_DIR="$HOME/.omp/agent" PATH="$FAKE_UNAME_LINUX:$FAKE_OMP:$PATH" bash "$REPO_DIR/run.sh" setup "$PROJ9B" 2>&1)"; RC=$?; set -e
+want "S-9b: the certified platform still exits 0" "[ '$RC' -eq 0 ]"
+want "S-9b: pi and all four omp units still compose as PASS" \
+  "printf '%s' \"\$OUT\" | grep -q 'pi: PASS' && printf '%s' \"\$OUT\" | grep -q 'omp-birth: PASS' && printf '%s' \"\$OUT\" | grep -q 'omp-mcp: PASS' && printf '%s' \"\$OUT\" | grep -q 'omp-config: PASS' && printf '%s' \"\$OUT\" | grep -q 'omp-receive: PASS'"
+want "S-9b: a PASS row is byte-identical to the pre-#78 wording (the operator surface did not move)" \
+  "printf '%s' \"\$OUT\" | grep -q 'omp-birth: PASS — birth extension installed — verify: ./run.sh doctor-omp-bridge'"
+want "S-9b: the computed summary is green and carries no rail-certification wording" \
+  "printf '%s' \"\$OUT\" | grep -q 'result: green (computed from the component outcomes above)' && ! printf '%s' \"\$OUT\" | grep -q 'NOT CERTIFIED'"
+want_auth_untouched "S-9b"
+omp_reset
+
+# ── S-9c: fake Darwin + NO harness → still green (the macOS CI job's contract) ──
+# The macos-install-surface job asserts exactly this shape on a real Darwin runner:
+# five zero-state SKIPs, core PASS, computed green. The rule above must not reach
+# an absent harness — SKIP is not a completed integration.
+echo "[smoke-setup-verdict] S-9c harness-free host on an uncertified platform"
+PROJ9C="$SB/proj9c"; mkdir -p "$PROJ9C"
+seed_auth
+set +e; OUT="$(PATH="$FAKE_UNAME:$PATH" bash "$REPO_DIR/run.sh" setup "$PROJ9C" 2>&1)"; RC=$?; set -e
+want "S-9c: a harness-free uncertified host still exits 0" "[ '$RC' -eq 0 ]"
+want "S-9c: all five harness probes are still zero-state SKIPs" \
+  "printf '%s' \"\$OUT\" | grep -q 'pi: SKIP' && printf '%s' \"\$OUT\" | grep -q 'claude: SKIP' && printf '%s' \"\$OUT\" | grep -q 'agy: SKIP' && printf '%s' \"\$OUT\" | grep -q 'copilot: SKIP' && printf '%s' \"\$OUT\" | grep -q 'omp: SKIP'"
+want "S-9c: core still PASSes and the computed summary is still green" \
+  "printf '%s' \"\$OUT\" | grep -q 'core: PASS' && printf '%s' \"\$OUT\" | grep -q 'result: green (computed from the component outcomes above)'"
+want "S-9c: an absent harness is never given a rail verdict it did not earn" \
+  "! printf '%s' \"\$OUT\" | grep -q 'NOT CERTIFIED'"
+want_auth_untouched "S-9c"
+
 # ── S-5: installed mode is a NAMED first verdict, never the source bootstrap ──
 # A bare copy of run.sh under a fake node_modules root pins the mode seam
 # cheaply: the copy is NOT a runnable installed package (no dist), so this cell
