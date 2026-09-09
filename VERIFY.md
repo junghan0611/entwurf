@@ -77,6 +77,7 @@ Do not collapse source, package, fixture, and native-host evidence into one “g
 | Packed install | `check-pack-install` | Real tarball, but checkout-visible. |
 | Linux artifact consumer | required `check-install-container` CI job against one preserved candidate | Fixtures prove package/oracle shape, not a real Claude lifecycle. |
 | Exact release commit | all required CI jobs green, and the `check` job's qualification body step concluded success, at the exact SHA | A different green SHA is not transferable evidence. |
+| macOS Entwurf-only install | `macos-install-surface` CI job (candidate, non-voting) | NOT YET MEASURED. It certifies the Entwurf-only install path only — never Claude/Copilot/OMP/agy wiring, the pi rail, ACP or mux — and `continue-on-error` keeps it off the release conclusion until GLG promotes a first physical green. |
 | LIVE runtime | `LIVE=1 ./run.sh release-gate <scratch> --cut` plus any shipped on-demand backend axis | `--cut` enforces `SKIP=0`; a red wired gate blocks the cut. |
 | Native Claude host | installed strict doctor against a new real session | Missing live join is `NOT CERTIFIED`, not a fixture PASS. |
 | Native agy host | three doctors plus conversation-id-gated native-push round trip | Aggregate release-gate does not own an agy conversation id. |
@@ -286,7 +287,7 @@ Pass: user/assistant turns accumulate normally; the transcript is not broken/emp
 The minimum passing bar:
 
 1. **Deterministic floor green:** `pnpm run check:full` passes (the core tier plus the hermetic-integration and package/install tiers, incl. `check-pack`), plus a `./run.sh check-gate-qualification` green on the same candidate.
-2. **All three CI jobs green on the exact release commit:** `check`, `install-surface`, and the required Linux `artifact-consumer`; preserve the latter's tarball digest and image identity.
+2. **The three required Linux CI jobs green on the exact release commit:** `check`, `install-surface`, and the required Linux `artifact-consumer`; preserve the latter's tarball digest and image identity. The fourth job, `macos-install-surface`, is candidate evidence for #78's macOS row and is deliberately non-voting (`continue-on-error`), so it neither blocks nor certifies a cut — promoting it means adding it to the release oracle's required set and rewriting this line.
 3. **Live floor MUST green:** `LIVE=1 ./run.sh release-gate <dir> --cut` exits 0 reporting `MUST PASS=N FAIL=0 SKIP=0`; with `--cut` a single SKIP is red, so the exit code itself now carries this condition. A BEHAVIOR FAIL is advisory, not blocking.
 4. **Native-host doctor green where the Claude meta-bridge is claimed:** a new post-install Claude session exists, live evidence is present, and the installed `doctor-meta-bridge` exits 0. `NOT CERTIFIED` is a release failure for that host, not a skip.
 5. **Honest self-recognition:** the bridged model identifies its actual harness/backend, lists `entwurf-bridge` as the single MCP server with its seven current tools, and presents a backend-native (not normalized) tool surface.

@@ -133,3 +133,105 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: ENTWURF_REQUIRE_DOCKER=1 ./run.sh check-install-container
+
+  # The macOS Entwurf-ONLY installation cell (#78's macOS row). This is the
+  # "smallest proposed macOS measurement" #86 transferred to #78, implemented as a
+  # composition of surfaces that already ship: pack the same candidate the publish
+  # path packs, install it, and drive the harness-free operator commands from under
+  # node_modules. macos-latest IS a real Mac, so this needs no borrowed host.
+  #
+  # WHY NOT check-pack-install (the install-surface job above). That gate cannot
+  # stand on Darwin, and not by accident — it RUNS three installers that refuse
+  # every non-Linux host by design, each dying before it does any work:
+  #   scripts/meta-bridge-install.sh:70    (driven at run.sh:3948, 4463, 4527)
+  #   scripts/copilot-bridge-install.sh:69 (driven at run.sh:4050)
+  #   scripts/omp-bridge-install.sh:48     (driven at run.sh:4094)
+  # Those refusals are calibrated facts (README: Linux is the only certified Claude
+  # meta-bridge axis), not defects, so this job does not touch them and does not
+  # try to make that gate portable. The same gate also uses GNU coreutils the macOS
+  # base image does not ship (sha256sum, `sort -z`, `xargs -0r`).
+  #
+  # WHAT THIS CERTIFIES: the Entwurf-ONLY installation path on macOS — the tarball
+  # builds and packs on Darwin, the packed bins resolve and run under the system
+  # bash 3.2, the installed MCP bridge boots and lists exactly the seven garden
+  # verbs, and the aggregate `setup` composition reaches a COMPUTED verdict with
+  # every harness absent while writing no harness or credential state.
+  # WHAT IT DOES NOT CERTIFY: Claude / Copilot / OMP / agy wiring, the pi provider
+  # rail, any ACP backend, mux, or a single LIVE turn. None of those has a macOS
+  # receipt, and this job mints none.
+  #
+  # NON-VOTING BY CONSTRUCTION. `continue-on-error` keeps a red here off the
+  # workflow-RUN conclusion, which the exact-SHA release oracle reads whole
+  # (.claude/skills/entwurf-release/scripts/verify-exact-ci.sh:83). Without it an
+  # unmeasured platform would block every Linux cut from the day it was added, and
+  # #78's own rule is to claim only what physical evidence proves. Promoting this
+  # to a release axis is a GLG decision after a first physical green, and it means
+  # adding this job name to that oracle's `required` tuple (:67) and to VERIFY.md.
+  macos-install-surface:
+    runs-on: macos-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.9.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # Same pack invocation the publish gate uses (run.sh:3238), dist lock
+      # included, so the Darwin evidence is about the shipped pack path rather
+      # than a CI-only variant. prepack -> build-bridge -> tsc runs here, which is
+      # itself the first thing macOS has never been measured doing.
+      - name: pack the candidate
+        run: |
+          mkdir -p "$RUNNER_TEMP/pack"
+          bash scripts/with-dist-lock.sh npm pack --dry-run=false --pack-destination "$RUNNER_TEMP/pack"
+      # A consumer root outside the checkout, so every command below resolves
+      # through node_modules and takes the installed branch of the location seam
+      # (start.sh dist, run_ts compiled twin, setup mode=installed).
+      - name: install the packed candidate into a clean consumer root
+        run: |
+          mkdir -p "$RUNNER_TEMP/consumer"
+          printf '%s\n' '{ "name": "entwurf-macos-consumer", "version": "0.0.0", "private": true }' \
+            > "$RUNNER_TEMP/consumer/package.json"
+          cd "$RUNNER_TEMP/consumer"
+          npm install --ignore-scripts "$RUNNER_TEMP"/pack/junghanacs-entwurf-*.tgz
+      - name: packed entwurf --help
+        run: '"$RUNNER_TEMP/consumer/node_modules/.bin/entwurf" --help'
+      - name: packed entwurf check-bridge
+        run: '"$RUNNER_TEMP/consumer/node_modules/.bin/entwurf" check-bridge'
+      # All-harness-absent `setup`, the same cells the Linux row asserts at
+      # run.sh:3785-3841, through the same five documented presence seams. The
+      # assertions are inline rather than a scripts/ gate on purpose: a macOS-only
+      # script is unrunnable and unqualifiable on the Linux oracle, so it would be
+      # a second, permanently untested implementation of that row. Fold these into
+      # one portable gate when a SECOND macOS cell needs them, not before.
+      - name: all-harness-absent entwurf setup
+        run: |
+          set -euo pipefail
+          H="$RUNNER_TEMP/setuphome"
+          P="$RUNNER_TEMP/setupproj"
+          mkdir -p "$H/.pi/agent" "$P"
+          printf '{ "anthropic": { "type": "oauth", "access": "ci-token" } }\n' > "$H/.pi/agent/auth.json"
+          cp "$H/.pi/agent/auth.json" "$RUNNER_TEMP/auth.before"
+          out=$(HOME="$H" XDG_DATA_HOME="$H/.local/share" XDG_STATE_HOME="$H/.local/state" \
+            XDG_CACHE_HOME="$H/.cache" XDG_CONFIG_HOME="$H/.config" PI_CODING_AGENT_DIR="$H/.pi/agent" \
+            PI_BIN="$RUNNER_TEMP/definitely-absent" CLAUDE_BIN="$RUNNER_TEMP/definitely-absent" \
+            AGY_BIN="$RUNNER_TEMP/definitely-absent" COPILOT_BIN="$RUNNER_TEMP/definitely-absent" \
+            OMP_BIN="$RUNNER_TEMP/definitely-absent" \
+            "$RUNNER_TEMP/consumer/node_modules/.bin/entwurf" setup "$P" 2>&1)
+          printf '%s\n' "$out"
+          printf '%s\n' "$out" | head -n 1 | grep -q "mode: installed package"
+          for probe in "pi: SKIP" "claude: SKIP" "agy: SKIP" "copilot: SKIP" "omp: SKIP"; do
+            printf '%s\n' "$out" | grep -q "$probe"
+          done
+          printf '%s\n' "$out" | grep -q "core: PASS"
+          printf '%s\n' "$out" | grep -q "result: green (computed from the component outcomes above)"
+          # Zero harness/credential writes. `cmp` instead of a hash: macOS ships no
+          # sha256sum, and byte equality is the actual contract.
+          test ! -e "$P/.pi"
+          test ! -e "$H/.pi/agent/settings.json"
+          test ! -e "$H/.pi/agent/auth.json.bak"
+          cmp -s "$RUNNER_TEMP/auth.before" "$H/.pi/agent/auth.json"
