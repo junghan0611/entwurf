@@ -151,11 +151,12 @@ jobs:
   # try to make that gate portable. The same gate also uses GNU coreutils the macOS
   # base image does not ship (sha256sum, `sort -z`, `xargs -0r`).
   #
-  # WHAT THIS CERTIFIES: the Entwurf-ONLY installation path on macOS — the tarball
-  # builds and packs on Darwin, the packed bins resolve and run under the system
-  # bash 3.2, the installed MCP bridge boots and lists exactly the seven garden
-  # verbs, and the aggregate `setup` composition reaches a COMPUTED verdict with
-  # every harness absent while writing no harness or credential state.
+  # WHAT A GREEN RUN HERE CERTIFIES: the Entwurf-ONLY installation path on macOS
+  # — the tarball builds and packs on Darwin, the packed bins resolve and run
+  # under the system bash 3.2, the installed MCP bridge boots and lists exactly
+  # the seven garden verbs, and the aggregate `setup` composition reaches a
+  # COMPUTED verdict with every harness absent while writing no harness or
+  # credential state.
   # WHAT IT DOES NOT CERTIFY: Claude / Copilot / OMP / agy wiring, the pi provider
   # rail, any ACP backend, mux, or a single LIVE turn. None of those has a macOS
   # receipt, and this job mints none.
@@ -167,6 +168,44 @@ jobs:
   # #78's own rule is to claim only what physical evidence proves. Promoting this
   # to a release axis is a GLG decision after a first physical green, and it means
   # adding this job name to that oracle's `required` tuple (:67) and to VERIFY.md.
+  #
+  # THAT SEMANTIC IS VENDOR-DOCUMENTED, IT FAILS CLOSED, AND IT MEASURES ITSELF.
+  # docs.github.com workflow-syntax, `jobs.<job_id>.continue-on-error`: "Prevents
+  # a workflow run from failing when a job fails. Set to true to allow a workflow
+  # run to pass when this job fails." (fetched 2026-09-09). A documented contract,
+  # not a guess -- but someone else's, and this repo has no prior use of the key
+  # to lean on (measured: main carries 0 occurrences). So the DIRECTION of a break
+  # is what was reasoned about, not its odds:
+  #
+  #   fail-closed. On any residual edge -- a cancelled run, runner infrastructure
+  #   failure -- the RUN conclusion goes non-success, the release oracle ABORTs,
+  #   and the cut stops. What is staked on the semantic is AVAILABILITY (can we
+  #   cut today), never evidence-truth. It can refuse; it cannot deceive. Same
+  #   direction as this repo's "crash, don't warn", not an exception to it.
+  #
+  #   the unmeasured part extinguishes itself. The assumption only bears load in
+  #   the state where a job here is RED -- and that is exactly the state whose own
+  #   run conclusion observes the semantic directly. Green here, and there is no
+  #   red to mask, so the assumption is inert. Red here, and the run's conclusion
+  #   IS the receipt: green run = the documented behaviour held; non-success run =
+  #   it did not, and the cut is already blocked. There is no state that bears
+  #   load silently. The first red job settles it in one push.
+  #
+  # So do not add machinery to hedge this, and do not read "unmeasured" as "unsafe".
+  #
+  # WHY IT LIVES IN ci.yml AND NOT ITS OWN WORKFLOW FILE. A separate workflow file
+  # would also keep a red off this run -- the release oracle only ever selects
+  # ci.yml runs (verify-exact-ci.sh:26-33) -- but it buys that by making the macOS
+  # cell INVISIBLE in the very run the operator and the oracle read at cut time,
+  # and a dispatch-recovered SHA would then carry no macOS cell at all. The two
+  # reasons above plus that visibility all keep holding after a future promotion;
+  # the one-time cost of moving files does not, so it is deliberately NOT recorded
+  # here as a reason. Reopen the separate-workflow design on exactly two observed
+  # events and no earlier: a fail-closed rupture, or a physical green that earns
+  # promotion. Its price (rewriting the ci.yml-anchored `on:` reader at
+  # scripts/check-release-gate-outcomes.ts:751, a second mutant subject for the
+  # new file, and one qualification pass) is justified by that observation, never
+  # prepaid ahead of it.
   macos-install-surface:
     runs-on: macos-latest
     continue-on-error: true
@@ -202,8 +241,12 @@ jobs:
         run: '"$RUNNER_TEMP/consumer/node_modules/.bin/entwurf" --help'
       - name: packed entwurf check-bridge
         run: '"$RUNNER_TEMP/consumer/node_modules/.bin/entwurf" check-bridge'
-      # All-harness-absent `setup`, the same cells the Linux row asserts at
-      # run.sh:3785-3841, through the same five documented presence seams. The
+      # All-harness-absent `setup`, a SUBSET of the cells the Linux row asserts at
+      # run.sh:3785-3841, through the same five documented presence seams. What the
+      # #86 row names is covered -- five SKIPs, a computed verdict, zero harness and
+      # credential writes -- while two Linux-row cells are deliberately not repeated
+      # here: the no-pnpm-bootstrap grep and the `bins: PASS` grep, both of which
+      # assert platform-neutral product behaviour the Linux gate already owns. The
       # assertions are inline rather than a scripts/ gate on purpose: a macOS-only
       # script is unrunnable and unqualifiable on the Linux oracle, so it would be
       # a second, permanently untested implementation of that row. Fold these into
@@ -233,5 +276,7 @@ jobs:
           # sha256sum, and byte equality is the actual contract.
           test ! -e "$P/.pi"
           test ! -e "$H/.pi/agent/settings.json"
+          test ! -e "$H/.gemini"
+          test ! -e "$H/.copilot"
           test ! -e "$H/.pi/agent/auth.json.bak"
           cmp -s "$RUNNER_TEMP/auth.before" "$H/.pi/agent/auth.json"
