@@ -4,6 +4,8 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+## 0.20.0 - 2026-09-09
+
 This range carries three lanes that are not one cause: the macOS
 install-surface axis (#78), `claude-fable-5-1` on the curated ACP surface,
 and the Cortex `realHome` path-flavor fix (PR #77). GLG (2026-09-09)
@@ -181,12 +183,20 @@ Hosts with no detected harness, and every Linux host, see no new prompt.
 
 ### Verification
 
-All numbers below are inherited from the lane receipts (oracle, 2026-09-09)
-unless marked otherwise. The LIVE release gate has **not** run — that is
-`entwurf-release` **make** (and prepare P5). There is **no** physical-Mac
-receipt.
+Lane receipts (oracle, 2026-09-09) plus prepare P4/P5 on this host. There is
+**no** physical-Mac receipt.
 
-- **`pnpm run check:full`** exit 0, 461 s (`9cc5b09`) / 469 s (`e09b84e`).
+- **`pnpm run check:full`** exit 0, 461 s (`9cc5b09`) / 469 s (`e09b84e`) /
+  465 s (prepare P4, this worktree).
+- **Prepare P5** `LIVE=1 ./run.sh release-gate --cut`:
+  scratch `/tmp/entwurf-release-gate-0.20.0.rerun`, **MUST PASS=23 FAIL=0
+  SKIP=0**, BEHAVIOR PASS=1, `cut: OK`. Qualification **391/391 KILLED**
+  inside that gate. The first attempt was `cut: BLOCKED` (MUST FAIL=2):
+  host `STALE writer` on the deployed omp-receive unit, and the omp-fresh
+  nonce callback captured by the preparing session's `PI_SESSION_ID`.
+  Rerun after `install-meta-bridge` / `install-omp-bridge` /
+  `install-omp-receive` and `env -u PI_SESSION_ID -u PI_AGENT_ID -u
+  CLAUDE_CONFIG_DIR`.
 - **`check-gate-qualification` 390/390 → 391/391 KILLED** (`9cc5b09` then
   `e09b84e`). New claims this range: `CLAUDE-CURATED-THREE-ROWS`,
   `CORTEX-REALHOME-PLATFORM-NEUTRAL`,
@@ -205,6 +215,10 @@ receipt.
 - CI run
   [`34316688064`](https://github.com/junghan0611/entwurf/actions/runs/34316688064)
   @ `9cc5b09` — 4 jobs + qualification step `success`.
+- Land exact-SHA CI run
+  [`34329931791`](https://github.com/junghan0611/entwurf/actions/runs/34329931791)
+  @ `a5a6dfe`, `event=workflow_dispatch` — 4 jobs + qualification body
+  `success` (the push run at this SHA skipped the body; L3 dispatch recovered it).
 
 ### Notes
 
