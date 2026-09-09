@@ -1,11 +1,18 @@
 # Clean-host setup
 
-Operator recipe for a POSIX host. The neutral npm package installs on macOS too —
-its Entwurf-only install surface there is CERTIFIED (CI) (`macos-install-surface`)
-— but the garden-native harness rails of §2–§6 are CERTIFIED on Linux only; on
-macOS they are NOT CERTIFIED — pending physical host. What is missing on Darwin is
-live-owner discovery evidence, not the install itself. native Windows is
-UNSUPPORTED.
+Operator recipe for a POSIX host. **Linux is the certified axis** — §2–§6 are
+written for it and their receipts are Linux receipts. What follows is the macOS
+evidence split, and its three states must not collapse into "macOS is supported":
+
+- **CERTIFIED (CI)** — the Entwurf-only install surface on macOS
+  (`macos-install-surface`). Weaker than a physical-host doctor green. §1 is
+  this surface.
+- **NOT CERTIFIED — pending physical host** — **on macOS**, every garden-native
+  harness rail in §2–§6 (pi, Claude, Copilot, OMP, agy), marker join, ACP turn,
+  mux. Wiring may be written; that is not a rail receipt. The remaining
+  unmeasured Darwin doctor reason is per-process environment DISCOVERY
+  (start-key is portable).
+- **UNSUPPORTED** — native Windows only. macOS is never this.
 
 ## Requirements
 
@@ -25,7 +32,34 @@ UNSUPPORTED.
 Claude Code >=2.1.217 is required for the managed exec-hook lifecycle. The package
 never supplies or proxies backend credentials.
 
+On a physical Darwin host, `python3` may be the CommandLineTools stub (a
+dialog instead of an interpreter) — unmeasured. That is a probe cell
+(`scripts/raw-macos-measure/probe.sh` M3), not a certification path.
+
 ## 1. Install Node and entwurf
+
+This section is the Entwurf-only install surface. On macOS it is
+**CERTIFIED (CI)** (`macos-install-surface`): npm pack → clean consumer
+install → bins → `--help` → `check-bridge` → harness-absent `setup`. That
+is not a harness-rail receipt.
+
+On Darwin, `entwurf setup` is intentionally non-green when it detects a
+harness. The wiring is written; the row is FAIL:
+
+> the wiring WAS written and nothing failed to install, but this harness
+> rail is NOT CERTIFIED — pending physical host on Darwin. setup runs no
+> doctor; the rail axis is owned by '<doctor>', which refuses on this
+> platform. Tracking: #78.
+
+That FAIL is honest: setup runs no doctor, and no physical-host rail
+receipt exists — it is not an install failure. An Entwurf-only host (no
+harness on PATH) stays green (five SKIP, `bins: PASS`, `core: PASS`,
+`result: green`), which is what CERTIFIED (CI) observed.
+
+A physical Mac can send host facts without installing entwurf or logging
+into a harness: `scripts/raw-macos-measure/probe.sh` (`/bin/sh`, ~3.5s,
+cells M1–M9, writes nothing). Measurement, not certification — it does
+not move CERTIFIED (CI) or close a rail.
 
 Use the host's normal Node 24 installation. With nvm:
 
@@ -110,6 +144,12 @@ packageRoot↔installerRoot coupling mismatch and a package/provider managed-pat
 
 ## 2. Optional pi adapter / ACP plugin
 
+This rail is CERTIFIED on Linux; on macOS it is NOT CERTIFIED — pending
+physical host. Control sockets, mux, and ACP plugin hosting have no
+physical-Darwin receipt. `entwurf install` may write `.pi/settings.json`
+on Darwin; that is wiring, not a rail receipt. If `pi` is on PATH,
+`setup` names the pi row FAIL with the §1 Darwin wording.
+
 Install the exact release floor, then wire the project:
 
 ```bash
@@ -165,19 +205,20 @@ validation, or hand-inspected marker cannot replace a new real session. If the l
 form is unsupported, reinstall; if ownership is correct but the live join is absent,
 restart the affected session.
 
-macOS Claude wiring is NOT CERTIFIED — pending physical host (a physical Mac is
-planned): the strict live-owner join has no Darwin evidence yet, and a CI runner
-cannot supply a Claude login. Darwin uninstall remains available for cleaning an
-older managed install. That is an evidence boundary, not UNSUPPORTED — native
-Windows is the unsupported axis, not macOS.
+The Darwin install fence is open (`Linux | Darwin`); python3 is the
+refusal, not the platform name. A completed Darwin install is still not
+a rail receipt: this rail is NOT CERTIFIED — pending physical host. The
+remaining unmeasured doctor reason is per-process environment DISCOVERY
+of live bridge children (start-key is portable). A CI runner cannot
+supply a Claude login. Uninstall is open on Darwin too. That is an
+evidence boundary, not UNSUPPORTED.
 
 ## 4. Optional GitHub Copilot CLI native citizen
 
-This rail is CERTIFIED on Linux; on macOS it is NOT CERTIFIED — pending physical
-host. An installer whose platform fence accepts Darwin may run there, but a green
-install is not a rail receipt: no physical-host doctor evidence exists on Darwin
-yet. That is an evidence boundary, not UNSUPPORTED — native Windows is the
-unsupported axis.
+This rail is CERTIFIED on Linux; on macOS it is NOT CERTIFIED — pending
+physical host. The Darwin install fence for `install-copilot-bridge` is
+open (`Linux | Darwin`); a completed install is not a rail receipt. That
+is an evidence boundary, not UNSUPPORTED.
 
 Copilot has four independently owned surfaces. `setup` composes all four when `copilot` is on
 PATH (#86 C3b); the commands below are the per-unit repair, doctor, and inverse surfaces. All
@@ -203,9 +244,10 @@ same managed invocation and requires the birth, MCP, receiver, and visible-ident
 
 ## 4b. Optional OMP (`omp`) native citizen — accepted on one Linux host (thinkpad)
 
-On macOS this rail is NOT CERTIFIED — pending physical host; an installer whose
-platform fence accepts Darwin may run there, but that is not a rail receipt. The
-Linux evidence itself is one host, named in the version rule below.
+This rail is CERTIFIED on Linux (one host, named in the version rule
+below); on macOS it is NOT CERTIFIED — pending physical host. The Darwin
+install fences for `install-omp-bridge` and `install-omp-receive` are
+open (`Linux | Darwin`); a completed install is not a rail receipt.
 
 Three independently owned surfaces, and a boundary that is part of the instructions rather
 than a footnote. Birth, visible identity, who-sent, the MCP hand and RECEIVE are landed, and
@@ -356,6 +398,10 @@ why `disabledServers` is never the way to hide an import.
 
 ## 5. Optional Antigravity native citizen
 
+This rail is CERTIFIED on Linux; on macOS it is NOT CERTIFIED — pending
+physical host. The installers may write on Darwin; a green install is
+not a native-push receipt.
+
 Install the three independently owned surfaces:
 
 ```bash
@@ -381,6 +427,10 @@ LIVE=1 AGY_CONVERSATION_ID=<id> entwurf smoke-agy-native-push-live
 
 ## 6. Optional ACP backend turns
 
+ACP turns are CERTIFIED on Linux; on macOS they are NOT CERTIFIED —
+pending physical host. Mux (visible fresh / resume) is the same state.
+A CI runner has no Claude or Cortex login.
+
 Claude uses the operator's existing local Claude authentication:
 
 ```bash
@@ -403,6 +453,15 @@ Its silence is not a Cortex PASS.
 After upgrading the package, rerun the managed installers for every native harness
 in use and restart their existing processes. Native plugin caches are not live-reload
 safe across launch-contract changes.
+
+On Darwin the four previously closed install fences
+(`install-meta-bridge`, `install-copilot-bridge`, `install-omp-bridge`,
+`install-omp-receive`) now accept `Linux | Darwin` and refuse on the
+real toolchain (python3 / node / harness presence), not the platform
+name. Re-running them writes wiring. `setup` still names every detected
+harness unit FAIL with the §1 Darwin wording — upgrade does not mint a
+rail receipt. Doctors refuse on Darwin until a physical-host receipt
+exists.
 
 If install or doctor reports an unreadable/old active citizen generation, do not edit
 records by hand. Close pi, Claude, Copilot, and agy sessions first, run
@@ -434,6 +493,8 @@ PASS/SKIP/FAIL summary. The complete quiescence, archive, and exit-code contract
   fixtures; not a native lifecycle proof.
 - `macos-install-surface`: macOS Entwurf-only package-consumer shape, CERTIFIED (CI)
   (`macos-latest` runner, run 34303884286 @ `70eda03`); not a native lifecycle proof.
+- `scripts/raw-macos-measure/probe.sh`: physical-Darwin host facts (~3.5s,
+  no install, no login). Measurement, not a certification path.
 - `doctor-meta-bridge`: one installed real Claude host, only with a new live session.
 - `LIVE=1 entwurf release-gate /path/to/scratch --cut`: aggregate runtime acceptance (`--cut` makes any MUST SKIP red; without it the run is a diagnostic pass).
 
@@ -441,6 +502,11 @@ Keep these verdicts separate. Current protocol is [VERIFY.md](../VERIFY.md); rec
 host verdicts are [BASELINE.md](../BASELINE.md).
 
 ## Uninstall
+
+Darwin uninstall is open for the same surfaces the installers write
+(the Claude uninstall fence was already open; the four install fences
+now match). Running an inverse on Darwin is cleanup, not a rail
+certification.
 
 Run only the surfaces this host owns:
 

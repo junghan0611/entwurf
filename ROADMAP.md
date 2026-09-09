@@ -7,23 +7,21 @@
 
 ---
 
-## 현재 — 0.15.1 shipped; OMP vendor measurement (실무 잠수함)
+## 현재 — 0.19.0 shipped; 0.20.0 cut is #78 macOS evidence honesty
 
 이 repo는 **entwurf-core(v2 garden-citizen dispatch) + native-harness bridges + pi adapter + ACP plugin**이다.
-`v0.15.1`은 GitHub와 npm `latest`로 게시됐다 (`repair=0.12.8-repair.1` 보존). 0.15.0은 Copilot을 시민으로 들였고, 0.15.1은 Linux one-command setup honesty(#86)다. Claude mailbox, pi control-socket,
-Antigravity native-push, Copilot self-fetch가 한 garden-id dispatch 표면으로 출하됐고, ACP plugin은 Claude와 Cortex를 pi host
+`v0.19.0`이 현재 패키지다 (`repair=0.12.8-repair.1` 보존). 0.15.0은 Copilot을 시민으로 들였고, 0.15.1은 Linux one-command setup honesty(#86)다. 0.16.0은 OMP를 출하했다. Claude mailbox, pi control-socket,
+Antigravity native-push, Copilot self-fetch, OMP self-fetch가 한 garden-id dispatch 표면으로 출하됐고, ACP plugin은 Claude와 Cortex를 pi host
 안에서 연결한다. 0.14.0은 hidden background resume을 철회하고 visible fresh creation과 same-id pi resume을
 각각 `entwurf_fresh_call` / `entwurf_resume_call`로 분리했으며, 0.14.1은 fresh creation에 literal absolute cwd를
-더했고, 0.14.2는 exact configured bridge invocation과 ACP child-end evidence를 강화했다. 0.15.0은 Copilot을
-시민으로 들였다. 검증은 ≤60s core와 frozen-candidate full floor로 계층화했다.
+더했고, 0.14.2는 exact configured bridge invocation과 ACP child-end evidence를 강화했다.
+검증은 ≤60s core와 frozen-candidate full floor로 계층화했다.
 
-**2026-08-01~02 축 전환(GLG 지시).** pi가 공식 provider로 지원하는 Codex/Grok을 위해 native citizen이나
-ACP backend를 중복 구현하지 않는다. #56 Codex native lane은 닫혔고, Codex/Grok 탐구 브랜치는 main 밖에
-격리한다. 거기서 얻은 native/ACP rail 방법론은 필요할 때만 현재 증거로 다시 세운다.
+**Codex native lane.** 2026-08-01에 #56이 닫혔고, GLG가 2026-09-08에 그 거절을 뒤집었다 — lane은 `#95`, 지금은 step 1 (`scripts/raw-codex-measure/`)만 닫혔다. record도 `entwurf_fresh_call`도 없다. **Codex를 ACP backend로 출하하지 않는다는 결정은 그대로다.**
 
-현재 레인은 #78 macOS 이식이다(`feat/78-macos-consumer-ci`): Entwurf-only 설치면은 **CERTIFIED (CI)**(`macos-install-surface` CI run 34303884286 @ `70eda03`)이고, 하네스 레일·마커 join·ACP 실턴·mux는 **NOT CERTIFIED — pending physical host**(회사 맥 대여 예정)이며, native Windows는 **UNSUPPORTED**다. OMP는 0.16.0에 출하됐다. GitHub OPEN은 backlog가 아니라 최대 5개의 실행 가능한
+현재 레인은 #78 macOS 이식이다(`feat/78-macos-consumer-ci`): Entwurf-only 설치면은 **CERTIFIED (CI)**(`macos-install-surface` CI run 34303884286 @ `70eda03`)이고, 하네스 레일·마커 join·ACP 실턴·mux는 **NOT CERTIFIED — pending physical host**이며, native Windows는 **UNSUPPORTED**다. GLG 2026-09-09: 물리 맥 대여는 이 컷 뒤로 미루고, 지금 증거로 정직하게 0.20.0을 자른다. GitHub OPEN은 backlog가 아니라 최대 5개의 실행 가능한
 계약만 둔다 (현재는 초과 — 이 컷이 sweep하지 않는다). 방향·철학·관찰 중인 가능성은 이 문서가 지며, 재현 가능한 결손이 되면 그때 증거와 다음 측정을
-갖고 이슈로 승격한다. 현재 실행 계약은 OMP 측정(이슈 아님, NEXT가 계약), #78 platform evidence, #72 ACP retained-child 원인, #76 subscription rail 강제, #80 public vocabulary다. #82/#86은 CLOSED. 실행 순서는 active NEXT handoff가 진다.
+갖고 이슈로 승격한다. 현재 실행 계약은 #78 platform evidence (이 컷), #95 Codex step 1 이후, #72 ACP retained-child 원인, #76 subscription rail 강제, #80 public vocabulary다. #82/#86은 CLOSED. 실행 순서는 active NEXT handoff가 진다.
 
 Pi는 가장 깊이 붙은 adapter지만 프로젝트의 본질은 여전히 **garden id로 호명 가능한 형제 세션 사이의 얇은
 dispatch substrate**다. provider 연결과 TUI/RPC/session lifecycle은 pi에 맡기고, entwurf는 부르는 법과

@@ -4,6 +4,47 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+This range carries three lanes that are not one cause: the macOS
+install-surface axis (#78), `claude-fable-5-1` on the curated ACP surface,
+and the Cortex `realHome` path-flavor fix (PR #77). GLG (2026-09-09)
+deferred the physical-Mac loan: this cut is honest about a **CERTIFIED (CI)**
+install surface and does not pretend the harness rails are certified.
+
+### Upgrade note — this one asks something of the operator
+
+**On Darwin, `entwurf setup` no longer prints `result: green` when a harness
+is already present.** Opening the four Darwin install fences (below) had a
+side-effect the command an operator actually types did not stay honest for:
+the installer that used to refuse on a platform name now writes the wiring,
+and setup graded that `PASS` / `result: green` — while every harness doctor
+still refuses on Darwin, and setup runs no doctor. That is cosmetic success
+against Hard Rule 17 ("a detected-but-incomplete integration is named
+non-green rather than cosmetic success").
+
+All 13 harness units now ask one predicate
+(`harness_rail_certified_platform`). On an uncertified platform they emit a
+named non-green (FAIL) whose wording is lexically disjoint from an install
+failure — `entwurf setup` says so by name:
+
+`<unit> FAIL — the wiring WAS written and nothing failed to install, but this
+harness rail is NOT CERTIFIED — pending physical host on <uname>. setup runs
+no doctor; the rail axis is owned by '<doctor>'. Tracking: #78.`
+
+`bins` and `core` are not rail axes and still PASS. A Darwin host with no
+harness still five-SKIPs and `result: green` — that is the path
+`macos-install-surface` asserts, and it did not move. Linux is unchanged: a
+completed rail install is still PASS.
+`[QK:SETUP-DARWIN-RAIL-COSMETIC-PASS]` plants the restoration of "a completed
+install always PASSes" and was KILLED at that signature.
+
+The four installers that used to refuse Darwin (`entwurf install-meta-bridge`,
+`install-copilot-bridge`, `install-omp-bridge`, `install-omp-receive`) now
+run; their own refusal is the toolchain check (python3 / node / harness
+presence), never the platform name. A green Darwin install certifies the
+install surface only, never a harness rail.
+
+Hosts with no detected harness, and every Linux host, see no new prompt.
+
 ### Added
 
 - **`claude-fable-5-1` joins the curated ACP model surface.** The `entwurf` provider now registers
@@ -33,7 +74,7 @@ All notable changes to this project will be documented here. Format follows [Kee
   from non-voting to required after its first green at commit `70eda03`
   (run 34303884286, 65 s, 10/10 steps): npm pack → checkout-invisible clean
   consumer install → bin links → `entwurf --help` → `check-bridge` (direct MCP
-  smoke, 246 ms, the seven tools) → harness-absent `setup` (pi/Claude/agy/Copilot/
+  smoke, 246 ms, the seven tools + `test.sh`) → harness-absent `setup` (pi/Claude/agy/Copilot/
   OMP all SKIP, bins/core PASS, computed verdict green, zero writes on the five
   no-write axes and `auth.json` byte-identical). Platform vocabulary across
   README/BASELINE now separates three states: the Entwurf-only install surface on
@@ -46,6 +87,18 @@ All notable changes to this project will be documented here. Format follows [Kee
   `[host-linux]` control run so the probe itself is never the thing under test. Opened
   by the promotion above; it is where a borrowed Mac produces the physical-host
   evidence the CI runner cannot.
+- **`scripts/raw-codex-measure/` — Codex 0.153.4 vendor measurement (#95 step 1).**
+  Nothing is installed: no birth hook, no record, no marker, no doctor, and
+  `entwurf_fresh_call` still cannot open a codex sibling. GLG reversed the
+  2026-08-01 decline on 2026-09-08; live claims that still said otherwise
+  were repaired. The ledger closes step 1: SessionStart fires on the first
+  turn, not at window open; a fourth callback spelling
+  (`mcp__entwurf_bridge__entwurf_v2`); the delivery-capable app-server join
+  cannot use parent-pid as a citizen key; hook-trust is an ownership cost
+  (`/etc/codex`, root-owned), not a capability gap; clause 4 is
+  `thread/name/set` plus a status_line config. Step 2 is not opened.
+  `PIN_CODEX_MINOR` 0.144 → 0.153 is a re-verification of the archived drift
+  probe, not a product pin.
 
 ### Changed
 
@@ -66,6 +119,13 @@ All notable changes to this project will be documented here. Format follows [Kee
   mints** (`/proc` stat field 22 → `linux:<ticks>`, else `ps -o lstart=` /
   `ps -o ppid=`, the same argv vectors `meta-session.ts` uses). Darwin's remaining
   doctor reason is per-process environment DISCOVERY, not start-key.
+  The `ps:` format is unchanged: 1-second resolution against `linux:` at
+  10 ms, but a same-second pid reuse needs a full PID_MAX wrap inside one
+  second (≈99,900 spawn/s vs a measured pathological ceiling of 14,873/s).
+  Coarsening can mint a false `live` and never a false `dead`. The migration
+  axis is empty — 1,248 marker files, all `linux:`, zero `ps:`. Widening the
+  key with argv was measured insufficient (two same-argv children share it,
+  and same-argv restart is the normal harness shape).
 - **Operator-surface portability substitutions (audit P1).** `grep -P` negative
   lookaheads moved to awk (6 sites); `sha256sum` moved to the in-repo python3
   hashlib helper (3 sites) — not a second `shasum` convention. `readlink -f` on the
@@ -97,6 +157,65 @@ All notable changes to this project will be documented here. Format follows [Kee
 - **Recovered-host selectors moved from GNU BRE alternation to ERE**
   (`omp-bridge-doctor.sh`, `copilot-bridge-doctor.sh`), so BSD grep cannot report a
   recovered host as unrecovered (a false RED that only Darwin's grep would mint).
+- **A red or interrupted gate no longer leaves its children and temp roots
+  behind.** Teardown written as the last line ran only on the green path;
+  gates throw to go red, and `^C`/SIGTERM runs no statement. Measured on
+  oracle: 360 reparented Node receivers from the copilot-receive stub and
+  ~9,200 stale temp roots (3.8 G), one of them minted by a `pnpm check` that
+  had just reported clean. Teardown now belongs to `process.on("exit")` plus
+  the three signals (`scripts/lib/reclaim-on-exit.ts`); the SDK stub gains
+  the parent-death watchdog production already has.
+  `[QK:COPILOT-RECEIVE-STUB-CHILD-DIES-WITH-PARENT]` carries the watchdog.
+  The release skill gains P9 (prefix-blind census; delete only prefixes this
+  checkout's `mkdtempSync` calls mint), run at the release-gate verdict, at
+  the end of prepare, and after the publish smoke.
+
+### Verification
+
+All numbers below are inherited from the lane receipts (oracle, 2026-09-09)
+unless marked otherwise. The LIVE release gate has **not** run — that is
+`entwurf-release` **make** (and prepare P5). There is **no** physical-Mac
+receipt.
+
+- **`pnpm run check:full`** exit 0, 461 s (`9cc5b09`) / 469 s (`e09b84e`).
+- **`check-gate-qualification` 390/390 → 391/391 KILLED** (`9cc5b09` then
+  `e09b84e`). New claims this range: `CLAUDE-CURATED-THREE-ROWS`,
+  `CORTEX-REALHOME-PLATFORM-NEUTRAL`,
+  `COPILOT-RECEIVE-STUB-CHILD-DIES-WITH-PARENT`,
+  `OMP-DOCTOR-UNENUMERATED-IS-UNVERIFIABLE`,
+  `COPILOT-RECEIVE-DOCTOR-UNREADABLE-ARGV-IS-UNVERIFIABLE`,
+  `SETUP-DARWIN-RAIL-COSMETIC-PASS`.
+- **`check-pack-install`** exit 0. **`check-install-container`** exit 0.
+- The macos-install-surface cell replayed against the packed candidate on
+  Linux: all 12 pins HOLD (`9cc5b09`).
+- Doctors (4 files) HEAD-vs-worktree output IDENTICAL (`9cc5b09`).
+- CI run
+  [`34303884286`](https://github.com/junghan0611/entwurf/actions/runs/34303884286)
+  @ `70eda03` — `macos-install-surface` required, `macos-latest`, 65 s,
+  steps 10/10.
+- CI run
+  [`34316688064`](https://github.com/junghan0611/entwurf/actions/runs/34316688064)
+  @ `9cc5b09` — 4 jobs + qualification step `success`.
+
+### Notes
+
+- **What this cut claims about macOS, and what it does not.** Claimed: the
+  Entwurf-only install surface is **CERTIFIED (CI)**; the shipped operator
+  path is portable (no `readlink -f`, no `grep -P`, no `sha256sum`, no GNU BRE
+  alternation on recovered-host selectors); doctors fail closed on an
+  uncertified discovery axis (`UNVERIFIABLE`, not a green note). Not claimed:
+  harness rails, marker join, a real ACP turn, mux, or a physical-host doctor
+  green — all **NOT CERTIFIED — pending physical host**. native Windows is
+  **UNSUPPORTED**. A CI `macos-latest` runner has no logged-in harness; it
+  cannot mint the stronger `certified`. macOS is never UNSUPPORTED.
+- **Two cells are unmeasured, by name.** Whether Darwin can read another
+  process's environ (`ps -Eww`), and whether macOS `python3` is the
+  CommandLineTools stub. Both are cells the borrowed-Mac probe
+  (`scripts/raw-macos-measure/probe.sh`, M6 and M3) is built to answer. Do
+  not fill them from a CI image spec.
+- **Codex is not a garden backend in this cut.** Step 1 of #95 closed as
+  measurement; step 2 is not opened. `entwurf_fresh_call` still cannot open a
+  codex sibling.
 
 ## 0.19.0 - 2026-09-07
 

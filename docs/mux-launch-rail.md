@@ -14,6 +14,9 @@
 > **§6이 서술한 형태의 T1-b(사전 주입 token → identity lookup)는 CLOSED다** — 미구현인 채로 §6-a의
 > callback correlation에 의해 superseded됐고, 새 증거와 GLG 재승인 없이 다시 열지 않는다.
 > 정확한 다음 행동은 active NEXT handoff가 진다.
+> **Host.** Every LIVE receipt in this document is Linux evidence. macOS mux is
+> NOT CERTIFIED — pending physical host. That is an evidence boundary, not
+> UNSUPPORTED — native Windows is the unsupported axis.
 
 ## 1. 출발점 — 무엇을 부를지보다 어디에 여는지가 먼저다
 

@@ -490,8 +490,10 @@ Only what the vendor actually ships. This is the step where imagination is most 
     invocation and refuses if the receiver it is promising is not installed. **Every other
     launch you can only DETECT:** `doctor-copilot-receive` identifies the live CLI processes
     from their argv — the vendor entry they were exec'd with, never their command name, which
-    the shim's own `exec` makes unusable — reads `/proc/<pid>/environ` (the Linux
-    reading; macOS is NOT CERTIFIED — pending physical host), and goes red when the
+    the shim's own `exec` makes unusable — and reads that process's environment (on Linux,
+    `/proc/<pid>/environ`). The remaining uncertified Darwin axis is per-process
+    environment DISCOVERY, not `/proc` absence; macOS rails are NOT CERTIFIED —
+    pending physical host. The doctor goes red when the
     receiver is installed and a running session could never arm. Take both halves: a managed
     launch is not a substitute for the doctor, because operators start sessions their own way,
     and a vendor silence you cannot remove is a doctor's job rather than a reason to promise
@@ -809,6 +811,15 @@ component per unit, and pin its probe in the aggregate gate.** Concretely:
    Without the pin, the developer's own host leaks into the fixture.
 6. **Then update [`setup-clean-host.md`](./setup-clean-host.md)** so the hand-run verb list
    becomes what it should be — a repair path, not the install.
+7. **Install portability and rail certification are separate axes (Hard Rule 17).**
+   Opening an installer fence so Darwin can receive the wiring is not a rail
+   receipt. On a platform that is not certified, `setup` still writes the units
+   it can, but every harness-rail row asks `harness_rail_certified_platform()`
+   and comes back named non-green (FAIL) with wording lexically distinct from
+   an install failure: the wiring WAS written and nothing failed to install,
+   but the rail is NOT CERTIFIED — pending physical host. A new harness owes
+   that same split: its installer may be portable; its setup/doctor row must
+   not print green on an uncertified platform.
 
 The general shape, once more: two closed loops with nothing between them. The unit gates held
 unit ≡ doctor ≡ inverse, the admission gates held registry ≡ citizens ≡ fresh set, and no gate
@@ -830,4 +841,6 @@ edge before the cut, not after an operator's clean host comes up green and empty
 Verification protocol and evidence levels stay in [`../VERIFY.md`](../VERIFY.md); recorded
 host evidence in [`../BASELINE.md`](../BASELINE.md); the invariants every step above must
 respect in [`../AGENTS.md`](../AGENTS.md) — in particular Hard Rule 7, which remains the
-authority on the meta-record store contract that step 2 touches.
+authority on the meta-record store contract that step 2 touches, and Hard Rule 17,
+which keeps installation portability and rail certification as separate evidence
+axes (step 10).

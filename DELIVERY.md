@@ -80,6 +80,9 @@ axis; neither word is an admission grade or a synonym of *supported*. A pre-cont
 can be owned without being supported; a supported harness still has to walk
 [`docs/adding-a-harness.md`](./docs/adding-a-harness.md) step 9.
 
+Every row in this table is Linux evidence. macOS rails are NOT CERTIFIED — pending
+physical host. Do not read a D-level cell as a Darwin receipt.
+
 | Harness / surface | Product status | Capability | Transport and boundary |
 |---|---|---|---|
 | **pi native Entwurf** | shipped | D7; D8 partial | Record-addressed Unix control socket. A record-less socket is diagnostic only and never dispatched. |

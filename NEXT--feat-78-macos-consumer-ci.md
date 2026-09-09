@@ -82,23 +82,43 @@ Agent reports (gitignored) carry the per-slice receipts: `.agent-reports/macos-*
 
 ## Next
 
-1. Close the side-eye review (grok, `20260909T151557-9eff5b`, on the pushed `9cc5b09`): **Blocker 0
-   / Defect 3 / Observation 5.** The one defect this lane itself created is D1 — opening the
+**Steps 1–3 are DONE.** `9cc5b09` (the lane) and `e09b84e` (the side-eye review closure) are both
+pushed. `9cc5b09` is four-green in CI with the qualification step concluding success; `e09b84e`'s
+run has its three fast jobs green and the qualification body still turning.
+
+1. ~~Land the lane.~~ `9cc5b09`.
+2. ~~Close the side-eye review~~ (grok, `20260909T151557-9eff5b`, **Blocker 0 / Defect 3 /
+   Observation 5**). `e09b84e`. The one defect this lane itself created was D1 — opening the
    install fences made `entwurf setup` on a Darwin host **with a harness present** print
    `result: green`, because setup grades "detected + install completed" and never runs the doctor,
-   while the Darwin doctor is always nonzero. Documents and doctors stay honest; the command
-   operators actually type does not. D2/D3 were the two NEXT files disagreeing with each other,
-   and the uninstall refusal string still describing the retired install-side fence.
-2. `pnpm run check:full` once on the frozen candidate, then `check-gate-qualification` once —
-   this lane touched gates, mutants and manifests, so the scheduling contract requires the body.
-   Nothing may edit the worktree while either runs, including this file.
-3. GLG commits and pushes; CI must come back four-green with the qualification step success.
-4. Borrowed Mac: run `sh scripts/raw-macos-measure/probe.sh` **once** — no entwurf install, no
-   login, ~3.5s — and paste the whole output into the ledger under a `[host-darwin]` heading.
+   while the Darwin doctor is always nonzero. Documents and doctors stayed honest; the command
+   operators actually type did not.
+3. ~~Full floor + qualification on the frozen candidate.~~ `check:full` 469s exit 0 ·
+   qualification **391/391 KILLED** exit 0.
+4. **Borrowed Mac (GLG).** `sh scripts/raw-macos-measure/probe.sh` **once** — no entwurf install,
+   no login, ~3.5s — and paste the whole output into the ledger under a `[host-darwin]` heading.
    That single command closes acceptance items 1–6. Items 7–9 need a logged-in harness.
 5. GLG names 0.20.0. "macOS parity" would overclaim; "install surface CERTIFIED (CI) + shipped
    path portable, rails pending the borrowed-Mac receipt" is what the evidence carries.
 6. 0.20.0 through the four release modes, each its own GLG approval.
+
+## Verification tempo on THIS branch — a correction, recorded because it cost real time
+
+**Nothing blocks until the Mac. Do not sit watching CI.**
+
+The coordinator ran the full floor twice and the full 391-mutant qualification twice while this
+branch was still iterating, then waited on CI to repeat the second one. GLG stopped it
+(2026-09-09): *"우리가 수정한 것에 대해서만 가야지 아직 릴리즈 하는거 아니잖아."* That is
+`AGENTS.md` § Verification scheduling as written, and the mistake was reading a release-grade
+floor into a pre-release lane.
+
+- **Inner loop = the gates whose SUBJECT changed.** Nothing else. A focused gate answers in
+  seconds; the floor answers the same question in eight minutes and the mutant body in forty.
+- **The mutant body is scheduled, not ambient.** Once per lane that touched a gate/mutant/matrix,
+  on the candidate — not once per commit, and never as something a human waits on. Machine time
+  re-proves it on push; the four-axis release oracle only needs it at the RELEASE SHA.
+- **A CI run in flight is not a gate on the next step.** It reports; it does not block. Read it
+  when it lands.
 
 ## Carried observations — named, not opened
 

@@ -156,6 +156,13 @@ Expected tail on a fully green host: `DONE: entwurf setup — result: green (com
 
 The wiring / meta-bridge / smoke steps are internal building blocks of `setup` (`install_local_package`, `scripts/meta-bridge-install.sh`, `validate_entwurf_bridge`) — call `setup`, never the parts. Consumers who `npm install @junghanacs/entwurf` get the obvious npm surface; that path is not the developer concern here.
 
+Installation portability and rail certification are separate axes (Hard Rule 17).
+A harness-absent `setup` on the macOS CI runner reaching `result: green` is
+CERTIFIED (CI) for the Entwurf-only install surface only. On a platform that is
+not certified, a detected harness is named non-green (FAIL) whose wording is
+not an install failure: the wiring WAS written, but the rail is NOT CERTIFIED —
+pending physical host. That FAIL is the honest setup verdict, not a skip.
+
 ### 1.1 Variables (optional)
 
 ```bash

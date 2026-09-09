@@ -79,6 +79,24 @@ A few words that look unusual for a coding tool.
 
 ## Install
 
+**Platform evidence, in one breath.** The Entwurf-only install surface on
+macOS is CERTIFIED (CI) (`macos-install-surface`). On macOS every
+garden-native harness rail (pi, Claude, Copilot, OMP, agy), marker join,
+ACP turn, and mux is NOT CERTIFIED — pending physical host; on Linux those
+same rails are the certified axis. native Windows is UNSUPPORTED.
+CERTIFIED (CI) is weaker than a physical-host doctor green.
+The npm package has no `os` restriction; that is installability, not a
+support claim.
+
+On Darwin, `entwurf setup` that detects a harness is intentionally
+non-green: the wiring WAS written and nothing failed to install, but the
+harness rail is NOT CERTIFIED — pending physical host. That FAIL is not
+an install defect. An Entwurf-only host (no harness on PATH) stays green.
+
+A physical Mac can send host facts without installing or logging in:
+`scripts/raw-macos-measure/probe.sh` (`/bin/sh`, ~3.5s). Measurement,
+not certification.
+
 `entwurf` is a neutral npm package first. Get the package, then run **`entwurf setup
 <project>`** — one command, the same front door from an npm global install, an npm
 project-local install, or a source checkout. It composes every harness it finds on the
@@ -187,6 +205,9 @@ gitignored and may be absent or stale immediately after a checkout or pull.
 
 ### Pi adapter / ACP plugin lane
 
+This rail is CERTIFIED on Linux; on macOS it is NOT CERTIFIED — pending
+physical host (control sockets, mux, ACP plugin hosting).
+
 To use the `entwurf` provider inside pi, install a compatible pi binary
 separately (`@earendil-works/pi-coding-agent >=0.85.1 <0.86`). Then point pi at
 the npm-installed package or development clone:
@@ -218,9 +239,9 @@ surface: each unit has its own installer, its own doctor with a named refusal, a
 inverse, so a single broken unit can be redone without touching the rest.
 
 - **Claude Code** (Linux CERTIFIED; macOS NOT CERTIFIED — pending physical host) — `install-meta-bridge`, `doctor-meta-bridge`.
-- **Antigravity / agy** (macOS: NOT CERTIFIED — pending physical host) — `install-agy-bridge`, `install-agy-statusline`, `install-agy-hooks`, each with a matching `doctor-agy-*`.
-- **GitHub Copilot CLI** (macOS: NOT CERTIFIED — pending physical host) — four independent units, four independent failure modes: `install-copilot-bridge` (birth: garden id + who-sent, on the first prompt), `install-copilot-mcp` (the entwurf tool hand, where `entwurf_inbox_read` lives), `install-copilot-receive` (the receiver extension: doorbell + receiver marker), `install-copilot-statusline` (optional for a manual citizen, required for supported fresh) — each with a matching `doctor-copilot-*` and `uninstall-copilot-*`.
-- **OMP (`omp`)** (macOS: NOT CERTIFIED — pending physical host) — four units, in-process extensions rather than launchers: `install-omp-bridge` (birth: the `mode === "tui"` visible host, its garden id on the status line, and who-sent), `install-omp-mcp` (the omp-native `entwurf-bridge` entry), `install-omp-config` (the one operator setting `tools: xdev: false`, without which the vendor mounts MCP tools as `xd://` devices the model cannot call), `install-omp-receive` (the receiver extension: mailbox watch + announce-only doorbell) — each with a matching `uninstall-omp-*`, and a `doctor-omp-*` for all but the setting, whose runtime axis `doctor-omp-mcp` owns. The setting writer owns exactly the lines it adds and refuses an explicit operator `tools: xdev: true` by name rather than overwriting it.
+- **Antigravity / agy** (Linux CERTIFIED; macOS NOT CERTIFIED — pending physical host) — `install-agy-bridge`, `install-agy-statusline`, `install-agy-hooks`, each with a matching `doctor-agy-*`.
+- **GitHub Copilot CLI** (Linux CERTIFIED; macOS NOT CERTIFIED — pending physical host) — four independent units, four independent failure modes: `install-copilot-bridge` (birth: garden id + who-sent, on the first prompt), `install-copilot-mcp` (the entwurf tool hand, where `entwurf_inbox_read` lives), `install-copilot-receive` (the receiver extension: doorbell + receiver marker), `install-copilot-statusline` (optional for a manual citizen, required for supported fresh) — each with a matching `doctor-copilot-*` and `uninstall-copilot-*`.
+- **OMP (`omp`)** (Linux CERTIFIED; macOS NOT CERTIFIED — pending physical host) — four units, in-process extensions rather than launchers: `install-omp-bridge` (birth: the `mode === "tui"` visible host, its garden id on the status line, and who-sent), `install-omp-mcp` (the omp-native `entwurf-bridge` entry), `install-omp-config` (the one operator setting `tools: xdev: false`, without which the vendor mounts MCP tools as `xd://` devices the model cannot call), `install-omp-receive` (the receiver extension: mailbox watch + announce-only doorbell) — each with a matching `uninstall-omp-*`, and a `doctor-omp-*` for all but the setting, whose runtime axis `doctor-omp-mcp` owns. The setting writer owns exactly the lines it adds and refuses an explicit operator `tools: xdev: true` by name rather than overwriting it.
 
 Run them as `entwurf <command>`. Which unit a doctor's refusal names, and the clean-host
 walk-through for each harness, live in [docs/setup-clean-host.md](./docs/setup-clean-host.md).
@@ -275,11 +296,10 @@ Copilot units included — and restart its existing processes; reach for a singl
 only when a **new** session using the
 installed artifact makes `doctor-meta-bridge` exit 0 with the live owner join.
 
-Linux is the CERTIFIED Claude meta-bridge axis. On macOS the Entwurf-only install
-surface is CERTIFIED (CI) (`macos-install-surface`); the Claude rail there is
-NOT CERTIFIED — pending physical host. Darwin uninstall remains available for
-legacy cleanup, and the neutral package itself has no `os` restriction. Detailed
-diagnosis and clean-host steps live in
+The Claude meta-bridge rail is CERTIFIED on Linux. On macOS it is
+NOT CERTIFIED — pending physical host. The Darwin install fence is
+open; uninstall was already open. Detailed diagnosis and clean-host
+steps live in
 [docs/setup-clean-host.md](./docs/setup-clean-host.md).
 
 The active citizen store is V3-only. A store that fails certification is never
