@@ -10,6 +10,15 @@ and the Cortex `realHome` path-flavor fix (PR #77). GLG (2026-09-09)
 deferred the physical-Mac loan: this cut is honest about a **CERTIFIED (CI)**
 install surface and does not pretend the harness rails are certified.
 
+**macOS in this release.** This release adds macOS support for Entwurf's
+install surface: the npm package installs, `entwurf --help` and `entwurf
+check-bridge` boot, and `entwurf setup` composes the integrations it finds.
+The four installers that previously rejected Darwin by platform name no longer
+do. We validated that surface only in macOS CI because the developers did not
+have a physical Mac. So macOS native-harness rails—marker join, an ACP turn,
+and mux included—are not yet certified; setup writes their wiring but reports
+them non-green. Linux's certified rail status is unchanged.
+
 ### Upgrade note — this one asks something of the operator
 
 **On Darwin, `entwurf setup` no longer prints `result: green` when a harness

@@ -152,9 +152,12 @@ bash "$CI_ORACLE" "$SHA" wait
 ```
 
 The oracle requires four axes on one run at that exact SHA: the workflow
-conclusion, the three job conclusions, and the `check` job's
+conclusion, the FOUR required job conclusions (`check`, `install-surface`,
+`artifact-consumer`, `macos-install-surface`), and the `check` job's
 `./run.sh check-gate-qualification` step concluding `success`. A skipped body is
-not evidence, so it fails the same way a red one does.
+not evidence, so it fails the same way a red one does. `macos-install-surface`
+joined the required set in 0.20.0 on its first green; a red macOS runner now
+blocks a cut exactly like any other required job.
 
 If the oracle names the qualification step -- absent or skipped -- the body did
 not run at this SHA. Force it, wait, and re-run the oracle. `gh workflow run`
@@ -190,7 +193,8 @@ test "$(count_dispatch_runs)" -gt "$BEFORE" || {
 bash "$CI_ORACLE" "$SHA" wait
 ```
 
-Report the SHA, workflow URL, the run event, all three job conclusions, and the
+Report the SHA, workflow URL, the run event, all FOUR required job conclusions
+(`check`, `install-surface`, `artifact-consumer`, `macos-install-surface`), and the
 qualification-step conclusion. End with:
 
 ```text
@@ -357,7 +361,7 @@ commit.
 
 For #51-style repair releases, do not create the final candidate here. The exact
 candidate must be created from the clean prepared HEAD only after that exact SHA
-has been pushed and all three CI jobs are green. `make` owns that post-CI
+has been pushed and all FOUR required CI jobs are green. `make` owns that post-CI
 acceptance. A checkout pack-once result is not release-artifact evidence.
 
 Never claim an unrun gate as passed.
