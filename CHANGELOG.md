@@ -28,6 +28,25 @@ All notable changes to this project will be documented here. Format follows [Kee
   real defect (dropping `claude-fable-5-1` from `SUPPORTED_ANTHROPIC_MODEL_IDS`). Lane inventory
   `acp-cortex` 12 → 13; total 386 → 387.
 
+- **macOS gets its own evidence axis — an install surface, not a support claim.**
+  The `macos-install-surface` CI job (GitHub Actions `macos-latest`) was promoted
+  from non-voting to required after its first green at commit `70eda03`
+  (run 34303884286, 65 s, 10/10 steps): npm pack → checkout-invisible clean
+  consumer install → bin links → `entwurf --help` → `check-bridge` (direct MCP
+  smoke, 246 ms, the seven tools) → harness-absent `setup` (pi/Claude/agy/Copilot/
+  OMP all SKIP, bins/core PASS, computed verdict green, zero writes on the five
+  no-write axes and `auth.json` byte-identical). Platform vocabulary across
+  README/BASELINE now separates three states: the Entwurf-only install surface on
+  macOS is **CERTIFIED (CI)** — a CI runner, never a physical host; the harness
+  rails (Claude/Copilot/OMP/agy wiring, marker join, a real ACP turn, mux) are
+  **NOT CERTIFIED — pending physical host**; native Windows is **UNSUPPORTED**.
+- **`scripts/raw-macos-measure/` — the borrowed-Mac measurement ledger.** `probe.sh`
+  (`/bin/sh`, cells M1–M9) measures one host and writes nothing: no install, no
+  record, no state. The README maps each cell to the surface it measures and keeps a
+  `[host-linux]` control run so the probe itself is never the thing under test. Opened
+  by the promotion above; it is where a borrowed Mac produces the physical-host
+  evidence the CI runner cannot.
+
 ### Changed
 
 - **`[QK:CORTEX-PROVIDER-SIX-ROW-SURFACE]` → `[QK:CORTEX-PROVIDER-EXACT-ROW-SURFACE]`.** The claim's
@@ -37,6 +56,22 @@ All notable changes to this project will be documented here. Format follows [Kee
   `signature`), the `acp-provider.ts` comment and the `run.sh` usage line moved together. The
   mutant's `find`/`replace` are untouched — it still plants the same defect (filtering the cortex
   rows out of the real entry).
+- **Four install fences now accept `Linux | Darwin`** — `meta-bridge-install.sh`,
+  `copilot-bridge-install.sh`, `omp-bridge-install.sh`, `omp-receive-install.sh`
+  (the `meta-bridge-uninstall.sh` precedent). The installers' own refusal is the
+  toolchain check (python3/node/harness presence), never the platform name. A green
+  Darwin install certifies the install surface only, never a harness rail —
+  installation portability and rail certification are separate axes (Hard Rule 17).
+- **Doctor python `start_key`/`parent` now mint the same two-tier key the TS core
+  mints** (`/proc` stat field 22 → `linux:<ticks>`, else `ps -o lstart=` /
+  `ps -o ppid=`, the same argv vectors `meta-session.ts` uses). Darwin's remaining
+  doctor reason is per-process environment DISCOVERY, not start-key.
+- **Operator-surface portability substitutions (audit P1).** `grep -P` negative
+  lookaheads moved to awk (6 sites); `sha256sum` moved to the in-repo python3
+  hashlib helper (3 sites) — not a second `shasum` convention. `readlink -f` on the
+  operator path (`agy-imprint.sh`, `copilot-launch.sh`) replaced with the POSIX
+  symlink walk `mcp/entwurf-bridge/start.sh` already ships, and `agy-bridge.sh`
+  advice no longer prints a GNU-only command.
 
 ### Fixed
 
@@ -50,6 +85,18 @@ All notable changes to this project will be documented here. Format follows [Kee
   cell, and mutant `CORTEX-REALHOME-PLATFORM-NEUTRAL` replants `startsWith("/")` and dies at
   `[QK:CORTEX-REALHOME-PLATFORM-NEUTRAL]`. This claims no native-Windows support; the certified
   platform axis is unchanged.
+- **Doctors no longer call an unmeasured host clean.** When `/proc` is absent, the
+  Copilot launch-flag and OMP identity-carrier doctors used to fail OPEN — a `note`
+  and a green verdict. They now emit `UNVERIFIABLE` through the existing `bad` path:
+  no new severity, emitter, or exit code. The same contract is pinned one step
+  further — absent and unknowable are no longer collapsed: a failed enumeration
+  (`pgrep` rc 2) or an unreadable `cmdline` is UNKNOWN and stays non-green, while a
+  genuine no-match or a vanished process remains the benign note it always was.
+  That distinction is bidirectional and holds on Linux too, where `/proc`'s presence
+  had merely hidden the defect.
+- **Recovered-host selectors moved from GNU BRE alternation to ERE**
+  (`omp-bridge-doctor.sh`, `copilot-bridge-doctor.sh`), so BSD grep cannot report a
+  recovered host as unrecovered (a false RED that only Darwin's grep would mint).
 
 ## 0.19.0 - 2026-09-07
 

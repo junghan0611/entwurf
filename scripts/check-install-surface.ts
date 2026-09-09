@@ -510,12 +510,13 @@ const operatorCmds = [...targets].filter(([cmd, ts]) => !isDevGate(cmd) && ts.le
 		`${skillRel}: missing name, four authority modes, prerelease contract, or English/ASCII-only surface`,
 	);
 	ok(
-		"S7g: the executable ASCII CI oracle binds headSha and all three required jobs",
+		"S7g: the executable ASCII CI oracle binds headSha and all four required jobs",
 		ciOracle === null ||
 			(ciOracle.includes("headSha") &&
 				ciOracle.includes('"check"') &&
 				ciOracle.includes('"install-surface"') &&
 				ciOracle.includes('"artifact-consumer"') &&
+				ciOracle.includes('"macos-install-surface"') &&
 				ciOracleMode === "100755" &&
 				oracleIsAscii),
 		`${ciOracleRel}: missing executable mode, exact-SHA classification, required jobs, or ASCII-only content`,

@@ -25,9 +25,13 @@
 # Idempotent: re-running removes the prior marketplace/plugin first, so a
 # `nix rebuild` that moved node just re-bakes and re-installs cleanly.
 #
-# Platform: Linux only for the #51 repair cut. macOS cannot reach the strict
-# live-owner certification tier, so accepting an install there would advertise a
-# surface this release can never certify. Windows and every other platform fail fast.
+# Platform: Linux and Darwin. This installer's own platform dependency is python3 +
+# node + the claude CLI (all checked below); it touches no /proc, no systemd, no
+# GNU-only tool. Windows and every other platform fail fast. Live-owner rail
+# certification is a SEPARATE evidence axis owned by doctor-meta-bridge (Hard Rule 17:
+# installation portability and rail/runtime support are separate evidence axes) — a
+# green install here does not certify the Darwin rail; run ./run.sh doctor-meta-bridge
+# for that verdict.
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -64,11 +68,13 @@ esac
 
 die() { echo "meta-bridge-install: $*" >&2; exit 1; }
 
-# --- platform gate (Linux-only repair contract) -----------------------------
+# --- platform gate (installer's own dependency, not rail certification) -----
+# Darwin is open on the same precedent as meta-bridge-uninstall.sh:20-23: this
+# installer touches no /proc and no GNU-only tool, so its own mechanism is portable
+# even while the live-owner rail (doctor-meta-bridge) stays a separate, unproven axis.
 case "$(uname -s)" in
-  Linux) ;;
-  Darwin) die "macOS is not yet verified/certified for this repair cut. Strict live-owner certification currently requires /proc, so Darwin install is refused rather than left NOT CERTIFIED; future validation may reopen this lane." ;;
-  *) die "unsupported platform '$(uname -s)'. The Claude meta-bridge repair cut supports Linux only (no unverified fallback)." ;;
+  Linux | Darwin) ;;
+  *) die "unsupported platform '$(uname -s)'. This installer requires Linux or Darwin." ;;
 esac
 
 # --- toolchain gate, part 1: this machine's own runtime ---------------------

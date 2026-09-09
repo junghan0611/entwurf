@@ -234,6 +234,17 @@
 			"signatureSource": "scripts/check-copilot-receive-arm.ts"
 		},
 		{
+			"claim": "COPILOT-RECEIVE-DOCTOR-UNREADABLE-ARGV-IS-UNVERIFIABLE",
+			"title": "collapsing every OSError on `/proc/<pid>/cmdline` back to None makes a REFUSED identity read indistinguishable from a process that left: the candidate is skipped before identity is decided, all counters stay zero, and the doctor prints the benign `no live GitHub Copilot CLI process` note — claiming ABSENCE while a live CLI it was never allowed to identify may be sitting there inert. The environ claim above cannot cover this one: that branch is reachable only AFTER a successful argv match",
+			"subject": "scripts/copilot-receive-bridge.sh",
+			"find": ["\t\tif exc.errno in (errno.ENOENT, errno.ESRCH):", "\t\t\treturn None", "\t\treturn UNREADABLE"],
+			"replace": ["\t\treturn None"],
+			"gate": ["bash", "run.sh", "check-copilot-receive-arm"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:COPILOT-RECEIVE-DOCTOR-UNREADABLE-ARGV-IS-UNVERIFIABLE]",
+			"signatureSource": "scripts/check-copilot-receive-arm.ts"
+		},
+		{
 			"claim": "COPILOT-RECEIVE-DOCTOR-OWNS-SCANNER-FAILURE",
 			"title": "letting the scanner's exit status reach the assignment under `set -e` kills the doctor mid-section: no verdict line is printed at all, so the operator cannot tell a healthy host from a broken doctor — the same silent-death shape this lane already fixed once in the log grep",
 			"subject": "scripts/copilot-receive-bridge.sh",

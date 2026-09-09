@@ -1,13 +1,16 @@
 #!/usr/bin/env bash
 # Stable bin wrapper for Antigravity PreInvocation birth imprint.
 set -euo pipefail
-SELF="${BASH_SOURCE[0]}"
-if command -v readlink >/dev/null 2>&1; then
-  RESOLVED="$(readlink -f "$SELF" 2>/dev/null || printf '%s' "$SELF")"
-else
-  RESOLVED="$SELF"
-fi
-HERE="$(cd "$(dirname "$RESOLVED")" && pwd)"
+SOURCE="${BASH_SOURCE[0]}"
+while [ -L "$SOURCE" ]; do
+  DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
+  TARGET="$(readlink "$SOURCE")"
+  case "$TARGET" in
+    /*) SOURCE="$TARGET" ;;
+    *) SOURCE="$DIR/$TARGET" ;;
+  esac
+done
+HERE="$(cd -P "$(dirname "$SOURCE")" && pwd)"
 ROOT="$(cd "$HERE/.." && pwd)"
 
 # Node refuses --experimental-strip-types for raw .ts below node_modules. Dev

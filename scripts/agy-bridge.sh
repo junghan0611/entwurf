@@ -233,7 +233,7 @@ doctor_static_one() {
       # entwurf does NOT repair a failed launcher here: it may be owned by a foreign file.
       log "  $label: configured → '$cmd' does NOT serve MCP with its configured args/env$link_note"
       log "        $BOOT_DETAIL"
-      log "        Identify the launcher: command -v '$cmd'; readlink -f \"\$(command -v '$cmd')\""
+      log "        Identify the launcher: command -v '$cmd'; ls -l \"\$(command -v '$cmd')\""
       log "        If it is entwurf's managed dev link, restore it with ./run.sh expose-dev-bin (it REFUSES a foreign link)."
       log "        If a foreign launcher owns the name, repair/remove it yourself or put a working one earlier on PATH."
       return 1 ;;

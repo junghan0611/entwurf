@@ -53,8 +53,9 @@ Prerequisites on the host running the external MCP client:
 > construction. Pinned by `[QK:FRESHCALL-IDENTITY-SCRUB]` in the `check-mux-fresh-call` vitest lane,
 > inside `check:full`. The DETECT half is unchanged and still load-bearing, because a seam covers
 > only the launches that pass through it: `doctor-omp-bridge` reads `/proc/<pid>/environ` for every
-> live `omp` process and goes RED on its own axis when one carries either carrier. An omp the
-> operator started from a pi citizen's bash never touched the seam and is still unsupported, exactly
+> live `omp` process (the Linux reading; macOS is NOT CERTIFIED — pending physical host) and goes
+> RED on its own axis when one carries either carrier. An omp the operator started
+> from a pi citizen's bash never touched the seam and is still unsupported, exactly
 > as this boundary says.
 
 Example env file:

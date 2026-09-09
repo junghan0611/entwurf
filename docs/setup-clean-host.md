@@ -1,8 +1,11 @@
 # Clean-host setup
 
-Current operator recipe for a fresh Linux desktop/workstation. The neutral npm
-package can install elsewhere, but Claude's garden-native meta-bridge is certified
-only on Linux because its strict live-owner join uses `/proc`.
+Operator recipe for a POSIX host. The neutral npm package installs on macOS too —
+its Entwurf-only install surface there is CERTIFIED (CI) (`macos-install-surface`)
+— but the garden-native harness rails of §2–§6 are CERTIFIED on Linux only; on
+macOS they are NOT CERTIFIED — pending physical host. What is missing on Darwin is
+live-owner discovery evidence, not the install itself. native Windows is
+UNSUPPORTED.
 
 ## Requirements
 
@@ -134,6 +137,9 @@ The V3 record births the garden id; do not inject a pi session id manually.
 
 ## 3. Optional Claude Code native citizen
 
+This rail is CERTIFIED on Linux; on macOS it is NOT CERTIFIED — pending physical
+host (see the end of this section).
+
 First register the MCP bridge if the stable bin is not already present:
 
 ```bash
@@ -159,11 +165,19 @@ validation, or hand-inspected marker cannot replace a new real session. If the l
 form is unsupported, reinstall; if ownership is correct but the live join is absent,
 restart the affected session.
 
-New macOS wiring is refused because the live join is not instrumented there. Darwin
-uninstall remains available for cleaning an older managed install; this is an evidence
-boundary, not a permanent impossibility claim.
+macOS Claude wiring is NOT CERTIFIED — pending physical host (a physical Mac is
+planned): the strict live-owner join has no Darwin evidence yet, and a CI runner
+cannot supply a Claude login. Darwin uninstall remains available for cleaning an
+older managed install. That is an evidence boundary, not UNSUPPORTED — native
+Windows is the unsupported axis, not macOS.
 
 ## 4. Optional GitHub Copilot CLI native citizen
+
+This rail is CERTIFIED on Linux; on macOS it is NOT CERTIFIED — pending physical
+host. An installer whose platform fence accepts Darwin may run there, but a green
+install is not a rail receipt: no physical-host doctor evidence exists on Darwin
+yet. That is an evidence boundary, not UNSUPPORTED — native Windows is the
+unsupported axis.
 
 Copilot has four independently owned surfaces. `setup` composes all four when `copilot` is on
 PATH (#86 C3b); the commands below are the per-unit repair, doctor, and inverse surfaces. All
@@ -187,7 +201,11 @@ scanning for that process, checks the receiver, removes inherited pi identity ca
 the model/permission defaults. Birth occurs on the first prompt. `entwurf_fresh_call` uses this
 same managed invocation and requires the birth, MCP, receiver, and visible-identity preflight.
 
-## 4b. Optional OMP (`omp`) native citizen — accepted on one host
+## 4b. Optional OMP (`omp`) native citizen — accepted on one Linux host (thinkpad)
+
+On macOS this rail is NOT CERTIFIED — pending physical host; an installer whose
+platform fence accepts Darwin may run there, but that is not a rail receipt. The
+Linux evidence itself is one host, named in the version rule below.
 
 Three independently owned surfaces, and a boundary that is part of the instructions rather
 than a footnote. Birth, visible identity, who-sent, the MCP hand and RECEIVE are landed, and
@@ -414,6 +432,8 @@ PASS/SKIP/FAIL summary. The complete quiescence, archive, and exit-code contract
   core / full candidate floor); maintainer checkout only.
 - `check-install-container`: checkout-invisible Linux package-consumer shape using
   fixtures; not a native lifecycle proof.
+- `macos-install-surface`: macOS Entwurf-only package-consumer shape, CERTIFIED (CI)
+  (`macos-latest` runner, run 34303884286 @ `70eda03`); not a native lifecycle proof.
 - `doctor-meta-bridge`: one installed real Claude host, only with a new live session.
 - `LIVE=1 entwurf release-gate /path/to/scratch --cut`: aggregate runtime acceptance (`--cut` makes any MUST SKIP red; without it the run is a diagnostic pass).
 

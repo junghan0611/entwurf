@@ -962,31 +962,82 @@ else
   bad "doctor did not surface enabled-but-cache-miss as a hard load failure:"$'\n'"$DOC_CACHE_OUT"
 fi
 
-# #51 repair support boundary. Fake only `uname -s`: no macOS implementation is
-# emulated. New Darwin install must refuse as not-yet-certified, doctor must stay
-# nonzero with the same evidence wording, while uninstall MUST get past the platform
-# gate so an older managed install is not stranded (it then honestly fails on our
-# fixture's intentionally absent state file).
-PLATFORM_BIN="$TMP/platform-bin"; mkdir -p "$PLATFORM_BIN"
-cat > "$PLATFORM_BIN/uname" <<'SH'
-#!/usr/bin/env bash
+# 0.20.0 D4: the platform fence moved from a bare `uname -s` refusal to the
+# installer's own REAL dependency (python3; see meta-bridge-install.sh's platform
+# gate comment). This gate must therefore pin the NEW contract, not the retired one:
+#   (a) Darwin install no longer refuses on platform name — it reaches PAST the
+#       platform line to its own toolchain gate, and dies there ONLY when a real
+#       dependency is actually missing;
+#   (b) with the real dependency present, Darwin clears the platform gate entirely
+#       and reaches the external claude-CLI toolchain step (never "unsupported
+#       platform", never the retired "not yet verified/certified" wording);
+#   (c) meta-bridge-doctor.sh's Darwin RAIL verdict is a SEPARATE, unmoved evidence
+#       axis (Hard Rule 17) — it still refuses (nonzero), on a narrowed reason (Q2:
+#       start-key no longer needs /proc; per-process environ discovery still does);
+#   (d) uninstall was ALREADY open to Darwin (precedent) and is untouched here.
+FAKE_UNAME_BIN="$TMP/fake-uname-bin"; mkdir -p "$FAKE_UNAME_BIN"
+# Bake the ABSOLUTE bash path into the shebang: the two cells below deliberately
+# narrow PATH (no bash on it), and `#!/usr/bin/env bash` would need `env` to find
+# `bash` on THAT narrowed PATH — this fixture's own launcher must not depend on it.
+cat > "$FAKE_UNAME_BIN/uname" <<SH
+#!$(command -v bash)
 printf '%s\n' Darwin
 SH
-chmod +x "$PLATFORM_BIN/uname"
+chmod +x "$FAKE_UNAME_BIN/uname"
+
+# (a) A minimal PATH carrying ONLY `dirname` (the sole external command
+# meta-bridge-install.sh calls before its own python3 check) plus the fake Darwin
+# `uname`. No real python3/node/claude can leak in from the host — the death point
+# is fully controlled by this fixture, not by what happens to be installed here.
+NOPY_BIN="$TMP/nopy-bin"; mkdir -p "$NOPY_BIN"
+ln -sf "$(command -v dirname)" "$NOPY_BIN/dirname"
 set +e
-DARWIN_INSTALL_OUT="$(env HOME="$DOC_HOME" XDG_DATA_HOME="$TMP/darwin-xdg" PI_CODING_AGENT_DIR="$DOC_AGENT" PATH="$PLATFORM_BIN:$DOC_BIN:$PATH" bash "$REPO/scripts/meta-bridge-install.sh" 2>&1)"
-DARWIN_INSTALL_CODE=$?
-DARWIN_DOCTOR_OUT="$(env HOME="$DOC_HOME" CLAUDE_CONFIG_DIR="$DOC_CFG" PI_CODING_AGENT_DIR="$DOC_AGENT" ENTWURF_META_SESSIONS_DIR="$DOC_STORE" PATH="$PLATFORM_BIN:$DOC_BIN:$PATH" bash "$REPO/scripts/meta-bridge-doctor.sh" 2>&1)"
+DARWIN_NOPY_OUT="$(env HOME="$TMP/darwin-nopy-home" XDG_DATA_HOME="$TMP/darwin-nopy-xdg" PATH="$FAKE_UNAME_BIN:$NOPY_BIN" "$BASH" "$REPO/scripts/meta-bridge-install.sh" 2>&1)"
+DARWIN_NOPY_CODE=$?
+set -e
+if [ "$DARWIN_NOPY_CODE" -ne 0 ] \
+   && printf '%s\n' "$DARWIN_NOPY_OUT" | grep -q "python3' not on PATH" \
+   && ! printf '%s\n' "$DARWIN_NOPY_OUT" | grep -qi 'unsupported platform'; then
+  ok "Darwin install clears the platform gate and refuses on the REAL missing dependency (python3), never on platform name"
+else bad "Darwin install did not reach the python3 dependency gate as the new fence contract requires:"$'\n'"$DARWIN_NOPY_OUT"; fi
+
+# (b) The mirror proof: Darwin WITH python3+node present must clear the platform
+# gate AND the toolchain gate, refusing only because `claude` is absent from this
+# fixture's deliberately narrow PATH (never on platform name, never on the retired
+# "not yet verified/certified" wording).
+OK_BIN="$TMP/darwin-ok-bin"; mkdir -p "$OK_BIN"
+ln -sf "$(command -v dirname)" "$OK_BIN/dirname"
+ln -sf "$(command -v node)" "$OK_BIN/node"
+ln -sf "$(command -v python3)" "$OK_BIN/python3"
+set +e
+DARWIN_OK_OUT="$(env HOME="$TMP/darwin-ok-home" XDG_DATA_HOME="$TMP/darwin-ok-xdg" PI_CODING_AGENT_DIR="$TMP/darwin-ok-agent" PATH="$FAKE_UNAME_BIN:$OK_BIN" "$BASH" "$REPO/scripts/meta-bridge-install.sh" 2>&1)"
+DARWIN_OK_CODE=$?
+set -e
+if [ "$DARWIN_OK_CODE" -ne 0 ] \
+   && printf '%s\n' "$DARWIN_OK_OUT" | grep -q "'claude' CLI not on PATH" \
+   && ! printf '%s\n' "$DARWIN_OK_OUT" | grep -qi 'unsupported platform' \
+   && ! printf '%s\n' "$DARWIN_OK_OUT" | grep -qi 'not yet verified'; then
+  ok "Darwin install with real python3+node clears BOTH the platform and toolchain-part-1 gates, reaching the external claude-CLI step"
+else bad "Darwin install with real python3+node did not clear the platform gate as the new contract requires:"$'\n'"$DARWIN_OK_OUT"; fi
+
+# (c) The doctor's RAIL verdict is untouched by the fence change: still nonzero,
+# still reaches its final verdict line. Wording is narrowed under Q2/D1 (start-key
+# no longer blamed; only per-process environ discovery is), so pin the substring
+# that survives that rename, not the retired sentence.
+set +e
+DARWIN_DOCTOR_OUT="$(env HOME="$DOC_HOME" CLAUDE_CONFIG_DIR="$DOC_CFG" PI_CODING_AGENT_DIR="$DOC_AGENT" ENTWURF_META_SESSIONS_DIR="$DOC_STORE" PATH="$FAKE_UNAME_BIN:$DOC_BIN:$PATH" bash "$REPO/scripts/meta-bridge-doctor.sh" 2>&1)"
 DARWIN_DOCTOR_CODE=$?
-DARWIN_UNINSTALL_OUT="$(env HOME="$TMP/darwin-clean-home" XDG_DATA_HOME="$TMP/darwin-clean-xdg" PATH="$PLATFORM_BIN:$PATH" bash "$REPO/scripts/meta-bridge-uninstall.sh" 2>&1)"
+set -e
+if [ "$DARWIN_DOCTOR_CODE" -ne 0 ] && printf '%s\n' "$DARWIN_DOCTOR_OUT" | grep -q 'NOT CERTIFIED' && printf '%s\n' "$DARWIN_DOCTOR_OUT" | grep -q 'meta-bridge doctor: FAIL'; then
+  ok "Darwin doctor stays nonzero and reaches its final NOT-CERTIFIED verdict (rail certification is a separate, unmoved axis)"
+else bad "Darwin doctor did not hold the rail-certification evidence boundary:"$'\n'"$DARWIN_DOCTOR_OUT"; fi
+
+# (d) Uninstall precedent, unchanged by this lane: it was ALREADY open to Darwin
+# before 0.20.0 (legacy-cleanup capability, never install certification).
+set +e
+DARWIN_UNINSTALL_OUT="$(env HOME="$TMP/darwin-clean-home" XDG_DATA_HOME="$TMP/darwin-clean-xdg" PATH="$FAKE_UNAME_BIN:$PATH" bash "$REPO/scripts/meta-bridge-uninstall.sh" 2>&1)"
 DARWIN_UNINSTALL_CODE=$?
 set -e
-if [ "$DARWIN_INSTALL_CODE" -ne 0 ] && printf '%s\n' "$DARWIN_INSTALL_OUT" | grep -q 'not yet verified/certified for this repair cut'; then
-  ok "Darwin install is refused fail-loud as not-yet-certified (future validation may reopen)"
-else bad "Darwin install did not enforce the repair-cut evidence boundary:"$'\n'"$DARWIN_INSTALL_OUT"; fi
-if [ "$DARWIN_DOCTOR_CODE" -ne 0 ] && printf '%s\n' "$DARWIN_DOCTOR_OUT" | grep -q 'NOT YET VERIFIED/CERTIFIED for this repair cut' && printf '%s\n' "$DARWIN_DOCTOR_OUT" | grep -q 'meta-bridge doctor: FAIL'; then
-  ok "Darwin doctor stays nonzero and reaches its final NOT-YET-CERTIFIED verdict"
-else bad "Darwin doctor did not hold the repair-cut evidence boundary:"$'\n'"$DARWIN_DOCTOR_OUT"; fi
 if [ "$DARWIN_UNINSTALL_CODE" -ne 0 ] && printf '%s\n' "$DARWIN_UNINSTALL_OUT" | grep -q 'install state missing' && ! printf '%s\n' "$DARWIN_UNINSTALL_OUT" | grep -q 'unsupported platform'; then
   ok "Darwin uninstall passes the platform gate and reaches honest state preflight (legacy inverse retained)"
 else bad "Darwin uninstall was blocked by the support hard-cut instead of reaching honest inverse preflight:"$'\n'"$DARWIN_UNINSTALL_OUT"; fi

@@ -233,7 +233,9 @@ do_doctor() {
 	# THE INVISIBLE FAILURE. A Copilot launched without the flag never scans for
 	# extensions and prints nothing at all, so a perfectly installed unit stays inert
 	# with no symptom anywhere. Reading the live processes' own environment is the only
-	# place that silence becomes visible. Linux /proc only; elsewhere it is a note.
+	# place that silence becomes visible. That read is `/proc`-bound today; where the
+	# interface does not exist the axis is reported UNVERIFIABLE and non-green, never
+	# as a benign note (see the branch below).
 	#
 	# WHY NOT `pgrep -x copilot` (what this used to do). It matched nothing, ever, and
 	# reported that as the benign "no live copilot" note — so the detector built to break
@@ -255,7 +257,27 @@ do_doctor() {
 	# from OUR unit and carry `COPILOT_EXTENSION_PARENT_PID`; counting one as a session
 	# would report a receiver as its own missing session.
 	if [ ! -d /proc ]; then
-		note "no /proc on this platform — cannot read the live CLI environments"
+		# D1 — NON-GREEN, NOT A NOTE. This used to `note`, and a note lets this doctor end
+		# in PASS on a platform where the flag axis is blind: the exact false-success the
+		# paragraph at the unreadable-environ branch below refuses on Linux ("A note would
+		# let the doctor end in PASS while a session that can never arm is running"). The
+		# epistemic state here is the SAME one — the flag verdict's predicate INPUT is
+		# missing — so it gets the same verdict, and the reason is stated rather than
+		# rounded off.
+		#
+		# AND ABSENCE CANNOT BE CLAIMED EITHER. Without /proc there is no candidate
+		# enumeration at all, so this branch cannot say "no live Copilot CLI" the way the
+		# zero-count note below does; it can only say the axis was not measurable. That
+		# is a strictly weaker sentence than the note it replaces, which is the point.
+		#
+		# WHY NO `ps` SUBSTITUTE IS ATTEMPTED HERE. `ps -A -o pid=,args=` would recover the
+		# argv half, but macOS truncates argv for processes the caller does not own, and the
+		# environment half (`ps -E`/`ps eww`) succeeds there only for unrestricted targets —
+		# both are unmeasured (scripts/raw-macos-measure/probe.sh cell M6 is the receipt that
+		# would decide it). A guessed reader that silently identifies nothing would restore
+		# exactly the fail-open this branch just closed, so the read is not guessed. When M6
+		# lands, the portable read belongs right here, in place of this refusal.
+		bad "UNVERIFIABLE on this platform: there is no per-process environment interface, so the $FLAG_ENV state of a live Copilot CLI cannot be read — and without one this doctor cannot enumerate processes either, so it cannot claim that no CLI is running. The receiver IS installed, so a session launched without $FLAG_ENV=$FLAG_VALUE (never scans extensions, prints nothing, can never arm) is NOT ruled out. Launch through 'entwurf copilot', which sets the flag, and treat this axis as unmeasured until a native Darwin receipt exists."
 	else
 		local pid_seam="" scan_json
 		# WHICH PROCESSES ARE CANDIDATES. Normally every pid under /proc.
@@ -274,7 +296,7 @@ do_doctor() {
 		# stepped on once. The status is captured instead, and a broken scan becomes a verdict.
 		local scan_rc=0
 		scan_json="$(ENTWURF_PID_SEAM="${pid_seam}" ENTWURF_PID_SEAM_SET="${ENTWURF_COPILOT_RECEIVE_PIDS+1}" FLAG_ENV="$FLAG_ENV" FLAG_VALUE="$FLAG_VALUE" python3 - <<'PY'
-import os, pathlib
+import errno, os, pathlib
 
 flag_env = os.environ["FLAG_ENV"]
 flag_value = os.environ["FLAG_VALUE"]
@@ -284,17 +306,43 @@ if os.environ.get("ENTWURF_PID_SEAM_SET"):
 else:
 	candidates = [p.name for p in pathlib.Path("/proc").iterdir() if p.name.isdigit()]
 
+# THREE ANSWERS, NOT TWO. "The process is gone" and "the read was refused" are different
+# facts about a live host, and collapsing them is how this scanner reported a process it
+# could not read as a process that was not there. A returned list is the bytes; `None` is
+# a PROVEN absence; `UNREADABLE` is "the input could not be obtained", which is unknown.
+UNREADABLE = object()
+
 def read_nul(pid, what):
 	try:
 		return pathlib.Path(f"/proc/{pid}/{what}").read_bytes().split(b"\0")
-	except OSError:
-		return None
+	except OSError as exc:
+		# ONLY A PROVEN ABSENCE IS BENIGN. ENOENT/ESRCH is the process itself leaving
+		# between enumeration and this read — nothing is left to judge. EVERYTHING else
+		# (EACCES/EPERM under a `hidepid` /proc or a session owned by another user, and
+		# any other I/O failure) leaves the process THERE and the input MISSING. Unknown
+		# is the DEFAULT side on purpose: a new errno class must arrive as non-green
+		# rather than inherit the benign one.
+		if exc.errno in (errno.ENOENT, errno.ESRCH):
+			return None
+		return UNREADABLE
 
-armed_ok, armed_missing, unreadable, contaminated = 0, 0, 0, 0
-missing_pids, unreadable_pids, contaminated_pids = [], [], []
+armed_ok, armed_missing, unreadable, contaminated, argv_unknown = 0, 0, 0, 0, 0
+missing_pids, unreadable_pids, contaminated_pids, argv_unknown_pids = [], [], [], []
 
 for pid in candidates:
 	argv = read_nul(pid, "cmdline")
+	if argv is UNREADABLE:
+		# WE CANNOT EVEN SAY WHAT THIS PROCESS IS. Identity is the FIRST predicate here, so
+		# a refused argv read is not "not a Copilot CLI" — it is "unknown", and a Copilot
+		# CLI is NOT ruled out. It carries its own counter because the unreadable-ENVIRON
+		# counter below means something strictly stronger: there, identity already
+		# succeeded and the process IS a Copilot CLI, so that verdict can name a session.
+		# This branch can only say the doctor was blinded — which is exactly why the `bad`
+		# path further down cannot cover it (that one is reachable only AFTER a successful
+		# argv match).
+		argv_unknown += 1
+		argv_unknown_pids.append(pid)
+		continue
 	# No cmdline at all is a kernel thread or a process that exited mid-scan; neither is
 	# a Copilot session and neither is evidence of anything.
 	if not argv:
@@ -322,9 +370,13 @@ for pid in candidates:
 		continue
 
 	env = read_nul(pid, "environ")
-	if env is None:
-		# FAIL-CLOSED: we identified a native CLI but cannot read its environment, so its
-		# flag state is unknown. That is reported, never rounded to armed.
+	if env is None or env is UNREADABLE:
+		# FAIL-CLOSED, AND DELIBERATELY NOT SPLIT. We identified a native CLI and then did
+		# not learn its environment — whether it left mid-scan or refused the read, its
+		# flag state is unknown and it WAS a live Copilot CLI when identity matched. Both
+		# halves stay in this one reported bucket. Only the argv branch above needs the
+		# distinction, because there absence and refusal answer different questions
+		# ("is anything running at all?" vs "what is this?").
 		unreadable += 1
 		unreadable_pids.append(pid)
 		continue
@@ -351,24 +403,30 @@ for pid in candidates:
 		armed_missing += 1
 		missing_pids.append(pid)
 
-print(f"{armed_ok} {armed_missing} {unreadable} {contaminated}")
+print(f"{armed_ok} {armed_missing} {unreadable} {contaminated} {argv_unknown}")
 print(" ".join(missing_pids))
 print(" ".join(unreadable_pids))
 print(" ".join(contaminated_pids))
+print(" ".join(argv_unknown_pids))
 PY
 )" || scan_rc=$?
-		local counts armed_ok armed_missing unreadable contaminated missing_pids unreadable_pids contaminated_pids
+		local counts armed_ok armed_missing unreadable contaminated argv_unknown
+		local missing_pids unreadable_pids contaminated_pids argv_unknown_pids
 		counts="$(printf '%s\n' "$scan_json" | sed -n '1p')"
 		missing_pids="$(printf '%s\n' "$scan_json" | sed -n '2p')"
 		unreadable_pids="$(printf '%s\n' "$scan_json" | sed -n '3p')"
 		contaminated_pids="$(printf '%s\n' "$scan_json" | sed -n '4p')"
+		argv_unknown_pids="$(printf '%s\n' "$scan_json" | sed -n '5p')"
 		armed_ok="$(printf '%s' "$counts" | awk '{print $1}')"
 		armed_missing="$(printf '%s' "$counts" | awk '{print $2}')"
 		unreadable="$(printf '%s' "$counts" | awk '{print $3}')"
 		contaminated="$(printf '%s' "$counts" | awk '{print $4}')"
+		argv_unknown="$(printf '%s' "$counts" | awk '{print $5}')"
 		if [ "$scan_rc" -ne 0 ] || [ -z "$armed_ok" ]; then
 			bad "the /proc scan for live Copilot CLIs FAILED (exit $scan_rc) — the flag axis is UNKNOWN, so an inert session cannot be ruled out. This is a broken doctor, not a clean host."
-		elif [ "$armed_ok" -eq 0 ] && [ "$armed_missing" -eq 0 ] && [ "$unreadable" -eq 0 ]; then
+		elif [ "$armed_ok" -eq 0 ] && [ "$armed_missing" -eq 0 ] && [ "$unreadable" -eq 0 ] && [ "${argv_unknown:-0}" -eq 0 ]; then
+			# The one branch that may claim ABSENCE, and it may only claim it because every
+			# candidate answered: each was enumerated and its argv was read (or proved gone).
 			note "no live GitHub Copilot CLI process — start one with 'entwurf copilot' (or $FLAG_ENV=$FLAG_VALUE copilot) to arm a receiver"
 		else
 			[ "$armed_ok" -gt 0 ] && ok "$armed_ok live Copilot CLI process(es) carry $FLAG_ENV=$FLAG_VALUE"
@@ -378,6 +436,15 @@ PY
 				# doctor end in PASS while a session that can never arm is running, which is the
 				# exact false-success the section was written to break.
 				bad "$unreadable live Copilot CLI process(es) have an unreadable environment (pids: $unreadable_pids) — their $FLAG_ENV state is UNKNOWN and is NOT assumed armed. Re-run this doctor as the user that owns those sessions."
+			fi
+			if [ "${argv_unknown:-0}" -gt 0 ]; then
+				# RED, and NOT the same finding as the line above. There, identity had already
+				# succeeded, so the doctor could name a Copilot session and say what was unknown
+				# about it. Here identity ITSELF failed to be decided: a live process would not
+				# let its argv be read, so whether it is a Copilot CLI is unknown and one is not
+				# ruled out. Rounding that to "no live CLI" is the false success this branch
+				# exists to break.
+				bad "UNVERIFIABLE — the argv of $argv_unknown live process(es) could not be read (pids: $argv_unknown_pids), so whether any of them is a GitHub Copilot CLI is UNKNOWN. This doctor therefore does NOT claim that no CLI is running, and an inert session cannot be ruled out. Re-run it as the user that owns those processes, or on a host whose /proc is not restricted."
 			fi
 			if [ "$armed_missing" -gt 0 ]; then
 				bad "$armed_missing live Copilot CLI process(es) lack $FLAG_ENV=$FLAG_VALUE while the receiver is installed (pids: $missing_pids) — relaunch them with 'entwurf copilot', or uninstall the receiver so nothing promises a doorbell"

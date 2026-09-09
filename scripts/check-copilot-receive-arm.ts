@@ -727,6 +727,68 @@ ok(
 	}
 }
 {
+	// AN UNREADABLE argv IS "UNKNOWN", NOT "ABSENT" (#78 B2). Identity is the FIRST
+	// predicate of the scan, so a candidate whose `cmdline` will not open cannot be
+	// classified at all — and a blanket `except OSError: return None` classified it
+	// anyway, as "not a Copilot CLI". Every candidate taking that branch left all
+	// counters at zero, which is the benign "no live GitHub Copilot CLI process" note:
+	// a doctor claiming ABSENCE while its identity input was unavailable. That is the
+	// same false-success class as the platform branch above, so it gets the same verdict.
+	//
+	// THE DENIAL IS INJECTED, AND THAT IS SAID OUT LOUD BECAUSE IT MATTERS. The environ
+	// cell above makes its file really unreadable with prctl(PR_SET_DUMPABLE, 0), and
+	// measured on this kernel that trick does NOT reach argv: `/proc/<pid>/cmdline` stays
+	// mode 0444 and readable even for a non-dumpable child (a full /proc census read
+	// 340/340 cmdlines). A real EACCES there needs a `hidepid` /proc mount, which an
+	// unprivileged gate cannot create. So the refusal is raised exactly where the kernel
+	// would raise it — at the scanner's own read, with EACCES — through a `sitecustomize`
+	// on PYTHONPATH, and what this cell pins is the CLASSIFICATION of a refused read,
+	// which is the entire contract. The fixture process is real, and the control run
+	// asserts it WOULD be identified as a native CLI when its argv can be read, so
+	// neither half of the pin is vacuous.
+	const denyDir = path.join(root, "deny-cmdline");
+	mkdirSync(denyDir, { recursive: true });
+	writeFileSync(
+		path.join(denyDir, "sitecustomize.py"),
+		[
+			"import errno, os, pathlib",
+			"_pid = os.environ.get('ENTWURF_TEST_DENY_CMDLINE_PID')",
+			"if _pid:",
+			"    _target = '/proc/' + _pid + '/cmdline'",
+			"    _real = pathlib.Path.read_bytes",
+			"    def _denied(self):",
+			"        if str(self) == _target:",
+			"            raise PermissionError(errno.EACCES, 'Permission denied', str(self))",
+			"        return _real(self)",
+			"    pathlib.Path.read_bytes = _denied",
+		].join("\n") + "\n",
+	);
+	const opaqueArgv = spawn(
+		"python3",
+		["-c", "import time; time.sleep(60)", path.join(root, "node_modules", "@github", "copilot", "npm-loader.js")],
+		{ stdio: "ignore" },
+	);
+	running.push(opaqueArgv);
+	try {
+		await sleep(400);
+		const identified = doctor({ ENTWURF_COPILOT_RECEIVE_PIDS: String(opaqueArgv.pid) });
+		const blind = doctor({
+			ENTWURF_COPILOT_RECEIVE_PIDS: String(opaqueArgv.pid),
+			PYTHONPATH: denyDir,
+			ENTWURF_TEST_DENY_CMDLINE_PID: String(opaqueArgv.pid),
+		});
+		ok(
+			"[QK:COPILOT-RECEIVE-DOCTOR-UNREADABLE-ARGV-IS-UNVERIFIABLE] a live process whose argv is REFUSED is UNKNOWN, not absent — the doctor declines to claim that no CLI is running and ends RED, where the same process with a readable argv is judged",
+			identified.includes("lack COPILOT_CLI_ENABLED_FEATURE_FLAGS") &&
+				blind.includes("UNVERIFIABLE — the argv of 1 live process(es) could not be read") &&
+				!blind.includes("no live GitHub Copilot CLI process") &&
+				blind.trimEnd().endsWith("[copilot-receive-doctor] FAIL"),
+		);
+	} finally {
+		opaqueArgv.kill("SIGKILL");
+	}
+}
+{
 	// THE SCANNER'S OWN FAILURE IS THIS DOCTOR'S VERDICT, NOT ITS DEATH. Under
 	// `set -euo pipefail`, `x="$(python3 …)"` hands the interpreter's status to the
 	// assignment and `-e` ends the script there — no verdict line, no exit-0/exit-1

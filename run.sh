@@ -209,7 +209,7 @@ Usage:
 
   ./run.sh install-meta-bridge        # INTERNAL part of `setup` (native-harness plugin) + doctor recovery path — prefer `setup`; stateful GLOBAL install (plugin + USER MCP + settings keyset, honest uninstall state)
   ./run.sh uninstall-meta-bridge      # 1.0.0 meta-bridge Phase 2: stateful GLOBAL uninstall (restore only keys/items captured in install-state)
-  ./run.sh doctor-meta-bridge         # THE RELEASE ORACLE (#51, Linux-certified repair axis). exit 0 = every required layer was MEASURED on this Linux host: toolchain + state + plugin/MCP + resolved-artifact launch-form classification (all 3 owner hooks + doorbell static contract) + synthetic owner join + store scan + hook errors + SessionStart evidence + REQUIRED live MCP↔marker join + writer-version parity. Missing live evidence is NOT CERTIFIED (open a Claude session and re-run), never a pass; Darwin is not yet verified/certified and stays nonzero for this cut (future validation may reopen it). Detection power is held by check-meta-doctor-oracle
+  ./run.sh doctor-meta-bridge         # THE RELEASE ORACLE (#51, Linux-certified repair axis). exit 0 = every required layer was MEASURED on this Linux host: toolchain + state + plugin/MCP + resolved-artifact launch-form classification (all 3 owner hooks + doorbell static contract) + synthetic owner join + store scan + hook errors + SessionStart evidence + REQUIRED live MCP↔marker join + writer-version parity. Missing live evidence is NOT CERTIFIED (open a Claude session and re-run), never a pass; Darwin is NOT CERTIFIED and stays nonzero, on ONE narrowed reason — start-key and ppid are portable there (`ps` fallback, same string the TS core mints), so what holds the lane closed is per-process environment DISCOVERY alone, pending physical-host evidence. Detection power is held by check-meta-doctor-oracle
   ./run.sh copilot [args...]          # #82 RAIL 7: the MANAGED Copilot launch. exec()s the vendor CLI in THIS terminal (cwd/pid/exit preserved) with COPILOT_CLI_ENABLED_FEATURE_FLAGS=EXTENSIONS set for that one invocation — entwurf owns no part of your shell and writes nothing to it, but it owns the process it is about to become. Without that flag Copilot skips the extension scan SILENTLY. Refuses to launch unless the receiver unit is actually installed. Injects `--model auto` when no --model was given and `--yolo` when no explicit permission/surface policy flag was given, both BEFORE any `--`; every argument you pass is forwarded byte-identical. RUNNING THIS IS YOUR CONSENT to that profile — use plain `copilot` for stock vendor behaviour. Not tmux, not fresh-call, mints no citizen (birth is still the first prompt)
   ./run.sh install-copilot-bridge     # #82: GLOBAL install of the Copilot BIRTH plugin (own marketplace root; node+entry baked into the no-argv exec string). MCP wiring and the RECEIVER extension are separate install surfaces (install-copilot-mcp, install-copilot-receive). Also retires the stale Claude unit (--keep-stale-claude-unit opts out)
   ./run.sh uninstall-copilot-bridge   # #86 C3a: honest inverse of install-copilot-bridge from the package-owned install-state (exact qualified id + exact marketplace name/path + recorded assembly only; state deleted LAST; a failing vendor list is UNKNOWN and refuses; never --force, never the stale Claude unit)
@@ -6203,10 +6203,12 @@ case "$cmd" in
     # XDG data dir ($XDG_DATA_HOME/entwurf/meta-bridge/.assembled — dev clone and
     # installed package alike, never the checkout) and runs marketplace add +
     # install --scope user, so every native Claude Code session auto-loads it.
-    # Idempotent; Linux is the only currently certified axis for the #51 repair cut.
-    # Darwin fails loud as not-yet-verified because the strict doctor cannot currently
-    # certify its live owner join; future validation may reopen it. Uninstall permits Darwin
-    # so an older macOS install is not stranded without an honest inverse.
+    # Idempotent. Install accepts Linux | Darwin — the fence that remains inside the
+    # installer is the toolchain check (python3/node/claude presence), not the platform
+    # name. Rail certification stays with doctor-meta-bridge: Darwin is NOT CERTIFIED —
+    # pending physical host, reason = per-process environment DISCOVERY. Uninstall
+    # permits Darwin so an older macOS install is not stranded without an honest
+    # inverse.
     (cd "$REPO_DIR" && bash scripts/meta-bridge-install.sh "$@")
     ;;
   uninstall-meta-bridge)

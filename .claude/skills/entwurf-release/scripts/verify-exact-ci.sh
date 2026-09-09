@@ -64,7 +64,7 @@ import sys
 
 run = json.loads(os.environ["RUN_JSON"])
 expected_sha = os.environ["EXPECTED_SHA"]
-required = ("check", "install-surface", "artifact-consumer")
+required = ("check", "install-surface", "artifact-consumer", "macos-install-surface")
 # The qualification BODY axis. GitHub names an unnamed step "Run <command>", so
 # this literal is bound to ci.yml's `- run: ./run.sh check-gate-qualification`
 # line -- the one cell 8a already pins to exactly one occurrence.

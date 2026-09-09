@@ -490,7 +490,8 @@ Only what the vendor actually ships. This is the step where imagination is most 
     invocation and refuses if the receiver it is promising is not installed. **Every other
     launch you can only DETECT:** `doctor-copilot-receive` identifies the live CLI processes
     from their argv — the vendor entry they were exec'd with, never their command name, which
-    the shim's own `exec` makes unusable — reads `/proc/<pid>/environ`, and goes red when the
+    the shim's own `exec` makes unusable — reads `/proc/<pid>/environ` (the Linux
+    reading; macOS is NOT CERTIFIED — pending physical host), and goes red when the
     receiver is installed and a running session could never arm. Take both halves: a managed
     launch is not a substitute for the doctor, because operators start sessions their own way,
     and a vendor silence you cannot remove is a doctor's job rather than a reason to promise

@@ -158,13 +158,13 @@
 		},
 		{
 			"claim": "OMP-DOCTOR-CARRIER-TRIMS",
-			"title": "treating an empty or whitespace-only PI carrier as an inherited identity makes Bundle C's deliberate tmux `-e NAME=` scrub fail the deterministic floor whenever a visible fresh omp citizen is alive. Re-anchored when the carrier scan moved from an early-exiting `grep -q` to `grep -c` (the SIGPIPE/pipefail repair); the replanted defect is unchanged — only the line it attaches to moved",
+			"title": "treating an empty or whitespace-only PI carrier as an inherited identity makes Bundle C's deliberate tmux `-e NAME=` scrub fail the deterministic floor whenever a visible fresh omp citizen is alive. Re-anchored twice, and the replanted defect is unchanged both times — only the line it attaches to moved: first when the carrier scan went from an early-exiting `grep -q` to `grep -c` (the SIGPIPE/pipefail repair), then when the scan lost an indentation level because the `[ -d /proc ]` wrapper whose `else` arm was a fail-open `note` was removed (#78 D1)",
 			"subject": "scripts/omp-bridge-doctor.sh",
 			"find": [
-				"    HITS=\"$(tr '\\0' '\\n' < \"$ENVIRON\" 2>/dev/null | grep -cE '^(PI_SESSION_ID|PI_AGENT_ID)=.*[^[:space:]]' || true)\""
+				"  HITS=\"$(tr '\\0' '\\n' < \"$ENVIRON\" 2>/dev/null | grep -cE '^(PI_SESSION_ID|PI_AGENT_ID)=.*[^[:space:]]' || true)\""
 			],
 			"replace": [
-				"    HITS=\"$(tr '\\0' '\\n' < \"$ENVIRON\" 2>/dev/null | grep -cE '^(PI_SESSION_ID|PI_AGENT_ID)=' || true)\""
+				"  HITS=\"$(tr '\\0' '\\n' < \"$ENVIRON\" 2>/dev/null | grep -cE '^(PI_SESSION_ID|PI_AGENT_ID)=' || true)\""
 			],
 			"gate": ["bash", "run.sh", "smoke-omp-bridge-state"],
 			"timeoutSeconds": 300,
@@ -173,13 +173,30 @@
 		},
 		{
 			"claim": "OMP-DOCTOR-CARRIER-NONBLANK-IS-RED",
-			"title": "the doctor stops flagging a live omp process that carries a NONBLANK inherited PI_SESSION_ID/PI_AGENT_ID, so a session whose MCP children would speak under the parent pi garden id reads as clean and the doctor prints PASS. The real defect was subtler than this replant, which is why the replant is written this way: `grep -q` exited at the first match, SIGPIPEd `tr` mid-environ, and pipefail turned a MATCH into a failed pipeline — a race on how far `tr` got, misreading ~15% of runs, so a `-q` replant would SURVIVE most of the time and prove nothing. This one makes the same false-clean deterministic",
+			"title": "the doctor stops flagging a live omp process that carries a NONBLANK inherited PI_SESSION_ID/PI_AGENT_ID, so a session whose MCP children would speak under the parent pi garden id reads as clean and the doctor prints PASS. The real defect was subtler than this replant, which is why the replant is written this way: `grep -q` exited at the first match, SIGPIPEd `tr` mid-environ, and pipefail turned a MATCH into a failed pipeline — a race on how far `tr` got, misreading ~15% of runs, so a `-q` replant would SURVIVE most of the time and prove nothing. This one makes the same false-clean deterministic. Re-anchored at one indentation level less when the `[ -d /proc ]` wrapper was removed (#78 D1)",
 			"subject": "scripts/omp-bridge-doctor.sh",
-			"find": ["    if [ \"${HITS:-0}\" -gt 0 ]; then"],
-			"replace": ["    if [ \"${HITS:-0}\" -gt 99 ]; then"],
+			"find": ["  if [ \"${HITS:-0}\" -gt 0 ]; then"],
+			"replace": ["  if [ \"${HITS:-0}\" -gt 99 ]; then"],
 			"gate": ["bash", "run.sh", "smoke-omp-bridge-state"],
 			"timeoutSeconds": 180,
 			"signature": "[QK:OMP-DOCTOR-CARRIER-NONBLANK-IS-RED]",
+			"signatureSource": "scripts/smoke-omp-bridge-state.sh"
+		},
+		{
+			"claim": "OMP-DOCTOR-UNENUMERATED-IS-UNVERIFIABLE",
+			"title": "restoring `|| true` on the candidate-discovery `pgrep` folds a FAILED enumeration (exit 2, or a `pgrep` that is not on PATH at all) into `nothing matched` (exit 1): the loop receives an empty candidate set, the doctor prints the clean carrier line and PASSes, and a live omp session carrying a foreign pi garden id reads as CLEAN because the tool that would have found it never ran. The documented `ENTWURF_OMP_CARRIER_PIDS` seam cannot substitute for this — it narrows candidates and short-circuits the very enumeration that failed",
+			"subject": "scripts/omp-bridge-doctor.sh",
+			"find": [
+				"  ENUM_RC=0",
+				"  CARRIER_CANDIDATES=\"$(pgrep -x omp 2>/dev/null)\" || ENUM_RC=$?",
+				"  if [ \"$ENUM_RC\" -gt 1 ]; then",
+				"    ENUM_FAILED=\"$ENUM_RC\"",
+				"  fi"
+			],
+			"replace": ["  CARRIER_CANDIDATES=\"$(pgrep -x omp 2>/dev/null || true)\""],
+			"gate": ["bash", "run.sh", "smoke-omp-bridge-state"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:OMP-DOCTOR-UNENUMERATED-IS-UNVERIFIABLE]",
 			"signatureSource": "scripts/smoke-omp-bridge-state.sh"
 		}
 	]

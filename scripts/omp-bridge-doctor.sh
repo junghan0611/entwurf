@@ -40,6 +40,16 @@ note() { echo "  note  $*"; }
 bad()  { echo "  FAIL  $*"; fail=1; }
 own_bad() { echo "  FAIL  $*"; own_fail=1; }
 
+# 12-hex digest, portable. NOT `sha256sum`: that is coreutils and absent on macOS.
+# NOT `shasum -a 256` either (byte-identical layout though it is) — that would be a
+# second digest convention in this tree, and python3 is already a HARD prerequisite
+# on every path that reaches a digest here: the structural oracle below runs python3
+# before this loop is entered. So the digest reuses the python3 hashlib form
+# omp-receive-doctor.sh:99 and copilot-receive-bridge.sh:174 already ship. Empty on
+# any failure, exactly like the old `2>/dev/null` form — the caller reads an empty
+# digest as STALE, which is the fail-closed side.
+sha12() { python3 -c 'import hashlib,sys;print(hashlib.sha256(open(sys.argv[1],"rb").read()).hexdigest()[:12])' "$1" 2>/dev/null || true; }
+
 # shellcheck source=scripts/omp-bridge-oracle.sh
 . "$HERE/omp-bridge-oracle.sh"
 
@@ -87,8 +97,8 @@ if [ -n "$UNIT_DIR" ]; then
         note "$label source is absent in this checkout ($src) — parity not measurable here"
         continue
       fi
-      INST_SHA="$(sha256sum "$UNIT_DIR/$rel" 2>/dev/null | cut -c1-12)"
-      SRC_SHA="$(sha256sum "$src" 2>/dev/null | cut -c1-12)"
+      INST_SHA="$(sha12 "$UNIT_DIR/$rel")"
+      SRC_SHA="$(sha12 "$src")"
       if [ -n "$INST_SHA" ] && [ "$INST_SHA" = "$SRC_SHA" ]; then
         ok "installed $label matches source ($INST_SHA)"
       else
@@ -180,17 +190,25 @@ fi
 echo
 echo "[what the extension did — ${HOOK_LOG:-<unresolved>}]"
 if [ -n "$HOOK_LOG" ] && [ -f "$HOOK_LOG" ]; then
-  MINT_ERRORS=' ERROR \[omp\] (?!sender-marker-)'
-  LAST_ERROR_LINE="$(grep -nP "$MINT_ERRORS" "$HOOK_LOG" 2>/dev/null | tail -1 | cut -d: -f1)"
-  LAST_OK_LINE="$(grep -n ' INFO \[omp\] \(create\|attach\) ' "$HOOK_LOG" 2>/dev/null | tail -1 | cut -d: -f1)"
-  TOTAL_ERRORS="$(grep -cP "$MINT_ERRORS" "$HOOK_LOG" 2>/dev/null | head -1)"; TOTAL_ERRORS="${TOTAL_ERRORS:-0}"
+  # PORTABLE SELECTOR, SAME CONTRACT. The separation above is a negative lookahead,
+  # and BSD grep (macOS) has no `-P` at all — so the selector is awk, where two
+  # conditions ARE `(?!…)`. It is also the pipefail-safe form: `grep -c` exits 1 on a
+  # zero-match file, which under this file's `set -o pipefail` (line 26) is exactly
+  # what the old `| head -1` was laundering; awk exits 0 and prints 0.
+  # The success selector moves from GNU BRE `\(a\|b\)` to ERE `(a|b)` for the same
+  # reason: BRE alternation is a GNU extension, so on BSD grep that pattern matches
+  # nothing and a RECOVERED host would be reported as unrecovered — a false RED.
+  MINT_ERRORS='/ ERROR \[omp\] / && !/ ERROR \[omp\] sender-marker-/'
+  LAST_ERROR_LINE="$(awk "$MINT_ERRORS{print NR}" "$HOOK_LOG" 2>/dev/null | tail -1)"
+  LAST_OK_LINE="$(grep -nE ' INFO \[omp\] (create|attach) ' "$HOOK_LOG" 2>/dev/null | tail -1 | cut -d: -f1)"
+  TOTAL_ERRORS="$(awk "$MINT_ERRORS{n++} END{print n+0}" "$HOOK_LOG" 2>/dev/null)"; TOTAL_ERRORS="${TOTAL_ERRORS:-0}"
   if [ -z "$LAST_ERROR_LINE" ]; then
     ok "no omp mint ERROR lines in $HOOK_LOG"
   elif [ -n "$LAST_OK_LINE" ] && [ "$LAST_OK_LINE" -gt "$LAST_ERROR_LINE" ]; then
     note "$TOTAL_ERRORS historical omp mint ERROR line(s), all followed by a successful mint (line $LAST_OK_LINE > $LAST_ERROR_LINE) — recovered, not red"
   else
     bad "the newest omp mint line in $HOOK_LOG is an unrecovered ERROR — the extension RAN and did not mint:"
-    grep -P "$MINT_ERRORS" "$HOOK_LOG" | tail -3 | sed 's/^/        /'
+    awk "$MINT_ERRORS" "$HOOK_LOG" | tail -3 | sed 's/^/        /'
   fi
 
   MARKER_FAILED="$(grep -c ' ERROR \[omp\] sender-marker-failed ' "$HOOK_LOG" 2>/dev/null | head -1)"
@@ -251,42 +269,93 @@ fi
 # than absorbing it into any other verdict.
 echo
 echo "[inherited pi identity carriers on live omp processes]"
-if [ -d /proc ]; then
-  CONTAMINATED=""
-  # Candidate set. Production scans every `omp` pid. `ENTWURF_OMP_CARRIER_PIDS` (set, even
-  # to empty) narrows it so a hermetic smoke can hand this branch REAL processes it launched
-  # and read their real `/proc/<pid>/environ`. It narrows candidates ONLY — the nonblank
-  # predicate below is the same production code either way.
-  if [ -n "${ENTWURF_OMP_CARRIER_PIDS+x}" ]; then
-    CARRIER_CANDIDATES="$ENTWURF_OMP_CARRIER_PIDS"
-  else
-    CARRIER_CANDIDATES="$(pgrep -x omp 2>/dev/null || true)"
-  fi
-  for pid in $CARRIER_CANDIDATES; do
-    case "$pid" in *[!0-9]*) continue ;; esac
-    ENVIRON="/proc/$pid/environ"
-    [ -r "$ENVIRON" ] || continue
-    # `grep -c`, never `grep -q`. This file runs under `set -o pipefail` (line 26), and a
-    # `-q` grep EXITS AT THE FIRST MATCH, closing the pipe while `tr` is still writing the
-    # rest of an ~12KB environ. `tr` dies of SIGPIPE (141), pipefail promotes that to the
-    # pipeline's status, and the `if` takes the CLEAN branch — so a genuinely contaminated
-    # process was reported as clean, and the doctor printed PASS. It is a RACE on how far
-    # `tr` got, which is why it read as flakiness: measured on this host, 6 misses in 40
-    # reads of one live fixture carrying PI_SESSION_ID=foreign-garden. `-c` consumes all of
-    # stdin, so there is no early close and nothing to race. The same lesson is already
-    # written at smoke-omp-mcp-state.sh:91 — it had not reached this reader.
-    HITS="$(tr '\0' '\n' < "$ENVIRON" 2>/dev/null | grep -cE '^(PI_SESSION_ID|PI_AGENT_ID)=.*[^[:space:]]' || true)"
-    if [ "${HITS:-0}" -gt 0 ]; then
-      CONTAMINATED="$CONTAMINATED $pid"
-    fi
-  done
-  if [ -n "$CONTAMINATED" ]; then
-    bad "live omp process(es)$CONTAMINATED carry a non-empty PI_SESSION_ID/PI_AGENT_ID inherited from a pi citizen's shell. Their MCP children would speak under the PARENT pi garden id, not their own — close them and relaunch omp from a shell without those variables"
-  else
-    ok "no live omp process carries a non-empty PI_SESSION_ID/PI_AGENT_ID (empty carrier values are the managed tmux scrub and are nonauthoritative; omp mints neither itself — the danger is pure inheritance passthrough, ledger M6)"
-  fi
+# THE CANDIDATE HALF IS PORTABLE; THE PREDICATE INPUT IS NOT. `pgrep -x omp` is POSIX
+# and answers on every platform; reading another process's environment is what needs
+# `/proc`. Those two facts used to be fused into one `[ -d /proc ]` branch whose else
+# arm was a `note`, and a note lets this doctor end in PASS while the contamination
+# detector is blind — the same fail-OPEN shape copilot-receive-bridge.sh:376-380
+# refuses on Linux ("A note would let the doctor end in PASS while a session that can
+# never arm is running, which is the exact false-success the section was written to
+# break"). The epistemic state is identical, so the verdict is now identical: an axis
+# whose predicate INPUT cannot be obtained is UNVERIFIABLE and non-green, never clean.
+#
+# Candidate set. Production scans every `omp` pid. `ENTWURF_OMP_CARRIER_PIDS` (set, even
+# to empty) narrows it so a hermetic smoke can hand this branch REAL processes it launched
+# and read their real `/proc/<pid>/environ`. It narrows candidates ONLY — the nonblank
+# predicate below is the same production code either way. It is a TEST SEAM, never
+# production proof: the branch below is what a real host runs, so it owes its own honesty.
+ENUM_FAILED=""
+if [ -n "${ENTWURF_OMP_CARRIER_PIDS+x}" ]; then
+  CARRIER_CANDIDATES="$ENTWURF_OMP_CARRIER_PIDS"
 else
-  note "/proc is unavailable, so live omp environments could not be read on this platform"
+  # `pgrep` HAS THREE ANSWERS AND ONLY TWO OF THEM ARE FACTS ABOUT omp. 0 = it enumerated
+  # and matched. 1 = it enumerated and NOTHING matched — a real, positive absence, which
+  # is evidence. ANYTHING ELSE (2 usage/syntax, 3 fatal, 127 not on PATH) means the
+  # enumeration itself did not happen, so the candidate set is UNKNOWN — not empty.
+  # This used to be `|| true`, which folded that third answer into the second: an empty
+  # candidate set, a loop that never runs, and the clean `ok` below. A live contaminated
+  # omp session then read as CLEAN because the tool that would have found it never ran
+  # (reproduced on an isolated install with a PATH-preceding `pgrep` shim exiting 2:
+  # rc=0, runtime PASS, ownership PASS). Same class as the missing-/proc branches below,
+  # so it gets the same verdict: an axis whose predicate INPUT cannot be obtained is
+  # UNVERIFIABLE and non-green, never clean.
+  ENUM_RC=0
+  CARRIER_CANDIDATES="$(pgrep -x omp 2>/dev/null)" || ENUM_RC=$?
+  if [ "$ENUM_RC" -gt 1 ]; then
+    ENUM_FAILED="$ENUM_RC"
+  fi
+fi
+CONTAMINATED=""
+UNVERIFIABLE=""
+for pid in $CARRIER_CANDIDATES; do
+  case "$pid" in *[!0-9]*) continue ;; esac
+  ENVIRON="/proc/$pid/environ"
+  if [ ! -d "/proc/$pid" ]; then
+    # TWO DIFFERENT FACTS SHARE THIS SHAPE AND ONLY ONE IS EVIDENCE. Where /proc
+    # exists, a missing /proc/<pid> means the process vanished between `pgrep` and
+    # this read — nothing to judge, so it is skipped. Where /proc ITSELF does not
+    # exist (Darwin), the process is still there and it is the INTERFACE that is
+    # missing: the verdict input is gone while the subject is not, which is the
+    # UNVERIFIABLE state and is reported, never skipped.
+    [ -d /proc ] && continue
+    UNVERIFIABLE="$UNVERIFIABLE $pid"
+    continue
+  fi
+  # STILL THERE, STILL UNREADABLE (hidepid, or an omp owned by another user that
+  # `pgrep` legitimately found) — same missing input, same state. This used to be a
+  # silent `continue`, which reported such a process as clean.
+  if [ ! -r "$ENVIRON" ]; then
+    UNVERIFIABLE="$UNVERIFIABLE $pid"
+    continue
+  fi
+  # `grep -c`, never `grep -q`. This file runs under `set -o pipefail` (line 26), and a
+  # `-q` grep EXITS AT THE FIRST MATCH, closing the pipe while `tr` is still writing the
+  # rest of an ~12KB environ. `tr` dies of SIGPIPE (141), pipefail promotes that to the
+  # pipeline's status, and the `if` takes the CLEAN branch — so a genuinely contaminated
+  # process was reported as clean, and the doctor printed PASS. It is a RACE on how far
+  # `tr` got, which is why it read as flakiness: measured on this host, 6 misses in 40
+  # reads of one live fixture carrying PI_SESSION_ID=foreign-garden. `-c` consumes all of
+  # stdin, so there is no early close and nothing to race. The same lesson is already
+  # written at smoke-omp-mcp-state.sh:91 — it had not reached this reader.
+  HITS="$(tr '\0' '\n' < "$ENVIRON" 2>/dev/null | grep -cE '^(PI_SESSION_ID|PI_AGENT_ID)=.*[^[:space:]]' || true)"
+  if [ "${HITS:-0}" -gt 0 ]; then
+    CONTAMINATED="$CONTAMINATED $pid"
+  fi
+done
+# Reported on their own lines, never folded: "contaminated", "cannot be judged" and "the
+# candidate set is unknown" send an operator to three different places, and absence is a
+# fourth answer that is none of them.
+if [ -n "$CONTAMINATED" ]; then
+  bad "live omp process(es)$CONTAMINATED carry a non-empty PI_SESSION_ID/PI_AGENT_ID inherited from a pi citizen's shell. Their MCP children would speak under the PARENT pi garden id, not their own — close them and relaunch omp from a shell without those variables"
+fi
+if [ -n "$UNVERIFIABLE" ]; then
+  bad "UNVERIFIABLE — the environment of live omp process(es)$UNVERIFIABLE could not be read, so their PI_SESSION_ID/PI_AGENT_ID state is UNKNOWN and is NOT assumed clean. On this platform there may be no per-process environment interface at all; \`ps -E\`/\`ps eww\` is deliberately NOT used as a substitute, because on Darwin it succeeds only for unrestricted targets and the measurement that would say which side omp falls on has not been run (scripts/raw-macos-measure/probe.sh cell M6). Otherwise, re-run this doctor as the user that owns those sessions."
+fi
+if [ -n "$ENUM_FAILED" ]; then
+  bad "UNVERIFIABLE — 'pgrep -x omp' FAILED (exit $ENUM_FAILED), so the SET of live omp processes is UNKNOWN and is NOT assumed empty. Nothing was enumerated, so this doctor can neither name a contaminated session nor claim there is none. Repair the process-enumeration tool on PATH (a \`pgrep\` that exits 1 is the honest 'nothing matched' and stays green) and re-run."
+fi
+if [ -z "$CONTAMINATED" ] && [ -z "$UNVERIFIABLE" ] && [ -z "$ENUM_FAILED" ]; then
+  ok "no live omp process carries a non-empty PI_SESSION_ID/PI_AGENT_ID (empty carrier values are the managed tmux scrub and are nonauthoritative; omp mints neither itself — the danger is pure inheritance passthrough, ledger M6)"
 fi
 
 # ── ownership axis ───────────────────────────────────────────────────────────

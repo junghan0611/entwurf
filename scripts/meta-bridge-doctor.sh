@@ -66,13 +66,18 @@ echo "meta-bridge doctor"
 echo "config=$CLAUDE_CFG  agent-dir=$AGENT"
 
 echo "[platform]"
-# The #51 repair contract is Linux-only because certification requires discovery of
-# each live bridge process's environment through /proc. Darwin is not an install lane
-# for this cut and must stay nonzero here too — never downgrade unsupported to a
-# static/synthetic PASS.
+# WHAT THIS FENCE IS ABOUT, NARROWLY. It is not "GNU tools" and it is not the
+# start-key: the python join below now mints the SAME `ps:` string the TS core mints
+# (audit Q2), so start-key and ppid are portable in this doctor too and that half of
+# the old reason is retired. What is left is bridge DISCOVERY — finding the live
+# entwurf MCP children by their per-process ENVIRONMENT — which has no measured
+# portable equivalent, so the live-owner tier is unreachable rather than merely
+# unobserved (the rc=3 branch below is the same verdict, stated where it fires).
+# Darwin therefore stays nonzero here: a doctor that cannot measure its central axis
+# must never downgrade "unsupported" to a static/synthetic PASS.
 case "$(uname -s)" in
   Linux)  ok "Linux supported — the certified live axis (live owner join is instrumentable)" ;;
-  Darwin) bad "macOS is NOT YET VERIFIED/CERTIFIED for this repair cut: strict live-owner certification currently requires /proc. The installer refuses Darwin; this doctor remains nonzero for diagnosis/legacy cleanup. Future validation may reopen the lane." ;;
+  Darwin) bad "macOS is NOT CERTIFIED for this cut: the live-owner join needs per-process ENVIRONMENT discovery of the live bridge children, and no portable Darwin equivalent has been MEASURED yet (start-key/ppid are portable here now — that half of the old reason is retired). This doctor stays nonzero on Darwin for diagnosis and legacy cleanup until a physical Darwin receipt exists." ;;
   *) bad "$(uname -s) unsupported (Claude meta-bridge repair cut is Linux-only)" ;;
 esac
 
@@ -982,7 +987,7 @@ fi
 echo "[live Claude MCP owner join]"
 if command -v python3 >/dev/null; then
   if JOIN_OUT="$(python3 - "$AGENT" "$META_SESSIONS" <<'PY' 2>&1
-import json, os, sys
+import json, re, subprocess, sys
 from pathlib import Path
 
 agent = Path(sys.argv[1]).expanduser().resolve()
@@ -990,23 +995,52 @@ store = Path(sys.argv[2]).expanduser().resolve()
 proc = Path("/proc")
 if not proc.is_dir():
     # rc=3 is a PLATFORM verdict, distinct from rc=2 ("no session open right now").
-    # The runtime this doctor verifies has a `ps` fallback for start-key/ppid, but
-    # bridge DISCOVERY needs per-process environ, which has no portable equivalent
-    # here — so the live tier is unreachable, not merely unobserved.
-    print("live owner join is NOT INSTRUMENTABLE on this platform: /proc is unavailable, so entwurf MCP children cannot be discovered")
+    # NARROWLY: start-key and ppid are NOT the reason — `parent()`/`start_key()` below
+    # carry the same two-tier `/proc`-then-`ps` fallback the runtime writer has, so they
+    # answer on any platform with a `ps`. Bridge DISCOVERY is the reason: it needs each
+    # candidate's per-process ENVIRONMENT, which has no measured portable equivalent, so
+    # the live tier is unreachable here rather than merely unobserved.
+    print("live owner join is NOT INSTRUMENTABLE on this platform: what holds the lane closed is per-process environment DISCOVERY alone — start-key and ppid are portable there (`ps` fallback, same string the TS core mints), but no measured Darwin equivalent exists for reading each live bridge child's environment")
     raise SystemExit(3)
 
 def stat_fields(pid):
     text = Path(f"/proc/{pid}/stat").read_text()
     return text[text.rfind(")") + 2:].split()
 
+def ps_field(pid, fmt):
+    # The SAME argv vector the writer uses (meta-session.ts parentPid/processStartKey),
+    # so the two writers cannot disagree by construction.
+    try:
+        out = subprocess.run(["ps", "-o", fmt, "-p", str(pid)], capture_output=True, text=True).stdout
+    except Exception:
+        return ""
+    return out.strip()
+
 def parent(pid):
+    if not isinstance(pid, int) or pid <= 0: return None
     try: return int(stat_fields(pid)[1])
-    except Exception: return None
+    except Exception: pass
+    # `ps -o ppid=` — literally the fallback parentPid() already ships.
+    ppid = ps_field(pid, "ppid=")
+    return int(ppid) if ppid.isdigit() and int(ppid) > 0 else None
 
 def start_key(pid):
-    try: return "linux:" + stat_fields(pid)[19]
-    except Exception: return ""
+    # TWO WRITERS, ONE STRING. The runtime mints this key (meta-session.ts
+    # processStartKey) and this doctor RE-mints it to compare against the marker; if the
+    # two ever mint different strings for the same live pid the join fails for a reason
+    # that has nothing to do with the install. So this is not "a portable start key" —
+    # it is the same two tiers in the same order with the same prefixes: `/proc/<pid>/stat`
+    # field 22 as `linux:<ticks>`, else `ps -o lstart= -p <pid>` trimmed as `ps:<lstart>`.
+    # python `.strip()` and JS `.trim()` both strip ASCII whitespace from this single-line
+    # output, and the argv vector is identical, so the bytes are identical (audit Q2).
+    # "" stays the UNKNOWN answer and never matches a marker — fail-closed, unchanged.
+    if not isinstance(pid, int) or pid <= 0: return ""
+    try:
+        starttime = stat_fields(pid)[19]
+        if re.fullmatch(r"\d+", starttime): return "linux:" + starttime
+    except Exception: pass
+    lstart = ps_field(pid, "lstart=")
+    return "ps:" + lstart if lstart else ""
 
 def process_agent(env):
     raw = env.get("PI_CODING_AGENT_DIR")
@@ -1088,7 +1122,7 @@ PY
     # send an operator to completely different places.
     case "$JOIN_RC" in
       2) bad "NOT CERTIFIED — $JOIN_OUT. Nothing here says the install is broken: the evidence simply does not exist yet. Open a Claude Code session (or restart the affected one) and run this doctor again." ;;
-      3) bad "NOT CERTIFIED on this platform — $JOIN_OUT. This repair cut currently certifies the Claude meta-bridge on Linux only; static/synthetic evidence cannot certify $(uname -s), and future native validation may reopen that lane." ;;
+      3) bad "NOT CERTIFIED on this platform — $JOIN_OUT. This repair cut certifies the Claude meta-bridge on Linux only; static/synthetic evidence cannot certify $(uname -s), and only a physical native run can reopen that lane." ;;
       *) bad "$JOIN_OUT. Re-run install-meta-bridge, restart the affected Claude session(s), then run doctor again." ;;
     esac
   fi
@@ -1121,7 +1155,14 @@ livewrite_schema() { # $1=meta-session.<ext> → v3|v2|v1|absent
   elif grep -q "serializeMetaIdentity" "$1"; then echo "v2"
   else echo "v1"; fi
 }
-hash12() { [ -f "$1" ] && sha256sum "$1" | cut -c1-12 || echo "------------"; }
+# 12-hex digest, portable. NOT `sha256sum` (coreutils, absent on macOS) and NOT
+# `shasum -a 256` — that would be a second digest convention, while python3 is already
+# a hard prerequisite of this whole doctor (line 31 reads install-state through it). So
+# this reuses the python3 hashlib form omp-receive-doctor.sh:99 already ships. An absent
+# file still yields `------------`, and a hashing failure now falls into that same
+# placeholder instead of an empty string — either way the parity rows below read it as
+# drift and go red, which is the fail-closed side.
+hash12() { [ -f "$1" ] && python3 -c 'import hashlib,sys;print(hashlib.sha256(open(sys.argv[1],"rb").read()).hexdigest()[:12])' "$1" 2>/dev/null || echo "------------"; }
 registry_for_ms() { # $1=bundle meta-session.ts → sibling plugin-root registry path
   [ -f "$1" ] || { echo ""; return; }
   dirname "$(dirname "$1")"

@@ -114,6 +114,44 @@ kill "$CARRIER_PID"
 wait "$CARRIER_PID" 2>/dev/null || true
 CARRIER_PID=""
 
+# THE CANDIDATE SET ITSELF CAN BE UNKNOWN, AND UNKNOWN IS NOT EMPTY (#78 B1). `pgrep`
+# answers three ways and only two of them are facts about omp: 0 = it enumerated and
+# matched, 1 = it enumerated and NOTHING matched (a real, positive absence), anything
+# else = it never enumerated. The doctor used to `|| true` that third answer into the
+# second, so a broken enumeration produced an empty candidate set, the clean carrier
+# line and a PASS — with a contaminated session possibly live on the host.
+#
+# BOTH DIRECTIONS ARE PINNED, because a repair that also reddened the honest "nothing
+# matched" would be a different defect. `ENTWURF_OMP_CARRIER_PIDS` must be UNSET for
+# these two: that seam short-circuits the very enumeration under test, which is why it
+# is a narrowing seam and never production proof.
+PGREP_SHIM="$SB/pgrep-shim"
+mkdir -p "$PGREP_SHIM"
+printf '#!/usr/bin/env bash\nexit 1\n' > "$PGREP_SHIM/pgrep"
+chmod +x "$PGREP_SHIM/pgrep"
+if OUT="$(env -u ENTWURF_OMP_CARRIER_PIDS PATH="$PGREP_SHIM:$PATH" "$RUN" doctor-omp-bridge 2>&1)"; then
+  printf '%s\n' "$OUT" | grep -q "no live omp process carries" || die "an enumerated-and-empty candidate set did not print the clean carrier verdict"
+  ok "a \`pgrep\` that enumerated and matched NOTHING is a real absence and stays green"
+else
+  printf '%s\n' "$OUT" >&2
+  die "a \`pgrep\` exit 1 (nothing matched) turned the carrier axis red"
+fi
+printf '#!/usr/bin/env bash\nexit 2\n' > "$PGREP_SHIM/pgrep"
+if OUT="$(env -u ENTWURF_OMP_CARRIER_PIDS PATH="$PGREP_SHIM:$PATH" "$RUN" doctor-omp-bridge 2>&1)"; then
+  printf '%s\n' "$OUT" >&2
+  die "[QK:OMP-DOCTOR-UNENUMERATED-IS-UNVERIFIABLE] a FAILED process enumeration left the doctor green — it printed a carrier verdict with no candidate set, so a live omp session carrying a foreign pi garden id would read as clean"
+fi
+if ! printf '%s\n' "$OUT" | grep -q "UNVERIFIABLE — 'pgrep -x omp' FAILED (exit 2)"; then
+  printf '%s\n' "$OUT" >&2
+  die "the doctor went red without naming the failed enumeration as UNVERIFIABLE"
+fi
+if printf '%s\n' "$OUT" | grep -q "no live omp process carries"; then
+  printf '%s\n' "$OUT" >&2
+  die "the doctor claimed a clean carrier axis while the candidate set was unknown"
+fi
+ok "a FAILED enumeration is UNVERIFIABLE and red, and it claims neither contamination nor absence"
+rm -rf "$PGREP_SHIM"
+
 # ── 2. reinstall is idempotent ───────────────────────────────────────────────
 "$RUN" install-omp-bridge >/dev/null || die "reinstall over our own state failed"
 "$RUN" doctor-omp-bridge >/dev/null || die "doctor red after a reinstall"

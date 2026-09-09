@@ -21,7 +21,7 @@ Antigravity native-push, Copilot self-fetch가 한 garden-id dispatch 표면으�
 ACP backend를 중복 구현하지 않는다. #56 Codex native lane은 닫혔고, Codex/Grok 탐구 브랜치는 main 밖에
 격리한다. 거기서 얻은 native/ACP rail 방법론은 필요할 때만 현재 증거로 다시 세운다.
 
-현재 우선순위는 **OMP를 보이는 세션 하나로서만 재는 것** (`docs/adding-a-harness.md` step 1; 서브에이전트는 citizen이 아니다), 그 다음 #78 portability다. 구현 레인은 GLG grant 전 금지. GitHub OPEN은 backlog가 아니라 최대 5개의 실행 가능한
+현재 레인은 #78 macOS 이식이다(`feat/78-macos-consumer-ci`): Entwurf-only 설치면은 **CERTIFIED (CI)**(`macos-install-surface` CI run 34303884286 @ `70eda03`)이고, 하네스 레일·마커 join·ACP 실턴·mux는 **NOT CERTIFIED — pending physical host**(회사 맥 대여 예정)이며, native Windows는 **UNSUPPORTED**다. OMP는 0.16.0에 출하됐다. GitHub OPEN은 backlog가 아니라 최대 5개의 실행 가능한
 계약만 둔다 (현재는 초과 — 이 컷이 sweep하지 않는다). 방향·철학·관찰 중인 가능성은 이 문서가 지며, 재현 가능한 결손이 되면 그때 증거와 다음 측정을
 갖고 이슈로 승격한다. 현재 실행 계약은 OMP 측정(이슈 아님, NEXT가 계약), #78 platform evidence, #72 ACP retained-child 원인, #76 subscription rail 강제, #80 public vocabulary다. #82/#86은 CLOSED. 실행 순서는 active NEXT handoff가 진다.
 

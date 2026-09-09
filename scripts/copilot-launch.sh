@@ -117,9 +117,23 @@ copilot_bin="$(type -P "$VENDOR_CMD" 2>/dev/null || true)"
 
 # Self-exec fence, the second half of the recursion guard: resolve symlinks and refuse
 # anything that is one of our own entrypoints even if the sentinel was stripped.
-resolved_bin="$(readlink -f "$copilot_bin" 2>/dev/null || printf '%s' "$copilot_bin")"
+# POSIX walk, same shape as mcp/entwurf-bridge/start.sh — BSD readlink has no -f.
+resolve_path() {
+	local SOURCE="$1" DIR TARGET
+	while [ -L "$SOURCE" ]; do
+		DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
+		TARGET="$(readlink "$SOURCE")"
+		case "$TARGET" in
+			/*) SOURCE="$TARGET" ;;
+			*) SOURCE="$DIR/$TARGET" ;;
+		esac
+	done
+	DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
+	printf '%s/%s\n' "$DIR" "$(basename "$SOURCE")"
+}
+resolved_bin="$(resolve_path "$copilot_bin")"
 for own in "$HERE/copilot-launch.sh" "$REPO_DIR/run.sh"; do
-	own_resolved="$(readlink -f "$own" 2>/dev/null || printf '%s' "$own")"
+	own_resolved="$(resolve_path "$own")"
 	[ "$resolved_bin" = "$own_resolved" ] \
 		&& fail "'$VENDOR_CMD' on PATH resolves to entwurf's own '$own_resolved' — that is a launch loop, not the vendor CLI."
 done

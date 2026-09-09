@@ -138,18 +138,17 @@ jobs:
   # "smallest proposed macOS measurement" #86 transferred to #78, implemented as a
   # composition of surfaces that already ship: pack the same candidate the publish
   # path packs, install it, and drive the harness-free operator commands from under
-  # node_modules. macos-latest IS a real Mac, so this needs no borrowed host.
+  # node_modules. macos-latest is a Darwin CI image, not an operator physical host:
+  # this job needs no borrowed Mac because it certifies the Entwurf-only install
+  # surface (CERTIFIED (CI)) and nothing else — the harness rails still need the
+  # borrowed Mac.
   #
-  # WHY NOT check-pack-install (the install-surface job above). That gate cannot
-  # stand on Darwin, and not by accident — it RUNS three installers that refuse
-  # every non-Linux host by design, each dying before it does any work:
-  #   scripts/meta-bridge-install.sh:70    (driven at run.sh:3948, 4463, 4527)
-  #   scripts/copilot-bridge-install.sh:69 (driven at run.sh:4050)
-  #   scripts/omp-bridge-install.sh:48     (driven at run.sh:4094)
-  # Those refusals are calibrated facts (README: Linux is the only certified Claude
-  # meta-bridge axis), not defects, so this job does not touch them and does not
-  # try to make that gate portable. The same gate also uses GNU coreutils the macOS
-  # base image does not ship (sha256sum, `sort -z`, `xargs -0r`).
+  # WHY NOT check-pack-install (the install-surface job above). That gate still
+  # cannot stand on Darwin — but no longer because of the install fences: this lane
+  # opened every install fence to `Linux | Darwin`, so the installers the gate
+  # drives no longer die on the platform name. The remaining reason is the GNU
+  # coreutils in the gate's own body, which the macOS base image does not ship
+  # (sha256sum, `sort -z`, `xargs -0r`).
   #
   # WHAT A GREEN RUN HERE CERTIFIES: the Entwurf-ONLY installation path on macOS
   # — the tarball builds and packs on Darwin, the packed bins resolve and run
@@ -161,54 +160,54 @@ jobs:
   # rail, any ACP backend, mux, or a single LIVE turn. None of those has a macOS
   # receipt, and this job mints none.
   #
-  # NON-VOTING BY CONSTRUCTION. `continue-on-error` keeps a red here off the
-  # workflow-RUN conclusion, which the exact-SHA release oracle reads whole
-  # (.claude/skills/entwurf-release/scripts/verify-exact-ci.sh:83). Without it an
-  # unmeasured platform would block every Linux cut from the day it was added, and
-  # #78's own rule is to claim only what physical evidence proves. Promoting this
-  # to a release axis is a GLG decision after a first physical green, and it means
-  # adding this job name to that oracle's `required` tuple (:67) and to VERIFY.md.
+  # REQUIRED as of 0.20.0 (#78), promoted from non-voting. This job's own
+  # earlier rule was: "Promoting this to a release axis is a GLG decision
+  # after a first physical green." That green happened: run 34303884286 @
+  # `70eda03` (2026-09-09), this job green in 65s, all 10 steps success, on
+  # this same job body. `continue-on-error` is removed below, so this job's
+  # conclusion now feeds the workflow RUN conclusion the same way `check`,
+  # `install-surface`, and `artifact-consumer` already do. Its name is added
+  # to verify-exact-ci.sh's `required` tuple (:67) and to VERIFY.md's release
+  # acceptance table.
   #
-  # THAT SEMANTIC IS VENDOR-DOCUMENTED, IT FAILS CLOSED, AND IT MEASURES ITSELF.
-  # docs.github.com workflow-syntax, `jobs.<job_id>.continue-on-error`: "Prevents
-  # a workflow run from failing when a job fails. Set to true to allow a workflow
-  # run to pass when this job fails." (fetched 2026-09-09). A documented contract,
-  # not a guess -- but someone else's, and this repo has no prior use of the key
-  # to lean on (measured: main carries 0 occurrences). So the DIRECTION of a break
-  # is what was reasoned about, not its odds:
+  # THE TRADE-OFF IS DELIBERATE. A macOS runner failure -- flaky infra, a
+  # macos-latest image change, or a genuine regression in this job's own
+  # steps -- now blocks every release cut, Linux included, the same way a red
+  # `check`/`install-surface`/`artifact-consumer` already does. What is newly
+  # staked is macOS runner availability and image drift, not unproven product
+  # code: the steps below are the same Entwurf-only install surface this
+  # promotion measured green once.
   #
-  #   fail-closed. On any residual edge -- a cancelled run, runner infrastructure
-  #   failure -- the RUN conclusion goes non-success, the release oracle ABORTs,
-  #   and the cut stops. What is staked on the semantic is AVAILABILITY (can we
-  #   cut today), never evidence-truth. It can refuse; it cannot deceive. Same
-  #   direction as this repo's "crash, don't warn", not an exception to it.
+  # INTERACTION WITH THE EXACT-SHA ORACLE. verify-exact-ci.sh already checks
+  # `run.conclusion != success` unconditionally, before it ever loops over
+  # `required` job names (:83-84) -- so a red job here now turns that
+  # unconditional check red directly, the same path a red Linux job already
+  # took; adding this job's name to `required` additionally names it in the
+  # per-job loop, but the run-conclusion check alone already catches it.
   #
-  #   the unmeasured part extinguishes itself. The assumption only bears load in
-  #   the state where a job here is RED -- and that is exactly the state whose own
-  #   run conclusion observes the semantic directly. Green here, and there is no
-  #   red to mask, so the assumption is inert. Red here, and the run's conclusion
-  #   IS the receipt: green run = the documented behaviour held; non-success run =
-  #   it did not, and the cut is already blocked. There is no state that bears
-  #   load silently. The first red job settles it in one push.
-  #
-  # So do not add machinery to hedge this, and do not read "unmeasured" as "unsafe".
+  # WHAT A GREEN RUN HERE CERTIFIES / DOES NOT CERTIFY IS UNCHANGED BY THIS
+  # PROMOTION -- see the two paragraphs above this job's steps. Required
+  # status widens WHEN a green macOS run is demanded, never WHAT it proves:
+  # Claude/Copilot/OMP/agy wiring, the pi provider rail, any ACP backend, mux,
+  # and a single LIVE turn remain uncertified by this job on any platform.
   #
   # WHY IT LIVES IN ci.yml AND NOT ITS OWN WORKFLOW FILE. A separate workflow file
   # would also keep a red off this run -- the release oracle only ever selects
   # ci.yml runs (verify-exact-ci.sh:26-33) -- but it buys that by making the macOS
   # cell INVISIBLE in the very run the operator and the oracle read at cut time,
   # and a dispatch-recovered SHA would then carry no macOS cell at all. The two
-  # reasons above plus that visibility all keep holding after a future promotion;
-  # the one-time cost of moving files does not, so it is deliberately NOT recorded
-  # here as a reason. Reopen the separate-workflow design on exactly two observed
-  # events and no earlier: a fail-closed rupture, or a physical green that earns
-  # promotion. Its price (rewriting the ci.yml-anchored `on:` reader at
+  # reasons above plus that visibility all kept holding through the promotion that
+  # has since landed; the one-time cost of moving files did not, so it is
+  # deliberately NOT recorded here as a reason. Reopen the separate-workflow design
+  # on exactly one observed event and no earlier: a fail-closed rupture. (The second
+  # trigger this paragraph once named — a green that earns promotion — is spent:
+  # that promotion landed above and the reasons still held, so it opens nothing.)
+  # Its price (rewriting the ci.yml-anchored `on:` reader at
   # scripts/check-release-gate-outcomes.ts:751, a second mutant subject for the
   # new file, and one qualification pass) is justified by that observation, never
   # prepaid ahead of it.
   macos-install-surface:
     runs-on: macos-latest
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4

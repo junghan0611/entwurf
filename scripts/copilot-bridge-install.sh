@@ -22,7 +22,8 @@
 # first-party extension, installed by `run.sh install-copilot-receive`, which also owns
 # the launch-flag check. Four surfaces, four installers, four failure modes.
 #
-# Platform: Linux only, same fence as the Claude installer.
+# Platform: Linux and Darwin, same fence as the Claude installer. Its own platform
+# dependency is python3 + node (checked below); no /proc, no GNU-only tool.
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -66,7 +67,10 @@ for arg in "$@"; do
   esac
 done
 
-[ "$(uname -s)" = "Linux" ] || die "Linux only; $(uname -s) is not a certified axis for this install."
+case "$(uname -s)" in
+  Linux | Darwin) ;;
+  *) die "unsupported platform '$(uname -s)'. This installer requires Linux or Darwin." ;;
+esac
 if [ "$ASSEMBLE_ONLY" -eq 0 ]; then
   command -v copilot >/dev/null 2>&1 || die "the 'copilot' CLI is not on PATH."
 fi

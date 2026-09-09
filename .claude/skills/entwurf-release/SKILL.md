@@ -82,6 +82,7 @@ full SHA, waits when requested, and requires these exact jobs to conclude
 - `check`
 - `install-surface`
 - `artifact-consumer`
+- `macos-install-surface`
 
 Use mode `verify` instead of `wait` when a prior run must already be complete.
 Never replace this with a branch-level green badge or the newest unrelated run.

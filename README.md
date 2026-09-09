@@ -217,10 +217,10 @@ for every harness it detects — you do not paste this list to install. This is 
 surface: each unit has its own installer, its own doctor with a named refusal, and its own
 inverse, so a single broken unit can be redone without touching the rest.
 
-- **Claude Code** (Linux-certified axis) — `install-meta-bridge`, `doctor-meta-bridge`.
-- **Antigravity / agy** — `install-agy-bridge`, `install-agy-statusline`, `install-agy-hooks`, each with a matching `doctor-agy-*`.
-- **GitHub Copilot CLI** — four independent units, four independent failure modes: `install-copilot-bridge` (birth: garden id + who-sent, on the first prompt), `install-copilot-mcp` (the entwurf tool hand, where `entwurf_inbox_read` lives), `install-copilot-receive` (the receiver extension: doorbell + receiver marker), `install-copilot-statusline` (optional for a manual citizen, required for supported fresh) — each with a matching `doctor-copilot-*` and `uninstall-copilot-*`.
-- **OMP (`omp`)** — four units, in-process extensions rather than launchers: `install-omp-bridge` (birth: the `mode === "tui"` visible host, its garden id on the status line, and who-sent), `install-omp-mcp` (the omp-native `entwurf-bridge` entry), `install-omp-config` (the one operator setting `tools: xdev: false`, without which the vendor mounts MCP tools as `xd://` devices the model cannot call), `install-omp-receive` (the receiver extension: mailbox watch + announce-only doorbell) — each with a matching `uninstall-omp-*`, and a `doctor-omp-*` for all but the setting, whose runtime axis `doctor-omp-mcp` owns. The setting writer owns exactly the lines it adds and refuses an explicit operator `tools: xdev: true` by name rather than overwriting it.
+- **Claude Code** (Linux CERTIFIED; macOS NOT CERTIFIED — pending physical host) — `install-meta-bridge`, `doctor-meta-bridge`.
+- **Antigravity / agy** (macOS: NOT CERTIFIED — pending physical host) — `install-agy-bridge`, `install-agy-statusline`, `install-agy-hooks`, each with a matching `doctor-agy-*`.
+- **GitHub Copilot CLI** (macOS: NOT CERTIFIED — pending physical host) — four independent units, four independent failure modes: `install-copilot-bridge` (birth: garden id + who-sent, on the first prompt), `install-copilot-mcp` (the entwurf tool hand, where `entwurf_inbox_read` lives), `install-copilot-receive` (the receiver extension: doorbell + receiver marker), `install-copilot-statusline` (optional for a manual citizen, required for supported fresh) — each with a matching `doctor-copilot-*` and `uninstall-copilot-*`.
+- **OMP (`omp`)** (macOS: NOT CERTIFIED — pending physical host) — four units, in-process extensions rather than launchers: `install-omp-bridge` (birth: the `mode === "tui"` visible host, its garden id on the status line, and who-sent), `install-omp-mcp` (the omp-native `entwurf-bridge` entry), `install-omp-config` (the one operator setting `tools: xdev: false`, without which the vendor mounts MCP tools as `xd://` devices the model cannot call), `install-omp-receive` (the receiver extension: mailbox watch + announce-only doorbell) — each with a matching `uninstall-omp-*`, and a `doctor-omp-*` for all but the setting, whose runtime axis `doctor-omp-mcp` owns. The setting writer owns exactly the lines it adds and refuses an explicit operator `tools: xdev: true` by name rather than overwriting it.
 
 Run them as `entwurf <command>`. Which unit a doctor's refusal names, and the clean-host
 walk-through for each harness, live in [docs/setup-clean-host.md](./docs/setup-clean-host.md).
@@ -275,10 +275,11 @@ Copilot units included — and restart its existing processes; reach for a singl
 only when a **new** session using the
 installed artifact makes `doctor-meta-bridge` exit 0 with the live owner join.
 
-Linux is the only currently certified Claude meta-bridge axis. New macOS wiring is
-refused because the strict live-owner doctor depends on `/proc`; Darwin uninstall
-remains available for legacy cleanup, and the neutral package itself has no `os`
-restriction. Detailed diagnosis and clean-host steps live in
+Linux is the CERTIFIED Claude meta-bridge axis. On macOS the Entwurf-only install
+surface is CERTIFIED (CI) (`macos-install-surface`); the Claude rail there is
+NOT CERTIFIED — pending physical host. Darwin uninstall remains available for
+legacy cleanup, and the neutral package itself has no `os` restriction. Detailed
+diagnosis and clean-host steps live in
 [docs/setup-clean-host.md](./docs/setup-clean-host.md).
 
 The active citizen store is V3-only. A store that fails certification is never

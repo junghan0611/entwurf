@@ -18,17 +18,24 @@ This table is the operator-facing support/certification view. It complements the
 model interview below; a persuasive answer from the model cannot turn an unmeasured
 host into a certified one. Verdicts are one of **certified** (a real host ran the
 installed doctor green), **shape-only** (gates model the package, no live host),
-or **unverified**.
+or **unverified**. Since 0.20.0 the table also carries two qualifiers:
+**CERTIFIED (CI)** marks a shape-only surface observed green on a CI runner — a
+runner is not a physical host, so bare **certified** still means a physical-host
+doctor green; and **NOT CERTIFIED — pending physical host** marks a rail whose
+missing evidence only a physical host can supply. That is an evidence boundary,
+not **UNSUPPORTED** — the deliberate never, which today is native Windows only.
 
 | Surface | Verdict | Evidence |
 |---|---|---|
 | Node 24 Linux package consumer | shape-only | Required `artifact-consumer` CI |
+| Node 24 macOS package consumer (GitHub Actions runner, not a physical Mac) | shape-only · CERTIFIED (CI) | Required `macos-install-surface` CI run 34303884286 @ `70eda03` (`macos-latest`, 65 s, 10/10 steps): pack → clean consumer install → bin links → `entwurf --help` → `check-bridge` (7 tools) → harness-absent `setup` (all SKIP, computed green, zero no-write-axis writes, `auth.json` byte-identical). Certifies no harness rail. |
 | Claude Code >=2.1.217 exec form | **certified** — supported floor | Topology + floor gates, doctor oracle; B2 live NixOS session |
 | Claude Code 2.1.138 | **unsupported** | Launcher refuses empty argv; no shell-form fallback |
 | Maintainer NixOS installed package | **certified** for `0.12.8-repair.1` | 2026-07-25 registry install → doctor exit 0 (HISTORY) |
 | Secondary Ubuntu installed package | **certified** for `0.12.8-repair.1` | 2026-07-25 same artifact, isolated agent dir → doctor exit 0 (HISTORY) |
-| macOS Claude meta-bridge | unverified | Installer refuses Darwin; no `/proc` live join |
-| WSL2 / Windows | unverified | None |
+| macOS Claude meta-bridge | NOT CERTIFIED — pending physical host | No physical-Mac doctor yet (company Mac planned); a CI runner has no Claude login |
+| WSL2 | unverified | Counts as Linux evidence, never a Windows surface (AGENTS Hard Rule 17) |
+| native Windows | UNSUPPORTED | Locked pending GLG; a scope decision, not an evidence gap |
 
 Notes the table cannot carry without becoming prose again:
 
@@ -36,13 +43,20 @@ Notes the table cannot carry without becoming prose again:
   candidate `.tgz`, checkout-invisible non-root global install, PATH shims, a frozen
   package root, the path+sha256 regular-file fence, and a strict doctor fixture. Its
   planted Claude cache/owner/bridge are synthetic — no real Claude lifecycle runs there.
+- **A CI runner is not a physical host.** The macOS consumer row is `macos-latest`
+  — an image, not the NixOS/Ubuntu "host" of the certified rows. Its green covers
+  the Entwurf-only install surface (pack, install, bins, `--help`, `check-bridge`,
+  harness-absent `setup`); it cannot log into a harness, so no rail, marker join,
+  ACP turn, or mux lifecycle is certified by it.
 - **Both certified hosts are certified for the published repair artifact only**, including
   physical `entwurf_v2` delivery and the live owner join. Stable cuts earn their own host
   proof; hand-patched hooks and `plugin validate` output are never acceptance.
 - **The maintainer host first went doctor-RED** on a managed dev-bin shadowing the registry
   bridge, and now runs dev wiring again.
-- **macOS is not permanently excluded.** Future native validation may reopen it, and the
-  package-level `os` field stays unrestricted.
+- **macOS evidence is split, not a support claim.** The Entwurf-only install surface is
+  CERTIFIED (CI) (row above); the harness rails are NOT CERTIFIED — pending
+  physical host (company Mac planned). The package-level `os` field stays
+  unrestricted, and native Windows is UNSUPPORTED.
 
 **Operator acceptance rule:** on a claimed Claude host, reinstall from the released
 artifact, restart every old Claude process, open a new session, and run the doctor

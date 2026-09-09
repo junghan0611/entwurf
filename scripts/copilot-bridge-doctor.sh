@@ -183,6 +183,8 @@ if [ -f "$HOOK_LOG" ]; then
   #
   # grep -c prints 0 AND exits 1 with no match, so a `|| echo 0` fallback would append a
   # SECOND line and every numeric test below would die on "0\n0". Keep it to one line.
+  # That rule still governs the plain-literal marker counters further down; the mint
+  # selector no longer needs it, for the reason in the next paragraph.
   #
   # MINT ERRORS ONLY. Since #82 RAIL 5b this unit also writes a SENDER marker, and a
   # failed marker write is an ERROR that lands AFTER the successful mint line — so the
@@ -190,10 +192,18 @@ if [ -f "$HOOK_LOG" ]; then
   # sentence that is simply false (the record IS there). The two failures are separated
   # here rather than downgraded in the payload, because a marker write that keeps
   # breaking must stay loud somewhere; it just is not a birth failure.
-  MINT_ERRORS=' ERROR \[copilot\] (?!sender-marker-)'
-  LAST_ERROR_LINE="$(grep -nP "$MINT_ERRORS" "$HOOK_LOG" 2>/dev/null | tail -1 | cut -d: -f1)"
-  LAST_OK_LINE="$(grep -n ' INFO \[copilot\] \(create\|attach\) ' "$HOOK_LOG" 2>/dev/null | tail -1 | cut -d: -f1)"
-  TOTAL_ERRORS="$(grep -cP "$MINT_ERRORS" "$HOOK_LOG" 2>/dev/null | head -1)"
+  #
+  # PORTABLE SELECTOR, SAME CONTRACT. That separation is a negative lookahead, and BSD
+  # grep (macOS) has no `-P` at all — so the selector is awk, where two conditions ARE
+  # `(?!…)`. It also removes the `grep -c` exit-1 hazard the paragraph above works
+  # around: awk prints 0 and exits 0 on a zero-match file, so there is no second line
+  # to launder. The success selector moves from GNU BRE `\(a\|b\)` to ERE `(a|b)` for
+  # the same portability reason — BRE alternation is a GNU extension, so on BSD grep
+  # that pattern matches nothing and a RECOVERED host reads as unrecovered (false RED).
+  MINT_ERRORS='/ ERROR \[copilot\] / && !/ ERROR \[copilot\] sender-marker-/'
+  LAST_ERROR_LINE="$(awk "$MINT_ERRORS{print NR}" "$HOOK_LOG" 2>/dev/null | tail -1)"
+  LAST_OK_LINE="$(grep -nE ' INFO \[copilot\] (create|attach) ' "$HOOK_LOG" 2>/dev/null | tail -1 | cut -d: -f1)"
+  TOTAL_ERRORS="$(awk "$MINT_ERRORS{n++} END{print n+0}" "$HOOK_LOG" 2>/dev/null)"
   TOTAL_ERRORS="${TOTAL_ERRORS:-0}"
   if [ -z "$LAST_ERROR_LINE" ]; then
     ok "no copilot ERROR lines in $HOOK_LOG"
@@ -201,7 +211,7 @@ if [ -f "$HOOK_LOG" ]; then
     note "$TOTAL_ERRORS historical copilot ERROR line(s) in $HOOK_LOG, all followed by a successful mint (line $LAST_OK_LINE > $LAST_ERROR_LINE) — recovered, not red"
   else
     bad "the newest copilot line in $HOOK_LOG is an unrecovered ERROR — the hook RAN and did not mint:"
-    grep -P "$MINT_ERRORS" "$HOOK_LOG" | tail -3 | sed 's/^/        /'
+    awk "$MINT_ERRORS" "$HOOK_LOG" | tail -3 | sed 's/^/        /'
   fi
 
   # WHO-SENT, judged on its own axis. Both outcomes leave a citizen that EXISTS and can

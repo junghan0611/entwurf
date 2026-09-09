@@ -1622,6 +1622,31 @@ export type MarkerOwnerVerdict = "live" | "dead" | "uncertain";
  * comparable to each other: `linux:<starttime ticks since boot>` and `ps:<lstart
  * wall-clock text>` describe the same process with different numbers, so a
  * mismatch ACROSS schemes says nothing about whether the process changed.
+ *
+ * They are also NOT equally resolved. `linux:` carries `/proc` clock ticks at
+ * 10 ms granularity; `ps:` carries `lstart` wall-clock text at ONE-SECOND
+ * granularity [measured, oracle 2026-09-09: two children spawned 50 ms apart
+ * returned identical `lstart` strings, and widening to `lstart=,command=`
+ * still collided when argv was identical]. Darwin has no `/proc`, so it ALWAYS
+ * takes the `ps:` branch — there the pid-reuse defense window is 100x wider
+ * than on Linux. 0.20.0 ships no key change anyway, and the numbers are why.
+ * A same-second pid reuse on Darwin requires pid N to die, the whole
+ * sequential pid space (PID_MAX 99999, wrapping after ~99,899 spawns and
+ * skipping live pids) to wrap back around to N, and the replacement to start
+ * in the SAME wall-clock second — a sustained ~99,900 spawns/second for a full
+ * second. Measured on the reference host: 19.9 forks/second average under real
+ * load, ~14,873 forks/second pathological synthetic peak (6.7x short even at
+ * the synthetic peak), with Darwin's default `kern.maxproc` (~2,500) capping
+ * churn in flight besides. The error direction is one-sided: a coarser clock
+ * can only make more keys compare EQUAL, and {@link classifyMarkerOwner} grants
+ * `live` on equal keys — coarsening can mint a false `live` (identity grant
+ * fails OPEN) and can never mint a false `dead` (the generation cut stays
+ * fail-CLOSED). The migration axis is empty by measurement, not argument: a
+ * read-only scan of this host's real marker store found 1,248 marker files —
+ * all `linux:`, zero `ps:` keys — because on Linux `/proc` always wins, so no
+ * Linux install ever minted a `ps:` key; only a Darwin install can. A
+ * Darwin-side hardening decision, if one is ever wanted, belongs with the
+ * physical-Mac receipts (#78), not ahead of them.
  */
 export type StartKeyScheme = "linux" | "ps";
 

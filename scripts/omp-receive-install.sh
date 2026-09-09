@@ -24,7 +24,9 @@
 # resolved by the shared oracle, which REFUSES rather than guesses when an inherited
 # `PI_*` knob makes it ambiguous (ledger M6).
 #
-# Platform: Linux only, same fence as the Claude, Copilot and omp-birth installers.
+# Platform: Linux and Darwin, same fence as the Claude, Copilot and omp-birth
+# installers. Its own platform dependency is python3 (checked below); no /proc,
+# no GNU-only tool.
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -48,7 +50,10 @@ for arg in "$@"; do
   esac
 done
 
-[ "$(uname -s)" = "Linux" ] || die "Linux only; $(uname -s) is not a certified axis for this install."
+case "$(uname -s)" in
+  Linux | Darwin) ;;
+  *) die "unsupported platform '$(uname -s)'. This installer requires Linux or Darwin." ;;
+esac
 command -v python3 >/dev/null 2>&1 || die "python3 is required and is not on PATH."
 
 # shellcheck source=scripts/omp-bridge-oracle.sh
