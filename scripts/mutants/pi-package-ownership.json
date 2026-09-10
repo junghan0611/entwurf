@@ -87,6 +87,32 @@
 			"timeoutSeconds": 300,
 			"signature": "[QK:MISSING-OWNER-AUTO-TAKEOVER]",
 			"signatureSource": "scripts/smoke-user-scope-citizen.sh"
+		},
+		{
+			"claim": "SECOND-CHECKOUT-EXTENSION-COLLISION",
+			"title": "entwurf's own checkout ships a project-scope self-registration again, so any SECOND checkout registers a rival copy of pi-extensions beside the installed one and wins --entwurf-control while the installed extension fails, printing the installed path as the loser (#110)",
+			"subject": ".pi/settings.json",
+			"find": ["\"skills\": [\"../.claude/skills\"],\n\t\"entwurfProvider\": {"],
+			"replace": ["\"skills\": [\"../.claude/skills\"],\n\t\"packages\": [\"..\"],\n\t\"entwurfProvider\": {"],
+			"gate": ["bash", "run.sh", "smoke-user-scope-citizen"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:SECOND-CHECKOUT-EXTENSION-COLLISION]",
+			"signatureSource": "scripts/smoke-user-scope-citizen.sh"
+		},
+		{
+			"claim": "SELF-CHECKOUT-PROJECT-REGISTRATION",
+			"title": "install registers entwurf project-scope into entwurf's OWN checkout, so `./run.sh setup` writes back the self-registration the tracked file no longer carries — the same #110 collision, arriving through the writer instead of through committed bytes",
+			"subject": "run.sh",
+			"find": [
+				"  if [ \"$(cd -P -- \"$project_dir\" 2>/dev/null && pwd)\" = \"$REPO_DIR\" ]; then\n    echo \"install: project-scope packages[] skipped — entwurf's own checkout self-registers through user scope (#110)\"\n  else\n    python3 \"$REPO_DIR/scripts/register-pi-package.py\" \"$project_dir/.pi/settings.json\" \"$REPO_DIR\"\n  fi"
+			],
+			"replace": [
+				"  python3 \"$REPO_DIR/scripts/register-pi-package.py\" \"$project_dir/.pi/settings.json\" \"$REPO_DIR\""
+			],
+			"gate": ["bash", "run.sh", "smoke-user-scope-citizen"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:SELF-CHECKOUT-PROJECT-REGISTRATION]",
+			"signatureSource": "scripts/smoke-user-scope-citizen.sh"
 		}
 	]
 }

@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # smoke-user-scope-citizen — deterministic gate for pi packages[] citizen
-# registration/removal (register-pi-package.py). Offline/hermetic: a fake
-# settings file + a fake REPO_DIR under $TMP, no pi, no network, no ~/.pi touched.
+# registration/removal (register-pi-package.py). Offline/hermetic: fake settings
+# files and fake REPO_DIRs under $TMP, sandboxed HOME/PI_CODING_AGENT_DIR/XDG,
+# no network, nothing of the operator's ~/.pi read or written.
 #
 # Guards the wiring that dropped when `pi install` was removed from setup
 # (2026-07-03: `--entwurf-control` / `--emacs-agent-socket` unknown in a foreign
@@ -10,10 +11,14 @@
 # in another repo. This gate is that missing tripwire: if the registration ever
 # regresses, `pnpm run check:full` goes red.
 #
-# Cells 11–13 close the second omission (#53 B): every case here drove a fake
-# settings file with ABSOLUTE entries, so the portable, settings-relative form this
-# repo actually commits was never registered against — and `setup` duplicated and
-# restyled the tracked file for four cuts without a single gate seeing it.
+# Cells 11–13 close the second omission (#53 B): every case before them drove a fake
+# settings file with ABSOLUTE entries, so the portable, settings-relative form was
+# never registered against — and `setup` duplicated and restyled a tracked file for
+# four cuts without a single gate seeing it.
+#
+# Cell 15 closes the third (#110), and it is the one cell here that SPAWNS pi: the
+# defect is not a byte, it is which of two checkouts wins `--entwurf-control`, and
+# only the real loader can say. It uses the pinned devDep pi, never PATH.
 set -euo pipefail
 export PYTHONDONTWRITEBYTECODE=1 # snapshot purity: no ignored scripts/__pycache__ writes under qualification
 
@@ -193,69 +198,64 @@ assert d['defaultProvider']=='openai-codex', 'run.sh remove-user-scope dropped a
 # idempotent: a second remove-user-scope is a clean no-op (no crash on absent entry)
 if XDG_DATA_HOME="$TMP/xdg" PI_CODING_AGENT_DIR="$AGENT_DIR" bash "$RUN" remove-user-scope >/dev/null 2>&1; then ok "run.sh remove-user-scope is idempotent (no-op second run)"; else bad "run.sh remove-user-scope second run crashed"; fi
 
-# ── 11–13. #53 B: install must not dirty a tracked, formatter-governed settings file
+# ── 11–13. #53 B: a settings-relative self entry is source, never install state
 # The cell whose ABSENCE let this ship. Every case above drove a fake settings file
-# with absolute entries, so the one shape this repo actually commits — the portable,
-# settings-relative `".."` that check-install-surface S7c pins — was never registered
-# against. `setup` therefore appended the absolute path BESIDE it and rewrote the
-# tracked, biome-owned bytes at indent=2, and `pnpm check` died at step 1 reading
-# "format error" instead of "install wrote this".
+# with ABSOLUTE entries, so the portable, settings-relative form — the one shape
+# register never WRITES, and must therefore never duplicate, absolutize or restyle —
+# was never registered against. `setup` appended the absolute path BESIDE it and
+# rewrote the file at indent=2, and `pnpm check` died at step 1 reading "format
+# error" instead of "install wrote this".
 #
-# The seed is the repo's OWN committed settings, copied into a stand-in checkout so
-# `".."` resolves to that clone rather than to the real repo (nothing here touches
-# $REPO). Setup landing is PROVEN before any product verdict: if the seed is not the
-# portable form, this says SETUP MISS in its own name instead of blaming the code.
+# The seed is a FIXTURE. It used to be this repo's OWN committed `.pi/settings.json`,
+# because the repo shipped `packages: [".."]`; #110 retired that entry (entwurf's own
+# checkout self-registers through user scope alone, so a second checkout can no
+# longer register a rival copy of pi-extensions). A witness that depends on us still
+# SHIPPING the shape it tests dies with the shape — and the shape it tests did not
+# die. An operator may hand-write a settings-relative entry, and
+# `is_settings_relative_self` is also what stops an unrelated relative package
+# (`../../repos/gh/andenken`) from being read as ours. Dropping the fixture to a
+# literal here makes the reason honest: the predicate is the subject, not our bytes.
 CLONE="$TMP/selfclone"; mkdir -p "$CLONE/.pi"
 CS="$CLONE/.pi/settings.json"
-seed_src=""
-if (cd "$REPO" && git show :.pi/settings.json) > "$CS" 2>/dev/null && [ -s "$CS" ]; then
-  seed_src="candidate index"
-elif cp "$REPO/.pi/settings.json" "$CS" 2>/dev/null; then
-  seed_src="worktree"
-fi
-if [ ! -s "$CS" ]; then
-  bad "11 SETUP MISS: could not seed this repo's own .pi/settings.json (no git object, no worktree file)"
-elif ! python3 -c "
-import json,sys
-p=json.load(open(sys.argv[1])).get('packages')
-sys.exit(0 if p==['..'] else 1)" "$CS"; then
-  bad "11 SETUP MISS: the seed ($seed_src) is not the committed portable form (packages != ['..']) — product verdict withheld"
+# Tab-indented with a compact array on purpose: cell 13 pins that a genuine rewrite
+# preserves the file's own indent unit, and 11b below pins that this file is not
+# rewritten at all. A seed written in the writer's default style could not tell the
+# two apart.
+printf '{\n\t"skills": ["../.claude/skills"],\n\t"packages": [".."]\n}\n' > "$CS"
+BEFORE="$(sha256sum "$CS" | cut -d' ' -f1)"; MT_B="$(stat -c %Y "$CS")"; sleep 1
+OUT_SELF="$(python3 "$REG" "$CS" "$CLONE")"
+AFTER="$(sha256sum "$CS" | cut -d' ' -f1)"; MT_A="$(stat -c %Y "$CS")"
+if printf '%s' "$OUT_SELF" | grep -q 'no-op'; then
+  ok "11 register against a settings-relative self entry is a no-op"
 else
-  BEFORE="$(sha256sum "$CS" | cut -d' ' -f1)"; MT_B="$(stat -c %Y "$CS")"; sleep 1
-  OUT_SELF="$(python3 "$REG" "$CS" "$CLONE")"
-  AFTER="$(sha256sum "$CS" | cut -d' ' -f1)"; MT_A="$(stat -c %Y "$CS")"
-  if printf '%s' "$OUT_SELF" | grep -q 'no-op'; then
-    ok "11 register against this repo's OWN committed settings is a no-op (seed: $seed_src)"
-  else
-    bad "11 register duplicated/absolutized the portable '..' entry" "$OUT_SELF"
-  fi
-  if [ "$BEFORE" = "$AFTER" ] && [ "$MT_B" = "$MT_A" ]; then
-    ok "11b the tracked, formatter-governed bytes are UNCHANGED (sha256 + mtime)"
-  else
-    bad "11b install rewrote the tracked settings file (sha $BEFORE -> $AFTER, mtime $MT_B -> $MT_A)"
-  fi
-  # The inverse direction of the same asymmetry: the shared matcher now RECOGNIZES
-  # `".."`, so an uninstall that deleted it would edit committed source — the same
-  # defect pointed the other way. remove leaves it and says so; dry-run agrees,
-  # because both ask one predicate.
-  BEFORE_R="$(sha256sum "$CS" | cut -d' ' -f1)"
-  OUT_RM="$(python3 "$REG" "$CS" "$CLONE" --remove)"
-  OUT_DRY="$(python3 "$REG" "$CS" "$CLONE" --remove --dry-run)"
-  if [ "$BEFORE_R" = "$(sha256sum "$CS" | cut -d' ' -f1)" ]; then
-    ok "11c --remove does NOT delete the committed portable entry (bytes unchanged)"
-  else
-    bad "11c --remove edited the repo's committed settings source" "$OUT_RM"
-  fi
-  if printf '%s' "$OUT_RM" | grep -q 'kept 1 settings-relative'; then
-    ok "11d the inverse REPORTS what it deliberately left behind (never a silent partial uninstall)"
-  else
-    bad "11d --remove left the entry without saying so" "$OUT_RM"
-  fi
-  if printf '%s' "$OUT_DRY" | grep -q 'no entwurf packages\[\] entry to remove'; then
-    ok "11e --dry-run agrees with remove (one predicate, no over-report)"
-  else
-    bad "11e --dry-run disagreed with what remove actually does" "$OUT_DRY"
-  fi
+  bad "11 register duplicated/absolutized the portable '..' entry" "$OUT_SELF"
+fi
+if [ "$BEFORE" = "$AFTER" ] && [ "$MT_B" = "$MT_A" ]; then
+  ok "11b the formatter-governed bytes are UNCHANGED (sha256 + mtime)"
+else
+  bad "11b register rewrote a settings file it only recognizes (sha $BEFORE -> $AFTER, mtime $MT_B -> $MT_A)"
+fi
+# The inverse direction of the same asymmetry: the shared matcher RECOGNIZES `".."`,
+# so an uninstall that deleted it would edit source it never wrote — the same defect
+# pointed the other way. remove leaves it and says so; dry-run agrees, because both
+# ask one predicate.
+BEFORE_R="$(sha256sum "$CS" | cut -d' ' -f1)"
+OUT_RM="$(python3 "$REG" "$CS" "$CLONE" --remove)"
+OUT_DRY="$(python3 "$REG" "$CS" "$CLONE" --remove --dry-run)"
+if [ "$BEFORE_R" = "$(sha256sum "$CS" | cut -d' ' -f1)" ]; then
+  ok "11c --remove does NOT delete a settings-relative self entry (bytes unchanged)"
+else
+  bad "11c --remove edited settings source it never authored" "$OUT_RM"
+fi
+if printf '%s' "$OUT_RM" | grep -q 'kept 1 settings-relative'; then
+  ok "11d the inverse REPORTS what it deliberately left behind (never a silent partial uninstall)"
+else
+  bad "11d --remove left the entry without saying so" "$OUT_RM"
+fi
+if printf '%s' "$OUT_DRY" | grep -q 'no entwurf packages\[\] entry to remove'; then
+  ok "11e --dry-run agrees with remove (one predicate, no over-report)"
+else
+  bad "11e --dry-run disagreed with what remove actually does" "$OUT_DRY"
 fi
 
 # 12. the state a pre-fix `setup` already left on real hosts: the portable entry AND
@@ -291,12 +291,20 @@ if grep -q $'^\t"packages"' "$S"; then ok "13 a rewrite preserves the file's tab
 # indent=2 — semantically a no-op, byte-wise a RED `pnpm check` diagnosed as "formatting".
 # A per-writer cell can never see that; only the real drive can. So this one runs
 # `run.sh install <checkout>` for real and demands sha256 + mtime invariance.
-#
 # The checkout is a stand-in: run.sh resolves its OWN symlinks to find REPO_DIR, so
 # run.sh is COPIED (a link would point the drive back at the operator's real repo) while
 # the trees it only reads are linked. That makes REPO_DIR == the stand-in, which is the
-# shape that matters — `".."` in <checkout>/.pi/settings.json resolves to the very repo
-# being registered, exactly as it does in a dev clone.
+# shape that matters — the drive installs entwurf INTO entwurf's own checkout, exactly
+# as `./run.sh setup` does from a dev clone (PROJECT_DIR_DEFAULT=$(pwd)).
+#
+# #110 raised what this cell demands. "install is a no-op here" used to hold because
+# the committed `packages: [".."]` already satisfied the writer. That entry is gone,
+# so the writer must instead RECOGNIZE that the project it is installing into IS this
+# root and skip project scope entirely — user scope already registers it, and a second
+# entry naming a different checkout is what made pi load two rival copies of
+# pi-extensions/entwurf-control.ts. The invariant, tested end to end below: entwurf's
+# own checkout carries no project-scope self-registration, in tracked bytes OR in
+# bytes a writer produced.
 CK="$TMP/checkout"
 mkdir -p "$CK/.pi"
 cp "$REPO/run.sh" "$CK/run.sh"
@@ -317,8 +325,8 @@ if [ ! -s "$CKS" ]; then
 elif ! python3 -c "
 import json,sys
 d=json.load(open(sys.argv[1]))
-sys.exit(0 if d.get('packages')==['..'] and isinstance(d.get('entwurfProvider'),dict) else 1)" "$CKS"; then
-  bad "14 SETUP MISS: the seed ($ck_seed) is not the committed portable form (packages ['..'] + entwurfProvider)"
+sys.exit(0 if d.get('packages') is None and isinstance(d.get('entwurfProvider'),dict) else 1)" "$CKS"; then
+  bad "14 SETUP MISS: the seed ($ck_seed) is not the committed form (no packages key + entwurfProvider)"
 else
   CK_BEFORE="$(sha256sum "$CKS" | cut -d' ' -f1)"; CK_MT="$(stat -c %Y "$CKS")"
   sleep 1
@@ -359,6 +367,110 @@ else
     else
       bad "14d the user-scope citizen was not written under the sandboxed PI_CODING_AGENT_DIR" "$ck_out"
     fi
+    # The invariant, read off the file the drive just wrote through: no writer put a
+    # project-scope self-registration back. 14b already pins the bytes, but a writer
+    # that ADDED `packages` to a file with no `packages` key would fail 14b for a
+    # reason a reader could mistake for formatting; this says the thing #110 is about,
+    # in its own words.
+    L14E="14e install into entwurf's OWN checkout wrote no project-scope packages[] self-registration [QK:SELF-CHECKOUT-PROJECT-REGISTRATION]"
+    if python3 -c "
+import json,sys
+sys.exit(0 if json.load(open(sys.argv[1])).get('packages') is None else 1)" "$CKS"; then
+      ok "$L14E"
+    else
+      bad "$L14E — violated: install self-registered this checkout, so a second checkout will load a rival copy of pi-extensions" "$(cat "$CKS")"
+    fi
+    case "$ck_out" in
+      *"project-scope packages[] skipped"*) ok "14f the drive REPORTS the skip (a silent skip and a silent write read alike)" ;;
+      *) bad "14f install skipped project scope without saying so — 14e cannot tell that apart from a writer that never ran" "$ck_out" ;;
+    esac
+  fi
+fi
+
+# ── 15. #110: the operator-observable this whole contract exists for ───────────
+# Cells 11–14 read settings bytes. Bytes are the mechanism; the SYMPTOM is what pi
+# does with them, and that is what nobody could see: a second checkout booted pi,
+# printed all seven `entwurf` model rows, and looked fine, while `--entwurf-control`
+# — the flag that makes a pi session a garden citizen — was being served by the
+# branch copy, and the INSTALLED extension failed to load with an error naming the
+# installed path as the loser. Not silent. Designed to be misread.
+#
+# pi's package identity is `local:<resolved path>` and dedupePackages collapses only
+# EQUAL identities (package-manager.js getPackageIdentity/dedupePackages), so two
+# real checkouts can never merge — no realpath rule, ours or pi's, would fix this.
+# The only lever is not registering the second one.
+#
+# The cell is control-then-assert on purpose. A sandbox where pi loads no project
+# settings at all (untrusted cwd, missing extension deps, a probe that dies early)
+# would report "no conflicts" for reasons that have nothing to do with the contract,
+# and that green would be a lie. So it first PLANTS the retired entry and demands the
+# conflict APPEAR; only a cell that has just watched the defect happen is allowed to
+# assert its absence.
+# Two different absences, and only one of them is allowed to be quiet. A tree with no
+# `node_modules` at all is a genuinely reduced checkout and the property is untestable
+# there — a named skip. A tree that HAS dependencies but no pinned pi is a broken dev
+# checkout, and skipping it would hide the breakage behind an exit-0 gate, so that one
+# fails loud. (The qualification snapshot is the first case only in principle: it
+# symlinks the origin's node_modules in after its baseline commit — mutation-qualify.ts
+# createRepoSnapshot — so cell 15 really runs there, which is what lets the two mutants
+# below cover this skip. A skip nobody can reach with a planted defect would be exactly
+# the quiet green this cell is built to refuse.)
+PI_BIN_PINNED="$REPO/node_modules/.bin/pi"
+if [ ! -d "$REPO/node_modules" ]; then
+  echo "  skip  15 second-checkout probe skipped: this tree has no node_modules (reduced checkout); the property is untestable here, not violated"
+elif [ ! -x "$PI_BIN_PINNED" ]; then
+  bad "15 the pinned pi is missing from a checkout that HAS dependencies ($PI_BIN_PINNED) — a broken dev checkout, not a reduced one; re-run pnpm install"
+else
+  A15="$TMP/dual/installed"; B15="$TMP/dual/second"
+  AG15="$TMP/agent15"
+  mkdir -p "$A15/.pi" "$B15/.pi" "$AG15"
+  # pi-extensions is COPIED into each root, not linked: the defect is two DISTINCT
+  # real paths declaring the same flag, and a shared symlink target would be one path
+  # wearing two names — a fixture that cannot reproduce what two checkouts do.
+  for root in "$A15" "$B15"; do
+    cp -R "$REPO/pi-extensions" "$root/pi-extensions"
+    for entry in node_modules package.json protocol.js; do
+      [ -e "$REPO/$entry" ] && ln -s "$REPO/$entry" "$root/$entry"
+    done
+  done
+  # user scope registers the INSTALLED root, absolutely — what `register_user_scope_citizen`
+  # writes on a real host. Trust is seeded for the second checkout because `.pi/` is a
+  # trust-gated input: an untrusted cwd loads no project settings, which would silence
+  # the control below and make the assertion vacuous.
+  printf '{"packages": ["%s"]}\n' "$A15" > "$AG15/settings.json"
+  printf '{"%s": true}\n' "$B15" > "$AG15/trust.json"
+  # Ambient identity carriers are stripped from the probe child: a live pi/ACP session
+  # exports PI_SESSION_ID/PI_AGENT_ID and CLAUDE_CONFIG_DIR into children, and this gate
+  # must read the loader, not the session that started it.
+  probe15() {
+    (cd "$B15" && env -u PI_SESSION_ID -u PI_AGENT_ID -u CLAUDE_CONFIG_DIR \
+      HOME="$TMP/home" PI_CODING_AGENT_DIR="$AG15" \
+      XDG_DATA_HOME="$TMP/xdg" XDG_STATE_HOME="$TMP/state" XDG_CACHE_HOME="$TMP/cache" \
+      "$PI_BIN_PINNED" --model zzz-no-such-provider/zzz-no-such-model --print x 2>&1 || true)
+  }
+  # CONTROL: the retired shape, re-planted. `".."` resolves against <B>/.pi, so the
+  # project entry names B while user scope names A — two identities, both loaded.
+  printf '{"packages": [".."]}\n' > "$B15/.pi/settings.json"
+  OUT15_CTL="$(probe15)"
+  if printf '%s' "$OUT15_CTL" | grep -q 'conflicts with'; then
+    ok "15 control: a second checkout that registers itself DOES collide on the extension flags"
+  else
+    bad "15 SETUP MISS: the planted second registration produced no conflict — this sandbox cannot observe the defect, so 15b would be vacuous" "$OUT15_CTL"
+  fi
+  # ASSERT: this repo's real `.pi/settings.json`, read from the WORKING TREE — not
+  # from the candidate index the way cells 11/14 read theirs. The subject here is
+  # what pi's loader does with the file that exists ON DISK when a session starts;
+  # the index is a different question and check-install-surface S7c already owns it.
+  # Reading the index here also made this cell blind to its own replant: a mutation
+  # writes the file, git show reads the staged bytes, and the gate stayed green over
+  # a planted defect (measured — qualification reported SURVIVED, 2026-09-10).
+  cp "$REPO/.pi/settings.json" "$B15/.pi/settings.json"
+  OUT15="$(probe15)"
+  L15B="15b a second checkout of this repo boots pi with zero extension conflicts [QK:SECOND-CHECKOUT-EXTENSION-COLLISION]"
+  if printf '%s' "$OUT15" | grep -q 'conflicts with'; then
+    bad "$L15B — violated: the branch copy wins --entwurf-control and the INSTALLED extension fails, printing the installed path as the loser" "$OUT15"
+  else
+    ok "$L15B"
   fi
 fi
 
@@ -740,14 +852,16 @@ if [ "$RC34B" -ne 0 ] && printf '%s' "$OUT34B" | grep -q 'CORRUPT'; then
   ok "34b doctor coupling FAILs on a wrong-type provider installerRoot (named CORRUPT) $QK34"
 else bad "34b doctor stayed green/silent over a corrupt installerRoot (rc=$RC34B): $OUT34B $QK34"; fi
 
-# 15. WIRING: both writers of this one file must share the serializer, not copy it.
+# 35. WIRING: both writers of this one file must share the serializer, not copy it.
 #     A duplicated indent-detector is how the provider writer stayed open after the
 #     package writer was closed; a parity check is cheaper than a third round.
+#     (Numbered 35, after the ownership block: it used to be a second "15", which
+#     stopped being merely untidy once #110 added the real cell 15 above.)
 for w in register-pi-package.py register-pi-provider.py; do
   if grep -q "from pi_settings_io import" "$REPO/scripts/$w"; then
-    ok "15 $w routes through the shared pi_settings_io serializer"
+    ok "35 $w routes through the shared pi_settings_io serializer"
   else
-    bad "15 $w serializes settings on its own again (copied rule = the #53 B shape)"
+    bad "35 $w serializes settings on its own again (copied rule = the #53 B shape)"
   fi
 done
 

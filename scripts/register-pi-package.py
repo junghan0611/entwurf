@@ -22,29 +22,36 @@ settings-RELATIVE entry that resolves to repo_dir (see below). A look-alike repo
 removed. Every non-entwurf package and every other settings key is preserved.
 
 CANONICAL IS NOT ONLY THE ABSOLUTE PATH. A packages[] entry is resolved by pi
-against the SETTINGS FILE'S OWN DIRECTORY, so this repo's committed
-`.pi/settings.json` names itself portably as `".."` — the exact form
-check-install-surface S7c pins. Comparing entries against the resolved absolute
-path ALONE did not recognize that as entwurf, so `setup` appended the absolute
-path beside it and rewrote the tracked, biome-governed file in a foreign style:
-a dev clone went RED at `pnpm check` step 1, diagnosed as a "formatting" error
-(#53 B). Two rules follow, and they are the same rule read forwards and backwards:
+against the SETTINGS FILE'S OWN DIRECTORY, so a settings-relative entry such as
+`".."` can name the very repo being registered. Comparing entries against the
+resolved absolute path ALONE did not recognize that as entwurf, so `setup` appended
+the absolute path beside it and rewrote a tracked, biome-governed file in a foreign
+style: a dev clone went RED at `pnpm check` step 1, diagnosed as a "formatting"
+error (#53 B). Two rules follow, and they are the same rule read forwards and
+backwards:
   - register: an entry that RESOLVES to repo_dir is already canonical → no-op, and
     when a rewrite is genuinely needed a settings-relative self-reference is kept
     as the survivor, so the portable form is never silently absolutized;
   - remove: register only ever WRITES the absolute form, so a settings-relative
-    self-reference cannot be install's own output — it was authored by the repo
-    (this one commits `".."`) or by the operator. Uninstall is install's inverse,
-    not a settings editor: it leaves that ONE class in place and SAYS SO on stdout,
-    rather than deleting source bytes install never wrote. The cost is stated
-    rather than hidden: on a settings file whose only entwurf entry is relative,
-    `--remove` is a no-op and the package stays registered until a human edits it.
-    would_remove() asks the same split, so `--dry-run` can never disagree with what
-    `--remove` does.
+    self-reference cannot be install's own output — it was authored by hand.
+    Uninstall is install's inverse, not a settings editor: it leaves that ONE class
+    in place and SAYS SO on stdout, rather than deleting source bytes install never
+    wrote. The cost is stated rather than hidden: on a settings file whose only
+    entwurf entry is relative, `--remove` is a no-op and the package stays
+    registered until a human edits it. would_remove() asks the same split, so
+    `--dry-run` can never disagree with what `--remove` does.
+This repo's own `.pi/settings.json` USED to be the load-bearing instance of that
+shape. It no longer carries a packages[] entry at all: entwurf's checkout
+self-registers through USER scope only, because a project entry naming "whichever
+checkout I am in" plus a user entry naming the installed one are two package
+identities to pi, and a second checkout then loads a rival copy of pi-extensions
+and wins `--entwurf-control` (#110). The predicate stays because the shape is still
+writable by hand, and because resolving-then-comparing is also what keeps an
+unrelated relative package like `../../repos/gh/andenken` from being read as ours.
 A rewrite also preserves the file's existing indentation instead of forcing 2
 spaces. That is narrower than it sounds — it keeps the indent UNIT, not a
-formatter's line-collapsing decisions — so the byte-identity guarantee this repo's
-own settings depend on comes from the no-op path, never from the writer's style.
+formatter's line-collapsing decisions — so a byte-identity guarantee always comes
+from the no-op path, never from the writer's style.
 
 This wiring (user scope) dropped when `pi install` was removed from setup
 (2026-07-03: `--entwurf-control` unknown in a foreign cwd). Extracting it here
@@ -129,11 +136,11 @@ def source_of(item: object) -> object:
 def is_settings_relative_self(source: str, settings_dir: str, repo_dir: str) -> bool:
     """True iff this entry is a SETTINGS-RELATIVE path naming repo_dir itself.
 
-    This is the repo's own committed portable form (`".."` in
-    <repo>/.pi/settings.json) — functionally identical to the absolute entry,
-    because pi resolves a relative package source against the settings file's own
-    directory. It is also the one shape register never writes, which is what lets
-    remove treat it as source rather than as install state.
+    The portable form (`".."` in <repo>/.pi/settings.json) — functionally identical
+    to the absolute entry, because pi resolves a relative package source against the
+    settings file's own directory. It is also the one shape register never writes,
+    which is what lets remove treat it as source rather than as install state. This
+    repo stopped shipping it at #110; an operator may still write it by hand.
 
     Anything carrying a scheme (npm:/git:/https:) is a spec, not a path; anything
     absolute (`/`, `~`) is not settings-relative. Everything else is resolved and
@@ -159,8 +166,8 @@ def is_entwurf_source(source: str, repo_dir: str, settings_dir: str | None = Non
       - the exact resolved repo dir;
       - an npm install path ending in node_modules/@junghanacs/entwurf;
       - an explicit npm package source for @junghanacs/entwurf;
-      - a settings-relative path that RESOLVES to the repo dir (the committed
-        portable `".."`), when the caller supplies settings_dir;
+      - a settings-relative path that RESOLVES to the repo dir (the portable
+        `".."` form), when the caller supplies settings_dir;
       - a local filesystem path whose final directory is literally "entwurf"
         (dev clone / stale move). Remote URL/git-like strings are NOT treated as
         local paths merely because their last segment is "entwurf".
@@ -242,7 +249,7 @@ def register(settings_path: Path, repo_dir_arg: str) -> str:
     # the canonical absolute string or as a settings-relative path resolving there.
     # Both are the same registration to pi, so both are a no-op: order-insensitive, no
     # rewrite, mtime stable. Recognizing only the absolute form is what made `setup`
-    # duplicate this repo's own committed `".."` and restyle the tracked file (#53 B).
+    # duplicate a settings-relative `".."` and restyle the tracked file (#53 B).
     # Both arms require the STRING form, so an object-form entry still collapses to a
     # canonical string exactly as before.
     if len(entwurf_entries) == 1 and isinstance(entwurf_entries[0], str) and (
@@ -252,8 +259,9 @@ def register(settings_path: Path, repo_dir_arg: str) -> str:
         return "noop"
 
     # A rewrite keeps the PORTABLE form when the file already had one: absolutizing a
-    # committed `".."` would repair the duplicate and dirty the tracked bytes in the
-    # same breath. Otherwise the canonical absolute path is what install writes.
+    # hand-written `".."` would repair the duplicate and dirty bytes install never
+    # wrote in the same breath. Otherwise the canonical absolute path is what install
+    # writes.
     survivor = next(
         (
             source_of(e) for e in entwurf_entries
@@ -277,7 +285,7 @@ def _removable(packages: list, repo_dir: str, settings_dir: str) -> tuple[list, 
 
     PRESERVED = settings-relative self-references, the one shape register CANNOT
     have produced (it always writes the resolved absolute path). Such an entry is
-    the repo's committed portable registration or the operator's own hand edit.
+    the operator's own hand edit.
     Deleting it would make uninstall a source editor, which is the defect #53 B is
     about, pointed the other way. main() prints what was kept so the incompleteness
     is loud rather than silent.
@@ -665,7 +673,7 @@ def remove_user(settings_path: Path, repo_dir_arg: str, state_path: Path, orphan
     else:
         print(f"remove: no entwurf packages[] entry naming this root ({settings_path})")
     if preserved_rel:
-        print(f"remove: kept {len(preserved_rel)} settings-relative entwurf entr{'y' if len(preserved_rel) == 1 else 'ies'} — committed/operator source, not install state")
+        print(f"remove: kept {len(preserved_rel)} settings-relative entwurf entr{'y' if len(preserved_rel) == 1 else 'ies'} — operator source, not install state")
     if foreign_like:
         print(f"remove: kept {len(foreign_like)} entwurf-shaped entr{'y' if len(foreign_like) == 1 else 'ies'} with no recorded owner "
               "(not provably this root's) — use './run.sh doctor-pi-package' / takeover-user-scope to resolve ownership")
@@ -829,7 +837,7 @@ def main(argv: list[str]) -> int:
         if kept:
             print(
                 f"remove: kept {kept} settings-relative entwurf entr{'y' if kept == 1 else 'ies'} "
-                f"({settings_path}) — install never writes that form, so it is committed/operator "
+                f"({settings_path}) — install never writes that form, so it is operator "
                 "source, not install state; edit the file by hand to drop it"
             )
         return 0

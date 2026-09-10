@@ -537,7 +537,28 @@ install_local_package() {
   mkdir -p "$project_dir/.pi"
   # packages[] registration via the shared SSOT — same is_entwurf_source
   # predicate + idempotency as user-scope and remove (not a substring match).
-  python3 "$REPO_DIR/scripts/register-pi-package.py" "$project_dir/.pi/settings.json" "$REPO_DIR"
+  #
+  # #110: entwurf's OWN checkout is the one project that never gets this entry.
+  # pi's package identity is `local:<resolved path>` and dedupePackages collapses
+  # only EQUAL identities (package-manager.js getPackageIdentity/dedupePackages),
+  # so a project entry naming this checkout and the user-scope entry naming the
+  # installed root are the same package only while they are the same directory.
+  # In a SECOND checkout (worktree, release scratch) they differ, pi keeps both,
+  # and both copies of pi-extensions/entwurf-control.ts declare
+  # `--entwurf-control`: detectExtensionConflicts gives the flag to whoever
+  # registered first — project scope — and fails the INSTALLED extension while
+  # printing the installed path as the loser, which reads exactly backwards.
+  # user-scope already owns self-registration from any cwd, so the project entry
+  # was only ever a duplicate of it; dropping it removes the second identity in
+  # written bytes, the way the tracked `.pi/settings.json` no longer carries one.
+  # A FOREIGN project still gets its entry — that is what `entwurf install
+  # <project>` is for, and an npm consumer's REPO_DIR is inside node_modules, so
+  # it can never take this branch.
+  if [ "$(cd -P -- "$project_dir" 2>/dev/null && pwd)" = "$REPO_DIR" ]; then
+    echo "install: project-scope packages[] skipped — entwurf's own checkout self-registers through user scope (#110)"
+  else
+    python3 "$REPO_DIR/scripts/register-pi-package.py" "$project_dir/.pi/settings.json" "$REPO_DIR"
+  fi
   # entwurfProvider.mcpServers.entwurf-bridge (project scope — checkout-local, NO state; #46
   # Task 2) via the shared register-pi-provider SSOT: normalize the command to the bare stable
   # bin `entwurf-bridge` (ownership-classified: absent/managed-current/managed-legacy adopt, a
@@ -707,8 +728,11 @@ remove_local_package() {
   # install, so remove never over-deletes a look-alike repo (entwurf-notes, …)
   # that install would never have registered. Same rule, one shape further (#53 B):
   # register only ever WRITES the absolute path, so a settings-RELATIVE entry naming
-  # this repo (the committed `".."` in <repo>/.pi/settings.json) is source, not
-  # install state — remove leaves it and says so instead of editing tracked bytes.
+  # this repo is source an operator hand-wrote, not install state — remove leaves it
+  # and says so instead of editing bytes it never authored. entwurf's own checkout
+  # no longer ships such an entry (#110: user scope owns self-registration), so for
+  # THIS repo the call is a reported no-op; the predicate stays because the shape is
+  # still writable by hand and still must not be over-deleted.
   python3 "$REPO_DIR/scripts/register-pi-package.py" "$project_dir/.pi/settings.json" "$REPO_DIR" --remove
   # entwurfProvider.mcpServers.entwurf-bridge cleanup (project scope) via the shared SSOT: strip
   # our-managed shapes (the bare stable bin AND the legacy repo start.sh path — a true user

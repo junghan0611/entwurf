@@ -478,11 +478,20 @@ const operatorCmds = [...targets].filter(([cmd, ts]) => !isDevGate(cmd) && ts.le
 			(settingsParseError === "" && Array.isArray(settings.skills) && settings.skills.includes("../.claude/skills")),
 		settingsParseError || `${settingsRel}: expected skills to include ../.claude/skills`,
 	);
+	// S7c pins an INVARIANT, not a shape. #53 B: a host-absolute path must never reach
+	// this tracked, biome-governed file. It used to be pinned as "the entry is exactly
+	// `..`", which satisfied that invariant and carried a second, unintended one — the
+	// checkout registers ITSELF. #110 showed what that second one buys: user scope
+	// already registers this root absolutely, so in any OTHER checkout the two entries
+	// name different directories, pi's dedupe (identity = `local:<resolved path>`) keeps
+	// both, and two copies of pi-extensions/entwurf-control.ts fight over
+	// `--entwurf-control` — the branch copy wins and the INSTALLED one fails, printing
+	// the installed path as the loser. No packages key at all satisfies #53 B strictly
+	// more than `..` did, and leaves self-registration where it is owned.
 	ok(
-		"S7c: candidate project settings keep the local package source portable",
-		settingsText === null ||
-			(Array.isArray(settings.packages) && settings.packages.length === 1 && settings.packages[0] === ".."),
-		`${settingsRel}: expected packages to be the settings-relative repo root '..'`,
+		"S7c: candidate project settings never bind entwurf to a checkout path",
+		settingsText === null || settings.packages === undefined,
+		`${settingsRel}: expected NO packages key — entwurf's own checkout self-registers through user scope (#110)`,
 	);
 	const bridge = settings.entwurfProvider?.mcpServers?.["entwurf-bridge"];
 	ok(
