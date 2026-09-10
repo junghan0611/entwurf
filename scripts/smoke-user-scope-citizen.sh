@@ -439,14 +439,28 @@ else
   # the control below and make the assertion vacuous.
   printf '{"packages": ["%s"]}\n' "$A15" > "$AG15/settings.json"
   printf '{"%s": true}\n' "$B15" > "$AG15/trust.json"
-  # Ambient identity carriers are stripped from the probe child: a live pi/ACP session
-  # exports PI_SESSION_ID/PI_AGENT_ID and CLAUDE_CONFIG_DIR into children, and this gate
-  # must read the loader, not the session that started it.
+  # Two fences on the probe child, and BOTH are load-bearing.
+  #
+  # `< /dev/null`: `pi --print` reads a non-tty stdin as piped prompt input, so it
+  # inherits whatever the CALLER handed this gate. Under an interactive shell or a
+  # /dev/null stdin that ends immediately and the probe returns in ~2s; under a
+  # supervised runner — which hands the process an open socket — it blocks forever.
+  # Measured 2026-09-10: a release-gate run sat 1h56m on this line with `pi` alive
+  # and no output, and the gate has no timeout of its own to catch it. A gate must
+  # read the loader, never the stdin of whoever started it.
+  #
+  # `timeout 60`: even so, a probe that cannot finish must go RED rather than hang.
+  # 124 lands in the captured output, the conflict grep misses, and the cell fails
+  # with its own name — the honest outcome for "the loader never answered".
+  #
+  # Ambient identity carriers are stripped for the same reason: a live pi/ACP session
+  # exports PI_SESSION_ID/PI_AGENT_ID and CLAUDE_CONFIG_DIR into children.
   probe15() {
     (cd "$B15" && env -u PI_SESSION_ID -u PI_AGENT_ID -u CLAUDE_CONFIG_DIR \
       HOME="$TMP/home" PI_CODING_AGENT_DIR="$AG15" \
       XDG_DATA_HOME="$TMP/xdg" XDG_STATE_HOME="$TMP/state" XDG_CACHE_HOME="$TMP/cache" \
-      "$PI_BIN_PINNED" --model zzz-no-such-provider/zzz-no-such-model --print x 2>&1 || true)
+      timeout 60 "$PI_BIN_PINNED" --model zzz-no-such-provider/zzz-no-such-model --print x \
+      </dev/null 2>&1 || true)
   }
   # CONTROL: the retired shape, re-planted. `".."` resolves against <B>/.pi, so the
   # project entry names B while user scope names A — two identities, both loaded.
