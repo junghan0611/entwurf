@@ -830,6 +830,50 @@ v2 필드 `parentGardenId`/`isEntwurf`는 **stray key로 거부된다** — 되�
     않는다(`run.sh:1820-1919` 전문 독파). ACP 핀의 오라클은 `check-acp-sdk-surface` 이고 그것은
     `scripts/` 게이트가 아니라 vitest 계약 `test/acp-sdk-surface.contract.test.ts` 다.
     게이트 신설 없음(pi 쪽 ⑶ 의 한 claim 은 pi 레인 몫).
+  - **2026-09-10 bump — claude-agent-acp 0.75.1 → 0.76.0 (ACP SDK 1.4.0 · claude-agent-sdk
+    0.3.257 · anthropic-ai/sdk 0.100.1 유지).** #110 레인과 같은 브랜치, **다른 원인**이라 커밋을
+    나눴다. 앞 범프의 논거를 재사용하지 않는다 — 성격 자체가 다르다.
+    ⑴ **성격: 리팩터 한 덩어리 + opt-in 확장 하나. 우리 표면 도달 델타 0.** 선언 런타임 deps
+    불변(`npm view` 실측). tarball unpackedSize 987,689 → 998,011 B, fileCount **117 → 123**;
+    신규는 `dist/session-model.*` + `dist/session-effort.*` 뿐이고, 움직인 dist 는
+    `acp-agent.*`(480,217→463,381) · `air-extension.*` · `clear-context-coordinator.*`,
+    나머지는 바이트 동일.
+    ⑵ **기능 델타는 upstream #1111 `recommendedValue` AIR 확장 하나이고 opt-in 이다.** 켜지려면
+    `initialize` 의 `clientCapabilities._meta.jetbrains.air.capabilities` 가 `recommendedValue`
+    를 실어야 하는데 우리는 `clientCapabilities: {}` 를 보낸다 `[읽음 backend.ts:1758]` → 모든
+    분기에서 `useRecommendedValue=false`. 그 위에 얹힌 라벨 정규화 · `default` 행 · effort
+    셀렉터는 **두 번째 독립 이유로도** 도달 불가: `[측정 2026-09-10]`
+    `git grep -c configOptions pi-extensions/lib/acp/` = **0**, 그리고 우리는 `EFFORT_CONFIG_ID`
+    를 세팅한 적이 없다(SDK 쪽 `applyFlagSettings` 의 다른 게이트).
+    ⑶ **우리 유일한 model forcing wire call 은 바이트 동일.** `setSessionConfigOption` 본체
+    `v0.75.1 ↔ v0.76.0` diff 빈 출력. `resolveModelPreference` 는 `session-model.ts` 로
+    **이동만**(diff 는 주석/포맷). `sessionUsage()` / `turnQuotaMeta()` 본문 md5 동일.
+    ⑷ **도달 모양을 가졌지만 inert 한 변화 하나.** `configuredSettings` 가 **문자열 경로**일 때의
+    `readFile`+`JSON.parse` 가 `resolvedProvider` 안쪽에서 `session/new` 무조건 경로로 올라왔다.
+    우리는 `settings` 를 **객체**로 넘긴다 `[읽음 tool-surface.ts:153]` → 안 걸린다. 이제
+    "settings 를 경로로 넘기지 않는다" 가 계약이고, 그 문장을 그 호출부 주석에 박았다.
+    ⑸ **#96 근거 재측정 — 0.76.0 에서도 동일.** `mcpServerStatus` 호출 **2건 → 2건** 불변,
+    주변 200줄 바이트 동일, 영역 **+26줄 이동**. 새 좌표를 upstream 태그에서 직접 읽었다:
+    `[측정 2026-09-10, v0.76.0/src/acp-agent.ts 직독, grep -n]` `:1762`(`authenticateMcpServers`
+    안, `supportsMcpOAuth` 뒤 `needs-auth` 만 훑음) · `:1855`(이름 하나짜리 서버를 OAuth
+    deadline 안에서 polling). 선언된 전체 MCP 를 `newSession` 전에 막는 fence 아님 — 결론 유지,
+    근거는 새로 측정.
+    ⑹ **트랙이 지정한 잠금 실행.** `./run.sh check-acp-sdk-surface` **vitest 7/7 PASS**
+    (PINS·L2 lock regex 가 `0.76.0` 으로 이동) + **`LIVE=1 ./run.sh smoke-acp-raw-turn-live`
+    2026-09-10 12:05 KST → PASS**: launch source `package:@agentclientprotocol/claude-agent-acp`
+    (PATH fallback 아님), model `claude-sonnet-5`, `protocolVersion=1`, `stopReason=end_turn`,
+    NDJSON **67,090 bytes** 캡처, EXIT=0. scratch PWD 에서, `PI_SESSION_ID`/`PI_AGENT_ID`/
+    `CLAUDE_CONFIG_DIR` strip 후 실행.
+    ⑺ **기계 이동:** `package.json` 한 dependency, `pnpm-workspace.yaml` exclude 에 `0.76.0`
+    (어제 발행이라 이게 없으면 `minimumReleaseAge` 가 설치를 막는다), `pnpm-lock.yaml`,
+    `test/acp-sdk-surface.contract.test.ts` PINS + 헤더 + L2 lock regex,
+    `docs/acp-backend-rail.md` 지원 matrix + capability posture 2항목 신설 + §11-7 재측정,
+    `tool-surface.ts` settings-객체 계약 주석 신설, 그리고 dist 줄번호 provenance 주석
+    **13곳**(`check-acp-usage-accounting.ts` 6 · `acp-client.ts` 2 · `backend-adapter.ts` 2 ·
+    `backend.ts` 3 — 앞 범프 기록이 2로 적었지만 실제 3 · `event-mapper.ts` 2 ·
+    `smoke-acp-raw-turn-live.ts` 1; 산술 추정 없이 0.76.0 dist 를 다시 읽어 재좌표화했고,
+    0.75.1 tarball 을 받아 옛 좌표의 본문과 새 좌표의 본문이 같은 코드인지 대조했다).
+    게이트 신설 없음.
 - **Standing focus — Mitsein over MCP:** plain external(non-replyable) vs garden-native meta-session
   (replyable by garden id) 구분이 agent 발화에 정직히 반영되는가. native Claude meta-session이
   external-mcp로 퇴행하거나 `wants_reply=true`를 비대칭 거절하면 버그.

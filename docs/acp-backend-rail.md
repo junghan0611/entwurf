@@ -95,7 +95,7 @@ undifferentiated "supported" column is what let a Claude PASS read as if it also
 | Entwurf package | `0.17.0` | shipped baseline | the package contract these rows belong to |
 | pi runtime | devDep exact `0.85.1`, peer `>=0.85.1 <0.86` | **exact** oracle + **closed range** | built and certified against 0.85.1; hosts inside the range are accepted, and the ceiling moves only on measurement |
 | ACP wire SDK | `@agentclientprotocol/sdk 1.4.0` | **exact** | the shared wire oracle both adapters speak |
-| Claude ACP adapter | `@agentclientprotocol/claude-agent-acp 0.75.1` | **exact**, bundled | the adapter we ship and certify; resolved before any PATH fallback |
+| Claude ACP adapter | `@agentclientprotocol/claude-agent-acp 0.76.0` | **exact**, bundled | the adapter we ship and certify; resolved before any PATH fallback |
 | Claude Agent SDK | `0.3.257` (transitive) | **exact** oracle | the runtime risk surface behind the adapter |
 | Anthropic SDK | `0.100.1` | **exact**, peer-resolution only | satisfies the Agent SDK peer floor (0.93.0+); never an API client here (gate L4) |
 | Claude Code runtime | `>=2.1.217` (`entwurf.claudeCodeFloor`) | **floor** | below it, hook args are silently dropped; entwurf enforces this itself |
@@ -151,6 +151,23 @@ different reasons, and collapsing them would hide a real risk**:
   entwurf passes that flag nowhere (repo grep, 0 hits). They are
   unreachable only because the common loop never invokes them (nor `logout`). Nothing upstream
   enforces that; it is our own call-site discipline, and it stops holding the moment we use one.
+- **Advertised but never called — 0.76.0 adds exactly one.** Upstream #1111 puts a
+  `recommendedValue` on AIR config options, and it is **opt-in**: the adapter turns it on only
+  when `initialize`'s `clientCapabilities._meta.jetbrains.air.capabilities` names
+  `recommendedValue`. entwurf sends `clientCapabilities: {}` (`backend.ts:1758`), so
+  `useRecommendedValue` is false on every branch. The label normalization, the `default` row and
+  the effort selector that ride it are unreachable for a second, independent reason as well:
+  `[측정 2026-09-10]` `git grep -c configOptions pi-extensions/lib/acp/` is **0**, and entwurf
+  has never set `EFFORT_CONFIG_ID`, which is the other gate on the SDK-side `applyFlagSettings`.
+  The rest of 0.76.0 is one refactor: `resolveModelPreference` moved into a new
+  `dist/session-model.*` (diff is comments and formatting), `dist/session-effort.*` is new, and
+  `setSessionConfigOption` — our only model-forcing wire call — is byte-identical across
+  `v0.75.1..v0.76.0`.
+- **One 0.76.0 change has a reachable SHAPE and is still inert for us.** When
+  `configuredSettings` is a STRING PATH, its `readFile` + `JSON.parse` moved out of
+  `resolvedProvider` and up onto the unconditional `session/new` path. entwurf passes `settings`
+  as an OBJECT (`tool-surface.ts:153`), so the branch is never taken. That makes "entwurf never
+  hands `settings` as a path" a contract rather than an accident; it is stated at that call site.
 - **The one 0.73.0 → 0.75.1 change that DOES reach us:** context compaction is now surfaced as a
   synthetic ACP tool lifecycle (0.75.0, #991) — a `tool_call` with `kind: "think"`, title
   `Compact conversation`, and `_meta.contextCompaction` schema v1 — where it used to arrive as
@@ -275,23 +292,23 @@ caller-session `_meta`, and cross-machine certification.
 
 A backend can return `newSession` before its declared MCP server is callable. This was
 observed intermittently on the Claude rail and directly on Cortex's private `mcp.json`
-path. Neither `claude-agent-acp` 0.75.1 nor the Cortex landing adds a client-side
+path. Neither `claude-agent-acp` 0.76.0 nor the Cortex landing adds a client-side
 readiness fence over a session's declared MCP servers, and entwurf's common loop
 calls `mcpServerStatus()` nowhere.
-(Re-measured at the 0.73.0 → 0.75.1 bump, not inherited from the previous one — and the
-0.70.0 → 0.73.0 argument is not reused either. `mcpServerStatus` call sites in
-`src/acp-agent.ts` are **2 at both v0.73.0 and v0.75.1** `[측정 2026-09-06, git grep -c]`;
-they first appeared in 0.71.0 via `0cbbaf3` (MCP OAuth, LLM-25012), so the ADAPTER calls it
-where it once did not. Both were re-read at `v0.75.1 src/acp-agent.ts:1736` and `:1829`
-(the 0.73.0 coordinates were `:1618` and `:1711`): the first sits inside
+(Re-measured at the 0.75.1 → 0.76.0 bump, not inherited — the previous bump's argument is
+not reused, the way the 0.73.0 → 0.75.1 entry did not reuse 0.70.0 → 0.73.0's.
+`mcpServerStatus` call sites in `src/acp-agent.ts` are **2 at v0.75.1 and 2 at v0.76.0**
+`[측정 2026-09-10, upstream v0.76.0/src/acp-agent.ts read directly, grep -n]`; they first
+appeared in 0.71.0 via `0cbbaf3` (MCP OAuth, LLM-25012), so the ADAPTER calls it where it
+once did not. Both were re-read at `v0.76.0 src/acp-agent.ts:1762` and `:1855`
+(v0.75.1: `:1736` / `:1829`; v0.73.0: `:1618` / `:1711`): the first sits inside
 `authenticateMcpServers` behind `supportsMcpOAuth(query)` and skips every status that is not
 `needs-auth`; the second polls a SINGLE named server to `connected` under an OAuth deadline.
 Neither waits on every declared server before `newSession` returns. That is an auth
-handshake, not a readiness fence, so the boundary below is unchanged. The other reachable-surface findings also re-measured:
-AIR typed failures and the AIR file-change report stay capability-gated and
-unadvertised by entwurf; `providers/set` / `providers/disable` stay advertised
-unconditionally and uncalled; native subagents, async tasks, session forks, session
-titles, permission-mode kinds and clear-context planning are all new-but-uncalled.
+handshake, not a readiness fence, so the boundary below is unchanged. The surrounding 200
+lines are byte-identical and the region moved +26; the whole 0.76.0 delta is one refactor
+plus one opt-in AIR extension that `clientCapabilities: {}` never enables, so the other
+reachable-surface findings stand as re-measured at the previous bump.
 This bump changes no readiness behavior and closes no part of #72.)
 
 ### 11-7-a/b. Instrument and first measurement

@@ -150,6 +150,12 @@ export function buildClaudeSessionMeta(
 		...(params.modelId ? { model: params.modelId } : {}),
 		tools: [...params.tools],
 		settingSources: [...params.settingSources],
+		// `settings` is an OBJECT here, and that is a contract, not a convenience.
+		// claude-agent-acp also accepts a STRING PATH, and at 0.76.0 the readFile +
+		// JSON.parse for that form moved out of `resolvedProvider` up onto the
+		// unconditional `session/new` path — a shape that WOULD reach us, and does not,
+		// only because we never hand it a path. Keep it inline: a path would put file
+		// IO, and its failure modes, inside every session creation.
 		settings: {
 			permissions: {
 				allow: [...params.permissionAllow],
