@@ -33,7 +33,7 @@ not **UNSUPPORTED** — the deliberate never, which today is native Windows only
 | Claude Code 2.1.138 | **unsupported** | Launcher refuses empty argv; no shell-form fallback |
 | Maintainer NixOS installed package | **certified** for `0.12.8-repair.1` | 2026-07-25 registry install → doctor exit 0 (HISTORY) |
 | Secondary Ubuntu installed package | **certified** for `0.12.8-repair.1` | 2026-07-25 same artifact, isolated agent dir → doctor exit 0 (HISTORY) |
-| macOS Claude meta-bridge | NOT CERTIFIED — pending physical host | No physical-Mac doctor yet; a CI runner has no Claude login. Physical-host rental is postponed past this 0.20.0 cut. |
+| macOS Claude meta-bridge | NOT CERTIFIED — pending physical host | No physical-Mac doctor yet; a CI runner has no Claude login. Physical-host rental remains unscheduled; no cut has carried it. |
 | Darwin install fence (meta/copilot/omp-bridge + omp-receive) | portable (Linux or Darwin) | Four installers accept Darwin; python3/node/harness presence holds the seat, not the platform name. A Darwin install is not a rail receipt. |
 | Doctor fail-closed on unreadable environ | Linux measured; Darwin unmeasured | Copilot launch-flag and omp identity-carrier: missing `/proc/<pid>/environ` as predicate INPUT is `UNVERIFIABLE` (non-green), not a benign note. omp distinguishes `pgrep` exit 1 (absent) from exit 2 (enumeration failed); copilot distinguishes ENOENT/ESRCH (gone) from other errno (read denied). |
 | setup on uncertified platform with harness present | named non-green | All 13 harness units ask `harness_rail_certified_platform()`; uncertified → FAIL whose wording is not "install failed". Harness-absent Darwin setup (the CI cell) can still be computed green. |
@@ -59,7 +59,7 @@ Notes the table cannot carry without becoming prose again:
   bridge, and now runs dev wiring again.
 - **macOS evidence is split, not a support claim.** The Entwurf-only install surface is
   CERTIFIED (CI) (row above); the harness rails are NOT CERTIFIED — pending
-  physical host (rental postponed past this cut). The package-level `os` field stays
+  physical host (rental remains unscheduled). The package-level `os` field stays
   unrestricted, and native Windows is UNSUPPORTED.
 
 **Operator acceptance rule:** on a claimed Claude host, reinstall from the released

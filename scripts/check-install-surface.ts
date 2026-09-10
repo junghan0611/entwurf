@@ -22,6 +22,10 @@
  *        smoke that swaps HOME into a sandbox swaps XDG_DATA_HOME with it — moving HOME
  *        alone still writes real install-state below the inherited XDG root, which is
  *        exactly how a verification sweep polluted a live host's provenance (2026-07-14).
+ *   S5b  every offline smoke that swaps HOME also swaps XDG_DATA_HOME (HOME alone still
+ *        writes real install-state below the inherited XDG root).
+ *   S5c  every MUTATING run.sh drive in the offline floor is sandboxed at every root it
+ *        writes (agent dir + XDG + HOME), not only by an enclosing export.
  *   S5d  a gate may isolate by PROCESS BOUNDARY instead of by HOME swap: lines inside a
  *        `CONTAINER_RUNNER_EOF` heredoc run in a container, so their $HOME is not this
  *        host's and S5 must not read them as host writes. The exemption covers the BLOCK,
@@ -31,7 +35,10 @@
  *        contains it while executing right here).
  *   S7   the release operator surface is one repo-local Agent Skill shared by Claude Code and
  *        pi: project settings point pi at `.claude/skills`, land/prepare/make/publish coexist in
- *        one SKILL.md, the exact-SHA CI oracle ships beside it, and retired prompt copies stay absent.
+ *        one SKILL.md, the exact-SHA CI oracle ships beside it, and retired prompt copies stay
+ *        absent. S7c also pins that the tracked settings carry NO packages key — entwurf's own
+ *        checkout self-registers through user scope alone (#110).
+ *   S6   tracked first-party text sources are NUL-free (a stray NUL makes git show nothing).
  *
  * HONEST SCOPE — what a green run does and does not mean. S1-S4 are structural: they read the
  * dispatch graph and the build manifest, so they hold for any entrypoint written in this repo's
@@ -39,8 +46,8 @@
  * of variable aliasing, and it does not see a path assembled across several variables, built
  * inside an embedded python/node heredoc, or reached through a helper in another file. A green
  * S5 therefore means "no obvious destructive line", NOT "verification is sandboxed". The real
- * guarantee is running the whole offline floor under a swapped HOME; that is an open item in
- * NEXT.md, not a claim made here. Every S was mutation-checked, including bypasses found in
+ * guarantee would be running the whole offline floor under a swapped HOME; that is not done,
+ * and not claimed here. Every S was mutation-checked, including bypasses found in
  * review — do not add an S without proving it fails on the bug it names.
  *
  * Read-only: parses sources, spawns nothing.

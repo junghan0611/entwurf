@@ -92,7 +92,7 @@ undifferentiated "supported" column is what let a Claude PASS read as if it also
 
 | Surface | Declaration | Class | What a green actually says |
 |---|---|---|---|
-| Entwurf package | `0.17.0` | shipped baseline | the package contract these rows belong to |
+| Entwurf package | `0.20.0` | shipped baseline | the package contract these rows belong to |
 | pi runtime | devDep exact `0.85.1`, peer `>=0.85.1 <0.86` | **exact** oracle + **closed range** | built and certified against 0.85.1; hosts inside the range are accepted, and the ceiling moves only on measurement |
 | ACP wire SDK | `@agentclientprotocol/sdk 1.4.0` | **exact** | the shared wire oracle both adapters speak |
 | Claude ACP adapter | `@agentclientprotocol/claude-agent-acp 0.76.0` | **exact**, bundled | the adapter we ship and certify; resolved before any PATH fallback |
@@ -401,5 +401,5 @@ Receipt, limits and the `completed`-branch gap: `scripts/raw-acp-compaction-meas
 
 - causal MCP-readiness diagnosis and, only with proof, a backend-invariant fence;
 - broader installed-host and cross-machine Cortex evidence;
-- any future Codex managed native-citizen lane—separate from ACP; 0.14.0 does not ship one;
+- any future Codex managed native-citizen lane—separate from ACP; the lane is open as #95 and no release ships one;
 - persisted ACP resume/load, which is not implemented by today's in-memory reuse.

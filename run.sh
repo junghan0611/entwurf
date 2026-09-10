@@ -201,7 +201,7 @@ Usage:
   ./run.sh smoke-copilot-mcp-state       # Copilot MCP install/doctor/inverse regression. Offline/deterministic
   ./run.sh smoke-omp-bridge-state        # OMP birth-extension install/doctor/inverse regression: placement, stale-writer detection, honest inverse, no-state refusal (structurally VALID as well as foreign), symlink refusal, ambiguous-agent-dir refusal (ledger M6), and a poisoned PI_CODING_AGENT_DIR that attracts no artifact. Fully sandboxed HOME/PI/XDG. Offline/deterministic
   ./run.sh smoke-agy-hooks-state      # agy PreInvocation birth/sender hook install/doctor/inverse + direct stdin→meta-record regression. Offline/deterministic
-  ./run.sh smoke-user-scope-citizen   # 0.12.6 install-boundary: pi packages[] registration SSOT (register-pi-package.py) — idempotent + preserves unrelated + remove symmetry + fails loud, and the #86 C2 explicit ownership cells (project scope still normalizes ITS OWN stale entries; user scope refuses other owners and only takeover-user-scope moves the shared entry). Offline/hermetic (deps: bash+python3)
+  ./run.sh smoke-user-scope-citizen   # 0.12.6 install-boundary: pi packages[] registration SSOT (register-pi-package.py) — idempotent + preserves unrelated + remove symmetry + fails loud, and the #86 C2 explicit ownership cells (project scope still normalizes ITS OWN stale entries; user scope refuses other owners and only takeover-user-scope moves the shared entry), plus the #110 self-checkout cells: the real `run.sh install <checkout>` drive leaves the tracked .pi/settings.json byte-identical, writes NO project-scope packages[] self-registration, and REPORTS the skip; cell 15 boots the pinned devDep pi against two stand-in checkouts and requires the --entwurf-control collision to APPEAR before asserting its absence. Offline/hermetic (deps: bash+python3+pinned pi)
   ./run.sh smoke-meta-prune           # 1.0.0 meta-bridge Phase 4: listing-only store janitor regression gate — classify keep/orphan/stale/ambiguous, delete nothing. Offline/deterministic (deps: bash+node)
   ./run.sh smoke-meta-keyset-guard    # 0.10.0 meta-bridge: keyset-owner guard regression — check-keyset-overlap + managed-keys SSOT (disjoint passes, collisions fail). Offline/hermetic (deps: bash+python3)
   ./run.sh check-meta-manifest-schema # 0.12.2 meta-bridge: CLI-version-INDEPENDENT static guard — plugin manifests pinned to the minimal keyset that validates on the lowest supported Claude (closed-schema regression that broke 0.12.1 install on floor) + desired_mcp installed-vs-clone dual-mode. Offline (deps: python3)
@@ -5799,9 +5799,11 @@ case "$cmd" in
     check_shell_quote
     ;;
   check-install-surface)
-    # 0.12.7 — structural half of the node_modules strip-types fence: run_ts is the only
-    # crossing, every operator subcommand has a compiled twin, bin wrappers branch, dev
-    # gates stay out of the tarball, and offline smokes never touch the real $HOME.
+    # structural half of the node_modules strip-types fence: run_ts is the only crossing,
+    # every operator subcommand has a compiled twin, bin wrappers branch, dev gates stay out
+    # of the tarball, offline smokes carry no OBVIOUS write to the real $HOME (a static
+    # tripwire, never a sandbox proof), and S7 pins the candidate .pi/settings.json — the
+    # shared release skill, the stable bridge bin, and NO packages key (#110).
     # check-pack-install owns the dynamic half (it drives the installed commands).
     run_ts scripts/check-install-surface.ts
     ;;

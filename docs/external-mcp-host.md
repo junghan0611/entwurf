@@ -169,6 +169,7 @@ Use the managed install surface rather than editing omp's files by hand:
 ```bash
 entwurf install-omp-bridge     # the BIRTH extension (a garden id per visible TUI session)
 entwurf install-omp-mcp        # the MCP hand (this section)
+entwurf install-omp-config     # the operator setting (tools.xdev: false)
 entwurf install-omp-receive    # the RECEIVER extension (mailbox watch + announce-only doorbell)
 
 entwurf doctor-omp-bridge
@@ -176,7 +177,7 @@ entwurf doctor-omp-mcp
 entwurf doctor-omp-receive
 ```
 
-Three units, not two. The receiver is what makes the citizen answerable at all — without it omp
+Four units, not two. The receiver is what makes the citizen answerable at all — without it omp
 sends under its own garden id and every reply is refused as `mailbox-undeliverable` — and it is
 also a prerequisite of visible fresh: the fresh preflight refuses this host before touching tmux
 when the receive unit is missing, rather than opening a window that can never be reached.
@@ -244,7 +245,8 @@ bridge registered, **11 devices**: omp's own `ast_edit`, `debug`, `lsp`, `browse
 seven `entwurf_*`. So the default does not merely wrap entwurf — it wraps omp's own LSP and
 debugger too.
 
-**Set this on any omp host that is meant to work as a citizen:**
+**`entwurf setup` writes this for a detected omp host, and `entwurf install-omp-config` is
+the repair leaf. The value they own:**
 
 ```yaml
 # ~/.omp/agent/config.yml

@@ -7,7 +7,9 @@ Both Python writers touch the SAME file (`<repo>/.pi/settings.json` at project s
   - register-pi-provider.py  → entwurfProvider.mcpServers.entwurf-bridge
 
 A settings file can be tracked and owned by a formatter (this repo's own is: tab
-indented, biome-governed, pinned byte-for-byte by check-install-surface S7b–S7d), so a
+indented, biome-governed, its skills/packages/provider-bin invariants pinned by
+check-install-surface S7b-S7d and its bytes pinned end to end by smoke-user-scope-citizen
+cell 14b), so a
 writer that re-serializes it in its own house style turns `install` into a source edit.
 #53 B closed that for the packages writer and left the provider writer open — the same
 file, the same defect, one function call away. The rules therefore live HERE rather than

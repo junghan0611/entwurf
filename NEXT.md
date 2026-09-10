@@ -119,8 +119,52 @@ CHANGELOG `## Unreleased`가 구현 범위 `v0.15.1..19ad90c` **30커밋** 전�
       **GLG 결정처럼 보였던 갈림 둘이 측정으로 사라졌다** — hook trust 는 managed `/etc/codex` 레이어가 프롬프트 없이 열고, clause 4 는 `thread/name/set` 이 벤더 auto-titler 를 이긴다.
       **join 키의 모양이 바뀌었다**: parent-pid 가 아니라 와이어 `_meta.threadId` 이고 hook `session_id` 와 같은 문자열이다. 마감 코멘트가 #95 스레드의 정본.
 
-현재 좌표: 1–24 완료 → **22. ACP fable 지원 랜딩·푸시 완료**(`9816618`, 2026-09-08). #109 openclaw 다리는 **닫혔다**(요청자가 컨테이너를 나왔다) · **0.16.1 make는 열린 채 PAUSED**.
+- [x] **25. #78 macOS consumer-CI 랜딩 + v0.20.0 컷·발행** — `feat/78-macos-consumer-ci` 가 main 으로 머지됐고 `v0.20.0` 이
+      **2026-09-09T13:02:45Z 에 태그·GitHub 릴리즈·npm 으로 나갔다.** `macos-install-surface` 는 그 컷에서 required 로 승격됐다.
+      실린 것은 세 상태 그대로다 — Entwurf-only 설치면 **CERTIFIED (CI)**, 하네스 레일·마커 join·ACP 실턴·mux **NOT CERTIFIED — pending
+      physical host**, native Windows **UNSUPPORTED**. 빌린 맥 영수증은 아직 없다(아래 CARRIED).
+
+- [x] **26. #110 두 번째 체크아웃 self-registration + claude-agent-acp 0.76.0** — 브랜치 `fix/110-second-checkout` 2커밋
+      (`6d6aaa6` 수리 / `2650e95` 범프, 원인이 달라 분리) → main fast-forward `2650e95`. 워크트리에서 작업했고 정본은 건드리지 않았다.
+      **#110 의 제목이 틀렸다**: pi 는 부팅한다. tracked `packages: [".."]` 가 "지금 있는 체크아웃"을, user-scope 가 정본 절대경로를
+      등록해서 pi 의 `local:<resolved path>` identity 가 갈리고, 두 번째 체크아웃에서 확장 사본 둘이 로드돼 **브랜치 사본이
+      `--entwurf-control` 을 가져가고 설치본이 실패하는데 에러가 설치본 경로를 찍는다.** 수리: entwurf 자기 체크아웃은
+      project-scope 자기등록을 갖지 않는다 — tracked 바이트로든 writer 가 쓴 바이트로든.
+      영수증: qualification **393/393 KILLED**, `check:full` exit 0 472s, exact-SHA CI
+      [`34438272372`](https://github.com/junghan0611/entwurf/actions/runs/34438272372) 4잡 success + qualification 본체 스텝 success,
+      실물 수용(손) 정본·워크트리·foreign cwd 모두 확장에러 0 / 모델행 7.
+      첫 qualification 이 `SECOND-CHECKOUT-EXTENSION-COLLISION` 을 **SURVIVED** 로 냈고 원인은 셀이 씨앗을 **인덱스**(`git show :`)에서
+      읽어 자기 재이식을 못 본 것이었다 — 그 셀의 주체는 세션 시작 시 **디스크의 파일**이다. 게이트가 자기 일을 했다.
+
+현재 좌표: 1–26 완료 → **26. #110 + acp 0.76.0 랜딩 완료**(main `2650e95`). 다음은 **0.20.1 컷**(patch: 결함 수리 + dep 범프, 새 능력 없음).
+#109 openclaw 다리는 **닫혔다**(요청자가 컨테이너를 나왔다) · **0.16.1 make는 열린 채 PAUSED**.
 푸시·태그는 `entwurf-release` 4모드 몫이다 (CalVer `tag-release`가 아님).
+
+# NOW — stem: 0.20.1 컷 (#110 self-registration 수리 + claude-agent-acp 0.76.0)
+
+- **Stem:** **0.20.1 을 자른다.** patch 가 맞다 — 결함 수리 하나와 dep 범프 하나이고 새 능력이 없다.
+  `entwurf_fresh_call` 스키마도 움직이지 않았다. GLG 가 2026-09-10 에 push·병합·릴리즈를 승인했다.
+- **좌표:** main = **`2650e95`** (#110 수리 `6d6aaa6` + acp 0.76.0 범프 `2650e95`, ff 머지·푸시 완료).
+  exact-SHA CI [`34438272372`](https://github.com/junghan0611/entwurf/actions/runs/34438272372) 4잡 전부 success,
+  `check` 잡의 qualification 본체 스텝 success. #110 은 병합 SHA 로 닫혔다. 패키지는 아직 `0.20.0`.
+- **정본 개발자 설치는 끝났다:** `/home/junghan/repos/gh/entwurf` 에서 `./run.sh install` 이
+  `project-scope packages[] skipped — entwurf's own checkout self-registers through user scope (#110)` 를 찍고
+  tracked 파일을 바이트·mtime 그대로 뒀다. `doctor-pi-package` = owned, `doctor-pi-provider` = ok(7 tools).
+  손 수용: 정본 / 워크트리 / foreign cwd **셋 다 확장에러 0 · entwurf 모델행 7**.
+- **Next:** (1) `/skill:entwurf-release prepare 0.20.1` — CHANGELOG `## Unreleased` 를 `## 0.20.1 - <KST 날짜>` 로 **승격만**
+  하고 본문은 다시 쓰지 않는다(이미 Fixed 2항목 + Upgrade note 가 들어 있다) · `npm version` · `pnpm install --lockfile-only` ·
+  `docs/acp-backend-rail.md` 지원표의 Entwurf package 행을 0.20.1 로 · `check:full` · `LIVE=1 release-gate --cut`.
+  (2) `make 0.20.1` — 푸시 → exact-SHA CI → 보존 candidate 1개 + `check-install-container`(**Docker 필요**) → 태그 → **GitHub 릴리즈 공개**.
+  (3) `publish 0.20.1 <candidate> latest`.
+- **Blocker:** 없음. 단 **npm publish 토큰이 401 이면 GLG 손이다**(0.17.2·0.18.0·0.18.1 전례) — 붙들지 말고 바로 DM.
+- **Read:** `.claude/skills/entwurf-release/SKILL.md`(4모드가 각각 별도 권한 경계다) · `VERIFY.md` 릴리즈 수용 · `AGENTS.md` "Verification scheduling".
+- **Do not touch:** **워크트리에서 `./run.sh install` 이나 `takeover-user-scope` 를 돌리지 마라** — `REPO_DIR` 이 워크트리라
+  user-scope 자기등록을 워크트리로 옮겨 #110 을 반대 방향으로 다시 만든다. 개발자 설치는 정본 체크아웃에서만 ·
+  태그만 만들고 GitHub 릴리즈를 빼먹지 마라(GLG 가 릴리즈 노트를 github.com 에서 읽는다) ·
+  이슈 칸이 비었다고 채우지 마라(총 10 / 구현 5 상한; 현재 결함이나 실행 가능한 계약만 칸을 얻는다) ·
+  codex 레인은 이번 릴리즈에서 열지 않는다.
+
+<details><summary>#78 macOS / 설치면 다양화 NOW (닫힘 — 0.20.0 으로 나갔다)</summary>
 
 # NOW — stem: 사용자층 확보 = 설치면 다양화 (GLG, 2026-09-08: "설치면 다양화가 더 급하겠어")
 
@@ -130,24 +174,24 @@ CHANGELOG `## Unreleased`가 구현 범위 `v0.15.1..19ad90c` **30커밋** 전�
 - **좌표:** 브랜치 `feat/78-macos-consumer-ci` @ **`9cc5b09`** 푸시됨. CI run
   [`34316688064`](https://github.com/junghan0611/entwurf/actions/runs/34316688064) **4잡 전부 success**,
   `check` 잡의 qualification 스텝 success. `macos-install-surface` 는 이제 **required** 다.
+  **닫힘:** 그 브랜치는 머지됐고 `v0.20.0` 이 2026-09-09T13:02:45Z 에 나갔다. (3) "0.20.0 을 무엇이라 부를지" 는
+  후자로 — 「설치면 CERTIFIED (CI) + 출하 경로 portable, 레일은 빌린 맥 영수증 후」 — 잘렸다.
 - **⚠ 이전 판의 틀린 문장을 여기 남긴다:** 이 stem 은 *"macOS 는 싸다: `macos-latest` 러너가 곧 진짜 맥이라 **호스트를 빌릴 필요가 없고**"* 라고 적고 있었다.
   **그건 틀렸다.** CI 러너는 하드웨어상 맥이지만 **로그인된 하네스가 없어** 레일을 인증하지 못한다 — 설치면만 준다. 그래서 빌린 맥이 필요하다.
-  이 리포에서 `certified` 는 **물리 호스트 닥터 초록**을 뜻하고, CI 가 주는 것은 그보다 약한 **CERTIFIED (CI)** 다. 세 상태를 섞지 마라:
-  **CERTIFIED (CI)** = macOS Entwurf-only 설치면 · **NOT CERTIFIED — pending physical host** = 모든 하네스 레일·마커 join·ACP 실턴·mux ·
-  **UNSUPPORTED** = native Windows 뿐.
-- **native Windows 는 제품 규모다**: bin 6개가 전부 bash 를 가리키고 `entwurf` bin 은 **6,725줄 `run.sh`** 라, #86 매트릭스대로
-  Node 프론트도어·심링크 없는 소스 노출·프로세스 seam 이 필요하다. 재진입 조건은 **GLG 의 명시적 product-scale 승인**이다. 열지 마라.
-  WSL2 는 계약상 리눅스의 연장이라 새 작업 없음.
-- **Next:** (1) 빌린 맥에서 `sh scripts/raw-macos-measure/probe.sh` **한 번** — entwurf 설치도 로그인도 필요 없고, 수용 체크리스트 1–6 을 한 명령으로 닫는다.
-  출력을 `scripts/raw-macos-measure/README.md` 의 `[host-darwin]` 절에 붙인다. (2) 그 영수증으로 7–9(설치·`doctor-meta-bridge`·실 배달 왕복) 판단.
-  (3) 0.20.0 을 **무엇이라 부를지** GLG 가 고른다 — 「macOS parity」로 자르면 어설프고, 「설치면 CERTIFIED (CI) + 출하 경로 portable,
-  레일은 빌린 맥 영수증 후」면 정직하다(side-eye 검수 판정, 2026-09-09).
-- **Blocker:** 없음.
 - **Read:** 브랜치 `NEXT--feat-78-macos-consumer-ci.md`(재론 금지 결정 3건 포함) · `.agent-reports/macos-portability-audit-20260909.md`(1010줄 감사) ·
   #78 본문 `## Evidence before a native-Windows claim` · #78 코멘트의 #86 obstruction matrix(2026-08-27).
-- **Do not touch:** native Windows 프론트도어(승인 전) · WSL 을 native-Windows 증거로 재라벨 · 리눅스 릴리즈 플로어 약화 ·
-  물리 증거 없이 macOS 를 supported 로 승격(#78 본문: *"claim only what physical evidence proves"*) ·
-  CI 러너를 물리 호스트 증거로 재라벨(이 stem 이 실제로 저지른 실수다).
+
+</details>
+
+## 세 상태를 섞지 마라 (0.20.0 에서 확정, 계속 유효)
+
+이 리포에서 `certified` 는 **물리 호스트 닥터 초록**을 뜻하고, CI 가 주는 것은 그보다 약한 **CERTIFIED (CI)** 다.
+**CERTIFIED (CI)** = macOS Entwurf-only 설치면 · **NOT CERTIFIED — pending physical host** = 모든 하네스 레일·마커 join·ACP 실턴·mux ·
+**UNSUPPORTED** = native Windows 뿐. **CI 러너를 물리 호스트 증거로 재라벨하지 마라**(이전 stem 이 실제로 저지른 실수다).
+
+**native Windows 는 제품 규모다**: bin 6개가 전부 bash 를 가리키고 `entwurf` bin 은 **6,725줄 `run.sh`** 라, #86 매트릭스대로
+Node 프론트도어·심링크 없는 소스 노출·프로세스 seam 이 필요하다. 재진입 조건은 **GLG 의 명시적 product-scale 승인**이다. 열지 마라.
+WSL2 는 계약상 리눅스의 연장이라 새 작업 없음.
 
 ## codex 레인 — step 1 만 닫혔다. step 2 는 GLG 가 연다
 
@@ -452,6 +496,12 @@ step 2/3 이 물려받는 것(정본은 `scripts/raw-codex-measure/` + #95 마�
 
 # CARRIED
 
+- **#78 물리 맥 영수증 — 아직 안 돌았다 (0.20.0 이 이 축을 열어둔 채 나갔다).** (1) 빌린 맥에서
+  `sh scripts/raw-macos-measure/probe.sh` **한 번** — entwurf 설치도 로그인도 필요 없고, 수용 체크리스트 1–6 을 한 명령으로 닫는다.
+  출력을 `scripts/raw-macos-measure/README.md` 의 `[host-darwin]` 절에 붙인다. (2) 그 영수증으로 7–9(설치·`doctor-meta-bridge`·
+  실 배달 왕복)을 판단한다. 그 전까지 macOS 하네스 레일은 **NOT CERTIFIED — pending physical host** 이고, 그 등급을 CI 초록으로
+  승격하지 마라(#78 본문: *"claim only what physical evidence proves"*).
+
 - **AGENTS.md 가 ACP first-user augment 50KB cap 천장에 붙어 있다 (#105 lane 측정 2026-09-07).** HEAD `7a6778c` 기준 여유 932B,
   `a39b637` 뒤 316B(`buildPiContextAugment` claude, repo AGENTS + 12KB global baseline, `check-acp-carrier-augment`
   `[QK:AUGMENT-BUDGET-FITS]`). 그 게이트는 `check:hermetic` 소속이라 `pnpm check` 로는 안 보이고 full floor/qualification 에서 처음
@@ -523,8 +573,8 @@ step 2/3 이 물려받는 것(정본은 `scripts/raw-codex-measure/` + #95 마�
 - **L2 CHANGELOG — 닫힘:** `## Unreleased`가 구현 범위 `v0.15.1..19ad90c` 30커밋 전수로 채워졌다(그중 `ec311a2`·`c3894be`·`7e45057`·`1143177` 4개는 v0.15.1 이후 이미 origin/main에 있던 것). 그 위에 쌓이는 릴리즈 준비 커밋은 이 30에 포함되지 않으므로, 범위를 다시 셀 때는 `v0.15.1..HEAD`가 아니라 이 끝점을 쓴다. 섹션 승격·버전 범프·release-gate 수치는 prepare 몫이고, Verification의 release-gate 줄은 일부러 빈 슬롯으로 남겼다. 이 리포의 릴리즈 도구는 CalVer `tag-release`가 아니라 SemVer `.claude/skills/entwurf-release`의 4모드다.
 - **L5 claude 시민의 model 필드 — 답 나옴, 고치는 일만 남음 (#90 CLOSED):** 설치된 Claude Code **2.1.245**에서 우리 훅 stdin을 캡처한 결과, interactive `SessionStart` 봉투는 `model`을 **문자열**로 보낸다(`claude-opus-5[1m]`). print 모드(`claude -p`)는 아예 안 보낸다. 우리 리더(`meta-bridge-hook.ts:184-191`)가 객체 `.id`/`model_id`만 받아 그 문자열을 버리므로 claude-code 레코드는 0/353이다. 남은 일: 리더를 문자열 수용으로 넓히고 birth-hook fixture로 고정하되 **print 모드의 부재도 같이 고정**한다. 벤더 버전이 오르면 캡처를 다시 떠야 답이 유지된다. 별도 grant.
 - **L8 OMP child가 bridge 권한을 물려받는다 (측정, GLG 세션 2026-08-28):** OMP task child의 `entwurf_self`는 **부모의 garden id**를 반환한다(두 번째 주소 없음 — §3.5 요구사항 충족, 게이트가 증명하는 그대로). 그러나 그 빌린 신원으로 `entwurf_v2`와 `entwurf_fresh_call`을 호출할 수 있다. §3.5(b)가 도구 차용을 의도적으로 허용하므로 깨진 불변식은 아니다. **열린 질문은 C에서 닫혔다 — 판정이 아니라 원칙으로:** `docs/adding-a-harness.md` §3.5의 principal doctrine이 visible host citizen을 가든 principal로 두고, 내부 위임과 그 책임을 그 시민·벤더 소유로 명시하며, Entwurf가 내부 ACL·subagent provenance·시민 아래 authority 축을 만들지 않는다고 못박았다. 빌린 신원의 dispatch는 principal이 자기가 고른 delegate를 통해 보낸 것이다. 따라서 아래 울타리 측정은 참고 자료로만 남는다. 값싼 울타리 후보 측정: omp 18.0.0에 subagent의 MCP 접근을 막는 `mcp.*` 키는 없으나 `task.enableLsp`(기본 false)가 **subagent별 개별 도구 차단 기제가 존재함**을 증명한다. 자체 tool set을 든 custom agent 정의는 미검증 단서.
-- **L6 벤더 드리프트:** 이 호스트는 아직 **omp 18.0.0**이다(2026-08-30 측정: `omp --version`). 벤더는 **18.0.11**을 알린다(TUI 배너). `mode === "tui"` 판별자, `xd://` 동작, 그리고 이제 §M7의 다섯 셀(호출 자리·idle wake·`clearTimer`·핸들러 순서)이 업그레이드 시 재측정 대상이다.
-- **L7 ROADMAP:** "현재" 절이 아직 측정 단계로 적혀 있다.
+- **L6 벤더 드리프트 — 트리거가 발동했다:** 이 호스트는 이제 **omp 18.1.12** 다(`omp --version`, 2026-09-10 재측정; 2026-08-30 의 18.0.0 에서 이동). 그러므로 `mode === "tui"` 판별자, `xd://` 동작, §M7 의 다섯 셀(호출 자리·idle wake·`clearTimer`·핸들러 순서)은 **지금 재측정 대상이고 아직 재측정되지 않았다**. 18.0.0 위에서 딴 §M7 영수증은 그 버전의 기록으로 유효하다 — 덮어쓰지 말고 새 측정을 옆에 붙여라.
+- **L9 MODELS.md 드리프트 (2026-09-10 관측, 이 레인 밖):** `MODELS.md`(2026-09-04)가 *"omp 는 entwurf 브리지가 없어 Claude 를 github-copilot 으로만 닿는다"* 고 적었는데, 지금 `omp models` 는 `anthropic` 프로바이더 그룹을 갖고 있어 `claude-opus-5` 가 **두 레일로 풀린다**(metered anthropic API / copilot 구독). 그래서 이 레인의 omp 형제는 `github-copilot/claude-opus-5` 로 provider 를 못박아 열렸다. 별건 — 릴리즈 뒤 GLG 판단.
 
 # DURABLE LINKS
 

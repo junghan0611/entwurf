@@ -25,8 +25,9 @@ Scope asymmetry (봉인계약 4·6, REASONED — not the unfounded asymmetry dev
            of our key is tidied; siblings kept.
   project  <repo>/.pi/settings.json — checkout-LOCAL, disposable, re-creatable, and `run.sh
            remove` already covers it → NO state. install normalizes the command; remove strips
-           our-managed shapes (the bare bin AND the legacy repo path). project-scope state is a
-           NAMED FOLLOW-UP (NEXT), deliberately out of this lane.
+           our-managed shapes (the bare bin AND the legacy repo path). project scope takes NO
+           state, deliberately: it is checkout-local, disposable, and `run.sh remove` is its
+           whole inverse.
 
 USER-SCOPE OWNER BINDING (#86 C2): the user install-state additionally records
 `installerRoot` (the repo/package root that installed the key), so an old root's

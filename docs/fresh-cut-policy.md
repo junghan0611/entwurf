@@ -22,7 +22,8 @@ the new generation.
 ## What certification checks
 
 `certifyActiveStore` is shared by the doctor and all identity writers: pi birth,
-Claude's `SessionStart`, agy's imprint, and `entwurf_register_native`. Every active
+Claude's `SessionStart`, Copilot's first-prompt birth hook, OMP's birth extension,
+agy's imprint, and `entwurf_register_native`. Every active
 record must be:
 
 - a regular, non-symlink `.meta.json` file;
@@ -43,7 +44,7 @@ are opened without following symlinks; implementation and race proofs live besid
 
 ## Running a cut
 
-First close every pi, Claude Code, and agy session that could own a citizen or
+First close every pi, Claude Code, Copilot, OMP, and agy session that could own a citizen or
 transport artifact. Then run:
 
 ```bash

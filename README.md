@@ -88,14 +88,15 @@ CERTIFIED (CI) is weaker than a physical-host doctor green.
 The npm package has no `os` restriction; that is installability, not a
 support claim.
 
-**macOS in this release.** This release adds macOS support for Entwurf's
+**macOS landed in 0.20.0.** That release added macOS support for Entwurf's
 install surface: the npm package installs, `entwurf --help` and `entwurf
 check-bridge` boot, and `entwurf setup` composes the integrations it finds.
 The four installers that previously rejected Darwin by platform name no longer
-do. We validated that surface only in macOS CI because the developers did not
+do. That surface was validated only in macOS CI because the developers did not
 have a physical Mac. So macOS native-harness rails—marker join, an ACP turn,
-and mux included—are not yet certified; setup writes their wiring but reports
-them non-green. Linux's certified rail status is unchanged.
+and mux included—are **NOT CERTIFIED — pending physical host**; setup writes
+their wiring but reports them non-green. Linux's certified rail status is
+unchanged.
 
 On Darwin, `entwurf setup` that detects a harness is intentionally
 non-green: the wiring WAS written and nothing failed to install, but the

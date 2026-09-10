@@ -7,10 +7,10 @@
 
 ---
 
-## 현재 — 0.19.0 shipped; 0.20.0 cut is #78 macOS evidence honesty
+## 현재 — 0.20.0 shipped (#78 macOS 설치면 정직성); 0.20.1 컷 대기
 
 이 repo는 **entwurf-core(v2 garden-citizen dispatch) + native-harness bridges + pi adapter + ACP plugin**이다.
-`v0.19.0`이 현재 패키지다 (`repair=0.12.8-repair.1` 보존). 0.15.0은 Copilot을 시민으로 들였고, 0.15.1은 Linux one-command setup honesty(#86)다. 0.16.0은 OMP를 출하했다. Claude mailbox, pi control-socket,
+`v0.20.0`이 현재 패키지다 (`repair=0.12.8-repair.1` 보존). 0.15.0은 Copilot을 시민으로 들였고, 0.15.1은 Linux one-command setup honesty(#86)다. 0.16.0은 OMP를 출하했다. 0.19.0은 #105 ① placement였고, 0.20.0은 macOS 설치면을 **CERTIFIED (CI)** 로 실으면서 `claude-fable-5-1`을 curated 행에 더했다. Claude mailbox, pi control-socket,
 Antigravity native-push, Copilot self-fetch, OMP self-fetch가 한 garden-id dispatch 표면으로 출하됐고, ACP plugin은 Claude와 Cortex를 pi host
 안에서 연결한다. 0.14.0은 hidden background resume을 철회하고 visible fresh creation과 same-id pi resume을
 각각 `entwurf_fresh_call` / `entwurf_resume_call`로 분리했으며, 0.14.1은 fresh creation에 literal absolute cwd를
@@ -19,9 +19,9 @@ Antigravity native-push, Copilot self-fetch, OMP self-fetch가 한 garden-id dis
 
 **Codex native lane.** 2026-08-01에 #56이 닫혔고, GLG가 2026-09-08에 그 거절을 뒤집었다 — lane은 `#95`, 지금은 step 1 (`scripts/raw-codex-measure/`)만 닫혔다. record도 `entwurf_fresh_call`도 없다. **Codex를 ACP backend로 출하하지 않는다는 결정은 그대로다.**
 
-현재 레인은 #78 macOS 이식이다(`feat/78-macos-consumer-ci`): Entwurf-only 설치면은 **CERTIFIED (CI)**(`macos-install-surface` CI run 34303884286 @ `70eda03`)이고, 하네스 레일·마커 join·ACP 실턴·mux는 **NOT CERTIFIED — pending physical host**이며, native Windows는 **UNSUPPORTED**다. GLG 2026-09-09: 물리 맥 대여는 이 컷 뒤로 미루고, 지금 증거로 정직하게 0.20.0을 자른다. GitHub OPEN은 backlog가 아니라 최대 5개의 실행 가능한
-계약만 둔다 (현재는 초과 — 이 컷이 sweep하지 않는다). 방향·철학·관찰 중인 가능성은 이 문서가 지며, 재현 가능한 결손이 되면 그때 증거와 다음 측정을
-갖고 이슈로 승격한다. 현재 실행 계약은 #78 platform evidence (이 컷), #95 Codex step 1 이후, #72 ACP retained-child 원인, #76 subscription rail 강제, #80 public vocabulary다. #82/#86은 CLOSED. 실행 순서는 active NEXT handoff가 진다.
+0.20.0이 #78 macOS 축을 세 상태 그대로 실었다 — Entwurf-only 설치면은 **CERTIFIED (CI)**(`macos-install-surface` CI run 34303884286 @ `70eda03`), 하네스 레일·마커 join·ACP 실턴·mux는 **NOT CERTIFIED — pending physical host**, native Windows는 **UNSUPPORTED**. 물리 맥 대여는 그 컷 뒤로 미뤄져 있고 아직 일정이 없다; 레일 승격은 빌린 맥 영수증 뒤다. GitHub OPEN은 backlog가 아니라 최대 5개의 실행 가능한
+계약만 둔다. 방향·철학·관찰 중인 가능성은 이 문서가 지며, 재현 가능한 결손이 되면 그때 증거와 다음 측정을
+갖고 이슈로 승격한다. 현재 실행 계약은 #78 platform evidence (물리 맥 영수증), #95 Codex step 2 이후, #76 subscription rail 강제, #80 public vocabulary, #107 remote-ready routing, #108 placement wire 증거다. #72·#82·#86·#110은 CLOSED. 실행 순서는 active NEXT handoff가 진다.
 
 Pi는 가장 깊이 붙은 adapter지만 프로젝트의 본질은 여전히 **garden id로 호명 가능한 형제 세션 사이의 얇은
 dispatch substrate**다. provider 연결과 TUI/RPC/session lifecycle은 pi에 맡기고, entwurf는 부르는 법과
@@ -43,7 +43,7 @@ v1 entwurf verbs(`entwurf`/`entwurf_resume`/`entwurf_send`)는 끝났고 사라�
 |---|---|---|---|
 | **pi** | shipped | control-socket adapter. ACP plugin도 pi provider/model로 들어온다. delivery 안의 relaunch transport는 visible-first cut으로 회수됐고, 그 자리는 별도 verb `entwurf_resume_call`이 visible same-id resume으로 채웠다. | `pnpm check`, v2 matrix LIVE, release-gate MUST |
 | **Claude Code** | shipped | SessionStart meta-bridge → garden id + mailbox + trusted marker. Transcript를 가져오지 않는다. | meta-session gates, mailbox/deliverability, `doctor-meta-bridge` |
-| **ACP Claude** | shipped; **outbound callback verified, retained-child failure tracked in #72** | Claude-first ACP plugin backend under local operator auth; socket-citizen rail. Integrated lifecycle proves callback, visible same-id resume and recall. Synthetic long-turn LIVE passes beyond 733s, but a real retained Sonnet tool-loop failed after four reuse turns with `ACP connection closed` (`20260730T194358-0061d2`), and GLG reports the same user-facing shape on hard workloads. #72 must recover child exit/signal/stderr and classify the workload-shape gap without automatic replay. Earlier intermittent bundled-MCP readiness observations remain separately recorded below. | ACP LIVE smokes + mux lifecycle release-gate MUST + #72 field report |
+| **ACP Claude** | shipped; outbound callback verified; #72 retained-child death **CLOSED**(외부 reaper, entwurf 결함 아님) | Claude-first ACP plugin backend under local operator auth; socket-citizen rail. Integrated lifecycle proves callback, visible same-id resume and recall. Synthetic long-turn LIVE passes beyond 733s. 2026-07-30에 실 Sonnet tool-loop가 네 번째 재사용 턴에서 `ACP connection closed`로 죽은 건(`20260730T194358-0061d2`)의 원인은 2026-09-01에 닫혔다 — 호스트에 손설치된 `acp-zombie-reaper.service`가 벤더 argv 부분문자열로 15분 넘은 child를 SIGTERM했다. 수리는 `ca52fdd`(entwurf 소유 same-process launcher + typed signal observation), 게이트는 `check-acp-launch-namespace`, 영수증은 `scripts/raw-acp-child-exit-measure/README.md`. Earlier intermittent bundled-MCP readiness observations remain separately recorded below. | ACP LIVE smokes + mux lifecycle release-gate MUST + `check-acp-launch-namespace` |
 | **Codex** | **native lane OPEN (#95)** — step 1(vendor measurement) 완료, step 2 이후 미착수 | 2026-08-01의 「managed lane 거절」을 **GLG가 2026-09-08에 뒤집었다**. 아직 citizen backend가 아니다 — record도, `entwurf_fresh_call`도 없다. step 1은 0.153.4에서 재측정: raw `turn/start` 재실행 green, birth event는 `SessionStart`(첫 턴), subagent는 `SubagentStart`로 갈려 §3.5가 무료, callback dialect는 `mcp__entwurf_bridge__entwurf_v2`. 열린 blocker 둘: 대화형 hook trust 프롬프트, clause 4 visible identity 미확보. **ACP backend로 출하하지 않는다는 결정은 그대로다.** | `scripts/raw-codex-measure/` · DELIVERY.md §Codex · #95 (closed #56은 역사) |
 | **Copilot CLI** | shipped (0.15.0); D3 pending / D8 unproven | 첫 프롬프트에 `backend:"copilot"` V3 record. receive는 포크된 first-party extension + mailbox rail. visible fresh는 `entwurf_fresh_call {backend:"copilot"}` → owned `entwurf copilot` invocation, 4축 preflight, exact-nonce callback. `--ui-server`/`ws.*`는 거절. D3 pending / D8 unproven. Copilot visible-fresh LIVE는 operator-metered이며 release MUST가 아니다. | DELIVERY.md matrix row (LIVE receipts 2026-08-23 / 2026-08-25) + issue #82 thread |
 | **Antigravity (`agy`)** | shipped | `PreInvocation` auto-birth + record-backed sender + native LS gRPC push; managed MCP/permission, statusline, hook adapters. | agy deterministic gates + doctors + 2026-07-13 live round trip |
