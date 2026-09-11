@@ -433,15 +433,22 @@ placement mechanism available to `entwurf_fresh_call` is the `TMUX`/`TMUX_PANE` 
 the app-server itself. `install-codex-mcp` names those variables in Codex's vendor-supported
 `env_vars` allowlist; it also forwards `CODEX_HOME` and the Entwurf garden/control roots so
 custom roots do not split the bridge from birth/probe state. An attached TUI may sit anywhere
-and does not lend its pane to the server. Request metadata identifies a thread, not its TUI's
-tmux seat, so N TUIs attached across sessions have no request→TUI seat join. A “Codex beside
-Pi” receipt therefore comes from a real visible `Pi → Codex → Pi` run, records the fresh
-Codex, inherited app-server, and outbound Pi session coordinates separately, and requires
-equality. Ambient `PI_SESSION_ID`/`PI_AGENT_ID` are stripped at the release boundary; fixture
-or self-fetch receipt collection cannot substitute for the first Pi leg. Otherwise first
-admission remains red. A tmux-less app-server gets `no-tmux-context`. Entwurf neither searches
-client panes nor exposes a generic API/manager or starts/moves/supervises the app-server.
-This fixed env-name boundary is not the caller-supplied generic env carrier forbidden below.
+and does not lend its pane to the server. A real visible `Pi → Codex → Pi` run at `6e28c9e`
+recorded the fresh Codex, inherited app-server, and outbound Pi coordinates separately and
+accepted same-session A. Ambient `PI_SESSION_ID`/`PI_AGENT_ID` were stripped; fixture receipt
+collection did not substitute for the first Pi leg.
+
+That equality is not admission. Exact Codex 0.153.4 source exports no attached-client
+connection/seat value usable by the shared Entwurf MCP or hooks; its internal `ConnectionId`
+does not cross into thread/core/MCP/hook state, so N TUIs across sessions have no
+request→attached-TUI-seat join and the current vendor surface is **do not admit**. The separate
+TUI-local dynamic-task MCP carries a localhost endpoint into core but is a closed `codex_tui`
+namespace, not an Entwurf route or seat identity. Reopen only when an upstream per-client
+metadata hook is visible at both the calling TUI seat and MCP request. A tmux-less app-server
+still gets `no-tmux-context`. Entwurf neither searches client panes nor substitutes manual
+placement/one-server-per-seat, nor exposes a generic manager or starts/moves/supervises the
+app-server. This fixed env-name boundary is not the caller-supplied generic env carrier forbidden
+below.
 
 **이것이 증명하는 것은 "전달 계층이 그 citizen을 안다"이지 "citizen이 자기를 안다"가 아니다.** 아래
 §6-b가 그 구분을 measured incident로 보존한다.

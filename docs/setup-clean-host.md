@@ -446,19 +446,19 @@ codex --remote "unix://$CODEX_HOME/app-server-control/app-server-control.sock"
 ```
 
 The app-server's `TMUX`/`TMUX_PANE` is the Codex caller placement forwarded to its MCP child.
-It is **not** the attached TUI's pane. Request metadata has no request→TUI seat join, so N
-clients attached from different sessions do not inherit the app-server's adjacency. To claim
-“Codex beside Pi,” start/attach the intended Codex TUI in the app-server's session and require
-the outbound Pi to land in that same session. If the app-server was started outside tmux,
-visible fresh rejects; Entwurf does not guess a client pane, create a tmux session, expose a
-generic app-server manager/API, or start/restart the server. Custom `CODEX_HOME` and custom
-Entwurf roots must cross the same explicit `env_vars` boundary. The strict request `_meta`
-tuple, not this environment or a pid marker, identifies the caller. Delivery uses one
-`codex queue` invocation with no retry.
+It is **not** the attached TUI's pane. Same-session A passed at `6e28c9e`, but exact Codex
+0.153.4 source exposes no request→attached-TUI-seat carrier: N clients attached from different
+sessions cannot receive symmetric default fresh placement. The current vendor surface is
+therefore **do not admit**; sharing the app-server's session is only the measured A deployment,
+not a support workaround. If the app-server was started outside tmux, visible fresh rejects;
+Entwurf does not guess a client pane, create a tmux session, expose a generic app-server
+manager/API, or start/restart the server. Custom `CODEX_HOME` and custom Entwurf roots must
+cross the same explicit `env_vars` boundary. The strict request `_meta` tuple identifies the
+thread caller, not its attached seat. Delivery uses one `codex queue` invocation with no retry.
 
-The 2026-09-11 loaded-thread run is preserved as pre-amendment native-push/identity evidence.
-It does not accept the current terminal-parser, env-boundary, setup, preflight-safety, and
-clause-7 composition amendments.
+The 2026-09-11 loaded-thread run remains pre-amendment native-push/identity evidence; the later
+real `Pi → Codex → Pi` receipt in `DELIVERY.md` accepts the amended same-session A only. Do not
+schedule qualification/release until the vendor supplies the B per-client metadata hook.
 
 `entwurf_fresh_call` accepts candidate backend `codex` and requires an explicit model. Its
 preflight must prove the safe birth closure, exact MCP/env atom, `thread-title`, and app-server
