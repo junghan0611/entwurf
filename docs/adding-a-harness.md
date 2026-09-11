@@ -185,11 +185,13 @@ The backend id must exist before any record carrying it can be written or read.
 
 A trusted lifecycle event of the harness turns a session into a record.
 
-- (a) Source: a per-backend hook unit under `pi/` (manifest + launcher) plus its payload
-  under `pi-extensions/`. The payload's whole job is `upsertMetaSession` — idempotent, so
-  whichever wired event fires first mints and the rest attach. The launcher `exec`s the
-  payload, so the payload keeps the launcher's pid and its parent is the harness itself.
-  Reference pair: `pi/meta-bridge-copilot/entwurf-meta-receive-copilot/` +
+- (a) Source: a package-owned birth unit expressed on the harness's real lifecycle surface.
+  Usually that is a per-backend hook unit under `pi/` (manifest + launcher) plus its payload
+  under `pi-extensions/`; a USER hook registry may instead point at a fixed package-owned
+  launcher closure under operator data. The payload's whole job is `upsertMetaSession` —
+  idempotent, so whichever wired event fires first mints and the rest attach. An exec launcher
+  keeps its pid and harness parent. Reference pair for the manifest form:
+  `pi/meta-bridge-copilot/entwurf-meta-receive-copilot/` +
   `pi-extensions/meta-bridge-hook-copilot.ts`.
 - (b) Two acceptances that must stay separate:
   - **mechanism** — a hermetic gate fires the shipped launcher with a synthetic envelope and
@@ -200,6 +202,12 @@ A trusted lifecycle event of the harness turns a session into a record.
   payload and its doctor, not in prose:
   - **Refuse a degraded envelope; never guess a field.** A record minted from a guessed id
     is a citizen no live session can be joined back to.
+  - **A vendor's one-time USER trust receipt is external authority, not install state.** Keep
+    the declaration identity fixed (event, matcher, handler type, launcher and timeout), and
+    have the doctor prove declaration bytes/closure ownership and vendor trust on separate
+    axes. Entwurf may read that receipt; it must never synthesize, pre-seed or bypass it.
+    `[측정]` Codex birth is its USER `SessionStart` declaration plus a fixed launcher closure,
+    accepted once by the operator through the vendor's visible trust UI.
   - **Say when birth happens.** `[측정]` A Copilot citizen is born when it is first spoken
     to, not when its window opens.
   - **When step 1(6) found a shared variable, give the backend an explicit root policy —
@@ -467,6 +475,12 @@ Only what the vendor actually ships. This is the step where imagination is most 
   - **Never infer a receiver from a sender.** They are separate markers with separate
     meanings. Copilot outbound identity was accepted before its receive transport was found;
     neither fact grants the other.
+  - **A native-push body must carry the trusted sender when the transport supplies no framing.**
+    Direct injection has neither control-socket RPC framing nor a mailbox file, so serialize an
+    authoritative sender with the mailbox-body SSOT, including `wants_reply`; with no
+    authoritative sender preserve the raw message. Render once before adapter resolution and
+    delivery so any permitted retry reuses byte-identical content. This is one shared
+    native-push rule for Codex and Antigravity, never adapter-specific decoration.
   - **Use a vendor-owned wake mechanism; do not invent an external watcher, delivery adapter,
     or polling supervisor.** A watcher *inside* the vendor's documented extension lifecycle
     is different from an entwurf sidecar pretending to own that lifecycle. `entwurf_v2`
@@ -642,6 +656,10 @@ The release gate strips those ambient variables. The required sequence is real
 app-server, and outbound Pi tmux session coordinates separately. Because Codex request
 metadata has no request→TUI seat join, a “Codex beside Pi” claim requires all three
 coordinates to agree; a fixture may collect receipts but cannot substitute for the first Pi leg.
+That equality proves only the supported same-session deployment (A). Codex remains unadmitted
+until B finds a vendor-owned request→attached-client-seat carrier that preserves default fresh
+parity across attached TUIs; if the vendor surface has none, the result is **do not admit**, not
+manual placement, one app-server per seat, pane/process guessing, or a hidden manager.
 
 **An `unsupported` note is not a partial-release permit.** `[측정]` #87 is where that was learned at
 full price: the Bundle A+B candidate carried a fully honest sentence in the delivery matrix —
