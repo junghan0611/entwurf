@@ -33,6 +33,14 @@ import {
 } from "../pi-extensions/lib/meta-session.ts";
 import { FRESH_CALL_BACKENDS } from "../pi-extensions/lib/mux-fresh-call.ts";
 import { readCodexThread, resolveCodexDefaultSocketPath } from "../pi-extensions/lib/native-push/codex-ws-client.ts";
+import {
+	buildCodexInstruction,
+	buildInitialPiPhaseOne,
+	buildInitialPiPhaseTwo,
+	runCleanupStages,
+	selectReport,
+	selectReportByBackend,
+} from "./lib/codex-fresh-live-protocol.ts";
 import { launchReceiptWindows } from "./lib/launch-receipt-windows.ts";
 import { skipLive } from "./lib/live-skip.ts";
 import { parseTmuxRow, TMUX_COORDINATE_FIELDS, TMUX_COORDINATE_FORMAT } from "./lib/tmux-coordinate-row.ts";
@@ -74,6 +82,10 @@ const fixtureArtifacts: string[] = [];
 let codexSocketPath = "";
 let initialPiTranscript = "";
 let codexThreadId = "";
+// Reachable from the EXIT path, not just from a wait: an assertion that throws must still be
+// able to ask the fixture's own mailbox which windows this run opened.
+let fixtureGid = "";
+const seenInbox: string[] = [];
 
 function ok(label: string, condition: unknown, detail = ""): asserts condition {
 	if (!condition) throw new Error(`${label}${detail ? `\n${detail}` : ""}`);
@@ -249,6 +261,32 @@ async function awaitOrRecover<T>(what: string, timeoutMs: number, probe: () => T
 			console.error(`  recovered  ${windowId} from its own receipt authority after: ${what}`);
 		}
 		throw error;
+	}
+}
+
+/**
+ * Every stable window handle any authority this run owns has written down: the fixture's own
+ * delivered mailbox bodies (drained once more, in case the failure beat the last drain), the
+ * initial Pi's transcript, and the Codex thread's tool results. De-duplicated, and only
+ * `@\d+` handles are kept.
+ */
+async function recoverEveryRecordedWindow(): Promise<void> {
+	const found: string[] = [];
+	if (fixtureGid !== "") {
+		try {
+			for (const message of readMetaInbox({ gardenId: fixtureGid }).messages) seenInbox.push(message.body);
+		} catch {
+			// The fixture mailbox may already be gone; the transcript authorities below remain.
+		}
+	}
+	for (const body of seenInbox) {
+		found.push(...launchReceiptWindows(body, "pi"), ...launchReceiptWindows(body, "codex"));
+	}
+	found.push(...recoverCodexWindows(), ...(await recoverOutboundPiWindows()));
+	for (const windowId of found) {
+		if (!WINDOW_ID.test(windowId) || openedWindows.includes(windowId)) continue;
+		openedWindows.push(windowId);
+		console.error(`  recovered  ${windowId} from a receipt this run already held`);
 	}
 }
 
@@ -454,6 +492,7 @@ async function run(): Promise<void> {
 		input: { backend: "claude-code", nativeSessionId, cwd: scratch },
 	});
 	const callerGid = caller.record.gardenId;
+	fixtureGid = callerGid;
 	const receiverMarker = writeMetaReceiverMarker({
 		gardenId: callerGid,
 		backend: "claude-code",
@@ -515,7 +554,6 @@ async function run(): Promise<void> {
 	receipts["3-initial-caller-pi-coordinate"] =
 		`session=${initialPiTmuxSession}\nwindow=${initialPiWindow}\napp-server-session=${appServerCoordinate.sessionId}`;
 
-	const seenInbox: string[] = [];
 	const drain = (): void => {
 		for (const message of readMetaInbox({ gardenId: callerGid }).messages) seenInbox.push(message.body);
 	};
@@ -536,38 +574,30 @@ async function run(): Promise<void> {
 	const codexAddressedToken = `PI-REPORTS-CODEX-ADDRESSED-${Math.random().toString(36).slice(2, 10).toUpperCase()}`;
 	const outboundPiToken = `CODEX-REPORTS-PI-LAUNCH-${Math.random().toString(36).slice(2, 10).toUpperCase()}`;
 	const finalToken = `CODEX-PI-FINAL-${Math.random().toString(36).slice(2, 10).toUpperCase()}`;
-	const codexInstruction =
-		`${codexWaitToken}\nThis is the addressed instruction from the initial Pi caller. Execute once, with no shell, ` +
-		"terminal, screen inspection, or retry:\n" +
-		`1. Call public mcp__entwurf_bridge__entwurf_fresh_call once with backend pi, model ${piModel}, cwd ${scratch}, ` +
-		'and task "After your automatic callback succeeds, answer ACK and stop. Do not open another sibling."\n' +
-		`2. From its LAUNCH receipt copy the exact nonce, session id, and stable window id. Immediately call public ` +
-		`mcp__entwurf_bridge__entwurf_v2 once to target ${callerGid} with:\n${outboundPiToken}\n` +
-		"PI_LAUNCH_NONCE=<exact nonce>\nPI_SESSION_ID=<exact $session id>\nPI_WINDOW_ID=<exact @window id>\n" +
-		"PI_LAUNCH_RECEIPT=<the launch receipt>\n" +
-		"3. Stop and wait for the Pi callback delivered into this Codex thread. Accept only a callback whose body " +
-		"repeats that exact nonce and whose sender envelope names a garden id.\n" +
-		`4. Only after that match, call public mcp__entwurf_bridge__entwurf_v2 once to target ${callerGid} with:\n` +
-		`${finalToken}\nPI_LAUNCH_NONCE=<same exact nonce>\nPI_CALLBACK_NONCE=<same exact nonce>\n` +
-		"PI_CALLBACK_FROM=<sender-envelope garden id>\nPI_SESSION_ID=<same exact $session id>\n" +
-		"PI_WINDOW_ID=<same exact @window id>\nDo not claim completion in prose.";
+	const codexInstruction = buildCodexInstruction({
+		waitToken: codexWaitToken,
+		outboundPiToken,
+		finalToken,
+		callerGid,
+		piModel,
+		scratch,
+	});
 
+	// PHASE 1 — launch, correlate, forward, stop. The forwarded payload is the tail of this
+	// message and nothing follows it: the report token below has not been transmitted yet, so
+	// no sibling can emit it by copying text it was handed.
 	const instructInitialPi = await bridge.call("entwurf_v2", {
 		target: initialPiGid,
 		intent: "fire-and-forget",
-		message:
-			`${initialPiWaitToken}\nExecute this public-tool chain exactly once; do not use shell, terminal, screen text, or retries:\n` +
-			`1. Call entwurf_fresh_call with backend codex, model ${codexModel}, cwd ${scratch}, and task ` +
-			`"After your required callback receipt, wait for the addressed instruction containing ${codexWaitToken}."\n` +
-			`2. Immediately call entwurf_v2 to target ${callerGid} with:\n${codexLaunchToken}\n` +
-			"CODEX_LAUNCH_NONCE=<exact nonce from the LAUNCH receipt>\nCODEX_SESSION_ID=<exact $session id>\n" +
-			"CODEX_WINDOW_ID=<exact @window id>\nCODEX_LAUNCH_RECEIPT=<the full launch receipt>\n" +
-			"3. Stop and wait for the Codex callback. Accept only a callback carrying that exact nonce; take the Codex " +
-			"garden id only from its sender envelope.\n" +
-			`4. Call entwurf_v2 once to that callback-derived Codex garden id with this addressed message:\n${codexInstruction}\n` +
-			`5. After that actual receipt returns, call entwurf_v2 once to target ${callerGid} with:\n${codexAddressedToken}\n` +
-			"CODEX_CALLBACK_NONCE=<exact launch nonce repeated by callback>\nCODEX_CALLBACK_FROM=<sender-envelope garden id>\n" +
-			"CODEX_ADDRESSED_RECEIPT=<the actual entwurf_v2 receipt from step 4>\n",
+		message: buildInitialPiPhaseOne({
+			initialPiWaitToken,
+			codexWaitToken,
+			launchToken: codexLaunchToken,
+			callerGid,
+			codexModel,
+			scratch,
+			codexInstruction,
+		}),
 	});
 	receipts["5-fixture-to-initial-pi-v2"] = instructInitialPi.text;
 	ok(
@@ -583,7 +613,9 @@ async function run(): Promise<void> {
 		ROUND_TRIP_WAIT_MS,
 		() => {
 			drain();
-			return seenInbox.find((body) => body.includes(codexLaunchToken)) ?? null;
+			// Token AND sender, decided before the wait ends: a matching token from anyone but
+			// the Pi we addressed is skipped, never returned and then asserted on.
+			return selectReport(seenInbox, codexLaunchToken, initialPiGid);
 		},
 	);
 	receipts["6-pi-to-fixture-codex-launch"] = codexLaunchBody;
@@ -615,41 +647,29 @@ async function run(): Promise<void> {
 	);
 	receipts["7-fresh-codex-coordinate"] = `session=${codexLaunchSession}\nwindow=${codexWindow}`;
 
-	const codexAddressedBody = await awaitOrRecover("Pi-to-Codex addressed delivery receipt", ROUND_TRIP_WAIT_MS, () => {
-		drain();
-		return seenInbox.find((body) => body.includes(codexAddressedToken)) ?? null;
-	});
-	receipts["8-pi-to-codex-addressed-v2"] = codexAddressedBody;
-	const addressedReporter = /^\s*session:\s+(\S+)/m.exec(codexAddressedBody)?.[1] ?? "";
-	const callbackNonce = /CODEX_CALLBACK_NONCE=(mux-fresh-call-[0-9a-f]+)/.exec(codexAddressedBody)?.[1] ?? "";
-	const codexGid = /CODEX_CALLBACK_FROM=(\d{8}T\d{6}-[0-9a-f]{6})/.exec(codexAddressedBody)?.[1] ?? "";
-	ok("the addressed-delivery report came from the initial Pi caller", addressedReporter === initialPiGid);
-	ok("initial Pi correlated the Codex callback to the exact Codex launch nonce", callbackNonce === codexNonce);
-	ok("the Codex callback sender envelope supplied its garden address", GARDEN_ID.test(codexGid));
-	ok(
-		"initial Pi -> Codex used an actual native-push entwurf_v2 receipt",
-		/native-push/i.test(codexAddressedBody) && /deliver/i.test(codexAddressedBody),
-		codexAddressedBody,
-	);
-	const codexIdentity = readMetaIdentityByGardenId(codexGid);
-	ok("the callback address resolves to a real Codex V3 citizen", codexIdentity.backend === "codex");
-	codexThreadId = codexIdentity.nativeSessionId;
-	// The VISIBLE half of admission. A record whose citizen the operator cannot see in the
-	// window is a citizen only entwurf knows about, so the title is read from the live
-	// app-server — not from the birth payload's intent, and not from screen text.
-	const codexThread = await readCodexThread(codexSocketPath, codexThreadId, false);
-	receipts["8b-codex-live-thread-title"] =
-		`threadId=${codexThreadId}\nlive name=${JSON.stringify(codexThread.name)}\ngarden=${codexGid}`;
-	ok(
-		"the LIVE Codex thread's visible title IS its garden id (read back through the operator's app-server)",
-		codexThread.name === codexGid,
-		`thread/read name=${JSON.stringify(codexThread.name)} garden=${codexGid}`,
-	);
-	ok("the live thread the title was read from is the record's own thread", codexThread.id === codexThreadId);
-
+	// Established by the Codex report below, and used by every later assertion — including the
+	// final-body filter — so it is bound for the whole run rather than inside the wait.
+	let codexGid = "";
 	const outboundPiBody = await awaitOrRecover("Codex outbound fresh Pi LAUNCH receipt", ROUND_TRIP_WAIT_MS, () => {
 		drain();
-		return seenInbox.find((body) => body.includes(outboundPiToken)) ?? null;
+		// The FIRST report from a citizen whose garden id we do not know yet. The token narrows
+		// the candidates; the backend decides acceptance, so the same token from a Pi sibling is
+		// skipped instead of being adopted as the Codex address.
+		const selected = selectReportByBackend(seenInbox, outboundPiToken, (gardenId) => {
+			try {
+				return readMetaIdentityByGardenId(gardenId).backend === "codex";
+			} catch {
+				return false;
+			}
+		});
+		if (selected === null) return null;
+		codexGid = selected.sender;
+		// Cleanup authority BEFORE any assertion below can throw: this body carries the outbound
+		// Pi window, and an assertion failure must not orphan it.
+		for (const windowId of launchReceiptWindows(selected.body, "pi")) {
+			if (!openedWindows.includes(windowId)) openedWindows.push(windowId);
+		}
+		return selected.body;
 	});
 	receipts["9-codex-to-fixture-outbound-pi-launch"] = outboundPiBody;
 	const outboundReporter = /^\s*session:\s+(\S+)/m.exec(outboundPiBody)?.[1] ?? "";
@@ -660,12 +680,26 @@ async function run(): Promise<void> {
 	const outboundPiReceiptCoordinate = /^\s*window:\s+(@\d+).*?\bin session (\$\d+)/m.exec(outboundPiBody);
 	const outboundPiWindow = outboundPiReceiptCoordinate?.[1] ?? "";
 	const outboundPiSession = outboundPiReceiptCoordinate?.[2] ?? "";
-	ok("the outbound Pi LAUNCH receipt travelled from the callback-derived Codex citizen", outboundReporter === codexGid);
+	ok("the outbound Pi LAUNCH receipt came from a real Codex V3 citizen", outboundReporter === codexGid);
+	const codexIdentity = readMetaIdentityByGardenId(codexGid);
+	ok("the reporting Codex citizen resolves to a codex-backend record", codexIdentity.backend === "codex");
+	codexThreadId = codexIdentity.nativeSessionId;
+	// The VISIBLE half of admission, read from the live app-server — not from the birth
+	// payload's intent, and not from screen text.
+	const codexThread = await readCodexThread(codexSocketPath, codexThreadId, false);
+	receipts["8b-codex-live-thread-title"] =
+		`threadId=${codexThreadId}\nlive name=${JSON.stringify(codexThread.name)}\ngarden=${codexGid}`;
+	ok(
+		"the LIVE Codex thread's visible title IS its garden id (read back through the operator's app-server)",
+		codexThread.name === codexGid,
+		`thread/read name=${JSON.stringify(codexThread.name)} garden=${codexGid}`,
+	);
+	ok("the live thread the title was read from is the record's own thread", codexThread.id === codexThreadId);
 	ok(
 		"the travelling raw outbound Pi LAUNCH receipt names Pi and a stable cleanup handle",
 		WINDOW_ID.test(outboundPiWindow) && /^\s*backend:\s+pi\b/m.test(outboundPiBody),
 	);
-	openedWindows.push(outboundPiWindow);
+	if (!openedWindows.includes(outboundPiWindow)) openedWindows.push(outboundPiWindow);
 	ok(
 		"the copied outbound Pi fields match the travelling raw LAUNCH receipt",
 		reportedOutboundPiNonce === outboundPiNonce &&
@@ -682,9 +716,47 @@ async function run(): Promise<void> {
 	);
 	receipts["10-outbound-fresh-pi-coordinate"] = `session=${outboundPiSession}\nwindow=${outboundPiWindow}`;
 
+	// PHASE 2 — audit, not a product rail. The report token below has never been transmitted
+	// until this call, and the Pi it goes to was told to stop after its forward. The product
+	// chain (Pi -> Codex native-push, Codex -> Pi) already happened above.
+	const requestPiReport = await bridge.call("entwurf_v2", {
+		target: initialPiGid,
+		intent: "fire-and-forget",
+		message: buildInitialPiPhaseTwo({ reportToken: codexAddressedToken, callerGid }),
+	});
+	receipts["8-fixture-to-initial-pi-report-request"] = requestPiReport.text;
+	ok(
+		"the fixture asked the initial Pi for its own record of the addressed delivery",
+		!requestPiReport.isError && /control-socket/i.test(requestPiReport.text),
+		requestPiReport.text,
+	);
+
+	const codexAddressedBody = await awaitOrRecover(
+		"the initial Pi's addressed-delivery report",
+		ROUND_TRIP_WAIT_MS,
+		() => {
+			drain();
+			return selectReport(seenInbox, codexAddressedToken, initialPiGid);
+		},
+	);
+	receipts["8c-initial-pi-addressed-report"] = codexAddressedBody;
+	const callbackNonce = /CODEX_CALLBACK_NONCE=(mux-fresh-call-[0-9a-f]+)/.exec(codexAddressedBody)?.[1] ?? "";
+	const reportedCodexGid = /CODEX_CALLBACK_FROM=(\d{8}T\d{6}-[0-9a-f]{6})/.exec(codexAddressedBody)?.[1] ?? "";
+	ok(
+		"the initial Pi's report names the SAME Codex citizen the Codex report already established",
+		reportedCodexGid === codexGid,
+		`pi-reported=${reportedCodexGid} codex-established=${codexGid}`,
+	);
+	ok("initial Pi correlated the Codex callback to the exact Codex launch nonce", callbackNonce === codexNonce);
+	ok(
+		"initial Pi -> Codex used an actual native-push entwurf_v2 receipt",
+		/native-push/i.test(codexAddressedBody) && /deliver/i.test(codexAddressedBody),
+		codexAddressedBody,
+	);
+
 	const finalBody = await awaitOrRecover("Codex final exact-nonce Pi callback evidence", ROUND_TRIP_WAIT_MS, () => {
 		drain();
-		return seenInbox.find((body) => body.includes(finalToken)) ?? null;
+		return selectReport(seenInbox, finalToken, codexGid);
 	});
 	receipts["11-codex-final-pi-callback-evidence"] = finalBody;
 	const finalSender = /^\s*session:\s+(\S+)/m.exec(finalBody)?.[1] ?? "";
@@ -715,18 +787,23 @@ try {
 } catch (error) {
 	failure = error;
 }
-closeBridge();
-const cleanupFailures = cleanupWindows();
-const fixtureCleanupFailures = cleanupFixture();
+// Cleanup authority runs on EVERY exit, not only on a wait that timed out. The first real run
+// failed inside an `ok()` and left a visible outbound Pi window alive, even though the handle
+// was already sitting in the fixture's own mailbox: a launch receipt the Codex sibling had
+// travelled to us. Recovery reads THAT — plus the two transcript authorities — and never scans
+// tmux inventory or guesses a handle nobody recorded. Every stage is attempted even when an
+// earlier stage itself throws; recovery trouble is evidence, never authority to skip cleanup.
+const cleanupFailures = await runCleanupStages([
+	{ label: "bridge", run: closeBridge },
+	{ label: "recovery", run: recoverEveryRecordedWindow },
+	{ label: "window", run: cleanupWindows },
+	{ label: "fixture", run: cleanupFixture },
+]);
 printReceipts();
-if (cleanupFailures.length > 0 || fixtureCleanupFailures.length > 0) {
-	const details = [
-		...cleanupFailures.map((entry) => `window: ${entry}`),
-		...fixtureCleanupFailures.map((entry) => `fixture: ${entry}`),
-	];
+if (cleanupFailures.length > 0) {
 	const cleanupError =
 		`[${LABEL}] CLEANUP FAILURE — only recorded smoke-owned stable window ids and exact fixture artifacts were targeted:\n` +
-		details.join("\n");
+		cleanupFailures.join("\n");
 	console.error(cleanupError);
 	failure = failure === null ? new Error(cleanupError) : new Error(`${String(failure)}\n${cleanupError}`);
 }

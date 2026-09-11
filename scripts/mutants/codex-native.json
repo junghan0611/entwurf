@@ -586,6 +586,82 @@
 			"timeoutSeconds": 180,
 			"signature": "[QK:TMUX-COORDINATE-ROW-NO-SHIFT]",
 			"signatureSource": "test/tmux-coordinate-row.test.ts"
+		},
+		{
+			"claim": "CODEX-LIVE-CODEX-TASK-WAITS-INNER-TOKEN",
+			"title": "the fresh Codex task waits for the initial Pi trigger instead of the token that begins its own later addressed payload, so the public chain stalls after callback",
+			"subject": "scripts/lib/codex-fresh-live-protocol.ts",
+			"find": [
+				"\t\t`\"After your required callback receipt, wait for the addressed instruction containing ${input.codexWaitToken}.\"\\n` +"
+			],
+			"replace": [
+				"\t\t`\"After your required callback receipt, wait for the addressed instruction containing ${input.initialPiWaitToken}.\"\\n` +"
+			],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:CODEX-LIVE-CODEX-TASK-WAITS-INNER-TOKEN]",
+			"signatureSource": "test/codex-fresh-live-protocol.test.ts"
+		},
+		{
+			"claim": "CODEX-LIVE-CLEANUP-FAILSAFE",
+			"title": "a thrown recovery aborts the teardown pipeline, so owned windows and fixture artifacts after it are never cleaned",
+			"subject": "scripts/lib/codex-fresh-live-protocol.ts",
+			"find": [
+				"\t\t\tfailures.push(`${stage.label}: threw: ${error instanceof Error ? error.message : String(error)}`);"
+			],
+			"replace": ["\t\t\tthrow error;  // mutant: an earlier cleanup failure aborts every later stage"],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:CODEX-LIVE-CLEANUP-FAILSAFE]",
+			"signatureSource": "test/codex-fresh-live-protocol.test.ts"
+		},
+		{
+			"claim": "CODEX-LIVE-PHASE-SEPARATION",
+			"title": "the report token rides the same message as the forwarded Codex payload again, so the sibling that receives the payload can emit the token meant for the Pi",
+			"subject": "scripts/lib/codex-fresh-live-protocol.ts",
+			"find": [
+				"\t\t\"5. After that call returns, STOP. Send nothing else and contact nobody else; a second addressed message \" +\n\t\t\"will tell you what to report.\\n\" +"
+			],
+			"replace": [
+				"\t\t\"5. After that call returns, report to the fixture with PI-REPORTS-CODEX-ADDRESSED and CODEX_ADDRESSED_RECEIPT=<receipt>.\\n\" +"
+			],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:CODEX-LIVE-PHASE-SEPARATION]",
+			"signatureSource": "test/codex-fresh-live-protocol.test.ts"
+		},
+		{
+			"claim": "CODEX-LIVE-REPORT-SENDER-FILTER",
+			"title": "a report is selected by token alone, so the first body carrying it ends the wait even when somebody else sent it",
+			"subject": "scripts/lib/codex-fresh-live-protocol.ts",
+			"find": ["\t\tif (reportSender(body) !== expectedSender) continue;"],
+			"replace": ["\t\t// mutant: take the first token match, whoever sent it"],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:CODEX-LIVE-REPORT-SENDER-FILTER]",
+			"signatureSource": "test/codex-fresh-live-protocol.test.ts"
+		},
+		{
+			"claim": "CODEX-LIVE-BACKEND-FILTER",
+			"title": "the first Codex report is accepted from any sender, so a Pi sibling's body can establish the Codex garden address",
+			"subject": "scripts/lib/codex-fresh-live-protocol.ts",
+			"find": ["\t\tif (sender === null || !isExpectedBackend(sender)) continue;"],
+			"replace": ["\t\tif (sender === null) continue;  // mutant: any backend will do"],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:CODEX-LIVE-BACKEND-FILTER]",
+			"signatureSource": "test/codex-fresh-live-protocol.test.ts"
+		},
+		{
+			"claim": "CODEX-LIVE-RECOVERY-FROM-INBOX",
+			"title": "the launch-receipt reader stops anchoring on the backend line, so a delivered report cannot hand cleanup the exact outbound window it already carries",
+			"subject": "scripts/lib/launch-receipt-windows.ts",
+			"find": ["\t\tif (open === backend) found.push(windowLine[1] as string);"],
+			"replace": ["\t\tif (open === backend && false) found.push(windowLine[1] as string);"],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:CODEX-LIVE-RECOVERY-FROM-INBOX]",
+			"signatureSource": "test/codex-fresh-live-protocol.test.ts"
 		}
 	]
 }
