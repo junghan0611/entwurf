@@ -82,9 +82,11 @@ Verification here is not a benchmark. In production we exchange short turns and 
 > ENTWURF_CODEX_FRESH_MODEL=<codex-model>
 > ENTWURF_CODEX_FRESH_PI_MODEL=<pi-model> ./run.sh smoke-codex-fresh-live`.
 >
-> The command name is not proof. If the admission smoke still originates its first
-> leg from a fixture/self-fetch collector rather than a real visible Pi citizen, the
-> gate does not satisfy this requirement and Codex remains unreleased.
+> The command name is not proof. The first leg must be a real record-backed visible Pi
+> citizen opening Codex; if a fixture or self-fetch receipt collector is what OPENS Codex,
+> the gate does not satisfy this requirement and Codex remains unreleased. A fixture that
+> only COLLECTS receipts beside that real Pi leg is not the disqualifier — substituting for
+> the leg is (see `docs/adding-a-harness.md`, the same wording).
 >
 > Authoritative per-cut counts and digests live in BASELINE/CHANGELOG, not inline
 > here; embedding them in the protocol makes a correct guide stale after every cut.

@@ -100,11 +100,14 @@ export function actionableRejectHint(reason: string): string | undefined {
 				"that garden id by a session that died without cleaning up."
 			);
 		case "native-push-target-dead":
-			// The adapter probe found no live host process for the conversation.
-			return "native-push conversation is not live (no host process found). Re-open the conversation, then retry — there is nothing to inject into.";
+			// The adapter probe found no live native host serving this conversation/thread. Stays
+			// backend-neutral: agy speaks conversations over an LS port, Codex threads over an
+			// app-server socket, and this hint is read by callers of both.
+			return "the native-push conversation/thread is not live — no native host (harness process or app-server) answered the probe for it. Re-open that conversation/thread in its own harness, then retry; there is nothing to inject into.";
 		case "native-push-probe-indeterminate":
-			// Host up, but no LS port served the conversation — inconclusive, not a hard dead.
-			return "native-push host is up but no port served this conversation (probe inconclusive). Retry once the conversation is loaded, or verify the conversation id.";
+			// Native host up, but nothing served this conversation/thread — inconclusive, not a
+			// hard dead. Backend-neutral for the same reason as the dead cell above.
+			return "the native host (harness process or app-server) is up, but nothing served this conversation/thread, so the probe is INCONCLUSIVE — not a measured death. Retry once it is loaded, or verify the conversation/thread id.";
 		case "record-less-socket":
 			// #50 C4: name the true cause AND the fix — a bare socket is a diagnostic
 			// state, not an addressable citizen (the record is the address).

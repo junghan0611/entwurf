@@ -665,7 +665,9 @@ async function run(): Promise<void> {
 	);
 	ok("the raw outbound Pi LAUNCH receipt carries its exact nonce", outboundPiNonce.length > 0);
 	ok(
-		"Codex 옆에 Pi: fresh Codex, app-server/MCP inheritance, and outbound fresh Pi share one tmux session",
+		"supported same-session deployment condition: fresh Codex, app-server/MCP inheritance, and outbound fresh Pi " +
+			"resolve to ONE tmux session. This proves THAT deployment, not an unrestricted 'Codex 옆에 Pi' — Codex request " +
+			"metadata carries no request→TUI-seat join, so N TUIs in other sessions behind one shared app-server stay uncovered",
 		codexLaunchSession === appServerCoordinate.sessionId && outboundPiSession === appServerCoordinate.sessionId,
 		`codex=${codexLaunchSession} app-server=${appServerCoordinate.sessionId} outbound-pi=${outboundPiSession}`,
 	);
