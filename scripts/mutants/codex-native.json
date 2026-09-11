@@ -407,6 +407,28 @@
 			"signatureSource": "scripts/smoke-codex-config-state.sh"
 		},
 		{
+			"claim": "CODEX-USER-BIRTH-FOREIGN-HOOKS-REFUSED",
+			"title": "the user-layer birth unit stops refusing a hooks.json no ownership state vouches for, so a declaration somebody else wrote is treated as one of ours",
+			"subject": "scripts/codex-user-birth-install.sh",
+			"find": ["  if [ \"$STATE_PRESENT\" = \"0\" ]; then"],
+			"replace": ["  if false; then  # mutant: treat a foreign hooks.json as ours"],
+			"gate": ["bash", "run.sh", "smoke-codex-user-birth"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:CODEX-USER-BIRTH-FOREIGN-HOOKS-REFUSED]",
+			"signatureSource": "scripts/smoke-codex-user-birth.sh"
+		},
+		{
+			"claim": "CODEX-USER-BIRTH-REINSTALL-REFUSES-CLOSURE-DRIFT",
+			"title": "reinstall stops licensing the live closure by digest, so publishing a new generation copies over an operator's edited helper member and destroys the only copy of it",
+			"subject": "scripts/codex-user-birth-install.sh",
+			"find": ["    if [ \"$MEMBER_LIVE\" != \"$want\" ]; then"],
+			"replace": ["    if false; then  # mutant: republish over a drifted closure member"],
+			"gate": ["bash", "run.sh", "smoke-codex-user-birth"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:CODEX-USER-BIRTH-REINSTALL-REFUSES-CLOSURE-DRIFT]",
+			"signatureSource": "scripts/smoke-codex-user-birth.sh"
+		},
+		{
 			"claim": "CODEX-THREAD-READ-DIALECT",
 			"title": "the visible-title read-back sends the thread id under a name the vendor app-server does not accept, so first-admission LIVE is the first place the dialect is tried",
 			"subject": "pi-extensions/lib/native-push/codex-ws-client.ts",

@@ -143,6 +143,7 @@ Usage:
   ./run.sh check-codex-birth-hook     # root hook closure, first-turn V3 birth, thread-name garden id, top-level event predicate
   ./run.sh check-codex-fresh-preflight # pre-mutation birth/MCP/thread-title/default-app-server readiness
   ./run.sh smoke-codex-config-state   # sandboxed MCP + status-line ownership/install/doctor/inverse lifecycle
+  ./run.sh smoke-codex-user-birth     # sandboxed USER-layer birth unit: exact trust identity, config.toml untouched, foreign/edited/symlink refusals, drift-refusing inverse
   ./run.sh check-harness-admission-parity  # #87 C: the EDGE the two closed parity loops never had. Every citizen backend is fresh-openable or a declared pre-#82 legacy admission whose exception a reader finds in DELIVERY.md — so a post-contract harness that mints records but cannot be opened by entwurf_fresh_call blocks the release package instead of only carrying an `unsupported` note (docs/adding-a-harness.md step 9)
   ./run.sh check-capability-bundle-reach # deterministic gate (IN pnpm check): re-ask EVERY shipped copy of meta-session (source + bridge bundle emit) whether metaCapabilitiesFilePath() reaches the registry — the artifact-depth check the source-path gates cannot make; needs a built dist, missing dist FAILS
   ./run.sh smoke-pi-attach            # deterministic gate (#50 C2 checkpoint + C3 ACP tail): a pi session attaches as a V3 meta-record citizen (backend:"pi"), the gardenId is the RECORD's not pi's session id, the control socket is keyed on it, a re-open ATTACHES to the same address (never a second mint), the BUILT DIST ENTRY driven over MCP stdio lists the citizen + delivers entwurf_v2 to that socket with an RPC ack, and the ACP identity chain lands a send AS the host record (enrichMcpServersWithEnvelope env → bridge sender = host gardenId). mkdtemp-isolated; the live store is never read
@@ -251,6 +252,9 @@ Usage:
   ./run.sh install-codex-birth        # root-only: install the fixed /etc/codex SessionStart birth unit; never sudo internally
   ./run.sh uninstall-codex-birth      # root-only exact inverse from /var/lib/entwurf ownership state
   ./run.sh doctor-codex-birth         # system birth/config/ownership/runtime verdict; use sudo for the ownership axis
+  ./run.sh install-codex-user-birth   # USER-layer twin: publish $CODEX_HOME/hooks.json + helper closure, no root; the operator trusts the declaration once, in the TUI
+  ./run.sh uninstall-codex-user-birth # exact inverse from the user install-state; refuses drifted bytes instead of deleting them
+  ./run.sh doctor-codex-user-birth    # STATIC unit bytes/ownership only — it makes no claim about the vendor's trust decision
   ./run.sh install-codex-mcp          # own only [mcp_servers.entwurf-bridge] in the user's Codex config
   ./run.sh uninstall-codex-mcp        # remove/restore only the recorded MCP atom
   ./run.sh doctor-codex-mcp           # effective config + ownership + actual bridge boot
@@ -6572,6 +6576,18 @@ case "$cmd" in
     shift || true
     (cd "$REPO_DIR" && bash scripts/codex-birth-doctor.sh "$@")
     ;;
+  install-codex-user-birth)
+    shift || true
+    (cd "$REPO_DIR" && bash scripts/codex-user-birth-install.sh "$@")
+    ;;
+  uninstall-codex-user-birth)
+    shift || true
+    (cd "$REPO_DIR" && bash scripts/codex-user-birth-uninstall.sh "$@")
+    ;;
+  doctor-codex-user-birth)
+    shift || true
+    (cd "$REPO_DIR" && bash scripts/codex-user-birth-doctor.sh "$@")
+    ;;
   install-codex-mcp)
     codex_mcp install
     ;;
@@ -6904,6 +6920,10 @@ case "$cmd" in
   smoke-codex-config-state)
     shift || true
     (cd "$REPO_DIR" && bash scripts/smoke-codex-config-state.sh "$@")
+    ;;
+  smoke-codex-user-birth)
+    shift || true
+    (cd "$REPO_DIR" && bash scripts/smoke-codex-user-birth.sh "$@")
     ;;
   check-pack)
     check_pack
