@@ -560,6 +560,32 @@
 			"timeoutSeconds": 180,
 			"signature": "[QK:FRESHCALL-CODEX-STATE-PARENT-AUTHORITY]",
 			"signatureSource": "test/codex-fresh-preflight.test.ts"
+		},
+		{
+			"claim": "TMUX-COORDINATE-FORMAT-PID",
+			"title": "the coordinate format asks tmux for a server-pid key that answers empty, so a metered LIVE fails at a field the format never filled",
+			"subject": "scripts/lib/tmux-coordinate-row.ts",
+			"find": ["export const TMUX_COORDINATE_FORMAT = \"#{pid}\\t#{session_id}\\t#{window_id}\\t#{pane_id}\";"],
+			"replace": [
+				"export const TMUX_COORDINATE_FORMAT = \"#{server_pid}\\t#{session_id}\\t#{window_id}\\t#{pane_id}\";"
+			],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:TMUX-COORDINATE-FORMAT-PID]",
+			"signatureSource": "test/tmux-coordinate-row.test.ts"
+		},
+		{
+			"claim": "TMUX-COORDINATE-ROW-NO-SHIFT",
+			"title": "the positional row is trimmed instead of having exactly one terminal newline removed, so an empty leading field shifts every later coordinate one place left",
+			"subject": "scripts/lib/tmux-coordinate-row.ts",
+			"find": [
+				"\tlet line = raw;\n\tif (line.endsWith(\"\\r\\n\")) line = line.slice(0, -2);\n\telse if (line.endsWith(\"\\n\")) line = line.slice(0, -1);"
+			],
+			"replace": ["\tconst line = raw.trim();  // mutant: reshape the row instead of removing one newline"],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:TMUX-COORDINATE-ROW-NO-SHIFT]",
+			"signatureSource": "test/tmux-coordinate-row.test.ts"
 		}
 	]
 }

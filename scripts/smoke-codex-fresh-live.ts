@@ -35,6 +35,7 @@ import { FRESH_CALL_BACKENDS } from "../pi-extensions/lib/mux-fresh-call.ts";
 import { readCodexThread, resolveCodexDefaultSocketPath } from "../pi-extensions/lib/native-push/codex-ws-client.ts";
 import { launchReceiptWindows } from "./lib/launch-receipt-windows.ts";
 import { skipLive } from "./lib/live-skip.ts";
+import { parseTmuxRow, TMUX_COORDINATE_FIELDS, TMUX_COORDINATE_FORMAT } from "./lib/tmux-coordinate-row.ts";
 
 const LABEL = "smoke-codex-fresh-live";
 const GARDEN_ID = /^\d{8}T\d{6}-[0-9a-f]{6}$/;
@@ -128,19 +129,27 @@ function inspectTmuxCoordinate(label: string, env: NodeJS.ProcessEnv): TmuxCoord
 		`TMUX=${JSON.stringify(tmuxValue)}`,
 	);
 	ok(`${label} carries a native TMUX_PANE handle`, /^%\d+$/.test(paneValue));
-	const inspected = spawnSync(
-		"tmux",
-		["display-message", "-p", "-t", paneValue, "#{server_pid}\t#{session_id}\t#{window_id}\t#{pane_id}"],
-		{ env, encoding: "utf8" },
-	);
+	const inspected = spawnSync("tmux", ["display-message", "-p", "-t", paneValue, TMUX_COORDINATE_FORMAT], {
+		env,
+		encoding: "utf8",
+	});
 	ok(
 		`${label} tmux coordinate answers through its own environment`,
 		inspected.status === 0,
 		String(inspected.stderr ?? ""),
 	);
-	const [serverPid, sessionId, windowId, paneId] = String(inspected.stdout ?? "")
-		.trim()
-		.split("\t");
+	// Positionally, with empty fields preserved: a format key that answers with nothing must
+	// fail at ITS coordinate instead of shifting every later one left (measured on tmux 3.6a,
+	// where `#{server_pid}` is empty — see scripts/lib/tmux-coordinate-row.ts).
+	let row: string[];
+	try {
+		row = parseTmuxRow(String(inspected.stdout ?? ""), TMUX_COORDINATE_FIELDS);
+	} catch (error) {
+		throw new Error(
+			`${label} tmux coordinate row is malformed: ${error instanceof Error ? error.message : String(error)}`,
+		);
+	}
+	const [serverPid, sessionId, windowId, paneId] = row;
 	ok(
 		`${label} resolves its exact server/session/window/pane coordinate`,
 		serverPid === tmuxMatch?.[2] &&

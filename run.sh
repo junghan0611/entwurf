@@ -1402,7 +1402,10 @@ check_mux_fresh_call() {
   # place the launcher's payload and the installed birth extension's decoder are read together.
   # They ship in different directories and cannot import each other (#87 Bundle C), so this
   # lane is what keeps a deliberate duplication from becoming drift.
-  run_vitest test/mux-fresh-call.test.ts test/copilot-fresh-preflight.test.ts test/codex-fresh-preflight.test.ts test/fresh-call-surfaces.contract.test.ts test/fresh-call-provider.contract.test.ts test/omp-fresh-bootstrap.contract.test.ts
+  # tmux-coordinate-row rides here because it is the parse every tmux COORDINATE in this lane's
+  # LIVE siblings depends on, and because it is the only half of a measured LIVE failure that a
+  # deterministic gate can own: the row is the input, so no tmux and no model turn is needed.
+  run_vitest test/mux-fresh-call.test.ts test/copilot-fresh-preflight.test.ts test/codex-fresh-preflight.test.ts test/fresh-call-surfaces.contract.test.ts test/fresh-call-provider.contract.test.ts test/omp-fresh-bootstrap.contract.test.ts test/tmux-coordinate-row.test.ts
 }
 
 smoke_mux_fresh_call_live() {
