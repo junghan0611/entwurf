@@ -82,9 +82,9 @@
  *
  * LAUNCH: never invoked directly by Codex. `[source]` Codex's `command` handler is a
  * SHELL STRING with no exec-form argv variant anywhere in the enum, so entwurf's
- * "no shell-form fallback" rule has no counterpart to bind to here. `/etc/codex/hooks.json`
- * therefore names ONE fixed absolute single-quoted launcher, installed root-owned and
- * read-only by `scripts/codex-birth-install.sh`, and that launcher `exec`s
+ * "no shell-form fallback" rule has no counterpart to bind to here. The declaration in
+ * `$CODEX_HOME/hooks.json` therefore names ONE fixed absolute single-quoted launcher,
+ * published operator-owned by `scripts/codex-birth-install.sh`, and that launcher `exec`s
  * `node --experimental-strip-types` over a COPY of this file plus its lib closure.
  * Nothing about identity travels in argv or in the environment, so the launcher has no
  * provenance token to stamp (the Claude/Copilot `ENTWURF_META_HOOK_LAUNCH` handshake
@@ -164,7 +164,7 @@ function isAbsolutePosix(value: string): boolean {
  * more); an extra key cannot corrupt an identity, whereas a missing one can.
  *
  * `path.isAbsolute` is not used for the two path axes: it is platform-dependent, and
- * this unit only ever runs from the POSIX managed layer (`/etc/codex/hooks.json`). A
+ * this unit only ever runs from a POSIX declaration (`$CODEX_HOME/hooks.json`). A
  * Windows-shaped absolute path arriving here would mean the envelope came from
  * somewhere this unit was never installed, which is precisely a refusal.
  */

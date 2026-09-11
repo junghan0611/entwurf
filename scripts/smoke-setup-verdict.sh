@@ -16,8 +16,9 @@
 #                             core and later components still attempted
 #   S-8 omp present         → the four omp units compose (birth/MCP/tools.xdev
 #                             setting/receiver), states exist, second run idempotent
-#   S-8c codex present      → root birth remains a named FAIL while MCP/statusline
-#                             compose twice, preserve foreign config, and stay idempotent
+#   S-8c codex present      → birth publishes but stays a named FAIL until the vendor trust
+#                             receipt exists; all three atoms compose twice, preserve foreign
+#                             config, stay idempotent, and go green on the trusted rerun
 #   S-5 installed mode      → the installed-vs-source branch is a NAMED verdict
 #                             printed before anything else, and never reaches
 #                             the source pnpm bootstrap
@@ -291,13 +292,13 @@ rm -rf "$HOME/.omp" "$XDG_DATA_HOME/entwurf/omp-bridge" "$XDG_DATA_HOME/entwurf/
   "$XDG_DATA_HOME/entwurf/omp-config" "$XDG_DATA_HOME/entwurf/omp-receive" \
   "$XDG_DATA_HOME/entwurf/meta-bridge-omp" "$XDG_DATA_HOME/entwurf/omp-receive"
 
-# ── S-8c: codex PRESENT but root birth ABSENT → user atoms compose, aggregate FAIL ──
-# Codex birth is deliberately NOT installed or faked green here. Its doctor owns
-# fixed system paths, so a PATH shim intercepts only that doctor and returns the
-# honest absent-prerequisite result before it can inspect or mutate the real host.
-# Every other bash invocation delegates to the real shell. CODEX_HOME and XDG data
-# remain below the fixture sandbox, while an operator-owned config exercises both
-# table preservation and status-line merging.
+# ── S-8c: codex PRESENT → setup publishes birth, and stays NON-GREEN until the vendor agrees ──
+# The birth unit's paths are the operator's own, so setup installs it here for real, inside the
+# fixture's HOME/CODEX_HOME/XDG. What setup CANNOT do is answer the vendor's one-time trust
+# prompt: that is the operator's, in their own visible Codex. So the first run writes every
+# byte and is honestly non-green, the two config atoms compose anyway, and the run after a
+# vendor receipt appears is green and byte-idempotent. Nothing here ever writes [hooks.state] —
+# the receipt is forged by the FIXTURE to stand in for the vendor, never by setup.
 echo "[smoke-setup-verdict] S-8c codex present — incomplete three-unit composition"
 PROJ8C="$SB/proj8c"; mkdir -p "$PROJ8C"
 FAKE_CODEX="$SB/harness/codex-fake"; mkdir -p "$FAKE_CODEX"
@@ -319,36 +320,24 @@ args = ["--keep"]
 status_line = ["model-with-reasoning"]
 TOML
 REAL_BASH="$(command -v bash)"
-CODEX_BASH_SHIM="$SB/harness/codex-bash-shim"; mkdir -p "$CODEX_BASH_SHIM"
-CODEX_BIRTH_STUB_LOG="$SB/codex-birth-prerequisite.log"
-cat > "$CODEX_BASH_SHIM/bash" <<SH
-#!$REAL_BASH
-case "\${1:-}" in
-  scripts/codex-birth-doctor.sh|*/scripts/codex-birth-doctor.sh)
-    printf 'doctor\t%s\n' "\$*" >> "\${CODEX_BIRTH_STUB_LOG:?}"
-    exit 1
-    ;;
-  scripts/codex-birth-install.sh|*/scripts/codex-birth-install.sh|scripts/codex-birth-uninstall.sh|*/scripts/codex-birth-uninstall.sh)
-    printf 'unsafe-root-mutation\t%s\n' "\$*" >> "\${CODEX_BIRTH_STUB_LOG:?}"
-    exit 99
-    ;;
-esac
-exec "$REAL_BASH" "\$@"
-SH
-chmod +x "$CODEX_BASH_SHIM/bash"
+CODEX_BIRTH_UNIT_ROOT="$XDG_DATA_HOME/entwurf/codex-birth"
 seed_auth
 set +e
-OUT="$(CODEX_BIN="$FAKE_CODEX/codex" CODEX_HOME="$CODEX_HOME_SANDBOX" CODEX_BIRTH_STUB_LOG="$CODEX_BIRTH_STUB_LOG" PATH="$CODEX_BASH_SHIM:$FAKE_CODEX:$PATH" "$REAL_BASH" "$REPO_DIR/run.sh" setup "$PROJ8C" 2>&1)"
+OUT="$(CODEX_BIN="$FAKE_CODEX/codex" CODEX_HOME="$CODEX_HOME_SANDBOX" PATH="$FAKE_CODEX:$PATH" "$REAL_BASH" "$REPO_DIR/run.sh" setup "$PROJ8C" 2>&1)"
 RC=$?
 set -e
+want "[QK:CODEX-SETUP-NEVER-PRESEEDS-TRUST] S-8c: setup wrote NO vendor trust receipt of its own" \
+  "! grep -q 'hooks.state' '$CODEX_HOME_SANDBOX/config.toml' && ! grep -q 'trusted_hash' '$CODEX_HOME_SANDBOX/config.toml'"
 want "S-8c: detected-incomplete Codex is a named nonzero result, never an absent SKIP [QK:CODEX-SETUP-BIRTH-COSMETIC-PASS]" \
   "[ '$RC' -ne 0 ] && printf '%s' \"\$OUT\" | grep -q 'codex-birth: FAIL' && ! printf '%s' \"\$OUT\" | grep -q 'codex: SKIP'"
 want "S-8c: both user-owned Codex atoms still compose independently as PASS [QK:CODEX-SETUP-BIRTH-INDEPENDENT]" \
   "printf '%s' \"\$OUT\" | grep -q 'codex-mcp: PASS' && printf '%s' \"\$OUT\" | grep -q 'codex-statusline: PASS'"
-want "S-8c: summary is NON-GREEN and attributes only the absent root birth prerequisite" \
+want "S-8c: summary is NON-GREEN and attributes it to the untrusted birth unit" \
   "printf '%s' \"\$OUT\" | grep -q 'NON-GREEN (FAIL: codex-birth)' && ! printf '%s' \"\$OUT\" | grep -q 'result: green'"
-want "S-8c: root birth stayed absent — only its doctor was refused before fixed host paths were touched" \
-  "[ \"\$(wc -l < '$CODEX_BIRTH_STUB_LOG')\" -eq 1 ] && grep -q '^doctor	.*scripts/codex-birth-doctor.sh$' '$CODEX_BIRTH_STUB_LOG' && ! grep -q '^unsafe-root-mutation' '$CODEX_BIRTH_STUB_LOG'"
+want "S-8c: the reason names the operator's one-time answer, not a repair setup could have made" \
+  "printf '%s' \"\$OUT\" | grep -q 'no trust receipt' && printf '%s' \"\$OUT\" | grep -q 'Trust all and continue'"
+want "S-8c: setup PUBLISHED the birth unit — declaration, launcher closure and ownership state" \
+  "[ -f '$CODEX_HOME_SANDBOX/hooks.json' ] && [ -x '$CODEX_BIRTH_UNIT_ROOT/helper/codex-birth-launch.sh' ] && [ -f '$CODEX_BIRTH_UNIT_ROOT/install-state.json' ]"
 CODEX_MCP_STATE="$XDG_DATA_HOME/entwurf/codex-mcp/install-state.json"
 CODEX_STATUSLINE_STATE="$XDG_DATA_HOME/entwurf/codex-statusline/install-state.json"
 want "S-8c: both user atoms wrote their package-owned install states inside the sandbox" \
@@ -361,17 +350,31 @@ CODEX_CONFIG_AFTER="$(sha256sum "$CODEX_HOME_SANDBOX/config.toml" | cut -d' ' -f
 CODEX_MCP_STATE_AFTER="$(sha256sum "$CODEX_MCP_STATE" | cut -d' ' -f1)"
 CODEX_STATUSLINE_STATE_AFTER="$(sha256sum "$CODEX_STATUSLINE_STATE" | cut -d' ' -f1)"
 set +e
-OUT2="$(CODEX_BIN="$FAKE_CODEX/codex" CODEX_HOME="$CODEX_HOME_SANDBOX" CODEX_BIRTH_STUB_LOG="$CODEX_BIRTH_STUB_LOG" PATH="$CODEX_BASH_SHIM:$FAKE_CODEX:$PATH" "$REAL_BASH" "$REPO_DIR/run.sh" setup "$PROJ8C" 2>&1)"
+OUT2="$(CODEX_BIN="$FAKE_CODEX/codex" CODEX_HOME="$CODEX_HOME_SANDBOX" PATH="$FAKE_CODEX:$PATH" "$REAL_BASH" "$REPO_DIR/run.sh" setup "$PROJ8C" 2>&1)"
 RC2=$?
 set -e
-want "S-8c: second setup still reports root birth FAIL and both user atoms PASS" \
+want "S-8c: second setup still reports the untrusted birth FAIL and both user atoms PASS" \
   "[ '$RC2' -ne 0 ] && printf '%s' \"\$OUT2\" | grep -q 'codex-birth: FAIL' && printf '%s' \"\$OUT2\" | grep -q 'codex-mcp: PASS' && printf '%s' \"\$OUT2\" | grep -q 'codex-statusline: PASS'"
 want "S-8c: second setup is byte-idempotent for config and both ownership receipts" \
   "[ \"\$(sha256sum '$CODEX_HOME_SANDBOX/config.toml' | cut -d' ' -f1)\" = '$CODEX_CONFIG_AFTER' ] && [ \"\$(sha256sum '$CODEX_MCP_STATE' | cut -d' ' -f1)\" = '$CODEX_MCP_STATE_AFTER' ] && [ \"\$(sha256sum '$CODEX_STATUSLINE_STATE' | cut -d' ' -f1)\" = '$CODEX_STATUSLINE_STATE_AFTER' ]"
-want "S-8c: second setup rechecks rather than faking or attempting to mutate the root prerequisite" \
-  "[ \"\$(wc -l < '$CODEX_BIRTH_STUB_LOG')\" -eq 2 ] && ! grep -q '^unsafe-root-mutation' '$CODEX_BIRTH_STUB_LOG' && ! printf '%s' \"\$OUT2\" | grep -q 'codex-birth: PASS'"
+want "S-8c: second setup rechecks rather than faking the missing receipt" \
+  "! printf '%s' \"\$OUT2\" | grep -q 'codex-birth: PASS' && ! grep -q 'trusted_hash' '$CODEX_HOME_SANDBOX/config.toml'"
+
+# The vendor answers. Written by the FIXTURE, exactly as the vendor writes it after one
+# 'Trust all': the receipt keyed to this declaration, carrying its own hash.
+printf '\n[hooks.state."%s/hooks.json:session_start:0:0"]\ntrusted_hash = "sha256:%s"\n' \
+  "$CODEX_HOME_SANDBOX" "$(printf '4%.0s' $(seq 64))" >> "$CODEX_HOME_SANDBOX/config.toml"
+CODEX_CONFIG_TRUSTED="$(sha256sum "$CODEX_HOME_SANDBOX/config.toml" | cut -d' ' -f1)"
+set +e
+OUT3="$(CODEX_BIN="$FAKE_CODEX/codex" CODEX_HOME="$CODEX_HOME_SANDBOX" PATH="$FAKE_CODEX:$PATH" "$REAL_BASH" "$REPO_DIR/run.sh" setup "$PROJ8C" 2>&1)"
+RC3=$?
+set -e
+want "[QK:CODEX-SETUP-TRUSTED-RERUN-GREEN] S-8c: once the vendor receipt exists the same setup is GREEN" \
+  "[ '$RC3' -eq 0 ] && printf '%s' \"\$OUT3\" | grep -q 'codex-birth: PASS' && printf '%s' \"\$OUT3\" | grep -q 'result: green'"
+want "S-8c: the trusted rerun is byte-idempotent — it neither rewrote the config nor touched the receipt" \
+  "[ \"\$(sha256sum '$CODEX_HOME_SANDBOX/config.toml' | cut -d' ' -f1)\" = '$CODEX_CONFIG_TRUSTED' ]"
 want_auth_untouched "S-8c"
-rm -rf "$HOME/.codex" "$XDG_DATA_HOME/entwurf/codex-mcp" "$XDG_DATA_HOME/entwurf/codex-statusline"
+rm -rf "$HOME/.codex" "$XDG_DATA_HOME/entwurf/codex-mcp" "$XDG_DATA_HOME/entwurf/codex-statusline" "$CODEX_BIRTH_UNIT_ROOT"
 
 # ── S-9: rail certification is a SEPARATE axis from install success (#78 D1) ──
 # The 0.20.0 macOS lane opened the installers to Darwin (meta-bridge-install.sh's

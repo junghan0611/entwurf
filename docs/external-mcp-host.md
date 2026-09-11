@@ -130,16 +130,17 @@ Claude Code reads `~/.mcp.json` in addition to `~/.claude.json`'s top-level `mcp
 Use the owned surfaces rather than editing `~/.codex/config.toml`:
 
 ```bash
-sudo entwurf install-codex-birth
+entwurf install-codex-birth
 entwurf install-codex-mcp
 entwurf install-codex-statusline
 
-sudo entwurf doctor-codex-birth
+entwurf doctor-codex-birth
 entwurf doctor-codex-mcp
 entwurf doctor-codex-statusline
 ```
 
-The system unit owns a prompt-free `/etc/codex` `SessionStart` hook; the user units own
+The birth unit owns a `SessionStart` declaration in `$CODEX_HOME/hooks.json`, which the vendor
+runs only after the operator trusts it once in a visible Codex; the other two units own
 only `[mcp_servers.entwurf-bridge]` and the `thread-title` status-line member. The MCP
 entry carries `ENTWURF_BRIDGE_NATIVE_HOST=codex`, which tells the bridge to require and
 reconcile Codex request `_meta`. Do not add the anonymous hatch.

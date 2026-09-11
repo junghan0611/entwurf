@@ -10,7 +10,7 @@ npm package: <https://www.npmjs.com/package/@junghanacs/entwurf>
 
 Legacy package: [`@junghanacs/pi-shell-acp`](https://www.npmjs.com/package/@junghanacs/pi-shell-acp). `entwurf` is its 0.12+ successor line: the same work renamed around the garden-citizen dispatch substrate rather than the pi adapter.
 
-> **Repository shape.** This repo is **entwurf-core (v2 dispatch) + native-harness bridges + a pi adapter + an ACP plugin**. Pi is one adapter, not the project subject. Claude Code, GitHub Copilot CLI, and OMP (`omp`) are shipped self-fetch citizens; Antigravity (`agy`) is shipped native-push. Codex CLI is an **unreleased native-push candidate** over the operator-owned app-server: root-hook birth, strict request-scoped identity, loaded-thread probe, and one-shot queue delivery. It remains native so Codex keeps its vendor tools, delegation, and work context; this is not another way to buy or expose GPT through ACP.
+> **Repository shape.** This repo is **entwurf-core (v2 dispatch) + native-harness bridges + a pi adapter + an ACP plugin**. Pi is one adapter, not the project subject. Claude Code, GitHub Copilot CLI, and OMP (`omp`) are shipped self-fetch citizens; Antigravity (`agy`) is shipped native-push. Codex CLI is an **unreleased native-push candidate** over the operator-owned app-server: vendor-trusted user-scope birth, strict request-scoped identity, loaded-thread probe, and one-shot queue delivery. It remains native so Codex keeps its vendor tools, delegation, and work context; this is not another way to buy or expose GPT through ACP.
 
 ```text
 Claude Code / Copilot / Codex / agy / omp / pi
@@ -61,7 +61,7 @@ native Antigravity / agy
 
 Claude's `install-meta-bridge`, Copilot's four `install-copilot-*` surfaces, agy's
 `install-agy-{bridge,statusline,hooks}`, OMP's four `install-omp-{bridge,mcp,config,receive}`,
-and Codex's root birth plus user-scope MCP/statusline units are distinct because their
+and Codex's birth, MCP and statusline units are distinct because their
 lifecycle and delivery transports are genuinely different. See [DELIVERY.md](./DELIVERY.md).
 
 > **Direction.** Inverse of [`pi-acp`](https://github.com/svkozak/pi-acp). `pi-acp` lets external ACP clients talk *to* pi; `entwurf` lets garden citizens talk across harness boundaries — with pi as one adapter, not the center.
@@ -244,16 +244,17 @@ SKIP while the detected harnesses are composed.
 
 A plain MCP registration exposes the bridge tools; a **garden-native** session also
 needs entwurf's lifecycle and identity unit. `setup` composes every user-scope unit
-for each detected harness. Codex's prompt-free birth hook is the deliberate exception:
-it is root-owned under `/etc/codex`, so setup reports a named FAIL and the exact
-`sudo entwurf install-codex-birth` repair rather than escalating itself. This is the
+for each detected harness, including Codex's birth hook — its paths are the operator's
+own, so nothing here asks for root. What setup cannot do is answer the vendor's one-time
+hook-trust prompt: only the operator can, in their own visible Codex, so a first setup on
+a Codex host writes every byte and stays honestly non-green until they have. This is the
 repair surface: each unit has its own installer, doctor, and inverse.
 
 - **Claude Code** (Linux CERTIFIED; macOS NOT CERTIFIED — pending physical host) — `install-meta-bridge`, `doctor-meta-bridge`.
 - **Antigravity / agy** (Linux CERTIFIED; macOS NOT CERTIFIED — pending physical host) — `install-agy-bridge`, `install-agy-statusline`, `install-agy-hooks`, each with a matching `doctor-agy-*`.
 - **GitHub Copilot CLI** (Linux CERTIFIED; macOS NOT CERTIFIED — pending physical host) — four independent units, four independent failure modes: `install-copilot-bridge` (birth: garden id + who-sent, on the first prompt), `install-copilot-mcp` (the entwurf tool hand, where `entwurf_inbox_read` lives), `install-copilot-receive` (the receiver extension: doorbell + receiver marker), `install-copilot-statusline` (optional for a manual citizen, required for supported fresh) — each with a matching `doctor-copilot-*` and `uninstall-copilot-*`.
 - **OMP (`omp`)** (Linux CERTIFIED; macOS NOT CERTIFIED — pending physical host) — four units, in-process extensions rather than launchers: `install-omp-bridge` (birth: the `mode === "tui"` visible host, its garden id on the status line, and who-sent), `install-omp-mcp` (the omp-native `entwurf-bridge` entry), `install-omp-config` (the one operator setting `tools: xdev: false`, without which the vendor mounts MCP tools as `xd://` devices the model cannot call), `install-omp-receive` (the receiver extension: mailbox watch + announce-only doorbell) — each with a matching `uninstall-omp-*`, and a `doctor-omp-*` for all but the setting, whose runtime axis `doctor-omp-mcp` owns. The setting writer owns exactly the lines it adds and refuses an explicit operator `tools: xdev: true` by name rather than overwriting it.
-- **OpenAI Codex CLI** (unreleased candidate; first-release acceptance pending; macOS NOT CERTIFIED) — `install-codex-birth` is the explicit root-owned `/etc/codex` `SessionStart` unit; `install-codex-mcp` owns `[mcp_servers.entwurf-bridge]`, including the `env_vars` boundary for `CODEX_HOME`, Entwurf garden/control roots, and the app-server's `TMUX`/`TMUX_PANE`; `install-codex-statusline` owns `thread-title`. Each has a matching doctor and inverse. The operator starts and seats the app-server; Entwurf never installs or supervises it and never discovers a TUI seat. “Codex beside Pi” is true only when the intended Codex TUI, the app-server, and outbound Pi resolve to one tmux session. Parser, env-boundary, setup, preflight and clause-7 composition amendments have landed in source; Oracle qualification, full floor, installed doctors and LIVE acceptance remain before release.
+- **OpenAI Codex CLI** (unreleased candidate; first-release acceptance pending; macOS NOT CERTIFIED) — `install-codex-birth` publishes the `SessionStart` declaration into `$CODEX_HOME/hooks.json` with its launcher closure under `$XDG_DATA_HOME/entwurf/codex-birth`, all operator-owned; the vendor trust receipt for that declaration is the operator's single answer, and `doctor-codex-birth` reports it as its own axis (present, or red with the exact instruction — never computed, never written); `install-codex-mcp` owns `[mcp_servers.entwurf-bridge]`, including the `env_vars` boundary for `CODEX_HOME`, Entwurf garden/control roots, and the app-server's `TMUX`/`TMUX_PANE`; `install-codex-statusline` owns `thread-title`. Each has a matching doctor and inverse. The operator starts and seats the app-server; Entwurf never installs or supervises it and never discovers a TUI seat. “Codex beside Pi” is true only when the intended Codex TUI, the app-server, and outbound Pi resolve to one tmux session. Parser, env-boundary, setup, preflight and clause-7 composition amendments have landed in source; Oracle qualification, full floor, installed doctors and LIVE acceptance remain before release.
 
 Run them as `entwurf <command>`. Which unit a doctor's refusal names, and the clean-host
 walk-through for each harness, live in [docs/setup-clean-host.md](./docs/setup-clean-host.md).
@@ -339,7 +340,7 @@ host evidence boundaries are [VERIFY.md](./VERIFY.md) and [BASELINE.md](./BASELI
 The curated model registry exposes unprefixed Claude ids — `claude-opus-5`, `claude-sonnet-5`,
 `claude-fable-5-1` — plus the `cortex-` rows below.
 Codex is not an ACP backend. Its unreleased native-citizen candidate is independent so the
-session retains Codex's native tools, delegation, and work context: root-hook birth, strict
+session retains Codex's native tools, delegation, and work context: trust-gated hook birth, strict
 request `_meta` identity, app-server probe, one-shot native-push, and visible fresh.
 
 **Snowflake Cortex Code is the second ACP backend** (contract and audit:
@@ -465,7 +466,7 @@ pnpm run check:full                     # full deterministic floor (adds the her
 ./run.sh check-agy-sender-identity      # record-backed pid/start-key sender identity
 ./run.sh check-codex-native-push       # deterministic Codex UDS probe + no-replay queue contract
 ./run.sh smoke-codex-config-state      # Codex MCP/status-line install, doctor, and inverse
-./run.sh check-codex-birth-hook        # root birth hook closure and ownership contract
+./run.sh check-codex-birth-hook        # sandboxed payload + declaration: one V3 per top-level thread, the envelope's own axes, no markers
 
 # source-maintainer only — qualification snapshots the git work surface, and both
 # commands are source-contract gates rather than installed operator checks:

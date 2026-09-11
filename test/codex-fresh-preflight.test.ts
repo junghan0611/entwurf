@@ -1,3 +1,4 @@
+import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -11,6 +12,7 @@ let home = "";
 let hooksFile = "";
 let helperDir = "";
 let configFile = "";
+let stateFile = "";
 let deps: CodexPreflightDeps;
 let closedProtocols = 0;
 const managedEnvVars = [
@@ -81,9 +83,16 @@ function protocolStub(request: () => Promise<unknown>): CodexRpcProtocol {
 	};
 }
 
+const sha = (file: string): string => crypto.createHash("sha256").update(fs.readFileSync(file)).digest("hex");
+
+/**
+ * The installed unit, including the ownership state that licenses it. The state is not
+ * decoration here: the preflight compares every recorded digest to the live bytes, so a
+ * fixture that skipped it would be testing a unit no installer ever produced.
+ */
 function installBirth(handler: Record<string, unknown> | null = null): void {
 	const launcher = path.join(helperDir, "codex-birth-launch.sh");
-	write(launcher, "#!/bin/sh\nexit 0\n", 0o555);
+	write(launcher, "#!/bin/sh\nexit 0\n", 0o755);
 	write(path.join(helperDir, "meta-bridge-hook-codex.ts"), "export {};\n");
 	write(path.join(helperDir, "lib", "meta-session.ts"), "export {};\n");
 	write(path.join(helperDir, "lib", "native-push", "codex-ws-client.ts"), "export {};\n");
@@ -97,14 +106,55 @@ function installBirth(handler: Record<string, unknown> | null = null): void {
 			},
 		}),
 	);
+	writeState();
 }
 
-function installConfig(statusLine = false, envVars: readonly string[] = managedEnvVars): void {
+function writeState(): void {
+	write(
+		stateFile,
+		JSON.stringify({
+			schema: "codex-birth-install-state/v1",
+			status: "installed",
+			hooksFile,
+			hooksSha256: sha(hooksFile),
+			helperDir,
+			helperFiles: [
+				{ path: "codex-birth-launch.sh", sha256: sha(path.join(helperDir, "codex-birth-launch.sh")), mode: "0755" },
+				{
+					path: "meta-bridge-hook-codex.ts",
+					sha256: sha(path.join(helperDir, "meta-bridge-hook-codex.ts")),
+					mode: "0644",
+				},
+				{ path: "lib/meta-session.ts", sha256: sha(path.join(helperDir, "lib", "meta-session.ts")), mode: "0644" },
+				{
+					path: "lib/native-push/codex-ws-client.ts",
+					sha256: sha(path.join(helperDir, "lib", "native-push", "codex-ws-client.ts")),
+					mode: "0644",
+				},
+				{ path: "lib/session-id.js", sha256: sha(path.join(helperDir, "lib", "session-id.js")), mode: "0644" },
+				{
+					path: "entwurf-capabilities.json",
+					sha256: sha(path.join(helperDir, "entwurf-capabilities.json")),
+					mode: "0644",
+				},
+			],
+		}),
+		0o600,
+	);
+}
+
+/** The vendor's receipt for OUR declaration — written by the vendor in production, forged
+ * here so the reading is what is under test. */
+function trustBlock(key = `${hooksFile}:session_start:0:0`): string {
+	return `\n[hooks.state."${key}"]\ntrusted_hash = "sha256:${"4".repeat(64)}"\n`;
+}
+
+function installConfig(statusLine = false, envVars: readonly string[] = managedEnvVars, trust = trustBlock()): void {
 	write(
 		configFile,
 		`[mcp_servers.entwurf-bridge]\ncommand = "entwurf-bridge"\nenv_vars = ${JSON.stringify(envVars)}\n\n[mcp_servers.entwurf-bridge.env]\nENTWURF_BRIDGE_NATIVE_HOST = "codex"\n${
 			statusLine ? '\n[tui]\nstatus_line = ["model-with-reasoning", "thread-title"]\n' : ""
-		}`,
+		}${trust}`,
 		0o600,
 	);
 }
@@ -112,13 +162,14 @@ function installConfig(statusLine = false, envVars: readonly string[] = managedE
 beforeEach(() => {
 	root = fs.mkdtempSync(path.join(os.tmpdir(), "entwurf-codex-preflight-"));
 	home = path.join(root, "home");
-	hooksFile = path.join(root, "etc", "codex", "hooks.json");
-	helperDir = path.join(root, "etc", "codex", "entwurf-birth");
+	hooksFile = path.join(home, ".codex", "hooks.json");
+	helperDir = path.join(root, "xdg", "entwurf", "codex-birth", "helper");
+	stateFile = path.join(root, "xdg", "entwurf", "codex-birth", "install-state.json");
 	configFile = path.join(home, ".codex", "config.toml");
 	closedProtocols = 0;
 	deps = {
-		systemPaths: { hooksFile, helperDir },
-		systemUid: process.getuid?.() ?? 0,
+		unitPathsOverride: { hooksFile, helperDir, stateFile },
+		operatorUid: process.getuid?.() ?? 0,
 		checkSocket: () => ({ ok: true }),
 		openProtocol: liveOpener(),
 		appServerTimeoutMs: 50,
@@ -131,7 +182,10 @@ describe("Codex fresh preflight", () => {
 	it("[QK:FRESHCALL-CODEX-PREFLIGHT] names each missing capability before placement", async () => {
 		expect(await codexFreshPreflight({ HOME: home }, deps)).toBe("codex-birth-unit-missing");
 		installBirth();
-		expect(await codexFreshPreflight({ HOME: home }, deps)).toBe("codex-mcp-hand-missing");
+		// Our bytes are perfect and the vendor has still recorded nothing: a DIFFERENT repair,
+		// and one only the operator can perform, so it gets its own reject rather than being
+		// folded into the installer's.
+		expect(await codexFreshPreflight({ HOME: home }, deps)).toBe("codex-birth-trust-missing");
 		installConfig();
 		expect(await codexFreshPreflight({ HOME: home }, deps)).toBe("codex-visible-identity-missing");
 		installConfig(true);
@@ -181,7 +235,7 @@ describe("Codex fresh preflight", () => {
 		expect(closedProtocols).toBe(1);
 	});
 
-	it("[QK:FRESHCALL-CODEX-HOOKS-SAFE] refuses a mutable or symlinked system birth unit", async () => {
+	it("[QK:FRESHCALL-CODEX-HOOKS-SAFE] refuses a mutable or symlinked birth unit", async () => {
 		installBirth();
 		installConfig(true);
 		const helper = path.join(helperDir, "meta-bridge-hook-codex.ts");
@@ -215,11 +269,89 @@ describe("Codex fresh preflight", () => {
 		expect(await codexFreshPreflight({ HOME: home }, deps)).toBeNull();
 	});
 
+	it("[QK:FRESHCALL-CODEX-TRUST-RECEIPT] refuses a birth the vendor never agreed to run", async () => {
+		installBirth();
+		// No receipt at all.
+		installConfig(true, managedEnvVars, "");
+		expect(await codexFreshPreflight({ HOME: home }, deps)).toBe("codex-birth-trust-missing");
+		// A receipt for SOMEBODY ELSE's declaration is not ours, however valid it is for them.
+		installConfig(true, managedEnvVars, trustBlock("/some/other/hooks.json:session_start:0:0"));
+		expect(await codexFreshPreflight({ HOME: home }, deps)).toBe("codex-birth-trust-missing");
+		// Present but not the vendor's shape: entwurf reads the receipt, it does not interpret
+		// a hash of its own making.
+		installConfig(
+			true,
+			managedEnvVars,
+			`\n[hooks.state."${hooksFile}:session_start:0:0"]\ntrusted_hash = "sha256:not-hex"\n`,
+		);
+		expect(await codexFreshPreflight({ HOME: home }, deps)).toBe("codex-birth-trust-missing");
+		installConfig(true);
+		expect(await codexFreshPreflight({ HOME: home }, deps)).toBeNull();
+	});
+
+	it("[QK:FRESHCALL-CODEX-STATE-DIGEST] refuses a closure whose bytes drifted from the recorded digests", async () => {
+		installBirth();
+		installConfig(true);
+		expect(await codexFreshPreflight({ HOME: home }, deps)).toBeNull();
+		// The launcher codex is about to exec is not the one this unit published. Existing is
+		// not enough — the state is a digest inventory, and a sibling opened over drifted bytes
+		// would run somebody else's script under our name.
+		write(path.join(helperDir, "codex-birth-launch.sh"), "#!/bin/sh\necho edited\n", 0o755);
+		expect(await codexFreshPreflight({ HOME: home }, deps)).toBe("codex-birth-unit-missing");
+		writeState();
+		expect(await codexFreshPreflight({ HOME: home }, deps)).toBeNull();
+		// ...and with no state at all there is nothing to compare against, which is the same
+		// refusal rather than a pass by absence.
+		fs.rmSync(stateFile);
+		expect(await codexFreshPreflight({ HOME: home }, deps)).toBe("codex-birth-unit-missing");
+	});
+
+	it("[QK:FRESHCALL-CODEX-EXACT-INVENTORY] refuses a state whose closure inventory is not the exact six members", async () => {
+		installBirth();
+		installConfig(true);
+		expect(await codexFreshPreflight({ HOME: home }, deps)).toBeNull();
+		const short = JSON.parse(fs.readFileSync(stateFile, "utf8"));
+		short.helperFiles = short.helperFiles.filter((f: { path: string }) => f.path === "codex-birth-launch.sh");
+		write(stateFile, JSON.stringify(short), 0o600);
+		// Every named member still matches its digest — the hole is the member nobody named.
+		expect(await codexFreshPreflight({ HOME: home }, deps)).toBe("codex-birth-unit-missing");
+		writeState();
+		const extra = JSON.parse(fs.readFileSync(stateFile, "utf8"));
+		extra.helperFiles.push({ path: "lib/session-id.js", sha256: "0".repeat(64), mode: "0644" });
+		write(stateFile, JSON.stringify(extra), 0o600);
+		expect(await codexFreshPreflight({ HOME: home }, deps)).toBe("codex-birth-unit-missing");
+	});
+
+	it("[QK:FRESHCALL-CODEX-STATE-PARENT-AUTHORITY] refuses a state whose own directory anyone can rewrite", async () => {
+		installBirth();
+		installConfig(true);
+		expect(await codexFreshPreflight({ HOME: home }, deps)).toBeNull();
+		// Every recorded digest still matches. What changed is who may replace the inventory
+		// those digests live in — which is the same as nobody having vouched for them.
+		fs.chmodSync(path.dirname(stateFile), 0o777);
+		expect(await codexFreshPreflight({ HOME: home }, deps)).toBe("codex-birth-unit-missing");
+		fs.chmodSync(path.dirname(stateFile), 0o755);
+		expect(await codexFreshPreflight({ HOME: home }, deps)).toBeNull();
+	});
+
+	it("refuses a unit root that is not absolute", async () => {
+		installBirth();
+		installConfig(true);
+		// The declaration records an absolute launcher path and the vendor keys its receipt to
+		// it, so a cwd-dependent root is a different unit by definition.
+		expect(
+			await codexFreshPreflight(
+				{ HOME: home },
+				{ ...deps, unitPathsOverride: { hooksFile: "relative/hooks.json", helperDir, stateFile } },
+			),
+		).toBe("codex-birth-unit-missing");
+	});
+
 	it("refuses contrary MCP provenance and malformed status shape", async () => {
 		installBirth();
 		write(
 			configFile,
-			'[mcp_servers.entwurf-bridge]\ncommand="entwurf-bridge"\n[mcp_servers.entwurf-bridge.env]\nENTWURF_BRIDGE_NATIVE_HOST="other"\n[tui]\nstatus_line="thread-title"\n',
+			`[mcp_servers.entwurf-bridge]\ncommand="entwurf-bridge"\n[mcp_servers.entwurf-bridge.env]\nENTWURF_BRIDGE_NATIVE_HOST="other"\n[tui]\nstatus_line="thread-title"\n${trustBlock()}`,
 			0o600,
 		);
 		expect(await codexFreshPreflight({ HOME: home }, deps)).toBe("codex-mcp-hand-missing");

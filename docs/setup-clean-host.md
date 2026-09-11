@@ -27,7 +27,7 @@ evidence split, and its three states must not collapse into "macOS is supported"
 | GitHub Copilot CLI | optional-by-presence, operator-installed and authenticated — absent is an explicit setup SKIP; detected composes all four units (birth/MCP/receiver/footer) | self-fetch citizen and visible fresh |
 | OMP (`omp`) | optional-by-presence, operator-installed — absent is an explicit setup SKIP; detected composes all four units (birth/MCP/`tools.xdev` setting/receiver) | self-fetch citizen and visible fresh (accepted on one host — see §4b) |
 | Antigravity `agy` | optional, operator-installed and authenticated | native-push citizen |
-| OpenAI Codex CLI | optional-by-presence, operator-installed and authenticated; unreleased candidate requires an operator-owned app-server started in a chosen tmux mechanism seat | native-push candidate and visible fresh |
+| OpenAI Codex CLI | optional-by-presence, operator-installed and authenticated; detected composes all three operator-owned units (birth/MCP/status-line) and stays non-green until the operator trusts the birth declaration once in a visible Codex; the unreleased candidate also requires an operator-owned app-server started in a chosen tmux mechanism seat | native-push candidate and visible fresh |
 | Cortex Code | optional, operator-installed and authenticated | Cortex ACP backend |
 
 Claude Code >=2.1.217 is required for the managed exec-hook lifecycle. The package
@@ -113,10 +113,10 @@ link is foreign, outside PATH, or shadowed by another command. It detects and wi
 pi/Claude/agy/Copilot/OMP/Codex by presence and prints a computed per-component
 PASS/SKIP/FAIL summary — a detected harness that cannot be completed makes setup exit nonzero.
 A detected `copilot` composes all four native units, and a detected `omp` composes its own four.
-A detected Codex install is an unreleased candidate path: setup composes its user-scope MCP
-and status-line atoms but never escalates or starts the app-server. The current amendment must
-prove independent component outcomes, exact env forwarding, idempotence, and a named
-`codex-birth FAIL` / `sudo entwurf install-codex-birth` repair before setup acceptance is closed.
+A detected Codex install is an unreleased candidate path: setup composes its user-scope birth,
+MCP, and status-line atoms but never escalates or starts the app-server. It reports independent
+component outcomes, preserves exact env forwarding and idempotence, and returns a named
+`codex-birth FAIL` until the vendor trust receipt exists.
 §4, §4b, and §4c keep the explicit per-unit install/doctor/inverse surfaces.
 
 ### 1.1 User-scope ownership (one shared registration, one recorded owner)
@@ -407,20 +407,26 @@ Codex tools, delegation, and work context rather than provide another GPT access
 Entwurf owns three atoms, not the harness and not a daemon:
 
 ```bash
-# Explicit system step. The command refuses unless already root; it never invokes sudo itself.
-sudo entwurf install-codex-birth
-
-# User-scope atoms. `entwurf setup` runs these when it detects Codex.
+# All three are operator-scope; `entwurf setup` runs them when it detects Codex. No root.
+entwurf install-codex-birth
 entwurf install-codex-mcp
 entwurf install-codex-statusline
 
-sudo entwurf doctor-codex-birth
+entwurf doctor-codex-birth
 entwurf doctor-codex-mcp
 entwurf doctor-codex-statusline
 ```
 
-The system atom is a prompt-free `SessionStart` hook under `/etc/codex`; it mints a V3 record
-on the thread's first turn and sets the thread title to the garden id. The MCP writer owns
+The birth atom publishes a `SessionStart` declaration into `$CODEX_HOME/hooks.json` with its
+launcher closure under `$XDG_DATA_HOME/entwurf/codex-birth`; it mints a V3 record on the
+thread's first turn and sets the thread title to the garden id.
+
+**One step is the operator's, and no command can do it for them.** The vendor will not run a
+user-layer hook until it has been trusted once: open a visible plain Codex, answer
+`Trust all and continue`, then send one first turn. `doctor-codex-birth` reads the receipt the
+vendor writes for that declaration and is RED without it — entwurf never writes, pre-seeds or
+recomputes that value, because it is the operator's security decision, not ours. After the one
+answer, later sessions raise no prompt and are born automatically. The MCP writer owns
 `[mcp_servers.entwurf-bridge]` in `$CODEX_HOME/config.toml`. Its exact `env_vars` allowlist is
 `CODEX_HOME`, `ENTWURF_DIR`, `PI_CODING_AGENT_DIR`, `ENTWURF_META_SESSIONS_DIR`,
 `ENTWURF_META_MAILBOX_DIR`, `ENTWURF_META_SENDERS_DIR`, `ENTWURF_META_RECEIVERS_DIR`,
@@ -455,7 +461,7 @@ It does not accept the current terminal-parser, env-boundary, setup, preflight-s
 clause-7 composition amendments.
 
 `entwurf_fresh_call` accepts candidate backend `codex` and requires an explicit model. Its
-preflight must prove the safe root closure, exact MCP/env atom, `thread-title`, and app-server
+preflight must prove the safe birth closure, exact MCP/env atom, `thread-title`, and app-server
 socket before tmux mutation. The sibling's garden id comes from the callback sender envelope,
 never the launch receipt. There is no Codex resume surface, watcher, supervisor, or app-server
 lifecycle ownership. Before release, Oracle still owes qualification, the frozen full floor,
@@ -605,7 +611,7 @@ entwurf uninstall-agy-statusline
 entwurf uninstall-agy-bridge
 entwurf uninstall-codex-statusline
 entwurf uninstall-codex-mcp
-sudo entwurf uninstall-codex-birth
+entwurf uninstall-codex-birth
 entwurf remove ~/entwurf-smoke
 # only when no other project uses the shared user-scope pi registration:
 entwurf remove-user-scope

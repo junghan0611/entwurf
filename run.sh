@@ -119,7 +119,7 @@ run_vitest() {
 usage() {
   cat <<'EOF'
 Usage:
-  ./run.sh setup [project-dir]        # ONE presence-driven composition (#86): per-component PASS/SKIP/FAIL for pi/claude/agy/copilot/omp/codex + stable dev bins + v2 install smoke. Codex user MCP/status-line atoms are composed, but its /etc birth prerequisite is never sudoed and stays a named FAIL until the operator installs it. Absent harness = zero-state SKIP, detected-incomplete = named FAIL + nonzero exit. Never installs a harness, starts a daemon, or touches credentials
+  ./run.sh setup [project-dir]        # ONE presence-driven composition (#86): per-component PASS/SKIP/FAIL for pi/claude/agy/copilot/omp/codex + stable dev bins + v2 install smoke. Codex birth/MCP/status-line atoms are composed at user scope; setup stays non-green until the operator trusts the birth declaration once in visible Codex. Absent harness = zero-state SKIP, detected-incomplete = named FAIL + nonzero exit. Never installs a harness, starts a daemon, touches credentials, or writes the vendor trust receipt
   ./run.sh release-gate [project-dir] [--cut] [--allow-skip-gemini]  # SINGLE release gate: full static (pnpm run check:full) + the v2-native live gates (v2 matrix-live, check-bridge, doctor-pi-provider, RGG) + the ACP plugin acceptance floor (12 LIVE smokes: socket-citizen/raw-turn/overlay/provider/session-reuse/carrier-augment/memory-containment/rgg/mcp/skill/bundled-mcp/v2-send) + the one surviving axis the aggregate used to omit silently (claude-native-resume; Cortex stays a documented on-demand direct call) + the cross-harness delivery chain (smoke-entwurf-chain-live) + the Codex first-admission Pi -> visible Codex -> visible Pi receipt chain (smoke-codex-fresh-live; explicit operator-owned app-server PID/seat). TWO-TIER summary: MUST (release-blocking, owns the exit code — "green" applies here) + BEHAVIOR (advisory, non-blocking: RGG positives model-in-loop turn). STEP OUTCOME protocol: every step is INVOKED and reports its own PASS / SKIP (exit 97, a prerequisite it does not have) / FAIL — a skip is never counted as a pass. Without --cut this is the unattended diagnostic (SKIPs reported, exit 0). WITH --cut it is read as release acceptance and ANY MUST SKIP is red, which is what makes "a CUT needs LIVE=1, SKIP=0" executable instead of prose. --allow-skip-gemini accepted-but-ignored (back-compat). final cut authorization is GLG's.
   ./run.sh check-bridge               # entwurf-bridge direct MCP smoke + protocol/negative-path test.sh (live substrate = v2 live smokes)
   ./run.sh check-entwurf-bridge-boot # deterministic gate (5d-5-pre, G1a/G1b/G1e/G1f, IN pnpm run check:full): boot start.sh under strip-types + assert v2 fence graph loads + entwurf_v2 and entwurf_resume_call registered/schema + the tools/list surface is EXACTLY the seven shipped garden verbs; tools/list only, no auth/side-effect
@@ -140,10 +140,10 @@ Usage:
   ./run.sh check-codex-sender-identity # Codex tools/call _meta triple agreement + addressable record join + cross-carrier conflict refusal
   ./run.sh check-codex-bridge-identity # real MCP bridge request identity for entwurf_self/v2/fresh; malformed or conflicting _meta fails loud
   ./run.sh check-codex-native-push    # app-server WebSocket-over-UDS probe + measured one-shot codex queue delivery; no replay
-  ./run.sh check-codex-birth-hook     # root hook closure, first-turn V3 birth, thread-name garden id, top-level event predicate
+  ./run.sh check-codex-birth-hook     # sandboxed payload + declaration: first-turn V3 birth, one record per thread, top-level event predicate, no markers
   ./run.sh check-codex-fresh-preflight # pre-mutation birth/MCP/thread-title/default-app-server readiness
   ./run.sh smoke-codex-config-state   # sandboxed MCP + status-line ownership/install/doctor/inverse lifecycle
-  ./run.sh smoke-codex-user-birth     # sandboxed USER-layer birth unit: exact trust identity, config.toml untouched, foreign/edited/symlink refusals, drift-refusing inverse
+  ./run.sh smoke-codex-birth          # sandboxed birth unit: exact trust identity, the vendor trust receipt read (never written), config.toml untouched, foreign/edited/symlink refusals, drift-refusing inverse
   ./run.sh check-harness-admission-parity  # #87 C: the EDGE the two closed parity loops never had. Every citizen backend is fresh-openable or a declared pre-#82 legacy admission whose exception a reader finds in DELIVERY.md — so a post-contract harness that mints records but cannot be opened by entwurf_fresh_call blocks the release package instead of only carrying an `unsupported` note (docs/adding-a-harness.md step 9)
   ./run.sh check-capability-bundle-reach # deterministic gate (IN pnpm check): re-ask EVERY shipped copy of meta-session (source + bridge bundle emit) whether metaCapabilitiesFilePath() reaches the registry — the artifact-depth check the source-path gates cannot make; needs a built dist, missing dist FAILS
   ./run.sh smoke-pi-attach            # deterministic gate (#50 C2 checkpoint + C3 ACP tail): a pi session attaches as a V3 meta-record citizen (backend:"pi"), the gardenId is the RECORD's not pi's session id, the control socket is keyed on it, a re-open ATTACHES to the same address (never a second mint), the BUILT DIST ENTRY driven over MCP stdio lists the citizen + delivers entwurf_v2 to that socket with an RPC ack, and the ACP identity chain lands a send AS the host record (enrichMcpServersWithEnvelope env → bridge sender = host gardenId). mkdtemp-isolated; the live store is never read
@@ -249,12 +249,9 @@ Usage:
   ./run.sh uninstall-agy-bridge       # 봉인 7: honest inverse of install-agy-bridge from install-state (restore preimage / remove key; refuse if config became a symlink)
   ./run.sh probe-bridge-command <cmd> [args...]  # #81: BOOT the given bridge invocation and require the entwurf MCP tool surface back. `--invocation-json '{"command":"…","args":[],"env":{}}'` preserves a harness config exactly. It waits for a valid initialize response, then sends initialized + tools/list only (no tools/call, lock, record, or delivery). exit 0 = it serves the bridge; 1 = it does not. The pi/agy doctors use this leaf.
   ./run.sh doctor-agy-bridge          # fail-loud doctor: MCP config + exact permission rule + state + live probe label
-  ./run.sh install-codex-birth        # root-only: install the fixed /etc/codex SessionStart birth unit; never sudo internally
-  ./run.sh uninstall-codex-birth      # root-only exact inverse from /var/lib/entwurf ownership state
-  ./run.sh doctor-codex-birth         # system birth/config/ownership/runtime verdict; use sudo for the ownership axis
-  ./run.sh install-codex-user-birth   # USER-layer twin: publish $CODEX_HOME/hooks.json + helper closure, no root; the operator trusts the declaration once, in the TUI
-  ./run.sh uninstall-codex-user-birth # exact inverse from the user install-state; refuses drifted bytes instead of deleting them
-  ./run.sh doctor-codex-user-birth    # STATIC unit bytes/ownership only — it makes no claim about the vendor's trust decision
+  ./run.sh install-codex-birth        # publish $CODEX_HOME/hooks.json + the helper closure; no root, and the operator trusts the declaration once in their own Codex
+  ./run.sh uninstall-codex-birth      # exact inverse from the install-state digest inventory; refuses drifted bytes instead of deleting them
+  ./run.sh doctor-codex-birth         # RUNTIME + UNIT bytes/ownership + the vendor TRUST receipt for this declaration (--unit-only skips the receipt; sandboxes only)
   ./run.sh install-codex-mcp          # own only [mcp_servers.entwurf-bridge] in the user's Codex config
   ./run.sh uninstall-codex-mcp        # remove/restore only the recorded MCP atom
   ./run.sh doctor-codex-mcp           # effective config + ownership + actual bridge boot
@@ -5269,18 +5266,28 @@ setup_all() {
   fi
 
 
-  # ── codex ── Entwurf owns three configuration atoms, never the harness or its app-server.
-  # The root birth atom is an explicit prerequisite: setup never sudo-es or writes /etc.
+  # ── codex ── Entwurf owns three configuration atoms, never the harness, its app-server, or
+  # the operator's trust decision. The birth unit is now setup's to install: its paths are the
+  # operator's own, so nothing here needs root — but the VENDOR still has to agree to run the
+  # hook, and only the operator can answer that, once, in their own visible Codex. So a first
+  # setup on a Codex host writes the bytes and is honestly NON-GREEN until that answer exists.
+  # It never writes `[hooks.state]`: forging the receipt in a file we already own would turn a
+  # security prompt into a silent install.
   local codex_rc
   if ! command -v "${CODEX_BIN:-codex}" >/dev/null 2>&1; then
     setup_result codex SKIP "codex not on PATH — zero Codex wiring written"
   else
     section "codex units (native harness detected: OpenAI Codex CLI)"
-    codex_rc=0; (cd "$REPO_DIR" && bash scripts/codex-birth-doctor.sh) >/dev/null || codex_rc=$?
-    if [ "$codex_rc" -eq 0 ]; then
-      setup_harness_result codex-birth "root-managed SessionStart birth present" "./run.sh doctor-codex-birth"
+    codex_rc=0; (cd "$REPO_DIR" && bash scripts/codex-birth-install.sh) || codex_rc=$?
+    if [ "$codex_rc" -ne 0 ]; then
+      setup_result codex-birth FAIL "detected codex, but publishing the SessionStart birth unit did not complete (see above)"
     else
-      setup_result codex-birth FAIL "detected codex, but the root-managed birth prerequisite is missing or red — run 'sudo entwurf install-codex-birth', then re-run setup"
+      codex_rc=0; (cd "$REPO_DIR" && bash scripts/codex-birth-doctor.sh) >/dev/null || codex_rc=$?
+      if [ "$codex_rc" -eq 0 ]; then
+        setup_harness_result codex-birth "SessionStart birth unit published and trusted by the vendor" "./run.sh doctor-codex-birth"
+      else
+        setup_result codex-birth FAIL "the birth unit is published, but the vendor has recorded no trust receipt for it yet, so the hook is declared and never runs. Open a visible plain Codex, answer its prompt with 'Trust all and continue', send one first turn, then re-run setup (or './run.sh doctor-codex-birth')"
+      fi
     fi
     codex_rc=0; codex_mcp install || codex_rc=$?
     if [ "$codex_rc" -eq 0 ]; then
@@ -6576,18 +6583,6 @@ case "$cmd" in
     shift || true
     (cd "$REPO_DIR" && bash scripts/codex-birth-doctor.sh "$@")
     ;;
-  install-codex-user-birth)
-    shift || true
-    (cd "$REPO_DIR" && bash scripts/codex-user-birth-install.sh "$@")
-    ;;
-  uninstall-codex-user-birth)
-    shift || true
-    (cd "$REPO_DIR" && bash scripts/codex-user-birth-uninstall.sh "$@")
-    ;;
-  doctor-codex-user-birth)
-    shift || true
-    (cd "$REPO_DIR" && bash scripts/codex-user-birth-doctor.sh "$@")
-    ;;
   install-codex-mcp)
     codex_mcp install
     ;;
@@ -6921,9 +6916,9 @@ case "$cmd" in
     shift || true
     (cd "$REPO_DIR" && bash scripts/smoke-codex-config-state.sh "$@")
     ;;
-  smoke-codex-user-birth)
+  smoke-codex-birth)
     shift || true
-    (cd "$REPO_DIR" && bash scripts/smoke-codex-user-birth.sh "$@")
+    (cd "$REPO_DIR" && bash scripts/smoke-codex-birth.sh "$@")
     ;;
   check-pack)
     check_pack

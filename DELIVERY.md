@@ -88,7 +88,7 @@ physical host. Do not read a D-level cell as a Darwin receipt.
 | **pi native Entwurf** | shipped | D7; D8 partial | Record-addressed Unix control socket. A record-less socket is diagnostic only and never dispatched. |
 | **Claude Code interactive `>=2.1.217`** | shipped; Linux certified | D6; D7/D8 partial | Per-session mailbox + exec-form `FileChanged`/`asyncRewake`. B2 proved idle wake and same-session continuity on one NixOS host. |
 | **Antigravity / agy** | shipped | D6; D7 partial | Record-backed native-push through LS gRPC `agentapi send-message`; no mailbox or receiver marker. Admitted before the #82 step 9 contract and not re-evaluated under it, so it is legacy citizen evidence, not a step-9 supported harness: `entwurf_fresh_call` cannot open an agy sibling, and nothing here should be read as claiming visible lifecycle parity. |
-| **Codex CLI app-server citizen** | unreleased candidate under amendment; pre-amendment native send/receive and identity observed on Linux at 0.153.4 | D6 candidate; D7 partial; D8 unproven | Root `SessionStart` birth plus strict per-request metadata join; no shared-pid sender marker. `thread/loaded/list` probes the operator-owned app-server UDS and one-shot `codex queue` delivers with no retry. The MCP `env_vars` boundary carries `CODEX_HOME`, Entwurf roots, and the app-server's actual tmux mechanism seat; this is not an attached-TUI join. Parser/env/setup/preflight/clause-7 amendments and Oracle qualification/full/installed-host real `Pi → Codex → Pi` LIVE remain release stops. |
+| **Codex CLI app-server citizen** | unreleased candidate under amendment; pre-amendment native send/receive and identity observed on Linux at 0.153.4 | D6 candidate; D7 partial; D8 unproven | Vendor-trusted user-scope `SessionStart` birth plus strict per-request metadata join; no shared-pid sender marker. `thread/loaded/list` probes the operator-owned app-server UDS and one-shot `codex queue` delivers with no retry. The MCP `env_vars` boundary carries `CODEX_HOME`, Entwurf roots, and the app-server's actual tmux mechanism seat; this is not an attached-TUI join. Parser/env/setup/preflight/clause-7 amendments and Oracle qualification/full/installed-host real `Pi → Codex → Pi` LIVE remain release stops. |
 | **Codex embedded TUI** | deferred | D0 partial | At the 2026-09-08 Codex 0.153.4 measurement, standalone mode had no `watchPaths`/`FileChanged`/`asyncRewake` analogue or supported idle receive route. This is dated vendor evidence, not a claim that the current candidate lacks records or fresh. |
 | **Copilot CLI first-party extension** | raw transport probe; superseded by the owned product unit | D7 path observed; D3 control receipt incomplete; D8 unproven | CLI-spawned extension over stdio JSON-RPC; `joinSession()` + documented `fs.watch` → `session.send({mode:"enqueue"})`. Idle wake, exact-marker reply, and completion passed on 2026-08-23 (CLI 1.0.80, L4, one Linux host). Two-process isolation was observed but its decisive B log was not preserved. Kept as the transport receipt the owned receive unit was built on; the shipped unit differs deliberately — it announces the inbox instead of injecting the body. |
 | **Copilot CLI garden citizen** | shipped in 0.15.0; send + receive + visible fresh accepted on one host | D6; D7 partial; D3 pending; D8 unproven | Birth, garden id, MCP hand and record-backed sender identity are accepted; the RECEIVER is an installed first-party extension that binds to the V3 record, writes a receiver marker owned by the WATCHER pid, and rings a doorbell the model drains with `entwurf_inbox_read`. `wakeMode` is `self-fetch`, so dispatch reaches the mailbox rail: armed → delivered, unarmed/stale → the honest `mailbox-undeliverable` refusal. **D6 is the owned-invocation LIVE acceptance of 2026-08-23** — garden `20260823T181316-d9f6ba`, native `20fe30c8-b2bc-4600-91a0-8a409131be51`, CLI 1.0.80: receive log `joined`→`armed`→`doorbell fresh=1`→`rang`, mailbox `lastEnqueuedAt 09:23:41.235Z` / `lastReadAt 09:23:56.480Z`, and a model reply on the same record/native/gid chain. **Visible fresh (step 9 clause 7) is a separate LIVE, 2026-08-25** — launch window `@89`/`%89` nonce `mux-fresh-call-690529ae99f99faa2252aefb`; exact-callback garden `20260825T085721-f68be0`; one `entwurf_v2` → `meta-mailbox → enqueued`; same garden `lastReadAt 2026-08-24T23:57:47.784Z` plus same-gid reply; GLG saw footer garden id and a healthy multi-turn window. Those rows stay unmerged. D7 is PARTIAL: reply and read receipt were observed, the completion taxonomy and long-haul operation were not. D3 (second-session isolation of an owned invocation) is PENDING — observed once, decisive log lost to scratch cleanup. Evidence level L4: one host. Launch through the owned invocation `entwurf copilot`, which sets `COPILOT_CLI_ENABLED_FEATURE_FLAGS=EXTENSIONS` for that one process; `doctor-copilot-receive` reads live CLI environments because a session launched without it is silently inert. Visible fresh is operator-metered and is not a release-gate MUST. |
@@ -142,7 +142,7 @@ not duplicate GPT access:
 operator starts app-server in one chosen tmux seat
   → its configured MCP env_vars forward that mechanism seat and explicit roots
   → visible codex TUI attaches with --remote unix://<default socket>
-    → first turn runs root-owned SessionStart birth
+    → first turn runs the vendor-trusted user-scope SessionStart birth
       → V3 record(nativeSessionId = threadId)
       → thread/name/set(gardenId)
     → MCP tools/call carries strict request metadata
@@ -170,9 +170,11 @@ rather than guessing a client pane or starting a server.
 
 Three ownership atoms remain separate:
 
-1. `sudo entwurf install-codex-birth` owns the fixed `/etc/codex/hooks.json`
-   `SessionStart` declaration plus its import closure. `setup` never escalates; it reports
-   the missing root prerequisite and the exact repair.
+1. `entwurf install-codex-birth` owns `$CODEX_HOME/hooks.json` — one whole file, ours or
+   absent — plus its launcher and import closure under `$XDG_DATA_HOME/entwurf/codex-birth`.
+   No root: every path belongs to the operator. The vendor gates a user-layer declaration on
+   ONE interactive "Trust all", which entwurf never answers, pre-seeds or computes; the
+   receipt is read as its own doctor axis, and until it exists setup is honestly non-green.
 2. `entwurf install-codex-mcp` owns `[mcp_servers.entwurf-bridge]` in
    `$CODEX_HOME/config.toml`, including exact `env_vars` forwarding for `CODEX_HOME`,
    Entwurf garden/control roots, and `TMUX`/`TMUX_PANE`. This explicit name boundary
@@ -203,7 +205,7 @@ codex --remote unix://<default socket> --model <explicit model>
       --dangerously-bypass-approvals-and-sandbox <callback-first prompt>
 ```
 
-The amended preflight must certify the safe root birth closure, exact MCP/env
+The amended preflight must certify the state-backed birth closure digests, the vendor trust receipt, exact MCP/env
 boundary, `thread-title`, and app-server socket before tmux mutation. The callback
 spelling is `mcp__entwurf_bridge__entwurf_v2`; the new garden id comes only from its
 sender envelope. There is no Codex resume, watcher, supervisor, or app-server
@@ -220,8 +222,8 @@ candidate.
 Current amendment scope is the terminal parser, explicit env-name boundary, setup
 acceptance, preflight safety, and clause-7 composition. Focused laptop work does not
 close the deep gates. Oracle must still run qualification and the frozen full floor,
-then accept the actually installed root/user units with the required real
-`Pi → visible Codex → visible Pi` lifecycle before the first release. Release-gate
+then accept the actually installed operator-owned units and vendor trust receipt with the required
+real `Pi → visible Codex → visible Pi` lifecycle before the first release. Release-gate
 strips ambient `PI_SESSION_ID`/`PI_AGENT_ID`; a fixture or self-fetch collector may
 preserve receipts but cannot substitute for the initial visible record-backed Pi turn.
 The receipt must record the fresh Codex, app-server, and outbound Pi tmux session
