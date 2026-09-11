@@ -150,6 +150,48 @@ want "state is gone" "[ ! -e '$MCP_STATE' ]"
 python3 "$MCP" doctor-static "$CFG" entwurf-bridge "$MCP_STATE" >"$SB/out"
 want "post-uninstall doctor is an unowned note again" "grep -q 'unowned' '$SB/out'"
 
+# A NEIGHBOUR APPENDED AFTER OUR BLOCK — the shape this host actually grew into.
+# Our managed table is written at the end of the file, so for a long time nothing
+# ever followed it and no gate could see where the family stopped. Then the Codex
+# vendor appended its own `[hooks.state]` (the operator's hook-trust decision) right
+# after ours, separated by one blank line, and a plain idempotent reinstall deleted
+# that blank line: semantically nothing, but a byte outside our atom, and the one
+# thing this writer promises never to touch. The separator belongs to the boundary,
+# not to the family.
+seed_config
+cp "$CFG" "$SB/neighbour-seed.toml"          # the operator bytes the inverse owes back
+cat > "$SB/neighbour-block.toml" <<'EOF'
+
+[hooks.state]
+
+[hooks.state."/sandbox/.codex/hooks.json:session_start:0:0"]
+trusted_hash = "sha256:4647c53b6948cd38f2283a3fdf63e40e83b7ff29ecf14650b7e61eec9315e1cc"
+EOF
+python3 "$MCP" install "$CFG" entwurf-bridge "$MCP_STATE" >/dev/null
+cat "$SB/neighbour-block.toml" >> "$CFG"
+cp "$CFG" "$SB/neighbour-expected.toml"
+# What the inverse owes: the operator's seed bytes, then the neighbour EXACTLY as it was
+# appended — its leading blank separator included. Built by concatenation, never by
+# describing the result, so the assertion cannot be satisfied by a file that merely ends
+# the right way.
+cat "$SB/neighbour-seed.toml" "$SB/neighbour-block.toml" > "$SB/neighbour-after-inverse-expected.toml"
+toml_ok "$CFG"; ok "our block plus an appended vendor neighbour parses"
+python3 "$MCP" install "$CFG" entwurf-bridge "$MCP_STATE" >/dev/null
+cmp -s "$SB/neighbour-expected.toml" "$CFG" \
+  || die "[QK:CODEX-TOML-FAMILY-EXCLUDES-SEPARATOR] reinstall changed bytes outside the managed table: $(diff -u "$SB/neighbour-expected.toml" "$CFG" | sed -n '3,12p')"
+ok "reinstall beside a vendor neighbour is byte-exact, separator included"
+want "the vendor's trust record survives verbatim" "grep -Fxq 'trusted_hash = \"sha256:4647c53b6948cd38f2283a3fdf63e40e83b7ff29ecf14650b7e61eec9315e1cc\"' '$CFG'"
+# ...and the inverse gives back exactly what it found: the operator's seed bytes plus the
+# neighbour verbatim. Asserted with `cmp` against bytes built by concatenation — an
+# "ends with the neighbour" shape test would pass on a file whose separator was eaten,
+# which is the very byte this cell exists to protect.
+python3 "$MCP" uninstall "$MCP_STATE" >/dev/null
+cmp -s "$SB/neighbour-after-inverse-expected.toml" "$CFG" \
+  || die "the inverse did not restore seed+neighbour byte-exact: $(diff -u "$SB/neighbour-after-inverse-expected.toml" "$CFG" | sed -n '3,12p')"
+ok "the inverse restores the operator seed plus the neighbour byte-exact, separator included"
+toml_ok "$CFG"; ok "config after the neighbour-aware inverse still parses"
+rm -f "$MCP_STATE"
+
 # created-new: the file we made is removed by the inverse
 rm -f "$CFG"
 python3 "$MCP" install "$CFG" entwurf-bridge "$MCP_STATE" >/dev/null

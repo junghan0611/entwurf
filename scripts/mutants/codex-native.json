@@ -372,6 +372,17 @@
 			"signatureSource": "scripts/smoke-codex-config-state.sh"
 		},
 		{
+			"claim": "CODEX-TOML-FAMILY-EXCLUDES-SEPARATOR",
+			"title": "the managed table family swallows the blank separator before the next neighbour, so an idempotent reinstall deletes a byte the vendor wrote outside our atom",
+			"subject": "scripts/codex_toml_io.py",
+			"find": ["    while end > start + 1 and lines[end - 1].strip() == \"\":"],
+			"replace": ["    while False:  # mutant: keep the trailing blank separator inside the family"],
+			"gate": ["bash", "run.sh", "smoke-codex-config-state"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:CODEX-TOML-FAMILY-EXCLUDES-SEPARATOR]",
+			"signatureSource": "scripts/smoke-codex-config-state.sh"
+		},
+		{
 			"claim": "CODEX-MCP-RESHAPED-REFUSES-KEEPS-STATE",
 			"title": "the MCP inverse's reshaped-entry refusal is disabled, so a present-but-unlocatable owned entry is silently treated as genuinely gone",
 			"subject": "scripts/codex-mcp-config.py",

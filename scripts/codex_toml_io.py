@@ -336,7 +336,20 @@ def scan_lines(lines: list[str]) -> list[LineInfo]:
 
 def find_table_family(lines: list[str], infos: list[LineInfo], path: tuple[str, ...]) -> tuple[int, int] | None:
     """(start, end_exclusive) of the `[path]` header line and every sub-table
-    under it, up to the next header that is not a descendant, or EOF."""
+    under it, up to the next header that is not a descendant, or EOF.
+
+    The BLANK LINES that sit between this family and whatever follows it are NOT
+    part of it. They are the separator two neighbours share, and the neighbour is
+    frequently not ours: measured on this host, the Codex vendor appended its own
+    `[hooks.state]` after our managed MCP block, and re-splicing the family over a
+    span that swallowed the separator deleted one of the vendor's bytes on a plain
+    idempotent reinstall — semantically nothing, but a byte outside our atom that
+    we had promised never to touch.
+
+    Only whitespace-only lines are given back. A COMMENT above the next header is
+    left inside the family exactly as before: a comment is somebody's words, and
+    deciding whose they are is a different question from where a table ends. This
+    boundary change must not quietly hand ownership of one to the other."""
     start = None
     for idx, info in enumerate(infos):
         if info.header == path and not info.is_array:
@@ -354,6 +367,8 @@ def find_table_family(lines: list[str], infos: list[LineInfo], path: tuple[str, 
             continue  # a descendant sub-table stays in the family
         end = idx
         break
+    while end > start + 1 and lines[end - 1].strip() == "":
+        end -= 1
     return start, end
 
 
