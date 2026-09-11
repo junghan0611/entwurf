@@ -292,6 +292,27 @@ rm -f "$SL_STATE"
 python3 "$SL" doctor-static "$CFG" "$SL_STATE" >"$SB/out"
 want "unowned thread-title is green (state-independent)" "grep -q '^thread-title-present unowned$' '$SB/out'"
 
+# ...and being unowned never rescues a MISSING required axis. The doctor's
+# subject is visible identity, not our bookkeeping: `thread-title-present` is
+# the only green, so every other effective token is red even with no receipt.
+# Without this, a host whose config the operator keeps elsewhere reports exit 0
+# while no Codex thread can ever show its garden id.
+cp "$CFG" "$SB/sl-required-axis.toml"
+sed -i 's/"thread-title", //' "$CFG"
+python3 "$SL" doctor-static "$CFG" "$SL_STATE" >"$SB/out" 2>&1 \
+  && die "[QK:CODEX-SL-DOCTOR-REQUIRES-VISIBLE-IDENTITY] unowned config WITHOUT thread-title reported green: $(cat "$SB/out")"
+want "unowned thread-title-absent is red, both axes preserved" "grep -q '^thread-title-absent unowned$' '$SB/out'"
+sed -i '/^status_line = /d' "$CFG"
+python3 "$SL" doctor-static "$CFG" "$SL_STATE" >"$SB/out" 2>&1 \
+  && die "unowned config with NO status_line key reported green: $(cat "$SB/out")"
+want "unowned status-line-absent is red, both axes preserved" "grep -q '^status-line-absent unowned$' '$SB/out'"
+ln -s "$SB/sl-required-axis.toml" "$SB/sl-symlinked.toml"
+python3 "$SL" doctor-static "$SB/sl-symlinked.toml" "$SL_STATE" >"$SB/out" 2>&1 \
+  && die "a symlinked config the doctor cannot read through reported green: $(cat "$SB/out")"
+want "unowned symlink is red, both axes preserved" "grep -q '^symlink unowned$' '$SB/out'"
+rm -f "$SB/sl-symlinked.toml"
+cp "$SB/sl-required-axis.toml" "$CFG"
+
 # drift: our item removed under a receipt is red; reinstall repairs. The seed
 # is rebuilt first: the file still carries OUR merged item from the checks
 # above, and adopting it back as "already-present" would make the inverse a
@@ -300,7 +321,7 @@ seed_config
 python3 "$SL" install "$CFG" "$SL_STATE" >/dev/null
 sed -i 's/"thread-title", //' "$CFG"
 python3 "$SL" doctor-static "$CFG" "$SL_STATE" >"$SB/out" 2>&1 && die "removed thread-title doctor should be red"
-want "removed thread-title under receipt is red" "grep -q '^thread-title-absent drift$' '$SB/out'"
+want "removed thread-title under receipt is red and still names ownership" "grep -q '^thread-title-absent owned drift$' '$SB/out'"
 python3 "$SL" install "$CFG" "$SL_STATE" >/dev/null
 python3 "$SL" uninstall "$SL_STATE" >/dev/null
 cmp -s "$SB/sl-seed.toml" "$CFG" && ok "status inverse restores operator bytes" || die "status inverse byte mismatch"

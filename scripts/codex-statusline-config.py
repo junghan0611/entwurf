@@ -18,8 +18,10 @@ drift to overwrite.
 
 The doctor judges EFFECTIVE thread-title from the config alone, independent of
 the state receipt (the operator may set it themselves — that is green, not
-drift); the state only annotates ownership and turns a missing item red while
-our receipt binds the file.
+drift). Its subject is that REQUIRED visible-identity axis, so a present item is
+the only green and every other effective token is red; the state never rescues
+one, it only annotates ownership and adds `drift` when our receipt binds the
+file whose item is gone.
 """
 
 from __future__ import annotations
@@ -390,10 +392,15 @@ def effective_token(config_path: str) -> str:
 
 
 def doctor_static(config_path: str, state_path: str) -> None:
-    """One line, two axes: `<effective> <ownership>`. The effective token is
-    computed without ever reading the receipt; ownership annotates. RED (exit
-    1) only while our receipt binds the file AND thread-title is not
-    effectively present — an unowned file with the item is green, not drift."""
+    """One line, two axes: `<effective> <ownership>[ drift]`. The effective
+    token is computed without ever reading the receipt; ownership annotates and
+    never rescues. GREEN (exit 0) is exactly `thread-title-present`, owned or
+    unowned — an unowned file that already carries the item is green, and every
+    other effective token is RED because this doctor's subject is the REQUIRED
+    visible-identity axis, not our bookkeeping. Ownership still distinguishes
+    the two reds an operator repairs differently: `drift` means our receipt
+    binds this file and our item is gone (repair in place), while a bare
+    `<effective> unowned` means the axis was never established here."""
     effective = effective_token(config_path)
     state = load_state(state_path)
     owned = (
@@ -402,10 +409,11 @@ def doctor_static(config_path: str, state_path: str) -> None:
         and state.get("atom") == ATOM
         and state.get("managedConfigPath") == os.path.abspath(config_path)
     )
-    if owned and effective != "thread-title-present":
-        sys.stdout.write(f"{effective} drift\n")
+    ownership = "owned" if owned else "unowned"
+    if effective != "thread-title-present":
+        sys.stdout.write(f"{effective} {ownership}{' drift' if owned else ''}\n")
         raise SystemExit(1)
-    sys.stdout.write(f"{effective} {'owned' if owned else 'unowned'}\n")
+    sys.stdout.write(f"{effective} {ownership}\n")
 
 
 def main(argv: list[str]) -> None:

@@ -394,6 +394,19 @@
 			"signatureSource": "scripts/smoke-codex-config-state.sh"
 		},
 		{
+			"claim": "CODEX-SL-DOCTOR-REQUIRES-VISIBLE-IDENTITY",
+			"title": "the statusline doctor lets ownership rescue a missing required axis, so a host with no thread-title reports green as long as no receipt binds it",
+			"subject": "scripts/codex-statusline-config.py",
+			"find": ["    if effective != \"thread-title-present\":"],
+			"replace": [
+				"    if owned and effective != \"thread-title-present\":  # mutant: unowned rescues the required axis"
+			],
+			"gate": ["bash", "run.sh", "smoke-codex-config-state"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:CODEX-SL-DOCTOR-REQUIRES-VISIBLE-IDENTITY]",
+			"signatureSource": "scripts/smoke-codex-config-state.sh"
+		},
+		{
 			"claim": "CODEX-THREAD-READ-DIALECT",
 			"title": "the visible-title read-back sends the thread id under a name the vendor app-server does not accept, so first-admission LIVE is the first place the dialect is tried",
 			"subject": "pi-extensions/lib/native-push/codex-ws-client.ts",
