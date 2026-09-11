@@ -73,7 +73,7 @@ run_setup() { # $1=HOME-root $2=project $3=PATH $4=PI_BIN $5=COPILOT_BIN(opt) $6
   set +e
   # ONE physical line by contract: check-install-surface S5c is a line-scoped static tripwire,
   # so the sandbox env assignments must ride the same line as the run.sh drive they guard.
-  OUT="$(HOME="$1" XDG_DATA_HOME="$1/.local/share" XDG_STATE_HOME="$1/.local/state" XDG_CACHE_HOME="$1/.cache" XDG_CONFIG_HOME="$1/.config" PI_CODING_AGENT_DIR="$1/.pi/agent" PATH="$3" PI_BIN="$4" CLAUDE_BIN="$ABSENT" AGY_BIN="$ABSENT" COPILOT_BIN="${5:-$ABSENT}" OMP_BIN="${6:-$ABSENT}" ENTWURF_OMP_AGENT_DIR="$1/.omp/agent" bash "$PKG/run.sh" setup "$2" 2>&1)"
+  OUT="$(HOME="$1" XDG_DATA_HOME="$1/.local/share" XDG_STATE_HOME="$1/.local/state" XDG_CACHE_HOME="$1/.cache" XDG_CONFIG_HOME="$1/.config" PI_CODING_AGENT_DIR="$1/.pi/agent" PATH="$3" PI_BIN="$4" CLAUDE_BIN="$ABSENT" AGY_BIN="$ABSENT" COPILOT_BIN="${5:-$ABSENT}" OMP_BIN="${6:-$ABSENT}" CODEX_BIN="$ABSENT" ENTWURF_OMP_AGENT_DIR="$1/.omp/agent" bash "$PKG/run.sh" setup "$2" 2>&1)"
   RC=$?
   set -e
 }
@@ -93,6 +93,8 @@ want "A: an absent copilot is one zero-state SKIP — no unit composed, no .copi
   "printf '%s' \"\$OUT\" | grep -q 'copilot: SKIP' && [ ! -e '$HOME_A/.copilot' ]"
 want "A: an absent omp is one zero-state SKIP — no unit composed, no .omp written [QK:SETUP-OMP-ABSENT-SKIP]" \
   "printf '%s' \"\$OUT\" | grep -q 'omp: SKIP' && [ ! -e '$HOME_A/.omp' ]"
+want "A: an absent Codex is one zero-state SKIP — no unit composed, no .codex written [QK:CODEX-SETUP-ZERO-STATE]" \
+  "printf '%s' \"\$OUT\" | grep -q 'codex: SKIP' && [ ! -e '$HOME_A/.codex' ]"
 want "A control: mode named first, pi/claude/agy SKIP, bins PASS, core FAIL, NON-GREEN summary" \
   "printf '%s' \"\$OUT\" | head -n 1 | grep -q 'mode: installed package' && printf '%s' \"\$OUT\" | grep -q 'pi: SKIP' && printf '%s' \"\$OUT\" | grep -q 'claude: SKIP' && printf '%s' \"\$OUT\" | grep -q 'agy: SKIP' && printf '%s' \"\$OUT\" | grep -q 'bins: PASS' && printf '%s' \"\$OUT\" | grep -q 'core: FAIL' && printf '%s' \"\$OUT\" | grep -q 'NON-GREEN'"
 

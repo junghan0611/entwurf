@@ -16,6 +16,8 @@
 #                             core and later components still attempted
 #   S-8 omp present         → the four omp units compose (birth/MCP/tools.xdev
 #                             setting/receiver), states exist, second run idempotent
+#   S-8c codex present      → root birth remains a named FAIL while MCP/statusline
+#                             compose twice, preserve foreign config, and stay idempotent
 #   S-5 installed mode      → the installed-vs-source branch is a NAMED verdict
 #                             printed before anything else, and never reaches
 #                             the source pnpm bootstrap
@@ -27,7 +29,7 @@
 # below-floor and false-green shapes as living end-to-end evidence.
 #
 # Deterministic: no model, no network, no cost. Presence probes are pinned via
-# PI_BIN / CLAUDE_BIN / AGY_BIN / COPILOT_BIN / OMP_BIN (the same hermetic seam
+# PI_BIN / CLAUDE_BIN / AGY_BIN / COPILOT_BIN / OMP_BIN / CODEX_BIN (the same hermetic seam
 # smoke-agy-install-state
 # uses), and every write root is sandboxed: HOME, XDG roots, the pi agent dir,
 # and the dev-bin dir. The source bootstrap (`pnpm install --frozen-lockfile`)
@@ -67,7 +69,7 @@ mkdir -p "$HOME" "$PI_CODING_AGENT_DIR" "$SB/bin" "$SB/harness"
 # Presence pins: default every harness to a definitely-absent path; each cell
 # re-pins what it needs. Production leaves these unset.
 ABSENT="$SB/harness/definitely-absent"
-export PI_BIN="$ABSENT" CLAUDE_BIN="$ABSENT" AGY_BIN="$ABSENT" COPILOT_BIN="$ABSENT" OMP_BIN="$ABSENT"
+export PI_BIN="$ABSENT" CLAUDE_BIN="$ABSENT" AGY_BIN="$ABSENT" COPILOT_BIN="$ABSENT" OMP_BIN="$ABSENT" CODEX_BIN="$ABSENT"
 
 PASS=0
 ok()   { PASS=$((PASS + 1)); printf '  ok    %s\n' "$*"; }
@@ -94,7 +96,8 @@ echo "[smoke-setup-verdict] S-1 all-harness-absent setup"
 PROJ1="$SB/proj1"; mkdir -p "$PROJ1"
 seed_auth
 set +e; OUT="$(bash "$REPO_DIR/run.sh" setup "$PROJ1" 2>&1)"; RC=$?; set -e
-want "S-1: all-absent setup exits 0 (core green is still green)" "[ '$RC' -eq 0 ]"
+want "S-1: all-absent setup exits 0 with a Codex SKIP" \
+  "[ '$RC' -eq 0 ] && printf '%s' \"\$OUT\" | grep -q 'codex: SKIP'"
 want "S-1: mode is a named source-checkout branch, printed first" \
   "printf '%s' \"\$OUT\" | head -n 1 | grep -q 'mode: source checkout'"
 want "S-1: pi absent is an explicit zero-state SKIP" "printf '%s' \"\$OUT\" | grep -q 'pi: SKIP'"
@@ -112,6 +115,7 @@ want "S-1: no user-scope pi settings were created" "[ ! -e '$PI_CODING_AGENT_DIR
 want "S-1: no agy config was created" "[ ! -e '$HOME/.gemini' ]"
 want "S-1: no Copilot config/units were created" "[ ! -e '$HOME/.copilot' ]"
 want "S-1: no OMP config/units were created" "[ ! -e '$HOME/.omp' ]"
+want "S-1: no Codex config/units were created" "[ ! -e '$HOME/.codex' ]"
 want_auth_untouched "S-1"
 
 # ── S-2: pi resolvable but BELOW floor → detected FAIL, never SKIP, no writes ──
@@ -287,6 +291,88 @@ rm -rf "$HOME/.omp" "$XDG_DATA_HOME/entwurf/omp-bridge" "$XDG_DATA_HOME/entwurf/
   "$XDG_DATA_HOME/entwurf/omp-config" "$XDG_DATA_HOME/entwurf/omp-receive" \
   "$XDG_DATA_HOME/entwurf/meta-bridge-omp" "$XDG_DATA_HOME/entwurf/omp-receive"
 
+# ── S-8c: codex PRESENT but root birth ABSENT → user atoms compose, aggregate FAIL ──
+# Codex birth is deliberately NOT installed or faked green here. Its doctor owns
+# fixed system paths, so a PATH shim intercepts only that doctor and returns the
+# honest absent-prerequisite result before it can inspect or mutate the real host.
+# Every other bash invocation delegates to the real shell. CODEX_HOME and XDG data
+# remain below the fixture sandbox, while an operator-owned config exercises both
+# table preservation and status-line merging.
+echo "[smoke-setup-verdict] S-8c codex present — incomplete three-unit composition"
+PROJ8C="$SB/proj8c"; mkdir -p "$PROJ8C"
+FAKE_CODEX="$SB/harness/codex-fake"; mkdir -p "$FAKE_CODEX"
+printf '#!/usr/bin/env bash\necho "codex-cli 0.153.4"\n' > "$FAKE_CODEX/codex"
+chmod +x "$FAKE_CODEX/codex"
+CODEX_HOME_SANDBOX="$HOME/.codex"
+mkdir -p "$CODEX_HOME_SANDBOX"
+cat > "$CODEX_HOME_SANDBOX/config.toml" <<'TOML'
+model = "operator-model"
+
+[projects."/operator/keep"]
+trust_level = "trusted"
+
+[mcp_servers.operator-owned]
+command = "/operator/bin/server"
+args = ["--keep"]
+
+[tui]
+status_line = ["model-with-reasoning"]
+TOML
+REAL_BASH="$(command -v bash)"
+CODEX_BASH_SHIM="$SB/harness/codex-bash-shim"; mkdir -p "$CODEX_BASH_SHIM"
+CODEX_BIRTH_STUB_LOG="$SB/codex-birth-prerequisite.log"
+cat > "$CODEX_BASH_SHIM/bash" <<SH
+#!$REAL_BASH
+case "\${1:-}" in
+  scripts/codex-birth-doctor.sh|*/scripts/codex-birth-doctor.sh)
+    printf 'doctor\t%s\n' "\$*" >> "\${CODEX_BIRTH_STUB_LOG:?}"
+    exit 1
+    ;;
+  scripts/codex-birth-install.sh|*/scripts/codex-birth-install.sh|scripts/codex-birth-uninstall.sh|*/scripts/codex-birth-uninstall.sh)
+    printf 'unsafe-root-mutation\t%s\n' "\$*" >> "\${CODEX_BIRTH_STUB_LOG:?}"
+    exit 99
+    ;;
+esac
+exec "$REAL_BASH" "\$@"
+SH
+chmod +x "$CODEX_BASH_SHIM/bash"
+seed_auth
+set +e
+OUT="$(CODEX_BIN="$FAKE_CODEX/codex" CODEX_HOME="$CODEX_HOME_SANDBOX" CODEX_BIRTH_STUB_LOG="$CODEX_BIRTH_STUB_LOG" PATH="$CODEX_BASH_SHIM:$FAKE_CODEX:$PATH" "$REAL_BASH" "$REPO_DIR/run.sh" setup "$PROJ8C" 2>&1)"
+RC=$?
+set -e
+want "S-8c: detected-incomplete Codex is a named nonzero result, never an absent SKIP [QK:CODEX-SETUP-BIRTH-COSMETIC-PASS]" \
+  "[ '$RC' -ne 0 ] && printf '%s' \"\$OUT\" | grep -q 'codex-birth: FAIL' && ! printf '%s' \"\$OUT\" | grep -q 'codex: SKIP'"
+want "S-8c: both user-owned Codex atoms still compose independently as PASS [QK:CODEX-SETUP-BIRTH-INDEPENDENT]" \
+  "printf '%s' \"\$OUT\" | grep -q 'codex-mcp: PASS' && printf '%s' \"\$OUT\" | grep -q 'codex-statusline: PASS'"
+want "S-8c: summary is NON-GREEN and attributes only the absent root birth prerequisite" \
+  "printf '%s' \"\$OUT\" | grep -q 'NON-GREEN (FAIL: codex-birth)' && ! printf '%s' \"\$OUT\" | grep -q 'result: green'"
+want "S-8c: root birth stayed absent — only its doctor was refused before fixed host paths were touched" \
+  "[ \"\$(wc -l < '$CODEX_BIRTH_STUB_LOG')\" -eq 1 ] && grep -q '^doctor	.*scripts/codex-birth-doctor.sh$' '$CODEX_BIRTH_STUB_LOG' && ! grep -q '^unsafe-root-mutation' '$CODEX_BIRTH_STUB_LOG'"
+CODEX_MCP_STATE="$XDG_DATA_HOME/entwurf/codex-mcp/install-state.json"
+CODEX_STATUSLINE_STATE="$XDG_DATA_HOME/entwurf/codex-statusline/install-state.json"
+want "S-8c: both user atoms wrote their package-owned install states inside the sandbox" \
+  "[ -f '$CODEX_MCP_STATE' ] && [ -f '$CODEX_STATUSLINE_STATE' ] && grep -q '\"atom\": \"codex-mcp\"' '$CODEX_MCP_STATE' && grep -q '\"atom\": \"codex-statusline\"' '$CODEX_STATUSLINE_STATE'"
+want "S-8c: MCP and visible-identity atoms landed in the sandbox Codex config" \
+  "grep -q '\\[mcp_servers\\.entwurf-bridge\\]' '$CODEX_HOME_SANDBOX/config.toml' && grep -q 'status_line = \\[\"thread-title\", \"model-with-reasoning\"\\]' '$CODEX_HOME_SANDBOX/config.toml'"
+want "S-8c: unrelated operator config survives both atom writers" \
+  "grep -q 'model = \"operator-model\"' '$CODEX_HOME_SANDBOX/config.toml' && grep -q '\\[mcp_servers\\.operator-owned\\]' '$CODEX_HOME_SANDBOX/config.toml' && grep -q 'command = \"/operator/bin/server\"' '$CODEX_HOME_SANDBOX/config.toml'"
+CODEX_CONFIG_AFTER="$(sha256sum "$CODEX_HOME_SANDBOX/config.toml" | cut -d' ' -f1)"
+CODEX_MCP_STATE_AFTER="$(sha256sum "$CODEX_MCP_STATE" | cut -d' ' -f1)"
+CODEX_STATUSLINE_STATE_AFTER="$(sha256sum "$CODEX_STATUSLINE_STATE" | cut -d' ' -f1)"
+set +e
+OUT2="$(CODEX_BIN="$FAKE_CODEX/codex" CODEX_HOME="$CODEX_HOME_SANDBOX" CODEX_BIRTH_STUB_LOG="$CODEX_BIRTH_STUB_LOG" PATH="$CODEX_BASH_SHIM:$FAKE_CODEX:$PATH" "$REAL_BASH" "$REPO_DIR/run.sh" setup "$PROJ8C" 2>&1)"
+RC2=$?
+set -e
+want "S-8c: second setup still reports root birth FAIL and both user atoms PASS" \
+  "[ '$RC2' -ne 0 ] && printf '%s' \"\$OUT2\" | grep -q 'codex-birth: FAIL' && printf '%s' \"\$OUT2\" | grep -q 'codex-mcp: PASS' && printf '%s' \"\$OUT2\" | grep -q 'codex-statusline: PASS'"
+want "S-8c: second setup is byte-idempotent for config and both ownership receipts" \
+  "[ \"\$(sha256sum '$CODEX_HOME_SANDBOX/config.toml' | cut -d' ' -f1)\" = '$CODEX_CONFIG_AFTER' ] && [ \"\$(sha256sum '$CODEX_MCP_STATE' | cut -d' ' -f1)\" = '$CODEX_MCP_STATE_AFTER' ] && [ \"\$(sha256sum '$CODEX_STATUSLINE_STATE' | cut -d' ' -f1)\" = '$CODEX_STATUSLINE_STATE_AFTER' ]"
+want "S-8c: second setup rechecks rather than faking or attempting to mutate the root prerequisite" \
+  "[ \"\$(wc -l < '$CODEX_BIRTH_STUB_LOG')\" -eq 2 ] && ! grep -q '^unsafe-root-mutation' '$CODEX_BIRTH_STUB_LOG' && ! printf '%s' \"\$OUT2\" | grep -q 'codex-birth: PASS'"
+want_auth_untouched "S-8c"
+rm -rf "$HOME/.codex" "$XDG_DATA_HOME/entwurf/codex-mcp" "$XDG_DATA_HOME/entwurf/codex-statusline"
+
 # ── S-9: rail certification is a SEPARATE axis from install success (#78 D1) ──
 # The 0.20.0 macOS lane opened the installers to Darwin (meta-bridge-install.sh's
 # platform gate became its own python3/node dependency instead of the platform
@@ -379,8 +465,8 @@ PROJ9C="$SB/proj9c"; mkdir -p "$PROJ9C"
 seed_auth
 set +e; OUT="$(PATH="$FAKE_UNAME:$PATH" bash "$REPO_DIR/run.sh" setup "$PROJ9C" 2>&1)"; RC=$?; set -e
 want "S-9c: a harness-free uncertified host still exits 0" "[ '$RC' -eq 0 ]"
-want "S-9c: all five harness probes are still zero-state SKIPs" \
-  "printf '%s' \"\$OUT\" | grep -q 'pi: SKIP' && printf '%s' \"\$OUT\" | grep -q 'claude: SKIP' && printf '%s' \"\$OUT\" | grep -q 'agy: SKIP' && printf '%s' \"\$OUT\" | grep -q 'copilot: SKIP' && printf '%s' \"\$OUT\" | grep -q 'omp: SKIP'"
+want "S-9c: all six harness probes are still zero-state SKIPs" \
+  "printf '%s' \"\$OUT\" | grep -q 'pi: SKIP' && printf '%s' \"\$OUT\" | grep -q 'claude: SKIP' && printf '%s' \"\$OUT\" | grep -q 'agy: SKIP' && printf '%s' \"\$OUT\" | grep -q 'copilot: SKIP' && printf '%s' \"\$OUT\" | grep -q 'omp: SKIP' && printf '%s' \"\$OUT\" | grep -q 'codex: SKIP'"
 want "S-9c: core still PASSes and the computed summary is still green" \
   "printf '%s' \"\$OUT\" | grep -q 'core: PASS' && printf '%s' \"\$OUT\" | grep -q 'result: green (computed from the component outcomes above)'"
 want "S-9c: an absent harness is never given a rail verdict it did not earn" \
