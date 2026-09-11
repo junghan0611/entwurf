@@ -27,8 +27,14 @@ import {
 	makeProductionEntwurfV2Deps,
 	type ProductionEntwurfV2Opts,
 } from "../pi-extensions/lib/entwurf-v2-production.ts";
-import { runEntwurfV2 } from "../pi-extensions/lib/entwurf-v2-runner.ts";
+import {
+	type EntwurfV2RunDeps,
+	type EntwurfV2RunResult,
+	executeDispatch,
+	runEntwurfV2,
+} from "../pi-extensions/lib/entwurf-v2-runner.ts";
 import type { ControlSocketPlan, MetaMailboxPlan } from "../pi-extensions/lib/entwurf-v2-send.ts";
+import { formatMetaMailboxBody, type MailboxSenderEnvelope } from "../pi-extensions/lib/meta-mailbox-body.ts";
 import type { MetaIdentity, MetaReceiverMarker, MetaSenderMarker } from "../pi-extensions/lib/meta-session.ts";
 import type { NativePushAdapter, NativePushProbeResult } from "../pi-extensions/lib/native-push/adapter.ts";
 import type { TargetSocketInspection } from "../pi-extensions/lib/socket-discovery.ts";
@@ -43,6 +49,13 @@ function ok(label: string, cond: boolean): void {
 const GID = "20260613T100000-aaaaaa";
 /** The garden a switched-away owner serves instead (#101). */
 const OTHER_GID = "20260613T100000-bbbbbb";
+/** The one trusted sender every rail in this gate renders from. */
+const SENDER: MailboxSenderEnvelope = {
+	sessionId: "self",
+	agentId: "pi/x",
+	cwd: "/cwd",
+	timestamp: "2026-06-13T00:00:00.000Z",
+};
 const LOCK_DIR = "/fake/locks";
 const SESSIONS_DIR = "/fake/sessions";
 const MAILBOX_DIR = "/fake/mailbox";
@@ -133,6 +146,35 @@ interface Spies {
 	nativePushResolve: string[];
 	nativePushProbe: { conv: string }[];
 	nativePushSend: { route: string; conv: string; content: string }[];
+	/** every `senderProvider()` call — ONE provider feeds all three rails, so a hand that
+	 * resolves the envelope twice (or not at all) is visible here. */
+	senderCalls: number[];
+	/** ORDERED trace of the native-push hand's observable steps. Counts alone cannot see
+	 * ORDER, and order is the whole safety claim: the envelope must be resolved BEFORE the
+	 * adapter is touched, so a provider throw leaves the target's conversation untouched
+	 * rather than half-delivered. `runInTwoPhases` marks where the execute phase starts. */
+	events: ("sender" | "resolve" | "probe" | "send")[];
+}
+
+/**
+ * `runEntwurfV2` split at its own seam so the EXECUTE phase has a MEASURED boundary. The decide
+ * phase legitimately resolves the adapter and probes (봉인 4: one adapter for both hands), so an
+ * order claim about the send hand has to start after decide returns — but the boundary must be
+ * the index recorded between the two calls, never something inferred from the event VALUES. An
+ * earlier version sliced after the last `probe`, which a regression could defeat: an executor
+ * that resolved and probed before the sender would make its own probe the "last" one and hide
+ * the illegal prefix it just produced. This records the length instead, so ANY extra execute-side
+ * resolve or probe ahead of the sender stays inside the slice and fails.
+ */
+async function runInTwoPhases(
+	input: DispatchInput,
+	deps: EntwurfV2RunDeps,
+	spies: Spies,
+): Promise<{ result: EntwurfV2RunResult; executeEvents: string[] }> {
+	const decision = await deps.decide(input);
+	const executeStart = spies.events.length;
+	const result = await executeDispatch(decision, deps.executor);
+	return { result, executeEvents: spies.events.slice(executeStart) };
 }
 
 /** Build a factory whose every leaf IO is a spy. `over` lets a case shape the decision
@@ -146,6 +188,8 @@ function makeSpiedFactory(over: {
 	classifyDead?: boolean;
 	/** #50 C3 — a caller with no authoritative sender (senderProvider → undefined). */
 	noSender?: boolean;
+	/** #95 — the envelope source itself fails: the send must reject with NOTHING injected. */
+	senderThrows?: boolean;
 	/** the native-push adapter probe result (only reached on a native-push backend). */
 	nativePushProbe?: NativePushProbeResult;
 	/** SE-2 2d-3 — the target's receiver presence marker: "active" (matches identity,
@@ -166,12 +210,16 @@ function makeSpiedFactory(over: {
 		nativePushResolve: [],
 		nativePushProbe: [],
 		nativePushSend: [],
+		senderCalls: [],
+		events: [],
 	};
 	const opts: ProductionEntwurfV2Opts = {
-		senderProvider: () =>
-			over.noSender
-				? undefined
-				: { sessionId: "self", agentId: "pi/x", cwd: "/cwd", timestamp: "2026-06-13T00:00:00.000Z" },
+		senderProvider: () => {
+			spies.senderCalls.push(spies.senderCalls.length + 1);
+			spies.events.push("sender");
+			if (over.senderThrows) throw new Error("fake: sender envelope unavailable");
+			return over.noSender ? undefined : SENDER;
+		},
 		lockDir: LOCK_DIR,
 		sessionsDir: SESSIONS_DIR,
 		mailboxDir: MAILBOX_DIR,
@@ -231,16 +279,19 @@ function makeSpiedFactory(over: {
 			// two hands never resolve different adapters.
 			resolveNativePushAdapter: (backend: string): NativePushAdapter => {
 				spies.nativePushResolve.push(backend);
+				spies.events.push("resolve");
 				return {
 					id: backend as NativePushAdapter["id"],
 					retriable: backend === "antigravity",
 					async probe(conv) {
 						spies.nativePushProbe.push({ conv });
+						spies.events.push("probe");
 						return over.nativePushProbe ?? { status: "dead", reason: "fake: no native-push probe configured" };
 					},
 					async send(route, conv, content) {
 						const routeLabel = route.backend === "antigravity" ? route.lsAddress : route.socketPath;
 						spies.nativePushSend.push({ route: routeLabel, conv, content });
+						spies.events.push("send");
 					},
 				};
 			},
@@ -286,7 +337,7 @@ async function main(): Promise<void> {
 		ok("A3: decider probed the native-push adapter once (decide side)", spies.nativePushProbe.length === 1);
 		ok("A3: executor sent via the native-push adapter once (execute side)", spies.nativePushSend.length === 1);
 		ok("A3: send used the DECIDER-probed route", spies.nativePushSend[0]?.route === "127.0.0.1:5599");
-		ok("A3: send carried the dispatch message", spies.nativePushSend[0]?.content === "hi agy");
+		ok("A3: send carried the dispatch message", spies.nativePushSend[0]?.content.includes("hi agy") === true);
 		ok(
 			"A3: BOTH hands resolved the SAME adapter (for 'antigravity')",
 			spies.nativePushResolve.length === 2 && spies.nativePushResolve.every((b) => b === "antigravity"),
@@ -320,6 +371,119 @@ async function main(): Promise<void> {
 			spies.acquire.length === 0 && spies.enqueue.length === 0,
 		);
 	}
+	// ── A3d (#95): the native-push rail injects the MAILBOX-SERIALIZED sender envelope ──
+	// Measured in the #95 A LIVE run: a nonce-only fresh-call callback direct-injected into a
+	// Codex thread arrived as bare text, so the receiving citizen could not name who called it
+	// and the callback was uncorrelatable. Direct injection has neither the control socket's RPC
+	// framing nor a mailbox file, so the envelope must ride IN the body — the same bytes
+	// `formatMetaMailboxBody` gives the mailbox rail. ONE rail: both native-push backends, no
+	// per-backend branch.
+	{
+		const route = { backend: "antigravity", lsAddress: "127.0.0.1:5599" } as const;
+		const { deps, spies } = makeSpiedFactory({
+			backend: "antigravity",
+			nativePushProbe: { status: "alive", route },
+		});
+		const { result, executeEvents } = await runInTwoPhases(
+			{ target: GID, intent: "fire-and-forget", message: "hi agy", wantsReply: true },
+			deps,
+			spies,
+		);
+		// WIRING FIRST, and it is its own claim: the factory must hand the native-push hand the
+		// SAME `opts.senderProvider` the mailbox hand gets. A render that is reachable but never
+		// fed falls back to raw silently, so "the provider was consulted exactly once on this
+		// rail" is asserted BEFORE the body is compared — that way a dropped wiring fails here
+		// at its own QK instead of borrowing the envelope claim's failure.
+		ok(
+			"[QK:NATIVE-PUSH-SENDER-PROVIDER-WIRING] the factory fed the native-push hand its one senderProvider, exactly once",
+			result.kind === "executed" && spies.senderCalls.length === 1,
+		);
+		ok(
+			"[QK:NATIVE-PUSH-SENDER-ENVELOPE] agy direct injection carries the mailbox-serialized trusted envelope",
+			spies.nativePushSend[0]?.content === formatMetaMailboxBody(SENDER, "hi agy", true),
+		);
+		ok(
+			"A3d: the enveloped body is NOT the raw plan message (an envelope was actually added)",
+			spies.nativePushSend[0]?.content !== "hi agy",
+		);
+		ok(
+			"A3d: wants_reply rides the envelope on this rail",
+			spies.nativePushSend[0]?.content.includes("wants reply: yes") === true,
+		);
+		// ORDER, not counts. The envelope must be resolved BEFORE the adapter is resolved or
+		// touched. Counts would be identical if the hand resolved the adapter first and the
+		// provider second — but then a provider throw would land after the adapter was already
+		// in hand, and the safety claim ("a failing envelope source injects nothing") would
+		// rest on luck rather than sequence.
+		ok(
+			"[QK:NATIVE-PUSH-SENDER-BEFORE-ADAPTER] the send hand resolves the envelope, THEN the adapter, THEN sends",
+			JSON.stringify(executeEvents) === JSON.stringify(["sender", "resolve", "send"]),
+		);
+	}
+	{
+		// Same rail, other backend — codex renders identically. A backend branch would show here.
+		const route = {
+			backend: "codex",
+			socketPath: "/home/operator/.codex/app-server-control/app-server-control.sock",
+		} as const;
+		const { deps, spies } = makeSpiedFactory({ backend: "codex", nativePushProbe: { status: "alive", route } });
+		const result = await runEntwurfV2({ target: GID, intent: "fire-and-forget", message: "hi codex" }, deps);
+		ok(
+			"A3d: codex direct injection carries the SAME mailbox-serialized envelope (one rail, no backend branch)",
+			result.kind === "executed" &&
+				spies.nativePushSend[0]?.content === formatMetaMailboxBody(SENDER, "hi codex", false),
+		);
+		ok("A3d: the codex body is NOT the raw plan message either", spies.nativePushSend[0]?.content !== "hi codex");
+		ok("A3d: codex resolved the envelope EXACTLY once", spies.senderCalls.length === 1);
+	}
+	{
+		// #50 C3 parity: no authoritative sender → the raw message is preserved, never a
+		// fabricated envelope. This is the same fallback the mailbox hand has.
+		const { deps, spies } = makeSpiedFactory({
+			backend: "codex",
+			noSender: true,
+			nativePushProbe: {
+				status: "alive",
+				route: { backend: "codex", socketPath: "/home/operator/.codex/app-server-control/app-server-control.sock" },
+			},
+		});
+		const result = await runEntwurfV2({ target: GID, intent: "fire-and-forget", message: "raw only" }, deps);
+		ok(
+			"A3d: no authoritative sender → the RAW message is injected, no fabricated envelope",
+			result.kind === "executed" && spies.nativePushSend[0]?.content === "raw only",
+		);
+	}
+	{
+		// A throwing provider must reject the send with NOTHING injected — a half-delivered
+		// conversation is worse than a rejected dispatch. No new reject reason, no fallback.
+		const { deps, spies } = makeSpiedFactory({
+			backend: "codex",
+			senderThrows: true,
+			nativePushProbe: {
+				status: "alive",
+				route: { backend: "codex", socketPath: "/home/operator/.codex/app-server-control/app-server-control.sock" },
+			},
+		});
+		const { result, executeEvents } = await runInTwoPhases(
+			{ target: GID, intent: "fire-and-forget", message: "never sent" },
+			deps,
+			spies,
+		);
+		ok(
+			"A3d: a throwing sender provider fails the dispatch EXACTLY as execution-failed",
+			result.kind === "execution-failed",
+		);
+		ok("A3d: a throwing sender provider called its provider exactly once", spies.senderCalls.length === 1);
+		ok("A3d: a throwing sender provider never resolved the adapter", executeEvents.includes("resolve") === false);
+		ok("A3d: a throwing sender provider injected NOTHING", spies.nativePushSend.length === 0);
+		// The whole execute phase is ONE event: the envelope source was asked, it failed, and the
+		// target's conversation was never reached. No partial delivery, no adapter in hand.
+		ok(
+			"A3d: the failed execute phase is exactly ['sender'] — nothing downstream ran",
+			JSON.stringify(executeEvents) === JSON.stringify(["sender"]),
+		);
+	}
+
 	{
 		// antigravity + dead probe → reject native-push-target-dead, NO send.
 		const { deps, spies } = makeSpiedFactory({

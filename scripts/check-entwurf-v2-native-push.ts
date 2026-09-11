@@ -118,6 +118,16 @@ async function main(): Promise<void> {
 			"retry: 2nd send used the RE-DISCOVERED route (not the stale one)",
 			agyAddress(sends[1]?.route) === "127.0.0.1:5601",
 		);
+		// The retry replays CONTENT, never re-derives it. The caller hands this leaf one already
+		// rendered string (the #95 sender envelope is rendered ONCE, upstream, with its own
+		// timestamp), so the only honest retry is the same bytes — a second render, or any
+		// per-attempt decoration here, would deliver a body that disagrees with the first
+		// attempt the target may already have accepted. Asserted at this leaf so the claim holds
+		// without coupling sender rendering into the adapter hand.
+		ok(
+			"[QK:NATIVE-PUSH-RETRY-BYTE-IDENTITY] the retry replays byte-identical content, never a re-derived body",
+			sends[0]?.content === sends[1]?.content,
+		);
 	}
 
 	// ── fail → re-probe alive → re-send FAIL: throws (fail-loud, no 3rd attempt) ──

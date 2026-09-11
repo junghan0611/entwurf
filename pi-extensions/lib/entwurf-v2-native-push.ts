@@ -17,6 +17,7 @@
 
 import type { ExecutionPlan } from "./entwurf-v2-decider.ts";
 import type { LockClaim } from "./entwurf-v2-lock.ts";
+import { formatMetaMailboxBody, type MailboxSenderEnvelope } from "./meta-mailbox-body.ts";
 import { type NativePushAdapter, type NativePushRoute, resolveNativePushAdapter } from "./native-push/adapter.ts";
 
 /** The native-push slice of the ExecutionPlan union (the decider plants it, this consumes it). */
@@ -62,6 +63,11 @@ export async function deliverViaNativePush(
  *  registry). Injected so the 5d gate proves the wiring with a fake adapter. */
 export interface NativePushSendDeps {
 	resolveAdapter?: (backend: string) => NativePushAdapter;
+	/** The SAME provider the mailbox hand receives (`makeProductionEntwurfV2Deps` passes one
+	 * `opts.senderProvider` to both). When it yields an envelope, the injected content is the
+	 * mailbox-serialized body — see the render note on `makeNativePushSend`. Absent/undefined
+	 * preserves the raw `plan.message`. */
+	senderProvider?: () => MailboxSenderEnvelope | undefined;
 }
 
 /**
@@ -69,14 +75,29 @@ export interface NativePushSendDeps {
  * `lock` entirely (a native-push plan is lock-free, 봉인 4), resolves the adapter, then applies
  * that adapter's retry policy. A delivery throw surfaces as a REJECTED promise (the runner's
  * try/catch maps it to execution-failed).
+ *
+ * SENDER ENVELOPE (measured #95). Direct injection used to hand the adapter the raw
+ * `plan.message`, so a native-push citizen received a body with no sender. The #95 A LIVE run
+ * measured what that costs: a fresh Pi's nonce-only callback landed in the Codex thread as
+ * bare text, and Codex could not name who called it — the callback was uncorrelatable. The
+ * control-socket rail carries the envelope in its RPC framing and the mailbox rail serializes
+ * it into the body; this rail has neither, so it renders the SAME `formatMetaMailboxBody` SSOT
+ * the mailbox uses. Rendered ONCE, before `deliverViaNativePush`, so an Antigravity re-probe
+ * retry replays byte-identical content (including its timestamp) instead of a second render.
+ * The adapter stays a dumb pipe — its signature is unchanged and it never learns about senders.
  */
 export function makeNativePushSend(
 	deps: NativePushSendDeps = {},
 ): (plan: NativePushPlan, lock: LockClaim | null) => Promise<NativePushSendResult> {
 	const resolveAdapter = deps.resolveAdapter ?? resolveNativePushAdapter;
+	const senderProvider = deps.senderProvider;
 	// `_lock` is named for the hand contract but NEVER read — native-push owns/releases no lock.
 	return async (plan: NativePushPlan, _lock: LockClaim | null): Promise<NativePushSendResult> => {
+		// Resolve the sender BEFORE the adapter is resolved or touched: a provider throw must
+		// reject this send with nothing injected, not leave a half-delivered conversation.
+		const sender = senderProvider?.();
+		const content = sender ? formatMetaMailboxBody(sender, plan.message, plan.wantsReply) : plan.message;
 		const adapter = resolveAdapter(plan.backend);
-		return deliverViaNativePush(adapter, plan.route, plan.nativeSessionId, plan.message);
+		return deliverViaNativePush(adapter, plan.route, plan.nativeSessionId, content);
 	};
 }

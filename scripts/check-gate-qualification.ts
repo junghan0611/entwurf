@@ -859,7 +859,7 @@ let manifestCount: number;
 		"self-address": 5,
 		"setup-verdict": 14,
 		"source-install": 2,
-		"v2-surface": 7,
+		"v2-surface": 11,
 		"v2-visible-resume": 17,
 	};
 	const laneTally: Record<string, number> = {};

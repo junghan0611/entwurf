@@ -198,6 +198,16 @@ or dead as defined by the probe result; no mailbox fallback exists. Delivery use
 measured one-shot `codex queue` command. Unlike Antigravity, Codex delivery has **zero
 retry**: losing stdout after vendor acceptance must not replay the user's message.
 
+Direct injection carries the **mailbox-serialized trusted sender envelope**, not the raw
+message. This rail has neither the control socket's RPC framing nor a mailbox file, so the
+envelope rides in the body through the same `formatMetaMailboxBody` SSOT the mailbox rail
+uses — one rail for both native-push backends, no per-backend branch. It is rendered once,
+before delivery, so Antigravity's one permitted re-probe retry replays byte-identical
+content. A caller with no authoritative sender still injects the raw message; an envelope is
+never fabricated. #95 measured the cost of the old raw behaviour: a fresh sibling's
+nonce-only callback landed in a Codex thread as bare text, so the Codex citizen could not
+name its caller and the callback was uncorrelatable.
+
 Visible fresh runs:
 
 ```text
@@ -220,7 +230,8 @@ public MCP `entwurf_v2` call woke its visible TUI; a real authenticated request 
 candidate.
 
 Current amendment scope is the terminal parser, explicit env-name boundary, setup
-acceptance, preflight safety, and clause-7 composition. Focused laptop work does not
+acceptance, preflight safety, clause-7 composition, and the native-push trusted
+sender-envelope amendment (direct injection carries the mailbox-serialized envelope). Focused laptop work does not
 close the deep gates. Oracle must still run qualification and the frozen full floor,
 then accept the actually installed operator-owned units and vendor trust receipt with the required
 real `Pi → visible Codex → visible Pi` lifecycle before the first release. Release-gate

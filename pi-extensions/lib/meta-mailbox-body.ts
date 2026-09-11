@@ -1,26 +1,33 @@
 /**
  * meta-mailbox-body — the SINGLE source for rendering an entwurf message as a
- * meta-bridge mailbox body. Both transports that can deliver to a garden citizen
- * with no live control socket use this:
+ * meta-bridge mailbox body. Every transport that can deliver to a garden citizen
+ * with no live control socket uses this:
  *   - the MCP bridge entwurf_v2 (mcp/entwurf-bridge) — external/Claude-host sends
  *   - the pi-native entwurf_v2 (pi-extensions/entwurf-control.ts) — pi-session sends
+ *   - the native-push rail (pi-extensions/lib/entwurf-v2-native-push.ts) — direct
+ *     injection into an Antigravity conversation or a loaded Codex thread. Its
+ *     THIRD consumer, added after the #95 A LIVE run measured what an envelope-less
+ *     injection costs: a nonce-only callback arrived in a Codex thread as bare text
+ *     and the receiving citizen could not name who had called it.
  *
  * The control-socket path carries the sender envelope inside its RPC framing; the
- * mailbox path is just a file, so the envelope must be SERIALIZED INTO the body —
- * else a receiver reading entwurf_inbox_read would not know who sent it, whether
- * the sender is replyable (and at which sessionId), or whether a reply was wanted.
- * The render mirrors the live "[entwurf received ⟵]" header so a transcript reads
- * the same whether the message arrived over a socket or a mailbox.
+ * mailbox path is just a file and direct injection is just a string, so for both the
+ * envelope must be SERIALIZED INTO the body —
+ * else a receiver — reading entwurf_inbox_read, or reading an injected turn in its own
+ * conversation — would not know who sent it, whether the sender is replyable (and at
+ * which sessionId), or whether a reply was wanted. The render mirrors the live
+ * "[entwurf received ⟵]" header so a transcript reads the same whether the message
+ * arrived over a socket, a mailbox, or direct injection.
  *
  * No filesystem/network IO and no mutation — the only ambient read is
  * process.env.HOME for display abbreviation (so not strictly referentially pure,
- * but deterministic per environment). Extracted so the two senders cannot drift
- * in how a mailbox message presents who-sent-it — the field that round-trips
- * garden-id replies.
+ * but deterministic per environment). Extracted so the three consumers cannot
+ * drift in how a delivered message presents who-sent-it — the field that
+ * round-trips garden-id replies.
  */
 
-/** The fields a mailbox body needs from a sender. Structurally compatible with
- * the SenderEnvelope of both entwurf_v2 surfaces. */
+/** The fields a sender-envelope presentation needs from a sender. Structurally
+ * compatible with the SenderEnvelope of both entwurf_v2 surfaces. */
 export interface MailboxSenderEnvelope {
 	sessionId: string;
 	agentId: string;
@@ -53,7 +60,9 @@ function formatKstTimestamp(iso: string): string {
 }
 
 /**
- * Render the full mailbox body: header envelope + separator + message. A
+ * Render the full body: header envelope + separator + message. The mailbox writes this
+ * into its message file and the native-push rail injects it directly into a live
+ * conversation; both present the sender identically. A
  * replyable sender (pi-session, or a trusted meta-session) advertises its
  * sessionId as the reply address; a non-replyable sender says so WITHOUT
  * losing its origin — a record-backed meta-session that is currently inactive

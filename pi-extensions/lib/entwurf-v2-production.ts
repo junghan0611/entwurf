@@ -137,8 +137,9 @@ export interface ProductionEntwurfV2Seams {
 export interface ProductionEntwurfV2Opts {
 	/** Built at the wiring site from `buildLocalSenderEnvelope(ctx)`, decorated with its
 	 * HONEST pi-session replyability (SE-1 2e-a: `replyable` reflects whether the canonical
-	 * control socket actually exists, not a hardcoded true). ONE provider feeds the
-	 * control-socket RPC sender AND the meta-mailbox body sender (they share the envelope). */
+	 * control socket actually exists, not a hardcoded true). ONE provider feeds ALL THREE
+	 * rails — the control-socket RPC sender, the meta-mailbox body sender, and the
+	 * native-push injected body sender — so no rail can present a different who-sent-it. */
 	senderProvider: () => SenderEnvelope | undefined;
 	lockDir?: string;
 	sessionsDir?: string;
@@ -339,7 +340,13 @@ export function makeProductionEntwurfV2Deps(opts: ProductionEntwurfV2Opts): Entw
 		sendMailbox: (plan, _lock) => sendViaMailbox(plan as MetaMailboxPlan, _lock as LockClaim),
 		// native-push (봉인 4): the SAME injected adapter resolver drives the executor send,
 		// so the decider's probe and the delivery use one adapter. Lock-free (lock ignored).
-		sendNativePush: makeNativePushSend({ resolveAdapter: io.resolveNativePushAdapter }),
+		// It also receives the SAME `opts.senderProvider` the mailbox hand got — one envelope
+		// source for all three rails, so a native-push citizen can name its sender exactly as
+		// a mailbox citizen does (#95: an envelope-less direct injection is uncorrelatable).
+		sendNativePush: makeNativePushSend({
+			resolveAdapter: io.resolveNativePushAdapter,
+			senderProvider: opts.senderProvider,
+		}),
 	};
 
 	return {

@@ -133,6 +133,58 @@
 			"timeoutSeconds": 60,
 			"signature": "[QK:V2SURF-DESC-FITS-HOST-CAP]",
 			"signatureSource": "scripts/check-entwurf-v2-surface.ts"
+		},
+		{
+			"claim": "NATIVE-PUSH-SENDER-ENVELOPE",
+			"title": "native-push direct injection reverts to the raw plan message, so a directly-injected citizen receives a body with no sender envelope and cannot name who called it",
+			"subject": "pi-extensions/lib/entwurf-v2-native-push.ts",
+			"find": [
+				"\t\tconst content = sender ? formatMetaMailboxBody(sender, plan.message, plan.wantsReply) : plan.message;"
+			],
+			"replace": ["\t\tconst content = plan.message;"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-production"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:NATIVE-PUSH-SENDER-ENVELOPE]",
+			"signatureSource": "scripts/check-entwurf-v2-production.ts"
+		},
+		{
+			"claim": "NATIVE-PUSH-SENDER-PROVIDER-WIRING",
+			"title": "the production factory stops handing its one senderProvider to the native-push hand, so the render is reachable but never fed and every direct injection silently falls back to raw",
+			"subject": "pi-extensions/lib/entwurf-v2-production.ts",
+			"find": [
+				"\t\tsendNativePush: makeNativePushSend({\n\t\t\tresolveAdapter: io.resolveNativePushAdapter,\n\t\t\tsenderProvider: opts.senderProvider,\n\t\t}),"
+			],
+			"replace": ["\t\tsendNativePush: makeNativePushSend({ resolveAdapter: io.resolveNativePushAdapter }),"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-production"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:NATIVE-PUSH-SENDER-PROVIDER-WIRING]",
+			"signatureSource": "scripts/check-entwurf-v2-production.ts"
+		},
+		{
+			"claim": "NATIVE-PUSH-SENDER-BEFORE-ADAPTER",
+			"title": "the send hand resolves the native-push adapter before the sender envelope, so a failing envelope source fails with the target's adapter already in hand instead of before anything was touched",
+			"subject": "pi-extensions/lib/entwurf-v2-native-push.ts",
+			"find": [
+				"\t\tconst sender = senderProvider?.();\n\t\tconst content = sender ? formatMetaMailboxBody(sender, plan.message, plan.wantsReply) : plan.message;\n\t\tconst adapter = resolveAdapter(plan.backend);"
+			],
+			"replace": [
+				"\t\tconst adapter = resolveAdapter(plan.backend);\n\t\tconst sender = senderProvider?.();\n\t\tconst content = sender ? formatMetaMailboxBody(sender, plan.message, plan.wantsReply) : plan.message;"
+			],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-production"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:NATIVE-PUSH-SENDER-BEFORE-ADAPTER]",
+			"signatureSource": "scripts/check-entwurf-v2-production.ts"
+		},
+		{
+			"claim": "NATIVE-PUSH-RETRY-BYTE-IDENTITY",
+			"title": "the one permitted retry decorates the replayed body, so the second attempt delivers bytes that disagree with the first attempt the target may already have accepted",
+			"subject": "pi-extensions/lib/entwurf-v2-native-push.ts",
+			"find": ["\t\tawait adapter.send(reprobe.route, nativeSessionId, content);"],
+			"replace": ["\t\tawait adapter.send(reprobe.route, nativeSessionId, `${content} (retry)`);"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-native-push"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:NATIVE-PUSH-RETRY-BYTE-IDENTITY]",
+			"signatureSource": "scripts/check-entwurf-v2-native-push.ts"
 		}
 	]
 }
