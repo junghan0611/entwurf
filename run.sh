@@ -1972,7 +1972,7 @@ assert.equal(peerDepTui, expectedPeer,
 // read, and sat two bumps stale (`>=0.84.3 <0.85` at a 0.85.1 pin) precisely
 // because it was outside this list. Its declaration is a plain range, so the
 // range scan below binds it — no new PROSE_DECL is needed for it.
-const BASELINE_DOCS = ['AGENTS.md', 'README.md', 'ROADMAP.md', 'docs/setup-clean-host.md', 'demo/README.md', 'VERIFY.md'];
+const BASELINE_DOCS = ['README.md', 'ROADMAP.md', 'docs/setup-clean-host.md', 'demo/README.md', 'VERIFY.md'];
 let rangeDecls = 0, exactDecls = 0;
 for (const file of BASELINE_DOCS) {
   const text = readFileSync(file, 'utf8');
@@ -1997,7 +1997,6 @@ const PROSE_DECLS = [
   ['demo/README.md', /current floor (\d+\.\d+\.\d+)/, 'current floor <version>'],
   ['ROADMAP.md', /\bpi (\d+\.\d+\.\d+) fence\b/, 'pi <version> fence'],
   ['ROADMAP.md', /floor = \*\*(\d+\.\d+\.\d+)\*\*/, 'floor = **<version>**'],
-  ['AGENTS.md', /devDep exact `(\d+\.\d+\.\d+)`/, 'devDep exact `<version>`'],
 ];
 for (const [file, re, shape] of PROSE_DECLS) {
   const m = readFileSync(file, 'utf8').match(re);
@@ -2149,7 +2148,7 @@ check_claude_floor_coherence() {
   # DERIVE it at runtime through scripts/meta-bridge-claude-floor.sh, so they carry no
   # literal to drift — that shared file is itself part of the contract and is asserted
   # below. What remains are the human-facing declarations (the launcher's refusal
-  # message, docs, AGENTS) plus every fake `claude` CLI stub the gates spawn: a stub
+  # message and docs) plus every fake `claude` CLI stub the gates spawn: a stub
   # that reports a version BELOW the floor would make the doctor legitimately refuse
   # its own fixture, so those are bound too — as `>=`, not equality, since a stub may
   # honestly claim a newer version.
@@ -2189,7 +2188,6 @@ const SITES = [
   ['pi/meta-bridge/entwurf-meta-receive/scripts/hook-launch.sh', /Claude Code >= (\d+\.\d+\.\d+)/g, 1, 'launcher refusal message'],
   ['scripts/meta-bridge-claude-floor.sh', /THE FLOOR IS (\d+\.\d+\.\d+)/g, 1, 'floor helper rationale header'],
   ['docs/setup-clean-host.md', /`>=(\d+\.\d+\.\d+)`\*\* — the exec-form hook floor/g, 1, 'clean-host pin matrix'],
-  ['AGENTS.md', /Claude Code `>=(\d+\.\d+\.\d+)`/g, 1, 'AGENTS rule 14'],
   ['README.md', /supported floor `>=(\d+\.\d+\.\d+)`/g, 1, 'README doctor description'],
   ['scripts/check-hook-launch-topology.ts', /\/(\d+)\\\.(\d+)\\\.(\d+)\//g, 1, 'topology gate floor assertion'],
 ];
