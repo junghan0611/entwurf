@@ -24,10 +24,13 @@
  * the issue keeps them static by design.
  */
 
+import { spawn } from "node:child_process";
 import * as fs from "node:fs";
+import * as os from "node:os";
 import * as path from "node:path";
 import { RRegex } from "rregex";
 import { beforeAll, describe, expect, it } from "vitest";
+import { CODEX_PREFLIGHT_HINT } from "../pi-extensions/lib/codex-fresh-preflight.ts";
 import { FRESH_CALL_BACKENDS } from "../pi-extensions/lib/mux-fresh-call.ts";
 import {
 	type BridgeTool,
@@ -169,7 +172,7 @@ describe("MCP surface — real bridge boot → runtime tools/list", () => {
 			"// ============================================================================\n// Main",
 		)[0];
 		expect(freshBlock).toMatch(
-			/const self = await buildAuthoritativeSelfEnvelope\(\);\s*callerGardenId = self\.envelope\.sessionId;/,
+			/const self = await buildAuthoritativeSelfEnvelope\(\{ requestMeta: extra\._meta \}\);\s*callerGardenId = self\.envelope\.sessionId;/,
 		);
 		expect(freshBlock).not.toMatch(/process\.env\.PI_SESSION_ID/);
 		// Derived from the composition's own set rather than retyped: this assertion exists to
@@ -334,6 +337,115 @@ describe("one grammar, two surfaces", () => {
 		// And the call shape the skill tells the agent to send.
 		expect(skill).toMatch(/\{backend, model, task, cwd\?, placement\?\}/);
 	});
+
+	/**
+	 * The Codex capability preflight is the ONE preflight that cannot live in the composition:
+	 * it performs a bounded app-server exchange, and `freshCall` is a synchronous leaf by
+	 * contract. So it sits on the two PUBLIC surfaces instead — which means the ordering that
+	 * every other backend gets for free (preflight inside the leaf, proven by the leaf's own
+	 * cells) is here a property of two hand-written call sites, and nothing executed them.
+	 *
+	 * The argument is the same one the copilot/omp pre-mutation cells make: with NO tmux in the
+	 * environment, a surface that skipped the preflight would answer `no-tmux-context` from the
+	 * placement leaf. Hearing a CODEX capability reason instead proves the decision happened
+	 * before placement — and placement is the last thing that runs before the one mutation.
+	 * `CODEX_HOME` points at an empty directory so the answer is a capability reason on an
+	 * installed host too, not only on one with no birth unit.
+	 */
+	function codexPreflightEnv(): { env: NodeJS.ProcessEnv; cleanup: () => void } {
+		const root = fs.mkdtempSync(path.join(os.tmpdir(), "entwurf-codex-premutation-"));
+		const env: NodeJS.ProcessEnv = { ...process.env, HOME: root, CODEX_HOME: path.join(root, "codex") };
+		for (const key of ["TMUX", "TMUX_PANE", "PI_SESSION_ID", "PI_AGENT_ID"]) delete env[key];
+		return { env, cleanup: () => fs.rmSync(root, { recursive: true, force: true }) };
+	}
+
+	const CODEX_REASONS = Object.keys(CODEX_PREFLIGHT_HINT);
+
+	/** One real bridge boot plus one tools/call — the same process an MCP host talks to. */
+	function callBridgeFreshCall(env: NodeJS.ProcessEnv): Promise<string> {
+		return new Promise((resolve, reject) => {
+			const child = spawn(path.join(REPO_DIR, "mcp", "entwurf-bridge", "start.sh"), { stdio: "pipe", env });
+			let stdout = "";
+			let stderr = "";
+			let settled = false;
+			const done = (fn: () => void): void => {
+				if (settled) return;
+				settled = true;
+				clearTimeout(timer);
+				child.kill("SIGTERM");
+				fn();
+			};
+			const timer = setTimeout(
+				() => done(() => reject(new Error(`no tools/call answer in 20s\n${stderr.trim()}`))),
+				20_000,
+			);
+			child.stderr.on("data", (d: Buffer) => {
+				stderr += d.toString();
+			});
+			child.on("exit", () => done(() => reject(new Error(`bridge exited early\n${stderr.trim()}`))));
+			child.stdout.on("data", (d: Buffer) => {
+				stdout += d.toString();
+				for (const line of stdout.split("\n")) {
+					if (!line.trim().startsWith("{")) continue;
+					let msg: { id?: number; result?: { content?: Array<{ text?: string }> } };
+					try {
+						msg = JSON.parse(line);
+					} catch {
+						continue;
+					}
+					if (msg.id !== 2 || !msg.result) continue;
+					done(() => resolve((msg.result?.content ?? []).map((c) => c.text ?? "").join("\n")));
+					return;
+				}
+			});
+			child.stdin.write(
+				`${JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2024-11-05", capabilities: {}, clientInfo: { name: "entwurf-vitest-pilot", version: "0.0.0" } } })}\n`,
+			);
+			child.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized" })}\n`);
+			child.stdin.write(
+				`${JSON.stringify({ jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "entwurf_fresh_call", arguments: { backend: "codex", model: "gpt-5.6", task: "pre-mutation contract cell — this must never reach tmux" } } })}\n`,
+			);
+		});
+	}
+
+	it("[QK:FRESHCALL-CODEX-PREMUTATION-MCP] the MCP surface answers a missing Codex capability BEFORE placement — with no tmux in its environment the reason is still the capability's, so no window can exist by the time the host reads it", async () => {
+		const { env, cleanup } = codexPreflightEnv();
+		try {
+			const text = await callBridgeFreshCall(env);
+			expect(text).not.toContain("no-tmux-context");
+			expect(
+				CODEX_REASONS.some((reason) => text.includes(reason)),
+				`expected one of ${CODEX_REASONS.join("/")}, got: ${text}`,
+			).toBe(true);
+		} finally {
+			cleanup();
+		}
+	}, 30_000);
+
+	it("[QK:FRESHCALL-CODEX-PREMUTATION-PI] the native pi surface answers the same way — the preflight lives on BOTH call sites, so one of them losing it is one public door that opens a window before deciding", async () => {
+		const piFresh = requireTool(piTools, "entwurf_fresh_call");
+		const { env, cleanup } = codexPreflightEnv();
+		const saved = { ...process.env };
+		try {
+			for (const key of Object.keys(process.env)) delete process.env[key];
+			Object.assign(process.env, env);
+			const result = await piFresh.execute("pre-mutation", {
+				backend: "codex",
+				model: "gpt-5.6",
+				task: "pre-mutation contract cell — this must never reach tmux",
+			});
+			const text = result.content.map((c) => c.text ?? "").join("\n");
+			expect(text).not.toContain("no-tmux-context");
+			expect(
+				CODEX_REASONS.some((reason) => text.includes(reason)),
+				`expected one of ${CODEX_REASONS.join("/")}, got: ${text}`,
+			).toBe(true);
+		} finally {
+			for (const key of Object.keys(process.env)) delete process.env[key];
+			Object.assign(process.env, saved);
+			cleanup();
+		}
+	}, 30_000);
 
 	it("both peers surfaces stay facts-only and route creation to entwurf_fresh_call", () => {
 		expect(requireTool(mcpTools, "entwurf_peers").description ?? "").toMatch(

@@ -78,6 +78,7 @@
 
 import { randomBytes } from "node:crypto";
 import { classifyTmuxCwd, type TmuxCwdRejectReason } from "./classify-tmux-cwd.ts";
+import { CODEX_PREFLIGHT_HINT, type CodexPreflightRejectReason } from "./codex-fresh-preflight.ts";
 import {
 	COPILOT_PREFLIGHT_HINT,
 	type CopilotPreflightRejectReason,
@@ -100,15 +101,16 @@ import {
 	runTmux,
 	type WindowHandle,
 } from "./mux-placement.ts";
+import { resolveCodexDefaultSocketPath } from "./native-push/codex-ws-client.ts";
 import { OMP_PREFLIGHT_HINT, type OmpPreflightRejectReason, ompFreshPreflight } from "./omp-fresh-preflight.ts";
 import { classifyTmuxSessionName, resolveTmuxSessionId, type TmuxSessionRejectReason } from "./resolve-tmux-session.ts";
 
 /** The backends this rail can open. Fixed set, not a profile — a further one is a decision,
- * not a config entry. `copilot` was added by #82 RAIL 9 under the step 9 admission contract, and
- * `omp` by #87 Bundle C under the same one. The set is joined to the citizen backends by
- * `check-harness-admission-parity`: a harness that mints records but is missing HERE is not an
- * unwired convenience, it is a release blocker. */
-export const FRESH_CALL_BACKENDS = ["pi", "claude-code", "copilot", "omp"] as const;
+ * not a config entry. `copilot` was added by #82 RAIL 9, `omp` by #87 Bundle C, and `codex`
+ * by #95 after its system birth and app-server rails were measured. The set is joined to the
+ * citizen backends by `check-harness-admission-parity`: a harness that mints records but is
+ * missing HERE is not an unwired convenience, it is a release blocker. */
+export const FRESH_CALL_BACKENDS = ["pi", "claude-code", "copilot", "omp", "codex"] as const;
 export type FreshCallBackend = (typeof FRESH_CALL_BACKENDS)[number];
 
 /**
@@ -138,6 +140,7 @@ export const FRESH_CALL_RUNTIME: Record<FreshCallBackend, string> = {
 	"claude-code": "claude",
 	copilot: "entwurf",
 	omp: "omp",
+	codex: "codex",
 };
 
 /**
@@ -166,6 +169,7 @@ export const FRESH_CALL_CALLBACK_TOOL: Record<FreshCallBackend, string> = {
 	"claude-code": "mcp__entwurf-bridge__entwurf_v2",
 	copilot: "entwurf-bridge-entwurf_v2",
 	omp: "mcp__entwurf_bridge_entwurf_v",
+	codex: "mcp__entwurf_bridge__entwurf_v2",
 };
 
 /** Mirrors the `entwurf_v2` message bound. This is an INTERFACE cap for symmetry with the
@@ -276,6 +280,7 @@ export function buildBackendArgs(
 	backend: FreshCallBackend,
 	composition: FreshCallComposition,
 	model: string,
+	env: NodeJS.ProcessEnv = process.env,
 ): string[] {
 	switch (backend) {
 		case "pi":
@@ -286,11 +291,20 @@ export function buildBackendArgs(
 			return ["copilot", "--interactive", composition.prompt, "--model", model, "--yolo"];
 		case "omp":
 			return [`--${OMP_BOOTSTRAP_FLAG}`, composition.bootstrapPayload, "--model", model, "--approval-mode", "yolo"];
+		case "codex":
+			return [
+				"--remote",
+				`unix://${resolveCodexDefaultSocketPath(env)}`,
+				"--model",
+				model,
+				"--dangerously-bypass-approvals-and-sandbox",
+				composition.prompt,
+			];
 	}
 }
 
 /**
- * What a launch has to say, in the two shapes the four backends need. Three of them are
+ * What a launch has to say, in the two shapes the five backends need. Four of them are
  * handed a first-turn PROMPT; omp is handed a bootstrap PAYLOAD its own installed extension
  * unpacks. Both are always built, because building one is cheap and a backend switch must
  * never be able to reach a field that was not composed.
@@ -375,6 +389,7 @@ export type FreshCallRejectReason =
 	| TmuxSessionRejectReason
 	| CopilotPreflightRejectReason
 	| OmpPreflightRejectReason
+	| CodexPreflightRejectReason
 	| "caller-identity-unavailable"
 	| "model-empty"
 	| "model-invalid"
@@ -435,9 +450,9 @@ function defaultRandomHex(): string {
  * for. That is sufficient and not a compromise: every reader of the carrier trims and tests
  * truthiness (`index.ts:212-217`), so empty and absent are the same answer by construction.
  *
- * It is applied to all four backends because the leak is a property of tmux, not of a vendor. A
+ * It is applied to all five backends because the leak is a property of tmux, not of a vendor. A
  * scrub only on the backend whose measurement surfaced it would encode the claim that the other
- * three are immune, which is false. It costs the legitimate case nothing: a carrier is only ever
+ * four are immune, which is false. It costs the legitimate case nothing: a carrier is only ever
  * authoritative when the process that owns it exported it ITSELF, and a fresh `pi` sibling does
  * exactly that after this argv has run. This is a fixed two-variable seam and deliberately NOT a
  * general env carrier — an arbitrary `-e` passthrough would hand callers the environment-shaping
@@ -555,7 +570,6 @@ export function freshCall(
 		const missing = ompFreshPreflight(env);
 		if (missing) return { ok: false, reason: missing };
 	}
-
 	const inspected = inspectPlacement(env);
 	if (!inspected.ok) return { ok: false, reason: inspected.reason };
 	const placement = inspected.placement;
@@ -582,7 +596,7 @@ export function freshCall(
 		bootstrapPayload: buildOmpBootstrapPayload({ callerGardenId: params.callerGardenId, nonce, task }),
 	};
 	const run = runTmux(
-		buildFreshCallArgs(targetSessionId, runtimePath, buildBackendArgs(params.backend, composition, model), cwd),
+		buildFreshCallArgs(targetSessionId, runtimePath, buildBackendArgs(params.backend, composition, model, env), cwd),
 		env,
 	);
 	assertTmuxOk("new-window", run);
@@ -624,6 +638,7 @@ const REJECT_HINT: Record<FreshCallRejectReason, string> = {
 	// the sentence an operator reads cannot drift away from the predicate that produced it.
 	...COPILOT_PREFLIGHT_HINT,
 	...OMP_PREFLIGHT_HINT,
+	...CODEX_PREFLIGHT_HINT,
 	"no-tmux-context": "this agent is not running inside tmux, so there is no session to open a sibling beside",
 	"anchor-malformed": "TMUX_PANE is not a native pane id",
 	"anchor-unresolved": "tmux resolved no pane for this agent's anchor",

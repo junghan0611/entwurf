@@ -52,6 +52,7 @@ const PI_MODEL = "entwurf/claude-sonnet-5";
 const CLAUDE_MODEL = "claude-sonnet-5";
 const COPILOT_MODEL = "gpt-5.6-terra";
 const OMP_MODEL = "openai-codex/gpt-5.6-terra";
+const CODEX_MODEL = "gpt-5.6-sol";
 
 const read = (rel: string): string => fs.readFileSync(path.join(REPO_DIR, rel), "utf8");
 const MODULE_SRC = read("pi-extensions/lib/mux-fresh-call.ts");
@@ -80,6 +81,26 @@ describe("argv dialects", () => {
 	const piArgs = buildBackendArgs("pi", COMPOSITION, PI_MODEL);
 	const clArgs = buildBackendArgs("claude-code", COMPOSITION, CLAUDE_MODEL);
 
+	const codexArgs = buildBackendArgs("codex", COMPOSITION, CODEX_MODEL, { HOME: "/home/operator" });
+
+	it("[QK:FRESHCALL-CODEX-ARGV] Codex attaches to the one default app-server with an explicit model, explicit yolo policy, and positional first-turn prompt", () => {
+		expect(FRESH_CALL_RUNTIME.codex).toBe("codex");
+		expect(codexArgs).toEqual([
+			"--remote",
+			"unix:///home/operator/.codex/app-server-control/app-server-control.sock",
+			"--model",
+			CODEX_MODEL,
+			"--dangerously-bypass-approvals-and-sandbox",
+			"PROMPT",
+		]);
+	});
+
+	it("[QK:FRESHCALL-CODEX-CALLBACK-DIALECT] Codex uses the measured underscore/double-underscore MCP spelling with the digit retained", () => {
+		expect(FRESH_CALL_CALLBACK_TOOL.codex).toBe("mcp__entwurf_bridge__entwurf_v2");
+		expect(buildFreshCallPrompt({ backend: "codex", task: TASK, callerGardenId: GID, nonce: NONCE })).toContain(
+			FRESH_CALL_CALLBACK_TOOL.codex,
+		);
+	});
 	it("[QK:FRESHCALL-PI-ARGV-PROMPT-FIRST] pi argv is the prompt FIRST, then --entwurf-control — the flag-first order was measured to open a window whose turn never ran", () => {
 		expect(piArgs[0]).toBe("PROMPT");
 		expect(piArgs[1]).toBe("--entwurf-control");
@@ -150,7 +171,7 @@ describe("argv dialects", () => {
 	});
 
 	it("no backend passes a shell string, a window name, a cwd or an env carrier", () => {
-		for (const a of [...piArgs, ...clArgs, ...cpArgs]) expect(a).not.toMatch(/^-(n|c|e|b)$/);
+		for (const a of [...piArgs, ...clArgs, ...cpArgs, ...codexArgs]) expect(a).not.toMatch(/^-(n|c|e|b)$/);
 	});
 
 	const ompArgs = buildBackendArgs("omp", COMPOSITION, OMP_MODEL);
@@ -201,8 +222,8 @@ describe("argv dialects", () => {
 		);
 	});
 
-	it("the four backends are the whole fixed set", () => {
-		expect([...FRESH_CALL_BACKENDS].sort()).toEqual(["claude-code", "copilot", "omp", "pi"]);
+	it("the five backends are the whole fixed set", () => {
+		expect([...FRESH_CALL_BACKENDS].sort()).toEqual(["claude-code", "codex", "copilot", "omp", "pi"]);
 	});
 });
 
@@ -544,7 +565,7 @@ describe("optional cwd — cross-repo fresh placement (#73)", () => {
 				const args = buildFreshCallArgs(
 					TARGET_SESSION,
 					runtime,
-					buildBackendArgs(backend, { prompt: "PROMPT", bootstrapPayload: "PAYLOAD" }, "m"),
+					buildBackendArgs(backend, { prompt: "PROMPT", bootstrapPayload: "PAYLOAD" }, "m", { HOME: "/home/operator" }),
 				);
 				for (const carrier of ["PI_SESSION_ID=", "PI_AGENT_ID="]) {
 					const at = args.indexOf(carrier);

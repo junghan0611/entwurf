@@ -119,8 +119,8 @@ run_vitest() {
 usage() {
   cat <<'EOF'
 Usage:
-  ./run.sh setup [project-dir]        # ONE presence-driven composition (#86): mode-first (source bootstrap only on a checkout), then per-component PASS/SKIP/FAIL for pi (presence+floor)/claude/agy/copilot (all four units: birth→MCP→receiver→footer, independently)/omp (four units: birth→MCP→tools.xdev setting→receiver, independently) + stable dev bins + v2 install smoke; absent harness = zero-state SKIP, detected-incomplete = named FAIL + nonzero exit. Never installs a harness or touches credentials
-  ./run.sh release-gate [project-dir] [--cut] [--allow-skip-gemini]  # SINGLE release gate: full static (pnpm run check:full) + the v2-native live gates (v2 matrix-live, check-bridge, doctor-pi-provider, RGG) + the ACP plugin acceptance floor (12 LIVE smokes: socket-citizen/raw-turn/overlay/provider/session-reuse/carrier-augment/memory-containment/rgg/mcp/skill/bundled-mcp/v2-send) + the one surviving axis the aggregate used to omit silently (claude-native-resume; Cortex stays a documented on-demand direct call) + the cross-harness delivery chain (smoke-entwurf-chain-live). TWO-TIER summary: MUST (release-blocking, owns the exit code — "green" applies here) + BEHAVIOR (advisory, non-blocking: RGG positives model-in-loop turn). STEP OUTCOME protocol: every step is INVOKED and reports its own PASS / SKIP (exit 97, a prerequisite it does not have) / FAIL — a skip is never counted as a pass. Without --cut this is the unattended diagnostic (SKIPs reported, exit 0). WITH --cut it is read as release acceptance and ANY MUST SKIP is red, which is what makes "a CUT needs LIVE=1, SKIP=0" executable instead of prose. --allow-skip-gemini accepted-but-ignored (back-compat). final cut authorization is GLG's.
+  ./run.sh setup [project-dir]        # ONE presence-driven composition (#86): per-component PASS/SKIP/FAIL for pi/claude/agy/copilot/omp/codex + stable dev bins + v2 install smoke. Codex user MCP/status-line atoms are composed, but its /etc birth prerequisite is never sudoed and stays a named FAIL until the operator installs it. Absent harness = zero-state SKIP, detected-incomplete = named FAIL + nonzero exit. Never installs a harness, starts a daemon, or touches credentials
+  ./run.sh release-gate [project-dir] [--cut] [--allow-skip-gemini]  # SINGLE release gate: full static (pnpm run check:full) + the v2-native live gates (v2 matrix-live, check-bridge, doctor-pi-provider, RGG) + the ACP plugin acceptance floor (12 LIVE smokes: socket-citizen/raw-turn/overlay/provider/session-reuse/carrier-augment/memory-containment/rgg/mcp/skill/bundled-mcp/v2-send) + the one surviving axis the aggregate used to omit silently (claude-native-resume; Cortex stays a documented on-demand direct call) + the cross-harness delivery chain (smoke-entwurf-chain-live) + the Codex first-admission Pi -> visible Codex -> visible Pi receipt chain (smoke-codex-fresh-live; explicit operator-owned app-server PID/seat). TWO-TIER summary: MUST (release-blocking, owns the exit code — "green" applies here) + BEHAVIOR (advisory, non-blocking: RGG positives model-in-loop turn). STEP OUTCOME protocol: every step is INVOKED and reports its own PASS / SKIP (exit 97, a prerequisite it does not have) / FAIL — a skip is never counted as a pass. Without --cut this is the unattended diagnostic (SKIPs reported, exit 0). WITH --cut it is read as release acceptance and ANY MUST SKIP is red, which is what makes "a CUT needs LIVE=1, SKIP=0" executable instead of prose. --allow-skip-gemini accepted-but-ignored (back-compat). final cut authorization is GLG's.
   ./run.sh check-bridge               # entwurf-bridge direct MCP smoke + protocol/negative-path test.sh (live substrate = v2 live smokes)
   ./run.sh check-entwurf-bridge-boot # deterministic gate (5d-5-pre, G1a/G1b/G1e/G1f, IN pnpm run check:full): boot start.sh under strip-types + assert v2 fence graph loads + entwurf_v2 and entwurf_resume_call registered/schema + the tools/list surface is EXACTLY the seven shipped garden verbs; tools/list only, no auth/side-effect
   ./run.sh check-entwurf-bridge-pi-free # deterministic gate (0.12.1 A, IN pnpm check): static — bridge index eager value-import closure must carry no @earendil-works/pi-* (type-only + dynamic import excluded); proves the meta-bridge boots pi-free
@@ -137,6 +137,12 @@ Usage:
   ./run.sh check-copilot-statusline   # #82 Copilot custom-footer renderer. session_id → ready/?/gid + rail `cop`; exit 0. IN pnpm check. No Copilot, no model turn
   ./run.sh check-entwurf-capabilities  # deterministic gate (0.11 Stage 0 step 3C): backend capability registry (pi/entwurf-capabilities.json) — coverage==META_CITIZEN_BACKENDS + agrees with live META_BACKEND_DESCRIPTORS + strict keyset, no API
   ./run.sh check-omp-fresh-preflight   # #87 C: the OMP fresh preflight reproduces omp_agent_dir and the tools.xdev read in TS (it runs from two emit depths and cannot call a sibling script). This drives the SHIPPED shell/python leaves over the same inputs — refusals included — and requires the TS half to agree, so the reproduction cannot silently drift from the installer's own oracle
+  ./run.sh check-codex-sender-identity # Codex tools/call _meta triple agreement + addressable record join + cross-carrier conflict refusal
+  ./run.sh check-codex-bridge-identity # real MCP bridge request identity for entwurf_self/v2/fresh; malformed or conflicting _meta fails loud
+  ./run.sh check-codex-native-push    # app-server WebSocket-over-UDS probe + measured one-shot codex queue delivery; no replay
+  ./run.sh check-codex-birth-hook     # root hook closure, first-turn V3 birth, thread-name garden id, top-level event predicate
+  ./run.sh check-codex-fresh-preflight # pre-mutation birth/MCP/thread-title/default-app-server readiness
+  ./run.sh smoke-codex-config-state   # sandboxed MCP + status-line ownership/install/doctor/inverse lifecycle
   ./run.sh check-harness-admission-parity  # #87 C: the EDGE the two closed parity loops never had. Every citizen backend is fresh-openable or a declared pre-#82 legacy admission whose exception a reader finds in DELIVERY.md — so a post-contract harness that mints records but cannot be opened by entwurf_fresh_call blocks the release package instead of only carrying an `unsupported` note (docs/adding-a-harness.md step 9)
   ./run.sh check-capability-bundle-reach # deterministic gate (IN pnpm check): re-ask EVERY shipped copy of meta-session (source + bridge bundle emit) whether metaCapabilitiesFilePath() reaches the registry — the artifact-depth check the source-path gates cannot make; needs a built dist, missing dist FAILS
   ./run.sh smoke-pi-attach            # deterministic gate (#50 C2 checkpoint + C3 ACP tail): a pi session attaches as a V3 meta-record citizen (backend:"pi"), the gardenId is the RECORD's not pi's session id, the control socket is keyed on it, a re-open ATTACHES to the same address (never a second mint), the BUILT DIST ENTRY driven over MCP stdio lists the citizen + delivers entwurf_v2 to that socket with an RPC ack, and the ACP identity chain lands a send AS the host record (enrichMcpServersWithEnvelope env → bridge sender = host gardenId). mkdtemp-isolated; the live store is never read
@@ -149,7 +155,7 @@ Usage:
   ./run.sh check-meta-capability-source # deterministic gate (0.11 Stage 0 step 3D-3): capability-source cut-over — mint/parse read wakeMode/deliveryLevel from the registry (metaCapabilityFor, registry-driven via injection), not META_BACKEND_DESCRIPTORS; behaviour-preserving (registry ≡ const); the record.delivery slot 3D-3 preserved was deleted by 3D-4, no API
   ./run.sh check-socket-probe          # deterministic gate (0.11 Stage 0, F3): three-valued control-socket liveness (alive|dead|indeterminate) — GC reclaims dead only, indeterminate survives; pure classify + 2-socket integration, no API
   ./run.sh check-project-trust-handler # deterministic gate (0.11 Stage 0, Trust 2층): project_trust handler — decideProjectTrust matrix (escape=inherited-false+interactive+trust-here→{yes,remember:true}; non-interactive→undecided; never undefined) + adapter single-writer, fake prompt, no UI
-  ./run.sh check-entwurf-v2-contract   # deterministic gate (0.11 Stage 0 step 4-pre, 동결결정 10 + Fable R1-R5): FROZEN entwurf_v2 contract — R1 control-socket domain (currently pi; claude/codex/agy=unsupported, not folded), 3-cell intent×liveness table (single verdict, 1 allow/2 reject after the visible-first cut), N1 indeterminate-no-spawn, R3 table↔receipt round-trip, R5 taxonomy, schema↔types drift; pure, no API
+  ./run.sh check-entwurf-v2-contract   # FROZEN entwurf_v2 contract — control-socket liveness domain is currently pi; self-fetch/native-push citizens are out of that domain, not globally unsupported; pure, no IO
   ./run.sh check-entwurf-v2-lock       # deterministic gate (0.11 Stage 0 step 5a, 버킷 B F2): per-gid dispatch LOCK primitive — openSync wx atomic acquire, second-acquire=target-locked conflict (holder JSON for human cleanup), nonce-owned release (successor survives late release), stale reclaim same-host+ESRCH-only (EPERM/remote/alive/unknown fail-closed), empty/corrupt=conflict not auto-deleted, F2-P1 malformed gid throws; real temp dir, deps injected
   ./run.sh check-entwurf-v2-decider    # deterministic gate (0.11 Stage 0 step 5b): PURE dispatch decider decideDispatch — frozen 7-step order over injected fakes, lock acquire+release tracked so reject⇒no-plan-no-lock proven; pre-probe rejects observedLiveness=null, send/resume execute keep lock + mailbox no-lock (？7), resume plan no mode/provider/model, invalid gid throws (F2-P1); pure, no IO
   ./run.sh check-entwurf-v2-matrix     # deterministic gate (0.11 Stage 0 step 5d-5 a): REACHABILITY + LOCK SSOT table — drives REAL decideDispatch over fakes, fixes every (target kind → transport → lock class) cell as one table (control-socket/meta-mailbox/native-push + bad-target/conflict/locked/undeliverable/dormant/indeterminate rejects), coverage pass fails on a dropped cell; thin coverage not a decider re-impl; pure, no IO
@@ -166,6 +172,8 @@ Usage:
   ./run.sh check-resume-launch-identity # deterministic gate for resume-launch-identity.ts, the record-authoritative launch-identity leaf preserved through the visible-first cut (spawn-bg and all its callers are gone; this leaf answers "which being is this, and which conversation is theirs"). Temp meta-store fixture: gardenId→record.transcriptPath happy path with header cwd/provider/model; C3 integrity (header id ≠ record.nativeSessionId → refused, never resumed); #52 ADDRESSABLE read (a gid that no longer holds its nativeSessionId alone is refused from EITHER side — the plain targeted read would resume one transcript twice under two locks); cause fidelity per impossible resume incl. the F7 pin (recorded-but-deleted transcript → MISSING, not "no recorded model"); header↔gate SSOT. No spawn/socket/timer
   ./run.sh smoke-entwurf-v2-matrix-live # LIVE sentinel (0.11 Stage 0 step 5d-5, D4-b) — OUT of pnpm check, needs LIVE=1. Drives REAL production runEntwurfV2 deps over REAL OS objects, 4 cells: C1 control-socket (real pi --entwurf-control resident → RPC send → lock acquire→release ×1), C1b record-less socket (#50 C4: live record-less pi → EVERY intent rejected pre-probe record-less-socket, no lock, rendered hint names record authority + fresh-cut), C2 meta-mailbox deliverable (armed self-fetch citizen → real .msg enqueue, lock-free), C3 meta-mailbox guard (no armed receiver → reject, no garbage). Model-in-loop OUT (transport/lock/enqueue gate, GPT Q2); negative/timeout stay deterministic. Model: ENTWURF_LIVE_TARGET=<provider>/<model> (default openai-codex/gpt-5.6-luna). LIVE=1 ./run.sh smoke-entwurf-v2-matrix-live
   ./run.sh smoke-agy-native-push-live  # 봉인 8 LIVE acceptance for the native-push (agy) rail — OUT of pnpm check, needs LIVE=1 + AGY_CONVERSATION_ID (a live agy conversation). Drives the REAL antigravity adapter + register core + runEntwurfV2 (production deps): doctor-static preflight (dangling→FAIL, the ③ gate), probe route, register create/attach idempotency, fire→native-push delivered, post-send re-probe (D7 partial), bogus-conv→native-push-probe-indeterminate. Meta-store isolated to a temp dir (only the agy round-trip is real; no real-store residue). COST FENCE: open that agy conversation on gemini-3.6-flash (free account) — never a Pro tier; entwurf never selects the agy model and no assertion reads it. LIVE=1 AGY_CONVERSATION_ID=<convId> ./run.sh smoke-agy-native-push-live
+  ./run.sh smoke-codex-native-push-live # on-demand LIVE acceptance for Codex native-push — needs LIVE=1 + CODEX_LIVE_THREAD_ID loaded by a visible TUI attached to the default app-server; probes the real UDS, routes through production runEntwurfV2, queues one exact-token turn without retry, re-probes, and leaves the visible TUI to show the model result
+  ./run.sh smoke-codex-fresh-live    # #95 first-admission RELEASE MUST: record-backed receipt fixture -> PUBLIC initial Pi fresh/callback -> Pi PUBLIC Codex fresh/exact callback -> Pi-to-Codex addressed native-push v2 -> Codex PUBLIC fresh Pi/exact callback -> Codex final v2 evidence. Needs LIVE=1 + ENTWURF_CODEX_APP_SERVER_PID + ENTWURF_CODEX_FRESH_MODEL + ENTWURF_CODEX_FRESH_PI_MODEL. The PID names the existing operator-owned app-server tmux seat; the smoke checks/prints initial Pi, Codex, inherited MCP, and outbound Pi coordinates, never starts/stops/guesses the app-server, never reads screen text, and cleans only receipt-named window ids
   ./run.sh smoke-mux-lifecycle-live  # RELEASE MUST integrated LIVE lifecycle acceptance for mux, through the REAL MCP surface — OUT of pnpm check, needs LIVE=1 and spends model turns (two pi siblings: native + recorded-ACP provider, each resumed once; one Claude Code sibling). tools/call fresh_call -> nonce callback sender envelope -> v2 control send landing in the sibling's own transcript -> resume_call REFUSED while live (window count unchanged) -> stable-handle close (pane gone, socket dead, record kept) -> dormant delivery refused honestly -> public entwurf_resume_call with LAUNCH and OBSERVATION receipts kept apart, same-gid socket alive, zero new citizens, zero lock residue, resumed pane_start_path == RECORD cwd (separate tmux query), transcript byte-identical across the resume -> v2 recall of the pre-close fact. claude-code resume refused target-not-pi, no window opened and no lock residue. LIVE=1 ./run.sh smoke-mux-lifecycle-live
   ./run.sh check-entwurf-facts         # deterministic gate (0.11 Stage 0 step 4, fact-provider slice 1+2): PURE PeerFact core + resolveFactList union — R1 out-of-domain→unsupported, R3b socket-domain 4-value, facts-only keyset; union: PeerFact + RecordLessSocketFact by gardenId (#50 C4: record-less socket = diagnostic subject, gid+liveness only), dormant→dead, F3 indeterminate preserved, out-of-socket-domain+socket fail-loud; pure, no IO
   ./run.sh check-socket-discovery      # deterministic gate (0.11 Stage 0 step 4, fact-provider slice 3): SOCKET-axis scanSocketProbes — probes (dir sockets) ∪ (in-domain citizen canonical paths) 3-valued; dormant citizen no-file → dead (resumable, not unprobed), stall → indeterminate (F3), dir hygiene/dedup/missing-dir + e2e → resolveFactList; readdir/probe injected, no IO
@@ -240,6 +248,15 @@ Usage:
   ./run.sh uninstall-agy-bridge       # 봉인 7: honest inverse of install-agy-bridge from install-state (restore preimage / remove key; refuse if config became a symlink)
   ./run.sh probe-bridge-command <cmd> [args...]  # #81: BOOT the given bridge invocation and require the entwurf MCP tool surface back. `--invocation-json '{"command":"…","args":[],"env":{}}'` preserves a harness config exactly. It waits for a valid initialize response, then sends initialized + tools/list only (no tools/call, lock, record, or delivery). exit 0 = it serves the bridge; 1 = it does not. The pi/agy doctors use this leaf.
   ./run.sh doctor-agy-bridge          # fail-loud doctor: MCP config + exact permission rule + state + live probe label
+  ./run.sh install-codex-birth        # root-only: install the fixed /etc/codex SessionStart birth unit; never sudo internally
+  ./run.sh uninstall-codex-birth      # root-only exact inverse from /var/lib/entwurf ownership state
+  ./run.sh doctor-codex-birth         # system birth/config/ownership/runtime verdict; use sudo for the ownership axis
+  ./run.sh install-codex-mcp          # own only [mcp_servers.entwurf-bridge] in the user's Codex config
+  ./run.sh uninstall-codex-mcp        # remove/restore only the recorded MCP atom
+  ./run.sh doctor-codex-mcp           # effective config + ownership + actual bridge boot
+  ./run.sh install-codex-statusline   # add thread-title to tui.status_line for visible garden ids
+  ./run.sh uninstall-codex-statusline # remove only the recorded status-line atom
+  ./run.sh doctor-codex-statusline    # effective visible-identity config + ownership verdict
   ./run.sh install-agy-statusline     # own the agy statusLine subtree with bare entwurf-agy-statusline; preserve unrelated settings
   ./run.sh uninstall-agy-statusline   # honest inverse from statusline install-state
   ./run.sh doctor-agy-statusline      # fail-loud statusLine config/bin/state doctor + honest live SKIP
@@ -581,6 +598,38 @@ install_local_package() {
 _pi_package_state() { echo "${XDG_DATA_HOME:-$HOME/.local/share}/entwurf/pi-package/install-state.json"; }
 _pi_provider_state() { echo "${XDG_DATA_HOME:-$HOME/.local/share}/entwurf/pi-provider/install-state.json"; }
 
+_codex_home() { echo "${CODEX_HOME:-$HOME/.codex}"; }
+_codex_config() { echo "$(_codex_home)/config.toml"; }
+_codex_mcp_state() { echo "${XDG_DATA_HOME:-$HOME/.local/share}/entwurf/codex-mcp/install-state.json"; }
+_codex_statusline_state() { echo "${XDG_DATA_HOME:-$HOME/.local/share}/entwurf/codex-statusline/install-state.json"; }
+
+codex_mcp() {
+  local verb="$1" config state
+  config="$(_codex_config)"
+  state="$(_codex_mcp_state)"
+  case "$verb" in
+    install) python3 "$REPO_DIR/scripts/codex-mcp-config.py" install "$config" "entwurf-bridge" "$state" ;;
+    uninstall) python3 "$REPO_DIR/scripts/codex-mcp-config.py" uninstall "$state" ;;
+    doctor)
+      python3 "$REPO_DIR/scripts/codex-mcp-config.py" doctor-static "$config" "entwurf-bridge" "$state"
+      local invocation
+      invocation="$(python3 "$REPO_DIR/scripts/codex-mcp-config.py" doctor-invocation "$config")"
+      run_ts scripts/probe-bridge-command.ts --invocation-json "$invocation"
+      ;;
+  esac
+}
+
+codex_statusline() {
+  local verb="$1" config state
+  config="$(_codex_config)"
+  state="$(_codex_statusline_state)"
+  case "$verb" in
+    install) python3 "$REPO_DIR/scripts/codex-statusline-config.py" install "$config" "$state" ;;
+    uninstall) python3 "$REPO_DIR/scripts/codex-statusline-config.py" uninstall "$state" ;;
+    doctor) python3 "$REPO_DIR/scripts/codex-statusline-config.py" doctor-static "$config" "$state" ;;
+  esac
+}
+
 register_user_scope_citizen() {
   local agent_dir="${PI_CODING_AGENT_DIR:-$HOME/.pi/agent}"
   # Shared idempotent implementation (also driven by smoke-user-scope-citizen).
@@ -829,6 +878,18 @@ smoke_omp_fresh_live() {
   # prerequisite is a FAIL. Writes into the REAL meta roots — the extensions run inside the
   # launched omp process and no env carrier on the fresh argv could fence them.
   run_ts scripts/smoke-omp-fresh-live.ts
+}
+
+smoke_codex_fresh_live() {
+  # #95 first-admission RELEASE MUST. The explicit operator-owned app-server PID is the
+  # seat authority: validate its Codex app-server argv and /proc TMUX/TMUX_PANE, then use
+  # that exact environment for the record-backed receipt fixture and stable-id cleanup.
+  # Through public MCP calls: fixture opens visible Pi; Pi opens visible Codex, correlates
+  # its exact callback and addresses it through native-push v2; Codex opens visible Pi,
+  # correlates that callback, and sends final evidence. The four actor/seat coordinates
+  # travel in receipts and Codex/app-server-MCP/outbound-Pi sessions must be identical.
+  # LIVE!=1 is the only host-prerequisite SKIP after admission; missing facts FAIL.
+  run_ts scripts/smoke-codex-fresh-live.ts
 }
 
 check_omp_fresh_preflight() {
@@ -1333,14 +1394,14 @@ check_mux_fresh_call() {
   # could not see: real bridge boot → tools/list schema/description, Rust-regex-family pattern
   # validity on every emitted pattern (the #62 escape), and the schema riding the actual
   # anthropic-messages request body. No fake tmux: the real-window axis is smoke-mux-fresh-call-live.
-  # copilot-fresh-preflight rides here rather than in its own gate: it exists only as
-  # freshCall's pre-mutation branch (#82 RAIL 9), and splitting it would let the two halves
-  # of one refusal be certified in different runs.
+  # copilot-fresh-preflight and codex-fresh-preflight ride here rather than in
+  # separate gates: each exists only as freshCall's pre-mutation branch, and
+  # splitting one would let the two halves of a refusal be certified separately.
   # omp-fresh-bootstrap.contract rides here for the same reason and one more: it is the ONLY
   # place the launcher's payload and the installed birth extension's decoder are read together.
   # They ship in different directories and cannot import each other (#87 Bundle C), so this
   # lane is what keeps a deliberate duplication from becoming drift.
-  run_vitest test/mux-fresh-call.test.ts test/copilot-fresh-preflight.test.ts test/fresh-call-surfaces.contract.test.ts test/fresh-call-provider.contract.test.ts test/omp-fresh-bootstrap.contract.test.ts
+  run_vitest test/mux-fresh-call.test.ts test/copilot-fresh-preflight.test.ts test/codex-fresh-preflight.test.ts test/fresh-call-surfaces.contract.test.ts test/fresh-call-provider.contract.test.ts test/omp-fresh-bootstrap.contract.test.ts
 }
 
 smoke_mux_fresh_call_live() {
@@ -3788,10 +3849,10 @@ sys.exit(0 if any(isinstance(s,str) and s.rstrip('/')== '$npm2_pkg' for s in src
   # SAME installed candidate, on a FRESH sandbox home with every harness absent.
   # This is the first living consumer of package-installed `entwurf setup`:
   # mode=installed decided by name before anything else, NO pnpm bootstrap inside
-  # node_modules, pi/claude/agy/copilot/omp explicit zero-state SKIPs, stable bins
-  # PASS as npm-provided, core bridge boundary PASS, computed green, zero
-  # harness/auth writes. Harness probes are pinned absent via the FIVE
-  # PI_BIN/CLAUDE_BIN/AGY_BIN/COPILOT_BIN/OMP_BIN seams so the gate host's real
+  # node_modules, every harness explicit zero-state SKIP, stable bins PASS as
+  # npm-provided, core bridge boundary PASS, computed green, zero
+  # harness/auth writes. Harness probes are pinned absent via the SIX
+  # PI_BIN/CLAUDE_BIN/AGY_BIN/COPILOT_BIN/OMP_BIN/CODEX_BIN seams so the gate host's real
   # harnesses never leak in.
   #
   # OMP_BIN was MISSING here from the 0.16.0 OMP admission until 2026-09-06, while
@@ -3803,7 +3864,7 @@ sys.exit(0 if any(isinstance(s,str) and s.rstrip('/')== '$npm2_pkg' for s in src
   # ambiguous. Nothing was wrong with the product; the fixture was. It stayed
   # invisible because CI runners carry no omp AND `release_gate()` does not run
   # this gate (it is prepublishOnly + the CI install-surface job). The skip probe
-  # below now requires FIVE zero-states, so a sixth harness cannot be admitted
+  # below now requires SIX zero-states, so a seventh harness cannot be admitted
   # while this seam is quietly left behind again.
   local setup_home="$npm_tmp/setuphome" setup_proj="$npm_tmp/setupproj" setup_out setup_rc setup_auth
   mkdir -p "$setup_home/.pi/agent" "$setup_proj"
@@ -3815,7 +3876,7 @@ sys.exit(0 if any(isinstance(s,str) and s.rstrip('/')== '$npm2_pkg' for s in src
   setup_out=$(HOME="$setup_home" XDG_DATA_HOME="$setup_home/.local/share" XDG_STATE_HOME="$setup_home/.local/state" \
     XDG_CACHE_HOME="$setup_home/.cache" XDG_CONFIG_HOME="$setup_home/.config" PI_CODING_AGENT_DIR="$setup_home/.pi/agent" \
     PI_BIN="$npm_tmp/definitely-absent" CLAUDE_BIN="$npm_tmp/definitely-absent" AGY_BIN="$npm_tmp/definitely-absent" \
-    COPILOT_BIN="$npm_tmp/definitely-absent" OMP_BIN="$npm_tmp/definitely-absent" \
+    COPILOT_BIN="$npm_tmp/definitely-absent" OMP_BIN="$npm_tmp/definitely-absent" CODEX_BIN="$npm_tmp/definitely-absent" \
     "$npmroot/node_modules/.bin/entwurf" setup "$setup_proj" 2>&1)
   setup_rc=$?
   set -e
@@ -3835,9 +3896,9 @@ sys.exit(0 if any(isinstance(s,str) and s.rstrip('/')== '$npm2_pkg' for s in src
     return 1
   fi
   local skip_probe
-  for skip_probe in "pi: SKIP" "claude: SKIP" "agy: SKIP" "copilot: SKIP" "omp: SKIP"; do
+  for skip_probe in "pi: SKIP" "claude: SKIP" "agy: SKIP" "copilot: SKIP" "omp: SKIP" "codex: SKIP"; do
     if ! grep -q "$skip_probe" <<<"$setup_out"; then
-      fail "[check-pack-install] installed all-absent setup missing explicit zero-state '$skip_probe':"
+      fail "[QK:CODEX-PACK-SETUP-ZERO-STATE] [check-pack-install] installed all-absent setup missing explicit zero-state '$skip_probe':"
       echo "$setup_out" | tail -25 | sed 's/^/    /' >&2
       return 1
     fi
@@ -3852,7 +3913,7 @@ sys.exit(0 if any(isinstance(s,str) and s.rstrip('/')== '$npm2_pkg' for s in src
     echo "$setup_out" | tail -25 | sed 's/^/    /' >&2
     return 1
   fi
-  if [ -e "$setup_proj/.pi" ] || [ -e "$setup_home/.pi/agent/settings.json" ] || [ -e "$setup_home/.gemini" ] || [ -e "$setup_home/.copilot" ]; then
+  if [ -e "$setup_proj/.pi" ] || [ -e "$setup_home/.pi/agent/settings.json" ] || [ -e "$setup_home/.gemini" ] || [ -e "$setup_home/.copilot" ] || [ -e "$setup_home/.codex" ]; then
     fail "[check-pack-install] installed all-absent setup wrote harness state (must be zero-write)"
     return 1
   fi
@@ -3860,7 +3921,7 @@ sys.exit(0 if any(isinstance(s,str) and s.rstrip('/')== '$npm2_pkg' for s in src
     fail "[check-pack-install] installed setup touched the credential store (byte drift or .bak)"
     return 1
   fi
-  echo "[check-pack-install] installed all-absent setup pass (mode-first, no bootstrap, 5x SKIP, bins npm-provided, core PASS, computed green, zero writes)"
+  echo "[check-pack-install] installed all-absent setup pass (mode-first, no bootstrap, 6x SKIP, bins npm-provided, core PASS, computed green, zero writes)"
 
   # Installed copilot-present aggregate `setup` row (#86 C3b): the SAME consumer
   # bin on a fresh sandbox home, with the shared fake vendor
@@ -3886,7 +3947,7 @@ sys.exit(0 if any(isinstance(s,str) and s.rstrip('/')== '$npm2_pkg' for s in src
   setup_out=$(HOME="$cop_setup_home" XDG_DATA_HOME="$cop_setup_home/.local/share" XDG_STATE_HOME="$cop_setup_home/.local/state" \
     XDG_CACHE_HOME="$cop_setup_home/.cache" XDG_CONFIG_HOME="$cop_setup_home/.config" PI_CODING_AGENT_DIR="$cop_setup_home/.pi/agent" \
     PI_BIN="$npm_tmp/definitely-absent" CLAUDE_BIN="$npm_tmp/definitely-absent" AGY_BIN="$npm_tmp/definitely-absent" \
-    OMP_BIN="$npm_tmp/definitely-absent" \
+    OMP_BIN="$npm_tmp/definitely-absent" CODEX_BIN="$npm_tmp/definitely-absent" \
     COPILOT_BIN="$cop_fake/copilot" PATH="$cop_fake:$npmroot/node_modules/.bin:$PATH" \
     "$npmroot/node_modules/.bin/entwurf" setup "$cop_setup_proj" 2>&1)
   setup_rc=$?
@@ -5203,6 +5264,33 @@ setup_all() {
     fi
   fi
 
+
+  # ── codex ── Entwurf owns three configuration atoms, never the harness or its app-server.
+  # The root birth atom is an explicit prerequisite: setup never sudo-es or writes /etc.
+  local codex_rc
+  if ! command -v "${CODEX_BIN:-codex}" >/dev/null 2>&1; then
+    setup_result codex SKIP "codex not on PATH — zero Codex wiring written"
+  else
+    section "codex units (native harness detected: OpenAI Codex CLI)"
+    codex_rc=0; (cd "$REPO_DIR" && bash scripts/codex-birth-doctor.sh) >/dev/null || codex_rc=$?
+    if [ "$codex_rc" -eq 0 ]; then
+      setup_harness_result codex-birth "root-managed SessionStart birth present" "./run.sh doctor-codex-birth"
+    else
+      setup_result codex-birth FAIL "detected codex, but the root-managed birth prerequisite is missing or red — run 'sudo entwurf install-codex-birth', then re-run setup"
+    fi
+    codex_rc=0; codex_mcp install || codex_rc=$?
+    if [ "$codex_rc" -eq 0 ]; then
+      setup_harness_result codex-mcp "MCP server registered" "./run.sh doctor-codex-mcp"
+    else
+      setup_result codex-mcp FAIL "detected codex, but the MCP registration did not complete (see above)"
+    fi
+    codex_rc=0; codex_statusline install || codex_rc=$?
+    if [ "$codex_rc" -eq 0 ]; then
+      setup_harness_result codex-statusline "thread-title visible identity enabled" "./run.sh doctor-codex-statusline"
+    else
+      setup_result codex-statusline FAIL "detected codex, but the visible-identity setting did not complete (see above)"
+    fi
+  fi
   # ── core bridge boundary ── deterministic preflight lives in `pnpm run
   # check:full`; live substrate acceptance lives in `LIVE=1 ./run.sh
   # release-gate <scratch> --cut`. Setup is the install path, so it verifies the
@@ -5707,6 +5795,14 @@ release_gate() {
   # applied from omp onward; it does not retroactively redesign Copilot's operator-metered
   # exclusion.
   run_live_step "smoke-omp-fresh-live (#87 bundle C: entwurf_fresh_call opens omp, exact nonce callback, addressed receive)" gate bash "$self" smoke-omp-fresh-live
+  # #95 first-admission LIVE acceptance. Unlike the older on-demand loaded-thread smoke,
+  # this gate owns all three windows it opens and therefore needs no pre-existing TUI/thread id.
+  # It still does not own the app-server: ENTWURF_CODEX_APP_SERVER_PID explicitly names the
+  # operator-started process, whose /proc TMUX/TMUX_PANE is the only seat authority.
+  # A real initial Pi opens Codex, correlates its callback and addresses it through native-push;
+  # Codex then opens the outbound Pi and correlates that callback. Actor coordinates travel,
+  # and fresh Codex == app-server/MCP inherited session == outbound Pi is a hard check.
+  run_live_step "smoke-codex-fresh-live (#95: visible Pi -> visible Codex/callback/addressed v2 -> visible Pi/callback)" gate bash "$self" smoke-codex-fresh-live
 
   # 4. BEHAVIOR lane (advisory, non-blocking). Model-in-loop gates that probe
   #     whether the model AUTONOMOUSLY drives the MCP entwurf surface. These never
@@ -6248,6 +6344,16 @@ case "$cmd" in
     # LIVE!=1. doctor-static preflight FAILs before the agy bridge is wired (③).
     run_ts scripts/smoke-agy-native-push-live.ts
     ;;
+  smoke-codex-native-push-live)
+    # Codex native-push LIVE acceptance. The operator owns both the app-server and visible
+    # attached TUI; this command only proves the shipped record/probe/delivery composition.
+    run_ts scripts/smoke-codex-native-push-live.ts
+    ;;
+  smoke-codex-fresh-live)
+    # First-admission LIVE acceptance: real visible Pi -> Codex -> Pi, using only the
+    # operator-owned app-server explicitly named by ENTWURF_CODEX_APP_SERVER_PID.
+    run_ts scripts/smoke-codex-fresh-live.ts
+    ;;
   smoke-user-scope-citizen)
     # 0.12.6 install-boundary gate: register-pi-package.py is the shared
     # packages[] SSOT for project/user install and remove; user scope makes
@@ -6453,6 +6559,36 @@ case "$cmd" in
     # acceptance, so none of them answers "is a doorbell held?" from a filename.
     shift || true
     run_ts scripts/omp-receive-facts.ts "$@"
+    ;;
+  install-codex-birth)
+    shift || true
+    (cd "$REPO_DIR" && bash scripts/codex-birth-install.sh "$@")
+    ;;
+  uninstall-codex-birth)
+    shift || true
+    (cd "$REPO_DIR" && bash scripts/codex-birth-uninstall.sh "$@")
+    ;;
+  doctor-codex-birth)
+    shift || true
+    (cd "$REPO_DIR" && bash scripts/codex-birth-doctor.sh "$@")
+    ;;
+  install-codex-mcp)
+    codex_mcp install
+    ;;
+  uninstall-codex-mcp)
+    codex_mcp uninstall
+    ;;
+  doctor-codex-mcp)
+    codex_mcp doctor
+    ;;
+  install-codex-statusline)
+    codex_statusline install
+    ;;
+  uninstall-codex-statusline)
+    codex_statusline uninstall
+    ;;
+  doctor-codex-statusline)
+    codex_statusline doctor
     ;;
   copilot)
     # #82 RAIL 7: the managed launch. `exec` and NO subshell/cd on purpose — the vendor
@@ -6744,6 +6880,30 @@ case "$cmd" in
     # verb in both invocation forms, and then succeed on the retry after the cut.
     # Hermetic (mkdtemp worlds + the store env seam); no model, no network.
     (cd "$REPO_DIR" && bash scripts/check-fresh-cut-gate.sh "$@")
+    ;;
+  check-codex-sender-identity)
+    shift || true
+    run_ts scripts/check-codex-sender-identity.ts "$@"
+    ;;
+  check-codex-bridge-identity)
+    shift || true
+    run_ts scripts/check-codex-bridge-identity.ts "$@"
+    ;;
+  check-codex-native-push)
+    shift || true
+    run_ts scripts/check-codex-native-push.ts "$@"
+    ;;
+  check-codex-birth-hook)
+    shift || true
+    run_ts scripts/check-codex-birth-hook.ts "$@"
+    ;;
+  check-codex-fresh-preflight)
+    shift || true
+    (cd "$REPO_DIR" && pnpm exec vitest run test/codex-fresh-preflight.test.ts "$@")
+    ;;
+  smoke-codex-config-state)
+    shift || true
+    (cd "$REPO_DIR" && bash scripts/smoke-codex-config-state.sh "$@")
     ;;
   check-pack)
     check_pack

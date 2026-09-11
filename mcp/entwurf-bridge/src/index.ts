@@ -65,7 +65,7 @@ import * as process from "node:process";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
-
+import { codexFreshPreflight } from "../../../pi-extensions/lib/codex-fresh-preflight.ts";
 import { controlSocketPathIn, defaultControlSocketDir } from "../../../pi-extensions/lib/control-socket-path.js";
 import { resolveMailboxReceiverFacts } from "../../../pi-extensions/lib/entwurf-deliverability.ts";
 import { listEntwurfFacts } from "../../../pi-extensions/lib/entwurf-fact-provider.ts";
@@ -81,8 +81,12 @@ import {
 	visibleResume,
 } from "../../../pi-extensions/lib/entwurf-v2-visible-resume.ts";
 import {
+	type CodexRequestSender,
 	probeNativeSenderAlive,
+	reconcileSenderIdentityClaims,
+	resolveCodexRequestSenderIdentity,
 	resolveTrustedMetaSenderIdentity,
+	type TrustedMetaSender,
 } from "../../../pi-extensions/lib/meta-sender-identity.ts";
 import {
 	applyOmpBridgeChildRootPolicy,
@@ -157,11 +161,11 @@ const server = new McpServer({ name: "entwurf-bridge", version: "0.1.0" });
 
 // Transparency envelope.
 //
-// Record-backed pi and trusted native-marker senders carry a structured envelope
-// so the receiver renders WHO (agentId, sessionId), FROM WHERE (cwd), and WHEN
-// (timestamp UTC, displayed in KST). `entwurf_self` is identity-required: pi's env
-// is a child carrier for the garden id established by record birth; a native sender
-// marker is accepted only through its backing record. Plain anonymous external hosts
+// Record-backed pi, pid-marker native senders, and request-scoped Codex senders carry a
+// structured envelope so the receiver renders WHO (agentId, sessionId), FROM WHERE (cwd), and
+// WHEN (timestamp UTC, displayed in KST). `entwurf_self` is identity-required: pi's env is a
+// child carrier for the garden id established by record birth; a native sender marker or Codex
+// request selector is accepted only through its backing record. Plain anonymous external hosts
 // fail. #50 C4: v2 delivery is identity-REQUIRED by default — "if we don't know
 // who sent it, we don't send it" holds on every install surface, not only where
 // an installer remembered to set a flag. The ONE documented escape hatch is
@@ -174,11 +178,11 @@ class EntwurfEnvelopeWiringError extends Error {
 	constructor(missing: string[]) {
 		super(
 			`entwurf sender envelope wiring incomplete — missing env: ${missing.join(", ")}, ` +
-				"and no trusted meta-sender marker was found. This MCP child should either inherit " +
-				"PI_SESSION_ID + PI_AGENT_ID (from an entwurf-control pi session), " +
-				"or run inside a garden-native meta-session whose own native hook wrote a live " +
-				"sender marker (Claude Code writes it from SessionStart, Antigravity from PreInvocation). " +
-				"entwurf_self is only callable when one of those authoritative identity paths is present.",
+				"and no record-backed native sender claim was found. This MCP child should inherit " +
+				"PI_SESSION_ID + PI_AGENT_ID from an entwurf-control pi session, carry a live sender marker " +
+				"written by its native hook, or be the managed Codex MCP child whose current tool request " +
+				"names a thread backed by a Codex citizen record. entwurf_self is callable only while one of " +
+				"those authoritative identity paths is present.",
 		);
 	}
 }
@@ -192,21 +196,19 @@ interface SenderEnvelope {
 	replyable?: boolean;
 }
 
-// #50 C4: anonymous sends are refused BY DEFAULT — a send with no pi-session
-// identity AND no trusted meta-sender marker does not go out as anonymous
-// external-mcp unless the operator explicitly wired the escape hatch.
+// #50 C4: anonymous sends are refused BY DEFAULT — a send with no pi-session identity,
+// trusted pid marker, or request-scoped Codex record does not go out as anonymous external-mcp
+// unless the operator explicitly wired the escape hatch.
 // "If we don't know who sent it, we don't send it."
 class EntwurfSenderIdentityError extends Error {
 	constructor() {
 		super(
 			"entwurf-bridge refused: no authoritative sender identity. Anonymous external sends are " +
-				"refused by default, and no pi-session env (PI_SESSION_ID + PI_AGENT_ID) or live meta-sender " +
-				"marker was found for this process. Each native backend writes that marker from its OWN hook, keyed " +
-				"by the native host's parent pid + start-time (Claude Code from SessionStart, Antigravity from " +
-				"PreInvocation) — open this session through the installed meta-bridge so your garden id is " +
-				"registered, then retry. A deliberately-anonymous external MCP host may set " +
-				"ENTWURF_BRIDGE_ALLOW_ANONYMOUS_SENDER=1 (explicit operator wiring; the send is then marked " +
-				"external/non-replyable).",
+				"refused by default, and this request has no complete pi-session env, live record-backed " +
+				"sender marker, or managed Codex thread selector backed by a Codex citizen record. Open the " +
+				"session through its installed birth/MCP integration, then retry. A deliberately-anonymous " +
+				"external MCP host may set ENTWURF_BRIDGE_ALLOW_ANONYMOUS_SENDER=1 (explicit operator wiring; " +
+				"the send is then marked external/non-replyable).",
 		);
 	}
 }
@@ -254,41 +256,15 @@ interface AuthoritativeSelf {
 	metaDeliveryDomain?: MetaDeliveryDomain;
 }
 
-async function buildTrustedMetaSenderEnvelope(cwd: string = process.cwd()): Promise<AuthoritativeSelf | null> {
-	// No pi-session identity. Try the meta-sender marker: a native backend that minted a
-	// garden-id from its own hook (Claude SessionStart / agy PreInvocation). The marker is
-	// keyed by the shared parent pid — this MCP child's process.ppid IS the native host the
-	// hook ran under (NOT cwd inference). A trusted marker promotes this process from
-	// anonymous external-mcp to a meta-session sender addressed by its garden-id.
-	const trusted = resolveTrustedMetaSenderIdentity({
-		markerPath: process.env.ENTWURF_META_SENDER_MARKER?.trim() || undefined,
-	});
-	if (!trusted) return null;
-	const { marker, identity } = trusted;
+interface SenderRequestContext {
+	requestMeta?: unknown;
+}
 
-	// Identity is trusted — but `replyable` is a SEPARATE fact, and WHICH fact depends on the
-	// rail a reply would ride (보정①). THREE values, not a native-push-or-self-fetch binary:
-	//   native-push ← nativePushSupported(backend). NOT wakeMode: `direct-inject` also covers
-	//     codex/pi, which have no native-push adapter.
-	//   self-fetch  ← resolveMailboxWakeModeCapability (the decider's mailbox seam — one owner
-	//     with dispatch). A new hardcoded backend list would drift the moment the registry
-	//     admits another self-fetch citizen.
-	//   none        ← neither. omp today: no mailbox drain, no native-push adapter. Rendering
-	//     this as self-fetch printed a mailboxPath nothing drains.
-	//   self-fetch (claude-code/copilot): can this citizen's own inbox wake? → the SHARED
-	//     receiver composition `resolveMailboxReceiverFacts`, the same one the v2 dispatch seam
-	//     uses, so a citizen's self-reported replyability can never disagree with what dispatch
-	//     decides about it. It reads the presence marker (a dead/reused owner already folds to
-	//     null) AND, where the watch owner is the sender-marker process, the #101 join that says
-	//     the owner is still serving THIS garden rather than one it switched away from.
-	//   native-push (antigravity): there is no inbox and no watch. A reply is injected into a
-	//     live app-server conversation, so only an adapter probe can answer. Composing the
-	//     receiver atom here would demand `watchArmed` from a backend that never arms one, and
-	//     every agy citizen would report replyable:false forever.
-	// Either way an inactive/unreachable citizen STILL returns its identity (who-sent must
-	// survive; degrading to null would erase the sender) — only with replyable:false.
-	// The rail, named ONCE and reused for both the predicate and the caller's rendering —
-	// so entwurf_self can never re-derive it differently from what decided `replyable`.
+async function buildMetaSenderEnvelope(
+	identity: TrustedMetaSender["identity"],
+	cwd: string,
+	trustedMarker?: TrustedMetaSender,
+): Promise<AuthoritativeSelf> {
 	const metaDeliveryDomain: MetaDeliveryDomain = nativePushSupported(identity.backend)
 		? "native-push"
 		: resolveMailboxWakeModeCapability(identity)
@@ -304,6 +280,11 @@ async function buildTrustedMetaSenderEnvelope(cwd: string = process.cwd()): Prom
 				}
 			: metaDeliveryDomain === "self-fetch"
 				? (() => {
+						if (!trustedMarker) {
+							throw new Error(
+								`entwurf-bridge: ${identity.backend} resolved as self-fetch without the sender marker its receiver join requires`,
+							);
+						}
 						const receiver = resolveMailboxReceiverFacts(identity, {
 							readReceiverMarker: (gardenId: string) => readMetaReceiverMarker({ gardenId }),
 							readSenderMarker: (backend: string, ownerPid: number) =>
@@ -323,12 +304,11 @@ async function buildTrustedMetaSenderEnvelope(cwd: string = process.cwd()): Prom
 						recordBacked: true,
 					};
 	const self = computeSelfAddressability(facts);
-
 	return {
 		envelope: {
 			sessionId: identity.gardenId,
 			agentId: `meta-session/${identity.backend}`,
-			cwd: marker.cwd || cwd,
+			cwd,
 			timestamp: new Date().toISOString(),
 			origin: "meta-session",
 			replyable: self.replyable,
@@ -337,17 +317,44 @@ async function buildTrustedMetaSenderEnvelope(cwd: string = process.cwd()): Prom
 	};
 }
 
-// async only for the native-push branch's adapter probe: a pi sender and a claude-code
-// sender still resolve from files alone, so their cost is unchanged.
-async function buildAuthoritativeSelfEnvelope(): Promise<AuthoritativeSelf> {
+async function resolveAuthoritativeSender(
+	context: SenderRequestContext,
+	cwd: string = process.cwd(),
+): Promise<AuthoritativeSelf | null> {
+	const sessionId = process.env.PI_SESSION_ID?.trim();
+	const agentId = process.env.PI_AGENT_ID?.trim();
+	const pi = sessionId && agentId && cwd ? buildStrictPiSenderEnvelope() : null;
+	const marker = resolveTrustedMetaSenderIdentity({
+		markerPath: process.env.ENTWURF_META_SENDER_MARKER?.trim() || undefined,
+	});
+	const codex: CodexRequestSender | null = resolveCodexRequestSenderIdentity({
+		provenance: process.env.ENTWURF_BRIDGE_NATIVE_HOST,
+		clientInfo: server.server.getClientVersion(),
+		requestMeta: context.requestMeta,
+	});
+	const selected = reconcileSenderIdentityClaims([
+		...(pi ? [{ rail: "pi-session" as const, id: pi.sessionId }] : []),
+		...(marker ? [{ rail: "meta-sender-marker" as const, id: marker.identity.gardenId }] : []),
+		...(codex ? [{ rail: "codex-request" as const, id: codex.identity.gardenId }] : []),
+	]);
+	if (!selected) return null;
+	if (codex && codex.identity.gardenId === selected.id) {
+		return buildMetaSenderEnvelope(codex.identity, codex.identity.cwd);
+	}
+	if (marker && marker.identity.gardenId === selected.id) {
+		return buildMetaSenderEnvelope(marker.identity, marker.marker.cwd || cwd, marker);
+	}
+	if (pi && pi.sessionId === selected.id) return { envelope: pi };
+	throw new Error(`entwurf-bridge: reconciled sender ${selected.id} has no matching identity source`);
+}
+
+// Async only when the selected sender rides native-push: replyability is the adapter's live fact.
+async function buildAuthoritativeSelfEnvelope(context: SenderRequestContext = {}): Promise<AuthoritativeSelf> {
+	const resolved = await resolveAuthoritativeSender(context);
+	if (resolved) return resolved;
 	const sessionId = process.env.PI_SESSION_ID?.trim();
 	const agentId = process.env.PI_AGENT_ID?.trim();
 	const cwd = process.cwd();
-	if (sessionId && agentId && cwd) return { envelope: buildStrictPiSenderEnvelope() };
-
-	const meta = await buildTrustedMetaSenderEnvelope(cwd);
-	if (meta) return meta;
-
 	const missing: string[] = [];
 	if (!sessionId) missing.push("PI_SESSION_ID");
 	if (!agentId) missing.push("PI_AGENT_ID");
@@ -355,18 +362,10 @@ async function buildAuthoritativeSelfEnvelope(): Promise<AuthoritativeSelf> {
 	throw new EntwurfEnvelopeWiringError(missing);
 }
 
-async function buildSendSenderEnvelope(): Promise<SenderEnvelope> {
-	const sessionId = process.env.PI_SESSION_ID?.trim();
-	const agentId = process.env.PI_AGENT_ID?.trim();
+async function buildSendSenderEnvelope(context: SenderRequestContext = {}): Promise<SenderEnvelope> {
+	const resolved = await resolveAuthoritativeSender(context);
+	if (resolved) return resolved.envelope;
 	const cwd = process.cwd();
-	if (sessionId && agentId && cwd) return buildStrictPiSenderEnvelope();
-
-	const meta = await buildTrustedMetaSenderEnvelope(cwd);
-	// Delivery takes the WIRE envelope only — the rail axis is rendering-local.
-	if (meta) return meta.envelope;
-
-	// No marker. #50 C4: anonymous external is refused UNLESS the operator wired the
-	// explicit escape hatch — identity-required is the default, not an install flag.
 	if (process.env.ENTWURF_BRIDGE_ALLOW_ANONYMOUS_SENDER !== "1") {
 		throw new EntwurfSenderIdentityError();
 	}
@@ -421,12 +420,11 @@ server.tool(
 		"outcome (delivered / rejected / delivered-but-lock-dirty). EXISTING targets only; discover with " +
 		"entwurf_peers. A peer entwurf_peers shows as liveness=alive → fire-and-forget. A " +
 		"citizen with NO socket liveness (liveness=unsupported) is ALSO fire-and-forget — unsupported means only " +
-		'"no control-socket probe" — and the decider picks its own rail: a self-fetch backend (e.g. Claude Code) ' +
-		"gets the mailbox, a native-push backend (e.g. Antigravity) gets direct injection and has NO mailbox at " +
-		"all. THERE IS A THIRD RESULT: the mailbox delivers only to a DELIVERABLE citizen, so a terminated " +
-		"session, or a backend with no adapter here (e.g. codex), is mailbox-undeliverable, not queued for an " +
-		"inbox nobody drains. The native-push probe is 3-valued: alive → injected; dead → " +
-		"native-push-target-dead; indeterminate → native-push-probe-indeterminate (unestablished ≠ gone). " +
+		'"no control-socket probe." The decider resolves the actual rail at dispatch time: a self-fetch ' +
+		"mailbox only while deliverable, native-push direct injection only while its adapter probe is alive, " +
+		"or a THIRD RESULT: rejection when neither holds. An inactive self-fetch citizen is mailbox-undeliverable; " +
+		"native-push has NO mailbox: dead → native-push-target-dead; indeterminate → " +
+		"native-push-probe-indeterminate. " +
 		"DORMANT IS UNREACHABLE: a socket-domain citizen that is not running gets dormant-fire-forget-unsupported " +
 		"— same receiver rule as the mailbox, no active drainer means no delivery. " +
 		"The intent that used to answer there, owned-outcome, resumed it by launching a hidden background child " +
@@ -466,11 +464,11 @@ server.tool(
 			),
 		wants_reply: z.boolean().optional().describe("Human-conversation reply hint (default false)"),
 	},
-	async ({ target, intent, message, mode, wants_reply }) => {
+	async ({ target, intent, message, mode, wants_reply }, extra) => {
 		try {
 			// Resolved ONCE so the dispatch-moment timestamp is fixed and the control RPC sender
 			// + the mailbox body sender share one envelope. No replyability gate (see above).
-			const sender = await buildSendSenderEnvelope();
+			const sender = await buildSendSenderEnvelope({ requestMeta: extra._meta });
 			const rendered = await runAndRenderEntwurfV2FromSurface(
 				{ target, intent, message, mode, wants_reply },
 				// No trust-preflight inputs are passed, and none exist to pass: the preflight on this
@@ -493,17 +491,16 @@ server.tool(
 		"degrading it to nothing would erase who-sent. Use to confirm WHO you " +
 		"are (agentId, sessionId), FROM WHERE (cwd), and WHEN this snapshot was taken. " +
 		"Works for pi sessions (PI_SESSION_ID / PI_AGENT_ID) and for garden-native meta-sessions, whose " +
-		"garden id comes from a trusted sender marker their OWN native hook wrote (Claude Code from " +
-		"SessionStart, Antigravity from PreInvocation). For a meta-session it also reports WHICH rail a " +
-		"reply rides, because that differs by backend: a self-fetch citizen (Claude Code) has a drainable " +
-		"mailbox and its path is shown, while a native-push citizen (Antigravity) has NO mailbox at all — " +
-		"a reply is injected straight into its live conversation. Do not expect a mailbox just because " +
-		"origin is meta-session. Throws for plain anonymous external MCP hosts because they have no " +
-		"authoritative reply address.",
+		"garden id comes from the matching record plus either a trusted native process marker or Codex's " +
+		"request-scoped thread selector. For a meta-session it also reports WHICH rail a reply rides, " +
+		"because that differs by backend: a self-fetch citizen has a drainable mailbox, while a " +
+		"native-push citizen has NO mailbox at all — a reply is injected straight into its live native " +
+		"conversation/thread. Do not expect a mailbox just because origin is meta-session. Throws for " +
+		"plain anonymous external MCP hosts because they have no authoritative reply address.",
 	{},
-	async () => {
+	async (_args, request) => {
 		try {
-			const self = await buildAuthoritativeSelfEnvelope();
+			const self = await buildAuthoritativeSelfEnvelope({ requestMeta: request._meta });
 			const sender = self.envelope;
 			const kst = formatKstTimestamp(sender.timestamp);
 			const extra: Record<string, string> = {};
@@ -707,19 +704,18 @@ server.tool(
 // against that answer would call home to a garden id nobody holds.
 server.tool(
 	"entwurf_fresh_call",
-	"Open ONE fresh visible sibling in the operator's tmux and hand it a first task. Four fixed " +
-		"backends only: pi, claude-code, copilot, omp. The sibling's FIRST action is a callback to you carrying a nonce, and the " +
+	"Open ONE fresh visible sibling in the operator's tmux and hand it a first task. Five fixed " +
+		"backends only: pi, claude-code, copilot, omp, codex. The sibling's FIRST action is a callback to you carrying a nonce, and the " +
 		"sender envelope of that callback is its garden id — that is how you learn the address of something that " +
 		"did not exist a moment ago. This returns a LAUNCH receipt (tmux window/pane plus that nonce) and nothing " +
 		"else: it does NOT mean the runtime started, the first turn ran, or the task was delivered. Nothing polls " +
 		"for the callback; if it never arrives the window is visible and can be read directly. For EXISTING " +
 		"citizens use entwurf_v2 — this tool only creates, and entwurf_peers only reports. Model is REQUIRED and " +
 		"is passed to the chosen runtime CLI (`provider/model` for pi; model id/alias for Claude Code; a model name " +
-		"or `auto` for copilot; a fuzzy model pattern for omp). A copilot launch goes through entwurf's own managed " +
-		"invocation and is refused BEFORE any window opens if this host lacks the Copilot birth, MCP, receiver or " +
-		"visible-footer units; an omp launch is refused the same way if this host lacks the OMP birth, MCP, receiver or " +
-		"visible-status units, or if omp's tools.xdev is not false (the vendor default hides MCP tool schemas from the " +
-		"prompt, so the sibling could not call you back at all). An optional " +
+		"or `auto` for copilot; a fuzzy model pattern for omp or codex). Copilot, omp, and codex are refused BEFORE " +
+		"any window opens when their required birth, MCP, receive/delivery, or visible-identity units are absent. " +
+		"Codex additionally requires the operator-owned default app-server socket; entwurf never starts or supervises it. " +
+		"An optional " +
 		"cwd starts the sibling in ONE literal absolute existing directory (cross-repo fresh) — never pick resume " +
 		"for a dormant record's cwd; resume is continuity-only. Omitted/empty cwd means the caller's own directory. " +
 		"An optional placement.tmuxSession opens it in ONE EXISTING session of this agent's own tmux server; an " +
@@ -729,8 +725,8 @@ server.tool(
 		"inside tmux: without a pane anchor there is no session to open a sibling beside.",
 	{
 		backend: z
-			.enum(["pi", "claude-code", "copilot", "omp"])
-			.describe("Which fixed runtime to open. Only these four; there is no arbitrary command."),
+			.enum(["pi", "claude-code", "copilot", "omp", "codex"])
+			.describe("Which fixed runtime to open. Only these five; there is no arbitrary command."),
 		model: z
 			.string()
 			.min(1)
@@ -745,7 +741,7 @@ server.tool(
 			// biome-ignore lint/complexity/noUselessEscapeInRegex: emitted to a Rust regex validator, see above
 			.regex(/^[A-Za-z0-9][A-Za-z0-9._/:\[\]-]*$/)
 			.describe(
-				"Required runtime model: canonical provider/model for pi, a Claude Code model id/alias, or a Copilot model name (or auto).",
+				"Required runtime model: canonical provider/model for pi, a Claude Code model id/alias, or a Copilot/OMP/Codex model name.",
 			),
 		task: z
 			.string()
@@ -773,10 +769,10 @@ server.tool(
 				"Optional project seat: open the sibling in ONE EXISTING tmux session of this agent's own server instead of the caller's session. Nothing is ever created — an absent session is a refusal, not a new session. Independent of cwd; neither is inferred from the other. The receipt echoes the REQUESTED name and reports the resolved target session id.",
 			),
 	},
-	async ({ backend, model, task, cwd, placement }) => {
+	async ({ backend, model, task, cwd, placement }, extra) => {
 		let callerGardenId: string | null = null;
 		try {
-			const self = await buildAuthoritativeSelfEnvelope();
+			const self = await buildAuthoritativeSelfEnvelope({ requestMeta: extra._meta });
 			callerGardenId = self.envelope.sessionId;
 		} catch (err) {
 			// ONE error is a legitimate answer here: this host has no authoritative identity at all
@@ -790,7 +786,11 @@ server.tool(
 			callerGardenId = null;
 		}
 		try {
-			const rendered = renderFreshCall(freshCall({ backend, model, task, cwd, placement, callerGardenId }));
+			const missing = backend === "codex" ? await codexFreshPreflight(process.env) : null;
+			const result = missing
+				? ({ ok: false, reason: missing } as const)
+				: freshCall({ backend, model, task, cwd, placement, callerGardenId });
+			const rendered = renderFreshCall(result);
 			return rendered.isError ? textErr(rendered.text) : textOk(rendered.text);
 		} catch (err) {
 			return textErr(`entwurf_fresh_call error: ${err instanceof Error ? err.message : String(err)}`);

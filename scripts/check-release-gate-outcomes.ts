@@ -297,6 +297,7 @@ function runSubcommand(sub: string, env: Record<string, string | undefined>): { 
 		"smoke-acp-long-turn-live": ["VERIFY.md", "on-demand, not part of `release-gate`"],
 		"smoke-mux-fresh-call-live": ["VERIFY.md", "Fresh-call LIVE is on-demand, not part of `release-gate`"],
 		"smoke-agy-native-push-live": ["VERIFY.md", "Aggregate release-gate does not own an agy conversation id"],
+		"smoke-codex-native-push-live": ["VERIFY.md", "Aggregate release-gate does not own a loaded Codex thread"],
 		"smoke-acp-ordering-probe-live": ["docs/acp-backend-rail.md", "opt-in paired observation"],
 		// Cortex needs an external Snowflake connection the HOST owns, so an aggregate
 		// that required it would block every cut taken without that account. Excluded —
@@ -807,6 +808,48 @@ function runSubcommand(sub: string, env: Record<string, string | undefined>): { 
 }
 
 // ===========================================================================
+// Codex first admission is a MUST; the loaded-thread probe remains on-demand
+//
+// The old native-push smoke consumes a thread the operator loaded in an attached
+// TUI, so the aggregate cannot own its prerequisite. The first-admission smoke
+// instead owns all three visible windows in the Pi -> Codex -> Pi chain and takes
+// only an explicit app-server PID as seat authority. The new gate must not silently
+// pull the old loaded-thread probe into release-gate, and keeping the old exclusion
+// must not excuse the new end-to-end acceptance.
+// ===========================================================================
+{
+	const runSh = readFileSync(join(REPO_DIR, "run.sh"), "utf8");
+	const gateBody = runSh.slice(runSh.indexOf("release_gate() {"), runSh.indexOf("# 5. Summary"));
+	const verify = readFileSync(join(REPO_DIR, "VERIFY.md"), "utf8");
+	const admissionSteps = gateBody.split("\n").filter((line) => line.includes('"$self" smoke-codex-fresh-live'));
+	const loadedThreadSteps = gateBody
+		.split("\n")
+		.filter((line) => line.includes('"$self" smoke-codex-native-push-live'));
+	const gaps: string[] = [];
+	if (admissionSteps.length !== 1) {
+		gaps.push(`release_gate runs smoke-codex-fresh-live ${admissionSteps.length}x (need exactly one MUST step)`);
+	}
+	if (admissionSteps.length === 1 && !admissionSteps[0]?.includes("run_live_step")) {
+		gaps.push("smoke-codex-fresh-live does not go through run_live_step, so LIVE=1/SKIP cannot reach --cut");
+	}
+	if (loadedThreadSteps.length !== 0) {
+		gaps.push(`release_gate runs the operator-thread smoke ${loadedThreadSteps.length}x (need zero)`);
+	}
+	if (!verify.includes("Aggregate release-gate does not own a loaded Codex thread")) {
+		gaps.push("VERIFY.md no longer states why smoke-codex-native-push-live remains on-demand");
+	}
+	if (!runSh.includes("ENTWURF_CODEX_APP_SERVER_PID")) {
+		gaps.push("run.sh no longer names the explicit operator-owned app-server PID prerequisite");
+	}
+	assert.ok(
+		gaps.length === 0,
+		"[QK:CODEX-FIRST-ADMISSION-IS-RELEASE-MUST] the fresh Codex acceptance must run exactly once through " +
+			"run_live_step, while the loaded-thread native-push smoke stays excluded for its documented operator-owned " +
+			`prerequisite. Broken: ${gaps.join("; ")}`,
+	);
+}
+
+// ===========================================================================
 // The operator's CONFIGURED bridge invocation is proven BEFORE the cost-bearing LIVE tier
 //
 // `check-bridge` boots the launcher this checkout SHIPS. It cannot speak for the string
@@ -873,5 +916,8 @@ console.log(
 		"five historical reds; and " +
 		"every gate a committed mutant names is itself inside check:full or states its exclusion in prose an operator " +
 		"reads; and the CI push trigger is filtered to branch refs, so a release tag creates no duplicate run; and " +
-		"the operator's CONFIGURED bridge invocation is booted exactly once through run_step, before the ACP LIVE tier",
+		"Pi -> visible Codex -> visible Pi first-admission callback/addressed/outbound acceptance is a release MUST " +
+		"while the operator-loaded-thread Codex native-push probe remains excluded; and the operator's CONFIGURED " +
+		"bridge invocation is booted exactly once " +
+		"through run_step, before the ACP LIVE tier",
 );

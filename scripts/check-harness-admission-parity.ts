@@ -81,7 +81,6 @@ const PRE_82_LEGACY: Partial<Record<MetaCitizenBackend, [file: string, sentence:
 		"DELIVERY.md",
 		"Admitted before the #82 step 9 contract and not re-evaluated under it, so it is legacy citizen evidence, not a step-9 supported harness",
 	],
-	codex: ["DELIVERY.md", "No owned native-citizen install/invocation lane."],
 };
 
 const fresh = new Set<string>(FRESH_CALL_BACKENDS);

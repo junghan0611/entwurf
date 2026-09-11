@@ -1,0 +1,542 @@
+{
+	"schemaVersion": 1,
+	"lane": "codex-native",
+	"mutants": [
+		{
+			"claim": "CODEX-BRIDGE-REQUEST-IDENTITY",
+			"title": "the Codex MCP provenance label drifts from the vendor host label, leaving request metadata present but anonymous",
+			"subject": "pi-extensions/lib/meta-sender-identity.ts",
+			"find": ["export const CODEX_BRIDGE_PROVENANCE_LABEL = \"codex\";"],
+			"replace": ["export const CODEX_BRIDGE_PROVENANCE_LABEL = \"external-mcp/codex\";"],
+			"gate": ["bash", "run.sh", "check-codex-bridge-identity"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:CODEX-BRIDGE-REQUEST-IDENTITY]",
+			"signatureSource": "scripts/check-codex-bridge-identity.ts"
+		},
+		{
+			"claim": "CODEX-NATIVE-LOADED-PROBE",
+			"title": "the Codex app-server probe ignores a loaded target and reports the live thread dead",
+			"subject": "pi-extensions/lib/native-push/codex-ws-client.ts",
+			"find": [
+				"\t\t\tif (result.data.includes(nativeSessionId)) return { status: \"alive\", route: { backend: \"codex\", socketPath } };"
+			],
+			"replace": [
+				"\t\t\tif (false && result.data.includes(nativeSessionId)) return { status: \"alive\", route: { backend: \"codex\", socketPath } };"
+			],
+			"gate": ["bash", "run.sh", "check-codex-native-push"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:CODEX-NATIVE-LOADED-PROBE]",
+			"signatureSource": "scripts/check-codex-native-push.ts"
+		},
+		{
+			"claim": "CODEX-NATIVE-VENDOR-QUEUE",
+			"title": "native delivery invokes a different Codex subcommand instead of the measured one-shot queue surface",
+			"subject": "pi-extensions/lib/native-push/codex-ws-client.ts",
+			"find": [
+				"\t\t[\"codex\", \"queue\", \"--remote\", `unix://${route.socketPath}`, \"--thread\", nativeSessionId, \"--message\", content],"
+			],
+			"replace": [
+				"\t\t[\"codex\", \"exec\", \"--remote\", `unix://${route.socketPath}`, \"--thread\", nativeSessionId, \"--message\", content],"
+			],
+			"gate": ["bash", "run.sh", "check-codex-native-push"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:CODEX-NATIVE-VENDOR-QUEUE]",
+			"signatureSource": "scripts/check-codex-native-push.ts"
+		},
+		{
+			"claim": "FRESHCALL-CODEX-ARGV",
+			"title": "Codex fresh launch drops the remote app-server attachment flag and opens an unrelated local session",
+			"subject": "pi-extensions/lib/mux-fresh-call.ts",
+			"find": ["\t\t\t\t\"--remote\","],
+			"replace": ["\t\t\t\t\"--resume\","],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:FRESHCALL-CODEX-ARGV]",
+			"signatureSource": "test/mux-fresh-call.test.ts"
+		},
+		{
+			"claim": "CODEX-BIRTH-MINTS-CODEX",
+			"title": "the Codex SessionStart hook writes a record into another backend domain",
+			"subject": "pi-extensions/meta-bridge-hook-codex.ts",
+			"find": ["\t\t\tbackend: \"codex\","],
+			"replace": ["\t\t\tbackend: \"omp\","],
+			"gate": ["bash", "run.sh", "check-codex-birth-hook"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:CODEX-BIRTH-MINTS-CODEX]",
+			"signatureSource": "scripts/check-codex-birth-hook.ts"
+		},
+		{
+			"claim": "CODEX-NATIVE-PRODUCTION-WIRING",
+			"title": "the native-push backend set drops Codex, so production routes a live app-server citizen to no delivery rail",
+			"subject": "pi-extensions/lib/entwurf-v2-contract.ts",
+			"find": ["export const NATIVE_PUSH_BACKENDS = [\"antigravity\", \"codex\"] as const;"],
+			"replace": ["export const NATIVE_PUSH_BACKENDS = [\"antigravity\"] as const;"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-production"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:CODEX-NATIVE-PRODUCTION-WIRING]",
+			"signatureSource": "scripts/check-entwurf-v2-production.ts"
+		},
+		{
+			"claim": "CODEX-NATIVE-NO-RETRY",
+			"title": "Codex queue delivery is marked retriable, so an accepted message may be replayed after its receipt is lost",
+			"subject": "pi-extensions/lib/native-push/codex-ws-client.ts",
+			"find": ["\t\tretriable: false,"],
+			"replace": ["\t\tretriable: true,"],
+			"gate": ["bash", "run.sh", "check-codex-native-push"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:CODEX-NATIVE-NO-RETRY]",
+			"signatureSource": "scripts/check-codex-native-push.ts"
+		},
+		{
+			"claim": "CODEX-BIRTH-REQUIRES-MODEL",
+			"title": "the Codex birth reader silently maps a missing measured model field to null",
+			"subject": "pi-extensions/meta-bridge-hook-codex.ts",
+			"find": ["\tif (!(\"model\" in env)) {"],
+			"replace": ["\tif (false && !(\"model\" in env)) {"],
+			"gate": ["bash", "run.sh", "check-codex-birth-hook"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:CODEX-BIRTH-REQUIRES-MODEL]",
+			"signatureSource": "scripts/check-codex-birth-hook.ts"
+		},
+		{
+			"claim": "FRESHCALL-CODEX-MCP-EXACT",
+			"title": "fresh preflight accepts extra keys in the managed Codex MCP table",
+			"subject": "pi-extensions/lib/codex-fresh-preflight.ts",
+			"find": ["\tif (Object.keys(server).sort().join(\",\") !== \"command,env,env_vars\") return true;"],
+			"replace": ["\tif (false) return true;"],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:FRESHCALL-CODEX-MCP-EXACT]",
+			"signatureSource": "test/codex-fresh-preflight.test.ts"
+		},
+		{
+			"claim": "CODEX-MCP-UNINSTALL-REFUSES-DRIFT",
+			"title": "the Codex MCP inverse restores its preimage over operator-modified managed-table bytes",
+			"subject": "scripts/codex-mcp-config.py",
+			"find": ["        if entry != expected:"],
+			"replace": ["        if False and entry != expected:"],
+			"gate": ["bash", "run.sh", "smoke-codex-config-state"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:CODEX-MCP-UNINSTALL-REFUSES-DRIFT]",
+			"signatureSource": "scripts/smoke-codex-config-state.sh"
+		},
+		{
+			"claim": "CODEX-INSTALL-REFUSES-CLOSURE-DRIFT",
+			"title": "the root installer accepts an unrecorded helper file and recursively deletes it during reinstall",
+			"subject": "scripts/codex-birth-install.sh",
+			"find": ["    if (actual.length > 0 && !matchesNext && !matchesPrev) {"],
+			"replace": ["    if (false) {"],
+			"gate": ["bash", "run.sh", "check-codex-birth-hook"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:CODEX-INSTALL-REFUSES-CLOSURE-DRIFT]",
+			"signatureSource": "scripts/check-codex-birth-hook.ts"
+		},
+		{
+			"claim": "CODEX-BIRTH-STATE-READABLE",
+			"title": "the root installer recreates an ownership-state parent as non-traversable to ordinary setup",
+			"subject": "scripts/codex-birth-install.sh",
+			"find": ["  if [ ! -d \"$STATE_ROOT\" ]; then install -d -m 0755 -- \"$STATE_ROOT\"; fi"],
+			"replace": ["  if [ ! -d \"$STATE_ROOT\" ]; then install -d -m 0700 -- \"$STATE_ROOT\"; fi"],
+			"gate": ["bash", "run.sh", "check-codex-birth-hook"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:CODEX-BIRTH-STATE-READABLE]",
+			"signatureSource": "scripts/check-codex-birth-hook.ts"
+		},
+		{
+			"claim": "CODEX-SETUP-ZERO-STATE",
+			"title": "setup ignores the explicit absent-Codex seam and enters the detected harness branch, so a harness-free package consumer is no longer zero-write",
+			"subject": "run.sh",
+			"find": ["  if ! command -v \"${CODEX_BIN:-codex}\" >/dev/null 2>&1; then"],
+			"replace": ["  if false; then"],
+			"gate": ["bash", "scripts/check-setup-qualification.sh"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:CODEX-SETUP-ZERO-STATE]",
+			"signatureSource": "scripts/check-setup-qualification.sh"
+		},
+		{
+			"claim": "CODEX-NATIVE-WS-TERMINAL",
+			"title": "both redundant oversize-frame guards on the 127-length WebSocket path are disabled, so a frame declaring an unbounded length is treated as merely incomplete and the parser waits forever for bytes that will never arrive instead of terminating the connection",
+			"subject": "pi-extensions/lib/native-push/codex-ws-client.ts",
+			"find": [
+				"\t\t\tif (wide > BigInt(MAX_MESSAGE_BYTES)) return this.protocolFailure(\"WebSocket frame exceeds 1 MiB\");",
+				"\t\t\tlength = Number(wide);",
+				"\t\t\toffset = 10;",
+				"\t\t}",
+				"\t\tif (length > MAX_MESSAGE_BYTES) return this.protocolFailure(\"WebSocket frame exceeds 1 MiB\");"
+			],
+			"replace": [
+				"\t\t\tif (false) return this.protocolFailure(\"WebSocket frame exceeds 1 MiB\");",
+				"\t\t\tlength = Number(wide);",
+				"\t\t\toffset = 10;",
+				"\t\t}",
+				"\t\tif (false) return this.protocolFailure(\"WebSocket frame exceeds 1 MiB\");"
+			],
+			"gate": ["bash", "run.sh", "check-codex-native-push"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:CODEX-NATIVE-WS-TERMINAL]",
+			"signatureSource": "scripts/check-codex-native-push.ts"
+		},
+		{
+			"claim": "FRESHCALL-CODEX-MCP-ENV-ORDER",
+			"title": "fresh preflight accepts the managed Codex MCP env_vars in any order, as long as the set matches \u2014 a reordered vendor-visible env manifest passes as exact",
+			"subject": "pi-extensions/lib/codex-fresh-preflight.ts",
+			"find": ["\t\tenvVars.some((name, index) => name !== CODEX_MCP_ENV_VARS[index])"],
+			"replace": [
+				"\t\tenvVars.some((name) => !CODEX_MCP_ENV_VARS.includes(name as (typeof CODEX_MCP_ENV_VARS)[number]))"
+			],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:FRESHCALL-CODEX-MCP-ENV-ORDER]",
+			"signatureSource": "test/codex-fresh-preflight.test.ts"
+		},
+		{
+			"claim": "FRESHCALL-CODEX-HOOKS-SAFE",
+			"title": "fresh preflight stops checking the root hooks.json for unsafe ownership/permissions/symlinks, so a world-writable or symlinked hooks.json is treated as a safe published birth unit",
+			"subject": "pi-extensions/lib/codex-fresh-preflight.ts",
+			"find": ["\tif (!isSafeSystemFile(paths.hooksFile, expectedUid)) return true;"],
+			"replace": ["\tif (false) return true;"],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:FRESHCALL-CODEX-HOOKS-SAFE]",
+			"signatureSource": "test/codex-fresh-preflight.test.ts"
+		},
+		{
+			"claim": "CODEX-SETUP-BIRTH-COSMETIC-PASS",
+			"title": "the codex-birth-doctor exit code is swallowed instead of captured, so a detected-but-incomplete root birth reads as codex-birth PASS and the whole aggregate can read green",
+			"subject": "run.sh",
+			"find": ["    codex_rc=0; (cd \"$REPO_DIR\" && bash scripts/codex-birth-doctor.sh) >/dev/null || codex_rc=$?"],
+			"replace": ["    codex_rc=0; (cd \"$REPO_DIR\" && bash scripts/codex-birth-doctor.sh) >/dev/null || true"],
+			"gate": ["bash", "run.sh", "smoke-setup-verdict"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:CODEX-SETUP-BIRTH-COSMETIC-PASS]",
+			"signatureSource": "scripts/smoke-setup-verdict.sh"
+		},
+		{
+			"claim": "CODEX-SETUP-BIRTH-INDEPENDENT",
+			"title": "an absent-or-red root Codex birth aborts the whole codex composition, so the MCP/status-line user atoms are silently never attempted while the operator reads only the first failure",
+			"subject": "run.sh",
+			"find": [
+				"      setup_result codex-birth FAIL \"detected codex, but the root-managed birth prerequisite is missing or red \u2014 run 'sudo entwurf install-codex-birth', then re-run setup\"\n    fi"
+			],
+			"replace": [
+				"      setup_result codex-birth FAIL \"detected codex, but the root-managed birth prerequisite is missing or red \u2014 run 'sudo entwurf install-codex-birth', then re-run setup\"\n      return 1\n    fi"
+			],
+			"gate": ["bash", "run.sh", "smoke-setup-verdict"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:CODEX-SETUP-BIRTH-INDEPENDENT]",
+			"signatureSource": "scripts/smoke-setup-verdict.sh"
+		},
+		{
+			"claim": "CODEX-INSTALL-RESUMES-INTERRUPTED-PUBLISH",
+			"title": "the installer stops recognising the generation an interrupted publish was replacing, so a host killed mid-publish is refused as foreign and its root-owned /etc bytes can never be replaced or removed",
+			"subject": "scripts/codex-birth-install.sh",
+			"find": ["    const matchesPrev = prevFiles !== null && matchesFull(prevFiles);"],
+			"replace": ["    const matchesPrev = false;"],
+			"gate": ["bash", "run.sh", "check-codex-birth-hook"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:CODEX-INSTALL-RESUMES-INTERRUPTED-PUBLISH]",
+			"signatureSource": "scripts/check-codex-birth-hook.ts"
+		},
+		{
+			"claim": "CODEX-INSTALL-REFUSES-STALE-GENERATION",
+			"title": "the installer tolerates a finished install that still records the generation it replaced, so a stale second authority keeps licensing replacement of bytes nobody is replacing",
+			"subject": "scripts/codex-birth-install.sh",
+			"find": [
+				"      if (s.status !== \"publishing\") throw new Error(\"a finished install still records state.previous \u2014 the publish that owned it never cleared it\");"
+			],
+			"replace": ["      if (false) throw new Error(\"unreachable\");"],
+			"gate": ["bash", "run.sh", "check-codex-birth-hook"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:CODEX-INSTALL-REFUSES-STALE-GENERATION]",
+			"signatureSource": "scripts/check-codex-birth-hook.ts"
+		},
+		{
+			"claim": "CODEX-UNINSTALL-INTERRUPTED-PUBLISH",
+			"title": "the inverse builds its removal plan from the incoming generation only, so the live bytes of an interrupted publish are reported as somebody else's edit and left in /etc forever",
+			"subject": "scripts/codex-birth-uninstall.sh",
+			"find": ["  if (previous !== null) collect(previous.helperFiles, \"state.previous.helperFiles\");"],
+			"replace": ["  if (false) collect([], \"unreachable\");"],
+			"gate": ["bash", "run.sh", "check-codex-birth-hook"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:CODEX-UNINSTALL-INTERRUPTED-PUBLISH]",
+			"signatureSource": "scripts/check-codex-birth-hook.ts"
+		},
+		{
+			"claim": "CODEX-DOCTOR-REFUSES-WRITABLE-CLOSURE",
+			"title": "the birth doctor judges the closure by digest alone, so a payload any user can rewrite is reported green while the fresh-call preflight refuses that same host",
+			"subject": "scripts/codex-birth-doctor.sh",
+			"find": [
+				"      if ((st.mode & 0o022) !== 0) return label + \" is group/world-writable (mode \" + (st.mode & 0o7777).toString(8).padStart(4, \"0\") + \"): \" + file;"
+			],
+			"replace": ["      if (false) return label;"],
+			"gate": ["bash", "run.sh", "check-codex-birth-hook"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:CODEX-DOCTOR-REFUSES-WRITABLE-CLOSURE]",
+			"signatureSource": "scripts/check-codex-birth-hook.ts"
+		},
+		{
+			"claim": "CODEX-DOCTOR-REPORTS-INVENTORY",
+			"title": "the birth doctor stops walking the published closure, so a file no generation records keeps the directory unreclaimable while ownership still reads green",
+			"subject": "scripts/codex-birth-doctor.sh",
+			"find": [
+				"        else if (!owned.has(childRel)) out.push(\"BAD\\tthe closure holds a file no generation records: \" + child + \" \u2014 the inverse will refuse to reclaim the directory. Repair: inspect it, move it out deliberately, then sudo ./run.sh install-codex-birth\");"
+			],
+			"replace": ["        else if (false) out.push(\"BAD\\tunreachable\");"],
+			"gate": ["bash", "run.sh", "check-codex-birth-hook"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:CODEX-DOCTOR-REPORTS-INVENTORY]",
+			"signatureSource": "scripts/check-codex-birth-hook.ts"
+		},
+		{
+			"claim": "CODEX-DOCTOR-REFUSES-WRITABLE-STATE",
+			"title": "the birth doctor stops checking the ownership state's own mode, so a removal authority any user can rewrite is reported green",
+			"subject": "scripts/codex-birth-doctor.sh",
+			"find": ["  elif [ $(( 8#${STATE_MODE:-777} & 0022 )) -ne 0 ] 2>/dev/null; then"],
+			"replace": ["  elif false; then"],
+			"gate": ["bash", "run.sh", "check-codex-birth-hook"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:CODEX-DOCTOR-REFUSES-WRITABLE-STATE]",
+			"signatureSource": "scripts/check-codex-birth-hook.ts"
+		},
+		{
+			"claim": "CODEX-DOCTOR-REFUSES-STALE-GENERATION",
+			"title": "the birth doctor accepts a finished install that still names the generation it replaced, disagreeing with the installer and the inverse that both refuse that state",
+			"subject": "scripts/codex-birth-doctor.sh",
+			"find": [
+				"      if (s.status !== \"publishing\") out.push(\"BAD\\tthe state is `installed` but still records state.previous \u2014 a finished publish must clear the generation it replaced. The installer refuses this state. Repair: sudo ./run.sh install-codex-birth\");"
+			],
+			"replace": ["      if (false) out.push(\"BAD\\tunreachable\");"],
+			"gate": ["bash", "run.sh", "check-codex-birth-hook"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:CODEX-DOCTOR-REFUSES-STALE-GENERATION]",
+			"signatureSource": "scripts/check-codex-birth-hook.ts"
+		},
+		{
+			"claim": "FRESHCALL-CODEX-APP-SERVER-LIVE",
+			"title": "fresh preflight reports the app-server ready on the inode check alone, so a stale socket file no live process answers passes and the visible launch dies afterwards",
+			"subject": "pi-extensions/lib/codex-fresh-preflight.ts",
+			"find": ["\treturn live ? null : \"codex-app-server-unavailable\";"],
+			"replace": ["\treturn null;"],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:FRESHCALL-CODEX-APP-SERVER-LIVE]",
+			"signatureSource": "test/codex-fresh-preflight.test.ts"
+		},
+		{
+			"claim": "FRESHCALL-CODEX-HOOK-KEYS",
+			"title": "fresh preflight stops requiring the exact birth handler key set, so an async or extra-key hook \u2014 one the installer would never publish and one that lets the turn proceed before the record exists \u2014 reads as an installed birth unit",
+			"subject": "pi-extensions/lib/codex-fresh-preflight.ts",
+			"find": ["\t\tif (Object.keys(hook).sort().join(\",\") !== \"command,timeout,type\") return true;"],
+			"replace": ["\t\tif (false) return true;"],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:FRESHCALL-CODEX-HOOK-KEYS]",
+			"signatureSource": "test/codex-fresh-preflight.test.ts"
+		},
+		{
+			"claim": "CODEX-TOML-STATE-BEFORE-CONFIG",
+			"title": "the MCP atom writes its config before its durable state receipt, so a state-write fault can no longer stop an already-mutated operator config",
+			"subject": "scripts/codex-mcp-config.py",
+			"find": [
+				"    atomic_write_state(state_path, state)",
+				"    # Strongest idempotence is an untouched file: same bytes, same mtime.",
+				"    if candidate != (text if text is not None else \"\"):",
+				"        atomic_write(config_path, candidate, prefix=\".codex-mcp-\")"
+			],
+			"replace": [
+				"    # mutant: config write reordered before state write",
+				"    if candidate != (text if text is not None else \"\"):",
+				"        atomic_write(config_path, candidate, prefix=\".codex-mcp-\")",
+				"    atomic_write_state(state_path, state)"
+			],
+			"gate": ["bash", "run.sh", "smoke-codex-config-state"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:CODEX-TOML-STATE-BEFORE-CONFIG]",
+			"signatureSource": "scripts/smoke-codex-config-state.sh"
+		},
+		{
+			"claim": "CODEX-TOML-CONFIG-REPLACE-ROLLBACK",
+			"title": "the MCP atom's config write drops its fault-injection prefix, so an injected replace fault silently stops firing and a broken write reports success",
+			"subject": "scripts/codex-mcp-config.py",
+			"find": [
+				"    if candidate != (text if text is not None else \"\"):",
+				"        atomic_write(config_path, candidate, prefix=\".codex-mcp-\")"
+			],
+			"replace": [
+				"    if candidate != (text if text is not None else \"\"):",
+				"        atomic_write(config_path, candidate)"
+			],
+			"gate": ["bash", "run.sh", "smoke-codex-config-state"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:CODEX-TOML-CONFIG-REPLACE-ROLLBACK]",
+			"signatureSource": "scripts/smoke-codex-config-state.sh"
+		},
+		{
+			"claim": "CODEX-MCP-RESHAPED-REFUSES-KEEPS-STATE",
+			"title": "the MCP inverse's reshaped-entry refusal is disabled, so a present-but-unlocatable owned entry is silently treated as genuinely gone",
+			"subject": "scripts/codex-mcp-config.py",
+			"find": ["    elif entry is not None:"],
+			"replace": ["    elif False:  # mutant: reshaped-owned refusal disabled"],
+			"gate": ["bash", "run.sh", "smoke-codex-config-state"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:CODEX-MCP-RESHAPED-REFUSES-KEEPS-STATE]",
+			"signatureSource": "scripts/smoke-codex-config-state.sh"
+		},
+		{
+			"claim": "CODEX-SL-GENUINELY-ABSENT-CLEARS-STATE",
+			"title": "the statusline inverse always treats a missing key as reshaped, so a genuinely absent thread-title membership refuses instead of clearing state",
+			"subject": "scripts/codex-statusline-config.py",
+			"find": ["        if shape == \"has-key\" and REQUIRED_ITEM in value:"],
+			"replace": ["        if True:  # mutant: genuinely-absent path always refuses"],
+			"gate": ["bash", "run.sh", "smoke-codex-config-state"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:CODEX-SL-GENUINELY-ABSENT-CLEARS-STATE]",
+			"signatureSource": "scripts/smoke-codex-config-state.sh"
+		},
+		{
+			"claim": "CODEX-THREAD-READ-DIALECT",
+			"title": "the visible-title read-back sends the thread id under a name the vendor app-server does not accept, so first-admission LIVE is the first place the dialect is tried",
+			"subject": "pi-extensions/lib/native-push/codex-ws-client.ts",
+			"find": ["\t\tconst result = (await protocol.request(\"thread/read\", { threadId, includeTurns })) as {"],
+			"replace": [
+				"\t\tconst result = (await protocol.request(\"thread/read\", { thread_id: threadId, includeTurns })) as {"
+			],
+			"gate": ["bash", "run.sh", "check-codex-native-push"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:CODEX-THREAD-READ-DIALECT]",
+			"signatureSource": "scripts/check-codex-native-push.ts"
+		},
+		{
+			"claim": "CODEX-THREAD-READ-REFUSES-MALFORMED",
+			"title": "a thread/read reply carrying no thread object is read as a thread with no title, so a broken read becomes an empty visible title instead of a refusal",
+			"subject": "pi-extensions/lib/native-push/codex-ws-client.ts",
+			"find": ["\t\tif (thread == null || typeof thread !== \"object\" || Array.isArray(thread)) {"],
+			"replace": ["\t\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-codex-native-push"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:CODEX-THREAD-READ-REFUSES-MALFORMED]",
+			"signatureSource": "scripts/check-codex-native-push.ts"
+		},
+		{
+			"claim": "CODEX-ORPHAN-WINDOW-RECOVERY",
+			"title": "the orphan-window parser reinstates an arbitrary length bound, so a receipt carrying a real project cwd and a seat recovers nothing",
+			"subject": "scripts/lib/launch-receipt-windows.ts",
+			"find": ["\tfor (const line of text.split(LINE)) {"],
+			"replace": ["\tfor (const line of text.slice(0, 300).split(LINE)) {"],
+			"gate": ["bash", "run.sh", "check-codex-native-push"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:CODEX-ORPHAN-WINDOW-RECOVERY]",
+			"signatureSource": "scripts/check-codex-native-push.ts"
+		},
+		{
+			"claim": "CODEX-DOCTOR-REFUSES-UNSAFE-PARENT",
+			"title": "the birth doctor stops checking the directories it publishes into, so a group/world-writable /etc/codex or state root reads green while the installer refuses that same host",
+			"subject": "scripts/codex-birth-doctor.sh",
+			"find": ["  if [ $((num & 0022)) -ne 0 ]; then"],
+			"replace": ["  if false; then"],
+			"gate": ["bash", "run.sh", "check-codex-birth-hook"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:CODEX-DOCTOR-REFUSES-UNSAFE-PARENT]",
+			"signatureSource": "scripts/check-codex-birth-hook.ts"
+		},
+		{
+			"claim": "CODEX-DOCTOR-BINDS-FIXED-PATHS",
+			"title": "the birth doctor reads its paths out of the ownership state, so a state naming a byte-identical copy elsewhere is certified green while the real /etc/codex bytes have no authority",
+			"subject": "scripts/codex-birth-doctor.sh",
+			"find": [
+				"    if (s.hooksFile !== process.env.DOCTOR_HOOKS_FILE) out.push(\"BAD\\tthe ownership state names hooksFile \" + JSON.stringify(s.hooksFile) + \", not the fixed path this unit owns (\" + process.env.DOCTOR_HOOKS_FILE + \") \u2014 that state is authority for somewhere else, so the installed bytes have none. Repair: inspect the state by hand; the inverse refuses it too.\");",
+				"    if (s.helperDir !== process.env.DOCTOR_HELPER_DIR) out.push(\"BAD\\tthe ownership state names helperDir \" + JSON.stringify(s.helperDir) + \", not the fixed path this unit owns (\" + process.env.DOCTOR_HELPER_DIR + \") \u2014 same defect, one path over.\");"
+			],
+			"replace": ["    if (false) out.push(\"BAD\\tunreachable\");"],
+			"gate": ["bash", "run.sh", "check-codex-birth-hook"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:CODEX-DOCTOR-BINDS-FIXED-PATHS]",
+			"signatureSource": "scripts/check-codex-birth-hook.ts"
+		},
+		{
+			"claim": "CODEX-DOCTOR-OK-NEVER-CONTRADICTS",
+			"title": "the inventory OK line goes back to ignoring member-level defects, so the doctor prints that the closure is root-owned throughout beside a line saying one member is world-writable",
+			"subject": "scripts/codex-birth-doctor.sh",
+			"find": ["    if (out.filter((l) => l.startsWith(\"BAD\\t\")).length === 0)"],
+			"replace": ["    if (out.filter((l) => l.startsWith(\"BAD\\tthe closure\")).length === 0)"],
+			"gate": ["bash", "run.sh", "check-codex-birth-hook"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:CODEX-DOCTOR-OK-NEVER-CONTRADICTS]",
+			"signatureSource": "scripts/check-codex-birth-hook.ts"
+		},
+		{
+			"claim": "FRESHCALL-CODEX-APP-SERVER-NO-LEAK",
+			"title": "an app-server connection that opens after the preflight bound expired is left open, leaking a live socket into the host for the rest of the process",
+			"subject": "pi-extensions/lib/codex-fresh-preflight.ts",
+			"find": ["\t\t\t\t\tlate.close();"],
+			"replace": ["\t\t\t\t\tvoid late;"],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:FRESHCALL-CODEX-APP-SERVER-NO-LEAK]",
+			"signatureSource": "test/codex-fresh-preflight.test.ts"
+		},
+		{
+			"claim": "CODEX-INSTALL-KEEPS-ETC-PROVENANCE",
+			"title": "a reinstall overwrites the /etc/codex creation history with what that run happened to observe, so the ordinary repair path silently makes the directory permanent",
+			"subject": "scripts/codex-birth-install.sh",
+			"find": ["      ETCCREATED) [ \"$ock_val\" = \"true\" ] && ETC_DIR_CREATED=true ;;"],
+			"replace": ["      ETCCREATED) : ;;"],
+			"gate": ["bash", "run.sh", "check-codex-birth-hook"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:CODEX-INSTALL-KEEPS-ETC-PROVENANCE]",
+			"signatureSource": "scripts/check-codex-birth-hook.ts"
+		},
+		{
+			"claim": "CODEX-UNINSTALL-REFUSES-WRITABLE-STATE",
+			"title": "the inverse deletes files under /etc on the word of an ownership state any user can rewrite, the one integrity check the installer and doctor both make and it did not",
+			"subject": "scripts/codex-birth-uninstall.sh",
+			"find": [
+				"[ $((8#$STATE_MODE & 0022)) -eq 0 ] || die \"$STATE_FILE is group/world-writable (mode $STATE_MODE), so it cannot authorize deleting anything under /etc. Refusing; nothing written."
+			],
+			"replace": ["[ 0 -eq 0 ] || die \"unreachable."],
+			"gate": ["bash", "run.sh", "check-codex-birth-hook"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:CODEX-UNINSTALL-REFUSES-WRITABLE-STATE]",
+			"signatureSource": "scripts/check-codex-birth-hook.ts"
+		},
+		{
+			"claim": "CODEX-UNINSTALL-BINDS-FIXED-PATHS",
+			"title": "the inverse accepts any absolute path the ownership state names, so a retargeted state makes it delete files at a path this unit never owned while the real /etc/codex bytes stay",
+			"subject": "scripts/codex-birth-uninstall.sh",
+			"find": [
+				"  if (s.hooksFile !== process.env.INVERSE_HOOKS_FILE) throw new Error(\"hooksFile is \" + JSON.stringify(s.hooksFile) + \", not the fixed path this unit owns (\" + process.env.INVERSE_HOOKS_FILE + \")\");",
+				"  if (s.helperDir !== process.env.INVERSE_HELPER_DIR) throw new Error(\"helperDir is \" + JSON.stringify(s.helperDir) + \", not the fixed path this unit owns (\" + process.env.INVERSE_HELPER_DIR + \")\");"
+			],
+			"replace": [
+				"  if (typeof s.hooksFile !== \"string\" || !s.hooksFile.startsWith(\"/\")) throw new Error(\"hooksFile is not an absolute path\");",
+				"  if (typeof s.helperDir !== \"string\" || !s.helperDir.startsWith(\"/\")) throw new Error(\"helperDir is not an absolute path\");"
+			],
+			"gate": ["bash", "run.sh", "check-codex-birth-hook"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:CODEX-UNINSTALL-BINDS-FIXED-PATHS]",
+			"signatureSource": "scripts/check-codex-birth-hook.ts"
+		},
+		{
+			"claim": "FRESHCALL-CODEX-PREMUTATION-MCP",
+			"title": "the MCP public surface stops running the Codex capability preflight, so a host with no birth unit gets a tmux window opened before anything decided the sibling could exist",
+			"subject": "mcp/entwurf-bridge/src/index.ts",
+			"find": ["\t\t\tconst missing = backend === \"codex\" ? await codexFreshPreflight(process.env) : null;"],
+			"replace": ["\t\t\tconst missing = null;"],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:FRESHCALL-CODEX-PREMUTATION-MCP]",
+			"signatureSource": "test/fresh-call-surfaces.contract.test.ts"
+		},
+		{
+			"claim": "FRESHCALL-CODEX-PREMUTATION-PI",
+			"title": "the native pi public surface stops running the Codex capability preflight, so the same window opens from the other public door",
+			"subject": "pi-extensions/entwurf-control.ts",
+			"find": ["\t\t\t\t\tparams.backend === \"codex\""],
+			"replace": ["\t\t\t\t\tfalse"],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:FRESHCALL-CODEX-PREMUTATION-PI]",
+			"signatureSource": "test/fresh-call-surfaces.contract.test.ts"
+		}
+	]
+}

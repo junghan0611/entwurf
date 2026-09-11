@@ -137,6 +137,7 @@
 		"../../scripts/omp-receive-facts.ts",
 		"../../pi-extensions/meta-bridge-hook.ts",
 		"../../pi-extensions/meta-bridge-hook-copilot.ts",
+		"../../pi-extensions/meta-bridge-hook-codex.ts",
 		"../../pi-extensions/meta-bridge-omp.ts",
 		"../../pi-extensions/meta-bridge-receive-omp.ts"
 	]

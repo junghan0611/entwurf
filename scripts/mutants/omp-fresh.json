@@ -6,8 +6,10 @@
 			"claim": "ADMISSION-FRESH-PARITY",
 			"title": "a post-#82 harness admitted as a full D6 citizen while entwurf_fresh_call cannot open it — the exact state the Bundle A+B candidate shipped in, where every gate was green and only prose said the backend was unsupported. This is the defect the whole gate exists for: without it, an `unsupported` note reads as a partial-release permit",
 			"subject": "pi-extensions/lib/mux-fresh-call.ts",
-			"find": ["export const FRESH_CALL_BACKENDS = [\"pi\", \"claude-code\", \"copilot\", \"omp\"] as const;"],
-			"replace": ["export const FRESH_CALL_BACKENDS = [\"pi\", \"claude-code\", \"copilot\"] as const;"],
+			"find": [
+				"export const FRESH_CALL_BACKENDS = [\"pi\", \"claude-code\", \"copilot\", \"omp\", \"codex\"] as const;"
+			],
+			"replace": ["export const FRESH_CALL_BACKENDS = [\"pi\", \"claude-code\", \"copilot\", \"codex\"] as const;"],
 			"gate": ["bash", "run.sh", "check-harness-admission-parity"],
 			"timeoutSeconds": 300,
 			"signature": "[QK:ADMISSION-FRESH-PARITY]",
@@ -117,8 +119,8 @@
 			"claim": "FRESHCALL-BACKEND-SET-SURFACE-PARITY-SKILL",
 			"title": "a backend added to the composition and both schema surfaces but not to the operator skill — the third public surface step 9 names, and the one that had no gate at all. The skill is what an operator reads to decide what can be opened, so a stale list makes the backend unreachable in practice exactly the way a missing enum value makes it unreachable in schema",
 			"subject": ".claude/skills/entwurf-dev/SKILL.md",
-			"find": ["backend는 정확히 `pi | claude-code | copilot | omp`이고"],
-			"replace": ["backend는 정확히 `pi | claude-code | copilot`이고"],
+			"find": ["backend는 정확히 `pi | claude-code | copilot | omp | codex`이고"],
+			"replace": ["backend는 정확히 `pi | claude-code | copilot | omp`이고"],
 			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
 			"timeoutSeconds": 300,
 			"signature": "[QK:FRESHCALL-BACKEND-SET-SURFACE-PARITY-SKILL]",

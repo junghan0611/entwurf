@@ -1496,11 +1496,16 @@ function registerListSessionsTool(pi: ExtensionAPI): void {
 // ============================================================================
 
 const MUX_FRESH_CALL_MODULE = "./lib/mux-fresh-call.ts";
+const CODEX_FRESH_PREFLIGHT_MODULE = "./lib/codex-fresh-preflight.ts";
+
+interface CodexFreshPreflightModule {
+	codexFreshPreflight(env: NodeJS.ProcessEnv): Promise<string | null>;
+}
 
 interface MuxFreshCallModule {
 	freshCall(
 		params: {
-			backend: "pi" | "claude-code" | "copilot" | "omp";
+			backend: "pi" | "claude-code" | "copilot" | "omp" | "codex";
 			model: string;
 			task: string;
 			cwd?: string;
@@ -1530,19 +1535,17 @@ function registerFreshCallTool(pi: ExtensionAPI): void {
 	registerTool({
 		name: "entwurf_fresh_call",
 		label: "Open Fresh Sibling",
-		description: `Open ONE fresh visible sibling in the operator's tmux and hand it a first task. Four fixed
-backends only: pi, claude-code, copilot, omp. The sibling's FIRST action is a callback to you carrying a nonce, and the
+		description: `Open ONE fresh visible sibling in the operator's tmux and hand it a first task. Five fixed
+backends only: pi, claude-code, copilot, omp, codex. The sibling's FIRST action is a callback to you carrying a nonce, and the
 sender envelope of that callback is its garden id — that is how you learn the address of something that did
 not exist a moment ago. This returns a LAUNCH receipt (tmux window/pane plus that nonce) and nothing else:
 it does NOT mean the runtime started, the first turn ran, or the task was delivered. Nothing polls for the
 callback; if it never arrives the window is visible and can be read directly. For EXISTING citizens use
 entwurf_v2 — this tool only creates, and entwurf_peers only reports. Model is REQUIRED and passed to the
-chosen runtime CLI (provider/model for pi; model id/alias for Claude Code; a Copilot model name or auto; a
-fuzzy model pattern for omp). A copilot launch goes through entwurf's own managed invocation and is refused
-BEFORE any window opens if this host lacks the Copilot birth, MCP, receiver or visible-footer units; an omp
-launch is refused the same way if this host lacks the OMP birth, MCP, receiver or visible-status units, or if
-omp's tools.xdev is not false (the vendor default hides MCP tool schemas from the prompt, so the sibling
-could not call you back at all). An optional cwd starts the
+chosen runtime CLI (provider/model for pi; model id/alias for Claude Code; a Copilot, OMP, or Codex model
+name). Copilot, omp, and codex are refused BEFORE any window opens when their required birth, MCP,
+receive/delivery, or visible-identity units are absent. Codex additionally requires the operator-owned
+default app-server socket; entwurf never starts or supervises it. An optional cwd starts the
 sibling in ONE literal absolute existing directory (cross-repo fresh) — never pick resume for a dormant
 record's cwd; resume is continuity-only. Omitted/empty cwd means the caller's own directory. An optional
 placement.tmuxSession opens it in ONE EXISTING session of this agent's own tmux server; an absent SESSION is
@@ -1550,15 +1553,15 @@ tmux-session-missing and NOTHING is created. Omit placement for the caller's own
 arbitrary command/env knobs. Do not put secrets in the task — model and task argv are visible to same-user
 processes on this host.`,
 		parameters: Type.Object({
-			backend: StringEnum(["pi", "claude-code", "copilot", "omp"], {
-				description: "Which fixed runtime to open. Only these four; there is no arbitrary command.",
+			backend: StringEnum(["pi", "claude-code", "copilot", "omp", "codex"], {
+				description: "Which fixed runtime to open. Only these five; there is no arbitrary command.",
 			}),
 			model: Type.String({
 				minLength: 1,
 				maxLength: 200,
 				pattern: "^[A-Za-z0-9][A-Za-z0-9._/:\\[\\]-]*$",
 				description:
-					"Required runtime model: canonical provider/model for pi, a Claude Code model id/alias, or a Copilot model name (or auto).",
+					"Required runtime model: canonical provider/model for pi, a Claude Code model id/alias, or a Copilot/OMP/Codex model name.",
 			}),
 			task: Type.String({
 				minLength: 1,
@@ -1590,7 +1593,7 @@ processes on this host.`,
 		async execute(
 			_toolCallId: string,
 			params: {
-				backend: "pi" | "claude-code" | "copilot" | "omp";
+				backend: "pi" | "claude-code" | "copilot" | "omp" | "codex";
 				model: string;
 				task: string;
 				cwd?: string;
@@ -1602,14 +1605,27 @@ processes on this host.`,
 		) {
 			try {
 				const mux = (await import(MUX_FRESH_CALL_MODULE)) as unknown as MuxFreshCallModule;
-				const result = mux.freshCall({
+				// ONE input object for ONE composition call. The codex branch differs only by the
+				// capability preflight that must answer BEFORE any mutation; duplicating the call
+				// would put the caller-identity contract in two places, which is how a mutant that
+				// plants a defect in one of them survives on the other.
+				const call = {
 					backend: params.backend,
 					model: params.model,
 					task: params.task,
 					cwd: params.cwd,
 					placement: params.placement,
 					callerGardenId: residentGardenId,
-				});
+				};
+				const result =
+					params.backend === "codex"
+						? await (async () => {
+								const preflight = (await import(CODEX_FRESH_PREFLIGHT_MODULE)) as unknown as CodexFreshPreflightModule;
+								const missing = await preflight.codexFreshPreflight(process.env);
+								if (missing) return { ok: false as const, reason: missing };
+								return mux.freshCall(call);
+							})()
+						: mux.freshCall(call);
 				const rendered = mux.renderFreshCall(result);
 				return {
 					content: [{ type: "text", text: rendered.text }],
