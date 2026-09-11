@@ -17,12 +17,13 @@ describes entwurf ownership of a concrete invocation/install/config surface; it 
 admission grade. *Supported* means the end-to-end native-harness contract in this document has
 been accepted.
 
-## The shipped map — five backends, one gauge
+## The current source map — six backends, one gauge
 
-Steps 1–9 below are one fixed gauge, and five backends now ride it. Every new harness feels like
-a special case while you are inside it; read this table first so the VARIETY is expected rather
-than alarming. Cells summarize facts whose receipts live in `DELIVERY.md`'s matrix and in this
-document's worked examples — do not re-derive them, reopen them there.
+Steps 1–9 below are one fixed gauge, and six backends ride it in the current source candidate.
+Every new harness feels like a special case while you are inside it; read this table first so the
+VARIETY is expected rather than alarming. Cells summarize facts whose receipts live in
+`DELIVERY.md`'s matrix and in this document's worked examples — do not re-derive them, reopen
+them there.
 
 | backend | lineage | receive rail — how a message lands | callback spelling (one tool, per-harness dialect) | fresh launch (step 9) |
 |---|---|---|---|---|
@@ -31,11 +32,8 @@ document's worked examples — do not re-derive them, reopen them there.
 | `copilot` | independent vendor | self-fetch mailbox: the watch lives in a FORKED first-party extension child; the receiver marker names the extension pid | `entwurf-bridge-entwurf_v2` — plus a SECOND permission dialect, `entwurf-bridge(entwurf_v2)` | managed verb `entwurf copilot`, `--interactive … --model … --yolo` |
 | `agy` | independent vendor | native-push: record + probe-alive gRPC `send-message`; no mailbox, no receiver marker | n/a — push rail | not openable; the declared pre-#82 legacy exception |
 | `omp` | **a pi fork** — inherits pi's env vocabulary (step 1(6)) | self-fetch mailbox: Claude's SHAPE, but the watch runs IN-PROCESS in the operator's TUI; announce-only doorbell via the vendor's own `sendUserMessage` | `mcp__entwurf_bridge_entwurf_v` — the sanitizer eats the digit | bare `omp`, NO positional prompt: the two-stage `--entwurf-bootstrap` payload |
+| `codex` | independent vendor | native-push: `thread/loaded/list` probe on the operator-owned app-server UDS, then one-shot `codex queue`; no mailbox, no receiver marker, no retry | `mcp__entwurf_bridge__entwurf_v2`; strict request metadata is the sender join | unreleased candidate under amendment: `--remote unix://<default-socket> --model <model> --dangerously-bypass-approvals-and-sandbox <prompt>`; parser/env/setup/preflight/clause-7 closure and deep acceptance still pending |
 
-(Codex is a sixth harness now walking this gauge, not a settled row: GLG reversed the 2026-08-01
-decline on 2026-09-08 and opened lane #95. It has closed step 1 only — measurements in
-`scripts/raw-codex-measure/` — so it has no table row above, mints no record, and is not
-openable. The prohibition on shipping it as an ACP backend is untouched.)
 
 Two facts this table exists to make obvious:
 
@@ -43,8 +41,8 @@ Two facts this table exists to make obvious:
   because the rail is chosen by the harness's MEASURED wake surface (step 1), never by its
   ancestry. What ancestry does instead is concentrate the danger: the shared env vocabulary is
   exactly where a fork silently splits a store (step 1(6), step 3; `[측정]` #87 B1).
-- **One tool, three spellings — and that is the smallest of the differences.** Every column
-  varies per harness, every cell was measured, and the next harness will disagree with all five
+- **One tool, per-harness spellings — and that is the smallest of the differences.** Every column
+  varies per harness, every cell was measured, and the next harness will disagree with all six
   rows somewhere. The gauge holds because the STEPS are fixed while their ANSWERS are not.
 - **A version floor is earned, not standard issue.** Node, pi and Claude Code each have an
   enforcement point; OMP deliberately has none, and carries a documented **weak floor** — the
@@ -55,9 +53,9 @@ Two facts this table exists to make obvious:
 **Why the doorbell is worth this much work** (GLG doctrine, 2026-08-31). Every row keeps its own
 runtime, auth and transcript; entwurf refuses prompt reconstruction, transcript hydration and
 harness emulation (Hard Rule 9), so the only way to reach a sibling is the doorbell its own
-vendor actually ships — and the table above is the price of that refusal, paid five times over.
+vendor actually ships — and the table above is the price of that refusal, paid six times over.
 The price is the point. A creation surface that made every harness cheap to open and drive would
-produce disposable workers wearing five logos. The bridge being hard — measured dialects,
+produce disposable workers wearing six logos. The bridge being hard — measured dialects,
 explicit doorbells, honest rejects — is what makes the thing on the other side a peer whose
 cooperation means something: you do not command it, you ring, and it answers as itself. The
 gauge is narrow so that what rides it is a citizen.
@@ -94,7 +92,7 @@ reopening; visible fresh is the required common creation surface.
 
 ## 1. Measure the vendor
 
-Everything downstream is a bet on what the vendor actually does. Take these five
+Everything downstream is a bet on what the vendor actually does. Take these six
 measurements first, from the vendor's own artifacts and processes.
 
 1. **Hook vocabulary and firing time.** Which events exist, and *when* they fire.
@@ -102,8 +100,9 @@ measurements first, from the vendor's own artifacts and processes.
 3. **Config writer.** Which file the vendor's own CLI writes, and in what shape.
 4. **Statusline / receive surfaces.** What the vendor offers for display and for waking,
    including bundled SDKs, extension APIs, and the feature gates that make them load.
-5. **Parent process topology.** Whether the hook process and the MCP child share one
-   ancestor — the join key step 6 depends on.
+5. **Sender-identity topology.** Which vendor-authoritative session/request carrier can be
+   joined to one record. Measure process ancestry too, but use it only when that backend's
+   marker contract actually makes a pid/start-key authoritative.
 6. **The environment vocabulary it inherits.** Which variable names the vendor reads, and
    whether any of them is a name *entwurf already owns*. A harness that is a FORK of another
    one keeps its parent's spelling, so a single variable ends up with two owners and two
@@ -375,59 +374,56 @@ Registration puts `entwurf_*` in the harness's hands. That is *all* it does.
 
 ---
 
-## 6. Sender identity — "who sent this?"
+## 6. Sender identity — join the vendor's caller to its record
 
-The bridge is a child process. It must be able to name the citizen that owns it.
+The bridge must name the citizen making THIS call. The rule is a vendor-authoritative
+record join, not a universal process-topology recipe: take the narrow identity the
+vendor supplies for the current session/request, require exactly one addressable V3
+record with the same `(backend, nativeSessionId)`, and reject absence, ambiguity, or a
+conflict with another authoritative carrier.
 
-- (a) Source: `pi-extensions/lib/meta-sender-identity.ts` (`META_SENDER_BACKENDS` and the
-  resolver) plus a `writeMetaSenderMarker` call in the backend's birth payload. The join is:
-  **the hook writes a marker keyed by ITS parent pid; the MCP child looks a marker up under
-  its own parent.** The shared ancestor is the join key — not cwd, not a wire field.
-- (b) Order, and it is not negotiable:
-  1. **Measure the join first.** Confirm `hook.ppid == mcp.ppid == the harness host pid`,
-     with the same start-key, on this vendor. If that is false, a marker will be written
-     where nothing looks for it and the whole step is dead code.
-  2. Then write the marker, behind the same three guards every other writer uses — a
-     plausible owner pid, a pid+start-key liveness key, and the backing meta-record as the
-     authority.
-  3. Then open the reader by adding the backend to `META_SENDER_BACKENDS`. **Both halves are
-     required**: a marker nobody reads and a reader with no marker fail identically.
-  - Gate: extend the backend's own birth gate rather than minting a second one. It runs the
-    real launcher as a child, so the marker's `ownerPid` is the gate's own pid — the same
-    parent-pid join production performs, with an oracle independent of the writer.
-    Precedent: `scripts/check-agy-sender-identity.ts`.
-  - Fail closed, and keep the two failures apart in the log. *Refused* (no launch
-    provenance, or an implausible parent) is the designed answer, not a fault — an already
-    open session that predates the install reaches the payload through an unstamped path
-    and correctly claims no owner; restarting it arms who-sent. *Failed* (the write itself
-    broke) is a real fault. Both leave a citizen that still exists and can still be
-    addressed by others; only its own outbound sends fall back to the default refusal.
-  - Then teach the backend's doctor the difference. `[측정]` Adding a marker write to a
-    birth payload puts an ERROR *after* the successful mint line, and a doctor whose
-    recovery rule is "an error with no successful mint after it" will read that as a birth
-    failure and print a sentence that is false. Judge mint errors and marker errors on
-    separate axes.
-  - **Sanitize inherited identity carriers in every new or amended native managed launch.** The
-    MCP bridge reads a complete `PI_SESSION_ID` + `PI_AGENT_ID` pair before it tries a native
-    sender marker. A non-pi harness started from a pi citizen's bash can therefore inherit and
-    impersonate the parent pi garden id unless its launcher removes both variables before exec.
-    This is a shared external-host boundary, not an OMP-specific patch: #82's remaining Copilot
-    fresh work and every later native admission must clear foreign identity carriers, then let
-    that harness's own trusted birth marker establish identity. Bundle C answered it at the
-    seam rather than per launcher: `PI_SESSION_ID` and `PI_AGENT_ID` are scrubbed for EVERY
-    backend before exec (`5bb1d50`), so a new launcher inherits the clearing instead of owing
-    its own certification.
-- (c) Two confusions this step exists to prevent:
-  - **who-sent ≠ replyable.** They are different facts on different rails. A sender marker
-    proves identity; whether a reply can *land* is answered by the receive rail of step 7 —
-    a receiver marker for a self-fetch backend, an adapter probe for a native-push one. A
-    backend can legitimately be `identity: garden-id` and `replyable: false` at the same
-    time, and forcing the second to `true` is a lie the receiver acts on.
-  - **The anonymous hatch is not a substitute for this step.**
-    `ENTWURF_BRIDGE_ALLOW_ANONYMOUS_SENDER=1` opens sending at the price of identity: the
-    message lands as `external-mcp`, non-replyable, and the receiver never learns who wrote
-    it. It is a documented operator escape for a host with no citizen lifecycle — not a
-    cheaper version of step 6.
+- (a) Source: the vendor's lifecycle and MCP request surfaces plus the backend-specific
+  resolver in `pi-extensions/lib/meta-sender-identity.ts` / the bridge request boundary.
+  Measured implementations currently have two shapes:
+  - **pid/start-key marker join** — the birth unit writes a record-backed marker owned by
+    the measured process that also owns the MCP or receive surface. Claude, Copilot, agy,
+    and OMP use variants of this shape; which pid is authoritative differs by harness.
+  - **strict request metadata join** — Codex attached TUIs share one app-server ancestry,
+    so a parent-pid marker would collapse N citizens into one. Codex instead requires
+    request `_meta.threadId`,
+    `_meta.x-codex-turn-metadata.session_id`, and
+    `_meta.x-codex-turn-metadata.thread_id` to agree, then joins that thread id to its
+    record. Missing or disagreeing fields refuse; there is no pid fallback.
+- (b) Order:
+  1. **Measure the vendor carrier first.** Prove that it selects one visible top-level
+     session across concurrency and internal delegation. Process ancestry is evidence
+     only for a backend that actually uses a process marker.
+  2. Bind that carrier to the certified record reader. A marker writer also requires a
+     plausible owner pid and pid+start-key liveness; a request-scoped reader requires
+     the complete strict metadata tuple. Neither carrier is itself a garden address.
+  3. Open the reader only with its writer/request boundary and backend registry change.
+     A marker nobody reads, a reader with no writer, and a request reader accepting a
+     partial tuple all fail this step.
+  4. Gate the consumer-observable result and conflict precedence. A matching native
+     claim returns the record-backed citizen; a conflicting complete pi env claim or
+     native claim throws rather than choosing whichever resolver ran first.
+- (c) Operational boundaries:
+  - **who-sent ≠ replyable.** Identity comes from this join; replyability comes from the
+    receive rail in step 7 — receiver state for self-fetch, adapter probe for
+    native-push. `identity: garden-id, replyable: false` is valid.
+  - **Environment is an explicit process boundary.** Managed native launches scrub
+    foreign `PI_SESSION_ID` / `PI_AGENT_ID` unless that backend contract deliberately
+    needs them. Codex is different again: its MCP child belongs to the operator-owned
+    app-server, whose configured `env_vars` must forward `CODEX_HOME`, the Entwurf
+    garden/control roots, and `TMUX`/`TMUX_PANE`. Those values locate the app-server's
+    stores and placement mechanism; they do not replace strict request identity or join
+    a request to an attached TUI's tmux seat.
+  - **The anonymous hatch is not a substitute.**
+    `ENTWURF_BRIDGE_ALLOW_ANONYMOUS_SENDER=1` deliberately yields `external-mcp`,
+    non-replyable delivery. It is not a cheaper version of this step.
+  - Keep mint and join failures on separate doctor/log axes. A successful record birth
+    followed by a failed marker/request join still leaves an addressable citizen; it
+    does not authorize that citizen's outbound send.
 
 ---
 
@@ -638,6 +634,14 @@ rule are both executable rather than remembered:
   a wired cross-harness LIVE step or a declared metered exception a reader can find — belongs
   beside `check-harness-admission-parity` and is an owed follow-up (see NEXT): until that gate
   lands, this bullet is prose, and the block below says exactly what prose is worth without one.
+
+For Codex #95, “existing citizen” in that LIVE pair means a real record-backed visible Pi,
+not a fixture that plants `PI_SESSION_ID`/`PI_AGENT_ID` or a self-fetch receipt collector.
+The release gate strips those ambient variables. The required sequence is real
+`Pi → visible Codex → visible Pi`, and the receipt records the fresh Codex, inherited
+app-server, and outbound Pi tmux session coordinates separately. Because Codex request
+metadata has no request→TUI seat join, a “Codex beside Pi” claim requires all three
+coordinates to agree; a fixture may collect receipts but cannot substitute for the first Pi leg.
 
 **An `unsupported` note is not a partial-release permit.** `[측정]` #87 is where that was learned at
 full price: the Bundle A+B candidate carried a fully honest sentence in the delivery matrix —

@@ -401,5 +401,4 @@ Receipt, limits and the `completed`-branch gap: `scripts/raw-acp-compaction-meas
 
 - causal MCP-readiness diagnosis and, only with proof, a backend-invariant fence;
 - broader installed-host and cross-machine Cortex evidence;
-- any future Codex managed native-citizen lane—separate from ACP; the lane is open as #95 and no release ships one;
 - persisted ACP resume/load, which is not implemented by today's in-memory reuse.

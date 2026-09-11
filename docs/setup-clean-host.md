@@ -8,8 +8,8 @@ evidence split, and its three states must not collapse into "macOS is supported"
   (`macos-install-surface`). Weaker than a physical-host doctor green. §1 is
   this surface.
 - **NOT CERTIFIED — pending physical host** — **on macOS**, every garden-native
-  harness rail in §2–§6 (pi, Claude, Copilot, OMP, agy), marker join, ACP turn,
-  mux. Wiring may be written; that is not a rail receipt. The remaining
+  harness rail in §2–§6 (pi, Claude, Copilot, OMP, agy, Codex), marker/request join,
+  ACP turn, mux. Wiring may be written; that is not a rail receipt. The remaining
   unmeasured Darwin doctor reason is per-process environment DISCOVERY
   (start-key is portable).
 - **UNSUPPORTED** — native Windows only. macOS is never this.
@@ -20,13 +20,14 @@ evidence split, and its three states must not collapse into "macOS is supported"
 |---|---|---|
 | Node | **`>=24.0.0`** | package and bridge runtime |
 | npm/pnpm | npm is bundled with Node; pnpm is required for source setup | package or source installation |
-| Python 3 | required by `setup`/`install` (project-path normalization + settings writers); `--help`/`check-bridge` stay Python-free | pi/Claude/agy/Copilot wiring writers |
+| Python 3 | required by `setup`/`install` (project-path normalization + settings writers); `--help`/`check-bridge` stay Python-free | pi/Claude/agy/Copilot/Codex wiring writers |
 | entwurf | global/project-local `@junghanacs/entwurf`, or a source checkout | operator command and garden capability |
 | pi | optional-by-presence, `>=0.85.1 <0.86` — absent is an explicit setup SKIP, below-floor is a named FAIL | ACP provider, control sockets |
 | Claude Code | optional, **`>=2.1.217`** — the exec-form hook floor | Claude ACP auth/runtime and mailbox-backed native citizen |
 | GitHub Copilot CLI | optional-by-presence, operator-installed and authenticated — absent is an explicit setup SKIP; detected composes all four units (birth/MCP/receiver/footer) | self-fetch citizen and visible fresh |
 | OMP (`omp`) | optional-by-presence, operator-installed — absent is an explicit setup SKIP; detected composes all four units (birth/MCP/`tools.xdev` setting/receiver) | self-fetch citizen and visible fresh (accepted on one host — see §4b) |
 | Antigravity `agy` | optional, operator-installed and authenticated | native-push citizen |
+| OpenAI Codex CLI | optional-by-presence, operator-installed and authenticated; unreleased candidate requires an operator-owned app-server started in a chosen tmux mechanism seat | native-push candidate and visible fresh |
 | Cortex Code | optional, operator-installed and authenticated | Cortex ACP backend |
 
 Claude Code >=2.1.217 is required for the managed exec-hook lifecycle. The package
@@ -52,9 +53,9 @@ harness. The wiring is written; the row is FAIL:
 > platform. Tracking: #78.
 
 That FAIL is honest: setup runs no doctor, and no physical-host rail
-receipt exists — it is not an install failure. An Entwurf-only host (no
-harness on PATH) stays green (five SKIP, `bins: PASS`, `core: PASS`,
-`result: green`), which is what CERTIFIED (CI) observed.
+receipt exists — it is not an install failure. An Entwurf-only host with no
+harness on PATH stays green (six SKIP, `bins: PASS`, `core: PASS`,
+`result: green`), which is what CERTIFIED (CI) observes.
 
 A physical Mac can send host facts without installing entwurf or logging
 into a harness: `scripts/raw-macos-measure/probe.sh` (`/bin/sh`, ~3.5s,
@@ -91,10 +92,10 @@ npx entwurf check-bridge
 `check-bridge` is auth-free. It proves the installed prebuilt MCP server boots and
 lists the seven garden tools; it does not prove a backend model turn or native hook.
 
-Neither npm form installs a harness runtime. `pi`, Claude Code, Copilot CLI, agy, Cortex and their
-authentication remain operator-owned optional prerequisites for the integrations that use them;
-all may be absent on an Entwurf-only host. A source checkout's pinned Pi development packages are
-for building and testing this repo, not a transitive product installation promise.
+Neither npm form installs a harness runtime. `pi`, Claude Code, Copilot CLI, Codex CLI, agy,
+Cortex, and their authentication remain operator-owned optional prerequisites for the
+integrations that use them; all may be absent on an Entwurf-only host. A source checkout's
+pinned Pi development packages are for building and testing this repo, not a transitive product installation promise.
 
 Maintainers using a source checkout do not install a second global entwurf package. Full source
 setup currently requires Node 24, pnpm, and Python 3 on PATH; every harness — including pi — is
@@ -109,12 +110,14 @@ cd ~/repos/gh/entwurf
 
 This owns `~/.local/bin/entwurf` as a symlink to that checkout's `run.sh` and fails if the
 link is foreign, outside PATH, or shadowed by another command. It detects and wires
-pi/Claude/agy/Copilot/OMP by presence and prints a computed per-component PASS/SKIP/FAIL summary — a
-detected harness that cannot be completed makes setup exit nonzero. A detected `copilot`
-composes all four native units (birth → MCP → receiver → visible footer) with independent
-per-unit verdicts (#86 C3b), and a detected `omp` composes its own four (birth → MCP →
-`tools.xdev` setting → receiver) the same way; §4 and §4b keep the explicit per-unit
-install/doctor/inverse surfaces for repair.
+pi/Claude/agy/Copilot/OMP/Codex by presence and prints a computed per-component
+PASS/SKIP/FAIL summary — a detected harness that cannot be completed makes setup exit nonzero.
+A detected `copilot` composes all four native units, and a detected `omp` composes its own four.
+A detected Codex install is an unreleased candidate path: setup composes its user-scope MCP
+and status-line atoms but never escalates or starts the app-server. The current amendment must
+prove independent component outcomes, exact env forwarding, idempotence, and a named
+`codex-birth FAIL` / `sudo entwurf install-codex-birth` repair before setup acceptance is closed.
+§4, §4b, and §4c keep the explicit per-unit install/doctor/inverse surfaces.
 
 ### 1.1 User-scope ownership (one shared registration, one recorded owner)
 
@@ -396,6 +399,86 @@ The MCP entry deliberately uses the same server key as any Claude Code import so
 SHADOWS it; see [`external-mcp-host.md`](./external-mcp-host.md) for why that key is pinned and
 why `disabledServers` is never the way to hide an import.
 
+## 4c. Optional OpenAI Codex CLI native citizen
+
+This unreleased candidate has Linux-focused evidence; on macOS it is NOT CERTIFIED —
+pending physical host. It is native, not ACP: the purpose is to preserve the operator's
+Codex tools, delegation, and work context rather than provide another GPT access path.
+Entwurf owns three atoms, not the harness and not a daemon:
+
+```bash
+# Explicit system step. The command refuses unless already root; it never invokes sudo itself.
+sudo entwurf install-codex-birth
+
+# User-scope atoms. `entwurf setup` runs these when it detects Codex.
+entwurf install-codex-mcp
+entwurf install-codex-statusline
+
+sudo entwurf doctor-codex-birth
+entwurf doctor-codex-mcp
+entwurf doctor-codex-statusline
+```
+
+The system atom is a prompt-free `SessionStart` hook under `/etc/codex`; it mints a V3 record
+on the thread's first turn and sets the thread title to the garden id. The MCP writer owns
+`[mcp_servers.entwurf-bridge]` in `$CODEX_HOME/config.toml`. Its exact `env_vars` allowlist is
+`CODEX_HOME`, `ENTWURF_DIR`, `PI_CODING_AGENT_DIR`, `ENTWURF_META_SESSIONS_DIR`,
+`ENTWURF_META_MAILBOX_DIR`, `ENTWURF_META_SENDERS_DIR`, `ENTWURF_META_RECEIVERS_DIR`,
+`TMUX`, and `TMUX_PANE`.
+The status-line writer owns only `thread-title`. Foreign or symlinked config is refused.
+
+Native delivery requires the operator-owned default app-server. Start it inside a chosen tmux
+session. This selects the placement mechanism; it does not discover the seat of an attached TUI:
+
+```bash
+CODEX_HOME="${CODEX_HOME:-$HOME/.codex}"
+mkdir -p "$CODEX_HOME/app-server-control"
+codex app-server --listen "unix://$CODEX_HOME/app-server-control/app-server-control.sock"
+
+# an operator may attach visible clients from other terminals
+codex --remote "unix://$CODEX_HOME/app-server-control/app-server-control.sock"
+```
+
+The app-server's `TMUX`/`TMUX_PANE` is the Codex caller placement forwarded to its MCP child.
+It is **not** the attached TUI's pane. Request metadata has no request→TUI seat join, so N
+clients attached from different sessions do not inherit the app-server's adjacency. To claim
+“Codex beside Pi,” start/attach the intended Codex TUI in the app-server's session and require
+the outbound Pi to land in that same session. If the app-server was started outside tmux,
+visible fresh rejects; Entwurf does not guess a client pane, create a tmux session, expose a
+generic app-server manager/API, or start/restart the server. Custom `CODEX_HOME` and custom
+Entwurf roots must cross the same explicit `env_vars` boundary. The strict request `_meta`
+tuple, not this environment or a pid marker, identifies the caller. Delivery uses one
+`codex queue` invocation with no retry.
+
+The 2026-09-11 loaded-thread run is preserved as pre-amendment native-push/identity evidence.
+It does not accept the current terminal-parser, env-boundary, setup, preflight-safety, and
+clause-7 composition amendments.
+
+`entwurf_fresh_call` accepts candidate backend `codex` and requires an explicit model. Its
+preflight must prove the safe root closure, exact MCP/env atom, `thread-title`, and app-server
+socket before tmux mutation. The sibling's garden id comes from the callback sender envelope,
+never the launch receipt. There is no Codex resume surface, watcher, supervisor, or app-server
+lifecycle ownership. Before release, Oracle still owes qualification, the frozen full floor,
+all three installed doctors, and actual visible `Pi → Codex → Pi` LIVE. The initial Pi must
+be a real record-backed visible citizen; release-gate strips ambient `PI_SESSION_ID` and
+`PI_AGENT_ID`, and a fixture/self-fetch collector cannot replace that first leg. The smoke
+must report fresh Codex, inherited app-server, and outbound Pi session coordinates separately
+and keep admission red unless all three match.
+
+Oracle runs the first-admission LIVE with explicit ownership/model selectors:
+
+```bash
+LIVE=1 \
+ENTWURF_CODEX_APP_SERVER_PID=<existing-app-server-pid> \
+ENTWURF_CODEX_FRESH_MODEL=<codex-model> \
+ENTWURF_CODEX_FRESH_PI_MODEL=<pi-model> \
+entwurf smoke-codex-fresh-live
+```
+
+The entrypoint name does not waive the contract above. If the installed smoke still begins
+from a fixture/self-fetch collector instead of a real visible Pi, the result is evidence for
+later receipts only and first admission remains red.
+
 ## 5. Optional Antigravity native citizen
 
 This rail is CERTIFIED on Linux; on macOS it is NOT CERTIFIED — pending
@@ -464,7 +547,7 @@ rail receipt. Doctors refuse on Darwin until a physical-host receipt
 exists.
 
 If install or doctor reports an unreadable/old active citizen generation, do not edit
-records by hand. Close pi, Claude, Copilot, and agy sessions first, run
+records by hand. Close pi, Claude, Copilot, OMP, agy, and Codex sessions first, run
 `entwurf meta-bridge-fresh-cut`, and read its exit status before any install. Then choose the
 installation mode you actually own:
 
@@ -496,6 +579,7 @@ PASS/SKIP/FAIL summary. The complete quiescence, archive, and exit-code contract
 - `scripts/raw-macos-measure/probe.sh`: physical-Darwin host facts (~3.5s,
   no install, no login). Measurement, not a certification path.
 - `doctor-meta-bridge`: one installed real Claude host, only with a new live session.
+- `doctor-codex-{birth,mcp,statusline}` plus `LIVE=1 CODEX_LIVE_THREAD_ID=<id> entwurf smoke-codex-native-push-live`: one installed Codex host; the aggregate does not own a loaded thread.
 - `LIVE=1 entwurf release-gate /path/to/scratch --cut`: aggregate runtime acceptance (`--cut` makes any MUST SKIP red; without it the run is a diagnostic pass).
 
 Keep these verdicts separate. Current protocol is [VERIFY.md](../VERIFY.md); recorded
@@ -519,6 +603,9 @@ entwurf uninstall-copilot-bridge
 entwurf uninstall-agy-hooks
 entwurf uninstall-agy-statusline
 entwurf uninstall-agy-bridge
+entwurf uninstall-codex-statusline
+entwurf uninstall-codex-mcp
+sudo entwurf uninstall-codex-birth
 entwurf remove ~/entwurf-smoke
 # only when no other project uses the shared user-scope pi registration:
 entwurf remove-user-scope

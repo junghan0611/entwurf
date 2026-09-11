@@ -4,10 +4,10 @@ Lane: `docs/adding-a-harness.md` step 1 (six measurements) + §3.5 citizen scope
 tool-name dialect + step 6's join. The oracle is the vendor artifact or the vendor process,
 never our assembler.
 
-This file is a MEASUREMENT-ONLY ledger. Nothing here was written by an entwurf installer,
-no meta-record was minted, and no operator config was edited. The one entwurf-owned artifact
-touched at all is the pre-existing `[mcp_servers.entwurf-bridge]` entry in the operator's own
-`~/.codex/config.toml`, which was READ, not written.
+This file is a MEASUREMENT-ONLY ledger of the **2026-09-08 step-1 state**. At that
+measurement date, nothing here had been written by an Entwurf Codex installer, no
+Codex meta-record had been minted, and no operator config had been edited. Later #95
+candidate work exists; this dated ledger is evidence for it, not current product status.
 
 Evidence-state vocabulary: **[source]** = read at `file:line` in the vendor checkout;
 **[host]** = measured on this host (`oracle`, 2026-09-08 KST) with the receipt named;
@@ -207,11 +207,11 @@ it carried is what S1b-B was run to settle.)*
 (`thread/queue/add|start|list|…`) that did not exist at 0.136. No hook or extension wake
 surface was added (see M1). The measured route is unchanged and green: **M-B** below.
 
-## M5 — Parent process topology (the step-6 join)
+## M5 — Parent process topology (measured refutation of a universal join)
 
-The join `docs/adding-a-harness.md` step 6 requires is `hook.ppid == mcp.ppid == the harness
-host pid`. **It holds on Codex — but WHICH process is the host depends on the launch mode, and
-that difference is the finding.**
+The then-current `docs/adding-a-harness.md` step 6 asked whether
+`hook.ppid == mcp.ppid == harness host pid`. The measurement below preserves the
+answer and explains why that equality is not a universal sender-identity contract.
 
 **Embedded mode** (a standalone `codex` TUI with its own `CODEX_HOME`, no app-server):
 
@@ -240,23 +240,20 @@ pid=1733 (entwurf-bridge) ppid=1393   # 1393 = codex app-server --listen
 pid=1616                              # = the plain codex TUI. Not the parent.
 ```
 
-So in the delivery-capable mode the join still holds — `hook.ppid == mcp.ppid` — but both
-resolve to the app-server.
+In the delivery-capable mode, `hook.ppid == mcp.ppid`, but both resolve to the
+app-server rather than to an attached TUI.
 
-**That the app-server is SHARED across citizens was an inference in the first draft, and it
-was published without a label.** `[source]` supports it
-(`app-server/src/request_processors/initialize_processor.rs:63-68` is a multi-client
-shared-thread surface), but the run above shows the parent of ONE attached TUI; reading N from
-one is not a measurement. Independent audit (terra, 2026-09-08) caught the missing label.
-**It has since been measured directly — see S1b-C below — and the answer is the one the
-inference guessed:** two live threads on one app-server, two separate visible TUIs, and every
-hook and every MCP child of BOTH threads reports the same `ppid`.
+The first draft inferred that this app-server was shared across citizens. Independent
+audit caught the missing evidence label; **S1b-C** then measured it directly: two live
+threads, two visible TUIs, and every hook/MCP child of both threads reported the same
+parent pid.
 
-**[host]** So this is now a measured fact rather than a structural read: **a sender marker
-keyed by parent pid would be one marker for N citizens**, which is precisely the uniqueness the
-V3 store contract (Hard Rule 7, `nativeSessionId` ownership) forbids. **This is the
-load-bearing result of the whole step**, and it is a design input for step 6, not a defect to
-fix here.
+That is the result: a parent-pid marker would be one marker for N Codex citizens. The
+topology is useful negative evidence, not the Codex join. **S1b-D** found the
+vendor-authoritative alternative on each MCP request, and the current candidate strictly
+joins that request metadata to `record.nativeSessionId`. Other measured harnesses still
+use pid/start-key markers where their vendor topology makes that carrier authoritative;
+the general doctrine is the vendor-authoritative record join.
 
 **[host]** A second consequence, measured on the same two runs: the hook's environment is the
 HOST process's snapshot, so it changes with the mode.
@@ -646,11 +643,11 @@ identifier**, and `record.nativeSessionId = threadId` needs no mapping layer. Th
 `nativeIdLabel: "threadId"` in `pi/entwurf-capabilities.json` is, on this axis, correct — which
 is worth saying precisely, because its `deliveryLevel: "D6"` on the same row still is not.
 
-**What this changes.** The step-6 question "who sent this?" does not need a parent-pid marker on
-codex, and the answer S1b-C ruled out was the wrong shape rather than a dead end: the caller is
-named on every call. `[source]` today's bridge reads a `PI_SESSION_ID`/`PI_AGENT_ID` pair or a
-native marker looked up by parent pid, and neither exists here — so consuming `_meta` would be
-new bridge code. **That is step 6, and nothing here implements it.**
+**What this changed on 2026-09-08.** The step-6 question did not need a parent-pid
+marker on Codex: every call named the thread. At that measurement date the bridge only
+read a complete pi env pair or a native pid marker, so consuming `_meta` still required
+new code. The later #95 candidate implements a strict request-metadata join; that later
+implementation is not evidence supplied by this ledger.
 
 One vendor fact this run also surfaced, recorded because it belongs to step 9 clause 2: the
 first `tools/call` raised an interactive approval prompt —
@@ -660,24 +657,95 @@ beside the model-facing `mcp__entwurf_bridge__entwurf_peers`. Copilot's "one too
 lesson repeats here. `entwurf_peers` itself answered from that session, which is the plain
 external-MCP-host row of `docs/external-mcp-host.md` behaving as designed.
 
-## What this measurement does NOT establish
+## S1c — vendor queue and visible-fresh argv (2026-09-10)
 
-- The source layer WAS independently audited on 2026-09-08 (terra, on commit `87ac7ad`):
-  **20/20 quotations CONFIRMED, 0 corrected, 0 unverifiable**, tag identity re-derived
-  independently (`rust-v0.153.4^{}` = `3d2ee51ca2d5db578f328aa75e20aa22c0197c9a`). Three prose
-  defects it raised are folded in above and marked as corrections; none was a wrong vendor
-  fact. The S1b-* sections were added AFTER that audit and carry no second reader yet.
-- Evidence level L4 at best: one Linux host (`oracle`, aarch64, NixOS), one CLI version, one
-  run per claim except M-B (three runs).
-- **No entwurf unit was built or installed.** No record, no hook, no marker, no doctor.
-  Steps 3–10 are untouched by design; this ledger is step 1 only.
-- **Step 2 is a pre-existing surprise, not this lane's work, and it is wrong.** `codex` is
-  ALREADY in `META_BACKENDS` (`pi-extensions/lib/meta-session.ts:84`) and
-  `META_CITIZEN_BACKENDS` (`:308`), and `pi/entwurf-capabilities.json` grades it
-  `wakeMode: "direct-inject"`, `deliveryLevel: "D6"`, `nativeIdLabel: "threadId"` — a grade
-  with no channel behind it, the exact failure `docs/adding-a-harness.md` step 8(c) names.
-  It is also the declared pre-#82 legacy exception `check-harness-admission-parity` reads out
-  of `DELIVERY.md`. Nothing here changes it; a reader should not take that D6 as evidence.
+Codex 0.153.4 has the narrow delivery primitive this lane was missing:
+
+```sh
+codex queue \
+  --remote unix://$SOCKET \
+  --thread 01a08bb0-999a-71b2-be36-357eedc26542 \
+  --message 'Reply exactly CODEX-QUEUE-Q1'
+```
+
+The command exited 0 and printed one explicit acceptance receipt:
+
+```text
+Queued message 01a08bb2-c70f-75f3-88c6-48cdffa4d64d for thread 01a08bb0-999a-71b2-be36-357eedc26542.
+```
+
+The attached TUI produced `CODEX-QUEUE-Q1`. A second run queued a turn that executed
+`sleep 12`; a third message was queued immediately while that turn was active. The CLI returned
+two different message ids, and the TUI completed `CODEX-QUEUE-Q2` before
+`CODEX-QUEUE-Q3`. **The vendor owns queue serialization and message identity.** Entwurf should
+exec this command once and validate its receipt; it should not recreate `turn/start`, a second
+queue, or an idempotency ledger. A nonexistent thread exited 1 with
+`thread/queue/add failed: failed to read thread: invalid thread-store request: no rollout found`
+and no acceptance receipt.
+
+The ordinary pnpm-installed binary also owns the usable app-server shape:
+
+```sh
+codex app-server --listen unix://$SOCKET
+```
+
+It created a mode-0600 UDS and served WebSocket JSON-RPC. By contrast,
+`codex app-server daemon start` refused this installation because its managed-daemon path
+requires `~/.codex/packages/standalone/current/codex`. Entwurf must not install that separate
+vendor runtime or hide this distinction behind a wrapper: the lightweight contract is to
+detect one already-running ordinary app-server at the fixed vendor socket.
+
+The complete fresh argv was then exercised against that app-server:
+
+```sh
+codex \
+  --remote unix://$SOCKET \
+  --model gpt-5.6-sol \
+  --dangerously-bypass-approvals-and-sandbox \
+  --no-alt-screen \
+  'Call mcp__entwurf_bridge__entwurf_peers as your first action …'
+```
+
+The visible TUI reported `gpt-5.6-sol high` and `YOLO`; MCP startup completed; the first turn
+called `entwurf-bridge.entwurf_peers` successfully. `--no-alt-screen` was only an observation
+aid and is not part of the launch contract. The fixed launch facts are `--remote`, explicit
+`--model`, the explicit task-wide permission token, and one positional first prompt. Unlike the
+OMP race, the Codex MCP tool was callable on that first turn.
+
+The same socket accepted
+`thread/name/set {threadId,name:"20260910T235959-codex"}` with `{}` and the attached TUI
+immediately rendered `Session renamed to 20260910T235959-codex`; a second call restored the
+captured preimage `Entwirf raw queue probe Q1`. This closes the naming primitive only. The
+current footer did not include `thread-title`, so the separate user-config atom remains necessary
+before a garden id is continuously visible.
+
+One lifecycle caveat is now bounded rather than hidden. Closing a TUI client does not
+immediately remove its thread from `thread/loaded/list`; the vendor keeps a loaded thread after
+the last subscriber disconnects and unloads it after 30 minutes without subscribers or thread
+activity (`app-server/README.md`, `thread/unsubscribe`). During that vendor-owned loaded lifetime
+`codex queue` remains the acceptance boundary. This is not a pane/process liveness claim and must
+not be re-described as one.
+
+These observations make 0.153.4 the first measured coordinate, **not a hard product floor**.
+No silent older-version failure has been measured, so Entwurf should report drift and fail a
+missing capability, not invent a lower-bound promise.
+
+## What this dated measurement did NOT establish
+
+- The source layer was independently audited on 2026-09-08 (terra, commit `87ac7ad`):
+  **20/20 quotations CONFIRMED**. The later S1b sections had no second reader then.
+- Evidence was L4 at best: one Linux host (`oracle`, aarch64, NixOS), Codex 0.153.4,
+  one run per claim except M-B.
+- **As of the 2026-09-08 measurement**, no Entwurf Codex unit had been built or
+  installed, no product record/doctor existed, and steps 3–10 were untouched by that
+  lane. These are historical scope statements, not claims about the later candidate.
+- Step 2 was already present but unearned at that date: registry/capability rows named
+  Codex before a production channel existed. Later #95 code supplies the candidate
+  record/native-push/fresh path; its parser, env-boundary, setup, preflight, and clause-7
+  amendments plus deep/installed-host acceptance are outside this raw ledger.
+- The hook-trust and visible-name questions were closed by S1b-A/B. The remaining
+  release evidence is owned by the current candidate's gates and actual host, not by
+  reinterpreting these measurements.
 - *(Two entries lived here until 2026-09-08 and are now **closed by measurement**, not moved:
   "clause 4 has no working candidate" was retired by **S1b-B**, and "the hook trust gate has no
   measured non-interactive path" by **S1b-A**. What each one costs is stated in its section.)*

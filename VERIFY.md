@@ -7,8 +7,10 @@ and the manual judgements a gate cannot make.
 > **Current surface.** `entwurf-bridge` exposes `entwurf_v2`, `entwurf_peers`,
 > `entwurf_fresh_call`, `entwurf_resume_call`, `entwurf_self`, `entwurf_inbox_read`, and `entwurf_register_native`. The ACP
 > backends are Claude and Snowflake Cortex Code. Antigravity is a separate shipped
-> native-push citizen lane; Codex has delivery-probe evidence but no managed citizen
-> lane. Retired v1 verbs and bridge implementations belong only in CHANGELOG/git.
+> native-push citizen lane. Codex is an unreleased native-push candidate with root-hook
+> birth, strict request-scoped identity, and visible fresh; it remains outside ACP and has no resume.
+> The current amendment is not qualified by earlier focused or LIVE receipts.
+> Retired v1 verbs and bridge implementations belong only in CHANGELOG/git.
 
 This is a working protocol, not a metrics ledger. Per-run counts, digests, and release
 chronology belong in [BASELINE.md](./BASELINE.md), CHANGELOG, and release artifacts.
@@ -64,6 +66,26 @@ Verification here is not a benchmark. In production we exchange short turns and 
 >
 > The aggregate release gate does not own a live agy conversation id, so agy's real native-push round trip is a separate acceptance axis: three fail-loud doctors plus `LIVE=1 AGY_CONVERSATION_ID=<id> ./run.sh smoke-agy-native-push-live`, followed by a fresh-conversation sender/reply check after package install. Its deterministic install/sender gates are already inside `pnpm run check:full`; do not misreport the aggregate gate as live agy evidence. **Cost fence:** the agy conversation this smoke drives runs on a free account, so open it on `gemini-3.6-flash` — never a Pro tier. The model is the operator's choice at conversation-open time; entwurf never selects it, and no assertion reads it (see the shipped-lane note: model display is not part of the agy contract).
 >
+> Aggregate release-gate does not own a loaded Codex thread. Codex native-push remains an
+> on-demand host axis, and the 2026-09-11 loaded-thread run is pre-amendment evidence only.
+> The current candidate is changing terminal parsing, explicit MCP `env_vars`, setup acceptance,
+> preflight safety, and clause-7 composition. Focused laptop work may close the affected local
+> cells; it cannot qualify the amended candidate. Oracle must run `check-gate-qualification`,
+> the frozen `pnpm run check:full`, the installed doctors, and the actual visible-fresh /
+> addressed-receive / cross-harness LIVE acceptance before Codex's first release. That
+> installed-host smoke records three distinct coordinates — fresh Codex session, inherited
+> app-server session, outbound Pi session — and requires all three to agree before it may
+> report “Codex beside Pi”; request metadata supplies no request→TUI seat join.
+>
+> Oracle invokes the admission cell with no inferred server or models:
+> `LIVE=1 ENTWURF_CODEX_APP_SERVER_PID=<existing-app-server-pid>
+> ENTWURF_CODEX_FRESH_MODEL=<codex-model>
+> ENTWURF_CODEX_FRESH_PI_MODEL=<pi-model> ./run.sh smoke-codex-fresh-live`.
+>
+> The command name is not proof. If the admission smoke still originates its first
+> leg from a fixture/self-fetch collector rather than a real visible Pi citizen, the
+> gate does not satisfy this requirement and Codex remains unreleased.
+>
 > Authoritative per-cut counts and digests live in BASELINE/CHANGELOG, not inline
 > here; embedding them in the protocol makes a correct guide stale after every cut.
 
@@ -81,6 +103,7 @@ Do not collapse source, package, fixture, and native-host evidence into one “g
 | LIVE runtime | `LIVE=1 ./run.sh release-gate <scratch> --cut` plus any shipped on-demand backend axis | `--cut` enforces `SKIP=0`; a red wired gate blocks the cut. |
 | Native Claude host | installed strict doctor against a new real session | Missing live join is `NOT CERTIFIED`, not a fixture PASS. |
 | Native agy host | three doctors plus conversation-id-gated native-push round trip | Aggregate release-gate does not own an agy conversation id. |
+| Native Codex host | amended qualification + frozen full floor; three installed doctors; loaded-thread native-push; clause-7 visible-fresh and cross-harness LIVE | Must run on Oracle against the actually installed root/user atoms. The app-server owns the tmux mechanism seat forwarded through MCP `env_vars`; an attached TUI pane is not placement evidence. First admission stays red unless the fresh Codex, inherited app-server, and outbound Pi session coordinates are recorded separately and equal. |
 
 The repo-local `entwurf-release` skill owns the `land → prepare → make → publish`
 state machine. Each mode is a separate GLG authorization. Preserve one candidate,
@@ -143,8 +166,9 @@ The goal is not merely "invoke Claude Code." We want:
 4. source stable-bin exposure — including certified `entwurf` → this checkout's `run.sh`, the managed runtime Copilot fresh resolves; helper units are attempted independently and a foreign helper is a named FAIL
 5. agy bridge + exact permission + statusline + `PreInvocation` hook — only when `agy` is on PATH; each adapter is idempotent and independently doctorable
 6. Copilot four-unit composition (birth → MCP → receiver → visible footer) — only when `copilot` is on PATH (#86 C3b); the units run independently, each keeps its package-owned install-state and inverse, and a failed unit is a named component FAIL. The explicit `install-copilot-*`/`uninstall-copilot-*` surfaces remain the per-unit repair and inverse path
-7. `entwurf-bridge` install smoke (`validate_entwurf_bridge`)
-8. computed summary — per-component PASS/SKIP/FAIL; any detected-integration FAIL makes the whole command exit nonzero while valid components stay installed
+7. Codex candidate composition — only when `codex` is on PATH: user MCP/status-line atoms plus a non-green root-birth prerequisite; setup never invokes sudo or starts the app-server. Its acceptance cell must prove the exact `env_vars` boundary, independent component outcomes, idempotence, and the named root repair. This amendment is pending deep qualification.
+8. `entwurf-bridge` install smoke (`validate_entwurf_bridge`)
+9. computed summary — per-component PASS/SKIP/FAIL; any detected-integration FAIL makes the whole command exit nonzero while valid components stay installed
 
 ```bash
 git clone https://github.com/junghan0611/entwurf /path/to/entwurf && cd $_
@@ -300,9 +324,10 @@ The minimum passing bar:
 5. **Honest self-recognition:** the bridged model identifies its actual harness/backend, lists `entwurf-bridge` as the single MCP server with its seven current tools, and presents a backend-native (not normalized) tool surface.
 6. **Carrier separation honored:** engraving vs pi-context-augment kept distinct (§1A.0); no bridge-identity narrative attributed to the engraving carrier.
 7. **agy shipped lane accepted:** all three agy doctors are green; automatic birth/statusline/sender identity and same-gid native-push reply are confirmed in a fresh conversation. `agentId=meta-session/antigravity` is correct; model display is not part of that contract. Same-pid concurrent conversation invocation is not claimed.
-8. **Boundary preservation across backends/machines:** for every shipped or explicitly probed backend, regardless of install path or host, no cross-backend tool-surface contamination and no confabulation about pi internals.
-9. **Hygiene:** no orphan ACP children; no unexpected persisted session garbage (a turn-scoped `cwd:` fallback is never a persisted reuse).
-10. **New-harness admission closed:** a release that introduces a native harness admitted under the #82 contract has that harness in `FRESH_CALL_BACKENDS` on all three public surfaces, with `check-harness-admission-parity` green and its clause 7 visible-fresh LIVE step green in the MUST tier. That release also owes the cross-harness leg the same release stop names — two dispatch receipts, an existing citizen's live turn delivered into the new citizen and the new citizen's live turn delivered into an existing one — recorded in `DELIVERY.md`; its deterministic half is an owed follow-up, so until that gate lands this half of the condition is prose and is judged by the recorded receipts. Partial evidence is a branch state; an `unsupported` note in `DELIVERY.md` is a description, never a permit.
+8. **Codex candidate accepted before first release:** root birth, MCP/env boundary, and status-line doctors are green; the operator-owned app-server is running in tmux and has a loaded visible thread; request metadata joins the exact record; native-push delivers without retry; and clause 7 records a real visible `Pi → Codex → Pi` sequence. Ambient `PI_SESSION_ID`/`PI_AGENT_ID` are stripped, so a fixture/self-fetch first leg cannot pass. The receipt reports the fresh Codex, inherited app-server, and outbound Pi tmux sessions as distinct coordinates and requires equality before claiming “Codex beside Pi”; N attached TUIs across sessions have no request→TUI seat join. A tmux-less app-server rejects. Codex remains outside ACP and has no resume claim.
+9. **Boundary preservation across backends/machines:** for every shipped or explicitly probed backend, regardless of install path or host, no cross-backend tool-surface contamination and no confabulation about pi internals.
+10. **Hygiene:** no orphan ACP children; no unexpected persisted session garbage (a turn-scoped `cwd:` fallback is never a persisted reuse).
+11. **New-harness admission closed:** a release that introduces a native harness admitted under the #82 contract has that harness in `FRESH_CALL_BACKENDS` on all three public surfaces, with `check-harness-admission-parity` green and its clause 7 visible-fresh LIVE step green in the MUST tier. That release also owes the cross-harness leg the same release stop names — two dispatch receipts, an existing citizen's live turn delivered into the new citizen and the new citizen's live turn delivered into an existing one — recorded in `DELIVERY.md`; its deterministic half is an owed follow-up, so until that gate lands this half of the condition is prose and is judged by the recorded receipts. Partial evidence is a branch state; an `unsupported` note in `DELIVERY.md` never weakens this stop.
 
 Passing establishes a **release verification floor**, not an 8-hour/day operational guarantee. The floor says: gates hold, the agent honestly recognizes its environment, no tool surface is normalized away, no identity leaks, no orphans. It does **not** say a real-day workload (50–100+ turns, tool bursts, partial MCP failures, auth/version drift) survives — that needs L3–L5 evidence (appendix).
 

@@ -10,7 +10,7 @@ npm package: <https://www.npmjs.com/package/@junghanacs/entwurf>
 
 Legacy package: [`@junghanacs/pi-shell-acp`](https://www.npmjs.com/package/@junghanacs/pi-shell-acp). `entwurf` is its 0.12+ successor line: the same work renamed around the garden-citizen dispatch substrate rather than the pi adapter.
 
-> **Repository shape.** This repo is **entwurf-core (v2 dispatch) + native-harness bridges + a pi adapter + an ACP plugin**. Pi is one supported harness adapter — important because it supplies control sockets and hosts the ACP plugin today — but it is not the project subject. Claude Code and GitHub Copilot CLI are shipped as mailbox-backed self-fetch meta-sessions; Antigravity (`agy`) is shipped as a native-push citizen with automatic `PreInvocation` birth, ambient garden-id status, and a managed MCP/permission install surface. OMP (`omp`) is a self-fetch citizen on the same rail as Claude and Copilot, opened by `entwurf_fresh_call` and accepted under the step 9 visible-fresh contract on 2026-08-30 — its first turn is a two-stage in-process bootstrap rather than an argv prompt, because the vendor connects its MCP tools in the background after the session starts. Codex has a launch-mode-specific verified delivery probe documented in [DELIVERY.md](./DELIVERY.md), but no managed native-citizen install lane yet. The ACP plugin ships two backends through one adapter rail: Claude (the reference) and Snowflake Cortex Code (landed in 0.13.0 under the measured contract in [docs/acp-backend-rail.md](./docs/acp-backend-rail.md#cortex-code-audit-d1d10)).
+> **Repository shape.** This repo is **entwurf-core (v2 dispatch) + native-harness bridges + a pi adapter + an ACP plugin**. Pi is one adapter, not the project subject. Claude Code, GitHub Copilot CLI, and OMP (`omp`) are shipped self-fetch citizens; Antigravity (`agy`) is shipped native-push. Codex CLI is an **unreleased native-push candidate** over the operator-owned app-server: root-hook birth, strict request-scoped identity, loaded-thread probe, and one-shot queue delivery. It remains native so Codex keeps its vendor tools, delegation, and work context; this is not another way to buy or expose GPT through ACP.
 
 ```text
 Claude Code / Copilot / Codex / agy / omp / pi
@@ -19,7 +19,7 @@ Claude Code / Copilot / Codex / agy / omp / pi
       → control-socket | meta-mailbox | native-push
 ```
 
-[`entwurf_v2`](#entwurf_v2--canonical-dispatch-verb) is the canonical dispatch surface over *existing* garden citizens — live control-socket send, meta-mailbox enqueue, and native-push into a live Antigravity conversation. It starts no process on any rail: the hidden background resume that used to answer a dormant target was withdrawn under the visible-first rule, so a dormant citizen rejects honestly here and is reopened by a separate lifecycle verb, `entwurf_resume_call`. The meta-record is the sole address authority (#50 C4): a record-less control socket is refused as a `record-less-socket` diagnostic, never dispatched. The v1 entwurf verbs are gone. Fresh siblings and resumes are separate verbs — `entwurf_fresh_call` opens a NEW sibling in the operator's tmux — the caller's own session, or one existing named session on the same server — and learns its garden id from the callback it makes, while `entwurf_resume_call` reopens a DORMANT pi citizen under its own garden id in a visible window without running a turn; the non-Claude ACP lane landed earlier — Snowflake Cortex Code became the second backend in 0.13.0.
+[`entwurf_v2`](#entwurf_v2--canonical-dispatch-verb) is the canonical dispatch surface over *existing* garden citizens — live control-socket send, meta-mailbox enqueue, and native-push into a live Antigravity conversation or loaded Codex candidate thread. It starts no process on any rail. `entwurf_fresh_call` is separate lifecycle: for Codex, its inherited placement context is the operator-owned app-server's actual tmux seat forwarded through the MCP entry's `env_vars`, **not** the pane of any attached TUI. This is only a placement mechanism; Codex request metadata does not join a request to an attached TUI's tmux seat. With N TUIs attached from different sessions, adjacency is unproven unless the intended TUI and app-server share the same session. A tmux-less app-server rejects visible fresh honestly. Codex has no resume surface.
 
 **Garden id is deliberate vocabulary.** It is not a decorative synonym for session id, worker, delegate, or subagent. The unfamiliar word is a guard: each harness keeps its own identity and transcript, while `entwurf` supplies a narrow addressable surface between siblings.
 
@@ -60,10 +60,9 @@ native Antigravity / agy
 ```
 
 Claude's `install-meta-bridge`, Copilot's four `install-copilot-*` surfaces, agy's
-`install-agy-{bridge,statusline,hooks}` and OMP's four `install-omp-{bridge,mcp,config,receive}`
-units are distinct because their lifecycle and delivery transports are
-genuinely different. Codex remains verified probe evidence, not a shipped managed native-citizen
-lane; see [DELIVERY.md](./DELIVERY.md).
+`install-agy-{bridge,statusline,hooks}`, OMP's four `install-omp-{bridge,mcp,config,receive}`,
+and Codex's root birth plus user-scope MCP/statusline units are distinct because their
+lifecycle and delivery transports are genuinely different. See [DELIVERY.md](./DELIVERY.md).
 
 > **Direction.** Inverse of [`pi-acp`](https://github.com/svkozak/pi-acp). `pi-acp` lets external ACP clients talk *to* pi; `entwurf` lets garden citizens talk across harness boundaries — with pi as one adapter, not the center.
 
@@ -72,7 +71,7 @@ lane; see [DELIVERY.md](./DELIVERY.md).
 A few words that look unusual for a coding tool.
 
 - **Entwurf** (기투, projection-of-self) — sibling sessions with their own runtime boundary. Not "delegate," not "worker," not "sub-agent." Opening a visible sibling (`entwurf_fresh_call`), live peer messaging (`entwurf_v2`) and reopening a dormant one (`entwurf_resume_call`) are first-class; the hidden background resume that preceded the last of those was withdrawn under the visible-first rule.
-- **Garden / garden id** — the garden is the shared address space where independent harness sessions become citizens without losing their own runtime or transcript. A garden id is the stable address of one such citizen (for pi, a garden-native session id like `YYYYMMDDTHHMMSS-<6hex>`; for native harnesses, a meta-session id minted from an authoritative lifecycle hook — Claude `SessionStart`, Copilot's first-prompt birth hook, agy `PreInvocation`, and for OMP an in-process extension bound to both session edges that mints only the visible `mode === "tui"` host). It is not a worker name and not proof that pi owns the session. The same-looking id may name a live control socket, a dormant pi record, a mailbox-backed native session, or a native-push conversation, so callers discover facts with `entwurf_peers` and deliver with `entwurf_v2` instead of choosing a transport by hand.
+- **Garden / garden id** — the garden is the shared address space where independent harness sessions become citizens without losing their own runtime or transcript. A garden id is the stable address of one such citizen (for pi, a garden-native session id like `YYYYMMDDTHHMMSS-<6hex>`; for native harnesses, a meta-session id minted from an authoritative lifecycle hook — Claude `SessionStart`, Codex `SessionStart`, Copilot's first-prompt birth hook, agy `PreInvocation`, and for OMP an in-process extension bound to both session edges that mints only the visible `mode === "tui"` host). It is not a worker name and not proof that pi owns the session. The same-looking id may name a live control socket, a dormant pi record, a mailbox-backed native session, or a native-push conversation/thread, so routing always reads the record and live rail facts first.
 - **Engraving** — optional short operator text delivered through each backend's native identity carrier. Not a giant hidden prompt, not a tool catalog.
 - **MCP** — in this repo, MCP is just the transport by which ACP-backed sessions receive pi capabilities that native pi exposes directly as extensions. It is not a general MCP platform. Explicit `entwurfProvider.mcpServers` only; no ambient `~/.mcp.json` scanning, no automatic retrieval. The same `entwurf-bridge` entry can also be wired into another host's MCP catalog (Claude Code, Copilot, Codex, Antigravity, OMP, …) when the operator chooses. `entwurf_self` returns an authoritative pi-session or trusted meta-session identity envelope; `entwurf_v2` requires an authoritative sender by default (#50 C4) — a plain external MCP host with no identity lane is refused unless the operator explicitly wires the documented anonymous hatch, and even then it is never replyable.
 - **Session persistence** — re-attaches pi to the same remote ACP session. Does not hydrate backend transcripts into pi history.
@@ -81,9 +80,10 @@ A few words that look unusual for a coding tool.
 
 **Platform evidence, in one breath.** The Entwurf-only install surface on
 macOS is CERTIFIED (CI) (`macos-install-surface`). On macOS every
-garden-native harness rail (pi, Claude, Copilot, OMP, agy), marker join,
-ACP turn, and mux is NOT CERTIFIED — pending physical host; on Linux those
-same rails are the certified axis. native Windows is UNSUPPORTED.
+garden-native harness rail, marker/request join, ACP turn, and mux is NOT CERTIFIED —
+pending physical host. On Linux the released harness rails are the certified axis;
+the unreleased Codex candidate has pre-amendment native-push evidence but still owes
+the amended deep gates and first-release installed-host clause-7 receipts. Native Windows is UNSUPPORTED.
 CERTIFIED (CI) is weaker than a physical-host doctor green.
 The npm package has no `os` restriction; that is installability, not a
 support claim.
@@ -243,15 +243,17 @@ SKIP while the detected harnesses are composed.
 ### Native harness repair and doctors
 
 A plain MCP registration exposes the bridge tools; a **garden-native** session also
-needs entwurf's lifecycle hook and identity marker. `setup` already composes all of that
-for every harness it detects — you do not paste this list to install. This is the repair
-surface: each unit has its own installer, its own doctor with a named refusal, and its own
-inverse, so a single broken unit can be redone without touching the rest.
+needs entwurf's lifecycle and identity unit. `setup` composes every user-scope unit
+for each detected harness. Codex's prompt-free birth hook is the deliberate exception:
+it is root-owned under `/etc/codex`, so setup reports a named FAIL and the exact
+`sudo entwurf install-codex-birth` repair rather than escalating itself. This is the
+repair surface: each unit has its own installer, doctor, and inverse.
 
 - **Claude Code** (Linux CERTIFIED; macOS NOT CERTIFIED — pending physical host) — `install-meta-bridge`, `doctor-meta-bridge`.
 - **Antigravity / agy** (Linux CERTIFIED; macOS NOT CERTIFIED — pending physical host) — `install-agy-bridge`, `install-agy-statusline`, `install-agy-hooks`, each with a matching `doctor-agy-*`.
 - **GitHub Copilot CLI** (Linux CERTIFIED; macOS NOT CERTIFIED — pending physical host) — four independent units, four independent failure modes: `install-copilot-bridge` (birth: garden id + who-sent, on the first prompt), `install-copilot-mcp` (the entwurf tool hand, where `entwurf_inbox_read` lives), `install-copilot-receive` (the receiver extension: doorbell + receiver marker), `install-copilot-statusline` (optional for a manual citizen, required for supported fresh) — each with a matching `doctor-copilot-*` and `uninstall-copilot-*`.
 - **OMP (`omp`)** (Linux CERTIFIED; macOS NOT CERTIFIED — pending physical host) — four units, in-process extensions rather than launchers: `install-omp-bridge` (birth: the `mode === "tui"` visible host, its garden id on the status line, and who-sent), `install-omp-mcp` (the omp-native `entwurf-bridge` entry), `install-omp-config` (the one operator setting `tools: xdev: false`, without which the vendor mounts MCP tools as `xd://` devices the model cannot call), `install-omp-receive` (the receiver extension: mailbox watch + announce-only doorbell) — each with a matching `uninstall-omp-*`, and a `doctor-omp-*` for all but the setting, whose runtime axis `doctor-omp-mcp` owns. The setting writer owns exactly the lines it adds and refuses an explicit operator `tools: xdev: true` by name rather than overwriting it.
+- **OpenAI Codex CLI** (unreleased candidate; amendment and first-release acceptance pending; macOS NOT CERTIFIED) — `install-codex-birth` is the explicit root-owned `/etc/codex` `SessionStart` unit; `install-codex-mcp` owns `[mcp_servers.entwurf-bridge]`, including the `env_vars` boundary for `CODEX_HOME`, Entwurf garden/control roots, and the app-server's `TMUX`/`TMUX_PANE`; `install-codex-statusline` owns `thread-title`. Each has a matching doctor and inverse. The operator starts and seats the app-server; Entwurf never installs or supervises it and never discovers a TUI seat. “Codex beside Pi” is true only when the intended Codex TUI, the app-server, and outbound Pi resolve to one tmux session. Parser, env-boundary, setup, preflight, and clause-7 composition amendments plus Oracle qualification/full/LIVE remain before release.
 
 Run them as `entwurf <command>`. Which unit a doctor's refusal names, and the clean-host
 walk-through for each harness, live in [docs/setup-clean-host.md](./docs/setup-clean-host.md).
@@ -336,9 +338,9 @@ host evidence boundaries are [VERIFY.md](./VERIFY.md) and [BASELINE.md](./BASELI
 
 The curated model registry exposes unprefixed Claude ids — `claude-opus-5`, `claude-sonnet-5`,
 `claude-fable-5-1` — plus the `cortex-` rows below.
-Codex is not an ACP backend or a shipped managed citizen lane: it has verified
-native-delivery probe evidence only. No managed Codex support is claimed; lifecycle,
-identity, installation, and doctors remain prerequisites for any such lane.
+Codex is not an ACP backend. Its unreleased native-citizen candidate is independent so the
+session retains Codex's native tools, delegation, and work context: root-hook birth, strict
+request `_meta` identity, app-server probe, one-shot native-push, and visible fresh.
 
 **Snowflake Cortex Code is the second ACP backend** (contract and audit:
 [docs/acp-backend-rail.md](./docs/acp-backend-rail.md#cortex-code-audit-d1d10)). Curated ids are
@@ -444,8 +446,8 @@ The Claude ACP backend keeps its native model / API / tools; entwurf shapes only
 
 **Claude** uses `_meta.systemPrompt` for the engraving carrier (kept short and pure — billing-safe; rich operator context rides the first user message instead, see [Context carriers](#context-carriers)) and `CLAUDE_CONFIG_DIR` for a whitelist overlay so auth/runtime entries stay available while operator memory, hooks, agents, history, local settings, and project memory remain hidden. The overlay writes an explicit empty `hooks: {}` because Claude SDK organic compaction needs the configured-empty shape; no operator hook definitions are inherited. It also pins `permissions.defaultMode: "bypassPermissions"` so an unattended ACP turn cannot suspend on an interactive permission prompt; explicit `tools` / `disallowedTools` still constrain the callable surface and backend authentication remains the operator's. The four-tool baseline is `Read`, `Bash`, `Edit`, and `Write`; `permissionAllow` carries their allow declarations, and `Skill` is added automatically when `skillPlugins` is non-empty. Operator context cap override: `ENTWURF_ACP_CLAUDE_CONTEXT=<int>`.
 
-Codex is not an ACP backend here. Its native delivery probe remains separate from
-the governed ACP adapter rail and does not yet constitute a managed garden citizen.
+Codex is not an ACP backend here. Its unreleased native-push candidate uses `SessionStart`
+for birth, strict request `_meta` for who-sent, and a loaded app-server thread as the live route.
 
 Antigravity is also not an ACP backend. It is a native-push citizen: `PreInvocation` supplies birth/sender identity, `entwurf_v2` probes and direct-injects replies into the live conversation, and no mailbox/receiver marker is involved.
 
@@ -461,6 +463,9 @@ pnpm run check:full                     # full deterministic floor (adds the her
 ./run.sh smoke-agy-statusline-state     # agy ambient garden-id install surface
 ./run.sh smoke-agy-hooks-state          # agy PreInvocation birth hook
 ./run.sh check-agy-sender-identity      # record-backed pid/start-key sender identity
+./run.sh check-codex-native-push       # deterministic Codex UDS probe + no-replay queue contract
+./run.sh smoke-codex-config-state      # Codex MCP/status-line install, doctor, and inverse
+./run.sh check-codex-birth-hook        # root birth hook closure and ownership contract
 
 # source-maintainer only — qualification snapshots the git work surface, and both
 # commands are source-contract gates rather than installed operator checks:
@@ -470,6 +475,19 @@ pnpm run check:full                     # full deterministic floor (adds the her
 
 # agy LIVE acceptance — requires an already-running conversation:
 LIVE=1 AGY_CONVERSATION_ID=<id> ./run.sh smoke-agy-native-push-live
+
+# Codex loaded-thread probe (pre-amendment evidence; not first-release acceptance):
+LIVE=1 CODEX_LIVE_THREAD_ID=<threadId> ./run.sh smoke-codex-native-push-live
+
+# Codex first-admission RELEASE MUST, on Oracle after qualification/full/install.
+# Record the fresh Codex, app-server, and outbound Pi session coordinates separately;
+# they must be equal for a “Codex beside Pi” claim:
+LIVE=1 ENTWURF_CODEX_APP_SERVER_PID=<existing-app-server-pid> \
+  ENTWURF_CODEX_FRESH_MODEL=<codex-model> \
+  ENTWURF_CODEX_FRESH_PI_MODEL=<pi-model> \
+  ./run.sh smoke-codex-fresh-live
+# This accepts only a real visible Pi → visible Codex → visible Pi run. A fixture or
+# self-fetch first leg may collect receipts but does not satisfy first admission.
 
 # ACP plugin LIVE acceptance — need the operator's local Claude auth/credit:
 LIVE=1 ./run.sh smoke-acp-socket-citizen-live   # turn-free socket citizenship (S1)

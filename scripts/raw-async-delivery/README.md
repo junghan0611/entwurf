@@ -551,7 +551,8 @@ send-message-v2` spins a fresh thread, not the live one.
 
 Copilot is a GitHub **harness** (issues, PR, CI, model `auto`, mode `autopilot`,
 remote/delegate), not a second GPT provider next to pi. This makes a native lane
-product-distinct from the declined Codex lane: Copilot can own GitHub work while
+product-distinct from Codex's separate native-push lane (#95, unreleased candidate):
+Copilot can own GitHub work while
 implementation checkpoints arrive from another garden id. That split is operator
 etiquette plus dispatch, not a substrate role system.
 

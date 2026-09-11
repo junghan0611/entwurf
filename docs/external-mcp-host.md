@@ -6,47 +6,45 @@ the one-line registration; everything an operator needs to actually wire a host 
 
 `entwurf-bridge` can also be registered in a separate MCP-aware harness (Claude Code, Codex CLI, Antigravity/`agy`, GitHub Copilot CLI, OMP, …). That host does **not** become a pi session and does **not** need to be ACP-backed. There are now two honest cases:
 
-- **plain external MCP host**: no garden meta-record / sender marker. It can call the read surfaces (`entwurf_peers`, `entwurf_inbox_read`), but `entwurf_v2` sends are **refused by default** (#50 C4: "if we don't know who sent it, we don't send it"). The operator may wire the explicit hatch below; the send then goes out external/non-replyable.
-- **garden-native native session**: a trusted lifecycle hook minted a garden id and sender marker — `SessionStart` for Claude Code, `PreInvocation` for agy, `userPromptSubmitted`/`sessionStart` for GitHub Copilot CLI, and for OMP an in-process extension on `session_start`/`session_switch` that mints only a `mode === "tui"` host. It is not a pi control-socket session, but it can be replyable by garden id when its own mailbox/probe rail says so.
+- **plain external MCP host**: no garden meta-record or authoritative identity carrier. It can call the read surfaces (`entwurf_peers`, `entwurf_inbox_read`), but `entwurf_v2` sends are **refused by default** (#50 C4: "if we don't know who sent it, we don't send it"). The operator may wire the explicit hatch below; the send then goes out external/non-replyable.
+- **garden-native native session**: a trusted lifecycle event minted a garden id — `SessionStart` for Claude Code and Codex, `PreInvocation` for agy, `userPromptSubmitted`/`sessionStart` for GitHub Copilot CLI, and for OMP an in-process extension on `session_start`/`session_switch` that mints only a `mode === "tui"` host. Claude/Copilot/agy/OMP then use record-backed process markers; Codex instead carries its matching native `threadId` on every MCP request. It is not a pi control-socket session, but it can be replyable by garden id when its own mailbox/probe rail says so.
 
   **Being garden-native is not the same as being replyable, and Copilot is the case that separates them.** Its hook writes a sender marker, so an `entwurf_v2` send carries its own garden id and the receiver learns who wrote — measured 2026-08-21 on Copilot CLI 1.0.80, where a live send arrived under its own garden id with `origin: "meta-session"` and `replyable: false`. Replyability arrived later and through a different process: a first-party extension (`run.sh install-copilot-receive`) that the CLI forks, which binds to the same V3 record and writes a receiver marker owned by its own pid (#82 RAIL 5). So a Copilot citizen is `replyable: true` exactly while that extension is armed for it, and `replyable: false` — honestly, with a real garden identity — when it is not installed, not launched with `COPILOT_CLI_ENABLED_FEATURE_FLAGS=EXTENSIONS` (which is what `entwurf copilot` sets for one invocation), not yet born, or gone. Read the two facts off different rails: the sender marker answers *who sent this*; the receiver marker answers *can a reply land*. The onboarding obligations are in [`adding-a-harness.md`](./adding-a-harness.md) step 7, and the evidence boundary — the managed LIVE acceptance that moved receive to D6, and what D7-partial / D3-pending still exclude — is in [`DELIVERY.md`](../DELIVERY.md).
 
-**Which verb an external agent should reach for:** to deliver to / reply to a garden id, use **`entwurf_v2`** — it is the canonical delivery surface and the only one that reads whether the target is live pi, dormant pi, a mailbox-backed self-fetch citizen (Claude Code, Copilot, OMP), or native-push Antigravity and routes correctly. Discover targets with `entwurf_peers`, confirm your own identity with `entwurf_self`, drain a mailbox with `entwurf_inbox_read`, and use `entwurf_register_native` only as the explicit/manual fallback for binding an already-running agy conversation (normal agy birth is automatic through the installed hook). Open a NEW sibling with **`entwurf_fresh_call {backend, model, task, cwd?, placement?}`**, and reopen a DORMANT pi citizen under its own garden id with **`entwurf_resume_call {target}`**. Fresh call accepts one optional literal absolute `cwd`: omit it or pass `""` for the caller's cwd; otherwise it must name an existing directory and may not contain `#`. Use that input for a new cross-repository sibling — resume preserves a dormant Pi citizen's recorded continuity and is not a cwd substitute. Fresh call also accepts one optional `placement.tmuxSession`: the exact name of an EXISTING session on the caller's own tmux server, so the sibling opens in the operator's project seat rather than beside the caller. It creates nothing — an absent session is refused as `tmux-session-missing`, a name outside `[A-Za-z0-9][A-Za-z0-9_-]*` as `tmux-session-name-invalid`, and no window and no session are left behind either way. The seat and the `cwd` never infer each other: with `cwd` omitted a seated sibling starts in the CALLING agent's own directory, not the target session's path. Fresh call needs its selected runtime on the server's PATH (`pi`, `claude`, `entwurf` or `omp` — Copilot opens through the managed `entwurf copilot` invocation, never the bare vendor, while OMP is opened as the bare `omp` runtime); resume call always needs `pi`. Both start a runtime, while delivery does not. (The old v1 verbs `entwurf` / `entwurf_resume` / `entwurf_send` are gone.)
+**Which verb an external agent should reach for:** to deliver to / reply to a garden id, use **`entwurf_v2`** — it is the canonical delivery surface and the only one that reads whether the target is live pi, dormant pi, a mailbox-backed self-fetch citizen (Claude Code, Copilot, OMP), or native-push Antigravity/Codex and routes correctly. Discover targets with `entwurf_peers`, confirm your own identity with `entwurf_self`, drain a mailbox with `entwurf_inbox_read`, and use `entwurf_register_native` only as the explicit/manual fallback for binding an already-running agy conversation. Open a NEW sibling with **`entwurf_fresh_call {backend, model, task, cwd?, placement?}`**, and reopen a DORMANT pi citizen under the same id with **`entwurf_resume_call {target}`**.
 
-Observed: Claude Code, Codex CLI, Antigravity CLI, GitHub Copilot CLI and OMP all reach the read surfaces through this MCP bridge from a plain external host — `entwurf_peers` is a pure fact projection, while `entwurf_inbox_read` is a **mutating drain** (it archives the messages and stamps the read-receipt), so "read" here does not mean side-effect-free; **sending** needs an identity lane. Claude, Copilot and OMP become symmetric/replyable through a mailbox-backed meta-session — Claude's watch armed by its own hook, Copilot's by the forked extension it installs, OMP's by an extension running inside the operator's own TUI process; agy becomes symmetric/replyable through its record-backed sender marker plus live native-push probe. Codex has no managed citizen lifecycle yet, so a Codex host cannot send without the explicit anonymous hatch below.
+Observed: Claude Code, Codex CLI, Antigravity CLI, GitHub Copilot CLI and OMP all reach this MCP bridge. Claude, Copilot and OMP become symmetric/replyable through mailbox-backed meta-sessions; agy and Codex use native-push. Codex's identity is request-scoped `_meta.threadId`, and its replyability requires that exact record plus a loaded app-server thread. Plain external hosts still need an identity lane to send.
 
 Prerequisites on the host running the external MCP client:
 
 - A live pi session launched with `--entwurf-control` populates `~/.pi/entwurf-control/<gardenId>.sock` — the key is the **record's** garden id, never a transcript/session id (`PI_SESSION_ID` only carries the id record birth already established). Required for `entwurf_v2` control-socket dispatch and `entwurf_peers`.
 
-> **PATH boundary.** MCP servers are often launched by GUI/editor daemons and may not inherit the interactive shell's PATH. No `entwurf_v2` rail launches a process, so this does not affect delivery — but `entwurf_fresh_call` and `entwurf_resume_call` do open a fixed runtime. If that runtime works in your terminal but an external-host call fails with `spawn pi ENOENT`, `spawn claude ENOENT`, `spawn entwurf ENOENT`, or `spawn omp ENOENT`, pass a full PATH in the MCP server `env`, set `ENTWURF_BRIDGE_ENV_FILE` to a small shell file that exports PATH, or point the host at a wrapper that can find the runtime. `start.sh` sources only the explicit `ENTWURF_BRIDGE_ENV_FILE`; it never reads personal dotfiles automatically.
+> **PATH boundary.** MCP servers are often launched by GUI/editor daemons and may not inherit the interactive shell's PATH. No `entwurf_v2` rail launches a process, so this does not affect delivery — but `entwurf_fresh_call` and `entwurf_resume_call` do open a fixed runtime. If that runtime works in your terminal but an external-host call fails with `spawn pi ENOENT`, `spawn claude ENOENT`, `spawn entwurf ENOENT`, `spawn omp ENOENT`, or `spawn codex ENOENT`, pass a full PATH in the MCP server `env`, set `ENTWURF_BRIDGE_ENV_FILE` to a small shell file that exports PATH, or point the host at a wrapper that can find the runtime. `start.sh` sources only the explicit `ENTWURF_BRIDGE_ENV_FILE`; it never reads personal dotfiles automatically.
 
-> **Identity-carrier boundary.** A complete `PI_SESSION_ID` + `PI_AGENT_ID` pair wins before a
-> native sender marker in the bridge's authoritative-self resolution. Those variables are correct
-> inside the pi process that planted them from record birth; they are foreign identity in another
-> native harness. Starting that harness from a pi citizen's bash can otherwise make the new host —
-> and any internal agents borrowing its MCP manager — speak under the parent pi garden id. Every
-> managed native launcher therefore removes both variables before exec and lets the launched
-> harness establish its own identity through its trusted birth marker. Clearing only one is not a
-> repair: an incomplete pair merely changes the failure wording, while retaining either carrier
-> invites future partial-reader drift. An unmanaged launch that inherits them is unsupported. A
-> native-harness admission made under this contract must add a doctor cell that names this
-> contamination rather than silently preferring the marker.
+> **Identity-carrier boundary.** The bridge reconciles every authoritative claim available to
+> the request: the complete `PI_SESSION_ID` + `PI_AGENT_ID` pair, a native sender marker, and
+> Codex request `_meta`. Zero claims is refused; multiple claims must name the same garden id or
+> the call throws. Nothing silently wins. Those pi variables are correct only inside the pi
+> process that planted them from record birth; they are foreign identity in another native
+> harness. Every managed fresh launch therefore empties both variables at the tmux seam and lets
+> the launched harness establish its own identity. Clearing only one is not a repair: an
+> incomplete pair is itself invalid, while retaining either carrier invites future reader drift.
+> An unmanaged launch that inherits them is unsupported. A native-harness admission must add a
+> doctor or request-level contract that names contamination rather than trusting precedence.
 >
-> **Certified so far: Copilot only** (#82 RAIL 9). `scripts/copilot-launch.sh` unsets both before
-> `exec`, `check-copilot-launch` asserts their absence from the vendor's OWN report of its
-> environment (and that clearing one alone does not pass), and `doctor-copilot-receive` reports any
-> live Copilot CLI still carrying either as RED on its own axis — a session can be perfectly armed
-> and still speak under the parent's garden id, so the flag verdict must not absorb it. The other
-> native launchers have NOT been certified against this failure mode; do not read Copilot's cells
-> as coverage for them.
+> **The defenses are layered.** Copilot's managed launcher unsets both carriers before `exec`,
+> and `doctor-copilot-receive` detects a contaminated live CLI. The shared fresh-call tmux seam
+> empties them for every backend. OMP retains its process-environment doctor for manually opened
+> sessions. Codex's request-level reconciler adds a different last line: a foreign pi claim and
+> `_meta.threadId` claim cannot coexist under different garden ids. These are complementary;
+> no backend's cell is evidence for another's unmanaged launch.
 >
 > **OMP has both halves, and the strip one is not an omp launcher** (#87 Bundle C). entwurf still
 > owns no managed omp invocation — the bare vendor runtime IS this harness's clause 1 answer, and
 > nothing here argues for a wrapper. The strip sits one level up instead, at the shared launch seam
 > every `entwurf_fresh_call` backend passes through: `SCRUBBED_INHERITED_ENV` empties
 > `PI_SESSION_ID` and `PI_AGENT_ID` on the `new-window` argv itself
-> (`pi-extensions/lib/mux-fresh-call.ts:402`), for all four backends rather than only the one whose
+> (`pi-extensions/lib/mux-fresh-call.ts`), for all five backends rather than only the one whose
 > measurement surfaced it, because the leak is a property of tmux and not of a vendor. `-e VAR=`
 > sets the variable empty rather than unsetting it — tmux has no per-window unset — and every
 > carrier reader trims and tests truthiness, so empty and absent are the same answer by
@@ -78,16 +76,16 @@ Then add it to the external MCP config:
 }
 ```
 
-**Anonymous sender hatch (explicit, documented — never a default).** The bridge refuses an `entwurf_v2` send when the process has neither pi-session env (`PI_SESSION_ID` + `PI_AGENT_ID`) nor a trusted meta-sender marker (#50 C4). A deliberately-anonymous external host — e.g. a Codex CLI wiring, which has no managed citizen lifecycle — may opt out by adding `"ENTWURF_BRIDGE_ALLOW_ANONYMOUS_SENDER": "1"` to the MCP server `env`. The cost is honest and fixed: the send lands with `origin: "external-mcp"`, `replyable: false` (there is no reply address), and `wants_reply: true` stays pointless. The retired opt-in `ENTWURF_BRIDGE_REQUIRE_META_SENDER` is no longer read — its demand became the default, so a stale copy in an old install env is inert.
+**Anonymous sender hatch (explicit, documented — never a default).** The bridge refuses an `entwurf_v2` send when the process has neither pi-session env nor a trusted native identity claim. A deliberately-anonymous plain external host may opt out by adding `"ENTWURF_BRIDGE_ALLOW_ANONYMOUS_SENDER": "1"` to the MCP server `env`. The cost is honest and fixed: the send lands with `origin: "external-mcp"`, `replyable: false`, and `wants_reply: true` stays pointless. A managed Codex citizen does **not** use this hatch; request `_meta` supplies its authoritative identity.
 
 Emergency/manual workaround when the MCP server environment is wrong but an existing entwurf session must be resumed: run `pi --session /path/to/entwurf.jsonl ...` from an interactive shell whose PATH is known-good. Treat this as a debug escape hatch, not a replacement for fixing the MCP launch environment.
 
 External/meta-session semantics:
 
 - `entwurf_v2` from a plain external host is **refused by default** (no authoritative sender — #50 C4). With the explicit `ENTWURF_BRIDGE_ALLOW_ANONYMOUS_SENDER=1` hatch it delivers with `origin: "external-mcp"` / `replyable: false`; there is still no reply address.
-- `entwurf_v2` from a trusted meta-session delivers with `origin: "meta-session"`, and `replyable` is **derived from that sender's own rail — not granted by being trusted**: a self-fetch sender (Claude Code, Copilot, OMP) is replyable only while its receiver is live and armed, and a native-push sender (Antigravity) only while its adapter probe finds the live conversation. Identity survives either way; only `replyable` drops to `false`. When it is `true`, `wants_reply: true` is allowed and the receiver can reply to the sender's garden id.
+- `entwurf_v2` from a trusted meta-session delivers with `origin: "meta-session"`, and `replyable` is **derived from that sender's own rail — not granted by being trusted**: a self-fetch sender (Claude Code, Copilot, OMP) is replyable only while its receiver is live and armed; Antigravity requires a live native probe; Codex requires a matching request-scoped record and loaded app-server thread. Identity survives either way; only `replyable` drops to `false`.
 - `entwurf_v2` never launches a process, so no delivery path needs `pi` on PATH. A dormant pi target is refused as `dormant-fire-forget-unsupported`: the hidden background resume that used to answer there was withdrawn under the visible-first rule, and re-opening the session is the separate `entwurf_resume_call` verb — which DOES need `pi` on PATH, because it starts one.
-- `entwurf_self` returns the same authoritative identity for pi sessions **and** trusted meta-sessions. A plain external host with no pi env and no trusted sender marker still fails because there is no reply address to report.
+- `entwurf_self` returns the same authoritative identity for pi sessions **and** trusted meta-sessions. A plain external host with no pi env, native marker, or Codex request claim still fails because there is no reply address to report.
 
 #### Claude Code
 
@@ -129,14 +127,36 @@ Claude Code reads `~/.mcp.json` in addition to `~/.claude.json`'s top-level `mcp
 
 #### Codex CLI
 
-Add the server to `~/.codex/config.toml`:
+Use the owned surfaces rather than editing `~/.codex/config.toml`:
 
-```toml
-[mcp_servers.entwurf-bridge]
-command = "/absolute/path/to/entwurf/mcp/entwurf-bridge/start.sh"
+```bash
+sudo entwurf install-codex-birth
+entwurf install-codex-mcp
+entwurf install-codex-statusline
+
+sudo entwurf doctor-codex-birth
+entwurf doctor-codex-mcp
+entwurf doctor-codex-statusline
 ```
 
-Codex has no managed citizen lifecycle (no sender marker), so this wiring can read `entwurf_peers`/`entwurf_inbox_read` but `entwurf_v2` sends are refused by default (#50 C4). To send anonymously anyway, add the explicit hatch to the same block: `env = { ENTWURF_BRIDGE_ALLOW_ANONYMOUS_SENDER = "1" }` — the send is then marked external/non-replyable (see the hatch paragraph above).
+The system unit owns a prompt-free `/etc/codex` `SessionStart` hook; the user units own
+only `[mcp_servers.entwurf-bridge]` and the `thread-title` status-line member. The MCP
+entry carries `ENTWURF_BRIDGE_NATIVE_HOST=codex`, which tells the bridge to require and
+reconcile Codex request `_meta`. Do not add the anonymous hatch.
+
+Native receive and visible fresh require the operator-owned default app-server. Entwurf
+does not start or supervise it:
+
+```bash
+CODEX_HOME="${CODEX_HOME:-$HOME/.codex}"
+codex app-server --listen "unix://$CODEX_HOME/app-server-control/app-server-control.sock"
+```
+
+Birth occurs on the first turn, not window open. It mints
+`record.nativeSessionId = threadId` and sets the visible thread title to the garden id.
+`entwurf_v2` probes the loaded-thread list and sends once through `codex queue`; it never
+retries. `entwurf_fresh_call` accepts `backend: "codex"` after all three owned units and
+the default socket pass preflight. Codex remains outside ACP and has no resume surface.
 
 #### Antigravity CLI (`agy`)
 

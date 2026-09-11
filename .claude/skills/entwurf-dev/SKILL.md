@@ -19,8 +19,8 @@ transcript를 가진 garden citizen이다.
 /skill:entwurf-dev status
 /skill:entwurf-dev fresh pi openai-codex/gpt-5.6-luna 오늘 S0 상태를 한 문장으로 말해
 /skill:entwurf-dev fresh claude-code claude-sonnet-5 README의 visible-first 계약을 읽어
+/skill:entwurf-dev fresh codex gpt-5.6-sol DELIVERY의 Codex rail을 요약해
 /skill:entwurf-dev send <garden-id> 지금 상태를 답해줘
-/skill:entwurf-dev resume <garden-id>
 /skill:entwurf-dev tour pi
 /skill:entwurf-dev boundary
 ```
@@ -39,7 +39,7 @@ transcript를 가진 garden citizen이다.
 
 호출된 tool schema가 worktree 문서보다 우선한다. 이 스킬은 현재 S1 계약에 맞는다.
 
-- `entwurf_fresh_call` backend는 정확히 `pi | claude-code | copilot | omp`이고 model은 required다. `cwd`는
+- `entwurf_fresh_call` backend는 정확히 `pi | claude-code | copilot | omp | codex`이고 model은 required다. `cwd`는
   선택 입력 하나: literal 절대경로(존재하는 디렉터리, `#`·trim·realpath 없음), 생략·`""`면
   caller cwd에서 시작한다. cross-repo fresh 절 참조.
   **심링크를 주면 두 문자열이 보이는데 정상이다**: entwurf는 경로를 해석하지 않고 tmux에 그대로
@@ -58,7 +58,7 @@ transcript를 가진 garden citizen이다.
   `cwd`를 생략하고 seat만 주면 새 pane은 이 에이전트(caller 프로세스)의 cwd에서 시작한다**(측정) —
   타깃 세션의 path도, 그 세션 active pane의 경로도 물려받지 않는다. 즉 `org` 자리에 열었다고 형제가
   `org` 프로젝트 디렉터리에 있는 것이 아니다. 다른 디렉터리를 원하면 `cwd`를 함께 준다.
-- 기본 정책은 Pi=`openai-codex/gpt-5.6-luna`, Claude Code=`claude-sonnet-5`다.
+- 기본 정책은 Pi=`openai-codex/gpt-5.6-luna`, Claude Code=`claude-sonnet-5`, Codex=`gpt-5.6-sol`이다.
 - GLG가 “entwurf 소넷”이라고 하면 Pi + `entwurf/claude-sonnet-5`다.
 - **Provider budget:** sibling launch에 OpenRouter를 쓰지 않는다. 이는 GLG 개인의 embedding/image 전용 제한 rail이다. Claude Code 구독, Pi의 승인된 GPT/Codex·xAI 구독, 또는 direct endpoint로 이미 설정된 회사 API만 쓴다. model label은 billing rail 증거가 아니다. 요청된 model이 현재 OpenRouter로 resolve되면 launch·test turn·login check·probe script를 하지 말고 그 한 사실만 즉시 보고한다. GLG가 이미 승인한 rail의 형제를 요청하면 credential/login을 다시 묻거나 찾지 말고 fresh-call을 바로 한 번 호출한다.
 - `entwurf_v2` intent는 정확히 `fire-and-forget` 하나다. 이 verb는 어떤 rail에서도 프로세스를 열지 않는다.

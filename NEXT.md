@@ -162,7 +162,7 @@ CHANGELOG `## Unreleased`가 구현 범위 `v0.15.1..19ad90c` **30커밋** 전�
   user-scope 자기등록을 워크트리로 옮겨 #110 을 반대 방향으로 다시 만든다. 개발자 설치는 정본 체크아웃에서만 ·
   태그만 만들고 GitHub 릴리즈를 빼먹지 마라(GLG 가 릴리즈 노트를 github.com 에서 읽는다) ·
   이슈 칸이 비었다고 채우지 마라(총 10 / 구현 5 상한; 현재 결함이나 실행 가능한 계약만 칸을 얻는다) ·
-  codex 레인은 이번 릴리즈에서 열지 않는다.
+  codex 레인은 별도 `feat/95-codex-admission` candidate에서 작업 중이며 0.20.1 release stem과 섞지 않는다.
 
 <details><summary>#78 macOS / 설치면 다양화 NOW (닫힘 — 0.20.0 으로 나갔다)</summary>
 
@@ -193,20 +193,39 @@ CHANGELOG `## Unreleased`가 구현 범위 `v0.15.1..19ad90c` **30커밋** 전�
 Node 프론트도어·심링크 없는 소스 노출·프로세스 seam 이 필요하다. 재진입 조건은 **GLG 의 명시적 product-scale 승인**이다. 열지 마라.
 WSL2 는 계약상 리눅스의 연장이라 새 작업 없음.
 
-## codex 레인 — step 1 만 닫혔다. step 2 는 GLG 가 연다
+## codex 레인 — unreleased native candidate, GPT-6 amendment 진행 중
 
-step 2/3 이 물려받는 것(정본은 `scripts/raw-codex-measure/` + #95 마감 코멘트):
-
-1. **Birth event: `SessionStart`**, 첫 턴에 발화, 추측할 필드 없음. §3.5 는 공짜(`SubagentStart` 가 갈라준다).
-2. **Receive rail: native-push**, app-server `turn/start`. `watchPaths` 대응물 없음. **app-server 상시 구동이 전제**다.
-3. **Identity key: thread id.** `record.nativeSessionId = threadId` 로 매핑 계층 불필요 — hook·app-server·tool-call `_meta` 가 같은 문자열.
-   **parent-pid sender marker 는 여기서 틀린 모양이다**; `_meta` 소비는 새 브리지 코드이고 **step 6** 이다.
-4. **능력이 아니라 소유권인 비용 둘.** 비대화형 birth 는 **root 레벨 `/etc/codex/` 단계**를 요구한다(`setup` 이 못 쓴다, Hard Rule 17).
-   `[tui] status_line` 은 그 키만 소유하는 writer 가 필요하다(`scripts/omp-config-xdev.py` 모양).
-5. **미측정 Observation (terra):** `/new`·resume·fork 가 `thread_name` 을 `None` 으로 되돌리는지 — 되돌리면 birth payload 가 가시 id 를 **재무장**해야 한다.
-   OMP 가 `/new` unarm 으로 같은 셀을 치렀다(`adding-a-harness.md` §7, `DELIVERY.md` §OMP). 재도출하지 마라.
-6. **선재 결함:** registry 가 codex 를 `direct-inject / D6` 로 등급 매겨놨는데 **채널이 없다**(step 8(c) 가 이름 붙인 실패 모양).
-   `nativeIdLabel:"threadId"` 는 맞고 `D6` 는 틀리다. 정정은 **step 8** 작업.
+- **좌표:** `feat/95-codex-admission`. ACP Codex는 금지 그대로다. 목적은 GPT 접근을
+  하나 더 만드는 것이 아니라 Codex의 native tools·delegation·work context를 그대로 둔 citizen이다.
+- **candidate 모양:** root-owned prompt-free `/etc/codex` `SessionStart` birth · strict
+  request-scoped metadata identity(join 충돌 fail-loud) · operator-owned app-server
+  `thread/loaded/list` probe · one-shot `codex queue` native-push(**재시도 0**) · user
+  MCP/status-line atom · `entwurf_fresh_call backend=codex`. mailbox/receiver/resume/ACP 없음.
+- **GLG placement 결정:** Codex caller의 자리는 attached TUI pane이 아니라 **operator가 실제로
+  app-server를 연 tmux seat**다. 그 app-server의 MCP child로 `TMUX`/`TMUX_PANE`을
+  `[mcp_servers.entwurf-bridge].env_vars`에서 전달한다. 그러나 이 seat는 mechanism일 뿐이고
+  request metadata에는 request→TUI seat join이 없다. N개의 TUI가 서로 다른 session에서 같은
+  app-server에 붙으면 어느 TUI “옆”인지 알 수 없다. `Codex 옆에 Pi`를 말하려면 intended fresh
+  Codex session = app-server inherited session = outbound Pi session을 각각 관측하고 같음을 요구한다.
+  custom `CODEX_HOME`과 Entwurf garden/control roots도 같은 explicit env-name 경계를 건넌다.
+  tmux 없이 열린 app-server는 visible fresh를 정직하게 거절한다. Entwurf는 generic API/manager를
+  만들거나 app-server를 숨겨 기동·감시·재시작하지 않는다.
+- **GPT-6 amendment:** 이전의 “source-complete, host ownership만 남음” 판정은 폐기한다.
+  terminal parser · env-boundary · setup acceptance · preflight safety · clause-7 composition을
+  한 amendment bundle로 고친다. laptop은 affected focused work만 소유하며 그 영수증을 deep
+  acceptance로 올려 읽지 않는다.
+- **보존된 pre-amendment LIVE (2026-09-11, Codex 0.153.4):** loaded-thread native-push,
+  public MCP send, authenticated request identity, isolated source-birth/title 변경은 관측됐다.
+  현재 amendment가 그 영수증으로 qualification됐다는 뜻은 아니다.
+- **Oracle/release stop:** independent review 뒤 `check-gate-qualification`과 frozen
+  `pnpm run check:full`; 실제 root/user 설치 + doctors; then
+  `LIVE=1 ENTWURF_CODEX_APP_SERVER_PID=<pid> ENTWURF_CODEX_FRESH_MODEL=<codex-model>
+  ENTWURF_CODEX_FRESH_PI_MODEL=<pi-model> ./run.sh smoke-codex-fresh-live`.
+  계약은 real visible `Pi → Codex → Pi`다. release-gate가 ambient `PI_SESSION_ID`/
+  `PI_AGENT_ID`를 지우므로 fixture/self-fetch 첫 leg는 receipt 수집만 할 뿐 admission을 닫지 못한다.
+  smoke는 fresh Codex / inherited app-server / outbound Pi session 좌표를 따로 남기고 셋이
+  같지 않으면 first-admission red다. 그 전까지 Codex는 unreleased candidate다.
+  0.20.1 stem과 commit/push를 섞지 않는다.
 
 <details><summary>ACP fable 지원 NOW (닫힘)</summary>
 

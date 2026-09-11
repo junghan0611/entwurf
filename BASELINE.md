@@ -8,9 +8,9 @@ not what it was told to claim.
 
 Claude is the reference ACP backend. Cortex Code has a separate compact baseline
 because it has no system-prompt carrier and keeps its own native tool surface.
-Antigravity (`agy`) is a native-push citizen rather than an ACP backend and therefore
-has a separate citizen/round-trip baseline. Historical Codex/Gemini probes are not
-part of this operator interview.
+Antigravity (`agy`) and Codex are native-push citizens rather than ACP backends and therefore
+have separate citizen/round-trip baselines. Codex's current native baseline is the 0.153.4
+receipt in `DELIVERY.md`; it is not part of this ACP operator interview.
 
 ## Release-host baseline
 

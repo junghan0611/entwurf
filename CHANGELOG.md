@@ -4,6 +4,77 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+### Added
+
+- **OpenAI Codex CLI is an unreleased app-server-backed native-push candidate (#95).**
+  A prompt-free root `SessionStart` hook mints the V3 record on the first turn and sets
+  the visible thread title. The bridge strictly joins each request's Codex metadata to
+  that record, so multiple visible TUIs may share one app-server without sharing a
+  process marker. The purpose is to preserve Codex's native tools, delegation, and work
+  context as a citizen — not to add an ACP Codex backend or duplicate GPT access.
+- **Codex gets three independently owned install/doctor/inverse atoms.**
+  `install-codex-birth` owns only the fixed `/etc/codex` hook declaration and import closure;
+  `install-codex-mcp` owns only `[mcp_servers.entwurf-bridge]`; and
+  `install-codex-statusline` owns only `thread-title`. The MCP atom also owns the exact
+  `env_vars` names that forward `CODEX_HOME`, Entwurf garden/control roots, and the
+  operator-owned app-server's `TMUX`/`TMUX_PANE`. `setup` never escalates or starts it.
+- **`entwurf_fresh_call` accepts `backend: "codex"` on both public tool surfaces and the
+  operator skill.** It requires an explicit model and uses the measured
+  `codex --remote unix://<default-socket> --model … --dangerously-bypass-approvals-and-sandbox`
+  shape. Root birth, MCP/env boundary, visible title, and the operator-owned app-server
+  socket/seat mechanism are checked before tmux mutation; a tmux-less app-server rejects.
+  This does not infer an attached TUI seat from request identity.
+
+### Changed
+
+- **The native-push rail is adapter-specific instead of Antigravity-shaped.** Codex liveness
+  is `thread/loaded/list` over the app-server WebSocket UDS; delivery is the measured one-shot
+  `codex queue --remote … --thread … --message …`. It has no mailbox, receiver marker, or
+  resume surface. Unlike Antigravity, Codex delivery is never retried because vendor acceptance
+  may precede the CLI receipt; replay would duplicate the user's message.
+- **Codex remains outside ACP and Entwurf remains outside Codex lifecycle ownership.**
+  Entwurf does not install Codex, supply auth, expose a generic app-server API/manager, or
+  start/supervise/restart the app-server. “Caller placement” is the app-server's actual
+  tmux seat, not an attached TUI pane. N attached TUIs across sessions have no
+  request→TUI seat join.
+
+### Upgrade note
+
+Codex native delivery requires one explicit system step and two user-scope atoms:
+
+```bash
+sudo entwurf install-codex-birth
+entwurf install-codex-mcp
+entwurf install-codex-statusline
+
+CODEX_HOME="${CODEX_HOME:-$HOME/.codex}"
+mkdir -p "$CODEX_HOME/app-server-control"
+# This chooses the mechanism seat. Put the intended Codex TUI in this same session
+# if the acceptance claim is “Codex beside Pi”.
+codex app-server --listen "unix://$CODEX_HOME/app-server-control/app-server-control.sock"
+```
+
+Then restart/open Codex and send its first turn. `entwurf setup <project>` never runs sudo and
+never starts the app-server.
+
+### Verification
+
+- The GPT-6 review reopened five surfaces in the candidate: terminal parser, explicit
+  env-name boundary, setup acceptance, fresh preflight safety, and clause-7 composition.
+  The prior “source-complete; only host ownership remains” wording is withdrawn.
+- The 2026-09-11 Codex CLI 0.153.4 run remains pre-amendment evidence: native-push and a
+  public MCP call woke one visible loaded thread; authenticated request identity resolved
+  `agentId=meta-session/codex`, `replyable=true`; and a source hook minted a record in an
+  isolated store. It does not qualify the amended candidate.
+- Laptop work is limited to affected focused cells. After the amendment and review,
+  Oracle still owes `check-gate-qualification`, the frozen `pnpm run check:full`, installed
+  root/user doctors, and actual real `Pi → visible Codex → visible Pi` clause-7 LIVE.
+  Release-gate strips ambient `PI_SESSION_ID`/`PI_AGENT_ID`; a fixture/self-fetch first
+  leg may collect receipts but cannot accept the harness. The installed-host receipt
+  must report fresh Codex, inherited app-server, and outbound Pi session coordinates
+  separately and keep admission red unless all three match. Codex remains unreleased
+  until those stops close.
+
 ## 0.20.1 - 2026-09-10
 
 ### Fixed
@@ -124,17 +195,15 @@ Hosts with no detected harness, and every Linux host, see no new prompt.
   by the promotion above; it is where a borrowed Mac produces the physical-host
   evidence the CI runner cannot.
 - **`scripts/raw-codex-measure/` — Codex 0.153.4 vendor measurement (#95 step 1).**
-  Nothing is installed: no birth hook, no record, no marker, no doctor, and
-  `entwurf_fresh_call` still cannot open a codex sibling. GLG reversed the
-  2026-08-01 decline on 2026-09-08; live claims that still said otherwise
-  were repaired. The ledger closes step 1: SessionStart fires on the first
-  turn, not at window open; a fourth callback spelling
-  (`mcp__entwurf_bridge__entwurf_v2`); the delivery-capable app-server join
-  cannot use parent-pid as a citizen key; hook-trust is an ownership cost
-  (`/etc/codex`, root-owned), not a capability gap; clause 4 is
-  `thread/name/set` plus a status_line config. Step 2 is not opened.
-  `PIN_CODEX_MINOR` 0.144 → 0.153 is a re-verification of the archived drift
-  probe, not a product pin.
+  **At the measurement landing on 2026-09-08**, no Entwurf Codex unit had been
+  installed or built, no product record/doctor existed, and fresh did not include
+  Codex. Those are dated step-1 facts, not the current candidate state. The ledger
+  established first-turn `SessionStart`, callback spelling
+  `mcp__entwurf_bridge__entwurf_v2`, the shared-app-server refutation of a pid-keyed
+  citizen join, root-owned prompt-free hooks, and `thread/name/set`. Later #95 work
+  added the record/native-push/fresh candidate described under Unreleased.
+  `PIN_CODEX_MINOR` 0.144 → 0.153 was a re-verification of the archived drift probe,
+  not a product pin.
 
 ### Changed
 
@@ -261,9 +330,9 @@ Lane receipts (oracle, 2026-09-09) plus prepare P4/P5 on this host. There is
   CommandLineTools stub. Both are cells the borrowed-Mac probe
   (`scripts/raw-macos-measure/probe.sh`, M6 and M3) is built to answer. Do
   not fill them from a CI image spec.
-- **Codex is not a garden backend in this cut.** Step 1 of #95 closed as
-  measurement; step 2 is not opened. `entwurf_fresh_call` still cannot open a
-  codex sibling.
+- **On the 0.20.0 release date (2026-09-09), Codex was not a garden backend in that
+  cut.** Step 1 of #95 was measurement only and `entwurf_fresh_call` did not include
+  Codex. This is release archaeology; the later unreleased candidate supersedes it.
 
 ## 0.19.0 - 2026-09-07
 

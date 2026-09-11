@@ -88,8 +88,8 @@ physical host. Do not read a D-level cell as a Darwin receipt.
 | **pi native Entwurf** | shipped | D7; D8 partial | Record-addressed Unix control socket. A record-less socket is diagnostic only and never dispatched. |
 | **Claude Code interactive `>=2.1.217`** | shipped; Linux certified | D6; D7/D8 partial | Per-session mailbox + exec-form `FileChanged`/`asyncRewake`. B2 proved idle wake and same-session continuity on one NixOS host. |
 | **Antigravity / agy** | shipped | D6; D7 partial | Record-backed native-push through LS gRPC `agentapi send-message`; no mailbox or receiver marker. Admitted before the #82 step 9 contract and not re-evaluated under it, so it is legacy citizen evidence, not a step-9 supported harness: `entwurf_fresh_call` cannot open an agy sibling, and nothing here should be read as claiming visible lifecycle parity. |
-| **Codex app-server-backed TUI** | verified probe, re-verified at 0.153.4 | D7; D8 unproven | WebSocket-over-UDS `turn/start` into a live `threadId`; status events expose completion. Re-run as shipped on 2026-09-08 at codex-cli **0.153.4** (garden lane #95): idle plain `codex` auto-attached to a bare `codex app-server --listen`, woke with zero typing, and the model replied in the same visible session — `{"ok": true, "threadId": "01a08145-ce6d-77d0-b7a4-cfb57c608282", "turnId": "01a08146-7c06-7b83-9e65-32e3814ee490", "status_seen": ["active","active","idle"]}`. No owned native-citizen install/invocation lane. Step 1 measurement only — the lane is open (#95) but nothing is installed, so this row stays the declared pre-#82 exception `check-harness-admission-parity` reads. |
-| **Codex embedded TUI** | deferred | D0 partial | No supported receive socket/hook on the measured standalone shape. Re-checked in source at 0.153.4: the hook vocabulary grew to 12 events but still has no `watchPaths`/`FileChanged`/`asyncRewake` analogue, so the negative stands. |
+| **Codex CLI app-server citizen** | unreleased candidate under amendment; pre-amendment native send/receive and identity observed on Linux at 0.153.4 | D6 candidate; D7 partial; D8 unproven | Root `SessionStart` birth plus strict per-request metadata join; no shared-pid sender marker. `thread/loaded/list` probes the operator-owned app-server UDS and one-shot `codex queue` delivers with no retry. The MCP `env_vars` boundary carries `CODEX_HOME`, Entwurf roots, and the app-server's actual tmux mechanism seat; this is not an attached-TUI join. Parser/env/setup/preflight/clause-7 amendments and Oracle qualification/full/installed-host real `Pi → Codex → Pi` LIVE remain release stops. |
+| **Codex embedded TUI** | deferred | D0 partial | At the 2026-09-08 Codex 0.153.4 measurement, standalone mode had no `watchPaths`/`FileChanged`/`asyncRewake` analogue or supported idle receive route. This is dated vendor evidence, not a claim that the current candidate lacks records or fresh. |
 | **Copilot CLI first-party extension** | raw transport probe; superseded by the owned product unit | D7 path observed; D3 control receipt incomplete; D8 unproven | CLI-spawned extension over stdio JSON-RPC; `joinSession()` + documented `fs.watch` → `session.send({mode:"enqueue"})`. Idle wake, exact-marker reply, and completion passed on 2026-08-23 (CLI 1.0.80, L4, one Linux host). Two-process isolation was observed but its decisive B log was not preserved. Kept as the transport receipt the owned receive unit was built on; the shipped unit differs deliberately — it announces the inbox instead of injecting the body. |
 | **Copilot CLI garden citizen** | shipped in 0.15.0; send + receive + visible fresh accepted on one host | D6; D7 partial; D3 pending; D8 unproven | Birth, garden id, MCP hand and record-backed sender identity are accepted; the RECEIVER is an installed first-party extension that binds to the V3 record, writes a receiver marker owned by the WATCHER pid, and rings a doorbell the model drains with `entwurf_inbox_read`. `wakeMode` is `self-fetch`, so dispatch reaches the mailbox rail: armed → delivered, unarmed/stale → the honest `mailbox-undeliverable` refusal. **D6 is the owned-invocation LIVE acceptance of 2026-08-23** — garden `20260823T181316-d9f6ba`, native `20fe30c8-b2bc-4600-91a0-8a409131be51`, CLI 1.0.80: receive log `joined`→`armed`→`doorbell fresh=1`→`rang`, mailbox `lastEnqueuedAt 09:23:41.235Z` / `lastReadAt 09:23:56.480Z`, and a model reply on the same record/native/gid chain. **Visible fresh (step 9 clause 7) is a separate LIVE, 2026-08-25** — launch window `@89`/`%89` nonce `mux-fresh-call-690529ae99f99faa2252aefb`; exact-callback garden `20260825T085721-f68be0`; one `entwurf_v2` → `meta-mailbox → enqueued`; same garden `lastReadAt 2026-08-24T23:57:47.784Z` plus same-gid reply; GLG saw footer garden id and a healthy multi-turn window. Those rows stay unmerged. D7 is PARTIAL: reply and read receipt were observed, the completion taxonomy and long-haul operation were not. D3 (second-session isolation of an owned invocation) is PENDING — observed once, decisive log lost to scratch cleanup. Evidence level L4: one host. Launch through the owned invocation `entwurf copilot`, which sets `COPILOT_CLI_ENABLED_FEATURE_FLAGS=EXTENSIONS` for that one process; `doctor-copilot-receive` reads live CLI environments because a session launched without it is silently inert. Visible fresh is operator-metered and is not a release-gate MUST. |
 | **OMP (`omp`) garden citizen** | shipped in 0.16.0; send + receive + visible fresh accepted on one host | D6; D3 proven; D7 partial; D8 partial | Two in-process extensions in the operator's own TUI: birth mints the `mode === "tui"` host (subagents mint nothing) and names it as sender; the RECEIVER unit joins that citizen in the SAME process, holds an `fs.watch` on its mailbox signal, and rings an announce-only doorbell through the vendor's `pi.sendUserMessage` — measured to be on the FACTORY object, not the event ctx, and measured to start a turn on an idle host with zero typing (`agent_start` +31ms). `wakeMode` is `self-fetch`: the model drains with `entwurf_inbox_read` and THAT read is the receipt. **D6 is the LIVE acceptance of 2026-08-30** (oracle, omp 18.0.0) — garden `20260830T140819-116f6a`, `lastEnqueuedAt 05:08:20.555Z` / `lastReadAt 05:08:23.958Z`, and the citizen's own transcript carrying `mcp__entwurf_bridge_entwurf_inbox_read` for its own garden id. **D3 is PROVEN, not pending**: with two live omp citizens armed, one addressed enqueue rang exactly one doorbell and the sibling persisted no transcript and kept an empty mailbox. D7 is PARTIAL (`lastReadAt` needs no scraping; the reply does). D8 is PARTIAL — dedupe and every stale-handling path are implemented and hermetically pinned, ordering/loop-guard/crash-recovery are not. The `/new` unarm is the rail-specific one: the watch lives in the operator's TUI, so pid + start-key cannot see a citizen change underneath a living process, and without an explicit unarm the previous garden id would keep reading deliverable. Requires `tools: xdev: false` in `~/.omp/agent/config.yml` — the vendor default hides MCP tool schemas from the prompt, so the doorbell would name a tool the model cannot call. The decisive receipt lines — the ordering probe, the D6 chain, the D3 isolation and the `/new` unarm — are pasted into `scripts/raw-omp-measure/README.md` §M7 rather than left in a host-local `/tmp` path. Evidence level L4: one Linux host, ARM. **Visible fresh (step 9) is ACCEPTED — the clause 7 LIVE went green on 2026-08-30:** `entwurf_fresh_call` opens omp on all three public surfaces through the bare `omp` runtime with an explicit `--approval-mode yolo` width and the `mcp__entwurf_bridge_entwurf_v` callback name, behind a five-axis pre-mutation preflight whose fifth axis is omp-specific (`tools.xdev !== true`, without which the model cannot call the callback tool at all). **The first turn is a TWO-STAGE BOOTSTRAP rather than a positional prompt, and that is a measured correction, not a preference.** `[LIVE 2026-08-30]` the positional-prompt candidate opened its window and minted its citizen (garden `20260830T181342-452167`, native `01a051f2-3107-7147-8806-fa2a6f527610`), delivered the byte-identical framing as a user message at `09:13:42.413Z`, and the model answered the literal text `ACK` at `09:13:47.105Z` with ZERO tool calls; the caller timed out at 240s. `[source]` the interactive UI defers MCP discovery (`sdk.ts:1847-1855`, `:1881-1905`) while the positional `initialMessage` prompts straight after `mode.init()` (`main.ts:540-565`), and `[측정]` an observer on the same runtime saw `turn_start` at +654ms with the entwurf tools absent and the callback tool present only at +1484ms. So the launcher now carries `{v,target,nonce,task}` on the fixed registered flag `--entwurf-bootstrap`, and the in-process birth extension polls `getAllTools`(`source:"mcp"`) AND `getActiveTools` for the exact callback name, sends a callback-ONLY prompt, arms the task only on a `tool_result` whose stored `toolCallId`, tool name, target, nonce and `isError === false` all match, and DELIVERS it at the next `turn_end` of that same session. `[LIVE 2026-08-30]` that last boundary is itself a measured correction: a first attempt sent the task from inside the `tool_result` handler with an explicit `deliverAs: "followUp"`, the hook log showed the full chain (`bootstrap-armed` → `bootstrap-ready` +440ms → `bootstrap-callback-observed` → `bootstrap-released`), and the task still never appeared in the session — `[source]` an explicit `deliverAs` queues without starting a turn in either state, while the omitted form starts one when idle (`agent-session.ts:6511-6513`), which the same transcript confirmed three seconds later when the Bundle B doorbell's omitted-option send landed and started a turn. `[측정 2026-08-30]` the callback-only half is what was proven to work: model `openai-codex/gpt-5.6-sol`, tool live at +1105ms, prompt injected at +1107ms, and the sibling calling `mcp__entwurf_bridge_entwurf_v` with the exact nonce (`omp-cb-btkvva4r87` → `20260830T184054-1aa1f2`, `meta-mailbox → enqueued`). **The clause 7 acceptance, `smoke-omp-fresh-live` (release-gate MUST), 2026-08-30, 21 assertions, omp 18.0.0 / `openai-codex/gpt-5.6-sol`:** launch through `tools/call entwurf_fresh_call` with nonce `mux-fresh-call-34faea228f3c3638684b40ff`; sibling garden `20260830T192913-df52b9` taken from the CALLBACK's sender envelope and never from the launch receipt; exactly one new citizen (§3.5); addressed `entwurf_v2` → `meta-mailbox → enqueued`; `lastEnqueuedAt 10:29:19.179Z` / `lastReadAt 10:29:24.673Z`; the drain visible in that session's own transcript for its own garden id. **Both bootstrap stages are in that transcript in order** — the callback-only prompt at offset 970, the caller's task at 4732, no four-backend positional framing anywhere, and an assistant message after the task proving it started a turn rather than sitting in a queue. The unit's own log carries the state machine: `bootstrap-armed 10:29:13.399Z` → `bootstrap-ready 10:29:13.819Z` (+420ms) → `bootstrap-callback-observed 10:29:18.663Z` (`toolCallId=call_KZJtkxfzy1IEE4ejKutCPWcm|fc_0858…`) → `bootstrap-released 10:29:18.731Z` → `bootstrap-task-sent 10:29:18.759Z`. Evidence level L4: one Linux host, ARM, one run. `check-harness-admission-parity` keeps the deterministic half of the admission from being a matter of memory. What this does NOT establish: multi-host, multi-model, or repeated fresh calls in one process. **Cross-harness leg, 2026-08-31 (first bidirectional live-turn roundtrip on the committed bytes + operator redeploy):** a claude-code citizen (`20260831T090152-f998ac`) opened a fresh omp sibling through the public surface (nonce `mux-fresh-call-807cb693b1913ce98ffdbfd1`, callback sender garden `20260831T124226-eac41a`), dispatched an addressed `entwurf_v2` → `meta-mailbox → enqueued`, and the omp citizen's own live turn drained and replied into the claude mailbox — its self-report (doorbell → `entwurf_inbox_read`; callback-only first user message, task second) agrees with every receipt on the chain. |
@@ -130,64 +130,116 @@ the pid/start-key sender marker would be last-writer-wins. Current operator chec
 in [BASELINE.md](./BASELINE.md); deterministic ownership and sender gates run in
 `pnpm run check:full`.
 
-### Codex: launch mode is part of the capability
+### Codex: one app-server-backed native-push shape
 
-Do not describe “Codex” as one delivery shape. The measured app-server-backed TUI can
-accept `turn/start` for a live thread and report completion; the standalone embedded
-TUI exposed no equivalent receive route. `turn/steer` is active-turn steering, not idle wake.
+Codex support is deliberately narrower than “drive Codex” and remains an
+**unreleased candidate**. Its purpose is to keep the operator's real Codex session —
+native tools, delegation, auth, transcript, and work context — addressable through
+the app-server-backed shape measured at Codex CLI **0.153.4**. It is not ACP and does
+not duplicate GPT access:
 
-**The 2026-08-01 decline is reversed.** GLG re-opened the Codex native lane on 2026-09-08
-(“코덱스 레일 들어가자”) as one of the two 사용자층 확보 axes; the lane is
-`#95` and the pi-already-supplies-GPT argument no longer settles it. Nothing here is a
-support claim: no codex record has ever been minted, there is no birth hook, no sender or
-receiver marker, and `entwurf_fresh_call` cannot open a codex sibling.
+```text
+operator starts app-server in one chosen tmux seat
+  → its configured MCP env_vars forward that mechanism seat and explicit roots
+  → visible codex TUI attaches with --remote unix://<default socket>
+    → first turn runs root-owned SessionStart birth
+      → V3 record(nativeSessionId = threadId)
+      → thread/name/set(gardenId)
+    → MCP tools/call carries strict request metadata
+      → entwurf_self / entwurf_v2 resolve that exact record
+```
 
-**But step 2 is already spent, and it is spent WRONG.** `codex` is in `META_BACKENDS`
-(`meta-session.ts:84`) and `META_CITIZEN_BACKENDS` (`:308`), and `pi/entwurf-capabilities.json`
-grades it `wakeMode: "direct-inject"`, `deliveryLevel: "D6"`, `nativeIdLabel: "threadId"`.
-That D6 is a **registry promise with no channel behind it** — precisely the shape
-`docs/adding-a-harness.md` step 8(c) names — and it predates this lane. Correcting the grade
-is step 8 work; it is recorded here so the next reader does not inherit a D6 as evidence.
+The standalone embedded TUI remains outside this rail: the 2026-09-08 measurement
+found no idle receive route equivalent to the app-server. `turn/steer` is active-turn
+steering, not idle wake. Entwurf does not start, stop, supervise, or health-loop the
+app-server. The operator starts it **inside one chosen tmux mechanism seat**:
 
-**Current coordinates are 0.153.4** (source `~/repos/3rd/codex` at `rust-v0.153.4`), measured
-2026-09-08 in `scripts/raw-codex-measure/` — step 1 of `docs/adding-a-harness.md` only. The
-0.136.0 rows above are preserved history. What the re-measurement changed:
+```bash
+CODEX_HOME="${CODEX_HOME:-$HOME/.codex}"
+mkdir -p "$CODEX_HOME/app-server-control"
+codex app-server --listen "unix://$CODEX_HOME/app-server-control/app-server-control.sock"
+```
 
-- **Delivery survives 17 minor lines unchanged.** The shipped raw probe ran as-is (receipt in
-  the matrix row above). One method note: at 0.153.4 the rollout JSONL is materialized lazily,
-  so `thread/loaded/list` — not newest-rollout scraping — is the reliable `threadId` source.
-- **Birth timing is first-turn, not window-open**, and the gap is ~47s wide on a live TUI.
-- **A subagent raises `SubagentStart`, never `SessionStart`**, so §3.5's top-level predicate is
-  vendor-authoritative and costs nothing.
-- **The callback dialect is `mcp__entwurf_bridge__entwurf_v2`** — a fourth spelling; the
-  sanitizer maps `-` to `_` but keeps the digit that omp's charset eats.
-- **The step-6 join holds in both launch modes, but its owner moves — and in the
-  delivery-capable mode it cannot separate citizens.** Embedded:
-  `hook.ppid == mcp.ppid == the TUI`. App-server-attached: both resolve to the app-server, and
-  that is now measured rather than inferred — two live threads on one app-server, two separate
-  visible windows, **one `ppid` for every hook and every MCP child of both**, neither TUI in
-  the chain. A parent-pid sender marker would be one marker for N citizens, which Hard Rule 7's
-  `nativeSessionId` uniqueness forbids. **A different key was then found, and it is not a
-  marker at all:** every `tools/call` carries `_meta.threadId` plus an
-  `x-codex-turn-metadata.{session_id,thread_id,turn_id}` block, so the caller names itself on
-  each call — and that id is byte-identical to the hook's `session_id`, so birth, delivery and
-  tool calls share ONE identifier and `record.nativeSessionId = threadId` needs no mapping.
-  Both halves are vendor-traced, not just captured: `core/src/mcp_tool_call.rs:1328-1349`
-  inserts `threadId` unconditionally (constant at `:1184`) from the call site at `:506-516`,
-  and `:1238-1263` carries the turn-metadata block.
-  (The registry's pre-existing `nativeIdLabel: "threadId"` is right on that axis; its `D6` on
-  the same row still is not.) Consuming `_meta` is new bridge code and is step 6, unstarted.
-- **Both admission questions this lane opened have since been CLOSED by measurement**, and
-  neither cost a design decision. The **hook trust prompt** has a real non-interactive path: a
-  hook in the managed `/etc/codex/config.toml` layer runs with no prompt, in both launch modes,
-  with `turn/start` wake intact — while `--dangerously-bypass-hook-trust` runs the hook but
-  kills auto-attach and is therefore unusable here. The remaining constraint is ownership:
-  `/etc/codex/` is root-owned, so that is a root-level operator step, not something `setup`
-  writes (Hard Rule 17). **Clause 4** has a working carrier: `thread/name/set` plus
-  `[tui] status_line = ["thread-title", …]` renders a garden id and survives turns in both
-  orderings, because the vendor's auto-titler is guarded on the thread being unnamed
-  (`tui/src/app/thread_routing.rs:1841`). It is reachable only over the app-server, and the
-  config key needs a writer that owns exactly it.
+“Caller placement” for a Codex MCP call is this app-server seat. It is not the
+attached TUI's pane: attached clients share the server, while the bridge is the
+app-server's child. There is no request→TUI seat join, so N attached TUIs in different
+sessions do not imply adjacency. If “Codex beside Pi” is required, the intended Codex
+TUI must share the app-server's session, and the outbound Pi window must land in that
+same session. If the app-server has no `TMUX`/`TMUX_PANE`, visible fresh rejects honestly
+rather than guessing a client pane or starting a server.
+
+Three ownership atoms remain separate:
+
+1. `sudo entwurf install-codex-birth` owns the fixed `/etc/codex/hooks.json`
+   `SessionStart` declaration plus its import closure. `setup` never escalates; it reports
+   the missing root prerequisite and the exact repair.
+2. `entwurf install-codex-mcp` owns `[mcp_servers.entwurf-bridge]` in
+   `$CODEX_HOME/config.toml`, including exact `env_vars` forwarding for `CODEX_HOME`,
+   Entwurf garden/control roots, and `TMUX`/`TMUX_PANE`. This explicit name boundary
+   keeps custom roots and the app-server seat intact without storing their values.
+3. `entwurf install-codex-statusline` owns only `thread-title` within
+   `tui.status_line`. Birth calls `thread/name/set`, so the visible title is the garden id.
+
+All three have state-backed doctors and inverses. Symlinked or foreign config is a
+named refusal, not an adoption. Entwurf never installs Codex or its credentials.
+
+Sender identity is request-scoped. The bridge requires the complete Codex metadata
+tuple — `_meta.threadId`, `_meta.x-codex-turn-metadata.session_id`, and
+`_meta.x-codex-turn-metadata.thread_id` — to agree, then joins that native id through
+the addressable V3 record reader. Missing or conflicting fields refuse; there is no
+parent-pid fallback. A complete pi env claim or other native claim must also agree.
+This is load-bearing because every attached TUI shares the app-server ancestry.
+
+The native-push adapter probes `thread/loaded/list`. A missing socket, malformed
+handshake, protocol failure, or absent loaded target is `native-push-probe-indeterminate`
+or dead as defined by the probe result; no mailbox fallback exists. Delivery uses the
+measured one-shot `codex queue` command. Unlike Antigravity, Codex delivery has **zero
+retry**: losing stdout after vendor acceptance must not replay the user's message.
+
+Visible fresh runs:
+
+```text
+codex --remote unix://<default socket> --model <explicit model>
+      --dangerously-bypass-approvals-and-sandbox <callback-first prompt>
+```
+
+The amended preflight must certify the safe root birth closure, exact MCP/env
+boundary, `thread-title`, and app-server socket before tmux mutation. The callback
+spelling is `mcp__entwurf_bridge__entwurf_v2`; the new garden id comes only from its
+sender envelope. There is no Codex resume, watcher, supervisor, or app-server
+lifecycle ownership.
+
+The 2026-09-11 Linux run used Codex 0.153.4 and the default app-server: the production
+probe found loaded thread `01a08bff-4efa-7071-9cac-b6d29da5f126`; native-push and a
+public MCP `entwurf_v2` call woke its visible TUI; a real authenticated request returned
+`agentId=meta-session/codex`, `replyable=true`; and a source birth hook minted garden
+`20260911T005221-fc7c47` in an isolated store. Those receipts are preserved as
+**pre-amendment focused delivery/identity evidence**, not qualification of the current
+candidate.
+
+Current amendment scope is the terminal parser, explicit env-name boundary, setup
+acceptance, preflight safety, and clause-7 composition. Focused laptop work does not
+close the deep gates. Oracle must still run qualification and the frozen full floor,
+then accept the actually installed root/user units with the required real
+`Pi → visible Codex → visible Pi` lifecycle before the first release. Release-gate
+strips ambient `PI_SESSION_ID`/`PI_AGENT_ID`; a fixture or self-fetch collector may
+preserve receipts but cannot substitute for the initial visible record-backed Pi turn.
+The receipt must record the fresh Codex, app-server, and outbound Pi tmux session
+coordinates separately and require equality before claiming “Codex beside Pi.”
+
+Oracle's clause-7 invocation is explicit about the operator-owned seat and both models:
+
+```bash
+LIVE=1 \
+ENTWURF_CODEX_APP_SERVER_PID=<existing-app-server-pid> \
+ENTWURF_CODEX_FRESH_MODEL=<codex-model> \
+ENTWURF_CODEX_FRESH_PI_MODEL=<pi-model> \
+./run.sh smoke-codex-fresh-live
+```
+
+This is the intended gate entrypoint, not acceptance by command name. If its first
+leg is still fixture-originated rather than a real visible Pi citizen, #95 remains red
+even when the later callback and delivery receipts are valid.
 
 ### Copilot CLI: one citizen, two rails, one pending receipt
 
