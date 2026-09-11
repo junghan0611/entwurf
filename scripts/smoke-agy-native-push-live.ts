@@ -128,9 +128,11 @@ async function main(): Promise<void> {
 	try {
 		// ── 1. probe the REAL conversation directly (route diagnostics; proves the live host) ──
 		const probe = await antigravityAdapter.probe(conversationId);
-		if (probe.status === "alive") {
+		if (probe.status === "alive" && probe.route.backend === "antigravity") {
 			artifacts["route"] = probe.route.lsAddress;
 			console.log(`  ..    probe: alive via ${probe.route.lsAddress}`);
+		} else if (probe.status === "alive") {
+			artifacts["probe"] = `alive with unexpected ${probe.route.backend} route`;
 		} else {
 			artifacts["probe"] = `${probe.status}: ${probe.reason}`;
 		}

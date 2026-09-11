@@ -1,9 +1,9 @@
 /**
  * native-push/register — the pure-ish core of the `entwurf_register_native` MCP tool
- * (봉인 5). It REGISTERS an already-running native conversation (antigravity) as a garden
- * citizen; it does NOT spawn one (that is the deferred v2 fresh-mint capability — kept
- * distinct so a caller never confuses "bind an existing conversation" with "create a new
- * sibling").
+ * (봉인 5). It REGISTERS an already-running Antigravity conversation as a garden
+ * citizen; it does NOT spawn one. Codex owns automatic birth from its system hook,
+ * so widening the native-push backend registry does not widen this manual registration
+ * authority.
  *
  * Flow (봉인 5):
  *   1. Resolve the native-push adapter for the backend and PROBE the conversation. Only a
@@ -23,15 +23,13 @@
  * upsert (pi-free), so the harness-neutral MCP bridge can reach it at boot.
  */
 
-import type { NativePushBackend } from "../entwurf-v2-contract.ts";
 import { type MetaCitizenBackend, type UpsertAction, upsertMetaSession } from "../meta-session.ts";
 import { type NativePushAdapter, resolveNativePushAdapter } from "./adapter.ts";
 
 export interface RegisterNativeConversationInput {
-	/** The native backend hosting the conversation. Only antigravity is registerable on this
-	 *  lane (codex is a separate lane). */
-	backend: NativePushBackend;
-	/** The backend's native conversation id (antigravity conversationId). */
+	/** Codex is born automatically from its system hook; this manual lane stays Antigravity-only. */
+	backend: "antigravity";
+	/** The Antigravity conversation id. */
 	nativeSessionId: string;
 	/** The cwd to record for this citizen — REQUIRED: a native conversation's metadata cannot
 	 *  confirm it, so the caller must state it (봉인 5). */

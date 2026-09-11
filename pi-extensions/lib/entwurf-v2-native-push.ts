@@ -5,11 +5,10 @@
  * ROUTING (the NATIVE_PUSH_DISPATCH_TABLE did) and carries NO release seam — a native-push
  * plan is the LOCK-FREE path (봉인 4), so a lock leak is structurally impossible here.
  *
- * This is where the 1-shot retry lives — NOT in the adapter leaf (봉인 3). The decider
- * probed a fresh route and planted it in the plan; the executor sends over it, and on a
- * failure it re-probes ONCE (the volatile LS port may have shifted between decide and
- * execute) and re-sends. A second failure is fail-loud (no infinite loop). This mirrors the
- * control-socket send-fallback pattern: the decider stays pure, the hand owns the retry.
+ * Retry is an adapter capability, not a rail-wide assumption. Antigravity re-probes once
+ * because its volatile LS port can shift before send. Codex never retries: `codex queue`
+ * may have accepted the message before its receipt failed, so replay could duplicate it.
+ * The decider stays pure; this hand enforces the adapter's declared policy.
  *
  * A native-push send has NO in-band refuse (there is no live receiver to answer
  * success:false) — like a mailbox enqueue, it either succeeds or THROWS. The hand never
@@ -25,16 +24,14 @@ export type NativePushPlan = Extract<ExecutionPlan, { transport: "native-push" }
 
 export interface NativePushSendResult {
 	success: true;
-	/** Whether the 1-shot re-probe→re-send fired (the first send over the planted route failed). */
+	/** Whether the adapter's one permitted re-probe→re-send fired. */
 	retried: boolean;
 }
 
 /**
- * Deliver `content` into the conversation, owning the 1-shot retry (봉인 3). Send over the
- * planted (decider-probed) route first; on failure re-probe ONCE and re-send over the fresh
- * route; a second failure PROPAGATES (fail-loud). If the re-probe finds the target no longer
- * alive, throw — a failed send into a now-dead conversation is an honest non-delivery, never
- * a silent success. The re-probe is the ONLY re-derivation of the volatile route.
+ * Deliver `content` through the decider-probed route. A non-retriable adapter propagates
+ * the first failure unchanged. A retriable adapter re-probes once and sends once more only
+ * when the target is still alive; no adapter gets a third attempt.
  */
 export async function deliverViaNativePush(
 	adapter: NativePushAdapter,
@@ -46,8 +43,8 @@ export async function deliverViaNativePush(
 		await adapter.send(route, nativeSessionId, content);
 		return { success: true, retried: false };
 	} catch (firstErr) {
-		// 1-shot re-probe → re-send: the volatile LS route may have shifted since the decider
-		// probed it. Re-discover it fresh and retry exactly once.
+		if (!adapter.retriable) throw firstErr;
+		// One re-probe and one retry for adapters whose send boundary is safe to replay.
 		const reprobe = await adapter.probe(nativeSessionId);
 		if (reprobe.status !== "alive") {
 			throw new Error(
@@ -69,10 +66,9 @@ export interface NativePushSendDeps {
 
 /**
  * Build the production `sendNativePush(plan, lock)` adapter the runner consumes. It IGNORES
- * `lock` entirely (a native-push plan is lock-free, 봉인 4) — the field exists only to match
- * the DispatchExecutorDeps hand signature. It resolves the adapter from the plan's backend
- * and delivers with the 1-shot retry. A delivery throw surfaces as a REJECTED promise (the
- * runner's try/catch maps it to execution-failed).
+ * `lock` entirely (a native-push plan is lock-free, 봉인 4), resolves the adapter, then applies
+ * that adapter's retry policy. A delivery throw surfaces as a REJECTED promise (the runner's
+ * try/catch maps it to execution-failed).
  */
 export function makeNativePushSend(
 	deps: NativePushSendDeps = {},

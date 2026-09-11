@@ -442,7 +442,12 @@ async function inspectNativePushCitizens(storeDir: string): Promise<QuiesceViola
 		try {
 			const probe = await resolveNativePushAdapter(identity.backend).probe(identity.nativeSessionId);
 			status = probe.status;
-			reason = probe.status === "alive" ? `route ${probe.route.lsAddress}` : probe.reason;
+			reason =
+				probe.status === "alive"
+					? probe.route.backend === "antigravity"
+						? `route ${probe.route.lsAddress}`
+						: `socket ${probe.route.socketPath}`
+					: probe.reason;
 		} catch (err) {
 			// A probe that cannot run is not a dead conversation.
 			violations.push({

@@ -39,6 +39,7 @@ const REPO_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), ".."
 function fakeAdapter(probe: NativePushProbeResult): NativePushAdapter {
 	return {
 		id: "antigravity",
+		retriable: true,
 		async probe() {
 			return probe;
 		},
@@ -48,7 +49,10 @@ function fakeAdapter(probe: NativePushProbeResult): NativePushAdapter {
 	};
 }
 
-const ALIVE: NativePushProbeResult = { status: "alive", route: { lsAddress: "127.0.0.1:5599" } };
+const ALIVE: NativePushProbeResult = {
+	status: "alive",
+	route: { backend: "antigravity", lsAddress: "127.0.0.1:5599" },
+};
 
 async function main(): Promise<void> {
 	const dir = mkdtempSync(path.join(os.tmpdir(), "entwurf-register-"));

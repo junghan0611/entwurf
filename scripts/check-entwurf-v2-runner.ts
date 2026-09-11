@@ -101,7 +101,7 @@ const NATIVE_PUSH_PLAN: NativePushPlan = {
 	targetGardenId: GID,
 	backend: "antigravity",
 	nativeSessionId: "conv-xyz",
-	route: { lsAddress: "127.0.0.1:5599" },
+	route: { backend: "antigravity", lsAddress: "127.0.0.1:5599" },
 	wantsReply: false,
 	message: "m",
 };

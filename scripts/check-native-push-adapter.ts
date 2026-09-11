@@ -29,6 +29,7 @@ import {
 	AGY_SEND_TIMEOUT_MS,
 	antigravityAdapter,
 	createAntigravityAdapter,
+	type NativePushRoute,
 	type NativePushRunner,
 	resolveNativePushAdapter,
 } from "../pi-extensions/lib/native-push/adapter.ts";
@@ -43,6 +44,11 @@ function eq(label: string, actual: unknown, expected: unknown): void {
 	assert.deepStrictEqual(actual, expected, label);
 	console.log(`  ok    ${label}`);
 	passed++;
+}
+
+function agyAddress(route: NativePushRoute): string {
+	assert.equal(route.backend, "antigravity", "Antigravity adapter returned its own route kind");
+	return route.backend === "antigravity" ? route.lsAddress : "(wrong backend)";
 }
 
 const FAKE_BINARY = "/fake/bin/agy";
@@ -129,7 +135,7 @@ function makeFakeRunner(config: FakeConfig): { runner: NativePushRunner; calls: 
 	ok("full-scan: probe finds the route on the SECOND pid (not head -1)", result.status === "alive");
 	eq(
 		"full-scan: route is pid 456's port (5002)",
-		result.status === "alive" ? result.route.lsAddress : "(dead)",
+		result.status === "alive" ? agyAddress(result.route) : "(dead)",
 		"127.0.0.1:5002",
 	);
 	// proof it did NOT stop at pid 123: it probed BOTH 5001 (miss) and 5002 (hit).
@@ -219,7 +225,11 @@ for (const [code, what] of [
 	const adapter = createAntigravityAdapter({ runner, binary: FAKE_BINARY });
 
 	const r1 = await adapter.probe(CONV);
-	eq("volatile-route: probe #1 route = 5002", r1.status === "alive" ? r1.route.lsAddress : "(dead)", "127.0.0.1:5002");
+	eq(
+		"volatile-route: probe #1 route = 5002",
+		r1.status === "alive" ? agyAddress(r1.route) : "(dead)",
+		"127.0.0.1:5002",
+	);
 	const pgrepAfter1 = calls.filter((c) => c.argv[0] === "pgrep").length;
 
 	// the LS port shifts (per-process, volatile) — a fresh probe must RE-DISCOVER it.
@@ -227,7 +237,7 @@ for (const [code, what] of [
 	const r2 = await adapter.probe(CONV);
 	eq(
 		"volatile-route: probe #2 RE-DISCOVERS the changed route = 5003 (no cache)",
-		r2.status === "alive" ? r2.route.lsAddress : "(dead)",
+		r2.status === "alive" ? agyAddress(r2.route) : "(dead)",
 		"127.0.0.1:5003",
 	);
 	ok(
@@ -241,7 +251,7 @@ for (const [code, what] of [
 {
 	const { runner, calls } = makeFakeRunner({ pids: [123], ss: ssLine(5002, 123), serving: () => true });
 	const adapter = createAntigravityAdapter({ runner, binary: FAKE_BINARY });
-	await adapter.send({ lsAddress: "127.0.0.1:5002" }, CONV, "hello world");
+	await adapter.send({ backend: "antigravity", lsAddress: "127.0.0.1:5002" }, CONV, "hello world");
 	const sendCall = calls.find((c) => c.argv.includes("send-message"));
 	eq("send: argv === [binary, agentapi, send-message, conv, content]", sendCall?.argv, [
 		FAKE_BINARY,
@@ -262,7 +272,7 @@ for (const [code, what] of [
 	const adapter = createAntigravityAdapter({ runner, binary: FAKE_BINARY });
 	let threw = false;
 	try {
-		await adapter.send({ lsAddress: "127.0.0.1:5002" }, CONV, "hi");
+		await adapter.send({ backend: "antigravity", lsAddress: "127.0.0.1:5002" }, CONV, "hi");
 	} catch (err) {
 		threw = true;
 		ok("send-fail: error names the non-zero exit", /native-push send failed/.test((err as Error).message));
@@ -286,7 +296,7 @@ for (const [code, what] of [
 	const { runner, calls } = makeFakeRunner({ pids: [123], ss: ssLine(5002, 123), serving: () => true });
 	const adapter = createAntigravityAdapter({ runner, binary: FAKE_BINARY });
 	await adapter.probe(CONV);
-	await adapter.send({ lsAddress: "127.0.0.1:5002" }, CONV, "hi");
+	await adapter.send({ backend: "antigravity", lsAddress: "127.0.0.1:5002" }, CONV, "hi");
 	const metaCall = calls.find((c) => c.argv.includes("get-conversation-metadata"));
 	const sendCall = calls.find((c) => c.argv.includes("send-message"));
 	eq("timeout: get-conversation-metadata carries the metadata timeout", metaCall?.timeoutMs, AGY_METADATA_TIMEOUT_MS);
@@ -317,7 +327,7 @@ for (const [code, what] of [
 	const adapter = createAntigravityAdapter({ runner, binary: FAKE_BINARY });
 	let threw = false;
 	try {
-		await adapter.send({ lsAddress: "127.0.0.1:5002" }, CONV, "hi");
+		await adapter.send({ backend: "antigravity", lsAddress: "127.0.0.1:5002" }, CONV, "hi");
 	} catch {
 		threw = true;
 	}
@@ -327,15 +337,9 @@ for (const [code, what] of [
 // ── resolver fail-fast (mirror resolveAcpBackendAdapter) ─────────────────────
 eq("resolve: antigravity → the antigravity adapter", resolveNativePushAdapter("antigravity").id, "antigravity");
 eq("adapter id: antigravityAdapter.id === antigravity", antigravityAdapter.id, "antigravity");
-{
-	let threw = false;
-	try {
-		resolveNativePushAdapter("codex");
-	} catch {
-		threw = true;
-	}
-	ok("resolve: unknown backend (codex) → throw (no silent default)", threw);
-}
+eq("resolve: codex → the Codex adapter", resolveNativePushAdapter("codex").id, "codex");
+eq("retry policy: Antigravity may retry", resolveNativePushAdapter("antigravity").retriable, true);
+eq("retry policy: Codex never retries", resolveNativePushAdapter("codex").retriable, false);
 {
 	let threw = false;
 	try {

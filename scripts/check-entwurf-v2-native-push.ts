@@ -35,7 +35,11 @@ function ok(label: string, cond: boolean): void {
 }
 
 const CONV = "conv-xyz";
-const PLANTED: NativePushRoute = { lsAddress: "127.0.0.1:5600" };
+const PLANTED: NativePushRoute = { backend: "antigravity", lsAddress: "127.0.0.1:5600" };
+
+function agyAddress(route: NativePushRoute | undefined): string | undefined {
+	return route?.backend === "antigravity" ? route.lsAddress : undefined;
+}
 
 interface SendCall {
 	route: NativePushRoute;
@@ -48,6 +52,7 @@ interface FakeAdapterConfig {
 	probes: NativePushProbeResult[];
 	/** 0-based indices of send() calls that THROW. */
 	sendFailAt?: number[];
+	retriable?: boolean;
 }
 
 function makeFakeAdapter(config: FakeAdapterConfig): {
@@ -60,6 +65,7 @@ function makeFakeAdapter(config: FakeAdapterConfig): {
 	const sends: SendCall[] = [];
 	const adapter: NativePushAdapter = {
 		id: "antigravity",
+		retriable: config.retriable ?? true,
 		async probe() {
 			const p = config.probes[probeIdx] ?? { status: "dead", reason: "fake: probes exhausted" };
 			probeIdx++;
@@ -81,31 +87,43 @@ async function main(): Promise<void> {
 		const r = await deliverViaNativePush(adapter, PLANTED, CONV, "hi");
 		ok("success: retried:false", r.success === true && r.retried === false);
 		ok("success: exactly ONE send", sends.length === 1);
-		ok("success: send used the PLANTED route (no re-probe)", sends[0]?.route.lsAddress === "127.0.0.1:5600");
+		ok("success: send used the PLANTED route (no re-probe)", agyAddress(sends[0]?.route) === "127.0.0.1:5600");
 		ok("success: ZERO re-probe", probeCount() === 0);
+	}
+
+	// Codex's vendor queue may accept before its receipt fails: no re-probe, no replay.
+	{
+		const { adapter, sends, probeCount } = makeFakeAdapter({
+			probes: [{ status: "alive", route: { backend: "antigravity", lsAddress: "must-not-be-used" } }],
+			sendFailAt: [0, 1],
+			retriable: false,
+		});
+		await assert.rejects(() => deliverViaNativePush(adapter, PLANTED, CONV, "hi"), /fake send fail/);
+		ok("non-retriable failure makes exactly ONE send", sends.length === 1);
+		ok("non-retriable failure makes ZERO probes", probeCount() === 0);
 	}
 
 	// ── fail → re-probe alive → re-send success: retried, fresh route ────────────
 	{
 		const { adapter, sends, probeCount } = makeFakeAdapter({
-			probes: [{ status: "alive", route: { lsAddress: "127.0.0.1:5601" } }],
+			probes: [{ status: "alive", route: { backend: "antigravity", lsAddress: "127.0.0.1:5601" } }],
 			sendFailAt: [0],
 		});
 		const r = await deliverViaNativePush(adapter, PLANTED, CONV, "hi");
 		ok("retry: retried:true", r.success === true && r.retried === true);
 		ok("retry: TWO sends (initial + one retry)", sends.length === 2);
 		ok("retry: exactly ONE re-probe", probeCount() === 1);
-		ok("retry: 1st send used the planted route", sends[0]?.route.lsAddress === "127.0.0.1:5600");
+		ok("retry: 1st send used the planted route", agyAddress(sends[0]?.route) === "127.0.0.1:5600");
 		ok(
 			"retry: 2nd send used the RE-DISCOVERED route (not the stale one)",
-			sends[1]?.route.lsAddress === "127.0.0.1:5601",
+			agyAddress(sends[1]?.route) === "127.0.0.1:5601",
 		);
 	}
 
 	// ── fail → re-probe alive → re-send FAIL: throws (fail-loud, no 3rd attempt) ──
 	{
 		const { adapter, sends } = makeFakeAdapter({
-			probes: [{ status: "alive", route: { lsAddress: "127.0.0.1:5601" } }],
+			probes: [{ status: "alive", route: { backend: "antigravity", lsAddress: "127.0.0.1:5601" } }],
 			sendFailAt: [0, 1],
 		});
 		let threw = false;
@@ -182,7 +200,7 @@ async function main(): Promise<void> {
 		);
 		ok(
 			"makeNativePushSend: sent the plan message over the plan route",
-			sends[0]?.content === "payload" && sends[0]?.route.lsAddress === "127.0.0.1:5600",
+			sends[0]?.content === "payload" && agyAddress(sends[0]?.route) === "127.0.0.1:5600",
 		);
 		ok("makeNativePushSend: lock IGNORED (lock-free — a bogus lock did not break delivery)", sends.length === 1);
 	}

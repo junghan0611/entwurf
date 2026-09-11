@@ -132,7 +132,7 @@ interface Spies {
 	/** which backend the native-push adapter resolver was asked for (decide + execute). */
 	nativePushResolve: string[];
 	nativePushProbe: { conv: string }[];
-	nativePushSend: { lsAddress: string; conv: string; content: string }[];
+	nativePushSend: { route: string; conv: string; content: string }[];
 }
 
 /** Build a factory whose every leaf IO is a spy. `over` lets a case shape the decision
@@ -232,13 +232,15 @@ function makeSpiedFactory(over: {
 			resolveNativePushAdapter: (backend: string): NativePushAdapter => {
 				spies.nativePushResolve.push(backend);
 				return {
-					id: "antigravity",
+					id: backend as NativePushAdapter["id"],
+					retriable: backend === "antigravity",
 					async probe(conv) {
 						spies.nativePushProbe.push({ conv });
 						return over.nativePushProbe ?? { status: "dead", reason: "fake: no native-push probe configured" };
 					},
 					async send(route, conv, content) {
-						spies.nativePushSend.push({ lsAddress: route.lsAddress, conv, content });
+						const routeLabel = route.backend === "antigravity" ? route.lsAddress : route.socketPath;
+						spies.nativePushSend.push({ route: routeLabel, conv, content });
 					},
 				};
 			},
@@ -277,13 +279,13 @@ async function main(): Promise<void> {
 	{
 		const { deps, spies } = makeSpiedFactory({
 			backend: "antigravity",
-			nativePushProbe: { status: "alive", route: { lsAddress: "127.0.0.1:5599" } },
+			nativePushProbe: { status: "alive", route: { backend: "antigravity", lsAddress: "127.0.0.1:5599" } },
 		});
 		const result = await runEntwurfV2({ target: GID, intent: "fire-and-forget", message: "hi agy" }, deps);
 		ok("A3: antigravity ff → native-push delivered", result.kind === "executed" && result.transport === "native-push");
 		ok("A3: decider probed the native-push adapter once (decide side)", spies.nativePushProbe.length === 1);
 		ok("A3: executor sent via the native-push adapter once (execute side)", spies.nativePushSend.length === 1);
-		ok("A3: send used the DECIDER-probed route", spies.nativePushSend[0]?.lsAddress === "127.0.0.1:5599");
+		ok("A3: send used the DECIDER-probed route", spies.nativePushSend[0]?.route === "127.0.0.1:5599");
 		ok("A3: send carried the dispatch message", spies.nativePushSend[0]?.content === "hi agy");
 		ok(
 			"A3: BOTH hands resolved the SAME adapter (for 'antigravity')",
@@ -291,6 +293,32 @@ async function main(): Promise<void> {
 		);
 		ok("A3: native-push is LOCK-FREE (no acquire)", spies.acquire.length === 0);
 		ok("A3: native-push did NOT enqueue a mailbox (not the unsupported path)", spies.enqueue.length === 0);
+	}
+	{
+		const { deps, spies } = makeSpiedFactory({
+			backend: "codex",
+			nativePushProbe: {
+				status: "alive",
+				route: { backend: "codex", socketPath: "/home/operator/.codex/app-server-control/app-server-control.sock" },
+			},
+		});
+		const result = await runEntwurfV2({ target: GID, intent: "fire-and-forget", message: "hi codex" }, deps);
+		ok(
+			"[QK:CODEX-NATIVE-PRODUCTION-WIRING] Codex ff → native-push delivered",
+			result.kind === "executed" && result.transport === "native-push",
+		);
+		ok(
+			"A3c: both hands resolve the Codex adapter",
+			spies.nativePushResolve.length === 2 && spies.nativePushResolve.every((b) => b === "codex"),
+		);
+		ok(
+			"A3c: planted Codex UDS reaches the send hand",
+			spies.nativePushSend[0]?.route.endsWith("/app-server-control.sock") === true,
+		);
+		ok(
+			"A3c: Codex native-push remains lock-free and mailbox-free",
+			spies.acquire.length === 0 && spies.enqueue.length === 0,
+		);
 	}
 	{
 		// antigravity + dead probe → reject native-push-target-dead, NO send.

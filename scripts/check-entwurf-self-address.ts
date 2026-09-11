@@ -266,14 +266,14 @@ ok(
 	/existsSync\s*\(/.test(piBody) && /controlSocketPathIn\s*\(\s*ENTWURF_DIR\s*,/.test(piBody),
 );
 
-const metaBuilder = functionBody("buildTrustedMetaSenderEnvelope");
+const metaBuilder = functionBody("buildMetaSenderEnvelope");
 // FIRST of the two derivation claims so a binary-fallback mutant dies here, not at the seam pin.
 ok(
-	"buildTrustedMetaSenderEnvelope does not fall back every non-native-push backend to self-fetch [QK:SELFADDR-NO-FALLBACK-SELF-FETCH]",
+	"buildMetaSenderEnvelope does not fall back every non-native-push backend to self-fetch [QK:SELFADDR-NO-FALLBACK-SELF-FETCH]",
 	!/\?\s*"native-push"\s*:\s*"self-fetch"/.test(metaBuilder),
 );
 ok(
-	"buildTrustedMetaSenderEnvelope derives self-fetch through resolveMailboxWakeModeCapability(identity), not a backend-name list [QK:SELFADDR-MAILBOX-WAKE-SEAM]",
+	"buildMetaSenderEnvelope derives self-fetch through resolveMailboxWakeModeCapability(identity), not a backend-name list [QK:SELFADDR-MAILBOX-WAKE-SEAM]",
 	/resolveMailboxWakeModeCapability\s*\(\s*identity\s*\)/.test(metaBuilder),
 );
 
@@ -443,14 +443,13 @@ function metaRailRenderIsHonest(region: string): { honest: boolean; reason: stri
 		throw new Error(`class ${name} body never closed`);
 	};
 
-	// Anchored per class (not a repo-wide grep) so a mention somewhere else in the file
-	// cannot make either row vacuously green.
+	// Anchored per class (not a repo-wide grep) so a mention elsewhere cannot make
+	// either row vacuously green. Native hook mechanisms vary by backend; Codex
+	// carries request-scoped identity instead of a shared process marker.
 	for (const cls of ["EntwurfEnvelopeWiringError", "EntwurfSenderIdentityError"]) {
 		const body = classBody(cls);
-		ok(
-			`${cls} names BOTH native hooks (SessionStart AND PreInvocation)`,
-			/SessionStart/.test(body) && /PreInvocation/.test(body),
-		);
+		ok(`${cls} names a native sender marker path`, /native (sender )?(claim|hook)|sender marker/.test(body));
+		ok(`${cls} names the managed Codex request identity path`, /managed Codex/.test(body));
 		ok(
 			`${cls} no longer presents SessionStart/Claude as THE marker writer`,
 			!/The native SessionStart hook writes that marker/.test(body) &&
@@ -465,33 +464,33 @@ function metaRailRenderIsHonest(region: string): { honest: boolean; reason: stri
 // THIS session's own receiver inbox can actually wake (slice-2 presence marker), not a
 // hardcoded true. An inactive receiver must still return the meta identity (replyable:false)
 // — degrading to null would erase who-sent and fall through to external-mcp.
-const metaBody = functionBody("buildTrustedMetaSenderEnvelope");
-ok("buildTrustedMetaSenderEnvelope calls computeSelfAddressability", /computeSelfAddressability\s*\(/.test(metaBody));
-ok("buildTrustedMetaSenderEnvelope no longer hardcodes `replyable: true`", !/replyable:\s*true/.test(metaBody));
+const metaBody = functionBody("buildMetaSenderEnvelope");
+ok("buildMetaSenderEnvelope calls computeSelfAddressability", /computeSelfAddressability\s*\(/.test(metaBody));
+ok("buildMetaSenderEnvelope no longer hardcodes `replyable: true`", !/replyable:\s*true/.test(metaBody));
 ok(
 	// #101: the identity match alone is no longer the whole answer. `entwurf_self` composes
 	// the SAME `resolveMailboxReceiverFacts` the v2 dispatch seam uses — reading the receiver
 	// marker AND, where the watch owner is the sender-marker process, the join that says that
 	// owner is still serving this garden. A citizen's self-reported replyability and what
 	// dispatch decides about it come from one measurement, so they cannot disagree.
-	"buildTrustedMetaSenderEnvelope derives active-receiver from the SHARED receiver composition (both markers)",
+	"buildMetaSenderEnvelope derives active-receiver from the SHARED receiver composition (both markers)",
 	/resolveMailboxReceiverFacts\s*\(/.test(metaBody) &&
 		/readMetaReceiverMarker\s*\(/.test(metaBody) &&
 		/readMetaSenderMarker\s*\(/.test(metaBody),
 );
 ok(
-	"buildTrustedMetaSenderEnvelope no longer copies one match into both receiver facts",
+	"buildMetaSenderEnvelope no longer copies one match into both receiver facts",
 	!/ownerAlive:\s*active/.test(metaBody) && !/watchArmed:\s*active/.test(metaBody),
 );
 ok(
 	// #101 (cross-review): both markers are read with their liveness guards ON. A reader that
 	// opted out would accept a dead session's leftover file as "which garden this pid serves
 	// now", and every fixture pid in a gate is live, so nothing dynamic here could tell.
-	"buildTrustedMetaSenderEnvelope reads neither marker with the owner guard disabled",
+	"buildMetaSenderEnvelope reads neither marker with the owner guard disabled",
 	!/verifyOwner:\s*false/.test(metaBody),
 );
 ok(
-	"buildTrustedMetaSenderEnvelope keeps meta identity + derived replyable (inactive → not null)",
+	"buildMetaSenderEnvelope keeps meta identity + derived replyable (inactive → not null)",
 	/origin:\s*"meta-session"/.test(metaBody) && /replyable:\s*self\.replyable/.test(metaBody),
 );
 

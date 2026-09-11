@@ -466,7 +466,7 @@ try {
 			"probe alive → replyable true",
 			(await probeNativeSenderAlive(
 				identity,
-				adapterWith(async () => ({ status: "alive", route: { lsAddress: "127.0.0.1:1" } })),
+				adapterWith(async () => ({ status: "alive", route: { backend: "antigravity", lsAddress: "127.0.0.1:1" } })),
 			)) === true,
 		);
 

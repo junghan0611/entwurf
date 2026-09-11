@@ -381,7 +381,7 @@ async function main(): Promise<void> {
 	// ── 8: unsupported + ff + seam says undeliverable → reject, no plan, no lock ─
 	{
 		const t = mkDeps({
-			resolution: { identity: identity("codex"), preProbeAddressConflict: false },
+			resolution: { identity: identity("omp"), preProbeAddressConflict: false },
 			mailboxDeliverable: false,
 		});
 		const d = await decideDispatch({ target: GID, intent: "fire-and-forget", message: "mail" }, t.deps);
@@ -399,8 +399,7 @@ async function main(): Promise<void> {
 	// reject, NO plan, NO lock, NO inspect/probe. This is the v2 closure of the gap slice
 	// 2d-2 closed for v1: the decider no longer trusts wake-mode alone; the required seam's
 	// active-receiver verdict governs, so a reply to a dead claude-code is refused, not
-	// enqueued as mailbox garbage. (Indistinguishable here from the codex case at the
-	// receipt level — that is the point: the seam, not the backend, decides.) ────────────
+	// enqueued as mailbox garbage. ───────────────────────────────────────────────────
 	{
 		const t = mkDeps({
 			resolution: { identity: identity("claude-code"), preProbeAddressConflict: false },
@@ -581,7 +580,7 @@ async function main(): Promise<void> {
 		// ff × alive → execute native-push send; plan carries route/backend/nativeSessionId; lock null.
 		const t = mkDeps({
 			resolution: npResolution,
-			nativePush: { status: "alive", route: { lsAddress: "127.0.0.1:5599" } },
+			nativePush: { status: "alive", route: { backend: "antigravity", lsAddress: "127.0.0.1:5599" } },
 		});
 		const d = await decideDispatch({ target: GID, intent: "fire-and-forget", message: "yo" }, t.deps);
 		ok("native-push ff+alive: execute", isExecute(d));
@@ -594,7 +593,10 @@ async function main(): Promise<void> {
 			t.mailboxCalls.length === 0,
 		);
 		if (isExecute(d) && d.plan.transport === "native-push") {
-			ok("native-push ff+alive: plan route = probed route", d.plan.route.lsAddress === "127.0.0.1:5599");
+			ok(
+				"native-push ff+alive: plan route = probed route",
+				d.plan.route.backend === "antigravity" && d.plan.route.lsAddress === "127.0.0.1:5599",
+			);
 			ok("native-push ff+alive: plan backend = antigravity", d.plan.backend === "antigravity");
 			ok("native-push ff+alive: plan nativeSessionId from identity", d.plan.nativeSessionId === `native-${GID}`);
 			ok(

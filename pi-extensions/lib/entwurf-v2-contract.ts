@@ -122,13 +122,12 @@ export function isLivenessSupported(backend: string): boolean {
 
 // ── Native-push backend domain (봉인 2/4) ───────────────────────────────────
 // A backend whose liveness is measured by the SEPARATE native-push adapter rail (a
-// live app-server conversation probe — antigravity's LS gRPC), NOT a control
-// socket. This domain is DISJOINT from LIVENESS_DOMAIN_BACKENDS: an agy session
-// is `unsupported` on the socket FACT axis (entwurf_peers) yet fully
-// measured + deliverable on the native-push axis. The two are separate rails on
-// purpose — check-entwurf-facts pins both sets and asserts their intersection is ∅
-// (a backend can never be in both domains).
-export const NATIVE_PUSH_BACKENDS = ["antigravity"] as const;
+// live vendor app-server target probe), NOT a control socket. This domain is DISJOINT
+// from LIVENESS_DOMAIN_BACKENDS: an Antigravity or Codex session is `unsupported` on
+// the socket FACT axis (entwurf_peers) yet independently measured on the native-push
+// axis. The two are separate rails on purpose — check-entwurf-facts pins both sets
+// and asserts their intersection is ∅ (a backend can never be in both domains).
+export const NATIVE_PUSH_BACKENDS = ["antigravity", "codex"] as const;
 export type NativePushBackend = (typeof NATIVE_PUSH_BACKENDS)[number];
 
 export function nativePushSupported(backend: string): backend is NativePushBackend {

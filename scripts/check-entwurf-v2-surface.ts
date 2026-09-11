@@ -729,7 +729,7 @@ async function main(): Promise<void> {
 			v2Start !== -1 && after > v2Start,
 		);
 		const v2Block = src.slice(v2Start, after);
-		ok("5: MCP — v2 handler builds buildSendSenderEnvelope()", /buildSendSenderEnvelope\(\)/.test(v2Block));
+		ok("5: MCP — v2 handler builds buildSendSenderEnvelope(context)", /buildSendSenderEnvelope\s*\(/.test(v2Block));
 		ok("5: MCP — v2 handler passes senderProvider: () => sender", /senderProvider:\s*\(\)\s*=>\s*sender/.test(v2Block));
 		ok(
 			"5: MCP — v2 handler calls runAndRenderEntwurfV2FromSurface",

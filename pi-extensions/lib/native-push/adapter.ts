@@ -1,7 +1,7 @@
 /**
  * native-push adapter rail — the transport LEAF by which a native-push backend
- * (antigravity, the first) is (1) probed for a LIVE conversation and (2) direct-injected
- * with a message. Mirrors the ACP backend-adapter rail (acp/backend-adapter.ts §ADAPTERS
+ * is (1) probed for a LIVE native target and (2) direct-injected with a message.
+ * Mirrors the ACP backend-adapter rail (acp/backend-adapter.ts §ADAPTERS
  * /resolveAcpBackendAdapter): one interface, one registry, a fail-fast resolver.
  *
  * Purity contract (봉인 3):
@@ -26,6 +26,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 
 import type { NativePushBackend } from "../entwurf-v2-contract.ts";
+import { codexNativePushAdapter } from "./codex-ws-client.ts";
 
 // ── runner seam (injectable process exec) ───────────────────────────────────
 
@@ -85,14 +86,13 @@ export const realNativePushRunner: NativePushRunner = {
 // ── route + probe result ────────────────────────────────────────────────────
 
 /**
- * A VOLATILE native-push route — the live LS address (`127.0.0.1:PORT`) a probe found
- * serving the conversation. MUST NOT be stored (봉인 3): it is re-derived every dispatch
- * by a fresh probe (the LS port is per-process and shifts). Carried only within a single
- * `send` call, handed straight from a fresh `probe`.
+ * A VOLATILE native-push route. Antigravity carries its live LS address; Codex carries
+ * the one app-server UDS that proved the target thread loaded. Routes are never stored:
+ * every dispatch derives one from a fresh probe and hands it straight to `send`.
  */
-export interface NativePushRoute {
-	readonly lsAddress: string;
-}
+export type NativePushRoute =
+	| { readonly backend: "antigravity"; readonly lsAddress: string }
+	| { readonly backend: "codex"; readonly socketPath: string };
 
 /**
  * A probe outcome. `alive` carries the volatile route; `dead`/`indeterminate` carry a
@@ -108,17 +108,12 @@ export type NativePushProbeResult =
 export interface NativePushAdapter {
 	/** Backend discriminator (a member of NATIVE_PUSH_BACKENDS). */
 	readonly id: NativePushBackend;
-	/**
-	 * Full-scan probe: find a LIVE route serving `nativeSessionId`, else report
-	 * dead/indeterminate. Scans EVERY host pid (never `head -1`) and re-discovers the
-	 * route on every call (no cache — volatile-route discipline, 봉인 3).
-	 */
+	/** Whether the executor may re-probe and retry once after an ambiguous send failure.
+	 * Codex is false: `codex queue` may accept before its receipt fails, so retry can duplicate. */
+	readonly retriable: boolean;
+	/** Probe the backend's current native route for `nativeSessionId`. */
 	probe(nativeSessionId: string): Promise<NativePushProbeResult>;
-	/**
-	 * Direct-inject `content` into the conversation over `route`. Single attempt: throws
-	 * on failure (fail-loud). Does NOT probe and does NOT retry — the executor hand owns
-	 * re-probe/retry (봉인 3), so the adapter can never silently paper over a dead route.
-	 */
+	/** Direct-inject once through the just-probed route. Throws on failure. */
 	send(route: NativePushRoute, nativeSessionId: string, content: string): Promise<void>;
 }
 
@@ -211,6 +206,7 @@ export function createAntigravityAdapter(deps: AntigravityAdapterDeps): NativePu
 
 	return {
 		id: "antigravity",
+		retriable: true,
 
 		async probe(nativeSessionId) {
 			let pids: number[];
@@ -237,7 +233,7 @@ export function createAntigravityAdapter(deps: AntigravityAdapterDeps): NativePu
 			for (const pid of pids) {
 				for (const lsAddress of portsByPid.get(pid) ?? []) {
 					if (await servesConversation(lsAddress, nativeSessionId)) {
-						return { status: "alive", route: { lsAddress } };
+						return { status: "alive", route: { backend: "antigravity", lsAddress } };
 					}
 				}
 			}
@@ -251,12 +247,13 @@ export function createAntigravityAdapter(deps: AntigravityAdapterDeps): NativePu
 		},
 
 		async send(route, nativeSessionId, content) {
+			if (route.backend !== "antigravity") {
+				throw new Error(`antigravity adapter received ${route.backend} route`);
+			}
 			const r = await runner.exec([binary, "agentapi", "send-message", nativeSessionId, content], {
 				env: { ANTIGRAVITY_LS_ADDRESS: route.lsAddress },
 				timeoutMs: AGY_SEND_TIMEOUT_MS,
 			});
-			// A non-zero code — including a timeout kill (124) on a stalled route — THROWS
-			// (fail-loud); the executor hand owns the 1-shot re-probe→re-send on that throw.
 			if (r.code !== 0) {
 				throw new Error(
 					`native-push send failed (agentapi send-message exit ${r.code}) via ${route.lsAddress}: ${
@@ -268,12 +265,12 @@ export function createAntigravityAdapter(deps: AntigravityAdapterDeps): NativePu
 	};
 }
 
-/** The production antigravity adapter (real runner + env-resolved binary). */
+/** Production adapters. */
 export const antigravityAdapter: NativePushAdapter = createAntigravityAdapter({ runner: realNativePushRunner });
 
 // ── registry + fail-fast resolver (mirror resolveAcpBackendAdapter) ──────────
 
-const ADAPTERS: readonly NativePushAdapter[] = [antigravityAdapter];
+const ADAPTERS: readonly NativePushAdapter[] = [antigravityAdapter, codexNativePushAdapter];
 
 /**
  * Resolve the native-push adapter that owns backend `id`. Fail-fast, like

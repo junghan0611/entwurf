@@ -280,8 +280,8 @@ ok(
 // ── native-push (봉인 1/2/4): a THIRD table, disjoint from pi socket + mailbox ──
 const NATIVE_PUSH_LIVENESSES = ["alive", "dead", "indeterminate"] as const;
 
-// domain: antigravity is native-push; pi/claude-code are NOT; the domain is DISJOINT
-// from the pi socket liveness domain (a backend is never in both rails).
+// domain: antigravity and Codex are native-push; pi/claude-code are NOT; the domain
+// is DISJOINT from pi socket liveness (a backend is never in both rails).
 eq("native-push domain: antigravity supported", nativePushSupported("antigravity"), true);
 eq("native-push domain: pi is NOT native-push (it is pi-socket)", nativePushSupported("pi"), false);
 eq(
@@ -289,7 +289,8 @@ eq(
 	nativePushSupported("claude-code"),
 	false,
 );
-eq("native-push domain: NATIVE_PUSH_BACKENDS == ['antigravity']", [...NATIVE_PUSH_BACKENDS], ["antigravity"]);
+eq("native-push domain: Codex supported", nativePushSupported("codex"), true);
+eq("native-push domain: NATIVE_PUSH_BACKENDS exact", [...NATIVE_PUSH_BACKENDS], ["antigravity", "codex"]);
 ok(
 	"native-push ∩ pi-socket liveness domain = ∅ (separate rails)",
 	!NATIVE_PUSH_BACKENDS.some((b) => (LIVENESS_DOMAIN_BACKENDS as readonly string[]).includes(b)),
