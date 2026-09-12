@@ -162,6 +162,7 @@ Usage:
   ./run.sh check-entwurf-v2-matrix     # deterministic gate (0.11 Stage 0 step 5d-5 a): REACHABILITY + LOCK SSOT table — drives REAL decideDispatch over fakes, fixes every (target kind → transport → lock class) cell as one table (control-socket/meta-mailbox/native-push + bad-target/conflict/locked/undeliverable/dormant/indeterminate rejects), coverage pass fails on a dropped cell; thin coverage not a decider re-impl; pure, no IO
   ./run.sh check-entwurf-v2-release    # deterministic gate (0.11 Stage 0 step 5c-1): PURE release-policy reducer (decideReleasePolicy + reduceRelease) — the spawn-observation policy and its four release events went with the transport in the visible-first cut, so the shipped machine is meta-mailbox=never release (no lock) + control-socket=release once on send-final; decideReleasePolicy still enforces the lock-nullness invariant; pure, no IO
   ./run.sh check-entwurf-v2-send       # deterministic gate (0.11 Stage 0 step 5c-2a): control-socket SEND hand (executeControlSocketSend) wiring transport IO onto the 5c-1 reducer — ack→sent, in-band reject→rejected (no fallback), dead→same-lock one-shot re-resolve (control retry / mailbox enqueue), indeterminate→failed+rethrow with NO fallback (no double-delivery); release exactly once, releaseLock throw never masks the send error; IO-via-dep
+  ./run.sh check-compaction-send-guard # deterministic gate (#111): control-socket send during Pi compaction — event-armed refuse compacting, quiet unknown non-idle refuse busy (ctx.signal is not isStreaming); no pi.sendMessage, no delivered:true; idle/live-run steer/followUp preserved; pure, no IO
   ./run.sh check-entwurf-v2-send-fallback # deterministic gate (0.11 Stage 0 step 5c-2b): same-lock re-resolve RESOLVER (resolveDeadControlSendFallback) — fire-and-forget re-resolve: alive→control retry, dead→reject (nothing is ever launched), indeterminate→reject, unsupported+deliverable→mailbox plan, undeliverable/bad-target/conflict→reject; resolver never releases, mis-wire fails loud, inspect/probe throws propagate; no IO (fakes)
   ./run.sh check-entwurf-v2-runner     # deterministic gate (0.11 Stage 0 step 5d-1): execute-router (executeDispatch) routing an already-decided DispatchDecision to its 5c transport hand → one outcome-rich EntwurfV2RunResult. reject→rejected (no hand) / control/mailbox→matching hand with decision.lock verbatim / N3 rejectReason carried / N1 SendDeliveredReleaseFailedError→execution-failed{finalizedOutcome,releaseFailed,retrySafe:false}; fake hands, no IO
   ./run.sh check-entwurf-v2-mailbox    # deterministic gate (0.11 Stage 0 step 5c-4, LAST 5c transport slice): ENQUEUE-ONLY meta-mailbox SEND body (executeMetaMailboxSend) + production sendViaMailbox adapter — sender→formatMetaMailboxBody with plan.wantsReply threaded (divergence from legacy hard false), sender absent→raw plan.message, enqueue opts EXACTLY {gardenId,body,sessionsDir,mailboxDir}, enqueue throw PROPAGATES (no success:false fold — mailbox has no in-band refuse); adapter NEVER touches lock (release is the hand's job); source guard: no release/routing seam
@@ -180,7 +181,7 @@ Usage:
   ./run.sh check-socket-discovery      # deterministic gate (0.11 Stage 0 step 4, fact-provider slice 3): SOCKET-axis scanSocketProbes — probes (dir sockets) ∪ (in-domain citizen canonical paths) 3-valued; dormant citizen no-file → dead (resumable, not unprobed), stall → indeterminate (F3), dir hygiene/dedup/missing-dir + e2e → resolveFactList; readdir/probe injected, no IO
   ./run.sh check-meta-facts            # deterministic gate for the meta-facts projection (#65): drives the REAL CLI — full-record join, parse-before-uniqueness, no-winner duplicates, drift/symlink/invalid-UTF-8 defects in-band, deterministic bytes, exit contract 0/2/3, dispatch+emit reachability
   ./run.sh check-meta-listing          # deterministic gate: META-STORE facts axis — kind-carrying entries; non-regular records are never read, parse/drift become diagnostics, duplicate nativeSessionId quarantines every rival but not unrelated citizens; strict throws / collect partial; pure injected IO
-  ./run.sh check-entwurf-fact-provider # deterministic gate (0.11 Stage 0 step 4, fact-provider slice 4b): ASSEMBLY listEntwurfFacts — listAllMetaIdentities→scanSocketProbes→pre-quarantine out-of-socket-domain/socket conflicts→resolveFactList(clean)→{facts,diagnostics}; C-원칙: expected corruption (parse/collision)→diagnostics (listing survives), impossible invariant (dup/unprobed)→throw; collision quarantines BOTH PeerFact+socket; deps injected, no IO
+  ./run.sh check-entwurf-fact-provider # deterministic gate (0.11 Stage 0 step 4, fact-provider slice 4b): ASSEMBLY listEntwurfFacts — full-store parse/probe/quarantine/resolve stays intact; #112 bounds expensive receiver/transcript observation to the newest 32 rendered rows while older machine rows say unobserved; Q112 pins full payload + exact observer budget; C-원칙 keeps corruption diagnostic and impossible wiring loud; deps injected, no IO
   ./run.sh check-entwurf-peers-surface # deterministic gate (0.11 Stage 0 step 4, fact-provider slice 4c): MCP entwurf_peers RENDER renderEntwurfPeers (#50 C4) — payload keyset exactly {peers, diagnostics}; FORBIDDEN keys sessions/socketOnly/controlDir/socketPath/count + no .sock in text (socket is transport, never identity); record-less socket = aggregated record-less-socket diagnostic (F8, liveness-keyed message, alive names fresh-cut); NO verb-routing key (JSON deep scan) NOR word (text), diagnostics both surfaces, empty→(none), unsupported shown; WIRING guard: both surfaces call provider+render, getLiveSessions + /entwurf-sessions gone; facts fabricated, no IO
   ./run.sh check-entwurf-self-address # deterministic gate (SE-1/SE-2 slice 1): self-addressability honesty predicate computeSelfAddressability — pi replyable ⟺ live socket; meta splits by RAIL: self-fetch ⟺ recordBacked ∧ ownerAlive ∧ watchArmed (regression-proof record-present rows), native-push ⟺ recordBacked ∧ probeAlive (separate axis — no mailbox fact may rescue or sink it), unsupplied rail fail-closed; SOURCE GUARD buildStrictPiSenderEnvelope drops hardcoded replyable:true + existsSync-probes socket, entwurf_self renders alive vs expected AND renders the meta rail per-rail (mailbox only inside the self-fetch branch; native-push denies an inbox and gates injection on the probe)
   ./run.sh check-entwurf-deliverability # deterministic gate (SE-1/SE-2 slice 2c): conversational-mailbox deliverability predicate — computeMetaReceiverActive (recordBacked ∧ ownerAlive ∧ watchArmed) + mailboxConversationalDeliverable (self-fetch AND active); direct-inject pi refused (SE-1), self-fetch dead/unarmed refused (SE-2); self-address shares the same atom
@@ -1281,6 +1282,14 @@ check_entwurf_control_rpc() {
   run_ts scripts/check-entwurf-control-rpc.ts
 }
 
+check_compaction_send_guard() {
+  # Deterministic gate for #111: a compacting Pi citizen is neither idle nor an ordinary
+  # streaming turn. Event-armed refuse is `compacting`; quiet unknown non-idle is `busy`
+  # (`ctx.signal` is not isStreaming). Either token: no pi.sendMessage, no delivered:true.
+  # Pure admission predicate + resident wiring/event source guard. No IO.
+  run_ts scripts/check-compaction-send-guard.ts
+}
+
 check_entwurf_resume_args() {
   # Deterministic gate for the resume-argv SSOT (buildResumePiArgs). S1 replaced the headless
   # shape with the VISIBLE one, measured against the runtime before the consumer was written:
@@ -1766,11 +1775,13 @@ check_entwurf_fact_provider() {
   # Deterministic gate for 0.11 Stage 0 step 4 (fact-provider slice 4b): the
   # ASSEMBLY layer listEntwurfFacts. listAllMetaIdentities → scanSocketProbes →
   # pre-quarantine out-of-socket-domain/socket conflicts → resolveFactList(clean) →
-  # {facts, diagnostics}. Throw-vs-diagnostics policy (GPT힣 C-원칙): expected
-  # corruption (parse failure / gardenId↔socket collision) → diagnostics, listing
-  # survives; impossible wiring invariant (resolveFactList duplicate/unprobed) →
-  # throw, never swallowed. A collision quarantines BOTH the PeerFact and the
-  # socket (gid is the universal address). meta + socket deps injected, no IO.
+  # {facts, diagnostics}. #112 keeps the whole-store parse/probe/diagnostic/payload
+  # while running expensive receiver/transcript observation for exactly the newest
+  # 32 human-rendered rows; older payload rows say unobserved. Q112 pins that budget.
+  # Throw-vs-diagnostics policy (GPT힣 C-원칙): expected corruption (parse failure /
+  # gardenId↔socket collision) → diagnostics, listing survives; impossible wiring
+  # invariant (resolveFactList duplicate/unprobed) → throw, never swallowed. A
+  # collision quarantines BOTH the PeerFact and socket. deps injected, no IO.
   run_ts scripts/check-entwurf-fact-provider.ts
 }
 
@@ -6028,6 +6039,9 @@ case "$cmd" in
     ;;
   check-entwurf-control-rpc)
     check_entwurf_control_rpc
+    ;;
+  check-compaction-send-guard)
+    check_compaction_send_guard
     ;;
   check-entwurf-v2-production)
     check_entwurf_v2_production

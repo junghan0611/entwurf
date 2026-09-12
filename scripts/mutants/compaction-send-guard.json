@@ -1,0 +1,103 @@
+{
+	"schemaVersion": 1,
+	"lane": "compaction-send-guard",
+	"mutants": [
+		{
+			"claim": "COMPACT-SEND-NO-MODE",
+			"title": "the predicate grows a mode argument so steer could be admitted while follow_up is refused",
+			"subject": "pi-extensions/lib/compaction-send-guard.ts",
+			"find": [
+				"export function compactionSendReject(guard: CompactionGuard, facts: CompactionSendFacts): CompactionSendReject | null {"
+			],
+			"replace": [
+				"export function compactionSendReject(guard: CompactionGuard, facts: CompactionSendFacts, mode?: string): CompactionSendReject | null {"
+			],
+			"gate": ["bash", "run.sh", "check-compaction-send-guard"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:COMPACT-SEND-NO-MODE]",
+			"signatureSource": "scripts/check-compaction-send-guard.ts"
+		},
+		{
+			"claim": "COMPACT-SEND-REJECT-ARMED",
+			"title": "armed compacting-during-stream is treated as an ordinary turn, so auto-compact still gets sendMessage",
+			"subject": "pi-extensions/lib/compaction-send-guard.ts",
+			"find": ["\tif (guard.armed) return COMPACTION_SEND_REJECT;"],
+			"replace": ["\t// armed compacting-during-stream no longer rejects"],
+			"gate": ["bash", "run.sh", "check-compaction-send-guard"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:COMPACT-SEND-REJECT-ARMED]",
+			"signatureSource": "scripts/check-compaction-send-guard.ts"
+		},
+		{
+			"claim": "COMPACT-SEND-REJECT-QUIET",
+			"title": "quiet unknown non-idle is admitted, so sendMessage runs in the manual-compact start race",
+			"subject": "pi-extensions/lib/compaction-send-guard.ts",
+			"find": ["\tif (!facts.hasAgentSignal) return BUSY_SEND_REJECT;"],
+			"replace": ["\t// quiet unknown no longer rejects"],
+			"gate": ["bash", "run.sh", "check-compaction-send-guard"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:COMPACT-SEND-REJECT-QUIET]",
+			"signatureSource": "scripts/check-compaction-send-guard.ts"
+		},
+		{
+			"claim": "COMPACT-SEND-ADMIT-IDLE",
+			"title": "idle no longer recovers a missed session_compact, so a later stream stays falsely refused",
+			"subject": "pi-extensions/lib/compaction-send-guard.ts",
+			"find": [
+				"\tif (facts.idle) {",
+				"\t\t// Idle means Pi is neither in an agent run nor compacting. Also recovers a",
+				"\t\t// missed `session_compact` so a later ordinary stream is not stuck refused.",
+				"\t\tguard.armed = false;",
+				"\t\treturn null;",
+				"\t}"
+			],
+			"replace": ["\t// idle no longer admits or disarms"],
+			"gate": ["bash", "run.sh", "check-compaction-send-guard"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:COMPACT-SEND-ADMIT-IDLE]",
+			"signatureSource": "scripts/check-compaction-send-guard.ts"
+		},
+		{
+			"claim": "COMPACT-SEND-ADMIT-STREAM",
+			"title": "a live agent run is refused, so idle/일반 streaming steer/followUp is no longer preserved",
+			"subject": "pi-extensions/lib/compaction-send-guard.ts",
+			"find": ["\treturn null; // live agent run — steer/followUp unchanged"],
+			"replace": ["\treturn COMPACTION_SEND_REJECT; // live agent run no longer admitted"],
+			"gate": ["bash", "run.sh", "check-compaction-send-guard"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:COMPACT-SEND-ADMIT-STREAM]",
+			"signatureSource": "scripts/check-compaction-send-guard.ts"
+		},
+		{
+			"claim": "COMPACT-SEND-WIRE",
+			"title": "the send path skips the leaf and still calls pi.sendMessage during compaction",
+			"subject": "pi-extensions/entwurf-control.ts",
+			"find": [
+				"\t\tconst compactionReject = compactionSendReject(state.compaction, {",
+				"\t\t\tidle: ctx.isIdle(),",
+				"\t\t\thasAgentSignal: ctx.signal !== undefined,",
+				"\t\t});",
+				"\t\tif (compactionReject) {",
+				"\t\t\trespond(false, \"send\", undefined, compactionReject);",
+				"\t\t\treturn;",
+				"\t\t}"
+			],
+			"replace": ["\t\t// compaction send guard removed"],
+			"gate": ["bash", "run.sh", "check-compaction-send-guard"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:COMPACT-SEND-WIRE]",
+			"signatureSource": "scripts/check-compaction-send-guard.ts"
+		},
+		{
+			"claim": "COMPACT-SEND-EVENTS",
+			"title": "session_before_compact no longer arms the resident guard",
+			"subject": "pi-extensions/entwurf-control.ts",
+			"find": ["\tpi.on(\"session_before_compact\", () => {", "\t\tnoteCompactionBefore(state.compaction);", "\t});"],
+			"replace": ["\t// session_before_compact no longer arms"],
+			"gate": ["bash", "run.sh", "check-compaction-send-guard"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:COMPACT-SEND-EVENTS]",
+			"signatureSource": "scripts/check-compaction-send-guard.ts"
+		}
+	]
+}

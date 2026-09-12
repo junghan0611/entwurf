@@ -81,6 +81,13 @@ import type {
 import { getMarkdownTheme, type Theme } from "@earendil-works/pi-coding-agent";
 import { Box, type Component, Markdown, Spacer, Text } from "@earendil-works/pi-tui";
 import { ENTWURF_SENT_MESSAGE_TYPE } from "../protocol.js";
+import {
+	type CompactionGuard,
+	compactionSendReject,
+	createCompactionGuard,
+	noteCompactionBefore,
+	noteCompactionTerminal,
+} from "./lib/compaction-send-guard.js";
 import { CONTROL_SOCKET_SUFFIX, controlSocketPathIn, defaultControlSocketDir } from "./lib/control-socket-path.js";
 import {
 	formatSenderInfoBlock,
@@ -126,6 +133,7 @@ interface SocketState {
 	server: net.Server | null;
 	socketPath: string | null;
 	context: ExtensionContext | null;
+	compaction: CompactionGuard;
 }
 
 // The resident's GARDEN ADDRESS (#50 C2) — minted by this session's meta-record at
@@ -754,6 +762,15 @@ async function handleCommand(
 			}
 		}
 
+		const compactionReject = compactionSendReject(state.compaction, {
+			idle: ctx.isIdle(),
+			hasAgentSignal: ctx.signal !== undefined,
+		});
+		if (compactionReject) {
+			respond(false, "send", undefined, compactionReject);
+			return;
+		}
+
 		// wants_reply defaults to false (etiquette marker, not transport contract).
 		// It surfaces a "(wants reply)" badge on the receiver render so the
 		// human/agent at either end sees that the sender wants a conversational
@@ -1036,6 +1053,7 @@ export default function (pi: ExtensionAPI) {
 		server: null,
 		socketPath: null,
 		context: null,
+		compaction: createCompactionGuard(),
 	};
 
 	pi.registerMessageRenderer(SESSION_MESSAGE_TYPE, renderSessionMessage);
@@ -1152,7 +1170,18 @@ export default function (pi: ExtensionAPI) {
 	// were dead. The typecheck-exclude on this file kept that decay invisible.
 	// Don't reintroduce them without first confirming the events exist.
 	pi.on("session_start", async (_event, ctx) => {
+		noteCompactionTerminal(state.compaction);
 		await refreshServer(ctx);
+	});
+
+	pi.on("session_before_compact", () => {
+		noteCompactionBefore(state.compaction);
+	});
+	pi.on("session_compact", () => {
+		noteCompactionTerminal(state.compaction);
+	});
+	pi.on("session_compact_failed", () => {
+		noteCompactionTerminal(state.compaction);
 	});
 
 	// No session_before_switch / session_before_fork guards: `/new`, `/fork`, `/clone`
@@ -1161,6 +1190,7 @@ export default function (pi: ExtensionAPI) {
 	// simply rebinds to the new address. There is no id to police at the pre-event.
 
 	pi.on("session_shutdown", async () => {
+		noteCompactionTerminal(state.compaction);
 		updateStatus(state.context, false, null);
 		updateSessionEnv(state.context, false, null);
 		residentGardenId = null;
@@ -1423,10 +1453,12 @@ interface EntwurfFactProviderModule {
 		metaEntries: readonly { filename: string; regularFile: boolean }[];
 		readRecord: (filename: string) => string;
 		socket: { dir: string };
+		observationLimit: number;
 	}): Promise<unknown>;
 }
 
 interface EntwurfPeersRenderModule {
+	ENTWURF_PEERS_RENDER_LIMIT: number;
 	renderEntwurfPeers(result: unknown): { text: string; payload: unknown };
 }
 
@@ -1445,14 +1477,17 @@ async function renderEntwurfPeersForSurface(): Promise<{ text: string; payload: 
 	// surfaced by the #52 duplicate pass, which would let such a symlink quarantine the
 	// healthy record it shadowed).
 	const provider = (await import(ENTWURF_FACT_PROVIDER_MODULE)) as unknown as EntwurfFactProviderModule;
+	const render = (await import(ENTWURF_PEERS_RENDER_MODULE)) as unknown as EntwurfPeersRenderModule;
 	const result = await provider.listEntwurfFacts({
 		metaEntries: meta.readActiveStoreEntries(sessionsDir),
 		readRecord: meta.makeStoreRecordReader(sessionsDir),
 		// Same socket axis as the legacy live-session scan, but merged with the
 		// meta-record rail by listEntwurfFacts so meta-mailbox citizens are discoverable too.
 		socket: { dir: ENTWURF_DIR },
+		// #112: observation follows the human render budget. The full machine payload
+		// and every authority/diagnostic pass above remain complete.
+		observationLimit: render.ENTWURF_PEERS_RENDER_LIMIT,
 	});
-	const render = (await import(ENTWURF_PEERS_RENDER_MODULE)) as unknown as EntwurfPeersRenderModule;
 	return render.renderEntwurfPeers(result);
 }
 

@@ -178,6 +178,44 @@ async function main(): Promise<void> {
 		);
 	}
 
+	// ── #112: expensive observation follows the 32-row human budget ───────────
+	{
+		const gids = Array.from({ length: 40 }, (_, i) => `20260612T${String(i).padStart(6, "0")}-aaaaaa`);
+		const meta = Object.fromEntries(gids.map((gid) => [`${gid}.meta.json`, rec(gid, "claude-code")]));
+		const allObserved: string[] = [];
+		const all = deps(meta, {});
+		all.observe = (identity) => {
+			allObserved.push(identity.gardenId);
+			return { receiver: "active", transcript: "exists" };
+		};
+		await listEntwurfFacts(all);
+		ok("Q112: generic provider without a presentation limit observes all 40 citizens", allObserved.length === 40);
+
+		const observed: string[] = [];
+		const d = deps(meta, {});
+		d.observationLimit = 32;
+		d.observe = (identity) => {
+			observed.push(identity.gardenId);
+			return { receiver: "active", transcript: "exists" };
+		};
+		const r = await listEntwurfFacts(d);
+		ok("Q112: full machine payload retains all 40 certified citizens", r.facts.peers.length === 40);
+		assert.deepStrictEqual(
+			observed,
+			gids.slice(-32),
+			"[QK:PEERS-OBSERVATION-BUDGET] observer must run for exactly the newest rendered rows",
+		);
+		ok("Q112: expensive observer runs exactly 32 times", observed.length === 32);
+		ok(
+			"Q112: eight historical payload rows honestly say unobserved",
+			r.facts.peers.slice(0, 8).every((p) => p.receiver === "unobserved" && p.transcript === "unobserved"),
+		);
+		ok(
+			"Q112: all 32 renderable rows retain measured observations",
+			r.facts.peers.slice(-32).every((p) => p.receiver === "active" && p.transcript === "exists"),
+		);
+	}
+
 	// ── corrupt record does NOT blind the listing ──────────────────────────────
 	{
 		const r = await listEntwurfFacts(
