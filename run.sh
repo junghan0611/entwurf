@@ -171,7 +171,7 @@ Usage:
   ./run.sh check-socket-discovery      # deterministic gate (0.11 Stage 0 step 4, fact-provider slice 3): SOCKET-axis scanSocketProbes — probes (dir sockets) ∪ (in-domain citizen canonical paths) 3-valued; dormant citizen no-file → dead (resumable, not unprobed), stall → indeterminate (F3), dir hygiene/dedup/missing-dir + e2e → resolveFactList; readdir/probe injected, no IO
   ./run.sh check-meta-facts            # deterministic gate for the meta-facts projection (#65): drives the REAL CLI — full-record join, parse-before-uniqueness, no-winner duplicates, drift/symlink/invalid-UTF-8 defects in-band, deterministic bytes, exit contract 0/2/3, dispatch+emit reachability
   ./run.sh check-meta-listing          # deterministic gate: META-STORE facts axis — kind-carrying entries; non-regular records are never read, parse/drift become diagnostics, duplicate nativeSessionId quarantines every rival but not unrelated citizens; strict throws / collect partial; pure injected IO
-  ./run.sh check-entwurf-fact-provider # deterministic gate (0.11 Stage 0 step 4, fact-provider slice 4b): ASSEMBLY listEntwurfFacts — listAllMetaIdentities→scanSocketProbes→pre-quarantine out-of-socket-domain/socket conflicts→resolveFactList(clean)→{facts,diagnostics}; C-원칙: expected corruption (parse/collision)→diagnostics (listing survives), impossible invariant (dup/unprobed)→throw; collision quarantines BOTH PeerFact+socket; deps injected, no IO
+  ./run.sh check-entwurf-fact-provider # deterministic gate (0.11 Stage 0 step 4, fact-provider slice 4b): ASSEMBLY listEntwurfFacts — full-store parse/probe/quarantine/resolve stays intact; #112 bounds expensive receiver/transcript observation to the newest 32 rendered rows while older machine rows say unobserved; Q112 pins full payload + exact observer budget; C-원칙 keeps corruption diagnostic and impossible wiring loud; deps injected, no IO
   ./run.sh check-entwurf-peers-surface # deterministic gate (0.11 Stage 0 step 4, fact-provider slice 4c): MCP entwurf_peers RENDER renderEntwurfPeers (#50 C4) — payload keyset exactly {peers, diagnostics}; FORBIDDEN keys sessions/socketOnly/controlDir/socketPath/count + no .sock in text (socket is transport, never identity); record-less socket = aggregated record-less-socket diagnostic (F8, liveness-keyed message, alive names fresh-cut); NO verb-routing key (JSON deep scan) NOR word (text), diagnostics both surfaces, empty→(none), unsupported shown; WIRING guard: both surfaces call provider+render, getLiveSessions + /entwurf-sessions gone; facts fabricated, no IO
   ./run.sh check-entwurf-self-address # deterministic gate (SE-1/SE-2 slice 1): self-addressability honesty predicate computeSelfAddressability — pi replyable ⟺ live socket; meta splits by RAIL: self-fetch ⟺ recordBacked ∧ ownerAlive ∧ watchArmed (regression-proof record-present rows), native-push ⟺ recordBacked ∧ probeAlive (separate axis — no mailbox fact may rescue or sink it), unsupplied rail fail-closed; SOURCE GUARD buildStrictPiSenderEnvelope drops hardcoded replyable:true + existsSync-probes socket, entwurf_self renders alive vs expected AND renders the meta rail per-rail (mailbox only inside the self-fetch branch; native-push denies an inbox and gates injection on the probe)
   ./run.sh check-entwurf-deliverability # deterministic gate (SE-1/SE-2 slice 2c): conversational-mailbox deliverability predicate — computeMetaReceiverActive (recordBacked ∧ ownerAlive ∧ watchArmed) + mailboxConversationalDeliverable (self-fetch AND active); direct-inject pi refused (SE-1), self-fetch dead/unarmed refused (SE-2); self-address shares the same atom
@@ -1701,11 +1701,13 @@ check_entwurf_fact_provider() {
   # Deterministic gate for 0.11 Stage 0 step 4 (fact-provider slice 4b): the
   # ASSEMBLY layer listEntwurfFacts. listAllMetaIdentities → scanSocketProbes →
   # pre-quarantine out-of-socket-domain/socket conflicts → resolveFactList(clean) →
-  # {facts, diagnostics}. Throw-vs-diagnostics policy (GPT힣 C-원칙): expected
-  # corruption (parse failure / gardenId↔socket collision) → diagnostics, listing
-  # survives; impossible wiring invariant (resolveFactList duplicate/unprobed) →
-  # throw, never swallowed. A collision quarantines BOTH the PeerFact and the
-  # socket (gid is the universal address). meta + socket deps injected, no IO.
+  # {facts, diagnostics}. #112 keeps the whole-store parse/probe/diagnostic/payload
+  # while running expensive receiver/transcript observation for exactly the newest
+  # 32 human-rendered rows; older payload rows say unobserved. Q112 pins that budget.
+  # Throw-vs-diagnostics policy (GPT힣 C-원칙): expected corruption (parse failure /
+  # gardenId↔socket collision) → diagnostics, listing survives; impossible wiring
+  # invariant (resolveFactList duplicate/unprobed) → throw, never swallowed. A
+  # collision quarantines BOTH the PeerFact and socket. deps injected, no IO.
   run_ts scripts/check-entwurf-fact-provider.ts
 }
 

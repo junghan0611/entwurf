@@ -31,7 +31,7 @@ import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { type EntwurfFactsResult, recordLessSocketMessage } from "../pi-extensions/lib/entwurf-fact-provider.ts";
 import type { PeerFact } from "../pi-extensions/lib/entwurf-facts.ts";
-import { renderEntwurfPeers } from "../pi-extensions/lib/entwurf-peers-render.ts";
+import { ENTWURF_PEERS_RENDER_LIMIT, renderEntwurfPeers } from "../pi-extensions/lib/entwurf-peers-render.ts";
 import type { FactLiveness } from "../pi-extensions/lib/entwurf-v2-contract.ts";
 import type { MetaCitizenBackend } from "../pi-extensions/lib/meta-session.ts";
 import type { SocketLiveness } from "../pi-extensions/lib/socket-probe.ts";
@@ -199,6 +199,10 @@ function main(): void {
 		);
 		const bounded = renderEntwurfPeers({ facts: { peers: manyPeers, recordLessSockets: [] }, diagnostics: [] });
 		ok("bounded text omits older entries when peer list is large", bounded.text.includes("older entries omitted"));
+		ok(
+			"#112: human row budget remains exactly 32",
+			ENTWURF_PEERS_RENDER_LIMIT === 32 && bounded.text.includes("(8 older entries omitted; showing latest 32)"),
+		);
 		ok("bounded text shows latest entries", bounded.text.includes("20260612T000039-aaaaaa"));
 		ok("bounded text omits oldest entry", !bounded.text.includes("20260612T000000-aaaaaa  backend="));
 		ok("bounded payload still carries every peer", bounded.payload.peers.length === 40);
@@ -255,6 +259,14 @@ function main(): void {
 		ok("wiring: bridge calls renderEntwurfPeers(", bridgeSrc.includes("renderEntwurfPeers("));
 		ok("wiring: native pi tool calls listEntwurfFacts(", nativeSrc.includes("listEntwurfFacts("));
 		ok("wiring: native pi tool calls renderEntwurfPeers(", nativeSrc.includes("renderEntwurfPeers("));
+		ok(
+			"#112 wiring: MCP observation uses the render limit",
+			bridgeSrc.includes("observationLimit: ENTWURF_PEERS_RENDER_LIMIT"),
+		);
+		ok(
+			"#112 wiring: native pi observation uses the render limit",
+			nativeSrc.includes("observationLimit: render.ENTWURF_PEERS_RENDER_LIMIT"),
+		);
 		ok(
 			"wiring: bridge does not paste full JSON payload into human text",
 			!bridgeSrc.includes("JSON.stringify(payload)"),

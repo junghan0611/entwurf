@@ -69,7 +69,7 @@ import { z } from "zod";
 import { controlSocketPathIn, defaultControlSocketDir } from "../../../pi-extensions/lib/control-socket-path.js";
 import { resolveMailboxReceiverFacts } from "../../../pi-extensions/lib/entwurf-deliverability.ts";
 import { listEntwurfFacts } from "../../../pi-extensions/lib/entwurf-fact-provider.ts";
-import { renderEntwurfPeers } from "../../../pi-extensions/lib/entwurf-peers-render.ts";
+import { ENTWURF_PEERS_RENDER_LIMIT, renderEntwurfPeers } from "../../../pi-extensions/lib/entwurf-peers-render.ts";
 import { computeSelfAddressability, type MetaDeliveryDomain } from "../../../pi-extensions/lib/entwurf-self-address.ts";
 import { nativePushSupported } from "../../../pi-extensions/lib/entwurf-v2-contract.ts";
 import { resolveMailboxWakeModeCapability } from "../../../pi-extensions/lib/entwurf-v2-decider.ts";
@@ -598,6 +598,9 @@ server.tool(
 				readRecord: makeStoreRecordReader(sessionsDir),
 				// Socket axis: the same dir dispatch uses (grammar SSOT), scan-internal only.
 				socket: { dir: ENTWURF_DIR },
+				// #112: observe only rows this human surface can render. Full store facts,
+				// diagnostics, liveness, and machine payload remain intact.
+				observationLimit: ENTWURF_PEERS_RENDER_LIMIT,
 			});
 			const { text } = renderEntwurfPeers(result);
 			return textOk(text);

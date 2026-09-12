@@ -32,6 +32,7 @@ import {
 	isOutOfSocketDomainGardenIdConflict,
 	type PeerObserver,
 	resolveFactList,
+	UNOBSERVED_PEER,
 } from "./entwurf-facts.ts";
 import { observePeerFacts } from "./entwurf-peer-observe.ts";
 import { isLivenessSupported } from "./entwurf-v2-contract.ts";
@@ -102,9 +103,12 @@ export interface EntwurfFactsDeps {
 	/** Observation axis (#101): per-citizen receiver + transcript facts. Defaults to the
 	 * REAL measurement — the same seam shape `makeProductionEntwurfV2Deps` uses, so the two
 	 * wiring sites (MCP + pi-native) cannot drift by each passing their own observer, and a
-	 * gate still drives the assembly with a fake and no filesystem. A caller that injects
-	 * nothing gets facts; a caller that injects `() => UNOBSERVED_PEER` says so on every row. */
+	 * gate still drives the assembly with a fake and no filesystem. */
 	observe?: PeerObserver;
+	/** Optional presentation budget. Undefined preserves the generic fact provider's full
+	 * observation contract; peers surfaces pass their shared render limit. Older machine
+	 * payload rows then say `unobserved` rather than fabricating `active` / `exists`. */
+	observationLimit?: number;
 }
 
 function diagnosticSortKey(d: EntwurfDiagnostic): string {
@@ -195,9 +199,31 @@ export async function listEntwurfFacts(deps: EntwurfFactsDeps): Promise<EntwurfF
 	// 4. resolveFactList over CLEAN inputs only. Its throws (duplicate identity /
 	//    unprobed in-domain citizen) are impossible wiring invariants — left to
 	//    fire as the last line of defense, never caught here.
+	//
+	//    A peers surface may bound observation to its SAME newest rendered rows. Receiver
+	//    observation can inspect process state and historical Claude markers, so doing it
+	//    for every retained record made bounded text grow linearly with history. The generic
+	//    provider stays unbounded when no limit is supplied. Either way the full clean
+	//    identity/probe arrays reach the core: certification, duplicate detection,
+	//    diagnostics, liveness, and the machine payload remain complete. Only an observation
+	//    not performed becomes `unobserved`.
 	const cleanIdentities = identities.filter((i) => !conflictGids.has(i.gardenId));
 	const cleanProbes = probes.filter((p) => !conflictGids.has(p.gardenId));
-	const facts: FactList = resolveFactList(cleanIdentities, cleanProbes, deps.observe ?? observePeerFacts);
+	const observe = deps.observe ?? observePeerFacts;
+	let selectedObserve = observe;
+	if (deps.observationLimit !== undefined) {
+		if (!Number.isSafeInteger(deps.observationLimit) || deps.observationLimit < 0) {
+			throw new Error("listEntwurfFacts: observationLimit must be a non-negative safe integer");
+		}
+		const observedGardenIds = new Set(
+			[...cleanIdentities]
+				.sort((a, b) => (a.gardenId < b.gardenId ? -1 : a.gardenId > b.gardenId ? 1 : 0))
+				.slice(Math.max(0, cleanIdentities.length - deps.observationLimit))
+				.map((identity) => identity.gardenId),
+		);
+		selectedObserve = (identity) => (observedGardenIds.has(identity.gardenId) ? observe(identity) : UNOBSERVED_PEER);
+	}
+	const facts: FactList = resolveFactList(cleanIdentities, cleanProbes, selectedObserve);
 
 	// 5. #50 C4 demotion: a record-less socket is a diagnostic, not a listing
 	//    section. One diagnostic per socket (subjects aggregate at render, F8);

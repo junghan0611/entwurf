@@ -1,0 +1,19 @@
+{
+	"schemaVersion": 1,
+	"lane": "entwurf-peers",
+	"mutants": [
+		{
+			"claim": "PEERS-OBSERVATION-BUDGET",
+			"title": "the peers presentation limit is accepted but the full historical store is still observed",
+			"subject": "pi-extensions/lib/entwurf-fact-provider.ts",
+			"find": [
+				"\t\tselectedObserve = (identity) => (observedGardenIds.has(identity.gardenId) ? observe(identity) : UNOBSERVED_PEER);"
+			],
+			"replace": ["\t\tselectedObserve = observe;"],
+			"gate": ["bash", "run.sh", "check-entwurf-fact-provider"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:PEERS-OBSERVATION-BUDGET]",
+			"signatureSource": "scripts/check-entwurf-fact-provider.ts"
+		}
+	]
+}

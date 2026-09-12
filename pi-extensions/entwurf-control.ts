@@ -1423,10 +1423,12 @@ interface EntwurfFactProviderModule {
 		metaEntries: readonly { filename: string; regularFile: boolean }[];
 		readRecord: (filename: string) => string;
 		socket: { dir: string };
+		observationLimit: number;
 	}): Promise<unknown>;
 }
 
 interface EntwurfPeersRenderModule {
+	ENTWURF_PEERS_RENDER_LIMIT: number;
 	renderEntwurfPeers(result: unknown): { text: string; payload: unknown };
 }
 
@@ -1445,14 +1447,17 @@ async function renderEntwurfPeersForSurface(): Promise<{ text: string; payload: 
 	// surfaced by the #52 duplicate pass, which would let such a symlink quarantine the
 	// healthy record it shadowed).
 	const provider = (await import(ENTWURF_FACT_PROVIDER_MODULE)) as unknown as EntwurfFactProviderModule;
+	const render = (await import(ENTWURF_PEERS_RENDER_MODULE)) as unknown as EntwurfPeersRenderModule;
 	const result = await provider.listEntwurfFacts({
 		metaEntries: meta.readActiveStoreEntries(sessionsDir),
 		readRecord: meta.makeStoreRecordReader(sessionsDir),
 		// Same socket axis as the legacy live-session scan, but merged with the
 		// meta-record rail by listEntwurfFacts so meta-mailbox citizens are discoverable too.
 		socket: { dir: ENTWURF_DIR },
+		// #112: observation follows the human render budget. The full machine payload
+		// and every authority/diagnostic pass above remain complete.
+		observationLimit: render.ENTWURF_PEERS_RENDER_LIMIT,
 	});
-	const render = (await import(ENTWURF_PEERS_RENDER_MODULE)) as unknown as EntwurfPeersRenderModule;
 	return render.renderEntwurfPeers(result);
 }
 

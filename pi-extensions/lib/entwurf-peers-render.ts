@@ -39,6 +39,9 @@ export interface EntwurfPeersRender {
 	payload: EntwurfPeersPayload;
 }
 
+/** Human rows and expensive provider observations share this one presentation budget. */
+export const ENTWURF_PEERS_RENDER_LIMIT = 32;
+
 // `receiver` and `transcript` are OBSERVED facts, not routing (#101): they say what was
 // found on disk for this citizen, and a caller still asks entwurf_v2 what may be done
 // about it. They earn a column because for every claude-code row `liveness` reads
@@ -124,7 +127,7 @@ function renderDiagnosticLines(diagnostics: EntwurfDiagnostic[]): string[] {
 	return lines;
 }
 
-function compactLines(lines: string[], max: number = 32): string[] {
+function compactLines(lines: string[], max: number = ENTWURF_PEERS_RENDER_LIMIT): string[] {
 	if (lines.length <= max) return lines;
 	const omitted = lines.length - max;
 	return [`  … (${omitted} older entries omitted; showing latest ${max})`, ...lines.slice(-max)];
