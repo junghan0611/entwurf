@@ -866,12 +866,15 @@ ok(
 			return true; // ESRCH — the pid is gone
 		}
 	});
+	// Reap before asserting: the parent-death mutant deliberately keeps this child alive,
+	// and ok() throws on that red path. Cleanup after ok() leaked one pid-1 Node process per
+	// qualification run — exactly the failure shape this assertion exists to prevent.
+	if (!gone) process.kill(orphanPid, "SIGKILL");
 	ok(
 		"[QK:COPILOT-RECEIVE-STUB-CHILD-DIES-WITH-PARENT] a fixture child whose parent disappeared exits by " +
 			"itself — no pid-1 receiver survives a red or interrupted run",
 		gone,
 	);
-	if (!gone) process.kill(orphanPid, "SIGKILL");
 }
 
 // ── 11. the installer's honest inverse ───────────────────────────────────────
