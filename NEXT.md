@@ -117,6 +117,7 @@ CHANGELOG `## Unreleased`가 구현 범위 `v0.15.1..19ad90c` **30커밋** 전�
       브랜치 `feat/95-codex-lane` 6커밋 → main fast-forward. **문서·측정만, 소스/게이트/뮤턴트 바이트 0.** 영수증은 `scripts/raw-codex-measure/`.
       팀: 코디네이터 `20260908T211235-485de8` · 측정 Opus `20260908T224329-2680e2` · 검수 terra `20260908T212236-d157ee`(4라운드, 인용 20/20 CONFIRMED, Blocker 0).
       **GLG 결정처럼 보였던 갈림 둘이 측정으로 사라졌다** — hook trust 는 managed `/etc/codex` 레이어가 프롬프트 없이 열고, clause 4 는 `thread/name/set` 이 벤더 auto-titler 를 이긴다.
+      (그 `/etc` 경로는 **채택되지 않았다**: prompt-free 를 root 로 사는 거래였고, user-installed Codex 에서 root 는 operator 가 동의한 적 없는 비용이다. 출하된 것은 trust-gated user-scope 선언이다 — 위 «출하 모양» 참조.)
       **join 키의 모양이 바뀌었다**: parent-pid 가 아니라 와이어 `_meta.threadId` 이고 hook `session_id` 와 같은 문자열이다. 마감 코멘트가 #95 스레드의 정본.
 
 - [x] **25. #78 macOS consumer-CI 랜딩 + v0.20.0 컷·발행** — `feat/78-macos-consumer-ci` 가 main 으로 머지됐고 `v0.20.0` 이
@@ -231,7 +232,9 @@ WSL2 는 계약상 리눅스의 연장이라 새 작업 없음.
 
 - **좌표:** local `main` implementation `5f81e86`, handoff close `00cba23`. ACP Codex는 금지 그대로다. 목적은 GPT 접근을
   하나 더 만드는 것이 아니라 Codex의 native tools·delegation·work context를 그대로 둔 citizen이다.
-- **candidate 모양:** root-owned prompt-free `/etc/codex` `SessionStart` birth · strict
+- **출하 모양:** trust-gated user-scope `$CODEX_HOME/hooks.json` `SessionStart` birth(**root 없음** —
+  installer가 uid 0을 거절하고, operator가 자기 Codex에서 "Trust all"에 한 번 답한다; closure는
+  `$XDG_DATA_HOME/entwurf/codex-birth`) · strict
   request-scoped metadata identity(join 충돌 fail-loud) · operator-owned app-server
   `thread/loaded/list` probe · one-shot `codex queue` native-push(**재시도 0**) · user
   MCP/status-line atom · `entwurf_fresh_call backend=codex`. mailbox/receiver/resume/ACP 없음.
@@ -251,8 +254,8 @@ WSL2 는 계약상 리눅스의 연장이라 새 작업 없음.
 - **구현 closure (2026-09-12):** `check-gate-qualification` **460/460 KILLED**(43 lanes,
   53m42s, origin/snapshot purity green) · receipt 문서까지 포함한 최종 `pnpm run check:full`
   **exit 0, 501s** · 구현 commit `5f81e86` · #95 CLOSED · local main merge `00cba23`.
-  명시적으로 승인된 release prepare가 `0.21.0` version/changelog를 만든다. Codex는 그 경계가 끝날 때까지
-  unreleased candidate이며 push/tag/publish는 별도 승인 전 금지다.
+  그 뒤 승인된 release prepare가 `0.21.0` version/changelog와 prep commit `ecabc8e`를 만들었다.
+  Codex는 **0.21.0에서 지원된다**; 남은 것은 MAKE 경계이고 push/tag/publish는 GLG의 별도 승인 전 금지다.
 
 <details><summary>ACP fable 지원 NOW (닫힘)</summary>
 

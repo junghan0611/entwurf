@@ -15,13 +15,21 @@ All notable changes to this project will be documented here. Format follows [Kee
   visible seat—not that unlike transports are relabeled as identical. The release also carries the
   independent #111 and #112 bug repairs.
 - **OpenAI Codex CLI becomes an app-server-backed native-push citizen (#95).**
-  A prompt-free root `SessionStart` hook mints the V3 record on the first turn and sets
-  the visible thread title. The bridge strictly joins each request's Codex metadata to
+  A user-scope `SessionStart` hook, declared in the operator's own `$CODEX_HOME/hooks.json`,
+  mints the V3 record on the first turn and sets the visible thread title. It needs no root:
+  the installer refuses to run as uid 0, and the declaration is trust-gated rather than
+  prompt-free — the operator answers the vendor's prompt with "Trust all" ONCE in their own
+  visible Codex, and the vendor records that decision itself. Entwurf never computes, writes,
+  pre-seeds or reads a `trusted_hash`, and never touches `config.toml`. Because the vendor
+  hashes the declaration identity (event, matcher, handler path) and not the launcher's
+  contents, the payload closure can be upgraded on later releases without asking again. The bridge strictly joins each request's Codex metadata to
   that record, so multiple visible TUIs may share one app-server without sharing a
   process marker. The purpose is to preserve Codex's native tools, delegation, and work
   context as a citizen — not to add an ACP Codex backend or duplicate GPT access.
 - **Codex gets three independently owned install/doctor/inverse atoms.**
-  `install-codex-birth` owns only the fixed `/etc/codex` hook declaration and import closure;
+  `install-codex-birth` owns only the fixed `$CODEX_HOME/hooks.json` declaration plus its
+  launcher/payload closure under `${XDG_DATA_HOME:-~/.local/share}/entwurf/codex-birth`, with a
+  digest inventory that licenses an exact inverse and refuses drifted bytes;
   `install-codex-mcp` owns only `[mcp_servers.entwurf-bridge]`; and
   `install-codex-statusline` owns only `thread-title`. The MCP atom also owns the exact
   `env_vars` names that forward `CODEX_HOME`, Entwurf garden/control roots, and the
@@ -29,10 +37,25 @@ All notable changes to this project will be documented here. Format follows [Kee
 - **`entwurf_fresh_call` accepts `backend: "codex"` on both public tool surfaces and the
   operator skill.** It requires an explicit model and uses the measured
   `codex --remote unix://<default-socket> --model … --dangerously-bypass-approvals-and-sandbox`
-  shape. Root birth, MCP/env boundary, visible title, and the operator-owned app-server
+  shape. The birth unit, MCP/env boundary, visible title, and the operator-owned app-server
   socket are checked before tmux mutation. With placement omitted, Codex resolves the exact
   existing `codex` tmux home; a missing home rejects without creating one. Explicit placement
   remains an expert override. This does not infer an attached TUI seat from request identity.
+- **Omitted placement becomes a backend-selected policy, and Codex is its first implementation.**
+  Every backend could already be sent to an operator-owned existing seat through explicit
+  `placement.tmuxSession`; that is unchanged, and named `claude`/`pi` seats stay available that
+  way without becoming omitted-placement defaults. What is new is that omitting placement no
+  longer means one thing for every backend: `pi`, `claude-code`, `copilot` and `omp` still open
+  in the caller's seat, while `codex` resolves its exact operator-owned home. tmux remains the
+  visible launch seat, never an address — the garden id is the address and arrives in the
+  callback envelope. Sibling symmetry is transcript, auth, native tools and visibility; it is
+  not a claim that the transports are the same.
+- **Why a client-side home rather than a vendor seat carrier.** Upstream
+  [openai/codex#44774](https://github.com/openai/codex/issues/44774) records the maintainer's
+  preference for client-side terminal/window management, citing multi-client steer semantics and
+  network propagation. Rather than wait for a request→pane carrier or guess one, 0.21.0 takes the
+  client-side route the exact `rust-v0.153.4` source supports: an operator-owned exact home plus
+  explicit placement, with the wider attached-TUI topology left unsupported and unclaimed.
 
 ### Changed
 
@@ -58,12 +81,17 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ### Upgrade note
 
-Codex native delivery requires one explicit system step and two user-scope atoms:
+Codex native delivery requires three user-scope atoms and one operator trust answer. No step
+needs root:
 
 ```bash
-sudo entwurf install-codex-birth
+entwurf install-codex-birth
 entwurf install-codex-mcp
 entwurf install-codex-statusline
+
+# Then, ONCE, in a visible plain Codex: answer the hook prompt with "Trust all and continue"
+# and send one first turn. Until the vendor records that receipt the hook is declared and
+# never runs, and `doctor-codex-birth` / `setup` stay non-green and say so.
 
 # First create/open the operator-owned tmux session named exactly `codex`.
 # From a pane in that session:
@@ -416,7 +444,7 @@ Lane receipts (oracle, 2026-09-09) plus prepare P4/P5 on this host. There is
   not fill them from a CI image spec.
 - **On the 0.20.0 release date (2026-09-09), Codex was not a garden backend in that
   cut.** Step 1 of #95 was measurement only and `entwurf_fresh_call` did not include
-  Codex. This is release archaeology; the later unreleased candidate supersedes it.
+  Codex. This is release archaeology; 0.21.0 support supersedes it.
 
 ## 0.19.0 - 2026-09-07
 

@@ -27,7 +27,7 @@ evidence split, and its three states must not collapse into "macOS is supported"
 | GitHub Copilot CLI | optional-by-presence, operator-installed and authenticated — absent is an explicit setup SKIP; detected composes all four units (birth/MCP/receiver/footer) | self-fetch citizen and visible fresh |
 | OMP (`omp`) | optional-by-presence, operator-installed — absent is an explicit setup SKIP; detected composes all four units (birth/MCP/`tools.xdev` setting/receiver) | self-fetch citizen and visible fresh (accepted on one host — see §4b) |
 | Antigravity `agy` | optional, operator-installed and authenticated | native-push citizen |
-| OpenAI Codex CLI | optional-by-presence, operator-installed and authenticated; detected composes all three operator-owned units (birth/MCP/status-line) and stays non-green until the operator trusts the birth declaration once in a visible Codex; the unreleased candidate also requires an operator-owned existing tmux session named `codex`, with its app-server and supported TUIs seated there | native-push candidate and visible fresh |
+| OpenAI Codex CLI | optional-by-presence, operator-installed and authenticated; detected composes all three operator-owned units (birth/MCP/status-line) and stays non-green until the operator trusts the birth declaration once in a visible Codex; visible fresh also requires an operator-owned existing tmux session named `codex`, with its app-server and supported TUIs seated there | native-push and visible fresh, supported in 0.21.0 |
 | Cortex Code | optional, operator-installed and authenticated | Cortex ACP backend |
 
 Claude Code >=2.1.217 is required for the managed exec-hook lifecycle. The package
@@ -113,7 +113,7 @@ link is foreign, outside PATH, or shadowed by another command. It detects and wi
 pi/Claude/agy/Copilot/OMP/Codex by presence and prints a computed per-component
 PASS/SKIP/FAIL summary — a detected harness that cannot be completed makes setup exit nonzero.
 A detected `copilot` composes all four native units, and a detected `omp` composes its own four.
-A detected Codex install is an unreleased candidate path: setup composes its user-scope birth,
+A detected Codex install is a supported 0.21.0 path: setup composes its user-scope birth,
 MCP, and status-line atoms but never escalates or starts the app-server. It reports independent
 component outcomes, preserves exact env forwarding and idempotence, and returns a named
 `codex-birth FAIL` until the vendor trust receipt exists.
@@ -401,7 +401,7 @@ why `disabledServers` is never the way to hide an import.
 
 ## 4c. Optional OpenAI Codex CLI native citizen
 
-This unreleased candidate has Linux-focused evidence; on macOS it is NOT CERTIFIED —
+Supported in 0.21.0 with Linux-focused evidence; on macOS it is NOT CERTIFIED —
 pending physical host. It is native, not ACP: the purpose is to preserve the operator's
 Codex tools, delegation, and work context rather than provide another GPT access path.
 Entwurf owns three atoms, not the harness and not a daemon:
@@ -458,7 +458,7 @@ first-admission acceptance passed on 2026-09-12: real initial Pi outside `codex`
 Codex and outbound Pi inside it, with exact callbacks and addressed delivery both ways. `DELIVERY.md`
 owns the 57-assertion receipt, four coordinates, and digest.
 
-`entwurf_fresh_call` accepts candidate backend `codex` and requires an explicit model. Its
+`entwurf_fresh_call` accepts backend `codex` — supported in 0.21.0 — and requires an explicit model. Its
 preflight must prove the safe birth closure, exact MCP/env atom, `thread-title`, and app-server
 socket before tmux mutation. The sibling's garden id comes from the callback sender envelope,
 never the launch receipt. There is no Codex resume surface, watcher, supervisor, or app-server
@@ -466,7 +466,10 @@ lifecycle ownership. The accepted LIVE used a real record-backed visible Pi for 
 release-gate stripped ambient `PI_SESSION_ID`/`PI_AGENT_ID`, and the fixture/self-fetch citizen only
 collected receipts. The smoke reported initial Pi, app-server, fresh Codex, and outbound Pi
 coordinates separately: the initial Pi differed and the latter three matched the exact `codex` home.
-Qualification and the frozen full floor remain required before the implementation commit.
+Qualification and the frozen full floor are complete for this lane: `check-gate-qualification`
+killed 475/475 across 43 lanes with origin purity green, `check:full` exited 0, and the LIVE release
+gate reported MUST 24/0/0 with `cut: OK`. The bounds above are unchanged — no request→arbitrary
+attached-TUI seat join, no resume surface, and macOS remains NOT CERTIFIED pending a physical host.
 
 Oracle runs the first-admission LIVE with explicit ownership/model selectors:
 

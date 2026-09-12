@@ -7,7 +7,7 @@ and the manual judgements a gate cannot make.
 > **Current surface.** `entwurf-bridge` exposes `entwurf_v2`, `entwurf_peers`,
 > `entwurf_fresh_call`, `entwurf_resume_call`, `entwurf_self`, `entwurf_inbox_read`, and `entwurf_register_native`. The ACP
 > backends are Claude and Snowflake Cortex Code. Antigravity is a separate shipped
-> native-push citizen lane. Codex is an unreleased native-push candidate whose birth hook is
+> native-push citizen lane. Codex is a native-push citizen supported in 0.21.0, whose birth hook is
 > operator-owned and gated on one vendor trust receipt, with strict request-scoped identity and
 > visible fresh; it remains outside ACP and has no resume.
 > The amended candidate carries its own full acceptance: standalone LIVE 48 assertions exit 0,
@@ -171,7 +171,7 @@ The goal is not merely "invoke Claude Code." We want:
 4. source stable-bin exposure — including certified `entwurf` → this checkout's `run.sh`, the managed runtime Copilot fresh resolves; helper units are attempted independently and a foreign helper is a named FAIL
 5. agy bridge + exact permission + statusline + `PreInvocation` hook — only when `agy` is on PATH; each adapter is idempotent and independently doctorable
 6. Copilot four-unit composition (birth → MCP → receiver → visible footer) — only when `copilot` is on PATH (#86 C3b); the units run independently, each keeps its package-owned install-state and inverse, and a failed unit is a named component FAIL. The explicit `install-copilot-*`/`uninstall-copilot-*` surfaces remain the per-unit repair and inverse path
-7. Codex candidate composition — only when `codex` is on PATH: setup publishes all three operator-owned atoms and stays non-green until the vendor's trust receipt for the birth declaration exists; it never invokes sudo, never writes `[hooks.state]`, and never starts the app-server or creates the `codex` tmux home. Its setup cells prove the exact `env_vars` boundary, independent component outcomes, idempotence, the non-green-until-trusted verdict with its named operator repair, and that setup never writes the receipt itself. First-admission qualification follows the separate explicit-home LIVE; unrestricted attached-TUI placement is outside the claim.
+7. Codex composition — only when `codex` is on PATH: setup publishes all three operator-owned atoms and stays non-green until the vendor's trust receipt for the birth declaration exists; it never invokes sudo, never writes `[hooks.state]`, and never starts the app-server or creates the `codex` tmux home. Its setup cells prove the exact `env_vars` boundary, independent component outcomes, idempotence, the non-green-until-trusted verdict with its named operator repair, and that setup never writes the receipt itself. First-admission qualification follows the separate explicit-home LIVE; unrestricted attached-TUI placement is outside the claim.
 8. `entwurf-bridge` install smoke (`validate_entwurf_bridge`)
 9. computed summary — per-component PASS/SKIP/FAIL; any detected-integration FAIL makes the whole command exit nonzero while valid components stay installed
 
