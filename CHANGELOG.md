@@ -4,6 +4,10 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+### Fixed
+
+- **Control-socket send during Pi compaction is no longer a false `delivered:true` (#111).** A compacting Pi citizen is neither idle nor an ordinary streaming turn, but the receiver only sampled `ctx.isIdle()` and forwarded every non-idle send into `pi.sendMessage({ triggerTurn: true })`. Installed Pi 0.85.1 `sendCustomMessage` then starts `_runAgentPrompt` when not streaming — racing `compact()`'s session rewrite, which is the field path that can make compaction "풀린다". There is no public `ExtensionContext.isCompacting()`. The resident arms on `session_before_compact` and refuses as `compacting`; quiet unknown non-idle (`!idle && ctx.signal === undefined`) is fail-closed as `busy`, not `compacting`, because `ctx.signal` is `agent.activeRun?.abortController.signal` and is already gone during `_handlePostAgentRun` retry/continuation while `_isAgentRunActive` is still true — that cell also covers the manual-compact start race and branch summary, which the public API cannot tell apart. Either token: no `pi.sendMessage`, no `delivered:true`. Idle and live-run steer/followUp are unchanged. Frozen v2 reject taxonomy is untouched — this is an in-band RPC refusal.
+
 ## 0.20.1 - 2026-09-10
 
 ### Fixed

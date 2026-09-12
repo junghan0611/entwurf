@@ -832,6 +832,7 @@ let manifestCount: number;
 		"bridge-boot-resume": 3,
 		"bridge-command-boot": 9,
 		"capability-cache": 3,
+		"compaction-send-guard": 7,
 		"copilot-birth": 19,
 		"copilot-launch": 14,
 		"copilot-receive": 20,

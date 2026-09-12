@@ -155,6 +155,7 @@ Usage:
   ./run.sh check-entwurf-v2-matrix     # deterministic gate (0.11 Stage 0 step 5d-5 a): REACHABILITY + LOCK SSOT table — drives REAL decideDispatch over fakes, fixes every (target kind → transport → lock class) cell as one table (control-socket/meta-mailbox/native-push + bad-target/conflict/locked/undeliverable/dormant/indeterminate rejects), coverage pass fails on a dropped cell; thin coverage not a decider re-impl; pure, no IO
   ./run.sh check-entwurf-v2-release    # deterministic gate (0.11 Stage 0 step 5c-1): PURE release-policy reducer (decideReleasePolicy + reduceRelease) — the spawn-observation policy and its four release events went with the transport in the visible-first cut, so the shipped machine is meta-mailbox=never release (no lock) + control-socket=release once on send-final; decideReleasePolicy still enforces the lock-nullness invariant; pure, no IO
   ./run.sh check-entwurf-v2-send       # deterministic gate (0.11 Stage 0 step 5c-2a): control-socket SEND hand (executeControlSocketSend) wiring transport IO onto the 5c-1 reducer — ack→sent, in-band reject→rejected (no fallback), dead→same-lock one-shot re-resolve (control retry / mailbox enqueue), indeterminate→failed+rethrow with NO fallback (no double-delivery); release exactly once, releaseLock throw never masks the send error; IO-via-dep
+  ./run.sh check-compaction-send-guard # deterministic gate (#111): control-socket send during Pi compaction — event-armed refuse compacting, quiet unknown non-idle refuse busy (ctx.signal is not isStreaming); no pi.sendMessage, no delivered:true; idle/live-run steer/followUp preserved; pure, no IO
   ./run.sh check-entwurf-v2-send-fallback # deterministic gate (0.11 Stage 0 step 5c-2b): same-lock re-resolve RESOLVER (resolveDeadControlSendFallback) — fire-and-forget re-resolve: alive→control retry, dead→reject (nothing is ever launched), indeterminate→reject, unsupported+deliverable→mailbox plan, undeliverable/bad-target/conflict→reject; resolver never releases, mis-wire fails loud, inspect/probe throws propagate; no IO (fakes)
   ./run.sh check-entwurf-v2-runner     # deterministic gate (0.11 Stage 0 step 5d-1): execute-router (executeDispatch) routing an already-decided DispatchDecision to its 5c transport hand → one outcome-rich EntwurfV2RunResult. reject→rejected (no hand) / control/mailbox→matching hand with decision.lock verbatim / N3 rejectReason carried / N1 SendDeliveredReleaseFailedError→execution-failed{finalizedOutcome,releaseFailed,retrySafe:false}; fake hands, no IO
   ./run.sh check-entwurf-v2-mailbox    # deterministic gate (0.11 Stage 0 step 5c-4, LAST 5c transport slice): ENQUEUE-ONLY meta-mailbox SEND body (executeMetaMailboxSend) + production sendViaMailbox adapter — sender→formatMetaMailboxBody with plan.wantsReply threaded (divergence from legacy hard false), sender absent→raw plan.message, enqueue opts EXACTLY {gardenId,body,sessionsDir,mailboxDir}, enqueue throw PROPAGATES (no success:false fold — mailbox has no in-band refuse); adapter NEVER touches lock (release is the hand's job); source guard: no release/routing seam
@@ -1217,6 +1218,14 @@ check_entwurf_control_rpc() {
   # (write command -> matched {type:response,command,success:true} -> resolve) / close-before-
   # response rejects 'connection closed before response'. net.Server only, no model/pi process.
   run_ts scripts/check-entwurf-control-rpc.ts
+}
+
+check_compaction_send_guard() {
+  # Deterministic gate for #111: a compacting Pi citizen is neither idle nor an ordinary
+  # streaming turn. Event-armed refuse is `compacting`; quiet unknown non-idle is `busy`
+  # (`ctx.signal` is not isStreaming). Either token: no pi.sendMessage, no delivered:true.
+  # Pure admission predicate + resident wiring/event source guard. No IO.
+  run_ts scripts/check-compaction-send-guard.ts
 }
 
 check_entwurf_resume_args() {
@@ -5922,6 +5931,9 @@ case "$cmd" in
     ;;
   check-entwurf-control-rpc)
     check_entwurf_control_rpc
+    ;;
+  check-compaction-send-guard)
+    check_compaction_send_guard
     ;;
   check-entwurf-v2-production)
     check_entwurf_v2_production
