@@ -1,0 +1,58 @@
+{
+	"provenance": {
+		"label": "vendor-source-derived projection from preserved rollout; not captured thread/read",
+		"preservedArtifactSha256": "c3a28938eaa738363c8c4a6d3a041837e9a555f094980da9ef2283f69c5768ae",
+		"rawRolloutLines": [33, 53],
+		"projectionSource": "codex rust-v0.153.4 app-server-protocol/src/protocol/v2/item.rs:230-242,1016-1039",
+		"transformations": "selected item projection; host/executable path scrubbed; launch footer abbreviated; synthetic completed turn wrappers (not observed turn completion)"
+	},
+	"thread": {
+		"id": "01a09565-cde2-7433-ab64-08140c6246a2",
+		"turns": [
+			{
+				"status": "completed",
+				"items": [
+					{
+						"type": "mcpToolCall",
+						"id": "exec-b2c8c04b-547b-4e5c-8ba8-c048361265af",
+						"server": "entwurf-bridge",
+						"tool": "entwurf_fresh_call",
+						"arguments": {
+							"backend": "pi",
+							"model": "openai-codex/gpt-5.6-luna",
+							"cwd": "/tmp/entwurf-codex-fresh-live-KMUq2c",
+							"task": "After your automatic callback succeeds, answer ACK and stop. Do not open another sibling."
+						},
+						"status": "completed",
+						"result": {
+							"content": [
+								{
+									"type": "text",
+									"text": "[entwurf fresh call →]\n  backend:  pi (/fixture/bin/pi)\n  model:    openai-codex/gpt-5.6-luna (requested on the runtime CLI)\n  cwd:      /tmp/entwurf-codex-fresh-live-KMUq2c (requested start directory — not an observation)\n  window:   @413 (index 4) in session $158\n  pane:     %413 pid 3100383\n  nonce:    mux-fresh-call-6337a6477bcd6f39ef16eece\n\nThis is a LAUNCH receipt: tmux created that window and was asked to start the runtime with the model above."
+								}
+							]
+						},
+						"error": null
+					}
+				]
+			},
+			{
+				"status": "completed",
+				"items": [
+					{
+						"type": "userMessage",
+						"id": "01a09566-997e-7cc2-83db-b72aefa3b578",
+						"clientId": "01a09566-67ac-7fd2-a52c-e4618b7cf74b",
+						"content": [
+							{
+								"type": "text",
+								"text": "[entwurf received ⟵]\n  from:        openai-codex/gpt-5.6-luna @ /tmp/entwurf-codex-fresh-live-KMUq2c\n  session:     20260912T203507-929a81 (replyable — reply via entwurf_v2 to this sessionId, intent=fire-and-forget)\n  at:          2026-09-12 20:35:11 KST\n  wants reply: no\n────────────────────────────────────────\nmux-fresh-call-6337a6477bcd6f39ef16eece\n",
+								"text_elements": []
+							}
+						]
+					}
+				]
+			}
+		]
+	}
+}

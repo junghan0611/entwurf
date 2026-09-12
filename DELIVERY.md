@@ -260,11 +260,53 @@ and every smoke-owned window was removed while the operator app-server remained 
 Two red attempts tightened the acceptance rather than weakening it. The first reached correct home
 placement but Codex interpreted “wait” as `wait_agent(timeout_ms=3600000)`, leaving its first turn
 active; the prompt now requires ending the turn and forbids every wait tool. The second proved that a
-model may reformat a receipt while copying it. Coordinate reports now travel between citizens, but
-the gate validates them against the exact Pi transcript tool result and Codex `thread/read` tool
-result instead of treating model-reformatted prose as raw evidence. Failure cleanup recovers the
-exact Codex thread from its nonce callback, interrupts only its still-running smoke-owned turn, and
-closes only receipt-named windows.
+model may reformat a receipt while copying it. That accepted run still travelled coordinate reports
+between citizens and checked them against Pi/Codex source results. A later prepare run exposed the
+remaining flaw by truncating a report token: the amended gate removes intermediate model reports,
+joins exact Pi toolCall/toolResult rows and structured Codex `thread/read` MCP items directly, and
+reads garden ids only from raw callback events. Failure cleanup recovers the exact Codex thread from
+its nonce callback, interrupts only its still-running smoke-owned turn, and closes only windows named
+by joined source fresh-call results.
+
+The amendment's own standalone acceptance then passed on 2026-09-12 (Codex 0.153.4): **48 assertions,
+exit 0**, final source audit `initial-pi=3/3 completed exact` and `codex=3/3 completed exact`. Fixture
+`20260912T232054-14c8e8` at `$150/@430`; initial Pi `20260912T232056-c0be9e` at `$150/@431`;
+operator-owned app-server `1693273` at `$158/@390/%390`; omitted-placement Codex `20260912T232110-1cd889`
+(thread `01a095fe-4f1a-7d93-8c5a-ed7539cf8930`) at `$158/@432`; Codex-opened Pi `20260912T232133-4ac684`
+at `$158/@433`; final token `CODEX-PI-FINAL-6QWDSELJ` carried `PI_CALLBACK_FROM=20260912T232133-4ac684`,
+`PI_SESSION_ID=$158`, `PI_WINDOW_ID=@433` into the fixture mailbox, which read it. Cleanup reclaimed
+`@433`, `@432`, `@431` — every one named by a joined source fresh-call result, with no tmux inventory scan
+and no mailbox prose promoted to authority. Artifact `.probe-artifacts/codex-fresh-live-fZccoK/`
+(`run-manifest.json` sha256 `05f20f00…`). The 57-assertion first-admission receipt above is preserved as
+its own pre-amendment axis; the two counts are different contracts, not a regression.
+
+That run also closed a defect the amendment had introduced. A source path read once at callback
+correlation froze out a record that gained `transcriptPath` 34s later, so the observer saw nothing while
+the chain actually completed — the preceding red run's Codex thread holds a completed final `entwurf_v2`
+result naming `PI_WINDOW_ID=@426`, and its two orphan windows were reclaimed only after their own joined
+source receipts named them (`@425` backend codex from the initial Pi, `@426` backend pi from the Codex
+thread; cleanup log preserved at `.probe-artifacts/codex-fresh-live-FblYLs/source-authorized-cleanup.log`,
+sha256 `07fe18fc…`, alongside `run-manifest.json` sha256 `62a538fd…`). The path is now re-read while the
+cache is empty. Note honestly what the green run does and does not prove: its manifest carries neither
+`initialPiTranscriptResolvedLate` nor `sourcePathUnresolved`, so the late-write timing did not recur and
+the repair is proven by its deterministic claim, not by this LIVE.
+
+**Repeat acceptance inside the aggregate release gate (2026-09-13).** The same acceptance ran again as
+the `smoke-codex-fresh-live` MUST step of `release-gate --cut` and passed at 48 assertions: fixture
+`20260913T065136-59d143` at `$187/@442`, initial Pi `20260913T065138-ad5f57` at `$187/@447`,
+omitted-placement Codex `20260913T065151-4b6078` (thread `01a0979a-edc4-7570-a29b-50f7e48cf298`) at
+`$158/@448`, Codex-opened Pi `20260913T065213-0811e6` at `$158/@449`, against the same operator-owned
+app-server at `$158/@390/%390`. Artifact `.probe-artifacts/codex-fresh-live-2oId4C/` (`run-manifest.json`
+sha256 `2cff6f08…`). Note the fixture seat differs from the standalone run: the aggregate builds its own
+tmux session (`$187`), while the Codex legs still resolve to the exact `codex` home. That gate reported
+MUST PASS=24 FAIL=0 SKIP=0 and `cut: OK`. Keep the three Codex acceptances apart — 57-assertion
+pre-amendment first admission, 48-assertion standalone amended (`fZccoK`), and this 48-assertion
+aggregate repeat (`2oId4C`).
+
+An earlier attempt at the identical source fingerprint failed two model-in-loop MUST steps and is kept
+as an observation rather than a defect: a callback nonce arrived one character short and an addressed
+instruction carried the wrong payload. Joined source receipts showed target, rail, and delivery were all
+correct, so both oracles refused for the right reason and nothing in the product was changed.
 
 Unrestricted attached-TUI parity (**B**) is explicitly outside this support claim. The exact vendor
 checkout `rust-v0.153.4` at `3d2ee51ca2d5db578f328aa75e20aa22c0197c9a` found no public

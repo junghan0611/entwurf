@@ -10,7 +10,10 @@ and the manual judgements a gate cannot make.
 > native-push citizen lane. Codex is an unreleased native-push candidate whose birth hook is
 > operator-owned and gated on one vendor trust receipt, with strict request-scoped identity and
 > visible fresh; it remains outside ACP and has no resume.
-> The current amendment is not qualified by earlier focused or LIVE receipts.
+> The amended candidate carries its own full acceptance: standalone LIVE 48 assertions exit 0,
+> `check:full` exit 0, and the LIVE release gate `--cut` at MUST 24/0/0 with `check-gate-qualification`
+> killing 475/475 and both purity axes green. Earlier focused, 460-mutant, and 57-assertion receipts
+> stay their own pre-amendment axes and are not promoted across it.
 > Retired v1 verbs and bridge implementations belong only in CHANGELOG/git.
 
 This is a working protocol, not a metrics ledger. Per-run counts, digests, and release

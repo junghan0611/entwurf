@@ -8,22 +8,27 @@
  *
  * RELEASE MUST once Codex is admitted. LIVE!=1 is the only host-prerequisite SKIP. With LIVE=1,
  * missing system birth, user MCP/status config, app-server, models, runtime, bridge, or tmux seat
- * is a FAIL. The smoke uses only public MCP calls and receipt bodies; screen text is never an
- * oracle.
+ * is a FAIL. The smoke drives only public MCP calls, then joins Pi's native toolCall/toolResult
+ * rows and Codex app-server thread events as receipt authority; screen text and model-reformatted
+ * reports are never oracles.
  *
- * A record-backed self-fetch fixture only collects travelling receipts. It first opens a real
- * visible Pi caller through public fresh_call; that Pi opens Codex, correlates Codex's callback,
- * and addresses Codex through v2. Codex then opens the outbound Pi and correlates that callback.
+ * A record-backed self-fetch fixture opens a real visible Pi caller through public fresh_call.
+ * That Pi opens Codex, correlates Codex's raw callback, and addresses Codex through v2. Codex then
+ * opens outbound Pi, correlates that raw callback, and sends one final exact message that the
+ * fixture must actually read.
  */
 
 import type { ChildProcess } from "node:child_process";
 import { spawn, spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { CODEX_PREFLIGHT_HINT, codexFreshPreflight } from "../pi-extensions/lib/codex-fresh-preflight.ts";
 import {
 	defaultMetaMailboxDir,
+	defaultMetaSessionsDir,
+	metaRecordFilename,
 	readMetaIdentityByGardenId,
 	readMetaInbox,
 	upsertMetaSession,
@@ -39,20 +44,36 @@ import {
 import {
 	buildCodexInstruction,
 	buildInitialPiPhaseOne,
-	buildInitialPiPhaseTwo,
 	runCleanupStages,
 	selectReport,
-	selectReportByBackend,
 } from "./lib/codex-fresh-live-protocol.ts";
-import { launchReceiptWindows } from "./lib/launch-receipt-windows.ts";
+import {
+	assertExactSourceToolCalls,
+	assertSourceCallScopes,
+	codexCallbackSenders,
+	codexSourceToolReceipts,
+	codexThreadIsTerminal,
+	mailboxCallbacks,
+	parseJsonLines,
+	parseMetaMailboxBody,
+	piCallbackSenders,
+	piSourceToolReceipts,
+	resolveSourceTranscriptPath,
+	selectExactSourceToolReceipt,
+	sourceCleanupWindows,
+	validateFinalMailboxBody,
+} from "./lib/codex-fresh-source-receipts.ts";
 import { skipLive } from "./lib/live-skip.ts";
 import { parseTmuxRow, TMUX_COORDINATE_FIELDS, TMUX_COORDINATE_FORMAT } from "./lib/tmux-coordinate-row.ts";
 
 const LABEL = "smoke-codex-fresh-live";
+const REPO = path.resolve(import.meta.dirname, "..");
 const GARDEN_ID = /^\d{8}T\d{6}-[0-9a-f]{6}$/;
 const WINDOW_ID = /^@\d+$/;
 const CALLBACK_WAIT_MS = 300_000;
-const ROUND_TRIP_WAIT_MS = 600_000;
+// Source calls in accepted runs arrive in under a minute. Five minutes preserves cold-start room
+// without repeating the old blind ten-minute model-report wait.
+const SOURCE_WAIT_MS = 300_000;
 const META_CONTEXT_ENV_KEYS = [
 	"HOME",
 	"CODEX_HOME",
@@ -84,12 +105,20 @@ const fixtureArtifacts: string[] = [];
 // as they become known.
 let codexSocketPath = "";
 let initialPiTranscript = "";
+let initialPiGardenId = "";
+// Set once run() owns its evidence file, so a path resolved DURING a poll is recorded there too.
+let recordEvidence: ((patch: Record<string, unknown>) => void) | null = null;
 let codexLaunchNonce = "";
 let codexThreadId = "";
+let codexGardenId = "";
 // Reachable from the EXIT path, not just from a wait: an assertion that throws must still be
 // able to ask the fixture's own mailbox which windows this run opened.
 let fixtureGid = "";
+let evidenceDir = "";
 const seenInbox: string[] = [];
+const expectedReportTokens: string[] = [];
+const relatedRecordPaths = new Set<string>();
+const relatedTranscripts = new Set<string>();
 
 function ok(label: string, condition: unknown, detail = ""): asserts condition {
 	if (!condition) throw new Error(`${label}${detail ? `\n${detail}` : ""}`);
@@ -206,6 +235,62 @@ function cleanupWindows(): string[] {
 	return failures;
 }
 
+async function preservePreCleanupEvidence(reason: unknown): Promise<string[]> {
+	if (evidenceDir === "") return [];
+	const failures: string[] = [];
+	const snapshot = path.join(evidenceDir, "pre-cleanup-snapshot");
+	try {
+		fs.mkdirSync(snapshot, { recursive: true, mode: 0o700 });
+		fs.writeFileSync(
+			path.join(snapshot, "reason.txt"),
+			`${reason instanceof Error ? reason.stack : String(reason)}\n`,
+			{
+				mode: 0o600,
+			},
+		);
+	} catch (snapshotError) {
+		return [`failure evidence root: ${String(snapshotError)}`];
+	}
+	// Recovery is optional enrichment. A corrupt source is exactly when the raw files matter most,
+	// so its failure is recorded but can never prevent the known sources below from being copied.
+	try {
+		recoverCodexThreadAuthority();
+	} catch (recoveryError) {
+		failures.push(`optional identity recovery: ${String(recoveryError)}`);
+	}
+	const sources = [
+		...(fixtureGid === "" ? [] : [path.join(defaultMetaMailboxDir(), fixtureGid)]),
+		...fixtureArtifacts,
+		...relatedRecordPaths,
+		...relatedTranscripts,
+	];
+	for (const [index, source] of sources.entries()) {
+		if (!fs.existsSync(source)) {
+			failures.push(`missing expected evidence source ${source}`);
+			continue;
+		}
+		try {
+			fs.cpSync(source, path.join(snapshot, `${String(index).padStart(2, "0")}-${path.basename(source)}`), {
+				recursive: true,
+			});
+		} catch (copyError) {
+			failures.push(`${source}: ${String(copyError)}`);
+		}
+	}
+	if (codexThreadId !== "" && codexSocketPath !== "") {
+		try {
+			const thread = await readCodexThread(codexSocketPath, codexThreadId, true);
+			fs.writeFileSync(path.join(snapshot, "codex-thread.json"), `${JSON.stringify(thread, null, 2)}\n`, {
+				mode: 0o600,
+			});
+		} catch (threadError) {
+			failures.push(`Codex thread ${codexThreadId}: ${String(threadError)}`);
+		}
+	}
+	console.error(`  evidence  preserved pre-cleanup snapshot at ${snapshot}`);
+	return failures;
+}
+
 function cleanupFixture(): string[] {
 	const failures: string[] = [];
 	for (const artifact of fixtureArtifacts.reverse()) {
@@ -219,37 +304,34 @@ function cleanupFixture(): string[] {
 	return failures;
 }
 
-/** Exact fresh-call receipt bodies as the initial Pi caller's OWN transcript recorded them. */
-function readInitialPiFreshReceipts(backend: "codex" | "pi"): string[] {
-	if (initialPiTranscript === "") return [];
-	try {
-		const found: string[] = [];
-		for (const line of fs.readFileSync(initialPiTranscript, "utf8").split("\n")) {
-			if (line.trim() === "") continue;
-			const entry = JSON.parse(line) as {
-				type?: unknown;
-				message?: { role?: unknown; content?: unknown };
-			};
-			if (entry.type !== "message" || entry.message?.role !== "toolResult" || !Array.isArray(entry.message.content))
-				continue;
-			for (const block of entry.message.content) {
-				const text = (block as { text?: unknown } | null)?.text;
-				if (
-					typeof text === "string" &&
-					new RegExp(`^\\[entwurf fresh call →\\]\\n\\s*backend:\\s+${backend}\\b`, "m").test(text)
-				)
-					found.push(text);
-			}
-		}
-		return found;
-	} catch {
-		return [];
+function readInitialPiEntries(): unknown[] {
+	const before = initialPiTranscript;
+	initialPiTranscript = resolveSourceTranscriptPath(initialPiTranscript, () =>
+		initialPiGardenId === "" ? "" : readMetaIdentityByGardenId(initialPiGardenId).transcriptPath,
+	);
+	if (initialPiTranscript !== before && initialPiTranscript !== "") {
+		relatedTranscripts.add(initialPiTranscript);
+		recordEvidence?.({ initialPiTranscript, initialPiTranscriptResolvedLate: true });
 	}
+	if (initialPiTranscript === "" || !fs.existsSync(initialPiTranscript)) return [];
+	return parseJsonLines(fs.readFileSync(initialPiTranscript, "utf8"));
+}
+
+/** Exact joined fresh-call receipts from the initial Pi's own call/result rows. */
+function readInitialPiFreshReceipts(backend: "codex" | "pi"): string[] {
+	return piSourceToolReceipts(readInitialPiEntries())
+		.filter(
+			(receipt) =>
+				receipt.toolName === "entwurf_fresh_call" &&
+				!receipt.isError &&
+				new RegExp(`^\\[entwurf fresh call →\\]\\n\\s*backend:\\s+${backend}\\b`, "m").test(receipt.text),
+		)
+		.map((receipt) => receipt.text);
 }
 
 /** The Codex window handle as the initial Pi caller's OWN transcript recorded its tool result. */
 function recoverCodexWindows(): string[] {
-	return readInitialPiFreshReceipts("codex").flatMap((receipt) => launchReceiptWindows(receipt, "codex"));
+	return sourceCleanupWindows(piSourceToolReceipts(readInitialPiEntries()));
 }
 
 /** Recover the exact launch nonce from the initial Pi's one raw Codex tool receipt. */
@@ -262,55 +344,28 @@ function recoverCodexLaunchNonce(): void {
 
 /**
  * Recover the launched Codex thread from its exact nonce callback in the initial Pi transcript,
- * then validate that carrier through the V3 record authority. This exists for the failure path:
- * the ordinary path learns the same id from Codex's travelling report.
+ * then validate that carrier through the V3 record authority. The ordinary and failure paths use
+ * the same source-owned callback; model report prose has no identity role.
  */
 function recoverCodexThreadAuthority(): void {
 	recoverCodexLaunchNonce();
 	if (codexThreadId !== "" || initialPiTranscript === "" || codexLaunchNonce === "") return;
 	try {
-		for (const line of fs.readFileSync(initialPiTranscript, "utf8").split("\n")) {
-			if (line.trim() === "") continue;
-			const entry = JSON.parse(line) as { type?: unknown; customType?: unknown; content?: unknown };
-			if (
-				entry.type !== "custom_message" ||
-				entry.customType !== "entwurf-message" ||
-				typeof entry.content !== "string" ||
-				!entry.content.startsWith(`${codexLaunchNonce}\n\n`)
-			)
-				continue;
-			const senderRaw = /<sender_info>(\{[\s\S]*?\})<\/sender_info>/.exec(entry.content)?.[1];
-			if (senderRaw == null) continue;
-			const sender = JSON.parse(senderRaw) as { sessionId?: unknown };
-			if (typeof sender.sessionId !== "string" || !GARDEN_ID.test(sender.sessionId)) continue;
-			const identity = readMetaIdentityByGardenId(sender.sessionId);
-			if (identity.backend !== "codex") continue;
-			codexThreadId = identity.nativeSessionId;
-			console.error(`  recovered  Codex thread ${codexThreadId} from its exact nonce callback`);
-			return;
-		}
+		const senders = piCallbackSenders(readInitialPiEntries(), codexLaunchNonce);
+		if (senders.length > 1) throw new Error(`duplicate exact Codex callbacks (${senders.length})`);
+		const sender = senders[0];
+		if (sender === undefined || !GARDEN_ID.test(sender)) return;
+		const identity = readMetaIdentityByGardenId(sender);
+		if (identity.backend !== "codex") return;
+		codexGardenId = sender;
+		codexThreadId = identity.nativeSessionId;
+		relatedRecordPaths.add(path.join(defaultMetaSessionsDir(), metaRecordFilename(identity)));
+		if (identity.transcriptPath != null) relatedTranscripts.add(identity.transcriptPath);
+		console.error(`  recovered  Codex thread ${codexThreadId} from its exact nonce callback`);
+		return;
 	} catch {
 		// The later cleanup stages still remove every stable window handle already recorded.
 	}
-}
-
-/** Exact fresh-call receipt bodies as the Codex thread's own mcpToolCall results recorded them. */
-function codexFreshReceipts(thread: Awaited<ReturnType<typeof readCodexThread>>, backend: "codex" | "pi"): string[] {
-	const found: string[] = [];
-	for (const turn of thread.turns ?? []) {
-		for (const item of turn.items ?? []) {
-			if (item?.type !== "mcpToolCall" || !String(item.tool ?? "").includes("entwurf_fresh_call")) continue;
-			for (const block of item.result?.content ?? []) {
-				const text = (block as { text?: unknown } | null)?.text;
-				if (
-					typeof text === "string" &&
-					new RegExp(`^\\[entwurf fresh call →\\]\\n\\s*backend:\\s+${backend}\\b`, "m").test(text)
-				)
-					found.push(text);
-			}
-		}
-	}
-	return found;
 }
 
 /** The outbound Pi handle as the Codex thread's own mcpToolCall result recorded it. */
@@ -318,16 +373,16 @@ async function recoverOutboundPiWindows(): Promise<string[]> {
 	if (codexThreadId === "" || codexSocketPath === "") return [];
 	try {
 		const thread = await readCodexThread(codexSocketPath, codexThreadId, true);
-		return codexFreshReceipts(thread, "pi").flatMap((receipt) => launchReceiptWindows(receipt, "pi"));
+		return sourceCleanupWindows(codexSourceToolReceipts(thread));
 	} catch {
 		return [];
 	}
 }
 
 /**
- * Wait for a travelling receipt, and when it never comes, hand cleanup the EXACT handles the
- * two authorities above already hold before rethrowing. No tmux inventory scan and no guess:
- * a handle nobody recorded stays unrecovered and the cleanup failure says so.
+ * Wait for source evidence, and when it never comes, hand cleanup the exact handles the two
+ * transcript authorities already hold before rethrowing. No tmux inventory scan and no guess:
+ * a handle no joined fresh-call result recorded stays unrecovered.
  */
 async function awaitOrRecover<T>(what: string, timeoutMs: number, probe: () => T | null): Promise<T> {
 	try {
@@ -339,30 +394,24 @@ async function awaitOrRecover<T>(what: string, timeoutMs: number, probe: () => T
 			openedWindows.push(windowId);
 			console.error(`  recovered  ${windowId} from its own receipt authority after: ${what}`);
 		}
+		// A source that never appeared leaves no cleanup authority, and mailbox prose or a tmux
+		// listing must not be promoted into one. Name the state instead of leaking it silently.
+		if (initialPiTranscript === "") {
+			const unrecoverable = "initial Pi record still carries no transcriptPath; no unverified child window killed";
+			console.error(`  cleanup  ${unrecoverable}`);
+			recordEvidence?.({ sourcePathUnresolved: unrecoverable });
+		}
 		throw error;
 	}
 }
 
 /**
- * Every stable window handle any authority this run owns has written down: the fixture's own
- * delivered mailbox bodies (drained once more, in case the failure beat the last drain), the
- * initial Pi's transcript, and the Codex thread's tool results. De-duplicated, and only
- * `@\d+` handles are kept.
+ * Every stable window handle the initial Pi or Codex source transcript recorded in an exact
+ * fresh-call tool result. Mailbox prose is diagnostic evidence, never cleanup authority.
  */
 async function recoverEveryRecordedWindow(): Promise<void> {
 	recoverCodexThreadAuthority();
-	const found: string[] = [];
-	if (fixtureGid !== "") {
-		try {
-			for (const message of readMetaInbox({ gardenId: fixtureGid }).messages) seenInbox.push(message.body);
-		} catch {
-			// The fixture mailbox may already be gone; the transcript authorities below remain.
-		}
-	}
-	for (const body of seenInbox) {
-		found.push(...launchReceiptWindows(body, "pi"), ...launchReceiptWindows(body, "codex"));
-	}
-	found.push(...recoverCodexWindows(), ...(await recoverOutboundPiWindows()));
+	const found = [...recoverCodexWindows(), ...(await recoverOutboundPiWindows())];
 	for (const windowId of found) {
 		if (!WINDOW_ID.test(windowId) || openedWindows.includes(windowId)) continue;
 		openedWindows.push(windowId);
@@ -405,6 +454,16 @@ async function until<T>(what: string, timeoutMs: number, probe: () => T | null):
 	const deadline = Date.now() + timeoutMs;
 	for (;;) {
 		const found = probe();
+		if (found !== null) return found;
+		if (Date.now() >= deadline) throw new Error(`timed out after ${timeoutMs}ms waiting for ${what}`);
+		await new Promise<void>((resolve) => setTimeout(resolve, 500));
+	}
+}
+
+async function untilAsync<T>(what: string, timeoutMs: number, probe: () => Promise<T | null>): Promise<T> {
+	const deadline = Date.now() + timeoutMs;
+	for (;;) {
+		const found = await probe();
 		if (found !== null) return found;
 		if (Date.now() >= deadline) throw new Error(`timed out after ${timeoutMs}ms waiting for ${what}`);
 		await new Promise<void>((resolve) => setTimeout(resolve, 500));
@@ -606,12 +665,17 @@ async function run(): Promise<void> {
 
 	const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "entwurf-codex-fresh-live-"));
 	fixtureArtifacts.push(scratch);
+	fs.mkdirSync(path.join(REPO, ".probe-artifacts"), { recursive: true, mode: 0o700 });
+	evidenceDir = fs.mkdtempSync(path.join(REPO, ".probe-artifacts", "codex-fresh-live-"));
+	fs.chmodSync(evidenceDir, 0o700);
+	console.log(`  evidence  ${evidenceDir}`);
 	const nativeSessionId = `codex-fresh-live-fixture-${process.pid}-${Date.now()}`;
 	const caller = upsertMetaSession({
 		input: { backend: "claude-code", nativeSessionId, cwd: scratch },
 	});
 	const callerGid = caller.record.gardenId;
 	fixtureGid = callerGid;
+	relatedRecordPaths.add(caller.path);
 	const receiverMarker = writeMetaReceiverMarker({
 		gardenId: callerGid,
 		backend: "claude-code",
@@ -627,6 +691,26 @@ async function run(): Promise<void> {
 		ownerPid: process.pid,
 	});
 	fixtureArtifacts.push(path.join(defaultMetaMailboxDir(), callerGid), receiverMarker, senderMarker, caller.path);
+	const evidenceManifest: Record<string, unknown> = {
+		runPid: process.pid,
+		scratch,
+		appServerPid,
+		appServerCoordinate,
+		fixtureCoordinate,
+		fixtureGardenId: callerGid,
+		fixtureRecordPath: caller.path,
+		resolvedRoots: Object.fromEntries(META_CONTEXT_ENV_KEYS.map((key) => [key, appServerEnv?.[key] ?? null])),
+		resolvedMetaSessionsDir: defaultMetaSessionsDir(),
+		resolvedMetaMailboxDir: defaultMetaMailboxDir(),
+	};
+	const writeEvidenceManifest = (patch: Record<string, unknown>): void => {
+		Object.assign(evidenceManifest, patch);
+		fs.writeFileSync(path.join(evidenceDir, "run-manifest.json"), `${JSON.stringify(evidenceManifest, null, 2)}\n`, {
+			mode: 0o600,
+		});
+	};
+	recordEvidence = writeEvidenceManifest;
+	writeEvidenceManifest({ phase: "fixture-ready" });
 	ok("the original caller is a record-backed fixture on the app-server's real meta roots", GARDEN_ID.test(callerGid));
 
 	const callerBridgeEnv: NodeJS.ProcessEnv = {
@@ -678,50 +762,110 @@ async function run(): Promise<void> {
 	receipts["3-initial-caller-pi-coordinate"] =
 		`session=${initialPiTmuxSession}\nwindow=${initialPiWindow}\ncodex-home-session=${appServerCoordinate.sessionId}`;
 
+	let drainedCount = 0;
 	const drain = (): void => {
-		for (const message of readMetaInbox({ gardenId: callerGid }).messages) seenInbox.push(message.body);
+		for (const message of readMetaInbox({ gardenId: callerGid }).messages) {
+			const index = String(++drainedCount).padStart(3, "0");
+			const bodyFile = path.join(evidenceDir, `mailbox-${index}.txt`);
+			fs.writeFileSync(bodyFile, message.body, { mode: 0o600 });
+			const parsed = parseMetaMailboxBody(message.body);
+			const matchingTokens = expectedReportTokens.filter((token) => message.body.includes(token));
+			const observedTokens = message.body.match(/\b(?:INITIAL-PI-WAIT|CODEX-WAIT|CODEX-PI-FINAL)-[A-Z0-9]+\b/g) ?? [];
+			const observation = {
+				kind: "candidate",
+				file: message.file,
+				bytes: Buffer.byteLength(message.body),
+				sha256: createHash("sha256").update(message.body).digest("hex"),
+				sender: parsed?.sender ?? null,
+				matchingTokens,
+				observedTokens,
+				bodyArtifact: path.basename(bodyFile),
+			};
+			fs.appendFileSync(path.join(evidenceDir, "mailbox-observations.jsonl"), `${JSON.stringify(observation)}\n`, {
+				mode: 0o600,
+			});
+			seenInbox.push(message.body);
+		}
+	};
+	const recordMailboxSelection = (phase: string, body: string, selected: boolean, reason: string): void => {
+		const parsed = parseMetaMailboxBody(body);
+		fs.appendFileSync(
+			path.join(evidenceDir, "mailbox-selections.jsonl"),
+			`${JSON.stringify({
+				phase,
+				sha256: createHash("sha256").update(body).digest("hex"),
+				sender: parsed?.sender ?? null,
+				selected,
+				reason,
+			})}\n`,
+			{ mode: 0o600 },
+		);
 	};
 	const initialPiCallback = await awaitOrRecover("the initial Pi exact nonce callback", CALLBACK_WAIT_MS, () => {
 		drain();
-		return seenInbox.find((body) => body.includes(initialPiNonce)) ?? null;
+		const matching = mailboxCallbacks(seenInbox, initialPiNonce);
+		if (matching.length > 1) throw new Error(`duplicate exact initial Pi callbacks (${matching.length})`);
+		return matching[0] ?? null;
 	});
-	receipts["4-initial-pi-callback"] = initialPiCallback;
-	const initialPiGid = /^\s*session:\s+(\S+)/m.exec(initialPiCallback)?.[1] ?? "";
-	ok("the initial Pi callback carries the exact launch nonce", initialPiCallback.includes(initialPiNonce));
+	for (const body of seenInbox) {
+		recordMailboxSelection(
+			"initial-pi-callback",
+			body,
+			body === initialPiCallback.body,
+			body === initialPiCallback.body
+				? "selected: exact outer frame, nonce, and sender"
+				: "excluded: not the exact callback",
+		);
+	}
+	receipts["4-initial-pi-callback"] = initialPiCallback.body;
+	const initialPiGid = initialPiCallback.sender;
+	ok(
+		"the initial Pi callback carries the exact launch nonce",
+		mailboxCallbacks([initialPiCallback.body], initialPiNonce).length === 1,
+	);
 	ok("the initial Pi callback sender envelope supplies its garden address", GARDEN_ID.test(initialPiGid));
 	const initialPiIdentity = readMetaIdentityByGardenId(initialPiGid);
 	ok("the initial caller callback resolves to a real Pi V3 citizen", initialPiIdentity.backend === "pi");
+	relatedRecordPaths.add(path.join(defaultMetaSessionsDir(), metaRecordFilename(initialPiIdentity)));
+	initialPiGardenId = initialPiGid;
 	initialPiTranscript = initialPiIdentity.transcriptPath ?? "";
+	if (initialPiTranscript !== "") relatedTranscripts.add(initialPiTranscript);
+	writeEvidenceManifest({
+		phase: "initial-pi-correlated",
+		initialPiGardenId: initialPiGid,
+		initialPiTranscript,
+		initialPiRecordPath: path.join(defaultMetaSessionsDir(), metaRecordFilename(initialPiIdentity)),
+	});
 
 	const codexWaitToken = `CODEX-WAIT-${Math.random().toString(36).slice(2, 10).toUpperCase()}`;
-	const codexLaunchToken = `PI-REPORTS-CODEX-LAUNCH-${Math.random().toString(36).slice(2, 10).toUpperCase()}`;
-	const codexAddressedToken = `PI-REPORTS-CODEX-ADDRESSED-${Math.random().toString(36).slice(2, 10).toUpperCase()}`;
-	const outboundPiToken = `CODEX-REPORTS-PI-LAUNCH-${Math.random().toString(36).slice(2, 10).toUpperCase()}`;
 	const finalToken = `CODEX-PI-FINAL-${Math.random().toString(36).slice(2, 10).toUpperCase()}`;
+	expectedReportTokens.push(finalToken);
+	const outboundPiTask = "After your automatic callback succeeds, answer ACK and stop. Do not open another sibling.";
+	const codexTask =
+		`After your required callback receipt, end the turn and wait passively for the addressed instruction containing ${codexWaitToken}. ` +
+		"Do not call shell, sleep, terminal, or any tool to wait.";
 	const codexInstruction = buildCodexInstruction({
 		waitToken: codexWaitToken,
-		outboundPiToken,
 		finalToken,
 		callerGid,
 		piModel,
 		scratch,
 	});
+	const initialPiInstruction = buildInitialPiPhaseOne({
+		initialPiWaitToken,
+		codexWaitToken,
+		codexModel,
+		scratch,
+		codexInstruction,
+	});
 
-	// PHASE 1 — launch, correlate, forward, stop. The forwarded payload is the tail of this
-	// message and nothing follows it: the report token below has not been transmitted yet, so
-	// no sibling can emit it by copying text it was handed.
+	// The model is asked to operate public tools, but every launch and delivery assertion below
+	// joins the harness's source-owned call arguments to its native result. Model reports are not
+	// coordinates and never enter the cleanup allowlist.
 	const instructInitialPi = await bridge.call("entwurf_v2", {
 		target: initialPiGid,
 		intent: "fire-and-forget",
-		message: buildInitialPiPhaseOne({
-			initialPiWaitToken,
-			codexWaitToken,
-			launchToken: codexLaunchToken,
-			callerGid,
-			codexModel,
-			scratch,
-			codexInstruction,
-		}),
+		message: initialPiInstruction,
 	});
 	receipts["5-fixture-to-initial-pi-v2"] = instructInitialPi.text;
 	ok(
@@ -732,48 +876,27 @@ async function run(): Promise<void> {
 		instructInitialPi.text,
 	);
 
-	const codexLaunchBody = await awaitOrRecover(
-		"the travelling Codex LAUNCH receipt from initial Pi",
-		ROUND_TRIP_WAIT_MS,
-		() => {
-			drain();
-			// Token AND sender, decided before the wait ends: a matching token from anyone but
-			// the Pi we addressed is skipped, never returned and then asserted on.
-			return selectReport(seenInbox, codexLaunchToken, initialPiGid);
-		},
+	const piFreshReceipt = await awaitOrRecover("the initial Pi source-owned Codex LAUNCH receipt", SOURCE_WAIT_MS, () =>
+		selectExactSourceToolReceipt(
+			piSourceToolReceipts(readInitialPiEntries()),
+			"entwurf_fresh_call",
+			{ backend: "codex", model: codexModel, cwd: scratch, task: codexTask },
+			"initial Pi Codex fresh call",
+		),
 	);
-	receipts["6-pi-to-fixture-codex-launch"] = codexLaunchBody;
-	const initialPiCodexReceipts = readInitialPiFreshReceipts("codex");
-	ok(
-		"the initial Pi transcript records exactly one raw Codex LAUNCH receipt",
-		initialPiCodexReceipts.length === 1,
-		`found=${initialPiCodexReceipts.length}`,
-	);
-	const codexLaunchReceipt = initialPiCodexReceipts[0] ?? "";
-	receipts["6b-initial-pi-own-codex-launch-receipt"] = codexLaunchReceipt;
-	const codexLaunchReporter = /^\s*session:\s+(\S+)/m.exec(codexLaunchBody)?.[1] ?? "";
-	const reportedCodexNonce = /CODEX_LAUNCH_NONCE=(mux-fresh-call-[0-9a-f]+)/.exec(codexLaunchBody)?.[1] ?? "";
-	codexLaunchNonce = reportedCodexNonce;
-	const reportedCodexSession = /CODEX_SESSION_ID=(\$\d+)/.exec(codexLaunchBody)?.[1] ?? "";
-	const reportedCodexWindow = /CODEX_WINDOW_ID=(@\d+)/.exec(codexLaunchBody)?.[1] ?? "";
+	const codexLaunchReceipt = piFreshReceipt.text;
+	receipts["6-initial-pi-source-codex-launch"] = codexLaunchReceipt;
 	const codexNonce = /^\s*nonce:\s*(mux-fresh-call-[0-9a-f]+)/m.exec(codexLaunchReceipt)?.[1] ?? "";
-	if (codexNonce !== "") codexLaunchNonce = codexNonce;
+	codexLaunchNonce = codexNonce;
 	const codexReceiptCoordinate = /^\s*window:\s+(@\d+).*?\bin session (\$\d+)/m.exec(codexLaunchReceipt);
 	const codexWindow = codexReceiptCoordinate?.[1] ?? "";
 	const codexLaunchSession = codexReceiptCoordinate?.[2] ?? "";
-	if (WINDOW_ID.test(codexWindow) && !openedWindows.includes(codexWindow)) openedWindows.push(codexWindow);
-	ok("the Codex coordinate report travelled from the initial Pi citizen", codexLaunchReporter === initialPiGid);
 	ok(
-		"the initial Pi's own raw LAUNCH receipt names Codex and a stable cleanup handle",
+		"the initial Pi's joined source receipt names Codex and a stable cleanup handle",
 		WINDOW_ID.test(codexWindow) && /^\s*backend:\s+codex\b/m.test(codexLaunchReceipt),
 	);
-	ok(
-		"the travelling Codex fields match the initial Pi's own raw LAUNCH receipt",
-		reportedCodexNonce === codexNonce &&
-			reportedCodexSession === codexLaunchSession &&
-			reportedCodexWindow === codexWindow,
-	);
-	ok("the raw Codex LAUNCH receipt carries its exact callback nonce", codexNonce.length > 0);
+	if (!openedWindows.includes(codexWindow)) openedWindows.push(codexWindow);
+	ok("the source-owned Codex LAUNCH receipt carries its exact callback nonce", codexNonce.length > 0);
 	ok(
 		"omitted placement opened fresh Codex in exact named `codex` home, resolved to the app-server session",
 		codexLaunchSession === appServerCoordinate.sessionId &&
@@ -784,74 +907,92 @@ async function run(): Promise<void> {
 	);
 	receipts["7-fresh-codex-coordinate"] = `session=${codexLaunchSession}\nwindow=${codexWindow}`;
 
-	// Established by the Codex report below, and used by every later assertion — including the
-	// final-body filter — so it is bound for the whole run rather than inside the wait.
-	let codexGid = "";
-	const outboundPiBody = await awaitOrRecover("Codex outbound fresh Pi LAUNCH receipt", ROUND_TRIP_WAIT_MS, () => {
-		drain();
-		// The FIRST report from a citizen whose garden id we do not know yet. The token narrows
-		// the candidates; the backend decides acceptance, so the same token from a Pi sibling is
-		// skipped instead of being adopted as the Codex address.
-		const selected = selectReportByBackend(seenInbox, outboundPiToken, (gardenId) => {
-			try {
-				return readMetaIdentityByGardenId(gardenId).backend === "codex";
-			} catch {
-				return false;
-			}
-		});
-		if (selected === null) return null;
-		codexGid = selected.sender;
-		// Cleanup authority BEFORE any assertion below can throw: the travelling field carries the
-		// outbound Pi window, and the Codex thread's own raw receipt will validate it below.
-		const reportedWindow = /PI_WINDOW_ID=(@\d+)/.exec(selected.body)?.[1];
-		if (reportedWindow != null && WINDOW_ID.test(reportedWindow) && !openedWindows.includes(reportedWindow))
-			openedWindows.push(reportedWindow);
-		return selected.body;
-	});
-	receipts["9-codex-to-fixture-outbound-pi-launch"] = outboundPiBody;
-	const outboundReporter = /^\s*session:\s+(\S+)/m.exec(outboundPiBody)?.[1] ?? "";
-	const reportedOutboundPiNonce = /PI_LAUNCH_NONCE=(mux-fresh-call-[0-9a-f]+)/.exec(outboundPiBody)?.[1] ?? "";
-	const reportedOutboundPiSession = /PI_SESSION_ID=(\$\d+)/.exec(outboundPiBody)?.[1] ?? "";
-	const reportedOutboundPiWindow = /PI_WINDOW_ID=(@\d+)/.exec(outboundPiBody)?.[1] ?? "";
-	ok("the outbound Pi coordinate report came from a real Codex V3 citizen", outboundReporter === codexGid);
-	const codexIdentity = readMetaIdentityByGardenId(codexGid);
-	ok("the reporting Codex citizen resolves to a codex-backend record", codexIdentity.backend === "codex");
-	codexThreadId = codexIdentity.nativeSessionId;
-	// The VISIBLE half of admission and the exact raw fresh-call result come from the live
-	// app-server view — never from model-reformatted prose or screen text.
-	const codexThread = await readCodexThread(codexSocketPath, codexThreadId, true);
-	const outboundPiReceipts = codexFreshReceipts(codexThread, "pi");
-	ok(
-		"the Codex thread records exactly one raw outbound Pi LAUNCH receipt",
-		outboundPiReceipts.length === 1,
-		`found=${outboundPiReceipts.length}`,
+	const codexCallbackSender = await awaitOrRecover(
+		"the exact Codex callback in initial Pi source",
+		CALLBACK_WAIT_MS,
+		() => {
+			const senders = piCallbackSenders(readInitialPiEntries(), codexNonce);
+			if (senders.length > 1) throw new Error(`duplicate exact Codex callbacks (${senders.length})`);
+			return senders[0] ?? null;
+		},
 	);
-	const outboundPiReceipt = outboundPiReceipts[0] ?? "";
-	receipts["9b-codex-own-outbound-pi-launch-receipt"] = outboundPiReceipt;
+	ok("the Codex callback sender envelope supplies its garden address", GARDEN_ID.test(codexCallbackSender));
+	const codexIdentity = readMetaIdentityByGardenId(codexCallbackSender);
+	ok("the callback-derived citizen resolves to a real Codex V3 citizen", codexIdentity.backend === "codex");
+	codexGardenId = codexCallbackSender;
+	codexThreadId = codexIdentity.nativeSessionId;
+	relatedRecordPaths.add(path.join(defaultMetaSessionsDir(), metaRecordFilename(codexIdentity)));
+	if (codexIdentity.transcriptPath != null) relatedTranscripts.add(codexIdentity.transcriptPath);
+	writeEvidenceManifest({
+		phase: "codex-correlated",
+		codexGardenId,
+		codexThreadId,
+		codexRecordPath: path.join(defaultMetaSessionsDir(), metaRecordFilename(codexIdentity)),
+	});
+	receipts["8-initial-pi-source-codex-callback"] =
+		`nonce=${codexNonce}\ngarden=${codexGardenId}\nthread=${codexThreadId}`;
+
+	const initialPiToCodex = await awaitOrRecover("the initial Pi joined native-push receipt", SOURCE_WAIT_MS, () => {
+		const piSources = piSourceToolReceipts(readInitialPiEntries());
+		assertSourceCallScopes(piSources, "entwurf_v2", "target", [callerGid, codexGardenId], "initial Pi v2 roles");
+		return selectExactSourceToolReceipt(
+			piSources,
+			"entwurf_v2",
+			{
+				target: codexGardenId,
+				intent: "fire-and-forget",
+				wants_reply: false,
+				message: codexInstruction,
+			},
+			"initial Pi addressed Codex call",
+		);
+	});
+	ok(
+		"initial Pi -> Codex used an actual joined native-push entwurf_v2 receipt",
+		initialPiToCodex.text === "entwurf_v2 native-push → delivered",
+		initialPiToCodex.text,
+	);
+	receipts["9-initial-pi-source-native-push"] = initialPiToCodex.text;
+
+	let codexThread = await readCodexThread(codexSocketPath, codexThreadId, true);
+	writeEvidenceManifest({
+		phase: "codex-thread-read",
+		codexThreadPath: (codexThread as { path?: unknown }).path ?? null,
+	});
+	receipts["10-codex-live-thread-title"] =
+		`threadId=${codexThreadId}\nlive name=${JSON.stringify(codexThread.name)}\ngarden=${codexGardenId}`;
+	ok(
+		"the LIVE Codex thread's visible title IS its garden id (read back through the operator's app-server)",
+		codexThread.name === codexGardenId,
+		`thread/read name=${JSON.stringify(codexThread.name)} garden=${codexGardenId}`,
+	);
+	ok("the live thread the title was read from is the record's own thread", codexThread.id === codexThreadId);
+
+	const codexPiFreshReceipt = await untilAsync(
+		"the Codex thread source-owned outbound Pi LAUNCH receipt",
+		SOURCE_WAIT_MS,
+		async () => {
+			codexThread = await readCodexThread(codexSocketPath, codexThreadId, true);
+			return selectExactSourceToolReceipt(
+				codexSourceToolReceipts(codexThread),
+				"entwurf_fresh_call",
+				{ backend: "pi", model: piModel, cwd: scratch, task: outboundPiTask },
+				"Codex outbound Pi fresh call",
+			);
+		},
+	);
+	const outboundPiReceipt = codexPiFreshReceipt.text;
+	receipts["11-codex-source-outbound-pi-launch"] = outboundPiReceipt;
 	const outboundPiNonce = /^\s*nonce:\s*(mux-fresh-call-[0-9a-f]+)/m.exec(outboundPiReceipt)?.[1] ?? "";
 	const outboundPiReceiptCoordinate = /^\s*window:\s+(@\d+).*?\bin session (\$\d+)/m.exec(outboundPiReceipt);
 	const outboundPiWindow = outboundPiReceiptCoordinate?.[1] ?? "";
 	const outboundPiSession = outboundPiReceiptCoordinate?.[2] ?? "";
-	receipts["8b-codex-live-thread-title"] =
-		`threadId=${codexThreadId}\nlive name=${JSON.stringify(codexThread.name)}\ngarden=${codexGid}`;
 	ok(
-		"the LIVE Codex thread's visible title IS its garden id (read back through the operator's app-server)",
-		codexThread.name === codexGid,
-		`thread/read name=${JSON.stringify(codexThread.name)} garden=${codexGid}`,
-	);
-	ok("the live thread the title was read from is the record's own thread", codexThread.id === codexThreadId);
-	ok(
-		"the Codex thread's own raw outbound LAUNCH receipt names Pi and a stable cleanup handle",
+		"the Codex thread's joined source receipt names Pi and a stable cleanup handle",
 		WINDOW_ID.test(outboundPiWindow) && /^\s*backend:\s+pi\b/m.test(outboundPiReceipt),
 	);
 	if (!openedWindows.includes(outboundPiWindow)) openedWindows.push(outboundPiWindow);
-	ok(
-		"the travelling outbound Pi fields match the Codex thread's own raw LAUNCH receipt",
-		reportedOutboundPiNonce === outboundPiNonce &&
-			reportedOutboundPiSession === outboundPiSession &&
-			reportedOutboundPiWindow === outboundPiWindow,
-	);
-	ok("the raw outbound Pi LAUNCH receipt carries its exact nonce", outboundPiNonce.length > 0);
+	ok("the source-owned outbound Pi LAUNCH receipt carries its exact nonce", outboundPiNonce.length > 0);
 	ok(
 		"supported Codex-home topology: a Pi in another session opens Codex in exact home; Codex opens outbound Pi " +
 			"beside itself and the operator-owned app-server. This does not claim arbitrary attached-TUI seat inference",
@@ -860,71 +1001,149 @@ async function run(): Promise<void> {
 			outboundPiSession === appServerCoordinate.sessionId,
 		`initial-pi=${initialPiTmuxSession} codex=${codexLaunchSession} app-server=${appServerCoordinate.sessionId} outbound-pi=${outboundPiSession}`,
 	);
-	receipts["10-outbound-fresh-pi-coordinate"] = `session=${outboundPiSession}\nwindow=${outboundPiWindow}`;
+	receipts["12-outbound-fresh-pi-coordinate"] = `session=${outboundPiSession}\nwindow=${outboundPiWindow}`;
 
-	// PHASE 2 — audit, not a product rail. The report token below has never been transmitted
-	// until this call, and the Pi it goes to was told to stop after its forward. The product
-	// chain (Pi -> Codex native-push, Codex -> Pi) already happened above.
-	const requestPiReport = await bridge.call("entwurf_v2", {
-		target: initialPiGid,
-		intent: "fire-and-forget",
-		message: buildInitialPiPhaseTwo({ reportToken: codexAddressedToken, callerGid }),
-	});
-	receipts["8-fixture-to-initial-pi-report-request"] = requestPiReport.text;
-	ok(
-		"the fixture asked the initial Pi for its own record of the addressed delivery",
-		!requestPiReport.isError && /control-socket/i.test(requestPiReport.text),
-		requestPiReport.text,
-	);
-
-	const codexAddressedBody = await awaitOrRecover(
-		"the initial Pi's addressed-delivery report",
-		ROUND_TRIP_WAIT_MS,
-		() => {
-			drain();
-			return selectReport(seenInbox, codexAddressedToken, initialPiGid);
+	const outboundPiGid = await untilAsync(
+		"the exact outbound Pi callback in Codex source",
+		CALLBACK_WAIT_MS,
+		async () => {
+			codexThread = await readCodexThread(codexSocketPath, codexThreadId, true);
+			const senders = codexCallbackSenders(codexThread, outboundPiNonce);
+			if (senders.length > 1) throw new Error(`duplicate exact outbound Pi callbacks (${senders.length})`);
+			return senders[0] ?? null;
 		},
-	);
-	receipts["8c-initial-pi-addressed-report"] = codexAddressedBody;
-	const callbackNonce = /CODEX_CALLBACK_NONCE=(mux-fresh-call-[0-9a-f]+)/.exec(codexAddressedBody)?.[1] ?? "";
-	const reportedCodexGid = /CODEX_CALLBACK_FROM=(\d{8}T\d{6}-[0-9a-f]{6})/.exec(codexAddressedBody)?.[1] ?? "";
-	ok(
-		"the initial Pi's report names the SAME Codex citizen the Codex report already established",
-		reportedCodexGid === codexGid,
-		`pi-reported=${reportedCodexGid} codex-established=${codexGid}`,
-	);
-	ok("initial Pi correlated the Codex callback to the exact Codex launch nonce", callbackNonce === codexNonce);
-	ok(
-		"initial Pi -> Codex used an actual native-push entwurf_v2 receipt",
-		/native-push/i.test(codexAddressedBody) && /deliver/i.test(codexAddressedBody),
-		codexAddressedBody,
-	);
-
-	const finalBody = await awaitOrRecover("Codex final exact-nonce Pi callback evidence", ROUND_TRIP_WAIT_MS, () => {
-		drain();
-		return selectReport(seenInbox, finalToken, codexGid);
-	});
-	receipts["11-codex-final-pi-callback-evidence"] = finalBody;
-	const finalSender = /^\s*session:\s+(\S+)/m.exec(finalBody)?.[1] ?? "";
-	const finalLaunchNonce = /PI_LAUNCH_NONCE=(mux-fresh-call-[0-9a-f]+)/.exec(finalBody)?.[1] ?? "";
-	const finalCallbackNonce = /PI_CALLBACK_NONCE=(mux-fresh-call-[0-9a-f]+)/.exec(finalBody)?.[1] ?? "";
-	const outboundPiGid = /PI_CALLBACK_FROM=(\d{8}T\d{6}-[0-9a-f]{6})/.exec(finalBody)?.[1] ?? "";
-	const finalPiSession = /PI_SESSION_ID=(\$\d+)/.exec(finalBody)?.[1] ?? "";
-	const finalWindow = /PI_WINDOW_ID=(@\d+)/.exec(finalBody)?.[1] ?? "";
-	ok("the final evidence delivery came from the same Codex citizen", finalSender === codexGid);
-	ok(
-		"Codex reports the outbound Pi callback only when its callback nonce equals its LAUNCH nonce exactly",
-		finalLaunchNonce === outboundPiNonce && finalCallbackNonce === outboundPiNonce,
-		`launch=${outboundPiNonce} final-launch=${finalLaunchNonce} callback=${finalCallbackNonce}`,
 	);
 	ok(
 		"the outbound fresh Pi callback names a new citizen, not the initial Pi or Codex",
-		GARDEN_ID.test(outboundPiGid) && outboundPiGid !== initialPiGid && outboundPiGid !== codexGid,
+		GARDEN_ID.test(outboundPiGid) && outboundPiGid !== initialPiGid && outboundPiGid !== codexGardenId,
 	);
-	ok("the final evidence preserves the exact outbound Pi session", finalPiSession === outboundPiSession);
-	ok("the final evidence preserves the exact outbound Pi cleanup handle", finalWindow === outboundPiWindow);
 	const outboundPiIdentity = readMetaIdentityByGardenId(outboundPiGid);
 	ok("the outbound Pi callback address resolves to a real Pi V3 citizen", outboundPiIdentity.backend === "pi");
+	relatedRecordPaths.add(path.join(defaultMetaSessionsDir(), metaRecordFilename(outboundPiIdentity)));
+	if (outboundPiIdentity.transcriptPath != null) relatedTranscripts.add(outboundPiIdentity.transcriptPath);
+	writeEvidenceManifest({
+		phase: "outbound-pi-correlated",
+		outboundPiGardenId: outboundPiGid,
+		outboundPiRecordPath: path.join(defaultMetaSessionsDir(), metaRecordFilename(outboundPiIdentity)),
+		outboundPiTranscript: outboundPiIdentity.transcriptPath ?? null,
+	});
+	receipts["13-codex-source-outbound-pi-callback"] = `nonce=${outboundPiNonce}\ngarden=${outboundPiGid}`;
+
+	const expectedFinalMessage =
+		`${finalToken}\nPI_LAUNCH_NONCE=${outboundPiNonce}\nPI_CALLBACK_NONCE=${outboundPiNonce}\n` +
+		`PI_CALLBACK_FROM=${outboundPiGid}\nPI_SESSION_ID=${outboundPiSession}\nPI_WINDOW_ID=${outboundPiWindow}`;
+	const codexFinalReceipt = await untilAsync("the Codex joined final mailbox receipt", SOURCE_WAIT_MS, async () => {
+		codexThread = await readCodexThread(codexSocketPath, codexThreadId, true);
+		const codexSources = codexSourceToolReceipts(codexThread);
+		assertSourceCallScopes(codexSources, "entwurf_v2", "target", [initialPiGid, callerGid], "Codex v2 roles");
+		return selectExactSourceToolReceipt(
+			codexSources,
+			"entwurf_v2",
+			{ target: callerGid, intent: "fire-and-forget", wants_reply: false, message: expectedFinalMessage },
+			"Codex final fixture call",
+		);
+	});
+	ok(
+		"Codex -> fixture used an actual joined meta-mailbox entwurf_v2 receipt",
+		/^entwurf_v2 meta-mailbox → enqueued \([^\n]+\.msg\)$/.test(codexFinalReceipt.text),
+		codexFinalReceipt.text,
+	);
+	receipts["14-codex-source-final-mailbox"] = codexFinalReceipt.text;
+
+	const finalBody = await awaitOrRecover(
+		"the fixture read Codex's final exact source message",
+		CALLBACK_WAIT_MS,
+		() => {
+			drain();
+			return selectReport(seenInbox, finalToken, codexGardenId);
+		},
+	);
+	for (const body of seenInbox) {
+		recordMailboxSelection(
+			"codex-final-candidate",
+			body,
+			body === finalBody,
+			body === finalBody
+				? "candidate selected: exact token and sender; body validation pending"
+				: "candidate excluded: token or sender differs",
+		);
+	}
+	receipts["15-fixture-read-codex-final"] = finalBody;
+	const finalValidation = validateFinalMailboxBody(finalBody, codexGardenId, expectedFinalMessage);
+	recordMailboxSelection("codex-final-validation", finalBody, finalValidation.accepted, finalValidation.reason);
+	ok(
+		"the fixture read one exact outer-framed final message from the same Codex citizen",
+		finalValidation.parsed?.sender === codexGardenId,
+	);
+	ok(
+		"the fixture mailbox payload exactly equals the source-validated Codex call argument",
+		finalValidation.accepted,
+		`expected=${JSON.stringify(expectedFinalMessage)}\nactual=${JSON.stringify(finalValidation.parsed?.payload)}`,
+	);
+
+	// Final audit closes the race left by polling a completed subset. Codex's final tool result can
+	// precede turn completion, so wait for the app-server's own terminal turn state before recounting.
+	codexThread = await untilAsync("the Codex final turn to become terminal", SOURCE_WAIT_MS, async () => {
+		const observed = await readCodexThread(codexSocketPath, codexThreadId, true);
+		return codexThreadIsTerminal(observed) ? observed : null;
+	});
+	assertExactSourceToolCalls(
+		piSourceToolReceipts(readInitialPiEntries()),
+		[
+			{
+				toolName: "entwurf_v2",
+				arguments: {
+					target: callerGid,
+					intent: "fire-and-forget",
+					message: initialPiNonce,
+					wants_reply: false,
+				},
+			},
+			{
+				toolName: "entwurf_fresh_call",
+				arguments: { backend: "codex", model: codexModel, cwd: scratch, task: codexTask },
+			},
+			{
+				toolName: "entwurf_v2",
+				arguments: {
+					target: codexGardenId,
+					intent: "fire-and-forget",
+					wants_reply: false,
+					message: codexInstruction,
+				},
+			},
+		],
+		"initial Pi final exact-once audit",
+	);
+	assertExactSourceToolCalls(
+		codexSourceToolReceipts(codexThread),
+		[
+			{
+				toolName: "entwurf_v2",
+				arguments: {
+					target: initialPiGid,
+					intent: "fire-and-forget",
+					wants_reply: false,
+					message: codexNonce,
+				},
+			},
+			{
+				toolName: "entwurf_fresh_call",
+				arguments: { backend: "pi", model: piModel, cwd: scratch, task: outboundPiTask },
+			},
+			{
+				toolName: "entwurf_v2",
+				arguments: {
+					target: callerGid,
+					intent: "fire-and-forget",
+					wants_reply: false,
+					message: expectedFinalMessage,
+				},
+			},
+		],
+		"Codex final exact-once audit",
+	);
+	receipts["16-source-final-audit"] = "initial-pi=3/3 completed exact\ncodex=3/3 completed exact";
 }
 
 let failure: unknown = null;
@@ -933,15 +1152,18 @@ try {
 } catch (error) {
 	failure = error;
 }
-// Cleanup authority runs on EVERY exit, not only on a wait that timed out. The first real run
-// failed inside an `ok()` and left a visible outbound Pi window alive, even though the handle
-// was already sitting in the fixture's own mailbox: a launch receipt the Codex sibling had
-// travelled to us. Recovery reads THAT — plus the two transcript authorities — and never scans
-// tmux inventory or guesses a handle nobody recorded. Every stage is attempted even when an
-// earlier stage itself throws; recovery trouble is evidence, never authority to skip cleanup.
+// Cleanup authority runs on EVERY exit, not only on a wait that timed out. Only joined source
+// fresh-call receipts may add stable handles to the allowlist; mailbox prose is preserved as
+// diagnostic evidence but never authorizes a kill. Every stage is attempted even when an earlier
+// stage throws. A mandatory snapshot is copied after source recovery and before any destructive
+// turn/window/fixture cleanup, so cleanup-only failures cannot erase their own evidence.
 const cleanupFailures = await runCleanupStages([
 	{ label: "bridge", run: closeBridge },
 	{ label: "recovery", run: recoverEveryRecordedWindow },
+	{
+		label: "evidence",
+		run: () => preservePreCleanupEvidence(failure ?? "run succeeded; mandatory pre-cleanup evidence checkpoint"),
+	},
 	{ label: "codex-turn", run: interruptCodexSmokeTurn },
 	{ label: "window", run: cleanupWindows },
 	{ label: "fixture", run: cleanupFixture },

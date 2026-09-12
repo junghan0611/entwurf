@@ -4,9 +4,17 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+## 0.21.0 - 2026-09-13
+
 ### Added
 
-- **OpenAI Codex CLI is an unreleased app-server-backed native-push candidate (#95).**
+- **This is a minor release because Codex support adds a new visible citizen axis, not merely a
+  patch to an existing rail.** The operator-owned exact `codex` tmux home gives the app-server and
+  supported Codex TUIs a stable visible place without making Entwurf their lifecycle manager. UX
+  symmetry means each backend remains a sibling with its own transcript, auth, native tools, and
+  visible seat—not that unlike transports are relabeled as identical. The release also carries the
+  independent #111 and #112 bug repairs.
+- **OpenAI Codex CLI becomes an app-server-backed native-push citizen (#95).**
   A prompt-free root `SessionStart` hook mints the V3 record on the first turn and sets
   the visible thread title. The bridge strictly joins each request's Codex metadata to
   that record, so multiple visible TUIs may share one app-server without sharing a
@@ -39,6 +47,14 @@ All notable changes to this project will be documented here. Format follows [Kee
   one operator-owned existing session named `codex` containing the app-server and supported
   Codex TUIs. N arbitrary attached TUIs across sessions still have no request→TUI seat join;
   that wider topology is unsupported and unclaimed rather than a blocker to the explicit home.
+- **`entwurf_peers` bounds expensive historical observation to its 32 rendered rows (#112).**
+  Full-store parsing, duplicate/conflict authority, socket liveness, diagnostics, and all 1,012
+  measured payload rows remain intact; older receiver/transcript cells say `unobserved` rather
+  than fabricating facts. On the 1,012-record fixture, repeated warm composition fell from about
+  3.2s to 70–103ms. Generic fact-provider callers remain unbounded unless they explicitly opt in.
+- **Version-coherence gates no longer require concise `AGENTS.md` to duplicate package pins.**
+  The owning runtime/package documents remain checked; removing redundant pin prose from the
+  maintainer guide no longer makes an otherwise coherent floor fail.
 
 ### Upgrade note
 
@@ -76,10 +92,51 @@ never starts the app-server.
   nonces, preserved log path, and SHA-256.
 - Two red attempts repaired the acceptance itself. “Wait” had let Codex call one-hour
   `wait_agent`; the task now ends its turn and forbids wait tools. A model also reformatted
-  a copied LAUNCH receipt; the gate now compares travelling coordinates with the exact
-  tool-result receipts in the Pi transcript and Codex app-server thread, never model prose.
-  Failure cleanup interrupts only the exact smoke-owned active Codex turn and removes only
-  receipt-named windows.
+  a copied LAUNCH receipt; the gate compares source-owned tool results rather than treating that prose
+  as raw evidence. Failure cleanup interrupts only the exact smoke-owned active Codex turn and removes
+  only source-receipt-named windows.
+- The second full prepare P5 remained honestly red at **MUST 23 PASS / 1 FAIL / 0 SKIP**. The initial
+  Pi's source transcript proved Codex launch, exact callback, native-push delivery, outbound Pi launch
+  and callback, and Codex's final mailbox enqueue; it also showed the missing observation's direct
+  cause: the model shortened expected launch-report token `…1G5XEKQH` to `…1G5XEKQ`. Enqueue did not
+  prove the fixture read, and cleanup had removed the mailbox needed to distinguish every downstream
+  observer hypothesis. The amendment removes intermediate model coordinate reports entirely: Pi JSONL
+  call/result rows are joined by call id, exact tool name/arguments, non-error result, and uniqueness;
+  Codex uses the corresponding structured app-server MCP items; raw callback events supply garden ids.
+  Mailbox prose can never authorize a window kill. Every drain now persists filename, byte length,
+  SHA-256, observed token candidates, phase-specific selection/exclusion reason and a 0600 body artifact
+  immediately, plus resolved-root/run/source-path manifest and a mandatory fixture/record/transcript/thread
+  snapshot before destructive cleanup on every outcome. That snapshot uses the record owner's `.meta.json`
+  filename, records missing expected sources, and still copies known raw files when optional identity recovery
+  throws; final acceptance also requires known `completed` Codex turn/items state and logs payload validation
+  separately from token/sender candidate selection. The preserved failed-rollout extraction
+  (`c3a28938…`) confirms raw outbound launch → callback → final enqueue but still not fixture read; its tracked
+  positive fixture is explicitly labelled a vendor-source-derived v2 projection, not a captured `thread/read`
+  response. A second defect the amendment itself introduced was then measured and closed: the smoke read the
+  initial Pi's `transcriptPath` once at callback correlation, and a record that gained that path 34s later
+  left every subsequent source observation permanently empty — one 300s red whose chain had in fact run to
+  completion, proven by the Codex thread's own completed final `entwurf_v2` result. The resolution is a pure
+  leaf that re-reads the record while its cached path is empty (an unreadable record stays fail-loud; only
+  "no path yet" is pending), its own `CODEX-LIVE-SOURCE-PATH-RE-RESOLVED` claim and mutant, and an explicit
+  `no unverified child window killed` line so a run that never obtains source evidence names its
+  unrecoverable windows instead of leaking them. Declared inventory is now 475 mutants across 43 lanes.
+  The amended standalone LIVE then passed: **48 assertions, exit 0**, final source audit `initial-pi=3/3`
+  and `codex=3/3` completed exact, all three opened windows reclaimed by their own receipts, artifact
+  `.probe-artifacts/codex-fresh-live-fZccoK/`. Assertion count is not comparable with the pre-amendment 57:
+  that contract counted model coordinate reports this one removes.
+- **Release acceptance for this candidate: `check:full` exit 0 in 502s, then the LIVE release gate
+  `--cut` at MUST PASS=24 FAIL=0 SKIP=0, BEHAVIOR PASS=1 FAIL=0 SKIP=0, `cut: OK`.** Its
+  `check-gate-qualification` MUST step killed 475/475 across 43 lanes with the origin HEAD and
+  work-surface hash identical before and after. The aggregate's own Codex leg repeated the
+  48-assertion source-owned acceptance (artifact `.probe-artifacts/codex-fresh-live-2oId4C/`), and the
+  mux lifecycle MUST passed in the same run. Scratch log sha256 `942d5fa0…`.
+- **Observation, not a repaired defect.** The first acceptance attempt at the identical source
+  fingerprint failed two model-in-loop MUST steps: a callback nonce arrived one character short
+  (`…c70cfb` for `…c70cfb2`) and an addressed instruction carried the wrong payload. Both oracles
+  refused fail-closed and named their cause, and the joined source receipts proved delivery and rails
+  were correct, so nothing in the product was changed. The same candidate, model, and environment then
+  passed. That leaves an intermittent exact-byte transfer failure in the model lane as a recorded
+  observation; the retry does not establish a cause for it.
 - The first 460-mutant qualification honestly stopped at 454/460. One wait-task mutant was
   stale after the prompt repair; the birth safe-umask mutant was killed earlier by the new
   package-root mode doctor but carried the wrong assertion label; and four setup claims shared
@@ -94,11 +151,12 @@ never starts the app-server.
   was byte-identical. The fresh run then killed **460/460** mutants across 43 lanes in 53m42s
   with the origin and snapshot surfaces pure. Biome only collapsed the new manifest arrays onto
   one line afterward (claim/subject/find/replace bytes and semantics unchanged), and the frozen
-  full floor passed in 506s. Codex remains unreleased until the implementation commit and
-  `0.20.2` release boundary are completed.
+  full floor passed in 506s. The receipt-bearing final candidate passed the full floor again
+  in 501s before the implementation commit and local-main merge.
 
 ### Fixed
 
+- **The Copilot receiver parent-death mutant no longer leaves one PID-1 fixture child per qualification run.** P9 found ten reparented Node stubs from ten qualifications. The gate did detect the mutant, but its failing assertion threw before the cleanup statement below it; cleanup now kills the surviving mutant child before asserting, preserving the same attributed red while leaving no process behind.
 - **Control-socket send during Pi compaction is no longer a false `delivered:true` (#111).** A compacting Pi citizen is neither idle nor an ordinary streaming turn, but the receiver only sampled `ctx.isIdle()` and forwarded every non-idle send into `pi.sendMessage({ triggerTurn: true })`. Installed Pi 0.85.1 `sendCustomMessage` then starts `_runAgentPrompt` when not streaming — racing `compact()`'s session rewrite, which is the field path that can make compaction "풀린다". There is no public `ExtensionContext.isCompacting()`. The resident arms on `session_before_compact` and refuses as `compacting`; quiet unknown non-idle (`!idle && ctx.signal === undefined`) is fail-closed as `busy`, not `compacting`, because `ctx.signal` is `agent.activeRun?.abortController.signal` and is already gone during `_handlePostAgentRun` retry/continuation while `_isAgentRunActive` is still true — that cell also covers the manual-compact start race and branch summary, which the public API cannot tell apart. Either token: no `pi.sendMessage`, no `delivered:true`. Idle and live-run steer/followUp are unchanged. Frozen v2 reject taxonomy is untouched — this is an in-band RPC refusal.
 
 ## 0.20.1 - 2026-09-10

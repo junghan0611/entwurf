@@ -1,6 +1,6 @@
 {
 	"name": "@junghanacs/entwurf",
-	"version": "0.20.1",
+	"version": "0.21.0",
 	"description": "Garden-citizen dispatch substrate and meta-bridge for pi, Claude Code, Copilot CLI, OMP, Antigravity, and Codex CLI; Claude and Snowflake Cortex Code ACP backends.",
 	"license": "MIT",
 	"author": {

@@ -341,10 +341,11 @@ Do not expect a fixed PASS count. Record actual output. Do not waive a MUST
 failure without diagnosing and explicitly classifying the failing axis. Do not
 hide a BEHAVIOR failure.
 
-**Create no commit while the gate is running.** `check-gate-qualification` pins the origin HEAD it
-started on and aborts with `origin HEAD changed during qualification` if that moves, discarding a
-~50-minute run. Editing the working tree is harmless; moving HEAD is not. Queue any commit request
-that arrives mid-run (including one from GLG) until the gate reports its verdict.
+**Freeze HEAD, index, and working tree while the gate is running.** `check-gate-qualification` pins
+the origin HEAD and aborts if that moves, but the other sequential P5 steps consume the candidate
+checkout directly. A working-tree or index edit can therefore make one release-gate verdict describe
+multiple candidates even when qualification's own snapshot stays pure. Queue every edit and commit
+request (including one from GLG) until the gate reports its verdict; any movement voids that P5 receipt.
 
 **When the gate reports its verdict, run P9 before doing anything else.** This is the
 heaviest resource event in the whole release (the full floor, `check-gate-qualification`

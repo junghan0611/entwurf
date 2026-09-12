@@ -613,14 +613,10 @@
 		},
 		{
 			"claim": "CODEX-LIVE-PHASE-SEPARATION",
-			"title": "the report token rides the same message as the forwarded Codex payload again, so the sibling that receives the payload can emit the token meant for the Pi",
+			"title": "the initial Pi is again asked to model-report a launch coordinate instead of leaving the forwarded Codex payload as its final source-observed action",
 			"subject": "scripts/lib/codex-fresh-live-protocol.ts",
-			"find": [
-				"\t\t\"5. After that call returns, STOP. Send nothing else and contact nobody else; a second addressed message \" +\n\t\t\"will tell you what to report.\\n\" +"
-			],
-			"replace": [
-				"\t\t\"5. After that call returns, report to the fixture with PI-REPORTS-CODEX-ADDRESSED and CODEX_ADDRESSED_RECEIPT=<receipt>.\\n\" +"
-			],
+			"find": ["\t\t\"nobody else.\\n\" +"],
+			"replace": ["\t\t\"nobody else; then report PI-REPORTS-CODEX-LAUNCH to the fixture.\\n\" +"],
 			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
 			"timeoutSeconds": 180,
 			"signature": "[QK:CODEX-LIVE-PHASE-SEPARATION]",
@@ -628,35 +624,214 @@
 		},
 		{
 			"claim": "CODEX-LIVE-REPORT-SENDER-FILTER",
-			"title": "a report is selected by token alone, so the first body carrying it ends the wait even when somebody else sent it",
+			"title": "the final mailbox body is selected by token alone, so a body from the wrong sender can satisfy the fixture-read claim",
 			"subject": "scripts/lib/codex-fresh-live-protocol.ts",
 			"find": ["\t\tif (reportSender(body) !== expectedSender) continue;"],
-			"replace": ["\t\t// mutant: take the first token match, whoever sent it"],
+			"replace": ["\t\t// mutant: take the first exact-token body, whoever sent it"],
 			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
 			"timeoutSeconds": 180,
 			"signature": "[QK:CODEX-LIVE-REPORT-SENDER-FILTER]",
 			"signatureSource": "test/codex-fresh-live-protocol.test.ts"
 		},
 		{
-			"claim": "CODEX-LIVE-BACKEND-FILTER",
-			"title": "the first Codex report is accepted from any sender, so a Pi sibling's body can establish the Codex garden address",
+			"claim": "CODEX-LIVE-REPORT-TOKEN-EXACT",
+			"title": "the final mailbox selector accepts a token missing its last character, recreating the 600-second model-truncation false wait",
 			"subject": "scripts/lib/codex-fresh-live-protocol.ts",
-			"find": ["\t\tif (sender === null || !isExpectedBackend(sender)) continue;"],
-			"replace": ["\t\tif (sender === null) continue;  // mutant: any backend will do"],
+			"find": ["\t\tif (!body.includes(token)) continue;"],
+			"replace": ["\t\tif (!body.includes(token.slice(0, -1))) continue;  // mutant: fuzzy truncated token"],
 			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
 			"timeoutSeconds": 180,
-			"signature": "[QK:CODEX-LIVE-BACKEND-FILTER]",
+			"signature": "[QK:CODEX-LIVE-REPORT-TOKEN-EXACT]",
 			"signatureSource": "test/codex-fresh-live-protocol.test.ts"
 		},
 		{
-			"claim": "CODEX-LIVE-RECOVERY-FROM-INBOX",
-			"title": "the launch-receipt reader stops anchoring on the backend line, so a delivered report cannot hand cleanup the exact outbound window it already carries",
-			"subject": "scripts/lib/launch-receipt-windows.ts",
-			"find": ["\t\tif (open === backend) found.push(windowLine[1] as string);"],
-			"replace": ["\t\tif (open === backend && false) found.push(windowLine[1] as string);"],
+			"claim": "CODEX-LIVE-SOURCE-JOIN",
+			"title": "a Pi tool result can be joined to a call whose tool name differs, turning an unrelated result body into launch authority",
+			"subject": "scripts/lib/codex-fresh-source-receipts.ts",
+			"find": ["\t\tif (result.toolName !== call.toolName)"],
+			"replace": ["\t\tif (false && result.toolName !== call.toolName)"],
 			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
 			"timeoutSeconds": 180,
-			"signature": "[QK:CODEX-LIVE-RECOVERY-FROM-INBOX]",
+			"signature": "[QK:CODEX-LIVE-SOURCE-JOIN]",
+			"signatureSource": "test/codex-fresh-live-protocol.test.ts"
+		},
+		{
+			"claim": "CODEX-LIVE-SOURCE-JOIN-UNIQUE",
+			"title": "two source tool calls in the same backend or target scope are accepted instead of failing closed as ambiguous",
+			"subject": "scripts/lib/codex-fresh-source-receipts.ts",
+			"find": [
+				"\tif (matchingScope.length > 1) throw new Error(`${label}: duplicate source tool calls (${matchingScope.length})`);"
+			],
+			"replace": [
+				"\tif (false && matchingScope.length > 1) throw new Error(`${label}: duplicate source tool calls (${matchingScope.length})`);"
+			],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:CODEX-LIVE-SOURCE-JOIN-UNIQUE]",
+			"signatureSource": "test/codex-fresh-live-protocol.test.ts"
+		},
+		{
+			"claim": "CODEX-LIVE-SOURCE-ERROR-REJECT",
+			"title": "a Pi toolResult without explicit boolean isError=false is normalized into successful receipt authority",
+			"subject": "scripts/lib/codex-fresh-source-receipts.ts",
+			"find": ["\t\t\tif (typeof message.isError !== \"boolean\")"],
+			"replace": ["\t\t\tif (false && typeof message.isError !== \"boolean\")"],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:CODEX-LIVE-SOURCE-ERROR-REJECT]",
+			"signatureSource": "test/codex-fresh-live-protocol.test.ts"
+		},
+		{
+			"claim": "CODEX-LIVE-SOURCE-UNMATCHED-REJECT",
+			"title": "an unmatched Pi toolResult is silently accepted as a complete transcript",
+			"subject": "scripts/lib/codex-fresh-source-receipts.ts",
+			"find": ["\t\tif (!calls.has(id)) throw new Error(`unmatched Pi toolResult id ${id}`);"],
+			"replace": ["\t\tif (false && !calls.has(id)) throw new Error(`unmatched Pi toolResult id ${id}`);"],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:CODEX-LIVE-SOURCE-UNMATCHED-REJECT]",
+			"signatureSource": "test/codex-fresh-live-protocol.test.ts"
+		},
+		{
+			"claim": "CODEX-LIVE-RAW-CALLBACK-REQUIRED",
+			"title": "a Pi callback with arbitrary bytes after its sender envelope is accepted as exact",
+			"subject": "scripts/lib/codex-fresh-source-receipts.ts",
+			"find": ["\tif (!text.startsWith(prefix) || !text.endsWith(suffix)) return null;"],
+			"replace": [
+				"\tif (!text.startsWith(prefix)) return null;\n\tconst suffixAt = text.indexOf(suffix, prefix.length);\n\tif (suffixAt < 0) return null;\n\ttext = text.slice(0, suffixAt + suffix.length);  // mutant: discard callback suffix"
+			],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:CODEX-LIVE-RAW-CALLBACK-REQUIRED]",
+			"signatureSource": "test/codex-fresh-live-protocol.test.ts"
+		},
+		{
+			"claim": "CODEX-LIVE-OUTER-FRAME-EXACT",
+			"title": "mailbox parsing trims payload bytes and can approve a whitespace-different callback or final body",
+			"subject": "scripts/lib/codex-fresh-source-receipts.ts",
+			"find": ["\treturn { sender: match[1] as string, payload: text.slice(match[0].length, -1) };"],
+			"replace": ["\treturn { sender: match[1] as string, payload: text.slice(match[0].length, -1).trim() };"],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:CODEX-LIVE-OUTER-FRAME-EXACT]",
+			"signatureSource": "test/codex-fresh-live-protocol.test.ts"
+		},
+		{
+			"claim": "CODEX-LIVE-JSONL-COMPLETE-ERROR",
+			"title": "a corrupt complete Pi JSONL row is misclassified as a partial final append and hidden until timeout",
+			"subject": "scripts/lib/codex-fresh-source-receipts.ts",
+			"find": ["\t\t\tif (isIncompleteLastAppend) return entries;"],
+			"replace": ["\t\t\tif (true) return entries;  // mutant: hide every parse error as a partial append"],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:CODEX-LIVE-JSONL-COMPLETE-ERROR]",
+			"signatureSource": "test/codex-fresh-live-protocol.test.ts"
+		},
+		{
+			"claim": "CODEX-LIVE-CODEX-PENDING",
+			"title": "Codex inProgress MCP state is treated as terminal instead of remaining pending until thread_history completes it",
+			"subject": "scripts/lib/codex-fresh-source-receipts.ts",
+			"find": ["\t\t\tif (item.status === \"inProgress\") {"],
+			"replace": ["\t\t\tif (false && item.status === \"inProgress\") {"],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:CODEX-LIVE-CODEX-PENDING]",
+			"signatureSource": "test/codex-fresh-live-protocol.test.ts"
+		},
+		{
+			"claim": "CODEX-LIVE-CODEX-SOURCE",
+			"title": "a non-Entwurf Codex MCP item is admitted as source tool authority",
+			"subject": "scripts/lib/codex-fresh-source-receipts.ts",
+			"find": ["\t\t\tif (item.type !== \"mcpToolCall\" || item.server !== \"entwurf-bridge\") continue;"],
+			"replace": ["\t\t\tif (item.type !== \"mcpToolCall\") continue;  // mutant: any MCP server"],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:CODEX-LIVE-CODEX-SOURCE]",
+			"signatureSource": "test/codex-fresh-live-protocol.test.ts"
+		},
+		{
+			"claim": "CODEX-LIVE-SOURCE-ROLE-AUDIT",
+			"title": "the final exact-once source audit is bypassed, allowing late duplicate or wrong-axis calls to disappear after an earlier selection",
+			"subject": "scripts/lib/codex-fresh-source-receipts.ts",
+			"find": ["\tif (receipts.length !== expected.length)"],
+			"replace": [
+				"\tif (true) return;  // mutant: bypass the final source-role audit\n\tif (receipts.length !== expected.length)"
+			],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:CODEX-LIVE-SOURCE-ROLE-AUDIT]",
+			"signatureSource": "test/codex-fresh-live-protocol.test.ts"
+		},
+		{
+			"claim": "CODEX-LIVE-TURN-TERMINAL-EXACT",
+			"title": "a missing or future Codex turn status is accepted as terminal completion",
+			"subject": "scripts/lib/codex-fresh-source-receipts.ts",
+			"find": ["\t\tif (status !== \"completed\") throw new Error(`unknown Codex turn status ${String(status)}`);"],
+			"replace": [
+				"\t\tif (false && status !== \"completed\") throw new Error(`unknown Codex turn status ${String(status)}`);"
+			],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:CODEX-LIVE-TURN-TERMINAL-EXACT]",
+			"signatureSource": "test/codex-fresh-live-protocol.test.ts"
+		},
+		{
+			"claim": "CODEX-LIVE-FINAL-DIAGNOSTIC-VERDICT",
+			"title": "token and sender selection is logged as exact acceptance even when the mailbox payload differs from the source-call argument",
+			"subject": "scripts/lib/codex-fresh-source-receipts.ts",
+			"find": ["\tif (parsed.payload !== expectedPayload)"],
+			"replace": ["\tif (false && parsed.payload !== expectedPayload)"],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:CODEX-LIVE-FINAL-DIAGNOSTIC-VERDICT]",
+			"signatureSource": "test/codex-fresh-live-protocol.test.ts"
+		},
+		{
+			"claim": "CODEX-LIVE-SOURCE-PATH-RE-RESOLVED",
+			"title": "an empty source-path cache never re-reads its record, so a transcriptPath written after callback correlation is frozen out and every later source observation stays permanently empty",
+			"subject": "scripts/lib/codex-fresh-source-receipts.ts",
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"find": ["\treturn readRecordPath() ?? \"\";"],
+			"replace": ["\treturn cached;  // mutant: an empty cache is answered without re-reading the record"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:CODEX-LIVE-SOURCE-PATH-RE-RESOLVED]",
+			"signatureSource": "test/codex-fresh-live-protocol.test.ts"
+		},
+		{
+			"claim": "CODEX-LIVE-EVIDENCE-RECORD-PATH",
+			"title": "the evidence manifest points at gardenId.json instead of the record owner's gardenId.meta.json filename",
+			"subject": "scripts/smoke-codex-fresh-live.ts",
+			"find": ["\t\tinitialPiRecordPath: path.join(defaultMetaSessionsDir(), metaRecordFilename(initialPiIdentity)),"],
+			"replace": ["\t\tinitialPiRecordPath: path.join(defaultMetaSessionsDir(), `${initialPiGid}.json`),"],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:CODEX-LIVE-EVIDENCE-RECORD-PATH]",
+			"signatureSource": "test/codex-fresh-live-protocol.test.ts"
+		},
+		{
+			"claim": "CODEX-LIVE-EVIDENCE-RECOVERY-FAILSAFE",
+			"title": "optional source identity recovery runs outside its evidence guard, so corruption prevents raw snapshot copies",
+			"subject": "scripts/smoke-codex-fresh-live.ts",
+			"find": ["\ttry {\n\t\trecoverCodexThreadAuthority();\n\t} catch (recoveryError) {"],
+			"replace": [
+				"\trecoverCodexThreadAuthority();  // mutant: throws before raw source copies\n\ttry {\n\t\t// optional recovery guard bypassed\n\t} catch (recoveryError) {"
+			],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:CODEX-LIVE-EVIDENCE-RECOVERY-FAILSAFE]",
+			"signatureSource": "test/codex-fresh-live-protocol.test.ts"
+		},
+		{
+			"claim": "CODEX-LIVE-RECOVERY-SOURCE-ONLY",
+			"title": "smoke cleanup reconnects untrusted mailbox prose directly to the window allowlist",
+			"subject": "scripts/smoke-codex-fresh-live.ts",
+			"find": ["\tconst found = [...recoverCodexWindows(), ...(await recoverOutboundPiWindows())];"],
+			"replace": [
+				"\tconst found = [...seenInbox.flatMap(() => ['@999']), ...recoverCodexWindows(), ...(await recoverOutboundPiWindows())];"
+			],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:CODEX-LIVE-RECOVERY-SOURCE-ONLY]",
 			"signatureSource": "test/codex-fresh-live-protocol.test.ts"
 		}
 	]

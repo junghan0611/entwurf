@@ -136,33 +136,67 @@ CHANGELOG `## Unreleased`가 구현 범위 `v0.15.1..19ad90c` **30커밋** 전�
       첫 qualification 이 `SECOND-CHECKOUT-EXTENSION-COLLISION` 을 **SURVIVED** 로 냈고 원인은 셀이 씨앗을 **인덱스**(`git show :`)에서
       읽어 자기 재이식을 못 본 것이었다 — 그 셀의 주체는 세션 시작 시 **디스크의 파일**이다. 게이트가 자기 일을 했다.
 
-현재 좌표: 1–26 완료 → **26. #110 + acp 0.76.0 랜딩 완료**(main `2650e95`). 다음은 **0.20.1 컷**(patch: 결함 수리 + dep 범프, 새 능력 없음).
-#109 openclaw 다리는 **닫혔다**(요청자가 컨테이너를 나왔다) · **0.16.1 make는 열린 채 PAUSED**.
-푸시·태그는 `entwurf-release` 4모드 몫이다 (CalVer `tag-release`가 아님).
+- [x] **27. #111 + #112 + #95 local-main landing** — `77b2ade` compaction send guard,
+      `741cfcd` bounded peer observation, `5f81e86` explicit Codex home admission, handoff close
+      `00cba23`; #111/#112/#95 CLOSED. Push 없음.
+- [x] **28. 0.21.0 prepare** — source-observer amendment(+lazy transcript-path 수리, 475/43) · CHANGELOG/version 승격 · `check:full` exit 0 502s · `release-gate --cut` **MUST 24/0/0, cut OK, qualification 475/475** · P9 2회 · prep commit.
 
-# NOW — stem: 0.20.1 컷 (#110 self-registration 수리 + claude-agent-acp 0.76.0)
+현재 좌표: 1–28 완료 → **0.21.0 prep commit 완료, MAKE 대기**. #109 openclaw 다리는
+**닫혔다**(요청자가 컨테이너를 나왔다) · **0.16.1 make는 열린 채 PAUSED**.
+푸시·태그·publish는 금지; `entwurf-release`의 make/publish 별도 권한이다.
 
-- **Stem:** **0.20.1 을 자른다.** patch 가 맞다 — 결함 수리 하나와 dep 범프 하나이고 새 능력이 없다.
-  `entwurf_fresh_call` 스키마도 움직이지 않았다. GLG 가 2026-09-10 에 push·병합·릴리즈를 승인했다.
-- **좌표:** main = **`2650e95`** (#110 수리 `6d6aaa6` + acp 0.76.0 범프 `2650e95`, ff 머지·푸시 완료).
-  exact-SHA CI [`34438272372`](https://github.com/junghan0611/entwurf/actions/runs/34438272372) 4잡 전부 success,
-  `check` 잡의 qualification 본체 스텝 success. #110 은 병합 SHA 로 닫혔다. 패키지는 아직 `0.20.0`.
-- **정본 개발자 설치는 끝났다:** `/home/junghan/repos/gh/entwurf` 에서 `./run.sh install` 이
-  `project-scope packages[] skipped — entwurf's own checkout self-registers through user scope (#110)` 를 찍고
-  tracked 파일을 바이트·mtime 그대로 뒀다. `doctor-pi-package` = owned, `doctor-pi-provider` = ok(7 tools).
-  손 수용: 정본 / 워크트리 / foreign cwd **셋 다 확장에러 0 · entwurf 모델행 7**.
-- **Next:** (1) `/skill:entwurf-release prepare 0.20.1` — CHANGELOG `## Unreleased` 를 `## 0.20.1 - <KST 날짜>` 로 **승격만**
-  하고 본문은 다시 쓰지 않는다(이미 Fixed 2항목 + Upgrade note 가 들어 있다) · `npm version` · `pnpm install --lockfile-only` ·
-  `docs/acp-backend-rail.md` 지원표의 Entwurf package 행을 0.20.1 로 · `check:full` · `LIVE=1 release-gate --cut`.
-  (2) `make 0.20.1` — 푸시 → exact-SHA CI → 보존 candidate 1개 + `check-install-container`(**Docker 필요**) → 태그 → **GitHub 릴리즈 공개**.
-  (3) `publish 0.20.1 <candidate> latest`.
-- **Blocker:** 없음. 단 **npm publish 토큰이 401 이면 GLG 손이다**(0.17.2·0.18.0·0.18.1 전례) — 붙들지 말고 바로 DM.
-- **Read:** `.claude/skills/entwurf-release/SKILL.md`(4모드가 각각 별도 권한 경계다) · `VERIFY.md` 릴리즈 수용 · `AGENTS.md` "Verification scheduling".
-- **Do not touch:** **워크트리에서 `./run.sh install` 이나 `takeover-user-scope` 를 돌리지 마라** — `REPO_DIR` 이 워크트리라
-  user-scope 자기등록을 워크트리로 옮겨 #110 을 반대 방향으로 다시 만든다. 개발자 설치는 정본 체크아웃에서만 ·
-  태그만 만들고 GitHub 릴리즈를 빼먹지 마라(GLG 가 릴리즈 노트를 github.com 에서 읽는다) ·
-  이슈 칸이 비었다고 채우지 마라(총 10 / 구현 5 상한; 현재 결함이나 실행 가능한 계약만 칸을 얻는다) ·
-  codex 레인은 별도 `feat/95-codex-admission` candidate에서 작업 중이며 0.20.1 release stem과 섞지 않는다.
+# NOW — stem: 0.21.0 prepare (#111 + #112 + #95)
+
+- **Stem:** **0.21.0을 준비한다.** 새 Codex native citizen과 operator-owned `codex` home은
+  단순 patch가 아니라 보이는 자리까지 포함한 새 지원 축이다. #111 compaction false-delivery와
+  #112 peers 성능 수리도 함께 실리므로 GLG가 minor로 올렸다. UX 대칭은 같은 transport를 꾸미는
+  말이 아니라, backend마다 자기 transcript·auth·native tools를 보존한 채 **정해진 자리에서 보이는
+  형제**로 부르고 불리는 데 있다; Codex는 exact `codex` home, Claude는 operator가 고른 tmux seat가
+  그 맥락을 줄 수 있다.
+- **좌표:** local main = `462fea7` (`00cba23` 뒤 P9 fixture-reap 수리), `origin/main`보다
+  23 commits ahead; package release-prep worktree는 0.21.0. 구현 candidate는 Codex home LIVE
+  57 assertions, qualification 460/460 purity green, receipt-bearing `check:full` exit 0 501s.
+  첫 prepare P5는 OMP MCP가 삭제된 `/tmp/snapshot-probe`를 가리킨 host drift와 Codex 필수 env
+  누락을 정직하게 잡았고, P9는 qualification마다 남은 Copilot stub 10개를 찾아 `462fea7`로
+  assertion 전 reap을 복구했다. 두 번째 P5는 MUST 23/1/0으로 붉었다. source transcript가
+  launch→callback→native-push→outbound Pi→final enqueue까지 완료했음을 보였고, 실패 원인은 initial
+  Pi가 model report token 마지막 글자를 잘라 fixture가 exact token을 고르지 못한 것이었다. GPT-6
+  검수에 따라 model prose를 좌표/cleanup 권위에서 제거하고 source toolCall↔toolResult + raw callback
+  결합으로 바꾸는 amendment를 넣었다. 그 amendment가 스스로 들인 결함 하나가 다시 측정돼 닫혔다 —
+  initial Pi의 `transcriptPath`를 callback correlation 시점에 한 번만 읽어, record가 34초 뒤에 그 경로를
+  얻은 run에서 이후 모든 source 관측이 영구히 비었다. 그 red는 배선 실패가 아니었다: 같은 run의 Codex
+  thread에 최종 `entwurf_v2`가 completed로 남아 있어 체인이 완주했음을 증명했고, 남은 고아 창 둘은 각자의
+  joined source receipt(`@425` backend codex, `@426` backend pi)가 명명한 뒤에만 회수했다. 수리는 cache가
+  빈 동안 record를 다시 읽는 pure leaf + 자기 claim `CODEX-LIVE-SOURCE-PATH-RE-RESOLVED` + source가 끝내
+  없을 때 `no unverified child window killed`를 명시하는 한 줄이다. **현재 상태:** focused
+  `check-mux-fresh-call` **229 tests** green, 선언 인벤토리 **475 mutants / 43 lanes**, 해당 6 claims focused
+  replay **6/6 KILLED**(각 mutant가 자기 QK 테스트 1개만, snapshot·origin purity green), amended standalone
+  LIVE **48 assertions exit 0**(source audit 3/3 both sides, 창 3개 전부 source receipt로 회수, artifact
+  `.probe-artifacts/codex-fresh-live-fZccoK/`). 48과 57은 서로 다른 계약이지 회귀가 아니다. #111/#112/#95
+  CLOSED. pre-version push/CI는 이번 prepare 권한에 없고 현재 계약도 요구하지 않는다.
+- **Prepare:** CHANGELOG의 verified `v0.20.1..HEAD` 범위를 0.21.0로 승격하고 #112를 보강한다;
+  version/lockfile 갱신; `check:full`; fresh scratch `LIVE=1 release-gate --cut`; P9 두 번;
+  source-observer amendment와 release-prep 파일을 함께 `chore(release): prepare v0.21.0`로 commit한다.
+- **Deferred to make:** main push → exact-SHA CI 4축 + qualification body → preserved candidate
+  + container acceptance → tag/GitHub release. npm publish는 그 뒤 별도 mode다.
+- **Blocker:** **없다 — prepare acceptance 완료.** frozen candidate(`WORK_SURFACE_SHA=293852cb…`)에서
+  `check:full` exit 0 502s · `LIVE=1 release-gate --cut` **MUST PASS=24 FAIL=0 SKIP=0**, BEHAVIOR 1/0/0,
+  `cut: OK` · 그 안의 `check-gate-qualification` **475/475 killed**, origin purity 전후 동일 ·
+  aggregate Codex leg가 48-assertion acceptance 재현(`codex-fresh-live-2oId4C`) · P9 2회. 남은 것은
+  MAKE 경계(push → exact-SHA CI → tag/release)이고 그건 이 prepare 권한 밖이다.
+- **Observation (defect 아님):** 동일 source fingerprint의 첫 acceptance 시도는 model-in-loop MUST
+  2건으로 붉었다 — callback nonce가 한 글자 짧게 왔고(`…c70cfb` vs `…c70cfb2`), addressed instruction이
+  지정된 payload 대신 다른 내용을 실었다. joined source receipt로 target·rail·delivery가 모두 옳았음을
+  확인했고 두 oracle 모두 제 이유로 fail-closed 거절했으므로 제품은 바꾸지 않았다. 같은 candidate·같은
+  모델·같은 env의 재시도는 green. **Luna의 exact-byte 수행이 간헐적으로 실패한다는 표본으로만 남긴다 —
+  시간대 인과는 확정되지 않았다.**
+- **Deferred proposals (이번 cut에 넣지 않음):** (1) lifecycle smoke가 타임아웃 시 도착해 있던 payload
+  후보와 배제 사유를 기록하는 진단 — 이번 nonce 절단을 5분이 아니라 즉시 이름 붙였을 것이다.
+  (2) `smoke-mux-lifecycle-live.ts:111`의 `PI_NATIVE_MODEL` 소스 상수를 env override 가능하게 하는 최소
+  변경 — codex 축은 이미 env인데 lifecycle 축만 상수라 모델 표본 교체 대칭이 깨져 있다. (3) callback
+  nonce를 모델이 손으로 옮기는 제품 설계 축은 별도 decision/research다.
+- **Do not:** push/tag/GitHub release/npm publish; app-server/tmux home을 Entwurf가 소유하게 만들기;
+  unrestricted attached-TUI placement을 수용 범위로 되살리기; 0.16.1 make를 섞기.
 
 <details><summary>#78 macOS / 설치면 다양화 NOW (닫힘 — 0.20.0 으로 나갔다)</summary>
 
@@ -193,9 +227,9 @@ CHANGELOG `## Unreleased`가 구현 범위 `v0.15.1..19ad90c` **30커밋** 전�
 Node 프론트도어·심링크 없는 소스 노출·프로세스 seam 이 필요하다. 재진입 조건은 **GLG 의 명시적 product-scale 승인**이다. 열지 마라.
 WSL2 는 계약상 리눅스의 연장이라 새 작업 없음.
 
-## codex 레인 — unreleased native candidate, explicit home LIVE green
+## codex 레인 — local main, 0.21.0 release candidate
 
-- **좌표:** `feat/95-codex-admission`. ACP Codex는 금지 그대로다. 목적은 GPT 접근을
+- **좌표:** local `main` implementation `5f81e86`, handoff close `00cba23`. ACP Codex는 금지 그대로다. 목적은 GPT 접근을
   하나 더 만드는 것이 아니라 Codex의 native tools·delegation·work context를 그대로 둔 citizen이다.
 - **candidate 모양:** root-owned prompt-free `/etc/codex` `SessionStart` birth · strict
   request-scoped metadata identity(join 충돌 fail-loud) · operator-owned app-server
@@ -216,8 +250,8 @@ WSL2 는 계약상 리눅스의 연장이라 새 작업 없음.
   현재 amendment가 그 영수증으로 qualification됐다는 뜻은 아니다.
 - **구현 closure (2026-09-12):** `check-gate-qualification` **460/460 KILLED**(43 lanes,
   53m42s, origin/snapshot purity green) · receipt 문서까지 포함한 최종 `pnpm run check:full`
-  **exit 0, 501s** · 구현 commit `5f81e86` · #95 CLOSED. 이제 local main merge 뒤 명시적으로
-  승인된 release prepare가 `0.20.2` version/changelog를 만든다. Codex는 그 경계가 끝날 때까지
+  **exit 0, 501s** · 구현 commit `5f81e86` · #95 CLOSED · local main merge `00cba23`.
+  명시적으로 승인된 release prepare가 `0.21.0` version/changelog를 만든다. Codex는 그 경계가 끝날 때까지
   unreleased candidate이며 push/tag/publish는 별도 승인 전 금지다.
 
 <details><summary>ACP fable 지원 NOW (닫힘)</summary>
