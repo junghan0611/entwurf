@@ -214,8 +214,9 @@ WSL2 는 계약상 리눅스의 연장이라 새 작업 없음.
 - **보존된 pre-amendment LIVE (2026-09-11, Codex 0.153.4):** loaded-thread native-push,
   public MCP send, authenticated request identity, isolated source-birth/title 변경은 관측됐다.
   현재 amendment가 그 영수증으로 qualification됐다는 뜻은 아니다.
-- **Oracle/release stop:** home LIVE는 닫혔다. 이제 `check-gate-qualification`과 frozen
-  `pnpm run check:full`을 같은 candidate에서 통과하고 구현 커밋/#95 closure로 간다. 이후 명시적으로
+- **구현 closure (2026-09-12):** `check-gate-qualification` **460/460 KILLED**(43 lanes,
+  53m42s, origin/snapshot purity green) · receipt 문서까지 포함한 최종 `pnpm run check:full`
+  **exit 0, 501s** · 구현 commit `5f81e86` · #95 CLOSED. 이제 local main merge 뒤 명시적으로
   승인된 release prepare가 `0.20.2` version/changelog를 만든다. Codex는 그 경계가 끝날 때까지
   unreleased candidate이며 push/tag/publish는 별도 승인 전 금지다.
 
