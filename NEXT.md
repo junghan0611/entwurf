@@ -193,7 +193,7 @@ CHANGELOG `## Unreleased`가 구현 범위 `v0.15.1..19ad90c` **30커밋** 전�
 Node 프론트도어·심링크 없는 소스 노출·프로세스 seam 이 필요하다. 재진입 조건은 **GLG 의 명시적 product-scale 승인**이다. 열지 마라.
 WSL2 는 계약상 리눅스의 연장이라 새 작업 없음.
 
-## codex 레인 — unreleased native candidate, GPT-6 amendment 진행 중
+## codex 레인 — unreleased native candidate, explicit home LIVE green
 
 - **좌표:** `feat/95-codex-admission`. ACP Codex는 금지 그대로다. 목적은 GPT 접근을
   하나 더 만드는 것이 아니라 Codex의 native tools·delegation·work context를 그대로 둔 citizen이다.
@@ -201,31 +201,23 @@ WSL2 는 계약상 리눅스의 연장이라 새 작업 없음.
   request-scoped metadata identity(join 충돌 fail-loud) · operator-owned app-server
   `thread/loaded/list` probe · one-shot `codex queue` native-push(**재시도 0**) · user
   MCP/status-line atom · `entwurf_fresh_call backend=codex`. mailbox/receiver/resume/ACP 없음.
-- **GLG placement 결정:** Codex caller의 자리는 attached TUI pane이 아니라 **operator가 실제로
-  app-server를 연 tmux seat**다. 그 app-server의 MCP child로 `TMUX`/`TMUX_PANE`을
-  `[mcp_servers.entwurf-bridge].env_vars`에서 전달한다. 그러나 이 seat는 mechanism일 뿐이고
-  request metadata에는 request→TUI seat join이 없다. N개의 TUI가 서로 다른 session에서 같은
-  app-server에 붙으면 어느 TUI “옆”인지 알 수 없다. `Codex 옆에 Pi`를 말하려면 intended fresh
-  Codex session = app-server inherited session = outbound Pi session을 각각 관측하고 같음을 요구한다.
-  custom `CODEX_HOME`과 Entwurf garden/control roots도 같은 explicit env-name 경계를 건넌다.
-  tmux 없이 열린 app-server는 visible fresh를 정직하게 거절한다. Entwurf는 generic API/manager를
-  만들거나 app-server를 숨겨 기동·감시·재시작하지 않는다.
-- **GPT-6 amendment:** 이전의 “source-complete, host ownership만 남음” 판정은 폐기한다.
-  terminal parser · env-boundary · setup acceptance · preflight safety · clause-7 composition을
-  한 amendment bundle로 고친다. laptop은 affected focused work만 소유하며 그 영수증을 deep
-  acceptance로 올려 읽지 않는다.
+- **GLG placement 결정:** operator가 기존 exact `codex` tmux home 하나를 소유하고 app-server와
+  supported Codex TUIs를 거기 둔다. omitted-placement Codex fresh는 그 이름을 exact lookup하며,
+  explicit placement는 expert override로 우선한다. Codex의 MCP child는 app-server의 `TMUX`/
+  `TMUX_PANE`을 받아 outbound Pi를 같은 home에 연다. Entwurf는 session/app-server를 만들거나
+  감독하지 않고 pane을 추측하지 않는다. request→arbitrary-attached-TUI seat join은 여전히 없으며
+  그 넓은 topology는 unsupported/unclaimed다.
+- **Home LIVE accepted (2026-09-12):** 57 assertions, exit 0. initial Pi `20260912T140748-355654`
+  `$150/@397` → omitted Codex `20260912T140800-8bc8d9` `$158/@398` → outbound Pi
+  `20260912T140829-a08178` `$158/@399`; app-server PID `1693273` stayed at `$158/@390/%390`.
+  Exact callbacks and addressed delivery passed both ways. Receipt/digest는 `DELIVERY.md`가 진다.
 - **보존된 pre-amendment LIVE (2026-09-11, Codex 0.153.4):** loaded-thread native-push,
   public MCP send, authenticated request identity, isolated source-birth/title 변경은 관측됐다.
   현재 amendment가 그 영수증으로 qualification됐다는 뜻은 아니다.
-- **Oracle/release stop:** independent review 뒤 `check-gate-qualification`과 frozen
-  `pnpm run check:full`; 실제 root/user 설치 + doctors; then
-  `LIVE=1 ENTWURF_CODEX_APP_SERVER_PID=<pid> ENTWURF_CODEX_FRESH_MODEL=<codex-model>
-  ENTWURF_CODEX_FRESH_PI_MODEL=<pi-model> ./run.sh smoke-codex-fresh-live`.
-  계약은 real visible `Pi → Codex → Pi`다. release-gate가 ambient `PI_SESSION_ID`/
-  `PI_AGENT_ID`를 지우므로 fixture/self-fetch 첫 leg는 receipt 수집만 할 뿐 admission을 닫지 못한다.
-  smoke는 fresh Codex / inherited app-server / outbound Pi session 좌표를 따로 남기고 셋이
-  같지 않으면 first-admission red다. 그 전까지 Codex는 unreleased candidate다.
-  0.20.1 stem과 commit/push를 섞지 않는다.
+- **Oracle/release stop:** home LIVE는 닫혔다. 이제 `check-gate-qualification`과 frozen
+  `pnpm run check:full`을 같은 candidate에서 통과하고 구현 커밋/#95 closure로 간다. 이후 명시적으로
+  승인된 release prepare가 `0.20.2` version/changelog를 만든다. Codex는 그 경계가 끝날 때까지
+  unreleased candidate이며 push/tag/publish는 별도 승인 전 금지다.
 
 <details><summary>ACP fable 지원 NOW (닫힘)</summary>
 

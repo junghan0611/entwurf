@@ -68,14 +68,13 @@ Verification here is not a benchmark. In production we exchange short turns and 
 > The aggregate release gate does not own a live agy conversation id, so agy's real native-push round trip is a separate acceptance axis: three fail-loud doctors plus `LIVE=1 AGY_CONVERSATION_ID=<id> ./run.sh smoke-agy-native-push-live`, followed by a fresh-conversation sender/reply check after package install. Its deterministic install/sender gates are already inside `pnpm run check:full`; do not misreport the aggregate gate as live agy evidence. **Cost fence:** the agy conversation this smoke drives runs on a free account, so open it on `gemini-3.6-flash` — never a Pro tier. The model is the operator's choice at conversation-open time; entwurf never selects it, and no assertion reads it (see the shipped-lane note: model display is not part of the agy contract).
 >
 > Aggregate release-gate does not own a loaded Codex thread. Codex native-push remains an
-> on-demand host axis. The amended real `Pi → visible Codex → visible Pi` same-session cell
-> passed at `6e28c9e` with all three runtime coordinates in the app-server's tmux session;
-> `DELIVERY.md` owns that exact receipt. This closes A only. Exact `rust-v0.153.4` source
-> exposes no request→attached-TUI-seat value: its connection id remains internal
-> transport/subscription state, the TUI supplies no per-client turn metadata, and MCP/hook
-> state cannot name the attached caller. B is therefore **do not admit** on this vendor
-> surface. Do not run qualification, the frozen full floor, or release acceptance until an
-> upstream per-client metadata hook makes that join possible.
+> on-demand host axis. The final first-admission acceptance passed on 2026-09-12 with the
+> explicit home topology; `DELIVERY.md` owns its 57-assertion receipt and digest. Re-runs start
+> from a tmux session other than `codex`; the operator-owned
+> app-server and supported Codex TUIs sit in the existing exact `codex` session; omitted Codex
+> placement resolves there; and the Codex-opened Pi stays there. Exact `rust-v0.153.4` source
+> exposes no arbitrary request→attached-TUI-seat value, so that wider topology is unsupported
+> and unclaimed rather than a blocker to the explicit home.
 >
 > The A cell takes no inferred server or models:
 > `LIVE=1 ENTWURF_CODEX_APP_SERVER_PID=<existing-app-server-pid>
@@ -83,10 +82,11 @@ Verification here is not a benchmark. In production we exchange short turns and 
 > ENTWURF_CODEX_FRESH_PI_MODEL=<pi-model> ./run.sh smoke-codex-fresh-live`.
 >
 > The command name is not proof. The first leg must be a real record-backed visible Pi
-> citizen opening Codex; if a fixture or self-fetch receipt collector is what OPENS Codex,
-> the gate does not satisfy A. A fixture that only COLLECTS receipts beside that real Pi leg
-> is not the disqualifier — substituting for the leg is (see `docs/adding-a-harness.md`, the
-> same wording). Even a green A cell does not override the B admission stop.
+> citizen outside the Codex home opening Codex; if a fixture or self-fetch receipt collector
+> is what OPENS Codex, the gate does not satisfy the topology. A fixture that only COLLECTS
+> receipts beside that real Pi leg is not the disqualifier — substituting for the leg is (see
+> `docs/adding-a-harness.md`, the same wording). The receipt must separately name the initial
+> Pi, app-server, fresh Codex, and outbound Pi coordinates.
 >
 > Authoritative per-cut counts and digests live in BASELINE/CHANGELOG, not inline
 > here; embedding them in the protocol makes a correct guide stale after every cut.
@@ -105,7 +105,7 @@ Do not collapse source, package, fixture, and native-host evidence into one “g
 | LIVE runtime | `LIVE=1 ./run.sh release-gate <scratch> --cut` plus any shipped on-demand backend axis | `--cut` enforces `SKIP=0`; a red wired gate blocks the cut. |
 | Native Claude host | installed strict doctor against a new real session | Missing live join is `NOT CERTIFIED`, not a fixture PASS. |
 | Native agy host | three doctors plus conversation-id-gated native-push round trip | Aggregate release-gate does not own an agy conversation id. |
-| Native Codex host | same-session A accepted at `6e28c9e`; B blocked on exact 0.153.4 source | The operator-owned birth/MCP/statusline atoms and real cross-harness A are measured on Linux, but the app-server mechanism seat is not an attached-TUI address. First admission remains red until the vendor exports one per-client value visible both at the TUI seat and in MCP request metadata; qualification/full/release are unscheduled meanwhile. |
+| Native Codex host | explicit-home first admission accepted 2026-09-12 | Operator-owned birth/MCP/statusline atoms and the on-demand four-coordinate chain are measured on Linux at Codex 0.153.4: initial Pi outside the existing exact `codex` home; app-server, omitted-placement fresh Codex, and outbound Pi inside it; exact callbacks and addressed delivery both ways. `DELIVERY.md` owns the 57-assertion receipt and digest. Arbitrary attached-TUI placement is unsupported and unclaimed. |
 
 The repo-local `entwurf-release` skill owns the `land → prepare → make → publish`
 state machine. Each mode is a separate GLG authorization. Preserve one candidate,
@@ -168,7 +168,7 @@ The goal is not merely "invoke Claude Code." We want:
 4. source stable-bin exposure — including certified `entwurf` → this checkout's `run.sh`, the managed runtime Copilot fresh resolves; helper units are attempted independently and a foreign helper is a named FAIL
 5. agy bridge + exact permission + statusline + `PreInvocation` hook — only when `agy` is on PATH; each adapter is idempotent and independently doctorable
 6. Copilot four-unit composition (birth → MCP → receiver → visible footer) — only when `copilot` is on PATH (#86 C3b); the units run independently, each keeps its package-owned install-state and inverse, and a failed unit is a named component FAIL. The explicit `install-copilot-*`/`uninstall-copilot-*` surfaces remain the per-unit repair and inverse path
-7. Codex candidate composition — only when `codex` is on PATH: setup publishes all three operator-owned atoms and stays non-green until the vendor's trust receipt for the birth declaration exists; it never invokes sudo, never writes `[hooks.state]`, and never starts the app-server. Its setup cells prove the exact `env_vars` boundary, independent component outcomes, idempotence, the non-green-until-trusted verdict with its named operator repair, and that setup never writes the receipt itself. Deep qualification is unscheduled while the separate attached-TUI B admission blocker stands.
+7. Codex candidate composition — only when `codex` is on PATH: setup publishes all three operator-owned atoms and stays non-green until the vendor's trust receipt for the birth declaration exists; it never invokes sudo, never writes `[hooks.state]`, and never starts the app-server or creates the `codex` tmux home. Its setup cells prove the exact `env_vars` boundary, independent component outcomes, idempotence, the non-green-until-trusted verdict with its named operator repair, and that setup never writes the receipt itself. First-admission qualification follows the separate explicit-home LIVE; unrestricted attached-TUI placement is outside the claim.
 8. `entwurf-bridge` install smoke (`validate_entwurf_bridge`)
 9. computed summary — per-component PASS/SKIP/FAIL; any detected-integration FAIL makes the whole command exit nonzero while valid components stay installed
 
@@ -326,7 +326,7 @@ The minimum passing bar:
 5. **Honest self-recognition:** the bridged model identifies its actual harness/backend, lists `entwurf-bridge` as the single MCP server with its seven current tools, and presents a backend-native (not normalized) tool surface.
 6. **Carrier separation honored:** engraving vs pi-context-augment kept distinct (§1A.0); no bridge-identity narrative attributed to the engraving carrier.
 7. **agy shipped lane accepted:** all three agy doctors are green; automatic birth/statusline/sender identity and same-gid native-push reply are confirmed in a fresh conversation. `agentId=meta-session/antigravity` is correct; model display is not part of that contract. Same-pid concurrent conversation invocation is not claimed.
-8. **Codex candidate remains unaccepted:** its birth/MCP/status-line doctors and real visible `Pi → Codex → Pi` same-session A are green, but exact 0.153.4 source exposes no request→attached-TUI-seat carrier. Coordinate equality proves only that deployment; it cannot preserve default fresh parity for N attached TUIs across sessions. Codex's first release is blocked until an upstream per-client metadata hook reaches both the calling TUI seat and MCP request. Qualification/full are unscheduled meanwhile; manual placement, one app-server per seat, pane/process guessing, and hidden app-server management do not satisfy this criterion. Codex remains outside ACP and has no resume claim.
+8. **Codex first-admission home topology accepted:** its birth/MCP/status-line doctors are green and the on-demand real visible `Pi → Codex → Pi` cell records four coordinates: initial Pi in a session other than the exact existing `codex` home; operator-owned app-server, omitted-placement fresh Codex, and Codex-opened outbound Pi in that home; exact callbacks and addressed delivery succeed both ways. Missing home/app-server rejects without mutation. Entwurf neither creates nor supervises them, infers attached-TUI panes, nor claims unrestricted client placement. Codex remains outside ACP and has no resume claim.
 9. **Boundary preservation across backends/machines:** for every shipped or explicitly probed backend, regardless of install path or host, no cross-backend tool-surface contamination and no confabulation about pi internals.
 10. **Hygiene:** no orphan ACP children; no unexpected persisted session garbage (a turn-scoped `cwd:` fallback is never a persisted reuse).
 11. **New-harness admission closed:** a release that introduces a native harness admitted under the #82 contract has that harness in `FRESH_CALL_BACKENDS` on all three public surfaces, with `check-harness-admission-parity` green and its clause 7 visible-fresh LIVE step green in the MUST tier. That release also owes the cross-harness leg the same release stop names — two dispatch receipts, an existing citizen's live turn delivered into the new citizen and the new citizen's live turn delivered into an existing one — recorded in `DELIVERY.md`; its deterministic half is an owed follow-up, so until that gate lands this half of the condition is prose and is judged by the recorded receipts. Partial evidence is a branch state; an `unsupported` note in `DELIVERY.md` never weakens this stop.

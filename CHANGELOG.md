@@ -22,8 +22,9 @@ All notable changes to this project will be documented here. Format follows [Kee
   operator skill.** It requires an explicit model and uses the measured
   `codex --remote unix://<default-socket> --model … --dangerously-bypass-approvals-and-sandbox`
   shape. Root birth, MCP/env boundary, visible title, and the operator-owned app-server
-  socket/seat mechanism are checked before tmux mutation; a tmux-less app-server rejects.
-  This does not infer an attached TUI seat from request identity.
+  socket are checked before tmux mutation. With placement omitted, Codex resolves the exact
+  existing `codex` tmux home; a missing home rejects without creating one. Explicit placement
+  remains an expert override. This does not infer an attached TUI seat from request identity.
 
 ### Changed
 
@@ -34,9 +35,10 @@ All notable changes to this project will be documented here. Format follows [Kee
   may precede the CLI receipt; replay would duplicate the user's message.
 - **Codex remains outside ACP and Entwurf remains outside Codex lifecycle ownership.**
   Entwurf does not install Codex, supply auth, expose a generic app-server API/manager, or
-  start/supervise/restart the app-server. “Caller placement” is the app-server's actual
-  tmux seat, not an attached TUI pane. N attached TUIs across sessions have no
-  request→TUI seat join.
+  start/supervise/restart the app-server or create its tmux home. The supported topology is
+  one operator-owned existing session named `codex` containing the app-server and supported
+  Codex TUIs. N arbitrary attached TUIs across sessions still have no request→TUI seat join;
+  that wider topology is unsupported and unclaimed rather than a blocker to the explicit home.
 
 ### Upgrade note
 
@@ -47,11 +49,12 @@ sudo entwurf install-codex-birth
 entwurf install-codex-mcp
 entwurf install-codex-statusline
 
+# First create/open the operator-owned tmux session named exactly `codex`.
+# From a pane in that session:
 CODEX_HOME="${CODEX_HOME:-$HOME/.codex}"
 mkdir -p "$CODEX_HOME/app-server-control"
-# This chooses the mechanism seat. Put the intended Codex TUI in this same session
-# if the acceptance claim is “Codex beside Pi”.
 codex app-server --listen "unix://$CODEX_HOME/app-server-control/app-server-control.sock"
+# Seat supported Codex TUIs in this same `codex` session.
 ```
 
 Then restart/open Codex and send its first turn. `entwurf setup <project>` never runs sudo and
@@ -66,14 +69,33 @@ never starts the app-server.
   public MCP call woke one visible loaded thread; authenticated request identity resolved
   `agentId=meta-session/codex`, `replyable=true`; and a source hook minted a record in an
   isolated store. It does not qualify the amended candidate.
-- Laptop work is limited to affected focused cells. After the amendment and review,
-  Oracle still owes `check-gate-qualification`, the frozen `pnpm run check:full`, installed
-  root/user doctors, and actual real `Pi → visible Codex → visible Pi` clause-7 LIVE.
-  Release-gate strips ambient `PI_SESSION_ID`/`PI_AGENT_ID`; a fixture/self-fetch first
-  leg may collect receipts but cannot accept the harness. The installed-host receipt
-  must report fresh Codex, inherited app-server, and outbound Pi session coordinates
-  separately and keep admission red unless all three match. Codex remains unreleased
-  until those stops close.
+- The 2026-09-12 Codex 0.153.4 explicit-home LIVE passed 57 assertions. A real initial Pi
+  ran at `$150/@397`; the operator app-server remained at `$158/@390/%390`; omitted-placement
+  Codex opened at `$158/@398`; and Codex opened outbound Pi at `$158/@399`. Exact callbacks
+  and addressed delivery succeeded both ways. `DELIVERY.md` carries the garden ids, thread,
+  nonces, preserved log path, and SHA-256.
+- Two red attempts repaired the acceptance itself. “Wait” had let Codex call one-hour
+  `wait_agent`; the task now ends its turn and forbids wait tools. A model also reformatted
+  a copied LAUNCH receipt; the gate now compares travelling coordinates with the exact
+  tool-result receipts in the Pi transcript and Codex app-server thread, never model prose.
+  Failure cleanup interrupts only the exact smoke-owned active Codex turn and removes only
+  receipt-named windows.
+- The first 460-mutant qualification honestly stopped at 454/460. One wait-task mutant was
+  stale after the prompt repair; the birth safe-umask mutant was killed earlier by the new
+  package-root mode doctor but carried the wrong assertion label; and four setup claims shared
+  one control-red because `smoke-setup-verdict` ran real pnpm inside the qualifier's
+  node_modules-symlink snapshot. The manifest was re-pinned, safe-umask attribution now has one
+  QK helper at both valid failure leaves, and the setup behavior gate uses a strict fixture
+  pnpm accepting only a no-op `install --frozen-lockfile` or the source-owned `build-bridge`
+  emit, whose snapshot-local dist is removed on exit. The next run killed all 460 mutants but
+  correctly rejected its own impure snapshot: the fixture had called the production dist-lock
+  wrapper, which removed its lock but left the ignored `.tmp-verify` parent. The fixture now
+  invokes the process-exclusive snapshot emit directly; a focused pre/post tree-manifest replay
+  was byte-identical. The fresh run then killed **460/460** mutants across 43 lanes in 53m42s
+  with the origin and snapshot surfaces pure. Biome only collapsed the new manifest arrays onto
+  one line afterward (claim/subject/find/replace bytes and semantics unchanged), and the frozen
+  full floor passed in 506s. Codex remains unreleased until the implementation commit and
+  `0.20.2` release boundary are completed.
 
 ### Fixed
 

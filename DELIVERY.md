@@ -88,7 +88,7 @@ physical host. Do not read a D-level cell as a Darwin receipt.
 | **pi native Entwurf** | shipped | D7; D8 partial | Record-addressed Unix control socket. A record-less socket is diagnostic only and never dispatched. |
 | **Claude Code interactive `>=2.1.217`** | shipped; Linux certified | D6; D7/D8 partial | Per-session mailbox + exec-form `FileChanged`/`asyncRewake`. B2 proved idle wake and same-session continuity on one NixOS host. |
 | **Antigravity / agy** | shipped | D6; D7 partial | Record-backed native-push through LS gRPC `agentapi send-message`; no mailbox or receiver marker. Admitted before the #82 step 9 contract and not re-evaluated under it, so it is legacy citizen evidence, not a step-9 supported harness: `entwurf_fresh_call` cannot open an agy sibling, and nothing here should be read as claiming visible lifecycle parity. |
-| **Codex CLI app-server citizen** | unreleased candidate **blocked at B**; same-session A accepted on Linux at 0.153.4 (`6e28c9e`) | D6 candidate; D7 partial; D8 unproven | Vendor-trusted user-scope `SessionStart` birth plus strict per-request metadata join; no shared-pid sender marker. `thread/loaded/list` probes the operator-owned app-server UDS and one-shot `codex queue` delivers with no retry. The MCP `env_vars` boundary carries `CODEX_HOME`, Entwurf roots, and the app-server's actual tmux mechanism seat; this is not an attached-TUI join. Exact 0.153.4 source exposes no request→attached-TUI-seat carrier, so this vendor surface is **do not admit**; seek an upstream per-client metadata hook before qualification or release. |
+| **Codex CLI app-server citizen** | unreleased candidate; explicit-home first admission accepted on Linux at 0.153.4 (2026-09-12) | D6 accepted; D7 partial; D8 unproven | Vendor-trusted user-scope `SessionStart` birth plus strict per-request metadata join; no shared-pid sender marker. `thread/loaded/list` probes the operator-owned app-server UDS and one-shot `codex queue` delivers with no retry. The supported visible topology is one operator-owned existing tmux session named `codex`: the app-server and supported Codex TUIs sit there, omitted Codex fresh placement selects it, and Codex-opened Pi stays beside its caller. Missing home rejects; Entwurf creates/supervises none of it. Exact 0.153.4 source bounds unrestricted attached-TUI placement as unsupported, not as a blocker to this explicit topology. |
 | **Codex embedded TUI** | deferred | D0 partial | At the 2026-09-08 Codex 0.153.4 measurement, standalone mode had no `watchPaths`/`FileChanged`/`asyncRewake` analogue or supported idle receive route. This is dated vendor evidence, not a claim that the current candidate lacks records or fresh. |
 | **Copilot CLI first-party extension** | raw transport probe; superseded by the owned product unit | D7 path observed; D3 control receipt incomplete; D8 unproven | CLI-spawned extension over stdio JSON-RPC; `joinSession()` + documented `fs.watch` → `session.send({mode:"enqueue"})`. Idle wake, exact-marker reply, and completion passed on 2026-08-23 (CLI 1.0.80, L4, one Linux host). Two-process isolation was observed but its decisive B log was not preserved. Kept as the transport receipt the owned receive unit was built on; the shipped unit differs deliberately — it announces the inbox instead of injecting the body. |
 | **Copilot CLI garden citizen** | shipped in 0.15.0; send + receive + visible fresh accepted on one host | D6; D7 partial; D3 pending; D8 unproven | Birth, garden id, MCP hand and record-backed sender identity are accepted; the RECEIVER is an installed first-party extension that binds to the V3 record, writes a receiver marker owned by the WATCHER pid, and rings a doorbell the model drains with `entwurf_inbox_read`. `wakeMode` is `self-fetch`, so dispatch reaches the mailbox rail: armed → delivered, unarmed/stale → the honest `mailbox-undeliverable` refusal. **D6 is the owned-invocation LIVE acceptance of 2026-08-23** — garden `20260823T181316-d9f6ba`, native `20fe30c8-b2bc-4600-91a0-8a409131be51`, CLI 1.0.80: receive log `joined`→`armed`→`doorbell fresh=1`→`rang`, mailbox `lastEnqueuedAt 09:23:41.235Z` / `lastReadAt 09:23:56.480Z`, and a model reply on the same record/native/gid chain. **Visible fresh (step 9 clause 7) is a separate LIVE, 2026-08-25** — launch window `@89`/`%89` nonce `mux-fresh-call-690529ae99f99faa2252aefb`; exact-callback garden `20260825T085721-f68be0`; one `entwurf_v2` → `meta-mailbox → enqueued`; same garden `lastReadAt 2026-08-24T23:57:47.784Z` plus same-gid reply; GLG saw footer garden id and a healthy multi-turn window. Those rows stay unmerged. D7 is PARTIAL: reply and read receipt were observed, the completion taxonomy and long-haul operation were not. D3 (second-session isolation of an owned invocation) is PENDING — observed once, decisive log lost to scratch cleanup. Evidence level L4: one host. Launch through the owned invocation `entwurf copilot`, which sets `COPILOT_CLI_ENABLED_FEATURE_FLAGS=EXTENSIONS` for that one process; `doctor-copilot-receive` reads live CLI environments because a session launched without it is silently inert. Visible fresh is operator-metered and is not a release-gate MUST. |
@@ -139,8 +139,8 @@ the app-server-backed shape measured at Codex CLI **0.153.4**. It is not ACP and
 not duplicate GPT access:
 
 ```text
-operator starts app-server in one chosen tmux seat
-  → its configured MCP env_vars forward that mechanism seat and explicit roots
+operator starts app-server in existing exact tmux session `codex`
+  → its configured MCP env_vars forward that home coordinate and explicit roots
   → visible codex TUI attaches with --remote unix://<default socket>
     → first turn runs the vendor-trusted user-scope SessionStart birth
       → V3 record(nativeSessionId = threadId)
@@ -152,21 +152,21 @@ operator starts app-server in one chosen tmux seat
 The standalone embedded TUI remains outside this rail: the 2026-09-08 measurement
 found no idle receive route equivalent to the app-server. `turn/steer` is active-turn
 steering, not idle wake. Entwurf does not start, stop, supervise, or health-loop the
-app-server. The operator starts it **inside one chosen tmux mechanism seat**:
+app-server. The operator starts it **inside the existing exact tmux session `codex`**:
 
 ```bash
+# Run from a pane in the operator-owned tmux session named exactly `codex`.
 CODEX_HOME="${CODEX_HOME:-$HOME/.codex}"
 mkdir -p "$CODEX_HOME/app-server-control"
 codex app-server --listen "unix://$CODEX_HOME/app-server-control/app-server-control.sock"
 ```
 
-“Caller placement” for a Codex MCP call is this app-server seat. It is not the
-attached TUI's pane: attached clients share the server, while the bridge is the
-app-server's child. There is no request→TUI seat join, so N attached TUIs in different
-sessions do not imply adjacency. If “Codex beside Pi” is required, the intended Codex
-TUI must share the app-server's session, and the outbound Pi window must land in that
-same session. If the app-server has no `TMUX`/`TMUX_PANE`, visible fresh rejects honestly
-rather than guessing a client pane or starting a server.
+This session is the supported home for the app-server and Codex TUIs. Omitted Codex
+fresh placement resolves its exact name from the caller's tmux server; Codex's MCP child
+then inherits the app-server's own `TMUX`/`TMUX_PANE`, so omitted outbound Pi placement
+stays in the home. An attached TUI does not lend its pane to the server, and N arbitrary
+clients in different sessions have no adjacency claim. Missing home/app-server rejects
+rather than guessing a client pane or creating/supervising either resource.
 
 Three ownership atoms remain separate:
 
@@ -211,15 +211,19 @@ name its caller and the callback was uncorrelatable.
 Visible fresh runs:
 
 ```text
-codex --remote unix://<default socket> --model <explicit model>
-      --dangerously-bypass-approvals-and-sandbox <callback-first prompt>
+existing tmux session: codex
+  operator-owned app-server + supported Codex TUIs
+  codex --remote unix://<default socket> --model <explicit model>
+        --dangerously-bypass-approvals-and-sandbox <callback-first prompt>
 ```
 
-The amended preflight must certify the state-backed birth closure digests, the vendor trust receipt, exact MCP/env
-boundary, `thread-title`, and app-server socket before tmux mutation. The callback
-spelling is `mcp__entwurf_bridge__entwurf_v2`; the new garden id comes only from its
-sender envelope. There is no Codex resume, watcher, supervisor, or app-server
-lifecycle ownership.
+With `placement` omitted, the fresh composition resolves the exact existing `codex` session name
+to its native `$id` before mutation. Other backends retain caller-session default placement; an
+explicit seat remains an expert override. The amended preflight must certify the state-backed birth
+closure digests, vendor trust receipt, exact MCP/env boundary, `thread-title`, and app-server socket
+before tmux mutation. The callback spelling is `mcp__entwurf_bridge__entwurf_v2`; the new garden id
+comes only from its sender envelope. There is no Codex resume, watcher, session/app-server creator,
+or lifecycle supervisor.
 
 The 2026-09-11 Linux run used Codex 0.153.4 and the default app-server: the production
 probe found loaded thread `01a08bff-4efa-7071-9cac-b6d29da5f126`; native-push and a
@@ -240,27 +244,38 @@ tmux session `$158`. Cleanup removed only smoke windows `@355`, `@356`, and `@35
 preserved all three records/transcripts, and left operator app-server PID `155166` and
 `$158/@351/%351` alive.
 
-That receipt closes only the supported same-session deployment. It does not supply a
-request→attached-TUI-seat join, so unrestricted attached-TUI parity (**B**) remains an
-admission stop. The exact vendor checkout `rust-v0.153.4` at
-`3d2ee51ca2d5db578f328aa75e20aa22c0197c9a` closes the source search with no public
-carrier: its process-local `ConnectionId` is internal transport/subscription routing and absent
-from the wire; every TUI initializes as the same `codex-tui` client and learns no server id; the
-TUI sends no `responsesapi_client_metadata`; the UDS acceptor collects no peer pid/credentials;
-and thread-scoped notifications and app-server→client server requests fan out to current
-subscribers without retaining the turn-originating connection in core/MCP state. The TUI-local
-dynamic task MCP is a closed vendor namespace, not a route to the shared Entwurf MCP child.
+That receipt established the mechanism of the now-selected deployment, but its initial Pi also sat
+in the app-server session and predates the fixed-home default. The stronger explicit-home acceptance
+passed on 2026-09-12. Receipt `.probe-artifacts/20260912T140745-codex-home-live-green.log`
+(SHA-256 `09e79bd1b62962f8a11d647ee456a71b11965b6792c7972d97ac4992119c91d7`)
+records 57 assertions and exit 0. The operator app-server stayed at `$158/@390/%390`; real initial Pi
+`20260912T140748-355654` opened outside the home at `$150/@397`, omitted-placement Codex
+`20260912T140800-8bc8d9` / thread `01a09403-e232-76b0-af9a-5cbaed8d94a9` opened at `$158/@398`,
+and Codex opened outbound Pi `20260912T140829-a08178` at `$158/@399`. The callbacks preserved exact
+nonces `mux-fresh-call-5d28f8e5bc2acf275ded30ec` and
+`mux-fresh-call-7a5fb4960dbb172843eb14fe`; initial Pi → Codex reported
+`entwurf_v2 native-push → delivered`, Codex read back its live garden-id title through `thread/read`,
+and every smoke-owned window was removed while the operator app-server remained alive.
 
-The current 0.153.4 outcome is therefore **do not admit**, pending an upstream per-client
-metadata hook visible both to the attached TUI seat and the MCP request. A two-TUI run could
-exhibit wrong-seat fanout but cannot prove or manufacture an address absent from the vendor
-protocol, so no further model LIVE is scheduled. Qualification and the frozen full floor are
-also unscheduled while this blocker stands. Manual placement, one app-server per seat,
-pane/process guessing, and a hidden manager remain invalid substitutes. The A gate strips
-ambient `PI_SESSION_ID`/`PI_AGENT_ID`; a fixture may preserve receipts but cannot substitute
-for the initial visible record-backed Pi turn.
+Two red attempts tightened the acceptance rather than weakening it. The first reached correct home
+placement but Codex interpreted “wait” as `wait_agent(timeout_ms=3600000)`, leaving its first turn
+active; the prompt now requires ending the turn and forbids every wait tool. The second proved that a
+model may reformat a receipt while copying it. Coordinate reports now travel between citizens, but
+the gate validates them against the exact Pi transcript tool result and Codex `thread/read` tool
+result instead of treating model-reformatted prose as raw evidence. Failure cleanup recovers the
+exact Codex thread from its nonce callback, interrupts only its still-running smoke-owned turn, and
+closes only receipt-named windows.
 
-Oracle's clause-7 invocation is explicit about the operator-owned seat and both models:
+Unrestricted attached-TUI parity (**B**) is explicitly outside this support claim. The exact vendor
+checkout `rust-v0.153.4` at `3d2ee51ca2d5db578f328aa75e20aa22c0197c9a` found no public
+request→attached-TUI-seat carrier: process-local `ConnectionId` does not cross into thread/core/MCP/hook
+state, and the TUI-local dynamic task MCP is a closed vendor namespace. That source result now bounds
+the topology instead of blocking the explicit home. Manual pane/process guessing and hidden manager
+behaviour remain invalid; explicit `placement.tmuxSession` is an operator-named expert override, not
+an inferred seat. The gate strips ambient `PI_SESSION_ID`/`PI_AGENT_ID`; a fixture may preserve receipts
+but cannot substitute for the initial visible record-backed Pi turn.
+
+Run the clause-7 invocation from a tmux session other than `codex`; the explicit app-server PID must belong to the operator-owned app-server seated in `codex`, and both models are explicit:
 
 ```bash
 LIVE=1 \
@@ -270,9 +285,9 @@ ENTWURF_CODEX_FRESH_PI_MODEL=<pi-model> \
 ./run.sh smoke-codex-fresh-live
 ```
 
-This is the intended gate entrypoint, not acceptance by command name. If its first
-leg is still fixture-originated rather than a real visible Pi citizen, #95 remains red
-even when the later callback and delivery receipts are valid.
+This is the intended gate entrypoint, not acceptance by command name. The accepted receipt above
+has a fixture only collecting evidence: a real visible record-backed Pi opens Codex from outside the
+home, and the later exact callback and bidirectional delivery receipts close the topology claim.
 
 ### Copilot CLI: one citizen, two rails, one pending receipt
 

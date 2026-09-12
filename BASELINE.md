@@ -9,8 +9,8 @@ not what it was told to claim.
 Claude is the reference ACP backend. Cortex Code has a separate compact baseline
 because it has no system-prompt carrier and keeps its own native tool surface.
 Antigravity (`agy`) and Codex are native-push citizens rather than ACP backends and therefore
-have separate citizen/round-trip baselines. Codex's current native baseline is the 0.153.4
-receipt in `DELIVERY.md`; it is not part of this ACP operator interview.
+have separate citizen/round-trip baselines. Codex's 0.153.4 explicit-`codex`-home acceptance
+receipt and protocol live in `DELIVERY.md`; neither is part of this ACP operator interview.
 
 ## Release-host baseline
 
@@ -34,6 +34,7 @@ not **UNSUPPORTED** — the deliberate never, which today is native Windows only
 | Maintainer NixOS installed package | **certified** for `0.12.8-repair.1` | 2026-07-25 registry install → doctor exit 0 (HISTORY) |
 | Secondary Ubuntu installed package | **certified** for `0.12.8-repair.1` | 2026-07-25 same artifact, isolated agent dir → doctor exit 0 (HISTORY) |
 | macOS Claude meta-bridge | NOT CERTIFIED — pending physical host | No physical-Mac doctor yet; a CI runner has no Claude login. Physical-host rental remains unscheduled; no cut has carried it. |
+| Native Codex Linux home topology | **certified** for the unreleased 0.20.2 candidate | 2026-09-12, Codex 0.153.4: 57-assertion explicit-home LIVE. Initial Pi `$150/@397`; operator app-server `$158/@390/%390`; omitted-placement Codex `$158/@398`; Codex-opened Pi `$158/@399`; exact callbacks and addressed delivery both ways. Receipt and digest: `DELIVERY.md`. Deterministic closure: qualification 460/460 across 43 lanes with origin/snapshot purity green, then frozen full floor exit 0 in 506s. Unrestricted attached-TUI placement remains unsupported and unclaimed. |
 | Darwin install fence (meta/copilot/omp-bridge + omp-receive) | portable (Linux or Darwin) | Four installers accept Darwin; python3/node/harness presence holds the seat, not the platform name. A Darwin install is not a rail receipt. |
 | Doctor fail-closed on unreadable environ | Linux measured; Darwin unmeasured | Copilot launch-flag and omp identity-carrier: missing `/proc/<pid>/environ` as predicate INPUT is `UNVERIFIABLE` (non-green), not a benign note. omp distinguishes `pgrep` exit 1 (absent) from exit 2 (enumeration failed); copilot distinguishes ENOENT/ESRCH (gone) from other errno (read denied). |
 | setup on uncertified platform with harness present | named non-green | All 13 harness units ask `harness_rail_certified_platform()`; uncertified → FAIL whose wording is not "install failed". Harness-absent Darwin setup (the CI cell) can still be computed green. |

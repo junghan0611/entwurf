@@ -10,7 +10,7 @@ npm package: <https://www.npmjs.com/package/@junghanacs/entwurf>
 
 Legacy package: [`@junghanacs/pi-shell-acp`](https://www.npmjs.com/package/@junghanacs/pi-shell-acp). `entwurf` is its 0.12+ successor line: the same work renamed around the garden-citizen dispatch substrate rather than the pi adapter.
 
-> **Repository shape.** This repo is **entwurf-core (v2 dispatch) + native-harness bridges + a pi adapter + an ACP plugin**. Pi is one adapter, not the project subject. Claude Code, GitHub Copilot CLI, and OMP (`omp`) are shipped self-fetch citizens; Antigravity (`agy`) is shipped native-push. Codex CLI is an **unreleased native-push candidate blocked at B** over the operator-owned app-server: vendor-trusted user-scope birth, strict request-scoped identity, loaded-thread probe, and one-shot queue delivery. Same-session A is green, but exact 0.153.4 source exposes no request→attached-TUI-seat carrier, so the current vendor surface is do-not-admit. It remains native so Codex keeps its vendor tools, delegation, and work context; this is not another way to buy or expose GPT through ACP.
+> **Repository shape.** This repo is **entwurf-core (v2 dispatch) + native-harness bridges + a pi adapter + an ACP plugin**. Pi is one adapter, not the project subject. Claude Code, GitHub Copilot CLI, and OMP (`omp`) are shipped self-fetch citizens; Antigravity (`agy`) is shipped native-push. Codex CLI is an **unreleased native-push candidate with its Linux home-topology acceptance green** over the operator-owned app-server: vendor-trusted user-scope birth, strict request-scoped identity, loaded-thread probe, one-shot queue delivery, and visible fresh in one explicit operator-owned tmux home named `codex`. Unrestricted attached-TUI seat inference is not supported or claimed; that non-goal no longer blocks the explicit home topology. Codex remains native so it keeps its vendor tools, delegation, and work context; this is not another way to buy or expose GPT through ACP.
 
 ```text
 Claude Code / Copilot / Codex / agy / omp / pi
@@ -19,7 +19,7 @@ Claude Code / Copilot / Codex / agy / omp / pi
       → control-socket | meta-mailbox | native-push
 ```
 
-[`entwurf_v2`](#entwurf_v2--canonical-dispatch-verb) is the canonical dispatch surface over *existing* garden citizens — live control-socket send, meta-mailbox enqueue, and native-push into a live Antigravity conversation or loaded Codex candidate thread. It starts no process on any rail. `entwurf_fresh_call` is separate lifecycle: for Codex, its inherited placement context is the operator-owned app-server's actual tmux seat forwarded through the MCP entry's `env_vars`, **not** the pane of any attached TUI. This mechanism passed same-session A, but exact 0.153.4 source confirms that request metadata does not join a request to an attached TUI's tmux seat. With N TUIs across sessions, symmetric default placement is unavailable; sharing the app-server session is an A deployment condition, not Codex admission. A tmux-less app-server rejects visible fresh honestly. Codex has no resume surface.
+[`entwurf_v2`](#entwurf_v2--canonical-dispatch-verb) is the canonical dispatch surface over *existing* garden citizens — live control-socket send, meta-mailbox enqueue, and native-push into a live Antigravity conversation or loaded Codex candidate thread. It starts no process on any rail. `entwurf_fresh_call` is separate lifecycle. With Codex placement omitted, it resolves the exact existing tmux session named `codex`; that operator-owned home holds the app-server and supported Codex TUIs. Missing home or app-server rejects before launch, and Entwurf never creates or supervises either. An explicit `placement.tmuxSession` remains an expert override. Exact 0.153.4 source confirms that arbitrary attached-TUI request→seat inference is unavailable, so Entwurf makes no such claim. Codex has no resume surface.
 
 **Garden id is deliberate vocabulary.** It is not a decorative synonym for session id, worker, delegate, or subagent. The unfamiliar word is a guard: each harness keeps its own identity and transcript, while `entwurf` supplies a narrow addressable surface between siblings.
 
@@ -82,8 +82,10 @@ A few words that look unusual for a coding tool.
 macOS is CERTIFIED (CI) (`macos-install-surface`). On macOS every
 garden-native harness rail, marker/request join, ACP turn, and mux is NOT CERTIFIED —
 pending physical host. On Linux the released harness rails are the certified axis;
-the unreleased Codex candidate passed same-session A at `6e28c9e` but is blocked at B:
-0.153.4 has no request→attached-TUI-seat carrier, so qualification/release is unscheduled.
+the unreleased Codex candidate passed its explicit-home first admission on 2026-09-12: a real Pi
+outside `codex` opened Codex and outbound Pi inside it, with exact callbacks and delivery both ways.
+Unrestricted attached-TUI placement
+is unsupported rather than a release blocker.
 Native Windows is UNSUPPORTED.
 CERTIFIED (CI) is weaker than a physical-host doctor green.
 The npm package has no `os` restriction; that is installability, not a
@@ -255,7 +257,7 @@ repair surface: each unit has its own installer, doctor, and inverse.
 - **Antigravity / agy** (Linux CERTIFIED; macOS NOT CERTIFIED — pending physical host) — `install-agy-bridge`, `install-agy-statusline`, `install-agy-hooks`, each with a matching `doctor-agy-*`.
 - **GitHub Copilot CLI** (Linux CERTIFIED; macOS NOT CERTIFIED — pending physical host) — four independent units, four independent failure modes: `install-copilot-bridge` (birth: garden id + who-sent, on the first prompt), `install-copilot-mcp` (the entwurf tool hand, where `entwurf_inbox_read` lives), `install-copilot-receive` (the receiver extension: doorbell + receiver marker), `install-copilot-statusline` (optional for a manual citizen, required for supported fresh) — each with a matching `doctor-copilot-*` and `uninstall-copilot-*`.
 - **OMP (`omp`)** (Linux CERTIFIED; macOS NOT CERTIFIED — pending physical host) — four units, in-process extensions rather than launchers: `install-omp-bridge` (birth: the `mode === "tui"` visible host, its garden id on the status line, and who-sent), `install-omp-mcp` (the omp-native `entwurf-bridge` entry), `install-omp-config` (the one operator setting `tools: xdev: false`, without which the vendor mounts MCP tools as `xd://` devices the model cannot call), `install-omp-receive` (the receiver extension: mailbox watch + announce-only doorbell) — each with a matching `uninstall-omp-*`, and a `doctor-omp-*` for all but the setting, whose runtime axis `doctor-omp-mcp` owns. The setting writer owns exactly the lines it adds and refuses an explicit operator `tools: xdev: true` by name rather than overwriting it.
-- **OpenAI Codex CLI** (unreleased candidate blocked at B; macOS NOT CERTIFIED) — `install-codex-birth` publishes the `SessionStart` declaration into `$CODEX_HOME/hooks.json` with its launcher closure under `$XDG_DATA_HOME/entwurf/codex-birth`, all operator-owned; the vendor trust receipt for that declaration is the operator's single answer, and `doctor-codex-birth` reports it as its own axis (present, or red with the exact instruction — never computed, never written); `install-codex-mcp` owns `[mcp_servers.entwurf-bridge]`, including the `env_vars` boundary for `CODEX_HOME`, Entwurf garden/control roots, and the app-server's `TMUX`/`TMUX_PANE`; `install-codex-statusline` owns `thread-title`. Each has a matching doctor and inverse. The operator starts and seats the app-server; Entwurf never installs or supervises it and never discovers a TUI seat. Real `Pi → Codex → Pi` same-session A passed at `6e28c9e`, but exact 0.153.4 source exposes no dual-sided per-client carrier. The current vendor surface is do-not-admit; an upstream metadata hook must precede qualification or release.
+- **OpenAI Codex CLI** (unreleased candidate; Linux home-topology acceptance green, macOS NOT CERTIFIED) — `install-codex-birth` publishes the `SessionStart` declaration into `$CODEX_HOME/hooks.json` with its launcher closure under `$XDG_DATA_HOME/entwurf/codex-birth`, all operator-owned; the vendor trust receipt for that declaration is the operator's single answer, and `doctor-codex-birth` reports it as its own axis (present, or red with the exact instruction — never computed, never written); `install-codex-mcp` owns `[mcp_servers.entwurf-bridge]`, including the `env_vars` boundary for `CODEX_HOME`, Entwurf garden/control roots, and the app-server's `TMUX`/`TMUX_PANE`; `install-codex-statusline` owns `thread-title`. Each has a matching doctor and inverse. The operator owns one existing tmux session named `codex`, starts the app-server there, and seats supported Codex TUIs there. Omitted Codex fresh placement selects that home; Entwurf never creates or supervises the session/app-server and never discovers arbitrary attached-TUI seats. An explicit placement is an expert override. Exact 0.153.4 source's missing per-client carrier bounds the unsupported topology; it does not block this explicit home deployment.
 
 Run them as `entwurf <command>`. Which unit a doctor's refusal names, and the clean-host
 walk-through for each harness, live in [docs/setup-clean-host.md](./docs/setup-clean-host.md).
@@ -450,8 +452,8 @@ The Claude ACP backend keeps its native model / API / tools; entwurf shapes only
 
 Codex is not an ACP backend here. Its unreleased native-push candidate uses `SessionStart`
 for birth, strict request `_meta` for who-sent, and a loaded app-server thread as the live route.
-Same-session A is green; admission is blocked because 0.153.4 exposes no request→attached-TUI-seat
-carrier to preserve default fresh parity across attached clients.
+Its supported visible topology is one operator-owned existing tmux home named `codex`; omitted
+Codex fresh placement selects it, while unrestricted attached-TUI seat inference is not claimed.
 
 Antigravity is also not an ACP backend. It is a native-push citizen: `PreInvocation` supplies birth/sender identity, `entwurf_v2` probes and direct-injects replies into the live conversation, and no mailbox/receiver marker is involved.
 
@@ -483,16 +485,16 @@ LIVE=1 AGY_CONVERSATION_ID=<id> ./run.sh smoke-agy-native-push-live
 # Codex loaded-thread probe (pre-amendment evidence; not first-release acceptance):
 LIVE=1 CODEX_LIVE_THREAD_ID=<threadId> ./run.sh smoke-codex-native-push-live
 
-# Codex same-session A evidence (green at 6e28c9e; NOT admission while B is blocked).
-# Record the fresh Codex, app-server, and outbound Pi session coordinates separately;
-# equality proves only this deployment, not attached-TUI parity:
+# Codex explicit-home acceptance. Run from a DIFFERENT tmux session; the operator-owned
+# app-server and supported Codex TUIs sit in the existing exact `codex` session. Record
+# initial Pi, app-server, fresh Codex, and outbound Pi coordinates separately:
 LIVE=1 ENTWURF_CODEX_APP_SERVER_PID=<existing-app-server-pid> \
   ENTWURF_CODEX_FRESH_MODEL=<codex-model> \
   ENTWURF_CODEX_FRESH_PI_MODEL=<pi-model> \
   ./run.sh smoke-codex-fresh-live
-# This accepts only a real visible Pi → visible Codex → visible Pi run. A fixture or
-# self-fetch first leg may collect receipts but does not satisfy A. Do not schedule
-# qualification/release until the vendor supplies the B carrier.
+# This accepts only a real visible Pi → visible Codex → visible Pi run: initial Pi outside
+# the Codex home, then Codex and its outbound Pi inside it. A fixture or self-fetch first leg
+# may collect receipts but does not satisfy the topology. No arbitrary attached-TUI parity is claimed.
 
 # ACP plugin LIVE acceptance — need the operator's local Claude auth/credit:
 LIVE=1 ./run.sh smoke-acp-socket-citizen-live   # turn-free socket citizenship (S1)

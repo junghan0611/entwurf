@@ -1583,8 +1583,9 @@ receive/delivery, or visible-identity units are absent. Codex additionally requi
 default app-server socket; entwurf never starts or supervises it. An optional cwd starts the
 sibling in ONE literal absolute existing directory (cross-repo fresh) — never pick resume for a dormant
 record's cwd; resume is continuity-only. Omitted/empty cwd means the caller's own directory. An optional
-placement.tmuxSession opens it in ONE EXISTING session of this agent's own tmux server; an absent SESSION is
-tmux-session-missing and NOTHING is created. Omit placement for the caller's own session. There are no
+placement.tmuxSession is an expert override naming ONE EXISTING session on this agent's own tmux server.
+When placement is omitted, Codex targets the exact existing \`codex\` home session; other backends target the
+caller's session. A missing named/home session is tmux-session-missing and NOTHING is created. There are no
 arbitrary command/env knobs. Do not put secrets in the task — model and task argv are visible to same-user
 processes on this host.`,
 		parameters: Type.Object({
@@ -1620,7 +1621,7 @@ processes on this host.`,
 					},
 					{
 						description:
-							"Optional project seat: open the sibling in ONE EXISTING tmux session of this agent's own server instead of the caller's session. Nothing is ever created — an absent session is a refusal, not a new session. Independent of cwd; neither is inferred from the other. The receipt echoes the REQUESTED name and reports the resolved target session id.",
+							"Optional expert seat override: open the sibling in ONE EXISTING tmux session of this agent's own server. When omitted, Codex selects the exact existing `codex` home session; other backends use the caller's session. Nothing is ever created. Independent of cwd; neither is inferred from the other. The receipt reports the selected name, its source, and resolved target session id.",
 					},
 				),
 			),

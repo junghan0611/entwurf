@@ -23,6 +23,7 @@ DOCTOR="$REPO_DIR/scripts/codex-birth-doctor.sh"
 pass=0
 ok() { printf '  ok    %s\n' "$1"; pass=$((pass + 1)); }
 die() { printf 'FAIL: %s\n' "$1" >&2; exit 1; }
+safe_umask_fail() { die "[QK:CODEX-BIRTH-INSTALL-SAFE-UMASK] $1"; }
 want() { eval "$2" && ok "$1" || die "$1"; }
 refuses() { # <label> <expected-substring-on-stderr> <cmd...>
   local label="$1" needle="$2"; shift 2
@@ -123,7 +124,7 @@ grep -v '^\[hooks.state' "$SB/config.before.toml" | grep -v '^trusted_hash' > "$
 "$DOCTOR" >"$SB/out" 2>&1 && die "the doctor was green with no [hooks.state] table at all"
 want "trust-absent is red and says which table is missing" "grep -q 'no vendor trust receipt for this declaration' '$SB/out' && grep -q 'no \[hooks.state\] table' '$SB/out'"
 cp "$SB/config.before.toml" "$CFG"
-"$DOCTOR" --unit-only >"$SB/out" 2>&1 || die "--unit-only should be green on intact bytes: $(cat "$SB/out")"
+"$DOCTOR" --unit-only >"$SB/out" 2>&1 || safe_umask_fail "--unit-only should be green on intact bytes: $(cat "$SB/out")"
 want "--unit-only reports the trust axis as SKIPPED, never as green" \
   "grep -q 'the TRUST axis was skipped' '$SB/out' && grep -q 'This is a skipped axis, not a green one' '$SB/out'"
 
@@ -277,7 +278,7 @@ rm -rf "$CODEX_HOME/hooks.json" "$UNIT_ROOT"
 ( umask 000; "$INSTALL" >/dev/null 2>&1 ) || die "install under umask 000 failed"
 UNSAFE_DIRS="$(find "$XDG_DATA_HOME" "$CODEX_HOME" -type d -perm /022 2>/dev/null || true)"
 [ -z "$UNSAFE_DIRS" ] && ok "every directory published under umask 000 is non-group/world-writable" \
-  || die "[QK:CODEX-BIRTH-INSTALL-SAFE-UMASK] umask 000 published writable directories: $UNSAFE_DIRS"
+  || safe_umask_fail "umask 000 published writable directories: $UNSAFE_DIRS"
 want "the published files are not group/world-writable either" \
   "[ -z \"\$(find '$UNIT_ROOT' -type f -perm /022 2>/dev/null)\" ] && [ ! -w /dev/null -o -z \"\$(find '$HOOKS' -perm /022 2>/dev/null)\" ]"
 

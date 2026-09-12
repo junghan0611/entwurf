@@ -1,11 +1,10 @@
 /**
  * First-admission LIVE acceptance for Codex visible fresh.
  *
- * The operator owns the Codex app-server. This smoke neither starts nor supervises it: an
- * explicit ENTWURF_CODEX_APP_SERVER_PID names the already-running process whose /proc environment is
- * the seat authority. In Codex remote mode every TUI hook and MCP child belongs to that one
- * app-server process, so its TMUX/TMUX_PANE identify the real launch seat; the attached TUI pane
- * is deliberately not guessed.
+ * The operator owns the existing exact `codex` tmux home and Codex app-server. This smoke neither
+ * creates nor supervises them: an explicit ENTWURF_CODEX_APP_SERVER_PID names the already-running
+ * process whose /proc environment must corroborate the home. It starts from a DIFFERENT caller
+ * session; omitted Codex placement selects the home by exact name. The attached TUI pane is never guessed.
  *
  * RELEASE MUST once Codex is admitted. LIVE!=1 is the only host-prerequisite SKIP. With LIVE=1,
  * missing system birth, user MCP/status config, app-server, models, runtime, bridge, or tmux seat
@@ -31,8 +30,12 @@ import {
 	writeMetaReceiverMarker,
 	writeMetaSenderMarker,
 } from "../pi-extensions/lib/meta-session.ts";
-import { FRESH_CALL_BACKENDS } from "../pi-extensions/lib/mux-fresh-call.ts";
-import { readCodexThread, resolveCodexDefaultSocketPath } from "../pi-extensions/lib/native-push/codex-ws-client.ts";
+import { CODEX_HOME_TMUX_SESSION, FRESH_CALL_BACKENDS } from "../pi-extensions/lib/mux-fresh-call.ts";
+import {
+	readCodexThread,
+	realCodexProtocolOpener,
+	resolveCodexDefaultSocketPath,
+} from "../pi-extensions/lib/native-push/codex-ws-client.ts";
 import {
 	buildCodexInstruction,
 	buildInitialPiPhaseOne,
@@ -81,6 +84,7 @@ const fixtureArtifacts: string[] = [];
 // as they become known.
 let codexSocketPath = "";
 let initialPiTranscript = "";
+let codexLaunchNonce = "";
 let codexThreadId = "";
 // Reachable from the EXIT path, not just from a wait: an assertion that throws must still be
 // able to ask the fixture's own mailbox which windows this run opened.
@@ -215,14 +219,98 @@ function cleanupFixture(): string[] {
 	return failures;
 }
 
-/** The Codex window handle as the initial Pi caller's OWN transcript recorded its tool result. */
-function recoverCodexWindows(): string[] {
+/** Exact fresh-call receipt bodies as the initial Pi caller's OWN transcript recorded them. */
+function readInitialPiFreshReceipts(backend: "codex" | "pi"): string[] {
 	if (initialPiTranscript === "") return [];
 	try {
-		return launchReceiptWindows(fs.readFileSync(initialPiTranscript, "utf8"), "codex");
+		const found: string[] = [];
+		for (const line of fs.readFileSync(initialPiTranscript, "utf8").split("\n")) {
+			if (line.trim() === "") continue;
+			const entry = JSON.parse(line) as {
+				type?: unknown;
+				message?: { role?: unknown; content?: unknown };
+			};
+			if (entry.type !== "message" || entry.message?.role !== "toolResult" || !Array.isArray(entry.message.content))
+				continue;
+			for (const block of entry.message.content) {
+				const text = (block as { text?: unknown } | null)?.text;
+				if (
+					typeof text === "string" &&
+					new RegExp(`^\\[entwurf fresh call →\\]\\n\\s*backend:\\s+${backend}\\b`, "m").test(text)
+				)
+					found.push(text);
+			}
+		}
+		return found;
 	} catch {
 		return [];
 	}
+}
+
+/** The Codex window handle as the initial Pi caller's OWN transcript recorded its tool result. */
+function recoverCodexWindows(): string[] {
+	return readInitialPiFreshReceipts("codex").flatMap((receipt) => launchReceiptWindows(receipt, "codex"));
+}
+
+/** Recover the exact launch nonce from the initial Pi's one raw Codex tool receipt. */
+function recoverCodexLaunchNonce(): void {
+	if (codexLaunchNonce !== "") return;
+	const receipts = readInitialPiFreshReceipts("codex");
+	if (receipts.length !== 1) return;
+	codexLaunchNonce = /^\s*nonce:\s*(mux-fresh-call-[0-9a-f]+)/m.exec(receipts[0] ?? "")?.[1] ?? "";
+}
+
+/**
+ * Recover the launched Codex thread from its exact nonce callback in the initial Pi transcript,
+ * then validate that carrier through the V3 record authority. This exists for the failure path:
+ * the ordinary path learns the same id from Codex's travelling report.
+ */
+function recoverCodexThreadAuthority(): void {
+	recoverCodexLaunchNonce();
+	if (codexThreadId !== "" || initialPiTranscript === "" || codexLaunchNonce === "") return;
+	try {
+		for (const line of fs.readFileSync(initialPiTranscript, "utf8").split("\n")) {
+			if (line.trim() === "") continue;
+			const entry = JSON.parse(line) as { type?: unknown; customType?: unknown; content?: unknown };
+			if (
+				entry.type !== "custom_message" ||
+				entry.customType !== "entwurf-message" ||
+				typeof entry.content !== "string" ||
+				!entry.content.startsWith(`${codexLaunchNonce}\n\n`)
+			)
+				continue;
+			const senderRaw = /<sender_info>(\{[\s\S]*?\})<\/sender_info>/.exec(entry.content)?.[1];
+			if (senderRaw == null) continue;
+			const sender = JSON.parse(senderRaw) as { sessionId?: unknown };
+			if (typeof sender.sessionId !== "string" || !GARDEN_ID.test(sender.sessionId)) continue;
+			const identity = readMetaIdentityByGardenId(sender.sessionId);
+			if (identity.backend !== "codex") continue;
+			codexThreadId = identity.nativeSessionId;
+			console.error(`  recovered  Codex thread ${codexThreadId} from its exact nonce callback`);
+			return;
+		}
+	} catch {
+		// The later cleanup stages still remove every stable window handle already recorded.
+	}
+}
+
+/** Exact fresh-call receipt bodies as the Codex thread's own mcpToolCall results recorded them. */
+function codexFreshReceipts(thread: Awaited<ReturnType<typeof readCodexThread>>, backend: "codex" | "pi"): string[] {
+	const found: string[] = [];
+	for (const turn of thread.turns ?? []) {
+		for (const item of turn.items ?? []) {
+			if (item?.type !== "mcpToolCall" || !String(item.tool ?? "").includes("entwurf_fresh_call")) continue;
+			for (const block of item.result?.content ?? []) {
+				const text = (block as { text?: unknown } | null)?.text;
+				if (
+					typeof text === "string" &&
+					new RegExp(`^\\[entwurf fresh call →\\]\\n\\s*backend:\\s+${backend}\\b`, "m").test(text)
+				)
+					found.push(text);
+			}
+		}
+	}
+	return found;
 }
 
 /** The outbound Pi handle as the Codex thread's own mcpToolCall result recorded it. */
@@ -230,17 +318,7 @@ async function recoverOutboundPiWindows(): Promise<string[]> {
 	if (codexThreadId === "" || codexSocketPath === "") return [];
 	try {
 		const thread = await readCodexThread(codexSocketPath, codexThreadId, true);
-		const found: string[] = [];
-		for (const turn of thread.turns ?? []) {
-			for (const item of turn.items ?? []) {
-				if (item?.type !== "mcpToolCall" || !String(item.tool ?? "").includes("entwurf_fresh_call")) continue;
-				for (const block of item.result?.content ?? []) {
-					const text = (block as { text?: unknown } | null)?.text;
-					if (typeof text === "string") found.push(...launchReceiptWindows(text, "pi"));
-				}
-			}
-		}
-		return found;
+		return codexFreshReceipts(thread, "pi").flatMap((receipt) => launchReceiptWindows(receipt, "pi"));
 	} catch {
 		return [];
 	}
@@ -255,6 +333,7 @@ async function awaitOrRecover<T>(what: string, timeoutMs: number, probe: () => T
 	try {
 		return await until(what, timeoutMs, probe);
 	} catch (error) {
+		recoverCodexThreadAuthority();
 		for (const windowId of [...recoverCodexWindows(), ...(await recoverOutboundPiWindows())]) {
 			if (openedWindows.includes(windowId)) continue;
 			openedWindows.push(windowId);
@@ -271,6 +350,7 @@ async function awaitOrRecover<T>(what: string, timeoutMs: number, probe: () => T
  * `@\d+` handles are kept.
  */
 async function recoverEveryRecordedWindow(): Promise<void> {
+	recoverCodexThreadAuthority();
 	const found: string[] = [];
 	if (fixtureGid !== "") {
 		try {
@@ -287,6 +367,37 @@ async function recoverEveryRecordedWindow(): Promise<void> {
 		if (!WINDOW_ID.test(windowId) || openedWindows.includes(windowId)) continue;
 		openedWindows.push(windowId);
 		console.error(`  recovered  ${windowId} from a receipt this run already held`);
+	}
+}
+
+/**
+ * Interrupt only this smoke's exact still-running Codex turn before its visible window closes.
+ * `[source]` rust-v0.153.4 `app-server-protocol/src/protocol/v2/turn.rs:311-319` owns
+ * `{threadId,turnId}` and the empty acknowledgement; no app-server lifecycle is touched here.
+ */
+async function interruptCodexSmokeTurn(): Promise<string[]> {
+	if (codexThreadId === "" || codexSocketPath === "") return [];
+	try {
+		const thread = (await readCodexThread(codexSocketPath, codexThreadId, true)) as {
+			turns?: Array<{ id?: unknown; status?: unknown }>;
+		};
+		const turn = [...(thread.turns ?? [])].reverse().find((candidate) => candidate.status === "inProgress");
+		if (typeof turn?.id !== "string" || turn.id === "") return [];
+		const protocol = await realCodexProtocolOpener.open(codexSocketPath);
+		try {
+			await protocol.request("initialize", {
+				clientInfo: { name: "entwurf-codex-live-cleanup", title: "entwurf-codex-live-cleanup", version: "0" },
+				capabilities: { experimentalApi: true, requestAttestation: false },
+			});
+			protocol.notify("initialized");
+			await protocol.request("turn/interrupt", { threadId: codexThreadId, turnId: turn.id });
+		} finally {
+			protocol.close();
+		}
+		console.error(`  cleanup  interrupted smoke-owned Codex turn ${turn.id}`);
+		return [];
+	} catch (error) {
+		return [`codex turn ${codexThreadId}: ${String(error)}`];
 	}
 }
 
@@ -457,9 +568,17 @@ async function run(): Promise<void> {
 		`expected --listen ${expectedListen}; argv=${JSON.stringify(argv)}`,
 	);
 	const appServerCoordinate = inspectTmuxCoordinate("Codex app-server/MCP inherited seat", appServerEnv);
+	const fixtureCoordinate = inspectTmuxCoordinate("fixture/initial-Pi caller seat", process.env);
+	ok(
+		"the fixture/initial-Pi seat and Codex home share one tmux server but are different sessions",
+		fixtureCoordinate.serverPid === appServerCoordinate.serverPid &&
+			fixtureCoordinate.sessionId !== appServerCoordinate.sessionId,
+		`fixture=${fixtureCoordinate.serverPid}/${fixtureCoordinate.sessionId} app-server=${appServerCoordinate.serverPid}/${appServerCoordinate.sessionId}`,
+	);
 	receipts["1-codex-app-server-mcp-coordinate"] =
 		`pid=${appServerPid}\nargv=${argv.join(" ")}\nserver=${appServerCoordinate.serverPid}\n` +
-		`session=${appServerCoordinate.sessionId}\nwindow=${appServerCoordinate.windowId}\npane=${appServerCoordinate.paneId}`;
+		`session=${appServerCoordinate.sessionId}\nwindow=${appServerCoordinate.windowId}\npane=${appServerCoordinate.paneId}\n` +
+		`fixture-session=${fixtureCoordinate.sessionId}\nfixture-window=${fixtureCoordinate.windowId}`;
 
 	const codexModel = process.env.ENTWURF_CODEX_FRESH_MODEL?.trim() ?? "";
 	const piModel = process.env.ENTWURF_CODEX_FRESH_PI_MODEL?.trim() ?? "";
@@ -512,6 +631,11 @@ async function run(): Promise<void> {
 
 	const callerBridgeEnv: NodeJS.ProcessEnv = {
 		...appServerEnv,
+		// The fixture launches the initial Pi from THIS operator session, not from Codex's
+		// app-server seat. Store/runtime facts come from the app-server environment above;
+		// only placement comes from the fixture's own exact tmux anchor.
+		TMUX: process.env.TMUX,
+		TMUX_PANE: process.env.TMUX_PANE,
 		ENTWURF_META_SENDER_MARKER: senderMarker,
 	};
 	delete callerBridgeEnv.ENTWURF_BRIDGE_NATIVE_HOST;
@@ -531,8 +655,8 @@ async function run(): Promise<void> {
 		model: piModel,
 		cwd: scratch,
 		task:
-			`After your required callback receipt, wait for one addressed message containing ${initialPiWaitToken}. ` +
-			"That message is the only authority to open the Codex sibling.",
+			`After your required callback receipt, end the turn and wait passively for one addressed message containing ${initialPiWaitToken}. ` +
+			"That message is the only authority to open the Codex sibling. Do not call shell, sleep, terminal, or any tool to wait.",
 	});
 	receipts["2-initial-pi-launch"] = initialPiLaunch.text;
 	ok(
@@ -547,12 +671,12 @@ async function run(): Promise<void> {
 	openedWindows.push(initialPiWindow);
 	ok("the initial Pi LAUNCH receipt carries its exact callback nonce", initialPiNonce.length > 0);
 	ok(
-		"the initial Pi caller is visible in the app-server seat",
-		initialPiTmuxSession === appServerCoordinate.sessionId,
-		`initial-pi=${initialPiTmuxSession} app-server=${appServerCoordinate.sessionId}`,
+		"the initial Pi caller is visible in the fixture's non-Codex session",
+		initialPiTmuxSession === fixtureCoordinate.sessionId && initialPiTmuxSession !== appServerCoordinate.sessionId,
+		`initial-pi=${initialPiTmuxSession} fixture=${fixtureCoordinate.sessionId} codex-home=${appServerCoordinate.sessionId}`,
 	);
 	receipts["3-initial-caller-pi-coordinate"] =
-		`session=${initialPiTmuxSession}\nwindow=${initialPiWindow}\napp-server-session=${appServerCoordinate.sessionId}`;
+		`session=${initialPiTmuxSession}\nwindow=${initialPiWindow}\ncodex-home-session=${appServerCoordinate.sessionId}`;
 
 	const drain = (): void => {
 		for (const message of readMetaInbox({ gardenId: callerGid }).messages) seenInbox.push(message.body);
@@ -619,30 +743,43 @@ async function run(): Promise<void> {
 		},
 	);
 	receipts["6-pi-to-fixture-codex-launch"] = codexLaunchBody;
+	const initialPiCodexReceipts = readInitialPiFreshReceipts("codex");
+	ok(
+		"the initial Pi transcript records exactly one raw Codex LAUNCH receipt",
+		initialPiCodexReceipts.length === 1,
+		`found=${initialPiCodexReceipts.length}`,
+	);
+	const codexLaunchReceipt = initialPiCodexReceipts[0] ?? "";
+	receipts["6b-initial-pi-own-codex-launch-receipt"] = codexLaunchReceipt;
 	const codexLaunchReporter = /^\s*session:\s+(\S+)/m.exec(codexLaunchBody)?.[1] ?? "";
 	const reportedCodexNonce = /CODEX_LAUNCH_NONCE=(mux-fresh-call-[0-9a-f]+)/.exec(codexLaunchBody)?.[1] ?? "";
+	codexLaunchNonce = reportedCodexNonce;
 	const reportedCodexSession = /CODEX_SESSION_ID=(\$\d+)/.exec(codexLaunchBody)?.[1] ?? "";
 	const reportedCodexWindow = /CODEX_WINDOW_ID=(@\d+)/.exec(codexLaunchBody)?.[1] ?? "";
-	const codexNonce = /^\s*nonce:\s*(mux-fresh-call-[0-9a-f]+)/m.exec(codexLaunchBody)?.[1] ?? "";
-	const codexReceiptCoordinate = /^\s*window:\s+(@\d+).*?\bin session (\$\d+)/m.exec(codexLaunchBody);
+	const codexNonce = /^\s*nonce:\s*(mux-fresh-call-[0-9a-f]+)/m.exec(codexLaunchReceipt)?.[1] ?? "";
+	if (codexNonce !== "") codexLaunchNonce = codexNonce;
+	const codexReceiptCoordinate = /^\s*window:\s+(@\d+).*?\bin session (\$\d+)/m.exec(codexLaunchReceipt);
 	const codexWindow = codexReceiptCoordinate?.[1] ?? "";
 	const codexLaunchSession = codexReceiptCoordinate?.[2] ?? "";
-	ok("the Codex LAUNCH receipt travelled from the initial Pi citizen", codexLaunchReporter === initialPiGid);
+	if (WINDOW_ID.test(codexWindow) && !openedWindows.includes(codexWindow)) openedWindows.push(codexWindow);
+	ok("the Codex coordinate report travelled from the initial Pi citizen", codexLaunchReporter === initialPiGid);
 	ok(
-		"the travelling raw Codex LAUNCH receipt names Codex and a stable cleanup handle",
-		WINDOW_ID.test(codexWindow) && /^\s*backend:\s+codex\b/m.test(codexLaunchBody),
+		"the initial Pi's own raw LAUNCH receipt names Codex and a stable cleanup handle",
+		WINDOW_ID.test(codexWindow) && /^\s*backend:\s+codex\b/m.test(codexLaunchReceipt),
 	);
-	openedWindows.push(codexWindow);
 	ok(
-		"the copied Codex fields match the travelling raw LAUNCH receipt",
+		"the travelling Codex fields match the initial Pi's own raw LAUNCH receipt",
 		reportedCodexNonce === codexNonce &&
 			reportedCodexSession === codexLaunchSession &&
 			reportedCodexWindow === codexWindow,
 	);
 	ok("the raw Codex LAUNCH receipt carries its exact callback nonce", codexNonce.length > 0);
 	ok(
-		"fresh Codex was opened in the app-server/MCP inherited tmux session",
-		codexLaunchSession === appServerCoordinate.sessionId,
+		"omitted placement opened fresh Codex in exact named `codex` home, resolved to the app-server session",
+		codexLaunchSession === appServerCoordinate.sessionId &&
+			codexLaunchReceipt.includes(
+				`seat:     ${CODEX_HOME_TMUX_SESSION} (Codex home tmux session, resolved to ${appServerCoordinate.sessionId})`,
+			),
 		`codex=${codexLaunchSession} app-server=${appServerCoordinate.sessionId}`,
 	);
 	receipts["7-fresh-codex-coordinate"] = `session=${codexLaunchSession}\nwindow=${codexWindow}`;
@@ -664,11 +801,11 @@ async function run(): Promise<void> {
 		});
 		if (selected === null) return null;
 		codexGid = selected.sender;
-		// Cleanup authority BEFORE any assertion below can throw: this body carries the outbound
-		// Pi window, and an assertion failure must not orphan it.
-		for (const windowId of launchReceiptWindows(selected.body, "pi")) {
-			if (!openedWindows.includes(windowId)) openedWindows.push(windowId);
-		}
+		// Cleanup authority BEFORE any assertion below can throw: the travelling field carries the
+		// outbound Pi window, and the Codex thread's own raw receipt will validate it below.
+		const reportedWindow = /PI_WINDOW_ID=(@\d+)/.exec(selected.body)?.[1];
+		if (reportedWindow != null && WINDOW_ID.test(reportedWindow) && !openedWindows.includes(reportedWindow))
+			openedWindows.push(reportedWindow);
 		return selected.body;
 	});
 	receipts["9-codex-to-fixture-outbound-pi-launch"] = outboundPiBody;
@@ -676,17 +813,25 @@ async function run(): Promise<void> {
 	const reportedOutboundPiNonce = /PI_LAUNCH_NONCE=(mux-fresh-call-[0-9a-f]+)/.exec(outboundPiBody)?.[1] ?? "";
 	const reportedOutboundPiSession = /PI_SESSION_ID=(\$\d+)/.exec(outboundPiBody)?.[1] ?? "";
 	const reportedOutboundPiWindow = /PI_WINDOW_ID=(@\d+)/.exec(outboundPiBody)?.[1] ?? "";
-	const outboundPiNonce = /^\s*nonce:\s*(mux-fresh-call-[0-9a-f]+)/m.exec(outboundPiBody)?.[1] ?? "";
-	const outboundPiReceiptCoordinate = /^\s*window:\s+(@\d+).*?\bin session (\$\d+)/m.exec(outboundPiBody);
-	const outboundPiWindow = outboundPiReceiptCoordinate?.[1] ?? "";
-	const outboundPiSession = outboundPiReceiptCoordinate?.[2] ?? "";
-	ok("the outbound Pi LAUNCH receipt came from a real Codex V3 citizen", outboundReporter === codexGid);
+	ok("the outbound Pi coordinate report came from a real Codex V3 citizen", outboundReporter === codexGid);
 	const codexIdentity = readMetaIdentityByGardenId(codexGid);
 	ok("the reporting Codex citizen resolves to a codex-backend record", codexIdentity.backend === "codex");
 	codexThreadId = codexIdentity.nativeSessionId;
-	// The VISIBLE half of admission, read from the live app-server — not from the birth
-	// payload's intent, and not from screen text.
-	const codexThread = await readCodexThread(codexSocketPath, codexThreadId, false);
+	// The VISIBLE half of admission and the exact raw fresh-call result come from the live
+	// app-server view — never from model-reformatted prose or screen text.
+	const codexThread = await readCodexThread(codexSocketPath, codexThreadId, true);
+	const outboundPiReceipts = codexFreshReceipts(codexThread, "pi");
+	ok(
+		"the Codex thread records exactly one raw outbound Pi LAUNCH receipt",
+		outboundPiReceipts.length === 1,
+		`found=${outboundPiReceipts.length}`,
+	);
+	const outboundPiReceipt = outboundPiReceipts[0] ?? "";
+	receipts["9b-codex-own-outbound-pi-launch-receipt"] = outboundPiReceipt;
+	const outboundPiNonce = /^\s*nonce:\s*(mux-fresh-call-[0-9a-f]+)/m.exec(outboundPiReceipt)?.[1] ?? "";
+	const outboundPiReceiptCoordinate = /^\s*window:\s+(@\d+).*?\bin session (\$\d+)/m.exec(outboundPiReceipt);
+	const outboundPiWindow = outboundPiReceiptCoordinate?.[1] ?? "";
+	const outboundPiSession = outboundPiReceiptCoordinate?.[2] ?? "";
 	receipts["8b-codex-live-thread-title"] =
 		`threadId=${codexThreadId}\nlive name=${JSON.stringify(codexThread.name)}\ngarden=${codexGid}`;
 	ok(
@@ -696,23 +841,24 @@ async function run(): Promise<void> {
 	);
 	ok("the live thread the title was read from is the record's own thread", codexThread.id === codexThreadId);
 	ok(
-		"the travelling raw outbound Pi LAUNCH receipt names Pi and a stable cleanup handle",
-		WINDOW_ID.test(outboundPiWindow) && /^\s*backend:\s+pi\b/m.test(outboundPiBody),
+		"the Codex thread's own raw outbound LAUNCH receipt names Pi and a stable cleanup handle",
+		WINDOW_ID.test(outboundPiWindow) && /^\s*backend:\s+pi\b/m.test(outboundPiReceipt),
 	);
 	if (!openedWindows.includes(outboundPiWindow)) openedWindows.push(outboundPiWindow);
 	ok(
-		"the copied outbound Pi fields match the travelling raw LAUNCH receipt",
+		"the travelling outbound Pi fields match the Codex thread's own raw LAUNCH receipt",
 		reportedOutboundPiNonce === outboundPiNonce &&
 			reportedOutboundPiSession === outboundPiSession &&
 			reportedOutboundPiWindow === outboundPiWindow,
 	);
 	ok("the raw outbound Pi LAUNCH receipt carries its exact nonce", outboundPiNonce.length > 0);
 	ok(
-		"supported same-session deployment condition: fresh Codex, app-server/MCP inheritance, and outbound fresh Pi " +
-			"resolve to ONE tmux session. This proves THAT deployment, not an unrestricted 'Codex 옆에 Pi' — Codex request " +
-			"metadata carries no request→TUI-seat join, so N TUIs in other sessions behind one shared app-server stay uncovered",
-		codexLaunchSession === appServerCoordinate.sessionId && outboundPiSession === appServerCoordinate.sessionId,
-		`codex=${codexLaunchSession} app-server=${appServerCoordinate.sessionId} outbound-pi=${outboundPiSession}`,
+		"supported Codex-home topology: a Pi in another session opens Codex in exact home; Codex opens outbound Pi " +
+			"beside itself and the operator-owned app-server. This does not claim arbitrary attached-TUI seat inference",
+		initialPiTmuxSession !== appServerCoordinate.sessionId &&
+			codexLaunchSession === appServerCoordinate.sessionId &&
+			outboundPiSession === appServerCoordinate.sessionId,
+		`initial-pi=${initialPiTmuxSession} codex=${codexLaunchSession} app-server=${appServerCoordinate.sessionId} outbound-pi=${outboundPiSession}`,
 	);
 	receipts["10-outbound-fresh-pi-coordinate"] = `session=${outboundPiSession}\nwindow=${outboundPiWindow}`;
 
@@ -796,13 +942,14 @@ try {
 const cleanupFailures = await runCleanupStages([
 	{ label: "bridge", run: closeBridge },
 	{ label: "recovery", run: recoverEveryRecordedWindow },
+	{ label: "codex-turn", run: interruptCodexSmokeTurn },
 	{ label: "window", run: cleanupWindows },
 	{ label: "fixture", run: cleanupFixture },
 ]);
 printReceipts();
 if (cleanupFailures.length > 0) {
 	const cleanupError =
-		`[${LABEL}] CLEANUP FAILURE — only recorded smoke-owned stable window ids and exact fixture artifacts were targeted:\n` +
+		`[${LABEL}] CLEANUP FAILURE — only the exact smoke-owned Codex turn, recorded stable window ids, and exact fixture artifacts were targeted:\n` +
 		cleanupFailures.join("\n");
 	console.error(cleanupError);
 	failure = failure === null ? new Error(cleanupError) : new Error(`${String(failure)}\n${cleanupError}`);

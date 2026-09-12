@@ -8,7 +8,7 @@
  * and required to be byte-identical, and `TMUX`/`TMUX_PANE` INHERITED from a fixture pane's
  * own `/proc/<pid>/environ` rather than assembled.
  *
- * The runtime under test is a FIXTURE script, not the operator's real `pi`. T1-a's claim is
+ * The runtimes under test are FIXTURE scripts, not the operator's real `pi`/`codex`. T1-a's claim is
  * "the window opens in the right place and the named runtime is what starts in it" — a claim a
  * long-lived stand-in proves exactly, without an interactive agent, a model call, or a session
  * record. `resolvePiRuntime` (which finds the official `pi` on PATH) is proven by the
@@ -27,6 +27,7 @@
  *   - the #105 seat, through the real `freshCall`: an absent seat refuses and creates nothing,
  *     an existing one puts the window in THAT session with a receipt naming the resolved
  *     target, and the resulting handle closes through `closeWindow` from outside that session
+ *   - #95's omitted Codex seat resolves exact existing `codex`, while omitted Pi stays caller-local
  */
 
 import assert from "node:assert/strict";
@@ -120,6 +121,7 @@ async function main(): Promise<void> {
 	// process must be the runtime itself for the pane_pid claim to mean anything.
 	const runtime = path.join(runtimeDir, "pi");
 	fs.writeFileSync(runtime, "#!/bin/sh\nexec sleep 900\n", { mode: 0o755 });
+	fs.writeFileSync(path.join(runtimeDir, "codex"), "#!/bin/sh\nexec sleep 900\n", { mode: 0o755 });
 
 	try {
 		assert.equal(fx("-f", "/dev/null", "new-session", "-d", "-s", SESSION).status, 0, "fixture new-session");
@@ -353,7 +355,7 @@ async function main(): Promise<void> {
 					fxLines("list-windows", "-t", placement.sessionId, "-F", "#{window_id}").join(" ") === callerWindowsBefore,
 			);
 			ok(
-				"seat: an omitted seat still lands in the caller's own session and the receipt names none",
+				"seat: an omitted Pi seat still lands in the caller's own session and the receipt names none",
 				(() => {
 					const own = call();
 					if (!own.ok) return false;
@@ -370,7 +372,50 @@ async function main(): Promise<void> {
 				closeWindow(receipt, inherited) === "closed" &&
 					!fxLines("list-windows", "-a", "-F", "#{window_id}").includes(receipt.windowId),
 			);
+
+			// (iv) Codex's omitted seat is a product default, not fixture prose. Missing home
+			// refuses before mutation; then a private session named exactly `codex` makes the real
+			// composition resolve that name while the Pi omitted-seat control stays caller-local.
+			const beforeMissingHome = inventory();
+			const missingHome = freshCall(
+				{
+					backend: "codex",
+					model: "fixture-model",
+					task: "fixture task",
+					callerGardenId: "20260101T000000-fixture",
+				},
+				inherited,
+			);
+			ok(
+				"codex home: omitted placement refuses a missing exact home without mutation",
+				!missingHome.ok && missingHome.reason === "tmux-session-missing" && inventory() === beforeMissingHome,
+			);
+			assert.equal(fx("new-session", "-d", "-s", "codex").status, 0, "fixture Codex home session");
+			const codexHomeId = fxLines("list-windows", "-t", "=codex", "-F", "#{session_id}")[0];
+			const home = freshCall(
+				{
+					backend: "codex",
+					model: "fixture-model",
+					task: "fixture task",
+					callerGardenId: "20260101T000000-fixture",
+				},
+				inherited,
+			);
+			assert.ok(home.ok, `the omitted-placement Codex call must succeed: ${home.ok ? "" : home.reason}`);
+			ok(
+				"codex home: omitted placement lands in exact existing `codex`, not the caller session",
+				home.receipt.sessionId === codexHomeId &&
+					home.receipt.sessionId !== placement.sessionId &&
+					home.receipt.tmuxSession === "codex" &&
+					home.receipt.tmuxSessionSource === "codex-home",
+			);
+			ok(
+				"codex home: the home receipt closes by stable handle",
+				closeWindow(home.receipt, inherited) === "closed" &&
+					!fxLines("list-windows", "-a", "-F", "#{window_id}").includes(home.receipt.windowId),
+			);
 			fx("kill-session", "-t", seatId);
+			fx("kill-session", "-t", codexHomeId);
 			ok("seat: the fixture is back to one session", sessionCount() === 1);
 		}
 	} finally {

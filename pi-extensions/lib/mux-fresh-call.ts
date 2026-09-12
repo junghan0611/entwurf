@@ -1,7 +1,8 @@
 /**
  * mux-fresh-call — open ONE visible sibling in the caller's own tmux server (its own session by
  * default, or one named existing session on that server since #105), hand it its first task in
- * the launch argv, and let it name itself back to the caller.
+ * the launch argv, and let it name itself back to the caller. Codex is the one measured topology
+ * exception: an omitted seat selects the existing `codex` home session (#95), never a TUI guess.
  *
  * ── Why this is a third module and not a parameter on the leaf ──
  *
@@ -404,6 +405,28 @@ export interface FreshCallPlacement {
 	tmuxSession: string;
 }
 
+/**
+ * Codex's explicit home topology (#95): the operator provides this one existing tmux session
+ * and seats the operator-owned app-server plus supported Codex TUIs there. This is a placement
+ * convention, not an address axis — `threadId` remains the native delivery address.
+ */
+export const CODEX_HOME_TMUX_SESSION = "codex" as const;
+export type FreshCallSeatSource = "requested" | "codex-home";
+export interface FreshCallSeat {
+	tmuxSession: string;
+	source: FreshCallSeatSource;
+}
+
+/** An explicit seat always wins. Only omitted Codex placement gets the fixed home. */
+export function selectFreshCallSeat(
+	backend: FreshCallBackend,
+	placement: FreshCallPlacement | undefined,
+): FreshCallSeat | null {
+	if (placement !== undefined) return { tmuxSession: placement.tmuxSession, source: "requested" };
+	if (backend === "codex") return { tmuxSession: CODEX_HOME_TMUX_SESSION, source: "codex-home" };
+	return null;
+}
+
 /** Coordinates plus what was handed to tmux. Read `runtimePath` as "what we asked to start".
  * There is deliberately NO field here for the callback, the nonce's arrival, or the sibling's
  * garden id — see the module header. */
@@ -414,10 +437,11 @@ export interface FreshCallReceipt extends WindowHandle {
 	 * of fact as `runtimePath`: what tmux was asked for, never an observation of where the pane
 	 * landed. */
 	cwd?: string;
-	/** The REQUESTED session name — present only when the caller named a seat. The RESOLVED
-	 * target is the inherited `sessionId`, which is the session the window is actually in; this
-	 * field is the request that produced it, exactly as `cwd` is. */
+	/** The selected session name — either caller-requested or Codex's fixed home. The RESOLVED
+	 * target is the inherited `sessionId`, which is the session the window is actually in. */
 	tmuxSession?: string;
+	/** Why `tmuxSession` was selected. Absent exactly when no named seat was used. */
+	tmuxSessionSource?: FreshCallSeatSource;
 	runtimePath: string;
 	nonce: string;
 }
@@ -541,8 +565,10 @@ export function freshCall(
 	// without tmux, so an unresolvable name is answered before anything else runs. Whether that
 	// session EXISTS is a tmux question and is asked below, after the caller's own context is
 	// proven — a name check that needed a live server would refuse for the wrong reason on a
-	// host with no tmux at all.
-	const seat = params.placement?.tmuxSession;
+	// host with no tmux at all. Codex alone selects its fixed home when the caller omitted a seat;
+	// an explicit seat remains an expert override and is reported as such.
+	const selectedSeat = selectFreshCallSeat(params.backend, params.placement);
+	const seat = selectedSeat?.tmuxSession;
 	if (seat !== undefined) {
 		const badSeat = classifyTmuxSessionName(seat);
 		if (badSeat) return { ok: false, reason: badSeat };
@@ -624,7 +650,9 @@ export function freshCall(
 			backend: params.backend,
 			model,
 			...(cwd === undefined ? {} : { cwd }),
-			...(seat === undefined ? {} : { tmuxSession: seat }),
+			...(selectedSeat === null
+				? {}
+				: { tmuxSession: selectedSeat.tmuxSession, tmuxSessionSource: selectedSeat.source }),
 			runtimePath,
 			nonce,
 		},
@@ -655,7 +683,7 @@ const REJECT_HINT: Record<FreshCallRejectReason, string> = {
 	"tmux-session-name-invalid":
 		"the requested tmux session name is outside the shape this rail addresses (start with a letter or digit, then letters, digits, '_' or '-') — some other shapes tmux cannot resolve at all ('#' is expanded when the name is stored; '.' and ':' are its own pane/window separators inside a target; a name like '$0' loses to the session id '$0'), and the rest are declined to keep one narrow grammar, so rename the session or open one whose name fits",
 	"tmux-session-missing":
-		"no session with that exact name answers on this agent's tmux server (or that server stopped answering) — nothing was created, so open the session yourself and call again",
+		"no session with that exact name answers on this agent's tmux server (or that server stopped answering) — nothing was created, so open the session yourself and call again; Codex's omitted-placement home is the exact session name 'codex'",
 	"model-empty": "model is empty after trimming; fresh calls require an explicit model",
 	"model-invalid": `model must be one ${MODEL_MAX_CHARS}-character argv-safe id/alias without whitespace or tmux syntax`,
 	"task-empty": "task is empty after trimming",
@@ -693,7 +721,9 @@ export function renderFreshCall(result: FreshCallResult): { text: string; isErro
 			(r.cwd === undefined ? "" : `  cwd:      ${r.cwd} (requested start directory — not an observation)\n`) +
 			(r.tmuxSession === undefined
 				? ""
-				: `  seat:     ${r.tmuxSession} (requested tmux session, resolved to ${r.sessionId})\n`) +
+				: r.tmuxSessionSource === "codex-home"
+					? `  seat:     ${r.tmuxSession} (Codex home tmux session, resolved to ${r.sessionId})\n`
+					: `  seat:     ${r.tmuxSession} (requested tmux session, resolved to ${r.sessionId})\n`) +
 			`  window:   ${r.windowId} (index ${r.windowIndex}) in session ${r.sessionId}\n` +
 			`  pane:     ${r.paneId} pid ${r.panePid}\n` +
 			`  nonce:    ${r.nonce}\n` +

@@ -591,12 +591,8 @@
 			"claim": "CODEX-LIVE-CODEX-TASK-WAITS-INNER-TOKEN",
 			"title": "the fresh Codex task waits for the initial Pi trigger instead of the token that begins its own later addressed payload, so the public chain stalls after callback",
 			"subject": "scripts/lib/codex-fresh-live-protocol.ts",
-			"find": [
-				"\t\t`\"After your required callback receipt, wait for the addressed instruction containing ${input.codexWaitToken}.\"\\n` +"
-			],
-			"replace": [
-				"\t\t`\"After your required callback receipt, wait for the addressed instruction containing ${input.initialPiWaitToken}.\"\\n` +"
-			],
+			"find": ["containing ${input.codexWaitToken}. ` +"],
+			"replace": ["containing ${input.initialPiWaitToken}. ` +"],
 			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
 			"timeoutSeconds": 180,
 			"signature": "[QK:CODEX-LIVE-CODEX-TASK-WAITS-INNER-TOKEN]",

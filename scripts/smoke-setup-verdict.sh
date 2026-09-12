@@ -33,9 +33,12 @@
 # PI_BIN / CLAUDE_BIN / AGY_BIN / COPILOT_BIN / OMP_BIN / CODEX_BIN (the same hermetic seam
 # smoke-agy-install-state
 # uses), and every write root is sandboxed: HOME, XDG roots, the pi agent dir,
-# and the dev-bin dir. The source bootstrap (`pnpm install --frozen-lockfile`)
-# runs against the ALREADY-INSTALLED checkout, which is a verified no-op under a
-# sandbox HOME (measured 2026-08-26).
+# and the dev-bin dir. Source-mode cells put a strict fixture `pnpm` first on PATH:
+# it accepts the no-op `install --frozen-lockfile` and the source-owned `run build-bridge`
+# emit only. Package-manager behavior belongs to the package gates. This is load-bearing
+# under mutation qualification, whose snapshot shares node_modules read-only — a real pnpm
+# follows that symlink and attempts to rewrite the origin checkout. Any dist this gate had
+# to build is removed on exit, restoring the snapshot's pre-gate surface.
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -54,7 +57,13 @@ esac
 export PYTHONDONTWRITEBYTECODE=1
 
 SB="$(mktemp -d -t entwurf-setup-verdict.XXXXXX)"
-cleanup() { rm -rf "$SB"; }
+DIST_ROOT="$REPO_DIR/mcp/entwurf-bridge/dist"
+DIST_PREEXISTED=0
+[ -d "$DIST_ROOT" ] && DIST_PREEXISTED=1
+cleanup() {
+  [ "$DIST_PREEXISTED" -eq 1 ] || rm -rf "$DIST_ROOT"
+  rm -rf "$SB"
+}
 trap cleanup EXIT
 
 export HOME="$SB/home"
@@ -65,7 +74,22 @@ export XDG_CONFIG_HOME="$SB/home/.config"
 export PI_CODING_AGENT_DIR="$SB/home/.pi/agent"
 export ENTWURF_DEV_BIN_DIR="$SB/bin"
 export PATH="$SB/bin:$PATH"
-mkdir -p "$HOME" "$PI_CODING_AGENT_DIR" "$SB/bin" "$SB/harness"
+mkdir -p "$HOME" "$PI_CODING_AGENT_DIR" "$SB/bin" "$SB/harness" "$SB/bootstrap-bin"
+cat > "$SB/bootstrap-bin/pnpm" <<'SH'
+#!/bin/sh
+if [ "$#" -eq 2 ] && [ "$1" = install ] && [ "$2" = --frozen-lockfile ]; then
+  exit 0
+fi
+if [ "$#" -eq 2 ] && [ "$1" = run ] && [ "$2" = build-bridge ]; then
+  # The qualification snapshot is process-exclusive. Invoke the source-owned emit
+  # directly so the production lock wrapper cannot leave its ignored parent dir.
+  exec bash scripts/build-bridge.sh
+fi
+echo "fixture pnpm accepts only: install --frozen-lockfile | run build-bridge" >&2
+exit 64
+SH
+chmod +x "$SB/bootstrap-bin/pnpm"
+export PATH="$SB/bootstrap-bin:$PATH"
 
 # Presence pins: default every harness to a definitely-absent path; each cell
 # re-pins what it needs. Production leaves these unset.

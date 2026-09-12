@@ -440,6 +440,17 @@
 			"signatureSource": "test/fresh-call-surfaces.contract.test.ts"
 		},
 		{
+			"claim": "FRESHCALL-CODEX-HOME-DEFAULT",
+			"title": "an omitted Codex seat falls back to the caller's session instead of the one supported `codex` home topology",
+			"subject": "pi-extensions/lib/mux-fresh-call.ts",
+			"find": ["\tif (backend === \"codex\") return { tmuxSession: CODEX_HOME_TMUX_SESSION, source: \"codex-home\" };"],
+			"replace": ["\tif (backend === \"pi\") return { tmuxSession: CODEX_HOME_TMUX_SESSION, source: \"codex-home\" };"],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:FRESHCALL-CODEX-HOME-DEFAULT]",
+			"signatureSource": "test/mux-fresh-call.test.ts"
+		},
+		{
 			"claim": "TMUXSESSION-LOOKUP-ENGINE",
 			"title": "the seat lookup goes back to the `-f` filter engine, which was measured to match EVERY session when the name contains a '}' — a fresh sibling then opens in whichever session tmux listed first",
 			"subject": "pi-extensions/lib/resolve-tmux-session.ts",
@@ -512,7 +523,7 @@
 			"title": "one surface drops the optional seat from its schema, so opening a sibling in the operator's project session works from pi and silently cannot exist from the MCP bridge",
 			"subject": "mcp/entwurf-bridge/src/index.ts",
 			"find": [
-				"\t\tplacement: z\n\t\t\t.object({\n\t\t\t\ttmuxSession: z\n\t\t\t\t\t.string()\n\t\t\t\t\t.describe(\n\t\t\t\t\t\t\"EXACT name of an EXISTING session on this agent's own tmux server. Nothing is created: an absent session is refused as tmux-session-missing, and a name outside [A-Za-z0-9][A-Za-z0-9_-]* as tmux-session-name-invalid.\",\n\t\t\t\t\t),\n\t\t\t})\n\t\t\t.optional()\n\t\t\t.describe(\n\t\t\t\t\"Optional project seat: open the sibling in ONE EXISTING tmux session of this agent's own server instead of the caller's session. Nothing is ever created — an absent session is a refusal, not a new session. Independent of cwd; neither is inferred from the other. The receipt echoes the REQUESTED name and reports the resolved target session id.\",\n\t\t\t),\n"
+				"\t\tplacement: z\n\t\t\t.object({\n\t\t\t\ttmuxSession: z\n\t\t\t\t\t.string()\n\t\t\t\t\t.describe(\n\t\t\t\t\t\t\"EXACT name of an EXISTING session on this agent's own tmux server. Nothing is created: an absent session is refused as tmux-session-missing, and a name outside [A-Za-z0-9][A-Za-z0-9_-]* as tmux-session-name-invalid.\",\n\t\t\t\t\t),\n\t\t\t})\n\t\t\t.optional()\n\t\t\t.describe(\n\t\t\t\t\"Optional expert seat override: open the sibling in ONE EXISTING tmux session of this agent's own server. When omitted, Codex selects the exact existing `codex` home session; other backends use the caller's session. Nothing is ever created. Independent of cwd; neither is inferred from the other. The receipt reports the selected name, its source, and resolved target session id.\",\n\t\t\t),\n"
 			],
 			"replace": [""],
 			"gate": ["bash", "run.sh", "check-mux-fresh-call"],

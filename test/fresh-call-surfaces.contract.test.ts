@@ -261,6 +261,7 @@ describe("one grammar, two surfaces", () => {
 				"secrets",
 				"Model is REQUIRED",
 				"entwurf_v2",
+				"exact existing `codex` home session",
 			]) {
 				expect(desc).toContain(literal);
 			}
@@ -310,6 +311,8 @@ describe("one grammar, two surfaces", () => {
 			expect(desc).toContain("EXISTING");
 			expect(desc).toContain("Nothing is ever created");
 			expect(desc).toContain("Independent of cwd");
+			expect(desc).toContain("Codex selects the exact existing `codex` home session");
+			expect(desc).toContain("expert seat override");
 		}
 		// Both runtime descriptions state the refusal, so a caller cannot read "seat" as "create".
 		for (const desc of [mcpFresh.description ?? "", piFresh.description]) {
@@ -334,6 +337,8 @@ describe("one grammar, two surfaces", () => {
 		// Both refusals, so the agent reading it cannot invent a repair (or a creation).
 		expect(seatBullet).toContain("tmux-session-missing");
 		expect(seatBullet).toContain("tmux-session-name-invalid");
+		expect(seatBullet).toContain("Codex");
+		expect(seatBullet).toContain("`codex`");
 		// And the call shape the skill tells the agent to send.
 		expect(skill).toMatch(/\{backend, model, task, cwd\?, placement\?\}/);
 	});

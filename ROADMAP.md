@@ -7,21 +7,21 @@
 
 ---
 
-## 현재 — 0.20.0 shipped (#78 macOS 설치면 정직성); 0.20.1 컷 대기
+## 현재 — 0.20.1 shipped; 0.20.2에 #95 Codex home-topology 준비
 
 이 repo는 **entwurf-core(v2 garden-citizen dispatch) + native-harness bridges + pi adapter + ACP plugin**이다.
-`v0.20.0`이 현재 패키지다 (`repair=0.12.8-repair.1` 보존). 0.15.0은 Copilot을 시민으로 들였고, 0.15.1은 Linux one-command setup honesty(#86)다. 0.16.0은 OMP를 출하했다. 0.19.0은 #105 ① placement였고, 0.20.0은 macOS 설치면을 **CERTIFIED (CI)** 로 실으면서 `claude-fable-5-1`을 curated 행에 더했다. Claude mailbox, pi control-socket,
+`v0.20.1`이 현재 패키지다 (`repair=0.12.8-repair.1` 보존). 0.15.0은 Copilot을 시민으로 들였고, 0.15.1은 Linux one-command setup honesty(#86)다. 0.16.0은 OMP를 출하했다. 0.19.0은 #105 ① placement였고, 0.20.0은 macOS 설치면을 **CERTIFIED (CI)** 로 실으면서 `claude-fable-5-1`을 curated 행에 더했다. Claude mailbox, pi control-socket,
 Antigravity native-push, Copilot self-fetch, OMP self-fetch가 한 garden-id dispatch 표면으로 출하됐고, ACP plugin은 Claude와 Cortex를 pi host
 안에서 연결한다. 0.14.0은 hidden background resume을 철회하고 visible fresh creation과 same-id pi resume을
 각각 `entwurf_fresh_call` / `entwurf_resume_call`로 분리했으며, 0.14.1은 fresh creation에 literal absolute cwd를
 더했고, 0.14.2는 exact configured bridge invocation과 ACP child-end evidence를 강화했다.
 검증은 ≤60s core와 frozen-candidate full floor로 계층화했다.
 
-**Codex native lane.** #95 is an **unreleased candidate blocked at B**. It preserves Codex's native tools, delegation, and work context through an operator-owned app-server; it is not duplicate GPT access and remains outside ACP. Record birth, strict request-scoped identity, native-push, and visible fresh exist in the candidate, and same-session A passed at `6e28c9e` with a real `Pi → visible Codex → visible Pi`. But exact `rust-v0.153.4` source at `3d2ee51ca2d5db578f328aa75e20aa22c0197c9a` exposes no value visible both to the attached TUI seat and the MCP request: app-server `ConnectionId` is internal transport/subscription routing, the TUI client name is the constant `codex-tui`, UDS peer credentials are not collected, and thread-scoped notifications/server requests fan out without retaining the turn-originating connection in core/MCP state. The current vendor surface is therefore **do not admit**. Reopen qualification/release only after an upstream per-client metadata hook supplies that join; manual placement, one app-server per seat, pane/process guessing, and a hidden manager are not substitutes.
+**Codex native lane.** #95 is an **unreleased candidate for 0.20.2**. It preserves Codex's native tools, delegation, and work context through an operator-owned app-server; it is not duplicate GPT access and remains outside ACP. Record birth, strict request-scoped identity, native-push, and visible fresh exist. The selected support topology is explicit: one existing operator-owned tmux session named `codex` contains the app-server and supported Codex TUIs; omitted Codex fresh placement selects that exact home, and Codex-opened Pi stays beside its caller. Entwurf creates or supervises none of it. The four-coordinate first-admission LIVE passed on 2026-09-12 (57 assertions): initial Pi outside → Codex home → outbound Pi home, with exact callbacks and addressed delivery both ways; `DELIVERY.md` owns the receipt. Exact `rust-v0.153.4` source still exposes no request→arbitrary-attached-TUI seat carrier; that wider topology is unsupported and unclaimed. Qualification killed 460/460 mutants with both purity axes green and the frozen full floor passed in 506s; only the implementation commit/local-main merge and release boundary remain.
 
 0.20.0이 #78 macOS 축을 세 상태 그대로 실었다 — Entwurf-only 설치면은 **CERTIFIED (CI)**(`macos-install-surface` CI run 34303884286 @ `70eda03`), 하네스 레일·마커 join·ACP 실턴·mux는 **NOT CERTIFIED — pending physical host**, native Windows는 **UNSUPPORTED**. 물리 맥 대여는 그 컷 뒤로 미뤄져 있고 아직 일정이 없다; 레일 승격은 빌린 맥 영수증 뒤다. GitHub OPEN은 backlog가 아니라 최대 5개의 실행 가능한
 계약만 둔다. 방향·철학·관찰 중인 가능성은 이 문서가 지며, 재현 가능한 결손이 되면 그때 증거와 다음 측정을
-갖고 이슈로 승격한다. 현재 실행 계약은 #78 platform evidence (물리 맥 영수증), #76 subscription rail 강제, #80 public vocabulary, #107 remote-ready routing, #108 placement wire 증거다. #95 Codex는 upstream per-client carrier 대기라 실행 계약이 아니다. #72·#82·#86·#110은 CLOSED. 실행 순서는 active NEXT handoff가 진다.
+갖고 이슈로 승격한다. 현재 실행 계약은 #95 Codex home admission, #78 platform evidence (물리 맥 영수증), #76 subscription rail 강제, #80 public vocabulary, #107 remote-ready routing, #108 placement wire 증거다. #72·#82·#86·#110·#111·#112는 CLOSED. 실행 순서는 active NEXT handoff가 진다.
 
 Pi는 가장 깊이 붙은 adapter지만 프로젝트의 본질은 여전히 **garden id로 호명 가능한 형제 세션 사이의 얇은
 dispatch substrate**다. provider 연결과 TUI/RPC/session lifecycle은 pi에 맡기고, entwurf는 부르는 법과
@@ -44,7 +44,7 @@ v1 entwurf verbs(`entwurf`/`entwurf_resume`/`entwurf_send`)는 끝났고 사라�
 | **pi** | shipped | control-socket adapter. ACP plugin도 pi provider/model로 들어온다. delivery 안의 relaunch transport는 visible-first cut으로 회수됐고, 그 자리는 별도 verb `entwurf_resume_call`이 visible same-id resume으로 채웠다. | `pnpm check`, v2 matrix LIVE, release-gate MUST |
 | **Claude Code** | shipped | SessionStart meta-bridge → garden id + mailbox + trusted marker. Transcript를 가져오지 않는다. | meta-session gates, mailbox/deliverability, `doctor-meta-bridge` |
 | **ACP Claude** | shipped; outbound callback verified; #72 retained-child death **CLOSED**(외부 reaper, entwurf 결함 아님) | Claude-first ACP plugin backend under local operator auth; socket-citizen rail. Integrated lifecycle proves callback, visible same-id resume and recall. Synthetic long-turn LIVE passes beyond 733s. 2026-07-30에 실 Sonnet tool-loop가 네 번째 재사용 턴에서 `ACP connection closed`로 죽은 건(`20260730T194358-0061d2`)의 원인은 2026-09-01에 닫혔다 — 호스트에 손설치된 `acp-zombie-reaper.service`가 벤더 argv 부분문자열로 15분 넘은 child를 SIGTERM했다. 수리는 `ca52fdd`(entwurf 소유 same-process launcher + typed signal observation), 게이트는 `check-acp-launch-namespace`, 영수증은 `scripts/raw-acp-child-exit-measure/README.md`. Earlier intermittent bundled-MCP readiness observations remain separately recorded below. | ACP LIVE smokes + mux lifecycle release-gate MUST + `check-acp-launch-namespace` |
-| **Codex** | **unreleased native candidate BLOCKED (#95)** — current 0.153.4 vendor surface is do-not-admit | Operator-owned app-server-backed citizen: prompt-free USER `SessionStart` birth, strict request `_meta` identity, `thread/loaded/list` probe, one-shot `codex queue`, and `entwurf_fresh_call`. Same-session A is green, but the app-server's tmux seat is only a shared mechanism seat: exact vendor source exposes no request→attached-TUI-seat carrier, so N TUIs across sessions cannot get symmetric default fresh placement. Entwurf never owns the app-server lifecycle, and there is no ACP or resume lane. | Wait for an upstream per-client metadata hook visible at both the attached TUI seat and MCP request. Do not run qualification/release or substitute manual placement, one app-server per seat, pane/process guessing, or a hidden manager while B is blocked. |
+| **Codex** | **unreleased native candidate (#95), explicit-home LIVE accepted 2026-09-12** | Operator-owned app-server-backed citizen: prompt-free USER `SessionStart` birth, strict request `_meta` identity, `thread/loaded/list` probe, one-shot `codex queue`, and `entwurf_fresh_call`. Supported placement is the existing exact `codex` tmux home containing app-server + supported TUIs; omitted Codex fresh selects it. Entwurf never owns that lifecycle, and there is no ACP or resume lane. | Four-coordinate `Pi outside → Codex home → Pi home`, exact callbacks/addressed delivery: green, 57 assertions (`DELIVERY.md`). Qualification 460/460 and frozen full floor green. Arbitrary attached-TUI seat inference remains unsupported. |
 | **Copilot CLI** | shipped (0.15.0); D3 pending / D8 unproven | 첫 프롬프트에 `backend:"copilot"` V3 record. receive는 포크된 first-party extension + mailbox rail. visible fresh는 `entwurf_fresh_call {backend:"copilot"}` → owned `entwurf copilot` invocation, 4축 preflight, exact-nonce callback. `--ui-server`/`ws.*`는 거절. D3 pending / D8 unproven. Copilot visible-fresh LIVE는 operator-metered이며 release MUST가 아니다. | DELIVERY.md matrix row (LIVE receipts 2026-08-23 / 2026-08-25) + issue #82 thread |
 | **Antigravity (`agy`)** | shipped | `PreInvocation` auto-birth + record-backed sender + native LS gRPC push; managed MCP/permission, statusline, hook adapters. | agy deterministic gates + doctors + 2026-07-13 live round trip |
 | **Cortex / governed ACP** | **landed (0.13.0)** — hvkiefer's PR #40 adapter transplanted with the CP0-audit revisions (dual-HOME overlay, mcp.json projection, per-turn set-model, 4-row curation) | current D1–D10 contract is `docs/acp-backend-rail.md` “Cortex Code audit”; deterministic gate `check-acp-cortex` + mutant lane `acp-cortex`; CP2 live smoke `smoke-acp-cortex-live` stays outside the claude-only release floor | PR #40 / #48 / `docs/acp-backend-rail.md` |
@@ -159,11 +159,11 @@ Sonnet에서 flaky라 한 번의 flake가 컷을 막으면 안 된다. 우회/�
 - **driver optionality — deferred, not a current issue.** production은 tmux를 직접 호출하며 generic `DRIVERS`
   seam이나 zmx backend는 없다. 구체적인 두 번째 driver 수요가 생기기 전에는 비교·추상화를 재개하지 않는다.
   quota, system load, 예상 작업량, 과거 담당자 같은 선택 신호도 substrate/driver에 저장하지 않는다.
-- **Codex attached-TUI carrier — upstream-blocked at 0.153.4.** Exact source has an internal
-  per-connection id but exports neither it nor peer pid into thread/turn/MCP/hook state. The next
-  valid measurement begins only when the vendor adds a per-client metadata hook that the TUI can
-  bind to its own seat and the MCP request carries unchanged. Until then #95 is do-not-admit, not
-  a prompt to build a manager or infer placement.
+- **Codex arbitrary attached-TUI carrier — unsupported at 0.153.4, not the selected topology.**
+  Exact source has an internal per-connection id but exports neither it nor peer pid into
+  thread/turn/MCP/hook state. If unrestricted attached-client placement is ever reconsidered, the
+  next valid measurement begins only after a vendor per-client metadata hook exists. #95 instead
+  closes on the fixed existing `codex` home; this remains no prompt to build a manager or infer panes.
 - **Copilot CLI — garden birth, outbound identity, owned receive, visible fresh 모두 한 호스트 LIVE.**
   #82 branch에서 실제 Copilot CLI 1.0.80 세션이 첫 프롬프트에 V3 record를 민팅했고, 자기
   garden id로 outbound `entwurf_v2`를 보내 `origin:meta-session`을 보존했다. Owned receive는

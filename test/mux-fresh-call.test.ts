@@ -24,6 +24,7 @@ import {
 	buildFreshCallArgs,
 	buildFreshCallPrompt,
 	buildOmpBootstrapPayload,
+	CODEX_HOME_TMUX_SESSION,
 	FRESH_CALL_BACKENDS,
 	FRESH_CALL_CALLBACK_TOOL,
 	FRESH_CALL_RUNTIME,
@@ -35,6 +36,7 @@ import {
 	OMP_BOOTSTRAP_FLAG,
 	OMP_BOOTSTRAP_VERSION,
 	renderFreshCall,
+	selectFreshCallSeat,
 	TASK_MAX_CHARS,
 } from "../pi-extensions/lib/mux-fresh-call.ts";
 import {
@@ -674,6 +676,23 @@ describe("optional project seat — cross-session fresh placement (#105)", () =>
 	const CALLER_SESSION = "$0";
 	const TARGET_SESSION = "$7";
 
+	it("[QK:FRESHCALL-CODEX-HOME-DEFAULT] omitted Codex placement selects the fixed existing `codex` home while every other backend stays in its caller session", () => {
+		expect(CODEX_HOME_TMUX_SESSION).toBe("codex");
+		expect(selectFreshCallSeat("codex", undefined)).toEqual({
+			tmuxSession: "codex",
+			source: "codex-home",
+		});
+		for (const backend of FRESH_CALL_BACKENDS.filter((candidate) => candidate !== "codex")) {
+			expect(selectFreshCallSeat(backend, undefined), backend).toBeNull();
+		}
+		// An explicit seat is never silently rewritten, even for Codex. It is an expert
+		// override outside the supported home topology and the receipt says it was requested.
+		expect(selectFreshCallSeat("codex", { tmuxSession: "org" })).toEqual({
+			tmuxSession: "org",
+			source: "requested",
+		});
+	});
+
 	/** The leaf's injected seam, answering the way tmux 3.6a was MEASURED to (2026-09-07,
 	 * private `-S` servers). This is not a fake tmux standing in for a server: the leaf takes
 	 * its runner as a parameter precisely so its decision — grammar, exit code, id parse — is
@@ -791,7 +810,7 @@ describe("optional project seat — cross-session fresh placement (#105)", () =>
 		// behavioural oracle lives outside this file: `check-mux-launch-tmux`'s seat cell reads
 		// `receipt.sessionId === seatId !== callerId` against a real second session.
 		expect(MODULE_SRC).toContain("sessionId: targetSessionId,");
-		expect(MODULE_SRC).toContain("...(seat === undefined ? {} : { tmuxSession: seat }),");
+		expect(MODULE_SRC).toContain("tmuxSession: selectedSeat.tmuxSession, tmuxSessionSource: selectedSeat.source");
 		// No created-session field, because nothing here creates one; the no-observed-cwd half is
 		// the module's standing rule, held by FRESHCALL-CWD-RECEIPT-REQUESTED above.
 		expect(MODULE_SRC).not.toContain("sessionCreated");
@@ -809,13 +828,21 @@ describe("optional project seat — cross-session fresh placement (#105)", () =>
 		};
 		const without = renderFreshCall({ ok: true, receipt });
 		expect(without.text).not.toMatch(/seat:/);
-		const seated = renderFreshCall({ ok: true, receipt: { ...receipt, tmuxSession: "org" } });
+		const seated = renderFreshCall({
+			ok: true,
+			receipt: { ...receipt, tmuxSession: "org", tmuxSessionSource: "requested" },
+		});
 		expect(seated.text).toContain(`seat:     org (requested tmux session, resolved to ${TARGET_SESSION})`);
 		expect(seated.text).toContain(`in session ${TARGET_SESSION}`);
+		const home = renderFreshCall({
+			ok: true,
+			receipt: { ...receipt, backend: "codex", tmuxSession: "codex", tmuxSessionSource: "codex-home" },
+		});
+		expect(home.text).toContain(`seat:     codex (Codex home tmux session, resolved to ${TARGET_SESSION})`);
 	});
 
-	it("an omitted seat keeps the pre-#105 behaviour and stays orthogonal to the cwd — neither input is inferred from the other", () => {
-		// No placement: the composition never asks tmux about a session name at all, so with a
+	it("an omitted non-Codex seat keeps the pre-#105 behaviour and stays orthogonal to the cwd — neither input is inferred from the other", () => {
+		// No placement for Pi: the composition never asks tmux about a session name at all, so with a
 		// hermetic runtime on PATH the refusal is still the placement leaf's own.
 		const bare = withPiRuntime((env) =>
 			freshCall({ backend: "pi", model: PI_MODEL, task: TASK, callerGardenId: GID }, env),

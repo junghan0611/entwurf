@@ -27,7 +27,7 @@ evidence split, and its three states must not collapse into "macOS is supported"
 | GitHub Copilot CLI | optional-by-presence, operator-installed and authenticated — absent is an explicit setup SKIP; detected composes all four units (birth/MCP/receiver/footer) | self-fetch citizen and visible fresh |
 | OMP (`omp`) | optional-by-presence, operator-installed — absent is an explicit setup SKIP; detected composes all four units (birth/MCP/`tools.xdev` setting/receiver) | self-fetch citizen and visible fresh (accepted on one host — see §4b) |
 | Antigravity `agy` | optional, operator-installed and authenticated | native-push citizen |
-| OpenAI Codex CLI | optional-by-presence, operator-installed and authenticated; detected composes all three operator-owned units (birth/MCP/status-line) and stays non-green until the operator trusts the birth declaration once in a visible Codex; the unreleased candidate also requires an operator-owned app-server started in a chosen tmux mechanism seat | native-push candidate and visible fresh |
+| OpenAI Codex CLI | optional-by-presence, operator-installed and authenticated; detected composes all three operator-owned units (birth/MCP/status-line) and stays non-green until the operator trusts the birth declaration once in a visible Codex; the unreleased candidate also requires an operator-owned existing tmux session named `codex`, with its app-server and supported TUIs seated there | native-push candidate and visible fresh |
 | Cortex Code | optional, operator-installed and authenticated | Cortex ACP backend |
 
 Claude Code >=2.1.217 is required for the managed exec-hook lifecycle. The package
@@ -433,43 +433,40 @@ answer, later sessions raise no prompt and are born automatically. The MCP write
 `TMUX`, and `TMUX_PANE`.
 The status-line writer owns only `thread-title`. Foreign or symlinked config is refused.
 
-Native delivery requires the operator-owned default app-server. Start it inside a chosen tmux
-session. This selects the placement mechanism; it does not discover the seat of an attached TUI:
+Native delivery requires the operator-owned default app-server and one existing tmux session
+named exactly `codex`. Start the app-server from a pane there and seat supported Codex TUIs there:
 
 ```bash
+# Run these commands inside the operator-owned tmux session named exactly `codex`.
 CODEX_HOME="${CODEX_HOME:-$HOME/.codex}"
 mkdir -p "$CODEX_HOME/app-server-control"
 codex app-server --listen "unix://$CODEX_HOME/app-server-control/app-server-control.sock"
-
-# an operator may attach visible clients from other terminals
 codex --remote "unix://$CODEX_HOME/app-server-control/app-server-control.sock"
 ```
 
-The app-server's `TMUX`/`TMUX_PANE` is the Codex caller placement forwarded to its MCP child.
-It is **not** the attached TUI's pane. Same-session A passed at `6e28c9e`, but exact Codex
-0.153.4 source exposes no request→attached-TUI-seat carrier: N clients attached from different
-sessions cannot receive symmetric default fresh placement. The current vendor surface is
-therefore **do not admit**; sharing the app-server's session is only the measured A deployment,
-not a support workaround. If the app-server was started outside tmux, visible fresh rejects;
-Entwurf does not guess a client pane, create a tmux session, expose a generic app-server
-manager/API, or start/restart the server. Custom `CODEX_HOME` and custom Entwurf roots must
-cross the same explicit `env_vars` boundary. The strict request `_meta` tuple identifies the
-thread caller, not its attached seat. Delivery uses one `codex queue` invocation with no retry.
+Omitted Codex fresh placement resolves exact `codex` on the caller's tmux server. The app-server's
+`TMUX`/`TMUX_PANE` is forwarded to its MCP child, so a Codex citizen's omitted outbound Pi placement
+stays in that home. It is **not** an arbitrary attached-TUI pane join. Exact Codex 0.153.4 source
+exposes no request→attached-TUI-seat carrier, so clients attached from other sessions have no
+adjacency claim; that wider topology is unsupported and unclaimed. Entwurf does not guess panes,
+create the tmux home, expose a generic app-server manager/API, or start/restart the server. Custom
+`CODEX_HOME` and Entwurf roots cross the same explicit `env_vars` boundary. Strict request `_meta`
+identifies the thread caller, not its seat. Delivery uses one `codex queue` invocation with no retry.
 
-The 2026-09-11 loaded-thread run remains pre-amendment native-push/identity evidence; the later
-real `Pi → Codex → Pi` receipt in `DELIVERY.md` accepts the amended same-session A only. Do not
-schedule qualification/release until the vendor supplies the B per-client metadata hook.
+The 2026-09-11 loaded-thread run remains pre-amendment native-push/identity evidence. The final
+first-admission acceptance passed on 2026-09-12: real initial Pi outside `codex`, then omitted-placement
+Codex and outbound Pi inside it, with exact callbacks and addressed delivery both ways. `DELIVERY.md`
+owns the 57-assertion receipt, four coordinates, and digest.
 
 `entwurf_fresh_call` accepts candidate backend `codex` and requires an explicit model. Its
 preflight must prove the safe birth closure, exact MCP/env atom, `thread-title`, and app-server
 socket before tmux mutation. The sibling's garden id comes from the callback sender envelope,
 never the launch receipt. There is no Codex resume surface, watcher, supervisor, or app-server
-lifecycle ownership. Before release, Oracle still owes qualification, the frozen full floor,
-all three installed doctors, and actual visible `Pi → Codex → Pi` LIVE. The initial Pi must
-be a real record-backed visible citizen; release-gate strips ambient `PI_SESSION_ID` and
-`PI_AGENT_ID`, and a fixture/self-fetch collector cannot replace that first leg. The smoke
-must report fresh Codex, inherited app-server, and outbound Pi session coordinates separately
-and keep admission red unless all three match.
+lifecycle ownership. The accepted LIVE used a real record-backed visible Pi for the first leg;
+release-gate stripped ambient `PI_SESSION_ID`/`PI_AGENT_ID`, and the fixture/self-fetch citizen only
+collected receipts. The smoke reported initial Pi, app-server, fresh Codex, and outbound Pi
+coordinates separately: the initial Pi differed and the latter three matched the exact `codex` home.
+Qualification and the frozen full floor remain required before the implementation commit.
 
 Oracle runs the first-admission LIVE with explicit ownership/model selectors:
 
@@ -481,9 +478,9 @@ ENTWURF_CODEX_FRESH_PI_MODEL=<pi-model> \
 entwurf smoke-codex-fresh-live
 ```
 
-The entrypoint name does not waive the contract above. If the installed smoke still begins
-from a fixture/self-fetch collector instead of a real visible Pi, the result is evidence for
-later receipts only and first admission remains red.
+Run this from a tmux session other than `codex`. The entrypoint name does not waive the contract
+above. A fixture/self-fetch citizen may collect receipts but cannot replace the real visible Pi leg;
+a Pi that starts inside the Codex home proves only the weaker shared-seat mechanism.
 
 ## 5. Optional Antigravity native citizen
 

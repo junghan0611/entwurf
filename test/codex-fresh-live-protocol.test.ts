@@ -69,6 +69,21 @@ describe("codex fresh-live protocol", () => {
 		expect(phaseTwo).toMatch(/Do not contact Codex/);
 	});
 
+	it("[QK:CODEX-LIVE-HOME-PLACEMENT-OMITTED] exercises both default-placement legs instead of laundering the home through an explicit seat", () => {
+		const phaseOne = buildInitialPiPhaseOne({
+			initialPiWaitToken: "INITIAL-PI-WAIT-OUTER123",
+			codexWaitToken: "CODEX-WAIT-INNER456",
+			launchToken: "PI-REPORTS-CODEX-LAUNCH-ABC789",
+			callerGid: CALLER,
+			codexModel: "gpt-5.6-sol",
+			scratch: "/tmp/fixture",
+			codexInstruction,
+		});
+		expect(phaseOne).toMatch(/backend codex, model gpt-5\.6-sol, cwd \/tmp\/fixture, NO placement/);
+		expect(codexInstruction).toMatch(/backend pi, model openai-codex\/gpt-5\.6-luna, cwd \/tmp\/fixture, NO placement/);
+		expect(phaseOne).not.toContain("tmuxSession");
+	});
+
 	it("[QK:CODEX-LIVE-CODEX-TASK-WAITS-INNER-TOKEN] gives fresh Codex the token that begins its later addressed payload", () => {
 		const phaseOne = buildInitialPiPhaseOne({
 			initialPiWaitToken: "INITIAL-PI-WAIT-OUTER123",
@@ -88,6 +103,8 @@ describe("codex fresh-live protocol", () => {
 		});
 		const taskLine = phaseOne.split("\n").find((line) => line.includes("required callback receipt"));
 		expect(taskLine).toContain("CODEX-WAIT-INNER456");
+		expect(taskLine).toContain("end the turn and wait passively");
+		expect(taskLine).toContain("Do not call shell, sleep, terminal, or any tool to wait");
 		expect(taskLine).not.toContain("INITIAL-PI-WAIT-OUTER123");
 		expect(phaseOne.startsWith("INITIAL-PI-WAIT-OUTER123\n")).toBe(true);
 	});

@@ -88,11 +88,10 @@ export function buildCodexInstruction(input: CodexInstructionInput): string {
 		`${input.waitToken}\nThis is the addressed instruction from the initial Pi caller. Execute once, with no shell, ` +
 		"terminal, screen inspection, or retry:\n" +
 		`1. Call public mcp__entwurf_bridge__entwurf_fresh_call once with backend pi, model ${input.piModel}, cwd ${input.scratch}, ` +
-		'and task "After your automatic callback succeeds, answer ACK and stop. Do not open another sibling."\n' +
+		'NO placement, and task "After your automatic callback succeeds, answer ACK and stop. Do not open another sibling."\n' +
 		"2. From its LAUNCH receipt copy the exact nonce, session id, and stable window id. Immediately call public " +
 		`mcp__entwurf_bridge__entwurf_v2 once to target ${input.callerGid} with:\n${input.outboundPiToken}\n` +
 		"PI_LAUNCH_NONCE=<exact nonce>\nPI_SESSION_ID=<exact $session id>\nPI_WINDOW_ID=<exact @window id>\n" +
-		"PI_LAUNCH_RECEIPT=<the launch receipt>\n" +
 		"3. Stop and wait for the Pi callback delivered into this Codex thread. Accept only a callback whose body " +
 		"repeats that exact nonce and whose sender envelope names a garden id.\n" +
 		`4. Only after that match, call public mcp__entwurf_bridge__entwurf_v2 once to target ${input.callerGid} with:\n` +
@@ -119,11 +118,12 @@ export interface InitialPiPhaseOneInput {
 export function buildInitialPiPhaseOne(input: InitialPiPhaseOneInput): string {
 	return (
 		`${input.initialPiWaitToken}\nExecute this public-tool chain exactly once; do not use shell, terminal, screen text, or retries:\n` +
-		`1. Call entwurf_fresh_call with backend codex, model ${input.codexModel}, cwd ${input.scratch}, and task ` +
-		`"After your required callback receipt, wait for the addressed instruction containing ${input.codexWaitToken}."\n` +
+		`1. Call entwurf_fresh_call with backend codex, model ${input.codexModel}, cwd ${input.scratch}, NO placement, and task ` +
+		`"After your required callback receipt, end the turn and wait passively for the addressed instruction containing ${input.codexWaitToken}. ` +
+		`Do not call shell, sleep, terminal, or any tool to wait."\n` +
 		`2. Immediately call entwurf_v2 to target ${input.callerGid} with:\n${input.launchToken}\n` +
 		"CODEX_LAUNCH_NONCE=<exact nonce from the LAUNCH receipt>\nCODEX_SESSION_ID=<exact $session id>\n" +
-		"CODEX_WINDOW_ID=<exact @window id>\nCODEX_LAUNCH_RECEIPT=<the full launch receipt>\n" +
+		"CODEX_WINDOW_ID=<exact @window id>\n" +
 		"3. Stop and wait for the Codex callback. Accept only a callback carrying that exact nonce; take the Codex " +
 		"garden id only from its sender envelope.\n" +
 		"4. Call entwurf_v2 once to that callback-derived Codex garden id. Keep the exact receipt that call returns, " +

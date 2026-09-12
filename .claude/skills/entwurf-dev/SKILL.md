@@ -50,7 +50,11 @@ transcript를 가진 garden citizen이다.
 - `placement`는 선택 입력 하나: `{ tmuxSession: "<정확한 이름>" }`. caller **자신의 tmux 서버**에
   **이미 있는** 세션에 형제를 연다(운영자의 프로젝트 자리). **세션을 만들지 않는다** — 없으면
   `tmux-session-missing`, 문법 밖 이름이면 `tmux-session-name-invalid`로 거절되고 창도 세션도 생기지
-  않는다. 그때는 GLG에게 그 자리를 먼저 만들어 달라고 말하고 다시 부른다.
+  않는다. 그때는 GLG에게 그 자리를 먼저 만들어 달라고 말하고 다시 부른다. 예외가 아니라 명시된
+  Codex 기본 topology가 하나 있다: `placement`를 생략한 Codex fresh는 caller 자리가 아니라 기존
+  exact `codex` home session을 선택한다. 이 세션과 operator-owned app-server는 GLG가 관리하며
+  Entwurf는 만들거나 감독하지 않는다. 다른 backend는 생략 시 caller session을 쓴다. 명시 placement는
+  expert override로 언제나 우선하고 receipt는 `requested`와 `Codex home`을 구분한다.
   이름 문법은 `[A-Za-z0-9][A-Za-z0-9_-]*` 하나뿐이다 — `.`, `:`, `#`, 공백, 선행 `_`/`-` 는
   `tmux-session-name-invalid` 로 거절된다(세션 이름을 그렇게 지었으면 GLG에게 문법에 맞는 세션을
   요청한다).
@@ -118,10 +122,10 @@ citizen의 맥락을 요구한 경우에만 그 exact id로 `entwurf_v2`를 보�
 ### `fresh <backend> [model] <task> [--cwd <absolute-path>]` / “새 형제 열어줘”
 
 1. backend가 생략되면 문맥상 명확한 경우에만 선택한다. 불명확하면 `pi` /
-   `claude-code` / `copilot` / `omp` 중 무엇을 열지 한 번만 묻는다.
+   `claude-code` / `copilot` / `omp` / `codex` 중 무엇을 열지 한 번만 묻는다.
 2. model이 생략되면 묻지 않고 backend 기본 정책을 적용한다: Pi는
    `openai-codex/gpt-5.6-luna`, Claude Code는 `claude-sonnet-5`, Copilot는 `auto`,
-   omp는 `openai-codex/gpt-5.6-sol` — 2026-08-30 two-stage bootstrap callback이 실제로
+   omp는 `openai-codex/gpt-5.6-sol`, Codex는 `gpt-5.6-sol` — 2026-08-30 two-stage bootstrap callback이 실제로
    측정된 모델이고, `smoke-omp-fresh-live`의 기본값과 같은 값이다.
    - “sol/terra/luna” → Pi `openai-codex/gpt-5.6-<tier>`
    - “entwurf 소넷” → Pi `entwurf/claude-sonnet-5`
@@ -137,13 +141,13 @@ citizen의 맥락을 요구한 경우에만 그 exact id로 `entwurf_v2`를 보�
    프로세스가 볼 수 있는 launch argv에 실린다.
 5. `entwurf_fresh_call`을 `{backend, model, task, cwd?, placement?}`로 정확히 한 번 호출한다. 같은 repo면
    `cwd`를 생략하고, cross-repo면 위 절의 literal 절대경로를 넣는다. GLG가 자리를 지정하면(예: “org 세션에
-   열어”) `placement: { tmuxSession: "org" }`을 넣고, 아니면 생략해 caller 세션에 연다. 실패나 callback
-   지연을 이유로 자동 재시도하지 않는다.
+   열어”) `placement: { tmuxSession: "org" }`을 넣는다. 자리 지정이 없으면 Codex는 기존 exact `codex`
+   home session으로, 다른 backend는 caller session으로 간다. 실패나 callback 지연을 이유로 자동 재시도하지 않는다.
 6. receipt의 model은 runtime CLI에 요청한 값만 증명한다. 실제 선택/turn 완료 증거로 읽지 않는다.
 7. 반환값을 **launch receipt**로만 설명한다. window/pane과 nonce는 “창을 열도록
    tmux에 요청했다”는 증거이며 runtime 시작, 첫 turn, callback, task 완료 증거가 아니다.
-   `placement`를 줬다면 receipt의 `seat:` 줄이 요청한 이름과 해석된 session id를 함께 보여준다 —
-   이름은 요청이고 id가 창이 실제로 들어간 자리다.
+   named seat를 썼다면 receipt의 `seat:` 줄이 선택한 이름·선택 근거와 해석된 session id를 함께 보여준다 —
+   explicit placement는 `requested tmux session`, Codex 기본은 `Codex home tmux session`이며 id가 창이 실제로 들어간 자리다.
 8. receipt의 nonce를 현재 대화의 pending correlation으로 보존하고 callback을 기다린다.
    polling, transcript grep, newest-peer 추측을 하지 않는다. 창은 보이므로 callback이
    없으면 GLG가 직접 창을 관측할 수 있다고 말한다.

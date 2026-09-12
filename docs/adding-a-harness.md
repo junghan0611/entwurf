@@ -652,14 +652,13 @@ rule are both executable rather than remembered:
 For Codex #95, “existing citizen” in that LIVE pair means a real record-backed visible Pi,
 not a fixture that plants `PI_SESSION_ID`/`PI_AGENT_ID` or a self-fetch receipt collector.
 The release gate strips those ambient variables. The required sequence is real
-`Pi → visible Codex → visible Pi`, and the receipt records the fresh Codex, inherited
-app-server, and outbound Pi tmux session coordinates separately. Because Codex request
-metadata has no request→TUI seat join, a “Codex beside Pi” claim requires all three
-coordinates to agree; a fixture may collect receipts but cannot substitute for the first Pi leg.
-That equality proves only the supported same-session deployment (A). Codex remains unadmitted
-until B finds a vendor-owned request→attached-client-seat carrier that preserves default fresh
-parity across attached TUIs; if the vendor surface has none, the result is **do not admit**, not
-manual placement, one app-server per seat, pane/process guessing, or a hidden manager.
+`Pi → visible Codex → visible Pi` under the explicit home topology: initial Pi in a tmux session
+other than the existing exact `codex` home; operator-owned app-server, omitted-placement fresh
+Codex, and Codex-opened outbound Pi in that home. The receipt records all four coordinates
+separately plus exact callbacks and addressed delivery both ways. A fixture may collect receipts
+but cannot substitute for the first Pi leg. Codex request metadata still has no arbitrary
+request→attached-TUI seat join, so that wider placement topology is unsupported and unclaimed.
+Entwurf neither guesses panes nor creates/supervises a hidden app-server/session manager.
 
 **An `unsupported` note is not a partial-release permit.** `[측정]` #87 is where that was learned at
 full price: the Bundle A+B candidate carried a fully honest sentence in the delivery matrix —
