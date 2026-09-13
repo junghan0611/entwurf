@@ -5,8 +5,8 @@
  *
  *   1. ack success            → outcome `sent`, release ×1, deadFallback NOT called.
  *   2. in-band reject (success:false) → outcome `rejected`, release ×1, NO fallback
- *      (deadFallback + mailbox NOT called — the receiver was reached and refused); NO
- *      rejectReason (an in-band refusal has no resolver taxonomy — N3 boundary).
+ *      (deadFallback + mailbox NOT called — the receiver was reached and refused); a
+ *      supplied receiver error is carried verbatim as `rejectReason` (N3 boundary).
  *   3. dead → re-resolve(control-socket) → success → `fallback-sent`, release ×1,
  *      deadFallback called EXACTLY once and UNDER the still-held lock (before release).
  *   4. dead → re-resolve reject → `rejected`, release ×1, and the resolver's reason is
@@ -193,15 +193,23 @@ async function main(): Promise<void> {
 
 	// ── 2: in-band reject → rejected, release once, NO fallback ───────────────
 	{
-		const { result, trace } = await run({ firstSend: { result: { success: false, error: "refused" } } });
+		const { result, trace } = await run({ firstSend: { result: { success: false, error: "compacting" } } });
 		ok("in-band reject → rejected", result.outcome === "rejected");
 		ok("in-band reject → release ×1", trace.releases.length === 1);
-		// N3 boundary: an in-band RPC refusal has NO resolver reason (only a dead-path
-		// re-resolve reject carries one) — the field stays undefined here.
-		ok("in-band reject → no rejectReason (in-band has no resolver taxonomy)", result.rejectReason === undefined);
+		ok(
+			"[QK:V2SEND-INBAND-REJECT-REASON] in-band control reject carries its receiver error",
+			result.rejectReason === "compacting",
+		);
 		ok(
 			"in-band reject → no deadFallback, no mailbox",
 			trace.deadFallbackCalls === 0 && trace.mailboxSends.length === 0,
+		);
+		const unnamed = await run({ firstSend: { result: { success: false } } });
+		ok("in-band reject without an error does not invent rejectReason", unnamed.result.rejectReason === undefined);
+		const empty = await run({ firstSend: { result: { success: false, error: "" } } });
+		ok(
+			"in-band reject with an empty error does not expose an empty rejectReason",
+			empty.result.rejectReason === undefined,
 		);
 	}
 
@@ -222,6 +230,16 @@ async function main(): Promise<void> {
 		ok(
 			"dead → deadFallback UNDER held lock (before release)",
 			trace.order.indexOf("deadFallback") < trace.order.indexOf("releaseLock"),
+		);
+
+		const refused = await run({
+			firstSend: { throwCode: "ECONNREFUSED" },
+			deadFallback: { kind: "execute", plan: RERESOLVED_CONTROL_PLAN },
+			fallbackSend: { result: { success: false, error: "retry-refused" } },
+		});
+		ok(
+			"dead → re-resolve(control) in-band reject carries the retry receiver error",
+			refused.result.outcome === "rejected" && refused.result.rejectReason === "retry-refused",
 		);
 	}
 
@@ -296,9 +314,10 @@ async function main(): Promise<void> {
 		const refused = await run({
 			firstSend: { throwCode: "ENOENT" },
 			deadFallback: { kind: "execute", plan: MAILBOX_PLAN },
-			fallbackSend: { result: { success: false } },
+			fallbackSend: { result: { success: false, error: "mailbox-refused" } },
 		});
 		ok("dead → mailbox enqueue success:false → rejected", refused.result.outcome === "rejected");
+		ok("dead → mailbox enqueue reject carries its receiver error", refused.result.rejectReason === "mailbox-refused");
 		// No file was written, so there is nothing to name — never echo a dep's stray path.
 		ok("dead → rejected enqueue carries NO messagePath", refused.result.messagePath === undefined);
 	}

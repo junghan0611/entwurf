@@ -17,6 +17,17 @@
 			"signatureSource": "scripts/check-entwurf-v2-surface.ts"
 		},
 		{
+			"claim": "V2SEND-INBAND-REJECT-REASON",
+			"title": "completed control or mailbox refusal drops its receiver-provided error, leaving the sender with bare rejected again",
+			"subject": "pi-extensions/lib/entwurf-v2-send.ts",
+			"find": ["\treturn { outcome: \"rejected\", rejectReason: result.error === \"\" ? undefined : result.error };"],
+			"replace": ["\treturn { outcome: \"rejected\" };"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-send"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:V2SEND-INBAND-REJECT-REASON]",
+			"signatureSource": "scripts/check-entwurf-v2-send.ts"
+		},
+		{
 			"claim": "V2SURF-PI-MODE-SCOPE",
 			"title": "pi-native mode param reverts to \"Delivery mode for a live send\" (false for native-push)",
 			"subject": "pi-extensions/entwurf-control.ts",

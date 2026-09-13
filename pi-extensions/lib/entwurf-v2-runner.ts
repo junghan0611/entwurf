@@ -12,8 +12,9 @@
  *
  * Why a result type richer than the receipt: the carry-over contracts from 5c demand it.
  *   - N3 (5c-2b): a dead-path re-resolve `rejected` carries the resolver's `rejectReason`
- *     (dormant-fire-forget-unsupported / mailbox-undeliverable / …). The runner carries it
- *     verbatim so the surface distinguishes "in-band refusal" from "no live route".
+ *     (dormant-fire-forget-unsupported / mailbox-undeliverable / …), while an in-band
+ *     refusal carries its supplied receiver error. The runner carries either verbatim;
+ *     receiver evidence is not reclassified as resolver taxonomy.
  *   - N1 (5c-2a): a non-`failed` outcome whose `releaseLock` then threw is a
  *     `SendDeliveredReleaseFailedError` — the delivery HAPPENED, the lock is dirty, a
  *     re-send would double-deliver. The runner surfaces this as `execution-failed` with
