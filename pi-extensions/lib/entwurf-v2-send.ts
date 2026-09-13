@@ -101,12 +101,12 @@ export interface ControlSocketSendDeps {
 
 export interface ControlSocketSendResult {
 	outcome: SendFinalOutcome;
-	/** Present ONLY on a `rejected` outcome that came from the dead-path re-resolve
-	 * (5c-2b): the resolver's machine-readable reason (dormant-fire-forget-unsupported /
-	 * mailbox-undeliverable / indeterminate-no-spawn / bad-target / target-address-conflict).
-	 * An in-band RPC refusal carries NO reason (there is no resolver taxonomy for it). The
-	 * 5d runner carries this verbatim so the surface can tell "in-band refusal" from
-	 * "no live route" — the N3 carry-over the hand boundary used to drop. */
+	/** Present ONLY on a `rejected` outcome. It carries either the dead-path re-resolver's
+	 * machine-readable reason (dormant-fire-forget-unsupported / mailbox-undeliverable /
+	 * indeterminate-no-spawn / bad-target / target-address-conflict), or the non-empty
+	 * error returned by an in-band RPC/mailbox refusal. The latter is receiver evidence,
+	 * not a resolver taxonomy and is never invented when the completed result has no error.
+	 * The 5d runner carries this verbatim to the sender-visible surface. */
 	rejectReason?: string;
 	/** #98 R, fallback leg: the `.msg` a dead-socket re-resolve enqueued. Present ONLY
 	 * when the fallback actually routed to the mailbox and the enqueue succeeded — a
@@ -120,7 +120,7 @@ export interface ControlSocketSendResult {
 
 // A drive step's verdict: the terminal outcome, plus the original error to RETHROW on
 // a `failed` (the hand releases first, then rethrows — never swallows the failure), plus
-// the optional resolver reject reason to carry on a re-resolve `rejected` (N3).
+// the optional resolver or in-band receiver reason to carry on a `rejected` (N3).
 interface SendDrive {
 	outcome: SendFinalOutcome;
 	error?: unknown;
@@ -177,8 +177,9 @@ async function driveSend(plan: ControlSocketPlan, lock: LockClaim, deps: Control
 		// dead ⇒ proven non-delivery ⇒ same-lock one-shot re-resolve (lock still held).
 		return await driveDeadFallback(plan, lock, deps);
 	}
-	// A completed RPC: ack ⇒ sent; in-band refusal ⇒ rejected, NO fallback.
-	return { outcome: result.success ? "sent" : "rejected" };
+	// A completed RPC: ack ⇒ sent; in-band refusal ⇒ rejected, NO fallback. Preserve
+	// its receiver error verbatim when supplied; do not make a reason up when absent.
+	return result.success ? { outcome: "sent" } : inBandRejected(result);
 }
 
 /**
@@ -187,6 +188,10 @@ async function driveSend(plan: ControlSocketPlan, lock: LockClaim, deps: Control
  * re-enter the fallback, it finalizes as failed). The hand only executes; the resolver
  * decided.
  */
+function inBandRejected(result: RpcSendResult): SendDrive {
+	return { outcome: "rejected", rejectReason: result.error === "" ? undefined : result.error };
+}
+
 async function driveDeadFallback(
 	plan: ControlSocketPlan,
 	lock: LockClaim,
@@ -219,7 +224,7 @@ async function driveDeadFallback(
 			// connect failure finalizes as failed (no further fallback).
 			try {
 				const r = await deps.sendOverSocket(rePlan);
-				return { outcome: r.success ? "fallback-sent" : "rejected" };
+				return r.success ? { outcome: "fallback-sent" } : inBandRejected(r);
 			} catch (err) {
 				return { outcome: "failed", error: err };
 			}
@@ -231,7 +236,7 @@ async function driveDeadFallback(
 				// #98 R: this leg writes a `.msg` exactly like the primary mailbox rail, so it
 				// owes the sender the same per-message receipt. Carried only on success — a
 				// `rejected` enqueue wrote no file to name.
-				return r.success ? { outcome: "fallback-sent", messagePath: r.messagePath } : { outcome: "rejected" };
+				return r.success ? { outcome: "fallback-sent", messagePath: r.messagePath } : inBandRejected(r);
 			} catch (err) {
 				return { outcome: "failed", error: err };
 			}
