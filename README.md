@@ -245,6 +245,26 @@ resolves its own agent directory, so that lineage does not reintroduce a `pi` re
 `setup` command: pi is optional-by-presence there, so a pi-less host simply gets an explicit pi
 SKIP while the detected harnesses are composed.
 
+### Garden viewer
+
+```bash
+entwurf garden                 # live, read-only terminal view; q quits, r refreshes
+entwurf garden --once          # one bounded frame
+entwurf garden --json          # one machine-readable snapshot
+```
+
+The viewer stacks **vertical** panels: tmux's `whole-current-server-inventory` above
+Entwurf's `retained-record-store`, never row-paired with it. It deliberately
+does **not** join them: tmux is placement observation only, while the record-backed
+garden id remains the sole address; each row visibly says its missing join is `unknown`.
+The JSON records those limits as `placement.scope`, `garden.scope`, and
+`garden.detailObservationLimit` (32 bounds receiver/transcript detail observation, not
+record retention). It also leaves `working`/`blocked`/`done` unobserved until a backend
+supplies an explicit report; liveness or screen text is not attention. The command has
+no frontend dependency and performs no send, launch, resume, install, pane switch, or
+state write. See
+[Garden view](./docs/garden-view.md).
+
 ### Native harness repair and doctors
 
 A plain MCP registration exposes the bridge tools; a **garden-native** session also

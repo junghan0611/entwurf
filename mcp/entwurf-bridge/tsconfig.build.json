@@ -105,6 +105,11 @@
 	// Its only repo import is meta-session.ts, already emitted for the
 	// store-doctor, so it adds ONE leaf JS and ZERO new deps.
 	//
+	// WHY garden-view rides this build (#114): it is a read-only operator command,
+	// not a dev gate. Installed users run it through run.sh below node_modules, so
+	// the strip-types fence requires this compiled twin. Its Entwurf input is the
+	// existing fact-provider graph; tmux observation uses only a Node builtin.
+	//
 	// WHY meta-bridge-fresh-cut rides this build: it is the ONE operator command
 	// every v3-only rejection surface names, and the hosts that need it most are
 	// INSTALLED hosts sitting on a previous-generation store — exactly where
@@ -134,6 +139,7 @@
 		"../../scripts/meta-bridge-prune.ts",
 		"../../scripts/meta-bridge-fresh-cut.ts",
 		"../../scripts/meta-facts.ts",
+		"../../scripts/garden-view.ts",
 		"../../scripts/omp-receive-facts.ts",
 		"../../pi-extensions/meta-bridge-hook.ts",
 		"../../pi-extensions/meta-bridge-hook-copilot.ts",

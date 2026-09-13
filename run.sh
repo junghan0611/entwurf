@@ -180,6 +180,7 @@ Usage:
   ./run.sh check-entwurf-facts         # deterministic gate (0.11 Stage 0 step 4, fact-provider slice 1+2): PURE PeerFact core + resolveFactList union — R1 out-of-domain→unsupported, R3b socket-domain 4-value, facts-only keyset; union: PeerFact + RecordLessSocketFact by gardenId (#50 C4: record-less socket = diagnostic subject, gid+liveness only), dormant→dead, F3 indeterminate preserved, out-of-socket-domain+socket fail-loud; pure, no IO
   ./run.sh check-socket-discovery      # deterministic gate (0.11 Stage 0 step 4, fact-provider slice 3): SOCKET-axis scanSocketProbes — probes (dir sockets) ∪ (in-domain citizen canonical paths) 3-valued; dormant citizen no-file → dead (resumable, not unprobed), stall → indeterminate (F3), dir hygiene/dedup/missing-dir + e2e → resolveFactList; readdir/probe injected, no IO
   ./run.sh check-meta-facts            # deterministic gate for the meta-facts projection (#65): drives the REAL CLI — full-record join, parse-before-uniqueness, no-winner duplicates, drift/symlink/invalid-UTF-8 defects in-band, deterministic bytes, exit contract 0/2/3, dispatch+emit reachability
+  ./run.sh check-garden-view          # deterministic gate for the read-only garden frontend (#114): whole-current-server tmux parser, retained-store owner facts, row-level authority separation/no-join, attention honesty, bounded render, scoped/detail-limited CLI JSON, installed-surface reachability
   ./run.sh check-meta-listing          # deterministic gate: META-STORE facts axis — kind-carrying entries; non-regular records are never read, parse/drift become diagnostics, duplicate nativeSessionId quarantines every rival but not unrelated citizens; strict throws / collect partial; pure injected IO
   ./run.sh check-entwurf-fact-provider # deterministic gate (0.11 Stage 0 step 4, fact-provider slice 4b): ASSEMBLY listEntwurfFacts — full-store parse/probe/quarantine/resolve stays intact; #112 bounds expensive receiver/transcript observation to the newest 32 rendered rows while older machine rows say unobserved; Q112 pins full payload + exact observer budget; C-원칙 keeps corruption diagnostic and impossible wiring loud; deps injected, no IO
   ./run.sh check-entwurf-peers-surface # deterministic gate (0.11 Stage 0 step 4, fact-provider slice 4c): MCP entwurf_peers RENDER renderEntwurfPeers (#50 C4) — payload keyset exactly {peers, diagnostics}; FORBIDDEN keys sessions/socketOnly/controlDir/socketPath/count + no .sock in text (socket is transport, never identity); record-less socket = aggregated record-less-socket diagnostic (F8, liveness-keyed message, alive names fresh-cut); NO verb-routing key (JSON deep scan) NOR word (text), diagnostics both surfaces, empty→(none), unsupported shown; WIRING guard: both surfaces call provider+render, getLiveSessions + /entwurf-sessions gone; facts fabricated, no IO
@@ -267,6 +268,7 @@ Usage:
   ./run.sh doctor-agy-hooks           # fail-loud doctor for agy hooks.json imprint wiring
   ./run.sh meta-bridge-prune          # 1.0.0 meta-bridge Phase 4: LISTING-ONLY store hygiene — classify orphan/stale/ambiguous/keep, print manual rm commands, delete NOTHING ([dir] [--ttl-days N])
   ./run.sh meta-bridge-fresh-cut      # the ONE generation verb (the verb every v3-only rejection names): quiesce-check live sockets/markers/native-push conversations (refusing any surface it cannot inspect), archive meta-sessions/ + meta-mailbox/ to `<dir>.archive-<ts>`, clear dead transport residue, open an empty v3 generation. No migration, no restore — the archive is forensic only. EXIT CONTRACT (#54, `--help` prints it): 0 complete / 1 NOTHING MOVED (re-run, do not setup) / 2 usage / 3 cut transition incomplete (inspect) / 4 cut complete but residue cleanup failed (`setup` may run; re-run only before new citizen birth, otherwise remove residue manually)
+  ./run.sh garden                     # #114 read-only live frontend: whole-current-server tmux inventory above retained owner-record facts. JSON declares both scopes + 32-detail observation limit; panes/citizens name unknown joins. Interactive TTY watches (q/r); pipes print once. Options: --once, --watch, --json, --interval-ms N. Never derives attention, sends, launches, installs, or writes.
   ./run.sh meta-facts                 # #65 owner-normalized READ-ONLY store projection: deterministic JSON {schemaVersion:1, storeDir, citizens: full v3 records sorted by gardenId, defects: {filename,message}} — THE listing contract emitted by the owner so consumers stop copying the certification. No liveness/sockets/transcript contents. EXIT: 0 readable (defects in-band; missing store = empty), 2 usage, 3 unreadable ([dir])
   ./run.sh meta-bridge-managed-keys   # 0.10.0 meta-bridge: print the SSOT of settings keys entwurf OWNS (consumers read this to stay disjoint — keyset-owner invariant)
   ./run.sh check-keyset-overlap <fragment.json...>  # 0.10.0 meta-bridge: PREVENTIVE keyset guard — fail if a consumer fragment collides with any pi-owned key (cross-repo; not in pnpm check)
@@ -1760,6 +1762,14 @@ check_meta_listing() {
   run_ts scripts/check-meta-listing.ts
 }
 
+check_garden_view() {
+  # #114 read-only frontend contract. The fixture gives a whole-server tmux pane and
+  # retained-store citizen the SAME cwd, proves their vertically ordered rows name
+  # unknown joins, and keeps attention explicitly unobserved. It drives the real CLI
+  # against a sandbox store + fake tmux and pins scoped JSON/install reachability. No writes.
+  run_ts scripts/check-garden-view.ts
+}
+
 check_meta_facts() {
   # Deterministic gate for the #65 owner-normalized store projection. Drives the
   # REAL scripts/meta-facts.ts as a subprocess against sandboxed fixture stores:
@@ -3100,6 +3110,9 @@ check_pack() {
     # #65 — the owner-normalized store projection consumers call INSTEAD of
     # parsing the store; installed hosts are exactly where those consumers live.
     "mcp/entwurf-bridge/dist/scripts/meta-facts.js"
+    # #114 — dependency-free read-only garden frontend. It imports the owner fact
+    # provider and observes tmux placement without creating a pane↔garden join.
+    "mcp/entwurf-bridge/dist/scripts/garden-view.js"
     # #87 Bundle B — omp-receive-doctor drives this operator projection through
     # run.sh, so installed node_modules must have the compiled twin too.
     "mcp/entwurf-bridge/dist/scripts/omp-receive-facts.js"
@@ -3395,6 +3408,8 @@ _check_pack_install_impl() {
     "mcp/entwurf-bridge/dist/scripts/meta-bridge-fresh-cut.js"
     # #65 — the owner-normalized store projection (see check-pack).
     "mcp/entwurf-bridge/dist/scripts/meta-facts.js"
+    # #114 — installed read-only garden frontend (see check-pack).
+    "mcp/entwurf-bridge/dist/scripts/garden-view.js"
     # #87 Bundle B — omp-receive-doctor reaches this through the installed dispatcher.
     "mcp/entwurf-bridge/dist/scripts/omp-receive-facts.js"
     # 0.12.5 — node_modules-safe plugin hook + lib (see check-pack). The installed
@@ -4444,6 +4459,31 @@ JS
     return 1
   fi
 
+  # #114 — run the installed frontend through its compiled JS twin. A zero-row fake
+  # tmux keeps this package proof checkout-independent while still driving the tmux
+  # command edge; the sandbox store proves the owner fact provider is the garden edge.
+  local garden_bin="$npm_tmp/garden-bin"
+  mkdir -p "$garden_bin"
+  printf '#!/usr/bin/env bash\nexit 0\n' > "$garden_bin/tmux"
+  chmod +x "$garden_bin/tmux"
+  if ! op_out=$(HOME="$npmhome" XDG_DATA_HOME="$op_xdg_data" XDG_STATE_HOME="$op_xdg_state" XDG_CACHE_HOME="$op_xdg_cache" PI_CODING_AGENT_DIR="$op_agent" PATH="$garden_bin:$PATH" "$installed_entwurf" garden --json 2>&1); then
+    fail "[check-pack-install] installed 'entwurf garden --json' FAILED under node_modules:"
+    echo "$op_out" | tail -8 | sed 's/^/    /' >&2
+    return 1
+  fi
+  if ! printf '%s' "$op_out" | node -e '
+let s=""; process.stdin.on("data", c => s += c); process.stdin.on("end", () => {
+  const x=JSON.parse(s);
+  if (x.schemaVersion !== 1 || x.placement?.authority !== "placement-observation-only" ||
+      x.placement?.scope !== "whole-current-server-inventory" ||
+      x.garden?.authority !== "garden-id-record-and-rail-facts" ||
+      x.garden?.scope !== "retained-record-store" || x.garden?.detailObservationLimit !== 32 ||
+      x.join?.state !== "not-performed") process.exit(1);
+});'; then
+    fail "[check-pack-install] installed 'entwurf garden --json' did not emit the authority-separated projection"
+    return 1
+  fi
+
   # #82 RAIL 7 — the managed launch, from the INSTALLED package. Hard Rule 11: a green
   # clone is not a green tarball. `entwurf copilot` is a bash leaf, so its risk here is
   # not the strip-types fence but PACKAGING — `scripts/copilot-launch.sh` has to be in
@@ -4510,7 +4550,7 @@ JS
     fail "[check-pack-install] installed 'entwurf meta-bridge-fresh-cut' never reached its verdict line: $op_out"
     return 1
   fi
-  echo "[check-pack-install] installed operator commands pass (new-session-id id-shaped, doctor-pi-provider reaches its verdict, meta-bridge-prune walks a 0-record store, fresh-cut opens a generation)"
+  echo "[check-pack-install] installed operator commands pass (new-session-id, doctor-pi-provider, prune, garden, fresh-cut)"
 
   # ── generation lane: the INSTALLED lifecycle on a host that already carries a
   # previous-generation store. Everything above this line meets an empty store,
@@ -6169,6 +6209,9 @@ case "$cmd" in
   check-meta-facts)
     check_meta_facts
     ;;
+  check-garden-view)
+    check_garden_view
+    ;;
   check-entwurf-fact-provider)
     check_entwurf_fact_provider
     ;;
@@ -6791,6 +6834,13 @@ case "$cmd" in
     # + [--ttl-days N] to override.
     shift || true
     run_ts scripts/meta-bridge-prune.ts "$@"
+    ;;
+  garden)
+    # #114 dependency-free READ-ONLY frontend. It renders tmux's whole-current-server
+    # inventory vertically apart from the retained record store, then emits one bounded
+    # terminal frame (or JSON). It never joins the two axes and never mutates either.
+    shift || true
+    run_ts scripts/garden-view.ts "$@"
     ;;
   meta-facts)
     # #65 owner-normalized READ-ONLY projection of the meta-record store: the

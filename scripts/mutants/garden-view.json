@@ -1,0 +1,111 @@
+{
+	"schemaVersion": 1,
+	"lane": "garden-view",
+	"mutants": [
+		{
+			"claim": "GV-TMUX-PARSE",
+			"title": "a tmux placement row substitutes its window id for the pane id, so the viewer points at the wrong visible terminal",
+			"subject": "scripts/lib/garden-view.ts",
+			"find": ["\t\t\t\tpaneId,\n\t\t\t\tpaneIndex: index(pi, \"pane_index\"),"],
+			"replace": ["\t\t\t\tpaneId: windowId,\n\t\t\t\tpaneIndex: index(pi, \"pane_index\"),"],
+			"gate": ["bash", "run.sh", "check-garden-view"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:GV-TMUX-PARSE]",
+			"signatureSource": "scripts/check-garden-view.ts"
+		},
+		{
+			"claim": "GV-AUTHORITY-SEPARATION",
+			"title": "a placement row calls its absent garden join inferred, so matching cwd or backend can read as a citizen correlation",
+			"subject": "scripts/lib/garden-view.ts",
+			"find": ["\t\t\tconst join = compact ? \"gd?\" : \"gd:?\";"],
+			"replace": ["\t\t\tconst join = \"inferred\";"],
+			"gate": ["bash", "run.sh", "check-garden-view"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:GV-AUTHORITY-SEPARATION]",
+			"signatureSource": "scripts/check-garden-view.ts"
+		},
+		{
+			"claim": "GV-OWNER-FACTS",
+			"title": "the frontend drops the owner fact-provider peers and shows an empty garden beside live placement",
+			"subject": "scripts/garden-view.ts",
+			"find": ["\t\t\tpeers: result.facts.peers,"],
+			"replace": ["\t\t\tpeers: [],"],
+			"gate": ["bash", "run.sh", "check-garden-view"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:GV-OWNER-FACTS]",
+			"signatureSource": "scripts/check-garden-view.ts"
+		},
+		{
+			"claim": "GV-ATTENTION-HONESTY",
+			"title": "the frontend claims liveness can stand in for backend-reported working/blocked/done attention",
+			"subject": "scripts/lib/garden-view.ts",
+			"find": [
+				"\t\"working/blocked/done requires an explicit backend report; liveness, receiver, transcript, and screen text do not imply it\";"
+			],
+			"replace": ["\t\"working/blocked/done follows liveness and screen text\";"],
+			"gate": ["bash", "run.sh", "check-garden-view"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:GV-ATTENTION-HONESTY]",
+			"signatureSource": "scripts/check-garden-view.ts"
+		},
+		{
+			"claim": "GV-NO-CROSS-KEYS",
+			"title": "the garden fact object gains a pane id even though no launch/callback receipt supplied a join",
+			"subject": "scripts/garden-view.ts",
+			"find": ["\t\t\tdiagnostics: result.diagnostics,\n\t\t},"],
+			"replace": ["\t\t\tdiagnostics: result.diagnostics,\n\t\t\tpaneId: \"inferred\",\n\t\t},"],
+			"gate": ["bash", "run.sh", "check-garden-view"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:GV-NO-CROSS-KEYS]",
+			"signatureSource": "scripts/check-garden-view.ts"
+		},
+		{
+			"claim": "GV-ROW-FACTS-SURVIVE-WIDTH",
+			"title": "compact rows discard record facts at narrow widths",
+			"subject": "scripts/lib/garden-view.ts",
+			"find": [
+				"\treturn `pl? ${glyph} ${peer.gardenId} ${backendLabel(peer.backend, tiny)} recv${recv} tx${tx}${nativePushListingAbsent(peer) ? \" np-listing?\" : \"\"}`;"
+			],
+			"replace": ["\treturn \"pl?\";"],
+			"gate": ["bash", "run.sh", "check-garden-view"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:GV-ROW-FACTS-SURVIVE-WIDTH]",
+			"signatureSource": "scripts/check-garden-view.ts"
+		},
+		{
+			"claim": "GV-OBSERVATION-HORIZON",
+			"title": "viewer replaces payload observation horizon with an invented constant",
+			"subject": "scripts/lib/garden-view.ts",
+			"find": [
+				"\tconst warning = compact\n\t\t? `LU<${horizon}> unobs:${unobserved} np?:${nativeUnknown}`\n\t\t: `LIVE-UNKNOWN before ${horizon} \u00b7 transcript-unobserved=${unobserved} \u00b7 native-push listing-liveness unknown=${nativeUnknown}`;"
+			],
+			"replace": ["\tconst warning = \"LU<none>\";"],
+			"gate": ["bash", "run.sh", "check-garden-view"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:GV-OBSERVATION-HORIZON]",
+			"signatureSource": "scripts/check-garden-view.ts"
+		},
+		{
+			"claim": "GV-UNREACHABLE-NAMED",
+			"title": "native-push listing absence loses its named compact marker",
+			"subject": "scripts/lib/garden-view.ts",
+			"find": ["${nativePushListingAbsent(peer) ? \" np-listing?\" : \"\"}`;"],
+			"replace": ["${\"\"}`;"],
+			"gate": ["bash", "run.sh", "check-garden-view"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:GV-UNREACHABLE-NAMED]",
+			"signatureSource": "scripts/check-garden-view.ts"
+		},
+		{
+			"claim": "GV-OMITTED-SUBJECTS",
+			"title": "truncation collapses typed omitted counts into an anonymous more count",
+			"subject": "scripts/lib/garden-view.ts",
+			"find": ["\t\t: `\u2026 hidden records:${count(\"record\")}`;"],
+			"replace": ["\t\t: `\u2026 hidden records:0`;"],
+			"gate": ["bash", "run.sh", "check-garden-view"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:GV-OMITTED-SUBJECTS]",
+			"signatureSource": "scripts/check-garden-view.ts"
+		}
+	]
+}
