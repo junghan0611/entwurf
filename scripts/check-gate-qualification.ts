@@ -839,7 +839,7 @@ let manifestCount: number;
 		"copilot-receive": 20,
 		"entwurf-peers": 1,
 		"fresh-cut": 3,
-		"garden-view": 9,
+		"garden-view": 10,
 		"gate-qualification": 2,
 		"meta-facts": 4,
 		"meta-hook-session-switch": 17,

@@ -61,12 +61,10 @@
 		},
 		{
 			"claim": "GV-ROW-FACTS-SURVIVE-WIDTH",
-			"title": "compact rows discard record facts at narrow widths",
+			"title": "compact row drops its backend interpolation while leaving other facts visible",
 			"subject": "scripts/lib/garden-view.ts",
-			"find": [
-				"\treturn `pl? ${glyph} ${peer.gardenId} ${backendLabel(peer.backend, tiny)} recv${recv} tx${tx}${nativePushListingAbsent(peer) ? \" np-listing?\" : \"\"}`;"
-			],
-			"replace": ["\treturn \"pl?\";"],
+			"find": ["${backendLabel(peer.backend, tiny)}"],
+			"replace": [""],
 			"gate": ["bash", "run.sh", "check-garden-view"],
 			"timeoutSeconds": 60,
 			"signature": "[QK:GV-ROW-FACTS-SURVIVE-WIDTH]",
@@ -105,6 +103,17 @@
 			"gate": ["bash", "run.sh", "check-garden-view"],
 			"timeoutSeconds": 60,
 			"signature": "[QK:GV-OMITTED-SUBJECTS]",
+			"signatureSource": "scripts/check-garden-view.ts"
+		},
+		{
+			"claim": "GV-PANE-JOIN-ROW",
+			"title": "actual pane rows lose their compact/full join token while a title legend remains",
+			"subject": "scripts/lib/garden-view.ts",
+			"find": ["\t\t\tconst join = compact ? \"gd?\" : \"gd:?\";"],
+			"replace": ["\t\t\tconst join = \"\";"],
+			"gate": ["bash", "run.sh", "check-garden-view"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:GV-PANE-JOIN-ROW]",
 			"signatureSource": "scripts/check-garden-view.ts"
 		}
 	]

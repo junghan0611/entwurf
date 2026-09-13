@@ -39,6 +39,8 @@ assert.throws(() => parseTmuxPaneRows("$7\u001fbroken\n"), /expected 13/, "malfo
 console.log("  ok    malformed placement rows fail loud");
 passed++;
 
+panes[0]!.command = "bash";
+
 const snapshot: GardenViewSnapshot = {
 	schemaVersion: 1,
 	observedAt: "2026-09-13T12:34:56.000Z",
@@ -77,18 +79,36 @@ const snapshot: GardenViewSnapshot = {
 };
 const rendered = renderGardenView(snapshot, { columns: 120, rows: 24 });
 const narrow = renderGardenView(snapshot, { columns: 60, rows: 24 });
+const peer = snapshot.garden.peers[0]!;
+function subjectLines(columns: number): { frame: string; pane: string; record: string } {
+	const frame = renderGardenView(snapshot, { columns, rows: 24 });
+	const lines = frame.split("\n");
+	const pane = lines.filter((line) => line.includes("%11"));
+	const record = lines.filter((line) =>
+		line.includes(columns < 100 ? `pl? ● ${peer.gardenId}` : `pl:? ${peer.gardenId}`),
+	);
+	assert.equal(pane.length, 1, `one actual pane row at ${columns}`);
+	assert.equal(record.length, 1, `one actual record row at ${columns}`);
+	return { frame, pane: pane[0]!, record: record[0]! };
+}
 ok(
-	"[QK:GV-AUTHORITY-SEPARATION] same-cwd pane and citizen occupy vertically ordered panels with named absent joins",
+	"[QK:GV-AUTHORITY-SEPARATION] actual compact/full pane and record rows remain vertically separate with named joins",
 	[60, 120].every((columns) => {
-		const frame = renderGardenView(snapshot, { columns, rows: 24 });
-		const pane = columns < 100 ? "gd?" : "gd:?";
-		const citizen = columns < 100 ? "pl?" : "pl:?";
+		const { frame, pane, record } = subjectLines(columns);
+		const recordToken = columns < 100 ? "pl?" : "pl:?";
 		return (
-			frame.includes(pane) &&
-			frame.includes(citizen) &&
+			pane.includes("%11") &&
+			record.includes(recordToken) &&
 			!frame.includes("inferred") &&
-			frame.indexOf(pane) < frame.indexOf(citizen)
+			frame.indexOf(pane) < frame.indexOf(record)
 		);
+	}),
+);
+ok(
+	"[QK:GV-PANE-JOIN-ROW] actual pane rows retain compact/full gd join tokens, never a legend-only token",
+	[60, 120].every((columns) => {
+		const { pane } = subjectLines(columns);
+		return pane.includes(columns < 100 ? "gd?" : "gd:?") && !pane.includes("inferred");
 	}),
 );
 ok(
@@ -99,18 +119,17 @@ ok(
 	"the same projection has a bounded narrow-terminal rendering",
 	narrow.split("\n").every((line) => line.length <= 60),
 );
-const peer = snapshot.garden.peers[0]!;
 ok(
 	"[QK:GV-ROW-FACTS-SURVIVE-WIDTH] human compact/full rows retain literal core facts at every width",
 	[48, 60, 80, 100, 120].every((columns) => {
-		const frame = renderGardenView(snapshot, { columns, rows: 24 });
+		const { record } = subjectLines(columns);
 		const backend = columns < 60 ? "pi" : peer.backend;
 		return (
-			frame.includes(peer.gardenId) &&
-			frame.includes(backend) &&
-			frame.includes(columns < 100 ? "recv-" : "recv:n/a") &&
-			frame.includes(columns < 100 ? "tx+" : "tr:exists") &&
-			frame.includes(columns < 100 ? "pl?" : "pl:?")
+			record.includes(peer.gardenId) &&
+			record.includes(backend) &&
+			record.includes(columns < 100 ? "recv-" : "recv:n/a") &&
+			record.includes(columns < 100 ? "tx+" : "tr:exists") &&
+			record.includes(columns < 100 ? "pl?" : "pl:?")
 		);
 	}),
 );
