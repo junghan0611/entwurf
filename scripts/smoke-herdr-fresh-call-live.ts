@@ -56,9 +56,21 @@
  *
  * AND THE VACUOUS CLAUSE THAT RUN ALSO EXPOSED: the caller's own receipt contains the nonce it
  * minted, so "the nonce appears in the caller's text" can be true while the callback timed out.
- * Callback arrival is therefore proved from the DELIVERED MESSAGE in the caller's own mailbox
- * directory — body is the nonce, sender is the child the direct witness resolved to — never from
- * the caller's receipt alone. Nothing below reads a pane's rendered output, and nothing types a key.
+ * Callback arrival is therefore proved from the DELIVERED MESSAGE — body is the nonce, and the
+ * SENDER is the child the direct witness resolved to — never from the caller's receipt alone.
+ *
+ * THAT DELIVERED MESSAGE HAS A DIFFERENT SHAPE PER RAIL, and assuming one shape for both is a
+ * defect this smoke shipped once. `[측정 2026-09-15]` a claude caller is a self-fetch citizen and
+ * its callback lands as a file in its mailbox directory; a pi caller is a LIVE CONTROL-SOCKET
+ * citizen and its callback goes straight down the socket, so no `.msg` file — and no mailbox
+ * directory at all — is ever created for it. Reading the mailbox on the pi axis failed four cells
+ * on a rail whose production path had in fact worked end to end, and an empty nonce then made a
+ * fifth cell pass vacuously through `includes("")`. Each rail is now read for its own artifact,
+ * the nonce's shape is asserted before any ordering cell uses it, and the caller's id goes through
+ * the same official path→id conversion as the child's (a pi witness reports a transcript PATH,
+ * while the record is keyed by the uuid inside that filename).
+ *
+ * Nothing below reads a pane's rendered output, and nothing types a key.
  */
 
 import { spawnSync } from "node:child_process";
@@ -450,57 +462,110 @@ async function main(): Promise<void> {
 					[...records.values()].filter((r) => r.nativeSessionId === joined.nativeSessionId).length === 1,
 			);
 			const childGid = String(childRecord?.gardenId ?? "");
-			const callerRecord = records.get(callerNative);
+			// The CALLER's id goes through the SAME official conversion as the child's. `[측정
+			// 2026-09-15]` reading it raw was a real miss: a pi witness reports `kind: "path"`, so
+			// `agent_session.value` is a transcript PATH while the record is keyed by the uuid
+			// inside that filename. The strict path→id rule is a measured vendor floor (S2-b:
+			// grepping the store for the full path literal returns zero records), and bypassing it
+			// for the caller made this cell fail on a rail that had worked.
+			const callerRow = panes.find((row) => row.paneId === callerPane.pane_id);
+			const callerJoined = callerRow === undefined ? null : joinKeyOf(callerRow);
+			const callerNativeId = callerJoined?.nativeSessionId ?? "";
+			const callerRecord = callerNativeId === "" ? undefined : records.get(callerNativeId);
 			const callerGid = String(callerRecord?.gardenId ?? "");
 			ok(
-				`${cell.label}: the CALLER's own herdr witness also resolves to exactly one fixture record — the address the child had to call is a record, never a pane`,
-				callerRecord !== undefined &&
+				`${cell.label}: the CALLER's own herdr witness also resolves to exactly one fixture record through the official conversion — the address the child had to call is a record, never a pane`,
+				callerJoined !== null &&
+					callerRecord !== undefined &&
 					callerGid.length > 0 &&
 					callerGid !== childGid &&
-					[...records.values()].filter((r) => r.nativeSessionId === callerNative).length === 1,
+					[...records.values()].filter((r) => r.nativeSessionId === callerNativeId).length === 1,
 			);
 
-			// ── the callback, in ENTWURF's own delivery artifact ────────────────────────
-			// The caller's own receipt carries the nonce it minted, so "the nonce appears in the
-			// caller's text" is NOT evidence that anything came back — the first run of this axis
-			// proved that the hard way, staying green on that clause while the callback had timed
-			// out. The delivered message in the CALLER's exact mailbox directory is the evidence:
-			// its body is the nonce and its sender is the child the witness resolved to.
-			const delivered = deliveredMessages(String(fenced.ENTWURF_META_MAILBOX_DIR), callerGid);
-			const body = (delivered[0]?.text ?? "").split(/─{5,}/)[1]?.trim() ?? "";
-			const nonce = /(?:herdr|mux)-fresh-call-[0-9a-f]{24}/.exec(body)?.[0] ?? "";
-			ok(
-				`${cell.label}: the child's callback is a DELIVERED message in the caller's own mailbox — exactly one, its body is a production nonce, and its sender garden id is the child the direct witness resolved to`,
-				delivered.length === 1 &&
+			// ── the callback, in whichever rail its CALLER actually answers on ──────────
+			//
+			// `[측정 2026-09-15]` this evidence is RAIL-SPECIFIC and collapsing it onto one rail is
+			// a defect this smoke already shipped once. A claude caller is a self-fetch citizen, so
+			// its callback lands as a delivered file in its mailbox directory. A pi caller is a
+			// LIVE CONTROL-SOCKET citizen: the message goes straight down the socket, and no `.msg`
+			// file — no mailbox directory at all — is ever created for it. Reading the mailbox on
+			// the pi axis failed four cells on a rail whose production path had worked end to end.
+			//
+			// What both forms must carry is the same pair, and it is the pair rather than the nonce
+			// alone that proves arrival: the caller's own receipt contains the nonce it MINTED, so
+			// a nonce sighting in the caller's text is not evidence that anything came back. The
+			// sender identity is. So each rail is read for: body === the nonce, and sender ===
+			// the child the direct witness resolved to.
+			let nonce = "";
+			let callbackArrived = false;
+			let callbackForm = "";
+			if (callerIsPi) {
+				// The socket rail's artifact is the delivered `entwurf-message` in the caller's own
+				// transcript: the body is the message, and `<sender_info>` is the envelope entwurf
+				// synthesised at the receiver (`entwurf-control-rpc.ts` formatSenderInfoBlock).
+				const message = /"customType":"entwurf-message","content":"((?:[^"\\]|\\.)*)"/.exec(text)?.[1] ?? "";
+				const decoded = message.replace(/\\n/g, "\n").replace(/\\"/g, '"');
+				nonce = /(?:herdr|mux)-fresh-call-[0-9a-f]{24}/.exec(decoded)?.[0] ?? "";
+				const senderId = /<sender_info>\{[^}]*"sessionId":"([^"]+)"/.exec(decoded)?.[1] ?? "";
+				callbackArrived = nonce.length > 0 && decoded.trimStart().startsWith(nonce) && senderId === childGid;
+				callbackForm = `control-socket entwurf-message (sender=${senderId || "none"})`;
+			} else {
+				const delivered = deliveredMessages(String(fenced.ENTWURF_META_MAILBOX_DIR), callerGid);
+				const body = (delivered[0]?.text ?? "").split(/─{5,}/)[1]?.trim() ?? "";
+				nonce = /(?:herdr|mux)-fresh-call-[0-9a-f]{24}/.exec(body)?.[0] ?? "";
+				callbackArrived =
+					delivered.length === 1 &&
 					nonce.length > 0 &&
 					body === nonce &&
-					childGid.length > 0 &&
-					(delivered[0]?.text ?? "").includes(`session:     ${childGid}`),
+					(delivered[0]?.text ?? "").includes(`session:     ${childGid}`);
+				callbackForm = `meta-mailbox delivered artifact (${delivered.length} file(s))`;
+			}
+			ok(
+				`${cell.label}: the child's callback ARRIVED on the rail this caller answers on — its body is a production nonce and its sender is the child the direct witness resolved to, never the nonce the caller minted for itself — ${callbackForm}`,
+				callbackArrived && childGid.length > 0,
+			);
+			// Nothing below may run on an empty nonce: `includes("")` is true for every string, and
+			// a vacuous green here is exactly what the first corrected run produced.
+			ok(
+				`${cell.label}: the nonce used by every ordering cell below came from the DELIVERED callback, not from a default`,
+				/^(?:herdr|mux)-fresh-call-[0-9a-f]{24}$/.test(nonce),
 			);
 
-			// ── the caller went on living, in entwurf's own hook journal ────────────────
+			// ── the caller went on living ───────────────────────────────────────────────
 			// A receiving session killed while answering is the exact shape of the C4 blocker and
-			// it reads as a transcript that simply stops. The hook journal records the caller's
-			// prompt submissions by its EXACT native session id; one after the message was
-			// enqueued is the message entering the caller's turn.
-			const hookLog = readTranscript(path.join(root, "meta-bridge-hook.log"));
-			const enqueuedAt = String(
-				(
-					JSON.parse(
-						readTranscript(path.join(String(fenced.ENTWURF_META_MAILBOX_DIR), callerGid, "state.json")) || "{}",
-					) as { lastEnqueuedAt?: string }
-				).lastEnqueuedAt ?? "",
-			);
-			const continuation = hookLog
-				.split("\n")
-				.filter((l) => l.includes("event=UserPromptSubmit") && l.includes(`native=${callerNative}`))
-				.filter((l) => enqueuedAt.length > 0 && (/^\S+/.exec(l)?.[0] ?? "") > enqueuedAt);
+			// it reads as an artifact that simply stops. Rail-specific again: the claude hook
+			// journal records prompt submissions by native session id, while a pi caller writes
+			// nothing there — its own transcript carries the delivered message and whatever it did
+			// after it.
 			const callerStillRunning = panes.some(
 				(row) => row.paneId === callerPane.pane_id && row.sessionValue === callerNative,
 			);
+			let continued = false;
+			let continuationForm = "";
+			if (callerIsPi) {
+				const at = text.indexOf('"customType":"entwurf-message"');
+				continued = at > 0 && /"role":"assistant"/.test(text.slice(at));
+				continuationForm = "an assistant message after the delivered entwurf-message";
+			} else {
+				const hookLog = readTranscript(path.join(root, "meta-bridge-hook.log"));
+				const enqueuedAt = String(
+					(
+						JSON.parse(
+							readTranscript(path.join(String(fenced.ENTWURF_META_MAILBOX_DIR), callerGid, "state.json")) || "{}",
+						) as { lastEnqueuedAt?: string }
+					).lastEnqueuedAt ?? "",
+				);
+				continued =
+					enqueuedAt.length > 0 &&
+					hookLog
+						.split("\n")
+						.filter((l) => l.includes("event=UserPromptSubmit") && l.includes(`native=${callerNative}`))
+						.some((l) => (/^\S+/.exec(l)?.[0] ?? "") > enqueuedAt);
+				continuationForm = "a UserPromptSubmit for this exact native session after the enqueue stamp";
+			}
 			ok(
-				`${cell.label}: the caller took the callback INTO its turn after the message was enqueued and is still the live agent in its own pane — a caller killed mid-answer is what this axis exists to catch`,
-				continuation.length >= 1 && callerStillRunning,
+				`${cell.label}: the caller took the callback INTO its turn and is still the live agent in its own pane — a caller killed mid-answer is what this axis exists to catch — ${continuationForm}`,
+				continued && callerStillRunning,
 			);
 
 			// ── what each axis proves about the two tool calls ──────────────────────────
