@@ -1800,6 +1800,21 @@ check_herdr_placement() {
   run_ts scripts/check-herdr-placement.ts
 }
 
+check_herdr_fresh_call() {
+  # Deterministic gate for #116 S2-c1: the herdr LAUNCH rail core
+  # (pi-extensions/lib/herdr-fresh-call.ts). Pins only what is decidable WITHOUT a herdr
+  # binary — the import fence that keeps the two rails separately deletable, the closed
+  # pi|claude-code pilot, the option-G one-line JSON encoding (exact round trip, zero
+  # Unicode Cc including the C1 block JSON.stringify leaves literal, max public task),
+  # the eight pre-mutation refusals with the CLI never invoked, split/start/get/close argv
+  # grammar, strict response parsing, the opaque pane id, the receipt's missing address,
+  # and the conditional-close matrix. No fake herdr executable and no fake server, for the
+  # reason check-mux-placement refuses a fake tmux. Every payload literal is verbatim
+  # herdr 0.9.0 output recorded 2026-09-14; the real-binary half is an isolated private
+  # server (c2).
+  run_ts scripts/check-herdr-fresh-call.ts
+}
+
 check_entwurf_peers_surface() {
   # Deterministic gate for 0.11 Stage 0 step 4 (fact-provider slice 4c; #50 C4
   # re-author): the MCP entwurf_peers RENDER/PAYLOAD layer renderEntwurfPeers.
@@ -6189,6 +6204,9 @@ case "$cmd" in
     ;;
   check-herdr-placement)
     check_herdr_placement
+    ;;
+  check-herdr-fresh-call)
+    check_herdr_fresh_call
     ;;
   check-entwurf-peers-surface)
     check_entwurf_peers_surface

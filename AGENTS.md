@@ -115,6 +115,7 @@ implement → affected focused gates → independent review → one amendment bu
 - [ROADMAP.md](./ROADMAP.md) — direction and deferred work.
 - [docs/adding-a-harness.md](./docs/adding-a-harness.md) — entry route for a new harness.
 - [docs/mux-launch-rail.md](./docs/mux-launch-rail.md) — mux ownership and launch contracts.
+- [docs/herdr-launch-rail.md](./docs/herdr-launch-rail.md) — herdr launch rail (#116): two-step placement, the one-line birth argv, and within-generation reclaim. Core only; the public surface is a later slice.
 - [docs/acp-backend-rail.md](./docs/acp-backend-rail.md) — ACP adapter contract.
 - [DELIVERY.md](./DELIVERY.md), [VERIFY.md](./VERIFY.md), [BASELINE.md](./BASELINE.md) — delivery coordinates, verification protocol, and evidence.
 - [README.md](./README.md) — operator-facing package contract.

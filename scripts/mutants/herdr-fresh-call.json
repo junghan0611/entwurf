@@ -1,0 +1,173 @@
+{
+	"schemaVersion": 1,
+	"lane": "herdr-fresh-call",
+	"mutants": [
+		{
+			"claim": "HFC-RAIL-IMPORT-FENCE",
+			"title": "the herdr rail takes a mux import again — one is all it takes to make either rail undeletable",
+			"subject": "pi-extensions/lib/herdr-fresh-call.ts",
+			"find": ["import { createHash } from \"node:crypto\";"],
+			"replace": ["import { createHash } from \"node:crypto\";\nimport { runTmux } from \"./mux-placement.ts\";"],
+			"gate": ["bash", "run.sh", "check-herdr-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:HFC-RAIL-IMPORT-FENCE]",
+			"signatureSource": "scripts/check-herdr-fresh-call.ts"
+		},
+		{
+			"claim": "HFC-PILOT-CLOSED",
+			"title": "a backend nobody measured on herdr is admitted to the pilot, so a caller gets a pane running something this rail never proved it can open",
+			"subject": "pi-extensions/lib/herdr-fresh-call.ts",
+			"find": ["export const HERDR_FRESH_CALL_BACKENDS = [\"pi\", \"claude-code\"] as const;"],
+			"replace": ["export const HERDR_FRESH_CALL_BACKENDS = [\"pi\", \"claude-code\", \"codex\"] as const;"],
+			"gate": ["bash", "run.sh", "check-herdr-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:HFC-PILOT-CLOSED]",
+			"signatureSource": "scripts/check-herdr-fresh-call.ts"
+		},
+		{
+			"claim": "HFC-TMUX-PLACEMENT-REFUSED",
+			"title": "a tmux seat inside herdr is silently ignored instead of refused, so the sibling opens somewhere the caller did not ask for and the call still looks successful",
+			"subject": "pi-extensions/lib/herdr-fresh-call.ts",
+			"find": ["\tif (typeof placement.tmuxSession === \"string\" && placement.tmuxSession.length > 0) {"],
+			"replace": ["\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-herdr-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:HFC-TMUX-PLACEMENT-REFUSED]",
+			"signatureSource": "scripts/check-herdr-fresh-call.ts"
+		},
+		{
+			"claim": "HFC-ENCODE-ROUNDTRIP",
+			"title": "the encoder normalises the caller's bytes before encoding, so the sibling is born with a task nobody wrote",
+			"subject": "pi-extensions/lib/herdr-fresh-call.ts",
+			"find": ["\tconst literal = escapeRemainingControlChars(JSON.stringify(prompt));"],
+			"replace": ["\tconst literal = escapeRemainingControlChars(JSON.stringify(prompt.replace(/\\t/g, \" \")));"],
+			"gate": ["bash", "run.sh", "check-herdr-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:HFC-ENCODE-ROUNDTRIP]",
+			"signatureSource": "scripts/check-herdr-fresh-call.ts"
+		},
+		{
+			"claim": "HFC-ENCODE-NO-CONTROL",
+			"title": "the C1/DEL escape pass is dropped and only JSON.stringify's C0 handling remains — herdr refuses the argv after the pane already exists",
+			"subject": "pi-extensions/lib/herdr-fresh-call.ts",
+			"find": ["\tconst literal = escapeRemainingControlChars(JSON.stringify(prompt));"],
+			"replace": ["\tconst literal = JSON.stringify(prompt);"],
+			"gate": ["bash", "run.sh", "check-herdr-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:HFC-ENCODE-NO-CONTROL]",
+			"signatureSource": "scripts/check-herdr-fresh-call.ts"
+		},
+		{
+			"claim": "HFC-ENCODE-MAX-TASK",
+			"title": "the encoded literal is truncated past a length nobody documented, so a long task silently loses its tail",
+			"subject": "pi-extensions/lib/herdr-fresh-call.ts",
+			"find": ["\tconst argv = `${HERDR_DECODE_INSTRUCTION}${literal}`;"],
+			"replace": ["\tconst argv = `${HERDR_DECODE_INSTRUCTION}${literal.slice(0, 4096)}`;"],
+			"gate": ["bash", "run.sh", "check-herdr-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:HFC-ENCODE-MAX-TASK]",
+			"signatureSource": "scripts/check-herdr-fresh-call.ts"
+		},
+		{
+			"claim": "HFC-PREMUTATION-ONLY",
+			"title": "an input refusal moves after the split, so a rejected call leaves a pane open in the operator's workspace",
+			"subject": "pi-extensions/lib/herdr-fresh-call.ts",
+			"find": ["\tif (params.task.length === 0) return { ok: false, reason: \"herdr-task-empty\" };"],
+			"replace": [""],
+			"gate": ["bash", "run.sh", "check-herdr-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:HFC-PREMUTATION-ONLY]",
+			"signatureSource": "scripts/check-herdr-fresh-call.ts"
+		},
+		{
+			"claim": "HFC-SPLIT-ARGV",
+			"title": "the split steals focus from the operator who was typing when the sibling opened",
+			"subject": "pi-extensions/lib/herdr-fresh-call.ts",
+			"find": ["\t\t\"--no-focus\",\n"],
+			"replace": [""],
+			"gate": ["bash", "run.sh", "check-herdr-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:HFC-SPLIT-ARGV]",
+			"signatureSource": "scripts/check-herdr-fresh-call.ts"
+		},
+		{
+			"claim": "HFC-START-ARGV",
+			"title": "the backend argv loses its `--` separator, so herdr reads the sibling's prompt as its own flags",
+			"subject": "pi-extensions/lib/herdr-fresh-call.ts",
+			"find": ["\t\tparams.paneId,\n\t\t\"--\",\n\t\t...params.backendArgs,"],
+			"replace": ["\t\tparams.paneId,\n\t\t...params.backendArgs,"],
+			"gate": ["bash", "run.sh", "check-herdr-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:HFC-START-ARGV]",
+			"signatureSource": "scripts/check-herdr-fresh-call.ts"
+		},
+		{
+			"claim": "HFC-AGENT-NAME-OPAQUE",
+			"title": "the raw nonce becomes the herdr agent name, which herdr's own name rule refuses — and a correlation tag becomes a visible label",
+			"subject": "pi-extensions/lib/herdr-fresh-call.ts",
+			"find": ["\treturn `entwurf-${createHash(\"sha256\").update(nonce).digest(\"hex\").slice(0, 20)}`;"],
+			"replace": ["\treturn nonce;"],
+			"gate": ["bash", "run.sh", "check-herdr-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:HFC-AGENT-NAME-OPAQUE]",
+			"signatureSource": "scripts/check-herdr-fresh-call.ts"
+		},
+		{
+			"claim": "HFC-PARSE-STRICT",
+			"title": "a pane reply missing its terminal id is half-believed, so the launch carries a coordinate it never received",
+			"subject": "pi-extensions/lib/herdr-fresh-call.ts",
+			"find": ["\tif (typeof terminalId !== \"string\" || terminalId.length === 0) return null;"],
+			"replace": ["\tif (typeof terminalId !== \"string\") return null;"],
+			"gate": ["bash", "run.sh", "check-herdr-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:HFC-PARSE-STRICT]",
+			"signatureSource": "scripts/check-herdr-fresh-call.ts"
+		},
+		{
+			"claim": "HFC-PANE-ID-OPAQUE",
+			"title": "the pane id is normalised on the way in, so herdr's own `pA` coordinate stops matching the one herdr will answer about",
+			"subject": "pi-extensions/lib/herdr-fresh-call.ts",
+			"find": ["\t\tpaneId,\n\t\tterminalId,"],
+			"replace": ["\t\tpaneId: paneId.toLowerCase(),\n\t\tterminalId,"],
+			"gate": ["bash", "run.sh", "check-herdr-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:HFC-PANE-ID-OPAQUE]",
+			"signatureSource": "scripts/check-herdr-fresh-call.ts"
+		},
+		{
+			"claim": "HFC-RECEIPT-NO-ADDRESS",
+			"title": "the launch receipt starts carrying an identity field, which is the first step in promoting a herdr view to a garden address",
+			"subject": "pi-extensions/lib/herdr-fresh-call.ts",
+			"find": ["\t\t\therdrPaneId: started.paneId,"],
+			"replace": ["\t\t\tnativeSessionId: started.terminalId,\n\t\t\therdrPaneId: started.paneId,"],
+			"gate": ["bash", "run.sh", "check-herdr-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:HFC-RECEIPT-NO-ADDRESS]",
+			"signatureSource": "scripts/check-herdr-fresh-call.ts"
+		},
+		{
+			"claim": "HFC-CLOSE-WITHIN-GENERATION",
+			"title": "the close drops its terminal-id proof and trusts a bare pane id — after a herdr restart that id belongs to someone else's view",
+			"subject": "pi-extensions/lib/herdr-fresh-call.ts",
+			"find": [
+				"\tif (current.terminalId !== split.terminalId) return { close: false, reason: \"terminal-id-mismatch\" };"
+			],
+			"replace": [""],
+			"gate": ["bash", "run.sh", "check-herdr-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:HFC-CLOSE-WITHIN-GENERATION]",
+			"signatureSource": "scripts/check-herdr-fresh-call.ts"
+		},
+		{
+			"claim": "HFC-ORPHAN-NAMED",
+			"title": "two different reclaim failures collapse into one name, so the operator cannot tell a wrong pane from an unreadable one",
+			"subject": "pi-extensions/lib/herdr-fresh-call.ts",
+			"find": ["\tif (current.paneId !== split.paneId) return { close: false, reason: \"pane-id-mismatch\" };"],
+			"replace": ["\tif (current.paneId !== split.paneId) return { close: false, reason: \"pane-get-unparsable\" };"],
+			"gate": ["bash", "run.sh", "check-herdr-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:HFC-ORPHAN-NAMED]",
+			"signatureSource": "scripts/check-herdr-fresh-call.ts"
+		}
+	]
+}
