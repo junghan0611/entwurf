@@ -102,6 +102,52 @@ export interface RpcGetInfoCommand {
 
 export type RpcCommand = RpcSendCommand | RpcGetMessageCommand | RpcClearCommand | RpcAbortCommand | RpcGetInfoCommand;
 
+// ============================================================================
+// Accepted-connection disconnect policy (server half of the same wire)
+// ============================================================================
+
+/** The two codes that mean THE PEER WENT AWAY, and nothing else. `EPIPE` is a write to a pipe the
+ * far side already closed; `ECONNRESET` is the far side resetting it. Both describe the client, not
+ * this process's state, which is why they are absorbed rather than diagnosed. */
+const PEER_DISCONNECT_CODES = new Set(["EPIPE", "ECONNRESET"]);
+
+export function isPeerDisconnect(error: NodeJS.ErrnoException): boolean {
+	return typeof error.code === "string" && PEER_DISCONNECT_CODES.has(error.code);
+}
+
+/**
+ * Install the disconnect policy on a connection this process ACCEPTED. Must run before any data
+ * handler and before any response can be written back.
+ *
+ * `[측정 2026-09-14, .agent-reports/116-c4-live-blocker-20260914.md]` a resident pi DIED without
+ * this. A sibling's control-socket send timed out while the receiving session was mid-turn, the
+ * sender closed its end, and the server then wrote its late response to a socket whose peer was
+ * gone. That EPIPE does NOT arrive as a throw — `writeResponse`'s synchronous try/catch cannot see
+ * it — it arrives asynchronously as an `error` event, and an `error` event with no listener is an
+ * uncaught exception, so Node terminated the whole session. The citizen then simply read as `dead`
+ * and the stale socket it left behind was the only trace.
+ *
+ * A client that went away is a BOUNDED environment condition, not invalid state: Rule 15's "crash,
+ * don't warn" governs states we cannot reason about, and losing an entire resident session because
+ * someone hung up is itself the silent failure. Same policy the MCP probe already carries for an
+ * async EPIPE on a child's stdin (`scripts/probe-bridge-command.ts:88-97`).
+ *
+ * Anything that is NOT a peer hanging up is diagnosed exactly once with its code and message and
+ * then served on. Swallowing every error would hide the class this listener is not here to absorb;
+ * rethrowing from an event callback would be the crash this whole function exists to prevent.
+ *
+ * `diagnose` is injected so a gate can count diagnostics without capturing global stderr.
+ */
+export function attachAcceptedSocketDisconnectPolicy(
+	socket: net.Socket,
+	diagnose: (line: string) => void = (line) => console.error(line),
+): void {
+	socket.on("error", (error: NodeJS.ErrnoException) => {
+		if (isPeerDisconnect(error)) return;
+		diagnose(`[entwurf-control] control socket error (${error.code ?? "no code"}): ${error.message}`);
+	});
+}
+
 export interface RpcClientOptions {
 	timeout?: number;
 }

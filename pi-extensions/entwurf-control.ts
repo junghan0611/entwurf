@@ -90,6 +90,7 @@ import {
 } from "./lib/compaction-send-guard.js";
 import { CONTROL_SOCKET_SUFFIX, controlSocketPathIn, defaultControlSocketDir } from "./lib/control-socket-path.js";
 import {
+	attachAcceptedSocketDisconnectPolicy,
 	formatSenderInfoBlock,
 	type RpcCommand,
 	type RpcResponse,
@@ -220,7 +221,11 @@ function writeResponse(socket: net.Socket, response: RpcResponse): void {
 	try {
 		socket.write(`${JSON.stringify(response)}\n`);
 	} catch {
-		// Socket may be closed
+		// SYNCHRONOUS throws only — a destroyed stream lands here. This catch CANNOT see an
+		// asynchronous stream error: an EPIPE on a peer that hung up arrives as an `error` event,
+		// and `attachAcceptedSocketDisconnectPolicy`, installed on every accepted connection in
+		// `createServer`, is what carries that half of the contract. Reading this catch as full
+		// coverage is what let a late response kill a resident session.
 	}
 }
 
@@ -841,6 +846,10 @@ async function handleCommand(
 
 async function createServer(pi: ExtensionAPI, state: SocketState, socketPath: string): Promise<net.Server> {
 	const server = net.createServer((socket) => {
+		// FIRST — before setEncoding, before the data handler, and before any response can be
+		// written back. The policy itself (and why this process died without it) lives with the
+		// rest of the wire protocol in lib/entwurf-control-rpc.ts.
+		attachAcceptedSocketDisconnectPolicy(socket);
 		socket.setEncoding("utf8");
 		let buffer = "";
 		socket.on("data", (chunk) => {

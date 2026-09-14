@@ -1,0 +1,57 @@
+{
+	"schemaVersion": 1,
+	"lane": "control-socket-disconnect",
+	"mutants": [
+		{
+			"claim": "CONTROL-SOCKET-NO-UNCAUGHT",
+			"title": "the accepted connection carries no disconnect policy, so a peer that hangs up mid-exchange reaches the process as an uncaught exception and kills the resident session",
+			"subject": "pi-extensions/lib/entwurf-control-rpc.ts",
+			"find": [
+				"\tsocket.on(\"error\", (error: NodeJS.ErrnoException) => {",
+				"\t\tif (isPeerDisconnect(error)) return;",
+				"\t\tdiagnose(`[entwurf-control] control socket error (${error.code ?? \"no code\"}): ${error.message}`);",
+				"\t});"
+			],
+			"replace": ["\t// the accepted connection no longer carries a disconnect policy"],
+			"gate": ["bash", "run.sh", "check-entwurf-control-rpc"],
+			"timeoutSeconds": 90,
+			"signature": "[QK:CONTROL-SOCKET-NO-UNCAUGHT]",
+			"signatureSource": "scripts/check-entwurf-control-rpc.ts"
+		},
+		{
+			"claim": "CONTROL-SOCKET-ABSORBS-PEER-DISCONNECT",
+			"title": "a peer that went away is diagnosed instead of absorbed, so ordinary client timeouts spray the resident session with stderr about someone else state",
+			"subject": "pi-extensions/lib/entwurf-control-rpc.ts",
+			"find": ["\t\tif (isPeerDisconnect(error)) return;"],
+			"replace": ["\t\t// a vanished peer is no longer absorbed"],
+			"gate": ["bash", "run.sh", "check-entwurf-control-rpc"],
+			"timeoutSeconds": 90,
+			"signature": "[QK:CONTROL-SOCKET-ABSORBS-PEER-DISCONNECT]",
+			"signatureSource": "scripts/check-entwurf-control-rpc.ts"
+		},
+		{
+			"claim": "CONTROL-SOCKET-DIAGNOSES-UNEXPECTED",
+			"title": "an error that is NOT a peer disconnect is swallowed silently, hiding exactly the class this listener was never meant to absorb",
+			"subject": "pi-extensions/lib/entwurf-control-rpc.ts",
+			"find": [
+				"\t\tdiagnose(`[entwurf-control] control socket error (${error.code ?? \"no code\"}): ${error.message}`);"
+			],
+			"replace": ["\t\treturn;"],
+			"gate": ["bash", "run.sh", "check-entwurf-control-rpc"],
+			"timeoutSeconds": 90,
+			"signature": "[QK:CONTROL-SOCKET-DIAGNOSES-UNEXPECTED]",
+			"signatureSource": "scripts/check-entwurf-control-rpc.ts"
+		},
+		{
+			"claim": "CONTROL-SOCKET-POLICY-FIRST",
+			"title": "the policy is attached after setEncoding, leaving a window in which the first write on a freshly accepted connection can still kill the session",
+			"subject": "pi-extensions/entwurf-control.ts",
+			"find": ["\t\tattachAcceptedSocketDisconnectPolicy(socket);", "\t\tsocket.setEncoding(\"utf8\");"],
+			"replace": ["\t\tsocket.setEncoding(\"utf8\");", "\t\tattachAcceptedSocketDisconnectPolicy(socket);"],
+			"gate": ["bash", "run.sh", "check-entwurf-control-rpc"],
+			"timeoutSeconds": 90,
+			"signature": "[QK:CONTROL-SOCKET-POLICY-FIRST]",
+			"signatureSource": "scripts/check-entwurf-control-rpc.ts"
+		}
+	]
+}

@@ -16,6 +16,11 @@
  *      `sendRpcCommand` reject `connection closed before response` (the 2026-05-18
  *      receiver-stuck backstop the settled-guard preserves).
  *   5. get_info runtime helper parses/formats cwd/model/idle once for every caller.
+ *   7. accepted-connection disconnect policy — a REAL peer that hangs up mid-exchange must not
+ *      reach this process as an uncaught exception (the 2026-09-14 C4 incident: a resident pi died
+ *      writing a late response to a sender that had already timed out), must not be diagnosed, and
+ *      an error that is NOT a disconnect must be diagnosed exactly once without rethrowing.
+ *   8. ordering — the surface installs that policy before setEncoding and before the data handler.
  *
  * No model / auth / pi process — only `net.Server` on a tmp socket, so it rides `pnpm run check:full`.
  */
@@ -27,6 +32,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
+	attachAcceptedSocketDisconnectPolicy,
 	fetchControlSocketRuntimeInfo,
 	formatRuntimeModel,
 	formatSenderInfoBlock,
@@ -215,6 +221,138 @@ async function main(): Promise<void> {
 		);
 		ok("6: wants_reply omitted unless explicitly true", !formatSenderInfoBlock(base, false).includes("wants_reply"));
 		ok("6: undefined origin/replyable render nothing", !formatSenderInfoBlock(base).includes("origin"));
+	}
+
+	// ── 7. accepted-connection disconnect policy (the server half of the wire) ──
+	// `[측정 2026-09-14]` a resident pi was killed by a late response written to a socket whose
+	// peer had already timed out and hung up. The EPIPE arrived asynchronously as an `error`
+	// event, and an `error` event with no listener is an uncaught exception. These cells drive a
+	// REAL unix socket to a real peer disconnect — no fake control server, no synthetic stand-in
+	// for the crash itself.
+	{
+		const dir = await fs.mkdtemp(path.join(os.tmpdir(), "rpc-disconnect-"));
+		const socketPath = path.join(dir, "s.sock");
+		const diagnostics: string[] = [];
+		const accepted: net.Socket[] = [];
+		const server = net.createServer((socket) => {
+			// Exactly what the surface does, and the ONLY error listener on this connection: if the
+			// policy stops absorbing, nothing else here is catching it.
+			attachAcceptedSocketDisconnectPolicy(socket, (line) => diagnostics.push(line));
+			accepted.push(socket);
+		});
+		await new Promise<void>((resolve) => server.listen(socketPath, resolve));
+
+		// Record instead of dying, so the crash becomes an assertion we can attribute rather than
+		// a stack trace that kills the gate run itself.
+		const uncaught: Error[] = [];
+		const onUncaught = (err: Error) => uncaught.push(err);
+		process.on("uncaughtException", onUncaught);
+		// Every socket this cell opens, torn down in `finally` — `server.close()` only calls back
+		// once the LAST connection is gone, so a client left open on a failing assertion would turn
+		// a red gate into a hang (which is not a kill: a mutant must fail bounded, with its QK).
+		const opened: net.Socket[] = [];
+		try {
+			const client = net.createConnection(socketPath);
+			opened.push(client);
+			await new Promise<void>((resolve, reject) => {
+				client.once("connect", resolve);
+				client.once("error", reject);
+			});
+			// The sender gives up and hangs up — the C4 shape exactly.
+			client.on("error", () => {});
+			client.destroy();
+
+			// The receiver answers LATE, into a peer that is gone. Bounded: writes until the stream
+			// records an error, never longer.
+			for (let i = 0; i < 200 && accepted[0] !== undefined && accepted[0].errored === null; i++) {
+				try {
+					accepted[0].write(`${"x".repeat(64 * 1024)}\n`);
+				} catch {
+					// A synchronous ERR_STREAM_DESTROYED is the OTHER half — writeResponse's own
+					// try/catch owns it. This loop is hunting the asynchronous one.
+				}
+				await new Promise<void>((resolve) => setTimeout(resolve, 10));
+			}
+
+			// Fixture integrity FIRST: if no peer-disconnect error ever landed, the two cells below
+			// would be vacuously green no matter what the policy did.
+			const errored = accepted[0]?.errored as NodeJS.ErrnoException | null | undefined;
+			ok(
+				"7: fixture — a real peer disconnect produced an async EPIPE/ECONNRESET on the accepted socket",
+				errored != null && (errored.code === "EPIPE" || errored.code === "ECONNRESET"),
+			);
+			ok(
+				"7: [QK:CONTROL-SOCKET-NO-UNCAUGHT] a vanished peer never reaches the process as an uncaught exception " +
+					`(would have killed this resident session) — uncaught=${JSON.stringify(uncaught.map((e) => String(e)))}`,
+				uncaught.length === 0,
+			);
+			ok(
+				"7: [QK:CONTROL-SOCKET-ABSORBS-PEER-DISCONNECT] a vanished peer is absorbed silently, never diagnosed " +
+					`(it describes the client, not our state) — diagnostics=${JSON.stringify(diagnostics)}`,
+				diagnostics.length === 0,
+			);
+
+			// Unexpected code on a REAL accepted socket: diagnosed exactly once, with code AND
+			// message, and the emit must not throw back out of the event callback.
+			const client2 = net.createConnection(socketPath);
+			opened.push(client2);
+			await new Promise<void>((resolve, reject) => {
+				client2.once("connect", resolve);
+				client2.once("error", reject);
+			});
+			client2.on("error", () => {});
+			// The SECOND accepted connection — live, never disconnected, so the diagnosis path is
+			// exercised on a socket in ordinary service rather than on the already-errored one.
+			for (let i = 0; i < 200 && accepted[1] === undefined; i++) {
+				await new Promise<void>((resolve) => setTimeout(resolve, 10));
+			}
+			const live = accepted[1];
+			ok("7: fixture — the second connection was accepted and carries the policy", live !== undefined);
+			const unexpected: NodeJS.ErrnoException = Object.assign(new Error("no space left on device"), {
+				code: "ENOSPC",
+			});
+			const before = diagnostics.length;
+			let threw = false;
+			try {
+				live?.emit("error", unexpected);
+			} catch {
+				threw = true;
+			}
+			const emitted = diagnostics.slice(before);
+			ok(
+				"7: [QK:CONTROL-SOCKET-DIAGNOSES-UNEXPECTED] a non-disconnect error diagnoses EXACTLY once with code and " +
+					`message, and never rethrows from the event callback — threw=${threw} emitted=${JSON.stringify(emitted)}`,
+				threw === false &&
+					emitted.length === 1 &&
+					emitted[0]!.includes("ENOSPC") &&
+					emitted[0]!.includes("no space left on device"),
+			);
+		} finally {
+			process.off("uncaughtException", onUncaught);
+			for (const socket of [...opened, ...accepted]) socket.destroy();
+			await new Promise<void>((resolve) => server.close(() => resolve()));
+			await fs.rm(dir, { recursive: true, force: true });
+		}
+	}
+
+	// ── 8. the surface installs the policy FIRST on every accepted connection ───
+	// Ordering is the contract, not merely presence: a listener attached after setEncoding or
+	// after the data handler leaves a window in which the very first write can still kill us.
+	{
+		const src = await fs.readFile(CONTROL_SRC, "utf8");
+		const accept = src.slice(src.indexOf("const server = net.createServer((socket) => {"));
+		const attachAt = accept.indexOf("attachAcceptedSocketDisconnectPolicy(socket)");
+		const encodingAt = accept.indexOf('socket.setEncoding("utf8")');
+		const dataAt = accept.indexOf('socket.on("data"');
+		ok(
+			"8: [QK:CONTROL-SOCKET-POLICY-FIRST] createServer attaches the disconnect policy before setEncoding and " +
+				`before the data handler — attach=${attachAt} setEncoding=${encodingAt} data=${dataAt}`,
+			attachAt !== -1 && encodingAt !== -1 && dataAt !== -1 && attachAt < encodingAt && attachAt < dataAt,
+		);
+		ok(
+			"8: the surface consumes the shared policy and defines no second error listener of its own",
+			/from "\.\/lib\/entwurf-control-rpc\.js"/.test(src) && !/socket\.on\("error"/.test(src),
+		);
 	}
 
 	console.log(`\ncheck-entwurf-control-rpc: ${passed} checks passed`);

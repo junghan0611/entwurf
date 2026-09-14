@@ -834,6 +834,7 @@ let manifestCount: number;
 		"capability-cache": 3,
 		"codex-native": 68,
 		"compaction-send-guard": 7,
+		"control-socket-disconnect": 4,
 		"copilot-birth": 19,
 		"copilot-launch": 14,
 		"copilot-receive": 20,
