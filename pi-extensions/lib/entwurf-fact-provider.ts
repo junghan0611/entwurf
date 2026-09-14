@@ -34,8 +34,9 @@ import {
 	resolveFactList,
 	UNOBSERVED_PEER,
 } from "./entwurf-facts.ts";
-import { observePeerFacts } from "./entwurf-peer-observe.ts";
+import { makeObservePeerFacts, readHerdrPlacementIndex } from "./entwurf-peer-observe.ts";
 import { isLivenessSupported } from "./entwurf-v2-contract.ts";
+import type { HerdrPlacementIndex } from "./herdr-placement.ts";
 import {
 	type ActiveStoreEntry,
 	FRESH_CUT_PRESCRIPTION,
@@ -105,6 +106,12 @@ export interface EntwurfFactsDeps {
 	 * wiring sites (MCP + pi-native) cannot drift by each passing their own observer, and a
 	 * gate still drives the assembly with a fake and no filesystem. */
 	observe?: PeerObserver;
+	/** Placement axis (#116 S1): the ONE placement-owner read this listing is allowed.
+	 * Injected so a gate drives the whole assembly with no herdr binary and no child
+	 * process. `undefined` uses the real read; a reader that returns `null` is the
+	 * no-herdr host and every row then says `unobserved`. Deliberately a READ, not a
+	 * per-citizen lookup: a per-citizen hook would invite one child process per record. */
+	readPlacementIndex?: () => HerdrPlacementIndex | null;
 	/** Optional presentation budget. Undefined preserves the generic fact provider's full
 	 * observation contract; peers surfaces pass their shared render limit. Older machine
 	 * payload rows then say `unobserved` rather than fabricating `active` / `exists`. */
@@ -209,7 +216,11 @@ export async function listEntwurfFacts(deps: EntwurfFactsDeps): Promise<EntwurfF
 	//    not performed becomes `unobserved`.
 	const cleanIdentities = identities.filter((i) => !conflictGids.has(i.gardenId));
 	const cleanProbes = probes.filter((p) => !conflictGids.has(p.gardenId));
-	const observe = deps.observe ?? observePeerFacts;
+	// The placement owner is read EXACTLY ONCE per listing, before any row is shaped, and
+	// never again for this call. That single read is the anti-watcher rule in code: herdr
+	// publishes no "the session reference landed" event, and a retry loop around that gap
+	// is the discovery watcher `docs/mux-launch-rail.md` §7 refuses by name.
+	const observe = deps.observe ?? makeObservePeerFacts((deps.readPlacementIndex ?? readHerdrPlacementIndex)());
 	let selectedObserve = observe;
 	if (deps.observationLimit !== undefined) {
 		if (!Number.isSafeInteger(deps.observationLimit) || deps.observationLimit < 0) {

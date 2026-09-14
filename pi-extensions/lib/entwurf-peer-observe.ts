@@ -13,6 +13,13 @@
  * about it: no `sendable`, no `deliverable`, no transport. The listing stays a listing —
  * dispatch still computes routing at call time from the same underlying markers.
  *
+ * THE PLACEMENT AXIS IS MEASURED ONCE, NOT PER CITIZEN (#116 S1). `receiver` and
+ * `transcript` are per-citizen filesystem questions; placement is one question asked of
+ * one placement owner about every pane it has. So the herdr read happens ABOVE this
+ * module (the provider does it once) and arrives here as an already-built index. That
+ * is also the anti-watcher shape: one read per listing, no retry, no wait for a pane
+ * whose session reference has not landed yet.
+ *
  * ONE MEASUREMENT, TWO WORDS. `receiver` is derived from the SAME
  * `resolveMailboxReceiverFacts` composition the v2 dispatch seam and `entwurf_self` use.
  * The surfaces are allowed to phrase it differently — a listing wants an enum, a reject
@@ -20,9 +27,16 @@
  * rather than a second opinion about the same markers.
  */
 
+import { execFileSync } from "node:child_process";
 import * as fs from "node:fs";
 import { resolveMailboxReceiverFacts } from "./entwurf-deliverability.ts";
 import type { PeerObservations, ReceiverObservation, TranscriptObservation } from "./entwurf-facts.ts";
+import {
+	buildPlacementIndex,
+	type HerdrPlacementIndex,
+	parseHerdrPaneList,
+	resolvePlacement,
+} from "./herdr-placement.ts";
 import {
 	type MetaBackend,
 	type MetaIdentity,
@@ -71,7 +85,63 @@ function observeTranscript(identity: MetaIdentity): TranscriptObservation {
 	}
 }
 
-/** The production observer: both axes, measured for one citizen. */
+/** How long the one placement read may take before we stop waiting for it. A listing
+ * must not hang on a placement owner: the column is a convenience and `unobserved` is
+ * a complete answer. */
+const HERDR_READ_TIMEOUT_MS = 2000;
+
+/**
+ * Read the placement owner ONCE, or decline to.
+ *
+ * TWO ENV FACTS DECIDE, AND BOTH ARE HERDR'S OWN (measured, herdr 0.9.0). `HERDR_ENV=1`
+ * is how herdr tells a process it is running inside herdr, and `HERDR_BIN_PATH` is the
+ * invocation path herdr's own plugin contract tells callers to use. Neither is
+ * discovered: if herdr did not put them in this process's environment we are not inside
+ * herdr and we make no claim. There is no path guess, no socket scan, and no PATH
+ * lookup — this must stay as explicit as Hard Rule 6 wants configuration to be.
+ *
+ * EVERY FAILURE IS `null`, NEVER AN EMPTY INDEX. A missing binary, a timeout, a nonzero
+ * exit or a payload we cannot parse all mean nobody measured. An empty index would say
+ * something much stronger — "herdr was read and has none of your citizens" — about a
+ * read that did not happen.
+ */
+export function readHerdrPlacementIndex(env: NodeJS.ProcessEnv = process.env): HerdrPlacementIndex | null {
+	if (env.HERDR_ENV !== "1") return null;
+	const bin = env.HERDR_BIN_PATH;
+	if (typeof bin !== "string" || bin.length === 0) return null;
+	let stdout: string;
+	try {
+		stdout = execFileSync(bin, ["pane", "list"], {
+			encoding: "utf8",
+			timeout: HERDR_READ_TIMEOUT_MS,
+			stdio: ["ignore", "pipe", "ignore"],
+		});
+	} catch {
+		// Bounded environment probe: a placement owner that did not answer is a citizen
+		// column that reads `unobserved`, not a listing that fails.
+		return null;
+	}
+	const rows = parseHerdrPaneList(stdout);
+	return rows === null ? null : buildPlacementIndex(rows);
+}
+
+/**
+ * Build the production observer over an already-resolved placement index.
+ *
+ * `null` means no placement owner was read on this host — every citizen then reads
+ * `unobserved`, which is the only honest answer when nobody looked. It is NOT `none`:
+ * that word is reserved for a herdr that WAS read and does not have this citizen.
+ */
+export function makeObservePeerFacts(placementIndex: HerdrPlacementIndex | null) {
+	return (identity: MetaIdentity): PeerObservations => ({
+		receiver: observeReceiver(identity),
+		transcript: observeTranscript(identity),
+		placement: resolvePlacement(placementIndex, identity),
+	});
+}
+
+/** The production observer with no placement owner read — the shape every caller that
+ * has not resolved an index gets, and the default on a host with no herdr. */
 export function observePeerFacts(identity: MetaIdentity): PeerObservations {
-	return { receiver: observeReceiver(identity), transcript: observeTranscript(identity) };
+	return makeObservePeerFacts(null)(identity);
 }

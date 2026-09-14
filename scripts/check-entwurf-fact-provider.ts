@@ -30,6 +30,7 @@
 import assert from "node:assert/strict";
 import * as path from "node:path";
 import { type EntwurfFactsDeps, listEntwurfFacts } from "../pi-extensions/lib/entwurf-fact-provider.ts";
+import { UNOBSERVED_PLACEMENT } from "../pi-extensions/lib/herdr-placement.ts";
 import { type MetaCitizenBackend, serializeMetaIdentity } from "../pi-extensions/lib/meta-session.ts";
 import { SOCKET_SUFFIX, type SocketDirEntry } from "../pi-extensions/lib/socket-discovery.ts";
 import type { SocketLiveness } from "../pi-extensions/lib/socket-probe.ts";
@@ -83,6 +84,7 @@ function deps(
 		observe: (identity) => ({
 			receiver: identity.backend === "claude-code" ? "inactive" : "n/a",
 			transcript: identity.gardenId === GID_CLAUDE ? "absent" : "exists",
+			placement: UNOBSERVED_PLACEMENT,
 		}),
 		// Kind-carrying entries, like the real bindings: the listing must be able to refuse a
 		// symlinked record without following it. `irregularMeta` names the ones that are not
@@ -186,7 +188,7 @@ async function main(): Promise<void> {
 		const all = deps(meta, {});
 		all.observe = (identity) => {
 			allObserved.push(identity.gardenId);
-			return { receiver: "active", transcript: "exists" };
+			return { receiver: "active", transcript: "exists", placement: UNOBSERVED_PLACEMENT };
 		};
 		await listEntwurfFacts(all);
 		ok("Q112: generic provider without a presentation limit observes all 40 citizens", allObserved.length === 40);
@@ -196,7 +198,7 @@ async function main(): Promise<void> {
 		d.observationLimit = 32;
 		d.observe = (identity) => {
 			observed.push(identity.gardenId);
-			return { receiver: "active", transcript: "exists" };
+			return { receiver: "active", transcript: "exists", placement: UNOBSERVED_PLACEMENT };
 		};
 		const r = await listEntwurfFacts(d);
 		ok("Q112: full machine payload retains all 40 certified citizens", r.facts.peers.length === 40);

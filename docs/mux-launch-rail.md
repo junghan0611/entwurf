@@ -472,7 +472,7 @@ caller에게 garden id를 파라미터로 받지 않는다. 받는 순간 이 �
 
 구현 승인 범위와 STOP LINE은 active NEXT handoff가 진다.
 
-## 7. peer placement evidence seam — 모르면 `unknown`
+## 7. peer placement evidence seam — 모르면 빈칸으로 둔다
 
 peer가 어느 tmux window에 보이는지는 **garden address도 liveness도 아니다.** 이 사실은 다음 규칙
 아래에서만 지도에 붙는다.
@@ -483,16 +483,56 @@ peer가 어느 tmux window에 보이는지는 **garden address도 liveness도 �
 | window title로 추측하지 않는다 | title은 shell/사용자가 언제든 덮어쓰는 표시 문자열이다 |
 | cwd 일치로 추측하지 않는다 | 한 repo에 여러 형제가 흔하다. cwd는 후보를 좁힐 뿐 결박하지 않는다 |
 | 시각 근접으로 추측하지 않는다 | 그것이 곧 discovery watcher다 |
-| exact evidence가 없으면 `unknown` | 빈칸을 그럴듯한 값으로 채우지 않는다 |
+| exact evidence가 없으면 빈칸 어휘를 쓴다 | 빈칸을 그럴듯한 값으로 채우지 않는다. 어휘는 아래 §7-a가 소유한다 |
 
-exact evidence로 인정되는 것은 둘뿐이다.
+exact evidence로 인정되는 것은 셋이다.
 
 1. **launch receipt** — 이 caller가 직접 연 window의 `@window/%pane`이고, T0-b handle이 지고 있는
    `serverPid`/`sessionId` context와 함께 제시될 때.
 2. **peer의 검증 가능한 self-report** — peer 자신이 `inspectPlacement`로 얻은 사실을 보고할 때. 그 값도
    보고자의 server context와 함께 읽고, 다른 tmux server의 좌표는 비교하지 않는다.
+3. **배치 소유자의 유일 키 조인** `[#116 S1에서 추가, 2026-09-14]` — 배치를 소유한 쪽(오늘은 herdr)이
+   자기 목록에 **우리가 독립적으로 소유한 유일 키**를 실어 보고할 때. 오늘 그 키는
+   `nativeSessionId`이고, Hard Rule 7이 그것을 meta-store 전체에서 유일하게 유지한다. 두 개의 독립
+   사실이 하나의 유일 키 위에서 만나므로 이것은 추측이 아니다 — 위 금지 목록(title·cwd·시각 근접)의
+   어느 것도 쓰지 않는다.
 
-두 경우 모두 optional view다. situation map은 placement 없이도 성립해야 한다.
+   이 항목이 **열어주지 않는 것**을 함께 적는다. 키가 유일하지 않거나, 값이 키가 아니라 경로·이름·
+   시각이거나, 두 개 이상의 pane이 한 키를 주장하면 그것은 조인이 아니다. 마지막 경우는 `ambiguous`
+   이지 pane 하나가 아니다 — 도착 순서로 고르면 그게 곧 추측이다.
+
+세 경우 모두 optional view다. situation map은 placement 없이도 성립해야 한다.
+
+## 7-a. 빈칸 어휘와 재시도 규칙 `[#116 S1, 2026-09-14]`
+
+§7이 오래 `unknown` 한 단어로 빈칸을 가리켰는데, 그 한 단어가 서로 다른 두 사실을 덮고 있었다.
+`entwurf_peers`의 관측 축들(`receiver`/`transcript`)이 이미 쓰던 어휘로 통일한다.
+
+| 값 | 뜻 |
+|---|---|
+| `unobserved` | **아무도 안 쟀다.** 이 호스트에 배치 소유자가 없거나, 읽기가 실패했다. 읽지 않은 것을 읽은 것처럼 말하지 않기 위한 단어다 |
+| `none` | 배치 소유자를 **읽었고**, 그 목록에 이 citizen이 없다. 음성 결과를 가진 실제 측정이다 |
+| `ambiguous` | 둘 이상의 pane이 한 키를 주장한다. 보이기는 하는데 한 곳이 아니다 |
+| `herdr <pane>` | 유일 키로 정확히 한 pane과 조인됐다. **누가 봤는지**를 값 안에 남긴다 |
+
+**재시도 상한: 없음. 한 listing당 읽기 1회, 재시도 0회.** 이것이 §7의 "시각 근접으로 추측하지
+않는다 = discovery watcher 금지"를 배치 소유자 축에서 지키는 방법이다. 근거는 측정이다
+`[2026-09-14, herdr 0.9.0]`: herdr에는 "이 pane의 session 참조가 이제 확정됐다"고 알려주는 이벤트가
+없다 — `agent_session`을 싣는 유일한 이벤트 `pane.updated`는 플러그인 `[[events]]`가 이름을 모른다고
+거절하고, `events.subscribe`가 받는 세 종류 중 그것을 싣는 것은 없으며, `pane.agent_detected`는 session
+참조가 생기기 **전에** 도착한다. 그 틈을 메우는 루프가 바로 watcher다. 그러니 아직 보고되지 않은
+citizen은 이번 pass에서 `none`으로 읽히고, 다음에 다시 물으면 된다.
+
+읽기 자체도 **명시적 env 두 개로만** 시작한다(`HERDR_ENV=1`, `HERDR_BIN_PATH`). 경로 추측도, 소켓
+스캔도, PATH 조회도 하지 않는다 — Hard Rule 6이 설정에 요구하는 명시성과 같은 기준이다. 실패는
+전부 `unobserved`이지 `none`이 아니다.
+
+**그리고 이 축은 rail이 아니다.** placement는 `entwurf_v2`의 어떤 결정에도 닿지 않는다. 서버 재시작
+한 번이면 거짓이 되는 사실을 routing에 쓰지 않는다는 Hard Rule 16의 같은 문장이고,
+`check-herdr-placement`의 `[QK:HP-PLACEMENT-NOT-DISPATCH]`가 dispatch 모듈들이 이 축을 **이름조차
+부르지 않는다**는 것을 소스에서 지킨다.
+
+구현과 게이트: `pi-extensions/lib/herdr-placement.ts`, `scripts/check-herdr-placement.ts`.
 
 ## 8. 지금 만들지 않을 것
 

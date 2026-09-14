@@ -70,6 +70,12 @@
 		// `.ts`-extension fence as project-trust-handler. Typechecked by
 		// scripts/tsconfig.json via the gate (check-entwurf-facts.ts).
 		"pi-extensions/lib/entwurf-facts.ts",
+		// herdr-placement.ts is the #116 S1 pure placement-evidence core — a lib→lib VALUE
+		// importer (it types against meta-session.ts and is imported as a VALUE by
+		// entwurf-facts.ts / entwurf-peer-observe.ts / entwurf-peers-render.ts with an
+		// explicit `.ts` extension), so it lives in the same fence and for the same reason
+		// as entwurf-facts.ts. Typechecked by scripts/tsconfig.json via check-herdr-placement.ts.
+		"pi-extensions/lib/herdr-placement.ts",
 		// entwurf-peer-observe.ts is the #101 IO half of the two observed peer facts
 		// (receiver / transcript). Same fence and same reason as entwurf-facts.ts, which it
 		// imports as a VALUE with an explicit `.ts` extension. Typechecked by

@@ -1,0 +1,108 @@
+{
+	"schemaVersion": 1,
+	"lane": "herdr-placement",
+	"mutants": [
+		{
+			"claim": "HP-UNREADABLE-IS-UNOBSERVED",
+			"title": "an unreadable herdr payload answered with an EMPTY row list turns 'nobody looked' into 'herdr was read and has none of your citizens' — a fabricated measurement about a read that did not happen (#116 S1)",
+			"subject": "pi-extensions/lib/herdr-placement.ts",
+			"find": ["\tif (!Array.isArray(panes)) return null;"],
+			"replace": ["\tif (!Array.isArray(panes)) return [];"],
+			"gate": ["bash", "run.sh", "check-herdr-placement"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:HP-UNREADABLE-IS-UNOBSERVED]",
+			"signatureSource": "scripts/check-herdr-placement.ts"
+		},
+		{
+			"claim": "HP-JOIN-CLAUDE-EXACT",
+			"title": "joining the claude axis on a PREFIX instead of the whole value lets one citizen attach to another citizen's pane — the exact-key discipline that makes this evidence rather than a guess (#116 S1)",
+			"subject": "pi-extensions/lib/herdr-placement.ts",
+			"find": ["\t\t\treturn row.sessionValue;"],
+			"replace": ["\t\t\treturn row.sessionValue.slice(0, 8);"],
+			"gate": ["bash", "run.sh", "check-herdr-placement"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:HP-JOIN-CLAUDE-EXACT]",
+			"signatureSource": "scripts/check-herdr-placement.ts"
+		},
+		{
+			"claim": "HP-JOIN-PI-FILENAME",
+			"title": "accepting any filename tail as the pi native session id drops the uuid shape check, so a renamed or foreign .jsonl joins a citizen to the wrong pane (#116 S1)",
+			"subject": "pi-extensions/lib/herdr-placement.ts",
+			"find": ["\treturn PI_SESSION_UUID.test(candidate) ? candidate : null;"],
+			"replace": ["\treturn candidate;"],
+			"gate": ["bash", "run.sh", "check-herdr-placement"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:HP-JOIN-PI-FILENAME]",
+			"signatureSource": "scripts/check-herdr-placement.ts"
+		},
+		{
+			"claim": "HP-JOIN-NEVER-GUESSES",
+			"title": "coercing an UNMEASURED agent_session kind into the claude rule invents a join rule for a herdr version nobody here has run (#116 S1)",
+			"subject": "pi-extensions/lib/herdr-placement.ts",
+			"find": [
+				"\t\t\t// An unmeasured `kind`. Skipped on purpose: coercing it would invent a rule",
+				"\t\t\t// for a herdr version nobody here has run.",
+				"\t\t\treturn null;"
+			],
+			"replace": [
+				"\t\t\t// An unmeasured `kind`. Skipped on purpose: coercing it would invent a rule",
+				"\t\t\t// for a herdr version nobody here has run.",
+				"\t\t\treturn row.sessionValue;"
+			],
+			"gate": ["bash", "run.sh", "check-herdr-placement"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:HP-JOIN-NEVER-GUESSES]",
+			"signatureSource": "scripts/check-herdr-placement.ts"
+		},
+		{
+			"claim": "HP-AMBIGUOUS-NOT-A-PANE",
+			"title": "letting the FIRST pane win when two claim one native session id settles an ambiguity by arrival order and prints a guess as a placement (#116 S1)",
+			"subject": "pi-extensions/lib/herdr-placement.ts",
+			"find": ["\t\t\tbyNativeSessionId.delete(key);"],
+			"replace": ["\t\t\tambiguous.delete(key);"],
+			"gate": ["bash", "run.sh", "check-herdr-placement"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:HP-AMBIGUOUS-NOT-A-PANE]",
+			"signatureSource": "scripts/check-herdr-placement.ts"
+		},
+		{
+			"claim": "HP-NO-HERDR-IS-UNOBSERVED",
+			"title": "answering a host with NO placement owner with `none` claims a measurement that never ran — the blank-filling docs/mux-launch-rail.md 7 refuses (#116 S1)",
+			"subject": "pi-extensions/lib/herdr-placement.ts",
+			"find": ["\tif (index === null) return UNOBSERVED_PLACEMENT;"],
+			"replace": ["\tif (index === null) return NO_PLACEMENT;"],
+			"gate": ["bash", "run.sh", "check-herdr-placement"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:HP-NO-HERDR-IS-UNOBSERVED]",
+			"signatureSource": "scripts/check-herdr-placement.ts"
+		},
+		{
+			"claim": "HP-ONE-READ-PER-LISTING",
+			"title": "moving the placement read INSIDE the per-citizen observer spawns one placement-owner call per record and is the first half of a discovery watcher (#116 S1)",
+			"subject": "pi-extensions/lib/entwurf-fact-provider.ts",
+			"find": [
+				"\tconst observe = deps.observe ?? makeObservePeerFacts((deps.readPlacementIndex ?? readHerdrPlacementIndex)());"
+			],
+			"replace": [
+				"\tconst observe =\n\t\tdeps.observe ??\n\t\t((identity) => makeObservePeerFacts((deps.readPlacementIndex ?? readHerdrPlacementIndex)())(identity));"
+			],
+			"gate": ["bash", "run.sh", "check-herdr-placement"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:HP-ONE-READ-PER-LISTING]",
+			"signatureSource": "scripts/check-herdr-placement.ts"
+		},
+		{
+			"claim": "HP-PLACEMENT-NOT-DISPATCH",
+			"title": "letting a dispatch module SEE the placement axis is how a pane that is one server restart from being false reaches a routing decision (Hard Rule 16, #116 S1)",
+			"subject": "pi-extensions/lib/entwurf-v2-production.ts",
+			"find": ["import { isOutOfSocketDomainGardenIdConflict } from \"./entwurf-facts.ts\";"],
+			"replace": [
+				"import { isOutOfSocketDomainGardenIdConflict } from \"./entwurf-facts.ts\";\nimport type { PlacementObservation } from \"./herdr-placement.ts\";"
+			],
+			"gate": ["bash", "run.sh", "check-herdr-placement"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:HP-PLACEMENT-NOT-DISPATCH]",
+			"signatureSource": "scripts/check-herdr-placement.ts"
+		}
+	]
+}

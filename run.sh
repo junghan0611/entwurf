@@ -182,6 +182,7 @@ Usage:
   ./run.sh check-meta-facts            # deterministic gate for the meta-facts projection (#65): drives the REAL CLI — full-record join, parse-before-uniqueness, no-winner duplicates, drift/symlink/invalid-UTF-8 defects in-band, deterministic bytes, exit contract 0/2/3, dispatch+emit reachability
   ./run.sh check-meta-listing          # deterministic gate: META-STORE facts axis — kind-carrying entries; non-regular records are never read, parse/drift become diagnostics, duplicate nativeSessionId quarantines every rival but not unrelated citizens; strict throws / collect partial; pure injected IO
   ./run.sh check-entwurf-fact-provider # deterministic gate (0.11 Stage 0 step 4, fact-provider slice 4b): ASSEMBLY listEntwurfFacts — full-store parse/probe/quarantine/resolve stays intact; #112 bounds expensive receiver/transcript observation to the newest 32 rendered rows while older machine rows say unobserved; Q112 pins full payload + exact observer budget; C-원칙 keeps corruption diagnostic and impossible wiring loud; deps injected, no IO
+  ./run.sh check-herdr-placement      # deterministic gate (#116 S1): the PURE placement-evidence axis — herdr `pane list` parse (unreadable payload → null → `unobserved`, never `none`), the two measured join rules (claude kind=id byte equality / pi kind=path uuid tail of a .jsonl basename, both strict), unmeasured kind → NO key, two panes on one key → `ambiguous` (never last-write-wins), provider reads the placement owner EXACTLY ONCE per listing (anti-watcher, docs/mux-launch-rail.md §7), and no entwurf_v2 dispatch module names or imports the axis (Hard Rule 16 — a pane is a view, not a rail). No fake herdr, no binary, no IO
   ./run.sh check-entwurf-peers-surface # deterministic gate (0.11 Stage 0 step 4, fact-provider slice 4c): MCP entwurf_peers RENDER renderEntwurfPeers (#50 C4) — payload keyset exactly {peers, diagnostics}; FORBIDDEN keys sessions/socketOnly/controlDir/socketPath/count + no .sock in text (socket is transport, never identity); record-less socket = aggregated record-less-socket diagnostic (F8, liveness-keyed message, alive names fresh-cut); NO verb-routing key (JSON deep scan) NOR word (text), diagnostics both surfaces, empty→(none), unsupported shown; WIRING guard: both surfaces call provider+render, getLiveSessions + /entwurf-sessions gone; facts fabricated, no IO
   ./run.sh check-entwurf-self-address # deterministic gate (SE-1/SE-2 slice 1): self-addressability honesty predicate computeSelfAddressability — pi replyable ⟺ live socket; meta splits by RAIL: self-fetch ⟺ recordBacked ∧ ownerAlive ∧ watchArmed (regression-proof record-present rows), native-push ⟺ recordBacked ∧ probeAlive (separate axis — no mailbox fact may rescue or sink it), unsupplied rail fail-closed; SOURCE GUARD buildStrictPiSenderEnvelope drops hardcoded replyable:true + existsSync-probes socket, entwurf_self renders alive vs expected AND renders the meta rail per-rail (mailbox only inside the self-fetch branch; native-push denies an inbox and gates injection on the probe)
   ./run.sh check-entwurf-deliverability # deterministic gate (SE-1/SE-2 slice 2c): conversational-mailbox deliverability predicate — computeMetaReceiverActive (recordBacked ∧ ownerAlive ∧ watchArmed) + mailboxConversationalDeliverable (self-fetch AND active); direct-inject pi refused (SE-1), self-fetch dead/unarmed refused (SE-2); self-address shares the same atom
@@ -1783,6 +1784,20 @@ check_entwurf_fact_provider() {
   # invariant (resolveFactList duplicate/unprobed) → throw, never swallowed. A
   # collision quarantines BOTH the PeerFact and socket. deps injected, no IO.
   run_ts scripts/check-entwurf-fact-provider.ts
+}
+
+check_herdr_placement() {
+  # Deterministic gate for #116 S1: the placement evidence axis
+  # (pi-extensions/lib/herdr-placement.ts) plus the ONE read the fact provider is
+  # allowed. Pins only what is decidable WITHOUT a herdr binary — payload parse, the
+  # two measured join rules, the ambiguity rule, the four-word vocabulary, the render,
+  # the once-per-listing read, and the STRUCTURAL absence of placement from every
+  # entwurf_v2 dispatch module. There is no fake herdr here for the same reason
+  # check-mux-placement refuses a fake tmux: a stand-in authors the contract before the
+  # real thing is measured. Every payload literal is verbatim herdr 0.9.0 output
+  # recorded 2026-09-14. The real-binary half is an isolated private herdr server
+  # (sandbox HOME/XDG, no client attach); the join/callback round trip stays LIVE.
+  run_ts scripts/check-herdr-placement.ts
 }
 
 check_entwurf_peers_surface() {
@@ -6171,6 +6186,9 @@ case "$cmd" in
     ;;
   check-entwurf-fact-provider)
     check_entwurf_fact_provider
+    ;;
+  check-herdr-placement)
+    check_herdr_placement
     ;;
   check-entwurf-peers-surface)
     check_entwurf_peers_surface

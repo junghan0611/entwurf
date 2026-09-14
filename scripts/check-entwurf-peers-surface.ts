@@ -33,6 +33,7 @@ import { type EntwurfFactsResult, recordLessSocketMessage } from "../pi-extensio
 import type { PeerFact } from "../pi-extensions/lib/entwurf-facts.ts";
 import { ENTWURF_PEERS_RENDER_LIMIT, renderEntwurfPeers } from "../pi-extensions/lib/entwurf-peers-render.ts";
 import type { FactLiveness } from "../pi-extensions/lib/entwurf-v2-contract.ts";
+import { UNOBSERVED_PLACEMENT } from "../pi-extensions/lib/herdr-placement.ts";
 import type { MetaCitizenBackend } from "../pi-extensions/lib/meta-session.ts";
 import type { SocketLiveness } from "../pi-extensions/lib/socket-probe.ts";
 
@@ -51,7 +52,7 @@ function peer(
 	gardenId: string,
 	backend: MetaCitizenBackend,
 	liveness: FactLiveness,
-	observed: Partial<Pick<PeerFact, "receiver" | "transcript">> = {},
+	observed: Partial<Pick<PeerFact, "receiver" | "transcript" | "placement">> = {},
 ): PeerFact {
 	return {
 		gardenId,
@@ -64,6 +65,7 @@ function peer(
 		liveness,
 		receiver: observed.receiver ?? "n/a",
 		transcript: observed.transcript ?? "exists",
+		placement: observed.placement ?? UNOBSERVED_PLACEMENT,
 	};
 }
 

@@ -36,6 +36,7 @@ import {
 	isLivenessSupported,
 	LIVENESS_DOMAIN_BACKENDS,
 } from "../pi-extensions/lib/entwurf-v2-contract.ts";
+import { UNOBSERVED_PLACEMENT } from "../pi-extensions/lib/herdr-placement.ts";
 import {
 	META_CITIZEN_BACKENDS,
 	type MetaCitizenBackend,
@@ -138,7 +139,7 @@ for (const backend of META_CITIZEN_BACKENDS) {
 	ok("passthrough recordUpdatedAt", fact.recordUpdatedAt === id.recordUpdatedAt);
 }
 
-// ── facts-only keyset: identity facts + liveness + the two observed axes, and
+// ── facts-only keyset: identity facts + liveness + the three observed axes, and
 // still NO verb-routing / no transcript PATH ────────────────────────────────
 {
 	const fact = resolvePeerFact(identity("pi"), "alive");
@@ -154,20 +155,25 @@ for (const backend of META_CITIZEN_BACKENDS) {
 		"recordUpdatedAt",
 		"receiver",
 		"transcript",
+		"placement",
 	].sort();
 	assert.deepStrictEqual(keys, expected, `PeerFact keyset drift: got ${keys.join(",")}`);
-	ok("facts-only keyset exact (identity facts + liveness + observed receiver/transcript)", true);
+	ok("facts-only keyset exact (identity facts + liveness + observed receiver/transcript/placement)", true);
 
 	// #101: an unmeasured row says so. `unobserved` is the default for a caller that
 	// injected no observer — never `none`/`absent`, which would be a fabricated fact.
 	ok(
-		"an observer-less composition reports both axes as unobserved (never a default fact)",
-		fact.receiver === "unobserved" && fact.transcript === "unobserved",
+		"an observer-less composition reports all three axes as unobserved (never a default fact)",
+		fact.receiver === "unobserved" && fact.transcript === "unobserved" && fact.placement.kind === "unobserved",
 	);
-	const observed = resolvePeerFact(identity("claude-code"), null, { receiver: "inactive", transcript: "absent" });
+	const observed = resolvePeerFact(identity("claude-code"), null, {
+		receiver: "inactive",
+		transcript: "absent",
+		placement: UNOBSERVED_PLACEMENT,
+	});
 	ok(
 		"an injected observation rides onto the fact verbatim",
-		observed.receiver === "inactive" && observed.transcript === "absent",
+		observed.receiver === "inactive" && observed.transcript === "absent" && observed.placement.kind === "unobserved",
 	);
 
 	const FORBIDDEN = [

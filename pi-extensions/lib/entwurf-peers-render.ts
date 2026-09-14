@@ -25,6 +25,7 @@
 
 import type { EntwurfDiagnostic, EntwurfFactsResult } from "./entwurf-fact-provider.ts";
 import type { PeerFact } from "./entwurf-facts.ts";
+import { renderPlacement } from "./herdr-placement.ts";
 
 /** The full `entwurf_peers` JSON payload: citizens + diagnostics, nothing else.
  * NO verb-routing field anywhere (the gate enforces this by deep key scan) and
@@ -50,11 +51,18 @@ export const ENTWURF_PEERS_RENDER_LIMIT = 32;
 // be indistinguishable here. `receiver=active|inactive|none|n/a` is a projection of the
 // same measurement dispatch uses; `transcript=exists|absent` is the record's transcript,
 // existence only, never the path.
+//
+// `placement` (#116 S1) is the third observed fact and the one most likely to be
+// MISREAD, so it is placed at the END of the row — away from `liveness` — and printed
+// as `herdr <pane>` rather than a bare pane id. A pane says where a citizen was last
+// SEEN by a placement owner; it says nothing about whether that citizen is running, and
+// nothing about how to reach it. `unobserved` = nobody looked (no herdr here), `none` =
+// herdr was read and does not have this one, `ambiguous` = more than one pane claimed it.
 function renderPeerLine(p: PeerFact): string {
 	const model = p.model ?? "(unknown)";
 	return (
 		`- ${p.gardenId}  backend=${p.backend}  liveness=${p.liveness}  receiver=${p.receiver}  ` +
-		`transcript=${p.transcript}  cwd=${p.cwd}  model=${model}`
+		`transcript=${p.transcript}  cwd=${p.cwd}  model=${model}  placement=${renderPlacement(p.placement)}`
 	);
 }
 

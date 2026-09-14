@@ -31,6 +31,7 @@
  */
 
 import { type FactLiveness, factLivenessOf, isLivenessSupported } from "./entwurf-v2-contract.ts";
+import { type PlacementObservation, UNOBSERVED_PLACEMENT } from "./herdr-placement.ts";
 import type { MetaCitizenBackend, MetaIdentity } from "./meta-session.ts";
 import type { SocketLiveness } from "./socket-probe.ts";
 
@@ -57,6 +58,12 @@ export interface PeerFact {
 	//   "the newest record in this cwd" picked the phantom as often as the real one.
 	receiver: ReceiverObservation;
 	transcript: TranscriptObservation;
+	// — the third observed axis (#116 S1): WHERE a citizen is visible, when a
+	//   placement owner reported it on a key we independently own. A pane is an
+	//   ephemeral view (Hard Rule 16), so this sits beside `receiver`/`transcript`
+	//   as evidence and never beside `liveness` as a claim about being alive: a
+	//   pane can outlive its process and a process can outlive its pane.
+	placement: PlacementObservation;
 }
 
 /**
@@ -79,11 +86,16 @@ export type TranscriptObservation = "exists" | "absent" | "unobserved";
 export interface PeerObservations {
 	receiver: ReceiverObservation;
 	transcript: TranscriptObservation;
+	placement: PlacementObservation;
 }
 
 /** What a caller that measured nothing must say. Explicit and greppable — a row that
  * silently defaulted to `none`/`absent` would be a fabricated fact. */
-export const UNOBSERVED_PEER: PeerObservations = { receiver: "unobserved", transcript: "unobserved" };
+export const UNOBSERVED_PEER: PeerObservations = {
+	receiver: "unobserved",
+	transcript: "unobserved",
+	placement: UNOBSERVED_PLACEMENT,
+};
 
 /** Measure the two observed axes for one citizen. Injected, so this module stays pure. */
 export type PeerObserver = (identity: MetaIdentity) => PeerObservations;
@@ -116,6 +128,7 @@ export function resolvePeerFact(
 		liveness: factLivenessOf(identity.backend, socket),
 		receiver: observations.receiver,
 		transcript: observations.transcript,
+		placement: observations.placement,
 	};
 }
 

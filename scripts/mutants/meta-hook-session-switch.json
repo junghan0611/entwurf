@@ -129,10 +129,10 @@
 			"title": "measuring both axes and printing neither returns the listing to two identical rows for a live citizen and a phantom — the surface gap that made a sibling dispatch into a void",
 			"subject": "pi-extensions/lib/entwurf-peers-render.ts",
 			"find": [
-				"\t\t`- ${p.gardenId}  backend=${p.backend}  liveness=${p.liveness}  receiver=${p.receiver}  ` +\n\t\t`transcript=${p.transcript}  cwd=${p.cwd}  model=${model}`"
+				"\t\t`- ${p.gardenId}  backend=${p.backend}  liveness=${p.liveness}  receiver=${p.receiver}  ` +\n\t\t`transcript=${p.transcript}  cwd=${p.cwd}  model=${model}  placement=${renderPlacement(p.placement)}`"
 			],
 			"replace": [
-				"\t\t`- ${p.gardenId}  backend=${p.backend}  liveness=${p.liveness}  ` + `cwd=${p.cwd}  model=${model}`"
+				"\t\t`- ${p.gardenId}  backend=${p.backend}  liveness=${p.liveness}  ` +\n\t\t`cwd=${p.cwd}  model=${model}  placement=${renderPlacement(p.placement)}`"
 			],
 			"gate": ["bash", "run.sh", "check-meta-hook-session-switch"],
 			"timeoutSeconds": 300,
