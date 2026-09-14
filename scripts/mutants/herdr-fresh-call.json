@@ -238,6 +238,42 @@
 			"timeoutSeconds": 120,
 			"signature": "[QK:HFC-START-ARGV-FIDELITY]",
 			"signatureSource": "scripts/check-herdr-fresh-call.ts"
+		},
+		{
+			"claim": "HERDR-RUNNER-NONBLOCKING",
+			"title": "a synchronous wait is reintroduced on the caller thread, so a herdr call in flight holds the event loop and the sibling first callback cannot be read",
+			"subject": "pi-extensions/lib/herdr-fresh-call.ts",
+			"find": ["\t\treturn new Promise((resolve) => {"],
+			"replace": [
+				"\t\treturn new Promise((resolve) => {",
+				"\t\t\tAtomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 1000);"
+			],
+			"gate": ["bash", "run.sh", "check-herdr-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:HERDR-RUNNER-NONBLOCKING]",
+			"signatureSource": "scripts/check-herdr-fresh-call.ts"
+		},
+		{
+			"claim": "HERDR-RUNNER-TIMEOUT-KILLS",
+			"title": "the bound stops waiting without killing the child, so a child keeps its pane after we reported the launch gone",
+			"subject": "pi-extensions/lib/herdr-fresh-call.ts",
+			"find": ["\t\t\tconst timer = setTimeout(() => {", "\t\t\t\tchild.kill(\"SIGKILL\");"],
+			"replace": ["\t\t\tconst timer = setTimeout(() => {"],
+			"gate": ["bash", "run.sh", "check-herdr-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:HERDR-RUNNER-TIMEOUT-KILLS]",
+			"signatureSource": "scripts/check-herdr-fresh-call.ts"
+		},
+		{
+			"claim": "HERDR-RUNNER-OUTPUT-BOUNDED",
+			"title": "the output cap is no longer enforced, so a runaway child is buffered without limit into the caller memory",
+			"subject": "pi-extensions/lib/herdr-fresh-call.ts",
+			"find": ["\t\t\t\tif (stdout.length + stderr.length <= bounds.maxOutputBytes) return;"],
+			"replace": ["\t\t\t\treturn;"],
+			"gate": ["bash", "run.sh", "check-herdr-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:HERDR-RUNNER-OUTPUT-BOUNDED]",
+			"signatureSource": "scripts/check-herdr-fresh-call.ts"
 		}
 	]
 }

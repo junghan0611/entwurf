@@ -41,10 +41,20 @@
  *   HFC-START-PANE-BINDING      a start that reports a different pane/terminal is a named failure
  *   HFC-START-WITNESS-REQUIRED  a start with no agent session is a named failure
  *   HFC-START-ARGV-FIDELITY     the echoed argv must be exactly what we asked herdr to compose
+ *   HERDR-RUNNER-NONBLOCKING    a herdr call in flight does NOT hold the caller's event loop —
+ *                               proved against a REAL child process while a REAL socket round
+ *                               trip and a timer are serviced in the same process
+ *   HERDR-RUNNER-TIMEOUT-KILLS  the bound kills the child and settles once, and the child is
+ *                               observed dead afterwards
+ *   HERDR-RUNNER-OUTPUT-BOUNDED a runaway child is cut off at the cap instead of being buffered
+ *                               without limit
  */
 
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { type ChildProcess, spawn } from "node:child_process";
+import * as fs from "node:fs";
+import * as net from "node:net";
+import * as os from "node:os";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -54,10 +64,14 @@ import {
 	buildHerdrPaneGetArgs,
 	buildHerdrSplitArgs,
 	containsControlChar,
+	createHerdrRunner,
 	decideConditionalClose,
 	encodeBirthPrompt,
+	HERDR_CLI_TIMEOUT_MS,
 	HERDR_DECODE_INSTRUCTION,
 	HERDR_FRESH_CALL_BACKENDS,
+	HERDR_MAX_OUTPUT_BYTES,
+	HERDR_START_TIMEOUT_MS,
 	type HerdrRun,
 	herdrAgentNameFromNonce,
 	herdrFreshCall,
@@ -66,11 +80,12 @@ import {
 	parseHerdrSplitResponse,
 	readHerdrErrorCode,
 	rejectTmuxPlacementInHerdrContext,
+	type SpawnFn,
 } from "../pi-extensions/lib/herdr-fresh-call.ts";
 
 const REPO_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MODULE = "pi-extensions/lib/herdr-fresh-call.ts";
-const MODULE_SRC = readFileSync(path.join(REPO_DIR, MODULE), "utf8");
+const MODULE_SRC = fs.readFileSync(path.join(REPO_DIR, MODULE), "utf8");
 
 let passed = 0;
 function ok(label: string, cond: boolean): void {
@@ -145,7 +160,9 @@ function scriptedRun(replies: readonly ScriptedReply[]): { run: HerdrRun; calls:
 		calls.push([...args]);
 		const entry = replies[index++] ?? { status: 1 };
 		const reply = typeof entry === "function" ? entry(args) : entry;
-		return { status: reply.status, stdout: reply.stdout ?? "", stderr: reply.stderr ?? "" };
+		// A PROMISE, like the production runner: the rail must await every herdr call, and a
+		// fixture that answered synchronously would let a blocking regression stay green here.
+		return Promise.resolve({ status: reply.status, stdout: reply.stdout ?? "", stderr: reply.stderr ?? "" });
 	};
 	return { run, calls };
 }
@@ -166,12 +183,12 @@ function neverRun(): { run: HerdrRun; calls: string[][] } {
 	const calls: string[][] = [];
 	const run: HerdrRun = (args) => {
 		calls.push([...args]);
-		return { status: 1, stdout: "", stderr: "" };
+		return Promise.resolve({ status: 1, stdout: "", stderr: "" });
 	};
 	return { run, calls };
 }
 
-function main(): void {
+async function main(): Promise<void> {
 	console.log("[check-herdr-fresh-call]");
 
 	// ── the fence ────────────────────────────────────────────────────────────────────────
@@ -271,7 +288,7 @@ function main(): void {
 	let everyRefusalPreMutation = true;
 	for (const [, params, env, expected] of refusals) {
 		const { run, calls } = neverRun();
-		const result = herdrFreshCall(params, run, env, NONCE);
+		const result = await herdrFreshCall(params, run, env, NONCE);
 		if (result.ok || result.reason !== expected || calls.length !== 0) everyRefusalPreMutation = false;
 	}
 	ok(
@@ -348,7 +365,7 @@ function main(): void {
 
 	// ── the launch, and what its receipt may say ─────────────────────────────────────────
 	const { run, calls } = scriptedRun([{ status: 0, stdout: SPLIT_OK }, startReplyEchoingArgv(START_OK)]);
-	const launched = herdrFreshCall({ ...base, backend: "claude-code", model: "opus" }, run, HERDR_ENV, NONCE);
+	const launched = await herdrFreshCall({ ...base, backend: "claude-code", model: "opus" }, run, HERDR_ENV, NONCE);
 	const receipt = launched.ok ? launched.receipt : null;
 	const receiptText = JSON.stringify(receipt ?? {});
 	ok(
@@ -420,7 +437,12 @@ function main(): void {
 		{ status: 0, stdout: SPLIT_OK },
 		{ status: 0 },
 	]);
-	const failed = herdrFreshCall({ ...base, backend: "claude-code", model: "opus" }, failing.run, HERDR_ENV, NONCE);
+	const failed = await herdrFreshCall(
+		{ ...base, backend: "claude-code", model: "opus" },
+		failing.run,
+		HERDR_ENV,
+		NONCE,
+	);
 	ok(
 		"a start that fails after the split reclaims the pane conditionally, quotes herdr's own error code, and reports the reclaim in the same breath",
 		!failed.ok &&
@@ -437,7 +459,12 @@ function main(): void {
 		{ status: 1, stderr: START_ERR },
 		{ status: 0, stdout: SPLIT_OK.replace("term_65b6e1ce2b3db16", "term_other") },
 	]);
-	const orphaned = herdrFreshCall({ ...base, backend: "claude-code", model: "opus" }, stubborn.run, HERDR_ENV, NONCE);
+	const orphaned = await herdrFreshCall(
+		{ ...base, backend: "claude-code", model: "opus" },
+		stubborn.run,
+		HERDR_ENV,
+		NONCE,
+	);
 	ok(
 		"when the proof does not hold the pane is LEFT ALONE and named — three calls, no close attempted",
 		!orphaned.ok &&
@@ -450,7 +477,7 @@ function main(): void {
 	// ── the amendment cells: input parity and post-split binding ─────────────────────────
 	ok(
 		"[QK:HFC-INPUT-PARITY] the input contract is the SHARED one — same five words, same order, same trimming as the tmux rail — so a caller does not learn a different vocabulary by being inside herdr",
-		(() => {
+		(await (async () => {
 			const cases: [Parameters<typeof herdrFreshCall>[0], string][] = [
 				[{ ...base, callerGardenId: null }, "caller-identity-unavailable"],
 				[{ ...base, model: "   " }, "model-empty"],
@@ -458,36 +485,37 @@ function main(): void {
 				[{ ...base, task: "\t\n " }, "task-empty"],
 				[{ ...base, task: "x".repeat(16001) }, "task-too-long"],
 			];
-			return cases.every(([params, expected]) => {
+			for (const [params, expected] of cases) {
 				const { run, calls } = neverRun();
-				const result = herdrFreshCall(params, run, HERDR_ENV, NONCE);
+				const result = await herdrFreshCall(params, run, HERDR_ENV, NONCE);
 				// The words AND the silence: an input refusal must also leave no pane behind.
-				return !result.ok && result.reason === expected && calls.length === 0;
-			});
-		})() &&
-			(() => {
+				if (result.ok || result.reason !== expected || calls.length !== 0) return false;
+			}
+			return true;
+		})()) &&
+			(await (async () => {
 				// The cap is the boundary, not a vibe: exactly at it the call proceeds to herdr.
 				const { run, calls } = scriptedRun([{ status: 0, stdout: SPLIT_OK }, startReplyEchoingArgv(START_OK)]);
-				const atCap = herdrFreshCall(
+				const atCap = await herdrFreshCall(
 					{ ...base, backend: "claude-code", task: "x".repeat(16000) },
 					run,
 					HERDR_ENV,
 					NONCE,
 				);
 				return atCap.ok && calls.length === 2;
-			})(),
+			})()),
 	);
 	ok(
 		"[QK:HFC-CWD-EMPTY-IS-OMITTED] an empty cwd means OMITTED, exactly as the public verb has always meant it — reading it as a path made a documented no-op into an invalid-directory refusal",
-		(() => {
+		await (async () => {
 			const { run, calls } = scriptedRun([{ status: 0, stdout: SPLIT_OK }, startReplyEchoingArgv(START_OK)]);
-			const result = herdrFreshCall({ ...base, backend: "claude-code", cwd: "" }, run, HERDR_ENV, NONCE);
+			const result = await herdrFreshCall({ ...base, backend: "claude-code", cwd: "" }, run, HERDR_ENV, NONCE);
 			return result.ok && !calls[0].includes("--cwd") && !("cwd" in result.receipt);
 		})(),
 	);
 	ok(
 		"[QK:HFC-SPLIT-OCCUPIED] a split that came back holding an agent does NOT get started into — it is named, and the reclaim that follows correctly refuses to close somebody else's pane",
-		(() => {
+		await (async () => {
 			const occupied = JSON.stringify({
 				id: "cli:pane:split",
 				result: { pane: JSON.parse(START_OK).result.agent, type: "pane_info" },
@@ -496,7 +524,7 @@ function main(): void {
 				{ status: 0, stdout: occupied },
 				{ status: 0, stdout: occupied },
 			]);
-			const result = herdrFreshCall({ ...base, backend: "claude-code" }, run, HERDR_ENV, NONCE);
+			const result = await herdrFreshCall({ ...base, backend: "claude-code" }, run, HERDR_ENV, NONCE);
 			return (
 				!result.ok &&
 				result.reason === "herdr-split-pane-occupied" &&
@@ -509,7 +537,7 @@ function main(): void {
 	);
 	ok(
 		"[QK:HFC-START-PANE-BINDING] a start reporting a pane or terminal that is not the one we split is a NAMED failure, not a success — a green receipt would have pointed the caller at a coordinate that never held their sibling — and the reclaim still runs from the split receipt",
-		(() => {
+		await (async () => {
 			const drifted = START_OK.replace('"w7:p7"', '"w7:p9"');
 			const { run, calls } = scriptedRun([
 				{ status: 0, stdout: SPLIT_OK },
@@ -517,7 +545,7 @@ function main(): void {
 				{ status: 0, stdout: SPLIT_OK },
 				{ status: 0 },
 			]);
-			const result = herdrFreshCall({ ...base, backend: "claude-code" }, run, HERDR_ENV, NONCE);
+			const result = await herdrFreshCall({ ...base, backend: "claude-code" }, run, HERDR_ENV, NONCE);
 			return (
 				!result.ok &&
 				result.reason === "herdr-agent-start-pane-drift" &&
@@ -528,7 +556,7 @@ function main(): void {
 	);
 	ok(
 		"[QK:HFC-START-WITNESS-REQUIRED] a start that succeeded WITHOUT an agent session is a named failure — herdr waits for detection before returning, so a missing witness means a launch nobody can identify, and presence is the whole claim we read",
-		(() => {
+		await (async () => {
 			const witnessless = JSON.parse(START_OK);
 			witnessless.result.agent.agent_session = null;
 			const { run } = scriptedRun([
@@ -537,13 +565,13 @@ function main(): void {
 				{ status: 0, stdout: SPLIT_OK },
 				{ status: 0 },
 			]);
-			const result = herdrFreshCall({ ...base, backend: "claude-code" }, run, HERDR_ENV, NONCE);
+			const result = await herdrFreshCall({ ...base, backend: "claude-code" }, run, HERDR_ENV, NONCE);
 			return !result.ok && result.reason === "herdr-agent-start-witness-missing";
 		})(),
 	);
 	ok(
 		"[QK:HFC-START-ARGV-FIDELITY] the echoed argv must be the canonical executable plus EXACTLY the argv we passed after `--` — a sibling started with a different framing is one we did not compose, and nothing downstream would ever reveal it",
-		(() => {
+		await (async () => {
 			const composed = JSON.parse(START_OK);
 			const { run, calls } = scriptedRun([
 				{ status: 0, stdout: SPLIT_OK },
@@ -557,7 +585,7 @@ function main(): void {
 				{ status: 0, stdout: SPLIT_OK },
 				{ status: 0 },
 			]);
-			const drift = herdrFreshCall({ ...base, backend: "claude-code" }, run, HERDR_ENV, NONCE);
+			const drift = await herdrFreshCall({ ...base, backend: "claude-code" }, run, HERDR_ENV, NONCE);
 			const passed = calls[1].slice(calls[1].indexOf("--") + 1);
 			return (
 				!drift.ok &&
@@ -570,7 +598,124 @@ function main(): void {
 		})(),
 	);
 
+	// ── the scheduling cells: the runner must not hold the caller's event loop ───────────
+	// `[측정 2026-09-14, C4 첫 LIVE]` the child's FIRST act is a callback onto the caller's control
+	// socket, and on this rail the caller is inside `agent start` when it arrives. A synchronous
+	// child wait made that callback unreadable until the wait ended. These cells drive the REAL
+	// production runner with a REAL child process (`node`, not a herdr stand-in) and watch what the
+	// same process manages to do while it is in flight. "The function says async" proves nothing
+	// and is not asserted anywhere below.
+	{
+		// A real unix socket, so the thing being serviced mid-call is actual IO, not a timer alone.
+		const socketDir = fs.mkdtempSync(path.join(os.tmpdir(), "herdr-runner-"));
+		const socketPath = path.join(socketDir, "s.sock");
+		const server = net.createServer((socket) => socket.end("pong\n"));
+		await new Promise<void>((resolve) => server.listen(socketPath, resolve));
+		const spawned: ChildProcess[] = [];
+		const recordingSpawn: SpawnFn = (bin, args, opts) => {
+			const child = spawn(bin, args, opts);
+			spawned.push(child);
+			return child as unknown as ReturnType<SpawnFn>;
+		};
+		try {
+			// ── NONBLOCKING ──────────────────────────────────────────────────────────────
+			{
+				const run = createHerdrRunner(process.execPath, process.env, recordingSpawn);
+				const started = Date.now();
+				let timerFiredAt: number | null = null;
+				let socketAnsweredAt: number | null = null;
+				setTimeout(() => {
+					timerFiredAt = Date.now();
+				}, 20);
+				const socketDone = new Promise<void>((resolve) => {
+					const client = net.createConnection(socketPath, () => {
+						client.on("data", () => {
+							socketAnsweredAt = Date.now();
+							client.end();
+							resolve();
+						});
+					});
+				});
+				// ~1.2s of real child, chosen so both observations must land WHILE it runs.
+				const result = await run(["-e", "setTimeout(() => process.stdout.write('done'), 1200)"]);
+				const resolvedAt = Date.now();
+				await socketDone;
+				ok(
+					"[QK:HERDR-RUNNER-NONBLOCKING] while a real herdr child is in flight the caller's loop keeps serving: a 20ms timer and a real unix-socket round trip BOTH completed before the call resolved, and the timer's latency stayed bounded — a synchronous child wait is exactly what made the C4 sibling's first callback unreadable" +
+						` — child=${resolvedAt - started}ms timer=${timerFiredAt === null ? "never" : timerFiredAt - started}ms socket=${socketAnsweredAt === null ? "never" : socketAnsweredAt - started}ms`,
+					result.status === 0 &&
+						result.stdout === "done" &&
+						timerFiredAt !== null &&
+						socketAnsweredAt !== null &&
+						timerFiredAt < resolvedAt &&
+						socketAnsweredAt < resolvedAt &&
+						timerFiredAt - started < 600,
+				);
+			}
+
+			// ── TIMEOUT KILLS ────────────────────────────────────────────────────────────
+			{
+				// The bounds are injected ONLY to reach the kill inside a gate's patience; the
+				// numbers production runs under are the exported constants, asserted below.
+				const run = createHerdrRunner(process.execPath, process.env, recordingSpawn, {
+					startMs: 150,
+					cliMs: 150,
+					maxOutputBytes: HERDR_MAX_OUTPUT_BYTES,
+				});
+				const before = spawned.length;
+				const result = await run(["-e", "setTimeout(() => {}, 60000)"]);
+				const child = spawned[before];
+				// The child must be GONE, not merely abandoned: a bound that stops waiting while
+				// the child keeps a pane is a bound we only claimed to have.
+				let alive = true;
+				for (let i = 0; i < 100 && alive; i++) {
+					await new Promise<void>((resolve) => setTimeout(resolve, 10));
+					try {
+						process.kill(child!.pid!, 0);
+					} catch {
+						alive = false;
+					}
+				}
+				ok(
+					"[QK:HERDR-RUNNER-TIMEOUT-KILLS] a child that outlives its bound is KILLED and the call settles once with the no-exit-status shape — a bound that only stops waiting leaves the child holding a pane we just reported gone" +
+						` — status=${result.status} stderr=${JSON.stringify(result.stderr)} alive=${alive}`,
+					result.status === 1 &&
+						result.stderr.includes("no exit status (timeout 150ms") &&
+						alive === false &&
+						// The production bounds themselves are untouched by the seam.
+						HERDR_START_TIMEOUT_MS === 300_000 &&
+						HERDR_CLI_TIMEOUT_MS === 30_000,
+				);
+			}
+
+			// ── OUTPUT BOUNDED ───────────────────────────────────────────────────────────
+			{
+				const run = createHerdrRunner(process.execPath, process.env, recordingSpawn, {
+					startMs: 5_000,
+					cliMs: 5_000,
+					maxOutputBytes: 64 * 1024,
+				});
+				const result = await run([
+					"-e",
+					"const chunk='x'.repeat(64*1024); for (let i=0;i<64;i++) process.stdout.write(chunk); setTimeout(()=>{}, 30000);",
+				]);
+				ok(
+					"[QK:HERDR-RUNNER-OUTPUT-BOUNDED] a runaway child is cut off AT the cap and reported as a failure, never buffered without limit or truncated into a parse we would believe" +
+						` — status=${result.status} stdout=${result.stdout.length}B stderr=${JSON.stringify(result.stderr.slice(0, 120))}`,
+					result.status === 1 &&
+						result.stdout === "" &&
+						result.stderr.includes(`output exceeded ${64 * 1024} bytes`) &&
+						HERDR_MAX_OUTPUT_BYTES === 8 * 1024 * 1024,
+				);
+			}
+		} finally {
+			for (const child of spawned) child.kill("SIGKILL");
+			await new Promise<void>((resolve) => server.close(() => resolve()));
+			fs.rmSync(socketDir, { recursive: true, force: true });
+		}
+	}
+
 	console.log(`\n[check-herdr-fresh-call] ${passed} assertions ok`);
 }
 
-main();
+await main();

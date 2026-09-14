@@ -24,7 +24,7 @@
  * the one address path, on both rails.
  */
 
-import { spawnSync } from "node:child_process";
+import { spawn as spawnChildProcess } from "node:child_process";
 import { codexFreshPreflight } from "./codex-fresh-preflight.ts";
 import { mintNonce } from "./fresh-call-composition.ts";
 import {
@@ -34,7 +34,7 @@ import {
 	herdrFreshCall,
 	renderHerdrFreshCall,
 	resolveHerdrContext,
-	type SpawnSyncFn,
+	type SpawnFn,
 } from "./herdr-fresh-call.ts";
 import { type FreshCallResult, freshCall, renderFreshCall } from "./mux-fresh-call.ts";
 
@@ -71,7 +71,7 @@ export type DispatchedFreshCall =
 export async function dispatchFreshCall(
 	request: FreshCallRequest,
 	env: NodeJS.ProcessEnv = process.env,
-	spawn?: SpawnSyncFn,
+	spawn?: SpawnFn,
 	nonce: string = mintNonce(),
 ): Promise<DispatchedFreshCall> {
 	if (selectFreshCallRail(env) === "herdr") {
@@ -81,8 +81,8 @@ export async function dispatchFreshCall(
 			// tmux here would open a window the operator cannot see from inside herdr.
 			return { rail: "herdr", result: { ok: false, reason: context.reason } };
 		}
-		const run: HerdrRun = createHerdrRunner(context.context.bin, env, spawn ?? (spawnSync as SpawnSyncFn));
-		return { rail: "herdr", result: herdrFreshCall(request, run, env, nonce) };
+		const run: HerdrRun = createHerdrRunner(context.context.bin, env, spawn ?? (spawnChildProcess as SpawnFn));
+		return { rail: "herdr", result: await herdrFreshCall(request, run, env, nonce) };
 	}
 	const missing = request.backend === "codex" ? await codexFreshPreflight(env) : null;
 	if (missing) return { rail: "tmux", result: { ok: false, reason: missing } };

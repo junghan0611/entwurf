@@ -40,10 +40,10 @@
 			"title": "the herdr branch runs the Codex preflight before refusing a non-pilot backend, answering an irrelevant question first",
 			"subject": "pi-extensions/lib/fresh-call-dispatch.ts",
 			"find": [
-				"\t\tconst run: HerdrRun = createHerdrRunner(context.context.bin, env, spawn ?? (spawnSync as SpawnSyncFn));"
+				"\t\tconst run: HerdrRun = createHerdrRunner(context.context.bin, env, spawn ?? (spawnChildProcess as SpawnFn));"
 			],
 			"replace": [
-				"\t\tif (request.backend === \"codex\") await codexFreshPreflight(env);\n\t\tconst run: HerdrRun = createHerdrRunner(context.context.bin, env, spawn ?? (spawnSync as SpawnSyncFn));"
+				"\t\tif (request.backend === \"codex\") await codexFreshPreflight(env);\n\t\tconst run: HerdrRun = createHerdrRunner(context.context.bin, env, spawn ?? (spawnChildProcess as SpawnFn));"
 			],
 			"gate": ["bash", "run.sh", "check-fresh-call-dispatch"],
 			"timeoutSeconds": 120,
@@ -67,8 +67,8 @@
 			"claim": "FCD-ONE-NONCE",
 			"title": "the rail mints its own second nonce, so the sibling calls back with a tag the caller never recorded",
 			"subject": "pi-extensions/lib/fresh-call-dispatch.ts",
-			"find": ["\t\treturn { rail: \"herdr\", result: herdrFreshCall(request, run, env, nonce) };"],
-			"replace": ["\t\treturn { rail: \"herdr\", result: herdrFreshCall(request, run, env, mintNonce()) };"],
+			"find": ["\t\treturn { rail: \"herdr\", result: await herdrFreshCall(request, run, env, nonce) };"],
+			"replace": ["\t\treturn { rail: \"herdr\", result: await herdrFreshCall(request, run, env, mintNonce()) };"],
 			"gate": ["bash", "run.sh", "check-fresh-call-dispatch"],
 			"timeoutSeconds": 120,
 			"signature": "[QK:FCD-ONE-NONCE]",
@@ -137,6 +137,17 @@
 			"gate": ["bash", "run.sh", "check-fresh-call-dispatch"],
 			"timeoutSeconds": 120,
 			"signature": "[QK:FCD-RECOVERY-VISIBLE]",
+			"signatureSource": "scripts/check-fresh-call-dispatch.ts"
+		},
+		{
+			"claim": "FCD-NO-SYNC-SPAWN",
+			"title": "the composition root regains synchronous child authority, which is how a blocking runner gets wired back in without anyone reading the runner",
+			"subject": "pi-extensions/lib/fresh-call-dispatch.ts",
+			"find": ["import { spawn as spawnChildProcess } from \"node:child_process\";"],
+			"replace": ["import { spawn as spawnChildProcess, spawnSync } from \"node:child_process\";"],
+			"gate": ["bash", "run.sh", "check-fresh-call-dispatch"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:FCD-NO-SYNC-SPAWN]",
 			"signatureSource": "scripts/check-fresh-call-dispatch.ts"
 		}
 	]

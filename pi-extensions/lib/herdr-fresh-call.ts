@@ -172,11 +172,11 @@ export type HerdrFreshCallResult =
 /** One invocation of the herdr CLI, injected. Production supplies `execFileSync`; tests supply a
  * table. There is no fake herdr binary anywhere in this repo, for the same reason there is no fake
  * tmux: a fake would agree with whatever we believed on the day we wrote it. */
-export type HerdrRun = (args: readonly string[]) => {
+export type HerdrRun = (args: readonly string[]) => Promise<{
 	readonly status: number;
 	readonly stdout: string;
 	readonly stderr: string;
-};
+}>;
 
 /** The two env facts that say we are inside herdr, plus the pane we were opened in. All three are
  * herdr's OWN (`HERDR_ENV`, `HERDR_BIN_PATH`, `HERDR_PANE_ID`); none is discovered, no socket is
@@ -509,7 +509,7 @@ export function decideConditionalClose(
  * `callerGardenId` comes from the SURFACE that registered the tool, out of its own record-backed
  * context. This module never derives it, looks it up, or guesses: an empty value is a refusal.
  */
-export function herdrFreshCall(
+export async function herdrFreshCall(
 	params: {
 		readonly backend: string;
 		readonly model: string;
@@ -521,7 +521,7 @@ export function herdrFreshCall(
 	run: HerdrRun,
 	env: NodeJS.ProcessEnv,
 	nonce: string,
-): HerdrFreshCallResult {
+): Promise<HerdrFreshCallResult> {
 	const context = resolveHerdrContext(env);
 	if (!context.ok) return { ok: false, reason: context.reason };
 
@@ -571,7 +571,7 @@ export function herdrFreshCall(
 	if (backendArgs.some(containsControlChar)) return { ok: false, reason: "herdr-argv-control-character" };
 
 	// ── everything above this line leaves nothing behind ──────────────────────────────────
-	const splitRun = run(
+	const splitRun = await run(
 		buildHerdrSplitArgs({
 			parentPaneId: context.context.parentPaneId,
 			...(cwd === undefined ? {} : { cwd }),
@@ -591,11 +591,11 @@ export function herdrFreshCall(
 		// A freshly split pane holding an agent is not a pane we understand. Starting into it
 		// would either be refused by herdr as busy or, worse, land beside somebody else's
 		// sibling. Declining here also means the reclaim below correctly REFUSES to close it.
-		return { ok: false, reason: "herdr-split-pane-occupied", recovery: reclaim(pane, run) };
+		return { ok: false, reason: "herdr-split-pane-occupied", recovery: await reclaim(pane, run) };
 	}
 
 	const agentName = herdrAgentNameFromNonce(nonce);
-	const startRun = run(
+	const startRun = await run(
 		buildHerdrAgentStartArgs({
 			agentName,
 			kind: HERDR_AGENT_KIND[backend],
@@ -608,12 +608,12 @@ export function herdrFreshCall(
 			ok: false,
 			reason: "herdr-agent-start-failed",
 			...errorCode(startRun.stderr),
-			recovery: reclaim(pane, run),
+			recovery: await reclaim(pane, run),
 		};
 	}
 	const started = parseHerdrAgentStartResponse(startRun.stdout);
 	if (started === null) {
-		return { ok: false, reason: "herdr-agent-start-unparsable", recovery: reclaim(pane, run) };
+		return { ok: false, reason: "herdr-agent-start-unparsable", recovery: await reclaim(pane, run) };
 	}
 	// EVERY reclaim below starts from the SPLIT receipt, never from what the start reported: if
 	// those two disagree, the split receipt is the only coordinate we have authority over.
@@ -621,18 +621,18 @@ export function herdrFreshCall(
 		// Readable, and actionable — so it is not folded into `unparsable`. Something started
 		// somewhere other than the pane we opened, and a green receipt would have pointed the
 		// caller at a coordinate that never held their sibling.
-		return { ok: false, reason: "herdr-agent-start-pane-drift", recovery: reclaim(pane, run) };
+		return { ok: false, reason: "herdr-agent-start-pane-drift", recovery: await reclaim(pane, run) };
 	}
 	if (!started.pane.hasAgentSession) {
 		// herdr's own start path waits for detection before returning, so a success with no
 		// session reference means we were told about a launch that nobody can identify. The
 		// VALUE stays unread here — presence is the whole claim.
-		return { ok: false, reason: "herdr-agent-start-witness-missing", recovery: reclaim(pane, run) };
+		return { ok: false, reason: "herdr-agent-start-witness-missing", recovery: await reclaim(pane, run) };
 	}
 	if (!argvMatchesRequest(started.argv, backend, backendArgs)) {
 		// The framing is the argv. A sibling started with a different one is a sibling we did not
 		// compose, and nothing downstream would ever reveal it.
-		return { ok: false, reason: "herdr-agent-start-argv-drift", recovery: reclaim(pane, run) };
+		return { ok: false, reason: "herdr-agent-start-argv-drift", recovery: await reclaim(pane, run) };
 	}
 
 	return {
@@ -669,15 +669,15 @@ function unknownPane(): HerdrRecovery {
 }
 
 /** Reclaim the pane we opened — conditionally, or not at all. */
-function reclaim(pane: HerdrPaneFacts, run: HerdrRun): HerdrRecovery {
-	const getRun = run(buildHerdrPaneGetArgs(pane.paneId));
+async function reclaim(pane: HerdrPaneFacts, run: HerdrRun): Promise<HerdrRecovery> {
+	const getRun = await run(buildHerdrPaneGetArgs(pane.paneId));
 	const decision = decideConditionalClose(
 		pane,
 		getRun.status === 0 ? parseHerdrPaneGetResponse(getRun.stdout) : null,
 		getRun.status !== 0,
 	);
 	if (!decision.close) return { outcome: "orphan-unreclaimed", paneId: pane.paneId, reason: decision.reason };
-	const closeRun = run(buildHerdrPaneCloseArgs(pane.paneId));
+	const closeRun = await run(buildHerdrPaneCloseArgs(pane.paneId));
 	if (closeRun.status !== 0) return { outcome: "orphan-unreclaimed", paneId: pane.paneId, reason: "close-failed" };
 	return { outcome: "closed", paneId: pane.paneId, terminalId: pane.terminalId };
 }
@@ -771,37 +771,114 @@ export function renderHerdrFreshCall(result: HerdrFreshCallResult): { text: stri
 export const HERDR_START_TIMEOUT_MS = 300_000;
 export const HERDR_CLI_TIMEOUT_MS = 30_000;
 
+/** How much of one herdr reply we are willing to hold. Every verb on this rail answers with one
+ * JSON object; a stream larger than this is not a reply we can parse, and an unbounded buffer would
+ * let a runaway child take the caller's memory with it. Overflow is reported as the same
+ * nonzero-status shape as any other failure rather than truncated into a parse we would believe. */
+export const HERDR_MAX_OUTPUT_BYTES = 8 * 1024 * 1024;
+
+/** The three bounds one herdr call runs under. Defaulted from the constants above; injectable only
+ * so a gate can reach the kill and the cap on a REAL child process quickly. */
+export interface HerdrRunnerBounds {
+	readonly startMs: number;
+	readonly cliMs: number;
+	readonly maxOutputBytes: number;
+}
+
 /**
- * The production runner: argv array, no shell, explicit env, bounded.
+ * The production runner: argv array, no shell, explicit env, bounded — and ASYNCHRONOUS.
+ *
+ * WHY IT MUST NOT BLOCK `[측정 2026-09-14, C4 첫 LIVE]`. The first thing a sibling does is call its
+ * caller back on the caller's own control socket. On this rail the caller is, at that exact moment,
+ * inside `agent start` waiting for herdr to report readiness — up to 300s. A SYNCHRONOUS child wait
+ * holds the caller's event loop for that whole window, so the callback cannot be read, the sender
+ * times out and hangs up, and the caller's late reply then lands on a socket whose peer is gone.
+ * The runner is therefore async: the child runs while the loop keeps serving sockets and timers.
  *
  * A spawn that never produced an exit status (binary missing, timeout, signal) is mapped to a
  * nonzero status with the failure on stderr — the SAME shape herdr's own error path produces, so
  * the rail above has one thing to read. Nothing here looks at a terminal.
+ *
+ * The timeout KILLS: a bound that only stops waiting would leave the child holding a pane while we
+ * report it gone. SIGKILL, because a bound we cannot enforce is not a bound. Exactly one settle —
+ * `close`, `error` and the timeout all race, and whichever arrives first is the only answer.
  */
-export function createHerdrRunner(bin: string, env: NodeJS.ProcessEnv, spawn: SpawnSyncFn): HerdrRun {
+export function createHerdrRunner(
+	bin: string,
+	env: NodeJS.ProcessEnv,
+	spawn: SpawnFn,
+	// The production bounds ARE the exported constants; this parameter exists so a gate can prove
+	// the kill and the cap on a real child within a gate's patience instead of waiting 30 seconds
+	// for them. The composition root passes nothing, and a structural cell keeps it that way — a
+	// caller who could shorten the start bound could kill a launch herdr was still waiting on.
+	bounds: HerdrRunnerBounds = {
+		startMs: HERDR_START_TIMEOUT_MS,
+		cliMs: HERDR_CLI_TIMEOUT_MS,
+		maxOutputBytes: HERDR_MAX_OUTPUT_BYTES,
+	},
+): HerdrRun {
 	return (args) => {
-		const timeout = args[0] === "agent" && args[1] === "start" ? HERDR_START_TIMEOUT_MS : HERDR_CLI_TIMEOUT_MS;
-		const run = spawn(bin, [...args], { encoding: "utf8", env, timeout, shell: false });
-		if (run.error !== undefined && run.error !== null) {
-			return { status: 1, stdout: "", stderr: `herdr ${args.join(" ")}: ${run.error.message}` };
-		}
-		if (run.status === null || run.status === undefined) {
-			// Killed by a signal or the timeout: herdr said nothing, so we say that rather than
-			// inventing an exit code that would read as herdr's own refusal.
-			return {
-				status: 1,
-				stdout: run.stdout ?? "",
-				stderr: `herdr ${args.join(" ")}: no exit status (timeout ${timeout}ms or signal ${String(run.signal)})`,
+		const timeout = args[0] === "agent" && args[1] === "start" ? bounds.startMs : bounds.cliMs;
+		return new Promise((resolve) => {
+			let stdout = "";
+			let stderr = "";
+			let settled = false;
+			const child = spawn(bin, [...args], { env, shell: false });
+
+			const settle = (result: { status: number; stdout: string; stderr: string }) => {
+				if (settled) return;
+				settled = true;
+				clearTimeout(timer);
+				resolve(result);
 			};
-		}
-		return { status: run.status, stdout: run.stdout ?? "", stderr: run.stderr ?? "" };
+			const failed = (why: string, out = stdout) =>
+				settle({ status: 1, stdout: out, stderr: `herdr ${args.join(" ")}: ${why}` });
+
+			const timer = setTimeout(() => {
+				child.kill("SIGKILL");
+				failed(`no exit status (timeout ${timeout}ms or signal null)`);
+			}, timeout);
+			// The bound must not itself keep this process alive once the answer is in.
+			timer.unref?.();
+
+			const collect = (into: "stdout" | "stderr") => (chunk: Buffer | string) => {
+				const text = typeof chunk === "string" ? chunk : chunk.toString("utf8");
+				if (into === "stdout") stdout += text;
+				else stderr += text;
+				if (stdout.length + stderr.length <= bounds.maxOutputBytes) return;
+				child.kill("SIGKILL");
+				failed(`output exceeded ${bounds.maxOutputBytes} bytes`, "");
+			};
+			child.stdout?.on("data", collect("stdout"));
+			child.stderr?.on("data", collect("stderr"));
+
+			child.on("error", (error: Error) => failed(error.message, ""));
+			child.on("close", (code: number | null, signal: NodeJS.Signals | null) => {
+				if (code === null) {
+					// Killed by a signal: herdr said nothing, so we say that rather than inventing
+					// an exit code that would read as herdr's own refusal.
+					failed(`no exit status (timeout ${timeout}ms or signal ${String(signal)})`);
+					return;
+				}
+				settle({ status: code, stdout, stderr });
+			});
+		});
 	};
 }
 
-/** The narrow shape of `node:child_process` `spawnSync` this runner needs, injected so the gate can
- * drive it without a herdr binary. */
-export type SpawnSyncFn = (
+/** The narrow shape of `node:child_process` `spawn` this runner needs, injected so the gate can
+ * drive the REAL runner with a real child process and no herdr binary. Structural on purpose: the
+ * production value is node's own `spawn`, and nothing here is a stand-in for one. */
+export interface SpawnedHerdrProcess {
+	readonly stdout: { on(event: "data", listener: (chunk: Buffer | string) => void): unknown } | null;
+	readonly stderr: { on(event: "data", listener: (chunk: Buffer | string) => void): unknown } | null;
+	on(event: "error", listener: (error: Error) => void): unknown;
+	on(event: "close", listener: (code: number | null, signal: NodeJS.Signals | null) => void): unknown;
+	kill(signal?: NodeJS.Signals): boolean;
+}
+
+export type SpawnFn = (
 	bin: string,
 	args: string[],
-	opts: { encoding: "utf8"; env: NodeJS.ProcessEnv; timeout: number; shell: false },
-) => { status?: number | null; signal?: NodeJS.Signals | null; stdout?: string; stderr?: string; error?: Error | null };
+	opts: { env: NodeJS.ProcessEnv; shell: false },
+) => SpawnedHerdrProcess;

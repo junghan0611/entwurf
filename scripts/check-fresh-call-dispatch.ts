@@ -37,7 +37,7 @@ import {
 	renderDispatchedFreshCall,
 	selectFreshCallRail,
 } from "../pi-extensions/lib/fresh-call-dispatch.ts";
-import { renderHerdrFreshCall, type SpawnSyncFn } from "../pi-extensions/lib/herdr-fresh-call.ts";
+import { renderHerdrFreshCall, type SpawnedHerdrProcess, type SpawnFn } from "../pi-extensions/lib/herdr-fresh-call.ts";
 
 const REPO_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const read = (rel: string): string => readFileSync(path.join(REPO_DIR, rel), "utf8");
@@ -57,12 +57,29 @@ const HERDR_ENV = { HERDR_ENV: "1", HERDR_BIN_PATH: "/x/herdr", HERDR_PANE_ID: "
 const CALLER = "20260914T174741-2e9ba9";
 const REQUEST = { backend: "pi", model: "openai-codex/gpt-5.6-sol", task: "do it", callerGardenId: CALLER } as const;
 
-/** A spawn that records and refuses: nothing may actually run from a gate. */
-function recordingSpawn(): { spawn: SpawnSyncFn; calls: string[][] } {
+/** A spawn that records and refuses: nothing may actually run from a gate. It answers the way a
+ * real child does — asynchronously, through `close` — so the dispatcher is exercised against the
+ * same scheduling shape production gets, never a stand-in that answers before it returns. */
+function recordingSpawn(): { spawn: SpawnFn; calls: string[][] } {
 	const calls: string[][] = [];
-	const spawn: SpawnSyncFn = (bin, args) => {
+	const spawn: SpawnFn = (bin, args) => {
 		calls.push([bin, ...args]);
-		return { status: 1, stdout: "", stderr: "refused by the gate's spawn" };
+		const listeners = new Map<string, (...rest: never[]) => void>();
+		const stderr = {
+			on: (_event: "data", listener: (chunk: Buffer | string) => void) =>
+				setTimeout(() => listener("refused by the gate's spawn"), 0),
+		};
+		const child: SpawnedHerdrProcess = {
+			stdout: { on: () => undefined },
+			stderr,
+			on: (event: string, listener: (...rest: never[]) => void) => {
+				listeners.set(event, listener);
+				if (event === "close") setTimeout(() => listener(...([1, null] as never[])), 0);
+				return undefined;
+			},
+			kill: () => true,
+		};
+		return child;
 	};
 	return { spawn, calls };
 }
@@ -121,7 +138,7 @@ async function main(): Promise<void> {
 	// "called once, on one path", not "the word appears once".
 	const dispatchBody = dispatchCode.slice(dispatchCode.indexOf("export async function dispatchFreshCall"));
 	const preflightIndex = dispatchBody.indexOf("codexFreshPreflight(env)");
-	const herdrReturnIndex = dispatchBody.indexOf('return { rail: "herdr", result: herdrFreshCall(');
+	const herdrReturnIndex = dispatchBody.indexOf('return { rail: "herdr", result: await herdrFreshCall(');
 	ok(
 		"[QK:FCD-CODEX-PREFLIGHT-TMUX] the Codex capability preflight is called ONCE, on the tmux path only, after the herdr branch has already returned, and still answers before the composition — the pre-existing contract, now in one place instead of two",
 		preflightIndex > herdrReturnIndex &&
@@ -140,6 +157,17 @@ async function main(): Promise<void> {
 			(startCall === undefined ||
 				startCall.some((token) => token.includes("fresh-call-dispatch-test-nonce")) ||
 				nonceSpawn.calls.length > 0),
+	);
+
+	// ── the composition root holds no synchronous child authority ────────────────────────
+	ok(
+		"[QK:FCD-NO-SYNC-SPAWN] the composition root injects node's ASYNC spawn and names no synchronous child API — a `spawnSync` here would hold the caller's event loop for the whole of `agent start`, which is exactly when the sibling calls back — and it passes no bounds override, so production runs on the exported constants",
+		/import \{ spawn as spawnChildProcess \} from "node:child_process";/.test(dispatchCode) &&
+			!/\bspawnSync\b|\bSpawnSyncFn\b|\bexecSync\b|\bexecFileSync\b/.test(dispatchCode) &&
+			/createHerdrRunner\(context\.context\.bin, env, spawn \?\? \(spawnChildProcess as SpawnFn\)\)/.test(
+				dispatchCode,
+			) &&
+			/result: await herdrFreshCall\(/.test(dispatchCode),
 	);
 
 	// ── one composition root, two surfaces ───────────────────────────────────────────────
