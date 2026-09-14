@@ -1815,6 +1815,20 @@ check_herdr_fresh_call() {
   run_ts scripts/check-herdr-fresh-call.ts
 }
 
+check_herdr_sandbox() {
+  # REAL herdr acceptance for #116 C2a: a PRIVATE herdr server in a fully sandboxed
+  # HOME/XDG/PI_CODING_AGENT_DIR opens a pane, installs herdr's own pi integration, and
+  # starts a BLANK pi from ONE checkout package registration. Asserts the official witness
+  # triple, the strict path->native id join, exactly one sandbox V3 record, a control socket
+  # that answers the production probe, and the conditional-close decision in both directions
+  # (refuses a pane holding an agent, reclaims one we own). No fake herdr, no model turn, no
+  # credentials, no keystrokes; the fixture's `pi --approve` is a one-run authorisation that
+  # writes no trust state and never enters production argv. herdr is an OPTIONAL rail: an
+  # absent binary prints a named SKIP and exits 0, a PRESENT-but-incomplete rail FAILS, and
+  # ENTWURF_REQUIRE_HERDR=1 turns absence itself into a failure (CI admission is C2b).
+  run_ts scripts/check-herdr-sandbox.ts
+}
+
 check_entwurf_peers_surface() {
   # Deterministic gate for 0.11 Stage 0 step 4 (fact-provider slice 4c; #50 C4
   # re-author): the MCP entwurf_peers RENDER/PAYLOAD layer renderEntwurfPeers.
@@ -6207,6 +6221,9 @@ case "$cmd" in
     ;;
   check-herdr-fresh-call)
     check_herdr_fresh_call
+    ;;
+  check-herdr-sandbox)
+    check_herdr_sandbox
     ;;
   check-entwurf-peers-surface)
     check_entwurf_peers_surface

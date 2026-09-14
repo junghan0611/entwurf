@@ -149,7 +149,23 @@ pane split --pane <HERDR_PANE_ID> --direction down --no-focus [--cwd <literal>] 
 | 축 | 어디서 |
 |---|---|
 | argv 문법 · 인코딩 · 파싱 · 거절 · 회수 결정 · receipt 모양 | `scripts/check-herdr-fresh-call.ts` (결정론, herdr 바이너리 불필요) |
-| 실바이너리 격리 서버 | c2 — 샌드박스 `HOME`/`XDG`의 private 서버. **가짜 herdr 실행파일·가짜 서버는 만들지 않는다** |
+| 실바이너리 격리 서버 | `scripts/check-herdr-sandbox.ts` (C2a). 샌드박스 `HOME`/`XDG`/`PI_CODING_AGENT_DIR`의 private 서버 + 실제 `herdr integration install pi` + 빈 pi 기동. **가짜 herdr 실행파일·가짜 서버는 만들지 않는다** |
 | 콜백 왕복 | LIVE (모델 턴이 필요한 순간부터가 LIVE다) |
 
 `[측정]` 기록에 남은 비변이 CLI probe 하나: 존재하지 않는 pane으로 `agent start`를 불러 제어문자 판정이 pane 조회보다 앞선다는 것을 확인했다. 아무것도 만들지 않는 probe는 이 등급에서 허용된다.
+
+## 13. 게이트 admission — 없음은 SKIP, 깨짐은 FAIL
+
+`check-herdr-sandbox`는 herdr를 **선택적 레일**로 다룬다. 세 갈래뿐이다:
+
+| 상태 | 결과 |
+|---|---|
+| PATH에 herdr 없음 | `[entwurf:herdr-rail-skip]` 두 줄을 찍고 **exit 0**. 결정론 표면에는 제3의 결과가 없고, 조용한 통과는 초록을 거짓말로 만든다 |
+| herdr 없음 + `ENTWURF_REQUIRE_HERDR=1` | **FAIL**. 미래의 CI가 이 파일을 고치지 않고 부재를 빨강으로 바꾸는 손잡이 |
+| herdr 있는데 셀을 완주 못함(pi 부재 포함) | **FAIL.** 부재는 선택이지만 고장은 아니다 |
+
+**버전 경계**는 잰 것만 말한다: `herdr 0.9.x`가 아니면 **실패**하고 재측정을 요구한다. 이 문서가 그 경계를 소유하며, **entwurf setup은 herdr를 설치하지 않는다**(Hard Rule 17).
+
+**`--approve`는 픽스처 전용이다.** 게이트는 자기 샌드박스의 오퍼레이터이므로 그 한 번의 실행을 스스로 승인할 수 있다. 프로덕션 argv에는 절대 들어가지 않는다 — `project-trust-handler.ts`가 "에이전트는 스스로 신뢰를 승격할 수 없다"를 의도된 보안 비대칭으로 적어 두었고, 런처가 오퍼레이터 대신 승인하면 그 판단을 조용히 가져가는 것이 된다. `[측정]` `--approve`는 `trust.json`을 만들지 않는다.
+
+`[미결, C2b]` CI가 herdr를 **누가 어떤 버전으로** 설치하는가, 그리고 **SKIP을 초록으로 둘지**. 그리고 구조적 제약 하나: **스스로 SKIP하는 게이트는 뮤턴트를 실을 수 없다** — SKIP은 exit 0이고, herdr 없는 호스트에서는 모든 뮤턴트가 SURVIVED로 읽힌다. 뮤턴트 lane은 admission이 정해진 뒤에 붙인다.
