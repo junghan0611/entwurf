@@ -9,6 +9,10 @@
  *      (a pi-alive citizen → control-socket execute; acquireLock spy saw {dir: lockDir}).
  *   B. control `sendOverSocket` builds the RpcSendCommand (type/message/mode/wants_reply/
  *      sender) and maps response.success→outcome; the hand releases under `lockDir`.
+ *   B2. #115 — the SAME closure carries `response.error` onto the RpcSendResult, so a
+ *      completed-but-refused RPC reaches the caller as `rejected` WITH the receiver's
+ *      named reason. Dropping that one field renders a reasonless reject, which is the
+ *      field symptom; no other deterministic gate holds this wiring.
  *   D. the meta-mailbox hand enqueues onto the wired sessionsDir/mailboxDir.
  *   E. Q3 + Q5 — a dead control send re-resolves (claude-code citizen) to the mailbox and
  *      enqueues through the SAME sendViaMailbox instance (same enqueue spy) on the SAME dirs
@@ -60,6 +64,10 @@ const LOCK_DIR = "/fake/locks";
 const SESSIONS_DIR = "/fake/sessions";
 const MAILBOX_DIR = "/fake/mailbox";
 const CONTROL_DIR = "/fake/ctl";
+/** The named in-band refusal a real receiver answers with while it compacts (#115).
+ * It is a plain opaque string here on purpose: the production seam must carry WHATEVER
+ * reason the receiver named, not a vocabulary this gate recognises. */
+const IN_BAND_REJECT_REASON = "compacting";
 
 function identity(backend: MetaIdentity["backend"], gardenId = GID): MetaIdentity {
 	return {
@@ -184,7 +192,10 @@ function makeSpiedFactory(over: {
 	recordExists?: boolean;
 	inspectKind?: TargetSocketInspection["kind"];
 	probe?: "alive" | "dead" | "indeterminate";
-	rpc?: "success" | "dead-throw";
+	/** `in-band-reject` (#115): the RPC COMPLETES and the receiver refuses in band
+	 * (`{success:false,error:"compacting"}`) — distinct from `dead-throw`, which never
+	 * reaches a response at all. It is the only arm that carries `response.error`. */
+	rpc?: "success" | "dead-throw" | "in-band-reject";
 	classifyDead?: boolean;
 	/** #50 C3 — a caller with no authoritative sender (senderProvider → undefined). */
 	noSender?: boolean;
@@ -266,6 +277,11 @@ function makeSpiedFactory(over: {
 					const e = new Error("refused") as NodeJS.ErrnoException;
 					e.code = "ECONNREFUSED";
 					throw e;
+				}
+				if (over.rpc === "in-band-reject") {
+					return {
+						response: { type: "response", command: command.type, success: false, error: IN_BAND_REJECT_REASON },
+					};
 				}
 				return { response: { type: "response", command: command.type, success: true } };
 			},
@@ -529,6 +545,31 @@ async function main(): Promise<void> {
 			"B: control hand released under the wired lockDir",
 			spies.release.length === 1 && spies.release[0].dir === LOCK_DIR,
 		);
+	}
+
+	// ── B2: #115 — the production seam CARRIES the receiver's named in-band reason ─
+	// B above proves the success half of the map. This is the other half, and it is the
+	// half the field symptom lived in: a completed RPC answering `{success:false,
+	// error:"compacting"}`. The reason has to cross THREE production hops the fake cannot
+	// short-circuit — `response.error` → `RpcSendResult.error` (the factory's own
+	// `sendOverSocket` closure) → `driveSend`'s `inBandRejected` → the
+	// `executeControlSocketSend` result — so deleting the factory's `error:` wiring alone
+	// strands the reason and this cell goes red. `outcome` alone is NOT the assertion:
+	// a bare `rejected` is exactly what the defect rendered.
+	{
+		const { deps, spies } = makeSpiedFactory({ rpc: "in-band-reject" });
+		const res = await deps.executor.sendControl(CONTROL_PLAN, lockClaim());
+		ok("B2: in-band {success:false} → outcome 'rejected' (not failed, not sent)", res.outcome === "rejected");
+		ok(
+			"B2: [QK:V2PROD-INBAND-ERROR-WIRED] response.error reaches the send result verbatim",
+			res.rejectReason === IN_BAND_REJECT_REASON,
+		);
+		ok("B2: an in-band reject is a COMPLETED rpc — the socket hand ran once", spies.rpc.length === 1);
+		ok(
+			"B2: a rejected send still releases under the wired lockDir",
+			spies.release.length === 1 && spies.release[0].dir === LOCK_DIR,
+		);
+		ok("B2: an in-band reject never falls back to the mailbox", spies.enqueue.length === 0);
 	}
 
 	// ── C2: #50 C3 — the dormant rail carries the caller edge (<sender_info>) ──
