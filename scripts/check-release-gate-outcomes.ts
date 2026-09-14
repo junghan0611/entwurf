@@ -304,6 +304,11 @@ function runSubcommand(sub: string, env: Record<string, string | undefined>): { 
 		// NOT waived: its direct call stays required for a Cortex-rail cut, and running
 		// it without the connection still reports protocol SKIP rather than a pass.
 		"smoke-acp-cortex-live": ["VERIFY.md", "The release aggregate does not re-certify Cortex"],
+		// #116 C4: first evidence precedes promotion. The herdr rail's LIVE acceptance exists and
+		// runs on demand, but a rail whose first real acceptance run is days old has not earned a
+		// place in the aggregate that blocks every cut — and herdr is an OPTIONAL rail, so a cut
+		// on a host without it would block for a capability the product does not require.
+		"smoke-herdr-fresh-call-live": ["VERIFY.md", "The release aggregate does not yet require the herdr rail"],
 	};
 
 	const allLive = globSync("scripts/smoke-*live*.{ts,sh}", { cwd: REPO_DIR })

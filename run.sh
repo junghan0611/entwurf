@@ -1854,6 +1854,22 @@ check_fresh_call_dispatch() {
   run_ts scripts/check-fresh-call-dispatch.ts
 }
 
+smoke_herdr_fresh_call_live() {
+  # LIVE acceptance for the #116 herdr rail: a REAL caller that is itself inside a herdr pane
+  # invokes the REAL PUBLIC entwurf_fresh_call, and a REAL child's first model action is the
+  # nonce callback. Opt-in (LIVE=1), four model turns, one private herdr server PER CELL —
+  # herdr's socket follows XDG_CONFIG_HOME and each cell is fenced into its own.
+  # `[측정 2026-09-14]` BOTH runtimes keep the operator's REAL HOME and real auth roots: a pi
+  # given a fixture HOME dies before readiness (an installed extension resolves its npm
+  # dependency through $HOME) and a claude given one enters first-run onboarding. Only
+  # Entwurf-OWNED writes are fenced into the fixture (XDG roots, the meta roots, the v2 lock
+  # dir). Evidence is source receipts only, in two named grades: pi from its own vendor
+  # transcript, claude from the runtime's own entwurf-bridge MCP activity log joined by exact
+  # sessionId plus entwurf's mailbox artifact and hook journal — never screen text, never a
+  # keystroke. The operator's herdr panes are snapshotted before and after.
+  run_ts scripts/smoke-herdr-fresh-call-live.ts
+}
+
 check_entwurf_peers_surface() {
   # Deterministic gate for 0.11 Stage 0 step 4 (fact-provider slice 4c; #50 C4
   # re-author): the MCP entwurf_peers RENDER/PAYLOAD layer renderEntwurfPeers.
@@ -6255,6 +6271,9 @@ case "$cmd" in
     ;;
   check-fresh-call-dispatch)
     check_fresh_call_dispatch
+    ;;
+  smoke-herdr-fresh-call-live)
+    smoke_herdr_fresh_call_live
     ;;
   check-entwurf-peers-surface)
     check_entwurf_peers_surface
