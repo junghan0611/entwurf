@@ -5,7 +5,7 @@
 		{
 			"claim": "FRESHCALL-PI-ARGV-PROMPT-FIRST",
 			"title": "pi gets the flag before the prompt again — the measured shape that opens a window whose first turn never runs",
-			"subject": "pi-extensions/lib/mux-fresh-call.ts",
+			"subject": "pi-extensions/lib/fresh-call-composition.ts",
 			"find": ["\t\t\treturn [composition.prompt, \"--entwurf-control\", \"--model\", model];"],
 			"replace": ["\t\t\treturn [\"--entwurf-control\", composition.prompt, \"--model\", model];"],
 			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
@@ -16,7 +16,7 @@
 		{
 			"claim": "FRESHCALL-CLAUDE-ARGV-EQUALS-FORM",
 			"title": "claude-code goes back to the variadic space form, which swallows the prompt as an option value",
-			"subject": "pi-extensions/lib/mux-fresh-call.ts",
+			"subject": "pi-extensions/lib/fresh-call-composition.ts",
 			"find": [
 				"\t\t\treturn [composition.prompt, `--allowedTools=${FRESH_CALL_CALLBACK_TOOL[\"claude-code\"]}`, `--model=${model}`];"
 			],
@@ -31,7 +31,7 @@
 		{
 			"claim": "FRESHCALL-PI-MODEL-ARGV",
 			"title": "pi drops its measured two-token model option and silently resolves its ambient default again",
-			"subject": "pi-extensions/lib/mux-fresh-call.ts",
+			"subject": "pi-extensions/lib/fresh-call-composition.ts",
 			"find": ["\t\t\treturn [composition.prompt, \"--entwurf-control\", \"--model\", model];"],
 			"replace": ["\t\t\treturn [composition.prompt, \"--entwurf-control\"];"],
 			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
@@ -42,7 +42,7 @@
 		{
 			"claim": "FRESHCALL-PI-MODEL-DIALECT",
 			"title": "pi model argv is unified with Claude Code into the equals form that the real Pi parser rejects",
-			"subject": "pi-extensions/lib/mux-fresh-call.ts",
+			"subject": "pi-extensions/lib/fresh-call-composition.ts",
 			"find": ["\t\t\treturn [composition.prompt, \"--entwurf-control\", \"--model\", model];"],
 			"replace": ["\t\t\treturn [composition.prompt, \"--entwurf-control\", `--model=${model}`];"],
 			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
@@ -53,7 +53,7 @@
 		{
 			"claim": "FRESHCALL-CLAUDE-MODEL-ARGV",
 			"title": "Claude Code drops the explicit model token and silently resolves its ambient Opus default again",
-			"subject": "pi-extensions/lib/mux-fresh-call.ts",
+			"subject": "pi-extensions/lib/fresh-call-composition.ts",
 			"find": [
 				"\t\t\treturn [composition.prompt, `--allowedTools=${FRESH_CALL_CALLBACK_TOOL[\"claude-code\"]}`, `--model=${model}`];"
 			],
@@ -66,7 +66,7 @@
 		{
 			"claim": "FRESHCALL-CALLBACK-PRECEDES-TASK",
 			"title": "the task is framed before the callback instruction, so a sibling that stalls in the task never names itself",
-			"subject": "pi-extensions/lib/mux-fresh-call.ts",
+			"subject": "pi-extensions/lib/fresh-call-composition.ts",
 			"find": ["\t\t`FIRST ACTION, before reading files or anything else: call ${tool} with ` +"],
 			"replace": ["\t\t`FINAL ACTION, after completing the task: call ${tool} with ` +"],
 			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
@@ -239,7 +239,7 @@
 		{
 			"claim": "FRESHCALL-COPILOT-ARGV-INTERACTIVE",
 			"title": "the Copilot prompt rides -p instead of --interactive — the turn runs and the CLI EXITS, closing the window on a sibling that was supposed to stay open",
-			"subject": "pi-extensions/lib/mux-fresh-call.ts",
+			"subject": "pi-extensions/lib/fresh-call-composition.ts",
 			"find": ["\t\t\treturn [\"copilot\", \"--interactive\", composition.prompt, \"--model\", model, \"--yolo\"];"],
 			"replace": ["\t\t\treturn [\"copilot\", \"-p\", composition.prompt, \"--model\", model, \"--yolo\"];"],
 			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
@@ -250,7 +250,7 @@
 		{
 			"claim": "FRESHCALL-COPILOT-MODEL-ARGV",
 			"title": "the Copilot argv drops the explicit model — the managed launcher then injects `--model auto` and the caller's model choice is silently discarded",
-			"subject": "pi-extensions/lib/mux-fresh-call.ts",
+			"subject": "pi-extensions/lib/fresh-call-composition.ts",
 			"find": ["\t\t\treturn [\"copilot\", \"--interactive\", composition.prompt, \"--model\", model, \"--yolo\"];"],
 			"replace": ["\t\t\treturn [\"copilot\", \"--interactive\", composition.prompt, \"--yolo\"];"],
 			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
@@ -261,7 +261,7 @@
 		{
 			"claim": "FRESHCALL-COPILOT-YOLO-POLICY",
 			"title": "the policy token narrows back to the callback-only --allow-tool grant — the exact regression GLG measured on 2026-08-25: no YOLO in the footer, a confirmation prompt at every task tool, an impractical sibling",
-			"subject": "pi-extensions/lib/mux-fresh-call.ts",
+			"subject": "pi-extensions/lib/fresh-call-composition.ts",
 			"find": ["\t\t\treturn [\"copilot\", \"--interactive\", composition.prompt, \"--model\", model, \"--yolo\"];"],
 			"replace": [
 				"\t\t\treturn [\"copilot\", \"--interactive\", composition.prompt, \"--model\", model, \"--allow-tool=entwurf-bridge(entwurf_v2)\"];"
@@ -274,7 +274,7 @@
 		{
 			"claim": "FRESHCALL-COPILOT-CALLBACK-TOOL",
 			"title": "the Copilot callback names Claude Code's `mcp__server__tool` spelling — a dialect copied instead of measured, and the whole first turn is spent looking for a tool that is not there",
-			"subject": "pi-extensions/lib/mux-fresh-call.ts",
+			"subject": "pi-extensions/lib/fresh-call-composition.ts",
 			"find": ["\tcopilot: \"entwurf-bridge-entwurf_v2\","],
 			"replace": ["\tcopilot: \"mcp__entwurf-bridge__entwurf_v2\","],
 			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
@@ -420,7 +420,7 @@
 		{
 			"claim": "FRESHCALL-COPILOT-EXPLICIT-POLICY",
 			"title": "the composition stops stating its policy and silently leans on the launcher to inject --yolo — the effective profile survives but the fresh contract loses its explicit permission statement",
-			"subject": "pi-extensions/lib/mux-fresh-call.ts",
+			"subject": "pi-extensions/lib/fresh-call-composition.ts",
 			"find": ["\t\t\treturn [\"copilot\", \"--interactive\", composition.prompt, \"--model\", model, \"--yolo\"];"],
 			"replace": ["\t\t\treturn [\"copilot\", \"--interactive\", composition.prompt, \"--model\", model];"],
 			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
@@ -530,6 +530,56 @@
 			"timeoutSeconds": 180,
 			"signature": "[QK:FRESHCALL-PLACEMENT-SURFACE-PARITY]",
 			"signatureSource": "test/fresh-call-surfaces.contract.test.ts"
+		},
+		{
+			"claim": "FRESHCOMP-NODE-ONLY-IMPORTS",
+			"title": "the composition leaf takes a repo-local import again — one is all it takes for the tmux rail to be back behind a rail that has no tmux",
+			"subject": "pi-extensions/lib/fresh-call-composition.ts",
+			"find": ["import { randomBytes } from \"node:crypto\";"],
+			"replace": ["import { randomBytes } from \"node:crypto\";\nimport { runTmux } from \"./mux-placement.ts\";"],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:FRESHCOMP-NODE-ONLY-IMPORTS]",
+			"signatureSource": "test/fresh-call-composition.contract.test.ts"
+		},
+		{
+			"claim": "FRESHCOMP-TMUX-OPENING-LINE",
+			"title": "the extraction quietly reworded the tmux rail's first sentence — the sibling is told where it is by a refactor rather than by a measurement",
+			"subject": "pi-extensions/lib/mux-fresh-call.ts",
+			"find": ["\t\"You are a fresh visible citizen that entwurf opened in the operator's tmux session.\";"],
+			"replace": ["\t\"You are a fresh visible citizen that entwurf opened in a terminal pane.\";"],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:FRESHCOMP-TMUX-OPENING-LINE]",
+			"signatureSource": "test/fresh-call-composition.contract.test.ts"
+		},
+		{
+			"claim": "FRESHCOMP-RAIL-OWNS-PLACEMENT-SENTENCE",
+			"title": "the leaf invents a placement sentence when the rail supplies none — a default that is true on one rail is a lie on the other",
+			"subject": "pi-extensions/lib/fresh-call-composition.ts",
+			"find": [
+				"\tif (params.openingLine.length === 0) {\n\t\tthrow new Error(\"fresh-call composition: openingLine is empty — the rail must state where it placed the sibling\");\n\t}"
+			],
+			"replace": [
+				"\tconst openingLine =\n\t\tparams.openingLine.length === 0\n\t\t\t? \"You are a fresh visible citizen that entwurf opened in the operator's tmux session.\"\n\t\t\t: params.openingLine;\n\tvoid openingLine;"
+			],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:FRESHCOMP-RAIL-OWNS-PLACEMENT-SENTENCE]",
+			"signatureSource": "test/fresh-call-composition.contract.test.ts"
+		},
+		{
+			"claim": "FRESHCOMP-CODEX-SOCKET-LAZY",
+			"title": "the injected Codex socket is resolved for every backend — a host with no Codex home stops opening pi and claude siblings, which the inline call never did",
+			"subject": "pi-extensions/lib/fresh-call-composition.ts",
+			"find": ["): string[] {\n\tswitch (backend) {\n\t\tcase \"pi\":"],
+			"replace": [
+				"): string[] {\n\tconst eager = resolveCodexSocketPath();\n\tvoid eager;\n\tswitch (backend) {\n\t\tcase \"pi\":"
+			],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:FRESHCOMP-CODEX-SOCKET-LAZY]",
+			"signatureSource": "test/fresh-call-composition.contract.test.ts"
 		}
 	]
 }

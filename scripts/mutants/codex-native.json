@@ -46,7 +46,7 @@
 		{
 			"claim": "FRESHCALL-CODEX-ARGV",
 			"title": "Codex fresh launch drops the remote app-server attachment flag and opens an unrelated local session",
-			"subject": "pi-extensions/lib/mux-fresh-call.ts",
+			"subject": "pi-extensions/lib/fresh-call-composition.ts",
 			"find": ["\t\t\t\t\"--remote\","],
 			"replace": ["\t\t\t\t\"--resume\","],
 			"gate": ["bash", "run.sh", "check-mux-fresh-call"],

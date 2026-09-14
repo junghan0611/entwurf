@@ -5,7 +5,7 @@
 		{
 			"claim": "ADMISSION-FRESH-PARITY",
 			"title": "a post-#82 harness admitted as a full D6 citizen while entwurf_fresh_call cannot open it — the exact state the Bundle A+B candidate shipped in, where every gate was green and only prose said the backend was unsupported. This is the defect the whole gate exists for: without it, an `unsupported` note reads as a partial-release permit",
-			"subject": "pi-extensions/lib/mux-fresh-call.ts",
+			"subject": "pi-extensions/lib/fresh-call-composition.ts",
 			"find": [
 				"export const FRESH_CALL_BACKENDS = [\"pi\", \"claude-code\", \"copilot\", \"omp\", \"codex\"] as const;"
 			],
@@ -31,7 +31,7 @@
 		{
 			"claim": "FRESHCALL-OMP-EXPLICIT-POLICY",
 			"title": "the permission width dropped from the omp argv. NOTHING OBSERVABLE FAILS: omp 18.0.0's schema default for tools.approvalMode is ALREADY yolo, so the sibling still boots and a LIVE acceptance still passes — the argv has simply started depending on a vendor default and on whatever the operator's config happens to say. This is the drift step 9 clause 2 forbids, and it is invisible to every test that only watches behaviour",
-			"subject": "pi-extensions/lib/mux-fresh-call.ts",
+			"subject": "pi-extensions/lib/fresh-call-composition.ts",
 			"find": [
 				"\t\t\treturn [`--${OMP_BOOTSTRAP_FLAG}`, composition.bootstrapPayload, \"--model\", model, \"--approval-mode\", \"yolo\"];"
 			],
@@ -44,7 +44,7 @@
 		{
 			"claim": "FRESHCALL-OMP-CALLBACK-TOOL-DIALECT",
 			"title": "the callback tool name spelled the way a reader expects instead of the way omp mints it — `entwurf_v2` keeps its digit, which omp's sanitizer charset [a-z_] eats. The sibling is told to call a tool that does not exist in its session, so the whole first turn is spent and no address ever comes back. A launch receipt still prints",
-			"subject": "pi-extensions/lib/mux-fresh-call.ts",
+			"subject": "pi-extensions/lib/fresh-call-composition.ts",
 			"find": ["\tomp: \"mcp__entwurf_bridge_entwurf_v\","],
 			"replace": ["\tomp: \"mcp__entwurf_bridge_entwurf_v2\","],
 			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
@@ -129,7 +129,7 @@
 		{
 			"claim": "FRESHCALL-OMP-ARGV-BOOTSTRAP-FLAG",
 			"title": "the positional first-turn prompt put back on the omp argv beside the bootstrap flag — the exact shape the first Bundle C candidate shipped. `[LIVE 2026-08-30]` it opens a window whose turn starts ~830ms BEFORE the callback tool exists, and the sibling answers the literal text `ACK` with zero tool calls. It parses, it launches, and the caller times out at 240s: the failure is invisible to anything that only checks that argv is well-formed",
-			"subject": "pi-extensions/lib/mux-fresh-call.ts",
+			"subject": "pi-extensions/lib/fresh-call-composition.ts",
 			"find": [
 				"\t\t\treturn [`--${OMP_BOOTSTRAP_FLAG}`, composition.bootstrapPayload, \"--model\", model, \"--approval-mode\", \"yolo\"];"
 			],

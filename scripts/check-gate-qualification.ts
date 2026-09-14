@@ -846,7 +846,7 @@ let manifestCount: number;
 		"meta-identity": 4,
 		"meta-retire": 3,
 		"mux-boundary": 16,
-		"mux-fresh-call": 45,
+		"mux-fresh-call": 49,
 		"mux-launcher-fence": 7,
 		"mux-parent-artifact": 3,
 		"pack-install": 2,
