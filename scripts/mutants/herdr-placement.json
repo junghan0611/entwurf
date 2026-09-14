@@ -17,8 +17,12 @@
 			"claim": "HP-JOIN-CLAUDE-EXACT",
 			"title": "joining the claude axis on a PREFIX instead of the whole value lets one citizen attach to another citizen's pane — the exact-key discipline that makes this evidence rather than a guess (#116 S1)",
 			"subject": "pi-extensions/lib/herdr-placement.ts",
-			"find": ["\t\t\treturn row.sessionValue;"],
-			"replace": ["\t\t\treturn row.sessionValue.slice(0, 8);"],
+			"find": [
+				"\tconst nativeSessionId = official.kind === \"id\" ? row.sessionValue : piNativeSessionIdFromPath(row.sessionValue);"
+			],
+			"replace": [
+				"\tconst nativeSessionId =\n\t\tofficial.kind === \"id\" ? row.sessionValue.slice(0, 8) : piNativeSessionIdFromPath(row.sessionValue);"
+			],
 			"gate": ["bash", "run.sh", "check-herdr-placement"],
 			"timeoutSeconds": 60,
 			"signature": "[QK:HP-JOIN-CLAUDE-EXACT]",
@@ -39,16 +43,8 @@
 			"claim": "HP-JOIN-NEVER-GUESSES",
 			"title": "coercing an UNMEASURED agent_session kind into the claude rule invents a join rule for a herdr version nobody here has run (#116 S1)",
 			"subject": "pi-extensions/lib/herdr-placement.ts",
-			"find": [
-				"\t\t\t// An unmeasured `kind`. Skipped on purpose: coercing it would invent a rule",
-				"\t\t\t// for a herdr version nobody here has run.",
-				"\t\t\treturn null;"
-			],
-			"replace": [
-				"\t\t\t// An unmeasured `kind`. Skipped on purpose: coercing it would invent a rule",
-				"\t\t\t// for a herdr version nobody here has run.",
-				"\t\t\treturn row.sessionValue;"
-			],
+			"find": ["\tif (row.sessionKind !== official.kind) return null;"],
+			"replace": ["\tif (false && row.sessionKind !== official.kind) return null;"],
 			"gate": ["bash", "run.sh", "check-herdr-placement"],
 			"timeoutSeconds": 60,
 			"signature": "[QK:HP-JOIN-NEVER-GUESSES]",
@@ -102,6 +98,41 @@
 			"gate": ["bash", "run.sh", "check-herdr-placement"],
 			"timeoutSeconds": 60,
 			"signature": "[QK:HP-PLACEMENT-NOT-DISPATCH]",
+			"signatureSource": "scripts/check-herdr-placement.ts"
+		},
+		{
+			"claim": "HP-JOIN-OFFICIAL-ONLY",
+			"title": "reading a session report without checking WHO reported it lets a third-party integration stand in for the placement owner — and that the placement owner reported it is the whole reason mux-launch-rail section 7 admits this join as exact evidence (#116 S1)",
+			"subject": "pi-extensions/lib/herdr-placement.ts",
+			"find": ["\tif (row.agent !== official.agent) return null;"],
+			"replace": ["\tif (false && row.agent !== official.agent) return null;"],
+			"gate": ["bash", "run.sh", "check-herdr-placement"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:HP-JOIN-OFFICIAL-ONLY]",
+			"signatureSource": "scripts/check-herdr-placement.ts"
+		},
+		{
+			"claim": "HP-JOIN-BACKEND-BOUND",
+			"title": "handing a pane to a citizen whose backend the reporting integration does not speak for turns a native-id collision into a confident wrong placement (#116 S1)",
+			"subject": "pi-extensions/lib/herdr-placement.ts",
+			"find": [
+				"\t\treturn entry.backend === identity.backend ? { kind: \"herdr-pane\", paneId: entry.paneId } : UNOBSERVED_PLACEMENT;"
+			],
+			"replace": ["\t\treturn { kind: \"herdr-pane\", paneId: entry.paneId };"],
+			"gate": ["bash", "run.sh", "check-herdr-placement"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:HP-JOIN-BACKEND-BOUND]",
+			"signatureSource": "scripts/check-herdr-placement.ts"
+		},
+		{
+			"claim": "HP-DECLINED-IS-UNOBSERVED",
+			"title": "reporting none after declining to read part of the listing claims a complete negative read that never happened — the report we refused might have been that citizen's (#116 S1)",
+			"subject": "pi-extensions/lib/herdr-placement.ts",
+			"find": ["\treturn index.declinedReports > 0 ? UNOBSERVED_PLACEMENT : NO_PLACEMENT;"],
+			"replace": ["\treturn NO_PLACEMENT;"],
+			"gate": ["bash", "run.sh", "check-herdr-placement"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:HP-DECLINED-IS-UNOBSERVED]",
 			"signatureSource": "scripts/check-herdr-placement.ts"
 		}
 	]

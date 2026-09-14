@@ -840,7 +840,7 @@ let manifestCount: number;
 		"entwurf-peers": 1,
 		"fresh-cut": 3,
 		"gate-qualification": 2,
-		"herdr-placement": 8,
+		"herdr-placement": 11,
 		"meta-facts": 4,
 		"meta-hook-session-switch": 17,
 		"meta-identity": 4,

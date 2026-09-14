@@ -19,6 +19,11 @@
  *   HP-JOIN-PI-FILENAME      a `kind:"path"` pane joins only on a well-formed uuid tail
  *   HP-JOIN-NEVER-GUESSES    an unmeasured kind / malformed name yields NO key, never a
  *                            plausible substring
+ *   HP-JOIN-OFFICIAL-ONLY    only an OFFICIAL herdr integration report is read — the
+ *                            agent/source pair is checked, not discarded
+ *   HP-JOIN-BACKEND-BOUND    a report speaks only for the backend it belongs to
+ *   HP-DECLINED-IS-UNOBSERVED  while any report was declined, a non-join says `unobserved`
+ *                            rather than claiming a complete negative read
  *   HP-AMBIGUOUS-NOT-A-PANE  two panes claiming one key resolve to `ambiguous`, never to
  *                            one of them
  *   HP-UNREADABLE-IS-UNOBSERVED  a payload we cannot read means nobody looked, never
@@ -75,8 +80,16 @@ function identity(nativeSessionId: string, backend: MetaIdentity["backend"] = "c
 	};
 }
 
-function row(paneId: string, kind: HerdrPaneRow["sessionKind"], value: string | null): HerdrPaneRow {
-	return { paneId, sessionKind: kind, sessionValue: value };
+/** An OFFICIAL report, the shape herdr 0.9.0 actually prints for each axis. */
+function row(paneId: string, axis: "claude" | "pi", value: string | null): HerdrPaneRow {
+	return axis === "claude"
+		? { paneId, agent: "claude", sessionSource: "herdr:claude", sessionKind: "id", sessionValue: value }
+		: { paneId, agent: "pi", sessionSource: "herdr:pi", sessionKind: "path", sessionValue: value };
+}
+
+/** A pane carrying no session report at all — a bare shell. Not a decline. */
+function bareRow(paneId: string): HerdrPaneRow {
+	return { paneId, agent: null, sessionSource: null, sessionKind: null, sessionValue: null };
 }
 
 async function main(): Promise<void> {
@@ -94,6 +107,13 @@ async function main(): Promise<void> {
 		assert.ok(rows, "the measured payload parses");
 		ok("the measured herdr 0.9.0 payload yields one row per pane", rows.length === 3);
 		ok("a pane with no agent_session parses to a keyless row (never dropped)", rows[0]?.sessionKind === null);
+		ok(
+			"the parser CARRIES agent + source, it does not discard them (they are what makes a report official)",
+			rows[1]?.agent === "claude" &&
+				rows[1]?.sessionSource === "herdr:claude" &&
+				rows[2]?.agent === "pi" &&
+				rows[2]?.sessionSource === "herdr:pi",
+		);
 
 		ok(
 			"[QK:HP-UNREADABLE-IS-UNOBSERVED] a payload this parser cannot read yields null — the caller then says " +
@@ -113,31 +133,43 @@ async function main(): Promise<void> {
 		'[QK:HP-JOIN-CLAUDE-EXACT] a kind:"id" pane joins on the value BYTE-FOR-BYTE — the claude axis is a ' +
 			"string equality against a unique nativeSessionId, and a looser compare would attach a citizen to " +
 			"someone else's pane",
-		joinKeyOf(row("w2:p2", "id", CLAUDE_NATIVE)) === CLAUDE_NATIVE &&
-			joinKeyOf(row("w2:p2", "id", `${CLAUDE_NATIVE}x`)) !== CLAUDE_NATIVE,
+		joinKeyOf(row("w2:p2", "claude", CLAUDE_NATIVE))?.nativeSessionId === CLAUDE_NATIVE &&
+			joinKeyOf(row("w2:p2", "claude", `${CLAUDE_NATIVE}x`))?.nativeSessionId !== CLAUDE_NATIVE,
 	);
 	ok(
 		'[QK:HP-JOIN-PI-FILENAME] a kind:"path" pane joins ONLY on a well-formed uuid tail of a .jsonl basename — ' +
 			"the key lives inside a vendor filename, so both ends are strict and a name that fails either test " +
 			"yields no key rather than a plausible-looking substring",
-		piNativeSessionIdFromPath(PI_PATH) === PI_NATIVE &&
+		joinKeyOf(row("w2:p4", "pi", PI_PATH))?.nativeSessionId === PI_NATIVE &&
+			piNativeSessionIdFromPath(PI_PATH) === PI_NATIVE &&
 			piNativeSessionIdFromPath(`/s/2026_${PI_NATIVE}.txt`) === null &&
 			piNativeSessionIdFromPath("/s/2026-09-14T05-17-03-979Z_not-a-uuid.jsonl") === null &&
 			piNativeSessionIdFromPath(`/s/${PI_NATIVE}.jsonl`) === null,
 	);
 	ok(
 		"[QK:HP-JOIN-NEVER-GUESSES] an unmeasured agent_session kind and an empty value both yield NO key — an " +
-			"unknown herdr shape is skipped, never coerced into one of the two rules we actually measured",
-		joinKeyOf(row("w2:p9", null, CLAUDE_NATIVE)) === null && joinKeyOf(row("w2:p9", "id", "")) === null,
+			"unknown herdr shape is declined, never coerced into one of the two rules we actually measured",
+		joinKeyOf({ ...row("w2:p9", "claude", CLAUDE_NATIVE), sessionKind: null }) === null &&
+			joinKeyOf(row("w2:p9", "claude", "")) === null,
+	);
+	ok(
+		"[QK:HP-JOIN-OFFICIAL-ONLY] a report from an UNOFFICIAL source, or one whose agent or shape does not match " +
+			"the source herdr is measured to emit, carries NO key — herdr accepts session reports from third-party " +
+			'integrations too, and "the placement owner reported it" is the whole reason mux-launch-rail.md section 7 ' +
+			"admits this as exact evidence, so the agent/source pair is checked rather than discarded",
+		joinKeyOf({ ...row("w2:p2", "claude", CLAUDE_NATIVE), sessionSource: "someone-else:claude" }) === null &&
+			joinKeyOf({ ...row("w2:p2", "claude", CLAUDE_NATIVE), agent: "pi" }) === null &&
+			joinKeyOf({ ...row("w2:p4", "pi", PI_PATH), sessionKind: "id" }) === null,
 	);
 
 	// ── 3. index + resolution vocabulary ────────────────────────────────────────
 	{
 		const index = buildPlacementIndex([
-			row("w1:p1", null, null),
-			row("w2:p2", "id", CLAUDE_NATIVE),
-			row("w2:p4", "path", PI_PATH),
+			bareRow("w1:p1"),
+			row("w2:p2", "claude", CLAUDE_NATIVE),
+			row("w2:p4", "pi", PI_PATH),
 		]);
+		ok("a bare shell pane is not a declined report — there was nothing there to read", index.declinedReports === 0);
 		ok(
 			"a joined citizen resolves to its pane",
 			renderPlacement(resolvePlacement(index, identity(CLAUDE_NATIVE))) === "herdr w2:p2",
@@ -157,7 +189,26 @@ async function main(): Promise<void> {
 			renderPlacement(resolvePlacement(null, identity(CLAUDE_NATIVE))) === "unobserved",
 		);
 
-		const dup = buildPlacementIndex([row("w2:p2", "id", CLAUDE_NATIVE), row("w2:p5", "id", CLAUDE_NATIVE)]);
+		ok(
+			"[QK:HP-JOIN-BACKEND-BOUND] a report speaks only for the backend its integration belongs to — a " +
+				"pi-reported pane handed to a claude-code citizen whose native id collides is a contradiction, not a " +
+				"placement, so it resolves to `unobserved` rather than naming that pane",
+			renderPlacement(resolvePlacement(index, identity(PI_NATIVE, "claude-code"))) === "unobserved",
+		);
+
+		const declined = buildPlacementIndex([
+			row("w2:p2", "claude", CLAUDE_NATIVE),
+			{ ...row("w2:p7", "claude", "whoever"), sessionSource: "thirdparty:tool" },
+		]);
+		ok(
+			"[QK:HP-DECLINED-IS-UNOBSERVED] while ANY report was declined, a citizen that did not join reads " +
+				"`unobserved`, not `none` — the report we refused to read might have been that citizen's, so we " +
+				"declined to look rather than looked and found nothing",
+			declined.declinedReports === 1 &&
+				renderPlacement(resolvePlacement(declined, identity("ffffffff-0000-0000-0000-000000000000"))) === "unobserved",
+		);
+
+		const dup = buildPlacementIndex([row("w2:p2", "claude", CLAUDE_NATIVE), row("w2:p5", "claude", CLAUDE_NATIVE)]);
 		ok(
 			"[QK:HP-AMBIGUOUS-NOT-A-PANE] two panes claiming one native session id resolve to `ambiguous`, and the " +
 				"key is removed from the index rather than settled by last-write-wins — naming one of them would be " +
@@ -169,7 +220,7 @@ async function main(): Promise<void> {
 			"the same pane reported twice is NOT ambiguity (only a genuine second pane is)",
 			renderPlacement(
 				resolvePlacement(
-					buildPlacementIndex([row("w2:p2", "id", CLAUDE_NATIVE), row("w2:p2", "id", CLAUDE_NATIVE)]),
+					buildPlacementIndex([row("w2:p2", "claude", CLAUDE_NATIVE), row("w2:p2", "claude", CLAUDE_NATIVE)]),
 					identity(CLAUDE_NATIVE),
 				),
 			) === "herdr w2:p2",
@@ -201,7 +252,7 @@ async function main(): Promise<void> {
 			...base,
 			readPlacementIndex: () => {
 				reads++;
-				return buildPlacementIndex([row("w2:p2", "id", CLAUDE_NATIVE)]);
+				return buildPlacementIndex([row("w2:p2", "claude", CLAUDE_NATIVE)]);
 			},
 		};
 		const r = await listEntwurfFacts(withIndex);
