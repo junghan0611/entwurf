@@ -1,0 +1,29 @@
+{
+	"$comment": "SSOT for the herdr binary this repository has MEASURED against. Nothing else may carry a version or a digest: the CI installer, the sandbox gate's boundary check and the launch-rail document all read or cite this file. Re-measuring a new herdr means running check-herdr-sandbox against it FIRST, then editing this file, then repairing the measured sentences in docs/herdr-launch-rail.md in the same commit — miss one and the gate fails on version mismatch, which is the point.",
+	"version": "0.9.0",
+	"tag": "v0.9.0",
+	"tagCommit": "b99002ac99b09e00b4ca692436cb15a6b0d676f1",
+	"socketProtocol": 22,
+	"measuredOn": "2026-09-14",
+	"measuredArch": "aarch64",
+	"releaseUrlPrefix": "https://github.com/herdrdev/herdr/releases/download",
+	"integrity": {
+		"kind": "github-immutable-release-attestation",
+		"predicateType": "https://in-toto.io/attestation/release/v0.2",
+		"note": "GitHub signs that these digests are this tag's assets. It is NOT a SLSA build provenance authored by herdr and NOT a reproducible-build claim. Corroborate with `gh api repos/herdrdev/herdr/attestations/sha256:<digest>`; `gh attestation verify` 2.97.0 cannot close this predicate and must not be depended on."
+	},
+	"assets": {
+		"x86_64": {
+			"name": "herdr-linux-x86_64",
+			"sha256": "4fa1a01158dd8043da92d31b270780b0dcc10603038d9b61cac4d81ab63fb71f",
+			"executed": false,
+			"executedNote": "pending the first CI run on an x86_64 runner — the digest is pinned, but no cell of this rail has ever run on this binary"
+		},
+		"aarch64": {
+			"name": "herdr-linux-aarch64",
+			"sha256": "9c8db20fb7e7427b138d5367113f1621ffd319f2f65d6f009e2594029115f0d2",
+			"executed": true,
+			"executedNote": "every measurement in #116 ran on this exact binary: the operator's installed herdr hashes byte-identical to this published asset"
+		}
+	}
+}

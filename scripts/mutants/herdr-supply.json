@@ -1,0 +1,133 @@
+{
+	"schemaVersion": 1,
+	"lane": "herdr-supply",
+	"mutants": [
+		{
+			"claim": "HSUP-MANIFEST-SSOT",
+			"title": "a second copy of the pinned version appears in the sandbox gate, so an installed version and an expected version can drift apart with nobody watching",
+			"subject": "scripts/check-herdr-sandbox.ts",
+			"find": ["const SUPPLY_MANIFEST = \"scripts/fixtures/herdr-supply.json\";"],
+			"replace": [
+				"const SUPPLY_MANIFEST = \"scripts/fixtures/herdr-supply.json\";\nconst PINNED_FALLBACK = \"0.9.0\";\nvoid PINNED_FALLBACK;"
+			],
+			"gate": ["bash", "run.sh", "check-herdr-supply"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:HSUP-MANIFEST-SSOT]",
+			"signatureSource": "scripts/check-herdr-supply.ts"
+		},
+		{
+			"claim": "HSUP-DIGEST-SHAPE",
+			"title": "a pinned digest is truncated, so the check that is supposed to catch a swapped binary can no longer fail",
+			"subject": "scripts/fixtures/herdr-supply.json",
+			"find": ["\"sha256\": \"4fa1a01158dd8043da92d31b270780b0dcc10603038d9b61cac4d81ab63fb71f\""],
+			"replace": ["\"sha256\": \"4fa1a01158dd8043da92d31b2707\""],
+			"gate": ["bash", "run.sh", "check-herdr-supply"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:HSUP-DIGEST-SHAPE]",
+			"signatureSource": "scripts/check-herdr-supply.ts"
+		},
+		{
+			"claim": "HSUP-ARCH-FAIL-CLOSED",
+			"title": "an unmeasured architecture silently receives the x86_64 binary instead of a refusal",
+			"subject": "scripts/install-herdr-ci.sh",
+			"find": ["\t\tif (!asset) {"],
+			"replace": ["\t\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-herdr-supply"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:HSUP-ARCH-FAIL-CLOSED]",
+			"signatureSource": "scripts/check-herdr-supply.ts"
+		},
+		{
+			"claim": "HSUP-VERIFY-BEFORE-CHMOD",
+			"title": "the downloaded file is made executable BEFORE its digest is checked, so a byte nobody chose becomes runnable first",
+			"subject": "scripts/install-herdr-ci.sh",
+			"find": ["actual_sha=\"$(sha256sum \"$target\" | cut -d' ' -f1)\""],
+			"replace": ["chmod +x \"$target\"\nactual_sha=\"$(sha256sum \"$target\" | cut -d' ' -f1)\""],
+			"gate": ["bash", "run.sh", "check-herdr-supply"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:HSUP-VERIFY-BEFORE-CHMOD]",
+			"signatureSource": "scripts/check-herdr-supply.ts"
+		},
+		{
+			"claim": "HSUP-NO-MUTABLE-SUPPLY",
+			"title": "the installer falls back to the upstream curl-pipe, which pins no version and verifies no digest",
+			"subject": "scripts/install-herdr-ci.sh",
+			"find": ["curl -fsSL --retry 3 --retry-delay 2 -o \"$target\" \"$url\" || fail \"download failed: ${url}\""],
+			"replace": ["curl -fsSL https://herdr.dev/install.sh | sh || fail \"download failed: ${url}\""],
+			"gate": ["bash", "run.sh", "check-herdr-supply"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:HSUP-NO-MUTABLE-SUPPLY]",
+			"signatureSource": "scripts/check-herdr-supply.ts"
+		},
+		{
+			"claim": "HSUP-NO-ATTESTATION-CLI",
+			"title": "the installer starts depending on `gh attestation verify`, which measured on gh 2.97.0 cannot close herdr's predicate at all",
+			"subject": "scripts/install-herdr-ci.sh",
+			"find": ["chmod +x \"$target\""],
+			"replace": [
+				"chmod +x \"$target\"\ngh attestation verify \"$target\" --repo herdrdev/herdr || fail \"attestation\""
+			],
+			"gate": ["bash", "run.sh", "check-herdr-supply"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:HSUP-NO-ATTESTATION-CLI]",
+			"signatureSource": "scripts/check-herdr-supply.ts"
+		},
+		{
+			"claim": "HSUP-CI-INSTALL-BEFORE-FLOOR",
+			"title": "CI installs herdr AFTER the floor, so the required cell skips in the one place it was supposed to be required",
+			"subject": ".github/workflows/ci.yml",
+			"find": ["      - name: install the pinned herdr binary\n        run: ./scripts/install-herdr-ci.sh\n"],
+			"replace": [""],
+			"gate": ["bash", "run.sh", "check-herdr-supply"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:HSUP-CI-INSTALL-BEFORE-FLOOR]",
+			"signatureSource": "scripts/check-herdr-supply.ts"
+		},
+		{
+			"claim": "HSUP-CI-REQUIRES-HERDR",
+			"title": "CI runs the floor without the required-mode switch, so a failed install downgrades to a silent skip",
+			"subject": ".github/workflows/ci.yml",
+			"find": ["        env:\n          ENTWURF_REQUIRE_HERDR: \"1\"\n"],
+			"replace": [""],
+			"gate": ["bash", "run.sh", "check-herdr-supply"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:HSUP-CI-REQUIRES-HERDR]",
+			"signatureSource": "scripts/check-herdr-supply.ts"
+		},
+		{
+			"claim": "HSUP-CI-LINUX-ONLY",
+			"title": "a second job installs herdr, widening a Linux-only certification to platforms this rail has never been measured on",
+			"subject": ".github/workflows/ci.yml",
+			"find": ["      - name: install the pinned herdr binary\n        run: ./scripts/install-herdr-ci.sh\n"],
+			"replace": [
+				"      - name: install the pinned herdr binary\n        run: ./scripts/install-herdr-ci.sh\n      - name: install the pinned herdr binary again\n        run: ./scripts/install-herdr-ci.sh\n"
+			],
+			"gate": ["bash", "run.sh", "check-herdr-supply"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:HSUP-CI-LINUX-ONLY]",
+			"signatureSource": "scripts/check-herdr-supply.ts"
+		},
+		{
+			"claim": "HSUP-SETUP-NEVER-INSTALLS",
+			"title": "the product itself gains a script that installs herdr, which is Entwurf supplying a placement owner's bytes",
+			"subject": "package.json",
+			"find": ["\"check:contracts\":"],
+			"replace": ["\"install-herdr\": \"./scripts/install-herdr-ci.sh\",\n\t\t\"check:contracts\":"],
+			"gate": ["bash", "run.sh", "check-herdr-supply"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:HSUP-SETUP-NEVER-INSTALLS]",
+			"signatureSource": "scripts/check-herdr-supply.ts"
+		},
+		{
+			"claim": "HSUP-X86-UNEXECUTED",
+			"title": "the x86_64 asset is recorded as executed although no cell of this rail has ever run on it",
+			"subject": "scripts/fixtures/herdr-supply.json",
+			"find": ["\"executed\": false"],
+			"replace": ["\"executed\": true"],
+			"gate": ["bash", "run.sh", "check-herdr-supply"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:HSUP-X86-UNEXECUTED]",
+			"signatureSource": "scripts/check-herdr-supply.ts"
+		}
+	]
+}

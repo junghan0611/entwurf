@@ -1829,6 +1829,19 @@ check_herdr_sandbox() {
   run_ts scripts/check-herdr-sandbox.ts
 }
 
+check_herdr_supply() {
+  # Deterministic supply-authority gate for #116 C2b: WHICH herdr bytes CI runs, and who
+  # decides. No herdr binary and no network — it reads scripts/fixtures/herdr-supply.json,
+  # scripts/install-herdr-ci.sh and .github/workflows/ci.yml as text. Pins the manifest as the
+  # only copy of version/tag/digest, the digest shape, the fail-closed architecture map, the
+  # verify-before-chmod order, the absence of curl-pipe/latest/package-manager/global install,
+  # the absence of a `gh attestation verify` dependency (measured: gh 2.97.0 cannot close
+  # herdr's in-toto release predicate), the CI install-before-floor order with
+  # ENTWURF_REQUIRE_HERDR=1, Linux-job-only wiring, that no product script or bin reaches the
+  # installer (Hard Rule 17), and that the x86_64 asset stays recorded as never executed.
+  run_ts scripts/check-herdr-supply.ts
+}
+
 check_entwurf_peers_surface() {
   # Deterministic gate for 0.11 Stage 0 step 4 (fact-provider slice 4c; #50 C4
   # re-author): the MCP entwurf_peers RENDER/PAYLOAD layer renderEntwurfPeers.
@@ -6224,6 +6237,9 @@ case "$cmd" in
     ;;
   check-herdr-sandbox)
     check_herdr_sandbox
+    ;;
+  check-herdr-supply)
+    check_herdr_supply
     ;;
   check-entwurf-peers-surface)
     check_entwurf_peers_surface

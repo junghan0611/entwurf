@@ -842,6 +842,7 @@ let manifestCount: number;
 		"gate-qualification": 2,
 		"herdr-placement": 11,
 		"herdr-fresh-call": 15,
+		"herdr-supply": 11,
 		"meta-facts": 4,
 		"meta-hook-session-switch": 17,
 		"meta-identity": 4,

@@ -56,10 +56,21 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # The herdr rail is optional on an operator's machine and REQUIRED here (#116 C2b).
+      # scripts/fixtures/herdr-supply.json is the only place a version or a digest lives;
+      # this step fetches that exact published asset, verifies its sha256 while the file is
+      # still inert, and exposes only the runner temp dir. Entwurf's own setup/package never
+      # installs herdr (Rule 17) — this is CI-job scaffolding, not a product surface.
+      - name: install the pinned herdr binary
+        run: ./scripts/install-herdr-ci.sh
       # Push CI owns the FULL deterministic floor (#70 tiering): `pnpm check`
       # is the operator's ≤60s everyday core, while `check:full` adds the
       # hermetic-integration and package/install tiers machine time pays for.
+      # ENTWURF_REQUIRE_HERDR turns "no herdr here" from the local SKIP into red: this job
+      # just installed one, so an absent binary means the step above lied.
       - run: pnpm run check:full
+        env:
+          ENTWURF_REQUIRE_HERDR: "1"
       # check-gate-qualification left the default local check chains (operator
       # inner-loop cost) — its HEAD is back inside check:full above as
       # check-gate-manifests, and the BODY runs here. CI machine time re-proves

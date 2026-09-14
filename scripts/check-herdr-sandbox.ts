@@ -66,11 +66,23 @@ import { probeSocketLiveness } from "../pi-extensions/lib/socket-probe.ts";
 const LABEL = "check-herdr-sandbox";
 const REPO_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
-/** The ONE herdr line this rail has been measured against. A different line is not a silent
- * pass and not a skip: it is a FAILURE that asks for a re-measurement, because
- * `docs/herdr-launch-rail.md` owns the boundary and cannot speak for a version nobody ran. */
-const MEASURED_HERDR_MAJOR_MINOR = "0.9.";
+/** The ONE herdr line this rail has been measured against — READ from the supply manifest, never
+ * spelled here. A constant in this file was the drift hole C2a shipped: CI could install one
+ * version while the gate expected another and nothing would say so. Now the installer and this
+ * boundary read the same file, so they cannot disagree. A different line is not a silent pass and
+ * not a skip: it is a FAILURE that asks for a re-measurement. */
+const SUPPLY_MANIFEST = "scripts/fixtures/herdr-supply.json";
 const OWNING_DOC = "docs/herdr-launch-rail.md";
+
+interface HerdrSupply {
+	readonly version: string;
+	readonly tag: string;
+	readonly assets: Readonly<Record<string, { readonly name: string; readonly sha256: string }>>;
+}
+
+function readSupply(): HerdrSupply {
+	return JSON.parse(fs.readFileSync(path.join(REPO_DIR, SUPPLY_MANIFEST), "utf8")) as HerdrSupply;
+}
 
 /** Absence of an optional rail is not a defect — but it must be visible. */
 const SKIP_MARKER = "[entwurf:herdr-rail-skip]";
@@ -206,12 +218,13 @@ async function main(): Promise<void> {
 		skip("no herdr binary on PATH");
 	}
 
+	const supply = readSupply();
 	const version = spawnSync(bin, ["--version"], { encoding: "utf8", timeout: 30_000 });
 	const versionText = `${version.stdout ?? ""}`.trim();
 	if ((version.status ?? 1) !== 0) fail(`herdr is on PATH at ${bin} but \`herdr --version\` failed: ${version.stderr}`);
 	ok(
-		`[QK:HS-VERSION-BOUNDARY] the herdr line under test is the one this rail was measured against (${MEASURED_HERDR_MAJOR_MINOR}x) — a different line fails and asks for a re-measurement rather than claiming a version nobody ran; ${OWNING_DOC} owns the boundary`,
-		versionText.includes(`herdr ${MEASURED_HERDR_MAJOR_MINOR}`),
+		`[QK:HS-VERSION-BOUNDARY] the herdr under test is the EXACT version the supply manifest pins (${supply.version}) — the gate and the CI installer read that one file, so an installed version and an expected version cannot drift apart silently; ${OWNING_DOC} owns why that version, ${SUPPLY_MANIFEST} owns which`,
+		versionText.includes(`herdr ${supply.version}`),
 	);
 
 	const pi = which("pi");
