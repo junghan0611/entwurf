@@ -96,7 +96,9 @@ describe("MCP surface — real bridge boot → runtime tools/list", () => {
 		// The pass-through half has no observation point short of a real launch; the
 		// call shape stays a structural assert.
 		const mcpSrc = fs.readFileSync(path.join(REPO_DIR, "mcp/entwurf-bridge/src/index.ts"), "utf8");
-		expect(mcpSrc).toMatch(/freshCall\(\{ backend, model, task, cwd, placement, callerGardenId \}\)/);
+		// The MCP surface passes ONE object to the composition ROOT (#116 C3): rail choice, Codex
+		// preflight ordering and rendering live there, so this surface and pi's own cannot drift.
+		expect(mcpSrc).toMatch(/dispatchFreshCall\(\{ backend, model, task, cwd, placement, callerGardenId \}\)/);
 	});
 
 	it("[QK:FRESHCALL-MODEL-PATTERN-HOST-VALID] every pattern the bridge emits on tools/list compiles under a Rust-regex-family engine — JS acceptance is not host acceptance", () => {
@@ -285,7 +287,9 @@ describe("one grammar, two surfaces", () => {
 		}
 		// The pass-through halves stay structural asserts, same as the model parameter above.
 		const mcpSrc = fs.readFileSync(path.join(REPO_DIR, "mcp/entwurf-bridge/src/index.ts"), "utf8");
-		expect(mcpSrc).toMatch(/freshCall\(\{ backend, model, task, cwd, placement, callerGardenId \}\)/);
+		// The MCP surface passes ONE object to the composition ROOT (#116 C3): rail choice, Codex
+		// preflight ordering and rendering live there, so this surface and pi's own cannot drift.
+		expect(mcpSrc).toMatch(/dispatchFreshCall\(\{ backend, model, task, cwd, placement, callerGardenId \}\)/);
 		const piSrc = fs.readFileSync(path.join(REPO_DIR, "pi-extensions/entwurf-control.ts"), "utf8");
 		expect(piSrc).toMatch(/cwd:\s*params\.cwd/);
 	});
@@ -321,7 +325,7 @@ describe("one grammar, two surfaces", () => {
 		}
 		// The pass-through halves stay structural asserts, same as the cwd parity above.
 		const mcpSeatSrc = fs.readFileSync(path.join(REPO_DIR, "mcp/entwurf-bridge/src/index.ts"), "utf8");
-		expect(mcpSeatSrc).toMatch(/freshCall\(\{ backend, model, task, cwd, placement, callerGardenId \}\)/);
+		expect(mcpSeatSrc).toMatch(/dispatchFreshCall\(\{ backend, model, task, cwd, placement, callerGardenId \}\)/);
 		const piSeatSrc = fs.readFileSync(path.join(REPO_DIR, "pi-extensions/entwurf-control.ts"), "utf8");
 		expect(piSeatSrc).toMatch(/placement:\s*params\.placement/);
 		// The THIRD surface, for the same reason the backend set is held on all three: the skill

@@ -226,6 +226,12 @@
 		// two rails stay separately deletable. Typechecked by scripts/tsconfig.json via its
 		// gate (check-herdr-fresh-call.ts).
 		"pi-extensions/lib/herdr-fresh-call.ts",
+		// fresh-call-dispatch.ts is the #116 C3 composition root — the ONE module that may know
+		// both rails. A lib→lib VALUE importer of both plus the codex preflight with explicit
+		// `.ts` extensions, same fence. Its consumers reach it the two ways their own fences
+		// allow: entwurf-control.ts through a NON-LITERAL dynamic import, the MCP bridge through
+		// a static import typechecked by mcp/tsconfig.json.
+		"pi-extensions/lib/fresh-call-dispatch.ts",
 		// entwurf-v2-visible-resume.ts is the S1 visible-resume composition on the V2 side of the
 		// fence — a lib→lib VALUE importer (lock / resume-launch-identity / socket-discovery /
 		// socket-probe / resume-args) with explicit `.ts` extensions, same fence. It never imports

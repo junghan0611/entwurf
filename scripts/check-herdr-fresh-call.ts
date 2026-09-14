@@ -186,7 +186,14 @@ function main(): void {
 	// tmux is NAMED in this module, and only in one place: the refusal of a tmux seat input.
 	// That is the opposite of a fallback, so the guard pins WHERE the word may appear rather
 	// than banning it — a banned word would have pushed the refusal into silence.
-	const tmuxLines = code.split("\n").filter((line) => /tmux/i.test(line));
+	// The reject-hint table is caller-facing prose whose JOB is to explain the tmux-seat refusal,
+	// so it is excluded from the scan the same way comments are: what must not contain tmux is the
+	// launch path, not the sentence telling an operator why their seat was refused.
+	const hintTable = code.slice(code.indexOf("const HERDR_REJECT_HINT"), code.indexOf("function renderRecovery"));
+	const tmuxLines = code
+		.replace(hintTable, "")
+		.split("\n")
+		.filter((line) => /tmux/i.test(line));
 	ok(
 		"[QK:HFC-PILOT-CLOSED] the pilot set is exactly pi + claude-code, and tmux appears in this module ONLY as the refusal of a tmux seat — never as a fallback launch",
 		HERDR_FRESH_CALL_BACKENDS.length === 2 &&

@@ -1,0 +1,143 @@
+{
+	"schemaVersion": 1,
+	"lane": "fresh-call-dispatch",
+	"mutants": [
+		{
+			"claim": "FCD-RAIL-IS-CAPABILITY",
+			"title": "the herdr marker is read loosely, so a process carrying HERDR_ENV=0 is treated as being inside herdr",
+			"subject": "pi-extensions/lib/fresh-call-dispatch.ts",
+			"find": ["\treturn env.HERDR_ENV === \"1\" ? \"herdr\" : \"tmux\";"],
+			"replace": ["\treturn env.HERDR_ENV !== undefined ? \"herdr\" : \"tmux\";"],
+			"gate": ["bash", "run.sh", "check-fresh-call-dispatch"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:FCD-RAIL-IS-CAPABILITY]",
+			"signatureSource": "scripts/check-fresh-call-dispatch.ts"
+		},
+		{
+			"claim": "FCD-NO-RAIL-PARAMETER",
+			"title": "the request gains a caller-chosen rail, so someone can ask for tmux placement from inside herdr and fail after a mutation",
+			"subject": "pi-extensions/lib/fresh-call-dispatch.ts",
+			"find": ["export interface FreshCallRequest {"],
+			"replace": ["export interface FreshCallRequest {\n\treadonly rail?: FreshCallRail;"],
+			"gate": ["bash", "run.sh", "check-fresh-call-dispatch"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:FCD-NO-RAIL-PARAMETER]",
+			"signatureSource": "scripts/check-fresh-call-dispatch.ts"
+		},
+		{
+			"claim": "FCD-NO-FALLBACK",
+			"title": "an incomplete herdr context falls back to tmux, opening a window the operator cannot see from where they are standing",
+			"subject": "pi-extensions/lib/fresh-call-dispatch.ts",
+			"find": ["\t\t\treturn { rail: \"herdr\", result: { ok: false, reason: context.reason } };"],
+			"replace": ["\t\t\treturn { rail: \"tmux\", result: freshCall(request as never, env, nonce) };"],
+			"gate": ["bash", "run.sh", "check-fresh-call-dispatch"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:FCD-NO-FALLBACK]",
+			"signatureSource": "scripts/check-fresh-call-dispatch.ts"
+		},
+		{
+			"claim": "FCD-HERDR-BACKEND-FIRST",
+			"title": "the herdr branch runs the Codex preflight before refusing a non-pilot backend, answering an irrelevant question first",
+			"subject": "pi-extensions/lib/fresh-call-dispatch.ts",
+			"find": [
+				"\t\tconst run: HerdrRun = createHerdrRunner(context.context.bin, env, spawn ?? (spawnSync as SpawnSyncFn));"
+			],
+			"replace": [
+				"\t\tif (request.backend === \"codex\") await codexFreshPreflight(env);\n\t\tconst run: HerdrRun = createHerdrRunner(context.context.bin, env, spawn ?? (spawnSync as SpawnSyncFn));"
+			],
+			"gate": ["bash", "run.sh", "check-fresh-call-dispatch"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:FCD-HERDR-BACKEND-FIRST]",
+			"signatureSource": "scripts/check-fresh-call-dispatch.ts"
+		},
+		{
+			"claim": "FCD-CODEX-PREFLIGHT-TMUX",
+			"title": "the Codex preflight moves after the composition, so a window opens before the capability question is asked",
+			"subject": "pi-extensions/lib/fresh-call-dispatch.ts",
+			"find": [
+				"\tconst missing = request.backend === \"codex\" ? await codexFreshPreflight(env) : null;\n\tif (missing) return { rail: \"tmux\", result: { ok: false, reason: missing } };"
+			],
+			"replace": [""],
+			"gate": ["bash", "run.sh", "check-fresh-call-dispatch"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:FCD-CODEX-PREFLIGHT-TMUX]",
+			"signatureSource": "scripts/check-fresh-call-dispatch.ts"
+		},
+		{
+			"claim": "FCD-ONE-NONCE",
+			"title": "the rail mints its own second nonce, so the sibling calls back with a tag the caller never recorded",
+			"subject": "pi-extensions/lib/fresh-call-dispatch.ts",
+			"find": ["\t\treturn { rail: \"herdr\", result: herdrFreshCall(request, run, env, nonce) };"],
+			"replace": ["\t\treturn { rail: \"herdr\", result: herdrFreshCall(request, run, env, mintNonce()) };"],
+			"gate": ["bash", "run.sh", "check-fresh-call-dispatch"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:FCD-ONE-NONCE]",
+			"signatureSource": "scripts/check-fresh-call-dispatch.ts"
+		},
+		{
+			"claim": "FCD-SURFACE-PARITY",
+			"title": "the MCP surface goes back to calling a rail directly, so the two public surfaces can drift on rail choice",
+			"subject": "mcp/entwurf-bridge/src/index.ts",
+			"find": [
+				"\t\t\tconst dispatched = await dispatchFreshCall({ backend, model, task, cwd, placement, callerGardenId });"
+			],
+			"replace": [
+				"\t\t\tconst dispatched = { rail: \"tmux\" as const, result: { ok: false, reason: \"caller-identity-unavailable\" as const } };\n\t\t\tvoid selectFreshCallRail;"
+			],
+			"gate": ["bash", "run.sh", "check-fresh-call-dispatch"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:FCD-SURFACE-PARITY]",
+			"signatureSource": "scripts/check-fresh-call-dispatch.ts"
+		},
+		{
+			"claim": "FCD-PI-DYNAMIC-IMPORT",
+			"title": "pi reaches the composition root by a literal path again, which is how the lazy import fence erodes",
+			"subject": "pi-extensions/entwurf-control.ts",
+			"find": ["const FRESH_CALL_DISPATCH_MODULE = \"./lib/fresh-call-dispatch.ts\";"],
+			"replace": ["const FRESH_CALL_DISPATCH_MODULE = \"./lib/fresh-call-dispatch-renamed.ts\";"],
+			"gate": ["bash", "run.sh", "check-fresh-call-dispatch"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:FCD-PI-DYNAMIC-IMPORT]",
+			"signatureSource": "scripts/check-fresh-call-dispatch.ts"
+		},
+		{
+			"claim": "FCD-RENDER-PER-RAIL",
+			"title": "both rails render through the tmux renderer, so a herdr caller is told their sibling is in a tmux window",
+			"subject": "pi-extensions/lib/fresh-call-dispatch.ts",
+			"find": [
+				"\treturn dispatched.rail === \"herdr\" ? renderHerdrFreshCall(dispatched.result) : renderFreshCall(dispatched.result);"
+			],
+			"replace": ["\treturn renderFreshCall(dispatched.result as never);"],
+			"gate": ["bash", "run.sh", "check-fresh-call-dispatch"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:FCD-RENDER-PER-RAIL]",
+			"signatureSource": "scripts/check-fresh-call-dispatch.ts"
+		},
+		{
+			"claim": "FCD-HERDR-VIEW-NOT-ADDRESS",
+			"title": "the herdr receipt stops saying its coordinates are a view, which is the first step to someone dispatching at a pane id",
+			"subject": "pi-extensions/lib/herdr-fresh-call.ts",
+			"find": [
+				"`  pane:     ${r.herdrPaneId} terminal ${r.herdrTerminalId} — herdr VIEW coordinates, not an address\\n` +"
+			],
+			"replace": ["`  pane:     ${r.herdrPaneId} terminal ${r.herdrTerminalId}\\n` +"],
+			"gate": ["bash", "run.sh", "check-fresh-call-dispatch"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:FCD-HERDR-VIEW-NOT-ADDRESS]",
+			"signatureSource": "scripts/check-fresh-call-dispatch.ts"
+		},
+		{
+			"claim": "FCD-RECOVERY-VISIBLE",
+			"title": "an unreclaimed orphan renders as if it had been closed, so nobody goes to look at the pane still sitting there",
+			"subject": "pi-extensions/lib/herdr-fresh-call.ts",
+			"find": [
+				"\t\t: `  recovery: orphan-unreclaimed:${recovery.reason}${recovery.paneId === \"\" ? \"\" : ` (${recovery.paneId})`} — this pane was NOT closed, on purpose\\n`;"
+			],
+			"replace": ["\t\t: `  recovery: closed ${recovery.paneId}\\n`;"],
+			"gate": ["bash", "run.sh", "check-fresh-call-dispatch"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:FCD-RECOVERY-VISIBLE]",
+			"signatureSource": "scripts/check-fresh-call-dispatch.ts"
+		}
+	]
+}

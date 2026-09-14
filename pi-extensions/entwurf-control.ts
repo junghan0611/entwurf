@@ -1530,16 +1530,15 @@ function registerListSessionsTool(pi: ExtensionAPI): void {
 // Tool: entwurf_fresh_call
 // ============================================================================
 
-const MUX_FRESH_CALL_MODULE = "./lib/mux-fresh-call.ts";
-const CODEX_FRESH_PREFLIGHT_MODULE = "./lib/codex-fresh-preflight.ts";
+// ONE dynamic import, and it resolves the composition root rather than a rail: which rail opens
+// the sibling, when the Codex preflight runs, and how the receipt renders are decisions this
+// surface must not own a second copy of (#116 C3). The import stays non-literal-free and lazy for
+// the same startup-fence reason it always was.
+const FRESH_CALL_DISPATCH_MODULE = "./lib/fresh-call-dispatch.ts";
 
-interface CodexFreshPreflightModule {
-	codexFreshPreflight(env: NodeJS.ProcessEnv): Promise<string | null>;
-}
-
-interface MuxFreshCallModule {
-	freshCall(
-		params: {
+interface FreshCallDispatchModule {
+	dispatchFreshCall(
+		request: {
 			backend: "pi" | "claude-code" | "copilot" | "omp" | "codex";
 			model: string;
 			task: string;
@@ -1548,8 +1547,11 @@ interface MuxFreshCallModule {
 			callerGardenId: string | null;
 		},
 		env?: NodeJS.ProcessEnv,
-	): { ok: boolean };
-	renderFreshCall(result: { ok: boolean }): { text: string; isError: boolean };
+	): Promise<{ rail: "herdr" | "tmux"; result: { ok: boolean } }>;
+	renderDispatchedFreshCall(dispatched: { rail: "herdr" | "tmux"; result: { ok: boolean } }): {
+		text: string;
+		isError: boolean;
+	};
 }
 
 /**
@@ -1570,27 +1572,24 @@ function registerFreshCallTool(pi: ExtensionAPI): void {
 	registerTool({
 		name: "entwurf_fresh_call",
 		label: "Open Fresh Sibling",
-		description: `Open ONE fresh visible sibling in the operator's tmux and hand it a first task. Five fixed
-backends only: pi, claude-code, copilot, omp, codex. The sibling's FIRST action is a callback to you carrying a nonce, and the
-sender envelope of that callback is its garden id — that is how you learn the address of something that did
-not exist a moment ago. This returns a LAUNCH receipt (tmux window/pane plus that nonce) and nothing else:
-it does NOT mean the runtime started, the first turn ran, or the task was delivered. Nothing polls for the
-callback; if it never arrives the window is visible and can be read directly. For EXISTING citizens use
-entwurf_v2 — this tool only creates, and entwurf_peers only reports. Model is REQUIRED and passed to the
-chosen runtime CLI (provider/model for pi; model id/alias for Claude Code; a Copilot, OMP, or Codex model
-name). Copilot, omp, and codex are refused BEFORE any window opens when their required birth, MCP,
-receive/delivery, or visible-identity units are absent. Codex additionally requires the operator-owned
-default app-server socket; entwurf never starts or supervises it. An optional cwd starts the
-sibling in ONE literal absolute existing directory (cross-repo fresh) — never pick resume for a dormant
-record's cwd; resume is continuity-only. Omitted/empty cwd means the caller's own directory. An optional
-placement.tmuxSession is an expert override naming ONE EXISTING session on this agent's own tmux server.
-When placement is omitted, Codex targets the exact existing \`codex\` home session; other backends target the
-caller's session. A missing named/home session is tmux-session-missing and NOTHING is created. There are no
-arbitrary command/env knobs. Do not put secrets in the task — model and task argv are visible to same-user
-processes on this host.`,
+		description: `Open ONE fresh visible sibling beside you and hand it a first task. WHERE it opens is decided by
+where THIS agent runs, never by a parameter: inside herdr (HERDR_ENV=1) it opens in a herdr pane and only pi and
+claude-code may be opened; everywhere else it opens in the operator's tmux with all five backends (pi, claude-code,
+copilot, omp, codex). There is no fallback — an incomplete herdr context is refused by name rather than opening a tmux
+window you cannot see from in herdr. The sibling's FIRST action is a callback to you carrying a nonce, whose sender
+envelope is its garden id — that is how you learn the address of a thing that did not exist a moment ago. This returns
+a LAUNCH receipt (the owner's coordinates plus that nonce) and nothing else: it does NOT mean the runtime started, the
+first turn ran, or the task was delivered. Those coordinates are a VIEW, never an address — a herdr pane id can change
+under a running sibling. Nothing polls; if the callback never arrives the pane is visible and readable directly. For EXISTING citizens use entwurf_v2 — this tool only creates, and entwurf_peers only reports. Model is REQUIRED and passed to the chosen runtime CLI (provider/model for pi, an id/alias for Claude Code, a name or pattern
+for the rest). On tmux, copilot/omp/codex are refused BEFORE any window opens when their birth, MCP, receive or
+visible-identity units are absent, and codex also needs the operator-owned app-server socket entwurf never starts; in
+herdr those three are refused by name first. Optional cwd starts the sibling in ONE literal absolute existing
+directory; omitted/empty means your own directory on both rails, and '#' is refused on tmux only. Optional
+placement.tmuxSession is a TMUX-ONLY seat naming ONE EXISTING session; omitted, Codex targets the exact existing \`codex\` home session and others your own, a missing one is tmux-session-missing and NOTHING is created — in herdr the field is refused by name. Do not put secrets in the task — model and task argv are visible to same-user processes.`,
 		parameters: Type.Object({
 			backend: StringEnum(["pi", "claude-code", "copilot", "omp", "codex"], {
-				description: "Which fixed runtime to open. Only these five; there is no arbitrary command.",
+				description:
+					"Which fixed runtime to open. Only these five, and only pi/claude-code when this agent runs inside herdr; there is no arbitrary command.",
 			}),
 			model: Type.String({
 				minLength: 1,
@@ -1608,7 +1607,7 @@ processes on this host.`,
 			cwd: Type.Optional(
 				Type.String({
 					description:
-						"Optional literal ABSOLUTE path of an existing directory to start the sibling in (cross-repo fresh). Omit or pass \"\" to start in this agent's own cwd. Taken exactly as given — no trim, no realpath, no project-name resolution; '#' is refused (tmux format expansion). The receipt echoes what was REQUESTED, never an observation.",
+						"Optional literal ABSOLUTE path of an existing directory to start the sibling in (cross-repo fresh). Omit or pass \"\" to start in this agent's own cwd — on BOTH rails. Taken exactly as given: no trim, no realpath, no project-name resolution. '#' is refused on the tmux rail only, because tmux format-expands a start directory; inside herdr it is an ordinary path character. The receipt echoes what was REQUESTED, never an observation.",
 				}),
 			),
 			placement: Type.Optional(
@@ -1621,7 +1620,7 @@ processes on this host.`,
 					},
 					{
 						description:
-							"Optional expert seat override: open the sibling in ONE EXISTING tmux session of this agent's own server. When omitted, Codex selects the exact existing `codex` home session; other backends use the caller's session. Nothing is ever created. Independent of cwd; neither is inferred from the other. The receipt reports the selected name, its source, and resolved target session id.",
+							"Optional expert seat override, TMUX ONLY: open the sibling in ONE EXISTING tmux session of this agent's own server. When omitted, Codex selects the exact existing `codex` home session; other backends use the caller's session. Nothing is ever created. Inside herdr this field is refused by name — placement there belongs to herdr, and a tmux session name would silently place the sibling somewhere else. Independent of cwd; neither is inferred from the other. The receipt reports the selected name, its source, and resolved target session id.",
 					},
 				),
 			),
@@ -1640,29 +1639,20 @@ processes on this host.`,
 			_ctx: ExtensionContext,
 		) {
 			try {
-				const mux = (await import(MUX_FRESH_CALL_MODULE)) as unknown as MuxFreshCallModule;
-				// ONE input object for ONE composition call. The codex branch differs only by the
-				// capability preflight that must answer BEFORE any mutation; duplicating the call
-				// would put the caller-identity contract in two places, which is how a mutant that
-				// plants a defect in one of them survives on the other.
-				const call = {
+				const dispatch = (await import(FRESH_CALL_DISPATCH_MODULE)) as unknown as FreshCallDispatchModule;
+				// ONE input object for ONE dispatch call. Rail selection and the Codex preflight
+				// ordering live behind it: duplicating either here would put the same decision in
+				// two places, which is how a mutant that plants a defect in one of them survives
+				// on the other.
+				const dispatched = await dispatch.dispatchFreshCall({
 					backend: params.backend,
 					model: params.model,
 					task: params.task,
 					cwd: params.cwd,
 					placement: params.placement,
 					callerGardenId: residentGardenId,
-				};
-				const result =
-					params.backend === "codex"
-						? await (async () => {
-								const preflight = (await import(CODEX_FRESH_PREFLIGHT_MODULE)) as unknown as CodexFreshPreflightModule;
-								const missing = await preflight.codexFreshPreflight(process.env);
-								if (missing) return { ok: false as const, reason: missing };
-								return mux.freshCall(call);
-							})()
-						: mux.freshCall(call);
-				const rendered = mux.renderFreshCall(result);
+				});
+				const rendered = dispatch.renderDispatchedFreshCall(dispatched);
 				return {
 					content: [{ type: "text", text: rendered.text }],
 					isError: rendered.isError,

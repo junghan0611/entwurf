@@ -51,6 +51,7 @@ import {
 	type FreshCallComposition,
 	type FreshCallInputRejectReason,
 	normalizeFreshCallInputs,
+	TASK_MAX_CHARS,
 } from "./fresh-call-composition.ts";
 
 /** The pilot set, closed. `[#116 decision]` herdr's own `--kind` enum is much larger, and that is
@@ -680,3 +681,127 @@ function reclaim(pane: HerdrPaneFacts, run: HerdrRun): HerdrRecovery {
 	if (closeRun.status !== 0) return { outcome: "orphan-unreclaimed", paneId: pane.paneId, reason: "close-failed" };
 	return { outcome: "closed", paneId: pane.paneId, terminalId: pane.terminalId };
 }
+
+/** Why each refusal happened, in the caller's terms. A reason a caller cannot act on is a reason
+ * they will guess about. The five shared input reasons keep the wording the public verb has always
+ * used; the rest are this rail's own. */
+const HERDR_REJECT_HINT: Record<HerdrFreshCallRejectReason | HerdrLaunchFailureReason, string> = {
+	"caller-identity-unavailable":
+		"this surface has no record-backed identity, so a sibling would have nowhere to call home",
+	"model-empty": "pass the model you want the sibling opened with — it is never inherited from this process",
+	"model-invalid": "the model is not in the accepted grammar (no whitespace, no leading dash)",
+	"task-empty": "a sibling opened with nothing to do is a window nobody asked for",
+	"task-too-long": `the task is over the ${TASK_MAX_CHARS}-character interface bound this verb shares with entwurf_v2`,
+	"herdr-context-missing":
+		"HERDR_ENV/HERDR_BIN_PATH are absent, so this process is not inside herdr and this rail does not exist here",
+	"herdr-parent-pane-missing":
+		"herdr did not give this process a HERDR_PANE_ID, and a split needs a parent pane we were actually given",
+	"herdr-backend-unsupported": "this rail opens pi and claude-code only; nothing is opened elsewhere instead",
+	"herdr-placement-tmux-rejected":
+		"`placement` names a tmux session, which does not exist inside herdr — drop it rather than have the sibling silently placed somewhere else",
+	"herdr-argv-control-character":
+		"an argument still holds a control character after encoding; herdr refuses those and no pane was created",
+	"cwd-not-absolute": "pass an absolute path, or omit cwd to use this agent's own directory",
+	"cwd-missing": "the requested start directory does not exist",
+	"cwd-not-directory": "the requested start path is not a directory",
+	"herdr-split-failed": "herdr refused to split the pane; nothing was created",
+	"herdr-split-unparsable": "herdr's split reply could not be read, so a pane may exist that this call cannot name",
+	"herdr-split-pane-occupied": "the pane herdr returned already holds an agent, so nothing was started into it",
+	"herdr-agent-start-failed": "herdr refused to start the agent in the pane that was just split",
+	"herdr-agent-start-unparsable": "herdr's start reply could not be read",
+	"herdr-agent-start-pane-drift": "herdr reported a different pane or terminal than the one we split",
+	"herdr-agent-start-witness-missing":
+		"herdr reported a start with no agent session, so nothing identifies what was launched",
+	"herdr-agent-start-argv-drift": "herdr echoed an argv that is not the one we composed",
+};
+
+/** How a reclaim reads to an operator who has to decide whether to go look. */
+function renderRecovery(recovery: HerdrRecovery): string {
+	return recovery.outcome === "closed"
+		? `  recovery: closed ${recovery.paneId} (its terminal still matched the split receipt)\n`
+		: `  recovery: orphan-unreclaimed:${recovery.reason}${recovery.paneId === "" ? "" : ` (${recovery.paneId})`} — this pane was NOT closed, on purpose\n`;
+}
+
+/**
+ * Three outcomes, and an operator must be able to tell them apart at a glance: a refusal that
+ * created nothing, a failure that may have left a pane behind, and a launch.
+ */
+export function renderHerdrFreshCall(result: HerdrFreshCallResult): { text: string; isError: boolean } {
+	if (!result.ok) {
+		const hint = HERDR_REJECT_HINT[result.reason];
+		if (!("recovery" in result)) {
+			return {
+				text: `entwurf_fresh_call rejected: ${result.reason} — ${hint}. No pane was created.`,
+				isError: true,
+			};
+		}
+		const code = result.herdrErrorCode === undefined ? "" : ` [herdr: ${result.herdrErrorCode}]`;
+		return {
+			text:
+				`entwurf_fresh_call failed after the split: ${result.reason}${code} — ${hint}.\n` +
+				renderRecovery(result.recovery),
+			isError: true,
+		};
+	}
+	const r = result.receipt;
+	return {
+		text:
+			`[entwurf fresh call → herdr]\n` +
+			`  backend:  ${r.backend} (requested kind ${r.requestedKind} — herdr resolves the executable, we did not)\n` +
+			`  model:    ${r.model} (requested on the runtime CLI)\n` +
+			(r.cwd === undefined ? "" : `  cwd:      ${r.cwd} (requested start directory — not an observation)\n`) +
+			`  agent:    ${r.herdrAgentName} (herdr's name for it, derived from the nonce)\n` +
+			`  pane:     ${r.herdrPaneId} terminal ${r.herdrTerminalId} — herdr VIEW coordinates, not an address\n` +
+			`  nonce:    ${r.nonce}\n` +
+			`\n` +
+			`This is a LAUNCH receipt: herdr split a pane and was asked to start the agent above. It does NOT mean ` +
+			`the sibling is running, that its first turn ran, or that the task was delivered. The pane coordinate is a ` +
+			`view and can change under the sibling — it is not an address and nothing may be dispatched to it.\n` +
+			`The sibling's garden id arrives separately — it calls entwurf_v2 back with the nonce above as its first ` +
+			`action, and the sender envelope of THAT message is the address. Nothing is polling for it; if it never ` +
+			`comes, the pane is visible and can be read directly.`,
+		isError: false,
+	};
+}
+
+/** How long a herdr command may take. `[측정, herdr 0.9.0 `agent start --help`]` the start verb waits
+ * for interactive readiness with a default of 30s and a documented ceiling of 300s, so the start
+ * bound is that ceiling: cutting it shorter would kill a launch herdr was still legitimately
+ * waiting on. Every other verb is a socket round trip and gets the short bound. */
+export const HERDR_START_TIMEOUT_MS = 300_000;
+export const HERDR_CLI_TIMEOUT_MS = 30_000;
+
+/**
+ * The production runner: argv array, no shell, explicit env, bounded.
+ *
+ * A spawn that never produced an exit status (binary missing, timeout, signal) is mapped to a
+ * nonzero status with the failure on stderr — the SAME shape herdr's own error path produces, so
+ * the rail above has one thing to read. Nothing here looks at a terminal.
+ */
+export function createHerdrRunner(bin: string, env: NodeJS.ProcessEnv, spawn: SpawnSyncFn): HerdrRun {
+	return (args) => {
+		const timeout = args[0] === "agent" && args[1] === "start" ? HERDR_START_TIMEOUT_MS : HERDR_CLI_TIMEOUT_MS;
+		const run = spawn(bin, [...args], { encoding: "utf8", env, timeout, shell: false });
+		if (run.error !== undefined && run.error !== null) {
+			return { status: 1, stdout: "", stderr: `herdr ${args.join(" ")}: ${run.error.message}` };
+		}
+		if (run.status === null || run.status === undefined) {
+			// Killed by a signal or the timeout: herdr said nothing, so we say that rather than
+			// inventing an exit code that would read as herdr's own refusal.
+			return {
+				status: 1,
+				stdout: run.stdout ?? "",
+				stderr: `herdr ${args.join(" ")}: no exit status (timeout ${timeout}ms or signal ${String(run.signal)})`,
+			};
+		}
+		return { status: run.status, stdout: run.stdout ?? "", stderr: run.stderr ?? "" };
+	};
+}
+
+/** The narrow shape of `node:child_process` `spawnSync` this runner needs, injected so the gate can
+ * drive it without a herdr binary. */
+export type SpawnSyncFn = (
+	bin: string,
+	args: string[],
+	opts: { encoding: "utf8"; env: NodeJS.ProcessEnv; timeout: number; shell: false },
+) => { status?: number | null; signal?: NodeJS.Signals | null; stdout?: string; stderr?: string; error?: Error | null };

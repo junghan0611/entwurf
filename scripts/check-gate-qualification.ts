@@ -838,6 +838,7 @@ let manifestCount: number;
 		"copilot-launch": 14,
 		"copilot-receive": 20,
 		"entwurf-peers": 1,
+		"fresh-call-dispatch": 11,
 		"fresh-cut": 3,
 		"gate-qualification": 2,
 		"herdr-placement": 11,

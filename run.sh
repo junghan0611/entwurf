@@ -1842,6 +1842,18 @@ check_herdr_supply() {
   run_ts scripts/check-herdr-supply.ts
 }
 
+check_fresh_call_dispatch() {
+  # Deterministic gate for #116 C3: the seam ABOVE the two rails. Pins that the rail is a
+  # capability fact (exactly HERDR_ENV=1) and never a caller parameter, that neither direction
+  # falls back, that a non-pilot backend refuses inside herdr before any preflight or mutation,
+  # that the Codex preflight keeps its pre-existing ordering on the tmux path only, that one
+  # nonce per call reaches the selected rail, that BOTH public surfaces reach one composition
+  # root (no second copy of rail choice, preflight ordering or rendering), that pi still uses
+  # its lazy dynamic import, and that herdr rendering shows view-not-address plus which recovery
+  # happened. No tmux and no herdr binary: the seam runs with an injected spawn.
+  run_ts scripts/check-fresh-call-dispatch.ts
+}
+
 check_entwurf_peers_surface() {
   # Deterministic gate for 0.11 Stage 0 step 4 (fact-provider slice 4c; #50 C4
   # re-author): the MCP entwurf_peers RENDER/PAYLOAD layer renderEntwurfPeers.
@@ -6240,6 +6252,9 @@ case "$cmd" in
     ;;
   check-herdr-supply)
     check_herdr_supply
+    ;;
+  check-fresh-call-dispatch)
+    check_fresh_call_dispatch
     ;;
   check-entwurf-peers-surface)
     check_entwurf_peers_surface
