@@ -28,8 +28,10 @@
 			"claim": "HFC-TMUX-PLACEMENT-REFUSED",
 			"title": "a tmux seat inside herdr is silently ignored instead of refused, so the sibling opens somewhere the caller did not ask for and the call still looks successful",
 			"subject": "pi-extensions/lib/herdr-fresh-call.ts",
-			"find": ["\tif (typeof placement.tmuxSession === \"string\" && placement.tmuxSession.length > 0) {"],
-			"replace": ["\tif (false) {"],
+			"find": ["\treturn placement === undefined ? null : \"herdr-placement-tmux-rejected\";"],
+			"replace": [
+				"\treturn placement === undefined || placement.tmuxSession === undefined || placement.tmuxSession.length === 0\n\t\t? null\n\t\t: \"herdr-placement-tmux-rejected\";"
+			],
 			"gate": ["bash", "run.sh", "check-herdr-fresh-call"],
 			"timeoutSeconds": 120,
 			"signature": "[QK:HFC-TMUX-PLACEMENT-REFUSED]",
@@ -70,10 +72,12 @@
 		},
 		{
 			"claim": "HFC-PREMUTATION-ONLY",
-			"title": "an input refusal moves after the split, so a rejected call leaves a pane open in the operator's workspace",
+			"title": "a pre-mutation input refusal is dropped, so a call that should have refused instead splits a pane in the operator's workspace first",
 			"subject": "pi-extensions/lib/herdr-fresh-call.ts",
-			"find": ["\tif (params.task.length === 0) return { ok: false, reason: \"herdr-task-empty\" };"],
-			"replace": [""],
+			"find": [
+				"\t\tconst badCwd = classifyHerdrCwd(cwd);\n\t\tif (badCwd !== null) return { ok: false, reason: badCwd };"
+			],
+			"replace": ["\t\tvoid classifyHerdrCwd(cwd);"],
 			"gate": ["bash", "run.sh", "check-herdr-fresh-call"],
 			"timeoutSeconds": 120,
 			"signature": "[QK:HFC-PREMUTATION-ONLY]",
@@ -138,8 +142,8 @@
 			"claim": "HFC-RECEIPT-NO-ADDRESS",
 			"title": "the launch receipt starts carrying an identity field, which is the first step in promoting a herdr view to a garden address",
 			"subject": "pi-extensions/lib/herdr-fresh-call.ts",
-			"find": ["\t\t\therdrPaneId: started.paneId,"],
-			"replace": ["\t\t\tnativeSessionId: started.terminalId,\n\t\t\therdrPaneId: started.paneId,"],
+			"find": ["\t\t\therdrPaneId: started.pane.paneId,"],
+			"replace": ["\t\t\tnativeSessionId: started.pane.terminalId,\n\t\t\therdrPaneId: started.pane.paneId,"],
 			"gate": ["bash", "run.sh", "check-herdr-fresh-call"],
 			"timeoutSeconds": 120,
 			"signature": "[QK:HFC-RECEIPT-NO-ADDRESS]",
@@ -167,6 +171,72 @@
 			"gate": ["bash", "run.sh", "check-herdr-fresh-call"],
 			"timeoutSeconds": 120,
 			"signature": "[QK:HFC-ORPHAN-NAMED]",
+			"signatureSource": "scripts/check-herdr-fresh-call.ts"
+		},
+		{
+			"claim": "HFC-INPUT-PARITY",
+			"title": "the task cap is dropped on the herdr rail, so the same oversized task is refused on one rail and launched on the other",
+			"subject": "pi-extensions/lib/fresh-call-composition.ts",
+			"find": ["\tif (task.length > TASK_MAX_CHARS) return { ok: false, reason: \"task-too-long\" };"],
+			"replace": [""],
+			"gate": ["bash", "run.sh", "check-herdr-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:HFC-INPUT-PARITY]",
+			"signatureSource": "scripts/check-herdr-fresh-call.ts"
+		},
+		{
+			"claim": "HFC-CWD-EMPTY-IS-OMITTED",
+			"title": "an empty cwd is read as a path again, turning the public verb's documented no-op into an invalid-directory refusal",
+			"subject": "pi-extensions/lib/fresh-call-composition.ts",
+			"find": ["\tconst cwd = params.cwd === undefined || params.cwd === \"\" ? undefined : params.cwd;"],
+			"replace": ["\tconst cwd = params.cwd;"],
+			"gate": ["bash", "run.sh", "check-herdr-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:HFC-CWD-EMPTY-IS-OMITTED]",
+			"signatureSource": "scripts/check-herdr-fresh-call.ts"
+		},
+		{
+			"claim": "HFC-SPLIT-OCCUPIED",
+			"title": "a split that came back already holding an agent is started into anyway, landing our framing beside somebody else's sibling",
+			"subject": "pi-extensions/lib/herdr-fresh-call.ts",
+			"find": ["\tif (pane.hasAgentSession) {"],
+			"replace": ["\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-herdr-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:HFC-SPLIT-OCCUPIED]",
+			"signatureSource": "scripts/check-herdr-fresh-call.ts"
+		},
+		{
+			"claim": "HFC-START-PANE-BINDING",
+			"title": "a start reporting a different pane is accepted as success, so the receipt names a coordinate that never held the sibling",
+			"subject": "pi-extensions/lib/herdr-fresh-call.ts",
+			"find": ["\tif (started.pane.paneId !== pane.paneId || started.pane.terminalId !== pane.terminalId) {"],
+			"replace": ["\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-herdr-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:HFC-START-PANE-BINDING]",
+			"signatureSource": "scripts/check-herdr-fresh-call.ts"
+		},
+		{
+			"claim": "HFC-START-WITNESS-REQUIRED",
+			"title": "a start with no agent session counts as success, so a launch nobody can identify is reported as one that worked",
+			"subject": "pi-extensions/lib/herdr-fresh-call.ts",
+			"find": ["\tif (!started.pane.hasAgentSession) {"],
+			"replace": ["\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-herdr-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:HFC-START-WITNESS-REQUIRED]",
+			"signatureSource": "scripts/check-herdr-fresh-call.ts"
+		},
+		{
+			"claim": "HFC-START-ARGV-FIDELITY",
+			"title": "the echoed argv is no longer checked, so a sibling started with a framing we never composed passes as ours",
+			"subject": "pi-extensions/lib/herdr-fresh-call.ts",
+			"find": ["\tif (!argvMatchesRequest(started.argv, backend, backendArgs)) {"],
+			"replace": ["\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-herdr-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:HFC-START-ARGV-FIDELITY]",
 			"signatureSource": "scripts/check-herdr-fresh-call.ts"
 		}
 	]

@@ -35,6 +35,12 @@
  *                               text or herdr view judgement
  *   HFC-CLOSE-WITHIN-GENERATION a close needs id AND terminal match AND no agent session
  *   HFC-ORPHAN-NAMED            every failed reclaim names its reason instead of going quiet
+ *   HFC-INPUT-PARITY            the caller-facing input contract is the SHARED one, word for word
+ *   HFC-CWD-EMPTY-IS-OMITTED    `cwd: ""` means "no cwd", as it does on the other rail
+ *   HFC-SPLIT-OCCUPIED          a split that landed on a pane holding an agent does not start
+ *   HFC-START-PANE-BINDING      a start that reports a different pane/terminal is a named failure
+ *   HFC-START-WITNESS-REQUIRED  a start with no agent session is a named failure
+ *   HFC-START-ARGV-FIDELITY     the echoed argv must be exactly what we asked herdr to compose
  */
 
 import assert from "node:assert/strict";
@@ -42,6 +48,7 @@ import { readFileSync } from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
+	argvMatchesRequest,
 	buildHerdrAgentStartArgs,
 	buildHerdrPaneCloseArgs,
 	buildHerdrPaneGetArgs,
@@ -123,19 +130,33 @@ const CALLER = "20260914T174741-2e9ba9";
 const NONCE = "herdr-fresh-call-0123456789abcdef01234567";
 const HERDR_ENV = { HERDR_ENV: "1", HERDR_BIN_PATH: "/home/operator/.local/bin/herdr", HERDR_PANE_ID: "w7:p1" };
 
-/** A runner that records what it was asked and answers from a fixed script. */
-function scriptedRun(replies: readonly { status: number; stdout?: string; stderr?: string }[]): {
-	run: HerdrRun;
-	calls: string[][];
-} {
+type ScriptedReply =
+	| { status: number; stdout?: string; stderr?: string }
+	| ((args: readonly string[]) => { status: number; stdout?: string; stderr?: string });
+
+/** A runner that records what it was asked and answers from a fixed script. A reply may be a
+ * FUNCTION of the request, which is how the start fixture echoes an argv the way herdr does
+ * (`src/app/agents.rs:197-199`: canonical executable + our args) instead of a frozen literal
+ * that could never drift and therefore could never be checked. */
+function scriptedRun(replies: readonly ScriptedReply[]): { run: HerdrRun; calls: string[][] } {
 	const calls: string[][] = [];
 	let index = 0;
 	const run: HerdrRun = (args) => {
 		calls.push([...args]);
-		const reply = replies[index++] ?? { status: 1 };
+		const entry = replies[index++] ?? { status: 1 };
+		const reply = typeof entry === "function" ? entry(args) : entry;
 		return { status: reply.status, stdout: reply.stdout ?? "", stderr: reply.stderr ?? "" };
 	};
 	return { run, calls };
+}
+
+/** herdr's own echo: the canonical executable for the requested kind, then everything after `--`. */
+function startReplyEchoingArgv(base: string, executable = "claude"): ScriptedReply {
+	return (args) => {
+		const parsed = JSON.parse(base) as { result: { argv: string[] } };
+		parsed.result.argv = [executable, ...args.slice(args.indexOf("--") + 1)];
+		return { status: 0, stdout: JSON.stringify(parsed) };
+	};
 }
 
 /** Records the calls a refusal should never make. It RETURNS rather than throws: a throw would
@@ -223,10 +244,11 @@ function main(): void {
 
 	// ── refusals happen before anything exists ───────────────────────────────────────────
 	ok(
-		"[QK:HFC-TMUX-PLACEMENT-REFUSED] a tmux seat is refused BY NAME rather than ignored — silently dropping it would open the sibling somewhere the caller did not ask for while the call still looked successful",
+		'[QK:HFC-TMUX-PLACEMENT-REFUSED] ANY defined placement object is refused by name — `{}` and `{tmuxSession:""}` too, because reading the member instead of the object would give a caller who asked for a seat and mistyped it a default-placed sibling under a green receipt',
 		rejectTmuxPlacementInHerdrContext({ tmuxSession: "org" }) === "herdr-placement-tmux-rejected" &&
-			rejectTmuxPlacementInHerdrContext(undefined) === null &&
-			rejectTmuxPlacementInHerdrContext({}) === null,
+			rejectTmuxPlacementInHerdrContext({}) === "herdr-placement-tmux-rejected" &&
+			rejectTmuxPlacementInHerdrContext({ tmuxSession: "" }) === "herdr-placement-tmux-rejected" &&
+			rejectTmuxPlacementInHerdrContext(undefined) === null,
 	);
 	const base = { backend: "pi", model: "openai-codex/gpt-5.6-sol", task: "do it", callerGardenId: CALLER } as const;
 	const refusals: [string, Parameters<typeof herdrFreshCall>[0], NodeJS.ProcessEnv, string][] = [
@@ -234,11 +256,11 @@ function main(): void {
 		["parent pane", { ...base }, { HERDR_ENV: "1", HERDR_BIN_PATH: "/x/herdr" }, "herdr-parent-pane-missing"],
 		["backend", { ...base, backend: "codex" }, HERDR_ENV, "herdr-backend-unsupported"],
 		["tmux seat", { ...base, placement: { tmuxSession: "org" } }, HERDR_ENV, "herdr-placement-tmux-rejected"],
-		["caller id", { ...base, callerGardenId: null }, HERDR_ENV, "herdr-caller-garden-id-missing"],
-		["empty task", { ...base, task: "" }, HERDR_ENV, "herdr-task-empty"],
-		["model", { ...base, model: "--yolo" }, HERDR_ENV, "herdr-model-invalid"],
 		["cwd", { ...base, cwd: "relative/dir" }, HERDR_ENV, "cwd-not-absolute"],
 	];
+	// The five INPUT reasons are owned by HFC-INPUT-PARITY below, which asserts both their
+	// words and that they too reach no CLI. Splitting them keeps each mutant attributable: a
+	// defect in "nothing runs yet" and a defect in "which word" are different repairs.
 	let everyRefusalPreMutation = true;
 	for (const [, params, env, expected] of refusals) {
 		const { run, calls } = neverRun();
@@ -246,7 +268,7 @@ function main(): void {
 		if (result.ok || result.reason !== expected || calls.length !== 0) everyRefusalPreMutation = false;
 	}
 	ok(
-		"[QK:HFC-PREMUTATION-ONLY] all eight refusals — context, parent pane, backend, tmux seat, caller id, task, model, cwd — are decided with the herdr CLI never invoked, so a refused call leaves no pane behind",
+		"[QK:HFC-PREMUTATION-ONLY] the rail-shaped refusals — context, parent pane, backend, tmux seat, cwd — are decided with the herdr CLI never invoked, so a refused call leaves no pane behind",
 		everyRefusalPreMutation,
 	);
 
@@ -304,7 +326,7 @@ function main(): void {
 	const started = parseHerdrAgentStartResponse(START_OK);
 	ok(
 		"the agent_started reply yields the same pane facts, and agent_session is read as PRESENCE only",
-		started !== null && started.paneId === "w7:p7" && started.hasAgentSession === true,
+		started !== null && started.pane.paneId === "w7:p7" && started.pane.hasAgentSession === true,
 	);
 	const opaque = parseHerdrSplitResponse(SPLIT_OK.replace('"w7:p7"', '"w7:pA"'));
 	ok(
@@ -318,10 +340,7 @@ function main(): void {
 	);
 
 	// ── the launch, and what its receipt may say ─────────────────────────────────────────
-	const { run, calls } = scriptedRun([
-		{ status: 0, stdout: SPLIT_OK },
-		{ status: 0, stdout: START_OK },
-	]);
+	const { run, calls } = scriptedRun([{ status: 0, stdout: SPLIT_OK }, startReplyEchoingArgv(START_OK)]);
 	const launched = herdrFreshCall({ ...base, backend: "claude-code", model: "opus" }, run, HERDR_ENV, NONCE);
 	const receipt = launched.ok ? launched.receipt : null;
 	const receiptText = JSON.stringify(receipt ?? {});
@@ -377,7 +396,10 @@ function main(): void {
 			),
 			"terminal-id-mismatch",
 		],
-		[decideConditionalClose(split, parseHerdrAgentStartResponse(START_OK), false), "agent-session-present"],
+		[
+			decideConditionalClose(split, parseHerdrAgentStartResponse(START_OK)?.pane ?? null, false),
+			"agent-session-present",
+		],
 	];
 	ok(
 		"[QK:HFC-ORPHAN-NAMED] every way the proof can fail has its OWN name — get failed, unreadable, wrong pane, wrong terminal, someone else's agent — because the operator's next move differs for each",
@@ -416,6 +438,129 @@ function main(): void {
 			orphaned.recovery.outcome === "orphan-unreclaimed" &&
 			orphaned.recovery.reason === "terminal-id-mismatch" &&
 			stubborn.calls.length === 3,
+	);
+
+	// ── the amendment cells: input parity and post-split binding ─────────────────────────
+	ok(
+		"[QK:HFC-INPUT-PARITY] the input contract is the SHARED one — same five words, same order, same trimming as the tmux rail — so a caller does not learn a different vocabulary by being inside herdr",
+		(() => {
+			const cases: [Parameters<typeof herdrFreshCall>[0], string][] = [
+				[{ ...base, callerGardenId: null }, "caller-identity-unavailable"],
+				[{ ...base, model: "   " }, "model-empty"],
+				[{ ...base, model: "bad model" }, "model-invalid"],
+				[{ ...base, task: "\t\n " }, "task-empty"],
+				[{ ...base, task: "x".repeat(16001) }, "task-too-long"],
+			];
+			return cases.every(([params, expected]) => {
+				const { run, calls } = neverRun();
+				const result = herdrFreshCall(params, run, HERDR_ENV, NONCE);
+				// The words AND the silence: an input refusal must also leave no pane behind.
+				return !result.ok && result.reason === expected && calls.length === 0;
+			});
+		})() &&
+			(() => {
+				// The cap is the boundary, not a vibe: exactly at it the call proceeds to herdr.
+				const { run, calls } = scriptedRun([{ status: 0, stdout: SPLIT_OK }, startReplyEchoingArgv(START_OK)]);
+				const atCap = herdrFreshCall(
+					{ ...base, backend: "claude-code", task: "x".repeat(16000) },
+					run,
+					HERDR_ENV,
+					NONCE,
+				);
+				return atCap.ok && calls.length === 2;
+			})(),
+	);
+	ok(
+		"[QK:HFC-CWD-EMPTY-IS-OMITTED] an empty cwd means OMITTED, exactly as the public verb has always meant it — reading it as a path made a documented no-op into an invalid-directory refusal",
+		(() => {
+			const { run, calls } = scriptedRun([{ status: 0, stdout: SPLIT_OK }, startReplyEchoingArgv(START_OK)]);
+			const result = herdrFreshCall({ ...base, backend: "claude-code", cwd: "" }, run, HERDR_ENV, NONCE);
+			return result.ok && !calls[0].includes("--cwd") && !("cwd" in result.receipt);
+		})(),
+	);
+	ok(
+		"[QK:HFC-SPLIT-OCCUPIED] a split that came back holding an agent does NOT get started into — it is named, and the reclaim that follows correctly refuses to close somebody else's pane",
+		(() => {
+			const occupied = JSON.stringify({
+				id: "cli:pane:split",
+				result: { pane: JSON.parse(START_OK).result.agent, type: "pane_info" },
+			});
+			const { run, calls } = scriptedRun([
+				{ status: 0, stdout: occupied },
+				{ status: 0, stdout: occupied },
+			]);
+			const result = herdrFreshCall({ ...base, backend: "claude-code" }, run, HERDR_ENV, NONCE);
+			return (
+				!result.ok &&
+				result.reason === "herdr-split-pane-occupied" &&
+				"recovery" in result &&
+				result.recovery.outcome === "orphan-unreclaimed" &&
+				result.recovery.reason === "agent-session-present" &&
+				!calls.some((call) => call[1] === "start")
+			);
+		})(),
+	);
+	ok(
+		"[QK:HFC-START-PANE-BINDING] a start reporting a pane or terminal that is not the one we split is a NAMED failure, not a success — a green receipt would have pointed the caller at a coordinate that never held their sibling — and the reclaim still runs from the split receipt",
+		(() => {
+			const drifted = START_OK.replace('"w7:p7"', '"w7:p9"');
+			const { run, calls } = scriptedRun([
+				{ status: 0, stdout: SPLIT_OK },
+				startReplyEchoingArgv(drifted),
+				{ status: 0, stdout: SPLIT_OK },
+				{ status: 0 },
+			]);
+			const result = herdrFreshCall({ ...base, backend: "claude-code" }, run, HERDR_ENV, NONCE);
+			return (
+				!result.ok &&
+				result.reason === "herdr-agent-start-pane-drift" &&
+				calls[2].join(" ") === "pane get w7:p7" &&
+				calls[3].join(" ") === "pane close w7:p7"
+			);
+		})(),
+	);
+	ok(
+		"[QK:HFC-START-WITNESS-REQUIRED] a start that succeeded WITHOUT an agent session is a named failure — herdr waits for detection before returning, so a missing witness means a launch nobody can identify, and presence is the whole claim we read",
+		(() => {
+			const witnessless = JSON.parse(START_OK);
+			witnessless.result.agent.agent_session = null;
+			const { run } = scriptedRun([
+				{ status: 0, stdout: SPLIT_OK },
+				startReplyEchoingArgv(JSON.stringify(witnessless)),
+				{ status: 0, stdout: SPLIT_OK },
+				{ status: 0 },
+			]);
+			const result = herdrFreshCall({ ...base, backend: "claude-code" }, run, HERDR_ENV, NONCE);
+			return !result.ok && result.reason === "herdr-agent-start-witness-missing";
+		})(),
+	);
+	ok(
+		"[QK:HFC-START-ARGV-FIDELITY] the echoed argv must be the canonical executable plus EXACTLY the argv we passed after `--` — a sibling started with a different framing is one we did not compose, and nothing downstream would ever reveal it",
+		(() => {
+			const composed = JSON.parse(START_OK);
+			const { run, calls } = scriptedRun([
+				{ status: 0, stdout: SPLIT_OK },
+				{
+					status: 0,
+					stdout: JSON.stringify({
+						...composed,
+						result: { ...composed.result, argv: ["claude", "SOMETHING-ELSE"] },
+					}),
+				},
+				{ status: 0, stdout: SPLIT_OK },
+				{ status: 0 },
+			]);
+			const drift = herdrFreshCall({ ...base, backend: "claude-code" }, run, HERDR_ENV, NONCE);
+			const passed = calls[1].slice(calls[1].indexOf("--") + 1);
+			return (
+				!drift.ok &&
+				drift.reason === "herdr-agent-start-argv-drift" &&
+				argvMatchesRequest(["claude", ...passed], "claude-code", passed) &&
+				!argvMatchesRequest(["claude"], "claude-code", passed) &&
+				!argvMatchesRequest(null, "claude-code", passed) &&
+				!argvMatchesRequest(["pi", ...passed], "claude-code", passed)
+			);
+		})(),
 	);
 
 	console.log(`\n[check-herdr-fresh-call] ${passed} assertions ok`);

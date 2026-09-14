@@ -284,3 +284,72 @@ export function mintNonce(randomHex: () => string = defaultRandomHex): string {
 function defaultRandomHex(): string {
 	return randomBytes(12).toString("hex");
 }
+
+/** Mirrors the `entwurf_v2` message bound. This is an INTERFACE cap for symmetry with the
+ * delivery surface, not a claim that a task of this size was measured through any one rail. An
+ * argv that the OS refuses is a launch failure and fails loud — it never reads as a delivered
+ * task. */
+export const TASK_MAX_CHARS = 16000;
+export const MODEL_MAX_CHARS = 200;
+const MODEL_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._/:[\]-]*$/;
+
+/** A model is an explicit launch input, not ambient process state. The grammar admits canonical
+ * pi provider/model ids, Claude model ids/aliases, and bracketed context variants, while refusing
+ * whitespace and shell/tmux control syntax. It is passed without a shell using each runtime's
+ * measured CLI dialect: Pi takes `--model`, value; Claude Code takes `--model=value`. */
+export function isSafeFreshCallModel(model: string): boolean {
+	return model.length > 0 && model.length <= MODEL_MAX_CHARS && MODEL_PATTERN.test(model);
+}
+
+/** Why a fresh call was refused on its INPUTS, before any rail was asked to do anything. These
+ * five strings are the caller-facing contract of the public verb, so both rails answer with the
+ * same words: a caller who mistypes a model must not learn a different name depending on which
+ * placement owner happens to be running. */
+export type FreshCallInputRejectReason =
+	| "caller-identity-unavailable"
+	| "model-empty"
+	| "model-invalid"
+	| "task-empty"
+	| "task-too-long";
+
+export interface FreshCallInputs {
+	readonly callerGardenId: string;
+	readonly model: string;
+	readonly task: string;
+	readonly cwd?: string;
+}
+
+/**
+ * Normalise and validate what the CALLER supplied, in the one order both rails share.
+ *
+ * Model and task are TRIMMED — that is the public contract and predates both rails, so a task
+ * of spaces is `task-empty` rather than a sibling born with nothing to do. Everything after this
+ * point travels byte-exact; the trim is the only normalisation anywhere in a launch.
+ *
+ * `cwd` is the exception that must not be "fixed": ONLY `undefined` and the exact empty string
+ * mean "no cwd". Every other value is the literal path, deliberately untrimmed, so a
+ * whitespace-mangled directory is refused loudly by each rail's classifier instead of being
+ * silently repaired into a different directory. The classification itself stays on the rails,
+ * because the reasons differ — tmux format-expands a `-c` value and herdr does not.
+ */
+export function normalizeFreshCallInputs(params: {
+	readonly callerGardenId: string | null;
+	readonly model: string;
+	readonly task: string;
+	readonly cwd?: string;
+}): { ok: true; inputs: FreshCallInputs } | { ok: false; reason: FreshCallInputRejectReason } {
+	if (typeof params.callerGardenId !== "string" || params.callerGardenId.length === 0) {
+		return { ok: false, reason: "caller-identity-unavailable" };
+	}
+	const model = params.model.trim();
+	if (model.length === 0) return { ok: false, reason: "model-empty" };
+	if (!isSafeFreshCallModel(model)) return { ok: false, reason: "model-invalid" };
+	const task = params.task.trim();
+	if (task.length === 0) return { ok: false, reason: "task-empty" };
+	if (task.length > TASK_MAX_CHARS) return { ok: false, reason: "task-too-long" };
+	const cwd = params.cwd === undefined || params.cwd === "" ? undefined : params.cwd;
+	return {
+		ok: true,
+		inputs: { callerGardenId: params.callerGardenId, model, task, ...(cwd === undefined ? {} : { cwd }) },
+	};
+}

@@ -51,7 +51,7 @@ Decode the following JSON string literal and follow the decoded instructions exa
 ```
 
 - **`JSON.stringify`만으로는 부족하다.** 그것은 C0와 따옴표·역슬래시만 이스케이프하고 **DEL(U+007F)과 C1 블록(U+0080–U+009F)은 리터럴로 남긴다.** 그래서 그 뒤에 남은 `\p{Cc}`를 `\uXXXX`로 되돌릴 수 있게 한 번 더 이스케이프한다.
-- **바이트를 정규화하지 않는다.** trim도, 개행 접기도, 유니코드 정규화도 없다. 인코더는 자기 출력이 원본으로 정확히 디코드되는지 확인하고, 아니면 **던진다** — 재현할 수 없는 프레이밍으로 형제를 태우지 않는다.
+- **전송이 바이트를 정규화하지 않는다.** 인코더는 개행 접기도 유니코드 정규화도 하지 않고, 자기 출력이 원본으로 정확히 디코드되는지 확인한 뒤 아니면 **던진다** — 재현할 수 없는 프레이밍으로 형제를 태우지 않는다. `[정확히 말하면]` 그 "원본"은 **공개 입력 계약을 통과한 뒤의 문자열**이다: model과 task는 두 레일 공통으로 **trim된다**(공백뿐인 task는 `task-empty`). trim이 launch 전체에서 유일한 정규화이고, 그 뒤로는 전송이 바이트를 건드리지 않는다.
 - **호출 전에 `\p{Cc}` 0개를 증명한다.** 프롬프트만이 아니라 `agent start`에 넘길 **모든 인자**를 검사한다(서버도 모든 인자를 본다). 실패는 `herdr-argv-control-character` — split 이전이라 **고아 pane이 남지 않는다**.
 - `[측정 2026-09-14, 두 파일럿]` 형제는 디코드하고 **콜백을 먼저** 보낸 뒤 과제에 답했다. 인코딩이 "콜백이 첫 행동"이라는 계약을 삼키지 않았다.
 
@@ -132,9 +132,15 @@ pane split --pane <HERDR_PANE_ID> --direction down --no-focus [--cwd <literal>] 
 
 ## 10. 거절 어휘
 
-**pre-mutation** (아무것도 생기지 않음): `herdr-context-missing` · `herdr-parent-pane-missing` · `herdr-backend-unsupported` · `herdr-placement-tmux-rejected` · `herdr-caller-garden-id-missing` · `herdr-task-empty` · `herdr-model-invalid` · `herdr-argv-control-character` · `cwd-not-absolute` · `cwd-missing` · `cwd-not-directory`
+**공유 입력 계약**(tmux 레일과 **같은 낱말**, 같은 순서, 같은 trim): `caller-identity-unavailable` · `model-empty` · `model-invalid` · `task-empty` · `task-too-long`. 이 다섯은 공개 verb의 caller-facing 계약이라 herdr 안이라고 다른 단어를 배우면 안 된다. `cwd`의 생략 규칙도 같이 온다 — **`undefined`와 정확히 빈 문자열만** "cwd 없음"이고, 나머지는 리터럴 경로다(untrimmed).
 
-**post-split** (회수 결과를 함께 낸다): `herdr-split-failed` · `herdr-split-unparsable` · `herdr-agent-start-failed` · `herdr-agent-start-unparsable`
+**herdr 고유 pre-mutation**(아무것도 생기지 않음): `herdr-context-missing` · `herdr-parent-pane-missing` · `herdr-backend-unsupported` · `herdr-placement-tmux-rejected` · `herdr-argv-control-character` · `cwd-not-absolute` · `cwd-missing` · `cwd-not-directory`
+
+**post-split** (회수 결과를 함께 낸다): `herdr-split-failed` · `herdr-split-unparsable` · `herdr-split-pane-occupied` · `herdr-agent-start-failed` · `herdr-agent-start-unparsable` · `herdr-agent-start-pane-drift` · `herdr-agent-start-witness-missing` · `herdr-agent-start-argv-drift`
+
+뒤의 셋은 **읽을 수 있는데 어긋난** 응답이라 `unparsable`로 뭉개지 않는다 — 오퍼레이터가 할 일이 각각 다르다. `pane-drift`는 우리가 연 pane이 아닌 곳에서 뭔가 떴다는 뜻이고(회수는 **split 영수증**에서 시작한다), `witness-missing`은 아무도 식별할 수 없는 launch를 성공이라고 들었다는 뜻이며, `argv-drift`는 우리가 구성하지 않은 프레이밍으로 형제가 떴다는 뜻이다. `[file:line @ c77af189]` `src/app/agents.rs:197-199`가 echo되는 argv를 **canonical executable + 우리 args**로 정의하므로 이 대조는 추측이 아니다.
+
+`placement`는 **정의되어 있기만 하면** 거절한다 — `{}`도 `{tmuxSession:""}`도. 멤버를 읽으면, seat를 요청했다가 오타를 낸 caller가 초록 영수증과 함께 기본 위치의 형제를 받는다.
 
 `herdr-placement-tmux-rejected`가 따로 있는 이유: herdr 안에서 `placement:{tmuxSession}`은 **조용히 무시하면 안 된다.** 무시하면 caller가 요청하지 않은 곳에 형제가 열리는데 호출은 성공으로 보인다. tmux fallback은 없다 — 지원하지 않는 backend도 마찬가지로 이름 붙여 거절하고, 다른 레일로 몰래 보내지 않는다.
 

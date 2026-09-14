@@ -92,9 +92,14 @@ import {
 	FRESH_CALL_CALLBACK_TOOL,
 	type FreshCallBackend,
 	type FreshCallComposition,
+	type FreshCallInputRejectReason,
+	isSafeFreshCallModel,
+	MODEL_MAX_CHARS,
 	mintNonce,
+	normalizeFreshCallInputs,
 	OMP_BOOTSTRAP_FLAG,
 	OMP_BOOTSTRAP_VERSION,
+	TASK_MAX_CHARS,
 } from "./fresh-call-composition.ts";
 import {
 	assertLaunchTarget,
@@ -134,9 +139,12 @@ export {
 	FRESH_CALL_CALLBACK_TOOL,
 	type FreshCallBackend,
 	type FreshCallComposition,
+	isSafeFreshCallModel,
+	MODEL_MAX_CHARS,
 	mintNonce,
 	OMP_BOOTSTRAP_FLAG,
 	OMP_BOOTSTRAP_VERSION,
+	TASK_MAX_CHARS,
 };
 
 /** What the tmux rail tells a sibling about where it woke up. The resume verb has no equivalent
@@ -195,25 +203,11 @@ export const FRESH_CALL_RUNTIME: Record<FreshCallBackend, string> = {
 	codex: "codex",
 };
 
-/** Mirrors the `entwurf_v2` message bound. This is an INTERFACE cap for symmetry with the
- * delivery surface, not a claim that a task of this size was measured through tmux. An argv
- * that the OS refuses is a launch failure and fails loud — it never reads as a delivered task. */
-export const TASK_MAX_CHARS = 16000;
-export const MODEL_MAX_CHARS = 200;
-const MODEL_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._/:[\]-]*$/;
-
-/** A model is an explicit launch input, not ambient process state. The grammar admits canonical
- * pi provider/model ids, Claude model ids/aliases, and bracketed context variants, while refusing
- * whitespace and tmux control syntax. It is passed without a shell using each runtime's measured
- * CLI dialect: Pi takes `--model`, value; Claude Code takes `--model=value`. */
-export function isSafeFreshCallModel(model: string): boolean {
-	return model.length > 0 && model.length <= MODEL_MAX_CHARS && MODEL_PATTERN.test(model);
-}
-
 /** A launch that was refused, or a placement that could not be established. Every value is a
  * NAMED refusal — this module has no fallback launch and no fallback directory. The cwd members
  * come from the shared classification leaf and their string values are stable contract. */
 export type FreshCallRejectReason =
+	| FreshCallInputRejectReason
 	| PlacementRejectReason
 	| LaunchRejectReason
 	| TmuxCwdRejectReason
@@ -364,19 +358,12 @@ export function freshCall(
 	env: NodeJS.ProcessEnv = process.env,
 	nonce: string = mintNonce(),
 ): FreshCallResult {
-	if (typeof params.callerGardenId !== "string" || params.callerGardenId.length === 0) {
-		return { ok: false, reason: "caller-identity-unavailable" };
-	}
-	const model = params.model.trim();
-	if (model.length === 0) return { ok: false, reason: "model-empty" };
-	if (!isSafeFreshCallModel(model)) return { ok: false, reason: "model-invalid" };
-	const task = params.task.trim();
-	if (task.length === 0) return { ok: false, reason: "task-empty" };
-	if (task.length > TASK_MAX_CHARS) return { ok: false, reason: "task-too-long" };
-	// ONLY `undefined` and the exact empty string mean "no cwd". Everything else is the literal
-	// value — deliberately untrimmed, so a whitespace-mangled path is refused loudly by the
-	// classification below instead of being silently repaired into a different directory.
-	const cwd = params.cwd === undefined || params.cwd === "" ? undefined : params.cwd;
+	// The caller-facing input contract lives in the composition leaf so BOTH rails answer a
+	// mistyped model or an oversized task with the same words. Order, trimming and the
+	// cwd-omission rule are unchanged from when they lived here.
+	const normalized = normalizeFreshCallInputs(params);
+	if (!normalized.ok) return { ok: false, reason: normalized.reason };
+	const { callerGardenId, model, task, cwd } = normalized.inputs;
 	if (cwd !== undefined) {
 		const badCwd = classifyTmuxCwd(cwd);
 		if (badCwd) return { ok: false, reason: badCwd };
@@ -436,10 +423,10 @@ export function freshCall(
 		prompt: buildFreshCallPrompt({
 			backend: params.backend,
 			task,
-			callerGardenId: params.callerGardenId,
+			callerGardenId,
 			nonce,
 		}),
-		bootstrapPayload: buildOmpBootstrapPayload({ callerGardenId: params.callerGardenId, nonce, task }),
+		bootstrapPayload: buildOmpBootstrapPayload({ callerGardenId, nonce, task }),
 	};
 	const run = runTmux(
 		buildFreshCallArgs(targetSessionId, runtimePath, buildBackendArgs(params.backend, composition, model, env), cwd),

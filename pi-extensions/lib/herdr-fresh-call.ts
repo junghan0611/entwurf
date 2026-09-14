@@ -49,6 +49,8 @@ import {
 	composeBackendArgs,
 	composeFreshCallPrompt,
 	type FreshCallComposition,
+	type FreshCallInputRejectReason,
+	normalizeFreshCallInputs,
 } from "./fresh-call-composition.ts";
 
 /** The pilot set, closed. `[#116 decision]` herdr's own `--kind` enum is much larger, and that is
@@ -80,13 +82,13 @@ export const HERDR_DECODE_INSTRUCTION =
 /** Why a herdr fresh call was refused BEFORE anything was created. Every value is a named refusal
  * and none of them has a fallback: a rejected call leaves no pane, no agent and no record. */
 export type HerdrFreshCallRejectReason =
+	// The caller-facing input contract, shared with the tmux rail so a mistyped model or an
+	// oversized task is answered with the SAME word on either placement owner.
+	| FreshCallInputRejectReason
 	| "herdr-context-missing"
 	| "herdr-parent-pane-missing"
 	| "herdr-backend-unsupported"
 	| "herdr-placement-tmux-rejected"
-	| "herdr-caller-garden-id-missing"
-	| "herdr-task-empty"
-	| "herdr-model-invalid"
 	| "herdr-argv-control-character"
 	| "cwd-not-absolute"
 	| "cwd-missing"
@@ -97,8 +99,19 @@ export type HerdrFreshCallRejectReason =
 export type HerdrLaunchFailureReason =
 	| "herdr-split-failed"
 	| "herdr-split-unparsable"
+	/** The split succeeded onto a pane that ALREADY holds an agent. Starting there would either
+	 * be refused by herdr or land on somebody else's sibling, so this declines instead. */
+	| "herdr-split-pane-occupied"
 	| "herdr-agent-start-failed"
-	| "herdr-agent-start-unparsable";
+	| "herdr-agent-start-unparsable"
+	/** The start reported a pane or terminal that is not the one we split. Distinct from
+	 * `unparsable` on purpose: the payload was readable and said something actionable. */
+	| "herdr-agent-start-pane-drift"
+	/** The start succeeded without an `agent_session`. herdr's own start path waits for
+	 * detection, so a missing witness means we were told about a launch nobody can identify. */
+	| "herdr-agent-start-witness-missing"
+	/** The echoed argv is not the canonical executable plus exactly what we passed after `--`. */
+	| "herdr-agent-start-argv-drift";
 
 /** Why an orphan pane could NOT be reclaimed. `[측정 2026-09-14, isolated sandbox server]` a herdr
  * server restart brought the SAME pane ids back bound to entirely different terminals
@@ -198,11 +211,11 @@ export function resolveHerdrContext(
 export function rejectTmuxPlacementInHerdrContext(
 	placement: { readonly tmuxSession?: string } | undefined,
 ): "herdr-placement-tmux-rejected" | null {
-	if (placement === undefined) return null;
-	if (typeof placement.tmuxSession === "string" && placement.tmuxSession.length > 0) {
-		return "herdr-placement-tmux-rejected";
-	}
-	return null;
+	// ANY defined placement object is a tmux-shaped request, including `{}` and
+	// `{tmuxSession: ""}`. Reading the MEMBER instead of the object would have let a caller who
+	// asked for a seat and mistyped it get a sibling in the default position with a green
+	// receipt — the same silent-relocation failure this refusal exists to prevent.
+	return placement === undefined ? null : "herdr-placement-tmux-rejected";
 }
 
 /**
@@ -382,13 +395,48 @@ export function parseHerdrSplitResponse(stdout: string): HerdrPaneFacts | null {
 	return readPaneFacts((result as Record<string, unknown>).pane);
 }
 
+/** What a successful `agent start` told us. `argv` is herdr's echo of what it actually composed:
+ * `[file:line @ c77af189]` `src/app/agents.rs:197-199` builds it as the canonical executable for
+ * the requested kind followed by our args, so it is checkable rather than decorative. It is
+ * LAUNCH TRANSPORT evidence and never leaves this module in a receipt. */
+export interface HerdrStartFacts {
+	readonly pane: HerdrPaneFacts;
+	readonly argv: readonly string[] | null;
+}
+
 /** `{"id":"cli:agent:start","result":{"agent":{…},"argv":[…],"type":"agent_started"}}` — measured. */
-export function parseHerdrAgentStartResponse(stdout: string): HerdrPaneFacts | null {
+export function parseHerdrAgentStartResponse(stdout: string): HerdrStartFacts | null {
 	const root = parseJsonObject(stdout);
 	if (root === null) return null;
 	const result = root.result;
 	if (typeof result !== "object" || result === null) return null;
-	return readPaneFacts((result as Record<string, unknown>).agent);
+	const pane = readPaneFacts((result as Record<string, unknown>).agent);
+	if (pane === null) return null;
+	const rawArgv = (result as Record<string, unknown>).argv;
+	const argv =
+		Array.isArray(rawArgv) && rawArgv.every((token) => typeof token === "string") ? (rawArgv as string[]) : null;
+	return { pane, argv };
+}
+
+/** The canonical executable herdr writes for a requested kind, measured twice today (`["claude"]`
+ * and `["pi","--entwurf-control"]`) and pinned upstream at `src/detect/mod.rs:155-156 @ c77af189`.
+ * We only assert it for the two pilot kinds we have actually seen. */
+export const HERDR_CANONICAL_EXECUTABLE: Record<HerdrFreshCallBackend, string> = {
+	pi: "pi",
+	"claude-code": "claude",
+};
+
+/** Did herdr compose the argv we asked for, exactly? A launch whose echoed argv differs is a
+ * sibling that was started with something other than our framing, which no later receipt would
+ * reveal. */
+export function argvMatchesRequest(
+	echoed: readonly string[] | null,
+	backend: HerdrFreshCallBackend,
+	backendArgs: readonly string[],
+): boolean {
+	if (echoed === null) return false;
+	const expected = [HERDR_CANONICAL_EXECUTABLE[backend], ...backendArgs];
+	return echoed.length === expected.length && echoed.every((token, index) => token === expected[index]);
 }
 
 /** `herdr pane get <id>` → `{"result":{"pane":{…}}}` — the same shape as split. */
@@ -448,13 +496,6 @@ export function decideConditionalClose(
 	return { close: true };
 }
 
-/** A model is an explicit launch input. The grammar is narrow on purpose and states only what this
- * rail can defend: non-empty, no control character (herdr would refuse the whole argv), and no
- * leading `-`, which every vendor CLI would read as a flag rather than a model. */
-export function isSafeHerdrModel(model: string): boolean {
-	return model.length > 0 && !model.startsWith("-") && !containsControlChar(model);
-}
-
 /**
  * Open the sibling.
  *
@@ -493,20 +534,22 @@ export function herdrFreshCall(
 	}
 	const backend = params.backend as HerdrFreshCallBackend;
 
-	if (params.callerGardenId === null || params.callerGardenId.length === 0) {
-		return { ok: false, reason: "herdr-caller-garden-id-missing" };
-	}
-	if (params.task.length === 0) return { ok: false, reason: "herdr-task-empty" };
-	if (!isSafeHerdrModel(params.model)) return { ok: false, reason: "herdr-model-invalid" };
-	if (params.cwd !== undefined) {
-		const badCwd = classifyHerdrCwd(params.cwd);
+	// The caller's inputs are judged by the SHARED contract — same order, same trimming, same
+	// five words — so a caller cannot learn a different vocabulary by being inside herdr. The
+	// cwd omission rule comes with it: `undefined` and `""` both mean "no cwd", which this rail
+	// previously mistook for an invalid path.
+	const normalized = normalizeFreshCallInputs(params);
+	if (!normalized.ok) return { ok: false, reason: normalized.reason };
+	const { callerGardenId, model, task, cwd } = normalized.inputs;
+	if (cwd !== undefined) {
+		const badCwd = classifyHerdrCwd(cwd);
 		if (badCwd !== null) return { ok: false, reason: badCwd };
 	}
 
 	const multiline = composeFreshCallPrompt({
 		backend,
-		task: params.task,
-		callerGardenId: params.callerGardenId,
+		task,
+		callerGardenId,
 		nonce,
 		openingLine: HERDR_FRESH_CALL_OPENING_LINE,
 	});
@@ -515,13 +558,9 @@ export function herdrFreshCall(
 
 	const composition: FreshCallComposition = {
 		prompt: encoded.argv,
-		bootstrapPayload: buildOmpBootstrapPayload({
-			callerGardenId: params.callerGardenId,
-			nonce,
-			task: params.task,
-		}),
+		bootstrapPayload: buildOmpBootstrapPayload({ callerGardenId, nonce, task }),
 	};
-	const backendArgs = composeBackendArgs(backend, composition, params.model, () => {
+	const backendArgs = composeBackendArgs(backend, composition, model, () => {
 		// Unreachable: codex is not in the pilot set and was refused above. It throws rather than
 		// returning a plausible path, so a future widening cannot silently inherit a guess.
 		throw new Error("herdr-fresh-call: codex is not a pilot backend on this rail");
@@ -534,7 +573,7 @@ export function herdrFreshCall(
 	const splitRun = run(
 		buildHerdrSplitArgs({
 			parentPaneId: context.context.parentPaneId,
-			...(params.cwd === undefined ? {} : { cwd: params.cwd }),
+			...(cwd === undefined ? {} : { cwd }),
 		}),
 	);
 	if (splitRun.status !== 0) {
@@ -546,6 +585,12 @@ export function herdrFreshCall(
 		// A pane may exist and its id is precisely what we could not read. Diffing `pane list` to
 		// find "the new one" is the guess this rail refuses, so the orphan is NAMED instead.
 		return { ok: false, reason: "herdr-split-unparsable", recovery: unknownPane() };
+	}
+	if (pane.hasAgentSession) {
+		// A freshly split pane holding an agent is not a pane we understand. Starting into it
+		// would either be refused by herdr as busy or, worse, land beside somebody else's
+		// sibling. Declining here also means the reclaim below correctly REFUSES to close it.
+		return { ok: false, reason: "herdr-split-pane-occupied", recovery: reclaim(pane, run) };
 	}
 
 	const agentName = herdrAgentNameFromNonce(nonce);
@@ -569,19 +614,38 @@ export function herdrFreshCall(
 	if (started === null) {
 		return { ok: false, reason: "herdr-agent-start-unparsable", recovery: reclaim(pane, run) };
 	}
+	// EVERY reclaim below starts from the SPLIT receipt, never from what the start reported: if
+	// those two disagree, the split receipt is the only coordinate we have authority over.
+	if (started.pane.paneId !== pane.paneId || started.pane.terminalId !== pane.terminalId) {
+		// Readable, and actionable — so it is not folded into `unparsable`. Something started
+		// somewhere other than the pane we opened, and a green receipt would have pointed the
+		// caller at a coordinate that never held their sibling.
+		return { ok: false, reason: "herdr-agent-start-pane-drift", recovery: reclaim(pane, run) };
+	}
+	if (!started.pane.hasAgentSession) {
+		// herdr's own start path waits for detection before returning, so a success with no
+		// session reference means we were told about a launch that nobody can identify. The
+		// VALUE stays unread here — presence is the whole claim.
+		return { ok: false, reason: "herdr-agent-start-witness-missing", recovery: reclaim(pane, run) };
+	}
+	if (!argvMatchesRequest(started.argv, backend, backendArgs)) {
+		// The framing is the argv. A sibling started with a different one is a sibling we did not
+		// compose, and nothing downstream would ever reveal it.
+		return { ok: false, reason: "herdr-agent-start-argv-drift", recovery: reclaim(pane, run) };
+	}
 
 	return {
 		ok: true,
 		receipt: {
 			backend,
 			requestedKind: HERDR_AGENT_KIND[backend],
-			model: params.model,
-			...(params.cwd === undefined ? {} : { cwd: params.cwd }),
+			model,
+			...(cwd === undefined ? {} : { cwd }),
 			herdrAgentName: agentName,
-			herdrPaneId: started.paneId,
-			herdrTerminalId: started.terminalId,
-			...(started.workspaceId === undefined ? {} : { herdrWorkspaceId: started.workspaceId }),
-			...(started.tabId === undefined ? {} : { herdrTabId: started.tabId }),
+			herdrPaneId: started.pane.paneId,
+			herdrTerminalId: started.pane.terminalId,
+			...(started.pane.workspaceId === undefined ? {} : { herdrWorkspaceId: started.pane.workspaceId }),
+			...(started.pane.tabId === undefined ? {} : { herdrTabId: started.pane.tabId }),
 			nonce,
 		},
 	};
