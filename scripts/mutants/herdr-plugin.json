@@ -1,0 +1,133 @@
+{
+	"schemaVersion": 1,
+	"lane": "herdr-plugin",
+	"mutants": [
+		{
+			"claim": "HPL-ONE-OPEN-ONE-READ",
+			"title": "re-reading either listing turns one answered question into a poll — peer-facts observes every citizen unbounded (measured 4.1s on a 1,150-record store) and herdr publishes no 'the session reference landed' event, so a second read is both the slow path and the discovery watcher docs/mux-launch-rail.md §7 refuses by name (#116 M2-b)",
+			"subject": "plugins/herdr/lib/status.mjs",
+			"find": ["\t\t\tconst agents = readJson(herdrBin, [\"agent\", \"list\"], {"],
+			"replace": [
+				"\t\t\treadJson(herdrBin, [\"agent\", \"list\"], { failed: \"x\", unparsable: \"y\" });\n\t\t\tconst agents = readJson(herdrBin, [\"agent\", \"list\"], {"
+			],
+			"gate": ["bash", "run.sh", "check-herdr-plugin"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:HPL-ONE-OPEN-ONE-READ]",
+			"signatureSource": "scripts/check-herdr-plugin.ts"
+		},
+		{
+			"claim": "HPL-SKIP-NOT-FAILURE",
+			"title": "turning a missing Entwurf into a red makes every host that simply has not installed it look broken, and invites the plugin to 'fix' it — installing Entwurf is not a plugin's business (AGENTS.md Hard Rule 17, #116 M2-b)",
+			"subject": "plugins/herdr/lib/status.mjs",
+			"find": ["\tfinish([\"entwurf-not-found\"], OK);"],
+			"replace": ["\tfinish([\"entwurf-not-found\"], RED);"],
+			"gate": ["bash", "run.sh", "check-herdr-plugin"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:HPL-SKIP-NOT-FAILURE]",
+			"signatureSource": "scripts/check-herdr-plugin.ts"
+		},
+		{
+			"claim": "HPL-FAILED-READ-IS-RED",
+			"title": "treating a nonzero listing exit as success renders an empty table for a listing that was never read — a host whose store could not be opened becomes indistinguishable from a host with no citizens (#116 M2-b)",
+			"subject": "plugins/herdr/lib/status.mjs",
+			"find": [
+				"\tif (run.status !== 0) return { error: names.failed, detail: `exit ${run.status}: ${(run.stderr ?? \"\").trim()}` };"
+			],
+			"replace": ["\tif (false) return { error: names.failed, detail: `exit ${run.status}` };"],
+			"gate": ["bash", "run.sh", "check-herdr-plugin"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:HPL-FAILED-READ-IS-RED]",
+			"signatureSource": "scripts/check-herdr-plugin.ts"
+		},
+		{
+			"claim": "HPL-AMBIGUOUS-NOT-GUESSED",
+			"title": "resolving two agent rows on one pane to whichever came first is a guess wearing a value's clothes — the only worth of this column is that it never guesses (#116 M2-b)",
+			"subject": "plugins/herdr/lib/status.mjs",
+			"find": ["\t\tbyPane.set(paneId, byPane.has(paneId) ? \"ambiguous\" : status);"],
+			"replace": ["\t\tif (!byPane.has(paneId)) byPane.set(paneId, status);"],
+			"gate": ["bash", "run.sh", "check-herdr-plugin"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:HPL-AMBIGUOUS-NOT-GUESSED]",
+			"signatureSource": "scripts/check-herdr-plugin.ts"
+		},
+		{
+			"claim": "HPL-ACTIVITY-IS-SEPARATE",
+			"title": "labelling herdr's agent_status as anything but herdr's own report starts the drift that ends with a screen judgement being read as Entwurf delivery liveness (docs/herdr-launch-rail.md §9, #116 M2-b)",
+			"subject": "plugins/herdr/lib/status.mjs",
+			"find": ["\tconst head = [\"garden id\", \"backend\", \"cwd\", \"placement\", \"herdr-reported activity\"];"],
+			"replace": ["\tconst head = [\"garden id\", \"backend\", \"cwd\", \"placement\", \"liveness\"];"],
+			"gate": ["bash", "run.sh", "check-herdr-plugin"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:HPL-ACTIVITY-IS-SEPARATE]",
+			"signatureSource": "scripts/check-herdr-plugin.ts"
+		},
+		{
+			"claim": "HPL-DIAGNOSTICS-SHOWN",
+			"title": "dropping the provider's diagnostics shows a store carrying hazards as a clean listing — the one lie a status pane can tell while looking green (#116 M2-b)",
+			"subject": "plugins/herdr/lib/status.mjs",
+			"find": ["\t\t\t\t\t\t...renderDiagnostics(diagnostics),"],
+			"replace": ["\t\t\t\t\t\t...renderDiagnostics([]),"],
+			"gate": ["bash", "run.sh", "check-herdr-plugin"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:HPL-DIAGNOSTICS-SHOWN]",
+			"signatureSource": "scripts/check-herdr-plugin.ts"
+		},
+		{
+			"claim": "HPL-JOIN-PANE-ID-ONLY",
+			"title": "joining on a native session id forks the vendor floor Entwurf owns in pi-extensions/lib/herdr-placement.ts into a file no gate and no document covers — the whole join a plugin may make is one opaque pane-id string equality (#116 M2-b)",
+			"subject": "plugins/herdr/lib/status.mjs",
+			"find": ["\t\tconst paneId = kind === \"herdr-pane\" ? placement.paneId : null;"],
+			"replace": ["\t\tconst paneId = typeof peer?.nativeSessionId === \"string\" ? peer.nativeSessionId : null;"],
+			"gate": ["bash", "run.sh", "check-herdr-plugin"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:HPL-JOIN-PANE-ID-ONLY]",
+			"signatureSource": "scripts/check-herdr-plugin.ts"
+		},
+		{
+			"claim": "HPL-NO-WRITE",
+			"title": "keeping state in HERDR_PLUGIN_STATE_DIR gives a status pane something that can be stale — this one is only ever as old as the keypress that opened it, and that is the whole guarantee (#116 M2-b)",
+			"subject": "plugins/herdr/lib/status.mjs",
+			"find": ["\tholdOpen().then(() => process.exit(code));"],
+			"replace": [
+				"\tif (process.env.HERDR_PLUGIN_STATE_DIR) fs.writeFileSync(path.join(process.env.HERDR_PLUGIN_STATE_DIR, \"last.json\"), lines.join(\"\\n\"));\n\tholdOpen().then(() => process.exit(code));"
+			],
+			"gate": ["bash", "run.sh", "check-herdr-plugin"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:HPL-NO-WRITE]",
+			"signatureSource": "scripts/check-herdr-plugin.ts"
+		},
+		{
+			"claim": "HPL-MANIFEST-NO-FORBIDDEN-SECTIONS",
+			"title": "a [[build]] section runs in the operator's real HOME — herdr scrubs only HERDR_* from build env (src/cli/plugin.rs:1511-1529 @ c77af189) — and [[startup]]/[[events]] are where the watcher this lane refuses would grow (#116 M2-b)",
+			"subject": "plugins/herdr/herdr-plugin.toml",
+			"find": ["[[panes]]"],
+			"replace": ["[[build]]\ncommand = [\"npm\", \"ci\"]\n\n[[panes]]"],
+			"gate": ["bash", "run.sh", "check-herdr-plugin"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:HPL-MANIFEST-NO-FORBIDDEN-SECTIONS]",
+			"signatureSource": "scripts/check-herdr-plugin.ts"
+		},
+		{
+			"claim": "HPL-RENDER-IS-THE-VISIBLE-ONES",
+			"title": "drawing every retained citizen turns the status pane into the whole store — measured 2026-09-15 the operator's own store is 1,162 records, all unobserved, 17,437 lines of peer-facts output, so finding the two citizens actually in this Herdr session becomes a scrolling exercise and a status surface you must search has already failed (#116 M2-b)",
+			"subject": "plugins/herdr/lib/status.mjs",
+			"find": ["\t\tif (kind !== \"herdr-pane\" && kind !== \"ambiguous\") {"],
+			"replace": ["\t\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-herdr-plugin"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:HPL-RENDER-IS-THE-VISIBLE-ONES]",
+			"signatureSource": "scripts/check-herdr-plugin.ts"
+		},
+		{
+			"claim": "HPL-DIAGNOSTIC-SUBJECTS",
+			"title": "printing a diagnostic's kind and prose without its subject tells an operator that a hazard exists and not where — `record-less-socket` without its garden id and `meta-record-read-error` without its filename are lines nobody can act on (#116 M2-b)",
+			"subject": "plugins/herdr/lib/status.mjs",
+			"find": ["\t\t\tconst fields = Object.keys(d ?? {})"],
+			"replace": ["\t\t\tconst fields = [] || Object.keys(d ?? {})"],
+			"gate": ["bash", "run.sh", "check-herdr-plugin"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:HPL-DIAGNOSTIC-SUBJECTS]",
+			"signatureSource": "scripts/check-herdr-plugin.ts"
+		}
+	]
+}

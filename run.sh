@@ -180,6 +180,7 @@ Usage:
   ./run.sh check-entwurf-facts         # deterministic gate (0.11 Stage 0 step 4, fact-provider slice 1+2): PURE PeerFact core + resolveFactList union — R1 out-of-domain→unsupported, R3b socket-domain 4-value, facts-only keyset; union: PeerFact + RecordLessSocketFact by gardenId (#50 C4: record-less socket = diagnostic subject, gid+liveness only), dormant→dead, F3 indeterminate preserved, out-of-socket-domain+socket fail-loud; pure, no IO
   ./run.sh check-socket-discovery      # deterministic gate (0.11 Stage 0 step 4, fact-provider slice 3): SOCKET-axis scanSocketProbes — probes (dir sockets) ∪ (in-domain citizen canonical paths) 3-valued; dormant citizen no-file → dead (resumable, not unprobed), stall → indeterminate (F3), dir hygiene/dedup/missing-dir + e2e → resolveFactList; readdir/probe injected, no IO
   ./run.sh check-meta-facts            # deterministic gate for the meta-facts projection (#65): drives the REAL CLI — full-record join, parse-before-uniqueness, no-winner duplicates, drift/symlink/invalid-UTF-8 defects in-band, deterministic bytes, exit contract 0/2/3, dispatch+emit reachability
+  ./run.sh check-herdr-plugin          # deterministic gate for the #116 M2-b herdr plugin (`plugins/herdr/`): STATIC manifest shape for herdr 0.9.0 + the forbidden sections ([[build]]/[[startup]]/[[events]]/[[actions]]/[[link_handlers]]) asserted absent; BEHAVIOURAL drive of the REAL pane entry against a stub `entwurf` and stub HERDR_BIN_PATH that LOG every call — exactly one peer-facts + one agent list per open (counted, not claimed), skip-by-name when Entwurf is absent, four distinct named refusals instead of an empty table, ambiguous never first-wins, diagnostics shown, activity in its own column, and zero writes to the plugin state/config dirs. No herdr binary, no Entwurf install
   ./run.sh check-peer-facts            # deterministic gate for the peer-facts projection (#116 M2-a): drives the REAL CLI with every ambient root sandboxed — placement crosses STRUCTURED (never the human `herdr <pane>` string), the peer keyset is exactly the provider's facts (no herdr agent_status may enter an entwurf payload), no socket coordinate is published (#50 C4), diagnostics in-band, the probed socket world is the one ENTWURF_DIR names (proved by a record-less socket surfacing — there is no field to echo), no observation budget, exit contract 0/2/3, dispatch+emit reachability. No herdr binary
   ./run.sh check-meta-listing          # deterministic gate: META-STORE facts axis — kind-carrying entries; non-regular records are never read, parse/drift become diagnostics, duplicate nativeSessionId quarantines every rival but not unrelated citizens; strict throws / collect partial; pure injected IO
   ./run.sh check-entwurf-fact-provider # deterministic gate (0.11 Stage 0 step 4, fact-provider slice 4b): ASSEMBLY listEntwurfFacts — full-store parse/probe/quarantine/resolve stays intact; #112 bounds expensive receiver/transcript observation to the newest 32 rendered rows while older machine rows say unobserved; Q112 pins full payload + exact observer budget; C-원칙 keeps corruption diagnostic and impossible wiring loud; deps injected, no IO
@@ -1772,6 +1773,24 @@ check_meta_facts() {
   # missing store = readable empty store, unreadable store = exit 3 with NO JSON,
   # usage = exit 2, plus dispatch + compiled-twin emit reachability.
   run_ts scripts/check-meta-facts.ts
+}
+
+check_herdr_plugin() {
+  # Deterministic gate for the #116 M2-b herdr plugin (`plugins/herdr/`). Two halves.
+  # STATIC: the manifest is parsed with the package's own TOML reader and held to the
+  # shape herdr 0.9.0 accepts (min_herdr_version required + semver, dot-free pane id,
+  # popup-only sizing, argv arrays), and the ABSENT sections are asserted as hard as the
+  # present one — [[build]] would run in the operator's real HOME (herdr scrubs only
+  # HERDR_*), [[startup]]/[[events]] are where a watcher would grow, [[actions]] would
+  # send a report nobody can read into a 64 KiB log. BEHAVIOURAL: the REAL pane entry is
+  # spawned with a stub `entwurf` and a stub HERDR_BIN_PATH that log every call, so
+  # "exactly one read each per open" is COUNTED; success, skip-by-name, four distinct
+  # named refusals, the ambiguous pane, diagnostics and the no-write claim are each
+  # driven for real. The stub stands for the CONSUMER's input, never for herdr's
+  # behaviour — no claim about herdr is made here, which is why this is not the fake
+  # fixture check-herdr-sandbox forbids. No herdr binary, no Entwurf install, no writes
+  # outside mkdtemp.
+  run_ts scripts/check-herdr-plugin.ts
 }
 
 check_peer_facts() {
@@ -6284,6 +6303,9 @@ case "$cmd" in
     ;;
   check-peer-facts)
     check_peer_facts
+    ;;
+  check-herdr-plugin)
+    check_herdr_plugin
     ;;
   check-entwurf-fact-provider)
     check_entwurf_fact_provider

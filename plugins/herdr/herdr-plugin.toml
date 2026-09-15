@@ -1,0 +1,39 @@
+# Entwurf's Herdr plugin — ONE read-only status pane, nothing else (#116 M2-b).
+#
+# Herdr owns the workbench: workspaces, tabs, panes, layout, and the agent lifecycle
+# it detects inside them. Entwurf owns the screwdriver: garden identity, official
+# delivery, receipts, named refusals. This manifest is where the two meet, and the
+# shape of the meeting is deliberately the smallest one that is useful.
+#
+# WHY THE FORBIDDEN SECTIONS ARE ABSENT, each for its own reason:
+#   [[build]]        — Herdr runs build commands with only HERDR_* scrubbed; HOME and
+#                      every cache under it stay the operator's (measured:
+#                      herdr src/cli/plugin.rs:1511-1529 @ c77af189). A plugin that
+#                      needs no build cannot write to a host it was never given.
+#   [[startup]]      — a startup hook runs on every server start. This pane answers a
+#                      question the operator asked; it does not volunteer.
+#   [[events]]       — pane.agent_status_changed is available and is exactly the hook
+#                      that would grow a watcher. Activity is read once, when asked.
+#   [[actions]]      — an action's stdout goes to a 64 KiB command log, not to the
+#                      operator's eyes. A thing meant to be READ is a pane.
+#   [[link_handlers]] — nothing here handles a URL.
+#
+# `command` is an argv array: Herdr does not run it through a shell. `node` is the
+# only external program named, and Entwurf is itself a Node package, so a host that
+# has Entwurf has Node (see README).
+id = "junghan0611.entwurf"
+name = "Entwurf"
+version = "0.1.0"
+min_herdr_version = "0.9.0"
+description = "Read-only Entwurf garden-citizen status for the panes in this Herdr session."
+platforms = ["linux"]
+
+[[panes]]
+id = "status"
+title = "Entwurf status"
+# overlay: a temporary zoomed view over the active pane that restores the previous
+# focus and zoom when it closes. It closes the instant the command exits (herdr
+# src/app/api.rs:241-258,349-358 @ c77af189), which is why the command waits for one
+# keypress before returning.
+placement = "overlay"
+command = ["node", "lib/status.mjs"]

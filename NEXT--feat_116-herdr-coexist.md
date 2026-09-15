@@ -32,15 +32,15 @@
     - **`[S2-b 측정 완료 2026-09-14 — 여섯 칸 전부 성립]`** `.agent-reports/116-s2b-birth-witness-20260914.md` · #116 코멘트 `issuecomment-5661519488`. 시민 둘(claude `20260914T175029-d7b623` / pi `20260914T175053-2ef8f6`)을 열고 닫았다. (1)(2)(3) direct 응답에 공식 삼중이 있고 exact-one 레코드로 풀리며 `source/agent`↔`backend`, `cwd`↔`cwd` 일치 — **pi는 경로 문자열 전체로 검색하면 0건**이라 파일명→uuid 변환이 선택이 아님이 대조로 증명됐다. (4) envelope 구성 가능: **레코드가 direct 응답보다 먼저 존재한다**(claude 레코드 08:50:29.514Z < 응답 08:50:31.053Z / pi 53.405Z < 54.943Z) → watcher·retry 없이 **1회 조회**로 충분. `[미검증 잔여]` 표본 2개 + 구조 논거일 뿐 herdr의 보장이 아니다 — "레코드가 아직 없음"을 **이름 붙인 거절**로 둘지 **상한 있는 1회 재읽기**로 둘지는 S2-c의 계약 결정이다. (5) claude mailbox `enqueued` → 실제 **읽음 영수증** `lastReadAt=08:51:28.718Z`(7초, 형제가 직접 드레인) / pi `control-socket → sent`. (6) **워크스페이스 이동에서 좌표가 `w7:p3`→`w8:p2`로 바뀌어도** `terminal_id`·`agent_session` 불변이고 현행 프로덕션 조인 leaf가 새 좌표를 정확히 따라갔다; 종료 뒤에는 해당 시민만 `none`(조용한 재결속 0). 한 세대 안에서 좌표 재사용 없음(`w7:p3` 해제 뒤 `w7:p5`→`w7:p6`). 조건부 close 4건 전부 MATCH→`closed`, `orphan-unreclaimed` 0건, 오퍼레이터 스냅샷 전후 IDENTICAL, 레코드 md5 불변.
     - **결론(섞지 않은 채로):** direct witness는 **성립한다**. 그러나 그것이 nonce를 은퇴시키지는 **않는다** — nonce가 소유하는 것은 형제의 **첫 모델 행동과 프레이밍**이고, direct witness가 소유하는 것은 **호출자 측 즉시 상관짓기**다. 다른 물건이라 한쪽을 다른 쪽의 fallback으로 엮으면 실패 모드가 합쳐진다. 어느 프로토콜로 herdr 레일을 낼지는 **GLG의 결정**이고, S2-b는 direct witness 칸을 전부 채웠을 뿐이다.
   - **증거 등급 `[S0 측정 + GLG 결정, 2026-09-14]`: placement·argv·회수·조인 전부 결정론(격리 private 서버 + 샌드박스 integration install) / 콜백 왕복만 LIVE.** 게이트가 샌드박스 `HOME`/`XDG` 안에서 `herdr integration install pi`(필요하면 claude도)를 직접 불러 `agent_session`이 채워지는 것까지 격리 서버에서 증명한다. S0이 잰 것: 헤드리스 서버·`workspace create`·`pane split`·`agent start`가 전부 클라이언트 attach 없이 돌고, `herdr integration status`가 샌드박스 HOME 경로를 그대로 따른다(설치가 샌드박스에 갇힌다). Hard Rule 17은 이 걸음을 막지 않는다 — 설치되는 것은 herdr 자기 바이트이고, 하네스 바이너리·구독·자격증명은 여전히 공급하지 않는다. tmux 대응: `check-mux-placement-tmux`(격리 서버) ↔ `smoke-mux-fresh-call-live`(LIVE)의 갈래와 같은 모양
-- [ ] **5. S5 · herdr 플러그인 껍데기 (M2)** — **M2-a 구현 후보 착지, M2-b 미착수.** `[결정 GLG direct 2026-09-14 밤]` M2는 herdr 플러그인 사용자면으로 간다: Herdr가 사용자면·배치·runtime 상태의 중심, Entwurf는 garden identity·공식 delivery·receipt. 방향은 **공장을 하나 더 짓는 것이 아니라 공방의 드라이버만 남기는 것**이다.
+- [ ] **5. S5 · herdr 플러그인 껍데기 (M2)** — **M2-a 착지, M2-b 구현·교차검수 완료.** `[결정 GLG direct 2026-09-14 밤]` M2는 herdr 플러그인 사용자면으로 간다: Herdr가 사용자면·배치·runtime 상태의 중심, Entwurf는 garden identity·공식 delivery·receipt. 방향은 **공장을 하나 더 짓는 것이 아니라 공방의 드라이버만 남기는 것**이다.
   - `[조사 완료 2026-09-15, 별동대 opus + 코디네이터 독립 독해]` 후보 A(리포 루트가 플러그인) / B(같은 리포 서브디렉터리) / C(별도 리포) 중 **B 채택**. `[결정 GLG direct 2026-09-15]` 플러그인 루트는 `plugins/herdr/`. 순서는 **M2-a(core `peer-facts`) → M2-b(`plugins/herdr/` 렌더러)**. 근거 셋: herdr의 `owner/repo/subdir` install이 공식 문법이고(`src/cli/plugin.rs:726-777 @ c77af189`), `plugin link`는 build를 돌리지 않아 체크아웃 개발/패키지 아티팩트/사용자 설치가 한 디렉터리에서 갈리며, B만이 `[[build]]` 0개를 실제 선택지로 만든다 — herdr는 build에서 `HERDR_*`만 스크럽하고 **HOME은 격리하지 않는다**(`src/cli/plugin.rs:1511-1529`).
-  - **M2-a `[구현 후보, 미커밋]`** — core read-only `peer-facts` verb. M2-b가 shell로 placement 조인을 다시 구현하는 것(= 벤더 바닥의 decaying copy)을 막는 것이 이 걸음의 전부다. 상세는 아래 NOW의 「M2-a」 절.
-  - **M2-b `[미착수, 0줄]`** — `plugins/herdr/`의 `herdr-plugin.toml` + overlay pane 렌더러. 아직 파일이 없고, 설계는 조사 메모에만 있다. 착수는 GLG/코디네이터의 별도 지시.
+  - **M2-a `[착지, f9cea1d]`** — core read-only `peer-facts` verb. M2-b가 shell로 placement 조인을 다시 구현하는 것(= 벤더 바닥의 decaying copy)을 막는 것이 이 걸음의 전부다. 상세는 아래 NOW의 「M2-a」 절.
+  - **M2-b `[구현 후보, 미커밋]`** — `plugins/herdr/`의 `herdr-plugin.toml` + overlay pane 렌더러. 상세는 아래 NOW의 「M2-b」 절.
 - [ ] **6. S4 · resume herdr placement** ← PAUSED: herdr native session restore(`resume_agents_on_restore` 기본 on, `session-state.mdx:52-70` @ c77af189) ↔ `entwurf_resume_call` 소유권 충돌 미측정. 이 랩 밖. herdr 서버 재시작이 우리 pi 시민을 되살렸을 때 garden id 거동은 레인 종료 전 1회 재야 한다. `[S2-b가 절반만 좁혔다]` 재기동 시 **pane id는 재사용되고 terminal_id는 새로 난다**는 것까지는 격리 서버에서 쟀지만, 그 실험에는 **에이전트가 없었다**(맨 셸 3개) — restore가 에이전트를 되살렸을 때 native session이 같은지 새로 나는지가 정확히 S4의 미측정 칸으로 남는다
 
 - [x] **7. M1-b · 배치 정책 교체 (split → 같은 workspace의 새 tab)** — `[GLG direct 승인 2026-09-15]` 구현 + **교차검수 amendment 1회 + C4 LIVE PASS**를 checkpoint로 묶고, 예정했던 qualification **547/547**과 `check:full` **exit 0**까지 후속 완료했다. 상세는 아래 NOW의 「M1-b」 절.
 
-현재 좌표: 0·1·2·3·4 완료 → **M1 complete; corrected C4 LIVE PASS** → **7(M1-b 배치 교체) checkpoint 완료** → **5의 M2-a(core `peer-facts`) 구현 후보, 검수 대기** → M2-b(`plugins/herdr/`) 미착수 → 6 보류
+현재 좌표: 0·1·2·3·4 완료 → **M1 complete; corrected C4 LIVE PASS** → **7(M1-b 배치 교체) checkpoint 완료** → **5의 M2-a 착지(`f9cea1d`)** → **M2-b(`plugins/herdr/`) 구현·교차검수 완료, checkpoint 대기** → 6 보류
 
 # NOW
 
@@ -49,9 +49,36 @@
 
 - Landed: 브랜치 `feat/116-herdr-coexist` = `2f97fc0`(공개 배선) + **`d8c85b2`** + **`5c1f68b`** + **`6684c41`**(C4 acceptance artifact) + **`8e5857d`**(레일별 C4 oracle 수선) + **`8f6c4fb`**(착지한 계획의 미래시제 산문 수선) + 이 문서. `LIVE=1 ./run.sh smoke-herdr-fresh-call-live`는 `8e5857d`에서 **exit 0, 29 assertions ok, 1m49s**, 영수증 `/tmp/herdr-fresh-call-live-exr8fL/receipts.md`. 전부 푸시됨.
 - **M1-b floor 완료 `[측정 receipt, 코디네이터 sol, 2026-09-15]`:** exact HEAD `073938c`에서 `check-gate-qualification` 본체 **547/547 exit 0**(`bg04`), `build-bridge` 뒤 `pnpm run check:full` **509s exit 0**(`bg06`). #116 기록은 `issuecomment-5677631940`. M1-b는 더 이상 floor pending이 아니다.
-- **CURRENT: M2-a 구현 후보를 검수한다.** M2-a 자신의 qualification 본체와 `check:full`은 **아직 미실행**이다 — 위 547/547·509s 영수증은 `073938c`의 것이지 이 변경분의 것이 아니고, 이 변경분은 lane을 하나 늘렸다(547→555). M2-b(`plugins/herdr/`)는 0줄로 남아 있다.
+- **M2-a 착지 `[커밋 f9cea1d]`** — core read-only `peer-facts` verb. 아래 「M2-a」 절은 그 커밋의 기록으로 남긴다.
+- **CURRENT: M2-b를 checkpoint로 묶은 뒤 M2 전체 floor를 실행한다.** `f9cea1d`(M2-a)와 이 변경분(M2-b) **둘 다** qualification 본체·`check:full` 미실행이다 — 위 547/547·509s 영수증은 `073938c`의 것이고, 그 뒤로 lane이 둘 늘었다(547 → 555 → **566**).
 
-## M2-a — core read-only `peer-facts` verb `[구현 후보, 미커밋]`
+## M2-b — `plugins/herdr/` read-only status pane `[구현 후보, 미커밋]`
+
+**무엇을 만들었나.** herdr 플러그인 하나, overlay pane 하나. 두 목록을 **한 번씩** 읽어 나란히 놓고, 키 입력 하나를 기다리고, 끝난다.
+
+- **경로·신원**: `plugins/herdr/`. id `junghan0611.entwurf`(은퇴한 org 아님), version **독립** `0.1.0`, `min_herdr_version` = 잰 바닥 `0.9.0`, `platforms = ["linux"]`.
+- **manifest는 `[[panes]]` 하나뿐.** `[[build]]`·`[[startup]]`·`[[events]]`·`[[actions]]`·`[[link_handlers]]` 0개이고, **없는 이유가 저마다 다르다**: build는 오퍼레이터의 실 HOME에서 돌고(herdr는 `HERDR_*`만 스크럽), startup/events는 이 레인이 거부하는 watcher가 자랄 자리이며, action의 stdout은 64KiB 로그로만 가서 읽으라고 만든 물건이 읽히지 않는다.
+- **의존성 0.** `lib/status.mjs` 하나, Node builtin만. `node_modules`·build·`npm install`·`jq` 없음. manifest argv가 부르는 외부 프로그램은 `node` 하나뿐이고 README가 그 사실을 말한다.
+- **조인은 불투명 pane id 문자열 동등 하나.** `peer-facts`가 `{kind:"herdr-pane", paneId}`를 주고 그 `paneId`를 herdr `pane_id`와 비교한다. 플러그인은 `nativeSessionId`도, 파일명→uuid 변환도, `agent_session` 삼중 재검증도 하지 않는다 — 그 pi 축 변환은 잰 벤더 바닥이고 사본은 아무 게이트도 문서도 덮지 않는다. 한 pane에 에이전트가 둘이면 고르지 않고 `ambiguous`.
+- **활동은 herdr의 말이고 herdr의 칸에 있다.** `herdr-reported activity`는 `placement` 다음, 별도 칸·별도 이름. Entwurf liveness와 섞지 않고 주소·배달 판단에 쓰지 않는다(`docs/herdr-launch-rail.md` §9).
+- **표는 "여기서 누가 보이는가"의 답이지 스토어 덤프가 아니다** `[교차검수 Blocker, 2026-09-15]`. 읽기는 전량 그대로(측정을 배급하면 `unobserved`를 지어낸다) 두고 **렌더만** 좁혔다: 배치 소유자가 보고한 행(`herdr-pane`·`ambiguous`)만 표에 넣고 나머지는 **세어서** 알린다. `unobserved`("아무도 배치를 관측하지 못했다")와 `none`("전량 읽었는데 이 시민이 없다")은 뜻이 달라 따로 센다. 표가 0행이면 `(none)`. 근거는 측정이다 — 오퍼레이터 스토어 1,162 레코드 전부 `unobserved`, `peer-facts` 출력 **17,437줄**. 1,002 시민 픽스처에서 표 1행 + 요약 2줄, 전체 15줄.
+- **진단은 subject를 잃지 않는다** `[교차검수 Defect, 2026-09-15]`. `kind`+prose만 찍으면 "어딘가에 위험이 있다"가 되어 오퍼레이터가 할 일이 없다. provider가 붙인 필드를 **전부**, 키 정렬 순서로 낸다(`record-less-socket [gardenId=… liveness=dead]`, `meta-record-read-error [filename=…]`). 이름 denylist를 쓰지 않는다 — payload에 소켓 경로 같은 transport 좌표가 애초에 없고(#50 C4), denylist는 다음에 추가되는 subject 필드를 조용히 떨어뜨린다.
+- **읽기 실패는 절대 빈 표가 아니다.** `peer-facts-failed`/`peer-facts-unparsable`/`herdr-agent-list-failed`/`herdr-agent-list-unparsable`/`herdr-bin-path-missing`/`entwurf-bin-not-absolute`/`entwurf-bin-not-executable`. Entwurf 부재만 SKIP — 정확히 `entwurf-not-found`, exit 0.
+- **아무것도 쓰지 않는다.** `HERDR_PLUGIN_STATE_DIR`·`CONFIG_DIR` 포함 0바이트. setup·install·credential·global config 0. delivery 0.
+- **overlay는 프로세스 종료 즉시 닫히므로**(herdr `src/app/api.rs:241-258,349-358 @ c77af189`) 마지막에 TTY 입력 1회를 기다린다. non-TTY는 stdin EOF로 끝나고 busy loop은 없다.
+- **`files[]` 무변경** — `plugins/`는 npm 아티팩트 밖이다. herdr의 `plugin link`/`plugin install`이 이 lifecycle의 유일한 주인이다.
+
+**`[측정, 격리 private herdr 서버]` 실바이너리 셀이 결함을 하나 잡았다.** 샌드박스 `HOME`/`XDG_*`에서 herdr 0.9.0 private 서버를 띄워 `plugin link` → `plugin pane open` → `pane read` → `pane close` → `server stop`을 돌렸다. 첫 실행이 돌려준 것은 표가 아니라 **`herdr-agent-list-failed / exit 2: usage: herdr agent list`** 였다 — `agent list`에는 `--json`이 없다(`plugin list`에는 있다). 대칭을 가정한 내 argv가 틀렸고, **stub은 아무 argv나 받아주므로 이것을 잡을 수 없었다.** argv를 `["agent","list"]`로 고친 뒤 같은 셀에서 표가 정상 렌더됐고(빈 샌드박스 스토어 → 빈 표 + `Diagnostics: (none)` + `[press Enter to close]`), 실패 경로가 설계대로 **이름 붙은 거절 + pane 유지**로 동작하는 것도 같은 셀이 보여줬다. 이 사실은 게이트 헤더에 기록했다 — 핀은 그 뒤에 있는 측정만큼만 참이다.
+
+**`[측정]` 오퍼레이터 무변경.** link는 샌드박스 레지스트리에만 들어갔고, 실 HOME의 `plugin list`는 여전히 `[]`, `~/.config/herdr/plugins.json`은 여전히 `[]`(md5 `d751713988987e9331980363e24189ce`), `pane list` 스냅샷 전후 IDENTICAL. 샌드박스 제거 후 살아남은 herdr 서버는 pid 3869363 하나이고 `/proc/<pid>/environ`이 `HOME=/home/junghan` — 오퍼레이터 것이다. 플러그인 소유 디렉터리(`plugins/config/<id>`, `state/plugins/<id>`)는 herdr가 만들었고 **파일은 0개**였다.
+
+- 바뀐/추가된 파일 9: 신규 `plugins/herdr/herdr-plugin.toml`·`plugins/herdr/lib/status.mjs`·`plugins/herdr/README.md`·`scripts/check-herdr-plugin.ts`·`scripts/mutants/herdr-plugin.json`, 수정 `run.sh`(usage 1줄 + case + helper)·`package.json`(`check:hermetic`)·`scripts/check-gate-qualification.ts`(lane inventory)·이 문서.
+- **Verify(M2-b, focused only — 교차검수 amendment 뒤 재실행).** `check-herdr-plugin` **32** ✅ / `check-gate-manifests` **566 mutants·50 lanes** ✅(555·49에서 +11·+1) / `check-peer-facts` 20 ✅ / `check-install-surface` ✅ / `check-shell-quote` 16 ✅ / `check-herdr-placement` 22 ✅ / `npx tsc --noEmit` 두 fence exit 0 ✅ / `biome check` clean ✅ / 뮤턴트 lane `herdr-plugin` **11/11 KILLED, 전부 자기 QK 귀속**(손으로 돌린 focused kill 확인, 끝에 두 subject md5 동일).
+- **아직 안 한 것(의도).** M2 전체 qualification 본체·`check:full` 미실행 · 푸시 없음 · **오퍼레이터 herdr에 link/install 안 함**(샌드박스에서만 재고 지웠다).
+- `[열린 위험]` **stub이 증명하지 못하는 것이 남아 있다** — 위 argv 결함이 그 증거다. 게이트는 이제 argv를 핀으로 박지만, 그 핀을 고치는 읽기는 실바이너리 쪽에 있고 이 게이트 안에는 없다. 같은 계열의 다음 후보: `agent list` JSON의 필드 이름(`pane_id`/`agent_status`)이 herdr 버전을 넘어 안정적인지는 0.9.0 한 판본에서만 쟀다.
+- `[열린 위험]` **`peer-facts` 4.1초가 그대로 pane 열기 지연이다.** one-open/one-read가 계약이자 완화책이고 `[QK:HPL-ONE-OPEN-ONE-READ]`가 그것을 지킨다. 예산 도입은 M2-a에서 적은 `unobserved` 모호성 때문에 여전히 답이 아니다.
+
+## M2-a — core read-only `peer-facts` verb `[착지, f9cea1d]`
 
 **무엇을 위한 걸음인가.** M2-b 렌더러가 herdr pane ↔ garden id 조인을 shell로 다시 구현하면 `herdr-placement.ts:133` `piNativeSessionIdFromPath` — pi 0.85.1에 대고 잰 **벤더 바닥** — 을 게이트도 문서도 덮지 않는 파일로 포크하게 된다. `peer-facts`가 서 있으면 렌더러의 조인은 **불투명 pane id 문자열 동등 하나**로 줄고, 그건 shell이 정확히 할 수 있는 일이다. #65 `meta-facts`가 스토어 축에서 한 일("consumers stop carrying a decaying copy", `run.sh` 주석)을 관측 축에서 한 번 더 하는 것이지 새 개념이 아니다.
 
@@ -66,7 +93,7 @@
 - 바뀐 파일 9: 신규 `scripts/peer-facts.ts`·`scripts/check-peer-facts.ts`·`scripts/mutants/peer-facts.json`, 수정 `run.sh`(usage 2줄 + case + helper + pack 목록 2곳)·`mcp/entwurf-bridge/tsconfig.build.json`·`package.json`(`check:hermetic`)·`scripts/check-gate-qualification.ts`(lane inventory)·`docs/mux-launch-rail.md`(§7-a에 사람 어휘 ↔ 태그드 유니온 구분 한 단락)·이 문서. **`files[]` 무변경** — `scripts/`가 이미 화이트리스트다.
 - **Verify(M2-a, focused only — 교차검수 amendment 뒤 재실행).** `check-peer-facts` **20** ✅ / `check-install-surface` ✅ / `check-entwurf-fact-provider` 41 ✅ / `check-herdr-placement` 22 ✅ / `check-entwurf-peers-surface` 60 ✅ / `check-meta-facts` 16 ✅ / `check-mux-launch` 25 · `check-mux-resume-call` 28 · `check-mux-parent-artifact` 12 ✅(§7-a 문서를 읽는 게이트) / `check-shell-quote` 16 ✅ / `check-gate-manifests` **555 mutants·49 lanes** ✅(547·48에서 +8·+1) / `npx tsc --noEmit` 두 fence 전부 exit 0 ✅ / `biome check` clean ✅ / 뮤턴트 lane `peer-facts` **8/8 KILLED, 전부 자기 QK 귀속**(손으로 돌린 focused kill 확인: 백업 → in-place 변이 → focused gate → 복원, 끝에 md5 동일). 컴파일 트윈 `dist/scripts/peer-facts.js`를 실제로 빌드해 **설치 경로로 직접 구동**했다 — `--help` exit 2, 빈 스토어 exit 0.
 - **교차검수 amendment 1회 `[코디네이터 sol, 2026-09-15 — Defect 3]`.** 셋 다 소스에 대고 재현했고 셋 다 실재하는 결함이었다. (1) **`controlDir` 공개 노출** — #50 C4가 legacy `sessions` projection을 없앨 때 "그것이 노출하던 `controlDir`과 함께" 없앴는데(`entwurf-peers-render.ts` 헤더) 새 verb가 그 필드를 되살려 놓았다. 출력·스키마 문서·top-level 키셋에서 제거하고, probe 동작과 그 QK는 그대로 뒀다. 그 자리에 새 뮤턴트 `PF-NO-SOCKET-COORDINATE`를 세웠다(lane 7→8) — 이 결함을 잡아낸 검수가 게이트로 굳었다. (2) **"MCP가 돌려주는 바로 그 객체"라는 과장** — MCP는 `observationLimit=32`를 주고 **text만** 돌려준다(`index.ts:592-601`). 정확한 계약은 "같은 provider·같은 renderer·같은 payload shape·조인 재구현 0, 그리고 기계 projection은 의도적으로 unbounded"이고, 헤더·`run.sh`·이 문서에서 모두 고쳤다. unbounded 결정 자체는 뒤집지 않았다. (3) **M1-b floor 상태 stale** — 위 NOW 첫 줄에서 완료 영수증으로 수선했다.
-- **아직 안 한 것(의도).** 이 변경분에 대한 `pnpm run check:full` 미실행 · `check-gate-qualification` 본체 미실행 · LIVE 없음 · 커밋/푸시 없음 · #116 댓글 없음 · M2-b 0줄. (M1-b의 floor는 `073938c`에서 이미 초록이고, 그 영수증은 이 변경분의 것이 아니다.)
+- **아직 안 한 것(의도).** `f9cea1d`에 대한 `pnpm run check:full` 미실행 · `check-gate-qualification` 본체 미실행 · LIVE 없음 · 푸시 없음. (M1-b의 floor는 `073938c`에서 이미 초록이고, 그 영수증은 이 커밋의 것이 아니다.)
 - `[열린 위험]` 실 스토어(1,150여 레코드)에서 `./run.sh peer-facts`가 **4.1초** 걸렸다 — 관측이 무제한이라 레코드 수에 선형이다. 요청 시 여는 pane에는 감당되지만, M2-b가 이걸 자동 갱신 루프에 넣으면 그 순간 잘못된 모양이 된다. 예산을 도입하는 것은 위 `unobserved` 이유로 답이 아니다.
 
 ## M1-b — 배치 정책 교체 (split → 같은 workspace의 새 tab) `[checkpoint]`
