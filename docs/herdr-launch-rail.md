@@ -67,7 +67,7 @@ Decode the following JSON string literal and follow the decoded instructions exa
 
 `[측정 2026-09-14]` direct witness는 `agent start` 응답이 돌아오기 **전에** 이미 레코드가 존재하는 시점에 온다(claude 레코드 09:41:47 < 응답 09:41:48, pi 09:42:09 < 09:42:16) — watcher도 retry도 필요 없는 1회 조회다.
 
-**그러나 이 모듈은 레코드를 읽지 않는다.** launch receipt에는 garden id도 native session id도 없다. 주소를 말하는 것은 레코드이고, 그 조회는 이 레일 밖(표면, c2)에서 일어난다. `[미검증 잔여]` "레코드가 아직 없는 순간"은 표본 2개 + 구조 논거일 뿐 herdr의 보장이 아니다 — **이름 붙인 거절**로 둘지 **상한 있는 1회 재읽기**로 둘지는 표면 배선 때 정한다.
+**그러나 이 모듈은 레코드를 읽지 않는다.** launch receipt에는 garden id도 native session id도 없다. 주소를 말하는 것은 레코드이고, 그 조회는 이 레일 밖(표면, c2)에서 일어난다. `[미검증 잔여]` "레코드가 아직 없는 순간"은 표본 2개 + 구조 논거일 뿐 herdr의 보장이 아니다. 이 레인은 direct witness를 공개 주소로 승격하지 않았다: `fresh-call-dispatch`는 레코드를 읽지 않고, 두 공개 표면의 주소 경로는 nonce 콜백으로 남는다. 따라서 이 미측정 칸은 dispatch fallback이나 재읽기 계약이 아니다.
 
 ## 5. 배치 정책 — 하나뿐이다
 
@@ -174,4 +174,4 @@ pane split --pane <HERDR_PANE_ID> --direction down --no-focus [--cwd <literal>] 
 
 **`--approve`는 픽스처 전용이다.** 게이트는 자기 샌드박스의 오퍼레이터이므로 그 한 번의 실행을 스스로 승인할 수 있다. 프로덕션 argv에는 절대 들어가지 않는다 — `project-trust-handler.ts`가 "에이전트는 스스로 신뢰를 승격할 수 없다"를 의도된 보안 비대칭으로 적어 두었고, 런처가 오퍼레이터 대신 승인하면 그 판단을 조용히 가져가는 것이 된다. `[측정]` `--approve`는 `trust.json`을 만들지 않는다.
 
-`[미결, C2b]` CI가 herdr를 **누가 어떤 버전으로** 설치하는가, 그리고 **SKIP을 초록으로 둘지**. 그리고 구조적 제약 하나: **스스로 SKIP하는 게이트는 뮤턴트를 실을 수 없다** — SKIP은 exit 0이고, herdr 없는 호스트에서는 모든 뮤턴트가 SURVIVED로 읽힌다. 뮤턴트 lane은 admission이 정해진 뒤에 붙인다.
+**C2b는 착지했다.** CI job은 `scripts/fixtures/herdr-supply.json`이 소유하는 정확한 published asset을 `scripts/install-herdr-ci.sh`로 내려받아 sha256 검증한 뒤 `check:full` 전에 PATH에만 노출하고, `ENTWURF_REQUIRE_HERDR=1`으로 부재를 FAIL로 만든다. 로컬에서는 여전히 optional rail의 named SKIP이다. 구조적 제약 하나는 남는다: **스스로 SKIP하는 게이트는 뮤턴트를 실을 수 없다** — SKIP은 exit 0이고, herdr 없는 호스트에서는 모든 뮤턴트가 SURVIVED로 읽힌다. 뮤턴트 lane은 CI admission이 필요한 환경에서만 붙인다.

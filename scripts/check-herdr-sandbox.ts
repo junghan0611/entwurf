@@ -26,8 +26,9 @@
  * ADMISSION. herdr is an OPTIONAL rail, so a host without the binary prints a named SKIP and
  * exits 0 — a deterministic surface has no third outcome, and a silent pass would let green lie.
  * A host WITH herdr that cannot complete the cell FAILS: absent is optional, broken is not.
- * `ENTWURF_REQUIRE_HERDR=1` turns absence itself into a failure; CI admission (who installs
- * herdr and at which version) is not wired yet and belongs to C2b.
+ * `ENTWURF_REQUIRE_HERDR=1` turns absence itself into a failure. C2b is wired: CI installs the
+ * exact asset owned by `scripts/fixtures/herdr-supply.json` through
+ * `scripts/install-herdr-ci.sh` before `check:full`; this gate then makes an absent binary red.
  *
  * Each claim carries its QK token on exactly ONE assertion.
  *

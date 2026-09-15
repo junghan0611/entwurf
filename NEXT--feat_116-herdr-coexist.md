@@ -35,33 +35,31 @@
 - [ ] **5. S5 · herdr 플러그인 껍데기** — **M2로 이관, 미착수.** `[결정 GLG direct 2026-09-14 밤]` M2는 `herdr-plugin` 사용자면으로 확실히 간다: Herdr가 사용자면·배치·runtime 상태의 중심, Entwurf는 garden identity·공식 delivery·receipt. 방향은 **공장을 하나 더 짓는 것이 아니라 공방의 드라이버만 남기는 것**이다. GLG 실사용 뒤 착수 판단
 - [ ] **6. S4 · resume herdr placement** ← PAUSED: herdr native session restore(`resume_agents_on_restore` 기본 on, `session-state.mdx:52-70` @ c77af189) ↔ `entwurf_resume_call` 소유권 충돌 미측정. 이 랩 밖. herdr 서버 재시작이 우리 pi 시민을 되살렸을 때 garden id 거동은 레인 종료 전 1회 재야 한다. `[S2-b가 절반만 좁혔다]` 재기동 시 **pane id는 재사용되고 terminal_id는 새로 난다**는 것까지는 격리 서버에서 쟀지만, 그 실험에는 **에이전트가 없었다**(맨 셸 3개) — restore가 에이전트를 되살렸을 때 native session이 같은지 새로 나는지가 정확히 S4의 미측정 칸으로 남는다
 
-현재 좌표: 0·1·2·3·4 완료 → **M1 implementation candidate complete / corrected C4 acceptance pending GLG·operator run** → 5(M2 plugin) 미착수 → 6 보류
+현재 좌표: 0·1·2·3·4 완료 → **M1 implementation candidate complete / corrected C4 LIVE PASS; GLG close·commit 판단 대기** → 5(M2 plugin) 미착수 → 6 보류
 
 # NOW
 
-**상태명(정확히 이대로 쓴다): M1 implementation candidate complete; corrected C4 acceptance pending GLG/operator run.**
-`C4 green`도 `M1 LIVE complete`도 아니다. 제품 증거와 오라클 판정을 섞지 않는다.
+**상태명(정확히 이대로 쓴다): M1 implementation candidate complete; corrected C4 LIVE PASS; GLG close·commit 판단 대기.**
+C4 PASS는 이 opt-in 수용의 판정이고, M1 close·commit 권한을 대신하지 않는다.
 
-- Current: 브랜치 `feat/116-herdr-coexist` = `2f97fc0`(공개 배선) + **`d8c85b2`** + **`5c1f68b`** + **`6684c41`**(C4 acceptance artifact) + 이 docs 커밋. **CURRENT는 GLG 수동 LIVE 검증**이다.
-- Next(아침 첫 동작, GLG): 메모리 여유 확인 후 **둘 중 하나**.
-  1. `LIVE=1 ./run.sh smoke-herdr-fresh-call-live` — 수선된 오라클로 2 pilot 수용을 받는다. 호스트 압력이 크면 하지 않는다(런타임 4개를 얹는다).
-  2. **자연어 수동 검증 카드** — herdr 안에서 실제로 써 보는 쪽. 아래 4칸.
+- Current: 브랜치 `feat/116-herdr-coexist` = `2f97fc0`(공개 배선) + **`d8c85b2`** + **`5c1f68b`** + **`6684c41`**(C4 acceptance artifact) + **`8e5857d`**(레일별 C4 oracle 수선) + 이 문서 수선. `LIVE=1 ./run.sh smoke-herdr-fresh-call-live`는 `8e5857d`에서 **exit 0, 29 assertions ok**였고 영수증은 `/tmp/herdr-fresh-call-live-exr8fL/receipts.md`다. **CURRENT는 GLG의 close·commit 판단**이다.
+- 다음 사용자면 증거가 필요하면 **자연어 수동 검증 카드**로 herdr 안에서 실제로 쓴다. 아래 4칸.
 - **수동 검증 카드 (herdr 안에서, 실제 사용)**
   - `(가)` **pi 안에서 claude 열기** — herdr pane의 pi 세션에서 `entwurf_fresh_call backend=claude-code`. receipt가 `[entwurf fresh call → herdr]`이고 pane 좌표가 herdr 것인지, 자식의 첫 행동이 nonce 콜백인지.
   - `(나)` **claude 안에서 pi 열기** — 반대 방향. pi 자식은 argv에 `--entwurf-control`이 붙어야 시민이 된다(README §Garden launcher).
   - `(다)` **`entwurf_peers`의 placement 칸** — 살아있는 시민이 `herdr <pane>`으로, herdr 밖 시민이 `unobserved`로 읽히는지.
   - `(라)` **codex 거절** — herdr 안에서 `backend=codex`가 `herdr-backend-unsupported`로 **이름 붙여 거절**되고 tmux로 새지 않는지.
-- **C4 LIVE 판정 — 두 번, 정직하게 분리**
+- **C4 LIVE 판정 — 세 번, 정직하게 분리**
   - **1차(22:07–22:12): RED, 그러나 제품 결함 아님.** pi pilot **13/13 통과**. claude pilot도 **프로덕션 경로는 성공**했다 — 런타임 자신의 MCP 로그가 `entwurf_fresh_call completed successfully in 14s`, 이어 `herdr-backend-unsupported … No pane was created.`, 자식은 `entwurf_v2 completed successfully in 30ms`를 남겼고 hook 저널이 콜백의 caller turn 진입을 기록했다. 떨어진 8칸은 전부 **claude가 hook envelope로 선언한 transcript 파일이 디스크에 없어서** 생긴 **오라클 결함**이다. 증거 보존: `/tmp/herdr-fresh-call-live-aR70RU`.
   - **2차(22:22): NO VERDICT.** 오라클 수선 후 재실행이 시작 ~30초 만에 **호스트 OOM으로 kill**(free 2G, 상위 RSS는 전부 오퍼레이터 소유라 내릴 수 없었다). RED도 GREEN도 아니다. 위생은 손으로 완결(고아 사설 서버 1개를 `/proc/<pid>/environ`으로 픽스처 소유 확인 후 자기 소켓으로 정지, 잔여 프로세스 0, 오퍼레이터 pane 원상, control socket 0건). 증거 보존: `/tmp/herdr-fresh-call-live-W8NCxd`.
-  - **3차는 하지 않았다** `[결정 코디네이터 22:25, GLG 권한 위임]` — 오퍼레이터 프로세스를 내리거나 OOM을 다시 거는 것은 M1보다 큰 권한이고, **판정을 꾸미지 않는다**.
+  - **3차: PASS.** `[측정 2026-09-15, GLG direct 허가]` `LIVE=1 ./run.sh smoke-herdr-fresh-call-live`를 정확히 1회 실행해 **exit 0, 29 assertions ok**. pi 축은 공식 path→uuid caller 조인 exact-one, control-socket delivered callback(비어 있지 않은 nonce), callback 뒤 assistant 지속을 통과했고, claude 축은 mailbox delivered artifact·exact session-id MCP activity log·hook journal을 통과했다. private 두 서버/socket은 teardown됐고 operator herdr endpoint는 전후 모두 `server_not_running`; fixture gid의 public control socket은 0건이었다. 영수증 `/tmp/herdr-fresh-call-live-exr8fL/receipts.md`.
 - **C4 오라클의 두 evidence grade (문서화된 비대칭, 숨기지 않는다)**
   - **pi**: 자기 vendor transcript까지 — receipt 내용(nonce·view 좌표·주소 미승격), task-after-callback 순서, `entwurf_v2 control-socket → sent`.
   - **claude**: 자기 **entwurf-bridge MCP activity log**(fenced `XDG_CACHE_HOME`, **exact `sessionId` 조인** — 파일명·mtime·recency 사용 0) + **entwurf 메일박스 delivered 아티팩트**(body=nonce, sender=direct witness가 푼 child garden id) + **hook 저널**(caller exact native id의 `UserPromptSubmit`이 enqueue 시각 이후). claude 축은 **receipt 텍스트와 최종 답변 내용을 증명하지 않는다** — 그건 위 수동 검증 카드의 몫이다.
   - 양쪽 모두 **screen evidence 0, keystroke 0**.
   - 1차가 드러낸 vacuous 절도 닫았다: caller 자신의 receipt에 자기가 민팅한 nonce가 있으므로 **그것만으로 콜백 도착을 주장하지 못한다.**
 - Verify(M1 production, 완료): `check-entwurf-control-rpc` 32 ✅ / `check-herdr-fresh-call` 31 ✅ / `check-fresh-call-dispatch` 12 ✅ / 새 레인 `control-socket-disconnect` 4/4 KILLED + `herdr-fresh-call` 24 + `fresh-call-dispatch` 12 = **두 레인 36/36 KILLED, 전부 자기 QK 귀속** ✅ / `check-gate-manifests` 543 mutants·48 lanes ✅ / **`pnpm run check:full` exit 0, 511s** (frozen candidate = production HEAD `5c1f68b`) ✅.
-- Verify(C4 artifact `6684c41`, 별도): focused static만 — `tsc` 3 fence ✅ / 프로토콜 SKIP 97 ✅ / `check-release-gate-outcomes` exit 0 ✅. **이 커밋 바이트에 대한 check:full은 돌리지 않았다**(호스트 압력). C4는 `check:full` 밖·release aggregate 밖이라 floor 성격이 production 커밋과 다르다 — 위 511s 영수증은 `5c1f68b`의 것이지 이 커밋의 것이 아니다.
+- Verify(C4 artifact `6684c41` + oracle fix `8e5857d`, 별도): focused static — `check-entwurf-control-rpc` 32 ✅ / `check-herdr-fresh-call` 31 ✅ / `check-fresh-call-dispatch` 12 ✅ / `check-release-gate-outcomes` exit 0 ✅; C4 LIVE **exit 0, 29 assertions ✅**. `8e5857d` 바이트에 대한 `check:full`은 돌리지 않았다. C4는 `check:full` 밖·release aggregate 밖이라 floor 성격이 production 커밋과 다르다 — 위 511s 영수증은 `5c1f68b`의 것이지 이 커밋의 것이 아니다.
 - Blocker: none. `[열린 질문, M1 blocker 아님]` claude가 선언한 `transcript_path`가 디스크에 나타나지 않는 이유(종료 시점 flush / XDG 격리 / 그 밖)는 **측정하지 않았다**. 별도 모델 턴으로 쫓지 않기로 했다.
 - **M2 — `herdr-plugin` 확정, 미착수** `[GLG direct 2026-09-14 밤]`: Herdr를 사용자면·배치·runtime 상태의 중심으로 두고 Entwurf는 garden identity·공식 delivery·receipt에 집중한다. 지금 구현 시작 금지. 새 브랜치·삭제·지원축 축소도 지금 지시가 아니다 — GLG 실사용 뒤 별도 결정.
 - `[후속 설계 입력, 승격 금지]` GLG가 언급한 pi/omp의 **idle/running 등 상태 정보**는 **Herdr-owner가 보고한 관측 사실** 후보로만 남긴다. Entwurf의 **delivery liveness로 승격하지 않고**, #116의 pilot backend(`pi | claude-code`)도 넓히지 않는다. 별도 검토 항목.
@@ -75,7 +73,7 @@
   - `~/.claude/settings.json`의 `hooks.*` — entwurf가 소유하지 않는다. 그게 공존의 근거다.
   - fake herdr fixture — 결정론은 argv/파싱/거절문법, 실바이너리는 격리 private 서버.
   - `HERDR_ENV=1`로 `--entwurf-control` 자동 활성 — env를 두 번째 활성 축으로 만들지 않는다.
-  - **보존된 C4 픽스처 2개** — `/tmp/herdr-fresh-call-live-aR70RU`(1차 RED) · `/tmp/herdr-fresh-call-live-W8NCxd`(2차 중단). 아침 판독 전에 지우지 않는다.
+  - **보존된 C4 픽스처 5개** — `/tmp/herdr-fresh-call-live-aR70RU`(1차 RED) · `/tmp/herdr-fresh-call-live-W8NCxd`(2차 OOM 중단) · `/tmp/herdr-fresh-call-live-5Bqg2y`(아침 pi 4 FAIL의 oracle artifact) · `/tmp/herdr-fresh-call-live-Pl3NCI`(판정 전 SIGTERM 중단) · `/tmp/herdr-fresh-call-live-exr8fL`(3차 PASS). 지우지 않는다.
 
 # 단계 계약 (S1·S2 요약 — 상세는 제안서)
 
@@ -97,7 +95,7 @@
 
 # RECENT
 
-- [2026-09-14 밤] **M1 마감(implementation candidate).** 교체 opus(`20260914T212325-46f7ba`)가 형성 후 3커밋. `d8c85b2` control socket이 끊긴 피어에 살아남는다 — accept한 연결마다 disconnect 정책을 **첫 줄**에 달고, EPIPE/ECONNRESET은 흡수·그 외는 코드+메시지로 **정확히 1회** 진단, 이벤트 콜백 밖으로 되던지지 않는다. `5c1f68b` herdr CLI가 caller 이벤트 루프를 잡지 않는다 — `HerdrRun`이 Promise, `herdrFreshCall`/`reclaim`이 await 체인, timeout은 **SIGKILL로 실제 종료**, 출력은 8MiB cap, `close`/`error`/timeout이 경쟁해도 1회 settle. `6684c41` C4 opt-in acceptance. 독립 오라클이 실제 child로 잰 값: **1.2초 child가 도는 동안 20ms 타이머 21ms, 실 unix 소켓 왕복 9ms, 둘 다 resolve 이전**. 두 결함 모두 **C4 첫 LIVE가 찾아낸 것**이고, C4가 없었으면 herdr 레일은 "게이트 초록 + 실사용 사망"으로 남았을 것이다.
+- [2026-09-14 밤] **M1 마감(implementation candidate).** 교체 opus(`20260914T212325-46f7ba`)가 형성 후 3커밋. `d8c85b2` control socket이 끊긴 피어에 살아남는다 — accept한 연결마다 disconnect 정책을 **첫 줄**에 달고, EPIPE/ECONNRESET은 흡수·그 외는 코드+메시지로 **정확히 1회** 진단, 이벤트 콜백 밖으로 되던지지 않는다. `5c1f68b` herdr CLI가 caller 이벤트 루프를 잡지 않는다 — `HerdrRun`이 Promise, `herdrFreshCall`/`reclaim`이 await 체인, timeout은 **SIGKILL로 실제 종료**, 출력은 8MiB cap, `close`/`error`/timeout이 경쟁해도 1회 settle. `6684c41` C4 opt-in acceptance, `8e5857d`가 pi/claude 레일별 callback evidence·공식 caller path→uuid join·nonempty nonce assertion으로 오라클을 수선했고 3차 C4 LIVE PASS로 검증했다. 독립 오라클이 실제 child로 잰 값: **1.2초 child가 도는 동안 20ms 타이머 21ms, 실 unix 소켓 왕복 9ms, 둘 다 resolve 이전**. 두 결함 모두 **C4 첫 LIVE가 찾아낸 것**이고, C4가 없었으면 herdr 레일은 "게이트 초록 + 실사용 사망"으로 남았을 것이다.
 
 - [2026-09-14 저녁] **S2-b 직접 birth-witness 측정 완료**(claude-code/opus `20260914T174741-2e9ba9`, 오라클, 코드 0줄). 여섯 칸 전부 성립. 설계를 바꾼 새 사실 둘: (1) **서버 세대를 넘으면 pane id가 재사용되고 terminal_id는 보존되지 않는다** → B1 조건부 close가 영수증으로 확정되고, 소유 증명은 "한 세대 안에서만" 참이다. (2) **워크스페이스 이동에서 pane 좌표 자체가 바뀐다**(`w7:p3`→`w8:p2`) → receipt에 좌표를 담으면 즉시 낡고, 매 listing 재계산인 현행 조인은 이동을 정확히 따라갔다. identity는 **두 제안으로 남겼다** — direct witness 성립이 nonce 은퇴를 뜻하지 않는다(각각 호출자 상관짓기 / 형제의 첫 모델 행동을 소유). 공개 코멘트 `issuecomment-5661519488`, 리포트 `.agent-reports/116-s2b-birth-witness-20260914.md`. 이 레인 순서도 수선된 본문에 맞춰 정정(측정 먼저 → 중립 leaf).
 - [2026-09-14 저녁] 코디네이터(fable) 정리. 형제 전원 퇴근(opus `20260914T141356-6a5a8f`·terra·sol). 커밋 2개 `d96a02f`·`469b3b5`. 솔 큰 틀 검수(Blocker 1→S2 계약으로 닫음 / Defect 6 / Observation 9): 경계 맞음, 두 레일은 strangler seam으로만, S2는 B1/D1/D2/D3 닫은 뒤. 테라 배포면: A안(같은 리포 `herdr-plugin/`, `[[build]]`가 exact npm을 플러그인 로컬 `.runtime`에) 권고, 준비 체크리스트에서 빠진 셋(build의 격리 HOME 계약·`HERDR_PLUGIN_STATE_DIR`↔install-state 관계·액션에서 `setup` 호출 금지). GLG llmlog 비교표(D0~D12)가 identity 갈림의 측정 셀을 줬다(RAIL 4). GLG 게이트 시간 규율 신설(NOW). #116 공개 본문의 stale 두 문장(resume 소유·alt-screen, 솔 D4/D6)은 코멘트로 표시했고 본문 수정은 GLG 결정 대기.
