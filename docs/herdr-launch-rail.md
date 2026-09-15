@@ -1,13 +1,13 @@
 # herdr launch rail
 
 > 이 문서는 **herdr 안에서 형제를 여는 레일**을 소유한다. tmux 레일은 [`mux-launch-rail.md`](./mux-launch-rail.md)가 그대로 소유하고, 두 문서는 합쳐지지 않는다 — 좌표도 실패 모양도 다르기 때문이다.
-> 대상: `pi-extensions/lib/herdr-fresh-call.ts` (#116 S2-c1). 측정 환경: herdr 0.9.0 / socket protocol 22, oracle, 2026-09-14. herdr 소스 인용은 전부 `@ c77af189` 고정본이다.
+> 대상: `pi-extensions/lib/herdr-fresh-call.ts` (#116 S2-c1). 측정 환경: herdr 0.9.0 / socket protocol 22, oracle — 2026-09-14, 배치 정책 교체분은 2026-09-15. herdr 소스 인용은 전부 `@ c77af189` 고정본이다.
 
 ## 1. 이 레일이 무엇을 나누어 갖는가
 
 | | herdr | entwurf |
 |---|---|---|
-| pane 배치·분할·레이아웃 | **소유** | 관여하지 않는다 |
+| workspace·tab·pane 배치와 레이아웃 | **소유** | 어느 workspace에 tab 하나를 열어달라고만 말한다 |
 | 에이전트 기동(`agent start`) | **소유** | 무엇을 띄워달라고 할지만 말한다 |
 | 첫 턴 프레이밍·nonce | — | **소유** |
 | garden id·주소·배달·거절 | — | **소유** |
@@ -19,10 +19,12 @@
 tmux 레일은 `new-window` 한 번이라 "위의 어떤 것도 창을 남기지 않는다"(`mux-fresh-call.ts:527-531`)가 성립한다. herdr는 **두 걸음**이다:
 
 ```text
-pane split  →  (pane이 이미 존재)  →  agent start  →  실패할 수 있다
+tab create  →  (tab과 그 initial pane이 이미 존재)  →  agent start  →  실패할 수 있다
 ```
 
-그래서 이 레일의 순서 논증은 다르게 쓰여 있다: **결정 가능한 모든 것을 split 앞으로 옮긴다.** context·backend·tmux seat 입력·caller id·task·model·cwd·인코딩된 argv의 제어문자까지 전부 pre-mutation 거절이고, split 이후로 살아남는 실패는 **herdr 자신의 실패뿐**이다.
+그래서 이 레일의 순서 논증은 다르게 쓰여 있다: **결정 가능한 모든 것을 `tab create` 앞으로 옮긴다.** context·backend·tmux seat 입력·caller id·task·model·cwd·인코딩된 argv의 제어문자까지 전부 pre-mutation 거절이고, 그 뒤로 살아남는 실패는 **herdr 자신의 실패뿐**이다.
+
+그 사이에 **읽기가 하나** 있다(§5의 `pane get`). 읽기는 아무것도 만들지 않으므로 이 사실을 흐리지 않는다: 거절 목록 맨 뒤에 두어, 어차피 거절될 호출이 herdr CLI에 닿지 않게 한다.
 
 ## 3. 옵션 G — 여러 줄 프레이밍을 한 물리행으로
 
@@ -47,12 +49,12 @@ if params.args.iter().any(|arg| arg.chars().any(char::is_control)) { InvalidArgu
 프레이밍 **전체**를 JSON 문자열 리터럴 하나로 감싸, 그것을 디코드하라는 **한 문장** 뒤에 붙인다.
 
 ```text
-Decode the following JSON string literal and follow the decoded instructions exactly as if they were this message: "You are a fresh visible citizen that entwurf opened in a herdr pane.\n\nFIRST ACTION, …"
+Decode the following JSON string literal and follow the decoded instructions exactly as if they were this message: "You are a fresh visible citizen that entwurf opened in a new herdr tab.\n\nFIRST ACTION, …"
 ```
 
 - **`JSON.stringify`만으로는 부족하다.** 그것은 C0와 따옴표·역슬래시만 이스케이프하고 **DEL(U+007F)과 C1 블록(U+0080–U+009F)은 리터럴로 남긴다.** 그래서 그 뒤에 남은 `\p{Cc}`를 `\uXXXX`로 되돌릴 수 있게 한 번 더 이스케이프한다.
 - **전송이 바이트를 정규화하지 않는다.** 인코더는 개행 접기도 유니코드 정규화도 하지 않고, 자기 출력이 원본으로 정확히 디코드되는지 확인한 뒤 아니면 **던진다** — 재현할 수 없는 프레이밍으로 형제를 태우지 않는다. `[정확히 말하면]` 그 "원본"은 **공개 입력 계약을 통과한 뒤의 문자열**이다: model과 task는 두 레일 공통으로 **trim된다**(공백뿐인 task는 `task-empty`). trim이 launch 전체에서 유일한 정규화이고, 그 뒤로는 전송이 바이트를 건드리지 않는다.
-- **호출 전에 `\p{Cc}` 0개를 증명한다.** 프롬프트만이 아니라 `agent start`에 넘길 **모든 인자**를 검사한다(서버도 모든 인자를 본다). 실패는 `herdr-argv-control-character` — split 이전이라 **고아 pane이 남지 않는다**.
+- **호출 전에 `\p{Cc}` 0개를 증명한다.** 프롬프트만이 아니라 `agent start`에 넘길 **모든 인자**를 검사한다(서버도 모든 인자를 본다). 실패는 `herdr-argv-control-character` — `tab create` 이전이라 **고아 tab이 남지 않는다**.
 - `[측정 2026-09-14, 두 파일럿]` 형제는 디코드하고 **콜백을 먼저** 보낸 뒤 과제에 답했다. 인코딩이 "콜백이 첫 행동"이라는 계약을 삼키지 않았다.
 
 ## 4. identity — 무엇이 무엇을 증명하는가
@@ -72,14 +74,23 @@ Decode the following JSON string literal and follow the decoded instructions exa
 ## 5. 배치 정책 — 하나뿐이다
 
 ```text
-pane split --pane <HERDR_PANE_ID> --direction down --no-focus [--cwd <literal>] --env PI_SESSION_ID= --env PI_AGENT_ID=
+pane get <HERDR_PANE_ID>                        # 읽기. 아무것도 만들지 않는다
+tab create --workspace <그 응답의 workspace_id> --no-focus [--cwd <literal>] --env PI_SESSION_ID= --env PI_AGENT_ID=
 ```
 
-- **부모 pane은 herdr가 준다**(`HERDR_PANE_ID`). `pane list`를 뒤져 부모를 고르지 않는다 — 그건 남의 view를 반으로 자를 대상으로 고르는 추측이다. 없으면 `herdr-parent-pane-missing`.
-- `[file:line @ c77af189]` `src/cli/pane.rs:722-727` — `--direction`은 **필수**다. "herdr가 알아서"라는 선택지가 없으므로 정책을 우리가 말해야 한다. `--no-focus`는 오퍼레이터의 키보드를 뺏지 않기 위해 명시한다.
-- `[file:line @ c77af189]` `src/cli/pane.rs:689-694` — `--cwd`는 `value.clone()`로 **그대로** 실린다. 포맷 확장이 없으므로 tmux 레일의 `#` 거절은 **가져오지 않는다**(그 거절의 이유가 여기서는 거짓이다). 존재 검사 셋(`cwd-not-absolute`/`cwd-missing`/`cwd-not-directory`)은 남는다 — 사라진 디렉토리에서 명랑하게 열리는 창이 tmux에서 문제였던 이유는 여기서도 같다.
-- `[file:line @ c77af189]` `src/cli/pane.rs:710-717` — `--env`는 map에 insert되므로 **반복이 문법**이다. `[측정]` `--env KEY=`는 키를 지우는 게 아니라 **빈 값을 주입**한다. 그래서 신원 스크럽을 명시로 싣는다 — 서버 env가 깨끗하다는 데 베팅하지 않는다.
-- **레이아웃 매니저를 만들지 않는다.** 다른 배치를 원하면 herdr에서 pane을 옮기면 된다. 레이아웃은 herdr 것이다.
+`[결정 GLG direct 2026-09-15]` 새 형제는 **caller와 같은 workspace의 새 tab**으로 연다. 이전 정책은 caller pane을 아래로 split하는 것이었고, `[GLG 직접 관측 2026-09-15]` 그것도 실제로 동작했지만 쓰기에는 새 tab이 편했다. 바뀐 것은 배치 한 줄이고, `--no-focus`도 경계도 그대로다.
+
+- **workspace는 herdr가 말해준다.** caller pane(`HERDR_PANE_ID`)을 `pane get`으로 물어 그 응답의 `workspace_id`를 쓴다. `w<N>:p<M>`의 앞자리를 떼어 쓰지 않는다 — `[측정 2026-09-14]` pane id는 불투명 문자열이고(열 번째가 `w7:pA`), `[측정 2026-09-14]` 워크스페이스 이동에서 좌표 자체가 바뀐다. 읽기는 아무것도 만들지 않으므로 이 네 실패는 전부 **pre-mutation 거절**이다: `herdr-caller-pane-get-failed` · `herdr-caller-pane-unparsable` · `herdr-caller-pane-drift` · `herdr-caller-workspace-missing`. `HERDR_PANE_ID` 자체가 없으면 `herdr-caller-pane-missing`.
+- **그 응답은 우리가 물은 pane에 결속된다.** `[교차검수 2026-09-15, Blocker]` 읽을 수 있는데 **다른 pane**을 답하면 그 pane의 workspace는 caller가 어디 있는지에 대한 증거가 아니다. 그것을 믿으면 caller가 지목하지 않은 workspace에 초록 영수증과 함께 형제가 열린다 — `--workspace` 생략과 정확히 같은 silent relocation이 argv가 아니라 **읽기를 통해** 들어오는 것이다. 그래서 `unparsable`로 뭉개지 않고 `herdr-caller-pane-drift`로 이름 붙여 거절한다.
+- **`--workspace`는 생략 가능한 옵션이 아니다.** `[측정 2026-09-15, 격리 private 서버]` 생략해도 `tab create`는 **성공한다** — herdr가 그때 focus된 workspace에 tab을 만든다. caller가 요청하지 않은 자리에 초록 영수증과 함께 형제가 열리는 것이고, 이 레일이 `placement:{tmuxSession}`을 거절하는 이유와 정확히 같은 모양이다. 그래서 workspace를 못 읽으면 기본값으로 넘어가지 않고 **거절한다**.
+- `[측정 2026-09-15]` 모르는 workspace는 아무것도 만들기 전에 거절된다(`{"error":{"code":"workspace_not_found"}}`, exit 1). 그래서 두 걸음은 여전히 **두 걸음**이지 세 걸음이 아니다.
+- `[측정 2026-09-15]` `tab create` 응답은 새 tab과 **그 initial pane을 한 번에** 준다:
+  `{"id":"cli:tab:create","result":{"root_pane":{…pane_id·terminal_id·tab_id·workspace_id…},"tab":{…tab_id·workspace_id·pane_count…},"type":"tab_created"}}`. `agent start`는 그 정확한 `root_pane`에 한다 — `pane list`를 diff해 "새로 생긴 것"을 고르지 않는다.
+- **두 절반은 같은 tab과 같은 workspace를 말해야 하고, 둘 다 말해야 한다.** `[측정 2026-09-15]` 모든 `tab_created` 응답이 `tab_id`와 `workspace_id`를 tab에도 root_pane에도 실어 보냈다. 그래서 **없는 것은 선택이 아니라 불일치다** — 한 번만 이름을 대는 응답은 자기 자신과 대조할 수 없고, 그것을 받아들이면 receipt가 가리키는 tab과 에이전트가 실제로 뜬 tab이 갈린 채 초록이 난다. `[교차검수 2026-09-15, Blocker]` 이전 판은 `root_pane.tab_id`가 **있을 때만** 대조하고 `workspace_id`는 아예 대조하지 않았다. 지금은 둘 다 필수·정확 일치이고, 어긋나거나 없으면 **payload 전체를 거절한다**.
+- `[측정 2026-09-15]` `--no-focus`는 지켜진다: 응답의 `root_pane.focused`와 `tab.focused`가 둘 다 `false`이고 기존 focus pane은 그대로였다. 오퍼레이터의 키보드를 뺏지 않는다.
+- `[측정 2026-09-15]` `--cwd`는 그대로 실린다. 다만 **없는 디렉토리를 줘도 herdr는 실패하지 않고** 서버 자신의 cwd로 조용히 떨어진다 — 그래서 존재 검사 셋(`cwd-not-absolute`/`cwd-missing`/`cwd-not-directory`)은 이 verb에서 오히려 더 필요하다. tmux 레일의 `#` 거절은 여기서 이유가 거짓이므로 가져오지 않는다.
+- `[측정 2026-09-15]` **신원 스크럽이 상속을 이긴다.** 서버 env에 `PI_SESSION_ID`를 일부러 오염시켜 둔 상태에서 `tab create --env PI_SESSION_ID= --env PI_AGENT_ID=`로 연 tab의 프로세스는 `/proc/<pid>/environ`에서 둘 다 **빈 값**이었다(마커 변수로 그 프로세스를 특정했다). 화면이 아니라 커널이 준 증거다. `--env KEY=`는 키를 지우는 게 아니라 빈 값을 주입하고, 반복이 문법이다.
+- **레이아웃 매니저를 만들지 않는다.** `--label`도 `--ratio`도 `--direction`도 싣지 않는다. 새 공개 placement/layout 선택축은 없다. 다른 배치를 원하면 herdr에서 tab을 옮기면 된다. 레이아웃은 herdr 것이다.
 
 ## 6. 이름과 좌표
 
@@ -87,7 +98,7 @@ pane split --pane <HERDR_PANE_ID> --direction down --no-focus [--cwd <literal>] 
 - **pane id는 불투명 문자열이다.** `[측정 2026-09-14]` 열 번째 pane은 `w7:p10`이 아니라 **`w7:pA`**로 왔다. 10진수를 가정하는 파서는 이미 틀렸다.
 - **pane id는 형제의 수명 동안 안정적이지도 않다.** `[측정]` 워크스페이스 이동에서 `w7:p3` → `w8:p2`로 바뀌었고 그 아래 세션은 그대로였다. 그래서 좌표는 **저장하지 않고** 필요할 때마다 다시 읽는다.
 
-## 7. 고아 회수 — 세대 안에서만 증명된다
+## 7. 고아 회수 — 세대 안에서만 증명된다, 그리고 tab이 아니라 pane으로
 
 `[측정 2026-09-14, 격리 샌드박스 서버]` `herdr server stop` → 재기동에서 **같은 pane id 셋이 전부 다른 terminal_id에 다시 묶였다**(`w1:p1/p2/p3`, `term_65b6d90e…` → `term_65b6d916…`).
 
@@ -96,13 +107,32 @@ pane split --pane <HERDR_PANE_ID> --direction down --no-focus [--cwd <literal>] 
 1. **bare pane id는 무엇을 닫을 권위도 아니다.** `[file:line @ c77af189]` `src/api/schema/common.rs:33-36` — `close_pane`은 `pane_id`만 받고 기대 terminal 토큰을 받지 않는다.
 2. **`terminal_id`도 세대를 넘지 못한다.** 그러므로 계약 문장은 *"terminal_id가 소유를 증명한다"*가 아니라 **"한 서버 세대 안에서 증명한다"**이다. 재기동 뒤의 낡은 영수증은 **항상** 불일치로 떨어지고, 그것이 안전한 방향이다.
 
+### tab을 만들었는데 왜 pane을 닫는가 `[측정 2026-09-15, 격리 private 서버]`
+
+배치가 tab으로 바뀌었으니 회수도 `tab close`여야 할 것 같지만, 재보니 반대였다.
+
+- **`tab close`는 우리가 가진 것보다 큰 권위다.** `tab_id` 하나만 받고 기대 토큰이 없다 — pane과 같은 문제인데 대상은 더 넓다. `[측정]` **에이전트가 돌고 있는 tab을 그대로 닫고** `{"result":{"type":"ok"}}`를 돌려줬다. 우리 tab에 누군가 pane을 하나 붙여 놨다면 그 사람 것까지 같이 닫는다.
+- **우리가 만든 pane 하나를 닫는 것으로 충분하다.** `[측정]` tab의 **유일한** pane을 `pane close` 하면 tab도 같이 사라진다(`tab get` → `tab_not_found`, 빈 tab 잔여 0). `[측정]` pane이 둘인 tab에서 우리 것만 닫으면 **tab과 남의 pane은 살아남는다**(`pane_count` 2→1).
+
+두 방향 모두 fail-closed이고, 증명은 이미 가지고 있던 그 증명(pane id + terminal_id + agent_session 없음)이다. 그래서 **회수 계약은 한 줄도 바꾸지 않았다.** 바뀐 것은 그 계약이 무엇을 회수하는지에 대한 측정된 설명뿐이다.
+
 회수 절차: 새 `pane get` → **pane id 일치 AND terminal_id 일치 AND agent_session 없음**일 때만 `pane close` 한 번.
+
+### 무엇이 존재하는가 — 회수보다 먼저 답해야 하는 질문 `[교차검수 2026-09-15, Defect]`
+
+`herdr-tab-create-failed`는 "아무것도 안 생겼다"를 **단정할 수 없다.** `createHerdrRunner`는 자기 timeout/kill/spawn 실패도 herdr의 실패와 **같은 nonzero status**로 돌려주고, 그때 stderr는 herdr의 JSON 봉투가 아니라 우리 평문이다. 죽인 `tab create`가 이미 tab을 만들었을 수 있다.
+
+그래서 stderr가 판별자다: **herdr 자신의 error 봉투가 있으면** herdr가 답한 것이고 만들기 전에 거절했다 → `none`. **봉투가 없으면** herdr에게 들은 바가 없다 → `unknown`. status 0인데 못 읽은 응답도 `unknown`이다.
+
+이전 판은 둘 다 `orphan-unreclaimed:pane-get-failed`(빈 pane id)로 찍었다 — `pane get`을 시도한 적도 없는데 실패했다고 말하고, 헤더는 "tab이 만들어진 뒤 실패"라고 하면서 힌트는 "아무것도 안 만들어졌다"고 하는 **자기모순**이었다. 지금 recovery는 네 값이고, 헤더도 그 값을 넘겨 말하지 않는다.
 
 | 결과 | 뜻 |
 |---|---|
+| `none` | herdr가 자기 error 봉투로 이름 붙여 거절했다. 가서 볼 것이 없다 |
+| `unknown` | 답을 못 받았거나 못 읽었다. **tab이 있을 수 있다.** 아무것도 닫지 않았으니 herdr를 직접 보라 |
 | `closed` | 세대 안 증명을 갖춘 회수 |
-| `orphan-unreclaimed: pane-get-failed` | 확인 자체가 실패 |
-| `orphan-unreclaimed: pane-get-unparsable` | 응답을 읽을 수 없음 |
+| `orphan-unreclaimed: pane-get-failed` | 회수 확인의 `pane get`이 실패 |
+| `orphan-unreclaimed: pane-get-unparsable` | 그 응답을 읽을 수 없음 |
 | `orphan-unreclaimed: pane-id-mismatch` | 다른 pane |
 | `orphan-unreclaimed: terminal-id-mismatch` | 같은 좌표, 다른 터미널(세대가 바뀜) |
 | `orphan-unreclaimed: agent-session-present` | 남의 에이전트가 들어와 있음 |
@@ -121,8 +151,11 @@ pane split --pane <HERDR_PANE_ID> --direction down --no-focus [--cwd <literal>] 
 | 담는다 | 왜 |
 |---|---|
 | `backend` · `requestedKind` · `model` · `cwd?` | 무엇을 띄워달라고 했는가 |
-| `herdrAgentName` · `herdrPaneId` · `herdrTerminalId` · `herdrWorkspaceId?` · `herdrTabId?` | herdr의 좌표, **view라고 이름 붙여서** |
+| `herdrWorkspaceId` · `herdrTabId` | **우리가 만든 tab**. 이제 필수다 — 만든 물건을 선택적으로 말하지 않는다 |
+| `herdrAgentName` · `herdrPaneId` · `herdrTerminalId` | 그 tab의 initial pane과 herdr의 이름, **view라고 이름 붙여서** |
 | `nonce` | 발행 사실. 주소가 아니다 |
+
+tab 좌표는 **그것을 만든 응답**에서 온다(`agent start`의 echo가 아니라). 오퍼레이터가 읽는 좌표와 회수가 겨냥하는 좌표가 같아야 하기 때문이다.
 
 | 담지 않는다 | 왜 |
 |---|---|
@@ -134,11 +167,11 @@ pane split --pane <HERDR_PANE_ID> --direction down --no-focus [--cwd <literal>] 
 
 **공유 입력 계약**(tmux 레일과 **같은 낱말**, 같은 순서, 같은 trim): `caller-identity-unavailable` · `model-empty` · `model-invalid` · `task-empty` · `task-too-long`. 이 다섯은 공개 verb의 caller-facing 계약이라 herdr 안이라고 다른 단어를 배우면 안 된다. `cwd`의 생략 규칙도 같이 온다 — **`undefined`와 정확히 빈 문자열만** "cwd 없음"이고, 나머지는 리터럴 경로다(untrimmed).
 
-**herdr 고유 pre-mutation**(아무것도 생기지 않음): `herdr-context-missing` · `herdr-parent-pane-missing` · `herdr-backend-unsupported` · `herdr-placement-tmux-rejected` · `herdr-argv-control-character` · `cwd-not-absolute` · `cwd-missing` · `cwd-not-directory`
+**herdr 고유 pre-mutation**(아무것도 생기지 않음): `herdr-context-missing` · `herdr-caller-pane-missing` · `herdr-caller-pane-get-failed` · `herdr-caller-pane-unparsable` · `herdr-caller-pane-drift` · `herdr-caller-workspace-missing` · `herdr-backend-unsupported` · `herdr-placement-tmux-rejected` · `herdr-argv-control-character` · `cwd-not-absolute` · `cwd-missing` · `cwd-not-directory`
 
-**post-split** (회수 결과를 함께 낸다): `herdr-split-failed` · `herdr-split-unparsable` · `herdr-split-pane-occupied` · `herdr-agent-start-failed` · `herdr-agent-start-unparsable` · `herdr-agent-start-pane-drift` · `herdr-agent-start-witness-missing` · `herdr-agent-start-argv-drift`
+**post-create** (회수 결과를 함께 낸다): `herdr-tab-create-failed` · `herdr-tab-create-unparsable` · `herdr-tab-root-pane-occupied` · `herdr-agent-start-failed` · `herdr-agent-start-unparsable` · `herdr-agent-start-pane-drift` · `herdr-agent-start-witness-missing` · `herdr-agent-start-argv-drift`
 
-뒤의 셋은 **읽을 수 있는데 어긋난** 응답이라 `unparsable`로 뭉개지 않는다 — 오퍼레이터가 할 일이 각각 다르다. `pane-drift`는 우리가 연 pane이 아닌 곳에서 뭔가 떴다는 뜻이고(회수는 **split 영수증**에서 시작한다), `witness-missing`은 아무도 식별할 수 없는 launch를 성공이라고 들었다는 뜻이며, `argv-drift`는 우리가 구성하지 않은 프레이밍으로 형제가 떴다는 뜻이다. `[file:line @ c77af189]` `src/app/agents.rs:197-199`가 echo되는 argv를 **canonical executable + 우리 args**로 정의하므로 이 대조는 추측이 아니다.
+뒤의 셋은 **읽을 수 있는데 어긋난** 응답이라 `unparsable`로 뭉개지 않는다 — 오퍼레이터가 할 일이 각각 다르다. `pane-drift`는 우리가 연 pane·terminal·**tab**이 아닌 곳에서 뭔가 떴다는 뜻이고(회수는 **tab create 영수증**에서 시작한다), `witness-missing`은 아무도 식별할 수 없는 launch를 성공이라고 들었다는 뜻이며, `argv-drift`는 우리가 구성하지 않은 프레이밍으로 형제가 떴다는 뜻이다. `[file:line @ c77af189]` `src/app/agents.rs:197-199`가 echo되는 argv를 **canonical executable + 우리 args**로 정의하므로 이 대조는 추측이 아니다.
 
 `placement`는 **정의되어 있기만 하면** 거절한다 — `{}`도 `{tmuxSession:""}`도. 멤버를 읽으면, seat를 요청했다가 오타를 낸 caller가 초록 영수증과 함께 기본 위치의 형제를 받는다.
 
@@ -154,8 +187,8 @@ pane split --pane <HERDR_PANE_ID> --direction down --no-focus [--cwd <literal>] 
 
 | 축 | 어디서 |
 |---|---|
-| argv 문법 · 인코딩 · 파싱 · 거절 · 회수 결정 · receipt 모양 | `scripts/check-herdr-fresh-call.ts` (결정론, herdr 바이너리 불필요) |
-| 실바이너리 격리 서버 | `scripts/check-herdr-sandbox.ts` (C2a). 샌드박스 `HOME`/`XDG`/`PI_CODING_AGENT_DIR`의 private 서버 + 실제 `herdr integration install pi` + 빈 pi 기동. **가짜 herdr 실행파일·가짜 서버는 만들지 않는다** |
+| argv 문법 · 인코딩 · 파싱 · 거절 · workspace 결속 · 회수 결정 · receipt 모양 | `scripts/check-herdr-fresh-call.ts` (결정론, herdr 바이너리 불필요) |
+| 실바이너리 격리 서버 | `scripts/check-herdr-sandbox.ts` (C2a). 샌드박스 `HOME`/`XDG`/`PI_CODING_AGENT_DIR`의 private 서버 + 실제 `herdr integration install pi` + 프로덕션 argv로 만든 tab에 빈 pi 기동 + 그 tab의 pane-레벨 회수. **가짜 herdr 실행파일·가짜 서버는 만들지 않는다** |
 | 콜백 왕복 | LIVE (모델 턴이 필요한 순간부터가 LIVE다) |
 
 `[측정]` 기록에 남은 비변이 CLI probe 하나: 존재하지 않는 pane으로 `agent start`를 불러 제어문자 판정이 pane 조회보다 앞선다는 것을 확인했다. 아무것도 만들지 않는 probe는 이 등급에서 허용된다.

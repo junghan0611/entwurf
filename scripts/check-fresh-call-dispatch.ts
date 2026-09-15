@@ -196,12 +196,12 @@ async function main(): Promise<void> {
 	// ── rendering stays rail-honest ──────────────────────────────────────────────────────
 	const herdrRefusal = renderDispatchedFreshCall({
 		rail: "herdr",
-		result: { ok: false, reason: "herdr-parent-pane-missing" },
+		result: { ok: false, reason: "herdr-caller-pane-missing" },
 	});
 	ok(
 		"[QK:FCD-RENDER-PER-RAIL] each rail renders its own receipt — a universal renderer would have to speak about panes and windows at once, which is how prose starts telling every caller their sibling is in tmux",
 		herdrRefusal.isError &&
-			herdrRefusal.text.includes("No pane was created") &&
+			herdrRefusal.text.includes("No tab and no pane were created") &&
 			!herdrRefusal.text.includes("window") &&
 			dispatchCode.includes("renderHerdrFreshCall") &&
 			dispatchCode.includes("renderFreshCall"),
@@ -213,6 +213,8 @@ async function main(): Promise<void> {
 			requestedKind: "pi",
 			model: "m/1",
 			herdrAgentName: "entwurf-abc",
+			herdrWorkspaceId: "w7",
+			herdrTabId: "w7:t3",
 			herdrPaneId: "w7:pA",
 			herdrTerminalId: "term_x",
 			nonce: "n-1",
@@ -242,13 +244,33 @@ async function main(): Promise<void> {
 			recovery: { outcome: "closed", paneId: "w7:p9", terminalId: "term_x" },
 		},
 	});
+	const nothing = renderDispatchedFreshCall({
+		rail: "herdr",
+		result: {
+			ok: false,
+			reason: "herdr-tab-create-failed",
+			herdrErrorCode: "workspace_not_found",
+			recovery: { outcome: "none" },
+		},
+	});
+	const unknown = renderDispatchedFreshCall({
+		rail: "herdr",
+		result: { ok: false, reason: "herdr-tab-create-failed", recovery: { outcome: "unknown" } },
+	});
 	ok(
-		"[QK:FCD-RECOVERY-VISIBLE] a post-split failure shows WHICH recovery happened — `closed` or `orphan-unreclaimed:<reason>` — because the operator's next move is to go look at a pane, or not",
+		"[QK:FCD-RECOVERY-VISIBLE] a post-attempt failure shows WHICH recovery happened — `none`, `unknown`, `closed` or `orphan-unreclaimed:<reason>` — because the operator's next move is to go look, or not, and a header that says the tab was created while its own hint says nothing was is the contradiction this cell exists to catch",
 		orphaned.isError &&
 			orphaned.text.includes("orphan-unreclaimed:terminal-id-mismatch") &&
 			orphaned.text.includes("NOT closed") &&
 			closed.text.includes("recovery: closed w7:p9") &&
-			!closed.text.includes("orphan-unreclaimed"),
+			!closed.text.includes("orphan-unreclaimed") &&
+			// herdr declined by name: nothing exists, and it is NOT spelled as an orphan.
+			nothing.text.includes("recovery: none") &&
+			!nothing.text.includes("orphan-unreclaimed") &&
+			!nothing.text.includes("failed after the tab was created") &&
+			// We never heard back: a tab MAY exist, and the receipt says exactly that.
+			unknown.text.includes("UNKNOWN") &&
+			!unknown.text.includes("orphan-unreclaimed"),
 	);
 
 	console.log(`\n[check-fresh-call-dispatch] ${passed} assertions ok`);

@@ -84,14 +84,40 @@
 			"signatureSource": "scripts/check-herdr-fresh-call.ts"
 		},
 		{
-			"claim": "HFC-SPLIT-ARGV",
-			"title": "the split steals focus from the operator who was typing when the sibling opened",
+			"claim": "HFC-CALLER-WORKSPACE",
+			"title": "the caller's workspace is dropped and herdr defaults --workspace to whatever is focused, so the sibling opens in a workspace nobody asked for under a green receipt",
+			"subject": "pi-extensions/lib/herdr-fresh-call.ts",
+			"find": [
+				"\tif (callerPane.workspaceId === undefined) return { ok: false, reason: \"herdr-caller-workspace-missing\" };\n"
+			],
+			"replace": [""],
+			"gate": ["bash", "run.sh", "check-herdr-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:HFC-CALLER-WORKSPACE]",
+			"signatureSource": "scripts/check-herdr-fresh-call.ts"
+		},
+		{
+			"claim": "HFC-CALLER-PANE-BOUND",
+			"title": "the caller pane-get answer is no longer bound to the pane we asked about, so a readable reply describing ANOTHER pane places the sibling in a workspace nobody named, under a green receipt",
+			"subject": "pi-extensions/lib/herdr-fresh-call.ts",
+			"find": [
+				"\tif (callerPane.paneId !== context.context.callerPaneId) return { ok: false, reason: \"herdr-caller-pane-drift\" };\n"
+			],
+			"replace": [""],
+			"gate": ["bash", "run.sh", "check-herdr-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:HFC-CALLER-PANE-BOUND]",
+			"signatureSource": "scripts/check-herdr-fresh-call.ts"
+		},
+		{
+			"claim": "HFC-TAB-ARGV",
+			"title": "the new tab steals focus from the operator who was typing when the sibling opened",
 			"subject": "pi-extensions/lib/herdr-fresh-call.ts",
 			"find": ["\t\t\"--no-focus\",\n"],
 			"replace": [""],
 			"gate": ["bash", "run.sh", "check-herdr-fresh-call"],
 			"timeoutSeconds": 120,
-			"signature": "[QK:HFC-SPLIT-ARGV]",
+			"signature": "[QK:HFC-TAB-ARGV]",
 			"signatureSource": "scripts/check-herdr-fresh-call.ts"
 		},
 		{
@@ -128,6 +154,19 @@
 			"signatureSource": "scripts/check-herdr-fresh-call.ts"
 		},
 		{
+			"claim": "HFC-TAB-HALVES-AGREE",
+			"title": "the tab-create reply's two halves are bound only when they happen to agree in one field, so a contradictory reply is assembled into a green launch whose receipt names a tab the agent did not start in",
+			"subject": "pi-extensions/lib/herdr-fresh-call.ts",
+			"find": [
+				"\tif (rootPane.tabId !== tabId) return null;\n\tif (rootPane.workspaceId !== workspaceId) return null;"
+			],
+			"replace": ["\tif (rootPane.tabId !== undefined && rootPane.tabId !== tabId) return null;"],
+			"gate": ["bash", "run.sh", "check-herdr-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:HFC-TAB-HALVES-AGREE]",
+			"signatureSource": "scripts/check-herdr-fresh-call.ts"
+		},
+		{
 			"claim": "HFC-PANE-ID-OPAQUE",
 			"title": "the pane id is normalised on the way in, so herdr's own `pA` coordinate stops matching the one herdr will answer about",
 			"subject": "pi-extensions/lib/herdr-fresh-call.ts",
@@ -154,9 +193,9 @@
 			"title": "the close drops its terminal-id proof and trusts a bare pane id — after a herdr restart that id belongs to someone else's view",
 			"subject": "pi-extensions/lib/herdr-fresh-call.ts",
 			"find": [
-				"\tif (current.terminalId !== split.terminalId) return { close: false, reason: \"terminal-id-mismatch\" };"
+				"\tif (current.terminalId !== created.terminalId) return { close: false, reason: \"terminal-id-mismatch\" };"
 			],
-			"replace": [""],
+			"replace": ["\tvoid created.terminalId;"],
 			"gate": ["bash", "run.sh", "check-herdr-fresh-call"],
 			"timeoutSeconds": 120,
 			"signature": "[QK:HFC-CLOSE-WITHIN-GENERATION]",
@@ -166,8 +205,8 @@
 			"claim": "HFC-ORPHAN-NAMED",
 			"title": "two different reclaim failures collapse into one name, so the operator cannot tell a wrong pane from an unreadable one",
 			"subject": "pi-extensions/lib/herdr-fresh-call.ts",
-			"find": ["\tif (current.paneId !== split.paneId) return { close: false, reason: \"pane-id-mismatch\" };"],
-			"replace": ["\tif (current.paneId !== split.paneId) return { close: false, reason: \"pane-get-unparsable\" };"],
+			"find": ["\tif (current.paneId !== created.paneId) return { close: false, reason: \"pane-id-mismatch\" };"],
+			"replace": ["\tif (current.paneId !== created.paneId) return { close: false, reason: \"pane-get-failed\" };"],
 			"gate": ["bash", "run.sh", "check-herdr-fresh-call"],
 			"timeoutSeconds": 120,
 			"signature": "[QK:HFC-ORPHAN-NAMED]",
@@ -196,21 +235,34 @@
 			"signatureSource": "scripts/check-herdr-fresh-call.ts"
 		},
 		{
-			"claim": "HFC-SPLIT-OCCUPIED",
-			"title": "a split that came back already holding an agent is started into anyway, landing our framing beside somebody else's sibling",
+			"claim": "HFC-TAB-OCCUPIED",
+			"title": "a brand-new tab whose initial pane already holds an agent is started into anyway, landing beside somebody else's sibling",
 			"subject": "pi-extensions/lib/herdr-fresh-call.ts",
 			"find": ["\tif (pane.hasAgentSession) {"],
 			"replace": ["\tif (false) {"],
 			"gate": ["bash", "run.sh", "check-herdr-fresh-call"],
 			"timeoutSeconds": 120,
-			"signature": "[QK:HFC-SPLIT-OCCUPIED]",
+			"signature": "[QK:HFC-TAB-OCCUPIED]",
+			"signatureSource": "scripts/check-herdr-fresh-call.ts"
+		},
+		{
+			"claim": "HFC-CREATE-OUTCOME-HONEST",
+			"title": "a tab create cut off by OUR OWN timeout is reported as `nothing was created`, sending the operator away from a tab that may be sitting on their screen",
+			"subject": "pi-extensions/lib/herdr-fresh-call.ts",
+			"find": ["\t\t\trecovery: code === undefined ? indeterminate() : nothingCreated(),"],
+			"replace": ["\t\t\trecovery: nothingCreated(),"],
+			"gate": ["bash", "run.sh", "check-herdr-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:HFC-CREATE-OUTCOME-HONEST]",
 			"signatureSource": "scripts/check-herdr-fresh-call.ts"
 		},
 		{
 			"claim": "HFC-START-PANE-BINDING",
-			"title": "a start reporting a different pane is accepted as success, so the receipt names a coordinate that never held the sibling",
+			"title": "a start reporting another pane, terminal or TAB is accepted as success, so the receipt points at a coordinate that never held the sibling",
 			"subject": "pi-extensions/lib/herdr-fresh-call.ts",
-			"find": ["\tif (started.pane.paneId !== pane.paneId || started.pane.terminalId !== pane.terminalId) {"],
+			"find": [
+				"\tif (\n\t\tstarted.pane.paneId !== pane.paneId ||\n\t\tstarted.pane.terminalId !== pane.terminalId ||\n\t\t(started.pane.tabId !== undefined && started.pane.tabId !== tab.tabId)\n\t) {"
+			],
 			"replace": ["\tif (false) {"],
 			"gate": ["bash", "run.sh", "check-herdr-fresh-call"],
 			"timeoutSeconds": 120,

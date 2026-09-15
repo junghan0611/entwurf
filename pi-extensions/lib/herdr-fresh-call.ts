@@ -1,9 +1,9 @@
 /**
- * herdr-fresh-call — open ONE visible sibling in a herdr pane, from inside herdr.
+ * herdr-fresh-call — open ONE visible sibling in a new herdr tab, from inside herdr.
  *
  * THE TMUX RAIL IS NOT TOUCHED AND NOT REACHED FROM HERE. This module imports no `mux-*` and no
  * `entwurf-*`: the pieces both rails genuinely share live in `fresh-call-composition.ts`, and
- * everything below that line is different. herdr places with `pane split` + `agent start`, which
+ * everything below that line is different. herdr places with `tab create` + `agent start`, which
  * is TWO mutations where tmux had one; it resolves no runtime for us; and its coordinates are
  * workspace/tab/pane rather than server/session/window. Sharing a placement type between those
  * would have been a shape, not a contract.
@@ -73,7 +73,7 @@ export const HERDR_AGENT_KIND: Record<HerdrFreshCallBackend, string> = {
 
 /** What the herdr rail tells a sibling about where it woke up — the rail-owned sentence the
  * composition leaf refuses to invent for itself. */
-export const HERDR_FRESH_CALL_OPENING_LINE = "You are a fresh visible citizen that entwurf opened in a herdr pane.";
+export const HERDR_FRESH_CALL_OPENING_LINE = "You are a fresh visible citizen that entwurf opened in a new herdr tab.";
 
 /** The sentence that carries the encoded prompt. It says exactly what it is: there is no hidden
  * protocol, and a human reading the pane's scrollback can decode the same string by hand. */
@@ -87,7 +87,18 @@ export type HerdrFreshCallRejectReason =
 	// oversized task is answered with the SAME word on either placement owner.
 	| FreshCallInputRejectReason
 	| "herdr-context-missing"
-	| "herdr-parent-pane-missing"
+	| "herdr-caller-pane-missing"
+	/** herdr would not tell us where the CALLER is sitting. Three separate names because the
+	 * operator's next move differs: their pane is gone, herdr answered something this version
+	 * cannot read, or the reply held no workspace at all. None of the three creates anything —
+	 * `pane get` is a read — so they all belong with the refusals rather than the failures. */
+	| "herdr-caller-pane-get-failed"
+	| "herdr-caller-pane-unparsable"
+	/** herdr answered readably, about a DIFFERENT pane. Not folded into `unparsable`: the payload
+	 * was fine and what it said was actionable — we asked about one pane and were told about
+	 * another, so its workspace is not evidence about where the caller is. */
+	| "herdr-caller-pane-drift"
+	| "herdr-caller-workspace-missing"
 	| "herdr-backend-unsupported"
 	| "herdr-placement-tmux-rejected"
 	| "herdr-argv-control-character"
@@ -95,17 +106,17 @@ export type HerdrFreshCallRejectReason =
 	| "cwd-missing"
 	| "cwd-not-directory";
 
-/** Why a launch that had ALREADY split a pane failed. These are separate from the refusals above
+/** Why a launch that had ALREADY created a tab failed. These are separate from the refusals above
  * because the operator's next question is different: something exists and may need reclaiming. */
 export type HerdrLaunchFailureReason =
-	| "herdr-split-failed"
-	| "herdr-split-unparsable"
-	/** The split succeeded onto a pane that ALREADY holds an agent. Starting there would either
-	 * be refused by herdr or land on somebody else's sibling, so this declines instead. */
-	| "herdr-split-pane-occupied"
+	| "herdr-tab-create-failed"
+	| "herdr-tab-create-unparsable"
+	/** The new tab came back with an initial pane that ALREADY holds an agent. Starting there
+	 * would either be refused by herdr or land on somebody else's sibling, so this declines. */
+	| "herdr-tab-root-pane-occupied"
 	| "herdr-agent-start-failed"
 	| "herdr-agent-start-unparsable"
-	/** The start reported a pane or terminal that is not the one we split. Distinct from
+	/** The start reported a pane, terminal or tab that is not the one we created. Distinct from
 	 * `unparsable` on purpose: the payload was readable and said something actionable. */
 	| "herdr-agent-start-pane-drift"
 	/** The start succeeded without an `agent_session`. herdr's own start path waits for
@@ -127,8 +138,24 @@ export type HerdrOrphanReason =
 	| "agent-session-present"
 	| "close-failed";
 
-/** What happened to the pane we opened when the launch failed after it existed. */
+/**
+ * What is out there after a launch failed — and the first question is whether anything IS.
+ *
+ * `none` and `unknown` are NOT reclaim results and must not be spelled as one. An earlier shape
+ * forced them both into `orphan-unreclaimed` with an empty pane id and the reason
+ * `pane-get-failed`, which told an operator that a `pane get` had failed when none was ever
+ * attempted, under a header saying the tab had been created. Every `HerdrOrphanReason` below now
+ * describes exactly what it says: a reclaim we tried and could not prove.
+ */
 export type HerdrRecovery =
+	/** herdr declined with its OWN error envelope, so it answered before making anything.
+	 * `[측정 2026-09-15]` the one decline measured on this verb (`workspace_not_found`) left the
+	 * server's tab and pane lists unchanged. */
+	| { readonly outcome: "none" }
+	/** We never got an answer we can act on — our own timeout/kill (no herdr envelope at all), or
+	 * a reply we could not read. A tab may exist and naming it would be a guess, so nothing is
+	 * closed and the operator is told to go look. */
+	| { readonly outcome: "unknown" }
 	| { readonly outcome: "closed"; readonly paneId: string; readonly terminalId: string }
 	| { readonly outcome: "orphan-unreclaimed"; readonly paneId: string; readonly reason: HerdrOrphanReason };
 
@@ -138,6 +165,11 @@ export type HerdrRecovery =
  * `herdr*` keys are named for their owner ON PURPOSE: they are herdr's coordinates, they are
  * VIEWS, and `[측정 2026-09-14]` a pane id is not even stable for the life of a sibling — moving a
  * pane across workspaces changed `w7:p3` into `w8:p2` while the session underneath was untouched.
+ *
+ * TAB FIRST, because that is now what we create: the tab and its workspace are REQUIRED, and the
+ * pane is the tab's initial pane — the one exact coordinate the agent was started into and the
+ * only one this rail has authority to close. `[측정 2026-09-15]` every `tab_created` reply carried
+ * all three, so a missing one is herdr disagreeing with us, not an optional field.
  *
  * ABSENT BY CONTRACT: `gardenId` and `nativeSessionId` (an address is the record's to give, and
  * this module never reads the store), screen text, `agent_status` and `interactive_ready` (herdr's
@@ -151,10 +183,11 @@ export interface HerdrFreshCallReceipt {
 	readonly model: string;
 	readonly cwd?: string;
 	readonly herdrAgentName: string;
+	readonly herdrWorkspaceId: string;
+	readonly herdrTabId: string;
+	/** The new tab's INITIAL pane — where the agent was started, and the only thing we may close. */
 	readonly herdrPaneId: string;
 	readonly herdrTerminalId: string;
-	readonly herdrWorkspaceId?: string;
-	readonly herdrTabId?: string;
 	readonly nonce: string;
 }
 
@@ -180,10 +213,13 @@ export type HerdrRun = (args: readonly string[]) => Promise<{
 
 /** The two env facts that say we are inside herdr, plus the pane we were opened in. All three are
  * herdr's OWN (`HERDR_ENV`, `HERDR_BIN_PATH`, `HERDR_PANE_ID`); none is discovered, no socket is
- * scanned and no path is guessed. Outside herdr this rail does not exist rather than improvising. */
+ * scanned and no path is guessed. Outside herdr this rail does not exist rather than improvising.
+ *
+ * `callerPaneId` is not a placement target on this rail — nothing is split into it. It is the ONE
+ * coordinate we are entitled to hand back to herdr to ask "which workspace is this caller in?". */
 export interface HerdrContext {
 	readonly bin: string;
-	readonly parentPaneId: string;
+	readonly callerPaneId: string;
 }
 
 export function resolveHerdrContext(
@@ -192,13 +228,13 @@ export function resolveHerdrContext(
 	if (env.HERDR_ENV !== "1") return { ok: false, reason: "herdr-context-missing" };
 	const bin = env.HERDR_BIN_PATH;
 	if (typeof bin !== "string" || bin.length === 0) return { ok: false, reason: "herdr-context-missing" };
-	const parentPaneId = env.HERDR_PANE_ID;
-	if (typeof parentPaneId !== "string" || parentPaneId.length === 0) {
-		// A split needs a parent. Guessing one from `pane list` would be picking someone else's
-		// view to cut in half, which is exactly the guess this rail refuses everywhere else.
-		return { ok: false, reason: "herdr-parent-pane-missing" };
+	const callerPaneId = env.HERDR_PANE_ID;
+	if (typeof callerPaneId !== "string" || callerPaneId.length === 0) {
+		// Without it we cannot ask herdr where the caller is, and picking a workspace out of
+		// `workspace list` would put the sibling beside whoever happens to be focused.
+		return { ok: false, reason: "herdr-caller-pane-missing" };
 	}
-	return { ok: true, context: { bin, parentPaneId } };
+	return { ok: true, context: { bin, callerPaneId } };
 }
 
 /**
@@ -207,7 +243,7 @@ export function resolveHerdrContext(
  * `placement: {tmuxSession}` names a session on the caller's tmux server. Inside herdr there is no
  * such server, and quietly dropping the field would open a sibling somewhere the caller did not
  * ask for while the call still looked successful. This is the narrowest layer that can see the
- * input; the public tool is not wired to it yet (#116 c2).
+ * input, and the public tool reaches it through `fresh-call-dispatch`.
  */
 export function rejectTmuxPlacementInHerdrContext(
 	placement: { readonly tmuxSession?: string } | undefined,
@@ -297,25 +333,37 @@ export function herdrAgentNameFromNonce(nonce: string): string {
 }
 
 /**
- * The ONE placement policy this rail has: split the caller's own pane downward and do not steal
- * focus. `[file:line @ c77af189]` `src/cli/pane.rs:722-727` makes `--direction` mandatory, so there
- * is no "herdr decides" option to defer to; `--no-focus` is stated because a sibling opening under
- * the operator's hands must not take the keyboard. This is deliberately NOT a layout manager: a
- * caller who wants a different arrangement moves the pane in herdr, which owns layout.
+ * The ONE placement policy this rail has: a NEW TAB in the caller's own workspace, without taking
+ * the keyboard. `[GLG direct decision 2026-09-15]` after using the rail for real, a tab beside the
+ * caller reads better than a pane split under it; `--no-focus` stays, because a sibling opening
+ * under the operator's hands must not steal focus either way.
+ *
+ * `--workspace` IS PASSED EXPLICITLY AND IS NOT OPTIONAL HERE. `[측정 2026-09-15, private server]`
+ * omitting it still succeeds — herdr puts the tab in whatever workspace is currently focused. That
+ * is a silent relocation exactly like the tmux seat this rail already refuses, so the workspace is
+ * resolved from herdr's OWN answer about the caller's pane (see `herdrFreshCall`) and never from
+ * parsing the `w<N>:p<M>` shape of a pane id, which `[측정 2026-09-14]` is opaque anyway (`w7:pA`).
+ *
+ * `[측정 2026-09-15]` a workspace herdr does not know is refused BEFORE anything is created
+ * (`{"error":{"code":"workspace_not_found"}}`, exit 1) — the mutation is still one step, not two.
+ *
+ * This is deliberately NOT a layout manager: no `--label`, no ratio, no second placement axis. A
+ * caller who wants a different arrangement moves the tab in herdr, which owns layout.
  *
  * The identity scrub is explicit for the reason the tmux rail learned the hard way: a child that
- * inherits a stale `PI_SESSION_ID` reports itself as a citizen it is not. `[측정 2026-09-14]`
- * `--env KEY=` injects the EMPTY value rather than dropping the key, and `[file:line @ c77af189]`
- * `src/cli/pane.rs:710-717` inserts each `--env` into a map, so repeating the flag is the grammar.
+ * inherits a stale `PI_SESSION_ID` reports itself as a citizen it is not. `[측정 2026-09-15]` the
+ * flag behaves the same on `tab create` as it did on `pane split` and it beats inheritance: with
+ * `PI_SESSION_ID` deliberately poisoned in the SERVER's own environment, the process launched in
+ * the new tab carried `PI_SESSION_ID=''` and `PI_AGENT_ID=''` — read from `/proc/<pid>/environ`,
+ * not from a screen. Repeating the flag is the grammar; `--env KEY=` injects the EMPTY value
+ * rather than dropping the key.
  */
-export function buildHerdrSplitArgs(params: { parentPaneId: string; cwd?: string }): string[] {
+export function buildHerdrTabCreateArgs(params: { workspaceId: string; cwd?: string }): string[] {
 	return [
-		"pane",
-		"split",
-		"--pane",
-		params.parentPaneId,
-		"--direction",
-		"down",
+		"tab",
+		"create",
+		"--workspace",
+		params.workspaceId,
 		"--no-focus",
 		...(params.cwd === undefined ? [] : ["--cwd", params.cwd]),
 		"--env",
@@ -386,14 +434,56 @@ function readPaneFacts(pane: unknown): HerdrPaneFacts | null {
 	};
 }
 
-/** `{"id":"cli:pane:split","result":{"pane":{…},"type":"pane_info"}}` — measured. A payload that is
+/** `{"id":"cli:pane:get","result":{"pane":{…},"type":"pane_info"}}` — measured. A payload that is
  * not that shape is DECLINED (null); it is never partially believed. */
-export function parseHerdrSplitResponse(stdout: string): HerdrPaneFacts | null {
+export function parseHerdrPaneResponse(stdout: string): HerdrPaneFacts | null {
 	const root = parseJsonObject(stdout);
 	if (root === null) return null;
 	const result = root.result;
 	if (typeof result !== "object" || result === null) return null;
 	return readPaneFacts((result as Record<string, unknown>).pane);
+}
+
+/** The tab we created, and the pane inside it we are allowed to touch. */
+export interface HerdrTabFacts {
+	readonly tabId: string;
+	readonly workspaceId: string;
+	/** The tab's initial pane, straight out of the same reply — never discovered by listing. */
+	readonly rootPane: HerdrPaneFacts;
+}
+
+/**
+ * `{"id":"cli:tab:create","result":{"root_pane":{…},"tab":{…},"type":"tab_created"}}` — measured
+ * verbatim on herdr 0.9.0, 2026-09-15.
+ *
+ * The reply names the new tab AND hands back its initial pane in one breath, which is why this
+ * rail never has to go looking: diffing `pane list` for "the new one" is the guess it refuses
+ * everywhere else.
+ *
+ * BOTH HALVES MUST NAME THE SAME TAB AND THE SAME WORKSPACE, and both must say so out loud.
+ * `[측정 2026-09-15]` every `tab_created` reply carried `tab_id` and `workspace_id` on the tab AND
+ * on its root pane, so an absent one is herdr disagreeing with this version rather than an
+ * optional field — and treating it as optional is how a contradictory reply gets assembled into a
+ * green launch whose receipt names one tab while the agent starts in another. Disagreement or
+ * absence declines the WHOLE payload; we do not pick the half we prefer.
+ */
+export function parseHerdrTabCreateResponse(stdout: string): HerdrTabFacts | null {
+	const root = parseJsonObject(stdout);
+	if (root === null) return null;
+	const result = root.result;
+	if (typeof result !== "object" || result === null) return null;
+	const rootPane = readPaneFacts((result as Record<string, unknown>).root_pane);
+	if (rootPane === null) return null;
+	const tab = (result as Record<string, unknown>).tab;
+	if (typeof tab !== "object" || tab === null) return null;
+	const tabId = (tab as Record<string, unknown>).tab_id;
+	const workspaceId = (tab as Record<string, unknown>).workspace_id;
+	if (typeof tabId !== "string" || tabId.length === 0) return null;
+	if (typeof workspaceId !== "string" || workspaceId.length === 0) return null;
+	// Required on the root pane too, and equal — not "checked when present".
+	if (rootPane.tabId !== tabId) return null;
+	if (rootPane.workspaceId !== workspaceId) return null;
+	return { tabId, workspaceId, rootPane };
 }
 
 /** What a successful `agent start` told us. `argv` is herdr's echo of what it actually composed:
@@ -440,8 +530,8 @@ export function argvMatchesRequest(
 	return echoed.length === expected.length && echoed.every((token, index) => token === expected[index]);
 }
 
-/** `herdr pane get <id>` → `{"result":{"pane":{…}}}` — the same shape as split. */
-export const parseHerdrPaneGetResponse = parseHerdrSplitResponse;
+/** `herdr pane get <id>` → `{"result":{"pane":{…}}}`. */
+export const parseHerdrPaneGetResponse = parseHerdrPaneResponse;
 
 /** herdr's own failure envelope: `{"id":…,"error":{"code":…,"message":…}}` on stderr with exit 1
  * (`[file:line @ c77af189]` `src/cli.rs:745-753`). The code is quoted into our reject, never
@@ -475,9 +565,18 @@ function parseJsonObject(text: string): Record<string, unknown> | null {
  * May we close the pane we just opened?
  *
  * Only with WITHIN-GENERATION proof: the pane we are looking at right now must be the same id AND
- * the same terminal our split receipt named, and it must not have acquired an agent session. A
+ * the same terminal our creation receipt named, and it must not have acquired an agent session. A
  * bare pane id is not authority (see `HerdrOrphanReason`), and the honest answer when the proof
  * does not hold is to leave the pane alone and say so by name.
+ *
+ * WHY THE RECLAIM IS STILL PANE-LEVEL ON A TAB-FIRST RAIL. `[측정 2026-09-15, private server]`
+ * `tab close` takes a bare `tab_id` and nothing else: it closed a tab holding a RUNNING agent and
+ * answered `{"result":{"type":"ok"}}`, so adopting it would be claiming authority over every pane
+ * a stranger had put in our tab meanwhile. Closing the one pane we own is strictly narrower and it
+ * is enough — `[측정]` closing the sole pane of a tab removed the tab with it (`tab get` →
+ * `tab_not_found`, no empty tab left behind), and on a tab that had gained a second pane the same
+ * close took only ours and left the tab and the stranger's pane alive. Fail-closed in both
+ * directions, with the proof we already had.
  *
  * A TOCTOU window remains between this decision and the close, and it is not closable through the
  * public API: `[file:line @ c77af189]` `src/api/schema/common.rs:33-36` gives `close_pane` only a
@@ -485,14 +584,14 @@ function parseJsonObject(text: string): Record<string, unknown> | null {
  * is named here rather than papered over.
  */
 export function decideConditionalClose(
-	split: Pick<HerdrPaneFacts, "paneId" | "terminalId">,
+	created: Pick<HerdrPaneFacts, "paneId" | "terminalId">,
 	current: HerdrPaneFacts | null,
 	getFailed: boolean,
 ): { close: true } | { close: false; reason: HerdrOrphanReason } {
 	if (getFailed) return { close: false, reason: "pane-get-failed" };
 	if (current === null) return { close: false, reason: "pane-get-unparsable" };
-	if (current.paneId !== split.paneId) return { close: false, reason: "pane-id-mismatch" };
-	if (current.terminalId !== split.terminalId) return { close: false, reason: "terminal-id-mismatch" };
+	if (current.paneId !== created.paneId) return { close: false, reason: "pane-id-mismatch" };
+	if (current.terminalId !== created.terminalId) return { close: false, reason: "terminal-id-mismatch" };
 	if (current.hasAgentSession) return { close: false, reason: "agent-session-present" };
 	return { close: true };
 }
@@ -501,10 +600,15 @@ export function decideConditionalClose(
  * Open the sibling.
  *
  * ORDER IS THE ARGUMENT, and it is a different argument from the tmux rail's. There, validation
- * could promise that "nothing above can leave a window behind"; here the split IS a mutation and
- * the start can still fail after it. So everything decidable — context, backend, placement input,
- * caller id, task, model, cwd, and the encoded argv's control characters — is decided BEFORE the
- * split, and the only failures that can survive into the two-step region are herdr's own.
+ * could promise that "nothing above can leave a window behind"; here the tab create IS a mutation
+ * and the start can still fail after it. So everything decidable — context, backend, placement
+ * input, caller id, task, model, cwd, and the encoded argv's control characters — is decided
+ * BEFORE it, and the only failures that can survive into the two-step region are herdr's own.
+ *
+ * ONE READ SITS BETWEEN THEM, and it creates nothing: `pane get <HERDR_PANE_ID>` asks herdr which
+ * workspace the caller is in. It comes LAST among the refusals so a call we would have rejected
+ * anyway never reaches the herdr CLI, and its four failure modes are refusals rather than launch
+ * failures because a read leaves no tab behind.
  *
  * `callerGardenId` comes from the SURFACE that registered the tool, out of its own record-backed
  * context. This module never derives it, looks it up, or guesses: an empty value is a refusal.
@@ -570,28 +674,55 @@ export async function herdrFreshCall(
 	// while it is still free to refuse.
 	if (backendArgs.some(containsControlChar)) return { ok: false, reason: "herdr-argv-control-character" };
 
+	// Which workspace is the caller in? herdr's own answer about the caller's own pane — not the
+	// focused workspace, not a listing, and not the `w<N>:` prefix of an id this rail treats as
+	// opaque. A pane we cannot read is a refusal: falling back to an omitted `--workspace` would
+	// open the sibling wherever the operator happens to be looking, under a green receipt.
+	const callerPaneRun = await run(buildHerdrPaneGetArgs(context.context.callerPaneId));
+	if (callerPaneRun.status !== 0) return { ok: false, reason: "herdr-caller-pane-get-failed" };
+	const callerPane = parseHerdrPaneGetResponse(callerPaneRun.stdout);
+	if (callerPane === null) return { ok: false, reason: "herdr-caller-pane-unparsable" };
+	// The answer must be about the pane we ASKED about. A readable reply describing some other
+	// pane carries some other pane's workspace, and using it would open the sibling in a
+	// workspace the caller never named — the exact silent relocation this whole policy exists to
+	// refuse, arriving through the read instead of through an omitted --workspace.
+	if (callerPane.paneId !== context.context.callerPaneId) return { ok: false, reason: "herdr-caller-pane-drift" };
+	if (callerPane.workspaceId === undefined) return { ok: false, reason: "herdr-caller-workspace-missing" };
+
 	// ── everything above this line leaves nothing behind ──────────────────────────────────
-	const splitRun = await run(
-		buildHerdrSplitArgs({
-			parentPaneId: context.context.parentPaneId,
+	const tabRun = await run(
+		buildHerdrTabCreateArgs({
+			workspaceId: callerPane.workspaceId,
 			...(cwd === undefined ? {} : { cwd }),
 		}),
 	);
-	if (splitRun.status !== 0) {
-		// Nothing was created, so there is nothing to reclaim and no recovery to report.
-		return { ok: false, reason: "herdr-split-failed", ...errorCode(splitRun.stderr), recovery: noPane() };
+	if (tabRun.status !== 0) {
+		// WHETHER ANYTHING EXISTS depends on WHO failed, and the stderr says which. herdr's own
+		// envelope means herdr answered — it declined before making a tab. NO envelope means we
+		// never heard from it at all: `createHerdrRunner` reports its own timeout/kill/spawn
+		// failure as the same nonzero status with a plain-text stderr, and a `tab create` we
+		// killed mid-flight may well have created the tab. Claiming "nothing was created" there
+		// would send an operator away from a tab that is sitting on their screen.
+		const code = readHerdrErrorCode(tabRun.stderr);
+		return {
+			ok: false,
+			reason: "herdr-tab-create-failed",
+			...(code === undefined ? {} : { herdrErrorCode: code }),
+			recovery: code === undefined ? indeterminate() : nothingCreated(),
+		};
 	}
-	const pane = parseHerdrSplitResponse(splitRun.stdout);
-	if (pane === null) {
-		// A pane may exist and its id is precisely what we could not read. Diffing `pane list` to
-		// find "the new one" is the guess this rail refuses, so the orphan is NAMED instead.
-		return { ok: false, reason: "herdr-split-unparsable", recovery: unknownPane() };
+	const tab = parseHerdrTabCreateResponse(tabRun.stdout);
+	if (tab === null) {
+		// A tab may exist and its coordinates are precisely what we could not read. Diffing
+		// `tab list` to find "the new one" is the guess this rail refuses, so it is NAMED instead.
+		return { ok: false, reason: "herdr-tab-create-unparsable", recovery: indeterminate() };
 	}
+	const pane = tab.rootPane;
 	if (pane.hasAgentSession) {
-		// A freshly split pane holding an agent is not a pane we understand. Starting into it
-		// would either be refused by herdr as busy or, worse, land beside somebody else's
+		// A brand-new tab's initial pane holding an agent is not a pane we understand. Starting
+		// into it would either be refused by herdr as busy or, worse, land beside somebody else's
 		// sibling. Declining here also means the reclaim below correctly REFUSES to close it.
-		return { ok: false, reason: "herdr-split-pane-occupied", recovery: await reclaim(pane, run) };
+		return { ok: false, reason: "herdr-tab-root-pane-occupied", recovery: await reclaim(pane, run) };
 	}
 
 	const agentName = herdrAgentNameFromNonce(nonce);
@@ -615,9 +746,15 @@ export async function herdrFreshCall(
 	if (started === null) {
 		return { ok: false, reason: "herdr-agent-start-unparsable", recovery: await reclaim(pane, run) };
 	}
-	// EVERY reclaim below starts from the SPLIT receipt, never from what the start reported: if
-	// those two disagree, the split receipt is the only coordinate we have authority over.
-	if (started.pane.paneId !== pane.paneId || started.pane.terminalId !== pane.terminalId) {
+	// EVERY reclaim below starts from the TAB-CREATE receipt, never from what the start reported:
+	// if those two disagree, the create receipt is the only coordinate we have authority over.
+	// The tab is checked too when herdr named one — the whole point of this policy is WHICH tab
+	// the sibling is in, so a start that reports another one is the same defect as another pane.
+	if (
+		started.pane.paneId !== pane.paneId ||
+		started.pane.terminalId !== pane.terminalId ||
+		(started.pane.tabId !== undefined && started.pane.tabId !== tab.tabId)
+	) {
 		// Readable, and actionable — so it is not folded into `unparsable`. Something started
 		// somewhere other than the pane we opened, and a green receipt would have pointed the
 		// caller at a coordinate that never held their sibling.
@@ -643,10 +780,13 @@ export async function herdrFreshCall(
 			model,
 			...(cwd === undefined ? {} : { cwd }),
 			herdrAgentName: agentName,
+			// The tab coordinates come from the reply that CREATED them, not from the start's
+			// echo: the create receipt is what the reclaim above is bound to, so the receipt an
+			// operator reads and the coordinate we would close must be the same one.
+			herdrWorkspaceId: tab.workspaceId,
+			herdrTabId: tab.tabId,
 			herdrPaneId: started.pane.paneId,
 			herdrTerminalId: started.pane.terminalId,
-			...(started.pane.workspaceId === undefined ? {} : { herdrWorkspaceId: started.pane.workspaceId }),
-			...(started.pane.tabId === undefined ? {} : { herdrTabId: started.pane.tabId }),
 			nonce,
 		},
 	};
@@ -657,15 +797,16 @@ function errorCode(stderr: string): { herdrErrorCode?: string } {
 	return code === undefined ? {} : { herdrErrorCode: code };
 }
 
-/** A split that never happened. The pane id is empty because there is no pane — said out loud
- * rather than left to a reader to infer from a missing field. */
-function noPane(): HerdrRecovery {
-	return { outcome: "orphan-unreclaimed", paneId: "", reason: "pane-get-failed" };
+/** herdr declined by name, so nothing exists to reclaim. Not an unreclaimed orphan: there is no
+ * pane, and no `pane get` was attempted. */
+function nothingCreated(): HerdrRecovery {
+	return { outcome: "none" };
 }
 
-/** A split that may have happened and whose id we could not read. */
-function unknownPane(): HerdrRecovery {
-	return { outcome: "orphan-unreclaimed", paneId: "", reason: "pane-get-unparsable" };
+/** We cannot say whether a tab exists — our own bound cut the call off, or the reply was
+ * unreadable. Nothing is closed, and the receipt says so instead of guessing either way. */
+function indeterminate(): HerdrRecovery {
+	return { outcome: "unknown" };
 }
 
 /** Reclaim the pane we opened — conditionally, or not at all. */
@@ -694,8 +835,15 @@ const HERDR_REJECT_HINT: Record<HerdrFreshCallRejectReason | HerdrLaunchFailureR
 	"task-too-long": `the task is over the ${TASK_MAX_CHARS}-character interface bound this verb shares with entwurf_v2`,
 	"herdr-context-missing":
 		"HERDR_ENV/HERDR_BIN_PATH are absent, so this process is not inside herdr and this rail does not exist here",
-	"herdr-parent-pane-missing":
-		"herdr did not give this process a HERDR_PANE_ID, and a split needs a parent pane we were actually given",
+	"herdr-caller-pane-missing":
+		"herdr did not give this process a HERDR_PANE_ID, so there is no way to ask herdr which workspace this caller is in",
+	"herdr-caller-pane-get-failed":
+		"herdr would not report this process's own pane — run `herdr pane get $HERDR_PANE_ID` to see what it says",
+	"herdr-caller-pane-unparsable": "herdr's reply about this process's own pane could not be read",
+	"herdr-caller-pane-drift":
+		"herdr answered about a different pane than HERDR_PANE_ID names, so its workspace says nothing about where this caller is",
+	"herdr-caller-workspace-missing":
+		"herdr reported this process's pane with no workspace, and guessing one would open the sibling wherever the operator is looking",
 	"herdr-backend-unsupported": "this rail opens pi and claude-code only; nothing is opened elsewhere instead",
 	"herdr-placement-tmux-rejected":
 		"`placement` names a tmux session, which does not exist inside herdr — drop it rather than have the sibling silently placed somewhere else",
@@ -704,41 +852,65 @@ const HERDR_REJECT_HINT: Record<HerdrFreshCallRejectReason | HerdrLaunchFailureR
 	"cwd-not-absolute": "pass an absolute path, or omit cwd to use this agent's own directory",
 	"cwd-missing": "the requested start directory does not exist",
 	"cwd-not-directory": "the requested start path is not a directory",
-	"herdr-split-failed": "herdr refused to split the pane; nothing was created",
-	"herdr-split-unparsable": "herdr's split reply could not be read, so a pane may exist that this call cannot name",
-	"herdr-split-pane-occupied": "the pane herdr returned already holds an agent, so nothing was started into it",
-	"herdr-agent-start-failed": "herdr refused to start the agent in the pane that was just split",
+	"herdr-tab-create-failed":
+		"the tab create did not succeed — read the recovery line below for whether anything exists",
+	"herdr-tab-create-unparsable": "herdr's tab reply could not be read, so a tab may exist that this call cannot name",
+	"herdr-tab-root-pane-occupied": "the new tab's initial pane already holds an agent, so nothing was started into it",
+	"herdr-agent-start-failed": "herdr refused to start the agent in the tab that was just created",
 	"herdr-agent-start-unparsable": "herdr's start reply could not be read",
-	"herdr-agent-start-pane-drift": "herdr reported a different pane or terminal than the one we split",
+	"herdr-agent-start-pane-drift": "herdr reported a different pane, terminal or tab than the one it just created",
 	"herdr-agent-start-witness-missing":
 		"herdr reported a start with no agent session, so nothing identifies what was launched",
 	"herdr-agent-start-argv-drift": "herdr echoed an argv that is not the one we composed",
 };
 
-/** How a reclaim reads to an operator who has to decide whether to go look. */
+/** How a recovery reads to an operator who has to decide whether to go look. `[측정 2026-09-15]`
+ * closing the tab's only pane takes the tab with it, so the closed line says that — conditionally,
+ * because a pane a stranger added meanwhile keeps the tab alive and this rail never closed it. */
 function renderRecovery(recovery: HerdrRecovery): string {
-	return recovery.outcome === "closed"
-		? `  recovery: closed ${recovery.paneId} (its terminal still matched the split receipt)\n`
-		: `  recovery: orphan-unreclaimed:${recovery.reason}${recovery.paneId === "" ? "" : ` (${recovery.paneId})`} — this pane was NOT closed, on purpose\n`;
+	switch (recovery.outcome) {
+		case "none":
+			return "  recovery: none — herdr declined by name before making anything, so there is nothing to go look at\n";
+		case "unknown":
+			return "  recovery: UNKNOWN — we never got an answer we can act on, so a tab MAY exist that this call cannot name. Nothing was closed; check herdr\n";
+		case "closed":
+			return `  recovery: closed ${recovery.paneId} (its terminal still matched the create receipt; the new tab went with it unless something else had joined it)\n`;
+		default:
+			return `  recovery: orphan-unreclaimed:${recovery.reason} (${recovery.paneId}) — this pane was NOT closed, on purpose\n`;
+	}
+}
+
+/** The failure header, which must not claim more than the recovery below it knows. An earlier
+ * shape said "failed after the tab was created" on EVERY post-attempt failure, including the one
+ * whose own hint said nothing was created. */
+function renderFailureHeader(recovery: HerdrRecovery): string {
+	switch (recovery.outcome) {
+		case "none":
+			return "entwurf_fresh_call failed at the tab create step";
+		case "unknown":
+			return "entwurf_fresh_call failed at the tab create step with an UNKNOWN outcome";
+		default:
+			return "entwurf_fresh_call failed after the tab was created";
+	}
 }
 
 /**
  * Three outcomes, and an operator must be able to tell them apart at a glance: a refusal that
- * created nothing, a failure that may have left a pane behind, and a launch.
+ * created nothing, a failure that may have left a tab behind, and a launch.
  */
 export function renderHerdrFreshCall(result: HerdrFreshCallResult): { text: string; isError: boolean } {
 	if (!result.ok) {
 		const hint = HERDR_REJECT_HINT[result.reason];
 		if (!("recovery" in result)) {
 			return {
-				text: `entwurf_fresh_call rejected: ${result.reason} — ${hint}. No pane was created.`,
+				text: `entwurf_fresh_call rejected: ${result.reason} — ${hint}. No tab and no pane were created.`,
 				isError: true,
 			};
 		}
 		const code = result.herdrErrorCode === undefined ? "" : ` [herdr: ${result.herdrErrorCode}]`;
 		return {
 			text:
-				`entwurf_fresh_call failed after the split: ${result.reason}${code} — ${hint}.\n` +
+				`${renderFailureHeader(result.recovery)}: ${result.reason}${code} — ${hint}.\n` +
 				renderRecovery(result.recovery),
 			isError: true,
 		};
@@ -751,12 +923,14 @@ export function renderHerdrFreshCall(result: HerdrFreshCallResult): { text: stri
 			`  model:    ${r.model} (requested on the runtime CLI)\n` +
 			(r.cwd === undefined ? "" : `  cwd:      ${r.cwd} (requested start directory — not an observation)\n`) +
 			`  agent:    ${r.herdrAgentName} (herdr's name for it, derived from the nonce)\n` +
-			`  pane:     ${r.herdrPaneId} terminal ${r.herdrTerminalId} — herdr VIEW coordinates, not an address\n` +
+			`  tab:      ${r.herdrTabId} in workspace ${r.herdrWorkspaceId} — a NEW tab beside the caller's, opened without taking focus\n` +
+			`  pane:     ${r.herdrPaneId} terminal ${r.herdrTerminalId} — the tab's initial pane; herdr VIEW coordinates, not an address\n` +
 			`  nonce:    ${r.nonce}\n` +
 			`\n` +
-			`This is a LAUNCH receipt: herdr split a pane and was asked to start the agent above. It does NOT mean ` +
-			`the sibling is running, that its first turn ran, or that the task was delivered. The pane coordinate is a ` +
-			`view and can change under the sibling — it is not an address and nothing may be dispatched to it.\n` +
+			`This is a LAUNCH receipt: herdr created a tab and was asked to start the agent above in it. It does NOT ` +
+			`mean the sibling is running, that its first turn ran, or that the task was delivered. The tab and pane ` +
+			`coordinates are a view and can change under the sibling — they are not an address and nothing may be ` +
+			`dispatched to them.\n` +
 			`The sibling's garden id arrives separately — it calls entwurf_v2 back with the nonce above as its first ` +
 			`action, and the sender envelope of THAT message is the address. Nothing is polling for it; if it never ` +
 			`comes, the pane is visible and can be read directly.`,

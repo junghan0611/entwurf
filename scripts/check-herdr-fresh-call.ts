@@ -10,7 +10,11 @@
  * as hard to a stand-in server: it would agree with whatever we believed the day we wrote it).
  * The real-binary half is an isolated private server, and that is c2.
  *
- * Every JSON literal below is a VERBATIM payload recorded from herdr 0.9.0 on 2026-09-14.
+ * Every JSON literal below is a payload recorded from herdr 0.9.0 — the pane/tab replies on
+ * 2026-09-15, the agent_started reply on 2026-09-14. Field sets and shapes are verbatim. Where
+ * two replies have to describe the SAME sibling, the coordinates of the start recording are
+ * carried into the tab recording, and that splice is stated here rather than implied: a fixture
+ * whose two halves named different panes could not test the binding between them at all.
  *
  * Each claim carries its QK token on exactly ONE assertion.
  *
@@ -23,8 +27,17 @@
  *                               block and DEL, which JSON.stringify leaves literal
  *   HFC-ENCODE-MAX-TASK         a maximum public task encodes and stays Cc-free
  *   HFC-PREMUTATION-ONLY        every refusal happens before the first herdr call
- *   HFC-SPLIT-ARGV              the one placement policy, cwd carried literally, identity
- *                               scrubbed explicitly
+ *   HFC-CALLER-WORKSPACE        the caller's workspace comes from herdr's own answer about the
+ *                               caller's own pane, never from parsing a pane id, and an
+ *                               unusable answer refuses instead of defaulting
+ *   HFC-CALLER-PANE-BOUND       that answer must be ABOUT the pane we asked about — a readable
+ *                               reply describing another pane is refused by its own name
+ *   HFC-TAB-HALVES-AGREE        the tab-create reply's two halves name the same tab and the
+ *                               same workspace, and absent is disagreement, not optionality
+ *   HFC-CREATE-OUTCOME-HONEST   a failed tab create says whether anything EXISTS, and never
+ *                               spells "nothing happened" as an unreclaimed orphan
+ *   HFC-TAB-ARGV                the one placement policy — a new tab in the caller's workspace,
+ *                               focus left alone, cwd literal, identity scrubbed explicitly
  *   HFC-START-ARGV              backend argv rides after `--`, under the requested kind
  *   HFC-AGENT-NAME-OPAQUE       the herdr agent name is derived from the nonce and is valid
  *                               under herdr's own name rule
@@ -37,7 +50,7 @@
  *   HFC-ORPHAN-NAMED            every failed reclaim names its reason instead of going quiet
  *   HFC-INPUT-PARITY            the caller-facing input contract is the SHARED one, word for word
  *   HFC-CWD-EMPTY-IS-OMITTED    `cwd: ""` means "no cwd", as it does on the other rail
- *   HFC-SPLIT-OCCUPIED          a split that landed on a pane holding an agent does not start
+ *   HFC-TAB-OCCUPIED            a new tab whose initial pane holds an agent does not get started into
  *   HFC-START-PANE-BINDING      a start that reports a different pane/terminal is a named failure
  *   HFC-START-WITNESS-REQUIRED  a start with no agent session is a named failure
  *   HFC-START-ARGV-FIDELITY     the echoed argv must be exactly what we asked herdr to compose
@@ -62,7 +75,7 @@ import {
 	buildHerdrAgentStartArgs,
 	buildHerdrPaneCloseArgs,
 	buildHerdrPaneGetArgs,
-	buildHerdrSplitArgs,
+	buildHerdrTabCreateArgs,
 	containsControlChar,
 	createHerdrRunner,
 	decideConditionalClose,
@@ -77,9 +90,10 @@ import {
 	herdrFreshCall,
 	parseHerdrAgentStartResponse,
 	parseHerdrPaneGetResponse,
-	parseHerdrSplitResponse,
+	parseHerdrTabCreateResponse,
 	readHerdrErrorCode,
 	rejectTmuxPlacementInHerdrContext,
+	renderHerdrFreshCall,
 	type SpawnFn,
 } from "../pi-extensions/lib/herdr-fresh-call.ts";
 
@@ -94,14 +108,45 @@ function ok(label: string, cond: boolean): void {
 	passed++;
 }
 
-/** Verbatim `pane split` reply, herdr 0.9.0, 2026-09-14. */
-const SPLIT_OK = JSON.stringify({
-	id: "cli:pane:split",
+/** Verbatim `tab create` reply shape, herdr 0.9.0, 2026-09-15 — the new tab AND its initial pane
+ * in one reply, which is why this rail never goes looking for "the new one". */
+const TAB_OK = JSON.stringify({
+	id: "cli:tab:create",
+	result: {
+		root_pane: {
+			agent_status: "unknown",
+			cwd: "/home/junghan/repos/gh/entwurf",
+			focused: false,
+			pane_id: "w7:p7",
+			revision: 0,
+			tab_id: "w7:t1",
+			terminal_id: "term_65b6e1ce2b3db16",
+			workspace_id: "w7",
+		},
+		tab: {
+			agent_status: "unknown",
+			focused: false,
+			label: "1",
+			number: 1,
+			pane_count: 1,
+			tab_id: "w7:t1",
+			workspace_id: "w7",
+		},
+		type: "tab_created",
+	},
+});
+
+/** Verbatim `pane get` reply shape, same day. Used for BOTH reads this rail makes: the caller's
+ * own pane (where the workspace comes from) and the reclaim's within-generation proof. */
+const PANE_OK = JSON.stringify({
+	id: "cli:pane:get",
 	result: {
 		pane: {
 			agent_status: "unknown",
 			cwd: "/home/junghan/repos/gh/entwurf",
+			focused: true,
 			pane_id: "w7:p7",
+			revision: 1,
 			tab_id: "w7:t1",
 			terminal_id: "term_65b6e1ce2b3db16",
 			workspace_id: "w7",
@@ -109,6 +154,9 @@ const SPLIT_OK = JSON.stringify({
 		type: "pane_info",
 	},
 });
+
+/** The CALLER's own pane — a different pane in the same workspace, which is the whole point. */
+const CALLER_PANE_OK = PANE_OK.replace('"w7:p7"', '"w7:p1"').replace("term_65b6e1ce2b3db16", "term_65b6e1ce2b3db00");
 
 /** Verbatim `agent start` reply for the claude axis, same day. */
 const START_OK = JSON.stringify({
@@ -277,7 +325,7 @@ async function main(): Promise<void> {
 	const base = { backend: "pi", model: "openai-codex/gpt-5.6-sol", task: "do it", callerGardenId: CALLER } as const;
 	const refusals: [string, Parameters<typeof herdrFreshCall>[0], NodeJS.ProcessEnv, string][] = [
 		["herdr-context-missing", { ...base }, {}, "herdr-context-missing"],
-		["parent pane", { ...base }, { HERDR_ENV: "1", HERDR_BIN_PATH: "/x/herdr" }, "herdr-parent-pane-missing"],
+		["caller pane", { ...base }, { HERDR_ENV: "1", HERDR_BIN_PATH: "/x/herdr" }, "herdr-caller-pane-missing"],
 		["backend", { ...base, backend: "codex" }, HERDR_ENV, "herdr-backend-unsupported"],
 		["tmux seat", { ...base, placement: { tmuxSession: "org" } }, HERDR_ENV, "herdr-placement-tmux-rejected"],
 		["cwd", { ...base, cwd: "relative/dir" }, HERDR_ENV, "cwd-not-absolute"],
@@ -292,20 +340,76 @@ async function main(): Promise<void> {
 		if (result.ok || result.reason !== expected || calls.length !== 0) everyRefusalPreMutation = false;
 	}
 	ok(
-		"[QK:HFC-PREMUTATION-ONLY] the rail-shaped refusals — context, parent pane, backend, tmux seat, cwd — are decided with the herdr CLI never invoked, so a refused call leaves no pane behind",
+		"[QK:HFC-PREMUTATION-ONLY] the rail-shaped refusals — context, caller pane, backend, tmux seat, cwd — are decided with the herdr CLI never invoked, so a refused call leaves no tab behind",
 		everyRefusalPreMutation,
 	);
 
-	// ── argv grammar ─────────────────────────────────────────────────────────────────────
-	const splitArgs = buildHerdrSplitArgs({ parentPaneId: "w7:p1", cwd: "/repo/dir" });
+	// ── where the sibling is placed comes from herdr, not from a pane id's shape ─────────
 	ok(
-		"[QK:HFC-SPLIT-ARGV] one placement policy — the caller's own pane, split down, focus left alone — with cwd carried literally and BOTH identity carriers scrubbed by explicit repeated --env",
-		splitArgs.join(" ") ===
-			"pane split --pane w7:p1 --direction down --no-focus --cwd /repo/dir --env PI_SESSION_ID= --env PI_AGENT_ID=",
+		"[QK:HFC-CALLER-PANE-BOUND] the caller pane-get answer must be ABOUT the pane we asked about — a readable reply describing a DIFFERENT pane is refused by its own name rather than folded into `unparsable`, because its workspace is not evidence about this caller and believing it is the same silent relocation, arriving through the read instead of through an omitted --workspace",
+		await (async () => {
+			const { run, calls } = scriptedRun([{ status: 0, stdout: PANE_OK }]);
+			const drifted = await herdrFreshCall({ ...base, backend: "claude-code" }, run, HERDR_ENV, NONCE);
+			return (
+				!drifted.ok &&
+				drifted.reason === "herdr-caller-pane-drift" &&
+				calls.length === 1 &&
+				calls[0].join(" ") === "pane get w7:p1"
+			);
+		})(),
+	);
+
+	ok(
+		"[QK:HFC-CALLER-WORKSPACE] the new tab's workspace is read from herdr's OWN answer about the caller's own pane — and when that answer is unusable the call REFUSES, because omitting --workspace still succeeds and puts the sibling in whatever workspace happens to be focused",
+		await (async () => {
+			const cases: [ScriptedReply, string][] = [
+				[
+					{ status: 1, stderr: '{"error":{"code":"pane_not_found"},"id":"cli:pane:get"}' },
+					"herdr-caller-pane-get-failed",
+				],
+				[{ status: 0, stdout: "usage: herdr pane get <pane_id>" }, "herdr-caller-pane-unparsable"],
+				[
+					{ status: 0, stdout: CALLER_PANE_OK.replace(',"workspace_id":"w7"', "").replace('"workspace_id":"w7",', "") },
+					"herdr-caller-workspace-missing",
+				],
+			];
+			for (const [reply, expected] of cases) {
+				const { run, calls } = scriptedRun([reply]);
+				const result = await herdrFreshCall({ ...base, backend: "claude-code" }, run, HERDR_ENV, NONCE);
+				// Exactly ONE herdr call, and it is the read. Nothing was created to reclaim, which
+				// is why these are refusals and not launch failures.
+				if (result.ok || result.reason !== expected) return false;
+				if (calls.length !== 1 || calls.join(" ") !== "pane,get,w7:p1") return false;
+			}
+			// And on the happy path the workspace herdr reported is the one --workspace carries.
+			const { run, calls } = scriptedRun([
+				{ status: 0, stdout: CALLER_PANE_OK },
+				{ status: 0, stdout: TAB_OK },
+				startReplyEchoingArgv(START_OK),
+			]);
+			const okResult = await herdrFreshCall({ ...base, backend: "claude-code" }, run, HERDR_ENV, NONCE);
+			return (
+				okResult.ok &&
+				calls[0].join(" ") === "pane get w7:p1" &&
+				calls[1].slice(0, 4).join(" ") === "tab create --workspace w7" &&
+				okResult.receipt.herdrWorkspaceId === "w7"
+			);
+		})(),
+	);
+
+	// ── argv grammar ─────────────────────────────────────────────────────────────────────
+	const tabArgs = buildHerdrTabCreateArgs({ workspaceId: "w7", cwd: "/repo/dir" });
+	ok(
+		"[QK:HFC-TAB-ARGV] one placement policy — a NEW TAB in the caller's own workspace, named explicitly so herdr cannot default it to the focused one, focus left alone, cwd carried literally, and BOTH identity carriers scrubbed by explicit repeated --env",
+		tabArgs.join(" ") ===
+			"tab create --workspace w7 --no-focus --cwd /repo/dir --env PI_SESSION_ID= --env PI_AGENT_ID=",
 	);
 	ok(
-		"a cwd-free split omits --cwd entirely rather than sending an empty value",
-		!buildHerdrSplitArgs({ parentPaneId: "w7:p1" }).includes("--cwd"),
+		"a cwd-free tab create omits --cwd entirely rather than sending an empty value, and the rail adds no layout axis of its own — no label, no ratio, no direction",
+		!buildHerdrTabCreateArgs({ workspaceId: "w7" }).includes("--cwd") &&
+			!tabArgs.includes("--label") &&
+			!tabArgs.includes("--ratio") &&
+			!tabArgs.includes("--direction"),
 	);
 	const startArgs = buildHerdrAgentStartArgs({
 		agentName: "entwurf-abc",
@@ -314,7 +418,7 @@ async function main(): Promise<void> {
 		backendArgs: ["PROMPT", "--model=opus"],
 	});
 	ok(
-		"[QK:HFC-START-ARGV] the backend's own argv rides after `--`, under the REQUESTED kind and the pane just split",
+		"[QK:HFC-START-ARGV] the backend's own argv rides after `--`, under the REQUESTED kind and the initial pane of the tab just created",
 		startArgs.join(" ") === "agent start entwurf-abc --kind claude --pane w7:pA -- PROMPT --model=opus",
 	);
 	ok(
@@ -332,30 +436,66 @@ async function main(): Promise<void> {
 	);
 
 	// ── parsing ──────────────────────────────────────────────────────────────────────────
-	const pane = parseHerdrSplitResponse(SPLIT_OK);
+	const tab = parseHerdrTabCreateResponse(TAB_OK);
 	ok(
-		"[QK:HFC-PARSE-STRICT] a payload missing the fields a launch needs is DECLINED whole — a half-read pane is how a launch starts believing a coordinate it never got",
-		pane !== null &&
-			pane.paneId === "w7:p7" &&
-			pane.terminalId === "term_65b6e1ce2b3db16" &&
-			parseHerdrSplitResponse('{"id":"cli:pane:split","result":{"pane":{"pane_id":"w7:p7"}}}') === null &&
+		"[QK:HFC-PARSE-STRICT] a payload missing any coordinate a launch needs is DECLINED whole — a half-read reply is how a launch starts believing a coordinate it never got",
+		tab !== null &&
+			tab.tabId === "w7:t1" &&
+			tab.workspaceId === "w7" &&
+			tab.rootPane.paneId === "w7:p7" &&
+			tab.rootPane.terminalId === "term_65b6e1ce2b3db16" &&
+			parseHerdrTabCreateResponse('{"id":"cli:tab:create","result":{"root_pane":{"pane_id":"w7:p7"}}}') === null &&
 			// An EMPTY coordinate is not a coordinate. A present-but-blank field reads as
 			// "herdr answered" to a `typeof` check alone, and would travel into the receipt as
 			// a terminal id no conditional close could ever match.
-			parseHerdrSplitResponse(SPLIT_OK.replace("term_65b6e1ce2b3db16", "")) === null &&
-			parseHerdrSplitResponse(SPLIT_OK.replace('"w7:p7"', '""')) === null &&
-			parseHerdrSplitResponse("usage: herdr pane split [<pane_id>|--pane ID|--current]") === null &&
-			parseHerdrSplitResponse("") === null,
+			parseHerdrTabCreateResponse(TAB_OK.replace("term_65b6e1ce2b3db16", "")) === null &&
+			parseHerdrTabCreateResponse(TAB_OK.replace('"w7:p7"', '""')) === null &&
+			// The tab half, held to the same standard as the pane half.
+			parseHerdrTabCreateResponse(TAB_OK.replace(/"tab_id":"w7:t1","workspace_id":"w7"\}/, '"tab_id":"w7:t1"}')) ===
+				null &&
+			parseHerdrTabCreateResponse(
+				TAB_OK.replace('"tab_id":"w7:t1","workspace_id":"w7"}', '"tab_id":"","workspace_id":"w7"}'),
+			) === null &&
+			parseHerdrTabCreateResponse("usage: herdr tab create [OPTIONS]") === null &&
+			parseHerdrTabCreateResponse("") === null &&
+			parseHerdrPaneGetResponse(PANE_OK)?.paneId === "w7:p7" &&
+			parseHerdrPaneGetResponse("") === null,
 	);
 	const started = parseHerdrAgentStartResponse(START_OK);
 	ok(
 		"the agent_started reply yields the same pane facts, and agent_session is read as PRESENCE only",
 		started !== null && started.pane.paneId === "w7:p7" && started.pane.hasAgentSession === true,
 	);
-	const opaque = parseHerdrSplitResponse(SPLIT_OK.replace('"w7:p7"', '"w7:pA"'));
 	ok(
-		"[QK:HFC-PANE-ID-OPAQUE] a `pA`-style pane id survives byte-identical — measured: the tenth pane is `w7:pA`, not `w7:p10`, so any decimal parser is already wrong",
-		opaque !== null && opaque.paneId === "w7:pA",
+		"[QK:HFC-TAB-HALVES-AGREE] the tab-create reply's two halves must name the SAME tab and the SAME workspace, and both must SAY so — absent is disagreement, not optionality, because a reply that names a tab only once cannot be checked against itself and assembling it is how a launch starts in one tab while the receipt names another",
+		parseHerdrTabCreateResponse(TAB_OK) !== null &&
+			// root_pane says one tab, tab says another.
+			parseHerdrTabCreateResponse(
+				TAB_OK.replace('"tab_id":"w7:t1","terminal_id"', '"tab_id":"w7:t9","terminal_id"'),
+			) === null &&
+			// …and the same for the workspace, in BOTH directions of disagreement.
+			parseHerdrTabCreateResponse(
+				TAB_OK.replace(
+					'"terminal_id":"term_65b6e1ce2b3db16","workspace_id":"w7"',
+					'"terminal_id":"term_65b6e1ce2b3db16","workspace_id":"w9"',
+				),
+			) === null &&
+			// ABSENT on the root pane is not "optional", it is disagreement: a reply that names a
+			// tab only once cannot be checked against itself, and believing it is how a launch
+			// starts in one tab while the receipt names another.
+			parseHerdrTabCreateResponse(TAB_OK.replace('"tab_id":"w7:t1","terminal_id"', '"terminal_id"')) === null &&
+			parseHerdrTabCreateResponse(
+				TAB_OK.replace(
+					'"terminal_id":"term_65b6e1ce2b3db16","workspace_id":"w7"',
+					'"terminal_id":"term_65b6e1ce2b3db16"',
+				),
+			) === null,
+	);
+
+	const opaque = parseHerdrTabCreateResponse(TAB_OK.replace('"w7:p7"', '"w7:pA"'));
+	ok(
+		"[QK:HFC-PANE-ID-OPAQUE] a `pA`-style pane id survives byte-identical — measured: the tenth pane is `w7:pA`, not `w7:p10`, so any decimal parser is already wrong, and this rail reads the workspace out of herdr's reply rather than off the front of an id",
+		opaque !== null && opaque.rootPane.paneId === "w7:pA",
 	);
 	ok(
 		"herdr's own error code is quoted out of its envelope rather than retyped into a vocabulary of ours that would go stale",
@@ -364,13 +504,19 @@ async function main(): Promise<void> {
 	);
 
 	// ── the launch, and what its receipt may say ─────────────────────────────────────────
-	const { run, calls } = scriptedRun([{ status: 0, stdout: SPLIT_OK }, startReplyEchoingArgv(START_OK)]);
+	const { run, calls } = scriptedRun([
+		{ status: 0, stdout: CALLER_PANE_OK },
+		{ status: 0, stdout: TAB_OK },
+		startReplyEchoingArgv(START_OK),
+	]);
 	const launched = await herdrFreshCall({ ...base, backend: "claude-code", model: "opus" }, run, HERDR_ENV, NONCE);
 	const receipt = launched.ok ? launched.receipt : null;
 	const receiptText = JSON.stringify(receipt ?? {});
 	ok(
 		"[QK:HFC-RECEIPT-NO-ADDRESS] the launch receipt carries the view and what was requested — and no garden id, no native session id, no screen text and none of herdr's own readiness judgements",
 		receipt !== null &&
+			receipt.herdrTabId === "w7:t1" &&
+			receipt.herdrWorkspaceId === "w7" &&
 			receipt.herdrPaneId === "w7:p7" &&
 			receipt.herdrTerminalId === "term_65b6e1ce2b3db16" &&
 			receipt.requestedKind === "claude" &&
@@ -383,45 +529,46 @@ async function main(): Promise<void> {
 			!receiptText.includes("Claude Code"),
 	);
 	ok(
-		"the launch is exactly two herdr calls — split then start — with the encoded one-line prompt as the first backend argument",
-		calls.length === 2 &&
-			calls[0][1] === "split" &&
-			calls[1][1] === "start" &&
-			calls[1][calls[1].indexOf("--") + 1].startsWith(HERDR_DECODE_INSTRUCTION) &&
-			!containsControlChar(calls[1][calls[1].indexOf("--") + 1]),
+		"the launch is one read and exactly two mutations — caller pane get, tab create, agent start — with the encoded one-line prompt as the first backend argument",
+		calls.length === 3 &&
+			calls[0].join(" ") === "pane get w7:p1" &&
+			calls[1][1] === "create" &&
+			calls[2][1] === "start" &&
+			calls[2][calls[2].indexOf("--") + 1].startsWith(HERDR_DECODE_INSTRUCTION) &&
+			!containsControlChar(calls[2][calls[2].indexOf("--") + 1]),
 	);
 
 	// ── conditional close ────────────────────────────────────────────────────────────────
-	const split = { paneId: "w7:p7", terminalId: "term_65b6e1ce2b3db16" };
-	const same = parseHerdrPaneGetResponse(SPLIT_OK);
+	const created = { paneId: "w7:p7", terminalId: "term_65b6e1ce2b3db16" };
+	const same = parseHerdrPaneGetResponse(PANE_OK);
 	ok(
 		"[QK:HFC-CLOSE-WITHIN-GENERATION] a close needs the SAME pane id AND the same terminal AND no agent session — measured: a server restart returns the same pane ids on different terminals, so a bare pane id is not authority to close anything",
-		decideConditionalClose(split, same, false).close === true &&
+		decideConditionalClose(created, same, false).close === true &&
 			decideConditionalClose(
-				split,
-				parseHerdrPaneGetResponse(SPLIT_OK.replace("term_65b6e1ce2b3db16", "term_other")),
+				created,
+				parseHerdrPaneGetResponse(PANE_OK.replace("term_65b6e1ce2b3db16", "term_other")),
 				false,
 			).close === false &&
-			decideConditionalClose(split, parseHerdrPaneGetResponse(SPLIT_OK.replace('"w7:p7"', '"w7:p9"')), false).close ===
+			decideConditionalClose(created, parseHerdrPaneGetResponse(PANE_OK.replace('"w7:p7"', '"w7:p9"')), false).close ===
 				false,
 	);
 	const matrix: [ReturnType<typeof decideConditionalClose>, string][] = [
-		[decideConditionalClose(split, null, true), "pane-get-failed"],
-		[decideConditionalClose(split, null, false), "pane-get-unparsable"],
+		[decideConditionalClose(created, null, true), "pane-get-failed"],
+		[decideConditionalClose(created, null, false), "pane-get-unparsable"],
 		[
-			decideConditionalClose(split, parseHerdrPaneGetResponse(SPLIT_OK.replace('"w7:p7"', '"w7:p9"')), false),
+			decideConditionalClose(created, parseHerdrPaneGetResponse(PANE_OK.replace('"w7:p7"', '"w7:p9"')), false),
 			"pane-id-mismatch",
 		],
 		[
 			decideConditionalClose(
-				split,
-				parseHerdrPaneGetResponse(SPLIT_OK.replace("term_65b6e1ce2b3db16", "term_other")),
+				created,
+				parseHerdrPaneGetResponse(PANE_OK.replace("term_65b6e1ce2b3db16", "term_other")),
 				false,
 			),
 			"terminal-id-mismatch",
 		],
 		[
-			decideConditionalClose(split, parseHerdrAgentStartResponse(START_OK)?.pane ?? null, false),
+			decideConditionalClose(created, parseHerdrAgentStartResponse(START_OK)?.pane ?? null, false),
 			"agent-session-present",
 		],
 	];
@@ -432,9 +579,10 @@ async function main(): Promise<void> {
 	);
 
 	const failing = scriptedRun([
-		{ status: 0, stdout: SPLIT_OK },
+		{ status: 0, stdout: CALLER_PANE_OK },
+		{ status: 0, stdout: TAB_OK },
 		{ status: 1, stderr: START_ERR },
-		{ status: 0, stdout: SPLIT_OK },
+		{ status: 0, stdout: PANE_OK },
 		{ status: 0 },
 	]);
 	const failed = await herdrFreshCall(
@@ -444,20 +592,73 @@ async function main(): Promise<void> {
 		NONCE,
 	);
 	ok(
-		"a start that fails after the split reclaims the pane conditionally, quotes herdr's own error code, and reports the reclaim in the same breath",
+		"a start that fails after the tab was created reclaims the pane conditionally, quotes herdr's own error code, and reports the reclaim in the same breath — and the close is the PANE we own, never `tab close`, which takes a bare tab id and would take a stranger's pane with it",
 		!failed.ok &&
 			failed.reason === "herdr-agent-start-failed" &&
 			"herdrErrorCode" in failed &&
 			failed.herdrErrorCode === "invalid_agent_argument" &&
 			"recovery" in failed &&
 			failed.recovery.outcome === "closed" &&
-			failing.calls.length === 4 &&
-			failing.calls[3].join(" ") === "pane close w7:p7",
+			failing.calls.length === 5 &&
+			failing.calls[4].join(" ") === "pane close w7:p7" &&
+			!failing.calls.some((call) => call[0] === "tab" && call[1] === "close"),
 	);
+	ok(
+		"[QK:HFC-CREATE-OUTCOME-HONEST] a failed tab create reports whether anything EXISTS, and the header never claims more than the recovery knows — herdr's OWN error envelope means it declined before making a tab (`none`), while a nonzero status with no envelope is OUR bound cutting the call off and a tab MAY be sitting there (`unknown`), as is a reply we could not read",
+		await (async () => {
+			// herdr declined by name: envelope present, quoted, nothing created.
+			const declined = scriptedRun([
+				{ status: 0, stdout: CALLER_PANE_OK },
+				{
+					status: 1,
+					stderr: '{"error":{"code":"workspace_not_found","message":"workspace w7 not found"},"id":"cli:tab:create"}',
+				},
+			]);
+			const none = await herdrFreshCall({ ...base, backend: "claude-code" }, declined.run, HERDR_ENV, NONCE);
+			if (none.ok || none.reason !== "herdr-tab-create-failed") return false;
+			if (!("recovery" in none) || none.recovery.outcome !== "none") return false;
+			if (!("herdrErrorCode" in none) || none.herdrErrorCode !== "workspace_not_found") return false;
+			// No close was attempted for something that does not exist.
+			if (declined.calls.length !== 2) return false;
+			const noneText = renderHerdrFreshCall(none).text;
+			if (!noneText.includes("recovery: none") || noneText.includes("orphan-unreclaimed")) return false;
+			// The header must not say the tab was created when the hint says it was not.
+			if (noneText.includes("failed after the tab was created")) return false;
+
+			// OUR bound, not herdr's answer: the production runner reports a timeout/kill as the
+			// same nonzero status with a PLAIN-TEXT stderr. A tab may exist.
+			const cutOff = scriptedRun([
+				{ status: 0, stdout: CALLER_PANE_OK },
+				{ status: 1, stderr: "herdr tab create --workspace w7: no exit status (timeout 30000ms or signal null)" },
+			]);
+			const unknown = await herdrFreshCall({ ...base, backend: "claude-code" }, cutOff.run, HERDR_ENV, NONCE);
+			if (unknown.ok || unknown.reason !== "herdr-tab-create-failed") return false;
+			if (!("recovery" in unknown) || unknown.recovery.outcome !== "unknown") return false;
+			if ("herdrErrorCode" in unknown && unknown.herdrErrorCode !== undefined) return false;
+			const unknownText = renderHerdrFreshCall(unknown).text;
+			if (!unknownText.includes("UNKNOWN") || unknownText.includes("orphan-unreclaimed")) return false;
+
+			// A readable status-0 reply we could not parse is the same honesty: may exist.
+			const garbled = scriptedRun([
+				{ status: 0, stdout: CALLER_PANE_OK },
+				{ status: 0, stdout: '{"id":"cli:tab:create","result":{"tab":{"tab_id":"w7:t1"}}}' },
+			]);
+			const unread = await herdrFreshCall({ ...base, backend: "claude-code" }, garbled.run, HERDR_ENV, NONCE);
+			return (
+				!unread.ok &&
+				unread.reason === "herdr-tab-create-unparsable" &&
+				"recovery" in unread &&
+				unread.recovery.outcome === "unknown" &&
+				garbled.calls.length === 2
+			);
+		})(),
+	);
+
 	const stubborn = scriptedRun([
-		{ status: 0, stdout: SPLIT_OK },
+		{ status: 0, stdout: CALLER_PANE_OK },
+		{ status: 0, stdout: TAB_OK },
 		{ status: 1, stderr: START_ERR },
-		{ status: 0, stdout: SPLIT_OK.replace("term_65b6e1ce2b3db16", "term_other") },
+		{ status: 0, stdout: PANE_OK.replace("term_65b6e1ce2b3db16", "term_other") },
 	]);
 	const orphaned = await herdrFreshCall(
 		{ ...base, backend: "claude-code", model: "opus" },
@@ -466,15 +667,16 @@ async function main(): Promise<void> {
 		NONCE,
 	);
 	ok(
-		"when the proof does not hold the pane is LEFT ALONE and named — three calls, no close attempted",
+		"when the proof does not hold the pane is LEFT ALONE and named — four calls, no close of any kind attempted",
 		!orphaned.ok &&
 			"recovery" in orphaned &&
 			orphaned.recovery.outcome === "orphan-unreclaimed" &&
 			orphaned.recovery.reason === "terminal-id-mismatch" &&
-			stubborn.calls.length === 3,
+			stubborn.calls.length === 4 &&
+			!stubborn.calls.some((call) => call[1] === "close"),
 	);
 
-	// ── the amendment cells: input parity and post-split binding ─────────────────────────
+	// ── the amendment cells: input parity and post-create binding ───────────────────────
 	ok(
 		"[QK:HFC-INPUT-PARITY] the input contract is the SHARED one — same five words, same order, same trimming as the tmux rail — so a caller does not learn a different vocabulary by being inside herdr",
 		(await (async () => {
@@ -495,39 +697,50 @@ async function main(): Promise<void> {
 		})()) &&
 			(await (async () => {
 				// The cap is the boundary, not a vibe: exactly at it the call proceeds to herdr.
-				const { run, calls } = scriptedRun([{ status: 0, stdout: SPLIT_OK }, startReplyEchoingArgv(START_OK)]);
+				const { run, calls } = scriptedRun([
+					{ status: 0, stdout: CALLER_PANE_OK },
+					{ status: 0, stdout: TAB_OK },
+					startReplyEchoingArgv(START_OK),
+				]);
 				const atCap = await herdrFreshCall(
 					{ ...base, backend: "claude-code", task: "x".repeat(16000) },
 					run,
 					HERDR_ENV,
 					NONCE,
 				);
-				return atCap.ok && calls.length === 2;
+				return atCap.ok && calls.length === 3;
 			})()),
 	);
 	ok(
 		"[QK:HFC-CWD-EMPTY-IS-OMITTED] an empty cwd means OMITTED, exactly as the public verb has always meant it — reading it as a path made a documented no-op into an invalid-directory refusal",
 		await (async () => {
-			const { run, calls } = scriptedRun([{ status: 0, stdout: SPLIT_OK }, startReplyEchoingArgv(START_OK)]);
+			const { run, calls } = scriptedRun([
+				{ status: 0, stdout: CALLER_PANE_OK },
+				{ status: 0, stdout: TAB_OK },
+				startReplyEchoingArgv(START_OK),
+			]);
 			const result = await herdrFreshCall({ ...base, backend: "claude-code", cwd: "" }, run, HERDR_ENV, NONCE);
-			return result.ok && !calls[0].includes("--cwd") && !("cwd" in result.receipt);
+			return result.ok && !calls[1].includes("--cwd") && !("cwd" in result.receipt);
 		})(),
 	);
 	ok(
-		"[QK:HFC-SPLIT-OCCUPIED] a split that came back holding an agent does NOT get started into — it is named, and the reclaim that follows correctly refuses to close somebody else's pane",
+		"[QK:HFC-TAB-OCCUPIED] a brand-new tab whose initial pane came back holding an agent does NOT get started into — it is named, and the reclaim that follows correctly refuses to close somebody else's pane",
 		await (async () => {
-			const occupied = JSON.stringify({
-				id: "cli:pane:split",
-				result: { pane: JSON.parse(START_OK).result.agent, type: "pane_info" },
+			const agent = JSON.parse(START_OK).result.agent;
+			const occupiedTab = JSON.stringify({
+				id: "cli:tab:create",
+				result: { root_pane: agent, tab: { tab_id: "w7:t1", workspace_id: "w7" }, type: "tab_created" },
 			});
+			const occupiedPane = JSON.stringify({ id: "cli:pane:get", result: { pane: agent, type: "pane_info" } });
 			const { run, calls } = scriptedRun([
-				{ status: 0, stdout: occupied },
-				{ status: 0, stdout: occupied },
+				{ status: 0, stdout: CALLER_PANE_OK },
+				{ status: 0, stdout: occupiedTab },
+				{ status: 0, stdout: occupiedPane },
 			]);
 			const result = await herdrFreshCall({ ...base, backend: "claude-code" }, run, HERDR_ENV, NONCE);
 			return (
 				!result.ok &&
-				result.reason === "herdr-split-pane-occupied" &&
+				result.reason === "herdr-tab-root-pane-occupied" &&
 				"recovery" in result &&
 				result.recovery.outcome === "orphan-unreclaimed" &&
 				result.recovery.reason === "agent-session-present" &&
@@ -536,22 +749,26 @@ async function main(): Promise<void> {
 		})(),
 	);
 	ok(
-		"[QK:HFC-START-PANE-BINDING] a start reporting a pane or terminal that is not the one we split is a NAMED failure, not a success — a green receipt would have pointed the caller at a coordinate that never held their sibling — and the reclaim still runs from the split receipt",
+		"[QK:HFC-START-PANE-BINDING] a start reporting a pane, terminal OR TAB that is not the one we created is a NAMED failure, not a success — the whole point of this placement policy is which tab the sibling is in — and the reclaim still runs from the tab-create receipt",
 		await (async () => {
-			const drifted = START_OK.replace('"w7:p7"', '"w7:p9"');
-			const { run, calls } = scriptedRun([
-				{ status: 0, stdout: SPLIT_OK },
-				startReplyEchoingArgv(drifted),
-				{ status: 0, stdout: SPLIT_OK },
-				{ status: 0 },
-			]);
-			const result = await herdrFreshCall({ ...base, backend: "claude-code" }, run, HERDR_ENV, NONCE);
-			return (
-				!result.ok &&
-				result.reason === "herdr-agent-start-pane-drift" &&
-				calls[2].join(" ") === "pane get w7:p7" &&
-				calls[3].join(" ") === "pane close w7:p7"
-			);
+			const drifts = [
+				START_OK.replace('"w7:p7"', '"w7:p9"'),
+				START_OK.replace("term_65b6e1ce2b3db16", "term_other"),
+				START_OK.replace('"w7:t1"', '"w7:t9"'),
+			];
+			for (const drifted of drifts) {
+				const { run, calls } = scriptedRun([
+					{ status: 0, stdout: CALLER_PANE_OK },
+					{ status: 0, stdout: TAB_OK },
+					startReplyEchoingArgv(drifted),
+					{ status: 0, stdout: PANE_OK },
+					{ status: 0 },
+				]);
+				const result = await herdrFreshCall({ ...base, backend: "claude-code" }, run, HERDR_ENV, NONCE);
+				if (result.ok || result.reason !== "herdr-agent-start-pane-drift") return false;
+				if (calls[3].join(" ") !== "pane get w7:p7" || calls[4].join(" ") !== "pane close w7:p7") return false;
+			}
+			return true;
 		})(),
 	);
 	ok(
@@ -560,9 +777,10 @@ async function main(): Promise<void> {
 			const witnessless = JSON.parse(START_OK);
 			witnessless.result.agent.agent_session = null;
 			const { run } = scriptedRun([
-				{ status: 0, stdout: SPLIT_OK },
+				{ status: 0, stdout: CALLER_PANE_OK },
+				{ status: 0, stdout: TAB_OK },
 				startReplyEchoingArgv(JSON.stringify(witnessless)),
-				{ status: 0, stdout: SPLIT_OK },
+				{ status: 0, stdout: PANE_OK },
 				{ status: 0 },
 			]);
 			const result = await herdrFreshCall({ ...base, backend: "claude-code" }, run, HERDR_ENV, NONCE);
@@ -574,7 +792,8 @@ async function main(): Promise<void> {
 		await (async () => {
 			const composed = JSON.parse(START_OK);
 			const { run, calls } = scriptedRun([
-				{ status: 0, stdout: SPLIT_OK },
+				{ status: 0, stdout: CALLER_PANE_OK },
+				{ status: 0, stdout: TAB_OK },
 				{
 					status: 0,
 					stdout: JSON.stringify({
@@ -582,11 +801,11 @@ async function main(): Promise<void> {
 						result: { ...composed.result, argv: ["claude", "SOMETHING-ELSE"] },
 					}),
 				},
-				{ status: 0, stdout: SPLIT_OK },
+				{ status: 0, stdout: PANE_OK },
 				{ status: 0 },
 			]);
 			const drift = await herdrFreshCall({ ...base, backend: "claude-code" }, run, HERDR_ENV, NONCE);
-			const passed = calls[1].slice(calls[1].indexOf("--") + 1);
+			const passed = calls[2].slice(calls[2].indexOf("--") + 1);
 			return (
 				!drift.ok &&
 				drift.reason === "herdr-agent-start-argv-drift" &&

@@ -1806,22 +1806,26 @@ check_herdr_fresh_call() {
   # binary — the import fence that keeps the two rails separately deletable, the closed
   # pi|claude-code pilot, the option-G one-line JSON encoding (exact round trip, zero
   # Unicode Cc including the C1 block JSON.stringify leaves literal, max public task),
-  # the eight pre-mutation refusals with the CLI never invoked, split/start/get/close argv
+  # the pre-mutation refusals with the CLI never invoked, the ONE placement policy (a new
+  # tab in the caller's own workspace, read from herdr's own answer about the caller's pane
+  # and never from a pane id's shape, focus left alone), tab-create/start/get/close argv
   # grammar, strict response parsing, the opaque pane id, the receipt's missing address,
   # and the conditional-close matrix. No fake herdr executable and no fake server, for the
-  # reason check-mux-placement refuses a fake tmux. Every payload literal is verbatim
-  # herdr 0.9.0 output recorded 2026-09-14; the real-binary half is an isolated private
-  # server (c2).
+  # reason check-mux-placement refuses a fake tmux. Payload literals are verbatim herdr
+  # 0.9.0 output (pane/tab replies 2026-09-15, agent_started 2026-09-14); the real-binary
+  # half is an isolated private server (c2).
   run_ts scripts/check-herdr-fresh-call.ts
 }
 
 check_herdr_sandbox() {
   # REAL herdr acceptance for #116 C2a: a PRIVATE herdr server in a fully sandboxed
-  # HOME/XDG/PI_CODING_AGENT_DIR opens a pane, installs herdr's own pi integration, and
-  # starts a BLANK pi from ONE checkout package registration. Asserts the official witness
+  # HOME/XDG/PI_CODING_AGENT_DIR creates a tab with the production placement argv, installs
+  # herdr's own pi integration, and starts a BLANK pi in that tab's initial pane from ONE
+  # checkout package registration. Asserts the official witness
   # triple, the strict path->native id join, exactly one sandbox V3 record, a control socket
   # that answers the production probe, and the conditional-close decision in both directions
-  # (refuses a pane holding an agent, reclaims one we own). No fake herdr, no model turn, no
+  # (refuses a pane holding an agent, reclaims one we own and with it the tab it was the
+  # whole of). No fake herdr, no model turn, no
   # credentials, no keystrokes; the fixture's `pi --approve` is a one-run authorisation that
   # writes no trust state and never enters production argv. herdr is an OPTIONAL rail: an
   # absent binary prints a named SKIP and exits 0, a PRESENT-but-incomplete rail FAILS, and

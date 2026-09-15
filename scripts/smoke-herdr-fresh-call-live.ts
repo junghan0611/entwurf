@@ -575,8 +575,8 @@ async function main(): Promise<void> {
 					text.includes("[entwurf fresh call → herdr]") && !text.includes("[entwurf fresh call →]\\n  backend"),
 				);
 				ok(
-					`${cell.label}: that receipt carries the delivered nonce and herdr view coordinates`,
-					text.includes(nonce) && /w\d+:p/.test(text),
+					`${cell.label}: that receipt carries the delivered nonce and herdr view coordinates — the TAB it created and that tab's initial pane, which is the placement policy this rail actually ran`,
+					text.includes(nonce) && /w\d+:p/.test(text) && /w\d+:t/.test(text),
 				);
 				ok(
 					`${cell.label}: the receipt promotes NO address — no garden id and no native session id in the tool text`,
@@ -601,9 +601,9 @@ async function main(): Promise<void> {
 					callerActivity.length > 0 && order[0] === "entwurf_fresh_call" && successAt >= 0,
 				);
 				ok(
-					`${cell.label}: the in-herdr negative cell refused a non-pilot backend BY NAME, after the successful call — no pane was created and no tmux fallback was taken`,
+					`${cell.label}: the in-herdr negative cell refused a non-pilot backend BY NAME, after the successful call — nothing was created and no tmux fallback was taken`,
 					rejectAt > successAt &&
-						(callerActivity[rejectAt]?.error ?? "").includes("No pane was created.") &&
+						(callerActivity[rejectAt]?.error ?? "").includes("No tab and no pane were created.") &&
 						order.filter((t) => t === "entwurf_fresh_call").length === 2,
 				);
 			}

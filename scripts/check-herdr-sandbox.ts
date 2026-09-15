@@ -2,9 +2,9 @@
  * check-herdr-sandbox — REAL herdr acceptance for the #116 launch rail (C2a).
  *
  * This is the half `check-herdr-fresh-call` cannot judge. That gate pins argv, encoding,
- * parsing and the reclaim decision without a binary; here a PRIVATE herdr server opens a real
- * pane, starts a real blank pi, and the assertions read what herdr and our own record store
- * actually produced. There is no fake herdr anywhere in this repo, for the same reason there is
+ * parsing and the reclaim decision without a binary; here a PRIVATE herdr server creates a real
+ * tab, starts a real blank pi in its initial pane, and the assertions read what herdr and our own
+ * record store actually produced. There is no fake herdr anywhere in this repo, for the same reason there is
  * no fake tmux (`scripts/check-mux-placement.ts:6-9`): a stand-in authors the contract before
  * anything is measured.
  *
@@ -41,7 +41,8 @@
  *   HS-EXACT-ONE-RECORD     that witness resolves to exactly one sandbox V3 record
  *   HS-CONTROL-SOCKET-ALIVE the citizen's control socket answers the production probe
  *   HS-CLOSE-REFUSES-LIVE   the conditional close refuses a pane that has an agent
- *   HS-CLOSE-RECLAIMS       the same decision closes a pane we own with no agent
+ *   HS-CLOSE-RECLAIMS       the same decision closes a pane we own with no agent, and that
+ *                           reclaims the tab it was the whole of
  *   HS-NO-RESIDUE           server stop leaves no socket, no process and no tree
  *   HS-OPERATOR-UNTOUCHED   the operator's panes and pi config are identical afterwards
  */
@@ -55,11 +56,11 @@ import { fileURLToPath } from "node:url";
 import {
 	buildHerdrPaneCloseArgs,
 	buildHerdrPaneGetArgs,
-	buildHerdrSplitArgs,
+	buildHerdrTabCreateArgs,
 	decideConditionalClose,
 	parseHerdrAgentStartResponse,
 	parseHerdrPaneGetResponse,
-	parseHerdrSplitResponse,
+	parseHerdrTabCreateResponse,
 } from "../pi-extensions/lib/herdr-fresh-call.ts";
 import { joinKeyOf, parseHerdrPaneList } from "../pi-extensions/lib/herdr-placement.ts";
 import { probeSocketLiveness } from "../pi-extensions/lib/socket-probe.ts";
@@ -282,10 +283,18 @@ async function main(): Promise<void> {
 		const ws = herdr(bin, sandbox, ["workspace", "create", "--label", "entwurf-gate", "--no-focus", "--cwd", REPO_DIR]);
 		if (ws.status !== 0) fail(`workspace create failed in the sandbox: ${ws.stderr}`);
 
-		// The production split argv, with the production identity scrub, against a real server.
-		const splitRun = herdr(bin, sandbox, buildHerdrSplitArgs({ parentPaneId: "w1:p1", cwd: REPO_DIR }));
-		const splitPane = splitRun.status === 0 ? parseHerdrSplitResponse(splitRun.stdout) : null;
-		if (splitPane === null) fail(`pane split failed or was unreadable: ${splitRun.stderr || splitRun.stdout}`);
+		// The production placement argv, with the production identity scrub, against a real
+		// server: the workspace comes from herdr's own answer about the pane we are standing in,
+		// exactly as the rail resolves it, never from the `w1:` prefix of an id.
+		const callerGet = herdr(bin, sandbox, buildHerdrPaneGetArgs("w1:p1"));
+		const callerPane = callerGet.status === 0 ? parseHerdrPaneGetResponse(callerGet.stdout) : null;
+		if (callerPane?.workspaceId === undefined) {
+			fail(`pane get of the caller pane failed or carried no workspace: ${callerGet.stderr || callerGet.stdout}`);
+		}
+		const tabRun = herdr(bin, sandbox, buildHerdrTabCreateArgs({ workspaceId: callerPane.workspaceId, cwd: REPO_DIR }));
+		const tab = tabRun.status === 0 ? parseHerdrTabCreateResponse(tabRun.stdout) : null;
+		if (tab === null) fail(`tab create failed or was unreadable: ${tabRun.stderr || tabRun.stdout}`);
+		const tabRootPane = tab.rootPane;
 
 		// `--approve` is the fixture's own one-run authorisation; `--entwurf-control` is the
 		// production citizenship flag. No prompt, no model, no credentials.
@@ -296,7 +305,7 @@ async function main(): Promise<void> {
 			"--kind",
 			"pi",
 			"--pane",
-			splitPane.paneId,
+			tabRootPane.paneId,
 			"--",
 			"--approve",
 			"--entwurf-control",
@@ -315,7 +324,7 @@ async function main(): Promise<void> {
 			session === undefined
 				? null
 				: joinKeyOf({
-						paneId: splitPane.paneId,
+						paneId: tabRootPane.paneId,
 						agent: session.agent ?? null,
 						sessionSource: session.source ?? null,
 						sessionKind: session.kind === "id" || session.kind === "path" ? session.kind : null,
@@ -367,9 +376,9 @@ async function main(): Promise<void> {
 		);
 
 		// ── the conditional close, against a real server ─────────────────────────────────
-		const liveGet = herdr(bin, sandbox, buildHerdrPaneGetArgs(splitPane.paneId));
+		const liveGet = herdr(bin, sandbox, buildHerdrPaneGetArgs(tabRootPane.paneId));
 		const liveDecision = decideConditionalClose(
-			splitPane,
+			tabRootPane,
 			liveGet.status === 0 ? parseHerdrPaneGetResponse(liveGet.stdout) : null,
 			liveGet.status !== 0,
 		);
@@ -378,9 +387,11 @@ async function main(): Promise<void> {
 			liveDecision.close === false && liveDecision.reason === "agent-session-present",
 		);
 
-		const spareRun = herdr(bin, sandbox, buildHerdrSplitArgs({ parentPaneId: "w1:p1" }));
-		const sparePane = spareRun.status === 0 ? parseHerdrSplitResponse(spareRun.stdout) : null;
-		if (sparePane === null) fail(`the second split failed or was unreadable: ${spareRun.stderr || spareRun.stdout}`);
+		const spareRun = herdr(bin, sandbox, buildHerdrTabCreateArgs({ workspaceId: callerPane.workspaceId }));
+		const spareTab = spareRun.status === 0 ? parseHerdrTabCreateResponse(spareRun.stdout) : null;
+		if (spareTab === null)
+			fail(`the second tab create failed or was unreadable: ${spareRun.stderr || spareRun.stdout}`);
+		const sparePane = spareTab.rootPane;
 		const spareGet = herdr(bin, sandbox, buildHerdrPaneGetArgs(sparePane.paneId));
 		const spareDecision = decideConditionalClose(
 			sparePane,
@@ -390,12 +401,18 @@ async function main(): Promise<void> {
 		const closeRun = spareDecision.close ? herdr(bin, sandbox, buildHerdrPaneCloseArgs(sparePane.paneId)) : null;
 		const afterClose = herdr(bin, sandbox, ["pane", "list"]);
 		const remaining = parseHerdrPaneList(afterClose.stdout) ?? [];
+		// `[측정 2026-09-15]` closing the sole pane of a tab takes the tab with it — so the same
+		// pane-level authority the rail already had is enough to reclaim a tab it created, and
+		// `tab close` (a bare tab id, no ownership token) never has to be reached for.
+		const remainingTabs = herdr(bin, sandbox, ["tab", "list"]);
 		ok(
-			"[QK:HS-CLOSE-RECLAIMS] the SAME decision closes a pane we own that has no agent — proof within one server generation, not a bare pane id",
+			"[QK:HS-CLOSE-RECLAIMS] the SAME decision closes a pane we own that has no agent — proof within one server generation, not a bare pane id — and closing that sole pane reclaims the tab it was the whole of, with no `tab close` and no empty tab left behind",
 			spareDecision.close === true &&
 				closeRun !== null &&
 				closeRun.status === 0 &&
-				!remaining.some((row) => row.paneId === sparePane.paneId),
+				!remaining.some((row) => row.paneId === sparePane.paneId) &&
+				remainingTabs.status === 0 &&
+				!remainingTabs.stdout.includes(`"${spareTab.tabId}"`),
 		);
 
 		stopServer();
