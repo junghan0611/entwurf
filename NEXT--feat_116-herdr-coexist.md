@@ -35,15 +35,15 @@
 - [ ] **5. S5 · herdr 플러그인 껍데기** — **M2로 이관, 미착수.** `[결정 GLG direct 2026-09-14 밤]` M2는 `herdr-plugin` 사용자면으로 확실히 간다: Herdr가 사용자면·배치·runtime 상태의 중심, Entwurf는 garden identity·공식 delivery·receipt. 방향은 **공장을 하나 더 짓는 것이 아니라 공방의 드라이버만 남기는 것**이다. GLG 실사용 뒤 착수 판단
 - [ ] **6. S4 · resume herdr placement** ← PAUSED: herdr native session restore(`resume_agents_on_restore` 기본 on, `session-state.mdx:52-70` @ c77af189) ↔ `entwurf_resume_call` 소유권 충돌 미측정. 이 랩 밖. herdr 서버 재시작이 우리 pi 시민을 되살렸을 때 garden id 거동은 레인 종료 전 1회 재야 한다. `[S2-b가 절반만 좁혔다]` 재기동 시 **pane id는 재사용되고 terminal_id는 새로 난다**는 것까지는 격리 서버에서 쟀지만, 그 실험에는 **에이전트가 없었다**(맨 셸 3개) — restore가 에이전트를 되살렸을 때 native session이 같은지 새로 나는지가 정확히 S4의 미측정 칸으로 남는다
 
-현재 좌표: 0·1·2·3·4 완료 → **M1 implementation candidate complete / corrected C4 LIVE PASS; GLG close·commit 판단 대기** → 5(M2 plugin) 미착수 → 6 보류
+현재 좌표: 0·1·2·3·4 완료 → **M1 complete; corrected C4 LIVE PASS** → 5(M2 plugin) 미착수 → 6 보류
 
 # NOW
 
-**상태명(정확히 이대로 쓴다): M1 implementation candidate complete; corrected C4 LIVE PASS; GLG close·commit 판단 대기.**
-C4 PASS는 이 opt-in 수용의 판정이고, M1 close·commit 권한을 대신하지 않는다.
+**상태명(정확히 이대로 쓴다): M1 complete; corrected C4 LIVE PASS.**
+`[close 승인: 코디네이터 sol, 2026-09-15 — Blocker 0]` C4 PASS는 **이 opt-in 수용의 판정**이다. release aggregate 통과도, 전량 qualification도 뜻하지 않는다 — C4는 여전히 `check:full` 밖이고 aggregate 밖이다(VERIFY.md 문장). #116은 M2를 위해 **OPEN으로 유지**한다.
 
-- Current: 브랜치 `feat/116-herdr-coexist` = `2f97fc0`(공개 배선) + **`d8c85b2`** + **`5c1f68b`** + **`6684c41`**(C4 acceptance artifact) + **`8e5857d`**(레일별 C4 oracle 수선) + 이 문서 수선. `LIVE=1 ./run.sh smoke-herdr-fresh-call-live`는 `8e5857d`에서 **exit 0, 29 assertions ok**였고 영수증은 `/tmp/herdr-fresh-call-live-exr8fL/receipts.md`다. **CURRENT는 GLG의 close·commit 판단**이다.
-- 다음 사용자면 증거가 필요하면 **자연어 수동 검증 카드**로 herdr 안에서 실제로 쓴다. 아래 4칸.
+- Landed: 브랜치 `feat/116-herdr-coexist` = `2f97fc0`(공개 배선) + **`d8c85b2`** + **`5c1f68b`** + **`6684c41`**(C4 acceptance artifact) + **`8e5857d`**(레일별 C4 oracle 수선) + **`8f6c4fb`**(착지한 계획의 미래시제 산문 수선) + 이 문서. `LIVE=1 ./run.sh smoke-herdr-fresh-call-live`는 `8e5857d`에서 **exit 0, 29 assertions ok, 1m49s**, 영수증 `/tmp/herdr-fresh-call-live-exr8fL/receipts.md`. 전부 푸시됨.
+- **CURRENT: GLG가 자연어로 herdr 안에서 실제로 써 본 뒤, M2 `herdr-plugin` 착수를 판단한다.** 체감이 먼저고 코드가 나중이다 — 아래 4칸이 그 체감의 카드다. 새 기능·설계는 그 판단 전에 추가하지 않는다.
 - **수동 검증 카드 (herdr 안에서, 실제 사용)**
   - `(가)` **pi 안에서 claude 열기** — herdr pane의 pi 세션에서 `entwurf_fresh_call backend=claude-code`. receipt가 `[entwurf fresh call → herdr]`이고 pane 좌표가 herdr 것인지, 자식의 첫 행동이 nonce 콜백인지.
   - `(나)` **claude 안에서 pi 열기** — 반대 방향. pi 자식은 argv에 `--entwurf-control`이 붙어야 시민이 된다(README §Garden launcher).
