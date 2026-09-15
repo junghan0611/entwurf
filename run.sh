@@ -180,6 +180,7 @@ Usage:
   ./run.sh check-entwurf-facts         # deterministic gate (0.11 Stage 0 step 4, fact-provider slice 1+2): PURE PeerFact core + resolveFactList union — R1 out-of-domain→unsupported, R3b socket-domain 4-value, facts-only keyset; union: PeerFact + RecordLessSocketFact by gardenId (#50 C4: record-less socket = diagnostic subject, gid+liveness only), dormant→dead, F3 indeterminate preserved, out-of-socket-domain+socket fail-loud; pure, no IO
   ./run.sh check-socket-discovery      # deterministic gate (0.11 Stage 0 step 4, fact-provider slice 3): SOCKET-axis scanSocketProbes — probes (dir sockets) ∪ (in-domain citizen canonical paths) 3-valued; dormant citizen no-file → dead (resumable, not unprobed), stall → indeterminate (F3), dir hygiene/dedup/missing-dir + e2e → resolveFactList; readdir/probe injected, no IO
   ./run.sh check-meta-facts            # deterministic gate for the meta-facts projection (#65): drives the REAL CLI — full-record join, parse-before-uniqueness, no-winner duplicates, drift/symlink/invalid-UTF-8 defects in-band, deterministic bytes, exit contract 0/2/3, dispatch+emit reachability
+  ./run.sh check-peer-facts            # deterministic gate for the peer-facts projection (#116 M2-a): drives the REAL CLI with every ambient root sandboxed — placement crosses STRUCTURED (never the human `herdr <pane>` string), the peer keyset is exactly the provider's facts (no herdr agent_status may enter an entwurf payload), no socket coordinate is published (#50 C4), diagnostics in-band, the probed socket world is the one ENTWURF_DIR names (proved by a record-less socket surfacing — there is no field to echo), no observation budget, exit contract 0/2/3, dispatch+emit reachability. No herdr binary
   ./run.sh check-meta-listing          # deterministic gate: META-STORE facts axis — kind-carrying entries; non-regular records are never read, parse/drift become diagnostics, duplicate nativeSessionId quarantines every rival but not unrelated citizens; strict throws / collect partial; pure injected IO
   ./run.sh check-entwurf-fact-provider # deterministic gate (0.11 Stage 0 step 4, fact-provider slice 4b): ASSEMBLY listEntwurfFacts — full-store parse/probe/quarantine/resolve stays intact; #112 bounds expensive receiver/transcript observation to the newest 32 rendered rows while older machine rows say unobserved; Q112 pins full payload + exact observer budget; C-원칙 keeps corruption diagnostic and impossible wiring loud; deps injected, no IO
   ./run.sh check-herdr-placement      # deterministic gate (#116 S1): the PURE placement-evidence axis — herdr `pane list` parse (unreadable payload → null → `unobserved`, never `none`), the two measured join rules (claude kind=id byte equality / pi kind=path uuid tail of a .jsonl basename, both strict), unmeasured kind → NO key, two panes on one key → `ambiguous` (never last-write-wins), provider reads the placement owner EXACTLY ONCE per listing (anti-watcher, docs/mux-launch-rail.md §7), and no entwurf_v2 dispatch module names or imports the axis (Hard Rule 16 — a pane is a view, not a rail). No fake herdr, no binary, no IO
@@ -269,6 +270,7 @@ Usage:
   ./run.sh meta-bridge-prune          # 1.0.0 meta-bridge Phase 4: LISTING-ONLY store hygiene — classify orphan/stale/ambiguous/keep, print manual rm commands, delete NOTHING ([dir] [--ttl-days N])
   ./run.sh meta-bridge-fresh-cut      # the ONE generation verb (the verb every v3-only rejection names): quiesce-check live sockets/markers/native-push conversations (refusing any surface it cannot inspect), archive meta-sessions/ + meta-mailbox/ to `<dir>.archive-<ts>`, clear dead transport residue, open an empty v3 generation. No migration, no restore — the archive is forensic only. EXIT CONTRACT (#54, `--help` prints it): 0 complete / 1 NOTHING MOVED (re-run, do not setup) / 2 usage / 3 cut transition incomplete (inspect) / 4 cut complete but residue cleanup failed (`setup` may run; re-run only before new citizen birth, otherwise remove residue manually)
   ./run.sh meta-facts                 # #65 owner-normalized READ-ONLY store projection: deterministic JSON {schemaVersion:1, storeDir, citizens: full v3 records sorted by gardenId, defects: {filename,message}} — THE listing contract emitted by the owner so consumers stop copying the certification. No liveness/sockets/transcript contents. EXIT: 0 readable (defects in-band; missing store = empty), 2 usage, 3 unreadable ([dir])
+  ./run.sh peer-facts                 # #116 M2-a owner-normalized READ-ONLY peer projection: the same listEntwurfFacts provider through the same renderer entwurf_peers uses, emitted as deterministic JSON {schemaVersion:1, storeDir, peers, diagnostics} so a consumer never re-implements the placement join (whose pi half is a measured vendor floor). NOT the same bytes as an entwurf_peers call and deliberately so: that surface is a human listing (observationLimit, text over the wire), this is a machine projection with UNBOUNDED observation, because a rationed row says `unobserved` and a machine cannot tell that from "nobody could look". `placement` stays a STRUCTURED tagged union ({kind:"herdr-pane",paneId} / unobserved / none / ambiguous) — never the human `herdr <pane>` string. Publishes NO socket coordinate (ENTWURF_DIR selects what is PROBED, #50 C4) and NO herdr agent_status / interactive_ready / screen text. One placement read per listing, no watcher. EXIT: 0 readable (diagnostics in-band; missing store = empty), 2 usage, 3 unreadable ([dir])
   ./run.sh meta-bridge-managed-keys   # 0.10.0 meta-bridge: print the SSOT of settings keys entwurf OWNS (consumers read this to stay disjoint — keyset-owner invariant)
   ./run.sh check-keyset-overlap <fragment.json...>  # 0.10.0 meta-bridge: PREVENTIVE keyset guard — fail if a consumer fragment collides with any pi-owned key (cross-repo; not in pnpm check)
   ./run.sh check-dep-versions         # local deterministic check that the pi pin agrees across package.json (devDeps + peer range), run.sh (peer-install pins), and the baseline docs (AGENTS/README/ROADMAP/setup-clean-host/demo)
@@ -1772,6 +1774,22 @@ check_meta_facts() {
   run_ts scripts/check-meta-facts.ts
 }
 
+check_peer_facts() {
+  # Deterministic gate for the #116 M2-a observed-peer projection. Drives the REAL
+  # scripts/peer-facts.ts as a subprocess with every ambient root replaced (store,
+  # ENTWURF_DIR, HOME, XDG_DATA_HOME, pi agent dir), so the live store, sockets and
+  # markers are never read. Owns only what this verb ADDS on top of the provider:
+  # placement crosses as the structured tagged union rather than the human string,
+  # the peer keyset is exactly the provider's facts (no herdr agent_status may enter
+  # an entwurf payload — that is the door observed activity would use to become
+  # delivery liveness) and no socket coordinate is published at all, diagnostics ride
+  # in-band, the probed socket world is the one ENTWURF_DIR names (proved by a
+  # record-less socket surfacing — there is no field to echo), no observation budget
+  # rations a machine projection, exit contract 0/2/3,
+  # plus dispatch + compiled-twin reachability. No herdr binary, no model turn.
+  run_ts scripts/check-peer-facts.ts
+}
+
 check_entwurf_fact_provider() {
   # Deterministic gate for 0.11 Stage 0 step 4 (fact-provider slice 4b): the
   # ASSEMBLY layer listEntwurfFacts. listAllMetaIdentities → scanSocketProbes →
@@ -3189,6 +3207,10 @@ check_pack() {
     # #65 — the owner-normalized store projection consumers call INSTEAD of
     # parsing the store; installed hosts are exactly where those consumers live.
     "mcp/entwurf-bridge/dist/scripts/meta-facts.js"
+    # #116 M2-a — the owner-normalized PEER projection, for the same reason one step
+    # out: the placement join it emits is the copy a herdr-side consumer would
+    # otherwise fork, and such a consumer runs against an installed host.
+    "mcp/entwurf-bridge/dist/scripts/peer-facts.js"
     # #87 Bundle B — omp-receive-doctor drives this operator projection through
     # run.sh, so installed node_modules must have the compiled twin too.
     "mcp/entwurf-bridge/dist/scripts/omp-receive-facts.js"
@@ -3484,6 +3506,8 @@ _check_pack_install_impl() {
     "mcp/entwurf-bridge/dist/scripts/meta-bridge-fresh-cut.js"
     # #65 — the owner-normalized store projection (see check-pack).
     "mcp/entwurf-bridge/dist/scripts/meta-facts.js"
+    # #116 M2-a — the owner-normalized peer projection (see check-pack).
+    "mcp/entwurf-bridge/dist/scripts/peer-facts.js"
     # #87 Bundle B — omp-receive-doctor reaches this through the installed dispatcher.
     "mcp/entwurf-bridge/dist/scripts/omp-receive-facts.js"
     # 0.12.5 — node_modules-safe plugin hook + lib (see check-pack). The installed
@@ -6258,6 +6282,9 @@ case "$cmd" in
   check-meta-facts)
     check_meta_facts
     ;;
+  check-peer-facts)
+    check_peer_facts
+    ;;
   check-entwurf-fact-provider)
     check_entwurf_fact_provider
     ;;
@@ -6908,6 +6935,22 @@ case "$cmd" in
     # no socket paths, no transcript contents, no state.
     shift || true
     run_ts scripts/meta-facts.ts "$@"
+    ;;
+  peer-facts)
+    # #116 M2-a READ-ONLY projection of the OBSERVED peer listing: one provider
+    # (`listEntwurfFacts`) through one renderer (`renderEntwurfPeers().payload`), so
+    # the payload SHAPE is the entwurf_peers payload shape and the join is never
+    # re-implemented — the pi half of that join is a measured vendor floor, and a
+    # forked copy decays silently. It is NOT the same bytes as an entwurf_peers call:
+    # that surface rations observation and returns text, this one is unbounded because
+    # a rationed row says `unobserved` and a machine consumer cannot tell that from
+    # "nobody could look". `placement` stays the structured tagged union. No socket
+    # coordinate is published (#50 C4 retired the legacy listing with the controlDir it
+    # exposed; ENTWURF_DIR only selects what is probed) and herdr's own
+    # agent_status/screen verdicts are absent (docs/herdr-launch-rail.md §9). No
+    # writes, no watcher, no dispatch. Same exit contract as meta-facts.
+    shift || true
+    run_ts scripts/peer-facts.ts "$@"
     ;;
   meta-bridge-managed-keys)
     # 0.10.0 meta-bridge: emit the SSOT of settings.json/~/.claude.json keys that

@@ -846,6 +846,7 @@ let manifestCount: number;
 		"herdr-fresh-call": 28,
 		"herdr-supply": 11,
 		"meta-facts": 4,
+		"peer-facts": 8,
 		"meta-hook-session-switch": 17,
 		"meta-identity": 4,
 		"meta-retire": 3,

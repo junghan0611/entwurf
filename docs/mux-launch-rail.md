@@ -527,6 +527,15 @@ exact evidence로 인정되는 것은 셋이다.
 | `ambiguous` | 둘 이상의 pane이 한 키를 주장한다. 보이기는 하는데 한 곳이 아니다 |
 | `herdr <pane>` | 유일 키로 정확히 한 pane과 조인됐다. **누가 봤는지**를 값 안에 남긴다 |
 
+**이 표는 사람이 읽는 칸의 어휘다. 관측 자체는 태그드 유니온이다** `[#116 M2-a, 2026-09-15]`.
+`PlacementObservation`은 `{kind:"unobserved"}` · `{kind:"none"}` · `{kind:"ambiguous"}` ·
+`{kind:"herdr-pane", paneId}`이고, 위 표의 `herdr <pane>`은 그중 마지막 값을 `renderPlacement`가
+**사람 표면용으로** 찍은 문자열이다(`herdr-placement.ts:274`). 둘을 헷갈리면 소비자가 문자열을 다시
+파싱한다. 그래서 기계 소비자용 표면 `entwurf peer-facts`는 **원형 그대로** 내보내고
+`renderPlacement`를 적용하지 않는다 — 그쪽 조인은 불투명 `paneId` 문자열 동등 하나로 끝나야 하며,
+그것이 `nativeSessionId` 변환(§7 3항의 pi 축 벤더 바닥)이 소비자 쪽으로 복제되지 않는 유일한 방법이다.
+게이트: `scripts/check-peer-facts.ts` `[QK:PF-PLACEMENT-STRUCTURED]`.
+
 **재시도 상한: 없음. 한 listing당 읽기 1회, 재시도 0회.** 이것이 §7의 "시각 근접으로 추측하지
 않는다 = discovery watcher 금지"를 배치 소유자 축에서 지키는 방법이다. 근거는 측정이다
 `[2026-09-14, herdr 0.9.0]`: herdr에는 "이 pane의 session 참조가 이제 확정됐다"고 알려주는 이벤트가

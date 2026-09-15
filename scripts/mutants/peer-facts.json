@@ -1,0 +1,98 @@
+{
+	"schemaVersion": 1,
+	"lane": "peer-facts",
+	"mutants": [
+		{
+			"claim": "PF-PLACEMENT-STRUCTURED",
+			"title": "stringifying placement into the human `herdr <pane>` form hands a machine consumer a presentation decision to re-parse — the pane id stops being a field and becomes a substring, which is exactly the re-implementation this verb exists to remove (#116 M2-a)",
+			"subject": "scripts/peer-facts.ts",
+			"find": ["const { payload } = renderEntwurfPeers(result);"],
+			"replace": [
+				"const { payload } = renderEntwurfPeers(result);\npayload.peers = payload.peers.map((p) => ({\n\t...p,\n\tplacement: (p.placement.kind === \"herdr-pane\" ? `herdr ${p.placement.paneId}` : p.placement.kind) as never,\n}));"
+			],
+			"gate": ["bash", "run.sh", "check-peer-facts"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:PF-PLACEMENT-STRUCTURED]",
+			"signatureSource": "scripts/check-peer-facts.ts"
+		},
+		{
+			"claim": "PF-PEER-KEYSET-EXACT",
+			"title": "letting a herdr display verdict (agent_status) into a peer row opens the one door through which herdr's screen judgement becomes an entwurf fact, and from there a rename away from delivery liveness (#116 M2-a, docs/herdr-launch-rail.md §9)",
+			"subject": "scripts/peer-facts.ts",
+			"find": ["const projection = { schemaVersion: 1, storeDir, ...payload };"],
+			"replace": [
+				"const projection = {\n\tschemaVersion: 1,\n\tstoreDir,\n\t...payload,\n\tpeers: payload.peers.map((p) => ({ ...p, agentStatus: \"idle\" })),\n};"
+			],
+			"gate": ["bash", "run.sh", "check-peer-facts"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:PF-PEER-KEYSET-EXACT]",
+			"signatureSource": "scripts/check-peer-facts.ts"
+		},
+		{
+			"claim": "PF-NO-SOCKET-COORDINATE",
+			"title": "republishing the control-socket dir undoes the #50 C4 retirement that removed the legacy listing together with the controlDir it exposed — the record is the sole address axis and a socket path is dispatch-internal transport, so a convenience field here reopens a second address-shaped axis (#116 M2-a)",
+			"subject": "scripts/peer-facts.ts",
+			"find": ["const projection = { schemaVersion: 1, storeDir, ...payload };"],
+			"replace": ["const projection = { schemaVersion: 1, storeDir, controlDir, ...payload };"],
+			"gate": ["bash", "run.sh", "check-peer-facts"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:PF-NO-SOCKET-COORDINATE]",
+			"signatureSource": "scripts/check-peer-facts.ts"
+		},
+		{
+			"claim": "PF-DIAGNOSTICS-PRESERVED",
+			"title": "dropping the provider's diagnostics turns a store carrying hazards into a clean-looking listing at exit 0 — the consumer is told about the healthy citizens and never about what was refused (#116 M2-a)",
+			"subject": "scripts/peer-facts.ts",
+			"find": ["process.stdout.write(`${JSON.stringify(projection, null, 2)}\\n`);"],
+			"replace": ["process.stdout.write(`${JSON.stringify({ ...projection, diagnostics: [] }, null, 2)}\\n`);"],
+			"gate": ["bash", "run.sh", "check-peer-facts"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:PF-DIAGNOSTICS-PRESERVED]",
+			"signatureSource": "scripts/check-peer-facts.ts"
+		},
+		{
+			"claim": "PF-CONTROL-DIR-PROBED",
+			"title": "ignoring ENTWURF_DIR probes a different socket world than the bridge does, so this verb and entwurf_peers can answer the same question from two worlds while both look green (#116 M2-a)",
+			"subject": "scripts/peer-facts.ts",
+			"find": ["\tsocket: { dir: controlDir },"],
+			"replace": ["\tsocket: { dir: defaultControlSocketDir(os.homedir()) },"],
+			"gate": ["bash", "run.sh", "check-peer-facts"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:PF-CONTROL-DIR-PROBED]",
+			"signatureSource": "scripts/check-peer-facts.ts"
+		},
+		{
+			"claim": "PF-NO-OBSERVATION-BUDGET",
+			"title": "rationing observations emits `unobserved` for rows nobody chose to skip, and in a machine payload that is indistinguishable from `nobody could look` — a fabricated measurement about a read that did not happen (#116 M2-a)",
+			"subject": "scripts/peer-facts.ts",
+			"find": ["\tsocket: { dir: controlDir },\n\t// No `observationLimit`"],
+			"replace": ["\tsocket: { dir: controlDir },\n\tobservationLimit: 0,\n\t// No `observationLimit`"],
+			"gate": ["bash", "run.sh", "check-peer-facts"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:PF-NO-OBSERVATION-BUDGET]",
+			"signatureSource": "scripts/check-peer-facts.ts"
+		},
+		{
+			"claim": "PF-EXIT-UNREADABLE",
+			"title": "answering an unreadable store with exit 0 makes an unreadable host look like an empty one — the same false-success class the #65 exit contract exists to refuse, one axis out (#116 M2-a)",
+			"subject": "scripts/peer-facts.ts",
+			"find": ["\tprocess.exit(3); // see the EXIT CONTRACT above: 3 = unreadable store, never an empty one"],
+			"replace": ["\tprocess.exit(0); // see the EXIT CONTRACT above: 3 = unreadable store, never an empty one"],
+			"gate": ["bash", "run.sh", "check-peer-facts"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:PF-EXIT-UNREADABLE]",
+			"signatureSource": "scripts/check-peer-facts.ts"
+		},
+		{
+			"claim": "PF-USAGE",
+			"title": "reading a dash argv as a store directory answers `--help` with `empty store, exit 0` — a silent wrong fact where a refusal belongs (#116 M2-a)",
+			"subject": "scripts/peer-facts.ts",
+			"find": ["if (process.argv.length > 3 || (arg !== undefined && arg.startsWith(\"-\"))) {"],
+			"replace": ["if (process.argv.length > 3) {"],
+			"gate": ["bash", "run.sh", "check-peer-facts"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:PF-USAGE]",
+			"signatureSource": "scripts/check-peer-facts.ts"
+		}
+	]
+}
