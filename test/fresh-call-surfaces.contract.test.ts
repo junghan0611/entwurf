@@ -417,7 +417,7 @@ describe("one grammar, two surfaces", () => {
 		});
 	}
 
-	it("[QK:FRESHCALL-CODEX-PREMUTATION-MCP] the MCP surface answers a missing Codex capability BEFORE placement — with no tmux in its environment the reason is still the capability's, so no window can exist by the time the host reads it", async () => {
+	it("[QK:FRESHCALL-CODEX-PREMUTATION-MCP] the MCP surface carries Codex unchanged into the shared dispatcher, which answers a missing capability BEFORE placement — with no tmux in its environment the reason is still the capability's", async () => {
 		const { env, cleanup } = codexPreflightEnv();
 		try {
 			const text = await callBridgeFreshCall(env);
@@ -431,7 +431,7 @@ describe("one grammar, two surfaces", () => {
 		}
 	}, 30_000);
 
-	it("[QK:FRESHCALL-CODEX-PREMUTATION-PI] the native pi surface answers the same way — the preflight lives on BOTH call sites, so one of them losing it is one public door that opens a window before deciding", async () => {
+	it("[QK:FRESHCALL-CODEX-PREMUTATION-PI] the native pi surface carries Codex unchanged into the same dispatcher — one surface relabelling it would bypass the single preflight and open a window before deciding", async () => {
 		const piFresh = requireTool(piTools, "entwurf_fresh_call");
 		const { env, cleanup } = codexPreflightEnv();
 		const saved = { ...process.env };

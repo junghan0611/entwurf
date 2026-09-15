@@ -118,7 +118,7 @@
 			"title": "the herdr receipt stops saying its coordinates are a view, which is the first step to someone dispatching at a pane id",
 			"subject": "pi-extensions/lib/herdr-fresh-call.ts",
 			"find": [
-				"`  pane:     ${r.herdrPaneId} terminal ${r.herdrTerminalId} — herdr VIEW coordinates, not an address\\n` +"
+				"`  pane:     ${r.herdrPaneId} terminal ${r.herdrTerminalId} — the tab's initial pane; herdr VIEW coordinates, not an address\\n` +"
 			],
 			"replace": ["`  pane:     ${r.herdrPaneId} terminal ${r.herdrTerminalId}\\n` +"],
 			"gate": ["bash", "run.sh", "check-fresh-call-dispatch"],
@@ -131,9 +131,9 @@
 			"title": "an unreclaimed orphan renders as if it had been closed, so nobody goes to look at the pane still sitting there",
 			"subject": "pi-extensions/lib/herdr-fresh-call.ts",
 			"find": [
-				"\t\t: `  recovery: orphan-unreclaimed:${recovery.reason}${recovery.paneId === \"\" ? \"\" : ` (${recovery.paneId})`} — this pane was NOT closed, on purpose\\n`;"
+				"\t\t\treturn `  recovery: orphan-unreclaimed:${recovery.reason} (${recovery.paneId}) — this pane was NOT closed, on purpose\\n`;"
 			],
-			"replace": ["\t\t: `  recovery: closed ${recovery.paneId}\\n`;"],
+			"replace": ["\t\t\treturn `  recovery: closed ${recovery.paneId}\\n`;"],
 			"gate": ["bash", "run.sh", "check-fresh-call-dispatch"],
 			"timeoutSeconds": 120,
 			"signature": "[QK:FCD-RECOVERY-VISIBLE]",

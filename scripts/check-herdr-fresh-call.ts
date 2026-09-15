@@ -314,6 +314,38 @@ async function main(): Promise<void> {
 		maxTask.length === 16000 && maxArgv !== null && !containsControlChar(maxArgv) && decodeOrNull(maxTask) === maxTask,
 	);
 
+	// ── argv grammar ─────────────────────────────────────────────────────────────────────
+	// Pure builders are checked before full launch paths so a framing mutant is attributed to
+	// its own contract rather than making an earlier integration success cell fail first.
+	const tabArgs = buildHerdrTabCreateArgs({ workspaceId: "w7", cwd: "/repo/dir" });
+	ok(
+		"[QK:HFC-TAB-ARGV] one placement policy — a NEW TAB in the caller's own workspace, named explicitly so herdr cannot default it to the focused one, focus left alone, cwd carried literally, and BOTH identity carriers scrubbed by explicit repeated --env",
+		tabArgs.join(" ") ===
+			"tab create --workspace w7 --no-focus --cwd /repo/dir --env PI_SESSION_ID= --env PI_AGENT_ID=",
+	);
+	ok(
+		"a cwd-free tab create omits --cwd entirely rather than sending an empty value, and the rail adds no layout axis of its own — no label, no ratio, no direction",
+		!buildHerdrTabCreateArgs({ workspaceId: "w7" }).includes("--cwd") &&
+			!tabArgs.includes("--label") &&
+			!tabArgs.includes("--ratio") &&
+			!tabArgs.includes("--direction"),
+	);
+	const startArgs = buildHerdrAgentStartArgs({
+		agentName: "entwurf-abc",
+		kind: "claude",
+		paneId: "w7:pA",
+		backendArgs: ["PROMPT", "--model=opus"],
+	});
+	ok(
+		"[QK:HFC-START-ARGV] the backend's own argv rides after `--`, under the REQUESTED kind and the initial pane of the tab just created",
+		startArgs.join(" ") === "agent start entwurf-abc --kind claude --pane w7:pA -- PROMPT --model=opus",
+	);
+	ok(
+		"pane get and pane close take a POSITIONAL pane id — measured: `--pane` is a usage error on both",
+		buildHerdrPaneGetArgs("w7:pA").join(" ") === "pane get w7:pA" &&
+			buildHerdrPaneCloseArgs("w7:pA").join(" ") === "pane close w7:pA",
+	);
+
 	// ── refusals happen before anything exists ───────────────────────────────────────────
 	ok(
 		'[QK:HFC-TMUX-PLACEMENT-REFUSED] ANY defined placement object is refused by name — `{}` and `{tmuxSession:""}` too, because reading the member instead of the object would give a caller who asked for a seat and mistyped it a default-placed sibling under a green receipt',
@@ -397,35 +429,6 @@ async function main(): Promise<void> {
 		})(),
 	);
 
-	// ── argv grammar ─────────────────────────────────────────────────────────────────────
-	const tabArgs = buildHerdrTabCreateArgs({ workspaceId: "w7", cwd: "/repo/dir" });
-	ok(
-		"[QK:HFC-TAB-ARGV] one placement policy — a NEW TAB in the caller's own workspace, named explicitly so herdr cannot default it to the focused one, focus left alone, cwd carried literally, and BOTH identity carriers scrubbed by explicit repeated --env",
-		tabArgs.join(" ") ===
-			"tab create --workspace w7 --no-focus --cwd /repo/dir --env PI_SESSION_ID= --env PI_AGENT_ID=",
-	);
-	ok(
-		"a cwd-free tab create omits --cwd entirely rather than sending an empty value, and the rail adds no layout axis of its own — no label, no ratio, no direction",
-		!buildHerdrTabCreateArgs({ workspaceId: "w7" }).includes("--cwd") &&
-			!tabArgs.includes("--label") &&
-			!tabArgs.includes("--ratio") &&
-			!tabArgs.includes("--direction"),
-	);
-	const startArgs = buildHerdrAgentStartArgs({
-		agentName: "entwurf-abc",
-		kind: "claude",
-		paneId: "w7:pA",
-		backendArgs: ["PROMPT", "--model=opus"],
-	});
-	ok(
-		"[QK:HFC-START-ARGV] the backend's own argv rides after `--`, under the REQUESTED kind and the initial pane of the tab just created",
-		startArgs.join(" ") === "agent start entwurf-abc --kind claude --pane w7:pA -- PROMPT --model=opus",
-	);
-	ok(
-		"pane get and pane close take a POSITIONAL pane id — measured: `--pane` is a usage error on both",
-		buildHerdrPaneGetArgs("w7:pA").join(" ") === "pane get w7:pA" &&
-			buildHerdrPaneCloseArgs("w7:pA").join(" ") === "pane close w7:pA",
-	);
 	const name = herdrAgentNameFromNonce(NONCE);
 	ok(
 		"[QK:HFC-AGENT-NAME-OPAQUE] the herdr agent name is derived from the per-call nonce, valid under herdr's own [a-z][a-z0-9_-]{0,31} rule, and discloses no role, title or address",

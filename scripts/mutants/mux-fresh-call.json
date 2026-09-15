@@ -123,7 +123,7 @@
 			"title": "one surface drops the optional cwd from its schema, so cross-repo fresh works from pi and silently cannot exist from the MCP bridge",
 			"subject": "mcp/entwurf-bridge/src/index.ts",
 			"find": [
-				"\t\tcwd: z\n\t\t\t.string()\n\t\t\t.optional()\n\t\t\t.describe(\n\t\t\t\t\"Optional literal ABSOLUTE path of an existing directory to start the sibling in (cross-repo fresh). Omit or pass \\\"\\\" to start in this agent's own cwd. Taken exactly as given — no trim, no realpath, no project-name resolution; '#' is refused (tmux format expansion). The receipt echoes what was REQUESTED, never an observation.\",\n\t\t\t),\n"
+				"\t\tcwd: z\n\t\t\t.string()\n\t\t\t.optional()\n\t\t\t.describe(\n\t\t\t\t\"Optional literal ABSOLUTE path of an existing directory to start the sibling in (cross-repo fresh). Omit or pass \\\"\\\" to start in this agent's own cwd — on BOTH rails. Taken exactly as given: no trim, no realpath, no project-name resolution. '#' is refused on the tmux rail only, because tmux format-expands a start directory; inside herdr it is an ordinary path character. The receipt echoes what was REQUESTED, never an observation.\",\n\t\t\t),\n"
 			],
 			"replace": [""],
 			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
@@ -523,7 +523,7 @@
 			"title": "one surface drops the optional seat from its schema, so opening a sibling in the operator's project session works from pi and silently cannot exist from the MCP bridge",
 			"subject": "mcp/entwurf-bridge/src/index.ts",
 			"find": [
-				"\t\tplacement: z\n\t\t\t.object({\n\t\t\t\ttmuxSession: z\n\t\t\t\t\t.string()\n\t\t\t\t\t.describe(\n\t\t\t\t\t\t\"EXACT name of an EXISTING session on this agent's own tmux server. Nothing is created: an absent session is refused as tmux-session-missing, and a name outside [A-Za-z0-9][A-Za-z0-9_-]* as tmux-session-name-invalid.\",\n\t\t\t\t\t),\n\t\t\t})\n\t\t\t.optional()\n\t\t\t.describe(\n\t\t\t\t\"Optional expert seat override: open the sibling in ONE EXISTING tmux session of this agent's own server. When omitted, Codex selects the exact existing `codex` home session; other backends use the caller's session. Nothing is ever created. Independent of cwd; neither is inferred from the other. The receipt reports the selected name, its source, and resolved target session id.\",\n\t\t\t),\n"
+				"\t\tplacement: z\n\t\t\t.object({\n\t\t\t\ttmuxSession: z\n\t\t\t\t\t.string()\n\t\t\t\t\t.describe(\n\t\t\t\t\t\t\"EXACT name of an EXISTING session on this agent's own tmux server. Nothing is created: an absent session is refused as tmux-session-missing, and a name outside [A-Za-z0-9][A-Za-z0-9_-]* as tmux-session-name-invalid.\",\n\t\t\t\t\t),\n\t\t\t})\n\t\t\t.optional()\n\t\t\t.describe(\n\t\t\t\t\"Optional expert seat override, TMUX ONLY: open the sibling in ONE EXISTING tmux session of this agent's own server. When omitted, Codex selects the exact existing `codex` home session; other backends use the caller's session. Nothing is ever created. Inside herdr this field is refused by name — placement there belongs to herdr, and a tmux session name would silently place the sibling somewhere else. Independent of cwd; neither is inferred from the other. The receipt reports the selected name, its source, and resolved target session id.\",\n\t\t\t),\n"
 			],
 			"replace": [""],
 			"gate": ["bash", "run.sh", "check-mux-fresh-call"],

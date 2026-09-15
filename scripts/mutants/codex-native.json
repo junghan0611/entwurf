@@ -380,10 +380,14 @@
 		},
 		{
 			"claim": "FRESHCALL-CODEX-PREMUTATION-MCP",
-			"title": "the MCP public surface stops running the Codex capability preflight, so a host with no birth unit gets a tmux window opened before anything decided the sibling could exist",
+			"title": "the MCP public surface relabels a Codex request as pi at the shared dispatcher seam, so the one central capability preflight is bypassed and placement runs first",
 			"subject": "mcp/entwurf-bridge/src/index.ts",
-			"find": ["\t\t\tconst missing = backend === \"codex\" ? await codexFreshPreflight(process.env) : null;"],
-			"replace": ["\t\t\tconst missing = null;"],
+			"find": [
+				"\t\t\tconst dispatched = await dispatchFreshCall({ backend, model, task, cwd, placement, callerGardenId });"
+			],
+			"replace": [
+				"\t\t\tconst dispatched = await dispatchFreshCall({ backend: \"pi\", model, task, cwd, placement, callerGardenId });"
+			],
 			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
 			"timeoutSeconds": 180,
 			"signature": "[QK:FRESHCALL-CODEX-PREMUTATION-MCP]",
@@ -391,10 +395,10 @@
 		},
 		{
 			"claim": "FRESHCALL-CODEX-PREMUTATION-PI",
-			"title": "the native pi public surface stops running the Codex capability preflight, so the same window opens from the other public door",
+			"title": "the native pi public surface relabels a Codex request as pi at the shared dispatcher seam, bypassing the same central preflight from the other public door",
 			"subject": "pi-extensions/entwurf-control.ts",
-			"find": ["\t\t\t\t\tparams.backend === \"codex\""],
-			"replace": ["\t\t\t\t\tfalse"],
+			"find": ["\t\t\t\t\tbackend: params.backend,"],
+			"replace": ["\t\t\t\t\tbackend: \"pi\","],
 			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
 			"timeoutSeconds": 180,
 			"signature": "[QK:FRESHCALL-CODEX-PREMUTATION-PI]",
