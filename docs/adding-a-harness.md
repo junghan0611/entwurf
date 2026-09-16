@@ -715,6 +715,16 @@ the same; not one of its answers is.
 | clause | OMP's answer | why it differs from Copilot's |
 |---|---|---|
 | 1 managed runtime | the BARE vendor, `omp` | Copilot needs `entwurf copilot` because the bare CLI silently skips its extension scan without a launcher-set flag. omp always scans, and the one thing it needs (`tools.xdev: false`) lives in the operator config — a PREFLIGHT fact, not something a launcher could supply. A managed verb here would have had nothing to manage |
+
+> **A third kind of managed verb, and it is not clause 1 (#95).** `entwurf copilot` is a managed
+> RUNTIME: the sibling becomes that process, and the verb exists because the bare CLI would launch
+> wrongly. `entwurf codex-app-server` is a managed SPELLING: it becomes the operator's own
+> long-lived app-server, mints no citizen, and the bare vendor command it `exec`s is equally
+> correct typed by hand. The test for whether a new harness wants one is not "is there a hard
+> string" but "does an operator have to type a path the product also computes" — if so, the verb's
+> only job is to resolve that path from the SAME leaf the product reads, and a gate must bind the
+> two spellings. Everything else (supervision, restart, lifecycle) stays outside: a launcher that
+> keeps its process alive has become a manager, and this repo does not ship one.
 | 2 model + permission | NO positional prompt: `--entwurf-bootstrap`, payload, then `--model`, value, then `--approval-mode`, `yolo`. `-p/--print` is still the forbidden flag — it runs the turn and EXITS | the width is the same GLG task-wide decision, but for the opposite reason: omp offers no argv grammar for a narrower grant at all (`tools.approval.<tool>` is a config axis). And the trap is inverted — omp's schema default is ALREADY `yolo`, so dropping the token changes nothing observable and the drift would be invisible to every behavioural test. The PROMPT half diverges hardest of all: Copilot's argv carries the whole first turn, omp's carries none of it — see "When argv cannot carry the first turn" below |
 | 3 preflight | FIVE axes: birth, MCP hand, receive, visible identity, and **callback callable** (`tools.xdev !== true`) | the fifth is omp-specific and load-bearing for clause 5: the vendor default mounts MCP tools as `xd://` devices whose schemas never reach the prompt, so the sibling could be launched, be delivered to, and still never call anything |
 | 4 visible identity | `ctx.ui.setStatus` inside the birth extension, gated by `statusLine.showHookStatus` (default true) | there is NO statusline command to resolve — v18's built-in segment set is a closed enum. Copilot's "is the command executable" predicate does not exist here, so the axis is derived rather than copied |

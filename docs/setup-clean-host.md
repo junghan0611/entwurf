@@ -446,12 +446,13 @@ neither creates nor supervises it. For the LIVE acceptance that session must NOT
 Pi/Codex pair runs in.
 
 ```bash
-# Run from a pane in the operator-owned tmux session that will hold the app-server.
-CODEX_HOME="${CODEX_HOME:-$HOME/.codex}"
-mkdir -p "$CODEX_HOME/app-server-control"
-codex app-server --listen "unix://$CODEX_HOME/app-server-control/app-server-control.sock"
+# Run from a pane in the operator-owned tmux session that will hold the app-server. One
+# command: entwurf spells the vendor's `app-server --listen unix://<default socket>` for you,
+# creates the control directory, and exec()s it here. Ctrl-C is yours; nothing supervises it.
+entwurf codex-app-server
 
 # Attach your own visible Codex TUI from wherever you work — any session, not a reserved room.
+CODEX_HOME="${CODEX_HOME:-$HOME/.codex}"
 codex --remote "unix://$CODEX_HOME/app-server-control/app-server-control.sock"
 ```
 

@@ -157,10 +157,17 @@ app-server. The operator starts it in a tmux session **of their own choosing**:
 ```bash
 # Run from a pane in the operator-owned tmux session that will hold the app-server.
 # For the LIVE acceptance that session must NOT be the one the Pi/Codex pair runs in.
-CODEX_HOME="${CODEX_HOME:-$HOME/.codex}"
-mkdir -p "$CODEX_HOME/app-server-control"
-codex app-server --listen "unix://$CODEX_HOME/app-server-control/app-server-control.sock"
+entwurf codex-app-server
 ```
+
+That verb owns the SPELLING of one vendor command and nothing else — it `exec`s
+`codex app-server --listen "unix://$CODEX_HOME/app-server-control/app-server-control.sock"`
+in the terminal it was typed in, after creating the control directory that address lives in.
+It resolves the socket through the same leaf every other Codex surface reads, so the address a
+consumer gets cannot drift from the one delivery looks for. There is no supervisor, no restart,
+no daemon and no pid file: Ctrl-C is the operator's. A live socket, an unidentifiable one, or a
+second `--listen` are named refusals; a dead socket file is reported and launched over. Passing
+the raw vendor command by hand remains equivalent and is not deprecated.
 
 #95 D1 (GLG, 2026-09-16) retired the requirement that this session be named `codex`, and with it the
 rule that an omitted-placement Codex TARGET selected it. The operator still owns the app-server and

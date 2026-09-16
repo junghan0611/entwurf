@@ -153,9 +153,13 @@ Native receive and visible fresh require the operator-owned default app-server. 
 does not start or supervise it:
 
 ```bash
-CODEX_HOME="${CODEX_HOME:-$HOME/.codex}"
-codex app-server --listen "unix://$CODEX_HOME/app-server-control/app-server-control.sock"
+entwurf codex-app-server
 ```
+
+`entwurf codex-app-server` owns the spelling of that one vendor command — it `exec`s
+`codex app-server --listen unix://<default socket>` in the terminal it was typed in, resolving
+the address through the same leaf delivery reads. It never supervises, restarts or daemonizes
+what it becomes.
 
 Birth occurs on the first turn, not window open. It mints
 `record.nativeSessionId = threadId` and sets the visible thread title to the garden id.

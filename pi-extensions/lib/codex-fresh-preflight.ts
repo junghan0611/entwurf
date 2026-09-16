@@ -29,7 +29,7 @@ export const CODEX_PREFLIGHT_HINT: Record<CodexPreflightRejectReason, string> = 
 	"codex-visible-identity-missing":
 		"Codex tui.status_line does not include thread-title; run `entwurf install-codex-statusline`, then `entwurf doctor-codex-statusline`",
 	"codex-app-server-unavailable":
-		"the operator-owned Codex app-server default socket is absent or unsafe; start `codex app-server --listen unix://$CODEX_HOME/app-server-control/app-server-control.sock` and retry",
+		"the operator-owned Codex app-server default socket is absent or unsafe; start it with `entwurf codex-app-server` from a detached tmux session (one that is NOT where you work), then retry",
 };
 
 /**

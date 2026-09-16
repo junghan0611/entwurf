@@ -152,6 +152,38 @@ entwurf check-bridge
 whatever native harnesses are present. The global install is the easiest path when
 Claude Code's USER-scope MCP registration should work from every cwd.
 
+#### Codex: what you still type by hand
+
+`setup` writes every byte Entwurf owns, and two things are deliberately left to you. They
+are the only manual steps between a fresh install and calling a Codex sibling:
+
+1. **Trust the birth hook once, in a visible plain Codex.** Answer `Trust all and continue`
+   and send one first turn. Nobody can do this for you: the receipt is the vendor's record of
+   *your* security decision, and writing it ourselves would turn a prompt into a silent
+   install. Until it exists, `setup` and `doctor-codex-birth` stay honestly non-green and say
+   exactly this.
+2. **Start the app-server, in a detached tmux session that is NOT where you work.**
+
+   ```bash
+   entwurf codex-app-server
+   ```
+
+   One command for the vendor string nobody wants to type. It `exec`s
+   `codex app-server --listen unix://<default socket>` right there — so Ctrl-C is yours, and
+   Entwurf neither supervises nor restarts it. The session matters because the MCP bridge is
+   this server's child and inherits its `TMUX`: that tmux server is the one caller-seat
+   lookups read. The launcher prints which seat it got rather than guessing one for you.
+
+Then `entwurf_fresh_call` with `backend: "codex"` works. Attaching your own visible Codex TUI
+(`codex --remote "unix://$CODEX_HOME/app-server-control/app-server-control.sock"`) is optional
+and independent — a sibling Entwurf opens brings its own.
+
+> **Observation, not a verb (#95).** That `--remote` string is exactly as unfriendly as the
+> `--listen` one was, and it has no managed spelling. It is deliberately left alone: it is how
+> an operator attaches their OWN terminal, not how a sibling is opened, and `entwurf_fresh_call`
+> already spells it internally for the siblings it launches. Whether the operator-facing half
+> deserves its own verb is open.
+
 ### From npm — project-local install
 
 ```bash

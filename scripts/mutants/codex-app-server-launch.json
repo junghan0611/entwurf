@@ -1,0 +1,69 @@
+{
+	"schemaVersion": 1,
+	"lane": "codex-app-server-launch",
+	"mutants": [
+		{
+			"claim": "CODEX-APP-SERVER-ADDRESS-MATCHES-PRODUCT-LEAF",
+			"title": "resolving the control socket from HOME alone ignores CODEX_HOME, so the one command starts a server at an address no record, preflight or delivery call will ever look at \u2014 and every one of them stays green while nothing can reach it",
+			"subject": "scripts/codex-app-server-launch.sh",
+			"find": ["codex_home=\"$(trim \"${CODEX_HOME:-}\")\""],
+			"replace": ["codex_home=\"\""],
+			"gate": ["bash", "run.sh", "check-codex-app-server-launch"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:CODEX-APP-SERVER-ADDRESS-MATCHES-PRODUCT-LEAF]",
+			"signatureSource": "scripts/check-codex-app-server-launch.ts"
+		},
+		{
+			"claim": "CODEX-APP-SERVER-EXECS-NOT-FORKS",
+			"title": "forking the vendor instead of becoming it leaves run.sh between the operator and their server: Ctrl-C hits the wrapper, and the process the operator believes they stopped is not the one that dies",
+			"subject": "scripts/codex-app-server-launch.sh",
+			"find": ["exec \"$codex_bin\" app-server --listen \"unix://$SOCK\" \"$@\""],
+			"replace": ["\"$codex_bin\" app-server --listen \"unix://$SOCK\" \"$@\""],
+			"gate": ["bash", "run.sh", "check-codex-app-server-launch"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:CODEX-APP-SERVER-EXECS-NOT-FORKS]",
+			"signatureSource": "scripts/check-codex-app-server-launch.ts"
+		},
+		{
+			"claim": "CODEX-APP-SERVER-REFUSES-LIVE-SOCKET",
+			"title": "reading a LIVE control socket as a stale leftover launches a second server over the endpoint every existing citizen record already points at \u2014 the running one keeps its threads while its address answers somebody else",
+			"subject": "scripts/codex-app-server-launch.sh",
+			"find": ["\tprint(\"live\")"],
+			"replace": ["\tprint(\"stale\")"],
+			"gate": ["bash", "run.sh", "check-codex-app-server-launch"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:CODEX-APP-SERVER-REFUSES-LIVE-SOCKET]",
+			"signatureSource": "scripts/check-codex-app-server-launch.ts"
+		},
+		{
+			"claim": "CODEX-APP-SERVER-REFUSES-INDETERMINATE-SOCKET",
+			"title": "reading an unidentifiable path (symlink, foreign owner, not a socket) as an absent one lets the launch clobber something it could not identify \u2014 the same classification the delivery rail refuses on, silently downgraded at the one place that would overwrite it",
+			"subject": "scripts/codex-app-server-launch.sh",
+			"find": ["\tprint(\"indeterminate\\tthe path is a symlink\")"],
+			"replace": ["\tprint(\"absent\")"],
+			"gate": ["bash", "run.sh", "check-codex-app-server-launch"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:CODEX-APP-SERVER-REFUSES-INDETERMINATE-SOCKET]",
+			"signatureSource": "scripts/check-codex-app-server-launch.ts"
+		},
+		{
+			"claim": "CODEX-APP-SERVER-REFUSES-SECOND-LISTEN",
+			"title": "appending the injected address beside an operator's own --listen hands the vendor two listen addresses; one wins silently, and the losing one is the address every record was written against",
+			"subject": "scripts/codex-app-server-launch.sh",
+			"find": [
+				"for tok in \"$@\"; do",
+				"\tif [ \"${tok%%=*}\" = \"--listen\" ]; then",
+				"\t\tfail \"codex-app-server-listen-override: this verb exists to spell ONE --listen address",
+				"  (unix://$SOCK), and you passed your own. Run the vendor directly if you mean a",
+				"  different address: $VENDOR_CMD app-server --listen <your-address>\"",
+				"\tfi",
+				"done"
+			],
+			"replace": ["# the operator may spell their own --listen beside ours"],
+			"gate": ["bash", "run.sh", "check-codex-app-server-launch"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:CODEX-APP-SERVER-REFUSES-SECOND-LISTEN]",
+			"signatureSource": "scripts/check-codex-app-server-launch.ts"
+		}
+	]
+}

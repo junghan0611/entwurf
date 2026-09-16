@@ -134,6 +134,7 @@ Usage:
   ./run.sh check-omp-birth-hook       # #87 gate: drives the real OMP assembler into a temp dir, imports the ASSEMBLED index.ts into a MOCK omp host and fires session_start/session_switch. tui mints one backend:"omp" record + a sender marker keyed to the host's OWN pid (the one-process join) + the garden id on the status line; print/rpc/json mint NOTHING (hasUI is true on the rpc rows, as in the vendor); switch attaches on the same native id and mints the replacement on a new one; the CERTIFIED receiver reader still finds no marker. Also the four-root joint binding: extension and omp-labeled bridge child resolve the same sessions/mailbox/senders/receivers bundle against test-built literals (never the production resolver as its own oracle), under a poisoned PI_CODING_AGENT_DIR and under four distinct ENTWURF_META_* overrides; the override grammar is absolute-or-~ and both halves plus the doctor refuse anything else by name; and a drifted provenance label selects no root policy at all. Hermetic; no omp, no model turn
   ./run.sh check-copilot-receive-arm  # #82 RAIL 5 gate: the REAL receiver installer + the REAL extension.mjs forked with a stubbed SDK. Arms only after birth, marker owned by the WATCHER pid, self-fetch dispatch answer, doorbell carries the garden id and NOT the body, id-drift/foreign-parent refusals. Hermetic; no Copilot, no model turn
   ./run.sh check-copilot-launch       # #82 RAIL 7 gate: the MANAGED launch `entwurf copilot`, driven through its public address against a FAKE VENDOR on a sandbox PATH. Receiver precondition refusals, EXTENSIONS token + operator token preservation, injected defaults before the `--` terminator, byte-identical argv, the 11 explicit permission/surface policy overrides that suppress `--yolo`, exec (not fork) pid identity, exit passthrough, recursion refusal. Hermetic; no Copilot, no model turn
+  ./run.sh check-codex-app-server-launch # #95 gate: the MANAGED app-server launch `entwurf codex-app-server`, driven through its public address against a FAKE VENDOR on a sandbox PATH. The injected `app-server --listen unix://<socket>` compared BYTE-FOR-BYTE against the product's own resolveCodexDefaultSocketPath over an env matrix (HOME / CODEX_HOME / whitespace), byte-identical operator argv, exec (not fork) parent identity, exit passthrough, live-socket and indeterminate-socket and second---listen and recursion refusals, dead-socket launch-over, the tmux fact line, and both identity carriers stripped. Hermetic; no Codex, no app-server, no model turn
   ./run.sh check-copilot-statusline   # #82 Copilot custom-footer renderer. session_id → ready/?/gid + rail `cop`; exit 0. IN pnpm check. No Copilot, no model turn
   ./run.sh check-entwurf-capabilities  # deterministic gate (0.11 Stage 0 step 3C): backend capability registry (pi/entwurf-capabilities.json) — coverage==META_CITIZEN_BACKENDS + agrees with live META_BACKEND_DESCRIPTORS + strict keyset, no API
   ./run.sh check-omp-fresh-preflight   # #87 C: the OMP fresh preflight reproduces omp_agent_dir and the tools.xdev read in TS (it runs from two emit depths and cannot call a sibling script). This drives the SHIPPED shell/python leaves over the same inputs — refusals included — and requires the TS half to agree, so the reproduction cannot silently drift from the installer's own oracle
@@ -262,6 +263,7 @@ Usage:
   ./run.sh install-codex-terminal-title   # add thread-id to tui.terminal_title so the multiplexer reports the caller's thread in #{pane_title} (#95 placement input, never an address)
   ./run.sh uninstall-codex-terminal-title # remove only the recorded terminal-title atom
   ./run.sh doctor-codex-terminal-title    # effective caller-seat config + ownership verdict
+  ./run.sh codex-app-server [args...]     # #95: the ONE COMMAND that starts the operator's Codex app-server. exec()s `codex app-server --listen "unix://$CODEX_HOME/app-server-control/app-server-control.sock"` in THIS terminal (cwd/pid/exit are the vendor's, Ctrl-C is yours) — entwurf owns the SPELLING of that address, never the process's lifecycle: no supervisor, no restart, no daemon, no pid file. The socket path is the same value `resolveCodexDefaultSocketPath` computes for every other Codex surface, and the gate binds the two. Your arguments are forwarded byte-identical after it; a second --listen is refused by name. Refuses on a live socket (names the /proc owner it can read) or an indeterminate one, and reports which tmux server this seat gives caller-seat lookups. Run it in a DETACHED tmux session other than the one you work in
   ./run.sh install-agy-statusline     # own the agy statusLine subtree with bare entwurf-agy-statusline; preserve unrelated settings
   ./run.sh uninstall-agy-statusline   # honest inverse from statusline install-state
   ./run.sh doctor-agy-statusline      # fail-loud statusLine config/bin/state doctor + honest live SKIP
@@ -1045,6 +1047,13 @@ check_copilot_launch() {
   # never a reading of the launcher's source. HOME/XDG/PATH are all redirected, so the
   # install-state, the extensions root and the resolved binary are the fixture's.
   run_ts scripts/check-copilot-launch.ts
+}
+
+check_codex_app_server_launch() {
+  # #95: the managed app-server SPELLING, proved against a fake vendor. Its second oracle is
+  # the product's own TS socket leaf, imported rather than transcribed — two spellings of one
+  # address is how a consumer ends up with a server nothing can find.
+  run_ts scripts/check-codex-app-server-launch.ts
 }
 
 check_copilot_receive_arm() {
@@ -4522,6 +4531,57 @@ JS
   fi
   echo "[check-pack-install] installed 'entwurf copilot' reached the vendor with the scan flag and the managed argv"
 
+  # #95 — the managed app-server SPELLING, from the INSTALLED package. Same packaging risk as
+  # the copilot cell above and the same reason a file-list assertion cannot stand in for it:
+  # `scripts/codex-app-server-launch.sh` has to be in the tarball AND resolve its siblings
+  # correctly once it lives under node_modules. What makes this cell worth its seconds is the
+  # ADDRESS: this verb exists so a consumer never types that socket path, so the one thing an
+  # installed run must prove is that the path it hands the vendor is the one the product's own
+  # resolver computes — read here from the INSTALLED tree, never from this checkout.
+  local cx_launch_home="$npm_tmp/codex-appserver-home" cx_launch_bin="$npm_tmp/codex-appserver-bin"
+  mkdir -p "$cx_launch_home" "$cx_launch_bin"
+  {
+    printf '#!/usr/bin/env bash\n'
+    printf 'for a in "$@"; do printf "ARG<%%s>\\n" "$a"; done\n'
+  } > "$cx_launch_bin/codex"
+  chmod +x "$cx_launch_bin/codex"
+  # The expectation is read from the INSTALLED COMPILED resolver, not from this checkout and
+  # not transcribed here: compiled JS is what an installed consumer surface reaches (Hard Rule
+  # 11), so this asks the packed tree itself what address it believes in.
+  local cx_resolver="$npm_pkg/mcp/entwurf-bridge/dist/pi-extensions/lib/native-push/codex-ws-client.js" cx_want
+  if [ ! -f "$cx_resolver" ]; then
+    fail "[check-pack-install] the tarball carries no compiled Codex socket resolver at $cx_resolver"
+    return 1
+  fi
+  if ! cx_want=$(CODEX_HOME="$cx_launch_home/.codex" node --input-type=module -e "
+import { resolveCodexDefaultSocketPath } from '$cx_resolver';
+process.stdout.write(resolveCodexDefaultSocketPath(process.env));
+" 2>&1); then
+    fail "[check-pack-install] the INSTALLED compiled socket resolver would not load:"
+    echo "$cx_want" | tail -4 | sed 's/^/    /' >&2
+    return 1
+  fi
+  if ! op_out=$(env -u ENTWURF_CODEX_APP_SERVER_ACTIVE -u TMUX \
+      HOME="$cx_launch_home" CODEX_HOME="$cx_launch_home/.codex" PATH="$cx_launch_bin:$PATH" \
+      "$installed_entwurf" codex-app-server --config probe=1 2>&1); then
+    fail "[check-pack-install] installed 'entwurf codex-app-server' FAILED to reach the vendor:"
+    echo "$op_out" | tail -8 | sed 's/^/    /' >&2
+    return 1
+  fi
+  for want in "ARG<app-server>" "ARG<--listen>" "ARG<unix://$cx_want>" "ARG<--config>" "ARG<probe=1>"; do
+    if ! printf '%s' "$op_out" | grep -qF "$want"; then
+      fail "[check-pack-install] installed 'entwurf codex-app-server' did not hand the vendor the resolved address and argv (missing $want):"
+      echo "$op_out" | tail -8 | sed 's/^/    /' >&2
+      return 1
+    fi
+  done
+  if printf '%s' "$op_out" | grep -qF 'ARG<codex-app-server>'; then
+    fail "[check-pack-install] installed 'entwurf codex-app-server' leaked the dispatcher verb into the vendor's argv:"
+    echo "$op_out" | tail -8 | sed 's/^/    /' >&2
+    return 1
+  fi
+  echo "[check-pack-install] installed 'entwurf codex-app-server' reached the vendor at the INSTALLED resolver's address ($cx_want)"
+
   # The generation verb must reach its verdict from under node_modules. On the
   # sandbox 0-record agent dir it archives nothing and opens a fresh generation.
   # The exit code alone can't tell a verdict from a fence crash, so read the line.
@@ -6022,6 +6082,9 @@ case "$cmd" in
   check-copilot-statusline)
     check_copilot_statusline
     ;;
+  check-codex-app-server-launch)
+    check_codex_app_server_launch
+    ;;
   check-copilot-launch)
     check_copilot_launch
     ;;
@@ -6654,6 +6717,16 @@ case "$cmd" in
     ;;
   doctor-codex-terminal-title)
     codex_terminal_title doctor
+    ;;
+  codex-app-server)
+    # #95: the managed app-server SPELLING. Same shape and same reasons as the `copilot`
+    # branch below — `exec`, no subshell and no cd, because this operates on the operator's
+    # own session rather than on the repo, and the `shift` keeps the dispatcher verb out of
+    # the vendor's argv. It is NOT the same KIND of thing: `entwurf copilot` becomes a
+    # sibling-bearing CLI, while this becomes the long-lived server those siblings' MCP
+    # children hang off. Neither one supervises what it becomes.
+    shift || true
+    exec bash "$REPO_DIR/scripts/codex-app-server-launch.sh" "$@"
     ;;
   copilot)
     # #82 RAIL 7: the managed launch. `exec` and NO subshell/cd on purpose — the vendor
