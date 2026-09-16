@@ -21,6 +21,7 @@ import {
 	piSourceToolReceipts,
 	resolveSourceTranscriptPath,
 	selectExactSourceToolReceipt,
+	sourceArgumentsMatch,
 	sourceCleanupWindows,
 	validateFinalMailboxBody,
 } from "../scripts/lib/codex-fresh-source-receipts.ts";
@@ -463,5 +464,68 @@ describe("codex fresh-live protocol", () => {
 		const smokeSource = readFileSync(new URL("../scripts/smoke-codex-fresh-live.ts", import.meta.url), "utf8");
 		expect(smokeSource).toContain("sourceCleanupWindows(piSourceToolReceipts(readInitialPiEntries()))");
 		expect(smokeSource).not.toContain("seenInbox.flatMap");
+	});
+});
+/**
+ * The one key the source-call oracle compares by MEANING (#95 lane B, after a LIVE run died on it).
+ *
+ * `entwurf_v2`'s `wants_reply` is optional with a documented default of false
+ * (`mcp/entwurf-bridge/src/index.ts:474`) that the decider actually applies
+ * (`pi-extensions/lib/entwurf-v2-decider.ts:270`, `input.wantsReply ?? false`). So a model told
+ * "wants_reply false" that simply omits the parameter has obeyed the instruction, and the dispatch
+ * it produced is identical. `[측정 2026-09-16]` an `isDeepStrictEqual` oracle called that drift and
+ * ended a LIVE acceptance at assertion 43 — the gate was reading a serialization shape where its
+ * claim is about the dispatch.
+ */
+describe("source-call arguments — schema default, not serialization shape", () => {
+	const v2 = (extra: Record<string, unknown>) => ({
+		target: "20260916T143637-e462b5",
+		intent: "fire-and-forget",
+		message: "CODEX-WAIT-N7C6CIGG",
+		...extra,
+	});
+
+	it("[QK:CODEX-LIVE-WANTS-REPLY-DEFAULT] an ABSENT wants_reply equals an explicit false, in both directions", () => {
+		expect(sourceArgumentsMatch(v2({ wants_reply: false }), v2({}))).toBe(true);
+		expect(sourceArgumentsMatch(v2({}), v2({ wants_reply: false }))).toBe(true);
+		expect(sourceArgumentsMatch(v2({}), v2({}))).toBe(true);
+	});
+
+	it("[QK:CODEX-LIVE-WANTS-REPLY-TRUE-IS-DRIFT] wants_reply TRUE still mismatches false or absent — only the default is filled in", () => {
+		expect(sourceArgumentsMatch(v2({ wants_reply: false }), v2({ wants_reply: true }))).toBe(false);
+		expect(sourceArgumentsMatch(v2({}), v2({ wants_reply: true }))).toBe(false);
+		expect(sourceArgumentsMatch(v2({ wants_reply: true }), v2({}))).toBe(false);
+	});
+
+	it("[QK:CODEX-LIVE-ONLY-WANTS-REPLY-NORMALIZED] every other key stays byte-exact — a difference there is a difference", () => {
+		expect(sourceArgumentsMatch(v2({}), v2({ target: "20260916T143620-bbba31" }))).toBe(false);
+		expect(sourceArgumentsMatch(v2({}), v2({ message: "CODEX-WAIT-OTHER" }))).toBe(false);
+		// An omitted OPTIONAL key that is not `wants_reply` is still drift: `mode` changes the
+		// control-socket injection style, and `placement`/`cwd` change where a sibling lands.
+		expect(sourceArgumentsMatch(v2({ mode: "follow_up" }), v2({}))).toBe(false);
+		const fresh = { backend: "pi", model: "m", cwd: "/tmp/x", task: "t" };
+		expect(sourceArgumentsMatch(fresh, { ...fresh, placement: { tmuxSession: "org" } })).toBe(false);
+	});
+
+	it("[QK:CODEX-LIVE-WANTS-REPLY-THROUGH-THE-ORACLE] the selector and the exact-once audit both use it, so no call site can drift", () => {
+		const receipt = {
+			toolName: "entwurf_v2",
+			arguments: v2({}),
+			text: "entwurf_v2 native-push → delivered",
+			status: "completed" as const,
+			isError: false,
+		};
+		expect(selectExactSourceToolReceipt([receipt], "entwurf_v2", v2({ wants_reply: false }), "cell")).toBe(receipt);
+		expect(() =>
+			assertExactSourceToolCalls(
+				[receipt],
+				[{ toolName: "entwurf_v2", arguments: v2({ wants_reply: false }) }],
+				"cell",
+			),
+		).not.toThrow();
+		// ...and a real mismatch still fails through the same door.
+		expect(() => selectExactSourceToolReceipt([receipt], "entwurf_v2", v2({ wants_reply: true }), "cell")).toThrow(
+			/source tool arguments differ/,
+		);
 	});
 });

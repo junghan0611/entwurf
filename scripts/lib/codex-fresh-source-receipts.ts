@@ -16,6 +16,33 @@ export interface ExpectedSourceToolCall {
 	arguments: Record<string, unknown>;
 }
 
+/**
+ * Compare source-call arguments by MEANING for the one key whose absence already means something,
+ * and byte-exactly for every other.
+ *
+ * `entwurf_v2`'s `wants_reply` is optional and absent IS false — the schema says so
+ * (`mcp/entwurf-bridge/src/index.ts:474`, `z.boolean().optional().describe("… (default false)")`)
+ * and the decider enforces it (`pi-extensions/lib/entwurf-v2-decider.ts:270`,
+ * `input.wantsReply ?? false`). So a model that reads "wants_reply false" in its instruction and
+ * simply omits the parameter has obeyed the instruction; nothing about the dispatch differs.
+ *
+ * `[측정 2026-09-16]` this cost a LIVE run at assertion 43: the initial Pi called `entwurf_v2`
+ * with byte-identical `target`, `intent` and `message` and no `wants_reply` key, and the
+ * `isDeepStrictEqual` oracle called it drift. The gate was reading a serialization shape where
+ * its claim is about the dispatch. Only THIS key is normalized — a `wants_reply: true` still
+ * mismatches an expected `false`, and `target`/`intent`/`message`/`placement`/`cwd` stay exact,
+ * because for those a difference is a difference.
+ */
+function normalizeSourceArguments(args: Record<string, unknown>): Record<string, unknown> {
+	if (!("wants_reply" in args)) return { ...args, wants_reply: false };
+	return args;
+}
+
+/** Arguments agree once the schema default above is filled in. */
+export function sourceArgumentsMatch(expected: Record<string, unknown>, actual: Record<string, unknown>): boolean {
+	return isDeepStrictEqual(normalizeSourceArguments(expected), normalizeSourceArguments(actual));
+}
+
 /** Select one source call in its backend/target scope, rejecting drift, errors, and duplicates. */
 export function selectExactSourceToolReceipt(
 	receipts: readonly SourceToolReceipt[],
@@ -32,7 +59,7 @@ export function selectExactSourceToolReceipt(
 	if (matchingScope.length > 1) throw new Error(`${label}: duplicate source tool calls (${matchingScope.length})`);
 	const receipt = matchingScope[0] ?? null;
 	if (receipt === null) return null;
-	if (!isDeepStrictEqual(receipt.arguments, expectedArguments))
+	if (!sourceArgumentsMatch(expectedArguments, receipt.arguments))
 		throw new Error(
 			`${label}: source tool arguments differ\nexpected=${JSON.stringify(expectedArguments)}\nactual=${JSON.stringify(receipt.arguments)}`,
 		);
@@ -68,7 +95,7 @@ export function assertExactSourceToolCalls(
 		if (receipt.status !== "completed") throw new Error(`${label}: ${receipt.toolName} remained ${receipt.status}`);
 		const index = remaining.findIndex(
 			(candidate) =>
-				candidate.toolName === receipt.toolName && isDeepStrictEqual(candidate.arguments, receipt.arguments),
+				candidate.toolName === receipt.toolName && sourceArgumentsMatch(candidate.arguments, receipt.arguments),
 		);
 		if (index < 0)
 			throw new Error(`${label}: unexpected source call ${receipt.toolName} ${JSON.stringify(receipt.arguments)}`);
