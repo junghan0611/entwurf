@@ -97,7 +97,7 @@ describe("MCP surface — real bridge boot → runtime tools/list", () => {
 		// call shape stays a structural assert.
 		const mcpSrc = fs.readFileSync(path.join(REPO_DIR, "mcp/entwurf-bridge/src/index.ts"), "utf8");
 		expect(mcpSrc).toMatch(
-			/freshCall\(\{ backend, model, task, cwd, placement, callerGardenId, callerNativeSessionId \}\)/,
+			/freshCall\(\{ backend, model, task, cwd, placement, callerGardenId, callerNativeSessionId, callerCwd \}\)/,
 		);
 	});
 
@@ -291,7 +291,7 @@ describe("one grammar, two surfaces", () => {
 		// The pass-through halves stay structural asserts, same as the model parameter above.
 		const mcpSrc = fs.readFileSync(path.join(REPO_DIR, "mcp/entwurf-bridge/src/index.ts"), "utf8");
 		expect(mcpSrc).toMatch(
-			/freshCall\(\{ backend, model, task, cwd, placement, callerGardenId, callerNativeSessionId \}\)/,
+			/freshCall\(\{ backend, model, task, cwd, placement, callerGardenId, callerNativeSessionId, callerCwd \}\)/,
 		);
 		const piSrc = fs.readFileSync(path.join(REPO_DIR, "pi-extensions/entwurf-control.ts"), "utf8");
 		expect(piSrc).toMatch(/cwd:\s*params\.cwd/);
@@ -341,7 +341,7 @@ describe("one grammar, two surfaces", () => {
 		// The pass-through halves stay structural asserts, same as the cwd parity above.
 		const mcpSeatSrc = fs.readFileSync(path.join(REPO_DIR, "mcp/entwurf-bridge/src/index.ts"), "utf8");
 		expect(mcpSeatSrc).toMatch(
-			/freshCall\(\{ backend, model, task, cwd, placement, callerGardenId, callerNativeSessionId \}\)/,
+			/freshCall\(\{ backend, model, task, cwd, placement, callerGardenId, callerNativeSessionId, callerCwd \}\)/,
 		);
 		const piSeatSrc = fs.readFileSync(path.join(REPO_DIR, "pi-extensions/entwurf-control.ts"), "utf8");
 		expect(piSeatSrc).toMatch(/placement:\s*params\.placement/);
@@ -451,6 +451,24 @@ describe("one grammar, two surfaces", () => {
 		const piSrc = fs.readFileSync(path.join(REPO_DIR, "pi-extensions/entwurf-control.ts"), "utf8");
 		expect(piSrc).not.toContain("codexCallerFreshPreflight");
 		expect(piSrc).not.toContain("callerNativeSessionId");
+	});
+
+	it("[QK:FRESHCALL-CALLER-CWD-SURFACE] the codex caller's RECORD cwd rides the MCP surface under the SAME condition as its thread id — one resolved sender, two facts, and neither read separately; the pi surface has neither, because a pi caller's own process directory IS its directory", () => {
+		// WHY the bridge is the only surface that can supply this: it runs as the MCP child of
+		// the operator-owned app-server, so `process.cwd()` there is the app-server's directory
+		// and an omitted cwd would open every sibling of every Codex caller in the app-server's
+		// repo (#95 lane C §1). The record is what says where that citizen actually is.
+		const mcpSrc = fs.readFileSync(path.join(REPO_DIR, "mcp/entwurf-bridge/src/index.ts"), "utf8");
+		expect(mcpSrc).toContain("callerCwd = self.codexThreadId === undefined ? undefined : self.envelope.cwd;");
+		// It is NOT a second identity axis: the envelope's cwd is only the record's directory
+		// when the reconciled sender is that codex citizen, so the guard is the thread id itself
+		// rather than a separate lookup, an env read or a `_meta.workspaces` inspection.
+		expect(mcpSrc).not.toMatch(/callerCwd\s*=\s*process\.cwd\(\)/);
+		expect(mcpSrc).not.toContain("_meta.workspaces");
+		// The pi surface stays without it for the same reason it stays without the anchor: a pi
+		// session is never a codex caller, and its own process directory is already its own.
+		const piSrc = fs.readFileSync(path.join(REPO_DIR, "pi-extensions/entwurf-control.ts"), "utf8");
+		expect(piSrc).not.toContain("callerCwd");
 	});
 
 	it("[QK:FRESHCALL-CODEX-PREMUTATION-MCP] the MCP surface answers a missing Codex capability BEFORE placement — with no tmux in its environment the reason is still the capability's, so no window can exist by the time the host reads it", async () => {

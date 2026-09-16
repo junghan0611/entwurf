@@ -40,6 +40,14 @@
  *     byte-identical to the pre-#73 shape. Anything else is taken LITERALLY — no trim, no
  *     realpath, no project-name resolution, no store/peers/record lookup. The caller is the
  *     only cwd authority this module knows.
+ *   - when a CODEX caller omits it, the surface supplies that citizen's own record cwd and it
+ *     becomes an explicit `-c` (#95 lane C). This is not a second authority: it is the same
+ *     caller, named more precisely, because a codex caller's PROCESS directory is the
+ *     operator-owned app-server's rather than its own. Every other caller keeps the inherited
+ *     directory and an unchanged argv.
+ *   - the chosen value reaches codex TWICE, and that is one value with two carriers rather than
+ *     two inputs: tmux `-c` places the pane, and codex `-C` places the THREAD, which a
+ *     `--remote` attachment would otherwise take from the app-server (see `buildBackendArgs`).
  *   - the value is classified by the shared `classify-tmux-cwd.ts` leaf BEFORE any mutation
  *     (same four stable reasons as resume; the measured tmux 3.6a facts live on that leaf).
  *     This module's hints phrase them as the REQUESTED cwd; resume's say RECORDED.
@@ -287,12 +295,37 @@ export function isSafeFreshCallModel(model: string): boolean {
  * have needed its own quoting, its own lifetime and its own refusal rules; argv already owns
  * all three. This is deliberately NOT a general `--flag value` passthrough — an arbitrary
  * carrier would hand callers the launch-shaping power this rail exists to refuse.
+ *
+ * CODEX ALONE CARRIES A DIRECTORY IN ITS ARGV, AND OMITTING IT IS A WRONG ANSWER RATHER THAN A
+ * NEUTRAL ONE. `[source rust-v0.153.4]` an explicit `--remote <endpoint>` — which this argv
+ * always passes — resolves to `AppServerTarget::Remote` (`codex-rs/tui/src/lib.rs:875-876`;
+ * `LocalDaemon` is only the IMPLICIT no-flag reuse path), and a Remote target takes its new
+ * thread's directory from `remote_cwd_override` ALONE: `thread_cwd_from_config`
+ * (`codex-rs/tui/src/app_server_session.rs:2022-2033`) answers `None` without it, and the
+ * app-server then opens the thread in ITS OWN directory. That override is exactly `-C/--cd`,
+ * retained only for a remote target (`codex-rs/tui/src/startup_orchestration.rs:191-194`), and
+ * the flag lives on the shared interactive options this argv already uses for
+ * `--dangerously-bypass-approvals-and-sandbox` (`codex-rs/utils/cli/src/shared_options.rs:53-68`)
+ * — not only on the `agents` subcommand that also spells it (`codex-rs/cli/src/main.rs:334`).
+ *
+ * `[측정 2026-09-16]` with the flag absent, three citizens of one chain (pi → Codex → Claude
+ * Code) all recorded the app-server's `~/repos/gh/entwurf` while the panes themselves sat in
+ * `~/repos/gh/agent-config`, and the birth hook wrote that vendor-supplied cwd into each record
+ * honestly (#95 lane C §1). So the token is ALWAYS present for codex: ONE directory, TWO
+ * CARRIERS — tmux `-c` places the PANE, codex `-C` places the THREAD, and `launchCwd` is the
+ * single value both receive. It is not a new input axis: the value is chosen by the cwd rules
+ * this module already has, one layer up.
  */
 export function buildBackendArgs(
 	backend: FreshCallBackend,
 	composition: FreshCallComposition,
 	model: string,
 	env: NodeJS.ProcessEnv = process.env,
+	/** Where the sibling will actually start: the directory `freshCall` chose when it chose one,
+	 * and otherwise THIS process's own — which is what tmux gives a window opened with no `-c`
+	 * (`[측정 ×2]`, module header). The default is that inherited fact rather than a
+	 * convenience, so a caller that omits it still names the truth to codex. */
+	launchCwd: string = process.cwd(),
 ): string[] {
 	switch (backend) {
 		case "pi":
@@ -307,6 +340,8 @@ export function buildBackendArgs(
 			return [
 				"--remote",
 				`unix://${resolveCodexDefaultSocketPath(env)}`,
+				"-C",
+				launchCwd,
 				"--model",
 				model,
 				"--dangerously-bypass-approvals-and-sandbox",
@@ -418,6 +453,12 @@ export interface FreshCallPlacement {
 	tmuxSession: string;
 }
 
+/** Which rule chose the start directory. Mirrors `FreshCallSeatSource` deliberately: one axis,
+ * one NAMED source, and no third value that means "we worked it out". `codex-caller-record` is
+ * the codex caller's own record cwd, consulted only when the caller requested none (#95 lane C).
+ */
+export type FreshCallCwdSource = "requested" | "codex-caller-record";
+
 export type FreshCallSeatSource = "requested" | "codex-title-anchor";
 export interface FreshCallSeat {
 	tmuxSession: string;
@@ -456,10 +497,14 @@ export function selectFreshCallSeat(placement: FreshCallPlacement | undefined): 
 export interface FreshCallReceipt extends WindowHandle {
 	backend: FreshCallBackend;
 	model: string;
-	/** The REQUESTED start directory — present only when the caller supplied one. The same kind
-	 * of fact as `runtimePath`: what tmux was asked for, never an observation of where the pane
-	 * landed. */
+	/** The start directory this launch CHOSE — present only when one was chosen: the caller's
+	 * requested cwd, or a codex caller's own record cwd when it requested none. The same kind of
+	 * fact as `runtimePath`: what tmux was asked for, never an observation of where the pane
+	 * landed. ABSENT means no directory was named at all and the pane inherits this process's —
+	 * that inheritance is not invented into a receipt field here. */
 	cwd?: string;
+	/** Which rule chose `cwd`. Present exactly when `cwd` is. */
+	cwdSource?: FreshCallCwdSource;
 	/** The caller-REQUESTED session name. The RESOLVED target is the inherited `sessionId`, which
 	 * is the session the window is actually in. Absent for `codex-title-anchor`, which has no
 	 * name to echo: a caller's own pane was OBSERVED, not requested by name, and inventing one
@@ -563,6 +608,14 @@ export function buildFreshCallArgs(
  * citizen, and it carries that citizen's `nativeSessionId` (the `_meta.threadId` the vendor put
  * on this very request). This module never resolves it, never reads `_meta`, and never asks a
  * store who is calling — it only turns a thread id into a pane, and only for placement.
+ *
+ * `callerCwd` rides the same surface rule and the same condition: it is that codex citizen's
+ * RECORD cwd, and it exists because a codex caller's process directory is NOT its own (the
+ * bridge runs as a child of the operator-owned app-server, so the directory that process
+ * reports is the app-server's — #95 lane C §2). It is consulted only when the caller requested
+ * no cwd, so an
+ * explicit request always wins, and this module never looks a cwd up, resolves it, or infers it
+ * from a seat, a workspace map or a project name.
  */
 export function freshCall(
 	params: {
@@ -573,6 +626,7 @@ export function freshCall(
 		placement?: FreshCallPlacement;
 		callerGardenId: string | null;
 		callerNativeSessionId?: string;
+		callerCwd?: string;
 	},
 	env: NodeJS.ProcessEnv = process.env,
 	nonce: string = mintNonce(),
@@ -588,8 +642,27 @@ export function freshCall(
 	if (task.length > TASK_MAX_CHARS) return { ok: false, reason: "task-too-long" };
 	// ONLY `undefined` and the exact empty string mean "no cwd". Everything else is the literal
 	// value — deliberately untrimmed, so a whitespace-mangled path is refused loudly by the
-	// classification below instead of being silently repaired into a different directory.
-	const cwd = params.cwd === undefined || params.cwd === "" ? undefined : params.cwd;
+	// classification below instead of being silently repaired into a different directory. The
+	// caller's own record directory answers the SAME two-value emptiness rule and is consulted
+	// ONLY second: an explicit request always wins, and a caller that supplies neither leaves the
+	// pane to inherit this process's directory exactly as before — a pi caller's argv is
+	// byte-identical, because its process directory IS its own and a `-c` token would change
+	// nothing about where that window lands.
+	const requestedCwd = params.cwd === undefined || params.cwd === "" ? undefined : params.cwd;
+	const callerCwd = params.callerCwd === undefined || params.callerCwd === "" ? undefined : params.callerCwd;
+	const chosenCwd: { value: string; source: FreshCallCwdSource } | undefined =
+		requestedCwd !== undefined
+			? { value: requestedCwd, source: "requested" }
+			: callerCwd !== undefined
+				? { value: callerCwd, source: "codex-caller-record" }
+				: undefined;
+	const cwd = chosenCwd?.value;
+	// SEAM (#95 lane C): a caller-record directory is classified by the SAME shared leaf and
+	// answers the same four `cwd-*` reasons, whose hint text says REQUESTED. When a codex
+	// caller's recorded directory has since been deleted, the repair that hint points at is
+	// still the right one — that directory does not exist — but the noun belongs to the caller
+	// rather than to the request. Kept shared on purpose: doubling the reason set for a wording
+	// difference would double the refusal contract two surfaces and one leaf already agree on.
 	if (cwd !== undefined) {
 		const badCwd = classifyTmuxCwd(cwd);
 		if (badCwd) return { ok: false, reason: badCwd };
@@ -670,7 +743,12 @@ export function freshCall(
 		bootstrapPayload: buildOmpBootstrapPayload({ callerGardenId: params.callerGardenId, nonce, task }),
 	};
 	const run = runTmux(
-		buildFreshCallArgs(targetSessionId, runtimePath, buildBackendArgs(params.backend, composition, model, env), cwd),
+		buildFreshCallArgs(
+			targetSessionId,
+			runtimePath,
+			buildBackendArgs(params.backend, composition, model, env, cwd),
+			cwd,
+		),
 		env,
 	);
 	assertTmuxOk("new-window", run);
@@ -697,7 +775,7 @@ export function freshCall(
 			...fields,
 			backend: params.backend,
 			model,
-			...(cwd === undefined ? {} : { cwd }),
+			...(chosenCwd === undefined ? {} : { cwd: chosenCwd.value, cwdSource: chosenCwd.source }),
 			...(selectedSeat === null
 				? anchoredSeat
 					? { tmuxSessionSource: "codex-title-anchor" as const }
@@ -770,7 +848,11 @@ export function renderFreshCall(result: FreshCallResult): { text: string; isErro
 			`[entwurf fresh call →]\n` +
 			`  backend:  ${r.backend} (${r.runtimePath})\n` +
 			`  model:    ${r.model} (requested on the runtime CLI)\n` +
-			(r.cwd === undefined ? "" : `  cwd:      ${r.cwd} (requested start directory — not an observation)\n`) +
+			(r.cwd === undefined
+				? ""
+				: r.cwdSource === "codex-caller-record"
+					? `  cwd:      ${r.cwd} (the Codex caller's own record directory, used because no cwd was requested — not an observation)\n`
+					: `  cwd:      ${r.cwd} (requested start directory — not an observation)\n`) +
 			(r.tmuxSessionSource === undefined
 				? ""
 				: r.tmuxSessionSource === "codex-title-anchor"

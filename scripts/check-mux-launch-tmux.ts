@@ -33,6 +33,10 @@
  *   - #95 lane B's COMPOSITION: a Codex caller's omitted-placement fresh call lands in the
  *     session its own titled pane is in, an explicit seat still overrides it, and an
  *     unresolvable anchor refuses with the server byte-identical
+ *   - #95 lane C: WHERE a sibling starts — a caller's record directory places the pane, an
+ *     explicit request still wins, an omitted one inherits THIS process's directory rather
+ *     than the target session's `session_path`, and codex carries that same directory to its
+ *     thread as `-C`, read off the runtime's own recorded argv
  */
 
 import assert from "node:assert/strict";
@@ -124,9 +128,14 @@ async function main(): Promise<void> {
 	const runtimeDir = fs.mkdtempSync(path.join(process.env.XDG_RUNTIME_DIR ?? "/tmp", "entwurf-mux-rt-"));
 	// A long-lived stand-in for the official runtime. `exec` so no shell survives: the pane's
 	// process must be the runtime itself for the pane_pid claim to mean anything.
+	// Each stand-in also DUMPS its own argv beside itself before it sleeps. That file is the
+	// only oracle in this repo for "what actually reached the runtime", independent of the
+	// builder that composed it — #95 lane C needs it because codex's thread directory rides a
+	// VENDOR flag whose absence is silent (the thread simply opens in the app-server's repo).
 	const runtime = path.join(runtimeDir, "pi");
-	fs.writeFileSync(runtime, "#!/bin/sh\nexec sleep 900\n", { mode: 0o755 });
-	fs.writeFileSync(path.join(runtimeDir, "codex"), "#!/bin/sh\nexec sleep 900\n", { mode: 0o755 });
+	const DUMP_ARGV = '#!/bin/sh\nprintf \'%s\\n\' "$@" > "$0.argv"\nexec sleep 900\n';
+	fs.writeFileSync(runtime, DUMP_ARGV, { mode: 0o755 });
+	fs.writeFileSync(path.join(runtimeDir, "codex"), DUMP_ARGV, { mode: 0o755 });
 
 	try {
 		assert.equal(fx("-f", "/dev/null", "new-session", "-d", "-s", SESSION).status, 0, "fixture new-session");
@@ -568,6 +577,141 @@ async function main(): Promise<void> {
 
 				fx("kill-session", "-t", tuiSessionId);
 				ok("caller seat: the fixture is back to one session", sessionCount() === 1);
+			}
+
+			// (vi) #95 lane C: WHERE the sibling starts, read off the pane and off the runtime's
+			// own argv. The deterministic gate can pin which value the composition selects; what
+			// only tmux and the runtime can answer is whether that value actually placed the
+			// pane, and whether the vendor token carrying it survived to the process. A codex
+			// thread's directory is the sharper half: with no `-C` the TUI attaches to the
+			// operator's app-server and the THREAD opens in the app-server's repo while the pane
+			// sits somewhere else entirely — a divergence no receipt in this repo would show.
+			{
+				const callerRepo = path.join(runtimeDir, "caller-repo");
+				const requestedRepo = path.join(runtimeDir, "requested-repo");
+				const sessionRepo = path.join(runtimeDir, "session-repo");
+				for (const dir of [callerRepo, requestedRepo, sessionRepo]) fs.mkdirSync(dir);
+				const paneCwd = (paneId: string): string =>
+					fxLines("display-message", "-p", "-t", paneId, "#{pane_current_path}")[0];
+				const argvAt = (backend: "pi" | "codex"): string => `${path.join(runtimeDir, backend)}.argv`;
+				/** `[측정]` a pane's `#{pane_current_path}` is read from the child's `/proc` at
+				 * QUERY time, and tmux chdirs in that child AFTER forking it — so a read taken
+				 * straight after the launch receipt can still answer the SERVER's directory and
+				 * make a correct `-c` look ignored. The runtime's own argv dump is the settle
+				 * signal: once it exists the fixture is running and has been chdir'ed. Bounded,
+				 * never unbounded — a runtime that never starts is a failed assertion, not a hang.
+				 * Each launch clears the previous file first, so a stale dump can never be read
+				 * as this launch's. */
+				const clearArgv = (backend: "pi" | "codex"): void => fs.rmSync(argvAt(backend), { force: true });
+				const awaitRuntime = (backend: "pi" | "codex"): void => {
+					const end = Date.now() + 5000;
+					while (!fs.existsSync(argvAt(backend)) && Date.now() < end) spawnSync("sleep", ["0.05"]);
+					assert.ok(fs.existsSync(argvAt(backend)), `the ${backend} fixture started and recorded its argv`);
+				};
+				const runtimeArgv = (backend: "pi" | "codex"): string[] => {
+					awaitRuntime(backend);
+					const argv = fs.readFileSync(argvAt(backend), "utf8").split("\n").slice(0, -1);
+					clearArgv(backend);
+					return argv;
+				};
+				const freshWith = (over: { backend?: "pi" | "codex"; cwd?: string; callerCwd?: string }) =>
+					freshCall(
+						{
+							backend: over.backend ?? "pi",
+							model: "fixture/model",
+							task: "fixture task",
+							cwd: over.cwd,
+							callerCwd: over.callerCwd,
+							callerGardenId: "20260101T000000-fixture",
+						},
+						inherited,
+					);
+
+				clearArgv("pi");
+				const fromRecord = freshWith({ callerCwd: callerRepo });
+				assert.ok(fromRecord.ok, `the caller-cwd fresh call must succeed: ${fromRecord.ok ? "" : fromRecord.reason}`);
+				awaitRuntime("pi");
+				ok(
+					"caller cwd: a caller that HAS a record directory opens the pane THERE, not in this process's directory",
+					paneCwd(fromRecord.receipt.paneId) === callerRepo &&
+						callerRepo !== process.cwd() &&
+						fromRecord.receipt.cwd === callerRepo &&
+						fromRecord.receipt.cwdSource === "codex-caller-record",
+				);
+				ok(
+					"caller cwd: the runtime argv carries no tmux carrier — the directory reached the PANE through `-c`",
+					!runtimeArgv("pi").includes("-c"),
+				);
+				closeWindow(fromRecord.receipt, inherited);
+
+				clearArgv("pi");
+				const requested = freshWith({ cwd: requestedRepo, callerCwd: callerRepo });
+				assert.ok(requested.ok, `the requested-cwd fresh call must succeed: ${requested.ok ? "" : requested.reason}`);
+				awaitRuntime("pi");
+				ok(
+					"caller cwd: an explicit request still wins over the caller's record directory, and the receipt says which rule chose it",
+					paneCwd(requested.receipt.paneId) === requestedRepo &&
+						requested.receipt.cwd === requestedRepo &&
+						requested.receipt.cwdSource === "requested",
+				);
+				closeWindow(requested.receipt, inherited);
+				runtimeArgv("pi");
+
+				// The inherited case, and the measurement `-C`'s default rests on: with no `-c`
+				// the pane takes the directory of the process that ran `new-window` — NOT the
+				// target session's `session_path`, which is why a seat in another directory is
+				// what makes this readable at all.
+				assert.equal(
+					fx("new-session", "-d", "-s", `${SESSION}-cwd`, "-c", sessionRepo).status,
+					0,
+					"fixture session rooted elsewhere",
+				);
+				const seatCwdId = fxLines("list-windows", "-t", `=${SESSION}-cwd`, "-F", "#{session_id}")[0];
+				clearArgv("pi");
+				const inherit = freshCall(
+					{
+						backend: "pi",
+						model: "fixture/model",
+						task: "fixture task",
+						placement: { tmuxSession: `${SESSION}-cwd` },
+						callerGardenId: "20260101T000000-fixture",
+					},
+					inherited,
+				);
+				assert.ok(inherit.ok, `the inherited-cwd fresh call must succeed: ${inherit.ok ? "" : inherit.reason}`);
+				awaitRuntime("pi");
+				ok(
+					"caller cwd: with NO directory named, the pane inherits this process's — not the target session's session_path — and the receipt invents nothing",
+					paneCwd(inherit.receipt.paneId) === process.cwd() &&
+						process.cwd() !== sessionRepo &&
+						inherit.receipt.sessionId === seatCwdId &&
+						inherit.receipt.cwd === undefined &&
+						inherit.receipt.cwdSource === undefined,
+				);
+				closeWindow(inherit.receipt, inherited);
+				runtimeArgv("pi");
+				fx("kill-session", "-t", seatCwdId);
+
+				// The codex half: the SAME value the pane got, carried to the vendor as `-C`,
+				// read off the process's own argv rather than off the builder that wrote it.
+				clearArgv("codex");
+				const codexThread = freshWith({ backend: "codex", callerCwd: callerRepo });
+				assert.ok(codexThread.ok, `the codex fresh call must succeed: ${codexThread.ok ? "" : codexThread.reason}`);
+				const codexArgv = runtimeArgv("codex");
+				const dashC = codexArgv.indexOf("-C");
+				ok(
+					"codex thread cwd: the vendor argv carries `-C <dir>` with the SAME directory the pane landed in — one value, two carriers",
+					dashC >= 0 &&
+						codexArgv[dashC + 1] === callerRepo &&
+						codexArgv.filter((a) => a === "-C").length === 1 &&
+						paneCwd(codexThread.receipt.paneId) === callerRepo,
+				);
+				ok(
+					"codex thread cwd: the flag rides the SAME argv as the remote attachment — an attached thread with no override takes the app-server's directory",
+					codexArgv.includes("--remote") && dashC > codexArgv.indexOf("--remote"),
+				);
+				closeWindow(codexThread.receipt, inherited);
+				ok("caller cwd: the fixture is back to one session", sessionCount() === 1);
 			}
 		}
 	} finally {

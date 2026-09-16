@@ -788,10 +788,19 @@ server.tool(
 		// consumer is the placement below: a Codex caller with no explicit seat opens its sibling
 		// beside its own TUI pane, found by that thread's terminal title (#95 lane B).
 		let callerNativeSessionId: string | undefined;
+		// The SAME citizen's record cwd, set under the SAME condition and carrying no further
+		// authority: `envelope.cwd` is only the record's directory when the selected sender is
+		// that codex citizen, so the two are derived from one fact rather than read separately.
+		// It exists because `process.cwd()` here is the operator-owned APP-SERVER's directory —
+		// this bridge is its MCP child — so a codex caller that names no cwd would otherwise open
+		// every sibling in the app-server's repo (#95 lane C §1). The composition consults it only
+		// when the tool call requested no cwd of its own.
+		let callerCwd: string | undefined;
 		try {
 			const self = await buildAuthoritativeSelfEnvelope({ requestMeta: extra._meta });
 			callerGardenId = self.envelope.sessionId;
 			callerNativeSessionId = self.codexThreadId;
+			callerCwd = self.codexThreadId === undefined ? undefined : self.envelope.cwd;
 		} catch (err) {
 			// ONE error is a legitimate answer here: this host has no authoritative identity at all
 			// (no pi carrier inherited, no trusted marker written), so the sibling would have nowhere
@@ -818,7 +827,7 @@ server.tool(
 			const missing = targetMissing ?? callerMissing;
 			const result = missing
 				? ({ ok: false, reason: missing } as const)
-				: freshCall({ backend, model, task, cwd, placement, callerGardenId, callerNativeSessionId });
+				: freshCall({ backend, model, task, cwd, placement, callerGardenId, callerNativeSessionId, callerCwd });
 			const rendered = renderFreshCall(result);
 			return rendered.isError ? textErr(rendered.text) : textOk(rendered.text);
 		} catch (err) {
