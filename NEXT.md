@@ -151,8 +151,16 @@ CHANGELOG `## Unreleased`가 구현 범위 `v0.15.1..19ad90c` **30커밋** 전�
       terra 측정/리뷰 3회(`33daa2`/`005234`/`374458`; Blocker 1 → `a843526`에서 닫힘). 바닥이 잡은 것 둘(stale 뮤턴트,
       stale dist)과 오라클 결함 하나(`wants_reply` 모양 비교)는 우회 없이 수리. 마감 정본은 #95 comment 5692716726.
 
-현재 좌표: 1–29 완료 → **lane B 로컬 main 완료, GLG push 대기** → push 후 exact-SHA CI(qualification body는 게이트
-스크립트가 움직였으므로 반드시 돈다) → 다음 컷 prepare는 별도 권한. #109 openclaw 다리는 **닫혔다** · **0.16.1 make는 열린 채 PAUSED**.
+- [x] **30. #95 lane C — Codex thread cwd가 pane을 따른다 (2026-09-16 오후, local main, push 없음)** — GLG 첫 실사용에서
+      발견(자리는 맞고 cwd만 app-server 것). 벤더: `--remote` TUI는 `-C/--cd`로만 thread cwd를 넘긴다
+      (`shared_options.rs:66-68`, `startup_orchestration.rs:191-194`, `app_server_session.rs:2022-2033`). 수리 `b25873e`:
+      Codex argv `-C <dir>` 항상, dir = 요청 → Codex caller record cwd → launch 프로세스 cwd; Codex caller의 생략 cwd는 tmux `-c`로
+      명시, pi caller argv 바이트 불변, receipt `cwdSource`. LIVE `b3e07dc`에서 **65 assertions exit 0**(SHA `712050e7…`),
+      영수증 `d0f2a86`. 뮤턴트 44→51. **이 SHA에서 qualification·check:full 미실행 — host vs CI는 GLG 결정.**
+      팀: 코디네이터 Fable · 구현 Opus `20260916T151809-d07e06`(새 세션). 마감 정본 #95 마지막 댓글.
+
+현재 좌표: 1–30 완료 → **lane B+C 로컬 main 완료(HEAD `d0f2a86`), GLG push 대기** → push 후 exact-SHA CI(qualification body는 게이트
+스크립트가 움직였으므로 반드시 돈다; lane C SHA의 긴 바닥은 로컬에서 안 돌렸다) → 다음 컷 prepare는 별도 권한. #109 openclaw 다리는 **닫혔다** · **0.16.1 make는 열린 채 PAUSED**.
 푸시·태그·publish는 금지; `entwurf-release`의 make/publish 별도 권한이다.
 
 # NOW — stem: 0.21.0 prepare (#111 + #112 + #95)
@@ -163,7 +171,7 @@ CHANGELOG `## Unreleased`가 구현 범위 `v0.15.1..19ad90c` **30커밋** 전�
   **은퇴**로 결정했다 — *"코덱스의 거처를 만들어주자는 말은 그냥 기술이 안돼서 무마한 개념이야."*
   UX 대칭은 같은 transport를 꾸미는 말이 아니라, backend마다 자기 transcript·auth·native tools를
   보존한 채 **부른 사람 옆에 보이는 형제**로 부르고 불리는 데 있다.
-- **좌표:** lane B **완료** = `d0a7b8c` (`b36d916` caller seat + D1 은퇴 · `b17ff04` NEXT carry · `ade59a1` stale
+- **좌표:** lane B **완료** = `d0a7b8c`, lane C **완료** = `d0f2a86`(Codex thread cwd = pane cwd, LIVE 65) (`b36d916` caller seat + D1 은퇴 · `b17ff04` NEXT carry · `ade59a1` stale
   mutant 수리 · `0ad3e21` affected-set 규칙 · `a843526` 은퇴 어휘 전수 · `a4d9f98` `wants_reply` 오라클 · `d0a7b8c`
   LIVE 영수증). caller-seat **LIVE green 56 assertions exit 0**(2026-09-16, A=`$30` ≠ S=`$2`), qualification 495/495,
   frozen `check:full` exit 0 337s. **다음 한 수 = GLG의 push 결정.** push 뒤 CI exact-SHA 4축 + qualification body를
