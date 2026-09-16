@@ -244,7 +244,7 @@ function inspectTmuxCoordinate(label: string, env: NodeJS.ProcessEnv): TmuxCoord
  * The session NAME behind a coordinate. Read on its own rather than added to the shared
  * `TMUX_COORDINATE_FORMAT`: that row's field count is a pinned contract with its own
  * deterministic oracle, and this card needs a name for exactly two reasons — to hand the fresh
- * call a seat it can address, and to prove the app-server really sits in the `codex` home.
+ * hand the fresh call a seat it can address, and to record which rooms A and S actually were.
  */
 function tmuxSessionName(label: string, env: NodeJS.ProcessEnv, paneId: string): string {
 	const inspected = spawnSync("tmux", ["display-message", "-p", "-t", paneId, "#{session_name}"], {
@@ -679,7 +679,7 @@ async function run(): Promise<void> {
 	const appServerCoordinate = inspectTmuxCoordinate("Codex app-server/MCP inherited seat", appServerEnv);
 	const fixtureCoordinate = inspectTmuxCoordinate("fixture/initial-Pi caller seat", process.env);
 	ok(
-		"the fixture/initial-Pi seat and Codex home share one tmux server but are different sessions",
+		"the fixture/initial-Pi seat S and the app-server seat A share one tmux server but are different sessions",
 		fixtureCoordinate.serverPid === appServerCoordinate.serverPid &&
 			fixtureCoordinate.sessionId !== appServerCoordinate.sessionId,
 		`fixture=${fixtureCoordinate.serverPid}/${fixtureCoordinate.sessionId} app-server=${appServerCoordinate.serverPid}/${appServerCoordinate.sessionId}`,
@@ -832,12 +832,12 @@ async function run(): Promise<void> {
 	openedWindows.push(initialPiWindow);
 	ok("the initial Pi LAUNCH receipt carries its exact callback nonce", initialPiNonce.length > 0);
 	ok(
-		"the initial Pi caller is visible in the fixture's non-Codex session",
+		"the initial Pi caller is visible in the fixture's own session S, not the app-server's A",
 		initialPiTmuxSession === fixtureCoordinate.sessionId && initialPiTmuxSession !== appServerCoordinate.sessionId,
-		`initial-pi=${initialPiTmuxSession} fixture=${fixtureCoordinate.sessionId} codex-home=${appServerCoordinate.sessionId}`,
+		`initial-pi=${initialPiTmuxSession} fixture=${fixtureCoordinate.sessionId} app-server=${appServerCoordinate.sessionId}`,
 	);
 	receipts["3-initial-caller-pi-coordinate"] =
-		`session=${initialPiTmuxSession}\nwindow=${initialPiWindow}\ncodex-home-session=${appServerCoordinate.sessionId}`;
+		`session=${initialPiTmuxSession}\nwindow=${initialPiWindow}\napp-server-session=${appServerCoordinate.sessionId}`;
 
 	let drainedCount = 0;
 	const drain = (): void => {

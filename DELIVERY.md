@@ -152,10 +152,11 @@ operator starts app-server in existing exact tmux session `codex`
 The standalone embedded TUI remains outside this rail: the 2026-09-08 measurement
 found no idle receive route equivalent to the app-server. `turn/steer` is active-turn
 steering, not idle wake. Entwurf does not start, stop, supervise, or health-loop the
-app-server. The operator starts it **inside the existing exact tmux session `codex`**:
+app-server. The operator starts it in a tmux session **of their own choosing**:
 
 ```bash
-# Run from a pane in the operator-owned tmux session named exactly `codex`.
+# Run from a pane in the operator-owned tmux session that will hold the app-server.
+# For the LIVE acceptance that session must NOT be the one the Pi/Codex pair runs in.
 CODEX_HOME="${CODEX_HOME:-$HOME/.codex}"
 mkdir -p "$CODEX_HOME/app-server-control"
 codex app-server --listen "unix://$CODEX_HOME/app-server-control/app-server-control.sock"
@@ -164,7 +165,6 @@ codex app-server --listen "unix://$CODEX_HOME/app-server-control/app-server-cont
 #95 D1 (GLG, 2026-09-16) retired the requirement that this session be named `codex`, and with it the
 rule that an omitted-placement Codex TARGET selected it. The operator still owns the app-server and
 still chooses its room; Entwurf neither creates nor supervises it, and a missing app-server rejects.
-The block above keeps `codex` only as the name this document has always used for that session.
 
 Since #95 lane B the outbound direction no longer rides the app-server's inherited
 `TMUX`/`TMUX_PANE`: a Codex CALLER with no explicit placement opens its sibling beside its own
@@ -239,11 +239,12 @@ existing tmux session: codex
         --dangerously-bypass-approvals-and-sandbox <callback-first prompt>
 ```
 
-With `placement` omitted, the fresh composition resolves the exact existing `codex` session name
-to its native `$id` before mutation. Other backends retain caller-session default placement; an
-explicit seat remains an expert override. The amended preflight must certify the state-backed birth
-closure digests, vendor trust receipt, exact MCP/env boundary, `thread-title`, and app-server socket
-before tmux mutation. The callback spelling is `mcp__entwurf_bridge__entwurf_v2`; the new garden id
+With `placement` omitted the seat follows the CALLER: a Codex citizen's own TUI pane, resolved from
+the `thread-id` in that pane's title to a native `$id` before mutation, with 0 or 2+ matches refused
+and no fallback; every other caller keeps caller-session default placement. An explicit seat remains
+an expert override. The preflight must certify the state-backed birth closure digests, vendor trust
+receipt, exact MCP/env boundary, `thread-title`, `terminal_title`, and app-server socket before tmux
+mutation. The callback spelling is `mcp__entwurf_bridge__entwurf_v2`; the new garden id
 comes only from its sender envelope. There is no Codex resume, watcher, session/app-server creator,
 or lifecycle supervisor.
 

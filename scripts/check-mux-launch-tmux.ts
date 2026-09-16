@@ -401,7 +401,7 @@ async function main(): Promise<void> {
 				`the omitted-placement Codex call must succeed: ${omittedCodex.ok ? "" : omittedCodex.reason}`,
 			);
 			ok(
-				"no codex home: an omitted Codex seat is caller-local and names NO seat, even with a session called `codex` right there",
+				"no fixed home: an omitted Codex seat is caller-local and names NO seat, even with a session called `codex` right there",
 				omittedCodex.receipt.sessionId === placement.sessionId &&
 					omittedCodex.receipt.sessionId !== decoyHomeId &&
 					omittedCodex.receipt.tmuxSession === undefined &&

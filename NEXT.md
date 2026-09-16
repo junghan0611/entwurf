@@ -138,7 +138,7 @@ CHANGELOG `## Unreleased`가 구현 범위 `v0.15.1..19ad90c` **30커밋** 전�
       읽어 자기 재이식을 못 본 것이었다 — 그 셀의 주체는 세션 시작 시 **디스크의 파일**이다. 게이트가 자기 일을 했다.
 
 - [x] **27. #111 + #112 + #95 local-main landing** — `77b2ade` compaction send guard,
-      `741cfcd` bounded peer observation, `5f81e86` explicit Codex home admission, handoff close
+      `741cfcd` bounded peer observation, `5f81e86` explicit Codex home admission(#95 D1이 은퇴), handoff close
       `00cba23`; #111/#112/#95 CLOSED. Push 없음.
 - [x] **28. 0.21.0 prepare** — source-observer amendment(+lazy transcript-path 수리, 475/43) · CHANGELOG/version 승격 · `check:full` exit 0 502s · `release-gate --cut` **MUST 24/0/0, cut OK, qualification 475/475** · P9 2회 · prep commit.
 
@@ -148,15 +148,17 @@ CHANGELOG `## Unreleased`가 구현 범위 `v0.15.1..19ad90c` **30커밋** 전�
 
 # NOW — stem: 0.21.0 prepare (#111 + #112 + #95)
 
-- **Stem:** **0.21.0을 준비한다.** 새 Codex native citizen과 operator-owned `codex` home은
-  단순 patch가 아니라 보이는 자리까지 포함한 새 지원 축이다. #111 compaction false-delivery와
-  #112 peers 성능 수리도 함께 실리므로 GLG가 minor로 올렸다. UX 대칭은 같은 transport를 꾸미는
-  말이 아니라, backend마다 자기 transcript·auth·native tools를 보존한 채 **정해진 자리에서 보이는
-  형제**로 부르고 불리는 데 있다; Codex는 exact `codex` home, Claude는 operator가 고른 tmux seat가
-  그 맥락을 줄 수 있다.
-- **좌표:** local main = `462fea7` (`00cba23` 뒤 P9 fixture-reap 수리), `origin/main`보다
-  23 commits ahead; package release-prep worktree는 0.21.0. 구현 candidate는 Codex home LIVE
-  57 assertions, qualification 460/460 purity green, receipt-bearing `check:full` exit 0 501s.
+- **Stem:** **#95 lane B(caller seat)를 닫고 다음 컷을 준비한다.** 0.21.0은 operator가 `codex`라는
+  이름의 tmux home을 유지하는 것을 전제로 나갔고, lane B가 그 전제를 없앴다: Codex **caller**는 자기
+  TUI pane 제목에 실린 `thread-id`로 찾은 자기 자리 옆에 형제를 연다. GLG가 2026-09-16 D1을
+  **은퇴**로 결정했다 — *"코덱스의 거처를 만들어주자는 말은 그냥 기술이 안돼서 무마한 개념이야."*
+  UX 대칭은 같은 transport를 꾸미는 말이 아니라, backend마다 자기 transcript·auth·native tools를
+  보존한 채 **부른 사람 옆에 보이는 형제**로 부르고 불리는 데 있다.
+- **좌표:** lane B candidate = `0ad3e21` (`b36d916` caller seat + D1 은퇴, `b17ff04` NEXT carry,
+  `ade59a1` stale mutant 수리, `0ad3e21` affected-set 문서). qualification 495/495 purity green,
+  frozen `check:full` exit 0 327s. **caller-seat LIVE는 미실행** — operator app-server가 Pi/Codex
+  쌍과 다른 세션에 떠야 하고, GLG의 go 대기. 0.21.0 자체의 좌표(`462fea7`, Codex home LIVE
+  57 assertions, qualification 460/460, `check:full` 501s)는 그 컷의 역사로 남는다.
   첫 prepare P5는 OMP MCP가 삭제된 `/tmp/snapshot-probe`를 가리킨 host drift와 Codex 필수 env
   누락을 정직하게 잡았고, P9는 qualification마다 남은 Copilot stub 10개를 찾아 `462fea7`로
   assertion 전 reap을 복구했다. 두 번째 P5는 MUST 23/1/0으로 붉었다. source transcript가
@@ -238,13 +240,13 @@ WSL2 는 계약상 리눅스의 연장이라 새 작업 없음.
   request-scoped metadata identity(join 충돌 fail-loud) · operator-owned app-server
   `thread/loaded/list` probe · one-shot `codex queue` native-push(**재시도 0**) · user
   MCP/status-line atom · `entwurf_fresh_call backend=codex`. mailbox/receiver/resume/ACP 없음.
-- **GLG placement 결정:** operator가 기존 exact `codex` tmux home 하나를 소유하고 app-server와
-  supported Codex TUIs를 거기 둔다. omitted-placement Codex fresh는 그 이름을 exact lookup하며,
-  explicit placement는 expert override로 우선한다. Codex의 MCP child는 app-server의 `TMUX`/
-  `TMUX_PANE`을 받아 outbound Pi를 같은 home에 연다. Entwurf는 session/app-server를 만들거나
-  감독하지 않고 pane을 추측하지 않는다. request→arbitrary-attached-TUI seat join은 여전히 없으며
-  그 넓은 topology는 unsupported/unclaimed다.
-- **Home LIVE accepted (2026-09-12):** 57 assertions, exit 0. initial Pi `20260912T140748-355654`
+- **GLG placement 결정 (2026-09-16, D1 = 은퇴):** 고정 `codex` home은 **끝났다.** placement를
+  생략하면 자리는 **부르는 쪽**을 따른다: Codex caller는 자기 TUI pane 옆(pane 제목의 `thread-id`로
+  매칭, 0개·2개 이상이면 거절·폴백 없음), 그 외에는 caller 자기 session. explicit placement는 여전히
+  expert override로 우선한다. app-server는 operator가 원하는 자리에 두면 되고 Entwurf는 만들거나
+  감독하지 않는다. pane 제목은 placement 입력일 뿐 주소·liveness·delivery 증거가 아니다.
+  request→arbitrary-attached-TUI seat join은 여전히 없으며 그 넓은 topology는 unsupported/unclaimed다.
+- **Home LIVE accepted (2026-09-12) — 은퇴한 계약의 역사:** 57 assertions, exit 0. initial Pi `20260912T140748-355654`
   `$150/@397` → omitted Codex `20260912T140800-8bc8d9` `$158/@398` → outbound Pi
   `20260912T140829-a08178` `$158/@399`; app-server PID `1693273` stayed at `$158/@390/%390`.
   Exact callbacks and addressed delivery passed both ways. Receipt/digest는 `DELIVERY.md`가 진다.

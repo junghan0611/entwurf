@@ -19,7 +19,7 @@ Claude Code / Copilot / Codex / agy / omp / pi
       → control-socket | meta-mailbox | native-push
 ```
 
-[`entwurf_v2`](#entwurf_v2--canonical-dispatch-verb) is the canonical dispatch surface over *existing* garden citizens — live control-socket send, meta-mailbox enqueue, and native-push into a live Antigravity conversation or loaded Codex thread. It starts no process on any rail. `entwurf_fresh_call` is separate lifecycle. With Codex placement omitted, it resolves the exact existing tmux session named `codex`; that operator-owned home holds the app-server and supported Codex TUIs. Missing home or app-server rejects before launch, and Entwurf never creates or supervises either. An explicit `placement.tmuxSession` remains an expert override. Exact 0.153.4 source confirms that arbitrary attached-TUI request→seat inference is unavailable, so Entwurf makes no such claim. Codex has no resume surface.
+[`entwurf_v2`](#entwurf_v2--canonical-dispatch-verb) is the canonical dispatch surface over *existing* garden citizens — live control-socket send, meta-mailbox enqueue, and native-push into a live Antigravity conversation or loaded Codex thread. It starts no process on any rail. `entwurf_fresh_call` is separate lifecycle. With placement omitted the seat follows the CALLER: a Codex citizen opens beside its own TUI pane, found by the `thread-id` in that pane's terminal title, and 0 or 2+ matching panes reject with no fallback; every other caller opens in its own session. A missing app-server rejects before launch, and Entwurf never creates or supervises it. An explicit `placement.tmuxSession` remains an expert override. Exact 0.153.4 source confirms that arbitrary attached-TUI request→seat inference is unavailable, so Entwurf makes no such claim. Codex has no resume surface.
 
 **Garden id is deliberate vocabulary.** It is not a decorative synonym for session id, worker, delegate, or subagent. The unfamiliar word is a guard: each harness keeps its own identity and transcript, while `entwurf` supplies a narrow addressable surface between siblings.
 
@@ -454,8 +454,8 @@ The Claude ACP backend keeps its native model / API / tools; entwurf shapes only
 
 Codex is not an ACP backend here. Its native-push lane, supported in 0.21.0, uses `SessionStart`
 for birth, strict request `_meta` for who-sent, and a loaded app-server thread as the live route.
-Its supported visible topology is one operator-owned existing tmux home named `codex`; omitted
-Codex fresh placement selects it, while unrestricted attached-TUI seat inference is not claimed.
+A Codex CALLER with placement omitted opens its sibling beside its own TUI pane, matched by the
+`thread-id` its terminal title carries; a pane whose thread nobody named is never inferred.
 
 Antigravity is also not an ACP backend. It is a native-push citizen: `PreInvocation` supplies birth/sender identity, `entwurf_v2` probes and direct-injects replies into the live conversation, and no mailbox/receiver marker is involved.
 
@@ -487,16 +487,16 @@ LIVE=1 AGY_CONVERSATION_ID=<id> ./run.sh smoke-agy-native-push-live
 # Codex loaded-thread probe (pre-amendment evidence; not first-release acceptance):
 LIVE=1 CODEX_LIVE_THREAD_ID=<threadId> ./run.sh smoke-codex-native-push-live
 
-# Codex explicit-home acceptance. Run from a DIFFERENT tmux session; the operator-owned
-# app-server and supported Codex TUIs sit in the existing exact `codex` session. Record
-# initial Pi, app-server, fresh Codex, and outbound Pi coordinates separately:
+# Codex caller-seat acceptance. The operator-owned app-server must sit in a session OTHER than
+# the one the Pi/Codex pair runs in — that separation is what tells the caller-pane anchor apart
+# from the app-server's inherited environment. Record all four coordinates separately:
 LIVE=1 ENTWURF_CODEX_APP_SERVER_PID=<existing-app-server-pid> \
   ENTWURF_CODEX_FRESH_MODEL=<codex-model> \
   ENTWURF_CODEX_FRESH_PI_MODEL=<pi-model> \
   ./run.sh smoke-codex-fresh-live
-# This accepts only a real visible Pi → visible Codex → visible Pi run: initial Pi outside
-# a different session from the app-server's, then Codex and its outbound Pi beside it. A fixture first leg
-# may collect receipts but does not satisfy the topology. No arbitrary attached-TUI parity is claimed.
+# This accepts only a real visible Pi → visible Codex → visible Pi run: initial Pi in a session
+# other than the app-server's, then Codex and its outbound Pi beside it. A fixture first leg may
+# collect receipts but does not satisfy the topology. No arbitrary attached-TUI parity is claimed.
 
 # ACP plugin LIVE acceptance — need the operator's local Claude auth/credit:
 LIVE=1 ./run.sh smoke-acp-socket-citizen-live   # turn-free socket citizenship (S1)

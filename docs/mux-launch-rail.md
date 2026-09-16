@@ -36,8 +36,8 @@ tmux server
 ```
 
 사람은 보통 같은 session 안에서 `prefix + 1/2/3/4`로 이동한다. sibling 하나마다 별도 tmux session을
-만드는 구조가 아니다. Codex는 #95 lane B의 좁은 예외다: Codex **caller**는 자기 TUI pane 옆에 열고(제목 앵커),
-omitted-placement Codex fresh가 그 이름을 exact lookup한다. Entwurf가 그 session을 만들지는 않는다.
+만드는 구조가 아니다. Codex는 #95 lane B의 좁은 예외다: Codex **caller**는 자기 TUI pane 옆에 연다 — pane 제목에 실린
+`thread-id`로 찾고, 0개나 2개 이상이면 거절한다. Entwurf는 app-server도 session도 만들지 않는다.
 
 여기서 갈라지는 두 문제를 계속 구분한다.
 

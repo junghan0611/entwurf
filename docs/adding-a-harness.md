@@ -656,7 +656,7 @@ not a fixture that plants `PI_SESSION_ID`/`PI_AGENT_ID` or a self-fetch receipt 
 The release gate strips those ambient variables. The required sequence is real
 `Pi → visible Codex → visible Pi`, and since #95 lane B the topology is the one that can tell the
 caller seat apart from the app-server's inherited environment: the operator-owned app-server stays
-in the existing exact `codex` home A, the initial Pi and the Codex it opens both sit in another
+its own session A, the initial Pi and the Codex it opens both sit in another
 session S, and the Codex-opened outbound Pi must land in S with an omitted placement. A landing in
 A would be the env fallback; S is reachable only through the caller's own pane title, and the
 receipt must name `codex-title-anchor` as the rule that chose it. The receipt records all four

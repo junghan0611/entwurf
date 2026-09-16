@@ -444,19 +444,22 @@ codex app-server --listen "unix://$CODEX_HOME/app-server-control/app-server-cont
 codex --remote "unix://$CODEX_HOME/app-server-control/app-server-control.sock"
 ```
 
-Omitted Codex fresh placement resolves exact `codex` on the caller's tmux server. The app-server's
-`TMUX`/`TMUX_PANE` is forwarded to its MCP child, so a Codex citizen's omitted outbound Pi placement
-stays in that home. It is **not** an arbitrary attached-TUI pane join. Exact Codex 0.153.4 source
-exposes no request→attached-TUI-seat carrier, so clients attached from other sessions have no
-adjacency claim; that wider topology is unsupported and unclaimed. Entwurf does not guess panes,
-create the tmux home, expose a generic app-server manager/API, or start/restart the server. Custom
+Omitted fresh placement follows the CALLER on the caller's own tmux server: a Codex citizen opens
+beside its own TUI pane, matched by the `thread-id` that pane's terminal title carries, with 0 or 2+
+matching panes refused and no fallback. The app-server's `TMUX`/`TMUX_PANE` is still forwarded to its
+MCP child, but it locates stores rather than a seat. It is **not** an arbitrary attached-TUI pane
+join: exact Codex 0.153.4 source exposes no request→attached-TUI-seat carrier, so a pane whose thread
+nobody named has no adjacency claim, and that wider topology stays unsupported and unclaimed. Entwurf
+does not guess panes, create a tmux session, expose a generic app-server manager/API, or
+start/restart the server. Custom
 `CODEX_HOME` and Entwurf roots cross the same explicit `env_vars` boundary. Strict request `_meta`
 identifies the thread caller, not its seat. Delivery uses one `codex queue` invocation with no retry.
 
-The 2026-09-11 loaded-thread run remains pre-amendment native-push/identity evidence. The final
-first-admission acceptance passed on 2026-09-12: real initial Pi outside `codex`, then omitted-placement
-Codex and outbound Pi inside it, with exact callbacks and addressed delivery both ways. `DELIVERY.md`
-owns the 57-assertion receipt, four coordinates, and digest.
+The 2026-09-11 loaded-thread run remains pre-amendment native-push/identity evidence. The
+first-admission acceptance passed on 2026-09-12 under the fixed-home topology #95 D1 later retired:
+real initial Pi outside `codex`, then omitted-placement Codex and outbound Pi inside it, with exact
+callbacks and addressed delivery both ways. `DELIVERY.md` owns that 57-assertion receipt, its four
+coordinates, and its digest as history; the caller-seat re-run is pending.
 
 `entwurf_fresh_call` accepts backend `codex` — supported in 0.21.0 — and requires an explicit model. Its
 preflight must prove the safe birth closure, exact MCP/env atom, `thread-title`, and app-server
