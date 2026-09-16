@@ -65,7 +65,7 @@ import * as process from "node:process";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
-import { codexFreshPreflight } from "../../../pi-extensions/lib/codex-fresh-preflight.ts";
+import { codexCallerFreshPreflight, codexFreshPreflight } from "../../../pi-extensions/lib/codex-fresh-preflight.ts";
 import { controlSocketPathIn, defaultControlSocketDir } from "../../../pi-extensions/lib/control-socket-path.js";
 import { resolveMailboxReceiverFacts } from "../../../pi-extensions/lib/entwurf-deliverability.ts";
 import { listEntwurfFacts } from "../../../pi-extensions/lib/entwurf-fact-provider.ts";
@@ -254,6 +254,15 @@ interface AuthoritativeSelf {
 	envelope: SenderEnvelope;
 	/** meta-session only: WHICH rail carries a reply back. Never inferred from `origin`. */
 	metaDeliveryDomain?: MetaDeliveryDomain;
+	/**
+	 * meta-session/codex ONLY: the `_meta.threadId` that named this caller on THIS request, and
+	 * which the reconciliation above already proved equal to the selected citizen's
+	 * `nativeSessionId`. It rides here for exactly one consumer — the fresh-call PLACEMENT,
+	 * which turns it into the caller's own tmux pane through its title (#95 lane B). It is not
+	 * an address, not a reply rail, and not part of the sender envelope: `sessionId` is the only
+	 * thing anyone may send to.
+	 */
+	codexThreadId?: string;
 }
 
 interface SenderRequestContext {
@@ -339,7 +348,7 @@ async function resolveAuthoritativeSender(
 	]);
 	if (!selected) return null;
 	if (codex && codex.identity.gardenId === selected.id) {
-		return buildMetaSenderEnvelope(codex.identity, codex.identity.cwd);
+		return { ...(await buildMetaSenderEnvelope(codex.identity, codex.identity.cwd)), codexThreadId: codex.threadId };
 	}
 	if (marker && marker.identity.gardenId === selected.id) {
 		return buildMetaSenderEnvelope(marker.identity, marker.marker.cwd || cwd, marker);
@@ -712,21 +721,21 @@ server.tool(
 		"sender envelope of that callback is its garden id — that is how you learn the address of something that " +
 		"did not exist a moment ago. This returns a LAUNCH receipt (tmux window/pane plus that nonce) and nothing " +
 		"else: it does NOT mean the runtime started, the first turn ran, or the task was delivered. Nothing polls " +
-		"for the callback; if it never arrives the window is visible and can be read directly. For EXISTING " +
+		"for the callback; if it never arrives the window is visible. For EXISTING " +
 		"citizens use entwurf_v2 — this tool only creates, and entwurf_peers only reports. Model is REQUIRED and " +
 		"is passed to the chosen runtime CLI (`provider/model` for pi; model id/alias for Claude Code; a model name " +
 		"or `auto` for copilot; a fuzzy model pattern for omp or codex). Copilot, omp, and codex are refused BEFORE " +
-		"any window opens when their required birth, MCP, receive/delivery, or visible-identity units are absent. " +
-		"Codex additionally requires the operator-owned default app-server socket; entwurf never starts or supervises it. " +
-		"An optional " +
+		"any window opens when their required birth, MCP, receive/delivery, or visible-identity units are absent; " +
+		"Codex also requires the operator-owned default app-server socket, which entwurf never starts. An optional " +
 		"cwd starts the sibling in ONE literal absolute existing directory (cross-repo fresh) — never pick resume " +
-		"for a dormant record's cwd; resume is continuity-only. Omitted/empty cwd means the caller's own directory. " +
-		"An optional placement.tmuxSession is an expert override naming ONE EXISTING session on this agent's own tmux server. " +
-		"When omitted, Codex targets the exact existing `codex` home session; other backends target the caller's session. " +
-		"A missing named/home session is tmux-session-missing and NOTHING is created. " +
+		"for a dormant record's cwd. Omitted/empty cwd means the caller's own directory. " +
+		"An optional placement.tmuxSession is an expert override naming ONE EXISTING session on this agent's own " +
+		"tmux server, and it ALWAYS wins. Omitted, the seat follows the CALLER: a CODEX CALLER opens beside its own " +
+		"TUI pane (matched by thread-id in that pane's title; 0 or 2+ matches REFUSE, never fall back), and every " +
+		"other caller opens in its own session. " +
+		"A missing named session is tmux-session-missing and NOTHING is created. " +
 		"There are no arbitrary command/env knobs. Do not put secrets in the task — model and task argv are visible to " +
-		"same-user processes on this host. Requires that this agent itself runs " +
-		"inside tmux: without a pane anchor there is no session to open a sibling beside.",
+		"same-user processes on this host. Requires that this agent itself runs inside tmux.",
 	{
 		backend: z
 			.enum(["pi", "claude-code", "copilot", "omp", "codex"])
@@ -770,14 +779,19 @@ server.tool(
 			})
 			.optional()
 			.describe(
-				"Optional expert seat override: open the sibling in ONE EXISTING tmux session of this agent's own server. When omitted, Codex selects the exact existing `codex` home session; other backends use the caller's session. Nothing is ever created. Independent of cwd; neither is inferred from the other. The receipt reports the selected name, its source, and resolved target session id.",
+				"Optional expert seat override: open the sibling in ONE EXISTING tmux session of this agent's own server, and it always wins. When omitted the seat follows the CALLER, never the backend being opened: a Codex CALLER opens beside its own TUI pane, matched by thread-id in that pane's terminal title (0 or 2+ matching panes refuse, never fall back); every other caller opens in its own session. A pane title is a placement input only — never an address, liveness or delivery fact. Nothing is ever created. Independent of cwd; neither is inferred from the other. The receipt reports the selected name (absent for the caller-pane rule, which observed a session rather than requesting a name), its source, and resolved target session id.",
 			),
 	},
 	async ({ backend, model, task, cwd, placement }, extra) => {
 		let callerGardenId: string | null = null;
+		// Present exactly when the reconciled caller is a record-backed codex citizen. Its ONLY
+		// consumer is the placement below: a Codex caller with no explicit seat opens its sibling
+		// beside its own TUI pane, found by that thread's terminal title (#95 lane B).
+		let callerNativeSessionId: string | undefined;
 		try {
 			const self = await buildAuthoritativeSelfEnvelope({ requestMeta: extra._meta });
 			callerGardenId = self.envelope.sessionId;
+			callerNativeSessionId = self.codexThreadId;
 		} catch (err) {
 			// ONE error is a legitimate answer here: this host has no authoritative identity at all
 			// (no pi carrier inherited, no trusted marker written), so the sibling would have nowhere
@@ -790,10 +804,21 @@ server.tool(
 			callerGardenId = null;
 		}
 		try {
-			const missing = backend === "codex" ? await codexFreshPreflight(process.env) : null;
+			// TWO capability axes, in this order, both pre-mutation and neither standing in for
+			// the other. The TARGET axis first — "entwurf cannot open a Codex sibling here at
+			// all" is the more fundamental answer than "and it would not know where to put it".
+			// The CALLER axis second, and only when the seat anchor will actually be consulted:
+			// a codex caller that named an explicit placement never reads a pane title, so
+			// refusing it for a missing `thread-id` would refuse an unused capability.
+			const targetMissing = backend === "codex" ? await codexFreshPreflight(process.env) : null;
+			const callerMissing =
+				targetMissing === null && callerNativeSessionId !== undefined && placement === undefined
+					? codexCallerFreshPreflight(process.env)
+					: null;
+			const missing = targetMissing ?? callerMissing;
 			const result = missing
 				? ({ ok: false, reason: missing } as const)
-				: freshCall({ backend, model, task, cwd, placement, callerGardenId });
+				: freshCall({ backend, model, task, cwd, placement, callerGardenId, callerNativeSessionId });
 			const rendered = renderFreshCall(result);
 			return rendered.isError ? textErr(rendered.text) : textOk(rendered.text);
 		} catch (err) {

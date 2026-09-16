@@ -164,8 +164,10 @@ Sonnet에서 flaky라 한 번의 flake가 컷을 막으면 안 된다. 우회/�
 - **Codex arbitrary attached-TUI carrier — unsupported at 0.153.4, not the selected topology.**
   Exact source has an internal per-connection id but exports neither it nor peer pid into
   thread/turn/MCP/hook state. If unrestricted attached-client placement is ever reconsidered, the
-  next valid measurement begins only after a vendor per-client metadata hook exists. #95 instead
-  closes on the fixed existing `codex` home; this remains no prompt to build a manager or infer panes.
+  next valid measurement begins only after a vendor per-client metadata hook exists. #95 lane B closes
+  the CALLER's own seat instead — the pane showing the thread the request itself named, read from that
+  pane's terminal title — and #95 D1 retired the fixed `codex` home it had shipped as a stand-in. This
+  remains no prompt to build a manager or infer panes.
 - **Copilot CLI — garden birth, outbound identity, owned receive, visible fresh 모두 한 호스트 LIVE.**
   #82 branch에서 실제 Copilot CLI 1.0.80 세션이 첫 프롬프트에 V3 record를 민팅했고, 자기
   garden id로 outbound `entwurf_v2`를 보내 `origin:meta-session`을 보존했다. Owned receive는

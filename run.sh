@@ -175,7 +175,7 @@ Usage:
   ./run.sh smoke-entwurf-v2-matrix-live # LIVE sentinel (0.11 Stage 0 step 5d-5, D4-b) — OUT of pnpm check, needs LIVE=1. Drives REAL production runEntwurfV2 deps over REAL OS objects, 4 cells: C1 control-socket (real pi --entwurf-control resident → RPC send → lock acquire→release ×1), C1b record-less socket (#50 C4: live record-less pi → EVERY intent rejected pre-probe record-less-socket, no lock, rendered hint names record authority + fresh-cut), C2 meta-mailbox deliverable (armed self-fetch citizen → real .msg enqueue, lock-free), C3 meta-mailbox guard (no armed receiver → reject, no garbage). Model-in-loop OUT (transport/lock/enqueue gate, GPT Q2); negative/timeout stay deterministic. Model: ENTWURF_LIVE_TARGET=<provider>/<model> (default openai-codex/gpt-5.6-luna). LIVE=1 ./run.sh smoke-entwurf-v2-matrix-live
   ./run.sh smoke-agy-native-push-live  # 봉인 8 LIVE acceptance for the native-push (agy) rail — OUT of pnpm check, needs LIVE=1 + AGY_CONVERSATION_ID (a live agy conversation). Drives the REAL antigravity adapter + register core + runEntwurfV2 (production deps): doctor-static preflight (dangling→FAIL, the ③ gate), probe route, register create/attach idempotency, fire→native-push delivered, post-send re-probe (D7 partial), bogus-conv→native-push-probe-indeterminate. Meta-store isolated to a temp dir (only the agy round-trip is real; no real-store residue). COST FENCE: open that agy conversation on gemini-3.6-flash (free account) — never a Pro tier; entwurf never selects the agy model and no assertion reads it. LIVE=1 AGY_CONVERSATION_ID=<convId> ./run.sh smoke-agy-native-push-live
   ./run.sh smoke-codex-native-push-live # on-demand LIVE acceptance for Codex native-push — needs LIVE=1 + CODEX_LIVE_THREAD_ID loaded by a visible TUI attached to the default app-server; probes the real UDS, routes through production runEntwurfV2, queues one exact-token turn without retry, re-probes, and leaves the visible TUI to show the model result
-  ./run.sh smoke-codex-fresh-live    # #95 first-admission RELEASE MUST: record-backed receipt fixture -> PUBLIC initial Pi fresh/callback OUTSIDE the Codex home -> Pi PUBLIC omitted-placement Codex fresh/exact callback INSIDE exact existing `codex` -> Pi-to-Codex addressed native-push v2 -> Codex PUBLIC omitted-placement fresh Pi/exact callback IN that home -> Codex final v2 evidence. Needs LIVE=1 + ENTWURF_CODEX_APP_SERVER_PID + ENTWURF_CODEX_FRESH_MODEL + ENTWURF_CODEX_FRESH_PI_MODEL. The PID names the operator-owned app-server inside `codex`; the smoke checks/prints all four coordinates, never starts/stops/guesses the app-server/session, never reads screen text, interrupts only its exact still-running Codex turn, and cleans only receipt-named window ids
+  ./run.sh smoke-codex-fresh-live    # #95 RELEASE MUST: record-backed receipt fixture -> PUBLIC initial Pi fresh/callback in a session S that is NOT the app-server's -> Pi PUBLIC omitted-placement Codex fresh/exact callback, also in S -> Pi-to-Codex addressed native-push v2 -> Codex PUBLIC omitted-placement fresh Pi/exact callback IN S beside its own TUI (the lane B claim: the app-server env names another session, so S can only come from the caller's pane title) -> Codex final v2 evidence. Needs LIVE=1 + ENTWURF_CODEX_APP_SERVER_PID + ENTWURF_CODEX_FRESH_MODEL + ENTWURF_CODEX_FRESH_PI_MODEL. The PID names the operator-owned app-server, which must sit in a DIFFERENT session from S; the smoke checks/prints all four coordinates, never starts/stops/guesses the app-server/session, never reads screen text, interrupts only its exact still-running Codex turn, and cleans only receipt-named window ids
   ./run.sh smoke-mux-lifecycle-live  # RELEASE MUST integrated LIVE lifecycle acceptance for mux, through the REAL MCP surface — OUT of pnpm check, needs LIVE=1 and spends model turns (two pi siblings: native + recorded-ACP provider, each resumed once; one Claude Code sibling). tools/call fresh_call -> nonce callback sender envelope -> v2 control send landing in the sibling's own transcript -> resume_call REFUSED while live (window count unchanged) -> stable-handle close (pane gone, socket dead, record kept) -> dormant delivery refused honestly -> public entwurf_resume_call with LAUNCH and OBSERVATION receipts kept apart, same-gid socket alive, zero new citizens, zero lock residue, resumed pane_start_path == RECORD cwd (separate tmux query), transcript byte-identical across the resume -> v2 recall of the pre-close fact. claude-code resume refused target-not-pi, no window opened and no lock residue. LIVE=1 ./run.sh smoke-mux-lifecycle-live
   ./run.sh check-entwurf-facts         # deterministic gate (0.11 Stage 0 step 4, fact-provider slice 1+2): PURE PeerFact core + resolveFactList union — R1 out-of-domain→unsupported, R3b socket-domain 4-value, facts-only keyset; union: PeerFact + RecordLessSocketFact by gardenId (#50 C4: record-less socket = diagnostic subject, gid+liveness only), dormant→dead, F3 indeterminate preserved, out-of-socket-domain+socket fail-loud; pure, no IO
   ./run.sh check-socket-discovery      # deterministic gate (0.11 Stage 0 step 4, fact-provider slice 3): SOCKET-axis scanSocketProbes — probes (dir sockets) ∪ (in-domain citizen canonical paths) 3-valued; dormant citizen no-file → dead (resumable, not unprobed), stall → indeterminate (F3), dir hygiene/dedup/missing-dir + e2e → resolveFactList; readdir/probe injected, no IO
@@ -259,6 +259,9 @@ Usage:
   ./run.sh install-codex-statusline   # add thread-title to tui.status_line for visible garden ids
   ./run.sh uninstall-codex-statusline # remove only the recorded status-line atom
   ./run.sh doctor-codex-statusline    # effective visible-identity config + ownership verdict
+  ./run.sh install-codex-terminal-title   # add thread-id to tui.terminal_title so the multiplexer reports the caller's thread in #{pane_title} (#95 placement input, never an address)
+  ./run.sh uninstall-codex-terminal-title # remove only the recorded terminal-title atom
+  ./run.sh doctor-codex-terminal-title    # effective caller-seat config + ownership verdict
   ./run.sh install-agy-statusline     # own the agy statusLine subtree with bare entwurf-agy-statusline; preserve unrelated settings
   ./run.sh uninstall-agy-statusline   # honest inverse from statusline install-state
   ./run.sh doctor-agy-statusline      # fail-loud statusLine config/bin/state doctor + honest live SKIP
@@ -604,6 +607,7 @@ _codex_home() { echo "${CODEX_HOME:-$HOME/.codex}"; }
 _codex_config() { echo "$(_codex_home)/config.toml"; }
 _codex_mcp_state() { echo "${XDG_DATA_HOME:-$HOME/.local/share}/entwurf/codex-mcp/install-state.json"; }
 _codex_statusline_state() { echo "${XDG_DATA_HOME:-$HOME/.local/share}/entwurf/codex-statusline/install-state.json"; }
+_codex_terminal_title_state() { echo "${XDG_DATA_HOME:-$HOME/.local/share}/entwurf/codex-terminal-title/install-state.json"; }
 
 codex_mcp() {
   local verb="$1" config state
@@ -629,6 +633,23 @@ codex_statusline() {
     install) python3 "$REPO_DIR/scripts/codex-statusline-config.py" install "$config" "$state" ;;
     uninstall) python3 "$REPO_DIR/scripts/codex-statusline-config.py" uninstall "$state" ;;
     doctor) python3 "$REPO_DIR/scripts/codex-statusline-config.py" doctor-static "$config" "$state" ;;
+  esac
+}
+
+# #95 lane B: the SECOND visible-identity atom, and a different axis from the
+# status line. `status_line`'s thread-title is what a HUMAN reads in the TUI;
+# `terminal_title`'s thread-id is what the MULTIPLEXER reports back as
+# `#{pane_title}`, which is the only value a Codex caller's `_meta.threadId`
+# can be matched against to find the pane it is sitting in. Placement input
+# only — never an address, delivery or liveness fact.
+codex_terminal_title() {
+  local verb="$1" config state
+  config="$(_codex_config)"
+  state="$(_codex_terminal_title_state)"
+  case "$verb" in
+    install) python3 "$REPO_DIR/scripts/codex-terminal-title-config.py" install "$config" "$state" ;;
+    uninstall) python3 "$REPO_DIR/scripts/codex-terminal-title-config.py" uninstall "$state" ;;
+    doctor) python3 "$REPO_DIR/scripts/codex-terminal-title-config.py" doctor-static "$config" "$state" ;;
   esac
 }
 
@@ -1414,7 +1435,10 @@ check_mux_fresh_call() {
   # tmux-coordinate-row rides here because it is the parse every tmux COORDINATE in this lane's
   # LIVE siblings depends on, and because it is the only half of a measured LIVE failure that a
   # deterministic gate can own: the row is the input, so no tmux and no model turn is needed.
-  run_vitest test/mux-fresh-call.test.ts test/copilot-fresh-preflight.test.ts test/codex-fresh-preflight.test.ts test/fresh-call-surfaces.contract.test.ts test/fresh-call-provider.contract.test.ts test/omp-fresh-bootstrap.contract.test.ts test/tmux-coordinate-row.test.ts test/codex-fresh-live-protocol.test.ts
+  # codex-caller-seat rides here for the same reason as the two preflights: the leaf exists
+  # only as freshCall's Codex placement input (#95 lane B), so certifying it apart from the
+  # composition it feeds would let the two halves of one seat decision drift.
+  run_vitest test/mux-fresh-call.test.ts test/copilot-fresh-preflight.test.ts test/codex-fresh-preflight.test.ts test/fresh-call-surfaces.contract.test.ts test/fresh-call-provider.contract.test.ts test/omp-fresh-bootstrap.contract.test.ts test/tmux-coordinate-row.test.ts test/codex-fresh-live-protocol.test.ts test/codex-caller-seat.test.ts
 }
 
 smoke_mux_fresh_call_live() {
@@ -5313,6 +5337,12 @@ setup_all() {
     else
       setup_result codex-statusline FAIL "detected codex, but the visible-identity setting did not complete (see above)"
     fi
+    codex_rc=0; codex_terminal_title install || codex_rc=$?
+    if [ "$codex_rc" -eq 0 ]; then
+      setup_harness_result codex-terminal-title "thread-id terminal title enabled (caller-seat placement input)" "./run.sh doctor-codex-terminal-title"
+    else
+      setup_result codex-terminal-title FAIL "detected codex, but the terminal-title setting did not complete (see above)"
+    fi
   fi
   # ── core bridge boundary ── deterministic preflight lives in `pnpm run
   # check:full`; live substrate acceptance lives in `LIVE=1 ./run.sh
@@ -6615,6 +6645,15 @@ case "$cmd" in
     ;;
   doctor-codex-statusline)
     codex_statusline doctor
+    ;;
+  install-codex-terminal-title)
+    codex_terminal_title install
+    ;;
+  uninstall-codex-terminal-title)
+    codex_terminal_title uninstall
+    ;;
+  doctor-codex-terminal-title)
+    codex_terminal_title doctor
     ;;
   copilot)
     # #82 RAIL 7: the managed launch. `exec` and NO subshell/cd on purpose — the vendor

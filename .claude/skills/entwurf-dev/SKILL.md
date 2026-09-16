@@ -50,11 +50,16 @@ transcript를 가진 garden citizen이다.
 - `placement`는 선택 입력 하나: `{ tmuxSession: "<정확한 이름>" }`. caller **자신의 tmux 서버**에
   **이미 있는** 세션에 형제를 연다(운영자의 프로젝트 자리). **세션을 만들지 않는다** — 없으면
   `tmux-session-missing`, 문법 밖 이름이면 `tmux-session-name-invalid`로 거절되고 창도 세션도 생기지
-  않는다. 그때는 GLG에게 그 자리를 먼저 만들어 달라고 말하고 다시 부른다. 예외가 아니라 명시된
-  Codex 기본 topology가 하나 있다: `placement`를 생략한 Codex fresh는 caller 자리가 아니라 기존
-  exact `codex` home session을 선택한다. 이 세션과 operator-owned app-server는 GLG가 관리하며
-  Entwurf는 만들거나 감독하지 않는다. 다른 backend는 생략 시 caller session을 쓴다. 명시 placement는
-  expert override로 언제나 우선하고 receipt는 `requested`와 `Codex home`을 구분한다.
+  않는다. 그때는 GLG에게 그 자리를 먼저 만들어 달라고 말하고 다시 부른다. `placement`를 생략했을 때의
+  자리는 **부르는 쪽**을 따르지 여는 대상을 따르지 않는다: ① 명시 placement가 언제나 이긴다.
+  ② **부르는 쪽이 Codex 시민**이면 그 Codex TUI가 앉은 pane 옆에 열린다 — pane 제목에 실린 `thread-id`로
+  찾으며, 맞는 pane이 0개면 `codex-caller-seat-unresolved`, 2개 이상이면 `codex-caller-seat-ambiguous`로
+  **거절**하고 폴백하지 않는다. ③ 그 외에는 caller 자기 session. receipt는 둘을 구분한다:
+  `requested tmux session` / `the Codex caller's own pane`. (#95가 처음 내놓은 "Codex는 기존 `codex`
+  home으로" 규칙은 #95 D1이 은퇴시켰다 — app-server는 GLG가 원하는 자리에 두면 되고 Entwurf는 묻지 않는다.)
+  pane 제목은 **placement 입력일 뿐**이다 — 주소도, liveness도, delivery 증거도 아니다(누구나 같은 제목을
+  쓸 수 있다). Codex caller의 자리가 안 잡히면 `entwurf install-codex-terminal-title`이 수리이고, tmux 서버가
+  `allow-set-title off`면 모든 pane 제목이 hostname이 되어 찾을 수 없다.
   이름 문법은 `[A-Za-z0-9][A-Za-z0-9_-]*` 하나뿐이다 — `.`, `:`, `#`, 공백, 선행 `_`/`-` 는
   `tmux-session-name-invalid` 로 거절된다(세션 이름을 그렇게 지었으면 GLG에게 문법에 맞는 세션을
   요청한다).
@@ -141,13 +146,16 @@ citizen의 맥락을 요구한 경우에만 그 exact id로 `entwurf_v2`를 보�
    프로세스가 볼 수 있는 launch argv에 실린다.
 5. `entwurf_fresh_call`을 `{backend, model, task, cwd?, placement?}`로 정확히 한 번 호출한다. 같은 repo면
    `cwd`를 생략하고, cross-repo면 위 절의 literal 절대경로를 넣는다. GLG가 자리를 지정하면(예: “org 세션에
-   열어”) `placement: { tmuxSession: "org" }`을 넣는다. 자리 지정이 없으면 Codex는 기존 exact `codex`
-   home session으로, 다른 backend는 caller session으로 간다. 실패나 callback 지연을 이유로 자동 재시도하지 않는다.
+   열어”) `placement: { tmuxSession: "org" }`을 넣는다. 자리 지정이 없으면 위 규칙대로 간다 —
+   Codex 시민이 부르면 자기 pane 옆, 그 외에는 caller 자기 session.
+   실패나 callback 지연을 이유로 자동 재시도하지 않는다.
 6. receipt의 model은 runtime CLI에 요청한 값만 증명한다. 실제 선택/turn 완료 증거로 읽지 않는다.
 7. 반환값을 **launch receipt**로만 설명한다. window/pane과 nonce는 “창을 열도록
    tmux에 요청했다”는 증거이며 runtime 시작, 첫 turn, callback, task 완료 증거가 아니다.
-   named seat를 썼다면 receipt의 `seat:` 줄이 선택한 이름·선택 근거와 해석된 session id를 함께 보여준다 —
-   explicit placement는 `requested tmux session`, Codex 기본은 `Codex home tmux session`이며 id가 창이 실제로 들어간 자리다.
+   자리 규칙이 걸렸다면 receipt의 `seat:` 줄이 선택 근거와 해석된 session id를 함께 보여준다 —
+   explicit placement는 `requested tmux session`, Codex caller의 자기 pane은
+   `the Codex caller's own pane`이다. 뒤의 경우에는 **이름이 없다**: 요청한 이름이 아니라
+   관측한 session이기 때문이다. 어느 경우든 id가 창이 실제로 들어간 자리다.
 8. receipt의 nonce를 현재 대화의 pending correlation으로 보존하고 callback을 기다린다.
    polling, transcript grep, newest-peer 추측을 하지 않는다. 창은 보이므로 callback이
    없으면 GLG가 직접 창을 관측할 수 있다고 말한다.

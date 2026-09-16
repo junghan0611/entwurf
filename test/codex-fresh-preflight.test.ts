@@ -4,7 +4,11 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { type CodexPreflightDeps, codexFreshPreflight } from "../pi-extensions/lib/codex-fresh-preflight.ts";
+import {
+	type CodexPreflightDeps,
+	codexCallerFreshPreflight,
+	codexFreshPreflight,
+} from "../pi-extensions/lib/codex-fresh-preflight.ts";
 import type { CodexProtocolOpener, CodexRpcProtocol } from "../pi-extensions/lib/native-push/codex-ws-client.ts";
 
 let root = "";
@@ -384,5 +388,67 @@ describe("Codex fresh preflight", () => {
 				.replace('command = "entwurf-bridge"', 'command = "entwurf-bridge"\nargs = []'),
 		);
 		expect(await codexFreshPreflight({ HOME: home }, deps)).toBe("codex-mcp-hand-missing");
+	});
+});
+
+/**
+ * The CALLER axis (#95 lane B C4) — a different question from everything above, asked of the
+ * same file. "Can the Codex citizen DOING the opening be located in tmux" is about
+ * `[tui].terminal_title`, and it is required no matter which backend that citizen opens; the
+ * five checks above are about whether a Codex sibling can be opened here at all. Nothing in
+ * this describe touches the app-server: whether the operator's app-server is up says nothing
+ * about whether a pane can be found, and asking would fail a placement check for a delivery
+ * reason.
+ */
+describe("Codex CALLER-side fresh preflight", () => {
+	/** Write only what this axis reads. Deliberately not `installConfig`: proving the two axes
+	 * are independent needs a config that satisfies neither by accident. */
+	function writeTui(body: string): void {
+		write(configFile, `model = "operator-model"\n\n[tui]\n${body}\n`, 0o600);
+	}
+
+	it("[QK:CODEX-CALLER-PREFLIGHT-TITLE] refuses until tui.terminal_title carries thread-id, and names the installer that repairs it", () => {
+		// No config at all — the ordinary pre-install state, and not an error.
+		expect(codexCallerFreshPreflight({ HOME: home })).toBe("codex-caller-title-missing");
+		writeTui('theme = "zenburn"');
+		expect(codexCallerFreshPreflight({ HOME: home })).toBe("codex-caller-title-missing");
+		writeTui('terminal_title = ["activity", "project-name"]');
+		expect(codexCallerFreshPreflight({ HOME: home })).toBe("codex-caller-title-missing");
+		writeTui('terminal_title = ["activity", "project-name", "thread-id"]');
+		expect(codexCallerFreshPreflight({ HOME: home })).toBeNull();
+		// The operator's own order is not ours to require — only MEMBERSHIP is the axis, exactly
+		// what `entwurf doctor-codex-terminal-title` judges.
+		writeTui('terminal_title = ["thread-id"]');
+		expect(codexCallerFreshPreflight({ HOME: home })).toBeNull();
+	});
+
+	it("[QK:CODEX-CALLER-PREFLIGHT-NOT-STATUS-LINE] neither the status line nor a neighbouring thread-title item satisfies the caller axis — only `terminal_title` reaches `#{pane_title}`, and only `thread-id` renders the id the anchor matches", () => {
+		writeTui('status_line = ["thread-title"]');
+		expect(codexCallerFreshPreflight({ HOME: home })).toBe("codex-caller-title-missing");
+		// The near-miss that actually happens: `thread-title` IS a legal terminal_title item, and
+		// it renders the thread NAME (the garden id, for an entwurf-named thread) rather than the
+		// id the anchor is built from. Accepting it here would report a configured seat for a
+		// host whose panes never carry a matchable token.
+		writeTui('terminal_title = ["activity", "thread-title"]');
+		expect(codexCallerFreshPreflight({ HOME: home })).toBe("codex-caller-title-missing");
+		writeTui('terminal_title = ["activity", "thread-title", "thread-id"]');
+		expect(codexCallerFreshPreflight({ HOME: home })).toBeNull();
+		// ...and the reverse: a config that satisfies the CALLER axis does not satisfy the
+		// target's visible-identity axis. Two keys, two repairs, neither standing in for the
+		// other.
+		installBirth();
+		writeTui('terminal_title = ["thread-id"]');
+		expect(codexCallerFreshPreflight({ HOME: home })).toBeNull();
+	});
+
+	it("[QK:CODEX-CALLER-PREFLIGHT-SHAPE] a terminal_title that is not an array of items is refused, never read as satisfied", () => {
+		for (const body of ['terminal_title = "thread-id"', "terminal_title = 7", "terminal_title = []"]) {
+			writeTui(body);
+			expect(codexCallerFreshPreflight({ HOME: home }), body).toBe("codex-caller-title-missing");
+		}
+		// An unparseable config is the same answer — `readConfig` returns null rather than
+		// guessing, and a caller whose config cannot be read has no provable seat axis.
+		write(configFile, "garbage [[[\n", 0o600);
+		expect(codexCallerFreshPreflight({ HOME: home })).toBe("codex-caller-title-missing");
 	});
 });

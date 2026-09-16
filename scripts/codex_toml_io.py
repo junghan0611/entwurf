@@ -522,6 +522,127 @@ def assert_blast_radius(original_text: str | None, candidate_text: str, owned_pa
     return before, after
 
 
+def array_append_point(span: str, search_from: int = 0) -> tuple[int, str] | None:
+    """Where a new item goes at the END of the first array in `span`, as
+    `(insert_index, tail)` — or None when this span holds no array this writer
+    can own.
+
+    `tail` says what the last meaningful byte inside the array was, because
+    that decides the snippet an atom appends:
+
+      ``empty``        the array has no items — insert ``"x"``
+      ``item``         it ends with an item      — insert ``, "x"``
+      ``comma``        it ends with a trailing comma (the multi-line style)
+                       — insert `` "x",`` AFTER that comma
+
+    The naive locator — append before ``span.rfind("]")`` — is wrong on three
+    real operator shapes: a trailing comment (``items = ["a"]  # keep ] this``),
+    a ``]`` inside a string item, and the multi-line array whose last item
+    already carries a comma (appending ``, "x"`` there emits ``,,``). So this
+    walks the span with the SAME string/comment rules `_scan_text` applies, but
+    reports POSITIONS, which `_scan_text` cannot: it is line-oriented (its
+    single-line string and escape flags are per call, so it may not be driven
+    character by character) and it returns only a resume index. Hence one
+    self-contained walk here rather than a wrapper.
+
+    Returning None is a SHAPE answer, never an error: a span with no
+    line-shaped array is a thing this writer does not own, and the caller
+    refuses it by name instead of splicing into someone's comment.
+    """
+    i = search_from
+    n = len(span)
+    depth = 0
+    open_at = -1
+    last_meaningful = -1  # index AFTER the last non-space byte inside the array
+    basic_ml = literal_ml = in_basic = in_literal = escaped = False
+
+    def mark(end: int) -> None:
+        nonlocal last_meaningful
+        if depth >= 1:
+            last_meaningful = end
+
+    while i < n:
+        ch = span[i]
+        if basic_ml or literal_ml:
+            quote = '"' if basic_ml else "'"
+            if ch == quote:
+                run = 1
+                while i + run < n and span[i + run] == quote:
+                    run += 1
+                if run >= 3:
+                    basic_ml = literal_ml = False
+                    i += 3
+                    mark(i)
+                    continue
+                i += run
+                mark(i)
+                continue
+            i += 1
+            mark(i)
+            continue
+        if in_basic:
+            if escaped:
+                escaped = False
+            elif ch == "\\":
+                escaped = True
+            elif ch == '"':
+                in_basic = False
+            i += 1
+            mark(i)
+            continue
+        if in_literal:
+            if ch == "'":
+                in_literal = False
+            i += 1
+            mark(i)
+            continue
+        if ch in "\"'":
+            run = 1
+            while i + run < n and span[i + run] == ch:
+                run += 1
+            if run >= 3:
+                basic_ml, literal_ml = ch == '"', ch == "'"
+                i += 3
+            elif run == 2:
+                i += 2  # an empty string opens nothing
+            else:
+                in_basic, in_literal = ch == '"', ch == "'"
+                i += 1
+            mark(i)
+            continue
+        if ch == "#":
+            # A comment runs to end of line and is NOT meaningful content.
+            # Inside an OPEN array that is legal TOML and the array continues
+            # on the next line; outside one there is nothing left to close.
+            newline = span.find("\n", i)
+            if depth == 0 or newline < 0:
+                return None
+            i = newline + 1
+            continue
+        if ch in "[{":
+            depth += 1
+            if depth == 1 and ch == "[":
+                open_at = i
+            mark(i + 1)
+            i += 1
+            continue
+        if ch in "]}":
+            depth -= 1
+            if depth < 0:
+                return None
+            if depth == 0 and ch == "]" and open_at >= 0:
+                if last_meaningful <= open_at + 1:
+                    return open_at + 1, "empty"
+                return last_meaningful, "comma" if span[last_meaningful - 1] == "," else "item"
+            mark(i + 1)
+            i += 1
+            continue
+        i += 1
+        if not ch.isspace():
+            mark(i)
+    return None
+
+
 def toml_string(value: str) -> str:
     # JSON double-quoted strings are valid TOML basic strings for every value
     # json can emit (\", \\, \n, \uXXXX — all legal TOML escapes).

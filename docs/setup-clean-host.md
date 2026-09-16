@@ -465,7 +465,11 @@ never the launch receipt. There is no Codex resume surface, watcher, supervisor,
 lifecycle ownership. The accepted LIVE used a real record-backed visible Pi for the first leg;
 release-gate stripped ambient `PI_SESSION_ID`/`PI_AGENT_ID`, and the fixture/self-fetch citizen only
 collected receipts. The smoke reported initial Pi, app-server, fresh Codex, and outbound Pi
-coordinates separately: the initial Pi differed and the latter three matched the exact `codex` home.
+coordinates separately: the initial Pi differed and the latter three matched the exact `codex` home,
+which was the contract at that date. #95 D1 (2026-09-16) retired that room — an omitted seat is now the
+caller's own session for every backend, and the reshaped card requires the app-server to sit in a
+DIFFERENT session from the Pi/Codex pair, because that is what tells the caller-pane anchor apart from
+the app-server's inherited environment.
 Qualification and the frozen full floor are complete for this lane: `check-gate-qualification`
 killed 475/475 across 43 lanes with origin purity green, `check:full` exited 0, and the LIVE release
 gate reported MUST 24/0/0 with `cut: OK`. The bounds above are unchanged — no request→arbitrary
@@ -481,9 +485,10 @@ ENTWURF_CODEX_FRESH_PI_MODEL=<pi-model> \
 entwurf smoke-codex-fresh-live
 ```
 
-Run this from a tmux session other than `codex`. The entrypoint name does not waive the contract
-above. A fixture/self-fetch citizen may collect receipts but cannot replace the real visible Pi leg;
-a Pi that starts inside the Codex home proves only the weaker shared-seat mechanism.
+Run this from a tmux session OTHER than the one the app-server is in. The entrypoint name does not
+waive the contract above. A fixture/self-fetch citizen may collect receipts but cannot replace the real
+visible Pi leg; a Pi that starts in the app-server's own session proves only the weaker shared-seat
+mechanism, because both the anchor and the env fallback would answer the same room.
 
 ## 5. Optional Antigravity native citizen
 

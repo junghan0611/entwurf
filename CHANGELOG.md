@@ -4,6 +4,70 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+### Added
+
+- **A Codex caller opens its sibling beside its own pane (#95 lane B).** Until now the seat a
+  Codex citizen got came from the app-server's inherited `TMUX`/`TMUX_PANE`, so a sibling opened
+  from Codex landed wherever the operator happened to have started the app-server rather than
+  beside the TUI the operator was looking at. `[측정 2026-09-16, codex-cli 0.153.4]` with
+  `thread-id` in `[tui].terminal_title` the TUI writes its thread UUID into the OSC 0 title and
+  tmux answers with it as `#{pane_title}` — truncated to 32 chars, i.e. 29 graphemes plus `...`
+  (`status_surfaces.rs:892-894`, `:1027-1043`; unchanged at `rust-v0.154.0`). So when the
+  reconciled sender of a fresh call is a record-backed `codex` citizen and `placement` is
+  omitted, that request's own `_meta.threadId` selects the pane whose title carries the token and
+  its `$session` becomes the target. **No vendor patch, no new carrier: one config item.**
+- **`entwurf install-codex-terminal-title` / `uninstall-` / `doctor-`** — a fourth Codex
+  ownership atom, owning only `thread-id` membership within `tui.terminal_title`. A different key
+  and a different axis from `install-codex-statusline`: `status_line` is what a human reads
+  inside the TUI, `terminal_title` is what the multiplexer reports back. The seeded list is
+  `["activity", "project-name", "thread-id"]` — `activity` leads because the herdr Codex detector
+  keys on the spinner and `Action Required` prefix — and an existing operator list is APPENDED to,
+  never reordered. `setup` composes it on a detected Codex host.
+- **The seat now follows the CALLER, never the backend being opened, on both fresh-call surfaces.**
+  An explicit `placement.tmuxSession` always wins; then a Codex CALLER's own pane
+  (`codex-title-anchor`); then the caller's own session. The anchored receipt reports its SOURCE and
+  no session name, because a session was observed rather than a name requested.
+
+### Changed
+
+- **The fixed `codex` tmux home is RETIRED (#95 D1).** 0.21.0 shipped it three days earlier: an
+  omitted-placement Codex TARGET selected an already-existing session named exactly `codex`, where
+  the operator was asked to seat the app-server and every Codex TUI, and the launch receipt labelled
+  that source `Codex home`. GLG retired it the moment the caller-pane anchor stood up — *"무조건
+  은퇴야 … 코덱스의 거처를 만들어주자는 말은 그냥 기술이 안돼서 무마한 개념이야. 제대로 가야지."* The
+  room was a workaround for a mapping that did not exist yet, and keeping it after the anchor landed
+  would have left Codex alone answering "where does a sibling open?" differently from every other
+  backend. `CODEX_HOME_TMUX_SESSION`, the `codex-home` receipt source, its renderer branch, its
+  deterministic cells and its mutant are gone; an omitted seat is the caller's own session for every
+  backend, and the operator seats the app-server wherever they like — Entwurf still never creates,
+  moves or supervises it. The 2026-09-12 home acceptance stays recorded in `DELIVERY.md` and
+  `docs/setup-clean-host.md` as history, not as a live contract. The reshaped LIVE card now REQUIRES
+  the app-server to sit in a different session from the Pi/Codex pair: that separation is what tells
+  the caller-pane anchor apart from the app-server's inherited environment.
+
+### Fixed
+
+- **Three named refusals replace a silent wrong seat.** Zero matching panes is
+  `codex-caller-seat-unresolved` (the TUI is on another tmux server, its config carries no
+  `thread-id`, or that server has `allow-set-title off`, which `[측정]` replaces every pane title
+  with the hostname); two or more is `codex-caller-seat-ambiguous`; and a Codex caller whose own
+  `[tui].terminal_title` lacks `thread-id` is refused pre-mutation as `codex-caller-title-missing`
+  with the installer as its repair. None of them falls back to another session, and none opens a
+  window. That caller-side check runs only when the anchor is actually consulted — an explicit
+  seat never reads a title.
+- **A pane title is a placement input and nothing else (Hard Rule 16).** Any process in any pane
+  can emit the same OSC string, so the leaf's answer may only reach a `-t` target; identity,
+  delivery and liveness keep the record + `_meta` join they already had, and the first-turn
+  framing still carries the caller's garden id rather than the thread id a title matched. The leaf
+  (`pi-extensions/lib/codex-caller-seat.ts`) imports nothing at all, which is how that boundary is
+  held by the code rather than by a comment.
+- **The title match is over tokens, not ` | ` segments, and the count is over panes.**
+  `title_setup.rs:183-193` joins the `activity` item to its neighbour with a plain space rather
+  than ` | `, so on a host whose operator list ends in `activity` a working TUI renders
+  `<spinner> <thread-id>` inside one segment and a segment-equality rule would lose the seat
+  exactly while the caller is busy. Counting panes rather than tokens keeps a single pane that
+  shows the same thread twice (`thread-title` beside `thread-id`) from reading as an ambiguity.
+
 ## 0.21.0 - 2026-09-13
 
 ### Added

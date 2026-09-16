@@ -36,7 +36,7 @@ tmux server
 ```
 
 사람은 보통 같은 session 안에서 `prefix + 1/2/3/4`로 이동한다. sibling 하나마다 별도 tmux session을
-만드는 구조가 아니다. Codex는 #95의 좁은 예외다: operator가 기존 `codex` home session 하나를 유지하고,
+만드는 구조가 아니다. Codex는 #95 lane B의 좁은 예외다: Codex **caller**는 자기 TUI pane 옆에 열고(제목 앵커),
 omitted-placement Codex fresh가 그 이름을 exact lookup한다. Entwurf가 그 session을 만들지는 않는다.
 
 여기서 갈라지는 두 문제를 계속 구분한다.
@@ -420,8 +420,9 @@ OMP는 positional prompt 대신 bootstrap carrier를 쓴다. command/env carrier
 dormant record를 `entwurf_resume_call`로 되세우는 압력이 실측됐다(2026-08-10 incident) — resume은 continuity
 verb이지 placement 우회로가 아니다. 그래서 fresh surface는 `{backend, model, task, cwd?}`로 좁게 한 번 더
 확장됐다. 그 다음 #105 가 optional `placement.tmuxSession` 을 같은 규칙으로 더했다 — 입력 하나, literal,
-명시값이 언제나 우선하며 실패는 이름 있는 거절(§8 개정 블록). 생략은 non-Codex에서 기존 caller-session
-동작이고, Codex에서는 #95가 고정 existing `codex` home을 선택한다. cwd 규칙은 좁다: `undefined`와 정확한 `""`만 생략(기존 no-`-c` 동작 그대로)이고, 그 외는 **literal**
+명시값이 언제나 우선하며 실패는 이름 있는 거절(§8 개정 블록). 생략일 때의 자리는 **부르는 쪽**을 따르지
+여는 대상을 따르지 않는다: ① 명시 placement, ② **Codex caller의 자기 pane**(#95 lane B), ③ 그 외
+caller 자기 세션. #95가 처음 출하한 네 번째 규칙(Codex target → 고정 `codex` home)은 #95 D1이 은퇴시켰다. cwd 규칙은 좁다: `undefined`와 정확한 `""`만 생략(기존 no-`-c` 동작 그대로)이고, 그 외는 **literal**
 절대경로다 — trim도 realpath도 project-name resolution도 store/peers/record 조회도 없다. caller가 유일한
 cwd 출처다. 분류는 resume과 **공유하는 `classify-tmux-cwd.ts` leaf**가 지고(4개 reason 문자열 동일; measured
 tmux 3.6a 사실도 그 leaf에 있다), `-c`는 fresh 자신의 argv builder가 resume과 대칭인 token 위치(`-t` 뒤,
@@ -429,27 +430,55 @@ tmux 3.6a 사실도 그 leaf에 있다), `-c`는 fresh 자신의 argv builder가
 사실로 **무엇을 요청했는지**만 말하며, pane이 실제 어디 앉았는지는 receipt의 사실이 아니다(acceptance 축).
 resume은 계속 `{target}` 하나다: recorded cwd 일치는 resume을 고를 이유가 아니다.
 
-**Codex has one explicit operator-owned tmux home (#95 decision, 2026-09-12).**
-The supported deployment uses an already-existing exact session name `codex` on the caller's
-tmux server. The operator seats the app-server and supported Codex TUIs there. When a fresh Codex
-call omits `placement`, `mux-fresh-call.ts` selects that name, the shared lookup leaf resolves it
-to one native `$session` id before mutation, and the launch receipt labels the source `Codex home`.
-A missing home refuses as `tmux-session-missing`; Entwurf never creates the session, starts or
-supervises the app-server, scrapes a pane, or moves a TUI. An explicit `placement.tmuxSession`
-remains an expert override and wins unchanged, with a `requested` receipt label.
+**The fixed `codex` home is RETIRED (#95 D1, GLG 2026-09-16).** From 2026-09-12 an omitted-placement
+Codex TARGET selected an already-existing exact session named `codex`, where the operator seated the
+app-server and their TUIs, and the launch receipt labelled that source `Codex home`. GLG retired it the
+moment the caller-pane anchor below stood up: *"무조건 은퇴야 … 코덱스의 거처를 만들어주자는 말은 그냥
+기술이 안돼서 무마한 개념이야."* The room was a workaround for a mapping that did not exist yet — nothing
+could find the pane a Codex caller sat in, so the operator was asked to keep every Codex in one known
+place. Keeping it after the anchor landed would have left Codex alone answering "where does a sibling
+open?" differently from every other backend. `CODEX_HOME_TMUX_SESSION`, the `codex-home` receipt source
+and its gate cells are gone; an omitted seat is now the caller's own session for every backend, and the
+operator seats the app-server wherever they like. The 2026-09-12 acceptance stays recorded in
+`DELIVERY.md` as history, not as a live contract.
 
 The MCP bridge still inherits the app-server's `TMUX`/`TMUX_PANE` snapshot through the vendor-supported
-`env_vars` allowlist; it also receives `CODEX_HOME` and the Entwurf garden/control roots. That is why a
-Codex citizen opening a Pi sibling with omitted placement puts the Pi beside itself in the home. The
-2026-09-12 acceptance proved the deliberately asymmetric chain: initial Pi in another session →
-omitted-placement Codex in `codex` → Codex-opened Pi in `codex`, with all four coordinates and exact
-callbacks/delivery. `DELIVERY.md` owns the 57-assertion receipt and digest.
+`env_vars` allowlist; it also receives `CODEX_HOME` and the Entwurf garden/control roots. Before #95
+lane B that snapshot was the only seat a Codex citizen had, so a Codex-opened Pi landed wherever the
+app-server happened to sit. The 2026-09-12 acceptance proved that chain honestly and narrowly: initial
+Pi in another session → omitted-placement Codex in `codex` → Codex-opened Pi in `codex`, with all four
+coordinates and exact callbacks/delivery. `DELIVERY.md` owns the 57-assertion receipt and digest. Those
+values are the env fallback the anchor now replaces — they locate the app-server's stores, not a seat.
+
+**A Codex CALLER opens beside its own pane (#95 lane B).** `[측정]` 2026-09-16, codex-cli 0.153.4: with
+`thread-id` in `[tui].terminal_title`, the TUI writes its thread UUID into the OSC 0 title and tmux
+answers with it as `#{pane_title}` — truncated to 32 chars, i.e. 29 graphemes plus `...`
+(`status_surfaces.rs:892-894`, `:1027-1043`; unchanged at `rust-v0.154.0`). So when the reconciled
+sender of a fresh call is a record-backed `codex` citizen AND `placement` is omitted, the caller's own
+`_meta.threadId` selects the pane whose title carries that token, and its `$session` becomes the target.
+The receipt labels the source `codex-title-anchor` and carries NO session name, because a pane was
+observed rather than a name requested.
+
+Three refusals, and none of them falls back: **zero** matching panes is `codex-caller-seat-unresolved`
+(the TUI is on another tmux server, its config carries no `thread-id`, or the server has
+`allow-set-title off`, which replaces every pane title with the hostname — measured), **two or more** is
+`codex-caller-seat-ambiguous`, and a caller whose own `[tui].terminal_title` lacks `thread-id` is
+refused pre-mutation as `codex-caller-title-missing` with `entwurf install-codex-terminal-title` as the
+repair. That caller check runs only when the anchor is actually consulted: an explicit seat never reads
+a title.
+
+**The title is a placement input and nothing else (Hard Rule 16).** Any process in any pane can emit the
+same OSC string, so the leaf's answer may only reach a `-t` target. Identity, delivery and liveness keep
+the record + `_meta` join they already had, and the first-turn framing still carries the caller's garden
+id, never the thread id a title matched. The leaf (`pi-extensions/lib/codex-caller-seat.ts`) imports
+nothing at all, which is how that boundary is held by the code rather than by this paragraph.
 
 Exact Codex 0.153.4 source still exports no request→arbitrary-attached-TUI seat value usable by shared
 MCP or hooks; its internal `ConnectionId` does not cross into thread/core/MCP/hook state, and the
-TUI-local dynamic-task MCP is a closed `codex_tui` namespace. Therefore unrestricted attached-TUI
-placement is unsupported and unclaimed, not a blocker to the explicit home. This is neither pane/process
-guessing nor a hidden one-server-per-seat manager.
+TUI-local dynamic-task MCP is a closed `codex_tui` namespace. The title anchor does not change that: it
+resolves the pane displaying THIS caller's own thread, which the caller already named on the request. It
+is neither pane/process guessing nor a hidden one-server-per-seat manager, and it makes no claim about a
+TUI whose thread nobody named.
 
 **이것이 증명하는 것은 "전달 계층이 그 citizen을 안다"이지 "citizen이 자기를 안다"가 아니다.** 아래
 §6-b가 그 구분을 measured incident로 보존한다.
@@ -560,7 +589,7 @@ gate, LIVE smoke, release 배선을 전부 제거했다.
 | tmux session lookup leaf (`resolve-tmux-session.ts`) | caller가 준 세션 **이름** 의 문법 판정과 이름→native `$id` 해석 하나 — 엔진은 `list-windows -t '=NAME' -F '#{session_id}'` 고정, 부재는 rc 로 판정(`-f` 필터는 이름 안 `}` 하나로 전 세션 오탐, `display-message` 는 존재해도 빈 출력; 둘 다 측정) | tmux 실행(runner 는 주입), argv, hint 문구(consumer 소유), 세션 **생성**, fallback 세션, 다른 서버 |
 | cwd classification leaf (`classify-tmux-cwd.ts`) | `-c` 후보의 분류 하나 — 4개 stable reason(absolute / `#` 없음 / 존재 / 디렉터리; tmux가 `-c`를 format-expand하고 없는 경로를 조용히 `$HOME`으로 폴백하기 때문) | argv, tmux 실행, hint 문구(각 consumer가 자기 표현을 소유), fallback 디렉터리 |
 | resume-call composition (`mux-resume-call.ts`) | record가 준 cwd에서의 same-session append(`-c`) — 분류는 공유 leaf, "recorded cwd" hint 표현, launch receipt | garden identity, record 조회, lock, delivery, supervision |
-| fresh-call composition (`mux-fresh-call.ts`) | backend별 fixed runtime + argv dialect, explicit model CLI token, optional **requested** cwd(caller가 유일한 출처; `undefined`/`""`만 생략, literal·no-trim, 같은 leaf로 pre-mutation 분류, resume 대칭 `-c` 위치), selected session seat(#105 explicit request; #95 omitted Codex → fixed existing `codex` home; 이름은 lookup leaf로 `$id` 해석, `-t`에는 `$id`만, `-d` 필수, 없으면 거절·생성 없음), first-turn framing(callback→task 순서), nonce 민팅, launch receipt(선택 이름+source+해석된 target `$id`, 관측 cwd 없음) | garden identity(표면이 공급), cwd 추측·resolve, 세션 생성, arbitrary TUI-seat discovery, delivery transport, task 분해, supervision |
+| fresh-call composition (`mux-fresh-call.ts`) | backend별 fixed runtime + argv dialect, explicit model CLI token, optional **requested** cwd(caller가 유일한 출처; `undefined`/`""`만 생략, literal·no-trim, 같은 leaf로 pre-mutation 분류, resume 대칭 `-c` 위치), selected session seat(#105 explicit request; 생략 시 caller 자기 세션이고, Codex caller만 #95 lane B 제목 앵커로 자기 pane; 이름은 lookup leaf로 `$id` 해석, `-t`에는 `$id`만, `-d` 필수, 없으면 거절·생성 없음), first-turn framing(callback→task 순서), nonce 민팅, launch receipt(선택 이름+source+해석된 target `$id`, 관측 cwd 없음) | garden identity(표면이 공급), cwd 추측·resolve, 세션 생성, arbitrary TUI-seat discovery, delivery transport, task 분해, supervision |
 | copilot capability preflight leaf (`copilot-fresh-preflight.ts`) | Copilot fresh **한 건**에 대한 pre-mutation 판정 — birth·MCP hand·receiver·visible footer 네 축의 **설치/설정 사실**과 축마다 하나인 named reason + repair 문구 | runtime 사실(벤더 spawn·live process·연결 여부는 doctor와 LIVE 소유), mutation, 다른 backend, generic doctor로의 성장 |
 | codex capability preflight leaf (`codex-fresh-preflight.ts`) | Codex fresh 한 건의 state-backed birth closure digests, vendor trust receipt, exact user MCP/env boundary, `thread-title`, operator-owned default app-server socket를 pre-mutation 판정 | app-server lifecycle/supervision, attached-TUI pane discovery, vendor install/auth, generic doctor, resume |
 | public surfaces (`entwurf-control.ts` · MCP `index.ts`) | fresh의 record-backed caller identity와 `{backend, model, task, cwd?, placement?}` schema, resume의 target-only schema, 양쪽 렌더, resume launch seam 조립 | argv 문법, placement, identity 민팅 |

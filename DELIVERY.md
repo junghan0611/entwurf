@@ -88,7 +88,7 @@ physical host. Do not read a D-level cell as a Darwin receipt.
 | **pi native Entwurf** | shipped | D7; D8 partial | Record-addressed Unix control socket. A record-less socket is diagnostic only and never dispatched. |
 | **Claude Code interactive `>=2.1.217`** | shipped; Linux certified | D6; D7/D8 partial | Per-session mailbox + exec-form `FileChanged`/`asyncRewake`. B2 proved idle wake and same-session continuity on one NixOS host. |
 | **Antigravity / agy** | shipped | D6; D7 partial | Record-backed native-push through LS gRPC `agentapi send-message`; no mailbox or receiver marker. Admitted before the #82 step 9 contract and not re-evaluated under it, so it is legacy citizen evidence, not a step-9 supported harness: `entwurf_fresh_call` cannot open an agy sibling, and nothing here should be read as claiming visible lifecycle parity. |
-| **Codex CLI app-server citizen** | supported in 0.21.0; explicit-home acceptance green on Linux at 0.153.4 | D6 accepted; D7 partial; D8 unproven | Vendor-trusted user-scope `SessionStart` birth plus strict per-request metadata join; no shared-pid sender marker. `thread/loaded/list` probes the operator-owned app-server UDS and one-shot `codex queue` delivers with no retry. The supported visible topology is one operator-owned existing tmux session named `codex`: the app-server and supported Codex TUIs sit there, omitted Codex fresh placement selects it, and Codex-opened Pi stays beside its caller. Missing home rejects; Entwurf creates/supervises none of it. Exact 0.153.4 source bounds unrestricted attached-TUI placement as unsupported, not as a blocker to this explicit topology. |
+| **Codex CLI app-server citizen** | supported in 0.21.0; caller-seat topology on Linux at 0.153.4 (the 2026-09-12 explicit-home acceptance is history — #95 D1 retired that room) | D6 accepted; D7 partial; D8 unproven | Vendor-trusted user-scope `SessionStart` birth plus strict per-request metadata join; no shared-pid sender marker. `thread/loaded/list` probes the operator-owned app-server UDS and one-shot `codex queue` delivers with no retry. The operator owns the app-server and seats it wherever they like; Entwurf creates, moves and supervises none of it. Since #95 lane B a Codex CALLER with no explicit placement opens its sibling beside its OWN pane, located by the `thread-id` its `[tui].terminal_title` writes into the pane title; 0 or 2+ matching panes refuse with no fallback, and the title is a placement input only — never an address, liveness or delivery fact. #95 D1 (2026-09-16) retired the fixed `codex` home that omitted-placement Codex TARGETS used to select, so an omitted seat is the caller's own session for every backend. Exact 0.153.4 source still bounds placing a sibling beside a TUI whose thread nobody named as unsupported; the anchor resolves only the pane showing the caller's own thread. |
 | **Codex embedded TUI** | deferred | D0 partial | At the 2026-09-08 Codex 0.153.4 measurement, standalone mode had no `watchPaths`/`FileChanged`/`asyncRewake` analogue or supported idle receive route. This is dated vendor evidence, not a claim that the current candidate lacks records or fresh. |
 | **Copilot CLI first-party extension** | raw transport probe; superseded by the owned product unit | D7 path observed; D3 control receipt incomplete; D8 unproven | CLI-spawned extension over stdio JSON-RPC; `joinSession()` + documented `fs.watch` → `session.send({mode:"enqueue"})`. Idle wake, exact-marker reply, and completion passed on 2026-08-23 (CLI 1.0.80, L4, one Linux host). Two-process isolation was observed but its decisive B log was not preserved. Kept as the transport receipt the owned receive unit was built on; the shipped unit differs deliberately — it announces the inbox instead of injecting the body. |
 | **Copilot CLI garden citizen** | shipped in 0.15.0; send + receive + visible fresh accepted on one host | D6; D7 partial; D3 pending; D8 unproven | Birth, garden id, MCP hand and record-backed sender identity are accepted; the RECEIVER is an installed first-party extension that binds to the V3 record, writes a receiver marker owned by the WATCHER pid, and rings a doorbell the model drains with `entwurf_inbox_read`. `wakeMode` is `self-fetch`, so dispatch reaches the mailbox rail: armed → delivered, unarmed/stale → the honest `mailbox-undeliverable` refusal. **D6 is the owned-invocation LIVE acceptance of 2026-08-23** — garden `20260823T181316-d9f6ba`, native `20fe30c8-b2bc-4600-91a0-8a409131be51`, CLI 1.0.80: receive log `joined`→`armed`→`doorbell fresh=1`→`rang`, mailbox `lastEnqueuedAt 09:23:41.235Z` / `lastReadAt 09:23:56.480Z`, and a model reply on the same record/native/gid chain. **Visible fresh (step 9 clause 7) is a separate LIVE, 2026-08-25** — launch window `@89`/`%89` nonce `mux-fresh-call-690529ae99f99faa2252aefb`; exact-callback garden `20260825T085721-f68be0`; one `entwurf_v2` → `meta-mailbox → enqueued`; same garden `lastReadAt 2026-08-24T23:57:47.784Z` plus same-gid reply; GLG saw footer garden id and a healthy multi-turn window. Those rows stay unmerged. D7 is PARTIAL: reply and read receipt were observed, the completion taxonomy and long-haul operation were not. D3 (second-session isolation of an owned invocation) is PENDING — observed once, decisive log lost to scratch cleanup. Evidence level L4: one host. Launch through the owned invocation `entwurf copilot`, which sets `COPILOT_CLI_ENABLED_FEATURE_FLAGS=EXTENSIONS` for that one process; `doctor-copilot-receive` reads live CLI environments because a session launched without it is silently inert. Visible fresh is operator-metered and is not a release-gate MUST. |
@@ -161,14 +161,27 @@ mkdir -p "$CODEX_HOME/app-server-control"
 codex app-server --listen "unix://$CODEX_HOME/app-server-control/app-server-control.sock"
 ```
 
-This session is the supported home for the app-server and Codex TUIs. Omitted Codex
-fresh placement resolves its exact name from the caller's tmux server; Codex's MCP child
-then inherits the app-server's own `TMUX`/`TMUX_PANE`, so omitted outbound Pi placement
-stays in the home. An attached TUI does not lend its pane to the server, and N arbitrary
-clients in different sessions have no adjacency claim. Missing home/app-server rejects
-rather than guessing a client pane or creating/supervising either resource.
+#95 D1 (GLG, 2026-09-16) retired the requirement that this session be named `codex`, and with it the
+rule that an omitted-placement Codex TARGET selected it. The operator still owns the app-server and
+still chooses its room; Entwurf neither creates nor supervises it, and a missing app-server rejects.
+The block above keeps `codex` only as the name this document has always used for that session.
 
-Three ownership atoms remain separate:
+Since #95 lane B the outbound direction no longer rides the app-server's inherited
+`TMUX`/`TMUX_PANE`: a Codex CALLER with no explicit placement opens its sibling beside its own
+pane, found by matching the caller's `_meta.threadId` against the `thread-id` the TUI writes
+into that pane's title. Zero matching panes (`codex-caller-seat-unresolved`), two or more
+(`codex-caller-seat-ambiguous`) and a caller whose `[tui].terminal_title` lacks `thread-id`
+(`codex-caller-title-missing`) are all named refusals with no fallback seat. An attached TUI
+still does not lend its pane to the server, and N arbitrary clients whose threads nobody named
+still have no adjacency claim: the anchor resolves only the pane displaying the thread the
+caller itself put on the request.
+
+The seat order, for all five backends, and it follows the CALLER rather than what is being
+opened: explicit `placement` wins; then a Codex CALLER's own pane (`codex-title-anchor`, no
+session name on the receipt because a session was observed rather than requested); then the
+caller's own session.
+
+Four ownership atoms remain separate:
 
 1. `entwurf install-codex-birth` owns `$CODEX_HOME/hooks.json` — one whole file, ours or
    absent — plus its launcher and import closure under `$XDG_DATA_HOME/entwurf/codex-birth`.
@@ -181,8 +194,17 @@ Three ownership atoms remain separate:
    keeps custom roots and the app-server seat intact without storing their values.
 3. `entwurf install-codex-statusline` owns only `thread-title` within
    `tui.status_line`. Birth calls `thread/name/set`, so the visible title is the garden id.
+4. `entwurf install-codex-terminal-title` owns only `thread-id` within `tui.terminal_title`
+   — a different key and a different axis from atom 3: `status_line` is what a human reads
+   inside the TUI, `terminal_title` is what the multiplexer reports back as `#{pane_title}`
+   and is the only value a caller seat can be matched against. The seeded list is
+   `["activity", "project-name", "thread-id"]` (`activity` leads because the herdr Codex
+   detector keys on the spinner/action-required prefix) and an existing operator list is
+   appended to, never reordered. A tmux server with `allow-set-title off` replaces every pane
+   title with the hostname, so the seat refuses there even with the atom installed — that is
+   a repair condition the refusal names, not an inference this rail makes.
 
-All three have state-backed doctors and inverses. Symlinked or foreign config is a
+All four have state-backed doctors and inverses. Symlinked or foreign config is a
 named refusal, not an adoption. Entwurf never installs Codex or its credentials.
 
 Sender identity is request-scoped. The bridge requires the complete Codex metadata
@@ -246,7 +268,8 @@ preserved all three records/transcripts, and left operator app-server PID `15516
 
 That receipt established the mechanism of the now-selected deployment, but its initial Pi also sat
 in the app-server session and predates the fixed-home default. The stronger explicit-home acceptance
-passed on 2026-09-12. Receipt `.probe-artifacts/20260912T140745-codex-home-live-green.log`
+passed on 2026-09-12, under the `codex` home topology #95 D1 later retired. Receipt
+`.probe-artifacts/20260912T140745-codex-home-live-green.log`
 (SHA-256 `09e79bd1b62962f8a11d647ee456a71b11965b6792c7972d97ac4992119c91d7`)
 records 57 assertions and exit 0. The operator app-server stayed at `$158/@390/%390`; real initial Pi
 `20260912T140748-355654` opened outside the home at `$150/@397`, omitted-placement Codex
@@ -298,7 +321,8 @@ omitted-placement Codex `20260913T065151-4b6078` (thread `01a0979a-edc4-7570-a29
 `$158/@448`, Codex-opened Pi `20260913T065213-0811e6` at `$158/@449`, against the same operator-owned
 app-server at `$158/@390/%390`. Artifact `.probe-artifacts/codex-fresh-live-2oId4C/` (`run-manifest.json`
 sha256 `2cff6f08…`). Note the fixture seat differs from the standalone run: the aggregate builds its own
-tmux session (`$187`), while the Codex legs still resolve to the exact `codex` home. That gate reported
+tmux session (`$187`), while the Codex legs resolved to the exact `codex` home that was the contract
+at the time. That gate reported
 MUST PASS=24 FAIL=0 SKIP=0 and `cut: OK`. Keep the three Codex acceptances apart — 57-assertion
 pre-amendment first admission, 48-assertion standalone amended (`fZccoK`), and this 48-assertion
 aggregate repeat (`2oId4C`).

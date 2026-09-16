@@ -32,6 +32,22 @@ export const CODEX_PREFLIGHT_HINT: Record<CodexPreflightRejectReason, string> = 
 		"the operator-owned Codex app-server default socket is absent or unsafe; start `codex app-server --listen unix://$CODEX_HOME/app-server-control/app-server-control.sock` and retry",
 };
 
+/**
+ * THE CALLER AXIS, AND IT IS NOT THE ONE ABOVE. Everything above asks "can a Codex sibling be
+ * OPENED on this host" — birth unit, vendor trust, MCP hand, visible identity, app-server. This
+ * asks the opposite question: "can the Codex citizen DOING the opening be located", which is a
+ * fact about the CALLER's own config and is required no matter which backend it opens (#95
+ * lane B). Keeping them apart is the point: a Pi caller opening a Codex sibling needs the five
+ * above and none of this, and a Codex caller opening a Pi sibling needs this and none of those.
+ * Folding either into the other would refuse one operator for the other's missing repair.
+ */
+export type CodexCallerPreflightRejectReason = "codex-caller-title-missing";
+
+export const CODEX_CALLER_PREFLIGHT_HINT: Record<CodexCallerPreflightRejectReason, string> = {
+	"codex-caller-title-missing":
+		"this Codex caller's tui.terminal_title does not include thread-id, so the multiplexer reports no pane title naming this thread and there is no caller seat to open the sibling beside; run `entwurf install-codex-terminal-title`, then `entwurf doctor-codex-terminal-title` (an explicit placement.tmuxSession skips this check entirely, because it never needs the seat)",
+};
+
 export interface CodexUnitPaths {
 	hooksFile: string;
 	helperDir: string;
@@ -248,6 +264,35 @@ function visibleIdentityMissing(config: Record<string, unknown>): boolean {
 	if (tui == null || typeof tui !== "object" || Array.isArray(tui)) return true;
 	const statusLine = (tui as Record<string, unknown>).status_line;
 	return !Array.isArray(statusLine) || !statusLine.includes("thread-title");
+}
+
+/** `[tui].terminal_title` membership, the exact axis `entwurf doctor-codex-terminal-title`
+ * judges. Same shape as `visibleIdentityMissing` and a DIFFERENT key: `status_line` is what a
+ * human reads inside the TUI, `terminal_title` is what the multiplexer reports back as
+ * `#{pane_title}`. Neither substitutes for the other. */
+function callerTitleMissing(config: Record<string, unknown>): boolean {
+	const tui = config.tui;
+	if (tui == null || typeof tui !== "object" || Array.isArray(tui)) return true;
+	const terminalTitle = (tui as Record<string, unknown>).terminal_title;
+	return !Array.isArray(terminalTitle) || !terminalTitle.includes("thread-id");
+}
+
+/**
+ * The CALLER-side capability, pre-mutation and synchronous.
+ *
+ * Synchronous because it reads one config file and nothing else: there is no app-server axis
+ * here and there must not be one — whether the operator's app-server is up says nothing about
+ * whether a caller's pane can be found, and asking would make a placement check fail for a
+ * delivery reason.
+ *
+ * Call it only when the anchor will actually be USED — a codex caller that named an explicit
+ * `placement` never consults the title, so refusing it for a missing `thread-id` would be a
+ * refusal for an unused capability.
+ */
+export function codexCallerFreshPreflight(env: NodeJS.ProcessEnv): CodexCallerPreflightRejectReason | null {
+	const config = readConfig(env);
+	if (config === null || callerTitleMissing(config)) return "codex-caller-title-missing";
+	return null;
 }
 
 const DEFAULT_APP_SERVER_TIMEOUT_MS = 5_000;

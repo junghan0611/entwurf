@@ -48,6 +48,8 @@ export function buildCodexInstruction(input: CodexInstructionInput): string {
 		`${input.waitToken}\nThis is the addressed instruction from the initial Pi caller. Execute once, with no shell, ` +
 		"terminal, screen inspection, or retry:\n" +
 		`1. Call public mcp__entwurf_bridge__entwurf_fresh_call once with backend pi, model ${input.piModel}, cwd ${input.scratch}, ` +
+		// NO placement is the CLAIM, not a convenience: this is the call whose seat must come
+		// from this Codex's own pane title and from nowhere else (#95 lane B).
 		'NO placement, and task "After your automatic callback succeeds, answer ACK and stop. Do not open another sibling."\n' +
 		"2. Stop and wait for the Pi callback delivered into this Codex thread. Accept only a callback whose body " +
 		"repeats the exact nonce from your LAUNCH receipt and whose sender envelope names a garden id.\n" +
@@ -71,6 +73,9 @@ export interface InitialPiPhaseOneInput {
 export function buildInitialPiPhaseOne(input: InitialPiPhaseOneInput): string {
 	return (
 		`${input.initialPiWaitToken}\nExecute this public-tool chain exactly once; do not use shell, terminal, screen text, or retries:\n` +
+		// NO placement on BOTH legs since #95 D1: an omitted seat is the caller's own session for
+		// every backend, so this Codex opens in S beside the Pi that called it — which is what
+		// puts its TUI somewhere the app-server's inherited `TMUX` does not point.
 		`1. Call entwurf_fresh_call with backend codex, model ${input.codexModel}, cwd ${input.scratch}, NO placement, and task ` +
 		`"After your required callback receipt, end the turn and wait passively for the addressed instruction containing ${input.codexWaitToken}. ` +
 		`Do not call shell, sleep, terminal, or any tool to wait."\n` +

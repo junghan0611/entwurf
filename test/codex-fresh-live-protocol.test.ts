@@ -114,7 +114,7 @@ describe("codex fresh-live protocol", () => {
 		expect(phaseOne).toContain("wants_reply false");
 	});
 
-	it("[QK:CODEX-LIVE-HOME-PLACEMENT-OMITTED] exercises both default-placement legs", () => {
+	it("[QK:CODEX-LIVE-CALLER-SEAT-LEGS] NEITHER leg names a seat — the whole chain rides omitted placement, which is what the acceptance measures (#95 lane B)", () => {
 		const phaseOne = buildInitialPiPhaseOne({
 			initialPiWaitToken: "INITIAL-PI-WAIT-OUTER123",
 			codexWaitToken: "CODEX-WAIT-INNER456",
@@ -122,9 +122,17 @@ describe("codex fresh-live protocol", () => {
 			scratch: "/tmp/fixture",
 			codexInstruction,
 		});
+		// Leg 1 is the SETUP. Since #95 D1 retired the fixed `codex` home, an omitted seat is the
+		// CALLER's own session for every backend — so this Codex opens in the fixture's session,
+		// which is deliberately not the app-server's. Naming a seat here would work too, and
+		// would hide the retirement behind an override.
 		expect(phaseOne).toMatch(/backend codex, model gpt-5\.6-sol, cwd \/tmp\/fixture, NO placement/);
+		// Leg 2 is the CLAIM: no placement either, so that seat can only come from the Codex
+		// caller's own pane title. Handing it one would prove nothing.
 		expect(codexInstruction).toMatch(/backend pi, model openai-codex\/gpt-5\.6-luna, cwd \/tmp\/fixture, NO placement/);
+		// Neither leg may carry a seat name at all — that is the asymmetry this card removed.
 		expect(phaseOne).not.toContain("tmuxSession");
+		expect(codexInstruction).not.toContain("tmuxSession");
 	});
 
 	it("[QK:CODEX-LIVE-CODEX-TASK-WAITS-INNER-TOKEN] gives fresh Codex its later addressed token", () => {

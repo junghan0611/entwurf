@@ -1,16 +1,40 @@
 /**
- * First-admission LIVE acceptance for Codex visible fresh.
+ * First-admission LIVE acceptance for Codex visible fresh — reshaped for the #95 lane B caller
+ * seat.
  *
  * The operator owns the existing exact `codex` tmux home and Codex app-server. This smoke neither
  * creates nor supervises them: an explicit ENTWURF_CODEX_APP_SERVER_PID names the already-running
- * process whose /proc environment must corroborate the home. It starts from a DIFFERENT caller
- * session; omitted Codex placement selects the home by exact name. The attached TUI pane is never guessed.
+ * process whose /proc environment must corroborate the home. The attached TUI pane is never
+ * guessed.
+ *
+ * ── THE TOPOLOGY, AND WHY IT IS DELIBERATELY SPLIT (#95 lane B) ──
+ *
+ * Four coordinates on ONE tmux server, in TWO sessions:
+ *
+ *   A = wherever the operator started their app-server, and it must NOT be S. This is the
+ *       session the app-server's inherited `TMUX` names — the value a Codex MCP child would
+ *       fall back to. Its NAME does not matter: #95 D1 retired the fixed `codex` home, so the
+ *       operator seats the app-server wherever they like and Entwurf never asks which room.
+ *   S = the fixture's own session. The initial Pi caller opens here.
+ *
+ *   initial Pi   → S   (the fixture's own seat)
+ *   fresh Codex  → S   (hop 1, omitted placement: the caller's own session)
+ *   outbound Pi  → S   (hop 2, omitted placement — and this is the claim)
+ *
+ * Hop 2 is the whole point. Its seat is decided by the Codex caller's own pane title
+ * (`codex-title-anchor`), and the proof is that it lands in S: the app-server's environment
+ * points at A, so an env fallback — the pre-#95 behaviour — would have put it there. S is
+ * reachable only through the anchor. A receipt that says `codex-title-anchor` AND a session
+ * that is not A are two independent halves of the same claim, and both are asserted.
+ *
+ * A ≠ S is therefore a PRECONDITION of this card, not a convenience: run it with the app-server
+ * in the fixture's own session and hop 2 proves nothing, because both rules would answer S.
  *
  * RELEASE MUST once Codex is admitted. LIVE!=1 is the only host-prerequisite SKIP. With LIVE=1,
- * missing system birth, user MCP/status config, app-server, models, runtime, bridge, or tmux seat
- * is a FAIL. The smoke drives only public MCP calls, then joins Pi's native toolCall/toolResult
- * rows and Codex app-server thread events as receipt authority; screen text and model-reformatted
- * reports are never oracles.
+ * missing system birth, user MCP/status/terminal-title config, app-server, models, runtime,
+ * bridge, or tmux seat is a FAIL. The smoke drives only public MCP calls, then joins Pi's native
+ * toolCall/toolResult rows and Codex app-server thread events as receipt authority; screen text
+ * and model-reformatted reports are never oracles.
  *
  * A record-backed self-fetch fixture opens a real visible Pi caller through public fresh_call.
  * That Pi opens Codex, correlates Codex's raw callback, and addresses Codex through v2. Codex then
@@ -24,7 +48,12 @@ import { createHash } from "node:crypto";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { CODEX_PREFLIGHT_HINT, codexFreshPreflight } from "../pi-extensions/lib/codex-fresh-preflight.ts";
+import {
+	CODEX_CALLER_PREFLIGHT_HINT,
+	CODEX_PREFLIGHT_HINT,
+	codexCallerFreshPreflight,
+	codexFreshPreflight,
+} from "../pi-extensions/lib/codex-fresh-preflight.ts";
 import {
 	defaultMetaMailboxDir,
 	defaultMetaSessionsDir,
@@ -35,7 +64,7 @@ import {
 	writeMetaReceiverMarker,
 	writeMetaSenderMarker,
 } from "../pi-extensions/lib/meta-session.ts";
-import { CODEX_HOME_TMUX_SESSION, FRESH_CALL_BACKENDS } from "../pi-extensions/lib/mux-fresh-call.ts";
+import { FRESH_CALL_BACKENDS } from "../pi-extensions/lib/mux-fresh-call.ts";
 import {
 	readCodexThread,
 	realCodexProtocolOpener,
@@ -209,6 +238,27 @@ function inspectTmuxCoordinate(label: string, env: NodeJS.ProcessEnv): TmuxCoord
 		windowId: windowId as string,
 		paneId: paneId as string,
 	};
+}
+
+/**
+ * The session NAME behind a coordinate. Read on its own rather than added to the shared
+ * `TMUX_COORDINATE_FORMAT`: that row's field count is a pinned contract with its own
+ * deterministic oracle, and this card needs a name for exactly two reasons — to hand the fresh
+ * call a seat it can address, and to prove the app-server really sits in the `codex` home.
+ */
+function tmuxSessionName(label: string, env: NodeJS.ProcessEnv, paneId: string): string {
+	const inspected = spawnSync("tmux", ["display-message", "-p", "-t", paneId, "#{session_name}"], {
+		env,
+		encoding: "utf8",
+	});
+	ok(
+		`${label} session name answers through its own environment`,
+		inspected.status === 0,
+		String(inspected.stderr ?? ""),
+	);
+	const name = String(inspected.stdout ?? "").replace(/\r?\n$/, "");
+	ok(`${label} session name is non-empty`, name.length > 0, `name=${JSON.stringify(name)}`);
+	return name;
 }
 
 function cleanupWindows(): string[] {
@@ -634,10 +684,27 @@ async function run(): Promise<void> {
 			fixtureCoordinate.sessionId !== appServerCoordinate.sessionId,
 		`fixture=${fixtureCoordinate.serverPid}/${fixtureCoordinate.sessionId} app-server=${appServerCoordinate.serverPid}/${appServerCoordinate.sessionId}`,
 	);
+	// A and S, by NAME — recorded so the receipt says which rooms this run actually used. The
+	// load-bearing fact is A ≠ S, already asserted above: "the env fallback would have said A"
+	// is only a proof when A is a session the anchor could not have chosen. Since #95 D1 there
+	// is no required NAME for either — the operator seats the app-server wherever they like.
+	const appServerSessionName = tmuxSessionName(
+		"Codex app-server/MCP inherited seat",
+		appServerEnv,
+		appServerCoordinate.paneId,
+	);
+	const fixtureSessionName = tmuxSessionName("fixture/initial-Pi caller seat", process.env, fixtureCoordinate.paneId);
+	ok(
+		"the app-server's own session is a DIFFERENT room from the fixture's, which is what makes hop 2 decisive",
+		appServerSessionName !== fixtureSessionName,
+		`app-server=${JSON.stringify(appServerSessionName)} fixture=${JSON.stringify(fixtureSessionName)}`,
+	);
 	receipts["1-codex-app-server-mcp-coordinate"] =
 		`pid=${appServerPid}\nargv=${argv.join(" ")}\nserver=${appServerCoordinate.serverPid}\n` +
-		`session=${appServerCoordinate.sessionId}\nwindow=${appServerCoordinate.windowId}\npane=${appServerCoordinate.paneId}\n` +
-		`fixture-session=${fixtureCoordinate.sessionId}\nfixture-window=${fixtureCoordinate.windowId}`;
+		`session=${appServerCoordinate.sessionId}\nname=${appServerSessionName}\n` +
+		`window=${appServerCoordinate.windowId}\npane=${appServerCoordinate.paneId}\n` +
+		`fixture-session=${fixtureCoordinate.sessionId}\nfixture-name=${fixtureSessionName}\n` +
+		`fixture-window=${fixtureCoordinate.windowId}`;
 
 	const codexModel = process.env.ENTWURF_CODEX_FRESH_MODEL?.trim() ?? "";
 	const piModel = process.env.ENTWURF_CODEX_FRESH_PI_MODEL?.trim() ?? "";
@@ -653,6 +720,16 @@ async function run(): Promise<void> {
 		"the real installed Codex birth, MCP, visible identity, and default app-server preflight is green",
 		missing === null,
 		missing === null ? "" : `${missing}: ${CODEX_PREFLIGHT_HINT[missing]}`,
+	);
+	// The CALLER axis, and a different fact from the five above: hop 2 is made BY a Codex
+	// citizen, so this host's `[tui].terminal_title` must carry `thread-id` or that citizen has
+	// no findable pane. Asserted here, before any window opens, because the alternative is
+	// discovering it three model turns later as a seat refusal.
+	const callerMissing = codexCallerFreshPreflight(appServerEnv);
+	ok(
+		"the installed Codex CALLER seat config is green — tui.terminal_title carries thread-id",
+		callerMissing === null,
+		callerMissing === null ? "" : `${callerMissing}: ${CODEX_CALLER_PREFLIGHT_HINT[callerMissing]}`,
 	);
 
 	// The fixture and every bridge it talks to must resolve the same real stores the app-server
@@ -880,7 +957,12 @@ async function run(): Promise<void> {
 		selectExactSourceToolReceipt(
 			piSourceToolReceipts(readInitialPiEntries()),
 			"entwurf_fresh_call",
-			{ backend: "codex", model: codexModel, cwd: scratch, task: codexTask },
+			{
+				backend: "codex",
+				model: codexModel,
+				cwd: scratch,
+				task: codexTask,
+			},
 			"initial Pi Codex fresh call",
 		),
 	);
@@ -897,15 +979,21 @@ async function run(): Promise<void> {
 	);
 	if (!openedWindows.includes(codexWindow)) openedWindows.push(codexWindow);
 	ok("the source-owned Codex LAUNCH receipt carries its exact callback nonce", codexNonce.length > 0);
+	// HOP 1. An omitted seat, which since #95 D1 means the CALLER's own session for every backend
+	// — Codex no longer selects a fixed room. It is the setup rather than the claim: it puts the
+	// Codex TUI in S so hop 2's answer can be told apart from the app-server's inherited A. The
+	// receipt must name NO seat at all: the caller's own session is the absence of a seat rule,
+	// not a rule with a name.
 	ok(
-		"omitted placement opened fresh Codex in exact named `codex` home, resolved to the app-server session",
-		codexLaunchSession === appServerCoordinate.sessionId &&
-			codexLaunchReceipt.includes(
-				`seat:     ${CODEX_HOME_TMUX_SESSION} (Codex home tmux session, resolved to ${appServerCoordinate.sessionId})`,
-			),
-		`codex=${codexLaunchSession} app-server=${appServerCoordinate.sessionId}`,
+		"omitted placement opened fresh Codex in the caller's own session S, away from the app-server's A",
+		codexLaunchSession === fixtureCoordinate.sessionId &&
+			codexLaunchSession !== appServerCoordinate.sessionId &&
+			!/^\s*seat:/m.test(codexLaunchReceipt),
+		`codex=${codexLaunchSession} fixture=${fixtureCoordinate.sessionId} app-server=${appServerCoordinate.sessionId}`,
 	);
-	receipts["7-fresh-codex-coordinate"] = `session=${codexLaunchSession}\nwindow=${codexWindow}`;
+	receipts["7-fresh-codex-coordinate"] =
+		`session=${codexLaunchSession}\nname=${fixtureSessionName}\nwindow=${codexWindow}\n` +
+		`app-server-session=${appServerCoordinate.sessionId}\napp-server-name=${appServerSessionName}`;
 
 	const codexCallbackSender = await awaitOrRecover(
 		"the exact Codex callback in initial Pi source",
@@ -993,15 +1081,39 @@ async function run(): Promise<void> {
 	);
 	if (!openedWindows.includes(outboundPiWindow)) openedWindows.push(outboundPiWindow);
 	ok("the source-owned outbound Pi LAUNCH receipt carries its exact nonce", outboundPiNonce.length > 0);
+	// HOP 2 — THE CLAIM (#95 lane B). Two independent halves of one fact, and both are required.
+	// The SEAT: this Pi landed in S, the session the Codex TUI is in. The app-server's inherited
+	// `TMUX` names A, so the pre-#95 env fallback would have put it there; S is reachable only
+	// through the caller's own pane title. The LABEL: the receipt says `codex-title-anchor`, so
+	// the rule that chose it is named rather than inferred from a coincidence of sessions.
 	ok(
-		"supported Codex-home topology: a Pi in another session opens Codex in exact home; Codex opens outbound Pi " +
-			"beside itself and the operator-owned app-server. This does not claim arbitrary attached-TUI seat inference",
-		initialPiTmuxSession !== appServerCoordinate.sessionId &&
-			codexLaunchSession === appServerCoordinate.sessionId &&
-			outboundPiSession === appServerCoordinate.sessionId,
-		`initial-pi=${initialPiTmuxSession} codex=${codexLaunchSession} app-server=${appServerCoordinate.sessionId} outbound-pi=${outboundPiSession}`,
+		"omitted placement opened the outbound Pi beside the CODEX TUI in S — not in the app-server's home A",
+		outboundPiSession === codexLaunchSession &&
+			outboundPiSession === fixtureCoordinate.sessionId &&
+			outboundPiSession !== appServerCoordinate.sessionId,
+		`outbound-pi=${outboundPiSession} codex=${codexLaunchSession} fixture=${fixtureCoordinate.sessionId} app-server=${appServerCoordinate.sessionId}`,
 	);
-	receipts["12-outbound-fresh-pi-coordinate"] = `session=${outboundPiSession}\nwindow=${outboundPiWindow}`;
+	ok(
+		"the outbound Pi receipt names the title anchor as the rule that chose that seat, and no session name",
+		/^\s*seat:\s+\$\d+ \(the Codex caller's own pane, found by its thread-id terminal title/m.test(outboundPiReceipt) &&
+			!outboundPiReceipt.includes("requested tmux session"),
+		outboundPiReceipt,
+	);
+	// The four coordinates, stated together so the shape is readable in one place. This claims
+	// the CALLER-seat topology and nothing wider: no arbitrary attached-TUI inference, and no
+	// claim about a Codex TUI this smoke did not open.
+	ok(
+		"supported caller-seat topology: initial Pi in S, Codex in S, Codex opens outbound Pi in S, " +
+			"while the operator-owned app-server stays in its own session A",
+		initialPiTmuxSession === fixtureCoordinate.sessionId &&
+			codexLaunchSession === fixtureCoordinate.sessionId &&
+			outboundPiSession === fixtureCoordinate.sessionId &&
+			appServerCoordinate.sessionId !== fixtureCoordinate.sessionId,
+		`initial-pi=${initialPiTmuxSession} codex=${codexLaunchSession} outbound-pi=${outboundPiSession} app-server=${appServerCoordinate.sessionId}`,
+	);
+	receipts["12-outbound-fresh-pi-coordinate"] =
+		`session=${outboundPiSession}\nwindow=${outboundPiWindow}\ncodex-session=${codexLaunchSession}\n` +
+		`app-server-session=${appServerCoordinate.sessionId}\nseat-source=codex-title-anchor`;
 
 	const outboundPiGid = await untilAsync(
 		"the exact outbound Pi callback in Codex source",
@@ -1101,7 +1213,12 @@ async function run(): Promise<void> {
 			},
 			{
 				toolName: "entwurf_fresh_call",
-				arguments: { backend: "codex", model: codexModel, cwd: scratch, task: codexTask },
+				arguments: {
+					backend: "codex",
+					model: codexModel,
+					cwd: scratch,
+					task: codexTask,
+				},
 			},
 			{
 				toolName: "entwurf_v2",

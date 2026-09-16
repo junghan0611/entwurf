@@ -27,7 +27,12 @@
  *   - the #105 seat, through the real `freshCall`: an absent seat refuses and creates nothing,
  *     an existing one puts the window in THAT session with a receipt naming the resolved
  *     target, and the resulting handle closes through `closeWindow` from outside that session
- *   - #95's omitted Codex seat resolves exact existing `codex`, while omitted Pi stays caller-local
+ *   - an omitted seat stays caller-local for EVERY backend (#95 D1 retired the Codex home)
+ *   - #95 lane B's caller-seat leaf against REAL pane titles: 0 / 1 / 2 matching panes, and the
+ *     activity-adjacent title a ` | `-segment rule would miss
+ *   - #95 lane B's COMPOSITION: a Codex caller's omitted-placement fresh call lands in the
+ *     session its own titled pane is in, an explicit seat still overrides it, and an
+ *     unresolvable anchor refuses with the server byte-identical
  */
 
 import assert from "node:assert/strict";
@@ -35,7 +40,7 @@ import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { buildLaunchArgs, LaunchPreconditionError, launchPi } from "../pi-extensions/lib/mux-launch.ts";
-import { inspectPlacement } from "../pi-extensions/lib/mux-placement.ts";
+import { inspectPlacement, runTmux } from "../pi-extensions/lib/mux-placement.ts";
 import { skipLive } from "./lib/live-skip.ts";
 
 const LABEL = "check-mux-launch-tmux";
@@ -373,11 +378,16 @@ async function main(): Promise<void> {
 					!fxLines("list-windows", "-a", "-F", "#{window_id}").includes(receipt.windowId),
 			);
 
-			// (iv) Codex's omitted seat is a product default, not fixture prose. Missing home
-			// refuses before mutation; then a private session named exactly `codex` makes the real
-			// composition resolve that name while the Pi omitted-seat control stays caller-local.
-			const beforeMissingHome = inventory();
-			const missingHome = freshCall(
+			// (iv) #95 D1 (GLG, 2026-09-16): an omitted seat is caller-local for EVERY backend,
+			// Codex included. Until then an omitted-placement Codex selected a fixed existing
+			// session named `codex` — a room the operator had to keep because nothing could find
+			// the pane a Codex caller was sitting in. The caller-pane anchor below IS that
+			// mapping, so this cell now asserts the ABSENCE of the old default: with a session
+			// literally named `codex` present on this server, an omitted-placement Codex call
+			// must still land in the caller's own session and name no seat at all.
+			assert.equal(fx("new-session", "-d", "-s", "codex").status, 0, "fixture session named codex");
+			const decoyHomeId = fxLines("list-windows", "-t", "=codex", "-F", "#{session_id}")[0];
+			const omittedCodex = freshCall(
 				{
 					backend: "codex",
 					model: "fixture-model",
@@ -386,37 +396,179 @@ async function main(): Promise<void> {
 				},
 				inherited,
 			);
-			ok(
-				"codex home: omitted placement refuses a missing exact home without mutation",
-				!missingHome.ok && missingHome.reason === "tmux-session-missing" && inventory() === beforeMissingHome,
-			);
-			assert.equal(fx("new-session", "-d", "-s", "codex").status, 0, "fixture Codex home session");
-			const codexHomeId = fxLines("list-windows", "-t", "=codex", "-F", "#{session_id}")[0];
-			const home = freshCall(
-				{
-					backend: "codex",
-					model: "fixture-model",
-					task: "fixture task",
-					callerGardenId: "20260101T000000-fixture",
-				},
-				inherited,
-			);
-			assert.ok(home.ok, `the omitted-placement Codex call must succeed: ${home.ok ? "" : home.reason}`);
-			ok(
-				"codex home: omitted placement lands in exact existing `codex`, not the caller session",
-				home.receipt.sessionId === codexHomeId &&
-					home.receipt.sessionId !== placement.sessionId &&
-					home.receipt.tmuxSession === "codex" &&
-					home.receipt.tmuxSessionSource === "codex-home",
+			assert.ok(
+				omittedCodex.ok,
+				`the omitted-placement Codex call must succeed: ${omittedCodex.ok ? "" : omittedCodex.reason}`,
 			);
 			ok(
-				"codex home: the home receipt closes by stable handle",
-				closeWindow(home.receipt, inherited) === "closed" &&
-					!fxLines("list-windows", "-a", "-F", "#{window_id}").includes(home.receipt.windowId),
+				"no codex home: an omitted Codex seat is caller-local and names NO seat, even with a session called `codex` right there",
+				omittedCodex.receipt.sessionId === placement.sessionId &&
+					omittedCodex.receipt.sessionId !== decoyHomeId &&
+					omittedCodex.receipt.tmuxSession === undefined &&
+					omittedCodex.receipt.tmuxSessionSource === undefined &&
+					fxLines("list-windows", "-t", decoyHomeId, "-F", "#{window_id}").length === 1,
 			);
+			process.kill(Number(omittedCodex.receipt.panePid), "SIGKILL");
 			fx("kill-session", "-t", seatId);
-			fx("kill-session", "-t", codexHomeId);
+			fx("kill-session", "-t", decoyHomeId);
 			ok("seat: the fixture is back to one session", sessionCount() === 1);
+
+			// (v) #95 lane B: the caller-seat leaf, against REAL pane titles on this server.
+			// The deterministic gate can pin the anchor and the counting, but "what tmux
+			// actually reports as `#{pane_title}`, and which `$session` that pane is in" had
+			// no oracle independent of the leaf's own parse. This cell is that oracle. The
+			// titles are set with `select-pane -T` rather than by a Codex process: the claim
+			// under test is the LOOKUP, and a real TUI would add a model turn, a record and a
+			// vendor version to a gate that must stay hermetic.
+			{
+				const { resolveCodexCallerSeat } = await import("../pi-extensions/lib/codex-caller-seat.ts");
+				const thread = "01a0a7f9-ed9c-7aa2-a4dd-b1a39c0d4e11";
+				const anchor = `${thread.slice(0, 29)}...`;
+				const seatRun = (args: string[]) => runTmux(args, inherited);
+				const titleOf = (pane: string): string =>
+					fxLines("list-panes", "-a", "-F", "#{pane_id}|#{pane_title}").find((row) => row.startsWith(`${pane}|`)) ?? "";
+
+				// 0 matches: every pane on this server carries the default title, which is the
+				// same shape a server with `allow-set-title off` reports for a live Codex.
+				ok(
+					"caller seat: no pane naming the thread refuses as unresolved — no fallback session",
+					(() => {
+						const r = resolveCodexCallerSeat(thread, seatRun);
+						return !r.ok && r.reason === "codex-caller-seat-unresolved";
+					})(),
+				);
+
+				// 1 match, in a session that is NOT the caller's: the leaf must report THAT
+				// session, which is the whole point of the anchor.
+				assert.equal(fx("new-session", "-d", "-s", `${SESSION}-tui`).status, 0, "fixture TUI session");
+				const tuiSessionId = fxLines("list-windows", "-t", `=${SESSION}-tui`, "-F", "#{session_id}")[0];
+				const tuiPane = fxLines("list-panes", "-t", `=${SESSION}-tui`, "-F", "#{pane_id}")[0];
+				assert.equal(fx("select-pane", "-t", tuiPane, "-T", `entwurf | ${anchor}`).status, 0, "fixture TUI title");
+				ok(
+					"caller seat: tmux really reports the OSC-shaped title we are matching against",
+					titleOf(tuiPane) === `${tuiPane}|entwurf | ${anchor}`,
+				);
+				ok(
+					"caller seat: the one matching pane resolves to ITS session, not the caller's",
+					(() => {
+						const r = resolveCodexCallerSeat(thread, seatRun);
+						return (
+							r.ok &&
+							r.seat.paneId === tuiPane &&
+							r.seat.sessionId === tuiSessionId &&
+							r.seat.sessionId !== placement.sessionId &&
+							r.seat.source === "codex-title-anchor"
+						);
+					})(),
+				);
+
+				// The ACTIVITY-adjacent shape. `title_setup.rs:183-193` joins the activity item
+				// to its neighbour with a plain space, so an operator list ending in `activity`
+				// renders the thread id INSIDE one ` | ` segment. A segment-equality rule reads
+				// this pane as no match at all; the token rule resolves it.
+				assert.equal(fx("select-pane", "-t", tuiPane, "-T", `entwurf | Working ${anchor}`).status, 0, "activity title");
+				ok(
+					"caller seat: an activity-adjacent title still resolves — the id is a TOKEN, not a whole segment",
+					(() => {
+						const r = resolveCodexCallerSeat(thread, seatRun);
+						return r.ok && r.seat.paneId === tuiPane && r.seat.sessionId === tuiSessionId;
+					})(),
+				);
+
+				// 2 matches: a stale duplicate in another session. Picking either would seat a
+				// sibling by guess, so nothing is chosen.
+				assert.equal(fx("split-window", "-d", "-t", tuiPane).status, 0, "fixture duplicate pane");
+				const duplicate = fxLines("list-panes", "-t", `=${SESSION}-tui`, "-F", "#{pane_id}").find(
+					(id) => id !== tuiPane,
+				);
+				assert.ok(duplicate, "the fixture duplicate pane must exist");
+				assert.equal(fx("select-pane", "-t", duplicate, "-T", `tmp | ${anchor}`).status, 0, "duplicate title");
+				ok(
+					"caller seat: two panes naming one thread refuse as ambiguous — never the first match",
+					(() => {
+						const r = resolveCodexCallerSeat(thread, seatRun);
+						return !r.ok && r.reason === "codex-caller-seat-ambiguous";
+					})(),
+				);
+
+				// ── the COMPOSITION, through the real `freshCall` (#95 lane B C3) ─────────
+				// The leaf's decision is proven above; what has no oracle outside production is
+				// whether the omitted-placement path for a CODEX CALLER actually reaches that
+				// decision and turns it into the `-t` target. These cells run the real
+				// composition with the same hermetic runtime the rest of this gate uses, and
+				// read the answer from the server's own inventory rather than the receipt alone.
+				// Back to EXACTLY one matching pane: the duplicate above must stop naming the
+				// thread, or the composition below would (correctly) refuse as ambiguous.
+				assert.equal(fx("select-pane", "-t", duplicate, "-T", "plain-shell").status, 0, "clear duplicate title");
+				assert.equal(fx("select-pane", "-t", tuiPane, "-T", `entwurf | ${anchor}`).status, 0, "restore TUI title");
+				const anchoredCall = (over?: { tmuxSession: string }) =>
+					freshCall(
+						{
+							backend: "pi",
+							model: "fixture/model",
+							task: "fixture task",
+							placement: over,
+							callerGardenId: "20260101T000000-fixture",
+							callerNativeSessionId: thread,
+						},
+						inherited,
+					);
+
+				const anchored = anchoredCall();
+				assert.ok(anchored.ok, `the anchored fresh call must succeed: ${anchored.ok ? "" : anchored.reason}`);
+				ok(
+					"caller seat composition: the window lands in the session the CALLER's pane is in, not the caller session",
+					anchored.receipt.sessionId === tuiSessionId &&
+						anchored.receipt.sessionId !== placement.sessionId &&
+						fxLines("list-windows", "-t", tuiSessionId, "-F", "#{window_id}").includes(anchored.receipt.windowId),
+				);
+				ok(
+					"caller seat composition: the receipt names the SOURCE and no session name — the pane was observed, not requested",
+					anchored.receipt.tmuxSessionSource === "codex-title-anchor" && anchored.receipt.tmuxSession === undefined,
+				);
+				ok(
+					"caller seat composition: that window closes by its own handle",
+					closeWindow(anchored.receipt, inherited) === "closed" &&
+						!fxLines("list-windows", "-a", "-F", "#{window_id}").includes(anchored.receipt.windowId),
+				);
+
+				// Rule 1 over rule 2, against a real server: an explicit seat is never rewritten
+				// by the anchor, even when the anchor would have resolved.
+				assert.equal(fx("new-session", "-d", "-s", `${SESSION}-over`).status, 0, "fixture override session");
+				const overrideId = fxLines("list-windows", "-t", `=${SESSION}-over`, "-F", "#{session_id}")[0];
+				const overridden = anchoredCall({ tmuxSession: `${SESSION}-over` });
+				assert.ok(overridden.ok, `the overridden fresh call must succeed: ${overridden.ok ? "" : overridden.reason}`);
+				ok(
+					"caller seat composition: an explicit seat still wins over a resolvable anchor",
+					overridden.receipt.sessionId === overrideId &&
+						overridden.receipt.sessionId !== tuiSessionId &&
+						overridden.receipt.tmuxSession === `${SESSION}-over` &&
+						overridden.receipt.tmuxSessionSource === "requested",
+				);
+				closeWindow(overridden.receipt, inherited);
+				fx("kill-session", "-t", overrideId);
+
+				// An unresolvable anchor is a refusal with NOTHING created anywhere — the D2
+				// contract, read from the server rather than from the return value alone.
+				const beforeUnresolved = inventory();
+				const unresolved = freshCall(
+					{
+						backend: "pi",
+						model: "fixture/model",
+						task: "fixture task",
+						callerGardenId: "20260101T000000-fixture",
+						callerNativeSessionId: "01a0ffff-ffff-7fff-bfff-ffffffffffff",
+					},
+					inherited,
+				);
+				ok(
+					"caller seat composition: an unresolvable anchor refuses and creates NOTHING — no window, no session, no fallback",
+					!unresolved.ok && unresolved.reason === "codex-caller-seat-unresolved" && inventory() === beforeUnresolved,
+				);
+
+				fx("kill-session", "-t", tuiSessionId);
+				ok("caller seat: the fixture is back to one session", sessionCount() === 1);
+			}
 		}
 	} finally {
 		fx("kill-server");

@@ -424,8 +424,10 @@ conflict with another authoritative carrier.
     needs them. Codex is different again: its MCP child belongs to the operator-owned
     app-server, whose configured `env_vars` must forward `CODEX_HOME`, the Entwurf
     garden/control roots, and `TMUX`/`TMUX_PANE`. Those values locate the app-server's
-    stores and placement mechanism; they do not replace strict request identity or join
-    a request to an attached TUI's tmux seat.
+    stores; they do not replace strict request identity and they are NOT how a Codex
+    caller's own seat is found. Since #95 lane B that seat comes from the request's own
+    `_meta.threadId` matched against the `thread-id` the TUI writes into its pane title —
+    a placement input only, with 0 or 2+ matches refused rather than guessed.
   - **The anonymous hatch is not a substitute.**
     `ENTWURF_BRIDGE_ALLOW_ANONYMOUS_SENDER=1` deliberately yields `external-mcp`,
     non-replyable delivery. It is not a cheaper version of this step.
@@ -652,13 +654,17 @@ rule are both executable rather than remembered:
 For Codex #95, “existing citizen” in that LIVE pair means a real record-backed visible Pi,
 not a fixture that plants `PI_SESSION_ID`/`PI_AGENT_ID` or a self-fetch receipt collector.
 The release gate strips those ambient variables. The required sequence is real
-`Pi → visible Codex → visible Pi` under the explicit home topology: initial Pi in a tmux session
-other than the existing exact `codex` home; operator-owned app-server, omitted-placement fresh
-Codex, and Codex-opened outbound Pi in that home. The receipt records all four coordinates
-separately plus exact callbacks and addressed delivery both ways. A fixture may collect receipts
-but cannot substitute for the first Pi leg. Codex request metadata still has no arbitrary
-request→attached-TUI seat join, so that wider placement topology is unsupported and unclaimed.
-Entwurf neither guesses panes nor creates/supervises a hidden app-server/session manager.
+`Pi → visible Codex → visible Pi`, and since #95 lane B the topology is the one that can tell the
+caller seat apart from the app-server's inherited environment: the operator-owned app-server stays
+in the existing exact `codex` home A, the initial Pi and the Codex it opens both sit in another
+session S, and the Codex-opened outbound Pi must land in S with an omitted placement. A landing in
+A would be the env fallback; S is reachable only through the caller's own pane title, and the
+receipt must name `codex-title-anchor` as the rule that chose it. The receipt records all four
+coordinates separately plus exact callbacks and addressed delivery both ways. A fixture may collect
+receipts but cannot substitute for the first Pi leg. Codex request metadata still exports no
+arbitrary request→attached-TUI seat join, so placing a sibling beside a TUI whose thread nobody
+named remains unsupported and unclaimed. Entwurf neither guesses panes nor creates/supervises a
+hidden app-server/session manager.
 
 **An `unsupported` note is not a partial-release permit.** `[측정]` #87 is where that was learned at
 full price: the Bundle A+B candidate carried a fully honest sentence in the delivery matrix —

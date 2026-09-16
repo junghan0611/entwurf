@@ -19,12 +19,13 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { CODEX_CALLER_SEAT_HINT } from "../pi-extensions/lib/codex-caller-seat.ts";
+import { CODEX_CALLER_PREFLIGHT_HINT } from "../pi-extensions/lib/codex-fresh-preflight.ts";
 import {
 	buildBackendArgs,
 	buildFreshCallArgs,
 	buildFreshCallPrompt,
 	buildOmpBootstrapPayload,
-	CODEX_HOME_TMUX_SESSION,
 	FRESH_CALL_BACKENDS,
 	FRESH_CALL_CALLBACK_TOOL,
 	FRESH_CALL_RUNTIME,
@@ -676,21 +677,113 @@ describe("optional project seat — cross-session fresh placement (#105)", () =>
 	const CALLER_SESSION = "$0";
 	const TARGET_SESSION = "$7";
 
-	it("[QK:FRESHCALL-CODEX-HOME-DEFAULT] omitted Codex placement selects the fixed existing `codex` home while every other backend stays in its caller session", () => {
-		expect(CODEX_HOME_TMUX_SESSION).toBe("codex");
-		expect(selectFreshCallSeat("codex", undefined)).toEqual({
-			tmuxSession: "codex",
-			source: "codex-home",
-		});
-		for (const backend of FRESH_CALL_BACKENDS.filter((candidate) => candidate !== "codex")) {
-			expect(selectFreshCallSeat(backend, undefined), backend).toBeNull();
+	it("[QK:FRESHCALL-SEAT-NAME-IS-REQUESTED-ONLY] the ONLY named seat is one the caller asked for — every backend with no placement takes no named seat at all", () => {
+		// #95 D1 (GLG, 2026-09-16) retired the fourth rule this cell used to hold: an omitted
+		// Codex TARGET no longer selects a fixed existing session named `codex`. That room was a
+		// workaround for a mapping that did not exist yet; the caller-pane anchor IS that
+		// mapping, so keeping it would have left Codex alone answering "where does a sibling
+		// open?" differently from every other backend. The 2026-09-12 home acceptance stays in
+		// DELIVERY.md as history.
+		for (const backend of FRESH_CALL_BACKENDS) {
+			expect(selectFreshCallSeat(undefined), backend).toBeNull();
 		}
-		// An explicit seat is never silently rewritten, even for Codex. It is an expert
-		// override outside the supported home topology and the receipt says it was requested.
-		expect(selectFreshCallSeat("codex", { tmuxSession: "org" })).toEqual({
+		expect(selectFreshCallSeat({ tmuxSession: "org" })).toEqual({
 			tmuxSession: "org",
 			source: "requested",
 		});
+		// The seat selector cannot even SEE the backend or the caller any more, which is what
+		// makes "the named seat is exactly what was requested" a property of the signature.
+		expect(selectFreshCallSeat.length).toBe(1);
+	});
+
+	it("[QK:CODEX-SEAT-FOLLOWS-CALLER-NOT-BACKEND] the anchor branch is gated on WHO IS CALLING, never on what is being opened", () => {
+		// The distinction is the whole asymmetry #95 lane B removes, and it is invisible in a
+		// single-backend test: a Codex citizen opening a PI sibling must still get its own pane,
+		// and a pi citizen opening a CODEX sibling must not try to anchor with no thread id at
+		// all. The branch is unreachable without a real tmux server, so the gate is structural;
+		// its behavioural oracle is the caller-seat composition cell in `check-mux-launch-tmux`,
+		// which drives the real composition with backend `pi` and a Codex caller.
+		expect(MODULE_SRC).toContain("params.callerNativeSessionId !== undefined) {");
+		expect(MODULE_SRC).not.toContain('params.backend === "codex") {');
+	});
+
+	it("[QK:CODEX-SEAT-PRECEDENCE-ANCHOR-OVER-EXPLICIT] rule 1 beats rule 2 — an explicit seat is never overridden by a resolvable anchor, and the composition re-reads it rather than inferring it", () => {
+		expect(selectFreshCallSeat({ tmuxSession: "org" })).toEqual({
+			tmuxSession: "org",
+			source: "requested",
+		});
+		// The anchor branch is unreachable without a real tmux server, so the guard itself is a
+		// structural assert. Its behavioural oracle is the "an explicit seat still wins over a
+		// resolvable anchor" cell in `check-mux-launch-tmux`, which drives the real composition
+		// against a real second session. `params.placement` is re-read there ON PURPOSE: deriving
+		// it from `seat === undefined` would make "an explicit seat always wins" an invariant a
+		// later edit could lose by accident.
+		expect(MODULE_SRC).toContain("} else if (params.placement === undefined &&");
+		expect(MODULE_SRC).toContain("const anchor = resolveCodexCallerSeat(params.callerNativeSessionId,");
+	});
+
+	it("[QK:CODEX-SEAT-COMPOSITION-REJECT-IS-REAL] an anchor refusal is returned VERBATIM and stops the call — it never becomes another reason and never falls through to a session", () => {
+		// The leaf's two reasons are the ones the caller sees; renaming or swallowing either
+		// would send the operator to the wrong repair for a window that was never opened.
+		expect(MODULE_SRC).toContain("if (!anchor.ok) return { ok: false, reason: anchor.reason };");
+		// ...and the branch that follows it is the ONLY place the anchor's session is adopted.
+		expect(MODULE_SRC).toContain("targetSessionId = anchor.seat.sessionId;");
+	});
+
+	it("[QK:CODEX-SEAT-TITLE-BECOMES-DELIVERY-TARGET] the first-turn framing carries the caller's GARDEN id and never the thread id a pane title matched — a forgeable title may not decide who a sibling calls back to", () => {
+		// Hard Rule 16, held at the one seam where the two values sit side by side. The thread id
+		// reaches placement and stops there; the address the sibling is told to answer is the
+		// record-backed garden id the SURFACE supplied.
+		expect(MODULE_SRC).toContain("callerGardenId: params.callerGardenId,");
+		expect(MODULE_SRC).not.toContain("params.callerNativeSessionId ?? params.callerGardenId");
+		// The prompt builder itself takes only the garden id — there is no thread parameter to
+		// pass one through, which is what makes the seam above the only place to get it wrong.
+		const prompt = buildFreshCallPrompt({ backend: "codex", task: TASK, callerGardenId: GID, nonce: NONCE });
+		expect(prompt).toContain(GID);
+		expect(prompt).not.toContain("01a0a7f9");
+	});
+
+	it("[QK:CODEX-SEAT-RECEIPT-INVENTS-A-NAME] an anchored seat reports its SOURCE and no session NAME — the caller's pane was observed, never requested by name", () => {
+		const anchored: FreshCallReceipt = {
+			serverPid: "1",
+			sessionId: "$2",
+			windowId: "@9",
+			windowIndex: "3",
+			paneId: "%9",
+			panePid: "3",
+			backend: "pi",
+			model: PI_MODEL,
+			tmuxSessionSource: "codex-title-anchor",
+			runtimePath: "/usr/bin/pi",
+			nonce: NONCE,
+		};
+		expect(anchored.tmuxSession).toBeUndefined();
+		const text = renderFreshCall({ ok: true, receipt: anchored }).text;
+		expect(text).toMatch(/seat:\s+\$2 \(the Codex caller's own pane/);
+		expect(text).toContain("an OBSERVED session, not a requested name");
+		// Production assembly half: the anchored branch emits the source ALONE, and the named
+		// branch keeps emitting both. A receipt that invented a name here would report a seat
+		// the caller never asked for.
+		expect(MODULE_SRC).toContain('? { tmuxSessionSource: "codex-title-anchor" as const }');
+		expect(MODULE_SRC).toContain("{ tmuxSession: selectedSeat.tmuxSession, tmuxSessionSource: selectedSeat.source }");
+	});
+
+	it("both anchor refusals are real rejections with their own repair text, and neither falls back to another session", () => {
+		for (const reason of ["codex-caller-seat-unresolved", "codex-caller-seat-ambiguous"] as const) {
+			const rendered = renderFreshCall({ ok: false, reason });
+			expect(rendered.isError).toBe(true);
+			expect(rendered.text).toContain(reason);
+			expect(rendered.text).toContain("No window was opened.");
+			// The hint is the LEAF's, not a second copy — the sentence an operator reads cannot
+			// drift from the predicate that produced it.
+			expect(rendered.text).toContain(CODEX_CALLER_SEAT_HINT[reason]);
+		}
+		// The caller-side capability refusal is a THIRD, separate reason: a missing terminal
+		// title is repaired by an installer, not by closing a duplicate pane.
+		const titleMissing = renderFreshCall({ ok: false, reason: "codex-caller-title-missing" });
+		expect(titleMissing.isError).toBe(true);
+		expect(titleMissing.text).toContain(CODEX_CALLER_PREFLIGHT_HINT["codex-caller-title-missing"]);
+		expect(titleMissing.text).toContain("entwurf install-codex-terminal-title");
 	});
 
 	/** The leaf's injected seam, answering the way tmux 3.6a was MEASURED to (2026-09-07,
@@ -836,9 +929,9 @@ describe("optional project seat — cross-session fresh placement (#105)", () =>
 		expect(seated.text).toContain(`in session ${TARGET_SESSION}`);
 		const home = renderFreshCall({
 			ok: true,
-			receipt: { ...receipt, backend: "codex", tmuxSession: "codex", tmuxSessionSource: "codex-home" },
+			receipt: { ...receipt, backend: "codex", tmuxSession: "codex", tmuxSessionSource: "requested" },
 		});
-		expect(home.text).toContain(`seat:     codex (Codex home tmux session, resolved to ${TARGET_SESSION})`);
+		expect(home.text).toContain(`seat:     codex (requested tmux session, resolved to ${TARGET_SESSION})`);
 	});
 
 	it("an omitted non-Codex seat keeps the pre-#105 behaviour and stays orthogonal to the cwd — neither input is inferred from the other", () => {
