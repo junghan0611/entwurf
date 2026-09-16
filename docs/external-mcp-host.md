@@ -164,8 +164,10 @@ what it becomes.
 Birth occurs on the first turn, not window open. It mints
 `record.nativeSessionId = threadId` and sets the visible thread title to the garden id.
 `entwurf_v2` probes the loaded-thread list and sends once through `codex queue`; it never
-retries. `entwurf_fresh_call` accepts `backend: "codex"` after all three owned units and
-the default socket pass preflight. Codex remains outside ACP and has no resume surface.
+retries. `entwurf_fresh_call` accepts `backend: "codex"` after the birth, MCP and status-line units
+and the default socket pass preflight; the fourth unit, `install-codex-terminal-title`, is what a
+Codex CALLER needs to open a sibling at all (without it the caller has no resolvable seat and the
+call is refused as `codex-caller-title-missing`). Codex remains outside ACP and has no resume surface.
 
 #### Antigravity CLI (`agy`)
 

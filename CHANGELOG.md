@@ -36,14 +36,16 @@ All notable changes to this project will be documented here. Format follows [Kee
   server's; Ctrl-C is the operator's), creates the control directory, forwards the rest of the
   argv byte-identical, and strips `PI_SESSION_ID`/`PI_AGENT_ID` so the server every bridge child
   inherits from cannot carry someone else's identity. The address comes from the SAME leaf
-  delivery, preflight and the LIVE smoke read (`resolveCodexDefaultSocketPath`), and the gate
-  compares the two spellings byte-for-byte over an env matrix rather than trusting either.
-  Refusals are named and happen before the exec: a live socket (with whatever `/proc` can be
-  READ to say about its holder — never an inferred owner), an unidentifiable path, a second
-  `--listen`, a recursive launch, no `codex` on PATH. A dead socket file is reported and launched
-  over. **It is a managed spelling, not a managed lifecycle**: no supervisor, no restart, no
-  daemon, no pid file, and `entwurf_fresh_call` still REJECTS a missing app-server rather than
-  starting one. The tmux seat this server gives caller-seat lookups is reported as a fact, not
+  delivery, preflight and the LIVE smoke read: the launcher ASKS that resolver through the new
+  internal `entwurf codex-socket-path` rather than re-deriving the path, so there is exactly one
+  spelling of this address instead of two that agree on the inputs somebody thought of.
+  Refusals are named and happen before the exec: a live socket (naming the pid whose `/proc`
+  cmdline actually carries that socket, and saying plainly when the host holds none — never an
+  inferred owner), an unidentifiable path, a second
+  `--listen`, a recursive launch, a socket classification nobody wrote, no `codex` on PATH. A dead
+  socket file is reported and launched over. **It is a managed spelling, not a managed
+  lifecycle**: no supervisor, no restart, no daemon, no pid file, and `entwurf_fresh_call` still
+  REJECTS a missing app-server rather than starting one. The tmux seat this server gives caller-seat lookups is reported as a fact, not
   enforced as a requirement. Typing the raw vendor command remains equivalent.
 
 ### Verification
@@ -63,14 +65,25 @@ All notable changes to this project will be documented here. Format follows [Kee
   app-server's inherited `TMUX` names A, so the pre-#95 environment fallback would have put the
   outbound Pi there. Its receipt instead records `seat-source=codex-title-anchor`. `DELIVERY.md` owns
   the coordinates, garden ids and digests, including the 43-assertion run kept as the D1 measurement.
-- **`check-codex-app-server-launch` — 22 assertions, hermetic, plus 5 mutants all killed by
+- **`check-codex-app-server-launch` — 27 assertions, hermetic, plus 7 mutants all killed by
   their own claim.** A fake vendor on a sandbox PATH under the real name reports the argv, parent
-  and environment it was handed; nothing is asserted by reading the launcher's source. Its second
-  oracle is the product's own TS socket leaf, imported rather than transcribed, so a bash/TS
-  divergence is a gate failure instead of a server nothing can find. `check-pack-install` proves
-  the INSTALLED verb reaches a vendor at the address the INSTALLED compiled resolver computes —
-  a file-list assertion cannot tell a shipped script from one that resolves its siblings wrongly
-  under `node_modules`.
+  and environment it was handed; nothing is asserted by reading the launcher's source.
+  `check-pack-install` proves the INSTALLED verb reaches a vendor at the address the INSTALLED
+  compiled resolver computes — a file-list assertion cannot tell a shipped script from one that
+  resolves its siblings wrongly under `node_modules`.
+- **Independent review caught a false success this gate had certified, and the repair removed the
+  class rather than the instance.** The launcher's first version re-derived the socket path in
+  bash and the gate compared the two spellings over four ASCII-normal inputs they agreed on.
+  `[측정 2026-09-16]` they disagree on `CODEX_HOME=$'\ufeff'` — JS `trim` strips U+FEFF, a POSIX
+  `[:space:]` trim does not, so the managed launch would have started a server at
+  `<BOM>/app-server-control/app-server-control.sock` while delivery looked at `$HOME/.codex` —
+  and on `path.join`'s normalization of a trailing slash or a `..` segment. Widening the matrix
+  would only have added the inputs somebody thought of, so the second spelling was deleted: the
+  launcher asks, the gate's hostile cells (BOM, trailing slash, `..`) keep it asking, and the
+  mutant that used to drop `CODEX_HOME` now re-derives the path in bash instead. The same review
+  found the `/proc` holder assertion over-determined (it accepted the fallback text OR a pid, so
+  deleting the scan passed) and the socket classifier not fail-closed on an unrecognised reading;
+  both are now discriminating cells with mutants of their own.
 - **Two gate defects surfaced on the way and were fixed rather than worked around.** A mutant whose
   `find` no longer matched had been silently untested since a rename — a stale mutant is a claim
   nobody is checking, so `check-gate-qualification` scores it red. And the LIVE source-call oracle

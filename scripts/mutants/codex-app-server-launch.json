@@ -4,10 +4,19 @@
 	"mutants": [
 		{
 			"claim": "CODEX-APP-SERVER-ADDRESS-MATCHES-PRODUCT-LEAF",
-			"title": "resolving the control socket from HOME alone ignores CODEX_HOME, so the one command starts a server at an address no record, preflight or delivery call will ever look at \u2014 and every one of them stays green while nothing can reach it",
+			"title": "re-deriving the control-socket path in bash instead of asking the product resolver reintroduces the divergence this launcher was repaired for: a CODEX_HOME that JS trims away and a POSIX trim keeps, or a path.join normalization, starts a server at an address delivery and preflight never look at",
 			"subject": "scripts/codex-app-server-launch.sh",
-			"find": ["codex_home=\"$(trim \"${CODEX_HOME:-}\")\""],
-			"replace": ["codex_home=\"\""],
+			"find": [
+				"if ! SOCK=\"$(bash \"$REPO_DIR/run.sh\" codex-socket-path)\"; then",
+				"\tfail \"could not resolve the Codex control-socket path.",
+				"  '$REPO_DIR/run.sh codex-socket-path' failed; that leaf is the only spelling of this address,",
+				"  and this launcher will not invent a second one. Its output above says why.\"",
+				"fi",
+				"[ -n \"$SOCK\" ] \\",
+				"\t|| fail \"the Codex control-socket resolver returned an empty path \u2014 neither CODEX_HOME nor",
+				"  HOME names a usable Codex home. Set CODEX_HOME.\""
+			],
+			"replace": ["SOCK=\"${CODEX_HOME:-$HOME/.codex}/app-server-control/app-server-control.sock\""],
 			"gate": ["bash", "run.sh", "check-codex-app-server-launch"],
 			"timeoutSeconds": 300,
 			"signature": "[QK:CODEX-APP-SERVER-ADDRESS-MATCHES-PRODUCT-LEAF]",
@@ -63,6 +72,49 @@
 			"gate": ["bash", "run.sh", "check-codex-app-server-launch"],
 			"timeoutSeconds": 300,
 			"signature": "[QK:CODEX-APP-SERVER-REFUSES-SECOND-LISTEN]",
+			"signatureSource": "scripts/check-codex-app-server-launch.ts"
+		},
+		{
+			"claim": "CODEX-APP-SERVER-READS-PROC-HOLDER",
+			"title": "dropping the /proc cmdline scan makes every already-listening refusal say nobody could be found \u2014 the operator is told to stop a server the message cannot name, and the refusal reads the same whether the host was searched or not",
+			"subject": "scripts/codex-app-server-launch.sh",
+			"find": [
+				"\t\towner=\"\"",
+				"\t\tif [ -d /proc ]; then",
+				"\t\t\tfor cl in /proc/[0-9]*/cmdline; do",
+				"\t\t\t\t[ -r \"$cl\" ] || continue",
+				"\t\t\t\tif tr '\\0' ' ' < \"$cl\" 2>/dev/null | grep -qF \"$SOCK\"; then",
+				"\t\t\t\t\towner=\"${owner}    pid $(basename \"$(dirname \"$cl\")\"): $(tr '\\0' ' ' < \"$cl\")",
+				"\"",
+				"\t\t\t\tfi",
+				"\t\t\tdone",
+				"\t\tfi"
+			],
+			"replace": ["\t\towner=\"\""],
+			"gate": ["bash", "run.sh", "check-codex-app-server-launch"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:CODEX-APP-SERVER-READS-PROC-HOLDER]",
+			"signatureSource": "scripts/check-codex-app-server-launch.ts"
+		},
+		{
+			"claim": "CODEX-APP-SERVER-REFUSES-UNRECOGNISED-PROBE",
+			"title": "letting an unrecognised socket classification fall through to the exec turns the one reading nobody understands into a launch \u2014 every branch above it exists to decide whether this launch would clobber a running server",
+			"subject": "scripts/codex-app-server-launch.sh",
+			"find": [
+				"\t*)",
+				"\t\t# Hard Rule 15. Every branch above is a decision about whether this launch would",
+				"\t\t# CLOBBER a running server, so an unrecognised classification is the one case where",
+				"\t\t# proceeding is unsafe \u2014 and a probe that exits 0 while printing something nobody wrote",
+				"\t\t# would otherwise fall straight through to the exec.",
+				"\t\tfail \"codex-app-server-socket-probe-unrecognised: the socket classifier answered",
+				"  '$probe_status', which is not one of live/stale/indeterminate/absent. Refusing to launch on a",
+				"  reading nothing understands.\"",
+				"\t\t;;"
+			],
+			"replace": ["\tunreachable-classification)", "\t\t:", "\t\t;;"],
+			"gate": ["bash", "run.sh", "check-codex-app-server-launch"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:CODEX-APP-SERVER-REFUSES-UNRECOGNISED-PROBE]",
 			"signatureSource": "scripts/check-codex-app-server-launch.ts"
 		}
 	]

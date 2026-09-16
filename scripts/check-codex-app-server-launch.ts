@@ -10,17 +10,25 @@
  * (`run.sh codex-app-server`), because the dispatcher's own argv handling is part of the
  * contract: the verb must not reach the vendor.
  *
- * THE SECOND ORACLE, AND IT IS THE POINT OF THIS GATE. The socket address is spelled in two
- * places now — the product's `resolveCodexDefaultSocketPath` (TypeScript, read by delivery,
- * preflight and the LIVE smoke) and this bash leaf. Two spellings of one address is exactly
- * how a consumer ends up with a server nothing can find. So the argv the fake vendor reports
- * is compared against the value the REAL TS leaf computes for the SAME environment, across
- * an environment matrix. The TS function is imported, not transcribed: a gate that restated
- * the expected path would drift with the leaf instead of binding it.
+ * THE ADDRESS ORACLE, AND WHY IT IS SHAPED LIKE THIS NOW. The first version of this launcher
+ * re-derived the socket path in bash, and this gate compared the two spellings over four
+ * ASCII-normal inputs. They agreed on those four and diverged elsewhere: `[측정 2026-09-16,
+ * independent review]` `CODEX_HOME=$'\ufeff'` trims to nothing in JS and keeps its byte in a
+ * POSIX `[:space:]` trim, so the launcher would have started a server at
+ * `<BOM>/app-server-control/app-server-control.sock` while delivery looked at `$HOME/.codex`.
+ * A matrix can only ever hold the inputs somebody thought of, so the second spelling was
+ * removed rather than widened — the launcher now ASKS `run.sh codex-socket-path`, which prints
+ * what `resolveCodexDefaultSocketPath` computes.
+ *
+ * That makes the cells below a WIRING oracle rather than a transcription oracle, and they are
+ * written to fail if the wiring is ever replaced by arithmetic again: the matrix keeps the
+ * ASCII cases AND carries the hostile inputs that caught the divergence, with the expectation
+ * computed by the real TS function on the same environment. The mutant that matters is not
+ * "drop CODEX_HOME" any more; it is "derive the path here instead of asking".
  */
 
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import * as net from "node:net";
 import { tmpdir } from "node:os";
@@ -116,12 +124,13 @@ exit "\${FAKE_CODEX_EXIT:-0}"
 		};
 	}
 
-	// ── 1. the address, bound to the leaf the product reads ─────────────────────
-	// The matrix is the environment shapes `resolveCodexHome` actually distinguishes:
-	// HOME alone, an explicit CODEX_HOME, and a CODEX_HOME that is whitespace only — which
-	// is NOT a value and must fall back to HOME. The expectation is computed by the real TS
-	// function on the same inputs, so this cell cannot pass a launcher that invented its own
-	// path, and cannot fail a launcher that merely disagrees with a transcription.
+	// ── 1. the address, taken from the leaf the product reads ───────────────────
+	// Two groups, and the second is the load-bearing one. The ASCII cells are the environment
+	// shapes `resolveCodexHome` distinguishes at all. The HOSTILE cells are the inputs on which
+	// a bash transcription was MEASURED to diverge from it — a BOM-only CODEX_HOME (JS `trim`
+	// strips U+FEFF, a POSIX `[:space:]` trim does not) and the two `path.join` normalizations.
+	// They are here so that replacing the `codex-socket-path` call with arithmetic goes red
+	// instead of passing on well-behaved paths, which is exactly how the first version passed.
 	{
 		const explicit = path.join(root, "explicit-codex-home");
 		const matrix: Array<{ label: string; env: Record<string, string | undefined> }> = [
@@ -129,6 +138,9 @@ exit "\${FAKE_CODEX_EXIT:-0}"
 			{ label: "explicit CODEX_HOME", env: { CODEX_HOME: explicit } },
 			{ label: "whitespace CODEX_HOME falls back to HOME", env: { CODEX_HOME: "   " } },
 			{ label: "CODEX_HOME with surrounding whitespace is trimmed", env: { CODEX_HOME: `  ${explicit}  ` } },
+			{ label: "BOM-only CODEX_HOME is not a value and falls back to HOME", env: { CODEX_HOME: "\ufeff" } },
+			{ label: "a trailing slash is normalized away", env: { CODEX_HOME: `${explicit}/` } },
+			{ label: "a .. segment is normalized", env: { CODEX_HOME: `${explicit}/sub/..` } },
 		];
 		for (const cell of matrix) {
 			const r = launch([], cell.env);
@@ -223,10 +235,44 @@ exit "\${FAKE_CODEX_EXIT:-0}"
 			r.status !== 0 && r.out.includes("codex-app-server-already-listening") && r.args.length === 0,
 		);
 		ok(
-			"the refusal reports what /proc actually says about the holder, and says so plainly when nothing matches — it never infers an owner from the socket file",
-			r.out.includes("What /proc reports about it:") &&
-				(r.out.includes("read, not inferred") || /pid \d+:/.test(r.out)),
+			"with nothing on this host spelling that socket, the refusal SAYS so rather than naming a holder it cannot see",
+			r.out.includes("What /proc reports about it:") && r.out.includes("read, not inferred") && !/pid \d+:/.test(r.out),
 		);
+		server.close();
+		servers.pop();
+	}
+	{
+		// The other half, and the pair is what makes either one discriminating. The first
+		// version asserted "fallback text OR a pid line", which every run satisfied through the
+		// fallback branch — deleting the scan entirely would have passed it. So this cell puts a
+		// process on the host whose cmdline really does carry the socket path and requires the
+		// refusal to name THAT pid. A launcher that stopped reading /proc now goes red here, and
+		// a launcher that invented an owner goes red in the cell above.
+		const ownedHome = path.join(root, "owned-home");
+		const ownedSock = resolveCodexDefaultSocketPath({ CODEX_HOME: ownedHome });
+		mkdirSync(path.dirname(ownedSock), { recursive: true });
+		const server = net.createServer();
+		servers.push(server);
+		server.listen(ownedSock);
+		// A decoy whose ARGV carries the path. It does not hold the socket, and it must not: the
+		// launcher reports what `/proc/*/cmdline` says, which is a READING, and this cell pins
+		// exactly that reading rather than a claim about socket ownership the kernel never made.
+		const holder = spawn("python3", ["-c", "import time; time.sleep(120)", ownedSock], {
+			stdio: "ignore",
+			detached: false,
+		});
+		try {
+			const r = launch([], { CODEX_HOME: ownedHome });
+			ok(
+				`[QK:CODEX-APP-SERVER-READS-PROC-HOLDER] the refusal names the pid whose cmdline actually carries that socket (want pid ${holder.pid})`,
+				r.status !== 0 &&
+					r.out.includes("codex-app-server-already-listening") &&
+					r.out.includes(`pid ${holder.pid}:`) &&
+					!r.out.includes("read, not inferred"),
+			);
+		} finally {
+			holder.kill("SIGKILL");
+		}
 		server.close();
 		servers.pop();
 	}
@@ -277,6 +323,23 @@ exit "\${FAKE_CODEX_EXIT:-0}"
 		ok(
 			"a first launch on a host with no control directory creates it and reaches the vendor",
 			r.status === 0 && existsSync(path.dirname(resolveCodexDefaultSocketPath({ CODEX_HOME: freshHome }))),
+		);
+	}
+
+	{
+		// Hard Rule 15: an unrecognised reading is the one case where proceeding is unsafe,
+		// because every branch above is a decision about whether this launch would clobber a
+		// running server. The stimulus is a sandbox `python3` that exits 0 while printing
+		// something nobody wrote — the exact shape a silent fall-through needs.
+		const oddBin = path.join(root, "odd-probe-bin");
+		mkdirSync(oddBin, { recursive: true });
+		const oddPython = path.join(oddBin, "python3");
+		writeFileSync(oddPython, "#!/usr/bin/env bash\ncat >/dev/null\necho 'unexpected-probe-status'\nexit 0\n");
+		chmodSync(oddPython, 0o755);
+		const r = launch([], { PATH: `${oddBin}:${bin}:${process.env.PATH ?? ""}` });
+		ok(
+			"[QK:CODEX-APP-SERVER-REFUSES-UNRECOGNISED-PROBE] a socket classifier that exits 0 with a reading nobody wrote REFUSES instead of falling through to the exec",
+			r.status !== 0 && r.out.includes("codex-app-server-socket-probe-unrecognised") && r.args.length === 0,
 		);
 	}
 

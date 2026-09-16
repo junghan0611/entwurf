@@ -263,6 +263,7 @@ Usage:
   ./run.sh install-codex-terminal-title   # add thread-id to tui.terminal_title so the multiplexer reports the caller's thread in #{pane_title} (#95 placement input, never an address)
   ./run.sh uninstall-codex-terminal-title # remove only the recorded terminal-title atom
   ./run.sh doctor-codex-terminal-title    # effective caller-seat config + ownership verdict
+  ./run.sh codex-socket-path              # #95 INTERNAL (the launcher asks this; you do not need it): print the Codex app-server default control-socket path for this environment, from the SAME resolver delivery and preflight read
   ./run.sh codex-app-server [args...]     # #95: the ONE COMMAND that starts the operator's Codex app-server. exec()s `codex app-server --listen "unix://$CODEX_HOME/app-server-control/app-server-control.sock"` in THIS terminal (cwd/pid/exit are the vendor's, Ctrl-C is yours) — entwurf owns the SPELLING of that address, never the process's lifecycle: no supervisor, no restart, no daemon, no pid file. The socket path is the same value `resolveCodexDefaultSocketPath` computes for every other Codex surface, and the gate binds the two. Your arguments are forwarded byte-identical after it; a second --listen is refused by name. Refuses on a live socket (names the /proc owner it can read) or an indeterminate one, and reports which tmux server this seat gives caller-seat lookups. Run it in a DETACHED tmux session other than the one you work in
   ./run.sh install-agy-statusline     # own the agy statusLine subtree with bare entwurf-agy-statusline; preserve unrelated settings
   ./run.sh uninstall-agy-statusline   # honest inverse from statusline install-state
@@ -6717,6 +6718,16 @@ case "$cmd" in
     ;;
   doctor-codex-terminal-title)
     codex_terminal_title doctor
+    ;;
+  codex-socket-path)
+    # #95 INTERNAL: print the Codex app-server default control-socket path for this
+    # environment. It exists because `entwurf codex-app-server` is bash and cannot import
+    # `resolveCodexDefaultSocketPath`; re-deriving that path in bash was MEASURED to diverge
+    # (BOM-only CODEX_HOME, path normalization), so the launcher asks instead of transcribing.
+    # `run_ts` is the crossing (compiled twin when installed, strip-types in a clone), which is
+    # the whole reason this sits in the dispatcher rather than inside the leaf.
+    shift || true
+    run_ts scripts/codex-socket-path.ts "$@"
     ;;
   codex-app-server)
     # #95: the managed app-server SPELLING. Same shape and same reasons as the `copilot`

@@ -41,7 +41,6 @@ REPO_DIR="$(cd "$HERE/.." && pwd)"
 # that can redirect an exec is an authority, not a test convenience. The gate proves the
 # real contract instead — it puts its fake vendor on a sandbox PATH under this exact name.
 VENDOR_CMD="codex"
-SOCKET_LEAF="app-server-control/app-server-control.sock"
 
 fail() { printf 'FAIL: %s\n' "$*" >&2; exit 1; }
 note() { printf '[entwurf] %s\n' "$*" >&2; }
@@ -56,26 +55,30 @@ if [ -n "${ENTWURF_CODEX_APP_SERVER_ACTIVE:-}" ]; then
   '$VENDOR_CMD' is the OpenAI Codex CLI, or run the vendor binary by its full path."
 fi
 
-# --- the socket path, resolved exactly as the product resolves it ----------
-# Mirrors resolveCodexHome: an explicit CODEX_HOME wins, whitespace is trimmed, and a value
-# that is empty AFTER trimming is not a value. Neither carrier present is a hard error
-# rather than a guess, because every other Codex surface would compute a different path
-# than whatever this one invented.
-trim() {
-	local v="$1"
-	v="${v#"${v%%[![:space:]]*}"}"
-	v="${v%"${v##*[![:space:]]}"}"
-	printf '%s' "$v"
-}
-codex_home="$(trim "${CODEX_HOME:-}")"
-if [ -z "$codex_home" ]; then
-	home_dir="$(trim "${HOME:-}")"
-	[ -n "$home_dir" ] \
-		|| fail "codex app-server: neither CODEX_HOME nor HOME is available, so the default
-  control-socket path cannot be resolved. Set CODEX_HOME to your Codex home."
-	codex_home="$home_dir/.codex"
+# --- the socket path: ASKED, never re-derived -------------------------------
+# This leaf does no path arithmetic at all, and that is the correction rather than the style.
+# Its first version mirrored `resolveCodexHome` in bash — `${CODEX_HOME:-$HOME/.codex}` plus a
+# POSIX `[:space:]` trim — with a gate comparing the two spellings over four ASCII-normal
+# inputs they happened to agree on. `[측정 2026-09-16, independent review]` they disagree
+# elsewhere: with `CODEX_HOME=$'\ufeff'` the TS leaf trims (JS trim strips U+FEFF) and falls
+# back to `$HOME/.codex`, while the bash trim kept the byte and produced
+# `<BOM>/app-server-control/app-server-control.sock`; `path.join` likewise normalizes a
+# trailing slash or a `..` segment where the bash concatenation did not. Each of those starts a
+# server at an address delivery and preflight never look at.
+#
+# So the second spelling is gone instead of widened — a transcription can only ever be tested
+# on the inputs somebody thought of. `run.sh codex-socket-path` prints what
+# `resolveCodexDefaultSocketPath` computes for THIS environment, through `run_ts` (compiled twin
+# when installed, strip-types in a clone). An empty or failed answer is a hard refusal: there is
+# no fallback spelling left to guess with, and that is the point.
+if ! SOCK="$(bash "$REPO_DIR/run.sh" codex-socket-path)"; then
+	fail "could not resolve the Codex control-socket path.
+  '$REPO_DIR/run.sh codex-socket-path' failed; that leaf is the only spelling of this address,
+  and this launcher will not invent a second one. Its output above says why."
 fi
-SOCK="$codex_home/$SOCKET_LEAF"
+[ -n "$SOCK" ] \
+	|| fail "the Codex control-socket resolver returned an empty path — neither CODEX_HOME nor
+  HOME names a usable Codex home. Set CODEX_HOME."
 
 # --- operator argv: forwarded, never reinterpreted -------------------------
 # Everything the operator passes is appended after the injected pair and crosses
@@ -204,6 +207,18 @@ $owner  Use that server, or stop it first."
 		;;
 	stale)
 		note "a dead control socket is already at $SOCK (nothing is listening); the vendor replaces it."
+		;;
+	absent)
+		: # nothing is there; the ordinary first launch
+		;;
+	*)
+		# Hard Rule 15. Every branch above is a decision about whether this launch would
+		# CLOBBER a running server, so an unrecognised classification is the one case where
+		# proceeding is unsafe — and a probe that exits 0 while printing something nobody wrote
+		# would otherwise fall straight through to the exec.
+		fail "codex-app-server-socket-probe-unrecognised: the socket classifier answered
+  '$probe_status', which is not one of live/stale/indeterminate/absent. Refusing to launch on a
+  reading nothing understands."
 		;;
 esac
 
