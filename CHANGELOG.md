@@ -41,7 +41,10 @@ All notable changes to this project will be documented here. Format follows [Kee
   spelling of this address instead of two that agree on the inputs somebody thought of.
   Refusals are named and happen before the exec: a live socket (naming the pid whose `/proc`
   cmdline actually carries that socket, and saying plainly when the host holds none — never an
-  inferred owner), an unidentifiable path, a second
+  inferred owner), a resolved address that is not absolute or carries a control character
+  (refused before anything is created: a relative socket is a different file for every process
+  that resolves it, and the bridge that will look for it is the app-server's MCP child with its
+  own cwd), an unidentifiable path, a second
   `--listen`, a recursive launch, a socket classification nobody wrote, no `codex` on PATH. A dead
   socket file is reported and launched over. **It is a managed spelling, not a managed
   lifecycle**: no supervisor, no restart, no daemon, no pid file, and `entwurf_fresh_call` still
@@ -65,7 +68,7 @@ All notable changes to this project will be documented here. Format follows [Kee
   app-server's inherited `TMUX` names A, so the pre-#95 environment fallback would have put the
   outbound Pi there. Its receipt instead records `seat-source=codex-title-anchor`. `DELIVERY.md` owns
   the coordinates, garden ids and digests, including the 43-assertion run kept as the D1 measurement.
-- **`check-codex-app-server-launch` — 27 assertions, hermetic, plus 7 mutants all killed by
+- **`check-codex-app-server-launch` — 29 assertions, hermetic, plus 9 mutants all killed by
   their own claim.** A fake vendor on a sandbox PATH under the real name reports the argv, parent
   and environment it was handed; nothing is asserted by reading the launcher's source.
   `check-pack-install` proves the INSTALLED verb reaches a vendor at the address the INSTALLED
@@ -82,8 +85,14 @@ All notable changes to this project will be documented here. Format follows [Kee
   launcher asks, the gate's hostile cells (BOM, trailing slash, `..`) keep it asking, and the
   mutant that used to drop `CODEX_HOME` now re-derives the path in bash instead. The same review
   found the `/proc` holder assertion over-determined (it accepted the fallback text OR a pid, so
-  deleting the scan passed) and the socket classifier not fail-closed on an unrecognised reading;
-  both are now discriminating cells with mutants of their own.
+  deleting the scan passed) and the socket classifier not fail-closed on an unrecognised reading.
+  A second review pass then found that asking one authority for the address does not make the
+  ANSWER safe: the resolver returns `CODEX_HOME` faithfully, so
+  `CODEX_HOME=$'relative\ncontrol-home'` had the launcher create that directory under its caller's
+  cwd and bind a relative socket — a different file for every process that resolves it, while the
+  gate still passed. This launcher is the only Codex surface that CREATES and binds rather than
+  reads, so it now refuses a non-absolute or control-character address before the first write.
+  Every one of those is a discriminating cell with a mutant of its own; the lane is 9.
 - **Two gate defects surfaced on the way and were fixed rather than worked around.** A mutant whose
   `find` no longer matched had been silently untested since a rename — a stale mutant is a claim
   nobody is checking, so `check-gate-qualification` scores it red. And the LIVE source-call oracle

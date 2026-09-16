@@ -155,6 +155,34 @@ exit "\${FAKE_CODEX_EXIT:-0}"
 		}
 	}
 
+	{
+		// Asking one authority for the address does not make the ANSWER safe to act on. The
+		// resolver returns `CODEX_HOME` faithfully, absolute or not, and this launcher is the one
+		// surface that CREATES a directory at that path and binds it. A relative address is a
+		// different file for every process that resolves it — and the bridge that will look for
+		// this socket is the app-server's MCP child, with its own cwd.
+		const cwdProbe = path.join(root, "relative-cwd");
+		mkdirSync(cwdProbe, { recursive: true });
+		const r = launch([], { CODEX_HOME: "relative-control-home" }, cwdProbe);
+		ok(
+			"[QK:CODEX-APP-SERVER-REFUSES-RELATIVE-SOCKET] a relative resolved address refuses before the vendor AND before anything is created on disk",
+			r.status !== 0 &&
+				r.out.includes("codex-app-server-socket-path-not-absolute") &&
+				r.args.length === 0 &&
+				!existsSync(path.join(cwdProbe, "relative-control-home")),
+		);
+	}
+	{
+		// ABSOLUTE on purpose, so this cell is not shadowed by the one above: the two refusals
+		// are separate guards and a mutant that removes only this one must still go red.
+		const weird = path.join(root, "ctrl-home\nsecond-line");
+		const r = launch([], { CODEX_HOME: weird });
+		ok(
+			"[QK:CODEX-APP-SERVER-REFUSES-CONTROL-CHAR-SOCKET] an absolute address carrying a control character refuses rather than creating or binding it",
+			r.status !== 0 && r.out.includes("codex-app-server-socket-path-untrusted") && r.args.length === 0,
+		);
+	}
+
 	// ── 2. the subcommand, and the operator's argv after it ─────────────────────
 	{
 		const r = launch(["--config", "a=b", "", "two words"]);

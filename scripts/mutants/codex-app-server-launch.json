@@ -116,6 +116,42 @@
 			"timeoutSeconds": 300,
 			"signature": "[QK:CODEX-APP-SERVER-REFUSES-UNRECOGNISED-PROBE]",
 			"signatureSource": "scripts/check-codex-app-server-launch.ts"
+		},
+		{
+			"claim": "CODEX-APP-SERVER-REFUSES-RELATIVE-SOCKET",
+			"title": "accepting a relative resolved address makes the launcher create a directory under whatever cwd it was typed in and bind a socket whose meaning differs per process \u2014 the bridge that looks for it is the app-server's MCP child with its own working directory, so the server and its finder end up at two different files",
+			"subject": "scripts/codex-app-server-launch.sh",
+			"find": [
+				"case \"$SOCK\" in",
+				"\t/*) ;;",
+				"\t*) fail \"codex-app-server-socket-path-not-absolute: the resolver returned",
+				"  '$SOCK'",
+				"  A relative control-socket address resolves to a different file for every process that reads it,",
+				"  and the bridge that looks for this socket runs with its own working directory. Set CODEX_HOME to",
+				"  an absolute path.\" ;;",
+				"esac"
+			],
+			"replace": ["# any address the resolver returns is good enough to create and bind"],
+			"gate": ["bash", "run.sh", "check-codex-app-server-launch"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:CODEX-APP-SERVER-REFUSES-RELATIVE-SOCKET]",
+			"signatureSource": "scripts/check-codex-app-server-launch.ts"
+		},
+		{
+			"claim": "CODEX-APP-SERVER-REFUSES-CONTROL-CHAR-SOCKET",
+			"title": "accepting a control-character-bearing address creates and binds a path no operator can name back \u2014 the address appears in receipts, refusals and /proc scans as a broken line, and this is the only surface that would bring it into existence",
+			"subject": "scripts/codex-app-server-launch.sh",
+			"find": [
+				"case \"$SOCK\" in",
+				"\t*[[:cntrl:]]*) fail \"codex-app-server-socket-path-untrusted: the resolved control-socket address",
+				"  carries a control character (CODEX_HOME almost certainly does). Refusing to create or bind it.\" ;;",
+				"esac"
+			],
+			"replace": ["# control characters in an address are somebody else's problem"],
+			"gate": ["bash", "run.sh", "check-codex-app-server-launch"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:CODEX-APP-SERVER-REFUSES-CONTROL-CHAR-SOCKET]",
+			"signatureSource": "scripts/check-codex-app-server-launch.ts"
 		}
 	]
 }

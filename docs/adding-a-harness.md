@@ -721,9 +721,15 @@ the same; not one of its answers is.
 > wrongly. `entwurf codex-app-server` is a managed SPELLING: it becomes the operator's own
 > long-lived app-server, mints no citizen, and the bare vendor command it `exec`s is equally
 > correct typed by hand. The test for whether a new harness wants one is not "is there a hard
-> string" but "does an operator have to type a path the product also computes" — if so, the verb's
-> only job is to resolve that path from the SAME leaf the product reads, and a gate must bind the
-> two spellings. Everything else (supervision, restart, lifecycle) stays outside: a launcher that
+> string" but "does an operator have to type a path the product also computes" — if so, the verb
+> must ASK the leaf that computes it rather than re-derive it, even when re-deriving looks like
+> three lines of shell. `[측정 2026-09-16]` the first version did re-derive, with a gate comparing
+> the two spellings over an environment matrix; they agreed on every ASCII input and diverged on a
+> BOM-only `CODEX_HOME` and on path normalization, which is a managed launch starting a server at
+> an address delivery never looks at. A transcription can only be tested on the inputs somebody
+> thought of. Whatever the leaf returns is then still a capability, not a fact: the verb is the
+> surface that CREATES and binds, so it refuses a non-absolute or control-character address before
+> the first write. Everything else (supervision, restart, lifecycle) stays outside: a launcher that
 > keeps its process alive has become a manager, and this repo does not ship one.
 | 2 model + permission | NO positional prompt: `--entwurf-bootstrap`, payload, then `--model`, value, then `--approval-mode`, `yolo`. `-p/--print` is still the forbidden flag — it runs the turn and EXITS | the width is the same GLG task-wide decision, but for the opposite reason: omp offers no argv grammar for a narrower grant at all (`tools.approval.<tool>` is a config axis). And the trap is inverted — omp's schema default is ALREADY `yolo`, so dropping the token changes nothing observable and the drift would be invisible to every behavioural test. The PROMPT half diverges hardest of all: Copilot's argv carries the whole first turn, omp's carries none of it — see "When argv cannot carry the first turn" below |
 | 3 preflight | FIVE axes: birth, MCP hand, receive, visible identity, and **callback callable** (`tools.xdev !== true`) | the fifth is omp-specific and load-bearing for clause 5: the vendor default mounts MCP tools as `xd://` devices whose schemas never reach the prompt, so the sibling could be launched, be delivered to, and still never call anything |

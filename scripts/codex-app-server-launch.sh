@@ -19,12 +19,14 @@
 # rather than being started behind anyone's back. What changed is only that the refusal can
 # now name a command a person can actually type.
 #
-# THE SOCKET PATH IS NOT SPELLED TWICE. `resolveCodexDefaultSocketPath`
-# (pi-extensions/lib/native-push/codex-ws-client.ts) is where the product computes this
-# path, and it is the leaf every OTHER Codex surface reads. A bash leaf cannot import it,
-# so the gate binds them instead: `check-codex-app-server-launch` runs both over the same
-# environment matrix and requires byte equality. A divergence is a gate failure, not a
-# surprise at delivery time.
+# THE SOCKET PATH IS SPELLED ONCE, SOMEWHERE ELSE. `resolveCodexDefaultSocketPath`
+# (pi-extensions/lib/native-push/codex-ws-client.ts) is where the product computes this path,
+# and it is the leaf every OTHER Codex surface reads. A bash leaf cannot import it, so this one
+# ASKS — `run.sh codex-socket-path`, through `run_ts`. It was written the other way first, with
+# a bash transcription and a gate comparing the two over an environment matrix; they agreed on
+# every ASCII input and diverged on a BOM-only CODEX_HOME and on path normalization. See
+# scripts/codex-socket-path.ts for that measurement. A transcription can only be tested on the
+# inputs somebody thought of, which is why there is no longer one to test.
 #
 # THE TMUX LINE IS A FACT, NOT A REFUSAL. The MCP bridge is a CHILD of this server and
 # inherits its `TMUX`, so the tmux server this process sits in is the one caller-seat
@@ -79,6 +81,28 @@ fi
 [ -n "$SOCK" ] \
 	|| fail "the Codex control-socket resolver returned an empty path — neither CODEX_HOME nor
   HOME names a usable Codex home. Set CODEX_HOME."
+
+# Asking one authority for the address does not make the ANSWER safe to act on, and this is the
+# one place that acts on it: `mkdir -p` creates a directory at it and the vendor binds it. The
+# resolver faithfully returns whatever `CODEX_HOME` holds — it neither requires an absolute path
+# nor rejects control characters, because the surfaces that merely READ it (preflight's lstat,
+# the delivery probe) fail closed on their own. A RELATIVE address is a different file for every
+# process that resolves it, and the bridge that will look for this socket is the app-server's MCP
+# child with its own cwd — so the one thing a launch cannot do is bind a path whose meaning
+# depends on where it was typed. Control characters are refused with it: a newline in an address
+# is not a path this repo will create on an operator's behalf. Both refuse BEFORE any write.
+case "$SOCK" in
+	/*) ;;
+	*) fail "codex-app-server-socket-path-not-absolute: the resolver returned
+  '$SOCK'
+  A relative control-socket address resolves to a different file for every process that reads it,
+  and the bridge that looks for this socket runs with its own working directory. Set CODEX_HOME to
+  an absolute path." ;;
+esac
+case "$SOCK" in
+	*[[:cntrl:]]*) fail "codex-app-server-socket-path-untrusted: the resolved control-socket address
+  carries a control character (CODEX_HOME almost certainly does). Refusing to create or bind it." ;;
+esac
 
 # --- operator argv: forwarded, never reinterpreted -------------------------
 # Everything the operator passes is appended after the injected pair and crosses
