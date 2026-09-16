@@ -28,6 +28,22 @@ All notable changes to this project will be documented here. Format follows [Kee
   (`codex-title-anchor`); then the caller's own session. The anchored receipt reports its SOURCE and
   no session name, because a session was observed rather than a name requested.
 
+### Verification
+
+- **Caller-seat LIVE accepted on Linux, 2026-09-16 (Codex 0.153.4): 56 assertions, exit 0.** The
+  operator-owned app-server stayed alone in session A (`$30`/`@41`/`%45`, pid `737636`) while the
+  initial Pi, the omitted-placement Codex it opened, and that Codex's own outbound Pi all landed in a
+  different session S (`$2`: `@46`, `@47`, `@48`). A ≠ S is what makes the run decisive: the
+  app-server's inherited `TMUX` names A, so the pre-#95 environment fallback would have put the
+  outbound Pi there. Its receipt instead records `seat-source=codex-title-anchor`. `DELIVERY.md` owns
+  the coordinates, garden ids and digests, including the 43-assertion run kept as the D1 measurement.
+- **Two gate defects surfaced on the way and were fixed rather than worked around.** A mutant whose
+  `find` no longer matched had been silently untested since a rename — a stale mutant is a claim
+  nobody is checking, so `check-gate-qualification` scores it red. And the LIVE source-call oracle
+  compared tool arguments with `isDeepStrictEqual`, so a model that omitted the optional `wants_reply`
+  rather than passing it explicitly read as drift; it now normalizes that one key to its schema
+  default. Both are recorded in `VERIFY.md`'s affected-set rules so the inner loop stops missing them.
+
 ### Changed
 
 - **The fixed `codex` tmux home is RETIRED (#95 D1).** 0.21.0 shipped it three days earlier: an
