@@ -30,6 +30,14 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ### Verification
 
+- **The Codex LIVE card now measures WHERE a sibling starts, and the acceptance is recorded.**
+  `[LIVE 2026-09-16, Codex 0.153.4, 65 assertions, exit 0]` hop 1 requests a cwd and joins four
+  authorities that cannot borrow from each other — the pane's `#{pane_current_path}`, the vendor
+  rollout's `session_meta.cwd`, the Entwurf record and the requested scratch; hop 2 requests NEITHER
+  placement NOR cwd, so its directory can only come from the Codex caller's own record. Both are
+  asserted different from the app-server's live `/proc/<pid>/cwd`, which is the failure mode staying
+  visible rather than coincidentally equal. 65 and 56 are different contracts: lane C added the cwd
+  axis on top of lane B's seat axis. Receipts and digests in `DELIVERY.md` / `BASELINE.md`.
 - **Caller-seat LIVE accepted on Linux, 2026-09-16 (Codex 0.153.4): 56 assertions, exit 0.** The
   operator-owned app-server stayed alone in session A (`$30`/`@41`/`%45`, pid `737636`) while the
   initial Pi, the omitted-placement Codex it opened, and that Codex's own outbound Pi all landed in a
