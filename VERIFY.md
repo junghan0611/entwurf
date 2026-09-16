@@ -71,13 +71,15 @@ Verification here is not a benchmark. In production we exchange short turns and 
 > The aggregate release gate does not own a live agy conversation id, so agy's real native-push round trip is a separate acceptance axis: three fail-loud doctors plus `LIVE=1 AGY_CONVERSATION_ID=<id> ./run.sh smoke-agy-native-push-live`, followed by a fresh-conversation sender/reply check after package install. Its deterministic install/sender gates are already inside `pnpm run check:full`; do not misreport the aggregate gate as live agy evidence. **Cost fence:** the agy conversation this smoke drives runs on a free account, so open it on `gemini-3.6-flash` — never a Pro tier. The model is the operator's choice at conversation-open time; entwurf never selects it, and no assertion reads it (see the shipped-lane note: model display is not part of the agy contract).
 >
 > Aggregate release-gate does not own a loaded Codex thread. Codex native-push remains an
-> on-demand host axis. The final first-admission acceptance passed on 2026-09-12 with the
-> explicit home topology; `DELIVERY.md` owns its 57-assertion receipt and digest. Re-runs start
-> from a tmux session other than `codex`; the operator-owned
-> app-server and supported Codex TUIs sit in the existing exact `codex` session; omitted Codex
-> placement resolves there; and the Codex-opened Pi stays there. Exact `rust-v0.153.4` source
-> exposes no arbitrary request→attached-TUI-seat value, so that wider topology is unsupported
-> and unclaimed rather than a blocker to the explicit home.
+> on-demand host axis. The first-admission acceptance passed on 2026-09-12 under the fixed `codex`
+> home topology #95 D1 later retired; `DELIVERY.md` owns its 57-assertion receipt and digest as
+> history. Re-runs follow the caller-seat topology instead: the operator-owned app-server sits in
+> its own session A, the initial Pi and the Codex it opens both sit in a DIFFERENT session S, and
+> the Codex-opened Pi must land in S. **A ≠ S is a precondition, not a preference** — the
+> app-server's inherited `TMUX` names A, so an outbound Pi in S can only have come from the
+> caller's own pane title, and the receipt must name `codex-title-anchor` as the rule that chose
+> it. Exact `rust-v0.153.4` source still exposes no arbitrary request→attached-TUI-seat value, so
+> placing a sibling beside a TUI whose thread nobody named stays unsupported and unclaimed.
 >
 > The A cell takes no inferred server or models:
 > `LIVE=1 ENTWURF_CODEX_APP_SERVER_PID=<existing-app-server-pid>
@@ -90,6 +92,15 @@ Verification here is not a benchmark. In production we exchange short turns and 
 > receipts beside that real Pi leg is not the disqualifier — substituting for the leg is (see
 > `docs/adding-a-harness.md`, the same wording). The receipt must separately name the initial
 > Pi, app-server, fresh Codex, and outbound Pi coordinates.
+>
+> **Running the 37-minute qualification on a memory-pressured host.** `[측정 2026-09-16,
+> thinkpad, 27 GiB]` `check-gate-qualification` took 37m37s and was killed three times by the
+> HARNESS's low-memory watchdog — not by any gate, and not by the kernel OOM killer. Each kill
+> left the checkout intact (the runner restores it) but discarded the run. Detaching it with
+> `setsid` survived, at the cost of the harness no longer tracking it: completion raises no
+> notification, so a separate waiter is needed for the signal. Record this as a host condition
+> rather than a gate property — it says nothing about the candidate, and the same command on a
+> less pressured host needs none of it.
 >
 > Authoritative per-cut counts and digests live in BASELINE/CHANGELOG, not inline
 > here; embedding them in the protocol makes a correct guide stale after every cut.
@@ -136,6 +147,26 @@ The manual `pi --session` path is used only when (a) the entwurf path itself is 
 
 - Execute one command at a time (no `;`-chaining). Preserve full stdout/stderr at each step.
 - On anything wrong, **stop and hold** — preserve session/cache/process state before proceeding.
+
+### Choosing the affected set for an inner loop
+
+The inner loop runs only affected gates, so the cost of that choice is a gap nobody sees until the
+full floor runs. Two rules exist because both gaps were paid for on the #95 lane B candidate, with
+every focused gate green at the time:
+
+- **Mutant manifests are keyed by SUBJECT FILE, not by lane.** Edit a file and check every
+  `scripts/mutants/*.json` whose `subject` names it, not only the lanes you wrote. `[측정
+  2026-09-16]` renaming one local in `mcp/entwurf-bridge/src/index.ts` left
+  `FRESHCALL-CODEX-PREMUTATION-MCP` in a manifest the lane never touched; qualification reported
+  it `MUTANT-STALE` (find matched 0×). **A stale mutant is a claim nobody is testing** — its
+  assertion keeps passing while the mutation that gives it meaning is never applied — which is why
+  this is a red rather than a warning. `check-gate-manifests` validates shape and inventory in
+  seconds but cannot see a find that no longer matches; only the executing body can.
+- **Any `mcp/entwurf-bridge/src/**` edit owes `pnpm run build-bridge` plus
+  `./run.sh check-bridge-delivery` in the same inner loop.** `[측정 2026-09-16]` the same candidate
+  reached `check:full` with a stale compiled entry and failed in 22 seconds on "artifact is not
+  stale". The installed surfaces run compiled JS (Hard Rule 11), so an un-rebuilt `dist` means the
+  focused gates proved the source while every package-shaped gate still judged the previous build.
 
 ### Wording — avoid safety-interpretation contamination
 
