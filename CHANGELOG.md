@@ -63,6 +63,26 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ### Fixed
 
+- **A Codex sibling's THREAD now opens where its pane is (#95 lane C).** The seat was right and the
+  directory was not: `[측정 2026-09-16]` a pi → Codex → Claude Code chain recorded the app-server's
+  `~/repos/gh/entwurf` for all three citizens while the panes sat in `~/repos/gh/agent-config`.
+  `[source rust-v0.153.4]` an explicit `--remote <endpoint>` resolves to `AppServerTarget::Remote`
+  (`codex-rs/tui/src/lib.rs:875-876`), and a Remote target takes its new thread's cwd from
+  `remote_cwd_override` alone (`app_server_session.rs:2022-2033`) — absent, the app-server opens the
+  thread in its OWN directory, and the birth hook then records that vendor-supplied cwd honestly.
+  The codex argv now always carries that override as `-C <dir>`, the flag the shared interactive
+  options already expose beside `--dangerously-bypass-approvals-and-sandbox`
+  (`utils/cli/src/shared_options.rs:53-68`), preserved for a remote target at
+  `startup_orchestration.rs:191-194`. **One flag, no vendor patch, no new layer.**
+- **A Codex CALLER that names no cwd opens its sibling in its OWN directory.** This bridge runs as
+  the operator-owned app-server's MCP child, so the directory its process reports is the
+  app-server's rather than the caller's — an omitted `cwd` used to put every sibling of every Codex
+  caller in the app-server's repo, whatever backend was being opened. The surface now hands the
+  composition that citizen's RECORD cwd under the same condition that already carries its thread
+  id, and it is consulted only when the call requested none. One value, two carriers: tmux `-c`
+  places the pane, codex `-C` places the thread. Every other caller's argv is byte-identical, and
+  the receipt names which rule chose the directory (`requested` / the Codex caller's own record
+  directory) instead of calling a caller-record path "requested".
 - **Three named refusals replace a silent wrong seat.** Zero matching panes is
   `codex-caller-seat-unresolved` (the TUI is on another tmux server, its config carries no
   `thread-id`, or that server has `allow-set-title off`, which `[측정]` replaces every pane title

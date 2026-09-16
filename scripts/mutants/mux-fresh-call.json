@@ -123,7 +123,7 @@
 			"title": "one surface drops the optional cwd from its schema, so cross-repo fresh works from pi and silently cannot exist from the MCP bridge",
 			"subject": "mcp/entwurf-bridge/src/index.ts",
 			"find": [
-				"\t\tcwd: z\n\t\t\t.string()\n\t\t\t.optional()\n\t\t\t.describe(\n\t\t\t\t\"Optional literal ABSOLUTE path of an existing directory to start the sibling in (cross-repo fresh). Omit or pass \\\"\\\" to start in this agent's own cwd. Taken exactly as given — no trim, no realpath, no project-name resolution; '#' is refused (tmux format expansion). The receipt echoes what was REQUESTED, never an observation.\",\n\t\t\t),\n"
+				"\t\tcwd: z\n\t\t\t.string()\n\t\t\t.optional()\n\t\t\t.describe(\n\t\t\t\t\"Optional literal ABSOLUTE path of an existing directory to start the sibling in (cross-repo fresh). Taken exactly as given — no trim, no realpath, no project-name resolution; '#' is refused (tmux format expansion). Omit or pass \\\"\\\" to start where the CALLER is: its own directory, or for a Codex caller its own record directory, because this bridge is the app-server's child and that process's directory is not the caller's. The receipt echoes the directory that was REQUESTED or the caller record it came from, never an observation of where the pane landed.\",\n\t\t\t),\n"
 			],
 			"replace": [""],
 			"gate": ["bash", "run.sh", "check-mux-fresh-call"],

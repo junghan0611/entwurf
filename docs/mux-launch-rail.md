@@ -411,7 +411,7 @@ caller가 fresh token N을 민팅
 다른 Opus 5를 골랐다. 이것은 runtime 선택을 존중한 것이 아니라 caller의 선택을 버린 것이다. 그래서
 surface는 `{backend, model, task}`로 좁게 확장됐고 composition은 shell 없이 runtime별 실측 CLI 방언으로 전달한다.
 Pi는 `--model <provider/model>`, Claude Code는 `--model=<id-or-alias>`, Copilot은 `--model <name>`,
-Codex는 `--remote unix://<default-socket> --model <name> --dangerously-bypass-approvals-and-sandbox`,
+Codex는 `--remote unix://<default-socket> -C <dir> --model <name> --dangerously-bypass-approvals-and-sandbox`,
 OMP는 positional prompt 대신 bootstrap carrier를 쓴다. command/env carrier나 provider/settings knob는
 여전히 없다. Launch receipt의 model은 **무엇을 요청했는지**만 증명하며 runtime이 그 model로 turn을
 완료했다는 증거는 callback 뒤 self-report/record 축에서 따로 얻는다.
@@ -429,6 +429,34 @@ tmux 3.6a 사실도 그 leaf에 있다), `-c`는 fresh 자신의 argv builder가
 `-P -F` 앞)에 붙인다 — placement leaf는 여전히 `-c`를 모른다. Launch receipt의 cwd는 model과 같은 종류의
 사실로 **무엇을 요청했는지**만 말하며, pane이 실제 어디 앉았는지는 receipt의 사실이 아니다(acceptance 축).
 resume은 계속 `{target}` 하나다: recorded cwd 일치는 resume을 고를 이유가 아니다.
+
+**한 값, 두 carrier — 그리고 Codex caller의 디렉터리 (#95 lane C, 2026-09-16).** 형제가 시작할
+디렉터리는 하나이고, 그 값을 고르는 규칙도 하나다: ① 요청 cwd → ② **Codex caller의 record cwd**
+→ ③ launch 프로세스의 디렉터리. ②가 필요한 이유는 추측이 아니라 구조다 — 브리지는 operator 소유
+app-server의 MCP child라서 그 프로세스가 말하는 디렉터리는 **app-server의 것**이고, Codex caller가
+cwd를 생략하면 지금까지 모든 형제가 app-server의 repo에서 열렸다. record가 그 시민이 실제로 어디
+있는지 말하는 유일한 사실이다. ③은 선택이 아니라 관측이다: `-c` 없는 pane은 `new-window`를 실행한
+프로세스의 디렉터리를 물려받는다(`check-mux-launch-tmux`가 다른 `session_path`를 가진 세션에 넣어
+재측정한다 — target session의 `session_path`가 아니다).
+
+그 한 값은 **두 carrier**로 간다. tmux `-c`가 **pane**을, codex `-C`가 **thread**를 놓는다. codex만
+argv에 디렉터리를 싣고, 그것은 생략이 곧 오답이기 때문이다 — `[source rust-v0.153.4]` 명시적
+`--remote <endpoint>`는 `AppServerTarget::Remote`(`codex-rs/tui/src/lib.rs:875-876`; `LocalDaemon`은
+플래그 없는 암묵 재사용 경로 전용)이고, Remote target의 새 thread cwd는 `remote_cwd_override` 하나만
+본다(`app_server_session.rs:2022-2033`의 `thread_cwd_from_config` → 없으면 `None` → app-server가 자기
+`config.cwd`로 연다). 그 override가 정확히 `-C/--cd`이며 remote일 때만 보존된다
+(`startup_orchestration.rs:191-194`). 플래그는 우리가 이미 쓰는
+`--dangerously-bypass-approvals-and-sandbox`와 같은 `SharedCliOptions`에 있다
+(`codex-rs/utils/cli/src/shared_options.rs:53-68`; `agents` 서브커맨드도 같은 철자를 따로 갖는다,
+`cli/src/main.rs:334`). `[측정 2026-09-16]` `-C` 없이 열린 한 사슬(pi → Codex → Claude Code)의 세
+시민이 전부 app-server의 `~/repos/gh/entwurf`를 record에 적었고, pane은 `agent-config`에 앉아 있었다.
+birth hook은 벤더가 준 cwd를 정직하게 적었을 뿐이다.
+
+Launch receipt는 **고른 값과 고른 규칙**을 함께 말한다(`cwd` + `cwdSource`: `requested` |
+`codex-caller-record`). ③(아무도 이름 붙이지 않은 경우)은 receipt에 발명하지 않는다 — 요청도 record도
+아닌 값을 "requested"라고 부르면 operator 손에 잘못된 명사가 들어간다. pane이 실제로 어디 앉았는지는
+여전히 receipt의 사실이 아니다(acceptance 축: `check-mux-launch-tmux`의 `#{pane_current_path}`와
+`smoke-codex-fresh-live`의 rollout `session_meta.cwd`).
 
 **The fixed `codex` home is RETIRED (#95 D1, GLG 2026-09-16).** From 2026-09-12 an omitted-placement
 Codex TARGET selected an already-existing exact session named `codex`, where the operator seated the
@@ -589,7 +617,7 @@ gate, LIVE smoke, release 배선을 전부 제거했다.
 | tmux session lookup leaf (`resolve-tmux-session.ts`) | caller가 준 세션 **이름** 의 문법 판정과 이름→native `$id` 해석 하나 — 엔진은 `list-windows -t '=NAME' -F '#{session_id}'` 고정, 부재는 rc 로 판정(`-f` 필터는 이름 안 `}` 하나로 전 세션 오탐, `display-message` 는 존재해도 빈 출력; 둘 다 측정) | tmux 실행(runner 는 주입), argv, hint 문구(consumer 소유), 세션 **생성**, fallback 세션, 다른 서버 |
 | cwd classification leaf (`classify-tmux-cwd.ts`) | `-c` 후보의 분류 하나 — 4개 stable reason(absolute / `#` 없음 / 존재 / 디렉터리; tmux가 `-c`를 format-expand하고 없는 경로를 조용히 `$HOME`으로 폴백하기 때문) | argv, tmux 실행, hint 문구(각 consumer가 자기 표현을 소유), fallback 디렉터리 |
 | resume-call composition (`mux-resume-call.ts`) | record가 준 cwd에서의 same-session append(`-c`) — 분류는 공유 leaf, "recorded cwd" hint 표현, launch receipt | garden identity, record 조회, lock, delivery, supervision |
-| fresh-call composition (`mux-fresh-call.ts`) | backend별 fixed runtime + argv dialect, explicit model CLI token, optional **requested** cwd(caller가 유일한 출처; `undefined`/`""`만 생략, literal·no-trim, 같은 leaf로 pre-mutation 분류, resume 대칭 `-c` 위치), selected session seat(#105 explicit request; 생략 시 caller 자기 세션이고, Codex caller만 #95 lane B 제목 앵커로 자기 pane; 이름은 lookup leaf로 `$id` 해석, `-t`에는 `$id`만, `-d` 필수, 없으면 거절·생성 없음), first-turn framing(callback→task 순서), nonce 민팅, launch receipt(선택 이름+source+해석된 target `$id`, 관측 cwd 없음) | garden identity(표면이 공급), cwd 추측·resolve, 세션 생성, arbitrary TUI-seat discovery, delivery transport, task 분해, supervision |
+| fresh-call composition (`mux-fresh-call.ts`) | backend별 fixed runtime + argv dialect, explicit model CLI token, optional **requested** cwd(caller가 유일한 출처; `undefined`/`""`만 생략, literal·no-trim, 같은 leaf로 pre-mutation 분류, resume 대칭 `-c` 위치), 요청이 없을 때의 Codex caller record cwd(#95 lane C; 표면이 공급, 같은 emptiness 규칙·같은 분류 leaf), codex argv의 `-C`(같은 한 값의 두 번째 carrier; 없으면 thread가 app-server 디렉터리에서 열린다), selected session seat(#105 explicit request; 생략 시 caller 자기 세션이고, Codex caller만 #95 lane B 제목 앵커로 자기 pane; 이름은 lookup leaf로 `$id` 해석, `-t`에는 `$id`만, `-d` 필수, 없으면 거절·생성 없음), first-turn framing(callback→task 순서), nonce 민팅, launch receipt(선택 이름+source+해석된 target `$id`, 관측 cwd 없음) | garden identity(표면이 공급), cwd 추측·resolve, 세션 생성, arbitrary TUI-seat discovery, delivery transport, task 분해, supervision |
 | copilot capability preflight leaf (`copilot-fresh-preflight.ts`) | Copilot fresh **한 건**에 대한 pre-mutation 판정 — birth·MCP hand·receiver·visible footer 네 축의 **설치/설정 사실**과 축마다 하나인 named reason + repair 문구 | runtime 사실(벤더 spawn·live process·연결 여부는 doctor와 LIVE 소유), mutation, 다른 backend, generic doctor로의 성장 |
 | codex capability preflight leaf (`codex-fresh-preflight.ts`) | Codex fresh 한 건의 state-backed birth closure digests, vendor trust receipt, exact user MCP/env boundary, `thread-title`, operator-owned default app-server socket를 pre-mutation 판정 | app-server lifecycle/supervision, attached-TUI pane discovery, vendor install/auth, generic doctor, resume |
 | public surfaces (`entwurf-control.ts` · MCP `index.ts`) | fresh의 record-backed caller identity와 `{backend, model, task, cwd?, placement?}` schema, resume의 target-only schema, 양쪽 렌더, resume launch seam 조립 | argv 문법, placement, identity 민팅 |

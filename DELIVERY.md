@@ -181,6 +181,18 @@ opened: explicit `placement` wins; then a Codex CALLER's own pane (`codex-title-
 session name on the receipt because a session was observed rather than requested); then the
 caller's own session.
 
+The DIRECTORY follows the caller the same way (#95 lane C, 2026-09-16): requested `cwd` wins;
+then a Codex CALLER's own RECORD cwd, because this bridge is the app-server's MCP child and its
+process directory is the app-server's rather than that caller's; then the launching process's
+own, which is what tmux gives a window opened with no `-c`. Codex alone also carries that one
+value into its argv as `-C <dir>`, and omitting it is a wrong answer rather than a neutral one:
+an explicit `--remote` target takes its new thread's cwd from that override ALONE
+(`codex-rs/tui/src/app_server_session.rs:2022-2033` at rust-v0.153.4), so without it the THREAD
+opens in the app-server's repo while its pane sits elsewhere — measured on 2026-09-16 as three
+citizens of one chain recording a directory none of them was in. The receipt names which rule
+chose the directory (`requested` / the Codex caller's own record directory) and invents nothing
+for the inherited case.
+
 Four ownership atoms remain separate:
 
 1. `entwurf install-codex-birth` owns `$CODEX_HOME/hooks.json` — one whole file, ours or

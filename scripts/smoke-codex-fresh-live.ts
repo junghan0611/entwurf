@@ -261,6 +261,47 @@ function tmuxSessionName(label: string, env: NodeJS.ProcessEnv, paneId: string):
 	return name;
 }
 
+/**
+ * The DIRECTORY behind a pane, read from tmux itself. Its own reader for the same reason the
+ * session name has one: this card needs it for exactly one claim (#95 lane C — where a sibling
+ * actually started), and the pinned coordinate row stays a fixed field count.
+ *
+ * `[측정 2026-09-16]` this value is read from the child's `/proc` at QUERY time and tmux chdirs
+ * in that child AFTER forking it, so a read taken in the same millisecond as a launch can still
+ * answer the SERVER's directory. Every call here happens after that citizen's own callback has
+ * already arrived, which is long past exec — the deterministic gate that reads it straight after
+ * a launch is the one that has to wait (`scripts/check-mux-launch-tmux.ts`).
+ */
+function tmuxPaneCwd(label: string, env: NodeJS.ProcessEnv, paneId: string): string {
+	const inspected = spawnSync("tmux", ["display-message", "-p", "-t", paneId, "#{pane_current_path}"], {
+		env,
+		encoding: "utf8",
+	});
+	ok(
+		`${label} pane directory answers through its own environment`,
+		inspected.status === 0,
+		String(inspected.stderr ?? ""),
+	);
+	const dir = String(inspected.stdout ?? "").replace(/\r?\n$/, "");
+	ok(`${label} pane directory is non-empty`, dir.length > 0, `cwd=${JSON.stringify(dir)}`);
+	return dir;
+}
+
+/** A live process's own working directory, read from the kernel rather than from any report. */
+function processCwd(pid: number): string {
+	return fs.readlinkSync(`/proc/${pid}/cwd`);
+}
+
+/** The `session_meta` header of a Codex rollout — the VENDOR's own record of where a thread opened. */
+function rolloutSessionMetaCwd(transcriptPath: string): string {
+	const first = fs.readFileSync(transcriptPath, "utf8").split("\n", 1)[0] ?? "";
+	const row = JSON.parse(first) as { type?: unknown; payload?: { cwd?: unknown } };
+	if (row.type !== "session_meta") throw new Error(`rollout row 1 is ${JSON.stringify(row.type)}, not session_meta`);
+	const cwd = row.payload?.cwd;
+	if (typeof cwd !== "string" || cwd.length === 0) throw new Error("rollout session_meta carries no cwd string");
+	return cwd;
+}
+
 function cleanupWindows(): string[] {
 	const failures: string[] = [];
 	if (!appServerEnv) return failures;
@@ -926,7 +967,6 @@ async function run(): Promise<void> {
 		finalToken,
 		callerGid,
 		piModel,
-		scratch,
 	});
 	const initialPiInstruction = buildInitialPiPhaseOne({
 		initialPiWaitToken,
@@ -1020,6 +1060,31 @@ async function run(): Promise<void> {
 	receipts["8-initial-pi-source-codex-callback"] =
 		`nonce=${codexNonce}\ngarden=${codexGardenId}\nthread=${codexThreadId}`;
 
+	// #95 lane C (i). WHERE THE CODEX THREAD OPENED, from four authorities that cannot borrow
+	// from each other: tmux's pane, the vendor's own rollout header, Entwurf's record, and the
+	// directory this call requested. Before the `-C` carrier they disagreed while every receipt
+	// still looked right — the pane sat in the requested scratch and the THREAD opened in the
+	// app-server's repo, which the birth hook then recorded honestly. The app-server's live cwd
+	// is read from the kernel and asserted DIFFERENT, because a scratch that happened to equal it
+	// would make all four agree for the wrong reason.
+	const codexPane = /^\s*pane:\s+(%\d+)/m.exec(codexLaunchReceipt)?.[1] ?? "";
+	ok("the Codex LAUNCH receipt names its pane", /^%\d+$/.test(codexPane), codexLaunchReceipt);
+	const appServerCwd = processCwd(appServerPid);
+	const codexPaneCwd = tmuxPaneCwd("fresh Codex", process.env, codexPane);
+	const codexRolloutCwd =
+		codexIdentity.transcriptPath === null ? "" : rolloutSessionMetaCwd(codexIdentity.transcriptPath);
+	ok(
+		"the fresh Codex thread, its pane, its record and the requested cwd are ONE directory — and it is not the app-server's",
+		codexPaneCwd === scratch &&
+			codexRolloutCwd === scratch &&
+			codexIdentity.cwd === scratch &&
+			appServerCwd !== scratch,
+		`pane=${codexPaneCwd} rollout=${codexRolloutCwd} record=${codexIdentity.cwd} requested=${scratch} app-server=${appServerCwd}`,
+	);
+	receipts["8b-codex-thread-cwd"] =
+		`requested=${scratch}\npane=${codexPaneCwd}\nrollout-session_meta=${codexRolloutCwd}\n` +
+		`record=${codexIdentity.cwd}\napp-server=${appServerCwd}`;
+
 	const initialPiToCodex = await awaitOrRecover("the initial Pi joined native-push receipt", SOURCE_WAIT_MS, () => {
 		const piSources = piSourceToolReceipts(readInitialPiEntries());
 		assertSourceCallScopes(piSources, "entwurf_v2", "target", [callerGid, codexGardenId], "initial Pi v2 roles");
@@ -1064,7 +1129,7 @@ async function run(): Promise<void> {
 			return selectExactSourceToolReceipt(
 				codexSourceToolReceipts(codexThread),
 				"entwurf_fresh_call",
-				{ backend: "pi", model: piModel, cwd: scratch, task: outboundPiTask },
+				{ backend: "pi", model: piModel, task: outboundPiTask },
 				"Codex outbound Pi fresh call",
 			);
 		},
@@ -1140,6 +1205,33 @@ async function run(): Promise<void> {
 		outboundPiTranscript: outboundPiIdentity.transcriptPath ?? null,
 	});
 	receipts["13-codex-source-outbound-pi-callback"] = `nonce=${outboundPiNonce}\ngarden=${outboundPiGid}`;
+
+	// #95 lane C (ii) — THE CLAIM. This leg named NO cwd, so the only directory the composition
+	// could use is the Codex caller's own record. Its oracle is independent twice over: the pane
+	// answers tmux, and the outbound Pi's RECORD is written by that Pi's own birth from its own
+	// process directory — neither reads the launch receipt. Before lane C this landed in the
+	// app-server's repo, because the bridge is the app-server's MCP child and an omitted cwd
+	// inherited ITS directory; the app-server's live cwd is asserted different so that failure
+	// mode stays visible rather than coincidentally equal.
+	const outboundPiPane = /^\s*pane:\s+(%\d+)/m.exec(outboundPiReceipt)?.[1] ?? "";
+	ok("the outbound Pi LAUNCH receipt names its pane", /^%\d+$/.test(outboundPiPane), outboundPiReceipt);
+	const outboundPiPaneCwd = tmuxPaneCwd("outbound Pi", process.env, outboundPiPane);
+	ok(
+		"with NO cwd requested, the outbound Pi opened in the CODEX CALLER's own record directory — not in the app-server's",
+		outboundPiPaneCwd === codexIdentity.cwd &&
+			outboundPiIdentity.cwd === codexIdentity.cwd &&
+			outboundPiPaneCwd !== appServerCwd,
+		`pane=${outboundPiPaneCwd} outbound-record=${outboundPiIdentity.cwd} codex-record=${codexIdentity.cwd} app-server=${appServerCwd}`,
+	);
+	ok(
+		"the outbound Pi receipt NAMES the caller-record rule rather than calling that directory requested",
+		outboundPiReceipt.includes(`cwd:      ${codexIdentity.cwd} (the Codex caller's own record directory`) &&
+			!outboundPiReceipt.includes("requested start directory"),
+		outboundPiReceipt,
+	);
+	receipts["13b-outbound-pi-cwd"] =
+		`requested=<none>\npane=${outboundPiPaneCwd}\nrecord=${outboundPiIdentity.cwd}\n` +
+		`codex-caller-record=${codexIdentity.cwd}\napp-server=${appServerCwd}`;
 
 	const expectedFinalMessage =
 		`${finalToken}\nPI_LAUNCH_NONCE=${outboundPiNonce}\nPI_CALLBACK_NONCE=${outboundPiNonce}\n` +
@@ -1246,7 +1338,7 @@ async function run(): Promise<void> {
 			},
 			{
 				toolName: "entwurf_fresh_call",
-				arguments: { backend: "pi", model: piModel, cwd: scratch, task: outboundPiTask },
+				arguments: { backend: "pi", model: piModel, task: outboundPiTask },
 			},
 			{
 				toolName: "entwurf_v2",

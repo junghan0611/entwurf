@@ -39,7 +39,6 @@ export interface CodexInstructionInput {
 	finalToken: string;
 	callerGid: string;
 	piModel: string;
-	scratch: string;
 }
 
 /** The payload the initial Pi forwards verbatim. It names only Codex's own steps. */
@@ -47,10 +46,14 @@ export function buildCodexInstruction(input: CodexInstructionInput): string {
 	return (
 		`${input.waitToken}\nThis is the addressed instruction from the initial Pi caller. Execute once, with no shell, ` +
 		"terminal, screen inspection, or retry:\n" +
-		`1. Call public mcp__entwurf_bridge__entwurf_fresh_call once with backend pi, model ${input.piModel}, cwd ${input.scratch}, ` +
-		// NO placement is the CLAIM, not a convenience: this is the call whose seat must come
-		// from this Codex's own pane title and from nowhere else (#95 lane B).
-		'NO placement, and task "After your automatic callback succeeds, answer ACK and stop. Do not open another sibling."\n' +
+		`1. Call public mcp__entwurf_bridge__entwurf_fresh_call once with backend pi, model ${input.piModel}, ` +
+		// NO placement AND NO cwd are both CLAIMS rather than conveniences, and they are two
+		// different ones. The seat must come from this Codex's own pane title (#95 lane B); the
+		// DIRECTORY must come from this Codex's own record (#95 lane C), which is a fact only
+		// because its thread now opens where its pane is rather than where the app-server sits.
+		// Omitting the parameter is the whole point — passing one would prove neither.
+		'NO cwd parameter and NO placement parameter, and task "After your automatic callback succeeds, answer ACK and ' +
+		'stop. Do not open another sibling."\n' +
 		"2. Stop and wait for the Pi callback delivered into this Codex thread. Accept only a callback whose body " +
 		"repeats the exact nonce from your LAUNCH receipt and whose sender envelope names a garden id.\n" +
 		`3. Only after that match, call public mcp__entwurf_bridge__entwurf_v2 once with target ${input.callerGid}, ` +

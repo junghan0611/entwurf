@@ -41,7 +41,11 @@ transcript를 가진 garden citizen이다.
 
 - `entwurf_fresh_call` backend는 정확히 `pi | claude-code | copilot | omp | codex`이고 model은 required다. `cwd`는
   선택 입력 하나: literal 절대경로(존재하는 디렉터리, `#`·trim·realpath 없음), 생략·`""`면
-  caller cwd에서 시작한다. cross-repo fresh 절 참조.
+  caller cwd에서 시작한다. **Codex caller만 예외이고 그것이 정확히 옳다(#95 lane C)**: Codex가
+  부를 때 `cwd`를 생략하면 그 시민의 **record cwd**(= 그 thread가 실제로 열린 디렉터리)에서
+  시작한다 — 브리지가 operator 소유 app-server의 MCP child라 그 프로세스의 cwd는 caller의 것이
+  아니라 app-server의 것이기 때문이다. receipt는 고른 규칙을 이름으로 말한다(`requested` /
+  `the Codex caller's own record directory`). cross-repo fresh 절 참조.
   **심링크를 주면 두 문자열이 보이는데 정상이다**: entwurf는 경로를 해석하지 않고 tmux에 그대로
   넘기므로 receipt의 `cwd:`는 요청한 문자열 그대로이고, record·transcript 경로·callback envelope·
   `pane_current_path`는 OS가 해석한 실제 경로다(측정: `~/org` 요청 → record `/home/junghan/sync/org`).
@@ -64,7 +68,8 @@ transcript를 가진 garden citizen이다.
   `tmux-session-name-invalid` 로 거절된다(세션 이름을 그렇게 지었으면 GLG에게 문법에 맞는 세션을
   요청한다).
   `cwd`와 `placement`는 서로 독립이며 한쪽에서 다른 쪽을 추론하지 않는다. **긍정형이 더 중요하다:
-  `cwd`를 생략하고 seat만 주면 새 pane은 이 에이전트(caller 프로세스)의 cwd에서 시작한다**(측정) —
+  `cwd`를 생략하고 seat만 주면 새 pane은 이 에이전트(caller 프로세스)의 cwd에서 시작한다**(측정,
+  Codex caller는 위의 record cwd) —
   타깃 세션의 path도, 그 세션 active pane의 경로도 물려받지 않는다. 즉 `org` 자리에 열었다고 형제가
   `org` 프로젝트 디렉터리에 있는 것이 아니다. 다른 디렉터리를 원하면 `cwd`를 함께 준다.
 - 기본 정책은 Pi=`openai-codex/gpt-5.6-luna`, Claude Code=`claude-sonnet-5`, Codex=`gpt-5.6-sol`이다.
@@ -119,9 +124,11 @@ tool schema를 로드하지 않는다 — 호스트가 tool 정의를 거부하�
 
 제품 경로는 `entwurf_fresh_call`의 optional `cwd`다(#73): target repo의 **literal 절대경로**를
 `cwd`로 넣어 fresh citizen을 그 자리에서 연다. 규칙은 좁다 — 존재하는 디렉터리의 절대경로만,
-`#` 금지, trim/realpath/프로젝트명 resolve 없음, 생략·`""`는 caller cwd 시작. 경로는 caller가
+`#` 금지, trim/realpath/프로젝트명 resolve 없음, 생략·`""`는 caller cwd 시작(Codex caller는 자기
+record cwd — 위 `cwd` 항목 참조). 경로는 caller가
 안다: record·peers에서 경로를 캐거나 이름으로 추측하지 않고, 불확실하면 GLG에게 묻는다.
-receipt의 cwd는 **요청 echo**이지 pane 관측이 아니다. GLG가 **기존 살아 있는** target-repo
+receipt의 cwd는 **요청(또는 그것을 준 caller record) echo**이지 pane 관측이 아니며, 어느 규칙이
+골랐는지 함께 적힌다. GLG가 **기존 살아 있는** target-repo
 citizen의 맥락을 요구한 경우에만 그 exact id로 `entwurf_v2`를 보낸다.
 
 ### `fresh <backend> [model] <task> [--cwd <absolute-path>]` / “새 형제 열어줘”

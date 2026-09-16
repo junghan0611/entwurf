@@ -767,7 +767,7 @@ server.tool(
 			.string()
 			.optional()
 			.describe(
-				"Optional literal ABSOLUTE path of an existing directory to start the sibling in (cross-repo fresh). Omit or pass \"\" to start in this agent's own cwd. Taken exactly as given — no trim, no realpath, no project-name resolution; '#' is refused (tmux format expansion). The receipt echoes what was REQUESTED, never an observation.",
+				"Optional literal ABSOLUTE path of an existing directory to start the sibling in (cross-repo fresh). Taken exactly as given — no trim, no realpath, no project-name resolution; '#' is refused (tmux format expansion). Omit or pass \"\" to start where the CALLER is: its own directory, or for a Codex caller its own record directory, because this bridge is the app-server's child and that process's directory is not the caller's. The receipt echoes the directory that was REQUESTED or the caller record it came from, never an observation of where the pane landed.",
 			),
 		placement: z
 			.object({

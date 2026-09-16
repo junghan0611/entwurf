@@ -42,7 +42,6 @@ const codexInstruction = buildCodexInstruction({
 	finalToken: "CODEX-PI-FINAL-XYZ789",
 	callerGid: CALLER,
 	piModel: "openai-codex/gpt-5.6-luna",
-	scratch: "/tmp/fixture",
 });
 
 function body(sender: string, payload: string): string {
@@ -128,9 +127,15 @@ describe("codex fresh-live protocol", () => {
 		// which is deliberately not the app-server's. Naming a seat here would work too, and
 		// would hide the retirement behind an override.
 		expect(phaseOne).toMatch(/backend codex, model gpt-5\.6-sol, cwd \/tmp\/fixture, NO placement/);
-		// Leg 2 is the CLAIM: no placement either, so that seat can only come from the Codex
-		// caller's own pane title. Handing it one would prove nothing.
-		expect(codexInstruction).toMatch(/backend pi, model openai-codex\/gpt-5\.6-luna, cwd \/tmp\/fixture, NO placement/);
+		// Leg 2 carries TWO claims and hands the model neither input. No placement, so the seat can
+		// only come from the Codex caller's own pane title (#95 lane B); no cwd, so the DIRECTORY
+		// can only come from that same caller's record (#95 lane C). Handing it either would prove
+		// nothing — and a leg that named a cwd would keep passing even with the thread opening in
+		// the app-server's repo, which is the defect lane C closed.
+		expect(codexInstruction).toMatch(
+			/backend pi, model openai-codex\/gpt-5\.6-luna, NO cwd parameter and NO placement parameter/,
+		);
+		expect(codexInstruction).not.toContain("/tmp/fixture");
 		// Neither leg may carry a seat name at all — that is the asymmetry this card removed.
 		expect(phaseOne).not.toContain("tmuxSession");
 		expect(codexInstruction).not.toContain("tmuxSession");
@@ -147,7 +152,6 @@ describe("codex fresh-live protocol", () => {
 				finalToken: "CODEX-PI-FINAL-XYZ789",
 				callerGid: CALLER,
 				piModel: "openai-codex/gpt-5.6-luna",
-				scratch: "/tmp/fixture",
 			}),
 		});
 		const taskLine = phaseOne.split("\n").find((line) => line.includes("required callback receipt"));
