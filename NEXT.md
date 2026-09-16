@@ -142,8 +142,17 @@ CHANGELOG `## Unreleased`가 구현 범위 `v0.15.1..19ad90c` **30커밋** 전�
       `00cba23`; #111/#112/#95 CLOSED. Push 없음.
 - [x] **28. 0.21.0 prepare** — source-observer amendment(+lazy transcript-path 수리, 475/43) · CHANGELOG/version 승격 · `check:full` exit 0 502s · `release-gate --cut` **MUST 24/0/0, cut OK, qualification 475/475** · P9 2회 · prep commit.
 
-현재 좌표: 1–28 완료 → **0.21.0 prep commit 완료, MAKE 대기**. #109 openclaw 다리는
-**닫혔다**(요청자가 컨테이너를 나왔다) · **0.16.1 make는 열린 채 PAUSED**.
+- [x] **29. #95 lane B — Codex caller seat + `codex` home 은퇴 (2026-09-16, local main, push 없음)** — 7커밋
+      `b36d916`(caller seat + D1 은퇴) → `d0a7b8c`(LIVE 영수증). GLG 결정 D1 **은퇴**(*"거처는 기술이 안 돼서 무마한 개념"*),
+      D2 0매치 **거절**. placement 생략 = 명시 > Codex caller의 pane 제목 `thread-id` 앵커(29자+`...`, 벤더 32자 잘림) > caller 세션.
+      **caller-seat LIVE green: 56 assertions, exit 0** — A(app-server `$30`) ≠ S(`$2`)에서 Codex→Pi가 Codex TUI 옆에 열림
+      (`seat-source=codex-title-anchor`), SHA `ed60c2bd…`. 바닥: qualification 495/495(`ade59a1`), `check:full` exit 0 on
+      frozen `d0a7b8c`(337s). 팀: 코디네이터 Fable `20260916T105535-98b9ad` · 구현 Opus `20260916T111444-fef607` ·
+      terra 측정/리뷰 3회(`33daa2`/`005234`/`374458`; Blocker 1 → `a843526`에서 닫힘). 바닥이 잡은 것 둘(stale 뮤턴트,
+      stale dist)과 오라클 결함 하나(`wants_reply` 모양 비교)는 우회 없이 수리. 마감 정본은 #95 comment 5692716726.
+
+현재 좌표: 1–29 완료 → **lane B 로컬 main 완료, GLG push 대기** → push 후 exact-SHA CI(qualification body는 게이트
+스크립트가 움직였으므로 반드시 돈다) → 다음 컷 prepare는 별도 권한. #109 openclaw 다리는 **닫혔다** · **0.16.1 make는 열린 채 PAUSED**.
 푸시·태그·publish는 금지; `entwurf-release`의 make/publish 별도 권한이다.
 
 # NOW — stem: 0.21.0 prepare (#111 + #112 + #95)
@@ -154,10 +163,15 @@ CHANGELOG `## Unreleased`가 구현 범위 `v0.15.1..19ad90c` **30커밋** 전�
   **은퇴**로 결정했다 — *"코덱스의 거처를 만들어주자는 말은 그냥 기술이 안돼서 무마한 개념이야."*
   UX 대칭은 같은 transport를 꾸미는 말이 아니라, backend마다 자기 transcript·auth·native tools를
   보존한 채 **부른 사람 옆에 보이는 형제**로 부르고 불리는 데 있다.
-- **좌표:** lane B candidate = `0ad3e21` (`b36d916` caller seat + D1 은퇴, `b17ff04` NEXT carry,
-  `ade59a1` stale mutant 수리, `0ad3e21` affected-set 문서). qualification 495/495 purity green,
-  frozen `check:full` exit 0 327s. **caller-seat LIVE는 미실행** — operator app-server가 Pi/Codex
-  쌍과 다른 세션에 떠야 하고, GLG의 go 대기. 0.21.0 자체의 좌표(`462fea7`, Codex home LIVE
+- **좌표:** lane B **완료** = `d0a7b8c` (`b36d916` caller seat + D1 은퇴 · `b17ff04` NEXT carry · `ade59a1` stale
+  mutant 수리 · `0ad3e21` affected-set 규칙 · `a843526` 은퇴 어휘 전수 · `a4d9f98` `wants_reply` 오라클 · `d0a7b8c`
+  LIVE 영수증). caller-seat **LIVE green 56 assertions exit 0**(2026-09-16, A=`$30` ≠ S=`$2`), qualification 495/495,
+  frozen `check:full` exit 0 337s. **다음 한 수 = GLG의 push 결정.** push 뒤 CI exact-SHA 4축 + qualification body를
+  읽고, 그 다음 컷(0.22.0) prepare는 `entwurf-release` 별도 권한. LIVE 재실행 조건: `install-codex-terminal-title` 설치,
+  app-server가 Pi/Codex 쌍과 **다른** tmux 세션, `hooks.json`이 entwurf 기록 digest와 일치(herdr 훅 공존은 #117 —
+  오늘 원본은 `~/.codex/hooks.json.herdr-bak`). 열린 것: statusline 원자의 같은 소유권 결함(관측, 미수정) · #117 ·
+  CARRIED app-server 가이드.
+  0.21.0 자체의 좌표(`462fea7`, Codex home LIVE
   57 assertions, qualification 460/460, `check:full` 501s)는 그 컷의 역사로 남는다.
   첫 prepare P5는 OMP MCP가 삭제된 `/tmp/snapshot-probe`를 가리킨 host drift와 Codex 필수 env
   누락을 정직하게 잡았고, P9는 qualification마다 남은 Copilot stub 10개를 찾아 `462fea7`로
