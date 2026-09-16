@@ -57,12 +57,28 @@
  * where the previous runtime is RESTORED first, so a candidate that then fails still leaves the
  * host with the runtime it had.
  *
- * WHY THE PACKAGE IS LOCKED TWICE. The exact `name@version` comes from the checkout's own
- * `package.json`; a sibling `runtime-lock.json` repeats it and adds the integrity npm published.
- * The two must agree, and the tarball's OWN sha512 must equal that integrity before anything is
- * installed. The journal records the expected integrity and the observed digest as separate fields,
- * because a digest computed from whatever arrived is a record of what happened — calling it a pin
- * would claim a check that only the comparison performs.
+ * WHY THE PACKAGE IS LOCKED TWICE, ON THE npm SOURCE. The exact `name@version` comes from the
+ * checkout's own `package.json`; a sibling `runtime-lock.json` repeats it and adds the integrity npm
+ * published. The two must agree, and the tarball's OWN sha512 must equal that integrity before
+ * anything is installed. The journal records the expected integrity and the observed digest as
+ * separate fields, because a digest computed from whatever arrived is a record of what happened —
+ * calling it a pin would claim a check that only the comparison performs.
+ *
+ * WHY THERE IS A SECOND SOURCE, AND WHAT IT MAY NOT BECOME (#116 M3-b3). Requiring a published npm
+ * version before a candidate can be installed makes every candidate a release. So the same lock
+ * file carries a CLOSED discriminant, and its other branch packs the exact commit Herdr itself
+ * checked out — `git+https://github.com/junghan0611/entwurf.git#<full sha>`, a literal remote and a
+ * commit read from the checkout, with no URL, ref, env var or caller parameter anywhere in the path.
+ * That branch is VERIFICATION-ONLY and it does not weaken the npm branch: there is no fallback
+ * between them, the npm integrity comparison is untouched, and a source switch is refused rather
+ * than inferred. What replaces the missing registry integrity is named where it happens — the
+ * commit pins the tree, the digest records the bytes, and the installed-runtime verifier decides.
+ *
+ * THE PACK FORM IS PART OF THE CONTRACT. Measured 2026-09-16 (npm 11.16.0): `npm pack <git spec>`
+ * runs `prepare` and NOT `prepack`, so the bridge is compiled and no global pnpm is needed, and the
+ * tarball is byte-identical across three independent sandboxes including a `--depth 1` clone. `npm
+ * pack <directory>` runs `prepack`, which calls `pnpm` and exits 127 on a clean host. Only the git
+ * spec is built here; the directory form is structurally absent, not merely avoided.
  *
  * WHY npm's CACHE IS OURS. The acquisition names `npm_config_cache` explicitly, under the user's
  * XDG cache root, so a plugin install never writes into the operator's default npm cache. It also
@@ -84,7 +100,59 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 /** Journal format. Bump only with a reader that understands both. */
-export const RUNTIME_SCHEMA_VERSION = 1;
+export const RUNTIME_SCHEMA_VERSION = 2;
+
+/**
+ * The two ways a runtime may be ACQUIRED, and they are a closed set (#116 M3-b3).
+ *
+ * `npm` is the production authority and its semantics are untouched: the lock names an exact
+ * `name@version` plus the integrity npm published for it, and the tarball's own sha512 must equal
+ * that integrity before anything is installed.
+ *
+ * `herdr-checkout` is the VERIFICATION-ONLY candidate carrier. A published npm version cannot be a
+ * precondition for iterating on a candidate — that is a release step per candidate, which is the
+ * churn this carrier exists to remove. It packs the exact commit Herdr itself just checked out, so
+ * there is no URL, ref, env var or caller parameter anywhere in it: the identity is already on
+ * disk. No registry integrity exists for such an artifact, so the anchor is the COMMIT, and the
+ * safety is carried entirely by the final installed-runtime verifier and named refusals.
+ */
+export const ARTIFACT_KINDS = Object.freeze(["npm", "herdr-checkout"]);
+
+/**
+ * The ONE repository a checkout-sourced runtime may come from, as a literal. Herdr's own remote is
+ * hardcoded `https://github.com/{owner}/{repo}.git` with no env override (measured 2026-09-16,
+ * herdr `src/cli/plugin.rs:763` @ c77af189), so binding this side to the same literal keeps the
+ * pair closed: nothing a caller says can point the acquisition at another tree.
+ */
+export const CHECKOUT_REPOSITORY = "junghan0611/entwurf";
+
+/**
+ * The exact key set an `artifactIdentity` carries, per kind AND per stage. Both halves are
+ * load-bearing.
+ *
+ * PER KIND, because the two acquisitions are anchored by different facts and a union that merged
+ * them would have to accept a null integrity or a null commit — a shape in which "we have not
+ * observed this yet" and "this source has no such fact" are the same value.
+ *
+ * PER STAGE, because `installing` is written BEFORE an artifact exists. The requested shape has no
+ * digest KEY at all rather than a null one: an absent key cannot be mistaken for an observation,
+ * and each phase's certifier below names exactly which shape it will accept.
+ *
+ * `packageName`/`packageVersion` appear ONLY in the checkout-ready shape, and only as COMPLETENESS
+ * evidence read off the artifact npm actually produced — what must still be sitting on disk for the
+ * tree to be a usable runtime. They are never identity: two different commits can both call
+ * themselves `0.21.0`, so identity for this kind is the commit and nothing else.
+ */
+export const ARTIFACT_KEYS = Object.freeze({
+	npm: Object.freeze({
+		requested: Object.freeze(["kind", "name", "version", "expectedIntegrity"]),
+		ready: Object.freeze(["kind", "name", "version", "expectedIntegrity", "observedDigest"]),
+	}),
+	"herdr-checkout": Object.freeze({
+		requested: Object.freeze(["kind", "repository", "commit"]),
+		ready: Object.freeze(["kind", "repository", "commit", "packageName", "packageVersion", "observedDigest"]),
+	}),
+});
 
 /**
  * The bins an installed runtime must carry for the scoped wiring above to have anything to name.
@@ -108,15 +176,19 @@ export const COMPILED_ENTRY = path.join("mcp", "entwurf-bridge", "dist", "mcp", 
  */
 export const JOURNAL_PHASES = Object.freeze(["installing", "runtime-ready", "removing"]);
 
-/** The exact key set a certified journal carries. Extra or missing keys grant no authority. */
+/**
+ * The exact key set a certified journal carries. Extra or missing keys grant no authority.
+ *
+ * There is ONE identity field, and every consumer — this journal, `previousRuntime`, the torn-swap
+ * carry, and the activation ledger one slice above — uses that same union through the same
+ * certifier. A second string beside it ("source", "commit") would be a second authority that could
+ * disagree with the first, on exactly the question the whole transaction is about.
+ */
 export const JOURNAL_KEYS = Object.freeze([
 	"schemaVersion",
 	"phase",
 	"runtimeRoot",
-	"packageName",
-	"packageVersion",
-	"expectedIntegrity",
-	"observedDigest",
+	"artifactIdentity",
 	"previousRuntime",
 ]);
 
@@ -124,10 +196,10 @@ export const JOURNAL_KEYS = Object.freeze([
  * `previousRuntime` exists because writing the `installing` entry would otherwise OVERWRITE the only
  * record of what was running. A host that dies mid-install would then hold a backup directory and no
  * statement of what it contains — recoverable bytes with unrecoverable provenance. So the prior
- * ready entry's provenance is carried forward for exactly as long as a backup can exist, and a
+ * ready entry's identity is carried forward for exactly as long as a backup can exist, and a
  * finished install sets it back to null because there is no longer a previous runtime to describe.
+ * It is a READY identity or null: a backup that was never observed is not a backup anyone can name.
  */
-export const PROVENANCE_KEYS = Object.freeze(["packageName", "packageVersion", "expectedIntegrity", "observedDigest"]);
 
 /** How a path at one of our three addresses may look. Anything else is refused by name. */
 export const PATH_KINDS = Object.freeze(["absent", "real-dir", "symlink", "other"]);
@@ -201,7 +273,18 @@ export function readCheckoutPackageSpec(checkoutRoot) {
 	return Object.freeze({ name, version });
 }
 
-/** The plugin-owned lock: exact package plus the integrity npm published for it. */
+/**
+ * The plugin-owned lock, and it is a DISCRIMINATED UNION whose discriminant is committed.
+ *
+ * Which source a host acquires from may not be decided by an environment variable, a caller
+ * argument or a fallback — all three would let the acquisition authority be chosen at runtime by
+ * whoever is running, and a fallback in particular would turn "the registry is unreachable" into
+ * "install something else instead" (AGENTS.md Hard Rule 5). So the selector is a field in a file
+ * that travels in the checkout, and an unknown or absent `source` is a named refusal rather than a
+ * default.
+ *
+ * `comment` is the one tolerated extra key: a lock is read by people too.
+ */
 export function readRuntimeLock(pluginDir) {
 	const lockPath = path.join(pluginDir, RUNTIME_LOCK_BASENAME);
 	let parsed;
@@ -219,19 +302,55 @@ export function readRuntimeLock(pluginDir) {
 			`${lockPath} parsed to ${Array.isArray(parsed) ? "an array" : JSON.stringify(parsed)}, not an object`,
 		);
 	}
-	if (
-		parsed.schemaVersion !== RUNTIME_SCHEMA_VERSION ||
-		typeof parsed.name !== "string" ||
-		typeof parsed.version !== "string" ||
-		typeof parsed.integrity !== "string" ||
-		!parsed.integrity.startsWith("sha512-")
-	) {
-		throw new RuntimeBootstrapError("runtime-lock-unreadable", `${lockPath} is not a v1 lock with an sha512 integrity`);
+	if (parsed.schemaVersion !== RUNTIME_SCHEMA_VERSION) {
+		throw new RuntimeBootstrapError(
+			"runtime-lock-unreadable",
+			`${lockPath} carries schemaVersion ${JSON.stringify(parsed.schemaVersion)}, not ${RUNTIME_SCHEMA_VERSION}`,
+		);
 	}
-	return Object.freeze({ name: parsed.name, version: parsed.version, integrity: parsed.integrity });
+	if (!ARTIFACT_KINDS.includes(parsed.source)) {
+		throw new RuntimeBootstrapError(
+			"runtime-lock-source-unknown",
+			`${lockPath} names source ${JSON.stringify(parsed.source)}; the closed set is ${JSON.stringify(ARTIFACT_KINDS)}`,
+		);
+	}
+	const expected =
+		parsed.source === "npm"
+			? ["comment", "integrity", "name", "schemaVersion", "source", "version"]
+			: ["comment", "repository", "schemaVersion", "source"];
+	const keys = Object.keys(parsed)
+		.filter((k) => k !== "comment")
+		.sort();
+	if (keys.join(",") !== expected.filter((k) => k !== "comment").join(",")) {
+		throw new RuntimeBootstrapError(
+			"runtime-lock-unreadable",
+			`${lockPath} is a ${parsed.source} lock with key set ${keys.join(",")}`,
+		);
+	}
+	if (parsed.source === "npm") {
+		if (
+			typeof parsed.name !== "string" ||
+			typeof parsed.version !== "string" ||
+			typeof parsed.integrity !== "string" ||
+			!parsed.integrity.startsWith("sha512-")
+		) {
+			throw new RuntimeBootstrapError(
+				"runtime-lock-unreadable",
+				`${lockPath} is not an npm lock with an sha512 integrity`,
+			);
+		}
+		return Object.freeze({ source: "npm", name: parsed.name, version: parsed.version, integrity: parsed.integrity });
+	}
+	if (parsed.repository !== CHECKOUT_REPOSITORY) {
+		throw new RuntimeBootstrapError(
+			"runtime-checkout-repository-foreign",
+			`${lockPath} names repository ${JSON.stringify(parsed.repository)}; this plugin installs ${CHECKOUT_REPOSITORY} and nothing else`,
+		);
+	}
+	return Object.freeze({ source: "herdr-checkout", repository: parsed.repository });
 }
 
-/** The lock and the checkout must name the SAME package, exactly. */
+/** The npm lock and the checkout must name the SAME package, exactly. */
 export function certifyLockCoherence(lock, checkoutSpec) {
 	if (lock.name !== checkoutSpec.name || lock.version !== checkoutSpec.version) {
 		throw new RuntimeBootstrapError(
@@ -240,6 +359,85 @@ export function certifyLockCoherence(lock, checkoutSpec) {
 		);
 	}
 	return Object.freeze({ name: lock.name, version: lock.version, integrity: lock.integrity });
+}
+
+/** A commit is forty lowercase hex characters. Anything else is not an anchor. */
+const COMMIT_SHA = /^[0-9a-f]{40}$/;
+
+/**
+ * The canonical full SHA of the checkout this build is running inside.
+ *
+ * `HEAD^{commit}` is asked for deliberately: it resolves a tag or an annotated object down to the
+ * commit, and `--verify` refuses an ambiguous or missing revision instead of echoing the argument
+ * back. A shallow clone answers this exactly as a full one does (measured 2026-09-16 on a real
+ * `--depth 1` checkout), which matters because Herdr's managed checkout IS shallow.
+ */
+export function resolveCheckoutCommit(checkoutRoot, { gitBin = "git", spawn = spawnSync } = {}) {
+	const run = spawn(gitBin, ["-C", checkoutRoot, "rev-parse", "--verify", "HEAD^{commit}"], { encoding: "utf8" });
+	if (run.error || run.status !== 0) {
+		throw new RuntimeBootstrapError(
+			"runtime-checkout-commit-unresolvable",
+			`${gitBin} -C ${checkoutRoot} rev-parse: ${run.error ? run.error.message : `exit ${run.status}: ${(run.stderr || "").trim().slice(0, 200)}`}`,
+		);
+	}
+	const commit = (run.stdout || "").trim();
+	if (!COMMIT_SHA.test(commit)) {
+		throw new RuntimeBootstrapError(
+			"runtime-checkout-commit-unresolvable",
+			`${checkoutRoot} resolved HEAD to ${JSON.stringify(commit)}, which is not a full 40-hex commit`,
+		);
+	}
+	return commit;
+}
+
+/**
+ * The identity a bootstrap is being ASKED for, derived from the committed lock and — for the
+ * checkout source — from the checkout itself. Nothing consults the environment or a flag.
+ */
+export function requestedArtifactIdentity({ lock, checkoutRoot, resolveCommit = resolveCheckoutCommit }) {
+	if (lock.source === "npm") {
+		const locked = certifyLockCoherence(lock, readCheckoutPackageSpec(checkoutRoot));
+		return certifyArtifactIdentity("requested artifact", {
+			kind: "npm",
+			name: locked.name,
+			version: locked.version,
+			expectedIntegrity: locked.integrity,
+		});
+	}
+	return certifyArtifactIdentity("requested artifact", {
+		kind: "herdr-checkout",
+		repository: lock.repository,
+		commit: resolveCommit(checkoutRoot),
+	});
+}
+
+/** The fixed product remote. There is no other spelling, and no input reaches it. */
+export function buildCheckoutRemote(repository) {
+	return `git+https://github.com/${repository}.git`;
+}
+
+/**
+ * `npm pack` argv for a checkout-sourced artifact, and the FORM is the contract.
+ *
+ * Measured 2026-09-16 on npm 11.16.0: packing a git spec runs `prepare` and NOT `prepack`, so the
+ * compiled bridge is built and no global pnpm is needed. Packing the DIRECTORY instead runs
+ * `prepack`, which calls `pnpm` and exits 127 on a clean host. Those are two different transactions,
+ * and only this one may be the product's — a directory pack is structurally absent from this module.
+ *
+ * `--ignore-scripts` is deliberately NOT here. It belongs to the local-tarball install below; on a
+ * pack it would skip `prepare` and produce a tarball with no compiled entry, which the installed
+ * verifier then refuses by name (measured: `runtime-compiled-dist-missing`).
+ */
+export function buildCheckoutPackArgv(identity, packDestination) {
+	return Object.freeze([
+		"pack",
+		`${buildCheckoutRemote(identity.repository)}#${identity.commit}`,
+		"--json",
+		"--pack-destination",
+		packDestination,
+		"--no-audit",
+		"--no-fund",
+	]);
 }
 
 /** `npm pack` argv for the exact spec, landing the artifact in OUR cache root. */
@@ -287,6 +485,15 @@ export function writeJournal(layout, entry) {
 	if (!JOURNAL_PHASES.includes(entry.phase)) {
 		throw new RuntimeBootstrapError("runtime-journal-phase-unknown", `phase ${JSON.stringify(entry.phase)}`);
 	}
+	// Certified on the way OUT as well as in. A journal only the writer can read is a journal that
+	// strands the next process — including the teardown, which is the one that has no checkout left
+	// to fall back on.
+	certifyArtifactIdentity(
+		"artifactIdentity",
+		entry.artifactIdentity,
+		entry.phase === "installing" ? "requested" : entry.phase === "runtime-ready" ? "ready" : "either",
+	);
+	if (entry.previousRuntime !== null) certifyArtifactIdentity("previousRuntime", entry.previousRuntime, "ready");
 	fs.mkdirSync(layout.pluginRoot, { recursive: true });
 	const body = `${JSON.stringify({ schemaVersion: RUNTIME_SCHEMA_VERSION, ...entry }, null, 2)}\n`;
 	const tmp = `${layout.journalPath}.tmp`;
@@ -301,22 +508,156 @@ function isExactIdentity(value) {
 	return typeof value === "string" && value.trim().length > 0 && value === value.trim();
 }
 
-function certifyProvenance(where, value) {
-	if (value === null) return null;
-	if (typeof value !== "object" || Array.isArray(value)) {
-		throw new RuntimeBootstrapError("runtime-journal-uncertified", `${where} is neither null nor an object`);
+/**
+ * THE one certifier for an `artifactIdentity`, wherever it appears — journal entry, carried
+ * `previousRuntime`, or activation ledger. Exact keys for the kind AND the stage; a shape that
+ * belongs to the other kind, or to the other stage of its own kind, is a named refusal.
+ *
+ * @param stage `"requested"` | `"ready"` | `"either"` — which shapes the CALLER's position accepts.
+ * @returns the frozen identity, so a certified value cannot be mutated after it was certified.
+ */
+export function certifyArtifactIdentity(where, value, stage = "either") {
+	if (value === null || typeof value !== "object" || Array.isArray(value)) {
+		throw new RuntimeBootstrapError(
+			"runtime-artifact-identity-uncertified",
+			`${where} is ${Array.isArray(value) ? "an array" : JSON.stringify(value)}, not an identity object`,
+		);
 	}
+	if (!ARTIFACT_KINDS.includes(value.kind)) {
+		throw new RuntimeBootstrapError(
+			"runtime-artifact-identity-uncertified",
+			`${where}.kind ${JSON.stringify(value.kind)} is outside ${JSON.stringify(ARTIFACT_KINDS)}`,
+		);
+	}
+	const shapes = stage === "either" ? ["requested", "ready"] : [stage];
 	const keys = Object.keys(value).sort().join(",");
-	if (keys !== [...PROVENANCE_KEYS].sort().join(",")) {
-		throw new RuntimeBootstrapError("runtime-journal-uncertified", `${where} key set: ${keys}`);
+	const matched = shapes.find((s) => keys === [...ARTIFACT_KEYS[value.kind][s]].sort().join(","));
+	if (matched === undefined) {
+		throw new RuntimeBootstrapError(
+			"runtime-artifact-identity-uncertified",
+			`${where} has key set ${keys}, which is not ${value.kind}'s ${shapes.join(" or ")} shape`,
+		);
 	}
-	if (!isExactIdentity(value.packageName) || !isExactIdentity(value.packageVersion)) {
-		throw new RuntimeBootstrapError("runtime-journal-uncertified", `${where} carries no exact package identity`);
+	if (value.kind === "npm") {
+		if (!isExactIdentity(value.name) || !isExactIdentity(value.version)) {
+			throw new RuntimeBootstrapError(
+				"runtime-artifact-identity-uncertified",
+				`${where} carries no exact package identity`,
+			);
+		}
+		if (!SHA512.test(value.expectedIntegrity)) {
+			throw new RuntimeBootstrapError(
+				"runtime-artifact-identity-uncertified",
+				`${where}.expectedIntegrity ${JSON.stringify(value.expectedIntegrity)}`,
+			);
+		}
+	} else {
+		// The repo literal travels WITH the identity, and is re-checked wherever it is read: a journal
+		// or ledger that names another repository describes an artifact this plugin may not have put
+		// there, and inheriting it would make a foreign tree our own by transcription.
+		if (value.repository !== CHECKOUT_REPOSITORY) {
+			throw new RuntimeBootstrapError(
+				"runtime-checkout-repository-foreign",
+				`${where}.repository ${JSON.stringify(value.repository)} is not ${CHECKOUT_REPOSITORY}`,
+			);
+		}
+		if (!COMMIT_SHA.test(value.commit)) {
+			throw new RuntimeBootstrapError(
+				"runtime-artifact-identity-uncertified",
+				`${where}.commit ${JSON.stringify(value.commit)} is not a full 40-hex commit`,
+			);
+		}
+		if (matched === "ready" && (!isExactIdentity(value.packageName) || !isExactIdentity(value.packageVersion))) {
+			throw new RuntimeBootstrapError(
+				"runtime-artifact-identity-uncertified",
+				`${where} carries no exact package completeness pair`,
+			);
+		}
 	}
-	if (!SHA512.test(value.expectedIntegrity) || !SHA256.test(value.observedDigest)) {
-		throw new RuntimeBootstrapError("runtime-journal-uncertified", `${where} integrity/digest are not well formed`);
+	if (matched === "ready" && !SHA256.test(value.observedDigest)) {
+		throw new RuntimeBootstrapError(
+			"runtime-artifact-identity-uncertified",
+			`${where}.observedDigest ${JSON.stringify(value.observedDigest)}`,
+		);
 	}
 	return Object.freeze({ ...value });
+}
+
+/** Which stage a certified identity is at. Derived from its own key set, never stored twice. */
+export function artifactStage(identity) {
+	const keys = Object.keys(identity).sort().join(",");
+	return keys === [...ARTIFACT_KEYS[identity.kind].ready].sort().join(",") ? "ready" : "requested";
+}
+
+/**
+ * The ONE place that answers "what name@version must be sitting on disk for this identity". For npm
+ * that is the identity itself; for a checkout it is the completeness pair observed off the artifact.
+ * Every disk verification — bootstrap idempotence, recovery, activation — asks here, so there is no
+ * second opinion to drift from.
+ */
+export function artifactCompleteness(identity) {
+	if (artifactStage(identity) !== "ready") {
+		throw new RuntimeBootstrapError(
+			"runtime-artifact-identity-uncertified",
+			`a requested ${identity.kind} identity has not observed a package yet, so it cannot say what is on disk`,
+		);
+	}
+	return identity.kind === "npm"
+		? Object.freeze({ name: identity.name, version: identity.version })
+		: Object.freeze({ name: identity.packageName, version: identity.packageVersion });
+}
+
+/**
+ * What the staging tree must hold, given what was asked for and what the acquisition observed.
+ *
+ * For npm the request itself is the answer — the registry spec IS the name@version. For a checkout
+ * the artifact says what it is, and this pair is exactly what the next line checks against the
+ * installed tree: an artifact whose metadata and whose installed tree disagree is refused there, by
+ * `verifyInstalledRuntime`, and not smoothed over here.
+ */
+export function completenessOf(requested, acquired) {
+	if (requested.kind === "npm") return Object.freeze({ name: requested.name, version: requested.version });
+	if (!isExactIdentity(acquired?.packageName) || !isExactIdentity(acquired?.packageVersion)) {
+		throw new RuntimeBootstrapError(
+			"runtime-artifact-identity-uncertified",
+			`a ${requested.kind} acquisition must report the packed package's exact name and version`,
+		);
+	}
+	return Object.freeze({ name: acquired.packageName, version: acquired.packageVersion });
+}
+
+/** The READY identity of what just landed: the request, plus exactly what was observed about it. */
+export function readyIdentity(requested, acquired) {
+	const observed =
+		requested.kind === "npm"
+			? { ...requested, observedDigest: acquired.observedDigest }
+			: {
+					...requested,
+					packageName: acquired.packageName,
+					packageVersion: acquired.packageVersion,
+					observedDigest: acquired.observedDigest,
+				};
+	return certifyArtifactIdentity("observed artifact", observed, "ready");
+}
+
+/**
+ * Is a READY identity the artifact a REQUESTED identity is asking for?
+ *
+ * For a checkout the answer is the commit and ONLY the commit. A version string is not an identity
+ * here: two commits can both call themselves `0.21.0`, so believing a version would let a stale
+ * runtime satisfy a request for a new candidate — the exact silence this comparison exists to make
+ * impossible.
+ */
+export function sameArtifactRequest(ready, requested) {
+	if (ready.kind !== requested.kind) return false;
+	if (ready.kind === "npm") {
+		return (
+			ready.name === requested.name &&
+			ready.version === requested.version &&
+			ready.expectedIntegrity === requested.expectedIntegrity
+		);
+	}
+	return ready.repository === requested.repository && ready.commit === requested.commit;
 }
 
 /**
@@ -355,33 +696,18 @@ export function readCertifiedJournal(layout) {
 	if (!JOURNAL_PHASES.includes(parsed.phase)) {
 		throw new RuntimeBootstrapError("runtime-journal-uncertified", `phase ${JSON.stringify(parsed.phase)}`);
 	}
-	if (!isExactIdentity(parsed.packageName) || !isExactIdentity(parsed.packageVersion)) {
-		throw new RuntimeBootstrapError("runtime-journal-uncertified", "packageName/packageVersion are not exact strings");
-	}
-	if (!SHA512.test(parsed.expectedIntegrity)) {
-		throw new RuntimeBootstrapError(
-			"runtime-journal-uncertified",
-			`expectedIntegrity ${JSON.stringify(parsed.expectedIntegrity)}`,
-		);
-	}
-	// The digest a phase may carry is exactly the writer state that phase describes: `installing` has
-	// not seen an artifact yet, `runtime-ready` has, and `removing` inherits from whichever it left.
-	if (parsed.phase === "installing" && parsed.observedDigest !== null) {
-		throw new RuntimeBootstrapError("runtime-journal-uncertified", "an installing entry cannot already have a digest");
-	}
-	if (parsed.phase === "runtime-ready" && !SHA256.test(parsed.observedDigest)) {
-		throw new RuntimeBootstrapError(
-			"runtime-journal-uncertified",
-			`a ready entry needs an observed digest, got ${JSON.stringify(parsed.observedDigest)}`,
-		);
-	}
-	if (parsed.phase === "removing" && parsed.observedDigest !== null && !SHA256.test(parsed.observedDigest)) {
-		throw new RuntimeBootstrapError(
-			"runtime-journal-uncertified",
-			`removing digest ${JSON.stringify(parsed.observedDigest)}`,
-		);
-	}
-	certifyProvenance("previousRuntime", parsed.previousRuntime);
+	// The identity shape a phase may carry IS the writer state that phase describes, and each phase
+	// names its own: `installing` has asked for an artifact and not seen one, `runtime-ready` has
+	// observed exactly one, and `removing` inherits whichever entry it left. That is why the stage is
+	// passed in here rather than accepted loosely — a ready-shaped `installing` entry would claim an
+	// observation that never happened, and a requested-shaped ready entry would name a runtime whose
+	// bytes nobody looked at.
+	certifyArtifactIdentity(
+		"artifactIdentity",
+		parsed.artifactIdentity,
+		parsed.phase === "installing" ? "requested" : parsed.phase === "runtime-ready" ? "ready" : "either",
+	);
+	if (parsed.previousRuntime !== null) certifyArtifactIdentity("previousRuntime", parsed.previousRuntime, "ready");
 	if (parsed.phase === "runtime-ready" && parsed.previousRuntime !== null) {
 		throw new RuntimeBootstrapError(
 			"runtime-journal-uncertified",
@@ -397,15 +723,14 @@ export function readCertifiedJournal(layout) {
 	return Object.freeze(parsed);
 }
 
-/** The provenance of a finished runtime, for carrying across an install that may not finish. */
+/**
+ * The identity of a FINISHED runtime, for carrying across an install that may not finish. Only a
+ * `runtime-ready` entry has one: an install that never observed an artifact has nothing to hand to
+ * the next transaction, and inventing a shape for it would be a provenance claim nobody made.
+ */
 export function provenanceOf(journal) {
-	if (journal === null) return null;
-	return Object.freeze({
-		packageName: journal.packageName,
-		packageVersion: journal.packageVersion,
-		expectedIntegrity: journal.expectedIntegrity,
-		observedDigest: journal.observedDigest,
-	});
+	if (journal === null || journal.phase !== "runtime-ready") return null;
+	return journal.artifactIdentity;
 }
 
 /**
@@ -433,6 +758,9 @@ export function assessRuntimeState(layout, certified) {
 		active: classifyPath(layout.activeDir),
 		staging: classifyPath(layout.stagingDir),
 		previous: classifyPath(layout.previousDir),
+		// The cache is classified with the rest, because it is the fourth thing this module deletes
+		// and a transaction that reclaims it has to have proven it was ours BEFORE the first removal.
+		cache: classifyPath(layout.cacheDir),
 	};
 	const facts = {
 		kinds: Object.freeze(kinds),
@@ -447,7 +775,12 @@ export function assessRuntimeState(layout, certified) {
 	}
 	const { active, staging, previous } = facts;
 	if (certified === null) {
-		return Object.freeze({ state: active || staging || previous ? "unowned-residue" : "clean", ...facts });
+		if (active || staging || previous) return Object.freeze({ state: "unowned-residue", ...facts });
+		// CACHE-ONLY residue gets its own name. A cache directory at our address with no journal behind
+		// it is somebody else's — or the remains of a generation this host cut — and adopting it would
+		// mean this module's first act on a strange host is deleting a tree it cannot prove it wrote.
+		if (kinds.cache !== "absent") return Object.freeze({ state: "unowned-cache-residue", ...facts });
+		return Object.freeze({ state: "clean", ...facts });
 	}
 	if (!active && !staging && !previous) return Object.freeze({ state: "owned-empty", ...facts });
 	if (!active && !staging && previous) return Object.freeze({ state: "torn-swap", ...facts });
@@ -538,10 +871,48 @@ export function digestFile(file) {
 	return `sha256-${createHash("sha256").update(fs.readFileSync(file)).digest("hex")}`;
 }
 
-/** Production acquisition: pack the exact spec into our cache, verify its bytes, then install it. */
-export function npmAcquire({ spec, prefix, cacheDir, env, npmBin = "npm" }) {
+/** `npm pack --json`'s one row, or a named refusal. The metadata is the ARTIFACT's own claim. */
+function readPackedArtifact(packed, cacheDir, failureCode) {
+	let row;
+	try {
+		row = JSON.parse(packed.stdout)[0];
+	} catch (err) {
+		throw new RuntimeBootstrapError(failureCode, `npm pack --json was unreadable: ${err.message}`);
+	}
+	if (
+		row === undefined ||
+		typeof row.filename !== "string" ||
+		!isExactIdentity(row.name) ||
+		!isExactIdentity(row.version)
+	) {
+		throw new RuntimeBootstrapError(
+			failureCode,
+			`npm pack --json carried no name/version/filename: ${packed.stdout.slice(0, 200)}`,
+		);
+	}
+	return Object.freeze({
+		tarball: path.join(cacheDir, path.basename(row.filename)),
+		name: row.name,
+		version: row.version,
+	});
+}
+
+/** Install a local tarball into the staging prefix. `--ignore-scripts` is this call's flag. */
+function installLocalTarball(tarball, prefix, npmEnv, npmBin, failureCode) {
+	const installed = spawnSync(npmBin, buildInstallArgv(tarball, prefix), { encoding: "utf8", env: npmEnv });
+	if (installed.status !== 0) {
+		throw new RuntimeBootstrapError(
+			failureCode,
+			`npm install exited ${installed.status}: ${(installed.stderr || "").trim().slice(0, 400)}`,
+		);
+	}
+}
+
+/** npm acquisition: pack the exact spec into our cache, verify its bytes against the published integrity, install. */
+export function npmAcquire({ identity, prefix, cacheDir, env, npmBin = "npm" }) {
 	fs.mkdirSync(cacheDir, { recursive: true });
 	const npmEnv = npmEnvironment(env, cacheDir);
+	const spec = { name: identity.name, version: identity.version, integrity: identity.expectedIntegrity };
 	const packed = spawnSync(npmBin, buildPackArgv(spec, cacheDir), { encoding: "utf8", env: npmEnv });
 	if (packed.status !== 0) {
 		throw new RuntimeBootstrapError(
@@ -549,28 +920,71 @@ export function npmAcquire({ spec, prefix, cacheDir, env, npmBin = "npm" }) {
 			`npm pack exited ${packed.status}: ${(packed.stderr || "").trim().slice(0, 400)}`,
 		);
 	}
-	let filename;
-	try {
-		filename = JSON.parse(packed.stdout)[0].filename;
-	} catch (err) {
-		throw new RuntimeBootstrapError("runtime-acquire-failed", `npm pack --json was unreadable: ${err.message}`);
-	}
-	const tarball = path.join(cacheDir, path.basename(filename));
-	const observedIntegrity = integrityOfFile(tarball);
+	const artifact = readPackedArtifact(packed, cacheDir, "runtime-acquire-failed");
+	const observedIntegrity = integrityOfFile(artifact.tarball);
 	if (observedIntegrity !== spec.integrity) {
 		throw new RuntimeBootstrapError(
 			"runtime-artifact-integrity-mismatch",
 			`the lock expects ${spec.integrity} for ${spec.name}@${spec.version}, the tarball hashes to ${observedIntegrity}`,
 		);
 	}
-	const installed = spawnSync(npmBin, buildInstallArgv(tarball, prefix), { encoding: "utf8", env: npmEnv });
-	if (installed.status !== 0) {
+	installLocalTarball(artifact.tarball, prefix, npmEnv, npmBin, "runtime-acquire-failed");
+	return Object.freeze({ observedDigest: digestFile(artifact.tarball) });
+}
+
+/**
+ * Checkout acquisition: pack the EXACT commit from the fixed remote, then install that tarball.
+ *
+ * There is no integrity to compare against, and this function does not pretend otherwise — a
+ * registry publishes an integrity, a commit does not. What stands in its place is spelled out
+ * rather than implied: the commit pins WHICH source tree was packed, the digest RECORDS the bytes
+ * that arrived, and the caller's `verifyInstalledRuntime` decides whether what landed is a runtime
+ * at all. A remote that cannot serve the commit, or a `prepare` that cannot build it, is
+ * `runtime-checkout-source-unavailable` — never a fallback to some other source.
+ */
+export function checkoutAcquire({ identity, prefix, cacheDir, env, npmBin = "npm" }) {
+	fs.mkdirSync(cacheDir, { recursive: true });
+	const npmEnv = npmEnvironment(env, cacheDir);
+	const packed = spawnSync(npmBin, buildCheckoutPackArgv(identity, cacheDir), { encoding: "utf8", env: npmEnv });
+	if (packed.status !== 0) {
 		throw new RuntimeBootstrapError(
-			"runtime-acquire-failed",
-			`npm install exited ${installed.status}: ${(installed.stderr || "").trim().slice(0, 400)}`,
+			"runtime-checkout-source-unavailable",
+			`npm pack ${buildCheckoutRemote(identity.repository)}#${identity.commit} exited ${packed.status}: ${(packed.stderr || "").trim().slice(0, 400)}`,
 		);
 	}
-	return Object.freeze({ observedDigest: digestFile(tarball) });
+	const artifact = readPackedArtifact(packed, cacheDir, "runtime-checkout-source-unavailable");
+	installLocalTarball(artifact.tarball, prefix, npmEnv, npmBin, "runtime-checkout-source-unavailable");
+	// COMPLETENESS, not identity: what the artifact says it is, to be checked against the tree.
+	return Object.freeze({
+		observedDigest: digestFile(artifact.tarball),
+		packageName: artifact.name,
+		packageVersion: artifact.version,
+	});
+}
+
+/** The dispatcher, on the identity's own discriminant. No environment, no fallback, no third branch. */
+export function acquireArtifact(args) {
+	return args.identity.kind === "npm" ? npmAcquire(args) : checkoutAcquire(args);
+}
+
+/**
+ * The package name the tree at the ACTIVE address was installed as, according to the journal.
+ *
+ * An `installing` entry describes what we are reaching for, not what is standing there, so the
+ * answer comes from the carried ready identity in that case. It is deliberately NOT taken from the
+ * request: on a source switch the request may carry no package name at all, and answering with the
+ * candidate's name would inspect the running runtime as if it were already the new one.
+ */
+function activePackageName(certified) {
+	const ready =
+		artifactStage(certified.artifactIdentity) === "ready" ? certified.artifactIdentity : certified.previousRuntime;
+	if (ready === null) {
+		throw new RuntimeBootstrapError(
+			"runtime-owner-state-missing",
+			`${certified.runtimeRoot} has a backup beside it but the journal carries no ready identity naming what that backup contains`,
+		);
+	}
+	return artifactCompleteness(ready).name;
 }
 
 /**
@@ -578,8 +992,14 @@ export function npmAcquire({ spec, prefix, cacheDir, env, npmBin = "npm" }) {
  *
  * @returns frozen `{phase, changed, recovered, journal}`
  */
-export function bootstrapRuntime({ env, spec, lock, acquire = npmAcquire }) {
-	const locked = certifyLockCoherence(lock, spec);
+export function bootstrapRuntime({
+	env,
+	lock,
+	checkoutRoot = defaultCheckoutRoot(),
+	acquire = acquireArtifact,
+	resolveCommit = resolveCheckoutCommit,
+}) {
+	const requested = requestedArtifactIdentity({ lock, checkoutRoot, resolveCommit });
 	const layout = resolveRuntimeLayout(env);
 
 	// PRE-MUTATION, and that word is literal: not one directory is created before ownership and the
@@ -597,6 +1017,12 @@ export function bootstrapRuntime({ env, spec, lock, acquire = npmAcquire }) {
 		throw new RuntimeBootstrapError(
 			"runtime-owner-state-missing",
 			`${layout.runtimeRoot} holds ${JSON.stringify(assessed.kinds)} with no certified journal behind it; refusing to move what we cannot prove is ours`,
+		);
+	}
+	if (assessed.state === "unowned-cache-residue") {
+		throw new RuntimeBootstrapError(
+			"runtime-cache-unowned-residue",
+			`${layout.cacheDir} exists with no certified journal behind it; this transaction reclaims only a cache its own journal proves it wrote`,
 		);
 	}
 
@@ -622,7 +1048,10 @@ export function bootstrapRuntime({ env, spec, lock, acquire = npmAcquire }) {
 		case "backup-pending":
 		case "backup-pending-with-candidate": {
 			removeTree(layout.stagingDir);
-			if (inspectInstalledRuntime(layout.activeDir, locked.name).ok) {
+			// "Is the active tree a usable runtime at all?" — asked with the name the PREVIOUS ready
+			// identity claims, because that is what the backup beside it was installed as. On a source
+			// switch the requested identity may not even carry a package name.
+			if (inspectInstalledRuntime(layout.activeDir, activePackageName(certified)).ok) {
 				removeTree(layout.previousDir);
 				recovered = "stale-backup";
 			} else {
@@ -640,16 +1069,20 @@ export function bootstrapRuntime({ env, spec, lock, acquire = npmAcquire }) {
 	// Reconcile journal against disk: only a `runtime-ready` journal for THIS exact spec, whose
 	// active tree is still a REAL DIRECTORY that verifies, may be believed. A recovery just moved a
 	// tree the journal does not describe, so a restore never takes this path.
+	// IDENTITY, not version. `sameArtifactRequest` is the only comparison allowed here: for a
+	// checkout-sourced runtime the anchor is the commit, so a journal that says `0.21.0` while the
+	// request names a different commit is NOT this runtime, and skipping the install on the strength
+	// of a matching version is how a host would keep serving the previous candidate while every
+	// receipt above it claimed the new one.
 	if (
 		!restored &&
 		certified !== null &&
 		certified.phase === "runtime-ready" &&
-		certified.packageName === locked.name &&
-		certified.packageVersion === locked.version &&
+		sameArtifactRequest(certified.artifactIdentity, requested) &&
 		classifyPath(layout.activeDir) === "real-dir"
 	) {
 		try {
-			verifyInstalledRuntime(layout.activeDir, locked);
+			verifyInstalledRuntime(layout.activeDir, artifactCompleteness(certified.artifactIdentity));
 			return Object.freeze({ phase: "runtime-ready", changed: false, recovered, journal: certified });
 		} catch {
 			// fall through: the journal claimed a runtime the disk does not have.
@@ -667,20 +1100,25 @@ export function bootstrapRuntime({ env, spec, lock, acquire = npmAcquire }) {
 	writeJournal(layout, {
 		phase: "installing",
 		runtimeRoot: layout.activeDir,
-		packageName: locked.name,
-		packageVersion: locked.version,
-		expectedIntegrity: locked.integrity,
-		observedDigest: null,
+		artifactIdentity: requested,
 		previousRuntime: carried,
 	});
 
-	let observedDigest;
+	// From here the journal above is this transaction's proof of ownership over the staging tree AND
+	// the cache — which is why the cleanup below may reclaim both, and why it could not before the
+	// write. What it may NOT touch is the journal itself, the backup, or the active runtime: those
+	// are the retry authority and the last good runtime, and a failed candidate is not a reason to
+	// have less than we started with.
+	let acquired;
 	try {
 		fs.mkdirSync(layout.stagingDir, { recursive: true });
-		({ observedDigest } = acquire({ spec: locked, prefix: layout.stagingDir, cacheDir: layout.cacheDir, env }));
-		verifyInstalledRuntime(layout.stagingDir, locked);
+		acquired = acquire({ identity: requested, prefix: layout.stagingDir, cacheDir: layout.cacheDir, env });
+		verifyInstalledRuntime(layout.stagingDir, completenessOf(requested, acquired));
 	} catch (err) {
 		removeTree(layout.stagingDir);
+		// A half-fetched tarball left in the cache is the thing a retry would trip over: npm's own
+		// cache entry may be incomplete, and OUR cache is the only place this transaction wrote.
+		removeTree(layout.cacheDir);
 		throw err;
 	}
 
@@ -704,10 +1142,7 @@ export function bootstrapRuntime({ env, spec, lock, acquire = npmAcquire }) {
 	const journal = {
 		phase: "runtime-ready",
 		runtimeRoot: layout.activeDir,
-		packageName: locked.name,
-		packageVersion: locked.version,
-		expectedIntegrity: locked.integrity,
-		observedDigest,
+		artifactIdentity: readyIdentity(requested, acquired),
 		previousRuntime: null,
 	};
 	writeJournal(layout, journal);
@@ -735,6 +1170,17 @@ export function removeOwnedRuntime({ env }) {
 			throw new RuntimeBootstrapError(
 				"runtime-inverse-foreign-refused",
 				`${layout.runtimeRoot} holds ${JSON.stringify(assessed)} with no certified journal behind it`,
+			);
+		}
+		// A CACHE with no journal behind it is refused here for the same reason the forward
+		// transaction refuses it: the inverse's whole plan begins with that directory, and the two
+		// sides of one ownership fact may not read it differently. An inverse that treated it as
+		// "nothing of ours, report success" would be the half that quietly deletes it next time the
+		// forward path is taught to be less careful.
+		if (assessed.state === "unowned-cache-residue") {
+			throw new RuntimeBootstrapError(
+				"runtime-inverse-foreign-refused",
+				`${layout.cacheDir} exists with no certified journal behind it; this inverse removes only what a journal proves it wrote`,
 			);
 		}
 		return Object.freeze({ removed: Object.freeze([]), reason: "runtime-journal-absent" });

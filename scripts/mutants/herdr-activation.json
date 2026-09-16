@@ -253,20 +253,52 @@
 			"claim": "HAC-RUNTIME-EXACT-VERSION",
 			"subject": "scripts/herdr-plugin-activate.mjs",
 			"title": "checking only that SOME usable tree of that name is present wires two harnesses at an address whose contents disagree with the journal that certified it — the provenance line then describes something else",
-			"find": [
-				"\t\tverifyInstalledRuntime(runtime.activeDir, { name: journal.packageName, version: journal.packageVersion });"
-			],
+			"find": ["\t\tverifyInstalledRuntime(runtime.activeDir, artifactCompleteness(journal.artifactIdentity));"],
 			"replace": [
+				"\t\tconst certifiedName = artifactCompleteness(journal.artifactIdentity).name;",
 				"\t\tverifyInstalledRuntime(runtime.activeDir, {",
-				"\t\t\tname: journal.packageName,",
+				"\t\t\tname: certifiedName,",
 				"\t\t\tversion: JSON.parse(",
-				"\t\t\t\tfs.readFileSync(path.join(runtime.activeDir, \"node_modules\", journal.packageName, \"package.json\"), \"utf8\"),",
+				"\t\t\t\tfs.readFileSync(path.join(runtime.activeDir, \"node_modules\", certifiedName, \"package.json\"), \"utf8\"),",
 				"\t\t\t).version,",
 				"\t\t});"
 			],
 			"gate": ["bash", "run.sh", "check-herdr-activation"],
 			"timeoutSeconds": 600,
 			"signature": "[QK:HAC-RUNTIME-EXACT-VERSION]",
+			"signatureSource": "scripts/check-herdr-activation.ts"
+		},
+		{
+			"claim": "HAC-LEDGER-IDENTITY-CERTIFIED",
+			"title": "letting the ledger carry a REQUESTED identity records an activation against an artifact nothing observed, and the teardown that reads it back has no digest or completeness pair to check the disk against",
+			"subject": "scripts/herdr-activation.mjs",
+			"find": ["\t\tcertifyArtifactIdentity(\"artifactIdentity\", parsed.artifactIdentity, \"ready\");"],
+			"replace": ["\t\tcertifyArtifactIdentity(\"artifactIdentity\", parsed.artifactIdentity, \"either\");"],
+			"gate": ["bash", "run.sh", "check-herdr-activation"],
+			"timeoutSeconds": 420,
+			"signature": "[QK:HAC-LEDGER-IDENTITY-CERTIFIED]",
+			"signatureSource": "scripts/check-herdr-activation.ts"
+		},
+		{
+			"claim": "HAC-REBIND-LEGALITY",
+			"title": "treating a SOURCE change as an ordinary reinstall lets one acquisition authority inherit the other's activation without the operator ever asking — the npm branch would silently adopt a candidate's wiring, or the reverse",
+			"subject": "scripts/herdr-activation.mjs",
+			"find": ["\tif (ledger.artifactIdentity.kind !== target.kind) {"],
+			"replace": ["\tif (false && ledger.artifactIdentity.kind !== target.kind) {"],
+			"gate": ["bash", "run.sh", "check-herdr-activation"],
+			"timeoutSeconds": 420,
+			"signature": "[QK:HAC-REBIND-LEGALITY]",
+			"signatureSource": "scripts/check-herdr-activation.ts"
+		},
+		{
+			"claim": "HAC-REBIND-ATOMIC-CHECKPOINT",
+			"title": "leaving already-active components labelled `active` through a rebind claims work the run has not redone: the ledger says those components are wired to the new artifact while nothing has re-pointed them",
+			"subject": "scripts/herdr-plugin-activate.mjs",
+			"find": ["\t\tif (disposition === \"rebind\" || states[backend] !== \"active\") states[backend] = \"pending\";"],
+			"replace": ["\t\tif (states[backend] !== \"active\") states[backend] = \"pending\";"],
+			"gate": ["bash", "run.sh", "check-herdr-activation"],
+			"timeoutSeconds": 420,
+			"signature": "[QK:HAC-REBIND-ATOMIC-CHECKPOINT]",
 			"signatureSource": "scripts/check-herdr-activation.ts"
 		}
 	]

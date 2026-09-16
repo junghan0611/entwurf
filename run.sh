@@ -180,10 +180,11 @@ Usage:
   ./run.sh check-entwurf-facts         # deterministic gate (0.11 Stage 0 step 4, fact-provider slice 1+2): PURE PeerFact core + resolveFactList union — R1 out-of-domain→unsupported, R3b socket-domain 4-value, facts-only keyset; union: PeerFact + RecordLessSocketFact by gardenId (#50 C4: record-less socket = diagnostic subject, gid+liveness only), dormant→dead, F3 indeterminate preserved, out-of-socket-domain+socket fail-loud; pure, no IO
   ./run.sh check-socket-discovery      # deterministic gate (0.11 Stage 0 step 4, fact-provider slice 3): SOCKET-axis scanSocketProbes — probes (dir sockets) ∪ (in-domain citizen canonical paths) 3-valued; dormant citizen no-file → dead (resumable, not unprobed), stall → indeterminate (F3), dir hygiene/dedup/missing-dir + e2e → resolveFactList; readdir/probe injected, no IO
   ./run.sh check-meta-facts            # deterministic gate for the meta-facts projection (#65): drives the REAL CLI — full-record join, parse-before-uniqueness, no-winner duplicates, drift/symlink/invalid-UTF-8 defects in-band, deterministic bytes, exit contract 0/2/3, dispatch+emit reachability
-  ./run.sh check-herdr-plugin          # deterministic gate for the #116 M2-b herdr plugin (`plugins/herdr/`): STATIC manifest shape for herdr 0.9.0 + the forbidden sections ([[build]]/[[startup]]/[[events]]/[[actions]]/[[link_handlers]]) asserted absent; BEHAVIOURAL drive of the REAL pane entry against a stub `entwurf` and stub HERDR_BIN_PATH that LOG every call — exactly one peer-facts + one agent list per open (counted, not claimed), skip-by-name when Entwurf is absent, four distinct named refusals instead of an empty table, ambiguous never first-wins, diagnostics shown, activity in its own column, and zero writes to the plugin state/config dirs. No herdr binary, no Entwurf install
+  ./run.sh check-herdr-plugin          # deterministic gate for the #116 M2-b herdr plugin (`plugins/herdr/`): STATIC manifest shape for herdr 0.9.0 + the forbidden sections ([[startup]]/[[events]]/[[actions]]/[[link_handlers]]) asserted absent ([[build]] is check-herdr-plugin-build's subject since #116 M3-b3); BEHAVIOURAL drive of the REAL pane entry against a stub `entwurf` and stub HERDR_BIN_PATH that LOG every call — exactly one peer-facts + one agent list per open (counted, not claimed), skip-by-name when Entwurf is absent, four distinct named refusals instead of an empty table, ambiguous never first-wins, diagnostics shown, activity in its own column, and zero writes to the plugin state/config dirs. No herdr binary, no Entwurf install
   ./run.sh check-herdr-runtime-bootstrap # deterministic gate for the #116 M3-b1 runtime leaf (`plugins/herdr/lib/runtime-bootstrap.mjs`): the Entwurf-owned stable active root as a REAL directory (nothing is put on PATH — the scoped wiring above names ABSOLUTE commands under it), ownership decided BEFORE the first mkdir, disk facts from lstat (a dangling symlink is not 'absent' and a link into another tree is not a directory), exact name@version + compiled entry + all three required bins present AND executable + a real `check-bridge`, the plugin-owned artifact lock coherent with the checkout, the owned npm cache and --ignore-scripts, a CERTIFIED journal (non-object/array/scalar/blank-identity/phase-contradicting-digest all refused) as the only ownership proof, all EIGHT active/staging/previous combinations named, the last good runtime never lost (torn swap AND corrupt-active beside a good backup), prior provenance carried across an install that may not finish, a failed candidate leaving the running runtime byte-identical, idempotent same-spec reinstall, a journal believed only while the disk backs it, a preflight-then-mutate inverse taking runtime last, and the refusal to record Herdr's commit as ours. NETWORK ZERO, npm ZERO — it drives a FIXTURE package, so the ACTUAL package proof lives in check-pack-install
   ./run.sh check-herdr-activation      # deterministic gate for the #116 M3-b2 scoped activation: the pi user-scope-ONLY forward seam (no project write, OpenCode byte-untouched), the absolute command DERIVED from the runtime root for BOTH harnesses (relative/unnormalised refused), default bare/clone bytes unchanged when no mode is asked, the pi inverse refusing a drifted command instead of deleting an override, a certified activation ledger that can never name an atom outside {pi, claude-code}, add-only reinstall (a shrinking H retains, never removes), a roots-drift refusal before the first byte, the teardown order components->runtime->ledger LAST, one refused preflight leaving every byte untouched, and no deferred module load on the path that deletes its own runtime. Drives the REAL pi writers; the vendor `claude` CLI is NOT invoked and its acceptance of an absolute executable stays a named LIVE boundary
   ./run.sh check-herdr-plugin-profile  # deterministic gate for the #116 M3-a PURE activation leaf (`plugins/herdr/lib/integration-profile.mjs`): the closed {pi→pi, claude→claude-code} table, exactly-one-row-or-named-refusal, the FRONT-ANCHORED state grammar (a `/srv/current (v9)/` directory name may not decide a verdict), no path in the plan, outdated/needs-repair as named FAILs, not-installed as a zero-write SKIP, `current` as herdr's admission with no floor of our own, OpenCode observed but never planned, and the leaf's purity. Listing strings only — no herdr binary, no install, no environment, no writes
+  ./run.sh check-herdr-plugin-build    # deterministic gate for the #116 M3-b3 build runner (`plugins/herdr/lib/build.mjs`): the ONE command Herdr's [[build]] calls, composing integration status -> pure profile -> runtime bootstrap -> activation THROUGH THE INSTALLED PACKAGE (never this checkout, which herdr deletes on uninstall with no cleanup hook). Pins one [[build]] with argv `node lib/build.mjs` and a runner npm does not ship, missing-herdr vs unanswerable-status as separate named refusals, a selected outdated/needs-repair/malformed/duplicate atom failing BEFORE any runtime work, A-empty as exit 0 with ZERO writes, absent/incapable activation entries as distinct refusals, the two-stage {pi} -> {pi, claude-code} composition with OpenCode never named, and the post-build herdr commit gap named rather than called atomic. Listing via the runner's own spawn seam (no fake herdr); one cell drives the REAL binary, named SKIP without it
   ./run.sh check-peer-facts            # deterministic gate for the peer-facts projection (#116 M2-a): drives the REAL CLI with every ambient root sandboxed — placement crosses STRUCTURED (never the human `herdr <pane>` string), the peer keyset is exactly the provider's facts (no herdr agent_status may enter an entwurf payload), no socket coordinate is published (#50 C4), diagnostics in-band, the probed socket world is the one ENTWURF_DIR names (proved by a record-less socket surfacing — there is no field to echo), no observation budget, exit contract 0/2/3, dispatch+emit reachability. No herdr binary
   ./run.sh check-meta-listing          # deterministic gate: META-STORE facts axis — kind-carrying entries; non-regular records are never read, parse/drift become diagnostics, duplicate nativeSessionId quarantines every rival but not unrelated citizens; strict throws / collect partial; pure injected IO
   ./run.sh check-entwurf-fact-provider # deterministic gate (0.11 Stage 0 step 4, fact-provider slice 4b): ASSEMBLY listEntwurfFacts — full-store parse/probe/quarantine/resolve stays intact; #112 bounds expensive receiver/transcript observation to the newest 32 rendered rows while older machine rows say unobserved; Q112 pins full payload + exact observer budget; C-원칙 keeps corruption diagnostic and impossible wiring loud; deps injected, no IO
@@ -1819,9 +1820,10 @@ check_herdr_plugin() {
   # STATIC: the manifest is parsed with the package's own TOML reader and held to the
   # shape herdr 0.9.0 accepts (min_herdr_version required + semver, dot-free pane id,
   # popup-only sizing, argv arrays), and the ABSENT sections are asserted as hard as the
-  # present one — [[build]] would run in the operator's real HOME (herdr scrubs only
-  # HERDR_*), [[startup]]/[[events]] are where a watcher would grow, [[actions]] would
-  # send a report nobody can read into a 64 KiB log. BEHAVIOURAL: the REAL pane entry is
+  # present ones — [[startup]]/[[events]] are where a watcher would grow, [[actions]]
+  # would send a report nobody can read into a 64 KiB log. ([[build]] LEFT that list in
+  # #116 M3-b3; the one runner it may call is check-herdr-plugin-build's subject.)
+  # BEHAVIOURAL: the REAL pane entry is
   # spawned with a stub `entwurf` and a stub HERDR_BIN_PATH that log every call, so
   # "exactly one read each per open" is COUNTED; success, skip-by-name, four distinct
   # named refusals, the ambiguous pane, diagnostics and the no-write claim are each
@@ -1871,6 +1873,41 @@ check_herdr_plugin_profile() {
   # here, OpenCode observed but never planned, and the leaf's purity. No herdr binary, no
   # Entwurf install, no environment read, no writes.
   run_ts scripts/check-herdr-plugin-profile.ts
+}
+
+check_herdr_plugin_build() {
+  # Deterministic gate for the #116 M3-b3 build runner (`plugins/herdr/lib/build.mjs`) — the ONE
+  # command Herdr's `[[build]]` calls, and the order it composes: integration status -> pure
+  # profile -> runtime bootstrap -> activation THROUGH THE INSTALLED PACKAGE. There is no fake
+  # herdr binary here (the repo forbids one); the listing arrives through the runner's own spawn
+  # seam as the prose shape 0.9.0 emits, and one cell drives the REAL binary with a named SKIP
+  # when the host has none (ENTWURF_REQUIRE_HERDR=1 makes absence red). Pins: exactly one
+  # [[build]] whose argv is `node lib/build.mjs` and a runner the npm package does NOT ship;
+  # missing herdr vs unanswerable status as separate named refusals with zero writes; a selected
+  # atom that is outdated/needs-repair/malformed/duplicated failing BEFORE any runtime work;
+  # A-empty as a clean exit 0 that writes nothing (no runtime, no wiring, no removal); the
+  # activation entry resolved under the stable runtime with absent/incapable as distinct named
+  # refusals and no checkout fallback; the two-stage {pi} -> {pi, claude-code} composition where a
+  # new commit reinstalls and OpenCode is never named; and the post-build Herdr commit gap being a
+  # NAMED gap, not an atomic transaction. The real `herdr plugin install` + real `npm pack
+  # git+https://...#<sha>` journey needs the network and lives in smoke-herdr-plugin-build-live.
+  run_ts scripts/check-herdr-plugin-build.ts
+}
+
+smoke_herdr_plugin_build_live() {
+  # #116 M3-b3 LIVE: a REAL `herdr plugin install` drives this plugin's REAL `[[build]]`, which
+  # packs the FIXED product git spec for real. Needs LIVE=1, herdr/git/npm, and the NETWORK (a
+  # git-spec pack builds the bridge through `prepare`, which installs devDependencies) — which is
+  # the axis check-herdr-plugin-build cannot have and does not claim. Hermetic by two substitutions
+  # only: sandbox HOME/XDG, and git `insteadOf` redirecting the unchanged product remote to a local
+  # bare clone of this worktree, so an unpushed candidate is testable without weakening the argv.
+  # Cells 1/2/4 are the real-Herdr journey: remote-commit available, reinstall widening to
+  # {pi, claude-code} with OpenCode zero-write and ONE COUNTED vendor MCP owner entry, and the
+  # post-build gap where herdr's own commit fails after our runner already rebound the activation.
+  # Cell 3 is deliberately NOT a journey: it calls the shipped runtime leaf directly with the fixed
+  # product argv at a commit the remote lacks, so it is acquisition-leaf evidence — named refusal,
+  # active runtime/ledger/harness bytes preserved, journal left as the certified retry authority.
+  run_ts scripts/smoke-herdr-plugin-build-live.ts
 }
 
 check_peer_facts() {
@@ -3835,7 +3872,7 @@ _check_pack_install_impl() {
   mkdir -p "$deact_active" "$deact_home/.state/entwurf/herdr-plugin"
   cp -R "$tmp/node_modules" "$deact_active/node_modules"
   deact_pkg="$deact_active/node_modules/@junghanacs/entwurf"
-  node -e 'const fs=require("fs"),path=require("path");const [home,active]=process.argv.slice(1);const pkg=path.join(active,"node_modules","@junghanacs","entwurf");const version=JSON.parse(fs.readFileSync(path.join(pkg,"package.json"),"utf8")).version;fs.writeFileSync(path.join(home,".data","entwurf","herdr-plugin","journal.json"),JSON.stringify({schemaVersion:1,phase:"runtime-ready",runtimeRoot:active,packageName:"@junghanacs/entwurf",packageVersion:version,expectedIntegrity:"sha512-consumercell",observedDigest:"sha256-"+"a".repeat(64),previousRuntime:null}));fs.writeFileSync(path.join(home,".state","entwurf","herdr-plugin","activation.json"),JSON.stringify({schemaVersion:1,phase:"deactivating",runtimeRoot:active,piAgentDir:{path:path.join(home,".pi","agent"),source:"default"},claudeConfigDir:{path:path.join(home,".claude"),source:"default"},claudeUserConfig:{path:path.join(home,".claude.json"),source:"HOME"},activatedBackends:["pi"],components:[{backend:"pi",state:"removed"}]}));' "$deact_home" "$deact_active"
+  node -e 'const fs=require("fs"),path=require("path");const [home,active]=process.argv.slice(1);const pkg=path.join(active,"node_modules","@junghanacs","entwurf");const version=JSON.parse(fs.readFileSync(path.join(pkg,"package.json"),"utf8")).version;fs.writeFileSync(path.join(home,".data","entwurf","herdr-plugin","journal.json"),JSON.stringify({schemaVersion:2,phase:"runtime-ready",runtimeRoot:active,artifactIdentity:{kind:"herdr-checkout",repository:"junghan0611/entwurf",commit:"c".repeat(40),packageName:"@junghanacs/entwurf",packageVersion:version,observedDigest:"sha256-"+"a".repeat(64)},previousRuntime:null}));fs.writeFileSync(path.join(home,".state","entwurf","herdr-plugin","activation.json"),JSON.stringify({schemaVersion:2,phase:"deactivating",runtimeRoot:active,artifactIdentity:{kind:"herdr-checkout",repository:"junghan0611/entwurf",commit:"c".repeat(40),packageName:"@junghanacs/entwurf",packageVersion:version,observedDigest:"sha256-"+"a".repeat(64)},piAgentDir:{path:path.join(home,".pi","agent"),source:"default"},claudeConfigDir:{path:path.join(home,".claude"),source:"default"},claudeUserConfig:{path:path.join(home,".claude.json"),source:"HOME"},activatedBackends:["pi"],components:[{backend:"pi",state:"removed"}]}));' "$deact_home" "$deact_active"
   deact_proof=$(env -i PATH="$PATH" HOME="$deact_home" XDG_DATA_HOME="$deact_home/.data" XDG_STATE_HOME="$deact_home/.state" XDG_CACHE_HOME="$deact_home/.cache" node "$deact_pkg/scripts/herdr-plugin-deactivate.mjs" 2>&1)
   deact_rc=$?
   runtime_left=$([ -e "$deact_home/.data/entwurf/herdr-plugin/runtime" ] && echo yes || echo no)
@@ -6443,6 +6480,12 @@ case "$cmd" in
     ;;
   check-herdr-plugin-profile)
     check_herdr_plugin_profile
+    ;;
+  check-herdr-plugin-build)
+    check_herdr_plugin_build
+    ;;
+  smoke-herdr-plugin-build-live)
+    smoke_herdr_plugin_build_live
     ;;
   check-peer-facts)
     check_peer_facts

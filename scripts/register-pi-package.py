@@ -120,6 +120,14 @@ from pathlib import Path
 # the first one was closed (#53 B). sys.path[0] already holds this directory when the
 # script is run by path, which is how run.sh and every gate invoke it; the explicit
 # insert keeps the import true under any other invocation form.
+# The sibling import below would otherwise leave `scripts/__pycache__/pi_settings_io.*.pyc`
+# behind — a write into the checkout this script was merely READ from. It is git-ignored, so
+# `git status --porcelain` never shows it, and on a host where the cache already exists nothing
+# changes; but in the gate-qualification snapshot the file is NEW, and the tree manifest that
+# certifies "the runner never wrote the tree" reads bytes, not porcelain. Measured on the #116
+# M3-b3 candidate: that one path was the whole of `IMPURE: treeClean=false porcelainClean=true`.
+# Same guard, same reason as codex-mcp-config.py / codex-statusline-config.py.
+sys.dont_write_bytecode = True
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from pi_settings_io import classify_installer_root, detect_indent, dumps  # noqa: E402
 

@@ -131,8 +131,20 @@ export function deactivate(env) {
 	);
 
 	// ── MUTATE: retry authority is written BEFORE each step, checkpointed after ──
+	// The identity is carried through the teardown unchanged, from the ledger's own record. A
+	// teardown does not re-decide which artifact it was: it removes what the ledger says was
+	// activated, so rewriting that field mid-inverse could only ever make the record less true.
 	const checkpoint = () =>
-		writeLedger(activation, ledgerBody({ phase: "deactivating", runtimeRoot: runtime.activeDir, roots, states }));
+		writeLedger(
+			activation,
+			ledgerBody({
+				phase: "deactivating",
+				runtimeRoot: runtime.activeDir,
+				artifactIdentity: ledger.artifactIdentity,
+				roots,
+				states,
+			}),
+		);
 	checkpoint();
 
 	const done = [];

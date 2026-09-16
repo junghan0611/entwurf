@@ -1,0 +1,107 @@
+{
+	"schemaVersion": 1,
+	"lane": "herdr-plugin-build",
+	"mutants": [
+		{
+			"claim": "HPB-MANIFEST-ONE-RUNNER",
+			"title": "handing the build to a shell instead of one argv reintroduces a quoting surface this plugin does not need, and a manifest that can grow a second command is a build order nobody reviewed",
+			"subject": "plugins/herdr/herdr-plugin.toml",
+			"find": ["command = [\"node\", \"lib/build.mjs\"]"],
+			"replace": ["command = [\"bash\", \"-c\", \"node lib/build.mjs\"]"],
+			"gate": ["bash", "run.sh", "check-herdr-plugin-build"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:HPB-MANIFEST-ONE-RUNNER]",
+			"signatureSource": "scripts/check-herdr-plugin-build.ts"
+		},
+		{
+			"claim": "HPB-BINARY-REQUIRED",
+			"title": "collapsing 'there is no herdr here' into 'herdr could not answer' loses the distinction an operator acts on, and both must stay refusals rather than an invented empty listing that reads as 'nothing is integrated'",
+			"subject": "plugins/herdr/lib/build.mjs",
+			"find": ["\t\t\t\"herdr-build-binary-missing\","],
+			"replace": ["\t\t\t\"herdr-build-status-unavailable\","],
+			"gate": ["bash", "run.sh", "check-herdr-plugin-build"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:HPB-BINARY-REQUIRED]",
+			"signatureSource": "scripts/check-herdr-plugin-build.ts"
+		},
+		{
+			"claim": "HPB-SELECTED-FAIL-BEFORE-BOOTSTRAP",
+			"title": "proceeding past a selected atom herdr calls outdated or needs-repair installs a runtime for a harness whose integration cannot run it — and `outdated (legacy < vN)` is the measured catch-all for empty and unreadable integration files",
+			"subject": "plugins/herdr/lib/build.mjs",
+			"find": ["\tif (profile.fail.length > 0) {"],
+			"replace": ["\tif (false && profile.fail.length > 0) {"],
+			"gate": ["bash", "run.sh", "check-herdr-plugin-build"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:HPB-SELECTED-FAIL-BEFORE-BOOTSTRAP]",
+			"signatureSource": "scripts/check-herdr-plugin-build.ts"
+		},
+		{
+			"claim": "HPB-EMPTY-A-ZERO-WRITE",
+			"title": "installing a runtime on a host where nothing is integrated writes megabytes for nobody and leaves this plugin's state on a machine that asked for none of it",
+			"subject": "plugins/herdr/lib/build.mjs",
+			"find": ["\tif (profile.activate.length === 0) {"],
+			"replace": ["\tif (false && profile.activate.length === 0) {"],
+			"gate": ["bash", "run.sh", "check-herdr-plugin-build"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:HPB-EMPTY-A-ZERO-WRITE]",
+			"signatureSource": "scripts/check-herdr-plugin-build.ts"
+		},
+		{
+			"claim": "HPB-INSTALLED-ENTRY-ONLY",
+			"title": "skipping the capability probe lets a file that exits 0 on an empty request stand in for the activation verb — the shape that already bit this package once, when a main-module guard made every call a silent success",
+			"subject": "plugins/herdr/lib/build.mjs",
+			"find": ["\tcertifyActivationCapability(entry, env, { spawn, nodeBin });"],
+			"replace": ["\tvoid certifyActivationCapability;"],
+			"gate": ["bash", "run.sh", "check-herdr-plugin-build"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:HPB-INSTALLED-ENTRY-ONLY]",
+			"signatureSource": "scripts/check-herdr-plugin-build.ts"
+		},
+		{
+			"claim": "HPB-SEQUENTIAL-TWO-STAGE",
+			"title": "handing down only the first backend of A leaves the widened set half-activated on exactly the reinstall Herdr's refresh trigger is built on — the operator installs Claude Code, reinstalls the plugin, and nothing points at it",
+			"subject": "plugins/herdr/lib/build.mjs",
+			"find": ["\tconst activated = spawn(nodeBin, [entry, ...profile.activate], {"],
+			"replace": ["\tconst activated = spawn(nodeBin, [entry, profile.activate[0]], {"],
+			"gate": ["bash", "run.sh", "check-herdr-plugin-build"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:HPB-SEQUENTIAL-TWO-STAGE]",
+			"signatureSource": "scripts/check-herdr-plugin-build.ts"
+		},
+		{
+			"claim": "HPB-POST-BUILD-GAP",
+			"title": "claiming Herdr's registration in this runner's own receipt states a step that has not run: herdr commits its checkout and registry only AFTER the build returns, so the next reconcile would be arguing with a lie",
+			"subject": "plugins/herdr/lib/build.mjs",
+			"find": ["\t\t`[herdr-plugin-build] activated ${profile.activate.join(\",\")} through the INSTALLED package` +"],
+			"replace": [
+				"\t\t`[herdr-plugin-build] activated ${profile.activate.join(\",\")} and registered with the herdr registry` +"
+			],
+			"gate": ["bash", "run.sh", "check-herdr-plugin-build"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:HPB-POST-BUILD-GAP]",
+			"signatureSource": "scripts/check-herdr-plugin-build.ts"
+		},
+		{
+			"claim": "HPB-PRE-BOOTSTRAP-AUTHORITY",
+			"title": "asking the activation authority AFTER the bootstrap is the state the first cut actually produced: the stable root already holds the new artifact, the ledger still names the old one, the run reports failure — and the harness wiring, which names the root and not the version, resolves to bytes no record accounts for",
+			"subject": "plugins/herdr/lib/build.mjs",
+			"find": ["\tconst disposition = certifyArtifactForForward(ledger, requested, requestedBackends);"],
+			"replace": ["\tconst disposition = ledger === null ? \"fresh\" : \"match\";"],
+			"gate": ["bash", "run.sh", "check-herdr-plugin-build"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:HPB-PRE-BOOTSTRAP-AUTHORITY]",
+			"signatureSource": "scripts/check-herdr-plugin-build.ts"
+		},
+		{
+			"claim": "HPB-BOOTSTRAP-IDENTITY-EXACT",
+			"title": "skipping the post-bootstrap identity comparison hands the installed activation verb a different artifact than the one this build was admitted for, so it re-judges and passes or fails on a question nobody asked",
+			"subject": "plugins/herdr/lib/build.mjs",
+			"find": ["\tif (!sameArtifactRequest(result.journal.artifactIdentity, plan.requested)) {"],
+			"replace": ["\tif (false && !sameArtifactRequest(result.journal.artifactIdentity, plan.requested)) {"],
+			"gate": ["bash", "run.sh", "check-herdr-plugin-build"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:HPB-BOOTSTRAP-IDENTITY-EXACT]",
+			"signatureSource": "scripts/check-herdr-plugin-build.ts"
+		}
+	]
+}

@@ -50,21 +50,30 @@ interface Spec {
 	version: string;
 	integrity?: string;
 }
-interface Provenance {
-	packageName: string;
-	packageVersion: string;
-	expectedIntegrity: string;
-	observedDigest: string;
+interface ArtifactIdentity {
+	kind: string;
+	name?: string;
+	version?: string;
+	expectedIntegrity?: string;
+	repository?: string;
+	commit?: string;
+	packageName?: string;
+	packageVersion?: string;
+	observedDigest?: string;
+}
+interface Lock {
+	source: string;
+	name?: string;
+	version?: string;
+	integrity?: string;
+	repository?: string;
 }
 interface Journal {
 	schemaVersion: number;
 	phase: string;
 	runtimeRoot: string;
-	packageName: string;
-	packageVersion: string;
-	expectedIntegrity: string | null;
-	observedDigest: string | null;
-	previousRuntime: Provenance | null;
+	artifactIdentity: ArtifactIdentity;
+	previousRuntime: ArtifactIdentity | null;
 }
 interface BootstrapResult {
 	phase: string;
@@ -82,10 +91,21 @@ interface Layout {
 	cacheDir: string;
 }
 interface AcquireArgs {
-	spec: Spec;
+	identity: ArtifactIdentity;
 	prefix: string;
 	cacheDir: string;
 	env: NodeJS.ProcessEnv;
+}
+interface AcquireResult {
+	observedDigest: string;
+	packageName?: string;
+	packageVersion?: string;
+}
+interface SpawnLike {
+	status: number | null;
+	stdout: string;
+	stderr: string;
+	error?: Error;
 }
 interface Assessed {
 	state: string;
@@ -101,10 +121,29 @@ interface Leaf {
 	JOURNAL_PHASES: string[];
 	JOURNAL_KEYS: string[];
 	RUNTIME_SCHEMA_VERSION: number;
+	ARTIFACT_KINDS: string[];
+	ARTIFACT_KEYS: Record<string, { requested: string[]; ready: string[] }>;
+	CHECKOUT_REPOSITORY: string;
 	resolveRuntimeLayout: (env: NodeJS.ProcessEnv) => Layout;
 	readCheckoutPackageSpec: (root: string) => Spec;
-	readRuntimeLock: (pluginDir: string) => Spec & { integrity: string };
+	readRuntimeLock: (pluginDir: string) => Lock;
 	certifyLockCoherence: (lock: Spec, spec: Spec) => Spec;
+	certifyArtifactIdentity: (where: string, value: unknown, stage?: string) => ArtifactIdentity;
+	artifactStage: (identity: ArtifactIdentity) => string;
+	artifactCompleteness: (identity: ArtifactIdentity) => Spec;
+	sameArtifactRequest: (ready: ArtifactIdentity, requested: ArtifactIdentity) => boolean;
+	requestedArtifactIdentity: (args: {
+		lock: Lock;
+		checkoutRoot: string;
+		resolveCommit?: (root: string) => string;
+	}) => ArtifactIdentity;
+	resolveCheckoutCommit: (
+		root: string,
+		deps?: { gitBin?: string; spawn?: (bin: string, argv: string[], opts: unknown) => SpawnLike },
+	) => string;
+	buildCheckoutRemote: (repository: string) => string;
+	buildCheckoutPackArgv: (identity: ArtifactIdentity, dest: string) => string[];
+	checkoutAcquire: (args: AcquireArgs & { npmBin?: string }) => AcquireResult;
 	assessRuntimeState: (layout: Layout, certified: Journal | null) => Assessed;
 	readCertifiedJournal: (layout: Layout) => Journal | null;
 	buildPackArgv: (spec: Spec, dest: string) => string[];
@@ -116,9 +155,10 @@ interface Leaf {
 	writeJournal: (layout: Layout, entry: Record<string, unknown>) => void;
 	bootstrapRuntime: (args: {
 		env: NodeJS.ProcessEnv;
-		spec: Spec;
-		lock: Spec & { integrity: string };
+		lock: Lock;
+		checkoutRoot?: string;
 		acquire?: unknown;
+		resolveCommit?: (root: string) => string;
 	}) => BootstrapResult;
 	removeOwnedRuntime: (args: { env: NodeJS.ProcessEnv }) => { removed: string[]; reason: string | null };
 }
@@ -129,12 +169,24 @@ const {
 	COMPILED_ENTRY,
 	JOURNAL_PHASES,
 	JOURNAL_KEYS,
+	ARTIFACT_KINDS,
+	ARTIFACT_KEYS,
+	CHECKOUT_REPOSITORY,
 	resolveRuntimeLayout,
 	readCheckoutPackageSpec,
 	assessRuntimeState,
 	readCertifiedJournal,
 	buildPackArgv,
 	buildInstallArgv,
+	buildCheckoutRemote,
+	buildCheckoutPackArgv,
+	checkoutAcquire,
+	certifyArtifactIdentity,
+	artifactStage,
+	artifactCompleteness,
+	sameArtifactRequest,
+	requestedArtifactIdentity,
+	resolveCheckoutCommit,
 	npmEnvironment,
 	readRuntimeLock,
 	classifyPath,
@@ -154,18 +206,44 @@ function world(tag: string): NodeJS.ProcessEnv {
 	};
 }
 
-const LOCK_A = { name: "@junghanacs/entwurf", version: "0.21.0", integrity: "sha512-fixtureA" };
-const LOCK_B = { name: "@junghanacs/entwurf", version: "0.22.0", integrity: "sha512-fixtureB" };
+const PACKAGE = "@junghanacs/entwurf";
+const LOCK_A: Lock = { source: "npm", name: PACKAGE, version: "0.21.0", integrity: "sha512-fixtureA" };
+const LOCK_B: Lock = { source: "npm", name: PACKAGE, version: "0.22.0", integrity: "sha512-fixtureB" };
+/** The committed candidate lock's shape: a source and the repo literal, and nothing else. */
+const CHECKOUT_LOCK: Lock = { source: "herdr-checkout", repository: "junghan0611/entwurf" };
+const COMMIT_A = "1".repeat(40);
+const COMMIT_B = "2".repeat(40);
+
+/**
+ * A fixture CHECKOUT — the thing an npm lock must be coherent with, and the thing a checkout-sourced
+ * identity reads its commit from. Written per lock so the two sources can be driven side by side.
+ */
+function fixtureCheckout(lock: Lock): string {
+	const root = reclaimOnExit(fs.mkdtempSync(path.join(os.tmpdir(), "entwurf-hrb-checkout-")));
+	fs.writeFileSync(
+		path.join(root, "package.json"),
+		`${JSON.stringify({ name: lock.name ?? PACKAGE, version: lock.version ?? "0.21.0" }, null, 2)}\n`,
+	);
+	return root;
+}
 
 /** Materialise a fixture package into `prefix` the way npm would, and return an observed digest. */
 function fixtureAcquire(
-	opts: { version?: string; dist?: boolean; exitCode?: number; omitBin?: string; unexecutableBin?: string } = {},
+	opts: {
+		version?: string;
+		name?: string;
+		dist?: boolean;
+		exitCode?: number;
+		omitBin?: string;
+		unexecutableBin?: string;
+	} = {},
 ) {
-	return ({ spec, prefix }: AcquireArgs) => {
-		const version = opts.version ?? spec.version;
-		const root = path.join(prefix, "node_modules", spec.name);
+	return ({ identity, prefix }: AcquireArgs): AcquireResult => {
+		const version = opts.version ?? identity.version ?? "0.21.0";
+		const name = opts.name ?? identity.name ?? PACKAGE;
+		const root = path.join(prefix, "node_modules", name);
 		fs.mkdirSync(root, { recursive: true });
-		fs.writeFileSync(path.join(root, "package.json"), `${JSON.stringify({ name: spec.name, version }, null, 2)}\n`);
+		fs.writeFileSync(path.join(root, "package.json"), `${JSON.stringify({ name, version }, null, 2)}\n`);
 		if (opts.dist !== false) {
 			fs.mkdirSync(path.join(root, path.dirname(COMPILED_ENTRY)), { recursive: true });
 			fs.writeFileSync(path.join(root, COMPILED_ENTRY), "// compiled entry fixture\n");
@@ -178,8 +256,14 @@ function fixtureAcquire(
 			fs.writeFileSync(p, `#!/bin/sh\nexit ${name === "entwurf" ? (opts.exitCode ?? 0) : 0}\n`);
 			fs.chmodSync(p, name === opts.unexecutableBin ? 0o644 : 0o755);
 		}
-		// a well-formed digest: the certified reader checks the SHAPE of provenance, not its truth
-		return { observedDigest: `sha256-${createHash("sha256").update(version).digest("hex")}` };
+		// A well-formed digest: the certified reader checks the SHAPE of an identity, not its truth.
+		// The completeness pair rides along because a checkout-sourced acquisition is the thing that
+		// OBSERVES what it packed — for npm the request already said it.
+		return {
+			observedDigest: `sha256-${createHash("sha256").update(`${name}@${version}`).digest("hex")}`,
+			packageName: name,
+			packageVersion: version,
+		};
 	};
 }
 
@@ -207,8 +291,18 @@ function refusal(fn: () => unknown): string | null {
 	}
 }
 
-function install(env: NodeJS.ProcessEnv, lock = LOCK_A, acquire = fixtureAcquire()): BootstrapResult {
-	return bootstrapRuntime({ env, spec: { name: lock.name, version: lock.version }, lock, acquire });
+/**
+ * One bootstrap against a fixture checkout. The npm locks get a checkout whose `package.json`
+ * agrees with them (that coherence is a contract of its own); a checkout lock gets a fixed commit
+ * seam, because this gate proves the transaction, and `git` itself is proven in its own cell.
+ */
+function install(
+	env: NodeJS.ProcessEnv,
+	lock: Lock = LOCK_A,
+	acquire = fixtureAcquire(),
+	commit: string = COMMIT_A,
+): BootstrapResult {
+	return bootstrapRuntime({ env, lock, checkoutRoot: fixtureCheckout(lock), acquire, resolveCommit: () => commit });
 }
 
 // ── 1. the shipped owner is the only implementation ────────────────────────────
@@ -242,17 +336,34 @@ function install(env: NodeJS.ProcessEnv, lock = LOCK_A, acquire = fixtureAcquire
 {
 	const env = world("address");
 	const layout = resolveRuntimeLayout(env);
-	install(env);
-	const first = fs.lstatSync(layout.activeDir);
-	install(env, LOCK_B);
-	const second = fs.lstatSync(layout.activeDir);
+	// The installs are CAUGHT. An active address that stopped being a real directory does not fail
+	// here as a wrong lstat — the NEXT install refuses the path kind first, and an uncaught refusal
+	// would end this cell before the claim it violates is judged, red with nobody's name on it.
+	const refusalOf = (run: () => void): string | null => {
+		try {
+			run();
+			return null;
+		} catch (err) {
+			return `${(err as { code?: string }).code ?? "unknown"}: ${(err as Error).message}`;
+		}
+	};
+	const firstRefusal = refusalOf(() => install(env));
+	const first = fs.lstatSync(layout.activeDir, { throwIfNoEntry: false }) ?? null;
+	const secondRefusal = refusalOf(() => install(env, LOCK_B));
+	const second = fs.lstatSync(layout.activeDir, { throwIfNoEntry: false }) ?? null;
 	ok(
 		"[QK:HRB-STABLE-ADDRESS] the runtime address is a REAL DIRECTORY at $XDG_DATA_HOME/entwurf/herdr-plugin/" +
 			"runtime/active and it is the same path after a version change — the scoped wiring one slice above records " +
 			"ABSOLUTE commands under this root, and Pi records the owner root it was wired with, so a symlink whose " +
 			"canonicalisation resolves to a per-version directory makes every upgrade look like a different owner " +
-			`taking that root over (active=${path.relative(env.HOME as string, layout.activeDir)} symlink=${first.isSymbolicLink()}/${second.isSymbolicLink()})`,
+			`taking that root over (active=${path.relative(env.HOME as string, layout.activeDir)} ` +
+			`symlink=${first?.isSymbolicLink()}/${second?.isSymbolicLink()} ` +
+			`refusals=${JSON.stringify([firstRefusal, secondRefusal])})`,
 		layout.activeDir === path.join(env.XDG_DATA_HOME as string, "entwurf", "herdr-plugin", "runtime", "active") &&
+			firstRefusal === null &&
+			secondRefusal === null &&
+			first !== null &&
+			second !== null &&
 			first.isDirectory() &&
 			!first.isSymbolicLink() &&
 			second.isDirectory() &&
@@ -371,33 +482,92 @@ function install(env: NodeJS.ProcessEnv, lock = LOCK_A, acquire = fixtureAcquire
 	);
 }
 
-// ── 8. the artifact is locked, and the lock agrees with the checkout ───────────
+// ── 8. the npm artifact is locked, and that lock agrees with the checkout ──────
 {
-	const lock = readRuntimeLock(PLUGIN_DIR);
-	const checkout = readCheckoutPackageSpec(REPO);
+	const drifted = fixtureCheckout({ ...LOCK_A, version: "9.9.9" });
 	const incoherent = refusal(() =>
-		bootstrapRuntime({
-			env: world("incoherent"),
-			spec: { name: lock.name, version: "9.9.9" },
-			lock,
-			acquire: fixtureAcquire(),
-		}),
+		bootstrapRuntime({ env: world("incoherent"), lock: LOCK_A, checkoutRoot: drifted, acquire: fixtureAcquire() }),
 	);
 	const env = world("provenance");
 	const result = install(env);
+	const identity = result.journal.artifactIdentity;
 	ok(
-		"[QK:HRB-ARTIFACT-LOCK] the plugin-owned lock names the exact package and the integrity npm published for it, " +
-			"and it must agree with this checkout's own package.json — a lock that drifts from the checkout installs a " +
-			"version nobody here reviewed. The journal keeps `expectedIntegrity` and `observedDigest` as SEPARATE " +
-			"fields: a digest computed from whatever arrived records what happened, and calling it a pin would claim a " +
-			`check only the comparison performs (lock=${lock.name}@${lock.version} checkout=${checkout.name}@${checkout.version} incoherent=${incoherent})`,
-		lock.name === checkout.name &&
-			lock.version === checkout.version &&
-			lock.integrity.startsWith("sha512-") &&
-			incoherent === "runtime-lock-incoherent" &&
-			result.journal.expectedIntegrity === LOCK_A.integrity &&
-			result.journal.observedDigest !== result.journal.expectedIntegrity &&
-			typeof result.journal.observedDigest === "string",
+		"[QK:HRB-ARTIFACT-LOCK] an npm-sourced lock names the exact package and the integrity npm published for it, and " +
+			"it must agree with the checkout's own package.json — a lock that drifts from the checkout installs a version " +
+			"nobody here reviewed. The ready identity keeps `expectedIntegrity` and `observedDigest` as SEPARATE fields: a " +
+			"digest computed from whatever arrived records what happened, and calling it a pin would claim a check only " +
+			`the comparison performs (incoherent=${incoherent} identity=${JSON.stringify(identity)})`,
+		incoherent === "runtime-lock-incoherent" &&
+			identity.kind === "npm" &&
+			identity.expectedIntegrity === LOCK_A.integrity &&
+			identity.observedDigest !== identity.expectedIntegrity &&
+			typeof identity.observedDigest === "string",
+	);
+}
+
+// ── 8a. the COMMITTED lock is coherent with this checkout, whichever source it names ──
+{
+	const lock = readRuntimeLock(PLUGIN_DIR);
+	const checkout = readCheckoutPackageSpec(REPO);
+	const requested = requestedArtifactIdentity({
+		lock,
+		checkoutRoot: REPO,
+		resolveCommit: () => COMMIT_A,
+	});
+	const npmCoherent = lock.source !== "npm" || (lock.name === checkout.name && lock.version === checkout.version);
+	const dir = reclaimOnExit(fs.mkdtempSync(path.join(os.tmpdir(), "entwurf-hrb-source-")));
+	const read = (body: unknown): string | null => {
+		fs.writeFileSync(path.join(dir, "runtime-lock.json"), `${JSON.stringify(body)}\n`);
+		return refusal(() => readRuntimeLock(dir));
+	};
+	const cells: Record<string, string | null> = {
+		"no-source": read({ schemaVersion: 2, name: PACKAGE, version: "0.21.0", integrity: "sha512-x" }),
+		"unknown-source": read({ schemaVersion: 2, source: "github-release", repository: CHECKOUT_REPOSITORY }),
+		"npm-keys-on-checkout": read({
+			schemaVersion: 2,
+			source: "herdr-checkout",
+			repository: CHECKOUT_REPOSITORY,
+			integrity: "sha512-x",
+		}),
+		"v1-lock": read({ schemaVersion: 1, name: PACKAGE, version: "0.21.0", integrity: "sha512-x" }),
+	};
+	const verdicts = Object.entries(cells).map(([k, v]) => `${k}=${v}`);
+	ok(
+		"[QK:HRB-LOCK-SOURCE-CLOSED] the lock's `source` is a CLOSED discriminant, the committed lock resolves to a " +
+			"requested identity of exactly that kind, and an absent source, an unknown source, one source wearing the " +
+			"other's keys, and a previous schema version are each refused by name — which source a host acquires from may " +
+			"not be decided by an environment variable, a caller flag or a fallback, because all three let whoever is " +
+			"running choose the acquisition authority, and a fallback in particular would turn an unreachable source into " +
+			`'install something else instead' (source=${lock.source} kinds=${JSON.stringify(ARTIFACT_KINDS)} requested=${JSON.stringify(requested)} npm-coherent=${npmCoherent} ${verdicts.join(" ")})`,
+		ARTIFACT_KINDS.includes(lock.source) &&
+			requested.kind === lock.source &&
+			artifactStage(requested) === "requested" &&
+			npmCoherent &&
+			cells["no-source"] === "runtime-lock-source-unknown" &&
+			cells["unknown-source"] === "runtime-lock-source-unknown" &&
+			cells["npm-keys-on-checkout"] === "runtime-lock-unreadable" &&
+			cells["v1-lock"] === "runtime-lock-unreadable",
+	);
+}
+
+// ── 8b. the repository is a literal on both sides of the wire ──────────────────
+{
+	const dir = reclaimOnExit(fs.mkdtempSync(path.join(os.tmpdir(), "entwurf-hrb-repo-")));
+	fs.writeFileSync(
+		path.join(dir, "runtime-lock.json"),
+		`${JSON.stringify({ schemaVersion: 2, source: "herdr-checkout", repository: "someone/else" })}\n`,
+	);
+	const lockRepo = refusal(() => readRuntimeLock(dir));
+	const identityRepo = refusal(() =>
+		certifyArtifactIdentity("borrowed", { kind: "herdr-checkout", repository: "someone/else", commit: COMMIT_A }),
+	);
+	ok(
+		"[QK:HRB-CHECKOUT-REPO-LITERAL] a repository that is not this plugin's is refused where the LOCK is read AND " +
+			"wherever an identity is read back — journal, carried previous runtime, activation ledger — so a strange tree " +
+			"cannot become ours by being transcribed into a record. Herdr's own remote is a hardcoded " +
+			"`https://github.com/{owner}/{repo}.git` with no override (measured, `src/cli/plugin.rs:763`), and binding " +
+			`this side to the same literal is what keeps the pair closed (lock=${lockRepo} identity=${identityRepo})`,
+		lockRepo === "runtime-checkout-repository-foreign" && identityRepo === "runtime-checkout-repository-foreign",
 	);
 }
 
@@ -427,7 +597,7 @@ function install(env: NodeJS.ProcessEnv, lock = LOCK_A, acquire = fixtureAcquire
 // ── 10. nothing this plugin installs may run install scripts ───────────────────
 {
 	const installArgv = buildInstallArgv("/tmp/pkg.tgz", "/tmp/prefix");
-	const packArgv = buildPackArgv(LOCK_A, "/tmp/cache");
+	const packArgv = buildPackArgv({ name: PACKAGE, version: "0.21.0" }, "/tmp/cache");
 	ok(
 		"[QK:HRB-INSTALL-SCRIPTS-OFF] the install argv carries `--ignore-scripts`, and the artifact is a LOCAL tarball " +
 			"packed at an exact spec with `--json` so its filename and bytes can be checked before use — a Herdr user " +
@@ -436,7 +606,7 @@ function install(env: NodeJS.ProcessEnv, lock = LOCK_A, acquire = fixtureAcquire
 		installArgv.includes("--ignore-scripts") &&
 			installArgv[1] === "/tmp/pkg.tgz" &&
 			installArgv.includes("--no-save") &&
-			packArgv[1] === `${LOCK_A.name}@${LOCK_A.version}` &&
+			packArgv[1] === `${PACKAGE}@0.21.0` &&
 			packArgv.includes("--json"),
 	);
 }
@@ -480,19 +650,17 @@ function install(env: NodeJS.ProcessEnv, lock = LOCK_A, acquire = fixtureAcquire
 		"json-null": write(null),
 		array: write([good]),
 		scalar: write("runtime-ready"),
-		"missing-key": write({ schemaVersion: 1, phase: "runtime-ready" }),
-		"installing-with-digest": write({ ...good, phase: "installing" }),
-		"ready-without-digest": write({ ...good, observedDigest: null }),
-		"blank-identity": write({ ...good, packageVersion: "   " }),
-		"bogus-integrity": write({ ...good, expectedIntegrity: "not-a-hash" }),
+		"missing-key": write({ schemaVersion: 2, phase: "runtime-ready" }),
+		"extra-key": write({ ...good, source: "npm" }),
+		"wrong-schema": write({ ...good, schemaVersion: 1 }),
 	};
 	const verdicts = Object.entries(cells).map(([k, v]) => `${k}=${v}`);
 	ok(
-		"[QK:HRB-JOURNAL-SHAPE-CERTIFIED] a bare `null`, an array, a scalar, a wrong key set, a blank package identity, " +
-			"a malformed integrity, and any entry whose digest contradicts the writer state its own phase implies are " +
-			"ALL refused by one name — `JSON.parse` returning something is not the same as a journal, and an entry that " +
-			"is accepted becomes authority to delete a user's directories, so 'roughly the right shape' is the widest " +
-			`hole this module could have (${verdicts.join(" ")})`,
+		"[QK:HRB-JOURNAL-SHAPE-CERTIFIED] a bare `null`, an array, a scalar, a missing key, an EXTRA key beside the one " +
+			"identity field, and a previous schema version are ALL refused by one name — `JSON.parse` returning something " +
+			"is not the same as a journal, an entry that is accepted becomes authority to delete a user's directories, " +
+			"and a second identity-ish field beside `artifactIdentity` would be a second authority that could disagree " +
+			`with the first (${verdicts.join(" ")} keys=${JSON.stringify(JOURNAL_KEYS)})`,
 		Object.values(cells).every((v) => v === "runtime-journal-uncertified"),
 	);
 }
@@ -535,10 +703,10 @@ function install(env: NodeJS.ProcessEnv, lock = LOCK_A, acquire = fixtureAcquire
 	const corruptLayout = resolveRuntimeLayout(corrupt);
 	install(corrupt);
 	fs.cpSync(corruptLayout.activeDir, corruptLayout.previousDir, { recursive: true });
-	fs.rmSync(path.join(corruptLayout.activeDir, "node_modules", LOCK_A.name, "package.json"));
+	fs.rmSync(path.join(corruptLayout.activeDir, "node_modules", PACKAGE, "package.json"));
 	const corruptState = assessRuntimeState(corruptLayout, readCertifiedJournal(corruptLayout)).state;
 	const corruptCode = refusal(() => install(corrupt, LOCK_B, fixtureAcquire({ exitCode: 9 })));
-	const corruptRescued = inspectInstalledRuntime(corruptLayout.activeDir, LOCK_A.name).ok;
+	const corruptRescued = inspectInstalledRuntime(corruptLayout.activeDir, PACKAGE).ok;
 
 	// (c) all three present, active corrupt: the candidate is dropped, the backup still wins.
 	const three = world("three-corrupt");
@@ -546,10 +714,10 @@ function install(env: NodeJS.ProcessEnv, lock = LOCK_A, acquire = fixtureAcquire
 	install(three);
 	fs.cpSync(threeLayout.activeDir, threeLayout.previousDir, { recursive: true });
 	fs.mkdirSync(path.join(threeLayout.stagingDir, "half"), { recursive: true });
-	fs.rmSync(path.join(threeLayout.activeDir, "node_modules", LOCK_A.name, "package.json"));
+	fs.rmSync(path.join(threeLayout.activeDir, "node_modules", PACKAGE, "package.json"));
 	const threeState = assessRuntimeState(threeLayout, readCertifiedJournal(threeLayout)).state;
 	refusal(() => install(three, LOCK_B, fixtureAcquire({ exitCode: 9 })));
-	const threeRescued = inspectInstalledRuntime(threeLayout.activeDir, LOCK_A.name).ok;
+	const threeRescued = inspectInstalledRuntime(threeLayout.activeDir, PACKAGE).ok;
 
 	ok(
 		"[QK:HRB-LAST-GOOD-NEVER-LOST] a backup is the last good runtime until inspection says otherwise, so it is " +
@@ -642,16 +810,24 @@ function install(env: NodeJS.ProcessEnv, lock = LOCK_A, acquire = fixtureAcquire
 	};
 	refusal(() => install(env, LOCK_B, acquireDies));
 	const torn = readCertifiedJournal(layout);
+	// `artifactStage` reads the KEYS off what it is handed, so asking it about a provenance that is
+	// missing throws a TypeError from inside the condition — the gate would die on the exact input
+	// this claim exists to refuse, and the red would carry someone else's name. Absence is a stage
+	// answer here, and the assertion judges it.
+	const stageOf = (identity: unknown): string | null =>
+		identity !== null && typeof identity === "object" ? artifactStage(identity as ArtifactIdentity) : null;
 	ok(
 		"[QK:HRB-PROVENANCE-CARRIED] writing the `installing` entry carries the finished runtime's provenance into " +
 			"`previousRuntime` instead of overwriting it — a host that dies mid-install otherwise holds a backup " +
 			"directory and no statement of what is in it, which is recoverable bytes with unrecoverable provenance; a " +
-			`finished install sets it back to null because there is then no previous runtime to describe (ready.previous=${JSON.stringify(first.journal.previousRuntime)} torn.phase=${torn?.phase} torn.previous=${JSON.stringify(torn?.previousRuntime?.packageVersion)} torn.package=${torn?.packageVersion})`,
+			`finished install sets it back to null because there is then no previous runtime to describe (ready.previous=${JSON.stringify(first.journal.previousRuntime)} torn.phase=${torn?.phase} torn.identity=${JSON.stringify(torn?.artifactIdentity)} torn.previous=${JSON.stringify(torn?.previousRuntime)})`,
 		first.journal.previousRuntime === null &&
 			torn?.phase === "installing" &&
-			torn.packageVersion === LOCK_B.version &&
-			torn.previousRuntime?.packageVersion === LOCK_A.version &&
-			torn.previousRuntime?.observedDigest === first.journal.observedDigest,
+			stageOf(torn.artifactIdentity) === "requested" &&
+			torn.artifactIdentity.version === LOCK_B.version &&
+			stageOf(torn.previousRuntime) === "ready" &&
+			torn.previousRuntime?.version === LOCK_A.version &&
+			torn.previousRuntime?.observedDigest === first.journal.artifactIdentity.observedDigest,
 	);
 }
 
@@ -679,7 +855,7 @@ function install(env: NodeJS.ProcessEnv, lock = LOCK_A, acquire = fixtureAcquire
 	const env = world("reconcile");
 	const layout = resolveRuntimeLayout(env);
 	install(env);
-	fs.rmSync(path.join(layout.activeDir, "node_modules", LOCK_A.name, "package.json"));
+	fs.rmSync(path.join(layout.activeDir, "node_modules", PACKAGE, "package.json"));
 	const journalBefore = readCertifiedJournal(layout);
 	const repaired = install(env);
 	ok(
@@ -689,7 +865,7 @@ function install(env: NodeJS.ProcessEnv, lock = LOCK_A, acquire = fixtureAcquire
 			`re-verification; trusting the record alone turns one bad state into a permanent one (before=${journalBefore?.phase} changed=${repaired.changed})`,
 		journalBefore?.phase === "runtime-ready" &&
 			repaired.changed === true &&
-			fs.existsSync(path.join(layout.activeDir, "node_modules", LOCK_A.name, "package.json")),
+			fs.existsSync(path.join(layout.activeDir, "node_modules", PACKAGE, "package.json")),
 	);
 }
 
@@ -739,6 +915,306 @@ function install(env: NodeJS.ProcessEnv, lock = LOCK_A, acquire = fixtureAcquire
 		result.phase === "runtime-ready" &&
 			!JOURNAL_PHASES.includes("herdr-installed") &&
 			rejected === "runtime-journal-phase-unknown",
+	);
+}
+
+// ── 21. one identity union, exact per kind AND per stage ──────────────────────
+{
+	const readyNpm = {
+		kind: "npm",
+		name: PACKAGE,
+		version: "0.21.0",
+		expectedIntegrity: "sha512-x",
+		observedDigest: `sha256-${"a".repeat(64)}`,
+	};
+	const readyCheckout = {
+		kind: "herdr-checkout",
+		repository: CHECKOUT_REPOSITORY,
+		commit: COMMIT_A,
+		packageName: PACKAGE,
+		packageVersion: "0.21.0",
+		observedDigest: `sha256-${"b".repeat(64)}`,
+	};
+	const cells: Record<string, string | null> = {
+		"npm-ready-as-requested": refusal(() => certifyArtifactIdentity("x", readyNpm, "requested")),
+		"npm-requested-as-ready": refusal(() =>
+			certifyArtifactIdentity(
+				"x",
+				{ kind: "npm", name: PACKAGE, version: "0.21.0", expectedIntegrity: "sha512-x" },
+				"ready",
+			),
+		),
+		"checkout-keys-on-npm": refusal(() =>
+			certifyArtifactIdentity("x", { ...readyNpm, repository: CHECKOUT_REPOSITORY }, "ready"),
+		),
+		"npm-keys-on-checkout": refusal(() => certifyArtifactIdentity("x", { ...readyCheckout, name: PACKAGE }, "ready")),
+		"unknown-kind": refusal(() => certifyArtifactIdentity("x", { ...readyNpm, kind: "github-release" }, "ready")),
+		"short-commit": refusal(() => certifyArtifactIdentity("x", { ...readyCheckout, commit: "abc" }, "ready")),
+		"uppercase-commit": refusal(() =>
+			certifyArtifactIdentity("x", { ...readyCheckout, commit: COMMIT_A.toUpperCase().replace(/1/g, "A") }, "ready"),
+		),
+		"blank-completeness": refusal(() =>
+			certifyArtifactIdentity("x", { ...readyCheckout, packageVersion: "  " }, "ready"),
+		),
+		"bad-digest": refusal(() =>
+			certifyArtifactIdentity("x", { ...readyCheckout, observedDigest: "sha256-nope" }, "ready"),
+		),
+		nullish: refusal(() => certifyArtifactIdentity("x", null, "ready")),
+	};
+	const accepted =
+		JSON.stringify(ARTIFACT_KEYS.npm) ===
+			JSON.stringify({
+				requested: ["kind", "name", "version", "expectedIntegrity"],
+				ready: ["kind", "name", "version", "expectedIntegrity", "observedDigest"],
+			}) &&
+		JSON.stringify(ARTIFACT_KEYS["herdr-checkout"]) ===
+			JSON.stringify({
+				requested: ["kind", "repository", "commit"],
+				ready: ["kind", "repository", "commit", "packageName", "packageVersion", "observedDigest"],
+			}) &&
+		certifyArtifactIdentity("x", readyNpm, "ready").kind === "npm" &&
+		certifyArtifactIdentity("x", readyCheckout, "ready").kind === "herdr-checkout" &&
+		artifactStage(readyCheckout) === "ready" &&
+		artifactCompleteness(readyCheckout).version === "0.21.0" &&
+		artifactCompleteness(readyNpm).name === PACKAGE;
+	const completenessOfRequested = refusal(() =>
+		artifactCompleteness({ kind: "herdr-checkout", repository: CHECKOUT_REPOSITORY, commit: COMMIT_A }),
+	);
+	const verdicts = Object.entries(cells).map(([k, v]) => `${k}=${v}`);
+	ok(
+		"[QK:HRB-ARTIFACT-IDENTITY-EXACT] one identity union, with an EXACT key set per kind and per stage: a ready " +
+			"shape where a request belongs, a request where a ready belongs, either kind wearing the other's keys, an " +
+			"unknown kind, a short or upper-case commit, a blank completeness pair and a malformed digest are each " +
+			"refused — a union that merged the two sources would have to accept a null integrity or a null commit, in " +
+			"which 'not observed yet' and 'this source has no such fact' become the same value, and a REQUESTED identity " +
+			`must not be able to answer what is on disk at all (${verdicts.join(" ")} accepted=${accepted} completeness-of-requested=${completenessOfRequested})`,
+		Object.values(cells).every((v) => v === "runtime-artifact-identity-uncertified") &&
+			accepted &&
+			completenessOfRequested === "runtime-artifact-identity-uncertified",
+	);
+}
+
+// ── 22. for a checkout, the COMMIT decides — never the version ────────────────
+{
+	const env = world("commit-decides");
+	let calls = 0;
+	const counted = (args: AcquireArgs) => {
+		calls++;
+		return fixtureAcquire()(args);
+	};
+	const first = install(env, CHECKOUT_LOCK, counted, COMMIT_A);
+	const again = install(env, CHECKOUT_LOCK, counted, COMMIT_A);
+	// SAME package version, DIFFERENT commit: the fixture package is 0.21.0 in both runs.
+	const rebuilt = install(env, CHECKOUT_LOCK, counted, COMMIT_B);
+	const identity = rebuilt.journal.artifactIdentity;
+	const sameVersionDifferentCommit = !sameArtifactRequest(first.journal.artifactIdentity, {
+		kind: "herdr-checkout",
+		repository: CHECKOUT_REPOSITORY,
+		commit: COMMIT_B,
+	});
+	const crossSource = !sameArtifactRequest(rebuilt.journal.artifactIdentity, {
+		kind: "npm",
+		name: PACKAGE,
+		version: "0.21.0",
+		expectedIntegrity: "sha512-fixtureA",
+	});
+	ok(
+		"[QK:HRB-IDENTITY-COMMIT-DECIDES] a checkout-sourced runtime is identified by its COMMIT: the same commit twice " +
+			"acquires nothing, and a NEW commit carrying the same package version is reinstalled rather than skipped — " +
+			"two commits can both call themselves 0.21.0, so a version comparison would let the previous candidate keep " +
+			"serving while every receipt above it named the new one, which is the silence this whole lane exists to " +
+			`prevent; a different SOURCE is never the same artifact either (calls=${calls} changed=${first.changed}/${again.changed}/${rebuilt.changed} commit=${identity.commit?.slice(0, 8)} version=${identity.packageVersion} distinct=${sameVersionDifferentCommit} cross-source=${crossSource})`,
+		calls === 2 &&
+			first.changed === true &&
+			again.changed === false &&
+			rebuilt.changed === true &&
+			identity.kind === "herdr-checkout" &&
+			identity.commit === COMMIT_B &&
+			identity.packageVersion === "0.21.0" &&
+			identity.repository === CHECKOUT_REPOSITORY &&
+			sameVersionDifferentCommit &&
+			crossSource,
+	);
+}
+
+// ── 23. the commit is read from the checkout, canonically ─────────────────────
+{
+	let asked: string[] = [];
+	const git = (result: Partial<SpawnLike>) => ({
+		spawn: (_bin: string, argv: string[]): SpawnLike => {
+			asked = argv;
+			return { status: 0, stdout: "", stderr: "", ...result } as SpawnLike;
+		},
+	});
+	const resolved = resolveCheckoutCommit("/checkout", git({ stdout: `${COMMIT_A}\n` }));
+	const short = refusal(() => resolveCheckoutCommit("/checkout", git({ stdout: "abc1234\n" })));
+	const empty = refusal(() => resolveCheckoutCommit("/checkout", git({ stdout: "\n" })));
+	const failed = refusal(() =>
+		resolveCheckoutCommit("/checkout", git({ status: 128, stderr: "not a git repository" })),
+	);
+	const missing = refusal(() =>
+		resolveCheckoutCommit("/checkout", {
+			spawn: () => ({ status: null, stdout: "", stderr: "", error: new Error("spawn git ENOENT") }),
+		}),
+	);
+	ok(
+		"[QK:HRB-CHECKOUT-COMMIT-CANONICAL] the candidate's commit comes from the checkout itself via " +
+			"`rev-parse --verify HEAD^{commit}` — `--verify` refuses an ambiguous or missing revision instead of echoing " +
+			"the argument back, and `^{commit}` resolves a tag down to the commit, so what lands in the identity is a " +
+			"full 40-hex commit or a named refusal. A shallow clone answers this exactly as a full one does, which is " +
+			`what makes Herdr's own managed checkout usable (argv=${JSON.stringify(asked)} resolved=${resolved.slice(0, 8)} short=${short} empty=${empty} failed=${failed} missing=${missing})`,
+		JSON.stringify(asked) === JSON.stringify(["-C", "/checkout", "rev-parse", "--verify", "HEAD^{commit}"]) &&
+			resolved === COMMIT_A &&
+			short === "runtime-checkout-commit-unresolvable" &&
+			empty === "runtime-checkout-commit-unresolvable" &&
+			failed === "runtime-checkout-commit-unresolvable" &&
+			missing === "runtime-checkout-commit-unresolvable",
+	);
+}
+
+// ── 24. the product pack argv is the fixed remote at that commit, and no other form ──
+{
+	const identity = { kind: "herdr-checkout", repository: CHECKOUT_REPOSITORY, commit: COMMIT_A };
+	const argv = buildCheckoutPackArgv(identity, "/tmp/cache");
+	const source = fs.readFileSync(LEAF, "utf8");
+	const packLiterals = (source.match(/"pack",/g) ?? []).length;
+	ok(
+		"[QK:HRB-CHECKOUT-ARGV-FIXED] the only checkout acquisition is `npm pack git+https://github.com/" +
+			"junghan0611/entwurf.git#<full sha>` — a fixed remote, a full commit, `--json`, our own pack destination, and " +
+			"NO `--ignore-scripts`, because on a git spec npm runs `prepare` (which compiles the bridge) and not " +
+			"`prepack`; measured 2026-09-16 on npm 11.16.0, where the same command produced a byte-identical tarball " +
+			"across three sandboxes including a shallow clone. The DIRECTORY form is structurally absent: it runs " +
+			"`prepack`, which calls pnpm and exits 127 on a clean host, so this module builds exactly two pack argvs and " +
+			`neither of them is a path (argv=${JSON.stringify(argv)} pack-literals=${packLiterals})`,
+		JSON.stringify(argv) ===
+			JSON.stringify([
+				"pack",
+				`git+https://github.com/${CHECKOUT_REPOSITORY}.git#${COMMIT_A}`,
+				"--json",
+				"--pack-destination",
+				"/tmp/cache",
+				"--no-audit",
+				"--no-fund",
+			]) &&
+			buildCheckoutRemote(CHECKOUT_REPOSITORY) === `git+https://github.com/${CHECKOUT_REPOSITORY}.git` &&
+			!argv.includes("--ignore-scripts") &&
+			packLiterals === 2,
+	);
+}
+
+// ── 25. a source that cannot serve the commit is named, never substituted ─────
+{
+	const bin = reclaimOnExit(fs.mkdtempSync(path.join(os.tmpdir(), "entwurf-hrb-npm-")));
+	const fakeNpm = (body: string): string => {
+		const p = path.join(bin, `npm-${createHash("sha256").update(body).digest("hex").slice(0, 8)}`);
+		fs.writeFileSync(p, `#!/bin/sh\n${body}\n`);
+		fs.chmodSync(p, 0o755);
+		return p;
+	};
+	const env = world("source-unavailable");
+	const layout = resolveRuntimeLayout(env);
+	const identity = certifyArtifactIdentity(
+		"x",
+		{ kind: "herdr-checkout", repository: CHECKOUT_REPOSITORY, commit: COMMIT_A },
+		"requested",
+	);
+	const args = { identity, prefix: path.join(env.HOME as string, "prefix"), cacheDir: layout.cacheDir, env };
+	const remoteRefused = refusal(() =>
+		checkoutAcquire({ ...args, npmBin: fakeNpm('echo "Could not read from remote repository" >&2; exit 128') }),
+	);
+	const noJson = refusal(() => checkoutAcquire({ ...args, npmBin: fakeNpm('echo "[]"; exit 0') }));
+	const prefixUntouched = classifyPath(args.prefix);
+	ok(
+		"[QK:HRB-SOURCE-UNAVAILABLE-NAMED] a remote that cannot serve the commit, and a pack whose `--json` carries no " +
+			"artifact, are ONE named refusal — `runtime-checkout-source-unavailable` — and nothing is installed in their " +
+			"place. This is the branch where a fallback would be most tempting and most wrong: 'the commit is not there, " +
+			"so install a registry version instead' would silently substitute an artifact nobody asked for, on the one " +
+			`path whose entire purpose is verifying a specific commit (remote=${remoteRefused} no-json=${noJson} prefix=${prefixUntouched})`,
+		remoteRefused === "runtime-checkout-source-unavailable" &&
+			noJson === "runtime-checkout-source-unavailable" &&
+			prefixUntouched === "absent",
+	);
+}
+
+// ── 26. a cache we cannot prove is ours is not adopted ────────────────────────
+{
+	const env = world("cache-unowned");
+	const layout = resolveRuntimeLayout(env);
+	fs.mkdirSync(layout.cacheDir, { recursive: true });
+	fs.writeFileSync(path.join(layout.cacheDir, "someone-elses.tgz"), "not ours\n");
+	const before = treeDigest(layout.cacheDir);
+	const refused = refusal(() => install(env));
+	const after = treeDigest(layout.cacheDir);
+	const assessed = assessRuntimeState(layout, null);
+	ok(
+		"[QK:HRB-CACHE-UNOWNED-REFUSED] a cache directory at our address with NO certified journal behind it is refused " +
+			"by name and left byte-identical — the cache is the fourth thing this module deletes, and a transaction whose " +
+			"first act on a strange host is reclaiming a tree it cannot prove it wrote has adopted somebody else's bytes " +
+			`in order to tidy them away (state=${assessed.state} refusal=${refused} untouched=${before === after})`,
+		assessed.state === "unowned-cache-residue" &&
+			refused === "runtime-cache-unowned-residue" &&
+			before === after &&
+			before !== "<absent>",
+	);
+}
+
+// ── 26a. the INVERSE reads that same ownership fact the same way ──────────────
+{
+	const env = world("inverse-cache-unowned");
+	const layout = resolveRuntimeLayout(env);
+	fs.mkdirSync(layout.cacheDir, { recursive: true });
+	fs.writeFileSync(path.join(layout.cacheDir, "someone-elses.tgz"), "not ours\n");
+	const before = treeDigest(layout.cacheDir);
+	const refused = refusal(() => removeOwnedRuntime({ env }));
+	const after = treeDigest(layout.cacheDir);
+	ok(
+		"[QK:HRB-INVERSE-CACHE-UNOWNED] the inverse refuses a journal-less cache by name, with its bytes untouched — the " +
+			"forward transaction already refuses that exact state, and one ownership fact read two different ways is how " +
+			"the careless side eventually deletes what the careful side would not: the inverse's plan BEGINS with this " +
+			`directory, so 'nothing of ours, report success' is the wrong answer to give about it (refusal=${refused} untouched=${before === after})`,
+		refused === "runtime-inverse-foreign-refused" && before === after && before !== "<absent>",
+	);
+}
+
+// ── 27. a failed acquisition reclaims what IT wrote, and a retry is green ─────
+{
+	const env = world("cache-reclaim");
+	const layout = resolveRuntimeLayout(env);
+	install(env, CHECKOUT_LOCK, fixtureAcquire(), COMMIT_A);
+	const goodTree = treeDigest(layout.activeDir);
+	const goodJournal = readCertifiedJournal(layout) as Journal;
+	const halfFetched = (args: AcquireArgs): AcquireResult => {
+		fs.mkdirSync(args.cacheDir, { recursive: true });
+		fs.writeFileSync(path.join(args.cacheDir, "half.tgz"), "truncated\n");
+		throw new Error("the remote hung up mid-pack");
+	};
+	const code = refusal(() => install(env, CHECKOUT_LOCK, halfFetched, COMMIT_B));
+	const afterFailure = {
+		staging: classifyPath(layout.stagingDir),
+		cache: classifyPath(layout.cacheDir),
+		previous: classifyPath(layout.previousDir),
+		active: treeDigest(layout.activeDir),
+		journal: readCertifiedJournal(layout) as Journal,
+	};
+	const retry = install(env, CHECKOUT_LOCK, fixtureAcquire(), COMMIT_B);
+	ok(
+		"[QK:HRB-CACHE-FAILED-ACQUIRE-RECLAIMED] a failed acquisition reclaims the staging tree AND the cache this " +
+			"transaction filled — its own `installing` journal is what proves both are ours — while the journal itself, " +
+			"the backup and the last good runtime are preserved, so the retry that follows is green rather than tripping " +
+			"over a truncated tarball nobody owns. The authority order is the point: the cache may be reclaimed only " +
+			`AFTER the write that claims it, never before (refusal=${code} staging=${afterFailure.staging} cache=${afterFailure.cache} previous=${afterFailure.previous} active-preserved=${afterFailure.active === goodTree} journal=${afterFailure.journal.phase} retry=${retry.changed}/${retry.journal.artifactIdentity.commit?.slice(0, 8)})`,
+		code !== null &&
+			afterFailure.staging === "absent" &&
+			afterFailure.cache === "absent" &&
+			afterFailure.previous === "absent" &&
+			afterFailure.active === goodTree &&
+			goodTree !== "<absent>" &&
+			afterFailure.journal.phase === "installing" &&
+			afterFailure.journal.previousRuntime?.commit === COMMIT_A &&
+			afterFailure.journal.previousRuntime?.observedDigest === goodJournal.artifactIdentity.observedDigest &&
+			retry.changed === true &&
+			retry.journal.phase === "runtime-ready" &&
+			retry.journal.artifactIdentity.commit === COMMIT_B,
 	);
 }
 

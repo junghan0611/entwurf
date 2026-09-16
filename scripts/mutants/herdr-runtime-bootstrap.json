@@ -172,14 +172,8 @@
 			"claim": "HRB-FAILED-CANDIDATE-PRESERVES-ACTIVE",
 			"title": "clearing the active directory when a CANDIDATE fails verification destroys a working runtime on behalf of an upgrade that never arrived — the host is left with its wiring pointing at an emptied address, strictly worse than the old version it was replacing",
 			"subject": "scripts/herdr-runtime.mjs",
-			"find": ["\t} catch (err) {", "\t\tremoveTree(layout.stagingDir);", "\t\tthrow err;", "\t}"],
-			"replace": [
-				"\t} catch (err) {",
-				"\t\tremoveTree(layout.stagingDir);",
-				"\t\tremoveTree(layout.activeDir);",
-				"\t\tthrow err;",
-				"\t}"
-			],
+			"find": ["\t\tremoveTree(layout.cacheDir);", "\t\tthrow err;"],
+			"replace": ["\t\tremoveTree(layout.cacheDir);", "\t\tremoveTree(layout.activeDir);", "\t\tthrow err;"],
 			"gate": ["bash", "run.sh", "check-herdr-runtime-bootstrap"],
 			"timeoutSeconds": 240,
 			"signature": "[QK:HRB-FAILED-CANDIDATE-PRESERVES-ACTIVE]",
@@ -190,7 +184,7 @@
 			"title": "deleting the backup because a sibling directory merely exists is how a corrupt active plus a good previous ends with zero usable runtimes — measured on the first cut of this module: it dropped the backup, then failed to acquire a candidate, and the address the wiring names held nothing",
 			"subject": "scripts/herdr-runtime.mjs",
 			"find": [
-				"\t\t\tif (inspectInstalledRuntime(layout.activeDir, locked.name).ok) {",
+				"\t\t\tif (inspectInstalledRuntime(layout.activeDir, activePackageName(certified)).ok) {",
 				"\t\t\t\tremoveTree(layout.previousDir);",
 				"\t\t\t\trecovered = \"stale-backup\";",
 				"\t\t\t} else {"
@@ -247,7 +241,7 @@
 			"subject": "scripts/herdr-runtime.mjs",
 			"find": [
 				"\t\ttry {",
-				"\t\t\tverifyInstalledRuntime(layout.activeDir, locked);",
+				"\t\t\tverifyInstalledRuntime(layout.activeDir, artifactCompleteness(certified.artifactIdentity));",
 				"\t\t\treturn Object.freeze({ phase: \"runtime-ready\", changed: false, recovered, journal: certified });"
 			],
 			"replace": [
@@ -281,6 +275,125 @@
 			"gate": ["bash", "run.sh", "check-herdr-runtime-bootstrap"],
 			"timeoutSeconds": 240,
 			"signature": "[QK:HRB-NO-HERDR-CLAIM]",
+			"signatureSource": "scripts/check-herdr-runtime-bootstrap.ts"
+		},
+		{
+			"claim": "HRB-LOCK-SOURCE-CLOSED",
+			"title": "defaulting an unknown or absent `source` instead of refusing it lets whoever edits a lock — or ships a v1 one — choose the acquisition authority silently, which is the one decision this discriminant exists to keep committed",
+			"subject": "scripts/herdr-runtime.mjs",
+			"find": ["\tif (!ARTIFACT_KINDS.includes(parsed.source)) {"],
+			"replace": ["\tif (false && !ARTIFACT_KINDS.includes(parsed.source)) {"],
+			"gate": ["bash", "run.sh", "check-herdr-runtime-bootstrap"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:HRB-LOCK-SOURCE-CLOSED]",
+			"signatureSource": "scripts/check-herdr-runtime-bootstrap.ts"
+		},
+		{
+			"claim": "HRB-CHECKOUT-REPO-LITERAL",
+			"title": "accepting any repository inside the identity certifier means a journal or ledger naming a foreign tree is believed on re-read — a strange source becomes ours by transcription, which is how a record-based authority gets laundered",
+			"subject": "scripts/herdr-runtime.mjs",
+			"find": ["\t\tif (value.repository !== CHECKOUT_REPOSITORY) {"],
+			"replace": ["\t\tif (false && value.repository !== CHECKOUT_REPOSITORY) {"],
+			"gate": ["bash", "run.sh", "check-herdr-runtime-bootstrap"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:HRB-CHECKOUT-REPO-LITERAL]",
+			"signatureSource": "scripts/check-herdr-runtime-bootstrap.ts"
+		},
+		{
+			"claim": "HRB-ARTIFACT-IDENTITY-EXACT",
+			"title": "accepting either stage wherever an identity is read makes a ready-shaped `installing` entry legal — an observation nobody made — and lets a requested-shaped ready entry name a runtime whose bytes were never looked at",
+			"subject": "scripts/herdr-runtime.mjs",
+			"find": ["\tconst shapes = stage === \"either\" ? [\"requested\", \"ready\"] : [stage];"],
+			"replace": ["\tconst shapes = [\"requested\", \"ready\"];"],
+			"gate": ["bash", "run.sh", "check-herdr-runtime-bootstrap"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:HRB-ARTIFACT-IDENTITY-EXACT]",
+			"signatureSource": "scripts/check-herdr-runtime-bootstrap.ts"
+		},
+		{
+			"claim": "HRB-IDENTITY-COMMIT-DECIDES",
+			"title": "dropping the commit from the checkout comparison makes a stale candidate satisfy a request for a new one — two commits can both call themselves 0.21.0, so the host keeps serving the old artifact while every receipt above it names the new",
+			"subject": "scripts/herdr-runtime.mjs",
+			"find": ["\treturn ready.repository === requested.repository && ready.commit === requested.commit;"],
+			"replace": ["\treturn ready.repository === requested.repository;"],
+			"gate": ["bash", "run.sh", "check-herdr-runtime-bootstrap"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:HRB-IDENTITY-COMMIT-DECIDES]",
+			"signatureSource": "scripts/check-herdr-runtime-bootstrap.ts"
+		},
+		{
+			"claim": "HRB-CHECKOUT-COMMIT-CANONICAL",
+			"title": "accepting whatever `rev-parse` printed lets an abbreviated sha, an empty line or a git error message become the anchor a candidate is identified by, and an anchor that is not a full commit identifies nothing",
+			"subject": "scripts/herdr-runtime.mjs",
+			"find": ["\tif (!COMMIT_SHA.test(commit)) {"],
+			"replace": ["\tif (false && !COMMIT_SHA.test(commit)) {"],
+			"gate": ["bash", "run.sh", "check-herdr-runtime-bootstrap"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:HRB-CHECKOUT-COMMIT-CANONICAL]",
+			"signatureSource": "scripts/check-herdr-runtime-bootstrap.ts"
+		},
+		{
+			"claim": "HRB-CHECKOUT-ARGV-FIXED",
+			"title": "adding `--ignore-scripts` to the PACK skips `prepare`, so the tarball arrives with no compiled bridge — the exact footgun measured on npm 11.16.0, where only the git-spec form builds and the directory form needs a global pnpm",
+			"subject": "scripts/herdr-runtime.mjs",
+			"find": ["\t\t`${buildCheckoutRemote(identity.repository)}#${identity.commit}`,", "\t\t\"--json\","],
+			"replace": [
+				"\t\t`${buildCheckoutRemote(identity.repository)}#${identity.commit}`,",
+				"\t\t\"--ignore-scripts\",",
+				"\t\t\"--json\","
+			],
+			"gate": ["bash", "run.sh", "check-herdr-runtime-bootstrap"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:HRB-CHECKOUT-ARGV-FIXED]",
+			"signatureSource": "scripts/check-herdr-runtime-bootstrap.ts"
+		},
+		{
+			"claim": "HRB-SOURCE-UNAVAILABLE-NAMED",
+			"title": "collapsing a remote that cannot serve the commit into the generic acquire failure erases the one distinction an operator needs: this candidate does not exist at that source, and no other artifact may stand in for it",
+			"subject": "scripts/herdr-runtime.mjs",
+			"find": ["\t\t\t\"runtime-checkout-source-unavailable\","],
+			"replace": ["\t\t\t\"runtime-acquire-failed\","],
+			"gate": ["bash", "run.sh", "check-herdr-runtime-bootstrap"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:HRB-SOURCE-UNAVAILABLE-NAMED]",
+			"signatureSource": "scripts/check-herdr-runtime-bootstrap.ts"
+		},
+		{
+			"claim": "HRB-CACHE-UNOWNED-REFUSED",
+			"title": "adopting a cache directory with no journal behind it makes this module's first act on a strange host the deletion of a tree it cannot prove it wrote",
+			"subject": "scripts/herdr-runtime.mjs",
+			"find": [
+				"\t\tif (kinds.cache !== \"absent\") return Object.freeze({ state: \"unowned-cache-residue\", ...facts });"
+			],
+			"replace": ["\t\tif (false) return Object.freeze({ state: \"unowned-cache-residue\", ...facts });"],
+			"gate": ["bash", "run.sh", "check-herdr-runtime-bootstrap"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:HRB-CACHE-UNOWNED-REFUSED]",
+			"signatureSource": "scripts/check-herdr-runtime-bootstrap.ts"
+		},
+		{
+			"claim": "HRB-CACHE-FAILED-ACQUIRE-RECLAIMED",
+			"title": "leaving a half-fetched tarball in our own cache after a failed acquisition is what a retry then trips over — and the transaction that wrote those bytes is the only one that can prove they are ours to remove",
+			"subject": "scripts/herdr-runtime.mjs",
+			"find": [
+				"\t\t// cache entry may be incomplete, and OUR cache is the only place this transaction wrote.",
+				"\t\tremoveTree(layout.cacheDir);"
+			],
+			"replace": ["\t\t// cache entry may be incomplete, and OUR cache is the only place this transaction wrote."],
+			"gate": ["bash", "run.sh", "check-herdr-runtime-bootstrap"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:HRB-CACHE-FAILED-ACQUIRE-RECLAIMED]",
+			"signatureSource": "scripts/check-herdr-runtime-bootstrap.ts"
+		},
+		{
+			"claim": "HRB-INVERSE-CACHE-UNOWNED",
+			"title": "letting the inverse report success over a journal-less cache makes the two sides of one ownership fact disagree — the forward path refuses that exact state, and the side that shrugs is the one that eventually deletes what the careful side would not",
+			"subject": "scripts/herdr-runtime.mjs",
+			"find": ["\t\tif (assessed.state === \"unowned-cache-residue\") {"],
+			"replace": ["\t\tif (false && assessed.state === \"unowned-cache-residue\") {"],
+			"gate": ["bash", "run.sh", "check-herdr-runtime-bootstrap"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:HRB-INVERSE-CACHE-UNOWNED]",
 			"signatureSource": "scripts/check-herdr-runtime-bootstrap.ts"
 		}
 	]

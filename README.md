@@ -621,6 +621,16 @@ own `SessionStart` hook, which entwurf installs and herdr does not touch. Where 
 visible is reported as evidence in `entwurf_peers` (`placement=herdr <pane>`), never as an address:
 [`docs/mux-launch-rail.md`](./docs/mux-launch-rail.md) §7-a.
 
+The wiring those two axes need does not have to be installed by hand on a Herdr host: the Entwurf
+Herdr plugin's install-time build reads Herdr's own `integration status`, and for every harness in
+`{pi, claude-code}` that Herdr reports as integrated it acquires an Entwurf runtime at a stable
+Entwurf-owned address and registers the user-scope wiring against it — no Entwurf clone, no manual
+`npm install`. `herdr plugin install junghan0611/entwurf/plugins/herdr` is the whole command, every
+reinstall is the refresh trigger, and `entwurf herdr-plugin-deactivate` is the explicit inverse
+(Herdr's own uninstall removes only its checkout and calls no cleanup hook).
+[`plugins/herdr/README.md`](./plugins/herdr/README.md) owns that lane, including which acquisition
+source the committed lock names.
+
 **Resuming an existing garden session.** Use `entwurf_resume_call {target}`. It reopens a DORMANT pi citizen under the SAME garden id in a visible window in the caller's own tmux session, resolving the transcript, model, provider and cwd from the record — so it takes only the target id, and it runs no turn: the window comes back with the conversation and waits, and talking to it is still `entwurf_v2`. Two receipts arrive and mean different things: a LAUNCH receipt (tmux made a window and was asked to start pi) and an OBSERVATION receipt (the control socket answered under the same id, or `resume-unobserved`). Unobserved is a real outcome, not an error to retry — the window is visible, so read it. A citizen that is already live is refused; so is a non-pi target (`target-not-pi`), because only pi stands a control socket up. The predecessor, `entwurf_v2 intent=owned-outcome`, resumed by launching a hidden window-less background child and was withdrawn under the visible-first rule; delivery still starts no process. Identity preconditions live in `resume-launch-identity.ts`, gated by `check-resume-launch-identity`.
 
 **Starting a new session in-process — pi's own `/new`.** Since the #50 C2 cut there is nothing to replace it with: `/new`, `/fork`, `/clone` and RPC session replacement are pi's again. The replacement session fires `session_start`, which upserts its own meta-record and rebinds the control socket to that record's garden id; the old socket is dropped. pi's session id (a uuidv7) is recorded as the citizen's `nativeSessionId` and is never an address. Gate: `run.sh smoke-resident-garden-guard` REPLACEMENT section (0-token RPC E2E).

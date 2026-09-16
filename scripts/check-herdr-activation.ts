@@ -47,7 +47,30 @@ const COMPILED_ENTRY = path.join("mcp", "entwurf-bridge", "dist", "mcp", "entwur
  * one, and it should — activating against an address nothing put a runtime at is the failure this
  * whole lane exists to make impossible.
  */
-function seedRuntime(env: NodeJS.ProcessEnv): string {
+const PACKAGE = "@junghanacs/entwurf";
+/**
+ * Three artifact identities in the ONE union the runtime journal and this ledger share: two
+ * checkout-sourced commits of the SAME package version (which is the whole point — a version cannot
+ * tell them apart) and one npm-sourced spec, for the source-drift cell.
+ */
+const IDENTITY_A = {
+	kind: "herdr-checkout",
+	repository: "junghan0611/entwurf",
+	commit: "a".repeat(40),
+	packageName: PACKAGE,
+	packageVersion: "0.21.0",
+	observedDigest: `sha256-${"a".repeat(64)}`,
+};
+const IDENTITY_B = { ...IDENTITY_A, commit: "b".repeat(40), observedDigest: `sha256-${"b".repeat(64)}` };
+const IDENTITY_NPM = {
+	kind: "npm",
+	name: PACKAGE,
+	version: "0.21.0",
+	expectedIntegrity: "sha512-fixture",
+	observedDigest: `sha256-${"c".repeat(64)}`,
+};
+
+function seedRuntime(env: NodeJS.ProcessEnv, identity: Record<string, unknown> = IDENTITY_A): string {
 	const active = runtimeRootOf(env);
 	const pkg = path.join(active, "node_modules", "@junghanacs", "entwurf");
 	fs.mkdirSync(path.join(pkg, path.dirname(COMPILED_ENTRY)), { recursive: true });
@@ -65,13 +88,10 @@ function seedRuntime(env: NodeJS.ProcessEnv): string {
 	fs.writeFileSync(
 		path.join(env.XDG_DATA_HOME as string, "entwurf", "herdr-plugin", "journal.json"),
 		`${JSON.stringify({
-			schemaVersion: 1,
+			schemaVersion: 2,
 			phase: "runtime-ready",
 			runtimeRoot: active,
-			packageName: "@junghanacs/entwurf",
-			packageVersion: "0.21.0",
-			expectedIntegrity: "sha512-fixture",
-			observedDigest: `sha256-${"a".repeat(64)}`,
+			artifactIdentity: identity,
 			previousRuntime: null,
 		})}\n`,
 	);
@@ -118,6 +138,7 @@ interface Ledger {
 	schemaVersion: number;
 	phase: string;
 	runtimeRoot: string;
+	artifactIdentity: Record<string, string>;
 	piAgentDir: Root;
 	claudeConfigDir: Root;
 	claudeUserConfig: Root;
@@ -152,9 +173,11 @@ interface Mod {
 	ledgerBody: (args: {
 		phase: string;
 		runtimeRoot: string;
+		artifactIdentity: Record<string, unknown>;
 		roots: { piAgentDir: Root; claudeConfigDir: Root; claudeUserConfig: Root };
 		states: Record<string, string>;
 	}) => Record<string, unknown>;
+	certifyArtifactForForward: (ledger: Ledger | null, current: Record<string, unknown>, requested: string[]) => string;
 	piStatePaths: (env: NodeJS.ProcessEnv) => { packageState: string; providerState: string };
 	resolveEntwurfDataRoot: (env: NodeJS.ProcessEnv) => string;
 	LEDGER_PHASES: string[];
@@ -174,6 +197,7 @@ const {
 	planDeactivation,
 	certifyPhaseForForward,
 	certifyPhaseForInverse,
+	certifyArtifactForForward,
 	ledgerBody,
 	piStatePaths,
 	resolveEntwurfDataRoot,
@@ -208,6 +232,24 @@ function py(env: NodeJS.ProcessEnv, script: string, args: string[]) {
 function readJson(file: string): unknown {
 	return JSON.parse(fs.readFileSync(file, "utf8"));
 }
+/**
+ * The `command` a helper run PRINTED, or `null` when it printed no readable one.
+ *
+ * A cell that reads `JSON.parse(run.stdout).command` inline dies with a SyntaxError the moment the
+ * helper exits non-zero — and a gate that dies before its own assertion reports someone else's
+ * failure, which is exactly the WRONG-REASON shape a mutant must never produce. So the parse is
+ * done defensively and the ASSERTION decides, with the run's own exit code and stderr carried into
+ * the message.
+ */
+function printedCommand(run: { status: number | null; stdout: string }): string | null {
+	if (run.status !== 0) return null;
+	try {
+		const parsed = JSON.parse(run.stdout) as { command?: unknown };
+		return typeof parsed.command === "string" ? parsed.command : null;
+	} catch {
+		return null;
+	}
+}
 function refusal(fn: () => unknown): string | null {
 	try {
 		fn();
@@ -219,13 +261,35 @@ function refusal(fn: () => unknown): string | null {
 function runtimeRootOf(env: NodeJS.ProcessEnv): string {
 	return path.join(env.XDG_DATA_HOME as string, "entwurf", "herdr-plugin", "runtime", "active");
 }
-function ledgerFor(env: NodeJS.ProcessEnv, backends: string[], phase = "active"): Record<string, unknown> {
+function ledgerFor(
+	env: NodeJS.ProcessEnv,
+	backends: string[],
+	phase = "active",
+	artifactIdentity: Record<string, unknown> = IDENTITY_A,
+): Record<string, unknown> {
 	const states: Record<string, string> = {};
-	for (const b of backends) states[b] = phase === "active" ? "active" : "active";
-	return ledgerBody({ phase, runtimeRoot: runtimeRootOf(env), roots: resolveComponentRoots(env), states });
+	for (const b of backends) states[b] = "active";
+	return ledgerBody({
+		phase,
+		runtimeRoot: runtimeRootOf(env),
+		artifactIdentity,
+		roots: resolveComponentRoots(env),
+		states,
+	});
 }
-function ledgerWith(env: NodeJS.ProcessEnv, phase: string, states: Record<string, string>): Record<string, unknown> {
-	return ledgerBody({ phase, runtimeRoot: runtimeRootOf(env), roots: resolveComponentRoots(env), states });
+function ledgerWith(
+	env: NodeJS.ProcessEnv,
+	phase: string,
+	states: Record<string, string>,
+	artifactIdentity: Record<string, unknown> = IDENTITY_A,
+): Record<string, unknown> {
+	return ledgerBody({
+		phase,
+		runtimeRoot: runtimeRootOf(env),
+		artifactIdentity,
+		roots: resolveComponentRoots(env),
+		states,
+	});
 }
 
 // ── 1. activation writes the global pi citizen and NOTHING in a project ────────
@@ -382,15 +446,22 @@ function ledgerWith(env: NodeJS.ProcessEnv, phase: string, states: Record<string
 	).entwurfProvider.mcpServers["entwurf-bridge"].command;
 	const claudeDefault = py(env, "meta-bridge-state.py", ["desired-mcp", "--repo", REPO]);
 	const claudeStatusDefault = py(env, "meta-bridge-state.py", ["desired-statusline", "--repo", REPO]);
+	const claudeDefaultCommand = printedCommand(claudeDefault);
+	const claudeStatusDefaultCommand = printedCommand(claudeStatusDefault);
 	ok(
 		"[QK:HAC-DEFAULT-MODE-UNCHANGED] with no mode requested the pi provider still writes the bare `entwurf-bridge` " +
 			"and the Claude owner still answers from its historical installed/clone branch — every host that never asks " +
 			"for the plugin mode keeps the bytes it had, which is the only thing that makes adding a mode safe rather " +
-			`than a migration (pi=${JSON.stringify(piDefault)} claude=${JSON.stringify((JSON.parse(claudeDefault.stdout) as { command: string }).command)})`,
+			`than a migration (pi=${JSON.stringify(piDefault)} claude=${JSON.stringify(claudeDefaultCommand)} ` +
+			`claude-statusline=${JSON.stringify(claudeStatusDefaultCommand)} mcp-exit=${claudeDefault.status} ` +
+			`statusline-exit=${claudeStatusDefault.status} mcp-stderr=${JSON.stringify((claudeDefault.stderr || "").trim().slice(-200))})`,
 		piDefault === "entwurf-bridge" &&
 			claudeDefault.status === 0 &&
-			!(JSON.parse(claudeDefault.stdout) as { command: string }).command.includes("herdr-plugin") &&
-			!(JSON.parse(claudeStatusDefault.stdout) as { command: string }).command.includes("herdr-plugin"),
+			claudeStatusDefault.status === 0 &&
+			claudeDefaultCommand !== null &&
+			!claudeDefaultCommand.includes("herdr-plugin") &&
+			claudeStatusDefaultCommand !== null &&
+			!claudeStatusDefaultCommand.includes("herdr-plugin"),
 	);
 }
 
@@ -863,13 +934,10 @@ function ledgerWith(env: NodeJS.ProcessEnv, phase: string, states: Record<string
 	fs.writeFileSync(
 		path.join(env.XDG_DATA_HOME as string, "entwurf", "herdr-plugin", "journal.json"),
 		`${JSON.stringify({
-			schemaVersion: 1,
+			schemaVersion: 2,
 			phase: "runtime-ready",
 			runtimeRoot: runtimeRootOf(env),
-			packageName: "@junghanacs/entwurf",
-			packageVersion: "0.21.0",
-			expectedIntegrity: "sha512-fixture",
-			observedDigest: `sha256-${"a".repeat(64)}`,
+			artifactIdentity: IDENTITY_A,
 			previousRuntime: null,
 		})}\n`,
 	);
@@ -1075,6 +1143,150 @@ function ledgerWith(env: NodeJS.ProcessEnv, phase: string, states: Record<string
 			(drifted.stderr || "").includes("activation-runtime-not-ready") &&
 			(drifted.stderr || "").includes("runtime-package-spec-mismatch") &&
 			!fs.existsSync(layout.ledgerPath),
+	);
+}
+
+// ── 22. the ledger carries the SAME identity union, through the same certifier ──
+{
+	const env = world("ledger-identity");
+	const layout = resolveActivationLayout(env);
+	writeLedger(layout, ledgerFor(env, ["pi"]));
+	const good = readCertifiedLedger(layout) as Ledger;
+	const write = (body: unknown): string | null => {
+		fs.writeFileSync(layout.ledgerPath, `${JSON.stringify(body)}\n`);
+		return refusal(() => readCertifiedLedger(layout));
+	};
+	const cells: Record<string, string | null> = {
+		"no-identity": write({ ...good, artifactIdentity: undefined }),
+		"requested-shape": write({
+			...good,
+			artifactIdentity: { kind: "herdr-checkout", repository: IDENTITY_A.repository, commit: IDENTITY_A.commit },
+		}),
+		"foreign-repo": write({ ...good, artifactIdentity: { ...IDENTITY_A, repository: "someone/else" } }),
+		"second-source-field": write({ ...good, source: "npm" }),
+		"scalar-identity": write({ ...good, artifactIdentity: "herdr-checkout" }),
+	};
+	const verdicts = Object.entries(cells).map(([k, v]) => `${k}=${v}`);
+	ok(
+		"[QK:HAC-LEDGER-IDENTITY-CERTIFIED] the ledger records WHICH artifact it activated in the same union the runtime " +
+			"journal uses, certified by the same imported certifier and in the READY shape only — a missing identity, a " +
+			"requested shape (nothing observed it), a foreign repository, a scalar, and a SECOND source-ish field beside " +
+			"it are each refused. A ledger that described the artifact in its own words could disagree with the journal " +
+			"about which runtime the wiring below it names, and nothing on the host would be able to say which of the two " +
+			`was right (${verdicts.join(" ")} keys=${JSON.stringify(LEDGER_KEYS)} good=${good.artifactIdentity.commit?.slice(0, 8)})`,
+		Object.values(cells).every((v) => v === "activation-ledger-uncertified") &&
+			LEDGER_KEYS.includes("artifactIdentity") &&
+			good.artifactIdentity.commit === IDENTITY_A.commit,
+	);
+}
+
+// ── 23. a SOURCE change is refused; a new commit on the same source may rebind ──
+{
+	const env = world("rebind-legality");
+	const layout = resolveActivationLayout(env);
+	const ledgerA = () => {
+		writeLedger(layout, ledgerFor(env, ["pi", "claude-code"]));
+		return readCertifiedLedger(layout) as Ledger;
+	};
+	const sourceDrift = refusal(() => certifyArtifactForForward(ledgerA(), IDENTITY_NPM, ["pi", "claude-code"]));
+	const matched = certifyArtifactForForward(ledgerA(), IDENTITY_A, ["pi"]);
+	const legal = certifyArtifactForForward(ledgerA(), IDENTITY_B, ["pi", "claude-code", "pi"]);
+	const fresh = certifyArtifactForForward(null, IDENTITY_B, ["pi"]);
+	const dropped = refusal(() => certifyArtifactForForward(ledgerA(), IDENTITY_B, ["pi"]));
+	writeLedger(layout, ledgerWith(env, "activating", { pi: "pending" }));
+	const midActivation = refusal(() =>
+		certifyArtifactForForward(readCertifiedLedger(layout) as Ledger, IDENTITY_B, ["pi"]),
+	);
+	writeLedger(layout, ledgerWith(env, "deactivating", { pi: "removed" }));
+	const midTeardown = refusal(() =>
+		certifyArtifactForForward(readCertifiedLedger(layout) as Ledger, IDENTITY_B, ["pi"]),
+	);
+	ok(
+		"[QK:HAC-REBIND-LEGALITY] the runtime address is stable while the artifact under it is not, so a reinstall may " +
+			"REBIND the ledger's claim — but only from a settled `active` ledger, with every component `active`, and only " +
+			"when the request still covers every activated backend. A SOURCE change is not a reinstall at all: it is a " +
+			"different acquisition authority inheriting an existing activation, and it needs the operator's explicit " +
+			"teardown. Dropping a backend would leave its wiring pointing at a root no record names, and rebinding over " +
+			"an unfinished transaction would discard the only account of how far that run got " +
+			`(drift=${sourceDrift} match=${matched} legal=${legal} fresh=${fresh} dropped=${dropped} mid-activation=${midActivation} mid-teardown=${midTeardown})`,
+		sourceDrift === "activation-artifact-source-drifted" &&
+			matched === "match" &&
+			legal === "rebind" &&
+			fresh === "fresh" &&
+			dropped === "activation-rebind-refused" &&
+			midActivation === "activation-rebind-refused" &&
+			midTeardown === "activation-rebind-refused",
+	);
+}
+
+// ── 24. the rebind is ONE checkpoint, and what it leaves is resumable ─────────
+{
+	const env = world("rebind-atomic");
+	const layout = resolveActivationLayout(env);
+	const log = path.join(env.HOME as string, "claude.log");
+	const workingClaude = fakeClaude(env);
+	const runEnv = { ...env, PATH: `${workingClaude}${path.delimiter}${env.PATH}`, FAKE_CLAUDE_LOG: log };
+	fs.writeFileSync(path.join(env.PI_CODING_AGENT_DIR as string, "settings.json"), '{"theme":"dark"}\n');
+	seedRuntime(env, IDENTITY_A);
+	const firstRun = spawnSync("node", [ACTIVATE, "pi", "claude-code"], { encoding: "utf8", env: runEnv });
+	const settled = readCertifiedLedger(layout) as Ledger;
+
+	// The artifact under the same stable root is replaced: new commit, SAME package version.
+	seedRuntime(env, IDENTITY_B);
+
+	// (a) a refusal BEFORE the checkpoint leaves the old ledger byte-identical. The request drops a
+	// backend the ledger holds, which is exactly the illegal rebind above.
+	const ledgerTextBefore = fs.readFileSync(layout.ledgerPath, "utf8");
+	const refusedRun = spawnSync("node", [ACTIVATE, "pi"], { encoding: "utf8", env: runEnv });
+	const ledgerTextAfterRefusal = fs.readFileSync(layout.ledgerPath, "utf8");
+
+	// (b) a component that fails AFTER the checkpoint: the claude writer dies on its own CLI, so the
+	// ledger must already name the NEW artifact and record exactly how far the run got.
+	const brokenDir = path.join(env.HOME as string, "broken-claude-bin");
+	fs.mkdirSync(brokenDir, { recursive: true });
+	fs.writeFileSync(
+		path.join(brokenDir, "claude"),
+		[
+			"#!/usr/bin/env bash",
+			'case "$1 $2" in',
+			'  "--version "*|"--version") echo "2.1.217 (Claude Code)" ;;',
+			'  *) echo "broken fixture" >&2; exit 1 ;;',
+			"esac",
+		].join("\n"),
+	);
+	fs.chmodSync(path.join(brokenDir, "claude"), 0o755);
+	const brokenRun = spawnSync("node", [ACTIVATE, "pi", "claude-code"], {
+		encoding: "utf8",
+		env: { ...env, PATH: `${brokenDir}${path.delimiter}${env.PATH}`, FAKE_CLAUDE_LOG: log },
+	});
+	const halfway = readCertifiedLedger(layout) as Ledger;
+
+	// (c) the SAME verb finishes it.
+	const resumed = spawnSync("node", [ACTIVATE, "pi", "claude-code"], { encoding: "utf8", env: runEnv });
+	const finished = readCertifiedLedger(layout) as Ledger;
+	ok(
+		"[QK:HAC-REBIND-ATOMIC-CHECKPOINT] the rebind lands in ONE ledger write: the new artifact identity and the " +
+			"`activating` phase together, with every selected component back to `pending` because they are being " +
+			"re-pointed at different bytes. A refusal before it leaves the previous ledger byte-identical; a component " +
+			"failure after it leaves a ledger that already names the new artifact and says how far the run got, which the " +
+			"SAME verb resumes. Splitting identity and phase across two writes would open a window where the ledger " +
+			"claims the new artifact while still reporting the old transaction as finished " +
+			`(first=${firstRun.status}/${settled.artifactIdentity.commit?.slice(0, 8)} refused=${refusedRun.status}/unchanged=${ledgerTextBefore === ledgerTextAfterRefusal} broken=${brokenRun.status}/${halfway.phase}/${halfway.artifactIdentity.commit?.slice(0, 8)}/${JSON.stringify(halfway.components)} resumed=${resumed.status}/${finished.phase}/${finished.artifactIdentity.commit?.slice(0, 8)})`,
+		firstRun.status === 0 &&
+			settled.phase === "active" &&
+			settled.artifactIdentity.commit === IDENTITY_A.commit &&
+			refusedRun.status !== 0 &&
+			(refusedRun.stderr || "").includes("activation-rebind-refused") &&
+			ledgerTextBefore === ledgerTextAfterRefusal &&
+			brokenRun.status !== 0 &&
+			halfway.phase === "activating" &&
+			halfway.artifactIdentity.commit === IDENTITY_B.commit &&
+			halfway.components.find((c) => c.backend === "pi")?.state === "active" &&
+			halfway.components.find((c) => c.backend === "claude-code")?.state === "pending" &&
+			resumed.status === 0 &&
+			finished.phase === "active" &&
+			finished.artifactIdentity.commit === IDENTITY_B.commit &&
+			finished.components.every((c) => c.state === "active"),
 	);
 }
 

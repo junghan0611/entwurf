@@ -28,6 +28,7 @@ import { fileURLToPath } from "node:url";
 import {
 	ACTIVATABLE_BACKENDS,
 	ActivationError,
+	certifyArtifactForForward,
 	certifyPhaseForForward,
 	certifyRootsAgainstLedger,
 	componentStates,
@@ -39,7 +40,12 @@ import {
 	resolveEntwurfDataRoot,
 	writeLedger,
 } from "./herdr-activation.mjs";
-import { readCertifiedJournal, resolveRuntimeLayout, verifyInstalledRuntime } from "./herdr-runtime.mjs";
+import {
+	artifactCompleteness,
+	readCertifiedJournal,
+	resolveRuntimeLayout,
+	verifyInstalledRuntime,
+} from "./herdr-runtime.mjs";
 
 const PACKAGE_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -65,6 +71,13 @@ export function parseBackends(argv) {
 	return ACTIVATABLE_BACKENDS.filter((b) => requested.includes(b));
 }
 
+/** One line naming an artifact by its own anchor — the commit for a checkout, the spec for npm. */
+export function describeArtifact(identity) {
+	return identity.kind === "npm"
+		? `npm ${identity.name}@${identity.version}`
+		: `${identity.repository}@${identity.commit.slice(0, 12)} (${identity.packageName}@${identity.packageVersion})`;
+}
+
 export function activate(env, requested) {
 	const activation = resolveActivationLayout(env);
 	const runtime = resolveRuntimeLayout(env);
@@ -82,15 +95,21 @@ export function activate(env, requested) {
 	// runtime the journal says is 0.21.0 while the disk holds something else is two different answers
 	// to the question the wiring is about to be pointed at.
 	try {
-		verifyInstalledRuntime(runtime.activeDir, { name: journal.packageName, version: journal.packageVersion });
+		verifyInstalledRuntime(runtime.activeDir, artifactCompleteness(journal.artifactIdentity));
 	} catch (err) {
 		throw new ActivationError("activation-runtime-not-ready", `${err.code ?? "unknown"}: ${err.detail ?? err.message}`);
 	}
+	const current = journal.artifactIdentity;
 
 	// 2. the existing ledger, and the roots it was recorded against.
 	const ledger = readCertifiedLedger(activation);
 	certifyRootsAgainstLedger(ledger, roots, runtime.activeDir);
 	certifyPhaseForForward(ledger, requested);
+	// 2b. WHICH ARTIFACT this ledger is about. The root is stable and the bytes under it are not, so
+	// a reinstall can legally replace the artifact — but only from a settled ledger, with every
+	// component active and every activated backend still in the request. Everything up to the single
+	// checkpoint below is zero-write, so a refusal here leaves the previous ledger byte-identical.
+	const disposition = certifyArtifactForForward(ledger, current, requested);
 	const plan = planActivation({ ledger, requested });
 	const selected = [...plan.reconcile, ...plan.add];
 
@@ -178,10 +197,26 @@ export function activate(env, requested) {
 	}
 
 	// 4. record the intention, THEN mutate, checkpointing each component as it lands.
+	//
+	// ON A REBIND this write is the whole checkpoint, and it is ONE `writeLedger`: the new artifact
+	// identity and the `activating` phase land together. A crash before it leaves the old ledger
+	// intact — old identity, phase `active`, nothing half-said. A crash after it leaves a ledger that
+	// already names the new artifact with its components `pending`, which the SAME verb resumes.
+	// Splitting the identity and the phase across two writes would open a window in which the ledger
+	// claims the new artifact while still saying the old transaction finished.
+	//
+	// Every selected component is `pending` in that case, including ones already active: they are
+	// being re-pointed at a different artifact, and a run that left them labelled `active` would be
+	// claiming work it has not redone.
 	const states = componentStates(ledger);
-	for (const backend of selected) if (states[backend] !== "active") states[backend] = "pending";
+	for (const backend of selected) {
+		if (disposition === "rebind" || states[backend] !== "active") states[backend] = "pending";
+	}
 	const checkpoint = (phase) =>
-		writeLedger(activation, ledgerBody({ phase, runtimeRoot: runtime.activeDir, roots, states }));
+		writeLedger(
+			activation,
+			ledgerBody({ phase, runtimeRoot: runtime.activeDir, artifactIdentity: current, roots, states }),
+		);
 	checkpoint("activating");
 
 	for (const backend of selected) {
@@ -210,6 +245,7 @@ export function activate(env, requested) {
 
 	process.stdout.write(
 		`[herdr-plugin-activate] active: ${Object.keys(states).join(", ")} (runtime ${runtime.activeDir}, ` +
+			`artifact ${describeArtifact(current)}, ${disposition}, ` +
 			`pi=${roots.piAgentDir.source}, claude=${roots.claudeConfigDir.source}` +
 			`${plan.retained.length > 0 ? `, retained ${plan.retained.join(",")}` : ""})\n`,
 	);

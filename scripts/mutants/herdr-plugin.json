@@ -98,10 +98,10 @@
 		},
 		{
 			"claim": "HPL-MANIFEST-NO-FORBIDDEN-SECTIONS",
-			"title": "a [[build]] section runs in the operator's real HOME — herdr scrubs only HERDR_* from build env (src/cli/plugin.rs:1511-1529 @ c77af189) — and [[startup]]/[[events]] are where the watcher this lane refuses would grow (#116 M2-b)",
+			"title": "[[build]] became this plugin's ONE door in #116 M3-b3 and left the forbidden list, so the defect this claim must still catch is the volunteering kind: a [[startup]] hook runs on every herdr server start, in the operator's real HOME, without anyone asking — which is exactly the watcher-shaped growth this lane refuses (#116 M2-b, M3-b3)",
 			"subject": "plugins/herdr/herdr-plugin.toml",
 			"find": ["[[panes]]"],
-			"replace": ["[[build]]\ncommand = [\"npm\", \"ci\"]\n\n[[panes]]"],
+			"replace": ["[[startup]]\ncommand = [\"node\", \"lib/status.mjs\"]\n\n[[panes]]"],
 			"gate": ["bash", "run.sh", "check-herdr-plugin"],
 			"timeoutSeconds": 180,
 			"signature": "[QK:HPL-MANIFEST-NO-FORBIDDEN-SECTIONS]",

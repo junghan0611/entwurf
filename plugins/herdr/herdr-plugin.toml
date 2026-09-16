@@ -1,15 +1,21 @@
-# Entwurf's Herdr plugin — ONE read-only status pane, nothing else (#116 M2-b).
+# Entwurf's Herdr plugin — one read-only status pane and ONE build runner (#116 M2-b, M3-b3).
 #
 # Herdr owns the workbench: workspaces, tabs, panes, layout, and the agent lifecycle
 # it detects inside them. Entwurf owns the screwdriver: garden identity, official
 # delivery, receipts, named refusals. This manifest is where the two meet, and the
 # shape of the meeting is deliberately the smallest one that is useful.
 #
-# WHY THE FORBIDDEN SECTIONS ARE ABSENT, each for its own reason:
-#   [[build]]        — Herdr runs build commands with only HERDR_* scrubbed; HOME and
-#                      every cache under it stay the operator's (measured:
-#                      herdr src/cli/plugin.rs:1511-1529 @ c77af189). A plugin that
-#                      needs no build cannot write to a host it was never given.
+# WHY THERE IS NOW EXACTLY ONE [[build]]. A Herdr user who has never heard of npm types
+# `herdr plugin install` and expects their harnesses to become Entwurf citizens. That
+# installation is the only door this plugin gets, so the activation has to happen here —
+# and it happens through ONE runner, not a list of steps a manifest could reorder.
+# Herdr runs build commands with only HERDR_* scrubbed, so HOME and the caches under it
+# stay the operator's (measured: herdr src/cli/plugin.rs:1511-1529 @ c77af189); the
+# runner therefore writes only to Entwurf-owned XDG addresses it proves it owns first,
+# and it makes no claim about Herdr's own registry, which is committed only AFTER a build
+# succeeds (src/cli/plugin.rs:193-230).
+#
+# WHY THE OTHER SECTIONS ARE STILL ABSENT, each for its own reason:
 #   [[startup]]      — a startup hook runs on every server start. This pane answers a
 #                      question the operator asked; it does not volunteer.
 #   [[events]]       — pane.agent_status_changed is available and is exactly the hook
@@ -27,6 +33,12 @@ version = "0.1.0"
 min_herdr_version = "0.9.0"
 description = "Read-only Entwurf garden-citizen status for the panes in this Herdr session."
 platforms = ["linux"]
+
+# ONE runner: read Herdr's integration status, compute A = E ∩ H ∩ P, bootstrap the
+# Entwurf-owned runtime, and activate A through the INSTALLED package. Never through
+# this checkout — Herdr deletes it on uninstall and calls no cleanup hook.
+[[build]]
+command = ["node", "lib/build.mjs"]
 
 [[panes]]
 id = "status"

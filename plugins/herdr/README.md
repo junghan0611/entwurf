@@ -1,7 +1,8 @@
 # Entwurf — a Herdr plugin
 
-One overlay pane that shows which Herdr pane each Entwurf garden citizen is visible in,
-read once, when you ask.
+Two surfaces, and only two: one **install-time build** that makes the harnesses Herdr has
+integrated into Entwurf citizens, and one **overlay pane** that shows which Herdr pane each
+garden citizen is visible in, read once, when you ask.
 
 Herdr owns the workbench — workspaces, tabs, panes, layout, and the agent lifecycle it
 detects inside them. Entwurf owns the screwdriver — garden identity, official delivery,
@@ -16,11 +17,15 @@ herdr plugin link "$PWD/plugins/herdr"
 herdr plugin list --json
 ```
 
-Once this lane is published, from anywhere:
+From anywhere, once the commit you want is pushed — an npm release is NOT a prerequisite,
+because the committed lock names a commit of this repository rather than a registry version:
 
 ```bash
 herdr plugin install junghan0611/entwurf/plugins/herdr
 ```
+
+That install — and every reinstall, which is the refresh trigger — runs the one `[[build]]`
+below, so this is also the command that makes Pi and Claude Code Entwurf citizens.
 
 Open the pane:
 
@@ -40,13 +45,16 @@ herdr plugin uninstall junghan0611.entwurf   # a GitHub-managed install: unregis
 - **Herdr 0.9.0 or newer**, and you must open the pane from inside a Herdr session. That
   floor is the version this was measured against, not a guess; Herdr refuses to link a
   plugin whose `min_herdr_version` is newer than the running binary.
-- **Entwurf on `PATH` as `entwurf`**, or an absolute path in `ENTWURF_BIN`. If neither is
-  present the pane prints exactly `entwurf-not-found` and exits 0 — a host without
-  Entwurf is not a broken host, and installing Entwurf is not a plugin's job.
-- **Node.** The pane entry is a plain `.mjs` that uses only Node builtins — no
-  `node_modules`, no build step, no `npm install`, no `jq`. Entwurf is itself a Node
-  package, so a host that has Entwurf has Node; the manifest names `node` in its argv and
-  nothing else.
+- **For the install-time build:** `git`, `node` >= 24, `npm`, and network access for the
+  transient devDependencies the bridge build needs (~45s and a few hundred MB in an
+  Entwurf-owned XDG npm cache, reclaimed by `herdr-plugin-deactivate`). You do **not**
+  clone Entwurf, run `npm install`, or wait for an Entwurf npm release — the build acquires
+  the exact artifact its committed lock names.
+- **For the pane:** Entwurf on `PATH` as `entwurf`, or an absolute path in `ENTWURF_BIN`. If
+  neither is present the pane prints exactly `entwurf-not-found` and exits 0 — a host
+  without Entwurf is not a broken host, and the pane does not install one.
+- **Node, for the pane entry itself.** It is a plain `.mjs` using only Node builtins — no
+  `node_modules`, no `jq`; the manifest names `node` in its argv and nothing else.
 
 ## What it does, exactly
 
@@ -75,11 +83,12 @@ from a session filename — Entwurf owns that conversion, and a copy out here wo
 If two Herdr agents claim one pane, the activity column says `ambiguous` rather than
 picking one.
 
-## What it will not do
+## What the pane will not do
 
 - **It writes nothing.** Not to `HERDR_PLUGIN_STATE_DIR`, not to
   `HERDR_PLUGIN_CONFIG_DIR`, not anywhere. It has no state and no config.
-- **It installs and configures nothing**, and it touches no credential.
+- **It installs and configures nothing**, and it touches no credential — that is the
+  build's job, and the build runs only when Herdr installs or reinstalls this plugin.
 - **It does not deliver.** No `entwurf_v2`, no fresh call, no resume. To reach a citizen,
   dispatch to its garden id; this pane only tells you the ids exist and where they show up.
 - **`herdr-reported activity` is not liveness.** `idle` / `working` / `blocked` / `done` /
@@ -95,20 +104,84 @@ picking one.
   filename failed to read — a line that says only "a hazard exists" is one you cannot act
   on. Every field the provider attached is shown, in sorted key order.
 
-## The runtime leaf, not yet wired
+## What the one `[[build]]` does
 
-`lib/runtime-bootstrap.mjs` is present but **nothing calls it**: no manifest section, no pane, no
-harness activation. It exists so the next slice has a measured transaction to build on, and it is
-covered by `./run.sh check-herdr-runtime-bootstrap`.
+`herdr plugin install` runs `node lib/build.mjs` in the temporary checkout, and that is the only
+command this manifest declares. It composes, in this order:
 
-What it will own, when it is wired: acquiring the exact `@junghanacs/entwurf` version named by
-`runtime-lock.json` — which must agree with this checkout's own `package.json` — into an
-Entwurf-owned stable address, `$XDG_DATA_HOME/entwurf/herdr-plugin/runtime/active`. That address is
-a **real directory**, because the scoped wiring one slice above will record absolute commands under
-it and Pi records the owner root it was wired with; a per-version path would make every upgrade look
+1. `herdr integration status` — Herdr's own answer to "what is integrated here", prose only, exit 0
+   in every state it can describe. No binary, or a non-zero exit, is a **named refusal**: without a
+   listing an empty stand-in would read as "nothing is integrated" and quietly activate nothing.
+2. the pure profile leaf, which yields `A = E ∩ H ∩ P` with `P = {pi, claude-code}` frozen.
+3. a selected atom Herdr calls `outdated` or `needs repair`, or a malformed/duplicated row for one,
+   **fails here** — before any runtime work. `outdated (legacy < vN)` is also what an empty or
+   unreadable integration file looks like, so treating it as absence would install a runtime for a
+   harness whose integration cannot run it.
+4. `A` empty is a clean exit 0 that writes **nothing** — no runtime, no wiring, and no removal. A
+   host with neither harness integrated asked for nothing.
+5. the runtime bootstrap below.
+6. activation of `A` **through the installed package**, never through this checkout: Herdr deletes
+   the checkout on uninstall and calls no cleanup hook, so a checkout-side activation would be
+   undoable only by code that is about to vanish. The installed entry's absence is a named refusal,
+   and its capability is probed with a zero-write call whose own named refusal is the evidence.
+
+`./run.sh check-herdr-plugin-build` owns that composition. The real journey — a real
+`herdr plugin install` driving a real `npm pack` of the product git spec — is
+`LIVE=1 ./run.sh smoke-herdr-plugin-build-live`, because a git-spec pack builds the bridge through
+`prepare`, which installs devDependencies from the registry: a network axis no deterministic gate
+may claim.
+
+## The runtime, and the two sources it may come from
+
+`scripts/herdr-runtime.mjs` (shipped; `lib/runtime-bootstrap.mjs` is a one-line re-export) acquires
+Entwurf into an Entwurf-owned stable address, `$XDG_DATA_HOME/entwurf/herdr-plugin/runtime/active`.
+That address is a **real directory**, because the scoped wiring records absolute commands under it
+and Pi records the owner root it was wired with; a per-version path would make every upgrade look
 like a takeover. A candidate is staged beside it, verified as an installed package (exact
 `name@version`, the compiled entry, all three required bins present *and executable*, and a real
 `entwurf check-bridge` run), and only then replaces the active directory.
+
+`runtime-lock.json` carries a **closed `source` discriminant**, and it is committed on purpose: an
+environment variable or a caller flag would let whoever is running choose the acquisition authority,
+and a fallback would turn an unreachable source into "install something else instead".
+
+| `source` | anchor | what it is for |
+|---|---|---|
+| `npm` | exact `name@version` (coherent with this checkout's `package.json`) **plus** the sha512 npm published, compared against the tarball's own bytes before install | the production authority, unchanged |
+| `herdr-checkout` | the **commit** Herdr itself checked out, packed from the fixed remote `git+https://github.com/junghan0611/entwurf.git#<full sha>` | verification-only: a candidate needs no npm release, which is what makes iterating on one cheap |
+
+Three things about the checkout source are deliberate. There is **no input** anywhere in it — the
+commit comes from the checkout's own `git rev-parse --verify HEAD^{commit}` (a shallow clone answers
+that exactly as a full one does, which matters because Herdr's managed checkout *is* shallow) and
+the repository is a literal on both sides of the wire. The **pack form is part of the contract**:
+measured on npm 11.16.0, `npm pack <git spec>` runs `prepare` and not `prepack`, so the bridge is
+compiled and no global pnpm is needed, while `npm pack <directory>` runs `prepack`, calls `pnpm` and
+exits 127 on a clean host — only the git spec exists here. And since a commit has no published
+integrity, what replaces it is stated rather than implied: the commit pins the tree, the digest
+records the bytes, and the installed-runtime verifier decides. A remote that cannot serve the commit
+is `runtime-checkout-source-unavailable` and **substitutes nothing**.
+
+**The authority check happens before anything is installed.** The build asks — through the same
+shipped functions the installed activation verb runs — whether this artifact may take over this
+host's activation: are the recorded harness roots still these, is the ledger in a phase that can be
+built over, does the ledger still describe the runtime actually standing at the root, and does the
+request still cover every activated backend. A refusal there leaves the runtime, its journal, our
+cache, the ledger and both harnesses' bytes exactly as they were found. (An earlier cut bootstrapped
+first and refused afterwards, which left the stable root holding an artifact no record accounted for
+while the run reported failure — and the wiring names that root, not the version.) After the install,
+what landed must be exactly what was admitted; a source that moved in between is a named refusal.
+
+**Records written before this contract are refused, not migrated.** A v1 journal or ledger fails
+certification by name: the older shape cannot say WHICH artifact it was, so nothing can be inferred
+from it. On such a host, run `entwurf herdr-plugin-deactivate` (or clear the runtime and ledger state
+by hand) before installing again.
+
+A **switch between the two sources is refused**, not inferred: it is a different acquisition
+authority inheriting an existing activation, so it needs an explicit `herdr-plugin-deactivate` first.
+Within one source, a new commit under the same stable root is a legal **rebind** — from a settled
+ledger, with every component active and every activated backend still requested — and it lands in
+one atomic ledger write. A version is never an identity here: two commits can both call themselves
+`0.21.0`.
 
 **It puts nothing on `PATH`.** An earlier cut exposed bare `entwurf` / `entwurf-bridge` through an
 owned bin directory; that was load-bearing on a condition nothing here can establish — there is no
@@ -132,21 +205,35 @@ restored over it when `active` turns out to be corrupt. The provenance of the ru
 is carried in the journal for exactly as long as a backup can exist, so a host that dies mid-install
 never holds recoverable bytes with unrecoverable provenance.
 
-Two boundaries it will not cross. It installs with `--ignore-scripts` into an Entwurf-owned npm
-cache, because one plugin command is not consent to run a package's install hooks in your HOME — so
-the artifact has to work with its own scripts never run, which is why completeness is verified
-rather than assumed. And it records success as `runtime-ready`, never as "installed": `[[build]]`
-finishes *before* Herdr re-reads the manifest, swaps its checkout and registers the plugin, so at
-that moment nobody knows whether Herdr will commit.
+Two boundaries it will not cross. It installs the local tarball with `--ignore-scripts` into an
+Entwurf-owned npm cache, because one plugin command is not consent to run a package's install hooks
+in your HOME — so the artifact has to work with its own scripts never run, which is why completeness
+is verified rather than assumed. (That flag belongs to the *install*; putting it on a pack would
+skip `prepare` and produce a tarball with no compiled entry, which the verifier then refuses by
+name.) And it records success as `runtime-ready`, never as "installed": `[[build]]` finishes *before*
+Herdr re-reads the manifest, swaps its checkout and registers the plugin, so at that moment nobody
+knows whether Herdr will commit.
+
+**That gap is named, not closed.** If Herdr's own commit then fails, the runtime and the activation
+this build performed simply remain — there is no cleanup hook for Herdr to call — and the next
+successful install reconciles them rather than duplicating them. Nothing here calls the pair atomic.
 
 Herdr has no cleanup hook, so `herdr plugin uninstall` leaves that runtime **retained, not
-cleaned**. A separate explicit Entwurf surface will own removing it; the inverse here establishes
-every deletion authority before the first deletion, and removes cache → runtime → journal so the
-ledger outlives what it authorised.
+cleaned**. `entwurf herdr-plugin-deactivate`, shipped in the npm package rather than in the deleted
+checkout, is the explicit surface that takes it back: it establishes every deletion authority before
+the first deletion, and removes components → runtime → ledger so the record outlives what it
+authorised.
 
 **Where the real package is proven.** The focused gate drives a *fixture* package, which proves the
 transaction and not this package. `./run.sh check-pack-install` packs this checkout, installs the
 tarball into a fresh temp project, and runs the same `verifyInstalledRuntime` against it.
+
+**Switching the production source is a re-proof, not a config change.** Moving from the candidate
+carrier to npm — or to a GitHub Release tarball plus its sha512 — re-decides where the bytes come
+from, and the candidate's evidence does not transfer. Before such a release: exact acquisition and
+integrity, the installed runtime (name@version, compiled entry, three executable bins, real
+`check-bridge`), the swap and torn-swap recovery, activation and deactivation, and the
+package-consumer proof all have to be re-run against that source.
 
 ## Not part of the npm package
 

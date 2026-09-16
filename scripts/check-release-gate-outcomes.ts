@@ -309,6 +309,13 @@ function runSubcommand(sub: string, env: Record<string, string | undefined>): { 
 		// place in the aggregate that blocks every cut — and herdr is an OPTIONAL rail, so a cut
 		// on a host without it would block for a capability the product does not require.
 		"smoke-herdr-fresh-call-live": ["VERIFY.md", "The release aggregate does not yet require the herdr rail"],
+		// #116 M3-b3, same rail and the same reason: the plugin build smoke drives a REAL
+		// `herdr plugin install` over the network. herdr is optional, so an aggregate that required it
+		// would block a cut on a host that does not have the rail at all. Its first LIVE acceptance
+		// landed 2026-09-16 (5 assertions, 0 skipped) — one run is evidence the axis works, not the run
+		// history that earns a place in the gate blocking every cut. On-demand, with the exclusion
+		// stated where an operator reads it.
+		"smoke-herdr-plugin-build-live": ["VERIFY.md", "The release aggregate does not require the plugin build smoke"],
 	};
 
 	const allLive = globSync("scripts/smoke-*live*.{ts,sh}", { cwd: REPO_DIR })

@@ -7,9 +7,10 @@
  * Static — the manifest is read with the same TOML parser the package already depends on
  * and checked against the shape herdr 0.9.0 actually accepts (`min_herdr_version`
  * required and semver, pane ids dot-free, popup-only sizing, argv arrays). The sections
- * that are ABSENT are asserted as hard as the ones present: `[[build]]` would run in the
- * operator's real HOME, `[[events]]`/`[[startup]]` would grow a watcher, `[[actions]]`
- * would send a report nobody can read into a 64 KiB log.
+ * that are ABSENT are asserted as hard as the ones present: `[[events]]`/`[[startup]]`
+ * would grow a watcher, `[[actions]]` would send a report nobody can read into a 64 KiB
+ * log. `[[build]]` is no longer among them (#116 M3-b3) — the single runner it may call is
+ * `check-herdr-plugin-build`'s subject.
  *
  * Behavioural — the REAL pane entry is spawned with a stub `entwurf` and a stub
  * `HERDR_BIN_PATH`, and every stub call is appended to a log, so "exactly one read each"
@@ -96,12 +97,17 @@ const manifest = parseToml(fs.readFileSync(path.join(PLUGIN_DIR, "herdr-plugin.t
 	// Sizing is popup-only in herdr; declaring it on an overlay is `invalid_plugin_pane_size`.
 	ok("no popup-only sizing on an overlay pane", !("width" in pane) && !("height" in pane));
 
+	// `[[build]]` LEFT this list in #116 M3-b3: a Herdr user's one install command is the only door
+	// this plugin gets, so the activation has to happen there. It is owned by
+	// `check-herdr-plugin-build`, which pins the single runner it may call; what stays forbidden here
+	// is everything that would VOLUNTEER — a startup hook on every server start, an event hook where
+	// a watcher would grow, an action whose output goes to a 64 KiB log nobody reads.
 	assert.deepEqual(
-		["build", "startup", "events", "actions", "link_handlers"].filter((k) => k in manifest),
+		["startup", "events", "actions", "link_handlers"].filter((k) => k in manifest),
 		[],
-		"[QK:HPL-MANIFEST-NO-FORBIDDEN-SECTIONS] the manifest declares no build, startup, event, action or link-handler section — a build command runs in the operator's real HOME (herdr scrubs only HERDR_*), and a startup or event hook is where the watcher this lane refuses would grow",
+		"[QK:HPL-MANIFEST-NO-FORBIDDEN-SECTIONS] the manifest declares no startup, event, action or link-handler section — a startup or event hook is where the watcher this lane refuses would grow, and an action sends a report nobody can read into a 64 KiB log. The one `[[build]]` section is `check-herdr-plugin-build`'s subject, not an exception carved out here",
 	);
-	console.log("  ok    the manifest declares no build / startup / event / action / link-handler section");
+	console.log("  ok    the manifest declares no startup / event / action / link-handler section");
 	passed++;
 }
 

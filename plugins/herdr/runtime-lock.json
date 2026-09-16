@@ -1,7 +1,6 @@
 {
-	"schemaVersion": 1,
-	"comment": "The exact Entwurf package this plugin installs, and the integrity npm published for it. Coherent with the checkout package.json by gate; refreshing it at release is a separate contract (#116 M3-b1).",
-	"name": "@junghanacs/entwurf",
-	"version": "0.21.0",
-	"integrity": "sha512-nqAHtuWwKeO1DLIcTIyz7LwMRHsk9D/lViT2kFTtmPE45dlniLAqCa0vkB+RVdHZ7+RYcEmHB3BMoNGaD0xrOQ=="
+	"schemaVersion": 2,
+	"comment": "WHICH SOURCE this plugin acquires its Entwurf runtime from, and it is committed on purpose (#116 M3-b3): an environment variable or a caller flag would let the acquisition authority be chosen by whoever happens to be running, and a fallback would turn an unreachable source into 'install something else'. `herdr-checkout` packs the exact commit Herdr checked out, from the fixed junghan0611/entwurf remote, so a candidate needs no npm release; the `npm` branch (name+version+integrity) remains the production authority and is switched to by an explicit deactivate/activate, never inherited.",
+	"source": "herdr-checkout",
+	"repository": "junghan0611/entwurf"
 }

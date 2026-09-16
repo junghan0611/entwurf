@@ -28,9 +28,10 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import { artifactStage, certifyArtifactIdentity, sameArtifactRequest } from "./herdr-runtime.mjs";
 
 /** Ledger format. Bump only with a reader that understands both. */
-export const ACTIVATION_SCHEMA_VERSION = 1;
+export const ACTIVATION_SCHEMA_VERSION = 2;
 
 /** Set P, frozen. The ledger may never name anything else. */
 export const ACTIVATABLE_BACKENDS = Object.freeze(["pi", "claude-code"]);
@@ -40,6 +41,7 @@ export const LEDGER_KEYS = Object.freeze([
 	"schemaVersion",
 	"phase",
 	"runtimeRoot",
+	"artifactIdentity",
 	"piAgentDir",
 	"claudeConfigDir",
 	"claudeUserConfig",
@@ -178,6 +180,15 @@ export function readCertifiedLedger(layout) {
 	if (typeof parsed.runtimeRoot !== "string" || !path.isAbsolute(parsed.runtimeRoot)) {
 		throw new ActivationError("activation-ledger-uncertified", "runtimeRoot is not an absolute path");
 	}
+	// The SAME union and the SAME certifier the runtime journal uses — imported, not re-implemented.
+	// A ledger that recorded the artifact in its own words could disagree with the journal about
+	// which runtime the wiring below it names, and nothing would be able to say which one was right.
+	// A READY shape only: the ledger describes an activation against an artifact that was observed.
+	try {
+		certifyArtifactIdentity("artifactIdentity", parsed.artifactIdentity, "ready");
+	} catch (err) {
+		throw new ActivationError("activation-ledger-uncertified", `artifactIdentity: ${err.detail ?? err.message}`);
+	}
 	certifyRoot("piAgentDir", parsed.piAgentDir);
 	certifyRoot("claudeConfigDir", parsed.claudeConfigDir);
 	certifyRoot("claudeUserConfig", parsed.claudeUserConfig);
@@ -297,6 +308,126 @@ export function certifyPhaseForForward(ledger, requested) {
 	}
 }
 
+/**
+ * Does the ledger describe the runtime that is ACTUALLY standing at the root right now?
+ *
+ * This is the pre-change consistency question, and it is asked BEFORE anything is installed (#116
+ * M3-b3 B1). If the ledger names one artifact and the journal says a different one is at the
+ * address, then some earlier run replaced the bytes without rebinding the record — and a build that
+ * proceeded would be layering a third artifact on top of a disagreement it did not cause and cannot
+ * resolve. That refusal has to happen while the host is still exactly as it was found.
+ *
+ * IT MUST NOT BE ASKED AFTER A BOOTSTRAP. Once the swap has happened, "ledger names the old
+ * artifact, runtime is the new one" is the NORMAL mid-rebind state — the very state the single
+ * atomic checkpoint exists to close. So this function has exactly one caller position: the
+ * read-only authority check that runs before the runtime is touched.
+ *
+ * @param current the READY identity describing what is at the active root, or null when nothing does.
+ */
+export function certifyLedgerDescribesRuntime(ledger, current) {
+	if (ledger === null) return;
+	if (current === null) {
+		throw new ActivationError(
+			"activation-runtime-ledger-mismatch",
+			`this ledger records an activation against ${JSON.stringify(ledger.artifactIdentity)} but no certified journal ` +
+				`describes what is standing at ${ledger.runtimeRoot}; run \`herdr-plugin-deactivate\` (or repair that runtime) ` +
+				"before installing over a state nothing accounts for",
+		);
+	}
+	if (!sameArtifactRequest(ledger.artifactIdentity, current)) {
+		throw new ActivationError(
+			"activation-runtime-ledger-mismatch",
+			`the ledger was recorded against ${JSON.stringify(ledger.artifactIdentity)} while the runtime at ` +
+				`${ledger.runtimeRoot} is ${JSON.stringify(current)} — an earlier run replaced the bytes without rebinding ` +
+				"the record, and this build may not stack a third artifact on that disagreement",
+		);
+	}
+}
+
+/**
+ * The READY identity that describes what is at the active root, or null when nothing does.
+ *
+ * A `runtime-ready` journal describes itself. An `installing` or `removing` entry describes an
+ * intention, so what is actually standing there is the carried `previousRuntime` — which is exactly
+ * why that field is carried at all.
+ */
+export function runtimeIdentityOnDisk(journal) {
+	if (journal === null) return null;
+	if (journal.phase === "runtime-ready") return journal.artifactIdentity;
+	if (artifactStage(journal.artifactIdentity) === "ready" && journal.previousRuntime === null) {
+		return journal.artifactIdentity;
+	}
+	return journal.previousRuntime;
+}
+
+/**
+ * Does the ledger already describe the artifact this activation is being pointed at — and if not,
+ * may this run REBIND it (#116 M3-b3 C)?
+ *
+ * The question exists because the runtime address is stable while the artifact at it is not. A
+ * reinstall can legitimately replace the bytes under the same root: same source, new commit. The
+ * wiring does not change (it names the root, not the version), but the ledger's claim about WHICH
+ * artifact it activated does, and a ledger that keeps naming the previous commit is a teardown and
+ * a doctor aimed at an artifact that is no longer there.
+ *
+ * ONE function, TWO call positions, and that is deliberate. Before a bootstrap the `target` is the
+ * identity this build INTENDS to install (a requested shape); after a bootstrap it is the identity
+ * now standing at the root (a ready shape). `sameArtifactRequest` reads only the anchor fields both
+ * shapes carry — kind plus commit, or kind plus name/version/integrity — so the same gate answers
+ * the same question at both points, and a build cannot be admitted by one and refused by the other.
+ *
+ * WHAT IS REFUSED, AND WHY EACH ONE:
+ *   - a SOURCE change (npm ⇄ herdr-checkout) is not a reinstall, it is a different acquisition
+ *     authority taking over an existing activation. It needs the operator's explicit teardown, not
+ *     an inference made mid-build.
+ *   - a ledger that is not `active` is a transaction somebody else is in the middle of. Rebinding
+ *     over it would overwrite the only record of how far that run got.
+ *   - a component that is not `active` is half-wired; rebinding would relabel it as belonging to the
+ *     new artifact without anyone having pointed it there.
+ *   - a request that DROPS a backend the ledger holds would leave that backend's wiring attached to
+ *     an artifact no record names. Add-only is preserved by requiring a superset, not by silently
+ *     rebinding the rest.
+ *
+ * @returns `"fresh"` (no ledger) | `"match"` (already this artifact) | `"rebind"` (legal, and the
+ *          caller must perform it in ONE atomic ledger write before any mutation).
+ */
+export function certifyArtifactForForward(ledger, target, requested) {
+	if (ledger === null) return "fresh";
+	if (sameArtifactRequest(ledger.artifactIdentity, target)) return "match";
+	if (ledger.artifactIdentity.kind !== target.kind) {
+		throw new ActivationError(
+			"activation-artifact-source-drifted",
+			`this activation was recorded against a ${ledger.artifactIdentity.kind} artifact and the one it is being ` +
+				`pointed at for ${ledger.runtimeRoot} is ${target.kind}; run \`herdr-plugin-deactivate\` and activate again ` +
+				"rather than letting one acquisition source inherit the other's activation",
+		);
+	}
+	if (ledger.phase !== "active") {
+		throw new ActivationError(
+			"activation-rebind-refused",
+			`the artifact this activation would name is changing but the ledger is ${ledger.phase}; finish or retry that ` +
+				"transaction first — rebinding over it would discard its record of how far it got",
+		);
+	}
+	const unsettled = ledger.components.filter((c) => c.state !== "active").map((c) => `${c.backend}=${c.state}`);
+	if (unsettled.length > 0) {
+		throw new ActivationError(
+			"activation-rebind-refused",
+			`the artifact this activation would name is changing but ${unsettled.join(", ")} is not active; a half-wired ` +
+				"component may not be relabelled as belonging to the new artifact",
+		);
+	}
+	const dropped = ledger.activatedBackends.filter((b) => !requested.includes(b));
+	if (dropped.length > 0) {
+		throw new ActivationError(
+			"activation-rebind-refused",
+			`the artifact this activation would name is changing but this request omits ${dropped.join(", ")}, whose wiring ` +
+				`names that same root; retry with every activated backend included (${[...new Set([...requested, ...ledger.activatedBackends])].sort().join(" ")})`,
+		);
+	}
+	return "rebind";
+}
+
 export function certifyPhaseForInverse(ledger) {
 	if (ledger === null) return;
 	if (ledger.phase === "activating") {
@@ -361,11 +492,12 @@ export function componentRow(backend, state) {
 }
 
 /** A whole ledger body, canonical by construction. */
-export function ledgerBody({ phase, runtimeRoot, roots, states }) {
+export function ledgerBody({ phase, runtimeRoot, artifactIdentity, roots, states }) {
 	const backends = ACTIVATABLE_BACKENDS.filter((b) => Object.hasOwn(states, b));
 	return {
 		phase,
 		runtimeRoot,
+		artifactIdentity,
 		piAgentDir: roots.piAgentDir,
 		claudeConfigDir: roots.claudeConfigDir,
 		claudeUserConfig: roots.claudeUserConfig,

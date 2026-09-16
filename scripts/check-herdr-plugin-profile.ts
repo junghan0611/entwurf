@@ -310,26 +310,38 @@ function piRowCode(row: string): string | null {
 
 // ── 13. atoms outside P are observed, never planned ─────────────────────────
 {
-	const full = buildActivationProfile(
-		listing(
-			PI_OK,
-			"omp: not installed (/home/u/.omp/agent/extensions/herdr-omp-agent-state.ts)",
-			CLAUDE_OK,
-			"codex: current (v8) (/home/u/.codex/herdr-agent-state.sh)",
-			"opencode: current (v11) (/home/u/.config/opencode/plugins/herdr-agent-state.js)",
-			"grok: outdated (legacy < v1) (/home/u/.grok/hooks/herdr-agent-state.sh)",
-			"weirdatom: a state this plugin has never heard of (/home/u/.weird/x)",
-			"kilo:broken declaration with no space (/home/u/.config/kilo/plugin/herdr-agent-state.js)",
-		),
+	// "may not refuse the whole listing" is HALF of this claim, so the refusal is CAUGHT and judged
+	// by the assertion below. Calling straight through would let a leaf that started refusing kill
+	// this cell with its own error before the claim it violates is ever evaluated — a red attributed
+	// to nobody.
+	const crowded = listing(
+		PI_OK,
+		"omp: not installed (/home/u/.omp/agent/extensions/herdr-omp-agent-state.ts)",
+		CLAUDE_OK,
+		"codex: current (v8) (/home/u/.codex/herdr-agent-state.sh)",
+		"opencode: current (v11) (/home/u/.config/opencode/plugins/herdr-agent-state.js)",
+		"grok: outdated (legacy < v1) (/home/u/.grok/hooks/herdr-agent-state.sh)",
+		"weirdatom: a state this plugin has never heard of (/home/u/.weird/x)",
+		"kilo:broken declaration with no space (/home/u/.config/kilo/plugin/herdr-agent-state.js)",
 	);
-	const plan = JSON.stringify([full.activate, full.skip, full.fail]);
+	let full: ReturnType<typeof buildActivationProfile> | null = null;
+	let refused: string | null = null;
+	try {
+		full = buildActivationProfile(crowded);
+	} catch (err) {
+		refused = `${(err as { code?: string }).code ?? "unknown"}: ${(err as Error).message}`;
+	}
+	const plan = full === null ? "<refused>" : JSON.stringify([full.activate, full.skip, full.fail]);
 	ok(
 		"[QK:HIP-UNSELECTED-NEVER-ACTIVATES] rows outside P are OBSERVED and never planned, and neither an unsupported " +
 			"atom nor an unparsable one disturbs the two verdicts that matter — OpenCode current v11 is the deliberate " +
 			"negative control (it must receive zero Entwurf state even while herdr reports it installed), Codex is out " +
 			"of this lane by GLG decision, and neither a future atom this parser cannot read nor a broken declaration " +
-			`belonging to one may refuse the whole listing (plan=${plan} observed=${JSON.stringify(full.observedOtherAtoms)})`,
-		full.activate.join(",") === "pi,claude-code" &&
+			`belonging to one may refuse the whole listing (plan=${plan} refused=${JSON.stringify(refused)} ` +
+			`observed=${JSON.stringify(full === null ? null : full.observedOtherAtoms)})`,
+		refused === null &&
+			full !== null &&
+			full.activate.join(",") === "pi,claude-code" &&
 			full.skip.length === 0 &&
 			full.fail.length === 0 &&
 			!plan.includes("opencode") &&
