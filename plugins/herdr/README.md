@@ -95,6 +95,59 @@ picking one.
   filename failed to read — a line that says only "a hazard exists" is one you cannot act
   on. Every field the provider attached is shown, in sorted key order.
 
+## The runtime leaf, not yet wired
+
+`lib/runtime-bootstrap.mjs` is present but **nothing calls it**: no manifest section, no pane, no
+harness activation. It exists so the next slice has a measured transaction to build on, and it is
+covered by `./run.sh check-herdr-runtime-bootstrap`.
+
+What it will own, when it is wired: acquiring the exact `@junghanacs/entwurf` version named by
+`runtime-lock.json` — which must agree with this checkout's own `package.json` — into an
+Entwurf-owned stable address, `$XDG_DATA_HOME/entwurf/herdr-plugin/runtime/active`. That address is
+a **real directory**, because the scoped wiring one slice above will record absolute commands under
+it and Pi records the owner root it was wired with; a per-version path would make every upgrade look
+like a takeover. A candidate is staged beside it, verified as an installed package (exact
+`name@version`, the compiled entry, all three required bins present *and executable*, and a real
+`entwurf check-bridge` run), and only then replaces the active directory.
+
+**It puts nothing on `PATH`.** An earlier cut exposed bare `entwurf` / `entwurf-bridge` through an
+owned bin directory; that was load-bearing on a condition nothing here can establish — there is no
+reason a fresh `$XDG_DATA_HOME/…/bin` is on a clean host's PATH, and this plugin may not edit a
+shell profile or write into a bin directory it does not own. The scoped wiring will name absolute
+commands under the stable root instead.
+
+**Nothing at that address is moved without proof, and nothing is created before the judgement.** A
+certified journal — exact keys, exact schema, a phase whose digest matches the writer state it
+implies, an exact package identity, and *this host's* stable root — is the only thing that makes
+those directories ours. A directory sitting there with no journal behind it is somebody else's, and
+the transaction refuses rather than renaming it away, with its own root still absent. Disk facts come
+from `lstat`, because `existsSync` calls a dangling symlink "absent" and a link into another tree "a
+directory": only an absent path or a real directory may stand at these addresses.
+
+**The last good runtime is never thrown away.** `active → previous` then `staging → active` is two
+renames and a process can die between them, so all eight presence combinations are read as **states**
+with names. A backup is not garbage merely because `active` also exists — which of the two is usable
+is a question only inspection answers, so the backup is kept until `active` has been inspected, and
+restored over it when `active` turns out to be corrupt. The provenance of the runtime being replaced
+is carried in the journal for exactly as long as a backup can exist, so a host that dies mid-install
+never holds recoverable bytes with unrecoverable provenance.
+
+Two boundaries it will not cross. It installs with `--ignore-scripts` into an Entwurf-owned npm
+cache, because one plugin command is not consent to run a package's install hooks in your HOME — so
+the artifact has to work with its own scripts never run, which is why completeness is verified
+rather than assumed. And it records success as `runtime-ready`, never as "installed": `[[build]]`
+finishes *before* Herdr re-reads the manifest, swaps its checkout and registers the plugin, so at
+that moment nobody knows whether Herdr will commit.
+
+Herdr has no cleanup hook, so `herdr plugin uninstall` leaves that runtime **retained, not
+cleaned**. A separate explicit Entwurf surface will own removing it; the inverse here establishes
+every deletion authority before the first deletion, and removes cache → runtime → journal so the
+ledger outlives what it authorised.
+
+**Where the real package is proven.** The focused gate drives a *fixture* package, which proves the
+transaction and not this package. `./run.sh check-pack-install` packs this checkout, installs the
+tarball into a fresh temp project, and runs the same `verifyInstalledRuntime` against it.
+
 ## Not part of the npm package
 
 `plugins/` is not in the `@junghanacs/entwurf` tarball. This plugin is consumed through

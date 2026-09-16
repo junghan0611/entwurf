@@ -181,6 +181,7 @@ Usage:
   ./run.sh check-socket-discovery      # deterministic gate (0.11 Stage 0 step 4, fact-provider slice 3): SOCKET-axis scanSocketProbes — probes (dir sockets) ∪ (in-domain citizen canonical paths) 3-valued; dormant citizen no-file → dead (resumable, not unprobed), stall → indeterminate (F3), dir hygiene/dedup/missing-dir + e2e → resolveFactList; readdir/probe injected, no IO
   ./run.sh check-meta-facts            # deterministic gate for the meta-facts projection (#65): drives the REAL CLI — full-record join, parse-before-uniqueness, no-winner duplicates, drift/symlink/invalid-UTF-8 defects in-band, deterministic bytes, exit contract 0/2/3, dispatch+emit reachability
   ./run.sh check-herdr-plugin          # deterministic gate for the #116 M2-b herdr plugin (`plugins/herdr/`): STATIC manifest shape for herdr 0.9.0 + the forbidden sections ([[build]]/[[startup]]/[[events]]/[[actions]]/[[link_handlers]]) asserted absent; BEHAVIOURAL drive of the REAL pane entry against a stub `entwurf` and stub HERDR_BIN_PATH that LOG every call — exactly one peer-facts + one agent list per open (counted, not claimed), skip-by-name when Entwurf is absent, four distinct named refusals instead of an empty table, ambiguous never first-wins, diagnostics shown, activity in its own column, and zero writes to the plugin state/config dirs. No herdr binary, no Entwurf install
+  ./run.sh check-herdr-runtime-bootstrap # deterministic gate for the #116 M3-b1 runtime leaf (`plugins/herdr/lib/runtime-bootstrap.mjs`): the Entwurf-owned stable active root as a REAL directory (nothing is put on PATH — the scoped wiring above names ABSOLUTE commands under it), ownership decided BEFORE the first mkdir, disk facts from lstat (a dangling symlink is not 'absent' and a link into another tree is not a directory), exact name@version + compiled entry + all three required bins present AND executable + a real `check-bridge`, the plugin-owned artifact lock coherent with the checkout, the owned npm cache and --ignore-scripts, a CERTIFIED journal (non-object/array/scalar/blank-identity/phase-contradicting-digest all refused) as the only ownership proof, all EIGHT active/staging/previous combinations named, the last good runtime never lost (torn swap AND corrupt-active beside a good backup), prior provenance carried across an install that may not finish, a failed candidate leaving the running runtime byte-identical, idempotent same-spec reinstall, a journal believed only while the disk backs it, a preflight-then-mutate inverse taking runtime last, and the refusal to record Herdr's commit as ours. NETWORK ZERO, npm ZERO — it drives a FIXTURE package, so the ACTUAL package proof lives in check-pack-install
   ./run.sh check-herdr-plugin-profile  # deterministic gate for the #116 M3-a PURE activation leaf (`plugins/herdr/lib/integration-profile.mjs`): the closed {pi→pi, claude→claude-code} table, exactly-one-row-or-named-refusal, the FRONT-ANCHORED state grammar (a `/srv/current (v9)/` directory name may not decide a verdict), no path in the plan, outdated/needs-repair as named FAILs, not-installed as a zero-write SKIP, `current` as herdr's admission with no floor of our own, OpenCode observed but never planned, and the leaf's purity. Listing strings only — no herdr binary, no install, no environment, no writes
   ./run.sh check-peer-facts            # deterministic gate for the peer-facts projection (#116 M2-a): drives the REAL CLI with every ambient root sandboxed — placement crosses STRUCTURED (never the human `herdr <pane>` string), the peer keyset is exactly the provider's facts (no herdr agent_status may enter an entwurf payload), no socket coordinate is published (#50 C4), diagnostics in-band, the probed socket world is the one ENTWURF_DIR names (proved by a record-less socket surfacing — there is no field to echo), no observation budget, exit contract 0/2/3, dispatch+emit reachability. No herdr binary
   ./run.sh check-meta-listing          # deterministic gate: META-STORE facts axis — kind-carrying entries; non-regular records are never read, parse/drift become diagnostics, duplicate nativeSessionId quarantines every rival but not unrelated citizens; strict throws / collect partial; pure injected IO
@@ -280,7 +281,7 @@ Usage:
   ./run.sh check-pack                 # publish gate (dry-run): npm pack --dry-run + tarball invariants (runtime-critical present, dev residue absent)
   ./run.sh check-pack-pin-matcher     # pure self-test of check-pack-install's pin-leak matcher against synthetic .pnpm lookalikes, one cell per property: version boundary (@0.85.10 must leak, @0.85.1 bare or with either measured peer-hash must pass) and closure prefix (an off-pin @earendil-works/chord must leak — it carries no `pi-` prefix); snapshot-safe qualification oracle, also run first inside check-pack-install
   ./run.sh check-fresh-cut-gate       # SOURCE cell of the generation-boundary proof (IN pnpm run check:full): drives real install/setup/fresh-cut in a sandbox; certification refusal is pre-write, quiescence is fail-closed, archives preserve bytes, and the #54 exit matrix distinguishes complete / no-move / usage / incomplete transition / complete-with-cleanup-residue. No model/network/cost
-  ./run.sh check-pack-install         # heavy publish gate (prepublishOnly): actual npm pack + tar -tf + fresh-temp install smoke with the pinned pi peers (pins derived from the package.json devDep; check-dep-versions binds them) + the npm-installed bridge BOOTS (tools/list) and DELIVERS (tools/call entwurf_v2 → .msg lands) + the installed all-absent and copilot-present (four-unit fake-vendor) `entwurf setup` rows + the INSTALLED generation lifecycle on a seeded previous-generation host (REFUSE before activation writes / zero Claude invocations → installed fresh-cut archives + opens empty → install-meta-bridge PASSES) + the INSTALLED-PACKAGE branch of the Copilot and OMP birth installers actually RUN (compiled entry selected, no raw .ts, and a real birth edge mints a citizen — the half a required-artifact list can never stand in for)
+  ./run.sh check-pack-install         # heavy publish gate (prepublishOnly): actual npm pack + tar -tf + fresh-temp install smoke + the #116 M3-b1 herdr-plugin RUNTIME VERIFIER run against that actual installed tarball (the focused check-herdr-runtime-bootstrap drives a fixture; THIS is where the real package is proven) with the pinned pi peers (pins derived from the package.json devDep; check-dep-versions binds them) + the npm-installed bridge BOOTS (tools/list) and DELIVERS (tools/call entwurf_v2 → .msg lands) + the installed all-absent and copilot-present (four-unit fake-vendor) `entwurf setup` rows + the INSTALLED generation lifecycle on a seeded previous-generation host (REFUSE before activation writes / zero Claude invocations → installed fresh-cut archives + opens empty → install-meta-bridge PASSES) + the INSTALLED-PACKAGE branch of the Copilot and OMP birth installers actually RUN (compiled entry selected, no raw .ts, and a real birth edge mints a citizen — the half a required-artifact list can never stand in for)
   ./run.sh check-install-container    # 0.12.8 (#51 C): Linux artifact-CONSUMER gate — one candidate .tgz handed read-only to a checkout-invisible node:<engines-major>-bookworm cell. Default packs once to temp; ENTWURF_CANDIDATE_TGZ=/absolute/preserved.tgz consumes those exact bytes with no re-pack and prints canonical path+sha256 for release. Non-root global PATH install, frozen package, MCP tools/list, fake-Claude install-meta-bridge, path+sha256 fence, strict doctor, and the GENERATION host-state matrix (clean / v3-only store bytes unchanged / previous-generation REFUSE→fresh-cut→retry PASS) seeded inline. Docker missing = honest SKIP; ENTWURF_REQUIRE_DOCKER=1 makes that RED (required CI)
   ./run.sh install [project-dir]      # INTERNAL part of `setup` (project .pi/settings.json wiring) + npm-consumer entry — prefer `setup`, don't call directly for dev
   ./run.sh remove [project-dir]       # remove entwurf entries from project .pi/settings.json (project scope only; global user-scope citizen left intact)
@@ -1792,6 +1793,20 @@ check_herdr_plugin() {
   # fixture check-herdr-sandbox forbids. No herdr binary, no Entwurf install, no writes
   # outside mkdtemp.
   run_ts scripts/check-herdr-plugin.ts
+}
+
+check_herdr_runtime_bootstrap() {
+  # Deterministic gate for the #116 M3-b1 runtime transaction. Every root comes from XDG, so the
+  # gate hands the module a mkdtemp HOME and asserts nothing appeared outside the two XDG roots it
+  # was given. `acquire` is a FUNCTION seam: the fixture stands in for the REGISTRY, so this gate
+  # proves the transaction (ownership certification, torn-swap recovery, leftover states, rollback,
+  # idempotence, the inverse) but NOT that the real Entwurf package boots — that actual-package
+  # proof is a named cell inside check-pack-install, which runs this module's own
+  # verifyInstalledRuntime against the tarball it packed and installed. npm is pinned here the only
+  # way a hermetic gate honestly can: the production pack/install argv and the npm environment are
+  # pure functions and are asserted directly. No network, no npm, no operator HOME, no writes
+  # outside mkdtemp.
+  run_ts scripts/check-herdr-runtime-bootstrap.ts
 }
 
 check_herdr_plugin_profile() {
@@ -3730,6 +3745,30 @@ _check_pack_install_impl() {
     return 1
   }
   echo "[check-pack-install] installed: $probe"
+
+  # #116 M3-b1 — THE ACTUAL-PACKAGE RUNTIME PROOF. The Herdr plugin's runtime verifier
+  # (plugins/herdr/lib/runtime-bootstrap.mjs) decides whether a tree npm placed is a
+  # runtime the scoped wiring may name: exact name@version, the compiled entry, all three
+  # required bins present AND executable, and a real `entwurf check-bridge`. Its own
+  # focused gate drives that verifier against a FIXTURE package, which proves the
+  # transaction but not this package — so the real artifact is verified HERE, against the
+  # tarball this gate already packed and installed. No second pack, no network, no npm
+  # cache of ours. `--ignore-scripts` is what the plugin installs with, and pnpm add above
+  # did not run entwurf's postinstall either, so an executable-bit that only a postinstall
+  # would set is exactly the regression this cell catches.
+  local runtime_proof
+  runtime_proof=$(cd "$tmp" && node --input-type=module -e "
+    const { verifyInstalledRuntime, readCheckoutPackageSpec, REQUIRED_BINS } =
+      await import('${REPO_DIR}/plugins/herdr/lib/runtime-bootstrap.mjs');
+    const spec = readCheckoutPackageSpec('${REPO_DIR}');
+    const seen = verifyInstalledRuntime(process.cwd(), spec);
+    console.log(seen.name + '@' + seen.version + ' verified as an installed runtime (' + REQUIRED_BINS.join(', ') + ')');
+  " 2>&1) || {
+    fail "[check-pack-install] #116 M3-b1 runtime verifier REFUSED the actual installed package:"
+    echo "$runtime_proof" | sed 's/^/    /' >&2
+    return 1
+  }
+  echo "[check-pack-install] herdr-plugin runtime verifier: $runtime_proof"
 
   # Pi package loader smoke — actual `pi` reads the manifest and
   # registers the provider. rc=0 + the curated model list in the
@@ -6317,6 +6356,9 @@ case "$cmd" in
     ;;
   check-meta-facts)
     check_meta_facts
+    ;;
+  check-herdr-runtime-bootstrap)
+    check_herdr_runtime_bootstrap
     ;;
   check-herdr-plugin-profile)
     check_herdr_plugin_profile

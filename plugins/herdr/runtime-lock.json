@@ -1,0 +1,7 @@
+{
+	"schemaVersion": 1,
+	"comment": "The exact Entwurf package this plugin installs, and the integrity npm published for it. Coherent with the checkout package.json by gate; refreshing it at release is a separate contract (#116 M3-b1).",
+	"name": "@junghanacs/entwurf",
+	"version": "0.21.0",
+	"integrity": "sha512-nqAHtuWwKeO1DLIcTIyz7LwMRHsk9D/lViT2kFTtmPE45dlniLAqCa0vkB+RVdHZ7+RYcEmHB3BMoNGaD0xrOQ=="
+}

@@ -1,0 +1,272 @@
+{
+	"schemaVersion": 1,
+	"lane": "herdr-runtime-bootstrap",
+	"mutants": [
+		{
+			"claim": "HRB-STABLE-ADDRESS",
+			"title": "making the active address a symlink is the candidate #116 rejected by name: the scoped wiring records absolute commands under this root and Pi records the owner root it was wired with, so a link whose canonicalisation lands in a per-version directory turns every upgrade into a different owner taking that root over",
+			"subject": "plugins/herdr/lib/runtime-bootstrap.mjs",
+			"find": ["\t\tfs.renameSync(layout.stagingDir, layout.activeDir);"],
+			"replace": ["\t\tfs.symlinkSync(layout.stagingDir, layout.activeDir);"],
+			"gate": ["bash", "run.sh", "check-herdr-runtime-bootstrap"],
+			"timeoutSeconds": 240,
+			"signature": "[QK:HRB-STABLE-ADDRESS]",
+			"signatureSource": "scripts/check-herdr-runtime-bootstrap.ts"
+		},
+		{
+			"claim": "HRB-PRE-MUTATION-ORDER",
+			"title": "creating the runtime root before ownership is decided answers 'is this ours?' with this module's own footprint — every later ownership question on that host is then answered by a directory we made while refusing to act",
+			"subject": "plugins/herdr/lib/runtime-bootstrap.mjs",
+			"find": [
+				"\tconst layout = resolveRuntimeLayout(env);",
+				"",
+				"\t// PRE-MUTATION, and that word is literal: not one directory is created before ownership and the"
+			],
+			"replace": [
+				"\tconst layout = resolveRuntimeLayout(env);",
+				"\tfs.mkdirSync(layout.runtimeRoot, { recursive: true });",
+				"",
+				"\t// PRE-MUTATION, and that word is literal: not one directory is created before ownership and the"
+			],
+			"gate": ["bash", "run.sh", "check-herdr-runtime-bootstrap"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:HRB-PRE-MUTATION-ORDER]",
+			"signatureSource": "scripts/check-herdr-runtime-bootstrap.ts"
+		},
+		{
+			"claim": "HRB-PATH-KIND-LSTAT",
+			"title": "classifying with a link-following stat makes a dangling symlink read as absent and a link into somebody else's tree read as a directory we may rename — the two shapes a hostile or half-removed host actually presents",
+			"subject": "plugins/herdr/lib/runtime-bootstrap.mjs",
+			"find": ["\tconst stat = fs.lstatSync(target, { throwIfNoEntry: false });"],
+			"replace": ["\tconst stat = fs.statSync(target, { throwIfNoEntry: false });"],
+			"gate": ["bash", "run.sh", "check-herdr-runtime-bootstrap"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:HRB-PATH-KIND-LSTAT]",
+			"signatureSource": "scripts/check-herdr-runtime-bootstrap.ts"
+		},
+		{
+			"claim": "HRB-EXACT-ARTIFACT",
+			"title": "accepting any version whose NAME matches unpins the supply chain — the runtime a clean host ends up with becomes whatever the registry served, and the journal's provenance line then records a version nobody verified",
+			"subject": "plugins/herdr/lib/runtime-bootstrap.mjs",
+			"find": ["\tif (seen.version !== spec.version) {"],
+			"replace": ["\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-herdr-runtime-bootstrap"],
+			"timeoutSeconds": 240,
+			"signature": "[QK:HRB-EXACT-ARTIFACT]",
+			"signatureSource": "scripts/check-herdr-runtime-bootstrap.ts"
+		},
+		{
+			"claim": "HRB-RUNTIME-COMPLETE",
+			"title": "skipping the required-bin check calls a tree ready that the scoped wiring above cannot actually invoke: the install runs with --ignore-scripts, so a missing or non-executable bin is exactly the shape that survives an install nobody chmod'd, and the harness command configured against it simply does not run",
+			"subject": "plugins/herdr/lib/runtime-bootstrap.mjs",
+			"find": [
+				"\tfor (const name of REQUIRED_BINS) {",
+				"\t\tconst bin = path.join(prefix, \"node_modules\", \".bin\", name);",
+				"\t\ttry {",
+				"\t\t\tfs.accessSync(bin, fs.constants.X_OK);",
+				"\t\t} catch (err) {",
+				"\t\t\treturn { ok: false, code: \"runtime-required-bin-missing\", detail: `${bin}: ${err.message}` };",
+				"\t\t}",
+				"\t}"
+			],
+			"replace": ["\tfor (const name of REQUIRED_BINS) void name;"],
+			"gate": ["bash", "run.sh", "check-herdr-runtime-bootstrap"],
+			"timeoutSeconds": 240,
+			"signature": "[QK:HRB-RUNTIME-COMPLETE]",
+			"signatureSource": "scripts/check-herdr-runtime-bootstrap.ts"
+		},
+		{
+			"claim": "HRB-LOCK-SHAPE-NAMED",
+			"title": "reading `.schemaVersion` off whatever JSON.parse returned leaks a native TypeError with no code when the lock is a bare null — an unnamed crash on the ONE file that says which package gets installed, where the contract promises a named refusal",
+			"subject": "plugins/herdr/lib/runtime-bootstrap.mjs",
+			"find": [
+				"\tif (parsed === null || typeof parsed !== \"object\" || Array.isArray(parsed)) {",
+				"\t\tthrow new RuntimeBootstrapError(",
+				"\t\t\t\"runtime-lock-unreadable\","
+			],
+			"replace": ["\tif (false) {", "\t\tthrow new RuntimeBootstrapError(", "\t\t\t\"runtime-lock-unreadable\","],
+			"gate": ["bash", "run.sh", "check-herdr-runtime-bootstrap"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:HRB-LOCK-SHAPE-NAMED]",
+			"signatureSource": "scripts/check-herdr-runtime-bootstrap.ts"
+		},
+		{
+			"claim": "HRB-ARTIFACT-LOCK",
+			"title": "letting the lock and the checkout disagree installs a version nobody in this repository reviewed — the lock is the only place the published integrity lives, so a lock that has drifted is an integrity check performed against the wrong artifact",
+			"subject": "plugins/herdr/lib/runtime-bootstrap.mjs",
+			"find": ["\tif (lock.name !== checkoutSpec.name || lock.version !== checkoutSpec.version) {"],
+			"replace": ["\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-herdr-runtime-bootstrap"],
+			"timeoutSeconds": 240,
+			"signature": "[QK:HRB-ARTIFACT-LOCK]",
+			"signatureSource": "scripts/check-herdr-runtime-bootstrap.ts"
+		},
+		{
+			"claim": "HRB-OWNED-NPM-CACHE",
+			"title": "letting an inherited npm cache setting win writes megabytes into the operator's default cache on behalf of a plugin install they typed one command for, and no inverse can afterwards tell those bytes from the operator's own",
+			"subject": "plugins/herdr/lib/runtime-bootstrap.mjs",
+			"find": ["\t\tnpm_config_cache: cacheDir,"],
+			"replace": ["\t\tnpm_config_cache: env.npm_config_cache ?? cacheDir,"],
+			"gate": ["bash", "run.sh", "check-herdr-runtime-bootstrap"],
+			"timeoutSeconds": 240,
+			"signature": "[QK:HRB-OWNED-NPM-CACHE]",
+			"signatureSource": "scripts/check-herdr-runtime-bootstrap.ts"
+		},
+		{
+			"claim": "HRB-INSTALL-SCRIPTS-OFF",
+			"title": "dropping --ignore-scripts runs a package's arbitrary postinstall hook inside the HOME of a Herdr user who never saw an npm prompt to decline — the plugin install is the only consent that was given, and it was not consent to execute install hooks",
+			"subject": "plugins/herdr/lib/runtime-bootstrap.mjs",
+			"find": ["\t\t\"--ignore-scripts\","],
+			"replace": ["\t\t\"--no-package-lock\","],
+			"gate": ["bash", "run.sh", "check-herdr-runtime-bootstrap"],
+			"timeoutSeconds": 240,
+			"signature": "[QK:HRB-INSTALL-SCRIPTS-OFF]",
+			"signatureSource": "scripts/check-herdr-runtime-bootstrap.ts"
+		},
+		{
+			"claim": "HRB-OWNER-STATE-CERTIFIED",
+			"title": "renaming away a directory at our address with no certified journal behind it destroys files this module cannot prove are its own — a fresh host, a half-removed install and a stranger's directory are indistinguishable from the path alone, and the journal is the only thing that tells them apart",
+			"subject": "plugins/herdr/lib/runtime-bootstrap.mjs",
+			"find": [
+				"\tif (assessed.state === \"unowned-residue\") {",
+				"\t\tthrow new RuntimeBootstrapError(",
+				"\t\t\t\"runtime-owner-state-missing\","
+			],
+			"replace": ["\tif (false) {", "\t\tthrow new RuntimeBootstrapError(", "\t\t\t\"runtime-owner-state-missing\","],
+			"gate": ["bash", "run.sh", "check-herdr-runtime-bootstrap"],
+			"timeoutSeconds": 240,
+			"signature": "[QK:HRB-OWNER-STATE-CERTIFIED]",
+			"signatureSource": "scripts/check-herdr-runtime-bootstrap.ts"
+		},
+		{
+			"claim": "HRB-JOURNAL-SHAPE-CERTIFIED",
+			"title": "`JSON.parse` returning something is not the same as a journal: a bare null, an array or a scalar reaches the key checks as an object-shaped value and what it grants is authority to delete a user's directories",
+			"subject": "plugins/herdr/lib/runtime-bootstrap.mjs",
+			"find": [
+				"\tif (parsed === null || typeof parsed !== \"object\" || Array.isArray(parsed)) {",
+				"\t\tthrow new RuntimeBootstrapError(",
+				"\t\t\t\"runtime-journal-uncertified\","
+			],
+			"replace": ["\tif (false) {", "\t\tthrow new RuntimeBootstrapError(", "\t\t\t\"runtime-journal-uncertified\","],
+			"gate": ["bash", "run.sh", "check-herdr-runtime-bootstrap"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:HRB-JOURNAL-SHAPE-CERTIFIED]",
+			"signatureSource": "scripts/check-herdr-runtime-bootstrap.ts"
+		},
+		{
+			"claim": "HRB-FAILED-CANDIDATE-PRESERVES-ACTIVE",
+			"title": "clearing the active directory when a CANDIDATE fails verification destroys a working runtime on behalf of an upgrade that never arrived — the host is left with its wiring pointing at an emptied address, strictly worse than the old version it was replacing",
+			"subject": "plugins/herdr/lib/runtime-bootstrap.mjs",
+			"find": ["\t} catch (err) {", "\t\tremoveTree(layout.stagingDir);", "\t\tthrow err;", "\t}"],
+			"replace": [
+				"\t} catch (err) {",
+				"\t\tremoveTree(layout.stagingDir);",
+				"\t\tremoveTree(layout.activeDir);",
+				"\t\tthrow err;",
+				"\t}"
+			],
+			"gate": ["bash", "run.sh", "check-herdr-runtime-bootstrap"],
+			"timeoutSeconds": 240,
+			"signature": "[QK:HRB-FAILED-CANDIDATE-PRESERVES-ACTIVE]",
+			"signatureSource": "scripts/check-herdr-runtime-bootstrap.ts"
+		},
+		{
+			"claim": "HRB-LAST-GOOD-NEVER-LOST",
+			"title": "deleting the backup because a sibling directory merely exists is how a corrupt active plus a good previous ends with zero usable runtimes — measured on the first cut of this module: it dropped the backup, then failed to acquire a candidate, and the address the wiring names held nothing",
+			"subject": "plugins/herdr/lib/runtime-bootstrap.mjs",
+			"find": [
+				"\t\t\tif (inspectInstalledRuntime(layout.activeDir, locked.name).ok) {",
+				"\t\t\t\tremoveTree(layout.previousDir);",
+				"\t\t\t\trecovered = \"stale-backup\";",
+				"\t\t\t} else {"
+			],
+			"replace": [
+				"\t\t\tif (true) {",
+				"\t\t\t\tremoveTree(layout.previousDir);",
+				"\t\t\t\trecovered = \"stale-backup\";",
+				"\t\t\t} else {"
+			],
+			"gate": ["bash", "run.sh", "check-herdr-runtime-bootstrap"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:HRB-LAST-GOOD-NEVER-LOST]",
+			"signatureSource": "scripts/check-herdr-runtime-bootstrap.ts"
+		},
+		{
+			"claim": "HRB-ALL-STATES-NAMED",
+			"title": "collapsing two presence combinations into one name is a branch nobody decided: the leftover candidate beside a restored backup is handled as if it were not there, which is how a half-written tree survives into the next run",
+			"subject": "plugins/herdr/lib/runtime-bootstrap.mjs",
+			"find": [
+				"\tif (!active && staging && previous) return Object.freeze({ state: \"torn-swap-with-candidate\", ...facts });"
+			],
+			"replace": ["\tif (!active && staging && previous) return Object.freeze({ state: \"torn-swap\", ...facts });"],
+			"gate": ["bash", "run.sh", "check-herdr-runtime-bootstrap"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:HRB-ALL-STATES-NAMED]",
+			"signatureSource": "scripts/check-herdr-runtime-bootstrap.ts"
+		},
+		{
+			"claim": "HRB-PROVENANCE-CARRIED",
+			"title": "overwriting the finished runtime's provenance when the installing entry is written leaves a host that dies mid-install holding a backup directory and no statement of what is in it — recoverable bytes with unrecoverable provenance",
+			"subject": "plugins/herdr/lib/runtime-bootstrap.mjs",
+			"find": ["\t\tpreviousRuntime: carried,"],
+			"replace": ["\t\tpreviousRuntime: null,"],
+			"gate": ["bash", "run.sh", "check-herdr-runtime-bootstrap"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:HRB-PROVENANCE-CARRIED]",
+			"signatureSource": "scripts/check-herdr-runtime-bootstrap.ts"
+		},
+		{
+			"claim": "HRB-IDEMPOTENT-REINSTALL",
+			"title": "failing to recognise an already-correct runtime makes Herdr's own reinstall — the explicit refresh trigger this product depends on — re-download and re-swap every time, so the routine safe operation becomes the expensive and risky one",
+			"subject": "plugins/herdr/lib/runtime-bootstrap.mjs",
+			"find": ["\t\tcertified.phase === \"runtime-ready\" &&"],
+			"replace": ["\t\tcertified.phase === \"installing\" &&"],
+			"gate": ["bash", "run.sh", "check-herdr-runtime-bootstrap"],
+			"timeoutSeconds": 240,
+			"signature": "[QK:HRB-IDEMPOTENT-REINSTALL]",
+			"signatureSource": "scripts/check-herdr-runtime-bootstrap.ts"
+		},
+		{
+			"claim": "HRB-JOURNAL-MUST-MATCH-DISK",
+			"title": "believing the journal without re-verifying the tree turns one damaged install into a permanent one: the record says runtime-ready, the bytes are gone or wrong, and every later install agrees there is nothing to do",
+			"subject": "plugins/herdr/lib/runtime-bootstrap.mjs",
+			"find": [
+				"\t\ttry {",
+				"\t\t\tverifyInstalledRuntime(layout.activeDir, locked);",
+				"\t\t\treturn Object.freeze({ phase: \"runtime-ready\", changed: false, recovered, journal: certified });"
+			],
+			"replace": [
+				"\t\ttry {",
+				"\t\t\treturn Object.freeze({ phase: \"runtime-ready\", changed: false, recovered, journal: certified });"
+			],
+			"gate": ["bash", "run.sh", "check-herdr-runtime-bootstrap"],
+			"timeoutSeconds": 240,
+			"signature": "[QK:HRB-JOURNAL-MUST-MATCH-DISK]",
+			"signatureSource": "scripts/check-herdr-runtime-bootstrap.ts"
+		},
+		{
+			"claim": "HRB-INVERSE-STATE-BACKED",
+			"title": "an inverse that walks past an address it cannot prove is its own will happily delete a stranger's directory — Herdr has no cleanup hook (measured: the plugin manifest has six sections, none an uninstall), so this is the only inverse that will ever run and there is no second chance to notice",
+			"subject": "plugins/herdr/lib/runtime-bootstrap.mjs",
+			"find": ["\tif (certified === null) {", "\t\tif (assessed.state === \"unowned-residue\") {"],
+			"replace": ["\tif (certified === null) {", "\t\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-herdr-runtime-bootstrap"],
+			"timeoutSeconds": 240,
+			"signature": "[QK:HRB-INVERSE-STATE-BACKED]",
+			"signatureSource": "scripts/check-herdr-runtime-bootstrap.ts"
+		},
+		{
+			"claim": "HRB-NO-HERDR-CLAIM",
+			"title": "giving this module a phase that claims Herdr installed the plugin records a step that had not run: [[build]] finishes BEFORE Herdr re-reads the manifest, swaps its checkout and registers, so the next install would reconcile against a state nobody observed",
+			"subject": "plugins/herdr/lib/runtime-bootstrap.mjs",
+			"find": ["export const JOURNAL_PHASES = Object.freeze([\"installing\", \"runtime-ready\", \"removing\"]);"],
+			"replace": [
+				"export const JOURNAL_PHASES = Object.freeze([\"installing\", \"runtime-ready\", \"removing\", \"herdr-installed\"]);"
+			],
+			"gate": ["bash", "run.sh", "check-herdr-runtime-bootstrap"],
+			"timeoutSeconds": 240,
+			"signature": "[QK:HRB-NO-HERDR-CLAIM]",
+			"signatureSource": "scripts/check-herdr-runtime-bootstrap.ts"
+		}
+	]
+}
