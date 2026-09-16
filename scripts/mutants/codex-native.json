@@ -380,10 +380,10 @@
 		},
 		{
 			"claim": "FRESHCALL-CODEX-PREMUTATION-MCP",
-			"title": "the MCP public surface stops running the Codex capability preflight, so a host with no birth unit gets a tmux window opened before anything decided the sibling could exist",
+			"title": "the MCP surface stops asking the Codex TARGET capability question before placement, so a host with no birth unit, no vendor trust receipt, no MCP hand or no app-server reaches tmux first — a window opens, and the operator is told about the missing capability only after something visible already exists",
 			"subject": "mcp/entwurf-bridge/src/index.ts",
-			"find": ["\t\t\tconst missing = backend === \"codex\" ? await codexFreshPreflight(process.env) : null;"],
-			"replace": ["\t\t\tconst missing = null;"],
+			"find": ["\t\t\tconst targetMissing = backend === \"codex\" ? await codexFreshPreflight(process.env) : null;"],
+			"replace": ["\t\t\tconst targetMissing = null;"],
 			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
 			"timeoutSeconds": 180,
 			"signature": "[QK:FRESHCALL-CODEX-PREMUTATION-MCP]",
