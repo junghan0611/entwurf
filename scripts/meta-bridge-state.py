@@ -21,6 +21,9 @@ MARKETPLACE = "meta-bridge-local"
 PLUGIN_REF = f"{PLUGIN}@{MARKETPLACE}"
 STATE_VERSION = 1
 OWNER = "entwurf meta-bridge"
+# The only suffix an assembled marketplace path may end in — the inverse acts on that address, and
+# the doctor already refuses anything else, so the preflight uses the SAME shape (not a looser one).
+ASSEMBLED_SUFFIX = "/entwurf/meta-bridge/.assembled"
 
 PERMISSION_ALLOW = [
     "Bash",
@@ -304,6 +307,44 @@ def is_installed_package(repo: Path) -> bool:
     return parts[-3:] == ("node_modules", "@junghanacs", "entwurf")
 
 
+# #116 M3-b2 — the explicit plugin mode. A Herdr plugin activates on a host where nothing entwurf is
+# on PATH, so the bare bin shim cannot resolve. In that mode the commands are DERIVED from the
+# certified stable active runtime root: the caller passes the root, these helpers append the fixed
+# suffixes, and nothing accepts an arbitrary command. The default installed branch below is
+# untouched — mode is an explicit input, never a path heuristic, because a stable-runtime install
+# lives at `.../active/node_modules/@junghanacs/entwurf` and already satisfies every layout test.
+PLUGIN_RUNTIME: Path | None = None
+
+
+def stable_active_root() -> Path:
+    """The ONE runtime address, derived from this process's XDG/HOME exactly as the runtime owner
+    derives it (`scripts/herdr-runtime.mjs` resolveRuntimeLayout). A gate pins the two equal."""
+    data_home = os.environ.get("XDG_DATA_HOME") or os.path.join(os.path.expanduser("~"), ".local", "share")
+    return Path(data_home) / "entwurf" / "herdr-plugin" / "runtime" / "active"
+
+
+def set_plugin_runtime(root: Path | None) -> None:
+    global PLUGIN_RUNTIME
+    if root is None:
+        PLUGIN_RUNTIME = None
+        return
+    if not root.is_absolute():
+        die(f"--plugin-runtime must be an ABSOLUTE stable runtime root, got {root}")
+    normalised = Path(os.path.normpath(str(root)))
+    # Named, not chosen: the caller may say which root, and it is accepted only when it IS this
+    # host's stable one. Any absolute directory would let a mode flag point Claude's MCP command at
+    # an executable of the caller's choosing.
+    expected = stable_active_root()
+    if normalised != expected:
+        die(f"--plugin-runtime must be this host's stable runtime root {expected}, got {normalised}")
+    PLUGIN_RUNTIME = normalised
+
+
+def plugin_bin(name: str) -> str:
+    assert PLUGIN_RUNTIME is not None
+    return str(PLUGIN_RUNTIME / "node_modules" / ".bin" / name)
+
+
 def desired_mcp(repo: Path) -> dict[str, Any]:
     env = {
         # #50 C4: anonymous sends are refused by the BRIDGE DEFAULT now — the
@@ -313,6 +354,8 @@ def desired_mcp(repo: Path) -> dict[str, Any]:
         # session always has an authoritative garden-id sender.
         "ENTWURF_BRIDGE_EXTERNAL_AGENT_ID": "external-mcp/claude-code",
     }
+    if PLUGIN_RUNTIME is not None:
+        return {"type": "stdio", "command": plugin_bin("entwurf-bridge"), "args": [], "env": env}
     if is_installed_package(repo):
         # Installed package: wire the STABLE `entwurf-bridge` bin shim that npm/pnpm
         # place on PATH. Baking repo/mcp/entwurf-bridge/start.sh would embed the pnpm
@@ -333,6 +376,8 @@ def desired_mcp(repo: Path) -> dict[str, Any]:
 
 
 def desired_statusline(repo: Path) -> dict[str, Any]:
+    if PLUGIN_RUNTIME is not None:
+        return {"type": "command", "command": plugin_bin("entwurf-statusline")}
     if is_installed_package(repo):
         # Installed package: mirror the MCP stable-bin pattern. The statusLine is
         # executed at render time, so a bare bin shim lets npm/pnpm update the
@@ -342,20 +387,23 @@ def desired_statusline(repo: Path) -> dict[str, Any]:
     return {"type": "command", "command": str((repo / "scripts" / "meta-bridge-statusline.sh").resolve())}
 
 
-def prepare(repo: Path, asm: Path) -> None:
-    existing = load_state(required=False)
-    state = existing if existing is not None else init_state(repo, asm)
-    state["updatedAt"] = iso_now()
-    state["repo"] = str(repo.resolve())
-    state["assembledMarketplacePath"] = str(asm.resolve())
-
+def read_live_documents() -> tuple[dict[str, Any], dict[str, Any]]:
     settings = read_json(settings_path(), {})
     root = read_json(claude_root_config_path(), {})
     if not isinstance(settings, dict):
         die(f"{settings_path()} root must be a JSON object")
     if not isinstance(root, dict):
         die(f"{claude_root_config_path()} root must be a JSON object")
+    return settings, root
 
+
+def plan_snapshots(state: dict[str, Any], repo: Path, asm: Path, settings: dict[str, Any], root: dict[str, Any]) -> None:
+    """Every snapshot decision `prepare` makes, in one place.
+
+    #116 M3-b2 amendment. `preflight-install` runs this against DEEP COPIES so the forward promise
+    is the real plan and not a JSON-object smoke test: a preflight that only checked the documents
+    parse would go green and then let `prepare` die on an array-type mismatch it never looked at.
+    """
     snapshot_value(
         state,
         "settings",
@@ -397,6 +445,15 @@ def prepare(repo: Path, asm: Path) -> None:
         legacy_absent_if_equal=desired_mcp(repo),
     )
 
+
+def prepare(repo: Path, asm: Path) -> None:
+    existing = load_state(required=False)
+    state = existing if existing is not None else init_state(repo, asm)
+    state["updatedAt"] = iso_now()
+    state["repo"] = str(repo.resolve())
+    state["assembledMarketplacePath"] = str(asm.resolve())
+    settings, root = read_live_documents()
+    plan_snapshots(state, repo, asm, settings, root)
     write_json(state_path(), state, mode=0o600)
     print(f"[meta-bridge-state] prepared {state_path()}")
 
@@ -446,10 +503,41 @@ def apply(repo: Path, asm: Path) -> None:
     print("[meta-bridge-state] applied managed keyset (settings.json + user MCP)")
 
 
-def restore_entry(obj: dict[str, Any], entry: dict[str, Any]) -> None:
+def certify_entry(obj: dict[str, Any], entry: dict[str, Any], where: str = "state entry") -> str:
+    """Prove this entry COULD be restored, and write nothing.
+
+    #116 M3-b2 amendment. This is the read-only twin of `restore_entry`, and it exists as one
+    function rather than two because the first cut of the uninstall preflight re-implemented the
+    checks and knew only ONE of the three entry shapes: it demanded `original` on every entry, while
+    `snapshot_array_items` writes `{originalExisted, added}`. Every real Claude activation therefore
+    failed its own preflight. A preflight that re-derives the restore rules will drift from them
+    again the next time a kind is added — so `restore_entry` calls THIS, and so does the preflight.
+    """
     path = entry.get("path")
     if not isinstance(path, list) or not all(isinstance(p, str) for p in path):
-        die("bad state entry path")
+        die(f"{where}: bad state entry path")
+    kind = entry.get("kind")
+    if kind in ("map-entry", "scalar"):
+        original = entry.get("original")
+        if not isinstance(original, dict) or "existed" not in original:
+            die(f"{where}: bad scalar/map original in state")
+        return kind
+    if kind == "array-items":
+        if "originalExisted" not in entry:
+            die(f"{where}: array-items entry records no originalExisted")
+        if not isinstance(entry.get("added", []), list):
+            die(f"{where}: bad array added list in state")
+        existed, value = get_nested(obj, path)
+        if existed and not isinstance(value, list):
+            die(f"{where}: {'.'.join(path)} exists but is not an array; restoration is not applicable")
+        return kind
+    die(f"{where}: unknown state entry kind {kind!r}")
+    raise AssertionError("unreachable")
+
+
+def restore_entry(obj: dict[str, Any], entry: dict[str, Any]) -> None:
+    certify_entry(obj, entry)
+    path = entry.get("path")
     kind = entry.get("kind")
     if kind in ("map-entry", "scalar"):
         original = entry.get("original")
@@ -525,8 +613,71 @@ def relinquish_retired_scalar(
 
 
 def preflight_uninstall() -> None:
-    load_state(required=True)
-    print(f"[meta-bridge-state] uninstall preflight ok ({state_path()})")
+    """Prove the ENTIRE restoration plan is applicable, writing nothing.
+
+    #116 M3-b2. This used to be `load_state(required=True)` and a print — it proved the ledger
+    existed and nothing else. An aggregate deactivate that calls it and then claims "every inverse
+    was preflighted" would be asserting a check that had not run, and a teardown that starts
+    mutating on that promise is how a Claude failure strands a Pi half. Every entry is certified
+    through the SAME function `restore_entry` uses, so the two cannot drift.
+    """
+    state = load_state(required=True)
+    assert state is not None
+    owner = state.get("owner")
+    if owner != OWNER:
+        die(f"{state_path()} is not ours: owner={owner!r} (expected {OWNER!r})")
+    settings, root = read_live_documents()
+    certified = 0
+    for path_key, doc in (("settings", settings), ("claudeRoot", root)):
+        entries = state.get("files", {}).get(path_key, {}).get("keys", {})
+        if not isinstance(entries, dict):
+            die(f"{state_path()} has no {path_key} key map")
+        for name, entry in entries.items():
+            if not isinstance(entry, dict):
+                die(f"{state_path()} {path_key} entry {name!r} is not a record")
+            certify_entry(doc, entry, f"{path_key} entry {name!r}")
+            certified += 1
+    certify_assembled_path(state.get("assembledMarketplacePath"))
+    print(
+        f"[meta-bridge-state] uninstall preflight ok ({state_path()}): owner={owner}, "
+        f"settings+claudeRoot parse, {certified} restore entries applicable, "
+        f"assembled={state.get('assembledMarketplacePath')}"
+    )
+
+
+def certify_assembled_path(recorded: Any) -> None:
+    """The recorded marketplace path is an address the inverse acts on, so its SHAPE is checked."""
+    if not isinstance(recorded, str) or not recorded:
+        die(f"{state_path()} records no assembledMarketplacePath")
+    if not os.path.isabs(recorded):
+        die(f"{state_path()} assembledMarketplacePath is not absolute: {recorded}")
+    if not recorded.endswith(ASSEMBLED_SUFFIX):
+        die(f"{state_path()} assembledMarketplacePath does not end in {ASSEMBLED_SUFFIX}: {recorded}")
+
+
+def preflight_install(repo: Path, asm: Path) -> None:
+    """The forward half of the same promise: run the REAL plan on copies, write nothing.
+
+    An aggregate activation has to be able to say "nothing will fail once I start" before it starts.
+    A preflight that only checked the documents parse would go green and then let `prepare` die on
+    an array-type mismatch it never looked at, so this walks `plan_snapshots` — the very function
+    `prepare` calls — against deep copies and certifies every entry it produces.
+    """
+    settings, root = read_live_documents()
+    existing = load_state(required=False)
+    state = copy.deepcopy(existing) if existing is not None else init_state(repo, asm)
+    plan_snapshots(state, repo, asm, copy.deepcopy(settings), copy.deepcopy(root))
+    planned = 0
+    for path_key, doc in (("settings", settings), ("claudeRoot", root)):
+        for name, entry in state["files"][path_key]["keys"].items():
+            certify_entry(doc, entry, f"planned {path_key} entry {name!r}")
+            planned += 1
+    certify_assembled_path(str(asm.resolve()))
+    mode = "plugin-runtime" if PLUGIN_RUNTIME is not None else ("installed" if is_installed_package(repo) else "clone")
+    print(
+        f"[meta-bridge-state] install preflight ok (mode={mode}, {planned} planned entries certified, "
+        f"mcp={desired_mcp(repo)['command']}, statusline={desired_statusline(repo)['command']}, asm={asm})"
+    )
 
 
 def uninstall() -> None:
@@ -667,6 +818,7 @@ def main() -> int:
         choices=[
             "prepare",
             "apply",
+            "preflight-install",
             "preflight-uninstall",
             "uninstall",
             "assembled-path",
@@ -678,6 +830,7 @@ def main() -> int:
     )
     parser.add_argument("--repo", default=Path(__file__).resolve().parents[1], type=Path)
     parser.add_argument("--asm", default=None, type=Path)
+    parser.add_argument("--plugin-runtime", default=None, type=Path)
     args = parser.parse_args()
     repo = args.repo.resolve()
     # The live artifact always lives under the XDG data dir — dev clone and
@@ -688,10 +841,13 @@ def main() -> int:
     default_asm = xdg_data / "entwurf" / "meta-bridge" / ".assembled"
     asm = (args.asm or default_asm).resolve()
     try:
+        set_plugin_runtime(args.plugin_runtime)
         if args.command == "prepare":
             prepare(repo, asm)
         elif args.command == "apply":
             apply(repo, asm)
+        elif args.command == "preflight-install":
+            preflight_install(repo, asm)
         elif args.command == "preflight-uninstall":
             preflight_uninstall()
         elif args.command == "uninstall":

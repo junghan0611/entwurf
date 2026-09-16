@@ -1,0 +1,273 @@
+{
+	"schemaVersion": 1,
+	"lane": "herdr-activation",
+	"mutants": [
+		{
+			"claim": "HAC-PI-USER-SCOPE-ONLY",
+			"title": "composing the generic install for a plugin activation writes a project `.pi/settings.json` the plugin has no project for — a second package identity that `--entwurf-control` then has to arbitrate, on a host the operator never asked to have a project registered in",
+			"subject": "run.sh",
+			"find": ["  register_user_scope_citizen \"$plugin_runtime\""],
+			"replace": ["  install_local_package \"${HOME}/plugin-has-no-project\""],
+			"gate": ["bash", "run.sh", "check-herdr-activation"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:HAC-PI-USER-SCOPE-ONLY]",
+			"signatureSource": "scripts/check-herdr-activation.ts"
+		},
+		{
+			"claim": "HAC-COMMAND-IS-DERIVED",
+			"title": "accepting any absolute directory as 'the plugin runtime' is a way to point every pi session at an executable of the caller's choosing — 'absolute' was never the contract, 'this host's stable runtime' was",
+			"subject": "scripts/register-pi-provider.py",
+			"find": ["    if runtime_root != expected:"],
+			"replace": ["    if False:"],
+			"gate": ["bash", "run.sh", "check-herdr-activation"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:HAC-COMMAND-IS-DERIVED]",
+			"signatureSource": "scripts/check-herdr-activation.ts"
+		},
+		{
+			"claim": "HAC-DEFAULT-MODE-UNCHANGED",
+			"title": "letting the plugin mode leak into the default branch rewrites the Claude wiring of every host that never asked for it — adding a mode is only safe while the hosts that do not use it keep their bytes",
+			"subject": "scripts/meta-bridge-state.py",
+			"find": [
+				"    if PLUGIN_RUNTIME is not None:",
+				"        return {\"type\": \"stdio\", \"command\": plugin_bin(\"entwurf-bridge\"), \"args\": [], \"env\": env}"
+			],
+			"replace": [
+				"    if True:",
+				"        return {\"type\": \"stdio\", \"command\": plugin_bin(\"entwurf-bridge\"), \"args\": [], \"env\": env}"
+			],
+			"gate": ["bash", "run.sh", "check-herdr-activation"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:HAC-DEFAULT-MODE-UNCHANGED]",
+			"signatureSource": "scripts/check-herdr-activation.ts"
+		},
+		{
+			"claim": "HAC-INVERSE-REFUSES-DRIFT",
+			"title": "the user-scope inverse is admitted by the ownership record, so without the drift check it deletes whatever now sits at our key — an operator who replaced the command with their own loses it to our uninstall",
+			"subject": "scripts/register-pi-provider.py",
+			"find": ["        if isinstance(recorded_cmd, str) and live_cmd is not None and live_cmd != recorded_cmd:"],
+			"replace": ["        if False:"],
+			"gate": ["bash", "run.sh", "check-herdr-activation"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:HAC-INVERSE-REFUSES-DRIFT]",
+			"signatureSource": "scripts/check-herdr-activation.ts"
+		},
+		{
+			"claim": "HAC-LEDGER-CERTIFIED",
+			"title": "a ledger that may name an atom outside P is a teardown aimed at a harness this lane promised to never write — OpenCode is installed on real hosts and the whole product boundary is that it receives nothing",
+			"subject": "scripts/herdr-activation.mjs",
+			"find": ["\t\tif (!ACTIVATABLE_BACKENDS.includes(backend)) {"],
+			"replace": ["\t\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-herdr-activation"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:HAC-LEDGER-CERTIFIED]",
+			"signatureSource": "scripts/check-herdr-activation.ts"
+		},
+		{
+			"claim": "HAC-ADD-ONLY",
+			"title": "inferring removal from a shrinking request makes an unrelated Herdr integration uninstall silently tear down Entwurf wiring the operator still uses — Herdr's reinstall is the refresh trigger, not a statement of intent to remove",
+			"subject": "scripts/herdr-activation.mjs",
+			"find": ["\tconst retained = ACTIVATABLE_BACKENDS.filter((b) => already.includes(b) && !requested.includes(b));"],
+			"replace": ["\tconst retained = [];"],
+			"gate": ["bash", "run.sh", "check-herdr-activation"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:HAC-ADD-ONLY]",
+			"signatureSource": "scripts/check-herdr-activation.ts"
+		},
+		{
+			"claim": "HAC-ROOTS-CERTIFIED",
+			"title": "acting on a ledger whose recorded harness roots differ from this environment's undoes an activation against a config that was never ours — the override that decided where the bytes went is the same override the inverse needs",
+			"subject": "scripts/herdr-activation.mjs",
+			"find": ["\tif (mismatches.length > 0) {"],
+			"replace": ["\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-herdr-activation"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:HAC-ROOTS-CERTIFIED]",
+			"signatureSource": "scripts/check-herdr-activation.ts"
+		},
+		{
+			"claim": "HAC-TEARDOWN-ORDER",
+			"title": "retiring the ledger before the artifacts it authorised leaves a half-removed host with no record of what remains, and removing the runtime first leaves both harnesses' configs naming a directory that is already gone",
+			"subject": "scripts/herdr-activation.mjs",
+			"find": [
+				"\tsteps.push(\"runtime\");",
+				"\t// The ledger is the retry authority, so it is retired after everything it authorised.",
+				"\tsteps.push(\"ledger\");"
+			],
+			"replace": [
+				"\tsteps.push(\"ledger\");",
+				"\t// The ledger is the retry authority, so it is retired after everything it authorised.",
+				"\tsteps.push(\"runtime\");"
+			],
+			"gate": ["bash", "run.sh", "check-herdr-activation"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:HAC-TEARDOWN-ORDER]",
+			"signatureSource": "scripts/check-herdr-activation.ts"
+		},
+		{
+			"claim": "HAC-PREFLIGHT-ALL-OR-NOTHING",
+			"title": "mutating before every authority is green is how a Claude failure strands a half-removed Pi: the teardown starts on a promise nobody checked and stops somewhere no record describes",
+			"subject": "scripts/herdr-plugin-deactivate.mjs",
+			"find": ["\tif (refused.length > 0) {"],
+			"replace": ["\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-herdr-activation"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:HAC-PREFLIGHT-ALL-OR-NOTHING]",
+			"signatureSource": "scripts/check-herdr-activation.ts"
+		},
+		{
+			"claim": "HAC-NO-DEFERRED-IMPORT",
+			"title": "one lazy import on this path is unrecoverable: the process has already deleted the runtime it is executing from, so the load fails with ERR_MODULE_NOT_FOUND and the host is left with no runtime, an unretired ledger, and nothing to run the rest",
+			"subject": "scripts/herdr-plugin-deactivate.mjs",
+			"find": ["import { removeOwnedRuntime, resolveRuntimeLayout } from \"./herdr-runtime.mjs\";"],
+			"replace": ["const { removeOwnedRuntime, resolveRuntimeLayout } = await import(\"./herdr-runtime.mjs\");"],
+			"gate": ["bash", "run.sh", "check-herdr-activation"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:HAC-NO-DEFERRED-IMPORT]",
+			"signatureSource": "scripts/check-herdr-activation.ts"
+		},
+		{
+			"claim": "HAC-ENTRY-GUARD-REALPATH",
+			"title": "comparing argv[1] to import.meta.url unresolved makes the entry guard silently FALSE under a package manager that symlinks the package — pnpm links node_modules/@junghanacs/entwurf into its store — so the verb runs, prints nothing, exits 0, and every caller reads a teardown that never happened",
+			"subject": "scripts/herdr-plugin-deactivate.mjs",
+			"find": ["\t\treturn fs.realpathSync(a) === fs.realpathSync(b);"],
+			"replace": ["\t\treturn path.resolve(a) === path.resolve(b);"],
+			"gate": ["bash", "run.sh", "check-herdr-activation"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:HAC-ENTRY-GUARD-REALPATH]",
+			"signatureSource": "scripts/check-herdr-activation.ts"
+		},
+		{
+			"claim": "HAC-DEACTIVATE-ROUNDTRIP",
+			"title": "a teardown that retires the ledger while leaving the runtime behind reports a host as clean while its stable address still holds a runtime nothing records — the operator has no verb left that will find it",
+			"subject": "scripts/herdr-plugin-deactivate.mjs",
+			"find": ["\t\t} else if (step === \"runtime\") {"],
+			"replace": ["\t\t} else if (step === \"never\") {"],
+			"gate": ["bash", "run.sh", "check-herdr-activation"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:HAC-DEACTIVATE-ROUNDTRIP]",
+			"signatureSource": "scripts/check-herdr-activation.ts"
+		},
+		{
+			"claim": "HAC-LEDGER-STATE-MACHINE",
+			"subject": "scripts/herdr-activation.mjs",
+			"title": "a phase that may contradict its own component rows is a ledger that says 'active' over a component it already removed — every later decision reads it, and the retry that trusts it re-runs an inverse whose ownership state is gone",
+			"find": ["\t\tif (!PHASE_ALLOWS[parsed.phase].includes(component.state)) {"],
+			"replace": ["\t\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-herdr-activation"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:HAC-LEDGER-STATE-MACHINE]",
+			"signatureSource": "scripts/check-herdr-activation.ts"
+		},
+		{
+			"claim": "HAC-TWO-STAGE-ADD-ONLY",
+			"subject": "scripts/herdr-plugin-activate.mjs",
+			"title": "not handing the installer the plugin mode wires Claude to the bare/clone command on a host where nothing entwurf is on PATH — the install reports success and every MCP call it configured cannot resolve",
+			"find": [
+				"\t\t\t\t: run(\"bash\", [path.join(PACKAGE_ROOT, \"scripts\", \"meta-bridge-install.sh\")], {",
+				"\t\t\t\t\t\t...env,",
+				"\t\t\t\t\t\tENTWURF_PLUGIN_RUNTIME: runtime.activeDir,",
+				"\t\t\t\t\t});"
+			],
+			"replace": [
+				"\t\t\t\t: run(\"bash\", [path.join(PACKAGE_ROOT, \"scripts\", \"meta-bridge-install.sh\")], {",
+				"\t\t\t\t\t\t...env,",
+				"\t\t\t\t\t});"
+			],
+			"gate": ["bash", "run.sh", "check-herdr-activation"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:HAC-TWO-STAGE-ADD-ONLY]",
+			"signatureSource": "scripts/check-herdr-activation.ts"
+		},
+		{
+			"claim": "HAC-RETRY-RESUMES",
+			"subject": "scripts/herdr-activation.mjs",
+			"title": "re-running a component inverse the ledger already recorded as removed is a permanent refusal, not an idempotent no-op: its ownership state is gone, its preflight fails, and one partial teardown becomes a host nobody can finish",
+			"find": ["\t\tif (states[backend] === \"active\") steps.push(backend);"],
+			"replace": ["\t\tsteps.push(backend);"],
+			"gate": ["bash", "run.sh", "check-herdr-activation"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:HAC-RETRY-RESUMES]",
+			"signatureSource": "scripts/check-herdr-activation.ts"
+		},
+		{
+			"claim": "HAC-XDG-RESOLUTION-SHARED",
+			"subject": "scripts/herdr-activation.mjs",
+			"title": "resolving the data root as `XDG_DATA_HOME || ''` builds `/entwurf/...` on a host with XDG unset while every writer uses `$HOME/.local/share/entwurf` — a preflight that looks at a file nobody writes and passes for the wrong reason",
+			"find": [
+				"\tconst dataHome = env.XDG_DATA_HOME || (home ? path.join(home, \".local\", \"share\") : null);\n\tif (!dataHome) {\n\t\tthrow new ActivationError(\"activation-xdg-root-unresolvable\", \"neither XDG_DATA_HOME nor HOME is set\");\n\t}\n\treturn path.join(dataHome, \"entwurf\");"
+			],
+			"replace": ["\treturn path.join(env.XDG_DATA_HOME || \"\", \"entwurf\");"],
+			"gate": ["bash", "run.sh", "check-herdr-activation"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:HAC-XDG-RESOLUTION-SHARED]",
+			"signatureSource": "scripts/check-herdr-activation.ts"
+		},
+		{
+			"claim": "HAC-CLAUDE-PLAN-CERTIFIED",
+			"subject": "scripts/meta-bridge-state.py",
+			"title": "a preflight that re-implements the restore rules knows only the entry shapes whoever wrote it remembered — the first cut demanded `original` on every entry while `snapshot_array_items` writes `{originalExisted, added}`, so every real Claude activation failed its own preflight and the aggregate could never honestly claim preflight-all",
+			"find": ["    if kind == \"array-items\":\n        if \"originalExisted\" not in entry:"],
+			"replace": ["    if kind == \"array-items-never\":\n        if \"originalExisted\" not in entry:"],
+			"gate": ["bash", "run.sh", "check-herdr-activation"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:HAC-CLAUDE-PLAN-CERTIFIED]",
+			"signatureSource": "scripts/check-herdr-activation.ts"
+		},
+		{
+			"claim": "HAC-PHASE-TRANSITIONS",
+			"subject": "scripts/herdr-activation.mjs",
+			"title": "a forward run over a `deactivating` ledger re-wires components a teardown is midway through removing and overwrites the only record of where it stopped — the host ends up half-wired with nothing that describes it",
+			"find": ["\tif (ledger.phase === \"deactivating\") {"],
+			"replace": ["\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-herdr-activation"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:HAC-PHASE-TRANSITIONS]",
+			"signatureSource": "scripts/check-herdr-activation.ts"
+		},
+		{
+			"claim": "HAC-CLAUDE-ROOTS-COMPLETE",
+			"subject": "scripts/herdr-activation.mjs",
+			"title": "a ledger that records only CLAUDE_CONFIG_DIR misses `$HOME/.claude.json`, where the user-scope MCP entry lives: measured, a moved HOME passes the root check and the MCP entry is left behind in the old home",
+			"find": ["\t\tclaudeUserConfig: Object.freeze({ path: path.join(home, \".claude.json\"), source: \"HOME\" }),"],
+			"replace": [
+				"\t\tclaudeUserConfig: Object.freeze({ path: path.join(home, \".claude.json\"), source: \"default\" }),"
+			],
+			"gate": ["bash", "run.sh", "check-herdr-activation"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:HAC-CLAUDE-ROOTS-COMPLETE]",
+			"signatureSource": "scripts/check-herdr-activation.ts"
+		},
+		{
+			"claim": "HAC-AGGREGATE-PREFLIGHT-COMPLETE",
+			"subject": "scripts/herdr-plugin-activate.mjs",
+			"title": "preflighting only the provider half lets the first ledger write land on a host the pi PACKAGE writer was always going to refuse — the aggregate claims preflight-all while one of the two ownership records was never asked",
+			"find": ["\t\tpreflights.push([", "\t\t\t\"pi-package\","],
+			"replace": ["\t\tif (false) preflights.push([", "\t\t\t\"pi-package\","],
+			"gate": ["bash", "run.sh", "check-herdr-activation"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:HAC-AGGREGATE-PREFLIGHT-COMPLETE]",
+			"signatureSource": "scripts/check-herdr-activation.ts"
+		},
+		{
+			"claim": "HAC-RUNTIME-EXACT-VERSION",
+			"subject": "scripts/herdr-plugin-activate.mjs",
+			"title": "checking only that SOME usable tree of that name is present wires two harnesses at an address whose contents disagree with the journal that certified it — the provenance line then describes something else",
+			"find": [
+				"\t\tverifyInstalledRuntime(runtime.activeDir, { name: journal.packageName, version: journal.packageVersion });"
+			],
+			"replace": [
+				"\t\tverifyInstalledRuntime(runtime.activeDir, {",
+				"\t\t\tname: journal.packageName,",
+				"\t\t\tversion: JSON.parse(",
+				"\t\t\t\tfs.readFileSync(path.join(runtime.activeDir, \"node_modules\", journal.packageName, \"package.json\"), \"utf8\"),",
+				"\t\t\t).version,",
+				"\t\t});"
+			],
+			"gate": ["bash", "run.sh", "check-herdr-activation"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:HAC-RUNTIME-EXACT-VERSION]",
+			"signatureSource": "scripts/check-herdr-activation.ts"
+		}
+	]
+}

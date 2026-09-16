@@ -170,11 +170,49 @@ def _now() -> str:
     return datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def _classify(existing_cmd, repo_dir: str) -> str:
+# #116 M3-b2 — the ONE alternative managed command, and it is DERIVED, never supplied.
+# A Herdr plugin activates on a host where nothing entwurf is on PATH, so the bare bin cannot
+# resolve. The plugin mode therefore names the bridge by its absolute path under the certified
+# stable active runtime — and that is the whole freedom it gets: the caller passes the runtime ROOT,
+# this function appends the fixed suffix, and any other string is refused. There is deliberately no
+# flag or environment variable that accepts an arbitrary command or path: that would be a generic
+# "write whatever you like into the operator's pi settings" authority wearing a plugin's clothes.
+PLUGIN_BIN_SUFFIX = os.path.join("node_modules", ".bin", SERVER_KEY)
+
+
+def stable_active_root() -> str:
+    """The ONE runtime address, derived from this process's XDG/HOME exactly as the runtime owner
+    derives it (`scripts/herdr-runtime.mjs` resolveRuntimeLayout). A gate pins the two
+    implementations equal; nothing here reads a caller-supplied root as authority."""
+    data_home = os.environ.get("XDG_DATA_HOME") or os.path.join(os.path.expanduser("~"), ".local", "share")
+    return os.path.join(data_home, "entwurf", "herdr-plugin", "runtime", "active")
+
+
+def plugin_command_for(runtime_root: str) -> str:
+    # The caller may NAME the root, but it is only accepted when it IS this host's stable root. An
+    # absolute path was never the contract — "the stable runtime" was — and a mode that takes any
+    # absolute directory is a way to point every pi session at an executable of the caller's choice.
+    if not isinstance(runtime_root, str) or not os.path.isabs(runtime_root):
+        _die(2, f"register-pi-provider: --plugin-runtime must be an ABSOLUTE stable runtime root, got {runtime_root!r}")
+    if runtime_root != os.path.normpath(runtime_root) or runtime_root.endswith(os.sep):
+        _die(2, f"register-pi-provider: --plugin-runtime must be a normalised path, got {runtime_root!r}")
+    expected = stable_active_root()
+    if runtime_root != expected:
+        _die(2, f"register-pi-provider: --plugin-runtime must be this host's stable runtime root {expected!r}, "
+                f"got {runtime_root!r} — an arbitrary absolute directory is not a plugin runtime.")
+    return os.path.join(runtime_root, PLUGIN_BIN_SUFFIX)
+
+
+def _classify(existing_cmd, repo_dir: str, managed_command: str = BARE_COMMAND) -> str:
     if existing_cmd is None:
         return "absent"
-    if existing_cmd == BARE_COMMAND:
+    if existing_cmd == managed_command:
         return "managed-current"
+    # The OTHER shape we own is adoptable, so bare↔plugin is a normalisation rather than a
+    # takeover. In DEFAULT mode this is exactly the historical set (the bare bin is
+    # managed-current above and never reaches here), so default bytes and verdicts are unchanged.
+    if managed_command != BARE_COMMAND and existing_cmd == BARE_COMMAND:
+        return "managed-legacy"
     if isinstance(existing_cmd, str) and (
         existing_cmd == f"{repo_dir}/mcp/{SERVER_KEY}/start.sh"
         or existing_cmd.endswith(f"/entwurf/mcp/{SERVER_KEY}/start.sh")
@@ -210,7 +248,8 @@ def _load_state_file(state_path: str) -> dict | None:
 
 
 def cmd_install(settings_path: str, repo_dir: str, scope: str, state_path: str, takeover: bool = False,
-                preflight: bool = False) -> None:
+                preflight: bool = False, plugin_runtime: str | None = None) -> None:
+    managed_command = plugin_command_for(plugin_runtime) if plugin_runtime else BARE_COMMAND
     if os.path.islink(settings_path):
         target = os.readlink(settings_path)
         _die(3, f"register-pi-provider: refusing to adopt {settings_path} — it is a symlink to {target} "
@@ -254,7 +293,7 @@ def cmd_install(settings_path: str, repo_dir: str, scope: str, state_path: str, 
     _prune_legacy(servers, repo_dir)   # independent of entwurf-bridge ownership
     existing = servers.get(SERVER_KEY)
     existing_cmd = existing.get("command") if isinstance(existing, dict) else existing
-    ownership = _classify(existing_cmd, repo_dir)
+    ownership = _classify(existing_cmd, repo_dir, managed_command)
 
     if preflight:
         # Read-only half of the atomic user-scope operation: the ownership decision
@@ -282,8 +321,8 @@ def cmd_install(settings_path: str, repo_dir: str, scope: str, state_path: str, 
             sys.stdout.write(f"install: no change — {settings_path} left untouched (bytes and mtime stable)\n")
         return
 
-    # absent / managed-current / managed-legacy → normalize to the bare stable bin.
-    newval = {"command": BARE_COMMAND}
+    # absent / managed-current / managed-legacy → normalize to the managed command for this mode.
+    newval = {"command": managed_command}
     # preserve non-empty custom args if the operator set them; else default [].
     if isinstance(existing, dict) and existing.get("args") not in (None, []):
         newval["args"] = existing["args"]
@@ -292,7 +331,8 @@ def cmd_install(settings_path: str, repo_dir: str, scope: str, state_path: str, 
     servers[SERVER_KEY] = newval
     wrote = _persist(settings_path, before, data, raw)
     sys.stdout.write(
-        f"install: {ownership} → entwurfProvider.mcpServers.{SERVER_KEY} = {BARE_COMMAND} (bare stable bin)\n"
+        f"install: {ownership} → entwurfProvider.mcpServers.{SERVER_KEY} = {managed_command} "
+        f"({'stable plugin runtime' if plugin_runtime else 'bare stable bin'})\n"
     )
     # The desired value AND the legacy prune both already held: nothing to say to the
     # file. Reported so an operator (and the gate) can tell "already correct" from
@@ -317,7 +357,7 @@ def cmd_install(settings_path: str, repo_dir: str, scope: str, state_path: str, 
                 "managedSettingsPath": os.path.abspath(settings_path),
                 "scope": "user",
                 "key": f"entwurfProvider.mcpServers.{SERVER_KEY}",
-                "command": BARE_COMMAND,
+                "command": managed_command,
                 "ownership": ownership,       # absent | managed-current | managed-legacy
                 "installerRoot": repo_dir,     # #86 C2: the root whose inverse may remove this key
                 "preimage": existing,          # raw prior value (audit only; NOT restored)
@@ -387,8 +427,23 @@ def cmd_remove(settings_path: str, repo_dir: str, scope: str, state_path: str, o
             before = _parse_settings(managed, raw)     # dies 4 on corrupt — preflight and writer alike
             data = _parse_settings(managed, raw)
             provider, servers = _provider_servers(data, create=False)
+        # #116 M3-b2 — DRIFT IS NOT OURS TO DELETE. The user-scope inverse is admitted by the
+        # ownership record, not by the command string, so without this it would remove whatever now
+        # sits at our key. The state records the exact command we wrote (bare bin, or the absolute
+        # bridge under a stable plugin runtime); if the live value is PRESENT and different, someone
+        # replaced our key after we installed it and the honest move is to refuse by name rather
+        # than delete their override. An ABSENT key stays an idempotent no-op.
+        recorded_cmd = state.get("command")
+        live = servers.get(SERVER_KEY) if isinstance(servers, dict) else None
+        live_cmd = live.get("command") if isinstance(live, dict) else live
+        if isinstance(recorded_cmd, str) and live_cmd is not None and live_cmd != recorded_cmd:
+            _die(6, f"register-pi-provider: the user-scope {SERVER_KEY} command drifted since install — "
+                    f"we wrote {recorded_cmd!r}, {managed} now holds {live_cmd!r}. That is somebody's override, "
+                    "not our key; zero settings bytes written and the ownership state is left intact.")
         if preflight:
-            sys.stdout.write("preflight: remove ok (owner verified; managed target bound and parseable)\n")
+            sys.stdout.write(
+                f"preflight: remove ok (owner verified; managed target bound and parseable; command={recorded_cmd!r})\n"
+            )
             return
         if os.path.exists(managed):
             # honest inverse: absent/managed-* → remove OUR key (a legacy repo path is NOT
@@ -442,6 +497,7 @@ def cmd_remove(settings_path: str, repo_dir: str, scope: str, state_path: str, o
 
 
 def _parse(argv: list):
+    plugin_runtime = None
     # positional: settings_path repo_dir ; flags: --scope <s> [--state <p>] [--takeover] [--orphan-cleanup] [--preflight]
     pos, scope, state_path = [], None, ""
     takeover, orphan, preflight = False, False, False
@@ -460,17 +516,24 @@ def _parse(argv: list):
             orphan = True
         elif a == "--preflight":
             preflight = True
+        elif a == "--plugin-runtime":
+            i += 1
+            # A flag with no value must NOT fall through to bare mode: the caller asked for the
+            # plugin runtime and would otherwise be told, silently, that it got it.
+            if i >= len(argv) or not argv[i]:
+                _die(5, "register-pi-provider.py: --plugin-runtime requires a value")
+            plugin_runtime = argv[i]
         else:
             pos.append(a)
         i += 1
-    return pos, scope, state_path, takeover, orphan, preflight
+    return pos, scope, state_path, takeover, orphan, preflight, plugin_runtime
 
 
 def main(argv: list) -> None:
     if len(argv) < 2:
         _die(5, "usage: register-pi-provider.py <install|remove> <settings_path> <repo_dir> --scope <user|project> [--state <path>]")
     sub = argv[1]
-    pos, scope, state_path, takeover, orphan, preflight = _parse(argv[2:])
+    pos, scope, state_path, takeover, orphan, preflight, plugin_runtime = _parse(argv[2:])
     if sub not in ("install", "remove"):
         _die(5, f"register-pi-provider.py: unknown subcommand {sub!r}")
     if len(pos) != 2:
@@ -486,8 +549,13 @@ def main(argv: list) -> None:
         _die(5, "register-pi-provider.py: --takeover is an install action")
     if orphan and sub != "remove":
         _die(5, "register-pi-provider.py: --orphan-cleanup is a remove action")
+    # The plugin mode is an INSTALL-side USER-scope decision only. `remove` needs no mode: it
+    # recognises every shape we own through the same classifier, so an inverse never has to be told
+    # which one it is undoing — and a mode flag on remove would be a way to aim a deletion.
+    if plugin_runtime is not None and (sub != "install" or scope != "user"):
+        _die(5, "register-pi-provider.py: --plugin-runtime is a user-scope install action")
     if sub == "install":
-        cmd_install(settings_path, repo_dir, scope, state_path, takeover, preflight)
+        cmd_install(settings_path, repo_dir, scope, state_path, takeover, preflight, plugin_runtime)
     else:
         cmd_remove(settings_path, repo_dir, scope, state_path, orphan, preflight)
 

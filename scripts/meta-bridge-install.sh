@@ -170,7 +170,13 @@ echo "[meta-bridge-install] platform=$(uname -s) node=$NODE_VER ($NODE_BIN) clau
 # settings.json / ~/.claude.json. Re-runs preserve the first snapshot, so
 # uninstall restores the true pre-entwurf state rather than the last install
 # run's already-managed values.
-python3 "$REPO/scripts/meta-bridge-state.py" prepare --repo "$REPO" --asm "$ASM"
+# #116 M3-b2 — decide before writing. An aggregate activation has to be able to say "nothing will
+# fail once I start" before it starts, and that promise is only real if this half can be checked
+# without mutating.
+python3 "$REPO/scripts/meta-bridge-state.py" preflight-install --repo "$REPO" --asm "$ASM" \
+  ${ENTWURF_PLUGIN_RUNTIME:+--plugin-runtime "$ENTWURF_PLUGIN_RUNTIME"}
+python3 "$REPO/scripts/meta-bridge-state.py" prepare --repo "$REPO" --asm "$ASM" \
+  ${ENTWURF_PLUGIN_RUNTIME:+--plugin-runtime "$ENTWURF_PLUGIN_RUNTIME"}
 
 # --- 1. assemble a self-contained, node-baked plugin ------------------------
 rm -rf "$ASM"
@@ -251,6 +257,15 @@ claude mcp remove pi-tools-bridge -s user >/dev/null 2>&1 || true
 # in node_modules/@junghanacs/entwurf) wires the STABLE `entwurf-bridge` bin shim; baking
 # the pnpm store path here would go stale on any peer/version bump. A dev clone pins to
 # this clone's start.sh. Both branches carry the same env desired_mcp() writes.
+# #116 M3-b2 — the explicit plugin mode comes FIRST, and it is derived, not supplied. A Herdr
+# plugin activates where nothing entwurf is on PATH, so the bare shim cannot resolve; the absolute
+# bridge under the certified stable runtime can. `desired_mcp()` above is still the SSOT — this
+# branch mirrors it, as the comment on the block already demanded.
+if [ -n "${ENTWURF_PLUGIN_RUNTIME:-}" ]; then
+  claude mcp add -s user entwurf-bridge \
+    -e ENTWURF_BRIDGE_EXTERNAL_AGENT_ID=external-mcp/claude-code \
+    -- "$ENTWURF_PLUGIN_RUNTIME/node_modules/.bin/entwurf-bridge" >/dev/null
+else
 case "$REPO" in
   */node_modules/@junghanacs/entwurf)
     claude mcp add -s user entwurf-bridge \
@@ -261,6 +276,7 @@ case "$REPO" in
       -e ENTWURF_BRIDGE_EXTERNAL_AGENT_ID=external-mcp/claude-code \
       -- bash "$REPO/mcp/entwurf-bridge/start.sh" >/dev/null ;;
 esac
+fi
 # Capture, THEN match — and require BOTH the exit code and the content.
 # `<cli> | grep -q` under `set -o pipefail` is a race, not a test: grep exits at the
 # first match and closes the pipe, the still-writing CLI dies of SIGPIPE (141), and
@@ -283,7 +299,8 @@ echo "[meta-bridge-install] installed entwurf-bridge MCP (scope: user = global r
 # Re-assert the repo-owned keyset through our stateful manager. The Claude CLI
 # calls above are allowed to maintain their cache/registry files, but the
 # operator-facing JSON keys are owned here so uninstall can be honest.
-python3 "$REPO/scripts/meta-bridge-state.py" apply --repo "$REPO" --asm "$ASM"
+python3 "$REPO/scripts/meta-bridge-state.py" apply --repo "$REPO" --asm "$ASM" \
+  ${ENTWURF_PLUGIN_RUNTIME:+--plugin-runtime "$ENTWURF_PLUGIN_RUNTIME"}
 
 # --- evidence ---------------------------------------------------------------
 echo "--- claude plugin list ---"

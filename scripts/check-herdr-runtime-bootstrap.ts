@@ -40,7 +40,10 @@ function ok(label: string, cond: boolean): void {
 
 const REPO = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
 const PLUGIN_DIR = path.join(REPO, "plugins", "herdr");
-const LEAF = path.join(PLUGIN_DIR, "lib", "runtime-bootstrap.mjs");
+/** The ONE owner — under `scripts/`, which the npm tarball ships. */
+const LEAF = path.join(REPO, "scripts", "herdr-runtime.mjs");
+/** The plugin-side file, which must be a thin re-export of exactly that. */
+const PLUGIN_REEXPORT = path.join(PLUGIN_DIR, "lib", "runtime-bootstrap.mjs");
 
 interface Spec {
 	name: string;
@@ -208,7 +211,34 @@ function install(env: NodeJS.ProcessEnv, lock = LOCK_A, acquire = fixtureAcquire
 	return bootstrapRuntime({ env, spec: { name: lock.name, version: lock.version }, lock, acquire });
 }
 
-// ── 1. the address the wiring will name is a real directory and it does not move ─
+// ── 1. the shipped owner is the only implementation ────────────────────────────
+{
+	const shipped = (JSON.parse(fs.readFileSync(path.join(REPO, "package.json"), "utf8")) as { files: string[] }).files;
+	const reexport = fs.readFileSync(PLUGIN_REEXPORT, "utf8");
+	const code = reexport
+		.replace(/\/\*[\s\S]*?\*\//g, "")
+		.split("\n")
+		.map((l) => l.trim())
+		.filter((l) => l.length > 0);
+	const owner = (await import(pathToFileURL(LEAF).href)) as Record<string, unknown>;
+	const thin = (await import(pathToFileURL(PLUGIN_REEXPORT).href)) as Record<string, unknown>;
+	const surfaces = JSON.stringify(Object.keys(owner).sort()) === JSON.stringify(Object.keys(thin).sort());
+	ok(
+		"[QK:HRB-ONE-SHIPPED-OWNER] the implementation lives under `scripts/` — which `package.json.files` ships — and " +
+			"the plugin-side file is a re-export and NOTHING else: Herdr's `plugin uninstall` deletes the checkout this " +
+			"plugin sits in and calls no cleanup hook, so the code that retires the runtime and undoes an activation has " +
+			"to outlive that deletion, and a second copy would let an uninstall read back a schema a different " +
+			`implementation wrote (scripts-shipped=${shipped.includes("scripts/")} plugins-shipped=${shipped.some((f) => f.startsWith("plugins"))} reexport-lines=${code.length} surfaces-identical=${surfaces})`,
+		shipped.includes("scripts/") &&
+			!shipped.some((f) => f.startsWith("plugins")) &&
+			code.length === 1 &&
+			code[0] === 'export * from "../../../scripts/herdr-runtime.mjs";' &&
+			surfaces &&
+			Object.keys(owner).length > 0,
+	);
+}
+
+// ── 2. the address the wiring will name is a real directory and it does not move ─
 {
 	const env = world("address");
 	const layout = resolveRuntimeLayout(env);
@@ -230,7 +260,7 @@ function install(env: NodeJS.ProcessEnv, lock = LOCK_A, acquire = fixtureAcquire
 	);
 }
 
-// ── 2. nothing is created before the judgement ─────────────────────────────────
+// ── 3. nothing is created before the judgement ─────────────────────────────────
 {
 	const env = world("premutation");
 	const layout = resolveRuntimeLayout(env);
@@ -249,7 +279,7 @@ function install(env: NodeJS.ProcessEnv, lock = LOCK_A, acquire = fixtureAcquire
 	);
 }
 
-// ── 3. disk facts come from lstat, and a link is never a directory ─────────────
+// ── 4. disk facts come from lstat, and a link is never a directory ─────────────
 {
 	const dangling = world("dangling");
 	const danglingLayout = resolveRuntimeLayout(dangling);
@@ -284,7 +314,7 @@ function install(env: NodeJS.ProcessEnv, lock = LOCK_A, acquire = fixtureAcquire
 	);
 }
 
-// ── 4. the exact package, or a named refusal ───────────────────────────────────
+// ── 5. the exact package, or a named refusal ───────────────────────────────────
 {
 	const wrongVersion = refusal(() => install(world("wrong-version"), LOCK_A, fixtureAcquire({ version: "0.0.1" })));
 	const noDist = refusal(() => install(world("no-dist"), LOCK_A, fixtureAcquire({ dist: false })));
@@ -300,7 +330,7 @@ function install(env: NodeJS.ProcessEnv, lock = LOCK_A, acquire = fixtureAcquire
 	);
 }
 
-// ── 5. an incomplete runtime is never `runtime-ready` ──────────────────────────
+// ── 6. an incomplete runtime is never `runtime-ready` ──────────────────────────
 {
 	const missing = refusal(() =>
 		install(world("bin-missing"), LOCK_A, fixtureAcquire({ omitBin: "entwurf-statusline" })),
@@ -317,7 +347,7 @@ function install(env: NodeJS.ProcessEnv, lock = LOCK_A, acquire = fixtureAcquire
 	);
 }
 
-// ── 6. the lock's SHAPE is named before any field is read ──────────────────────
+// ── 7. the lock's SHAPE is named before any field is read ──────────────────────
 {
 	const dir = reclaimOnExit(fs.mkdtempSync(path.join(os.tmpdir(), "entwurf-hrb-lock-")));
 	const read = (body: string): string | null => {
@@ -341,7 +371,7 @@ function install(env: NodeJS.ProcessEnv, lock = LOCK_A, acquire = fixtureAcquire
 	);
 }
 
-// ── 7. the artifact is locked, and the lock agrees with the checkout ───────────
+// ── 8. the artifact is locked, and the lock agrees with the checkout ───────────
 {
 	const lock = readRuntimeLock(PLUGIN_DIR);
 	const checkout = readCheckoutPackageSpec(REPO);
@@ -371,7 +401,7 @@ function install(env: NodeJS.ProcessEnv, lock = LOCK_A, acquire = fixtureAcquire
 	);
 }
 
-// ── 8. npm fills OUR cache, never the operator's ───────────────────────────────
+// ── 9. npm fills OUR cache, never the operator's ───────────────────────────────
 {
 	const env = world("cache");
 	const layout = resolveRuntimeLayout(env);
@@ -394,7 +424,7 @@ function install(env: NodeJS.ProcessEnv, lock = LOCK_A, acquire = fixtureAcquire
 	);
 }
 
-// ── 9. nothing this plugin installs may run install scripts ────────────────────
+// ── 10. nothing this plugin installs may run install scripts ───────────────────
 {
 	const installArgv = buildInstallArgv("/tmp/pkg.tgz", "/tmp/prefix");
 	const packArgv = buildPackArgv(LOCK_A, "/tmp/cache");
@@ -411,7 +441,7 @@ function install(env: NodeJS.ProcessEnv, lock = LOCK_A, acquire = fixtureAcquire
 	);
 }
 
-// ── 10. nothing at our address is moved without proof that it is ours ──────────
+// ── 11. nothing at our address is moved without proof that it is ours ──────────
 {
 	const env = world("unowned");
 	const layout = resolveRuntimeLayout(env);
@@ -436,7 +466,7 @@ function install(env: NodeJS.ProcessEnv, lock = LOCK_A, acquire = fixtureAcquire
 	);
 }
 
-// ── 11. the journal's SHAPE is certified, phase by phase ───────────────────────
+// ── 12. the journal's SHAPE is certified, phase by phase ───────────────────────
 {
 	const env = world("journal-shape");
 	const layout = resolveRuntimeLayout(env);
@@ -467,7 +497,7 @@ function install(env: NodeJS.ProcessEnv, lock = LOCK_A, acquire = fixtureAcquire
 	);
 }
 
-// ── 12. a failing candidate leaves the previous runtime exactly as it was ──────
+// ── 13. a failing candidate leaves the previous runtime exactly as it was ──────
 {
 	const env = world("rollback");
 	const layout = resolveRuntimeLayout(env);
@@ -488,7 +518,7 @@ function install(env: NodeJS.ProcessEnv, lock = LOCK_A, acquire = fixtureAcquire
 	);
 }
 
-// ── 13. the last good runtime is never lost ────────────────────────────────────
+// ── 14. the last good runtime is never lost ────────────────────────────────────
 {
 	// (a) the crash window itself: active renamed away, staging not yet renamed in.
 	const torn = world("torn");
@@ -539,7 +569,7 @@ function install(env: NodeJS.ProcessEnv, lock = LOCK_A, acquire = fixtureAcquire
 	);
 }
 
-// ── 14. all eight presence combinations have a name, and none leaves residue ───
+// ── 15. all eight presence combinations have a name, and none leaves residue ───
 {
 	const cases: { tag: string; arrange: (l: Layout) => void; expect: string }[] = [
 		{ tag: "000", arrange: (l) => fs.rmSync(l.activeDir, { recursive: true }), expect: "owned-empty" },
@@ -602,7 +632,7 @@ function install(env: NodeJS.ProcessEnv, lock = LOCK_A, acquire = fixtureAcquire
 	);
 }
 
-// ── 15. the provenance of the runtime being replaced is carried, not overwritten ─
+// ── 16. the provenance of the runtime being replaced is carried, not overwritten ─
 {
 	const env = world("provenance-carry");
 	const layout = resolveRuntimeLayout(env);
@@ -625,7 +655,7 @@ function install(env: NodeJS.ProcessEnv, lock = LOCK_A, acquire = fixtureAcquire
 	);
 }
 
-// ── 16. the same exact runtime is not acquired twice ───────────────────────────
+// ── 17. the same exact runtime is not acquired twice ───────────────────────────
 {
 	const env = world("idempotent");
 	let calls = 0;
@@ -644,7 +674,7 @@ function install(env: NodeJS.ProcessEnv, lock = LOCK_A, acquire = fixtureAcquire
 	);
 }
 
-// ── 17. a journal the disk does not back is not believed ───────────────────────
+// ── 18. a journal the disk does not back is not believed ───────────────────────
 {
 	const env = world("reconcile");
 	const layout = resolveRuntimeLayout(env);
@@ -663,7 +693,7 @@ function install(env: NodeJS.ProcessEnv, lock = LOCK_A, acquire = fixtureAcquire
 	);
 }
 
-// ── 18. the inverse removes only what it can prove, runtime last ───────────────
+// ── 19. the inverse removes only what it can prove, runtime last ───────────────
 {
 	const foreign = world("inverse-foreign");
 	const foreignLayout = resolveRuntimeLayout(foreign);
@@ -694,7 +724,7 @@ function install(env: NodeJS.ProcessEnv, lock = LOCK_A, acquire = fixtureAcquire
 	);
 }
 
-// ── 19. this slice never claims Herdr's commit ─────────────────────────────────
+// ── 20. this slice never claims Herdr's commit ─────────────────────────────────
 {
 	const env = world("no-claim");
 	const layout = resolveRuntimeLayout(env);

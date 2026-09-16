@@ -182,6 +182,7 @@ Usage:
   ./run.sh check-meta-facts            # deterministic gate for the meta-facts projection (#65): drives the REAL CLI — full-record join, parse-before-uniqueness, no-winner duplicates, drift/symlink/invalid-UTF-8 defects in-band, deterministic bytes, exit contract 0/2/3, dispatch+emit reachability
   ./run.sh check-herdr-plugin          # deterministic gate for the #116 M2-b herdr plugin (`plugins/herdr/`): STATIC manifest shape for herdr 0.9.0 + the forbidden sections ([[build]]/[[startup]]/[[events]]/[[actions]]/[[link_handlers]]) asserted absent; BEHAVIOURAL drive of the REAL pane entry against a stub `entwurf` and stub HERDR_BIN_PATH that LOG every call — exactly one peer-facts + one agent list per open (counted, not claimed), skip-by-name when Entwurf is absent, four distinct named refusals instead of an empty table, ambiguous never first-wins, diagnostics shown, activity in its own column, and zero writes to the plugin state/config dirs. No herdr binary, no Entwurf install
   ./run.sh check-herdr-runtime-bootstrap # deterministic gate for the #116 M3-b1 runtime leaf (`plugins/herdr/lib/runtime-bootstrap.mjs`): the Entwurf-owned stable active root as a REAL directory (nothing is put on PATH — the scoped wiring above names ABSOLUTE commands under it), ownership decided BEFORE the first mkdir, disk facts from lstat (a dangling symlink is not 'absent' and a link into another tree is not a directory), exact name@version + compiled entry + all three required bins present AND executable + a real `check-bridge`, the plugin-owned artifact lock coherent with the checkout, the owned npm cache and --ignore-scripts, a CERTIFIED journal (non-object/array/scalar/blank-identity/phase-contradicting-digest all refused) as the only ownership proof, all EIGHT active/staging/previous combinations named, the last good runtime never lost (torn swap AND corrupt-active beside a good backup), prior provenance carried across an install that may not finish, a failed candidate leaving the running runtime byte-identical, idempotent same-spec reinstall, a journal believed only while the disk backs it, a preflight-then-mutate inverse taking runtime last, and the refusal to record Herdr's commit as ours. NETWORK ZERO, npm ZERO — it drives a FIXTURE package, so the ACTUAL package proof lives in check-pack-install
+  ./run.sh check-herdr-activation      # deterministic gate for the #116 M3-b2 scoped activation: the pi user-scope-ONLY forward seam (no project write, OpenCode byte-untouched), the absolute command DERIVED from the runtime root for BOTH harnesses (relative/unnormalised refused), default bare/clone bytes unchanged when no mode is asked, the pi inverse refusing a drifted command instead of deleting an override, a certified activation ledger that can never name an atom outside {pi, claude-code}, add-only reinstall (a shrinking H retains, never removes), a roots-drift refusal before the first byte, the teardown order components->runtime->ledger LAST, one refused preflight leaving every byte untouched, and no deferred module load on the path that deletes its own runtime. Drives the REAL pi writers; the vendor `claude` CLI is NOT invoked and its acceptance of an absolute executable stays a named LIVE boundary
   ./run.sh check-herdr-plugin-profile  # deterministic gate for the #116 M3-a PURE activation leaf (`plugins/herdr/lib/integration-profile.mjs`): the closed {pi→pi, claude→claude-code} table, exactly-one-row-or-named-refusal, the FRONT-ANCHORED state grammar (a `/srv/current (v9)/` directory name may not decide a verdict), no path in the plan, outdated/needs-repair as named FAILs, not-installed as a zero-write SKIP, `current` as herdr's admission with no floor of our own, OpenCode observed but never planned, and the leaf's purity. Listing strings only — no herdr binary, no install, no environment, no writes
   ./run.sh check-peer-facts            # deterministic gate for the peer-facts projection (#116 M2-a): drives the REAL CLI with every ambient root sandboxed — placement crosses STRUCTURED (never the human `herdr <pane>` string), the peer keyset is exactly the provider's facts (no herdr agent_status may enter an entwurf payload), no socket coordinate is published (#50 C4), diagnostics in-band, the probed socket world is the one ENTWURF_DIR names (proved by a record-less socket surfacing — there is no field to echo), no observation budget, exit contract 0/2/3, dispatch+emit reachability. No herdr binary
   ./run.sh check-meta-listing          # deterministic gate: META-STORE facts axis — kind-carrying entries; non-regular records are never read, parse/drift become diagnostics, duplicate nativeSessionId quarantines every rival but not unrelated citizens; strict throws / collect partial; pure injected IO
@@ -285,6 +286,9 @@ Usage:
   ./run.sh check-install-container    # 0.12.8 (#51 C): Linux artifact-CONSUMER gate — one candidate .tgz handed read-only to a checkout-invisible node:<engines-major>-bookworm cell. Default packs once to temp; ENTWURF_CANDIDATE_TGZ=/absolute/preserved.tgz consumes those exact bytes with no re-pack and prints canonical path+sha256 for release. Non-root global PATH install, frozen package, MCP tools/list, fake-Claude install-meta-bridge, path+sha256 fence, strict doctor, and the GENERATION host-state matrix (clean / v3-only store bytes unchanged / previous-generation REFUSE→fresh-cut→retry PASS) seeded inline. Docker missing = honest SKIP; ENTWURF_REQUIRE_DOCKER=1 makes that RED (required CI)
   ./run.sh install [project-dir]      # INTERNAL part of `setup` (project .pi/settings.json wiring) + npm-consumer entry — prefer `setup`, don't call directly for dev
   ./run.sh remove [project-dir]       # remove entwurf entries from project .pi/settings.json (project scope only; global user-scope citizen left intact)
+  ./run.sh install-user-scope [--plugin-runtime <root>]  # #116 M3-b2 PLUGIN-ONLY forward seam: compose ONLY the global pi citizen (user-scope packages[] + provider), never a project `.pi/settings.json` — a Herdr plugin activation has no project and must not invent one. With --plugin-runtime the provider's managed command becomes the absolute bridge under that certified stable runtime (a clean host has nothing entwurf on PATH); without it every byte is the historical bare-bin install. Inverse: remove-user-scope
+  ./run.sh herdr-plugin-activate <backend...>  # #116 M3-b2 public forward activation. Takes a subset of {pi, claude-code} and NOTHING else — the stable runtime root is DERIVED from XDG here and handed down, and both harness writers accept a named root only when it IS that derived one. Certifies the runtime-ready journal AND the installed tree, certifies the existing ledger and its recorded harness roots, plans ADD-ONLY (a backend absent from this request is retained, never removed), preflights every selected component before the first byte, then writes each component `pending` BEFORE mutating and checkpoints `active` the moment its writer returns — so a run that dies halfway leaves a record of how far it got. Which backends is M3-b3's question: this verb is handed the answer, it does not read Herdr's integration status
+  ./run.sh herdr-plugin-deactivate   # #116 M3-b2 public teardown of a Herdr-plugin activation. Herdr's `plugin uninstall` deletes its checkout and calls NO cleanup hook, so the harness wiring and the stable runtime are retained, not cleaned — this is the shipped verb that takes them back. Certifies the activation ledger, the resolved Pi/Claude roots and BOTH component inverses read-only first; mutates only when every preflight is green; then Claude -> Pi user scope -> runtime -> ledger LAST. A component failure stops with the runtime and ledger intact as retry authority. Static imports only: the process deletes the runtime it is running from, and a lazy import after that fails
   ./run.sh remove-user-scope          # explicit GLOBAL inverse of install's user-scope citizen: drop entwurf from ~/.pi/agent/settings.json packages[] (affects ALL cwds — shared entry, not per-project). #86 C2: same-owner-only — a LIVE foreign owner refuses; a MISSING owner is removed only when package entry + package state + provider installerRoot all align (reported orphan cleanup)
   ./run.sh takeover-user-scope        # #86 C2: operator-EXPLICIT ownership move of the shared user-scope registration to THIS root (old→new reported, packages[] entry + provider installerRoot together). The only writer over another owner — normal install/setup/remove refuse instead. No --force exists
   ./run.sh doctor-pi-package          # #86 C2: package-side user-scope ownership verdict — unregistered / owned / owned-by-other(live) / legacy-no-state / mismatch / missing-owner (nonzero on defect verdicts). Provider runtime verdicts stay with doctor-pi-provider
@@ -638,8 +642,15 @@ codex_statusline() {
   esac
 }
 
+# $1 (optional): a certified stable plugin runtime root. Given, the provider half is written in
+# PLUGIN MODE — its managed command becomes the absolute bridge under that root instead of the bare
+# bin. That is the whole difference, and it exists because a Herdr plugin activates on a host where
+# nothing entwurf is on PATH, so a bare command cannot resolve. Absent, every byte is what it has
+# always been (#116 M3-b2).
 register_user_scope_citizen() {
   local agent_dir="${PI_CODING_AGENT_DIR:-$HOME/.pi/agent}"
+  local plugin_mode=()
+  [ -n "${1:-}" ] && plugin_mode=(--plugin-runtime "$1")
   # Shared idempotent implementation (also driven by smoke-user-scope-citizen).
   # #86 C2: user scope carries a recorded OWNER (packageRoot in the pi-package
   # install-state). Another owner — live or missing — makes this a zero-write
@@ -652,7 +663,7 @@ register_user_scope_citizen() {
   python3 "$REPO_DIR/scripts/register-pi-package.py" "$agent_dir/settings.json" "$REPO_DIR" \
     --scope user --state "$(_pi_package_state)" --preflight >/dev/null
   python3 "$REPO_DIR/scripts/register-pi-provider.py" install "$agent_dir/settings.json" "$REPO_DIR" \
-    --scope user --state "$(_pi_provider_state)" --preflight >/dev/null
+    --scope user --state "$(_pi_provider_state)" ${plugin_mode[@]+"${plugin_mode[@]}"} --preflight >/dev/null
   python3 "$REPO_DIR/scripts/register-pi-package.py" "$agent_dir/settings.json" "$REPO_DIR" \
     --scope user --state "$(_pi_package_state)"
   # #46 Task 2: own entwurfProvider.mcpServers.entwurf-bridge as the bare stable bin at USER scope
@@ -661,7 +672,33 @@ register_user_scope_citizen() {
   # local and covered by `run.sh remove` (no state) — deliberate, reasoned asymmetry.
   # #86 C2: the provider state records installerRoot, so the same foreign-owner refusal
   # holds here — and the package refusal above fires FIRST, before any provider write.
-  python3 "$REPO_DIR/scripts/register-pi-provider.py" install "$agent_dir/settings.json" "$REPO_DIR" --scope user --state "$(_pi_provider_state)"
+  python3 "$REPO_DIR/scripts/register-pi-provider.py" install "$agent_dir/settings.json" "$REPO_DIR" --scope user --state "$(_pi_provider_state)" ${plugin_mode[@]+"${plugin_mode[@]}"}
+}
+
+# install-user-scope — the PLUGIN-ONLY forward seam (#116 M3-b2). Generic `install` writes both a
+# project `.pi/settings.json` and the global user-scope citizen; a Herdr plugin activation has no
+# project and must not invent one, so this verb composes the user-scope half and nothing else. Its
+# inverse is the one that already existed, `remove-user-scope` — the asymmetry this closes is that
+# the inverse was public and the forward was not.
+install_user_scope() {
+  command -v python3 >/dev/null 2>&1 || { echo "[install-user-scope] requires python3 on PATH; nothing was written." >&2; exit 1; }
+  local plugin_runtime=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --plugin-runtime)
+        shift
+        # A flag with no value must not fall through to bare mode: the caller asked for the plugin
+        # runtime and would otherwise be told, silently, that it got it.
+        [ -n "${1:-}" ] || { echo "run.sh install-user-scope: --plugin-runtime requires a value" >&2; exit 2; }
+        plugin_runtime="$1" ;;
+      *) echo "usage: run.sh install-user-scope [--plugin-runtime <stable active root>]" >&2; exit 2 ;;
+    esac
+    shift
+  done
+  preflight_v3_store install-user-scope
+  section "install-user-scope: the GLOBAL pi citizen only (no project wiring)"
+  register_user_scope_citizen "$plugin_runtime"
+  ok "install-user-scope: user-scope packages[] + provider registered${plugin_runtime:+ (plugin runtime: $plugin_runtime)}"
 }
 
 # takeover-user-scope — the operator-explicit ownership move (#86 C2). The ONLY
@@ -1793,6 +1830,17 @@ check_herdr_plugin() {
   # fixture check-herdr-sandbox forbids. No herdr binary, no Entwurf install, no writes
   # outside mkdtemp.
   run_ts scripts/check-herdr-plugin.ts
+}
+
+check_herdr_activation() {
+  # Deterministic gate for the #116 M3-b2 scoped activation. The pi cells drive the REAL writers
+  # (run.sh install-user-scope, register-pi-provider.py, remove-user-scope) against a sandboxed
+  # HOME/XDG/PI_CODING_AGENT_DIR, so the bytes asserted are bytes those writers produced. The Claude
+  # cells drive the REAL state owner's pure surfaces; the vendor `claude` CLI is NOT invoked and its
+  # acceptance of an absolute executable stays a named LIVE boundary. The oracle for a roundtrip is
+  # JSON equality plus unrelated-key survival, never byte equality: the pi settings writer preserves
+  # semantics but may reindent (measured 2026-09-16). No network, no operator HOME.
+  run_ts scripts/check-herdr-activation.ts
 }
 
 check_herdr_runtime_bootstrap() {
@@ -3746,29 +3794,59 @@ _check_pack_install_impl() {
   }
   echo "[check-pack-install] installed: $probe"
 
-  # #116 M3-b1 — THE ACTUAL-PACKAGE RUNTIME PROOF. The Herdr plugin's runtime verifier
-  # (plugins/herdr/lib/runtime-bootstrap.mjs) decides whether a tree npm placed is a
-  # runtime the scoped wiring may name: exact name@version, the compiled entry, all three
-  # required bins present AND executable, and a real `entwurf check-bridge`. Its own
-  # focused gate drives that verifier against a FIXTURE package, which proves the
-  # transaction but not this package — so the real artifact is verified HERE, against the
-  # tarball this gate already packed and installed. No second pack, no network, no npm
-  # cache of ours. `--ignore-scripts` is what the plugin installs with, and pnpm add above
-  # did not run entwurf's postinstall either, so an executable-bit that only a postinstall
-  # would set is exactly the regression this cell catches.
+  # #116 M3-b1/b2 — THE ACTUAL-PACKAGE RUNTIME PROOF, THROUGH THE SHIPPED OWNER.
+  # The Herdr plugin's runtime verifier decides whether a tree npm placed is a runtime the scoped
+  # wiring may name: exact name@version, the compiled entry, all three required bins present AND
+  # executable, and a real `entwurf check-bridge`. Its own focused gate drives that verifier against
+  # a FIXTURE package, which proves the transaction but not this package — so the real artifact is
+  # verified HERE, against the tarball this gate already packed and installed. No second pack, no
+  # network.
+  #
+  # It imports from the INSTALLED tree's own scripts/herdr-runtime.mjs, not from the checkout. That
+  # is the point: Herdr's `plugin uninstall` deletes the plugin checkout and calls no cleanup hook,
+  # so the code that retires a runtime has to be IN the package. Reaching into $REPO_DIR here would
+  # prove the checkout works and say nothing about what a clean host receives.
   local runtime_proof
   runtime_proof=$(cd "$tmp" && node --input-type=module -e "
+    const pkg = process.cwd() + '/node_modules/@junghanacs/entwurf';
     const { verifyInstalledRuntime, readCheckoutPackageSpec, REQUIRED_BINS } =
-      await import('${REPO_DIR}/plugins/herdr/lib/runtime-bootstrap.mjs');
-    const spec = readCheckoutPackageSpec('${REPO_DIR}');
+      await import(pkg + '/scripts/herdr-runtime.mjs');
+    const spec = readCheckoutPackageSpec(pkg);
     const seen = verifyInstalledRuntime(process.cwd(), spec);
-    console.log(seen.name + '@' + seen.version + ' verified as an installed runtime (' + REQUIRED_BINS.join(', ') + ')');
+    console.log(seen.name + '@' + seen.version + ' verified through the SHIPPED owner (' + REQUIRED_BINS.join(', ') + ')');
   " 2>&1) || {
-    fail "[check-pack-install] #116 M3-b1 runtime verifier REFUSED the actual installed package:"
+    fail "[check-pack-install] #116 runtime verifier REFUSED the actual installed package (or does not ship):"
     echo "$runtime_proof" | sed 's/^/    /' >&2
     return 1
   }
   echo "[check-pack-install] herdr-plugin runtime verifier: $runtime_proof"
+
+  # #116 M3-b2 — THE DEACTIVATE VERB MUST ACTUALLY TEAR DOWN, WITH NO CHECKOUT. Herdr's `plugin
+  # uninstall` deletes the plugin checkout and calls no cleanup hook, so the teardown entry has to
+  # be IN the package AND has to survive deleting the runtime it is executing from. So this does not
+  # settle for the "nothing to undo" verdict: it stages the real shape — the installed package
+  # sitting AT the stable active root, a certified runtime journal, and a certified activation
+  # ledger whose components are already removed — then runs THAT copy's own entry with a throwaway
+  # HOME/XDG and no reference to this repo. What it proves is the self-delete: the process removes
+  # the tree it is executing from and still finishes retiring the ledger.
+  local deact_home deact_active deact_pkg deact_proof deact_rc runtime_left ledger_left
+  deact_home=$(mktemp -d -t entwurf-deact.XXXXXX)
+  deact_active="$deact_home/.data/entwurf/herdr-plugin/runtime/active"
+  mkdir -p "$deact_active" "$deact_home/.state/entwurf/herdr-plugin"
+  cp -R "$tmp/node_modules" "$deact_active/node_modules"
+  deact_pkg="$deact_active/node_modules/@junghanacs/entwurf"
+  node -e 'const fs=require("fs"),path=require("path");const [home,active]=process.argv.slice(1);const pkg=path.join(active,"node_modules","@junghanacs","entwurf");const version=JSON.parse(fs.readFileSync(path.join(pkg,"package.json"),"utf8")).version;fs.writeFileSync(path.join(home,".data","entwurf","herdr-plugin","journal.json"),JSON.stringify({schemaVersion:1,phase:"runtime-ready",runtimeRoot:active,packageName:"@junghanacs/entwurf",packageVersion:version,expectedIntegrity:"sha512-consumercell",observedDigest:"sha256-"+"a".repeat(64),previousRuntime:null}));fs.writeFileSync(path.join(home,".state","entwurf","herdr-plugin","activation.json"),JSON.stringify({schemaVersion:1,phase:"deactivating",runtimeRoot:active,piAgentDir:{path:path.join(home,".pi","agent"),source:"default"},claudeConfigDir:{path:path.join(home,".claude"),source:"default"},claudeUserConfig:{path:path.join(home,".claude.json"),source:"HOME"},activatedBackends:["pi"],components:[{backend:"pi",state:"removed"}]}));' "$deact_home" "$deact_active"
+  deact_proof=$(env -i PATH="$PATH" HOME="$deact_home" XDG_DATA_HOME="$deact_home/.data" XDG_STATE_HOME="$deact_home/.state" XDG_CACHE_HOME="$deact_home/.cache" node "$deact_pkg/scripts/herdr-plugin-deactivate.mjs" 2>&1)
+  deact_rc=$?
+  runtime_left=$([ -e "$deact_home/.data/entwurf/herdr-plugin/runtime" ] && echo yes || echo no)
+  ledger_left=$([ -e "$deact_home/.state/entwurf/herdr-plugin/activation.json" ] && echo yes || echo no)
+  rm -rf "$deact_home"
+  if [ "$deact_rc" -ne 0 ] || [ "$runtime_left" != "no" ] || [ "$ledger_left" != "no" ]; then
+    fail "[check-pack-install] #116 M3-b2 installed herdr-plugin-deactivate did not complete the self-delete (rc=$deact_rc runtime-left=$runtime_left ledger-left=$ledger_left):"
+    echo "$deact_proof" | sed 's/^/    /' >&2
+    return 1
+  fi
+  echo "[check-pack-install] installed herdr-plugin-deactivate removed its OWN runtime and retired the ledger with no checkout: $deact_proof"
 
   # Pi package loader smoke — actual `pi` reads the manifest and
   # registers the provider. rc=0 + the curated model list in the
@@ -6357,6 +6435,9 @@ case "$cmd" in
   check-meta-facts)
     check_meta_facts
     ;;
+  check-herdr-activation)
+    check_herdr_activation
+    ;;
   check-herdr-runtime-bootstrap)
     check_herdr_runtime_bootstrap
     ;;
@@ -7193,6 +7274,21 @@ case "$cmd" in
     ;;
   remove)
     remove_local_package "$TARGET_PROJECT_DIR"
+    ;;
+  herdr-plugin-activate)
+    # #116 M3-b2 public forward verb. Takes a subset of {pi, claude-code} and NOTHING else — the
+    # stable runtime root is derived, never supplied. Plain `node` in both modes: shipped .mjs.
+    shift
+    (cd "$REPO_DIR" && node "$REPO_DIR/scripts/herdr-plugin-activate.mjs" "$@")
+    ;;
+  herdr-plugin-deactivate)
+    # #116 M3-b2 public verb. Plain `node` in BOTH modes on purpose: this is shipped .mjs, not TS,
+    # because it has to run from an installed package after Herdr deleted the plugin checkout.
+    (cd "$REPO_DIR" && node "$REPO_DIR/scripts/herdr-plugin-deactivate.mjs" "$@")
+    ;;
+  install-user-scope)
+    shift
+    install_user_scope "$@"
     ;;
   remove-user-scope)
     remove_user_scope_citizen
