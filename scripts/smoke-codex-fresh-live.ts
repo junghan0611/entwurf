@@ -2,10 +2,10 @@
  * First-admission LIVE acceptance for Codex visible fresh — reshaped for the #95 lane B caller
  * seat.
  *
- * The operator owns the existing exact `codex` tmux home and Codex app-server. This smoke neither
- * creates nor supervises them: an explicit ENTWURF_CODEX_APP_SERVER_PID names the already-running
- * process whose /proc environment must corroborate the home. The attached TUI pane is never
- * guessed.
+ * The operator owns the Codex app-server and the tmux session it sits in (#95 D1 retired the fixed
+ * `codex` home). This smoke neither creates nor supervises them: an explicit
+ * ENTWURF_CODEX_APP_SERVER_PID names the already-running process whose /proc environment must
+ * corroborate its seat. The attached TUI pane is never guessed.
  *
  * ── THE TOPOLOGY, AND WHY IT IS DELIBERATELY SPLIT (#95 lane B) ──
  *

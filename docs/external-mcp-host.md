@@ -133,15 +133,19 @@ Use the owned surfaces rather than editing `~/.codex/config.toml`:
 entwurf install-codex-birth
 entwurf install-codex-mcp
 entwurf install-codex-statusline
+entwurf install-codex-terminal-title
 
 entwurf doctor-codex-birth
 entwurf doctor-codex-mcp
 entwurf doctor-codex-statusline
+entwurf doctor-codex-terminal-title
 ```
 
 The birth unit owns a `SessionStart` declaration in `$CODEX_HOME/hooks.json`, which the vendor
-runs only after the operator trusts it once in a visible Codex; the other two units own
-only `[mcp_servers.entwurf-bridge]` and the `thread-title` status-line member. The MCP
+runs only after the operator trusts it once in a visible Codex; the other three units own
+only `[mcp_servers.entwurf-bridge]`, the `thread-title` status-line member, and the `thread-id`
+terminal-title member (that last one is the CALLER seat input: without it a Codex citizen opening
+a sibling is refused with `codex-caller-title-missing`). The MCP
 entry carries `ENTWURF_BRIDGE_NATIVE_HOST=codex`, which tells the bridge to require and
 reconcile Codex request `_meta`. Do not add the anonymous hatch.
 

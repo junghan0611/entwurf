@@ -404,18 +404,25 @@ why `disabledServers` is never the way to hide an import.
 Supported in 0.21.0 with Linux-focused evidence; on macOS it is NOT CERTIFIED —
 pending physical host. It is native, not ACP: the purpose is to preserve the operator's
 Codex tools, delegation, and work context rather than provide another GPT access path.
-Entwurf owns three atoms, not the harness and not a daemon:
+Entwurf owns four atoms, not the harness and not a daemon:
 
 ```bash
-# All three are operator-scope; `entwurf setup` runs them when it detects Codex. No root.
+# All four are operator-scope; `entwurf setup` runs them when it detects Codex. No root.
 entwurf install-codex-birth
 entwurf install-codex-mcp
 entwurf install-codex-statusline
+entwurf install-codex-terminal-title
 
 entwurf doctor-codex-birth
 entwurf doctor-codex-mcp
 entwurf doctor-codex-statusline
+entwurf doctor-codex-terminal-title
 ```
+
+The first three make a Codex session a citizen others can reach. The fourth makes it a CALLER:
+`thread-id` in `[tui].terminal_title` is the only thing that tells the multiplexer which pane is
+this thread's, so without it a Codex citizen opening a sibling is refused with
+`codex-caller-title-missing` (an explicit `placement.tmuxSession` skips that check entirely).
 
 The birth atom publishes a `SessionStart` declaration into `$CODEX_HOME/hooks.json` with its
 launcher closure under `$XDG_DATA_HOME/entwurf/codex-birth`; it mints a V3 record on the
@@ -433,14 +440,18 @@ answer, later sessions raise no prompt and are born automatically. The MCP write
 `TMUX`, and `TMUX_PANE`.
 The status-line writer owns only `thread-title`. Foreign or symlinked config is refused.
 
-Native delivery requires the operator-owned default app-server and one existing tmux session
-named exactly `codex`. Start the app-server from a pane there and seat supported Codex TUIs there:
+Native delivery requires the operator-owned default app-server. The operator chooses the tmux
+session that holds it: #95 D1 retired the requirement that the session be named `codex`, and Entwurf
+neither creates nor supervises it. For the LIVE acceptance that session must NOT be the one the
+Pi/Codex pair runs in.
 
 ```bash
-# Run these commands inside the operator-owned tmux session named exactly `codex`.
+# Run from a pane in the operator-owned tmux session that will hold the app-server.
 CODEX_HOME="${CODEX_HOME:-$HOME/.codex}"
 mkdir -p "$CODEX_HOME/app-server-control"
 codex app-server --listen "unix://$CODEX_HOME/app-server-control/app-server-control.sock"
+
+# Attach your own visible Codex TUI from wherever you work — any session, not a reserved room.
 codex --remote "unix://$CODEX_HOME/app-server-control/app-server-control.sock"
 ```
 
