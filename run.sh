@@ -181,6 +181,7 @@ Usage:
   ./run.sh check-socket-discovery      # deterministic gate (0.11 Stage 0 step 4, fact-provider slice 3): SOCKET-axis scanSocketProbes — probes (dir sockets) ∪ (in-domain citizen canonical paths) 3-valued; dormant citizen no-file → dead (resumable, not unprobed), stall → indeterminate (F3), dir hygiene/dedup/missing-dir + e2e → resolveFactList; readdir/probe injected, no IO
   ./run.sh check-meta-facts            # deterministic gate for the meta-facts projection (#65): drives the REAL CLI — full-record join, parse-before-uniqueness, no-winner duplicates, drift/symlink/invalid-UTF-8 defects in-band, deterministic bytes, exit contract 0/2/3, dispatch+emit reachability
   ./run.sh check-herdr-plugin          # deterministic gate for the #116 M2-b herdr plugin (`plugins/herdr/`): STATIC manifest shape for herdr 0.9.0 + the forbidden sections ([[build]]/[[startup]]/[[events]]/[[actions]]/[[link_handlers]]) asserted absent; BEHAVIOURAL drive of the REAL pane entry against a stub `entwurf` and stub HERDR_BIN_PATH that LOG every call — exactly one peer-facts + one agent list per open (counted, not claimed), skip-by-name when Entwurf is absent, four distinct named refusals instead of an empty table, ambiguous never first-wins, diagnostics shown, activity in its own column, and zero writes to the plugin state/config dirs. No herdr binary, no Entwurf install
+  ./run.sh check-herdr-plugin-profile  # deterministic gate for the #116 M3-a PURE activation leaf (`plugins/herdr/lib/integration-profile.mjs`): the closed {pi→pi, claude→claude-code} table, exactly-one-row-or-named-refusal, the FRONT-ANCHORED state grammar (a `/srv/current (v9)/` directory name may not decide a verdict), no path in the plan, outdated/needs-repair as named FAILs, not-installed as a zero-write SKIP, `current` as herdr's admission with no floor of our own, OpenCode observed but never planned, and the leaf's purity. Listing strings only — no herdr binary, no install, no environment, no writes
   ./run.sh check-peer-facts            # deterministic gate for the peer-facts projection (#116 M2-a): drives the REAL CLI with every ambient root sandboxed — placement crosses STRUCTURED (never the human `herdr <pane>` string), the peer keyset is exactly the provider's facts (no herdr agent_status may enter an entwurf payload), no socket coordinate is published (#50 C4), diagnostics in-band, the probed socket world is the one ENTWURF_DIR names (proved by a record-less socket surfacing — there is no field to echo), no observation budget, exit contract 0/2/3, dispatch+emit reachability. No herdr binary
   ./run.sh check-meta-listing          # deterministic gate: META-STORE facts axis — kind-carrying entries; non-regular records are never read, parse/drift become diagnostics, duplicate nativeSessionId quarantines every rival but not unrelated citizens; strict throws / collect partial; pure injected IO
   ./run.sh check-entwurf-fact-provider # deterministic gate (0.11 Stage 0 step 4, fact-provider slice 4b): ASSEMBLY listEntwurfFacts — full-store parse/probe/quarantine/resolve stays intact; #112 bounds expensive receiver/transcript observation to the newest 32 rendered rows while older machine rows say unobserved; Q112 pins full payload + exact observer budget; C-원칙 keeps corruption diagnostic and impossible wiring loud; deps injected, no IO
@@ -1791,6 +1792,22 @@ check_herdr_plugin() {
   # fixture check-herdr-sandbox forbids. No herdr binary, no Entwurf install, no writes
   # outside mkdtemp.
   run_ts scripts/check-herdr-plugin.ts
+}
+
+check_herdr_plugin_profile() {
+  # Deterministic gate for the #116 M3-a pure leaf: the function that turns ONE
+  # `herdr integration status` listing into this plugin's activation plan. Every listing
+  # is an INPUT STRING (verbatim herdr 0.9.0 rows measured 2026-09-16 in a sandboxed
+  # HOME/XDG, plus the two forms cross-checked in herdr source at c77af189), so nothing
+  # here claims a fact about herdr. Pins: the closed atom->backend table, exactly one row
+  # per selected atom or a NAMED refusal (never a first/last-match guess), the state read
+  # FRONT-ANCHORED so an operator's directory name cannot spell a verdict, the display
+  # path leaving no trace in the plan, outdated/needs-repair as named FAILs (measured:
+  # empty, unreadable and marker-less files all collapse into `outdated`), not-installed
+  # as a zero-write SKIP, `current` as herdr's admission with no second floor invented
+  # here, OpenCode observed but never planned, and the leaf's purity. No herdr binary, no
+  # Entwurf install, no environment read, no writes.
+  run_ts scripts/check-herdr-plugin-profile.ts
 }
 
 check_peer_facts() {
@@ -6300,6 +6317,9 @@ case "$cmd" in
     ;;
   check-meta-facts)
     check_meta_facts
+    ;;
+  check-herdr-plugin-profile)
+    check_herdr_plugin_profile
     ;;
   check-peer-facts)
     check_peer_facts

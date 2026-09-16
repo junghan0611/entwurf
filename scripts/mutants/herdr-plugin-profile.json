@@ -1,0 +1,202 @@
+{
+	"schemaVersion": 1,
+	"lane": "herdr-plugin-profile",
+	"mutants": [
+		{
+			"claim": "HIP-CLOSED-MAP",
+			"title": "widening the table by one atom is how an unsupported backend becomes supported without a decision: OpenCode is installed and `current` on real hosts, GLG froze P at {pi, claude-code} (#116 issuecomment-5690300559), and the plugin that admits it writes Entwurf state into a harness this lane never agreed to own",
+			"subject": "plugins/herdr/lib/integration-profile.mjs",
+			"find": ["export const SELECTED_ATOMS = Object.freeze({ pi: \"pi\", claude: \"claude-code\" });"],
+			"replace": [
+				"export const SELECTED_ATOMS = Object.freeze({ pi: \"pi\", claude: \"claude-code\", opencode: \"opencode\" });"
+			],
+			"gate": ["bash", "run.sh", "check-herdr-plugin-profile"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:HIP-CLOSED-MAP]",
+			"signatureSource": "scripts/check-herdr-plugin-profile.ts"
+		},
+		{
+			"claim": "HIP-ROW-MISSING-REFUSED",
+			"title": "an absent selected row that is not refused by name leaves the caller holding whatever the next line of code makes of `declared[0]` — an unnamed crash, or worse a default, for a question herdr never answered (#116 M3-a)",
+			"subject": "plugins/herdr/lib/integration-profile.mjs",
+			"find": ["\tif (declared.length === 0) {"],
+			"replace": ["\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-herdr-plugin-profile"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:HIP-ROW-MISSING-REFUSED]",
+			"signatureSource": "scripts/check-herdr-plugin-profile.ts"
+		},
+		{
+			"claim": "HIP-ROW-DUPLICATE-REFUSED",
+			"title": "taking the first match when a selected atom has two rows resolves a contradiction into a guess — the listing that says both `current` and `not installed` for pi is not a listing we understand, and the quiet winner decides whether an integration gets installed over (#116 M3-a)",
+			"subject": "plugins/herdr/lib/integration-profile.mjs",
+			"find": ["\tif (declared.length > 1) {"],
+			"replace": ["\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-herdr-plugin-profile"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:HIP-ROW-DUPLICATE-REFUSED]",
+			"signatureSource": "scripts/check-herdr-plugin-profile.ts"
+		},
+		{
+			"claim": "HIP-SELECTED-DELIMITER-FRAMED",
+			"title": "claiming a line only at `<atom>: ` lets a broken declaration by the SAME atom pass as unrelated text: `pi:current (v1) …` sitting beside a valid `pi: ` row contradicts it and changes nothing, and standing alone it reads as a missing row rather than the malformed one it is (#116 M3-a cross-review defect 3)",
+			"subject": "plugins/herdr/lib/integration-profile.mjs",
+			"find": ["\tconst declared = lines.filter((line) => line.startsWith(`${atom}:`));"],
+			"replace": ["\tconst declared = lines.filter((line) => line.startsWith(prefix));"],
+			"gate": ["bash", "run.sh", "check-herdr-plugin-profile"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:HIP-SELECTED-DELIMITER-FRAMED]",
+			"signatureSource": "scripts/check-herdr-plugin-profile.ts"
+		},
+		{
+			"claim": "HIP-ROW-MALFORMED-REFUSED",
+			"title": "defaulting an unreadable state to `not installed` turns a phrase nobody has interpreted into a clean zero-write SKIP — the next state herdr ships would be walked past and reported as success (#116 M3-a)",
+			"subject": "plugins/herdr/lib/integration-profile.mjs",
+			"find": [
+				"\tthrow new IntegrationProfileError(",
+				"\t\t\"herdr-status-row-malformed\",",
+				"\t\t`unreadable \\`${prefix}\\` row: ${JSON.stringify(remainder)}`,",
+				"\t);"
+			],
+			"replace": [
+				"\treturn Object.freeze({ atom, backend: SELECTED_ATOMS[atom], state: \"not-installed\", installedVersion: null, floorVersion: null });"
+			],
+			"gate": ["bash", "run.sh", "check-herdr-plugin-profile"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:HIP-ROW-MALFORMED-REFUSED]",
+			"signatureSource": "scripts/check-herdr-plugin-profile.ts"
+		},
+		{
+			"claim": "HIP-SUFFIX-FRAMING",
+			"title": "reading only the head of a row and trusting the rest is the hole cross-review found (Terra, reproduced by the coordinator 2026-09-16): `current (v8)` with no suffix, with a relative path, with the closing paren missing, with `()`, and with trailing bytes after the `)` ALL activated — a row nobody finished reading decided that a harness was installed (#116 M3-a blocker 1)",
+			"subject": "plugins/herdr/lib/integration-profile.mjs",
+			"find": [
+				"\t{ state: \"current\", re: /^current \\(v(\\d+)\\) \\(\\/.*\\)$/, installed: (m) => Number(m[1]), floor: () => null },"
+			],
+			"replace": [
+				"\t{ state: \"current\", re: /^current \\(v(\\d+)\\)(?: \\(|$)/, installed: (m) => Number(m[1]), floor: () => null },"
+			],
+			"gate": ["bash", "run.sh", "check-herdr-plugin-profile"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:HIP-SUFFIX-FRAMING]",
+			"signatureSource": "scripts/check-herdr-plugin-profile.ts"
+		},
+		{
+			"claim": "HIP-VERSION-U32",
+			"title": "herdr's integration version is a Rust u32, so a 400-digit capture becomes Infinity and serialises to null: the plan would carry 'no version' for a row that loudly stated one, and every downstream comparison against it is then made against a value the listing never contained (#116 M3-a observation 4)",
+			"subject": "plugins/herdr/lib/integration-profile.mjs",
+			"find": ["\t\tif (m.slice(1).some((captured) => !isU32(captured))) break;"],
+			"replace": ["\t\tif (false) break;"],
+			"gate": ["bash", "run.sh", "check-herdr-plugin-profile"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:HIP-VERSION-U32]",
+			"signatureSource": "scripts/check-herdr-plugin-profile.ts"
+		},
+		{
+			"claim": "HIP-STATE-FRONT-ANCHORED",
+			"title": "dropping the `^` anchor lets the operator's own directory name answer the question: with an unanchored pattern `pi: outdated (legacy < v8) (/srv/current (v9) (/x)/…)` reads as CURRENT, so a broken integration is activated because someone named a folder `current (v9)` (#116 M3-a)",
+			"subject": "plugins/herdr/lib/integration-profile.mjs",
+			"find": [
+				"\t{ state: \"current\", re: /^current \\(v(\\d+)\\) \\(\\/.*\\)$/, installed: (m) => Number(m[1]), floor: () => null },"
+			],
+			"replace": [
+				"\t{ state: \"current\", re: /current \\(v(\\d+)\\) \\(\\/.*\\)$/, installed: (m) => Number(m[1]), floor: () => null },"
+			],
+			"gate": ["bash", "run.sh", "check-herdr-plugin-profile"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:HIP-STATE-FRONT-ANCHORED]",
+			"signatureSource": "scripts/check-herdr-plugin-profile.ts"
+		},
+		{
+			"claim": "HIP-PATH-IS-NOT-AUTHORITY",
+			"title": "recovering the display path into the plan puts an address in the one module that must not carry one — the same bytes read `current` or `not installed` depending only on PI_CODING_AGENT_DIR (measured 2026-09-16), so a path resolved HERE and a path installed against THERE are two answers nobody reconciles (#116 M3-a)",
+			"subject": "plugins/herdr/lib/integration-profile.mjs",
+			"find": [
+				"\t\treturn Object.freeze({",
+				"\t\t\tatom,",
+				"\t\t\tbackend: SELECTED_ATOMS[atom],",
+				"\t\t\tstate: entry.state,",
+				"\t\t\tinstalledVersion: entry.installed(m),",
+				"\t\t\tfloorVersion: entry.floor(m),",
+				"\t\t});"
+			],
+			"replace": [
+				"\t\treturn Object.freeze({",
+				"\t\t\tatom,",
+				"\t\t\tbackend: SELECTED_ATOMS[atom],",
+				"\t\t\tstate: entry.state,",
+				"\t\t\tinstalledVersion: entry.installed(m),",
+				"\t\t\tfloorVersion: entry.floor(m),",
+				"\t\t\tdisplayPath: /\\(([^)]*)\\)\\s*$/.exec(row)?.[1] ?? null,",
+				"\t\t});"
+			],
+			"gate": ["bash", "run.sh", "check-herdr-plugin-profile"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:HIP-PATH-IS-NOT-AUTHORITY]",
+			"signatureSource": "scripts/check-herdr-plugin-profile.ts"
+		},
+		{
+			"claim": "HIP-OUTDATED-IS-FAIL",
+			"title": "classifying `outdated` as a skip hides the exact case the M3 contract exists to stop: measured, an empty file, a chmod-000 file and a marker-less hand-written file ALL print `outdated (legacy < vN)`, so a skip there walks past a broken integration and reports a clean run (#116 issuecomment-5689767140)",
+			"subject": "plugins/herdr/lib/integration-profile.mjs",
+			"find": ["\toutdated: \"fail\","],
+			"replace": ["\toutdated: \"skip\","],
+			"gate": ["bash", "run.sh", "check-herdr-plugin-profile"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:HIP-OUTDATED-IS-FAIL]",
+			"signatureSource": "scripts/check-herdr-plugin-profile.ts"
+		},
+		{
+			"claim": "HIP-ABSENT-IS-SKIP-ZERO-WRITE",
+			"title": "turning `not installed` into a failure makes every host that simply has not added that Herdr integration look broken, and a red is the pressure that invites the plugin to go install the harness it must never install (AGENTS.md Hard Rule 17, #116 M3-a)",
+			"subject": "plugins/herdr/lib/integration-profile.mjs",
+			"find": ["\t\"not-installed\": \"skip\","],
+			"replace": ["\t\"not-installed\": \"fail\","],
+			"gate": ["bash", "run.sh", "check-herdr-plugin-profile"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:HIP-ABSENT-IS-SKIP-ZERO-WRITE]",
+			"signatureSource": "scripts/check-herdr-plugin-profile.ts"
+		},
+		{
+			"claim": "HIP-CURRENT-IS-ADMISSION-ONLY",
+			"title": "inventing a second version floor rejects hosts herdr already admitted while proving nothing about the bytes — `current` is one marker line (measured: bytes appended after it still read current, and v999 reads current), so a floor here is a check that looks like integrity and is not (#116 M3-a)",
+			"subject": "plugins/herdr/lib/integration-profile.mjs",
+			"find": ["\t\tconst verdict = VERDICT[fact.state];"],
+			"replace": [
+				"\t\tconst verdict = fact.state === \"current\" && (fact.installedVersion ?? 0) < 8 ? \"fail\" : VERDICT[fact.state];"
+			],
+			"gate": ["bash", "run.sh", "check-herdr-plugin-profile"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:HIP-CURRENT-IS-ADMISSION-ONLY]",
+			"signatureSource": "scripts/check-herdr-plugin-profile.ts"
+		},
+		{
+			"claim": "HIP-UNSELECTED-NEVER-ACTIVATES",
+			"title": "building the plan from whatever atoms the listing happens to contain makes set P the listing instead of our decision: OpenCode enters the plan, and one unreadable row for an atom nobody supports refuses the whole listing and blocks Pi and Claude Code with it (#116 issuecomment-5690300559)",
+			"subject": "plugins/herdr/lib/integration-profile.mjs",
+			"find": ["\tconst selected = Object.keys(SELECTED_ATOMS).map((atom) => readSelectedRow(lines, atom));"],
+			"replace": [
+				"\tconst selected = observeOtherAtoms(lines)\n\t\t.concat(Object.keys(SELECTED_ATOMS))\n\t\t.map((atom) => readSelectedRow(lines, atom));"
+			],
+			"gate": ["bash", "run.sh", "check-herdr-plugin-profile"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:HIP-UNSELECTED-NEVER-ACTIVATES]",
+			"signatureSource": "scripts/check-herdr-plugin-profile.ts"
+		},
+		{
+			"claim": "HIP-PURE-LEAF",
+			"title": "one import is all it takes for the plan to stop being a property of the listing — a leaf that can reach the filesystem or the environment can disagree with the bootstrap that acts on its answer about which host they are both standing on, and that disagreement is unobservable from the plan (#116 M3-a)",
+			"subject": "plugins/herdr/lib/integration-profile.mjs",
+			"find": ["export const SELECTED_ATOMS = Object.freeze({ pi: \"pi\", claude: \"claude-code\" });"],
+			"replace": [
+				"import fs from \"node:fs\";",
+				"",
+				"export const SELECTED_ATOMS = Object.freeze({ pi: \"pi\", claude: \"claude-code\" });"
+			],
+			"gate": ["bash", "run.sh", "check-herdr-plugin-profile"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:HIP-PURE-LEAF]",
+			"signatureSource": "scripts/check-herdr-plugin-profile.ts"
+		}
+	]
+}
