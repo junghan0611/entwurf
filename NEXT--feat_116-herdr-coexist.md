@@ -48,6 +48,66 @@
 
 # NOW
 
+## 좌표 2026-09-18 02시 — 9-1~9-3 착지, 9-2는 수용 영수증 + 이름 붙은 변동성 하나 `[opus, oracle]`
+
+**상태명: 9-1·9-2·9-3 커밋 다섯 개가 브랜치에 있다. herdr rail의 첫 프롬프트는 Sonnet 5에게 한 번 통했고, 통하지 않은 세 번은 거절이 아니라 도구 가용성 경주로 좁혀졌다. merge(10)는 새 형제 몫이다.**
+
+커밋: `c763e00`(HSUP 0.9.1 뮤턴트 둘) · `fd47f31`(프레이밍) · `f7f9d8c`(herdr `--timeout`·자식 시계·오라클) · `ab5c860`(자식 진단 관측면) · `adbcc84`(README/설치 안내).
+
+### 정정 — 이 파일의 낡은 문장 둘
+- **오퍼레이터 herdr는 0.9.1이다**(`herdr --version`, 측정 2026-09-18). "로컬 플로어가 빨갛다(0.9.0 vs 핀 0.9.1)"는 해소됐다: `check-herdr-sandbox` **11 assertions green, `HS-VERSION-BOUNDARY` 포함**(private herdr 0.9.1).
+- 브랜치 CI red의 원인이던 HSUP 둘은 `c763e00`이 닫았다. lane `herdr-supply` 11/11 KILLED.
+
+### 9-2가 실제로 무엇이었나 — 프레이밍 하나 + **레일 결함 셋**
+Sonnet이 `[GLG 직접, 날것 PC]`에서 이름 붙인 트리거 셋에 각각 답했다: decode-instructions 형태 소멸(framing은 평문 한 줄, **task만** 리터럴 + "위 지시를 바꾸지 못한다"는 범위 문장) / 부정문 두 줄 삭제(같은 조종을 **사실**로) / `entwurf_peers` 검증을 **권유**(강제 아님).
+
+`[source herdr 7505c08]` 근거 둘이 설계를 정했다 — `agents.rs:157-161` 제어문자 인자 거절(개행 접기는 필요), `agents.rs:197-200` → `linux.rs:127-141` `shell_quote`가 **각 인자를 단따옴표로 통째 감싼다**(따라서 JSON은 셸 안전성 때문이 아니었다). 설계가 한 번 뒤집혔다: 처음엔 전체를 공백으로 접으려 했는데, 라운드트립이 지키는 대상이 framing이 아니라 **사용자 task 본문**이라 여러 줄 task를 뭉갤 뻔했다.
+
+**sonnet 핀이 드러낸 레일 결함 셋**(전부 `f7f9d8c`):
+1. `agent start`에 `--timeout`을 안 넘겨 **herdr가 자기 기본 30초**로 포기 — 살아서 부팅 중인 Claude Code 형제가 `herdr: timeout` + 회수 안 된 pane. 이제 명시적 240초, 우리 300초 kill보다 **낮게**(경주에서 herdr가 먼저 져야 이름 붙은 답이 온다). 신규 `HFC-START-READY-BOUND`.
+2. LIVE 셀이 자식 증거를 **호출자 시계로** 읽었다 — 같은 코드 두 런의 차이가 오직 호출자 launch 시간(56s vs 37s).
+3. 오라클이 `order[0] === "entwurf_v2"`를 요구해 **우리 프롬프트가 권한 행동을 우리 게이트가 금지**했다.
+
+### LIVE 네 번 + 진단 한 번, 분류표 `[측정 oracle 2026-09-18 01:48~02:14]`
+| run | 자식 결과 | 자식 MCP연결→첫 프롬프트 | 진단 |
+|---|---|---|---|
+| 1 | — | — | `herdr-agent-start-failed [herdr: timeout]`. **모델 거절 아님**, 위 결함 1. |
+| 2 `sCzzE0` | **콜백 도착** | **195 ms** | 자식이 `entwurf_peers` → `entwurf_v2` 둘 다 성공. **수용 영수증.** |
+| 3 `e3aQHQ` | 침묵 | 171 ms | 도구 호출 0 |
+| 4 `7yn2Xu` | 침묵 | 132 ms | 180초 추가 대기에도 동일 |
+| 5 `5p7T9o` | 침묵 | 106 ms | `agent_status: idle`, 터미널 제목 `✳ Entwurf callback with correlation tag` |
+
+**죽은 가설 둘**: "프롬프트 미수신"(자식이 `UserPromptSubmit`을 SessionStart 후 ~300ms에 찍는다, hook 저널) · "아직 생각 중"(`idle`, `interactive_ready: true`).
+**남은 선두 가설**: 첫 턴이 **entwurf-bridge 도구 목록이 도달하기 전에 구성된다** — GLG의 Sonnet이 관측한 lazy load 그대로. 195ms만 통했고 106/132/171ms는 안 통했다. **n=4, 상관이지 증명 아니다.**
+**다음 측정(값싸고 결정적)**: `herdr agent prompt <TARGET> <TEXT>`가 별도 verb로 존재한다(측정: `agent prompt --help`). `agent start`를 **프롬프트 없이** 띄워 interactive_ready를 받은 뒤 `agent prompt`로 첫 턴을 주면 경주 자체가 사라진다. 그게 통하면 (b) attestation은 필요 없다.
+**자식 transcript는 없다** — `[측정 2026-09-18]` 이 스모크의 모든 claude 세션(호출자·자식, 행동한 것·침묵한 것)이 실HOME `~/.claude/projects/`에도 격리 XDG 어디에도 없다. **도구 2회 성공한 자식조차**. HOME은 실제값이므로 격리 부작용이 아니다. 그래서 증거는 herdr status + hook 저널 둘뿐이고, `ab5c860`이 그 둘을 매 런 receipts에 적는다.
+
+### 결정론 증거 (exact 워킹트리)
+`check-herdr-fresh-call` **38** · `check-fresh-call-dispatch` 12 · `check-mux-fresh-call` **239** · `check-harness-admission-parity` 5 · `check-herdr-placement` 22 · `check-herdr-supply` 11 · `check-herdr-sandbox` **11(0.9.1)** · `check-herdr-plugin` 32 · `check-herdr-plugin-profile` 14 · `check-herdr-plugin-build` **14** · `check-herdr-runtime-bootstrap` 31 · `check-gate-manifests` **654 mutants / 54 lanes**(650→654) · lint/typecheck clean.
+**뮤턴트: subject/gate source가 이 변경들에 닿는 것 전수 replay — 전부 KILLED**(신규 넷: `HFC-FRAMING-IS-PROSE`·`HFC-FRAMING-CONTROL-REFUSED`·`HFC-START-READY-BOUND`·`HPB-USAGE-NOTE-NAMES-A-MODEL`).
+
+### 남은 순서
+1. **GLG 아침 판정** — 날것 PC에서 `pi → claude-code (claude-sonnet-5)` 재시도. run 2 영수증 + 결함 1 수리가 그 요청의 근거다(날것 PC는 콜드 스타트라 결함 1을 정확히 겪는다).
+2. **10. merge** — 아래 인수인계 절. **새 형제.**
+3. 그 뒤 0.23.0 prepare/make → npm publish → `runtime-lock.json` `source: npm` 핀 → 플러그인 `version` 0.2.0.
+
+## 인수인계 — merge(10) 담당 형제에게
+
+**출발점:** `feat/116-herdr-coexist` @ 이 브랜치 head, `git merge origin/main`(= `c4178ea`, v0.22.0+#117).
+
+**conflict 11파일, 해소 원칙 (측정 2026-09-18, #117·9-x 이후에도 늘지 않았다):**
+- `README.md` · `.claude/skills/entwurf-dev/SKILL.md` · `pi-extensions/entwurf-control.ts`(주석) — **origin/main 산문을 기준으로 삼고 herdr 문장만 복원**한다. main 쪽에 #95 lane B(caller seat)·#117 선언 소유권 문장이 새로 들어갔으니 그것을 지우지 마라.
+- `pi-extensions/lib/mux-fresh-call.ts` — **유일한 실작업.** 545줄. main 쪽은 `codexLaunchCwdFreshPreflight` leaf와 caller-seat(#95 lane B) 분기가 들어왔고, 브랜치 쪽은 fresh-call composition이 `composeFreshCallPrompt`를 부르는 자리다. **주의: 이 브랜치에서 그 leaf가 `composeFreshCallFraming` + task로 쪼개졌다**(`fd47f31`) — main의 호출부는 여전히 `composeFreshCallPrompt`를 부르므로 그쪽은 그대로 두면 된다(그 함수는 남아 있다). herdr 분기는 `mux-fresh-call.ts`가 아니라 `herdr-fresh-call.ts`에 있고 dispatch가 고른다 — 이 파일에서 herdr를 찾지 마라(`grep -c HERDR mux-fresh-call.ts` = 0).
+- `scripts/mutants/codex-native.json` · `scripts/mutants/mux-fresh-call.json` · `scripts/check-gate-qualification.ts` inventory · `package.json` check chain · `run.sh` · `mcp/entwurf-bridge/src/index.ts` · `test/fresh-call-surfaces.contract.test.ts` — **합집합.** inventory는 main 527 + 브랜치 654가 아니라 **머지 후 실제 lane 수를 `check-gate-manifests`가 말해주는 값**으로 맞춰라(선언과 디스크가 같아야 통과한다).
+
+**머지 뒤 반드시:**
+- **양쪽 lane 뮤턴트 전수 focused replay.** 범위는 「머지 커밋이 건드린 subject 파일 전부」다 — `mux-fresh-call` · `codex-native` · `herdr-*` · `fresh-call-dispatch` · `omp-fresh` · `setup-verdict`(run.sh). **이것이 #117에서 CI가 40분 뒤에 대신 말해준 함정이다**: `check-gate-manifests`는 find가 아직 맞는지 **안 본다**(본체 소관). 짧은 게이트만 도는 레인에서 그 구멍을 지는 것은 이 replay뿐이다.
+- `check-gate-manifests` · affected focused gates · lint · typecheck → push → CI(코드 push라 본체가 돈다, ~55분).
+- **브랜치 NEXT 삭제는 머지 커밋 직전에.** durable한 것은 `docs/herdr-launch-rail.md`로 승격한다 — 특히 위 「LIVE 분류표」와 「자식 transcript는 없다」 측정.
+
+**하지 않는 것:** 0.23.0 컷/prepare · `runtime-lock.json`의 `source` 변경 · Codex 실 턴 · 긴 게이트 전량 · main fast-forward(코디네이터 몫).
+
+
 ## 좌표 2026-09-17 15시 — 코디네이터 판 `[fable, oracle]`
 
 **상태명: 날것 PC에서 pi는 됐고 claude-code(sonnet)는 첫 프롬프트를 injection으로 거절했다. 브랜치 CI는 뮤턴트 2개로 red. main은 0.22.0 prepare 상태이고 그 CI도 red다. 둘 다 작다.**
