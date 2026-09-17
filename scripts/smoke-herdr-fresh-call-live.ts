@@ -78,7 +78,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { encodeBirthPrompt } from "../pi-extensions/lib/herdr-fresh-call.ts";
+import { containsControlChar } from "../pi-extensions/lib/herdr-fresh-call.ts";
 import { joinKeyOf, parseHerdrPaneList } from "../pi-extensions/lib/herdr-placement.ts";
 import { skipLive } from "./lib/live-skip.ts";
 
@@ -304,7 +304,13 @@ async function main(): Promise<void> {
 			callerKind: "claude",
 			childKind: "claude",
 			callerModel: "opus",
-			childModel: "opus",
+			// THE CHILD IS THE SAFETY-TUNED MODEL ON PURPOSE (#116, 2026-09-17). This cell pinned
+			// `opus` on both sides and passed, while `[GLG 직접, 날것 PC]` a Sonnet 5 child refused the
+			// first turn outright — so the gate had never once exercised the layer that refuses, which
+			// is the layer a user installing this rail actually meets. The CALLER stays on opus: it is
+			// not the side under test here. Override to sample another model; the default is the
+			// harder oracle, not the convenient one.
+			childModel: process.env.ENTWURF_HERDR_LIVE_CHILD_MODEL?.trim() || "sonnet",
 		},
 	];
 
@@ -377,17 +383,23 @@ async function main(): Promise<void> {
 				'2. Then call entwurf_fresh_call ONE more time with backend="codex" and the same model and task.',
 				"3. Report both tool results verbatim in your final answer and stop. Do not retry anything, do not open anything else.",
 			].join("\n");
-			// The CALLER gets the transport (one physical line) but NOT the production framing:
+			// The CALLER gets the transport constraint (one physical line, zero control characters —
+			// `[source herdr 7505c08]` src/app/agents.rs:157-161) but NOT the production framing:
 			// `composeFreshCallPrompt` would order it to call back to a garden id, and this fixture
 			// has none to give — the first run did exactly that and sent the caller dispatching at
 			// an id that does not exist. The child's framing is composed by PRODUCTION when the
-			// caller invokes the tool, which is the thing under test.
-			const encodedCaller = encodeBirthPrompt(callerTask);
-			if (!encodedCaller.ok) throw new Error(`${LABEL}: the caller prompt could not be encoded`);
+			// caller invokes the tool, which is the thing under test. It is folded here rather than
+			// run through `encodeBirthPrompt`, which now composes a production framing this fixture
+			// deliberately does not want.
+			const callerArgv = callerTask
+				.split("\n")
+				.filter((line) => line.length > 0)
+				.join(" ");
+			if (containsControlChar(callerArgv)) throw new Error(`${LABEL}: the caller prompt carries a control character`);
 			const callerArgs =
 				cell.callerKind === "pi"
-					? [encodedCaller.argv, "--approve", "--entwurf-control", "--model", cell.callerModel]
-					: [encodedCaller.argv, `--model=${cell.callerModel}`];
+					? [callerArgv, "--approve", "--entwurf-control", "--model", cell.callerModel]
+					: [callerArgv, `--model=${cell.callerModel}`];
 			const started = herdr(bin, env, [
 				"agent",
 				"start",

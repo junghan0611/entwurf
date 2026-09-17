@@ -238,21 +238,35 @@ export function composeBackendArgs(
  * follows it, and the three prohibitions are measured rather than polite.
  */
 /**
- * The first-turn framing. Order is the contract: the callback is the FIRST action and the task
- * follows it, so a sibling that gets stuck in the task has already told the caller who it is.
+ * The first-turn framing, WITHOUT the task.
  *
- * The three prohibitions are not politeness. Each names a detour that was measured to produce a
- * confidently wrong answer or a wasted turn.
+ * Split from the whole prompt because the two halves travel differently. The tmux rail hands a
+ * sibling one multi-line string and both halves ride together; the herdr rail cannot carry a
+ * newline at all (`[source herdr 7505c08]` `src/app/agents.rs:157-161` refuses any agent argument
+ * containing a Unicode Cc), so it folds THIS half onto one line and encodes only the task. Keeping
+ * the halves separate is what lets the framing stay plain prose on both rails while the operator's
+ * task text keeps every byte it was written with.
+ *
+ * Order is the contract: the callback is the FIRST action and the task follows it, so a sibling
+ * that gets stuck in the task has already told the caller who it is.
+ *
+ * WHAT THIS SAYS AND WHY IT STOPPED SAYING THE REST (#116). Until 2026-09-17 this framing carried
+ * three prohibitions, including "Do not inspect environment variables, do not call entwurf_self".
+ * `[GLG 직접, 날것 PC, 2026-09-17]` a Claude Sonnet 5 sibling REFUSED the whole first turn and named
+ * that line as its reason: "legitimate instructions don't need to disable your ability to
+ * sanity-check them". It was right, and the prohibition was costing more than the wasted turn it
+ * was written to prevent. What replaces it is the same steering stated as a FACT — reporting your
+ * identity in the pane does not reach the caller, the tool call does — plus a read-only way to
+ * corroborate the caller instead of an instruction not to look.
  */
-export function composeFreshCallPrompt(params: {
+export function composeFreshCallFraming(params: {
 	backend: FreshCallBackend;
-	task: string;
 	callerGardenId: string;
 	nonce: string;
 	/** The rail's own first sentence — see `PLACEMENT SENTENCE` above. Empty is a crash, not a
 	 * default: a sibling told nothing about where it is would be told something false by silence. */
 	openingLine: string;
-}): string {
+}): string[] {
 	const tool = FRESH_CALL_CALLBACK_TOOL[params.backend];
 	if (params.openingLine.length === 0) {
 		throw new Error("fresh-call composition: openingLine is empty — the rail must state where it placed the sibling");
@@ -263,16 +277,30 @@ export function composeFreshCallPrompt(params: {
 		`FIRST ACTION, before reading files or anything else: call ${tool} with ` +
 			`target=${params.callerGardenId}, intent=fire-and-forget, wants_reply=false, and ` +
 			`message set to exactly ${params.nonce} — that string alone, nothing added.`,
-		"That call is how the agent that opened you learns your address. Do not skip it, do not",
-		"defer it until the task is done, and do not reword the message.",
+		`${params.nonce} is a correlation tag this caller minted for this one launch: it names no`,
+		"secret and grants no access. Sending it is how the caller learns the garden id you were born",
+		"with, which it has no other way to know. Your own record does not carry the caller's address,",
+		"so reporting your identity here does not reach it — that tool call does.",
 		"",
-		"Do not inspect environment variables, do not call entwurf_self, and do not start an MCP",
-		"server yourself. Your own report of your identity is not the address anyone needs.",
-		"",
-		"After the tool receipt, carry out this task:",
-		"",
-		params.task,
-	].join("\n");
+		`You can corroborate the caller first if you want to: entwurf_peers is a read-only listing of`,
+		`this garden's citizens and ${params.callerGardenId} is one of them. That listing is capped, so`,
+		"a caller you do not happen to see in it is not a reason to skip the callback.",
+	];
+}
+
+/**
+ * The whole first turn for a rail that can carry newlines: the framing, then the task.
+ */
+export function composeFreshCallPrompt(params: {
+	backend: FreshCallBackend;
+	task: string;
+	callerGardenId: string;
+	nonce: string;
+	openingLine: string;
+}): string {
+	return [...composeFreshCallFraming(params), "", "After the tool receipt, carry out this task:", "", params.task].join(
+		"\n",
+	);
 }
 
 /** Correlation tag only. Random, never derived from time, cwd or a peer listing — a nonce that

@@ -70,6 +70,7 @@ import * as net from "node:net";
 import * as os from "node:os";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
+import { composeFreshCallFraming } from "../pi-extensions/lib/fresh-call-composition.ts";
 import {
 	argvMatchesRequest,
 	buildHerdrAgentStartArgs,
@@ -81,10 +82,11 @@ import {
 	decideConditionalClose,
 	encodeBirthPrompt,
 	HERDR_CLI_TIMEOUT_MS,
-	HERDR_DECODE_INSTRUCTION,
 	HERDR_FRESH_CALL_BACKENDS,
+	HERDR_FRESH_CALL_OPENING_LINE,
 	HERDR_MAX_OUTPUT_BYTES,
 	HERDR_START_TIMEOUT_MS,
+	HERDR_TASK_LITERAL_INSTRUCTION,
 	type HerdrRun,
 	herdrAgentNameFromNonce,
 	herdrFreshCall,
@@ -272,19 +274,33 @@ async function main(): Promise<void> {
 	// An encoder that refuses and an encoder that throws are the same thing to a caller: no
 	// faithful argv. Both land on the claim's own assertion rather than ending the gate with
 	// an unattributable stack.
-	const decodeOrNull = (prompt: string): string | null => {
+	//
+	// WHAT MOVED HERE (#116, 2026-09-17). The whole first turn used to be one JSON literal behind
+	// "follow the decoded instructions", and `[GLG 직접, 날것 PC]` a Sonnet 5 sibling refused exactly
+	// that shape. Now the FRAMING is folded to one line as prose and only the operator's TASK is a
+	// literal, so the round-trip claim is about the task — which is the half that actually carries
+	// bytes somebody wrote — while the framing gets its own claim about surviving the fold verbatim.
+	const FRAMING = composeFreshCallFraming({
+		backend: "claude-code",
+		callerGardenId: "20260101T010101-aaaaaa",
+		nonce: "mux-fresh-call-deadbeefdeadbeefdeadbeef",
+		openingLine: HERDR_FRESH_CALL_OPENING_LINE,
+	});
+	const decodeOrNull = (task: string): string | null => {
 		try {
-			const result = encodeBirthPrompt(prompt);
+			const result = encodeBirthPrompt(FRAMING, task);
 			if (!result.ok) return null;
-			const decoded: unknown = JSON.parse(result.argv.slice(HERDR_DECODE_INSTRUCTION.length));
+			const at = result.argv.indexOf(HERDR_TASK_LITERAL_INSTRUCTION);
+			if (at === -1) return null;
+			const decoded: unknown = JSON.parse(result.argv.slice(at + HERDR_TASK_LITERAL_INSTRUCTION.length));
 			return typeof decoded === "string" ? decoded : null;
 		} catch {
 			return null;
 		}
 	};
-	const argvOrNull = (prompt: string): string | null => {
+	const argvOrNull = (task: string): string | null => {
 		try {
-			const result = encodeBirthPrompt(prompt);
+			const result = encodeBirthPrompt(FRAMING, task);
 			return result.ok ? result.argv : null;
 		} catch {
 			return null;
@@ -293,17 +309,38 @@ async function main(): Promise<void> {
 
 	const multiline = 'line one\nline two\ttabbed\n"quoted" and \\backslash\n한글 — em dash';
 	ok(
-		"[QK:HFC-ENCODE-ROUNDTRIP] the encoded argv decodes back to the EXACT prompt — every newline, tab, quote, backslash and non-ASCII character, with no trim and no normalisation",
+		"[QK:HFC-ENCODE-ROUNDTRIP] the operator's TASK decodes back byte for byte — every newline, tab, quote, backslash and non-ASCII character, with no trim and no normalisation",
 		decodeOrNull(multiline) === multiline,
 	);
-	const c1Prompt = "head\u0085middle\u009fdel\u007ftail";
-	const c1Argv = argvOrNull(c1Prompt);
+	const plainArgv = argvOrNull("do the thing");
 	ok(
-		"[QK:HFC-ENCODE-NO-CONTROL] the encoded argv carries zero Unicode Cc — JSON.stringify leaves DEL and the C1 block LITERAL, and herdr refuses an argument containing any of them",
-		containsControlChar(c1Prompt) &&
-			c1Argv !== null &&
-			!containsControlChar(c1Argv) &&
-			decodeOrNull(c1Prompt) === c1Prompt,
+		"[QK:HFC-FRAMING-IS-PROSE] the framing rides as PLAIN PROSE folded onto one line — every composed sentence survives the fold verbatim and in order, and nothing asks the sibling to decode its instructions",
+		plainArgv !== null &&
+			FRAMING.filter((line) => line.length > 0).every((line) => plainArgv.includes(line)) &&
+			FRAMING.filter((line) => line.length > 0).reduce<{ ok: boolean; at: number }>(
+				(acc, line) => {
+					const at = plainArgv.indexOf(line, acc.at);
+					return { ok: acc.ok && at >= acc.at, at: at + line.length };
+				},
+				{ ok: true, at: 0 },
+			).ok &&
+			!/decoded instructions|as if they were this message/i.test(plainArgv) &&
+			!/Do not inspect environment variables/i.test(plainArgv),
+	);
+	const c1Task = "head\u0085middle\u009fdel\u007ftail";
+	const c1Argv = argvOrNull(c1Task);
+	ok(
+		"[QK:HFC-ENCODE-NO-CONTROL] the whole argv carries zero Unicode Cc — JSON.stringify leaves DEL and the C1 block LITERAL, and herdr refuses an argument containing any of them",
+		containsControlChar(c1Task) && c1Argv !== null && !containsControlChar(c1Argv) && decodeOrNull(c1Task) === c1Task,
+	);
+	// A control character in the FRAMING is the rail's own input, not the caller's — it is refused
+	// rather than escaped, because the framing is prose and an escape would be read as text.
+	ok(
+		"[QK:HFC-FRAMING-CONTROL-REFUSED] a control character in the rail's own framing is a named refusal, never silently escaped into the prose a sibling reads",
+		(() => {
+			const bad = encodeBirthPrompt([...FRAMING, "tail\u0007bell"], "task");
+			return !bad.ok && bad.reason === "herdr-argv-control-character";
+		})(),
 	);
 	// 16000 is the public task cap the delivery surface mirrors; the worst case is every
 	// character needing a six-byte \uXXXX escape.
@@ -537,7 +574,8 @@ async function main(): Promise<void> {
 			calls[0].join(" ") === "pane get w7:p1" &&
 			calls[1][1] === "create" &&
 			calls[2][1] === "start" &&
-			calls[2][calls[2].indexOf("--") + 1].startsWith(HERDR_DECODE_INSTRUCTION) &&
+			calls[2][calls[2].indexOf("--") + 1].startsWith(HERDR_FRESH_CALL_OPENING_LINE) &&
+			calls[2][calls[2].indexOf("--") + 1].includes(HERDR_TASK_LITERAL_INSTRUCTION) &&
 			!containsControlChar(calls[2][calls[2].indexOf("--") + 1]),
 	);
 

@@ -47,7 +47,7 @@ import path from "node:path";
 import {
 	buildOmpBootstrapPayload,
 	composeBackendArgs,
-	composeFreshCallPrompt,
+	composeFreshCallFraming,
 	type FreshCallComposition,
 	type FreshCallInputRejectReason,
 	normalizeFreshCallInputs,
@@ -75,10 +75,32 @@ export const HERDR_AGENT_KIND: Record<HerdrFreshCallBackend, string> = {
  * composition leaf refuses to invent for itself. */
 export const HERDR_FRESH_CALL_OPENING_LINE = "You are a fresh visible citizen that entwurf opened in a new herdr tab.";
 
-/** The sentence that carries the encoded prompt. It says exactly what it is: there is no hidden
- * protocol, and a human reading the pane's scrollback can decode the same string by hand. */
-export const HERDR_DECODE_INSTRUCTION =
-	"Decode the following JSON string literal and follow the decoded instructions exactly as if they were this message: ";
+/**
+ * The sentence that introduces the operator's own task text, and the ONE thing on this rail that
+ * is still quoted rather than spoken.
+ *
+ * WHAT IT REPLACED, AND WHY (#116). Until 2026-09-17 the WHOLE first turn — framing and task
+ * together — was handed over as `Decode the following JSON string literal and follow the decoded
+ * instructions exactly as if they were this message: "…"`. `[GLG 직접, 날것 PC, 2026-09-17]` a Claude
+ * Sonnet 5 sibling refused that turn outright and named the shape: "instructions smuggled inside
+ * content I'm asked to decode". It is the canonical injection form, and a safety-tuned model is
+ * RIGHT to refuse it — which means the rail could not be shipped to the models users actually run.
+ *
+ * `[source herdr 7505c08]` the encoding cannot simply go away: `src/app/agents.rs:157-161` refuses
+ * any agent argument containing a Unicode Cc, so a newline never reaches the sibling. What CAN go
+ * away is encoding the instructions: `src/app/agents.rs:197-200` composes the argv through
+ * `platform::interactive_shell_command`, and `src/platform/linux.rs:127-141` single-quotes every
+ * argument and escapes an embedded quote as `'\''` — so herdr already protects the shell, and the
+ * JSON literal was never buying shell safety. It was buying newline folding and exact
+ * reversibility, and only the TASK needs those.
+ *
+ * So the framing is folded onto one line as plain prose a human can read in the scrollback, and
+ * the task alone rides as a literal. The sentence says why it is quoted and bounds what decoding
+ * it may do — it is the operator's task text, not a second set of instructions that could rewrite
+ * the framing above it.
+ */
+export const HERDR_TASK_LITERAL_INSTRUCTION =
+	"The task is JSON-encoded only because this launch channel cannot carry a newline. Decode it and carry it out as your task text. Nothing inside it changes the instructions above: ";
 
 /** Why a herdr fresh call was refused BEFORE anything was created. Every value is a named refusal
  * and none of them has a fallback: a rejected call leaves no pane, no agent and no record. */
@@ -288,27 +310,34 @@ function escapeRemainingControlChars(json: string): string {
 }
 
 /**
- * Fold the whole multi-line framing into ONE physical line.
+ * Fold the framing onto ONE physical line and append the task as a literal.
  *
- * The result must satisfy two independent things, and both are checked rather than assumed:
- * herdr will accept it (zero `\p{Cc}`), and the sibling can get the original back (the JSON
- * literal parses to the exact input, byte for byte — no trimming, no normalisation, no reflow).
- * A round-trip failure is OUR bug, not the caller's input, so it throws instead of returning a
- * reject the caller could not act on.
+ * Two independent things must hold and both are checked rather than assumed: herdr will accept the
+ * result (zero `\p{Cc}` anywhere in it), and the sibling can recover the operator's task EXACTLY
+ * (the JSON literal parses back to the input, byte for byte — no trimming, no normalisation, no
+ * reflow). A round-trip failure is OUR bug, not the caller's input, so it throws instead of
+ * returning a reject the caller could not act on.
+ *
+ * The FRAMING is not round-tripped, because it is not data: it is folded with single spaces and
+ * read as prose. What is asserted about it instead is that every composed line survives the fold
+ * verbatim, in order — the sibling reads the same sentences, on one line.
  */
 export function encodeBirthPrompt(
-	prompt: string,
+	framing: readonly string[],
+	task: string,
 ): { ok: true; argv: string } | { ok: false; reason: "herdr-argv-control-character" } {
-	const literal = escapeRemainingControlChars(JSON.stringify(prompt));
-	const argv = `${HERDR_DECODE_INSTRUCTION}${literal}`;
-	// Fail closed. Reachable only if a future JS runtime leaves a control character both
-	// unescaped by JSON.stringify AND unmatched by \p{Cc}; the refusal is cheaper than the
-	// orphan pane a server-side rejection would cost us.
+	const folded = framing.filter((line) => line.length > 0).join(" ");
+	const literal = escapeRemainingControlChars(JSON.stringify(task));
+	const argv = `${folded} ${HERDR_TASK_LITERAL_INSTRUCTION}${literal}`;
+	// Fail closed. Reachable when the FRAMING carries a control character (a rail opening line is
+	// the rail's own input) or if a future JS runtime leaves one both unescaped by JSON.stringify
+	// AND unmatched by \p{Cc}; the refusal is cheaper than the orphan pane a server-side rejection
+	// would cost us.
 	if (containsControlChar(argv)) return { ok: false, reason: "herdr-argv-control-character" };
 	const decoded: unknown = JSON.parse(literal);
-	if (decoded !== prompt) {
+	if (decoded !== task) {
 		throw new Error(
-			"herdr-fresh-call: the encoded birth prompt did not decode back to the original — refusing to launch a sibling with a framing we cannot reproduce",
+			"herdr-fresh-call: the encoded task did not decode back to the original — refusing to launch a sibling with a task we cannot reproduce",
 		);
 	}
 	return { ok: true, argv };
@@ -651,14 +680,13 @@ export async function herdrFreshCall(
 		if (badCwd !== null) return { ok: false, reason: badCwd };
 	}
 
-	const multiline = composeFreshCallPrompt({
+	const framing = composeFreshCallFraming({
 		backend,
-		task,
 		callerGardenId,
 		nonce,
 		openingLine: HERDR_FRESH_CALL_OPENING_LINE,
 	});
-	const encoded = encodeBirthPrompt(multiline);
+	const encoded = encodeBirthPrompt(framing, task);
 	if (!encoded.ok) return { ok: false, reason: encoded.reason };
 
 	const composition: FreshCallComposition = {

@@ -39,10 +39,10 @@
 		},
 		{
 			"claim": "HFC-ENCODE-ROUNDTRIP",
-			"title": "the encoder normalises the caller's bytes before encoding, so the sibling is born with a task nobody wrote",
+			"title": "the encoder normalises the caller's task bytes before quoting them, so the sibling is born with a task nobody wrote",
 			"subject": "pi-extensions/lib/herdr-fresh-call.ts",
-			"find": ["\tconst literal = escapeRemainingControlChars(JSON.stringify(prompt));"],
-			"replace": ["\tconst literal = escapeRemainingControlChars(JSON.stringify(prompt.replace(/\\t/g, \" \")));"],
+			"find": ["\tconst literal = escapeRemainingControlChars(JSON.stringify(task));"],
+			"replace": ["\tconst literal = escapeRemainingControlChars(JSON.stringify(task.replace(/\\t/g, \" \")));"],
 			"gate": ["bash", "run.sh", "check-herdr-fresh-call"],
 			"timeoutSeconds": 120,
 			"signature": "[QK:HFC-ENCODE-ROUNDTRIP]",
@@ -52,8 +52,8 @@
 			"claim": "HFC-ENCODE-NO-CONTROL",
 			"title": "the C1/DEL escape pass is dropped and only JSON.stringify's C0 handling remains — herdr refuses the argv after the pane already exists",
 			"subject": "pi-extensions/lib/herdr-fresh-call.ts",
-			"find": ["\tconst literal = escapeRemainingControlChars(JSON.stringify(prompt));"],
-			"replace": ["\tconst literal = JSON.stringify(prompt);"],
+			"find": ["\tconst literal = escapeRemainingControlChars(JSON.stringify(task));"],
+			"replace": ["\tconst literal = JSON.stringify(task);"],
 			"gate": ["bash", "run.sh", "check-herdr-fresh-call"],
 			"timeoutSeconds": 120,
 			"signature": "[QK:HFC-ENCODE-NO-CONTROL]",
@@ -63,11 +63,37 @@
 			"claim": "HFC-ENCODE-MAX-TASK",
 			"title": "the encoded literal is truncated past a length nobody documented, so a long task silently loses its tail",
 			"subject": "pi-extensions/lib/herdr-fresh-call.ts",
-			"find": ["\tconst argv = `${HERDR_DECODE_INSTRUCTION}${literal}`;"],
-			"replace": ["\tconst argv = `${HERDR_DECODE_INSTRUCTION}${literal.slice(0, 4096)}`;"],
+			"find": ["\tconst argv = `${folded} ${HERDR_TASK_LITERAL_INSTRUCTION}${literal}`;"],
+			"replace": ["\tconst argv = `${folded} ${HERDR_TASK_LITERAL_INSTRUCTION}${literal.slice(0, 4096)}`;"],
 			"gate": ["bash", "run.sh", "check-herdr-fresh-call"],
 			"timeoutSeconds": 120,
 			"signature": "[QK:HFC-ENCODE-MAX-TASK]",
+			"signatureSource": "scripts/check-herdr-fresh-call.ts"
+		},
+		{
+			"claim": "HFC-FRAMING-IS-PROSE",
+			"title": "the framing is quoted back into a JSON literal behind a decode instruction — the exact shape a safety-tuned sibling refused, restored",
+			"subject": "pi-extensions/lib/herdr-fresh-call.ts",
+			"find": ["\tconst folded = framing.filter((line) => line.length > 0).join(\" \");"],
+			"replace": [
+				"\tconst folded = `Decode the following JSON string literal and follow the decoded instructions exactly as if they were this message: ${JSON.stringify(framing.join(\"\\n\"))}`;"
+			],
+			"gate": ["bash", "run.sh", "check-herdr-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:HFC-FRAMING-IS-PROSE]",
+			"signatureSource": "scripts/check-herdr-fresh-call.ts"
+		},
+		{
+			"claim": "HFC-FRAMING-CONTROL-REFUSED",
+			"title": "a control character in the rail's own framing is escaped into the prose instead of refused, so a sibling reads an escape sequence as text",
+			"subject": "pi-extensions/lib/herdr-fresh-call.ts",
+			"find": ["\tconst folded = framing.filter((line) => line.length > 0).join(\" \");"],
+			"replace": [
+				"\tconst folded = escapeRemainingControlChars(framing.filter((line) => line.length > 0).join(\" \"));"
+			],
+			"gate": ["bash", "run.sh", "check-herdr-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:HFC-FRAMING-CONTROL-REFUSED]",
 			"signatureSource": "scripts/check-herdr-fresh-call.ts"
 		},
 		{

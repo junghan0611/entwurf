@@ -251,10 +251,26 @@ describe("first-turn framing", () => {
 		);
 	});
 
-	it("forbids the three detours that were measured to produce a confidently wrong self-report", () => {
-		expect(prompt).toMatch(/environment variables/);
-		expect(prompt).toMatch(/entwurf_self/);
-		expect(prompt).toMatch(/MCP\s*\n?server yourself|start an MCP/);
+	/**
+	 * This replaced a cell that REQUIRED three prohibitions in the prompt ("do not inspect
+	 * environment variables, do not call entwurf_self, do not start an MCP server yourself").
+	 * `[GLG 직접, 날것 PC, 2026-09-17]` a Claude Sonnet 5 sibling refused its whole first turn and
+	 * named that line as the reason: instructions that disable a sanity check read as an injection,
+	 * and it was right. The steering those lines bought is now stated as a FACT about where the
+	 * caller's address lives, and the sibling is pointed at a read-only way to corroborate the
+	 * caller rather than told not to look.
+	 */
+	it("steers with facts instead of prohibitions — the sentence that a safety-tuned sibling refused is gone", () => {
+		expect(prompt).not.toMatch(/Do not inspect environment variables/);
+		expect(prompt).not.toMatch(/do not call entwurf_self/);
+		expect(prompt).toMatch(/does not carry the caller's address/);
+		expect(prompt).toMatch(/reporting your identity here does not reach it/);
+	});
+
+	it("offers corroboration rather than demanding it — a caller missing from a capped listing is not a reason to skip the callback", () => {
+		expect(prompt).toContain("You can corroborate the caller first if you want to");
+		expect(prompt).toContain("entwurf_peers");
+		expect(prompt).toMatch(/not a reason to skip the callback/);
 	});
 });
 
