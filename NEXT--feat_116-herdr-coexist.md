@@ -42,7 +42,7 @@
 
 - [x] **8. M3 · clean-host activation** — M3-a(`9813717`)·M3-b1/b2(`28d1324`)·M3-b3(`ee535a1` + 후속 `cd30388`·`1c77710`·`6339cd2`·`7b16298`) 착지. `[GLG 직접, 날것 PC gq-6aab44, herdr 0.9.1, 2026-09-17 14:14]` `herdr plugin install` 한 번으로 pi·claude-code 배선, **claude → pi fresh call + nonce 콜백 + 답장 왕복 성공**. 상세는 아래 NOW.
 - [ ] **9. 브랜치 CI green + herdr rail 첫 프롬프트 수선** ← CURRENT: 아래 NOW 「좌표 2026-09-17 15시」 1→2→3→4 순서. 수용 기준은 날것 PC에서 **pi → claude-code(sonnet) 콜백 성공**(GLG 직접).
-- [ ] **10. main 안착** ← 9 뒤. main lane(0.22.0 컷)이 먼저 닫혀야 merge한다. 순서는 NOW 「main 안착」.
+- [ ] **10. main 안착** ← 9 뒤. **0.22.0 컷 완료(2026-09-17 21:17, tag `v0.22.0` @ `ea28e56`, GitHub release 공개)** — npm publish만 GLG 몫. main 다음 수는 #117. merge 순서는 NOW 「main 안착」.
 
 현재 좌표: 0~5·7·8 완료 → **9 진행(CI red 2건 + sonnet 거절 수선)** → 10 대기(main 0.22.0 컷과 병렬) → 6 보류
 
@@ -80,6 +80,13 @@ Sonnet이 덧붙인 관측 둘은 기록만: (a) 첫 답에서 "entwurf-bridge M
 #118(`entwurf pi` 런처)은 이 브랜치에 얹지 않는다 — merge 뒤 main에서 짧은 브랜치.
 
 ### main 안착 — 9 뒤
+
+`[갱신 2026-09-17 21:30, 코디네이터 fable]` **0.22.0은 나갔다.** 영수증(Opus `20260917T144714-0459ec` 측정, 코디네이터가 tag/release/artifact 대조): exact-SHA CI `ea28e56` run `35215263800`(qualification body 520/520) · LIVE `release-gate --cut` MUST 24/0/0 `cut: OK`(`/tmp/entwurf-release-gate-0.22.0.royX2L`) · candidate `/tmp/entwurf-release-candidate-0.22.0.GAQERG/junghanacs-entwurf-0.22.0.tgz` sha256 `e1e2868a…fd0ccf` 12,855,699 bytes(리팩 없음) · main NEXT.md `0b0a575`. **남은 것: GLG의 `npm publish`(그 tgz 그대로, `latest`) + 레지스트리 integrity 대조.** 그 뒤 main 다음 수는 #117이고, 이 브랜치 merge는 그 다음이다 — 아래 순서 그대로.
+
+`[이번 컷이 #116에 준 교훈 — 9-2 설계 입력]` chain 스모크의 hop A(Sonnet 5)는 **페이로드 안의 권한 문장을 인젝션 표식으로 지목**했고(1차 실패), **권한을 채널로 옮기자**(게이트가 민팅한 world의 `AGENTS.md`/`CLAUDE.md`, GLG 전역 규칙 "nearest AGENTS.md") 통과했다(`f5d6e10`). herdr rail의 Sonnet 거절도 같은 축이다 — 프롬프트 문구 튜닝으로 넘기려 하지 마라. 다만 fresh_call의 cwd는 사용자 프로젝트라 그 채널을 못 쓴다. 후보: 콜백 nonce를 sibling이 `entwurf_self`/MCP 서버 쪽에서 검증 가능한 형태로 만들거나(권한이 도구 쪽에 있음), 첫 프롬프트를 "부른 사람의 garden id + 이 호출이 entwurf_fresh_call 영수증에 있다"는 **검증 가능한 사실**로만 구성. 측정 먼저.
+
+`[컷 중 호스트 조작 기록]` oracle `~/.codex/hooks.json`은 herdr 그룹을 `.herdr-bak`으로 옮겨 잰 뒤 `herdr integration install codex`로 복원했다(doctor-codex-birth RED 복귀 = #117 상태, 정상). app-server pid 2777024(`codex-appserver` $208)는 살아 있음. worktree `~/repos/wt/entwurf/main`(detached)은 Opus 퇴근 뒤 `git worktree remove`.
+
 
 - **main lane이 먼저**(별도 실무자, herdr와 병렬 가능): `4158b79` SURVIVED 2 수리 → `workflow_dispatch`의 force 입력으로 qualification 본체 exact-SHA green → `entwurf-release make` 0.22.0 → GLG npm publish. 풀 floor는 CI가 진다(체크아웃 `check:full` 5~9분 + CI qualification 40~55분 + LIVE `release-gate --cut`). 짧게 가는 길은 없고 실무자가 거부하는 것이 맞다 — 앞선 컷들과 같은 증거 등급이어야 0.22.0이다.
 - 그 다음 **브랜치에 origin/main(=v0.22.0 tag) merge** → 위 11파일 해소 → CI(stale 뮤턴트 반드시 나옴, 그것도 고친다) → main fast-forward → push(GLG) → 0.23.0 prepare/make → npm publish → `plugins/herdr/runtime-lock.json` `source: npm` 0.23.0 핀 커밋(사용자 설치 문 확정; 0.22.0은 `scripts/herdr-*.mjs`가 없어 핀 불가) → 플러그인 `version` 0.2.0.
