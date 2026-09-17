@@ -97,6 +97,36 @@ stdout을 `--json` 스트림에 합치므로 JSON 앞에 그 줄이 붙는다. `
 **아직 안 돈 것: qualification 전량(644)과 `pnpm run check:full`.** 이 커밋은 GLG의 날것 PC 재시도를 막지 않으려는
 체크포인트다 — full floor는 별도.
 
+## M3-b3 F — 설치 중 침묵 제거 `[2026-09-17]`
+
+`[관측: GLG, 날것 PC, herdr 0.9.1]` `y` 누른 뒤 아무 출력 없이 몇 분 — "멈춘 줄 알았다".
+
+`[측정: 소스 읽기, ~/repos/3rd/herdr @ c77af189, src/cli/plugin.rs:1328-1373]` herdr는 `[[build]]`를
+**stdout·stderr 둘 다 pipe**로 잡아 tail-capped 버퍼에 담고, `if status.success() { return Ok(()) }` —
+**성공하면 버퍼를 버린다.** 실패할 때만 찍는다. 그래서 build.mjs가 이미 쓰던 `[herdr-plugin-build] …`는
+성공 경로에서 구조적으로 안 보였다. 우리 쪽 결함이 아니라 herdr 인터페이스 속성이다.
+
+`[측정 2026-09-17]` herdr와 **정확히 같은 spawn 모양**(stdin null, stdout/stderr piped)으로 자식을 띄우고
+`/dev/tty`에 쓰면 그 줄은 터미널에 **즉시** 뜨고 **두 캡처 버퍼 어디에도 안 들어간다**. herdr가 바꾸는 것은
+우리 stdio이지 controlling terminal이 아니기 때문이다. E2E로도 확인했다 — 가짜 herdr를 PATH에 두고
+piped stdio로 build.mjs를 돌리니 `[entwurf 1/5] …` / `[entwurf done] …`이 터미널에 live로 뜨고,
+같은 줄이 부모의 captured stderr에도 남았다.
+
+**출하한 것:** 새 leaf `plugins/herdr/lib/build-progress.mjs` + build.mjs의 5단계 서술.
+- 터미널이 없으면(CI·파이프·데몬) **조용히 무력**하다 — 서술 때문에 설치가 깨지면 본말전도다.
+- 모든 줄은 stderr에도 미러된다. 성공 시 공짜(herdr가 버림), **실패 시 그게 에러 앞에 붙는 발자취**다.
+- 사람 문장만 나른다. 서브프로세스 출력도, 누가 파싱할 데이터도 아니다.
+- 가장 긴 3단계는 "무엇을 어디서 받는 중이고 몇 분 조용할 것"이라고 말한다.
+
+게이트 2셀 신설 — `[QK:HPB-PROGRESS-NAMED-SEQUENCE]`(5단계 순서·긴 단계 명명, 활성화 대상 없으면 1단계 뒤
+곧장 done: 안 한 일을 서술하지 않는다) · `[QK:HPB-PROGRESS-TTY-OPTIONAL]`(터미널 없어도 무력+미러 유지,
+close 두 번도 무해). 뮤턴트 2개, lane `herdr-plugin-build` 9→**11**, 인벤토리 644→**646**. 각각 단독 주입으로
+kill 확인(실패 라인에 자기 QK).
+
+**이월 관측 `[Observation]`** — 근본 수리는 herdr 쪽이다: `[[build]]` 출력을 성공 시에도 스트리밍하거나
+최소한 단계 진행을 보여주는 것. 우리 `/dev/tty` 서술은 그때까지의 우리 몫이고, herdr가 스트리밍을 켜도
+중복되지 않는다(우리는 5줄만 쓴다). herdr에 이슈로 올릴지는 GLG 판단.
+
 **다음 한 걸음:** GLG가 날것 PC(herdr 0.9.1)에서 `--ref feat/116-herdr-coexist`로 재설치.
 이제 checkout은 **이 커밋**이므로 pack이 깨끗한 JSON을 낸다.
 

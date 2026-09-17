@@ -59,6 +59,7 @@ import {
 	resolveRuntimeLayout,
 	sameArtifactRequest,
 } from "../../../scripts/herdr-runtime.mjs";
+import { createProgressReporter } from "./build-progress.mjs";
 import { buildActivationProfile } from "./integration-profile.mjs";
 
 /** `plugins/herdr` — the manifest root, which is also Herdr's build cwd. */
@@ -137,6 +138,16 @@ export function certifyActivationCapability(entry, env, { spawn = spawnSync, nod
 	}
 }
 
+/**
+ * What the long step is actually reaching for, in the operator's words. The `kind` discriminant
+ * is the same one the acquisition dispatches on, so this cannot describe a source we would not use.
+ */
+function describeRequest(requested) {
+	return requested.kind === "npm"
+		? `${requested.name}@${requested.version} from npm`
+		: `${requested.repository}#${requested.commit.slice(0, 8)} (git)`;
+}
+
 /** One line per selected atom Herdr cannot serve, for the operator who has to fix it. */
 function describeEntries(entries) {
 	return entries.map((e) => `${e.atom}→${e.backend} ${e.state} (${e.reason})`).join("; ");
@@ -187,10 +198,29 @@ export function certifyActivationPlan(env, { lock, checkoutRoot, requested: requ
  * @returns 0 on success or on a clean nothing-to-do; every other outcome throws a named refusal.
  */
 export function runBuild(env, deps = {}) {
+	const progress = deps.progress ?? createProgressReporter();
+	try {
+		return runBuildReported(env, deps, progress);
+	} finally {
+		progress.close();
+	}
+}
+
+/**
+ * The build proper, with the operator's progress channel already open.
+ *
+ * THE NARRATION IS NOT THE CONTRACT. Every `progress.step` here is a sentence about work that is
+ * about to happen; not one of them decides anything, and removing them all would leave the same
+ * install. They exist because herdr captures and then DISCARDS this process's streams on success
+ * (`build-progress.mjs` header), so without them the operator watches a blank terminal through a
+ * multi-minute `npm pack` and reasonably concludes it hung.
+ */
+function runBuildReported(env, deps, progress) {
 	const write = deps.write ?? ((text) => process.stdout.write(text));
 	const spawn = deps.spawn ?? spawnSync;
 	const nodeBin = deps.nodeBin ?? process.execPath;
 
+	progress.step("reading herdr's integration status");
 	const listing = readIntegrationListing(env, deps);
 	const profile = buildActivationProfile(listing);
 	if (profile.fail.length > 0) {
@@ -200,6 +230,7 @@ export function runBuild(env, deps = {}) {
 		);
 	}
 	if (profile.activate.length === 0) {
+		progress.done(`nothing to activate: ${describeEntries(profile.skip) || "no supported atom present"}`);
 		write(
 			`[herdr-plugin-build] nothing to activate: ${describeEntries(profile.skip) || "no supported atom present"}` +
 				`${profile.observedOtherAtoms.length > 0 ? ` (observed, never planned: ${profile.observedOtherAtoms.join(",")})` : ""}\n`,
@@ -211,6 +242,7 @@ export function runBuild(env, deps = {}) {
 
 	// D1 — read-only authority, BEFORE the first byte of runtime work. A refusal here leaves the
 	// runtime, its journal, our cache, the ledger and both harnesses' bytes exactly as found.
+	progress.step(`planning activation for ${profile.activate.join(", ")}`);
 	const plan = certifyActivationPlan(env, {
 		lock,
 		checkoutRoot: CHECKOUT_ROOT,
@@ -218,6 +250,10 @@ export function runBuild(env, deps = {}) {
 		resolveCommit: deps.resolveCommit,
 	});
 
+	progress.step(
+		`fetching and installing the Entwurf runtime from ${describeRequest(plan.requested)} — this is the long step ` +
+			"(npm packs the source; expect minutes of silence)",
+	);
 	const bootstrapArgs = { env, lock, checkoutRoot: CHECKOUT_ROOT };
 	if (deps.acquire !== undefined) bootstrapArgs.acquire = deps.acquire;
 	if (deps.resolveCommit !== undefined) bootstrapArgs.resolveCommit = deps.resolveCommit;
@@ -240,8 +276,10 @@ export function runBuild(env, deps = {}) {
 			`${result.recovered ? ` after ${result.recovered}` : ""}: ${completeness.name}@${completeness.version} from ${lock.source} at ${layout.activeDir} (${plan.disposition})\n`,
 	);
 
+	progress.step(`checking what landed: ${completeness.name}@${completeness.version} and its activation verb`);
 	const entry = resolveActivationEntry(layout.activeDir, completeness.name);
 	certifyActivationCapability(entry, env, { spawn, nodeBin });
+	progress.step(`wiring ${profile.activate.join(", ")} through the installed package`);
 	const activated = spawn(nodeBin, [entry, ...profile.activate], {
 		encoding: "utf8",
 		env,
@@ -258,6 +296,9 @@ export function runBuild(env, deps = {}) {
 		`[herdr-plugin-build] activated ${profile.activate.join(",")} through the INSTALLED package` +
 			`${profile.skip.length > 0 ? `; skipped ${describeEntries(profile.skip)}` : ""}` +
 			`${profile.observedOtherAtoms.length > 0 ? `; observed, never planned: ${profile.observedOtherAtoms.join(",")}` : ""}\n`,
+	);
+	progress.done(
+		`${completeness.name}@${completeness.version} active at ${layout.activeDir}; ${profile.activate.join(", ")} wired`,
 	);
 	return 0;
 }

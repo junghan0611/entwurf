@@ -125,6 +125,29 @@ command this manifest declares. It composes, in this order:
    undoable only by code that is about to vanish. The installed entry's absence is a named refusal,
    and its capability is probed with a zero-write call whose own named refusal is the evidence.
 
+### What you will see while it runs
+
+Answering `y` at the install prompt used to be followed by minutes of complete silence, which reads
+as a hang. It is not: the third step packs the Entwurf source with `npm pack`, and that is simply
+slow. You now get one line per step:
+
+```text
+[entwurf 1/5] reading herdr's integration status
+[entwurf 2/5] planning activation for pi, claude-code
+[entwurf 3/5] fetching and installing the Entwurf runtime from junghan0611/entwurf#cd303887 (git) — this is the long step (npm packs the source; expect minutes of silence)
+[entwurf 4/5] checking what landed: @junghanacs/entwurf@0.21.0 and its activation verb
+[entwurf 5/5] wiring pi, claude-code through the installed package
+[entwurf done] @junghanacs/entwurf@0.21.0 active at ~/.local/share/entwurf/herdr-plugin/runtime/active; pi, claude-code wired
+```
+
+Those lines go to `/dev/tty`, not to stdout, and the reason is worth knowing if you ever wonder why
+a build's output vanished. Herdr runs `[[build]]` with both streams piped into a buffer it prints
+**only on failure** (`src/cli/plugin.rs:1328-1373` @ c77af189) — so anything a build writes normally
+is invisible when it succeeds. Writing to the terminal directly is what reaches the person who typed
+the command. Where there is no terminal — CI, a pipe, a daemon — the narration is silently absent
+and the install is unchanged. Every line is also mirrored to stderr, so when a build *does* fail,
+Herdr's error report arrives with the steps that completed in front of it.
+
 `./run.sh check-herdr-plugin-build` owns that composition. The real journey — a real
 `herdr plugin install` driving a real `npm pack` of the product git spec — is
 `LIVE=1 ./run.sh smoke-herdr-plugin-build-live`, because a git-spec pack builds the bridge through

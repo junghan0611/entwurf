@@ -102,6 +102,33 @@
 			"timeoutSeconds": 300,
 			"signature": "[QK:HPB-BOOTSTRAP-IDENTITY-EXACT]",
 			"signatureSource": "scripts/check-herdr-plugin-build.ts"
+		},
+		{
+			"claim": "HPB-PROGRESS-NAMED-SEQUENCE",
+			"title": "narrating the acquisition without saying what it is reaching for or that silence is expected leaves the operator in front of a terminal that says nothing for minutes while `npm pack` runs — herdr discards this process's streams on success, so a bland step is the same as no step on the one phase that legitimately takes the longest and reads exactly like a hang",
+			"subject": "plugins/herdr/lib/build.mjs",
+			"find": [
+				"\tprogress.step(",
+				"\t\t`fetching and installing the Entwurf runtime from ${describeRequest(plan.requested)} — this is the long step ` +",
+				"\t\t\t\"(npm packs the source; expect minutes of silence)\",",
+				"\t);"
+			],
+			"replace": ["\tprogress.step(\"working\");"],
+			"gate": ["bash", "run.sh", "check-herdr-plugin-build"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:HPB-PROGRESS-NAMED-SEQUENCE]",
+			"signatureSource": "scripts/check-herdr-plugin-build.ts"
+		},
+		{
+			"claim": "HPB-PROGRESS-TTY-OPTIONAL",
+			"title": "mirroring only when a terminal was opened throws the failure trail away on exactly the hosts that cannot watch it happen — CI and any piped run then report the error with nothing in front of it, and the stderr herdr prints on failure is the only place those steps could still have been read",
+			"subject": "plugins/herdr/lib/build-progress.mjs",
+			"find": ["\t\t}", "\t\tmirror(line);", "\t};"],
+			"replace": ["\t\t\tmirror(line);", "\t\t}", "\t};"],
+			"gate": ["bash", "run.sh", "check-herdr-plugin-build"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:HPB-PROGRESS-TTY-OPTIONAL]",
+			"signatureSource": "scripts/check-herdr-plugin-build.ts"
 		}
 	]
 }

@@ -95,6 +95,14 @@ const { ACTIVATE_ENTRY, buildStatusArgv, readIntegrationListing, resolveActivati
 const profileLeaf = (await import(pathToFileURL(path.join(PLUGIN_DIR, "lib", "integration-profile.mjs")).href)) as {
 	buildActivationProfile: (listing: string) => Profile;
 };
+const progressLeaf = (await import(pathToFileURL(path.join(PLUGIN_DIR, "lib", "build-progress.mjs")).href)) as {
+	createProgressReporter: (deps: {
+		openTty?: () => number;
+		writeTty?: (fd: number, line: string) => void;
+		closeTty?: (fd: number) => void;
+		mirror?: (line: string) => void;
+	}) => { live: boolean; step: (t: string) => void; done: (t: string) => void; close: () => void };
+};
 
 /** A listing in the exact prose shape measured on herdr 0.9.0 (#116 `issuecomment-5690462527`). */
 function listing(rows: Record<string, string>): string {
@@ -214,8 +222,17 @@ function drive(
 	env: NodeJS.ProcessEnv,
 	text: string | { error: string } | { status: number; stderr: string },
 	deps: Record<string, unknown> = {},
-): { code: number | null; refusal: string | null; out: string } {
+): { code: number | null; refusal: string | null; out: string; progress: string[] } {
 	let out = "";
+	// The operator's terminal is a SEAM here, never the real `/dev/tty`: a gate that narrated into
+	// whatever terminal happened to be running it would be writing outside its own sandbox.
+	const progressLines: string[] = [];
+	const progress = {
+		live: false,
+		step: (text: string) => progressLines.push(text),
+		done: (text: string) => progressLines.push(`done: ${text}`),
+		close: () => {},
+	};
 	const spawn = (bin: string, argv: string[], opts: unknown): SpawnResult => {
 		if (bin === HERDR_STUB) {
 			if (typeof text === "string") return { status: 0, stdout: text, stderr: "" };
@@ -225,10 +242,21 @@ function drive(
 		return spawnSync(bin, argv, opts as Record<string, never>) as unknown as SpawnResult;
 	};
 	try {
-		const code = runBuild(env, { herdrBin: HERDR_STUB, spawn, write: (t: string) => (out += t), ...deps });
-		return { code, refusal: null, out };
+		const code = runBuild(env, {
+			herdrBin: HERDR_STUB,
+			spawn,
+			write: (t: string) => (out += t),
+			progress,
+			...deps,
+		});
+		return { code, refusal: null, out, progress: progressLines };
 	} catch (err) {
-		return { code: null, refusal: (err as { code?: string }).code ?? `not-a-HerdrBuildError:${String(err)}`, out };
+		return {
+			code: null,
+			refusal: (err as { code?: string }).code ?? `not-a-HerdrBuildError:${String(err)}`,
+			out,
+			progress: progressLines,
+		};
 	}
 }
 
@@ -665,6 +693,91 @@ function drive(
 			status.status === 0 && rows >= 2 && Array.isArray(profile.activate),
 		);
 	}
+}
+
+// ── 10. the operator is told what is happening, on a channel herdr does not eat ─
+{
+	const env = world("progress-sequence");
+	const full = drive(env, listing({ pi: "current (v8) (/home/u/.pi)", claude: "current (v8) (/home/u/.claude)" }), {
+		acquire: fixtureAcquire({ activate: "recorder", log: path.join(env.HOME as string, "argv.log") }),
+		resolveCommit: () => COMMIT_A,
+	});
+	const idle = drive(world("progress-idle"), listing({}));
+	const longStep = full.progress[2] ?? "";
+	ok(
+		"[QK:HPB-PROGRESS-NAMED-SEQUENCE] a build narrates the five steps IN ORDER and names the long one — herdr pipes " +
+			"both of this process's streams into a buffer it DISCARDS on success (`src/cli/plugin.rs:1328-1373` @ c77af189), " +
+			"so an operator who has just answered the install prompt sees nothing at all through a multi-minute `npm pack` " +
+			"and reads it as a hang. The sequence is reported, not logged: each step names the work about to start, the " +
+			"acquisition step says out loud that silence is expected and which source it is reaching for, and a run with " +
+			"nothing to activate takes exactly ONE step and then closes — it must not narrate work it never did " +
+			`(full=${JSON.stringify(full.progress)} idle=${JSON.stringify(idle.progress)})`,
+		full.code === 0 &&
+			full.progress.length === 6 &&
+			full.progress[0].includes("integration status") &&
+			full.progress[1].includes("pi, claude-code") &&
+			longStep.includes("long step") &&
+			longStep.includes(COMMIT_A.slice(0, 8)) &&
+			full.progress[3].includes("what landed") &&
+			full.progress[4].includes("wiring pi, claude-code") &&
+			full.progress[5].startsWith("done: ") &&
+			idle.code === 0 &&
+			idle.progress.length === 2 &&
+			idle.progress[1].startsWith("done: nothing to activate"),
+	);
+}
+
+// ── 11. no terminal is an ordinary state, and the trail survives either way ─────
+{
+	const tty: string[] = [];
+	const mirrored: string[] = [];
+	let closed = 0;
+	const live = progressLeaf.createProgressReporter({
+		openTty: () => 7,
+		writeTty: (fd: number, line: string) => tty.push(`${fd}:${line}`),
+		closeTty: () => {
+			closed += 1;
+		},
+		mirror: (line: string) => mirrored.push(line),
+	});
+	live.step("one");
+	live.done("two");
+	live.close();
+	live.close();
+
+	const blindMirror: string[] = [];
+	const blind = progressLeaf.createProgressReporter({
+		openTty: () => {
+			throw new Error("ENXIO: no controlling terminal");
+		},
+		writeTty: () => {
+			throw new Error("must never be called without a terminal");
+		},
+		closeTty: () => {
+			throw new Error("must never be called without a terminal");
+		},
+		mirror: (line: string) => blindMirror.push(line),
+	});
+	blind.step("one");
+	blind.close();
+
+	ok(
+		"[QK:HPB-PROGRESS-TTY-OPTIONAL] the progress channel is the operator's terminal when there is one and NOTHING " +
+			"when there is not — a CI runner, a pipe or a daemon has no `/dev/tty`, and a build that failed for want of a " +
+			"terminal would be the narration breaking the install it exists to explain. Every line is mirrored to stderr " +
+			"either way, which costs nothing on success (herdr drops it) and is the trail in front of the error on failure. " +
+			`The descriptor is closed once, and closing twice is not an error (tty=${JSON.stringify(tty)} mirrored=${JSON.stringify(mirrored)} closed=${closed} blind-live=${blind.live} blind-mirrored=${JSON.stringify(blindMirror)})`,
+		live.live === true &&
+			tty.length === 2 &&
+			tty[0] === "7:[entwurf 1/5] one\n" &&
+			tty[1] === "7:[entwurf done] two\n" &&
+			mirrored.length === 2 &&
+			mirrored[0] === "[entwurf 1/5] one\n" &&
+			closed === 1 &&
+			blind.live === false &&
+			blindMirror.length === 1 &&
+			blindMirror[0] === "[entwurf 1/5] one\n",
+	);
 }
 
 console.log(`\ncheck-herdr-plugin-build: ${passed} assertions passed`);
