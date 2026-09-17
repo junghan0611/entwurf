@@ -40,9 +40,50 @@
 
 - [x] **7. M1-b · 배치 정책 교체 (split → 같은 workspace의 새 tab)** — `[GLG direct 승인 2026-09-15]` 구현 + **교차검수 amendment 1회 + C4 LIVE PASS**를 checkpoint로 묶고, 예정했던 qualification **547/547**과 `check:full` **exit 0**까지 후속 완료했다. 상세는 아래 NOW의 「M1-b」 절.
 
-현재 좌표: 0·1·2·3·4·5 완료 → **M1 complete; corrected C4 LIVE PASS** → **7(M1-b 배치 교체) checkpoint 완료** → **M2-a(`f9cea1d`)·M2-b(`07c7cbc`) 착지** → **8(M3 clean-host activation): M3-0·M3-b0 측정 완료 · M3-a 착지(`9813717`) · M3-b1 checkpoint 승인** → 6 보류
+- [x] **8. M3 · clean-host activation** — M3-a(`9813717`)·M3-b1/b2(`28d1324`)·M3-b3(`ee535a1` + 후속 `cd30388`·`1c77710`·`6339cd2`·`7b16298`) 착지. `[GLG 직접, 날것 PC gq-6aab44, herdr 0.9.1, 2026-09-17 14:14]` `herdr plugin install` 한 번으로 pi·claude-code 배선, **claude → pi fresh call + nonce 콜백 + 답장 왕복 성공**. 상세는 아래 NOW.
+- [ ] **9. 브랜치 CI green + herdr rail 첫 프롬프트 수선** ← CURRENT: 아래 NOW 「좌표 2026-09-17 15시」 1→2→3→4 순서. 수용 기준은 날것 PC에서 **pi → claude-code(sonnet) 콜백 성공**(GLG 직접).
+- [ ] **10. main 안착** ← 9 뒤. main lane(0.22.0 컷)이 먼저 닫혀야 merge한다. 순서는 NOW 「main 안착」.
+
+현재 좌표: 0~5·7·8 완료 → **9 진행(CI red 2건 + sonnet 거절 수선)** → 10 대기(main 0.22.0 컷과 병렬) → 6 보류
 
 # NOW
+
+## 좌표 2026-09-17 15시 — 코디네이터 판 `[fable, oracle]`
+
+**상태명: 날것 PC에서 pi는 됐고 claude-code(sonnet)는 첫 프롬프트를 injection으로 거절했다. 브랜치 CI는 뮤턴트 2개로 red. main은 0.22.0 prepare 상태이고 그 CI도 red다. 둘 다 작다.**
+
+측정 receipt (전부 GitHub CI 로그·소스 `file:line`, 2026-09-17 12시 KST):
+
+- 브랜치 `7b16298` CI `check` **red** — qualification 648/650. `HSUP-MANIFEST-SSOT` SURVIVED, `HSUP-DIGEST-SHAPE` MUTANT-STALE. 원인: `cd30388`이 `scripts/fixtures/herdr-supply.json`을 herdr 0.9.0→0.9.1로 올리면서 `scripts/mutants/herdr-supply.json`의 find(옛 sha `4fa1a011…`)와 삽입 상수 `"0.9.0"`을 안 따라 올렸다. 게이트 `check-herdr-supply.ts:85-91`은 `"0.9.1"`만 검사하므로 `"0.9.0"` 삽입이 산다.
+- main `4158b79`(0.22.0 prepare) CI `check` **red** — qualification 518/520. `CODEX-LAUNCH-CWD-ANCESTOR-PLAIN-PATHS-ONLY`·`FRESHCALL-CODEX-LAUNCH-CWD-NOTES-NEVER-REFUSES` SURVIVED, 둘 다 `attribution=vitest-failed-titles(0)`. 후속 `c4afe92`의 green은 qualification 스텝 **skipped**(docs-only 판정)이라 영수증이 아니다. tag/npm 없음.
+- merge-tree origin/main × 브랜치: conflict **11파일**. 실작업은 `pi-extensions/lib/mux-fresh-call.ts` 한 곳(558줄 — main의 codex-launch-cwd leaf × 브랜치의 herdr composition). 나머지: 산문 3(`README.md`·`.claude/skills/entwurf-dev/SKILL.md`·`entwurf-control.ts` 주석) = origin/main 기준 + herdr 문장 복원, `mutants/*.json`·`package.json` check chain·`check-gate-qualification.ts` inventory = 합집합.
+
+`[GLG 직접, 날것 PC, herdr 0.9.1, 저널 2026-09-17 14:14]` 세 시험:
+
+| 시험 | 결과 | 원인 (`file:line`) | 성격 |
+|---|---|---|---|
+| claude → pi (`openai-codex/gpt-5.6-terra`) | **성공** — nonce 콜백 + "형제 호출 성공" 왕복 | — | #116 수용 영수증 |
+| pi → claude-code (`claude-sonnet-5`) | 탭 열림·MCP 붙음·**Sonnet이 첫 프롬프트를 injection으로 거절**, 두 번째 요청도 거절 | herdr rail만 `HERDR_DECODE_INSTRUCTION`(`herdr-fresh-call.ts:81`) "Decode the following JSON string literal…" 래퍼로 감싸고, 공통 composition `fresh-call-composition.ts:269` "Do not inspect environment variables, do not call entwurf_self"가 겹침. tmux rail은 같은 본문을 평문 argv로 줘 Opus/Fable에서 통과했을 뿐 | **#116 마지막 실결함**. 안전성 높은 모델일수록 거절 → 사용자 설치 경로에서 재현 확률 높음 |
+| pi → `entwurf/claude-sonnet-5` (ACP) | 실패 `Could not start dynamically linked executable … claude-agent-sdk-linux-x64/claude` | NixOS + nix-ld 부재. oracle은 `nixos-config/machines/shared.nix:109` `programs.nix-ld.enable = true` | entwurf 결함 아님. 플러그인 README 전제 한 줄 |
+
+Sonnet이 덧붙인 관측 둘은 기록만: (a) 첫 답에서 "entwurf-bridge MCP 없음"이라 했다가 다음 턴에 tool description을 읽었다 — lazy load. (b) `entwurf_v2` description의 긴 서술문을 "tool poisoning 정황"으로 읽었다. 지금 고칠 것은 아니고 description 길이는 Observation.
+
+### 순서 — 실무 Opus, 이 순서대로 (1 뒤에 main lane으로 갔다가 돌아와도 된다)
+
+1. **HSUP 뮤턴트 2개 갱신** — `scripts/mutants/herdr-supply.json`의 `HSUP-DIGEST-SHAPE` find를 0.9.1 sha(`2a02fed1…`)로, `HSUP-MANIFEST-SSOT` 삽입 상수를 `"0.9.1"`로. focused `check-gate-qualification` lane `herdr-supply` KILLED 확인 → push → CI `check` green이 영수증. 코드 변경 0.
+2. **herdr rail 첫 프롬프트 수선.** 측정 먼저: herdr `agent start`가 개행 포함 prompt를 어떤 경로로 받는가(래퍼가 생긴 이유가 pane shell에 argv를 쓰는 것이라면 개행 없는 조인이나 파일 경유가 대안인지 격리 서버에서 잰다). 그다음 composition 문장을 투명하게 — 누가(호출자 garden id) 왜 열었고 nonce가 무엇인지 말하고, 부정 지시("보지 마라") 대신 순서만 정한다. 공통 leaf라 tmux rail도 같이 바뀌고 `mux-fresh-call`·`herdr-fresh-call` 뮤턴트가 따라간다. **수용 기준 = 날것 PC에서 pi → claude-code sonnet 콜백 성공(GLG 직접).** Opus/Fable로 통과시켜 놓고 끝내지 않는다.
+3. **플러그인 README 전제 두 줄 + 설치 후 안내(6339cd2)에 모델명 예시** — NixOS는 nix-ld 필요(ACP claude 바이너리), 모델 예시 `claude-sonnet-5` / `openai-codex/gpt-5.6-terra`. GLG "정확한 모델명을 모른다"가 근거.
+4. **#116 checkpoint 코멘트**에 오늘 GLG 영수증(herdr 0.9.1, claude→pi ✓, pi→claude-code sonnet ✗→수선 후 ✓)과 1~3의 SHA 기록. 그 뒤 이 파일 삭제(머지 전 규칙), durable한 것은 `docs/herdr-launch-rail.md`.
+
+`[minor, GLG 개인취향 — 넣을지 GLG가 정한다]` statusline의 device 라벨: `scripts/meta-bridge-statusline.sh:25,67-72`·`scripts/agy-statusline.sh:31,80-83`이 `~/.current-device`가 없으면 `UNKNOWN`을 찍는다. 그 파일은 GLG nixos-config 관례라 사용자 설치 호스트엔 없다 → line1 첫 칸이 항상 `UNKNOWN`. 후보: 파일 없으면 칸 자체를 비운다(hostname 대체는 새 정보축이라 비추천). 이슈 상한(현재 12 > 10)이라 별도 이슈 대신 여기 두고, 3번과 같은 커밋에 실어도 되고 빼도 된다.
+
+#118(`entwurf pi` 런처)은 이 브랜치에 얹지 않는다 — merge 뒤 main에서 짧은 브랜치.
+
+### main 안착 — 9 뒤
+
+- **main lane이 먼저**(별도 실무자, herdr와 병렬 가능): `4158b79` SURVIVED 2 수리 → `workflow_dispatch`의 force 입력으로 qualification 본체 exact-SHA green → `entwurf-release make` 0.22.0 → GLG npm publish. 풀 floor는 CI가 진다(체크아웃 `check:full` 5~9분 + CI qualification 40~55분 + LIVE `release-gate --cut`). 짧게 가는 길은 없고 실무자가 거부하는 것이 맞다 — 앞선 컷들과 같은 증거 등급이어야 0.22.0이다.
+- 그 다음 **브랜치에 origin/main(=v0.22.0 tag) merge** → 위 11파일 해소 → CI(stale 뮤턴트 반드시 나옴, 그것도 고친다) → main fast-forward → push(GLG) → 0.23.0 prepare/make → npm publish → `plugins/herdr/runtime-lock.json` `source: npm` 0.23.0 핀 커밋(사용자 설치 문 확정; 0.22.0은 `scripts/herdr-*.mjs`가 없어 핀 불가) → 플러그인 `version` 0.2.0.
+- 이슈: #95 close(`d0f2a86`), #116 close(merge SHA), #117은 main lane 다음 수. open ≤ 10.
 
 ## M3-b3 raw-PC 1차 시도 — 실패 원인 확정·수리 `[2026-09-17]`
 
