@@ -1231,5 +1231,14 @@ describe("module boundaries (structural contracts, source-text by design)", () =
 		expect(MODULE_SRC.match(/process\.cwd\(\)/g) ?? []).toHaveLength(1);
 		expect(MODULE_SRC).toContain("launchCwd: string = process.cwd(),");
 		expect(MODULE_SRC.indexOf("process.cwd()")).toBeLessThan(MODULE_SRC.indexOf("const chosenCwd:"));
+		// THE OTHER HALF OF THE SAME CLAIM, across the seam #116 S2-a created. The codex argv
+		// branch lives in the rail-neutral leaf now, so the authority is only held if that
+		// branch takes the directory the RAIL hands it and the leaf names no directory of its
+		// own — a `process.cwd()` there would re-resolve the inherited default a second time,
+		// behind the rail, and a cross-repo or caller-record cwd would place the pane while the
+		// thread opened somewhere else.
+		const COMPOSITION_SRC = read("pi-extensions/lib/fresh-call-composition.ts");
+		expect(COMPOSITION_SRC).toContain('"-C",\n\t\t\t\tresolveCodexLaunchCwd(),');
+		expect(COMPOSITION_SRC).not.toMatch(/process\.cwd\(\)/);
 	});
 });
