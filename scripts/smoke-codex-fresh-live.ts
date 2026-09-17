@@ -1,16 +1,40 @@
 /**
- * First-admission LIVE acceptance for Codex visible fresh.
+ * First-admission LIVE acceptance for Codex visible fresh — reshaped for the #95 lane B caller
+ * seat.
  *
- * The operator owns the existing exact `codex` tmux home and Codex app-server. This smoke neither
- * creates nor supervises them: an explicit ENTWURF_CODEX_APP_SERVER_PID names the already-running
- * process whose /proc environment must corroborate the home. It starts from a DIFFERENT caller
- * session; omitted Codex placement selects the home by exact name. The attached TUI pane is never guessed.
+ * The operator owns the Codex app-server and the tmux session it sits in (#95 D1 retired the fixed
+ * `codex` home). This smoke neither creates nor supervises them: an explicit
+ * ENTWURF_CODEX_APP_SERVER_PID names the already-running process whose /proc environment must
+ * corroborate its seat. The attached TUI pane is never guessed.
+ *
+ * ── THE TOPOLOGY, AND WHY IT IS DELIBERATELY SPLIT (#95 lane B) ──
+ *
+ * Four coordinates on ONE tmux server, in TWO sessions:
+ *
+ *   A = wherever the operator started their app-server, and it must NOT be S. This is the
+ *       session the app-server's inherited `TMUX` names — the value a Codex MCP child would
+ *       fall back to. Its NAME does not matter: #95 D1 retired the fixed `codex` home, so the
+ *       operator seats the app-server wherever they like and Entwurf never asks which room.
+ *   S = the fixture's own session. The initial Pi caller opens here.
+ *
+ *   initial Pi   → S   (the fixture's own seat)
+ *   fresh Codex  → S   (hop 1, omitted placement: the caller's own session)
+ *   outbound Pi  → S   (hop 2, omitted placement — and this is the claim)
+ *
+ * Hop 2 is the whole point. Its seat is decided by the Codex caller's own pane title
+ * (`codex-title-anchor`), and the proof is that it lands in S: the app-server's environment
+ * points at A, so an env fallback — the pre-#95 behaviour — would have put it there. S is
+ * reachable only through the anchor. A receipt that says `codex-title-anchor` AND a session
+ * that is not A are two independent halves of the same claim, and both are asserted.
+ *
+ * A ≠ S is therefore a PRECONDITION of this card, not a convenience: run it with the app-server
+ * in the fixture's own session and hop 2 proves nothing, because both rules would answer S.
  *
  * RELEASE MUST once Codex is admitted. LIVE!=1 is the only host-prerequisite SKIP. With LIVE=1,
- * missing system birth, user MCP/status config, app-server, models, runtime, bridge, or tmux seat
- * is a FAIL. The smoke drives only public MCP calls, then joins Pi's native toolCall/toolResult
- * rows and Codex app-server thread events as receipt authority; screen text and model-reformatted
- * reports are never oracles.
+ * missing system birth, user MCP/status/terminal-title config, app-server, models, runtime,
+ * bridge, or tmux seat is a FAIL. The smoke drives only public MCP calls, then joins Pi's native
+ * toolCall/toolResult rows and Codex app-server thread events as receipt authority; screen text
+ * and model-reformatted reports are never oracles.
  *
  * A record-backed self-fetch fixture opens a real visible Pi caller through public fresh_call.
  * That Pi opens Codex, correlates Codex's raw callback, and addresses Codex through v2. Codex then
@@ -24,7 +48,14 @@ import { createHash } from "node:crypto";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { CODEX_PREFLIGHT_HINT, codexFreshPreflight } from "../pi-extensions/lib/codex-fresh-preflight.ts";
+import {
+	CODEX_CALLER_PREFLIGHT_HINT,
+	CODEX_LAUNCH_CWD_PREFLIGHT_HINT,
+	CODEX_PREFLIGHT_HINT,
+	codexCallerFreshPreflight,
+	codexFreshPreflight,
+	codexLaunchCwdFreshPreflight,
+} from "../pi-extensions/lib/codex-fresh-preflight.ts";
 import {
 	defaultMetaMailboxDir,
 	defaultMetaSessionsDir,
@@ -35,7 +66,7 @@ import {
 	writeMetaReceiverMarker,
 	writeMetaSenderMarker,
 } from "../pi-extensions/lib/meta-session.ts";
-import { CODEX_HOME_TMUX_SESSION, FRESH_CALL_BACKENDS } from "../pi-extensions/lib/mux-fresh-call.ts";
+import { FRESH_CALL_BACKENDS } from "../pi-extensions/lib/mux-fresh-call.ts";
 import {
 	readCodexThread,
 	realCodexProtocolOpener,
@@ -209,6 +240,68 @@ function inspectTmuxCoordinate(label: string, env: NodeJS.ProcessEnv): TmuxCoord
 		windowId: windowId as string,
 		paneId: paneId as string,
 	};
+}
+
+/**
+ * The session NAME behind a coordinate. Read on its own rather than added to the shared
+ * `TMUX_COORDINATE_FORMAT`: that row's field count is a pinned contract with its own
+ * deterministic oracle, and this card needs a name for exactly two reasons — to hand the fresh
+ * hand the fresh call a seat it can address, and to record which rooms A and S actually were.
+ */
+function tmuxSessionName(label: string, env: NodeJS.ProcessEnv, paneId: string): string {
+	const inspected = spawnSync("tmux", ["display-message", "-p", "-t", paneId, "#{session_name}"], {
+		env,
+		encoding: "utf8",
+	});
+	ok(
+		`${label} session name answers through its own environment`,
+		inspected.status === 0,
+		String(inspected.stderr ?? ""),
+	);
+	const name = String(inspected.stdout ?? "").replace(/\r?\n$/, "");
+	ok(`${label} session name is non-empty`, name.length > 0, `name=${JSON.stringify(name)}`);
+	return name;
+}
+
+/**
+ * The DIRECTORY behind a pane, read from tmux itself. Its own reader for the same reason the
+ * session name has one: this card needs it for exactly one claim (#95 lane C — where a sibling
+ * actually started), and the pinned coordinate row stays a fixed field count.
+ *
+ * `[측정 2026-09-16]` this value is read from the child's `/proc` at QUERY time and tmux chdirs
+ * in that child AFTER forking it, so a read taken in the same millisecond as a launch can still
+ * answer the SERVER's directory. Every call here happens after that citizen's own callback has
+ * already arrived, which is long past exec — the deterministic gate that reads it straight after
+ * a launch is the one that has to wait (`scripts/check-mux-launch-tmux.ts`).
+ */
+function tmuxPaneCwd(label: string, env: NodeJS.ProcessEnv, paneId: string): string {
+	const inspected = spawnSync("tmux", ["display-message", "-p", "-t", paneId, "#{pane_current_path}"], {
+		env,
+		encoding: "utf8",
+	});
+	ok(
+		`${label} pane directory answers through its own environment`,
+		inspected.status === 0,
+		String(inspected.stderr ?? ""),
+	);
+	const dir = String(inspected.stdout ?? "").replace(/\r?\n$/, "");
+	ok(`${label} pane directory is non-empty`, dir.length > 0, `cwd=${JSON.stringify(dir)}`);
+	return dir;
+}
+
+/** A live process's own working directory, read from the kernel rather than from any report. */
+function processCwd(pid: number): string {
+	return fs.readlinkSync(`/proc/${pid}/cwd`);
+}
+
+/** The `session_meta` header of a Codex rollout — the VENDOR's own record of where a thread opened. */
+function rolloutSessionMetaCwd(transcriptPath: string): string {
+	const first = fs.readFileSync(transcriptPath, "utf8").split("\n", 1)[0] ?? "";
+	const row = JSON.parse(first) as { type?: unknown; payload?: { cwd?: unknown } };
+	if (row.type !== "session_meta") throw new Error(`rollout row 1 is ${JSON.stringify(row.type)}, not session_meta`);
+	const cwd = row.payload?.cwd;
+	if (typeof cwd !== "string" || cwd.length === 0) throw new Error("rollout session_meta carries no cwd string");
+	return cwd;
 }
 
 function cleanupWindows(): string[] {
@@ -629,15 +722,32 @@ async function run(): Promise<void> {
 	const appServerCoordinate = inspectTmuxCoordinate("Codex app-server/MCP inherited seat", appServerEnv);
 	const fixtureCoordinate = inspectTmuxCoordinate("fixture/initial-Pi caller seat", process.env);
 	ok(
-		"the fixture/initial-Pi seat and Codex home share one tmux server but are different sessions",
+		"the fixture/initial-Pi seat S and the app-server seat A share one tmux server but are different sessions",
 		fixtureCoordinate.serverPid === appServerCoordinate.serverPid &&
 			fixtureCoordinate.sessionId !== appServerCoordinate.sessionId,
 		`fixture=${fixtureCoordinate.serverPid}/${fixtureCoordinate.sessionId} app-server=${appServerCoordinate.serverPid}/${appServerCoordinate.sessionId}`,
 	);
+	// A and S, by NAME — recorded so the receipt says which rooms this run actually used. The
+	// load-bearing fact is A ≠ S, already asserted above: "the env fallback would have said A"
+	// is only a proof when A is a session the anchor could not have chosen. Since #95 D1 there
+	// is no required NAME for either — the operator seats the app-server wherever they like.
+	const appServerSessionName = tmuxSessionName(
+		"Codex app-server/MCP inherited seat",
+		appServerEnv,
+		appServerCoordinate.paneId,
+	);
+	const fixtureSessionName = tmuxSessionName("fixture/initial-Pi caller seat", process.env, fixtureCoordinate.paneId);
+	ok(
+		"the app-server's own session is a DIFFERENT room from the fixture's, which is what makes hop 2 decisive",
+		appServerSessionName !== fixtureSessionName,
+		`app-server=${JSON.stringify(appServerSessionName)} fixture=${JSON.stringify(fixtureSessionName)}`,
+	);
 	receipts["1-codex-app-server-mcp-coordinate"] =
 		`pid=${appServerPid}\nargv=${argv.join(" ")}\nserver=${appServerCoordinate.serverPid}\n` +
-		`session=${appServerCoordinate.sessionId}\nwindow=${appServerCoordinate.windowId}\npane=${appServerCoordinate.paneId}\n` +
-		`fixture-session=${fixtureCoordinate.sessionId}\nfixture-window=${fixtureCoordinate.windowId}`;
+		`session=${appServerCoordinate.sessionId}\nname=${appServerSessionName}\n` +
+		`window=${appServerCoordinate.windowId}\npane=${appServerCoordinate.paneId}\n` +
+		`fixture-session=${fixtureCoordinate.sessionId}\nfixture-name=${fixtureSessionName}\n` +
+		`fixture-window=${fixtureCoordinate.windowId}`;
 
 	const codexModel = process.env.ENTWURF_CODEX_FRESH_MODEL?.trim() ?? "";
 	const piModel = process.env.ENTWURF_CODEX_FRESH_PI_MODEL?.trim() ?? "";
@@ -654,6 +764,16 @@ async function run(): Promise<void> {
 		missing === null,
 		missing === null ? "" : `${missing}: ${CODEX_PREFLIGHT_HINT[missing]}`,
 	);
+	// The CALLER axis, and a different fact from the five above: hop 2 is made BY a Codex
+	// citizen, so this host's `[tui].terminal_title` must carry `thread-id` or that citizen has
+	// no findable pane. Asserted here, before any window opens, because the alternative is
+	// discovering it three model turns later as a seat refusal.
+	const callerMissing = codexCallerFreshPreflight(appServerEnv);
+	ok(
+		"the installed Codex CALLER seat config is green — tui.terminal_title carries thread-id",
+		callerMissing === null,
+		callerMissing === null ? "" : `${callerMissing}: ${CODEX_CALLER_PREFLIGHT_HINT[callerMissing]}`,
+	);
 
 	// The fixture and every bridge it talks to must resolve the same real stores the app-server
 	// forwards into Codex MCP children. This is not an isolated lookalike store.
@@ -663,8 +783,37 @@ async function run(): Promise<void> {
 		else delete process.env[key];
 	}
 
-	const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "entwurf-codex-fresh-live-"));
+	// A STABLE directory, not a fresh `mkdtemp` per run, and that is a folder-consent fact rather
+	// than a tidiness preference. `[측정 2026-09-16]` codex keys its project trust to the exact
+	// launch directory on this rail, so a new random scratch is an UNDECIDED folder every time:
+	// the sibling opens on the vendor's trust screen, starts no turn, writes no rollout and never
+	// calls back — which is exactly how the two unattended release-gate runs failed while the two
+	// runs a human sat through passed. One path, answered `Trust` once, keeps the operator's
+	// config from growing an entry per run. The path stays OUTSIDE the repo and is asserted
+	// different from the app-server's own directory below, which is all lane C needs of it.
+	//
+	// It is PRINTED rather than documented as a literal, because `os.tmpdir()` is a host fact:
+	// this process's `TMPDIR` when it has one and `/tmp` when it does not, and the trust key is
+	// the exact string either way. A doc that spelled it `$TMPDIR/...` would send an operator
+	// whose TMPDIR is unset to `/entwurf-codex-fresh-live` — a different directory, in the root
+	// of the filesystem, that the vendor would then ask about separately.
+	const scratch = path.join(os.tmpdir(), "entwurf-codex-fresh-live");
+	fs.mkdirSync(scratch, { recursive: true, mode: 0o700 });
 	fixtureArtifacts.push(scratch);
+	console.log(`  launch-cwd ${scratch}`);
+	// Named HERE, before anything is launched, because the same refusal arriving 20 assertions
+	// later reads as a callback timeout — the failure mode this whole comment exists to retire.
+	// The detail carries the REPAIR COMMAND with the resolved path already in it, so the answer
+	// cannot be given for a near-miss directory.
+	const untrustedScratch = codexLaunchCwdFreshPreflight(appServerEnv, scratch);
+	ok(
+		"the Codex launch directory carries the vendor's own trust receipt, so a sibling opened there starts its first turn",
+		untrustedScratch === null,
+		untrustedScratch === null
+			? ""
+			: `${untrustedScratch}: ${CODEX_LAUNCH_CWD_PREFLIGHT_HINT[untrustedScratch]}\n` +
+					`            repair (this host, exact directory): codex -C ${scratch}   → answer \`Trust\``,
+	);
 	fs.mkdirSync(path.join(REPO, ".probe-artifacts"), { recursive: true, mode: 0o700 });
 	evidenceDir = fs.mkdtempSync(path.join(REPO, ".probe-artifacts", "codex-fresh-live-"));
 	fs.chmodSync(evidenceDir, 0o700);
@@ -755,12 +904,12 @@ async function run(): Promise<void> {
 	openedWindows.push(initialPiWindow);
 	ok("the initial Pi LAUNCH receipt carries its exact callback nonce", initialPiNonce.length > 0);
 	ok(
-		"the initial Pi caller is visible in the fixture's non-Codex session",
+		"the initial Pi caller is visible in the fixture's own session S, not the app-server's A",
 		initialPiTmuxSession === fixtureCoordinate.sessionId && initialPiTmuxSession !== appServerCoordinate.sessionId,
-		`initial-pi=${initialPiTmuxSession} fixture=${fixtureCoordinate.sessionId} codex-home=${appServerCoordinate.sessionId}`,
+		`initial-pi=${initialPiTmuxSession} fixture=${fixtureCoordinate.sessionId} app-server=${appServerCoordinate.sessionId}`,
 	);
 	receipts["3-initial-caller-pi-coordinate"] =
-		`session=${initialPiTmuxSession}\nwindow=${initialPiWindow}\ncodex-home-session=${appServerCoordinate.sessionId}`;
+		`session=${initialPiTmuxSession}\nwindow=${initialPiWindow}\napp-server-session=${appServerCoordinate.sessionId}`;
 
 	let drainedCount = 0;
 	const drain = (): void => {
@@ -849,7 +998,6 @@ async function run(): Promise<void> {
 		finalToken,
 		callerGid,
 		piModel,
-		scratch,
 	});
 	const initialPiInstruction = buildInitialPiPhaseOne({
 		initialPiWaitToken,
@@ -880,7 +1028,12 @@ async function run(): Promise<void> {
 		selectExactSourceToolReceipt(
 			piSourceToolReceipts(readInitialPiEntries()),
 			"entwurf_fresh_call",
-			{ backend: "codex", model: codexModel, cwd: scratch, task: codexTask },
+			{
+				backend: "codex",
+				model: codexModel,
+				cwd: scratch,
+				task: codexTask,
+			},
 			"initial Pi Codex fresh call",
 		),
 	);
@@ -897,15 +1050,21 @@ async function run(): Promise<void> {
 	);
 	if (!openedWindows.includes(codexWindow)) openedWindows.push(codexWindow);
 	ok("the source-owned Codex LAUNCH receipt carries its exact callback nonce", codexNonce.length > 0);
+	// HOP 1. An omitted seat, which since #95 D1 means the CALLER's own session for every backend
+	// — Codex no longer selects a fixed room. It is the setup rather than the claim: it puts the
+	// Codex TUI in S so hop 2's answer can be told apart from the app-server's inherited A. The
+	// receipt must name NO seat at all: the caller's own session is the absence of a seat rule,
+	// not a rule with a name.
 	ok(
-		"omitted placement opened fresh Codex in exact named `codex` home, resolved to the app-server session",
-		codexLaunchSession === appServerCoordinate.sessionId &&
-			codexLaunchReceipt.includes(
-				`seat:     ${CODEX_HOME_TMUX_SESSION} (Codex home tmux session, resolved to ${appServerCoordinate.sessionId})`,
-			),
-		`codex=${codexLaunchSession} app-server=${appServerCoordinate.sessionId}`,
+		"omitted placement opened fresh Codex in the caller's own session S, away from the app-server's A",
+		codexLaunchSession === fixtureCoordinate.sessionId &&
+			codexLaunchSession !== appServerCoordinate.sessionId &&
+			!/^\s*seat:/m.test(codexLaunchReceipt),
+		`codex=${codexLaunchSession} fixture=${fixtureCoordinate.sessionId} app-server=${appServerCoordinate.sessionId}`,
 	);
-	receipts["7-fresh-codex-coordinate"] = `session=${codexLaunchSession}\nwindow=${codexWindow}`;
+	receipts["7-fresh-codex-coordinate"] =
+		`session=${codexLaunchSession}\nname=${fixtureSessionName}\nwindow=${codexWindow}\n` +
+		`app-server-session=${appServerCoordinate.sessionId}\napp-server-name=${appServerSessionName}`;
 
 	const codexCallbackSender = await awaitOrRecover(
 		"the exact Codex callback in initial Pi source",
@@ -931,6 +1090,31 @@ async function run(): Promise<void> {
 	});
 	receipts["8-initial-pi-source-codex-callback"] =
 		`nonce=${codexNonce}\ngarden=${codexGardenId}\nthread=${codexThreadId}`;
+
+	// #95 lane C (i). WHERE THE CODEX THREAD OPENED, from four authorities that cannot borrow
+	// from each other: tmux's pane, the vendor's own rollout header, Entwurf's record, and the
+	// directory this call requested. Before the `-C` carrier they disagreed while every receipt
+	// still looked right — the pane sat in the requested scratch and the THREAD opened in the
+	// app-server's repo, which the birth hook then recorded honestly. The app-server's live cwd
+	// is read from the kernel and asserted DIFFERENT, because a scratch that happened to equal it
+	// would make all four agree for the wrong reason.
+	const codexPane = /^\s*pane:\s+(%\d+)/m.exec(codexLaunchReceipt)?.[1] ?? "";
+	ok("the Codex LAUNCH receipt names its pane", /^%\d+$/.test(codexPane), codexLaunchReceipt);
+	const appServerCwd = processCwd(appServerPid);
+	const codexPaneCwd = tmuxPaneCwd("fresh Codex", process.env, codexPane);
+	const codexRolloutCwd =
+		codexIdentity.transcriptPath === null ? "" : rolloutSessionMetaCwd(codexIdentity.transcriptPath);
+	ok(
+		"the fresh Codex thread, its pane, its record and the requested cwd are ONE directory — and it is not the app-server's",
+		codexPaneCwd === scratch &&
+			codexRolloutCwd === scratch &&
+			codexIdentity.cwd === scratch &&
+			appServerCwd !== scratch,
+		`pane=${codexPaneCwd} rollout=${codexRolloutCwd} record=${codexIdentity.cwd} requested=${scratch} app-server=${appServerCwd}`,
+	);
+	receipts["8b-codex-thread-cwd"] =
+		`requested=${scratch}\npane=${codexPaneCwd}\nrollout-session_meta=${codexRolloutCwd}\n` +
+		`record=${codexIdentity.cwd}\napp-server=${appServerCwd}`;
 
 	const initialPiToCodex = await awaitOrRecover("the initial Pi joined native-push receipt", SOURCE_WAIT_MS, () => {
 		const piSources = piSourceToolReceipts(readInitialPiEntries());
@@ -976,7 +1160,7 @@ async function run(): Promise<void> {
 			return selectExactSourceToolReceipt(
 				codexSourceToolReceipts(codexThread),
 				"entwurf_fresh_call",
-				{ backend: "pi", model: piModel, cwd: scratch, task: outboundPiTask },
+				{ backend: "pi", model: piModel, task: outboundPiTask },
 				"Codex outbound Pi fresh call",
 			);
 		},
@@ -993,15 +1177,39 @@ async function run(): Promise<void> {
 	);
 	if (!openedWindows.includes(outboundPiWindow)) openedWindows.push(outboundPiWindow);
 	ok("the source-owned outbound Pi LAUNCH receipt carries its exact nonce", outboundPiNonce.length > 0);
+	// HOP 2 — THE CLAIM (#95 lane B). Two independent halves of one fact, and both are required.
+	// The SEAT: this Pi landed in S, the session the Codex TUI is in. The app-server's inherited
+	// `TMUX` names A, so the pre-#95 env fallback would have put it there; S is reachable only
+	// through the caller's own pane title. The LABEL: the receipt says `codex-title-anchor`, so
+	// the rule that chose it is named rather than inferred from a coincidence of sessions.
 	ok(
-		"supported Codex-home topology: a Pi in another session opens Codex in exact home; Codex opens outbound Pi " +
-			"beside itself and the operator-owned app-server. This does not claim arbitrary attached-TUI seat inference",
-		initialPiTmuxSession !== appServerCoordinate.sessionId &&
-			codexLaunchSession === appServerCoordinate.sessionId &&
-			outboundPiSession === appServerCoordinate.sessionId,
-		`initial-pi=${initialPiTmuxSession} codex=${codexLaunchSession} app-server=${appServerCoordinate.sessionId} outbound-pi=${outboundPiSession}`,
+		"omitted placement opened the outbound Pi beside the CODEX TUI in S — not in the app-server's home A",
+		outboundPiSession === codexLaunchSession &&
+			outboundPiSession === fixtureCoordinate.sessionId &&
+			outboundPiSession !== appServerCoordinate.sessionId,
+		`outbound-pi=${outboundPiSession} codex=${codexLaunchSession} fixture=${fixtureCoordinate.sessionId} app-server=${appServerCoordinate.sessionId}`,
 	);
-	receipts["12-outbound-fresh-pi-coordinate"] = `session=${outboundPiSession}\nwindow=${outboundPiWindow}`;
+	ok(
+		"the outbound Pi receipt names the title anchor as the rule that chose that seat, and no session name",
+		/^\s*seat:\s+\$\d+ \(the Codex caller's own pane, found by its thread-id terminal title/m.test(outboundPiReceipt) &&
+			!outboundPiReceipt.includes("requested tmux session"),
+		outboundPiReceipt,
+	);
+	// The four coordinates, stated together so the shape is readable in one place. This claims
+	// the CALLER-seat topology and nothing wider: no arbitrary attached-TUI inference, and no
+	// claim about a Codex TUI this smoke did not open.
+	ok(
+		"supported caller-seat topology: initial Pi in S, Codex in S, Codex opens outbound Pi in S, " +
+			"while the operator-owned app-server stays in its own session A",
+		initialPiTmuxSession === fixtureCoordinate.sessionId &&
+			codexLaunchSession === fixtureCoordinate.sessionId &&
+			outboundPiSession === fixtureCoordinate.sessionId &&
+			appServerCoordinate.sessionId !== fixtureCoordinate.sessionId,
+		`initial-pi=${initialPiTmuxSession} codex=${codexLaunchSession} outbound-pi=${outboundPiSession} app-server=${appServerCoordinate.sessionId}`,
+	);
+	receipts["12-outbound-fresh-pi-coordinate"] =
+		`session=${outboundPiSession}\nwindow=${outboundPiWindow}\ncodex-session=${codexLaunchSession}\n` +
+		`app-server-session=${appServerCoordinate.sessionId}\nseat-source=codex-title-anchor`;
 
 	const outboundPiGid = await untilAsync(
 		"the exact outbound Pi callback in Codex source",
@@ -1028,6 +1236,33 @@ async function run(): Promise<void> {
 		outboundPiTranscript: outboundPiIdentity.transcriptPath ?? null,
 	});
 	receipts["13-codex-source-outbound-pi-callback"] = `nonce=${outboundPiNonce}\ngarden=${outboundPiGid}`;
+
+	// #95 lane C (ii) — THE CLAIM. This leg named NO cwd, so the only directory the composition
+	// could use is the Codex caller's own record. Its oracle is independent twice over: the pane
+	// answers tmux, and the outbound Pi's RECORD is written by that Pi's own birth from its own
+	// process directory — neither reads the launch receipt. Before lane C this landed in the
+	// app-server's repo, because the bridge is the app-server's MCP child and an omitted cwd
+	// inherited ITS directory; the app-server's live cwd is asserted different so that failure
+	// mode stays visible rather than coincidentally equal.
+	const outboundPiPane = /^\s*pane:\s+(%\d+)/m.exec(outboundPiReceipt)?.[1] ?? "";
+	ok("the outbound Pi LAUNCH receipt names its pane", /^%\d+$/.test(outboundPiPane), outboundPiReceipt);
+	const outboundPiPaneCwd = tmuxPaneCwd("outbound Pi", process.env, outboundPiPane);
+	ok(
+		"with NO cwd requested, the outbound Pi opened in the CODEX CALLER's own record directory — not in the app-server's",
+		outboundPiPaneCwd === codexIdentity.cwd &&
+			outboundPiIdentity.cwd === codexIdentity.cwd &&
+			outboundPiPaneCwd !== appServerCwd,
+		`pane=${outboundPiPaneCwd} outbound-record=${outboundPiIdentity.cwd} codex-record=${codexIdentity.cwd} app-server=${appServerCwd}`,
+	);
+	ok(
+		"the outbound Pi receipt NAMES the caller-record rule rather than calling that directory requested",
+		outboundPiReceipt.includes(`cwd:      ${codexIdentity.cwd} (the Codex caller's own record directory`) &&
+			!outboundPiReceipt.includes("requested start directory"),
+		outboundPiReceipt,
+	);
+	receipts["13b-outbound-pi-cwd"] =
+		`requested=<none>\npane=${outboundPiPaneCwd}\nrecord=${outboundPiIdentity.cwd}\n` +
+		`codex-caller-record=${codexIdentity.cwd}\napp-server=${appServerCwd}`;
 
 	const expectedFinalMessage =
 		`${finalToken}\nPI_LAUNCH_NONCE=${outboundPiNonce}\nPI_CALLBACK_NONCE=${outboundPiNonce}\n` +
@@ -1101,7 +1336,12 @@ async function run(): Promise<void> {
 			},
 			{
 				toolName: "entwurf_fresh_call",
-				arguments: { backend: "codex", model: codexModel, cwd: scratch, task: codexTask },
+				arguments: {
+					backend: "codex",
+					model: codexModel,
+					cwd: scratch,
+					task: codexTask,
+				},
 			},
 			{
 				toolName: "entwurf_v2",
@@ -1129,7 +1369,7 @@ async function run(): Promise<void> {
 			},
 			{
 				toolName: "entwurf_fresh_call",
-				arguments: { backend: "pi", model: piModel, cwd: scratch, task: outboundPiTask },
+				arguments: { backend: "pi", model: piModel, task: outboundPiTask },
 			},
 			{
 				toolName: "entwurf_v2",

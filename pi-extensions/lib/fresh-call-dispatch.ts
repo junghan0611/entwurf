@@ -25,7 +25,7 @@
  */
 
 import { spawn as spawnChildProcess } from "node:child_process";
-import { codexFreshPreflight } from "./codex-fresh-preflight.ts";
+import { codexCallerFreshPreflight, codexFreshPreflight } from "./codex-fresh-preflight.ts";
 import { mintNonce } from "./fresh-call-composition.ts";
 import {
 	createHerdrRunner,
@@ -54,6 +54,13 @@ export interface FreshCallRequest {
 	readonly placement?: { readonly tmuxSession?: string };
 	/** Supplied by the SURFACE from its own record-backed context — never a tool parameter. */
 	readonly callerGardenId: string | null;
+	/** Set by the surface exactly when the reconciled caller is a record-backed codex citizen,
+	 * carrying that citizen's `nativeSessionId`. TMUX-RAIL INPUT ONLY: it exists to find the
+	 * caller's own pane by its terminal title (#95 lane B), and a herdr tab has no such pane. */
+	readonly callerNativeSessionId?: string;
+	/** The SAME codex citizen's record cwd, under the same condition (#95 lane C). Also tmux-only,
+	 * and consulted only when the call requested no cwd of its own. */
+	readonly callerCwd?: string;
 }
 
 export type DispatchedFreshCall =
@@ -63,10 +70,17 @@ export type DispatchedFreshCall =
 /**
  * Open a sibling on whichever rail this process is actually standing in.
  *
- * ORDER MATTERS TWICE. On tmux, the Codex capability preflight runs BEFORE the composition, which
+ * ORDER MATTERS TWICE. On tmux, the Codex capability preflights run BEFORE the composition, which
  * is the pre-existing contract. On herdr, the backend refusal comes first: codex is not a pilot
  * backend there, so running a Codex preflight would ask an irrelevant question and could fail for
  * a reason that has nothing to do with why the call is impossible.
+ *
+ * THE TWO CODEX CALLER INPUTS ARE TMUX-RAIL FACTS and stop at this boundary. #95 lane B/C measured
+ * both against a tmux pane and an app-server-hosted bridge: a pane title is what carries the
+ * caller's thread-id, and a record cwd exists as an input because THAT process's directory is the
+ * app-server's. Inside herdr the tab is created by herdr, there is no pane title to anchor to, and
+ * neither fact has been measured — so the herdr rail is handed the request without consulting
+ * them rather than inheriting a rule from a topology it does not share.
  */
 export async function dispatchFreshCall(
 	request: FreshCallRequest,
@@ -84,7 +98,18 @@ export async function dispatchFreshCall(
 		const run: HerdrRun = createHerdrRunner(context.context.bin, env, spawn ?? (spawnChildProcess as SpawnFn));
 		return { rail: "herdr", result: await herdrFreshCall(request, run, env, nonce) };
 	}
-	const missing = request.backend === "codex" ? await codexFreshPreflight(env) : null;
+	// TWO capability axes, in this order, both pre-mutation and neither standing in for the
+	// other. The TARGET axis first — "entwurf cannot open a Codex sibling here at all" is the
+	// more fundamental answer than "and it would not know where to put it". The CALLER axis
+	// second, and only when the seat anchor will actually be consulted: a codex caller that
+	// named an explicit placement never reads a pane title, so refusing it for a missing
+	// `thread-id` would refuse an unused capability.
+	const targetMissing = request.backend === "codex" ? await codexFreshPreflight(env) : null;
+	const callerMissing =
+		targetMissing === null && request.callerNativeSessionId !== undefined && request.placement === undefined
+			? codexCallerFreshPreflight(env)
+			: null;
+	const missing = targetMissing ?? callerMissing;
 	if (missing) return { rail: "tmux", result: { ok: false, reason: missing } };
 	return {
 		rail: "tmux",
@@ -98,6 +123,10 @@ export async function dispatchFreshCall(
 					? {}
 					: { placement: { tmuxSession: request.placement.tmuxSession } }),
 				callerGardenId: request.callerGardenId,
+				...(request.callerNativeSessionId === undefined
+					? {}
+					: { callerNativeSessionId: request.callerNativeSessionId }),
+				...(request.callerCwd === undefined ? {} : { callerCwd: request.callerCwd }),
 			},
 			env,
 			nonce,

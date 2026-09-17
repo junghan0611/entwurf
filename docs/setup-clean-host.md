@@ -27,7 +27,7 @@ evidence split, and its three states must not collapse into "macOS is supported"
 | GitHub Copilot CLI | optional-by-presence, operator-installed and authenticated — absent is an explicit setup SKIP; detected composes all four units (birth/MCP/receiver/footer) | self-fetch citizen and visible fresh |
 | OMP (`omp`) | optional-by-presence, operator-installed — absent is an explicit setup SKIP; detected composes all four units (birth/MCP/`tools.xdev` setting/receiver) | self-fetch citizen and visible fresh (accepted on one host — see §4b) |
 | Antigravity `agy` | optional, operator-installed and authenticated | native-push citizen |
-| OpenAI Codex CLI | optional-by-presence, operator-installed and authenticated; detected composes all three operator-owned units (birth/MCP/status-line) and stays non-green until the operator trusts the birth declaration once in a visible Codex; visible fresh also requires an operator-owned existing tmux session named `codex`, with its app-server and supported TUIs seated there | native-push and visible fresh, supported in 0.21.0 |
+| OpenAI Codex CLI | optional-by-presence, operator-installed and authenticated; detected composes all four operator-owned units (birth/MCP/status-line/terminal-title) and stays non-green until the operator trusts the birth declaration once in a visible Codex; visible fresh also requires the operator-owned app-server, started with `entwurf codex-app-server` in a tmux session of the operator's choosing (#95 D1 retired the fixed `codex` home) | native-push and visible fresh, supported in 0.21.0 |
 | Cortex Code | optional, operator-installed and authenticated | Cortex ACP backend |
 
 Claude Code >=2.1.217 is required for the managed exec-hook lifecycle. The package
@@ -404,22 +404,57 @@ why `disabledServers` is never the way to hide an import.
 Supported in 0.21.0 with Linux-focused evidence; on macOS it is NOT CERTIFIED —
 pending physical host. It is native, not ACP: the purpose is to preserve the operator's
 Codex tools, delegation, and work context rather than provide another GPT access path.
-Entwurf owns three atoms, not the harness and not a daemon:
+Entwurf owns four atoms, not the harness and not a daemon:
 
 ```bash
-# All three are operator-scope; `entwurf setup` runs them when it detects Codex. No root.
+# All four are operator-scope; `entwurf setup` runs them when it detects Codex. No root.
 entwurf install-codex-birth
 entwurf install-codex-mcp
 entwurf install-codex-statusline
+entwurf install-codex-terminal-title
 
 entwurf doctor-codex-birth
 entwurf doctor-codex-mcp
 entwurf doctor-codex-statusline
+entwurf doctor-codex-terminal-title
 ```
+
+The first three make a Codex session a citizen others can reach. The fourth makes it a CALLER:
+`thread-id` in `[tui].terminal_title` is the only thing that tells the multiplexer which pane is
+this thread's, so without it a Codex citizen opening a sibling is refused with
+`codex-caller-title-missing` (an explicit `placement.tmuxSession` skips that check entirely).
+
+**One thing here is NOT an entwurf atom, and installing everything above does not supply it: the
+directory a sibling starts in must be one this Codex has an answer for.** A DIRECT decision is
+recorded per exact directory on this rail — no parent, no git root — and a directory with no
+answer anywhere opens a consent screen instead of running a first turn, which unattended looks
+exactly like a sibling that never called back; `entwurf_fresh_call` prints
+`codex-launch-cwd-undecided` and opens the window anyway, because that screen is self-repairing and
+answering it once is the whole fix. That is the ordinary outcome and not the only one. Either recorded
+answer passes: a deliberate `untrusted` is skipped by the vendor on this rail and its turn starts.
+A project `.codex` layer can consent with no entry at all. A directory INSIDE an explicitly
+`untrusted` project is noted under a different name (`codex-launch-cwd-untrusted-ancestor`)
+because the vendor answers that with `pass the repository root explicitly with --cd` rather than a
+prompt — launch at that root instead.
+
+The check is a narrow LOCAL read of your own `config.toml`, not the vendor's verdict: the vendor
+merges system, managed and cloud layers around that file, so everything this check cannot see is
+allowed through rather than guessed at. The repair for the ordinary case is the vendor's own, done
+once per directory you launch siblings into: open a plain `codex -C <dir>` there and answer the
+prompt. Name that directory literally — a `$TMPDIR`-style
+spelling silently becomes a different path on a host where `TMPDIR` is unset, and the vendor keys
+its consent to the exact string.
 
 The birth atom publishes a `SessionStart` declaration into `$CODEX_HOME/hooks.json` with its
 launcher closure under `$XDG_DATA_HOME/entwurf/codex-birth`; it mints a V3 record on the
 thread's first turn and sets the thread title to the garden id.
+
+It owns that ONE declaration, not the file. Another integration may declare its own
+`SessionStart` group in the same hooks.json — Herdr's official Codex integration does — and the
+vendor runs both, because trust is keyed per declaration. So installing into a file somebody else
+already wrote is an append, not a refusal; uninstalling takes out only entwurf's group and leaves
+every neighbouring byte where it was; and `doctor-codex-birth` lists the neighbours in their own
+FOREIGN section, certifying none of them and letting none of them move its verdict.
 
 **One step is the operator's, and no command can do it for them.** The vendor will not run a
 user-layer hook until it has been trusted once: open a visible plain Codex, answer
@@ -433,30 +468,38 @@ answer, later sessions raise no prompt and are born automatically. The MCP write
 `TMUX`, and `TMUX_PANE`.
 The status-line writer owns only `thread-title`. Foreign or symlinked config is refused.
 
-Native delivery requires the operator-owned default app-server and one existing tmux session
-named exactly `codex`. Start the app-server from a pane there and seat supported Codex TUIs there:
+Native delivery requires the operator-owned default app-server. The operator chooses the tmux
+session that holds it: #95 D1 retired the requirement that the session be named `codex`, and Entwurf
+neither creates nor supervises it. For the LIVE acceptance that session must NOT be the one the
+Pi/Codex pair runs in.
 
 ```bash
-# Run these commands inside the operator-owned tmux session named exactly `codex`.
+# Run from a pane in the operator-owned tmux session that will hold the app-server. One
+# command: entwurf spells the vendor's `app-server --listen unix://<default socket>` for you,
+# creates the control directory, and exec()s it here. Ctrl-C is yours; nothing supervises it.
+entwurf codex-app-server
+
+# Attach your own visible Codex TUI from wherever you work — any session, not a reserved room.
 CODEX_HOME="${CODEX_HOME:-$HOME/.codex}"
-mkdir -p "$CODEX_HOME/app-server-control"
-codex app-server --listen "unix://$CODEX_HOME/app-server-control/app-server-control.sock"
 codex --remote "unix://$CODEX_HOME/app-server-control/app-server-control.sock"
 ```
 
-Omitted Codex fresh placement resolves exact `codex` on the caller's tmux server. The app-server's
-`TMUX`/`TMUX_PANE` is forwarded to its MCP child, so a Codex citizen's omitted outbound Pi placement
-stays in that home. It is **not** an arbitrary attached-TUI pane join. Exact Codex 0.153.4 source
-exposes no request→attached-TUI-seat carrier, so clients attached from other sessions have no
-adjacency claim; that wider topology is unsupported and unclaimed. Entwurf does not guess panes,
-create the tmux home, expose a generic app-server manager/API, or start/restart the server. Custom
+Omitted fresh placement follows the CALLER on the caller's own tmux server: a Codex citizen opens
+beside its own TUI pane, matched by the `thread-id` that pane's terminal title carries, with 0 or 2+
+matching panes refused and no fallback. The app-server's `TMUX`/`TMUX_PANE` is still forwarded to its
+MCP child, but it locates stores rather than a seat. It is **not** an arbitrary attached-TUI pane
+join: exact Codex 0.153.4 source exposes no request→attached-TUI-seat carrier, so a pane whose thread
+nobody named has no adjacency claim, and that wider topology stays unsupported and unclaimed. Entwurf
+does not guess panes, create a tmux session, expose a generic app-server manager/API, or
+start/restart the server. Custom
 `CODEX_HOME` and Entwurf roots cross the same explicit `env_vars` boundary. Strict request `_meta`
 identifies the thread caller, not its seat. Delivery uses one `codex queue` invocation with no retry.
 
-The 2026-09-11 loaded-thread run remains pre-amendment native-push/identity evidence. The final
-first-admission acceptance passed on 2026-09-12: real initial Pi outside `codex`, then omitted-placement
-Codex and outbound Pi inside it, with exact callbacks and addressed delivery both ways. `DELIVERY.md`
-owns the 57-assertion receipt, four coordinates, and digest.
+The 2026-09-11 loaded-thread run remains pre-amendment native-push/identity evidence. The
+first-admission acceptance passed on 2026-09-12 under the fixed-home topology #95 D1 later retired:
+real initial Pi outside `codex`, then omitted-placement Codex and outbound Pi inside it, with exact
+callbacks and addressed delivery both ways. `DELIVERY.md` owns that 57-assertion receipt, its four
+coordinates, and its digest as history; the caller-seat re-run is pending.
 
 `entwurf_fresh_call` accepts backend `codex` — supported in 0.21.0 — and requires an explicit model. Its
 preflight must prove the safe birth closure, exact MCP/env atom, `thread-title`, and app-server
@@ -465,7 +508,11 @@ never the launch receipt. There is no Codex resume surface, watcher, supervisor,
 lifecycle ownership. The accepted LIVE used a real record-backed visible Pi for the first leg;
 release-gate stripped ambient `PI_SESSION_ID`/`PI_AGENT_ID`, and the fixture/self-fetch citizen only
 collected receipts. The smoke reported initial Pi, app-server, fresh Codex, and outbound Pi
-coordinates separately: the initial Pi differed and the latter three matched the exact `codex` home.
+coordinates separately: the initial Pi differed and the latter three matched the exact `codex` home,
+which was the contract at that date. #95 D1 (2026-09-16) retired that room — an omitted seat is now the
+caller's own session for every backend, and the reshaped card requires the app-server to sit in a
+DIFFERENT session from the Pi/Codex pair, because that is what tells the caller-pane anchor apart from
+the app-server's inherited environment.
 Qualification and the frozen full floor are complete for this lane: `check-gate-qualification`
 killed 475/475 across 43 lanes with origin purity green, `check:full` exited 0, and the LIVE release
 gate reported MUST 24/0/0 with `cut: OK`. The bounds above are unchanged — no request→arbitrary
@@ -481,9 +528,10 @@ ENTWURF_CODEX_FRESH_PI_MODEL=<pi-model> \
 entwurf smoke-codex-fresh-live
 ```
 
-Run this from a tmux session other than `codex`. The entrypoint name does not waive the contract
-above. A fixture/self-fetch citizen may collect receipts but cannot replace the real visible Pi leg;
-a Pi that starts inside the Codex home proves only the weaker shared-seat mechanism.
+Run this from a tmux session OTHER than the one the app-server is in. The entrypoint name does not
+waive the contract above. A fixture/self-fetch citizen may collect receipts but cannot replace the real
+visible Pi leg; a Pi that starts in the app-server's own session proves only the weaker shared-seat
+mechanism, because both the anchor and the env fallback would answer the same room.
 
 ## 5. Optional Antigravity native citizen
 

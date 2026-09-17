@@ -1,0 +1,334 @@
+{
+	"schemaVersion": 1,
+	"lane": "codex-caller-seat",
+	"mutants": [
+		{
+			"claim": "CODEX-SEAT-ANCHOR-PREFIX-LENGTH",
+			"title": "the anchor keeps one char too many before the ellipsis — the token is 33 chars, no live Codex pane title ever equals it, and every Codex caller silently loses its seat while the leaf reports the ordinary 'your TUI is not here' refusal",
+			"subject": "pi-extensions/lib/codex-caller-seat.ts",
+			"find": ["\treturn `${chars.slice(0, maxChars - 3).join(\"\")}...`;"],
+			"replace": ["\treturn `${chars.slice(0, maxChars - 2).join(\"\")}...`;"],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:CODEX-SEAT-ANCHOR-PREFIX-LENGTH]",
+			"signatureSource": "test/codex-caller-seat.test.ts"
+		},
+		{
+			"claim": "CODEX-SEAT-ANCHOR-ELLIPSIS",
+			"title": "the anchor drops the vendor's `...` suffix, so it is a 29-char prefix the title never carries on its own — same silent total loss of the seat, dressed as a normal refusal",
+			"subject": "pi-extensions/lib/codex-caller-seat.ts",
+			"find": ["\treturn `${chars.slice(0, maxChars - 3).join(\"\")}...`;"],
+			"replace": ["\treturn chars.slice(0, maxChars - 3).join(\"\");"],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:CODEX-SEAT-ANCHOR-ELLIPSIS]",
+			"signatureSource": "test/codex-caller-seat.test.ts"
+		},
+		{
+			"claim": "CODEX-SEAT-TOKEN-NOT-SEGMENT",
+			"title": "the title is split ONLY on ` | `, so a segment must equal the anchor whole. `title_setup.rs:183-193` joins the `activity` item to its neighbour with a plain space, so on a host whose operator list ends in `activity` a WORKING TUI renders `<spinner> <anchor>` as one segment and the caller's seat vanishes exactly while it is busy — the state every fresh call is made in. Proof is in two halves: this mutant dies on the token assertion in the fast lane, and the behavioural oracle independent of that source is the activity-adjacent pane cell in check-mux-launch-tmux (a real `select-pane -T` title, resolved to its real session id)",
+			"subject": "pi-extensions/lib/codex-caller-seat.ts",
+			"find": [
+				"\tfor (const segment of title.split(TITLE_SEGMENT_SEPARATOR)) {\n\t\tfor (const token of segment.split(TITLE_TOKEN_SEPARATOR)) {\n\t\t\tif (anchors.includes(token)) return true;\n\t\t}\n\t}"
+			],
+			"replace": [
+				"\tfor (const segment of title.split(TITLE_SEGMENT_SEPARATOR)) {\n\t\tif (anchors.includes(segment)) return true;\n\t}"
+			],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:CODEX-SEAT-TOKEN-NOT-SEGMENT]",
+			"signatureSource": "test/codex-caller-seat.test.ts"
+		},
+		{
+			"claim": "CODEX-SEAT-EXACT-TOKEN",
+			"title": "a token that merely CONTAINS the anchor matches, so a pane whose title quotes this thread id inside a longer word — a log line, a path, another agent's status text — is read as the caller's own TUI and a sibling is seated in a stranger's window",
+			"subject": "pi-extensions/lib/codex-caller-seat.ts",
+			"find": ["\t\t\tif (anchors.includes(token)) return true;"],
+			"replace": ["\t\t\tif (anchors.some((anchor) => token.includes(anchor))) return true;"],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:CODEX-SEAT-EXACT-TOKEN]",
+			"signatureSource": "test/codex-caller-seat.test.ts"
+		},
+		{
+			"claim": "CODEX-SEAT-AMBIGUOUS-REJECTS",
+			"title": "two panes naming one thread take the FIRST match instead of refusing — tmux's listing order decides where the operator's sibling opens, and the receipt names that guess as if it were an observation",
+			"subject": "pi-extensions/lib/codex-caller-seat.ts",
+			"find": ["\tif (matches.length > 1) return { ok: false, reason: \"codex-caller-seat-ambiguous\" };"],
+			"replace": [""],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:CODEX-SEAT-AMBIGUOUS-REJECTS]",
+			"signatureSource": "test/codex-caller-seat.test.ts"
+		},
+		{
+			"claim": "CODEX-SEAT-UNRESOLVED-NO-FALLBACK",
+			"title": "no matching pane stops being a refusal — the leaf returns an `ok` seat built from nothing, and the composition above it seats a sibling against an undefined session",
+			"subject": "pi-extensions/lib/codex-caller-seat.ts",
+			"find": ["\tif (matches.length === 0) return { ok: false, reason: \"codex-caller-seat-unresolved\" };"],
+			"replace": [""],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:CODEX-SEAT-UNRESOLVED-NO-FALLBACK]",
+			"signatureSource": "test/codex-caller-seat.test.ts"
+		},
+		{
+			"claim": "CODEX-SEAT-COUNTS-PANES",
+			"title": "the count moves from panes to TOKENS, so one pane whose title carries both `thread-title` (the full id, for an unnamed thread) and `thread-id` (the truncated one) refuses as ambiguous — two views of the same thread in the same window become a reason not to open anything",
+			"subject": "pi-extensions/lib/codex-caller-seat.ts",
+			"find": ["\t\tif (titleNamesThread(pane.title, anchors)) {"],
+			"replace": ["\t\tfor (const anchor of anchors) if (titleNamesThread(pane.title, [anchor])) {"],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:CODEX-SEAT-COUNTS-PANES]",
+			"signatureSource": "test/codex-caller-seat.test.ts"
+		},
+		{
+			"claim": "CODEX-SEAT-UNREADABLE-LINE-RAISES",
+			"title": "an unreadable pane line is skipped instead of raised — the listing is the whole evidence base for `exactly one`, so the dropped line can be the second match that should have refused, and a silent one-match answer replaces a named ambiguity",
+			"subject": "pi-extensions/lib/codex-caller-seat.ts",
+			"find": [
+				"\t\tif (pane === null) {\n\t\t\tthrow new Error(`codex-caller-seat: tmux printed a pane line this leaf cannot read: ${JSON.stringify(line)}`);\n\t\t}"
+			],
+			"replace": ["\t\tif (pane === null) continue;"],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:CODEX-SEAT-UNREADABLE-LINE-RAISES]",
+			"signatureSource": "test/codex-caller-seat.test.ts"
+		},
+		{
+			"claim": "CODEX-SEAT-IMPORTS-NOTHING",
+			"title": "the leaf acquires an import, so the module that reads a FORGEABLE pane title is no longer structurally unable to reach identity, delivery or a record (Hard Rule 16). The fence is what makes 'a title is only a placement input' a property of the code rather than a promise in a comment",
+			"subject": "pi-extensions/lib/codex-caller-seat.ts",
+			"find": ["export type CodexCallerSeatRejectReason ="],
+			"replace": [
+				"import { resolveTmuxSessionId } from \"./resolve-tmux-session.ts\";\n\nexport type CodexCallerSeatRejectReason ="
+			],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:CODEX-SEAT-IMPORTS-NOTHING]",
+			"signatureSource": "test/codex-caller-seat.test.ts"
+		},
+		{
+			"claim": "CODEX-SEAT-FOLLOWS-CALLER-NOT-BACKEND",
+			"title": "the anchor branch is gated on the BACKEND BEING OPENED instead of on who is calling — the exact confusion #95 D1 retired the `codex` home to remove. A Codex citizen opening a PI sibling then loses its own pane and lands wherever the app-server happens to sit, while a pi citizen opening a CODEX sibling walks into an anchor lookup it has no thread id for",
+			"subject": "pi-extensions/lib/mux-fresh-call.ts",
+			"find": ["\t} else if (params.placement === undefined && params.callerNativeSessionId !== undefined) {"],
+			"replace": ["\t} else if (params.placement === undefined && params.backend === \"codex\") {"],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:CODEX-SEAT-FOLLOWS-CALLER-NOT-BACKEND]",
+			"signatureSource": "test/mux-fresh-call.test.ts"
+		},
+		{
+			"claim": "CODEX-SEAT-PRECEDENCE-ANCHOR-OVER-EXPLICIT",
+			"title": "the anchor stops re-reading the explicit placement, so an expert override is silently overridden by the caller's own pane — the operator names a project seat and the sibling opens somewhere else, with a receipt that says `requested`",
+			"subject": "pi-extensions/lib/mux-fresh-call.ts",
+			"find": ["\t} else if (params.placement === undefined && params.callerNativeSessionId !== undefined) {"],
+			"replace": ["\t}\n\tif (params.callerNativeSessionId !== undefined) {"],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:CODEX-SEAT-PRECEDENCE-ANCHOR-OVER-EXPLICIT]",
+			"signatureSource": "test/mux-fresh-call.test.ts"
+		},
+		{
+			"claim": "CODEX-SEAT-COMPOSITION-REJECT-IS-REAL",
+			"title": "an unresolvable or ambiguous anchor stops being a refusal and falls through to the caller's own session — the sibling opens, the launch looks successful, and the operator's Codex never sees the window it asked for. Proof is in two halves: this mutant dies on the source-text branch assert in the fast lane, and the behavioural oracle independent of that source is the caller-seat composition cell in check-mux-launch-tmux (a named refusal with a byte-identical list-windows -a before and after)",
+			"subject": "pi-extensions/lib/mux-fresh-call.ts",
+			"find": ["\t\tif (!anchor.ok) return { ok: false, reason: anchor.reason };"],
+			"replace": ["\t\tif (!anchor.ok) return { ok: false, reason: \"caller-identity-unavailable\" };"],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:CODEX-SEAT-COMPOSITION-REJECT-IS-REAL]",
+			"signatureSource": "test/mux-fresh-call.test.ts"
+		},
+		{
+			"claim": "CODEX-SEAT-RECEIPT-INVENTS-A-NAME",
+			"title": "the anchored receipt reports a session NAME the caller never asked for — `tmuxSession` becomes the observed `$id`, so a receipt field whose whole contract is `what was REQUESTED` starts carrying an observation, and every reader that echoes it back as a seat name addresses a session by a string tmux may not resolve",
+			"subject": "pi-extensions/lib/mux-fresh-call.ts",
+			"find": ["\t\t\t\t\t? { tmuxSessionSource: \"codex-title-anchor\" as const }"],
+			"replace": ["\t\t\t\t\t? { tmuxSession: targetSessionId, tmuxSessionSource: \"codex-title-anchor\" as const }"],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:CODEX-SEAT-RECEIPT-INVENTS-A-NAME]",
+			"signatureSource": "test/mux-fresh-call.test.ts"
+		},
+		{
+			"claim": "CODEX-SEAT-TITLE-BECOMES-DELIVERY-TARGET",
+			"title": "the caller's own garden address is replaced by the thread id the PANE TITLE matched, so a forgeable title decides who the fresh sibling is told to call back to. The sibling's first message would then be delivered against an identity nobody vouched for — the exact Hard Rule 16 crossing this lane is built to make impossible: the title is a placement input and may never become an address",
+			"subject": "pi-extensions/lib/mux-fresh-call.ts",
+			"find": ["\t\t\tcallerGardenId,\n\t\t\tnonce,\n\t\t}),"],
+			"replace": ["\t\t\tcallerGardenId: params.callerNativeSessionId ?? callerGardenId,\n\t\t\tnonce,\n\t\t}),"],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:CODEX-SEAT-TITLE-BECOMES-DELIVERY-TARGET]",
+			"signatureSource": "test/mux-fresh-call.test.ts"
+		},
+		{
+			"claim": "CODEX-CALLER-PREFLIGHT-TITLE",
+			"title": "the caller-side capability check reads `status_line` instead of `terminal_title`, so a host whose visible identity is installed passes a seat check it never satisfied — the fresh call then reaches tmux, finds no titled pane, and reports `unresolved` as if the operator's TUI were missing rather than their config",
+			"subject": "pi-extensions/lib/codex-fresh-preflight.ts",
+			"find": ["\tconst terminalTitle = (tui as Record<string, unknown>).terminal_title;"],
+			"replace": ["\tconst terminalTitle = (tui as Record<string, unknown>).status_line;"],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:CODEX-CALLER-PREFLIGHT-TITLE]",
+			"signatureSource": "test/codex-fresh-preflight.test.ts"
+		},
+		{
+			"claim": "CODEX-CALLER-PREFLIGHT-NOT-STATUS-LINE",
+			"title": "the caller axis accepts `thread-title` as well as `thread-id`, so the status-line atom silently satisfies a check it has nothing to do with — `status_line` is read inside the TUI and never reaches `#{pane_title}`, so the seat is still unfindable and the operator is told their config is fine",
+			"subject": "pi-extensions/lib/codex-fresh-preflight.ts",
+			"find": ["\treturn !Array.isArray(terminalTitle) || !terminalTitle.includes(\"thread-id\");"],
+			"replace": [
+				"\treturn !Array.isArray(terminalTitle) || !(terminalTitle.includes(\"thread-id\") || terminalTitle.includes(\"thread-title\"));"
+			],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:CODEX-CALLER-PREFLIGHT-NOT-STATUS-LINE]",
+			"signatureSource": "test/codex-fresh-preflight.test.ts"
+		},
+		{
+			"claim": "CODEX-CALLER-PREFLIGHT-SHAPE",
+			"title": "a `terminal_title` that is not an array of items is read as satisfying the caller axis, so an operator whose value is a string (or whose config does not parse) is told the seat is configured and only finds out when the fresh call cannot place a window",
+			"subject": "pi-extensions/lib/codex-fresh-preflight.ts",
+			"find": ["\tif (config === null || callerTitleMissing(config)) return \"codex-caller-title-missing\";"],
+			"replace": ["\tif (config !== null && callerTitleMissing(config)) return \"codex-caller-title-missing\";"],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:CODEX-CALLER-PREFLIGHT-SHAPE]",
+			"signatureSource": "test/codex-fresh-preflight.test.ts"
+		},
+		{
+			"claim": "CODEX-CALLER-PREFLIGHT-SURFACE-WIRED",
+			"title": "the shared dispatcher stops running the caller-side preflight, so a Codex caller with no `thread-id` in its terminal title gets the generic `unresolved` seat refusal instead of the capability repair — and the MCP surface, its only supplier, cannot tell the two apart",
+			"subject": "pi-extensions/lib/fresh-call-dispatch.ts",
+			"find": [
+				"\t\ttargetMissing === null && request.callerNativeSessionId !== undefined && request.placement === undefined\n\t\t\t? codexCallerFreshPreflight(env)\n\t\t\t: null;"
+			],
+			"replace": ["\t\tnull;"],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:CODEX-CALLER-PREFLIGHT-SURFACE-WIRED]",
+			"signatureSource": "test/fresh-call-surfaces.contract.test.ts"
+		},
+		{
+			"claim": "CODEX-TT-OPERATOR-ITEM-UNOWNED",
+			"title": "the pre-repair shape returns: an operator-authored `thread-id` gets a receipt written over it, so entwurf claims an edit it never made. The doctor then answers `owned`, and its `drift` red — whose repair reads \"reinstall in place\" — starts pointing at bytes that were always the operator's. The same receipt is what made the inverse dishonest: parked over their item, a reinstall after they hand-removed it splices ours back in while the receipt still says `already-present`, and the take-back then reports \"nothing to take back\" and leaves our bytes in their config for good",
+			"subject": "scripts/codex-terminal-title-config.py",
+			"find": [
+				"            if prior is None:\n                # The operator wrote it. Nothing is written ANYWHERE — not the config, not a\n                # receipt — so the doctor reads this host as `unowned`, which is what it is.\n                sys.stdout.write(f\"already-present {os.path.abspath(config_path)}\\n\")\n                return\n            # Ours, already installed. The strongest idempotence is to leave both files exactly\n            # as they are, carrying the ORIGINAL receipt rather than re-deriving one.\n            mode = prior[\"detectMode\"]\n            new_lines = lines\n            preimage = prior[\"terminalTitlePreimage\"]\n            postimage_span = prior[\"postimageSpan\"]\n            snippet = prior[\"snippet\"]\n"
+			],
+			"replace": [
+				"            mode = \"already-present\"\n            new_lines = lines\n            preimage = span_text(lines, key_span[0], key_span[1] + 1)\n            postimage_span = preimage\n            snippet = None\n"
+			],
+			"gate": ["bash", "run.sh", "smoke-codex-config-state"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:CODEX-TT-OPERATOR-ITEM-UNOWNED]",
+			"signatureSource": "scripts/smoke-codex-config-state.sh"
+		},
+		{
+			"claim": "CODEX-LAUNCH-CWD-TRUST",
+			"title": "the launch directory's folder consent is never asked, so an unconsented directory is launched anyway — the sibling opens on the vendor's trust screen, starts no turn, writes no rollout and never calls back, and the caller waits out its whole timeout on a window that is merely waiting to be answered. This is the 2026-09-16 failure verbatim: the two unattended release-gate runs died here while the two a human sat through passed",
+			"subject": "pi-extensions/lib/codex-fresh-preflight.ts",
+			"find": ["\tif (levelOf(launchCwd) !== null) return null;"],
+			"replace": ["\tif (true) return null;"],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:CODEX-LAUNCH-CWD-TRUST]",
+			"signatureSource": "test/codex-fresh-preflight.test.ts"
+		},
+		{
+			"claim": "CODEX-LAUNCH-CWD-DECIDED-NOT-TRUSTED",
+			"title": "the axis narrows back to `trusted` only, so a directory the operator deliberately answered `untrusted` is refused even though the vendor skips its consent screen on this remote rail and the turn would have started — entwurf inventing a policy the vendor does not have, and a launch that works refused for a reason the operator cannot repair without reversing their own security decision",
+			"subject": "pi-extensions/lib/codex-fresh-preflight.ts",
+			"find": ["\t\treturn level === \"trusted\" || level === \"untrusted\" ? level : null;"],
+			"replace": ["\t\treturn level === \"trusted\" ? level : null;"],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:CODEX-LAUNCH-CWD-DECIDED-NOT-TRUSTED]",
+			"signatureSource": "test/codex-fresh-preflight.test.ts"
+		},
+		{
+			"claim": "CODEX-LAUNCH-CWD-EXACT-KEY",
+			"title": "the consent lookup walks up to a parent entry, so a trusted `/tmp` is read as consent for an undecided `/tmp/<scratch>` — the preflight passes a launch the vendor still stops, which is the exact shape measured on 2026-09-16 and the reason this rail's key is the literal cwd (`ProjectTrustHost::Remote` looks up `vec![cwd_key]` alone, with no root marker, git root or parent)",
+			"subject": "pi-extensions/lib/codex-fresh-preflight.ts",
+			"find": ["\tif (levelOf(launchCwd) !== null) return null;"],
+			"replace": [
+				"\tif (Object.keys(table).some((key) => levelOf(key) === \"trusted\" && (launchCwd === key || launchCwd.startsWith(`${key}/`)))) return null;"
+			],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:CODEX-LAUNCH-CWD-EXACT-KEY]",
+			"signatureSource": "test/codex-fresh-preflight.test.ts"
+		},
+		{
+			"claim": "CODEX-LAUNCH-CWD-NO-EVIDENCE-PROCEEDS",
+			"title": "an unreadable user config becomes a refusal, so absence is treated as evidence: the vendor loads an empty user table and merges system, managed and cloud layers around it, any of which can carry the decision that starts the turn. Every host without a user config.toml — and every managed installation — would be refused a sibling the vendor was going to open, with a repair that fixes nothing",
+			"subject": "pi-extensions/lib/codex-fresh-preflight.ts",
+			"find": ["\tif (config === null) return null;"],
+			"replace": ["\tif (config === null) return \"codex-launch-cwd-undecided\";"],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:CODEX-LAUNCH-CWD-NO-EVIDENCE-PROCEEDS]",
+			"signatureSource": "test/codex-fresh-preflight.test.ts"
+		},
+		{
+			"claim": "CODEX-LAUNCH-CWD-UNTRUSTED-ANCESTOR",
+			"title": "a cwd inside an explicitly untrusted project collapses into the generic undecided reason, so the operator is told to answer a consent prompt at a directory the vendor never prompts for — on this rail it refuses the startup outright with `pass the repository root explicitly with --cd`, and the suggested repair reproduces that same error instead of fixing it",
+			"subject": "pi-extensions/lib/codex-fresh-preflight.ts",
+			"find": ["\t\t\treturn \"codex-launch-cwd-untrusted-ancestor\";"],
+			"replace": ["\t\t\treturn \"codex-launch-cwd-undecided\";"],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:CODEX-LAUNCH-CWD-UNTRUSTED-ANCESTOR]",
+			"signatureSource": "test/codex-fresh-preflight.test.ts"
+		},
+		{
+			"claim": "CODEX-LAUNCH-CWD-LAYER-NOT-REFUSED",
+			"title": "the project-layer escape narrows from EXISTENCE to safe ownership, so a `.codex` the vendor would admit a layer from — its admission consults no owner, mode or symlink safety, and it preserves even an unknown or untrusted layer as a disabled one — goes unseen here and the leaf synthesises an `untrusted-ancestor` refusal whose vendor precondition (`project_layers.is_empty()`) does not hold. That is a FALSE REFUSAL: the operator loses a sibling that would have started, and is handed a repair naming a directory that was never the problem",
+			"subject": "pi-extensions/lib/codex-fresh-preflight.ts",
+			"find": ["\t\tif (candidate !== codexHome && fs.existsSync(candidate)) return null;"],
+			"replace": [
+				"\t\tif (candidate !== codexHome && isSafeOwnedDir(candidate, process.getuid?.() ?? -1)) return null;"
+			],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:CODEX-LAUNCH-CWD-LAYER-NOT-REFUSED]",
+			"signatureSource": "test/codex-fresh-preflight.test.ts"
+		},
+		{
+			"claim": "CODEX-LAUNCH-CWD-HOME-NOT-A-LAYER",
+			"title": "the operator's own codex home counts as a project layer, so every directory under $HOME answers `null` and the axis is silently dead on a real host — the gate stays green while the failure it exists to catch walks straight through it",
+			"subject": "pi-extensions/lib/codex-fresh-preflight.ts",
+			"find": ["\t\tif (candidate !== codexHome && fs.existsSync(candidate)) return null;"],
+			"replace": ["\t\tif (fs.existsSync(candidate)) return null;"],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:CODEX-LAUNCH-CWD-HOME-NOT-A-LAYER]",
+			"signatureSource": "test/codex-fresh-preflight.test.ts"
+		},
+		{
+			"claim": "CODEX-LAUNCH-CWD-ANCESTOR-PLAIN-PATHS-ONLY",
+			"title": "the ancestor match is asserted for paths this leaf cannot compare the way the vendor does — the vendor compares path URIs segment-wise and fails closed on encoded separators, this compares strings — so an encoded or dot-segmented key can produce a confident `untrusted-ancestor` refusal, complete with a repair naming a specific other directory, for a launch the vendor would have run",
+			"subject": "pi-extensions/lib/codex-fresh-preflight.ts",
+			"find": ["\tif (plainPosixPath(launchCwd)) {"],
+			"replace": ["\tif (true) {"],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:CODEX-LAUNCH-CWD-ANCESTOR-PLAIN-PATHS-ONLY]",
+			"signatureSource": "test/codex-fresh-preflight.test.ts"
+		},
+		{
+			"claim": "FRESHCALL-CODEX-LAUNCH-CWD-NOTES-NEVER-REFUSES",
+			"title": "the note names the REQUESTED directory instead of the token codex receives, so a launch that named none — the case where the pane inherits this process's directory and `-C` names it — reports the empty string, and the operator is pointed at a directory the thread never starts in",
+			"subject": "pi-extensions/lib/mux-fresh-call.ts",
+			"find": ["\t\tconst launchCwd = backendArgs[at + 1] ?? \"\";"],
+			"replace": ["\t\tconst launchCwd = cwd ?? \"\";"],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:FRESHCALL-CODEX-LAUNCH-CWD-NOTES-NEVER-REFUSES]",
+			"signatureSource": "test/mux-fresh-call.test.ts"
+		}
+	]
+}

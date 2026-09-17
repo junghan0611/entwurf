@@ -109,9 +109,12 @@ async function main(): Promise<void> {
 	);
 
 	const dispatchCode = DISPATCH_SRC.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:])\/\/.*$/gm, "$1");
+	// Up to the FIRST statement of the tmux path, which is the target capability question
+	// (#95 lane B added a caller-side one beside it, so `const missing =` is no longer the
+	// boundary — it is the line that FOLDS the two).
 	const herdrBranch = dispatchCode.slice(
 		dispatchCode.indexOf('if (selectFreshCallRail(env) === "herdr")'),
-		dispatchCode.indexOf("\tconst missing ="),
+		dispatchCode.indexOf("\tconst targetMissing ="),
 	);
 
 	// ── no fallback, either direction ────────────────────────────────────────────────────
@@ -129,22 +132,40 @@ async function main(): Promise<void> {
 			!refused.result.ok &&
 			refused.result.reason === "herdr-backend-unsupported" &&
 			nonPilot.calls.length === 0 &&
-			// And structurally: the herdr branch names no capability preflight at all.
-			!herdrBranch.includes("codexFreshPreflight"),
+			// And structurally: the herdr branch names NEITHER capability preflight — not the
+			// target one, and not the caller-seat one #95 lane B put beside it.
+			!herdrBranch.includes("codexFreshPreflight") &&
+			!herdrBranch.includes("codexCallerFreshPreflight"),
 	);
 
 	// ── the tmux rail keeps its pre-existing ordering ────────────────────────────────────
 	// The import line names the preflight too, so the body is what gets counted: the claim is
 	// "called once, on one path", not "the word appears once".
 	const dispatchBody = dispatchCode.slice(dispatchCode.indexOf("export async function dispatchFreshCall"));
-	const preflightIndex = dispatchBody.indexOf("codexFreshPreflight(env)");
+	// `codexCallerFreshPreflight` CONTAINS `codexFreshPreflight` as a substring, so the target
+	// call is located by its own whole spelling — a containment search would find the caller
+	// call first and count two where the claim is about one.
+	const preflightIndex = dispatchBody.indexOf("await codexFreshPreflight(env)");
 	const herdrReturnIndex = dispatchBody.indexOf('return { rail: "herdr", result: await herdrFreshCall(');
+	// The second axis #95 lane B put beside it: the CALLER-seat capability, asked after the
+	// target one and only when the anchor will actually be consulted — a codex caller that named
+	// an explicit seat never reads a pane title, so refusing it for a missing `thread-id` would
+	// refuse an unused capability. Both are this one claim, because both are "the capability
+	// question is answered in the root, before the composition".
+	const callerPreflightIndex = dispatchBody.indexOf("codexCallerFreshPreflight(env)");
 	ok(
-		"[QK:FCD-CODEX-PREFLIGHT-TMUX] the Codex capability preflight is called ONCE, on the tmux path only, after the herdr branch has already returned, and still answers before the composition — the pre-existing contract, now in one place instead of two",
+		"[QK:FCD-CODEX-PREFLIGHT-TMUX] BOTH Codex capability preflights are called ONCE, on the tmux path only, after the herdr branch has already returned and before the composition — target first, then the caller seat under its own gate — the pre-existing contract, now in one place instead of two",
 		preflightIndex > herdrReturnIndex &&
 			herdrReturnIndex > 0 &&
 			preflightIndex < dispatchBody.indexOf("result: freshCall(") &&
-			dispatchBody.split("codexFreshPreflight").length - 1 === 1,
+			dispatchBody.split("await codexFreshPreflight(env)").length - 1 === 1 &&
+			callerPreflightIndex > preflightIndex &&
+			callerPreflightIndex < dispatchBody.indexOf("result: freshCall(") &&
+			dispatchBody.split("codexCallerFreshPreflight(env)").length - 1 === 1 &&
+			dispatchBody.includes(
+				"targetMissing === null && request.callerNativeSessionId !== undefined && request.placement === undefined",
+			) &&
+			dispatchBody.includes("const missing = targetMissing ?? callerMissing;"),
 	);
 
 	// ── one nonce, into whichever rail ───────────────────────────────────────────────────

@@ -27,6 +27,17 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, statSync
 import { tmpdir } from "node:os";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+	appendSessionStartGroup,
+	canonicalJson,
+	certifySplice,
+	declarationDigest,
+	entwurfDeclarationGroup,
+	removeEntwurfDescription,
+	removeSessionStartGroup,
+	selectEntwurfDeclaration,
+	trustReceiptKey,
+} from "../pi-extensions/lib/codex-declaration.js";
 import { listAllMetaIdentitiesDir, type MetaIdentity } from "../pi-extensions/lib/meta-session.ts";
 import { reclaimOnExit } from "./lib/reclaim-on-exit.ts";
 
@@ -122,6 +133,179 @@ ok(
 	handler.command === `'${LAUNCHER}'`,
 );
 ok("the handler timeout is 30", handler.timeout === 30);
+
+// ── 2. the declaration leaf: what entwurf owns inside a file it SHARES (#117) ─
+// The installer, the inverse, the doctor and the fresh preflight all decide with this leaf, so
+// its two mechanisms are proven here once rather than four times through their shells. The
+// mechanisms are: a NORMALIZED digest (blind to whatever a neighbour's serializer does) and a
+// SPAN SPLICE (so a neighbour's bytes are copied through rather than rewritten).
+{
+	const fakeLauncher = "/opt/entwurf/codex-birth-launch.sh";
+	const ourGroup = entwurfDeclarationGroup(fakeLauncher);
+	const herdrGroup = {
+		hooks: [{ type: "command", command: "bash '/home/op/.codex/herdr-agent-state.sh' session", timeout: 10 }],
+	};
+
+	ok(
+		"[QK:CODEX-DECL-CANONICAL-KEY-ORDER] the canonical form sorts keys recursively, so two documents that differ only in key order digest identically",
+		canonicalJson({ b: 1, a: [{ y: 2, x: 3 }] }) === canonicalJson({ a: [{ x: 3, y: 2 }], b: 1 }),
+	);
+	ok(
+		"[QK:CODEX-DECL-DIGEST-BINDS-LAUNCHER] the digest is sensitive to the launcher path — the one string the vendor keys its trust receipt to",
+		declarationDigest(ourGroup) !== declarationDigest(entwurfDeclarationGroup(`${fakeLauncher}.bak`)),
+	);
+	ok(
+		"[QK:CODEX-DECL-DIGEST-BINDS-EVENT] the digest covers the EVENT as well as the group, so the same group under another event is another identity",
+		declarationDigest(ourGroup) !== declarationDigest(ourGroup, "SubagentStart"),
+	);
+
+	// SELECTION is by the launcher command, at whatever index that command happens to sit.
+	for (const [label, groups, wantIndex] of [
+		["alone", [ourGroup], 0],
+		["after a neighbour", [herdrGroup, ourGroup], 1],
+		["before a neighbour", [ourGroup, herdrGroup], 0],
+		["between neighbours", [herdrGroup, ourGroup, herdrGroup], 1],
+	] as const) {
+		const picked = selectEntwurfDeclaration({ hooks: { SessionStart: groups } }, fakeLauncher);
+		ok(
+			`[QK:CODEX-DECL-SELECT-BY-COMMAND] entwurf's declaration is selected by its command, ${label} (index ${wantIndex})`,
+			picked.ok && picked.groupIndex === wantIndex && picked.handlerIndex === 0,
+		);
+		ok(
+			`the trust key names that measured position, ${label}`,
+			picked.ok &&
+				trustReceiptKey("/h/hooks.json", picked.groupIndex, picked.handlerIndex) ===
+					`/h/hooks.json:session_start:${wantIndex}:0`,
+		);
+		ok(
+			`every other group is reported FOREIGN and none of ours is, ${label}`,
+			picked.ok && picked.foreign.length === groups.length - 1 && !picked.foreign.some((g) => g.index === wantIndex),
+		);
+	}
+
+	// The HANDLER KEY SET, on its own cell because it is the one shape predicate the normalized
+	// digest does not separate: a handler carrying `async` also digests differently, so the
+	// preflight refuses it either way. What only this predicate buys is the NAME — "every extra
+	// key, `async` above all, changes the trust identity" — instead of a bare digest mismatch, and
+	// an operator repairs those two with different hands. `async: true` is the case that matters:
+	// it would let the turn proceed before the record exists.
+	{
+		const extra = selectEntwurfDeclaration(
+			{ hooks: { SessionStart: [{ hooks: [{ ...ourGroup.hooks[0], async: true }] }] } },
+			fakeLauncher,
+		);
+		ok(
+			"[QK:FRESHCALL-CODEX-HOOK-KEYS] a handler carrying `async` — or any key the installer never writes — is refused as a SHAPE drift that names the extra key, not as an anonymous digest mismatch",
+			!extra.ok &&
+				extra.code === "declaration-shape-drifted" &&
+				extra.detail.includes("exactly type+command+timeout") &&
+				extra.detail.includes("async"),
+		);
+	}
+
+	for (const [code, document] of [
+		["declaration-absent", { hooks: { SessionStart: [herdrGroup] } }],
+		["declaration-duplicated", { hooks: { SessionStart: [ourGroup, herdrGroup, ourGroup] } }],
+		["declaration-shape-drifted", { hooks: { SessionStart: [{ matcher: "startup", ...ourGroup }] } }],
+		["declaration-shape-drifted", { hooks: { SessionStart: [{ hooks: [{ ...ourGroup.hooks[0], async: true }] }] } }],
+		["declaration-shape-drifted", { hooks: { SessionStart: [{ hooks: [ourGroup.hooks[0], herdrGroup.hooks[0]] }] } }],
+		["hooks-unreadable", { hooks: { SessionStart: "not an array" } }],
+	] as const) {
+		const picked = selectEntwurfDeclaration(document, fakeLauncher);
+		ok(
+			`[QK:CODEX-DECL-NAMED-REFUSALS] ${code} is returned by name rather than as a silent miss (${JSON.stringify(document).slice(0, 60)}…)`,
+			!picked.ok && picked.code === code,
+		);
+	}
+
+	// THE SPLICE. What is asserted is not "the result parses" but "every byte a neighbour owns is
+	// literally still there", because a re-serialize would also parse. So the fixtures below are
+	// deliberately formatted the way NOTHING in this repo serializes — tabs, inline groups, the
+	// neighbour's keys in the order serde emits them — and the assertion is a literal substring.
+	// A fixture written with `JSON.stringify(_, null, 2)` would let a whole-document rewrite pass
+	// unnoticed, which is the one failure this mechanism exists to prevent.
+	const herdrLine = `\t\t\t{"hooks": [{"command": ${JSON.stringify(herdrGroup.hooks[0].command)}, "timeout": 10, "type": "command"}]}`;
+	const ourLine = `\t\t\t{"hooks": [{"type": "command", "command": "'${fakeLauncher}'", "timeout": 30}]}`;
+	const shared = [
+		"{",
+		'\t"description": "entwurf codex-birth 9.9.9 — prose we authored",',
+		'\t"hooks": {',
+		'\t\t"SessionStart": [',
+		`${ourLine},`,
+		herdrLine,
+		"\t\t]",
+		"\t}",
+		"}",
+	].join("\n");
+	ok(
+		"the shared fixture really does hold the neighbour's bytes verbatim, in formatting nothing here would reproduce",
+		shared.includes(herdrLine) && JSON.stringify(JSON.parse(shared), null, 2) !== shared,
+	);
+	const withoutOurs = removeEntwurfDescription(
+		certifySplice(removeSessionStartGroup(shared, 0), { ...JSON.parse(shared), hooks: { SessionStart: [herdrGroup] } }),
+	);
+	ok(
+		"[QK:CODEX-DECL-SPLICE-KEEPS-FOREIGN-BYTES] removing entwurf's group leaves the neighbour's bytes literally untouched",
+		withoutOurs.includes(herdrLine),
+	);
+	ok(
+		"removing entwurf's group also removes entwurf's own description and nothing else",
+		canonicalJson(JSON.parse(withoutOurs)) === canonicalJson({ hooks: { SessionStart: [herdrGroup] } }),
+	);
+	const foreignOnly = ["{", '\t"hooks": {', '\t\t"SessionStart": [', herdrLine, "\t\t]", "\t}", "}"].join("\n");
+	const rejoined = certifySplice(appendSessionStartGroup(foreignOnly, ourGroup), {
+		hooks: { SessionStart: [herdrGroup, ourGroup] },
+	});
+	ok(
+		"[QK:CODEX-DECL-SPLICE-APPENDS-LAST] appending entwurf's group leaves the neighbour at its own index — and therefore at its own trust receipt — with its bytes unchanged",
+		selectEntwurfDeclaration(JSON.parse(rejoined), fakeLauncher).groupIndex === 1 && rejoined.includes(herdrLine),
+	);
+
+	// THE POST-CONDITION IS THE SAFETY. The span reader is the only new way this unit can damage
+	// a file nobody asked it to touch, so no splice is ever trusted on the reader's word.
+	let refused = "";
+	try {
+		certifySplice(rejoined, { hooks: { SessionStart: [herdrGroup] } });
+	} catch (err) {
+		refused = err instanceof Error ? err.message : String(err);
+	}
+	ok(
+		"[QK:CODEX-DECL-SPLICE-CERTIFIED] a splice whose result is not the value the caller intended is REFUSED, never returned",
+		refused.includes("not the value this edit intended"),
+	);
+	refused = "";
+	try {
+		certifySplice("{not json", { hooks: {} });
+	} catch (err) {
+		refused = err instanceof Error ? err.message : String(err);
+	}
+	ok("a splice that does not parse is refused with its own reason", refused.includes("does not parse"));
+
+	// The span reader must find the SAME structure `JSON.parse` does, across the shapes a hooks
+	// file is actually written in. A disagreement here is the reader silently editing the wrong
+	// range, which is exactly what the post-condition above is guarding.
+	for (const [label, text] of [
+		["compact", JSON.stringify({ hooks: { SessionStart: [ourGroup, herdrGroup] } })],
+		["2-space", JSON.stringify({ hooks: { SessionStart: [ourGroup, herdrGroup] } }, null, 2)],
+		["tab", JSON.stringify({ hooks: { SessionStart: [ourGroup, herdrGroup] } }, null, "\t")],
+		[
+			"strings that contain braces and escaped quotes",
+			JSON.stringify({
+				description: 'a } b ] c \\" d',
+				hooks: { SessionStart: [ourGroup, { hooks: [{ type: "command", command: '] } "x"', timeout: 1 }] }] },
+			}),
+		],
+	] as const) {
+		const trimmed = certifySplice(removeSessionStartGroup(text, 0), {
+			...(JSON.parse(text) as Record<string, unknown>),
+			hooks: { SessionStart: [(JSON.parse(text) as { hooks: { SessionStart: unknown[] } }).hooks.SessionStart[1]] },
+		});
+		ok(
+			`[QK:CODEX-DECL-SPAN-READER-EXACT] the span reader agrees with JSON.parse on ${label} formatting`,
+			JSON.parse(trimmed) !== null,
+		);
+	}
+}
 
 // ── 3. FIRE the installed launcher, the way codex fires it ──────────────────
 const MEASURED = {

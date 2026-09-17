@@ -77,25 +77,61 @@ Verification here is not a benchmark. In production we exchange short turns and 
 > The aggregate release gate does not own a live agy conversation id, so agy's real native-push round trip is a separate acceptance axis: three fail-loud doctors plus `LIVE=1 AGY_CONVERSATION_ID=<id> ./run.sh smoke-agy-native-push-live`, followed by a fresh-conversation sender/reply check after package install. Its deterministic install/sender gates are already inside `pnpm run check:full`; do not misreport the aggregate gate as live agy evidence. **Cost fence:** the agy conversation this smoke drives runs on a free account, so open it on `gemini-3.6-flash` — never a Pro tier. The model is the operator's choice at conversation-open time; entwurf never selects it, and no assertion reads it (see the shipped-lane note: model display is not part of the agy contract).
 >
 > Aggregate release-gate does not own a loaded Codex thread. Codex native-push remains an
-> on-demand host axis. The final first-admission acceptance passed on 2026-09-12 with the
-> explicit home topology; `DELIVERY.md` owns its 57-assertion receipt and digest. Re-runs start
-> from a tmux session other than `codex`; the operator-owned
-> app-server and supported Codex TUIs sit in the existing exact `codex` session; omitted Codex
-> placement resolves there; and the Codex-opened Pi stays there. Exact `rust-v0.153.4` source
-> exposes no arbitrary request→attached-TUI-seat value, so that wider topology is unsupported
-> and unclaimed rather than a blocker to the explicit home.
+> on-demand host axis. The first-admission acceptance passed on 2026-09-12 under the fixed `codex`
+> home topology #95 D1 later retired; `DELIVERY.md` owns its 57-assertion receipt and digest as
+> history. Re-runs follow the caller-seat topology instead: the operator-owned app-server sits in
+> its own session A, the initial Pi and the Codex it opens both sit in a DIFFERENT session S, and
+> the Codex-opened Pi must land in S. **A ≠ S is a precondition, not a preference** — the
+> app-server's inherited `TMUX` names A, so an outbound Pi in S can only have come from the
+> caller's own pane title, and the receipt must name `codex-title-anchor` as the rule that chose
+> it. Exact `rust-v0.153.4` source still exposes no arbitrary request→attached-TUI-seat value, so
+> placing a sibling beside a TUI whose thread nobody named stays unsupported and unclaimed.
 >
 > The A cell takes no inferred server or models:
 > `LIVE=1 ENTWURF_CODEX_APP_SERVER_PID=<existing-app-server-pid>
 > ENTWURF_CODEX_FRESH_MODEL=<codex-model>
 > ENTWURF_CODEX_FRESH_PI_MODEL=<pi-model> ./run.sh smoke-codex-fresh-live`.
+> **Both of THIS cell's live-spend defaults are `gpt-5.6-luna` from 2026-09-17**
+> (`openai-codex/gpt-5.6-luna` on the pi side) — the Codex leg came down off `sol`. It is a tier
+> choice and not a gate change; the receipt this cell is accepted on must be the one that actually
+> ran, never a `sol` run inherited from before. This says nothing about other cells: `smoke-omp-
+> fresh-live` keeps `openai-codex/gpt-5.6-sol`, the model its bootstrap callback was measured on.
+>
+> **This cell needs its launch directory ANSWERED, once, and that is a vendor fact rather than a
+> gate setting.** Codex records a direct folder decision per exact directory on this rail, so the smoke
+> launches in one stable path instead of a fresh `mkdtemp`, and it PRINTS that path as
+> `launch-cwd <dir>` on every run. **Do not spell it `$TMPDIR/entwurf-codex-fresh-live`** — the
+> smoke resolves it with `os.tmpdir()`, which is this host's `TMPDIR` when one is set and `/tmp`
+> when it is not, so on a host with no `TMPDIR` that shell expansion names
+> `/entwurf-codex-fresh-live` in the filesystem root: a different directory the vendor would ask
+> about separately. Derive it exactly:
+>
+> ```bash
+> node -e 'console.log(require("node:os").tmpdir() + "/entwurf-codex-fresh-live")'
+> ```
+>
+> Open a plain `codex -C <that path>` once, answer the prompt, and every later run is unattended.
+> Skip it and the smoke says so in its own assertion before anything is launched —
+> `codex-launch-cwd-undecided` with the exact repair command, not a callback timeout twenty
+> assertions later. **That precondition belongs to this gate, not to the product:** an ordinary
+> `entwurf_fresh_call` only prints the same note and opens the window, because a human can answer
+> the screen. Here nobody can, which is the whole reason the gate asserts it.
 >
 > The command name is not proof. The first leg must be a real record-backed visible Pi
-> citizen outside the Codex home opening Codex; if a fixture or self-fetch receipt collector
+> citizen in a session OTHER than the app-server's opening Codex; if a fixture or self-fetch receipt collector
 > is what OPENS Codex, the gate does not satisfy the topology. A fixture that only COLLECTS
 > receipts beside that real Pi leg is not the disqualifier — substituting for the leg is (see
 > `docs/adding-a-harness.md`, the same wording). The receipt must separately name the initial
 > Pi, app-server, fresh Codex, and outbound Pi coordinates.
+>
+> **Running the 37-minute qualification on a memory-pressured host.** `[측정 2026-09-16,
+> thinkpad, 27 GiB]` `check-gate-qualification` took 37m37s and was killed three times by the
+> HARNESS's low-memory watchdog — not by any gate, and not by the kernel OOM killer. Each kill
+> left the checkout intact (the runner restores it) but discarded the run. Detaching it with
+> `setsid` survived, at the cost of the harness no longer tracking it: completion raises no
+> notification, so a separate waiter is needed for the signal. Record this as a host condition
+> rather than a gate property — it says nothing about the candidate, and the same command on a
+> less pressured host needs none of it.
 >
 > Authoritative per-cut counts and digests live in BASELINE/CHANGELOG, not inline
 > here; embedding them in the protocol makes a correct guide stale after every cut.
@@ -114,7 +150,7 @@ Do not collapse source, package, fixture, and native-host evidence into one “g
 | LIVE runtime | `LIVE=1 ./run.sh release-gate <scratch> --cut` plus any shipped on-demand backend axis | `--cut` enforces `SKIP=0`; a red wired gate blocks the cut. |
 | Native Claude host | installed strict doctor against a new real session | Missing live join is `NOT CERTIFIED`, not a fixture PASS. |
 | Native agy host | three doctors plus conversation-id-gated native-push round trip | Aggregate release-gate does not own an agy conversation id. |
-| Native Codex host | explicit-home first admission accepted 2026-09-12 | Operator-owned birth/MCP/statusline atoms and the on-demand four-coordinate chain are measured on Linux at Codex 0.153.4: initial Pi outside the existing exact `codex` home; app-server, omitted-placement fresh Codex, and outbound Pi inside it; exact callbacks and addressed delivery both ways. `DELIVERY.md` owns the 57-assertion receipt and digest. Arbitrary attached-TUI placement is unsupported and unclaimed. |
+| Native Codex host | caller-seat topology accepted 2026-09-16 (56 assertions, exit 0); caller-DIRECTORY axis accepted the same day (65 assertions, exit 0) | Operator-owned birth/MCP/statusline/terminal-title atoms and the on-demand four-coordinate chain are measured on Linux at Codex 0.153.4: the app-server alone in session A (`$30/@41/%45`, pid 737636), and initial Pi / omitted-placement fresh Codex / Codex-opened outbound Pi all in a different session S (`$2`, `@46`/`@47`/`@48`; `@58`/`@59`/`@61` in the lane C run); exact callbacks and addressed delivery both ways. A ≠ S is the load-bearing half — the app-server's inherited `TMUX` names A, so the outbound Pi landing in S can only have come from the caller's own pane title, and its receipt records `seat-source=codex-title-anchor`. **#95 lane C added the second axis to the same card: WHERE the sibling starts.** Hop 1 joins four authorities that cannot borrow from each other — the pane's `#{pane_current_path}`, the vendor rollout's `session_meta.cwd`, the Entwurf record and the requested scratch — and hop 1's leg requests a cwd while hop 2 requests NONE, so hop 2's directory can only come from the Codex caller's own record; both are asserted different from the app-server's live `/proc/<pid>/cwd`. 65 and 56 are different contracts, not a regression. The 2026-09-12 fixed-home chain is PAST CONTRACT (#95 D1); `DELIVERY.md` owns every receipt and digest. Placement beside a TUI whose thread nobody named is unsupported and unclaimed. |
 
 The repo-local `entwurf-release` skill owns the `land → prepare → make → publish`
 state machine. Each mode is a separate GLG authorization. Preserve one candidate,
@@ -142,6 +178,26 @@ The manual `pi --session` path is used only when (a) the entwurf path itself is 
 
 - Execute one command at a time (no `;`-chaining). Preserve full stdout/stderr at each step.
 - On anything wrong, **stop and hold** — preserve session/cache/process state before proceeding.
+
+### Choosing the affected set for an inner loop
+
+The inner loop runs only affected gates, so the cost of that choice is a gap nobody sees until the
+full floor runs. Two rules exist because both gaps were paid for on the #95 lane B candidate, with
+every focused gate green at the time:
+
+- **Mutant manifests are keyed by SUBJECT FILE, not by lane.** Edit a file and check every
+  `scripts/mutants/*.json` whose `subject` names it, not only the lanes you wrote. `[측정
+  2026-09-16]` renaming one local in `mcp/entwurf-bridge/src/index.ts` left
+  `FRESHCALL-CODEX-PREMUTATION-MCP` in a manifest the lane never touched; qualification reported
+  it `MUTANT-STALE` (find matched 0×). **A stale mutant is a claim nobody is testing** — its
+  assertion keeps passing while the mutation that gives it meaning is never applied — which is why
+  this is a red rather than a warning. `check-gate-manifests` validates shape and inventory in
+  seconds but cannot see a find that no longer matches; only the executing body can.
+- **Any `mcp/entwurf-bridge/src/**` edit owes `pnpm run build-bridge` plus
+  `./run.sh check-bridge-delivery` in the same inner loop.** `[측정 2026-09-16]` the same candidate
+  reached `check:full` with a stale compiled entry and failed in 22 seconds on "artifact is not
+  stale". The installed surfaces run compiled JS (Hard Rule 11), so an un-rebuilt `dist` means the
+  focused gates proved the source while every package-shaped gate still judged the previous build.
 
 ### Wording — avoid safety-interpretation contamination
 
@@ -177,7 +233,7 @@ The goal is not merely "invoke Claude Code." We want:
 4. source stable-bin exposure — including certified `entwurf` → this checkout's `run.sh`, the managed runtime Copilot fresh resolves; helper units are attempted independently and a foreign helper is a named FAIL
 5. agy bridge + exact permission + statusline + `PreInvocation` hook — only when `agy` is on PATH; each adapter is idempotent and independently doctorable
 6. Copilot four-unit composition (birth → MCP → receiver → visible footer) — only when `copilot` is on PATH (#86 C3b); the units run independently, each keeps its package-owned install-state and inverse, and a failed unit is a named component FAIL. The explicit `install-copilot-*`/`uninstall-copilot-*` surfaces remain the per-unit repair and inverse path
-7. Codex composition — only when `codex` is on PATH: setup publishes all three operator-owned atoms and stays non-green until the vendor's trust receipt for the birth declaration exists; it never invokes sudo, never writes `[hooks.state]`, and never starts the app-server or creates the `codex` tmux home. Its setup cells prove the exact `env_vars` boundary, independent component outcomes, idempotence, the non-green-until-trusted verdict with its named operator repair, and that setup never writes the receipt itself. First-admission qualification follows the separate explicit-home LIVE; unrestricted attached-TUI placement is outside the claim.
+7. Codex composition — only when `codex` is on PATH: setup publishes all four operator-owned atoms (birth, MCP, status line, terminal title) and stays non-green until the vendor's trust receipt for the birth declaration exists; it never invokes sudo, never writes `[hooks.state]`, and never starts or seats the app-server. Its setup cells prove the exact `env_vars` boundary, independent component outcomes, idempotence, the non-green-until-trusted verdict with its named operator repair, and that setup never writes the receipt itself. First-admission qualification follows the separate caller-seat LIVE; unrestricted attached-TUI placement is outside the claim.
 8. `entwurf-bridge` install smoke (`validate_entwurf_bridge`)
 9. computed summary — per-component PASS/SKIP/FAIL; any detected-integration FAIL makes the whole command exit nonzero while valid components stay installed
 
@@ -335,7 +391,7 @@ The minimum passing bar:
 5. **Honest self-recognition:** the bridged model identifies its actual harness/backend, lists `entwurf-bridge` as the single MCP server with its seven current tools, and presents a backend-native (not normalized) tool surface.
 6. **Carrier separation honored:** engraving vs pi-context-augment kept distinct (§1A.0); no bridge-identity narrative attributed to the engraving carrier.
 7. **agy shipped lane accepted:** all three agy doctors are green; automatic birth/statusline/sender identity and same-gid native-push reply are confirmed in a fresh conversation. `agentId=meta-session/antigravity` is correct; model display is not part of that contract. Same-pid concurrent conversation invocation is not claimed.
-8. **Codex first-admission home topology accepted:** its birth/MCP/status-line doctors are green and the on-demand real visible `Pi → Codex → Pi` cell records four coordinates: initial Pi in a session other than the exact existing `codex` home; operator-owned app-server, omitted-placement fresh Codex, and Codex-opened outbound Pi in that home; exact callbacks and addressed delivery succeed both ways. Missing home/app-server rejects without mutation. Entwurf neither creates nor supervises them, infers attached-TUI panes, nor claims unrestricted client placement. Codex remains outside ACP and has no resume claim.
+8. **Codex caller-seat topology accepted:** its birth/MCP/status-line/terminal-title doctors are green and the on-demand real visible `Pi → Codex → Pi` cell records four coordinates: the operator-owned app-server in its own session A; initial Pi, omitted-placement fresh Codex, and Codex-opened outbound Pi all in a DIFFERENT session S; exact callbacks and addressed delivery succeed both ways. A ≠ S is a precondition, not a preference — the app-server's inherited environment names A, so an outbound Pi in S can only have come from the caller's own pane title, and the receipt must name `codex-title-anchor` as the rule that chose it. 0 or 2+ matching panes, and a caller whose `[tui].terminal_title` lacks `thread-id`, reject without mutation. Entwurf neither creates nor supervises the app-server, infers attached-TUI panes, nor claims placement beside a TUI whose thread nobody named. (The 2026-09-12 fixed-`codex`-home acceptance this condition replaced stays recorded in `DELIVERY.md` as history; #95 D1 retired that room.) Codex remains outside ACP and has no resume claim.
 9. **Boundary preservation across backends/machines:** for every shipped or explicitly probed backend, regardless of install path or host, no cross-backend tool-surface contamination and no confabulation about pi internals.
 10. **Hygiene:** no orphan ACP children; no unexpected persisted session garbage (a turn-scoped `cwd:` fallback is never a persisted reuse).
 11. **New-harness admission closed:** a release that introduces a native harness admitted under the #82 contract has that harness in `FRESH_CALL_BACKENDS` on all three public surfaces, with `check-harness-admission-parity` green and its clause 7 visible-fresh LIVE step green in the MUST tier. That release also owes the cross-harness leg the same release stop names — two dispatch receipts, an existing citizen's live turn delivered into the new citizen and the new citizen's live turn delivered into an existing one — recorded in `DELIVERY.md`; its deterministic half is an owed follow-up, so until that gate lands this half of the condition is prose and is judged by the recorded receipts. Partial evidence is a branch state; an `unsupported` note in `DELIVERY.md` never weakens this stop.

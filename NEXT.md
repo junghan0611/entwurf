@@ -138,25 +138,173 @@ CHANGELOG `## Unreleased`가 구현 범위 `v0.15.1..19ad90c` **30커밋** 전�
       읽어 자기 재이식을 못 본 것이었다 — 그 셀의 주체는 세션 시작 시 **디스크의 파일**이다. 게이트가 자기 일을 했다.
 
 - [x] **27. #111 + #112 + #95 local-main landing** — `77b2ade` compaction send guard,
-      `741cfcd` bounded peer observation, `5f81e86` explicit Codex home admission, handoff close
+      `741cfcd` bounded peer observation, `5f81e86` explicit Codex home admission(#95 D1이 은퇴), handoff close
       `00cba23`; #111/#112/#95 CLOSED. Push 없음.
 - [x] **28. 0.21.0 prepare** — source-observer amendment(+lazy transcript-path 수리, 475/43) · CHANGELOG/version 승격 · `check:full` exit 0 502s · `release-gate --cut` **MUST 24/0/0, cut OK, qualification 475/475** · P9 2회 · prep commit.
 
-현재 좌표: 1–28 완료 → **0.21.0 prep commit 완료, MAKE 대기**. #109 openclaw 다리는
-**닫혔다**(요청자가 컨테이너를 나왔다) · **0.16.1 make는 열린 채 PAUSED**.
+- [x] **29. #95 lane B — Codex caller seat + `codex` home 은퇴 (2026-09-16, local main, push 없음)** — 7커밋
+      `b36d916`(caller seat + D1 은퇴) → `d0a7b8c`(LIVE 영수증). GLG 결정 D1 **은퇴**(*"거처는 기술이 안 돼서 무마한 개념"*),
+      D2 0매치 **거절**. placement 생략 = 명시 > Codex caller의 pane 제목 `thread-id` 앵커(29자+`...`, 벤더 32자 잘림) > caller 세션.
+      **caller-seat LIVE green: 56 assertions, exit 0** — A(app-server `$30`) ≠ S(`$2`)에서 Codex→Pi가 Codex TUI 옆에 열림
+      (`seat-source=codex-title-anchor`), SHA `ed60c2bd…`. 바닥: qualification 495/495(`ade59a1`), `check:full` exit 0 on
+      frozen `d0a7b8c`(337s). 팀: 코디네이터 Fable `20260916T105535-98b9ad` · 구현 Opus `20260916T111444-fef607` ·
+      terra 측정/리뷰 3회(`33daa2`/`005234`/`374458`; Blocker 1 → `a843526`에서 닫힘). 바닥이 잡은 것 둘(stale 뮤턴트,
+      stale dist)과 오라클 결함 하나(`wants_reply` 모양 비교)는 우회 없이 수리. 마감 정본은 #95 comment 5692716726.
+
+- [x] **30. #95 lane C — Codex thread cwd가 pane을 따른다 (2026-09-16 오후, local main, push 없음)** — GLG 첫 실사용에서
+      발견(자리는 맞고 cwd만 app-server 것). 벤더: `--remote` TUI는 `-C/--cd`로만 thread cwd를 넘긴다
+      (`shared_options.rs:66-68`, `startup_orchestration.rs:191-194`, `app_server_session.rs:2022-2033`). 수리 `b25873e`:
+      Codex argv `-C <dir>` 항상, dir = 요청 → Codex caller record cwd → launch 프로세스 cwd; Codex caller의 생략 cwd는 tmux `-c`로
+      명시, pi caller argv 바이트 불변, receipt `cwdSource`. LIVE `b3e07dc`에서 **65 assertions exit 0**(SHA `712050e7…`),
+      영수증 `d0f2a86`. 뮤턴트 44→51. **이 SHA에서 qualification·check:full 미실행 — host vs CI는 GLG 결정.**
+      팀: 코디네이터 Fable · 구현 Opus `20260916T151809-d07e06`(새 세션). 마감 정본 #95 마지막 댓글.
+
+현재 좌표: 1–30 완료 → **lane B+C 로컬 main 완료(HEAD `d0f2a86`), GLG push 대기** → push 후 exact-SHA CI(qualification body는 게이트
+스크립트가 움직였으므로 반드시 돈다; lane C SHA의 긴 바닥은 로컬에서 안 돌렸다) → 다음 컷 prepare는 별도 권한. #109 openclaw 다리는 **닫혔다** · **0.16.1 make는 열린 채 PAUSED**.
 푸시·태그·publish는 금지; `entwurf-release`의 make/publish 별도 권한이다.
+
+# NOW — stem: #116 머지 완료, 다음 = 0.23.0 컷
+
+- **상태:** `feat/116-herdr-coexist`에 **`origin/main`(= `c4178ea`, v0.22.0 + #117) 머지 완료.**
+  conflict 11파일 전부 해소, main ff·push는 **코디네이터(Claude Fable 5.1 `20260917T085525-9d1c92`) 몫**이다.
+  herdr 레일의 좌표·거절·회수·증거 등급·LIVE 분류표는 [docs/herdr-launch-rail.md](./docs/herdr-launch-rail.md)가 진다
+  (브랜치 NEXT는 머지 커밋에서 지웠다).
+- **머지의 실작업 한 곳:** `pi-extensions/lib/mux-fresh-call.ts`. main의 codex `-C launchCwd`가
+  브랜치에서 `fresh-call-composition.ts`로 옮겨간 argv 분기에 앉아야 했으므로, 그 leaf가 소켓과
+  **같은 방식의 lazy thunk 둘**(`resolveCodexSocketPath`·`resolveCodexLaunchCwd`)을 받는다 — herdr 레일은
+  codex가 pilot이 아니므로 둘 다 던지는 resolver를 넘긴다. main의 caller-seat 축(#95 lane B/C)은
+  `dispatchFreshCall`로 올라갔고, 두 표면 중 MCP 브리지만 그 입력을 공급한다.
+- **stale 뮤턴트 함정(#117이 CI 40분 뒤에 배운 것)은 정적으로 닫았다:** 전 lane 704 뮤턴트의 find를
+  subject 바이트에 대고 재대조 → **0 MUTANT-STALE**. 이동한 것 7개를 재조준했다(`FRESHCALL-CODEX-THREAD-CWD`·
+  `FRESHCALL-CWD-CALLER-ONLY` → 합성 leaf, `CODEX-CALLER-PREFLIGHT-SURFACE-WIRED` → dispatch root,
+  `FCD-CODEX-PREFLIGHT-TMUX`·`FCD-SURFACE-PARITY`·`FRESHCALL-CODEX-PREMUTATION-MCP`·
+  `CODEX-SEAT-TITLE-BECOMES-DELIVERY-TARGET`).
+- **남은 것, 순서대로:**
+  1. **GLG 아침 판정** — 날것 PC에서 `pi → claude-code (claude-sonnet-5)` 재시도. LIVE run 2 수용
+     영수증 + 콜드 스타트 타임아웃 수리가 그 요청의 근거다.
+  2. **`herdr agent prompt` 2단계 측정** — `agent start`를 프롬프트 없이 띄워 `interactive_ready` 뒤
+     `agent prompt`로 첫 턴을 주면 도구목록 경주가 사라진다. 값싸고 결정적이며 아직 없다.
+  3. **0.23.0** prepare → make → **GLG publish** → `plugins/herdr/runtime-lock.json` `source: npm` 0.23.0 핀
+     (0.22.0은 `scripts/herdr-*.mjs`가 없어 핀 불가) → 플러그인 `version` 0.2.0.
+- **npm publish 0.22.0은 여전히 GLG 몫**(아래 절). 수용 candidate
+  `/tmp/entwurf-release-candidate-0.22.0.GAQERG/junghanacs-entwurf-0.22.0.tgz`,
+  sha256 `e1e2868a6d7e74cfa2ca008608f8ed4f1cfbef22790f9ed7b304791368fd0ccf`, 12,855,699 bytes.
+  **그 바이트 그대로 발행하고 리팩하지 않는다.**
+- **Do not:** main ff·push(코디네이터 몫) · 0.23.0 prepare/cut · `runtime-lock.json`의 `source` 변경 ·
+  실 Codex 턴 · `~/.codex/hooks.json` 손편집 · `.herdr-bak` 삭제 · `HERDR_FRESH_CALL_BACKENDS`에 codex 추가 ·
+  statusline `UNKNOWN`(GLG 취향 미결) · #118.
+
+<details><summary>#117 랜딩의 NOW (머지 전 좌표)</summary>
+
+# NOW — stem: #117 랜딩됨, 다음 = #116 머지
+
+- **상태:** **`fix/117-codex-hooks-coexist` @ `ac3f1f8` — 브랜치 푸시 + exact-SHA CI
+  [`35239086438`](https://github.com/junghan0611/entwurf/actions/runs/35239086438) **4잡 전부 success**.**
+  main fast-forward는 **아직 하지 않았다** — 코디네이터(Claude Fable 5.1 `20260917T085525-9d1c92`)의
+  판단 대기. 커밋 6개: `0daf9a3`(production) · `0e49aa8`(게이트+뮤턴트) · `88c780d`(docs) ·
+  `997ac89`·`c3cb292`(자기검수 수리 둘) · `ac3f1f8`(CI가 잡은 stale 뮤턴트 6개 수리).
+- **무엇이 고쳐졌나:** entwurf codex birth 유닛이 `$CODEX_HOME/hooks.json`을 **파일 전체**로 소유하던
+  것을 **자기 `SessionStart` 선언 하나**로 좁혔다. herdr가 자기 그룹을 붙이면 벤더는 둘 다 돌리는데
+  (`discovery.rs:664-665` — trust는 `<path>:<event>:<group>:<handler>` 단위) entwurf만 파일 digest를
+  요구해서 doctor RED + 모든 Codex fresh가 `codex-birth-unit-missing`으로 거절됐다.
+  0.22.0 컷이 herdr 훅을 `.herdr-bak`으로 치우고 LIVE를 잰 부채가 **이것**이고, **갚았다.**
+  - 정규화 digest/shape certify(파일 바이트 아님) · 선언 정확히 1개 · **벤더 trust 영수증을 측정된
+    현재 index에서** 읽음(상수 `:0:0`은 이웃이 index 0을 차지하면 **남의 승인을 우리 것으로 읽는
+    거짓 초록**이었다) · 이웃은 doctor의 FOREIGN 절에 present-but-foreign으로만 보고, certify 0 ·
+    install은 append, uninstall은 우리 그룹만 splice → foreign 바이트 양쪽에서 불변 ·
+    install-state `v2`(선언 영수증), v1은 이름 불러 거부하고 installer가 단방향 승격.
+  - 에이전트는 여전히 trust 영수증을 만들지도 우회하지도 않고, **벤더 hash를 재계산하지도 않는다**
+    (doctor TRUST 축에 이유가 문장으로 있다).
+- **호스트 수리 영수증 (oracle, 2026-09-17 23:0x, herdr 제거 없이):** `install-codex-birth` 1회 →
+  `~/.codex/hooks.json` sha **전후 동일** `d5879a43305a547d6d3e4a22672f8883f85e122f5d9b2db39cf9790d11dcf8e9`,
+  herdr 그룹 정규화 sha `654bf95c…` 불변, state `v1`→`v2`(`declaration.sha256 = 12e147db…`),
+  `doctor-codex-birth` **exit 0 / RED 0**, 실 `codexFreshPreflight`(app-server만 stub-alive) → **`null`
+  ADMITTED**. `.herdr-bak`은 그대로 둔다.
+- **게이트 (측정):** 로컬 focused — `smoke-codex-birth` **102**(76→) · `check-codex-birth-hook`
+  **101**(69→) · `check-mux-fresh-call` 292 · `smoke-setup-verdict` 135 · `check-gate-manifests`
+  **527 뮤턴트/45 lane**(520→527) · lint/typecheck clean.
+  **CI가 exact-SHA에서 긴 것을 졌다:** `pnpm run check:full` **exit 0, 403s** ·
+  `check-gate-qualification` 본체 **527/527 KILLED**(skip 아님 — 코드 push라 필터가 본체를 켰다).
+  실 fresh Codex 호출 1회는 **0.23.0 LIVE** 몫이다(주간 한도 보호, 이름 붙여 남긴다).
+- **첫 CI가 붉었던 것과 그 교훈:** `c3cb292`의 CI가 `FRESHCALL-CODEX-*` **여섯 claim을
+  `MUTANT-STALE (find matched 0×)`**로 잡았다. 내가 `codex-fresh-preflight.ts`의 함수를 개명하면서
+  기존 뮤턴트의 find가 빗나간 것이다. **affected set의 정의는 「내가 추가한 claim」이 아니라
+  「내가 subject 파일을 편집한 모든 claim」이다** — `check-gate-manifests`는 find 유효성을 보지
+  않으므로(본체 소관) 짧은 게이트만 도는 레인에는 그 구멍을 소유한 게이트가 없다. `ac3f1f8`이
+  다섯을 재조준하고 `FRESHCALL-CODEX-HOOK-KEYS`는 오라클이 분리 못 하게 된 것을 확인해
+  `check-codex-birth-hook`의 전용 셀로 옮겼다. 마지막에 **subject/signatureSource가 이 변경에 닿는
+  뮤턴트 35개 전수 replay → 35 KILLED**.
+- **다음 한 수:** (1) 코디네이터가 `ac3f1f8`을 main에 fast-forward할지 결정 → (2) **#116
+  (`feat/116-herdr-coexist`) 머지** — #117이 그 Step 0이었다 → (3) 0.23.0 컷에서 긴 게이트 전량 + 실
+  Codex fresh LIVE.
+- **npm publish 0.22.0은 여전히 GLG 몫**(아래 절). 수용 candidate
+  `/tmp/entwurf-release-candidate-0.22.0.GAQERG/junghanacs-entwurf-0.22.0.tgz`,
+  sha256 `e1e2868a6d7e74cfa2ca008608f8ed4f1cfbef22790f9ed7b304791368fd0ccf`, 12,855,699 bytes.
+  **그 바이트 그대로 발행하고 리팩하지 않는다.**
+- **Do not:** `ac3f1f8`을 main에 직접 밀기(코디네이터 판단) · `~/.codex/hooks.json` 손편집 ·
+  `.herdr-bak` 삭제 · `HERDR_FRESH_CALL_BACKENDS`에 codex 추가 · statusline/terminal-title의 같은
+  소유권 결함을 이 레인에서 고치기(별도 원자, CHANGELOG에 Observation으로 이름만 있다).
+
+</details>
+
+<details><summary>0.22.0 컷의 NOW (릴리즈 기록 — npm publish만 남았다)</summary>
+
+# NOW — stem: 0.22.0 나갔다, npm publish만 남았다
+
+- **상태:** **`v0.22.0` @ `ea28e56`, 태그·GitHub 릴리즈 공개 완료 (2026-09-17 21:17 KST).**
+  npm publish는 **GLG 몫**(토큰 401 이력, 0.17.2 이래 같은 방식). 수용된 candidate는
+  `/tmp/entwurf-release-candidate-0.22.0.GAQERG/junghanacs-entwurf-0.22.0.tgz`,
+  sha256 `e1e2868a6d7e74cfa2ca008608f8ed4f1cfbef22790f9ed7b304791368fd0ccf`, 12,855,699 bytes,
+  acceptance log 같은 디렉터리. **그 바이트 그대로 발행하고 리팩하지 않는다.** 발행 뒤
+  `dist.integrity`/`shasum`/tarball sha256을 이 값과 대조하는 것이 마지막 축이다.
+- **컷 경로 (영수증):** land `52aaf86` → CI [`35188022368`](https://github.com/junghan0611/entwurf/actions/runs/35188022368)
+  4잡 + qualification **520/520** → `f5d6e10` 체인 수리 → dispatch CI [`35202801617`](https://github.com/junghan0611/entwurf/actions/runs/35202801617)
+  → LIVE `release-gate --cut` **MUST 24/0/0 · BEHAVIOR 1/0 · cut OK**
+  (`/tmp/entwurf-release-gate-0.22.0.royX2L/release-gate.log`, `check:full` 521s,
+  `smoke-codex-fresh-live` 66 assertions) → prepare `ea28e56` → M2 CI
+  [`35215263800`](https://github.com/junghan0611/entwurf/actions/runs/35215263800) 4잡 + body success
+  → candidate 수용(no repack, image `node@sha256:6dac556d…`) → 태그·릴리즈·도장.
+- **이 컷의 LIVE는 herdr 훅을 임시 제거한 상태에서 쟀다. 그 부채는 #117이 갚는다.**
+  `~/.codex/hooks.json`을 `hooks.json.herdr-bak`으로 옮기고 `install-codex-birth`로 재발행해
+  측정했고, 컷 뒤 `herdr integration install codex`로 복원했다. 복원 후 `doctor-codex-birth`가
+  다시 RED인 것이 **정상**이다(live `d5879a43…` vs recorded `33c84bb8…`). 벤더 trust 영수증
+  `session_start:0:0`은 재발행을 견뎠다 — 실제 Codex TUI가 consent 화면 없이 떴다(측정).
+  `.herdr-bak`은 지우지 않았다.
+- **다음 = #117.** entwurf가 자기가 소유한 것은 한 그룹인데 파일 전체 digest를 요구하는 것이
+  근본 원인이다. 그것을 고치기 전에는 herdr가 붙은 호스트에서 `smoke-codex-fresh-live`가 못 돈다.
+  그 다음이 #116(herdr-entwurf) 합류.
+- **이번 컷이 잡은 것 둘 (둘 다 검증 쪽 결함, production 바이트 0):**
+  ① `check-gate-qualification` **518/520** — `CODEX-LAUNCH-CWD-ANCESTOR-PLAIN-PATHS-ONLY`는
+  cwd측/key측 guard 둘 중 key측만 시험당하고 있었고, `FRESHCALL-CODEX-LAUNCH-CWD-NOTES-NEVER-REFUSES`는
+  `indexOf("-C")`만 assert하고 그 인덱스에서 읽는 값을 assert하지 않았다. 둘 다 stale 뮤턴트가
+  **아니었다**(find가 정확히 1회 매치) — assertion 구멍이다. `52aaf86`에서 닫았다.
+  ② `smoke-entwurf-chain-live` — 배달이 아니라 **모델이 GLG의 전역 AGENTS.md를 옳게 읽고 거절**했다.
+  페이로드에 출처를 적는 1차 수리는 hop이 그 문장을 인젝션 표식으로 지목하며 실패했고(그것도 옳다),
+  `f5d6e10`은 권한을 **게이트가 민팅한 world의 `AGENTS.md`**로 옮겼다. 부정 지시 없음, 페이로드
+  바이트 불변, 모델 핀 없이 호스트 기본 Sonnet 5로 통과.
+- **Do not:** 이 candidate를 리팩하거나 다시 pack하기; `~/.codex/hooks.json`에 에이전트가 trust
+  항목 쓰기; launch-directory 경고를 거절로 되돌리기(GLG 결정); `.herdr-bak` 삭제.
+
+</details>
 
 # NOW — stem: 0.21.0 prepare (#111 + #112 + #95)
 
-- **Stem:** **0.21.0을 준비한다.** 새 Codex native citizen과 operator-owned `codex` home은
-  단순 patch가 아니라 보이는 자리까지 포함한 새 지원 축이다. #111 compaction false-delivery와
-  #112 peers 성능 수리도 함께 실리므로 GLG가 minor로 올렸다. UX 대칭은 같은 transport를 꾸미는
-  말이 아니라, backend마다 자기 transcript·auth·native tools를 보존한 채 **정해진 자리에서 보이는
-  형제**로 부르고 불리는 데 있다; Codex는 exact `codex` home, Claude는 operator가 고른 tmux seat가
-  그 맥락을 줄 수 있다.
-- **좌표:** local main = `462fea7` (`00cba23` 뒤 P9 fixture-reap 수리), `origin/main`보다
-  23 commits ahead; package release-prep worktree는 0.21.0. 구현 candidate는 Codex home LIVE
-  57 assertions, qualification 460/460 purity green, receipt-bearing `check:full` exit 0 501s.
+- **Stem:** **#95 lane B(caller seat)를 닫고 다음 컷을 준비한다.** 0.21.0은 operator가 `codex`라는
+  이름의 tmux home을 유지하는 것을 전제로 나갔고, lane B가 그 전제를 없앴다: Codex **caller**는 자기
+  TUI pane 제목에 실린 `thread-id`로 찾은 자기 자리 옆에 형제를 연다. GLG가 2026-09-16 D1을
+  **은퇴**로 결정했다 — *"코덱스의 거처를 만들어주자는 말은 그냥 기술이 안돼서 무마한 개념이야."*
+  UX 대칭은 같은 transport를 꾸미는 말이 아니라, backend마다 자기 transcript·auth·native tools를
+  보존한 채 **부른 사람 옆에 보이는 형제**로 부르고 불리는 데 있다.
+- **좌표:** lane B **완료** = `d0a7b8c`, lane C **완료** = `d0f2a86`(Codex thread cwd = pane cwd, LIVE 65) (`b36d916` caller seat + D1 은퇴 · `b17ff04` NEXT carry · `ade59a1` stale
+  mutant 수리 · `0ad3e21` affected-set 규칙 · `a843526` 은퇴 어휘 전수 · `a4d9f98` `wants_reply` 오라클 · `d0a7b8c`
+  LIVE 영수증). caller-seat **LIVE green 56 assertions exit 0**(2026-09-16, A=`$30` ≠ S=`$2`), qualification 495/495,
+  frozen `check:full` exit 0 337s. **다음 한 수 = GLG의 push 결정.** push 뒤 CI exact-SHA 4축 + qualification body를
+  읽고, 그 다음 컷(0.22.0) prepare는 `entwurf-release` 별도 권한. LIVE 재실행 조건: `install-codex-terminal-title` 설치,
+  app-server가 Pi/Codex 쌍과 **다른** tmux 세션, `hooks.json`이 entwurf 기록 digest와 일치(herdr 훅 공존은 #117 —
+  오늘 원본은 `~/.codex/hooks.json.herdr-bak`). 열린 것: statusline 원자의 같은 소유권 결함(관측, 미수정) · #117 ·
+  CARRIED app-server 가이드.
+  0.21.0 자체의 좌표(`462fea7`, Codex home LIVE
+  57 assertions, qualification 460/460, `check:full` 501s)는 그 컷의 역사로 남는다.
   첫 prepare P5는 OMP MCP가 삭제된 `/tmp/snapshot-probe`를 가리킨 host drift와 Codex 필수 env
   누락을 정직하게 잡았고, P9는 qualification마다 남은 Copilot stub 10개를 찾아 `462fea7`로
   assertion 전 reap을 복구했다. 두 번째 P5는 MUST 23/1/0으로 붉었다. source transcript가
@@ -238,13 +386,13 @@ WSL2 는 계약상 리눅스의 연장이라 새 작업 없음.
   request-scoped metadata identity(join 충돌 fail-loud) · operator-owned app-server
   `thread/loaded/list` probe · one-shot `codex queue` native-push(**재시도 0**) · user
   MCP/status-line atom · `entwurf_fresh_call backend=codex`. mailbox/receiver/resume/ACP 없음.
-- **GLG placement 결정:** operator가 기존 exact `codex` tmux home 하나를 소유하고 app-server와
-  supported Codex TUIs를 거기 둔다. omitted-placement Codex fresh는 그 이름을 exact lookup하며,
-  explicit placement는 expert override로 우선한다. Codex의 MCP child는 app-server의 `TMUX`/
-  `TMUX_PANE`을 받아 outbound Pi를 같은 home에 연다. Entwurf는 session/app-server를 만들거나
-  감독하지 않고 pane을 추측하지 않는다. request→arbitrary-attached-TUI seat join은 여전히 없으며
-  그 넓은 topology는 unsupported/unclaimed다.
-- **Home LIVE accepted (2026-09-12):** 57 assertions, exit 0. initial Pi `20260912T140748-355654`
+- **GLG placement 결정 (2026-09-16, D1 = 은퇴):** 고정 `codex` home은 **끝났다.** placement를
+  생략하면 자리는 **부르는 쪽**을 따른다: Codex caller는 자기 TUI pane 옆(pane 제목의 `thread-id`로
+  매칭, 0개·2개 이상이면 거절·폴백 없음), 그 외에는 caller 자기 session. explicit placement는 여전히
+  expert override로 우선한다. app-server는 operator가 원하는 자리에 두면 되고 Entwurf는 만들거나
+  감독하지 않는다. pane 제목은 placement 입력일 뿐 주소·liveness·delivery 증거가 아니다.
+  request→arbitrary-attached-TUI seat join은 여전히 없으며 그 넓은 topology는 unsupported/unclaimed다.
+- **Home LIVE accepted (2026-09-12) — 은퇴한 계약의 역사:** 57 assertions, exit 0. initial Pi `20260912T140748-355654`
   `$150/@397` → omitted Codex `20260912T140800-8bc8d9` `$158/@398` → outbound Pi
   `20260912T140829-a08178` `$158/@399`; app-server PID `1693273` stayed at `$158/@390/%390`.
   Exact callbacks and addressed delivery passed both ways. Receipt/digest는 `DELIVERY.md`가 진다.
@@ -544,6 +692,27 @@ WSL2 는 계약상 리눅스의 연장이라 새 작업 없음.
 - **2026-08-27:** OMP vendor measurement and real TUI/subagent observations closed the Bundle A admission basis.
 
 # CARRIED
+
+- **`entwurf codex-app-server`가 아직 런처 시점에 검사하지 않는 두 가지 (terra 리뷰 관측, 2026-09-16, 그 컷에 넣지 않음 — 0.21.1은 발행되지 않았고 그 범위는 0.22.0으로 접혔다).**
+  (1) **AF_UNIX 108바이트 한계는 벤더 시점 검증이다** `[측정]` — 실제로 `bind`하는 가짜 벤더로, 두 가드와 `mkdir -p`를
+  통과한 178바이트 절대 소켓 경로가 `AF_UNIX path too long`과 함께 exit 41로 죽었다. **거짓 성공은 아니다**(nonzero가
+  그대로 전파된다). 쓰기 전에 바이트 한계를 거절하면 진단이 좋아지고 남는 디렉터리가 없어지지만, 릴리즈를 막지 않는다.
+  (2) **조상 심볼릭 링크** `[읽음, 미측정]` — `codex-app-server-launch.sh`의 lstat은 최종 소켓만 보고 `mkdir -p`는 조상
+  링크를 따라간다. 그래서 심볼릭 링크된 `app-server-control` 부모가 bind 위치를 옮길 수 있다. 다만 resolver와 preflight도
+  **같은 pathname**을 쓰고 같은 부모를 따라가므로 배달 분열이 증명된 것은 아니다 — 원커맨드 표면이 조상 링크를 거절해야
+  하는지는 소유권 정책 결정이고, 이 레인의 것이 아니다.
+
+- **Codex app-server의 자리와 수명 — 하네스 중립 가이드 (GLG, 2026-09-16; #95 B 레인·#117에 걸침).** B(제목 앵커)가 서면
+  Pi 옆에 열리는 것은 Codex **TUI 하나**뿐이고 서버 탭은 생기지 않는다(`--remote unix://`; entwurf는 서버를 띄우지 않는다,
+  `docs/mux-launch-rail.md:436-437`). 그러나 현재 브리지는 서버의 `TMUX` env를 물려받아 pane 목록을 읽으므로 **서버가 어떤 tmux
+  세션 안에 있어야** 한다 — mux 전용 종속이고, herdr 플러그인(#117)에서는 "서버가 도대체 어디 떠 있어야 하지"가 같은 질문으로
+  돌아온다. GLG 직접: *"형제가 코덱스를 부를 경우에 서버가 없으면 띄우는 매끄러운 방법이 필요할거야 … 차라리 에이전트가 물어보고
+  가이드대로 띄우고 쓰게하는게 나아. 코드로 다 자동화하는 위험보다는."* D1 결정(2026-09-16, GLG: "무조건 은퇴야 … 거처는 기술이 안 돼서 무마한 개념"): `codex` 홈 기본값은 은퇴, 서버 세션 이름은
+  더 이상 계약이 아니다. 순서: (1) 지금은 테스트 때 detach된 아무 tmux 세션(Pi/Codex 쌍과 다른 세션)에 수동
+  기동(attach하지 않으면 Ctrl-C 사고 자리가 없다). (2) 다음 계약: 서버 부재 시 fresh-call이 **이름 있는 거절 + 기동 가이드
+  한 장**을 돌려주고 에이전트가 GLG에게 묻는다 — mux 전용도 herdr 전용도 아닌 문장. (3) 자동 기동/종료는 (2)가 굳은 뒤에만,
+  별도 GLG 승인. 브리지가 서버 env 대신 기본 tmux 소켓을 쓸지(서버를 systemd user unit 등 tmux 밖에 두는 길)는 이 항목의
+  하위 결정이다.
 
 - **#78 물리 맥 영수증 — 아직 안 돌았다 (0.20.0 이 이 축을 열어둔 채 나갔다).** (1) 빌린 맥에서
   `sh scripts/raw-macos-measure/probe.sh` **한 번** — entwurf 설치도 로그인도 필요 없고, 수용 체크리스트 1–6 을 한 명령으로 닫는다.

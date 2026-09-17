@@ -32,7 +32,7 @@ them there.
 | `copilot` | independent vendor | self-fetch mailbox: the watch lives in a FORKED first-party extension child; the receiver marker names the extension pid | `entwurf-bridge-entwurf_v2` — plus a SECOND permission dialect, `entwurf-bridge(entwurf_v2)` | managed verb `entwurf copilot`, `--interactive … --model … --yolo` |
 | `agy` | independent vendor | native-push: record + probe-alive gRPC `send-message`; no mailbox, no receiver marker | n/a — push rail | not openable; the declared pre-#82 legacy exception |
 | `omp` | **a pi fork** — inherits pi's env vocabulary (step 1(6)) | self-fetch mailbox: Claude's SHAPE, but the watch runs IN-PROCESS in the operator's TUI; announce-only doorbell via the vendor's own `sendUserMessage` | `mcp__entwurf_bridge_entwurf_v` — the sanitizer eats the digit | bare `omp`, NO positional prompt: the two-stage `--entwurf-bootstrap` payload |
-| `codex` | independent vendor | native-push: `thread/loaded/list` probe on the operator-owned app-server UDS, then one-shot `codex queue`; no mailbox, no receiver marker, no retry | `mcp__entwurf_bridge__entwurf_v2`; strict request metadata is the sender join | supported in 0.21.0: `--remote unix://<default-socket> --model <model> --dangerously-bypass-approvals-and-sandbox <prompt>`. Birth is a trust-gated USER `SessionStart` declaration in `$CODEX_HOME/hooks.json` with its closure under `$XDG_DATA_HOME/entwurf/codex-birth` — no root, and the operator answers the vendor prompt once. Parser, env-boundary, setup, preflight and clause-7 composition landed, and acceptance closed them: installed doctors green, `check:full` exit 0, and `release-gate --cut` at MUST 24/0/0 with `check-gate-qualification` 475/475. With placement omitted this backend resolves the exact existing operator-owned `codex` session (missing home rejects; nothing is created); every other backend's omitted placement is the caller's own seat. Still bounded: no request→arbitrary-attached-TUI seat join, no resume lane, and macOS NOT CERTIFIED — pending physical host |
+| `codex` | independent vendor | native-push: `thread/loaded/list` probe on the operator-owned app-server UDS, then one-shot `codex queue`; no mailbox, no receiver marker, no retry | `mcp__entwurf_bridge__entwurf_v2`; strict request metadata is the sender join | supported in 0.21.0: `--remote unix://<default-socket> --model <model> --dangerously-bypass-approvals-and-sandbox <prompt>`. Birth is a trust-gated USER `SessionStart` declaration in `$CODEX_HOME/hooks.json` with its closure under `$XDG_DATA_HOME/entwurf/codex-birth` — no root, and the operator answers the vendor prompt once. Parser, env-boundary, setup, preflight and clause-7 composition landed, and acceptance closed them: installed doctors green, `check:full` exit 0, and `release-gate --cut` at MUST 24/0/0 with `check-gate-qualification` 475/475. With placement omitted the seat follows the CALLER: a Codex CALLER opens its sibling beside its own TUI pane, matched by the `thread-id` in that pane's terminal title (0 or 2+ matching panes reject, no fallback); every other caller opens in its own seat. (0.21.0 shipped a fixed operator-owned `codex` home for omitted-placement Codex TARGETS; #95 D1 retired it on 2026-09-16.) Still bounded: no request→arbitrary-attached-TUI seat join, no resume lane, and macOS NOT CERTIFIED — pending physical host |
 
 
 Two facts this table exists to make obvious:
@@ -424,8 +424,10 @@ conflict with another authoritative carrier.
     needs them. Codex is different again: its MCP child belongs to the operator-owned
     app-server, whose configured `env_vars` must forward `CODEX_HOME`, the Entwurf
     garden/control roots, and `TMUX`/`TMUX_PANE`. Those values locate the app-server's
-    stores and placement mechanism; they do not replace strict request identity or join
-    a request to an attached TUI's tmux seat.
+    stores; they do not replace strict request identity and they are NOT how a Codex
+    caller's own seat is found. Since #95 lane B that seat comes from the request's own
+    `_meta.threadId` matched against the `thread-id` the TUI writes into its pane title —
+    a placement input only, with 0 or 2+ matches refused rather than guessed.
   - **The anonymous hatch is not a substitute.**
     `ENTWURF_BRIDGE_ALLOW_ANONYMOUS_SENDER=1` deliberately yields `external-mcp`,
     non-replyable delivery. It is not a cheaper version of this step.
@@ -652,13 +654,17 @@ rule are both executable rather than remembered:
 For Codex #95, “existing citizen” in that LIVE pair means a real record-backed visible Pi,
 not a fixture that plants `PI_SESSION_ID`/`PI_AGENT_ID` or a self-fetch receipt collector.
 The release gate strips those ambient variables. The required sequence is real
-`Pi → visible Codex → visible Pi` under the explicit home topology: initial Pi in a tmux session
-other than the existing exact `codex` home; operator-owned app-server, omitted-placement fresh
-Codex, and Codex-opened outbound Pi in that home. The receipt records all four coordinates
-separately plus exact callbacks and addressed delivery both ways. A fixture may collect receipts
-but cannot substitute for the first Pi leg. Codex request metadata still has no arbitrary
-request→attached-TUI seat join, so that wider placement topology is unsupported and unclaimed.
-Entwurf neither guesses panes nor creates/supervises a hidden app-server/session manager.
+`Pi → visible Codex → visible Pi`, and since #95 lane B the topology is the one that can tell the
+caller seat apart from the app-server's inherited environment: the operator-owned app-server stays
+its own session A, the initial Pi and the Codex it opens both sit in another
+session S, and the Codex-opened outbound Pi must land in S with an omitted placement. A landing in
+A would be the env fallback; S is reachable only through the caller's own pane title, and the
+receipt must name `codex-title-anchor` as the rule that chose it. The receipt records all four
+coordinates separately plus exact callbacks and addressed delivery both ways. A fixture may collect
+receipts but cannot substitute for the first Pi leg. Codex request metadata still exports no
+arbitrary request→attached-TUI seat join, so placing a sibling beside a TUI whose thread nobody
+named remains unsupported and unclaimed. Entwurf neither guesses panes nor creates/supervises a
+hidden app-server/session manager.
 
 **An `unsupported` note is not a partial-release permit.** `[측정]` #87 is where that was learned at
 full price: the Bundle A+B candidate carried a fully honest sentence in the delivery matrix —
@@ -709,6 +715,22 @@ the same; not one of its answers is.
 | clause | OMP's answer | why it differs from Copilot's |
 |---|---|---|
 | 1 managed runtime | the BARE vendor, `omp` | Copilot needs `entwurf copilot` because the bare CLI silently skips its extension scan without a launcher-set flag. omp always scans, and the one thing it needs (`tools.xdev: false`) lives in the operator config — a PREFLIGHT fact, not something a launcher could supply. A managed verb here would have had nothing to manage |
+
+> **A third kind of managed verb, and it is not clause 1 (#95).** `entwurf copilot` is a managed
+> RUNTIME: the sibling becomes that process, and the verb exists because the bare CLI would launch
+> wrongly. `entwurf codex-app-server` is a managed SPELLING: it becomes the operator's own
+> long-lived app-server, mints no citizen, and the bare vendor command it `exec`s is equally
+> correct typed by hand. The test for whether a new harness wants one is not "is there a hard
+> string" but "does an operator have to type a path the product also computes" — if so, the verb
+> must ASK the leaf that computes it rather than re-derive it, even when re-deriving looks like
+> three lines of shell. `[측정 2026-09-16]` the first version did re-derive, with a gate comparing
+> the two spellings over an environment matrix; they agreed on every ASCII input and diverged on a
+> BOM-only `CODEX_HOME` and on path normalization, which is a managed launch starting a server at
+> an address delivery never looks at. A transcription can only be tested on the inputs somebody
+> thought of. Whatever the leaf returns is then still a capability, not a fact: the verb is the
+> surface that CREATES and binds, so it refuses a non-absolute or control-character address before
+> the first write. Everything else (supervision, restart, lifecycle) stays outside: a launcher that
+> keeps its process alive has become a manager, and this repo does not ship one.
 | 2 model + permission | NO positional prompt: `--entwurf-bootstrap`, payload, then `--model`, value, then `--approval-mode`, `yolo`. `-p/--print` is still the forbidden flag — it runs the turn and EXITS | the width is the same GLG task-wide decision, but for the opposite reason: omp offers no argv grammar for a narrower grant at all (`tools.approval.<tool>` is a config axis). And the trap is inverted — omp's schema default is ALREADY `yolo`, so dropping the token changes nothing observable and the drift would be invisible to every behavioural test. The PROMPT half diverges hardest of all: Copilot's argv carries the whole first turn, omp's carries none of it — see "When argv cannot carry the first turn" below |
 | 3 preflight | FIVE axes: birth, MCP hand, receive, visible identity, and **callback callable** (`tools.xdev !== true`) | the fifth is omp-specific and load-bearing for clause 5: the vendor default mounts MCP tools as `xd://` devices whose schemas never reach the prompt, so the sibling could be launched, be delivered to, and still never call anything |
 | 4 visible identity | `ctx.ui.setStatus` inside the birth extension, gated by `statusLine.showHookStatus` (default true) | there is NO statusline command to resolve — v18's built-in segment set is a closed enum. Copilot's "is the command executable" predicate does not exist here, so the axis is derived rather than copied |

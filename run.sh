@@ -120,7 +120,7 @@ usage() {
   cat <<'EOF'
 Usage:
   ./run.sh setup [project-dir]        # ONE presence-driven composition (#86): per-component PASS/SKIP/FAIL for pi/claude/agy/copilot/omp/codex + stable dev bins + v2 install smoke. Codex birth/MCP/status-line atoms are composed at user scope; setup stays non-green until the operator trusts the birth declaration once in visible Codex. Absent harness = zero-state SKIP, detected-incomplete = named FAIL + nonzero exit. Never installs a harness, starts a daemon, touches credentials, or writes the vendor trust receipt
-  ./run.sh release-gate [project-dir] [--cut] [--allow-skip-gemini]  # SINGLE release gate: full static (pnpm run check:full) + the v2-native live gates (v2 matrix-live, check-bridge, doctor-pi-provider, RGG) + the ACP plugin acceptance floor (12 LIVE smokes: socket-citizen/raw-turn/overlay/provider/session-reuse/carrier-augment/memory-containment/rgg/mcp/skill/bundled-mcp/v2-send) + the one surviving axis the aggregate used to omit silently (claude-native-resume; Cortex stays a documented on-demand direct call) + the cross-harness delivery chain (smoke-entwurf-chain-live) + the Codex first-admission Pi -> visible Codex -> visible Pi receipt chain (smoke-codex-fresh-live; initial Pi outside the existing exact `codex` home, explicit operator-owned app-server PID inside it). TWO-TIER summary: MUST (release-blocking, owns the exit code — "green" applies here) + BEHAVIOR (advisory, non-blocking: RGG positives model-in-loop turn). STEP OUTCOME protocol: every step is INVOKED and reports its own PASS / SKIP (exit 97, a prerequisite it does not have) / FAIL — a skip is never counted as a pass. Without --cut this is the unattended diagnostic (SKIPs reported, exit 0). WITH --cut it is read as release acceptance and ANY MUST SKIP is red, which is what makes "a CUT needs LIVE=1, SKIP=0" executable instead of prose. --allow-skip-gemini accepted-but-ignored (back-compat). final cut authorization is GLG's.
+  ./run.sh release-gate [project-dir] [--cut] [--allow-skip-gemini]  # SINGLE release gate: full static (pnpm run check:full) + the v2-native live gates (v2 matrix-live, check-bridge, doctor-pi-provider, RGG) + the ACP plugin acceptance floor (12 LIVE smokes: socket-citizen/raw-turn/overlay/provider/session-reuse/carrier-augment/memory-containment/rgg/mcp/skill/bundled-mcp/v2-send) + the one surviving axis the aggregate used to omit silently (claude-native-resume; Cortex stays a documented on-demand direct call) + the cross-harness delivery chain (smoke-entwurf-chain-live) + the Codex Pi -> visible Codex -> visible Pi receipt chain (smoke-codex-fresh-live; initial Pi and the Codex it opens in one session S, explicit operator-owned app-server PID in a DIFFERENT session — that separation is the lane B claim). TWO-TIER summary: MUST (release-blocking, owns the exit code — "green" applies here) + BEHAVIOR (advisory, non-blocking: RGG positives model-in-loop turn). STEP OUTCOME protocol: every step is INVOKED and reports its own PASS / SKIP (exit 97, a prerequisite it does not have) / FAIL — a skip is never counted as a pass. Without --cut this is the unattended diagnostic (SKIPs reported, exit 0). WITH --cut it is read as release acceptance and ANY MUST SKIP is red, which is what makes "a CUT needs LIVE=1, SKIP=0" executable instead of prose. --allow-skip-gemini accepted-but-ignored (back-compat). final cut authorization is GLG's.
   ./run.sh check-bridge               # entwurf-bridge direct MCP smoke + protocol/negative-path test.sh (live substrate = v2 live smokes)
   ./run.sh check-entwurf-bridge-boot # deterministic gate (5d-5-pre, G1a/G1b/G1e/G1f, IN pnpm run check:full): boot start.sh under strip-types + assert v2 fence graph loads + entwurf_v2 and entwurf_resume_call registered/schema + the tools/list surface is EXACTLY the seven shipped garden verbs; tools/list only, no auth/side-effect
   ./run.sh check-entwurf-bridge-pi-free # deterministic gate (0.12.1 A, IN pnpm check): static — bridge index eager value-import closure must carry no @earendil-works/pi-* (type-only + dynamic import excluded); proves the meta-bridge boots pi-free
@@ -134,6 +134,7 @@ Usage:
   ./run.sh check-omp-birth-hook       # #87 gate: drives the real OMP assembler into a temp dir, imports the ASSEMBLED index.ts into a MOCK omp host and fires session_start/session_switch. tui mints one backend:"omp" record + a sender marker keyed to the host's OWN pid (the one-process join) + the garden id on the status line; print/rpc/json mint NOTHING (hasUI is true on the rpc rows, as in the vendor); switch attaches on the same native id and mints the replacement on a new one; the CERTIFIED receiver reader still finds no marker. Also the four-root joint binding: extension and omp-labeled bridge child resolve the same sessions/mailbox/senders/receivers bundle against test-built literals (never the production resolver as its own oracle), under a poisoned PI_CODING_AGENT_DIR and under four distinct ENTWURF_META_* overrides; the override grammar is absolute-or-~ and both halves plus the doctor refuse anything else by name; and a drifted provenance label selects no root policy at all. Hermetic; no omp, no model turn
   ./run.sh check-copilot-receive-arm  # #82 RAIL 5 gate: the REAL receiver installer + the REAL extension.mjs forked with a stubbed SDK. Arms only after birth, marker owned by the WATCHER pid, self-fetch dispatch answer, doorbell carries the garden id and NOT the body, id-drift/foreign-parent refusals. Hermetic; no Copilot, no model turn
   ./run.sh check-copilot-launch       # #82 RAIL 7 gate: the MANAGED launch `entwurf copilot`, driven through its public address against a FAKE VENDOR on a sandbox PATH. Receiver precondition refusals, EXTENSIONS token + operator token preservation, injected defaults before the `--` terminator, byte-identical argv, the 11 explicit permission/surface policy overrides that suppress `--yolo`, exec (not fork) pid identity, exit passthrough, recursion refusal. Hermetic; no Copilot, no model turn
+  ./run.sh check-codex-app-server-launch # #95 gate: the MANAGED app-server launch `entwurf codex-app-server`, driven through its public address against a FAKE VENDOR on a sandbox PATH. The injected `app-server --listen unix://<socket>` required to equal the product's own resolveCodexDefaultSocketPath over an env matrix that includes the inputs a bash transcription was MEASURED to diverge on (BOM-only CODEX_HOME, trailing slash, `..`), non-absolute and control-character addresses refused before any write, byte-identical operator argv, exec (not fork) parent identity, exit passthrough, live-socket and indeterminate-socket and second---listen and recursion refusals, dead-socket launch-over, the tmux fact line, and both identity carriers stripped. Hermetic; no Codex, no app-server, no model turn
   ./run.sh check-copilot-statusline   # #82 Copilot custom-footer renderer. session_id → ready/?/gid + rail `cop`; exit 0. IN pnpm check. No Copilot, no model turn
   ./run.sh check-entwurf-capabilities  # deterministic gate (0.11 Stage 0 step 3C): backend capability registry (pi/entwurf-capabilities.json) — coverage==META_CITIZEN_BACKENDS + agrees with live META_BACKEND_DESCRIPTORS + strict keyset, no API
   ./run.sh check-omp-fresh-preflight   # #87 C: the OMP fresh preflight reproduces omp_agent_dir and the tools.xdev read in TS (it runs from two emit depths and cannot call a sibling script). This drives the SHIPPED shell/python leaves over the same inputs — refusals included — and requires the TS half to agree, so the reproduction cannot silently drift from the installer's own oracle
@@ -143,7 +144,7 @@ Usage:
   ./run.sh check-codex-birth-hook     # sandboxed payload + declaration: first-turn V3 birth, one record per thread, top-level event predicate, no markers
   ./run.sh check-codex-fresh-preflight # pre-mutation birth/MCP/thread-title/default-app-server readiness
   ./run.sh smoke-codex-config-state   # sandboxed MCP + status-line ownership/install/doctor/inverse lifecycle
-  ./run.sh smoke-codex-birth          # sandboxed birth unit: exact trust identity, the vendor trust receipt read (never written), config.toml untouched, foreign/edited/symlink refusals, drift-refusing inverse
+  ./run.sh smoke-codex-birth          # sandboxed birth unit: exact trust identity, the vendor trust receipt read at our MEASURED index (never written), config.toml untouched, coexistence with a foreign SessionStart group in either ordering (joined not adopted, reported not certified, byte-preserved across install and inverse), own-declaration drift/duplication refusals, drift-refusing inverse
   ./run.sh check-harness-admission-parity  # #87 C: the EDGE the two closed parity loops never had. Every citizen backend is fresh-openable or a declared pre-#82 legacy admission whose exception a reader finds in DELIVERY.md — so a post-contract harness that mints records but cannot be opened by entwurf_fresh_call blocks the release package instead of only carrying an `unsupported` note (docs/adding-a-harness.md step 9)
   ./run.sh check-capability-bundle-reach # deterministic gate (IN pnpm check): re-ask EVERY shipped copy of meta-session (source + bridge bundle emit) whether metaCapabilitiesFilePath() reaches the registry — the artifact-depth check the source-path gates cannot make; needs a built dist, missing dist FAILS
   ./run.sh smoke-pi-attach            # deterministic gate (#50 C2 checkpoint + C3 ACP tail): a pi session attaches as a V3 meta-record citizen (backend:"pi"), the gardenId is the RECORD's not pi's session id, the control socket is keyed on it, a re-open ATTACHES to the same address (never a second mint), the BUILT DIST ENTRY driven over MCP stdio lists the citizen + delivers entwurf_v2 to that socket with an RPC ack, and the ACP identity chain lands a send AS the host record (enrichMcpServersWithEnvelope env → bridge sender = host gardenId). mkdtemp-isolated; the live store is never read
@@ -175,7 +176,7 @@ Usage:
   ./run.sh smoke-entwurf-v2-matrix-live # LIVE sentinel (0.11 Stage 0 step 5d-5, D4-b) — OUT of pnpm check, needs LIVE=1. Drives REAL production runEntwurfV2 deps over REAL OS objects, 4 cells: C1 control-socket (real pi --entwurf-control resident → RPC send → lock acquire→release ×1), C1b record-less socket (#50 C4: live record-less pi → EVERY intent rejected pre-probe record-less-socket, no lock, rendered hint names record authority + fresh-cut), C2 meta-mailbox deliverable (armed self-fetch citizen → real .msg enqueue, lock-free), C3 meta-mailbox guard (no armed receiver → reject, no garbage). Model-in-loop OUT (transport/lock/enqueue gate, GPT Q2); negative/timeout stay deterministic. Model: ENTWURF_LIVE_TARGET=<provider>/<model> (default openai-codex/gpt-5.6-luna). LIVE=1 ./run.sh smoke-entwurf-v2-matrix-live
   ./run.sh smoke-agy-native-push-live  # 봉인 8 LIVE acceptance for the native-push (agy) rail — OUT of pnpm check, needs LIVE=1 + AGY_CONVERSATION_ID (a live agy conversation). Drives the REAL antigravity adapter + register core + runEntwurfV2 (production deps): doctor-static preflight (dangling→FAIL, the ③ gate), probe route, register create/attach idempotency, fire→native-push delivered, post-send re-probe (D7 partial), bogus-conv→native-push-probe-indeterminate. Meta-store isolated to a temp dir (only the agy round-trip is real; no real-store residue). COST FENCE: open that agy conversation on gemini-3.6-flash (free account) — never a Pro tier; entwurf never selects the agy model and no assertion reads it. LIVE=1 AGY_CONVERSATION_ID=<convId> ./run.sh smoke-agy-native-push-live
   ./run.sh smoke-codex-native-push-live # on-demand LIVE acceptance for Codex native-push — needs LIVE=1 + CODEX_LIVE_THREAD_ID loaded by a visible TUI attached to the default app-server; probes the real UDS, routes through production runEntwurfV2, queues one exact-token turn without retry, re-probes, and leaves the visible TUI to show the model result
-  ./run.sh smoke-codex-fresh-live    # #95 first-admission RELEASE MUST: record-backed receipt fixture -> PUBLIC initial Pi fresh/callback OUTSIDE the Codex home -> Pi PUBLIC omitted-placement Codex fresh/exact callback INSIDE exact existing `codex` -> Pi-to-Codex addressed native-push v2 -> Codex PUBLIC omitted-placement fresh Pi/exact callback IN that home -> Codex final v2 evidence. Needs LIVE=1 + ENTWURF_CODEX_APP_SERVER_PID + ENTWURF_CODEX_FRESH_MODEL + ENTWURF_CODEX_FRESH_PI_MODEL. The PID names the operator-owned app-server inside `codex`; the smoke checks/prints all four coordinates, never starts/stops/guesses the app-server/session, never reads screen text, interrupts only its exact still-running Codex turn, and cleans only receipt-named window ids
+  ./run.sh smoke-codex-fresh-live    # #95 RELEASE MUST: record-backed receipt fixture -> PUBLIC initial Pi fresh/callback in a session S that is NOT the app-server's -> Pi PUBLIC omitted-placement Codex fresh/exact callback, also in S -> Pi-to-Codex addressed native-push v2 -> Codex PUBLIC omitted-placement AND omitted-cwd fresh Pi/exact callback IN S beside its own TUI (lane B claim: the app-server env names another session, so S can only come from the caller's pane title; lane C claim: no cwd was asked for, so the directory can only come from the Codex caller's own record — and the Codex thread's own rollout session_meta.cwd, its pane and its record must all be the requested scratch, not the app-server's repo) -> Codex final v2 evidence. Needs LIVE=1 + ENTWURF_CODEX_APP_SERVER_PID + ENTWURF_CODEX_FRESH_MODEL + ENTWURF_CODEX_FRESH_PI_MODEL, and its ONE stable launch directory answered 'Trust' once in a plain codex -C there: codex records its direct consent per exact directory, so a directory with no answer at all opens a consent screen instead of a first turn. Only THIS gate treats that as a precondition and fails up front as codex-launch-cwd-undecided rather than timing out on a callback — an ordinary entwurf_fresh_call only prints the note and opens the window, because a human can answer the screen. The smoke PRINTS that directory as 'launch-cwd <dir>' and repeats it in the failure as a ready-to-run repair command — do not retype it from memory, and do not write it as \$TMPDIR/... (os.tmpdir() falls back to /tmp when TMPDIR is unset, so that spelling names a different directory in the filesystem root). The PID names the operator-owned app-server, which must sit in a DIFFERENT session from S; the smoke checks/prints all four coordinates, never starts/stops/guesses the app-server/session, never reads screen text, interrupts only its exact still-running Codex turn, and cleans only receipt-named window ids
   ./run.sh smoke-mux-lifecycle-live  # RELEASE MUST integrated LIVE lifecycle acceptance for mux, through the REAL MCP surface — OUT of pnpm check, needs LIVE=1 and spends model turns (two pi siblings: native + recorded-ACP provider, each resumed once; one Claude Code sibling). tools/call fresh_call -> nonce callback sender envelope -> v2 control send landing in the sibling's own transcript -> resume_call REFUSED while live (window count unchanged) -> stable-handle close (pane gone, socket dead, record kept) -> dormant delivery refused honestly -> public entwurf_resume_call with LAUNCH and OBSERVATION receipts kept apart, same-gid socket alive, zero new citizens, zero lock residue, resumed pane_start_path == RECORD cwd (separate tmux query), transcript byte-identical across the resume -> v2 recall of the pre-close fact. claude-code resume refused target-not-pi, no window opened and no lock residue. LIVE=1 ./run.sh smoke-mux-lifecycle-live
   ./run.sh check-entwurf-facts         # deterministic gate (0.11 Stage 0 step 4, fact-provider slice 1+2): PURE PeerFact core + resolveFactList union — R1 out-of-domain→unsupported, R3b socket-domain 4-value, facts-only keyset; union: PeerFact + RecordLessSocketFact by gardenId (#50 C4: record-less socket = diagnostic subject, gid+liveness only), dormant→dead, F3 indeterminate preserved, out-of-socket-domain+socket fail-loud; pure, no IO
   ./run.sh check-socket-discovery      # deterministic gate (0.11 Stage 0 step 4, fact-provider slice 3): SOCKET-axis scanSocketProbes — probes (dir sockets) ∪ (in-domain citizen canonical paths) 3-valued; dormant citizen no-file → dead (resumable, not unprobed), stall → indeterminate (F3), dir hygiene/dedup/missing-dir + e2e → resolveFactList; readdir/probe injected, no IO
@@ -257,15 +258,20 @@ Usage:
   ./run.sh uninstall-agy-bridge       # 봉인 7: honest inverse of install-agy-bridge from install-state (restore preimage / remove key; refuse if config became a symlink)
   ./run.sh probe-bridge-command <cmd> [args...]  # #81: BOOT the given bridge invocation and require the entwurf MCP tool surface back. `--invocation-json '{"command":"…","args":[],"env":{}}'` preserves a harness config exactly. It waits for a valid initialize response, then sends initialized + tools/list only (no tools/call, lock, record, or delivery). exit 0 = it serves the bridge; 1 = it does not. The pi/agy doctors use this leaf.
   ./run.sh doctor-agy-bridge          # fail-loud doctor: MCP config + exact permission rule + state + live probe label
-  ./run.sh install-codex-birth        # publish $CODEX_HOME/hooks.json + the helper closure; no root, and the operator trusts the declaration once in their own Codex
-  ./run.sh uninstall-codex-birth      # exact inverse from the install-state digest inventory; refuses drifted bytes instead of deleting them
-  ./run.sh doctor-codex-birth         # RUNTIME + UNIT bytes/ownership + the vendor TRUST receipt for this declaration (--unit-only skips the receipt; sandboxes only)
+  ./run.sh install-codex-birth        # publish ONE SessionStart declaration inside $CODEX_HOME/hooks.json (a file it shares) + the helper closure; no root, and the operator trusts the declaration once in their own Codex
+  ./run.sh uninstall-codex-birth      # exact inverse from the install-state digest inventory; removes only entwurf's own declaration (foreign groups byte-for-byte) and refuses drifted bytes instead of deleting them
+  ./run.sh doctor-codex-birth         # RUNTIME + UNIT bytes/ownership + FOREIGN neighbours (reported, never certified) + the vendor TRUST receipt at this declaration's measured index (--unit-only skips the receipt; sandboxes only)
   ./run.sh install-codex-mcp          # own only [mcp_servers.entwurf-bridge] in the user's Codex config
   ./run.sh uninstall-codex-mcp        # remove/restore only the recorded MCP atom
   ./run.sh doctor-codex-mcp           # effective config + ownership + actual bridge boot
   ./run.sh install-codex-statusline   # add thread-title to tui.status_line for visible garden ids
   ./run.sh uninstall-codex-statusline # remove only the recorded status-line atom
   ./run.sh doctor-codex-statusline    # effective visible-identity config + ownership verdict
+  ./run.sh install-codex-terminal-title   # add thread-id to tui.terminal_title so the multiplexer reports the caller's thread in #{pane_title} (#95 placement input, never an address)
+  ./run.sh uninstall-codex-terminal-title # remove only the recorded terminal-title atom
+  ./run.sh doctor-codex-terminal-title    # effective caller-seat config + ownership verdict
+  ./run.sh codex-socket-path              # #95 INTERNAL (the launcher asks this; you do not need it): print the Codex app-server default control-socket path for this environment, from the SAME resolver delivery and preflight read
+  ./run.sh codex-app-server [args...]     # #95: the ONE COMMAND that starts the operator's Codex app-server. exec()s `codex app-server --listen "unix://$CODEX_HOME/app-server-control/app-server-control.sock"` in THIS terminal (cwd/pid/exit are the vendor's, Ctrl-C is yours) — entwurf owns the SPELLING of that address, never the process's lifecycle: no supervisor, no restart, no daemon, no pid file. It does no path arithmetic: the address comes from `codex-socket-path`, the one leaf every other Codex surface reads, and a resolved address that is not absolute or carries a control character is refused before anything is created. Your arguments are forwarded byte-identical after it; a second --listen is refused by name. Refuses on a live socket (names the /proc owner it can read) or an indeterminate one, and reports which tmux server this seat gives caller-seat lookups. Run it in a DETACHED tmux session other than the one you work in
   ./run.sh install-agy-statusline     # own the agy statusLine subtree with bare entwurf-agy-statusline; preserve unrelated settings
   ./run.sh uninstall-agy-statusline   # honest inverse from statusline install-state
   ./run.sh doctor-agy-statusline      # fail-loud statusLine config/bin/state doctor + honest live SKIP
@@ -615,6 +621,7 @@ _codex_home() { echo "${CODEX_HOME:-$HOME/.codex}"; }
 _codex_config() { echo "$(_codex_home)/config.toml"; }
 _codex_mcp_state() { echo "${XDG_DATA_HOME:-$HOME/.local/share}/entwurf/codex-mcp/install-state.json"; }
 _codex_statusline_state() { echo "${XDG_DATA_HOME:-$HOME/.local/share}/entwurf/codex-statusline/install-state.json"; }
+_codex_terminal_title_state() { echo "${XDG_DATA_HOME:-$HOME/.local/share}/entwurf/codex-terminal-title/install-state.json"; }
 
 codex_mcp() {
   local verb="$1" config state
@@ -640,6 +647,23 @@ codex_statusline() {
     install) python3 "$REPO_DIR/scripts/codex-statusline-config.py" install "$config" "$state" ;;
     uninstall) python3 "$REPO_DIR/scripts/codex-statusline-config.py" uninstall "$state" ;;
     doctor) python3 "$REPO_DIR/scripts/codex-statusline-config.py" doctor-static "$config" "$state" ;;
+  esac
+}
+
+# #95 lane B: the SECOND visible-identity atom, and a different axis from the
+# status line. `status_line`'s thread-title is what a HUMAN reads in the TUI;
+# `terminal_title`'s thread-id is what the MULTIPLEXER reports back as
+# `#{pane_title}`, which is the only value a Codex caller's `_meta.threadId`
+# can be matched against to find the pane it is sitting in. Placement input
+# only — never an address, delivery or liveness fact.
+codex_terminal_title() {
+  local verb="$1" config state
+  config="$(_codex_config)"
+  state="$(_codex_terminal_title_state)"
+  case "$verb" in
+    install) python3 "$REPO_DIR/scripts/codex-terminal-title-config.py" install "$config" "$state" ;;
+    uninstall) python3 "$REPO_DIR/scripts/codex-terminal-title-config.py" uninstall "$state" ;;
+    doctor) python3 "$REPO_DIR/scripts/codex-terminal-title-config.py" doctor-static "$config" "$state" ;;
   esac
 }
 
@@ -1070,6 +1094,14 @@ check_copilot_launch() {
   run_ts scripts/check-copilot-launch.ts
 }
 
+check_codex_app_server_launch() {
+  # #95: the managed app-server SPELLING, proved against a fake vendor. There is no second
+  # spelling of the address to compare any more — the launcher asks `codex-socket-path` — so
+  # these cells are a WIRING oracle, and they carry the hostile inputs a transcription was
+  # measured to diverge on so that re-deriving the path here goes red rather than passing.
+  run_ts scripts/check-codex-app-server-launch.ts
+}
+
 check_copilot_receive_arm() {
   # #82 RAIL 5 gate: drives the REAL receiver installer into a temp extensions dir, then
   # forks the REAL extension.mjs with the SDK specifier resolved by a loader hook (the
@@ -1458,7 +1490,10 @@ check_mux_fresh_call() {
   # tmux-coordinate-row rides here because it is the parse every tmux COORDINATE in this lane's
   # LIVE siblings depends on, and because it is the only half of a measured LIVE failure that a
   # deterministic gate can own: the row is the input, so no tmux and no model turn is needed.
-  run_vitest test/mux-fresh-call.test.ts test/fresh-call-composition.contract.test.ts test/copilot-fresh-preflight.test.ts test/codex-fresh-preflight.test.ts test/fresh-call-surfaces.contract.test.ts test/fresh-call-provider.contract.test.ts test/omp-fresh-bootstrap.contract.test.ts test/tmux-coordinate-row.test.ts test/codex-fresh-live-protocol.test.ts
+  # codex-caller-seat rides here for the same reason as the two preflights: the leaf exists
+  # only as freshCall's Codex placement input (#95 lane B), so certifying it apart from the
+  # composition it feeds would let the two halves of one seat decision drift.
+  run_vitest test/mux-fresh-call.test.ts test/fresh-call-composition.contract.test.ts test/copilot-fresh-preflight.test.ts test/codex-fresh-preflight.test.ts test/fresh-call-surfaces.contract.test.ts test/fresh-call-provider.contract.test.ts test/omp-fresh-bootstrap.contract.test.ts test/tmux-coordinate-row.test.ts test/codex-fresh-live-protocol.test.ts test/codex-caller-seat.test.ts
 }
 
 smoke_mux_fresh_call_live() {
@@ -4801,6 +4836,57 @@ JS
   fi
   echo "[check-pack-install] installed 'entwurf copilot' reached the vendor with the scan flag and the managed argv"
 
+  # #95 — the managed app-server SPELLING, from the INSTALLED package. Same packaging risk as
+  # the copilot cell above and the same reason a file-list assertion cannot stand in for it:
+  # `scripts/codex-app-server-launch.sh` has to be in the tarball AND resolve its siblings
+  # correctly once it lives under node_modules. What makes this cell worth its seconds is the
+  # ADDRESS: this verb exists so a consumer never types that socket path, so the one thing an
+  # installed run must prove is that the path it hands the vendor is the one the product's own
+  # resolver computes — read here from the INSTALLED tree, never from this checkout.
+  local cx_launch_home="$npm_tmp/codex-appserver-home" cx_launch_bin="$npm_tmp/codex-appserver-bin"
+  mkdir -p "$cx_launch_home" "$cx_launch_bin"
+  {
+    printf '#!/usr/bin/env bash\n'
+    printf 'for a in "$@"; do printf "ARG<%%s>\\n" "$a"; done\n'
+  } > "$cx_launch_bin/codex"
+  chmod +x "$cx_launch_bin/codex"
+  # The expectation is read from the INSTALLED COMPILED resolver, not from this checkout and
+  # not transcribed here: compiled JS is what an installed consumer surface reaches (Hard Rule
+  # 11), so this asks the packed tree itself what address it believes in.
+  local cx_resolver="$npm_pkg/mcp/entwurf-bridge/dist/pi-extensions/lib/native-push/codex-ws-client.js" cx_want
+  if [ ! -f "$cx_resolver" ]; then
+    fail "[check-pack-install] the tarball carries no compiled Codex socket resolver at $cx_resolver"
+    return 1
+  fi
+  if ! cx_want=$(CODEX_HOME="$cx_launch_home/.codex" node --input-type=module -e "
+import { resolveCodexDefaultSocketPath } from '$cx_resolver';
+process.stdout.write(resolveCodexDefaultSocketPath(process.env));
+" 2>&1); then
+    fail "[check-pack-install] the INSTALLED compiled socket resolver would not load:"
+    echo "$cx_want" | tail -4 | sed 's/^/    /' >&2
+    return 1
+  fi
+  if ! op_out=$(env -u ENTWURF_CODEX_APP_SERVER_ACTIVE -u TMUX \
+      HOME="$cx_launch_home" CODEX_HOME="$cx_launch_home/.codex" PATH="$cx_launch_bin:$PATH" \
+      "$installed_entwurf" codex-app-server --config probe=1 2>&1); then
+    fail "[check-pack-install] installed 'entwurf codex-app-server' FAILED to reach the vendor:"
+    echo "$op_out" | tail -8 | sed 's/^/    /' >&2
+    return 1
+  fi
+  for want in "ARG<app-server>" "ARG<--listen>" "ARG<unix://$cx_want>" "ARG<--config>" "ARG<probe=1>"; do
+    if ! printf '%s' "$op_out" | grep -qF "$want"; then
+      fail "[check-pack-install] installed 'entwurf codex-app-server' did not hand the vendor the resolved address and argv (missing $want):"
+      echo "$op_out" | tail -8 | sed 's/^/    /' >&2
+      return 1
+    fi
+  done
+  if printf '%s' "$op_out" | grep -qF 'ARG<codex-app-server>'; then
+    fail "[check-pack-install] installed 'entwurf codex-app-server' leaked the dispatcher verb into the vendor's argv:"
+    echo "$op_out" | tail -8 | sed 's/^/    /' >&2
+    return 1
+  fi
+  echo "[check-pack-install] installed 'entwurf codex-app-server' reached the vendor at the INSTALLED resolver's address ($cx_want)"
+
   # The generation verb must reach its verdict from under node_modules. On the
   # sandbox 0-record agent dir it archives nothing and opens a fresh generation.
   # The exit code alone can't tell a verdict from a fence crash, so read the line.
@@ -5616,6 +5702,12 @@ setup_all() {
     else
       setup_result codex-statusline FAIL "detected codex, but the visible-identity setting did not complete (see above)"
     fi
+    codex_rc=0; codex_terminal_title install || codex_rc=$?
+    if [ "$codex_rc" -eq 0 ]; then
+      setup_harness_result codex-terminal-title "thread-id terminal title enabled (caller-seat placement input)" "./run.sh doctor-codex-terminal-title"
+    else
+      setup_result codex-terminal-title FAIL "detected codex, but the terminal-title setting did not complete (see above)"
+    fi
   fi
   # ── core bridge boundary ── deterministic preflight lives in `pnpm run
   # check:full`; live substrate acceptance lives in `LIVE=1 ./run.sh
@@ -6295,6 +6387,9 @@ case "$cmd" in
   check-copilot-statusline)
     check_copilot_statusline
     ;;
+  check-codex-app-server-launch)
+    check_codex_app_server_launch
+    ;;
   check-copilot-launch)
     check_copilot_launch
     ;;
@@ -6957,6 +7052,35 @@ case "$cmd" in
     ;;
   doctor-codex-statusline)
     codex_statusline doctor
+    ;;
+  install-codex-terminal-title)
+    codex_terminal_title install
+    ;;
+  uninstall-codex-terminal-title)
+    codex_terminal_title uninstall
+    ;;
+  doctor-codex-terminal-title)
+    codex_terminal_title doctor
+    ;;
+  codex-socket-path)
+    # #95 INTERNAL: print the Codex app-server default control-socket path for this
+    # environment. It exists because `entwurf codex-app-server` is bash and cannot import
+    # `resolveCodexDefaultSocketPath`; re-deriving that path in bash was MEASURED to diverge
+    # (BOM-only CODEX_HOME, path normalization), so the launcher asks instead of transcribing.
+    # `run_ts` is the crossing (compiled twin when installed, strip-types in a clone), which is
+    # the whole reason this sits in the dispatcher rather than inside the leaf.
+    shift || true
+    run_ts scripts/codex-socket-path.ts "$@"
+    ;;
+  codex-app-server)
+    # #95: the managed app-server SPELLING. Same shape and same reasons as the `copilot`
+    # branch below — `exec`, no subshell and no cd, because this operates on the operator's
+    # own session rather than on the repo, and the `shift` keeps the dispatcher verb out of
+    # the vendor's argv. It is NOT the same KIND of thing: `entwurf copilot` becomes a
+    # sibling-bearing CLI, while this becomes the long-lived server those siblings' MCP
+    # children hang off. Neither one supervises what it becomes.
+    shift || true
+    exec bash "$REPO_DIR/scripts/codex-app-server-launch.sh" "$@"
     ;;
   copilot)
     # #82 RAIL 7: the managed launch. `exec` and NO subshell/cd on purpose — the vendor

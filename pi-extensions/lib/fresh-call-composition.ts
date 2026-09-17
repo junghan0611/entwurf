@@ -202,12 +202,38 @@ export function buildOmpBootstrapPayload(params: { callerGardenId: string; nonce
  * have needed its own quoting, its own lifetime and its own refusal rules; argv already owns
  * all three. This is deliberately NOT a general `--flag value` passthrough — an arbitrary
  * carrier would hand callers the launch-shaping power this rail exists to refuse.
+ *
+ * CODEX ALONE CARRIES A DIRECTORY IN ITS ARGV, AND OMITTING IT IS A WRONG ANSWER RATHER THAN A
+ * NEUTRAL ONE. `[source rust-v0.153.4]` an explicit `--remote <endpoint>` — which this argv
+ * always passes — resolves to `AppServerTarget::Remote` (`codex-rs/tui/src/lib.rs:875-876`;
+ * `LocalDaemon` is only the IMPLICIT no-flag reuse path), and a Remote target takes its new
+ * thread's directory from `remote_cwd_override` ALONE: `thread_cwd_from_config`
+ * (`codex-rs/tui/src/app_server_session.rs:2022-2033`) answers `None` without it, and the
+ * app-server then opens the thread in ITS OWN directory. That override is exactly `-C/--cd`,
+ * retained only for a remote target (`codex-rs/tui/src/startup_orchestration.rs:191-194`), and
+ * the flag lives on the shared interactive options this argv already uses for
+ * `--dangerously-bypass-approvals-and-sandbox` (`codex-rs/utils/cli/src/shared_options.rs:53-68`)
+ * — not only on the `agents` subcommand that also spells it (`codex-rs/cli/src/main.rs:334`).
+ *
+ * `[측정 2026-09-16]` with the flag absent, three citizens of one chain (pi → Codex → Claude
+ * Code) all recorded the app-server's `~/repos/gh/entwurf` while the panes themselves sat in
+ * `~/repos/gh/agent-config`, and the birth hook wrote that vendor-supplied cwd into each record
+ * honestly (#95 lane C §1). So the token is ALWAYS present for codex: ONE directory, TWO
+ * CARRIERS — tmux `-c` places the PANE, codex `-C` places the THREAD, and the rail's chosen
+ * directory is the single value both receive. It is not a new input axis: the value is chosen by
+ * the cwd rules the rail already has, one layer up.
+ *
+ * BOTH CODEX FACTS ARRIVE AS THUNKS, and for the same reason: they are rail knowledge, and only
+ * the codex branch may pay for them. A host with no Codex home must still open pi and claude
+ * siblings, and the herdr rail — where codex is not a pilot backend and is refused before this
+ * point — supplies throwing resolvers so a future widening cannot silently inherit a guess.
  */
 export function composeBackendArgs(
 	backend: FreshCallBackend,
 	composition: FreshCallComposition,
 	model: string,
 	resolveCodexSocketPath: () => string,
+	resolveCodexLaunchCwd: () => string,
 ): string[] {
 	switch (backend) {
 		case "pi":
@@ -222,6 +248,8 @@ export function composeBackendArgs(
 			return [
 				"--remote",
 				`unix://${resolveCodexSocketPath()}`,
+				"-C",
+				resolveCodexLaunchCwd(),
 				"--model",
 				model,
 				"--dangerously-bypass-approvals-and-sandbox",

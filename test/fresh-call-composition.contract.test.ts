@@ -88,8 +88,12 @@ describe("the tmux rail's bytes did not move when the code did", () => {
 
 	it("[QK:FRESHCOMP-ARGV-UNCHANGED] every backend's argv is what the rail wrapper produced before the extraction", () => {
 		const socket = () => "/home/operator/.codex/app-server-control/app-server-control.sock";
+		// The launch directory is the second codex-only fact the RAIL owns (#95 lane C): the
+		// wrapper's default is this process's own, so the leaf is handed exactly that to keep the
+		// two argvs comparable byte for byte.
+		const launchCwd = () => process.cwd();
 		for (const backend of ["pi", "claude-code", "copilot", "omp", "codex"] as const) {
-			expect(composeBackendArgs(backend, COMPOSITION, "m/1", socket)).toEqual(
+			expect(composeBackendArgs(backend, COMPOSITION, "m/1", socket, launchCwd)).toEqual(
 				buildBackendArgs(backend, COMPOSITION, "m/1", { HOME: "/home/operator" }),
 			);
 		}
@@ -98,7 +102,13 @@ describe("the tmux rail's bytes did not move when the code did", () => {
 
 describe("the injected Codex socket path", () => {
 	it("[QK:FRESHCOMP-CODEX-SOCKET-INJECTED] the leaf is handed the path and never derives it — the resolver lives with delivery, which this file may not import", () => {
-		const args = composeBackendArgs("codex", COMPOSITION, "m/1", () => "/tmp/sock");
+		const args = composeBackendArgs(
+			"codex",
+			COMPOSITION,
+			"m/1",
+			() => "/tmp/sock",
+			() => "/tmp/work",
+		);
 		expect(args).toContain("unix:///tmp/sock");
 	});
 
@@ -106,8 +116,18 @@ describe("the injected Codex socket path", () => {
 		const exploding = () => {
 			throw new Error("codex app-server: neither CODEX_HOME nor HOME is available");
 		};
-		expect(() => composeBackendArgs("pi", COMPOSITION, "m/1", exploding)).not.toThrow();
-		expect(() => composeBackendArgs("claude-code", COMPOSITION, "m/1", exploding)).not.toThrow();
-		expect(() => composeBackendArgs("codex", COMPOSITION, "m/1", exploding)).toThrow(/CODEX_HOME/);
+		const cwd = () => "/tmp/work";
+		expect(() => composeBackendArgs("pi", COMPOSITION, "m/1", exploding, cwd)).not.toThrow();
+		expect(() => composeBackendArgs("claude-code", COMPOSITION, "m/1", exploding, cwd)).not.toThrow();
+		expect(() => composeBackendArgs("codex", COMPOSITION, "m/1", exploding, cwd)).toThrow(/CODEX_HOME/);
+		// The launch-directory thunk is lazy for the SAME reason, and the herdr rail relies on it:
+		// codex is not a pilot backend there, so its resolver throws rather than guessing a path.
+		const noCwd = () => {
+			throw new Error("herdr-fresh-call: codex is not a pilot backend on this rail");
+		};
+		expect(() => composeBackendArgs("pi", COMPOSITION, "m/1", () => "/tmp/sock", noCwd)).not.toThrow();
+		expect(() => composeBackendArgs("codex", COMPOSITION, "m/1", () => "/tmp/sock", noCwd)).toThrow(
+			/not a pilot backend/,
+		);
 	});
 });

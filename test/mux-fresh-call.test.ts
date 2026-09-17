@@ -19,12 +19,13 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { CODEX_CALLER_SEAT_HINT } from "../pi-extensions/lib/codex-caller-seat.ts";
+import { CODEX_CALLER_PREFLIGHT_HINT } from "../pi-extensions/lib/codex-fresh-preflight.ts";
 import {
 	buildBackendArgs,
 	buildFreshCallArgs,
 	buildFreshCallPrompt,
 	buildOmpBootstrapPayload,
-	CODEX_HOME_TMUX_SESSION,
 	FRESH_CALL_BACKENDS,
 	FRESH_CALL_CALLBACK_TOOL,
 	FRESH_CALL_RUNTIME,
@@ -83,18 +84,51 @@ describe("argv dialects", () => {
 	const piArgs = buildBackendArgs("pi", COMPOSITION, PI_MODEL);
 	const clArgs = buildBackendArgs("claude-code", COMPOSITION, CLAUDE_MODEL);
 
-	const codexArgs = buildBackendArgs("codex", COMPOSITION, CODEX_MODEL, { HOME: "/home/operator" });
+	/** The directory the pane will start in. Explicit in every codex fixture below, because the
+	 * one thing these cells must be able to see is the difference between "the value freshCall
+	 * chose" and "whatever directory this test process happens to run in". */
+	const LAUNCH_CWD = "/repos/gh/agent-config";
+	const codexArgs = buildBackendArgs("codex", COMPOSITION, CODEX_MODEL, { HOME: "/home/operator" }, LAUNCH_CWD);
 
 	it("[QK:FRESHCALL-CODEX-ARGV] Codex attaches to the one default app-server with an explicit model, explicit yolo policy, and positional first-turn prompt", () => {
 		expect(FRESH_CALL_RUNTIME.codex).toBe("codex");
 		expect(codexArgs).toEqual([
 			"--remote",
 			"unix:///home/operator/.codex/app-server-control/app-server-control.sock",
+			"-C",
+			LAUNCH_CWD,
 			"--model",
 			CODEX_MODEL,
 			"--dangerously-bypass-approvals-and-sandbox",
 			"PROMPT",
 		]);
+	});
+
+	it("[QK:FRESHCALL-CODEX-THREAD-CWD] Codex ALWAYS carries `-C <dir>`, and the dir is the one the launch chose — an omitted flag is not a neutral default but the APP-SERVER's own directory, because an explicit `--remote` target takes its thread cwd from that override alone (rust-v0.153.4: tui/src/lib.rs:875-876 → startup_orchestration.rs:191-194 → app_server_session.rs:2022-2033)", () => {
+		const at = codexArgs.indexOf("-C");
+		expect(at).toBeGreaterThan(0);
+		expect(codexArgs[at + 1]).toBe(LAUNCH_CWD);
+		expect(codexArgs.filter((a) => a === "-C")).toHaveLength(1);
+		// A different chosen directory travels, rather than any ambient one: this is what a
+		// `process.cwd()` hardcode inside the dialect would silently break, since the value it
+		// would substitute is real and absolute and looks right in every other way.
+		const other = buildBackendArgs("codex", COMPOSITION, CODEX_MODEL, { HOME: "/home/operator" }, "/tmp/scratch-repo");
+		expect(other[other.indexOf("-C") + 1]).toBe("/tmp/scratch-repo");
+		expect(other[other.indexOf("-C") + 1]).not.toBe(process.cwd());
+		// The default is the inherited fact, not a convenience: a caller that names no directory
+		// still tells codex the directory tmux will actually give the pane.
+		const inherited = buildBackendArgs("codex", COMPOSITION, CODEX_MODEL, { HOME: "/home/operator" });
+		expect(inherited[inherited.indexOf("-C") + 1]).toBe(process.cwd());
+	});
+
+	it("[QK:FRESHCALL-CWD-BACKEND-CARRIER-SCOPE] the chosen directory reaches the BACKEND dialect only for codex — the other four are byte-identical whatever directory the launch chose, so one vendor's thread-cwd defect cannot rewrite four argvs", () => {
+		for (const backend of ["pi", "claude-code", "copilot", "omp"] as const) {
+			const model = backend === "omp" ? OMP_MODEL : PI_MODEL;
+			const here = buildBackendArgs(backend, COMPOSITION, model, { HOME: "/home/operator" }, LAUNCH_CWD);
+			const there = buildBackendArgs(backend, COMPOSITION, model, { HOME: "/home/operator" }, "/tmp/scratch-repo");
+			expect(here, backend).toEqual(there);
+			expect(here, backend).not.toContain(LAUNCH_CWD);
+		}
 	});
 
 	it("[QK:FRESHCALL-CODEX-CALLBACK-DIALECT] Codex uses the measured underscore/double-underscore MCP spelling with the digit retained", () => {
@@ -172,8 +206,12 @@ describe("argv dialects", () => {
 		);
 	});
 
-	it("no backend passes a shell string, a window name, a cwd or an env carrier", () => {
+	it("no backend passes a shell string, a window name, a tmux cwd or an env carrier — codex's `-C` is the one directory token, and it is the VENDOR's flag rather than tmux's", () => {
 		for (const a of [...piArgs, ...clArgs, ...cpArgs, ...codexArgs]) expect(a).not.toMatch(/^-(n|c|e|b)$/);
+		// Case matters and is load-bearing: `-c` is tmux's carrier (refused above for every
+		// backend) while `-C` is codex's own `--cd`. Only codex carries one.
+		for (const a of [...piArgs, ...clArgs, ...cpArgs, ...ompArgs]) expect(a).not.toBe("-C");
+		expect(codexArgs).toContain("-C");
 	});
 
 	const ompArgs = buildBackendArgs("omp", COMPOSITION, OMP_MODEL);
@@ -667,7 +705,9 @@ describe("optional cwd — cross-repo fresh placement (#73)", () => {
 		// keeps no fake one), so the wiring that carries the requested cwd into the receipt is a
 		// structural contract on the composition body — the renderer below would stay green on a
 		// fixture receipt even if production stopped supplying the field.
-		expect(MODULE_SRC).toContain("...(cwd === undefined ? {} : { cwd }),");
+		expect(MODULE_SRC).toContain(
+			"...(chosenCwd === undefined ? {} : { cwd: chosenCwd.value, cwdSource: chosenCwd.source }),",
+		);
 		const receipt: FreshCallReceipt = {
 			serverPid: "1",
 			sessionId: "$1",
@@ -682,9 +722,100 @@ describe("optional cwd — cross-repo fresh placement (#73)", () => {
 		};
 		const without = renderFreshCall({ ok: true, receipt });
 		expect(without.text).not.toMatch(/cwd:/);
-		const withCwd = renderFreshCall({ ok: true, receipt: { ...receipt, cwd: "/repos/other-project" } });
+		const withCwd = renderFreshCall({
+			ok: true,
+			receipt: { ...receipt, cwd: "/repos/other-project", cwdSource: "requested" },
+		});
 		expect(withCwd.text).toContain("cwd:      /repos/other-project");
 		expect(withCwd.text).toMatch(/requested start directory — not an observation/);
+	});
+
+	it("[QK:FRESHCALL-CWD-RECEIPT-SOURCE] the receipt NAMES which rule chose the directory — a caller-record directory was not requested by anyone, so reporting it as `requested` would put a fact in the operator's hands under the wrong noun", () => {
+		const receipt: FreshCallReceipt = {
+			serverPid: "1",
+			sessionId: "$1",
+			windowId: "@1",
+			windowIndex: "2",
+			paneId: "%1",
+			panePid: "3",
+			backend: "codex",
+			model: CODEX_MODEL,
+			runtimePath: "/usr/bin/codex",
+			nonce: NONCE,
+		};
+		const fromRecord = renderFreshCall({
+			ok: true,
+			receipt: { ...receipt, cwd: "/repos/gh/agent-config", cwdSource: "codex-caller-record" },
+		});
+		expect(fromRecord.text).toContain("cwd:      /repos/gh/agent-config");
+		expect(fromRecord.text).toMatch(/Codex caller's own record directory/);
+		expect(fromRecord.text).not.toMatch(/requested start directory/);
+		// ...and the inherited case stays absent rather than being invented into a field: no
+		// directory was named, so the receipt reports none even though codex's argv carries one.
+		expect(renderFreshCall({ ok: true, receipt }).text).not.toMatch(/cwd:/);
+	});
+
+	it("[QK:FRESHCALL-CALLER-CWD-CODEX] a codex caller's record directory is consulted ONLY when the call requested none, and an explicit request always wins — the record cwd is a more precise name for the SAME caller, never a second authority", () => {
+		// The pre-mutation half is observable without tmux: a bad caller directory is refused by
+		// the same shared leaf and the same four reasons, which is what proves it reaches the
+		// classification at all rather than riding straight to tmux.
+		const call = (over: { cwd?: string; callerCwd?: string }): string =>
+			reasonOf(
+				freshCall({ backend: "codex", model: CODEX_MODEL, task: TASK, callerGardenId: GID, ...over }, { HOME: "/h" }),
+			);
+		expect(call({ callerCwd: "relative/project" })).toBe("cwd-not-absolute");
+		expect(call({ callerCwd: "/nonexistent-caller-record-dir" })).toBe("cwd-missing");
+		// An explicit request wins: the REQUESTED value is the one classified, so its own defect
+		// is the one reported even when the caller record is perfectly fine.
+		expect(call({ cwd: "relative/requested", callerCwd: os.tmpdir() })).toBe("cwd-not-absolute");
+		// ...and a usable REQUEST beside an unusable caller record is not refused at all: the
+		// record was never classified, because it was never consulted. With a hermetic codex on
+		// PATH the refusal past it is the placement leaf's, which is as far as this axis can be
+		// decided without a real tmux server — the behavioural oracle for which value reaches
+		// `-c` is the composition cell in `check-mux-launch-tmux`, read off `#{pane_current_path}`.
+		const runtimeDir = fs.mkdtempSync(path.join(os.tmpdir(), "entwurf-fresh-call-codex-"));
+		try {
+			fs.writeFileSync(path.join(runtimeDir, "codex"), "#!/bin/sh\nexit 0\n", { mode: 0o755 });
+			expect(
+				reasonOf(
+					freshCall(
+						{
+							backend: "codex",
+							model: CODEX_MODEL,
+							task: TASK,
+							callerGardenId: GID,
+							cwd: os.tmpdir(),
+							callerCwd: "/nonexistent-caller-record-dir",
+						},
+						{ HOME: "/h", PATH: runtimeDir },
+					),
+				),
+			).toBe("no-tmux-context");
+		} finally {
+			fs.rmSync(runtimeDir, { recursive: true, force: true });
+		}
+	});
+
+	it("[QK:FRESHCALL-CWD-TMUX-CARRIER-SOURCE] the tmux `-c` carrier is fed by the CHOSEN directory alone — substituting this process's directory for an absent one would put a `-c` on every launch, and the argv four backends have carried since #73 would quietly stop being the one that was measured", () => {
+		expect(MODULE_SRC).toContain("const cwd = chosenCwd?.value;");
+		expect(MODULE_SRC).toContain('...(cwd === undefined ? [] : ["-c", cwd]),');
+	});
+
+	it("[QK:FRESHCALL-CALLER-CWD-PI-ARGV-UNCHANGED] a caller with no record directory keeps the pre-#95 argv byte-for-byte — the empty string is the same omit the request side uses, and an absent caller cwd never becomes this process's directory as a `-c` token", () => {
+		// The emptiness rule, read where it is decided: both inputs answer the same two values,
+		// so an empty caller cwd can never be classified, refused, or carried.
+		expect(MODULE_SRC).toContain(
+			'const callerCwd = params.callerCwd === undefined || params.callerCwd === "" ? undefined : params.callerCwd;',
+		);
+		// The carrier half: tmux gets `-c` only for a chosen directory, and `process.cwd()` is
+		// never the source of one. It reaches codex's own `-C` instead, where an omitted flag
+		// would mean the app-server's directory rather than the pane's.
+		expect(MODULE_SRC).not.toMatch(/-c["'],\s*process\.cwd\(\)/);
+		expect(MODULE_SRC).toContain("const cwd = chosenCwd?.value;");
+		const empty = withPiRuntime((env) =>
+			freshCall({ backend: "pi", model: PI_MODEL, task: TASK, callerGardenId: GID, callerCwd: "" }, env),
+		);
+		expect(reasonOf(empty)).toBe("no-tmux-context");
 	});
 });
 
@@ -692,21 +823,159 @@ describe("optional project seat — cross-session fresh placement (#105)", () =>
 	const CALLER_SESSION = "$0";
 	const TARGET_SESSION = "$7";
 
-	it("[QK:FRESHCALL-CODEX-HOME-DEFAULT] omitted Codex placement selects the fixed existing `codex` home while every other backend stays in its caller session", () => {
-		expect(CODEX_HOME_TMUX_SESSION).toBe("codex");
-		expect(selectFreshCallSeat("codex", undefined)).toEqual({
-			tmuxSession: "codex",
-			source: "codex-home",
-		});
-		for (const backend of FRESH_CALL_BACKENDS.filter((candidate) => candidate !== "codex")) {
-			expect(selectFreshCallSeat(backend, undefined), backend).toBeNull();
+	it("[QK:FRESHCALL-SEAT-NAME-IS-REQUESTED-ONLY] the ONLY named seat is one the caller asked for — every backend with no placement takes no named seat at all", () => {
+		// #95 D1 (GLG, 2026-09-16) retired the fourth rule this cell used to hold: an omitted
+		// Codex TARGET no longer selects a fixed existing session named `codex`. That room was a
+		// workaround for a mapping that did not exist yet; the caller-pane anchor IS that
+		// mapping, so keeping it would have left Codex alone answering "where does a sibling
+		// open?" differently from every other backend. The 2026-09-12 home acceptance stays in
+		// DELIVERY.md as history.
+		for (const backend of FRESH_CALL_BACKENDS) {
+			expect(selectFreshCallSeat(undefined), backend).toBeNull();
 		}
-		// An explicit seat is never silently rewritten, even for Codex. It is an expert
-		// override outside the supported home topology and the receipt says it was requested.
-		expect(selectFreshCallSeat("codex", { tmuxSession: "org" })).toEqual({
+		expect(selectFreshCallSeat({ tmuxSession: "org" })).toEqual({
 			tmuxSession: "org",
 			source: "requested",
 		});
+		// The seat selector cannot even SEE the backend or the caller any more, which is what
+		// makes "the named seat is exactly what was requested" a property of the signature.
+		expect(selectFreshCallSeat.length).toBe(1);
+	});
+
+	it("[QK:CODEX-SEAT-FOLLOWS-CALLER-NOT-BACKEND] the anchor branch is gated on WHO IS CALLING, never on what is being opened", () => {
+		// The distinction is the whole asymmetry #95 lane B removes, and it is invisible in a
+		// single-backend test: a Codex citizen opening a PI sibling must still get its own pane,
+		// and a pi citizen opening a CODEX sibling must not try to anchor with no thread id at
+		// all. The branch is unreachable without a real tmux server, so the gate is structural;
+		// its behavioural oracle is the caller-seat composition cell in `check-mux-launch-tmux`,
+		// which drives the real composition with backend `pi` and a Codex caller.
+		expect(MODULE_SRC).toContain("params.callerNativeSessionId !== undefined) {");
+		// Scoped to the SEAT REGION rather than the whole module, and that scope is the claim: a
+		// backend gate is not forbidden here in general — the launch-directory axis is legitimately
+		// codex-only, because only codex's argv carries a directory the vendor consents to. What
+		// must never come back is a gate INSIDE the seat decision, where it would re-introduce the
+		// asymmetry #95 lane B removed.
+		const seatRegion = MODULE_SRC.slice(
+			MODULE_SRC.indexOf("let anchoredSeat = false;"),
+			MODULE_SRC.indexOf("const composition: FreshCallComposition"),
+		);
+		expect(seatRegion).not.toBe("");
+		expect(seatRegion).not.toContain('params.backend === "codex"');
+	});
+
+	it("[QK:CODEX-SEAT-PRECEDENCE-ANCHOR-OVER-EXPLICIT] rule 1 beats rule 2 — an explicit seat is never overridden by a resolvable anchor, and the composition re-reads it rather than inferring it", () => {
+		expect(selectFreshCallSeat({ tmuxSession: "org" })).toEqual({
+			tmuxSession: "org",
+			source: "requested",
+		});
+		// The anchor branch is unreachable without a real tmux server, so the guard itself is a
+		// structural assert. Its behavioural oracle is the "an explicit seat still wins over a
+		// resolvable anchor" cell in `check-mux-launch-tmux`, which drives the real composition
+		// against a real second session. `params.placement` is re-read there ON PURPOSE: deriving
+		// it from `seat === undefined` would make "an explicit seat always wins" an invariant a
+		// later edit could lose by accident.
+		expect(MODULE_SRC).toContain("} else if (params.placement === undefined &&");
+		expect(MODULE_SRC).toContain("const anchor = resolveCodexCallerSeat(params.callerNativeSessionId,");
+	});
+
+	it("[QK:CODEX-SEAT-COMPOSITION-REJECT-IS-REAL] an anchor refusal is returned VERBATIM and stops the call — it never becomes another reason and never falls through to a session", () => {
+		// The leaf's two reasons are the ones the caller sees; renaming or swallowing either
+		// would send the operator to the wrong repair for a window that was never opened.
+		expect(MODULE_SRC).toContain("if (!anchor.ok) return { ok: false, reason: anchor.reason };");
+		// ...and the branch that follows it is the ONLY place the anchor's session is adopted.
+		expect(MODULE_SRC).toContain("targetSessionId = anchor.seat.sessionId;");
+	});
+
+	it("[QK:CODEX-SEAT-TITLE-BECOMES-DELIVERY-TARGET] the first-turn framing carries the caller's GARDEN id and never the thread id a pane title matched — a forgeable title may not decide who a sibling calls back to", () => {
+		// Hard Rule 16, held at the one seam where the two values sit side by side. The thread id
+		// reaches placement and stops there; the address the sibling is told to answer is the
+		// record-backed garden id the SURFACE supplied.
+		// The id reaches the framing through the SHARED input contract (#116 S2-a), so the seam
+		// spells it as the normalized value rather than `params.` — the fact being held is which
+		// of the two values travels, not where it was destructured.
+		expect(MODULE_SRC).toContain("\t\t\tcallerGardenId,\n\t\t\tnonce,");
+		expect(MODULE_SRC).not.toContain("params.callerNativeSessionId ?? callerGardenId");
+		expect(MODULE_SRC).not.toContain("params.callerNativeSessionId ?? params.callerGardenId");
+		// The prompt builder itself takes only the garden id — there is no thread parameter to
+		// pass one through, which is what makes the seam above the only place to get it wrong.
+		const prompt = buildFreshCallPrompt({ backend: "codex", task: TASK, callerGardenId: GID, nonce: NONCE });
+		expect(prompt).toContain(GID);
+		expect(prompt).not.toContain("01a0a7f9");
+	});
+
+	it("[QK:CODEX-SEAT-RECEIPT-INVENTS-A-NAME] an anchored seat reports its SOURCE and no session NAME — the caller's pane was observed, never requested by name", () => {
+		const anchored: FreshCallReceipt = {
+			serverPid: "1",
+			sessionId: "$2",
+			windowId: "@9",
+			windowIndex: "3",
+			paneId: "%9",
+			panePid: "3",
+			backend: "pi",
+			model: PI_MODEL,
+			tmuxSessionSource: "codex-title-anchor",
+			runtimePath: "/usr/bin/pi",
+			nonce: NONCE,
+		};
+		expect(anchored.tmuxSession).toBeUndefined();
+		const text = renderFreshCall({ ok: true, receipt: anchored }).text;
+		expect(text).toMatch(/seat:\s+\$2 \(the Codex caller's own pane/);
+		expect(text).toContain("an OBSERVED session, not a requested name");
+		// Production assembly half: the anchored branch emits the source ALONE, and the named
+		// branch keeps emitting both. A receipt that invented a name here would report a seat
+		// the caller never asked for.
+		expect(MODULE_SRC).toContain('? { tmuxSessionSource: "codex-title-anchor" as const }');
+		expect(MODULE_SRC).toContain("{ tmuxSession: selectedSeat.tmuxSession, tmuxSessionSource: selectedSeat.source }");
+	});
+
+	it("both anchor refusals are real rejections with their own repair text, and neither falls back to another session", () => {
+		for (const reason of ["codex-caller-seat-unresolved", "codex-caller-seat-ambiguous"] as const) {
+			const rendered = renderFreshCall({ ok: false, reason });
+			expect(rendered.isError).toBe(true);
+			expect(rendered.text).toContain(reason);
+			expect(rendered.text).toContain("No window was opened.");
+			// The hint is the LEAF's, not a second copy — the sentence an operator reads cannot
+			// drift from the predicate that produced it.
+			expect(rendered.text).toContain(CODEX_CALLER_SEAT_HINT[reason]);
+		}
+		// The caller-side capability refusal is a THIRD, separate reason: a missing terminal
+		// title is repaired by an installer, not by closing a duplicate pane.
+		const titleMissing = renderFreshCall({ ok: false, reason: "codex-caller-title-missing" });
+		expect(titleMissing.isError).toBe(true);
+		expect(titleMissing.text).toContain(CODEX_CALLER_PREFLIGHT_HINT["codex-caller-title-missing"]);
+		expect(titleMissing.text).toContain("entwurf install-codex-terminal-title");
+	});
+
+	it("[QK:FRESHCALL-CODEX-LAUNCH-CWD-NOTES-NEVER-REFUSES] an unanswered launch directory is a DIAGNOSTIC, never a rejection — the vendor's consent screen is self-repairing for the human this rail opens windows for, so the launch proceeds and says what it saw", () => {
+		// The claim with teeth: this reason is not in the reject vocabulary at all. A future edit
+		// that turns the note back into a refusal has to come through here, where the cost is
+		// written down — one answer at a visible window becomes "no window, go run codex
+		// yourself, then call again", and it would have to be right about a decision this process
+		// cannot fully see (the vendor merges system, managed and cloud layers around the file the
+		// leaf reads).
+		// The reject vocabulary is a closed union plus an exhaustive hint map, so "not a reject" is
+		// readable straight off the module: neither the type nor the map admits this leaf.
+		expect(MODULE_SRC).not.toContain("CodexLaunchCwdPreflightRejectReason");
+		expect(MODULE_SRC).not.toContain("...CODEX_LAUNCH_CWD_PREFLIGHT_HINT,");
+		// The note itself is wired on two facts. FIRST: the directory named is READ BACK off
+		// codex's own `-C` token, so it cannot drift from the thread's start directory or become a
+		// second resolution of the inherited default (`FRESHCALL-CWD-CALLER-ONLY` keeps that at
+		// exactly one site). The three statements are asserted CONTIGUOUSLY, because the index
+		// lookup alone is not the claim: a note that kept `indexOf("-C")` and then asked about
+		// `cwd` would report the empty string for the launch that requested no directory — exactly
+		// the case where the pane inherits this process's directory and `-C` names it — and point
+		// the operator at a directory the thread never starts in.
+		expect(MODULE_SRC).toContain(
+			[
+				'const at = backendArgs.indexOf("-C");',
+				'const launchCwd = backendArgs[at + 1] ?? "";',
+				"const unanswered = codexLaunchCwdFreshPreflight(env, launchCwd);",
+			].join("\n\t\t"),
+		);
+		// SECOND: it goes to stderr and returns nothing — diagnostics are not control flow
+		// (Hard Rule 15), and the very next statement still runs the launch.
+		expect(MODULE_SRC).toContain("console.error(");
+		expect(MODULE_SRC).not.toMatch(/codexLaunchCwdFreshPreflight[\s\S]{0,400}?return \{ ok: false/);
 	});
 
 	/** The leaf's injected seam, answering the way tmux 3.6a was MEASURED to (2026-09-07,
@@ -778,7 +1047,7 @@ describe("optional project seat — cross-session fresh placement (#105)", () =>
 		// which calls the production freshCall against a private server and reads the refusal
 		// plus a byte-identical `list-windows -a` from tmux itself.)
 		const resolvedAt = MODULE_SRC.indexOf("const resolved = resolveTmuxSessionId(seat,");
-		const mutatedAt = MODULE_SRC.indexOf("buildFreshCallArgs(targetSessionId,");
+		const mutatedAt = MODULE_SRC.indexOf("const run = runTmux(");
 		expect(resolvedAt).toBeGreaterThan(0);
 		expect(resolvedAt).toBeLessThan(mutatedAt);
 		expect(MODULE_SRC).toContain("if (!resolved.ok) return { ok: false, reason: resolved.reason };");
@@ -852,9 +1121,9 @@ describe("optional project seat — cross-session fresh placement (#105)", () =>
 		expect(seated.text).toContain(`in session ${TARGET_SESSION}`);
 		const home = renderFreshCall({
 			ok: true,
-			receipt: { ...receipt, backend: "codex", tmuxSession: "codex", tmuxSessionSource: "codex-home" },
+			receipt: { ...receipt, backend: "codex", tmuxSession: "codex", tmuxSessionSource: "requested" },
 		});
-		expect(home.text).toContain(`seat:     codex (Codex home tmux session, resolved to ${TARGET_SESSION})`);
+		expect(home.text).toContain(`seat:     codex (requested tmux session, resolved to ${TARGET_SESSION})`);
 	});
 
 	it("an omitted non-Codex seat keeps the pre-#105 behaviour and stays orthogonal to the cwd — neither input is inferred from the other", () => {
@@ -950,10 +1219,17 @@ describe("module boundaries (structural contracts, source-text by design)", () =
 		expect(MODULE_SRC).not.toMatch(/from "\.\/entwurf-/);
 	});
 
-	it("[QK:FRESHCALL-CWD-CALLER-ONLY] the caller is the ONLY cwd authority — the module imports no store, peers surface or resume record to find a directory, never reads process.cwd, and classifies through the shared classify-tmux-cwd leaf", () => {
-		expect(MODULE_SRC).not.toMatch(
-			/meta-session|entwurf-peers|mux-resume-call|readAddressableMetaIdentity|process\.cwd/,
-		);
+	it("[QK:FRESHCALL-CWD-CALLER-ONLY] the caller is the ONLY cwd AUTHORITY — the module imports no store, peers surface or resume record to find a directory, keeps no fallback `-c`, and classifies through the shared classify-tmux-cwd leaf. `process.cwd()` occurs exactly once, as codex's `-C` default, where it DESCRIBES the directory tmux will give a `-c`-less pane instead of choosing one", () => {
+		expect(MODULE_SRC).not.toMatch(/meta-session|entwurf-peers|mux-resume-call|readAddressableMetaIdentity/);
 		expect(MODULE_SRC).toMatch(/from "\.\/classify-tmux-cwd\.ts"/);
+		// The one permitted occurrence, pinned by COUNT and by POSITION. It is the parameter
+		// default of the backend-argv builder — above the selection, so it is not a value
+		// `freshCall` can select, classify, carry to tmux or assemble into a receipt. A pane
+		// opened with no `-c` lands in this process's directory whatever anyone says, so naming
+		// it to codex changes no destination; omitting it hands the THREAD to the app-server's
+		// directory instead, which is the #95 lane C defect.
+		expect(MODULE_SRC.match(/process\.cwd\(\)/g) ?? []).toHaveLength(1);
+		expect(MODULE_SRC).toContain("launchCwd: string = process.cwd(),");
+		expect(MODULE_SRC.indexOf("process.cwd()")).toBeLessThan(MODULE_SRC.indexOf("const chosenCwd:"));
 	});
 });

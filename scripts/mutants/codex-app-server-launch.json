@@ -1,0 +1,157 @@
+{
+	"schemaVersion": 1,
+	"lane": "codex-app-server-launch",
+	"mutants": [
+		{
+			"claim": "CODEX-APP-SERVER-ADDRESS-MATCHES-PRODUCT-LEAF",
+			"title": "re-deriving the control-socket path in bash instead of asking the product resolver reintroduces the divergence this launcher was repaired for: a CODEX_HOME that JS trims away and a POSIX trim keeps, or a path.join normalization, starts a server at an address delivery and preflight never look at",
+			"subject": "scripts/codex-app-server-launch.sh",
+			"find": [
+				"if ! SOCK=\"$(bash \"$REPO_DIR/run.sh\" codex-socket-path)\"; then",
+				"\tfail \"could not resolve the Codex control-socket path.",
+				"  '$REPO_DIR/run.sh codex-socket-path' failed; that leaf is the only spelling of this address,",
+				"  and this launcher will not invent a second one. Its output above says why.\"",
+				"fi",
+				"[ -n \"$SOCK\" ] \\",
+				"\t|| fail \"the Codex control-socket resolver returned an empty path \u2014 neither CODEX_HOME nor",
+				"  HOME names a usable Codex home. Set CODEX_HOME.\""
+			],
+			"replace": ["SOCK=\"${CODEX_HOME:-$HOME/.codex}/app-server-control/app-server-control.sock\""],
+			"gate": ["bash", "run.sh", "check-codex-app-server-launch"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:CODEX-APP-SERVER-ADDRESS-MATCHES-PRODUCT-LEAF]",
+			"signatureSource": "scripts/check-codex-app-server-launch.ts"
+		},
+		{
+			"claim": "CODEX-APP-SERVER-EXECS-NOT-FORKS",
+			"title": "forking the vendor instead of becoming it leaves run.sh between the operator and their server: Ctrl-C hits the wrapper, and the process the operator believes they stopped is not the one that dies",
+			"subject": "scripts/codex-app-server-launch.sh",
+			"find": ["exec \"$codex_bin\" app-server --listen \"unix://$SOCK\" \"$@\""],
+			"replace": ["\"$codex_bin\" app-server --listen \"unix://$SOCK\" \"$@\""],
+			"gate": ["bash", "run.sh", "check-codex-app-server-launch"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:CODEX-APP-SERVER-EXECS-NOT-FORKS]",
+			"signatureSource": "scripts/check-codex-app-server-launch.ts"
+		},
+		{
+			"claim": "CODEX-APP-SERVER-REFUSES-LIVE-SOCKET",
+			"title": "reading a LIVE control socket as a stale leftover launches a second server over the endpoint every existing citizen record already points at \u2014 the running one keeps its threads while its address answers somebody else",
+			"subject": "scripts/codex-app-server-launch.sh",
+			"find": ["\tprint(\"live\")"],
+			"replace": ["\tprint(\"stale\")"],
+			"gate": ["bash", "run.sh", "check-codex-app-server-launch"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:CODEX-APP-SERVER-REFUSES-LIVE-SOCKET]",
+			"signatureSource": "scripts/check-codex-app-server-launch.ts"
+		},
+		{
+			"claim": "CODEX-APP-SERVER-REFUSES-INDETERMINATE-SOCKET",
+			"title": "reading an unidentifiable path (symlink, foreign owner, not a socket) as an absent one lets the launch clobber something it could not identify \u2014 the same classification the delivery rail refuses on, silently downgraded at the one place that would overwrite it",
+			"subject": "scripts/codex-app-server-launch.sh",
+			"find": ["\tprint(\"indeterminate\\tthe path is a symlink\")"],
+			"replace": ["\tprint(\"absent\")"],
+			"gate": ["bash", "run.sh", "check-codex-app-server-launch"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:CODEX-APP-SERVER-REFUSES-INDETERMINATE-SOCKET]",
+			"signatureSource": "scripts/check-codex-app-server-launch.ts"
+		},
+		{
+			"claim": "CODEX-APP-SERVER-REFUSES-SECOND-LISTEN",
+			"title": "appending the injected address beside an operator's own --listen hands the vendor two listen addresses; one wins silently, and the losing one is the address every record was written against",
+			"subject": "scripts/codex-app-server-launch.sh",
+			"find": [
+				"for tok in \"$@\"; do",
+				"\tif [ \"${tok%%=*}\" = \"--listen\" ]; then",
+				"\t\tfail \"codex-app-server-listen-override: this verb exists to spell ONE --listen address",
+				"  (unix://$SOCK), and you passed your own. Run the vendor directly if you mean a",
+				"  different address: $VENDOR_CMD app-server --listen <your-address>\"",
+				"\tfi",
+				"done"
+			],
+			"replace": ["# the operator may spell their own --listen beside ours"],
+			"gate": ["bash", "run.sh", "check-codex-app-server-launch"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:CODEX-APP-SERVER-REFUSES-SECOND-LISTEN]",
+			"signatureSource": "scripts/check-codex-app-server-launch.ts"
+		},
+		{
+			"claim": "CODEX-APP-SERVER-READS-PROC-HOLDER",
+			"title": "dropping the /proc cmdline scan makes every already-listening refusal say nobody could be found \u2014 the operator is told to stop a server the message cannot name, and the refusal reads the same whether the host was searched or not",
+			"subject": "scripts/codex-app-server-launch.sh",
+			"find": [
+				"\t\towner=\"\"",
+				"\t\tif [ -d /proc ]; then",
+				"\t\t\tfor cl in /proc/[0-9]*/cmdline; do",
+				"\t\t\t\t[ -r \"$cl\" ] || continue",
+				"\t\t\t\tif tr '\\0' ' ' < \"$cl\" 2>/dev/null | grep -qF \"$SOCK\"; then",
+				"\t\t\t\t\towner=\"${owner}    pid $(basename \"$(dirname \"$cl\")\"): $(tr '\\0' ' ' < \"$cl\")",
+				"\"",
+				"\t\t\t\tfi",
+				"\t\t\tdone",
+				"\t\tfi"
+			],
+			"replace": ["\t\towner=\"\""],
+			"gate": ["bash", "run.sh", "check-codex-app-server-launch"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:CODEX-APP-SERVER-READS-PROC-HOLDER]",
+			"signatureSource": "scripts/check-codex-app-server-launch.ts"
+		},
+		{
+			"claim": "CODEX-APP-SERVER-REFUSES-UNRECOGNISED-PROBE",
+			"title": "letting an unrecognised socket classification fall through to the exec turns the one reading nobody understands into a launch \u2014 every branch above it exists to decide whether this launch would clobber a running server",
+			"subject": "scripts/codex-app-server-launch.sh",
+			"find": [
+				"\t*)",
+				"\t\t# Hard Rule 15. Every branch above is a decision about whether this launch would",
+				"\t\t# CLOBBER a running server, so an unrecognised classification is the one case where",
+				"\t\t# proceeding is unsafe \u2014 and a probe that exits 0 while printing something nobody wrote",
+				"\t\t# would otherwise fall straight through to the exec.",
+				"\t\tfail \"codex-app-server-socket-probe-unrecognised: the socket classifier answered",
+				"  '$probe_status', which is not one of live/stale/indeterminate/absent. Refusing to launch on a",
+				"  reading nothing understands.\"",
+				"\t\t;;"
+			],
+			"replace": ["\tunreachable-classification)", "\t\t:", "\t\t;;"],
+			"gate": ["bash", "run.sh", "check-codex-app-server-launch"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:CODEX-APP-SERVER-REFUSES-UNRECOGNISED-PROBE]",
+			"signatureSource": "scripts/check-codex-app-server-launch.ts"
+		},
+		{
+			"claim": "CODEX-APP-SERVER-REFUSES-RELATIVE-SOCKET",
+			"title": "accepting a relative resolved address makes the launcher create a directory under whatever cwd it was typed in and bind a socket whose meaning differs per process \u2014 the bridge that looks for it is the app-server's MCP child with its own working directory, so the server and its finder end up at two different files",
+			"subject": "scripts/codex-app-server-launch.sh",
+			"find": [
+				"case \"$SOCK\" in",
+				"\t/*) ;;",
+				"\t*) fail \"codex-app-server-socket-path-not-absolute: the resolver returned",
+				"  '$SOCK'",
+				"  A relative control-socket address resolves to a different file for every process that reads it,",
+				"  and the bridge that looks for this socket runs with its own working directory. Set CODEX_HOME to",
+				"  an absolute path.\" ;;",
+				"esac"
+			],
+			"replace": ["# any address the resolver returns is good enough to create and bind"],
+			"gate": ["bash", "run.sh", "check-codex-app-server-launch"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:CODEX-APP-SERVER-REFUSES-RELATIVE-SOCKET]",
+			"signatureSource": "scripts/check-codex-app-server-launch.ts"
+		},
+		{
+			"claim": "CODEX-APP-SERVER-REFUSES-CONTROL-CHAR-SOCKET",
+			"title": "accepting a control-character-bearing address creates and binds a path no operator can name back \u2014 the address appears in receipts, refusals and /proc scans as a broken line, and this is the only surface that would bring it into existence",
+			"subject": "scripts/codex-app-server-launch.sh",
+			"find": [
+				"case \"$SOCK\" in",
+				"\t*[[:cntrl:]]*) fail \"codex-app-server-socket-path-untrusted: the resolved control-socket address",
+				"  carries a control character (CODEX_HOME almost certainly does). Refusing to create or bind it.\" ;;",
+				"esac"
+			],
+			"replace": ["# control characters in an address are somebody else's problem"],
+			"gate": ["bash", "run.sh", "check-codex-app-server-launch"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:CODEX-APP-SERVER-REFUSES-CONTROL-CHAR-SOCKET]",
+			"signatureSource": "scripts/check-codex-app-server-launch.ts"
+		}
+	]
+}

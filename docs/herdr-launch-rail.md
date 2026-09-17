@@ -209,3 +209,48 @@ tab 좌표는 **그것을 만든 응답**에서 온다(`agent start`의 echo가 
 **`--approve`는 픽스처 전용이다.** 게이트는 자기 샌드박스의 오퍼레이터이므로 그 한 번의 실행을 스스로 승인할 수 있다. 프로덕션 argv에는 절대 들어가지 않는다 — `project-trust-handler.ts`가 "에이전트는 스스로 신뢰를 승격할 수 없다"를 의도된 보안 비대칭으로 적어 두었고, 런처가 오퍼레이터 대신 승인하면 그 판단을 조용히 가져가는 것이 된다. `[측정]` `--approve`는 `trust.json`을 만들지 않는다.
 
 **C2b는 착지했다.** CI job은 `scripts/fixtures/herdr-supply.json`이 소유하는 정확한 published asset을 `scripts/install-herdr-ci.sh`로 내려받아 sha256 검증한 뒤 `check:full` 전에 PATH에만 노출하고, `ENTWURF_REQUIRE_HERDR=1`으로 부재를 FAIL로 만든다. 로컬에서는 여전히 optional rail의 named SKIP이다. 구조적 제약 하나는 남는다: **스스로 SKIP하는 게이트는 뮤턴트를 실을 수 없다** — SKIP은 exit 0이고, herdr 없는 호스트에서는 모든 뮤턴트가 SURVIVED로 읽힌다. 뮤턴트 lane은 CI admission이 필요한 환경에서만 붙인다.
+
+## 14. LIVE 관측 — 첫 턴, 그리고 그 변동성 `[측정 oracle 2026-09-18 01:48~02:14]`
+
+이 레일의 콜백 왕복은 LIVE이고(§12), LIVE 다섯 런이 **평균이 아니라 분류표**로 남았다. 같은 코드에서
+결과가 갈릴 때 평균은 사실을 지우고, 분류는 다음 측정을 가리킨다.
+
+| run | 자식 결과 | 자식 MCP연결 → 첫 프롬프트 | 진단 |
+|---|---|---|---|
+| 1 | — | — | `herdr-agent-start-failed [herdr: timeout]`. **모델 거절이 아니다** — 아래 결함 1 |
+| 2 `sCzzE0` | **콜백 도착** | **195 ms** | 자식이 `entwurf_peers` → `entwurf_v2` 둘 다 성공. 수용 영수증 |
+| 3 `e3aQHQ` | 침묵 | 171 ms | 도구 호출 0 |
+| 4 `7yn2Xu` | 침묵 | 132 ms | 180초를 더 기다려도 같음 |
+| 5 `5p7T9o` | 침묵 | 106 ms | `agent_status: idle`, `interactive_ready: true`, 터미널 제목 `✳ Entwurf callback with correlation tag` |
+
+**죽은 가설 둘**(측정으로 죽었다): "프롬프트가 도착하지 않았다" — 자식은 매 런 `SessionStart` 뒤 ~300 ms에
+`UserPromptSubmit`을 entwurf 자신의 hook 저널에 찍는다. "아직 생각 중이었다" — `agent_status: idle`, 턴이 끝나 있다.
+
+**남은 선두 가설**: 첫 턴이 **entwurf-bridge 도구 목록이 도달하기 전에 구성된다**. 195 ms만 통하고
+106/132/171 ms가 통하지 않은 순서와 일관되지만 **n=4이므로 상관이고 증명이 아니다** — omp가 `--entwurf-bootstrap`
+페이로드를 갖게 된 것과 같은 축의 경주다(`fresh-call-composition.ts`, "WHY OMP ALONE CARRIES NO PROMPT").
+
+**다음 측정은 값싸고 결정적이며 아직 없다**: `herdr agent prompt <TARGET> <TEXT>`가 별도 verb로 존재한다
+(측정: `agent prompt --help`). `agent start`를 프롬프트 없이 띄워 `interactive_ready`를 받은 뒤 `agent prompt`로
+첫 턴을 주면 경주 자체가 사라진다. 그것이 통하면 도구 attestation 재설계는 필요 없다.
+
+### 이 레일에서만 드러난 결함 셋 `[전부 수리됨, f7f9d8c]`
+
+1. **`agent start`에 `--timeout`을 넘기지 않았다.** herdr는 자기 기본 30초로 포기하고 우리 프로세스 바운드는
+   300초에 앉아 있었으므로, 콜드 스타트 중인 **살아 있는** 형제가 회수되지 않은 pane과 함께
+   `herdr-agent-start-failed [herdr: timeout]`으로 돌아왔다. 이제 명시적 240초이고 우리 300초 kill보다
+   **낮다**: 둘이 경주하면 herdr가 져야 하고, 그래야 이름 붙은 답이 "no exit status"로 바뀌지 않는다
+   (`HFC-START-READY-BOUND`). **날것 설치 PC는 정확히 이 콜드 스타트 경우다.**
+2. **셀이 자식을 호출자의 시계로 판정했다.** 같은 코드 두 런의 차이가 오직 호출자 launch 시간(56s vs 37s)이었고,
+   느린 쪽만 자식에게 충분한 머리시간을 주었다. 자식은 이제 자기 시계로 바운드된다.
+3. **오라클이 우리 프롬프트와 모순됐다.** 자식의 첫 도구 호출이 `entwurf_v2`이기를 요구했는데, 프레이밍은
+   읽기 전용 확인을 **권유**한다 — Sonnet 자식이 그 권유를 받아들이자 게이트가 우리가 부탁한 행동을
+   실패로 읽었다. 이제 읽기 전용 확인을 허용하고, 주장의 대상이던 것만 금지한다.
+
+### 증거 표면 — 자식 transcript는 없다 `[측정 2026-09-18]`
+
+이 스모크의 **모든** claude 세션(호출자·자식, 행동한 것·침묵한 것)이 실HOME `~/.claude/projects/`에도, 격리
+XDG 루트 어디에도 없다 — **도구를 두 번 성공시킨 자식조차**. HOME은 이 런타임들에게 실제값이므로 격리
+부작용이 아니다. 따라서 이 레일의 증거 표면은 **herdr agent status + entwurf 자신의 hook 저널 둘뿐**이고,
+`ab5c860` 이후 LIVE 셀은 매 런 그 둘을 receipts에 적는다. 자식이 무엇을 생각했는지 묻는 가설은 이 레일에서
+검증할 수 없다 — 물을 수 있는 것은 자식이 무엇을 **했는지**다.

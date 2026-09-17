@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
 # smoke-codex-config-state — hermetic install/doctor/inverse contract for the
-# two Codex config atoms (codex-mcp-config.py + codex-statusline-config.py).
+# three Codex config atoms (codex-mcp-config.py + codex-statusline-config.py +
+# codex-terminal-title-config.py).
 # No Codex process, no model turn: the vendor's config.toml surface only.
 set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 MCP="$REPO_DIR/scripts/codex-mcp-config.py"
 SL="$REPO_DIR/scripts/codex-statusline-config.py"
+TT="$REPO_DIR/scripts/codex-terminal-title-config.py"
 pass=0
 ok() { printf '  ok    %s\n' "$1"; pass=$((pass + 1)); }
 die() { printf 'FAIL: %s\n' "$1" >&2; exit 1; }
@@ -39,6 +41,7 @@ mkdir -p "$CODEX_HOME" "$(dirname "$XDG_DATA_HOME")"
 CFG="$CODEX_HOME/config.toml"
 MCP_STATE="$XDG_DATA_HOME/entwurf/codex-mcp/install-state.json"
 SL_STATE="$XDG_DATA_HOME/entwurf/codex-statusline/install-state.json"
+TT_STATE="$XDG_DATA_HOME/entwurf/codex-terminal-title/install-state.json"
 
 seed_config() { # the operator's hand-edited file: quoted header keys, nested
   # tables, an unrelated MCP server, and NO entwurf atom content.
@@ -464,6 +467,189 @@ sed -i 's/^status_line = .*/status_line = [\n  "weather",\n  "thread-title",\n]/
 refuses "restructured list refuses blind take-back" "changed since install" python3 "$SL" uninstall "$SL_STATE"
 rm -f "$SL_STATE"
 
+
+###############################################################################
+# Atom 3 — [tui].terminal_title includes thread-id  (#95 lane B caller seat)
+#
+# Same writer shape as atom 2 and a DIFFERENT contract in two places, both of
+# which have a wrong answer that still parses: the seeded list must LEAD with
+# `activity` (the herdr Codex detector keys on the spinner/action-required
+# prefix), and an existing operator list is APPENDED to, never prepended — a
+# prepend would put thread-id ahead of an activity the operator already
+# configured. The append position is the third: a trailing comma, a trailing
+# comment or a `]` inside a string item each send a naive `rfind("]")` at the
+# wrong bytes, and one of those emits `,,`.
+###############################################################################
+
+# seeded from nothing: the herdr-safe order, verbatim
+rm -f "$CFG" "$TT_STATE"
+python3 "$TT" install "$CFG" "$TT_STATE" >"$SB/out"
+want "[QK:CODEX-TT-SEED-ACTIVITY-FIRST] seeded terminal_title leads with activity, ends with thread-id" \
+  "grep -q '^created-new ' '$SB/out' && grep -q '^terminal_title = \[\"activity\", \"project-name\", \"thread-id\"\]$' '$CFG'"
+python3 "$TT" doctor-static "$CFG" "$TT_STATE" >"$SB/out"
+want "seeded terminal-title doctor is green and owned" "grep -q '^thread-id-present owned$' '$SB/out'"
+python3 "$TT" uninstall "$TT_STATE" >"$SB/out"
+want "seeded file is removed whole by the inverse" "[ ! -e '$CFG' ] && [ ! -e '$TT_STATE' ]"
+
+# an operator list is APPENDED to — the direction that is opposite to atom 2
+seed_config
+sed -i '/^theme = /i terminal_title = ["activity", "project-name"]' "$CFG"
+cp "$CFG" "$SB/tt-seed.toml"
+python3 "$TT" install "$CFG" "$TT_STATE" >"$SB/out"
+want "[QK:CODEX-TT-APPENDS-AT-END] thread-id is appended LAST, operator order untouched" \
+  "grep -q '^merged-item ' '$SB/out' && grep -q '^terminal_title = \[\"activity\", \"project-name\", \"thread-id\"\]$' '$CFG'"
+toml_ok "$CFG"; ok "merged terminal_title still parses"
+MT1="$(stat -c %Y "$CFG")"; sleep 1.1
+python3 "$TT" install "$CFG" "$TT_STATE" >/dev/null
+want "terminal-title reinstall writes nothing" "[ '$MT1' = '$(stat -c %Y "$CFG")' ]"
+python3 "$TT" uninstall "$TT_STATE" >/dev/null
+cmp -s "$SB/tt-seed.toml" "$CFG" && ok "appended item restored byte-exact" || die "terminal-title inverse mismatch"
+
+# an activity-TERMINATED operator list: the item still lands after it
+seed_config
+sed -i '/^theme = /i terminal_title = ["project-name", "activity"]' "$CFG"
+python3 "$TT" install "$CFG" "$TT_STATE" >/dev/null
+want "an activity-terminated list keeps activity in place and appends after it" \
+  "grep -q '^terminal_title = \[\"project-name\", \"activity\", \"thread-id\"\]$' '$CFG'"
+python3 "$TT" uninstall "$TT_STATE" >/dev/null
+
+# multi-line array with a TRAILING COMMA — the shape a naive append breaks
+seed_config
+python3 - "$CFG" <<'PY'
+import sys
+p = sys.argv[1]
+t = open(p).read()
+t = t.replace('theme = "zenburn"',
+              'terminal_title = [\n  "activity",  # operator note\n  "project-name",\n]\ntheme = "zenburn"')
+open(p, 'w').write(t)
+PY
+cp "$CFG" "$SB/tt-multiline.toml"
+python3 "$TT" install "$CFG" "$TT_STATE" >/dev/null
+toml_ok "$CFG"
+want "[QK:CODEX-TT-TRAILING-COMMA] a trailing-comma array is appended to without emitting a double comma" \
+  "! grep -q ',[[:space:]]*,' '$CFG' && python3 -c \"import tomllib,sys; d=tomllib.load(open(sys.argv[1],'rb')); assert d['tui']['terminal_title']==['activity','project-name','thread-id'], d\" '$CFG'"
+python3 "$TT" uninstall "$TT_STATE" >/dev/null
+cmp -s "$SB/tt-multiline.toml" "$CFG" && ok "trailing-comma array restored byte-exact" || die "trailing-comma inverse mismatch"
+
+# a trailing COMMENT that itself contains `]` — rfind("]") would splice into it
+seed_config
+sed -i '/^theme = /i terminal_title = ["activity"]  # keep ] this' "$CFG"
+cp "$CFG" "$SB/tt-comment.toml"
+python3 "$TT" install "$CFG" "$TT_STATE" >/dev/null
+want "[QK:CODEX-TT-COMMENT-NOT-SPLICED] the item lands inside the array and the operator's comment survives" \
+  "grep -q '^terminal_title = \[\"activity\", \"thread-id\"\]  # keep \] this$' '$CFG'"
+python3 "$TT" uninstall "$TT_STATE" >/dev/null
+cmp -s "$SB/tt-comment.toml" "$CFG" && ok "commented line restored byte-exact" || die "comment inverse mismatch"
+
+# a `]` inside a string item, and the empty list
+seed_config
+sed -i '/^theme = /i terminal_title = ["a]b", "activity"]' "$CFG"
+python3 "$TT" install "$CFG" "$TT_STATE" >/dev/null
+want "a ] inside a string item does not become the append point" \
+  "grep -q '^terminal_title = \[\"a\]b\", \"activity\", \"thread-id\"\]$' '$CFG'"
+python3 "$TT" uninstall "$TT_STATE" >/dev/null
+seed_config
+sed -i '/^theme = /i terminal_title = []' "$CFG"
+cp "$CFG" "$SB/tt-empty.toml"
+python3 "$TT" install "$CFG" "$TT_STATE" >/dev/null
+want "empty terminal_title becomes exactly [\"thread-id\"]" "grep -q '^terminal_title = \[\"thread-id\"\]$' '$CFG'"
+python3 "$TT" uninstall "$TT_STATE" >/dev/null
+cmp -s "$SB/tt-empty.toml" "$CFG" && ok "empty terminal_title restored byte-exact" || die "empty terminal_title inverse mismatch"
+
+# an operator-authored item is UNOWNED, and nothing is written over it
+seed_config
+sed -i '/^theme = /i terminal_title = ["activity", "thread-id"]' "$CFG"
+cp "$CFG" "$SB/tt-operator.toml"
+rm -f "$TT_STATE"
+MT1="$(stat -c %Y "$CFG")"; sleep 1.1
+python3 "$TT" install "$CFG" "$TT_STATE" >"$SB/out"
+want "[QK:CODEX-TT-OPERATOR-ITEM-UNOWNED] an operator-authored thread-id writes NO receipt and no config byte" \
+  "grep -q '^already-present ' '$SB/out' && [ ! -e '$TT_STATE' ] && [ '$MT1' = '$(stat -c %Y "$CFG")' ]"
+python3 "$TT" doctor-static "$CFG" "$TT_STATE" >"$SB/out"
+want "the doctor reports it UNOWNED — we claim no edit we did not make" \
+  "grep -q '^thread-id-present unowned$' '$SB/out'"
+python3 "$TT" uninstall "$TT_STATE" >"$SB/out" 2>&1 \
+  && die "uninstall claimed to take back an operator's own item"
+grep -q 'nothing to undo' "$SB/out" || die "unowned uninstall refusal is unnamed: $(cat "$SB/out")"
+cmp -s "$SB/tt-operator.toml" "$CFG" && ok "the refused inverse left the operator's config byte-identical" \
+  || die "unowned uninstall mutated the operator's config"
+
+# ...and that is what keeps the INVERSE honest across a hand edit. With a receipt parked over an
+# operator's item, a reinstall after they removed it splices ours in while the stale receipt still
+# says it was already there — and the inverse then reports "nothing to take back" and leaves our
+# bytes behind for good. Writing nothing above makes that second install an ordinary merged-item.
+seed_config
+sed -i '/^theme = /i terminal_title = ["activity"]' "$CFG"
+cp "$CFG" "$SB/tt-inverse.toml"
+rm -f "$TT_STATE"
+python3 "$TT" install "$CFG" "$TT_STATE" >/dev/null
+sed -i 's/, "thread-id"\]/]/' "$CFG"          # the operator takes our item back by hand
+python3 "$TT" install "$CFG" "$TT_STATE" >"$SB/out"
+want "a reinstall after a hand removal records what it ACTUALLY did" \
+  "grep -q '^merged-item ' '$SB/out' && grep -q '\"detectMode\": \"merged-item\"' '$TT_STATE'"
+python3 "$TT" uninstall "$TT_STATE" >/dev/null
+cmp -s "$SB/tt-inverse.toml" "$CFG" && ok "the inverse takes our re-added item back, leaving nothing behind" \
+  || { printf 'left behind:\n%s\n' "$(cat "$CFG")"; die "reinstall inverse left our item in the operator's config"; }
+rm -f "$TT_STATE"
+
+# the doctor's subject is the REQUIRED caller-seat axis, receipt or no receipt
+seed_config
+sed -i '/^theme = /i terminal_title = ["activity", "thread-id"]' "$CFG"
+rm -f "$TT_STATE"
+python3 "$TT" doctor-static "$CFG" "$TT_STATE" >"$SB/out"
+want "unowned thread-id is green (state-independent)" "grep -q '^thread-id-present unowned$' '$SB/out'"
+sed -i 's/, "thread-id"\]/]/' "$CFG"
+python3 "$TT" doctor-static "$CFG" "$TT_STATE" >"$SB/out" 2>&1 \
+  && die "[QK:CODEX-TT-DOCTOR-REQUIRES-SEAT-AXIS] unowned config WITHOUT thread-id reported green: $(cat "$SB/out")"
+want "[QK:CODEX-TT-DOCTOR-REQUIRES-SEAT-AXIS] a missing caller-seat axis is RED even unowned" \
+  "grep -q '^thread-id-absent unowned$' '$SB/out'"
+python3 "$TT" install "$CFG" "$TT_STATE" >/dev/null
+sed -i 's/, "thread-id"\]/]/' "$CFG"
+python3 "$TT" doctor-static "$CFG" "$TT_STATE" >"$SB/out" 2>&1 || true
+want "our receipt over a vanished item reports drift, not green" "grep -q '^thread-id-absent owned drift$' '$SB/out'"
+rm -f "$TT_STATE"
+
+# the two [tui] atoms are independent: neither sees the other's key
+seed_config
+python3 "$SL" install "$CFG" "$SL_STATE" >/dev/null
+python3 "$TT" install "$CFG" "$TT_STATE" >/dev/null
+want "[QK:CODEX-TT-ATOM-INDEPENDENCE] both [tui] atoms live side by side" \
+  "python3 -c \"import tomllib,sys; d=tomllib.load(open(sys.argv[1],'rb'))['tui']; assert d['status_line']==['thread-title','model-with-reasoning','current-dir'], d; assert d['terminal_title']==['activity','project-name','thread-id'], d\" '$CFG'"
+python3 "$TT" uninstall "$TT_STATE" >/dev/null
+want "[QK:CODEX-TT-ATOM-INDEPENDENCE] taking back terminal_title leaves status_line exactly as it was" \
+  "grep -q '^status_line = \[\"thread-title\", \"model-with-reasoning\", \"current-dir\"\]$' '$CFG' && ! grep -q 'terminal_title' '$CFG'"
+python3 "$SL" uninstall "$SL_STATE" >/dev/null
+
+# refusals — symlink, malformed, contrary value by name, foreign/retargeted state
+seed_config
+ln -sf "$SB/foreign.toml" "$CFG"
+refuses "symlink config refused (terminal-title)" "symlink" python3 "$TT" install "$CFG" "$TT_STATE"
+rm -f "$CFG"
+printf 'garbage [[[\n' > "$CFG"
+refuses "malformed TOML refused (terminal-title)" "not valid TOML" python3 "$TT" install "$CFG" "$TT_STATE"
+seed_config
+sed -i '/^theme = /i terminal_title = "thread-id"' "$CFG"
+refuses "non-array terminal_title refused BY NAME" "terminal_title.*explicitly" python3 "$TT" install "$CFG" "$TT_STATE"
+want "terminal-title refusals wrote no state" "[ ! -e '$TT_STATE' ]"
+seed_config
+python3 "$SL" install "$CFG" "$SL_STATE" >/dev/null
+cp "$SL_STATE" "$TT_STATE"                               # atom 2's receipt, on our path
+refuses "foreign-atom state refused (terminal-title)" "belongs to atom" python3 "$TT" install "$CFG" "$TT_STATE"
+python3 "$SL" uninstall "$SL_STATE" >/dev/null
+rm -f "$TT_STATE"
+seed_config
+python3 "$TT" install "$CFG" "$TT_STATE" >/dev/null
+sed -i "s|$(json_field "$TT_STATE" managedConfigPath)|$SB/elsewhere.toml|" "$TT_STATE"
+refuses "retargeted state refused (terminal-title)" "refusing to retarget" python3 "$TT" install "$CFG" "$TT_STATE"
+rm -f "$TT_STATE"
+
+# operator restructures the list after install: the take-back refuses, by name
+seed_config
+python3 "$TT" install "$CFG" "$TT_STATE" >/dev/null
+sed -i 's/^terminal_title = .*/terminal_title = [\n  "weather",\n  "thread-id",\n]/' "$CFG"
+refuses "restructured terminal_title refuses blind take-back" "changed since install" python3 "$TT" uninstall "$TT_STATE"
+rm -f "$TT_STATE"
+
 ###############################################################################
 # Unrelated operator config survives the whole cycle, byte for byte
 ###############################################################################
@@ -471,6 +657,7 @@ seed_config
 cp "$CFG" "$SB/final-seed.toml"
 python3 "$MCP" install "$CFG" entwurf-bridge "$MCP_STATE" >/dev/null
 python3 "$SL" install "$CFG" "$SL_STATE" >/dev/null
+python3 "$TT" install "$CFG" "$TT_STATE" >/dev/null
 toml_ok "$CFG"; ok "fully installed config parses as TOML"
 python3 - "$CFG" <<'PY'
 import tomllib, sys
@@ -494,17 +681,19 @@ assert d["mcp_servers"]["entwurf-bridge"] == {
     "env": {"ENTWURF_BRIDGE_NATIVE_HOST": "codex"},
 }, d
 assert d["tui"]["status_line"] == ["thread-title", "model-with-reasoning", "current-dir"], d
+assert d["tui"]["terminal_title"] == ["activity", "project-name", "thread-id"], d
 assert d["tui"]["theme"] == "zenburn" and d["tui"]["model_availability_nux"] == {"gpt-5.5": 4}, d
 assert d["plugins"]["github@openai-curated"] == {"enabled": False}, d
 PY
-ok "unrelated tables intact and both atoms semantically live"
+ok "unrelated tables intact and all three atoms semantically live"
 # the vendor writes trust state back between install and uninstall (M1)
 printf '[hooks.state."~/c.toml:stop:0:0"]\ntrusted_hash = "sha256:def"\n' >> "$CFG"
 python3 "$MCP" uninstall "$MCP_STATE" >/dev/null
 python3 "$SL" uninstall "$SL_STATE" >/dev/null
+python3 "$TT" uninstall "$TT_STATE" >/dev/null
 printf '[hooks.state."~/c.toml:stop:0:0"]\ntrusted_hash = "sha256:def"\n' >> "$SB/final-seed.toml"
 cmp -s "$SB/final-seed.toml" "$CFG" && ok "full cycle leaves only vendor-added bytes (unrelated config survives)" || die "final byte mismatch"
-want "both states cleared" "[ ! -e '$MCP_STATE' ] && [ ! -e '$SL_STATE' ]"
+want "all three states cleared" "[ ! -e '$MCP_STATE' ] && [ ! -e '$SL_STATE' ] && [ ! -e '$TT_STATE' ]"
 
 REPO_AFTER="$(cd "$REPO_DIR" && git status --porcelain)"
 [ "$REPO_BEFORE" = "$REPO_AFTER" ] || die "smoke changed the checkout"

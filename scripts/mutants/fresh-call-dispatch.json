@@ -55,7 +55,7 @@
 			"title": "the Codex preflight moves after the composition, so a window opens before the capability question is asked",
 			"subject": "pi-extensions/lib/fresh-call-dispatch.ts",
 			"find": [
-				"\tconst missing = request.backend === \"codex\" ? await codexFreshPreflight(env) : null;\n\tif (missing) return { rail: \"tmux\", result: { ok: false, reason: missing } };"
+				"\tconst targetMissing = request.backend === \"codex\" ? await codexFreshPreflight(env) : null;\n\tconst callerMissing =\n\t\ttargetMissing === null && request.callerNativeSessionId !== undefined && request.placement === undefined\n\t\t\t? codexCallerFreshPreflight(env)\n\t\t\t: null;\n\tconst missing = targetMissing ?? callerMissing;\n\tif (missing) return { rail: \"tmux\", result: { ok: false, reason: missing } };"
 			],
 			"replace": [""],
 			"gate": ["bash", "run.sh", "check-fresh-call-dispatch"],
@@ -79,7 +79,7 @@
 			"title": "the MCP surface goes back to calling a rail directly, so the two public surfaces can drift on rail choice",
 			"subject": "mcp/entwurf-bridge/src/index.ts",
 			"find": [
-				"\t\t\tconst dispatched = await dispatchFreshCall({ backend, model, task, cwd, placement, callerGardenId });"
+				"\t\t\tconst dispatched = await dispatchFreshCall({\n\t\t\t\tbackend,\n\t\t\t\tmodel,\n\t\t\t\ttask,\n\t\t\t\tcwd,\n\t\t\t\tplacement,\n\t\t\t\tcallerGardenId,\n\t\t\t\tcallerNativeSessionId,\n\t\t\t\tcallerCwd,\n\t\t\t});"
 			],
 			"replace": [
 				"\t\t\tconst dispatched = { rail: \"tmux\" as const, result: { ok: false, reason: \"caller-identity-unavailable\" as const } };\n\t\t\tvoid selectFreshCallRail;"

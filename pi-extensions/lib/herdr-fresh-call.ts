@@ -697,11 +697,21 @@ export async function herdrFreshCall(
 		prompt: encoded.argv,
 		bootstrapPayload: buildOmpBootstrapPayload({ callerGardenId, nonce, task }),
 	};
-	const backendArgs = composeBackendArgs(backend, composition, model, () => {
-		// Unreachable: codex is not in the pilot set and was refused above. It throws rather than
-		// returning a plausible path, so a future widening cannot silently inherit a guess.
-		throw new Error("herdr-fresh-call: codex is not a pilot backend on this rail");
-	});
+	const backendArgs = composeBackendArgs(
+		backend,
+		composition,
+		model,
+		() => {
+			// Unreachable: codex is not in the pilot set and was refused above. It throws rather than
+			// returning a plausible path, so a future widening cannot silently inherit a guess.
+			throw new Error("herdr-fresh-call: codex is not a pilot backend on this rail");
+		},
+		() => {
+			// Unreachable for the same reason, and refusing for the same reason: codex's `-C` names
+			// where a REMOTE thread opens, and this rail has no app-server to name it to.
+			throw new Error("herdr-fresh-call: codex is not a pilot backend on this rail");
+		},
+	);
 	// The server checks EVERY argument, not just the prompt, so we check every argument too —
 	// while it is still free to refuse.
 	if (backendArgs.some(containsControlChar)) return { ok: false, reason: "herdr-argv-control-character" };

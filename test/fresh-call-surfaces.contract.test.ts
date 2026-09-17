@@ -98,7 +98,11 @@ describe("MCP surface — real bridge boot → runtime tools/list", () => {
 		const mcpSrc = fs.readFileSync(path.join(REPO_DIR, "mcp/entwurf-bridge/src/index.ts"), "utf8");
 		// The MCP surface passes ONE object to the composition ROOT (#116 C3): rail choice, Codex
 		// preflight ordering and rendering live there, so this surface and pi's own cannot drift.
-		expect(mcpSrc).toMatch(/dispatchFreshCall\(\{ backend, model, task, cwd, placement, callerGardenId \}\)/);
+		// Two of its fields are surface-supplied codex caller facts (#95 lane B/C) that only this
+		// surface can supply, and they ride the same object rather than a second call.
+		expect(mcpSrc).toMatch(
+			/dispatchFreshCall\(\{\s*backend,\s*model,\s*task,\s*cwd,\s*placement,\s*callerGardenId,\s*callerNativeSessionId,\s*callerCwd,\s*\}\)/,
+		);
 	});
 
 	it("[QK:FRESHCALL-MODEL-PATTERN-HOST-VALID] every pattern the bridge emits on tools/list compiles under a Rust-regex-family engine — JS acceptance is not host acceptance", () => {
@@ -263,7 +267,10 @@ describe("one grammar, two surfaces", () => {
 				"secrets",
 				"Model is REQUIRED",
 				"entwurf_v2",
-				"exact existing `codex` home session",
+				// #95 D1 retired the fixed `codex` home, so the shared literal is no longer a
+				// room name. What both surfaces must still say is WHOSE session an omitted seat
+				// follows — the caller's, never the backend being opened.
+				"the CALLER",
 			]) {
 				expect(desc).toContain(literal);
 			}
@@ -289,7 +296,11 @@ describe("one grammar, two surfaces", () => {
 		const mcpSrc = fs.readFileSync(path.join(REPO_DIR, "mcp/entwurf-bridge/src/index.ts"), "utf8");
 		// The MCP surface passes ONE object to the composition ROOT (#116 C3): rail choice, Codex
 		// preflight ordering and rendering live there, so this surface and pi's own cannot drift.
-		expect(mcpSrc).toMatch(/dispatchFreshCall\(\{ backend, model, task, cwd, placement, callerGardenId \}\)/);
+		// Two of its fields are surface-supplied codex caller facts (#95 lane B/C) that only this
+		// surface can supply, and they ride the same object rather than a second call.
+		expect(mcpSrc).toMatch(
+			/dispatchFreshCall\(\{\s*backend,\s*model,\s*task,\s*cwd,\s*placement,\s*callerGardenId,\s*callerNativeSessionId,\s*callerCwd,\s*\}\)/,
+		);
 		const piSrc = fs.readFileSync(path.join(REPO_DIR, "pi-extensions/entwurf-control.ts"), "utf8");
 		expect(piSrc).toMatch(/cwd:\s*params\.cwd/);
 	});
@@ -315,17 +326,31 @@ describe("one grammar, two surfaces", () => {
 			expect(desc).toContain("EXISTING");
 			expect(desc).toContain("Nothing is ever created");
 			expect(desc).toContain("Independent of cwd");
-			expect(desc).toContain("Codex selects the exact existing `codex` home session");
 			expect(desc).toContain("expert seat override");
+			// The omitted-seat rule, stated the same way on both surfaces. It is deliberately
+			// about WHO CALLS rather than what is opened: #95 D1 retired the Codex-target home,
+			// and the asymmetry it left behind is exactly what a stale description would keep
+			// selling to a model.
+			expect(desc).toContain("follows the CALLER, never the backend being opened");
 		}
+		// The Codex caller-pane rule is on the MCP surface ONLY, and its absence from pi is a
+		// FACT rather than a gap: a pi session is never a codex citizen, so that branch cannot
+		// arise there. Asserting both halves keeps a future "parity" edit from selling pi a rule
+		// it can only fail.
+		expect(String(mcpPlacement?.description ?? "")).toContain("a Codex CALLER opens beside its own TUI pane");
+		expect(String(piPlacement?.description ?? "")).not.toContain("thread-id");
 		// Both runtime descriptions state the refusal, so a caller cannot read "seat" as "create".
 		for (const desc of [mcpFresh.description ?? "", piFresh.description]) {
 			expect(desc).toContain("placement.tmuxSession");
 			expect(desc).toContain("NOTHING is created");
+			// ...and neither may still advertise the retired room (#95 D1).
+			expect(desc).not.toContain("`codex` home");
 		}
 		// The pass-through halves stay structural asserts, same as the cwd parity above.
 		const mcpSeatSrc = fs.readFileSync(path.join(REPO_DIR, "mcp/entwurf-bridge/src/index.ts"), "utf8");
-		expect(mcpSeatSrc).toMatch(/dispatchFreshCall\(\{ backend, model, task, cwd, placement, callerGardenId \}\)/);
+		expect(mcpSeatSrc).toMatch(
+			/dispatchFreshCall\(\{\s*backend,\s*model,\s*task,\s*cwd,\s*placement,\s*callerGardenId,\s*callerNativeSessionId,\s*callerCwd,\s*\}\)/,
+		);
 		const piSeatSrc = fs.readFileSync(path.join(REPO_DIR, "pi-extensions/entwurf-control.ts"), "utf8");
 		expect(piSeatSrc).toMatch(/placement:\s*params\.placement/);
 		// The THIRD surface, for the same reason the backend set is held on all three: the skill
@@ -416,6 +441,47 @@ describe("one grammar, two surfaces", () => {
 			);
 		});
 	}
+
+	it("[QK:CODEX-CALLER-PREFLIGHT-SURFACE-WIRED] the CALLER-side capability question is asked in the shared dispatcher, gated on a codex caller with no explicit seat — a different axis from the target preflight beside it, and one the pi surface can never supply an input for", () => {
+		// Two facts, and they are separate on purpose. FIRST: the root runs the caller check, and
+		// only when the anchor will be consulted — a codex caller that named a placement never
+		// reads a pane title, so refusing it for a missing `thread-id` would refuse an unused
+		// capability. SECOND: it runs AFTER the target axis, because "entwurf cannot open a Codex
+		// sibling here at all" is the more fundamental repair.
+		const rootSrc = fs.readFileSync(path.join(REPO_DIR, "pi-extensions/lib/fresh-call-dispatch.ts"), "utf8");
+		expect(rootSrc).toContain(
+			"targetMissing === null && request.callerNativeSessionId !== undefined && request.placement === undefined\n\t\t\t? codexCallerFreshPreflight(env)",
+		);
+		expect(rootSrc).toContain("const missing = targetMissing ?? callerMissing;");
+		// The MCP surface is the only one that supplies the input the gate reads, because it is
+		// the only surface a codex caller reaches entwurf through.
+		const mcpSrc = fs.readFileSync(path.join(REPO_DIR, "mcp/entwurf-bridge/src/index.ts"), "utf8");
+		expect(mcpSrc).toContain("callerNativeSessionId = self.codexThreadId;");
+		// The pi surface is NOT missing a capability here: a pi session is never a codex caller,
+		// so there is no thread id to anchor and nothing for this check to be about. Asserting
+		// its ABSENCE is what keeps a future "parity" edit from adding a check pi can only fail.
+		const piSrc = fs.readFileSync(path.join(REPO_DIR, "pi-extensions/entwurf-control.ts"), "utf8");
+		expect(piSrc).not.toContain("codexCallerFreshPreflight");
+		expect(piSrc).not.toContain("callerNativeSessionId");
+	});
+
+	it("[QK:FRESHCALL-CALLER-CWD-SURFACE] the codex caller's RECORD cwd rides the MCP surface under the SAME condition as its thread id — one resolved sender, two facts, and neither read separately; the pi surface has neither, because a pi caller's own process directory IS its directory", () => {
+		// WHY the bridge is the only surface that can supply this: it runs as the MCP child of
+		// the operator-owned app-server, so `process.cwd()` there is the app-server's directory
+		// and an omitted cwd would open every sibling of every Codex caller in the app-server's
+		// repo (#95 lane C §1). The record is what says where that citizen actually is.
+		const mcpSrc = fs.readFileSync(path.join(REPO_DIR, "mcp/entwurf-bridge/src/index.ts"), "utf8");
+		expect(mcpSrc).toContain("callerCwd = self.codexThreadId === undefined ? undefined : self.envelope.cwd;");
+		// It is NOT a second identity axis: the envelope's cwd is only the record's directory
+		// when the reconciled sender is that codex citizen, so the guard is the thread id itself
+		// rather than a separate lookup, an env read or a `_meta.workspaces` inspection.
+		expect(mcpSrc).not.toMatch(/callerCwd\s*=\s*process\.cwd\(\)/);
+		expect(mcpSrc).not.toContain("_meta.workspaces");
+		// The pi surface stays without it for the same reason it stays without the anchor: a pi
+		// session is never a codex caller, and its own process directory is already its own.
+		const piSrc = fs.readFileSync(path.join(REPO_DIR, "pi-extensions/entwurf-control.ts"), "utf8");
+		expect(piSrc).not.toContain("callerCwd");
+	});
 
 	it("[QK:FRESHCALL-CODEX-PREMUTATION-MCP] the MCP surface carries Codex unchanged into the shared dispatcher, which answers a missing capability BEFORE placement — with no tmux in its environment the reason is still the capability's", async () => {
 		const { env, cleanup } = codexPreflightEnv();

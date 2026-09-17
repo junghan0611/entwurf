@@ -1628,12 +1628,14 @@ window you cannot see from in herdr. The sibling's FIRST action is a callback to
 envelope is its garden id — that is how you learn the address of a thing that did not exist a moment ago. This returns
 a LAUNCH receipt (the owner's coordinates plus that nonce) and nothing else: it does NOT mean the runtime started, the
 first turn ran, or the task was delivered. Those coordinates are a VIEW, never an address — a herdr pane id can change
-under a running sibling. Nothing polls; if the callback never arrives the pane is visible and readable directly. For EXISTING citizens use entwurf_v2 — this tool only creates, and entwurf_peers only reports. Model is REQUIRED and passed to the chosen runtime CLI (provider/model for pi, an id/alias for Claude Code, a name or pattern
+under a running sibling. Nothing polls; if the callback never arrives the pane is visible. For EXISTING citizens use entwurf_v2 — this tool only creates, and entwurf_peers only reports. Model is REQUIRED and passed to the chosen runtime CLI (provider/model for pi, an id/alias for Claude Code, a name or pattern
 for the rest). On tmux, copilot/omp/codex are refused BEFORE any window opens when their birth, MCP, receive or
 visible-identity units are absent, and codex also needs the operator-owned app-server socket entwurf never starts; in
 herdr those three are refused by name first. Optional cwd starts the sibling in ONE literal absolute existing
 directory; omitted/empty means your own directory on both rails, and '#' is refused on tmux only. Optional
-placement.tmuxSession is a TMUX-ONLY seat naming ONE EXISTING session; omitted, Codex targets the exact existing \`codex\` home session and others your own, a missing one is tmux-session-missing and NOTHING is created — in herdr the field is refused by name. Do not put secrets in the task — model and task argv are visible to same-user processes.`,
+placement.tmuxSession is a TMUX-ONLY seat naming ONE EXISTING session and ALWAYS wins; omitted, the seat
+follows the CALLER, and on this surface that is always your own session — a missing one is
+tmux-session-missing and NOTHING is created. In herdr the field is refused by name. Do not put secrets in the task — model and task argv are visible to same-user processes.`,
 		parameters: Type.Object({
 			backend: StringEnum(["pi", "claude-code", "copilot", "omp", "codex"], {
 				description:
@@ -1668,7 +1670,7 @@ placement.tmuxSession is a TMUX-ONLY seat naming ONE EXISTING session; omitted, 
 					},
 					{
 						description:
-							"Optional expert seat override, TMUX ONLY: open the sibling in ONE EXISTING tmux session of this agent's own server. When omitted, Codex selects the exact existing `codex` home session; other backends use the caller's session. Nothing is ever created. Inside herdr this field is refused by name — placement there belongs to herdr, and a tmux session name would silently place the sibling somewhere else. Independent of cwd; neither is inferred from the other. The receipt reports the selected name, its source, and resolved target session id.",
+							"Optional expert seat override, TMUX ONLY: open the sibling in ONE EXISTING tmux session of this agent's own server, and it always wins. When omitted the seat follows the CALLER, never the backend being opened: every caller on THIS surface opens in its own session (a pi session is never a Codex citizen, so the Codex caller-pane rule the MCP bridge carries cannot arise here). Nothing is ever created. Inside herdr this field is refused by name — placement there belongs to herdr, and a tmux session name would silently place the sibling somewhere else. Independent of cwd; neither is inferred from the other. The receipt reports the selected name, its source, and resolved target session id.",
 					},
 				),
 			),

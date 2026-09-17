@@ -133,15 +133,19 @@ Use the owned surfaces rather than editing `~/.codex/config.toml`:
 entwurf install-codex-birth
 entwurf install-codex-mcp
 entwurf install-codex-statusline
+entwurf install-codex-terminal-title
 
 entwurf doctor-codex-birth
 entwurf doctor-codex-mcp
 entwurf doctor-codex-statusline
+entwurf doctor-codex-terminal-title
 ```
 
 The birth unit owns a `SessionStart` declaration in `$CODEX_HOME/hooks.json`, which the vendor
-runs only after the operator trusts it once in a visible Codex; the other two units own
-only `[mcp_servers.entwurf-bridge]` and the `thread-title` status-line member. The MCP
+runs only after the operator trusts it once in a visible Codex; the other three units own
+only `[mcp_servers.entwurf-bridge]`, the `thread-title` status-line member, and the `thread-id`
+terminal-title member (that last one is the CALLER seat input: without it a Codex citizen opening
+a sibling is refused with `codex-caller-title-missing`). The MCP
 entry carries `ENTWURF_BRIDGE_NATIVE_HOST=codex`, which tells the bridge to require and
 reconcile Codex request `_meta`. Do not add the anonymous hatch.
 
@@ -149,15 +153,21 @@ Native receive and visible fresh require the operator-owned default app-server. 
 does not start or supervise it:
 
 ```bash
-CODEX_HOME="${CODEX_HOME:-$HOME/.codex}"
-codex app-server --listen "unix://$CODEX_HOME/app-server-control/app-server-control.sock"
+entwurf codex-app-server
 ```
+
+`entwurf codex-app-server` owns the spelling of that one vendor command — it `exec`s
+`codex app-server --listen unix://<default socket>` in the terminal it was typed in, resolving
+the address through the same leaf delivery reads. It never supervises, restarts or daemonizes
+what it becomes.
 
 Birth occurs on the first turn, not window open. It mints
 `record.nativeSessionId = threadId` and sets the visible thread title to the garden id.
 `entwurf_v2` probes the loaded-thread list and sends once through `codex queue`; it never
-retries. `entwurf_fresh_call` accepts `backend: "codex"` after all three owned units and
-the default socket pass preflight. Codex remains outside ACP and has no resume surface.
+retries. `entwurf_fresh_call` accepts `backend: "codex"` after the birth, MCP and status-line units
+and the default socket pass preflight; the fourth unit, `install-codex-terminal-title`, is what a
+Codex CALLER needs to open a sibling at all (without it the caller has no resolvable seat and the
+call is refused as `codex-caller-title-missing`). Codex remains outside ACP and has no resume surface.
 
 #### Antigravity CLI (`agy`)
 

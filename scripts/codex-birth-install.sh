@@ -3,7 +3,7 @@
 #
 # Three paths, all the operator's own:
 #
-#   $CODEX_HOME/hooks.json                          ONE complete file, ours or absent
+#   $CODEX_HOME/hooks.json                          ONE SessionStart group inside a SHARED file
 #   ${XDG_DATA_HOME:-~/.local/share}/entwurf/codex-birth/helper/
 #                                                   launcher + the TS payload closure
 #   .../entwurf/codex-birth/install-state.json      the digest inventory that licenses removal
@@ -22,6 +22,16 @@
 # `[hooks.state]` (and where entwurf's two other user atoms live). Trust is the operator's to
 # give; forging it in a file we already own would be the one shortcut that turns a security
 # prompt into a silent install.
+#
+# WHAT THIS UNIT OWNS IN hooks.json, AND WHAT IT DOES NOT (#117). Until 0.22.0 this unit owned
+# that file WHOLE: it refused any file it had not written and recorded a whole-file sha256. That
+# was true only while entwurf was the only thing declaring a Codex hook. Herdr's official Codex
+# integration appends its own `SessionStart` group and the vendor keeps running both, because
+# `[source]` discovery.rs:664-665 keys trust by `<path>:<event>:<group_idx>:<handler_idx>` — trust
+# is DECLARATION-scoped and always was. So this unit now owns exactly one group holding exactly
+# one handler whose command is our quoted launcher path. Every other group is FOREIGN: reported,
+# never certified, never rewritten. Adding and removing our group is a TEXT SPLICE
+# (pi-extensions/lib/codex-declaration.js), so a neighbour's bytes come through untouched.
 #
 # THE TRUST IDENTITY IS THE LAUNCHER PATH. `[source]` discovery.rs:775-792 hashes a
 # normalized identity of (event name + matcher group + the single handler) — so `type`, the
@@ -79,6 +89,9 @@ case "$NODE_BIN" in /*) : ;; *) die "resolved node path is not absolute: $NODE_B
 NODE_MAJOR="$("$NODE_BIN" -p 'process.versions.node.split(".")[0]' 2>/dev/null || echo 0)"
 [ "$NODE_MAJOR" -ge 24 ] 2>/dev/null || die "node >= 24 is required (the payload is stripped, not compiled); $NODE_BIN reports major '$NODE_MAJOR'."
 
+DECLARATION_LIB="$REPO/pi-extensions/lib/codex-declaration.js"
+[ -f "$DECLARATION_LIB" ] || die "the declaration leaf is missing: $DECLARATION_LIB (reinstall the package, or check out the repo completely)."
+
 PAYLOAD_SRC="$REPO/pi-extensions/$PAYLOAD_NAME"
 LIB_SRC="$REPO/pi-extensions/lib/meta-session.ts"
 CODEX_CLIENT_SRC="$REPO/pi-extensions/lib/native-push/codex-ws-client.ts"
@@ -120,7 +133,7 @@ safe_own_dir() { # $1 = dir, $2 = label
 [ -e "$UNIT_ROOT" ] && safe_own_dir "$UNIT_ROOT" "the unit root (it holds the ownership state)"
 
 STATE_PRESENT=0
-RECORDED_HOOKS_SHA=""
+RECORDED_SCHEMA=""
 if [ -e "$STATE_FILE" ] || [ -L "$STATE_FILE" ]; then
   [ -L "$STATE_FILE" ] && die "$STATE_FILE is a symlink — refusing to take replacement authority from a link. Nothing written."
   [ -f "$STATE_FILE" ] || die "$STATE_FILE is not a regular file. Nothing written."
@@ -131,14 +144,19 @@ if [ -e "$STATE_FILE" ] || [ -L "$STATE_FILE" ]; then
   STATE_READ="$("$NODE_BIN" -e '
     const s = JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8"));
     const path = require("node:path");
-    if (s.schema !== "codex-birth-install-state/v1") throw new Error("foreign state schema " + JSON.stringify(s.schema));
+    // v1 is READ HERE AND NOWHERE ELSE, and only to be SUPERSEDED. It recorded a whole-file
+    // hooksSha256 this installer no longer consults: whether hooks.json may be edited is now
+    // decided by reading the live document and selecting our own declaration, not by a receipt
+    // from a generation that claimed the whole file. What v1 still holds that this run needs is
+    // the CLOSURE inventory, whose shape is identical in both schemas. Every other reader —
+    // uninstall, doctor, preflight — refuses v1 by name and sends the operator here.
+    if (s.schema !== "codex-birth-install-state/v2" && s.schema !== "codex-birth-install-state/v1") throw new Error("foreign state schema " + JSON.stringify(s.schema));
     // A state this unit never wrote — or one left in a status it does not define — is not a
     // receipt, however well its digests happen to match. `publishing` is the one interrupted
     // generation this installer knows how to finish.
     if (s.status !== "installed" && s.status !== "publishing") throw new Error("unknown state status " + JSON.stringify(s.status));
     if (s.hooksFile !== process.argv[2]) throw new Error("state is bound to " + s.hooksFile + ", not " + process.argv[2]);
     if (s.helperDir !== process.argv[3]) throw new Error("state is bound to helper dir " + s.helperDir);
-    if (!/^[0-9a-f]{64}$/.test(s.hooksSha256)) throw new Error("hooksSha256 is not a digest");
     // The inventory is the removal/replacement authority, so it must be EXACTLY the closure
     // this unit publishes: a state naming fewer members would leave an unlisted file in the
     // helper directory that nothing can reclaim, and one naming more would license deleting
@@ -164,7 +182,7 @@ if [ -e "$STATE_FILE" ] || [ -L "$STATE_FILE" ]; then
           (duplicate.length ? "; duplicated " + duplicate.join(", ") : ""),
       );
     }
-    const lines = ["HOOKSSHA\t" + s.hooksSha256];
+    const lines = ["SCHEMA\t" + s.schema];
     for (const f of s.helperFiles) {
       if (typeof f?.path !== "string" || f.path.length === 0 || f.path.startsWith("/") || f.path.split("/").includes("..")) {
         throw new Error("unsafe helper path " + JSON.stringify(f?.path));
@@ -175,7 +193,7 @@ if [ -e "$STATE_FILE" ] || [ -L "$STATE_FILE" ]; then
     process.stdout.write(lines.join("\n"));
   ' "$STATE_FILE" "$HOOKS_FILE" "$HELPER_DIR" 2>&1)" || die "the ownership state is malformed or bound elsewhere, so replacement authority is UNKNOWN: $STATE_READ
 Move $STATE_FILE aside deliberately and re-run. Nothing written."
-  RECORDED_HOOKS_SHA="$(printf '%s\n' "$STATE_READ" | sed -n 's/^HOOKSSHA\t//p')"
+  RECORDED_SCHEMA="$(printf '%s\n' "$STATE_READ" | sed -n 's/^SCHEMA\t//p')"
   STATE_PRESENT=1
 
   # The closure is licensed by the SAME rule as the declaration, and for the same reason.
@@ -219,20 +237,9 @@ if [ -L "$HOOKS_FILE" ]; then
 fi
 if [ -e "$HOOKS_FILE" ]; then
   [ -f "$HOOKS_FILE" ] || die "$HOOKS_FILE exists and is not a regular file. Refusing; nothing written."
-  LIVE_HOOKS_SHA="$(sha_of "$HOOKS_FILE")"
-  if [ "$STATE_PRESENT" = "0" ]; then
-    die "$HOOKS_FILE already exists and this host has NO entwurf ownership state ($STATE_FILE).
-This unit owns hooks.json as ONE COMPLETE FILE, so adopting it would silently delete hook
-declarations somebody else wrote. Refusing; nothing written.
-Move it aside deliberately and re-run — or declare your own hooks in config.toml, which the
-vendor merges with this file (both sources load per layer)."
-  fi
-  if [ "$LIVE_HOOKS_SHA" != "$RECORDED_HOOKS_SHA" ]; then
-    die "$HOOKS_FILE was edited after install (live $LIVE_HOOKS_SHA, recorded $RECORDED_HOOKS_SHA).
-Republishing would throw away an edit this unit cannot read back. Refusing; nothing written.
-If the edit was yours, keep it and stop using this unit; otherwise run the inverse first."
-  fi
-  note "adopting the hooks.json this unit published (sha256 $LIVE_HOOKS_SHA) — it will be republished."
+fi
+if [ "$STATE_PRESENT" = "1" ] && [ "$RECORDED_SCHEMA" = "codex-birth-install-state/v1" ]; then
+  note "superseding a v1 ownership receipt (it claimed the WHOLE hooks.json) with v2 (it certifies entwurf's own declaration) — no foreign byte is read as ours, and none is rewritten."
 fi
 
 if [ -e "$HELPER_DIR" ] || [ -L "$HELPER_DIR" ]; then
@@ -301,59 +308,113 @@ REGISTRY_SHA="$(sha_of "$STAGE/entwurf-capabilities.json")"
 #            identity from the record this hook writes.
 #   state    not a hooks.json key at all; `[hooks.state]` is the vendor's, in config.toml, and
 #            this unit neither reads nor writes that file.
-cat > "$HOOKS_TMP" <<HOOKSJSON
-{
-  "description": "entwurf codex-birth $UNIT_VERSION — mints one garden meta-record per top-level Codex thread on its first turn. Managed by scripts/codex-birth-install.sh; inverse: scripts/codex-birth-uninstall.sh. Do not edit: the exact bytes are recorded in $STATE_FILE. The vendor's trust decision for this declaration lives in config.toml and is the operator's alone.",
-  "hooks": {
-    "SessionStart": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "'$LAUNCHER'",
-            "timeout": 30
-          }
-        ]
+#
+# FOUR OUTCOMES, AND ONLY TWO OF THEM WRITE (#117). The declaration leaf decides, because it is
+# the same leaf the doctor and the fresh preflight judge with:
+#
+#   PRESENT+CERTIFIED  our group is there, shaped right, and its normalized digest is the one
+#                      this unit publishes -> hooks.json is NOT TOUCHED AT ALL. Not rewritten,
+#                      not re-serialized, mtime unchanged. This is the ordinary re-run on a host
+#                      where a neighbour has since re-serialized the document.
+#   ABSENT             our group is not there -> it is APPENDED by text splice. Every foreign
+#                      group comes through byte-for-byte, and appending (rather than inserting)
+#                      leaves a neighbour's index — and therefore their trust receipt — alone.
+#   CREATE             no file at all -> this unit writes the whole document, description and all.
+#                      A description is OURS only on a file we created; into a shared file this
+#                      unit adds no prose, because that member belongs to whoever made it.
+#   DRIFTED/DUPLICATED our group is there and edited, or there twice -> zero-write REFUSAL by
+#                      name. Republishing would throw away an edit nobody can read back, and
+#                      duplication is a birth hook the vendor would run twice.
+#
+# Every splice is re-parsed and deep-compared to the value it intended before it reaches a file
+# (`certifySplice`), so a span edit that lands anywhere else is a refusal, not a written file.
+HOOKS_DESCRIPTION="entwurf codex-birth $UNIT_VERSION — mints one garden meta-record per top-level Codex thread on its first turn. Managed by scripts/codex-birth-install.sh; inverse: scripts/codex-birth-uninstall.sh. This unit owns ONLY this SessionStart declaration; any other group in this file is foreign and is never read as ours. The vendor's trust decision for this declaration lives in config.toml and is the operator's alone."
+DECISION="$("$NODE_BIN" -e '
+  const fs = require("node:fs");
+  const [, lib, hooksFile, launcher, description, outTmp] = process.argv;
+  import(lib).then((m) => {
+    const group = m.entwurfDeclarationGroup(launcher);
+    const digest = m.declarationDigest(group);
+    const emit = (verdict, detail) => process.stdout.write([verdict, digest, detail ?? ""].join("\t"));
+    if (!fs.existsSync(hooksFile)) {
+      fs.writeFileSync(outTmp, JSON.stringify({ description, hooks: { SessionStart: [group] } }, null, 2) + "\n");
+      return emit("CREATE", "");
+    }
+    const text = fs.readFileSync(hooksFile, "utf8");
+    let parsed;
+    try {
+      parsed = JSON.parse(text);
+    } catch (err) {
+      throw new Error(hooksFile + " is not readable JSON (" + err.message + "). This unit edits only its own declaration inside that file and will not rewrite a document it cannot read.");
+    }
+    const sel = m.selectEntwurfDeclaration(parsed, launcher);
+    if (sel.ok) {
+      if (sel.digest !== digest) {
+        throw new Error(
+          "entwurf\u2019s own declaration in " + hooksFile + " was EDITED after install (group " + sel.groupIndex +
+            ": live " + sel.digest + ", this unit publishes " + digest + "). Republishing would throw away an edit this unit cannot read back. If the edit was yours, keep it and stop using this unit; otherwise run the inverse first.",
+        );
       }
-    ]
-  }
-}
-HOOKSJSON
+      return emit("UNCHANGED", String(sel.foreign.length));
+    }
+    if (sel.code !== "declaration-absent") throw new Error(sel.code + ": " + sel.detail);
+    const want = JSON.parse(text);
+    if (want.hooks === null || typeof want.hooks !== "object" || Array.isArray(want.hooks)) {
+      throw new Error(hooksFile + " carries no `hooks` object, so there is nowhere to declare a SessionStart group without rewriting somebody else\u2019s grammar.");
+    }
+    want.hooks.SessionStart = (Array.isArray(want.hooks.SessionStart) ? want.hooks.SessionStart : []).concat([group]);
+    fs.writeFileSync(outTmp, m.certifySplice(m.appendSessionStartGroup(m.ensureSessionStartArray(text), group), want));
+    return emit("APPEND", String(sel.foreign.length));
+  }).catch((err) => {
+    process.stderr.write(err && err.message ? err.message : String(err));
+    process.exit(1);
+  });
+' "$DECLARATION_LIB" "$HOOKS_FILE" "$LAUNCHER" "$HOOKS_DESCRIPTION" "$HOOKS_TMP" 2>&1)" || die "$DECISION
+Refusing; nothing written."
+HOOKS_ACTION="$(printf '%s' "$DECISION" | cut -f1)"
+DECL_SHA="$(printf '%s' "$DECISION" | cut -f2)"
+FOREIGN_COUNT="$(printf '%s' "$DECISION" | cut -f3)"
+# Exactly 64 hex, not "starts hex": this value is written into the ownership receipt and every
+# later reader compares the live declaration to it, so a truncated or warning-polluted capture
+# would record a receipt nothing can ever match.
+case "$DECL_SHA" in
+  ""|*[!0-9a-f]*) die "the declaration leaf returned no digest (got '$DECISION'). Nothing written." ;;
+esac
+[ "${#DECL_SHA}" -eq 64 ] || die "the declaration leaf returned a ${#DECL_SHA}-character digest, not 64 (got '$DECISION'). Nothing written."
+# `mktemp` made this file, so it always exists; chmod it unconditionally rather than behind a
+# test whose false branch would be the last command of a `set -e` line.
 chmod 0644 -- "$HOOKS_TMP"
 
-# Prove the bytes are the grammar we think they are BEFORE they are published: a broken
-# hooks.json is a hook nobody declared and nobody can see failing.
-"$NODE_BIN" -e '
-  const fs = require("node:fs");
-  const f = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
-  if (Object.keys(f).sort().join(",") !== "description,hooks") throw new Error("hooks.json top level must be exactly description+hooks");
-  const groups = f.hooks?.SessionStart;
-  if (Object.keys(f.hooks).join(",") !== "SessionStart") throw new Error("this unit declares SessionStart and nothing else");
-  if (!Array.isArray(groups) || groups.length !== 1) throw new Error("hooks.SessionStart must be a single matcher group");
-  if ("matcher" in groups[0]) throw new Error("the matcher group must carry no matcher key");
-  if (Object.keys(groups[0]).join(",") !== "hooks") throw new Error("the matcher group must carry no key other than hooks");
-  const hs = groups[0].hooks;
-  if (!Array.isArray(hs) || hs.length !== 1) throw new Error("the matcher group must hold exactly one handler");
-  if (Object.keys(hs[0]).sort().join(",") !== "command,timeout,type") throw new Error("the handler must carry exactly type+command+timeout — every extra key changes the trust identity");
-  if (hs[0].type !== "command") throw new Error("the handler type must be command");
-  if (hs[0].timeout !== 30) throw new Error("the handler timeout must be 30 — it is part of the hash the operator trusts");
-  if (hs[0].command !== "'"'"'" + process.argv[2] + "'"'"'") throw new Error("the command must be the single-quoted fixed launcher path, got " + hs[0].command);
-' "$HOOKS_TMP" "$LAUNCHER" || die "the staged hooks.json is not the exact declaration this unit publishes. Nothing written."
-HOOKS_SHA="$(sha_of "$HOOKS_TMP")"
-
+# Prove the staged bytes carry EXACTLY our declaration before they are published: a broken or
+# absorbed hooks.json is a hook nobody declared and nobody can see failing. The same leaf reads
+# it back, so what is asserted here is what the doctor and the preflight will assert later.
+if [ "$HOOKS_ACTION" != "UNCHANGED" ]; then
+  "$NODE_BIN" -e '
+    const fs = require("node:fs");
+    const [, lib, staged, launcher, wantDigest] = process.argv;
+    import(lib).then((m) => {
+      const sel = m.selectEntwurfDeclaration(JSON.parse(fs.readFileSync(staged, "utf8")), launcher);
+      if (!sel.ok) throw new Error("the staged document does not carry our declaration: " + sel.code + " " + sel.detail);
+      if (sel.digest !== wantDigest) throw new Error("the staged declaration digest is " + sel.digest + ", not " + wantDigest);
+    }).catch((err) => {
+      process.stderr.write(err && err.message ? err.message : String(err));
+      process.exit(1);
+    });
+  ' "$DECLARATION_LIB" "$HOOKS_TMP" "$LAUNCHER" "$DECL_SHA" || die "the staged hooks.json is not the exact declaration this unit publishes. Nothing written."
+fi
 write_state() { # $1 = status
   # Created here only when absent — the safe umask floors it and the explicit mode removes any
   # doubt. An EXISTING root was judged above and is left exactly as it was found.
   if [ ! -e "$UNIT_ROOT" ]; then mkdir -p -- "$UNIT_ROOT" && chmod 0755 -- "$UNIT_ROOT"; fi
   cat > "$STATE_TMP" <<STATE
 {
-  "schema": "codex-birth-install-state/v1",
+  "schema": "codex-birth-install-state/v2",
   "status": "$1",
   "unitVersion": "$UNIT_VERSION",
   "writtenAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
   "nodeBin": "$NODE_BIN",
   "hooksFile": "$HOOKS_FILE",
-  "hooksSha256": "$HOOKS_SHA",
+  "declaration": { "event": "SessionStart", "command": "'$LAUNCHER'", "sha256": "$DECL_SHA" },
   "hooksExistedBefore": $HOOKS_EXISTED,
   "helperDir": "$HELPER_DIR",
   "helperFiles": [
@@ -396,18 +457,36 @@ chmod 0755 -- "$LAUNCHER"
 chmod 0644 -- "$HELPER_DIR/$PAYLOAD_NAME" "$HELPER_DIR/lib/meta-session.ts" "$HELPER_DIR/lib/native-push/codex-ws-client.ts" "$HELPER_DIR/lib/session-id.js" "$HELPER_DIR/entwurf-capabilities.json"
 
 if [ ! -e "$CODEX_HOME" ]; then mkdir -p -- "$CODEX_HOME" && chmod 0755 -- "$CODEX_HOME"; fi
-# Strongest idempotence is an untouched file: identical bytes are not rewritten, so a
-# re-run leaves mtime — and any vendor state keyed off it — alone.
-if [ -f "$HOOKS_FILE" ] && [ "$(sha_of "$HOOKS_FILE")" = "$HOOKS_SHA" ]; then
-  note "hooks.json is already the exact declaration — not rewritten"
-else
-  cp -- "$HOOKS_TMP" "$HOOKS_FILE.tmp" && mv -f -- "$HOOKS_FILE.tmp" "$HOOKS_FILE"
-fi
+# Strongest idempotence is an UNTOUCHED file, and on a shared hooks.json that is also the only
+# honest one: re-serializing a document to reproduce bytes we already agree with would rewrite
+# every neighbouring declaration for no reason at all.
+case "$HOOKS_ACTION" in
+  UNCHANGED)
+    note "hooks.json already carries entwurf's declaration (normalized sha256 $DECL_SHA) — NOT REWRITTEN, not one byte"
+    ;;
+  APPEND)
+    # The file was somebody else's before this line and is shared after it, so its MODE is
+    # carried over from what we found rather than reset to the one a fresh publish would use.
+    chmod "$(stat -c %a -- "$HOOKS_FILE")" -- "$HOOKS_TMP"
+    cp -- "$HOOKS_TMP" "$HOOKS_FILE.tmp" && mv -f -- "$HOOKS_FILE.tmp" "$HOOKS_FILE"
+    note "appended entwurf's declaration to the existing hooks.json by text splice — every foreign group came through byte-for-byte"
+    ;;
+  CREATE)
+    cp -- "$HOOKS_TMP" "$HOOKS_FILE.tmp" && mv -f -- "$HOOKS_FILE.tmp" "$HOOKS_FILE"
+    ;;
+  *)
+    die "unknown declaration decision '$HOOKS_ACTION'. Nothing more written."
+    ;;
+esac
 
 write_state installed
 
 note "installed"
-note "  declaration : $HOOKS_FILE (sha256 $HOOKS_SHA)"
+note "  declaration : $HOOKS_FILE (normalized sha256 $DECL_SHA)"
+case "$FOREIGN_COUNT" in
+  ""|0) note "  neighbours  : none — entwurf is the only SessionStart declaration in that file" ;;
+  *) note "  neighbours  : $FOREIGN_COUNT foreign SessionStart group(s) in that file, neither certified nor touched" ;;
+esac
 note "  launcher    : $LAUNCHER"
 note "  state       : $STATE_FILE"
 note "The vendor will ask the operator to trust this declaration ONCE, in the Codex TUI."

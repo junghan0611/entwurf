@@ -4,6 +4,407 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+### Added
+
+- **`entwurf_fresh_call` opens a sibling on the herdr rail, beside the tmux one (#116).** A session
+  running inside [herdr](https://github.com/steipete/herdr) has no tmux server to place a window
+  on, so the rail is chosen from PROCESS CONTEXT — `HERDR_ENV=1`, herdr's own marker, read for its
+  exact value — and never from a caller parameter, which would let someone request tmux placement
+  from inside herdr and fail after a mutation instead of before one. There is **no fallback either
+  direction**: an incomplete herdr context is refused by its own herdr reason rather than quietly
+  opening a window the operator cannot see from where they are standing. The pilot backends are
+  `pi` and `claude-code`; `placement` is refused BY NAME there, because placement inside herdr
+  belongs to herdr and a tmux session name would silently relocate the sibling.
+  Coordinates, refusals, reclaim and evidence grades: [docs/herdr-launch-rail.md](./docs/herdr-launch-rail.md).
+  - One composition root (`fresh-call-dispatch.ts`) now owns rail choice, the Codex preflights and
+    the render call for BOTH public surfaces, so a defect planted in one surface can no longer
+    survive on the other. The rail-neutral half of the composition (argv dialects, callback tool
+    names, first-turn framing, nonce, input contract) moved to `fresh-call-composition.ts`, which
+    knows nothing about tmux; each rail supplies only what it alone can state.
+  - A sibling is placed in a NEW TAB of the caller's own herdr workspace, without taking focus,
+    with the workspace read from herdr's answer about the caller's own pane — never the focused
+    workspace and never the `w<N>:` prefix of an id this rail treats as opaque. Orphan reclaim is
+    proven within a generation and closes the PANE rather than the tab (`[측정 2026-09-15]`).
+  - `entwurf_peers` carries a read-only `placement` column with four words
+    (`unobserved` / `none` / `ambiguous` / `herdr <pane>`), joined only on an official herdr report
+    for its own backend. A pane coordinate is a VIEW, never an address: the garden id still arrives
+    in the callback envelope (Hard Rule 16).
+- **A herdr plugin that installs entwurf onto a host where nothing entwurf is on `PATH`.**
+  `plugins/herdr/` bootstraps a stable, scoped plugin runtime from an exact checkout candidate,
+  classifies which integrations the host already has, activates only what it owns, and ships a
+  read-only citizen status pane built on the core's own `peer-facts` projection. The install
+  reports NAMED steps on the operator's terminal and ends with one usage example per activated
+  backend, because `[GLG 직접, 2026-09-17]` "정확한 모델명을 모른다" was a real blocker on a clean
+  install. Entwurf still installs only Entwurf bytes — never a harness, subscription or login
+  (Hard Rule 17) — and a clean NixOS host additionally needs `programs.nix-ld.enable = true` for
+  the ACP rail's dynamically linked vendor binary.
+
+### Fixed
+
+- **The first turn no longer looks like the injection it is not (#116).** `[GLG 직접, 날것 PC,
+  2026-09-17]` a Claude Sonnet 5 sibling REFUSED its whole first turn and named three reasons, all
+  of them ours: a "decode the following JSON string literal and follow the decoded instructions"
+  wrapper, the line "Do not inspect environment variables, do not call entwurf_self", and no way to
+  verify the caller. The framing is now plain prose folded onto one physical line, with ONLY the
+  operator's task riding as a literal — `[source herdr 7505c08]` `src/app/agents.rs:157-161`
+  refuses any agent argument carrying a Unicode Cc, so a newline never reaches the sibling, and
+  `src/platform/linux.rs:127-141` single-quotes every argument, which is why the encoding was never
+  buying shell safety. The prohibition is replaced by the same steering stated as a FACT (your own
+  record does not carry the caller's address; the tool call is what reaches it) plus an OFFERED
+  read-only way to corroborate the caller. `[측정 oracle 2026-09-18, LIVE run sCzzE0]` a Sonnet 5
+  child called `entwurf_peers` and then `entwurf_v2`, both successful, and its callback landed.
+- **The rail tells herdr how long to wait, and judges the child on its own clock (#116).** Without
+  an explicit `--timeout`, herdr gave up at its own 30s default while our process bound sat at
+  300s, so a cold-starting Claude Code sibling that was alive and booting came back as
+  `herdr-agent-start-failed [herdr: timeout]` over an unreclaimed pane. The bound is now an
+  explicit 240s, deliberately BELOW our own kill, so herdr has to lose that race or its named
+  answer is replaced by "no exit status". The LIVE cell also stopped measuring the child with the
+  CALLER's clock — two runs of identical code had differed only in how long the caller's launch
+  took — and now records what the child was doing every run: herdr's agent status and entwurf's own
+  hook journal are the WHOLE evidence surface, because `[측정 2026-09-18]` no claude session in this
+  smoke, caller or child, acting or silent, exists under `~/.claude/projects/` or any fenced XDG
+  root — including a child that had just made two successful tool calls.
+- **A peer that hangs up on an accepted control socket no longer takes the resident with it.** The
+  connection error is handled where the socket is accepted, so a half-open peer is a bounded
+  per-connection failure instead of an uncaught exception.
+- **The uncitizened `entwurf_self` notice is proven, not regexed.** The gate asserted the shape of
+  a message instead of the fact it reports, which a reworded notice would have broken while a
+  wrong notice passed.
+
+
+- **The Codex birth unit owns its own declaration, not the whole `hooks.json` (#117).** Installing
+  Herdr's official Codex integration appends a second `SessionStart` group to
+  `$CODEX_HOME/hooks.json`. The vendor kept running BOTH declarations — `[source]`
+  `codex-rs/hooks/src/engine/discovery.rs:664-665` hashes a normalized event/matcher/group/handler
+  and keys trust by `<path>:<event>:<group_idx>:<handler_idx>`, so trust was declaration-scoped all
+  along — but entwurf's certification was file-scoped: `install-state` recorded a whole-file
+  sha256 and the fresh preflight additionally required `SessionStart.length === 1`. On a host with
+  both installed, `doctor-codex-birth` was RED and every Codex fresh launch was refused
+  `codex-birth-unit-missing`. **v0.22.0's release LIVE was measured with Herdr's hooks moved
+  aside; this is the debt that names paid.**
+  - Ownership is now exactly one `SessionStart` group holding one handler whose `command` is our
+    quoted launcher path. It is certified by SHAPE (which keys may exist) and by a NORMALIZED
+    digest (recursively sorted keys, no whitespace) — blind to indentation and key order, because
+    `[측정 2026-09-17 oracle]` Herdr re-serializes the entire document through serde, which changed
+    our own handler's key order from `type,command,timeout` to `command,timeout,type`.
+  - The vendor trust receipt is read at the index our declaration was MEASURED at, never at the
+    constant `:0:0`. With a neighbour at index 0 that constant read THEIR approval and reported it
+    as ours — a green for a hook the vendor had never been asked to run.
+  - Neighbours are `present-but-foreign`: reported in the doctor's own FOREIGN section, certified
+    by nothing, never overwritten or absorbed, and no input to any verdict of ours. Editing one
+    moves nothing.
+  - Install into a file somebody else already declares in is an APPEND by text splice (never an
+    adoption and never a refusal), and appending rather than inserting leaves a neighbour's index —
+    and therefore their existing trust receipt — alone. Uninstall splices out only entwurf's group
+    (plus entwurf's own top-level `description`), removing the file only when entwurf was its sole
+    declaration. Every splice is re-parsed and deep-compared to the value it intended before it
+    reaches disk; a splice that lands anywhere else is a zero-write refusal.
+  - Our own declaration missing, edited or DUPLICATED is still a named red, in install, doctor,
+    inverse and preflight alike.
+  - Entwurf still never creates, computes, pre-seeds or bypasses a vendor trust receipt, and
+    deliberately does NOT recompute what that hash should be: the vendor normalizes with its own
+    code, and reimplementing it here would make entwurf a second opinion about somebody else's
+    security decision that drifts with every vendor release.
+  - `install-state` moves to `codex-birth-install-state/v2` (declaration receipt instead of
+    `hooksSha256`). The uninstall, doctor and preflight read v2 only and refuse v1 by name; the
+    installer reads a v1 receipt once, to supersede it forward — it removes nothing and rewrites no
+    foreign byte.
+  - New shared leaf `pi-extensions/lib/codex-declaration.js` is the single definition the
+    installer, inverse, doctor, fresh preflight and gates all decide with.
+  - Gates: `smoke-codex-birth` 102 checks (both orderings green, foreign bytes proven across
+    install and inverse, foreign edits neutral, own-declaration drift/duplication/v1 named red,
+    trust read at the measured index, the shared file's mode carried over, and an unscanned
+    FOREIGN axis reporting NOT READ rather than "none"), `check-codex-birth-hook` 101 checks (the
+    leaf's digest, selection, named refusals, span reader and splice post-condition), six new
+    preflight cells, and 8 exact-once mutants (inventory 520 → 527). Six existing
+    `FRESHCALL-CODEX-*` mutants were re-pointed at the predicates this narrowing moved;
+    `FRESHCALL-CODEX-HOOK-KEYS` moved gate as well, because under the preflight's oracle an extra
+    handler key is caught by the digest anyway — what its predicate still buys is the NAME.
+    Verification receipts at `ac3f1f8`: `pnpm run check:full` exit 0 (403s) and
+    `check-gate-qualification` **527/527 killed**, both in the exact-SHA CI run
+    [35239086438](https://github.com/junghan0611/entwurf/actions/runs/35239086438).
+  - **Not in scope, by decision:** adding Codex to `HERDR_FRESH_CALL_BACKENDS`, Herdr env carriers
+    on the Codex MCP child, plugin supervision of the app-server, and the identical ownership
+    defect in the statusline/terminal-title atoms (recorded as an Observation, its own atom).
+
+## 0.22.0 - 2026-09-17
+
+### Added
+
+- **A Codex sibling opened into a directory the vendor has no answer for now SAYS SO
+  (`codex-launch-cwd-undecided`).** `entwurf_fresh_call` reads the launch directory against the
+  operator's Codex config and prints what it saw — and then opens the window anyway. **It is a
+  diagnostic, not a gate, and that is the product decision (GLG, 2026-09-17):** the vendor's
+  consent screen is self-repairing for the human this rail exists to put a window in front of, one
+  answer teaches the vendor that directory for good, and a refusal would replace that with "no
+  window, go run codex yourself, then call again" while having to be right about a decision this
+  process cannot fully see. The UNATTENDED case is answered where it belongs —
+  `smoke-codex-fresh-live` asserts the same leaf up front, so a release gate with nobody at the
+  keyboard reads a named precondition instead of a callback timeout. `[source rust-v0.153.4]` a `--remote` startup — which this
+  argv always is — runs `check_directory_trust` on the `-C` value (`tui/src/lib.rs:1699-1725`), and
+  nothing on that path consults the approval or sandbox policy
+  (`tui/src/onboarding/directory_trust.rs:33-130`): the
+  `--dangerously-bypass-approvals-and-sandbox` token this launcher already carries turns off
+  approvals, never folder consent. A DIRECT decision is keyed to the exact directory and nothing else — for
+  `ProjectTrustHost::Remote` the lookup is `vec![cwd_key]` (`tui/src/config_update.rs:290-296`), with
+  no project-root marker, no git root and no parent inheritance. **The question is whether the
+  directory has been ANSWERED, not whether it is trusted:** a saved `untrusted` folder is
+  explicitly skipped on a remote target (`onboarding/directory_trust.rs:94-96`), so that turn
+  starts too and is not noted at all. A cwd inside an explicitly `untrusted` project gets its OWN
+  note (`codex-launch-cwd-untrusted-ancestor`) because the vendor answers that one with an error
+  rather than a screen — `pass the repository root explicitly with --cd`
+  (`config_update.rs:357-371`) — so its repair names a different directory, not a prompt.
+
+  **The leaf is deliberately NARROWER than the vendor's own judgment and says so rather than
+  claiming equivalence.** It reads the operator's `config.toml`; the vendor reads an effective
+  config — system, managed and cloud layers merged around that file — through its app-server, and
+  an enabled PROJECT LAYER consents on a directory's behalf with no entry at all
+  (`config_update.rs:346-354`). That gap is affordable precisely because nothing here refuses:
+  everything the leaf cannot see stays silent, and a note that turns out to be unnecessary costs a
+  line of stderr. **`[측정 2026-09-16]` this is the
+  failure it retires, not a hypothetical:** four `smoke-codex-fresh-live` runs, one scratch directory
+  each; the two whose directory carried a trust entry (`…-db65N2`, `…-pBXxOJ`, both answered by a
+  human at the keyboard) passed, and the two unattended release-gate runs (`…-2zznHl`, `…-kSsoAn`)
+  died with no rollout written after 21:28 at all — the sibling had opened on a consent screen and
+  started no turn, so there was no birth, no callback, and nothing to address. The caller then waits
+  out its entire timeout on a window that is merely waiting to be answered, which reads as a delivery
+  defect and is a folder question. The directory asked about is read back off codex's own `-C` token
+  rather than recomputed, so the consent question cannot drift from the thread's real start
+  directory, and the inherited default stays resolved in exactly one place.
+
+- **A Codex caller opens its sibling beside its own pane (#95 lane B).** Until now the seat a
+  Codex citizen got came from the app-server's inherited `TMUX`/`TMUX_PANE`, so a sibling opened
+  from Codex landed wherever the operator happened to have started the app-server rather than
+  beside the TUI the operator was looking at. `[측정 2026-09-16, codex-cli 0.153.4]` with
+  `thread-id` in `[tui].terminal_title` the TUI writes its thread UUID into the OSC 0 title and
+  tmux answers with it as `#{pane_title}` — truncated to 32 chars, i.e. 29 graphemes plus `...`
+  (`status_surfaces.rs:892-894`, `:1027-1043`; unchanged at `rust-v0.154.0`). So when the
+  reconciled sender of a fresh call is a record-backed `codex` citizen and `placement` is
+  omitted, that request's own `_meta.threadId` selects the pane whose title carries the token and
+  its `$session` becomes the target. **No vendor patch, no new carrier: one config item.**
+- **`entwurf install-codex-terminal-title` / `uninstall-` / `doctor-`** — a fourth Codex
+  ownership atom, owning only `thread-id` membership within `tui.terminal_title`. A different key
+  and a different axis from `install-codex-statusline`: `status_line` is what a human reads
+  inside the TUI, `terminal_title` is what the multiplexer reports back. The seeded list is
+  `["activity", "project-name", "thread-id"]` — `activity` leads because the herdr Codex detector
+  keys on the spinner and `Action Required` prefix — and an existing operator list is APPENDED to,
+  never reordered. `setup` composes it on a detected Codex host.
+- **The seat now follows the CALLER, never the backend being opened, on both fresh-call surfaces.**
+  An explicit `placement.tmuxSession` always wins; then a Codex CALLER's own pane
+  (`codex-title-anchor`); then the caller's own session. The anchored receipt reports its SOURCE and
+  no session name, because a session was observed rather than a name requested.
+- **`entwurf codex-app-server` — the one command that starts the operator's Codex app-server.**
+  Every Codex rail needs a server the operator starts themselves, and the command was
+  `codex app-server --listen "unix://$CODEX_HOME/app-server-control/app-server-control.sock"`:
+  correct, in three documents, and in the text of a refusal — which meant most operators met it
+  only AFTER something had already failed. This verb owns that SPELLING and nothing else. It
+  `exec`s the vendor in the terminal it was typed in (cwd, pid, tty and exit status are the
+  server's; Ctrl-C is the operator's), creates the control directory, forwards the rest of the
+  argv byte-identical, and strips `PI_SESSION_ID`/`PI_AGENT_ID` so the server every bridge child
+  inherits from cannot carry someone else's identity. The address comes from the SAME leaf
+  delivery, preflight and the LIVE smoke read: the launcher ASKS that resolver through the new
+  internal `entwurf codex-socket-path` rather than re-deriving the path, so there is exactly one
+  spelling of this address instead of two that agree on the inputs somebody thought of.
+  Refusals are named and happen before the exec: a live socket (naming the pid whose `/proc`
+  cmdline actually carries that socket, and saying plainly when the host holds none — never an
+  inferred owner), a resolved address that is not absolute or carries a control character
+  (refused before anything is created: a relative socket is a different file for every process
+  that resolves it, and the bridge that will look for it is the app-server's MCP child with its
+  own cwd), an unidentifiable path, a second
+  `--listen`, a recursive launch, a socket classification nobody wrote, no `codex` on PATH. A dead
+  socket file is reported and launched over. **It is a managed spelling, not a managed
+  lifecycle**: no supervisor, no restart, no daemon, no pid file, and `entwurf_fresh_call` still
+  REJECTS a missing app-server rather than starting one. The tmux seat this server gives caller-seat lookups is reported as a fact, not
+  enforced as a requirement. Typing the raw vendor command remains equivalent.
+
+### Verification
+
+- **Release acceptance for this cut.** `[LIVE 2026-09-17, oracle]` `LIVE=1 ./run.sh release-gate
+  /tmp/entwurf-release-gate-0.22.0.royX2L --cut` → **`MUST: PASS=24 FAIL=0 SKIP=0`**, **`BEHAVIOR:
+  PASS=1 FAIL=0 SKIP=0`**, **`cut: OK`**, exit 0, 18:47–20:02 KST; log preserved at
+  `<scratch>/release-gate.log`. Inside it: `check:full` exit 0 in 521s, `check-gate-qualification`
+  **520/520 killed**, `smoke-entwurf-chain-live` 24 assertions, `smoke-codex-fresh-live` **66
+  assertions** — one more than lane C's 65, because the launch-directory precondition this release
+  adds is asserted before anything launches. Gate env `ENTWURF_CODEX_FRESH_MODEL=gpt-5.6-luna`,
+  `ENTWURF_CODEX_FRESH_PI_MODEL=openai-codex/gpt-5.6-luna`, `ENTWURF_CODEX_APP_SERVER_PID` naming an
+  operator-started app-server in its own tmux session. Exact-SHA CI at the pre-release commit:
+  run [`35202801617`](https://github.com/junghan0611/entwurf/actions/runs/35202801617)
+  `event=workflow_dispatch` @ `f5d6e10`, all four required jobs success and the `check` job's
+  qualification BODY step success.
+- **The host's Codex hook declaration was measured with the herdr SessionStart group temporarily
+  removed, and that is a debt this release does not pay.** `~/.codex/hooks.json` on `oracle` carries
+  a second SessionStart group installed by herdr, so `doctor-codex-birth` reports the declaration as
+  edited after install and `smoke-codex-fresh-live` cannot run. For this cut the file was moved to
+  `hooks.json.herdr-bak` and re-published by `install-codex-birth`; the vendor's trust receipt for
+  `…/hooks.json:session_start:0:0` survived that re-publication, measured by a real Codex TUI
+  starting with no consent screen. The herdr group is restored after the cut and the doctor goes RED
+  again on purpose. **#117 owns the real repair** — entwurf requires a whole-file digest where the
+  unit it actually owns is one group.
+- **Two gate defects found by the release gate itself, both repaired in test/gate code with zero
+  production bytes.** `check-gate-qualification` scored **518/520** on the first prepared commit and
+  both survivors were launch-directory claims whose assertion could not see the defect its mutant
+  plants. `CODEX-LAUNCH-CWD-ANCESTOR-PLAIN-PATHS-ONLY` guards two predicates — the cwd side and the
+  key side — and every non-plain cell put the encoded character in the KEY, so the key-side filter
+  answered alone and deleting the cwd-side guard changed nothing; cells that vary the CWD against a
+  plain untrusted key now close it. `FRESHCALL-CODEX-LAUNCH-CWD-NOTES-NEVER-REFUSES` asserted the
+  `indexOf("-C")` lookup but not the value read at it, so a note that asked about the REQUESTED cwd
+  instead of codex's own `-C` token passed; the three statements are now pinned contiguously.
+  Neither mutant was stale — each still matched its production line exactly once, which is what made
+  the hole an assertion hole rather than drift.
+- **`smoke-entwurf-chain-live` went red because a model read the operator's policy correctly, and
+  the repair moved the authority rather than the wording.** The native Claude Code hop declined to
+  forward, citing the operator's global AGENTS.md; B, C and D were all born and addressable and the
+  terminus simply received nothing. A first repair put the provenance in the payload and the hop
+  named those sentences as the tell — content that vouches for itself is the shape of an injection,
+  so no sentence inside the payload can settle it. The payload is therefore byte-identical to
+  before, and the fact now rides the disposable world the turn starts in: the gate mints that
+  directory, every `ENTWURF_META_*_DIR` resolves inside it, and it exists because the operator ran
+  `release-gate`, so an `AGENTS.md`/`CLAUDE.md` written there is a standing operator instruction of
+  exactly the kind the operator's own global policy defers to for directory-scoped behaviour. **No
+  negative instruction was added**: a "do not check your policy" line would buy the same green by
+  asking the model to stop reading, and would keep passing after the chain broke. Accepted on the
+  host default model with no model pin.
+
+- **The Codex LIVE card now measures WHERE a sibling starts, and the acceptance is recorded.**
+  `[LIVE 2026-09-16, Codex 0.153.4, 65 assertions, exit 0]` hop 1 requests a cwd and joins four
+  authorities that cannot borrow from each other — the pane's `#{pane_current_path}`, the vendor
+  rollout's `session_meta.cwd`, the Entwurf record and the requested scratch; hop 2 requests NEITHER
+  placement NOR cwd, so its directory can only come from the Codex caller's own record. Both are
+  asserted different from the app-server's live `/proc/<pid>/cwd`, which is the failure mode staying
+  visible rather than coincidentally equal. 65 and 56 are different contracts: lane C added the cwd
+  axis on top of lane B's seat axis. Receipts and digests in `DELIVERY.md` / `BASELINE.md`.
+- **Caller-seat LIVE accepted on Linux, 2026-09-16 (Codex 0.153.4): 56 assertions, exit 0.** The
+  operator-owned app-server stayed alone in session A (`$30`/`@41`/`%45`, pid `737636`) while the
+  initial Pi, the omitted-placement Codex it opened, and that Codex's own outbound Pi all landed in a
+  different session S (`$2`: `@46`, `@47`, `@48`). A ≠ S is what makes the run decisive: the
+  app-server's inherited `TMUX` names A, so the pre-#95 environment fallback would have put the
+  outbound Pi there. Its receipt instead records `seat-source=codex-title-anchor`. `DELIVERY.md` owns
+  the coordinates, garden ids and digests, including the 43-assertion run kept as the D1 measurement.
+- **`check-codex-app-server-launch` — 29 assertions, hermetic, plus 9 mutants all killed by
+  their own claim.** A fake vendor on a sandbox PATH under the real name reports the argv, parent
+  and environment it was handed; nothing is asserted by reading the launcher's source.
+  `check-pack-install` proves the INSTALLED verb reaches a vendor at the address the INSTALLED
+  compiled resolver computes — a file-list assertion cannot tell a shipped script from one that
+  resolves its siblings wrongly under `node_modules`.
+- **Independent review caught a false success this gate had certified, and the repair removed the
+  class rather than the instance.** The launcher's first version re-derived the socket path in
+  bash and the gate compared the two spellings over four ASCII-normal inputs they agreed on.
+  `[측정 2026-09-16]` they disagree on `CODEX_HOME=$'\ufeff'` — JS `trim` strips U+FEFF, a POSIX
+  `[:space:]` trim does not, so the managed launch would have started a server at
+  `<BOM>/app-server-control/app-server-control.sock` while delivery looked at `$HOME/.codex` —
+  and on `path.join`'s normalization of a trailing slash or a `..` segment. Widening the matrix
+  would only have added the inputs somebody thought of, so the second spelling was deleted: the
+  launcher asks, the gate's hostile cells (BOM, trailing slash, `..`) keep it asking, and the
+  mutant that used to drop `CODEX_HOME` now re-derives the path in bash instead. The same review
+  found the `/proc` holder assertion over-determined (it accepted the fallback text OR a pid, so
+  deleting the scan passed) and the socket classifier not fail-closed on an unrecognised reading.
+  A second review pass then found that asking one authority for the address does not make the
+  ANSWER safe: the resolver returns `CODEX_HOME` faithfully, so
+  `CODEX_HOME=$'relative\ncontrol-home'` had the launcher create that directory under its caller's
+  cwd and bind a relative socket — a different file for every process that resolves it, while the
+  gate still passed. This launcher is the only Codex surface that CREATES and binds rather than
+  reads, so it now refuses a non-absolute or control-character address before the first write.
+  Every one of those is a discriminating cell with a mutant of its own; the lane is 9.
+- **Two gate defects surfaced on the way and were fixed rather than worked around.** A mutant whose
+  `find` no longer matched had been silently untested since a rename — a stale mutant is a claim
+  nobody is checking, so `check-gate-qualification` scores it red. And the LIVE source-call oracle
+  compared tool arguments with `isDeepStrictEqual`, so a model that omitted the optional `wants_reply`
+  rather than passing it explicitly read as drift; it now normalizes that one key to its schema
+  default. Both are recorded in `VERIFY.md`'s affected-set rules so the inner loop stops missing them.
+
+### Changed
+
+- **`smoke-codex-fresh-live` launches in ONE stable directory instead of a fresh `mkdtemp` per
+  run.** Per-run random scratch made every run an undecided folder — a trust prompt per run, an
+  entry per run in the operator's `~/.codex/config.toml`, and unattended failure whenever nobody was
+  there to answer. The path is now one stable `os.tmpdir()`-rooted directory, answered `Trust`
+  once; the smoke PRINTS it as `launch-cwd <dir>` on every run and asserts that consent by name
+  BEFORE it launches anything, so a missing answer reads as `codex-launch-cwd-undecided` — with the
+  exact `codex -C <dir>` repair command — at the top of the run rather than as a callback timeout
+  twenty assertions later. The directory is printed rather than documented as a literal because
+  `os.tmpdir()` is a host fact: a doc spelling it `$TMPDIR/...` would send an operator with no
+  `TMPDIR` to `/entwurf-codex-fresh-live` in the filesystem root, which is a different directory
+  the vendor consents to separately. Lane C is unaffected: its only requirement of that directory is that it differ
+  from the app-server's own, which the assertion still proves.
+- **The Codex live-spend default comes down to `gpt-5.6-luna`.** The `entwurf-dev` skill's Codex
+  backend default and the `smoke-codex-fresh-live` recommendation in `VERIFY.md` move off
+  `gpt-5.6-sol`. **This is the Codex axis alone** — OMP's fresh default is deliberately unchanged at
+  `openai-codex/gpt-5.6-sol` (`scripts/smoke-omp-fresh-live.ts:14`), because that is the model its
+  two-stage bootstrap callback was actually measured on and moving it would invalidate that
+  receipt. A cost decision, not a gate change: no step moved tier, and the acceptance receipt for
+  the Codex cell must be the run that actually happened on the new default rather than a `sol` run
+  inherited from before.
+
+- **The fixed `codex` tmux home is RETIRED (#95 D1).** 0.21.0 shipped it three days earlier: an
+  omitted-placement Codex TARGET selected an already-existing session named exactly `codex`, where
+  the operator was asked to seat the app-server and every Codex TUI, and the launch receipt labelled
+  that source `Codex home`. GLG retired it the moment the caller-pane anchor stood up — *"무조건
+  은퇴야 … 코덱스의 거처를 만들어주자는 말은 그냥 기술이 안돼서 무마한 개념이야. 제대로 가야지."* The
+  room was a workaround for a mapping that did not exist yet, and keeping it after the anchor landed
+  would have left Codex alone answering "where does a sibling open?" differently from every other
+  backend. `CODEX_HOME_TMUX_SESSION`, the `codex-home` receipt source, its renderer branch, its
+  deterministic cells and its mutant are gone; an omitted seat is the caller's own session for every
+  backend, and the operator seats the app-server wherever they like — Entwurf still never creates,
+  moves or supervises it. The 2026-09-12 home acceptance stays recorded in `DELIVERY.md` and
+  `docs/setup-clean-host.md` as history, not as a live contract. The reshaped LIVE card now REQUIRES
+  the app-server to sit in a different session from the Pi/Codex pair: that separation is what tells
+  the caller-pane anchor apart from the app-server's inherited environment.
+
+### Fixed
+
+- **An in-band refusal now reaches the sender with the reason the RECEIVER gave it
+  (`d49e6cb`, `0c8a42c`).** A completed control-socket RPC that came back `success:false` was
+  finalized as `rejected` with no reason at all, so every named receiver refusal — including the
+  0.21.0 compaction guard's own `compacting` / `busy` — arrived at the caller as a reasonless
+  rejection indistinguishable from "no live route". The send hand now carries that error verbatim
+  when the receiver supplied one, and invents nothing when it did not: receiver evidence is not
+  reclassified into the resolver's taxonomy (`dormant-fire-forget-unsupported`,
+  `mailbox-undeliverable`, …), and the two remain distinguishable at the surface. The gap was one
+  hop wide and entirely invisible to the unit lane — the production `sendOverSocket` closure was
+  what dropped `response.error` before `driveSend` could see it — so the guard that holds it is a
+  production-wiring assertion with its own mutant (`V2PROD-INBAND-ERROR-WIRED`), not another test
+  of the pure function.
+- **A Codex sibling's THREAD now opens where its pane is (#95 lane C).** The seat was right and the
+  directory was not: `[측정 2026-09-16]` a pi → Codex → Claude Code chain recorded the app-server's
+  `~/repos/gh/entwurf` for all three citizens while the panes sat in `~/repos/gh/agent-config`.
+  `[source rust-v0.153.4]` an explicit `--remote <endpoint>` resolves to `AppServerTarget::Remote`
+  (`codex-rs/tui/src/lib.rs:875-876`), and a Remote target takes its new thread's cwd from
+  `remote_cwd_override` alone (`app_server_session.rs:2022-2033`) — absent, the app-server opens the
+  thread in its OWN directory, and the birth hook then records that vendor-supplied cwd honestly.
+  The codex argv now always carries that override as `-C <dir>`, the flag the shared interactive
+  options already expose beside `--dangerously-bypass-approvals-and-sandbox`
+  (`utils/cli/src/shared_options.rs:53-68`), preserved for a remote target at
+  `startup_orchestration.rs:191-194`. **One flag, no vendor patch, no new layer.**
+- **A Codex CALLER that names no cwd opens its sibling in its OWN directory.** This bridge runs as
+  the operator-owned app-server's MCP child, so the directory its process reports is the
+  app-server's rather than the caller's — an omitted `cwd` used to put every sibling of every Codex
+  caller in the app-server's repo, whatever backend was being opened. The surface now hands the
+  composition that citizen's RECORD cwd under the same condition that already carries its thread
+  id, and it is consulted only when the call requested none. One value, two carriers: tmux `-c`
+  places the pane, codex `-C` places the thread. Every other caller's argv is byte-identical, and
+  the receipt names which rule chose the directory (`requested` / the Codex caller's own record
+  directory) instead of calling a caller-record path "requested".
+- **Three named refusals replace a silent wrong seat.** Zero matching panes is
+  `codex-caller-seat-unresolved` (the TUI is on another tmux server, its config carries no
+  `thread-id`, or that server has `allow-set-title off`, which `[측정]` replaces every pane title
+  with the hostname); two or more is `codex-caller-seat-ambiguous`; and a Codex caller whose own
+  `[tui].terminal_title` lacks `thread-id` is refused pre-mutation as `codex-caller-title-missing`
+  with the installer as its repair. None of them falls back to another session, and none opens a
+  window. That caller-side check runs only when the anchor is actually consulted — an explicit
+  seat never reads a title.
+- **A pane title is a placement input and nothing else (Hard Rule 16).** Any process in any pane
+  can emit the same OSC string, so the leaf's answer may only reach a `-t` target; identity,
+  delivery and liveness keep the record + `_meta` join they already had, and the first-turn
+  framing still carries the caller's garden id rather than the thread id a title matched. The leaf
+  (`pi-extensions/lib/codex-caller-seat.ts`) imports nothing at all, which is how that boundary is
+  held by the code rather than by a comment.
+- **The title match is over tokens, not ` | ` segments, and the count is over panes.**
+  `title_setup.rs:183-193` joins the `activity` item to its neighbour with a plain space rather
+  than ` | `, so on a host whose operator list ends in `activity` a working TUI renders
+  `<spinner> <thread-id>` inside one segment and a segment-equality rule would lose the seat
+  exactly while the caller is busy. Counting panes rather than tokens keeps a single pane that
+  shows the same thread twice (`thread-title` beside `thread-id`) from reading as an ambiguity.
+
 ## 0.21.0 - 2026-09-13
 
 ### Added

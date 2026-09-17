@@ -3,9 +3,20 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-
-import { type CodexPreflightDeps, codexFreshPreflight } from "../pi-extensions/lib/codex-fresh-preflight.ts";
+import { declarationDigest, entwurfDeclarationGroup, trustReceiptKey } from "../pi-extensions/lib/codex-declaration.js";
+import {
+	type CodexPreflightDeps,
+	codexCallerFreshPreflight,
+	codexFreshPreflight,
+	codexLaunchCwdFreshPreflight,
+} from "../pi-extensions/lib/codex-fresh-preflight.ts";
 import type { CodexProtocolOpener, CodexRpcProtocol } from "../pi-extensions/lib/native-push/codex-ws-client.ts";
+
+/** Herdr's official Codex integration, as it lands in a shared hooks.json — measured on oracle
+ * 2026-09-17: one appended `SessionStart` group, a shell-string command, timeout 10. */
+const HERDR_GROUP = {
+	hooks: [{ command: "bash '/home/op/.codex/herdr-agent-state.sh' session", timeout: 10, type: "command" }],
+};
 
 let root = "";
 let home = "";
@@ -90,7 +101,10 @@ const sha = (file: string): string => crypto.createHash("sha256").update(fs.read
  * decoration here: the preflight compares every recorded digest to the live bytes, so a
  * fixture that skipped it would be testing a unit no installer ever produced.
  */
-function installBirth(handler: Record<string, unknown> | null = null): void {
+function installBirth(
+	handler: Record<string, unknown> | null = null,
+	neighbours: { before?: number; after?: number; duplicateOurs?: boolean } = {},
+): void {
 	const launcher = path.join(helperDir, "codex-birth-launch.sh");
 	write(launcher, "#!/bin/sh\nexit 0\n", 0o755);
 	write(path.join(helperDir, "meta-bridge-hook-codex.ts"), "export {};\n");
@@ -98,25 +112,42 @@ function installBirth(handler: Record<string, unknown> | null = null): void {
 	write(path.join(helperDir, "lib", "native-push", "codex-ws-client.ts"), "export {};\n");
 	write(path.join(helperDir, "lib", "session-id.js"), "export {};\n");
 	write(path.join(helperDir, "entwurf-capabilities.json"), "{}\n");
-	write(
-		hooksFile,
-		JSON.stringify({
-			hooks: {
-				SessionStart: [{ hooks: [handler ?? { type: "command", command: `'${launcher}'`, timeout: 30 }] }],
-			},
-		}),
-	);
+	const ours = { hooks: [handler ?? { type: "command", command: `'${launcher}'`, timeout: 30 }] };
+	const groups: unknown[] = [];
+	for (let i = 0; i < (neighbours.before ?? 0); i += 1) groups.push(HERDR_GROUP);
+	groups.push(ours);
+	if (neighbours.duplicateOurs) groups.push(JSON.parse(JSON.stringify(ours)));
+	for (let i = 0; i < (neighbours.after ?? 0); i += 1) groups.push(HERDR_GROUP);
+	write(hooksFile, JSON.stringify({ hooks: { SessionStart: groups } }, null, 2));
 	writeState();
 }
 
+/** Where entwurf's declaration actually sits in the fixture just written — the position the
+ * vendor keys its receipt to, and the whole point of #117. */
+function ourIndex(): number {
+	const launcher = path.join(helperDir, "codex-birth-launch.sh");
+	const groups = (JSON.parse(fs.readFileSync(hooksFile, "utf8")) as { hooks: { SessionStart: unknown[] } }).hooks
+		.SessionStart;
+	return groups.findIndex(
+		(group) => (group as { hooks?: Array<{ command?: unknown }> }).hooks?.[0]?.command === `'${launcher}'`,
+	);
+}
+
 function writeState(): void {
+	const launcher = path.join(helperDir, "codex-birth-launch.sh");
 	write(
 		stateFile,
 		JSON.stringify({
-			schema: "codex-birth-install-state/v1",
+			schema: "codex-birth-install-state/v2",
 			status: "installed",
 			hooksFile,
-			hooksSha256: sha(hooksFile),
+			// The declaration receipt, NOT a file digest: hooks.json is shared, so its bytes are
+			// not this unit's to certify (#117).
+			declaration: {
+				event: "SessionStart",
+				command: `'${launcher}'`,
+				sha256: declarationDigest(entwurfDeclarationGroup(launcher)),
+			},
 			helperDir,
 			helperFiles: [
 				{ path: "codex-birth-launch.sh", sha256: sha(path.join(helperDir, "codex-birth-launch.sh")), mode: "0755" },
@@ -254,7 +285,7 @@ describe("Codex fresh preflight", () => {
 		expect(await codexFreshPreflight({ HOME: home }, deps)).toBe("codex-birth-unit-missing");
 	});
 
-	it("[QK:FRESHCALL-CODEX-HOOK-KEYS] refuses a birth handler carrying async or any key the installer never writes", async () => {
+	it("refuses a birth handler carrying async or any key the installer never writes (named by the declaration leaf; see [CHECK:FRESHCALL-CODEX-HOOK-KEYS])", async () => {
 		const launcher = path.join(helperDir, "codex-birth-launch.sh");
 		installConfig(true);
 		// `async: true` would run birth beside the turn instead of before it, so the MCP child
@@ -384,5 +415,345 @@ describe("Codex fresh preflight", () => {
 				.replace('command = "entwurf-bridge"', 'command = "entwurf-bridge"\nargs = []'),
 		);
 		expect(await codexFreshPreflight({ HOME: home }, deps)).toBe("codex-mcp-hand-missing");
+	});
+});
+
+/**
+ * The CALLER axis (#95 lane B C4) — a different question from everything above, asked of the
+ * same file. "Can the Codex citizen DOING the opening be located in tmux" is about
+ * `[tui].terminal_title`, and it is required no matter which backend that citizen opens; the
+ * five checks above are about whether a Codex sibling can be opened here at all. Nothing in
+ * this describe touches the app-server: whether the operator's app-server is up says nothing
+ * about whether a pane can be found, and asking would fail a placement check for a delivery
+ * reason.
+ */
+/**
+ * #117 — entwurf owns ONE `SessionStart` declaration inside a file it SHARES.
+ *
+ * Every cell here is a thing the previous whole-file certification got wrong on a host where
+ * Herdr's official Codex integration is installed: it read the file's bytes (which a neighbour
+ * re-serializes), it required `SessionStart.length === 1` (which a neighbour breaks), and it read
+ * the vendor's trust receipt at the constant `:0:0` (which a neighbour at index 0 now owns).
+ */
+describe("Codex declaration ownership inside a shared hooks.json", () => {
+	const green = async (): Promise<unknown> => codexFreshPreflight({ HOME: home }, deps);
+
+	it("[QK:CODEX-DECLARATION-SELECTED-BY-COMMAND] entwurf's declaration is found by its launcher command, so a neighbouring integration in EITHER ordering leaves the birth unit admissible", async () => {
+		for (const neighbours of [{ after: 1 }, { before: 1 }, { before: 1, after: 2 }]) {
+			installBirth(null, neighbours);
+			const index = ourIndex();
+			expect(index).toBeGreaterThanOrEqual(0);
+			installConfig(true, managedEnvVars, trustBlock(trustReceiptKey(hooksFile, index, 0)));
+			// The file holds more than one SessionStart group and the unit is STILL admissible:
+			// that pair is the whole defect #117 closed.
+			const groups = (JSON.parse(fs.readFileSync(hooksFile, "utf8")) as { hooks: { SessionStart: unknown[] } }).hooks
+				.SessionStart;
+			expect(groups.length).toBeGreaterThan(1);
+			expect(await green()).toBeNull();
+		}
+	});
+
+	it("[QK:CODEX-DECLARATION-TRUST-INDEX] the vendor receipt is read at the index our declaration was MEASURED at — a neighbour's receipt at `:0:0` is somebody else's approval, never ours", async () => {
+		installBirth(null, { before: 1 });
+		expect(ourIndex()).toBe(1);
+		// The neighbour holds index 0 and the operator has trusted THEIR declaration. A constant
+		// `:0:0` would read that receipt and report a birth hook the vendor never agreed to run.
+		installConfig(true, managedEnvVars, trustBlock(`${hooksFile}:session_start:0:0`));
+		expect(await green()).toBe("codex-birth-trust-missing");
+		installConfig(true, managedEnvVars, trustBlock(`${hooksFile}:session_start:1:0`));
+		expect(await green()).toBeNull();
+	});
+
+	it("[QK:CODEX-DECLARATION-DUPLICATED] our declaration present twice is a named refusal, not a first-match green — the vendor would run the birth hook twice and only one position can carry the receipt", async () => {
+		installBirth(null, { duplicateOurs: true });
+		installConfig(true, managedEnvVars, trustBlock(`${hooksFile}:session_start:0:0`));
+		expect(await green()).toBe("codex-birth-unit-missing");
+	});
+
+	it("[QK:CODEX-DECLARATION-NORMALIZED-DIGEST] the certification survives a neighbour re-serializing the whole document, and still fails on an edit to our OWN handler", async () => {
+		installBirth(null, { after: 1 });
+		installConfig(true, managedEnvVars, trustBlock(`${hooksFile}:session_start:0:0`));
+		expect(await green()).toBeNull();
+		// Exactly what Herdr's serde write-back did on oracle 2026-09-17: same values, different
+		// key order, different indentation, no whitespace this unit chose.
+		const document = JSON.parse(fs.readFileSync(hooksFile, "utf8")) as {
+			hooks: { SessionStart: Array<{ hooks: Array<Record<string, unknown>> }> };
+		};
+		document.hooks.SessionStart = document.hooks.SessionStart.map((group) => ({
+			hooks: group.hooks.map((handler) => ({
+				command: handler.command,
+				timeout: handler.timeout,
+				type: handler.type,
+			})),
+		}));
+		write(hooksFile, JSON.stringify(document));
+		expect(await green()).toBeNull();
+		// ...and the digest is still load-bearing: a timeout the operator never approved is drift.
+		document.hooks.SessionStart[0].hooks[0].timeout = 31;
+		write(hooksFile, JSON.stringify(document, null, 4));
+		expect(await green()).toBe("codex-birth-unit-missing");
+	});
+
+	it("[QK:CODEX-DECLARATION-FOREIGN-NEUTRAL] editing, adding or breaking a FOREIGN group moves no verdict of ours — neighbours are reported elsewhere and certified nowhere", async () => {
+		installBirth(null, { after: 1 });
+		installConfig(true, managedEnvVars, trustBlock(`${hooksFile}:session_start:0:0`));
+		expect(await green()).toBeNull();
+		const document = JSON.parse(fs.readFileSync(hooksFile, "utf8")) as {
+			hooks: { SessionStart: Array<Record<string, unknown>> };
+		};
+		document.hooks.SessionStart[1] = { matcher: "startup", hooks: [{ type: "command", command: "x", async: true }] };
+		document.hooks.SessionStart.push({ hooks: [] });
+		write(hooksFile, JSON.stringify(document, null, 2));
+		expect(await green()).toBeNull();
+	});
+
+	it("[QK:CODEX-DECLARATION-STATE-V2] a v1 ownership receipt is refused rather than read leniently — it recorded a whole-file digest, an authority this unit no longer holds", async () => {
+		installBirth();
+		installConfig(true, managedEnvVars, trustBlock(`${hooksFile}:session_start:0:0`));
+		expect(await green()).toBeNull();
+		const state = JSON.parse(fs.readFileSync(stateFile, "utf8")) as Record<string, unknown>;
+		state.schema = "codex-birth-install-state/v1";
+		state.hooksSha256 = sha(hooksFile);
+		state.declaration = undefined;
+		write(stateFile, JSON.stringify(state), 0o600);
+		expect(await green()).toBe("codex-birth-unit-missing");
+	});
+});
+
+describe("Codex CALLER-side fresh preflight", () => {
+	/** Write only what this axis reads. Deliberately not `installConfig`: proving the two axes
+	 * are independent needs a config that satisfies neither by accident. */
+	function writeTui(body: string): void {
+		write(configFile, `model = "operator-model"\n\n[tui]\n${body}\n`, 0o600);
+	}
+
+	it("[QK:CODEX-CALLER-PREFLIGHT-TITLE] refuses until tui.terminal_title carries thread-id, and names the installer that repairs it", () => {
+		// No config at all — the ordinary pre-install state, and not an error.
+		expect(codexCallerFreshPreflight({ HOME: home })).toBe("codex-caller-title-missing");
+		writeTui('theme = "zenburn"');
+		expect(codexCallerFreshPreflight({ HOME: home })).toBe("codex-caller-title-missing");
+		writeTui('terminal_title = ["activity", "project-name"]');
+		expect(codexCallerFreshPreflight({ HOME: home })).toBe("codex-caller-title-missing");
+		writeTui('terminal_title = ["activity", "project-name", "thread-id"]');
+		expect(codexCallerFreshPreflight({ HOME: home })).toBeNull();
+		// The operator's own order is not ours to require — only MEMBERSHIP is the axis, exactly
+		// what `entwurf doctor-codex-terminal-title` judges.
+		writeTui('terminal_title = ["thread-id"]');
+		expect(codexCallerFreshPreflight({ HOME: home })).toBeNull();
+	});
+
+	it("[QK:CODEX-CALLER-PREFLIGHT-NOT-STATUS-LINE] neither the status line nor a neighbouring thread-title item satisfies the caller axis — only `terminal_title` reaches `#{pane_title}`, and only `thread-id` renders the id the anchor matches", () => {
+		writeTui('status_line = ["thread-title"]');
+		expect(codexCallerFreshPreflight({ HOME: home })).toBe("codex-caller-title-missing");
+		// The near-miss that actually happens: `thread-title` IS a legal terminal_title item, and
+		// it renders the thread NAME (the garden id, for an entwurf-named thread) rather than the
+		// id the anchor is built from. Accepting it here would report a configured seat for a
+		// host whose panes never carry a matchable token.
+		writeTui('terminal_title = ["activity", "thread-title"]');
+		expect(codexCallerFreshPreflight({ HOME: home })).toBe("codex-caller-title-missing");
+		writeTui('terminal_title = ["activity", "thread-title", "thread-id"]');
+		expect(codexCallerFreshPreflight({ HOME: home })).toBeNull();
+		// ...and the reverse: a config that satisfies the CALLER axis does not satisfy the
+		// target's visible-identity axis. Two keys, two repairs, neither standing in for the
+		// other.
+		installBirth();
+		writeTui('terminal_title = ["thread-id"]');
+		expect(codexCallerFreshPreflight({ HOME: home })).toBeNull();
+	});
+
+	it("[QK:CODEX-CALLER-PREFLIGHT-SHAPE] a terminal_title that is not an array of items is refused, never read as satisfied", () => {
+		for (const body of ['terminal_title = "thread-id"', "terminal_title = 7", "terminal_title = []"]) {
+			writeTui(body);
+			expect(codexCallerFreshPreflight({ HOME: home }), body).toBe("codex-caller-title-missing");
+		}
+		// An unparseable config is the same answer — `readConfig` returns null rather than
+		// guessing, and a caller whose config cannot be read has no provable seat axis.
+		write(configFile, "garbage [[[\n", 0o600);
+		expect(codexCallerFreshPreflight({ HOME: home })).toBe("codex-caller-title-missing");
+	});
+});
+
+/**
+ * THE LAUNCH-DIRECTORY AXIS. The two above ask about the HOST and the CALLER — facts that do not
+ * change between two calls made a second apart. This one asks about ONE directory, so it is the
+ * only codex axis whose answer can differ per call on an unchanged host, and the only one that
+ * needed the cwd rules to have already run.
+ */
+describe("Codex launch-directory preflight", () => {
+	function writeProjects(body: string): void {
+		write(configFile, `model = "operator-model"\n\n${body}\n`, 0o600);
+	}
+
+	it("[QK:CODEX-LAUNCH-CWD-TRUST] refuses a launch directory the vendor has recorded no decision for, because an undecided folder opens a consent screen instead of a first turn", () => {
+		const target = path.join(root, "scratch");
+		// No config at all is NOT this axis's answer — absence proves nothing about the effective
+		// config, and its own cell below owns that. The refusal starts where the evidence does: a
+		// readable `projects` table that is silent about this exact directory.
+		expect(codexLaunchCwdFreshPreflight({ HOME: home }, target)).toBeNull();
+		writeProjects(`[projects."${path.join(root, "elsewhere")}"]\ntrust_level = "trusted"`);
+		expect(codexLaunchCwdFreshPreflight({ HOME: home }, target)).toBe("codex-launch-cwd-undecided");
+		writeProjects(`[projects."${target}"]\ntrust_level = "trusted"`);
+		expect(codexLaunchCwdFreshPreflight({ HOME: home }, target)).toBeNull();
+	});
+
+	it("[QK:CODEX-LAUNCH-CWD-EXACT-KEY] neither a TRUSTED parent nor a child entry answers for the directory being launched — this rail's vendor lookup is the exact cwd string and nothing else", () => {
+		const target = path.join(root, "parent", "scratch");
+		// `[source rust-v0.153.4]` project-root markers and the git root are consulted only for
+		// ProjectTrustHost::Local; a `--remote` startup looks up `vec![cwd_key]`. A parent that
+		// answered here would let the preflight pass a launch the vendor still stops — measured
+		// on 2026-09-16 with a trusted `/tmp` and an undecided `/tmp/entwurf-codex-fresh-live-*`.
+		// An UNTRUSTED ancestor is the one prefix that does travel, and it travels to a DIFFERENT
+		// reason rather than to consent — its own cell below.
+		writeProjects(`[projects."${path.join(root, "parent")}"]\ntrust_level = "trusted"`);
+		expect(codexLaunchCwdFreshPreflight({ HOME: home }, target)).toBe("codex-launch-cwd-undecided");
+		writeProjects(`[projects."${path.join(target, "deeper")}"]\ntrust_level = "trusted"`);
+		expect(codexLaunchCwdFreshPreflight({ HOME: home }, target)).toBe("codex-launch-cwd-undecided");
+		writeProjects(`[projects."${target}"]\ntrust_level = "trusted"`);
+		expect(codexLaunchCwdFreshPreflight({ HOME: home }, target)).toBeNull();
+	});
+
+	it("[QK:CODEX-LAUNCH-CWD-DECIDED-NOT-TRUSTED] a deliberate `untrusted` still passes — the axis asks whether a turn STARTS, and on this rail the vendor skips the consent screen for a saved untrusted folder; refusing it would invent a policy the vendor does not have", () => {
+		const target = path.join(root, "scratch");
+		// `[source rust-v0.153.4]` `if target.uses_remote_workspace() && trust_level == Some(Untrusted)
+		// { continue; }` (onboarding/directory_trust.rs:94-96), and every fresh call IS a remote
+		// target because its argv always passes `--remote` (tui/src/lib.rs:307-309).
+		writeProjects(`[projects."${target}"]\ntrust_level = "untrusted"`);
+		expect(codexLaunchCwdFreshPreflight({ HOME: home }, target)).toBeNull();
+		writeProjects(`[projects."${target}"]\ntrust_level = "trusted"`);
+		expect(codexLaunchCwdFreshPreflight({ HOME: home }, target)).toBeNull();
+		// UNDECIDED is the one that blocks, and the reason is named for it rather than for trust.
+		writeProjects(`[projects."${path.join(root, "elsewhere")}"]\ntrust_level = "trusted"`);
+		expect(codexLaunchCwdFreshPreflight({ HOME: home }, target)).toBe("codex-launch-cwd-undecided");
+	});
+
+	it("[QK:CODEX-LAUNCH-CWD-SHAPE] only a level the vendor itself recognises counts as decided, and a relative or unreadable input is refused rather than repaired into a different directory", () => {
+		const target = path.join(root, "scratch");
+		// An unrecognised string leaves `trust_level` as `None` on the vendor side too, and `None`
+		// with no project layer is precisely the case that renders the screen.
+		for (const level of ['trust_level = "Trusted"', 'trust_level = "yes"', "trust_level = true", ""]) {
+			writeProjects(`[projects."${target}"]\n${level}`);
+			expect(codexLaunchCwdFreshPreflight({ HOME: home }, target), level).toBe("codex-launch-cwd-undecided");
+		}
+		writeProjects(`[projects."${target}"]\ntrust_level = "trusted"`);
+	});
+
+	it("[QK:CODEX-LAUNCH-CWD-NO-EVIDENCE-PROCEEDS] absence is never a refusal — a relative path, an unreadable user config and a missing `projects` table all PROCEED, because none of them is evidence about what the vendor will do", () => {
+		const target = path.join(root, "scratch");
+		writeProjects(`[projects."${path.join(root, "elsewhere")}"]\ntrust_level = "trusted"`);
+		// A relative cwd: the vendor does not give up on one, it asks its app-server for a cwd and
+		// joins (`config_update.rs:203-224`). Production never reaches this anyway — the shared cwd
+		// leaf refuses a non-absolute request as `cwd-not-absolute`, a better reason than this axis
+		// could give.
+		expect(codexLaunchCwdFreshPreflight({ HOME: home }, "scratch")).toBeNull();
+		expect(codexLaunchCwdFreshPreflight({ HOME: home }, "")).toBeNull();
+		// No readable user config is NOT "no decisions": the vendor loads an empty user table and
+		// merges system, managed and cloud layers around it (`config/src/loader/mod.rs:258-290`,
+		// `:430-460`, `:520-610`), any of which can carry the decision that starts the turn.
+		write(configFile, "garbage [[[\n", 0o600);
+		expect(codexLaunchCwdFreshPreflight({ HOME: home }, target)).toBeNull();
+		fs.rmSync(configFile, { force: true });
+		expect(codexLaunchCwdFreshPreflight({ HOME: home }, target)).toBeNull();
+		// A readable config with no `projects` table says the USER layer records nothing, not that
+		// the effective config does.
+		write(configFile, 'model = "operator-model"\n', 0o600);
+		expect(codexLaunchCwdFreshPreflight({ HOME: home }, target)).toBeNull();
+		// ...and with a table present but silent about this directory, the evidence is positive
+		// again and the refusal returns.
+		writeProjects(`[projects."${path.join(root, "elsewhere")}"]\ntrust_level = "trusted"`);
+		expect(codexLaunchCwdFreshPreflight({ HOME: home }, target)).toBe("codex-launch-cwd-undecided");
+	});
+	it("[QK:CODEX-LAUNCH-CWD-UNTRUSTED-ANCESTOR] a cwd inside an explicitly untrusted project is its OWN failure, because the vendor answers it with an error rather than a consent screen and the repair is a different directory", () => {
+		// `[source rust-v0.153.4]` with no direct decision and no project layers, the remote branch
+		// returns `Err("remote project directory is inside an explicitly untrusted project; pass the
+		// repository root explicitly with --cd")` (`config_update.rs:357-371`). Reporting that as
+		// `undecided` would send the operator to answer a prompt at the child, which only
+		// reproduces the same vendor error.
+		const forbidden = path.join(root, "forbidden");
+		const target = path.join(forbidden, "inner", "scratch");
+		writeProjects(`[projects."${forbidden}"]\ntrust_level = "untrusted"`);
+		expect(codexLaunchCwdFreshPreflight({ HOME: home }, target)).toBe("codex-launch-cwd-untrusted-ancestor");
+		// A DIRECT decision on the launch directory still wins: the vendor never reaches the
+		// ancestor branch when the exact cwd is answered.
+		writeProjects(
+			`[projects."${forbidden}"]\ntrust_level = "untrusted"\n\n[projects."${target}"]\ntrust_level = "trusted"`,
+		);
+		expect(codexLaunchCwdFreshPreflight({ HOME: home }, target)).toBeNull();
+		// A sibling path that merely SHARES A PREFIX is not inside it — the boundary is a path
+		// separator, not a string prefix.
+		writeProjects(`[projects."${forbidden}"]\ntrust_level = "untrusted"`);
+		expect(codexLaunchCwdFreshPreflight({ HOME: home }, `${forbidden}-elsewhere/x`)).toBe("codex-launch-cwd-undecided");
+	});
+
+	it("[QK:CODEX-LAUNCH-CWD-LAYER-NOT-REFUSED] a directory that could carry a project layer is NOT refused — the vendor consents through layers this leaf cannot enumerate, so the unseeable case proceeds instead of blocking a launch that would have run", () => {
+		// `[source rust-v0.153.4]` `trust_level.is_none() && disabled_project.is_none() &&
+		// project_layers.any(no disabledReason)` returns `Ok(None)` — no screen, turn starts
+		// (`config_update.rs:346-354`). Those layers come from the server's `ConfigRead
+		// { include_layers: true }`, which this leaf does not ask. The asymmetry is deliberate and
+		// one-directional: miss a hang, never refuse a working launch.
+		const target = path.join(root, "layered");
+		fs.mkdirSync(path.join(target, ".codex"), { recursive: true, mode: 0o700 });
+		// EXISTENCE is the predicate, not safe ownership: a world-writable `.codex` is still a
+		// place the vendor can admit a layer from, and narrowing here would synthesise a refusal
+		// for a launch the vendor runs.
+		fs.chmodSync(path.join(target, ".codex"), 0o777);
+		writeProjects(`[projects."${path.join(root, "elsewhere")}"]\ntrust_level = "trusted"`);
+		expect(codexLaunchCwdFreshPreflight({ HOME: home }, target)).toBeNull();
+		// An ANCESTOR's `.codex` counts the same way, and it outranks the untrusted-ancestor
+		// reason for the vendor's own reason: that error branch requires `project_layers.is_empty()`.
+		const child = path.join(target, "inner");
+		fs.mkdirSync(child, { recursive: true, mode: 0o700 });
+		writeProjects(`[projects."${target}"]\ntrust_level = "untrusted"`);
+		expect(codexLaunchCwdFreshPreflight({ HOME: home }, child)).toBeNull();
+		// Without that `.codex` anywhere above it, the same shape is the ancestor refusal.
+		fs.rmSync(path.join(target, ".codex"), { recursive: true, force: true });
+		expect(codexLaunchCwdFreshPreflight({ HOME: home }, child)).toBe("codex-launch-cwd-untrusted-ancestor");
+	});
+
+	it("[QK:CODEX-LAUNCH-CWD-HOME-NOT-A-LAYER] the operator's own CODEX HOME never counts as a project layer — counting it would answer `null` for every path under $HOME and retire the whole axis in real use", () => {
+		// `~/.codex` is an ancestor of nearly every directory a sibling is launched in, and it is
+		// the USER config root rather than a project layer. This is the cell that keeps the check
+		// from being silently dead on a real host.
+		const underHome = path.join(home, "repos", "project");
+		fs.mkdirSync(path.join(home, ".codex"), { recursive: true, mode: 0o700 });
+		fs.mkdirSync(underHome, { recursive: true, mode: 0o700 });
+		writeProjects(`[projects."${path.join(root, "elsewhere")}"]\ntrust_level = "trusted"`);
+		expect(codexLaunchCwdFreshPreflight({ HOME: home }, underHome)).toBe("codex-launch-cwd-undecided");
+		// The exclusion follows CODEX_HOME rather than a hardcoded `~/.codex`, and the default one
+		// then stops being special: for a host whose codex home is elsewhere, a `.codex` at $HOME
+		// IS a project layer. Its config moves with it, so the fixture writes both.
+		const otherHome = path.join(root, "codex-home");
+		write(
+			path.join(otherHome, "config.toml"),
+			`[projects."${path.join(root, "elsewhere")}"]\ntrust_level = "trusted"\n`,
+			0o600,
+		);
+		expect(codexLaunchCwdFreshPreflight({ HOME: home, CODEX_HOME: otherHome }, underHome)).toBeNull();
+	});
+	it("[QK:CODEX-LAUNCH-CWD-ANCESTOR-PLAIN-PATHS-ONLY] a path this leaf cannot compare the way the vendor does degrades to the weaker reason instead of asserting the ancestor one — the disagreement lands on the permissive side", () => {
+		// `[source rust-v0.153.4]` the vendor compares path URIs segment-wise and fails closed on
+		// encoded separators (`utils/path-uri`); this compares strings on a separator boundary. An
+		// encoded or dot-segmented path is exactly where those two could part, so the ancestor
+		// reason — whose repair names a specific other directory — is not asserted there.
+		const forbidden = path.join(root, "forb%idden");
+		const target = path.join(forbidden, "inner");
+		writeProjects(`[projects."${forbidden}"]\ntrust_level = "untrusted"`);
+		expect(codexLaunchCwdFreshPreflight({ HOME: home }, target)).toBe("codex-launch-cwd-undecided");
+		// A plain key under a plain cwd still gets the precise reason.
+		const plain = path.join(root, "forbidden");
+		writeProjects(`[projects."${plain}"]\ntrust_level = "untrusted"`);
+		expect(codexLaunchCwdFreshPreflight({ HOME: home }, path.join(plain, "inner"))).toBe(
+			"codex-launch-cwd-untrusted-ancestor",
+		);
+		// BOTH SIDES of that comparison carry the rule, and each side has its OWN guard. The cells
+		// above vary the KEY; these vary the CWD against a plain key, which is the only way the
+		// cwd-side guard is observable — a cell that varies both leaves the key-side filter
+		// answering alone and certifies a guard that is no longer there. The two literals are the
+		// two halves of "not a plain POSIX path": an encoded separator and a dot segment.
+		expect(codexLaunchCwdFreshPreflight({ HOME: home }, path.join(plain, "in%ner"))).toBe("codex-launch-cwd-undecided");
+		// Written as a literal rather than through `path.join`, which would normalise the `..`
+		// away before the leaf ever saw it — the value codex receives on `-C` is not normalised.
+		expect(codexLaunchCwdFreshPreflight({ HOME: home }, `${plain}/../forbidden/inner`)).toBe(
+			"codex-launch-cwd-undecided",
+		);
 	});
 });

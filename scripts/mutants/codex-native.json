@@ -171,8 +171,8 @@
 			"claim": "FRESHCALL-CODEX-HOOKS-SAFE",
 			"title": "fresh preflight stops checking the operator-owned hooks.json for unsafe ownership/permissions/symlinks, so a world-writable or symlinked hooks.json is treated as a safe published birth unit",
 			"subject": "pi-extensions/lib/codex-fresh-preflight.ts",
-			"find": ["\tif (!isSafeOwnedFile(paths.hooksFile, expectedUid)) return true;"],
-			"replace": ["\tif (false) return true;"],
+			"find": ["\tif (!isSafeOwnedFile(paths.hooksFile, expectedUid)) return null;"],
+			"replace": ["\tif (false) return null;"],
 			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
 			"timeoutSeconds": 120,
 			"signature": "[QK:FRESHCALL-CODEX-HOOKS-SAFE]",
@@ -217,14 +217,14 @@
 		},
 		{
 			"claim": "FRESHCALL-CODEX-HOOK-KEYS",
-			"title": "fresh preflight stops requiring the exact birth handler key set, so an async or extra-key hook — one the installer would never publish and one that lets the turn proceed before the record exists — reads as an installed birth unit",
-			"subject": "pi-extensions/lib/codex-fresh-preflight.ts",
-			"find": ["\t\tif (Object.keys(hook).sort().join(\",\") !== \"command,timeout,type\") return true;"],
-			"replace": ["\t\tif (false) return true;"],
-			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
-			"timeoutSeconds": 120,
+			"title": "the declaration leaf stops requiring the exact birth handler key set, so an async or extra-key hook — one the installer would never publish and one that lets the turn proceed before the record exists — is no longer NAMED as a shape drift",
+			"subject": "pi-extensions/lib/codex-declaration.js",
+			"find": ["\tif (handlerKeys.join(\",\") !== \"command,timeout,type\") {"],
+			"replace": ["\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-codex-birth-hook"],
+			"timeoutSeconds": 180,
 			"signature": "[QK:FRESHCALL-CODEX-HOOK-KEYS]",
-			"signatureSource": "test/codex-fresh-preflight.test.ts"
+			"signatureSource": "scripts/check-codex-birth-hook.ts"
 		},
 		{
 			"claim": "CODEX-TOML-STATE-BEFORE-CONFIG",
@@ -311,14 +311,14 @@
 			"signatureSource": "scripts/smoke-codex-config-state.sh"
 		},
 		{
-			"claim": "CODEX-BIRTH-FOREIGN-HOOKS-REFUSED",
-			"title": "the user-layer birth unit stops refusing a hooks.json no ownership state vouches for, so a declaration somebody else wrote is treated as one of ours",
+			"claim": "CODEX-BIRTH-JOINS-FOREIGN-FILE",
+			"title": "the birth unit refuses a hooks.json it did not write instead of joining it, so a host carrying a neighbouring integration can never be installed into",
 			"subject": "scripts/codex-birth-install.sh",
-			"find": ["  if [ \"$STATE_PRESENT\" = \"0\" ]; then"],
-			"replace": ["  if false; then  # mutant: treat a foreign hooks.json as ours"],
+			"find": ["    if (sel.code !== \"declaration-absent\") throw new Error(sel.code + \": \" + sel.detail);"],
+			"replace": ["    throw new Error(\"hooks.json already exists and no ownership state vouches for it\");"],
 			"gate": ["bash", "run.sh", "smoke-codex-birth"],
 			"timeoutSeconds": 120,
-			"signature": "[QK:CODEX-BIRTH-FOREIGN-HOOKS-REFUSED]",
+			"signature": "[QK:CODEX-BIRTH-JOINS-FOREIGN-FILE]",
 			"signatureSource": "scripts/smoke-codex-birth.sh"
 		},
 		{
@@ -383,10 +383,10 @@
 			"title": "the MCP public surface relabels a Codex request as pi at the shared dispatcher seam, so the one central capability preflight is bypassed and placement runs first",
 			"subject": "mcp/entwurf-bridge/src/index.ts",
 			"find": [
-				"\t\t\tconst dispatched = await dispatchFreshCall({ backend, model, task, cwd, placement, callerGardenId });"
+				"\t\t\tconst dispatched = await dispatchFreshCall({\n\t\t\t\tbackend,\n\t\t\t\tmodel,\n\t\t\t\ttask,\n\t\t\t\tcwd,\n\t\t\t\tplacement,\n\t\t\t\tcallerGardenId,\n\t\t\t\tcallerNativeSessionId,\n\t\t\t\tcallerCwd,\n\t\t\t});"
 			],
 			"replace": [
-				"\t\t\tconst dispatched = await dispatchFreshCall({ backend: \"pi\", model, task, cwd, placement, callerGardenId });"
+				"\t\t\tconst dispatched = await dispatchFreshCall({\n\t\t\t\tbackend: \"pi\",\n\t\t\t\tmodel,\n\t\t\t\ttask,\n\t\t\t\tcwd,\n\t\t\t\tplacement,\n\t\t\t\tcallerGardenId,\n\t\t\t\tcallerNativeSessionId,\n\t\t\t\tcallerCwd,\n\t\t\t});"
 			],
 			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
 			"timeoutSeconds": 180,
@@ -449,9 +449,7 @@
 			"claim": "FRESHCALL-CODEX-TRUST-RECEIPT",
 			"title": "fresh preflight opens a Codex sibling whose birth hook the vendor never agreed to run",
 			"subject": "pi-extensions/lib/codex-fresh-preflight.ts",
-			"find": [
-				"\tif (config === null || trustReceiptMissing(config, paths.hooksFile)) return \"codex-birth-trust-missing\";"
-			],
+			"find": ["\tif (config === null || trustReceiptMissing(config, key)) return \"codex-birth-trust-missing\";"],
 			"replace": ["\tif (config === null) return \"codex-birth-trust-missing\";"],
 			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
 			"timeoutSeconds": 180,
@@ -462,8 +460,10 @@
 			"claim": "FRESHCALL-CODEX-STATE-DIGEST",
 			"title": "fresh preflight accepts a birth closure whose bytes no longer match the digests its own ownership state recorded",
 			"subject": "pi-extensions/lib/codex-fresh-preflight.ts",
-			"find": ["\treturn closureDriftedFromState(paths, expectedUid);"],
-			"replace": ["\treturn false;  // mutant: existence is enough"],
+			"find": [
+				"\t\tif (typeof member.sha256 !== \"string\" || digest(path.join(paths.helperDir, rel)) !== member.sha256) return null;"
+			],
+			"replace": ["\t\tif (typeof member.sha256 !== \"string\") return null;  // mutant: existence is enough"],
 			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
 			"timeoutSeconds": 180,
 			"signature": "[QK:FRESHCALL-CODEX-STATE-DIGEST]",
@@ -522,7 +522,7 @@
 			"title": "fresh preflight compares only the digests a state happens to name, so a short inventory hides an unchecked closure member",
 			"subject": "pi-extensions/lib/codex-fresh-preflight.ts",
 			"find": [
-				"\tif (named.length !== expected.length) return true;\n\tif (expected.some((name) => !named.includes(name))) return true;\n\tif (named.some((name, index) => named.indexOf(name) !== index)) return true;"
+				"\tif (named.length !== expected.length) return null;\n\tif (expected.some((name) => !named.includes(name))) return null;\n\tif (named.some((name, index) => named.indexOf(name) !== index)) return null;"
 			],
 			"replace": ["\t// mutant: judge only the members a state happens to name"],
 			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
@@ -558,7 +558,7 @@
 			"claim": "FRESHCALL-CODEX-STATE-PARENT-AUTHORITY",
 			"title": "fresh preflight trusts a digest inventory sitting in a directory anyone on the host can rewrite",
 			"subject": "pi-extensions/lib/codex-fresh-preflight.ts",
-			"find": ["\tif (!isSafeOwnedDir(path.dirname(paths.stateFile), expectedUid)) return true;"],
+			"find": ["\tif (!isSafeOwnedDir(path.dirname(paths.stateFile), expectedUid)) return null;"],
 			"replace": ["\t// mutant: the directory holding the receipt is nobody's business"],
 			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
 			"timeoutSeconds": 180,
@@ -837,6 +837,87 @@
 			"timeoutSeconds": 180,
 			"signature": "[QK:CODEX-LIVE-RECOVERY-SOURCE-ONLY]",
 			"signatureSource": "test/codex-fresh-live-protocol.test.ts"
+		},
+		{
+			"claim": "CODEX-DECL-CANONICAL-KEY-ORDER",
+			"title": "the declaration digest is taken over unsorted keys, so a neighbour re-serializing the document reads as an edited entwurf declaration",
+			"subject": "pi-extensions/lib/codex-declaration.js",
+			"find": ["\tconst keys = Object.keys(value).sort();"],
+			"replace": ["\tconst keys = Object.keys(value);"],
+			"gate": ["bash", "run.sh", "check-codex-birth-hook"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:CODEX-DECL-CANONICAL-KEY-ORDER]",
+			"signatureSource": "scripts/check-codex-birth-hook.ts"
+		},
+		{
+			"claim": "CODEX-DECL-SELECT-BY-COMMAND",
+			"title": "entwurf's declaration is selected by POSITION instead of by its launcher command, so a neighbour at index 0 is certified as ours",
+			"subject": "pi-extensions/lib/codex-declaration.js",
+			"find": [
+				"\t\t\tif (handler !== null && typeof handler === \"object\" && !Array.isArray(handler) && handler.command === want) {"
+			],
+			"replace": [
+				"\t\t\tif (handler !== null && typeof handler === \"object\" && !Array.isArray(handler) && h === 0) {"
+			],
+			"gate": ["bash", "run.sh", "check-codex-birth-hook"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:CODEX-DECL-SELECT-BY-COMMAND]",
+			"signatureSource": "scripts/check-codex-birth-hook.ts"
+		},
+		{
+			"claim": "CODEX-DECL-SPLICE-KEEPS-FOREIGN-BYTES",
+			"title": "a certified splice returns a RE-SERIALIZED document instead of the spliced text, rewriting every byte a neighbouring integration owns",
+			"subject": "pi-extensions/lib/codex-declaration.js",
+			"find": ["\treturn spliced;"],
+			"replace": ["\treturn JSON.stringify(reparsed, null, 2);"],
+			"gate": ["bash", "run.sh", "check-codex-birth-hook"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:CODEX-DECL-SPLICE-KEEPS-FOREIGN-BYTES]",
+			"signatureSource": "scripts/check-codex-birth-hook.ts"
+		},
+		{
+			"claim": "CODEX-DECL-SPLICE-CERTIFIED",
+			"title": "the span splice is written out on the span reader's word alone, with no re-parse proving it landed where the caller intended",
+			"subject": "pi-extensions/lib/codex-declaration.js",
+			"find": ["\tif (canonicalJson(reparsed) !== canonicalJson(expected)) {"],
+			"replace": ["\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-codex-birth-hook"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:CODEX-DECL-SPLICE-CERTIFIED]",
+			"signatureSource": "scripts/check-codex-birth-hook.ts"
+		},
+		{
+			"claim": "CODEX-DECLARATION-DUPLICATED",
+			"title": "a duplicated entwurf declaration is first-match accepted, so the vendor runs the birth hook twice and only one position carries the receipt",
+			"subject": "pi-extensions/lib/codex-declaration.js",
+			"find": ["\tif (mine.length > 1) {"],
+			"replace": ["\tif (mine.length > 2) {"],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:CODEX-DECLARATION-DUPLICATED]",
+			"signatureSource": "test/codex-fresh-preflight.test.ts"
+		},
+		{
+			"claim": "CODEX-DECLARATION-TRUST-INDEX",
+			"title": "fresh preflight reads the vendor trust receipt at the constant :0:0, so a neighbour's approval at index 0 admits a birth hook the vendor never agreed to run",
+			"subject": "pi-extensions/lib/codex-fresh-preflight.ts",
+			"find": ["\tconst key = trustReceiptKey(paths.hooksFile, declaration.groupIndex, declaration.handlerIndex);"],
+			"replace": ["\tconst key = trustReceiptKey(paths.hooksFile, 0, 0);"],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:CODEX-DECLARATION-TRUST-INDEX]",
+			"signatureSource": "test/codex-fresh-preflight.test.ts"
+		},
+		{
+			"claim": "CODEX-BIRTH-TRUST-INDEX-MEASURED",
+			"title": "the doctor reads the vendor trust receipt at the constant :0:0, reporting a neighbour's approval as entwurf's own",
+			"subject": "scripts/codex-birth-doctor.sh",
+			"find": ["  TRUST_KEY=\"$HOOKS_FILE:session_start:$DECL_GROUP_INDEX:$DECL_HANDLER_INDEX\""],
+			"replace": ["  TRUST_KEY=\"$HOOKS_FILE:session_start:0:0\""],
+			"gate": ["bash", "run.sh", "smoke-codex-birth"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:CODEX-BIRTH-TRUST-INDEX-MEASURED]",
+			"signatureSource": "scripts/smoke-codex-birth.sh"
 		}
 	]
 }

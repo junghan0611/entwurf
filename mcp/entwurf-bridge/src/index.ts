@@ -253,6 +253,15 @@ interface AuthoritativeSelf {
 	envelope: SenderEnvelope;
 	/** meta-session only: WHICH rail carries a reply back. Never inferred from `origin`. */
 	metaDeliveryDomain?: MetaDeliveryDomain;
+	/**
+	 * meta-session/codex ONLY: the `_meta.threadId` that named this caller on THIS request, and
+	 * which the reconciliation above already proved equal to the selected citizen's
+	 * `nativeSessionId`. It rides here for exactly one consumer — the fresh-call PLACEMENT,
+	 * which turns it into the caller's own tmux pane through its title (#95 lane B). It is not
+	 * an address, not a reply rail, and not part of the sender envelope: `sessionId` is the only
+	 * thing anyone may send to.
+	 */
+	codexThreadId?: string;
 }
 
 interface SenderRequestContext {
@@ -338,7 +347,7 @@ async function resolveAuthoritativeSender(
 	]);
 	if (!selected) return null;
 	if (codex && codex.identity.gardenId === selected.id) {
-		return buildMetaSenderEnvelope(codex.identity, codex.identity.cwd);
+		return { ...(await buildMetaSenderEnvelope(codex.identity, codex.identity.cwd)), codexThreadId: codex.threadId };
 	}
 	if (marker && marker.identity.gardenId === selected.id) {
 		return buildMetaSenderEnvelope(marker.identity, marker.marker.cwd || cwd, marker);
@@ -707,24 +716,25 @@ server.tool(
 server.tool(
 	"entwurf_fresh_call",
 	"Open ONE fresh visible sibling beside you and hand it a first task. WHERE it opens is decided by where THIS " +
-		"agent runs, never by a parameter: inside herdr (HERDR_ENV=1) it opens in a herdr pane and only pi and " +
-		"claude-code may be opened; everywhere else it opens in the operator's tmux with all five backends (pi, " +
-		"claude-code, copilot, omp, codex). There is no fallback — an incomplete herdr context is refused by name " +
-		"rather than opening a tmux window you cannot see from in herdr. The sibling's FIRST action " +
+		"agent runs, never by a parameter: inside herdr (HERDR_ENV=1) it opens in a herdr pane, pi and claude-code " +
+		"only; everywhere else it opens in the operator's tmux with all five backends (pi, " +
+		"claude-code, copilot, omp, codex). No fallback: an incomplete herdr context is refused by name, " +
+		"never by a tmux window you cannot see from herdr. The sibling's FIRST action " +
 		"is a callback to you carrying a nonce, whose sender envelope is its garden id — that is how you learn the " +
 		"address of a thing that did not exist a moment ago. This returns a LAUNCH receipt (the owner's " +
-		"coordinates plus that nonce) and nothing else: it does NOT mean the runtime started, the first turn ran, or " +
-		"the task was delivered. Those coordinates are a VIEW, never an address — a herdr pane id can change under a " +
-		"running sibling. Nothing polls; if the callback never arrives the pane is visible and readable directly. " +
-		"For EXISTING citizens use entwurf_v2 — this tool only creates, and entwurf_peers only reports. Model is REQUIRED and passed to the chosen runtime CLI (`provider/model` for pi, an id/alias " +
-		"for Claude Code, a name or pattern for the rest). On tmux, copilot/omp/codex are refused BEFORE any window " +
+		"coordinates plus that nonce): it does NOT mean the runtime started, the first turn ran, or " +
+		"the task was delivered. Those coordinates are a VIEW, never an address — a herdr pane id can change under " +
+		"a running sibling. Nothing polls. " +
+		"For EXISTING citizens use entwurf_v2 — this tool only creates, and entwurf_peers only reports. Model is REQUIRED and passed to the chosen " +
+		"runtime CLI (`provider/model` for pi, an id/alias for Claude Code, a pattern for the rest). On tmux, copilot/omp/codex are refused BEFORE any window " +
 		"opens when their birth, MCP, receive or visible-identity units are absent, and codex also needs the " +
-		"operator-owned app-server socket entwurf never starts; in herdr those three are refused by name first. " +
-		"Optional cwd starts the sibling in ONE literal absolute existing directory; omitted/empty means your own " +
-		"directory on both rails, and '#' is refused on tmux only. Optional placement.tmuxSession " +
-		"is a TMUX-ONLY seat naming ONE EXISTING session; omitted, Codex targets the exact existing `codex` home " +
-		"session and others your own, a missing one is tmux-session-missing and NOTHING is created — in herdr the " +
-		"field is refused by name. Do not put secrets in the task — model and task argv are visible to same-user " +
+		"operator-owned app-server socket entwurf never starts; in herdr they are refused by name first. " +
+		"Optional cwd starts the sibling in ONE literal absolute existing directory; omitted/empty means where the " +
+		"CALLER is — its own directory, or a Codex caller's own record directory — on both rails, and '#' is " +
+		"refused on tmux only. Optional placement.tmuxSession is a TMUX-ONLY seat naming ONE EXISTING session and " +
+		"ALWAYS wins; omitted, the seat follows the CALLER, never the backend opened: a CODEX CALLER opens beside " +
+		"its own TUI pane, every other caller in its own session; a missing one is tmux-session-missing and " +
+		"NOTHING is created. In herdr the field is refused by name. Do not put secrets in the task — model and task argv are visible to same-user " +
 		"processes.",
 	{
 		backend: z
@@ -759,7 +769,7 @@ server.tool(
 			.string()
 			.optional()
 			.describe(
-				"Optional literal ABSOLUTE path of an existing directory to start the sibling in (cross-repo fresh). Omit or pass \"\" to start in this agent's own cwd — on BOTH rails. Taken exactly as given: no trim, no realpath, no project-name resolution. '#' is refused on the tmux rail only, because tmux format-expands a start directory; inside herdr it is an ordinary path character. The receipt echoes what was REQUESTED, never an observation.",
+				"Optional literal ABSOLUTE path of an existing directory to start the sibling in (cross-repo fresh). Omit or pass \"\" to start where the CALLER is — this agent's own cwd on BOTH rails, or for a Codex caller its own record directory, because this bridge is the app-server's child and that process's directory is not the caller's. Taken exactly as given: no trim, no realpath, no project-name resolution. '#' is refused on the tmux rail only, because tmux format-expands a start directory; inside herdr it is an ordinary path character. The receipt echoes the directory that was REQUESTED or the caller record it came from, never an observation of where the pane landed.",
 			),
 		placement: z
 			.object({
@@ -771,14 +781,28 @@ server.tool(
 			})
 			.optional()
 			.describe(
-				"Optional expert seat override, TMUX ONLY: open the sibling in ONE EXISTING tmux session of this agent's own server. When omitted, Codex selects the exact existing `codex` home session; other backends use the caller's session. Nothing is ever created. Inside herdr this field is refused by name — placement there belongs to herdr, and a tmux session name would silently place the sibling somewhere else. Independent of cwd; neither is inferred from the other. The receipt reports the selected name, its source, and resolved target session id.",
+				"Optional expert seat override, TMUX ONLY: open the sibling in ONE EXISTING tmux session of this agent's own server, and it always wins. When omitted the seat follows the CALLER, never the backend being opened: a Codex CALLER opens beside its own TUI pane, matched by thread-id in that pane's terminal title (0 or 2+ matching panes refuse, never fall back); every other caller opens in its own session. A pane title is a placement input only — never an address, liveness or delivery fact. Nothing is ever created. Inside herdr this field is refused by name — placement there belongs to herdr, and a tmux session name would silently place the sibling somewhere else. Independent of cwd; neither is inferred from the other. The receipt reports the selected name (absent for the caller-pane rule, which observed a session rather than requesting a name), its source, and resolved target session id.",
 			),
 	},
 	async ({ backend, model, task, cwd, placement }, extra) => {
 		let callerGardenId: string | null = null;
+		// Present exactly when the reconciled caller is a record-backed codex citizen. Its ONLY
+		// consumer is the placement below: a Codex caller with no explicit seat opens its sibling
+		// beside its own TUI pane, found by that thread's terminal title (#95 lane B).
+		let callerNativeSessionId: string | undefined;
+		// The SAME citizen's record cwd, set under the SAME condition and carrying no further
+		// authority: `envelope.cwd` is only the record's directory when the selected sender is
+		// that codex citizen, so the two are derived from one fact rather than read separately.
+		// It exists because `process.cwd()` here is the operator-owned APP-SERVER's directory —
+		// this bridge is its MCP child — so a codex caller that names no cwd would otherwise open
+		// every sibling in the app-server's repo (#95 lane C §1). The composition consults it only
+		// when the tool call requested no cwd of its own.
+		let callerCwd: string | undefined;
 		try {
 			const self = await buildAuthoritativeSelfEnvelope({ requestMeta: extra._meta });
 			callerGardenId = self.envelope.sessionId;
+			callerNativeSessionId = self.codexThreadId;
+			callerCwd = self.codexThreadId === undefined ? undefined : self.envelope.cwd;
 		} catch (err) {
 			// ONE error is a legitimate answer here: this host has no authoritative identity at all
 			// (no pi carrier inherited, no trusted marker written), so the sibling would have nowhere
@@ -792,8 +816,19 @@ server.tool(
 		}
 		try {
 			// Rail choice, Codex preflight ordering and rendering all live in the composition root,
-			// so this surface and pi's own cannot drift apart on any of them.
-			const dispatched = await dispatchFreshCall({ backend, model, task, cwd, placement, callerGardenId });
+			// so this surface and pi's own cannot drift apart on any of them. The two caller-derived
+			// codex inputs ride with the request: the root consults them only on the tmux rail,
+			// which is where #95 lane B/C measured them.
+			const dispatched = await dispatchFreshCall({
+				backend,
+				model,
+				task,
+				cwd,
+				placement,
+				callerGardenId,
+				callerNativeSessionId,
+				callerCwd,
+			});
 			const rendered = renderDispatchedFreshCall(dispatched);
 			return rendered.isError ? textErr(rendered.text) : textOk(rendered.text);
 		} catch (err) {

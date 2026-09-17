@@ -7,17 +7,31 @@
 #   RUNTIME     is there a node the launcher can exec, and a Codex CLI at all?
 #   UNIT        are the declaration, launcher and closure present, ours by digest, and
 #               owned/permissioned so that nobody else could have written them?
+#   FOREIGN     what ELSE declares a SessionStart hook in that file — reported, never judged.
 #   TRUST       has the VENDOR recorded the operator's one-time decision for this exact
 #               declaration identity?
 #
+# WHAT THE UNIT AXIS CERTIFIES ABOUT hooks.json, AND WHAT IT STOPPED CERTIFYING (#117). Not the
+# file. entwurf owns ONE `SessionStart` group in a file it SHARES — Herdr's official Codex
+# integration appends its own, and the vendor runs both, because `[source]`
+# hooks/src/engine/discovery.rs:664-665 keys trust by `<path>:<event>:<group_idx>:<handler_idx>`.
+# So this doctor selects entwurf's group by its launcher command, checks its SHAPE and its
+# NORMALIZED digest (key order and indentation blind — measured: Herdr re-serializes the whole
+# document), and reports every other group as FOREIGN without ever certifying or editing it.
+#
 # WHAT THE TRUST AXIS IS, EXACTLY. It reads `$CODEX_HOME/config.toml` and looks for the
-# vendor's own receipt at the fixed key `<hooks.json>:session_start:0:0`, whose value must
-# be a `trusted_hash` of the shape `sha256:<64 hex>`. That is ALL it claims: a vendor trust
+# vendor's own receipt at `<hooks.json>:session_start:<our group>:<our handler>`, whose value
+# must be a `trusted_hash` of the shape `sha256:<64 hex>`. That is ALL it claims: a vendor trust
 # receipt is present for the declaration identity this unit publishes. It does NOT compute
 # what that hash should be, does not compare it to anything of ours, and therefore never
 # says the approval is cryptographically valid — the vendor hashes a normalized identity of
 # its own (`[source]` hooks/src/engine/discovery.rs:775-792) and recomputing it here would
 # be entwurf asserting authority over somebody else's security decision.
+#
+# AND IT IS READ AT THE INDEX OUR DECLARATION WAS JUST MEASURED AT, never at a constant. The old
+# spelling `…:session_start:0:0` was true only while entwurf was alone in the file; with a
+# neighbour at index 0 it reads THEIR receipt and reports it as ours — a green for a hook the
+# vendor has never been asked to run.
 #
 # WHAT THIS DOCTOR NEVER DOES. It does not write, pre-seed or repair `[hooks.state]`, and it
 # never launches Codex. A missing receipt is not something to fix from here: the operator
@@ -49,7 +63,13 @@ HELPER_DIR="$UNIT_ROOT/helper"
 LAUNCHER_NAME="codex-birth-launch.sh"
 LAUNCHER="$HELPER_DIR/$LAUNCHER_NAME"
 STATE_FILE="$UNIT_ROOT/install-state.json"
+REPO_DIR="$(cd -P -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+DECLARATION_LIB="$REPO_DIR/pi-extensions/lib/codex-declaration.js"
 ME="$(id -u)"
+# Filled by the UNIT axis and read by the TRUST axis: the position our declaration was actually
+# found at. Empty means the UNIT axis could not locate it, and TRUST says so rather than guessing.
+DECL_GROUP_INDEX=""
+DECL_HANDLER_INDEX=""
 
 RED=0
 section() { printf '\n── %s %s\n' "$1" "─────────────────────────────────────────"; }
@@ -105,9 +125,25 @@ judge_parent() { # $1 = dir, $2 = label
 section "UNIT (the bytes this unit publishes, and whether they are still ours)"
 judge_parent "$PACKAGE_STATE_ROOT" "the package state root"
 judge_parent "$UNIT_ROOT" "the unit root"
+FOREIGN_LINES=""
+FOREIGN_SCANNED=0
+ORPHAN_DECLARATION=0
+if [ ! -e "$STATE_FILE" ] && [ ! -L "$STATE_FILE" ] && [ -f "$HOOKS_FILE" ] && [ -n "$NODE_BIN" ] && [ -f "$DECLARATION_LIB" ]; then
+  # A hooks.json with NO entwurf state is the ordinary shape on a host where only somebody else
+  # declares hooks — it is not evidence of anything of ours. What IS evidence is a group
+  # commanding OUR launcher with no receipt behind it, so that is the only thing asked about.
+  "$NODE_BIN" -e '
+    const fs = require("node:fs");
+    const [, lib, hooksFile, launcher] = process.argv;
+    import(lib).then((m) => {
+      const sel = m.selectEntwurfDeclaration(JSON.parse(fs.readFileSync(hooksFile, "utf8")), launcher);
+      process.exit(sel.ok || sel.code === "declaration-duplicated" ? 0 : 1);
+    }).catch(() => process.exit(1));
+  ' "$DECLARATION_LIB" "$HOOKS_FILE" "$LAUNCHER" >/dev/null 2>&1 && ORPHAN_DECLARATION=1
+fi
 if [ ! -e "$STATE_FILE" ] && [ ! -L "$STATE_FILE" ]; then
-  if [ -e "$HOOKS_FILE" ] || [ -e "$HELPER_DIR" ]; then
-    bad "no ownership state at $STATE_FILE, yet $HOOKS_FILE or $HELPER_DIR exists — those bytes are not provably ours and the inverse will refuse them. Inspect them."
+  if [ "$ORPHAN_DECLARATION" = "1" ] || [ -e "$HELPER_DIR" ]; then
+    bad "no ownership state at $STATE_FILE, yet an entwurf declaration or helper closure is present — those bytes are not provably ours and the inverse will refuse them. Inspect them."
   else
     # NOT an informational note. "Nothing is installed" is the most complete way for this
     # unit to be broken: no declaration, no closure, no record will ever be minted — and a
@@ -133,15 +169,21 @@ else
   INVENTORY="$("$NODE_BIN" -e '
     const fs = require("node:fs");
     const path = require("node:path");
-    const s = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+    const [, stateFile, hooksFile, helperDir, lib, launcher] = process.argv;
+    // An async main, not a top-level body: `node -e` compiles its input as a script, where a
+    // top-level `return` is a SyntaxError, and the declaration leaf is an ESM `import()`.
+    void (async function main() {
+    const s = JSON.parse(fs.readFileSync(stateFile, "utf8"));
     const out = [];
     const hex = (v) => typeof v === "string" && /^[0-9a-f]{64}$/.test(v);
-    if (s.schema !== "codex-birth-install-state/v1") out.push("BAD\tforeign state schema " + JSON.stringify(s.schema));
+    if (s.schema === "codex-birth-install-state/v1") {
+      out.push("BAD\tthe ownership state is codex-birth-install-state/v1, which recorded a digest of the WHOLE hooks.json. This unit now owns ONE declaration inside a file it shares, so that receipt claims bytes it does not own. Repair: ./run.sh install-codex-birth (it supersedes the receipt, removes nothing, and rewrites no foreign byte)");
+    } else if (s.schema !== "codex-birth-install-state/v2") {
+      out.push("BAD\tforeign state schema " + JSON.stringify(s.schema));
+    }
     if (s.status !== "installed") out.push("BAD\tthe state status is " + JSON.stringify(s.status) + ", so a previous install did not finish publishing. Repair: ./run.sh install-codex-birth");
-    if (s.hooksFile !== process.argv[2]) out.push("BAD\tthe state is bound to " + s.hooksFile + ", not the fixed path " + process.argv[2]);
-    if (s.helperDir !== process.argv[3]) out.push("BAD\tthe state is bound to helper dir " + s.helperDir + ", not the fixed path " + process.argv[3]);
-    if (!hex(s.hooksSha256)) out.push("BAD\thooksSha256 is not a digest");
-    else out.push("WANT\t" + s.hooksSha256 + "\t" + s.hooksFile + "\tthe declaration");
+    if (s.hooksFile !== hooksFile) out.push("BAD\tthe state is bound to " + s.hooksFile + ", not the fixed path " + hooksFile);
+    if (s.helperDir !== helperDir) out.push("BAD\tthe state is bound to helper dir " + s.helperDir + ", not the fixed path " + helperDir);
     const expected = [
       "codex-birth-launch.sh",
       "meta-bridge-hook-codex.ts",
@@ -168,13 +210,67 @@ else
       out.push(["WANT", f.sha256, path.join(s.helperDir, f.path), "helper member " + f.path, f.mode ?? ""].join("\t"));
     }
     out.push("INFO\tunitVersion=" + (s.unitVersion ?? "?") + " nodeBin=" + (s.nodeBin ?? "?"));
-    process.stdout.write(out.join("\n") + "\n");
-  ' "$STATE_FILE" "$HOOKS_FILE" "$HELPER_DIR" 2>&1)" || { bad "the ownership state is unreadable or malformed: $INVENTORY"; INVENTORY=""; }
+
+    // ── the DECLARATION, judged as one group inside a file this unit shares ──
+    const decl = s.declaration;
+    const declOk = decl !== null && typeof decl === "object" && !Array.isArray(decl) && decl.event === "SessionStart" && typeof decl.command === "string" && hex(decl.sha256);
+    if (!declOk && s.schema === "codex-birth-install-state/v2") out.push("BAD\tthe state records no usable declaration receipt (event/command/sha256)");
+    const emit = () => process.stdout.write(out.join("\n") + "\n");
+    if (!declOk) return emit();
+    let text;
+    try {
+      text = fs.readFileSync(hooksFile, "utf8");
+    } catch {
+      out.push("BAD\tthe declaration file is MISSING: " + hooksFile + " — no Codex thread on this host can become a citizen. Repair: ./run.sh install-codex-birth");
+      return emit();
+    }
+    const m = await import(lib);
+    let sel;
+    try {
+      sel = m.selectEntwurfDeclaration(JSON.parse(text), launcher);
+    } catch (err) {
+      out.push("BAD\t" + hooksFile + " is not readable JSON (" + err.message + ")");
+      return emit();
+    }
+    // The SCAN marker is emitted whether or not there are neighbours, because "none" and "never
+    // looked" are different facts and only one of them claims anything about a file we read.
+    for (const group of sel.foreign) {
+      out.push("FOREIGN\tSessionStart group " + group.index + ": " + (group.commands.join(" | ") || "(no handler)"));
+    }
+    out.push("FOREIGNSCAN\t" + sel.foreign.length);
+    if (!sel.ok) {
+      out.push("BAD\tentwurf\u2019s own declaration is not certifiable in " + hooksFile + " — " + sel.code + ": " + sel.detail + ". Repair: ./run.sh install-codex-birth");
+      return emit();
+    }
+    if (sel.digest !== decl.sha256) {
+      out.push("BAD\tentwurf\u2019s own declaration was EDITED after install (" + hooksFile + " group " + sel.groupIndex + ": live normalized " + sel.digest + ", recorded " + decl.sha256 + ") — the inverse will refuse to remove it");
+      return emit();
+    }
+    if (decl.command !== m.entwurfDeclarationCommand(launcher)) {
+      out.push("BAD\tthe recorded declaration command " + JSON.stringify(decl.command) + " is not the one these fixed paths produce");
+      return emit();
+    }
+    out.push("DECL\t" + sel.groupIndex + "\t" + sel.handlerIndex + "\t" + sel.digest + "\t" + sel.foreign.length);
+    return emit();
+    })().catch((err) => {
+      process.stderr.write(err && err.message ? err.message : String(err));
+      process.exit(1);
+    });
+  ' "$STATE_FILE" "$HOOKS_FILE" "$HELPER_DIR" "$DECLARATION_LIB" "$LAUNCHER" 2>&1)" || { bad "the ownership state is unreadable or malformed: $INVENTORY"; INVENTORY=""; }
 
   while IFS="$(printf '\t')" read -r kind a b c d; do
     case "$kind" in
       BAD) bad "$a" ;;
       INFO) info "$a" ;;
+      FOREIGN) FOREIGN_LINES="${FOREIGN_LINES}${a}
+" ;;
+      FOREIGNSCAN) FOREIGN_SCANNED=1 ;;
+      DECL)
+        DECL_GROUP_INDEX="$a"; DECL_HANDLER_INDEX="$b"
+        ok "entwurf's declaration is certified at $HOOKS_FILE group $a handler $b (normalized sha256 $c)"
+        info "certified by NORMALIZED digest, not by file bytes: this unit owns one SessionStart group,"
+        info "and a neighbour re-serializing that document changes every byte and nothing of ours."
+        ;;
       WANT)
         if [ -L "$b" ]; then bad "$c is a SYMLINK ($b) — this unit publishes no links."
         elif [ ! -e "$b" ]; then bad "$c is MISSING: $b"
@@ -197,11 +293,37 @@ $INVENTORY
 EOF
 fi
 
+section "FOREIGN (what else declares a SessionStart hook in that file)"
+# REPORTED, NEVER JUDGED. Another integration's declaration is not this unit's to certify, to
+# repair or to remove, and its state says nothing about whether entwurf's own hook will run —
+# `[source]` discovery.rs:664-665 trusts per declaration, so neighbours are independent. This
+# section exists so an operator can SEE them, which is the difference between coexisting and
+# not knowing.
+if [ "$FOREIGN_SCANNED" = "0" ]; then
+  # NOT "none". The UNIT axis stopped before it read that document — an absent or unreadable
+  # ownership state, a missing file — and reporting "none" here would be this doctor asserting
+  # something about the operator's file that it never looked at.
+  info "NOT READ — the UNIT axis stopped before it could look at $HOOKS_FILE, so this doctor"
+  info "knows nothing about what else declares a SessionStart hook there. Repair the UNIT axis first."
+elif [ -n "$FOREIGN_LINES" ]; then
+  printf '%s' "$FOREIGN_LINES" | while IFS= read -r line; do
+    [ -n "$line" ] && info "$line"
+  done
+  info "present-but-foreign: not certified by this unit, never overwritten, never absorbed, and"
+  info "no input to any verdict above. Their own trust receipts are their owners' business."
+else
+  info "none — entwurf is the only SessionStart declaration in $HOOKS_FILE"
+fi
+
 TRUST_REPAIR="Repair: open a visible plain Codex (no flags), answer the vendor's prompt with
            'Trust all and continue', send one first turn, then re-run this doctor."
 
 section "TRUST (the vendor's receipt for this exact declaration)"
-if [ "$UNIT_ONLY" = "1" ]; then
+if [ -z "$DECL_GROUP_INDEX" ] && [ "$UNIT_ONLY" != "1" ]; then
+  bad "the UNIT axis could not locate entwurf's declaration, so there is no index to read a vendor
+           receipt at. A receipt read at a guessed position would be somebody else's approval.
+           Repair the UNIT axis first: ./run.sh install-codex-birth"
+elif [ "$UNIT_ONLY" = "1" ]; then
   info "--unit-only: the vendor receipt was NOT read. This is a skipped axis, not a green one."
 elif [ ! -e "$CODEX_HOME/config.toml" ]; then
   bad "$CODEX_HOME/config.toml does not exist, so the vendor has recorded no trust decision for $HOOKS_FILE.
@@ -212,7 +334,11 @@ else
   # The key the vendor writes is `<declaration path>:<event>:<group>:<handler>` — measured on
   # this host after one 'Trust all'. We look for exactly ours: a receipt for a DIFFERENT
   # declaration is not this unit's approval, however valid it is for whoever owns it.
-  TRUST_KEY="$HOOKS_FILE:session_start:0:0"
+  #
+  # THE INDEX COMES FROM THE UNIT AXIS, which just measured where our declaration actually sits.
+  # Spelling it `0:0` was right only while entwurf was alone in the file: with a neighbour at
+  # index 0, that constant reads THEIR receipt and reports it as ours.
+  TRUST_KEY="$HOOKS_FILE:session_start:$DECL_GROUP_INDEX:$DECL_HANDLER_INDEX"
   # python3 + tomllib, the same reader the two config atoms already use — node has no TOML
   # parser and inventing one here would be a second opinion about the vendor's own file.
   TRUST_OUT="$(python3 -c '
@@ -242,8 +368,11 @@ sys.stdout.write("PRESENT\t" + digest)
   case "$TRUST_KIND" in
     PRESENT)
       ok "a vendor trust receipt is present for $TRUST_KEY ($TRUST_DETAIL)"
-      info "this reports that the vendor RECORDED a decision for this declaration identity — it is"
-      info "not a cryptographic validation, and this doctor never computes what that hash should be."
+      info "this reports that the vendor RECORDED a decision for this declaration identity AT THE INDEX"
+      info "entwurf's declaration was just measured at — not a cryptographic validation. This doctor"
+      info "deliberately does NOT recompute what that hash should be: the vendor hashes a normalized"
+      info "identity of its own (discovery.rs:775-792), and reimplementing it here would make entwurf a"
+      info "second opinion about somebody else's security decision, drifting with every vendor release."
       ;;
     ABSENT)
       bad "no vendor trust receipt for this declaration — $TRUST_DETAIL. Until the operator answers the

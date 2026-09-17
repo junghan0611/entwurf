@@ -354,8 +354,8 @@ want "[QK:CODEX-SETUP-NEVER-PRESEEDS-TRUST] S-8c: setup wrote NO vendor trust re
   "! grep -q 'hooks.state' '$CODEX_HOME_SANDBOX/config.toml' && ! grep -q 'trusted_hash' '$CODEX_HOME_SANDBOX/config.toml'"
 want "S-8c: detected-incomplete Codex is a named nonzero result, never an absent SKIP [QK:CODEX-SETUP-BIRTH-COSMETIC-PASS]" \
   "[ '$RC' -ne 0 ] && printf '%s' \"\$OUT\" | grep -q 'codex-birth: FAIL' && ! printf '%s' \"\$OUT\" | grep -q 'codex: SKIP'"
-want "S-8c: both user-owned Codex atoms still compose independently as PASS [QK:CODEX-SETUP-BIRTH-INDEPENDENT]" \
-  "printf '%s' \"\$OUT\" | grep -q 'codex-mcp: PASS' && printf '%s' \"\$OUT\" | grep -q 'codex-statusline: PASS'"
+want "S-8c: all three user-owned Codex atoms still compose independently as PASS [QK:CODEX-SETUP-BIRTH-INDEPENDENT]" \
+  "printf '%s' \"\$OUT\" | grep -q 'codex-mcp: PASS' && printf '%s' \"\$OUT\" | grep -q 'codex-statusline: PASS' && printf '%s' \"\$OUT\" | grep -q 'codex-terminal-title: PASS'"
 want "S-8c: summary is NON-GREEN and attributes it to the untrusted birth unit" \
   "printf '%s' \"\$OUT\" | grep -q 'NON-GREEN (FAIL: codex-birth)' && ! printf '%s' \"\$OUT\" | grep -q 'result: green'"
 want "S-8c: the reason names the operator's one-time answer, not a repair setup could have made" \
@@ -364,23 +364,25 @@ want "S-8c: setup PUBLISHED the birth unit — declaration, launcher closure and
   "[ -f '$CODEX_HOME_SANDBOX/hooks.json' ] && [ -x '$CODEX_BIRTH_UNIT_ROOT/helper/codex-birth-launch.sh' ] && [ -f '$CODEX_BIRTH_UNIT_ROOT/install-state.json' ]"
 CODEX_MCP_STATE="$XDG_DATA_HOME/entwurf/codex-mcp/install-state.json"
 CODEX_STATUSLINE_STATE="$XDG_DATA_HOME/entwurf/codex-statusline/install-state.json"
-want "S-8c: both user atoms wrote their package-owned install states inside the sandbox" \
-  "[ -f '$CODEX_MCP_STATE' ] && [ -f '$CODEX_STATUSLINE_STATE' ] && grep -q '\"atom\": \"codex-mcp\"' '$CODEX_MCP_STATE' && grep -q '\"atom\": \"codex-statusline\"' '$CODEX_STATUSLINE_STATE'"
-want "S-8c: MCP and visible-identity atoms landed in the sandbox Codex config" \
-  "grep -q '\\[mcp_servers\\.entwurf-bridge\\]' '$CODEX_HOME_SANDBOX/config.toml' && grep -q 'status_line = \\[\"thread-title\", \"model-with-reasoning\"\\]' '$CODEX_HOME_SANDBOX/config.toml'"
+CODEX_TERMINAL_TITLE_STATE="$XDG_DATA_HOME/entwurf/codex-terminal-title/install-state.json"
+want "S-8c: all three user atoms wrote their package-owned install states inside the sandbox" \
+  "[ -f '$CODEX_MCP_STATE' ] && [ -f '$CODEX_STATUSLINE_STATE' ] && [ -f '$CODEX_TERMINAL_TITLE_STATE' ] && grep -q '\"atom\": \"codex-mcp\"' '$CODEX_MCP_STATE' && grep -q '\"atom\": \"codex-statusline\"' '$CODEX_STATUSLINE_STATE' && grep -q '\"atom\": \"codex-terminal-title\"' '$CODEX_TERMINAL_TITLE_STATE'"
+want "S-8c: MCP, visible-identity and caller-seat atoms landed in the sandbox Codex config" \
+  "grep -q '\\[mcp_servers\\.entwurf-bridge\\]' '$CODEX_HOME_SANDBOX/config.toml' && grep -q 'status_line = \\[\"thread-title\", \"model-with-reasoning\"\\]' '$CODEX_HOME_SANDBOX/config.toml' && grep -q 'terminal_title = \\[\"activity\", \"project-name\", \"thread-id\"\\]' '$CODEX_HOME_SANDBOX/config.toml'"
 want "S-8c: unrelated operator config survives both atom writers" \
   "grep -q 'model = \"operator-model\"' '$CODEX_HOME_SANDBOX/config.toml' && grep -q '\\[mcp_servers\\.operator-owned\\]' '$CODEX_HOME_SANDBOX/config.toml' && grep -q 'command = \"/operator/bin/server\"' '$CODEX_HOME_SANDBOX/config.toml'"
 CODEX_CONFIG_AFTER="$(sha256sum "$CODEX_HOME_SANDBOX/config.toml" | cut -d' ' -f1)"
 CODEX_MCP_STATE_AFTER="$(sha256sum "$CODEX_MCP_STATE" | cut -d' ' -f1)"
 CODEX_STATUSLINE_STATE_AFTER="$(sha256sum "$CODEX_STATUSLINE_STATE" | cut -d' ' -f1)"
+CODEX_TERMINAL_TITLE_STATE_AFTER="$(sha256sum "$CODEX_TERMINAL_TITLE_STATE" | cut -d' ' -f1)"
 set +e
 OUT2="$(CODEX_BIN="$FAKE_CODEX/codex" CODEX_HOME="$CODEX_HOME_SANDBOX" PATH="$FAKE_CODEX:$PATH" "$REAL_BASH" "$REPO_DIR/run.sh" setup "$PROJ8C" 2>&1)"
 RC2=$?
 set -e
-want "S-8c: second setup still reports the untrusted birth FAIL and both user atoms PASS" \
-  "[ '$RC2' -ne 0 ] && printf '%s' \"\$OUT2\" | grep -q 'codex-birth: FAIL' && printf '%s' \"\$OUT2\" | grep -q 'codex-mcp: PASS' && printf '%s' \"\$OUT2\" | grep -q 'codex-statusline: PASS'"
-want "S-8c: second setup is byte-idempotent for config and both ownership receipts" \
-  "[ \"\$(sha256sum '$CODEX_HOME_SANDBOX/config.toml' | cut -d' ' -f1)\" = '$CODEX_CONFIG_AFTER' ] && [ \"\$(sha256sum '$CODEX_MCP_STATE' | cut -d' ' -f1)\" = '$CODEX_MCP_STATE_AFTER' ] && [ \"\$(sha256sum '$CODEX_STATUSLINE_STATE' | cut -d' ' -f1)\" = '$CODEX_STATUSLINE_STATE_AFTER' ]"
+want "S-8c: second setup still reports the untrusted birth FAIL and all three user atoms PASS" \
+  "[ '$RC2' -ne 0 ] && printf '%s' \"\$OUT2\" | grep -q 'codex-birth: FAIL' && printf '%s' \"\$OUT2\" | grep -q 'codex-mcp: PASS' && printf '%s' \"\$OUT2\" | grep -q 'codex-statusline: PASS' && printf '%s' \"\$OUT2\" | grep -q 'codex-terminal-title: PASS'"
+want "S-8c: second setup is byte-idempotent for config and all three ownership receipts" \
+  "[ \"\$(sha256sum '$CODEX_HOME_SANDBOX/config.toml' | cut -d' ' -f1)\" = '$CODEX_CONFIG_AFTER' ] && [ \"\$(sha256sum '$CODEX_MCP_STATE' | cut -d' ' -f1)\" = '$CODEX_MCP_STATE_AFTER' ] && [ \"\$(sha256sum '$CODEX_STATUSLINE_STATE' | cut -d' ' -f1)\" = '$CODEX_STATUSLINE_STATE_AFTER' ] && [ \"\$(sha256sum '$CODEX_TERMINAL_TITLE_STATE' | cut -d' ' -f1)\" = '$CODEX_TERMINAL_TITLE_STATE_AFTER' ]"
 want "S-8c: second setup rechecks rather than faking the missing receipt" \
   "! printf '%s' \"\$OUT2\" | grep -q 'codex-birth: PASS' && ! grep -q 'trusted_hash' '$CODEX_HOME_SANDBOX/config.toml'"
 
@@ -398,7 +400,7 @@ want "[QK:CODEX-SETUP-TRUSTED-RERUN-GREEN] S-8c: once the vendor receipt exists 
 want "S-8c: the trusted rerun is byte-idempotent — it neither rewrote the config nor touched the receipt" \
   "[ \"\$(sha256sum '$CODEX_HOME_SANDBOX/config.toml' | cut -d' ' -f1)\" = '$CODEX_CONFIG_TRUSTED' ]"
 want_auth_untouched "S-8c"
-rm -rf "$HOME/.codex" "$XDG_DATA_HOME/entwurf/codex-mcp" "$XDG_DATA_HOME/entwurf/codex-statusline" "$CODEX_BIRTH_UNIT_ROOT"
+rm -rf "$HOME/.codex" "$XDG_DATA_HOME/entwurf/codex-mcp" "$XDG_DATA_HOME/entwurf/codex-statusline" "$XDG_DATA_HOME/entwurf/codex-terminal-title" "$CODEX_BIRTH_UNIT_ROOT"
 
 # ── S-9: rail certification is a SEPARATE axis from install success (#78 D1) ──
 # The 0.20.0 macOS lane opened the installers to Darwin (meta-bridge-install.sh's

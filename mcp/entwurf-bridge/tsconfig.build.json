@@ -114,6 +114,14 @@
 	// the marker-less native-push quiesce row) are lib leaves the bridge graph already
 	// tolerates — the adapter is a 봉인-3 leaf (node builtins + type-only contract), and
 	// register_native already pulls both into this emit.
+	// WHY codex-socket-path rides THIS build (#95): `entwurf codex-app-server` is a bash
+	// launcher that cannot import the socket resolver, and its first version re-derived the
+	// address instead — measurably diverging from `resolveCodexDefaultSocketPath` on a BOM-only
+	// CODEX_HOME and on path normalization. The launcher now ASKS this leaf through run_ts, so on
+	// an installed host it resolves under node_modules where strip-types is refused and a missing
+	// twin would make the one-command launch die before its first line. Its only repo import is
+	// native-push/codex-ws-client.ts, ALREADY emitted for meta-bridge-hook-codex, so this adds ONE
+	// leaf JS and ZERO new deps.
 	// WHY meta-bridge-omp rides THIS build (#87): `install-omp-bridge` explicitly SELECTS
 	// `dist/pi-extensions/meta-bridge-omp.js` when REPO_DIR is under node_modules — the same
 	// strip-types fence the Claude and Copilot birth entries cross — and
@@ -136,6 +144,7 @@
 		"../../scripts/meta-facts.ts",
 		"../../scripts/peer-facts.ts",
 		"../../scripts/omp-receive-facts.ts",
+		"../../scripts/codex-socket-path.ts",
 		"../../pi-extensions/meta-bridge-hook.ts",
 		"../../pi-extensions/meta-bridge-hook-copilot.ts",
 		"../../pi-extensions/meta-bridge-hook-codex.ts",

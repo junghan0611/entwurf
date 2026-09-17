@@ -111,7 +111,7 @@
 			"claim": "FRESHCALL-CWD-RECEIPT-REQUESTED",
 			"title": "production freshCall stops assembling the requested cwd into its receipt, so the operator-visible answer silently loses the one placement fact the caller asked for",
 			"subject": "pi-extensions/lib/mux-fresh-call.ts",
-			"find": ["\t\t\t...(cwd === undefined ? {} : { cwd }),\n"],
+			"find": ["\t\t\t...(chosenCwd === undefined ? {} : { cwd: chosenCwd.value, cwdSource: chosenCwd.source }),\n"],
 			"replace": [""],
 			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
 			"timeoutSeconds": 120,
@@ -123,7 +123,7 @@
 			"title": "one surface drops the optional cwd from its schema, so cross-repo fresh works from pi and silently cannot exist from the MCP bridge",
 			"subject": "mcp/entwurf-bridge/src/index.ts",
 			"find": [
-				"\t\tcwd: z\n\t\t\t.string()\n\t\t\t.optional()\n\t\t\t.describe(\n\t\t\t\t\"Optional literal ABSOLUTE path of an existing directory to start the sibling in (cross-repo fresh). Omit or pass \\\"\\\" to start in this agent's own cwd — on BOTH rails. Taken exactly as given: no trim, no realpath, no project-name resolution. '#' is refused on the tmux rail only, because tmux format-expands a start directory; inside herdr it is an ordinary path character. The receipt echoes what was REQUESTED, never an observation.\",\n\t\t\t),\n"
+				"\t\tcwd: z\n\t\t\t.string()\n\t\t\t.min(1)\n\t\t\t.describe(\n\t\t\t\t\"The working directory to record for this citizen — REQUIRED (a native conversation's metadata cannot confirm it, so you must state it).\",\n\t\t\t),\n"
 			],
 			"replace": [""],
 			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
@@ -440,17 +440,6 @@
 			"signatureSource": "test/fresh-call-surfaces.contract.test.ts"
 		},
 		{
-			"claim": "FRESHCALL-CODEX-HOME-DEFAULT",
-			"title": "an omitted Codex seat falls back to the caller's session instead of the one supported `codex` home topology",
-			"subject": "pi-extensions/lib/mux-fresh-call.ts",
-			"find": ["\tif (backend === \"codex\") return { tmuxSession: CODEX_HOME_TMUX_SESSION, source: \"codex-home\" };"],
-			"replace": ["\tif (backend === \"pi\") return { tmuxSession: CODEX_HOME_TMUX_SESSION, source: \"codex-home\" };"],
-			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
-			"timeoutSeconds": 180,
-			"signature": "[QK:FRESHCALL-CODEX-HOME-DEFAULT]",
-			"signatureSource": "test/mux-fresh-call.test.ts"
-		},
-		{
 			"claim": "TMUXSESSION-LOOKUP-ENGINE",
 			"title": "the seat lookup goes back to the `-f` filter engine, which was measured to match EVERY session when the name contains a '}' — a fresh sibling then opens in whichever session tmux listed first",
 			"subject": "pi-extensions/lib/resolve-tmux-session.ts",
@@ -523,7 +512,7 @@
 			"title": "one surface drops the optional seat from its schema, so opening a sibling in the operator's project session works from pi and silently cannot exist from the MCP bridge",
 			"subject": "mcp/entwurf-bridge/src/index.ts",
 			"find": [
-				"\t\tplacement: z\n\t\t\t.object({\n\t\t\t\ttmuxSession: z\n\t\t\t\t\t.string()\n\t\t\t\t\t.describe(\n\t\t\t\t\t\t\"EXACT name of an EXISTING session on this agent's own tmux server. Nothing is created: an absent session is refused as tmux-session-missing, and a name outside [A-Za-z0-9][A-Za-z0-9_-]* as tmux-session-name-invalid.\",\n\t\t\t\t\t),\n\t\t\t})\n\t\t\t.optional()\n\t\t\t.describe(\n\t\t\t\t\"Optional expert seat override, TMUX ONLY: open the sibling in ONE EXISTING tmux session of this agent's own server. When omitted, Codex selects the exact existing `codex` home session; other backends use the caller's session. Nothing is ever created. Inside herdr this field is refused by name — placement there belongs to herdr, and a tmux session name would silently place the sibling somewhere else. Independent of cwd; neither is inferred from the other. The receipt reports the selected name, its source, and resolved target session id.\",\n\t\t\t),\n"
+				"\t\tplacement: z\n\t\t\t.object({\n\t\t\t\ttmuxSession: z\n\t\t\t\t\t.string()\n\t\t\t\t\t.describe(\n\t\t\t\t\t\t\"EXACT name of an EXISTING session on this agent's own tmux server. Nothing is created: an absent session is refused as tmux-session-missing, and a name outside [A-Za-z0-9][A-Za-z0-9_-]* as tmux-session-name-invalid.\",\n\t\t\t\t\t),\n\t\t\t})\n\t\t\t.optional()\n\t\t\t.describe(\n\t\t\t\t\"Optional expert seat override, TMUX ONLY: open the sibling in ONE EXISTING tmux session of this agent's own server, and it always wins. When omitted the seat follows the CALLER, never the backend being opened: a Codex CALLER opens beside its own TUI pane, matched by thread-id in that pane's terminal title (0 or 2+ matching panes refuse, never fall back); every other caller opens in its own session. A pane title is a placement input only — never an address, liveness or delivery fact. Nothing is ever created. Inside herdr this field is refused by name — placement there belongs to herdr, and a tmux session name would silently place the sibling somewhere else. Independent of cwd; neither is inferred from the other. The receipt reports the selected name (absent for the caller-pane rule, which observed a session rather than requesting a name), its source, and resolved target session id.\",\n\t\t\t),\n"
 			],
 			"replace": [""],
 			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
@@ -580,6 +569,89 @@
 			"timeoutSeconds": 120,
 			"signature": "[QK:FRESHCOMP-CODEX-SOCKET-LAZY]",
 			"signatureSource": "test/fresh-call-composition.contract.test.ts"
+		},
+		{
+			"claim": "FRESHCALL-CODEX-THREAD-CWD",
+			"title": "codex loses the `-C <dir>` token, so an attached thread opens in the APP-SERVER's directory while its pane sits somewhere else — the launch, the receipt and the pane all still look right",
+			"subject": "pi-extensions/lib/fresh-call-composition.ts",
+			"find": ["\t\t\t\t\"-C\",\n\t\t\t\tresolveCodexLaunchCwd(),\n"],
+			"replace": [""],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:FRESHCALL-CODEX-THREAD-CWD]",
+			"signatureSource": "test/mux-fresh-call.test.ts"
+		},
+		{
+			"claim": "FRESHCALL-CWD-CALLER-ONLY",
+			"title": "the codex dialect reads THIS process's directory instead of the directory the launch chose, so a cross-repo or caller-record cwd places the pane while the thread opens somewhere else",
+			"subject": "pi-extensions/lib/fresh-call-composition.ts",
+			"find": ["\t\t\t\tresolveCodexLaunchCwd(),\n"],
+			"replace": ["\t\t\t\tprocess.cwd(),\n"],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:FRESHCALL-CWD-CALLER-ONLY]",
+			"signatureSource": "test/mux-fresh-call.test.ts"
+		},
+		{
+			"claim": "FRESHCALL-CALLER-CWD-CODEX",
+			"title": "the composition drops the caller's record directory, so a Codex caller's omitted cwd silently falls back to the app-server's directory again — the #95 lane C defect, restored with the input still on the signature",
+			"subject": "pi-extensions/lib/mux-fresh-call.ts",
+			"find": [
+				"\t\t\t? { value: requestedCwd, source: \"requested\" }\n\t\t\t: callerCwd !== undefined\n\t\t\t\t? { value: callerCwd, source: \"codex-caller-record\" }\n\t\t\t\t: undefined;"
+			],
+			"replace": ["\t\t\t? { value: requestedCwd, source: \"requested\" }\n\t\t\t: undefined;"],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:FRESHCALL-CALLER-CWD-CODEX]",
+			"signatureSource": "test/mux-fresh-call.test.ts"
+		},
+		{
+			"claim": "FRESHCALL-CALLER-CWD-PI-ARGV-UNCHANGED",
+			"title": "an EMPTY caller cwd stops meaning omit, so a surface that supplies \"\" turns into a classified value — a refusal where the pre-#95 argv simply opened",
+			"subject": "pi-extensions/lib/mux-fresh-call.ts",
+			"find": [
+				"\tconst callerCwd = params.callerCwd === undefined || params.callerCwd === \"\" ? undefined : params.callerCwd;"
+			],
+			"replace": ["\tconst callerCwd = params.callerCwd;"],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:FRESHCALL-CALLER-CWD-PI-ARGV-UNCHANGED]",
+			"signatureSource": "test/mux-fresh-call.test.ts"
+		},
+		{
+			"claim": "FRESHCALL-CWD-TMUX-CARRIER-SOURCE",
+			"title": "an absent chosen directory becomes this process's, so every launch carries a `-c` and the argv four backends have had since #73 is no longer the measured one",
+			"subject": "pi-extensions/lib/mux-fresh-call.ts",
+			"find": ["\tconst cwd = chosenCwd?.value;"],
+			"replace": ["\tconst cwd = chosenCwd?.value ?? process.cwd();"],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:FRESHCALL-CWD-TMUX-CARRIER-SOURCE]",
+			"signatureSource": "test/mux-fresh-call.test.ts"
+		},
+		{
+			"claim": "FRESHCALL-CWD-RECEIPT-SOURCE",
+			"title": "the receipt relabels a caller-record directory as REQUESTED, telling the operator someone asked for a directory nobody named",
+			"subject": "pi-extensions/lib/mux-fresh-call.ts",
+			"find": [
+				"\t\t\t\t: r.cwdSource === \"codex-caller-record\"\n\t\t\t\t\t? `  cwd:      ${r.cwd} (the Codex caller's own record directory, used because no cwd was requested — not an observation)\\n`\n\t\t\t\t\t: `  cwd:      ${r.cwd} (requested start directory — not an observation)\\n`) +"
+			],
+			"replace": ["\t\t\t\t: `  cwd:      ${r.cwd} (requested start directory — not an observation)\\n`) +"],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:FRESHCALL-CWD-RECEIPT-SOURCE]",
+			"signatureSource": "test/mux-fresh-call.test.ts"
+		},
+		{
+			"claim": "FRESHCALL-CALLER-CWD-SURFACE",
+			"title": "the MCP surface stops handing the codex caller's record directory to the composition, so the capability exists in the leaf and is unreachable from the only surface a codex caller can reach it through",
+			"subject": "mcp/entwurf-bridge/src/index.ts",
+			"find": ["\t\t\tcallerCwd = self.codexThreadId === undefined ? undefined : self.envelope.cwd;\n"],
+			"replace": [""],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:FRESHCALL-CALLER-CWD-SURFACE]",
+			"signatureSource": "test/fresh-call-surfaces.contract.test.ts"
 		}
 	]
 }
