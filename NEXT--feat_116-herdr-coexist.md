@@ -123,6 +123,35 @@ piped stdio로 build.mjs를 돌리니 `[entwurf 1/5] …` / `[entwurf done] …`
 close 두 번도 무해). 뮤턴트 2개, lane `herdr-plugin-build` 9→**11**, 인벤토리 644→**646**. 각각 단독 주입으로
 kill 확인(실패 라인에 자기 QK).
 
+### F-2 — "설치했는데 아무도 안 알려준다" `[2026-09-17]`
+
+`[관측: GLG, 날것 PC]` 설치 성공 후에도 `pi --entwurf-control`을 쳐야 시민이 된다는 걸 아무도 말해주지 않는다.
+"나는 이렇게 해놔서 문제가 없는데 그냥 둬선 아무도 모를 것 같다."
+
+**이건 결함이 아니라 설계다** — 시민권은 argv로 잠근다. 플러그인의 pi 배선은 `~/.pi/agent/settings.json`의
+**user-scope 패키지 등록**이라(`scripts/herdr-plugin-activate.mjs:138-160`) 확장은 그 호스트의 **모든** pi에
+로드되지만, 플래그가 있어야 레코드·소켓·도구가 선다. 켜기만 하면 시민이 되는 pi는 오퍼레이터가 요청하지 않은
+결정을 내리는 것이다. 문제는 **그 두 사실이 밖에서는 "설치가 아무것도 안 했다"와 구분되지 않는다**는 것.
+
+**출하한 것 둘 — 둘 다 "사용자가 틀린 순간"에 말한다.**
+1. **설치 마지막 줄** (`[entwurf] …`) — 활성화한 backend마다 한 줄. 두 배선이 정반대라 각각 다른 문장이다:
+   claude-code는 MCP라 `claude`만 치면 되고, pi는 플래그가 필요하다. 새 `progress.note` 채널(done과 분리 —
+   note는 결과가 아니다). 게이트 `[QK:HPB-INSTALL-USAGE-NOTE]`.
+2. **플래그 없이 켠 pi** — 확장이 UI에 한 줄, **프로세스당 한 번**. `ctx.hasUI` 게이트라 `pi -p …` 파이프라인엔
+   안 나간다(옆 refusal이 stderr를 always 쓰는 건 그게 durable fault이기 때문이고, 이건 평범한 상태다).
+   게이트 `[QK:SELFADDR-UNCITIZENED-NOTICED]` — self-address 레인이 "없는 주소를 주장하지 않는다"의 거울면이라
+   그 집에 뒀다.
+
+**플래그를 말하지 launcher를 말하지 않는다.** PATH에 무엇을 놓을지는 오퍼레이터 결정이고 이 플러그인은 거기
+한 바이트도 안 쓴다. `entwurf-pi` bin은 별건(아래).
+
+뮤턴트 2개, lane `herdr-plugin-build` 11→**12** · `self-address` 5→**6**, 인벤토리 646→**648**, 각각 단독 kill 확인.
+
+**열린 후속 `[GLG 결정 대기]`** — ① `entwurf-pi` bin(새 표면이라 이슈 하나 값어치; `pie`는 GLG bashrc 한 줄
+별칭이 맞다 — 이미 `pit`/`pius`로 하는 방식) ② fresh_call 모델 거절 규칙은 #76으로 나갔다
+([issuecomment-5707946216](https://github.com/junghan0611/entwurf/issues/76#issuecomment-5707946216) —
+맨 alias 경로는 본문 가드로 못 막는다는 새 사실 포함).
+
 **이월 관측 `[Observation]`** — 근본 수리는 herdr 쪽이다: `[[build]]` 출력을 성공 시에도 스트리밍하거나
 최소한 단계 진행을 보여주는 것. 우리 `/dev/tty` 서술은 그때까지의 우리 몫이고, herdr가 스트리밍을 켜도
 중복되지 않는다(우리는 5줄만 쓴다). herdr에 이슈로 올릴지는 GLG 판단.

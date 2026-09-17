@@ -231,6 +231,7 @@ function drive(
 		live: false,
 		step: (text: string) => progressLines.push(text),
 		done: (text: string) => progressLines.push(`done: ${text}`),
+		note: (text: string) => progressLines.push(`note: ${text}`),
 		close: () => {},
 	};
 	const spawn = (bin: string, argv: string[], opts: unknown): SpawnResult => {
@@ -713,7 +714,7 @@ function drive(
 			"nothing to activate takes exactly ONE step and then closes — it must not narrate work it never did " +
 			`(full=${JSON.stringify(full.progress)} idle=${JSON.stringify(idle.progress)})`,
 		full.code === 0 &&
-			full.progress.length === 6 &&
+			full.progress.length >= 6 &&
 			full.progress[0].includes("integration status") &&
 			full.progress[1].includes("pi, claude-code") &&
 			longStep.includes("long step") &&
@@ -724,6 +725,36 @@ function drive(
 			idle.code === 0 &&
 			idle.progress.length === 2 &&
 			idle.progress[1].startsWith("done: nothing to activate"),
+	);
+}
+
+// ── 10a. the install says how to USE what it just wired ────────────────────────
+{
+	const env = world("progress-usage-note");
+	const full = drive(env, listing({ pi: "current (v8) (/home/u/.pi)", claude: "current (v8) (/home/u/.claude)" }), {
+		acquire: fixtureAcquire({ activate: "recorder", log: path.join(env.HOME as string, "argv.log") }),
+		resolveCommit: () => COMMIT_A,
+	});
+	const piOnly = drive(world("progress-usage-note-pi"), listing({ pi: "current (v8) (/home/u/.pi)" }), {
+		acquire: fixtureAcquire({ activate: "recorder", log: path.join(world("unused").HOME as string, "argv.log") }),
+		resolveCommit: () => COMMIT_A,
+	});
+	const notesOf = (r: { progress: string[] }) => r.progress.filter((line) => line.startsWith("note: "));
+	ok(
+		"[QK:HPB-INSTALL-USAGE-NOTE] a green install ends by saying how to USE each backend it just wired, one line " +
+			"each, and only for the backends it actually activated. `[관측: GLG, 날것 PC, 2026-09-17]` the two wirings " +
+			"feel opposite from the operator's chair and neither is guessable: claude-code gets an MCP server so an " +
+			"ordinary `claude` has the tools, while pi gets a USER-SCOPE package registration that loads in every pi " +
+			"session on the host and is STILL not a citizen until it is started with --entwurf-control. Green install, " +
+			"`pi` starts, nothing there — indistinguishable from an install that did nothing. The note names the FLAG " +
+			`and not a launcher, because what goes on a host's PATH is the operator's call (both=${JSON.stringify(notesOf(full))} pi-only=${JSON.stringify(notesOf(piOnly))})`,
+		notesOf(full).length === 2 &&
+			notesOf(full)[0].includes("pi: ") &&
+			notesOf(full)[0].includes("--entwurf-control") &&
+			notesOf(full)[1].includes("claude-code: ") &&
+			notesOf(full)[1].includes("MCP") &&
+			notesOf(piOnly).length === 1 &&
+			notesOf(piOnly)[0].includes("--entwurf-control"),
 	);
 }
 

@@ -1041,6 +1041,33 @@ function applyEmacsAgentSocketEnv(pi: ExtensionAPI): void {
 	}
 }
 
+/**
+ * The one-line answer to "I installed entwurf, why is nothing here?" (#116 M3-b3 F).
+ *
+ * `[관측: GLG, 날것 PC, 2026-09-17]` a herdr plugin install wires this extension into pi at USER
+ * scope, so it loads in EVERY pi session on the host — but citizenship is argv-gated on purpose, so
+ * a plain `pi` has no garden id, no socket and no tools. From the outside those two facts are
+ * indistinguishable from "the install did nothing", and the operator has no reason to guess at a
+ * flag nobody showed them. This says it once, at exactly the moment they are looking at the wrong
+ * thing.
+ *
+ * UI ONLY, AND THAT IS THE CONTRACT. The refusal path below writes stderr ALWAYS because a control
+ * surface that failed to come up is a durable fault. This is not that: it is an ordinary,
+ * deliberate state. Writing it to stderr would put a sentence into every `pi -p …` pipeline and
+ * every script on the host to tell a human something no human is reading there. Once per process,
+ * because `refreshServer` runs again on session switches and a hint that repeats is noise.
+ */
+let uncitizenedNoticeShown = false;
+function noticeUncitizenedSession(ctx: ExtensionContext): void {
+	if (uncitizenedNoticeShown || !ctx.hasUI) return;
+	uncitizenedNoticeShown = true;
+	ctx.ui.notify(
+		"🪛 entwurf is installed here, but this session is not a garden citizen — start pi with " +
+			"--entwurf-control for a garden id, a control socket and the entwurf tools.",
+		"info",
+	);
+}
+
 function shouldRegisterControlTools(pi: ExtensionAPI): boolean {
 	return pi.getFlag(ENTWURF_FLAG) === true || wasBooleanFlagPassed(ENTWURF_FLAG);
 }
@@ -1120,6 +1147,7 @@ export default function (pi: ExtensionAPI) {
 			residentGardenId = null;
 			updateStatus(ctx, false, null);
 			updateSessionEnv(ctx, false, null);
+			noticeUncitizenedSession(ctx);
 			return;
 		}
 		let birth: PiCitizenBirth;

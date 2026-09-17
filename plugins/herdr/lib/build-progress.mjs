@@ -41,6 +41,18 @@ export function formatDoneLine(text) {
 }
 
 /**
+ * A line AFTER the sequence: how to actually use what was just installed.
+ *
+ * It is separate from `done` because it is not an outcome — nothing about it can fail, and it
+ * must never read as one more thing that happened. `[관측: GLG, 2026-09-17]` an install that
+ * finishes green still leaves the operator with no idea that a pi has to be started a particular
+ * way, and the end of the install is the one moment they are certainly looking.
+ */
+export function formatNoteLine(text) {
+	return `[entwurf] ${text}\n`;
+}
+
+/**
  * A reporter bound to the operator's terminal, or an inert one when there is no terminal.
  *
  * @returns frozen `{step, done, close, live}` — `live` is a FACT about this host (did we get a
@@ -85,6 +97,9 @@ export function createProgressReporter({
 		done(text) {
 			emit(formatDoneLine(text));
 		},
+		note(text) {
+			emit(formatNoteLine(text));
+		},
 		close() {
 			if (fd === null) return;
 			try {
@@ -99,5 +114,5 @@ export function createProgressReporter({
 
 /** The inert reporter, written out rather than implied — used where there is nothing to narrate. */
 export function silentProgressReporter() {
-	return Object.freeze({ live: false, step() {}, done() {}, close() {} });
+	return Object.freeze({ live: false, step() {}, done() {}, note() {}, close() {} });
 }

@@ -193,6 +193,35 @@ export function certifyActivationPlan(env, { lock, checkoutRoot, requested: requ
 }
 
 /**
+ * How to actually USE what was just wired, one line per activated backend.
+ *
+ * WHY THIS IS NOT DECORATION. The two backends are wired in ways that feel opposite from the
+ * outside and neither is guessable. Claude Code gets an MCP server, so an ordinary `claude` picks
+ * the tools up with nothing added. Pi gets a USER-SCOPE package registration, so the extension
+ * loads in every pi session on the host — and yet a plain `pi` is still not a citizen, because
+ * citizenship is argv-gated on purpose (a pi that minted a record and a socket merely by starting
+ * would be deciding something the operator never asked for). `[관측: GLG, 날것 PC, 2026-09-17]`
+ * from the operator's chair that difference is invisible: the install says green, `pi` starts, and
+ * nothing is there. So the install says which sentence applies to which harness, once, at the end.
+ *
+ * It states the flag, not a launcher: what a host puts on its PATH is the operator's call and this
+ * plugin writes nothing there.
+ */
+function usageNotes(activated) {
+	const notes = [];
+	if (activated.includes("pi")) {
+		notes.push(
+			"pi: start it as `pi --entwurf-control` to be a garden citizen — a plain `pi` loads this " +
+				"extension but has no garden id, no control socket and no entwurf tools.",
+		);
+	}
+	if (activated.includes("claude-code")) {
+		notes.push("claude-code: nothing to add — an ordinary `claude` picks up the entwurf tools through MCP.");
+	}
+	return notes;
+}
+
+/**
  * The whole build, as one function so the gate can drive it with seams instead of a subprocess.
  *
  * @returns 0 on success or on a clean nothing-to-do; every other outcome throws a named refusal.
@@ -300,6 +329,7 @@ function runBuildReported(env, deps, progress) {
 	progress.done(
 		`${completeness.name}@${completeness.version} active at ${layout.activeDir}; ${profile.activate.join(", ")} wired`,
 	);
+	for (const line of usageNotes(profile.activate)) progress.note(line);
 	return 0;
 }
 

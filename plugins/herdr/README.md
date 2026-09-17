@@ -138,7 +138,18 @@ slow. You now get one line per step:
 [entwurf 4/5] checking what landed: @junghanacs/entwurf@0.21.0 and its activation verb
 [entwurf 5/5] wiring pi, claude-code through the installed package
 [entwurf done] @junghanacs/entwurf@0.21.0 active at ~/.local/share/entwurf/herdr-plugin/runtime/active; pi, claude-code wired
+[entwurf] pi: start it as `pi --entwurf-control` to be a garden citizen — a plain `pi` loads this extension but has no garden id, no control socket and no entwurf tools.
+[entwurf] claude-code: nothing to add — an ordinary `claude` picks up the entwurf tools through MCP.
 ```
+
+The last two lines are the ones worth reading twice, because the two wirings are **opposite** and
+neither is guessable from the outside. Claude Code gets an MCP server, so an ordinary `claude`
+already has the tools. Pi gets a user-scope package registration, so this extension loads in every
+pi session on the host — and that pi is still **not** a citizen until it is started with
+`--entwurf-control`, because citizenship is argv-gated on purpose: a pi that minted a record and a
+socket merely by starting would be deciding something the operator never asked for. A plain `pi`
+after a green install says so once, on its own UI. If you want it shorter, that is your shell's
+job — this plugin writes nothing to your PATH.
 
 Those lines go to `/dev/tty`, not to stdout, and the reason is worth knowing if you ever wonder why
 a build's output vanished. Herdr runs `[[build]]` with both streams piped into a buffer it prints

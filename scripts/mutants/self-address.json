@@ -88,6 +88,17 @@
 			"timeoutSeconds": 60,
 			"signature": "[QK:SELFADDR-MAILBOX-WAKE-SEAM]",
 			"signatureSource": "scripts/check-entwurf-self-address.ts"
+		},
+		{
+			"claim": "SELFADDR-UNCITIZENED-NOTICED",
+			"title": "sending the not-a-citizen notice to stderr turns an ordinary deliberate state into a sentence printed into every `pi -p …` pipeline and every script on the host, to tell a human something no human is reading there — the neighbouring refusal writes stderr because a control surface that failed to come up is a durable fault, and this is not that",
+			"subject": "pi-extensions/entwurf-control.ts",
+			"find": ["\tctx.ui.notify("],
+			"replace": ["\tprocess.stderr.write(\"uncitizened\\\\n\");\n\tctx.ui.notify("],
+			"gate": ["bash", "run.sh", "check-entwurf-self-address"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:SELFADDR-UNCITIZENED-NOTICED]",
+			"signatureSource": "scripts/check-entwurf-self-address.ts"
 		}
 	]
 }

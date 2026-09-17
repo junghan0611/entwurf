@@ -129,6 +129,17 @@
 			"timeoutSeconds": 300,
 			"signature": "[QK:HPB-PROGRESS-TTY-OPTIONAL]",
 			"signatureSource": "scripts/check-herdr-plugin-build.ts"
+		},
+		{
+			"claim": "HPB-INSTALL-USAGE-NOTE",
+			"title": "dropping the pi line leaves the one backend whose wiring is invisible from the operator's chair unexplained: claude-code picks the tools up through MCP with nothing added, while a plain pi loads the extension on every session of the host and is still not a citizen — a green install followed by a silent, tool-less pi is indistinguishable from an install that did nothing",
+			"subject": "plugins/herdr/lib/build.mjs",
+			"find": ["\tif (activated.includes(\"pi\")) {"],
+			"replace": ["\tif (false && activated.includes(\"pi\")) {"],
+			"gate": ["bash", "run.sh", "check-herdr-plugin-build"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:HPB-INSTALL-USAGE-NOTE]",
+			"signatureSource": "scripts/check-herdr-plugin-build.ts"
 		}
 	]
 }

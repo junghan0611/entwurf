@@ -512,4 +512,27 @@ ok(
 		!/import[^;]*from\s*"\.\/lib\/entwurf-self-address\.(js|ts)"/.test(nativeSrc),
 );
 
+// ── the other half of the same honesty: a session that is NOT a citizen says so ──
+// This gate exists because a surface must not CLAIM an addressability it does not have. The
+// mirror of that is a surface that has none and says nothing at all: `[관측: GLG, 날것 PC,
+// 2026-09-17]` a herdr plugin install wires this extension at USER scope, so it loads in every pi
+// on the host, while citizenship stays argv-gated on purpose — so a plain `pi` after a green
+// install is silent, tool-less and indistinguishable from an install that did nothing. The notice
+// is UI-only BY CONTRACT: the neighbouring refusal writes stderr always because a control surface
+// that failed to come up is a durable fault, whereas this is an ordinary deliberate state, and
+// putting it on stderr would narrate into every `pi -p …` pipeline on the host.
+ok(
+	"pi-native: a non-control session is told once, on the UI only, that it is not a garden citizen " +
+		"[QK:SELFADDR-UNCITIZENED-NOTICED]",
+	/function\s+noticeUncitizenedSession/.test(nativeSrc) &&
+		/noticeUncitizenedSession\(ctx\);/.test(nativeSrc) &&
+		/uncitizenedNoticeShown\s*\|\|\s*!ctx\.hasUI/.test(nativeSrc) &&
+		((body: string) => /--entwurf-control/.test(body) && !/process\.stderr/.test(body))(
+			nativeSrc.slice(
+				nativeSrc.indexOf("function noticeUncitizenedSession"),
+				nativeSrc.indexOf("function shouldRegisterControlTools"),
+			),
+		),
+);
+
 console.log(`\ncheck-entwurf-self-address: ${passed} checks passed`);
