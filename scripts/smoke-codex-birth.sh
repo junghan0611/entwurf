@@ -7,6 +7,10 @@
 #   1. the published declaration is the EXACT trust identity (matcher-less, type/command/
 #      timeout, quoted fixed launcher path) — because that identity is what an operator
 #      approves once, and any drift in it costs a second approval;
+#   1b. entwurf owns ONLY that declaration inside a file it SHARES (#117): a neighbouring
+#      integration's `SessionStart` group in either ordering leaves install/doctor green, is
+#      reported as foreign, is never certified, survives install and inverse byte-for-byte, and
+#      moves no verdict of ours when it is edited;
 #   2. config.toml is neither read nor written, so the vendor's [hooks.state] and entwurf's
 #      own two user atoms survive install AND inverse byte-for-byte;
 #   3. a foreign or edited hooks.json is a ZERO-WRITE refusal, never an adoption — this unit
@@ -76,9 +80,13 @@ want "the launcher is published and executable" "[ -f '$LAUNCHER' ] && [ -x '$LA
 want "the closure is published whole" "[ -f '$HELPER/meta-bridge-hook-codex.ts' ] && [ -f '$HELPER/lib/meta-session.ts' ] && [ -f '$HELPER/lib/native-push/codex-ws-client.ts' ] && [ -f '$HELPER/lib/session-id.js' ] && [ -f '$HELPER/entwurf-capabilities.json' ]"
 want "the state is a regular non-symlink file" "[ -f '$STATE' ] && [ ! -L '$STATE' ]"
 want "the state is bound to the fixed paths and finished publishing" \
-  "node -e 'const s=require(process.argv[1]); if(s.schema!==\"codex-birth-install-state/v1\")throw 0; if(s.status!==\"installed\")throw 0; if(s.hooksFile!==process.argv[2])throw 0; if(s.helperDir!==process.argv[3])throw 0;' '$STATE' '$HOOKS' '$HELPER'"
+  "node -e 'const s=require(process.argv[1]); if(s.schema!==\"codex-birth-install-state/v2\")throw 0; if(s.status!==\"installed\")throw 0; if(s.hooksFile!==process.argv[2])throw 0; if(s.helperDir!==process.argv[3])throw 0;' '$STATE' '$HOOKS' '$HELPER'"
+# The receipt is a DECLARATION digest, not a file digest. A state carrying a whole-file
+# `hooksSha256` would be claiming authority over bytes a neighbour owns — the #117 defect itself.
+want "[QK:CODEX-BIRTH-STATE-CERTIFIES-DECLARATION] the state records a declaration receipt and NO whole-file digest" \
+  "node -e 'const s=require(process.argv[1]); const hex=v=>/^[0-9a-f]{64}\$/.test(v); if(\"hooksSha256\" in s)throw new Error(\"the state still claims the whole file\"); if(s.declaration.event!==\"SessionStart\")throw 0; if(typeof s.declaration.command!==\"string\")throw 0; if(!hex(s.declaration.sha256))throw 0;' '$STATE'"
 want "the state records a digest for every published byte" \
-  "node -e 'const s=require(process.argv[1]); const hex=v=>/^[0-9a-f]{64}\$/.test(v); if(!hex(s.hooksSha256))throw 0; if(s.helperFiles.length!==6)throw 0; for(const f of s.helperFiles){if(!hex(f.sha256))throw 0;}' '$STATE'"
+  "node -e 'const s=require(process.argv[1]); const hex=v=>/^[0-9a-f]{64}\$/.test(v); if(s.helperFiles.length!==6)throw 0; for(const f of s.helperFiles){if(!hex(f.sha256))throw 0;}' '$STATE'"
 
 # The trust identity, asserted field by field. This is the cell that costs a second operator
 # approval if it ever drifts, so it is checked literally rather than by shape.
@@ -153,7 +161,7 @@ MT1="$(stat -c %Y "$HOOKS")"; sleep 1.1
 "$INSTALL" >"$SB/out" 2>&1 || die "reinstall failed: $(cat "$SB/out")"
 MT2="$(stat -c %Y "$HOOKS")"
 want "reinstall does not rewrite the declaration" "[ '$MT1' = '$MT2' ]"
-want "reinstall adopts its own published declaration by digest" "grep -q 'adopting the hooks.json this unit published' '$SB/out'"
+want "reinstall recognises its own declaration by normalized digest and rewrites nothing" "grep -q 'NOT REWRITTEN, not one byte' '$SB/out'"
 cmp -s "$SB/config.before.toml" "$CFG" && ok "reinstall still left config.toml byte-identical" || die "reinstall modified config.toml"
 
 ###############################################################################
@@ -198,12 +206,144 @@ ok "the unit axis is green again after the absent member was republished"
 # refusals — a foreign file, an edited file, a symlink; each ZERO-WRITE
 ###############################################################################
 "$UNINSTALL" >/dev/null 2>&1 || die "clean uninstall before the refusal cells failed"
-printf '{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"/opt/operator/own-hook.sh","timeout":10}]}]}}\n' > "$HOOKS"
-cp "$HOOKS" "$SB/foreign-hooks.json"
-refuses "[QK:CODEX-BIRTH-FOREIGN-HOOKS-REFUSED] a foreign hooks.json is refused, not adopted" "already exists and this host has NO entwurf ownership state" "$INSTALL"
-cmp -s "$SB/foreign-hooks.json" "$HOOKS" && ok "the foreign declaration survives the refusal byte-for-byte" || die "the foreign hooks.json was overwritten"
-want "the foreign refusal wrote no state and no helper" "[ ! -e '$STATE' ] && [ ! -e '$HELPER' ]"
+
+###############################################################################
+# COEXISTENCE (#117) — the neighbour is joined, never adopted and never refused
+#
+# Until 0.22.0 this unit owned hooks.json WHOLE: a file it had not written was a zero-write
+# refusal, and its whole-file digest went red the moment anyone else appended. That is exactly
+# what Herdr's official Codex integration does, and the vendor keeps running both declarations
+# because `[source]` discovery.rs:664-665 keys trust per `<path>:<event>:<group>:<handler>`.
+# These cells are the new contract: one group is ours, everything else is foreign bytes we read
+# and never write.
+###############################################################################
+FOREIGN_GROUP='      {
+        "hooks": [
+          {
+            "command": "bash '"'"'/sandbox/.codex/herdr-agent-state.sh'"'"' session",
+            "timeout": 10,
+            "type": "command"
+          }
+        ]
+      }'
+neighbour_survives() { # <label>
+  printf '%s' "$FOREIGN_GROUP" > "$SB/foreign-block.txt"
+  grep -qF -f "$SB/foreign-block.txt" "$HOOKS" && ok "$1" || die "$1 (the foreign group's bytes changed)"
+}
+foreign_file() { # writes a hooks.json declaring ONLY the neighbour, in its own formatting
+  printf '{\n  "hooks": {\n    "SessionStart": [\n%s\n    ]\n  }\n}\n' "$FOREIGN_GROUP" > "$HOOKS"
+}
+
+# ORDER A — the neighbour is there first and entwurf joins it.
+foreign_file
+cp "$HOOKS" "$SB/foreign-only.json"
+want "[QK:CODEX-BIRTH-JOINS-FOREIGN-FILE] a foreign hooks.json is JOINED by text splice, never adopted and never refused" \
+  "'$INSTALL' >'$SB/out' 2>&1 && grep -q 'appended entwurf' '$SB/out' && grep -q 'byte-for-byte' '$SB/out'"
+neighbour_survives "the neighbour's declaration survives the install byte-for-byte"
+want "entwurf's declaration was APPENDED, so the neighbour keeps index 0 and the trust receipt it already has" \
+  "node -e 'const s=JSON.parse(require(\"node:fs\").readFileSync(process.argv[1],\"utf8\")); const g=s.hooks.SessionStart; if(g.length!==2)throw new Error(\"groups \"+g.length); if(g[0].hooks[0].command.includes(\"entwurf\"))throw new Error(\"entwurf took index 0\"); if(g[1].hooks[0].command!==\"'\''\"+process.argv[2]+\"'\''\")throw new Error(\"ours is not at index 1\");' '$HOOKS' '$LAUNCHER'"
+want "[QK:CODEX-BIRTH-DOCTOR-COEXISTS] the doctor certifies entwurf's own declaration at its MEASURED index and stays green beside a neighbour" \
+  "'$DOCTOR' --unit-only >'$SB/out' 2>&1 && grep -q \"entwurf's declaration is certified at .* group 1 handler 0\" '$SB/out'"
+want "[QK:CODEX-BIRTH-DOCTOR-REPORTS-FOREIGN] the neighbour is reported as present-but-foreign, in its own section, and certified by nothing" \
+  "grep -q 'FOREIGN (what else declares' '$SB/out' && grep -q 'SessionStart group 0: bash' '$SB/out' && grep -q 'present-but-foreign' '$SB/out' && grep -q 'never overwritten, never absorbed' '$SB/out'"
+
+# THE VENDOR RECEIPT IS READ AT OUR MEASURED INDEX, and this is the cell that would have caught
+# the #117 false green: with the neighbour at index 0, a constant `:0:0` reads THEIR approval and
+# reports a birth hook the vendor was never asked to run.
+trust_receipt "$HOOKS:session_start:1:0"
+want "[QK:CODEX-BIRTH-TRUST-INDEX-MEASURED] the full doctor reads the vendor receipt at entwurf's MEASURED index (1:0 here), never at the constant :0:0" \
+  "'$DOCTOR' >'$SB/out' 2>&1"
+trust_receipt "$HOOKS:session_start:0:0"
+"$DOCTOR" >"$SB/out" 2>&1 && die "the doctor read the NEIGHBOUR's receipt at :0:0 as entwurf's own approval"
+want "a receipt at the neighbour's index is named as somebody else's approval, and the key looked for is ours" \
+  "grep -q \"NONE at this unit's key $HOOKS:session_start:1:0\" '$SB/out'"
+cp "$SB/config.before.toml" "$CFG"
+
+# A neighbour EDITED after our install moves nothing of ours — it is not ours to certify.
+python3 -c 'import json,sys
+p=sys.argv[1]; d=json.load(open(p))
+d["hooks"]["SessionStart"][0]["hooks"][0]["timeout"]=99
+open(p,"w").write(json.dumps(d,indent=2))' "$HOOKS"
+want "[QK:CODEX-BIRTH-FOREIGN-EDIT-NEUTRAL] a neighbour's declaration edited after our install is still reported and still certified by nothing — our verdict is unmoved" \
+  "'$DOCTOR' --unit-only >'$SB/out' 2>&1 && grep -q \"entwurf's declaration is certified\" '$SB/out' && grep -q 'SessionStart group 0: bash' '$SB/out'"
+"$INSTALL" >"$SB/out" 2>&1 || die "reinstall beside an edited neighbour failed: $(cat "$SB/out")"
+want "a reinstall beside an edited neighbour does not rewrite hooks.json at all" "grep -q 'NOT REWRITTEN, not one byte' '$SB/out'"
+
+# The inverse takes our group out and leaves the neighbour's bytes exactly where they were.
+cp "$HOOKS" "$SB/before-inverse.json"
+"$UNINSTALL" >"$SB/out" 2>&1 || die "the inverse failed beside a neighbour: $(cat "$SB/out")"
+want "[QK:CODEX-BIRTH-INVERSE-KEEPS-FOREIGN] the inverse removes ONLY entwurf's group and keeps the shared file" \
+  "[ -f '$HOOKS' ] && grep -q 'by text splice' '$SB/out' && ! grep -q 'codex-birth-launch.sh' '$HOOKS'"
+want "the inverse left the neighbour as the file's only declaration" \
+  "node -e 'const s=JSON.parse(require(\"node:fs\").readFileSync(process.argv[1],\"utf8\")); if(s.hooks.SessionStart.length!==1)throw 0; if(!s.hooks.SessionStart[0].hooks[0].command.includes(\"herdr\"))throw 0;' '$HOOKS'"
+want "the inverse removed entwurf's own description and left no entwurf prose behind" "! grep -q 'entwurf codex-birth' '$HOOKS'"
+# The neighbour was re-indented by its own editor above; what must survive the SPLICE is every
+# byte of the group as it stood immediately before the inverse ran.
+node -e '
+  const fs = require("node:fs");
+  const before = JSON.parse(fs.readFileSync(process.argv[1], "utf8")).hooks.SessionStart.filter((g) => !JSON.stringify(g).includes("codex-birth-launch"));
+  const after = JSON.parse(fs.readFileSync(process.argv[2], "utf8")).hooks.SessionStart;
+  if (JSON.stringify(before) !== JSON.stringify(after)) throw new Error("foreign groups changed across the inverse");
+' "$SB/before-inverse.json" "$HOOKS" && ok "[QK:CODEX-BIRTH-INVERSE-FOREIGN-EXACT] every foreign group is value-identical across the inverse" || die "the inverse changed a foreign group"
 rm -f "$HOOKS"
+
+# ORDER B — entwurf is there first and the neighbour appends afterwards, re-serializing the
+# WHOLE document on its way past (measured: Herdr does exactly this, oracle 2026-09-17).
+"$INSTALL" >/dev/null 2>&1 || die "install before the order-B cell failed"
+python3 -c 'import json,sys
+p=sys.argv[1]; d=json.load(open(p))
+g=d["hooks"]["SessionStart"][0]["hooks"][0]
+d["hooks"]["SessionStart"][0]["hooks"][0]={"command":g["command"],"timeout":g["timeout"],"type":g["type"]}
+d["hooks"]["SessionStart"].append({"hooks":[{"command":"bash \x27/sandbox/.codex/herdr-agent-state.sh\x27 session","timeout":10,"type":"command"}]})
+open(p,"w").write(json.dumps(d,indent=2))' "$HOOKS"
+BEFORE_SHA="$(sha256sum "$HOOKS" | cut -d" " -f1)"
+want "[QK:CODEX-BIRTH-NORMALIZED-DIGEST] the certification is blind to key order and indentation a neighbour imposed — bytes changed, our declaration did not" \
+  "'$DOCTOR' --unit-only >'$SB/out' 2>&1 && grep -q \"entwurf's declaration is certified at .* group 0 handler 0\" '$SB/out' && grep -q 'NORMALIZED digest, not by file bytes' '$SB/out'"
+"$INSTALL" >"$SB/out" 2>&1 || die "reinstall after a neighbour re-serialized the file failed: $(cat "$SB/out")"
+want "that reinstall rewrote NOT ONE BYTE of the shared file" \
+  "grep -q 'NOT REWRITTEN, not one byte' '$SB/out' && [ \"\$(sha256sum '$HOOKS' | cut -d' ' -f1)\" = '$BEFORE_SHA' ]"
+
+# OUR OWN declaration edited is still a named refusal — the narrowing is about WHOSE bytes, not
+# about being lenient with ours. SHAPE catches it first: `timeout` is part of the identity the
+# operator approved, so a value the installer never writes is not a digest question at all.
+python3 -c 'import json,sys
+p=sys.argv[1]; d=json.load(open(p))
+d["hooks"]["SessionStart"][0]["hooks"][0]["timeout"]=31
+open(p,"w").write(json.dumps(d,indent=2))' "$HOOKS"
+refuses "[QK:CODEX-BIRTH-OWN-DECLARATION-DRIFT] an edit to entwurf's OWN handler is refused by name" "declaration-shape-drifted" "$INSTALL"
+"$DOCTOR" --unit-only >"$SB/out" 2>&1 && die "the doctor was green over an edited entwurf declaration"
+want "the doctor names our own drifted declaration and what about it drifted" "grep -q 'declaration is not certifiable' '$SB/out' && grep -q 'timeout must be 30' '$SB/out'"
+"$UNINSTALL" >"$SB/out" 2>&1 && die "the inverse removed an edited entwurf declaration"
+want "the inverse leaves our own drifted declaration in place" "grep -q 'DRIFT' '$SB/out' && grep -q 'declaration-shape-drifted' '$SB/out' && [ -f '$HOOKS' ]"
+
+# SHAPE and DIGEST are two different authorities and only one of them is the recorded receipt.
+# Shape asks "is this the declaration these fixed paths produce"; the digest asks "is this the
+# declaration the STATE recorded". Tampering with the receipt alone is the only way to separate
+# them, and it must be red: a receipt anyone can retune certifies nothing.
+rm -rf "$HOOKS" "$UNIT_ROOT"
+"$INSTALL" >/dev/null 2>&1 || die "install before the receipt-binding cell failed"
+python3 -c 'import json,sys
+p=sys.argv[1]; s=json.load(open(p))
+s["declaration"]["sha256"]="0"*64
+open(p,"w").write(json.dumps(s,indent=2))' "$STATE"
+want "[QK:CODEX-BIRTH-DECLARATION-RECEIPT-BINDS] the live declaration is compared to the RECORDED normalized digest, and a receipt that no longer names it is red" \
+  "! '$DOCTOR' --unit-only >'$SB/out' 2>&1 && grep -q 'declaration was EDITED after install' '$SB/out' && grep -q 'live normalized' '$SB/out' && grep -q 'recorded 0000' '$SB/out'"
+"$INSTALL" >/dev/null 2>&1 || die "install should re-record the receipt over a tampered one"
+"$DOCTOR" --unit-only >/dev/null 2>&1 || die "the unit axis should be green once the receipt is republished"
+ok "install re-records the declaration receipt, and the unit axis is green again"
+
+# ...and a SECOND copy of our declaration is a refusal too: the vendor would run the birth hook
+# twice per session, and only one of those positions can carry the operator's receipt.
+python3 -c 'import json,sys
+p=sys.argv[1]; d=json.load(open(p)); g=d["hooks"]["SessionStart"]
+g[0]["hooks"][0]["timeout"]=30
+g.append(json.loads(json.dumps(g[0])))
+open(p,"w").write(json.dumps(d,indent=2))' "$HOOKS"
+refuses "[QK:CODEX-BIRTH-DECLARATION-DUPLICATED] our declaration present twice is refused by name, never first-match accepted" "declaration-duplicated" "$INSTALL"
+"$DOCTOR" --unit-only >"$SB/out" 2>&1 && die "the doctor accepted a duplicated entwurf declaration"
+want "the doctor names the duplication and both positions" "grep -q 'declaration-duplicated' '$SB/out' && grep -qE 'group [0-9]+ handler [0-9]+, group [0-9]+ handler [0-9]+' '$SB/out'"
+rm -rf "$HOOKS" "$UNIT_ROOT"
+
 
 ln -s "$SB/foreign-hooks.json" "$HOOKS"
 refuses "a symlinked hooks.json is refused" "is a SYMLINK" "$INSTALL"
@@ -211,18 +351,27 @@ want "the symlink refusal wrote no state" "[ ! -e '$STATE' ] && [ -L '$HOOKS' ]"
 rm -f "$HOOKS"
 
 "$INSTALL" >/dev/null 2>&1 || die "install before the edited-declaration cell failed"
+# WHITESPACE IS NOT DRIFT ANY MORE, and that is a contract change worth pinning: a normalized
+# digest is blind to formatting precisely so a neighbour's re-serialize cannot fake an edit.
 printf '\n' >> "$HOOKS"
+want "[QK:CODEX-BIRTH-WHITESPACE-NOT-DRIFT] reformatting alone is not drift — the digest is over the declaration, not the bytes" \
+  "'$DOCTOR' --unit-only >/dev/null 2>&1"
+# An edit to a FIELD of our handler still is.
+python3 -c 'import json,sys
+p=sys.argv[1]; d=json.load(open(p))
+d["hooks"]["SessionStart"][0]["hooks"][0]["timeout"]=7
+open(p,"w").write(json.dumps(d,indent=2))' "$HOOKS"
 cp "$HOOKS" "$SB/edited-hooks.json"
-refuses "an edited declaration is refused instead of republished" "was edited after install" "$INSTALL"
+refuses "an edited declaration is refused instead of republished" "declaration-shape-drifted" "$INSTALL"
 cmp -s "$SB/edited-hooks.json" "$HOOKS" && ok "the edited declaration survives the refusal byte-for-byte" || die "the edited hooks.json was overwritten"
 "$DOCTOR" --unit-only >"$SB/out" 2>&1 && die "the unit axis should be red while the declaration is edited"
-want "the doctor names the edited declaration" "grep -q 'was EDITED after install' '$SB/out'"
+want "the doctor names the edited declaration" "grep -q 'declaration is not certifiable' '$SB/out'"
 
 ###############################################################################
 # inverse — exact removal, and a refusal that leaves drift in place
 ###############################################################################
 "$UNINSTALL" >"$SB/out" 2>&1 && die "the inverse should refuse while the declaration is drifted"
-want "the inverse refuses the drifted declaration" "grep -q 'DRIFT: the declaration was edited after install' '$SB/out'"
+want "the inverse refuses the drifted declaration" "grep -q 'DRIFT' '$SB/out' && grep -q 'declaration-shape-drifted' '$SB/out'"
 want "the drifted declaration is LEFT IN PLACE" "[ -f '$HOOKS' ]"
 want "the inverse keeps the state so a later run can still license the path" "[ -f '$STATE' ]"
 cmp -s "$SB/edited-hooks.json" "$HOOKS" && ok "the drifted declaration is byte-identical after the refused inverse" || die "the refused inverse changed the drifted file"
@@ -313,6 +462,29 @@ want "that refusal wrote nothing" \
 python3 -c 'import json,sys; s=json.load(open(sys.argv[1])); s["status"]="publishing"; open(sys.argv[1],"w").write(json.dumps(s))' "$STATE"
 "$INSTALL" >/dev/null 2>&1 || die "an interrupted `publishing` state should be finishable, not refused"
 want "the finished publish records installed" "grep -q '\"status\": \"installed\"' '$STATE'"
+
+# A v1 ownership receipt recorded a digest of the WHOLE hooks.json. Reading it leniently would
+# certify bytes a neighbour owns, so every reader refuses it by name — and the installer is the
+# one forward path, superseding it without removing anything or rewriting a foreign byte.
+rm -rf "$HOOKS" "$UNIT_ROOT"
+"$INSTALL" >/dev/null 2>&1 || die "install before the v1-supersede cell failed"
+python3 -c 'import json,sys
+p=sys.argv[1]; s=json.load(open(p))
+s["schema"]="codex-birth-install-state/v1"
+s["hooksSha256"]="1"*64
+del s["declaration"]
+open(p,"w").write(json.dumps(s,indent=2))' "$STATE"
+want "[QK:CODEX-BIRTH-STATE-V1-REFUSED] the doctor refuses a v1 receipt by name and names the one forward path" \
+  "! '$DOCTOR' --unit-only >'$SB/out' 2>&1 && grep -q 'codex-birth-install-state/v1' '$SB/out' && grep -q 'WHOLE hooks.json' '$SB/out' && grep -q 'install-codex-birth' '$SB/out'"
+"$UNINSTALL" >"$SB/out" 2>&1 && die "the inverse removed things on the word of a v1 receipt"
+want "the inverse refuses a v1 receipt and removes NOTHING" \
+  "grep -q 'codex-birth-install-state/v2' '$SB/out' && [ -f '$HOOKS' ] && [ -f '$LAUNCHER' ] && [ -f '$STATE' ]"
+HOOKS_BEFORE_V1="$(sha256sum "$HOOKS" | cut -d' ' -f1)"
+"$INSTALL" >"$SB/out" 2>&1 || die "the installer should supersede a v1 receipt: $(cat "$SB/out")"
+want "the installer supersedes v1 forward, says so, and rewrites not one byte of hooks.json" \
+  "grep -q 'superseding a v1 ownership receipt' '$SB/out' && grep -q 'NOT REWRITTEN, not one byte' '$SB/out' && [ \"\$(sha256sum '$HOOKS' | cut -d' ' -f1)\" = \"$HOOKS_BEFORE_V1\" ]"
+"$DOCTOR" --unit-only >/dev/null 2>&1 || die "the unit axis should be green once the receipt is v2"
+ok "the unit axis is green once the receipt has been superseded to v2"
 
 # The directory holding the receipt carries the receipt's authority. Children untouched: what
 # changed is only who may replace the inventory every digest is compared against.

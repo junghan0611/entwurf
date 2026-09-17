@@ -834,7 +834,7 @@ let manifestCount: number;
 		"capability-cache": 3,
 		"codex-app-server-launch": 9,
 		"codex-caller-seat": 28,
-		"codex-native": 68,
+		"codex-native": 75,
 		"compaction-send-guard": 7,
 		"copilot-birth": 19,
 		"copilot-launch": 14,

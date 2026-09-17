@@ -3,7 +3,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-
+import { declarationDigest, entwurfDeclarationGroup, trustReceiptKey } from "../pi-extensions/lib/codex-declaration.js";
 import {
 	type CodexPreflightDeps,
 	codexCallerFreshPreflight,
@@ -11,6 +11,12 @@ import {
 	codexLaunchCwdFreshPreflight,
 } from "../pi-extensions/lib/codex-fresh-preflight.ts";
 import type { CodexProtocolOpener, CodexRpcProtocol } from "../pi-extensions/lib/native-push/codex-ws-client.ts";
+
+/** Herdr's official Codex integration, as it lands in a shared hooks.json — measured on oracle
+ * 2026-09-17: one appended `SessionStart` group, a shell-string command, timeout 10. */
+const HERDR_GROUP = {
+	hooks: [{ command: "bash '/home/op/.codex/herdr-agent-state.sh' session", timeout: 10, type: "command" }],
+};
 
 let root = "";
 let home = "";
@@ -95,7 +101,10 @@ const sha = (file: string): string => crypto.createHash("sha256").update(fs.read
  * decoration here: the preflight compares every recorded digest to the live bytes, so a
  * fixture that skipped it would be testing a unit no installer ever produced.
  */
-function installBirth(handler: Record<string, unknown> | null = null): void {
+function installBirth(
+	handler: Record<string, unknown> | null = null,
+	neighbours: { before?: number; after?: number; duplicateOurs?: boolean } = {},
+): void {
 	const launcher = path.join(helperDir, "codex-birth-launch.sh");
 	write(launcher, "#!/bin/sh\nexit 0\n", 0o755);
 	write(path.join(helperDir, "meta-bridge-hook-codex.ts"), "export {};\n");
@@ -103,25 +112,42 @@ function installBirth(handler: Record<string, unknown> | null = null): void {
 	write(path.join(helperDir, "lib", "native-push", "codex-ws-client.ts"), "export {};\n");
 	write(path.join(helperDir, "lib", "session-id.js"), "export {};\n");
 	write(path.join(helperDir, "entwurf-capabilities.json"), "{}\n");
-	write(
-		hooksFile,
-		JSON.stringify({
-			hooks: {
-				SessionStart: [{ hooks: [handler ?? { type: "command", command: `'${launcher}'`, timeout: 30 }] }],
-			},
-		}),
-	);
+	const ours = { hooks: [handler ?? { type: "command", command: `'${launcher}'`, timeout: 30 }] };
+	const groups: unknown[] = [];
+	for (let i = 0; i < (neighbours.before ?? 0); i += 1) groups.push(HERDR_GROUP);
+	groups.push(ours);
+	if (neighbours.duplicateOurs) groups.push(JSON.parse(JSON.stringify(ours)));
+	for (let i = 0; i < (neighbours.after ?? 0); i += 1) groups.push(HERDR_GROUP);
+	write(hooksFile, JSON.stringify({ hooks: { SessionStart: groups } }, null, 2));
 	writeState();
 }
 
+/** Where entwurf's declaration actually sits in the fixture just written — the position the
+ * vendor keys its receipt to, and the whole point of #117. */
+function ourIndex(): number {
+	const launcher = path.join(helperDir, "codex-birth-launch.sh");
+	const groups = (JSON.parse(fs.readFileSync(hooksFile, "utf8")) as { hooks: { SessionStart: unknown[] } }).hooks
+		.SessionStart;
+	return groups.findIndex(
+		(group) => (group as { hooks?: Array<{ command?: unknown }> }).hooks?.[0]?.command === `'${launcher}'`,
+	);
+}
+
 function writeState(): void {
+	const launcher = path.join(helperDir, "codex-birth-launch.sh");
 	write(
 		stateFile,
 		JSON.stringify({
-			schema: "codex-birth-install-state/v1",
+			schema: "codex-birth-install-state/v2",
 			status: "installed",
 			hooksFile,
-			hooksSha256: sha(hooksFile),
+			// The declaration receipt, NOT a file digest: hooks.json is shared, so its bytes are
+			// not this unit's to certify (#117).
+			declaration: {
+				event: "SessionStart",
+				command: `'${launcher}'`,
+				sha256: declarationDigest(entwurfDeclarationGroup(launcher)),
+			},
 			helperDir,
 			helperFiles: [
 				{ path: "codex-birth-launch.sh", sha256: sha(path.join(helperDir, "codex-birth-launch.sh")), mode: "0755" },
@@ -401,6 +427,99 @@ describe("Codex fresh preflight", () => {
  * about whether a pane can be found, and asking would fail a placement check for a delivery
  * reason.
  */
+/**
+ * #117 — entwurf owns ONE `SessionStart` declaration inside a file it SHARES.
+ *
+ * Every cell here is a thing the previous whole-file certification got wrong on a host where
+ * Herdr's official Codex integration is installed: it read the file's bytes (which a neighbour
+ * re-serializes), it required `SessionStart.length === 1` (which a neighbour breaks), and it read
+ * the vendor's trust receipt at the constant `:0:0` (which a neighbour at index 0 now owns).
+ */
+describe("Codex declaration ownership inside a shared hooks.json", () => {
+	const green = async (): Promise<unknown> => codexFreshPreflight({ HOME: home }, deps);
+
+	it("[QK:CODEX-DECLARATION-SELECTED-BY-COMMAND] entwurf's declaration is found by its launcher command, so a neighbouring integration in EITHER ordering leaves the birth unit admissible", async () => {
+		for (const neighbours of [{ after: 1 }, { before: 1 }, { before: 1, after: 2 }]) {
+			installBirth(null, neighbours);
+			const index = ourIndex();
+			expect(index).toBeGreaterThanOrEqual(0);
+			installConfig(true, managedEnvVars, trustBlock(trustReceiptKey(hooksFile, index, 0)));
+			// The file holds more than one SessionStart group and the unit is STILL admissible:
+			// that pair is the whole defect #117 closed.
+			const groups = (JSON.parse(fs.readFileSync(hooksFile, "utf8")) as { hooks: { SessionStart: unknown[] } }).hooks
+				.SessionStart;
+			expect(groups.length).toBeGreaterThan(1);
+			expect(await green()).toBeNull();
+		}
+	});
+
+	it("[QK:CODEX-DECLARATION-TRUST-INDEX] the vendor receipt is read at the index our declaration was MEASURED at — a neighbour's receipt at `:0:0` is somebody else's approval, never ours", async () => {
+		installBirth(null, { before: 1 });
+		expect(ourIndex()).toBe(1);
+		// The neighbour holds index 0 and the operator has trusted THEIR declaration. A constant
+		// `:0:0` would read that receipt and report a birth hook the vendor never agreed to run.
+		installConfig(true, managedEnvVars, trustBlock(`${hooksFile}:session_start:0:0`));
+		expect(await green()).toBe("codex-birth-trust-missing");
+		installConfig(true, managedEnvVars, trustBlock(`${hooksFile}:session_start:1:0`));
+		expect(await green()).toBeNull();
+	});
+
+	it("[QK:CODEX-DECLARATION-DUPLICATED] our declaration present twice is a named refusal, not a first-match green — the vendor would run the birth hook twice and only one position can carry the receipt", async () => {
+		installBirth(null, { duplicateOurs: true });
+		installConfig(true, managedEnvVars, trustBlock(`${hooksFile}:session_start:0:0`));
+		expect(await green()).toBe("codex-birth-unit-missing");
+	});
+
+	it("[QK:CODEX-DECLARATION-NORMALIZED-DIGEST] the certification survives a neighbour re-serializing the whole document, and still fails on an edit to our OWN handler", async () => {
+		installBirth(null, { after: 1 });
+		installConfig(true, managedEnvVars, trustBlock(`${hooksFile}:session_start:0:0`));
+		expect(await green()).toBeNull();
+		// Exactly what Herdr's serde write-back did on oracle 2026-09-17: same values, different
+		// key order, different indentation, no whitespace this unit chose.
+		const document = JSON.parse(fs.readFileSync(hooksFile, "utf8")) as {
+			hooks: { SessionStart: Array<{ hooks: Array<Record<string, unknown>> }> };
+		};
+		document.hooks.SessionStart = document.hooks.SessionStart.map((group) => ({
+			hooks: group.hooks.map((handler) => ({
+				command: handler.command,
+				timeout: handler.timeout,
+				type: handler.type,
+			})),
+		}));
+		write(hooksFile, JSON.stringify(document));
+		expect(await green()).toBeNull();
+		// ...and the digest is still load-bearing: a timeout the operator never approved is drift.
+		document.hooks.SessionStart[0].hooks[0].timeout = 31;
+		write(hooksFile, JSON.stringify(document, null, 4));
+		expect(await green()).toBe("codex-birth-unit-missing");
+	});
+
+	it("[QK:CODEX-DECLARATION-FOREIGN-NEUTRAL] editing, adding or breaking a FOREIGN group moves no verdict of ours — neighbours are reported elsewhere and certified nowhere", async () => {
+		installBirth(null, { after: 1 });
+		installConfig(true, managedEnvVars, trustBlock(`${hooksFile}:session_start:0:0`));
+		expect(await green()).toBeNull();
+		const document = JSON.parse(fs.readFileSync(hooksFile, "utf8")) as {
+			hooks: { SessionStart: Array<Record<string, unknown>> };
+		};
+		document.hooks.SessionStart[1] = { matcher: "startup", hooks: [{ type: "command", command: "x", async: true }] };
+		document.hooks.SessionStart.push({ hooks: [] });
+		write(hooksFile, JSON.stringify(document, null, 2));
+		expect(await green()).toBeNull();
+	});
+
+	it("[QK:CODEX-DECLARATION-STATE-V2] a v1 ownership receipt is refused rather than read leniently — it recorded a whole-file digest, an authority this unit no longer holds", async () => {
+		installBirth();
+		installConfig(true, managedEnvVars, trustBlock(`${hooksFile}:session_start:0:0`));
+		expect(await green()).toBeNull();
+		const state = JSON.parse(fs.readFileSync(stateFile, "utf8")) as Record<string, unknown>;
+		state.schema = "codex-birth-install-state/v1";
+		state.hooksSha256 = sha(hooksFile);
+		state.declaration = undefined;
+		write(stateFile, JSON.stringify(state), 0o600);
+		expect(await green()).toBe("codex-birth-unit-missing");
+	});
+});
+
 describe("Codex CALLER-side fresh preflight", () => {
 	/** Write only what this axis reads. Deliberately not `installConfig`: proving the two axes
 	 * are independent needs a config that satisfies neither by accident. */
