@@ -460,6 +460,9 @@ case "$HOOKS_ACTION" in
     note "hooks.json already carries entwurf's declaration (normalized sha256 $DECL_SHA) — NOT REWRITTEN, not one byte"
     ;;
   APPEND)
+    # The file was somebody else's before this line and is shared after it, so its MODE is
+    # carried over from what we found rather than reset to the one a fresh publish would use.
+    chmod "$(stat -c %a -- "$HOOKS_FILE")" -- "$HOOKS_TMP"
     cp -- "$HOOKS_TMP" "$HOOKS_FILE.tmp" && mv -f -- "$HOOKS_FILE.tmp" "$HOOKS_FILE"
     note "appended entwurf's declaration to the existing hooks.json by text splice — every foreign group came through byte-for-byte"
     ;;

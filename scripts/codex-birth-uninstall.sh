@@ -223,7 +223,9 @@ REMOVE_DECLARATION() { # $1 = recorded normalized digest, $2 = hooks.json path
       ;;
     FILE) rm -f -- "$tmp" "$target"; note "removed $target (entwurf was its only declaration)" ;;
     SPLICE)
-      chmod 0644 -- "$tmp"
+      # The file survives this inverse, so its MODE is one more thing that is not ours to
+      # change: it is carried over from what we found rather than reset to what we publish.
+      chmod "$(stat -c %a -- "$target")" -- "$tmp"
       cp -- "$tmp" "$target.tmp" && mv -f -- "$target.tmp" "$target"
       rm -f -- "$tmp"
       note "removed entwurf's declaration from $target by text splice — $detail foreign group(s) preserved byte-for-byte"

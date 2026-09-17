@@ -230,8 +230,10 @@ neighbour_survives() { # <label>
   printf '%s' "$FOREIGN_GROUP" > "$SB/foreign-block.txt"
   grep -qF -f "$SB/foreign-block.txt" "$HOOKS" && ok "$1" || die "$1 (the foreign group's bytes changed)"
 }
-foreign_file() { # writes a hooks.json declaring ONLY the neighbour, in its own formatting
+foreign_file() { # writes a hooks.json declaring ONLY the neighbour, in its own formatting AND
+  # its own mode — both are things this unit must carry over rather than normalise.
   printf '{\n  "hooks": {\n    "SessionStart": [\n%s\n    ]\n  }\n}\n' "$FOREIGN_GROUP" > "$HOOKS"
+  chmod 0600 "$HOOKS"
 }
 
 # ORDER A — the neighbour is there first and entwurf joins it.
@@ -240,6 +242,8 @@ cp "$HOOKS" "$SB/foreign-only.json"
 want "[QK:CODEX-BIRTH-JOINS-FOREIGN-FILE] a foreign hooks.json is JOINED by text splice, never adopted and never refused" \
   "'$INSTALL' >'$SB/out' 2>&1 && grep -q 'appended entwurf' '$SB/out' && grep -q 'byte-for-byte' '$SB/out'"
 neighbour_survives "the neighbour's declaration survives the install byte-for-byte"
+want "[QK:CODEX-BIRTH-SHARED-FILE-MODE-KEPT] the shared file keeps the mode it was found with — a file we only add a group to is not one whose permissions are ours to reset" \
+  "[ \"\$(stat -c %a '$HOOKS')\" = '0600' ] || [ \"\$(stat -c %a '$HOOKS')\" = '600' ]"
 want "entwurf's declaration was APPENDED, so the neighbour keeps index 0 and the trust receipt it already has" \
   "node -e 'const s=JSON.parse(require(\"node:fs\").readFileSync(process.argv[1],\"utf8\")); const g=s.hooks.SessionStart; if(g.length!==2)throw new Error(\"groups \"+g.length); if(g[0].hooks[0].command.includes(\"entwurf\"))throw new Error(\"entwurf took index 0\"); if(g[1].hooks[0].command!==\"'\''\"+process.argv[2]+\"'\''\")throw new Error(\"ours is not at index 1\");' '$HOOKS' '$LAUNCHER'"
 want "[QK:CODEX-BIRTH-DOCTOR-COEXISTS] the doctor certifies entwurf's own declaration at its MEASURED index and stays green beside a neighbour" \
@@ -398,6 +402,11 @@ cmp -s "$SB/config.before.toml" "$CFG" && ok "the full install/inverse cycle lef
 # empty unit on the strength of somebody else's approval — measured exactly that way once.
 "$DOCTOR" --unit-only >"$SB/out" 2>&1 && die "[QK:CODEX-BIRTH-DOCTOR-ABSENT-IS-RED] the unit axis was green with NOTHING installed"
 want "an absent unit is named as red, not as an informational note" "grep -q 'no Codex birth unit is installed here' '$SB/out'"
+# ...and with nothing installed the FOREIGN axis says NOT READ, never "none": the UNIT axis never
+# opened that file, and "none" would be this doctor asserting something about the operator's
+# hooks.json it never looked at.
+want "[QK:CODEX-BIRTH-FOREIGN-UNREAD-NOT-NONE] an unscanned FOREIGN axis reports NOT READ rather than claiming there are no neighbours" \
+  "grep -q 'NOT READ' '$SB/out' && ! grep -q 'none — entwurf is the only' '$SB/out'"
 trust_receipt "$HOOKS:session_start:0:0"
 "$DOCTOR" >"$SB/out" 2>&1 && die "a stale vendor receipt made an ABSENT unit green"
 want "a stale receipt cannot carry an absent unit" "grep -q 'no Codex birth unit is installed here' '$SB/out'"

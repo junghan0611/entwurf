@@ -126,6 +126,7 @@ section "UNIT (the bytes this unit publishes, and whether they are still ours)"
 judge_parent "$PACKAGE_STATE_ROOT" "the package state root"
 judge_parent "$UNIT_ROOT" "the unit root"
 FOREIGN_LINES=""
+FOREIGN_SCANNED=0
 ORPHAN_DECLARATION=0
 if [ ! -e "$STATE_FILE" ] && [ ! -L "$STATE_FILE" ] && [ -f "$HOOKS_FILE" ] && [ -n "$NODE_BIN" ] && [ -f "$DECLARATION_LIB" ]; then
   # A hooks.json with NO entwurf state is the ordinary shape on a host where only somebody else
@@ -231,9 +232,12 @@ else
       out.push("BAD\t" + hooksFile + " is not readable JSON (" + err.message + ")");
       return emit();
     }
+    // The SCAN marker is emitted whether or not there are neighbours, because "none" and "never
+    // looked" are different facts and only one of them claims anything about a file we read.
     for (const group of sel.foreign) {
       out.push("FOREIGN\tSessionStart group " + group.index + ": " + (group.commands.join(" | ") || "(no handler)"));
     }
+    out.push("FOREIGNSCAN\t" + sel.foreign.length);
     if (!sel.ok) {
       out.push("BAD\tentwurf\u2019s own declaration is not certifiable in " + hooksFile + " — " + sel.code + ": " + sel.detail + ". Repair: ./run.sh install-codex-birth");
       return emit();
@@ -260,6 +264,7 @@ else
       INFO) info "$a" ;;
       FOREIGN) FOREIGN_LINES="${FOREIGN_LINES}${a}
 " ;;
+      FOREIGNSCAN) FOREIGN_SCANNED=1 ;;
       DECL)
         DECL_GROUP_INDEX="$a"; DECL_HANDLER_INDEX="$b"
         ok "entwurf's declaration is certified at $HOOKS_FILE group $a handler $b (normalized sha256 $c)"
@@ -294,7 +299,13 @@ section "FOREIGN (what else declares a SessionStart hook in that file)"
 # `[source]` discovery.rs:664-665 trusts per declaration, so neighbours are independent. This
 # section exists so an operator can SEE them, which is the difference between coexisting and
 # not knowing.
-if [ -n "$FOREIGN_LINES" ]; then
+if [ "$FOREIGN_SCANNED" = "0" ]; then
+  # NOT "none". The UNIT axis stopped before it read that document — an absent or unreadable
+  # ownership state, a missing file — and reporting "none" here would be this doctor asserting
+  # something about the operator's file that it never looked at.
+  info "NOT READ — the UNIT axis stopped before it could look at $HOOKS_FILE, so this doctor"
+  info "knows nothing about what else declares a SessionStart hook there. Repair the UNIT axis first."
+elif [ -n "$FOREIGN_LINES" ]; then
   printf '%s' "$FOREIGN_LINES" | while IFS= read -r line; do
     [ -n "$line" ] && info "$line"
   done
