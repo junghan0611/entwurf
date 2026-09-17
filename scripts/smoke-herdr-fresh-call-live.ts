@@ -531,6 +531,51 @@ async function main(): Promise<void> {
 			}
 			if (callerIsPi) text = readTranscript(callerTranscript);
 
+			// ── what the child was DOING when we stopped waiting ────────────────────────
+			//
+			// Diagnosis only — nothing below reads this, and no claim is made from it. It exists
+			// because `[측정 2026-09-17]` a claude child that received its prompt and then called no
+			// tool is indistinguishable, from every artifact this smoke had, between "it answered
+			// and declined" and "it was still thinking". Two facts separate them and both are
+			// cheap:
+			//
+			//   herdr agent status   `idle`/`done` means the turn ENDED with no tool call — the
+			//                        child answered something and stopped. `working` means the
+			//                        bound was short. `blocked` means it is waiting on a human.
+			//   the hook journal     entwurf's own SessionStart/UserPromptSubmit stamps. `[측정
+			//                        2026-09-17]` a silent child still stamps UserPromptSubmit
+			//                        ~300ms after SessionStart, so "the prompt never arrived" is
+			//                        already excluded and must not be re-guessed.
+			//
+			// The claude child leaves NO transcript to read: `[측정 2026-09-17]` every claude
+			// session in this smoke — callers and children, acting and silent — is absent from the
+			// operator's real `~/.claude/projects/` and from every fenced XDG root, including one
+			// child that had just made two successful tool calls. That absence is a claude-runtime
+			// fact, re-measured with HOME real, and is why the two stamps below are the evidence.
+			const agentStatus = herdr(bin, env, ["agent", "list"]).stdout.trim();
+			const hookJournal = ((): string => {
+				try {
+					return fs
+						.readFileSync(path.join(root, "meta-bridge-hook.log"), "utf8")
+						.trimEnd()
+						.split("\n")
+						.slice(-8)
+						.join("\n");
+				} catch {
+					return "(no hook journal)";
+				}
+			})();
+			lines.push(
+				`### ${cell.label} — child diagnosis at the end of the wait`,
+				"",
+				"```",
+				`herdr agent list: ${agentStatus.slice(0, 2000)}`,
+				"",
+				hookJournal,
+				"```",
+				"",
+			);
+
 			let nonce = "";
 			let callbackArrived = false;
 			let callbackForm = "";
