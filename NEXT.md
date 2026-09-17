@@ -163,61 +163,41 @@ CHANGELOG `## Unreleased`가 구현 범위 `v0.15.1..19ad90c` **30커밋** 전�
 스크립트가 움직였으므로 반드시 돈다; lane C SHA의 긴 바닥은 로컬에서 안 돌렸다) → 다음 컷 prepare는 별도 권한. #109 openclaw 다리는 **닫혔다** · **0.16.1 make는 열린 채 PAUSED**.
 푸시·태그·publish는 금지; `entwurf-release`의 make/publish 별도 권한이다.
 
-# NOW — stem: 0.22.0 prepare (codex 폴더 동의 + #116 합류)
+# NOW — stem: 0.22.0 나갔다, npm publish만 남았다
 
-- **Stem:** **무인 codex leg가 침묵하던 원인이 배달이 아니라 폴더 동의였다.** 2026-09-16 밤
-  `release-gate --cut` 두 번이 `smoke-codex-fresh-live` 한 칸에서만 붉었고, 원인 축으로 의심받던
-  models cache 손상은 **기각**됐다. 측정: 네 run의 scratch 디렉토리 중 `~/.codex/config.toml`에
-  trust 항목이 있던 둘(`…-db65N2`, `…-pBXxOJ` — GLG가 옆에서 엔터를 눌러준 run)만 통과했고,
-  항목이 없던 무인 run 둘(`…-2zznHl`, `…-kSsoAn`)은 21:28 이후 **롤아웃을 하나도 쓰지 않았다**.
-  형제는 벤더의 folder-trust 화면 위에서 열려 첫 턴을 시작조차 못 했다. `[source rust-v0.153.4]`
-  `--remote` 시작은 항상 `-C` 값에 `check_directory_trust`를 돌리고(`tui/src/lib.rs:1699-1725`)
-  그 경로는 승인/샌드박스 정책을 읽지 않는다(`onboarding/directory_trust.rs:33-130`) — 이미 싣고 있던
-  `--dangerously-bypass-approvals-and-sandbox`가 이걸 덮지 못한 이유다. **direct 결정**의 키는 정확히 그 cwd 하나다
-  (`config_update.rs:290-296`): 부모도, git root도, project marker도 아니다. 그래서 trusted `/tmp`가
-  있는데도 두 scratch가 각자 항목으로 기록돼 있었다.
-- **좌표:** launch 디렉터리 상태를 **경고로 말하고 창은 연다**(GLG 결정, 2026-09-17). 이름은 둘이다:
-  `codex-launch-cwd-undecided`(벤더가 화면을 띄울 자리)와 `codex-launch-cwd-untrusted-ancestor`(벤더가
-  화면 대신 `pass the repository root explicitly with --cd` 에러로 끝내는 자리 — repair가 다르다).
-  **거절하지 않는 것이 제품 결정이다**: consent 화면은 사람이 있으면 자가수복이고, 한 번 답하면 벤더가
-  그 디렉터리를 영구히 기록한다. 거절은 그 한 번을 "창 없음 → 직접 codex 열기 → 다시 호출"로 바꾸면서,
-  이 프로세스가 온전히 볼 수 없는 판정(벤더는 system/managed/cloud layer를 합친다)에 대해 옳아야 한다.
-  무인 케이스는 제자리에서 답한다 — `smoke-codex-fresh-live`가 같은 leaf를 맨 앞에서 assert하므로
-  키보드 앞에 아무도 없는 게이트는 콜백 타임아웃 대신 이름 붙은 전제를 읽는다.
-  묻는 값은 codex가 실제로 받는 `-C` 토큰을 되읽은 것이고(재계산 아님 — 상속 기본값 해석 지점은
-  여전히 하나), 스모크는 매 run `mkdtemp` 대신 `os.tmpdir()` 아래 고정 경로 하나(매 run `launch-cwd`로 찍는다)에서
-  열어 운영자 설정이 run마다 불어나지 않는다. Codex live-spend 기본값은 `gpt-5.6-sol` → **`gpt-5.6-luna`**.
-- **여기서 초록인 것 (thinkpad, 2026-09-17, `4158b79`):** `check:full` exit 0 ·
-  `check-mux-fresh-call` 286 · `check-codex-fresh-preflight` 24 · `check-gate-manifests`
-  **520 mutants / 45 lanes** (선언 인벤토리 일치) · typecheck/format · bridge dist 재빌드.
-  main 푸시 완료: `e242be6` (feat) + `4158b79` (release prep). tag/release/npm은 **미수행**.
-- **여기서 초록이 아닌 것 — `check-gate-qualification` BODY는 완주하지 않았다.** 전수 실행을 세 번
-  시도했는데 백그라운드 run이 겹쳐 매번 마지막 순수성 tripwire(`origin work surface changed during
-  qualification`)에 걸렸다. **뮤턴트 자체는 걸린 지점까지 전부 KILLED였고 실패는 실행 위생이지 코드가
-  아니다** — 그래도 그건 영수증이 아니다. 이 컷의 qualification 정본은 **oracle의 exact-SHA CI run**이다.
-  head(`check-gate-manifests`)는 결정적 floor 안에서 초록이므로 manifest 부채는 없다.
-  재실행할 때는 **다른 게이트와 겹치지 않게 단독으로** 돌릴 것.
-- **다음 한 수:** oracle에서 **#116(`[implementation] herdr-entwurf — run Entwurf on Herdr, keep
-  tmux intact`)과 합류**해 한 번의 긴 게이트로 수용한다. 이 리포는 정적/focused 게이트까지만 서고,
-  LIVE와 qualification body는 거기서 돈다. 게이트 env: `ENTWURF_CODEX_FRESH_MODEL=gpt-5.6-luna`,
-  `ENTWURF_CODEX_FRESH_PI_MODEL=openai-codex/gpt-5.6-luna`.
-- **이번 변경의 독립 검수는 이미 돌았다 (terra, pi `openai-codex/gpt-5.6-terra`, 5라운드).** Blocker 4건 ·
-  Defect 다수가 전부 벤더 소스 대조로 확인되고 닫혔다: 은퇴한 고정 `codex` home 지시, `untrusted`
-  거짓 거절, project layer/조상 에러 미모델링, `isSafeOwnedDir` 협소화, `readConfig === null` 거짓 거절,
-  문서 동치 과대주장. 마지막 라운드가 남긴 논점(권위 있는 `ConfigRead { include_layers: true }` RPC로
-  가야 하는가)은 **GLG가 "거절하지 않는다"로 결정하면서 소멸했다** — 거절이 없으면 거짓 거절도 없다.
-  같은 축을 다시 검수할 때 이 결정을 모르고 보면 같은 길을 되판다.
-- **LIVE 재실행 전제(추가):** 그 고정 디렉토리를 `codex -C <경로>`로 한 번 열어 `Trust`를 답해 둔다.
-  경로를 `$TMPDIR/...`로 쓰지 않는다 — `os.tmpdir()`는 `TMPDIR`가 없으면 `/tmp`로 떨어지므로 그 표기는
-  TMPDIR가 unset인 호스트(thinkpad에서 측정: unset)에서 파일시스템 루트의 `/entwurf-codex-fresh-live`를
-  가리킨다. 정확히 뽑는 법:
-  `node -e 'console.log(require("node:os").tmpdir() + "/entwurf-codex-fresh-live")'`.
-  스모크도 매 run `launch-cwd <경로>`로 그 값을 찍고, 거절할 때는 그 경로가 박힌 repair 명령을 함께 준다.
-  안 해두면 맨 앞 assertion에서 그 이름으로 거절한다 — 콜백 타임아웃으로 위장되지 않는다. 기존
-  전제(app-server가 Pi/Codex 쌍과 다른 tmux 세션, `install-codex-terminal-title`)는 그대로다.
-- **Do not:** thinkpad에서 긴 LIVE 게이트를 다시 태우기; `~/.codex/config.toml`에 에이전트가 trust
-  항목을 써넣기(동의는 사람이 준다 — 제품도 쓰지 않는다); launch-directory 경고를 다시 거절로 바꾸기
-  (GLG 결정이고 그 비용은 CHANGELOG 0.22.0에 적혀 있다); tag/GitHub release/npm publish.
+- **상태:** **`v0.22.0` @ `ea28e56`, 태그·GitHub 릴리즈 공개 완료 (2026-09-17 21:17 KST).**
+  npm publish는 **GLG 몫**(토큰 401 이력, 0.17.2 이래 같은 방식). 수용된 candidate는
+  `/tmp/entwurf-release-candidate-0.22.0.GAQERG/junghanacs-entwurf-0.22.0.tgz`,
+  sha256 `e1e2868a6d7e74cfa2ca008608f8ed4f1cfbef22790f9ed7b304791368fd0ccf`, 12,855,699 bytes,
+  acceptance log 같은 디렉터리. **그 바이트 그대로 발행하고 리팩하지 않는다.** 발행 뒤
+  `dist.integrity`/`shasum`/tarball sha256을 이 값과 대조하는 것이 마지막 축이다.
+- **컷 경로 (영수증):** land `52aaf86` → CI [`35188022368`](https://github.com/junghan0611/entwurf/actions/runs/35188022368)
+  4잡 + qualification **520/520** → `f5d6e10` 체인 수리 → dispatch CI [`35202801617`](https://github.com/junghan0611/entwurf/actions/runs/35202801617)
+  → LIVE `release-gate --cut` **MUST 24/0/0 · BEHAVIOR 1/0 · cut OK**
+  (`/tmp/entwurf-release-gate-0.22.0.royX2L/release-gate.log`, `check:full` 521s,
+  `smoke-codex-fresh-live` 66 assertions) → prepare `ea28e56` → M2 CI
+  [`35215263800`](https://github.com/junghan0611/entwurf/actions/runs/35215263800) 4잡 + body success
+  → candidate 수용(no repack, image `node@sha256:6dac556d…`) → 태그·릴리즈·도장.
+- **이 컷의 LIVE는 herdr 훅을 임시 제거한 상태에서 쟀다. 그 부채는 #117이 갚는다.**
+  `~/.codex/hooks.json`을 `hooks.json.herdr-bak`으로 옮기고 `install-codex-birth`로 재발행해
+  측정했고, 컷 뒤 `herdr integration install codex`로 복원했다. 복원 후 `doctor-codex-birth`가
+  다시 RED인 것이 **정상**이다(live `d5879a43…` vs recorded `33c84bb8…`). 벤더 trust 영수증
+  `session_start:0:0`은 재발행을 견뎠다 — 실제 Codex TUI가 consent 화면 없이 떴다(측정).
+  `.herdr-bak`은 지우지 않았다.
+- **다음 = #117.** entwurf가 자기가 소유한 것은 한 그룹인데 파일 전체 digest를 요구하는 것이
+  근본 원인이다. 그것을 고치기 전에는 herdr가 붙은 호스트에서 `smoke-codex-fresh-live`가 못 돈다.
+  그 다음이 #116(herdr-entwurf) 합류.
+- **이번 컷이 잡은 것 둘 (둘 다 검증 쪽 결함, production 바이트 0):**
+  ① `check-gate-qualification` **518/520** — `CODEX-LAUNCH-CWD-ANCESTOR-PLAIN-PATHS-ONLY`는
+  cwd측/key측 guard 둘 중 key측만 시험당하고 있었고, `FRESHCALL-CODEX-LAUNCH-CWD-NOTES-NEVER-REFUSES`는
+  `indexOf("-C")`만 assert하고 그 인덱스에서 읽는 값을 assert하지 않았다. 둘 다 stale 뮤턴트가
+  **아니었다**(find가 정확히 1회 매치) — assertion 구멍이다. `52aaf86`에서 닫았다.
+  ② `smoke-entwurf-chain-live` — 배달이 아니라 **모델이 GLG의 전역 AGENTS.md를 옳게 읽고 거절**했다.
+  페이로드에 출처를 적는 1차 수리는 hop이 그 문장을 인젝션 표식으로 지목하며 실패했고(그것도 옳다),
+  `f5d6e10`은 권한을 **게이트가 민팅한 world의 `AGENTS.md`**로 옮겼다. 부정 지시 없음, 페이로드
+  바이트 불변, 모델 핀 없이 호스트 기본 Sonnet 5로 통과.
+- **Do not:** 이 candidate를 리팩하거나 다시 pack하기; `~/.codex/hooks.json`에 에이전트가 trust
+  항목 쓰기; launch-directory 경고를 거절로 되돌리기(GLG 결정); `.herdr-bak` 삭제.
 
 # NOW — stem: 0.21.0 prepare (#111 + #112 + #95)
 
