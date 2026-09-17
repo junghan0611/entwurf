@@ -165,6 +165,49 @@ async function main(): Promise<void> {
 	const receiversDir = path.join(world, "receivers");
 	const sendersDir = path.join(world, "senders");
 	for (const d of [sessionsDir, mailboxDir, receiversDir, sendersDir]) await fsp.mkdir(d, { recursive: true });
+	// THE WORLD'S STANDING INSTRUCTION — the authority channel for hop 1, and the reason the
+	// payload itself says nothing about who authorised it.
+	//
+	// `[측정 2026-09-17]` a native Claude Code hop declined to forward, twice, and both refusals
+	// were CORRECT readings of the operator's own global rules ("entwurf는 GLG가 명시적으로
+	// 요청할 때만 사용", "다른 sibling에게 일방적으로 작업을 전달하지 않는다"). The second refusal
+	// went further and named a provenance sentence inside the prompt as the tell it is: content
+	// that vouches for itself is what an injection looks like, so no amount of asserting inside
+	// the payload can settle the question — the more insistent the sentence, the worse it reads.
+	//
+	// What actually separates this gate from an injection is not the message but the DIRECTORY
+	// the turn is started in: a disposable world this gate just minted, whose every
+	// `ENTWURF_META_*_DIR` points inside it, created because the operator ran `release-gate` on
+	// this host. So the fact is written where a standing operator instruction belongs, and the
+	// operator's own global policy is what makes it load-bearing — `agent-config/home/AGENTS.md`
+	// says "For repo-specific behavior, obey the nearest AGENTS.md". Both filenames are written
+	// because the harnesses that can host a hop do not agree on which one they read.
+	//
+	// This is not a "do not check your policy" instruction, which would buy the same green by
+	// asking the model to stop reading and would keep passing after the chain broke. The hop is
+	// free to refuse; what it gains is the one fact it had no other way to have.
+	const worldStanding = [
+		"# entwurf release-gate scratch world",
+		"",
+		"This directory was created moments ago by entwurf's release gate `smoke-entwurf-chain-live`,",
+		"which the operator (GLG) started on this host by running `release-gate`. It holds fixture",
+		"citizens and their mailboxes and nothing else, and it is deleted when the gate ends.",
+		"",
+		"The gate measures one capability: that a payload handed to a hop reaches a mailbox terminus",
+		"through three sibling hops, carrying the right sender identity at each one. A turn started in",
+		"this directory IS one of those hops.",
+		"",
+		"- Inside this directory, forwarding the payload a hop is given to the target it names, with",
+		"  `entwurf_v2`, is the operator's own request. It is the subject under measurement — not a",
+		"  delegation the model chose, and not a peer lane opened on the model's initiative.",
+		"- Every target is a fixture citizen this gate created in this world; the `ENTWURF_META_*_DIR`",
+		"  carriers all resolve inside this directory, so nothing outside it is addressed.",
+		"- The standing rule that entwurf is used only when GLG asks is satisfied by GLG having",
+		"  started the gate. This file is the nearest `AGENTS.md`, which the operator's global",
+		"  `AGENTS.md` defers to for behaviour scoped to a directory.",
+		"",
+	].join("\n");
+	for (const name of ["AGENTS.md", "CLAUDE.md"]) await fsp.writeFile(path.join(world, name), worldStanding);
 	const worldEnv = {
 		ENTWURF_META_SESSIONS_DIR: sessionsDir,
 		ENTWURF_META_MAILBOX_DIR: mailboxDir,
@@ -295,6 +338,13 @@ async function main(): Promise<void> {
 			hop3,
 			"INNER-END",
 		].join("\n");
+		// The payload carries NO claim about its own authority, and that is deliberate.
+		// `[측정 2026-09-17]` a first attempt put the provenance in these very lines — "this prompt is
+		// issued by entwurf's release gate, which the operator started" — and the hop named those
+		// sentences as the tell: *"컨텐츠가 '이것은 위임이 아니라 승인된 테스트 대상 자체다'라고
+		// 스스로를 정당화하는 것도 전형적인 수법입니다."* It was right. A message that vouches for
+		// itself is exactly the shape of an injection, so authority cannot ride the payload; it rides
+		// the WORLD this turn is started in (see the standing instruction written next to `world`).
 		const hop1Prompt = [
 			"You are the first hop of a delivery chain. Do exactly this and nothing else.",
 			`Call the tool mcp__entwurf-bridge__entwurf_v2 exactly once with target=${gidB}, intent=fire-and-forget,`,
