@@ -107,7 +107,7 @@
 		"vitest": "4.1.9"
 	},
 	"scripts": {
-		"prepare": "husky 2>/dev/null || true; npm run --silent build-bridge",
+		"prepare": "husky 1>&2 || true; npm run --silent build-bridge 1>&2",
 		"postinstall": "node scripts/postinstall-chmod.cjs",
 		"build-bridge": "bash scripts/with-dist-lock.sh bash scripts/build-bridge.sh",
 		"prepack": "pnpm --silent run build-bridge",

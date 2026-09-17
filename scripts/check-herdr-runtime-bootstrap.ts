@@ -1218,4 +1218,47 @@ function install(
 	);
 }
 
+// ── 28. OUR OWN lifecycle scripts may not write to the stdout this rail parses ─
+{
+	// `[측정 2026-09-17, oracle, npm 11.16.0 / node 24.18.1]` the checkout branch reads
+	// `npm pack --json`'s STDOUT, and npm forwards a lifecycle script's stdout into that same
+	// stream. Packing the product's own GitHub git spec runs `prepare` in a tree that has NO
+	// `.git` — GitHub serves a codeload tarball rather than a clone — where husky v9 writes
+	// `.git can't be found` with `p.stdout.write` (`husky/bin.js`), so the JSON arrives with
+	// that sentence in front of it. Measured against the real remote at `ee535a17`: exit 0, a
+	// perfectly good 13,017,411-byte tarball, and stdout beginning `.git can't be found`.
+	// On the operator's clean host that became
+	// `runtime-checkout-source-unavailable: npm pack --json was unreadable: Unexpected token '.'`.
+	//
+	// THE REFUSAL WAS RIGHT AND THE DEFECT WAS OURS, which is why this cell reads OUR
+	// `package.json` instead of loosening the parser. Neither existing axis could see it: the
+	// deterministic cells above drive a fake npm that emits clean JSON, and the LIVE gate
+	// redirects the product remote to a local bare mirror through git's `insteadOf`
+	// (`smoke-herdr-plugin-build-live.ts`) — a `file://` spec IS cloned, `.git` therefore
+	// exists, and husky stays silent. The substitution removed the condition under test.
+	const pkgScripts = (
+		JSON.parse(fs.readFileSync(path.join(REPO, "package.json"), "utf8")) as { scripts: Record<string, string> }
+	).scripts;
+	const prepare = pkgScripts.prepare ?? "";
+	const commands = prepare
+		.split(/;|&&/)
+		.map((part) =>
+			part
+				.trim()
+				.replace(/\|\|\s*true$/, "")
+				.trim(),
+		)
+		.filter((part) => part.length > 0);
+	const polluting = commands.filter((command) => !/1>&2$/.test(command));
+	ok(
+		"[QK:HRB-PREPARE-STDOUT-CLEAN] every command in this package's `prepare` routes its STDOUT to stderr — npm " +
+			"merges lifecycle stdout into the `npm pack --json` stream this rail parses, so one chatty script in our own " +
+			"package turns a perfectly good artifact into `runtime-checkout-source-unavailable` on every clean host. " +
+			"`2>/dev/null` is NOT this check and never was: husky writes its diagnostics to stdout, so silencing stderr " +
+			"left the one stream that mattered wide open (measured 2026-09-17 against the real GitHub remote). Diagnostics " +
+			`still reach the operator — they go to stderr, which npm does not parse (prepare=${JSON.stringify(prepare)} polluting=${JSON.stringify(polluting)})`,
+		commands.length > 0 && polluting.length === 0,
+	);
+}
+
 console.log(`\ncheck-herdr-runtime-bootstrap: ${passed} assertions passed`);

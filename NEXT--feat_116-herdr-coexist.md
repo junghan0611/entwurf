@@ -44,6 +44,67 @@
 
 # NOW
 
+## M3-b3 raw-PC 1차 시도 — 실패 원인 확정·수리 `[2026-09-17]`
+
+**상태명: 날것 PC 설치가 우리 `prepare` 때문에 깨졌고, 원인은 재현으로 확정됐다. 수리는 한 줄. 남은 것은 full floor와 GLG의 재시도다.**
+
+`[GLG 실관측, 날것 PC, herdr 0.9.1]` `herdr plugin install junghan0611/entwurf/plugins/herdr --ref feat/116-herdr-coexist`
+(commit `ee535a17`)가 build에서 죽었다:
+`runtime-checkout-source-unavailable: npm pack --json was unreadable: Unexpected token '.', ".git can't"...`.
+
+`[측정 2026-09-17, oracle, npm 11.16.0 / node 24.18.1]` 같은 커밋을 두 remote로 pack해 원인을 갈랐다.
+스펙 하나만 다르고 나머지는 전부 같다.
+
+| pack spec | stdout 선두 | 판정 |
+|---|---|---|
+| `git+https://github.com/junghan0611/entwurf.git#ee535a17` | `` .git can't be found.git can't be found[ `` | `JSON.parse` 실패 = GLG가 본 그 에러 |
+| `git+file:///tmp/…/entwurf.git#ee535a17` | `[` | 깨끗, exit 0 |
+
+둘 다 **exit 0**이고 tarball은 13,017,411 bytes로 동일하다 — 획득은 성공했고 읽는 쪽만 깨졌다.
+사슬: `package.json:prepare`가 `husky 2>/dev/null || true`였는데 **husky v9는 stdout에 쓴다**
+(`husky/bin.js`의 `p.stdout.write`), `.git`이 없으면 `.git can't be found`(`husky/index.js:11`).
+GitHub git spec을 pack할 때 prepare가 도는 트리에는 `.git`이 없다(codeload tarball). npm은 lifecycle
+stdout을 `--json` 스트림에 합치므로 JSON 앞에 그 줄이 붙는다. `readPackedArtifact`의 이름 붙은 거절은
+**정확히 계약대로 동작했다** — 결함은 우리가 채널을 오염시킨 것이다.
+
+**두 검증축이 모두 못 본 이유가 이 건의 본체다.**
+- 결정론: `check-herdr-runtime-bootstrap` 25번 셀의 가짜 npm이 `echo "[]"`를 낸다. lifecycle 접두사가 붙은 stdout을 한 번도 모델링하지 않았다.
+- LIVE: `smoke-herdr-plugin-build-live.ts`가 제품 remote를 `insteadOf`로 로컬 bare mirror에 돌린다. `file://`는 **진짜 clone**이라 prepare cwd에 `.git`이 있고 husky는 침묵한다. **치환이 시험 대상 조건 자체를 제거했다.**
+
+**수리 (이 커밋):** `"prepare": "husky 1>&2 || true; npm run --silent build-bridge 1>&2"`.
+진단은 stderr로 남고(2026-04-27 pi-shell-acp 전례가 경고한 것) npm이 파싱하는 stdout만 비운다.
+게이트 셀 `[QK:HRB-PREPARE-STDOUT-CLEAN]` 신설 — `prepare`의 모든 명령이 stdout을 stderr로 돌리는지
+우리 `package.json`을 읽어 판정한다. 뮤턴트 1개(옛 줄로 되돌리기) 추가, lane `herdr-runtime-bootstrap`
+30→**31**, 인벤토리 643→**644**.
+
+**herdr 0.9.1 정렬 (같은 커밋).** `[측정 2026-09-17]` digest로 받은 0.9.1 aarch64
+(`f4ccf4de…8d9e`, 릴리즈 API digest와 일치)를 temp에서 실행해 쟀다 — **오퍼레이터 설치본은 건드리지 않았다.**
+- `check-herdr-sandbox` **11 assertions green** (`ENTWURF_REQUIRE_HERDR=1`, `HS-OPERATOR-UNTOUCHED` 포함)
+- `herdr status client` → `protocol: 22` — 0.9.0과 동일
+- `integration status` → **17행 → 18행**, 추가분은 `letta (experimental)` 하나뿐이고 나머지 17행은 바이트 동일
+- 공급 핀 `scripts/fixtures/herdr-supply.json` → 0.9.1 / `v0.9.1` / tagCommit `065ef9d6…`
+- `min_herdr_version`은 **0.9.0 그대로 둔다** — 0.9.1을 요구할 측정된 이유가 없고, floor를 올리면 0.9.0 호스트를 이유 없이 배제한다
+
+**⚠️ 오라클 로컬 플로어가 지금 빨갛다.** 공급 핀은 0.9.1인데 `~/.local/bin/herdr`는 0.9.0이라
+`check-herdr-sandbox`의 `HS-VERSION-BOUNDARY`가 드리프트를 정확히 잡는다(그게 그 셀의 목적이다).
+`herdr update`로 오퍼레이터 herdr를 0.9.1로 올리면 풀린다. **GLG 권위** — 0.9.0 서버가 떠 있는 동안
+에이전트가 바이너리를 갈아끼우지 않았다.
+
+**초록 (exact 워킹트리, 2026-09-17):** `check-herdr-runtime-bootstrap` **31** · `check-herdr-supply` **11** ·
+`check-herdr-plugin-profile` **14** · `check-herdr-plugin-build` **10** · `check-herdr-plugin` **32** ·
+`check-herdr-activation` **24** · `check-gate-manifests` **644 mutants / 54 lanes** · `pnpm lint` exit 0 ·
+`pnpm typecheck` exit 0 · 신설 뮤턴트 수동 kill-proof(옛 prepare 줄 주입 → exit 1, 실패 라인에 `[QK:HRB-PREPARE-STDOUT-CLEAN]`).
+**아직 안 돈 것: qualification 전량(644)과 `pnpm run check:full`.** 이 커밋은 GLG의 날것 PC 재시도를 막지 않으려는
+체크포인트다 — full floor는 별도.
+
+**다음 한 걸음:** GLG가 날것 PC(herdr 0.9.1)에서 `--ref feat/116-herdr-coexist`로 재설치.
+이제 checkout은 **이 커밋**이므로 pack이 깨끗한 JSON을 낸다.
+
+**이월 관측 `[Observation, 지금 열지 않는다]`** — LIVE 게이트의 `insteadOf` 치환은 GitHub codeload 경로를
+구조적으로 재현하지 못한다. 같은 계열의 다음 결함(어느 devDependency의 prepare든 stdout에 쓰면 재발)을 잡으려면
+LIVE 쪽에 "prepare cwd에 `.git`이 없는" 조건을 만들거나, `readPackedArtifact`를 첫 `[`부터 읽도록 관용화해야 한다.
+후자는 계약 변경이라 자기 뮤턴트를 벌어야 한다.
+
 **상태명(정확히 이대로 쓴다): M1 complete; corrected C4 LIVE PASS.**
 `[close 승인: 코디네이터 sol, 2026-09-15 — Blocker 0]` C4 PASS는 **이 opt-in 수용의 판정**이다. release aggregate 통과도, 전량 qualification도 뜻하지 않는다 — C4는 여전히 `check:full` 밖이고 aggregate 밖이다(VERIFY.md 문장). #116은 M2를 위해 **OPEN으로 유지**한다.
 

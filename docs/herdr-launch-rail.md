@@ -2,6 +2,7 @@
 
 > 이 문서는 **herdr 안에서 형제를 여는 레일**을 소유한다. tmux 레일은 [`mux-launch-rail.md`](./mux-launch-rail.md)가 그대로 소유하고, 두 문서는 합쳐지지 않는다 — 좌표도 실패 모양도 다르기 때문이다.
 > 대상: `pi-extensions/lib/herdr-fresh-call.ts` (#116 S2-c1). 측정 환경: herdr 0.9.0 / socket protocol 22, oracle — 2026-09-14, 배치 정책 교체분은 2026-09-15. herdr 소스 인용은 전부 `@ c77af189` 고정본이다.
+> `[재측정 2026-09-17, oracle, herdr 0.9.1]` 공급 핀이 0.9.1로 올라갔다(`scripts/fixtures/herdr-supply.json`). 이 문서의 payload 리터럴은 **재기록하지 않았다** — 0.9.1에서 바뀐 관측은 셋뿐이고 전부 이 레일 밖이거나 무해하다: `herdr status client`의 `protocol: 22` 그대로, `check-herdr-sandbox` 11 assertions green(같은 argv·같은 응답 모양), `integration status`가 행 하나를 더한다(17→18, 추가분은 `letta (experimental)` 하나뿐이고 나머지 17행은 바이트 동일). 0.9.1 바이너리는 digest로 받아 temp에서 실행했고 오퍼레이터 설치본은 건드리지 않았다.
 
 ## 1. 이 레일이 무엇을 나누어 갖는가
 

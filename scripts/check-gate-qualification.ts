@@ -847,7 +847,7 @@ let manifestCount: number;
 		"herdr-plugin-profile": 14,
 		"herdr-activation": 24,
 		"herdr-plugin-build": 9,
-		"herdr-runtime-bootstrap": 30,
+		"herdr-runtime-bootstrap": 31,
 		"herdr-fresh-call": 28,
 		"herdr-supply": 11,
 		"meta-facts": 4,

@@ -7,9 +7,10 @@
  * listing it was handed and of nothing else. Everything it deliberately refuses is below,
  * because in this repo the absences are the design.
  *
- * WHY A PROSE PARSER AT ALL. Herdr 0.9.0 has no machine format for this listing. Measured
- * 2026-09-16 against the shipped binary: `--json`, `--format=json` and `-o json` each exit
- * 2 with `usage: herdr integration status [--outdated-only]`, and `--outdated-only` is a
+ * WHY A PROSE PARSER AT ALL. Herdr has no machine format for this listing. Measured
+ * 2026-09-16 against the shipped 0.9.0 binary, re-measured 2026-09-17 against 0.9.1:
+ * `--json`, `--format=json` and `-o json` each exit 2 with
+ * `usage: herdr integration status [--outdated-only]`, and `--outdated-only` is a
  * human remediation sentence that still exits 0. Exit code carries no verdict. So the rows
  * ARE the protocol, and a parser that misreads one is the whole failure surface.
  *
@@ -54,6 +55,17 @@
  * hand-written file ALL collapse into `outdated (legacy < vN)`. That string therefore means
  * "no readable marker at or above the floor", which is the stale/broken case the M3 contract
  * requires to be a NAMED FAIL. It is never a SKIP and never a cosmetic pass.
+ *
+ * THE ATOM SET GROWS, AND THAT IS ORDINARY. `[측정 2026-09-17]` 0.9.1 prints 18 rows where
+ * 0.9.0 printed 17; the one addition is `letta (experimental)` and every other row is
+ * byte-identical. Two consequences, both deliberate. The two rows this leaf reads are
+ * unchanged, so the plan is unchanged. And `ATOM_LINE` does not match an atom name carrying a
+ * space, so `letta (experimental)` appears in NO field of the result — not in the plan, which
+ * is correct, and not in `observedOtherAtoms` either, which is a gap in an observation-only
+ * array that feeds nothing. Widening the pattern would be a contract change earning its own
+ * mutant; recording the gap is what this comment is for. Note what does NOT happen: a selected
+ * atom that one day arrives as `pi (experimental):` would find no `pi:` row and refuse by name,
+ * which is the fail-closed direction.
  *
  * UNSELECTED ATOMS ARE OBSERVED, NEVER PLANNED. OpenCode is a first-class Herdr atom and a
  * deliberate negative control: it may be installed and current, and it still receives no

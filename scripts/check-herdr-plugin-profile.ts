@@ -115,8 +115,9 @@ function piRowCode(row: string): string | null {
 {
 	const missing = refusalCode(listing(CLAUDE_OK));
 	ok(
-		"[QK:HIP-ROW-MISSING-REFUSED] a selected atom with NO row refuses by name — a real 0.9.0 listing prints all 17 " +
-			"atoms every time, so a listing with no `pi:` line at all is not the protocol we think we are reading, and " +
+		"[QK:HIP-ROW-MISSING-REFUSED] a selected atom with NO row refuses by name — a real listing prints EVERY atom " +
+			"every time (17 rows on 0.9.0, 18 on 0.9.1: `[측정 2026-09-17]` the added row is `letta (experimental)` and the " +
+			"other 17 are byte-identical), so a listing with no `pi:` line at all is not the protocol we think we are reading, and " +
 			"the plausible-looking alternative (treat absence as 'not installed') would report a clean zero-write SKIP " +
 			`for a question that was never actually asked (got ${missing})`,
 		missing === "herdr-status-row-missing",

@@ -1,10 +1,10 @@
 {
 	"$comment": "SSOT for the herdr binary this repository has MEASURED against. Nothing else may carry a version or a digest: the CI installer, the sandbox gate's boundary check and the launch-rail document all read or cite this file. Re-measuring a new herdr means running check-herdr-sandbox against it FIRST, then editing this file, then repairing the measured sentences in docs/herdr-launch-rail.md in the same commit — miss one and the gate fails on version mismatch, which is the point.",
-	"version": "0.9.0",
-	"tag": "v0.9.0",
-	"tagCommit": "b99002ac99b09e00b4ca692436cb15a6b0d676f1",
+	"version": "0.9.1",
+	"tag": "v0.9.1",
+	"tagCommit": "065ef9d6a531c49fb8bee7e818ef837065b21ee9",
 	"socketProtocol": 22,
-	"measuredOn": "2026-09-14",
+	"measuredOn": "2026-09-17",
 	"measuredArch": "aarch64",
 	"releaseUrlPrefix": "https://github.com/herdrdev/herdr/releases/download",
 	"integrity": {
@@ -15,15 +15,15 @@
 	"assets": {
 		"x86_64": {
 			"name": "herdr-linux-x86_64",
-			"sha256": "4fa1a01158dd8043da92d31b270780b0dcc10603038d9b61cac4d81ab63fb71f",
+			"sha256": "2a02fed16beb651ef006e1d43f048f652ca4dc58ad053cd2d44450563d5c54b7",
 			"executed": false,
 			"executedNote": "pending the first CI run on an x86_64 runner — the digest is pinned, but no cell of this rail has ever run on this binary"
 		},
 		"aarch64": {
 			"name": "herdr-linux-aarch64",
-			"sha256": "9c8db20fb7e7427b138d5367113f1621ffd319f2f65d6f009e2594029115f0d2",
+			"sha256": "f4ccf4de745f2cb9a39a983e9ba3703dad50ec2a58dea83026ceab721bbd8d9e",
 			"executed": true,
-			"executedNote": "every measurement in #116 ran on this exact binary: the operator's installed herdr hashes byte-identical to this published asset"
+			"executedNote": "the #116 rail was re-measured on this exact binary on 2026-09-17: `check-herdr-sandbox` green, `herdr status client` reports protocol 22 (unchanged from 0.9.0), and `integration status` adds exactly one row — `letta (experimental)` — with every other row byte-identical to 0.9.0. The operator host still runs the 0.9.0 asset at that date; the binary measured here was fetched by digest into a temp dir"
 		}
 	}
 }
