@@ -187,8 +187,26 @@ CHANGELOG `## Unreleased`가 구현 범위 `v0.15.1..19ad90c` **30커밋** 전�
   묻는 값은 codex가 실제로 받는 `-C` 토큰을 되읽은 것이고(재계산 아님 — 상속 기본값 해석 지점은
   여전히 하나), 스모크는 매 run `mkdtemp` 대신 `os.tmpdir()` 아래 고정 경로 하나(매 run `launch-cwd`로 찍는다)에서
   열어 운영자 설정이 run마다 불어나지 않는다. Codex live-spend 기본값은 `gpt-5.6-sol` → **`gpt-5.6-luna`**.
-- **다음 한 수:** oracle에서 **#116과 합류**해 한 번의 긴 게이트로 수용한다. 이 리포는 정적/focused
-  게이트까지만 서고, LIVE는 거기서 돈다.
+- **여기서 초록인 것 (thinkpad, 2026-09-17, `4158b79`):** `check:full` exit 0 ·
+  `check-mux-fresh-call` 286 · `check-codex-fresh-preflight` 24 · `check-gate-manifests`
+  **520 mutants / 45 lanes** (선언 인벤토리 일치) · typecheck/format · bridge dist 재빌드.
+  main 푸시 완료: `e242be6` (feat) + `4158b79` (release prep). tag/release/npm은 **미수행**.
+- **여기서 초록이 아닌 것 — `check-gate-qualification` BODY는 완주하지 않았다.** 전수 실행을 세 번
+  시도했는데 백그라운드 run이 겹쳐 매번 마지막 순수성 tripwire(`origin work surface changed during
+  qualification`)에 걸렸다. **뮤턴트 자체는 걸린 지점까지 전부 KILLED였고 실패는 실행 위생이지 코드가
+  아니다** — 그래도 그건 영수증이 아니다. 이 컷의 qualification 정본은 **oracle의 exact-SHA CI run**이다.
+  head(`check-gate-manifests`)는 결정적 floor 안에서 초록이므로 manifest 부채는 없다.
+  재실행할 때는 **다른 게이트와 겹치지 않게 단독으로** 돌릴 것.
+- **다음 한 수:** oracle에서 **#116(`[implementation] herdr-entwurf — run Entwurf on Herdr, keep
+  tmux intact`)과 합류**해 한 번의 긴 게이트로 수용한다. 이 리포는 정적/focused 게이트까지만 서고,
+  LIVE와 qualification body는 거기서 돈다. 게이트 env: `ENTWURF_CODEX_FRESH_MODEL=gpt-5.6-luna`,
+  `ENTWURF_CODEX_FRESH_PI_MODEL=openai-codex/gpt-5.6-luna`.
+- **이번 변경의 독립 검수는 이미 돌았다 (terra, pi `openai-codex/gpt-5.6-terra`, 5라운드).** Blocker 4건 ·
+  Defect 다수가 전부 벤더 소스 대조로 확인되고 닫혔다: 은퇴한 고정 `codex` home 지시, `untrusted`
+  거짓 거절, project layer/조상 에러 미모델링, `isSafeOwnedDir` 협소화, `readConfig === null` 거짓 거절,
+  문서 동치 과대주장. 마지막 라운드가 남긴 논점(권위 있는 `ConfigRead { include_layers: true }` RPC로
+  가야 하는가)은 **GLG가 "거절하지 않는다"로 결정하면서 소멸했다** — 거절이 없으면 거짓 거절도 없다.
+  같은 축을 다시 검수할 때 이 결정을 모르고 보면 같은 길을 되판다.
 - **LIVE 재실행 전제(추가):** 그 고정 디렉토리를 `codex -C <경로>`로 한 번 열어 `Trust`를 답해 둔다.
   경로를 `$TMPDIR/...`로 쓰지 않는다 — `os.tmpdir()`는 `TMPDIR`가 없으면 `/tmp`로 떨어지므로 그 표기는
   TMPDIR가 unset인 호스트(thinkpad에서 측정: unset)에서 파일시스템 루트의 `/entwurf-codex-fresh-live`를
@@ -197,8 +215,9 @@ CHANGELOG `## Unreleased`가 구현 범위 `v0.15.1..19ad90c` **30커밋** 전�
   스모크도 매 run `launch-cwd <경로>`로 그 값을 찍고, 거절할 때는 그 경로가 박힌 repair 명령을 함께 준다.
   안 해두면 맨 앞 assertion에서 그 이름으로 거절한다 — 콜백 타임아웃으로 위장되지 않는다. 기존
   전제(app-server가 Pi/Codex 쌍과 다른 tmux 세션, `install-codex-terminal-title`)는 그대로다.
-- **Do not:** 이 리포에서 긴 LIVE 게이트를 다시 태우기; `~/.codex/config.toml`에 에이전트가 trust 항목을
-  써넣기(동의는 사람이 준다); tag/GitHub release/npm publish.
+- **Do not:** thinkpad에서 긴 LIVE 게이트를 다시 태우기; `~/.codex/config.toml`에 에이전트가 trust
+  항목을 써넣기(동의는 사람이 준다 — 제품도 쓰지 않는다); launch-directory 경고를 다시 거절로 바꾸기
+  (GLG 결정이고 그 비용은 CHANGELOG 0.22.0에 적혀 있다); tag/GitHub release/npm publish.
 
 # NOW — stem: 0.21.0 prepare (#111 + #112 + #95)
 
