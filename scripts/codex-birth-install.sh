@@ -374,11 +374,16 @@ Refusing; nothing written."
 HOOKS_ACTION="$(printf '%s' "$DECISION" | cut -f1)"
 DECL_SHA="$(printf '%s' "$DECISION" | cut -f2)"
 FOREIGN_COUNT="$(printf '%s' "$DECISION" | cut -f3)"
+# Exactly 64 hex, not "starts hex": this value is written into the ownership receipt and every
+# later reader compares the live declaration to it, so a truncated or warning-polluted capture
+# would record a receipt nothing can ever match.
 case "$DECL_SHA" in
-  [0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]*) : ;;
-  *) die "the declaration leaf returned no digest (got '$DECISION'). Nothing written." ;;
+  ""|*[!0-9a-f]*) die "the declaration leaf returned no digest (got '$DECISION'). Nothing written." ;;
 esac
-[ -f "$HOOKS_TMP" ] && chmod 0644 -- "$HOOKS_TMP"
+[ "${#DECL_SHA}" -eq 64 ] || die "the declaration leaf returned a ${#DECL_SHA}-character digest, not 64 (got '$DECISION'). Nothing written."
+# `mktemp` made this file, so it always exists; chmod it unconditionally rather than behind a
+# test whose false branch would be the last command of a `set -e` line.
+chmod 0644 -- "$HOOKS_TMP"
 
 # Prove the staged bytes carry EXACTLY our declaration before they are published: a broken or
 # absorbed hooks.json is a hook nobody declared and nobody can see failing. The same leaf reads
