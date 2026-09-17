@@ -55,6 +55,20 @@ herdr plugin uninstall junghan0611.entwurf   # a GitHub-managed install: unregis
   without Entwurf is not a broken host, and the pane does not install one.
 - **Node, for the pane entry itself.** It is a plain `.mjs` using only Node builtins — no
   `node_modules`, no `jq`; the manifest names `node` in its argv and nothing else.
+- **On NixOS, `programs.nix-ld.enable = true`** if you intend to use the ACP rail
+  (`pi --model entwurf/<claude model>`). `[관측: GLG, 날것 PC, 2026-09-17]` that rail runs a
+  dynamically linked vendor binary shipped inside the Claude Agent SDK
+  (`@anthropic-ai/claude-agent-sdk-linux-x64/claude`), and a stock NixOS cannot start one:
+  `Could not start dynamically linked executable … NixOS cannot run dynamically linked
+  executables intended for generic linux environments out of the box`. Nothing in Entwurf can
+  fix that from inside the host, and it is not a plugin failure — the other rails are
+  unaffected. The two things this plugin's build actually wires, `pi --entwurf-control` and
+  an ordinary `claude`, need no such thing.
+- **A model id when you open a sibling.** `entwurf_fresh_call` has no default, and the two
+  harnesses spell them differently: pi wants a provider-qualified id like
+  `openai-codex/gpt-5.6-terra`, Claude Code wants the vendor id like `claude-sonnet-5`. These
+  are examples measured on one host, not a supported set; each runtime owns its own grammar
+  and this plugin validates neither.
 
 ## What it does, exactly
 

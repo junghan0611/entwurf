@@ -750,13 +750,39 @@ function drive(
 			"session on the host and is STILL not a citizen until it is started with --entwurf-control. Green install, " +
 			"`pi` starts, nothing there — indistinguishable from an install that did nothing. The note names the FLAG " +
 			`and not a launcher, because what goes on a host's PATH is the operator's call (both=${JSON.stringify(notesOf(full))} pi-only=${JSON.stringify(notesOf(piOnly))})`,
-		notesOf(full).length === 2 &&
+		notesOf(full).length === 4 &&
 			notesOf(full)[0].includes("pi: ") &&
 			notesOf(full)[0].includes("--entwurf-control") &&
-			notesOf(full)[1].includes("claude-code: ") &&
-			notesOf(full)[1].includes("MCP") &&
-			notesOf(piOnly).length === 1 &&
-			notesOf(piOnly)[0].includes("--entwurf-control"),
+			notesOf(full)[2].includes("claude-code: ") &&
+			notesOf(full)[2].includes("MCP") &&
+			notesOf(piOnly).length === 2 &&
+			notesOf(piOnly)[0].includes("--entwurf-control") &&
+			notesOf(piOnly).every((line) => line.includes("pi: ")),
+	);
+	// `[관측: GLG, 날것 PC, 2026-09-17]` "일단 정확한 모델명을 모른다" — the note that says a backend is
+	// wired is not usable until the operator can name a model for it, and the two harnesses spell
+	// them differently enough that guessing fails. One example each, scoped to what was activated.
+	ok(
+		`[QK:HPB-USAGE-NOTE-NAMES-A-MODEL] each activated backend also gets ONE example model id in its own grammar — provider-qualified for pi, the vendor id for claude-code — and a backend that was not activated gets neither (both=${JSON.stringify(notesOf(full))} pi-only=${JSON.stringify(notesOf(piOnly))})`,
+		((): boolean => {
+			// The token INSIDE the backticks, not a substring of the line: `anthropic/claude-sonnet-5`
+			// contains `claude-sonnet-5`, so a containment test cannot tell the two grammars apart —
+			// which is the whole claim.
+			const idIn = (lines: string[], backend: string): string | null => {
+				const line = lines.find((l) => l.startsWith(`note: ${backend}: `) && l.includes("model id looks like"));
+				return line === undefined ? null : (/`([^`]+)`/.exec(line)?.[1] ?? null);
+			};
+			const piId = idIn(notesOf(full), "pi");
+			const claudeId = idIn(notesOf(full), "claude-code");
+			return (
+				piId === "openai-codex/gpt-5.6-terra" &&
+				piId.includes("/") &&
+				claudeId === "claude-sonnet-5" &&
+				!claudeId.includes("/") &&
+				idIn(notesOf(piOnly), "pi") === "openai-codex/gpt-5.6-terra" &&
+				idIn(notesOf(piOnly), "claude-code") === null
+			);
+		})(),
 	);
 }
 

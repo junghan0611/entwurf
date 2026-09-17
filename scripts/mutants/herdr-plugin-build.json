@@ -131,6 +131,21 @@
 			"signatureSource": "scripts/check-herdr-plugin-build.ts"
 		},
 		{
+			"claim": "HPB-USAGE-NOTE-NAMES-A-MODEL",
+			"title": "the install names a model id in the wrong harness's grammar, so the first fresh call an operator copies is refused",
+			"subject": "plugins/herdr/lib/build.mjs",
+			"find": [
+				"\t\tnotes.push(\"claude-code: a model id looks like `claude-sonnet-5` — the vendor id, not a provider path.\");"
+			],
+			"replace": [
+				"\t\tnotes.push(\"claude-code: a model id looks like `anthropic/claude-sonnet-5` — provider-qualified.\");"
+			],
+			"gate": ["bash", "run.sh", "check-herdr-plugin-build"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:HPB-USAGE-NOTE-NAMES-A-MODEL]",
+			"signatureSource": "scripts/check-herdr-plugin-build.ts"
+		},
+		{
 			"claim": "HPB-INSTALL-USAGE-NOTE",
 			"title": "dropping the pi line leaves the one backend whose wiring is invisible from the operator's chair unexplained: claude-code picks the tools up through MCP with nothing added, while a plain pi loads the extension on every session of the host and is still not a citizen — a green install followed by a silent, tool-less pi is indistinguishable from an install that did nothing",
 			"subject": "plugins/herdr/lib/build.mjs",

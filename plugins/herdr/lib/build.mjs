@@ -206,6 +206,11 @@ export function certifyActivationPlan(env, { lock, checkoutRoot, requested: requ
  *
  * It states the flag, not a launcher: what a host puts on its PATH is the operator's call and this
  * plugin writes nothing there.
+ *
+ * It also spells ONE model id per harness. `[관측: GLG, 날것 PC, 2026-09-17]` "일단 정확한 모델명을
+ * 모른다" — the first thing an operator needs after a green install is a call that works, and
+ * `entwurf_fresh_call` takes a model string with no default. These are examples, not a supported
+ * set: the grammar is each runtime's own, and this plugin neither validates nor pins them.
  */
 function usageNotes(activated) {
 	const notes = [];
@@ -214,9 +219,11 @@ function usageNotes(activated) {
 			"pi: start it as `pi --entwurf-control` to be a garden citizen — a plain `pi` loads this " +
 				"extension but has no garden id, no control socket and no entwurf tools.",
 		);
+		notes.push("pi: a model id looks like `openai-codex/gpt-5.6-terra` — provider-qualified.");
 	}
 	if (activated.includes("claude-code")) {
 		notes.push("claude-code: nothing to add — an ordinary `claude` picks up the entwurf tools through MCP.");
+		notes.push("claude-code: a model id looks like `claude-sonnet-5` — the vendor id, not a provider path.");
 	}
 	return notes;
 }
