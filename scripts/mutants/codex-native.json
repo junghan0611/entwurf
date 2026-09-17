@@ -171,8 +171,8 @@
 			"claim": "FRESHCALL-CODEX-HOOKS-SAFE",
 			"title": "fresh preflight stops checking the operator-owned hooks.json for unsafe ownership/permissions/symlinks, so a world-writable or symlinked hooks.json is treated as a safe published birth unit",
 			"subject": "pi-extensions/lib/codex-fresh-preflight.ts",
-			"find": ["\tif (!isSafeOwnedFile(paths.hooksFile, expectedUid)) return true;"],
-			"replace": ["\tif (false) return true;"],
+			"find": ["\tif (!isSafeOwnedFile(paths.hooksFile, expectedUid)) return null;"],
+			"replace": ["\tif (false) return null;"],
 			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
 			"timeoutSeconds": 120,
 			"signature": "[QK:FRESHCALL-CODEX-HOOKS-SAFE]",
@@ -217,14 +217,14 @@
 		},
 		{
 			"claim": "FRESHCALL-CODEX-HOOK-KEYS",
-			"title": "fresh preflight stops requiring the exact birth handler key set, so an async or extra-key hook — one the installer would never publish and one that lets the turn proceed before the record exists — reads as an installed birth unit",
-			"subject": "pi-extensions/lib/codex-fresh-preflight.ts",
-			"find": ["\t\tif (Object.keys(hook).sort().join(\",\") !== \"command,timeout,type\") return true;"],
-			"replace": ["\t\tif (false) return true;"],
-			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
-			"timeoutSeconds": 120,
+			"title": "the declaration leaf stops requiring the exact birth handler key set, so an async or extra-key hook — one the installer would never publish and one that lets the turn proceed before the record exists — is no longer NAMED as a shape drift",
+			"subject": "pi-extensions/lib/codex-declaration.js",
+			"find": ["\tif (handlerKeys.join(\",\") !== \"command,timeout,type\") {"],
+			"replace": ["\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-codex-birth-hook"],
+			"timeoutSeconds": 180,
 			"signature": "[QK:FRESHCALL-CODEX-HOOK-KEYS]",
-			"signatureSource": "test/codex-fresh-preflight.test.ts"
+			"signatureSource": "scripts/check-codex-birth-hook.ts"
 		},
 		{
 			"claim": "CODEX-TOML-STATE-BEFORE-CONFIG",
@@ -445,9 +445,7 @@
 			"claim": "FRESHCALL-CODEX-TRUST-RECEIPT",
 			"title": "fresh preflight opens a Codex sibling whose birth hook the vendor never agreed to run",
 			"subject": "pi-extensions/lib/codex-fresh-preflight.ts",
-			"find": [
-				"\tif (config === null || trustReceiptMissing(config, paths.hooksFile)) return \"codex-birth-trust-missing\";"
-			],
+			"find": ["\tif (config === null || trustReceiptMissing(config, key)) return \"codex-birth-trust-missing\";"],
 			"replace": ["\tif (config === null) return \"codex-birth-trust-missing\";"],
 			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
 			"timeoutSeconds": 180,
@@ -458,8 +456,10 @@
 			"claim": "FRESHCALL-CODEX-STATE-DIGEST",
 			"title": "fresh preflight accepts a birth closure whose bytes no longer match the digests its own ownership state recorded",
 			"subject": "pi-extensions/lib/codex-fresh-preflight.ts",
-			"find": ["\treturn closureDriftedFromState(paths, expectedUid);"],
-			"replace": ["\treturn false;  // mutant: existence is enough"],
+			"find": [
+				"\t\tif (typeof member.sha256 !== \"string\" || digest(path.join(paths.helperDir, rel)) !== member.sha256) return null;"
+			],
+			"replace": ["\t\tif (typeof member.sha256 !== \"string\") return null;  // mutant: existence is enough"],
 			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
 			"timeoutSeconds": 180,
 			"signature": "[QK:FRESHCALL-CODEX-STATE-DIGEST]",
@@ -518,7 +518,7 @@
 			"title": "fresh preflight compares only the digests a state happens to name, so a short inventory hides an unchecked closure member",
 			"subject": "pi-extensions/lib/codex-fresh-preflight.ts",
 			"find": [
-				"\tif (named.length !== expected.length) return true;\n\tif (expected.some((name) => !named.includes(name))) return true;\n\tif (named.some((name, index) => named.indexOf(name) !== index)) return true;"
+				"\tif (named.length !== expected.length) return null;\n\tif (expected.some((name) => !named.includes(name))) return null;\n\tif (named.some((name, index) => named.indexOf(name) !== index)) return null;"
 			],
 			"replace": ["\t// mutant: judge only the members a state happens to name"],
 			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
@@ -554,7 +554,7 @@
 			"claim": "FRESHCALL-CODEX-STATE-PARENT-AUTHORITY",
 			"title": "fresh preflight trusts a digest inventory sitting in a directory anyone on the host can rewrite",
 			"subject": "pi-extensions/lib/codex-fresh-preflight.ts",
-			"find": ["\tif (!isSafeOwnedDir(path.dirname(paths.stateFile), expectedUid)) return true;"],
+			"find": ["\tif (!isSafeOwnedDir(path.dirname(paths.stateFile), expectedUid)) return null;"],
 			"replace": ["\t// mutant: the directory holding the receipt is nobody's business"],
 			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
 			"timeoutSeconds": 180,

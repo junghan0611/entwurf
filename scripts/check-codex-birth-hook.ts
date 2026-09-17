@@ -183,6 +183,26 @@ ok("the handler timeout is 30", handler.timeout === 30);
 		);
 	}
 
+	// The HANDLER KEY SET, on its own cell because it is the one shape predicate the normalized
+	// digest does not separate: a handler carrying `async` also digests differently, so the
+	// preflight refuses it either way. What only this predicate buys is the NAME — "every extra
+	// key, `async` above all, changes the trust identity" — instead of a bare digest mismatch, and
+	// an operator repairs those two with different hands. `async: true` is the case that matters:
+	// it would let the turn proceed before the record exists.
+	{
+		const extra = selectEntwurfDeclaration(
+			{ hooks: { SessionStart: [{ hooks: [{ ...ourGroup.hooks[0], async: true }] }] } },
+			fakeLauncher,
+		);
+		ok(
+			"[QK:FRESHCALL-CODEX-HOOK-KEYS] a handler carrying `async` — or any key the installer never writes — is refused as a SHAPE drift that names the extra key, not as an anonymous digest mismatch",
+			!extra.ok &&
+				extra.code === "declaration-shape-drifted" &&
+				extra.detail.includes("exactly type+command+timeout") &&
+				extra.detail.includes("async"),
+		);
+	}
+
 	for (const [code, document] of [
 		["declaration-absent", { hooks: { SessionStart: [herdrGroup] } }],
 		["declaration-duplicated", { hooks: { SessionStart: [ourGroup, herdrGroup, ourGroup] } }],

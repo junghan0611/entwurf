@@ -285,7 +285,7 @@ describe("Codex fresh preflight", () => {
 		expect(await codexFreshPreflight({ HOME: home }, deps)).toBe("codex-birth-unit-missing");
 	});
 
-	it("[QK:FRESHCALL-CODEX-HOOK-KEYS] refuses a birth handler carrying async or any key the installer never writes", async () => {
+	it("refuses a birth handler carrying async or any key the installer never writes (named by the declaration leaf; see [CHECK:FRESHCALL-CODEX-HOOK-KEYS])", async () => {
 		const launcher = path.join(helperDir, "codex-birth-launch.sh");
 		installConfig(true);
 		// `async: true` would run birth beside the turn instead of before it, so the MCP child
