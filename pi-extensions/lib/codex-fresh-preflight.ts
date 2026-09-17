@@ -4,6 +4,13 @@ import * as path from "node:path";
 import { parse } from "smol-toml";
 
 import {
+	CODEX_BIRTH_EVENT,
+	entwurfDeclarationCommand,
+	selectEntwurfDeclaration,
+	trustReceiptKey,
+} from "./codex-declaration.js";
+
+import {
 	type CodexProtocolOpener,
 	type CodexRpcProtocol,
 	type CodexSocketFileCheck,
@@ -64,6 +71,16 @@ export const CODEX_CALLER_PREFLIGHT_HINT: Record<CodexCallerPreflightRejectReaso
 	"codex-caller-title-missing":
 		"this Codex caller's tui.terminal_title does not include thread-id, so the multiplexer reports no pane title naming this thread and there is no caller seat to open the sibling beside; run `entwurf install-codex-terminal-title`, then `entwurf doctor-codex-terminal-title` (an explicit placement.tmuxSession skips this check entirely, because it never needs the seat)",
 };
+
+/**
+ * What `codex-birth-install-state/v2` records ABOUT the declaration — the normalized digest of
+ * entwurf's own `SessionStart` group and the command string that selects it. Never a file digest:
+ * hooks.json is shared, and its bytes are not this unit's to certify.
+ */
+interface RecordedDeclaration {
+	command: string;
+	sha256: string;
+}
 
 export interface CodexUnitPaths {
 	hooksFile: string;
@@ -137,21 +154,37 @@ function isSafeOwnedDir(dir: string, expectedUid: number): boolean {
  * EXIST prove nothing: the launcher codex is about to exec must be the one this unit
  * published, so every recorded member is compared to its recorded digest before a sibling
  * is opened. No digest is computed for the VENDOR here — that is a different axis below.
+ *
+ * WHAT THIS NO LONGER READS (#117): a WHOLE-FILE `hooksSha256`. `codex-birth-install-state/v2`
+ * records the normalized digest of entwurf's own declaration instead, because hooks.json is a
+ * file this unit SHARES — a neighbouring integration appending its own `SessionStart` group
+ * changes every byte of that file and none of our declaration's meaning. The declaration axis
+ * lives in `birthDeclaration` below, which needs the live document anyway to find where our group
+ * currently sits.
  */
-function closureDriftedFromState(paths: CodexUnitPaths, expectedUid: number): boolean {
+function certifiedState(paths: CodexUnitPaths, expectedUid: number): RecordedDeclaration | null {
 	// The directory holding the state carries the state's authority: anyone who can write it
 	// can replace the inventory every digest below is compared against.
-	if (!isSafeOwnedDir(path.dirname(paths.stateFile), expectedUid)) return true;
-	if (!isSafeOwnedDir(path.dirname(path.dirname(paths.stateFile)), expectedUid)) return true;
-	if (!isSafeOwnedFile(paths.stateFile, expectedUid)) return true;
+	if (!isSafeOwnedDir(path.dirname(paths.stateFile), expectedUid)) return null;
+	if (!isSafeOwnedDir(path.dirname(path.dirname(paths.stateFile)), expectedUid)) return null;
+	if (!isSafeOwnedFile(paths.stateFile, expectedUid)) return null;
 	let state: Record<string, unknown>;
 	try {
 		state = JSON.parse(fs.readFileSync(paths.stateFile, "utf8")) as Record<string, unknown>;
 	} catch {
-		return true;
+		return null;
 	}
-	if (state.schema !== "codex-birth-install-state/v1" || state.status !== "installed") return true;
-	if (state.hooksFile !== paths.hooksFile || state.helperDir !== paths.helperDir) return true;
+	// v2 ONLY, and a v1 state is refused rather than read leniently: v1 recorded a whole-file
+	// digest, so a reader that tolerated it would be certifying an authority nobody holds any
+	// more. `entwurf install-codex-birth` supersedes it — that is the one forward path.
+	if (state.schema !== "codex-birth-install-state/v2" || state.status !== "installed") return null;
+	if (state.hooksFile !== paths.hooksFile || state.helperDir !== paths.helperDir) return null;
+	const declaration = state.declaration;
+	if (declaration === null || typeof declaration !== "object" || Array.isArray(declaration)) return null;
+	const recorded = declaration as Record<string, unknown>;
+	if (recorded.event !== CODEX_BIRTH_EVENT) return null;
+	if (typeof recorded.command !== "string" || typeof recorded.sha256 !== "string") return null;
+	if (!/^[0-9a-f]{64}$/.test(recorded.sha256)) return null;
 	const digest = (file: string): string | null => {
 		try {
 			return crypto.createHash("sha256").update(fs.readFileSync(file)).digest("hex");
@@ -159,9 +192,8 @@ function closureDriftedFromState(paths: CodexUnitPaths, expectedUid: number): bo
 			return null;
 		}
 	};
-	if (typeof state.hooksSha256 !== "string" || digest(paths.hooksFile) !== state.hooksSha256) return true;
 	const members = state.helperFiles;
-	if (!Array.isArray(members)) return true;
+	if (!Array.isArray(members)) return null;
 	// Exactly the closure the installer publishes: a short inventory would leave a member
 	// nothing compares, which is the same hole as not checking digests at all.
 	const named = members.map((raw) => (raw as Record<string, unknown>)?.path);
@@ -173,21 +205,38 @@ function closureDriftedFromState(paths: CodexUnitPaths, expectedUid: number): bo
 		"lib/session-id.js",
 		"entwurf-capabilities.json",
 	];
-	if (named.length !== expected.length) return true;
-	if (expected.some((name) => !named.includes(name))) return true;
-	if (named.some((name, index) => named.indexOf(name) !== index)) return true;
+	if (named.length !== expected.length) return null;
+	if (expected.some((name) => !named.includes(name))) return null;
+	if (named.some((name, index) => named.indexOf(name) !== index)) return null;
 	for (const raw of members) {
 		const member = raw as Record<string, unknown>;
 		const rel = member.path;
 		if (typeof rel !== "string" || rel.length === 0 || rel.startsWith("/") || rel.split("/").includes("..")) {
-			return true;
+			return null;
 		}
-		if (typeof member.sha256 !== "string" || digest(path.join(paths.helperDir, rel)) !== member.sha256) return true;
+		if (typeof member.sha256 !== "string" || digest(path.join(paths.helperDir, rel)) !== member.sha256) return null;
 	}
-	return false;
+	return { command: recorded.command, sha256: recorded.sha256 };
 }
 
-function birthMissing(paths: CodexUnitPaths, expectedUid: number): boolean {
+/**
+ * WHERE ENTWURF'S DECLARATION CURRENTLY SITS, or nothing.
+ *
+ * `null` here means the SAME reject as before — `codex-birth-unit-missing` — but the question
+ * it answers is narrower than it used to be (#117). It no longer asks "is hooks.json exactly the
+ * file we wrote"; it asks "is entwurf's own `SessionStart` group present exactly once, shaped the
+ * way the operator approved, and still the declaration this unit recorded". A Herdr (or any
+ * other) integration declaring its own group beside ours changes neither answer.
+ *
+ * The POSITION is the return value rather than a side note because the vendor keys its trust
+ * receipt by index: a declaration that has been renumbered by a neighbour's install needs its
+ * receipt read at the new index, and reading the old one would report a NEIGHBOUR's approval as
+ * our own.
+ */
+function birthDeclaration(
+	paths: CodexUnitPaths,
+	expectedUid: number,
+): { groupIndex: number; handlerIndex: number } | null {
 	const launcher = path.join(paths.helperDir, "codex-birth-launch.sh");
 	const directories = [
 		path.dirname(paths.hooksFile),
@@ -195,8 +244,8 @@ function birthMissing(paths: CodexUnitPaths, expectedUid: number): boolean {
 		path.join(paths.helperDir, "lib"),
 		path.join(paths.helperDir, "lib", "native-push"),
 	];
-	if (directories.some((dir) => !isSafeOwnedDir(dir, expectedUid))) return true;
-	if (!isSafeOwnedFile(paths.hooksFile, expectedUid)) return true;
+	if (directories.some((dir) => !isSafeOwnedDir(dir, expectedUid))) return null;
+	if (!isSafeOwnedFile(paths.hooksFile, expectedUid)) return null;
 	const closure = [
 		[launcher, true],
 		[path.join(paths.helperDir, "meta-bridge-hook-codex.ts"), false],
@@ -205,20 +254,23 @@ function birthMissing(paths: CodexUnitPaths, expectedUid: number): boolean {
 		[path.join(paths.helperDir, "lib", "session-id.js"), false],
 		[path.join(paths.helperDir, "entwurf-capabilities.json"), false],
 	] as const;
-	if (closure.some(([file, executable]) => !isSafeOwnedFile(file, expectedUid, executable))) return true;
+	if (closure.some(([file, executable]) => !isSafeOwnedFile(file, expectedUid, executable))) return null;
+	const recorded = certifiedState(paths, expectedUid);
+	if (recorded === null) return null;
+	// The state's own account of what it certified must be the declaration these paths produce;
+	// a receipt bound to a different launcher is a receipt for a different unit.
+	if (recorded.command !== entwurfDeclarationCommand(launcher)) return null;
+	let selected: ReturnType<typeof selectEntwurfDeclaration>;
 	try {
-		const parsed = JSON.parse(fs.readFileSync(paths.hooksFile, "utf8")) as Record<string, unknown>;
-		const events = (parsed.hooks as Record<string, unknown> | undefined)?.SessionStart;
-		if (!Array.isArray(events) || events.length !== 1) return true;
-		const group = events[0] as Record<string, unknown>;
-		if ("matcher" in group || !Array.isArray(group.hooks) || group.hooks.length !== 1) return true;
-		const hook = group.hooks[0] as Record<string, unknown>;
-		if (Object.keys(hook).sort().join(",") !== "command,timeout,type") return true;
-		if (hook.type !== "command" || hook.command !== `'${launcher}'` || hook.timeout !== 30) return true;
+		selected = selectEntwurfDeclaration(JSON.parse(fs.readFileSync(paths.hooksFile, "utf8")), launcher);
 	} catch {
-		return true;
+		return null;
 	}
-	return closureDriftedFromState(paths, expectedUid);
+	if (!selected.ok) return null;
+	// The NORMALIZED digest, so a neighbour re-serializing the document (measured: Herdr does)
+	// cannot make our intact declaration look edited — and an edit to our own handler still can.
+	if (selected.digest !== recorded.sha256) return null;
+	return { groupIndex: selected.groupIndex, handlerIndex: selected.handlerIndex };
 }
 
 /**
@@ -227,13 +279,19 @@ function birthMissing(paths: CodexUnitPaths, expectedUid: number): boolean {
  * `trusted_hash` of the shape `sha256:<64 hex>`. What this asserts is that a receipt EXISTS
  * for our declaration identity — never that the hash is correct, which only the vendor can
  * say, and never by launching Codex to find out.
+ *
+ * THE KEY IS MEASURED, NOT ASSUMED (#117). It used to be spelled `…:session_start:0:0`, which
+ * was true only while entwurf was the sole declaration in the file. With a neighbour at index 0
+ * that constant reads THEIR receipt and calls it ours — a false green for a hook the vendor has
+ * never been asked to run. The caller passes the key built from the position our declaration was
+ * just found at.
  */
-function trustReceiptMissing(config: Record<string, unknown>, hooksFile: string): boolean {
+function trustReceiptMissing(config: Record<string, unknown>, key: string): boolean {
 	const hooks = config.hooks;
 	if (hooks == null || typeof hooks !== "object" || Array.isArray(hooks)) return true;
 	const state = (hooks as Record<string, unknown>).state;
 	if (state == null || typeof state !== "object" || Array.isArray(state)) return true;
-	const entry = (state as Record<string, unknown>)[`${hooksFile}:session_start:0:0`];
+	const entry = (state as Record<string, unknown>)[key];
 	if (entry == null || typeof entry !== "object" || Array.isArray(entry)) return true;
 	const digest = (entry as Record<string, unknown>).trusted_hash;
 	return typeof digest !== "string" || !/^sha256:[0-9a-f]{64}$/.test(digest);
@@ -558,14 +616,16 @@ export async function codexFreshPreflight(
 	if (!path.isAbsolute(paths.hooksFile) || !path.isAbsolute(paths.helperDir) || !path.isAbsolute(paths.stateFile)) {
 		return "codex-birth-unit-missing";
 	}
-	if (birthMissing(paths, deps.operatorUid ?? process.getuid?.() ?? -1)) {
+	const declaration = birthDeclaration(paths, deps.operatorUid ?? process.getuid?.() ?? -1);
+	if (declaration === null) {
 		return "codex-birth-unit-missing";
 	}
 	const config = readConfig(env);
 	// The vendor receipt is a SEPARATE reject from our bytes: perfect bytes the vendor will
 	// not run and absent bytes are two different repairs, and folding them would send the
 	// operator to the installer for something only they can answer in their own Codex.
-	if (config === null || trustReceiptMissing(config, paths.hooksFile)) return "codex-birth-trust-missing";
+	const key = trustReceiptKey(paths.hooksFile, declaration.groupIndex, declaration.handlerIndex);
+	if (config === null || trustReceiptMissing(config, key)) return "codex-birth-trust-missing";
 	if (mcpMissing(config)) return "codex-mcp-hand-missing";
 	if (visibleIdentityMissing(config)) return "codex-visible-identity-missing";
 	const socketPath = resolveCodexDefaultSocketPath(env);
