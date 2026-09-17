@@ -711,7 +711,9 @@ function drive(
 			"so an operator who has just answered the install prompt sees nothing at all through a multi-minute `npm pack` " +
 			"and reads it as a hang. The sequence is reported, not logged: each step names the work about to start, the " +
 			"acquisition step says out loud that silence is expected and which source it is reaching for, and a run with " +
-			"nothing to activate takes exactly ONE step and then closes — it must not narrate work it never did " +
+			"nothing to activate takes exactly ONE step and then closes — it must not narrate work it never did. " +
+			"Pinning all six positions is also what keeps a usage NOTE out of the sequence: a note is not an outcome, " +
+			"and one read as a seventh step says the install is still going " +
 			`(full=${JSON.stringify(full.progress)} idle=${JSON.stringify(idle.progress)})`,
 		full.code === 0 &&
 			full.progress.length >= 6 &&

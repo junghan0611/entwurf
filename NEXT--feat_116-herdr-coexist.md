@@ -147,6 +147,29 @@ kill 확인(실패 라인에 자기 QK).
 
 뮤턴트 2개, lane `herdr-plugin-build` 11→**12** · `self-address` 5→**6**, 인벤토리 646→**648**, 각각 단독 kill 확인.
 
+**독립 검수 (opus 형제 `20260917T123612-7479b4`, 2026-09-17) — Blocker 2 / Defect 2, 전부 처리:**
+- `[B2 · 재현으로 확인 · 수리함]` `[QK:SELFADDR-UNCITIZENED-NOTICED]`의 소스 정규식이 자기 주장의 3분의 2를
+  안 죽였다. **false success**다. 내가 직접 재현했다 — 호출을 시민 분기로 옮겨도, once-latch를 지워도
+  **51/51 green**. 정규식은 호출이 존재하는지만 본다; 어느 분기에 있는지도, 몇 번 불리는지도 못 본다.
+  수리: 세 조건을 순수 결정 `decideUncitizenedNotice`(self-address fence)로 빼고 호출을 **무조건**으로 바꿔
+  `controlEnabled`를 사실로 넘긴다 — 분기가 사라지니 옮길 자리가 없다. 셀 1→3
+  (`-DECISION` 진리표 8행 · `-NOTICED` 호출부가 진짜 플래그를 나름 · `-ONCE` latch),
+  뮤턴트 1→3, 검수자가 통과시킨 두 뮤턴트가 이제 **각자의 claim으로** 죽는다. 53 assertions.
+- `[B1 · 이슈 본문 수선함]` #118 초판이 `entwurf copilot`(`run.sh:6961-6975` + `scripts/copilot-launch.sh`)이라는
+  **이미 출하된 선례**를 인용하지 않고 설계 질문 넷을 다시 열었다. 본문을 그 좌표로 고쳤고, 남은 진짜 질문은
+  둘로 줄었다(pi 런처 선행조건 0인가 · 플래그 중복 argv 스캔).
+- `[D1 · 수리함]` note 순서 계약 — spine 셀이 여섯 자리를 전부 핀으로 박고 있어 이미 구조적으로 보장되는데
+  산문이 그걸 말하지 않았다. 산문을 고쳤다(중복 술어를 note 셀에 넣었다가 **엉뚱한 claim이 먼저 터져서** 뺐다 —
+  "앞 셀이 먼저 트립하면 안 된다"의 실례).
+- `[B3 · #118 선행조건으로 이월]` `--entwurf-control` 리터럴 6곳, `acp/session-store.ts:52`에 상수가 있는데도
+  `6339cd2`가 둘 늘렸다. 런처가 7번째를 낳는 자리이므로 게이트 대조를 그 작업의 선행조건으로 박았다.
+- `[검수가 기각한 의심]` `cd30388`의 `prepare` 범위는 정확하다 — 디렉터리 spec은 prepack/prepare/postpack이
+  전부 stdout에 섞이지만 **git spec은 prepare 하나만** 돈다(검수자 독립 재현, `herdr-runtime.mjs:420-430`의
+  기존 측정과 일치).
+- `[Observation, 열지 않음]` notice에 은퇴 조건이 없다 — 그 호스트의 **의도적으로 시민이 아닌** 모든 pi가
+  프로세스당 1회 권유를 받는다(GLG 본인이 그렇게 쓴다). ACP `--provider entwurf` 세션도 받는다. 메타 스토어가
+  답을 알지만 IO 0인 경로에 스토어 읽기가 붙는다.
+
 **열린 후속 `[GLG 결정 대기]`** — ① `entwurf-pi` bin(새 표면이라 이슈 하나 값어치; `pie`는 GLG bashrc 한 줄
 별칭이 맞다 — 이미 `pit`/`pius`로 하는 방식) ② fresh_call 모델 거절 규칙은 #76으로 나갔다
 ([issuecomment-5707946216](https://github.com/junghan0611/entwurf/issues/76#issuecomment-5707946216) —

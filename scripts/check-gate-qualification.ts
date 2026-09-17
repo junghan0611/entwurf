@@ -869,7 +869,7 @@ let manifestCount: number;
 		"release-gate": 19,
 		"resume-args": 6,
 		"resume-launch-identity": 6,
-		"self-address": 6,
+		"self-address": 8,
 		"setup-verdict": 14,
 		"source-install": 2,
 		"v2-surface": 13,

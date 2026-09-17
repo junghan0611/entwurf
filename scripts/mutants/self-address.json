@@ -91,13 +91,35 @@
 		},
 		{
 			"claim": "SELFADDR-UNCITIZENED-NOTICED",
-			"title": "sending the not-a-citizen notice to stderr turns an ordinary deliberate state into a sentence printed into every `pi -p …` pipeline and every script on the host, to tell a human something no human is reading there — the neighbouring refusal writes stderr because a control surface that failed to come up is a durable fault, and this is not that",
+			"title": "passing a constant instead of the real flag makes the decision unreachable and the notice a property of nothing — this is the defect an independent review walked through the first cut's source regex with (measured 2026-09-17: moving the call into the citizen branch left the gate 51/51 green), because a regex sees that a call exists and cannot see which fact it carries",
 			"subject": "pi-extensions/entwurf-control.ts",
-			"find": ["\tctx.ui.notify("],
-			"replace": ["\tprocess.stderr.write(\"uncitizened\\\\n\");\n\tctx.ui.notify("],
+			"find": ["\t\tawait noticeUncitizenedSession(ctx, enabled);"],
+			"replace": ["\t\tawait noticeUncitizenedSession(ctx, false);"],
 			"gate": ["bash", "run.sh", "check-entwurf-self-address"],
 			"timeoutSeconds": 300,
 			"signature": "[QK:SELFADDR-UNCITIZENED-NOTICED]",
+			"signatureSource": "scripts/check-entwurf-self-address.ts"
+		},
+		{
+			"claim": "SELFADDR-UNCITIZENED-ONCE",
+			"title": "dropping the line that records the notice fired turns a one-time hint into a nag: `refreshServer` runs again on every session switch, so the operator who already read the sentence reads it again each time — and the second cut's own comment is what claims this cannot happen",
+			"subject": "pi-extensions/entwurf-control.ts",
+			"find": ["\tuncitizenedNoticeShown = true;"],
+			"replace": ["\tvoid uncitizenedNoticeShown;"],
+			"gate": ["bash", "run.sh", "check-entwurf-self-address"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:SELFADDR-UNCITIZENED-ONCE]",
+			"signatureSource": "scripts/check-entwurf-self-address.ts"
+		},
+		{
+			"claim": "SELFADDR-UNCITIZENED-DECISION",
+			"title": "letting the decision answer yes for a session that DOES have --entwurf-control tells a citizen it is not one — the exact inversion the mirror contract exists to prevent, and the reason the three conditions are a truth table here instead of ifs at a call site a regex was pretending to cover",
+			"subject": "pi-extensions/lib/entwurf-self-address.ts",
+			"find": ["\tif (facts.controlEnabled) return false;"],
+			"replace": ["\tif (false && facts.controlEnabled) return false;"],
+			"gate": ["bash", "run.sh", "check-entwurf-self-address"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:SELFADDR-UNCITIZENED-DECISION]",
 			"signatureSource": "scripts/check-entwurf-self-address.ts"
 		}
 	]

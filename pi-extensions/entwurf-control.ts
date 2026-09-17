@@ -1054,12 +1054,22 @@ function applyEmacsAgentSocketEnv(pi: ExtensionAPI): void {
  * UI ONLY, AND THAT IS THE CONTRACT. The refusal path below writes stderr ALWAYS because a control
  * surface that failed to come up is a durable fault. This is not that: it is an ordinary,
  * deliberate state. Writing it to stderr would put a sentence into every `pi -p …` pipeline and
- * every script on the host to tell a human something no human is reading there. Once per process,
- * because `refreshServer` runs again on session switches and a hint that repeats is noise.
+ * every script on the host to tell a human something no human is reading there.
+ *
+ * WHETHER TO SPEAK IS NOT DECIDED HERE. It is `decideUncitizenedNotice` in the self-address fence,
+ * reached by the same non-literal dynamic import as its sibling — and that placement is a repair,
+ * not taste. `[측정 2026-09-17, 독립 검수 + 재현]` while the three conditions were `if`s at this
+ * call site and the gate pinned them with a source regex, two mutants walked through green: moving
+ * the call into the CITIZEN branch, and deleting the once-latch. A regex sees that a call exists;
+ * it cannot see which branch it sits in or how often it fires. So the call is now UNCONDITIONAL and
+ * carries `controlEnabled` as a fact — the branch is gone, and what is left is a truth table.
  */
 let uncitizenedNoticeShown = false;
-function noticeUncitizenedSession(ctx: ExtensionContext): void {
-	if (uncitizenedNoticeShown || !ctx.hasUI) return;
+async function noticeUncitizenedSession(ctx: ExtensionContext, controlEnabled: boolean): Promise<void> {
+	const self = (await import(ENTWURF_SELF_ADDRESS_MODULE)) as unknown as EntwurfSelfAddressModule;
+	if (!self.decideUncitizenedNotice({ controlEnabled, hasUI: ctx.hasUI, alreadyShown: uncitizenedNoticeShown })) {
+		return;
+	}
 	uncitizenedNoticeShown = true;
 	ctx.ui.notify(
 		"🪛 entwurf is installed here, but this session is not a garden citizen — start pi with " +
@@ -1142,12 +1152,12 @@ export default function (pi: ExtensionAPI) {
 		// non-control session.
 		applyEmacsAgentSocketEnv(pi);
 		const enabled = pi.getFlag(ENTWURF_FLAG) === true;
+		await noticeUncitizenedSession(ctx, enabled);
 		if (!enabled) {
 			await stopControlServer(state);
 			residentGardenId = null;
 			updateStatus(ctx, false, null);
 			updateSessionEnv(ctx, false, null);
-			noticeUncitizenedSession(ctx);
 			return;
 		}
 		let birth: PiCitizenBirth;
@@ -1316,6 +1326,7 @@ type SelfAddressabilityFn = (facts: {
 
 interface EntwurfSelfAddressModule {
 	computeSelfAddressability: SelfAddressabilityFn;
+	decideUncitizenedNotice: (facts: { controlEnabled: boolean; hasUI: boolean; alreadyShown: boolean }) => boolean;
 }
 
 /**

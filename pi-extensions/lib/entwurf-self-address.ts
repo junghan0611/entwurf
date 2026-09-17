@@ -168,3 +168,36 @@ export function computeSelfAddressability(facts: SelfAddressabilityFacts): SelfA
 		}
 	}
 }
+
+/** Facts the uncitizened-notice decision is made from. Nothing is read here — all three are given. */
+export interface UncitizenedNoticeFacts {
+	/** Did this session get `--entwurf-control`? A citizen is never told it is not one. */
+	controlEnabled: boolean;
+	/** Is there a human surface to say it on? `pi -p …` has none, and neither does any pipeline. */
+	hasUI: boolean;
+	/** Has this process already said it? `refreshServer` runs again on session switches. */
+	alreadyShown: boolean;
+}
+
+/**
+ * The mirror of `computeSelfAddressability`, as a decision rather than a claim.
+ *
+ * That function exists so a surface never CLAIMS an addressability it lacks. This one exists so a
+ * surface does not stay SILENT about lacking one: `[관측: GLG, 날것 PC, 2026-09-17]` a herdr plugin
+ * install wires this extension at user scope, so it loads in every pi on the host while citizenship
+ * stays argv-gated on purpose — and a plain `pi` after a green install is therefore silent,
+ * tool-less and indistinguishable from an install that did nothing.
+ *
+ * WHY THIS IS A FUNCTION AND NOT THREE `if`s AT THE CALL SITE. It was three `if`s, and its gate was
+ * a source regex asserting the call existed. `[측정 2026-09-17, 독립 검수 claude-opus-5 + 재현]` two
+ * mutants walked straight through that green: moving the call into the CITIZEN branch (so citizens
+ * are told they are not citizens and plain pi stays silent), and deleting the once-latch (so the
+ * line repeats on every session switch). A regex can see that a call exists; it cannot see which
+ * branch it is in or how often it fires. Those are properties of FACTS, so the facts are now
+ * arguments and the answer is a value a truth table can exhaust.
+ */
+export function decideUncitizenedNotice(facts: UncitizenedNoticeFacts): boolean {
+	if (facts.controlEnabled) return false;
+	if (!facts.hasUI) return false;
+	return !facts.alreadyShown;
+}

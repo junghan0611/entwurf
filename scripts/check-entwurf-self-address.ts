@@ -44,6 +44,7 @@ import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
 	computeSelfAddressability,
+	decideUncitizenedNotice,
 	type SelfAddressabilityFacts,
 	type SocketState,
 } from "../pi-extensions/lib/entwurf-self-address.ts";
@@ -513,26 +514,70 @@ ok(
 );
 
 // ── the other half of the same honesty: a session that is NOT a citizen says so ──
-// This gate exists because a surface must not CLAIM an addressability it does not have. The
-// mirror of that is a surface that has none and says nothing at all: `[관측: GLG, 날것 PC,
-// 2026-09-17]` a herdr plugin install wires this extension at USER scope, so it loads in every pi
-// on the host, while citizenship stays argv-gated on purpose — so a plain `pi` after a green
-// install is silent, tool-less and indistinguishable from an install that did nothing. The notice
-// is UI-only BY CONTRACT: the neighbouring refusal writes stderr always because a control surface
-// that failed to come up is a durable fault, whereas this is an ordinary deliberate state, and
-// putting it on stderr would narrate into every `pi -p …` pipeline on the host.
+// This gate exists because a surface must not CLAIM an addressability it does not have. The mirror
+// of that is a surface that has none and says nothing: `[관측: GLG, 날것 PC, 2026-09-17]` a herdr
+// plugin install wires this extension at USER scope, so it loads in every pi on the host while
+// citizenship stays argv-gated — a plain `pi` after a green install is silent, tool-less and
+// indistinguishable from an install that did nothing.
+//
+// WHY THESE THREE CELLS AND NOT ONE REGEX. The first cut pinned "told once, on the UI only" with a
+// source regex that only proved a call existed somewhere. `[측정 2026-09-17, 독립 검수
+// claude-opus-5 + 재현]` two mutants walked through it green: moving the call into the CITIZEN
+// branch, and deleting the once-latch — 51/51 both times. That was a false success, so the
+// conditions moved into a pure decision the truth table below exhausts, and what is left at the
+// call site is narrow enough for a source pin to actually cover.
+{
+	const decide = (controlEnabled: boolean, hasUI: boolean, alreadyShown: boolean): boolean =>
+		decideUncitizenedNotice({ controlEnabled, hasUI, alreadyShown });
+	const table = {
+		citizenFirstUI: decide(true, true, false),
+		citizenNoUI: decide(true, false, false),
+		citizenShown: decide(true, true, true),
+		uncitizenedFirstUI: decide(false, true, false),
+		uncitizenedNoUI: decide(false, false, false),
+		uncitizenedShown: decide(false, true, true),
+		uncitizenedShownNoUI: decide(false, false, true),
+	};
+	ok(
+		"a citizen is never told it is not one, a session with no UI is never told anything, and the " +
+			`answer is true in exactly ONE of the eight states [QK:SELFADDR-UNCITIZENED-DECISION] (${JSON.stringify(table)})`,
+		table.uncitizenedFirstUI === true &&
+			table.citizenFirstUI === false &&
+			table.citizenNoUI === false &&
+			table.citizenShown === false &&
+			table.uncitizenedNoUI === false &&
+			table.uncitizenedShown === false &&
+			table.uncitizenedShownNoUI === false,
+	);
+}
+
+// The call site carries the REAL flag as a fact and is unconditional — there is no branch left for
+// a mutant to move it into, and passing a constant would make the decision above unreachable.
+const noticeBody = nativeSrc.slice(
+	nativeSrc.indexOf("async function noticeUncitizenedSession"),
+	nativeSrc.indexOf("function shouldRegisterControlTools"),
+);
 ok(
-	"pi-native: a non-control session is told once, on the UI only, that it is not a garden citizen " +
+	"pi-native: the not-a-citizen notice is decided from the REAL flag, on the UI only, never on stderr " +
 		"[QK:SELFADDR-UNCITIZENED-NOTICED]",
-	/function\s+noticeUncitizenedSession/.test(nativeSrc) &&
-		/noticeUncitizenedSession\(ctx\);/.test(nativeSrc) &&
-		/uncitizenedNoticeShown\s*\|\|\s*!ctx\.hasUI/.test(nativeSrc) &&
-		((body: string) => /--entwurf-control/.test(body) && !/process\.stderr/.test(body))(
-			nativeSrc.slice(
-				nativeSrc.indexOf("function noticeUncitizenedSession"),
-				nativeSrc.indexOf("function shouldRegisterControlTools"),
-			),
-		),
+	/const enabled = pi\.getFlag\(ENTWURF_FLAG\) === true;\n\t\tawait noticeUncitizenedSession\(ctx, enabled\);/.test(
+		nativeSrc,
+	) &&
+		/decideUncitizenedNotice\(\{ controlEnabled, hasUI: ctx\.hasUI, alreadyShown: uncitizenedNoticeShown \}\)/.test(
+			noticeBody,
+		) &&
+		/--entwurf-control/.test(noticeBody) &&
+		!/process\.stderr/.test(noticeBody),
+);
+
+// The latch is the difference between a hint and a nag: `refreshServer` runs again on session
+// switches, so the line that records "already said it" is load-bearing, not bookkeeping.
+ok(
+	"pi-native: the notice records that it fired, so a session switch does not repeat it " +
+		"[QK:SELFADDR-UNCITIZENED-ONCE]",
+	/let uncitizenedNoticeShown = false;/.test(nativeSrc) &&
+		/uncitizenedNoticeShown = true;/.test(noticeBody) &&
+		noticeBody.indexOf("uncitizenedNoticeShown = true;") < noticeBody.indexOf("ctx.ui.notify("),
 );
 
 console.log(`\ncheck-entwurf-self-address: ${passed} checks passed`);
