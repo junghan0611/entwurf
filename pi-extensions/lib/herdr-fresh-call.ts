@@ -418,6 +418,10 @@ export function buildHerdrAgentStartArgs(params: {
 		params.kind,
 		"--pane",
 		params.paneId,
+		// Never omitted: herdr's own default is 30s, which is shorter than a cold Claude Code start
+		// and turns a healthy launch into a named timeout over an unreclaimed pane.
+		"--timeout",
+		String(HERDR_START_READY_MS),
 		"--",
 		...params.backendArgs,
 	];
@@ -966,11 +970,28 @@ export function renderHerdrFreshCall(result: HerdrFreshCallResult): { text: stri
 	};
 }
 
-/** How long a herdr command may take. `[측정, herdr 0.9.0 `agent start --help`]` the start verb waits
+/** How long a herdr command may take. `[측정, herdr 0.9.1 `agent start --help`]` the start verb waits
  * for interactive readiness with a default of 30s and a documented ceiling of 300s, so the start
  * bound is that ceiling: cutting it shorter would kill a launch herdr was still legitimately
  * waiting on. Every other verb is a socket round trip and gets the short bound. */
 export const HERDR_START_TIMEOUT_MS = 300_000;
+
+/**
+ * How long HERDR may wait for interactive readiness — passed as `--timeout`, and NOT the same
+ * number as the bound above.
+ *
+ * `[측정 2026-09-17, oracle, LIVE]` the rail never passed this flag, so herdr used its own 30s
+ * default while our process bound sat at 300s. A Claude Code cold start in a fresh pane exceeds
+ * 30s on this host, so herdr gave up on an agent that WAS alive and starting, and the rail reported
+ * `herdr-agent-start-failed [herdr: timeout]` with an unreclaimed pane holding a healthy sibling.
+ * The gate had never seen it because its LIVE cell pinned a runtime that starts fast.
+ *
+ * It is deliberately BELOW `HERDR_START_TIMEOUT_MS`. The two bounds race, and herdr has to lose:
+ * if our process kill landed first we would learn nothing but "no exit status", while herdr's own
+ * expiry answers with a named `timeout` we can report and reclaim from. Sixty seconds of daylight
+ * is the margin.
+ */
+export const HERDR_START_READY_MS = 240_000;
 export const HERDR_CLI_TIMEOUT_MS = 30_000;
 
 /** How much of one herdr reply we are willing to hold. Every verb on this rail answers with one

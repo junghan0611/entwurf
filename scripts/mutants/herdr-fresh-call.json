@@ -150,11 +150,22 @@
 			"claim": "HFC-START-ARGV",
 			"title": "the backend argv loses its `--` separator, so herdr reads the sibling's prompt as its own flags",
 			"subject": "pi-extensions/lib/herdr-fresh-call.ts",
-			"find": ["\t\tparams.paneId,\n\t\t\"--\",\n\t\t...params.backendArgs,"],
-			"replace": ["\t\tparams.paneId,\n\t\t...params.backendArgs,"],
+			"find": ["\t\tString(HERDR_START_READY_MS),\n\t\t\"--\",\n\t\t...params.backendArgs,"],
+			"replace": ["\t\tString(HERDR_START_READY_MS),\n\t\t...params.backendArgs,"],
 			"gate": ["bash", "run.sh", "check-herdr-fresh-call"],
 			"timeoutSeconds": 120,
 			"signature": "[QK:HFC-START-ARGV]",
+			"signatureSource": "scripts/check-herdr-fresh-call.ts"
+		},
+		{
+			"claim": "HFC-START-READY-BOUND",
+			"title": "the start stops telling herdr how long to wait, so herdr falls back to its own 30s default and a cold runtime start comes back as a named timeout over a pane holding a healthy sibling",
+			"subject": "pi-extensions/lib/herdr-fresh-call.ts",
+			"find": ["\t\t\"--timeout\",\n\t\tString(HERDR_START_READY_MS),\n"],
+			"replace": [""],
+			"gate": ["bash", "run.sh", "check-herdr-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:HFC-START-READY-BOUND]",
 			"signatureSource": "scripts/check-herdr-fresh-call.ts"
 		},
 		{

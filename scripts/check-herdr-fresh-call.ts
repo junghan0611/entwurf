@@ -85,6 +85,7 @@ import {
 	HERDR_FRESH_CALL_BACKENDS,
 	HERDR_FRESH_CALL_OPENING_LINE,
 	HERDR_MAX_OUTPUT_BYTES,
+	HERDR_START_READY_MS,
 	HERDR_START_TIMEOUT_MS,
 	HERDR_TASK_LITERAL_INSTRUCTION,
 	type HerdrRun,
@@ -373,9 +374,25 @@ async function main(): Promise<void> {
 		paneId: "w7:pA",
 		backendArgs: ["PROMPT", "--model=opus"],
 	});
+	// `[측정 2026-09-17, oracle, LIVE]` this flag was missing and herdr used its own 30s default: a
+	// cold Claude Code start outran it, and a healthy sibling came back as `herdr: timeout` over an
+	// unreclaimed pane. The two bounds must also stay ordered — herdr has to expire FIRST, or our
+	// process kill lands instead and the named reason is lost.
+	//
+	// Asserted BEFORE the exact-argv cell below: that cell spells the whole command out, so it
+	// would fail first on a missing flag and take this claim's attribution with it.
+	ok(
+		"[QK:HFC-START-READY-BOUND] the start carries an EXPLICIT readiness timeout, and it expires before our own process bound so herdr's named answer is the one we report",
+		// Deliberately NOT asserting where `--` sits: that separator is HFC-START-ARGV's claim, and
+		// reading it here would make a mutant of THAT contract fail on THIS token.
+		startArgs.includes("--timeout") &&
+			startArgs[startArgs.indexOf("--timeout") + 1] === String(HERDR_START_READY_MS) &&
+			HERDR_START_READY_MS < HERDR_START_TIMEOUT_MS,
+	);
 	ok(
 		"[QK:HFC-START-ARGV] the backend's own argv rides after `--`, under the REQUESTED kind and the initial pane of the tab just created",
-		startArgs.join(" ") === "agent start entwurf-abc --kind claude --pane w7:pA -- PROMPT --model=opus",
+		startArgs.join(" ") ===
+			`agent start entwurf-abc --kind claude --pane w7:pA --timeout ${HERDR_START_READY_MS} -- PROMPT --model=opus`,
 	);
 	ok(
 		"pane get and pane close take a POSITIONAL pane id — measured: `--pane` is a usage error on both",

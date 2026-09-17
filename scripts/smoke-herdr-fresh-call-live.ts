@@ -92,6 +92,11 @@ const REAL_CLAUDE_CONFIG_DIR = ORIGINAL_CLAUDE_CONFIG_DIR || path.join(REAL_HOME
 /** How long a caller's whole turn may take: it has to boot, call the tool, and have its child
  * boot and call back. Bounded, and a timeout is a RED rather than a retry. */
 const CELL_TIMEOUT_MS = 240_000;
+/** How long the CHILD may take to call back after its CALLER's turn is already over. Separate from
+ * the cell bound above because it measures a different process: `[측정 2026-09-17]` a child started
+ * late in the caller's launch had not finished booting when the caller finished, and the cell read
+ * its evidence on the caller's clock. */
+const CHILD_CALLBACK_WAIT_MS = 180_000;
 const POLL_MS = 2_000;
 
 let passed = 0;
@@ -508,6 +513,24 @@ async function main(): Promise<void> {
 			// a nonce sighting in the caller's text is not evidence that anything came back. The
 			// sender identity is. So each rail is read for: body === the nonce, and sender ===
 			// the child the direct witness resolved to.
+			// THE CHILD HAS ITS OWN CLOCK, and this is where that was measured (#116, 2026-09-17).
+			// The loop above waits for the CALLER to finish its two tool calls; the child was
+			// started somewhere inside the first of them and may still be booting when the caller
+			// is done. Two consecutive runs of this same code differed only there — the caller's
+			// launch took 56s in one and 37s in the other, and only the slower one gave the child
+			// enough head start to have called back by the time this line ran. Judging the child on
+			// the caller's clock is a race, and a race that reports a healthy rail as red. So the
+			// child gets its own bounded wait for the artifact BEFORE anything is asserted about it.
+			const childCallbackDeadline = Date.now() + CHILD_CALLBACK_WAIT_MS;
+			while (Date.now() < childCallbackDeadline) {
+				const seen = callerIsPi
+					? /"customType":"entwurf-message"/.test(readTranscript(callerTranscript))
+					: deliveredMessages(String(fenced.ENTWURF_META_MAILBOX_DIR), callerGid).length > 0;
+				if (seen) break;
+				sleep(POLL_MS);
+			}
+			if (callerIsPi) text = readTranscript(callerTranscript);
+
 			let nonce = "";
 			let callbackArrived = false;
 			let callbackForm = "";
@@ -639,10 +662,22 @@ async function main(): Promise<void> {
 			} else {
 				const childActivity = mcpActivityBySession(root).get(childNative) ?? [];
 				const order = toolCallOrder(childActivity);
+				// THE CALLBACK COMES BEFORE THE TASK — and a read-only corroboration may come before
+				// BOTH. `[측정 2026-09-17, oracle, LIVE]` this cell used to require `order[0] ===
+				// "entwurf_v2"`, and a Sonnet 5 child failed it by calling `entwurf_peers` first and
+				// the callback second. That is not a violation: the framing this rail now sends
+				// OFFERS exactly that corroboration ("you can corroborate the caller first if you
+				// want to"), so the old oracle contradicted our own prompt and would have forbidden
+				// the behaviour we asked for. What still must hold is everything the claim was
+				// actually about — the callback lands before any work, it completes, and no
+				// entwurf_v2 in the log failed or timed out.
+				const READ_ONLY_FIRST = new Set(["entwurf_peers", "entwurf_self"]);
+				const beforeCallback = order.slice(0, Math.max(order.indexOf("entwurf_v2"), 0));
 				ok(
-					`${cell.label}: the child decoded the one-line birth argv and its FIRST tool action was the callback — entwurf_v2, completed successfully, with no failed or timed-out entwurf_v2 anywhere in its log`,
+					`${cell.label}: the child read the one-line birth argv and called back BEFORE doing any work — entwurf_v2 completed successfully, preceded only by read-only corroboration the framing offers, with no failed or timed-out entwurf_v2 anywhere in its log`,
 					childActivity.length > 0 &&
-						order[0] === "entwurf_v2" &&
+						order.includes("entwurf_v2") &&
+						beforeCallback.every((name) => READ_ONLY_FIRST.has(name)) &&
 						childActivity.some((e) => (e.debug ?? "").startsWith("Tool 'entwurf_v2' completed successfully")) &&
 						!childActivity.some(
 							(e) => (e.debug ?? "").startsWith("Tool 'entwurf_v2' failed") || (e.error ?? "").includes("entwurf_v2"),
