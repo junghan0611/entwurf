@@ -163,6 +163,57 @@ CHANGELOG `## Unreleased`가 구현 범위 `v0.15.1..19ad90c` **30커밋** 전�
 스크립트가 움직였으므로 반드시 돈다; lane C SHA의 긴 바닥은 로컬에서 안 돌렸다) → 다음 컷 prepare는 별도 권한. #109 openclaw 다리는 **닫혔다** · **0.16.1 make는 열린 채 PAUSED**.
 푸시·태그·publish는 금지; `entwurf-release`의 make/publish 별도 권한이다.
 
+# NOW — stem: #117 랜딩됨, 다음 = #116 머지
+
+- **상태:** **`fix/117-codex-hooks-coexist` @ `ac3f1f8` — 브랜치 푸시 + exact-SHA CI
+  [`35239086438`](https://github.com/junghan0611/entwurf/actions/runs/35239086438) **4잡 전부 success**.**
+  main fast-forward는 **아직 하지 않았다** — 코디네이터(Claude Fable 5.1 `20260917T085525-9d1c92`)의
+  판단 대기. 커밋 6개: `0daf9a3`(production) · `0e49aa8`(게이트+뮤턴트) · `88c780d`(docs) ·
+  `997ac89`·`c3cb292`(자기검수 수리 둘) · `ac3f1f8`(CI가 잡은 stale 뮤턴트 6개 수리).
+- **무엇이 고쳐졌나:** entwurf codex birth 유닛이 `$CODEX_HOME/hooks.json`을 **파일 전체**로 소유하던
+  것을 **자기 `SessionStart` 선언 하나**로 좁혔다. herdr가 자기 그룹을 붙이면 벤더는 둘 다 돌리는데
+  (`discovery.rs:664-665` — trust는 `<path>:<event>:<group>:<handler>` 단위) entwurf만 파일 digest를
+  요구해서 doctor RED + 모든 Codex fresh가 `codex-birth-unit-missing`으로 거절됐다.
+  0.22.0 컷이 herdr 훅을 `.herdr-bak`으로 치우고 LIVE를 잰 부채가 **이것**이고, **갚았다.**
+  - 정규화 digest/shape certify(파일 바이트 아님) · 선언 정확히 1개 · **벤더 trust 영수증을 측정된
+    현재 index에서** 읽음(상수 `:0:0`은 이웃이 index 0을 차지하면 **남의 승인을 우리 것으로 읽는
+    거짓 초록**이었다) · 이웃은 doctor의 FOREIGN 절에 present-but-foreign으로만 보고, certify 0 ·
+    install은 append, uninstall은 우리 그룹만 splice → foreign 바이트 양쪽에서 불변 ·
+    install-state `v2`(선언 영수증), v1은 이름 불러 거부하고 installer가 단방향 승격.
+  - 에이전트는 여전히 trust 영수증을 만들지도 우회하지도 않고, **벤더 hash를 재계산하지도 않는다**
+    (doctor TRUST 축에 이유가 문장으로 있다).
+- **호스트 수리 영수증 (oracle, 2026-09-17 23:0x, herdr 제거 없이):** `install-codex-birth` 1회 →
+  `~/.codex/hooks.json` sha **전후 동일** `d5879a43305a547d6d3e4a22672f8883f85e122f5d9b2db39cf9790d11dcf8e9`,
+  herdr 그룹 정규화 sha `654bf95c…` 불변, state `v1`→`v2`(`declaration.sha256 = 12e147db…`),
+  `doctor-codex-birth` **exit 0 / RED 0**, 실 `codexFreshPreflight`(app-server만 stub-alive) → **`null`
+  ADMITTED**. `.herdr-bak`은 그대로 둔다.
+- **게이트 (측정):** 로컬 focused — `smoke-codex-birth` **102**(76→) · `check-codex-birth-hook`
+  **101**(69→) · `check-mux-fresh-call` 292 · `smoke-setup-verdict` 135 · `check-gate-manifests`
+  **527 뮤턴트/45 lane**(520→527) · lint/typecheck clean.
+  **CI가 exact-SHA에서 긴 것을 졌다:** `pnpm run check:full` **exit 0, 403s** ·
+  `check-gate-qualification` 본체 **527/527 KILLED**(skip 아님 — 코드 push라 필터가 본체를 켰다).
+  실 fresh Codex 호출 1회는 **0.23.0 LIVE** 몫이다(주간 한도 보호, 이름 붙여 남긴다).
+- **첫 CI가 붉었던 것과 그 교훈:** `c3cb292`의 CI가 `FRESHCALL-CODEX-*` **여섯 claim을
+  `MUTANT-STALE (find matched 0×)`**로 잡았다. 내가 `codex-fresh-preflight.ts`의 함수를 개명하면서
+  기존 뮤턴트의 find가 빗나간 것이다. **affected set의 정의는 「내가 추가한 claim」이 아니라
+  「내가 subject 파일을 편집한 모든 claim」이다** — `check-gate-manifests`는 find 유효성을 보지
+  않으므로(본체 소관) 짧은 게이트만 도는 레인에는 그 구멍을 소유한 게이트가 없다. `ac3f1f8`이
+  다섯을 재조준하고 `FRESHCALL-CODEX-HOOK-KEYS`는 오라클이 분리 못 하게 된 것을 확인해
+  `check-codex-birth-hook`의 전용 셀로 옮겼다. 마지막에 **subject/signatureSource가 이 변경에 닿는
+  뮤턴트 35개 전수 replay → 35 KILLED**.
+- **다음 한 수:** (1) 코디네이터가 `ac3f1f8`을 main에 fast-forward할지 결정 → (2) **#116
+  (`feat/116-herdr-coexist`) 머지** — #117이 그 Step 0이었다 → (3) 0.23.0 컷에서 긴 게이트 전량 + 실
+  Codex fresh LIVE.
+- **npm publish 0.22.0은 여전히 GLG 몫**(아래 절). 수용 candidate
+  `/tmp/entwurf-release-candidate-0.22.0.GAQERG/junghanacs-entwurf-0.22.0.tgz`,
+  sha256 `e1e2868a6d7e74cfa2ca008608f8ed4f1cfbef22790f9ed7b304791368fd0ccf`, 12,855,699 bytes.
+  **그 바이트 그대로 발행하고 리팩하지 않는다.**
+- **Do not:** `ac3f1f8`을 main에 직접 밀기(코디네이터 판단) · `~/.codex/hooks.json` 손편집 ·
+  `.herdr-bak` 삭제 · `HERDR_FRESH_CALL_BACKENDS`에 codex 추가 · statusline/terminal-title의 같은
+  소유권 결함을 이 레인에서 고치기(별도 원자, CHANGELOG에 Observation으로 이름만 있다).
+
+<details><summary>0.22.0 컷의 NOW (릴리즈 기록 — npm publish만 남았다)</summary>
+
 # NOW — stem: 0.22.0 나갔다, npm publish만 남았다
 
 - **상태:** **`v0.22.0` @ `ea28e56`, 태그·GitHub 릴리즈 공개 완료 (2026-09-17 21:17 KST).**
@@ -198,6 +249,8 @@ CHANGELOG `## Unreleased`가 구현 범위 `v0.15.1..19ad90c` **30커밋** 전�
   바이트 불변, 모델 핀 없이 호스트 기본 Sonnet 5로 통과.
 - **Do not:** 이 candidate를 리팩하거나 다시 pack하기; `~/.codex/hooks.json`에 에이전트가 trust
   항목 쓰기; launch-directory 경고를 거절로 되돌리기(GLG 결정); `.herdr-bak` 삭제.
+
+</details>
 
 # NOW — stem: 0.21.0 prepare (#111 + #112 + #95)
 

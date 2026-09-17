@@ -45,11 +45,18 @@ All notable changes to this project will be documented here. Format follows [Kee
     foreign byte.
   - New shared leaf `pi-extensions/lib/codex-declaration.js` is the single definition the
     installer, inverse, doctor, fresh preflight and gates all decide with.
-  - Gates: `smoke-codex-birth` 100 checks (both orderings green, foreign bytes proven across
+  - Gates: `smoke-codex-birth` 102 checks (both orderings green, foreign bytes proven across
     install and inverse, foreign edits neutral, own-declaration drift/duplication/v1 named red,
-    trust read at the measured index), `check-codex-birth-hook` 100 checks (the leaf's digest,
-    selection, named refusals, span reader and splice post-condition), six new preflight cells,
-    and 8 exact-once mutants (inventory 520 → 527).
+    trust read at the measured index, the shared file's mode carried over, and an unscanned
+    FOREIGN axis reporting NOT READ rather than "none"), `check-codex-birth-hook` 101 checks (the
+    leaf's digest, selection, named refusals, span reader and splice post-condition), six new
+    preflight cells, and 8 exact-once mutants (inventory 520 → 527). Six existing
+    `FRESHCALL-CODEX-*` mutants were re-pointed at the predicates this narrowing moved;
+    `FRESHCALL-CODEX-HOOK-KEYS` moved gate as well, because under the preflight's oracle an extra
+    handler key is caught by the digest anyway — what its predicate still buys is the NAME.
+    Verification receipts at `ac3f1f8`: `pnpm run check:full` exit 0 (403s) and
+    `check-gate-qualification` **527/527 killed**, both in the exact-SHA CI run
+    [35239086438](https://github.com/junghan0611/entwurf/actions/runs/35239086438).
   - **Not in scope, by decision:** adding Codex to `HERDR_FRESH_CALL_BACKENDS`, Herdr env carriers
     on the Codex MCP child, plugin supervision of the app-server, and the identical ownership
     defect in the statusline/terminal-title atoms (recorded as an Observation, its own atom).
