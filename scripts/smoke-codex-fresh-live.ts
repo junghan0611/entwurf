@@ -50,9 +50,11 @@ import * as os from "node:os";
 import * as path from "node:path";
 import {
 	CODEX_CALLER_PREFLIGHT_HINT,
+	CODEX_LAUNCH_CWD_PREFLIGHT_HINT,
 	CODEX_PREFLIGHT_HINT,
 	codexCallerFreshPreflight,
 	codexFreshPreflight,
+	codexLaunchCwdFreshPreflight,
 } from "../pi-extensions/lib/codex-fresh-preflight.ts";
 import {
 	defaultMetaMailboxDir,
@@ -781,8 +783,37 @@ async function run(): Promise<void> {
 		else delete process.env[key];
 	}
 
-	const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "entwurf-codex-fresh-live-"));
+	// A STABLE directory, not a fresh `mkdtemp` per run, and that is a folder-consent fact rather
+	// than a tidiness preference. `[측정 2026-09-16]` codex keys its project trust to the exact
+	// launch directory on this rail, so a new random scratch is an UNDECIDED folder every time:
+	// the sibling opens on the vendor's trust screen, starts no turn, writes no rollout and never
+	// calls back — which is exactly how the two unattended release-gate runs failed while the two
+	// runs a human sat through passed. One path, answered `Trust` once, keeps the operator's
+	// config from growing an entry per run. The path stays OUTSIDE the repo and is asserted
+	// different from the app-server's own directory below, which is all lane C needs of it.
+	//
+	// It is PRINTED rather than documented as a literal, because `os.tmpdir()` is a host fact:
+	// this process's `TMPDIR` when it has one and `/tmp` when it does not, and the trust key is
+	// the exact string either way. A doc that spelled it `$TMPDIR/...` would send an operator
+	// whose TMPDIR is unset to `/entwurf-codex-fresh-live` — a different directory, in the root
+	// of the filesystem, that the vendor would then ask about separately.
+	const scratch = path.join(os.tmpdir(), "entwurf-codex-fresh-live");
+	fs.mkdirSync(scratch, { recursive: true, mode: 0o700 });
 	fixtureArtifacts.push(scratch);
+	console.log(`  launch-cwd ${scratch}`);
+	// Named HERE, before anything is launched, because the same refusal arriving 20 assertions
+	// later reads as a callback timeout — the failure mode this whole comment exists to retire.
+	// The detail carries the REPAIR COMMAND with the resolved path already in it, so the answer
+	// cannot be given for a near-miss directory.
+	const untrustedScratch = codexLaunchCwdFreshPreflight(appServerEnv, scratch);
+	ok(
+		"the Codex launch directory carries the vendor's own trust receipt, so a sibling opened there starts its first turn",
+		untrustedScratch === null,
+		untrustedScratch === null
+			? ""
+			: `${untrustedScratch}: ${CODEX_LAUNCH_CWD_PREFLIGHT_HINT[untrustedScratch]}\n` +
+					`            repair (this host, exact directory): codex -C ${scratch}   → answer \`Trust\``,
+	);
 	fs.mkdirSync(path.join(REPO, ".probe-artifacts"), { recursive: true, mode: 0o700 });
 	evidenceDir = fs.mkdtempSync(path.join(REPO, ".probe-artifacts", "codex-fresh-live-"));
 	fs.chmodSync(evidenceDir, 0o700);

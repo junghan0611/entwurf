@@ -154,8 +154,9 @@ Claude Code's USER-scope MCP registration should work from every cwd.
 
 #### Codex: what you still type by hand
 
-`setup` writes every byte Entwurf owns, and two things are deliberately left to you. They
-are the only manual steps between a fresh install and calling a Codex sibling:
+`setup` writes every byte Entwurf owns, and three things are deliberately left to you. They
+are the only manual steps between a fresh install and calling a Codex sibling, and all three are
+answers only you can give:
 
 1. **Trust the birth hook once, in a visible plain Codex.** Answer `Trust all and continue`
    and send one first turn. Nobody can do this for you: the receipt is the vendor's record of
@@ -173,6 +174,22 @@ are the only manual steps between a fresh install and calling a Codex sibling:
    Entwurf neither supervises nor restarts it. The session matters because the MCP bridge is
    this server's child and inherits its `TMUX`: that tmux server is the one caller-seat
    lookups read. The launcher prints which seat it got rather than guessing one for you.
+3. **Answer the folder-consent prompt once for each directory you open siblings in.** Codex
+   records a direct decision per EXACT directory — not the parent, not the git root — and a
+   directory with no answer anywhere opens a consent screen instead of running a first turn.
+   `entwurf_fresh_call` prints `codex-launch-cwd-undecided` and opens the window anyway — the
+   screen is self-repairing, and answering it once is the whole fix. (Two neighbours differ: a
+   project `.codex` layer can consent with no entry at all, and a directory inside an explicitly
+   untrusted project is noted as `codex-launch-cwd-untrusted-ancestor` because the vendor answers
+   that one with an error naming the repository root instead of a prompt.) You can also do it up
+   front:
+
+   ```bash
+   codex -C <the directory you will launch siblings in>   # answer the prompt, then quit
+   ```
+
+   Same reason as step 1: it is your security decision, and writing it ourselves would turn a
+   prompt into a silent install.
 
 Then `entwurf_fresh_call` with `backend: "codex"` works. Attaching your own visible Codex TUI
 (`codex --remote "unix://$CODEX_HOME/app-server-control/app-server-control.sock"`) is optional
@@ -291,7 +308,7 @@ repair surface: each unit has its own installer, doctor, and inverse.
 - **Antigravity / agy** (Linux CERTIFIED; macOS NOT CERTIFIED — pending physical host) — `install-agy-bridge`, `install-agy-statusline`, `install-agy-hooks`, each with a matching `doctor-agy-*`.
 - **GitHub Copilot CLI** (Linux CERTIFIED; macOS NOT CERTIFIED — pending physical host) — four independent units, four independent failure modes: `install-copilot-bridge` (birth: garden id + who-sent, on the first prompt), `install-copilot-mcp` (the entwurf tool hand, where `entwurf_inbox_read` lives), `install-copilot-receive` (the receiver extension: doorbell + receiver marker), `install-copilot-statusline` (optional for a manual citizen, required for supported fresh) — each with a matching `doctor-copilot-*` and `uninstall-copilot-*`.
 - **OMP (`omp`)** (Linux CERTIFIED; macOS NOT CERTIFIED — pending physical host) — four units, in-process extensions rather than launchers: `install-omp-bridge` (birth: the `mode === "tui"` visible host, its garden id on the status line, and who-sent), `install-omp-mcp` (the omp-native `entwurf-bridge` entry), `install-omp-config` (the one operator setting `tools: xdev: false`, without which the vendor mounts MCP tools as `xd://` devices the model cannot call), `install-omp-receive` (the receiver extension: mailbox watch + announce-only doorbell) — each with a matching `uninstall-omp-*`, and a `doctor-omp-*` for all but the setting, whose runtime axis `doctor-omp-mcp` owns. The setting writer owns exactly the lines it adds and refuses an explicit operator `tools: xdev: true` by name rather than overwriting it.
-- **OpenAI Codex CLI** (supported in 0.21.0 on Linux; macOS NOT CERTIFIED — pending physical host) — `install-codex-birth` publishes the `SessionStart` declaration into `$CODEX_HOME/hooks.json` with its launcher closure under `$XDG_DATA_HOME/entwurf/codex-birth`, all operator-owned; the vendor trust receipt for that declaration is the operator's single answer, and `doctor-codex-birth` reports it as its own axis (present, or red with the exact instruction — never computed, never written); `install-codex-mcp` owns `[mcp_servers.entwurf-bridge]`, including the `env_vars` boundary for `CODEX_HOME`, Entwurf garden/control roots, and the app-server's `TMUX`/`TMUX_PANE`; `install-codex-statusline` owns `thread-title` in `tui.status_line`; `install-codex-terminal-title` owns `thread-id` in `tui.terminal_title`. Each has a matching doctor and inverse. The operator owns the app-server and seats it wherever they like; Entwurf never creates or supervises it. Omitted fresh placement follows the CALLER, never the backend being opened: an explicit `placement` always wins, then a Codex CALLER opens beside its own TUI pane — located by the `thread-id` that pane's terminal title carries, with 0 or 2+ matching panes refused and no fallback — then the caller's own session. (#95 first shipped a fixed `codex` home for omitted-placement Codex TARGETS; #95 D1 retired it on 2026-09-16 once the anchor made the room unnecessary.) A pane title is a placement input only, never an address, liveness or delivery fact. Exact 0.153.4 source's missing per-client carrier still bounds placing a sibling beside a TUI whose thread nobody named as unsupported.
+- **OpenAI Codex CLI** (supported in 0.21.0 on Linux; macOS NOT CERTIFIED — pending physical host) — `install-codex-birth` publishes the `SessionStart` declaration into `$CODEX_HOME/hooks.json` with its launcher closure under `$XDG_DATA_HOME/entwurf/codex-birth`, all operator-owned; the vendor trust receipt for that declaration is the operator's single answer, and `doctor-codex-birth` reports it as its own axis (present, or red with the exact instruction — never computed, never written); `install-codex-mcp` owns `[mcp_servers.entwurf-bridge]`, including the `env_vars` boundary for `CODEX_HOME`, Entwurf garden/control roots, and the app-server's `TMUX`/`TMUX_PANE`; `install-codex-statusline` owns `thread-title` in `tui.status_line`; `install-codex-terminal-title` owns `thread-id` in `tui.terminal_title`. Each has a matching doctor and inverse. **One Codex precondition is the vendor's own and no installer supplies it: the directory a sibling starts in must already be answered in this Codex.** A direct consent decision is recorded per exact directory on this rail — not the parent, not the git root — and a directory the vendor has no answer for at all opens a consent screen instead of running a first turn, so `entwurf_fresh_call` prints `codex-launch-cwd-undecided` and opens the window anyway; that screen is self-repairing, and answering it once teaches the vendor the directory for good. **Nothing here refuses a launch** — the note is a diagnostic, and the one caller that treats it as a precondition is `smoke-codex-fresh-live`, where nobody is at the keyboard. Two neighbouring cases read differently: a directory answered `untrusted` is not noted at all (the vendor skips its screen on this rail, so that turn starts), and a directory INSIDE an explicitly untrusted project is noted as `codex-launch-cwd-untrusted-ancestor` because the vendor answers that one with an error naming the repository root rather than a prompt. The check is a narrow local read of the operator's own config, never the vendor's verdict: the vendor also consents through project layers it reads from its app-server, and everything the check cannot see stays silent. The operator owns the app-server and seats it wherever they like; Entwurf never creates or supervises it. Omitted fresh placement follows the CALLER, never the backend being opened: an explicit `placement` always wins, then a Codex CALLER opens beside its own TUI pane — located by the `thread-id` that pane's terminal title carries, with 0 or 2+ matching panes refused and no fallback — then the caller's own session. (#95 first shipped a fixed `codex` home for omitted-placement Codex TARGETS; #95 D1 retired it on 2026-09-16 once the anchor made the room unnecessary.) A pane title is a placement input only, never an address, liveness or delivery fact. Exact 0.153.4 source's missing per-client carrier still bounds placing a sibling beside a TUI whose thread nobody named as unsupported.
 
 Run them as `entwurf <command>`. Which unit a doctor's refusal names, and the clean-host
 walk-through for each harness, live in [docs/setup-clean-host.md](./docs/setup-clean-host.md).
@@ -521,7 +538,9 @@ LIVE=1 CODEX_LIVE_THREAD_ID=<threadId> ./run.sh smoke-codex-native-push-live
 
 # Codex caller-seat acceptance. The operator-owned app-server must sit in a session OTHER than
 # the one the Pi/Codex pair runs in — that separation is what tells the caller-pane anchor apart
-# from the app-server's inherited environment. Record all four coordinates separately:
+# from the app-server's inherited environment. This smoke ALSO needs its one stable launch
+# directory answered once (manual step 3 above); VERIFY.md's Codex section owns that procedure,
+# including how to derive the exact path instead of retyping it. Record all four coordinates:
 LIVE=1 ENTWURF_CODEX_APP_SERVER_PID=<existing-app-server-pid> \
   ENTWURF_CODEX_FRESH_MODEL=<codex-model> \
   ENTWURF_CODEX_FRESH_PI_MODEL=<pi-model> \

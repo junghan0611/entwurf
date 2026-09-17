@@ -95,9 +95,11 @@ import {
 } from "./codex-caller-seat.ts";
 import {
 	CODEX_CALLER_PREFLIGHT_HINT,
+	CODEX_LAUNCH_CWD_PREFLIGHT_HINT,
 	CODEX_PREFLIGHT_HINT,
 	type CodexCallerPreflightRejectReason,
 	type CodexPreflightRejectReason,
+	codexLaunchCwdFreshPreflight,
 } from "./codex-fresh-preflight.ts";
 import {
 	COPILOT_PREFLIGHT_HINT,
@@ -742,15 +744,38 @@ export function freshCall(
 		}),
 		bootstrapPayload: buildOmpBootstrapPayload({ callerGardenId: params.callerGardenId, nonce, task }),
 	};
-	const run = runTmux(
-		buildFreshCallArgs(
-			targetSessionId,
-			runtimePath,
-			buildBackendArgs(params.backend, composition, model, env, cwd),
-			cwd,
-		),
-		env,
-	);
+	const backendArgs = buildBackendArgs(params.backend, composition, model, env, cwd);
+	// THE LAUNCH-DIRECTORY NOTE, AND IT IS A DIAGNOSTIC RATHER THAN A GATE. `[측정 2026-09-16]` a
+	// Codex sibling opened into a directory this Codex has no answer for stops on the vendor's
+	// folder-consent screen: no first turn, no rollout, no callback. It is tempting to refuse
+	// that, and refusing is the wrong product. The consent screen is SELF-REPAIRING when a human
+	// is there — one answer and the vendor records the directory, so every later launch runs —
+	// and an operator at the keyboard is exactly who a visible-first rail is built for. A refusal
+	// would replace that one answer with "no window, go run codex yourself, then call again", and
+	// it would have to be right about a decision this process cannot fully see (the vendor merges
+	// system, managed and cloud layers around the file this leaf reads). So the launch proceeds
+	// and says what it saw.
+	//
+	// The UNATTENDED case is not answered here and must not be: a gate with nobody at the keyboard
+	// needs its precondition named before it spends a model turn, which is its own oracle's job —
+	// `smoke-codex-fresh-live` asserts this same leaf up front, so a missing answer reads as a
+	// named precondition instead of a callback timeout.
+	//
+	// The directory asked about is READ BACK off codex's own `-C` token rather than recomputed:
+	// one resolution, one authority, and no way for the note to name a directory the thread will
+	// not start in (this module is deliberately not allowed to resolve the inherited default a
+	// second time — `FRESHCALL-CWD-CALLER-ONLY`).
+	if (params.backend === "codex") {
+		const at = backendArgs.indexOf("-C");
+		const launchCwd = backendArgs[at + 1] ?? "";
+		const unanswered = codexLaunchCwdFreshPreflight(env, launchCwd);
+		if (unanswered) {
+			console.error(
+				`[fresh-call] ${unanswered}: ${launchCwd}\n` + `            ${CODEX_LAUNCH_CWD_PREFLIGHT_HINT[unanswered]}`,
+			);
+		}
+	}
+	const run = runTmux(buildFreshCallArgs(targetSessionId, runtimePath, backendArgs, cwd), env);
 	assertTmuxOk("new-window", run);
 
 	let fields: ReturnType<typeof parseWindowFields>;

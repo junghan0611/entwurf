@@ -228,6 +228,109 @@
 			"timeoutSeconds": 300,
 			"signature": "[QK:CODEX-TT-OPERATOR-ITEM-UNOWNED]",
 			"signatureSource": "scripts/smoke-codex-config-state.sh"
+		},
+		{
+			"claim": "CODEX-LAUNCH-CWD-TRUST",
+			"title": "the launch directory's folder consent is never asked, so an unconsented directory is launched anyway — the sibling opens on the vendor's trust screen, starts no turn, writes no rollout and never calls back, and the caller waits out its whole timeout on a window that is merely waiting to be answered. This is the 2026-09-16 failure verbatim: the two unattended release-gate runs died here while the two a human sat through passed",
+			"subject": "pi-extensions/lib/codex-fresh-preflight.ts",
+			"find": ["\tif (levelOf(launchCwd) !== null) return null;"],
+			"replace": ["\tif (true) return null;"],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:CODEX-LAUNCH-CWD-TRUST]",
+			"signatureSource": "test/codex-fresh-preflight.test.ts"
+		},
+		{
+			"claim": "CODEX-LAUNCH-CWD-DECIDED-NOT-TRUSTED",
+			"title": "the axis narrows back to `trusted` only, so a directory the operator deliberately answered `untrusted` is refused even though the vendor skips its consent screen on this remote rail and the turn would have started — entwurf inventing a policy the vendor does not have, and a launch that works refused for a reason the operator cannot repair without reversing their own security decision",
+			"subject": "pi-extensions/lib/codex-fresh-preflight.ts",
+			"find": ["\t\treturn level === \"trusted\" || level === \"untrusted\" ? level : null;"],
+			"replace": ["\t\treturn level === \"trusted\" ? level : null;"],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:CODEX-LAUNCH-CWD-DECIDED-NOT-TRUSTED]",
+			"signatureSource": "test/codex-fresh-preflight.test.ts"
+		},
+		{
+			"claim": "CODEX-LAUNCH-CWD-EXACT-KEY",
+			"title": "the consent lookup walks up to a parent entry, so a trusted `/tmp` is read as consent for an undecided `/tmp/<scratch>` — the preflight passes a launch the vendor still stops, which is the exact shape measured on 2026-09-16 and the reason this rail's key is the literal cwd (`ProjectTrustHost::Remote` looks up `vec![cwd_key]` alone, with no root marker, git root or parent)",
+			"subject": "pi-extensions/lib/codex-fresh-preflight.ts",
+			"find": ["\tif (levelOf(launchCwd) !== null) return null;"],
+			"replace": [
+				"\tif (Object.keys(table).some((key) => levelOf(key) === \"trusted\" && (launchCwd === key || launchCwd.startsWith(`${key}/`)))) return null;"
+			],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:CODEX-LAUNCH-CWD-EXACT-KEY]",
+			"signatureSource": "test/codex-fresh-preflight.test.ts"
+		},
+		{
+			"claim": "CODEX-LAUNCH-CWD-NO-EVIDENCE-PROCEEDS",
+			"title": "an unreadable user config becomes a refusal, so absence is treated as evidence: the vendor loads an empty user table and merges system, managed and cloud layers around it, any of which can carry the decision that starts the turn. Every host without a user config.toml — and every managed installation — would be refused a sibling the vendor was going to open, with a repair that fixes nothing",
+			"subject": "pi-extensions/lib/codex-fresh-preflight.ts",
+			"find": ["\tif (config === null) return null;"],
+			"replace": ["\tif (config === null) return \"codex-launch-cwd-undecided\";"],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:CODEX-LAUNCH-CWD-NO-EVIDENCE-PROCEEDS]",
+			"signatureSource": "test/codex-fresh-preflight.test.ts"
+		},
+		{
+			"claim": "CODEX-LAUNCH-CWD-UNTRUSTED-ANCESTOR",
+			"title": "a cwd inside an explicitly untrusted project collapses into the generic undecided reason, so the operator is told to answer a consent prompt at a directory the vendor never prompts for — on this rail it refuses the startup outright with `pass the repository root explicitly with --cd`, and the suggested repair reproduces that same error instead of fixing it",
+			"subject": "pi-extensions/lib/codex-fresh-preflight.ts",
+			"find": ["\t\t\treturn \"codex-launch-cwd-untrusted-ancestor\";"],
+			"replace": ["\t\t\treturn \"codex-launch-cwd-undecided\";"],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:CODEX-LAUNCH-CWD-UNTRUSTED-ANCESTOR]",
+			"signatureSource": "test/codex-fresh-preflight.test.ts"
+		},
+		{
+			"claim": "CODEX-LAUNCH-CWD-LAYER-NOT-REFUSED",
+			"title": "the project-layer escape narrows from EXISTENCE to safe ownership, so a `.codex` the vendor would admit a layer from — its admission consults no owner, mode or symlink safety, and it preserves even an unknown or untrusted layer as a disabled one — goes unseen here and the leaf synthesises an `untrusted-ancestor` refusal whose vendor precondition (`project_layers.is_empty()`) does not hold. That is a FALSE REFUSAL: the operator loses a sibling that would have started, and is handed a repair naming a directory that was never the problem",
+			"subject": "pi-extensions/lib/codex-fresh-preflight.ts",
+			"find": ["\t\tif (candidate !== codexHome && fs.existsSync(candidate)) return null;"],
+			"replace": [
+				"\t\tif (candidate !== codexHome && isSafeOwnedDir(candidate, process.getuid?.() ?? -1)) return null;"
+			],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:CODEX-LAUNCH-CWD-LAYER-NOT-REFUSED]",
+			"signatureSource": "test/codex-fresh-preflight.test.ts"
+		},
+		{
+			"claim": "CODEX-LAUNCH-CWD-HOME-NOT-A-LAYER",
+			"title": "the operator's own codex home counts as a project layer, so every directory under $HOME answers `null` and the axis is silently dead on a real host — the gate stays green while the failure it exists to catch walks straight through it",
+			"subject": "pi-extensions/lib/codex-fresh-preflight.ts",
+			"find": ["\t\tif (candidate !== codexHome && fs.existsSync(candidate)) return null;"],
+			"replace": ["\t\tif (fs.existsSync(candidate)) return null;"],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:CODEX-LAUNCH-CWD-HOME-NOT-A-LAYER]",
+			"signatureSource": "test/codex-fresh-preflight.test.ts"
+		},
+		{
+			"claim": "CODEX-LAUNCH-CWD-ANCESTOR-PLAIN-PATHS-ONLY",
+			"title": "the ancestor match is asserted for paths this leaf cannot compare the way the vendor does — the vendor compares path URIs segment-wise and fails closed on encoded separators, this compares strings — so an encoded or dot-segmented key can produce a confident `untrusted-ancestor` refusal, complete with a repair naming a specific other directory, for a launch the vendor would have run",
+			"subject": "pi-extensions/lib/codex-fresh-preflight.ts",
+			"find": ["\tif (plainPosixPath(launchCwd)) {"],
+			"replace": ["\tif (true) {"],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:CODEX-LAUNCH-CWD-ANCESTOR-PLAIN-PATHS-ONLY]",
+			"signatureSource": "test/codex-fresh-preflight.test.ts"
+		},
+		{
+			"claim": "FRESHCALL-CODEX-LAUNCH-CWD-NOTES-NEVER-REFUSES",
+			"title": "the note names the REQUESTED directory instead of the token codex receives, so a launch that named none — the case where the pane inherits this process's directory and `-C` names it — reports the empty string, and the operator is pointed at a directory the thread never starts in",
+			"subject": "pi-extensions/lib/mux-fresh-call.ts",
+			"find": ["\t\tconst launchCwd = backendArgs[at + 1] ?? \"\";"],
+			"replace": ["\t\tconst launchCwd = cwd ?? \"\";"],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:FRESHCALL-CODEX-LAUNCH-CWD-NOTES-NEVER-REFUSES]",
+			"signatureSource": "test/mux-fresh-call.test.ts"
 		}
 	]
 }

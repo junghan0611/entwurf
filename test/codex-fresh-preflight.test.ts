@@ -8,6 +8,7 @@ import {
 	type CodexPreflightDeps,
 	codexCallerFreshPreflight,
 	codexFreshPreflight,
+	codexLaunchCwdFreshPreflight,
 } from "../pi-extensions/lib/codex-fresh-preflight.ts";
 import type { CodexProtocolOpener, CodexRpcProtocol } from "../pi-extensions/lib/native-push/codex-ws-client.ts";
 
@@ -450,5 +451,179 @@ describe("Codex CALLER-side fresh preflight", () => {
 		// guessing, and a caller whose config cannot be read has no provable seat axis.
 		write(configFile, "garbage [[[\n", 0o600);
 		expect(codexCallerFreshPreflight({ HOME: home })).toBe("codex-caller-title-missing");
+	});
+});
+
+/**
+ * THE LAUNCH-DIRECTORY AXIS. The two above ask about the HOST and the CALLER — facts that do not
+ * change between two calls made a second apart. This one asks about ONE directory, so it is the
+ * only codex axis whose answer can differ per call on an unchanged host, and the only one that
+ * needed the cwd rules to have already run.
+ */
+describe("Codex launch-directory preflight", () => {
+	function writeProjects(body: string): void {
+		write(configFile, `model = "operator-model"\n\n${body}\n`, 0o600);
+	}
+
+	it("[QK:CODEX-LAUNCH-CWD-TRUST] refuses a launch directory the vendor has recorded no decision for, because an undecided folder opens a consent screen instead of a first turn", () => {
+		const target = path.join(root, "scratch");
+		// No config at all is NOT this axis's answer — absence proves nothing about the effective
+		// config, and its own cell below owns that. The refusal starts where the evidence does: a
+		// readable `projects` table that is silent about this exact directory.
+		expect(codexLaunchCwdFreshPreflight({ HOME: home }, target)).toBeNull();
+		writeProjects(`[projects."${path.join(root, "elsewhere")}"]\ntrust_level = "trusted"`);
+		expect(codexLaunchCwdFreshPreflight({ HOME: home }, target)).toBe("codex-launch-cwd-undecided");
+		writeProjects(`[projects."${target}"]\ntrust_level = "trusted"`);
+		expect(codexLaunchCwdFreshPreflight({ HOME: home }, target)).toBeNull();
+	});
+
+	it("[QK:CODEX-LAUNCH-CWD-EXACT-KEY] neither a TRUSTED parent nor a child entry answers for the directory being launched — this rail's vendor lookup is the exact cwd string and nothing else", () => {
+		const target = path.join(root, "parent", "scratch");
+		// `[source rust-v0.153.4]` project-root markers and the git root are consulted only for
+		// ProjectTrustHost::Local; a `--remote` startup looks up `vec![cwd_key]`. A parent that
+		// answered here would let the preflight pass a launch the vendor still stops — measured
+		// on 2026-09-16 with a trusted `/tmp` and an undecided `/tmp/entwurf-codex-fresh-live-*`.
+		// An UNTRUSTED ancestor is the one prefix that does travel, and it travels to a DIFFERENT
+		// reason rather than to consent — its own cell below.
+		writeProjects(`[projects."${path.join(root, "parent")}"]\ntrust_level = "trusted"`);
+		expect(codexLaunchCwdFreshPreflight({ HOME: home }, target)).toBe("codex-launch-cwd-undecided");
+		writeProjects(`[projects."${path.join(target, "deeper")}"]\ntrust_level = "trusted"`);
+		expect(codexLaunchCwdFreshPreflight({ HOME: home }, target)).toBe("codex-launch-cwd-undecided");
+		writeProjects(`[projects."${target}"]\ntrust_level = "trusted"`);
+		expect(codexLaunchCwdFreshPreflight({ HOME: home }, target)).toBeNull();
+	});
+
+	it("[QK:CODEX-LAUNCH-CWD-DECIDED-NOT-TRUSTED] a deliberate `untrusted` still passes — the axis asks whether a turn STARTS, and on this rail the vendor skips the consent screen for a saved untrusted folder; refusing it would invent a policy the vendor does not have", () => {
+		const target = path.join(root, "scratch");
+		// `[source rust-v0.153.4]` `if target.uses_remote_workspace() && trust_level == Some(Untrusted)
+		// { continue; }` (onboarding/directory_trust.rs:94-96), and every fresh call IS a remote
+		// target because its argv always passes `--remote` (tui/src/lib.rs:307-309).
+		writeProjects(`[projects."${target}"]\ntrust_level = "untrusted"`);
+		expect(codexLaunchCwdFreshPreflight({ HOME: home }, target)).toBeNull();
+		writeProjects(`[projects."${target}"]\ntrust_level = "trusted"`);
+		expect(codexLaunchCwdFreshPreflight({ HOME: home }, target)).toBeNull();
+		// UNDECIDED is the one that blocks, and the reason is named for it rather than for trust.
+		writeProjects(`[projects."${path.join(root, "elsewhere")}"]\ntrust_level = "trusted"`);
+		expect(codexLaunchCwdFreshPreflight({ HOME: home }, target)).toBe("codex-launch-cwd-undecided");
+	});
+
+	it("[QK:CODEX-LAUNCH-CWD-SHAPE] only a level the vendor itself recognises counts as decided, and a relative or unreadable input is refused rather than repaired into a different directory", () => {
+		const target = path.join(root, "scratch");
+		// An unrecognised string leaves `trust_level` as `None` on the vendor side too, and `None`
+		// with no project layer is precisely the case that renders the screen.
+		for (const level of ['trust_level = "Trusted"', 'trust_level = "yes"', "trust_level = true", ""]) {
+			writeProjects(`[projects."${target}"]\n${level}`);
+			expect(codexLaunchCwdFreshPreflight({ HOME: home }, target), level).toBe("codex-launch-cwd-undecided");
+		}
+		writeProjects(`[projects."${target}"]\ntrust_level = "trusted"`);
+	});
+
+	it("[QK:CODEX-LAUNCH-CWD-NO-EVIDENCE-PROCEEDS] absence is never a refusal — a relative path, an unreadable user config and a missing `projects` table all PROCEED, because none of them is evidence about what the vendor will do", () => {
+		const target = path.join(root, "scratch");
+		writeProjects(`[projects."${path.join(root, "elsewhere")}"]\ntrust_level = "trusted"`);
+		// A relative cwd: the vendor does not give up on one, it asks its app-server for a cwd and
+		// joins (`config_update.rs:203-224`). Production never reaches this anyway — the shared cwd
+		// leaf refuses a non-absolute request as `cwd-not-absolute`, a better reason than this axis
+		// could give.
+		expect(codexLaunchCwdFreshPreflight({ HOME: home }, "scratch")).toBeNull();
+		expect(codexLaunchCwdFreshPreflight({ HOME: home }, "")).toBeNull();
+		// No readable user config is NOT "no decisions": the vendor loads an empty user table and
+		// merges system, managed and cloud layers around it (`config/src/loader/mod.rs:258-290`,
+		// `:430-460`, `:520-610`), any of which can carry the decision that starts the turn.
+		write(configFile, "garbage [[[\n", 0o600);
+		expect(codexLaunchCwdFreshPreflight({ HOME: home }, target)).toBeNull();
+		fs.rmSync(configFile, { force: true });
+		expect(codexLaunchCwdFreshPreflight({ HOME: home }, target)).toBeNull();
+		// A readable config with no `projects` table says the USER layer records nothing, not that
+		// the effective config does.
+		write(configFile, 'model = "operator-model"\n', 0o600);
+		expect(codexLaunchCwdFreshPreflight({ HOME: home }, target)).toBeNull();
+		// ...and with a table present but silent about this directory, the evidence is positive
+		// again and the refusal returns.
+		writeProjects(`[projects."${path.join(root, "elsewhere")}"]\ntrust_level = "trusted"`);
+		expect(codexLaunchCwdFreshPreflight({ HOME: home }, target)).toBe("codex-launch-cwd-undecided");
+	});
+	it("[QK:CODEX-LAUNCH-CWD-UNTRUSTED-ANCESTOR] a cwd inside an explicitly untrusted project is its OWN failure, because the vendor answers it with an error rather than a consent screen and the repair is a different directory", () => {
+		// `[source rust-v0.153.4]` with no direct decision and no project layers, the remote branch
+		// returns `Err("remote project directory is inside an explicitly untrusted project; pass the
+		// repository root explicitly with --cd")` (`config_update.rs:357-371`). Reporting that as
+		// `undecided` would send the operator to answer a prompt at the child, which only
+		// reproduces the same vendor error.
+		const forbidden = path.join(root, "forbidden");
+		const target = path.join(forbidden, "inner", "scratch");
+		writeProjects(`[projects."${forbidden}"]\ntrust_level = "untrusted"`);
+		expect(codexLaunchCwdFreshPreflight({ HOME: home }, target)).toBe("codex-launch-cwd-untrusted-ancestor");
+		// A DIRECT decision on the launch directory still wins: the vendor never reaches the
+		// ancestor branch when the exact cwd is answered.
+		writeProjects(
+			`[projects."${forbidden}"]\ntrust_level = "untrusted"\n\n[projects."${target}"]\ntrust_level = "trusted"`,
+		);
+		expect(codexLaunchCwdFreshPreflight({ HOME: home }, target)).toBeNull();
+		// A sibling path that merely SHARES A PREFIX is not inside it — the boundary is a path
+		// separator, not a string prefix.
+		writeProjects(`[projects."${forbidden}"]\ntrust_level = "untrusted"`);
+		expect(codexLaunchCwdFreshPreflight({ HOME: home }, `${forbidden}-elsewhere/x`)).toBe("codex-launch-cwd-undecided");
+	});
+
+	it("[QK:CODEX-LAUNCH-CWD-LAYER-NOT-REFUSED] a directory that could carry a project layer is NOT refused — the vendor consents through layers this leaf cannot enumerate, so the unseeable case proceeds instead of blocking a launch that would have run", () => {
+		// `[source rust-v0.153.4]` `trust_level.is_none() && disabled_project.is_none() &&
+		// project_layers.any(no disabledReason)` returns `Ok(None)` — no screen, turn starts
+		// (`config_update.rs:346-354`). Those layers come from the server's `ConfigRead
+		// { include_layers: true }`, which this leaf does not ask. The asymmetry is deliberate and
+		// one-directional: miss a hang, never refuse a working launch.
+		const target = path.join(root, "layered");
+		fs.mkdirSync(path.join(target, ".codex"), { recursive: true, mode: 0o700 });
+		// EXISTENCE is the predicate, not safe ownership: a world-writable `.codex` is still a
+		// place the vendor can admit a layer from, and narrowing here would synthesise a refusal
+		// for a launch the vendor runs.
+		fs.chmodSync(path.join(target, ".codex"), 0o777);
+		writeProjects(`[projects."${path.join(root, "elsewhere")}"]\ntrust_level = "trusted"`);
+		expect(codexLaunchCwdFreshPreflight({ HOME: home }, target)).toBeNull();
+		// An ANCESTOR's `.codex` counts the same way, and it outranks the untrusted-ancestor
+		// reason for the vendor's own reason: that error branch requires `project_layers.is_empty()`.
+		const child = path.join(target, "inner");
+		fs.mkdirSync(child, { recursive: true, mode: 0o700 });
+		writeProjects(`[projects."${target}"]\ntrust_level = "untrusted"`);
+		expect(codexLaunchCwdFreshPreflight({ HOME: home }, child)).toBeNull();
+		// Without that `.codex` anywhere above it, the same shape is the ancestor refusal.
+		fs.rmSync(path.join(target, ".codex"), { recursive: true, force: true });
+		expect(codexLaunchCwdFreshPreflight({ HOME: home }, child)).toBe("codex-launch-cwd-untrusted-ancestor");
+	});
+
+	it("[QK:CODEX-LAUNCH-CWD-HOME-NOT-A-LAYER] the operator's own CODEX HOME never counts as a project layer — counting it would answer `null` for every path under $HOME and retire the whole axis in real use", () => {
+		// `~/.codex` is an ancestor of nearly every directory a sibling is launched in, and it is
+		// the USER config root rather than a project layer. This is the cell that keeps the check
+		// from being silently dead on a real host.
+		const underHome = path.join(home, "repos", "project");
+		fs.mkdirSync(path.join(home, ".codex"), { recursive: true, mode: 0o700 });
+		fs.mkdirSync(underHome, { recursive: true, mode: 0o700 });
+		writeProjects(`[projects."${path.join(root, "elsewhere")}"]\ntrust_level = "trusted"`);
+		expect(codexLaunchCwdFreshPreflight({ HOME: home }, underHome)).toBe("codex-launch-cwd-undecided");
+		// The exclusion follows CODEX_HOME rather than a hardcoded `~/.codex`, and the default one
+		// then stops being special: for a host whose codex home is elsewhere, a `.codex` at $HOME
+		// IS a project layer. Its config moves with it, so the fixture writes both.
+		const otherHome = path.join(root, "codex-home");
+		write(
+			path.join(otherHome, "config.toml"),
+			`[projects."${path.join(root, "elsewhere")}"]\ntrust_level = "trusted"\n`,
+			0o600,
+		);
+		expect(codexLaunchCwdFreshPreflight({ HOME: home, CODEX_HOME: otherHome }, underHome)).toBeNull();
+	});
+	it("[QK:CODEX-LAUNCH-CWD-ANCESTOR-PLAIN-PATHS-ONLY] a path this leaf cannot compare the way the vendor does degrades to the weaker reason instead of asserting the ancestor one — the disagreement lands on the permissive side", () => {
+		// `[source rust-v0.153.4]` the vendor compares path URIs segment-wise and fails closed on
+		// encoded separators (`utils/path-uri`); this compares strings on a separator boundary. An
+		// encoded or dot-segmented key is exactly where those two could part, so the ancestor
+		// reason — whose repair names a specific other directory — is not asserted there.
+		const forbidden = path.join(root, "forb%idden");
+		const target = path.join(forbidden, "inner");
+		writeProjects(`[projects."${forbidden}"]\ntrust_level = "untrusted"`);
+		expect(codexLaunchCwdFreshPreflight({ HOME: home }, target)).toBe("codex-launch-cwd-undecided");
+		// A plain key under a plain cwd still gets the precise reason.
+		const plain = path.join(root, "forbidden");
+		writeProjects(`[projects."${plain}"]\ntrust_level = "untrusted"`);
+		expect(codexLaunchCwdFreshPreflight({ HOME: home }, path.join(plain, "inner"))).toBe(
+			"codex-launch-cwd-untrusted-ancestor",
+		);
 	});
 });

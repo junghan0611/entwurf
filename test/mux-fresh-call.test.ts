@@ -834,7 +834,17 @@ describe("optional project seat — cross-session fresh placement (#105)", () =>
 		// its behavioural oracle is the caller-seat composition cell in `check-mux-launch-tmux`,
 		// which drives the real composition with backend `pi` and a Codex caller.
 		expect(MODULE_SRC).toContain("params.callerNativeSessionId !== undefined) {");
-		expect(MODULE_SRC).not.toContain('params.backend === "codex") {');
+		// Scoped to the SEAT REGION rather than the whole module, and that scope is the claim: a
+		// backend gate is not forbidden here in general — the launch-directory axis is legitimately
+		// codex-only, because only codex's argv carries a directory the vendor consents to. What
+		// must never come back is a gate INSIDE the seat decision, where it would re-introduce the
+		// asymmetry #95 lane B removed.
+		const seatRegion = MODULE_SRC.slice(
+			MODULE_SRC.indexOf("let anchoredSeat = false;"),
+			MODULE_SRC.indexOf("const composition: FreshCallComposition"),
+		);
+		expect(seatRegion).not.toBe("");
+		expect(seatRegion).not.toContain('params.backend === "codex"');
 	});
 
 	it("[QK:CODEX-SEAT-PRECEDENCE-ANCHOR-OVER-EXPLICIT] rule 1 beats rule 2 — an explicit seat is never overridden by a resolvable anchor, and the composition re-reads it rather than inferring it", () => {
@@ -914,6 +924,29 @@ describe("optional project seat — cross-session fresh placement (#105)", () =>
 		expect(titleMissing.isError).toBe(true);
 		expect(titleMissing.text).toContain(CODEX_CALLER_PREFLIGHT_HINT["codex-caller-title-missing"]);
 		expect(titleMissing.text).toContain("entwurf install-codex-terminal-title");
+	});
+
+	it("[QK:FRESHCALL-CODEX-LAUNCH-CWD-NOTES-NEVER-REFUSES] an unanswered launch directory is a DIAGNOSTIC, never a rejection — the vendor's consent screen is self-repairing for the human this rail opens windows for, so the launch proceeds and says what it saw", () => {
+		// The claim with teeth: this reason is not in the reject vocabulary at all. A future edit
+		// that turns the note back into a refusal has to come through here, where the cost is
+		// written down — one answer at a visible window becomes "no window, go run codex
+		// yourself, then call again", and it would have to be right about a decision this process
+		// cannot fully see (the vendor merges system, managed and cloud layers around the file the
+		// leaf reads).
+		// The reject vocabulary is a closed union plus an exhaustive hint map, so "not a reject" is
+		// readable straight off the module: neither the type nor the map admits this leaf.
+		expect(MODULE_SRC).not.toContain("CodexLaunchCwdPreflightRejectReason");
+		expect(MODULE_SRC).not.toContain("...CODEX_LAUNCH_CWD_PREFLIGHT_HINT,");
+		// The note itself is wired on two facts. FIRST: the directory named is READ BACK off
+		// codex's own `-C` token, so it cannot drift from the thread's start directory or become a
+		// second resolution of the inherited default (`FRESHCALL-CWD-CALLER-ONLY` keeps that at
+		// exactly one site).
+		expect(MODULE_SRC).toContain('const at = backendArgs.indexOf("-C");');
+		expect(MODULE_SRC).toContain("codexLaunchCwdFreshPreflight(env, launchCwd)");
+		// SECOND: it goes to stderr and returns nothing — diagnostics are not control flow
+		// (Hard Rule 15), and the very next statement still runs the launch.
+		expect(MODULE_SRC).toContain("console.error(");
+		expect(MODULE_SRC).not.toMatch(/codexLaunchCwdFreshPreflight[\s\S]{0,400}?return \{ ok: false/);
 	});
 
 	/** The leaf's injected seam, answering the way tmux 3.6a was MEASURED to (2026-09-07,

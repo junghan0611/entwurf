@@ -833,7 +833,7 @@ let manifestCount: number;
 		"bridge-command-boot": 9,
 		"capability-cache": 3,
 		"codex-app-server-launch": 9,
-		"codex-caller-seat": 19,
+		"codex-caller-seat": 28,
 		"codex-native": 68,
 		"compaction-send-guard": 7,
 		"copilot-birth": 19,

@@ -424,6 +424,27 @@ The first three make a Codex session a citizen others can reach. The fourth make
 this thread's, so without it a Codex citizen opening a sibling is refused with
 `codex-caller-title-missing` (an explicit `placement.tmuxSession` skips that check entirely).
 
+**One thing here is NOT an entwurf atom, and installing everything above does not supply it: the
+directory a sibling starts in must be one this Codex has an answer for.** A DIRECT decision is
+recorded per exact directory on this rail — no parent, no git root — and a directory with no
+answer anywhere opens a consent screen instead of running a first turn, which unattended looks
+exactly like a sibling that never called back; `entwurf_fresh_call` prints
+`codex-launch-cwd-undecided` and opens the window anyway, because that screen is self-repairing and
+answering it once is the whole fix. That is the ordinary outcome and not the only one. Either recorded
+answer passes: a deliberate `untrusted` is skipped by the vendor on this rail and its turn starts.
+A project `.codex` layer can consent with no entry at all. A directory INSIDE an explicitly
+`untrusted` project is noted under a different name (`codex-launch-cwd-untrusted-ancestor`)
+because the vendor answers that with `pass the repository root explicitly with --cd` rather than a
+prompt — launch at that root instead.
+
+The check is a narrow LOCAL read of your own `config.toml`, not the vendor's verdict: the vendor
+merges system, managed and cloud layers around that file, so everything this check cannot see is
+allowed through rather than guessed at. The repair for the ordinary case is the vendor's own, done
+once per directory you launch siblings into: open a plain `codex -C <dir>` there and answer the
+prompt. Name that directory literally — a `$TMPDIR`-style
+spelling silently becomes a different path on a host where `TMPDIR` is unset, and the vendor keys
+its consent to the exact string.
+
 The birth atom publishes a `SessionStart` declaration into `$CODEX_HOME/hooks.json` with its
 launcher closure under `$XDG_DATA_HOME/entwurf/codex-birth`; it mints a V3 record on the
 thread's first turn and sets the thread title to the garden id.

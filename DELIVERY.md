@@ -252,9 +252,9 @@ name its caller and the callback was uncorrelatable.
 Visible fresh runs:
 
 ```text
-existing tmux session: codex
+operator-owned tmux session A (any name — the operator seats it)
   operator-owned app-server + supported Codex TUIs
-  codex --remote unix://<default socket> --model <explicit model>
+  codex --remote unix://<default socket> -C <launch directory> --model <explicit model>
         --dangerously-bypass-approvals-and-sandbox <callback-first prompt>
 ```
 
@@ -262,8 +262,34 @@ With `placement` omitted the seat follows the CALLER: a Codex citizen's own TUI 
 the `thread-id` in that pane's title to a native `$id` before mutation, with 0 or 2+ matches refused
 and no fallback; every other caller keeps caller-session default placement. An explicit seat remains
 an expert override. The preflight must certify the state-backed birth closure digests, vendor trust
-receipt, exact MCP/env boundary, `thread-title`, `terminal_title`, and app-server socket before tmux
-mutation. The callback spelling is `mcp__entwurf_bridge__entwurf_v2`; the new garden id
+receipt, exact MCP/env boundary, `thread-title`, `terminal_title`, app-server socket, and a narrow LOCAL
+read of the LAUNCH DIRECTORY's folder consent before tmux mutation — a guard on the cases the user
+config decides, not a certification of the vendor's verdict. That last axis is the vendor's, not ours:
+`[source rust-v0.153.4]` a `--remote` startup always runs `check_directory_trust` on the `-C` value
+(`tui/src/lib.rs:1699-1725`) and nothing on that path reads the approval or sandbox policy
+(`tui/src/onboarding/directory_trust.rs:33-130`), so
+`--dangerously-bypass-approvals-and-sandbox` does not cover it — approvals and folder consent are
+two different gates. A DIRECT decision is keyed to the exact directory: for `ProjectTrustHost::Remote` that lookup is
+`vec![cwd_key]` alone (`tui/src/config_update.rs:290-296`), with no project-root marker, git root or
+parent inheritance. An UNDECIDED directory renders a consent screen, and a TUI waiting on one has started no turn —
+no rollout, no birth, no callback. Entwurf NOTES that as `codex-launch-cwd-undecided` and opens the
+window anyway: the screen is self-repairing for the human this rail exists to put a window in front
+of, and one answer teaches the vendor that directory for good. The unattended case is answered
+where it belongs — `smoke-codex-fresh-live` asserts the same leaf up front, so a gate with nobody
+at the keyboard reads a named precondition instead of a callback timeout. A directory the operator deliberately answered `untrusted`
+is NOT refused: on a remote target the vendor skips that screen
+(`onboarding/directory_trust.rs:94-96`; `uses_remote_workspace()` is `matches!(self, Self::Remote
+{ .. })` at `tui/src/lib.rs:307-309`), so the turn starts and refusing it would be entwurf
+inventing a policy the vendor does not have. A cwd INSIDE an explicitly `untrusted` project is a
+third answer with its own reason, `codex-launch-cwd-untrusted-ancestor`: there the vendor returns
+`pass the repository root explicitly with --cd` (`config_update.rs:357-371`) rather than a screen,
+so answering a prompt at the child would only reproduce that error.
+
+**The preflight leaf is narrower than the vendor's decision and does not claim otherwise.** It
+reads one TOML file while the vendor reads a layered config through its app-server, where an
+enabled project layer can consent with no entry at all (`config_update.rs:346-354`). Every case the
+leaf cannot see resolves to "proceed", so it may fail to catch a hang but never refuses a launch
+the vendor would have run. The callback spelling is `mcp__entwurf_bridge__entwurf_v2`; the new garden id
 comes only from its sender envelope. There is no Codex resume, watcher, session/app-server creator,
 or lifecycle supervisor.
 
@@ -421,7 +447,7 @@ behaviour remain invalid; explicit `placement.tmuxSession` is an operator-named 
 an inferred seat. The gate strips ambient `PI_SESSION_ID`/`PI_AGENT_ID`; a fixture may preserve receipts
 but cannot substitute for the initial visible record-backed Pi turn.
 
-Run the clause-7 invocation from a tmux session other than `codex`; the explicit app-server PID must belong to the operator-owned app-server seated in `codex`, and both models are explicit:
+Run the clause-7 invocation from a tmux session OTHER than the app-server's own; the explicit app-server PID must belong to the operator-owned app-server, and that session's NAME is not a requirement — #95 D1 retired the fixed `codex` home on 2026-09-16, so A ≠ S is the precondition and no particular name is. Both models are explicit, and the launch directory must already be answered in this Codex (`VERIFY.md` owns the derivation and the one-time `Trust`):
 
 ```bash
 LIVE=1 \

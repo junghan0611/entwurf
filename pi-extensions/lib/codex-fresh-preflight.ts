@@ -43,6 +43,23 @@ export const CODEX_PREFLIGHT_HINT: Record<CodexPreflightRejectReason, string> = 
  */
 export type CodexCallerPreflightRejectReason = "codex-caller-title-missing";
 
+/**
+ * THE LAUNCH-DIRECTORY AXIS, AND IT IS A THIRD QUESTION AGAIN. The target axis asks "can a Codex
+ * sibling be opened on this host", the caller axis asks "can the Codex citizen doing the opening
+ * be located", and this asks "will the vendor START A TURN in the directory this launch names" —
+ * a fact about ONE directory rather than about the host or the caller, so it is the only axis
+ * that needs the resolved launch cwd and the only one that can pass for one call and refuse the
+ * next on an unchanged host.
+ */
+export type CodexLaunchCwdPreflightRejectReason = "codex-launch-cwd-undecided" | "codex-launch-cwd-untrusted-ancestor";
+
+export const CODEX_LAUNCH_CWD_PREFLIGHT_HINT: Record<CodexLaunchCwdPreflightRejectReason, string> = {
+	"codex-launch-cwd-undecided":
+		"Codex has recorded NO decision for the directory this sibling would start in, so the window would open on the vendor's folder-consent screen and WAIT for a human instead of running its first turn — no rollout, no callback, and nothing to address; either launch in a directory this Codex has already been answered for, or open a plain `codex -C <dir>` there once and answer it, then retry",
+	"codex-launch-cwd-untrusted-ancestor":
+		"this directory sits inside a project the operator marked `untrusted`, and on this rail the vendor does not offer a consent screen for that — it refuses the startup outright with `pass the repository root explicitly with --cd`, so answering a prompt at this directory would only reproduce that error; launch at that untrusted project's own root instead, or change that project's recorded decision",
+};
+
 export const CODEX_CALLER_PREFLIGHT_HINT: Record<CodexCallerPreflightRejectReason, string> = {
 	"codex-caller-title-missing":
 		"this Codex caller's tui.terminal_title does not include thread-id, so the multiplexer reports no pane title naming this thread and there is no caller seat to open the sibling beside; run `entwurf install-codex-terminal-title`, then `entwurf doctor-codex-terminal-title` (an explicit placement.tmuxSession skips this check entirely, because it never needs the seat)",
@@ -293,6 +310,161 @@ export function codexCallerFreshPreflight(env: NodeJS.ProcessEnv): CodexCallerPr
 	const config = readConfig(env);
 	if (config === null || callerTitleMissing(config)) return "codex-caller-title-missing";
 	return null;
+}
+
+/**
+ * The launch directory's own capability, pre-mutation and synchronous — and DELIBERATELY NARROWER
+ * than the vendor's own decision, because the leaf that decides here reads one TOML file while the
+ * vendor asks its app-server. Read this whole comment as the scope statement it is: what follows
+ * says what this answers, and then says what it refuses to claim.
+ *
+ * WHY THE AXIS EXISTS. `[source rust-v0.153.4]` a fresh call always passes `--remote`, so the TUI
+ * resolves `AppServerTarget::Remote` and startup ALWAYS runs `check_directory_trust` on the `-C`
+ * value (`tui/src/lib.rs:1699-1725`). Nothing on that path consults the approval or sandbox policy
+ * (`tui/src/onboarding/directory_trust.rs:33-130`), which is why the
+ * `--dangerously-bypass-approvals-and-sandbox` token this argv already carries does NOT cover it:
+ * approvals and folder consent are two different gates. A directory with no recorded decision
+ * renders the consent screen and blocks, and a blocked TUI has started no turn — no rollout, no
+ * birth, no callback, and the caller waits out its whole timeout on a window that is merely
+ * waiting to be answered. `[측정 2026-09-16]` the two release-gate runs that failed launched in
+ * `…-2zznHl` and `…-kSsoAn`, neither of which had an entry; the two that passed launched in
+ * `…-db65N2` and `…-pBXxOJ`, both of which did. Unattended, the failure is silent.
+ *
+ * THE THREE VENDOR OUTCOMES THIS LEAF MODELS, in the vendor's own order
+ * (`tui/src/config_update.rs:290-371`, `ProjectTrustHost::Remote`):
+ *
+ *   1. A DIRECT decision on the exact cwd starts a turn, and BOTH recorded answers do. `trusted`
+ *      returns before any screen (`:346-354`); a saved `untrusted` is explicitly skipped for a
+ *      remote target — `if target.uses_remote_workspace() && trust_level == Some(Untrusted) {
+ *      continue; }` (`onboarding/directory_trust.rs:94-96`), and `uses_remote_workspace()` is
+ *      exactly `matches!(self, Self::Remote { .. })` (`tui/src/lib.rs:307-309`). Refusing a
+ *      deliberate `untrusted` would be entwurf inventing a policy the vendor does not have.
+ *      The key is the exact cwd — `cwd_keys = vec![cwd_key]` (`:290-296`), no root marker, no git
+ *      root, no parent, all three of which exist only on the Local host. `[측정 2026-09-16]`
+ *      `~/.codex/config.toml` carried a trusted `/tmp` and still recorded two separate
+ *      `/tmp/entwurf-codex-fresh-live-*` entries, one per run a human answered.
+ *   2. With NO direct decision, an enabled PROJECT LAYER consents on the directory's behalf
+ *      (`trust_level.is_none() && disabled_project.is_none() && project_layers.any(no
+ *      disabledReason)` → `Ok(None)`, `:346-354`). Those layers come from the app-server's
+ *      `ConfigRead { include_layers: true }` answer, which this leaf does not have. A layer that
+ *      is present but DISABLED is a fourth outcome — the vendor preserves an unknown or untrusted
+ *      project layer as disabled rather than dropping it, and that path falls through to the
+ *      screen — and this leaf cannot tell the two apart either. So wherever a layer could exist at
+ *      all it answers `null`, which folds both outcomes into "proceed".
+ *   3. With no direct decision and NO layers, a cwd inside an explicitly `untrusted` ancestor is
+ *      not a consent screen at all: the remote branch returns an ERROR
+ *      (`"remote project directory is inside an explicitly untrusted project; pass the repository
+ *      root explicitly with --cd"`, `:357-371`). That is a different failure with a different
+ *      repair, so it gets its own reason — answering `Trust` at the child would only reproduce the
+ *      same vendor error. Note the vendor's own precondition there is `project_layers.is_empty()`,
+ *      which is why this reason is only reachable after step 2 has found no layer anywhere.
+ *
+ * WHAT THIS LEAF IS FOR, AND WHAT IT IS NOT. It is NOT equivalent to the vendor's judgment and
+ * must not be described as asking "the same question": it reads the operator's own `config.toml`,
+ * while the vendor reads an EFFECTIVE config — system, managed and cloud layers merged around that
+ * user layer (`config/src/loader/mod.rs:258-290`, `:430-460`) — through its app-server.
+ *
+ * That gap is affordable because NOTHING HERE REFUSES A LAUNCH. `freshCall` prints what this leaf
+ * saw and opens the window anyway: the consent screen is self-repairing when a human is there, and
+ * one answer teaches the vendor the directory for good. The one caller that treats the answer as a
+ * precondition is `smoke-codex-fresh-live`, where nobody is at the keyboard and a named
+ * precondition is worth more than a callback timeout — that gate owns one directory, answered
+ * once.
+ *
+ * So read a non-null answer as "the vendor will probably stop here, and this is the repair", never
+ * as a verdict. Absence is not evidence either way, and every case this leaf cannot see resolves
+ * to `null`.
+ */
+export function codexLaunchCwdFreshPreflight(
+	env: NodeJS.ProcessEnv,
+	launchCwd: string,
+): CodexLaunchCwdPreflightRejectReason | null {
+	// THREE NON-ANSWERS, AND EVERY ONE OF THEM PROCEEDS. Each is a case where this leaf holds no
+	// evidence about what the vendor will do, and a refusal without evidence is exactly the false
+	// refusal this axis promises not to produce:
+	//
+	//   - A RELATIVE directory. It cannot match a stored key here, but the vendor does not give up
+	//     on one — it asks its app-server for a cwd and joins (`config_update.rs:203-224`), so the
+	//     joined path may well be answered. In production this branch is unreachable anyway: the
+	//     shared cwd leaf already refuses a non-absolute request as `cwd-not-absolute`, which is a
+	//     better reason than anything this axis could give.
+	//   - NO READABLE USER CONFIG. A missing `config.toml` is not "no decisions": the vendor loads
+	//     an empty user table and merges system, managed and cloud layers around it
+	//     (`config/src/loader/mod.rs:258-290`, `:430-460`, `:520-610`), any of which can carry the
+	//     decision or the layer that starts the turn.
+	//   - NO `projects` TABLE. Same reason: it says the USER layer records nothing, not that the
+	//     effective config does.
+	if (!path.isAbsolute(launchCwd)) return null;
+	const config = readConfig(env);
+	if (config === null) return null;
+	const projects = config.projects;
+	if (projects == null || typeof projects !== "object" || Array.isArray(projects)) {
+		return null;
+	}
+	const table = projects as Record<string, unknown>;
+	const levelOf = (key: string): string | null => {
+		const entry = table[key];
+		if (entry == null || typeof entry !== "object" || Array.isArray(entry)) return null;
+		const level = (entry as Record<string, unknown>).trust_level;
+		// An unrecognised value leaves `trust_level` as `None` on the vendor side too, and `None`
+		// with no project layer is precisely the case that renders the screen.
+		return level === "trusted" || level === "untrusted" ? level : null;
+	};
+	// Outcome 1: a direct decision, either answer.
+	if (levelOf(launchCwd) !== null) return null;
+	// Outcome 2: a PROJECT LAYER may consent with no entry at all, and this leaf cannot enumerate
+	// layers — they come from the app-server's `ConfigRead { include_layers: true }` answer. What
+	// it CAN decide is the negative: a `.codex` anywhere from the directory upward is the only
+	// place such a layer comes from, so when none exists the vendor's `project_layers` really is
+	// empty and the two remaining outcomes below are computable. Where one could exist, answer
+	// `null`.
+	//
+	// EXISTENCE, not ownership, and the weaker predicate is the load-bearing one. The vendor
+	// admits a layer on its own terms — an unknown or untrusted one is preserved as a DISABLED
+	// layer, not dropped — and none of that consults owner/mode/symlink safety. Asking for a
+	// safely-owned directory here would let a layer the vendor sees go unseen by this leaf, which
+	// would then synthesise an `untrusted-ancestor` refusal for a launch the vendor was going to
+	// run. That is the false refusal this axis must never produce, so the check is the widest
+	// thing that still means "a layer could live here".
+	//
+	// The operator's own CODEX HOME is excluded, and excluding it is what keeps this axis from
+	// being a no-op: `~/.codex` is an ancestor of nearly every directory anyone launches a sibling
+	// in, and it is the USER config root rather than a project layer — the vendor names those
+	// apart (`layer.name.dotCodexFolder` for a project, the home for the user layer). Counting it
+	// would answer `null` for every path under `$HOME` and the check would never fire in real use.
+	const codexHome = path.resolve(env.CODEX_HOME?.trim() || path.join(env.HOME ?? "", ".codex"));
+	for (let dir = launchCwd; ; ) {
+		const candidate = path.join(dir, ".codex");
+		if (candidate !== codexHome && fs.existsSync(candidate)) return null;
+		const parent = path.dirname(dir);
+		if (parent === dir) break;
+		dir = parent;
+	}
+	// Outcome 3: no layer anywhere and an explicitly untrusted ancestor — the vendor's own
+	// precondition for that branch is exactly `project_layers.is_empty()`, which the loop above
+	// has now established. It is reported as its own failure because its repair is to launch at
+	// that root, never to answer a prompt at the child.
+	//
+	// The MATCH IS NOT THE VENDOR'S and is not claimed to be. The vendor compares path URIs
+	// (`LegacyAppPathString` → `PathUri::starts_with`, segment-aware, fail-closed on encoded
+	// separators); this compares plain strings on a separator boundary. Where the two could
+	// disagree — a key or a cwd that is not a plain POSIX path — this answers `undecided` rather
+	// than `untrusted-ancestor`. Be exact about what that buys: BOTH are refusals, so this is NOT
+	// the launch-permissive direction. What it weakens is the SPECIFIC-ERROR claim — the ancestor
+	// reason names another directory as the repair, and naming the wrong one is worse than saying
+	// "no decision here". Neither vendor outcome on this branch starts a turn, so the guarantee
+	// above is untouched either way.
+	const plainPosixPath = (value: string): boolean =>
+		!value.includes("%") && !value.includes("\\") && !value.split("/").some((seg) => seg === "." || seg === "..");
+	if (plainPosixPath(launchCwd)) {
+		for (const key of Object.keys(table)) {
+			if (levelOf(key) !== "untrusted" || !plainPosixPath(key)) continue;
+			if (launchCwd === key || launchCwd.startsWith(key.endsWith("/") ? key : `${key}/`)) {
+				return "codex-launch-cwd-untrusted-ancestor";
+			}
+		}
+	}
+	return "codex-launch-cwd-undecided";
 }
 
 const DEFAULT_APP_SERVER_TIMEOUT_MS = 5_000;

@@ -85,6 +85,31 @@ Verification here is not a benchmark. In production we exchange short turns and 
 > `LIVE=1 ENTWURF_CODEX_APP_SERVER_PID=<existing-app-server-pid>
 > ENTWURF_CODEX_FRESH_MODEL=<codex-model>
 > ENTWURF_CODEX_FRESH_PI_MODEL=<pi-model> ./run.sh smoke-codex-fresh-live`.
+> **Both of THIS cell's live-spend defaults are `gpt-5.6-luna` from 2026-09-17**
+> (`openai-codex/gpt-5.6-luna` on the pi side) — the Codex leg came down off `sol`. It is a tier
+> choice and not a gate change; the receipt this cell is accepted on must be the one that actually
+> ran, never a `sol` run inherited from before. This says nothing about other cells: `smoke-omp-
+> fresh-live` keeps `openai-codex/gpt-5.6-sol`, the model its bootstrap callback was measured on.
+>
+> **This cell needs its launch directory ANSWERED, once, and that is a vendor fact rather than a
+> gate setting.** Codex records a direct folder decision per exact directory on this rail, so the smoke
+> launches in one stable path instead of a fresh `mkdtemp`, and it PRINTS that path as
+> `launch-cwd <dir>` on every run. **Do not spell it `$TMPDIR/entwurf-codex-fresh-live`** — the
+> smoke resolves it with `os.tmpdir()`, which is this host's `TMPDIR` when one is set and `/tmp`
+> when it is not, so on a host with no `TMPDIR` that shell expansion names
+> `/entwurf-codex-fresh-live` in the filesystem root: a different directory the vendor would ask
+> about separately. Derive it exactly:
+>
+> ```bash
+> node -e 'console.log(require("node:os").tmpdir() + "/entwurf-codex-fresh-live")'
+> ```
+>
+> Open a plain `codex -C <that path>` once, answer the prompt, and every later run is unattended.
+> Skip it and the smoke says so in its own assertion before anything is launched —
+> `codex-launch-cwd-undecided` with the exact repair command, not a callback timeout twenty
+> assertions later. **That precondition belongs to this gate, not to the product:** an ordinary
+> `entwurf_fresh_call` only prints the same note and opens the window, because a human can answer
+> the screen. Here nobody can, which is the whole reason the gate asserts it.
 >
 > The command name is not proof. The first leg must be a real record-backed visible Pi
 > citizen in a session OTHER than the app-server's opening Codex; if a fixture or self-fetch receipt collector

@@ -495,6 +495,33 @@ refused pre-mutation as `codex-caller-title-missing` with `entwurf install-codex
 repair. That caller check runs only when the anchor is actually consulted: an explicit seat never reads
 a title.
 
+**A fourth refusal belongs to the DIRECTORY rather than the seat: `codex-launch-cwd-undecided`.** The
+two carriers of one directory (`tmux -c` for the pane, `codex -C` for the thread) are a placement
+fact; whether the vendor will start a turn there is not. `[source rust-v0.153.4]` a `--remote`
+startup always runs `check_directory_trust` on the `-C` value (`tui/src/lib.rs:1699-1725`) and reads
+no approval or sandbox policy while doing it (`tui/src/onboarding/directory_trust.rs:33-130`), and
+and a DIRECT decision is keyed to the exact cwd alone (`tui/src/config_update.rs:290-296`) — no
+root marker, no git root, no parent. So the launcher asks about the token it actually hands over —
+read back off `-C` rather than recomputed — and refuses before tmux is run. It asks a NARROWER
+question than the vendor's, never the same one: `exact cwd alone` describes the direct-entry step
+only, and after a direct miss the vendor keeps going through project layers and `disabledReason`
+to a `trust_target` this leaf never computes (`config_update.rs:299-327`). **The question is "has this directory been ANSWERED",
+not "is it trusted":** on this remote rail a saved `untrusted` folder is explicitly skipped
+(`onboarding/directory_trust.rs:94-96`, with `uses_remote_workspace()` being exactly
+`matches!(self, Self::Remote { .. })` at `tui/src/lib.rs:307-309`), so that turn starts too and
+refusing it would be entwurf inventing a policy the vendor does not have. The generic consent-screen
+outcome — the one this note is named for — is the UNDECIDED directory, `codex-launch-cwd-undecided`.
+It is not the only one: a cwd inside an explicitly `untrusted` project is noted under its own name,
+`codex-launch-cwd-untrusted-ancestor`,
+because the vendor answers that with `pass the repository root explicitly with --cd`
+(`config_update.rs:357-371`) instead of a prompt.
+
+**이 leaf는 벤더 판정과 동치가 아니며 그렇게 주장하지 않는다.** leaf는 `~/.codex/config.toml` 하나를 읽고,
+벤더는 app-server를 통해 layered config를 읽는다 — entry가 아예 없어도 enabled project layer가 대신 동의할 수
+있다(`config_update.rs:346-354`). leaf가 볼 수 없는 경우는 전부 "진행"으로 답한다. 비대칭은 한 방향이다:
+hang을 놓칠 수는 있어도, 벤더가 돌렸을 launch를 거절하지는 않는다. A window opened into an unconsented directory is not a
+slow sibling; it is a TUI waiting on a human, with no rollout, no birth and no callback.
+
 **The title is a placement input and nothing else (Hard Rule 16).** Any process in any pane can emit the
 same OSC string, so the leaf's answer may only reach a `-t` target. Identity, delivery and liveness keep
 the record + `_meta` join they already had, and the first-turn framing still carries the caller's garden
@@ -619,7 +646,7 @@ gate, LIVE smoke, release 배선을 전부 제거했다.
 | resume-call composition (`mux-resume-call.ts`) | record가 준 cwd에서의 same-session append(`-c`) — 분류는 공유 leaf, "recorded cwd" hint 표현, launch receipt | garden identity, record 조회, lock, delivery, supervision |
 | fresh-call composition (`mux-fresh-call.ts`) | backend별 fixed runtime + argv dialect, explicit model CLI token, optional **requested** cwd(caller가 유일한 출처; `undefined`/`""`만 생략, literal·no-trim, 같은 leaf로 pre-mutation 분류, resume 대칭 `-c` 위치), 요청이 없을 때의 Codex caller record cwd(#95 lane C; 표면이 공급, 같은 emptiness 규칙·같은 분류 leaf), codex argv의 `-C`(같은 한 값의 두 번째 carrier; 없으면 thread가 app-server 디렉터리에서 열린다), selected session seat(#105 explicit request; 생략 시 caller 자기 세션이고, Codex caller만 #95 lane B 제목 앵커로 자기 pane; 이름은 lookup leaf로 `$id` 해석, `-t`에는 `$id`만, `-d` 필수, 없으면 거절·생성 없음), first-turn framing(callback→task 순서), nonce 민팅, launch receipt(선택 이름+source+해석된 target `$id`, 관측 cwd 없음) | garden identity(표면이 공급), cwd 추측·resolve, 세션 생성, arbitrary TUI-seat discovery, delivery transport, task 분해, supervision |
 | copilot capability preflight leaf (`copilot-fresh-preflight.ts`) | Copilot fresh **한 건**에 대한 pre-mutation 판정 — birth·MCP hand·receiver·visible footer 네 축의 **설치/설정 사실**과 축마다 하나인 named reason + repair 문구 | runtime 사실(벤더 spawn·live process·연결 여부는 doctor와 LIVE 소유), mutation, 다른 backend, generic doctor로의 성장 |
-| codex capability preflight leaf (`codex-fresh-preflight.ts`) | Codex fresh 한 건의 state-backed birth closure digests, vendor trust receipt, exact user MCP/env boundary, `thread-title`, operator-owned default app-server socket를 pre-mutation 판정 | app-server lifecycle/supervision, attached-TUI pane discovery, vendor install/auth, generic doctor, resume |
+| codex capability preflight leaf (`codex-fresh-preflight.ts`) | Codex fresh 한 건의 state-backed birth closure digests, vendor trust receipt, exact user MCP/env boundary, `thread-title`, operator-owned default app-server socket, 그리고 **launch 디렉터리의 folder consent에 대한 좁은 local 근사**(exact cwd의 direct 결정 `trusted`/`untrusted` 둘 다 통과 · `.codex`가 있을 수 있으면 통과 · layer가 없는 explicit untrusted 조상은 `codex-launch-cwd-untrusted-ancestor` · 그 밖의 미결정만 `codex-launch-cwd-undecided`)를 pre-mutation 판정 | app-server lifecycle/supervision, attached-TUI pane discovery, vendor install/auth, generic doctor, resume, **동의를 대신 써넣기**, 그리고 **벤더 판정과의 동치**(layer 열거는 app-server의 `ConfigRead`가 소유하고, 이 leaf가 못 보는 것은 전부 통과 쪽으로 답한다) |
 | public surfaces (`entwurf-control.ts` · MCP `index.ts`) | fresh의 record-backed caller identity와 `{backend, model, task, cwd?, placement?}` schema, resume의 target-only schema, 양쪽 렌더, resume launch seam 조립 | argv 문법, placement, identity 민팅 |
 | project policy (repo 밖) | 누구를·언제·무엇으로 부를지, fan-out 횟수, 실패 후 판단 | transport 내부 구현 |
 
