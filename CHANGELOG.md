@@ -96,6 +96,52 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ### Verification
 
+- **Release acceptance for this cut.** `[LIVE 2026-09-17, oracle]` `LIVE=1 ./run.sh release-gate
+  /tmp/entwurf-release-gate-0.22.0.royX2L --cut` → **`MUST: PASS=24 FAIL=0 SKIP=0`**, **`BEHAVIOR:
+  PASS=1 FAIL=0 SKIP=0`**, **`cut: OK`**, exit 0, 18:47–20:02 KST; log preserved at
+  `<scratch>/release-gate.log`. Inside it: `check:full` exit 0 in 521s, `check-gate-qualification`
+  **520/520 killed**, `smoke-entwurf-chain-live` 24 assertions, `smoke-codex-fresh-live` **66
+  assertions** — one more than lane C's 65, because the launch-directory precondition this release
+  adds is asserted before anything launches. Gate env `ENTWURF_CODEX_FRESH_MODEL=gpt-5.6-luna`,
+  `ENTWURF_CODEX_FRESH_PI_MODEL=openai-codex/gpt-5.6-luna`, `ENTWURF_CODEX_APP_SERVER_PID` naming an
+  operator-started app-server in its own tmux session. Exact-SHA CI at the pre-release commit:
+  run [`35202801617`](https://github.com/junghan0611/entwurf/actions/runs/35202801617)
+  `event=workflow_dispatch` @ `f5d6e10`, all four required jobs success and the `check` job's
+  qualification BODY step success.
+- **The host's Codex hook declaration was measured with the herdr SessionStart group temporarily
+  removed, and that is a debt this release does not pay.** `~/.codex/hooks.json` on `oracle` carries
+  a second SessionStart group installed by herdr, so `doctor-codex-birth` reports the declaration as
+  edited after install and `smoke-codex-fresh-live` cannot run. For this cut the file was moved to
+  `hooks.json.herdr-bak` and re-published by `install-codex-birth`; the vendor's trust receipt for
+  `…/hooks.json:session_start:0:0` survived that re-publication, measured by a real Codex TUI
+  starting with no consent screen. The herdr group is restored after the cut and the doctor goes RED
+  again on purpose. **#117 owns the real repair** — entwurf requires a whole-file digest where the
+  unit it actually owns is one group.
+- **Two gate defects found by the release gate itself, both repaired in test/gate code with zero
+  production bytes.** `check-gate-qualification` scored **518/520** on the first prepared commit and
+  both survivors were launch-directory claims whose assertion could not see the defect its mutant
+  plants. `CODEX-LAUNCH-CWD-ANCESTOR-PLAIN-PATHS-ONLY` guards two predicates — the cwd side and the
+  key side — and every non-plain cell put the encoded character in the KEY, so the key-side filter
+  answered alone and deleting the cwd-side guard changed nothing; cells that vary the CWD against a
+  plain untrusted key now close it. `FRESHCALL-CODEX-LAUNCH-CWD-NOTES-NEVER-REFUSES` asserted the
+  `indexOf("-C")` lookup but not the value read at it, so a note that asked about the REQUESTED cwd
+  instead of codex's own `-C` token passed; the three statements are now pinned contiguously.
+  Neither mutant was stale — each still matched its production line exactly once, which is what made
+  the hole an assertion hole rather than drift.
+- **`smoke-entwurf-chain-live` went red because a model read the operator's policy correctly, and
+  the repair moved the authority rather than the wording.** The native Claude Code hop declined to
+  forward, citing the operator's global AGENTS.md; B, C and D were all born and addressable and the
+  terminus simply received nothing. A first repair put the provenance in the payload and the hop
+  named those sentences as the tell — content that vouches for itself is the shape of an injection,
+  so no sentence inside the payload can settle it. The payload is therefore byte-identical to
+  before, and the fact now rides the disposable world the turn starts in: the gate mints that
+  directory, every `ENTWURF_META_*_DIR` resolves inside it, and it exists because the operator ran
+  `release-gate`, so an `AGENTS.md`/`CLAUDE.md` written there is a standing operator instruction of
+  exactly the kind the operator's own global policy defers to for directory-scoped behaviour. **No
+  negative instruction was added**: a "do not check your policy" line would buy the same green by
+  asking the model to stop reading, and would keep passing after the chain broke. Accepted on the
+  host default model with no model pin.
+
 - **The Codex LIVE card now measures WHERE a sibling starts, and the acceptance is recorded.**
   `[LIVE 2026-09-16, Codex 0.153.4, 65 assertions, exit 0]` hop 1 requests a cwd and joins four
   authorities that cannot borrow from each other — the pane's `#{pane_current_path}`, the vendor
