@@ -449,6 +449,13 @@ The birth atom publishes a `SessionStart` declaration into `$CODEX_HOME/hooks.js
 launcher closure under `$XDG_DATA_HOME/entwurf/codex-birth`; it mints a V3 record on the
 thread's first turn and sets the thread title to the garden id.
 
+It owns that ONE declaration, not the file. Another integration may declare its own
+`SessionStart` group in the same hooks.json — Herdr's official Codex integration does — and the
+vendor runs both, because trust is keyed per declaration. So installing into a file somebody else
+already wrote is an append, not a refusal; uninstalling takes out only entwurf's group and leaves
+every neighbouring byte where it was; and `doctor-codex-birth` lists the neighbours in their own
+FOREIGN section, certifying none of them and letting none of them move its verdict.
+
 **One step is the operator's, and no command can do it for them.** The vendor will not run a
 user-layer hook until it has been trusted once: open a visible plain Codex, answer
 `Trust all and continue`, then send one first turn. `doctor-codex-birth` reads the receipt the

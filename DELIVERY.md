@@ -202,8 +202,16 @@ for the inherited case.
 
 Four ownership atoms remain separate:
 
-1. `entwurf install-codex-birth` owns `$CODEX_HOME/hooks.json` — one whole file, ours or
-   absent — plus its launcher and import closure under `$XDG_DATA_HOME/entwurf/codex-birth`.
+1. `entwurf install-codex-birth` owns **one `SessionStart` declaration inside**
+   `$CODEX_HOME/hooks.json` — not the file — plus its launcher and import closure under
+   `$XDG_DATA_HOME/entwurf/codex-birth`. The vendor keys trust per
+   `<path>:<event>:<group>:<handler>`, so a neighbouring integration (Herdr's official Codex
+   integration appends its own group) coexists: entwurf certifies the NORMALIZED digest and
+   shape of its own group, requires it exactly once, reads the vendor receipt at the index that
+   group was measured at, and reports every other group as present-but-foreign — certified by
+   nothing, rewritten never. Install appends and uninstall splices by text, so a neighbour's
+   bytes survive both unchanged. The ownership receipt is `codex-birth-install-state/v2`; a v1
+   receipt (whole-file digest) is refused by name and superseded forward by one reinstall.
    No root: every path belongs to the operator. The vendor gates a user-layer declaration on
    ONE interactive "Trust all", which entwurf never answers, pre-seeds or computes; the
    receipt is read as its own doctor axis, and until it exists setup is honestly non-green.

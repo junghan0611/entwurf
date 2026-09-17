@@ -4,6 +4,56 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+### Fixed
+
+- **The Codex birth unit owns its own declaration, not the whole `hooks.json` (#117).** Installing
+  Herdr's official Codex integration appends a second `SessionStart` group to
+  `$CODEX_HOME/hooks.json`. The vendor kept running BOTH declarations — `[source]`
+  `codex-rs/hooks/src/engine/discovery.rs:664-665` hashes a normalized event/matcher/group/handler
+  and keys trust by `<path>:<event>:<group_idx>:<handler_idx>`, so trust was declaration-scoped all
+  along — but entwurf's certification was file-scoped: `install-state` recorded a whole-file
+  sha256 and the fresh preflight additionally required `SessionStart.length === 1`. On a host with
+  both installed, `doctor-codex-birth` was RED and every Codex fresh launch was refused
+  `codex-birth-unit-missing`. **v0.22.0's release LIVE was measured with Herdr's hooks moved
+  aside; this is the debt that names paid.**
+  - Ownership is now exactly one `SessionStart` group holding one handler whose `command` is our
+    quoted launcher path. It is certified by SHAPE (which keys may exist) and by a NORMALIZED
+    digest (recursively sorted keys, no whitespace) — blind to indentation and key order, because
+    `[측정 2026-09-17 oracle]` Herdr re-serializes the entire document through serde, which changed
+    our own handler's key order from `type,command,timeout` to `command,timeout,type`.
+  - The vendor trust receipt is read at the index our declaration was MEASURED at, never at the
+    constant `:0:0`. With a neighbour at index 0 that constant read THEIR approval and reported it
+    as ours — a green for a hook the vendor had never been asked to run.
+  - Neighbours are `present-but-foreign`: reported in the doctor's own FOREIGN section, certified
+    by nothing, never overwritten or absorbed, and no input to any verdict of ours. Editing one
+    moves nothing.
+  - Install into a file somebody else already declares in is an APPEND by text splice (never an
+    adoption and never a refusal), and appending rather than inserting leaves a neighbour's index —
+    and therefore their existing trust receipt — alone. Uninstall splices out only entwurf's group
+    (plus entwurf's own top-level `description`), removing the file only when entwurf was its sole
+    declaration. Every splice is re-parsed and deep-compared to the value it intended before it
+    reaches disk; a splice that lands anywhere else is a zero-write refusal.
+  - Our own declaration missing, edited or DUPLICATED is still a named red, in install, doctor,
+    inverse and preflight alike.
+  - Entwurf still never creates, computes, pre-seeds or bypasses a vendor trust receipt, and
+    deliberately does NOT recompute what that hash should be: the vendor normalizes with its own
+    code, and reimplementing it here would make entwurf a second opinion about somebody else's
+    security decision that drifts with every vendor release.
+  - `install-state` moves to `codex-birth-install-state/v2` (declaration receipt instead of
+    `hooksSha256`). The uninstall, doctor and preflight read v2 only and refuse v1 by name; the
+    installer reads a v1 receipt once, to supersede it forward — it removes nothing and rewrites no
+    foreign byte.
+  - New shared leaf `pi-extensions/lib/codex-declaration.js` is the single definition the
+    installer, inverse, doctor, fresh preflight and gates all decide with.
+  - Gates: `smoke-codex-birth` 100 checks (both orderings green, foreign bytes proven across
+    install and inverse, foreign edits neutral, own-declaration drift/duplication/v1 named red,
+    trust read at the measured index), `check-codex-birth-hook` 100 checks (the leaf's digest,
+    selection, named refusals, span reader and splice post-condition), six new preflight cells,
+    and 8 exact-once mutants (inventory 520 → 527).
+  - **Not in scope, by decision:** adding Codex to `HERDR_FRESH_CALL_BACKENDS`, Herdr env carriers
+    on the Codex MCP child, plugin supervision of the app-server, and the identical ownership
+    defect in the statusline/terminal-title atoms (recorded as an Observation, its own atom).
+
 ## 0.22.0 - 2026-09-17
 
 ### Added
