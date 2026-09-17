@@ -4,7 +4,50 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+## 0.22.0 - 2026-09-17
+
 ### Added
+
+- **A Codex sibling opened into a directory the vendor has no answer for now SAYS SO
+  (`codex-launch-cwd-undecided`).** `entwurf_fresh_call` reads the launch directory against the
+  operator's Codex config and prints what it saw — and then opens the window anyway. **It is a
+  diagnostic, not a gate, and that is the product decision (GLG, 2026-09-17):** the vendor's
+  consent screen is self-repairing for the human this rail exists to put a window in front of, one
+  answer teaches the vendor that directory for good, and a refusal would replace that with "no
+  window, go run codex yourself, then call again" while having to be right about a decision this
+  process cannot fully see. The UNATTENDED case is answered where it belongs —
+  `smoke-codex-fresh-live` asserts the same leaf up front, so a release gate with nobody at the
+  keyboard reads a named precondition instead of a callback timeout. `[source rust-v0.153.4]` a `--remote` startup — which this
+  argv always is — runs `check_directory_trust` on the `-C` value (`tui/src/lib.rs:1699-1725`), and
+  nothing on that path consults the approval or sandbox policy
+  (`tui/src/onboarding/directory_trust.rs:33-130`): the
+  `--dangerously-bypass-approvals-and-sandbox` token this launcher already carries turns off
+  approvals, never folder consent. A DIRECT decision is keyed to the exact directory and nothing else — for
+  `ProjectTrustHost::Remote` the lookup is `vec![cwd_key]` (`tui/src/config_update.rs:290-296`), with
+  no project-root marker, no git root and no parent inheritance. **The question is whether the
+  directory has been ANSWERED, not whether it is trusted:** a saved `untrusted` folder is
+  explicitly skipped on a remote target (`onboarding/directory_trust.rs:94-96`), so that turn
+  starts too and is not noted at all. A cwd inside an explicitly `untrusted` project gets its OWN
+  note (`codex-launch-cwd-untrusted-ancestor`) because the vendor answers that one with an error
+  rather than a screen — `pass the repository root explicitly with --cd`
+  (`config_update.rs:357-371`) — so its repair names a different directory, not a prompt.
+
+  **The leaf is deliberately NARROWER than the vendor's own judgment and says so rather than
+  claiming equivalence.** It reads the operator's `config.toml`; the vendor reads an effective
+  config — system, managed and cloud layers merged around that file — through its app-server, and
+  an enabled PROJECT LAYER consents on a directory's behalf with no entry at all
+  (`config_update.rs:346-354`). That gap is affordable precisely because nothing here refuses:
+  everything the leaf cannot see stays silent, and a note that turns out to be unnecessary costs a
+  line of stderr. **`[측정 2026-09-16]` this is the
+  failure it retires, not a hypothetical:** four `smoke-codex-fresh-live` runs, one scratch directory
+  each; the two whose directory carried a trust entry (`…-db65N2`, `…-pBXxOJ`, both answered by a
+  human at the keyboard) passed, and the two unattended release-gate runs (`…-2zznHl`, `…-kSsoAn`)
+  died with no rollout written after 21:28 at all — the sibling had opened on a consent screen and
+  started no turn, so there was no birth, no callback, and nothing to address. The caller then waits
+  out its entire timeout on a window that is merely waiting to be answered, which reads as a delivery
+  defect and is a folder question. The directory asked about is read back off codex's own `-C` token
+  rather than recomputed, so the consent question cannot drift from the thread's real start
+  directory, and the inherited default stays resolved in exactly one place.
 
 - **A Codex caller opens its sibling beside its own pane (#95 lane B).** Until now the seat a
   Codex citizen got came from the app-server's inherited `TMUX`/`TMUX_PANE`, so a sibling opened
@@ -102,6 +145,27 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ### Changed
 
+- **`smoke-codex-fresh-live` launches in ONE stable directory instead of a fresh `mkdtemp` per
+  run.** Per-run random scratch made every run an undecided folder — a trust prompt per run, an
+  entry per run in the operator's `~/.codex/config.toml`, and unattended failure whenever nobody was
+  there to answer. The path is now one stable `os.tmpdir()`-rooted directory, answered `Trust`
+  once; the smoke PRINTS it as `launch-cwd <dir>` on every run and asserts that consent by name
+  BEFORE it launches anything, so a missing answer reads as `codex-launch-cwd-undecided` — with the
+  exact `codex -C <dir>` repair command — at the top of the run rather than as a callback timeout
+  twenty assertions later. The directory is printed rather than documented as a literal because
+  `os.tmpdir()` is a host fact: a doc spelling it `$TMPDIR/...` would send an operator with no
+  `TMPDIR` to `/entwurf-codex-fresh-live` in the filesystem root, which is a different directory
+  the vendor consents to separately. Lane C is unaffected: its only requirement of that directory is that it differ
+  from the app-server's own, which the assertion still proves.
+- **The Codex live-spend default comes down to `gpt-5.6-luna`.** The `entwurf-dev` skill's Codex
+  backend default and the `smoke-codex-fresh-live` recommendation in `VERIFY.md` move off
+  `gpt-5.6-sol`. **This is the Codex axis alone** — OMP's fresh default is deliberately unchanged at
+  `openai-codex/gpt-5.6-sol` (`scripts/smoke-omp-fresh-live.ts:14`), because that is the model its
+  two-stage bootstrap callback was actually measured on and moving it would invalidate that
+  receipt. A cost decision, not a gate change: no step moved tier, and the acceptance receipt for
+  the Codex cell must be the run that actually happened on the new default rather than a `sol` run
+  inherited from before.
+
 - **The fixed `codex` tmux home is RETIRED (#95 D1).** 0.21.0 shipped it three days earlier: an
   omitted-placement Codex TARGET selected an already-existing session named exactly `codex`, where
   the operator was asked to seat the app-server and every Codex TUI, and the launch receipt labelled
@@ -119,6 +183,18 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ### Fixed
 
+- **An in-band refusal now reaches the sender with the reason the RECEIVER gave it
+  (`d49e6cb`, `0c8a42c`).** A completed control-socket RPC that came back `success:false` was
+  finalized as `rejected` with no reason at all, so every named receiver refusal — including the
+  0.21.0 compaction guard's own `compacting` / `busy` — arrived at the caller as a reasonless
+  rejection indistinguishable from "no live route". The send hand now carries that error verbatim
+  when the receiver supplied one, and invents nothing when it did not: receiver evidence is not
+  reclassified into the resolver's taxonomy (`dormant-fire-forget-unsupported`,
+  `mailbox-undeliverable`, …), and the two remain distinguishable at the surface. The gap was one
+  hop wide and entirely invisible to the unit lane — the production `sendOverSocket` closure was
+  what dropped `response.error` before `driveSend` could see it — so the guard that holds it is a
+  production-wiring assertion with its own mutant (`V2PROD-INBAND-ERROR-WIRED`), not another test
+  of the pure function.
 - **A Codex sibling's THREAD now opens where its pane is (#95 lane C).** The seat was right and the
   directory was not: `[측정 2026-09-16]` a pi → Codex → Claude Code chain recorded the app-server's
   `~/repos/gh/entwurf` for all three citizens while the panes sat in `~/repos/gh/agent-config`.

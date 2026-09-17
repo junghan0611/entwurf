@@ -163,6 +163,43 @@ CHANGELOG `## Unreleased`가 구현 범위 `v0.15.1..19ad90c` **30커밋** 전�
 스크립트가 움직였으므로 반드시 돈다; lane C SHA의 긴 바닥은 로컬에서 안 돌렸다) → 다음 컷 prepare는 별도 권한. #109 openclaw 다리는 **닫혔다** · **0.16.1 make는 열린 채 PAUSED**.
 푸시·태그·publish는 금지; `entwurf-release`의 make/publish 별도 권한이다.
 
+# NOW — stem: 0.22.0 prepare (codex 폴더 동의 + #116 합류)
+
+- **Stem:** **무인 codex leg가 침묵하던 원인이 배달이 아니라 폴더 동의였다.** 2026-09-16 밤
+  `release-gate --cut` 두 번이 `smoke-codex-fresh-live` 한 칸에서만 붉었고, 원인 축으로 의심받던
+  models cache 손상은 **기각**됐다. 측정: 네 run의 scratch 디렉토리 중 `~/.codex/config.toml`에
+  trust 항목이 있던 둘(`…-db65N2`, `…-pBXxOJ` — GLG가 옆에서 엔터를 눌러준 run)만 통과했고,
+  항목이 없던 무인 run 둘(`…-2zznHl`, `…-kSsoAn`)은 21:28 이후 **롤아웃을 하나도 쓰지 않았다**.
+  형제는 벤더의 folder-trust 화면 위에서 열려 첫 턴을 시작조차 못 했다. `[source rust-v0.153.4]`
+  `--remote` 시작은 항상 `-C` 값에 `check_directory_trust`를 돌리고(`tui/src/lib.rs:1699-1725`)
+  그 경로는 승인/샌드박스 정책을 읽지 않는다(`onboarding/directory_trust.rs:33-130`) — 이미 싣고 있던
+  `--dangerously-bypass-approvals-and-sandbox`가 이걸 덮지 못한 이유다. **direct 결정**의 키는 정확히 그 cwd 하나다
+  (`config_update.rs:290-296`): 부모도, git root도, project marker도 아니다. 그래서 trusted `/tmp`가
+  있는데도 두 scratch가 각자 항목으로 기록돼 있었다.
+- **좌표:** launch 디렉터리 상태를 **경고로 말하고 창은 연다**(GLG 결정, 2026-09-17). 이름은 둘이다:
+  `codex-launch-cwd-undecided`(벤더가 화면을 띄울 자리)와 `codex-launch-cwd-untrusted-ancestor`(벤더가
+  화면 대신 `pass the repository root explicitly with --cd` 에러로 끝내는 자리 — repair가 다르다).
+  **거절하지 않는 것이 제품 결정이다**: consent 화면은 사람이 있으면 자가수복이고, 한 번 답하면 벤더가
+  그 디렉터리를 영구히 기록한다. 거절은 그 한 번을 "창 없음 → 직접 codex 열기 → 다시 호출"로 바꾸면서,
+  이 프로세스가 온전히 볼 수 없는 판정(벤더는 system/managed/cloud layer를 합친다)에 대해 옳아야 한다.
+  무인 케이스는 제자리에서 답한다 — `smoke-codex-fresh-live`가 같은 leaf를 맨 앞에서 assert하므로
+  키보드 앞에 아무도 없는 게이트는 콜백 타임아웃 대신 이름 붙은 전제를 읽는다.
+  묻는 값은 codex가 실제로 받는 `-C` 토큰을 되읽은 것이고(재계산 아님 — 상속 기본값 해석 지점은
+  여전히 하나), 스모크는 매 run `mkdtemp` 대신 `os.tmpdir()` 아래 고정 경로 하나(매 run `launch-cwd`로 찍는다)에서
+  열어 운영자 설정이 run마다 불어나지 않는다. Codex live-spend 기본값은 `gpt-5.6-sol` → **`gpt-5.6-luna`**.
+- **다음 한 수:** oracle에서 **#116과 합류**해 한 번의 긴 게이트로 수용한다. 이 리포는 정적/focused
+  게이트까지만 서고, LIVE는 거기서 돈다.
+- **LIVE 재실행 전제(추가):** 그 고정 디렉토리를 `codex -C <경로>`로 한 번 열어 `Trust`를 답해 둔다.
+  경로를 `$TMPDIR/...`로 쓰지 않는다 — `os.tmpdir()`는 `TMPDIR`가 없으면 `/tmp`로 떨어지므로 그 표기는
+  TMPDIR가 unset인 호스트(thinkpad에서 측정: unset)에서 파일시스템 루트의 `/entwurf-codex-fresh-live`를
+  가리킨다. 정확히 뽑는 법:
+  `node -e 'console.log(require("node:os").tmpdir() + "/entwurf-codex-fresh-live")'`.
+  스모크도 매 run `launch-cwd <경로>`로 그 값을 찍고, 거절할 때는 그 경로가 박힌 repair 명령을 함께 준다.
+  안 해두면 맨 앞 assertion에서 그 이름으로 거절한다 — 콜백 타임아웃으로 위장되지 않는다. 기존
+  전제(app-server가 Pi/Codex 쌍과 다른 tmux 세션, `install-codex-terminal-title`)는 그대로다.
+- **Do not:** 이 리포에서 긴 LIVE 게이트를 다시 태우기; `~/.codex/config.toml`에 에이전트가 trust 항목을
+  써넣기(동의는 사람이 준다); tag/GitHub release/npm publish.
+
 # NOW — stem: 0.21.0 prepare (#111 + #112 + #95)
 
 - **Stem:** **#95 lane B(caller seat)를 닫고 다음 컷을 준비한다.** 0.21.0은 operator가 `codex`라는
@@ -569,7 +606,7 @@ WSL2 는 계약상 리눅스의 연장이라 새 작업 없음.
 
 # CARRIED
 
-- **`entwurf codex-app-server`가 아직 런처 시점에 검사하지 않는 두 가지 (terra 리뷰 관측, 2026-09-16, 0.21.1 컷에 넣지 않음).**
+- **`entwurf codex-app-server`가 아직 런처 시점에 검사하지 않는 두 가지 (terra 리뷰 관측, 2026-09-16, 그 컷에 넣지 않음 — 0.21.1은 발행되지 않았고 그 범위는 0.22.0으로 접혔다).**
   (1) **AF_UNIX 108바이트 한계는 벤더 시점 검증이다** `[측정]` — 실제로 `bind`하는 가짜 벤더로, 두 가드와 `mkdir -p`를
   통과한 178바이트 절대 소켓 경로가 `AF_UNIX path too long`과 함께 exit 41로 죽었다. **거짓 성공은 아니다**(nonzero가
   그대로 전파된다). 쓰기 전에 바이트 한계를 거절하면 진단이 좋아지고 남는 디렉터리가 없어지지만, 릴리즈를 막지 않는다.

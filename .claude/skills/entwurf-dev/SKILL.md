@@ -19,7 +19,7 @@ transcript를 가진 garden citizen이다.
 /skill:entwurf-dev status
 /skill:entwurf-dev fresh pi openai-codex/gpt-5.6-luna 오늘 S0 상태를 한 문장으로 말해
 /skill:entwurf-dev fresh claude-code claude-sonnet-5 README의 visible-first 계약을 읽어
-/skill:entwurf-dev fresh codex gpt-5.6-sol DELIVERY의 Codex rail을 요약해
+/skill:entwurf-dev fresh codex gpt-5.6-luna DELIVERY의 Codex rail을 요약해
 /skill:entwurf-dev send <garden-id> 지금 상태를 답해줘
 /skill:entwurf-dev tour pi
 /skill:entwurf-dev boundary
@@ -72,7 +72,9 @@ transcript를 가진 garden citizen이다.
   Codex caller는 위의 record cwd) —
   타깃 세션의 path도, 그 세션 active pane의 경로도 물려받지 않는다. 즉 `org` 자리에 열었다고 형제가
   `org` 프로젝트 디렉터리에 있는 것이 아니다. 다른 디렉터리를 원하면 `cwd`를 함께 준다.
-- 기본 정책은 Pi=`openai-codex/gpt-5.6-luna`, Claude Code=`claude-sonnet-5`, Codex=`gpt-5.6-sol`이다.
+- 기본 정책은 Pi=`openai-codex/gpt-5.6-luna`, Claude Code=`claude-sonnet-5`, Codex=`gpt-5.6-luna`이다.
+  Codex 기본값은 2026-09-17에 `sol`에서 내렸다 — live-spend 결정이고, GLG가 명시적으로 상위 tier를 말할
+  때만 올라간다.
 - GLG가 “entwurf 소넷”이라고 하면 Pi + `entwurf/claude-sonnet-5`다.
 - **Provider budget:** sibling launch에 OpenRouter를 쓰지 않는다. 이는 GLG 개인의 embedding/image 전용 제한 rail이다. Claude Code 구독, Pi의 승인된 GPT/Codex·xAI 구독, 또는 direct endpoint로 이미 설정된 회사 API만 쓴다. model label은 billing rail 증거가 아니다. 요청된 model이 현재 OpenRouter로 resolve되면 launch·test turn·login check·probe script를 하지 말고 그 한 사실만 즉시 보고한다. GLG가 이미 승인한 rail의 형제를 요청하면 credential/login을 다시 묻거나 찾지 말고 fresh-call을 바로 한 번 호출한다.
 - `entwurf_v2` intent는 정확히 `fire-and-forget` 하나다. 이 verb는 어떤 rail에서도 프로세스를 열지 않는다.
@@ -137,8 +139,8 @@ citizen의 맥락을 요구한 경우에만 그 exact id로 `entwurf_v2`를 보�
    `claude-code` / `copilot` / `omp` / `codex` 중 무엇을 열지 한 번만 묻는다.
 2. model이 생략되면 묻지 않고 backend 기본 정책을 적용한다: Pi는
    `openai-codex/gpt-5.6-luna`, Claude Code는 `claude-sonnet-5`, Copilot는 `auto`,
-   omp는 `openai-codex/gpt-5.6-sol`, Codex는 `gpt-5.6-sol` — 2026-08-30 two-stage bootstrap callback이 실제로
-   측정된 모델이고, `smoke-omp-fresh-live`의 기본값과 같은 값이다.
+   omp는 `openai-codex/gpt-5.6-sol` — 2026-08-30 two-stage bootstrap callback이 실제로 측정된 모델이고,
+   `smoke-omp-fresh-live`의 기본값과 같은 값이다 — Codex는 `gpt-5.6-luna`다.
    - “sol/terra/luna” → Pi `openai-codex/gpt-5.6-<tier>`
    - “entwurf 소넷” → Pi `entwurf/claude-sonnet-5`
    - “클로드코드 소넷” → Claude Code `claude-sonnet-5`
