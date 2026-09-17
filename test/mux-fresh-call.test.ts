@@ -940,9 +940,18 @@ describe("optional project seat — cross-session fresh placement (#105)", () =>
 		// The note itself is wired on two facts. FIRST: the directory named is READ BACK off
 		// codex's own `-C` token, so it cannot drift from the thread's start directory or become a
 		// second resolution of the inherited default (`FRESHCALL-CWD-CALLER-ONLY` keeps that at
-		// exactly one site).
-		expect(MODULE_SRC).toContain('const at = backendArgs.indexOf("-C");');
-		expect(MODULE_SRC).toContain("codexLaunchCwdFreshPreflight(env, launchCwd)");
+		// exactly one site). The three statements are asserted CONTIGUOUSLY, because the index
+		// lookup alone is not the claim: a note that kept `indexOf("-C")` and then asked about
+		// `cwd` would report the empty string for the launch that requested no directory — exactly
+		// the case where the pane inherits this process's directory and `-C` names it — and point
+		// the operator at a directory the thread never starts in.
+		expect(MODULE_SRC).toContain(
+			[
+				'const at = backendArgs.indexOf("-C");',
+				'const launchCwd = backendArgs[at + 1] ?? "";',
+				"const unanswered = codexLaunchCwdFreshPreflight(env, launchCwd);",
+			].join("\n\t\t"),
+		);
 		// SECOND: it goes to stderr and returns nothing — diagnostics are not control flow
 		// (Hard Rule 15), and the very next statement still runs the launch.
 		expect(MODULE_SRC).toContain("console.error(");

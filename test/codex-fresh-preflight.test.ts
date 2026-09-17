@@ -613,7 +613,7 @@ describe("Codex launch-directory preflight", () => {
 	it("[QK:CODEX-LAUNCH-CWD-ANCESTOR-PLAIN-PATHS-ONLY] a path this leaf cannot compare the way the vendor does degrades to the weaker reason instead of asserting the ancestor one — the disagreement lands on the permissive side", () => {
 		// `[source rust-v0.153.4]` the vendor compares path URIs segment-wise and fails closed on
 		// encoded separators (`utils/path-uri`); this compares strings on a separator boundary. An
-		// encoded or dot-segmented key is exactly where those two could part, so the ancestor
+		// encoded or dot-segmented path is exactly where those two could part, so the ancestor
 		// reason — whose repair names a specific other directory — is not asserted there.
 		const forbidden = path.join(root, "forb%idden");
 		const target = path.join(forbidden, "inner");
@@ -624,6 +624,17 @@ describe("Codex launch-directory preflight", () => {
 		writeProjects(`[projects."${plain}"]\ntrust_level = "untrusted"`);
 		expect(codexLaunchCwdFreshPreflight({ HOME: home }, path.join(plain, "inner"))).toBe(
 			"codex-launch-cwd-untrusted-ancestor",
+		);
+		// BOTH SIDES of that comparison carry the rule, and each side has its OWN guard. The cells
+		// above vary the KEY; these vary the CWD against a plain key, which is the only way the
+		// cwd-side guard is observable — a cell that varies both leaves the key-side filter
+		// answering alone and certifies a guard that is no longer there. The two literals are the
+		// two halves of "not a plain POSIX path": an encoded separator and a dot segment.
+		expect(codexLaunchCwdFreshPreflight({ HOME: home }, path.join(plain, "in%ner"))).toBe("codex-launch-cwd-undecided");
+		// Written as a literal rather than through `path.join`, which would normalise the `..`
+		// away before the leaf ever saw it — the value codex receives on `-C` is not normalised.
+		expect(codexLaunchCwdFreshPreflight({ HOME: home }, `${plain}/../forbidden/inner`)).toBe(
+			"codex-launch-cwd-undecided",
 		);
 	});
 });
