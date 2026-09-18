@@ -230,16 +230,25 @@ export interface HerdrFreshCallReceipt {
  * `reported` — it did, after `reads` read(s) and `settleMs` of waiting. `settleMs: 0` with one read
  * means the start reply already carried it, which is the ordinary pi case.
  *
- * `unavailable` — it had not, and we stopped asking. **This is not a failure and never reclaims.**
- * The reporter is the CHILD's own one-shot hook with a 0.5s socket deadline that swallows its
- * failures, so "never" is reachable for a perfectly healthy sibling; the agent was confirmed to
- * still occupy the pane we opened before this word was written. What it costs the operator is
- * named rather than hidden: the placement join in `entwurf_peers` has nothing to join on for this
- * sibling, so its `placement` column reads `unobserved`. The address was never this anyway — the
- * garden id arrives in the sibling's own callback envelope (Hard Rule 16).
+ * `unavailable` — it had not, and we stopped asking, BUT a readable reply had rebound the agent to
+ * the pane we opened at least once. **This is not a failure and never reclaims.** The reporter is
+ * the CHILD's own one-shot hook with a 0.5s socket deadline that swallows its failures, so "never"
+ * is reachable for a perfectly healthy sibling. What it costs the operator is named rather than
+ * hidden: the placement join in `entwurf_peers` has nothing to join on for this sibling, so its
+ * `placement` column reads `unobserved`. The address was never this anyway — the garden id arrives
+ * in the sibling's own callback envelope (Hard Rule 16).
+ *
+ * `unobserved` — we never got a reply we could read at all: every `agent get` failed, was
+ * unparsable, or answered without the fields that bind it to our pane. **Also not a failure and
+ * also never reclaims** — an unreadable read is not evidence that a sibling is gone (a socket that
+ * blinked answers the same way). It is a separate word from `unavailable` because the two license
+ * DIFFERENT sentences: one saw the agent in our pane and only missed its session id, the other saw
+ * nothing and therefore says NOTHING about whether the sibling is running. `[sol 재검 2026-09-18]`
+ * collapsing them let a receipt assert current liveness it had never confirmed, and contradict its
+ * own closing paragraph while doing it.
  */
 export interface HerdrWitness {
-	readonly state: "reported" | "unavailable";
+	readonly state: "reported" | "unavailable" | "unobserved";
 	readonly reads: number;
 	readonly settleMs: number;
 }
@@ -1005,6 +1014,9 @@ export async function settleAgentWitness(params: {
 	const pollMs = params.pollMs ?? HERDR_AGENT_SESSION_POLL_MS;
 	const startedAt = params.clock.now();
 	let reads = 0;
+	/** Did ANY readable reply rebind the agent to the pane we opened? Nothing else licenses a
+	 * receipt sentence about the sibling still being there. */
+	let observed = false;
 	for (;;) {
 		await params.clock.sleep(pollMs);
 		const getRun = await params.run(buildHerdrAgentGetArgs(params.agentName));
@@ -1016,6 +1028,18 @@ export async function settleAgentWitness(params: {
 		// poll; the ONLY thing that names a vanished launch is a readable reply that disagrees.
 		const agent = getRun.status === 0 ? parseHerdrAgentGetResponse(getRun.stdout) : null;
 		if (agent !== null) {
+			// REBINDING IS ALL FIVE AXES, PRESENT AND EQUAL `[sol 재검 2026-09-18]`. A reply that
+			// OMITS tab, name or kind cannot carry the exact-rebinding claim this loop makes, so it
+			// is not a usable witness — we keep polling. It is deliberately NOT drift: treating a
+			// missing optional field as disagreement would fail a healthy launch on a vendor that
+			// simply answered with less. Only a field that IS there and DISAGREES names a vanished
+			// sibling, because only that is a reply about somebody else.
+			const bound =
+				agent.paneId === params.created.paneId &&
+				agent.terminalId === params.created.terminalId &&
+				agent.tabId === params.tabId &&
+				agent.agentName === params.agentName &&
+				agent.agent === params.kind;
 			const drifted =
 				agent.paneId !== params.created.paneId ||
 				agent.terminalId !== params.created.terminalId ||
@@ -1023,9 +1047,19 @@ export async function settleAgentWitness(params: {
 				(agent.agentName !== undefined && agent.agentName !== params.agentName) ||
 				(agent.agent !== undefined && agent.agent !== params.kind);
 			if (drifted) return { ok: false, reads };
-			if (agent.hasAgentSession) return { ok: true, witness: { state: "reported", reads, settleMs: elapsed } };
+			if (bound) {
+				observed = true;
+				if (agent.hasAgentSession) return { ok: true, witness: { state: "reported", reads, settleMs: elapsed } };
+			}
 		}
-		if (elapsed >= settleMs) return { ok: true, witness: { state: "unavailable", reads, settleMs: elapsed } };
+		if (elapsed >= settleMs) {
+			// The two expiry words are the whole point of `observed`: we may only say the agent is
+			// still in our pane if a readable reply said so.
+			return {
+				ok: true,
+				witness: { state: observed ? "unavailable" : "unobserved", reads, settleMs: elapsed },
+			};
+		}
 	}
 }
 
@@ -1092,9 +1126,18 @@ const HERDR_REJECT_HINT: Record<HerdrFreshCallRejectReason | HerdrLaunchFailureR
  * address was never a pane; it arrives in the sibling's callback). */
 function renderWitness(witness: HerdrWitness): string {
 	const cost = `${witness.reads} read(s), ${witness.settleMs}ms`;
-	return witness.state === "reported"
-		? `reported to herdr after ${cost} — its placement can be joined in entwurf_peers`
-		: `unavailable after ${cost} — herdr was not told this agent's session id, which its own reporter may never send. The sibling IS running (herdr still shows the agent in this pane); its peers placement column will read unobserved, and its garden id still arrives in the callback`;
+	switch (witness.state) {
+		case "reported":
+			return `reported to herdr after ${cost} — its placement can be joined in entwurf_peers`;
+		case "unavailable":
+			return `unavailable after ${cost} — herdr was not told this agent's session id, which its own reporter may never send. herdr DID still show this agent in the pane we opened when we last read it; its peers placement column will read unobserved, and its garden id still arrives in the callback`;
+		default:
+			// `[sol 재검 2026-09-18]` the branch that used to borrow the sentence above. Every read
+			// failed or could not be bound to our pane, so this receipt asserts NOTHING about the
+			// sibling's current state — and says so, rather than letting a reader infer liveness
+			// from a word that merely means "we stopped asking".
+			return `unobserved after ${cost} — no readable answer about this agent ever came back, so this receipt says nothing about whether the sibling is running. Nothing was reclaimed on that silence: an unreadable read is not evidence that a sibling is gone. Its peers placement column will read unobserved, and its garden id still arrives in the callback`;
+	}
 }
 
 function renderRecovery(recovery: HerdrRecovery): string {

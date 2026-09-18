@@ -201,7 +201,7 @@ tab 좌표는 **그것을 만든 응답**에서 온다(`agent start`의 echo가 
 
 **post-create** (회수 결과를 함께 낸다): `herdr-tab-create-failed` · `herdr-tab-create-unparsable` · `herdr-tab-root-pane-occupied` · `herdr-agent-start-failed` · `herdr-agent-start-unparsable` · `herdr-agent-start-pane-drift` · `herdr-agent-start-vanished` · `herdr-agent-start-argv-drift`
 
-뒤의 셋은 **읽을 수 있는데 어긋난** 응답이라 `unparsable`로 뭉개지 않는다 — 오퍼레이터가 할 일이 각각 다르다. `pane-drift`는 우리가 연 pane·terminal·**tab**이 아닌 곳에서 뭔가 떴다는 뜻이고(회수는 **tab create 영수증**에서 시작한다), `witness-missing`은 아무도 식별할 수 없는 launch를 성공이라고 들었다는 뜻이며, `argv-drift`는 우리가 구성하지 않은 프레이밍으로 형제가 떴다는 뜻이다. `[file:line @ c77af189]` `src/app/agents.rs:197-199`가 echo되는 argv를 **canonical executable + 우리 args**로 정의하므로 이 대조는 추측이 아니다.
+뒤의 셋은 **읽을 수 있는데 어긋난** 응답이라 `unparsable`로 뭉개지 않는다 — 오퍼레이터가 할 일이 각각 다르다. `pane-drift`는 우리가 연 pane·terminal·**tab**이 아닌 곳에서 뭔가 떴다는 뜻이고(회수는 **tab create 영수증**에서 시작한다), `agent-start-vanished`는 herdr가 시작했다고 한 그 agent를 **읽을 수 있게** 다시 물었더니 우리 pane의 agent가 아니라고 답했다는 뜻이며, `argv-drift`는 우리가 구성하지 않은 프레이밍으로 형제가 떴다는 뜻이다. `[정정 2026-09-18, sol 재검]` 이 자리에 있던 `witness-missing`은 **퇴역했다** — 읽히지 않는 응답은 형제가 없다는 증거가 아니므로 더 이상 거절이 아니고, 만료는 성공 영수증의 두 낱말로 끝난다: 읽을 수 있는 응답이 우리 pane의 agent를 한 번이라도 다시 묶었으면 **`unavailable`**(세션 id만 못 들었다), 한 번도 못 묶었으면 **`unobserved`**(아무 말도 하지 않는다). 어느 쪽도 회수하지 않는다. `[file:line @ c77af189]` `src/app/agents.rs:197-199`가 echo되는 argv를 **canonical executable + 우리 args**로 정의하므로 이 대조는 추측이 아니다.
 
 `placement`는 **정의되어 있기만 하면** 거절한다 — `{}`도 `{tmuxSession:""}`도. 멤버를 읽으면, seat를 요청했다가 오타를 낸 caller가 초록 영수증과 함께 기본 위치의 형제를 받는다.
 

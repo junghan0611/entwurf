@@ -4,7 +4,7 @@
 	"mutants": [
 		{
 			"claim": "HFC-RAIL-IMPORT-FENCE",
-			"title": "the herdr rail takes a mux import again \u2014 one is all it takes to make either rail undeletable",
+			"title": "the herdr rail takes a mux import again — one is all it takes to make either rail undeletable",
 			"subject": "pi-extensions/lib/herdr-fresh-call.ts",
 			"find": ["import { createHash } from \"node:crypto\";"],
 			"replace": ["import { createHash } from \"node:crypto\";\nimport { runTmux } from \"./mux-placement.ts\";"],
@@ -50,7 +50,7 @@
 		},
 		{
 			"claim": "HFC-ENCODE-NO-CONTROL",
-			"title": "the C1/DEL escape pass is dropped and only JSON.stringify's C0 handling remains \u2014 herdr refuses the argv after the pane already exists",
+			"title": "the C1/DEL escape pass is dropped and only JSON.stringify's C0 handling remains — herdr refuses the argv after the pane already exists",
 			"subject": "pi-extensions/lib/herdr-fresh-call.ts",
 			"find": ["\tconst literal = escapeRemainingControlChars(JSON.stringify(task));"],
 			"replace": ["\tconst literal = JSON.stringify(task);"],
@@ -72,7 +72,7 @@
 		},
 		{
 			"claim": "HFC-FRAMING-IS-PROSE",
-			"title": "the framing is quoted back into a JSON literal behind a decode instruction \u2014 the exact shape a safety-tuned sibling refused, restored",
+			"title": "the framing is quoted back into a JSON literal behind a decode instruction — the exact shape a safety-tuned sibling refused, restored",
 			"subject": "pi-extensions/lib/herdr-fresh-call.ts",
 			"find": ["\tconst folded = framing.filter((line) => line.length > 0).join(\" \");"],
 			"replace": [
@@ -170,7 +170,7 @@
 		},
 		{
 			"claim": "HFC-AGENT-NAME-OPAQUE",
-			"title": "the raw nonce becomes the herdr agent name, which herdr's own name rule refuses \u2014 and a correlation tag becomes a visible label",
+			"title": "the raw nonce becomes the herdr agent name, which herdr's own name rule refuses — and a correlation tag becomes a visible label",
 			"subject": "pi-extensions/lib/herdr-fresh-call.ts",
 			"find": ["\treturn `entwurf-${createHash(\"sha256\").update(nonce).digest(\"hex\").slice(0, 20)}`;"],
 			"replace": ["\treturn nonce;"],
@@ -227,7 +227,7 @@
 		},
 		{
 			"claim": "HFC-CLOSE-WITHIN-GENERATION",
-			"title": "the close drops its terminal-id proof and trusts a bare pane id \u2014 after a herdr restart that id belongs to someone else's view",
+			"title": "the close drops its terminal-id proof and trusts a bare pane id — after a herdr restart that id belongs to someone else's view",
 			"subject": "pi-extensions/lib/herdr-fresh-call.ts",
 			"find": [
 				"\tif (current.terminalId !== created.terminalId) return { close: false, reason: \"terminal-id-mismatch\" };"
@@ -412,6 +412,36 @@
 			"gate": ["bash", "run.sh", "check-herdr-fresh-call"],
 			"timeoutSeconds": 120,
 			"signature": "[QK:HFC-CWD-HASH-IS-DATA]",
+			"signatureSource": "scripts/check-herdr-fresh-call.ts"
+		},
+		{
+			"claim": "HFC-WITNESS-UNREAD-SAYS-NOTHING",
+			"title": "a launch whose every witness read failed borrows the sentence that says herdr still showed the agent in our pane — the receipt then asserts a current liveness nobody confirmed, and contradicts its own closing paragraph while doing it",
+			"subject": "pi-extensions/lib/herdr-fresh-call.ts",
+			"find": [
+				"\t\t\treturn `unobserved after ${cost} — no readable answer about this agent ever came back, so this receipt says nothing about whether the sibling is running. Nothing was reclaimed on that silence: an unreadable read is not evidence that a sibling is gone. Its peers placement column will read unobserved, and its garden id still arrives in the callback`;"
+			],
+			"replace": [
+				"\t\t\treturn `unavailable after ${cost} — herdr DID still show this agent in the pane we opened when we last read it`;"
+			],
+			"gate": ["bash", "run.sh", "check-herdr-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:HFC-WITNESS-UNREAD-SAYS-NOTHING]",
+			"signatureSource": "scripts/check-herdr-fresh-call.ts"
+		},
+		{
+			"claim": "HFC-WITNESS-BINDING-COMPLETE",
+			"title": "a half-bound reply — one that omits tab, name or kind — is counted as having seen our sibling, so the exact-rebinding claim in the comment stops being true of the code and an expiry says `unavailable` on the strength of an answer that never named our pane's agent",
+			"subject": "pi-extensions/lib/herdr-fresh-call.ts",
+			"find": [
+				"\t\t\t\tagent.tabId === params.tabId &&\n\t\t\t\tagent.agentName === params.agentName &&\n\t\t\t\tagent.agent === params.kind;"
+			],
+			"replace": [
+				"\t\t\t\t(agent.tabId === undefined || agent.tabId === params.tabId) &&\n\t\t\t\t(agent.agentName === undefined || agent.agentName === params.agentName) &&\n\t\t\t\t(agent.agent === undefined || agent.agent === params.kind);"
+			],
+			"gate": ["bash", "run.sh", "check-herdr-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:HFC-WITNESS-BINDING-COMPLETE]",
 			"signatureSource": "scripts/check-herdr-fresh-call.ts"
 		}
 	]

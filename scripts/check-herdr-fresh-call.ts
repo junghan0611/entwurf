@@ -213,7 +213,14 @@ const START_OK = JSON.stringify({
  * Built as a FUNCTION of what herdr has been told so far, because that is the whole subject here:
  * the same agent, same pane, same terminal, with and without a session report.
  */
-function agentGetReply(options: { session: boolean; paneId?: string; terminalId?: string; agent?: string }): string {
+function agentGetReply(options: {
+	session: boolean;
+	paneId?: string;
+	terminalId?: string;
+	agent?: string;
+	/** Answer WITHOUT the fields that bind a reply to our pane — a reply we cannot rebind on. */
+	omitBinding?: boolean;
+}): string {
 	return JSON.stringify({
 		id: "cli:agent:get",
 		result: {
@@ -231,9 +238,9 @@ function agentGetReply(options: { session: boolean; paneId?: string; terminalId?
 					: {}),
 				agent_status: "idle",
 				interactive_ready: true,
-				name: herdrAgentNameFromNonce(NONCE),
+				...(options.omitBinding ? {} : { name: herdrAgentNameFromNonce(NONCE) }),
 				pane_id: options.paneId ?? "w7:p7",
-				tab_id: "w7:t1",
+				...(options.omitBinding ? {} : { tab_id: "w7:t1" }),
 				terminal_id: options.terminalId ?? "term_65b6e1ce2b3db16",
 				workspace_id: "w7",
 			},
@@ -1018,6 +1025,51 @@ async function main(): Promise<void> {
 				// And the operator is TOLD, in the receipt, rather than left to infer it.
 				renderHerdrFreshCall(result).text.includes("unavailable after") &&
 				!renderHerdrFreshCall(result).isError
+			);
+		})(),
+	);
+	ok(
+		"[QK:HFC-WITNESS-UNREAD-SAYS-NOTHING] an expiry in which NO read was ever readable is its own word — `unobserved`, not `unavailable` — and the receipt then asserts nothing about the sibling: the sentence that says herdr still showed the agent in our pane belongs only to the branch where a readable reply actually said so, and it closes nothing either way",
+		await (async () => {
+			const clock = fakeClock();
+			const blind: ScriptedReply = { status: 1, stderr: "boom" };
+			const { run, calls } = scriptedRun([
+				{ status: 0, stdout: CALLER_PANE_OK },
+				{ status: 0, stdout: TAB_OK },
+				startReplyEchoingArgv(witnessless()),
+				...Array.from({ length: 200 }, () => blind),
+			]);
+			const result = await herdrFreshCall({ ...base, backend: "claude-code" }, run, HERDR_ENV, NONCE, clock);
+			if (!result.ok) return false;
+			const text = renderHerdrFreshCall(result).text;
+			return (
+				result.receipt.witness.state === "unobserved" &&
+				result.receipt.witness.settleMs === HERDR_AGENT_SESSION_SETTLE_MS &&
+				text.includes("unobserved after") &&
+				text.includes("says nothing about whether the sibling is running") &&
+				// THE DEFECT THIS CELL OWNS: a receipt that never got a readable answer used to
+				// borrow the other branch's sentence and assert current liveness.
+				!text.includes("herdr DID still show this agent") &&
+				!calls.some((call) => call[0] === "pane" && call[1] === "close")
+			);
+		})(),
+	);
+	ok(
+		"[QK:HFC-WITNESS-BINDING-COMPLETE] a readable reply that OMITS tab, name or kind cannot carry the exact-rebinding claim, so it is not a witness — the wait keeps polling and expires `unobserved` rather than counting a half-bound answer as having seen our sibling, and it is not treated as drift either, because a field that is absent disagrees with nothing",
+		await (async () => {
+			const clock = fakeClock();
+			const halfBound: ScriptedReply = { status: 0, stdout: agentGetReply({ session: true, omitBinding: true }) };
+			const { run, calls } = scriptedRun([
+				{ status: 0, stdout: CALLER_PANE_OK },
+				{ status: 0, stdout: TAB_OK },
+				startReplyEchoingArgv(witnessless()),
+				...Array.from({ length: 200 }, () => halfBound),
+			]);
+			const result = await herdrFreshCall({ ...base, backend: "claude-code" }, run, HERDR_ENV, NONCE, clock);
+			return (
+				result.ok &&
+				result.receipt.witness.state === "unobserved" &&
+				!calls.some((call) => call[0] === "pane" && call[1] === "close")
 			);
 		})(),
 	);
