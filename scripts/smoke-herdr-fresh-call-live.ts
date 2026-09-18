@@ -378,15 +378,26 @@ async function main(): Promise<void> {
 	// it whole: herdr's socket follows `XDG_CONFIG_HOME`, so each cell must keep its own. So it
 	// takes parity on the ONE subtree the incident is about — the vendor's data dir is shared with
 	// the operator rather than re-created empty, which puts the store and the launcher back in the
-	// same install. Everything else in this tree stays fenced. If the operator has no such dir
-	// there is nothing to share and the preflight below is what stands.
+	// same install. Everything else in this tree stays fenced.
+	//
+	// AND IF THERE IS NO SUCH DIR, THIS SMOKE DOES NOT RUN `[sol 재검 2026-09-18]`. The previous
+	// version skipped the symlink and launched anyway, on the reasoning that "the preflight below
+	// stands" — which was false comfort: the preflight PINS the launcher's identity, and the
+	// teardown oracle reports the damage, but neither prevents a child from retargeting it. Without
+	// this subtree there is no parity to give, so the incident's exact precondition would be rebuilt
+	// on purpose. A rail that cannot protect the operator's launcher declines to open the child.
 	const operatorClaudeData = path.join(
 		process.env.XDG_DATA_HOME ?? path.join(os.homedir(), ".local", "share"),
 		"claude",
 	);
-	if (fs.existsSync(operatorClaudeData)) {
-		fs.symlinkSync(operatorClaudeData, path.join(fenced.XDG_DATA_HOME, "claude"));
+	if (!fs.existsSync(operatorClaudeData)) {
+		throw new Error(
+			`${LABEL}: fail-closed — the operator has no vendor data dir at ${operatorClaudeData}, so the fixture cannot share ` +
+				"the version store the launcher resolves against. Launching anyway is the #67 precondition (fixture " +
+				"XDG_DATA_HOME beside a real HOME), and this smoke refuses to rebuild it.",
+		);
 	}
+	fs.symlinkSync(operatorClaudeData, path.join(fenced.XDG_DATA_HOME, "claude"));
 
 	// FAIL-CLOSED PREFLIGHT, before any child exists (issue #67's shared fence). This smoke keeps
 	// its fixture rather than removing it, so the guard that matters here is the integrity oracle

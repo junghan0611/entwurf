@@ -121,12 +121,12 @@
 		},
 		{
 			"claim": "LAUNCHFENCE-EXPOSED-SMOKE-WIRED",
-			"title": "a LIVE smoke hands a Claude child a fixture XDG_DATA_HOME beside the operator's real HOME with no fence — the vendor then splits its install across two trees, reinstalls into the fixture and repoints ~/.local/bin/claude at a tmp directory, which is how the herdr rail silently owned the operator's launcher for seven runs",
+			"title": "the teardown verifies a launcher snapshot taken AFTER the children ran instead of the one pinned before them — every name the fence exports is still in the file, so a presence check passes, while the oracle now compares the damage to itself and a retarget reads as 'unchanged'",
 			"subject": "scripts/smoke-herdr-fresh-call-live.ts",
-			"find": [
-				"import { assessLauncherCleanup, snapshotClaudeLauncher, verifyClaudeLauncher } from \"./lib/claude-launcher-fence.ts\";\n"
+			"find": ["\t\tconst launcherProblems = verifyClaudeLauncher(launcher);"],
+			"replace": [
+				"\t\tconst launcherProblems = verifyClaudeLauncher(snapshotClaudeLauncher({ env: process.env, fixtureRoot: root }));"
 			],
-			"replace": [""],
 			"gate": ["bash", "run.sh", "check-mux-launcher-fence"],
 			"timeoutSeconds": 120,
 			"signature": "[QK:LAUNCHFENCE-EXPOSED-SMOKE-WIRED]",

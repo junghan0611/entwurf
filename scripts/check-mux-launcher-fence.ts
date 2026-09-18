@@ -264,45 +264,91 @@ function main(): void {
 		);
 		// ── the population: who ELSE hands a child a fixture data root ───────────
 		{
-			// A smoke that assigns its own fixture XDG_DATA_HOME is in the incident's precondition.
-			// Exemptions are named here WITH the fact that makes them true, never assumed: the
-			// plugin-build smoke relocates HOME into the same sandbox, so the vendor's store and its
-			// launcher stay in ONE tree and the operator's launcher is never a candidate.
-			const EXEMPT: Record<string, { reason: string; holds: (src: string) => boolean }> = {
+			// A smoke that assigns its own fixture XDG_DATA_HOME beside the operator's real HOME is
+			// standing in the incident's precondition. Three things are read STRUCTURALLY rather than
+			// by name `[sol 재검 2026-09-18]`, because the first version of this claim asked only
+			// whether four strings appeared anywhere in the file — which a comment, or dead code,
+			// satisfies as well as a wired smoke:
+			//
+			//   1. the preflight is BOUND (`const x = snapshotClaudeLauncher(`) and comes first;
+			//   2. the integrity oracle and the cleanup verdict both run on THAT binding, in that
+			//      order — one snapshot, not three unrelated calls;
+			//   3. a smoke that REMOVES its fixture does both before the removal. The herdr smoke
+			//      preserves its fixture as evidence and therefore has no removal to precede; that
+			//      is a real difference between the two shapes, so the rule is written as a
+			//      condition on removal rather than as a `finally` that only one of them has.
+			//
+			// An exemption is read the same way: not "the file contains HOME somewhere", but "the
+			// env object that assigns the fixture XDG_DATA_HOME also relocates HOME", which is the
+			// relation that actually keeps the vendor's store and its launcher in one tree.
+			const dataRootAssignment = (file: string): RegExp => (file.endsWith(".sh") ? /XDG_DATA_HOME=/ : /XDG_DATA_HOME:/);
+			/** The object literal / env block that carries the fixture data root, not the whole file. */
+			const envBlockAround = (src: string, file: string): string => {
+				const at = src.search(dataRootAssignment(file));
+				if (at < 0) return "";
+				const from = src.lastIndexOf("{", at);
+				if (from < 0) return src.slice(Math.max(0, at - 800), at + 800);
+				let depth = 0;
+				for (let i = from; i < src.length; i += 1) {
+					if (src[i] === "{") depth += 1;
+					else if (src[i] === "}") {
+						depth -= 1;
+						if (depth === 0) return src.slice(from, i + 1);
+					}
+				}
+				return src.slice(from);
+			};
+			const EXEMPT: Record<string, { reason: string; holds: (src: string, file: string) => boolean }> = {
 				"smoke-herdr-plugin-build-live.ts": {
 					reason: "it relocates HOME into the same sandbox, so store and launcher stay in one tree",
-					holds: (src) => /\n\tHOME,\n/.test(src),
+					holds: (src, file) => /(^|\n)\s*HOME[,:]/.test(envBlockAround(src, file)),
 				},
 			};
-			const consumesFence = (src: string): boolean =>
-				src.includes('from "./lib/claude-launcher-fence.ts"') &&
-				src.includes("snapshotClaudeLauncher(") &&
-				src.includes("verifyClaudeLauncher(") &&
-				src.includes("assessLauncherCleanup(");
+			const consumesFence = (src: string): boolean => {
+				if (!src.includes('from "./lib/claude-launcher-fence.ts"')) return false;
+				const bound = /const (\w+) = snapshotClaudeLauncher\(/.exec(src);
+				if (bound === null) return false;
+				const snapshot = bound[1];
+				const preflightAt = src.indexOf(bound[0]);
+				const verifyAt = src.indexOf(`verifyClaudeLauncher(${snapshot})`);
+				const cleanupAt = src.indexOf(`assessLauncherCleanup(${snapshot})`);
+				const removalAt = src.indexOf("rmSync(root");
+				if (preflightAt < 0 || verifyAt < preflightAt || cleanupAt < verifyAt) return false;
+				return removalAt < 0 || (verifyAt < removalAt && cleanupAt < removalAt);
+			};
 			const exposed = fs
 				.readdirSync(path.join(ROOT, "scripts"))
-				.filter((f) => f.startsWith("smoke-") && f.endsWith("-live.ts"))
-				.filter((f) => /XDG_DATA_HOME:/.test(read(path.join("scripts", f))));
+				.filter((f) => f.startsWith("smoke-") && (f.endsWith("-live.ts") || f.endsWith("-live.sh")))
+				.filter((f) => dataRootAssignment(f).test(read(path.join("scripts", f))));
 			const unguarded = exposed.filter((f) => {
 				const src = read(path.join("scripts", f));
 				if (consumesFence(src)) return false;
 				const exemption = EXEMPT[f];
-				return !(exemption && exemption.holds(src));
+				return !(exemption && exemption.holds(src, f));
 			});
 			ok(
-				`population: ${exposed.length} LIVE smokes assign a fixture XDG_DATA_HOME (measured, not listed), and the three real-HOME ones are the fence's constituency`,
+				`population: ${exposed.length} LIVE smokes assign a fixture data root (measured across .ts AND .sh, not listed), and the three real-HOME ones are the fence's constituency`,
 				exposed.length >= 4 &&
 					["smoke-herdr-fresh-call-live.ts", "smoke-mux-fresh-call-live.ts", "smoke-mux-lifecycle-live.ts"].every((f) =>
 						exposed.includes(f),
 					),
 			);
 			ok(
-				`[QK:LAUNCHFENCE-EXPOSED-SMOKE-WIRED] every LIVE smoke that hands a child a fixture XDG_DATA_HOME beside the operator's real HOME consumes this fence — preflight, integrity oracle and cleanup verdict — or carries a stated exemption that is true of its own source; unguarded: ${unguarded.join(", ") || "none"}`,
+				`[QK:LAUNCHFENCE-EXPOSED-SMOKE-WIRED] every LIVE smoke that hands a child a fixture XDG_DATA_HOME beside the operator's real HOME consumes this fence AS A LIFECYCLE — one bound preflight, then its integrity oracle, then the cleanup verdict on that same snapshot, and all of it before any fixture removal — or carries an exemption proved against the very env block that assigns the data root; unguarded: ${unguarded.join(", ") || "none"}`,
 				unguarded.length === 0,
 			);
 			ok(
-				"the exemption discriminates rather than excuses: the exempt smoke really does relocate HOME, and removing that line would put it back in the constituency",
-				Object.entries(EXEMPT).every(([f, e]) => e.holds(read(path.join("scripts", f)))),
+				"the exemption discriminates rather than excuses: the exempt smoke relocates HOME in the SAME env block that fences its data root, and moving that line out of the block would put it back in the constituency",
+				Object.entries(EXEMPT).every(([f, e]) => e.holds(read(path.join("scripts", f)), f)),
+			);
+			ok(
+				"the lifecycle read is not satisfied by the STRINGS alone — a source carrying all four names with no ordering is refused",
+				!consumesFence(
+					[
+						'import { assessLauncherCleanup, snapshotClaudeLauncher, verifyClaudeLauncher } from "./lib/claude-launcher-fence.ts";',
+						"// snapshotClaudeLauncher( verifyClaudeLauncher( assessLauncherCleanup(",
+					].join("\n"),
+				),
 			);
 		}
 
