@@ -163,50 +163,17 @@ CHANGELOG `## Unreleased`가 구현 범위 `v0.15.1..19ad90c` **30커밋** 전�
 스크립트가 움직였으므로 반드시 돈다; lane C SHA의 긴 바닥은 로컬에서 안 돌렸다) → 다음 컷 prepare는 별도 권한. #109 openclaw 다리는 **닫혔다** · **0.16.1 make는 열린 채 PAUSED**.
 푸시·태그·publish는 금지; `entwurf-release`의 make/publish 별도 권한이다.
 
-# NOW — stem: #116 머지 완료, 다음 = 0.23.0 컷
+# NOW — stem: v0.23.0 tag/GitHub release 완료, 다음 = GLG publish
 
-- **상태:** `feat/116-herdr-coexist`에 **`origin/main`(= `c4178ea`, v0.22.0 + #117) 머지 완료.**
-  conflict 11파일 전부 해소, main ff·push는 **코디네이터(Claude Fable 5.1 `20260917T085525-9d1c92`) 몫**이다.
-  herdr 레일의 좌표·거절·회수·증거 등급·LIVE 분류표는 [docs/herdr-launch-rail.md](./docs/herdr-launch-rail.md)가 진다
-  (브랜치 NEXT는 머지 커밋에서 지웠다).
-- **머지의 실작업 한 곳:** `pi-extensions/lib/mux-fresh-call.ts`. main의 codex `-C launchCwd`가
-  브랜치에서 `fresh-call-composition.ts`로 옮겨간 argv 분기에 앉아야 했으므로, 그 leaf가 소켓과
-  **같은 방식의 lazy thunk 둘**(`resolveCodexSocketPath`·`resolveCodexLaunchCwd`)을 받는다 — herdr 레일은
-  codex가 pilot이 아니므로 둘 다 던지는 resolver를 넘긴다. main의 caller-seat 축(#95 lane B/C)은
-  `dispatchFreshCall`로 올라갔고, 두 표면 중 MCP 브리지만 그 입력을 공급한다.
-- **stale 뮤턴트 함정(#117이 CI 40분 뒤에 배운 것)은 정적으로 닫았다:** 전 lane 704 뮤턴트의 find를
-  subject 바이트에 대고 재대조 → **0 MUTANT-STALE**. 이동한 것 7개를 재조준했다(`FRESHCALL-CODEX-THREAD-CWD`·
-  `FRESHCALL-CWD-CALLER-ONLY` → 합성 leaf, `CODEX-CALLER-PREFLIGHT-SURFACE-WIRED` → dispatch root,
-  `FCD-CODEX-PREFLIGHT-TMUX`·`FCD-SURFACE-PARITY`·`FRESHCALL-CODEX-PREMUTATION-MCP`·
-  `CODEX-SEAT-TITLE-BECOMES-DELIVERY-TARGET`).
-- **남은 것, 순서대로:**
-  1. **GLG 아침 판정** — 날것 PC에서 `pi → claude-code (claude-sonnet-5)` 재시도. LIVE run 2 수용
-     영수증 + 콜드 스타트 타임아웃 수리가 그 요청의 근거다.
-  2. **0.23.0** prepare → make → **GLG publish** → `plugins/herdr/runtime-lock.json` `source: npm` 0.23.0 핀
-     (0.22.0은 `scripts/herdr-*.mjs`가 없어 핀 불가) → 플러그인 `version` 0.2.0.
-- **A. `herdr agent prompt` 2단계 측정 — 닫혔다, 구현 안 함** (`65cefd8`). 모델 턴 없이 벤더 소스에서
-  끝났다: `agent.prompt`는 텍스트를 bracketed paste로 감싸 **자식 pane PTY에 쓰고** 300 ms 뒤 Enter를
-  쓴다(`api/agents.rs:195`·`api_helpers.rs:25-32`·`:13`·`:208-212` @ `7505c08`). 제어문자 검사는
-  argv와 달리 **없고**(빈 문자열 검사뿐), ack되는 것은 "입력이 쓰였다"뿐이다(벤더 help: "before any
-  input is sent", "It does not track turns"). 즉 2단계는 §3이 이미 버린 **키 입력 레일**이고 Hard Rule
-  16을 첫 턴에 어긴다. LIVE 3런은 쓰지 않았다. 측정표는 `docs/herdr-launch-rail.md` §14, §3↔§14 모순도
-  같이 수리했다. 첫 턴 경주의 남은 방향은 프레이밍이 도구 목록보다 먼저 서는 축(omp `--entwurf-bootstrap`).
-- **B. 키 입력 경계 게이트 — 섰다** (`95cfac0`). 외부 관측자(2026-09-17 19:35)가 「지켜지고 있고,
-  지키는 것은 아무것도 없다」고 잰 그 규칙에 `check-typing-call-fence` 신설: `pi-extensions/`·`mcp/`의
-  **tracked 프로덕션 76파일**을 주석만 지우고(문자열은 남기고) 훑어 tmux `send-keys`/`paste-buffer`/
-  `load-buffer`와 herdr PTY 동사(`agent.prompt`·`agent.send_keys`·`pane.send_text`·`pane.input.set`)
-  **0건**을 이름으로 단언한다. 8 assertions, `check:hermetic` 배선, 뮤턴트 1(`TYPEFENCE-PRODUCTION-CLEAN`)
-  → 인벤토리 **704 → 705 / 57 lanes**. 산문 면제가 하중을 진다 — 규칙을 적은 문장이 그 이름을 담으므로.
-- **npm publish 0.22.0 — 완료, integrity 대조 끝났다.** GLG가 2026-09-17 21:2x에 직접 발행했다.
-  `[측정 2026-09-18 oracle]` 레지스트리 `dist-tags`는 `latest`=**0.22.0** / `repair`=0.12.8-repair.1(보존),
-  `dist.integrity` = `sha512-i8V4berF1Nzt/j+/VzEj3oZAcJAWFUt55OJ0Z4SvqadDVyXmjhYwFamj1VhArT4W/7Ym6gAwVmBZI8Q7YSxDGQ==`,
-  `dist.shasum` = `413c3d3f9e2688221852f2af88bf1791cf3fec09`. 보존된 수용 candidate
-  `/tmp/entwurf-release-candidate-0.22.0.GAQERG/junghanacs-entwurf-0.22.0.tgz`(12,855,699 bytes,
-  sha256 `e1e2868a6d7e74cfa2ca008608f8ed4f1cfbef22790f9ed7b304791368fd0ccf`)의 sha512-base64와 sha1이
-  그 둘과 **같다 — 리팩 없음**. 남은 릴리즈 순서는 위 2번(0.23.0)뿐이다.
-- **Do not:** main ff·push(코디네이터 몫) · 0.23.0 prepare/cut · `runtime-lock.json`의 `source` 변경 ·
-  실 Codex 턴 · `~/.codex/hooks.json` 손편집 · `.herdr-bak` 삭제 · `HERDR_FRESH_CALL_BACKENDS`에 codex 추가 ·
-  statusline `UNKNOWN`(GLG 취향 미결) · #118.
+- **좌표:** `v0.23.0` @ `1261c72`, GitHub release 공개. 수용 candidate는
+  `/tmp/entwurf-release-candidate-0.23.0.wlNB1w/junghanacs-entwurf-0.23.0.tgz` (13,206,068 bytes,
+  sha256 `a8f4485dd295d7f38570d5cb9d177572dbb79d6bc10c136440be6f0b8b5ae0d1`)이며 npm에는 아직 올리지 않았다.
+- **다음 순서:** GLG가 위 보존 candidate를 `latest`로 publish → 레지스트리-installed 검증과 integrity 대조 →
+  `plugins/herdr/runtime-lock.json`을 `source: npm`의 0.23.0으로 핀 → 플러그인 `version` 0.2.0.
+- **컷 영수증:** prepared exact-SHA CI run `35337835836` 4잡+qualification body green; candidate container
+  acceptance log `/tmp/entwurf-release-candidate-0.23.0.wlNB1w/acceptance.log`. LIVE Codex retry의 명시 승인
+  편차와 focused repair receipt는 CHANGELOG 0.23.0 Verification에 정직하게 남겼다.
+- **Do not:** npm publish를 대신 실행하지 말 것; candidate를 재pack하지 말 것; `~/.codex/hooks.json`을 손편집하지 말 것.
 
 <details><summary>#117 랜딩의 NOW (머지 전 좌표)</summary>
 
