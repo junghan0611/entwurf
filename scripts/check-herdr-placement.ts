@@ -33,13 +33,31 @@
  *   HP-PLACEMENT-NOT-DISPATCH    the dispatch path never imports the placement axis
  *   HP-ONE-READ-PER-LISTING      the provider reads the placement owner exactly once for
  *                            a whole listing — the anti-watcher rule in code
+ *   HP-READ-ENV-GATED-NULL-NEVER-EMPTY  the production READ itself: gated on herdr's own two
+ *                            env facts, spawning nothing when they are absent, asking the
+ *                            fixed `pane list` argv, and turning every failure into `null`
+ *   HP-READ-TIMEOUT-BOUNDED  that read is bounded, so a placement owner that never answers
+ *                            costs a listing a bounded wait and not a hang
+ *
+ * THE ONE STUB IN THIS FILE, AND WHY IT IS NOT A FAKE HERDR (glm #1, 2026-09-18). Everything
+ * above is decided from VERBATIM recordings because a stand-in would author herdr's answers
+ * before the real thing was measured. The two claims below are not about herdr's answers at all:
+ * they are about OUR spawn seam — which env facts gate it, what argv it asks, and that a process
+ * which fails, garbles or hangs becomes `null` rather than an empty index. Proving those needs a
+ * controllable PROCESS, and the stub is never asked what a pane list looks like: the one cell that
+ * reads a payload feeds it the same recorded bytes section 1 parses. `[glm 감사 2026-09-18]` this
+ * seam had zero assertions and zero mutants — a typo in `["pane","list"]` or a deleted timeout
+ * would have left the deterministic floor green.
  */
 
 import assert from "node:assert/strict";
+import * as fs from "node:fs";
 import { readFileSync } from "node:fs";
+import * as os from "node:os";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { type EntwurfFactsDeps, listEntwurfFacts } from "../pi-extensions/lib/entwurf-fact-provider.ts";
+import { readHerdrPlacementIndex } from "../pi-extensions/lib/entwurf-peer-observe.ts";
 import {
 	buildPlacementIndex,
 	type HerdrPaneRow,
@@ -50,6 +68,7 @@ import {
 	resolvePlacement,
 } from "../pi-extensions/lib/herdr-placement.ts";
 import { type MetaIdentity, serializeMetaIdentity } from "../pi-extensions/lib/meta-session.ts";
+import { reclaimOnExit } from "./lib/reclaim-on-exit.ts";
 
 const REPO_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -297,6 +316,64 @@ async function main(): Promise<void> {
 			"[QK:HP-PLACEMENT-NOT-DISPATCH] no entwurf_v2 dispatch module imports, names, or reads the placement axis — " +
 				`a pane is an ephemeral view and must never reach a routing decision (leaking: ${leaking.join(", ")})`,
 			leaking.length === 0,
+		);
+	}
+
+	// ── 6. the production READ — the spawn seam, on a stub PROCESS ──────────────
+	{
+		const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), "entwurf-herdr-read."));
+		reclaimOnExit(sandbox);
+		const witness = path.join(sandbox, "spawned");
+		const stub = (body: string): string => {
+			const file = path.join(sandbox, `stub-${Math.random().toString(36).slice(2)}.sh`);
+			// EVERY stub records that it ran, so "returned null" and "was never spawned" are
+			// different observations rather than the same one.
+			fs.writeFileSync(file, `#!/usr/bin/env bash\nprintf '%s\\n' "$*" >> ${JSON.stringify(witness)}\n${body}\n`);
+			fs.chmodSync(file, 0o755);
+			return file;
+		};
+		const spawns = (): string[] =>
+			fs.existsSync(witness) ? fs.readFileSync(witness, "utf8").split("\n").filter(Boolean) : [];
+		const RECORDED = `{"id":"cli:pane:list","result":{"panes":[{"agent":"claude","agent_session":{"agent":"claude","kind":"id","source":"herdr:claude","value":"${CLAUDE_NATIVE}"},"pane_id":"w2:p2"},{"agent":"pi","agent_session":{"agent":"pi","kind":"path","source":"herdr:pi","value":"${PI_PATH}"},"pane_id":"w2:p4"}],"type":"pane_list"}}`;
+
+		const good = stub(`cat <<'JSON'\n${RECORDED}\nJSON`);
+		const before = spawns().length;
+		const noEnv = readHerdrPlacementIndex({ HERDR_BIN_PATH: good });
+		const noBin = readHerdrPlacementIndex({ HERDR_ENV: "1" });
+		const wrongEnv = readHerdrPlacementIndex({ HERDR_ENV: "true", HERDR_BIN_PATH: good });
+		const gatedSpawns = spawns().length - before;
+
+		const failing = stub("exit 1");
+		const failed = readHerdrPlacementIndex({ HERDR_ENV: "1", HERDR_BIN_PATH: failing });
+		const garbling = stub("echo 'not json at all'");
+		const garbled = readHerdrPlacementIndex({ HERDR_ENV: "1", HERDR_BIN_PATH: garbling });
+		const read = readHerdrPlacementIndex({ HERDR_ENV: "1", HERDR_BIN_PATH: good });
+		const argv = spawns();
+
+		ok(
+			"[QK:HP-READ-ENV-GATED-NULL-NEVER-EMPTY] the read is gated on herdr's OWN two env facts and spawns nothing without them, asks the fixed `pane list` argv, and turns a failed or unreadable answer into null — never into an empty index, which would claim herdr was read and has none of your citizens",
+			noEnv === null &&
+				noBin === null &&
+				// `HERDR_ENV` is read for its EXACT value: anything else is not herdr saying so.
+				wrongEnv === null &&
+				gatedSpawns === 0 &&
+				failed === null &&
+				garbled === null &&
+				read !== null &&
+				read.byNativeSessionId.size === 2 &&
+				argv.length === 3 &&
+				argv.every((line) => line === "pane list"),
+		);
+
+		// A hang is the failure a bound exists for, and it is the one no other cell reaches: the
+		// process is alive and silent, so nothing but the timeout ends the wait.
+		const hanging = stub("sleep 30");
+		const started = Date.now();
+		const hung = readHerdrPlacementIndex({ HERDR_ENV: "1", HERDR_BIN_PATH: hanging });
+		const waited = Date.now() - started;
+		ok(
+			`[QK:HP-READ-TIMEOUT-BOUNDED] a placement owner that never answers costs the listing a BOUNDED wait and then reads unobserved — measured ${waited}ms against the 2000ms bound`,
+			hung === null && waited < 10_000,
 		);
 	}
 
