@@ -382,10 +382,24 @@ async function main(): Promise<void> {
 			liveGet.status === 0 ? parseHerdrPaneGetResponse(liveGet.stdout) : null,
 			liveGet.status !== 0,
 		);
+		// THE REAL SERVER IS WHAT MAKES THIS CELL WORTH RUNNING, and 2026-09-18 is why: the
+		// refusal used to be spelled `agent-session-present`, which only fires once herdr has been
+		// TOLD the pane's session id. On the Claude rail that id arrives through a separate hook the
+		// child makes after it starts, so a pane holding a booted sibling read as empty and was
+		// closed. OCCUPANCY — herdr naming an AGENT in the pane — is the refusal now, and it does
+		// not depend on anybody having reported a session. Both facts are asserted: against a live
+		// pi citizen herdr has both, and the one that must carry the refusal is the first.
 		ok(
-			"[QK:HS-CLOSE-REFUSES-LIVE] the reclaim decision REFUSES a pane that now holds an agent, naming agent-session-present — a living sibling is never closed by the path that exists to clean up a failed launch",
-			liveDecision.close === false && liveDecision.reason === "agent-session-present",
+			"[QK:HS-CLOSE-REFUSES-LIVE] the reclaim decision REFUSES a pane that now holds an agent, naming agent-present — occupancy alone, because a sibling whose session id herdr has not been told yet is still a sibling, and a living one is never closed by the path that exists to clean up a failed launch",
+			liveDecision.close === false && liveDecision.reason === "agent-present",
 		);
+		{
+			const live = liveGet.status === 0 ? parseHerdrPaneGetResponse(liveGet.stdout) : null;
+			ok(
+				"a real live citizen gives herdr BOTH facts — the agent label and the session report — and the refusal above is keyed to the one that arrives first",
+				live?.agent !== undefined && live?.hasAgentSession === true,
+			);
+		}
 
 		const spareRun = herdr(bin, sandbox, buildHerdrTabCreateArgs({ workspaceId: callerPane.workspaceId }));
 		const spareTab = spareRun.status === 0 ? parseHerdrTabCreateResponse(spareRun.stdout) : null;
