@@ -110,7 +110,7 @@
 			"find": [
 				"\tprogress.step(",
 				"\t\t`fetching and installing the Entwurf runtime from ${describeRequest(plan.requested)} — this is the long step ` +",
-				"\t\t\t\"(npm packs the source; expect minutes of silence)\",",
+				"\t\t\t\"(npm acquires the locked artifact; expect minutes of silence)\",",
 				"\t);"
 			],
 			"replace": ["\tprogress.step(\"working\");"],
