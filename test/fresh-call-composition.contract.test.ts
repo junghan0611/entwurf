@@ -25,6 +25,7 @@ import {
 	FRESH_CALL_BACKENDS,
 	FRESH_CALL_CALLBACK_TOOL,
 	FRESH_CALL_PEERS_TOOL,
+	FRESH_CALL_TOOL_LOAD_HINT,
 	type FreshCallComposition,
 } from "../pi-extensions/lib/fresh-call-composition.ts";
 import {
@@ -135,6 +136,54 @@ describe("the tmux rail's bytes did not move when the code did", () => {
 		// is the whole mechanism, and a supervisor is what this rail refuses to be.
 		const code = LEAF_SRC.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:])\/\/.*$/gm, "$1");
 		expect(code).not.toMatch(/setInterval|setTimeout|watch|poll/i);
+	});
+
+	it("[QK:FRESHCOMP-TOOL-LOAD-HINT-CLAUDE-ONLY] the one backend measured to need it is told how to load its callback tool, and no other backend's framing gains a byte", () => {
+		// `[측정 2026-09-18, n=5]` claude-code 2.1.267 surfaced the bridge's tools as DEFERRED (name
+		// listed, schema absent) or still-connecting on EVERY probe — directly callable zero times —
+		// so a child told "FIRST ACTION … call entwurf_v2" answered in text and went idle. That is
+		// the production silence, 5 of 14 recorded launches. `[측정, n=3]` the sentence below made it
+		// 3/3, including a child 782 ms in, which is slower than every silent run.
+		const claude = composeFreshCallFraming({
+			backend: "claude-code",
+			callerGardenId: GID,
+			nonce: NONCE,
+			openingLine: TMUX_FRESH_CALL_OPENING_LINE,
+		}).join("\n");
+		// ONE select carries both tools: the corroboration the framing offers has to stay reachable
+		// for the child that takes the offer, and a second ToolSearch is a second thing to get right.
+		expect(claude).toContain(
+			`ToolSearch("select:${FRESH_CALL_CALLBACK_TOOL["claude-code"]},${FRESH_CALL_PEERS_TOOL["claude-code"]}")`,
+		);
+		expect((claude.match(/ToolSearch/g) ?? []).length).toBe(1);
+		// It states a fact and asks for a call. The REGISTER is checked on the hint's own lines, not
+		// on the whole framing — the surrounding prose says "you do not happen to see" and "no other
+		// way to know", and a file-wide match would be asserting something about sentences this
+		// claim does not own. What this claim owns is that the added line neither forbids nor claims
+		// authority: that is the register the prohibitions came out for (2026-09-17, a Sonnet sibling
+		// refused a first turn over one).
+		const hintText = FRESH_CALL_TOOL_LOAD_HINT["claude-code"].join(" ");
+		expect(hintText).not.toMatch(/\bdo not\b|\bnever\b|\byou must\b|\byou are required\b/i);
+		for (const backend of FRESH_CALL_BACKENDS) {
+			const framing = composeFreshCallFraming({
+				backend,
+				callerGardenId: GID,
+				nonce: NONCE,
+				openingLine: TMUX_FRESH_CALL_OPENING_LINE,
+			}).join("\n");
+			expect((framing.match(/ToolSearch/g) ?? []).length).toBe(backend === "claude-code" ? 1 : 0);
+			// The hint is a per-backend template, so a dialect that moves moves here too rather than
+			// leaving a stale tool name in the one sentence a stuck child depends on.
+			if (FRESH_CALL_TOOL_LOAD_HINT[backend].length > 0) {
+				expect(framing).toContain(FRESH_CALL_CALLBACK_TOOL[backend]);
+				expect(framing).not.toContain("${callbackTool}");
+			}
+		}
+		// Only the measured backend carries a hint at all — a sentence invented for a runtime nobody
+		// probed would be this rail guessing about a vendor again.
+		expect(FRESH_CALL_BACKENDS.filter((backend) => FRESH_CALL_TOOL_LOAD_HINT[backend].length > 0)).toEqual([
+			"claude-code",
+		]);
 	});
 
 	it("[QK:FRESHCOMP-RAIL-OWNS-PLACEMENT-SENTENCE] a rail supplies that sentence — the leaf refuses an empty one instead of inventing a default that would be false somewhere", () => {

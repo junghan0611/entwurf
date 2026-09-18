@@ -84,6 +84,43 @@ export const FRESH_CALL_PEERS_TOOL: Record<FreshCallBackend, string> = {
 };
 
 /**
+ * ONE BACKEND NEEDS TO BE TOLD HOW TO REACH ITS OWN CALLBACK TOOL `[측정 2026-09-18, n=5 + n=3]`.
+ *
+ * A Claude Code child of this rail could not call `entwurf_v2` on its first turn because the tool
+ * was not callable yet — claude-code 2.1.267 surfaces an MCP server that is still connecting as
+ * DEFERRED: the NAME is listed, the schema is not, and a call without the schema fails. Across five
+ * isolated probes the bridge's tools were directly callable ZERO times (4 DEFERRED, 1 still
+ * connecting), and the framing said "FIRST ACTION … call `entwurf_v2`" without saying the one thing
+ * that makes that possible. A child that cannot call the tool answers in text and goes idle — which
+ * is exactly the "silence" this rail measured in production, 5 of 14 recorded launches.
+ *
+ * The timing story that preceded this one is retired: re-read at n=13 rather than n=4, the success
+ * and silence latencies overlap completely (a 52 ms child called back; a 94 ms child did not), and
+ * the repair worked on a 782 ms child — slower than every silent run.
+ *
+ * `[측정, n=3, same model]` adding the sentence below produced 3/3 callbacks. It is a FACT about the
+ * runtime, in the register the rest of this framing uses since the prohibitions came out: it grants
+ * nothing, forbids nothing, and names the one call that turns a listed name into a callable tool.
+ * Both tools ride ONE `ToolSearch` select, so the corroboration the framing offers stays reachable
+ * for a child that takes the offer.
+ *
+ * Every other backend gets an EMPTY array, deliberately: pi has no deferred-tool surface, and the
+ * other three were never measured to need it. A hint invented for a runtime nobody probed would be
+ * this rail guessing about a vendor again.
+ */
+export const FRESH_CALL_TOOL_LOAD_HINT: Record<FreshCallBackend, readonly string[]> = {
+	pi: [],
+	"claude-code": [
+		"If ${callbackTool} is not callable yet, the entwurf-bridge server is still connecting or its",
+		'tools are deferred: load them first with ToolSearch("select:${callbackTool},${peersTool}") —',
+		"it waits for the server — then call ${callbackTool}.",
+	],
+	copilot: [],
+	omp: [],
+	codex: [],
+};
+
+/**
  * What a launch has to say, in the two shapes the five backends need. Four of them are
  * handed a first-turn PROMPT; omp is handed a bootstrap PAYLOAD its own installed extension
  * unpacks. Both are always built, because building one is cheap and a backend switch must
@@ -319,6 +356,13 @@ export function composeFreshCallFraming(params: {
 }): string[] {
 	const tool = FRESH_CALL_CALLBACK_TOOL[params.backend];
 	const peersTool = FRESH_CALL_PEERS_TOOL[params.backend];
+	// The hint is a per-backend TEMPLATE so the two tool dialects stay the single source of their
+	// own spelling here too — a hint that hard-coded Claude's name would go stale the day a dialect
+	// moves, and it would go stale silently, in the one sentence a stuck child depends on.
+	const loadHint = FRESH_CALL_TOOL_LOAD_HINT[params.backend].map((line) =>
+		line.replaceAll("${callbackTool}", tool).replaceAll("${peersTool}", peersTool),
+	);
+	const hintBlock = loadHint.length === 0 ? [] : ["", ...loadHint];
 	if (params.openingLine.length === 0) {
 		throw new Error("fresh-call composition: openingLine is empty — the rail must state where it placed the sibling");
 	}
@@ -336,6 +380,7 @@ export function composeFreshCallFraming(params: {
 		`You can corroborate the caller first if you want to: ${peersTool} is a read-only listing of`,
 		`this garden's citizens and ${params.callerGardenId} is one of them. That listing is capped, so`,
 		"a caller you do not happen to see in it is not a reason to skip the callback.",
+		...hintBlock,
 		"",
 		// WHERE THE RESULT GOES, said once, as topology. `[GLG 직접, 2026-09-18]` a Sonnet sibling
 		// finished its task and printed the answer in its own window; the caller never saw it. An

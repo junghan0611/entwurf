@@ -4,7 +4,7 @@
 	"mutants": [
 		{
 			"claim": "FRESHCALL-PI-ARGV-PROMPT-FIRST",
-			"title": "pi gets the flag before the prompt again \u2014 the measured shape that opens a window whose first turn never runs",
+			"title": "pi gets the flag before the prompt again — the measured shape that opens a window whose first turn never runs",
 			"subject": "pi-extensions/lib/fresh-call-composition.ts",
 			"find": ["\t\t\treturn [composition.prompt, \"--entwurf-control\", \"--model\", model];"],
 			"replace": ["\t\t\treturn [\"--entwurf-control\", composition.prompt, \"--model\", model];"],
@@ -123,7 +123,7 @@
 			"title": "one surface drops the optional cwd from its schema, so cross-repo fresh works from pi and silently cannot exist from the MCP bridge",
 			"subject": "mcp/entwurf-bridge/src/index.ts",
 			"find": [
-				"\t\tcwd: z\n\t\t\t.string()\n\t\t\t.optional()\n\t\t\t.describe(\n\t\t\t\t\"Optional literal ABSOLUTE path of an existing directory to start the sibling in (cross-repo fresh). Omit or pass \\\"\\\" to start where the CALLER is \u2014 this agent's own cwd on BOTH rails, or for a Codex caller its own record directory, because this bridge is the app-server's child and that process's directory is not the caller's. Taken exactly as given: no trim, no realpath, no project-name resolution. '#' is refused on the tmux rail only, because tmux format-expands a start directory; inside herdr it is an ordinary path character. The receipt echoes the directory that was REQUESTED or the caller record it came from, never an observation of where the pane landed.\",\n\t\t\t),\n"
+				"\t\tcwd: z\n\t\t\t.string()\n\t\t\t.optional()\n\t\t\t.describe(\n\t\t\t\t\"Optional literal ABSOLUTE path of an existing directory to start the sibling in (cross-repo fresh). Omit or pass \\\"\\\" to start where the CALLER is — this agent's own cwd on BOTH rails, or for a Codex caller its own record directory, because this bridge is the app-server's child and that process's directory is not the caller's. Taken exactly as given: no trim, no realpath, no project-name resolution. '#' is refused on the tmux rail only, because tmux format-expands a start directory; inside herdr it is an ordinary path character. The receipt echoes the directory that was REQUESTED or the caller record it came from, never an observation of where the pane landed.\",\n\t\t\t),\n"
 			],
 			"replace": [""],
 			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
@@ -133,7 +133,7 @@
 		},
 		{
 			"claim": "FRESHCALL-PI-SURFACE-IDENTITY",
-			"title": "native pi takes the caller garden id from the environment instead of its own resident closure \u2014 the uuidv7 confusion, reintroduced",
+			"title": "native pi takes the caller garden id from the environment instead of its own resident closure — the uuidv7 confusion, reintroduced",
 			"subject": "pi-extensions/entwurf-control.ts",
 			"find": ["\t\t\t\t\tcallerGardenId: residentGardenId,"],
 			"replace": ["\t\t\t\t\tcallerGardenId: process.env.PI_SESSION_ID ?? null,"],
@@ -173,7 +173,7 @@
 			"title": "MCP drops the required model field from fresh-call while the composition still expects one",
 			"subject": "mcp/entwurf-bridge/src/index.ts",
 			"find": [
-				"\t\tmodel: z\n\t\t\t.string()\n\t\t\t.min(1)\n\t\t\t.max(200)\n\t\t\t// The `\\[` below is USELESS TO JS AND LOAD-BEARING TO THE HOST. zod emits this source\n\t\t\t// text verbatim as the JSON Schema `pattern`, and the host's tool-schema validator is a\n\t\t\t// Rust regex engine that rejects an unescaped `[` inside a character class as \"unclosed\n\t\t\t// character class\" \u2014 a 400 on tools/list that stops EVERY Claude session from opening\n\t\t\t// (7-M-fix). Biome's safe fix removes it; do not accept that fix. The suppression must\n\t\t\t// stay on the line DIRECTLY above the expression, or it attaches to nothing and reads\n\t\t\t// as an unused suppression while the escape goes back to being fixable.\n\t\t\t// biome-ignore lint/complexity/noUselessEscapeInRegex: emitted to a Rust regex validator, see above\n\t\t\t.regex(/^[A-Za-z0-9][A-Za-z0-9._/:\\[\\]-]*$/)\n\t\t\t.describe(\n\t\t\t\t\"Required runtime model: canonical provider/model for pi, a Claude Code model id/alias, or a Copilot/OMP/Codex model name.\",\n\t\t\t),\n"
+				"\t\tmodel: z\n\t\t\t.string()\n\t\t\t.min(1)\n\t\t\t.max(200)\n\t\t\t// The `\\[` below is USELESS TO JS AND LOAD-BEARING TO THE HOST. zod emits this source\n\t\t\t// text verbatim as the JSON Schema `pattern`, and the host's tool-schema validator is a\n\t\t\t// Rust regex engine that rejects an unescaped `[` inside a character class as \"unclosed\n\t\t\t// character class\" — a 400 on tools/list that stops EVERY Claude session from opening\n\t\t\t// (7-M-fix). Biome's safe fix removes it; do not accept that fix. The suppression must\n\t\t\t// stay on the line DIRECTLY above the expression, or it attaches to nothing and reads\n\t\t\t// as an unused suppression while the escape goes back to being fixable.\n\t\t\t// biome-ignore lint/complexity/noUselessEscapeInRegex: emitted to a Rust regex validator, see above\n\t\t\t.regex(/^[A-Za-z0-9][A-Za-z0-9._/:\\[\\]-]*$/)\n\t\t\t.describe(\n\t\t\t\t\"Required runtime model: canonical provider/model for pi, a Claude Code model id/alias, or a Copilot/OMP/Codex model name.\",\n\t\t\t),\n"
 			],
 			"replace": [""],
 			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
@@ -227,7 +227,7 @@
 		},
 		{
 			"claim": "FRESHCALL-COPILOT-MANAGED-RUNTIME",
-			"title": "fresh call opens the BARE vendor instead of entwurf's managed invocation \u2014 the window opens, the EXTENSIONS scan is skipped silently, and the sibling can never be delivered to",
+			"title": "fresh call opens the BARE vendor instead of entwurf's managed invocation — the window opens, the EXTENSIONS scan is skipped silently, and the sibling can never be delivered to",
 			"subject": "pi-extensions/lib/mux-fresh-call.ts",
 			"find": ["\tcopilot: \"entwurf\","],
 			"replace": ["\tcopilot: \"copilot\","],
@@ -238,7 +238,7 @@
 		},
 		{
 			"claim": "FRESHCALL-COPILOT-ARGV-INTERACTIVE",
-			"title": "the Copilot prompt rides -p instead of --interactive \u2014 the turn runs and the CLI EXITS, closing the window on a sibling that was supposed to stay open",
+			"title": "the Copilot prompt rides -p instead of --interactive — the turn runs and the CLI EXITS, closing the window on a sibling that was supposed to stay open",
 			"subject": "pi-extensions/lib/fresh-call-composition.ts",
 			"find": ["\t\t\treturn [\"copilot\", \"--interactive\", composition.prompt, \"--model\", model, \"--yolo\"];"],
 			"replace": ["\t\t\treturn [\"copilot\", \"-p\", composition.prompt, \"--model\", model, \"--yolo\"];"],
@@ -249,7 +249,7 @@
 		},
 		{
 			"claim": "FRESHCALL-COPILOT-MODEL-ARGV",
-			"title": "the Copilot argv drops the explicit model \u2014 the managed launcher then injects `--model auto` and the caller's model choice is silently discarded",
+			"title": "the Copilot argv drops the explicit model — the managed launcher then injects `--model auto` and the caller's model choice is silently discarded",
 			"subject": "pi-extensions/lib/fresh-call-composition.ts",
 			"find": ["\t\t\treturn [\"copilot\", \"--interactive\", composition.prompt, \"--model\", model, \"--yolo\"];"],
 			"replace": ["\t\t\treturn [\"copilot\", \"--interactive\", composition.prompt, \"--yolo\"];"],
@@ -260,7 +260,7 @@
 		},
 		{
 			"claim": "FRESHCALL-COPILOT-YOLO-POLICY",
-			"title": "the policy token narrows back to the callback-only --allow-tool grant \u2014 the exact regression GLG measured on 2026-08-25: no YOLO in the footer, a confirmation prompt at every task tool, an impractical sibling",
+			"title": "the policy token narrows back to the callback-only --allow-tool grant — the exact regression GLG measured on 2026-08-25: no YOLO in the footer, a confirmation prompt at every task tool, an impractical sibling",
 			"subject": "pi-extensions/lib/fresh-call-composition.ts",
 			"find": ["\t\t\treturn [\"copilot\", \"--interactive\", composition.prompt, \"--model\", model, \"--yolo\"];"],
 			"replace": [
@@ -273,7 +273,7 @@
 		},
 		{
 			"claim": "FRESHCALL-COPILOT-CALLBACK-TOOL",
-			"title": "the Copilot callback names Claude Code's `mcp__server__tool` spelling \u2014 a dialect copied instead of measured, and the whole first turn is spent looking for a tool that is not there",
+			"title": "the Copilot callback names Claude Code's `mcp__server__tool` spelling — a dialect copied instead of measured, and the whole first turn is spent looking for a tool that is not there",
 			"subject": "pi-extensions/lib/fresh-call-composition.ts",
 			"find": ["\tcopilot: \"entwurf-bridge-entwurf_v2\","],
 			"replace": ["\tcopilot: \"mcp__entwurf-bridge__entwurf_v2\","],
@@ -284,7 +284,7 @@
 		},
 		{
 			"claim": "FRESHCALL-COPILOT-PREFLIGHT-PREMUTATION",
-			"title": "the capability preflight is removed \u2014 a host missing the birth, MCP, receiver or footer unit gets a real window and a launch receipt for a sibling that can never call home",
+			"title": "the capability preflight is removed — a host missing the birth, MCP, receiver or footer unit gets a real window and a launch receipt for a sibling that can never call home",
 			"subject": "pi-extensions/lib/mux-fresh-call.ts",
 			"find": [
 				"\tif (params.backend === \"copilot\") {\n\t\tconst missing = copilotFreshPreflight(env);\n\t\tif (missing) return { ok: false, reason: missing };\n\t}\n"
@@ -297,7 +297,7 @@
 		},
 		{
 			"claim": "FRESHCALL-COPILOT-PREFLIGHT-AFTER-RUNTIME",
-			"title": "the preflight runs before the runtime is proven \u2014 an operator with no entwurf at all is told to install a Copilot unit, which is the wrong repair",
+			"title": "the preflight runs before the runtime is proven — an operator with no entwurf at all is told to install a Copilot unit, which is the wrong repair",
 			"subject": "pi-extensions/lib/mux-fresh-call.ts",
 			"find": ["\tlet runtimePath: string;"],
 			"replace": [
@@ -310,7 +310,7 @@
 		},
 		{
 			"claim": "FRESHCALL-BACKEND-SET-SURFACE-PARITY",
-			"title": "a backend the composition can open is missing from the MCP surface enum \u2014 the capability exists and no external host can reach it",
+			"title": "a backend the composition can open is missing from the MCP surface enum — the capability exists and no external host can reach it",
 			"subject": "mcp/entwurf-bridge/src/index.ts",
 			"find": ["\t\t\t.enum([\"pi\", \"claude-code\", \"copilot\", \"omp\", \"codex\"])"],
 			"replace": ["\t\t\t.enum([\"pi\", \"claude-code\", \"copilot\", \"omp\"])"],
@@ -321,9 +321,9 @@
 		},
 		{
 			"claim": "COPILOT-PREFLIGHT-VISIBLE-IDENTITY-EFFECTIVE",
-			"title": "the visible-identity axis gates on entwurf's ownership RECEIPT instead of the settings Copilot actually reads \u2014 a host with a correct, resolvable footer and no install-state is refused for a working identity surface (measured: that is the acceptance host)",
+			"title": "the visible-identity axis gates on entwurf's ownership RECEIPT instead of the settings Copilot actually reads — a host with a correct, resolvable footer and no install-state is refused for a working identity surface (measured: that is the acceptance host)",
 			"subject": "pi-extensions/lib/copilot-fresh-preflight.ts",
-			"find": ["\tif (state === null) return false; // absent state is not drift \u2014 see the doc comment above"],
+			"find": ["\tif (state === null) return false; // absent state is not drift — see the doc comment above"],
 			"replace": ["\tif (state === null) return true;"],
 			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
 			"timeoutSeconds": 180,
@@ -332,7 +332,7 @@
 		},
 		{
 			"claim": "COPILOT-PREFLIGHT-VISIBLE-IDENTITY-REQUIRED",
-			"title": "the visible-identity axis is dropped entirely \u2014 a Copilot citizen is admitted whose garden id can only be found by scraping records, which step 4 refuses to call lifecycle parity",
+			"title": "the visible-identity axis is dropped entirely — a Copilot citizen is admitted whose garden id can only be found by scraping records, which step 4 refuses to call lifecycle parity",
 			"subject": "pi-extensions/lib/copilot-fresh-preflight.ts",
 			"find": ["\tif (visibleIdentityMissing(env, data)) return \"copilot-visible-identity-missing\";"],
 			"replace": [""],
@@ -343,7 +343,7 @@
 		},
 		{
 			"claim": "COPILOT-PREFLIGHT-MCP-CONFIG-DRIFT",
-			"title": "the MCP axis trusts the install-state alone \u2014 a config that lost the server key still reads as installed, and the first turn calls a tool that is not registered",
+			"title": "the MCP axis trusts the install-state alone — a config that lost the server key still reads as installed, and the first turn calls a tool that is not registered",
 			"subject": "pi-extensions/lib/copilot-fresh-preflight.ts",
 			"find": [
 				"\tif (!Object.hasOwn(servers as Record<string, unknown>, MCP_SERVER_KEY)) return \"copilot-mcp-hand-missing\";"
@@ -356,7 +356,7 @@
 		},
 		{
 			"claim": "COPILOT-PREFLIGHT-BIRTH-AXIS",
-			"title": "the birth axis is satisfied by the directory alone \u2014 an assembly root with no hooks.json passes as a hook unit, so a host that cannot mint a record reads as ready",
+			"title": "the birth axis is satisfied by the directory alone — an assembly root with no hooks.json passes as a hook unit, so a host that cannot mint a record reads as ready",
 			"subject": "pi-extensions/lib/copilot-fresh-preflight.ts",
 			"find": ["\tif (!isDir(birthUnit) || !existsSync(path.join(birthUnit, \"hooks\", \"hooks.json\"))) {"],
 			"replace": ["\tif (!isDir(birthUnit)) {"],
@@ -367,7 +367,7 @@
 		},
 		{
 			"claim": "COPILOT-PREFLIGHT-RECEIVE-PATH-MISMATCH",
-			"title": "the receive axis ignores the launcher's DEST equality \u2014 a unit in a different extensions root than this env will scan still preflights green, then entwurf copilot refuses inside the new window",
+			"title": "the receive axis ignores the launcher's DEST equality — a unit in a different extensions root than this env will scan still preflights green, then entwurf copilot refuses inside the new window",
 			"subject": "pi-extensions/lib/copilot-fresh-preflight.ts",
 			"find": [
 				"\tconst dest = receiveDest(env);\n\tif (dest === null || recvPath !== dest) return \"copilot-receive-unit-missing\";\n"
@@ -380,7 +380,7 @@
 		},
 		{
 			"claim": "COPILOT-PREFLIGHT-RECEIVE-AXIS",
-			"title": "the receive axis is satisfied by the directory alone \u2014 a leftover folder with no extension.mjs passes as our unit, so a host that cannot arm still reads as ready",
+			"title": "the receive axis is satisfied by the directory alone — a leftover folder with no extension.mjs passes as our unit, so a host that cannot arm still reads as ready",
 			"subject": "pi-extensions/lib/copilot-fresh-preflight.ts",
 			"find": [
 				"\tif (!isDir(recvPath) || !existsSync(path.join(recvPath, \"extension.mjs\"))) return \"copilot-receive-unit-missing\";"
@@ -393,7 +393,7 @@
 		},
 		{
 			"claim": "COPILOT-PREFLIGHT-COMPLETE-HOST-PASSES",
-			"title": "a correctly wired host is still refused \u2014 the preflight becomes a permanent closed door wearing a check's clothes",
+			"title": "a correctly wired host is still refused — the preflight becomes a permanent closed door wearing a check's clothes",
 			"subject": "pi-extensions/lib/copilot-fresh-preflight.ts",
 			"find": [
 				"\tif (visibleIdentityMissing(env, data)) return \"copilot-visible-identity-missing\";\n\n\treturn null;"
@@ -408,7 +408,7 @@
 		},
 		{
 			"claim": "COPILOT-PREFLIGHT-STATUSLINE-STATE-DRIFT",
-			"title": "an install-state that manages a different settings file is accepted \u2014 two files then disagree about who owns the footer and the preflight pretends they do not",
+			"title": "an install-state that manages a different settings file is accepted — two files then disagree about who owns the footer and the preflight pretends they do not",
 			"subject": "pi-extensions/lib/copilot-fresh-preflight.ts",
 			"find": ["\treturn path.resolve(managed) !== path.resolve(settingsPath);"],
 			"replace": ["\treturn false;"],
@@ -419,7 +419,7 @@
 		},
 		{
 			"claim": "FRESHCALL-COPILOT-EXPLICIT-POLICY",
-			"title": "the composition stops stating its policy and silently leans on the launcher to inject --yolo \u2014 the effective profile survives but the fresh contract loses its explicit permission statement",
+			"title": "the composition stops stating its policy and silently leans on the launcher to inject --yolo — the effective profile survives but the fresh contract loses its explicit permission statement",
 			"subject": "pi-extensions/lib/fresh-call-composition.ts",
 			"find": ["\t\t\treturn [\"copilot\", \"--interactive\", composition.prompt, \"--model\", model, \"--yolo\"];"],
 			"replace": ["\t\t\treturn [\"copilot\", \"--interactive\", composition.prompt, \"--model\", model];"],
@@ -430,7 +430,7 @@
 		},
 		{
 			"claim": "FRESHCALL-BACKEND-SET-SURFACE-PARITY-PI",
-			"title": "a backend the composition can open is missing from the native pi surface enum \u2014 an in-process pi session cannot name a capability the module already opens",
+			"title": "a backend the composition can open is missing from the native pi surface enum — an in-process pi session cannot name a capability the module already opens",
 			"subject": "pi-extensions/entwurf-control.ts",
 			"find": ["\t\t\tbackend: StringEnum([\"pi\", \"claude-code\", \"copilot\", \"omp\", \"codex\"], {"],
 			"replace": ["\t\t\tbackend: StringEnum([\"pi\", \"claude-code\", \"copilot\", \"omp\"], {"],
@@ -441,7 +441,7 @@
 		},
 		{
 			"claim": "TMUXSESSION-LOOKUP-ENGINE",
-			"title": "the seat lookup goes back to the `-f` filter engine, which was measured to match EVERY session when the name contains a '}' \u2014 a fresh sibling then opens in whichever session tmux listed first",
+			"title": "the seat lookup goes back to the `-f` filter engine, which was measured to match EVERY session when the name contains a '}' — a fresh sibling then opens in whichever session tmux listed first",
 			"subject": "pi-extensions/lib/resolve-tmux-session.ts",
 			"find": ["\treturn [\"list-windows\", \"-t\", `=${name}`, \"-F\", \"#{session_id}\"];"],
 			"replace": ["\treturn [\"list-sessions\", \"-f\", `#{==:#{session_name},${name}}`, \"-F\", \"#{session_id}\"];"],
@@ -452,7 +452,7 @@
 		},
 		{
 			"claim": "TMUXSESSION-NAME-GRAMMAR",
-			"title": "the seat name grammar is widened to 'anything non-empty' \u2014 tmux then stores a DIFFERENT name than the one requested (or splits it on '.'/':') and the seat can never be found, reported as 'missing' instead of as a shape this rail does not address",
+			"title": "the seat name grammar is widened to 'anything non-empty' — tmux then stores a DIFFERENT name than the one requested (or splits it on '.'/':') and the seat can never be found, reported as 'missing' instead of as a shape this rail does not address",
 			"subject": "pi-extensions/lib/resolve-tmux-session.ts",
 			"find": ["const SESSION_NAME = /^[A-Za-z0-9][A-Za-z0-9_-]*$/;"],
 			"replace": ["const SESSION_NAME = /^.+$/;"],
@@ -463,7 +463,7 @@
 		},
 		{
 			"claim": "FRESHCALL-PLACEMENT-MISSING-REJECTS",
-			"title": "an absent seat is read as success \u2014 tmux's exit code is ignored, so a missing session falls through to the caller's own session and the launch looks like the seat worked. Proof is in two halves: this mutant dies on the leaf's injected-runner assert plus the source-text ordering assert in the fast lane, and the behavioural oracle independent of that source is the real-tmux seat cell in check-mux-launch-tmux (refusal by name with a byte-identical list-windows -a before and after)",
+			"title": "an absent seat is read as success — tmux's exit code is ignored, so a missing session falls through to the caller's own session and the launch looks like the seat worked. Proof is in two halves: this mutant dies on the leaf's injected-runner assert plus the source-text ordering assert in the fast lane, and the behavioural oracle independent of that source is the real-tmux seat cell in check-mux-launch-tmux (refusal by name with a byte-identical list-windows -a before and after)",
 			"subject": "pi-extensions/lib/resolve-tmux-session.ts",
 			"find": ["\tif (result.status !== 0) return { ok: false, reason: \"tmux-session-missing\" };"],
 			"replace": [
@@ -476,7 +476,7 @@
 		},
 		{
 			"claim": "FRESHCALL-PLACEMENT-TARGET-ARGV",
-			"title": "the launch argv targets the caller's own session again \u2014 a seated fresh call silently opens beside the caller instead of in the operator's project session, and the receipt still looks right",
+			"title": "the launch argv targets the caller's own session again — a seated fresh call silently opens beside the caller instead of in the operator's project session, and the receipt still looks right",
 			"subject": "pi-extensions/lib/mux-fresh-call.ts",
 			"find": ["\t\t`${targetSessionId}:{end}`,"],
 			"replace": ["\t\t`$0:{end}`,"],
@@ -487,7 +487,7 @@
 		},
 		{
 			"claim": "FRESHCALL-PLACEMENT-BACKEND-PARITY",
-			"title": "the project seat becomes a pi capability \u2014 the grammar refusal is gated on the backend, so claude-code, copilot and omp fall past the seat check into runtime resolution and answer with the wrong reason. Every seat assertion that existed when #105 landed was written against backend pi alone, so nothing would have noticed",
+			"title": "the project seat becomes a pi capability — the grammar refusal is gated on the backend, so claude-code, copilot and omp fall past the seat check into runtime resolution and answer with the wrong reason. Every seat assertion that existed when #105 landed was written against backend pi alone, so nothing would have noticed",
 			"subject": "pi-extensions/lib/mux-fresh-call.ts",
 			"find": ["\t\tif (badSeat) return { ok: false, reason: badSeat };"],
 			"replace": ["\t\tif (badSeat && params.backend === \"pi\") return { ok: false, reason: badSeat };"],
@@ -498,7 +498,7 @@
 		},
 		{
 			"claim": "FRESHCALL-PLACEMENT-RECEIPT-TARGET",
-			"title": "the receipt copies the CALLER's session id again \u2014 the window is in the seat, the receipt names the caller's session, and every later close/lookup built on that receipt addresses the wrong session. Proof is in two halves: this mutant dies on the source-text assembly assert in the fast lane, and the behavioural oracle independent of that source is the real-tmux seat cell in check-mux-launch-tmux (receipt.sessionId === seatId !== callerId, read from the server's own inventory)",
+			"title": "the receipt copies the CALLER's session id again — the window is in the seat, the receipt names the caller's session, and every later close/lookup built on that receipt addresses the wrong session. Proof is in two halves: this mutant dies on the source-text assembly assert in the fast lane, and the behavioural oracle independent of that source is the real-tmux seat cell in check-mux-launch-tmux (receipt.sessionId === seatId !== callerId, read from the server's own inventory)",
 			"subject": "pi-extensions/lib/mux-fresh-call.ts",
 			"find": ["\t\t\tsessionId: targetSessionId,"],
 			"replace": ["\t\t\tsessionId: placement.sessionId,"],
@@ -512,7 +512,7 @@
 			"title": "one surface drops the optional seat from its schema, so opening a sibling in the operator's project session works from pi and silently cannot exist from the MCP bridge",
 			"subject": "mcp/entwurf-bridge/src/index.ts",
 			"find": [
-				"\t\tplacement: z\n\t\t\t.object({\n\t\t\t\ttmuxSession: z\n\t\t\t\t\t.string()\n\t\t\t\t\t.describe(\n\t\t\t\t\t\t\"EXACT name of an EXISTING session on this agent's own tmux server. Nothing is created: an absent session is refused as tmux-session-missing, and a name outside [A-Za-z0-9][A-Za-z0-9_-]* as tmux-session-name-invalid.\",\n\t\t\t\t\t),\n\t\t\t})\n\t\t\t.optional()\n\t\t\t.describe(\n\t\t\t\t\"Optional expert seat override, TMUX ONLY: open the sibling in ONE EXISTING tmux session of this agent's own server, and it always wins. When omitted the seat follows the CALLER, never the backend being opened: a Codex CALLER opens beside its own TUI pane, matched by thread-id in that pane's terminal title (0 or 2+ matching panes refuse, never fall back); every other caller opens in its own session. A pane title is a placement input only \u2014 never an address, liveness or delivery fact. Nothing is ever created. Inside herdr this field is refused by name \u2014 placement there belongs to herdr, and a tmux session name would silently place the sibling somewhere else. Independent of cwd; neither is inferred from the other. The receipt reports the selected name (absent for the caller-pane rule, which observed a session rather than requesting a name), its source, and resolved target session id.\",\n\t\t\t),\n"
+				"\t\tplacement: z\n\t\t\t.object({\n\t\t\t\ttmuxSession: z\n\t\t\t\t\t.string()\n\t\t\t\t\t.describe(\n\t\t\t\t\t\t\"EXACT name of an EXISTING session on this agent's own tmux server. Nothing is created: an absent session is refused as tmux-session-missing, and a name outside [A-Za-z0-9][A-Za-z0-9_-]* as tmux-session-name-invalid.\",\n\t\t\t\t\t),\n\t\t\t})\n\t\t\t.optional()\n\t\t\t.describe(\n\t\t\t\t\"Optional expert seat override, TMUX ONLY: open the sibling in ONE EXISTING tmux session of this agent's own server, and it always wins. When omitted the seat follows the CALLER, never the backend being opened: a Codex CALLER opens beside its own TUI pane, matched by thread-id in that pane's terminal title (0 or 2+ matching panes refuse, never fall back); every other caller opens in its own session. A pane title is a placement input only — never an address, liveness or delivery fact. Nothing is ever created. Inside herdr this field is refused by name — placement there belongs to herdr, and a tmux session name would silently place the sibling somewhere else. Independent of cwd; neither is inferred from the other. The receipt reports the selected name (absent for the caller-pane rule, which observed a session rather than requesting a name), its source, and resolved target session id.\",\n\t\t\t),\n"
 			],
 			"replace": [""],
 			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
@@ -522,7 +522,7 @@
 		},
 		{
 			"claim": "FRESHCOMP-NODE-ONLY-IMPORTS",
-			"title": "the composition leaf takes a repo-local import again \u2014 one is all it takes for the tmux rail to be back behind a rail that has no tmux",
+			"title": "the composition leaf takes a repo-local import again — one is all it takes for the tmux rail to be back behind a rail that has no tmux",
 			"subject": "pi-extensions/lib/fresh-call-composition.ts",
 			"find": ["import { randomBytes } from \"node:crypto\";"],
 			"replace": ["import { randomBytes } from \"node:crypto\";\nimport { runTmux } from \"./mux-placement.ts\";"],
@@ -533,7 +533,7 @@
 		},
 		{
 			"claim": "FRESHCOMP-TMUX-OPENING-LINE",
-			"title": "the extraction quietly reworded the tmux rail's first sentence \u2014 the sibling is told where it is by a refactor rather than by a measurement",
+			"title": "the extraction quietly reworded the tmux rail's first sentence — the sibling is told where it is by a refactor rather than by a measurement",
 			"subject": "pi-extensions/lib/mux-fresh-call.ts",
 			"find": ["\t\"You are a fresh visible citizen that entwurf opened in the operator's tmux session.\";"],
 			"replace": ["\t\"You are a fresh visible citizen that entwurf opened in a terminal pane.\";"],
@@ -544,10 +544,10 @@
 		},
 		{
 			"claim": "FRESHCOMP-RAIL-OWNS-PLACEMENT-SENTENCE",
-			"title": "the leaf invents a placement sentence when the rail supplies none \u2014 a default that is true on one rail is a lie on the other",
+			"title": "the leaf invents a placement sentence when the rail supplies none — a default that is true on one rail is a lie on the other",
 			"subject": "pi-extensions/lib/fresh-call-composition.ts",
 			"find": [
-				"\tif (params.openingLine.length === 0) {\n\t\tthrow new Error(\"fresh-call composition: openingLine is empty \u2014 the rail must state where it placed the sibling\");\n\t}"
+				"\tif (params.openingLine.length === 0) {\n\t\tthrow new Error(\"fresh-call composition: openingLine is empty — the rail must state where it placed the sibling\");\n\t}"
 			],
 			"replace": [
 				"\tconst openingLine =\n\t\tparams.openingLine.length === 0\n\t\t\t? \"You are a fresh visible citizen that entwurf opened in the operator's tmux session.\"\n\t\t\t: params.openingLine;\n\tvoid openingLine;"
@@ -559,7 +559,7 @@
 		},
 		{
 			"claim": "FRESHCOMP-CODEX-SOCKET-LAZY",
-			"title": "the injected Codex socket is resolved for every backend \u2014 a host with no Codex home stops opening pi and claude siblings, which the inline call never did",
+			"title": "the injected Codex socket is resolved for every backend — a host with no Codex home stops opening pi and claude siblings, which the inline call never did",
 			"subject": "pi-extensions/lib/fresh-call-composition.ts",
 			"find": ["): string[] {\n\tswitch (backend) {\n\t\tcase \"pi\":"],
 			"replace": [
@@ -572,7 +572,7 @@
 		},
 		{
 			"claim": "FRESHCALL-CODEX-THREAD-CWD",
-			"title": "codex loses the `-C <dir>` token, so an attached thread opens in the APP-SERVER's directory while its pane sits somewhere else \u2014 the launch, the receipt and the pane all still look right",
+			"title": "codex loses the `-C <dir>` token, so an attached thread opens in the APP-SERVER's directory while its pane sits somewhere else — the launch, the receipt and the pane all still look right",
 			"subject": "pi-extensions/lib/fresh-call-composition.ts",
 			"find": ["\t\t\t\t\"-C\",\n\t\t\t\tresolveCodexLaunchCwd(),\n"],
 			"replace": [""],
@@ -594,7 +594,7 @@
 		},
 		{
 			"claim": "FRESHCALL-CALLER-CWD-CODEX",
-			"title": "the composition drops the caller's record directory, so a Codex caller's omitted cwd silently falls back to the app-server's directory again \u2014 the #95 lane C defect, restored with the input still on the signature",
+			"title": "the composition drops the caller's record directory, so a Codex caller's omitted cwd silently falls back to the app-server's directory again — the #95 lane C defect, restored with the input still on the signature",
 			"subject": "pi-extensions/lib/mux-fresh-call.ts",
 			"find": [
 				"\t\t\t? { value: requestedCwd, source: \"requested\" }\n\t\t\t: callerCwd !== undefined\n\t\t\t\t? { value: callerCwd, source: \"codex-caller-record\" }\n\t\t\t\t: undefined;"
@@ -607,7 +607,7 @@
 		},
 		{
 			"claim": "FRESHCALL-CALLER-CWD-PI-ARGV-UNCHANGED",
-			"title": "an EMPTY caller cwd stops meaning omit, so a surface that supplies \"\" turns into a classified value \u2014 a refusal where the pre-#95 argv simply opened",
+			"title": "an EMPTY caller cwd stops meaning omit, so a surface that supplies \"\" turns into a classified value — a refusal where the pre-#95 argv simply opened",
 			"subject": "pi-extensions/lib/mux-fresh-call.ts",
 			"find": [
 				"\tconst callerCwd = params.callerCwd === undefined || params.callerCwd === \"\" ? undefined : params.callerCwd;"
@@ -634,9 +634,9 @@
 			"title": "the receipt relabels a caller-record directory as REQUESTED, telling the operator someone asked for a directory nobody named",
 			"subject": "pi-extensions/lib/mux-fresh-call.ts",
 			"find": [
-				"\t\t\t\t: r.cwdSource === \"codex-caller-record\"\n\t\t\t\t\t? `  cwd:      ${r.cwd} (the Codex caller's own record directory, used because no cwd was requested \u2014 not an observation)\\n`\n\t\t\t\t\t: `  cwd:      ${r.cwd} (requested start directory \u2014 not an observation)\\n`) +"
+				"\t\t\t\t: r.cwdSource === \"codex-caller-record\"\n\t\t\t\t\t? `  cwd:      ${r.cwd} (the Codex caller's own record directory, used because no cwd was requested — not an observation)\\n`\n\t\t\t\t\t: `  cwd:      ${r.cwd} (requested start directory — not an observation)\\n`) +"
 			],
-			"replace": ["\t\t\t\t: `  cwd:      ${r.cwd} (requested start directory \u2014 not an observation)\\n`) +"],
+			"replace": ["\t\t\t\t: `  cwd:      ${r.cwd} (requested start directory — not an observation)\\n`) +"],
 			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
 			"timeoutSeconds": 120,
 			"signature": "[QK:FRESHCALL-CWD-RECEIPT-SOURCE]",
@@ -675,6 +675,19 @@
 			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
 			"timeoutSeconds": 120,
 			"signature": "[QK:FRESHCOMP-RESULT-GOES-TO-CALLER]",
+			"signatureSource": "test/fresh-call-composition.contract.test.ts"
+		},
+		{
+			"claim": "FRESHCOMP-TOOL-LOAD-HINT-CLAUDE-ONLY",
+			"title": "the Claude child loses the one sentence that tells it how to load a deferred callback tool — the framing goes back to naming a tool the child cannot call on its first turn, which is the measured silence: 0/5 directly callable, 5 of 14 production launches dead",
+			"subject": "pi-extensions/lib/fresh-call-composition.ts",
+			"find": [
+				"\t\"claude-code\": [\n\t\t\"If ${callbackTool} is not callable yet, the entwurf-bridge server is still connecting or its\",\n\t\t'tools are deferred: load them first with ToolSearch(\"select:${callbackTool},${peersTool}\") —',\n\t\t\"it waits for the server — then call ${callbackTool}.\",\n\t],"
+			],
+			"replace": ["\t\"claude-code\": [],"],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:FRESHCOMP-TOOL-LOAD-HINT-CLAUDE-ONLY]",
 			"signatureSource": "test/fresh-call-composition.contract.test.ts"
 		}
 	]
