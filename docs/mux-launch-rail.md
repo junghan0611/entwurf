@@ -551,8 +551,16 @@ TUI whose thread nobody named.
    확증했다. 반환값 자신도 `socketState: "expected"` / `replyable: false`로 자기가 주소가 아님을 말하고
    있었는데, 그 신호는 읽히지 않았다.
 
-그래서 fresh-call framing은 env 탐색·`entwurf_self`·MCP 직접 spawn을 **명시적으로 금지**하고, 어느 표면도
-caller에게 garden id를 파라미터로 받지 않는다. 받는 순간 이 오답이 callback target이 될 수 있다.
+그래서 fresh-call framing은 어느 표면도 caller에게 garden id를 파라미터로 받지 않는다. 받는 순간 이 오답이
+callback target이 될 수 있다. (금지문 자체는 2026-09-17에 은퇴했다 — Sonnet 형제가 그 문장들을 인젝션 표식으로
+읽고 첫 턴 전체를 거절했다. 같은 조향이 **사실**로 서 있다: 네 레코드는 호출자의 주소를 지니지 않는다.)
+
+**그리고 framing은 결과가 어디로 가는지도 말한다.** `[GLG 직접, 2026-09-18]` fresh 형제가 과제를 끝내고 답을
+**자기 창에만** 출력했고 호출자는 그것을 보지 못했다. 조사 결과 고장난 주입은 없었다 — 옛 framing에도 새
+framing에도 **그 문장이 원래 없었다.** 사람이 쓴 briefing이 target과 도구를 명시했기 때문에 되던 것이고,
+briefing이 그 말을 멈추자 그 문장이 사는 곳이 아무 데도 없다는 것이 드러났다. 그래서 마지막 두 줄이 그것을
+지고, **명령이 아니라 topology**로 말한다 — 어디로 보낼지, 그리고 왜 보내야 하는지(보이는 창을 가진 형제는
+자기 창이 배달이 아님을 알 길이 없다). 코드는 완료를 감시하지도 대신 보내지도 않는다: 이 레일은 열고 놓는다.
 
 구현 승인 범위와 STOP LINE은 active NEXT handoff가 진다.
 

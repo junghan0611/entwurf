@@ -252,6 +252,41 @@ All notable changes to this project will be documented here. Format follows [Kee
   composition leaf while the cell carrying its signature read only the tmux module, so three other
   cells failed instead and the kill could not be attributed.
 
+- **The first turn says where the result goes.** `[GLG 직접, 2026-09-18]` a fresh sibling finished
+  its task, printed the answer in its own window, and the caller never saw it. The investigation
+  found no broken injection: NEITHER framing, the retired one or the current one, had ever said
+  this. It used to work because a hand-written briefing named the target and the tool, and when the
+  briefing stopped doing that the sentence turned out to live nowhere. The framing now ends with two
+  lines — where to send the result (the callback tool, in the same backend dialect) and why sending
+  is needed at all, because a sibling with a visible window has no way to know its window is not the
+  delivery. It is TOPOLOGY, not a command: nothing watches for completion or sends on the sibling's
+  behalf, and a supervisor is what this rail refuses to be.
+- **A LIVE smoke stops taking the operator's `claude` launcher** — #67's failure on a rail born
+  after its fence. The vendor resolves the two halves of its install from different roots: the
+  version store from `XDG_DATA_HOME`, the launcher from `HOME`. This smoke fenced XDG while keeping
+  the real HOME, so each Claude child found an empty store beside a real launcher, installed itself
+  into the fixture, and repointed `~/.local/bin/claude` at `<fixture>/claude/versions/2.1.267`.
+  **That is not a hazard, it happened** — seven preserved fixture roots each hold that install, and
+  the operator's launcher pointed into the newest of them, one `/tmp` sweep away from a `claude`
+  that does not start. The fixture's `xdg-data/claude` is now a symlink to the operator's vendor
+  data dir, which puts store and launcher back in one install while the rest of the tree stays
+  fenced, and the smoke consumes the shared fence: fail-closed preflight, integrity oracle in
+  teardown, cleanup verdict. The gate side stopped naming files — `LAUNCHFENCE-EXPOSED-SMOKE-WIRED`
+  asks the POPULATION (every LIVE smoke that assigns a fixture `XDG_DATA_HOME` either consumes the
+  fence or carries an exemption verified against its own source: four today, three wired, one
+  exempt), because the two claims that listed smokes by name are exactly what the newest rail walked
+  past. `[LIVE 2026-09-18]` the first run in eight to leave zero version copies behind.
+- **The herdr LIVE ordering oracle reads the join pi actually writes.** The claim asked for ONE
+  transcript record carrying both the delivered nonce and the `sent` outcome; pi cannot write that
+  record, because the nonce rides the toolCall and the outcome rides a separate toolResult, joined
+  by `toolCallId`. So the oracle failed a run whose child did exactly what the claim describes
+  (callback 04:15:01.381, `sent` .415, task token .03.728) — the most expensive kind of red: correct
+  product, red gate, and a cut that stops for nothing. The join was what the claim was always about:
+  the `sent` outcome must belong, by that id, to THE call that carried THIS nonce, and the task
+  token must appear after it. Proven on the failing transcript — the real run holds, a forged pair
+  whose `sent` belongs to a different call does not, and a run whose token appears only before the
+  callback does not.
+
 ### Changed
 
 - **The two tool descriptions say what the code does.** `entwurf_v2` no longer offers `codex` as an

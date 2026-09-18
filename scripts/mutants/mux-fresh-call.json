@@ -663,6 +663,19 @@
 			"timeoutSeconds": 120,
 			"signature": "[QK:FRESHCOMP-PEERS-TOOL-DIALECT]",
 			"signatureSource": "test/fresh-call-composition.contract.test.ts"
+		},
+		{
+			"claim": "FRESHCOMP-RESULT-GOES-TO-CALLER",
+			"title": "the first turn stops naming where the result goes, so a sibling finishes its task, prints the answer in its own window, and the caller never learns it is done",
+			"subject": "pi-extensions/lib/fresh-call-composition.ts",
+			"find": [
+				"\t\t`When the task reaches its requested final result, send that result to the same target with ${tool}.`,"
+			],
+			"replace": [""],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:FRESHCOMP-RESULT-GOES-TO-CALLER]",
+			"signatureSource": "test/fresh-call-composition.contract.test.ts"
 		}
 	]
 }

@@ -336,6 +336,20 @@ export function composeFreshCallFraming(params: {
 		`You can corroborate the caller first if you want to: ${peersTool} is a read-only listing of`,
 		`this garden's citizens and ${params.callerGardenId} is one of them. That listing is capped, so`,
 		"a caller you do not happen to see in it is not a reason to skip the callback.",
+		"",
+		// WHERE THE RESULT GOES, said once, as topology. `[GLG 직접, 2026-09-18]` a Sonnet sibling
+		// finished its task and printed the answer in its own window; the caller never saw it. An
+		// investigation found no broken injection — NEITHER framing, old or new, had ever said this.
+		// It used to work because a hand-written briefing named the target and the tool, and when the
+		// briefing stopped doing that the sentence turned out to live nowhere.
+		//
+		// It is a FACT about the topology, not a command about behaviour: the second half is what
+		// makes the first half necessary, because a sibling with a visible window has no way to know
+		// its window is not the delivery. Nothing here watches for completion or sends on the
+		// sibling's behalf — this rail launches and lets go (Hard Rule 16, and the reason there is no
+		// supervisor anywhere in it).
+		`When the task reaches its requested final result, send that result to the same target with ${tool}.`,
+		"Output in this sibling window is not delivered to the caller.",
 	];
 }
 

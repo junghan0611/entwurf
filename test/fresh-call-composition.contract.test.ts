@@ -109,6 +109,34 @@ describe("the tmux rail's bytes did not move when the code did", () => {
 		expect(FRESH_CALL_PEERS_TOOL.omp).toBe("mcp__entwurf_bridge_entwurf_peers");
 	});
 
+	it("[QK:FRESHCOMP-RESULT-GOES-TO-CALLER] the first turn names WHERE the result goes, in the same dialect as the callback and identically on both rails — a sibling with a visible window has no way to know its window is not the delivery", () => {
+		for (const backend of FRESH_CALL_BACKENDS) {
+			const tool = FRESH_CALL_CALLBACK_TOOL[backend];
+			// The sentence is TOPOLOGY, in two halves: where to send it, and why sending is needed
+			// at all. The second half is what makes the first one necessary.
+			const expected = [
+				`When the task reaches its requested final result, send that result to the same target with ${tool}.`,
+				"Output in this sibling window is not delivered to the caller.",
+			];
+			for (const openingLine of [
+				TMUX_FRESH_CALL_OPENING_LINE,
+				"You are a fresh visible citizen that entwurf opened in a new herdr tab.",
+			]) {
+				const framing = composeFreshCallFraming({ backend, callerGardenId: GID, nonce: NONCE, openingLine });
+				// Same two lines, same order, LAST — the rail supplies only the first sentence, so a
+				// rail that grew its own version of this one would be composing a second contract.
+				expect(framing.slice(-2)).toEqual(expected);
+			}
+			// And it is the CALLBACK tool, never the peers one: the result is a delivery, not a lookup.
+			expect(expected[0]).toContain(FRESH_CALL_CALLBACK_TOOL[backend]);
+			expect(expected[0]).not.toContain(FRESH_CALL_PEERS_TOOL[backend]);
+		}
+		// Nothing in the leaf watches for completion or sends on the sibling's behalf: the sentence
+		// is the whole mechanism, and a supervisor is what this rail refuses to be.
+		const code = LEAF_SRC.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:])\/\/.*$/gm, "$1");
+		expect(code).not.toMatch(/setInterval|setTimeout|watch|poll/i);
+	});
+
 	it("[QK:FRESHCOMP-RAIL-OWNS-PLACEMENT-SENTENCE] a rail supplies that sentence — the leaf refuses an empty one instead of inventing a default that would be false somewhere", () => {
 		expect(() =>
 			composeFreshCallPrompt({ backend: "pi", task: TASK, callerGardenId: GID, nonce: NONCE, openingLine: "" }),
