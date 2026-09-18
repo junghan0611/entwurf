@@ -511,6 +511,45 @@ chmod 0755 "$UNIT_ROOT"
 ok "the unit axis is green again once the root is no longer writable"
 "$UNINSTALL" >/dev/null 2>&1 || die "cleanup uninstall after the parent-authority cell failed"
 
+# ── the SHARED file's own ownership, decided ONCE for four surfaces (sol B3, 2026-09-18) ─────
+# The split this closes: install and uninstall asked only symlink-and-regular, the doctor asked
+# NOTHING about who owned hooks.json, and only the fresh-call preflight refused a foreign uid or a
+# group-writable mode. So a host could install clean, read GREEN, and have every Codex launch
+# refuse it as `codex-birth-unit-missing` — three surfaces saying yes about bytes the fourth said
+# no about. All four now decide with `classifyOwnedPath` in the shared declaration leaf.
+#
+# We still never chmod what we share. The cells below prove the mode we found is the mode left
+# behind: an unsafe shared file is a zero-write REFUSAL, not a file we normalise on the way past.
+"$INSTALL" >/dev/null 2>&1 || die "install before the shared-ownership cells failed"
+HOOKS_BEFORE_UNSAFE="$(sha256sum "$HOOKS" | cut -d' ' -f1)"
+chmod 0666 "$HOOKS"
+refuses "[QK:CODEX-BIRTH-SHARED-FILE-OWNERSHIP] install refuses a hooks.json anyone else can rewrite — a receipt cannot bind bytes somebody else controls" \
+  "group/world-writable" "$INSTALL"
+want "the refused install neither repaired the mode nor wrote a byte" \
+  "[ \"\$(stat -c %a '$HOOKS')\" = '666' ] && [ \"\$(sha256sum '$HOOKS' | cut -d' ' -f1)\" = \"$HOOKS_BEFORE_UNSAFE\" ]"
+# ONE assertion, because the exit code and the wording are one claim: a doctor that stayed green
+# would fail a separate negative line first, and that line could not carry the token (a manifest
+# may name its QK exactly once per gate source), so the mutant would die unattributable.
+DOCTOR_RC=0
+"$DOCTOR" --unit-only >"$SB/out" 2>&1 || DOCTOR_RC=$?
+want "[QK:CODEX-BIRTH-DOCTOR-SHARED-OWNERSHIP] the doctor asks the same ownership question BEFORE it measures any digest — a digest taken in a file somebody else can rewrite certifies nothing, and a green here would contradict the launcher" \
+  "[ \"$DOCTOR_RC\" -ne 0 ] && grep -q 'group/world-writable' '$SB/out' && grep -q 'every Codex fresh call refuses this host' '$SB/out'"
+"$UNINSTALL" >"$SB/out" 2>&1 || true   # drift is a nonzero exit; the WORDS and the bytes are the claim
+want "[QK:CODEX-BIRTH-INVERSE-SHARED-OWNERSHIP] the inverse asks it too and leaves an unsafe shared file exactly as found, counted as DRIFT — it used to rewrite a file it could not bind" \
+  "grep -q 'DRIFT: the declaration file writable-by-others' '$SB/out' && [ \"\$(sha256sum '$HOOKS' | cut -d' ' -f1)\" = \"$HOOKS_BEFORE_UNSAFE\" ]"
+chmod 0600 "$HOOKS"
+# That inverse removed the closure it COULD account for and left the shared file alone, so the
+# way back to green is an install — which is itself the claim: the refusal was about this file's
+# ownership and nothing else, and it lifts the moment the ownership does.
+"$INSTALL" >/dev/null 2>&1 || die "install should succeed again once the shared file is no longer writable by others"
+"$DOCTOR" --unit-only >/dev/null 2>&1 || die "the unit axis should be green again once the shared file is no longer writable by others"
+ok "all four surfaces agree again once the shared file is safe"
+ln -sf "$SB/foreign-only.json" "$SB/hooks-link.json"
+refuses "a symlinked hooks.json is refused with its OWN word — the repair is not a mode change, it is a different file" \
+  "SYMLINK" env CODEX_HOME="$CODEX_HOME" HOOKS_LINK=1 bash -c "cp '$HOOKS' '$SB/hooks-real.json'; rm '$HOOKS'; ln -s '$SB/hooks-real.json' '$HOOKS'; '$INSTALL'"
+rm -f "$HOOKS"; cp "$SB/hooks-real.json" "$HOOKS"; chmod 0600 "$HOOKS"
+"$UNINSTALL" >/dev/null 2>&1 || die "cleanup uninstall after the shared-ownership cells failed"
+
 # A relative root would make "the fixed launcher path" depend on the caller's cwd — and that
 # path is exactly what the vendor keys its trust receipt to.
 ( cd "$SB" && CODEX_HOME="relative/.codex" "$INSTALL" >"$SB/out" 2>&1 ) && die "[QK:CODEX-BIRTH-REFUSES-RELATIVE-ROOT] a relative CODEX_HOME was accepted"

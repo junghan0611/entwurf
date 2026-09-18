@@ -537,3 +537,76 @@ export function certifySplice(spliced, expected) {
 	}
 	return spliced;
 }
+
+/**
+ * Is this shared file one we may write through, and is it provably ours to certify?
+ *
+ * WHY IT LIVES HERE (sol B3, 2026-09-18). Four surfaces decide about the SAME file — the
+ * installer, the inverse, the doctor and the fresh-call preflight — and they were deciding
+ * differently. Preflight required a plausible owner and refused group/world-writable
+ * (`codex-fresh-preflight.ts`); the two shells checked only symlink-and-regular, and the doctor
+ * checked the file's CONTENT without ever asking who owned it. So a hooks.json owned by another
+ * uid, or writable by a group, could be installed into and reported GREEN while every Codex fresh
+ * call refused it as `codex-birth-unit-missing` — install and doctor saying yes about the same
+ * bytes launch said no about, which is the split this closes.
+ *
+ * TWO DIFFERENT THINGS, and only one of them is ours. We do NOT chmod a file we share — a
+ * neighbour's mode is a neighbour's business, and the installer carries it over untouched. But
+ * WRITING INTO a file anyone else can rewrite is a different question: whatever we certify there,
+ * someone else can change afterwards, so our receipt would describe bytes we cannot bind. That is
+ * why an unsafe file is a zero-write refusal rather than a mode we normalize.
+ *
+ * The classifier is PURE — it judges a stat record, not a path — so the same rules can be proven
+ * against fixture records with no filesystem, and so this leaf keeps its "dependency-free except
+ * node:crypto" promise. `statOwnedPath` takes the `fs` module from its caller for the same reason.
+ *
+ * @param {{ exists: boolean, isSymbolicLink: boolean, isFile: boolean, isDirectory: boolean, uid: number, mode: number }} stat
+ * @param {number} expectedUid
+ * @param {{ kind?: "file" | "directory" }} [options]
+ * @returns {"ok"|"missing"|"symlink"|"not-regular"|"foreign-uid"|"writable-by-others"}
+ */
+export function classifyOwnedPath(stat, expectedUid, options = {}) {
+	const kind = options.kind ?? "file";
+	if (!stat.exists) return "missing";
+	// SYMLINK FIRST, and it is not folded into `not-regular`: the two repairs differ. A link's
+	// target could be any file on the host, so the answer is never "fix the mode" — it is "this
+	// path is not the file we think we are looking at".
+	if (stat.isSymbolicLink) return "symlink";
+	if (kind === "directory" ? !stat.isDirectory : !stat.isFile) return "not-regular";
+	if (stat.uid !== expectedUid) return "foreign-uid";
+	if ((stat.mode & 0o022) !== 0) return "writable-by-others";
+	return "ok";
+}
+
+/**
+ * Read one path into the record `classifyOwnedPath` judges. `lstat`, never `stat`: following the
+ * link would answer about its target and hide the one verdict whose repair is different.
+ *
+ * @param {{ lstatSync: (p: string) => { isFile: () => boolean, isDirectory: () => boolean, isSymbolicLink: () => boolean, uid: number, mode: number } }} fs
+ * @param {string} file
+ */
+export function statOwnedPath(fs, file) {
+	try {
+		const st = fs.lstatSync(file);
+		return {
+			exists: true,
+			isSymbolicLink: st.isSymbolicLink(),
+			isFile: st.isFile(),
+			isDirectory: st.isDirectory(),
+			uid: st.uid,
+			mode: st.mode,
+		};
+	} catch {
+		return { exists: false, isSymbolicLink: false, isFile: false, isDirectory: false, uid: -1, mode: 0 };
+	}
+}
+
+/** What each verdict means to whoever has to repair it. One wording, so the installer, the
+ * inverse and the doctor cannot describe the same file in three different ways. */
+export const OWNED_PATH_REFUSAL = {
+	symlink: "is a SYMLINK — this unit publishes through no link, and a link's target could be any file on the host",
+	"not-regular": "is not a regular file",
+	"foreign-uid": "is owned by another user, so nothing here can bind what it will say next",
+	"writable-by-others":
+		"is group/world-writable, so anything certified in it can be rewritten by someone else afterwards",
+};

@@ -156,7 +156,7 @@
 		},
 		{
 			"claim": "FRESHCALL-CODEX-MCP-ENV-ORDER",
-			"title": "fresh preflight accepts the managed Codex MCP env_vars in any order, as long as the set matches — a reordered vendor-visible env manifest passes as exact",
+			"title": "fresh preflight accepts the managed Codex MCP env_vars in any order, as long as the set matches \u2014 a reordered vendor-visible env manifest passes as exact",
 			"subject": "pi-extensions/lib/codex-fresh-preflight.ts",
 			"find": ["\t\tenvVars.some((name, index) => name !== CODEX_MCP_ENV_VARS[index])"],
 			"replace": [
@@ -217,7 +217,7 @@
 		},
 		{
 			"claim": "FRESHCALL-CODEX-HOOK-KEYS",
-			"title": "the declaration leaf stops requiring the exact birth handler key set, so an async or extra-key hook — one the installer would never publish and one that lets the turn proceed before the record exists — is no longer NAMED as a shape drift",
+			"title": "the declaration leaf stops requiring the exact birth handler key set, so an async or extra-key hook \u2014 one the installer would never publish and one that lets the turn proceed before the record exists \u2014 is no longer NAMED as a shape drift",
 			"subject": "pi-extensions/lib/codex-declaration.js",
 			"find": ["\tif (handlerKeys.join(\",\") !== \"command,timeout,type\") {"],
 			"replace": ["\tif (false) {"],
@@ -917,6 +917,39 @@
 			"gate": ["bash", "run.sh", "smoke-codex-birth"],
 			"timeoutSeconds": 180,
 			"signature": "[QK:CODEX-BIRTH-TRUST-INDEX-MEASURED]",
+			"signatureSource": "scripts/smoke-codex-birth.sh"
+		},
+		{
+			"claim": "CODEX-BIRTH-SHARED-FILE-OWNERSHIP",
+			"title": "the shared ownership predicate stops seeing a group/world-writable file, so all four surfaces write into and certify bytes somebody else can rewrite",
+			"subject": "pi-extensions/lib/codex-declaration.js",
+			"find": ["\tif ((stat.mode & 0o022) !== 0) return \"writable-by-others\";"],
+			"replace": [""],
+			"gate": ["bash", "run.sh", "smoke-codex-birth"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:CODEX-BIRTH-SHARED-FILE-OWNERSHIP]",
+			"signatureSource": "scripts/smoke-codex-birth.sh"
+		},
+		{
+			"claim": "CODEX-BIRTH-DOCTOR-SHARED-OWNERSHIP",
+			"title": "the doctor stops asking who owns the shared file and goes straight to the digest, so it reports green on a host every launch refuses",
+			"subject": "scripts/codex-birth-doctor.sh",
+			"find": ["    if (owned !== \"ok\") {"],
+			"replace": ["    if (false) {"],
+			"gate": ["bash", "run.sh", "smoke-codex-birth"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:CODEX-BIRTH-DOCTOR-SHARED-OWNERSHIP]",
+			"signatureSource": "scripts/smoke-codex-birth.sh"
+		},
+		{
+			"claim": "CODEX-BIRTH-INVERSE-SHARED-OWNERSHIP",
+			"title": "the inverse stops asking and rewrites a shared file it cannot bind, instead of leaving it as found and counting the drift",
+			"subject": "scripts/codex-birth-uninstall.sh",
+			"find": ["  if [ \"$owned\" != \"ok\" ]; then"],
+			"replace": ["  if false; then"],
+			"gate": ["bash", "run.sh", "smoke-codex-birth"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:CODEX-BIRTH-INVERSE-SHARED-OWNERSHIP]",
 			"signatureSource": "scripts/smoke-codex-birth.sh"
 		}
 	]

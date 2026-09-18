@@ -5,8 +5,10 @@ import { parse } from "smol-toml";
 
 import {
 	CODEX_BIRTH_EVENT,
+	classifyOwnedPath,
 	entwurfDeclarationCommand,
 	selectEntwurfDeclaration,
+	statOwnedPath,
 	trustReceiptKey,
 } from "./codex-declaration.js";
 
@@ -125,28 +127,22 @@ const CODEX_MCP_ENV_VARS = [
 	"TMUX_PANE",
 ] as const;
 
+/**
+ * ONE POLICY, FOUR SURFACES. The predicate itself lives in `codex-declaration.js` (sol B3,
+ * 2026-09-18) because the installer, the inverse and the doctor decide about the SAME shared
+ * hooks.json and used to decide differently: they checked symlink-and-regular, this checked owner
+ * and mode as well, and the doctor checked neither. That split let an install and a doctor say yes
+ * about bytes every fresh call then refused. The executable bit stays HERE — it is this rail's
+ * question about the launcher codex is going to exec, not a fact about shared ownership.
+ */
 function isSafeOwnedFile(file: string, expectedUid: number, executable = false): boolean {
-	try {
-		const stat = fs.lstatSync(file);
-		return (
-			stat.isFile() &&
-			!stat.isSymbolicLink() &&
-			stat.uid === expectedUid &&
-			(stat.mode & 0o022) === 0 &&
-			(!executable || (stat.mode & 0o111) !== 0)
-		);
-	} catch {
-		return false;
-	}
+	const stat = statOwnedPath(fs, file);
+	if (classifyOwnedPath(stat, expectedUid) !== "ok") return false;
+	return !executable || (stat.mode & 0o111) !== 0;
 }
 
 function isSafeOwnedDir(dir: string, expectedUid: number): boolean {
-	try {
-		const stat = fs.lstatSync(dir);
-		return stat.isDirectory() && !stat.isSymbolicLink() && stat.uid === expectedUid && (stat.mode & 0o022) === 0;
-	} catch {
-		return false;
-	}
+	return classifyOwnedPath(statOwnedPath(fs, dir), expectedUid, { kind: "directory" }) === "ok";
 }
 
 /**

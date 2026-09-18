@@ -217,14 +217,28 @@ else
     if (!declOk && s.schema === "codex-birth-install-state/v2") out.push("BAD\tthe state records no usable declaration receipt (event/command/sha256)");
     const emit = () => process.stdout.write(out.join("\n") + "\n");
     if (!declOk) return emit();
-    let text;
-    try {
-      text = fs.readFileSync(hooksFile, "utf8");
-    } catch {
+    const m = await import(lib);
+    // OWNERSHIP BEFORE CONTENT (sol B3, 2026-09-18). This doctor used to read the CONTENT of the
+    // shared file without ever asking who owned it, while the fresh-call preflight refused a foreign
+    // uid or a group-writable mode outright — so a host could be GREEN here and refuse every
+    // launch as `codex-birth-unit-missing`. One predicate now answers for all four surfaces, and
+    // it answers first: a digest measured in a file somebody else can rewrite certifies nothing.
+    const owned = m.classifyOwnedPath(m.statOwnedPath(fs, hooksFile), process.getuid());
+    if (owned === "missing") {
       out.push("BAD\tthe declaration file is MISSING: " + hooksFile + " — no Codex thread on this host can become a citizen. Repair: ./run.sh install-codex-birth");
       return emit();
     }
-    const m = await import(lib);
+    if (owned !== "ok") {
+      out.push("BAD\tthe declaration file " + m.OWNED_PATH_REFUSAL[owned] + " (" + hooksFile + ") — every Codex fresh call refuses this host for the same reason, so a green here would contradict the launcher");
+      return emit();
+    }
+    let text;
+    try {
+      text = fs.readFileSync(hooksFile, "utf8");
+    } catch (err) {
+      out.push("BAD\tthe declaration file could not be read (" + hooksFile + "): " + err.message);
+      return emit();
+    }
     let sel;
     try {
       sel = m.selectEntwurfDeclaration(JSON.parse(text), launcher);

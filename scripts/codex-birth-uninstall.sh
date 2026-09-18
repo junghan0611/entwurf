@@ -55,6 +55,17 @@ sha_of() { sha256sum -- "$1" | cut -d' ' -f1; }
 
 REPO="$(cd -P -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 DECLARATION_LIB="$REPO/pi-extensions/lib/codex-declaration.js"
+
+# One shared ownership predicate for the file this unit SHARES — see the installer's copy of this
+# comment for why four surfaces had to stop deciding it three different ways.
+owned_path_verdict() { # $1 = path, $2 = file|directory
+  "$NODE_BIN" -e '
+    import(process.argv[1]).then((m) => {
+      const fs = require("node:fs");
+      process.stdout.write(m.classifyOwnedPath(m.statOwnedPath(fs, process.argv[2]), process.getuid(), { kind: process.argv[3] }));
+    }).catch((err) => { process.stderr.write(String(err && err.message ? err.message : err)); process.exit(1); });
+  ' "$DECLARATION_LIB" "$1" "${2:-file}"
+}
 [ -f "$DECLARATION_LIB" ] || die "the declaration leaf is missing: $DECLARATION_LIB — without it this inverse cannot tell entwurf's declaration from a neighbour's. Nothing removed."
 
 # Judged BEFORE anything is removed: a state sitting in a directory somebody else can write
@@ -153,16 +164,20 @@ DRIFTED=0
 # (named, left exactly as found), sole-owner (the file was ours whole, so the file goes), and
 # shared (our group is spliced out and every neighbouring group comes through byte-for-byte).
 REMOVE_DECLARATION() { # $1 = recorded normalized digest, $2 = hooks.json path
-  local want="$1" target="$2" verdict kind detail tmp
-  if [ -L "$target" ]; then
-    printf '[codex-birth-uninstall] DRIFT: the declaration file is a SYMLINK now (%s) — refusing to edit through a link.\n' "$target" >&2
+  local want="$1" target="$2" verdict kind detail tmp owned
+  # THE SAME PREDICATE THE INSTALLER AND THE DOCTOR USE (sol B3, 2026-09-18). This inverse used to
+  # ask only symlink-and-regular, so it would happily rewrite a hooks.json owned by another user or
+  # writable by a group — a file whose next state nothing here can bind. Every non-`ok` verdict is
+  # DRIFT: named, counted, and zero-write.
+  owned="$(owned_path_verdict "$target" file)" || {
+    printf '[codex-birth-uninstall] DRIFT: %s could not be judged for ownership (%s) — leaving it exactly as found.\n' "$target" "$owned" >&2
     DRIFTED=$((DRIFTED + 1)); return
-  fi
-  if [ ! -e "$target" ]; then
+  }
+  if [ "$owned" = "missing" ]; then
     note "already absent: $target"; return
   fi
-  if [ ! -f "$target" ]; then
-    printf '[codex-birth-uninstall] DRIFT: the declaration file is no longer a regular file (%s) — leaving it.\n' "$target" >&2
+  if [ "$owned" != "ok" ]; then
+    printf '[codex-birth-uninstall] DRIFT: the declaration file %s (%s) — refusing to edit it.\n' "$owned" "$target" >&2
     DRIFTED=$((DRIFTED + 1)); return
   fi
   tmp="$(mktemp)"

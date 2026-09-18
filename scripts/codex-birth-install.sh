@@ -121,6 +121,38 @@ safe_own_dir() { # $1 = dir, $2 = label
   [ $((8#$mode & 0022)) -eq 0 ] || die "$2 ($1) is group/world-writable (mode $mode), so its contents are not provably ours. Nothing written."
 }
 
+# The SHARED file's own ownership, judged by the SHARED predicate (sol B3, 2026-09-18).
+# `classifyOwnedPath` lives in codex-declaration.js because four surfaces decide about this one
+# file — this installer, the inverse, the doctor and the fresh-call preflight — and they used to
+# decide differently: the two shells asked only symlink-and-regular, preflight asked owner and mode
+# too, and the doctor asked neither. An install could therefore succeed and a doctor go green on
+# bytes every Codex launch then refused as `codex-birth-unit-missing`.
+#
+# We still do NOT chmod what we share: a neighbour's mode is theirs, and the APPEND below carries
+# it over untouched. Writing into a file anyone else may rewrite is the different question, and the
+# answer to that one is a refusal, because a receipt cannot bind bytes somebody else controls.
+owned_path_verdict() { # $1 = path, $2 = file|directory
+  "$NODE_BIN" -e '
+    import(process.argv[1]).then((m) => {
+      const fs = require("node:fs");
+      process.stdout.write(m.classifyOwnedPath(m.statOwnedPath(fs, process.argv[2]), process.getuid(), { kind: process.argv[3] }));
+    }).catch((err) => { process.stderr.write(String(err && err.message ? err.message : err)); process.exit(1); });
+  ' "$DECLARATION_LIB" "$1" "${2:-file}"
+}
+
+require_writable_share() { # $1 = path, $2 = label — `missing` is fine; we are about to create it
+  local verdict
+  verdict="$(owned_path_verdict "$1" file)" || die "$2 ($1) could not be judged: $verdict. Nothing written."
+  case "$verdict" in
+    ok|missing) : ;;
+    symlink) die "$2 ($1) is a SYMLINK. This unit owns that path as ONE regular file and never publishes through a link. Refusing; nothing written." ;;
+    not-regular) die "$2 ($1) exists and is not a regular file. Refusing; nothing written." ;;
+    foreign-uid) die "$2 ($1) is owned by another user, so nothing this unit certifies in it can bind what it will say next. Refusing; nothing written." ;;
+    writable-by-others) die "$2 ($1) is group/world-writable, so anything certified in it can be rewritten by someone else afterwards. Its mode is not ours to change either. Refusing; nothing written." ;;
+    *) die "$2 ($1) returned an unknown ownership verdict '$verdict'. Refusing; nothing written." ;;
+  esac
+}
+
 # ── ownership preflight — READ-ONLY, and every refusal is zero-write ─────────
 # Three different facts, three different refusals, none of them silent:
 #   a foreign hooks.json (no state behind it), a hand-edited one (state disagrees), and a
@@ -232,12 +264,7 @@ $STATE_READ
 EOF
 fi
 
-if [ -L "$HOOKS_FILE" ]; then
-  die "$HOOKS_FILE is a SYMLINK. This unit owns that path as ONE regular file and never publishes through a link. Refusing; nothing written."
-fi
-if [ -e "$HOOKS_FILE" ]; then
-  [ -f "$HOOKS_FILE" ] || die "$HOOKS_FILE exists and is not a regular file. Refusing; nothing written."
-fi
+require_writable_share "$HOOKS_FILE" "the declaration file"
 if [ "$STATE_PRESENT" = "1" ] && [ "$RECORDED_SCHEMA" = "codex-birth-install-state/v1" ]; then
   note "superseding a v1 ownership receipt (it claimed the WHOLE hooks.json) with v2 (it certifies entwurf's own declaration) — no foreign byte is read as ours, and none is rewritten."
 fi
