@@ -186,10 +186,17 @@ function transcriptRecords(file: string): string[] {
 }
 
 /**
- * The id of the `entwurf_v2` toolCall in this record that carried THIS nonce, or null. Pi writes a
- * call and its result as two records; this is one half of the join that replaces a same-record read.
+ * The id of the `entwurf_v2` toolCall in this record that IS the callback, or null. Pi writes a call
+ * and its result as two records; this is one half of the join that replaces a same-record read.
+ *
+ * WHAT MAKES IT THE CALLBACK, READ STRUCTURALLY `[sol 재검 2026-09-18]`. An earlier version only
+ * asked whether the serialised arguments CONTAINED the nonce, which a call carrying `prefix+nonce`,
+ * or the right nonce to the wrong target, satisfies just as well — and then the later, correct call
+ * is the one that produces the artifact, so the predicate could join a wrong call to a right
+ * delivery. The arguments are an object, so they are read as one: the message must BE the nonce,
+ * the target must be the caller that minted it, and the intent must be the one the framing names.
  */
-function entwurfCallIdFor(record: string, nonce: string): string | null {
+function entwurfCallIdFor(record: string, nonce: string, callerGid: string): string | null {
 	let parsed: unknown;
 	try {
 		parsed = JSON.parse(record);
@@ -201,7 +208,15 @@ function entwurfCallIdFor(record: string, nonce: string): string | null {
 	for (const part of content) {
 		const call = part as { type?: unknown; name?: unknown; id?: unknown; arguments?: unknown };
 		if (call.type !== "toolCall" || call.name !== "entwurf_v2") continue;
-		if (!JSON.stringify(call.arguments ?? "").includes(nonce)) continue;
+		const args = call.arguments as
+			| { message?: unknown; target?: unknown; intent?: unknown; wants_reply?: unknown }
+			| undefined;
+		if (typeof args !== "object" || args === null) continue;
+		if (args.message !== nonce) continue;
+		if (args.target !== callerGid) continue;
+		if (args.intent !== "fire-and-forget") continue;
+		// The framing asks for no reply; a call that asked for one is a different act.
+		if (args.wants_reply === true) continue;
 		return typeof call.id === "string" ? call.id : null;
 	}
 	return null;
@@ -682,8 +697,15 @@ async function main(): Promise<void> {
 				const delivered = deliveredMessages(String(fenced.ENTWURF_META_MAILBOX_DIR), callerGid);
 				const body = (delivered[0]?.text ?? "").split(/─{5,}/)[1]?.trim() ?? "";
 				nonce = /(?:herdr|mux)-fresh-call-[0-9a-f]{24}/.exec(body)?.[0] ?? "";
+				// THE FIRST ARTIFACT, NOT THE ONLY ONE `[측정 2026-09-18, LIVE run #2]`. This read
+				// required `delivered.length === 1`, which the framing itself retired: since the
+				// first turn asks the sibling to report its result back, a child that obeys sends
+				// TWO messages — the nonce at 13:46:44 and `확인 토큰은 …` at 13:46:50 — and the
+				// oracle failed the run for doing exactly what it was told. What the claim is about
+				// is the FIRST one: the callback precedes the work, so the nonce must be the body of
+				// the first artifact, and anything after it is the sibling answering.
 				callbackArrived =
-					delivered.length === 1 &&
+					delivered.length >= 1 &&
 					nonce.length > 0 &&
 					body === nonce &&
 					(delivered[0]?.text ?? "").includes(`session:     ${childGid}`);
@@ -791,8 +813,8 @@ async function main(): Promise<void> {
 				// 03.728 — which is the most expensive kind of red there is. What the one-record rule
 				// was guarding against ("some nonce appeared somewhere earlier, so call it proof") is
 				// held by the join itself: the outcome must belong to THE call that carried THIS nonce.
-				const callAt = childRecords.findIndex((record) => entwurfCallIdFor(record, nonce) !== null);
-				const callId = callAt >= 0 ? entwurfCallIdFor(childRecords[callAt], nonce) : null;
+				const callAt = childRecords.findIndex((record) => entwurfCallIdFor(record, nonce, callerGid) !== null);
+				const callId = callAt >= 0 ? entwurfCallIdFor(childRecords[callAt], nonce, callerGid) : null;
 				const sentAt =
 					callId === null
 						? -1
@@ -862,7 +884,14 @@ async function main(): Promise<void> {
 					stampedAt >= Date.parse(childActivity[callAt]?.timestamp ?? "") &&
 					stampedAt <= Date.parse(childActivity[doneAt]?.timestamp ?? "");
 				ok(
-					`${cell.label}: the child read the one-line birth argv and called back BEFORE doing any work — the FIRST entwurf_v2 completed successfully and the delivered callback carrying this exact nonce was enqueued inside that call's own window, preceded only by the read-only corroboration the framing offers, with no failed or timed-out entwurf_v2 anywhere in its log`,
+					// WHAT THIS AXIS CAN SEE, SAID EXACTLY `[sol 재검 2026-09-18]`. The claim used to read
+					// "called back BEFORE doing any work". This cell's only evidence is the child's MCP
+					// tool activity — §14 measured that a claude child of this rail leaves no transcript
+					// anywhere — so assistant text it may have produced before the call is invisible
+					// here, and a claim about "any work" is wider than the oracle. What IS observed, and
+					// is the thing the framing actually asks for, is the ORDER OF TOOLS: the first
+					// non-read-only tool this child called was the callback.
+					`${cell.label}: the child's FIRST non-read-only tool call was the callback — the FIRST entwurf_v2 completed successfully and the delivered callback carrying this exact nonce was enqueued inside that call's own window, preceded only by the read-only corroboration the framing offers, with no failed or timed-out entwurf_v2 anywhere in its log (this cell reads tool activity only; assistant text is not observable on this rail)`,
 					childActivity.length > 0 &&
 						order.includes("entwurf_v2") &&
 						beforeCallback.every((name) => READ_ONLY_FIRST.has(name)) &&
@@ -871,6 +900,46 @@ async function main(): Promise<void> {
 						!childActivity.some(
 							(e) => (e.debug ?? "").startsWith("Tool 'entwurf_v2' failed") || (e.error ?? "").includes("entwurf_v2"),
 						),
+				);
+			}
+			// ── HFC-LIVE-FINAL-RESULT-DELIVERED: the framing's last line, actually observed ──
+			//
+			// `dc550cd` added one sentence to the first turn — tell the sibling where its result
+			// goes — and nothing yet measured that a sibling obeys it. `[측정 2026-09-18, LIVE #2]`
+			// one does: the claude child sent the nonce at 13:46:44 and `확인 토큰은 …` at 13:46:50,
+			// to the same caller, on the same rail. That second message is the acceptance of the
+			// framing line, so it is asserted rather than tolerated — and it is asserted AFTER the
+			// callback cells, because arriving first would be the framing being disobeyed.
+			// It gets the child's own bound for the same reason the callback does: the caller's
+			// clock says nothing about how long the sibling takes to finish its task.
+			{
+				const resultDeadline = Date.now() + CHILD_CALLBACK_WAIT_MS;
+				let resultText = "";
+				while (Date.now() < resultDeadline) {
+					if (callerIsPi) {
+						const messages = [
+							...readTranscript(callerTranscript).matchAll(
+								/"customType":"entwurf-message","content":"((?:[^"\\]|\\.)*)"/g,
+							),
+						]
+							.map((match) => match[1].replace(/\\n/g, "\n").replace(/\\"/g, '"'))
+							.filter((decoded) => !decoded.trimStart().startsWith(nonce));
+						resultText = messages.find((decoded) => decoded.includes(token)) ?? "";
+					} else {
+						const delivered = deliveredMessages(String(fenced.ENTWURF_META_MAILBOX_DIR), callerGid);
+						resultText =
+							delivered
+								.slice(1)
+								.map((artifact) => artifact.text.split(/─{5,}/)[1]?.trim() ?? "")
+								.find((body) => body.includes(token)) ?? "";
+					}
+					if (resultText.length > 0) break;
+					sleep(POLL_MS);
+				}
+				lines.push("", `### ${cell.label} — final result message`, "```", resultText.slice(0, 500), "```", "");
+				ok(
+					`${cell.label}: the sibling reported its RESULT back to the caller after the callback — a second message on the same rail carrying this cell's task token, which is the first LIVE evidence that the framing's closing line is followed rather than merely written`,
+					resultText.includes(token),
 				);
 			}
 			ok(
