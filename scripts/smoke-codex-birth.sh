@@ -511,6 +511,29 @@ chmod 0755 "$UNIT_ROOT"
 ok "the unit axis is green again once the root is no longer writable"
 "$UNINSTALL" >/dev/null 2>&1 || die "cleanup uninstall after the parent-authority cell failed"
 
+# ── the FILE verdict has to EARN its delete (sol B2, 2026-09-18) ─────────────────────────────
+# The counterexample, derived from the source rather than imagined: a hooks.json that existed
+# BEFORE this unit, carrying a foreign top-level `description` and an EMPTY SessionStart array.
+# Our install appends one group, so afterwards there is no foreign GROUP, one event, and one
+# declaration — which is exactly what the old FILE test asked. It deleted the whole file, and the
+# neighbour's description with it, while the receipt had recorded `hooksExistedBefore: true` the
+# entire time and nothing read it.
+"$UNINSTALL" >/dev/null 2>&1 || true
+printf '{\n  "description": "a neighbour wrote this",\n  "note": "and this",\n  "hooks": {\n    "SessionStart": []\n  }\n}\n' > "$HOOKS"
+chmod 0600 "$HOOKS"
+PRE_EXISTING_SHA="$(sha256sum "$HOOKS" | cut -d' ' -f1)"
+"$INSTALL" >/dev/null 2>&1 || die "install into a pre-existing empty-declaration file failed"
+"$UNINSTALL" >"$SB/out" 2>&1 || die "uninstall after that install failed: $(cat "$SB/out")"
+want "[QK:CODEX-BIRTH-INVERSE-KEEPS-PRE-EXISTING-FILE] a file that existed BEFORE this unit survives the inverse whole — our group comes out by splice and the neighbour's top-level bytes come back byte-for-byte, because hooksExistedBefore is a removal authority and not a decoration" \
+  "[ -f '$HOOKS' ] && [ \"\$(sha256sum '$HOOKS' | cut -d' ' -f1)\" = \"$PRE_EXISTING_SHA\" ] && grep -q 'by text splice' '$SB/out'"
+# And the delete arm still exists for the case it was written for: a file this unit created,
+# holding nothing but its own description and its own group.
+rm -f "$HOOKS"
+"$INSTALL" >/dev/null 2>&1 || die "install into a host with no hooks.json failed"
+"$UNINSTALL" >"$SB/out" 2>&1 || die "uninstall of a file we created failed: $(cat "$SB/out")"
+want "a hooks.json this unit CREATED, holding only its own description and group, is still removed whole" \
+  "[ ! -e '$HOOKS' ] && grep -q 'entwurf was its only declaration' '$SB/out'"
+
 # ── the SHARED file's own ownership, decided ONCE for four surfaces (sol B3, 2026-09-18) ─────
 # The split this closes: install and uninstall asked only symlink-and-regular, the doctor asked
 # NOTHING about who owned hooks.json, and only the fresh-call preflight refused a foreign uid or a

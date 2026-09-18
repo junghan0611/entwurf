@@ -137,9 +137,15 @@ PLAN="$("$NODE_BIN" -e '
         (duplicate.length ? "; duplicated " + duplicate.join(", ") : ""),
     );
   }
+  // WHO CREATED THE FILE is a removal authority, and the receipt has always recorded it — the
+  // inverse simply never read it (sol B2, 2026-09-18). Anything other than an explicit `false`
+  // reads as "it was already there", which is the safe direction: an old receipt that predates
+  // this field licenses a splice, never a delete.
+  const createdByUs = s.hooksExistedBefore === false;
   const lines = [
     ["STATUS", s.status, s.unitVersion ?? ""].join("\t"),
     ["DECLCMD", "-", decl.command].join("\t"),
+    ["HOOKSCREATED", "-", createdByUs ? "yes" : "no"].join("\t"),
     ["DECLARATION", decl.sha256, s.hooksFile].join("\t"),
   ];
   const seen = new Set();
@@ -183,7 +189,7 @@ REMOVE_DECLARATION() { # $1 = recorded normalized digest, $2 = hooks.json path
   tmp="$(mktemp)"
   verdict="$("$NODE_BIN" -e '
     const fs = require("node:fs");
-    const [, lib, hooksFile, launcherCommand, wantDigest, outTmp] = process.argv;
+    const [, lib, hooksFile, launcherCommand, wantDigest, outTmp, createdByUs] = process.argv;
     import(lib).then((m) => {
       const text = fs.readFileSync(hooksFile, "utf8");
       let parsed;
@@ -204,8 +210,22 @@ REMOVE_DECLARATION() { # $1 = recorded normalized digest, $2 = hooks.json path
           "DRIFT\tentwurf\u2019s declaration was edited after install (group " + sel.groupIndex + ": live " + sel.digest + ", recorded " + wantDigest + ")",
         );
       }
+      // FILE — deleting the whole file — is the ONE verdict that can destroy a byte nobody here
+      // wrote, so it takes three proofs and not one (sol B2, 2026-09-18). "Our group is the last
+      // declaration" was the only one it used to take, and that is true of a file we merely
+      // APPENDED to: `{"description":"foreign","hooks":{"SessionStart":[]}}` has no foreign GROUP,
+      // so after our install the old shape classified it FILE and deleted top-level bytes
+      // belonging to a neighbour.
+      //   1. the receipt says this unit created the file (hooksExistedBefore === false),
+      //   2. nothing but our own two top-level keys is in it, and the description is OURS,
+      //   3. our group is the only declaration, under the only event.
+      // Anything else SPLICES: our group comes out, every other byte stays.
       const events = Object.keys(parsed.hooks);
-      if (sel.foreign.length === 0 && events.length === 1 && events[0] === m.CODEX_BIRTH_EVENT) {
+      const topLevel = Object.keys(parsed).sort().join(",");
+      const ourDescription =
+        typeof parsed.description === "string" && parsed.description.startsWith(m.CODEX_BIRTH_DESCRIPTION_PREFIX);
+      const soleDeclaration = sel.foreign.length === 0 && events.length === 1 && events[0] === m.CODEX_BIRTH_EVENT;
+      if (createdByUs === "yes" && soleDeclaration && topLevel === "description,hooks" && ourDescription) {
         return process.stdout.write("FILE\t");
       }
       const want = JSON.parse(text);
@@ -222,7 +242,7 @@ REMOVE_DECLARATION() { # $1 = recorded normalized digest, $2 = hooks.json path
       process.stderr.write(err && err.message ? err.message : String(err));
       process.exit(1);
     });
-  ' "$DECLARATION_LIB" "$target" "$DECLARATION_COMMAND" "$want" "$tmp" 2>&1)" || {
+  ' "$DECLARATION_LIB" "$target" "$DECLARATION_COMMAND" "$want" "$tmp" "$HOOKS_CREATED_BY_US" 2>&1)" || {
     rm -f -- "$tmp"
     printf '[codex-birth-uninstall] DRIFT: the declaration could not be judged (%s) — leaving %s exactly as found.\n' "$verdict" "$target" >&2
     DRIFTED=$((DRIFTED + 1)); return
@@ -273,10 +293,12 @@ REMOVE_ONE() { # $1 = recorded digest, $2 = absolute path, $3 = label
 
 HELPER_DIR=""
 DECLARATION_COMMAND=""
+HOOKS_CREATED_BY_US="no"
 while IFS="$(printf '\t')" read -r kind digest target; do
   case "$kind" in
     STATUS) note "state: status=$digest unitVersion=$target" ;;
     DECLCMD) DECLARATION_COMMAND="$target" ;;
+    HOOKSCREATED) HOOKS_CREATED_BY_US="$target" ;;
     DECLARATION) REMOVE_DECLARATION "$digest" "$target" ;;
     HELPER) REMOVE_ONE "$digest" "$target" "helper member" ;;
     HELPERDIR) HELPER_DIR="$target" ;;

@@ -951,6 +951,19 @@
 			"timeoutSeconds": 300,
 			"signature": "[QK:CODEX-BIRTH-INVERSE-SHARED-OWNERSHIP]",
 			"signatureSource": "scripts/smoke-codex-birth.sh"
+		},
+		{
+			"claim": "CODEX-BIRTH-INVERSE-KEEPS-PRE-EXISTING-FILE",
+			"title": "the FILE verdict goes back to asking only whether our group was the last declaration, so a hooks.json that existed before this unit is deleted with its owners top-level bytes",
+			"subject": "scripts/codex-birth-uninstall.sh",
+			"find": [
+				"      if (createdByUs === \"yes\" && soleDeclaration && topLevel === \"description,hooks\" && ourDescription) {"
+			],
+			"replace": ["      if (soleDeclaration) {"],
+			"gate": ["bash", "run.sh", "smoke-codex-birth"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:CODEX-BIRTH-INVERSE-KEEPS-PRE-EXISTING-FILE]",
+			"signatureSource": "scripts/smoke-codex-birth.sh"
 		}
 	]
 }
