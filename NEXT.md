@@ -163,17 +163,14 @@ CHANGELOG `## Unreleased`가 구현 범위 `v0.15.1..19ad90c` **30커밋** 전�
 스크립트가 움직였으므로 반드시 돈다; lane C SHA의 긴 바닥은 로컬에서 안 돌렸다) → 다음 컷 prepare는 별도 권한. #109 openclaw 다리는 **닫혔다** · **0.16.1 make는 열린 채 PAUSED**.
 푸시·태그·publish는 금지; `entwurf-release`의 make/publish 별도 권한이다.
 
-# NOW — stem: v0.23.0 tag/GitHub release 완료, 다음 = GLG publish
+# NOW — stem: Herdr plugin runtime npm 핀, 다음 = GLG raw-PC 재테스트
 
-- **좌표:** `v0.23.0` @ `1261c72`, GitHub release 공개. 수용 candidate는
-  `/tmp/entwurf-release-candidate-0.23.0.wlNB1w/junghanacs-entwurf-0.23.0.tgz` (13,206,068 bytes,
-  sha256 `a8f4485dd295d7f38570d5cb9d177572dbb79d6bc10c136440be6f0b8b5ae0d1`)이며 npm에는 아직 올리지 않았다.
-- **다음 순서:** GLG가 위 보존 candidate를 `latest`로 publish → 레지스트리-installed 검증과 integrity 대조 →
-  `plugins/herdr/runtime-lock.json`을 `source: npm`의 0.23.0으로 핀 → 플러그인 `version` 0.2.0.
-- **컷 영수증:** prepared exact-SHA CI run `35337835836` 4잡+qualification body green; candidate container
-  acceptance log `/tmp/entwurf-release-candidate-0.23.0.wlNB1w/acceptance.log`. LIVE Codex retry의 명시 승인
-  편차와 focused repair receipt는 CHANGELOG 0.23.0 Verification에 정직하게 남겼다.
-- **Do not:** npm publish를 대신 실행하지 말 것; candidate를 재pack하지 말 것; `~/.codex/hooks.json`을 손편집하지 말 것.
+- **좌표:** `runtime-lock.json`은 npm `@junghanacs/entwurf@0.23.0`의 published sha512를 핀하고,
+  Herdr plugin은 0.2.0이다. `herdr-checkout`은 후보 검증용 closed source로만 남는다.
+- **다음:** GLG raw-PC에서 `herdr plugin install` 재테스트. 그 뒤 atom은 hook trust preflight,
+  VERIFY affected-set, tool-description diet, README two doors, #118 순서다.
+- **Do not:** `herdr-checkout`을 npm의 fallback으로 만들지 말 것; `~/.codex/hooks.json`을 손편집하지 말 것;
+  LIVE plugin install은 이 atom의 acceptance로 주장하지 말 것.
 
 <details><summary>#117 랜딩의 NOW (머지 전 좌표)</summary>
 

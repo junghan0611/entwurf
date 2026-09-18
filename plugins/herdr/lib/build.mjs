@@ -274,7 +274,10 @@ function runBuildReported(env, deps, progress) {
 		return 0;
 	}
 
-	const lock = readRuntimeLock(PLUGIN_DIR);
+	// `readRuntimeLock` is a gate seam only; the CLI supplies no caller-controlled source, path or
+	// lock. Production always reads this checkout's committed lock from PLUGIN_DIR.
+	const lockReader = deps.readRuntimeLock ?? readRuntimeLock;
+	const lock = lockReader(PLUGIN_DIR);
 
 	// D1 — read-only authority, BEFORE the first byte of runtime work. A refusal here leaves the
 	// runtime, its journal, our cache, the ledger and both harnesses' bytes exactly as found.
@@ -288,7 +291,7 @@ function runBuildReported(env, deps, progress) {
 
 	progress.step(
 		`fetching and installing the Entwurf runtime from ${describeRequest(plan.requested)} — this is the long step ` +
-			"(npm packs the source; expect minutes of silence)",
+			"(npm acquires the locked artifact; expect minutes of silence)",
 	);
 	const bootstrapArgs = { env, lock, checkoutRoot: CHECKOUT_ROOT };
 	if (deps.acquire !== undefined) bootstrapArgs.acquire = deps.acquire;

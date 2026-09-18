@@ -29,7 +29,7 @@
 # has Entwurf has Node (see README).
 id = "junghan0611.entwurf"
 name = "Entwurf"
-version = "0.1.0"
+version = "0.2.0"
 min_herdr_version = "0.9.0"
 description = "Read-only Entwurf garden-citizen status for the panes in this Herdr session."
 platforms = ["linux"]

@@ -23,8 +23,7 @@ herdr plugin link "$PWD/plugins/herdr"
 herdr plugin list --json
 ```
 
-From anywhere, once the commit you want is pushed — an npm release is NOT a prerequisite,
-because the committed lock names a commit of this repository rather than a registry version:
+From anywhere, after the npm release named by the committed lock is available:
 
 ```bash
 herdr plugin install junghan0611/entwurf/plugins/herdr
@@ -56,10 +55,9 @@ herdr plugin uninstall junghan0611.entwurf   # a GitHub-managed install: unregis
     what `check-herdr-sandbox` requires and what every receipt in this repo was taken against. A
     different Herdr inside the admission window is permitted and carries no receipt of ours.
 - **For the install-time build:** `git`, `node` >= 24, `npm`, and network access for the
-  transient devDependencies the bridge build needs (~45s and a few hundred MB in an
-  Entwurf-owned XDG npm cache, reclaimed by `herdr-plugin-deactivate`). You do **not**
-  clone Entwurf, run `npm install`, or wait for an Entwurf npm release — the build acquires
-  the exact artifact its committed lock names.
+  locked registry artifact (~45s and a few hundred MB in an Entwurf-owned XDG npm cache,
+  reclaimed by `herdr-plugin-deactivate`). You do **not** clone Entwurf or run `npm install`;
+  the build acquires and integrity-checks the exact npm artifact its committed lock names.
 - **For the pane:** Entwurf on `PATH` as `entwurf`, or an absolute path in `ENTWURF_BIN`. If
   neither is present the pane prints exactly `entwurf-not-found` and exits 0 — a host
   without Entwurf is not a broken host, and the pane does not install one.
@@ -152,13 +150,13 @@ command this manifest declares. It composes, in this order:
 ### What you will see while it runs
 
 Answering `y` at the install prompt used to be followed by minutes of complete silence, which reads
-as a hang. It is not: the third step packs the Entwurf source with `npm pack`, and that is simply
-slow. You now get one line per step:
+as a hang. It is not: the third step acquires and verifies the locked runtime, and that network work
+can be slow. You now get one line per step:
 
 ```text
 [entwurf 1/5] reading herdr's integration status
 [entwurf 2/5] planning activation for pi, claude-code
-[entwurf 3/5] fetching and installing the Entwurf runtime from junghan0611/entwurf#<full-commit> (git) — this is the long step (npm packs the source; expect minutes of silence)
+[entwurf 3/5] fetching and installing the Entwurf runtime from @junghanacs/entwurf@0.23.0 (npm) — this is the long step (expect minutes of silence)
 [entwurf 4/5] checking what landed: @junghanacs/entwurf@<version> and its activation verb
 [entwurf 5/5] wiring pi, claude-code through the installed package
 [entwurf done] @junghanacs/entwurf@<version> active at ~/.local/share/entwurf/herdr-plugin/runtime/active; pi, claude-code wired
@@ -183,11 +181,9 @@ the command. Where there is no terminal — CI, a pipe, a daemon — the narrati
 and the install is unchanged. Every line is also mirrored to stderr, so when a build *does* fail,
 Herdr's error report arrives with the steps that completed in front of it.
 
-`./run.sh check-herdr-plugin-build` owns that composition. The real journey — a real
-`herdr plugin install` driving a real `npm pack` of the product git spec — is
-`LIVE=1 ./run.sh smoke-herdr-plugin-build-live`, because a git-spec pack builds the bridge through
-`prepare`, which installs devDependencies from the registry: a network axis no deterministic gate
-may claim.
+`./run.sh check-herdr-plugin-build` owns that composition. The real journey — a real `herdr plugin install` acquiring the locked registry artifact — is
+`LIVE=1 ./run.sh smoke-herdr-plugin-build-live`; it remains a network axis no deterministic gate
+may claim. The `herdr-checkout` path is separately retained for candidate verification.
 
 ## The runtime, and the two sources it may come from
 
@@ -205,8 +201,8 @@ and a fallback would turn an unreachable source into "install something else ins
 
 | `source` | anchor | what it is for |
 |---|---|---|
-| `npm` | exact `name@version` (coherent with this checkout's `package.json`) **plus** the sha512 npm published, compared against the tarball's own bytes before install | the production authority, unchanged |
-| `herdr-checkout` | the **commit** Herdr itself checked out, packed from the fixed remote `git+https://github.com/junghan0611/entwurf.git#<full sha>` | verification-only: a candidate needs no npm release, which is what makes iterating on one cheap |
+| `npm` | exact `name@version` (coherent with this checkout's `package.json`) **plus** the sha512 npm published, compared against the tarball's own bytes before install | active production authority |
+| `herdr-checkout` | the **commit** Herdr itself checked out, packed from the fixed remote `git+https://github.com/junghan0611/entwurf.git#<full sha>` | verification-only candidate path; it remains a closed source, not a fallback |
 
 Three things about the checkout source are deliberate. There is **no input** anywhere in it — the
 commit comes from the checkout's own `git rev-parse --verify HEAD^{commit}` (a shallow clone answers
@@ -286,12 +282,12 @@ authorised.
 transaction and not this package. `./run.sh check-pack-install` packs this checkout, installs the
 tarball into a fresh temp project, and runs the same `verifyInstalledRuntime` against it.
 
-**Switching the production source is a re-proof, not a config change.** Moving from the candidate
-carrier to npm — or to a GitHub Release tarball plus its sha512 — re-decides where the bytes come
-from, and the candidate's evidence does not transfer. Before such a release: exact acquisition and
-integrity, the installed runtime (name@version, compiled entry, three executable bins, real
-`check-bridge`), the swap and torn-swap recovery, activation and deactivation, and the
-package-consumer proof all have to be re-run against that source.
+**Switching source is a re-proof, not a config change.** The active production lock is npm; moving
+from `herdr-checkout` to npm — or to another future authority — re-decides where the bytes come
+from, and candidate evidence does not transfer. Exact acquisition and integrity, the installed runtime
+(name@version, compiled entry, three executable bins, real `check-bridge`), the swap and torn-swap
+recovery, activation and deactivation, and the package-consumer proof must be re-run against that
+source.
 
 ## Not part of the npm package
 

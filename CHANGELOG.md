@@ -4,6 +4,13 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+### Changed
+
+- **The Herdr plugin is 0.2.0 and pins its runtime to npm `@junghanacs/entwurf@0.23.0`.** Its
+  committed lock carries the published sha512
+  `sha512-ZR2VCui7JjK3w56rQSDs3AuAJMMuiXCNWH7HB52SQ3E/7p0oPhcxD+fb6Gdzi0VcBnheqxPzvJHMPQQcdYtNiw==`;
+  the 0.1.0 `herdr-checkout` source remains the candidate-verification path.
+
 ## 0.23.0 - 2026-09-18
 
 ### Added
