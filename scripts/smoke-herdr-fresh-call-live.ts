@@ -185,6 +185,41 @@ function transcriptRecords(file: string): string[] {
 		.filter((line) => line.trim().length > 0);
 }
 
+/**
+ * The id of the `entwurf_v2` toolCall in this record that carried THIS nonce, or null. Pi writes a
+ * call and its result as two records; this is one half of the join that replaces a same-record read.
+ */
+function entwurfCallIdFor(record: string, nonce: string): string | null {
+	let parsed: unknown;
+	try {
+		parsed = JSON.parse(record);
+	} catch {
+		return null;
+	}
+	const content = (parsed as { message?: { content?: unknown } })?.message?.content;
+	if (!Array.isArray(content)) return null;
+	for (const part of content) {
+		const call = part as { type?: unknown; name?: unknown; id?: unknown; arguments?: unknown };
+		if (call.type !== "toolCall" || call.name !== "entwurf_v2") continue;
+		if (!JSON.stringify(call.arguments ?? "").includes(nonce)) continue;
+		return typeof call.id === "string" ? call.id : null;
+	}
+	return null;
+}
+
+/** The toolCallId this record is a RESULT for — the other half of the join. */
+function toolResultIdOf(record: string): string | null {
+	let parsed: unknown;
+	try {
+		parsed = JSON.parse(record);
+	} catch {
+		return null;
+	}
+	const message = (parsed as { message?: { role?: unknown; toolCallId?: unknown } })?.message;
+	if (!message || message.role !== "toolResult") return null;
+	return typeof message.toolCallId === "string" ? message.toolCallId : null;
+}
+
 interface McpEntry {
 	readonly sessionId: string;
 	readonly timestamp: string;
@@ -747,12 +782,26 @@ async function main(): Promise<void> {
 			if (cell.childKind === "pi") {
 				const childRecords = transcriptRecords(String(childRow?.sessionValue ?? ""));
 				const childText = childRecords.join("\n");
-				// ONE RECORD carries the whole claim: the verb, the rail it was delivered on, the
-				// outcome, and the EXACT nonce that was delivered. Splitting those across the file
-				// is what let "the nonce appears somewhere before the token" pass on a prompt.
-				const sentAt = childRecords.findIndex(
-					(record) => record.includes("entwurf_v2 control-socket → sent") && record.includes(nonce),
-				);
+				// THE JOIN, NOT THE RECORD, IS WHAT THIS CLAIM IS ABOUT `[측정 2026-09-18]`. An earlier
+				// version asked for ONE record carrying both the delivered nonce and the `sent`
+				// outcome. Pi's transcript can never satisfy that: the nonce rides the toolCall record
+				// (`content[].toolCall.id`) and the outcome rides the separate toolResult record
+				// (`message.toolCallId`), and the two are joined by that id. It failed a run whose
+				// child did exactly the right thing — callback at .381, `sent` at .415, task token at
+				// 03.728 — which is the most expensive kind of red there is. What the one-record rule
+				// was guarding against ("some nonce appeared somewhere earlier, so call it proof") is
+				// held by the join itself: the outcome must belong to THE call that carried THIS nonce.
+				const callAt = childRecords.findIndex((record) => entwurfCallIdFor(record, nonce) !== null);
+				const callId = callAt >= 0 ? entwurfCallIdFor(childRecords[callAt], nonce) : null;
+				const sentAt =
+					callId === null
+						? -1
+						: childRecords.findIndex(
+								(record, i) =>
+									i > callAt &&
+									record.includes("entwurf_v2 control-socket → sent") &&
+									toolResultIdOf(record) === callId,
+							);
 				// The LAST mention of the task token, so the birth prompt — which carries it, first —
 				// cannot be what satisfies "the work came after".
 				let workedAt = -1;
@@ -763,8 +812,8 @@ async function main(): Promise<void> {
 					}
 				}
 				ok(
-					`${cell.label}: the child decoded the one-line birth argv and ran the task only AFTER its callback — the delivered nonce and the \`sent\` outcome are the SAME transcript record, and the task token appears in a later one`,
-					nonce.length > 0 && sentAt >= 0 && workedAt > sentAt,
+					`${cell.label}: the child decoded the one-line birth argv and ran the task only AFTER its callback — the \`sent\` outcome belongs, by toolCallId, to the very call that carried the delivered nonce, and the task token appears in a record after it`,
+					nonce.length > 0 && callAt >= 0 && sentAt > callAt && workedAt > sentAt,
 				);
 				ok(
 					`${cell.label}: the child's OWN tool result says the callback was DELIVERED on the rail its caller answers on — \`entwurf_v2 control-socket → sent\` — not a timeout, not a reject, not a dirty lock`,
