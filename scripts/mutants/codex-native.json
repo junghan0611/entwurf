@@ -217,7 +217,7 @@
 		},
 		{
 			"claim": "FRESHCALL-CODEX-HOOK-KEYS",
-			"title": "the declaration leaf stops requiring the exact birth handler key set, so an async or extra-key hook \u2014 one the installer would never publish and one that lets the turn proceed before the record exists \u2014 is no longer NAMED as a shape drift",
+			"title": "the declaration leaf stops NAMING the extra handler key, so an async or extra-key hook \u2014 still refused by the normalized digest \u2014 arrives as an anonymous mismatch instead of a diagnosis that quotes the key. This claim owns the diagnosis, never the acceptance",
 			"subject": "pi-extensions/lib/codex-declaration.js",
 			"find": ["\tif (handlerKeys.join(\",\") !== \"command,timeout,type\") {"],
 			"replace": ["\tif (false) {"],

@@ -183,19 +183,22 @@ ok("the handler timeout is 30", handler.timeout === 30);
 		);
 	}
 
-	// The HANDLER KEY SET, on its own cell because it is the one shape predicate the normalized
-	// digest does not separate: a handler carrying `async` also digests differently, so the
-	// preflight refuses it either way. What only this predicate buys is the NAME — "every extra
-	// key, `async` above all, changes the trust identity" — instead of a bare digest mismatch, and
-	// an operator repairs those two with different hands. `async: true` is the case that matters:
-	// it would let the turn proceed before the record exists.
+	// THE HANDLER KEY SET — and this claim is a DIAGNOSIS contract, not an acceptance one. Say it
+	// plainly, because the QK token predates the narrowing and an unchanged name over a changed
+	// meaning is how a mutant stops testing what its claim says (sol, 2026-09-18). ACCEPTANCE is
+	// owned by the normalized digest: a handler carrying `async` digests differently, so the
+	// preflight refuses it whether or not this predicate exists, and the mutant below cannot make
+	// a drifted declaration green. What ONLY this predicate buys is the NAME — "the extra key is
+	// `async`, and every extra key changes the trust identity" — instead of an anonymous digest
+	// mismatch, and an operator repairs those two with different hands. `async: true` is the case
+	// that earns the name: it would let the turn proceed before the record exists.
 	{
 		const extra = selectEntwurfDeclaration(
 			{ hooks: { SessionStart: [{ hooks: [{ ...ourGroup.hooks[0], async: true }] }] } },
 			fakeLauncher,
 		);
 		ok(
-			"[QK:FRESHCALL-CODEX-HOOK-KEYS] a handler carrying `async` — or any key the installer never writes — is refused as a SHAPE drift that names the extra key, not as an anonymous digest mismatch",
+			"[QK:FRESHCALL-CODEX-HOOK-KEYS] a handler carrying `async` — or any key the installer never writes — is NAMED as a shape drift that quotes the extra key; acceptance is the digest's job either way, and what this claim owns is the diagnosis an operator reads",
 			!extra.ok &&
 				extra.code === "declaration-shape-drifted" &&
 				extra.detail.includes("exactly type+command+timeout") &&
