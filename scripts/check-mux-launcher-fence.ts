@@ -26,6 +26,20 @@
  *   LAUNCHFENCE-LIFECYCLE-CELL-BRANCH   lifecycle keeps its two truthful cell branches: ACP pi
  *                                       retains the four MEASURED canonical REAL_XDG_* roots,
  *                                       the direct Claude cell gets exact-parity restore
+ *   LAUNCHFENCE-EXPOSED-SMOKE-WIRED     the population, not a list of names: EVERY LIVE smoke
+ *                                       that hands a child a fixture XDG_DATA_HOME either
+ *                                       consumes this fence or carries a stated exemption that
+ *                                       is itself true of its source
+ *
+ * WHY THE LAST CLAIM EXISTS `[측정 oracle 2026-09-18]`. The two WIRED claims above name two files,
+ * and a rail born after them walked straight through the gap: `smoke-herdr-fresh-call-live` fenced
+ * XDG while keeping the operator's real HOME, and its Claude children reinstalled themselves into
+ * the fixture and repointed `~/.local/bin/claude` at `<fixture>/claude/versions/2.1.267`. Seven
+ * preserved fixture roots each held that install; the operator's launcher pointed into the newest
+ * of them until it was relinked by hand. The vendor's own two halves are why — the version store
+ * follows `XDG_DATA_HOME` and the launcher follows `HOME` (2.1.267: `EZe = join(Wge(), "claude",
+ * "versions")` against `TN = join(home, ".local", "bin")`) — so a fixture data root beside a real
+ * HOME is the incident's precondition, and THAT is what this claim enumerates.
  */
 
 import assert from "node:assert/strict";
@@ -248,6 +262,50 @@ function main(): void {
 			"[QK:LAUNCHFENCE-WIRED-FRESH-CALL] wiring: smoke-mux-fresh-call-live consumes the SAME shared fence rather than a private copy — one protection, two smokes, per the issue's shared-repair requirement",
 			wired(read("scripts/smoke-mux-fresh-call-live.ts")),
 		);
+		// ── the population: who ELSE hands a child a fixture data root ───────────
+		{
+			// A smoke that assigns its own fixture XDG_DATA_HOME is in the incident's precondition.
+			// Exemptions are named here WITH the fact that makes them true, never assumed: the
+			// plugin-build smoke relocates HOME into the same sandbox, so the vendor's store and its
+			// launcher stay in ONE tree and the operator's launcher is never a candidate.
+			const EXEMPT: Record<string, { reason: string; holds: (src: string) => boolean }> = {
+				"smoke-herdr-plugin-build-live.ts": {
+					reason: "it relocates HOME into the same sandbox, so store and launcher stay in one tree",
+					holds: (src) => /\n\tHOME,\n/.test(src),
+				},
+			};
+			const consumesFence = (src: string): boolean =>
+				src.includes('from "./lib/claude-launcher-fence.ts"') &&
+				src.includes("snapshotClaudeLauncher(") &&
+				src.includes("verifyClaudeLauncher(") &&
+				src.includes("assessLauncherCleanup(");
+			const exposed = fs
+				.readdirSync(path.join(ROOT, "scripts"))
+				.filter((f) => f.startsWith("smoke-") && f.endsWith("-live.ts"))
+				.filter((f) => /XDG_DATA_HOME:/.test(read(path.join("scripts", f))));
+			const unguarded = exposed.filter((f) => {
+				const src = read(path.join("scripts", f));
+				if (consumesFence(src)) return false;
+				const exemption = EXEMPT[f];
+				return !(exemption && exemption.holds(src));
+			});
+			ok(
+				`population: ${exposed.length} LIVE smokes assign a fixture XDG_DATA_HOME (measured, not listed), and the three real-HOME ones are the fence's constituency`,
+				exposed.length >= 4 &&
+					["smoke-herdr-fresh-call-live.ts", "smoke-mux-fresh-call-live.ts", "smoke-mux-lifecycle-live.ts"].every((f) =>
+						exposed.includes(f),
+					),
+			);
+			ok(
+				`[QK:LAUNCHFENCE-EXPOSED-SMOKE-WIRED] every LIVE smoke that hands a child a fixture XDG_DATA_HOME beside the operator's real HOME consumes this fence — preflight, integrity oracle and cleanup verdict — or carries a stated exemption that is true of its own source; unguarded: ${unguarded.join(", ") || "none"}`,
+				unguarded.length === 0,
+			);
+			ok(
+				"the exemption discriminates rather than excuses: the exempt smoke really does relocate HOME, and removing that line would put it back in the constituency",
+				Object.entries(EXEMPT).every(([f, e]) => e.holds(read(path.join("scripts", f)))),
+			);
+		}
+
 		ok(
 			"[QK:LAUNCHFENCE-LIFECYCLE-CELL-BRANCH] wiring: lifecycle's real-HOME cell env keeps its two truthful branches — the ACP-backed pi cell retains all four MEASURED canonical REAL_XDG_* assignments, and the direct Claude Code cell (the else branch) gets exact-parity restoreOriginalXdg instead",
 			/if \(backend === "pi"\) \{\s*serverEnv\.XDG_CONFIG_HOME = REAL_XDG_CONFIG_HOME;\s*serverEnv\.XDG_DATA_HOME = REAL_XDG_DATA_HOME;\s*serverEnv\.XDG_STATE_HOME = REAL_XDG_STATE_HOME;\s*serverEnv\.XDG_CACHE_HOME = REAL_XDG_CACHE_HOME;\s*\} else \{\s*restoreOriginalXdg\(serverEnv, ORIGINAL_XDG\);\s*\}/.test(

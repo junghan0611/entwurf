@@ -219,6 +219,41 @@ tab 좌표는 **그것을 만든 응답**에서 온다(`agent start`의 echo가 
 
 `[측정]` 기록에 남은 비변이 CLI probe 하나: 존재하지 않는 pane으로 `agent start`를 불러 제어문자 판정이 pane 조회보다 앞선다는 것을 확인했다. 아무것도 만들지 않는 probe는 이 등급에서 허용된다.
 
+## 12.5 운영자의 `claude` 런처 — 이 레일이 픽스처로 가르면 안 되는 한 그루 `[측정 oracle 2026-09-18]`
+
+LIVE 셀은 두 런타임 모두 **운영자의 real HOME**을 쓰고(§ 스모크 머리말, 측정된 결정), herdr 소켓 때문에
+셀마다 `XDG_CONFIG_HOME`을 가른다. 그 김에 `XDG_DATA_HOME`까지 갈랐던 것이 사고였다.
+
+벤더는 설치의 두 쪽을 **서로 다른 뿌리**에서 찾는다 `[file:line, claude-code 2.1.267]`:
+
+```js
+Wge = () => env.XDG_DATA_HOME ?? join(home, ".local", "share")
+EZe = () => join(Wge(), "claude", "versions")   // 버전 저장소 ← XDG_DATA_HOME
+TN  = () => join(home, ".local", "bin")          // 런처       ← HOME
+```
+
+픽스처 `XDG_DATA_HOME` + real HOME이면 자식은 **빈 저장소 옆의 진짜 런처**를 본다. 그래서 자기를 픽스처
+안에 설치하고 `$HOME/.local/bin/claude`를 `<픽스처>/claude/versions/<v>`로 다시 묶는다. **가설이 아니라
+일어난 일이다**: 이 스모크의 픽스처 루트 7개가 각각 `claude/versions/2.1.267` + `applications/claude-code-url-handler.desktop`을
+담고 있었고, 운영자 런처는 그중 가장 최근 것을 가리키고 있었다(손으로 되돌렸다. `/tmp` 정리 한 번이면
+운영자의 `claude`가 죽는 상태였다).
+
+수리는 두 층이고 둘 다 필요하다:
+
+- **원인** — 픽스처의 `xdg-data/claude`를 운영자의 진짜 벤더 데이터 디렉터리로 **심링크**한다. 저장소와
+  런처가 다시 같은 설치 안에 놓인다. 나머지 픽스처는 그대로 갈라져 있고, 운영자에게 그 디렉터리가 없으면
+  공유할 것도 없으므로 아래 울타리만 남는다. (#67 fence 모듈의 본래 수리는 네 XDG 루트 **parity**지만,
+  이 레일은 herdr 소켓 때문에 `XDG_CONFIG_HOME`을 양보할 수 없어 **사고가 난 그 한 그루에만** parity를 준다.)
+- **탐지** — `scripts/lib/claude-launcher-fence.ts`의 셋을 그대로 쓴다: 자식이 생기기 전 fail-closed
+  preflight, teardown의 integrity oracle(리타깃은 **이 스모크의 실패**다), 그리고 cleanup verdict. 이
+  스모크는 픽스처를 증거로 **남기므로** 마지막 것은 삭제를 막는 대신 "이 트리를 지우면 운영자 런처가
+  끊긴다"를 이름으로 찍는다.
+
+게이트 쪽 계약은 이름 열거가 아니라 **모집단**이다 — `check-mux-launcher-fence`의
+`LAUNCHFENCE-EXPOSED-SMOKE-WIRED`: 픽스처 `XDG_DATA_HOME`을 주는 모든 LIVE 스모크는 이 울타리를 쓰거나,
+자기 소스로 참임이 확인되는 면제 사유를 달아야 한다. #67 이후 태어난 레일이 이름 목록 밖에 있었다는 것이
+이 claim이 생긴 이유다.
+
 ## 13. 게이트 admission — 없음은 SKIP, 깨짐은 FAIL
 
 `check-herdr-sandbox`는 herdr를 **선택적 레일**로 다룬다. 세 갈래뿐이다:

@@ -80,6 +80,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { containsControlChar } from "../pi-extensions/lib/herdr-fresh-call.ts";
 import { joinKeyOf, parseHerdrPaneList } from "../pi-extensions/lib/herdr-placement.ts";
+import { assessLauncherCleanup, snapshotClaudeLauncher, verifyClaudeLauncher } from "./lib/claude-launcher-fence.ts";
 import { skipLive } from "./lib/live-skip.ts";
 
 const LABEL = "smoke-herdr-fresh-call-live";
@@ -306,6 +307,42 @@ async function main(): Promise<void> {
 	};
 	for (const dir of Object.values(fenced)) fs.mkdirSync(dir, { recursive: true });
 	fs.chmodSync(fenced.XDG_RUNTIME_DIR, 0o700);
+
+	// THE ONE SUBTREE THAT MUST NOT BE FENCED, AND WHY `[측정 2026-09-18, vendor 2.1.267]`.
+	// The vendor resolves its two installation halves from DIFFERENT roots: the version store from
+	// `XDG_DATA_HOME` and the launcher from `HOME`.
+	//
+	//     Wge = () => env.XDG_DATA_HOME ?? join(home, ".local", "share")
+	//     EZe = () => join(Wge(), "claude", "versions")     // version store  ← XDG_DATA_HOME
+	//     TN  = () => join(home, ".local", "bin")           // launcher       ← HOME
+	//
+	// A child that inherits a fixture `XDG_DATA_HOME` while keeping the operator's real HOME is
+	// therefore looking at an EMPTY version store beside a real launcher, installs itself into the
+	// fixture, and repoints `$HOME/.local/bin/claude` at `<fixture>/claude/versions/<v>` — the
+	// operator's command now depends on a disposable tmp tree. `[측정 oracle 2026-09-18]` that is
+	// not a hazard, it HAPPENED: seven fixture roots from this smoke each held a full
+	// `claude/versions/2.1.267` plus `applications/claude-code-url-handler.desktop`, and the real
+	// launcher pointed into the newest of them until it was relinked by hand.
+	//
+	// The fence module's own repair is operator PARITY on the XDG roots, and this rail cannot take
+	// it whole: herdr's socket follows `XDG_CONFIG_HOME`, so each cell must keep its own. So it
+	// takes parity on the ONE subtree the incident is about — the vendor's data dir is shared with
+	// the operator rather than re-created empty, which puts the store and the launcher back in the
+	// same install. Everything else in this tree stays fenced. If the operator has no such dir
+	// there is nothing to share and the preflight below is what stands.
+	const operatorClaudeData = path.join(
+		process.env.XDG_DATA_HOME ?? path.join(os.homedir(), ".local", "share"),
+		"claude",
+	);
+	if (fs.existsSync(operatorClaudeData)) {
+		fs.symlinkSync(operatorClaudeData, path.join(fenced.XDG_DATA_HOME, "claude"));
+	}
+
+	// FAIL-CLOSED PREFLIGHT, before any child exists (issue #67's shared fence). This smoke keeps
+	// its fixture rather than removing it, so the guard that matters here is the integrity oracle
+	// in the teardown plus the named cleanup verdict it prints — a tree the launcher references
+	// must not be swept by a later hand either.
+	const launcher = snapshotClaudeLauncher({ env: process.env, fixtureRoot: root });
 
 	const servers: { cell: Cell; env: NodeJS.ProcessEnv; socket: string }[] = [];
 	const artifact = path.join(root, "receipts.md");
@@ -804,6 +841,27 @@ async function main(): Promise<void> {
 			"the operator's herdr panes are byte-identical — every pane this smoke opened lived on a private server",
 			afterOperator === beforeOperator,
 		);
+		// INTEGRITY ORACLE (#67). The launcher this smoke's children could rewrite is re-derived
+		// from the same facts the preflight pinned. A retarget is a FAILURE of this smoke, not a
+		// note: the operator's `claude` is how the next session starts.
+		const launcherProblems = verifyClaudeLauncher(launcher);
+		lines.push("", `## operator claude launcher`, `- ${launcher.launcherPath} -> ${launcher.resolvedPath}`);
+		for (const problem of launcherProblems) lines.push(`- PROBLEM: ${problem}`);
+		ok(
+			`the operator's claude launcher is untouched — same kind, same link, same resolved target, same content (${launcher.launcherPath})`,
+			launcherProblems.length === 0,
+		);
+		// This fixture is deliberately preserved as evidence, so the cleanup guard is not gating a
+		// removal here — it is stating, by name, whether a later `rm -rf` of this tree would sever
+		// the operator's launcher.
+		const cleanup = assessLauncherCleanup(launcher);
+		if (!cleanup.safeToRemove) {
+			for (const problem of cleanup.problems) {
+				console.error(`  WARN  removing ${root} would damage the operator's launcher: ${problem}`);
+				lines.push(`- DO NOT REMOVE ${root}: ${problem}`);
+			}
+		}
+		fs.writeFileSync(artifact, `${lines.join("\n")}\n`);
 		console.log(`\n[${LABEL}] receipts: ${artifact}`);
 	}
 

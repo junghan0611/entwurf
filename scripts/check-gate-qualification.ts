@@ -859,7 +859,7 @@ let manifestCount: number;
 		"meta-retire": 3,
 		"mux-boundary": 16,
 		"mux-fresh-call": 56,
-		"mux-launcher-fence": 7,
+		"mux-launcher-fence": 8,
 		"mux-parent-artifact": 3,
 		"pack-install": 2,
 		"pi-package-ownership": 8,

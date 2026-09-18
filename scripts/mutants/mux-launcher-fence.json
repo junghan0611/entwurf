@@ -118,6 +118,19 @@
 			"timeoutSeconds": 120,
 			"signature": "[QK:LAUNCHFENCE-WIRED-FRESH-CALL]",
 			"signatureSource": "scripts/check-mux-launcher-fence.ts"
+		},
+		{
+			"claim": "LAUNCHFENCE-EXPOSED-SMOKE-WIRED",
+			"title": "a LIVE smoke hands a Claude child a fixture XDG_DATA_HOME beside the operator's real HOME with no fence — the vendor then splits its install across two trees, reinstalls into the fixture and repoints ~/.local/bin/claude at a tmp directory, which is how the herdr rail silently owned the operator's launcher for seven runs",
+			"subject": "scripts/smoke-herdr-fresh-call-live.ts",
+			"find": [
+				"import { assessLauncherCleanup, snapshotClaudeLauncher, verifyClaudeLauncher } from \"./lib/claude-launcher-fence.ts\";\n"
+			],
+			"replace": [""],
+			"gate": ["bash", "run.sh", "check-mux-launcher-fence"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:LAUNCHFENCE-EXPOSED-SMOKE-WIRED]",
+			"signatureSource": "scripts/check-mux-launcher-fence.ts"
 		}
 	]
 }
