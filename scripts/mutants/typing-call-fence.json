@@ -1,0 +1,17 @@
+{
+	"schemaVersion": 1,
+	"lane": "typing-call-fence",
+	"mutants": [
+		{
+			"claim": "TYPEFENCE-PRODUCTION-CLEAN",
+			"title": "a production module acquires a typing call — the launch rail starts reaching a sibling through the place a human types, which is the one channel this product measured and refused at design time and the one kind of 'delivery' that is only a screen write (Hard Rule 16)",
+			"subject": "pi-extensions/lib/herdr-fresh-call.ts",
+			"find": ["\t\t\"tab\",\n\t\t\"create\","],
+			"replace": ["\t\t\"tab\",\n\t\t\"create\",\n\t\t\"send-keys\","],
+			"gate": ["bash", "run.sh", "check-typing-call-fence"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:TYPEFENCE-PRODUCTION-CLEAN]",
+			"signatureSource": "scripts/check-typing-call-fence.ts"
+		}
+	]
+}

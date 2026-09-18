@@ -874,6 +874,7 @@ let manifestCount: number;
 		"self-address": 8,
 		"setup-verdict": 14,
 		"source-install": 2,
+		"typing-call-fence": 1,
 		"v2-surface": 13,
 		"v2-visible-resume": 17,
 	};

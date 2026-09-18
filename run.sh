@@ -171,6 +171,7 @@ Usage:
   ./run.sh check-mux-resume-call       # deterministic gate: S1 resume PLACEMENT composition (mux-resume-call.ts). No fake tmux. cwd rules are MEASURED tmux 3.6a behaviours, each a way a resume looks successful while being wrong: a nonexistent `-c` exits 0 and lands the child in $HOME (so it is refused HERE), `-c` is FORMAT-EXPANDED so `#{…}` silently rewrites the path and `#(…)` was observed running a command (so `#` is refused), and whitespace measured SAFE (so no escaping layer is owed). Also pins `-c` reaching tmux, runtime after `--`, carrier-free argv, zero identity in this module, and the surface seam that keeps the v2 composition from importing mux
   ./run.sh check-mux-parent-artifact  # deterministic gate for the tracked scrubbed parent-transcript fixture — a version-pinned sample of the PARENT-SIDE shape (fresh_call toolResult + the later callback custom_message) so downstream never opens a private transcript. Pins event order, the toolCallId join on the RESULT (pi writes no separate toolCall row), the launch nonce reappearing verbatim in the callback body, the <sender_info> envelope field names, and the absence of operator paths / real garden ids / real uuids. NOT placement evidence
   ./run.sh check-mux-launcher-fence   # deterministic gate for the shared operator-launcher fence (issue #67): scripts/lib/claude-launcher-fence.ts + its wiring into BOTH mux LIVE smokes. Replants the observed install-destruction shape (real HOME + fixture XDG_DATA_HOME → self-update retargets the real `claude` launcher into the fixture tree, teardown deletes it) wholly inside disposable mkdtemp roots — the real launcher is never inspected. Pins fail-closed preflight, retarget/content-change detection before cleanup, removal BLOCKED on fixture reference / unproven safety / surviving tracked panes, exact operator-parity XDG restore (absent = DELETED, not canonical defaults), the lifecycle cell-branch topology, and one shared helper consumed by both smokes
+  ./run.sh check-typing-call-fence    # deterministic gate for the boundary nobody has broken: this product composes ARGUMENTS and LETTERS, never keystrokes. Scans every tracked production source under pi-extensions/ and mcp/ — comments blanked, string literals kept — for tmux send-keys/paste-buffer/load-buffer and herdr's PTY verbs (agent.prompt, agent.send_keys, pane.send_text, pane.input.set). Prose is exempt on purpose: the sentence stating the rule names the very calls it forbids, and a scanner that read prose could be made green by deleting the law. Carries its own oracle — the detector is proven on planted code, proven blind to comments, and the scanned inventory is measured
   ./run.sh check-entwurf-v2-visible-resume # deterministic gate: S1 visible-resume COMPOSITION (entwurf-v2-visible-resume.ts) with every seam injected — the whole state machine incl. the timeout branch runs with no tmux/lock/socket/clock. Pins lock BEFORE liveness, identity under the lock and before any window (no-transcript citizen fails loud, opens nothing), live/indeterminate/address-conflict refused unlaunched, observation as a BOUNDED WAIT (measured: socket answers ~2–4s after launch, so one immediate probe would call a successful resume unobserved), exactly ONE launch on every path, timeout → lock released + window left open + nothing retried/killed, failed release throws, and the two receipts staying separate in type and text
   ./run.sh check-resume-launch-identity # deterministic gate for resume-launch-identity.ts, the record-authoritative launch-identity leaf preserved through the visible-first cut (spawn-bg and all its callers are gone; this leaf answers "which being is this, and which conversation is theirs"). Temp meta-store fixture: gardenId→record.transcriptPath happy path with header cwd/provider/model; C3 integrity (header id ≠ record.nativeSessionId → refused, never resumed); #52 ADDRESSABLE read (a gid that no longer holds its nativeSessionId alone is refused from EITHER side — the plain targeted read would resume one transcript twice under two locks); cause fidelity per impossible resume incl. the F7 pin (recorded-but-deleted transcript → MISSING, not "no recorded model"); header↔gate SSOT. No spawn/socket/timer
   ./run.sh smoke-entwurf-v2-matrix-live # LIVE sentinel (0.11 Stage 0 step 5d-5, D4-b) — OUT of pnpm check, needs LIVE=1. Drives REAL production runEntwurfV2 deps over REAL OS objects, 4 cells: C1 control-socket (real pi --entwurf-control resident → RPC send → lock acquire→release ×1), C1b record-less socket (#50 C4: live record-less pi → EVERY intent rejected pre-probe record-less-socket, no lock, rendered hint names record authority + fresh-cut), C2 meta-mailbox deliverable (armed self-fetch citizen → real .msg enqueue, lock-free), C3 meta-mailbox guard (no armed receiver → reject, no garbage). Model-in-loop OUT (transport/lock/enqueue gate, GPT Q2); negative/timeout stay deterministic. Model: ENTWURF_LIVE_TARGET=<provider>/<model> (default openai-codex/gpt-5.6-luna). LIVE=1 ./run.sh smoke-entwurf-v2-matrix-live
@@ -1391,6 +1392,17 @@ check_mux_launcher_fence() {
   # (absent means DELETED, never canonical defaults; RUNTIME_DIR stays fixture by design), the
   # lifecycle pi/claude cell-branch topology, and both smokes consuming the one shared helper.
   run_ts scripts/check-mux-launcher-fence.ts
+}
+
+check_typing_call_fence() {
+  # The rule kept since day one, now kept by NAME: entwurf composes arguments and letters, never
+  # keystrokes. An outside reader measured the tree on 2026-09-17 and found the law perfectly kept
+  # and nothing keeping it — zero typing calls in pi-extensions/, zero checks and zero mutants that
+  # would notice one arriving. Scans tracked production sources under pi-extensions/ and mcp/ with
+  # comments blanked and string literals kept, because a typing call spelled as a string is the
+  # call. Comment exemption is load-bearing: the sentence that states the rule contains the names
+  # the rule forbids. Offline, no binaries, no fixtures on disk.
+  run_ts scripts/check-typing-call-fence.ts
 }
 
 check_mux_parent_artifact() {
@@ -6479,6 +6491,9 @@ case "$cmd" in
     ;;
   check-mux-launcher-fence)
     check_mux_launcher_fence
+    ;;
+  check-typing-call-fence)
+    check_typing_call_fence
     ;;
   check-entwurf-v2-visible-resume)
     check_entwurf_v2_visible_resume
