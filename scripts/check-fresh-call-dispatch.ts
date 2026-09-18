@@ -239,6 +239,7 @@ async function main(): Promise<void> {
 			herdrPaneId: "w7:pA",
 			herdrTerminalId: "term_x",
 			nonce: "n-1",
+			witness: { state: "reported", reads: 0, settleMs: 0 },
 		},
 	});
 	ok(

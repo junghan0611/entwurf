@@ -47,12 +47,22 @@
  *   HFC-RECEIPT-NO-ADDRESS      the receipt carries no garden id, native session id, screen
  *                               text or herdr view judgement
  *   HFC-CLOSE-WITHIN-GENERATION a close needs id AND terminal match AND no agent session
+ *   HFC-CLOSE-REFUSES-OCCUPIED  a pane herdr says an AGENT is in is never closed, whether or not
+ *                               anybody has reported that agent's session id
  *   HFC-ORPHAN-NAMED            every failed reclaim names its reason instead of going quiet
  *   HFC-INPUT-PARITY            the caller-facing input contract is the SHARED one, word for word
  *   HFC-CWD-EMPTY-IS-OMITTED    `cwd: ""` means "no cwd", as it does on the other rail
  *   HFC-TAB-OCCUPIED            a new tab whose initial pane holds an agent does not get started into
  *   HFC-START-PANE-BINDING      a start that reports a different pane/terminal is a named failure
- *   HFC-START-WITNESS-REQUIRED  a start with no agent session is a named failure
+ *   HFC-WITNESS-SETTLED-BY-READ a start whose reply carries no agent session is SETTLED by
+ *                               bounded read-only re-reads of the EXACT agent name, never by a
+ *                               listing and never by a keystroke
+ *   HFC-WITNESS-ABSENCE-KEEPS   the settle window expiring is a SUCCESSFUL launch carrying an
+ *                               `unavailable` witness — it closes nothing. `[측정 oracle
+ *                               2026-09-18]` the shape this replaces closed a pane holding a live
+ *                               Claude Code child 0.585s after that child wrote its birth record
+ *   HFC-WITNESS-DRIFT-VANISHED  a readable reply about a DIFFERENT agent is the one failure this
+ *                               stage can name, and only it may reach the reclaim
  *   HFC-START-ARGV-FIDELITY     the echoed argv must be exactly what we asked herdr to compose
  *   HERDR-RUNNER-NONBLOCKING    a herdr call in flight does NOT hold the caller's event loop —
  *                               proved against a REAL child process while a REAL socket round
@@ -73,6 +83,7 @@ import { fileURLToPath } from "node:url";
 import { composeFreshCallFraming } from "../pi-extensions/lib/fresh-call-composition.ts";
 import {
 	argvMatchesRequest,
+	buildHerdrAgentGetArgs,
 	buildHerdrAgentStartArgs,
 	buildHerdrPaneCloseArgs,
 	buildHerdrPaneGetArgs,
@@ -81,6 +92,8 @@ import {
 	createHerdrRunner,
 	decideConditionalClose,
 	encodeBirthPrompt,
+	HERDR_AGENT_SESSION_POLL_MS,
+	HERDR_AGENT_SESSION_SETTLE_MS,
 	HERDR_CLI_TIMEOUT_MS,
 	HERDR_FRESH_CALL_BACKENDS,
 	HERDR_FRESH_CALL_OPENING_LINE,
@@ -88,6 +101,7 @@ import {
 	HERDR_START_READY_MS,
 	HERDR_START_TIMEOUT_MS,
 	HERDR_TASK_LITERAL_INSTRUCTION,
+	type HerdrClock,
 	type HerdrRun,
 	herdrAgentNameFromNonce,
 	herdrFreshCall,
@@ -186,6 +200,58 @@ const START_OK = JSON.stringify({
 	},
 });
 
+/**
+ * `herdr agent get <name>` — the read the settle window makes. Shape from `AgentInfo`
+ * (`[file:line @ c77af189]` `src/api/schema/agents.rs:187-215`), coordinates spliced to the START
+ * recording above so the two replies describe the SAME sibling; a fixture whose halves named
+ * different agents could not test the binding between them.
+ *
+ * Built as a FUNCTION of what herdr has been told so far, because that is the whole subject here:
+ * the same agent, same pane, same terminal, with and without a session report.
+ */
+function agentGetReply(options: { session: boolean; paneId?: string; terminalId?: string; agent?: string }): string {
+	return JSON.stringify({
+		id: "cli:agent:get",
+		result: {
+			agent: {
+				agent: options.agent ?? "claude",
+				...(options.session
+					? {
+							agent_session: {
+								agent: "claude",
+								kind: "id",
+								source: "herdr:claude",
+								value: "e3093930-9113-4c3e-b9d0-672803d38fd8",
+							},
+						}
+					: {}),
+				agent_status: "idle",
+				interactive_ready: true,
+				name: herdrAgentNameFromNonce(NONCE),
+				pane_id: options.paneId ?? "w7:p7",
+				tab_id: "w7:t1",
+				terminal_id: options.terminalId ?? "term_65b6e1ce2b3db16",
+				workspace_id: "w7",
+			},
+			type: "agent_info",
+		},
+	});
+}
+
+/**
+ * The two halves of "this pane is not empty", each on its own.
+ *
+ * They exist separately because collapsing them is the defect: a pane with an AGENT and no session
+ * report is precisely the live Claude Code child the old predicate closed, and a pane with a
+ * session and no agent label is how the same predicate used to be the only refusal. Both are
+ * derived from the recorded `PANE_OK` so nothing but the contested key differs.
+ */
+const PANE_WITH_AGENT_ONLY = PANE_OK.replace('"agent_status":"unknown"', '"agent":"claude","agent_status":"idle"');
+const PANE_WITH_SESSION_ONLY = PANE_OK.replace(
+	'"agent_status":"unknown"',
+	'"agent_session":{"agent":"claude","kind":"id","source":"herdr:claude","value":"e3093930-9113-4c3e-b9d0-672803d38fd8"},"agent_status":"unknown"',
+);
+
 /** Verbatim failure envelope — measured against a NONEXISTENT pane, so nothing was created. */
 const START_ERR = JSON.stringify({
 	error: { code: "invalid_agent_argument", message: "agent arguments cannot be encoded safely for the target shell" },
@@ -216,6 +282,27 @@ function scriptedRun(replies: readonly ScriptedReply[]): { run: HerdrRun; calls:
 		return Promise.resolve({ status: reply.status, stdout: reply.stdout ?? "", stderr: reply.stderr ?? "" });
 	};
 	return { run, calls };
+}
+
+/**
+ * A clock the settle window can be driven through without spending it.
+ *
+ * `sleep` does not wait — it ADVANCES the clock by exactly what it was asked for. So a cell that
+ * exhausts the whole 5s window costs nothing in wall time while still walking the same number of
+ * polls production would. A gate that slept for real would either be slow or would have to shrink
+ * the bound it is testing, and a bound shrunk for a test is a different bound.
+ */
+function fakeClock(): HerdrClock & { readonly elapsed: () => number } {
+	let ms = 1_000_000;
+	const start = ms;
+	return {
+		now: () => ms,
+		sleep: (by) => {
+			ms += by;
+			return Promise.resolve();
+		},
+		elapsed: () => ms - start,
+	};
 }
 
 /** herdr's own echo: the canonical executable for the requested kind, then everything after `--`. */
@@ -610,6 +697,16 @@ async function main(): Promise<void> {
 			decideConditionalClose(created, parseHerdrPaneGetResponse(PANE_OK.replace('"w7:p7"', '"w7:p9"')), false).close ===
 				false,
 	);
+	ok(
+		"[QK:HFC-CLOSE-REFUSES-OCCUPIED] a pane herdr says an AGENT is in is never closed, whether or not anybody has reported that agent's session id — `[측정 oracle 2026-09-18]` the predicate that read only the session id closed a pane holding a booted Claude Code child, because on that rail the id arrives through a separate hook the child makes AFTER it starts",
+		decideConditionalClose(created, parseHerdrPaneGetResponse(PANE_WITH_AGENT_ONLY), false).close === false &&
+			// The two facts are independent, and the occupancy one is the one that has to hold on
+			// its own: a pane with an agent and NO session is exactly the live child that was killed.
+			parseHerdrPaneGetResponse(PANE_WITH_AGENT_ONLY)?.hasAgentSession === false &&
+			parseHerdrPaneGetResponse(PANE_WITH_AGENT_ONLY)?.agent === "claude" &&
+			// And an empty pane is still closable, so this is a narrowing rather than a disabling.
+			decideConditionalClose(created, same, false).close === true,
+	);
 	const matrix: [ReturnType<typeof decideConditionalClose>, string][] = [
 		[decideConditionalClose(created, null, true), "pane-get-failed"],
 		[decideConditionalClose(created, null, false), "pane-get-unparsable"],
@@ -626,14 +723,15 @@ async function main(): Promise<void> {
 			"terminal-id-mismatch",
 		],
 		[
-			decideConditionalClose(created, parseHerdrAgentStartResponse(START_OK)?.pane ?? null, false),
+			decideConditionalClose(created, parseHerdrPaneGetResponse(PANE_WITH_SESSION_ONLY), false),
 			"agent-session-present",
 		],
+		[decideConditionalClose(created, parseHerdrPaneGetResponse(PANE_WITH_AGENT_ONLY), false), "agent-present"],
 	];
 	ok(
-		"[QK:HFC-ORPHAN-NAMED] every way the proof can fail has its OWN name — get failed, unreadable, wrong pane, wrong terminal, someone else's agent — because the operator's next move differs for each",
+		"[QK:HFC-ORPHAN-NAMED] every way the proof can fail has its OWN name — get failed, unreadable, wrong pane, wrong terminal, an agent in the pane, someone else's session — because the operator's next move differs for each",
 		matrix.every(([decision, reason]) => decision.close === false && decision.reason === reason) &&
-			new Set(matrix.map(([, reason]) => reason)).size === 5,
+			new Set(matrix.map(([, reason]) => reason)).size === 6,
 	);
 
 	const failing = scriptedRun([
@@ -801,7 +899,9 @@ async function main(): Promise<void> {
 				result.reason === "herdr-tab-root-pane-occupied" &&
 				"recovery" in result &&
 				result.recovery.outcome === "orphan-unreclaimed" &&
-				result.recovery.reason === "agent-session-present" &&
+				// OCCUPANCY is what refuses here, and it is the stronger of the two facts: this
+				// stranger's pane would be refused even if nobody had reported their session id.
+				result.recovery.reason === "agent-present" &&
 				!calls.some((call) => call[1] === "start")
 			);
 		})(),
@@ -829,20 +929,88 @@ async function main(): Promise<void> {
 			return true;
 		})(),
 	);
+	const witnessless = (): string => {
+		const parsed = JSON.parse(START_OK);
+		parsed.result.agent.agent_session = null;
+		return JSON.stringify(parsed);
+	};
 	ok(
-		"[QK:HFC-START-WITNESS-REQUIRED] a start that succeeded WITHOUT an agent session is a named failure — herdr waits for detection before returning, so a missing witness means a launch nobody can identify, and presence is the whole claim we read",
+		"[QK:HFC-WITNESS-SETTLED-BY-READ] a start reply with no agent session is SETTLED by re-reading, not judged on the spot — the rail asks `agent get <the exact name it started>` (never a listing, never a keystroke) and a session that arrives on a later read makes the launch a success that reports what the wait cost",
 		await (async () => {
-			const witnessless = JSON.parse(START_OK);
-			witnessless.result.agent.agent_session = null;
-			const { run } = scriptedRun([
+			const clock = fakeClock();
+			const { run, calls } = scriptedRun([
 				{ status: 0, stdout: CALLER_PANE_OK },
 				{ status: 0, stdout: TAB_OK },
-				startReplyEchoingArgv(JSON.stringify(witnessless)),
+				startReplyEchoingArgv(witnessless()),
+				{ status: 0, stdout: agentGetReply({ session: false }) },
+				{ status: 0, stdout: agentGetReply({ session: true }) },
+			]);
+			const result = await herdrFreshCall({ ...base, backend: "claude-code" }, run, HERDR_ENV, NONCE, clock);
+			const reads = calls.filter((call) => call[0] === "agent" && call[1] === "get");
+			return (
+				result.ok &&
+				result.receipt.witness.state === "reported" &&
+				result.receipt.witness.reads === 2 &&
+				result.receipt.witness.settleMs === 2 * HERDR_AGENT_SESSION_POLL_MS &&
+				reads.length === 2 &&
+				// EXACT NAME, both times. A listing would make us pick "the one that looks like
+				// ours" out of every agent on the server — the guess this rail refuses.
+				reads.every(
+					(call) => JSON.stringify(call) === JSON.stringify(buildHerdrAgentGetArgs(herdrAgentNameFromNonce(NONCE))),
+				) &&
+				!calls.some((call) => call[0] === "pane" && call[1] === "close")
+			);
+		})(),
+	);
+	ok(
+		"[QK:HFC-WITNESS-ABSENCE-KEEPS] the settle window EXPIRING is a successful launch carrying an `unavailable` witness, and it closes nothing — the session id comes from the child's own one-shot reporter, so `nobody told herdr` never becomes `nobody is there`, and the shape this replaces closed a pane holding a live Claude Code child 0.585s after that child had written its own birth record",
+		await (async () => {
+			const clock = fakeClock();
+			const silent: ScriptedReply = { status: 0, stdout: agentGetReply({ session: false }) };
+			const { run, calls } = scriptedRun([
+				{ status: 0, stdout: CALLER_PANE_OK },
+				{ status: 0, stdout: TAB_OK },
+				startReplyEchoingArgv(witnessless()),
+				...Array.from({ length: 200 }, () => silent),
+			]);
+			const result = await herdrFreshCall({ ...base, backend: "claude-code" }, run, HERDR_ENV, NONCE, clock);
+			const expectedReads = HERDR_AGENT_SESSION_SETTLE_MS / HERDR_AGENT_SESSION_POLL_MS;
+			return (
+				result.ok &&
+				result.receipt.witness.state === "unavailable" &&
+				result.receipt.witness.settleMs === HERDR_AGENT_SESSION_SETTLE_MS &&
+				result.receipt.witness.reads === expectedReads &&
+				// The whole point: nothing was closed, and the window is bounded rather than open.
+				!calls.some((call) => call[0] === "pane" && call[1] === "close") &&
+				clock.elapsed() === HERDR_AGENT_SESSION_SETTLE_MS &&
+				// And the operator is TOLD, in the receipt, rather than left to infer it.
+				renderHerdrFreshCall(result).text.includes("unavailable after") &&
+				!renderHerdrFreshCall(result).isError
+			);
+		})(),
+	);
+	ok(
+		"[QK:HFC-WITNESS-DRIFT-VANISHED] the one failure this stage can name is a READABLE reply about a different agent — a reply we could not read only costs a poll, because herdr answers a missing agent and a socket that blinked with the same exit status and this module cannot tell them apart",
+		await (async () => {
+			const clock = fakeClock();
+			const { run, calls } = scriptedRun([
+				{ status: 0, stdout: CALLER_PANE_OK },
+				{ status: 0, stdout: TAB_OK },
+				startReplyEchoingArgv(witnessless()),
+				// Unreadable, then failed: neither is evidence that the agent is gone.
+				{ status: 0, stdout: "not json" },
+				{ status: 1, stderr: "boom" },
+				// Readable, and about a pane that is not the one we opened.
+				{ status: 0, stdout: agentGetReply({ session: true, paneId: "w7:p9" }) },
 				{ status: 0, stdout: PANE_OK },
 				{ status: 0 },
 			]);
-			const result = await herdrFreshCall({ ...base, backend: "claude-code" }, run, HERDR_ENV, NONCE);
-			return !result.ok && result.reason === "herdr-agent-start-witness-missing";
+			const drifted = await herdrFreshCall({ ...base, backend: "claude-code" }, run, HERDR_ENV, NONCE, clock);
+			return (
+				!drifted.ok &&
+				drifted.reason === "herdr-agent-start-vanished" &&
+				calls.filter((call) => call[0] === "agent" && call[1] === "get").length === 3
+			);
 		})(),
 	);
 	ok(

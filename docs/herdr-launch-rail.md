@@ -170,7 +170,7 @@ tab 좌표는 **그것을 만든 응답**에서 온다(`agent start`의 echo가 
 
 **herdr 고유 pre-mutation**(아무것도 생기지 않음): `herdr-context-missing` · `herdr-caller-pane-missing` · `herdr-caller-pane-get-failed` · `herdr-caller-pane-unparsable` · `herdr-caller-pane-drift` · `herdr-caller-workspace-missing` · `herdr-backend-unsupported` · `herdr-placement-tmux-rejected` · `herdr-argv-control-character` · `cwd-not-absolute` · `cwd-missing` · `cwd-not-directory`
 
-**post-create** (회수 결과를 함께 낸다): `herdr-tab-create-failed` · `herdr-tab-create-unparsable` · `herdr-tab-root-pane-occupied` · `herdr-agent-start-failed` · `herdr-agent-start-unparsable` · `herdr-agent-start-pane-drift` · `herdr-agent-start-witness-missing` · `herdr-agent-start-argv-drift`
+**post-create** (회수 결과를 함께 낸다): `herdr-tab-create-failed` · `herdr-tab-create-unparsable` · `herdr-tab-root-pane-occupied` · `herdr-agent-start-failed` · `herdr-agent-start-unparsable` · `herdr-agent-start-pane-drift` · `herdr-agent-start-vanished` · `herdr-agent-start-argv-drift`
 
 뒤의 셋은 **읽을 수 있는데 어긋난** 응답이라 `unparsable`로 뭉개지 않는다 — 오퍼레이터가 할 일이 각각 다르다. `pane-drift`는 우리가 연 pane·terminal·**tab**이 아닌 곳에서 뭔가 떴다는 뜻이고(회수는 **tab create 영수증**에서 시작한다), `witness-missing`은 아무도 식별할 수 없는 launch를 성공이라고 들었다는 뜻이며, `argv-drift`는 우리가 구성하지 않은 프레이밍으로 형제가 떴다는 뜻이다. `[file:line @ c77af189]` `src/app/agents.rs:197-199`가 echo되는 argv를 **canonical executable + 우리 args**로 정의하므로 이 대조는 추측이 아니다.
 

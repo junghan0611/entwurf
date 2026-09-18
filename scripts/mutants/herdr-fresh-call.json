@@ -307,14 +307,51 @@
 			"signatureSource": "scripts/check-herdr-fresh-call.ts"
 		},
 		{
-			"claim": "HFC-START-WITNESS-REQUIRED",
-			"title": "a start with no agent session counts as success, so a launch nobody can identify is reported as one that worked",
+			"claim": "HFC-WITNESS-SETTLED-BY-READ",
+			"title": "the settle window stops believing a session that arrives on a later read, so every launch whose start reply was early reports an unavailable witness it did not have to",
 			"subject": "pi-extensions/lib/herdr-fresh-call.ts",
-			"find": ["\tif (!started.pane.hasAgentSession) {"],
-			"replace": ["\tif (false) {"],
+			"find": [
+				"\t\t\tif (agent.hasAgentSession) return { ok: true, witness: { state: \"reported\", reads, settleMs: elapsed } };"
+			],
+			"replace": ["\t\t\tif (false) return { ok: true, witness: { state: \"reported\", reads, settleMs: elapsed } };"],
 			"gate": ["bash", "run.sh", "check-herdr-fresh-call"],
 			"timeoutSeconds": 120,
-			"signature": "[QK:HFC-START-WITNESS-REQUIRED]",
+			"signature": "[QK:HFC-WITNESS-SETTLED-BY-READ]",
+			"signatureSource": "scripts/check-herdr-fresh-call.ts"
+		},
+		{
+			"claim": "HFC-WITNESS-ABSENCE-KEEPS",
+			"title": "the settle window expiring becomes a launch FAILURE again, which is the shape that closed a pane holding a live Claude Code child",
+			"subject": "pi-extensions/lib/herdr-fresh-call.ts",
+			"find": [
+				"\t\tif (elapsed >= settleMs) return { ok: true, witness: { state: \"unavailable\", reads, settleMs: elapsed } };"
+			],
+			"replace": ["\t\tif (elapsed >= settleMs) return { ok: false, reads };"],
+			"gate": ["bash", "run.sh", "check-herdr-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:HFC-WITNESS-ABSENCE-KEEPS]",
+			"signatureSource": "scripts/check-herdr-fresh-call.ts"
+		},
+		{
+			"claim": "HFC-WITNESS-DRIFT-VANISHED",
+			"title": "a readable reply about a different agent stops being a named failure, so a launch that drifted waits out its window and reports a healthy unavailable witness",
+			"subject": "pi-extensions/lib/herdr-fresh-call.ts",
+			"find": ["\t\t\tif (drifted) return { ok: false, reads };"],
+			"replace": ["\t\t\tif (false) return { ok: false, reads };"],
+			"gate": ["bash", "run.sh", "check-herdr-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:HFC-WITNESS-DRIFT-VANISHED]",
+			"signatureSource": "scripts/check-herdr-fresh-call.ts"
+		},
+		{
+			"claim": "HFC-CLOSE-REFUSES-OCCUPIED",
+			"title": "the reclaim stops reading occupancy and judges an empty pane by the session id alone, so a pane holding an agent nobody has reported yet is closable again",
+			"subject": "pi-extensions/lib/herdr-fresh-call.ts",
+			"find": ["\tif (current.agent !== undefined) return { close: false, reason: \"agent-present\" };"],
+			"replace": [""],
+			"gate": ["bash", "run.sh", "check-herdr-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:HFC-CLOSE-REFUSES-OCCUPIED]",
 			"signatureSource": "scripts/check-herdr-fresh-call.ts"
 		},
 		{

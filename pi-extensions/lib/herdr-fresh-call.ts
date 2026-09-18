@@ -141,9 +141,11 @@ export type HerdrLaunchFailureReason =
 	/** The start reported a pane, terminal or tab that is not the one we created. Distinct from
 	 * `unparsable` on purpose: the payload was readable and said something actionable. */
 	| "herdr-agent-start-pane-drift"
-	/** The start succeeded without an `agent_session`. herdr's own start path waits for
-	 * detection, so a missing witness means we were told about a launch nobody can identify. */
-	| "herdr-agent-start-witness-missing"
+	/** The start succeeded, the settle window expired with no `agent_session`, AND the exact agent
+	 * we started is no longer in the pane we opened. NOT "the witness is late" — that is a
+	 * DIAGNOSIS on a successful receipt (`HerdrWitness`), never a failure. This reason exists only
+	 * for the case where herdr can no longer show us the agent it told us it had started. */
+	| "herdr-agent-start-vanished"
 	/** The echoed argv is not the canonical executable plus exactly what we passed after `--`. */
 	| "herdr-agent-start-argv-drift";
 
@@ -158,6 +160,11 @@ export type HerdrOrphanReason =
 	| "pane-id-mismatch"
 	| "terminal-id-mismatch"
 	| "agent-session-present"
+	/** herdr says an AGENT occupies this pane. `[측정 oracle 2026-09-18]` this is the reason that
+	 * had to exist: `agent-session-present` only fires once herdr has been TOLD the session id,
+	 * which on the Claude rail is a separate hook round trip, so a pane holding a live child read
+	 * as empty and was closed. Occupancy is the close-refusal; the session id is not. */
+	| "agent-present"
 	| "close-failed";
 
 /**
@@ -196,7 +203,8 @@ export type HerdrRecovery =
  * ABSENT BY CONTRACT: `gardenId` and `nativeSessionId` (an address is the record's to give, and
  * this module never reads the store), screen text, `agent_status` and `interactive_ready` (herdr's
  * own view judgements), and `agent_session` (the join key — putting it here would be the first
- * step in promoting a pane to an address).
+ * step in promoting a pane to an address). `witness` below is the OPPOSITE of that: it reports
+ * whether herdr had been told a session id by the time we stopped asking, and carries no id.
  */
 export interface HerdrFreshCallReceipt {
 	readonly backend: HerdrFreshCallBackend;
@@ -211,6 +219,29 @@ export interface HerdrFreshCallReceipt {
 	readonly herdrPaneId: string;
 	readonly herdrTerminalId: string;
 	readonly nonce: string;
+	/** Whether herdr had been told this agent's session id before we stopped asking, and what that
+	 * cost. A DIAGNOSIS on a launch that succeeded either way — see `HerdrWitness`. */
+	readonly witness: HerdrWitness;
+}
+
+/**
+ * Did herdr learn the new agent's session id while we were still here?
+ *
+ * `reported` — it did, after `reads` read(s) and `settleMs` of waiting. `settleMs: 0` with one read
+ * means the start reply already carried it, which is the ordinary pi case.
+ *
+ * `unavailable` — it had not, and we stopped asking. **This is not a failure and never reclaims.**
+ * The reporter is the CHILD's own one-shot hook with a 0.5s socket deadline that swallows its
+ * failures, so "never" is reachable for a perfectly healthy sibling; the agent was confirmed to
+ * still occupy the pane we opened before this word was written. What it costs the operator is
+ * named rather than hidden: the placement join in `entwurf_peers` has nothing to join on for this
+ * sibling, so its `placement` column reads `unobserved`. The address was never this anyway — the
+ * garden id arrives in the sibling's own callback envelope (Hard Rule 16).
+ */
+export interface HerdrWitness {
+	readonly state: "reported" | "unavailable";
+	readonly reads: number;
+	readonly settleMs: number;
 }
 
 export type HerdrFreshCallResult =
@@ -232,6 +263,22 @@ export type HerdrRun = (args: readonly string[]) => Promise<{
 	readonly stdout: string;
 	readonly stderr: string;
 }>;
+
+/** The two clock verbs the settle window needs, injected for the same reason `HerdrRun` is: a gate
+ * must be able to drive the whole window without spending it. Production passes `Date.now` and a
+ * real `setTimeout`; nothing else in this module reads a clock. */
+export interface HerdrClock {
+	readonly now: () => number;
+	readonly sleep: (ms: number) => Promise<void>;
+}
+
+export const HERDR_REAL_CLOCK: HerdrClock = {
+	now: () => Date.now(),
+	sleep: (ms) =>
+		new Promise((resolve) => {
+			setTimeout(resolve, ms);
+		}),
+};
 
 /** The two env facts that say we are inside herdr, plus the pane we were opened in. All three are
  * herdr's OWN (`HERDR_ENV`, `HERDR_BIN_PATH`, `HERDR_PANE_ID`); none is discovered, no socket is
@@ -437,9 +484,27 @@ export function buildHerdrPaneCloseArgs(paneId: string): string[] {
 	return ["pane", "close", paneId];
 }
 
+/** `herdr agent get <target>` — POSITIONAL, exactly one argument (`[file:line @ c77af189]`
+ * `src/cli/agent.rs:450-458`). EXACT NAME, never `agent list`: a listing would make us pick "the
+ * one that looks like ours" out of every agent on the server, which is the guess this rail
+ * refuses. The name we ask about is the nonce-derived one we asked herdr to start. */
+export function buildHerdrAgentGetArgs(agentName: string): string[] {
+	return ["agent", "get", agentName];
+}
+
 /** A pane as herdr reported it, reduced to what a launch needs. `paneId` stays an OPAQUE string:
  * `[측정 2026-09-14]` the tenth pane came back as `w7:pA`, not `w7:p10`, so any parser that assumes
- * decimals is already wrong. */
+ * decimals is already wrong.
+ *
+ * OCCUPANCY AND WITNESS ARE TWO DIFFERENT FACTS, and collapsing them cost a live sibling.
+ * `[측정 oracle 2026-09-18, LIVE run XimC19]` an earlier shape kept only `hasAgentSession`, so
+ * "herdr has not been told this agent's session id yet" and "no agent is in this pane" were the
+ * same value — and the reclaim below closed a pane holding a Claude Code child that had already
+ * written its own birth record 0.585s earlier. `agent`/`agentStatus`/`agentName` are herdr's own
+ * occupancy report (`[file:line @ c77af189]` `src/api/schema/panes.rs:539,549` — `agent` and
+ * `agent_status` sit on `PaneInfo` beside the optional `agent_session`), and they are read for ONE
+ * purpose: refusing to close a pane somebody is living in. They are never promoted to an address.
+ */
 export interface HerdrPaneFacts {
 	readonly paneId: string;
 	readonly terminalId: string;
@@ -447,6 +512,12 @@ export interface HerdrPaneFacts {
 	readonly tabId?: string;
 	/** Presence ONLY. The value is the placement join key and has no business in a launch. */
 	readonly hasAgentSession: boolean;
+	/** herdr's agent-kind label for whoever occupies this pane, when it named one. */
+	readonly agent?: string;
+	/** herdr's own status word. Read as occupancy evidence, never as a readiness judgement. */
+	readonly agentStatus?: string;
+	/** The agent NAME herdr carries for this pane — ours is the nonce-derived one we asked for. */
+	readonly agentName?: string;
 }
 
 function readPaneFacts(pane: unknown): HerdrPaneFacts | null {
@@ -458,12 +529,19 @@ function readPaneFacts(pane: unknown): HerdrPaneFacts | null {
 	if (typeof terminalId !== "string" || terminalId.length === 0) return null;
 	const workspaceId = typeof row.workspace_id === "string" ? row.workspace_id : undefined;
 	const tabId = typeof row.tab_id === "string" ? row.tab_id : undefined;
+	const agent = typeof row.agent === "string" && row.agent.length > 0 ? row.agent : undefined;
+	const agentStatus =
+		typeof row.agent_status === "string" && row.agent_status.length > 0 ? row.agent_status : undefined;
+	const agentName = typeof row.name === "string" && row.name.length > 0 ? row.name : undefined;
 	return {
 		paneId,
 		terminalId,
 		...(workspaceId === undefined ? {} : { workspaceId }),
 		...(tabId === undefined ? {} : { tabId }),
 		hasAgentSession: row.agent_session !== undefined && row.agent_session !== null,
+		...(agent === undefined ? {} : { agent }),
+		...(agentStatus === undefined ? {} : { agentStatus }),
+		...(agentName === undefined ? {} : { agentName }),
 	};
 }
 
@@ -566,6 +644,19 @@ export function argvMatchesRequest(
 /** `herdr pane get <id>` → `{"result":{"pane":{…}}}`. */
 export const parseHerdrPaneGetResponse = parseHerdrPaneResponse;
 
+/** `herdr agent get <name>` → `{"result":{"agent":{…AgentInfo…}}}` — the same reduction the start
+ * reply gets, because `AgentInfo` carries the same pane/terminal/tab/session keys
+ * (`[file:line @ c77af189]` `src/api/schema/agents.rs:187-215`). A payload that is not that shape
+ * is DECLINED (null); an absent agent and an unreadable reply are NOT the same answer, and the
+ * caller of this parser is the one that keeps them apart. */
+export function parseHerdrAgentGetResponse(stdout: string): HerdrPaneFacts | null {
+	const root = parseJsonObject(stdout);
+	if (root === null) return null;
+	const result = root.result;
+	if (typeof result !== "object" || result === null) return null;
+	return readPaneFacts((result as Record<string, unknown>).agent);
+}
+
 /** herdr's own failure envelope: `{"id":…,"error":{"code":…,"message":…}}` on stderr with exit 1
  * (`[file:line @ c77af189]` `src/cli.rs:745-753`). The code is quoted into our reject, never
  * re-typed into a vocabulary of ours that would go stale the moment herdr adds a case. */
@@ -598,9 +689,20 @@ function parseJsonObject(text: string): Record<string, unknown> | null {
  * May we close the pane we just opened?
  *
  * Only with WITHIN-GENERATION proof: the pane we are looking at right now must be the same id AND
- * the same terminal our creation receipt named, and it must not have acquired an agent session. A
- * bare pane id is not authority (see `HerdrOrphanReason`), and the honest answer when the proof
- * does not hold is to leave the pane alone and say so by name.
+ * the same terminal our creation receipt named, and it must be EMPTY. A bare pane id is not
+ * authority (see `HerdrOrphanReason`), and the honest answer when the proof does not hold is to
+ * leave the pane alone and say so by name.
+ *
+ * EMPTY IS TWO QUESTIONS, NOT ONE, and asking only the second one killed a living sibling.
+ * `[측정 oracle 2026-09-18, LIVE run XimC19]` this predicate refused to close only when herdr had
+ * already been told the pane's `agent_session`. On the Claude rail that id arrives through a
+ * SEPARATE hook round trip the child makes after it starts (`[file:line @ c77af189]`
+ * `src/integration/assets/claude/herdr-agent-state.sh:60-99`, one shot, 0.5s socket deadline,
+ * failures swallowed), so a pane holding a booted child read as empty and was closed 0.585s after
+ * that child wrote its own birth record. Occupancy — herdr naming an AGENT in the pane — is now the
+ * first refusal, and it does not depend on anybody having reported a session id. A bound that
+ * expires is not authority either: no finite wait converts "nobody told us the id" into "nobody is
+ * there".
  *
  * WHY THE RECLAIM IS STILL PANE-LEVEL ON A TAB-FIRST RAIL. `[측정 2026-09-15, private server]`
  * `tab close` takes a bare `tab_id` and nothing else: it closed a tab holding a RUNNING agent and
@@ -625,6 +727,7 @@ export function decideConditionalClose(
 	if (current === null) return { close: false, reason: "pane-get-unparsable" };
 	if (current.paneId !== created.paneId) return { close: false, reason: "pane-id-mismatch" };
 	if (current.terminalId !== created.terminalId) return { close: false, reason: "terminal-id-mismatch" };
+	if (current.agent !== undefined) return { close: false, reason: "agent-present" };
 	if (current.hasAgentSession) return { close: false, reason: "agent-session-present" };
 	return { close: true };
 }
@@ -658,6 +761,7 @@ export async function herdrFreshCall(
 	run: HerdrRun,
 	env: NodeJS.ProcessEnv,
 	nonce: string,
+	clock: HerdrClock = HERDR_REAL_CLOCK,
 ): Promise<HerdrFreshCallResult> {
 	const context = resolveHerdrContext(env);
 	if (!context.ok) return { ok: false, reason: context.reason };
@@ -802,16 +906,26 @@ export async function herdrFreshCall(
 		// caller at a coordinate that never held their sibling.
 		return { ok: false, reason: "herdr-agent-start-pane-drift", recovery: await reclaim(pane, run) };
 	}
-	if (!started.pane.hasAgentSession) {
-		// herdr's own start path waits for detection before returning, so a success with no
-		// session reference means we were told about a launch that nobody can identify. The
-		// VALUE stays unread here — presence is the whole claim.
-		return { ok: false, reason: "herdr-agent-start-witness-missing", recovery: await reclaim(pane, run) };
-	}
 	if (!argvMatchesRequest(started.argv, backend, backendArgs)) {
 		// The framing is the argv. A sibling started with a different one is a sibling we did not
 		// compose, and nothing downstream would ever reveal it.
 		return { ok: false, reason: "herdr-agent-start-argv-drift", recovery: await reclaim(pane, run) };
+	}
+	// THE WITNESS IS THE LAST QUESTION, AND IT IS NOT A VETO. Everything above could disqualify the
+	// launch; this cannot. `settleAgentWitness` only re-READS, and its two answers are "herdr knows
+	// the session id" and "it does not yet" — both of which are successful launches. It fails only
+	// when a readable reply says the agent we started is no longer the agent in our pane.
+	const settled = await settleAgentWitness({
+		agentName,
+		kind: HERDR_AGENT_KIND[backend],
+		created: pane,
+		tabId: tab.tabId,
+		started: started.pane,
+		run,
+		clock,
+	});
+	if (!settled.ok) {
+		return { ok: false, reason: "herdr-agent-start-vanished", recovery: await reclaim(pane, run) };
 	}
 
 	return {
@@ -830,6 +944,7 @@ export async function herdrFreshCall(
 			herdrPaneId: started.pane.paneId,
 			herdrTerminalId: started.pane.terminalId,
 			nonce,
+			witness: settled.witness,
 		},
 	};
 }
@@ -849,6 +964,69 @@ function nothingCreated(): HerdrRecovery {
  * unreadable. Nothing is closed, and the receipt says so instead of guessing either way. */
 function indeterminate(): HerdrRecovery {
 	return { outcome: "unknown" };
+}
+
+/**
+ * The launch already succeeded. Wait — bounded, read-only — to see whether herdr learns the new
+ * agent's session id, and rebind every read to the launch we actually made.
+ *
+ * WHY THIS EXISTS AT ALL. `[측정 oracle 2026-09-18, LIVE run XimC19]` the rail used to treat a
+ * successful `agent start` whose reply carried no `agent_session` as a launch failure and CLOSED
+ * the pane. The premise was that herdr waits for detection before answering; it does not — it waits
+ * for `agent_status ∈ {idle,done}` plus `interactive_ready` (`[file:line @ c77af189]`
+ * `src/cli/agent.rs:592-615`) — and on the Claude rail the session id arrives afterwards, through
+ * the child's own hook. A booted Claude Code sibling was killed 0.585s after it wrote its birth
+ * record, and the same bytes passed five minutes later only because that child took 1m27s to
+ * become ready.
+ *
+ * WHAT EACH READ PROVES. `agent get <exact name>` — never a listing. Every reply is rebound to the
+ * CREATE receipt (pane id, terminal id, tab id when herdr names one) and to what we asked for
+ * (agent name, kind), because a reply about a different agent answers a different question. A read
+ * that drifts is not a slow witness; it is `herdr-agent-start-vanished`, and only then may the
+ * reclaim below even be consulted.
+ *
+ * WHAT EXPIRY DOES NOT BUY. Nothing. The window closing means we stop asking, and the launch is
+ * still a success with `witness: unavailable`. No finite bound turns "herdr was never told the id"
+ * into "there is nobody there" — the reporter is one-shot and swallows its failures.
+ */
+export async function settleAgentWitness(params: {
+	readonly agentName: string;
+	readonly kind: string;
+	readonly created: HerdrPaneFacts;
+	readonly tabId: string;
+	readonly started: HerdrPaneFacts;
+	readonly run: HerdrRun;
+	readonly clock: HerdrClock;
+	readonly settleMs?: number;
+	readonly pollMs?: number;
+}): Promise<{ readonly ok: true; readonly witness: HerdrWitness } | { readonly ok: false; readonly reads: number }> {
+	if (params.started.hasAgentSession) return { ok: true, witness: { state: "reported", reads: 0, settleMs: 0 } };
+	const settleMs = params.settleMs ?? HERDR_AGENT_SESSION_SETTLE_MS;
+	const pollMs = params.pollMs ?? HERDR_AGENT_SESSION_POLL_MS;
+	const startedAt = params.clock.now();
+	let reads = 0;
+	for (;;) {
+		await params.clock.sleep(pollMs);
+		const getRun = await params.run(buildHerdrAgentGetArgs(params.agentName));
+		reads += 1;
+		const elapsed = params.clock.now() - startedAt;
+		// A failed or unreadable read is NOT evidence that the agent is gone. herdr answers a
+		// missing agent with its own error envelope, but so does a socket that blinked, and this
+		// module cannot tell those apart from an exit status. So an unreadable read only costs a
+		// poll; the ONLY thing that names a vanished launch is a readable reply that disagrees.
+		const agent = getRun.status === 0 ? parseHerdrAgentGetResponse(getRun.stdout) : null;
+		if (agent !== null) {
+			const drifted =
+				agent.paneId !== params.created.paneId ||
+				agent.terminalId !== params.created.terminalId ||
+				(agent.tabId !== undefined && agent.tabId !== params.tabId) ||
+				(agent.agentName !== undefined && agent.agentName !== params.agentName) ||
+				(agent.agent !== undefined && agent.agent !== params.kind);
+			if (drifted) return { ok: false, reads };
+			if (agent.hasAgentSession) return { ok: true, witness: { state: "reported", reads, settleMs: elapsed } };
+		}
+		if (elapsed >= settleMs) return { ok: true, witness: { state: "unavailable", reads, settleMs: elapsed } };
+	}
 }
 
 /** Reclaim the pane we opened — conditionally, or not at all. */
@@ -901,14 +1079,24 @@ const HERDR_REJECT_HINT: Record<HerdrFreshCallRejectReason | HerdrLaunchFailureR
 	"herdr-agent-start-failed": "herdr refused to start the agent in the tab that was just created",
 	"herdr-agent-start-unparsable": "herdr's start reply could not be read",
 	"herdr-agent-start-pane-drift": "herdr reported a different pane, terminal or tab than the one it just created",
-	"herdr-agent-start-witness-missing":
-		"herdr reported a start with no agent session, so nothing identifies what was launched",
+	"herdr-agent-start-vanished":
+		"herdr started the agent and then answered about a different one, so the sibling it named is not in the pane we opened",
 	"herdr-agent-start-argv-drift": "herdr echoed an argv that is not the one we composed",
 };
 
 /** How a recovery reads to an operator who has to decide whether to go look. `[측정 2026-09-15]`
  * closing the tab's only pane takes the tab with it, so the closed line says that — conditionally,
  * because a pane a stranger added meanwhile keeps the tab alive and this rail never closed it. */
+/** The witness line an operator reads. `unavailable` is a DIAGNOSIS on a successful launch, so it
+ * says what it costs (the peers placement column has nothing to join) and what it does not (the
+ * address was never a pane; it arrives in the sibling's callback). */
+function renderWitness(witness: HerdrWitness): string {
+	const cost = `${witness.reads} read(s), ${witness.settleMs}ms`;
+	return witness.state === "reported"
+		? `reported to herdr after ${cost} — its placement can be joined in entwurf_peers`
+		: `unavailable after ${cost} — herdr was not told this agent's session id, which its own reporter may never send. The sibling IS running (herdr still shows the agent in this pane); its peers placement column will read unobserved, and its garden id still arrives in the callback`;
+}
+
 function renderRecovery(recovery: HerdrRecovery): string {
 	switch (recovery.outcome) {
 		case "none":
@@ -968,6 +1156,7 @@ export function renderHerdrFreshCall(result: HerdrFreshCallResult): { text: stri
 			`  tab:      ${r.herdrTabId} in workspace ${r.herdrWorkspaceId} — a NEW tab beside the caller's, opened without taking focus\n` +
 			`  pane:     ${r.herdrPaneId} terminal ${r.herdrTerminalId} — the tab's initial pane; herdr VIEW coordinates, not an address\n` +
 			`  nonce:    ${r.nonce}\n` +
+			`  witness:  ${renderWitness(r.witness)}\n` +
 			`\n` +
 			`This is a LAUNCH receipt: herdr created a tab and was asked to start the agent above in it. It does NOT ` +
 			`mean the sibling is running, that its first turn ran, or that the task was delivered. The tab and pane ` +
@@ -1003,6 +1192,35 @@ export const HERDR_START_TIMEOUT_MS = 300_000;
  */
 export const HERDR_START_READY_MS = 240_000;
 export const HERDR_CLI_TIMEOUT_MS = 30_000;
+
+/**
+ * How long we keep ASKING herdr for the agent session of a launch that already succeeded — a
+ * SEPARATE stage from `HERDR_START_READY_MS`, which is herdr's own interactive-readiness budget and
+ * has by then already returned.
+ *
+ * `[측정 oracle 2026-09-18, LIVE runs XimC19 / TCatjF]` the same bytes on the same host answered
+ * twice within five minutes: the fast run returned a successful `agent start` in 4.9s with no
+ * `agent_session`, and the slow one took 1m27s and had it. Nothing about the launch differed —
+ * upstream returns on `agent_status ∈ {idle,done}` plus `interactive_ready`
+ * (`[file:line @ c77af189]` `src/cli/agent.rs:592-615`) and never waits for a session report, so
+ * the slow run's 85s of extra waiting was not a bound, it was a race the wait happened to hide.
+ *
+ * THIS NUMBER IS A PROPOSAL, and it is honest to say so. The red run still had no session 585ms
+ * after the child's own birth record, the reporter's socket deadline alone is 0.5s, and hook
+ * scheduling sits outside both — so the observed pair justifies neither a few hundred ms nor the
+ * slow run's 85s. It is set to one bounded window big enough to absorb an ordinary hook tail and
+ * small enough that nobody waits on it, and the LIVE distribution is what may move it.
+ *
+ * WHAT IT IS NOT: expiry is never authority to close anything. A session id that never arrives is
+ * a launch we cannot NAME, not a launch that did not happen — the reporter is one-shot and
+ * swallows its own failures, so "never" is a reachable state for a perfectly healthy sibling.
+ */
+export const HERDR_AGENT_SESSION_SETTLE_MS = 5_000;
+
+/** How often we re-read during that window. Matched to the vendor's own start-poll cadence
+ * (`[file:line @ c77af189]` `src/cli/agent.rs:9`), because there is no reason to ask a server
+ * faster than it changes its own mind. */
+export const HERDR_AGENT_SESSION_POLL_MS = 100;
 
 /** How much of one herdr reply we are willing to hold. Every verb on this rail answers with one
  * JSON object; a stream larger than this is not a reply we can parse, and an unbounded buffer would
