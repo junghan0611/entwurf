@@ -62,6 +62,28 @@ export const FRESH_CALL_CALLBACK_TOOL: Record<FreshCallBackend, string> = {
 };
 
 /**
+ * The same dialects, for the tool the framing OFFERS rather than requires.
+ *
+ * `[sol D2, 2026-09-18]` the corroboration sentence named a bare `entwurf_peers` to every backend,
+ * including the four that reach it under a composed MCP name. The prohibition it replaced was
+ * removed precisely because a sibling should be able to check who called it; naming that tool in a
+ * spelling its own session does not expose puts the offer back out of reach for exactly the
+ * backends that needed it most.
+ *
+ * Every entry is the callback dialect applied to `entwurf_peers`, so the two maps drift together
+ * or not at all. omp is the one that has to be read rather than pattern-matched: its sanitizer
+ * charset is `[a-z_]`, which ate the digit in `entwurf_v2` — `entwurf_peers` has no digit, so the
+ * SAME rule produces the whole word here.
+ */
+export const FRESH_CALL_PEERS_TOOL: Record<FreshCallBackend, string> = {
+	pi: "entwurf_peers",
+	"claude-code": "mcp__entwurf-bridge__entwurf_peers",
+	copilot: "entwurf-bridge-entwurf_peers",
+	omp: "mcp__entwurf_bridge_entwurf_peers",
+	codex: "mcp__entwurf_bridge__entwurf_peers",
+};
+
+/**
  * What a launch has to say, in the two shapes the five backends need. Four of them are
  * handed a first-turn PROMPT; omp is handed a bootstrap PAYLOAD its own installed extension
  * unpacks. Both are always built, because building one is cheap and a backend switch must
@@ -296,6 +318,7 @@ export function composeFreshCallFraming(params: {
 	openingLine: string;
 }): string[] {
 	const tool = FRESH_CALL_CALLBACK_TOOL[params.backend];
+	const peersTool = FRESH_CALL_PEERS_TOOL[params.backend];
 	if (params.openingLine.length === 0) {
 		throw new Error("fresh-call composition: openingLine is empty — the rail must state where it placed the sibling");
 	}
@@ -310,7 +333,7 @@ export function composeFreshCallFraming(params: {
 		"with, which it has no other way to know. Your own record does not carry the caller's address,",
 		"so reporting your identity here does not reach it — that tool call does.",
 		"",
-		`You can corroborate the caller first if you want to: entwurf_peers is a read-only listing of`,
+		`You can corroborate the caller first if you want to: ${peersTool} is a read-only listing of`,
 		`this garden's citizens and ${params.callerGardenId} is one of them. That listing is capped, so`,
 		"a caller you do not happen to see in it is not a reason to skip the callback.",
 	];

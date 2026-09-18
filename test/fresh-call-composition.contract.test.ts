@@ -20,7 +20,11 @@ import * as path from "node:path";
 import { describe, expect, it } from "vitest";
 import {
 	composeBackendArgs,
+	composeFreshCallFraming,
 	composeFreshCallPrompt,
+	FRESH_CALL_BACKENDS,
+	FRESH_CALL_CALLBACK_TOOL,
+	FRESH_CALL_PEERS_TOOL,
 	type FreshCallComposition,
 } from "../pi-extensions/lib/fresh-call-composition.ts";
 import {
@@ -78,6 +82,31 @@ describe("the tmux rail's bytes did not move when the code did", () => {
 				openingLine: TMUX_FRESH_CALL_OPENING_LINE,
 			}),
 		);
+	});
+
+	it("[QK:FRESHCOMP-PEERS-TOOL-DIALECT] the tool the framing OFFERS is spelled in the same backend dialect as the one it requires — a corroboration named in a spelling the sibling's own session does not expose is an offer it cannot take", () => {
+		// Every backend, because the defect was exactly that four of them shared one bare spelling.
+		for (const backend of FRESH_CALL_BACKENDS) {
+			const framing = composeFreshCallFraming({
+				backend,
+				callerGardenId: GID,
+				nonce: NONCE,
+				openingLine: TMUX_FRESH_CALL_OPENING_LINE,
+			}).join("\n");
+			expect(framing).toContain(FRESH_CALL_PEERS_TOOL[backend]);
+			expect(framing).toContain(FRESH_CALL_CALLBACK_TOOL[backend]);
+		}
+		// The two maps are the SAME dialect applied to two tools, so a backend whose callback name
+		// is composed must have a composed peers name too. pi is the one that is bare in both.
+		for (const backend of FRESH_CALL_BACKENDS) {
+			expect(FRESH_CALL_PEERS_TOOL[backend].startsWith("entwurf_")).toBe(
+				FRESH_CALL_CALLBACK_TOOL[backend].startsWith("entwurf_"),
+			);
+		}
+		// omp is read, never pattern-matched: its `[a-z_]` sanitizer ate the digit in `entwurf_v2`,
+		// and `entwurf_peers` has no digit, so the same rule keeps the whole word here.
+		expect(FRESH_CALL_CALLBACK_TOOL.omp).toBe("mcp__entwurf_bridge_entwurf_v");
+		expect(FRESH_CALL_PEERS_TOOL.omp).toBe("mcp__entwurf_bridge_entwurf_peers");
 	});
 
 	it("[QK:FRESHCOMP-RAIL-OWNS-PLACEMENT-SENTENCE] a rail supplies that sentence — the leaf refuses an empty one instead of inventing a default that would be false somewhere", () => {
