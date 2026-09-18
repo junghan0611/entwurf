@@ -78,6 +78,19 @@ A few words that look unusual for a coding tool.
 
 ## Install
 
+**Two installation routes, and the one you want depends on where you work.**
+
+- **Direct** — `npm install -g @junghanacs/entwurf`, then `entwurf setup <project>`. This is the
+  general route: it composes every harness it FINDS on the host — pi, Claude Code, Codex, Copilot,
+  Antigravity, the ACP rail — and reports each one PASS / SKIP / FAIL. Use it in an ordinary shell,
+  in tmux, anywhere.
+- **Herdr workbench** — `herdr plugin install` from inside a Herdr session. It activates Entwurf for
+  the pi and Claude Code sessions Herdr has integrated, and only those. Contract, evidence grades
+  and its refusals: [plugins/herdr/README.md](plugins/herdr/README.md).
+
+Neither route installs a harness, a subscription, or a login (Hard Rule 17). Everything below this
+paragraph describes the direct route.
+
 **Platform evidence, in one breath.** The Entwurf-only install surface on
 macOS is CERTIFIED (CI) (`macos-install-surface`). On macOS every
 garden-native harness rail, marker/request join, ACP turn, and mux is NOT CERTIFIED —

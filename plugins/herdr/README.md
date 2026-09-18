@@ -10,6 +10,12 @@ receipts, named refusals. This plugin is the smallest useful place those two mee
 
 ## Install
 
+**This is one of Entwurf's two installation routes.** It activates Entwurf for the pi and Claude
+Code sessions Herdr has integrated, inside a Herdr workbench. If you are not in Herdr — or you want
+the other native harnesses (Codex, Copilot, Antigravity, the ACP rail) — the direct route is the
+root [README's Install section](../../README.md#install): `npm install -g @junghanacs/entwurf`
+followed by `entwurf setup`. Neither route installs a harness, a subscription or a login.
+
 Developing from a checkout of this repository:
 
 ```bash
@@ -42,9 +48,13 @@ herdr plugin uninstall junghan0611.entwurf   # a GitHub-managed install: unregis
 
 ## What it needs
 
-- **Herdr 0.9.0 or newer**, and you must open the pane from inside a Herdr session. That
-  floor is the version this was measured against, not a guess; Herdr refuses to link a
-  plugin whose `min_herdr_version` is newer than the running binary.
+- **Herdr 0.9.0 or newer** — the ADMISSION floor, declared as `min_herdr_version` in
+  `herdr-plugin.toml`; Herdr refuses to link a plugin whose floor is newer than the running
+  binary. You must open the pane from inside a Herdr session.
+  - That floor is not the same claim as the version this was MEASURED on. Entwurf's reproducible
+    and CI rail is pinned to exactly **0.9.1** by `scripts/fixtures/herdr-supply.json`, which is
+    what `check-herdr-sandbox` requires and what every receipt in this repo was taken against. A
+    different Herdr inside the admission window is permitted and carries no receipt of ours.
 - **For the install-time build:** `git`, `node` >= 24, `npm`, and network access for the
   transient devDependencies the bridge build needs (~45s and a few hundred MB in an
   Entwurf-owned XDG npm cache, reclaimed by `herdr-plugin-deactivate`). You do **not**
@@ -148,10 +158,10 @@ slow. You now get one line per step:
 ```text
 [entwurf 1/5] reading herdr's integration status
 [entwurf 2/5] planning activation for pi, claude-code
-[entwurf 3/5] fetching and installing the Entwurf runtime from junghan0611/entwurf#cd303887 (git) — this is the long step (npm packs the source; expect minutes of silence)
-[entwurf 4/5] checking what landed: @junghanacs/entwurf@0.21.0 and its activation verb
+[entwurf 3/5] fetching and installing the Entwurf runtime from junghan0611/entwurf#<full-commit> (git) — this is the long step (npm packs the source; expect minutes of silence)
+[entwurf 4/5] checking what landed: @junghanacs/entwurf@<version> and its activation verb
 [entwurf 5/5] wiring pi, claude-code through the installed package
-[entwurf done] @junghanacs/entwurf@0.21.0 active at ~/.local/share/entwurf/herdr-plugin/runtime/active; pi, claude-code wired
+[entwurf done] @junghanacs/entwurf@<version> active at ~/.local/share/entwurf/herdr-plugin/runtime/active; pi, claude-code wired
 [entwurf] pi: start it as `pi --entwurf-control` to be a garden citizen — a plain `pi` loads this extension but has no garden id, no control socket and no entwurf tools.
 [entwurf] claude-code: nothing to add — an ordinary `claude` picks up the entwurf tools through MCP.
 ```
@@ -229,7 +239,7 @@ authority inheriting an existing activation, so it needs an explicit `herdr-plug
 Within one source, a new commit under the same stable root is a legal **rebind** — from a settled
 ledger, with every component active and every activated backend still requested — and it lands in
 one atomic ledger write. A version is never an identity here: two commits can both call themselves
-`0.21.0`.
+`<version>` — which is exactly why the ledger binds the COMMIT.
 
 **It puts nothing on `PATH`.** An earlier cut exposed bare `entwurf` / `entwurf-bridge` through an
 owned bin directory; that was load-bearing on a condition nothing here can establish — there is no

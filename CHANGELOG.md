@@ -39,6 +39,40 @@ All notable changes to this project will be documented here. Format follows [Kee
   (Hard Rule 17) — and a clean NixOS host additionally needs `programs.nix-ld.enable = true` for
   the ACP rail's dynamically linked vendor binary.
 
+- **A gate keeps the typing-call boundary by NAME, not by prose alone.** `[외부 관측 2026-09-17
+  19:35]` an outside reader measured this tree and found the law perfectly kept and nothing keeping
+  it: zero typing calls across `pi-extensions/`, and zero checks and zero mutants that would notice
+  one arriving. Gates here grow on top of incidents, and this boundary was named and REFUSED at
+  design time (`docs/herdr-launch-rail.md` §3 threw the keystroke verb away before it shipped), so
+  it never produced the failure that would have produced a test — and a rule kept since day one is
+  the most defenceless kind, because its green means only that nobody has broken it yet.
+  `check-typing-call-fence` scans every TRACKED AND UNTRACKED production source under
+  `pi-extensions/`, `mcp/`, `plugins/herdr/` and `scripts/herdr-*.mjs` for the names of typing calls
+  — tmux `send-keys` / `paste-buffer` / `load-buffer` and herdr's PTY verbs `agent.prompt` /
+  `agent.send_keys` / `pane.send_text` / `pane.input.set` — with comments blanked and string
+  literals KEPT, because a typing call spelled as a string is the call.
+  - The comment exemption is load-bearing rather than a convenience: the sentence that states the
+    rule contains the very names the rule forbids, so a scanner that read prose would be red on the
+    law itself and the cheapest way to green would be deleting the law.
+  - Three assertions stand in front of the claim for the same reason — the detector is proven to SEE
+    each name planted in code, proven BLIND to the same name in a comment, and the scanned inventory
+    is measured, because without those "zero hits" and "looked at nothing" print identically.
+  - **What it does not catch is named in its own header rather than implied:** it reads SPELLINGS,
+    so a verb assembled at runtime passes it. That limit is accepted rather than closed. This is a
+    tripwire for the slip — a module reaching for the vendor's typing verb because the argv route
+    looked harder that afternoon — not a defence against somebody hiding one, and a gate claiming to
+    be the latter would be the more dangerous object. The claim therefore says CARRIES a typing call
+    spelled out, which is what it measures.
+  - `scripts/` stays out as a whole: this gate lives there, and a gate that scanned itself could
+    only be made green by deleting the names it exists to forbid. Wired into `check:hermetic`;
+    8 checks over 85 production sources, one exact-once mutant.
+- **The framing OFFERS its corroboration in a spelling the sibling can actually use.** The callback
+  tool name goes through a per-backend dialect map; the peer listing the first turn offers did not,
+  and four of the five backends reach that tool under a composed MCP name. The offer was unusable by
+  exactly the siblings it was written for — and it was written to replace a prohibition, removed
+  because a sibling should be able to check who called it. `FRESH_CALL_PEERS_TOOL` is the same
+  dialects applied to the other tool, so the two maps drift together or not at all.
+
 ### Fixed
 
 - **The first turn no longer looks like the injection it is not (#116).** `[GLG 직접, 날것 PC,
@@ -126,6 +160,150 @@ All notable changes to this project will be documented here. Format follows [Kee
   - **Not in scope, by decision:** adding Codex to `HERDR_FRESH_CALL_BACKENDS`, Herdr env carriers
     on the Codex MCP child, plugin supervision of the app-server, and the identical ownership
     defect in the statusline/terminal-title atoms (recorded as an Observation, its own atom).
+
+- **A sibling herdr has not been introduced to yet is no longer killed for it.** `[측정 oracle
+  2026-09-18, LIVE run XimC19]` a Claude Code child booted, wrote its own birth record at
+  01:53:38.297Z, and 0.585s later this rail closed the pane it was sitting in. The same bytes passed
+  five minutes later (run TCatjF) because that child took 1m27s to become ready instead of 4.9s — so
+  the FAST path was the dangerous one, and every green run before it was luck rather than proof.
+  - The premise was that `agent start` waits for detection before returning. It does not:
+    `[file:line @ c77af189]` `src/cli/agent.rs:592-615` returns on `agent_status ∈ {idle,done}` plus
+    `interactive_ready`, and `agent_session` is not in that condition at all. On the Claude rail that
+    id arrives afterwards from the CHILD's own one-shot hook
+    (`src/integration/assets/claude/herdr-agent-state.sh:60-99`, 0.5s socket deadline, failures
+    swallowed), so "herdr has not been told the id" is a reachable resting state for a healthy
+    sibling.
+  - `settleAgentWitness` re-READS instead of judging on the spot: `agent get <the exact name we
+    started>`, never a listing, bounded and rebound to the create receipt every time. An unreadable
+    or failed read costs one poll, because herdr answers a missing agent and a socket that blinked
+    with the same exit status.
+  - **Expiry buys nothing.** The window closing is a SUCCESSFUL launch carrying a
+    `witness: unavailable` diagnosis that says what it costs (the peers `placement` column has
+    nothing to join) and what it does not (the address was never a pane). The old
+    `witness-missing → reclaim` path is gone; the one failure this stage can still name is a
+    readable reply about a DIFFERENT agent, `herdr-agent-start-vanished`.
+  - The reclaim predicate now reads OCCUPANCY, not the session id: a pane herdr says an agent is in
+    is never closed, whether or not anybody has reported that agent's session. Collapsing those two
+    facts is what made a booted child read as an empty pane, and it would have survived in every
+    other post-create failure branch if only the witness path had been patched.
+  - The settle bound is a PROPOSAL and says so in its own comment: the red run still had nothing
+    585ms after the child's birth record, the reporter's own deadline is 500ms, and the slow run's
+    85s was a race being hidden rather than a ceiling.
+- **The Codex birth unit decides who owns the shared `hooks.json` ONCE, for all four surfaces.** The
+  fresh-call preflight required a plausible owner and refused a group/world-writable mode; the
+  installer and the inverse asked only symlink-and-regular; the doctor read the file's CONTENT
+  without ever asking who owned it. A host could install clean, read GREEN, and have every Codex
+  launch refuse it as `codex-birth-unit-missing` — three surfaces saying yes about bytes the fourth
+  said no about. `classifyOwnedPath` now lives in the shared declaration leaf all four already load,
+  and it is PURE: it judges a stat record, not a path. A neighbour's MODE stays theirs (the install
+  still carries it over untouched); WRITING into a file anyone else can rewrite is the different
+  question, and the answer there is a zero-write refusal, because a receipt cannot bind bytes
+  somebody else controls. Symlink keeps its own verdict — the repair is not a mode change, it is a
+  different file.
+- **The inverse's FILE verdict earns its delete.** It could remove a `hooks.json` this unit never
+  created: the arm asked one question — is our group the last declaration — and that is true of a
+  file we merely APPENDED to. `{"description":"foreign","hooks":{"SessionStart":[]}}` has no foreign
+  GROUP, so after our install it classified FILE and the whole document went, a neighbour's
+  top-level bytes included. The receipt had recorded `hooksExistedBefore` since the installer was
+  written and nothing read it; it does now, with two more proofs beside it (the top-level keys are
+  exactly the two this unit writes, and the description is ours). Anything else SPLICES. An absent
+  field reads as "it was already there", so an older receipt licenses a splice and never a delete.
+- **The herdr LIVE oracle joins the callback it claims to have proved.** Its pi cell compared
+  CHARACTER OFFSETS across the whole transcript, and both strings are already in the birth prompt in
+  that order — so "called back, then worked" and "never called back" read identically. It now wants
+  ONE record carrying the delivered nonce and the `sent` outcome together, with the task token in a
+  later one. Its claude cell asserted only that the first `entwurf_v2` completed, which a call
+  delivering somebody else's nonce also satisfies; the join it can actually make is across two
+  independent artifacts — the delivered message carrying the exact nonce and the child as sender,
+  enqueued inside that call's own window.
+- **Three Codex branches and one peers read stop being claims nobody tests.** An independent
+  coverage audit found the whole production path behind the peers `placement` column — env gate,
+  binary execution, timeout, parse failure — with zero assertions and zero mutants, so a typo in
+  `["pane","list"]` or a deleted timeout would have left the deterministic floor green. It has two
+  claims now, driven through a stub PROCESS (not a fake herdr: every answer-shaped fact still comes
+  from the verbatim 0.9.0 recordings, and what the stub supplies is an exit code, a hang, an
+  absence). The doctor's ORPHAN verdict, the inverse's SPLICE arm and its FILE arm gained the
+  mutants their behaviour cells never had, and the herdr rail's documented cwd asymmetry — `#` is
+  DATA here, because herdr has no format expansion for the tmux refusal to protect against — gained
+  a cell that drives a real directory through to the argv.
+
+- **The herdr rail's two-step `agent prompt` proposal is closed at the VENDOR SOURCE, not with LIVE
+  runs — and not implemented.** §14 proposed starting the agent with no prompt and sending the first
+  turn with `herdr agent prompt`, which would remove the tool-list race. The question standing in
+  front of "does the child call back" is what that verb SENDS, and the vendor answers it:
+  `[source herdr 7505c08]` `api/agents.rs:195` hands the text to `encode_api_submission_parts`,
+  `api_helpers.rs:25-32` wraps it in bracketed paste and writes it to the child pane's PTY, and
+  `:13` / `:208-212` write an encoded Enter 300 ms later. It runs NO control-character check — only
+  a non-empty one, unlike the argv path — so whether a newline pastes or submits is decided by the
+  child terminal's paste mode at that instant rather than by a contract, and what is acknowledged is
+  that input was written (the vendor's own help: "before any input is sent", "It does not track
+  turns"). So the two-step is the keystroke channel §3 already measured and refused, and adopting it
+  would put screen input on the FIRST turn — exactly what Hard Rule 16 keeps out of delivery
+  evidence. The three LIVE runs budgeted for it were NOT spent characterising a path that cannot
+  ship. The remaining legitimate direction for the race is the framing that stands before the tool
+  list, the same axis as omp's `--entwurf-bootstrap`.
+- **Two mutant claims the #116 merge moved now aim at what they were about.** Replaying every lane
+  the merge touched answered 484/486, and both refusals were the merge's own bookkeeping.
+  `FRESHCALL-CWD-SURFACE-PARITY` SURVIVED because the regenerated find was extracted from the FIRST
+  `cwd: z` block in the bridge — which belongs to `entwurf_register_native`, not
+  `entwurf_fresh_call` — so the mutation deleted a required cwd from a DIFFERENT tool and nothing
+  failed; both parity finds are now extracted from inside the `fresh_call` registration span.
+  `FRESHCALL-CWD-CALLER-ONLY` came back WRONG-REASON because the mutation now lands in the
+  composition leaf while the cell carrying its signature read only the tmux module, so three other
+  cells failed instead and the kill could not be attributed.
+
+### Changed
+
+- **The two tool descriptions say what the code does.** `entwurf_v2` no longer offers `codex` as an
+  example of a backend with no adapter: Codex is a native-push backend, and that sentence pointed a
+  caller at the wrong dispatch outcome. `entwurf_fresh_call` says it opens a NEW UNFOCUSED TAB in
+  the caller's own herdr workspace rather than "a herdr pane" — the contract has been tab-first
+  since it shipped. Both surfaces lost the top-level cwd sentence the `cwd` parameter description
+  already owns, which is also what kept them inside the 2048-char host cap.
+- **The herdr rail document describes the first turn that actually ships.** §3 still recorded the
+  retired shape — the whole framing wrapped in one JSON literal behind "decode the following" —
+  which a Sonnet 5 sibling refused outright. The current shape is plain prose with only the
+  operator's task as a literal, and the section now says why: the encoding never bought shell
+  safety (herdr single-quotes every argument), and what is left is the vendor's control-character
+  refusal, so only the thing that must carry newlines is encoded.
+- **`ROADMAP.md` and `docs/setup-clean-host.md` stop calling accepted work pending.** The Codex
+  caller-seat and caller-DIRECTORY re-runs were accepted on 2026-09-16 with 56 and 65 assertions;
+  both documents said "pending", and the roadmap's current-package line still read 0.20.1.
+- **`plugins/herdr/README.md` separates an admission floor from a measured supply.** Herdr
+  `>=0.9.0` is the manifest floor; Entwurf's reproducible and CI rail is pinned to exactly 0.9.1,
+  and a different Herdr inside the admission window carries no receipt of ours. Its install-output
+  example uses `<version>` / `<full-commit>` placeholders instead of a frozen `0.21.0` and a frozen
+  commit that no longer reproduce. Both READMEs now name the two installation routes and link to
+  each other.
+
+### Observations — named rather than carried
+
+These were raised by the pre-cut review round and deliberately NOT acted on in this release. Each
+one is recorded here so the next lane inherits the finding instead of rediscovering it.
+
+- **The vendor trust receipt is bound by KEY, not by VALUE.** `doctor-codex-birth` and the fresh
+  preflight read the receipt at the index our declaration was measured at and check that its value
+  has the shape `sha256:<64 hex>` — they do not check that the hash is the one the vendor would
+  compute for the CURRENT declaration, so a stale or arbitrary well-shaped value reads as ready.
+  Closing it would mean reimplementing the vendor's normalization here, which is exactly the second
+  opinion about somebody else's security decision that Hard Rule 9 and the doctor's own prose
+  refuse. The live failure mode is bounded and visible: a stale receipt makes the vendor show its
+  consent screen again to the human sitting there, and an unattended launch reads as a callback
+  timeout.
+- **The typing fence does not detect an assembled typing call** — see its header, and the entry
+  above.
+- **The declaration span fixtures do not pin CRLF, BOM or deeply nested arrays by name.** The parser
+  and its splice post-condition handled all three correctly in a direct memory-only sample; what is
+  missing is a labelled cell, and BOM in particular would read better as an explicit refusal than as
+  an incidental one.
+- **Four more coverage gaps were enumerated and left for their own lane:** the uninstall's v1-state
+  refusal has a behaviour cell but no mutant of its own, the `trustReceiptKey` composition is
+  asserted separately by the doctor and the preflight rather than jointly, and two spawn-seam
+  sub-claims were deliberately not split into their own QKs.
+- **The Claude child's `--allowedTools` names only the callback tool**, so the corroboration the
+  framing offers is not on the auto-approved list. Measured behaviour is unchanged by this release
+  (the bare spelling was not on it either), and widening auto-approval is a decision rather than a
+  repair.
 
 ## 0.22.0 - 2026-09-17
 

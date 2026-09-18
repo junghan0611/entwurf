@@ -499,7 +499,10 @@ The 2026-09-11 loaded-thread run remains pre-amendment native-push/identity evid
 first-admission acceptance passed on 2026-09-12 under the fixed-home topology #95 D1 later retired:
 real initial Pi outside `codex`, then omitted-placement Codex and outbound Pi inside it, with exact
 callbacks and addressed delivery both ways. `DELIVERY.md` owns that 57-assertion receipt, its four
-coordinates, and its digest as history; the caller-seat re-run is pending.
+coordinates, and its digest as history. The caller-seat re-run is **accepted** — 2026-09-16, 56
+assertions for the seat topology and 65 for the caller-DIRECTORY axis, both exit 0 — and it, not the
+fixed home, is the current contract (`DELIVERY.md`, `BASELINE.md:37-38`, `VERIFY.md` release
+acceptance).
 
 `entwurf_fresh_call` accepts backend `codex` — supported in 0.21.0 — and requires an explicit model. Its
 preflight must prove the safe birth closure, exact MCP/env atom, `thread-title`, and app-server

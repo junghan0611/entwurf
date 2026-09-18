@@ -716,22 +716,21 @@ server.tool(
 server.tool(
 	"entwurf_fresh_call",
 	"Open ONE fresh visible sibling beside you and hand it a first task. WHERE it opens is decided by where THIS " +
-		"agent runs, never by a parameter: inside herdr (HERDR_ENV=1) it opens in a herdr pane, pi and claude-code " +
+		"agent runs, never by a parameter: inside herdr (HERDR_ENV=1) it opens a NEW UNFOCUSED TAB in your own " +
+		"herdr workspace, pi and claude-code " +
 		"only; everywhere else it opens in the operator's tmux with all five backends (pi, " +
 		"claude-code, copilot, omp, codex). No fallback: an incomplete herdr context is refused by name, " +
 		"never by a tmux window you cannot see from herdr. The sibling's FIRST action " +
 		"is a callback to you carrying a nonce, whose sender envelope is its garden id — that is how you learn the " +
 		"address of a thing that did not exist a moment ago. This returns a LAUNCH receipt (the owner's " +
 		"coordinates plus that nonce): it does NOT mean the runtime started, the first turn ran, or " +
-		"the task was delivered. Those coordinates are a VIEW, never an address — a herdr pane id can change under " +
+		"the task was delivered. Those coordinates are a VIEW, never an address — a herdr tab/pane id can change under " +
 		"a running sibling. Nothing polls. " +
 		"For EXISTING citizens use entwurf_v2 — this tool only creates, and entwurf_peers only reports. Model is REQUIRED and passed to the chosen " +
 		"runtime CLI (`provider/model` for pi, an id/alias for Claude Code, a pattern for the rest). On tmux, copilot/omp/codex are refused BEFORE any window " +
 		"opens when their birth, MCP, receive or visible-identity units are absent, and codex also needs the " +
 		"operator-owned app-server socket entwurf never starts; in herdr they are refused by name first. " +
-		"Optional cwd starts the sibling in ONE literal absolute existing directory; omitted/empty means where the " +
-		"CALLER is — its own directory, or a Codex caller's own record directory — on both rails, and '#' is " +
-		"refused on tmux only. Optional placement.tmuxSession is a TMUX-ONLY seat naming ONE EXISTING session and " +
+		"Optional placement.tmuxSession is a TMUX-ONLY seat naming ONE EXISTING session and " +
 		"ALWAYS wins; omitted, the seat follows the CALLER, never the backend opened: a CODEX CALLER opens beside " +
 		"its own TUI pane, every other caller in its own session; a missing one is tmux-session-missing and " +
 		"NOTHING is created. In herdr the field is refused by name. Do not put secrets in the task — model and task argv are visible to same-user " +

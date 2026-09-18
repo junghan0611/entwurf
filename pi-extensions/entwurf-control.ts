@@ -1419,8 +1419,8 @@ A peer entwurf_peers shows as liveness=alive → fire-and-forget. A citizen with
 (liveness=unsupported) is ALSO fire-and-forget — unsupported means only "no control-socket probe" — and the
 decider picks its own rail: a self-fetch backend (e.g. Claude Code) gets the mailbox, a native-push backend
 (e.g. Antigravity) gets direct injection and has NO mailbox at all. THERE IS A THIRD RESULT: the mailbox
-delivers only to a DELIVERABLE citizen, so a terminated session, or a backend with no adapter here (e.g.
-codex), is mailbox-undeliverable, not queued for an inbox nobody drains. The native-push probe is 3-valued:
+delivers only to a DELIVERABLE citizen, so a terminated self-fetch session is mailbox-undeliverable
+rather than queued for an inbox nobody drains. The native-push probe is 3-valued:
 alive → injected; dead → native-push-target-dead; indeterminate → native-push-probe-indeterminate
 (unestablished ≠ gone). DORMANT IS UNREACHABLE: a socket-domain citizen that is not running gets
 dormant-fire-forget-unsupported — same receiver rule as the mailbox, no active drainer means no
@@ -1621,18 +1621,17 @@ function registerFreshCallTool(pi: ExtensionAPI): void {
 		name: "entwurf_fresh_call",
 		label: "Open Fresh Sibling",
 		description: `Open ONE fresh visible sibling beside you and hand it a first task. WHERE it opens is decided by
-where THIS agent runs, never by a parameter: inside herdr (HERDR_ENV=1) it opens in a herdr pane and only pi and
-claude-code may be opened; everywhere else it opens in the operator's tmux with all five backends (pi, claude-code,
+where THIS agent runs, never by a parameter: inside herdr (HERDR_ENV=1) it opens a NEW UNFOCUSED TAB in your own
+herdr workspace and only pi and claude-code may be opened; everywhere else it opens in the operator's tmux with all five backends (pi, claude-code,
 copilot, omp, codex). There is no fallback — an incomplete herdr context is refused by name rather than opening a tmux
 window you cannot see from in herdr. The sibling's FIRST action is a callback to you carrying a nonce, whose sender
 envelope is its garden id — that is how you learn the address of a thing that did not exist a moment ago. This returns
 a LAUNCH receipt (the owner's coordinates plus that nonce) and nothing else: it does NOT mean the runtime started, the
-first turn ran, or the task was delivered. Those coordinates are a VIEW, never an address — a herdr pane id can change
-under a running sibling. Nothing polls; if the callback never arrives the pane is visible. For EXISTING citizens use entwurf_v2 — this tool only creates, and entwurf_peers only reports. Model is REQUIRED and passed to the chosen runtime CLI (provider/model for pi, an id/alias for Claude Code, a name or pattern
+first turn ran, or the task was delivered. Those coordinates are a VIEW, never an address — a herdr tab/pane id can
+change under a running sibling. Nothing polls; if the callback never arrives the tab is visible. For EXISTING citizens use entwurf_v2 — this tool only creates, and entwurf_peers only reports. Model is REQUIRED and passed to the chosen runtime CLI (provider/model for pi, an id/alias for Claude Code, a name or pattern
 for the rest). On tmux, copilot/omp/codex are refused BEFORE any window opens when their birth, MCP, receive or
 visible-identity units are absent, and codex also needs the operator-owned app-server socket entwurf never starts; in
-herdr those three are refused by name first. Optional cwd starts the sibling in ONE literal absolute existing
-directory; omitted/empty means your own directory on both rails, and '#' is refused on tmux only. Optional
+herdr those three are refused by name first. Optional
 placement.tmuxSession is a TMUX-ONLY seat naming ONE EXISTING session and ALWAYS wins; omitted, the seat
 follows the CALLER, and on this surface that is always your own session — a missing one is
 tmux-session-missing and NOTHING is created. In herdr the field is refused by name. Do not put secrets in the task — model and task argv are visible to same-user processes.`,

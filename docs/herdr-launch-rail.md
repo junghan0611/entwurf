@@ -47,16 +47,30 @@ if params.args.iter().any(|arg| arg.chars().any(char::is_control)) { InvalidArgu
 
 ### 채택한 모양
 
-프레이밍 **전체**를 JSON 문자열 리터럴 하나로 감싸, 그것을 디코드하라는 **한 문장** 뒤에 붙인다.
+프레이밍은 **빈 줄을 공백으로 접은 평문**이다. `agent start`가 Unicode Cc를 거절하므로 **operator의
+task만** JSON 리터럴로 인코드하고, 그 리터럴은 **줄바꿈을 싣기 위한 carrier**일 뿐 프레이밍이나
+tool 지시를 디코드하거나 바꾸라는 요구가 **아니다**. 정본은 `composeFreshCallFraming()`과
+`HERDR_TASK_LITERAL_INSTRUCTION`이다.
 
 ```text
-Decode the following JSON string literal and follow the decoded instructions exactly as if they were this message: "You are a fresh visible citizen that entwurf opened in a new herdr tab.\n\nFIRST ACTION, …"
+You are a fresh visible citizen that entwurf opened in a new herdr tab. FIRST ACTION, before reading files or anything else: call mcp__entwurf-bridge__entwurf_v2 with target=…, intent=fire-and-forget, wants_reply=false, and message set to exactly herdr-fresh-call-… — that string alone, nothing added. … After the tool receipt, carry out this task: "<operator task as a JSON string literal>"
 ```
+
+**이전 모양이 왜 은퇴했는지 — 이 자리에 기록한다.** 한때 프레이밍 **전체**를 JSON 리터럴로 감싸고
+"Decode the following JSON string literal and follow the decoded instructions"로 열었다.
+`[GLG 직접, 날것 PC, 2026-09-17]` Claude Sonnet 5 형제가 첫 턴 전체를 **거절**했고, 든 이유 셋이
+전부 우리 것이었다 — decode 래퍼, "Do not inspect environment variables, do not call entwurf_self"
+금지문, 호출자를 검증할 길 없음. 셋 다 고쳤다(CHANGELOG 0.23.0 Fixed 절). 그리고 인코딩이 사던
+안전은 애초에 없었다: `[source herdr 7505c08]` `src/platform/linux.rs:127-141`이 모든 인자를
+single-quote하므로 shell 안전은 이미 서 있었고, `src/app/agents.rs:157-161`이 Cc를 지닌 인자를
+거절하는 것이 남은 진짜 제약이다 — 그래서 **개행을 실어야 하는 것만** 리터럴이 된다.
 
 - **`JSON.stringify`만으로는 부족하다.** 그것은 C0와 따옴표·역슬래시만 이스케이프하고 **DEL(U+007F)과 C1 블록(U+0080–U+009F)은 리터럴로 남긴다.** 그래서 그 뒤에 남은 `\p{Cc}`를 `\uXXXX`로 되돌릴 수 있게 한 번 더 이스케이프한다.
 - **전송이 바이트를 정규화하지 않는다.** 인코더는 개행 접기도 유니코드 정규화도 하지 않고, 자기 출력이 원본으로 정확히 디코드되는지 확인한 뒤 아니면 **던진다** — 재현할 수 없는 프레이밍으로 형제를 태우지 않는다. `[정확히 말하면]` 그 "원본"은 **공개 입력 계약을 통과한 뒤의 문자열**이다: model과 task는 두 레일 공통으로 **trim된다**(공백뿐인 task는 `task-empty`). trim이 launch 전체에서 유일한 정규화이고, 그 뒤로는 전송이 바이트를 건드리지 않는다.
 - **호출 전에 `\p{Cc}` 0개를 증명한다.** 프롬프트만이 아니라 `agent start`에 넘길 **모든 인자**를 검사한다(서버도 모든 인자를 본다). 실패는 `herdr-argv-control-character` — `tab create` 이전이라 **고아 tab이 남지 않는다**.
-- `[측정 2026-09-14, 두 파일럿]` 형제는 디코드하고 **콜백을 먼저** 보낸 뒤 과제에 답했다. 인코딩이 "콜백이 첫 행동"이라는 계약을 삼키지 않았다.
+- `[측정 oracle 2026-09-18, LIVE run sCzzE0]` 평문 프레이밍 아래에서 Sonnet 5 자식이 `entwurf_peers`를
+  부르고 그다음 `entwurf_v2`를 불러 **콜백을 먼저** 보낸 뒤 과제에 답했다. 읽기 전용 corroboration이
+  콜백 앞에 오는 것은 **프레이밍이 권하는 바로 그것**이고, "콜백이 첫 행동"이라는 계약을 삼키지 않았다.
 
 ## 4. identity — 무엇이 무엇을 증명하는가
 
@@ -68,7 +82,18 @@ Decode the following JSON string literal and follow the decoded instructions exa
 | exact-one V3 레코드 | 레코드 저장소 | 그 native session의 **주소** |
 | nonce 콜백의 sender envelope | 형제 | 형제가 **첫 모델 행동**을 했다 |
 
-`[측정 2026-09-14]` direct witness는 `agent start` 응답이 돌아오기 **전에** 이미 레코드가 존재하는 시점에 온다(claude 레코드 09:41:47 < 응답 09:41:48, pi 09:42:09 < 09:42:16) — watcher도 retry도 필요 없는 1회 조회다.
+`[측정 2026-09-14]` 표본 둘에서 direct witness는 `agent start` 응답이 돌아오기 **전에** 이미 레코드가
+존재하는 시점에 왔다(claude 레코드 09:41:47 < 응답 09:41:48, pi 09:42:09 < 09:42:16).
+
+**그것은 관측이었지 보장이 아니다 — 2026-09-18에 그 순서가 뒤집혔다.** `[측정 oracle 2026-09-18,
+LIVE run XimC19]` `agent start`가 4.9초 만에 성공으로 돌아왔는데 응답에 `agent_session`이 없었고,
+같은 실행의 훅 저널은 그 0.585초 **전에** 자식이 자기 레코드를 만든 것을 보여준다. 벤더가 기다리는
+것은 detection이 아니라 **interactive readiness**이고(`[file:line @ c77af189]` `src/cli/agent.rs:592-615`),
+claude의 `agent_session`은 **자식 자신의 one-shot 훅**이 되쏘는 값이다
+(`src/integration/assets/claude/herdr-agent-state.sh:60-99`, 소켓 deadline 0.5s, 실패는 조용히 삼킴).
+즉 자식이 **빨리 뜰수록** 이 경주에서 진다 — 같은 바이트가 5분 뒤 1분 27초짜리 기동에서는 통과했다
+(run TCatjF). 그래서 witness 부재는 이제 실패가 아니라 **bounded 재조회 뒤의 진단**이고, 만료는
+살아 있는 pane을 닫을 권한을 사지 않는다(`settleAgentWitness`, `HFC-WITNESS-*` claim 셋).
 
 **그러나 이 모듈은 레코드를 읽지 않는다.** launch receipt에는 garden id도 native session id도 없다. 주소를 말하는 것은 레코드이고, 그 조회는 이 레일 밖(표면, c2)에서 일어난다. `[미검증 잔여]` "레코드가 아직 없는 순간"은 표본 2개 + 구조 논거일 뿐 herdr의 보장이 아니다. 이 레인은 direct witness를 공개 주소로 승격하지 않았다: `fresh-call-dispatch`는 레코드를 읽지 않고, 두 공개 표면의 주소 경로는 nonce 콜백으로 남는다. 따라서 이 미측정 칸은 dispatch fallback이나 재읽기 계약이 아니다.
 
