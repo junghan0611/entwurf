@@ -924,8 +924,14 @@ async function main(): Promise<void> {
 			// It gets the child's own bound for the same reason the callback does: the caller's
 			// clock says nothing about how long the sibling takes to finish its task.
 			{
+				// THE SENDER IS HALF THE CLAIM `[sol 재검 2026-09-18]`. "The sibling reported its
+				// result" is a statement about WHO sent it, and a body-only read makes it true of any
+				// message that happens to carry the token — including one the caller wrote to itself.
+				// So each rail is read for the pair, exactly as the callback cell above is: the body
+				// carries the token AND the same record's sender is the child.
 				const resultDeadline = Date.now() + CHILD_CALLBACK_WAIT_MS;
 				let resultText = "";
+				let resultSender = "";
 				while (Date.now() < resultDeadline) {
 					if (callerIsPi) {
 						const messages = [
@@ -935,22 +941,39 @@ async function main(): Promise<void> {
 						]
 							.map((match) => match[1].replace(/\\n/g, "\n").replace(/\\"/g, '"'))
 							.filter((decoded) => !decoded.trimStart().startsWith(nonce));
-						resultText = messages.find((decoded) => decoded.includes(token)) ?? "";
+						const hit = messages.find(
+							(decoded) =>
+								decoded.includes(token) &&
+								(/<sender_info>\{[^}]*"sessionId":"([^"]+)"/.exec(decoded)?.[1] ?? "") === childGid,
+						);
+						resultText = hit ?? "";
+						resultSender = hit === undefined ? "" : childGid;
 					} else {
 						const delivered = deliveredMessages(String(fenced.ENTWURF_META_MAILBOX_DIR), callerGid);
-						resultText =
-							delivered
-								.slice(1)
-								.map((artifact) => artifact.text.split(/─{5,}/)[1]?.trim() ?? "")
-								.find((body) => body.includes(token)) ?? "";
+						const hit = delivered
+							.slice(1)
+							.find(
+								(artifact) =>
+									(artifact.text.split(/─{5,}/)[1]?.trim() ?? "").includes(token) &&
+									artifact.text.includes(`session:     ${childGid}`),
+							);
+						resultText = hit === undefined ? "" : (hit.text.split(/─{5,}/)[1]?.trim() ?? "");
+						resultSender = hit === undefined ? "" : childGid;
 					}
 					if (resultText.length > 0) break;
 					sleep(POLL_MS);
 				}
-				lines.push("", `### ${cell.label} — final result message`, "```", resultText.slice(0, 500), "```", "");
+				lines.push(
+					"",
+					`### ${cell.label} — final result message (sender ${resultSender || "none"})`,
+					"```",
+					resultText.slice(0, 500),
+					"```",
+					"",
+				);
 				ok(
-					`${cell.label}: the sibling reported its RESULT back to the caller after the callback — a second message on the same rail carrying this cell's task token, which is the first LIVE evidence that the framing's closing line is followed rather than merely written`,
-					resultText.includes(token),
+					`${cell.label}: the SIBLING reported its RESULT back to the caller after the callback — a later message on the same rail whose body carries this cell's task token and whose sender is the child itself, which is the first LIVE evidence that the framing's closing line is followed rather than merely written`,
+					resultText.includes(token) && resultSender === childGid && childGid.length > 0,
 				);
 			}
 			ok(
