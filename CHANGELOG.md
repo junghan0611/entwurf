@@ -4,6 +4,8 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+## 0.23.0 - 2026-09-18
+
 ### Added
 
 - **`entwurf_fresh_call` opens a sibling on the herdr rail, beside the tmux one (#116).** A session
@@ -74,6 +76,8 @@ All notable changes to this project will be documented here. Format follows [Kee
   dialects applied to the other tool, so the two maps drift together or not at all.
 
 ### Fixed
+
+- **`smoke-codex-fresh-live` now directs Codex to the callback sender garden id by the envelope's `session:` line.** In the first 0.23.0 retry Luna copied the model label from `from:` instead; the red receipt is `/tmp/entwurf-release-gate-0.23.0-retry.17pfMp`.
 
 - **A Claude child that could not see its callback tool now knows how to load it.** The framing said
   "FIRST ACTION … call `entwurf_v2`" to a child for which that tool was not callable yet: `[측정
@@ -353,6 +357,32 @@ one is recorded here so the next lane inherits the finding instead of rediscover
   framing offers is not on the auto-approved list. Measured behaviour is unchanged by this release
   (the bare spelling was not on it either), and widening auto-approval is a decision rather than a
   repair.
+- **`doctor-codex-birth` FOREIGN 축은 이웃 선언의 trust 부재를 판단하지 않지만 vendor 동의 화면은
+  파일 단위로 첫 턴을 막는다.** `smoke-codex-fresh-live` 전제조건은 폴더 trust만 이름짓고 hook
+  trust는 timeout으로 읽힌다 — 컷 후 atom.
+
+### Verification
+
+- **Land exact-SHA CI.** Push run
+  [`35312087142`](https://github.com/junghan0611/entwurf/actions/runs/35312087142) at
+  `09aea576a80983709a7e2bb7593d6fb546234eee` concluded green for `check`,
+  `install-surface`, `artifact-consumer`, and `macos-install-surface`; the `check` job's
+  `check-gate-qualification` body also concluded green.
+- **LIVE Codex acceptance is a focused rerun, not a final `release-gate --cut` exit 0.** First cut
+  attempt `/tmp/entwurf-release-gate-0.23.0.Ire9Nr` was red because the vendor's Herdr hook trust
+  receipt was absent; the operator answered the vendor consent screen once. Retry
+  `/tmp/entwurf-release-gate-0.23.0-retry.17pfMp` recorded `MUST: PASS=23 FAIL=1 SKIP=0`; its only
+  red cell was `smoke-codex-fresh-live`, where Luna copied the model label from the callback
+  envelope's `from:` line. The frozen-candidate delta afterwards is exactly the two instruction
+  sentences in `scripts/lib/codex-fresh-live-protocol.ts` plus these CHANGELOG records. After
+  `pnpm run build-bridge` and `./run.sh check-bridge-delivery` (19 PASS), the repaired standalone
+  `smoke-codex-fresh-live` passed 66 assertions:
+  `/tmp/entwurf-codex-smoke-0.23.0-amend.BHrPTU/smoke-codex-fresh-live.log`.
+- **Deterministic floor and explicit variance.** `pnpm run check:full` passed before the amendment
+  at `/tmp/entwurf-check-full-0.23.0.Q6GGeI`; it also passed on the amended working bytes in 579 s
+  at `/tmp/entwurf-check-full-0.23.0-amend.zBu9ic/check-full.log`. VERIFY §389 문자 조건 미충족 —
+  GLG 명시 승인 하의 편차, 사유: 통과 스텝 재실행은 자원낭비. The prepared-HEAD exact-SHA CI owns
+  the final deterministic proof.
 
 ## 0.22.0 - 2026-09-17
 

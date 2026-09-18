@@ -55,11 +55,11 @@ export function buildCodexInstruction(input: CodexInstructionInput): string {
 		'NO cwd parameter and NO placement parameter, and task "After your automatic callback succeeds, answer ACK and ' +
 		'stop. Do not open another sibling."\n' +
 		"2. Stop and wait for the Pi callback delivered into this Codex thread. Accept only a callback whose body " +
-		"repeats the exact nonce from your LAUNCH receipt and whose sender envelope names a garden id.\n" +
+		"repeats the exact nonce from your LAUNCH receipt and whose sender envelope carries a garden id on its `session:` line.\n" +
 		`3. Only after that match, call public mcp__entwurf_bridge__entwurf_v2 once with target ${input.callerGid}, ` +
 		"intent fire-and-forget, wants_reply false, and message:\n" +
 		`${input.finalToken}\nPI_LAUNCH_NONCE=<exact launch nonce>\nPI_CALLBACK_NONCE=<same exact nonce>\n` +
-		"PI_CALLBACK_FROM=<sender-envelope garden id>\nPI_SESSION_ID=<exact $session id from the LAUNCH receipt>\n" +
+		"PI_CALLBACK_FROM=<the garden id on the callback envelope's `session:` line — NOT the model name on its `from:` line>\nPI_SESSION_ID=<exact $session id from the LAUNCH receipt>\n" +
 		"PI_WINDOW_ID=<exact @window id from the LAUNCH receipt>\nDo not claim completion in prose."
 	);
 }
