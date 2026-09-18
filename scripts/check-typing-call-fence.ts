@@ -37,6 +37,19 @@
  * The three assertions before it are this gate's own oracle: the detector is proven to SEE each
  * forbidden name in planted code, proven NOT to see it in prose, and the scanned inventory is
  * measured rather than assumed — without those, "zero hits" and "looked at nothing" read the same.
+ *
+ * WHAT THIS GATE DOES NOT CATCH, NAMED RATHER THAN IMPLIED (sol D3, 2026-09-18). It reads SPELLINGS.
+ * A typing call assembled at runtime — `["send", "keys"].join("-")`, a template with the verb in a
+ * variable, an RPC method built from parts — passes it, and no wording of this scanner would change
+ * that without becoming a dataflow analysis.
+ *
+ * That limit is accepted rather than closed, and the reason is what this gate is FOR. It is a
+ * tripwire for the slip: a module that reaches for the vendor's typing verb because the argv route
+ * looked harder that afternoon, written the ordinary way, spelled out. It is not a defence against
+ * somebody deliberately hiding one, and a gate that claimed to be would be the more dangerous
+ * object — the claim above therefore says CARRIES a typing call spelled out, not "composes" one.
+ * The defence against deliberate evasion is review, and the rule it enforces is in
+ * `docs/herdr-launch-rail.md` §3 where a human reads it.
  */
 
 import assert from "node:assert/strict";
@@ -215,13 +228,38 @@ const flavorOf = (rel: string): Flavor => (rel.endsWith(".sh") ? "shell" : "c");
 }
 
 // ── 3. the scanned inventory is MEASURED, never assumed ─────────────────────
-const SCOPE = ["pi-extensions", "mcp"] as const;
-const files = execFileSync("git", ["ls-files", "--cached", "--", ...SCOPE.map((s) => `${s}/*`)], {
-	cwd: REPO,
-	encoding: "utf8",
-})
-	.split("\n")
-	.filter(Boolean)
+//
+// SCOPE grew on 2026-09-18 (sol D3 / glm #4). `plugins/herdr/` and the four `scripts/herdr-*.mjs`
+// runtime scripts are the code that actually drives the herdr CLI, and they sat OUTSIDE the law
+// that exists because of that CLI. They are clean today — this gate is what keeps them so.
+//
+// AND THE LISTING IS NOT `--cached` ALONE. A brand-new production module is untracked until it is
+// staged, so a fence that read only the index would look at everything except the file most likely
+// to be carrying the mistake. `--others --exclude-standard` adds exactly the untracked files git
+// would offer to add, which leaves the gitignored build output (`mcp/entwurf-bridge/dist/`) out
+// for the reason it always was: it is this source, compiled, and scanning it twice proves nothing.
+const SCOPE = ["pi-extensions", "mcp", "plugins/herdr"] as const;
+const files = [
+	...execFileSync(
+		"git",
+		["ls-files", "--cached", "--others", "--exclude-standard", "--", ...SCOPE.map((s) => `${s}/*`)],
+		{
+			cwd: REPO,
+			encoding: "utf8",
+		},
+	)
+		.split("\n")
+		.filter(Boolean),
+	// The herdr runtime scripts live in `scripts/`, which is NOT in scope as a whole — this gate
+	// is in there, and a gate that scanned itself could only be made green by deleting the names
+	// it exists to forbid. So they are named, one glob, by what they are.
+	...execFileSync("git", ["ls-files", "--cached", "--others", "--exclude-standard", "--", "scripts/herdr-*.mjs"], {
+		cwd: REPO,
+		encoding: "utf8",
+	})
+		.split("\n")
+		.filter(Boolean),
+]
 	.filter((f) => /\.(ts|js|mjs|cjs|sh)$/.test(f))
 	.filter((f) => fs.existsSync(path.join(REPO, f)));
 
@@ -232,6 +270,10 @@ const files = execFileSync("git", ["ls-files", "--cached", "--", ...SCOPE.map((s
 		"pi-extensions/lib/fresh-call-composition.ts",
 		"pi-extensions/entwurf-control.ts",
 		"mcp/entwurf-bridge/src/index.ts",
+		// The two surfaces that drive the vendor CLI this law is about — named, so widening the
+		// scope cannot quietly narrow again.
+		"plugins/herdr/lib/build.mjs",
+		"scripts/herdr-runtime.mjs",
 	];
 	const missing = required.filter((r) => !files.includes(r));
 	ok(
@@ -245,7 +287,7 @@ const files = execFileSync("git", ["ls-files", "--cached", "--", ...SCOPE.map((s
 {
 	const hits = files.flatMap((rel) => scan(rel, fs.readFileSync(path.join(REPO, rel), "utf8"), flavorOf(rel)));
 	ok(
-		`[QK:TYPEFENCE-PRODUCTION-CLEAN] none of the ${files.length} production sources composes a typing call — this rail builds arguments and letters, and a module that acquires a typing call is refused by name`,
+		`[QK:TYPEFENCE-PRODUCTION-CLEAN] none of the ${files.length} production sources CARRIES a typing call spelled out — this rail builds arguments and letters, and a module that acquires one of these names in code is refused by name`,
 		hits.length === 0,
 		hits.map((h) => `${h.file}:${h.line} carries ${h.name} — ${h.text}`).join("\n"),
 	);
