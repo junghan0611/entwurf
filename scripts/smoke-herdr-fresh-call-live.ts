@@ -167,6 +167,23 @@ function readTranscript(file: string): string {
 	}
 }
 
+/**
+ * The pi transcript as the RECORDS it is, not as one string.
+ *
+ * `[sol D1, 2026-09-18]` the ordering cell below used to compare CHARACTER OFFSETS inside the
+ * whole file — `indexOf(nonce) < indexOf(token)`. Both strings are already in the birth prompt, in
+ * that order, so the predicate was true before the child had done anything at all: it could not
+ * distinguish "called back, then worked" from "never called back". Line indices over the JSONL
+ * records are the smallest honest unit here — one record is one event, so a claim about WHICH
+ * event carried the nonce and WHICH came after it is a claim about the run rather than about the
+ * prompt we wrote.
+ */
+function transcriptRecords(file: string): string[] {
+	return readTranscript(file)
+		.split("\n")
+		.filter((line) => line.trim().length > 0);
+}
+
 interface McpEntry {
 	readonly sessionId: string;
 	readonly timestamp: string;
@@ -691,12 +708,26 @@ async function main(): Promise<void> {
 			// ── the child's FIRST action was the callback ───────────────────────────────
 			const childNative = String(joined?.nativeSessionId ?? childRow?.sessionValue ?? "");
 			if (cell.childKind === "pi") {
-				const childText = readTranscript(String(childRow?.sessionValue ?? ""));
+				const childRecords = transcriptRecords(String(childRow?.sessionValue ?? ""));
+				const childText = childRecords.join("\n");
+				// ONE RECORD carries the whole claim: the verb, the rail it was delivered on, the
+				// outcome, and the EXACT nonce that was delivered. Splitting those across the file
+				// is what let "the nonce appears somewhere before the token" pass on a prompt.
+				const sentAt = childRecords.findIndex(
+					(record) => record.includes("entwurf_v2 control-socket → sent") && record.includes(nonce),
+				);
+				// The LAST mention of the task token, so the birth prompt — which carries it, first —
+				// cannot be what satisfies "the work came after".
+				let workedAt = -1;
+				for (let i = childRecords.length - 1; i >= 0; i -= 1) {
+					if (childRecords[i].includes(token)) {
+						workedAt = i;
+						break;
+					}
+				}
 				ok(
-					`${cell.label}: the child decoded the one-line birth argv and ran the task only AFTER its callback`,
-					childText.includes(token) &&
-						childText.indexOf(nonce) > 0 &&
-						childText.indexOf(nonce) < childText.indexOf(token),
+					`${cell.label}: the child decoded the one-line birth argv and ran the task only AFTER its callback — the delivered nonce and the \`sent\` outcome are the SAME transcript record, and the task token appears in a later one`,
+					nonce.length > 0 && sentAt >= 0 && workedAt > sentAt,
 				);
 				ok(
 					`${cell.label}: the child's OWN tool result says the callback was DELIVERED on the rail its caller answers on — \`entwurf_v2 control-socket → sent\` — not a timeout, not a reject, not a dirty lock`,
@@ -716,14 +747,41 @@ async function main(): Promise<void> {
 				// the behaviour we asked for. What still must hold is everything the claim was
 				// actually about — the callback lands before any work, it completes, and no
 				// entwurf_v2 in the log failed or timed out.
-				const READ_ONLY_FIRST = new Set(["entwurf_peers", "entwurf_self"]);
+				// ONLY what the framing actually offers. `entwurf_self` used to sit in this set and
+				// nothing ever proposed it to the child — an allowance for a tool we do not mention
+				// widens the oracle without widening the contract (sol D1, 2026-09-18).
+				const READ_ONLY_FIRST = new Set(["entwurf_peers"]);
 				const beforeCallback = order.slice(0, Math.max(order.indexOf("entwurf_v2"), 0));
+				// THE JOIN THIS AXIS CAN ACTUALLY MAKE. The claude MCP log records WHICH tool was
+				// called and whether it completed — never its arguments or its result body — so
+				// "the first entwurf_v2 completed" alone would also be true of a call that delivered
+				// somebody else's nonce or came back as a semantic reject over a successful
+				// transport. The second artifact closes it: the caller's own delivered message
+				// carries the EXACT nonce and the child as its sender, and its enqueue timestamp has
+				// to fall inside the window of that first call. Two independent records, one event.
+				const callAt = indexOfEntry(childActivity, (e) => (e.debug ?? "") === "Calling MCP tool: entwurf_v2");
+				const doneAt = indexOfEntry(childActivity, (e) =>
+					(e.debug ?? "").startsWith("Tool 'entwurf_v2' completed successfully"),
+				);
+				const callbackStamp = deliveredMessages(String(fenced.ENTWURF_META_MAILBOX_DIR), callerGid)[0]?.file ?? "";
+				const stampedAt = Date.parse(
+					/^(\d{4}-\d{2}-\d{2})T(\d{2})-(\d{2})-(\d{2})-(\d{3})Z/.exec(callbackStamp)
+						? callbackStamp.replace(/^(\d{4}-\d{2}-\d{2})T(\d{2})-(\d{2})-(\d{2})-(\d{3})Z.*$/, "$1T$2:$3:$4.$5Z")
+						: "",
+				);
+				const within =
+					callAt >= 0 &&
+					doneAt > callAt &&
+					Number.isFinite(stampedAt) &&
+					stampedAt >= Date.parse(childActivity[callAt]?.timestamp ?? "") &&
+					stampedAt <= Date.parse(childActivity[doneAt]?.timestamp ?? "");
 				ok(
-					`${cell.label}: the child read the one-line birth argv and called back BEFORE doing any work — entwurf_v2 completed successfully, preceded only by read-only corroboration the framing offers, with no failed or timed-out entwurf_v2 anywhere in its log`,
+					`${cell.label}: the child read the one-line birth argv and called back BEFORE doing any work — the FIRST entwurf_v2 completed successfully and the delivered callback carrying this exact nonce was enqueued inside that call's own window, preceded only by the read-only corroboration the framing offers, with no failed or timed-out entwurf_v2 anywhere in its log`,
 					childActivity.length > 0 &&
 						order.includes("entwurf_v2") &&
 						beforeCallback.every((name) => READ_ONLY_FIRST.has(name)) &&
-						childActivity.some((e) => (e.debug ?? "").startsWith("Tool 'entwurf_v2' completed successfully")) &&
+						within &&
+						callbackArrived &&
 						!childActivity.some(
 							(e) => (e.debug ?? "").startsWith("Tool 'entwurf_v2' failed") || (e.error ?? "").includes("entwurf_v2"),
 						),
