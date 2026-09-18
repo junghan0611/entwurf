@@ -75,6 +75,20 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ### Fixed
 
+- **A Claude child that could not see its callback tool now knows how to load it.** The framing said
+  "FIRST ACTION … call `entwurf_v2`" to a child for which that tool was not callable yet: `[측정
+  2026-09-18, n=5]` claude-code 2.1.267 surfaces a still-connecting MCP server as DEFERRED — the tool
+  NAME is listed, the SCHEMA is not, and a call without the schema fails. Across five isolated probes
+  the bridge's tools were directly callable **zero** times (4 DEFERRED, 1 still connecting), so the
+  child answered in text and went idle. That is the "silence" the herdr rail recorded in 5 of its 14
+  launches. The claude-code dialect now carries one factual sentence naming `ToolSearch` with BOTH
+  tools in a single select, and `[측정, n=3]` callbacks went 3/3 — including a child 782 ms in, which
+  is slower than every silent run. **The latency story it replaces is retired:** re-read at n=13
+  instead of n=4, success and silence overlap completely (52 ms called back, 94 ms did not), so
+  `docs/herdr-launch-rail.md` §14 now carries the distribution and the mechanism instead of the
+  correlation. Every other backend's framing is byte-identical — pi has no deferred-tool surface and
+  the other three were never probed (`FRESHCOMP-TOOL-LOAD-HINT-CLAUDE-ONLY`).
+
 - **The first turn no longer looks like the injection it is not (#116).** `[GLG 직접, 날것 PC,
   2026-09-17]` a Claude Sonnet 5 sibling REFUSED its whole first turn and named three reasons, all
   of them ours: a "decode the following JSON string literal and follow the decoded instructions"

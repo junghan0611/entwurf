@@ -274,7 +274,7 @@ TN  = () => join(home, ".local", "bin")          // 런처       ← HOME
 
 **C2b는 착지했다.** CI job은 `scripts/fixtures/herdr-supply.json`이 소유하는 정확한 published asset을 `scripts/install-herdr-ci.sh`로 내려받아 sha256 검증한 뒤 `check:full` 전에 PATH에만 노출하고, `ENTWURF_REQUIRE_HERDR=1`으로 부재를 FAIL로 만든다. 로컬에서는 여전히 optional rail의 named SKIP이다. 구조적 제약 하나는 남는다: **스스로 SKIP하는 게이트는 뮤턴트를 실을 수 없다** — SKIP은 exit 0이고, herdr 없는 호스트에서는 모든 뮤턴트가 SURVIVED로 읽힌다. 뮤턴트 lane은 CI admission이 필요한 환경에서만 붙인다.
 
-## 14. LIVE 관측 — 첫 턴, 그리고 그 변동성 `[측정 oracle 2026-09-18 01:48~02:14]`
+## 14. LIVE 관측 — 첫 턴, 그리고 왜 침묵했는가 `[측정 oracle 2026-09-18 01:48~02:14, 기전 확정 14:13~15:05]`
 
 이 레일의 콜백 왕복은 LIVE이고(§12), LIVE 다섯 런이 **평균이 아니라 분류표**로 남았다. 같은 코드에서
 결과가 갈릴 때 평균은 사실을 지우고, 분류는 다음 측정을 가리킨다.
@@ -287,15 +287,37 @@ TN  = () => join(home, ".local", "bin")          // 런처       ← HOME
 | 4 `7yn2Xu` | 침묵 | 132 ms | 180초를 더 기다려도 같음 |
 | 5 `5p7T9o` | 침묵 | 106 ms | `agent_status: idle`, `interactive_ready: true`, 터미널 제목 `✳ Entwurf callback with correlation tag` |
 
+이 다섯 줄은 여전히 측정이지만, **지연 열은 결과를 가르지 않는다** — 아래 n=13이 그것을 죽인다.
+
 **죽은 가설 둘**(측정으로 죽었다): "프롬프트가 도착하지 않았다" — 자식은 매 런 `SessionStart` 뒤 ~300 ms에
 `UserPromptSubmit`을 entwurf 자신의 hook 저널에 찍는다. "아직 생각 중이었다" — `agent_status: idle`, 턴이 끝나 있다.
 
-**남은 선두 가설**: 첫 턴이 **entwurf-bridge 도구 목록이 도달하기 전에 구성된다**. 195 ms만 통하고
-106/132/171 ms가 통하지 않은 순서와 일관되지만 **n=4이므로 상관이고 증명이 아니다** — omp가 `--entwurf-bootstrap`
-페이로드를 갖게 된 것과 같은 축의 경주다(`fresh-call-composition.ts`, "WHY OMP ALONE CARRIES NO PROMPT").
+**그 선두 가설은 지연이었고, 지연은 틀렸다 `[측정 2026-09-18, n=13]`.** 위 표의 다섯 줄은 "195 ms만
+통했다"로 읽혔지만, 같은 종류의 아티팩트를 **n=4가 아니라 n=13**으로 다시 조립하면 성공과 침묵의 지연 분포가
+**완전히 겹친다**:
 
-**그 다음 측정으로 제안됐던 `agent prompt` 2단계 기동은 아래에서 닫혔다** — 모델 턴이 아니라 벤더
-소스로, 그리고 **채택 불가**로.
+| 지연 | 결과 |
+|---|---|
+| 52 ms · 63 ms · 73 ms · 112 ms · 147 ms · 191 ms · 196 ms | 콜백 **도착** |
+| 94 ms · 106 ms · 133 ms · 146 ms · 153 ms · 171 ms | **침묵** |
+
+52 ms 자식이 콜백했고 94 ms 자식이 침묵했다. 정본은 `.agent-reports/measure-herdr-claude-silent-20260918.md`
+(로컬, gitignore)이고, 그 표는 이 스모크가 남긴 픽스처 14개를 전수로 읽은 것이다.
+
+**기전은 deferred tool이다 `[측정 2026-09-18, 격리 probe n=5, sonnet]`.** claude-code 2.1.267은 아직
+연결 중인 MCP 서버를 **DEFERRED**로 노출한다 — 도구 **이름은 목록에 있고 스키마는 없다**. 스키마 없이는 호출이
+되지 않는다. 다섯 번의 격리 probe에서 `mcp__entwurf-bridge__*`가 **곧바로 호출 가능했던 적은 0회**다(4회
+DEFERRED, 1회 아직 connecting). 프레이밍은 "FIRST ACTION … call `entwurf_v2`"라고만 말하고 그것을 호출
+가능하게 만드는 한 가지를 말하지 않았다. 부를 수 없는 자식은 텍스트로 답하고 `idle`로 끝난다 — 그게 침묵이다.
+
+**수리는 문장 하나이고 3/3이었다 `[측정, n=3, 같은 모델]`.** claude-code 방언에만 사실 한 줄을 넣는다 —
+아직 호출 불가면 서버가 연결 중이거나 도구가 deferred이니 `ToolSearch("select:<callback>,<peers>")`로 먼저
+로드하라. 콜백 3/3이 도착했고, 그중 하나는 **782 ms** 자식이었다 — 침묵 런 전부보다 느린데 통했다. 지연 축의
+세 번째 반증이다. 그 줄은 `FRESH_CALL_TOOL_LOAD_HINT`가 지고(다른 네 backend는 빈 배열), 계약은
+`FRESHCOMP-TOOL-LOAD-HINT-CLAUDE-ONLY`가 진다.
+
+**그 전에 제안됐던 `agent prompt` 2단계 기동은 아래에서 닫혔다** — 모델 턴이 아니라 벤더 소스로, 그리고
+**채택 불가**로.
 
 ### `agent prompt` 2단계 기동 — 재보고, 다시 버렸다 `[측정 2026-09-18, herdr 소스 @ 7505c08 + 설치본 0.9.1 CLI]`
 
