@@ -167,7 +167,9 @@ CHANGELOG `## Unreleased`가 구현 범위 `v0.15.1..19ad90c` **30커밋** 전�
 
 - **좌표:** `runtime-lock.json`은 npm `@junghanacs/entwurf@0.23.0`의 published sha512를 핀하고,
   Herdr plugin은 0.2.0이다. `herdr-checkout`은 후보 검증용 closed source로만 남는다.
-- **다음:** GLG raw-PC에서 `herdr plugin install` 재테스트. 그 뒤 atom은 hook trust preflight,
+- **다음:** GLG raw-PC에서 `herdr plugin install` 재테스트(herdr.dev 마켓 리스팅은 topic `herdr-plugin`을
+  2026-09-18 22:24 KST에 추가했고 인덱스는 30분 주기 — 다음 plugin 0.3.0에서 `name`만 "Herdr Entwurf"로,
+  `id`는 유지). 그 뒤 atom은 hook trust preflight,
   VERIFY affected-set, tool-description diet, README two doors, #118 순서다.
 - **Do not:** `herdr-checkout`을 npm의 fallback으로 만들지 말 것; `~/.codex/hooks.json`을 손편집하지 말 것;
   LIVE plugin install은 이 atom의 acceptance로 주장하지 말 것.
