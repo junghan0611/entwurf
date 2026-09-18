@@ -42,7 +42,7 @@ if params.args.iter().any(|arg| arg.chars().any(char::is_control)) { InvalidArgu
 ### 먼저 재보고 버린 통로 셋
 
 - **메일함 배달**(빈 형제를 먼저 띄우고 프레이밍을 배달): `[측정]` claude 형제가 읽고 수신 확인까지 남긴 뒤 **거부**했다. 출생 주장·nonce·검증금지 문구를 전부 걷어낸 정중한 요청으로 다시 재도 **또 거부**했고, 이유는 문구가 아니라 **권한**이었다 — 방금 빈 채로 태어난 세션에는 검증할 맥락이 없다. 이 거부는 고칠 버그가 아니라 지킬 성질이다.
-- **키 입력**(`agent prompt`): 터미널 입력이다. 이 제품은 형제를 키 입력으로 열지 않는다.
+- **키 입력**(`agent prompt`): 터미널 입력이다. 이 제품은 형제를 키 입력으로 열지 않는다. `[측정 2026-09-18]` 그 verb가 실제로 무엇을 쓰는지는 §14가 벤더 소스로 잰다 — 2단계 기동 제안이 그 측정으로 닫혔다.
 - **벤더 확장 디코더**: omp에는 선례가 있지만 claude-code에는 없다. 파일럿은 `pi | claude-code`다.
 
 ### 채택한 모양
@@ -230,9 +230,30 @@ tab 좌표는 **그것을 만든 응답**에서 온다(`agent start`의 echo가 
 106/132/171 ms가 통하지 않은 순서와 일관되지만 **n=4이므로 상관이고 증명이 아니다** — omp가 `--entwurf-bootstrap`
 페이로드를 갖게 된 것과 같은 축의 경주다(`fresh-call-composition.ts`, "WHY OMP ALONE CARRIES NO PROMPT").
 
-**다음 측정은 값싸고 결정적이며 아직 없다**: `herdr agent prompt <TARGET> <TEXT>`가 별도 verb로 존재한다
-(측정: `agent prompt --help`). `agent start`를 프롬프트 없이 띄워 `interactive_ready`를 받은 뒤 `agent prompt`로
-첫 턴을 주면 경주 자체가 사라진다. 그것이 통하면 도구 attestation 재설계는 필요 없다.
+**그 다음 측정으로 제안됐던 `agent prompt` 2단계 기동은 아래에서 닫혔다** — 모델 턴이 아니라 벤더
+소스로, 그리고 **채택 불가**로.
+
+### `agent prompt` 2단계 기동 — 재보고, 다시 버렸다 `[측정 2026-09-18, herdr 소스 @ 7505c08 + 설치본 0.9.1 CLI]`
+
+위 가설의 "값싼 다음 측정"은 **모델 턴 없이** 끝났다. 자식이 콜백하는가보다 앞에 있는 물음이 있었기
+때문이다 — `agent prompt`는 무엇을 보내는가.
+
+| 물음 | 측정 | 어디서 `[file:line @ 7505c08]` |
+|---|---|---|
+| 무엇을 보내나 | 자식 pane의 **PTY에 bracketed paste로 감싼 텍스트 바이트**를 쓰고, **300 ms** 뒤 **Enter 키 인코딩**을 쓴다 | `src/app/api_helpers.rs:25-32`(`\x1b[200~{text}\x1b[201~`)·`:48-58`, `src/app/api/agents.rs:13`·`:195`·`:208-212` |
+| 제어문자 거절이 argv와 같은가 | **아니다.** `agent start`는 `args`에 `char::is_control`이 하나라도 있으면 pane 조회 전에 거절하는데(`src/app/agents.rs:159`), `agent.prompt`의 `text`에는 **빈 문자열 검사 하나뿐**이고 제어문자 검사가 아예 없다 | `src/app/api/agents.rs:123-128` |
+| 그래서 개행은 통과하나 | 통과한다. 다만 **계약이 아니라 상태다** — bracketed paste가 켜져 있으면 붙여넣기로 들어가고, 꺼져 있으면 `text.as_bytes()` 그대로라 개행 하나하나가 그 자리에서 제출이 된다. 어느 쪽인지는 그 순간 자식 터미널의 모드가 정한다 | `src/app/api_helpers.rs:26-31` |
+| 무엇이 ack되나 | 입력이 **쓰였다**는 것. 벤더 help가 스스로 그렇게 적는다 — "before any input is sent", "It does not track turns" | `herdr agent prompt --help` (설치본 0.9.1) |
+| 비-PTY 프롬프트 통로가 따로 있나 | 없다. 텍스트를 나르는 API 동사는 `agent.prompt`·`agent.send_keys`·`pane.send_text`·`pane.input.set` 넷이고 **전부 PTY 입력**이다 | `src/api/schema.rs:116-190` |
+
+`agent prompt`는 herdr API 동사이지만 그 아래는 **자식 PTY에 찍는 합성 키 입력**이다. 그러면 2단계 기동은
+§3이 이미 이름 불러 버린 통로(「키 입력(`agent prompt`): 터미널 입력이다」, 45행 · `herdr-fresh-call.ts:28`)를
+프로덕션 레일로 되살리는 일이고, Hard Rule 16의 「keystrokes are not delivery evidence」를 하필 **첫 턴**에
+적용하는 일이다. **구현하지 않았다.** LIVE 3런도 돌리지 않았다 — 채택할 수 없는 경로의 성질을 재는 값이다.
+
+**이 절 이전 판이 §3과 모순돼 있었다.** 같은 문서가 3에서 버린 통로를 14에서 다음 측정으로 제안했다.
+규칙의 소유자는 §3이고, 이 절은 그 제안을 측정으로 닫는다. 첫 턴 경주의 남은 적법한 방향은 **프레이밍이
+도구 목록보다 먼저 서 있게 만드는 축**이다 — omp의 `--entwurf-bootstrap`과 같은 자리이지, 키 입력이 아니다.
 
 ### 이 레일에서만 드러난 결함 셋 `[전부 수리됨, f7f9d8c]`
 
