@@ -324,9 +324,9 @@
 			"title": "the settle window expiring becomes a launch FAILURE again, which is the shape that closed a pane holding a live Claude Code child",
 			"subject": "pi-extensions/lib/herdr-fresh-call.ts",
 			"find": [
-				"\t\tif (elapsed >= settleMs) return { ok: true, witness: { state: \"unavailable\", reads, settleMs: elapsed } };"
+				"\t\tif (elapsed >= settleMs) {\n\t\t\t// The two expiry words are the whole point of `observed`: we may only say the agent is\n\t\t\t// still in our pane if a readable reply said so.\n\t\t\treturn {\n\t\t\t\tok: true,\n\t\t\t\twitness: { state: observed ? \"unavailable\" : \"unobserved\", reads, settleMs: elapsed },\n\t\t\t};\n\t\t}"
 			],
-			"replace": ["\t\tif (elapsed >= settleMs) return { ok: false, reads };"],
+			"replace": ["\t\tif (elapsed >= settleMs) {\n\t\t\treturn { ok: false, reads };\n\t\t}"],
 			"gate": ["bash", "run.sh", "check-herdr-fresh-call"],
 			"timeoutSeconds": 120,
 			"signature": "[QK:HFC-WITNESS-ABSENCE-KEEPS]",
