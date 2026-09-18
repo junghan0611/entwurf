@@ -6,6 +6,32 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ### Changed
 
+- **The bundled Claude ACP adapter is `@agentclientprotocol/claude-agent-acp` 0.79.0** (from
+  0.76.0, crossing 0.77.0/0.78.0/0.79.0; `@anthropic-ai/claude-agent-sdk` 0.3.257 → 0.3.274,
+  ACP wire SDK 1.4.0 and `@anthropic-ai/sdk` 0.100.1 unchanged). Three upstream releases, three
+  changes with a reachable shape, and **no entwurf code change** — each "inert" is a fresh
+  measurement, not the previous bump's argument reused:
+  - 0.77.0's BREAKING removal of `claudeCode.options.agent` misses us twice: our
+    `buildClaudeSessionMeta` never set that key, and we spawn the adapter's binary rather than
+    importing the removed agent-picker exports (repo-wide grep: 0 hits).
+  - 0.77.0's `allowDangerouslySkipPermissions` host opt-out is a NEW lever we do not pull. We set
+    the option nowhere, `ALLOW_BYPASS` is byte-identical across both versions, and the overlay's
+    `permissions.defaultMode: "bypassPermissions"` resolves the same under each, so a sibling's
+    effective permission mode is unchanged.
+  - 0.78.0's `compaction_update` / `compaction_summary_chunk` are the first new `sessionUpdate`
+    kinds since the pin moved, and they are gated off by our `clientCapabilities: {}` — with the
+    mapper's forward-compatible `default` arm as an independent second reason. The `stopReason`
+    axis, where "unknown is an error" actually applies, is unchanged.
+  - 0.79.0's shell-command permission prompts reorder the option array reject-first under the new
+    `defaultToNo` hint. Our approve-all policy selects by option KIND, not position, and every
+    upstream option builder emits an allow option, so the order-sensitive fallback is unreachable.
+  Re-measured and unchanged: the #96 `mcpServerStatus` evidence (2 call sites, now at
+  `v0.79.0 src/acp-agent.ts:1773`/`:1866`, surrounding 200-line window byte-identical) and all four
+  model-forcing/accounting wire calls (`setSessionConfigOption`, `sessionUsage`, `turnQuotaMeta`,
+  `resolveModelPreference` — byte-identical). Full per-change classification with evidence state:
+  [ROADMAP.md](./ROADMAP.md) 2026-09-18 bump entry and
+  [docs/acp-backend-rail.md](./docs/acp-backend-rail.md) capability posture.
+
 - **The Herdr plugin is 0.2.0 and pins its runtime to npm `@junghanacs/entwurf@0.23.0`.** Its
   committed lock carries the published sha512
   `sha512-ZR2VCui7JjK3w56rQSDs3AuAJMMuiXCNWH7HB52SQ3E/7p0oPhcxD+fb6Gdzi0VcBnheqxPzvJHMPQQcdYtNiw==`;

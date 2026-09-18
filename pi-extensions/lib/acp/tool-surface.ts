@@ -154,7 +154,8 @@ export function buildClaudeSessionMeta(
 		// claude-agent-acp also accepts a STRING PATH, and at 0.76.0 the readFile +
 		// JSON.parse for that form moved out of `resolvedProvider` up onto the
 		// unconditional `session/new` path — a shape that WOULD reach us, and does not,
-		// only because we never hand it a path. Keep it inline: a path would put file
+		// only because we never hand it a path. Still on that path at 0.79.0
+		// (`dist/acp-agent.js:6010-6012`). Keep it inline: a path would put file
 		// IO, and its failure modes, inside every session creation.
 		settings: {
 			permissions: {

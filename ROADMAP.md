@@ -883,6 +883,133 @@ v2 필드 `parentGardenId`/`isEntwurf`는 **stray key로 거부된다** — 되�
     `smoke-acp-raw-turn-live.ts` 1; 산술 추정 없이 0.76.0 dist 를 다시 읽어 재좌표화했고,
     0.75.1 tarball 을 받아 옛 좌표의 본문과 새 좌표의 본문이 같은 코드인지 대조했다).
     게이트 신설 없음.
+  - **2026-09-18 bump — claude-agent-acp 0.76.0 → 0.79.0, 세 릴리스를 한 번에 건넜다
+    (ACP SDK 1.4.0 유지 · claude-agent-sdk 0.3.257 → 0.3.274 · anthropic-ai/sdk 0.100.1 유지).**
+    앞 두 범프의 논거를 재사용하지 않는다. 이번엔 **BREAKING 하나 · 새 `sessionUpdate` kind 둘 ·
+    우리 permission 정책의 INPUT 을 실제로 바꾸는 변화 하나**가 들어 있어서, "도달 0" 을 세 번
+    각각 따로 측정해야 했다. 결론은 **코드 변경 0**, 그러나 그 0 은 상속이 아니라 측정이다.
+    ⑴ **성격: upstream 기능 추가 + BREAKING 제거 한 덩어리, 우리 표면 도달 델타 0.**
+    선언 런타임 deps 는 `@agentclientprotocol/sdk 1.4.0` 불변, `@anthropic-ai/claude-agent-sdk`
+    0.3.257 → **0.3.274**, `zod` 이 `^4.0.0` → **`4.6.5` 정확 핀**(실측 `package.json` 직독).
+    tarball unpackedSize 998,011 → **1,016,671 B**, fileCount **123 → 126**; 신규는
+    `dist/diff.*` 셋뿐이고 그건 `toolUpdateFromDiffToolResponse` 가 `tools.js` 에서 **이동**한
+    것이다(양쪽 export 목록 diff = 그 이름 한 줄). 바뀐 dist 는 28개, 나머지는 바이트 동일.
+    claude-agent-sdk 의 peer floor 는 `>=0.93.0` 그대로라 L2 의 논거 문장이 그대로 산다
+    (`node_modules/.../claude-agent-sdk/package.json` 직독).
+    ⑵ **0.77.0 BREAKING 은 두 겹으로 도달하지 않는다.** `claudeCode.options.agent` 는 이제
+    adapter 가 옵션 객체를 shallow-copy 한 뒤 `delete` 한다
+    `[측정 2026-09-18, 0.79.0 dist/acp-agent.js:5934-5941 직독]`. 우리 `buildClaudeSessionMeta`
+    는 그 키를 세팅한 적이 없고(`tool-surface.ts:145-199` 전문 독파 — literal 은
+    `model`/`tools`/`settingSources`/`settings` + 선택적 `plugins`/`disallowedTools`/`extraArgs`
+    가 전부), 제거된 agent-picker export 넷(`DEFAULT_AGENT_ID` · `AGENT_CONFIG_ID` ·
+    `BUILTIN_AGENT_NAMES` · `discoverCustomAgents`)은 `[측정 2026-09-18]` `git grep -c` 로
+    `pi-extensions/` · `test/` · `scripts/` · `mcp/` 전 범위 **0 hits**. 애초에 우리는 adapter 를
+    라이브러리로 import 하지 않고 **바이너리를 spawn** 한다 — 두 번째 독립 이유.
+    ⑶ **0.77.0 permission 변화는 "새 레버가 생겼다" 이지 "우리 모드가 바뀌었다" 가 아니다.**
+    0.76.0 은 `allowDangerouslySkipPermissions: ALLOW_BYPASS` 를 무조건 보냈고
+    `initialPermissionMode = creationOpts.permissionMode ?? resolvePermissionMode(settings…)`
+    였다. 0.79.0 은
+    `allowBypass = ALLOW_BYPASS && sessionMeta?.claudeCode?.options?.allowDangerouslySkipPermissions !== false`
+    를 먼저 정하고 `resolvePermissionMode(…, logger, allowBypass)` 로 전부 통과시킨다
+    `[측정 2026-09-18, 0.79.0 dist/acp-agent.js:5932-5933 직독]`. 우리는 그 옵션을 어디서도
+    세팅하지 않으므로 `undefined !== false` → `allowBypass === ALLOW_BYPASS`, 그리고
+    `ALLOW_BYPASS = !IS_ROOT || !!process.env.IS_SANDBOX` 는 두 버전 **바이트 동일**
+    (`dist/permissions/modes.js` 전문 대조). overlay 가 박은
+    `permissions.defaultMode: "bypassPermissions"`(`overlay.ts:122`)는 양쪽에서 같은 값으로
+    풀린다 → **분신의 실효 permission mode 불변**. 달라진 건 우리가 당기지 않기로 한 레버가
+    생겼다는 사실뿐이고, 그걸 선언하는 건 별도 축이다(capability posture 에 기록).
+    ⑷ **0.77.0 의 system-reminder strip 은 우리 first-user-message augment 를 건드리지 않는다.**
+    `INJECTED_CONTEXT_MARKERS = ["system-reminder"]` 가 local-command marker 들과 함께
+    `stripMarkerTags` 에 들어갔고, `stripLocalCommandMetadata` 호출부는 정확히 둘이다
+    `[측정 2026-09-18, 0.79.0 dist/acp-agent.js grep -n]`: `:4129`(메시지 본문이
+    `<local-command-stdout>` 를 포함할 때만) 과 `:5061`(`session/load` transcript replay).
+    둘 다 transcript 에서 **돌아오는** 텍스트를 agent→client 로 다듬는 자리다. 우리 augment 는
+    첫 `session/prompt` 에서 client→agent 로 한 번 가고 다시 방출되지 않는다 —
+    entwurf 는 `session/load` 를 부르는 곳이 없다 `[측정 2026-09-18]`
+    (`git grep loadSession pi-extensions/lib/acp/` 는 `session-store.ts` 의 capability **타입**
+    두 줄뿐, wire call 0). augment 자체도 `<system-reminder>` 태그를 쓰지 않는다(`augment.ts` 독파).
+    ⑸ **0.78.0 compaction 은 새 `sessionUpdate` kind 이고, 두 겹으로 inert 다 — 이번 범프에서
+    코드가 필요할 가능성이 가장 높았던 항목.** `compaction_update` · `compaction_summary_chunk`
+    가 신설됐다 `[측정 2026-09-18, 양쪽 dist 전체 `sessionUpdate: "…"` 리터럴 sweep:
+    0.76.0 15종 → 0.79.0 17종, 늘어난 둘이 정확히 이것]`. 첫째 게이트:
+    `presentation: clientSupportsCompactionUpdates(this.clientCapabilities) ? "compaction_update"
+    : "tool_call"` (`dist/acp-agent.js:1875-1879`) 이고 그 술어는
+    `capabilities?.session?.compaction` 을 읽는다 — 우리는 `clientCapabilities: {}`
+    (`backend.ts:1758`) 이므로 §11-8 이 이미 측정한 0.75.0 `tool_call` 표현이 그대로 온다.
+    replay 경로(`:5082`)도 같은 술어가 `:4915` 에서 막는다. 둘째 게이트(독립):
+    우리 mapper 의 update switch 는 `default: break` — "unknown update kinds are ignored
+    (forward-compatible)" (`event-mapper.ts:311-313`, `:377-378`). AGENTS.md 의
+    "explicitly map every terminal reason / unknown is an error" 는 **stopReason 축**이지
+    session update 축이 아니고, `stopReason` 리터럴은 두 dist 에서 `"cancelled"` 하나로 동일
+    `[측정 2026-09-18 sweep]`. **코드 불필요.**
+    ⑹ **0.78.0 checkpoint file-change 보고와 AIR diff counts 는 둘 다 AIR 게이트 뒤.**
+    `supportsAgentFileChangeReport` 는
+    `clientSupportsAirCapability(capabilities, "agentFileChangeReport")`
+    (`dist/file-change-audit.js:27-29` 직독), `air-extension.js` 의 유일한 델타는 상수
+    `AIR_DIFF_STATS_KEY` 한 줄(전체 파일 diff). 0.76.0 `recommendedValue` 때와 **같은**
+    `clientCapabilities: {}` 논거지만 상속하지 않고 다시 쟀다.
+    ⑺ **0.79.0 의 shell permission prompt 는 우리 정책의 INPUT 에 실제로 닿고, 결정은 바꾸지
+    않는다 — 이번 범프에서 유일하게 "도달 모양"을 가진 변화.** CLI 가 `defaultToNo` 를
+    힌트하면 option 배열이 이제 **reject-first** 로 정렬된다
+    (`dist/permissions/options.js:5-10`). `defaultToNo` 자체가 0.79.0 신설이다
+    `[측정 2026-09-18]` — 0.76.0 dist 전체 `grep -rn defaultToNo` **0 hits**. 우리
+    approve-all 정책은 `options.find((o) => o.kind === "allow_once" || o.kind === "allow_always")`
+    로 **kind 로** 고르고 `options[0]` 는 그 find 가 실패할 때만 쓴다
+    (`backend.ts:824-831`) → 순서가 뒤집혀도 결정이 뒤집히지 않는다. fallback 자체도 도달
+    불가다: `dist/permissions/options/` 의 모든 builder 가 `withOptionalUpdate` /
+    `withGeneratedUpdate` 를 타고 둘 다 `allowOnce()` 로 시작하며, `tools.js` 의 손수 짠
+    집합들도 각각 `allow_once` 나 `allow_always` 를 하나씩 갖는다(`shared.js` + `tools.js` 직독).
+    제목 변화(Bash/PowerShell 은 `humanText` 압축을 우회)는 우리가 읽지 않는 필드다.
+    ⑻ **#96 근거 재측정 — 0.79.0 에서도 동일.** `mcpServerStatus` 호출 **2건 → 2건** 불변.
+    새 좌표를 upstream 태그에서 직접 읽었다 `[측정 2026-09-18, v0.79.0/src/acp-agent.ts 직독,
+    grep -n]`: `:1773`(`authenticateMcpServers` 안, `supportsMcpOAuth` 뒤 `needs-auth` 만 훑음) ·
+    `:1866`(이름 하나짜리 서버를 OAuth deadline 안에서 polling). 주변 200줄 창은 **바이트 동일**
+    (`diff v0.76.0:1662-1862 v0.79.0:1673-1873` 빈 출력), 영역 **+11줄 이동**, 파일 자체는
+    10,405 → 10,329 줄로 줄었다. 선언된 전체 MCP 를 `newSession` 전에 막는 fence 아님 — 결론
+    유지, 근거는 새로 측정.
+    ⑼ **model forcing / accounting wire call 넷 모두 바이트 동일.**
+    `[측정 2026-09-18, 양쪽 dist 에서 brace-match 추출 후 md5]`: `setSessionConfigOption`
+    (4,858 B 동일) · `sessionUsage`(373 B 동일) · `turnQuotaMeta` 와 `quotaTokenCount`(md5 동일).
+    `resolveModelPreference` 는 `dist/session-model.js` 에 있고 그 **파일 전체가** 바이트 동일
+    (`md5 cfd031d0…` 양쪽). `settings` 를 STRING PATH 로 넘길 때의 `readFile`+`JSON.parse` 도
+    여전히 무조건 `session/new` 경로 위에 있다(`dist/acp-agent.js:6010-6012`) — 그 호출부
+    계약 주석의 "0.76.0 에 올라왔고 0.79.0 에도 그대로" 를 그렇게 정정했다(옛 문장을 버전만
+    바꿔 놓으면 "0.79.0 에 이동했다" 는 거짓말이 된다).
+    ⑽ **게이트 + LIVE 영수증.** `./run.sh check-acp-sdk-surface` **vitest 7/7 PASS** ·
+    `./run.sh check-acp-usage-accounting` EXIT 0 · `pnpm check` EXIT 0(51s) ·
+    `pnpm run build-bridge` + `./run.sh check-bridge-delivery` **PASS(19 assertions)**.
+    LIVE 셋 모두 scratch PWD 에서 `PI_SESSION_ID`/`PI_AGENT_ID`/`CLAUDE_CONFIG_DIR` strip 후
+    `claude-sonnet-5` 로 돌렸다(2026-09-18 22:4x KST):
+    **`LIVE=1 ./run.sh smoke-acp-raw-turn-live` → PASS** (launch source
+    `package:@agentclientprotocol/claude-agent-acp`, PATH fallback 아님; `protocolVersion=1`,
+    `stopReason=end_turn`, NDJSON **63,409 bytes**, EXIT=0);
+    **`LIVE=1 ./run.sh smoke-acp-provider-live` → PASS** — compaction 이 새 update kind 라서
+    **event mapper 를 실제로 통과하는** 턴이 필요했고, 이게 그 축이다(pi provider →
+    `streamShellAcp` → S2c mapper; nonce 확인, 진행 notice 3개 가시, textSignature JSONL
+    round-trip 유지, EXIT=0);
+    **`LIVE=1 ./run.sh smoke-acp-overlay-live` → PASS** — 0.77.0 이 손댄 바로 그
+    `newSession` `_meta.claudeCode.options` 경로를 오버레이 아래에서 구동한다.
+    ⑾ **기계 이동:** `package.json` 한 dependency, `pnpm-workspace.yaml:21` exclude 에
+    `0.77.0 || 0.78.0 || 0.79.0`(0.79.0 이 어제 발행이라 이게 없으면 `minimumReleaseAge` 가
+    설치를 막는다) **와 그 아래 transitive `claude-agent-sdk` 9행의 `0.3.257` → `0.3.274`**
+    (`[측정 2026-09-18]` 0.3.274 는 2026-09-16 발행이라 지금은 그 행 없이도 통과하지만, 트리에
+    없는 버전을 가리키는 exclude 는 다음 범프에서 조용히 죽는다 — 같은 기계의 같은 이동으로
+    같이 옮겼고, `pnpm install --lockfile-only` 재해석 결과 lockfile 무변화로 확인), `pnpm-lock.yaml`
+    (`zod@4.6.5` 가 새로 들어와 `@agentclientprotocol/sdk@1.4.0(zod@4.6.5)` snapshot 이 하나
+    늘었다), `test/acp-sdk-surface.contract.test.ts` PINS + 헤더 + **L2 lock regex 둘**(acp 핀과
+    claude-agent-sdk 핀) + L2b/L2c 런타임 assertion 의 `0.3.257` → `0.3.274`,
+    `docs/acp-backend-rail.md` 지원 matrix 2행 + capability posture **7항목 신설** + §11-7 재측정,
+    `tool-surface.ts` settings-객체 계약 주석의 "언제 이동했나" 정정, 그리고 dist 줄번호
+    provenance 좌표 **20개**(`check-acp-usage-accounting.ts` 7 · `backend.ts` 3 ·
+    `event-mapper.ts` 3 · `acp-client.ts` 2 · `backend-adapter.ts` 2 · `tool-surface.ts` 2 —
+    주석 한 덩어리가 좌표를 둘씩 들기도 한다; `smoke-acp-raw-turn-live.ts` 는 버전 문자열만
+    들어서 좌표 0) 을 **산술 없이** 재좌표화했다: 9개 구역 전부 0.76.0 원문을 뽑아 0.79.0 후보 좌표의 본문과
+    `diff` 로 대조해 빈 출력을 확인했고(`6566-6575`→`6579-6588` · `6549-6558`→`6562-6571` ·
+    `3857-3882`→`3920-3945` · `3471-3486`→`3504-3519` · `6538-6558`→`6551-6571` ·
+    `4286-4293`→`4349-4356` · `3871-3882`→`3934-3945` · `6541-6547`→`6554-6560` ·
+    `3853-3866`→`3916-3929`), 부수 좌표 둘(rate-limit 경로 `:4273-4281`→`:4336-4344`,
+    claude-agent-sdk `sdk.d.ts:4884`@0.3.257 → `:5342`@0.3.274)도 같은 방식으로 다시 읽었다.
+    게이트 신설 없음.
 - **Standing focus — Mitsein over MCP:** plain external(non-replyable) vs garden-native meta-session
   (replyable by garden id) 구분이 agent 발화에 정직히 반영되는가. native Claude meta-session이
   external-mcp로 퇴행하거나 `wants_reply=true`를 비대칭 거절하면 버그.

@@ -95,8 +95,8 @@ undifferentiated "supported" column is what let a Claude PASS read as if it also
 | Entwurf package | `0.20.0` | shipped baseline | the package contract these rows belong to |
 | pi runtime | devDep exact `0.85.1`, peer `>=0.85.1 <0.86` | **exact** oracle + **closed range** | built and certified against 0.85.1; hosts inside the range are accepted, and the ceiling moves only on measurement |
 | ACP wire SDK | `@agentclientprotocol/sdk 1.4.0` | **exact** | the shared wire oracle both adapters speak |
-| Claude ACP adapter | `@agentclientprotocol/claude-agent-acp 0.76.0` | **exact**, bundled | the adapter we ship and certify; resolved before any PATH fallback |
-| Claude Agent SDK | `0.3.257` (transitive) | **exact** oracle | the runtime risk surface behind the adapter |
+| Claude ACP adapter | `@agentclientprotocol/claude-agent-acp 0.79.0` | **exact**, bundled | the adapter we ship and certify; resolved before any PATH fallback |
+| Claude Agent SDK | `0.3.274` (transitive) | **exact** oracle | the runtime risk surface behind the adapter |
 | Anthropic SDK | `0.100.1` | **exact**, peer-resolution only | satisfies the Agent SDK peer floor (0.93.0+); never an API client here (gate L4) |
 | Claude Code runtime | `>=2.1.217` (`entwurf.claudeCodeFloor`) | **floor** | below it, hook args are silently dropped; entwurf enforces this itself |
 | Node | `>=24` (`engines.node`) | **floor** | single axis, derived everywhere else |
@@ -168,6 +168,83 @@ different reasons, and collapsing them would hide a real risk**:
   `resolvedProvider` and up onto the unconditional `session/new` path. entwurf passes `settings`
   as an OBJECT (`tool-surface.ts:153`), so the branch is never taken. That makes "entwurf never
   hands `settings` as a path" a contract rather than an accident; it is stated at that call site.
+- **0.77.0's BREAKING change does not reach us, twice over.** `claudeCode.options.agent` is no
+  longer forwarded — the adapter now shallow-copies the options object and `delete`s `agent` on
+  the unconditional `session/new` path (`[측정 2026-09-18, 0.79.0 dist/acp-agent.js:5934-5941 직독]`).
+  entwurf's `buildClaudeSessionMeta` never sets that key (`tool-surface.ts:145-199` 직독: the
+  literal carries `model`/`tools`/`settingSources`/`settings` plus optional `plugins`/
+  `disallowedTools`/`extraArgs`, and nothing else), and the removed agent-picker exports
+  (`DEFAULT_AGENT_ID`, `AGENT_CONFIG_ID`, `BUILTIN_AGENT_NAMES`, `discoverCustomAgents`) are
+  imported nowhere: `[측정 2026-09-18]` `git grep -c` over `pi-extensions/`, `test/`, `scripts/`,
+  `mcp/` is **0**. We never imported the adapter as a library at all — we spawn its binary.
+- **0.77.0's `allowDangerouslySkipPermissions` opt-out is a new lever we deliberately do not
+  pull, and our effective permission mode is unchanged.** 0.76.0 sent
+  `allowDangerouslySkipPermissions: ALLOW_BYPASS` unconditionally and computed
+  `initialPermissionMode = creationOpts.permissionMode ?? resolvePermissionMode(settings…)`.
+  0.79.0 computes `allowBypass = ALLOW_BYPASS && sessionMeta?.claudeCode?.options?.allowDangerouslySkipPermissions !== false`
+  and routes the whole thing through `resolvePermissionMode(…, logger, allowBypass)`
+  (`[측정 2026-09-18, 0.79.0 dist/acp-agent.js:5932-5933 직독]`). entwurf sets that option
+  nowhere, so `undefined !== false` holds and `allowBypass === ALLOW_BYPASS`;
+  `ALLOW_BYPASS = !IS_ROOT || !!process.env.IS_SANDBOX` is **byte-identical** between the two
+  versions (`dist/permissions/modes.js` 직독). Our overlay pins
+  `permissions.defaultMode: "bypassPermissions"` (`overlay.ts:122`), which resolves the same
+  under both. The lever now EXISTS for a host that wants a non-bypass sibling; declaring it is a
+  separate axis, not a one-line flip, and nothing in this bump takes it.
+- **0.77.0's system-reminder strip never touches our first-user-message augment.**
+  `INJECTED_CONTEXT_MARKERS = ["system-reminder"]` joins the local-command markers in
+  `stripMarkerTags`, and `stripLocalCommandMetadata` has exactly two call sites
+  (`[측정 2026-09-18, 0.79.0 dist/acp-agent.js grep -n]`): `:4129`, gated on the message content
+  containing `<local-command-stdout>`, and `:5061`, in the `session/load` transcript replay. Both
+  run agent→client on text coming BACK from the transcript; our augment rides client→agent on the
+  first `session/prompt` and is never re-emitted, because entwurf calls `session/load` nowhere
+  (`[측정 2026-09-18]` `git grep loadSession` in `pi-extensions/lib/acp/` hits only the
+  `session-store.ts` capability TYPE, never a wire call). The augment also emits no
+  `<system-reminder>` tag of its own (`augment.ts` 직독), so no prose of ours is strippable.
+- **0.78.0's compaction update is a NEW `sessionUpdate` kind and is inert for us, twice over.**
+  `compaction_update` and `compaction_summary_chunk` are new in `dist/context-compaction.js`
+  (`[측정 2026-09-18]` `sessionUpdate: "…"` literal sweep across both dists: 0.76.0 has 15 distinct kinds,
+  0.79.0 has 17, and the two new ones are exactly these). Gate one: the lifecycle's
+  `presentation` is `clientSupportsCompactionUpdates(this.clientCapabilities) ? "compaction_update"
+  : "tool_call"` (`dist/acp-agent.js:1875-1879`), and that predicate reads
+  `capabilities?.session?.compaction` — entwurf sends `clientCapabilities: {}` (`backend.ts:1758`),
+  so we keep the 0.75.0 `tool_call` presentation §11-8 already measured. The replay path
+  (`:5082`) is guarded by the same predicate at `:4915`. Gate two, independent: our mapper's
+  update switch has a `default: break` — "unknown update kinds are ignored (forward-compatible)"
+  (`event-mapper.ts:311-313`, `:377-378`). The "map every terminal reason, unknown is an error" rule
+  is about ACP **stopReason**, a different axis; `stopReason` literals are unchanged across the
+  two dists (`[측정 2026-09-18]` sweep: `"cancelled"` only, both versions). No code needed.
+- **0.78.0's checkpoint file-change report and AIR diff counts are both behind the AIR gate.**
+  `supportsAgentFileChangeReport` is `clientSupportsAirCapability(capabilities, "agentFileChangeReport")`
+  (`dist/file-change-audit.js:27-29` 직독), and `air-extension.js`'s only delta is one added
+  constant `AIR_DIFF_STATS_KEY` (full-file `diff`, one line). Same `clientCapabilities: {}`
+  argument as the 0.76.0 `recommendedValue` entry — re-measured, not inherited.
+- **0.79.0's shell-command permission prompts reach our permission handler's INPUT and change no
+  decision.** The change reorders options: when the CLI hints `defaultToNo` (new in 0.79.0 —
+  `[측정 2026-09-18]` `grep -rn defaultToNo` over the 0.76.0 dist is **0 hits**), the option array
+  now sorts reject-first (`dist/permissions/options.js:5-10`). entwurf's approve-all policy
+  selects `options.find((o) => o.kind === "allow_once" || o.kind === "allow_always")` and only
+  falls back to `options[0]` when that find fails (`backend.ts:824-831`) — a find by KIND, so
+  order cannot flip it. The fallback is unreachable besides: every builder in
+  `dist/permissions/options/` routes through `withOptionalUpdate`/`withGeneratedUpdate`, both of
+  which lead with `allowOnce()`, and the hand-rolled `tools.js` sets each carry an `allow_once` or
+  `allow_always` (직독 of `shared.js` + `tools.js`). The title change (Bash/PowerShell titles now
+  bypass `humanText` compaction) lands on a field we never read.
+- **0.77.0–0.79.0's remaining fixes are unreachable under our capability posture.** The
+  AskUserQuestion multi-select/custom-text fixes (#1031, #1131) require form elicitation:
+  the adapter computes `disallowedTools = elicitationSupport.form ? [] : ["AskUserQuestion"]`
+  from `clientCapabilities.elicitation.form`, which our `{}` leaves false, so AskUserQuestion is
+  disabled on every session we open. The TaskList regex fix (#1006) is internal parsing. #1128's
+  tool names land on `presentation.toolCall._meta.claudeCode` on the permission-request path
+  (`dist/acp-agent.js:5317-5325`), which our handler ignores; our `titleForTool` already read
+  `_meta.claudeCode.toolName` as a fallback behind `update.title`, so it is additive at worst.
+- **Our model-forcing and accounting wire calls are byte-identical across 0.76.0 → 0.79.0.**
+  `[측정 2026-09-18, brace-matched extraction from both dists, md5]`: `setSessionConfigOption`
+  (4,858 B, identical), `sessionUsage` (373 B, identical), `turnQuotaMeta` and `quotaTokenCount`
+  (identical md5), and `resolveModelPreference` lives in `dist/session-model.js`, whose whole file
+  is byte-identical (`md5 cfd031d0…` both versions). The `settings`-as-STRING-PATH branch our
+  call-site contract names is still on the unconditional `session/new` path
+  (`dist/acp-agent.js:6010-6012`).
+
 - **The one 0.73.0 → 0.75.1 change that DOES reach us:** context compaction is now surfaced as a
   synthetic ACP tool lifecycle (0.75.0, #991) — a `tool_call` with `kind: "think"`, title
   `Compact conversation`, and `_meta.contextCompaction` schema v1 — where it used to arrive as
@@ -292,23 +369,25 @@ caller-session `_meta`, and cross-machine certification.
 
 A backend can return `newSession` before its declared MCP server is callable. This was
 observed intermittently on the Claude rail and directly on Cortex's private `mcp.json`
-path. Neither `claude-agent-acp` 0.76.0 nor the Cortex landing adds a client-side
+path. Neither `claude-agent-acp` 0.79.0 nor the Cortex landing adds a client-side
 readiness fence over a session's declared MCP servers, and entwurf's common loop
 calls `mcpServerStatus()` nowhere.
-(Re-measured at the 0.75.1 → 0.76.0 bump, not inherited — the previous bump's argument is
-not reused, the way the 0.73.0 → 0.75.1 entry did not reuse 0.70.0 → 0.73.0's.
-`mcpServerStatus` call sites in `src/acp-agent.ts` are **2 at v0.75.1 and 2 at v0.76.0**
-`[측정 2026-09-10, upstream v0.76.0/src/acp-agent.ts read directly, grep -n]`; they first
+(Re-measured at the 0.76.0 → 0.79.0 bump, not inherited — the previous bump's argument is
+not reused, the way the 0.75.1 → 0.76.0 entry did not reuse 0.73.0 → 0.75.1's.
+`mcpServerStatus` call sites in `src/acp-agent.ts` are **2 at v0.76.0 and 2 at v0.79.0**
+`[측정 2026-09-18, upstream v0.79.0/src/acp-agent.ts read directly, grep -n]`; they first
 appeared in 0.71.0 via `0cbbaf3` (MCP OAuth, LLM-25012), so the ADAPTER calls it where it
-once did not. Both were re-read at `v0.76.0 src/acp-agent.ts:1762` and `:1855`
-(v0.75.1: `:1736` / `:1829`; v0.73.0: `:1618` / `:1711`): the first sits inside
-`authenticateMcpServers` behind `supportsMcpOAuth(query)` and skips every status that is not
-`needs-auth`; the second polls a SINGLE named server to `connected` under an OAuth deadline.
-Neither waits on every declared server before `newSession` returns. That is an auth
-handshake, not a readiness fence, so the boundary below is unchanged. The surrounding 200
-lines are byte-identical and the region moved +26; the whole 0.76.0 delta is one refactor
-plus one opt-in AIR extension that `clientCapabilities: {}` never enables, so the other
-reachable-surface findings stand as re-measured at the previous bump.
+once did not. Both were re-read at `v0.79.0 src/acp-agent.ts:1773` and `:1866`
+(v0.76.0: `:1762` / `:1855`; v0.75.1: `:1736` / `:1829`; v0.73.0: `:1618` / `:1711`): the
+first sits inside `authenticateMcpServers` behind `supportsMcpOAuth(query)` and skips every
+status that is not `needs-auth`; the second polls a SINGLE named server to `connected` under
+an OAuth deadline. Neither waits on every declared server before `newSession` returns. That
+is an auth handshake, not a readiness fence, so the boundary below is unchanged. The
+surrounding 200-line window is byte-identical (`diff v0.76.0:1662-1862 v0.79.0:1673-1873`,
+empty) and the region moved +11 while the file shrank 10,405 → 10,329 lines. The 0.77.0
+agent-picker removal, the 0.78.0 compaction/checkpoint/AIR work and the 0.79.0 permission
+presentation touch no part of this path, so the other reachable-surface findings stand as
+re-measured in the capability-posture section above.
 This bump changes no readiness behavior and closes no part of #72.)
 
 ### 11-7-a/b. Instrument and first measurement

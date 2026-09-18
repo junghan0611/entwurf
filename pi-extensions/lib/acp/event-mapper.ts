@@ -60,8 +60,8 @@ export type AcpPiStreamState = {
 	 *
 	 * Last write wins, never a sum: both are latest session-level observations, and
 	 * one turn can legitimately see several (claude emits one per `result` message,
-	 * including a sub-agent's own — read at claude-agent-acp 0.76.0
-	 * `dist/acp-agent.js:3471-3486`), each carrying that result's current values.
+	 * including a sub-agent's own — read at claude-agent-acp 0.79.0
+	 * `dist/acp-agent.js:3504-3519`), each carrying that result's current values.
 	 */
 	observedSessionCostUsd?: number;
 	observedContextOccupancyTokens?: number;
@@ -346,9 +346,9 @@ export function applyAcpSessionUpdate(
 		case "usage_update": {
 			// `used` is OCCUPANCY-shaped — the backend's post-turn context size, not
 			// the prompt response's turn aggregate. Claude sends `lastAssistantTotalUsage`
-			// as `used` (read at claude-agent-acp 0.76.0
-			// `dist/acp-agent.js:3871-3882`), after constructing that scalar from the
-			// latest assistant snapshot (`:3853-3866`). pi reads `usage.totalTokens` as
+			// as `used` (read at claude-agent-acp 0.79.0
+			// `dist/acp-agent.js:3934-3945`), after constructing that scalar from the
+			// latest assistant snapshot (`:3916-3929`). pi reads `usage.totalTokens` as
 			// exactly that occupancy (`calculateContextTokens(usage) = usage.totalTokens
 			// || input + output + cacheRead + cacheWrite`, read at pi-coding-agent
 			// `dist/core/compaction/compaction.js:86-88`). The assignment below is the
