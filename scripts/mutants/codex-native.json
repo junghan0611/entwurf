@@ -964,6 +964,41 @@
 			"timeoutSeconds": 300,
 			"signature": "[QK:CODEX-BIRTH-INVERSE-KEEPS-PRE-EXISTING-FILE]",
 			"signatureSource": "scripts/smoke-codex-birth.sh"
+		},
+		{
+			"claim": "CODEX-BIRTH-DOCTOR-ORPHAN-RED",
+			"title": "the doctor stops looking for our own bytes when the receipt is gone, so a half-removed unit reads as a clean host and invites a reinstall over bytes the inverse will refuse",
+			"subject": "scripts/codex-birth-doctor.sh",
+			"find": ["  if [ \"$ORPHAN_DECLARATION\" = \"1\" ] || [ -e \"$HELPER_DIR\" ]; then"],
+			"replace": ["  if false; then"],
+			"gate": ["bash", "run.sh", "smoke-codex-birth"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:CODEX-BIRTH-DOCTOR-ORPHAN-RED]",
+			"signatureSource": "scripts/smoke-codex-birth.sh"
+		},
+		{
+			"claim": "CODEX-BIRTH-INVERSE-KEEPS-FOREIGN",
+			"title": "the text splice takes a fixed group index instead of the one the selector measured, so the inverse reaches for a neighbours declaration and the post-condition is the only thing standing between that and a written file",
+			"subject": "scripts/codex-birth-uninstall.sh",
+			"find": ["      let spliced = m.certifySplice(m.removeSessionStartGroup(text, sel.groupIndex), want);"],
+			"replace": ["      let spliced = m.certifySplice(m.removeSessionStartGroup(text, 0), want);"],
+			"gate": ["bash", "run.sh", "smoke-codex-birth"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:CODEX-BIRTH-INVERSE-KEEPS-FOREIGN]",
+			"signatureSource": "scripts/smoke-codex-birth.sh"
+		},
+		{
+			"claim": "CODEX-BIRTH-INVERSE-SOLE-OWNER",
+			"title": "the FILE arm drops the target from its own removal, so a hooks.json this unit created and was the sole declaration in survives an uninstall that reports it gone",
+			"subject": "scripts/codex-birth-uninstall.sh",
+			"find": [
+				"    FILE) rm -f -- \"$tmp\" \"$target\"; note \"removed $target (entwurf was its only declaration)\" ;;"
+			],
+			"replace": ["    FILE) rm -f -- \"$tmp\"; note \"removed $target (entwurf was its only declaration)\" ;;"],
+			"gate": ["bash", "run.sh", "smoke-codex-birth"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:CODEX-BIRTH-INVERSE-SOLE-OWNER]",
+			"signatureSource": "scripts/smoke-codex-birth.sh"
 		}
 	]
 }

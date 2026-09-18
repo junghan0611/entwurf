@@ -52,6 +52,9 @@
  *   HFC-ORPHAN-NAMED            every failed reclaim names its reason instead of going quiet
  *   HFC-INPUT-PARITY            the caller-facing input contract is the SHARED one, word for word
  *   HFC-CWD-EMPTY-IS-OMITTED    `cwd: ""` means "no cwd", as it does on the other rail
+ *   HFC-CWD-HASH-IS-DATA        a `#` in the start directory is DATA here — the tmux rail's
+ *                               format-token refusal is not imported, because its reason is
+ *                               false on a rail with no format expansion
  *   HFC-TAB-OCCUPIED            a new tab whose initial pane holds an agent does not get started into
  *   HFC-START-PANE-BINDING      a start that reports a different pane/terminal is a named failure
  *   HFC-WITNESS-SETTLED-BY-READ a start whose reply carries no agent session is SETTLED by
@@ -88,6 +91,7 @@ import {
 	buildHerdrPaneCloseArgs,
 	buildHerdrPaneGetArgs,
 	buildHerdrTabCreateArgs,
+	classifyHerdrCwd,
 	containsControlChar,
 	createHerdrRunner,
 	decideConditionalClose,
@@ -866,6 +870,34 @@ async function main(): Promise<void> {
 				);
 				return atCap.ok && calls.length === 3;
 			})()),
+	);
+	ok(
+		"[QK:HFC-CWD-HASH-IS-DATA] a `#` in the start directory is DATA on this rail — the tmux leaf refuses it because tmux format-expands a `-c` value and a `#(\u2026)` was observed EXECUTING, while herdr clones `--cwd` into the request untouched, so importing that refusal would be borrowed authority with a stated reason that is false here",
+		await (async () => {
+			// A real directory, because the classifier's other two answers are existence facts and
+			// a fixture that did not exist would pass for the wrong reason.
+			const hashDir = fs.mkdtempSync(path.join(os.tmpdir(), "entwurf-herdr-hash."));
+			const withHash = path.join(hashDir, "#(date)");
+			fs.mkdirSync(withHash);
+			try {
+				const { run, calls } = scriptedRun([
+					{ status: 0, stdout: CALLER_PANE_OK },
+					{ status: 0, stdout: TAB_OK },
+					startReplyEchoingArgv(START_OK),
+				]);
+				const result = await herdrFreshCall({ ...base, backend: "claude-code", cwd: withHash }, run, HERDR_ENV, NONCE);
+				return (
+					classifyHerdrCwd(withHash) === null &&
+					result.ok &&
+					// It reaches herdr as the literal it is — unquoted, untrimmed, unexpanded.
+					calls[1].includes("--cwd") &&
+					calls[1][calls[1].indexOf("--cwd") + 1] === withHash &&
+					result.receipt.cwd === withHash
+				);
+			} finally {
+				fs.rmSync(hashDir, { recursive: true, force: true });
+			}
+		})(),
 	);
 	ok(
 		"[QK:HFC-CWD-EMPTY-IS-OMITTED] an empty cwd means OMITTED, exactly as the public verb has always meant it — reading it as a path made a documented no-op into an invalid-directory refusal",

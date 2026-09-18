@@ -275,9 +275,13 @@ want "a reinstall beside an edited neighbour does not rewrite hooks.json at all"
 
 # The inverse takes our group out and leaves the neighbour's bytes exactly where they were.
 cp "$HOOKS" "$SB/before-inverse.json"
-"$UNINSTALL" >"$SB/out" 2>&1 || die "the inverse failed beside a neighbour: $(cat "$SB/out")"
-want "[QK:CODEX-BIRTH-INVERSE-KEEPS-FOREIGN] the inverse removes ONLY entwurf's group and keeps the shared file" \
-  "[ -f '$HOOKS' ] && grep -q 'by text splice' '$SB/out' && ! grep -q 'codex-birth-launch.sh' '$HOOKS'"
+# The exit status rides INSIDE the claim: a splice aimed at the wrong group is caught by the
+# post-condition and comes back as DRIFT, which is a nonzero exit — and a separate `|| die` above
+# would swallow that with a line that cannot carry this claim's token.
+INVERSE_RC=0
+"$UNINSTALL" >"$SB/out" 2>&1 || INVERSE_RC=$?
+want "[QK:CODEX-BIRTH-INVERSE-KEEPS-FOREIGN] the inverse removes ONLY entwurf's group, by splice, and keeps the shared file — a splice that landed anywhere else would be refused by its own post-condition and reported as drift instead" \
+  "[ \"$INVERSE_RC\" -eq 0 ] && [ -f '$HOOKS' ] && grep -q 'by text splice' '$SB/out' && ! grep -q 'codex-birth-launch.sh' '$HOOKS'"
 want "the inverse left the neighbour as the file's only declaration" \
   "node -e 'const s=JSON.parse(require(\"node:fs\").readFileSync(process.argv[1],\"utf8\")); if(s.hooks.SessionStart.length!==1)throw 0; if(!s.hooks.SessionStart[0].hooks[0].command.includes(\"herdr\"))throw 0;' '$HOOKS'"
 want "the inverse removed entwurf's own description and left no entwurf prose behind" "! grep -q 'entwurf codex-birth' '$HOOKS'"
@@ -387,7 +391,7 @@ printf '# operator edit\n' >> "$LAUNCHER"
 "$UNINSTALL" >"$SB/out" 2>&1 && die "the inverse should refuse while the launcher is drifted"
 want "the inverse refuses a drifted helper member by digest" "grep -q 'DRIFT: helper member was edited after install' '$SB/out'"
 want "the drifted launcher is LEFT IN PLACE" "[ -f '$LAUNCHER' ]"
-want "the declaration it already removed is gone, and the state remains" "[ ! -e '$HOOKS' ] && [ -f '$STATE' ]"
+want "[QK:CODEX-BIRTH-INVERSE-SOLE-OWNER] the declaration it already removed is GONE — the FILE arm deletes the file it was the sole declaration in — and the state remains, because a drifted helper is still owed a licence" "[ ! -e '$HOOKS' ] && [ -f '$STATE' ]"
 
 rm -f "$LAUNCHER"
 "$INSTALL" >/dev/null 2>&1 || die "reinstall before the exact-inverse cell failed"
@@ -531,7 +535,7 @@ want "[QK:CODEX-BIRTH-INVERSE-KEEPS-PRE-EXISTING-FILE] a file that existed BEFOR
 rm -f "$HOOKS"
 "$INSTALL" >/dev/null 2>&1 || die "install into a host with no hooks.json failed"
 "$UNINSTALL" >"$SB/out" 2>&1 || die "uninstall of a file we created failed: $(cat "$SB/out")"
-want "a hooks.json this unit CREATED, holding only its own description and group, is still removed whole" \
+want "a hooks.json this unit CREATED, holding only its own description and group, is still removed whole — the narrowing above added proofs to that delete, it did not retire it" \
   "[ ! -e '$HOOKS' ] && grep -q 'entwurf was its only declaration' '$SB/out'"
 
 # ── the SHARED file's own ownership, decided ONCE for four surfaces (sol B3, 2026-09-18) ─────
@@ -572,6 +576,28 @@ refuses "a symlinked hooks.json is refused with its OWN word — the repair is n
   "SYMLINK" env CODEX_HOME="$CODEX_HOME" HOOKS_LINK=1 bash -c "cp '$HOOKS' '$SB/hooks-real.json'; rm '$HOOKS'; ln -s '$SB/hooks-real.json' '$HOOKS'; '$INSTALL'"
 rm -f "$HOOKS"; cp "$SB/hooks-real.json" "$HOOKS"; chmod 0600 "$HOOKS"
 "$UNINSTALL" >/dev/null 2>&1 || die "cleanup uninstall after the shared-ownership cells failed"
+
+# ── the ORPHAN verdict: our bytes with no receipt behind them (glm #2) ────────────────────────
+# `[glm 감사 2026-09-18]` this branch had no assertion and no mutant at all. It is the half-removed
+# state — a declaration commanding OUR launcher, or a closure directory, with the receipt that
+# licenses removing them gone — and the doctor must go RED rather than fall through to the
+# "nothing is installed here" arm, which reads as a clean host and invites a reinstall over bytes
+# the inverse will then refuse.
+"$INSTALL" >/dev/null 2>&1 || die "install before the orphan cell failed"
+ORPHAN_HOOKS_SHA="$(sha256sum "$HOOKS" | cut -d' ' -f1)"
+mv "$STATE" "$SB/state-parked.json"
+# ONE assertion, because red-for-the-wrong-reason is the failure mode here: with the orphan test
+# removed the doctor still exits nonzero, down the "nothing is installed here" arm, and a cell that
+# only checked the exit code would call that a kill. The WORDS are the claim.
+ORPHAN_RC=0
+"$DOCTOR" --unit-only >"$SB/out" 2>&1 || ORPHAN_RC=$?
+want "[QK:CODEX-BIRTH-DOCTOR-ORPHAN-RED] a declaration or closure with no receipt behind it is RED and NAMED as not provably ours — never the clean-host arm, which reads as nothing installed and invites a reinstall over bytes the inverse will then refuse" \
+  "[ \"$ORPHAN_RC\" -ne 0 ] && grep -q 'not provably ours' '$SB/out' && ! grep -q 'no Codex birth unit is installed here' '$SB/out'"
+want "the orphan doctor is READ-ONLY — it names those bytes and repairs nothing" \
+  "[ \"\$(sha256sum '$HOOKS' | cut -d' ' -f1)\" = \"$ORPHAN_HOOKS_SHA\" ] && [ ! -e '$STATE' ]"
+mv "$SB/state-parked.json" "$STATE"
+"$DOCTOR" --unit-only >/dev/null 2>&1 || die "the unit axis should be green again once the receipt is back"
+"$UNINSTALL" >/dev/null 2>&1 || die "cleanup uninstall after the orphan cell failed"
 
 # A relative root would make "the fixed launcher path" depend on the caller's cwd — and that
 # path is exactly what the vendor keys its trust receipt to.

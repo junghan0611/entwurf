@@ -4,7 +4,7 @@
 	"mutants": [
 		{
 			"claim": "HFC-RAIL-IMPORT-FENCE",
-			"title": "the herdr rail takes a mux import again — one is all it takes to make either rail undeletable",
+			"title": "the herdr rail takes a mux import again \u2014 one is all it takes to make either rail undeletable",
 			"subject": "pi-extensions/lib/herdr-fresh-call.ts",
 			"find": ["import { createHash } from \"node:crypto\";"],
 			"replace": ["import { createHash } from \"node:crypto\";\nimport { runTmux } from \"./mux-placement.ts\";"],
@@ -50,7 +50,7 @@
 		},
 		{
 			"claim": "HFC-ENCODE-NO-CONTROL",
-			"title": "the C1/DEL escape pass is dropped and only JSON.stringify's C0 handling remains — herdr refuses the argv after the pane already exists",
+			"title": "the C1/DEL escape pass is dropped and only JSON.stringify's C0 handling remains \u2014 herdr refuses the argv after the pane already exists",
 			"subject": "pi-extensions/lib/herdr-fresh-call.ts",
 			"find": ["\tconst literal = escapeRemainingControlChars(JSON.stringify(task));"],
 			"replace": ["\tconst literal = JSON.stringify(task);"],
@@ -72,7 +72,7 @@
 		},
 		{
 			"claim": "HFC-FRAMING-IS-PROSE",
-			"title": "the framing is quoted back into a JSON literal behind a decode instruction — the exact shape a safety-tuned sibling refused, restored",
+			"title": "the framing is quoted back into a JSON literal behind a decode instruction \u2014 the exact shape a safety-tuned sibling refused, restored",
 			"subject": "pi-extensions/lib/herdr-fresh-call.ts",
 			"find": ["\tconst folded = framing.filter((line) => line.length > 0).join(\" \");"],
 			"replace": [
@@ -170,7 +170,7 @@
 		},
 		{
 			"claim": "HFC-AGENT-NAME-OPAQUE",
-			"title": "the raw nonce becomes the herdr agent name, which herdr's own name rule refuses — and a correlation tag becomes a visible label",
+			"title": "the raw nonce becomes the herdr agent name, which herdr's own name rule refuses \u2014 and a correlation tag becomes a visible label",
 			"subject": "pi-extensions/lib/herdr-fresh-call.ts",
 			"find": ["\treturn `entwurf-${createHash(\"sha256\").update(nonce).digest(\"hex\").slice(0, 20)}`;"],
 			"replace": ["\treturn nonce;"],
@@ -227,7 +227,7 @@
 		},
 		{
 			"claim": "HFC-CLOSE-WITHIN-GENERATION",
-			"title": "the close drops its terminal-id proof and trusts a bare pane id — after a herdr restart that id belongs to someone else's view",
+			"title": "the close drops its terminal-id proof and trusts a bare pane id \u2014 after a herdr restart that id belongs to someone else's view",
 			"subject": "pi-extensions/lib/herdr-fresh-call.ts",
 			"find": [
 				"\tif (current.terminalId !== created.terminalId) return { close: false, reason: \"terminal-id-mismatch\" };"
@@ -399,6 +399,19 @@
 			"gate": ["bash", "run.sh", "check-herdr-fresh-call"],
 			"timeoutSeconds": 120,
 			"signature": "[QK:HERDR-RUNNER-OUTPUT-BOUNDED]",
+			"signatureSource": "scripts/check-herdr-fresh-call.ts"
+		},
+		{
+			"claim": "HFC-CWD-HASH-IS-DATA",
+			"title": "the herdr rail absorbs the tmux rails format-token refusal, so an ordinary directory whose name contains a hash is rejected on a rail that has no format expansion to protect against",
+			"subject": "pi-extensions/lib/herdr-fresh-call.ts",
+			"find": ["\tif (!path.isAbsolute(cwd)) return \"cwd-not-absolute\";"],
+			"replace": [
+				"\tif (!path.isAbsolute(cwd)) return \"cwd-not-absolute\";\n\tif (cwd.includes(\"#\")) return \"cwd-not-directory\";"
+			],
+			"gate": ["bash", "run.sh", "check-herdr-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:HFC-CWD-HASH-IS-DATA]",
 			"signatureSource": "scripts/check-herdr-fresh-call.ts"
 		}
 	]
