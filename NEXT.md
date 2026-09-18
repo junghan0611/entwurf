@@ -182,14 +182,28 @@ CHANGELOG `## Unreleased`가 구현 범위 `v0.15.1..19ad90c` **30커밋** 전�
 - **남은 것, 순서대로:**
   1. **GLG 아침 판정** — 날것 PC에서 `pi → claude-code (claude-sonnet-5)` 재시도. LIVE run 2 수용
      영수증 + 콜드 스타트 타임아웃 수리가 그 요청의 근거다.
-  2. **`herdr agent prompt` 2단계 측정** — `agent start`를 프롬프트 없이 띄워 `interactive_ready` 뒤
-     `agent prompt`로 첫 턴을 주면 도구목록 경주가 사라진다. 값싸고 결정적이며 아직 없다.
-  3. **0.23.0** prepare → make → **GLG publish** → `plugins/herdr/runtime-lock.json` `source: npm` 0.23.0 핀
+  2. **0.23.0** prepare → make → **GLG publish** → `plugins/herdr/runtime-lock.json` `source: npm` 0.23.0 핀
      (0.22.0은 `scripts/herdr-*.mjs`가 없어 핀 불가) → 플러그인 `version` 0.2.0.
-- **npm publish 0.22.0은 여전히 GLG 몫**(아래 절). 수용 candidate
-  `/tmp/entwurf-release-candidate-0.22.0.GAQERG/junghanacs-entwurf-0.22.0.tgz`,
-  sha256 `e1e2868a6d7e74cfa2ca008608f8ed4f1cfbef22790f9ed7b304791368fd0ccf`, 12,855,699 bytes.
-  **그 바이트 그대로 발행하고 리팩하지 않는다.**
+- **A. `herdr agent prompt` 2단계 측정 — 닫혔다, 구현 안 함** (`65cefd8`). 모델 턴 없이 벤더 소스에서
+  끝났다: `agent.prompt`는 텍스트를 bracketed paste로 감싸 **자식 pane PTY에 쓰고** 300 ms 뒤 Enter를
+  쓴다(`api/agents.rs:195`·`api_helpers.rs:25-32`·`:13`·`:208-212` @ `7505c08`). 제어문자 검사는
+  argv와 달리 **없고**(빈 문자열 검사뿐), ack되는 것은 "입력이 쓰였다"뿐이다(벤더 help: "before any
+  input is sent", "It does not track turns"). 즉 2단계는 §3이 이미 버린 **키 입력 레일**이고 Hard Rule
+  16을 첫 턴에 어긴다. LIVE 3런은 쓰지 않았다. 측정표는 `docs/herdr-launch-rail.md` §14, §3↔§14 모순도
+  같이 수리했다. 첫 턴 경주의 남은 방향은 프레이밍이 도구 목록보다 먼저 서는 축(omp `--entwurf-bootstrap`).
+- **B. 키 입력 경계 게이트 — 섰다** (`95cfac0`). 외부 관측자(2026-09-17 19:35)가 「지켜지고 있고,
+  지키는 것은 아무것도 없다」고 잰 그 규칙에 `check-typing-call-fence` 신설: `pi-extensions/`·`mcp/`의
+  **tracked 프로덕션 76파일**을 주석만 지우고(문자열은 남기고) 훑어 tmux `send-keys`/`paste-buffer`/
+  `load-buffer`와 herdr PTY 동사(`agent.prompt`·`agent.send_keys`·`pane.send_text`·`pane.input.set`)
+  **0건**을 이름으로 단언한다. 8 assertions, `check:hermetic` 배선, 뮤턴트 1(`TYPEFENCE-PRODUCTION-CLEAN`)
+  → 인벤토리 **704 → 705 / 57 lanes**. 산문 면제가 하중을 진다 — 규칙을 적은 문장이 그 이름을 담으므로.
+- **npm publish 0.22.0 — 완료, integrity 대조 끝났다.** GLG가 2026-09-17 21:2x에 직접 발행했다.
+  `[측정 2026-09-18 oracle]` 레지스트리 `dist-tags`는 `latest`=**0.22.0** / `repair`=0.12.8-repair.1(보존),
+  `dist.integrity` = `sha512-i8V4berF1Nzt/j+/VzEj3oZAcJAWFUt55OJ0Z4SvqadDVyXmjhYwFamj1VhArT4W/7Ym6gAwVmBZI8Q7YSxDGQ==`,
+  `dist.shasum` = `413c3d3f9e2688221852f2af88bf1791cf3fec09`. 보존된 수용 candidate
+  `/tmp/entwurf-release-candidate-0.22.0.GAQERG/junghanacs-entwurf-0.22.0.tgz`(12,855,699 bytes,
+  sha256 `e1e2868a6d7e74cfa2ca008608f8ed4f1cfbef22790f9ed7b304791368fd0ccf`)의 sha512-base64와 sha1이
+  그 둘과 **같다 — 리팩 없음**. 남은 릴리즈 순서는 위 2번(0.23.0)뿐이다.
 - **Do not:** main ff·push(코디네이터 몫) · 0.23.0 prepare/cut · `runtime-lock.json`의 `source` 변경 ·
   실 Codex 턴 · `~/.codex/hooks.json` 손편집 · `.herdr-bak` 삭제 · `HERDR_FRESH_CALL_BACKENDS`에 codex 추가 ·
   statusline `UNKNOWN`(GLG 취향 미결) · #118.
