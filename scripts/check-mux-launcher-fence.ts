@@ -270,7 +270,13 @@ function main(): void {
 			// whether four strings appeared anywhere in the file — which a comment, or dead code,
 			// satisfies as well as a wired smoke:
 			//
-			//   1. the preflight is BOUND (`const x = snapshotClaudeLauncher(`) and comes first;
+			//   1. the preflight is BOUND (`const x = snapshotClaudeLauncher(`) and comes BEFORE the
+			//      smoke's first child. That boundary is the whole point `[sol 재검 2026-09-18]`: an
+			//      ordering of snapshot < verify < cleanup alone is satisfied by moving the entire
+			//      block AFTER the children, which pins the damage as the baseline and makes the
+			//      oracle green on a launcher that has already moved. Each smoke's first child is
+			//      named here by its own marker, and a smoke in the population with no marker is
+			//      RED rather than waved through — a new rail must say where its children begin.
 			//   2. the integrity oracle and the cleanup verdict both run on THAT binding, in that
 			//      order — one snapshot, not three unrelated calls;
 			//   3. a smoke that REMOVES its fixture does both before the removal. The herdr smoke
@@ -304,16 +310,29 @@ function main(): void {
 					holds: (src, file) => /(^|\n)\s*HOME[,:]/.test(envBlockAround(src, file)),
 				},
 			};
-			const consumesFence = (src: string): boolean => {
+			/** Where each smoke's FIRST Claude-capable child begins. Named per smoke, because the
+			 * three rails start children in three different ways and a generic "spawn" would match
+			 * the setup probes (`tmux -V`, `command -v claude`) that run long before any child. */
+			const FIRST_CHILD: Record<string, RegExp> = {
+				"smoke-herdr-fresh-call-live.ts": /herdr\(bin, env, \[\s*"agent",\s*"start"/,
+				"smoke-mux-fresh-call-live.ts": /\n\t*const \w+ = freshCall\(/,
+				"smoke-mux-lifecycle-live.ts": /\bbridge\.call\("entwurf_fresh_call"/,
+			};
+			const consumesFence = (src: string, file: string): boolean => {
 				if (!src.includes('from "./lib/claude-launcher-fence.ts"')) return false;
 				const bound = /const (\w+) = snapshotClaudeLauncher\(/.exec(src);
 				if (bound === null) return false;
+				const marker = FIRST_CHILD[file];
+				if (marker === undefined) return false;
+				const firstChildAt = src.search(marker);
+				if (firstChildAt < 0) return false;
 				const snapshot = bound[1];
 				const preflightAt = src.indexOf(bound[0]);
 				const verifyAt = src.indexOf(`verifyClaudeLauncher(${snapshot})`);
 				const cleanupAt = src.indexOf(`assessLauncherCleanup(${snapshot})`);
 				const removalAt = src.indexOf("rmSync(root");
-				if (preflightAt < 0 || verifyAt < preflightAt || cleanupAt < verifyAt) return false;
+				if (preflightAt < 0 || preflightAt > firstChildAt) return false;
+				if (verifyAt < firstChildAt || cleanupAt < verifyAt) return false;
 				return removalAt < 0 || (verifyAt < removalAt && cleanupAt < removalAt);
 			};
 			const exposed = fs
@@ -322,7 +341,7 @@ function main(): void {
 				.filter((f) => dataRootAssignment(f).test(read(path.join("scripts", f))));
 			const unguarded = exposed.filter((f) => {
 				const src = read(path.join("scripts", f));
-				if (consumesFence(src)) return false;
+				if (consumesFence(src, f)) return false;
 				const exemption = EXEMPT[f];
 				return !(exemption && exemption.holds(src, f));
 			});
@@ -334,22 +353,37 @@ function main(): void {
 					),
 			);
 			ok(
-				`[QK:LAUNCHFENCE-EXPOSED-SMOKE-WIRED] every LIVE smoke that hands a child a fixture XDG_DATA_HOME beside the operator's real HOME consumes this fence AS A LIFECYCLE — one bound preflight, then its integrity oracle, then the cleanup verdict on that same snapshot, and all of it before any fixture removal — or carries an exemption proved against the very env block that assigns the data root; unguarded: ${unguarded.join(", ") || "none"}`,
+				`[QK:LAUNCHFENCE-EXPOSED-SMOKE-WIRED] every LIVE smoke that hands a child a fixture XDG_DATA_HOME beside the operator's real HOME consumes this fence AS A LIFECYCLE — one bound preflight BEFORE its first child, then its integrity oracle and cleanup verdict on that same snapshot after the children, and all of it before any fixture removal — or carries an exemption proved against the very env block that assigns the data root; unguarded: ${unguarded.join(", ") || "none"}`,
 				unguarded.length === 0,
 			);
 			ok(
 				"the exemption discriminates rather than excuses: the exempt smoke relocates HOME in the SAME env block that fences its data root, and moving that line out of the block would put it back in the constituency",
 				Object.entries(EXEMPT).every(([f, e]) => e.holds(read(path.join("scripts", f)), f)),
 			);
-			ok(
-				"the lifecycle read is not satisfied by the STRINGS alone — a source carrying all four names with no ordering is refused",
-				!consumesFence(
-					[
-						'import { assessLauncherCleanup, snapshotClaudeLauncher, verifyClaudeLauncher } from "./lib/claude-launcher-fence.ts";',
-						"// snapshotClaudeLauncher( verifyClaudeLauncher( assessLauncherCleanup(",
-					].join("\n"),
-				),
-			);
+			{
+				const IMPORT =
+					'import { assessLauncherCleanup, snapshotClaudeLauncher, verifyClaudeLauncher } from "./lib/claude-launcher-fence.ts";';
+				const CHILD = '\tconst launch = await bridge.call("entwurf_fresh_call", {});';
+				const PIN = "\tconst snap = snapshotClaudeLauncher({ env: process.env, fixtureRoot: root });";
+				const ORACLE = "\tverifyClaudeLauncher(snap);\n\tassessLauncherCleanup(snap);";
+				const file = "smoke-mux-lifecycle-live.ts";
+				ok(
+					"the lifecycle read is not satisfied by the STRINGS alone — a source carrying all four names with no ordering is refused",
+					!consumesFence(
+						[IMPORT, "// snapshotClaudeLauncher( verifyClaudeLauncher( assessLauncherCleanup("].join("\n"),
+						file,
+					),
+				);
+				ok(
+					"snapshot < verify < cleanup in the RIGHT order is still refused when the whole block sits after the first child — that shape pins the damage as the baseline, which is the exact way an intact-looking oracle would report a launcher that had already moved",
+					!consumesFence([IMPORT, CHILD, PIN, ORACLE].join("\n"), file) &&
+						consumesFence([IMPORT, PIN, CHILD, ORACLE].join("\n"), file),
+				);
+				ok(
+					"a smoke in the population whose first child this gate cannot locate is refused rather than waved through — a new rail must say where its children begin",
+					!consumesFence([IMPORT, PIN, CHILD, ORACLE].join("\n"), "smoke-brand-new-live.ts"),
+				);
+			}
 		}
 
 		ok(
