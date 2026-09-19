@@ -1,0 +1,113 @@
+{
+	"schemaVersion": 1,
+	"lane": "pi-launch",
+	"mutants": [
+		{
+			"claim": "PILAUNCH-FLAG-SSOT",
+			"title": "the launcher spells the control flag itself, so a typo in run.sh silently produces a pi that is not a citizen and reports nothing",
+			"subject": "run.sh",
+			"find": ["    exec \"$entwurf_pi_bin\" --entwurf-control \"$@\""],
+			"replace": ["    exec \"$entwurf_pi_bin\" --entwurf-controll \"$@\""],
+			"gate": ["bash", "run.sh", "check-pi-launch"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PILAUNCH-FLAG-SSOT]",
+			"signatureSource": "scripts/check-pi-launch.ts"
+		},
+		{
+			"claim": "PILAUNCH-VERB-DROPPED",
+			"title": "without the shift the dispatcher verb stays in the forwarded argv and `pi` arrives at the vendor as a prompt argument",
+			"subject": "run.sh",
+			"find": ["    shift || true\n    if [ -n \"${ENTWURF_PI_LAUNCH_ACTIVE:-}\" ]; then"],
+			"replace": ["    if [ -n \"${ENTWURF_PI_LAUNCH_ACTIVE:-}\" ]; then"],
+			"gate": ["bash", "run.sh", "check-pi-launch"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PILAUNCH-VERB-DROPPED]",
+			"signatureSource": "scripts/check-pi-launch.ts"
+		},
+		{
+			"claim": "PILAUNCH-FLAG-FIRST",
+			"title": "injecting the flag AFTER the operator argv puts it behind a positional prompt, where pi reads it as data instead of standing up a control socket",
+			"subject": "run.sh",
+			"find": ["    exec \"$entwurf_pi_bin\" --entwurf-control \"$@\""],
+			"replace": ["    exec \"$entwurf_pi_bin\" \"$@\" --entwurf-control"],
+			"gate": ["bash", "run.sh", "check-pi-launch"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PILAUNCH-FLAG-FIRST]",
+			"signatureSource": "scripts/check-pi-launch.ts"
+		},
+		{
+			"claim": "PILAUNCH-NOTHING-ELSE-INJECTED",
+			"title": "a launcher that also injects operator taste stops being a spelling and starts deciding the session (Rule 9)",
+			"subject": "run.sh",
+			"find": ["    exec \"$entwurf_pi_bin\" --entwurf-control \"$@\""],
+			"replace": ["    exec \"$entwurf_pi_bin\" --entwurf-control --emacs-agent-socket \"$@\""],
+			"gate": ["bash", "run.sh", "check-pi-launch"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PILAUNCH-NOTHING-ELSE-INJECTED]",
+			"signatureSource": "scripts/check-pi-launch.ts"
+		},
+		{
+			"claim": "PILAUNCH-ARGV-BYTES",
+			"title": "an unquoted forward word-splits the operator argv and drops empty elements, so a quoted prompt silently becomes several arguments",
+			"subject": "run.sh",
+			"find": ["    exec \"$entwurf_pi_bin\" --entwurf-control \"$@\""],
+			"replace": ["    exec \"$entwurf_pi_bin\" --entwurf-control $@"],
+			"gate": ["bash", "run.sh", "check-pi-launch"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PILAUNCH-ARGV-BYTES]",
+			"signatureSource": "scripts/check-pi-launch.ts"
+		},
+		{
+			"claim": "PILAUNCH-EXEC-KEEPS-PID",
+			"title": "forking instead of exec leaves run.sh as a parent that supervises nothing and owns neither the terminal nor the exit",
+			"subject": "run.sh",
+			"find": ["    exec \"$entwurf_pi_bin\" --entwurf-control \"$@\""],
+			"replace": ["    \"$entwurf_pi_bin\" --entwurf-control \"$@\""],
+			"gate": ["bash", "run.sh", "check-pi-launch"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PILAUNCH-EXEC-KEEPS-PID]",
+			"signatureSource": "scripts/check-pi-launch.ts"
+		},
+		{
+			"claim": "PILAUNCH-VENDOR-ABSENT",
+			"title": "an absent vendor that exits 0 is the false success this repo refuses: nothing launched and the caller was told it worked",
+			"subject": "run.sh",
+			"find": [
+				"      echo \"         'entwurf pi' launches the pi coding agent; it does not install one.\" >&2\n      exit 1"
+			],
+			"replace": [
+				"      echo \"         'entwurf pi' launches the pi coding agent; it does not install one.\" >&2\n      exit 0"
+			],
+			"gate": ["bash", "run.sh", "check-pi-launch"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PILAUNCH-VENDOR-ABSENT]",
+			"signatureSource": "scripts/check-pi-launch.ts"
+		},
+		{
+			"claim": "PILAUNCH-SENTINEL-EXPORTED",
+			"title": "a sentinel that is set but not exported is invisible to the re-entered child, so the recursion fence never fires and the terminal hangs",
+			"subject": "run.sh",
+			"find": ["    export ENTWURF_PI_LAUNCH_ACTIVE=1"],
+			"replace": ["    ENTWURF_PI_LAUNCH_ACTIVE=1"],
+			"gate": ["bash", "run.sh", "check-pi-launch"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PILAUNCH-SENTINEL-EXPORTED]",
+			"signatureSource": "scripts/check-pi-launch.ts"
+		},
+		{
+			"claim": "PILAUNCH-RECURSION-FENCE",
+			"title": "with the fence removed a PATH `pi` that shells back here spins forever, and the symptom is a hung terminal rather than an error",
+			"subject": "run.sh",
+			"find": [
+				"    if [ -n \"${ENTWURF_PI_LAUNCH_ACTIVE:-}\" ]; then\n      echo \"entwurf: recursive managed launch detected (ENTWURF_PI_LAUNCH_ACTIVE is already set).\" >&2"
+			],
+			"replace": [
+				"    if false; then\n      echo \"entwurf: recursive managed launch detected (ENTWURF_PI_LAUNCH_ACTIVE is already set).\" >&2"
+			],
+			"gate": ["bash", "run.sh", "check-pi-launch"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PILAUNCH-RECURSION-FENCE]",
+			"signatureSource": "scripts/check-pi-launch.ts"
+		}
+	]
+}

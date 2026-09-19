@@ -1095,6 +1095,14 @@ check_copilot_launch() {
   run_ts scripts/check-copilot-launch.ts
 }
 
+check_pi_launch() {
+  # #118 홉 2. Same oracle as check-copilot-launch and for the same reason: the subject is
+  # a process replacement, so a fake vendor named `pi` on a sandbox PATH reports the argv,
+  # env and pid it was handed — never a reading of the launcher's source. Also carries the
+  # --entwurf-control literal cross-check, because the shell cannot import the TS constant.
+  run_ts scripts/check-pi-launch.ts
+}
+
 check_codex_app_server_launch() {
   # #95: the managed app-server SPELLING, proved against a fake vendor. There is no second
   # spelling of the address to compare any more — the launcher asks `codex-socket-path` — so
@@ -6476,6 +6484,9 @@ case "$cmd" in
   check-copilot-launch)
     check_copilot_launch
     ;;
+  check-pi-launch)
+    check_pi_launch
+    ;;
   check-copilot-receive-arm)
     check_copilot_receive_arm
     ;;
@@ -7196,6 +7207,54 @@ case "$cmd" in
     # "copilot" would arrive as a prompt argument.
     shift || true
     exec bash "$REPO_DIR/scripts/copilot-launch.sh" "$@"
+    ;;
+  pi)
+    # #118 홉 2: the managed pi launch. Same shape and same reasons as `copilot` above —
+    # `exec`, no subshell and no cd, because this operates on the operator's session; and
+    # `shift`, because this branch forwards straight into the VENDOR argv where a stray
+    # "pi" would arrive as a prompt argument.
+    #
+    # NO separate launcher script, and no precondition check, because the precondition is
+    # ZERO and that was measured rather than assumed: on a host where entwurf's pi extension
+    # is not registered, `pi --entwurf-control` already fails as
+    # `Error: Unknown option: --entwurf-control` with exit 1. A pre-check here would only
+    # duplicate a refusal pi owns and would go stale the day pi renames it.
+    #
+    # ONE recursion fence, not copilot's two, and the difference is measured. The sentinel
+    # closes the only real loop: a PATH executable named `pi` that shells back to
+    # `entwurf pi` re-enters this branch, and finds the flag already exported. Copilot's
+    # second fence — resolving the binary and refusing our own entrypoints — closes a case
+    # that is not a loop here: a PATH `pi` symlinked to run.sh would be exec'd as
+    # `run.sh --entwurf-control …`, which is an unknown verb this dispatcher already
+    # refuses. `type -P` is what keeps the operator's own shell wrappers out of it
+    # entirely: it returns a PATH file only, never a function or alias, so a
+    # `pi() { entwurf pi "$@"; }` in a profile can never be re-entered through it.
+    #
+    # The flag is added, never deduplicated: `pit`/`pius`-style wrappers already pass
+    # `--entwurf-control`, and passing it twice was measured to be byte-identical to
+    # passing it once. An argv scan would be code earning nothing.
+    #
+    # Nothing else is injected. `--emacs-agent-socket` and friends are operator taste, and
+    # a launcher that decides them stops being a spelling (Hard Rule 9).
+    shift || true
+    if [ -n "${ENTWURF_PI_LAUNCH_ACTIVE:-}" ]; then
+      echo "entwurf: recursive managed launch detected (ENTWURF_PI_LAUNCH_ACTIVE is already set)." >&2
+      echo "         Something on PATH named 'pi' resolves back to this launcher. Fix PATH so 'pi'" >&2
+      echo "         is the pi coding agent, or run the vendor binary by its full path." >&2
+      exit 1
+    fi
+    entwurf_pi_bin="$(type -P pi 2>/dev/null || true)"
+    if [ -z "$entwurf_pi_bin" ]; then
+      echo "entwurf: no 'pi' executable found on PATH." >&2
+      echo "         'entwurf pi' launches the pi coding agent; it does not install one." >&2
+      exit 1
+    fi
+    if [ ! -f "$entwurf_pi_bin" ] || [ ! -x "$entwurf_pi_bin" ]; then
+      echo "entwurf: '$entwurf_pi_bin' is not an executable regular file — refusing to exec it." >&2
+      exit 1
+    fi
+    export ENTWURF_PI_LAUNCH_ACTIVE=1
+    exec "$entwurf_pi_bin" --entwurf-control "$@"
     ;;
   install-copilot-receive)
     # #82 RAIL 5: install the RECEIVER extension into the Copilot USER extensions dir.

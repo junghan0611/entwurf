@@ -839,6 +839,7 @@ let manifestCount: number;
 		"control-socket-disconnect": 4,
 		"copilot-birth": 19,
 		"copilot-launch": 14,
+		"pi-launch": 9,
 		"copilot-receive": 20,
 		"entwurf-peers": 1,
 		"fresh-call-dispatch": 12,
