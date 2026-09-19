@@ -18,7 +18,7 @@
  *
  * This is a THIN coverage gate, NOT a re-implementation of the decider. It drives
  * the REAL `decideDispatch` over minimal injected fakes (the same shape
- * check-entwurf-v2-decider uses) and asserts, per row, the (transport, lock class,
+ * entwurf-v2-decider.test.ts uses) and asserts, per row, the (transport, lock class,
  * reject reason) the decider actually produces. A final COVERAGE pass then FAILS if
  * any transport, lock class, or pre-probe reject is missing from the table — so a
  * future decider change that silently drops a reachability cell cannot pass.
@@ -142,7 +142,7 @@ function mkDeps(opts: ScenarioOpts): Tracked {
 		},
 		// The matrix rows are pi / claude-code targets — the native-push branch (antigravity)
 		// is NOT exercised here (it is a SEPARATE table, covered by check-entwurf-v2-contract's
-		// NATIVE_PUSH round-trip + check-entwurf-v2-decider's branch scenarios). A tripwire so a
+		// NATIVE_PUSH round-trip + entwurf-v2-decider.test.ts's branch scenarios). A tripwire so a
 		// future antigravity row that forgets to wire this fails loud instead of misrouting.
 		nativePushProbe: () => {
 			throw new Error("matrix: native-push branch must not be reached (no antigravity row wired)");

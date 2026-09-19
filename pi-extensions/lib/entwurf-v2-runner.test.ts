@@ -29,7 +29,7 @@
  *   inline in cases 2/3/4.)
  *
  * 5d-2a adds the `runEntwurfV2` COMPOSITION gate (cases 10–14): `decide → execute` joined
- * over a FAKE `decide` (not the real decider — that is check-entwurf-v2-decider's job):
+ * over a FAKE `decide` (not the real decider — that is entwurf-v2-decider.test.ts's job):
  *  10. decide called EXACTLY once, with the SAME input.
  *  11. reject decision  → no executor hand called, the rejected result returned.
  *  12. execute decision → the matching executor hand ran (control/mailbox).
@@ -325,7 +325,7 @@ describe("executeDispatch — what a throwing hand becomes", () => {
 });
 
 // 5d-2a. The composition is joined over a FAKE decide — exercising the real decider is
-// check-entwurf-v2-decider's job, and doing it twice would prove it in neither place.
+// entwurf-v2-decider.test.ts's job, and doing it twice would prove it in neither place.
 describe("runEntwurfV2 — decide, then execute", () => {
 	it("decide is called exactly once, with the SAME input object", async () => {
 		const { deps, decideCalls } = makeRunDeps({ decision: { kind: "reject", receipt: REJECT_RECEIPT } }, {});

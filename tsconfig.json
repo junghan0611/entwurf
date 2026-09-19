@@ -127,7 +127,7 @@
 		// transport IO onto the release reducer and carries explicit `.ts`-extension
 		// imports that pull the excluded decider/lock/release into the program, same
 		// fence. Typechecked by scripts/tsconfig.json via its gate
-		// (check-entwurf-v2-send.ts).
+		// (pi-extensions/lib/entwurf-v2-send.test.ts).
 		"pi-extensions/lib/entwurf-v2-send.ts",
 		// entwurf-v2-send-fallback.ts is the 5c-2b same-lock re-resolve resolver — a
 		// lib→lib VALUE importer (resolveDispatch / resolveMailboxDeliverability /
@@ -151,7 +151,7 @@
 		// the native-push rail) — a lib→lib VALUE importer (resolveNativePushAdapter from
 		// native-push/adapter.ts) with explicit `.ts`-extension imports that pull the excluded
 		// decider into the program, same fence. It owns the 1-shot re-probe→re-send retry.
-		// Typechecked by scripts/tsconfig.json via its gate (check-entwurf-v2-native-push.ts).
+		// Typechecked by scripts/tsconfig.json via its gate (pi-extensions/lib/entwurf-v2-native-push.test.ts).
 		"pi-extensions/lib/entwurf-v2-native-push.ts",
 		// The shared native-push adapter registry and Codex fresh preflight value-import the
 		// dependency-free Codex UDS client by explicit `.ts` extension so Node strip-types can
@@ -243,7 +243,7 @@
 		// fence — a lib→lib VALUE importer (lock / resume-launch-identity / socket-discovery /
 		// socket-probe / resume-args) with explicit `.ts` extensions, same fence. It never imports
 		// mux: the launcher is an injected seam the SURFACES supply (docs/mux-launch-rail.md §11).
-		// Typechecked by scripts/tsconfig.json via its gate (check-entwurf-v2-visible-resume.ts).
+		// Typechecked by scripts/tsconfig.json via its gate (pi-extensions/lib/entwurf-v2-visible-resume.test.ts).
 		"pi-extensions/lib/entwurf-v2-visible-resume.ts"
 	]
 }

@@ -44,6 +44,45 @@ When you write a new entry, mark its rung. "L1 only" is honest; "L2 reached" is 
 
 Verification here is not a benchmark. In production we exchange short turns and stop immediately to isolate a cause before resuming when something looks off. This document records **verification intent (what we look at) and pass criteria (how to judge)**; the execution shape is the agent's choice as long as the criteria are met.
 
+### Where a verification lives — two locations, and what decides
+
+A new contract's test goes BESIDE the behaviour it certifies: `pi-extensions/**/*.test.ts` or
+`plugins/herdr/**/*.test.mjs`. Nothing names those files. `check-tests-beside-behavior` expands
+the two globs every run and hands the resulting paths to `run_vitest`, so landing a test edits no
+list — and a failure is attributed from the JSON test TITLE (`run.sh:104-113`), never from the
+code frame, which quotes an adjacent passing test's own title.
+
+`scripts/check-*` is not a legacy pile; it is the home of what a vitest lane cannot hold. What
+stays there, and why: LIVE lanes that need real accounts, models, tmux or a Docker daemon;
+install and pack gates that consume a tarball; gates that spawn a subprocess or stand a server up;
+gates that read product source as text; and the mutant EXECUTION COORDINATES described below. A
+new hand-built gate needs a reason one of those five applies.
+
+**Four rules bind a migrated gate that carries mutants**, and each of them was measured rather
+than assumed (#119 V3 slice 2):
+
+1. **Every QK claim is its own `it` title.** Attribution reads the failed test title, so a QK
+   that lives only in an assertion message leaves its mutant unattributable.
+2. **The token appears exactly once in the file.** Putting it in the title AND the assertion
+   label is refused by the manifest set-integrity contract — the title keeps the token, the
+   assertion keeps the sentence.
+3. **The `run.sh` case survives as a mutant execution coordinate, and keeps its `check:contracts`
+   entry.** The case is not a discovery path: the door already finds the test. It exists because
+   the qualification runner re-invokes a gate's argv once per mutant, and a gate argv calling
+   vitest directly would skip the reporter attribution depends on. Its file filter is narrow,
+   because a mutant pointed at the glob shim would re-run every beside-behaviour test once per
+   mutant. It stays in `check:contracts` because `check-release-gate-outcomes` requires a gate a
+   mutant names to run inside `check:full` — reachable only through qualification, its going red
+   on a clean tree would be noticed by nothing but the mutant body.
+4. **Attribution is containment, not exclusivity.** `assert.ok` aborted at the first broken claim,
+   so exactly one label was ever reported; vitest runs every test, so one mutation surfaces
+   several failed titles (measured: 1–15). A kill is attributed when the claim's token is AMONG
+   them.
+
+Migration moves lines BETWEEN the two axes `inventory-verification-surface.ts` counts, and only a
+drop in the COMBINED number is subtraction. That is why the inventory reads both locations: a gate
+that moved out of `scripts/` and into a file beside its subject would otherwise read as deleted.
+
 ### The canonical floor — two entry points
 
 - **Deterministic floor — two tiers (#70):** `pnpm check` is the everyday CORE — toolchain (lint + typecheck), the vitest lanes, and the pure-unit / behavioral-contract / source-topology gates plus the cheap static coherence checks. It prints its own total wall time; acceptance is ≤60s on the reference host `oracle` (an operator measurement, never a hard wall-clock gate on arbitrary hosts). `pnpm run check:full` is the FULL deterministic floor — the core plus the hermetic-integration and package/install tiers — and is what the frozen-candidate protocol, push CI, release-gate, and `prepublishOnly` run. Exact membership is the named `check:*` group scripts in `package.json` (the executable SSOT — this document records meaning and principles, not the command list); a gate changes tier by semantic-class decision, never by getting faster or slower. The FULL tier carries the qualification HEAD (`check-gate-manifests`, through `check:hermetic`); the everyday core does not, and neither tier carries the separately scheduled mutant-executing body (`check-gate-qualification`).
