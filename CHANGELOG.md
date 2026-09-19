@@ -4,6 +4,8 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+## 0.23.1 - 2026-09-19
+
 ### Changed
 
 - **The plugin runtime lock names `herdr-checkout` again, for the length of the 0.23.1 candidate
