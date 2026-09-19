@@ -161,7 +161,6 @@ Usage:
   ./run.sh check-entwurf-v2-lock       # deterministic gate (0.11 Stage 0 step 5a, 버킷 B F2): per-gid dispatch LOCK primitive — openSync wx atomic acquire, second-acquire=target-locked conflict (holder JSON for human cleanup), nonce-owned release (successor survives late release), stale reclaim same-host+ESRCH-only (EPERM/remote/alive/unknown fail-closed), empty/corrupt=conflict not auto-deleted, F2-P1 malformed gid throws; real temp dir, deps injected
   ./run.sh check-entwurf-v2-decider    # deterministic gate (0.11 Stage 0 step 5b): PURE dispatch decider decideDispatch — frozen 7-step order over injected fakes, lock acquire+release tracked so reject⇒no-plan-no-lock proven; pre-probe rejects observedLiveness=null, send/resume execute keep lock + mailbox no-lock (？7), resume plan no mode/provider/model, invalid gid throws (F2-P1); pure, no IO
   ./run.sh check-entwurf-v2-matrix     # deterministic gate (0.11 Stage 0 step 5d-5 a): REACHABILITY + LOCK SSOT table — drives REAL decideDispatch over fakes, fixes every (target kind → transport → lock class) cell as one table (control-socket/meta-mailbox/native-push + bad-target/conflict/locked/undeliverable/dormant/indeterminate rejects), coverage pass fails on a dropped cell; thin coverage not a decider re-impl; pure, no IO
-  ./run.sh check-entwurf-v2-release    # deterministic gate (0.11 Stage 0 step 5c-1): PURE release-policy reducer (decideReleasePolicy + reduceRelease) — the spawn-observation policy and its four release events went with the transport in the visible-first cut, so the shipped machine is meta-mailbox=never release (no lock) + control-socket=release once on send-final; decideReleasePolicy still enforces the lock-nullness invariant; pure, no IO
   ./run.sh check-entwurf-v2-send       # deterministic gate (0.11 Stage 0 step 5c-2a): control-socket SEND hand (executeControlSocketSend) wiring transport IO onto the 5c-1 reducer — ack→sent, in-band reject→rejected (no fallback), dead→same-lock one-shot re-resolve (control retry / mailbox enqueue), indeterminate→failed+rethrow with NO fallback (no double-delivery); release exactly once, releaseLock throw never masks the send error; IO-via-dep
   ./run.sh check-compaction-send-guard # deterministic gate (#111): control-socket send during Pi compaction — event-armed refuse compacting, quiet unknown non-idle refuse busy (ctx.signal is not isStreaming); no pi.sendMessage, no delivered:true; idle/live-run steer/followUp preserved; pure, no IO
   ./run.sh check-entwurf-v2-send-fallback # deterministic gate (0.11 Stage 0 step 5c-2b): same-lock re-resolve RESOLVER (resolveDeadControlSendFallback) — fire-and-forget re-resolve: alive→control retry, dead→reject (nothing is ever launched), indeterminate→reject, unsupported+deliverable→mailbox plan, undeliverable/bad-target/conflict→reject; resolver never releases, mis-wire fails loud, inspect/probe throws propagate; no IO (fakes)
@@ -1232,17 +1231,6 @@ check_entwurf_v2_matrix() {
   # decider cell cannot pass silently. Thin coverage, NOT a decider re-impl; surface
   # parity stays in check-entwurf-v2-surface. Pure, no IO, no API.
   run_ts scripts/check-entwurf-v2-matrix.ts
-}
-
-check_entwurf_v2_release() {
-  # Deterministic gate for 0.11 Stage 0 step 5c-1: the PURE release-policy reducer
-  # (decideReleasePolicy + reduceRelease) for the 5c transport hand. Proves the
-  # Fable-3 "release-after-observation" timing as a pure state machine BEFORE any
-  # send IO: meta-mailbox=never release (no lock), control-socket=release once
-  # on send-final. The spawn-observation policy and its four release events went with
-  # the transport in the visible-first cut; decideReleasePolicy still enforces the
-  # lock-nullness invariant (？7). Pure, no IO.
-  run_ts scripts/check-entwurf-v2-release.ts
 }
 
 check_entwurf_v2_send() {
@@ -6510,9 +6498,6 @@ case "$cmd" in
     ;;
   check-entwurf-v2-matrix)
     check_entwurf_v2_matrix
-    ;;
-  check-entwurf-v2-release)
-    check_entwurf_v2_release
     ;;
   check-entwurf-v2-send)
     check_entwurf_v2_send
