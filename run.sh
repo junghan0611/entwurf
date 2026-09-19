@@ -160,7 +160,6 @@ Usage:
   ./run.sh check-entwurf-v2-contract   # FROZEN entwurf_v2 contract — control-socket liveness domain is currently pi; self-fetch/native-push citizens are out of that domain, not globally unsupported; pure, no IO
   ./run.sh check-entwurf-v2-send       # deterministic gate (0.11 Stage 0 step 5c-2a): control-socket SEND hand (executeControlSocketSend) wiring transport IO onto the 5c-1 reducer — ack→sent, in-band reject→rejected (no fallback), dead→same-lock one-shot re-resolve (control retry / mailbox enqueue), indeterminate→failed+rethrow with NO fallback (no double-delivery); release exactly once, releaseLock throw never masks the send error; IO-via-dep
   ./run.sh check-compaction-send-guard # deterministic gate (#111): control-socket send during Pi compaction — event-armed refuse compacting, quiet unknown non-idle refuse busy (ctx.signal is not isStreaming); no pi.sendMessage, no delivered:true; idle/live-run steer/followUp preserved; pure, no IO
-  ./run.sh check-entwurf-resume-args   # deterministic gate: resume-argv SSOT (buildResumePiArgs) for the S1 VISIBLE resume. The headless shape was measured wrong for a window before the consumer was written (`-p` is pi's own non-interactive mode), so the one shipped posture is `--entwurf-control` FIRST + ext args exactly once + `--session <abs file>` + optional `--provider` + `--model <m>` — and the gate pins the ABSENCES as hard as the presences: no --mode, no -p, no positional prompt (a resume runs no turn), no --no-extensions, never --session-id (which MINTS a session instead of resuming one)
   ./run.sh check-mux-resume-call       # deterministic gate: S1 resume PLACEMENT composition (mux-resume-call.ts). No fake tmux. cwd rules are MEASURED tmux 3.6a behaviours, each a way a resume looks successful while being wrong: a nonexistent `-c` exits 0 and lands the child in $HOME (so it is refused HERE), `-c` is FORMAT-EXPANDED so `#{…}` silently rewrites the path and `#(…)` was observed running a command (so `#` is refused), and whitespace measured SAFE (so no escaping layer is owed). Also pins `-c` reaching tmux, runtime after `--`, carrier-free argv, zero identity in this module, and the surface seam that keeps the v2 composition from importing mux
   ./run.sh check-mux-parent-artifact  # deterministic gate for the tracked scrubbed parent-transcript fixture — a version-pinned sample of the PARENT-SIDE shape (fresh_call toolResult + the later callback custom_message) so downstream never opens a private transcript. Pins event order, the toolCallId join on the RESULT (pi writes no separate toolCall row), the launch nonce reappearing verbatim in the callback body, the <sender_info> envelope field names, and the absence of operator paths / real garden ids / real uuids. NOT placement evidence
   ./run.sh check-mux-launcher-fence   # deterministic gate for the shared operator-launcher fence (issue #67): scripts/lib/claude-launcher-fence.ts + its wiring into BOTH mux LIVE smokes. Replants the observed install-destruction shape (real HOME + fixture XDG_DATA_HOME → self-update retargets the real `claude` launcher into the fixture tree, teardown deletes it) wholly inside disposable mkdtemp roots — the real launcher is never inspected. Pins fail-closed preflight, retarget/content-change detection before cleanup, removal BLOCKED on fixture reference / unproven safety / surviving tracked panes, exact operator-parity XDG restore (absent = DELETED, not canonical defaults), the lifecycle cell-branch topology, and one shared helper consumed by both smokes
@@ -1272,15 +1271,17 @@ check_compaction_send_guard() {
 }
 
 check_entwurf_resume_args() {
-  # Deterministic gate for the resume-argv SSOT (buildResumePiArgs). S1 replaced the headless
-  # shape with the VISIBLE one, measured against the runtime before the consumer was written:
-  # `-p` is pi's own non-interactive mode, so the old `--mode json -p … <prompt>` prefix would
-  # put a JSON stream in the operator's window instead of a session they can use. Pins the one
-  # shipped posture — `--entwurf-control` FIRST (the resumed session stands its socket up), no
-  # --mode/-p/positional prompt (a resume runs no turn), explicitExtensionArgs exactly once
-  # between the control flag and --session (#29 provider-resolution footgun), --session <abs
-  # file> never --session-id (which MINTS), and a null provider emitting no --provider.
-  run_ts scripts/check-entwurf-resume-args.ts
+  # NOT a discovery path — the test is found by check-tests-beside-behavior like every other
+  # beside-behaviour lane. This case exists as the MUTANT EXECUTION COORDINATE: the six
+  # resume-args mutants name it as their gate argv, the qualification runner re-invokes that
+  # argv once per mutant, and attribution is read from the JSON test titles `run_vitest` emits
+  # under ENTWURF_MUTATION_VITEST_REPORT (run.sh:104-113). A gate argv that called vitest
+  # directly would skip that reporter and every kill would come back unattributed.
+  #
+  # The file filter is NARROW on purpose. Pointing a mutant at the glob shim would make the
+  # runner re-run every beside-behaviour test once per mutant.
+  section "resume-argv SSOT (mutant execution coordinate)"
+  run_vitest pi-extensions/lib/entwurf-resume-args.test.ts
 }
 
 check_mux_launcher_fence() {

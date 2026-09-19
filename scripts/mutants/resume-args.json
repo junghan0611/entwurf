@@ -11,7 +11,7 @@
 			"gate": ["bash", "run.sh", "check-entwurf-resume-args"],
 			"timeoutSeconds": 60,
 			"signature": "[QK:RESUMEARGS-NO-HEADLESS]",
-			"signatureSource": "scripts/check-entwurf-resume-args.ts"
+			"signatureSource": "pi-extensions/lib/entwurf-resume-args.test.ts"
 		},
 		{
 			"claim": "RESUMEARGS-CONTROL-FIRST",
@@ -24,7 +24,7 @@
 			"gate": ["bash", "run.sh", "check-entwurf-resume-args"],
 			"timeoutSeconds": 60,
 			"signature": "[QK:RESUMEARGS-CONTROL-FIRST]",
-			"signatureSource": "scripts/check-entwurf-resume-args.ts"
+			"signatureSource": "pi-extensions/lib/entwurf-resume-args.test.ts"
 		},
 		{
 			"claim": "RESUMEARGS-EXT-ONCE-BEFORE-SESSION",
@@ -37,7 +37,7 @@
 			"gate": ["bash", "run.sh", "check-entwurf-resume-args"],
 			"timeoutSeconds": 60,
 			"signature": "[QK:RESUMEARGS-EXT-ONCE-BEFORE-SESSION]",
-			"signatureSource": "scripts/check-entwurf-resume-args.ts"
+			"signatureSource": "pi-extensions/lib/entwurf-resume-args.test.ts"
 		},
 		{
 			"claim": "RESUMEARGS-SESSION-IS-FILE",
@@ -48,7 +48,7 @@
 			"gate": ["bash", "run.sh", "check-entwurf-resume-args"],
 			"timeoutSeconds": 60,
 			"signature": "[QK:RESUMEARGS-SESSION-IS-FILE]",
-			"signatureSource": "scripts/check-entwurf-resume-args.ts"
+			"signatureSource": "pi-extensions/lib/entwurf-resume-args.test.ts"
 		},
 		{
 			"claim": "RESUMEARGS-PROVIDER-OPTIONAL",
@@ -59,7 +59,7 @@
 			"gate": ["bash", "run.sh", "check-entwurf-resume-args"],
 			"timeoutSeconds": 60,
 			"signature": "[QK:RESUMEARGS-PROVIDER-OPTIONAL]",
-			"signatureSource": "scripts/check-entwurf-resume-args.ts"
+			"signatureSource": "pi-extensions/lib/entwurf-resume-args.test.ts"
 		},
 		{
 			"claim": "RESUMEARGS-NO-PROMPT-TAIL",
@@ -70,7 +70,7 @@
 			"gate": ["bash", "run.sh", "check-entwurf-resume-args"],
 			"timeoutSeconds": 60,
 			"signature": "[QK:RESUMEARGS-NO-PROMPT-TAIL]",
-			"signatureSource": "scripts/check-entwurf-resume-args.ts"
+			"signatureSource": "pi-extensions/lib/entwurf-resume-args.test.ts"
 		}
 	]
 }
