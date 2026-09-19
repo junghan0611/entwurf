@@ -84,15 +84,19 @@ if ! command -v docker >/dev/null 2>&1 || ! docker info >/dev/null 2>&1; then
 fi
 
 PI_SPEC="$(node -p "require('$REPO/package.json').devDependencies['@earendil-works/pi-coding-agent']")"
+# Pinned, not floating: a receipt that cannot say WHICH Claude Code it ran is not
+# reproducible. This is the version measured in the container on 2026-09-19. Claude Code
+# is scaffolding here (Rule 17) — the product face starts at `herdr integration install`.
+CLAUDE_SPEC="2.1.278"
 FLOOR_SPEC="$(node -p "require('$REPO/package.json').engines.node")"
 FLOOR_MAJOR="${FLOOR_SPEC#>=}"; FLOOR_MAJOR="${FLOOR_MAJOR%%.*}"
 HERDR_VERSION="$(node -p "require('$REPO/scripts/fixtures/herdr-supply.json').version")"
 BASE_IMAGE="node:${FLOOR_MAJOR}-bookworm"
 # Tagged by everything the image content depends on, so a changed pin rebuilds instead of
 # silently reusing a stale layer cache.
-IMAGE="entwurf-herdr-raw-install:node${FLOOR_MAJOR}-pi${PI_SPEC}-herdr${HERDR_VERSION}"
+IMAGE="entwurf-herdr-raw-install:node${FLOOR_MAJOR}-pi${PI_SPEC}-herdr${HERDR_VERSION}-claude${CLAUDE_SPEC}"
 
-echo "[smoke-herdr-raw-install-live] ref=$REF base=$BASE_IMAGE pi=$PI_SPEC herdr=$HERDR_VERSION"
+echo "[smoke-herdr-raw-install-live] ref=$REF base=$BASE_IMAGE pi=$PI_SPEC herdr=$HERDR_VERSION claude=$CLAUDE_SPEC"
 
 CTX="$(mktemp -d -t entwurf-herdr-raw.XXXXXX)"
 trap 'rm -rf "$CTX"' EXIT
@@ -109,7 +113,7 @@ FROM ${BASE_IMAGE}
 # unexplained content.
 RUN apt-get update && apt-get install -y --no-install-recommends git curl ca-certificates \\
  && rm -rf /var/lib/apt/lists/*
-RUN npm install -g @earendil-works/pi-coding-agent@${PI_SPEC} @anthropic-ai/claude-code
+RUN npm install -g @earendil-works/pi-coding-agent@${PI_SPEC} @anthropic-ai/claude-code@${CLAUDE_SPEC}
 COPY scripts /scaffold/scripts
 RUN d="\$(bash /scaffold/scripts/install-herdr-ci.sh | tail -1)" \\
  && install -m 0755 "\$d/herdr" /usr/local/bin/herdr \\
@@ -124,6 +128,7 @@ docker build -q -t "$IMAGE" "$CTX" >/dev/null || {
 IMAGE_ID="$(docker image inspect --format '{{.Id}}' "$IMAGE")"
 BASE_DIGEST="$(docker image inspect --format '{{if .RepoDigests}}{{index .RepoDigests 0}}{{else}}<none>{{end}}' "$BASE_IMAGE" 2>/dev/null || echo '<none>')"
 echo "[smoke-herdr-raw-install-live] image id=$IMAGE_ID base=$BASE_IMAGE repoDigest=$BASE_DIGEST"
+echo "[smoke-herdr-raw-install-live] scaffolded: pi@$PI_SPEC herdr@$HERDR_VERSION claude-code@$CLAUDE_SPEC"
 
 set +e
 docker run --rm -i \
@@ -285,7 +290,7 @@ fi
 
 # ── 4. add Claude, reinstall, and watch the ledger widen ─────────────────────
 echo; echo "[4] herdr integration install claude, then reinstall (refresh)"
-herdr integration install claude >/dev/null 2>&1; rc=$?
+herdr integration install claude; rc=$?
 [ "$rc" -eq 0 ] && ok "integration install claude exit 0" || bad "integration install claude exit $rc"
 herdr plugin install "$REMOTE_SPEC" --ref "$REQUESTED_REF" --yes 2>&1 | sed 's/^/    /'
 rc="${PIPESTATUS[0]}"

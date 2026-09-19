@@ -31,7 +31,7 @@
  */
 
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import {
 	chmodSync,
 	existsSync,
@@ -87,6 +87,20 @@ exit "\${FAKE_PI_EXIT:-0}"
 
 	// A PATH with no `pi` anywhere on it — built by dropping every real entry that holds
 	// one, rather than by emptying PATH (the launcher still needs bash and friends).
+	// The sandbox is TOTAL, the same way check-copilot-launch's is. The launcher writes
+	// nothing itself, but it EXECS a vendor, and a fixture that leaves the operator's HOME
+	// and XDG roots reachable is one careless vendor away from touching them. Naming every
+	// root explicitly is also what #119 asks of each test rather than of each gate.
+	const sandboxEnv = {
+		HOME: path.join(root, "home"),
+		XDG_DATA_HOME: path.join(root, "xdg", "data"),
+		XDG_CONFIG_HOME: path.join(root, "xdg", "config"),
+		XDG_STATE_HOME: path.join(root, "xdg", "state"),
+		XDG_CACHE_HOME: path.join(root, "xdg", "cache"),
+		PI_CODING_AGENT_DIR: path.join(root, "pi-agent"),
+	};
+	for (const d of Object.values(sandboxEnv)) mkdirSync(d, { recursive: true });
+
 	const pathWithoutVendor = (process.env.PATH ?? "")
 		.split(":")
 		.filter((d) => d !== "" && !existsSync(path.join(d, "pi")))
@@ -105,6 +119,7 @@ exit "\${FAKE_PI_EXIT:-0}"
 			encoding: "utf8",
 			env: {
 				...process.env,
+				...sandboxEnv,
 				PATH: withVendor ? `${bin}:${pathWithoutVendor}` : pathWithoutVendor,
 				ENTWURF_PI_LAUNCH_ACTIVE: undefined as unknown as string,
 				FAKE_PI_EXIT: undefined as unknown as string,
@@ -147,22 +162,63 @@ exit "\${FAKE_PI_EXIT:-0}"
 			new RegExp(`(^|\\s)${FLAG.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(\\s|$)`, "m").test(launcher),
 			`FLAG=${FLAG}\n--- launcher branch, comments dropped ---\n${launcher}`,
 		);
-		// The other sites that COMPOSE argv with this flag. Prose and diagnostics are not
-		// listed: they cannot break a launch, and sweeping them would make this a spell
-		// checker. A new argv-composing site that spells the flag differently is caught by
-		// its own gate; what this cell owns is that these agree with the constant TODAY.
-		const argvSites = [
-			"pi-extensions/lib/entwurf-resume-args.ts",
-			"pi-extensions/lib/fresh-call-composition.ts",
-			"scripts/smoke-acp-v2-send-live.ts",
-			"scripts/smoke-acp-session-reuse-live.ts",
-			"scripts/smoke-resident-garden-guard.sh",
-		];
-		const disagreeing = argvSites.filter((rel) => !readFileSync(path.join(REPO, rel), "utf8").includes(FLAG));
+		// EXHAUSTIVE, not a list. The first cut named five files and claimed "every
+		// argv-composing site"; cross-review found eight more that the list did not know
+		// about. They all happened to be spelled correctly, so there was no false success —
+		// but a drift OUTSIDE the list would have passed silently, which is the same gate
+		// rot in a slower form. So the sweep walks every tracked source file and requires
+		// that every `--entwurf-…` token it finds IS this flag. A typo, a rename, or a
+		// second spelling anywhere becomes a named red, and a new call site needs no edit
+		// here to be covered.
+		//
+		// Prose is excluded and that exclusion is the load-bearing part: comments and
+		// markdown quote the flag constantly, and a checker that read them would be a spell
+		// checker for documentation rather than a guard on what pi actually receives. Only
+		// lines that can compose argv are read.
+		const tracked = execFileSync(
+			"git",
+			["ls-files", "--", "scripts", "pi-extensions", "mcp", "demo", "plugins", "run.sh"],
+			{
+				cwd: REPO,
+				encoding: "utf8",
+			},
+		)
+			.split("\n")
+			.filter((f) => f.length > 0 && /\.(ts|mjs|js|sh)$/.test(f));
+
+		// Narrowed to the DRIFT class, and the first run is why. A pattern of `--entwurf-…`
+		// swept up `--entwurf-bootstrap` (scripts/check-omp-birth-hook.ts), which is a real and
+		// unrelated flag — this cell is not the registry of every entwurf flag. What it owns is
+		// that no VARIANT of the control flag exists: `--entwurf-controll`, `--entwurf-control-x`
+		// and friends. A wholesale rename to a different word is a different change, and the SSOT
+		// cell above catches it by reading the constant.
+		const FLAGLIKE = new RegExp(`${FLAG.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}[A-Za-z0-9-]*`, "g");
+		const wrong: string[] = [];
+		let sites = 0;
+		for (const rel of tracked) {
+			const body = readFileSync(path.join(REPO, rel), "utf8");
+			body.split("\n").forEach((line, i) => {
+				// A whole-line comment in any of the three syntaxes these files use. An inline
+				// trailing comment is NOT stripped: `#` and `//` both appear inside real argv
+				// strings here, and guessing where a comment starts would drop live code.
+				if (/^\s*(\/\/|#|\*|\/\*)/.test(line)) return;
+				for (const m of line.matchAll(FLAGLIKE)) {
+					sites++;
+					if (m[0] !== FLAG) wrong.push(`${rel}:${i + 1}: ${m[0]}`);
+				}
+			});
+		}
 		ok(
-			`[QK:PILAUNCH-FLAG-SITES] every argv-composing site carries the same literal (${argvSites.length} + this launcher)`,
-			disagreeing.length === 0,
-			`sites missing ${FLAG}: ${disagreeing.join(", ")}`,
+			`[QK:PILAUNCH-FLAG-SITES] EVERY --entwurf-… token in tracked code is exactly the constant (${sites} occurrences swept, prose excluded)`,
+			wrong.length === 0,
+			`FLAG=${FLAG}\ndisagreeing:\n${wrong.join("\n")}`,
+		);
+		// A sweep that found nothing would also report zero disagreements, so the count is
+		// asserted too: the launcher alone guarantees at least one.
+		ok(
+			"[QK:PILAUNCH-FLAG-SWEEP-REACHES] the sweep actually reached code that names the flag",
+			sites > 1,
+			`sites=${sites}`,
 		);
 	}
 
@@ -233,6 +289,7 @@ exit "\${FAKE_PI_EXIT:-0}"
 			encoding: "utf8",
 			env: {
 				...process.env,
+				...sandboxEnv,
 				PATH: `${bin}:${pathWithoutVendor}`,
 				ENTWURF_PI_LAUNCH_ACTIVE: undefined as unknown as string,
 			},
@@ -283,6 +340,7 @@ exit "\${FAKE_PI_EXIT:-0}"
 			timeout: 30_000,
 			env: {
 				...process.env,
+				...sandboxEnv,
 				PATH: `${loopBin}:${pathWithoutVendor}`,
 				ENTWURF_PI_LAUNCH_ACTIVE: undefined as unknown as string,
 			},
