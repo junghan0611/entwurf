@@ -163,7 +163,6 @@ Usage:
   ./run.sh check-entwurf-v2-matrix     # deterministic gate (0.11 Stage 0 step 5d-5 a): REACHABILITY + LOCK SSOT table — drives REAL decideDispatch over fakes, fixes every (target kind → transport → lock class) cell as one table (control-socket/meta-mailbox/native-push + bad-target/conflict/locked/undeliverable/dormant/indeterminate rejects), coverage pass fails on a dropped cell; thin coverage not a decider re-impl; pure, no IO
   ./run.sh check-entwurf-v2-send       # deterministic gate (0.11 Stage 0 step 5c-2a): control-socket SEND hand (executeControlSocketSend) wiring transport IO onto the 5c-1 reducer — ack→sent, in-band reject→rejected (no fallback), dead→same-lock one-shot re-resolve (control retry / mailbox enqueue), indeterminate→failed+rethrow with NO fallback (no double-delivery); release exactly once, releaseLock throw never masks the send error; IO-via-dep
   ./run.sh check-compaction-send-guard # deterministic gate (#111): control-socket send during Pi compaction — event-armed refuse compacting, quiet unknown non-idle refuse busy (ctx.signal is not isStreaming); no pi.sendMessage, no delivered:true; idle/live-run steer/followUp preserved; pure, no IO
-  ./run.sh check-entwurf-v2-send-fallback # deterministic gate (0.11 Stage 0 step 5c-2b): same-lock re-resolve RESOLVER (resolveDeadControlSendFallback) — fire-and-forget re-resolve: alive→control retry, dead→reject (nothing is ever launched), indeterminate→reject, unsupported+deliverable→mailbox plan, undeliverable/bad-target/conflict→reject; resolver never releases, mis-wire fails loud, inspect/probe throws propagate; no IO (fakes)
   ./run.sh check-entwurf-v2-runner     # deterministic gate (0.11 Stage 0 step 5d-1): execute-router (executeDispatch) routing an already-decided DispatchDecision to its 5c transport hand → one outcome-rich EntwurfV2RunResult. reject→rejected (no hand) / control/mailbox→matching hand with decision.lock verbatim / N3 rejectReason carried / N1 SendDeliveredReleaseFailedError→execution-failed{finalizedOutcome,releaseFailed,retrySafe:false}; fake hands, no IO
   ./run.sh check-entwurf-v2-mailbox    # deterministic gate (0.11 Stage 0 step 5c-4, LAST 5c transport slice): ENQUEUE-ONLY meta-mailbox SEND body (executeMetaMailboxSend) + production sendViaMailbox adapter — sender→formatMetaMailboxBody with plan.wantsReply threaded (divergence from legacy hard false), sender absent→raw plan.message, enqueue opts EXACTLY {gardenId,body,sessionsDir,mailboxDir}, enqueue throw PROPAGATES (no success:false fold — mailbox has no in-band refuse); adapter NEVER touches lock (release is the hand's job); source guard: no release/routing seam
   ./run.sh check-entwurf-resume-args   # deterministic gate: resume-argv SSOT (buildResumePiArgs) for the S1 VISIBLE resume. The headless shape was measured wrong for a window before the consumer was written (`-p` is pi's own non-interactive mode), so the one shipped posture is `--entwurf-control` FIRST + ext args exactly once + `--session <abs file>` + optional `--provider` + `--model <m>` — and the gate pins the ABSENCES as hard as the presences: no --mode, no -p, no positional prompt (a resume runs no turn), no --no-extensions, never --session-id (which MINTS a session instead of resuming one)
@@ -1243,19 +1242,6 @@ check_entwurf_v2_send() {
   # double-delivery on an alive-but-stalled socket). Release fires exactly once per
   # send-final; a releaseLock throw never masks the send failure (5b). IO-via-dep.
   run_ts scripts/check-entwurf-v2-send.ts
-}
-
-check_entwurf_v2_send_fallback() {
-  # Deterministic gate for 0.11 Stage 0 step 5c-2b: the same-lock re-resolve RESOLVER
-  # (resolveDeadControlSendFallback) the 5c-2a hand calls on a dead connect. Proves the
-  # fire-and-forget re-resolve routing over injected fakes (no filesystem): alive->
-  # control-socket retry (inspected socketPath) / dead(absent)->reject (dormant-fire-
-  # forget-unsupported, and nothing is launched) / indeterminate->reject / unsupported+deliverable
-  # ->meta-mailbox plan (mini-table, no inspect/probe) / unsupported+undeliverable->reject
-  # / bad-target + address-conflict->reject pre-probe. Mis-wire (plan/lock gid) fails loud
-  # before IO; inspect/probe throws PROPAGATE (the hand owns failed+release); the resolver
-  # has NO release seam; every execute plan keeps the held gid.
-  run_ts scripts/check-entwurf-v2-send-fallback.ts
 }
 
 check_entwurf_v2_mailbox() {
@@ -6501,9 +6487,6 @@ case "$cmd" in
     ;;
   check-entwurf-v2-send)
     check_entwurf_v2_send
-    ;;
-  check-entwurf-v2-send-fallback)
-    check_entwurf_v2_send_fallback
     ;;
   check-entwurf-v2-mailbox)
     check_entwurf_v2_mailbox
