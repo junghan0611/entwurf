@@ -28,8 +28,8 @@
 # only external program named, and Entwurf is itself a Node package, so a host that
 # has Entwurf has Node (see README).
 id = "junghan0611.entwurf"
-name = "Entwurf"
-version = "0.2.0"
+name = "Herdr Entwurf"
+version = "0.3.0"
 min_herdr_version = "0.9.0"
 description = "Read-only Entwurf garden-citizen status for the panes in this Herdr session."
 platforms = ["linux"]

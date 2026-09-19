@@ -16,29 +16,83 @@ the other native harnesses (Codex, Copilot, Antigravity, the ACP rail) — the d
 root [README's Install section](../../README.md#install): `npm install -g @junghanacs/entwurf`
 followed by `entwurf setup`. Neither route installs a harness, a subscription or a login.
 
-Developing from a checkout of this repository:
+### From a raw Linux box, in nine steps
+
+Measured end to end in a clean `node:24` container on 2026-09-19 — no host config, cache or
+socket mounted, no git `insteadOf`, the remote spelled exactly as written here. The receipt is
+`LIVE=1 ./run.sh smoke-herdr-raw-install-live`, and it recorded `ref=main` resolving to commit
+`37b81e725cde4d0a548f1c0faab4fcb5c62942b2`, runtime `kind=npm @junghanacs/entwurf@0.23.0`, and
+the activation ledger moving from `["pi"]` to `["pi","claude-code"]`.
+
+```bash
+# 1. pi
+npm install -g @earendil-works/pi-coding-agent
+
+# 2. herdr — see the herdr project for its own install
+herdr --version
+
+# 3. start pi once. Not ceremony: herdr creates ~/.pi/agent/extensions only when
+#    ~/.pi/agent already exists, so an agent that has never run cannot be integrated.
+pi --help
+
+# 4. integrate pi
+herdr integration install pi
+
+# 5. install this plugin. Every install is also the refresh trigger, so this is the
+#    command that makes the integrated harnesses Entwurf citizens.
+herdr plugin install junghan0611/entwurf/plugins/herdr --yes
+
+# 6. pi is now active. Start it as a citizen:
+pi --entwurf-control
+
+# 7. Claude Code, and its own first run — herdr refuses to integrate it unless
+#    ~/.claude is a directory, which `claude mcp list` is enough to create.
+npm install -g @anthropic-ai/claude-code
+claude mcp list
+
+# 8. integrate Claude Code
+herdr integration install claude
+
+# 9. reinstall to refresh. The ledger widens to {pi, claude-code}; an ordinary
+#    `claude` now picks up the entwurf tools through MCP.
+herdr plugin install junghan0611/entwurf/plugins/herdr --yes
+```
+
+Steps 3 and 7 are the ones nobody guesses. Herdr integrates an agent by writing into the
+directory that agent owns, and it will not invent one: pi fails with `pi extension directory
+not found at …/.pi/agent/extensions. install pi first`, and Claude with `claude directory not
+found`. Both commands above are ordinary invocations — no model turn, no login, no account.
+
+`--yes` is required whenever stdin is not a terminal; herdr exits 2 without it, and that exit
+is about the prompt, never about a missing herdr server. (An install with no server running is
+fine: it was measured completing on 0.9.1 through herdr's offline-persist path.)
+
+### What 0.3.0 does not give you
+
+This release improves the install path and nothing else. With the runtime its lock names
+(`@junghanacs/entwurf@0.23.0`) it does **not** ship:
+
+- `entwurf pi`. The one-word launcher exists in the repository but is not in the npm artifact
+  this lock names; it arrives with the next cut. Until then the command is `pi --entwurf-control`,
+  exactly as step 6 spells it.
+- Anything on your `PATH`. The status pane needs `entwurf` on `PATH` or an absolute
+  `ENTWURF_BIN`; this plugin writes to neither.
+- Any harness, subscription or login. Steps 1, 2 and 7 are yours.
+
+### Developing from a checkout
 
 ```bash
 herdr plugin link "$PWD/plugins/herdr"
 herdr plugin list --json
 ```
 
-From anywhere, after the npm release named by the committed lock is available:
-
-```bash
-herdr plugin install junghan0611/entwurf/plugins/herdr
-```
-
-That install — and every reinstall, which is the refresh trigger — runs the one `[[build]]`
-below, so this is also the command that makes Pi and Claude Code Entwurf citizens.
-
-Open the pane:
+### Open the pane
 
 ```bash
 herdr plugin pane open --plugin junghan0611.entwurf --entrypoint status
 ```
 
-Remove it:
+### Remove it
 
 ```bash
 herdr plugin unlink junghan0611.entwurf      # a linked checkout: unregister, keep the files
