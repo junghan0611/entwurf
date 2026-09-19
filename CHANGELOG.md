@@ -4,6 +4,31 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+### Changed
+
+- **The plugin runtime lock names `herdr-checkout` again, for the length of the 0.23.1 candidate
+  window.** This is a state, not a direction: an `npm` lock must name a version that is ALREADY
+  published and coherent with this checkout's `package.json`
+  (`certifyLockCoherence`, asserted on the committed lock by `check-herdr-runtime-bootstrap` 8a,
+  which sits inside `check:hermetic`), and the version bump necessarily lands before the publish.
+  So a cut cannot ride an npm lock naming the version it is about to create. `dd84ac0` is the
+  precedent and the exit: 0.23.0 was tagged on the checkout carrier and pinned to npm afterwards,
+  and 0.23.1 follows the same two steps. While this window is open, `smoke-herdr-raw-install-live`
+  reports the npm acquisition axis as a NAMED SKIP rather than a failure, and still asserts that
+  the runtime came from the source this ref locks.
+
+  **A pin and its inverse move the lock AND `check-herdr-plugin-build` together**, which is a fact
+  worth writing down because it has now been rediscovered twice. That gate reads the COMMITTED lock
+  in three places — the two-stage journey expects one acquisition and the locked `kind@version`, the
+  activation-authority cell seeds its ledger from the committed kind, and the progress cell pins the
+  long-step wording — so `dd84ac0` changed 90 lines of it alongside the eight lines of lock, and
+  this commit is the measured inverse of both halves (14/14 assertions, exit 0). No mutant is
+  disturbed: every claim in `scripts/mutants/herdr-plugin-build.json` names a production file
+  (`herdr-plugin.toml`, `lib/build.mjs`, `lib/build-progress.mjs`), none names the gate, and the
+  `HPB-PROGRESS-NAMED-SEQUENCE` needle re-aimed by `37b81e7` still occurs exactly once in
+  `lib/build.mjs`, which this commit does not touch. Teaching the gate to read either lock kind,
+  so neither direction needs it flipped again, is deferred to its own issue after the cut.
+
 ### Added
 
 - **A test written beside the behaviour it certifies is run by public `pnpm check`, and nobody
