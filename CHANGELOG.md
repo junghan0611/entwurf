@@ -4,6 +4,16 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+### Changed
+
+- **The plugin runtime lock is pinned to npm `@junghanacs/entwurf@0.23.1`** and its published
+  sha512, closing the candidate window 0.23.1 shipped in. The pair moves together, as that entry
+  says it must: the lock and `check-herdr-plugin-build`'s committed-lock expectations, with the
+  `IDENTITY` fixture's sha512 travelling with its version rather than being left on the previous
+  release's bytes. The integrity was read from the registry in this session
+  (`npm view @junghanacs/entwurf@0.23.1 dist.integrity`) rather than copied from another
+  session's report, which is the whole point of a pin.
+
 ## 0.23.1 - 2026-09-19
 
 ### Changed

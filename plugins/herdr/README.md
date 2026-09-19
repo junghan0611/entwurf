@@ -84,10 +84,8 @@ fine: it was measured completing on 0.9.1 through herdr's offline-persist path.)
 
 ### What 0.3.0 does not give you
 
-This release improves the install path and nothing else. Its lock currently names the
-`herdr-checkout` candidate carrier for the 0.23.1 cut, and returns to an npm pin
-(`@junghanacs/entwurf@0.23.1` plus its published sha512) in a follow-up commit once that
-version is on the registry. With either of those runtimes it does **not** ship:
+This release improves the install path and nothing else. With the runtime its lock names
+(`@junghanacs/entwurf@0.23.1`) it does **not** ship:
 
 - `entwurf pi`. The one-word launcher exists in the repository but is not in the npm artifact
   this lock names; it arrives with the next cut. Until then the command is `pi --entwurf-control`,
