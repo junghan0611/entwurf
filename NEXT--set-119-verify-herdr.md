@@ -11,12 +11,14 @@
 - [ ] **V3. v2 척추만 이동** — decider/send/mailbox/runner/peers/facts 부근 8~12파일, `#62` 방식(심→동등성→심 제거), 파일마다 이주표 + QK/mutant(signatureSource·gate argv) 동반 이동. mutant gate를 V2 glob 심에 걸지 말 것.
 - [ ] **동결 창** — 후보 SHA 고정 → `check-gate-qualification` 1회 → `check:full` 1회 → 영수증 #119에 → main 머지 → (이 이슈 밖) 0.23.1 컷 → lock 0.23.1 + 0.3.0 후속 커밋.
 
-# NOW — H1 홉 1 GREEN → A1 amendment → H1 홉 2 (2026-09-19 14:1x)
+# NOW — A1 착지 → H1 홉 2·3 연속 진행 (2026-09-19 15:2x)
 
 - **좌표:** main `37b81e7` = v0.23.0 + 2. 브랜치 HEAD `1991090`(V2 끝). `pnpm check` 50→52s.
 - **닫힘:** H1 홉 1 `smoke-herdr-raw-install-live` **PASS** (`f6d05ed`, #118 코멘트) — herdr 0.9.1 서버 없는 컨테이너에서 `plugin install --yes` exit 0, resolved `37b81e7`, npm 0.23.0 identity, `["pi"]`→`["pi","claude-code"]`. 발견: 하네스를 한 번 실행해야 `herdr integration install`이 받는다(README 단계 추가, 홉 3). V2 검수(terra, #119 코멘트): Blocker 0 · Defect 2 · Observation 2.
-- **진행 중:** Opus(garden `20260919T133137-746e24`) = A1 amendment(Defect 1 심의 glob 직접 전개 + 음성 정지 사진, Defect 2 AGENTS 문장) → H1 홉 2 `entwurf pi`.
-- **다음 한 수:** A1 착지 확인 → H1 홉 2(`entwurf pi` + `check-pi-launch` + 리터럴 대조) → 홉 3(README 9단계 + 0.3.0) → H1 검수(다른 학교) → V3(첫 커밋 = 인벤토리 분모에 행동 옆 테스트 축 추가, terra Observation 2)(mutant 0 순수 8개부터: decider·runner·socket-discovery·matrix·facts·send-fallback·release·resume-args; v2-production/v2-contract는 cross-lane이라 첫 슬라이스 제외).
+- **닫힘:** A1 `a1eeb81` — 심이 glob을 직접 전개, 빈 전개는 return(`--passWithNoTests` 제거), 정지 사진 3장(`selected 2`, `test/` 0), AGENTS.md:102 fence 문장 교체.
+- **진행 중:** Opus = H1 홉 2(`entwurf pi` + `check-pi-launch` + `--entwurf-control` 리터럴 대조 + 뮤턴트) → 홉 3(README 9단계·0.3.0·smoke 재실행) 연속, 홉 3 끝에 보고.
+- **동결 창 할 일(코디네이터):** NEXT 커밋 3개(`5062147`·`1d6532a`·`637befc`)의 Co-Authored-By 트레일러 제거 — NEXT-- 파일은 머지 전 삭제라 squash로 정리. 이후 커밋은 트레일러 없음(GLG 지침 09-19).
+- **다음 한 수:** 홉 3 보고 수령 → H1 검수(다른 학교, `f6d05ed`+홉 2·3 커밋 열거 set) → amendment → V3(첫 커밋 = 인벤토리 분모에 행동 옆 테스트 축 추가, terra Observation 2)(mutant 0 순수 8개부터: decider·runner·socket-discovery·matrix·facts·send-fallback·release·resume-args; v2-production/v2-contract는 cross-lane이라 첫 슬라이스 제외).
 - **게이트 — 이것만:** 커밋마다 `pnpm check`(명시 실행, elapsed 기록). 영향 focused `./run.sh check-<x>`. subject·signatureSource·gate argv·QK·inventory 중 하나라도 건드리면 `./run.sh check-gate-manifests`. MCP 소스면 `build-bridge` + `check-bridge-delivery`. H1 자기 LIVE `LIVE=1 ./run.sh smoke-herdr-raw-install-live`.
 - **게이트 — 절대 안 됨(inner loop):** `pnpm run check:full` · `./run.sh check-gate-qualification` · `release-gate` · `entwurf-release` · 무관한 MUST LIVE. **한 시간짜리를 구간마다 돌리지 않는다.** 동결 창의 1회는 코디네이터 몫.
 - **운영 경로 변경 창:** `run.sh`, `mcp/**`, `pi-extensions/**`(test 아닌 것), hook/launch/install 스크립트, `plugins/herdr/lib/**`는 파일을 쓰는 순간 GLG의 pi/Claude/MCP에 노출된다(이 체크아웃 = 운영자 런타임). 들어가기 전 코디네이터에 알리고, 운영자 호출 재개 전 파일군별 focused를 끝낸다.
