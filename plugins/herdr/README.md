@@ -20,9 +20,24 @@ followed by `entwurf setup`. Neither route installs a harness, a subscription or
 
 Measured end to end in a clean `node:24` container on 2026-09-19 — no host config, cache or
 socket mounted, no git `insteadOf`, the remote spelled exactly as written here. The receipt is
-`LIVE=1 ./run.sh smoke-herdr-raw-install-live`, and it recorded `ref=main` resolving to commit
-`37b81e725cde4d0a548f1c0faab4fcb5c62942b2`, runtime `kind=npm @junghanacs/entwurf@0.23.0`, and
-the activation ledger moving from `["pi"]` to `["pi","claude-code"]`.
+`LIVE=1 ./run.sh smoke-herdr-raw-install-live`, and there are **two of them**, kept apart because
+they answer different questions.
+
+- **(a) what a user gets today.** `ref=main` resolving to commit
+  `37b81e725cde4d0a548f1c0faab4fcb5c62942b2`, runtime `kind=npm @junghanacs/entwurf@0.23.0`, and
+  the activation ledger moving from `["pi"]` to `["pi","claude-code"]`. This is the baseline the
+  nine steps below are written against.
+- **(b) the branch state these nine steps were written on.**
+  `herdr plugin install junghan0611/entwurf/plugins/herdr --ref set/119-verify-herdr --yes`,
+  resolving to commit `1685d0786bb3d9ccd30514a3794bfdfd4f027193`, same npm runtime and same
+  ledger transition, cells `[1]`–`[9]` PASS
+  ([receipt](https://github.com/junghan0611/entwurf/issues/118#issuecomment-5740721948)).
+  It carries four cells (a) did not: the install is followed by running what those bytes
+  became, starting a citizen on the wiring with no model turn, driving the status pane against
+  the real binaries, and tearing the whole activation back down and reinstalling.
+
+The two are not interchangeable. (a) is the public commit, so it is the one a reader can
+reproduce right now; (b) is a branch, so it is candidate evidence until that branch lands.
 
 ```bash
 # 1. pi
