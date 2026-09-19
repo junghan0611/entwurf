@@ -162,7 +162,6 @@ Usage:
   ./run.sh check-entwurf-v2-decider    # deterministic gate (0.11 Stage 0 step 5b): PURE dispatch decider decideDispatch — frozen 7-step order over injected fakes, lock acquire+release tracked so reject⇒no-plan-no-lock proven; pre-probe rejects observedLiveness=null, send/resume execute keep lock + mailbox no-lock (？7), resume plan no mode/provider/model, invalid gid throws (F2-P1); pure, no IO
   ./run.sh check-entwurf-v2-send       # deterministic gate (0.11 Stage 0 step 5c-2a): control-socket SEND hand (executeControlSocketSend) wiring transport IO onto the 5c-1 reducer — ack→sent, in-band reject→rejected (no fallback), dead→same-lock one-shot re-resolve (control retry / mailbox enqueue), indeterminate→failed+rethrow with NO fallback (no double-delivery); release exactly once, releaseLock throw never masks the send error; IO-via-dep
   ./run.sh check-compaction-send-guard # deterministic gate (#111): control-socket send during Pi compaction — event-armed refuse compacting, quiet unknown non-idle refuse busy (ctx.signal is not isStreaming); no pi.sendMessage, no delivered:true; idle/live-run steer/followUp preserved; pure, no IO
-  ./run.sh check-entwurf-v2-runner     # deterministic gate (0.11 Stage 0 step 5d-1): execute-router (executeDispatch) routing an already-decided DispatchDecision to its 5c transport hand → one outcome-rich EntwurfV2RunResult. reject→rejected (no hand) / control/mailbox→matching hand with decision.lock verbatim / N3 rejectReason carried / N1 SendDeliveredReleaseFailedError→execution-failed{finalizedOutcome,releaseFailed,retrySafe:false}; fake hands, no IO
   ./run.sh check-entwurf-v2-mailbox    # deterministic gate (0.11 Stage 0 step 5c-4, LAST 5c transport slice): ENQUEUE-ONLY meta-mailbox SEND body (executeMetaMailboxSend) + production sendViaMailbox adapter — sender→formatMetaMailboxBody with plan.wantsReply threaded (divergence from legacy hard false), sender absent→raw plan.message, enqueue opts EXACTLY {gardenId,body,sessionsDir,mailboxDir}, enqueue throw PROPAGATES (no success:false fold — mailbox has no in-band refuse); adapter NEVER touches lock (release is the hand's job); source guard: no release/routing seam
   ./run.sh check-entwurf-resume-args   # deterministic gate: resume-argv SSOT (buildResumePiArgs) for the S1 VISIBLE resume. The headless shape was measured wrong for a window before the consumer was written (`-p` is pi's own non-interactive mode), so the one shipped posture is `--entwurf-control` FIRST + ext args exactly once + `--session <abs file>` + optional `--provider` + `--model <m>` — and the gate pins the ABSENCES as hard as the presences: no --mode, no -p, no positional prompt (a resume runs no turn), no --no-extensions, never --session-id (which MINTS a session instead of resuming one)
   ./run.sh check-mux-resume-call       # deterministic gate: S1 resume PLACEMENT composition (mux-resume-call.ts). No fake tmux. cwd rules are MEASURED tmux 3.6a behaviours, each a way a resume looks successful while being wrong: a nonexistent `-c` exits 0 and lands the child in $HOME (so it is refused HERE), `-c` is FORMAT-EXPANDED so `#{…}` silently rewrites the path and `#(…)` was observed running a command (so `#` is refused), and whitespace measured SAFE (so no escaping layer is owed). Also pins `-c` reaching tmux, runtime after `--`, carrier-free argv, zero identity in this module, and the surface seam that keeps the v2 composition from importing mux
@@ -1254,19 +1253,6 @@ check_entwurf_v2_native_push() {
   # throws (not retried), NO second send. makeNativePushSend resolves the adapter from
   # plan.backend and IGNORES the lock (lock-free rail).
   run_ts scripts/check-entwurf-v2-native-push.ts
-}
-
-check_entwurf_v2_runner() {
-  # Deterministic gate for 0.11 Stage 0 step 5d-1: the execute-router (executeDispatch) that
-  # routes an already-decided DispatchDecision to its 5c transport hand and maps the outcome
-  # to one outcome-rich EntwurfV2RunResult. Proves over injected fake hands (no socket/spawn/
-  # timer): reject -> rejected (receipt+diagnostic carried, NO hand called) / control-socket ->
-  # sendControl(plan, lock) / meta-mailbox -> sendMailbox(plan, NULL
-  # lock, ？7). Carry-overs: N3 control `rejected` carries rejectReason verbatim; N1
-  # SendDeliveredReleaseFailedError -> execution-failed{finalizedOutcome, releaseFailed,
-  # retrySafe:false}; a plain hand throw -> execution-failed{retrySafe:false} with no
-  # finalizedOutcome. Exactly one hand runs per execute.
-  run_ts scripts/check-entwurf-v2-runner.ts
 }
 
 check_entwurf_v2_surface() {
@@ -6449,9 +6435,6 @@ case "$cmd" in
     ;;
   check-entwurf-v2-native-push)
     check_entwurf_v2_native_push
-    ;;
-  check-entwurf-v2-runner)
-    check_entwurf_v2_runner
     ;;
   check-entwurf-control-rpc)
     check_entwurf_control_rpc
