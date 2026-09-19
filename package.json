@@ -73,7 +73,8 @@
 		"CONTRIBUTING.md",
 		"CHANGELOG.md",
 		"!**/__pycache__",
-		"!**/*.pyc"
+		"!**/*.pyc",
+		"!pi-extensions/**/*.test.ts"
 	],
 	"engines": {
 		"node": ">=24.0.0"

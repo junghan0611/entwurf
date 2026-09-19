@@ -3508,6 +3508,13 @@ check_pack() {
     # tripwire that fails loud if that negation is ever dropped (결합 규칙).
     '__pycache__'
     '\.pyc$'
+    # Tests written beside behavior (#119 V2) are a dev surface, and `pi-extensions/`
+    # ships WHOLE through the files allowlist, so the `!pi-extensions/**/*.test.ts`
+    # negation is the only thing keeping them out — same 결합 규칙 as __pycache__ above,
+    # this pattern is its tripwire. Written loose rather than anchored under
+    # pi-extensions/ so it also covers any future allowlist entry; `plugins/` needs no
+    # companion negation because `^plugins/` above already refuses that whole tree.
+    '\.test\.[cm]?[jt]s$'
   )
 
   local pass=1 f pat hit
