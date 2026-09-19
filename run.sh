@@ -3075,6 +3075,36 @@ check_acp_sdk_surface() {
   run_vitest test/acp-sdk-surface.contract.test.ts
 }
 
+check_tests_beside_behavior() {
+  # The DISCOVERY door (issue #119 V2). A `.test.ts` beside a pi extension or a
+  # `.test.mjs` beside the herdr plugin lib is run by public `pnpm check` without
+  # anyone adding its filename anywhere. That is the whole contract: the other two
+  # vitest shims list their files, and a door that also listed files would shut
+  # again the first time someone forgot.
+  #
+  # Positional filters over the SHARED include, not a second config. Vitest reads
+  # positionals as path substring filters, so the behavior-adjacent globs live in
+  # vitest.config.ts beside everything else and this gate still never runs test/**.
+  # Keeping them out of the other two shims is deliberate: those are mutant gate
+  # argv (mux-fresh-call carries 56), and widening their include would rerun
+  # unrelated tests once per mutant.
+  #
+  # --passWithNoTests because an empty set is the honest steady state — this gate
+  # claims the door is OPEN, never that someone has walked through it. What stops
+  # that from rotting into a silent pass is the literal cross-check below: the shell
+  # cannot read vitest's resolved config, so it compares the two globs as text, and
+  # deleting either one turns this gate red while the filters still exit 0.
+  section "tests beside behavior (discovery, not a filename list)"
+  local cfg="$REPO_DIR/vitest.config.ts" glob
+  for glob in 'pi-extensions/**/*.test.ts' 'plugins/herdr/**/*.test.mjs'; do
+    if ! grep -qF "\"$glob\"" "$cfg"; then
+      fail "[check-tests-beside-behavior] vitest.config.ts no longer includes $glob — the discovery door is shut, and the filters below would still pass"
+      return 1
+    fi
+  done
+  run_vitest --passWithNoTests pi-extensions plugins/herdr
+}
+
 check_acp_overlay() {
   # Deterministic gate for the S2b Claude config overlay materializer. Drives
   # ensureClaudeConfigOverlay against injected temp realDir/overlayDir (no
@@ -7348,6 +7378,9 @@ case "$cmd" in
     ;;
   check-acp-sdk-surface)
     check_acp_sdk_surface
+    ;;
+  check-tests-beside-behavior)
+    check_tests_beside_behavior
     ;;
   check-acp-overlay)
     check_acp_overlay
