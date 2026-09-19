@@ -1,10 +1,29 @@
-# NEXT — OMP as one garden sibling (실무 잠수함)
+# NEXT — 문서 표면 다이어트
 
 > NEXT는 disposable boot sector다. 완료 이력은 issue/git이 지고, 방향은 ROADMAP,
 > 운영 규율은 AGENTS가 진다. 새 하네스 입학 경로는
 > [docs/adding-a-harness.md](./docs/adding-a-harness.md)다.
 
 # RAIL — 현재 좌표
+
+- [x] **1. Entwurf 0.23.1 + Herdr integration 0.3.1** — published and documented; the public project page now leads with the Herdr route without shrinking Entwurf to that one integration.
+- [x] **2. First public boundary question captured** — the Agentwire exchange exposed a recurring distinction: Entwurf bridges independent visible siblings; it neither becomes an agent factory nor owns project/session state.
+- [ ] **3. FAQ baseline and documentation-diet map** ← CURRENT: land the short boundary answers, then map duplicated README material to its owning document before removing anything.
+- [ ] **4. Surgical README reduction** ← PAUSED: requires the map, retained-link checks, and GLG's choice of the first section to move.
+
+현재 좌표: 1·2 완료 → 3 진행 → 4 보류
+
+# NOW — FAQ와 문서 다이어트
+
+- **Stem:** 외부 질문에 짧고 정확하게 답하면서, 긴 README를 제품 계약·설치 경로·상세 증거 문서로 무리 없이 나눈다.
+- **Next:** `FAQ.md`의 첫 세트(공방/공장, garden id, session·project state, internal subagents, delivery·visible sibling)를 검토하고 README에서 FAQ 링크가 닿는지 확인한다.
+- **Then:** README의 반복 문단을 *문장 단위로* `FAQ.md`, `DELIVERY.md`, `VERIFY.md`, `docs/adding-a-harness.md`, rail 문서 중 한 SSOT에 매핑한다. 첫 이관은 GLG가 고른 한 섹션만 하며, 삭제는 링크·claim owner·사용자 경로 확인 뒤다.
+- **Verify:** relative links and anchors resolve; `git diff --check`; no runtime claim, gate, or install command is weakened or silently moved.
+- **Blocker:** 없음.
+- **Read:** `FAQ.md`; `README.md:1-77, 622-724`; `AGENTS.md` North Star / Architecture; `docs/adding-a-harness.md:268-280`.
+- **Do not touch:** runtime behavior, tool descriptions, release evidence, or large README deletions without the map and an explicit GLG choice.
+
+## Archived RAIL — OMP as one garden sibling
 
 - [x] **1. OMP measurement·audit·LIVE + Bundle A admission hardening** — backend registration, TUI-only birth, visible status, native MCP hand, sender identity, four-root/package/doctor hardening 완료.
 - [x] **2. Operator deploy + real outbound acceptance** — 2026-08-28 oracle: 재설치·shared reader 재배포·doctor 4종 green, `check:full` exit 0, outbound LIVE 4건(그중 1건은 GLG가 직접 연 세션). `tools.xdev` 방언 발견과 문서화 포함.
@@ -68,7 +87,7 @@ WSL2 는 계약상 리눅스의 연장이라 새 작업 없음.
 
 <details><summary>ACP fable 지원 NOW (닫힘)</summary>
 
-# NOW — stem: ACP `claude-fable-5-1` 지원 (GLG, 2026-09-08: "entwurf acp fable 지원을 넣어줘. 그래야 계속 부를 수 있어")
+## Archived NOW — stem: ACP `claude-fable-5-1` 지원 (GLG, 2026-09-08: "entwurf acp fable 지원을 넣어줘. 그래야 계속 부를 수 있어")
 
 - **Stem:** **`claude-fable-5-1` 을 curated ACP 모델 표면에 싣는다.** GLG 가 B 를 그 모델로 이미 불렀고(`entwurf/claude-fable-5-1`,
   garden `20260908T181437-30802a`, `backend=pi`, `liveness=alive`), 계속 부를 수 있게 표면·게이트·문서를 정합화하는 것이 이 stem 이다.

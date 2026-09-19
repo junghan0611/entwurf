@@ -8,6 +8,8 @@
 
 npm package: <https://www.npmjs.com/package/@junghanacs/entwurf>
 
+**Short answers for common questions:** [FAQ.md](./FAQ.md).
+
 Legacy package: [`@junghanacs/pi-shell-acp`](https://www.npmjs.com/package/@junghanacs/pi-shell-acp). `entwurf` is its 0.12+ successor line: the same work renamed around the garden-citizen dispatch substrate rather than the pi adapter.
 
 > **Repository shape.** This repo is **entwurf-core (v2 dispatch) + native-harness bridges + a pi adapter + an ACP plugin**. Pi is one adapter, not the project subject. Claude Code, GitHub Copilot CLI, and OMP (`omp`) are shipped self-fetch citizens; Antigravity (`agy`) is shipped native-push. Codex CLI is a **native-push citizen, supported in 0.21.0 on Linux** over the operator-owned app-server: vendor-trusted user-scope birth, strict request-scoped identity, loaded-thread probe, one-shot queue delivery, and visible fresh beside the CALLER's own pane. Unrestricted attached-TUI seat inference is not supported or claimed; #95 D1 retired the fixed `codex` tmux home on 2026-09-16, so the operator seats the app-server wherever they like and a Codex caller opens its sibling beside its own TUI pane. Codex remains native so it keeps its vendor tools, delegation, and work context; this is not another way to buy or expose GPT through ACP.
