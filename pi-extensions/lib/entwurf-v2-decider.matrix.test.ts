@@ -1,5 +1,15 @@
 /**
- * check-entwurf-v2-matrix — the 5d-5 (a) REACHABILITY + LOCK SSOT TABLE.
+ * entwurf-v2-decider (matrix) — the 5d-5 (a) REACHABILITY + LOCK SSOT TABLE, proven beside
+ * the decider it drives (#119 V3).
+ *
+ * MIGRATED from scripts/check-entwurf-v2-matrix.ts, row for row and axis for axis. It lives
+ * beside entwurf-v2-decider.ts because that is the subject it drives — the decider's own
+ * branch coverage is a separate file beside the same module.
+ *
+ * Every row builds its OWN deps inside its OWN test. The fakes count acquire/release and
+ * inspect/probe/mailbox calls, and those counts ARE the lock-class and reach assertions —
+ * a decision shared across tests would carry another test's calls and every one of them
+ * would quietly stop meaning anything.
  *
  * GPT Q5 design: a deterministic gate (no API, no real pi) that fixes the 5d-5
  * operating claim — "target kind × resulting transport × lock acquire→release×1" —
@@ -31,12 +41,9 @@
  *                   acquire 1, release 0.
  */
 
-import assert from "node:assert/strict";
-import {
-	type EntwurfIntent,
-	type EntwurfV2Transport,
-	isLivenessSupported,
-} from "../pi-extensions/lib/entwurf-v2-contract.ts";
+import { describe, expect, it } from "vitest";
+
+import { type EntwurfIntent, type EntwurfV2Transport, isLivenessSupported } from "./entwurf-v2-contract.ts";
 import {
 	type DispatchDeciderDeps,
 	type DispatchDecision,
@@ -44,18 +51,11 @@ import {
 	type ExecutionPlan,
 	type RejectDiagnostic,
 	type TargetResolution,
-} from "../pi-extensions/lib/entwurf-v2-decider.ts";
-import type { AcquireLockResult, LockClaim } from "../pi-extensions/lib/entwurf-v2-lock.ts";
-import type { MetaCitizenBackend, MetaIdentity } from "../pi-extensions/lib/meta-session.ts";
-import { controlSocketPath, type TargetSocketInspection } from "../pi-extensions/lib/socket-discovery.ts";
-import type { SocketLiveness } from "../pi-extensions/lib/socket-probe.ts";
-
-let passed = 0;
-function ok(label: string, cond: boolean): void {
-	assert.ok(cond, label);
-	console.log(`  ok    ${label}`);
-	passed++;
-}
+} from "./entwurf-v2-decider.ts";
+import type { AcquireLockResult, LockClaim } from "./entwurf-v2-lock.ts";
+import type { MetaCitizenBackend, MetaIdentity } from "./meta-session.ts";
+import { controlSocketPath, type TargetSocketInspection } from "./socket-discovery.ts";
+import type { SocketLiveness } from "./socket-probe.ts";
 
 const GID = "20260612T100000-aaaaaa";
 const CWD = "/home/junghan/repos/gh/entwurf";
@@ -290,83 +290,92 @@ function planTransport(d: DispatchDecision): EntwurfV2Transport | null {
 	return d.kind === "execute" ? (d.plan as ExecutionPlan).transport : null;
 }
 
-// Verify a row against the REAL decideDispatch + the tracked lock calls.
-async function runRow(row: Row): Promise<void> {
+async function decide(row: Row) {
 	const t = mkDeps(row.scenario);
 	const d = await decideDispatch({ target: GID, intent: row.intent, message: "hi" }, t.deps);
-	const acq = t.acquireCalls.length;
-	const rel = t.releaseCalls.length;
-
-	// reach axis (GPT D4-a): the decider must touch ONLY the seams this target kind
-	// allows — make the "no inspect / no mailbox" prose machine-checked.
-	const reaches = reachOf(row.scenario);
-	const insp = t.inspectCalls.length;
-	const prb = t.probeCalls.length;
-	const mbx = t.mailboxCalls.length;
-	if (reaches === "pre-probe") {
-		ok(`${row.name}: pre-probe reach — no inspect, no probe, no mailbox`, insp === 0 && prb === 0 && mbx === 0);
-	} else if (reaches === "unsupported") {
-		ok(
-			`${row.name}: unsupported reach — deliverability seam ×1, no socket inspect/probe`,
-			mbx === 1 && insp === 0 && prb === 0,
-		);
-	} else {
-		ok(`${row.name}: in-domain reach — socket inspected, deliverability seam untouched`, insp >= 1 && mbx === 0);
-	}
-
-	if (row.expect.decision === "execute") {
-		ok(`${row.name}: execute`, d.kind === "execute");
-		ok(`${row.name}: transport=${row.expect.transport}`, planTransport(d) === row.expect.transport);
-		const lockNull = d.kind === "execute" && d.lock === null;
-		if (row.expect.lock === "held") {
-			ok(`${row.name}: lock held (acquire 1, release 0, non-null)`, acq === 1 && rel === 0 && !lockNull);
-		} else {
-			// mailbox-null
-			ok(`${row.name}: lock-free meta-mailbox (acquire 0, lock null)`, acq === 0 && rel === 0 && lockNull);
-		}
-	} else {
-		ok(`${row.name}: reject`, d.kind === "reject");
-		ok(`${row.name}: reason=${row.expect.reason}`, d.kind === "reject" && d.receipt.reason === row.expect.reason);
-		ok(`${row.name}: no plan field`, !("plan" in d));
-		switch (row.expect.lock) {
-			case "none":
-				ok(`${row.name}: no lock (acquire 0, release 0)`, acq === 0 && rel === 0);
-				break;
-			case "acquire-fail":
-				ok(`${row.name}: acquire failed (acquire 1, release 0)`, acq === 1 && rel === 0);
-				break;
-			case "released":
-				ok(`${row.name}: lock acquired then released ×1 (acquire 1, release 1)`, acq === 1 && rel === 1);
-				break;
-			default:
-				assert.fail(`${row.name}: reject row cannot expect lock=${row.expect.lock}`);
-		}
-		if (row.expect.diagnostic) {
-			ok(
-				`${row.name}: carries the ${row.expect.diagnostic} diagnostic`,
-				d.kind === "reject" && d.diagnostic?.kind === row.expect.diagnostic,
-			);
-		} else {
-			ok(`${row.name}: no diagnostic`, d.kind === "reject" && d.diagnostic === undefined);
-		}
-	}
+	return { d, t };
 }
 
-async function main(): Promise<void> {
-	console.log("[check-entwurf-v2-matrix] 5d-5 (a) reachability + lock SSOT table\n");
-	for (const row of ROWS) {
-		console.log(`── ${row.name}  [${row.targetKind}]`);
-		await runRow(row);
-	}
+for (const row of ROWS) {
+	describe(`${row.name}  [${row.targetKind}]`, () => {
+		// The reach axis (GPT D4-a): the decider must touch ONLY the seams this target kind
+		// allows. reachOf is DERIVED from the scenario, never hand-set, so a new row cannot
+		// drift from its declared target kind — the prose "no inspect" is machine-checked.
+		it(`reach: ${reachOf(row.scenario)}`, async () => {
+			const { t } = await decide(row);
+			const [insp, prb, mbx] = [t.inspectCalls.length, t.probeCalls.length, t.mailboxCalls.length];
+			if (reachOf(row.scenario) === "pre-probe") {
+				expect([insp, prb, mbx]).toEqual([0, 0, 0]);
+			} else if (reachOf(row.scenario) === "unsupported") {
+				// lock-free mailbox branch: deliverability consulted exactly once, no socket work.
+				expect([mbx, insp, prb]).toEqual([1, 0, 0]);
+			} else {
+				// probe count varies by inspection kind, so it is deliberately not asserted.
+				expect(insp).toBeGreaterThanOrEqual(1);
+				expect(mbx).toBe(0);
+			}
+		});
 
-	// ── COVERAGE: the table must span every matrix-owned transport + lock class + ──
-	// pre-probe reject, or the "matrix is closed" claim is a lie. A dropped decider cell
-	// makes one of these sets shrink → fail (not a silent green). NOTE: native-push is NOT
-	// a matrix-owned transport — it is a SEPARATE NATIVE_PUSH_DISPATCH_TABLE (check-entwurf-
-	// v2-contract round-trip + check-entwurf-v2-decider branch), so it is deliberately absent
-	// from this coverage set (adding an antigravity row would blur the matrix's lock-class /
-	// transport semantics — GPT R8).
-	console.log("\n── coverage (table completeness)");
+		if (row.expect.decision === "execute") {
+			const want = row.expect;
+			it(`execute → ${want.transport}`, async () => {
+				const { d } = await decide(row);
+				expect(d.kind).toBe("execute");
+				expect(planTransport(d)).toBe(want.transport);
+			});
+
+			it(
+				want.lock === "held"
+					? "lock held (acquire 1, release 0, non-null)"
+					: "lock-free meta-mailbox (acquire 0, lock null)",
+				async () => {
+					const { d, t } = await decide(row);
+					const lockNull = d.kind === "execute" && d.lock === null;
+					if (want.lock === "held") {
+						expect([t.acquireCalls.length, t.releaseCalls.length]).toEqual([1, 0]);
+						expect(lockNull).toBe(false);
+					} else {
+						expect([t.acquireCalls.length, t.releaseCalls.length]).toEqual([0, 0]);
+						expect(lockNull).toBe(true);
+					}
+				},
+			);
+		} else {
+			const want = row.expect;
+			it(`reject → ${want.reason}, with no plan field`, async () => {
+				const { d } = await decide(row);
+				expect(d.kind).toBe("reject");
+				expect(d.kind === "reject" && d.receipt.reason).toBe(want.reason);
+				expect("plan" in d).toBe(false);
+			});
+
+			it(`lock class: ${want.lock}`, async () => {
+				const { t } = await decide(row);
+				const pair = [t.acquireCalls.length, t.releaseCalls.length];
+				if (want.lock === "none") expect(pair).toEqual([0, 0]);
+				else if (want.lock === "acquire-fail") expect(pair).toEqual([1, 0]);
+				else if (want.lock === "released") expect(pair).toEqual([1, 1]);
+				else throw new Error(`reject row cannot expect lock=${want.lock}`);
+			});
+
+			// #101 갭 C: `diagnostic` names the KIND a reject must carry, not a boolean. A reject
+			// carrying the WRONG diagnostic would pass a yes/no cell.
+			it(want.diagnostic ? `carries the ${want.diagnostic} diagnostic` : "carries no diagnostic", async () => {
+				const { d } = await decide(row);
+				expect(d.kind === "reject" && d.diagnostic?.kind).toBe(want.diagnostic);
+			});
+		}
+	});
+}
+
+// The table must span every matrix-owned transport, lock class and pre-probe reject, or
+// "the matrix is closed" is a lie. A dropped decider cell makes one of these sets shrink and
+// this fails — it is not a silent green.
+//
+// native-push is NOT a matrix-owned transport: it is a SEPARATE NATIVE_PUSH_DISPATCH_TABLE
+// (the contract round-trip + the decider's branch coverage), and it is deliberately absent
+// here because an antigravity row would blur this table's lock-class semantics (GPT R8).
+describe("coverage — the table is closed", () => {
 	const transports = new Set<string>();
 	const lockClasses = new Set<LockClass>();
 	const rejectReasons = new Set<string>();
@@ -375,11 +384,12 @@ async function main(): Promise<void> {
 		if (row.expect.decision === "execute") transports.add(row.expect.transport);
 		else rejectReasons.add(row.expect.reason);
 	}
+
 	for (const tr of ["control-socket", "meta-mailbox"]) {
-		ok(`coverage: transport "${tr}" exercised`, transports.has(tr));
+		it(`transport "${tr}" is exercised`, () => expect(transports.has(tr)).toBe(true));
 	}
 	for (const lc of ["none", "held", "mailbox-null", "released", "acquire-fail"] as LockClass[]) {
-		ok(`coverage: lock class "${lc}" exercised`, lockClasses.has(lc));
+		it(`lock class "${lc}" is exercised`, () => expect(lockClasses.has(lc)).toBe(true));
 	}
 	for (const rr of [
 		"bad-target",
@@ -389,13 +399,6 @@ async function main(): Promise<void> {
 		"dormant-fire-forget-unsupported",
 		"indeterminate-no-spawn",
 	]) {
-		ok(`coverage: reject reason "${rr}" in table`, rejectReasons.has(rr));
+		it(`reject reason "${rr}" is in the table`, () => expect(rejectReasons.has(rr)).toBe(true));
 	}
-
-	console.log(`\n[check-entwurf-v2-matrix] ${passed} assertions ok`);
-}
-
-main().catch((err) => {
-	console.error(err);
-	process.exit(1);
 });
