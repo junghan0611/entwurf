@@ -6634,6 +6634,20 @@ case "$cmd" in
   smoke-herdr-plugin-build-live)
     smoke_herdr_plugin_build_live
     ;;
+  smoke-herdr-raw-install-live)
+    # #118 홉 1: the FIRST USER PATH. Every other herdr gate proves the plugin against a
+    # source we control — a stub, or the product remote redirected by git insteadOf to a
+    # local bare clone asserting identity.kind === "herdr-checkout". None has watched the
+    # plugin acquire its runtime from npm on a machine that has never seen this repo, which
+    # is the one axis VERIFY.md:61 leaves open while the production lock says npm. Clean
+    # container, public remote, no mounts, no insteadOf. Its first question is whether
+    # `plugin install --yes` completes with no herdr server; a "no" is #118 investigation
+    # output, not a completion. on-demand LIVE, never an aggregate MUST.
+    # shift is load-bearing: this dispatcher keeps the verb in "$@" and each branch that
+    # forwards arguments drops it for itself. Without it `--ref` arrives behind the gate name.
+    shift
+    (cd "$REPO_DIR" && bash scripts/smoke-herdr-raw-install-live.sh "$@")
+    ;;
   check-peer-facts)
     check_peer_facts
     ;;
