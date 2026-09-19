@@ -25,7 +25,7 @@
 			"gate": ["bash", "run.sh", "check-entwurf-v2-send"],
 			"timeoutSeconds": 60,
 			"signature": "[QK:V2SEND-INBAND-REJECT-REASON]",
-			"signatureSource": "scripts/check-entwurf-v2-send.ts"
+			"signatureSource": "pi-extensions/lib/entwurf-v2-send.test.ts"
 		},
 		{
 			"claim": "V2PROD-INBAND-ERROR-WIRED",

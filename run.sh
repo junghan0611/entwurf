@@ -158,7 +158,6 @@ Usage:
   ./run.sh check-socket-probe          # deterministic gate (0.11 Stage 0, F3): three-valued control-socket liveness (alive|dead|indeterminate) — GC reclaims dead only, indeterminate survives; pure classify + 2-socket integration, no API
   ./run.sh check-project-trust-handler # deterministic gate (0.11 Stage 0, Trust 2층): project_trust handler — decideProjectTrust matrix (escape=inherited-false+interactive+trust-here→{yes,remember:true}; non-interactive→undecided; never undefined) + adapter single-writer, fake prompt, no UI
   ./run.sh check-entwurf-v2-contract   # FROZEN entwurf_v2 contract — control-socket liveness domain is currently pi; self-fetch/native-push citizens are out of that domain, not globally unsupported; pure, no IO
-  ./run.sh check-entwurf-v2-send       # deterministic gate (0.11 Stage 0 step 5c-2a): control-socket SEND hand (executeControlSocketSend) wiring transport IO onto the 5c-1 reducer — ack→sent, in-band reject→rejected (no fallback), dead→same-lock one-shot re-resolve (control retry / mailbox enqueue), indeterminate→failed+rethrow with NO fallback (no double-delivery); release exactly once, releaseLock throw never masks the send error; IO-via-dep
   ./run.sh check-compaction-send-guard # deterministic gate (#111): control-socket send during Pi compaction — event-armed refuse compacting, quiet unknown non-idle refuse busy (ctx.signal is not isStreaming); no pi.sendMessage, no delivered:true; idle/live-run steer/followUp preserved; pure, no IO
   ./run.sh check-mux-resume-call       # deterministic gate: S1 resume PLACEMENT composition (mux-resume-call.ts). No fake tmux. cwd rules are MEASURED tmux 3.6a behaviours, each a way a resume looks successful while being wrong: a nonexistent `-c` exits 0 and lands the child in $HOME (so it is refused HERE), `-c` is FORMAT-EXPANDED so `#{…}` silently rewrites the path and `#(…)` was observed running a command (so `#` is refused), and whitespace measured SAFE (so no escaping layer is owed). Also pins `-c` reaching tmux, runtime after `--`, carrier-free argv, zero identity in this module, and the surface seam that keeps the v2 composition from importing mux
   ./run.sh check-mux-parent-artifact  # deterministic gate for the tracked scrubbed parent-transcript fixture — a version-pinned sample of the PARENT-SIDE shape (fresh_call toolResult + the later callback custom_message) so downstream never opens a private transcript. Pins event order, the toolCallId join on the RESULT (pi writes no separate toolCall row), the launch nonce reappearing verbatim in the callback body, the <sender_info> envelope field names, and the absence of operator paths / real garden ids / real uuids. NOT placement evidence
@@ -1184,15 +1183,15 @@ check_entwurf_v2_contract() {
 }
 
 check_entwurf_v2_send() {
-  # Deterministic gate for 0.11 Stage 0 step 5c-2a: the control-socket SEND hand
-  # (executeControlSocketSend) that WIRES real transport IO onto the 5c-1 release
-  # reducer. Proves the send->outcome->release ordering over injected fakes (no socket):
-  # ack->sent / in-band reject->rejected (no fallback) / dead->same-lock one-shot
-  # re-resolve (control retry or mailbox enqueue)->fallback-sent|rejected|failed /
-  # indeterminate->failed+rethrow with deadFallback+mailbox NEVER called (no
-  # double-delivery on an alive-but-stalled socket). Release fires exactly once per
-  # send-final; a releaseLock throw never masks the send failure (5b). IO-via-dep.
-  run_ts scripts/check-entwurf-v2-send.ts
+  # MUTANT EXECUTION COORDINATE, not a discovery path — the test is found by
+  # check-tests-beside-behavior like every other beside-behaviour lane. This case exists
+  # because the V2SEND-INBAND-REJECT-REASON mutant names it as gate argv, and attribution is
+  # read from the JSON test titles `run_vitest` emits (run.sh:104-113). Narrow file filter: a
+  # mutant pointed at the glob shim would re-run every beside-behaviour test once per mutant.
+  # It stays inside check:contracts even though the discovery door also runs this file — see
+  # check-release-gate-outcomes: a gate a mutant names must be reachable outside qualification.
+  section "control-socket send hand (mutant execution coordinate)"
+  run_vitest pi-extensions/lib/entwurf-v2-send.test.ts
 }
 
 check_entwurf_v2_native_push() {
