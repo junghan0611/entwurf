@@ -1201,6 +1201,8 @@ check_entwurf_v2_native_push() {
   # because the NATIVE-PUSH-RETRY-BYTE-IDENTITY mutant names it as gate argv, and attribution
   # is read from the JSON test titles `run_vitest` emits (run.sh:104-113). Narrow file filter:
   # a mutant pointed at the glob shim would re-run every beside-behaviour test once per mutant.
+  # It stays inside check:contracts even though the discovery door also runs this file — see
+  # check-release-gate-outcomes: a gate a mutant names must be reachable outside qualification.
   section "native-push send hand (mutant execution coordinate)"
   run_vitest pi-extensions/lib/entwurf-v2-native-push.test.ts
 }
@@ -1278,6 +1280,11 @@ check_entwurf_resume_args() {
   #
   # The file filter is NARROW on purpose. Pointing a mutant at the glob shim would make the
   # runner re-run every beside-behaviour test once per mutant.
+  #
+  # It stays inside check:contracts even though the discovery door also runs this file, and the
+  # duplicate is deliberate: check-release-gate-outcomes requires every gate a mutant names to
+  # run inside check:full, because a gate reachable ONLY through qualification makes the
+  # 28-minute mutant body the only thing that can notice it going red on a clean tree.
   section "resume-argv SSOT (mutant execution coordinate)"
   run_vitest pi-extensions/lib/entwurf-resume-args.test.ts
 }
