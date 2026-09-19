@@ -44,6 +44,13 @@
 		// scripts/tsconfig.json fence (allowImportingTsExtensions), not the
 		// emit-capable root program.
 		"test",
+		// A test written BESIDE a pi extension (issue #119 V2) is the same file shape
+		// one directory over, so it takes the same fence for the same measured reason:
+		// left in this program, `import { x } from "./subject.ts"` is TS5097 here and
+		// clean under scripts/tsconfig.json. Excluding it is what keeps every .ts in
+		// exactly ONE fence — scripts/tsconfig.json picks these up explicitly, so the
+		// pair must move together.
+		"pi-extensions/**/*.test.ts",
 		"pi-extensions/meta-bridge-hook.ts",
 		// meta-bridge-hook-copilot.ts is the #82 Copilot BIRTH entry — the same fence
 		// for the same reason as the Claude entry above: it runs under Node

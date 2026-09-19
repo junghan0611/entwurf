@@ -28,6 +28,11 @@
 		"./**/*.ts",
 		"../test/**/*.ts",
 		"../pi-extensions/lib/**/*.ts",
+		// The behavior-adjacent tests the root config just excluded (#119 V2). Listed at
+		// pi-extensions/** rather than pi-extensions/lib/** so a test beside an extension
+		// OUTSIDE lib/ lands in a fence too — the root exclude is glob-wide, and a file in
+		// no fence is worse than a file in two.
+		"../pi-extensions/**/*.test.ts",
 		"../pi-extensions/model-lock.ts",
 		"../pi-extensions/meta-bridge-hook.ts",
 		"../pi-extensions/meta-bridge-hook-copilot.ts",
