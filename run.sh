@@ -159,7 +159,6 @@ Usage:
   ./run.sh check-project-trust-handler # deterministic gate (0.11 Stage 0, Trust 2층): project_trust handler — decideProjectTrust matrix (escape=inherited-false+interactive+trust-here→{yes,remember:true}; non-interactive→undecided; never undefined) + adapter single-writer, fake prompt, no UI
   ./run.sh check-entwurf-v2-contract   # FROZEN entwurf_v2 contract — control-socket liveness domain is currently pi; self-fetch/native-push citizens are out of that domain, not globally unsupported; pure, no IO
   ./run.sh check-entwurf-v2-lock       # deterministic gate (0.11 Stage 0 step 5a, 버킷 B F2): per-gid dispatch LOCK primitive — openSync wx atomic acquire, second-acquire=target-locked conflict (holder JSON for human cleanup), nonce-owned release (successor survives late release), stale reclaim same-host+ESRCH-only (EPERM/remote/alive/unknown fail-closed), empty/corrupt=conflict not auto-deleted, F2-P1 malformed gid throws; real temp dir, deps injected
-  ./run.sh check-entwurf-v2-decider    # deterministic gate (0.11 Stage 0 step 5b): PURE dispatch decider decideDispatch — frozen 7-step order over injected fakes, lock acquire+release tracked so reject⇒no-plan-no-lock proven; pre-probe rejects observedLiveness=null, send/resume execute keep lock + mailbox no-lock (？7), resume plan no mode/provider/model, invalid gid throws (F2-P1); pure, no IO
   ./run.sh check-entwurf-v2-send       # deterministic gate (0.11 Stage 0 step 5c-2a): control-socket SEND hand (executeControlSocketSend) wiring transport IO onto the 5c-1 reducer — ack→sent, in-band reject→rejected (no fallback), dead→same-lock one-shot re-resolve (control retry / mailbox enqueue), indeterminate→failed+rethrow with NO fallback (no double-delivery); release exactly once, releaseLock throw never masks the send error; IO-via-dep
   ./run.sh check-compaction-send-guard # deterministic gate (#111): control-socket send during Pi compaction — event-armed refuse compacting, quiet unknown non-idle refuse busy (ctx.signal is not isStreaming); no pi.sendMessage, no delivered:true; idle/live-run steer/followUp preserved; pure, no IO
   ./run.sh check-entwurf-v2-mailbox    # deterministic gate (0.11 Stage 0 step 5c-4, LAST 5c transport slice): ENQUEUE-ONLY meta-mailbox SEND body (executeMetaMailboxSend) + production sendViaMailbox adapter — sender→formatMetaMailboxBody with plan.wantsReply threaded (divergence from legacy hard false), sender absent→raw plan.message, enqueue opts EXACTLY {gardenId,body,sessionsDir,mailboxDir}, enqueue throw PROPAGATES (no success:false fold — mailbox has no in-band refuse); adapter NEVER touches lock (release is the hand's job); source guard: no release/routing seam
@@ -1200,18 +1199,6 @@ check_entwurf_v2_lock() {
   # auto-deleted. F2-P1: a malformed gid throws before any path is built. Real
   # temp dir (wx atomicity under test); clock/nonce/pid/host/kill injected.
   run_ts scripts/check-entwurf-v2-lock.ts
-}
-
-check_entwurf_v2_decider() {
-  # Deterministic gate for 0.11 Stage 0 step 5b: the PURE dispatch decider
-  # decideDispatch. Drives the frozen 7-step order over INJECTED fakes (target
-  # lookup / lock / socket inspect+probe / preflight / capability), tracking lock
-  # acquire+release so "reject ⇒ no plan AND no lock retained" is PROVEN. Covers:
-  # bad-target/target-locked/target-address-conflict carry observedLiveness=null
-  # (pre-probe), every other reject carries a measured value; a control-socket send
-  # executes KEEPING the lock, meta-mailbox send takes NO lock (？7); an invalid gid throws before
-  # any lookup (F2-P1). Pure, no IO, no API.
-  run_ts scripts/check-entwurf-v2-decider.ts
 }
 
 check_entwurf_v2_send() {
@@ -6423,9 +6410,6 @@ case "$cmd" in
     ;;
   check-entwurf-v2-lock)
     check_entwurf_v2_lock
-    ;;
-  check-entwurf-v2-decider)
-    check_entwurf_v2_decider
     ;;
   check-entwurf-v2-send)
     check_entwurf_v2_send
