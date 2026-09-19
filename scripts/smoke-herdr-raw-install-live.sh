@@ -402,9 +402,28 @@ const said = `${run.stdout ?? ""}${run.stderr ?? ""}`;
 // the receipt. A receipt that misspells what it witnessed is the failure this cell exists
 // to prevent one directory over, so it is spelled correctly here.
 const verbs = (said.match(/entwurf_[a-z0-9_]+/g) ?? []).filter((v, i, a) => a.indexOf(v) === i).sort();
+// A SECOND, INDEPENDENT COPY OF THE SET, ON PURPOSE (A5 D1). The exit code alone used to be
+// the oracle here, which left the printed list as decoration a parser bug could quietly
+// corrupt — and did, see the regex note just above. The package under test carries the
+// expectation of run.sh:5187 in its own bytes, so reading the answer from there would let
+// the artifact grade itself. The literal below is a copy that must AGREE with the shipped
+// one; the two disagreeing is the signal, and a verb genuinely added upstream reddens this
+// smoke until somebody says so here too.
+const EXPECTED_VERBS = [
+  "entwurf_fresh_call",
+  "entwurf_inbox_read",
+  "entwurf_peers",
+  "entwurf_register_native",
+  "entwurf_resume_call",
+  "entwurf_self",
+  "entwurf_v2",
+];
 console.log(`  VERBS ${verbs.join(",") || "<none>"}`);
 if (run.status === 0) ok(`entwurf check-bridge exit 0 from the installed bin (${verbs.length} verbs listed)`);
 else no(`entwurf check-bridge exit ${run.status}: ${said.trim().slice(0, 400)}`);
+JSON.stringify(verbs) === JSON.stringify(EXPECTED_VERBS)
+  ? ok(`the receipt names EXACTLY the seven garden verbs (${EXPECTED_VERBS.length}), parsed from what the installed bin answered`)
+  : no(`verb set mismatch — want ${JSON.stringify(EXPECTED_VERBS)} got ${JSON.stringify(verbs)}`);
 process.exit(bad);
 ' "$ACTIVE" "$REGISTRY" "$PLUGIN_ID" || fail=1
 
@@ -609,10 +628,14 @@ fan_with_server="$(run_fan)"; fan_with_server_rc=$?
 echo "$fan_with_server" | sed 's/^/    /'
 echo "    → exit $fan_with_server_rc"
 if [ "$fan_with_server_rc" -eq 0 ]; then ok "with a herdr server the fan completes both reads and exits 0"; else bad "the fan exited $fan_with_server_rc with a live herdr server"; fi
-if printf '%s' "$fan_with_server" | grep -q 'unobserved'; then
-  ok "the citizen with no observed placement is COUNTED as unobserved, not silently dropped"
+# The WHOLE sentence, count included (A5 O1). The bare word `unobserved` also appears in
+# `renderPlacement`'s fallback and could be carried by output that never accounted for
+# anybody. status.mjs:205-213 writes `<n> citizen(s) not shown: ... (unobserved).`, and the
+# store holds exactly the one citizen [7] created, so the count is a fact this cell may name.
+if printf '%s' "$fan_with_server" | grep -qx '1 citizen(s) not shown: nobody could observe placement for them (unobserved)\.'; then
+  ok "the ONE citizen with no observed placement is COUNTED by name (1 citizen(s) not shown ... unobserved), not silently dropped"
 else
-  bad "the fan drew no 'unobserved' accounting for the citizen born in [7]"
+  bad "the fan drew no '1 citizen(s) not shown ... (unobserved)' accounting for the citizen born in [7]"
 fi
 herdr server stop >/dev/null 2>&1 || true
 
@@ -650,8 +673,18 @@ const before = readOrNull(piBaseline);
 const after = readOrNull(piSettings);
 console.log(`  PI-SETTINGS before=${JSON.stringify(before)} after=${JSON.stringify(after)}`);
 if (before === null) {
-  const clean = after === null || !JSON.stringify(after).includes("entwurf");
-  clean ? ok("pi settings carry no entwurf entry (there was none before the plugin)") : no("pi settings still name entwurf after the teardown");
+  // NOT "absent, or anything without the word entwurf in it" (A5 D2). remove() is a FILTER,
+  // not a file deletion: it rewrites data[packages] without our entries and writes the file
+  // back, preserving every other key (register-pi-package.py:22,307-323). Deleting a
+  // settings file it never created would be over-reach, so an emptied packages[] is the
+  // CONTRACTED residue of a file the plugin itself created — and this branch runs only when
+  // there was no baseline, which is exactly that case. The oracle is that shell and nothing
+  // else: a surviving extra key, or somebody else packages left in the array, is a teardown
+  // that left something behind, and the old substring test called both of those clean.
+  const EMPTY_SHELL = JSON.stringify({ packages: [] });
+  JSON.stringify(after) === EMPTY_SHELL
+    ? ok(`pi settings are the contracted empty shell ${EMPTY_SHELL} — the plugin created the file, remove() filtered it, nothing else survives`)
+    : no(`the plugin-created pi settings are ${JSON.stringify(after)}, not the contracted empty shell ${EMPTY_SHELL}`);
 } else {
   JSON.stringify(after) === JSON.stringify(before)
     ? ok("pi settings are JSON-equal to their pre-plugin meaning")
