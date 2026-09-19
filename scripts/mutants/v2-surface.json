@@ -206,7 +206,7 @@
 			"gate": ["bash", "run.sh", "check-entwurf-v2-native-push"],
 			"timeoutSeconds": 120,
 			"signature": "[QK:NATIVE-PUSH-RETRY-BYTE-IDENTITY]",
-			"signatureSource": "scripts/check-entwurf-v2-native-push.ts"
+			"signatureSource": "pi-extensions/lib/entwurf-v2-native-push.test.ts"
 		}
 	]
 }

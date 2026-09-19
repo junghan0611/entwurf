@@ -1196,15 +1196,13 @@ check_entwurf_v2_send() {
 }
 
 check_entwurf_v2_native_push() {
-  # Deterministic gate for 봉인 3/4: the native-push SEND hand (deliverViaNativePush +
-  # makeNativePushSend), the executor half of the native-push rail — where the 1-shot retry
-  # lives (moved out of the adapter leaf). Proves over a fake adapter (no agy/socket): success
-  # first try -> {retried:false}, ONE send over the planted route, ZERO re-probe; fail ->
-  # re-probe alive -> re-send success -> {retried:true}, TWO sends, the 2nd over the RE-
-  # DISCOVERED route; re-send FAIL -> throws (no 3rd attempt); re-probe dead/indeterminate ->
-  # throws (not retried), NO second send. makeNativePushSend resolves the adapter from
-  # plan.backend and IGNORES the lock (lock-free rail).
-  run_ts scripts/check-entwurf-v2-native-push.ts
+  # MUTANT EXECUTION COORDINATE, not a discovery path — the test is found by
+  # check-tests-beside-behavior like every other beside-behaviour lane. This case exists
+  # because the NATIVE-PUSH-RETRY-BYTE-IDENTITY mutant names it as gate argv, and attribution
+  # is read from the JSON test titles `run_vitest` emits (run.sh:104-113). Narrow file filter:
+  # a mutant pointed at the glob shim would re-run every beside-behaviour test once per mutant.
+  section "native-push send hand (mutant execution coordinate)"
+  run_vitest pi-extensions/lib/entwurf-v2-native-push.test.ts
 }
 
 check_entwurf_v2_surface() {

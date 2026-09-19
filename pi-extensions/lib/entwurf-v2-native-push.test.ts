@@ -1,0 +1,239 @@
+/**
+ * entwurf-v2-native-push — the native-push SEND hand (봉인 3/4) and its 1-shot
+ * re-probe→re-send retry, proven beside the module (#119 V3, slice 2).
+ *
+ * MIGRATED from scripts/check-entwurf-v2-native-push.ts. Labels kept verbatim, and the one
+ * QK claim is its OWN test title: this lane carries a mutant and `run_vitest` attributes a
+ * kill from the failed TEST TITLE (run.sh:104-113).
+ *
+ * The original header, unchanged — check-entwurf-v2-native-push — deterministic gate for the native-push SEND hand
+ * (봉인 3/4), the executor half of the native-push rail. This is where the 1-shot retry
+ * lives (moved out of the adapter leaf per the review): the decider planted a fresh route,
+ * the hand sends over it, and on failure re-probes ONCE and re-sends.
+ *
+ * Proves (deliverViaNativePush, fake adapter):
+ *   - success first try → {retried:false}, ONE send, ZERO re-probe (the planted route is used).
+ *   - fail → re-probe alive → re-send success → {retried:true}, TWO sends, ONE re-probe, and
+ *     the second send uses the RE-DISCOVERED route (not the stale planted one).
+ *   - fail → re-probe alive → re-send FAIL → THROWS (fail-loud, no third attempt).
+ *   - fail → re-probe dead/indeterminate → THROWS (not retried), NO second send.
+ * Proves (makeNativePushSend):
+ *   - resolves the adapter from plan.backend, delivers via deliverViaNativePush, and IGNORES
+ *     the lock (native-push is lock-free, 봉인 4).
+ *
+ * Pure; no backend, no socket, no real process.
+ */
+
+import { describe, expect, it } from "vitest";
+
+import type { LockClaim } from "./entwurf-v2-lock.ts";
+import type { NativePushPlan } from "./entwurf-v2-native-push.ts";
+import { deliverViaNativePush, makeNativePushSend } from "./entwurf-v2-native-push.ts";
+import type { NativePushAdapter, NativePushProbeResult, NativePushRoute } from "./native-push/adapter.ts";
+
+// The label is the contract, so it travels as expect's message.
+function ok(label: string, cond: boolean): void {
+	expect(cond, label).toBe(true);
+}
+
+const CONV = "conv-xyz";
+const PLANTED: NativePushRoute = { backend: "antigravity", lsAddress: "127.0.0.1:5600" };
+
+function agyAddress(route: NativePushRoute | undefined): string | undefined {
+	return route?.backend === "antigravity" ? route.lsAddress : undefined;
+}
+
+interface SendCall {
+	route: NativePushRoute;
+	nativeSessionId: string;
+	content: string;
+}
+
+interface FakeAdapterConfig {
+	/** probe() results consumed in order (each re-probe pops the next). */
+	probes: NativePushProbeResult[];
+	/** 0-based indices of send() calls that THROW. */
+	sendFailAt?: number[];
+	retriable?: boolean;
+}
+
+function makeFakeAdapter(config: FakeAdapterConfig): {
+	adapter: NativePushAdapter;
+	sends: SendCall[];
+	probeCount: () => number;
+} {
+	let probeIdx = 0;
+	let sendIdx = 0;
+	const sends: SendCall[] = [];
+	const adapter: NativePushAdapter = {
+		id: "antigravity",
+		retriable: config.retriable ?? true,
+		async probe() {
+			const p = config.probes[probeIdx] ?? { status: "dead", reason: "fake: probes exhausted" };
+			probeIdx++;
+			return p;
+		},
+		async send(route, nativeSessionId, content) {
+			const i = sendIdx++;
+			sends.push({ route, nativeSessionId, content });
+			if (config.sendFailAt?.includes(i)) throw new Error(`fake send fail #${i}`);
+		},
+	};
+	return { adapter, sends, probeCount: () => probeIdx };
+}
+
+describe("the native-push send hand", () => {
+	// ── success first try: ONE send over the planted route, ZERO re-probe ────────
+	it("success first try: ONE send over the planted route, ZERO re-probe", async () => {
+		{
+			const { adapter, sends, probeCount } = makeFakeAdapter({ probes: [] });
+			const r = await deliverViaNativePush(adapter, PLANTED, CONV, "hi");
+			ok("success: retried:false", r.success === true && r.retried === false);
+			ok("success: exactly ONE send", sends.length === 1);
+			ok("success: send used the PLANTED route (no re-probe)", agyAddress(sends[0]?.route) === "127.0.0.1:5600");
+			ok("success: ZERO re-probe", probeCount() === 0);
+		}
+
+		// Codex's vendor queue may accept before its receipt fails: no re-probe, no replay.
+		{
+			const { adapter, sends, probeCount } = makeFakeAdapter({
+				probes: [{ status: "alive", route: { backend: "antigravity", lsAddress: "must-not-be-used" } }],
+				sendFailAt: [0, 1],
+				retriable: false,
+			});
+			await expect(deliverViaNativePush(adapter, PLANTED, CONV, "hi")).rejects.toThrow(/fake send fail/);
+			ok("non-retriable failure makes exactly ONE send", sends.length === 1);
+			ok("non-retriable failure makes ZERO probes", probeCount() === 0);
+		}
+	});
+
+	// ── fail → re-probe alive → re-send success: retried, fresh route ────────────
+	it("fail → re-probe alive → re-send success: retried, fresh route", async () => {
+		{
+			const { adapter, sends, probeCount } = makeFakeAdapter({
+				probes: [{ status: "alive", route: { backend: "antigravity", lsAddress: "127.0.0.1:5601" } }],
+				sendFailAt: [0],
+			});
+			const r = await deliverViaNativePush(adapter, PLANTED, CONV, "hi");
+			ok("retry: retried:true", r.success === true && r.retried === true);
+			ok("retry: TWO sends (initial + one retry)", sends.length === 2);
+			ok("retry: exactly ONE re-probe", probeCount() === 1);
+			ok("retry: 1st send used the planted route", agyAddress(sends[0]?.route) === "127.0.0.1:5600");
+			ok(
+				"retry: 2nd send used the RE-DISCOVERED route (not the stale one)",
+				agyAddress(sends[1]?.route) === "127.0.0.1:5601",
+			);
+		}
+	});
+
+	// The retry replays CONTENT, never re-derives it. The caller hands this leaf one already
+	// rendered string (the #95 sender envelope is rendered ONCE, upstream, with its own
+	// timestamp), so the only honest retry is the same bytes — a second render, or any
+	// per-attempt decoration here, would deliver a body that disagrees with the first attempt
+	// the target may already have accepted. Asserted at this leaf so the claim holds without
+	// coupling sender rendering into the adapter hand.
+	//
+	// Its own test, not a line inside the one above: this claim carries a mutant, and
+	// `run_vitest` attributes a kill from the failed TEST TITLE (run.sh:104-113).
+	it("[QK:NATIVE-PUSH-RETRY-BYTE-IDENTITY] the retry replays byte-identical content, never a re-derived body", async () => {
+		const { adapter, sends } = makeFakeAdapter({
+			probes: [{ status: "alive", route: { backend: "antigravity", lsAddress: "127.0.0.1:5601" } }],
+			sendFailAt: [0],
+		});
+		await deliverViaNativePush(adapter, PLANTED, CONV, "hi");
+		expect(sends[0]?.content).toBe(sends[1]?.content);
+	});
+
+	// ── fail → re-probe alive → re-send FAIL: throws (fail-loud, no 3rd attempt) ──
+	it("fail → re-probe alive → re-send FAIL: throws (fail-loud, no 3rd attempt)", async () => {
+		{
+			const { adapter, sends } = makeFakeAdapter({
+				probes: [{ status: "alive", route: { backend: "antigravity", lsAddress: "127.0.0.1:5601" } }],
+				sendFailAt: [0, 1],
+			});
+			let threw = false;
+			try {
+				await deliverViaNativePush(adapter, PLANTED, CONV, "hi");
+			} catch {
+				threw = true;
+			}
+			ok("double-fail: THROWS (fail-loud)", threw);
+			ok("double-fail: exactly TWO sends, no third attempt", sends.length === 2);
+		}
+	});
+
+	// ── fail → re-probe dead: throws (not retried), NO second send ───────────────
+	it("fail → re-probe dead: throws (not retried), NO second send", async () => {
+		{
+			const { adapter, sends, probeCount } = makeFakeAdapter({
+				probes: [{ status: "dead", reason: "host gone" }],
+				sendFailAt: [0],
+			});
+			let msg = "";
+			try {
+				await deliverViaNativePush(adapter, PLANTED, CONV, "hi");
+			} catch (err) {
+				msg = (err as Error).message;
+			}
+			ok("reprobe-dead: THROWS", msg.length > 0);
+			ok("reprobe-dead: error names the dead re-probe + 'not retried'", /dead/.test(msg) && /not retried/.test(msg));
+			ok("reprobe-dead: exactly ONE send (no re-send into a dead conversation)", sends.length === 1);
+			ok("reprobe-dead: re-probe was attempted once", probeCount() === 1);
+		}
+	});
+
+	// ── fail → re-probe indeterminate: throws (not retried) ──────────────────────
+	it("fail → re-probe indeterminate: throws (not retried)", async () => {
+		{
+			const { adapter, sends } = makeFakeAdapter({
+				probes: [{ status: "indeterminate", reason: "no port" }],
+				sendFailAt: [0],
+			});
+			let threw = false;
+			try {
+				await deliverViaNativePush(adapter, PLANTED, CONV, "hi");
+			} catch {
+				threw = true;
+			}
+			ok("reprobe-indeterminate: THROWS (never coerced to a retry)", threw);
+			ok("reprobe-indeterminate: exactly ONE send", sends.length === 1);
+		}
+	});
+
+	// ── makeNativePushSend: resolves adapter from plan.backend, ignores lock ─────
+	it("makeNativePushSend: resolves adapter from plan.backend, ignores lock", async () => {
+		{
+			const plan: NativePushPlan = {
+				transport: "native-push",
+				action: "send",
+				targetGardenId: "20260704T000000-abcdef",
+				backend: "antigravity",
+				nativeSessionId: CONV,
+				route: PLANTED,
+				wantsReply: false,
+				message: "payload",
+			};
+			const { adapter, sends } = makeFakeAdapter({ probes: [] });
+			const resolvedBackends: string[] = [];
+			const send = makeNativePushSend({
+				resolveAdapter: (backend) => {
+					resolvedBackends.push(backend);
+					return adapter;
+				},
+			});
+			// pass a NON-null lock to prove it is ignored (lock-free rail).
+			const bogusLock = { gardenId: "x" } as unknown as LockClaim;
+			const r = await send(plan, bogusLock);
+			ok("makeNativePushSend: delivered success", r.success === true && r.retried === false);
+			ok(
+				"makeNativePushSend: resolved the adapter from plan.backend",
+				resolvedBackends.length === 1 && resolvedBackends[0] === "antigravity",
+			);
+			ok(
+				"makeNativePushSend: sent the plan message over the plan route",
+				sends[0]?.content === "payload" && agyAddress(sends[0]?.route) === "127.0.0.1:5600",
+			);
+			ok("makeNativePushSend: lock IGNORED (lock-free — a bogus lock did not break delivery)", sends.length === 1);
+		}
+	});
+});
