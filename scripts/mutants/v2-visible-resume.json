@@ -11,7 +11,7 @@
 			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
 			"timeoutSeconds": 60,
 			"signature": "[QK:V2RESUME-LIVE-REFUSED]",
-			"signatureSource": "scripts/check-entwurf-v2-visible-resume.ts"
+			"signatureSource": "pi-extensions/lib/entwurf-v2-visible-resume.test.ts"
 		},
 		{
 			"claim": "V2RESUME-INDETERMINATE-NO-START",
@@ -22,7 +22,7 @@
 			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
 			"timeoutSeconds": 60,
 			"signature": "[QK:V2RESUME-INDETERMINATE-NO-START]",
-			"signatureSource": "scripts/check-entwurf-v2-visible-resume.ts"
+			"signatureSource": "pi-extensions/lib/entwurf-v2-visible-resume.test.ts"
 		},
 		{
 			"claim": "V2RESUME-CONFLICT-NO-START",
@@ -33,7 +33,7 @@
 			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
 			"timeoutSeconds": 60,
 			"signature": "[QK:V2RESUME-CONFLICT-NO-START]",
-			"signatureSource": "scripts/check-entwurf-v2-visible-resume.ts"
+			"signatureSource": "pi-extensions/lib/entwurf-v2-visible-resume.test.ts"
 		},
 		{
 			"claim": "V2RESUME-LOCKED-NO-RESOLVE",
@@ -44,7 +44,7 @@
 			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
 			"timeoutSeconds": 60,
 			"signature": "[QK:V2RESUME-LOCKED-NO-RESOLVE]",
-			"signatureSource": "scripts/check-entwurf-v2-visible-resume.ts"
+			"signatureSource": "pi-extensions/lib/entwurf-v2-visible-resume.test.ts"
 		},
 		{
 			"claim": "V2RESUME-NO-TRANSCRIPT-FAILS-LOUD",
@@ -67,7 +67,7 @@
 			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
 			"timeoutSeconds": 60,
 			"signature": "[QK:V2RESUME-NO-TRANSCRIPT-FAILS-LOUD]",
-			"signatureSource": "scripts/check-entwurf-v2-visible-resume.ts"
+			"signatureSource": "pi-extensions/lib/entwurf-v2-visible-resume.test.ts"
 		},
 		{
 			"claim": "V2RESUME-OBSERVE-IS-BOUNDED-WAIT",
@@ -78,7 +78,7 @@
 			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
 			"timeoutSeconds": 60,
 			"signature": "[QK:V2RESUME-OBSERVE-IS-BOUNDED-WAIT]",
-			"signatureSource": "scripts/check-entwurf-v2-visible-resume.ts"
+			"signatureSource": "pi-extensions/lib/entwurf-v2-visible-resume.test.ts"
 		},
 		{
 			"claim": "V2RESUME-UNOBSERVED-IS-REAL",
@@ -89,7 +89,7 @@
 			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
 			"timeoutSeconds": 60,
 			"signature": "[QK:V2RESUME-UNOBSERVED-IS-REAL]",
-			"signatureSource": "scripts/check-entwurf-v2-visible-resume.ts"
+			"signatureSource": "pi-extensions/lib/entwurf-v2-visible-resume.test.ts"
 		},
 		{
 			"claim": "V2RESUME-RELEASE-FAILURE-LOUD",
@@ -100,7 +100,7 @@
 			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
 			"timeoutSeconds": 60,
 			"signature": "[QK:V2RESUME-RELEASE-FAILURE-LOUD]",
-			"signatureSource": "scripts/check-entwurf-v2-visible-resume.ts"
+			"signatureSource": "pi-extensions/lib/entwurf-v2-visible-resume.test.ts"
 		},
 		{
 			"claim": "V2RESUME-ARGV-FROM-RECORD",
@@ -111,7 +111,7 @@
 			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
 			"timeoutSeconds": 60,
 			"signature": "[QK:V2RESUME-ARGV-FROM-RECORD]",
-			"signatureSource": "scripts/check-entwurf-v2-visible-resume.ts"
+			"signatureSource": "pi-extensions/lib/entwurf-v2-visible-resume.test.ts"
 		},
 		{
 			"claim": "V2RESUME-RECEIPTS-SEPARATE",
@@ -124,7 +124,7 @@
 			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
 			"timeoutSeconds": 60,
 			"signature": "[QK:V2RESUME-RECEIPTS-SEPARATE]",
-			"signatureSource": "scripts/check-entwurf-v2-visible-resume.ts"
+			"signatureSource": "pi-extensions/lib/entwurf-v2-visible-resume.test.ts"
 		},
 		{
 			"claim": "V2RESUME-RENDER-SEPARATES",
@@ -137,7 +137,7 @@
 			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
 			"timeoutSeconds": 60,
 			"signature": "[QK:V2RESUME-RENDER-SEPARATES]",
-			"signatureSource": "scripts/check-entwurf-v2-visible-resume.ts"
+			"signatureSource": "pi-extensions/lib/entwurf-v2-visible-resume.test.ts"
 		},
 		{
 			"claim": "V2RESUME-IDENTITY-BEFORE-WINDOW",
@@ -148,7 +148,7 @@
 			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
 			"timeoutSeconds": 60,
 			"signature": "[QK:V2RESUME-IDENTITY-BEFORE-WINDOW]",
-			"signatureSource": "scripts/check-entwurf-v2-visible-resume.ts"
+			"signatureSource": "pi-extensions/lib/entwurf-v2-visible-resume.test.ts"
 		},
 		{
 			"claim": "V2RESUME-TIMEOUT-RELEASES",
@@ -161,7 +161,7 @@
 			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
 			"timeoutSeconds": 60,
 			"signature": "[QK:V2RESUME-TIMEOUT-RELEASES]",
-			"signatureSource": "scripts/check-entwurf-v2-visible-resume.ts"
+			"signatureSource": "pi-extensions/lib/entwurf-v2-visible-resume.test.ts"
 		},
 		{
 			"claim": "V2RESUME-LOCK-BEFORE-LIVENESS",
@@ -172,7 +172,7 @@
 			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
 			"timeoutSeconds": 60,
 			"signature": "[QK:V2RESUME-LOCK-BEFORE-LIVENESS]",
-			"signatureSource": "scripts/check-entwurf-v2-visible-resume.ts"
+			"signatureSource": "pi-extensions/lib/entwurf-v2-visible-resume.test.ts"
 		},
 		{
 			"claim": "V2RESUME-NOT-PI-REFUSED",
@@ -183,7 +183,7 @@
 			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
 			"timeoutSeconds": 60,
 			"signature": "[QK:V2RESUME-NOT-PI-REFUSED]",
-			"signatureSource": "scripts/check-entwurf-v2-visible-resume.ts"
+			"signatureSource": "pi-extensions/lib/entwurf-v2-visible-resume.test.ts"
 		},
 		{
 			"claim": "V2RESUME-NOT-PI-BY-FIELD",
@@ -198,7 +198,7 @@
 			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
 			"timeoutSeconds": 60,
 			"signature": "[QK:V2RESUME-NOT-PI-BY-FIELD]",
-			"signatureSource": "scripts/check-entwurf-v2-visible-resume.ts"
+			"signatureSource": "pi-extensions/lib/entwurf-v2-visible-resume.test.ts"
 		},
 		{
 			"claim": "V2RESUME-SHARED-ID-GRAMMAR",
@@ -209,7 +209,7 @@
 			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
 			"timeoutSeconds": 60,
 			"signature": "[QK:V2RESUME-SHARED-ID-GRAMMAR]",
-			"signatureSource": "scripts/check-entwurf-v2-visible-resume.ts"
+			"signatureSource": "pi-extensions/lib/entwurf-v2-visible-resume.test.ts"
 		}
 	]
 }
