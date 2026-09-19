@@ -7,6 +7,16 @@
 
 ---
 
+## 0.23.1 shipped (2026-09-20) — 세트 #118/#119 닫힘, 후속 다섯
+
+`v0.23.1` = `b9a6e4e`, npm integrity `sha512-T8l/JShW…rndA==`; herdr 플러그인 0.3.0은 lock npm 0.23.1(`194e800`). 세트가 남긴 것: 행동 옆 테스트 자동 발견(`check-tests-beside-behavior`), 13 게이트 vitest 이주, raw-install LIVE smoke cell [0]-[9]+[8a](설치→사용 경로→출하 런처), `entwurf pi` 런처. 후속(각각 별 이슈, 현재 증거와 다음 측정이 있을 때만):
+
+1. **Codex relay 충실도 단언** — `smoke-codex-fresh-live.ts:1267-1269`의 strict equality가 모델 tier에 따라 red(luna: `$228`→`228`, `@581`→`581`; terra: 보존). VERIFY.md:135-137 기본 모델을 terra로 갱신하거나, 단언을 sigil-불변으로 바꾸되 "무엇을 잃는가"를 먼저 적는다.
+2. **`check-herdr-plugin-build`의 lock 종류 독립** — 지금은 lock 전환마다 게이트 90줄을 dd84ac0 정/역방향으로 뒤집는다(3c3a67d ↔ 194e800). 셀 6·6a(d)·progress 셋 + `seeded()` 헬퍼를 `lock.source`로 분기.
+3. **잔여 3 gate 이주** — `v2-contract`·`v2-production`(cross-lane), `v2-surface`(공유 헬퍼 `assertRailSemantics`). 막힌 지점은 #119 V3 코멘트.
+4. **H2 이식 본체** — 팬 action/events. #118 "Do not"이 이 홉에서 막았던 것.
+5. **npm 소스 재증명 잔여 행** — swap/torn-swap, package-consumer(VERIFY.md 재증명 표).
+
 ## 현재 — 0.22.0 shipped; #116 herdr 레일 + #117 Codex hooks 공존이 0.23.0 컷 대기
 
 이 repo는 **entwurf-core(v2 garden-citizen dispatch) + native-harness bridges + pi adapter + ACP plugin**이다.
