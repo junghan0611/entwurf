@@ -107,6 +107,14 @@ herdr plugin list --json
 herdr plugin pane open --plugin junghan0611.entwurf --entrypoint status
 ```
 
+**A citizen is drawn as a ROW only if a Herdr pane reported it.** The pane joins on
+`placement.kind === "herdr-pane"`, which Herdr can only report for a session running inside
+one of its panes — so start pi with `pi --entwurf-control` *in a Herdr pane*, then open the
+overlay. A citizen started anywhere else is still counted, under `unobserved`, which means
+nobody could observe a placement for it rather than that it is missing. The container
+receipt above cannot measure this half: it is headless and has no panes, so the row is
+evidence only a real Herdr workbench can produce.
+
 ### Remove it
 
 ```bash

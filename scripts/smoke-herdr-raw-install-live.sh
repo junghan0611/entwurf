@@ -302,13 +302,52 @@ process.exit(bad);
 ' "$REGISTRY" "$JOURNAL" "$ACTIVE" "$LEDGER" "$PLUGIN_ID" "$REQUESTED_REF" || fail=1
 
 # The pi wiring must point INTO the active runtime, never at a checkout herdr will delete.
-pi_hit="$(grep -rl "entwurf" "$HOME/.pi/agent" 2>/dev/null | head -1)"
-if [ -n "$pi_hit" ]; then
-  if grep -q "$ACTIVE" "$pi_hit"; then ok "pi wiring at ${pi_hit#$HOME/} names the active runtime path"; else bad "pi wiring at ${pi_hit#$HOME/} does not name $ACTIVE"; fi
-  cp "$pi_hit" /tmp/pi-settings-phase-a.json
-  PI_FILE="$pi_hit"
+#
+# NAMED, NOT DISCOVERED (A7-1). This used to be `grep -rl entwurf ~/.pi/agent | head -1`
+# followed by a substring grep for the active path: the file was whichever readdir happened
+# to yield first, the JSON was never parsed, and any file merely CONTAINING the active path
+# anywhere satisfied it — a wiring entry of the wrong shape, or under the wrong key, would
+# have read as green. `register-pi-package.py` writes exactly one file at a path it derives
+# rather than searches, so this asks that file by name and compares the entry it wrote.
+PI_FILE="$HOME/.pi/agent/settings.json"
+if [ -f "$PI_FILE" ]; then
+  cp "$PI_FILE" /tmp/pi-settings-phase-a.json
+  node -e '
+const fs = require("node:fs");
+const path = require("node:path");
+const [settingsPath, active, registry, pluginId] = process.argv.slice(1);
+let bad = 0;
+const ok = (m) => console.log("  ok    " + m);
+const no = (m) => { console.log("  FAIL  " + m); bad = 1; };
+const read = (p) => JSON.parse(fs.readFileSync(p, "utf8"));
+
+const reg = read(registry);
+const entry = (Array.isArray(reg) ? reg : reg.plugins || []).find((e) => e.plugin_id === pluginId);
+const managed = entry?.source?.managed_path || entry?.managed_path;
+const lock = read(path.join(managed, "plugins", "herdr", "runtime-lock.json"));
+// register() writes the CANONICAL ABSOLUTE path of the package root and nothing else
+// (register-pi-package.py:244-282). The stable `active` dir is a real directory that a
+// generation swap renames into place, never a symlink (herdr-runtime.mjs:15,744,1039), so
+// the resolved string is this join and a generation path here would be the bug: it would
+// strand the wiring the next time the runtime is swapped.
+const expected = path.join(active, "node_modules", lock.name);
+
+const settings = read(settingsPath);
+const packages = settings.packages;
+console.log(`  PI-WIRING ${path.basename(settingsPath)} packages=${JSON.stringify(packages)}`);
+if (!Array.isArray(packages)) { no(`packages is ${JSON.stringify(packages)}, not an array`); process.exit(1); }
+packages.filter((e) => e === expected).length === 1
+  ? ok(`pi packages[] carries exactly one entry equal to the active runtime root (${expected})`)
+  : no(`no single packages[] entry equals ${expected}`);
+// The substring test did catch one real thing — a SECOND, differently shaped entwurf
+// registration — so that is kept as its own assertion rather than lost to the tightening.
+packages.filter((e) => typeof e === "string" && e.includes("entwurf")).length === 1
+  ? ok("no second entwurf-shaped packages[] entry survives beside it")
+  : no(`entwurf-shaped packages[] entries: ${JSON.stringify(packages.filter((e) => typeof e === "string" && e.includes("entwurf")))}`);
+process.exit(bad);
+' "$PI_FILE" "$ACTIVE" "$REGISTRY" "$PLUGIN_ID" || fail=1
 else
-  bad "no pi wiring found under \$HOME/.pi/agent"
+  bad "no pi settings at ${PI_FILE#$HOME/} — register-pi-package.py writes exactly that path, so its absence is the wiring never happening"
   PI_FILE=""
 fi
 
@@ -324,7 +363,8 @@ echo "    → exit $rc"
 echo; echo "[5] the {pi} → {pi, claude-code} transition"
 node -e '
 const fs = require("node:fs");
-const [ledger, claudeUserConfig] = process.argv.slice(1);
+const path = require("node:path");
+const [ledger, claudeUserConfig, active] = process.argv.slice(1);
 let bad = 0;
 const ok = (m) => console.log("  ok    " + m);
 const no = (m) => { console.log("  FAIL  " + m); bad = 1; };
@@ -337,10 +377,27 @@ JSON.stringify(backends) === JSON.stringify(["pi", "claude-code"])
   : no(`ledger activatedBackends === ${JSON.stringify(backends)}`);
 const cfg = JSON.parse(fs.readFileSync(claudeUserConfig, "utf8"));
 const servers = cfg.mcpServers || {};
-const owned = Object.keys(servers).filter((k) => k.includes("entwurf"));
-owned.length === 1 ? ok(`exactly one Claude MCP owner entry (${owned[0]})`) : no(`Claude MCP owner entries: ${JSON.stringify(owned)}`);
+// THE LITERAL KEY, not a substring (A7-2). `meta-bridge-state.py:495` sets exactly
+// mcpServers.entwurf-bridge, so `k.includes("entwurf")` was strictly weaker than the name
+// the writer uses: a drifted or renamed key would have satisfied it while Claude looked for
+// the one that is no longer there. The substring is still asked, as a SEPARATE question —
+// is there a second entwurf-shaped server beside ours — which is the thing it did catch.
+const OWNER_KEY = "entwurf-bridge";
+const keys = Object.keys(servers);
+console.log(`  CLAUDE-MCP keys=${JSON.stringify(keys)} command=${JSON.stringify(servers[OWNER_KEY]?.command)}`);
+keys.filter((k) => k === OWNER_KEY).length === 1
+  ? ok(`exactly one Claude MCP entry under the owner key the writer uses (${OWNER_KEY})`)
+  : no(`no single mcpServers.${OWNER_KEY} — keys are ${JSON.stringify(keys)}`);
+keys.filter((k) => k !== OWNER_KEY && k.includes("entwurf")).length === 0
+  ? ok("no second entwurf-shaped MCP server beside it")
+  : no(`extra entwurf-shaped MCP keys: ${JSON.stringify(keys.filter((k) => k !== OWNER_KEY && k.includes("entwurf")))}`);
+// And it points into the ACTIVE runtime bin dir — `plugin_bin` (meta-bridge-state.py:343-345)
+// writes that absolute path, and a bare name here would be a different contract silently.
+servers[OWNER_KEY]?.command === path.join(active, "node_modules", ".bin", OWNER_KEY)
+  ? ok("the MCP command is the bin inside the active runtime, by absolute path")
+  : no(`MCP command is ${JSON.stringify(servers[OWNER_KEY]?.command)}, not ${path.join(active, "node_modules", ".bin", OWNER_KEY)}`);
 process.exit(bad);
-' "$LEDGER" "$HOME/.claude.json" || fail=1
+' "$LEDGER" "$HOME/.claude.json" "$ACTIVE" || fail=1
 
 if [ -n "$PI_FILE" ]; then
   if diff -q /tmp/pi-settings-phase-a.json "$PI_FILE" >/dev/null 2>&1; then
@@ -692,8 +749,15 @@ if (before === null) {
 }
 
 const claude = readOrNull(claudeUserConfig) ?? {};
-const owned = Object.keys(claude.mcpServers ?? {}).filter((k) => k.includes("entwurf"));
-owned.length === 0 ? ok("the Claude MCP owner entry is gone") : no(`Claude MCP still carries ${JSON.stringify(owned)}`);
+// Same literal as [5] (A7-2): the teardown has to retire the key the writer wrote, and a
+// substring test would have called a RENAMED survivor gone. Both questions are asked.
+const OWNER_KEY = "entwurf-bridge";
+const claudeKeys = Object.keys(claude.mcpServers ?? {});
+console.log(`  CLAUDE-MCP after teardown keys=${JSON.stringify(claudeKeys)}`);
+claudeKeys.includes(OWNER_KEY) ? no(`mcpServers.${OWNER_KEY} survived the teardown`) : ok(`the Claude MCP owner entry ${OWNER_KEY} is gone`);
+claudeKeys.filter((k) => k.includes("entwurf")).length === 0
+  ? ok("no entwurf-shaped MCP server survives under any other name either")
+  : no(`entwurf-shaped MCP keys survived: ${JSON.stringify(claudeKeys.filter((k) => k.includes("entwurf")))}`);
 
 // FILES, not directories: an emptied pi-package/ is a reclaimed install-state, and calling
 // the surviving directory name dirty would fail a clean inverse.
