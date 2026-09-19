@@ -4,7 +4,81 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+### Added
+
+- **A test written beside the behaviour it certifies is run by public `pnpm check`, and nobody
+  names the file** (#119 V2). `vitest.config.ts` include grows two globs —
+  `pi-extensions/**/*.test.ts` and `plugins/herdr/**/*.test.mjs` — and `check-tests-beside-behavior`
+  expands them every run and hands the resulting paths to `run_vitest`. Both halves were measured
+  the hard way. The first cut passed `pi-extensions plugins/herdr` as vitest POSITIONALS, which are
+  path substrings, so `test/pi-extensions-probe.test.ts` was selected too (measured: it ran);
+  expanding first keeps the selected set exactly the two globs while the shim still contains no
+  filename. And an empty expansion RETURNS rather than calling vitest with no arguments, because a
+  vitest run with no filter runs the whole include. The literal cross-check against
+  `vitest.config.ts` stays, because the shell cannot read vitest's resolved config and a deleted
+  glob would otherwise pass. Proven by three still photos in one public `pnpm check`: two failing
+  beside-behaviour tests turn it red (`selected 2`), and a third file planted under `test/` is not
+  selected.
+- **`entwurf pi`** (#118 hop 2) — `exec pi --entwurf-control "$@"`, a dispatcher case with no new
+  bin. Two things it deliberately does NOT do, both measured on pi 0.85.1: there is no
+  precondition check, because an unregistered host already gets `Error: Unknown option:
+  --entwurf-control` and exit 1 from pi itself; and the flag is added, never deduplicated, because
+  passing it twice was measured byte-identical to passing it once. One recursion fence, not
+  copilot's two — the sentinel closes the real loop, and the case copilot's second fence covers is
+  measured here to be a fail-closed unknown verb rather than a loop. `check-pi-launch` reuses
+  `check-copilot-launch`'s fake-vendor posture and carries the `--entwurf-control` literal
+  cross-check, since the shell cannot import `ENTWURF_CONTROL_FLAG`. Nine mutants, each killed by
+  exactly its own claim; exit-status passthrough is asserted without one, because `set -euo
+  pipefail` couples it to `exec` and a mutant that kills two claims attributes to neither.
+- **`smoke-herdr-raw-install-live`** (#118 hop 1) — the plugin's first user path, on a clean
+  `node:24` container with no host socket/config/cache mounted, no git `insteadOf`, and the public
+  remote spelled as a user would type it. It closes the one npm re-proof axis VERIFY.md demanded
+  and the production lock had left empty since `dd84ac0`. Receipts: **(a)** `--ref main` →
+  `37b81e725cde4d0a548f1c0faab4fcb5c62942b2`, **(b)** `--ref set/119-verify-herdr` →
+  `11ec0c38af36d5cd4a59614c3c8e07c5b5b0f9ae`, both `kind=npm @junghanacs/entwurf@0.23.0` with the
+  ledger widening `["pi"]` → `["pi","claude-code"]` and the pi wiring byte-identical across the
+  reinstall. Three facts it measured rather than assumed: herdr's offline-persist path carries
+  0.9.1, so `plugin install --yes` completes with no server; `herdr integration install` refuses a
+  harness that has never run, because it creates `~/.pi/agent/extensions` only when the parent
+  exists and refuses Claude without `~/.claude`; and `--ref` takes a REMOTE REF, not an arbitrary
+  commit (`--ref <sha>` fails as `couldn't find remote ref`).
+
 ### Changed
+
+- **`plugins/herdr` 0.3.0 — the Install path, rewritten as the nine steps a raw box needs.** The
+  eighth and ninth are the ones nobody guesses and they come from the container measurement above:
+  each harness must be started once (`pi --help`, `claude mcp list`) before herdr will integrate
+  it. The release says what it does NOT give you, because the honest combination is this plugin
+  plus the runtime its lock still names: `entwurf pi` exists in the repository and is not in
+  `@junghanacs/entwurf@0.23.0`, so the user command stays `pi --entwurf-control` until the next
+  cut carries the launcher. **`runtime-lock.json` is untouched on purpose** — a pin can only move
+  after the version it names is published, so the 0.23.1 pin is a follow-up commit after that
+  release, the same two-step `dd84ac0` took for 0.23.0.
+- **Thirteen v2-spine gates moved out of `scripts/` and beside the modules they certify** (#119
+  V3), assertion for assertion, with the inventory's denominator fixed FIRST so the move reads as
+  a move. `inventory-verification-surface.ts` now counts both vitest locations; without that, the
+  migration would have subtracted 2,799 lines from the one number that exists to make migration
+  honest. What actually left is 133 lines of plumbing — per-file `ok()` scaffolding, `main()`
+  wrappers, summary trailers — and the combined file count is unchanged, seven out and seven in
+  per slice.
+  - The six mutant-carrying lanes needed four rules the mutant-free seven did not, each learned by
+    getting it wrong: a QK claim must BE an `it` title (attribution reads the failed test title);
+    the token must appear exactly once per file (title keeps the token, assertion keeps the
+    sentence); the `run.sh` case survives as a mutant EXECUTION COORDINATE and keeps its
+    `check:contracts` entry (branch CI caught the removal — a gate a mutant names must run inside
+    `check:full`); and attribution is containment, not exclusivity (vitest runs every test, so one
+    mutation surfaces 1–15 failed titles). 25/25 mutants verified killed and attributed by hand;
+    733 mutants across 58 lanes unchanged, `signatureSource` moved, gate argv did not.
+  - `entwurf-v2-visible-resume.test.ts` grew 445 → 908 lines and the growth is the design:
+    seventeen claims that shared four drives of the subject now each replay their own, because
+    nearly every one is an "X happened BEFORE Y" reading a call-order trace, and a trace polluted
+    by a neighbouring test answers wrongly while staying green.
+  - Three gates stay under `scripts/` with a reason: `check-entwurf-v2-contract` and
+    `check-entwurf-v2-production` are cross-lane (`mux-boundary.json` and `codex-native.json` call
+    them as gate argv), and `check-entwurf-v2-surface` generates its seven QK labels inside shared
+    helpers called twice from `await` blocks, so the established method would either lose
+    attribution or require an async `describe`.
+
 
 - **The bundled Claude ACP adapter is `@agentclientprotocol/claude-agent-acp` 0.79.0** (from
   0.76.0, crossing 0.77.0/0.78.0/0.79.0; `@anthropic-ai/claude-agent-sdk` 0.3.257 → 0.3.274,
