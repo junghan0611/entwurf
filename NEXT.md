@@ -163,6 +163,87 @@ CHANGELOG `## Unreleased`가 구현 범위 `v0.15.1..19ad90c` **30커밋** 전�
 스크립트가 움직였으므로 반드시 돈다; lane C SHA의 긴 바닥은 로컬에서 안 돌렸다) → 다음 컷 prepare는 별도 권한. #109 openclaw 다리는 **닫혔다** · **0.16.1 make는 열린 채 PAUSED**.
 푸시·태그·publish는 금지; `entwurf-release`의 make/publish 별도 권한이다.
 
+# NOW — stem: #119 세트(검증면 정리 + Herdr 첫 사용자 경로) 브랜치 완료, 동결 창 → 머지 → 0.23.1
+
+- **좌표:** 브랜치 `set/119-verify-herdr`(origin에 push됨) = main `37b81e7` + 커밋 ~30. 계약 정본은 #119(세트 첫 그림 + V 장부)와 #118(H1 장부), 영수증은 두 스레드의 코멘트. 이 절은 옛 `NEXT--set-119-verify-herdr.md`를 접어 넣은 것이다.
+- **착지한 것:** V2 발견의 문(행동 옆 `.test.ts`/`.test.mjs`를 `check-tests-beside-behavior`가 glob으로 발견, 정지 사진 3장) · H1(`smoke-herdr-raw-install-live` (a) main `37b81e7` PASS ×3 + (b) 브랜치 `11ec0c3` PASS, `entwurf pi` 런처 + `check-pi-launch` 14 checks/뮤턴트 9, README 9단계, 플러그인 0.3.0 매니페스트, lock은 npm 0.23.0 유지) · V3(순수 게이트 13개 vitest 이주, 수동 귀속 25/25, 733/58 불변, 인벤토리 분모에 행동 옆 축). 검수 4회(terra×2·glm·grok) Blocker 0, Defect 전부 A1~A4로 닫힘. 브랜치 CI `35429392366` @ `d4e20c4` 4잡 green.
+- **다음 한 수 (코디네이터):** 동결 창 — 후보 SHA 고정, 구현자 정지 → `./run.sh check-gate-qualification` 1회(~40분) → `pnpm run check:full` 1회 → 두 영수증을 #119 코멘트 → GLG 머지 결정(DM) → main 머지 → `entwurf-release` land/prepare/make/publish **0.23.1**(모드마다 GLG 승인) → 발행 뒤 새 Opus가 lock 0.23.1 + 플러그인 0.3.0 후속 커밋(`dd84ac0` 패턴) + (a) 재영수증 → GLG 날것 PC 재테스트 = #118 사용자 도착.
+- **흔들리면 여기로:** 잔여 3 gate(`v2-contract`·`v2-production` cross-lane, `v2-surface` 공유 헬퍼)·H2 이식 본체·`scripts/` rename·뮤턴트 다이어트는 **이 세트 밖**, 0.23.1 뒤 별 이슈. 긴 게이트는 동결 창 1회. 트레일러 없음.
+- **트레일러 3개(`5062147`·`1d6532a`·`637befc`, NEXT 문서 커밋)는 남긴다:** 히스토리 재작성은 이슈 스레드가 인용한 SHA 20여 개를 전부 무효화한다. GLG 지침(09-19)은 그 뒤 커밋부터 적용됐다.
+- **Do not:** 워크트리 · 둘째 구현자 · `entwurf setup`/`install` 재실행 · 동결 창 안에서 stage/commit/NEXT 수정 · 과거 SHA 영수증을 새 SHA 증거로.
+
+## 다음 홉 — 형제 교대 (GLG 2026-09-19 17:4x: Opus 70%↑ · Fable 40%↑)
+
+**교대 시점 = F1 + A4 착지 직후, 동결 창 직전.** 동결 창은 코디네이터가 구현자 없이 돌린다. 현 Opus(`20260919T133137-746e24`)의 마지막 산출은 F1 문서 커밋 + 인계 절(#119 코멘트). 그 절은 아래 "새 구현자 브리핑"에 옮겨 붙인다.
+
+### 방향 고정 — 흔들리면 여기로 돌아온다
+- 목표는 #119 세트 exit → main 머지 → **0.23.1 컷 → lock 0.23.1 + 플러그인 0.3.0 후속 커밋 → GLG 날것 PC 재테스트**(= #118 사용자 도착). 그 이전에 새 기능·잔여 3 gate·H2·`scripts/` rename·뮤턴트 다이어트를 열지 않는다.
+- 긴 게이트는 동결 창 1회. 브랜치 CI가 `check:full`을 대신 돈다(두 번 잡았다: `NO-SILENT-AGGREGATE-OMISSION`, `MUTANT-GATES-INSIDE-FULL-FLOOR`).
+- 계약 정본은 GitHub #119/#118 본문 + 코멘트. 이 파일은 "지금 어디"만.
+
+### 새 구현자(Opus) 브리핑 — 첫 턴에 읽을 순서
+1. 이 파일 전체 → `gh issue view 119` 본문("게이트 규율" 표 두 교훈 행 포함) → `gh issue view 118` 본문 → #119 마지막 코멘트의 **인계 절**(현 Opus 작성) → CHANGELOG `## Unreleased`.
+2. 첫 일은 **머지 뒤**에 시작한다(코디네이터가 부른다): (a) `entwurf-release` **prepare** 모드(GLG 승인 뒤) — CHANGELOG 승격·버전 0.23.1·lockfile; (b) make/publish는 GLG 몫; (c) 발행 뒤 `plugins/herdr/runtime-lock.json` 핀(name·version·`npm view @junghanacs/entwurf@0.23.1 dist.integrity`) + 플러그인 0.3.0 출하 커밋(`dd84ac0` 패턴), `check-herdr-plugin-build`·`check-herdr-runtime-bootstrap` focused, 그리고 `LIVE=1 ./run.sh smoke-herdr-raw-install-live`(main, (a) 재영수증) → #118 코멘트.
+3. 하지 않는 것: 워크트리 · 둘째 구현자 · `entwurf setup`/`install` 재실행 · 트레일러 · 잔여 3 gate · H2.
+
+### 새 코디네이터 브리핑(Fable 교대 시)
+- 자기 garden id로 `entwurf_self` → `entwurf_peers`로 살아 있는 형제 확인 → 이 파일 → #119/#118 → `git log main..HEAD`.
+- 동결 창 절차: Opus 정지 확인(`git status` clean, 메일함 조용) → 후보 SHA 기록 → `./run.sh check-gate-qualification`(~40분, tmux 스킬로) → `pnpm run check:full`(~7분) → 두 영수증(elapsed·exit·SHA)을 #119 코멘트 → 후보가 움직이면 재동결. 그 뒤 NEXT 커밋 3개(`5062147`·`1d6532a`·`637befc`) 트레일러 정리는 squash로, `NEXT--set-119-verify-herdr.md` 삭제, GLG에게 머지 결정 DM.
+- 검수 형제: terra `20260919T135931-24854f`(pi, alive) · glm `20260919T153349-e12a86` · grok `20260919T160504-4a49e1`. 살아 있으면 `entwurf_v2`로 재사용, 죽었으면 fresh.
+- DM 규칙: 구간 착지 또는 GLG 결정 필요 시 1건. GLG가 보고 있을 때는 안 보냄.
+
+
+## 인계 절 — 다음 Opus에게 (현 Opus `20260919T133137-746e24` 작성, #119 코멘트 원문)
+
+### 1. mutant 동반 이주 규칙 넷 (근거 SHA)
+
+1. **QK는 `it` 제목에 있어야 한다.** 귀속은 실패한 TEST TITLE을 읽는다(`run.sh:104-113`, `mutation-qualify.ts:132-135`). 근거 `7ba4484`.
+2. **토큰은 파일당 정확히 1회.** 제목+본문 양쪽에 두면 `[QK:MANIFEST-SET-INTEGRITY-REFUSED]`. 제목이 토큰, 단언이 문장. 근거 `c4e73b4`.
+3. **좌표 case + `check:contracts` 엔트리 둘 다 유지.** case는 발견 경로가 아니라 mutant 실행 좌표(gate argv가 vitest를 직접 부르면 리포터를 건너뛴다), 엔트리는 `[QK:MUTANT-GATES-INSIDE-FULL-FLOOR]`가 요구한다. 근거 `e86acb0` — **내가 엔트리를 뺐다가 CI가 red로 잡았다.**
+4. **귀속은 포함이지 배타가 아니고, title 단위다.** vitest는 전부 돌려 1~15개 실패 title을 낸다. 근거 `7ba4484`. **title은 assertion 위치를 식별하지 않으므로**(terra O1) qualification 영수증을 assertion-정확 증거로 승격하지 말 것.
+
+### 2. 실행자 규칙
+
+- 커밋마다 `pnpm check` **명시 실행 + elapsed 기록**(현재 기준 **59s**, pre-commit 훅은 이걸 대신하지 않는다).
+- `run.sh` 만지면 `bash -n run.sh`. `run.sh`·`package.json`·`scripts/mutants/**` 중 하나라도 만지면 **`./run.sh check-gate-manifests`**.
+- 새 `smoke-*-live`를 만들면 **`./run.sh check-release-gate-outcomes`**(집계 wiring 또는 `DOCUMENTED_EXCLUSIONS` 필요).
+- mutant를 옮겼으면 **수동 귀속**: 변이 → `ENTWURF_MUTATION_VITEST_REPORT=/tmp/x.json` + gate argv → JSON `fullName`에 토큰 → 복원 → **`cmp` byte-identical** → control green.
+- **금지:** `pnpm run check:full` · `./run.sh check-gate-qualification` · `release-gate` · `entwurf-release` 어느 모드든 · 무관한 LIVE. 동결 창은 코디네이터 몫이다.
+
+### 3. 잔여 3 — 막힌 지점 (재측정 불필요)
+
+- **`check-entwurf-v2-contract`** — `scripts/mutants/mux-boundary.json`이 gate argv로 부른다(mutants: `check-mux-placement`·`check-mux-launch`와 같은 manifest). 옮기면 그 레인의 argv가 바뀐다.
+- **`check-entwurf-v2-production`** — `scripts/mutants/codex-native.json` **및** `v2-surface.json` 양쪽이 부른다(5 mutants). 이중 cross-lane.
+- **`check-entwurf-v2-surface`** — 7개 QK가 **공유 헬퍼 안에서 생성**된다: `assertRailSemantics` (`:79`, 호출 `:687` pi / `:773` MCP), `assertDormantHonesty` (`:177`, 호출 `:673`/`:764`), `assertPeersDeadRowHonesty` (`:198`, 호출 `:702`/`:800`), `assertDescriptionFitsHostCap` (`:255`, 호출 `:688`/`:774`). 헬퍼 유지 → QK가 제목에 못 감(7개 귀속 불가). 헬퍼의 `ok`를 `it`으로 → 헬퍼가 **수집 시점**에 돌아야 하는데 호출 지점이 전부 `await` 블록 안 → async `describe`, 등록 신뢰 불가. 토큰 2회 → set-integrity 거절. **기계 변환 산출: 39 단언 중 8 red, QK 제목 0.** 해법은 헬퍼를 테스트 팩토리로 재설계(호출부 `await` 프리앰블을 헬퍼 안으로)이고, 그건 별 이슈다.
+
+### 4. H1 좌표
+
+```bash
+LIVE=1 ./run.sh smoke-herdr-raw-install-live [--ref <remote-ref>]
+```
+- `--ref` 기본값 `main`. **remote ref(브랜치/태그)만** — `--ref <sha>`는 `couldn't find remote ref`로 죽는다. 후보는 브랜치로 주소 지정하고 출력의 `resolved_commit`으로 핀한다.
+- 소요 **약 3~5분**(이미지 캐시되면 ~90s). Docker + 공개 네트워크 필요.
+- `LIVE` 없으면 이름 붙은 SKIP, Docker 없으면 SKIP(`ENTWURF_REQUIRE_DOCKER=1`이 red로).
+- 영수증: **(a)** #118 `issuecomment-5739565425`, **(b)** `issuecomment-5740133229`.
+- `DOCUMENTED_EXCLUSIONS` 엔트리는 `scripts/check-release-gate-outcomes.ts`, 가리키는 문장은 `VERIFY.md`의 "The plugin's FIRST USER PATH is its own on-demand axis" (그 파일에서 유일해야 한다).
+
+### 5. 0.23.1 뒤 lock 핀 절차
+
+1. 컷·publish 뒤 `npm view @junghanacs/entwurf@0.23.1 dist.integrity` → sha512.
+2. `plugins/herdr/runtime-lock.json`의 `name`·`version`·`integrity` 세 값을 그것으로. `source: "npm"` 유지.
+3. **창 주의:** `certifyLockCoherence`(`scripts/herdr-runtime.mjs:353-361`)는 lock name@version ≠ 체크아웃 `package.json` name@version이면 `runtime-lock-incoherent`로 거절한다. root가 0.23.1이고 lock이 0.23.0인 SHA(태그 ~ 핀 커밋)를 `--ref`로 설치하면 거절된다.
+4. 핀 커밋 뒤 **영수증 (a) 재실행** — 그게 0.3.0의 사용자 출하 증거다.
+
+### 6. 내가 첫 시도에 틀렸던 것 셋
+
+1. **vitest positional은 경로 substring이다.** `pi-extensions`로 필터하면 `test/pi-extensions-*.test.ts`도 선택된다. glob을 직접 전개해 경로를 넘겨라. (빈 전개일 때 인자 없이 부르면 include 전체가 돈다.)
+2. **`--ref`는 SHA를 안 받는다.** remote ref만.
+3. **귀속을 "실패 title 정확히 1개"로 읽지 마라.** 러너는 `failed.some(includes)`다. 이걸 몰라 6/6을 0/6으로 오독했다.
+
+**보너스(같은 부류):** python 패치 블록이 중간 `assert`에서 죽으면 **아무것도 쓰이지 않는다**. 나는 "patched" 출력만 보고 두 번 잘못 보고했다(A2 레이블, A3 필터). 패치 뒤에는 **파일을 다시 읽어 확인**하라.
+
+<details><summary>이전 NOW — Herdr plugin runtime npm 핀 (0.23.0 컷 직후)</summary>
+
 # NOW — stem: Herdr plugin runtime npm 핀, 다음 = GLG raw-PC 재테스트
 
 - **좌표:** `runtime-lock.json`은 npm `@junghanacs/entwurf@0.23.0`의 published sha512를 핀하고,
@@ -175,6 +256,9 @@ CHANGELOG `## Unreleased`가 구현 범위 `v0.15.1..19ad90c` **30커밋** 전�
   LIVE plugin install은 이 atom의 acceptance로 주장하지 말 것.
 
 <details><summary>#117 랜딩의 NOW (머지 전 좌표)</summary>
+
+
+</details>
 
 # NOW — stem: #117 랜딩됨, 다음 = #116 머지
 
