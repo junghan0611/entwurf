@@ -60,6 +60,13 @@ esac
 # `--ref` defaults to `main`, not to a pinned SHA: receipt (a) is defined as what a user gets
 # TODAY from the public remote, and a SHA frozen in this file would quietly stop being that.
 # herdr resolves the ref and this gate prints the resolved commit, so the receipt is still exact.
+#
+# It takes a REMOTE REF — a branch or a tag — and NOT an arbitrary commit. Measured on herdr
+# 0.9.1 (2026-09-19): `--ref 11ec0c3` fails as
+#   git failed with status exit status: 128: fatal: couldn't find remote ref 11ec0c3
+# because the checkout fetches the ref by name. So a candidate is addressed by its BRANCH and
+# pinned by the resolved_commit this gate prints, which is the honest pairing anyway: the
+# branch says what was asked for, the commit says what arrived.
 REF="main"
 while [ $# -gt 0 ]; do
   case "$1" in

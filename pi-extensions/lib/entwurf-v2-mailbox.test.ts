@@ -1,0 +1,286 @@
+/**
+ * entwurf-v2-mailbox — the 5c-4 ENQUEUE-ONLY meta-mailbox send body and its production adapter, proven beside the module (#119 V3).
+ *
+ * MIGRATED from scripts/check-entwurf-v2-mailbox.ts. Transcribed, not rewritten: every label is kept verbatim
+ * because the labels ARE the contract here, and `ok`/`eq` are expect carrying that label
+ * as its message, so a failure still names the claim it broke.
+ *
+ *
+ * The original header, unchanged — check-entwurf-v2-mailbox — deterministic gate for the 5c-4 meta-mailbox SEND body
+ * (`executeMetaMailboxSend` + the production `makeProductionSendViaMailbox` adapter). It
+ * proves the ENQUEUE-ONLY wiring over an injected fake enqueue, with NO filesystem:
+ *
+ *   1. sender present + wantsReply=true  → body rendered via formatMetaMailboxBody with
+ *      `wants reply: yes`; enqueue called EXACTLY once.
+ *   2. sender present + wantsReply=false → body shows `wants reply: no` (plan.wantsReply
+ *      is threaded — the deliberate divergence from legacy's hard-coded false).
+ *   3. sender undefined → the RAW `plan.message` is enqueued (envelope-less fallback).
+ *   4. enqueue opts are EXACTLY {gardenId: plan.targetGardenId, body, sessionsDir,
+ *      mailboxDir} — the routing target is the plan's, never re-derived.
+ *   5. enqueue throw PROPAGATES (it is NOT folded into {success:false}).
+ *   6. a successful enqueue returns {success:true}.
+ *   7. production adapter: returns Promise<{success:true}>, calls senderProvider, and
+ *      NEVER touches `lock` — a poison LockClaim whose every access throws still resolves.
+ *   8. production adapter threads the plan straight through to enqueue ONCE.
+ *   9. source guard: the lib has NO release seam and NO routing seam (no releaseLock /
+ *      inspect / probe / resolve) — a lock leak / re-route is structurally impossible.
+ *
+ * No real IO — the enqueue fake records its args so "enqueue once, with these exact
+ * arguments, no routing, no release" is asserted structurally.
+ */
+
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { expect, it } from "vitest";
+import type { LockClaim } from "./entwurf-v2-lock.ts";
+import { executeMetaMailboxSend, makeProductionSendViaMailbox } from "./entwurf-v2-mailbox.ts";
+import type { MetaMailboxPlan } from "./entwurf-v2-send.ts";
+import type { MailboxSenderEnvelope } from "./meta-mailbox-body.ts";
+import type { EnqueueMetaMessageOptions, EnqueueMetaMessageResult } from "./meta-session.ts";
+
+// The label is the contract, so it travels as expect's message.
+function ok(label: string, cond: boolean): void {
+	expect(cond, label).toBe(true);
+}
+
+const GID = "20260613T100000-aaaaaa";
+
+const SENDER: MailboxSenderEnvelope = {
+	sessionId: "20260613T120000-sender",
+	agentId: "openai-codex/gpt-5.5",
+	cwd: "/home/junghan/repos/gh/entwurf",
+	timestamp: "2026-06-13T04:00:00.000Z",
+	origin: "pi-session",
+	replyable: true,
+};
+
+function mailboxPlan(over: Partial<MetaMailboxPlan> = {}): MetaMailboxPlan {
+	return {
+		transport: "meta-mailbox",
+		action: "send",
+		targetGardenId: GID,
+		mailboxDir: "/fake/mailbox",
+		sessionsDir: "/fake/sessions",
+		wantsReply: false,
+		message: "hello world",
+		...over,
+	};
+}
+
+// A fake enqueue that records every call. The result is a plausible EnqueueMetaMessageResult.
+function recordingEnqueue(): {
+	calls: EnqueueMetaMessageOptions[];
+	fn: (opts: EnqueueMetaMessageOptions) => EnqueueMetaMessageResult;
+} {
+	const calls: EnqueueMetaMessageOptions[] = [];
+	return {
+		calls,
+		fn: (opts: EnqueueMetaMessageOptions): EnqueueMetaMessageResult => {
+			calls.push(opts);
+			return {
+				gardenId: opts.gardenId,
+				recordPath: `/fake/records/${opts.gardenId}.json`,
+				messagePath: `/fake/mailbox/${opts.gardenId}/m.msg`,
+				signalPath: `/fake/mailbox/${opts.gardenId}/inbox.signal`,
+			};
+		},
+	};
+}
+
+// ── 1. sender present + wantsReply=true → rendered body, enqueue once ────────
+it("1. sender present + wantsReply=true → rendered body, enqueue once", () => {
+	{
+		const enq = recordingEnqueue();
+		const plan = mailboxPlan({ wantsReply: true, message: "ping" });
+		const res = executeMetaMailboxSend(plan, SENDER, { enqueue: enq.fn });
+		ok("1: enqueue called exactly once", enq.calls.length === 1);
+		ok("1: returns {success:true}", res.success === true);
+		const body = enq.calls[0].body;
+		ok(
+			"1: body is the rendered envelope, not raw message",
+			body !== plan.message && body.includes("[entwurf received ⟵]"),
+		);
+		ok("1: wantsReply=true → 'wants reply: yes' in body", body.includes("wants reply: yes"));
+		ok("1: body carries the message", body.includes("ping"));
+		ok("1: body carries the sender sessionId (replyable)", body.includes(SENDER.sessionId));
+		ok(
+			"1: replyable body points to the v2 reply surface (entwurf_v2), not the retired entwurf_send",
+			body.includes("entwurf_v2") && !body.includes("entwurf_send"),
+		);
+	}
+});
+
+// ── 2. sender present + wantsReply=false → 'wants reply: no' ──────────────────
+it("2. sender present + wantsReply=false → 'wants reply: no'", () => {
+	{
+		const enq = recordingEnqueue();
+		const res = executeMetaMailboxSend(mailboxPlan({ wantsReply: false }), SENDER, { enqueue: enq.fn });
+		ok("2: returns {success:true}", res.success === true);
+		ok("2: wantsReply=false → 'wants reply: no' in body", enq.calls[0].body.includes("wants reply: no"));
+	}
+});
+
+// ── 3. sender undefined → raw plan.message enqueued ──────────────────────────
+it("3. sender undefined → raw plan.message enqueued", () => {
+	{
+		const enq = recordingEnqueue();
+		const plan = mailboxPlan({ message: "raw body, no envelope" });
+		executeMetaMailboxSend(plan, undefined, { enqueue: enq.fn });
+		ok("3: envelope-less → raw plan.message is the body", enq.calls[0].body === plan.message);
+		ok("3: no envelope header when sender absent", !enq.calls[0].body.includes("[entwurf received ⟵]"));
+	}
+});
+
+// ── 4. enqueue opts are EXACTLY the plan's fields (no re-derivation) ──────────
+it("4. enqueue opts are EXACTLY the plan's fields (no re-derivation)", () => {
+	{
+		const enq = recordingEnqueue();
+		const plan = mailboxPlan({ targetGardenId: GID, mailboxDir: "/m/dir", sessionsDir: "/s/dir" });
+		executeMetaMailboxSend(plan, SENDER, { enqueue: enq.fn });
+		const opts = enq.calls[0];
+		ok("4: gardenId === plan.targetGardenId", opts.gardenId === GID);
+		ok("4: mailboxDir === plan.mailboxDir", opts.mailboxDir === "/m/dir");
+		ok("4: sessionsDir === plan.sessionsDir", opts.sessionsDir === "/s/dir");
+		ok(
+			"4: opts keys are exactly {gardenId, body, sessionsDir, mailboxDir}",
+			JSON.stringify(Object.keys(opts).sort()) === JSON.stringify(["body", "gardenId", "mailboxDir", "sessionsDir"]),
+		);
+	}
+});
+
+// ── 5. enqueue throw PROPAGATES, not folded into success:false ───────────────
+it("5. enqueue throw PROPAGATES, not folded into success:false", () => {
+	{
+		const boom = new Error("citizen record gone");
+		let thrown: unknown;
+		try {
+			executeMetaMailboxSend(mailboxPlan(), SENDER, {
+				enqueue: () => {
+					throw boom;
+				},
+			});
+		} catch (e) {
+			thrown = e;
+		}
+		ok("5: enqueue throw propagates (no success:false fold)", thrown === boom);
+	}
+});
+
+// ── 6. (covered by 1/2) success → {success:true} — explicit ──────────────────
+it("6. (covered by 1/2) success → {success:true} — explicit", () => {
+	{
+		const enq = recordingEnqueue();
+		const res = executeMetaMailboxSend(mailboxPlan(), SENDER, { enqueue: enq.fn });
+		ok("6: successful enqueue → {success:true}", res.success === true && res.error === undefined);
+	}
+});
+
+// ── 6b. #98 R: the enqueue result's messagePath is the SEND receipt ──────────
+// Reported VERBATIM from the enqueue result, never re-derived from the plan — a
+// re-derived path could disagree with the file that was actually written.
+it("6b. #98 R: the enqueue result's messagePath is the SEND receipt", () => {
+	{
+		const enq = recordingEnqueue();
+		const res = executeMetaMailboxSend(mailboxPlan(), SENDER, { enqueue: enq.fn });
+		ok("6b: result carries the enqueue's messagePath verbatim", res.messagePath === `/fake/mailbox/${GID}/m.msg`);
+	}
+	{
+		// The path is taken from the RESULT, not from `plan.mailboxDir` + gardenId: an enqueue
+		// that lands somewhere else (env override, tilde expansion, a resolved symlink) must be
+		// reported where it actually landed.
+		const res = executeMetaMailboxSend(mailboxPlan(), SENDER, {
+			enqueue: (opts) => ({
+				gardenId: opts.gardenId,
+				recordPath: "/elsewhere/rec.json",
+				messagePath: "/elsewhere/queued-here.msg",
+				signalPath: "/elsewhere/inbox.signal",
+			}),
+		});
+		ok(
+			"6b: a messagePath outside the plan's mailboxDir is still reported as-is",
+			res.messagePath === "/elsewhere/queued-here.msg",
+		);
+	}
+});
+
+// ── 7. production adapter: ignores lock entirely (poison LockClaim) ───────────
+it("7. production adapter: ignores lock entirely (poison LockClaim)", async () => {
+	{
+		const enq = recordingEnqueue();
+		let senderProviderCalls = 0;
+		const sendViaMailbox = makeProductionSendViaMailbox({
+			senderProvider: () => {
+				senderProviderCalls++;
+				return SENDER;
+			},
+			enqueue: enq.fn,
+		});
+		// Any property access on this lock throws — proving the adapter never reads it.
+		const poisonLock = new Proxy({} as LockClaim, {
+			get() {
+				throw new Error("mailbox enqueue must NOT touch the lock");
+			},
+		});
+		const res = await sendViaMailbox(mailboxPlan(), poisonLock);
+		ok("7: production adapter resolves {success:true}", res.success === true);
+		ok("7: senderProvider consulted exactly once", senderProviderCalls === 1);
+		ok("7: enqueue called once via adapter", enq.calls.length === 1);
+		ok("7: lock never touched (poison getter never fired)", true);
+	}
+});
+
+// ── 8. production adapter threads the plan straight through ───────────────────
+it("8. production adapter threads the plan straight through", async () => {
+	{
+		const enq = recordingEnqueue();
+		const sendViaMailbox = makeProductionSendViaMailbox({ senderProvider: () => undefined, enqueue: enq.fn });
+		const plan = mailboxPlan({ targetGardenId: "20260613T200000-cccccc", message: "thread me" });
+		await sendViaMailbox(plan, undefined as unknown as LockClaim);
+		ok(
+			"8: adapter enqueues the plan's target once",
+			enq.calls.length === 1 && enq.calls[0].gardenId === plan.targetGardenId,
+		);
+		ok("8: envelope-less adapter sends raw message", enq.calls[0].body === plan.message);
+	}
+});
+
+// ── 8b. production adapter: an enqueue throw surfaces as a REJECTED promise ───
+// The adapter is `async`, so a synchronous enqueue throw must become a rejection (not a
+// sync throw) — the honest async-dep shape the send hand awaits.
+it("8b. production adapter: an enqueue throw surfaces as a REJECTED promise", async () => {
+	{
+		const boom = new Error("enqueue exploded");
+		const sendViaMailbox = makeProductionSendViaMailbox({
+			senderProvider: () => SENDER,
+			enqueue: () => {
+				throw boom;
+			},
+		});
+		let rejected: unknown;
+		await sendViaMailbox(mailboxPlan(), undefined as unknown as LockClaim).catch((e) => {
+			rejected = e;
+		});
+		ok("8b: enqueue throw → rejected promise (not a sync throw)", rejected === boom);
+	}
+});
+
+// ── 9. source guard: NO release seam, NO routing seam ────────────────────────
+it("9. source guard: NO release seam, NO routing seam", () => {
+	{
+		const libPath = fileURLToPath(new URL("./entwurf-v2-mailbox.ts", import.meta.url));
+		const src = readFileSync(libPath, "utf8");
+		// Strip block comments so the doc-prose ("release stays the hand's …") does not trip
+		// the structural guard — we assert about CODE, not the rationale we wrote about it.
+		const code = src.replace(/\/\*[\s\S]*?\*\//g, "");
+		for (const forbidden of ["releaseLock", "inspectSocket", "probeSocket", "resolveDispatch", "resolveTarget"]) {
+			ok(`9: lib code has no '${forbidden}' (no release / no routing seam)`, !code.includes(forbidden));
+		}
+		// #98 R, the negative half stated as an assertion: a SEND receipt may never carry a
+		// read/delivery stamp. At enqueue time `lastReadAt` holds the PREVIOUS message's read,
+		// so carrying it here would let a sender read "my message was read" off a stamp that
+		// says nothing of the kind. The per-message read receipt is the `.read` suffix.
+		for (const forbidden of ["lastReadAt", "lastDeliveredAt", "readAt"]) {
+			ok(`9: lib code never carries '${forbidden}' into the send receipt`, !code.includes(forbidden));
+		}
+	}
+});
