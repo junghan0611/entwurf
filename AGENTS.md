@@ -82,6 +82,8 @@ Keep at most ten open issues, including at most five implementation issues. Clas
 
 Two independent axes are required: deterministic/package gates and opt-in LIVE evidence. Exact commands, evidence levels, and release acceptance are owned by [VERIFY.md](./VERIFY.md); recorded host evidence by [BASELINE.md](./BASELINE.md). Run LIVE gates from scratch with ambient identity carriers stripped so artifacts and callbacks cannot bleed from the operator session.
 
+A new contract's test goes beside the behavior it certifies — `pi-extensions/**/*.test.ts` or `plugins/herdr/**/*.test.mjs` — and `check-tests-beside-behavior` discovers it by glob, so landing one edits no filename list. `scripts/check-*` stays the home of LIVE, install, spawning and mixed gates; a new hand-built gate there needs a reason the vitest lane could not carry it.
+
 ### Scheduling
 
 ```text
@@ -97,7 +99,7 @@ implement → affected focused gates → independent review → one amendment bu
 
 ## Type and Working Boundaries
 
-- Each `.ts` file belongs to one declared typecheck fence; never hide a file with `exclude`. Root pi extensions use TypeBox through `@earendil-works/pi-ai`; MCP/scripts use explicit `.ts` imports required by Node strip-types. Installed surfaces route to compiled JS.
+- Each `.ts` file belongs to one declared typecheck fence; never hide a file with `exclude`. Root pi extensions use TypeBox through `@earendil-works/pi-ai`; MCP/scripts use explicit `.ts` imports required by Node strip-types. Installed surfaces route to compiled JS. Behavior-adjacent `.test.ts` takes the fence `test/` takes — `scripts/tsconfig.json`, never the emit-capable root program — and is kept out of the tarball by a files-array negation whose tripwire is `check-pack`.
 - Make surgical, one-contract changes. Removal repairs source and its proof together; a green gate never proves retired behavior.
 - Before commit, sweep repository-wide for retired authority vocabulary and landed-plan future tense. Historical tombstones may remain; live docs, source, gates, and usage must agree.
 - Prefer capability-domain language over identity rank. Use tabs unless the project formatter requires otherwise. GLG decides commit, push, and release gates.
