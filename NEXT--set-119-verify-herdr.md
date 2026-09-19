@@ -30,6 +30,26 @@
 - **Do not:** 워크트리 분할 · 둘째 구현 형제 · `entwurf setup`/`install` 재실행 · `#62` Phase 4 · spawn/LIVE 66개 대량 이주 · H2 기능 · `herdr-checkout` fallback · `insteadOf` · 초록 사진을 정지 사진으로 · 실패 측정을 완료로.
 - **역할:** 코디네이터 Fable(Claude Code, garden `20260919T122011-818171`) · 구현 Opus 1 · 검수 glm/grok/terra 구간마다 · 자문 gpt-6-astra 2회 완료(#119 코멘트).
 
+# 다음 홉 — 형제 교대 (GLG 2026-09-19 17:4x: Opus 70%↑ · Fable 40%↑)
+
+**교대 시점 = F1 + A4 착지 직후, 동결 창 직전.** 동결 창은 코디네이터가 구현자 없이 돌린다. 현 Opus(`20260919T133137-746e24`)의 마지막 산출은 F1 문서 커밋 + 인계 절(#119 코멘트). 그 절은 아래 "새 구현자 브리핑"에 옮겨 붙인다.
+
+## 방향 고정 — 흔들리면 여기로 돌아온다
+- 목표는 #119 세트 exit → main 머지 → **0.23.1 컷 → lock 0.23.1 + 플러그인 0.3.0 후속 커밋 → GLG 날것 PC 재테스트**(= #118 사용자 도착). 그 이전에 새 기능·잔여 3 gate·H2·`scripts/` rename·뮤턴트 다이어트를 열지 않는다.
+- 긴 게이트는 동결 창 1회. 브랜치 CI가 `check:full`을 대신 돈다(두 번 잡았다: `NO-SILENT-AGGREGATE-OMISSION`, `MUTANT-GATES-INSIDE-FULL-FLOOR`).
+- 계약 정본은 GitHub #119/#118 본문 + 코멘트. 이 파일은 "지금 어디"만.
+
+## 새 구현자(Opus) 브리핑 — 첫 턴에 읽을 순서
+1. 이 파일 전체 → `gh issue view 119` 본문("게이트 규율" 표 두 교훈 행 포함) → `gh issue view 118` 본문 → #119 마지막 코멘트의 **인계 절**(현 Opus 작성) → CHANGELOG `## Unreleased`.
+2. 첫 일은 **머지 뒤**에 시작한다(코디네이터가 부른다): (a) `entwurf-release` **prepare** 모드(GLG 승인 뒤) — CHANGELOG 승격·버전 0.23.1·lockfile; (b) make/publish는 GLG 몫; (c) 발행 뒤 `plugins/herdr/runtime-lock.json` 핀(name·version·`npm view @junghanacs/entwurf@0.23.1 dist.integrity`) + 플러그인 0.3.0 출하 커밋(`dd84ac0` 패턴), `check-herdr-plugin-build`·`check-herdr-runtime-bootstrap` focused, 그리고 `LIVE=1 ./run.sh smoke-herdr-raw-install-live`(main, (a) 재영수증) → #118 코멘트.
+3. 하지 않는 것: 워크트리 · 둘째 구현자 · `entwurf setup`/`install` 재실행 · 트레일러 · 잔여 3 gate · H2.
+
+## 새 코디네이터 브리핑(Fable 교대 시)
+- 자기 garden id로 `entwurf_self` → `entwurf_peers`로 살아 있는 형제 확인 → 이 파일 → #119/#118 → `git log main..HEAD`.
+- 동결 창 절차: Opus 정지 확인(`git status` clean, 메일함 조용) → 후보 SHA 기록 → `./run.sh check-gate-qualification`(~40분, tmux 스킬로) → `pnpm run check:full`(~7분) → 두 영수증(elapsed·exit·SHA)을 #119 코멘트 → 후보가 움직이면 재동결. 그 뒤 NEXT 커밋 3개(`5062147`·`1d6532a`·`637befc`) 트레일러 정리는 squash로, `NEXT--set-119-verify-herdr.md` 삭제, GLG에게 머지 결정 DM.
+- 검수 형제: terra `20260919T135931-24854f`(pi, alive) · glm `20260919T153349-e12a86` · grok `20260919T160504-4a49e1`. 살아 있으면 `entwurf_v2`로 재사용, 죽었으면 fresh.
+- DM 규칙: 구간 착지 또는 GLG 결정 필요 시 1건. GLG가 보고 있을 때는 안 보냄.
+
 # RECENT
 
 - 2026-09-19 #119 본문 v6·#118 본문 v3(gpt-6 자문 2회 + V1 수치). 브랜치 생성. V1 표(Opus). V2 5커밋(Opus): 인벤토리 수리·발견의 문·fence(scripts)·출하 제외·AGENTS 한 줄.
