@@ -99,7 +99,7 @@ implement → affected focused gates → independent review → one amendment bu
 
 ## Type and Working Boundaries
 
-- Each `.ts` file belongs to one declared typecheck fence; never hide a file with `exclude`. Root pi extensions use TypeBox through `@earendil-works/pi-ai`; MCP/scripts use explicit `.ts` imports required by Node strip-types. Installed surfaces route to compiled JS. Behavior-adjacent `.test.ts` takes the fence `test/` takes — `scripts/tsconfig.json`, never the emit-capable root program — and is kept out of the tarball by a files-array negation whose tripwire is `check-pack`.
+- Each `.ts` file belongs to one declared typecheck fence; `exclude` may move a file between fences but never out of all of them, so an exclude states the receiving `include` in the same change. Root pi extensions use TypeBox through `@earendil-works/pi-ai`; MCP/scripts use explicit `.ts` imports required by Node strip-types. Installed surfaces route to compiled JS. Behavior-adjacent `.test.ts` takes the fence `test/` takes — `scripts/tsconfig.json`, never the emit-capable root program — and is kept out of the tarball by a files-array negation whose tripwire is `check-pack`.
 - Make surgical, one-contract changes. Removal repairs source and its proof together; a green gate never proves retired behavior.
 - Before commit, sweep repository-wide for retired authority vocabulary and landed-plan future tense. Historical tombstones may remain; live docs, source, gates, and usage must agree.
 - Prefer capability-domain language over identity rank. Use tabs unless the project formatter requires otherwise. GLG decides commit, push, and release gates.

@@ -3082,27 +3082,61 @@ check_tests_beside_behavior() {
   # vitest shims list their files, and a door that also listed files would shut
   # again the first time someone forgot.
   #
-  # Positional filters over the SHARED include, not a second config. Vitest reads
-  # positionals as path substring filters, so the behavior-adjacent globs live in
-  # vitest.config.ts beside everything else and this gate still never runs test/**.
-  # Keeping them out of the other two shims is deliberate: those are mutant gate
-  # argv (mux-fresh-call carries 56), and widening their include would rerun
-  # unrelated tests once per mutant.
+  # The globs are EXPANDED here, not handed to vitest as positional filters. The first
+  # cut passed `pi-extensions plugins/herdr` as positionals, and vitest reads a positional
+  # as a path SUBSTRING — so `test/pi-extensions-probe.test.ts` was selected too, which is
+  # the opposite of the two-locations contract this gate exists to hold (measured: that file
+  # ran as "Test Files 1 passed"). Expanding first keeps the selected set exactly the two
+  # globs while the shim still contains no filename: it computes them every run.
   #
-  # --passWithNoTests because an empty set is the honest steady state — this gate
-  # claims the door is OPEN, never that someone has walked through it. What stops
-  # that from rotting into a silent pass is the literal cross-check below: the shell
-  # cannot read vitest's resolved config, so it compares the two globs as text, and
-  # deleting either one turns this gate red while the filters still exit 0.
+  # Keeping these globs out of the other two shims stays deliberate — those are mutant gate
+  # argv (mux-fresh-call carries 56), and widening their include would rerun unrelated tests
+  # once per mutant.
+  #
+  # An empty expansion RETURNS rather than calling vitest with no arguments, because a
+  # vitest run with no filter runs the whole include — that is, all of test/**. The honest
+  # steady state is "the door is open and unused", and it must not be spelled as a run.
   section "tests beside behavior (discovery, not a filename list)"
   local cfg="$REPO_DIR/vitest.config.ts" glob
   for glob in 'pi-extensions/**/*.test.ts' 'plugins/herdr/**/*.test.mjs'; do
     if ! grep -qF "\"$glob\"" "$cfg"; then
-      fail "[check-tests-beside-behavior] vitest.config.ts no longer includes $glob — the discovery door is shut, and the filters below would still pass"
+      fail "[check-tests-beside-behavior] vitest.config.ts no longer includes $glob — the discovery door is shut, and an expansion that found nothing would still pass"
       return 1
     fi
   done
-  run_vitest --passWithNoTests pi-extensions plugins/herdr
+
+  local -a selected=()
+  local f
+  while IFS= read -r f; do
+    [ -n "$f" ] && selected+=("$f")
+  done < <(cd "$REPO_DIR" && {
+    find pi-extensions -name node_modules -prune -o -type f -name '*.test.ts' -print
+    find plugins/herdr -name node_modules -prune -o -type f -name '*.test.mjs' -print
+  } 2>/dev/null | LC_ALL=C sort)
+
+  # Independent of HOW the expansion was produced: every selected path must be under one of
+  # the two declared locations, and none may come from test/. The second clause is the one
+  # that names the defect above, so it is asserted rather than left implied by the first.
+  for f in "${selected[@]}"; do
+    case "$f" in
+      test/*)
+        fail "[check-tests-beside-behavior] selected $f — this gate covers the two behavior-adjacent locations, never test/**"
+        return 1
+        ;;
+      pi-extensions/*.test.ts | plugins/herdr/*.test.mjs) ;;
+      *)
+        fail "[check-tests-beside-behavior] selected $f, which matches neither declared glob"
+        return 1
+        ;;
+    esac
+  done
+
+  if [ "${#selected[@]}" -eq 0 ]; then
+    echo "  the door is open and unused — 0 tests beside behavior at this HEAD"
+    return 0
+  fi
+  echo "  selected ${#selected[@]}: ${selected[*]}"
+  run_vitest "${selected[@]}"
 }
 
 check_acp_overlay() {
