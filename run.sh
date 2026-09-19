@@ -176,7 +176,6 @@ Usage:
   ./run.sh smoke-codex-native-push-live # on-demand LIVE acceptance for Codex native-push — needs LIVE=1 + CODEX_LIVE_THREAD_ID loaded by a visible TUI attached to the default app-server; probes the real UDS, routes through production runEntwurfV2, queues one exact-token turn without retry, re-probes, and leaves the visible TUI to show the model result
   ./run.sh smoke-codex-fresh-live    # #95 RELEASE MUST: record-backed receipt fixture -> PUBLIC initial Pi fresh/callback in a session S that is NOT the app-server's -> Pi PUBLIC omitted-placement Codex fresh/exact callback, also in S -> Pi-to-Codex addressed native-push v2 -> Codex PUBLIC omitted-placement AND omitted-cwd fresh Pi/exact callback IN S beside its own TUI (lane B claim: the app-server env names another session, so S can only come from the caller's pane title; lane C claim: no cwd was asked for, so the directory can only come from the Codex caller's own record — and the Codex thread's own rollout session_meta.cwd, its pane and its record must all be the requested scratch, not the app-server's repo) -> Codex final v2 evidence. Needs LIVE=1 + ENTWURF_CODEX_APP_SERVER_PID + ENTWURF_CODEX_FRESH_MODEL + ENTWURF_CODEX_FRESH_PI_MODEL, and its ONE stable launch directory answered 'Trust' once in a plain codex -C there: codex records its direct consent per exact directory, so a directory with no answer at all opens a consent screen instead of a first turn. Only THIS gate treats that as a precondition and fails up front as codex-launch-cwd-undecided rather than timing out on a callback — an ordinary entwurf_fresh_call only prints the note and opens the window, because a human can answer the screen. The smoke PRINTS that directory as 'launch-cwd <dir>' and repeats it in the failure as a ready-to-run repair command — do not retype it from memory, and do not write it as \$TMPDIR/... (os.tmpdir() falls back to /tmp when TMPDIR is unset, so that spelling names a different directory in the filesystem root). The PID names the operator-owned app-server, which must sit in a DIFFERENT session from S; the smoke checks/prints all four coordinates, never starts/stops/guesses the app-server/session, never reads screen text, interrupts only its exact still-running Codex turn, and cleans only receipt-named window ids
   ./run.sh smoke-mux-lifecycle-live  # RELEASE MUST integrated LIVE lifecycle acceptance for mux, through the REAL MCP surface — OUT of pnpm check, needs LIVE=1 and spends model turns (two pi siblings: native + recorded-ACP provider, each resumed once; one Claude Code sibling). tools/call fresh_call -> nonce callback sender envelope -> v2 control send landing in the sibling's own transcript -> resume_call REFUSED while live (window count unchanged) -> stable-handle close (pane gone, socket dead, record kept) -> dormant delivery refused honestly -> public entwurf_resume_call with LAUNCH and OBSERVATION receipts kept apart, same-gid socket alive, zero new citizens, zero lock residue, resumed pane_start_path == RECORD cwd (separate tmux query), transcript byte-identical across the resume -> v2 recall of the pre-close fact. claude-code resume refused target-not-pi, no window opened and no lock residue. LIVE=1 ./run.sh smoke-mux-lifecycle-live
-  ./run.sh check-socket-discovery      # deterministic gate (0.11 Stage 0 step 4, fact-provider slice 3): SOCKET-axis scanSocketProbes — probes (dir sockets) ∪ (in-domain citizen canonical paths) 3-valued; dormant citizen no-file → dead (resumable, not unprobed), stall → indeterminate (F3), dir hygiene/dedup/missing-dir + e2e → resolveFactList; readdir/probe injected, no IO
   ./run.sh check-meta-facts            # deterministic gate for the meta-facts projection (#65): drives the REAL CLI — full-record join, parse-before-uniqueness, no-winner duplicates, drift/symlink/invalid-UTF-8 defects in-band, deterministic bytes, exit contract 0/2/3, dispatch+emit reachability
   ./run.sh check-herdr-plugin          # deterministic gate for the #116 M2-b herdr plugin (`plugins/herdr/`): STATIC manifest shape for herdr 0.9.0 + the forbidden sections ([[startup]]/[[events]]/[[actions]]/[[link_handlers]]) asserted absent ([[build]] is check-herdr-plugin-build's subject since #116 M3-b3); BEHAVIOURAL drive of the REAL pane entry against a stub `entwurf` and stub HERDR_BIN_PATH that LOG every call — exactly one peer-facts + one agent list per open (counted, not claimed), skip-by-name when Entwurf is absent, four distinct named refusals instead of an empty table, ambiguous never first-wins, diagnostics shown, activity in its own column, and zero writes to the plugin state/config dirs. No herdr binary, no Entwurf install
   ./run.sh check-herdr-runtime-bootstrap # deterministic gate for the #116 M3-b1 runtime leaf (`plugins/herdr/lib/runtime-bootstrap.mjs`): the Entwurf-owned stable active root as a REAL directory (nothing is put on PATH — the scoped wiring above names ABSOLUTE commands under it), ownership decided BEFORE the first mkdir, disk facts from lstat (a dangling symlink is not 'absent' and a link into another tree is not a directory), exact name@version + compiled entry + all three required bins present AND executable + a real `check-bridge`, the plugin-owned artifact lock coherent with the checkout, the owned npm cache and --ignore-scripts, a CERTIFIED journal (non-object/array/scalar/blank-identity/phase-contradicting-digest all refused) as the only ownership proof, all EIGHT active/staging/previous combinations named, the last good runtime never lost (torn swap AND corrupt-active beside a good backup), prior provenance carried across an install that may not finish, a failed candidate leaving the running runtime byte-identical, idempotent same-spec reinstall, a journal believed only while the disk backs it, a preflight-then-mutate inverse taking runtime last, and the refusal to record Herdr's commit as ours. NETWORK ZERO, npm ZERO — it drives a FIXTURE package, so the ACTUAL package proof lives in check-pack-install
@@ -1780,18 +1779,6 @@ check_control_socket_path() {
   # (socket-discovery, entwurf-control, the MCP bridge) so a local ".sock" literal,
   # an inline join, an inline filename parse, or a dropped leaf import goes RED.
   run_ts scripts/check-control-socket-path.ts
-}
-
-check_socket_discovery() {
-  # Deterministic gate for 0.11 Stage 0 step 4 (fact-provider slice 3): the
-  # SOCKET-axis wiring scanSocketProbes. Probes the union of (dir sockets) ∪
-  # (every in-domain pi citizen's canonical path) so a dormant citizen with no
-  # socket file reads dead (ENOENT) → resumable, never an unprobed gap (slice 2
-  # throws on that). Three-valued throughout — a stalled socket stays
-  # indeterminate (F3), never folded to dead by an alive-only listing. Dir
-  # hygiene (non-.sock / malformed names ignored), dedup, missing-dir, sort, and
-  # an end-to-end scanSocketProbes→resolveFactList. readdir/probe injected, no IO.
-  run_ts scripts/check-socket-discovery.ts
 }
 
 check_meta_listing() {
@@ -6588,9 +6575,6 @@ case "$cmd" in
     ;;
   check-control-socket-path)
     check_control_socket_path
-    ;;
-  check-socket-discovery)
-    check_socket_discovery
     ;;
   check-meta-listing)
     check_meta_listing
