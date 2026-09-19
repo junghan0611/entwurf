@@ -18,26 +18,24 @@ followed by `entwurf setup`. Neither route installs a harness, a subscription or
 
 ### From a raw Linux box, in nine steps
 
-Measured end to end in a clean `node:24` container on 2026-09-19 — no host config, cache or
+Measured end to end in a clean `node:24` container on 2026-09-20 — no host config, cache or
 socket mounted, no git `insteadOf`, the remote spelled exactly as written here. The receipt is
-`LIVE=1 ./run.sh smoke-herdr-raw-install-live`, and there are **two of them**, kept apart because
-they answer different questions.
+`LIVE=1 ./run.sh smoke-herdr-raw-install-live --ref main`, and it is **what a user gets today**:
+`ref=main` resolving to commit `194e8003f31610e6518a54b425bb9e22545b752c`, runtime
+`kind=npm @junghanacs/entwurf@0.23.1` whose `expectedIntegrity` is the sha512 npm published
+(`sha512-T8l/JShWeboR15vZ8QOvWUA47tHNEa3XwC0Q0hCyn/GBIYwWLQqXLcCBl46RzNKzoQaKjRKekzjkEY0feQrndA==`),
+and the activation ledger moving from `["pi"]` to `["pi","claude-code"]`.
 
-- **(a) what a user gets today.** `ref=main` resolving to commit
-  `37b81e725cde4d0a548f1c0faab4fcb5c62942b2`, runtime `kind=npm @junghanacs/entwurf@0.23.0`, and
-  the activation ledger moving from `["pi"]` to `["pi","claude-code"]`. This is the baseline the
-  nine steps below are written against.
-- **(b) the branch state these nine steps were written on.**
-  `herdr plugin install junghan0611/entwurf/plugins/herdr --ref set/119-verify-herdr --yes`,
-  resolving to commit `1685d0786bb3d9ccd30514a3794bfdfd4f027193`, same npm runtime and same
-  ledger transition, cells `[1]`–`[9]` PASS
-  ([receipt](https://github.com/junghan0611/entwurf/issues/118#issuecomment-5740721948)).
-  It carries four cells (a) did not: the install is followed by running what those bytes
-  became, starting a citizen on the wiring with no model turn, driving the status pane against
-  the real binaries, and tearing the whole activation back down and reinstalling.
+The run does not stop at the install. It then runs what those bytes became — the compiled
+bridge entry, three executable bins, a real `entwurf check-bridge` listing exactly the seven
+garden verbs — starts a citizen twice with no model turn (once on the wiring as
+`pi --entwurf-control`, once through the shipped `entwurf pi` launcher), drives the status pane
+against the real `entwurf` and `herdr` binaries, and finally tears the whole activation down
+and reinstalls onto the host it left.
 
-The two are not interchangeable. (a) is the public commit, so it is the one a reader can
-reproduce right now; (b) is a branch, so it is candidate evidence until that branch lands.
+The earlier candidate receipt, taken on the branch these nine steps were written on
+(`--ref set/119-verify-herdr` at `1685d078`), is superseded by the line above: that branch
+landed as `d905a95` and its content is in `main`.
 
 ```bash
 # 1. pi
@@ -87,11 +85,15 @@ fine: it was measured completing on 0.9.1 through herdr's offline-persist path.)
 This release improves the install path and nothing else. With the runtime its lock names
 (`@junghanacs/entwurf@0.23.1`) it does **not** ship:
 
-- `entwurf pi`. The one-word launcher exists in the repository but is not in the npm artifact
-  this lock names; it arrives with the next cut. Until then the command is `pi --entwurf-control`,
-  exactly as step 6 spells it.
-- Anything on your `PATH`. The status pane needs `entwurf` on `PATH` or an absolute
-  `ENTWURF_BIN`; this plugin writes to neither.
+- Anything on your `PATH`. This is the one that decides how you start a session. The npm
+  artifact this lock names **does** carry the `entwurf pi` launcher — measured in the published
+  0.23.1 tarball, and exercised in the receipt above, where
+  `<runtime>/node_modules/.bin/entwurf pi` becomes a garden citizen with no model turn. But the
+  plugin puts nothing on your `PATH`, so that bin is only reachable by its absolute path under
+  the runtime root. The command this README tells you to type is therefore still
+  `pi --entwurf-control`, exactly as step 6 spells it. The status pane has the same constraint
+  from the other side: it needs `entwurf` on `PATH` or an absolute `ENTWURF_BIN`, and this
+  plugin writes to neither.
 - Any harness, subscription or login. Steps 1, 2 and 7 are yours.
 
 ### Developing from a checkout
@@ -141,7 +143,7 @@ herdr plugin uninstall junghan0611.entwurf   # a GitHub-managed install: unregis
 - **Node, for the pane entry itself.** It is a plain `.mjs` using only Node builtins — no
   `node_modules`, no `jq`; the manifest names `node` in its argv and nothing else.
 - **On NixOS, `programs.nix-ld.enable = true`** if you intend to use the ACP rail
-  (`pi --model entwurf/<claude model>`). `[관측: GLG, 날것 PC, 2026-09-17]` that rail runs a
+  (`pi --model entwurf/<claude model>`). `[observed: GLG, raw PC, 2026-09-17]` that rail runs a
   dynamically linked vendor binary shipped inside the Claude Agent SDK
   (`@anthropic-ai/claude-agent-sdk-linux-x64/claude`), and a stock NixOS cannot start one:
   `Could not start dynamically linked executable … NixOS cannot run dynamically linked
@@ -233,7 +235,7 @@ can be slow. You now get one line per step:
 ```text
 [entwurf 1/5] reading herdr's integration status
 [entwurf 2/5] planning activation for pi, claude-code
-[entwurf 3/5] fetching and installing the Entwurf runtime from @junghanacs/entwurf@0.23.0 (npm) — this is the long step (expect minutes of silence)
+[entwurf 3/5] fetching and installing the Entwurf runtime from @junghanacs/entwurf@0.23.1 (npm) — this is the long step (expect minutes of silence)
 [entwurf 4/5] checking what landed: @junghanacs/entwurf@<version> and its activation verb
 [entwurf 5/5] wiring pi, claude-code through the installed package
 [entwurf done] @junghanacs/entwurf@<version> active at ~/.local/share/entwurf/herdr-plugin/runtime/active; pi, claude-code wired
