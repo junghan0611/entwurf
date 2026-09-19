@@ -201,7 +201,7 @@ export async function executeDispatch(
 /**
  * 5d-2a: the deps `runEntwurfV2` joins. `decide` is the WHOLE decider as ONE injected
  * function — NOT `DispatchDeciderDeps`. The runner does not re-validate the 5b decider
- * logic (that is `check-entwurf-v2-decider`'s job); it proves only the decide→execute
+ * logic (that is `pi-extensions/lib/entwurf-v2-decider.test.ts`'s job); it proves only the decide→execute
  * COMPOSITION contract over a fake `decide`. Production wraps the real decider as
  * `decide: (input) => decideDispatch(input, productionDeciderDeps)` (assembled in 5d-2b),
  * so the runner stays gate-provable without any decider IO seam leaking in.

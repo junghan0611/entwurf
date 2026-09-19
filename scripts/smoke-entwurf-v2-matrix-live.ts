@@ -1,7 +1,7 @@
 /**
  * smoke-entwurf-v2-matrix-live — the 5d-5 D4-b LIVE sentinel for the release-gate matrix.
  *
- * The deterministic sibling (check-entwurf-v2-matrix) drives the REAL decider over fakes with
+ * The deterministic sibling (pi-extensions/lib/entwurf-v2-decider.matrix.test.ts) drives the REAL decider over fakes with
  * ZERO IO — it fixes every (target kind → transport → lock) cell as a table. This LIVE sentinel
  * drives the REAL production `runEntwurfV2` deps against REAL OS objects on the substrate's
  * happy path, to catch what fakes cannot: a real `pi --entwurf-control` control socket + RPC,

@@ -106,6 +106,11 @@ const H_FS = /from\s+["']node:fs["']|require\(["']node:fs["']\)/;
 // is the verification surface importing itself, which is a different fact the mutant inventory
 // already counts as infra-subject.
 const H_IMPORTS_SIBLING = /(?:from\s+["']|import\(\s*["'])\.{1,2}\//;
+// Wider than the framework-axis glob (`plugins/herdr/**`) on purpose, and the asymmetry only
+// runs one way: the glob decides what ENTERS the denominator, this decides how a file already
+// in it is read. A test under some other plugins/ package would have to be admitted by the
+// glob first, so the looser shape here cannot inflate a count — it only keeps the classifier
+// from throwing on the day that glob widens.
 const BESIDE_BEHAVIOUR = /^(pi-extensions|plugins)\/.*\.test\.(ts|mjs)$/;
 // H_LIVE asks whether the file's OWN CODE reads the LIVE switch — not whether the
 // three letters appear. The naive `\bLIVE=1\b` form classified
@@ -328,8 +333,9 @@ shell double-quoted expansions kept), so a gate that merely QUOTES "LIVE=1" is n
 real-live. Two-tier gates are listed under the class breakdown.
 semantic classes, first match wins: override → real-live (name -live | H_LIVE on code) →
   package-install (name pack|install) → hermetic-integration (.sh | H_PROC | H_NET) →
-  source-topology (H_TEXT ∧ ¬H_IMPORTS) → behavioral-contract (H_IMPORTS ∧ (H_TEXT ∨ H_FS)) →
-  pure-unit (H_IMPORTS) → ERROR (unclassified is asserted zero)
+  source-topology (H_TEXT ∧ ¬importsProduct) → behavioral-contract (importsProduct ∧ (H_TEXT ∨ H_FS)) →
+  pure-unit (importsProduct) → ERROR (unclassified is asserted zero)
+importsProduct = H_IMPORTS, plus H_IMPORTS_SIBLING for a BESIDE_BEHAVIOUR lane
 test/*.test.ts is classified together with the ./helpers/* bodies it imports.
 `);
 

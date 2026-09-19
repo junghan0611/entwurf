@@ -75,7 +75,7 @@
 		// entwurf-facts.ts is the fact-provider's pure core (step 4 slice 1) — a
 		// lib→lib VALUE importer (factLivenessOf from entwurf-v2-contract.ts), same
 		// `.ts`-extension fence as project-trust-handler. Typechecked by
-		// scripts/tsconfig.json via the gate (check-entwurf-facts.ts).
+		// scripts/tsconfig.json via the gate (pi-extensions/lib/entwurf-facts.test.ts).
 		"pi-extensions/lib/entwurf-facts.ts",
 		// herdr-placement.ts is the #116 S1 pure placement-evidence core — a lib→lib VALUE
 		// importer (it types against meta-session.ts and is imported as a VALUE by
@@ -99,7 +99,7 @@
 		// socket-discovery.ts is the fact-provider's SOCKET-axis wiring (step 4
 		// slice 3) — a lib→lib VALUE importer (probeSocketLiveness from
 		// socket-probe.ts), same `.ts`-extension fence. Typechecked by
-		// scripts/tsconfig.json via the gate (check-socket-discovery.ts).
+		// scripts/tsconfig.json via the gate (pi-extensions/lib/socket-discovery.test.ts).
 		"pi-extensions/lib/socket-discovery.ts",
 		// entwurf-fact-provider.ts is the fact-provider's ASSEMBLY layer (step 4
 		// slice 4b) — a lib→lib VALUE importer (resolveFactList / scanSocketProbes
@@ -115,13 +115,13 @@
 		// VALUE importer (resolveDispatch / acquireLock / inspectTargetControlSocket /
 		// isOutOfSocketDomainGardenIdConflict / metaCapabilityFor), same `.ts`-extension
 		// fence. Typechecked by scripts/tsconfig.json via the gate
-		// (check-entwurf-v2-decider.ts).
+		// (pi-extensions/lib/entwurf-v2-decider.test.ts).
 		"pi-extensions/lib/entwurf-v2-decider.ts",
 		// entwurf-v2-release.ts is the PURE release-policy reducer (step 5c-1). Its
 		// imports are type-only, but they carry the explicit `.ts` extension and pull
 		// the excluded decider/lock into the program, so it lives in the same
 		// scripts/tsconfig.json fence. Typechecked via its gate
-		// (check-entwurf-v2-release.ts).
+		// (pi-extensions/lib/entwurf-v2-release.test.ts).
 		"pi-extensions/lib/entwurf-v2-release.ts",
 		// entwurf-v2-send.ts is the control-socket SEND hand (step 5c-2a) — it WIRES
 		// transport IO onto the release reducer and carries explicit `.ts`-extension
@@ -133,7 +133,7 @@
 		// lib→lib VALUE importer (resolveDispatch / resolveMailboxDeliverability /
 		// mapInspectionToLiveness / defaultMetaMailboxDir) with explicit `.ts`-extension
 		// imports, same fence. Typechecked by scripts/tsconfig.json via its gate
-		// (check-entwurf-v2-send-fallback.ts).
+		// (pi-extensions/lib/entwurf-v2-send-fallback.test.ts).
 		"pi-extensions/lib/entwurf-v2-send-fallback.ts",
 		// resume-launch-identity.ts is the record-authoritative launch-identity leaf preserved
 		// from the retired spawn-bg factory — a lib→lib VALUE importer (readAddressableMetaIdentity /
@@ -145,7 +145,7 @@
 		// sendViaMailbox adapter — a lib→lib VALUE importer (formatMetaMailboxBody /
 		// enqueueMetaMessage) with explicit `.ts`-extension imports that pull the excluded
 		// send hand into the program, same fence. Typechecked by scripts/tsconfig.json via
-		// its gate (check-entwurf-v2-mailbox.ts).
+		// its gate (pi-extensions/lib/entwurf-v2-mailbox.test.ts).
 		"pi-extensions/lib/entwurf-v2-mailbox.ts",
 		// entwurf-v2-native-push.ts is the native-push SEND hand (봉인 3/4, the executor half of
 		// the native-push rail) — a lib→lib VALUE importer (resolveNativePushAdapter from
@@ -167,7 +167,7 @@
 		// entwurf-v2-runner.ts is the 5d-1 execute-router — a lib→lib VALUE importer
 		// (SendDeliveredReleaseFailedError from entwurf-v2-send) with explicit `.ts`-extension
 		// imports that pull the excluded send/decider/spawn into the program, same fence.
-		// Typechecked by scripts/tsconfig.json via its gate (check-entwurf-v2-runner.ts).
+		// Typechecked by scripts/tsconfig.json via its gate (pi-extensions/lib/entwurf-v2-runner.test.ts).
 		"pi-extensions/lib/entwurf-v2-runner.ts",
 		// entwurf-v2-production.ts is the 5d-2b PRODUCTION runEntwurfV2 deps assembly — a
 		// lib→lib VALUE importer (decideDispatch / the 3 transport hands / lock / mailbox /

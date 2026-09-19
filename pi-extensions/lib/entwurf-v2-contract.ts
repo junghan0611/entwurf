@@ -111,7 +111,7 @@ export type DispatchLiveness = (typeof DISPATCH_LIVENESSES)[number];
 // unreachable (the native-push rail measures it — entwurf-v2-decider.ts). Widening
 // THIS set is a deliberate future decision, gated by a real compatible
 // control-socket predicate — never by silently mapping sessions to dead/indeterminate
-// (R1 핵심). check-entwurf-facts pins this == ["pi"] and asserts the native-push
+// (R1 핵심). pi-extensions/lib/entwurf-facts.test.ts pins this == ["pi"] and asserts the native-push
 // domain is disjoint from it.
 export const LIVENESS_DOMAIN_BACKENDS = ["pi"] as const;
 export type LivenessDomainBackend = (typeof LIVENESS_DOMAIN_BACKENDS)[number];
@@ -125,7 +125,7 @@ export function isLivenessSupported(backend: string): boolean {
 // live vendor app-server target probe), NOT a control socket. This domain is DISJOINT
 // from LIVENESS_DOMAIN_BACKENDS: an Antigravity or Codex session is `unsupported` on
 // the socket FACT axis (entwurf_peers) yet independently measured on the native-push
-// axis. The two are separate rails on purpose — check-entwurf-facts pins both sets
+// axis. The two are separate rails on purpose — pi-extensions/lib/entwurf-facts.test.ts pins both sets
 // and asserts their intersection is ∅ (a backend can never be in both domains).
 export const NATIVE_PUSH_BACKENDS = ["antigravity", "codex"] as const;
 export type NativePushBackend = (typeof NATIVE_PUSH_BACKENDS)[number];

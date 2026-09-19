@@ -1696,7 +1696,7 @@ smoke_acp_cortex_live() {
 
 smoke_entwurf_v2_matrix_live() {
   # LIVE sentinel for 0.11 Stage 0 step 5d-5 (D4-b) — kept OUT of `pnpm check`. The deterministic
-  # sibling (check-entwurf-v2-matrix) fixes every (target kind → transport → lock) cell over fakes
+  # sibling (pi-extensions/lib/entwurf-v2-decider.matrix.test.ts) fixes every (target kind → transport → lock) cell over fakes
   # with ZERO IO; this drives the REAL production runEntwurfV2 deps against REAL OS objects on the
   # substrate happy path across 3 cells: C1 control-socket (a real `pi --entwurf-control` resident
   # → control-socket RPC send → lock acquire→release ×1), C2 meta-mailbox deliverable (armed

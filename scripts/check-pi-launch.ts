@@ -209,7 +209,7 @@ exit "\${FAKE_PI_EXIT:-0}"
 			});
 		}
 		ok(
-			`[QK:PILAUNCH-FLAG-SITES] EVERY --entwurf-… token in tracked code is exactly the constant (${sites} occurrences swept, prose excluded)`,
+			`[QK:PILAUNCH-FLAG-SITES] every control-flag PREFIX VARIANT in tracked code is exactly the constant (${sites} occurrences swept, prose excluded)`,
 			wrong.length === 0,
 			`FLAG=${FLAG}\ndisagreeing:\n${wrong.join("\n")}`,
 		);

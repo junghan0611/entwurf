@@ -82,7 +82,7 @@ export const LOCK_SUFFIX = ".lock";
 export const LOCK_OWNER = "entwurf_v2" as const;
 
 /** The reject reason a lock conflict maps to. Kept as a literal here (the lock
- * primitive stays decoupled from the full contract); `check-entwurf-v2-lock`
+ * primitive stays decoupled from the full contract); `pi-extensions/lib/entwurf-v2-lock.test.ts`
  * cross-checks it against the contract's ENTWURF_V2_REJECT_REASONS so the two
  * cannot drift. */
 export const LOCK_CONFLICT_REASON = "target-locked" as const;
