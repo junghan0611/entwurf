@@ -1,8 +1,8 @@
-# Entwurf — a Herdr plugin
+# Entwurf in Herdr
 
-Two surfaces, and only two: one **install-time build** that makes the harnesses Herdr has
-integrated into Entwurf citizens, and one **overlay pane** that shows which Herdr pane each
-garden citizen is visible in, read once, when you ask.
+Bring Entwurf sibling AI sessions into a Herdr workbench: one **install-time build** activates the
+pi and Claude Code sessions Herdr has already integrated, and one **overlay pane** shows which
+Entwurf citizen is visible in each Herdr pane, read once when you ask.
 
 Herdr owns the workbench — workspaces, tabs, panes, layout, and the agent lifecycle it
 detects inside them. Entwurf owns the screwdriver — garden identity, official delivery,
@@ -80,9 +80,10 @@ found`. Both commands above are ordinary invocations — no model turn, no login
 is about the prompt, never about a missing herdr server. (An install with no server running is
 fine: it was measured completing on 0.9.1 through herdr's offline-persist path.)
 
-### What 0.3.0 does not give you
+### What 0.3.1 does not give you
 
-This release improves the install path and nothing else. With the runtime its lock names
+This release makes the Herdr integration easier to identify; it changes no runtime behavior. With
+the runtime its lock names
 (`@junghanacs/entwurf@0.23.1`) it does **not** ship:
 
 - Anything on your `PATH`. This is the one that decides how you start a session. The npm

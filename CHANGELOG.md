@@ -6,6 +6,10 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ### Changed
 
+- **`plugins/herdr` 0.3.1 leads with the workbench a visitor is looking at.** Its manifest and
+  README now say that Entwurf brings sibling AI sessions into Herdr, then name its actual narrow
+  integration scope: the install-time build activates only Herdr-integrated pi and Claude Code,
+  while the pane is read-only. This is an affordance correction, not a new runtime claim.
 - **The plugin runtime lock is pinned to npm `@junghanacs/entwurf@0.23.1`** and its published
   sha512, closing the candidate window 0.23.1 shipped in. The pair moves together, as that entry
   says it must: the lock and `check-herdr-plugin-build`'s committed-lock expectations, with the
