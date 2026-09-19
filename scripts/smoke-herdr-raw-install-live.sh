@@ -553,13 +553,19 @@ const HOME = process.env.HOME;
 const SOCKET_DIR = path.join(HOME, ".pi", "entwurf-control");
 const META_DIR = path.join(HOME, ".pi", "agent", "meta-sessions");
 const ENTWURF_BIN = process.argv[2];
+// The ENTRY POINT is an argument, because there are two of them and they are different
+// claims. `pi --entwurf-control` proves the WIRING; `entwurf pi` proves the LAUNCHER a user
+// received from npm. One program, so neither claim drifts away from the other.
+const LABEL = process.argv[3];
+const [COMMAND, ...COMMAND_ARGS] = process.argv.slice(4);
 
 let bad = 0;
 const ok = (m) => console.log("  ok    " + m);
 const no = (m) => { console.log("  FAIL  " + m); bad = 1; };
 const ls = (dir) => { try { return fs.readdirSync(dir); } catch { return []; } };
 
-const child = spawn("pi", ["--entwurf-control", "--mode", "rpc"], { stdio: ["pipe", "pipe", "pipe"] });
+console.log(`  ENTRY  ${LABEL}: ${COMMAND} ${COMMAND_ARGS.join(" ")}`);
+const child = spawn(COMMAND, COMMAND_ARGS, { stdio: ["pipe", "pipe", "pipe"] });
 let stderr = "";
 child.stderr.on("data", (d) => { stderr += d.toString(); });
 
@@ -655,14 +661,14 @@ child.stdout.on("data", (d) => {
 child.on("error", (err) => { no(`pi failed to spawn: ${err.message}`); done(1); });
 child.on("exit", (code) => {
 	if (settled) return;
-	no(`pi exited ${code} before answering get_state — stderr: ${stderr.trim().slice(0, 600)}`);
+	no(`${LABEL}: the session exited ${code} before answering get_state — stderr: ${stderr.trim().slice(0, 600)}`);
 	done(1);
 });
 
 setTimeout(() => { child.stdin.write(`${JSON.stringify({ type: "get_state", id: "g1" })}\n`); }, 500);
 setTimeout(() => { if (!settled) { no("pi did not answer get_state within 60s"); done(1); } }, 60_000);
 DRIVER_EOF
-node /tmp/use-path-drive.mjs "$ACTIVE/node_modules/.bin/entwurf" || fail=1
+node /tmp/use-path-drive.mjs "$ACTIVE/node_modules/.bin/entwurf" "the plugin wiring" pi --entwurf-control --mode rpc || fail=1
 
 # ── 8. the status fan, driven by the REAL binaries this install produced ─────
 # `check-herdr-plugin` already drives `lib/status.mjs` against stub `entwurf` and `herdr`
@@ -735,6 +741,28 @@ else
   bad "the fan drew no '1 citizen(s) not shown ... (unobserved)' accounting for the citizen born in [7]"
 fi
 herdr server stop >/dev/null 2>&1 || true
+
+# ── 8a. the SHIPPED LAUNCHER, from the bin the user actually received ───────
+# [7] proves the wiring by running `pi` off PATH. That is not the same claim as the one #118
+# hop 2 makes, and astra named the gap: a user who installed this plugin does not have this
+# checkout, so the only launcher that means anything to them is the one inside the npm
+# artifact the lock names. Measured on the published tarball before this cell existed, the
+# `pi)` case IS in `run.sh` at 0.23.1 — so the claim is now testable, and this cell is what
+# tests it: the same 0-token birth, driven through `<active>/node_modules/.bin/entwurf pi`.
+#
+# The proof that it EXEC'd pi is the birth itself. A launcher that silently did nothing, or
+# resolved to something else, cannot produce a V3 record and a gardenId-keyed socket.
+#
+# IT SITS AFTER [8] ON PURPOSE: the fan cell asserts the unobserved count as an exact
+# literal, and a second citizen born before it would change that number. Order here is the
+# cheaper of the two ways to keep that oracle exact.
+echo; echo "[8a] entwurf pi — the launcher inside the npm artifact, same 0-token birth"
+ENTWURF_INSTALLED_BIN="$ACTIVE/node_modules/.bin/entwurf"
+if [ -x "$ENTWURF_INSTALLED_BIN" ]; then
+  node /tmp/use-path-drive.mjs "$ENTWURF_INSTALLED_BIN" "the shipped launcher" "$ENTWURF_INSTALLED_BIN" pi --mode rpc || fail=1
+else
+  bad "no installed entwurf bin at $ENTWURF_INSTALLED_BIN — the launcher claim cannot be measured"
+fi
 
 # ── 9. deactivate: the roundtrip, on the npm source (#118 H1-5) ──────────────
 # `check-herdr-activation` cell 16 proves this against fixtures: [QK:HAC-DEACTIVATE-ROUNDTRIP]
