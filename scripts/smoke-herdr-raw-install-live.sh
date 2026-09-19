@@ -20,6 +20,12 @@
 # VERIFY.md:102's installed-runtime and deactivation rows, re-proved against the npm source
 # rather than against a fixture.
 #
+# AT A REF WHOSE LOCK NAMES `herdr-checkout`, the acquisition axis reports a NAMED SKIP and
+# the rest of the journey still runs. That lock is the candidate carrier a cut legitimately
+# sits on (0.23.0 did, until dd84ac0 pinned npm), so a red there would say the install is
+# broken when what is true is that this ref does not lock npm. What IS asserted at both lock
+# kinds is that the runtime came from the source the ref locks.
+#
 # WHAT IT STILL DOES NOT CLOSE, kept explicit so a green run cannot be read as more than it
 # is: swap / torn-swap recovery (owned by `smoke-herdr-plugin-build-live` cells 3–4 on the
 # checkout carrier, and unmeasured on the npm one), the package-consumer proof, and the
@@ -250,10 +256,19 @@ if (src.resolved_commit) ok("the registry records a resolved commit"); else no("
 const managed = src.managed_path || entry.managed_path;
 if (!managed) { no("no managed checkout path recorded"); process.exit(1); }
 const lock = read(path.join(managed, "plugins", "herdr", "runtime-lock.json"));
-console.log(`  LOCK source=${lock.source} ${lock.name}@${lock.version}`);
-console.log(`  LOCK integrity=${lock.integrity}`);
-if (lock.source === "npm") ok("the committed lock at this ref names npm as the production source");
-else no(`the committed lock names ${lock.source}, not npm — this ref is not the production source`);
+// THE PACKAGE NAME COMES FROM THE CHECKOUT, NOT THE LOCK (A8). A `herdr-checkout` lock
+// carries exactly `repository, schemaVersion, source` — npm keys on it are refused by name
+// (herdr-runtime.mjs:317-328) — so `lock.name` is undefined at any ref locking the candidate
+// carrier, and `path.join(active, "node_modules", undefined)` THROWS ERR_INVALID_ARG_TYPE
+// rather than failing an assertion. A receipt that answers a source question with a node
+// stack is the exact failure this smoke exists to refuse. `readCheckoutPackageSpec`
+// (herdr-runtime.mjs:258-272) reads the same manifest for both lock kinds, and for an npm
+// lock it is the very pair `certifyLockCoherence` compares against, so nothing is weakened.
+const checkout = read(path.join(managed, "package.json"));
+const PACKAGE = checkout.name;
+console.log(`  LOCK source=${lock.source}${lock.source === "npm" ? ` ${lock.name}@${lock.version}` : ` ${lock.repository}`}`);
+console.log(`  CHECKOUT ${checkout.name}@${checkout.version}`);
+if (lock.source === "npm") console.log(`  LOCK integrity=${lock.integrity}`);
 
 if (!fs.existsSync(journal)) {
   no(`no runtime journal at ${journal}`);
@@ -266,32 +281,54 @@ const j = read(journal);
 // schemaVersion, phase, runtimeRoot, artifactIdentity, previousRuntime.
 const id = j.artifactIdentity;
 if (!id) { no(`no runtime identity in ${journal}: keys ${Object.keys(j)}`); process.exit(1); }
-console.log(`  RUNTIME kind=${id.kind} ${id.name}@${id.version}`);
-console.log(`  RUNTIME expectedIntegrity=${id.expectedIntegrity}`);
-console.log(`  RUNTIME observedDigest=${id.observedDigest}`);
-id.kind === "npm" ? ok("runtime identity.kind === npm (acquired from the registry, not a checkout)") : no(`runtime identity.kind === ${id.kind}`);
-id.name === lock.name && id.version === lock.version ? ok(`runtime name@version matches the committed lock (${id.name}@${id.version})`) : no(`runtime ${id.name}@${id.version} != lock ${lock.name}@${lock.version}`);
-id.expectedIntegrity === lock.integrity ? ok("expected integrity is the committed sha512") : no("expected integrity differs from the committed lock");
-// observedDigest is a sha256 CONTENT ADDRESS of the tarball that arrived, not a second copy of
-// the sha512 integrity — the two are different hashes of the same bytes. The sha512 comparison is
-// not repeated here because it cannot be: npmAcquire hashes the fetched tarball and THROWS
-// runtime-artifact-integrity-mismatch before installing anything (herdr-runtime.mjs:924-930), so a
-// journal existing at all is that comparison having passed. What is left to check is that a real
-// digest of real bytes was recorded.
-/^sha256-[0-9a-f]{64}$/.test(id.observedDigest ?? "")
-  ? ok("a sha256 content address of the FETCHED bytes is recorded (and the sha512 gate upstream let the install proceed)")
-  : no(`observedDigest is not a sha256 content address: ${JSON.stringify(id.observedDigest)}`);
+// The identity is printed in the shape its OWN kind has: an npm identity carries
+// name/version/integrity/digest, a herdr-checkout one carries repository/commit. Printing
+// the npm fields unconditionally spelled `undefined@undefined` for a perfectly well-formed
+// checkout identity, which is a receipt describing a state the host is not in.
+if (id.kind === "npm") {
+  console.log(`  RUNTIME kind=${id.kind} ${id.name}@${id.version}`);
+  console.log(`  RUNTIME expectedIntegrity=${id.expectedIntegrity}`);
+  console.log(`  RUNTIME observedDigest=${id.observedDigest}`);
+} else {
+  console.log(`  RUNTIME kind=${id.kind} ${id.repository}@${id.commit}`);
+}
+// ASKED AT BOTH LOCK KINDS, because what a ref LOCKED and what the host RECEIVED is the one
+// question a receipt must answer even when the npm axis is not the subject.
+id.kind === lock.source
+  ? ok(`the runtime was acquired from the source this ref locks (identity.kind === ${id.kind})`)
+  : no(`this ref locks ${lock.source} but the runtime identity.kind is ${id.kind}`);
+
+if (lock.source === "npm") {
+  ok("the committed lock at this ref names npm as the production source");
+  id.name === lock.name && id.version === lock.version ? ok(`runtime name@version matches the committed lock (${id.name}@${id.version})`) : no(`runtime ${id.name}@${id.version} != lock ${lock.name}@${lock.version}`);
+  id.expectedIntegrity === lock.integrity ? ok("expected integrity is the committed sha512") : no("expected integrity differs from the committed lock");
+  // observedDigest is a sha256 CONTENT ADDRESS of the tarball that arrived, not a second copy of
+  // the sha512 integrity — the two are different hashes of the same bytes. The sha512 comparison is
+  // not repeated here because it cannot be: npmAcquire hashes the fetched tarball and THROWS
+  // runtime-artifact-integrity-mismatch before installing anything (herdr-runtime.mjs:924-930), so a
+  // journal existing at all is that comparison having passed. What is left to check is that a real
+  // digest of real bytes was recorded.
+  /^sha256-[0-9a-f]{64}$/.test(id.observedDigest ?? "")
+    ? ok("a sha256 content address of the FETCHED bytes is recorded (and the sha512 gate upstream let the install proceed)")
+    : no(`observedDigest is not a sha256 content address: ${JSON.stringify(id.observedDigest)}`);
+} else {
+  // A NAMED SKIP, not a pass and not a red. During a candidate window the committed lock
+  // names `herdr-checkout` ON PURPOSE (0.23.0 cut this way before dd84ac0 pinned it), and a
+  // red there would say the install is broken when what is true is that this ref does not
+  // lock npm. The rest of this smoke still runs; only the acquisition axis stands down.
+  console.log(`  skip  this ref locks ${lock.source}; the npm acquisition axis is not measured at this commit`);
+}
 
 // The active dir is an npm PREFIX, so the package lands under node_modules/<name>
 // (herdr-runtime.mjs:805-806), not at its root.
-const installedRoot = path.join(active, "node_modules", lock.name);
+const installedRoot = path.join(active, "node_modules", PACKAGE);
 if (!fs.existsSync(path.join(installedRoot, "package.json"))) {
   no(`no installed runtime at ${installedRoot}`);
 } else {
   const pkg = read(path.join(installedRoot, "package.json"));
-  pkg.name === lock.name && pkg.version === lock.version
-    ? ok(`the active runtime on disk is ${pkg.name}@${pkg.version}`)
-    : no(`active runtime is ${pkg.name}@${pkg.version}`);
+  pkg.name === checkout.name && pkg.version === checkout.version
+    ? ok(`the active runtime on disk is ${pkg.name}@${pkg.version}, the pair this checkout declares`)
+    : no(`active runtime is ${pkg.name}@${pkg.version}, not the checkout pair ${checkout.name}@${checkout.version}`);
 }
 
 if (!fs.existsSync(ledger)) { no(`no activation ledger at ${ledger}`); process.exit(1); }
@@ -324,13 +361,15 @@ const read = (p) => JSON.parse(fs.readFileSync(p, "utf8"));
 const reg = read(registry);
 const entry = (Array.isArray(reg) ? reg : reg.plugins || []).find((e) => e.plugin_id === pluginId);
 const managed = entry?.source?.managed_path || entry?.managed_path;
-const lock = read(path.join(managed, "plugins", "herdr", "runtime-lock.json"));
+// The checkout manifest, for the reason spelled out in [3] (A8): a herdr-checkout lock has
+// no `name`, and joining undefined throws instead of failing.
+const checkout = read(path.join(managed, "package.json"));
 // register() writes the CANONICAL ABSOLUTE path of the package root and nothing else
 // (register-pi-package.py:244-282). The stable `active` dir is a real directory that a
 // generation swap renames into place, never a symlink (herdr-runtime.mjs:15,744,1039), so
 // the resolved string is this join and a generation path here would be the bug: it would
 // strand the wiring the next time the runtime is swapped.
-const expected = path.join(active, "node_modules", lock.name);
+const expected = path.join(active, "node_modules", checkout.name);
 
 const settings = read(settingsPath);
 const packages = settings.packages;
@@ -430,8 +469,9 @@ const read = (p) => JSON.parse(fs.readFileSync(p, "utf8"));
 const reg = read(registry);
 const entry = (Array.isArray(reg) ? reg : reg.plugins || []).find((e) => e.plugin_id === pluginId);
 const managed = entry?.source?.managed_path || entry?.managed_path;
-const lock = read(path.join(managed, "plugins", "herdr", "runtime-lock.json"));
-const root = path.join(active, "node_modules", lock.name);
+// Checkout manifest, not the lock (A8): a herdr-checkout lock carries no `name`.
+const checkout = read(path.join(managed, "package.json"));
+const root = path.join(active, "node_modules", checkout.name);
 
 // The exact constant the bootstrap uses, spelled out so a drift in either place is visible
 // here rather than absorbed: mcp/entwurf-bridge/dist/mcp/entwurf-bridge/src/index.js.
