@@ -69,7 +69,22 @@ function listWorkSurface(pathspec: string[]): string[] {
 }
 
 const legacyFiles = listWorkSurface(["scripts/"]);
-const frameworkFiles = listWorkSurface(["test/", "vitest.config.ts"]);
+// The framework axis is every vitest-managed lane, and since #119 V2 that is TWO locations:
+// the migration lane under test/, and tests written beside the behaviour they certify. The
+// pathspecs are `:(glob)` so `**` means "at any depth" and nothing but a test file enters —
+// pi-extensions/ and plugins/ are product trees, and pulling them in whole would put 20k lines
+// of product into a VERIFICATION denominator.
+//
+// This is what keeps the combined total honest through the V3 migration: a gate moving from
+// scripts/ to a file beside its subject moves lines BETWEEN axes, and only a drop in the
+// combined number is subtraction. Before this, such a gate left the denominator entirely and
+// every migrated line read as a deletion.
+const frameworkFiles = listWorkSurface([
+	"test/",
+	"vitest.config.ts",
+	":(glob)pi-extensions/**/*.test.ts",
+	":(glob)plugins/herdr/**/*.test.mjs",
+]);
 
 function countLines(rel: string): number {
 	const body = fs.readFileSync(path.join(REPO_DIR, rel), "utf8");
@@ -83,6 +98,15 @@ const H_TEXT = /readFileSync[^\n]*(?:pi-extensions|mcp\/|\.ts["'`]|SOURCE|SRC)|\
 const H_PROC = /\b(?:spawn|spawnSync|execFile|execFileSync|execSync|fork)\s*\(|subprocess\.(?:run|Popen|check_)/;
 const H_NET = /\b(?:http|net)\.createServer|\.listen\(/;
 const H_FS = /from\s+["']node:fs["']|require\(["']node:fs["']\)/;
+// H_IMPORTS asks for an ASCENDING path into a product tree, because every gate under scripts/
+// has to climb to reach one. A test written beside its subject never climbs: it imports
+// `./subject.ts`. The distinction is the file's own location, not its spelling — a lane living
+// inside pi-extensions/ or plugins/ that imports a relative sibling is importing product by
+// construction. Applied ONLY to those lanes: scripts/check-*.ts also import `./lib/*`, and that
+// is the verification surface importing itself, which is a different fact the mutant inventory
+// already counts as infra-subject.
+const H_IMPORTS_SIBLING = /(?:from\s+["']|import\(\s*["'])\.{1,2}\//;
+const BESIDE_BEHAVIOUR = /^(pi-extensions|plugins)\/.*\.test\.(ts|mjs)$/;
 // H_LIVE asks whether the file's OWN CODE reads the LIVE switch — not whether the
 // three letters appear. The naive `\bLIVE=1\b` form classified
 // scripts/check-release-gate-outcomes.ts as real-live because that gate QUOTES the
@@ -226,9 +250,13 @@ function classify(rel: string, axis: "legacy" | "framework"): Row {
 	const body = isShell ? fs.readFileSync(path.join(REPO_DIR, rel), "utf8") : effectiveBody(rel);
 	const base = path.basename(rel);
 
+	// One notion of "imports product", used by BOTH axes below so the style table and the class
+	// table can never disagree about the same file.
+	const importsProduct = H_IMPORTS.test(body) || (BESIDE_BEHAVIOUR.test(rel) && H_IMPORTS_SIBLING.test(body));
+
 	const style: Style = (() => {
 		if (isShell) return "shell";
-		const axes = [H_IMPORTS.test(body), H_TEXT.test(body), H_PROC.test(body)];
+		const axes = [importsProduct, H_TEXT.test(body), H_PROC.test(body)];
 		const n = axes.filter(Boolean).length;
 		if (n >= 2) return "mixed";
 		if (axes[0]) return "imports-product";
@@ -246,11 +274,11 @@ function classify(rel: string, axis: "legacy" | "framework"): Row {
 				? "package-install"
 				: isShell || H_PROC.test(body) || H_NET.test(body)
 					? "hermetic-integration"
-					: H_TEXT.test(body) && !H_IMPORTS.test(body)
+					: H_TEXT.test(body) && !importsProduct
 						? "source-topology"
-						: H_IMPORTS.test(body) && (H_TEXT.test(body) || H_FS.test(body))
+						: importsProduct && (H_TEXT.test(body) || H_FS.test(body))
 							? "behavioral-contract"
-							: H_IMPORTS.test(body)
+							: importsProduct
 								? "pure-unit"
 								: null;
 	if (cls === null) {
@@ -263,7 +291,7 @@ function classify(rel: string, axis: "legacy" | "framework"): Row {
 
 // ── buckets ──────────────────────────────────────────────────────────────────
 const legacyGates = legacyFiles.filter((f) => /^scripts\/(check-|smoke-)/.test(f));
-const frameworkGates = frameworkFiles.filter((f) => /^test\/.*\.test\.ts$/.test(f));
+const frameworkGates = frameworkFiles.filter((f) => /\.test\.(ts|mjs)$/.test(f));
 const lib = legacyFiles.filter((f) => f.startsWith("scripts/lib/"));
 const mutantManifests = legacyFiles.filter((f) => f.startsWith("scripts/mutants/") && f.endsWith(".json"));
 const fixtures = legacyFiles.filter((f) => f.startsWith("scripts/fixtures/"));
@@ -293,6 +321,7 @@ rule predicates (re-derive any number from these):
   H_PROC     ${H_PROC}
   H_NET      ${H_NET}
   H_FS       ${H_FS}
+  H_IMPORTS_SIBLING ${H_IMPORTS_SIBLING}   (only for ${BESIDE_BEHAVIOUR})
   H_LIVE     ${H_LIVE}
 H_LIVE is applied to the CODE-ONLY projection (comments and inert literals blanked;
 shell double-quoted expansions kept), so a gate that merely QUOTES "LIVE=1" is not
@@ -314,9 +343,11 @@ console.log(`  scripts/lib/:                    ${lib.length} files, ${total(lib
 console.log(`  scripts/mutants/:                ${mutantManifests.length} manifests`);
 console.log(`  scripts/fixtures/:               ${fixtures.length} files`);
 console.log(`  other:                           ${legacyOther.length} files, ${total(legacyOther)} lines`);
-console.log(`framework axis (test/ + vitest.config.ts): ${frameworkFiles.length} files, ${frameworkTotal} lines`);
 console.log(
-	`  vitest lanes (test/**/*.test.ts):  ${frameworkGates.length} files, ${sum(rows.filter((r) => r.axis === "framework"))} lines`,
+	`framework axis (vitest-managed, both locations):  ${frameworkFiles.length} files, ${frameworkTotal} lines`,
+);
+console.log(
+	`  lanes (test/** + beside behaviour): ${frameworkGates.length} files, ${sum(rows.filter((r) => r.axis === "framework"))} lines`,
 );
 console.log(`  helpers/config:                    ${frameworkSupport.length} files, ${total(frameworkSupport)} lines`);
 console.log(
