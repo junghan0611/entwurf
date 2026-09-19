@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# smoke-herdr-raw-install-live — the FIRST USER PATH for the Herdr plugin (#118 홉 1).
+# smoke-herdr-raw-install-live — the FIRST USER PATH for the Herdr plugin (#118 홉 1, H1-4, H1-5).
 #
 # WHAT THIS IS THE ONLY EVIDENCE FOR. Every other herdr gate in this repository proves the
 # plugin against a source we control: `check-herdr-plugin-build` drives a herdr-stub, and
@@ -8,12 +8,24 @@
 # what they are, and neither has ever watched the plugin acquire its runtime from npm on a
 # machine that has never seen this repository. VERIFY.md:61 says a source switch is a
 # re-proof, and the production lock has said `npm` since dd84ac0 with that re-proof's
-# acquisition axis still empty. This closes that one axis and no other.
+# acquisition axis still empty. Cells [1]–[5] close that one axis.
 #
-# WHAT IT DOES NOT CLOSE, kept explicit so a green run cannot be read as more than it is:
-# installed-runtime depth beyond identity (compiled entry, three bins, a real
-# `check-bridge`), swap / torn-swap recovery, deactivation, and the package-consumer proof.
-# Those stay where #118's table puts them.
+# THEN THE PATH KEEPS GOING, because an install is not a use. Cells [6]–[9] stay in the SAME
+# container and ask what a user asks next: the runtime those bytes became is run (compiled
+# entry, three executable bins, a real `check-bridge` printing its verb set); the pi that
+# this plugin WIRED is started with no `-e` and no model turn, to see whether it becomes a
+# garden citizen with a record and a control socket; `entwurf peer-facts` and the plugin's
+# own status fan are asked about that citizen with neither side stubbed; and the shipped
+# teardown deletes the runtime it is executing from and then comes back. Those are
+# VERIFY.md:102's installed-runtime and deactivation rows, re-proved against the npm source
+# rather than against a fixture.
+#
+# WHAT IT STILL DOES NOT CLOSE, kept explicit so a green run cannot be read as more than it
+# is: swap / torn-swap recovery (owned by `smoke-herdr-plugin-build-live` cells 3–4 on the
+# checkout carrier, and unmeasured on the npm one), the package-consumer proof, and the
+# status fan drawing a citizen as a ROW — that needs `placement.kind === "herdr-pane"`, so
+# the pi session must live in a herdr pane a session reference joins, and a headless
+# container has no panes. Those stay where #118's table puts them.
 #
 # SCAFFOLDING VS PRODUCT FACE (Hard Rule 17). pi, herdr and Claude Code are installed in the
 # IMAGE BUILD, by this harness, for this one container. Entwurf's own setup and package
@@ -196,6 +208,11 @@ else
   echo; echo "smoke-herdr-raw-install-live: FAIL (harness integration, before the product face)"
   exit 1
 fi
+# The pre-plugin baseline for [9]. Captured HERE and not later: everything after this line
+# is the plugin's own writing, so this is the last moment the file still means what the
+# host meant. Absence is a baseline too — `<absent>` below is a file the plugin created,
+# and a teardown must not leave one behind carrying our entry.
+cp "$HOME/.pi/agent/settings.json" /tmp/pi-settings-pre-plugin.json 2>/dev/null || rm -f /tmp/pi-settings-pre-plugin.json
 
 # ── 2. THE FIRST MEASUREMENT: plugin install with no herdr server ────────────
 echo; echo "[2] herdr plugin install $REMOTE_SPEC --ref $REQUESTED_REF --yes"
@@ -332,6 +349,350 @@ if [ -n "$PI_FILE" ]; then
     bad "pi wiring changed across the reinstall:"; diff /tmp/pi-settings-phase-a.json "$PI_FILE" | sed 's/^/        /'
   fi
 fi
+
+# ── 6. the INSTALLED runtime, MEASURED instead of implied (#118 H1-5) ────────
+# A green [2] already implies this: `certifyInstalledTree` refuses an install whose tree
+# lacks the compiled entry, the three bins, or a `check-bridge` that exits 0
+# (herdr-runtime.mjs:824-843). Implication is not observation, and VERIFY.md:102 lists
+# "the installed runtime (name@version, compiled entry, three executable bins, a real
+# check-bridge)" as its own re-proof row against THIS source. A row closed by inference
+# cannot print the verb set it claims, so these lines run the npm-acquired bytes and print
+# what they answered. The bin set is REQUIRED_BINS (herdr-runtime.mjs:165) — the package
+# declares six, and the three named there are the ones an activation certifies.
+echo; echo "[6] the installed runtime: compiled entry, three bins, a real check-bridge"
+node -e '
+const fs = require("node:fs");
+const path = require("node:path");
+const { spawnSync } = require("node:child_process");
+const [active, registry, pluginId] = process.argv.slice(1);
+let bad = 0;
+const ok = (m) => console.log("  ok    " + m);
+const no = (m) => { console.log("  FAIL  " + m); bad = 1; };
+const read = (p) => JSON.parse(fs.readFileSync(p, "utf8"));
+
+const reg = read(registry);
+const entry = (Array.isArray(reg) ? reg : reg.plugins || []).find((e) => e.plugin_id === pluginId);
+const managed = entry?.source?.managed_path || entry?.managed_path;
+const lock = read(path.join(managed, "plugins", "herdr", "runtime-lock.json"));
+const root = path.join(active, "node_modules", lock.name);
+
+// The exact constant the bootstrap uses, spelled out so a drift in either place is visible
+// here rather than absorbed: mcp/entwurf-bridge/dist/mcp/entwurf-bridge/src/index.js.
+const COMPILED_ENTRY = path.join("mcp", "entwurf-bridge", "dist", "mcp", "entwurf-bridge", "src", "index.js");
+const entryPath = path.join(root, COMPILED_ENTRY);
+if (fs.existsSync(entryPath)) ok(`compiled bridge entry present (${COMPILED_ENTRY})`);
+else no(`no compiled bridge entry at ${entryPath} — the npm artifact shipped source without its dist`);
+
+// Executable, not merely present. A bin entry npm did not chmod is the failure mode
+// `postinstall-chmod` exists for, and `fs.existsSync` would call it green.
+const binDir = path.join(active, "node_modules", ".bin");
+for (const name of ["entwurf", "entwurf-bridge", "entwurf-statusline"]) {
+  const bin = path.join(binDir, name);
+  try { fs.accessSync(bin, fs.constants.X_OK); ok(`bin is executable: ${name}`); }
+  catch (err) { no(`bin not executable: ${bin} (${err.code})`); }
+}
+
+// The REAL subcommand, from the installed bin, under node_modules — which is the branch of
+// start.sh that runs the prebuilt dist. Its own oracle is an EXACT set (run.sh:5187), so a
+// zero exit here is the artifact listing all seven garden verbs and no eighth.
+const run = spawnSync(path.join(binDir, "entwurf"), ["check-bridge"], { encoding: "utf8" });
+const said = `${run.stdout ?? ""}${run.stderr ?? ""}`;
+// [a-z0-9_] and not [a-z_]: the first draft of this line printed `entwurf_v` for entwurf_v2
+// and the cell still went green, because the EXIT CODE is the oracle and the verb list is
+// the receipt. A receipt that misspells what it witnessed is the failure this cell exists
+// to prevent one directory over, so it is spelled correctly here.
+const verbs = (said.match(/entwurf_[a-z0-9_]+/g) ?? []).filter((v, i, a) => a.indexOf(v) === i).sort();
+console.log(`  VERBS ${verbs.join(",") || "<none>"}`);
+if (run.status === 0) ok(`entwurf check-bridge exit 0 from the installed bin (${verbs.length} verbs listed)`);
+else no(`entwurf check-bridge exit ${run.status}: ${said.trim().slice(0, 400)}`);
+process.exit(bad);
+' "$ACTIVE" "$REGISTRY" "$PLUGIN_ID" || fail=1
+
+# ── 7. THE USE PATH: the wired runtime makes a citizen, with no model turn ───
+# What [1]–[5] proved is that bytes landed. #118 H1-4 asks the next question, which is the
+# one a user actually has: does the pi that this plugin wired come up as a GARDEN CITIZEN?
+#
+# NO `-e` AND NO `--no-extensions`. smoke-resident-garden-guard loads this checkout's
+# extension explicitly, because its subject is the checkout. The subject HERE is the
+# wiring — the user-scope packages[] entry that `herdr plugin install` wrote — so the
+# extension has to arrive the way it arrives for a user, or the cell proves nothing about
+# the install. A bare `pi` is the whole point.
+#
+# ZERO TOKENS, and no provider argument either. `--mode rpc` + one `get_state` is the
+# 0-token shape smoke-resident-garden-guard's BIRTH cell uses; the record and the socket
+# exist only WHILE pi is alive, which is why the snapshot is taken from inside the driver
+# between ordered commands rather than after the process ends. A provider/model pair is NOT
+# passed: measured here 2026-09-19, a bogus one (`--provider zzz`) exits 1 with
+# `Unknown provider` BEFORE session_start, and omitting the pair lets pi resolve the
+# default the extension itself registers — so this cell needs no vendor account, no auth
+# file, and no model name that could rot.
+echo; echo "[7] pi --entwurf-control on the plugin's wiring: record + control socket, 0 tokens"
+cat > /tmp/use-path-drive.mjs <<'DRIVER_EOF'
+import { spawn } from "node:child_process";
+import fs from "node:fs";
+import path from "node:path";
+import { spawnSync } from "node:child_process";
+
+const HOME = process.env.HOME;
+const SOCKET_DIR = path.join(HOME, ".pi", "entwurf-control");
+const META_DIR = path.join(HOME, ".pi", "agent", "meta-sessions");
+const ENTWURF_BIN = process.argv[2];
+
+let bad = 0;
+const ok = (m) => console.log("  ok    " + m);
+const no = (m) => { console.log("  FAIL  " + m); bad = 1; };
+const ls = (dir) => { try { return fs.readdirSync(dir); } catch { return []; } };
+
+const child = spawn("pi", ["--entwurf-control", "--mode", "rpc"], { stdio: ["pipe", "pipe", "pipe"] });
+let stderr = "";
+child.stderr.on("data", (d) => { stderr += d.toString(); });
+
+let buf = "";
+let settled = false;
+const extensionErrors = [];
+let agentStartSeen = false;
+
+const done = (code) => {
+	if (settled) return;
+	settled = true;
+	try { child.stdin.end(); } catch { /* best-effort */ }
+	setTimeout(() => { try { child.kill("SIGTERM"); } catch { /* best-effort */ } process.exit(code); }, 300);
+};
+
+const observe = (sessionId) => {
+	const sockets = ls(SOCKET_DIR).filter((f) => f.endsWith(".sock"));
+	const recordFiles = ls(META_DIR).filter((f) => f.endsWith(".meta.json"));
+	const records = recordFiles.map((f) => {
+		try { return JSON.parse(fs.readFileSync(path.join(META_DIR, f), "utf8")); } catch { return null; }
+	}).filter((r) => r !== null);
+	const mine = records.filter((r) => r.nativeSessionId === sessionId);
+	console.log(`  PI    nativeSessionId=${sessionId}`);
+	console.log(`  STORE records=${records.length} sockets=${JSON.stringify(sockets)}`);
+
+	if (mine.length === 1) ok("exactly one V3 record claims this pi session");
+	else { no(`${mine.length} records claim ${sessionId} — the wired extension did not birth exactly one citizen`); return null; }
+
+	const rec = mine[0];
+	console.log(`  RECORD gardenId=${rec.gardenId} backend=${rec.backend} schemaVersion=${rec.schemaVersion} model=${rec.model} transcriptPath=${JSON.stringify(rec.transcriptPath)}`);
+	rec.schemaVersion === 3 && rec.backend === "pi"
+		? ok("the record is V3 with backend:\"pi\"")
+		: no(`record is schemaVersion=${rec.schemaVersion} backend=${rec.backend}`);
+	// The address is the record's. A gardenId equal to pi's own id would mean the id
+	// authority moved back into the harness — the split #50 C2 exists to hold.
+	typeof rec.gardenId === "string" && /^\d{8}T\d{6}-[0-9a-f]{6}$/.test(rec.gardenId) && rec.gardenId !== sessionId
+		? ok(`the record minted the address, not pi (${rec.gardenId})`)
+		: no(`gardenId ${JSON.stringify(rec.gardenId)} is not a record-minted address distinct from pi's id`);
+	// A 0-token birth writes no session file, so a resume target here would be a phantom.
+	rec.transcriptPath === null ? ok("0-token birth carries transcriptPath=null (no phantom resume target)") : no(`transcriptPath=${JSON.stringify(rec.transcriptPath)} for a session with no turn`);
+
+	sockets.includes(`${rec.gardenId}.sock`)
+		? ok(`a control socket is open, keyed on the record gardenId (${rec.gardenId}.sock)`)
+		: no(`no ${rec.gardenId}.sock among ${JSON.stringify(sockets)} — the citizen has an address but no rail`);
+	sockets.some((s) => s === `${sessionId}.sock` || /^[0-9a-f]{8}-[0-9a-f]{4}-/.test(s))
+		? no(`a socket carries pi's own session id: ${JSON.stringify(sockets)}`)
+		: ok("no socket carries pi's session id");
+	return rec;
+};
+
+/** peer-facts from the INSTALLED bin, while pi is still alive. */
+const askPeers = (rec) => {
+	const run = spawnSync(ENTWURF_BIN, ["peer-facts"], { encoding: "utf8" });
+	if (run.status !== 0) { no(`installed \`entwurf peer-facts\` exit ${run.status}: ${(run.stderr ?? "").trim().slice(0, 300)}`); return; }
+	let payload;
+	try { payload = JSON.parse(run.stdout); } catch (err) { no(`peer-facts output is not JSON: ${err.message}`); return; }
+	const peers = Array.isArray(payload?.peers) ? payload.peers : null;
+	if (peers === null) { no("peer-facts payload has no `peers` array"); return; }
+	const row = peers.find((p) => p.gardenId === rec.gardenId);
+	console.log(`  PEERS total=${peers.length} mine=${row ? JSON.stringify(row) : "<absent>"}`);
+	if (!row) { no(`peer-facts does not report ${rec.gardenId} — the citizen exists on disk and not in the listing`); return; }
+	ok(`the installed \`entwurf peer-facts\` reports this citizen (backend=${row.backend})`);
+	// Liveness is a FACT here, not a dispatch decision: the process is up and the socket is
+	// bound, so anything but `alive` means the probe cannot see a rail that exists.
+	row.liveness === "alive" ? ok("peer-facts reports liveness=alive while the session is up") : no(`peer-facts reports liveness=${row.liveness} for a running session`);
+};
+
+child.stdout.on("data", (d) => {
+	buf += d.toString();
+	let i;
+	while ((i = buf.indexOf("\n")) >= 0) {
+		const line = buf.slice(0, i);
+		buf = buf.slice(i + 1);
+		if (!line.trim()) continue;
+		let evt;
+		try { evt = JSON.parse(line); } catch { continue; }
+		if (evt.type === "agent_start") agentStartSeen = true;
+		if (evt.type === "extension_error") extensionErrors.push({ path: evt.extensionPath, error: evt.error });
+		if (evt.type !== "response" || evt.command !== "get_state") continue;
+		const sessionId = evt.data?.sessionId ?? null;
+		if (typeof sessionId !== "string") { no(`get_state returned no sessionId: ${line.slice(0, 300)}`); done(bad || 1); return; }
+		extensionErrors.length === 0
+			? ok("the wired extension loaded with no extension_error")
+			: no(`extension errors: ${JSON.stringify(extensionErrors).slice(0, 400)}`);
+		const rec = observe(sessionId);
+		if (rec) askPeers(rec);
+		agentStartSeen ? no("a model turn started — this cell is supposed to cost zero tokens") : ok("no model turn ran (zero tokens)");
+		done(bad);
+		return;
+	}
+});
+
+child.on("error", (err) => { no(`pi failed to spawn: ${err.message}`); done(1); });
+child.on("exit", (code) => {
+	if (settled) return;
+	no(`pi exited ${code} before answering get_state — stderr: ${stderr.trim().slice(0, 600)}`);
+	done(1);
+});
+
+setTimeout(() => { child.stdin.write(`${JSON.stringify({ type: "get_state", id: "g1" })}\n`); }, 500);
+setTimeout(() => { if (!settled) { no("pi did not answer get_state within 60s"); done(1); } }, 60_000);
+DRIVER_EOF
+node /tmp/use-path-drive.mjs "$ACTIVE/node_modules/.bin/entwurf" || fail=1
+
+# ── 8. the status fan, driven by the REAL binaries this install produced ─────
+# `check-herdr-plugin` already drives `lib/status.mjs` against stub `entwurf` and `herdr`
+# executables, and its oracle is the call LOG: exactly one `entwurf peer-facts` and one
+# `herdr agent list`, in that order. Here the same entry runs with neither side stubbed —
+# `ENTWURF_BIN` is the npm-installed bin from [6], `HERDR_BIN_PATH` is the herdr the image
+# scaffolded — so the question is whether that contract survives contact with the real two.
+#
+# TWO STATES, because the honest answer differs between them and both are a user's.
+# (i) NO SERVER — the state everything above ran in. `herdr agent list` answers
+#     {"error":{"code":"server_not_running"}} on exit 1 (measured, 0.9.1), so the fan must
+#     name `herdr-agent-list-failed` and go RED. A failed read rendered as an empty table
+#     is the one lie this surface could tell, and this is where it would tell it.
+# (ii) HEADLESS SERVER — `herdr server` is scaffolding for the fan's SECOND read only; the
+#     offline-persist measurement that cell [2] owns already happened without it, and the
+#     server is stopped again before [9] so the reinstall there takes the same serverless
+#     path. With a server and no panes the agent list is a real empty result, so the fan
+#     exits 0 and the citizen from [7] is COUNTED rather than drawn: nobody observed a
+#     placement for it, which is exactly the `unobserved` word the renderer reserves for
+#     "nobody could look", as distinct from `none`.
+#
+# WHAT THIS CELL CANNOT CLOSE, stated rather than rounded: a citizen rendered as a ROW
+# needs `placement.kind === "herdr-pane"`, which requires the pi session to be living in a
+# herdr pane that herdr's own session reference joins. A headless container has no panes,
+# so the row is out of reach here and stays with the host-side surface
+# (`check-herdr-placement` for the join, GLG's raw PC for the picture).
+echo; echo "[8] the status fan on real binaries — with no herdr server, then with one"
+FAN="$(node -e '
+const fs=require("node:fs");const path=require("node:path");
+const [registry,pluginId]=process.argv.slice(1);
+const reg=JSON.parse(fs.readFileSync(registry,"utf8"));
+const e=(Array.isArray(reg)?reg:reg.plugins||[]).find((x)=>x.plugin_id===pluginId);
+process.stdout.write(path.join(e?.source?.managed_path||e?.managed_path,"plugins","herdr","lib","status.mjs"));
+' "$REGISTRY" "$PLUGIN_ID")"
+if [ -f "$FAN" ]; then ok "the status fan ships in the managed checkout (${FAN#$HOME/})"; else bad "no status fan at $FAN"; fi
+
+run_fan() {
+  env ENTWURF_BIN="$ACTIVE/node_modules/.bin/entwurf" HERDR_BIN_PATH="$(command -v herdr)" \
+    node "$FAN" </dev/null 2>&1
+}
+
+fan_no_server="$(run_fan)"; fan_no_server_rc=$?
+echo "$fan_no_server" | sed 's/^/    /'
+echo "    → exit $fan_no_server_rc"
+if [ "$fan_no_server_rc" -ne 0 ] && printf '%s' "$fan_no_server" | grep -q '^herdr-agent-list-failed'; then
+  ok "with no herdr server the fan names herdr-agent-list-failed and goes red (not an empty table)"
+else
+  bad "with no herdr server the fan answered rc=$fan_no_server_rc without naming herdr-agent-list-failed"
+fi
+
+(herdr server >/tmp/herdr-server.log 2>&1 &)
+server_up=0
+for _ in $(seq 1 40); do
+  if herdr agent list >/dev/null 2>&1; then server_up=1; break; fi
+  sleep 0.5
+done
+[ "$server_up" -eq 1 ] && ok "a headless herdr server answered 'agent list' (scaffolding for the fan's second read)" || bad "the headless herdr server never answered agent list: $(head -3 /tmp/herdr-server.log)"
+
+fan_with_server="$(run_fan)"; fan_with_server_rc=$?
+echo "$fan_with_server" | sed 's/^/    /'
+echo "    → exit $fan_with_server_rc"
+if [ "$fan_with_server_rc" -eq 0 ]; then ok "with a herdr server the fan completes both reads and exits 0"; else bad "the fan exited $fan_with_server_rc with a live herdr server"; fi
+if printf '%s' "$fan_with_server" | grep -q 'unobserved'; then
+  ok "the citizen with no observed placement is COUNTED as unobserved, not silently dropped"
+else
+  bad "the fan drew no 'unobserved' accounting for the citizen born in [7]"
+fi
+herdr server stop >/dev/null 2>&1 || true
+
+# ── 9. deactivate: the roundtrip, on the npm source (#118 H1-5) ──────────────
+# `check-herdr-activation` cell 16 proves this against fixtures: [QK:HAC-DEACTIVATE-ROUNDTRIP]
+# asserts the pi settings return to their ORIGINAL MEANING (JSON equality, not bytes — the
+# writer may reindent), zero install-state survives, and the runtime and ledger are retired.
+# VERIFY.md:102 lists deactivation as a row that must be re-run against the production
+# source, and #118's table still carries it as `deactivate 미결`. This runs the verb that
+# actually ships — `entwurf herdr-plugin-deactivate` from the npm-installed bin, deleting
+# the runtime it is itself executing from — and then reinstalls, because a teardown nobody
+# can come back from is not a roundtrip.
+echo; echo "[9] entwurf herdr-plugin-deactivate, then reinstall"
+"$ACTIVE/node_modules/.bin/entwurf" herdr-plugin-deactivate 2>&1 | sed 's/^/    /'
+rc="${PIPESTATUS[0]}"
+echo "    → exit $rc"
+[ "$rc" -eq 0 ] && ok "herdr-plugin-deactivate exit 0 from the installed bin (it deleted its own runtime)" || bad "herdr-plugin-deactivate exit $rc"
+
+node -e '
+const fs = require("node:fs");
+const path = require("node:path");
+const [ledger, runtimeRoot, piSettings, piBaseline, claudeUserConfig, dataRoot] = process.argv.slice(1);
+let bad = 0;
+const ok = (m) => console.log("  ok    " + m);
+const no = (m) => { console.log("  FAIL  " + m); bad = 1; };
+const readOrNull = (p) => { try { return JSON.parse(fs.readFileSync(p, "utf8")); } catch { return null; } };
+
+fs.existsSync(ledger) ? no(`the activation ledger survived at ${ledger}`) : ok("the activation ledger is retired");
+fs.existsSync(runtimeRoot) ? no(`the runtime root survived at ${runtimeRoot}`) : ok("the stable runtime root is gone");
+
+// The same oracle shape as [QK:HAC-DEACTIVATE-ROUNDTRIP]: JSON equality against what the
+// host carried BEFORE the plugin touched it. `<absent>` is a real baseline too — a file the
+// plugin created must not be left behind carrying our entry.
+const before = readOrNull(piBaseline);
+const after = readOrNull(piSettings);
+console.log(`  PI-SETTINGS before=${JSON.stringify(before)} after=${JSON.stringify(after)}`);
+if (before === null) {
+  const clean = after === null || !JSON.stringify(after).includes("entwurf");
+  clean ? ok("pi settings carry no entwurf entry (there was none before the plugin)") : no("pi settings still name entwurf after the teardown");
+} else {
+  JSON.stringify(after) === JSON.stringify(before)
+    ? ok("pi settings are JSON-equal to their pre-plugin meaning")
+    : no("pi settings did not return to their pre-plugin meaning");
+}
+
+const claude = readOrNull(claudeUserConfig) ?? {};
+const owned = Object.keys(claude.mcpServers ?? {}).filter((k) => k.includes("entwurf"));
+owned.length === 0 ? ok("the Claude MCP owner entry is gone") : no(`Claude MCP still carries ${JSON.stringify(owned)}`);
+
+// FILES, not directories: an emptied pi-package/ is a reclaimed install-state, and calling
+// the surviving directory name dirty would fail a clean inverse.
+const leftover = [];
+const walk = (dir) => {
+  if (!fs.existsSync(dir)) return;
+  for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+    const abs = path.join(dir, e.name);
+    if (e.isDirectory()) walk(abs); else leftover.push(path.relative(dataRoot, abs));
+  }
+};
+walk(dataRoot);
+leftover.length === 0 ? ok("zero install-state files survive under the entwurf data root") : no(`install-state survived: ${JSON.stringify(leftover)}`);
+process.exit(bad);
+' "$LEDGER" "$DATA/entwurf/herdr-plugin/runtime" "$HOME/.pi/agent/settings.json" /tmp/pi-settings-pre-plugin.json "$HOME/.claude.json" "$DATA/entwurf" || fail=1
+
+# The return leg. Same serverless path as [2] and [4] — the headless server from [8] was
+# stopped — so a green here is the plugin reinstalling onto a host it had fully left.
+herdr plugin install "$REMOTE_SPEC" --ref "$REQUESTED_REF" --yes 2>&1 | sed 's/^/    /'
+rc="${PIPESTATUS[0]}"
+echo "    → exit $rc"
+[ "$rc" -eq 0 ] && ok "reinstall after a full teardown exit 0" || bad "reinstall after teardown exited $rc"
+node -e '
+const fs = require("node:fs");
+const [ledger] = process.argv.slice(1);
+if (!fs.existsSync(ledger)) { console.log(`  FAIL  no activation ledger after the reinstall (${ledger})`); process.exit(1); }
+const led = JSON.parse(fs.readFileSync(ledger, "utf8"));
+const b = led.activatedBackends;
+if (JSON.stringify(b) === JSON.stringify(["pi", "claude-code"])) { console.log(`  ok    the reinstall restored activatedBackends === ["pi","claude-code"]`); process.exit(0); }
+console.log(`  FAIL  ledger activatedBackends === ${JSON.stringify(b)} after the reinstall`);
+process.exit(1);
+' "$LEDGER" || fail=1
 
 echo
 if [ "$fail" -eq 0 ]; then
