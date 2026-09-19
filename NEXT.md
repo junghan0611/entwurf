@@ -167,7 +167,8 @@ CHANGELOG `## Unreleased`가 구현 범위 `v0.15.1..19ad90c` **30커밋** 전�
 
 - **좌표:** 브랜치 `set/119-verify-herdr`(origin에 push됨) = main `37b81e7` + 커밋 ~30. 계약 정본은 #119(세트 첫 그림 + V 장부)와 #118(H1 장부), 영수증은 두 스레드의 코멘트. 이 절은 옛 `NEXT--set-119-verify-herdr.md`를 접어 넣은 것이다.
 - **착지한 것:** V2 발견의 문(행동 옆 `.test.ts`/`.test.mjs`를 `check-tests-beside-behavior`가 glob으로 발견, 정지 사진 3장) · H1(`smoke-herdr-raw-install-live` (a) main `37b81e7` PASS ×3 + (b) 브랜치 `11ec0c3` PASS, `entwurf pi` 런처 + `check-pi-launch` 14 checks/뮤턴트 9, README 9단계, 플러그인 0.3.0 매니페스트, lock은 npm 0.23.0 유지) · V3(순수 게이트 13개 vitest 이주, 수동 귀속 25/25, 733/58 불변, 인벤토리 분모에 행동 옆 축). 검수 4회(terra×2·glm·grok) Blocker 0, Defect 전부 A1~A4로 닫힘. 브랜치 CI `35429392366` @ `d4e20c4` 4잡 green.
-- **다음 한 수 (코디네이터):** 동결 창 — 후보 SHA 고정, 구현자 정지 → `./run.sh check-gate-qualification` 1회(~40분) → `pnpm run check:full` 1회 → 두 영수증을 #119 코멘트 → GLG 머지 결정(DM) → main 머지 → `entwurf-release` land/prepare/make/publish **0.23.1**(모드마다 GLG 승인) → 발행 뒤 새 Opus가 lock 0.23.1 + 플러그인 0.3.0 후속 커밋(`dd84ac0` 패턴) + (a) 재영수증 → GLG 날것 PC 재테스트 = #118 사용자 도착.
+- **동결 창은 로컬이 아니라 CI다 (GLG 2026-09-19 17:5x):** 브랜치 push CI가 `check:full`과, push range가 qualification 표면을 건드리면 **qualification body까지** 돈다(`ci.yml` check job; run `35429392366` @ `d4e20c4`가 body 포함 54분 green, 07:27→08:21Z). 로컬 qualification은 중복이라 시작했다가 **중단했다**(tmux `entwurf-freeze` kill, 영수증 없음). 후보 `767aff4`의 run `35432917677`이 진행 중. 릴리즈 SHA의 body 영수증은 `entwurf-release` land가 `verify-exact-ci.sh`로 요구한다.
+- **다음 한 수 (코디네이터):** run `35432917677` green 확인 → GLG 머지 결정 → main **fast-forward** 머지(`767aff4`가 main의 후손, merge-base 확인됨) + push → `entwurf-release` land/prepare/make/publish **0.23.1**(모드마다 GLG 승인) → 발행 뒤 새 Opus가 lock 0.23.1 + 플러그인 0.3.0 후속 커밋(`dd84ac0` 패턴) + (a) 재영수증 → GLG 날것 PC 재테스트 = #118 사용자 도착.
 - **흔들리면 여기로:** 잔여 3 gate(`v2-contract`·`v2-production` cross-lane, `v2-surface` 공유 헬퍼)·H2 이식 본체·`scripts/` rename·뮤턴트 다이어트는 **이 세트 밖**, 0.23.1 뒤 별 이슈. 긴 게이트는 동결 창 1회. 트레일러 없음.
 - **트레일러 3개(`5062147`·`1d6532a`·`637befc`, NEXT 문서 커밋)는 남긴다:** 히스토리 재작성은 이슈 스레드가 인용한 SHA 20여 개를 전부 무효화한다. GLG 지침(09-19)은 그 뒤 커밋부터 적용됐다.
 - **Do not:** 워크트리 · 둘째 구현자 · `entwurf setup`/`install` 재실행 · 동결 창 안에서 stage/commit/NEXT 수정 · 과거 SHA 영수증을 새 SHA 증거로.
@@ -188,7 +189,7 @@ CHANGELOG `## Unreleased`가 구현 범위 `v0.15.1..19ad90c` **30커밋** 전�
 
 ### 새 코디네이터 브리핑(Fable 교대 시)
 - 자기 garden id로 `entwurf_self` → `entwurf_peers`로 살아 있는 형제 확인 → 이 파일 → #119/#118 → `git log main..HEAD`.
-- 동결 창 절차: Opus 정지 확인(`git status` clean, 메일함 조용) → 후보 SHA 기록 → `./run.sh check-gate-qualification`(~40분, tmux 스킬로) → `pnpm run check:full`(~7분) → 두 영수증(elapsed·exit·SHA)을 #119 코멘트 → 후보가 움직이면 재동결. 그 뒤 NEXT 커밋 3개(`5062147`·`1d6532a`·`637befc`) 트레일러 정리는 squash로, `NEXT--set-119-verify-herdr.md` 삭제, GLG에게 머지 결정 DM.
+- 동결 창 절차(개정): 로컬 긴 게이트를 돌리지 않는다. 브랜치 CI check job(check:full + 조건부 qualification body)이 후보 SHA에서 green인지 `gh run view <id> --json jobs`로 읽고 #119에 영수증 → GLG 머지 결정 → ff 머지. 히스토리 재작성 없음(트레일러 3개 유지, 이유는 위).
 - 검수 형제: terra `20260919T135931-24854f`(pi, alive) · glm `20260919T153349-e12a86` · grok `20260919T160504-4a49e1`. 살아 있으면 `entwurf_v2`로 재사용, 죽었으면 fresh.
 - DM 규칙: 구간 착지 또는 GLG 결정 필요 시 1건. GLG가 보고 있을 때는 안 보냄.
 
