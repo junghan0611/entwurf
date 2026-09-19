@@ -145,6 +145,45 @@ const CLASS_OVERRIDES: Record<string, { cls: SemanticClass; reason: string }> = 
 		cls: "source-topology",
 		reason: "asserts the scrubbed parent-transcript fixture's recorded shape — an artifact contract, no product run",
 	},
+	// #119 V1 measured the classifier THROWING on these four at HEAD 5062147 — the
+	// assertion below did its job and named real drift, in three distinct shapes. None
+	// of them is reachable by widening H_IMPORTS: there is no literal `../plugins/`
+	// import anywhere under scripts/ or test/ (measured, 0 matches), so a `plugins`
+	// alternative in that predicate would match nothing and only claim coverage it
+	// does not have.
+	//
+	// Shape 1 — the herdr gates reach their subject through a RUNTIME-ASSEMBLED
+	// dynamic import, `await import(pathToFileURL(LEAF).href)`. H_IMPORTS matches a
+	// literal specifier by design (a computed one cannot be read as text without
+	// executing the gate), so these two are override territory, not predicate
+	// territory.
+	"scripts/check-herdr-plugin-profile.ts": {
+		cls: "behavioral-contract",
+		reason:
+			"dynamically imports plugins/herdr/lib/integration-profile.mjs and source-reads that same leaf — executes product code, no process",
+	},
+	"scripts/check-herdr-runtime-bootstrap.ts": {
+		cls: "behavioral-contract",
+		reason:
+			"dynamically imports the herdr runtime leaf and its plugin re-export and drives them against mkdtemp HOME/XDG fixtures — executes product code, spawns nothing",
+	},
+	// Shape 2 — the reads go through a local `read(rel)` helper, so H_TEXT's
+	// line-level form (readFileSync on the same line as the path literal) cannot see
+	// them. No product is executed: this is a manifest/installer/CI structure gate.
+	"scripts/check-herdr-supply.ts": {
+		cls: "source-topology",
+		reason:
+			"reads the supply manifest, the CI installer and the workflow as text through a read() helper; runs no product",
+	},
+	// Shape 3 — a vitest lane whose SUBJECT is the verification surface itself
+	// (scripts/lib), not pi-extensions/ or mcp/. The mutant inventory below already
+	// counts that as infra-subject; the class axis needs the same honesty rather than
+	// a widened "product import" predicate that would blur the two.
+	"test/tmux-coordinate-row.test.ts": {
+		cls: "pure-unit",
+		reason:
+			"executes the scripts/lib/tmux-coordinate-row leaf — an INFRA-subject lane; no fs, no text read, no process",
+	},
 };
 
 /**
