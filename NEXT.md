@@ -17,7 +17,20 @@
 
 <details><summary>6의 원래 본문 (릴리즈 준비 기록)</summary>
 
-CHANGELOG `## Unreleased`가 구현 범위 `v0.15.1..19ad90c` **30커밋** 전수로 채워져 있었다. CHANGELOG `## Unreleased`가 구현 범위 `v0.15.1..19ad90c` **30커밋** 전수로 채워져 있다(릴리즈 준비 커밋은 그 위에 따로 쌓이므로 `v0.15.1..HEAD`의 수는 계속 커진다 — 기준은 항상 범위이지 숫자가 아니다). 섹션 승격·버전 범프·lockfile·release-gate 수치는 `entwurf-release` **prepare** 몫이고, land/prepare/make/publish는 모드마다 별도 GLG 승인이다.
+CHANGELOG `## NOW — 0.23.1 릴리즈 레인 (main `d905a95`, 2026-09-19 19:1x)
+
+**세트 브랜치는 main에 ff-merge됐다(`37b81e7`..`d905a95` 48커밋, #119 close).** #118은 Exit 4(사용자 수용)까지 열어둔다. GLG 승인(19:0x): 머지 · Exit 4 · lock 복귀 순서 · **publish는 GLG 직접** · 릴리즈 게이트 실무는 terra(pi) — Claude Code는 긴 게이트에서 메모리 한계로 제외.
+
+순서(각 화살표마다 코디네이터가 확인하고 다음을 부른다):
+1. Opus2 `20260919T175543-fe4237`: main에 **lock `herdr-checkout` 복귀 커밋**(dd84ac0 역방향; root 0.23.1 + lock npm 0.23.0 창을 `check-herdr-runtime-bootstrap` 8a `npmCoherent`가 거절하기 때문). 짧은 게이트 + LIVE smoke 1회(A8의 이름 붙인 SKIP + `identity.kind === herdr-checkout`이 그 창의 영수증). push는 코디네이터.
+2. terra `20260919T135931-24854f`: `entwurf-release land 0.23.1`(exact-SHA CI) → `prepare 0.23.1`(CHANGELOG 승격 · 0.23.1 · lockfile · check:full · LIVE release-gate --cut in tmux · prep 커밋, push 금지) → `make 0.23.1`(push · CI · tag · GitHub release · candidate tgz). 모드마다 GLG 승인을 코디네이터가 확인.
+3. GLG: `publish 0.23.1 <candidate.tgz> latest`.
+4. Opus2(또는 새 Opus): lock npm 0.23.1 + `npm view @junghanacs/entwurf@0.23.1 dist.integrity` + 플러그인 0.3.0 출하 커밋(dd84ac0 패턴) → `LIVE=1 ./run.sh smoke-herdr-raw-install-live`(main, (a) 재영수증) → **설치된 entwurf bin 경로**로 cell [7]과 같은 0-token birth 셀 → #118 Exit 4 (i)(ii). (iii) 날것 PC 팬 ROW는 GLG.
+5. #118 close. 그 뒤 별 이슈: 잔여 3 gate · H2 이식 본체 · `scripts/` rename · 검증면 정리.
+
+**Do not:** 로컬 qualification body(CI가 동결 창) · Claude Code로 check:full/release-gate · 트레일러 · GLG 승인 없는 모드 진입 · npm publish.
+
+## Unreleased`가 구현 범위 `v0.15.1..19ad90c` **30커밋** 전수로 채워져 있었다. CHANGELOG `## Unreleased`가 구현 범위 `v0.15.1..19ad90c` **30커밋** 전수로 채워져 있다(릴리즈 준비 커밋은 그 위에 따로 쌓이므로 `v0.15.1..HEAD`의 수는 계속 커진다 — 기준은 항상 범위이지 숫자가 아니다). 섹션 승격·버전 범프·lockfile·release-gate 수치는 `entwurf-release` **prepare** 몫이고, land/prepare/make/publish는 모드마다 별도 GLG 승인이다.
 
 </details>
 
