@@ -21,6 +21,13 @@ All notable changes to this project will be documented here. Format follows [Kee
   sandboxed `pi install npm:@junghanacs/entwurf@0.24.0` resolves the bridge to the registry
   install and `--list-models entwurf` lists the curated Claude and Cortex anchors; dist-tags
   `latest=0.24.0`, `repair=0.12.8-repair.1` preserved.
+- **`smoke-herdr-raw-install-live` says the eighth verb too.** Its verb cell keeps an
+  independent copy of the shipped `EXPECT_TOOLS` set on purpose, so an upstream verb reddens it
+  until somebody says so there — and `entwurf_callback` had not been said. First run on the
+  public remote at `deb73f1` with the npm 0.24.0 runtime: every acquisition, identity, [7]/[8a]
+  0-token citizen and teardown/reinstall cell green, only that copy red; with the eighth verb
+  named the smoke is PASS (`ref=main`, runtime `@junghanacs/entwurf@0.24.0`, observed sha256
+  `fd750bcb…`). The comment's stale `run.sh:5187` line reference now names the constant instead.
 
 ## 0.24.0 - 2026-09-20
 

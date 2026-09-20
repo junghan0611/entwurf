@@ -490,7 +490,7 @@ for (const name of ["entwurf", "entwurf-bridge", "entwurf-statusline"]) {
 }
 
 // The REAL subcommand, from the installed bin, under node_modules — which is the branch of
-// start.sh that runs the prebuilt dist. Its own oracle is an EXACT set (run.sh:5187), so a
+// start.sh that runs the prebuilt dist. Its own oracle is an EXACT set (`EXPECT_TOOLS` in run.sh check-bridge), so a
 // zero exit here is the artifact listing all seven garden verbs and no eighth.
 const run = spawnSync(path.join(binDir, "entwurf"), ["check-bridge"], { encoding: "utf8" });
 const said = `${run.stdout ?? ""}${run.stderr ?? ""}`;
@@ -507,6 +507,7 @@ const verbs = (said.match(/entwurf_[a-z0-9_]+/g) ?? []).filter((v, i, a) => a.in
 // one; the two disagreeing is the signal, and a verb genuinely added upstream reddens this
 // smoke until somebody says so here too.
 const EXPECTED_VERBS = [
+  "entwurf_callback",
   "entwurf_fresh_call",
   "entwurf_inbox_read",
   "entwurf_peers",
@@ -519,7 +520,7 @@ console.log(`  VERBS ${verbs.join(",") || "<none>"}`);
 if (run.status === 0) ok(`entwurf check-bridge exit 0 from the installed bin (${verbs.length} verbs listed)`);
 else no(`entwurf check-bridge exit ${run.status}: ${said.trim().slice(0, 400)}`);
 JSON.stringify(verbs) === JSON.stringify(EXPECTED_VERBS)
-  ? ok(`the receipt names EXACTLY the seven garden verbs (${EXPECTED_VERBS.length}), parsed from what the installed bin answered`)
+  ? ok(`the receipt names EXACTLY the eight garden verbs (${EXPECTED_VERBS.length}), parsed from what the installed bin answered`)
   : no(`verb set mismatch — want ${JSON.stringify(EXPECTED_VERBS)} got ${JSON.stringify(verbs)}`);
 process.exit(bad);
 ' "$ACTIVE" "$REGISTRY" "$PLUGIN_ID" || fail=1
