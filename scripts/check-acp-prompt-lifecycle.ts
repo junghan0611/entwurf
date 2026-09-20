@@ -36,7 +36,7 @@ import { copyFileSync, mkdirSync, mkdtempSync, rmdirSync, rmSync } from "node:fs
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import type { Api, AssistantMessageEvent, Context, Message, Model, TranscriptContext } from "@earendil-works/pi-ai";
+import type { Api, AssistantMessageEvent, Message, Model, TranscriptContext } from "@earendil-works/pi-ai";
 import { normalizeContext } from "@earendil-works/pi-ai";
 import { isRetryableAssistantError } from "@earendil-works/pi-ai/compat";
 
@@ -216,7 +216,7 @@ function makeHarness(recordDir: string) {
 /** Start a turn and collect its events in the background. */
 function startTurn(
 	backend: any,
-	context: Context,
+	context: TranscriptContext,
 	options: Record<string, unknown>,
 	deps: unknown,
 ): { events: AssistantMessageEvent[]; done: Promise<void> } {

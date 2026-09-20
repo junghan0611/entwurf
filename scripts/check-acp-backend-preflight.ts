@@ -179,9 +179,13 @@ try {
 // any absence check and is why it lives beside the capability it protects rather
 // than in a lane of its own.
 {
+	// The SMOKES are in scope, not only the deterministic gates. Leaving them out is how this
+	// guard missed `smoke-acp-session-reuse-live.ts` in the 0.23.2 release gate: the gates it
+	// did sweep were all green, and the one provider-path fixture it could not see failed an
+	// hour into a LIVE run instead.
 	const swept = [
 		...readdirSync(resolve("scripts"))
-			.filter((f) => f.startsWith("check-acp-") && f.endsWith(".ts"))
+			.filter((f) => (f.startsWith("check-acp-") || f.startsWith("smoke-")) && f.endsWith(".ts"))
 			.map((f) => join("scripts", f)),
 		...readdirSync(resolve("pi-extensions", "lib"), { recursive: true, encoding: "utf8" })
 			.filter((f) => f.endsWith(".test.ts"))
@@ -190,6 +194,16 @@ try {
 	// Guard the sweep: a glob that matches nothing passes vacuously and says so to nobody.
 	assert.ok(swept.length >= 10, `provider-path sweep matched only ${swept.length} files — the globs stopped resolving`);
 
+	// BOTH spellings, because the hazard is the TYPE, not one syntax for reaching it. The four
+	// gates found in the full floor wrote `as Context`; the live smoke found in the release gate
+	// wrote `const turn1: Context = {…}`. A guard that names one spelling only teaches the next
+	// author which spelling to use.
+	//
+	// `Context[...]` and `Context<...>` are NOT the hazard and are excluded by the trailing
+	// lookahead: `messages: Context["messages"]` is the legitimate INPUT to `normalizeContext`,
+	// which takes a real Context by contract. Flagging it would push authors to re-type pi's own
+	// message array by hand, which is a worse fixture than the one this rule exists to prevent.
+	const RAW_CONTEXT = /(?:\bas\s+Context|:\s*Context)\b(?![[<])/;
 	const offenders: string[] = [];
 	for (const file of swept) {
 		readFileSync(file, "utf8")
@@ -197,17 +211,18 @@ try {
 			.forEach((line, i) => {
 				// Prose about the rule is not a violation of it.
 				if (line.trimStart().startsWith("//") || line.trimStart().startsWith("*")) return;
-				if (/\bas\s+Context\b/.test(line)) offenders.push(`${file}:${i + 1}: ${line.trim()}`);
+				if (RAW_CONTEXT.test(line)) offenders.push(`${file}:${i + 1}: ${line.trim()}`);
 			});
 	}
 	assert.deepEqual(
 		offenders,
 		[],
-		"[QK:ACP-FIXTURE-NO-CONTEXT-CAST] a provider-path fixture may not be cast to the raw `Context` type. Since pi 0.86 a custom " +
-			"provider receives a branded TranscriptContext, and the brand is the only thing that names a stale fixture at " +
-			"typecheck time — a cast silences it, so the fixture declares no tools, the exclude-tools preflight rejects " +
-			"every turn before the prompt is sent, and the gate fails as `'error' !== 'done'` with nothing pointing at the " +
-			"cause. Build it with `normalizeContext({ tools, messages })` instead. Found:\n" +
+		"[QK:ACP-FIXTURE-NO-CONTEXT-CAST] a provider-path fixture may not be typed as the raw `Context` — neither by " +
+			"annotation nor by cast. Since pi 0.86 a custom provider receives a branded TranscriptContext, and the brand is " +
+			"the only thing that names a stale fixture at typecheck time; either spelling silences it, so the fixture " +
+			"declares no tools, the exclude-tools preflight rejects every turn before the prompt is sent, and the failure " +
+			"surfaces as `'error' !== 'done'` with nothing pointing at the cause. Build it with " +
+			"`normalizeContext({ tools, messages })` instead. Found:\n" +
 			offenders.join("\n"),
 	);
 }
@@ -217,6 +232,7 @@ console.log(
 		"surface and runs assertExcludeToolsHonored before spawn; a declared-vs-actual " +
 		"tool-surface lie fails fast into the stream as an error event (no backend launched, no done); " +
 		"actionableAcpBackendHint (A-c) classifies a context-window 400 into an actionable hint without misclassifying " +
-		"unrelated failures; and no provider-path fixture in the acp gates or the lib tests is cast to the raw `Context` type, so the " +
+		"unrelated failures; and no provider-path fixture in the acp gates, the smokes or the lib tests is typed as the raw " +
+		"`Context` (annotation or cast), so the " +
 		"TranscriptContext brand still names a stale one at typecheck time",
 );

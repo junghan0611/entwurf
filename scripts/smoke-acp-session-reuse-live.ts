@@ -24,11 +24,26 @@ import { copyFileSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import type { Api, AssistantMessageEvent, Context, Model } from "@earendil-works/pi-ai";
+import type { Api, AssistantMessageEvent, Model, TranscriptContext } from "@earendil-works/pi-ai";
+import { normalizeContext } from "@earendil-works/pi-ai";
 import { skipLive } from "./lib/live-skip.ts";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const MODEL = process.env.ENTWURF_ACP_PROVIDER_MODEL?.trim() || "claude-sonnet-5";
+// The pi built-ins the Claude child also exposes natively. pi declares its tool surface on
+// every turn, and since 0.86 that declaration reaches a provider as the leading system
+// message's `toolsAdded` (`normalizeContext`), which backend.ts replays for the exclude-tools
+// truthfulness preflight. A fixture that declares NO tools is therefore not "a turn with the
+// defaults" — it is a turn where the operator excluded everything, and the preflight rejects it
+// before the prompt is ever sent. So every provider-path context here is built through
+// `normalizeContext`, never typed as a raw `Context`: that annotation is exactly what hid this
+// shape from typecheck when the 0.86 pin landed.
+const PI_DECLARED_TOOLS = ["read", "bash", "edit", "write"].map((name) => ({
+	name,
+	description: "",
+	parameters: {} as never,
+}));
+
 const TURN_TIMEOUT_MS = Number(process.env.ENTWURF_ACP_PROVIDER_TIMEOUT_MS) || 240_000;
 
 function fail(msg: string): never {
@@ -101,7 +116,8 @@ async function main(): Promise<void> {
 	console.error(`[smoke-acp-session-reuse-live] codeword: ${codeword}`);
 
 	// --- turn 1 (new): introduce the codeword, full transcript ---
-	const turn1: Context = {
+	const turn1: TranscriptContext = normalizeContext({
+		tools: PI_DECLARED_TOOLS,
 		messages: [
 			{
 				role: "user",
@@ -109,7 +125,7 @@ async function main(): Promise<void> {
 				timestamp: 0,
 			},
 		],
-	};
+	});
 	const r1 = await withTimeout(
 		"turn 1",
 		consume(backend.streamShellAcp(model, turn1, options) as Stream),
@@ -121,7 +137,9 @@ async function main(): Promise<void> {
 	console.error("[smoke-acp-session-reuse-live] starting turn 2 reuse prompt");
 
 	// --- turn 2 (reuse): ask for the codeword, DELTA ONLY ---
-	const turn2: Context = {
+	// turn1.messages already carries the folded system message, so spreading it keeps the
+	// declared surface on the reuse turn too; normalizeContext does not double it.
+	const turn2: TranscriptContext = normalizeContext({
 		messages: [
 			...turn1.messages,
 			{
@@ -147,7 +165,7 @@ async function main(): Promise<void> {
 				timestamp: 0,
 			},
 		],
-	};
+	});
 	const r2 = await withTimeout(
 		"turn 2",
 		consume(backend.streamShellAcp(model, turn2, options) as Stream),

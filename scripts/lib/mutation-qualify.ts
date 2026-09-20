@@ -617,7 +617,7 @@ function sha256File(file: string): string {
 	return createHash("sha256").update(fs.readFileSync(file)).digest("hex");
 }
 
-function countOccurrences(haystack: string, needle: string): number {
+export function countOccurrences(haystack: string, needle: string): number {
 	let count = 0;
 	let at = haystack.indexOf(needle);
 	while (at !== -1) {

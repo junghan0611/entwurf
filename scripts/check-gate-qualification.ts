@@ -49,6 +49,7 @@ import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
 	classifyMutantRun,
+	countOccurrences,
 	createRepoSnapshot,
 	ManifestError,
 	type MutantManifest,
@@ -903,6 +904,42 @@ let manifestCount: number;
 				(err instanceof Error ? err.message : String(err)),
 		);
 	}
+	// FIND MATCHES ITS SUBJECT, EXACTLY ONCE — the body's own precondition, hoisted into the head.
+	// `validateManifestSet` above proves the subject is TRACKED; it never opens it. So a change
+	// that edits a subject line a mutant quotes leaves the whole deterministic floor green and
+	// dies an hour later in CI or the release gate as MUTANT-STALE. That is exactly how the
+	// 0.23.2 pi bump landed: `pack_install_leaked_pi`'s pin regex moved 0.85.1 → 0.86.0 in
+	// run.sh, `scripts/mutants/pack-install.json` kept quoting the old line, and two claims came
+	// back NOT KILLED after ~50 minutes of mutant execution. The check costs one read per
+	// mutant and uses `countOccurrences` — the SAME function the body applies at
+	// mutation-qualify.ts:743 — so head and body cannot disagree about what "matches" means.
+	// This is a STALENESS check, not a kill-proof: it says the mutant still has a subject to
+	// corrupt, never that corrupting it is caught. That remains the body's verdict.
+	const stale: string[] = [];
+	for (const man of manifests) {
+		for (const m of man.mutants) {
+			const subjectAbs = path.join(REPO_DIR, m.subject);
+			let source: string;
+			try {
+				source = fs.readFileSync(subjectAbs, "utf8");
+			} catch (err) {
+				stale.push(`${man.lane}/${m.claim}: subject ${m.subject} unreadable (${(err as Error).message})`);
+				continue;
+			}
+			const n = countOccurrences(source, m.find.join("\n"));
+			if (n !== 1) stale.push(`${man.lane}/${m.claim}: find matched ${n}× in ${m.subject} (expected exactly 1)`);
+		}
+	}
+	assert.deepEqual(
+		stale,
+		[],
+		"[QK:MUTANT-FIND-MATCHES-SUBJECT] every mutant's `find` must match its subject exactly once. A find that " +
+			"matches 0× is a mutant whose production line moved out from under it — the body can write nothing, the " +
+			"verdict is MUTANT-STALE, and the claim is silently unproven; a find that matches 2+× cannot say WHICH " +
+			"occurrence it corrupts. Either way the manifest and the source have to move together. Found:\n" +
+			stale.join("\n"),
+	);
+
 	manifestCount = manifests.length;
 	console.log(`[${SURFACE}] ${selected.length} mutants across ${manifestCount} lanes (no tiers — full set every run)`);
 }
@@ -910,7 +947,8 @@ let manifestCount: number;
 if (MANIFESTS_ONLY) {
 	console.log(
 		`[check-gate-manifests] ok — runner self-test green, ${selected.length} committed mutants across ` +
-			`${manifestCount} lanes validated against the origin index, and the lane inventory matches its declared ` +
+			`${manifestCount} lanes validated against the origin index, every one of their \`find\` strings still ` +
+			"matching its subject exactly once, and the lane inventory matching its declared " +
 			"contract. ZERO mutants were executed and this repo was never snapshotted: the body " +
 			"(check-gate-qualification) owns that, unchanged.",
 	);
