@@ -90,9 +90,10 @@ fine: it was measured completing on 0.9.1 through herdr's offline-persist path.)
 
 ### What 0.3.1 does not give you
 
-This release makes the Herdr integration easier to identify; it changes no runtime behavior. With
-the runtime its lock names
-(`@junghanacs/entwurf@0.23.1`) it does **not** ship:
+This release makes the Herdr integration easier to identify; it changes no runtime behavior. Its
+lock currently names the `herdr-checkout` candidate carrier for the 0.23.2 cut, and returns to an
+npm pin (`@junghanacs/entwurf@0.23.2` plus its published sha512) in a follow-up commit once that
+version is on the registry. With either of those runtimes it does **not** ship:
 
 - Anything on your `PATH`. This is the one that decides how you start a session. The npm
   artifact this lock names **does** carry the `entwurf pi` launcher — measured in the published
