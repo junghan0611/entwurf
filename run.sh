@@ -2190,7 +2190,14 @@ assert.equal(peerDepTui, expectedPeer,
 // from the hour 0.86.0 published it installed a pi outside the range the plugin
 // ships against — and nothing read that line. It now carries the range and is
 // scanned here, which is the only reason writing the number down is allowed.
-const BASELINE_DOCS = ['README.md', 'ROADMAP.md', 'docs/setup-clean-host.md', 'demo/README.md', 'VERIFY.md', 'plugins/herdr/README.md'];
+// docs/acp-backend-rail.md joined on 2026-09-20 for the same reason the two before it did:
+// its support table declared `peer >=0.85.1 <0.86` in prose no gate read, and the 0.86.0 bump
+// would have carried that into a release. Its declaration is a plain closed range and it is the
+// ONLY one in that file (the other rows declare exact versions of non-pi packages, which neither
+// pattern below matches), so the range scan binds it with no new PROSE_DECL. The bare `0.86.0`
+// devDep mentions in the same cell are prose, not an install pin, and stay unscanned — the range
+// half is what holds the row honest.
+const BASELINE_DOCS = ['README.md', 'ROADMAP.md', 'docs/setup-clean-host.md', 'demo/README.md', 'VERIFY.md', 'plugins/herdr/README.md', 'docs/acp-backend-rail.md'];
 
 // ROADMAP.md is a baseline doc AND the home of the dated bump ledger, and those
 // are opposite kinds of sentence. A ledger entry is a RECEIPT: `2026-09-06 bump
@@ -3882,17 +3889,17 @@ _check_pack_install_impl() {
 
   # A pin is a wish until the resolved tree is read back. Assert it: EVERY
   # @earendil-works package present — direct or transitive, top level or nested,
-  # chord included — must be the pinned 0.85.1. Anything else means an unpinned caret
+  # chord included — must be the pinned 0.86.0. Anything else means an unpinned caret
   # floated and the rest of this gate would be exercising a runtime nobody verified,
-  # while still printing "pinned pi 0.85.1". Fail loud instead of proving the wrong floor.
+  # while still printing "pinned pi 0.86.0". Fail loud instead of proving the wrong floor.
   local leaked_pi
   leaked_pi=$(ls "$tmp/node_modules/.pnpm" 2>/dev/null | pack_install_leaked_pi)
   if [ -n "$leaked_pi" ]; then
-    fail "[check-pack-install] UNVERIFIED pi runtime resolved into the install tree (expected only 0.85.1):"
+    fail "[check-pack-install] UNVERIFIED pi runtime resolved into the install tree (expected only 0.86.0):"
     printf '%s\n' "$leaked_pi" | sed 's/^/    /' >&2
     return 1
   fi
-  echo "[check-pack-install] pi runtime tree pin verified: every @earendil-works package is 0.85.1 (chord included)"
+  echo "[check-pack-install] pi runtime tree pin verified: every @earendil-works package is 0.86.0 (chord included)"
 
   # Resolve the installed package.json and confirm pi.extensions
   # arrived intact. If pi.extensions is empty or missing, the
