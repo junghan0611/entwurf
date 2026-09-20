@@ -291,7 +291,15 @@ async function main(): Promise<void> {
 		if (callerPane?.workspaceId === undefined) {
 			fail(`pane get of the caller pane failed or carried no workspace: ${callerGet.stderr || callerGet.stdout}`);
 		}
-		const tabRun = herdr(bin, sandbox, buildHerdrTabCreateArgs({ workspaceId: callerPane.workspaceId, cwd: REPO_DIR }));
+		const tabCallback = {
+			target: "20260101T010101-aaaaaa",
+			nonce: "mux-fresh-call-deadbeefdeadbeefdeadbeef",
+		};
+		const tabRun = herdr(
+			bin,
+			sandbox,
+			buildHerdrTabCreateArgs({ workspaceId: callerPane.workspaceId, cwd: REPO_DIR, callback: tabCallback }),
+		);
 		const tab = tabRun.status === 0 ? parseHerdrTabCreateResponse(tabRun.stdout) : null;
 		if (tab === null) fail(`tab create failed or was unreadable: ${tabRun.stderr || tabRun.stdout}`);
 		const tabRootPane = tab.rootPane;
@@ -401,7 +409,11 @@ async function main(): Promise<void> {
 			);
 		}
 
-		const spareRun = herdr(bin, sandbox, buildHerdrTabCreateArgs({ workspaceId: callerPane.workspaceId }));
+		const spareRun = herdr(
+			bin,
+			sandbox,
+			buildHerdrTabCreateArgs({ workspaceId: callerPane.workspaceId, callback: tabCallback }),
+		);
 		const spareTab = spareRun.status === 0 ? parseHerdrTabCreateResponse(spareRun.stdout) : null;
 		if (spareTab === null)
 			fail(`the second tab create failed or was unreadable: ${spareRun.stderr || spareRun.stdout}`);

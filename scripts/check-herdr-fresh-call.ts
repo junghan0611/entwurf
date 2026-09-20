@@ -344,9 +344,11 @@ async function main(): Promise<void> {
 	const code = MODULE_SRC.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:])\/\/.*$/gm, "$1");
 	const specifiers = [...MODULE_SRC.matchAll(/^import\s[^;]*?from\s+"([^"]+)";$/gm)].map((m) => m[1]);
 	ok(
-		"[QK:HFC-RAIL-IMPORT-FENCE] the herdr rail imports only node builtins and the neutral composition leaf — one mux or entwurf import here would re-couple the two rails and make either one undeletable",
+		"[QK:HFC-RAIL-IMPORT-FENCE] the herdr rail imports only node builtins, the neutral composition leaf, and the callback-env pair — one mux or entwurf import here would re-couple the two rails and make either one undeletable",
 		specifiers.length > 0 &&
-			specifiers.every((s) => s.startsWith("node:") || s === "./fresh-call-composition.ts") &&
+			specifiers.every(
+				(s) => s.startsWith("node:") || s === "./fresh-call-composition.ts" || s === "./callback-env.ts",
+			) &&
 			!/from\s+"\.\/(mux-|entwurf-)/.test(code),
 	);
 	// tmux is NAMED in this module, and only in one place: the refusal of a tmux seat input.
@@ -453,15 +455,24 @@ async function main(): Promise<void> {
 	// ── argv grammar ─────────────────────────────────────────────────────────────────────
 	// Pure builders are checked before full launch paths so a framing mutant is attributed to
 	// its own contract rather than making an earlier integration success cell fail first.
-	const tabArgs = buildHerdrTabCreateArgs({ workspaceId: "w7", cwd: "/repo/dir" });
+	const tabCallback = {
+		target: "20260101T010101-aaaaaa",
+		nonce: "mux-fresh-call-deadbeefdeadbeefdeadbeef",
+	};
+	const tabArgs = buildHerdrTabCreateArgs({ workspaceId: "w7", cwd: "/repo/dir", callback: tabCallback });
 	ok(
 		"[QK:HFC-TAB-ARGV] one placement policy — a NEW TAB in the caller's own workspace, named explicitly so herdr cannot default it to the focused one, focus left alone, cwd carried literally, and BOTH identity carriers scrubbed by explicit repeated --env",
 		tabArgs.join(" ") ===
-			"tab create --workspace w7 --no-focus --cwd /repo/dir --env PI_SESSION_ID= --env PI_AGENT_ID=",
+			"tab create --workspace w7 --no-focus --cwd /repo/dir --env PI_SESSION_ID= --env PI_AGENT_ID= --env ENTWURF_CALLBACK_TARGET=20260101T010101-aaaaaa --env ENTWURF_CALLBACK_NONCE=mux-fresh-call-deadbeefdeadbeefdeadbeef",
+	);
+	ok(
+		"[QK:HFC-CALLBACK-ENV] the launcher-computed callback pair rides as two more --env assignments beside the scrub",
+		tabArgs.includes("ENTWURF_CALLBACK_TARGET=20260101T010101-aaaaaa") &&
+			tabArgs.includes("ENTWURF_CALLBACK_NONCE=mux-fresh-call-deadbeefdeadbeefdeadbeef"),
 	);
 	ok(
 		"a cwd-free tab create omits --cwd entirely rather than sending an empty value, and the rail adds no layout axis of its own — no label, no ratio, no direction",
-		!buildHerdrTabCreateArgs({ workspaceId: "w7" }).includes("--cwd") &&
+		!buildHerdrTabCreateArgs({ workspaceId: "w7", callback: tabCallback }).includes("--cwd") &&
 			!tabArgs.includes("--label") &&
 			!tabArgs.includes("--ratio") &&
 			!tabArgs.includes("--direction"),

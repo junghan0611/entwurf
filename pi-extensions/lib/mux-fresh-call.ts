@@ -86,6 +86,7 @@
  *     there is no "session created" field because nothing here creates one.
  */
 
+import { callbackEnvAssignments } from "./callback-env.ts";
 import { classifyTmuxCwd, type TmuxCwdRejectReason } from "./classify-tmux-cwd.ts";
 import {
 	CODEX_CALLER_SEAT_HINT,
@@ -351,9 +352,11 @@ export type FreshCallResult = { ok: true; receipt: FreshCallReceipt } | { ok: fa
  * scrub only on the backend whose measurement surfaced it would encode the claim that the other
  * four are immune, which is false. It costs the legitimate case nothing: a carrier is only ever
  * authoritative when the process that owns it exported it ITSELF, and a fresh `pi` sibling does
- * exactly that after this argv has run. This is a fixed two-variable seam and deliberately NOT a
- * general env carrier — an arbitrary `-e` passthrough would hand callers the environment-shaping
- * power this rail exists to refuse.
+ * exactly that after this argv has run. This is a fixed seam and deliberately NOT a general env
+ * carrier — an arbitrary `-e` passthrough would hand callers the environment-shaping power this
+ * rail exists to refuse. Two more `-e` assignments ride beside the scrub: the callback pair
+ * (`callback-env.ts`), launcher-computed, so the sibling's first action does not retype an
+ * address out of prose.
  */
 const SCRUBBED_INHERITED_ENV = ["PI_SESSION_ID=", "PI_AGENT_ID="] as const;
 
@@ -371,7 +374,8 @@ export function buildFreshCallArgs(
 	targetSessionId: string,
 	runtimePath: string,
 	backendArgs: readonly string[],
-	cwd?: string,
+	cwd: string | undefined,
+	callback: { target: string; nonce: string },
 ): string[] {
 	assertSelector("session", targetSessionId);
 	assertLaunchTarget(runtimePath);
@@ -384,6 +388,7 @@ export function buildFreshCallArgs(
 		"-d",
 		"-a",
 		...SCRUBBED_INHERITED_ENV.flatMap((assignment) => ["-e", assignment]),
+		...callbackEnvAssignments(callback).flatMap((assignment) => ["-e", assignment]),
 		"-t",
 		`${targetSessionId}:{end}`,
 		...(cwd === undefined ? [] : ["-c", cwd]),
@@ -569,7 +574,13 @@ export function freshCall(
 			);
 		}
 	}
-	const run = runTmux(buildFreshCallArgs(targetSessionId, runtimePath, backendArgs, cwd), env);
+	const run = runTmux(
+		buildFreshCallArgs(targetSessionId, runtimePath, backendArgs, cwd, {
+			target: callerGardenId,
+			nonce,
+		}),
+		env,
+	);
 	assertTmuxOk("new-window", run);
 
 	let fields: ReturnType<typeof parseWindowFields>;

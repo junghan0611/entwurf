@@ -34,8 +34,13 @@
  *   - entwurf_resume_call — reopen ONE DORMANT pi citizen under its OWN garden id in a visible
  *                       window; target-only, runs no turn, LAUNCH and OBSERVATION receipts stay
  *                       apart.
+ *   - entwurf_callback — ZERO-ARGUMENT fresh-sibling callback. Reads ENTWURF_CALLBACK_TARGET +
+ *                       ENTWURF_CALLBACK_NONCE from this process env (launcher-injected), validates
+ *                       grammar, and dispatches through the existing v2 runner. Refuses by name
+ *                       when env is absent/malformed or this process is a Codex-provenance bridge.
+ *                       No model-supplied target fallback.
  *
- * That list is the WHOLE public surface — seven verbs — and `check-entwurf-bridge-boot`
+ * That list is the WHOLE public surface — eight verbs — and `check-entwurf-bridge-boot`
  * (G1f) holds it as an exact set on the runtime tools/list, so a verb added or dropped
  * here without a decision is red rather than merely undocumented.
  *
@@ -65,6 +70,7 @@ import * as process from "node:process";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
+import { readCallbackEnv } from "../../../pi-extensions/lib/callback-env.ts";
 import { controlSocketPathIn, defaultControlSocketDir } from "../../../pi-extensions/lib/control-socket-path.js";
 import { resolveMailboxReceiverFacts } from "../../../pi-extensions/lib/entwurf-deliverability.ts";
 import { listEntwurfFacts } from "../../../pi-extensions/lib/entwurf-fact-provider.ts";
@@ -873,6 +879,40 @@ server.tool(
 			return rendered.isError ? textErr(rendered.text) : textOk(rendered.text);
 		} catch (err) {
 			return textErr(`entwurf_resume_call error: ${err instanceof Error ? err.message : String(err)}`);
+		}
+	},
+);
+
+server.tool(
+	"entwurf_callback",
+	"ZERO-ARGUMENT callback for a fresh sibling this process was launched as. Reads " +
+		"ENTWURF_CALLBACK_TARGET and ENTWURF_CALLBACK_NONCE from this process environment " +
+		"(injected by the launcher next to the identity scrub), validates garden-id and nonce " +
+		"grammar, and dispatches through the existing v2 runner with intent fire-and-forget, " +
+		"message=nonce, wants_reply=false. The target is re-resolved by record/decider — env " +
+		"names the id, it does not skip dispatch. REFUSES BY NAME when the pair is absent, " +
+		"malformed, or this process is a Codex-provenance bridge (window env never reaches that " +
+		"MCP child). No arguments, no fallback to a model-supplied target.",
+	{},
+	async (_args, extra) => {
+		const read = readCallbackEnv(process.env);
+		if (!read.ok) {
+			return textErr(`entwurf_callback: ${read.reason}`);
+		}
+		try {
+			const sender = await buildSendSenderEnvelope({ requestMeta: extra._meta });
+			const rendered = await runAndRenderEntwurfV2FromSurface(
+				{
+					target: read.target,
+					intent: "fire-and-forget",
+					message: read.nonce,
+					wants_reply: false,
+				},
+				{ senderProvider: () => sender },
+			);
+			return rendered.isError ? textErr(rendered.text) : textOk(rendered.text);
+		} catch (err) {
+			return textErr(`entwurf_callback error: ${err instanceof Error ? err.message : String(err)}`);
 		}
 	},
 );

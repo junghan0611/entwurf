@@ -40,6 +40,32 @@
 			"timeoutSeconds": 120,
 			"signature": "[QK:BRIDGEBOOT-PUBLIC-SURFACE-EXACT-SET]",
 			"signatureSource": "scripts/check-entwurf-bridge-boot.ts"
+		},
+		{
+			"claim": "BRIDGEBOOT-CALLBACK-REGISTERED",
+			"title": "the callback verb is imported but never registered — invisible to every host, while every import-level assertion stays green",
+			"subject": "mcp/entwurf-bridge/src/index.ts",
+			"find": ["server.tool(\n\t\"entwurf_callback\","],
+			"replace": [
+				"const _unregisteredCallbackTool = (...a: unknown[]) => void a;\n_unregisteredCallbackTool(\n\t\"entwurf_callback\","
+			],
+			"gate": ["bash", "run.sh", "check-entwurf-bridge-boot"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:BRIDGEBOOT-CALLBACK-REGISTERED]",
+			"signatureSource": "scripts/check-entwurf-bridge-boot.ts"
+		},
+		{
+			"claim": "BRIDGEBOOT-CALLBACK-ZERO-ARG",
+			"title": "a target parameter is added to the callback schema, giving the model a way to supply an address the env pair was meant to own",
+			"subject": "mcp/entwurf-bridge/src/index.ts",
+			"find": ["\t\"MCP child). No arguments, no fallback to a model-supplied target.\",\n\t{},"],
+			"replace": [
+				"\t\"MCP child). No arguments, no fallback to a model-supplied target.\",\n\t{ target: z.string().optional() },"
+			],
+			"gate": ["bash", "run.sh", "check-entwurf-bridge-boot"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:BRIDGEBOOT-CALLBACK-ZERO-ARG]",
+			"signatureSource": "scripts/check-entwurf-bridge-boot.ts"
 		}
 	]
 }

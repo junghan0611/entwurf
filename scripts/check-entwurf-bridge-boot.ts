@@ -224,6 +224,20 @@ async function main(): Promise<void> {
 		!tools.some((t) => ["entwurf", "entwurf_resume", "entwurf_send"].includes(String(t?.name))),
 	);
 
+	const callback = tools.find((t) => t?.name === "entwurf_callback");
+	ok(
+		"[QK:BRIDGEBOOT-CALLBACK-REGISTERED] G1h: entwurf_callback is registered on the runtime tools/list surface — not merely imported",
+		!!callback,
+	);
+	const callbackSchema = callback?.inputSchema ?? {};
+	const callbackProps = callbackSchema.properties ?? {};
+	const callbackRequired = Array.isArray(callbackSchema.required) ? callbackSchema.required.map(String) : [];
+	ok(
+		"[QK:BRIDGEBOOT-CALLBACK-ZERO-ARG] G1h: entwurf_callback takes EXACTLY zero inputs — a target or nonce parameter here would be a model-supplied address, which Hard Rule 5 refuses",
+		Object.keys(callbackProps).length === 0 && callbackRequired.length === 0,
+		`--- inputSchema ---\n${JSON.stringify(callbackSchema)}`,
+	);
+
 	// G1f — the public surface is an EXACT set, judged last so the named assertions above
 	// keep their own diagnosis. Every check before this one is existential: each names one
 	// verb it cares about, so a verb nobody named could be dropped (entwurf_fresh_call was
@@ -233,6 +247,7 @@ async function main(): Promise<void> {
 	// from the server: an oracle computed from the subject proves nothing.
 	const publicSurface = tools.map((t) => String(t?.name)).sort();
 	const expectedSurface = [
+		"entwurf_callback",
 		"entwurf_fresh_call",
 		"entwurf_inbox_read",
 		"entwurf_peers",
@@ -242,7 +257,7 @@ async function main(): Promise<void> {
 		"entwurf_v2",
 	];
 	ok(
-		"[QK:BRIDGEBOOT-PUBLIC-SURFACE-EXACT-SET] G1f: the runtime tools/list surface is EXACTLY the seven shipped garden verbs — no missing verb, no undecided extra, no duplicate",
+		"[QK:BRIDGEBOOT-PUBLIC-SURFACE-EXACT-SET] G1f: the runtime tools/list surface is EXACTLY the eight shipped garden verbs — no missing verb, no undecided extra, no duplicate",
 		publicSurface.length === expectedSurface.length && expectedSurface.every((n, i) => publicSurface[i] === n),
 		`--- want ---\n${expectedSurface.join(",")}\n--- got ---\n${publicSurface.join(",")}`,
 	);

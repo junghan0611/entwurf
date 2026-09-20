@@ -44,6 +44,7 @@
 import { createHash } from "node:crypto";
 import { statSync } from "node:fs";
 import path from "node:path";
+import { callbackEnvAssignments } from "./callback-env.ts";
 import {
 	buildOmpBootstrapPayload,
 	composeBackendArgs,
@@ -443,7 +444,11 @@ export function herdrAgentNameFromNonce(nonce: string): string {
  * not from a screen. Repeating the flag is the grammar; `--env KEY=` injects the EMPTY value
  * rather than dropping the key.
  */
-export function buildHerdrTabCreateArgs(params: { workspaceId: string; cwd?: string }): string[] {
+export function buildHerdrTabCreateArgs(params: {
+	workspaceId: string;
+	cwd?: string;
+	callback: { target: string; nonce: string };
+}): string[] {
 	return [
 		"tab",
 		"create",
@@ -455,6 +460,7 @@ export function buildHerdrTabCreateArgs(params: { workspaceId: string; cwd?: str
 		"PI_SESSION_ID=",
 		"--env",
 		"PI_AGENT_ID=",
+		...callbackEnvAssignments(params.callback).flatMap((assignment) => ["--env", assignment]),
 	];
 }
 
@@ -849,6 +855,7 @@ export async function herdrFreshCall(
 		buildHerdrTabCreateArgs({
 			workspaceId: callerPane.workspaceId,
 			...(cwd === undefined ? {} : { cwd }),
+			callback: { target: callerGardenId, nonce },
 		}),
 	);
 	if (tabRun.status !== 0) {

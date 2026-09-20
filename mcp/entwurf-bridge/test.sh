@@ -55,7 +55,7 @@ names=set(raw)
 # was an artifact-surface hole: a bundle missing entwurf_fresh_call / entwurf_resume_call
 # answered tools/list and passed. Equality also refuses an undecided extra verb; the
 # duplicate arm catches a name registered twice, which set membership cannot see.
-expected={'entwurf_v2','entwurf_self','entwurf_peers','entwurf_inbox_read','entwurf_register_native','entwurf_fresh_call','entwurf_resume_call'}
+expected={'entwurf_v2','entwurf_self','entwurf_peers','entwurf_inbox_read','entwurf_register_native','entwurf_fresh_call','entwurf_resume_call','entwurf_callback'}
 legacy={'entwurf','entwurf_resume','entwurf_send'} & names
 if len(raw)!=len(names):
     raise SystemExit(f"duplicate tool registrations: {sorted(raw)}")
@@ -66,7 +66,7 @@ if legacy:
 if names!=expected:
     raise SystemExit(f"tool set MISMATCH — missing {sorted(expected-names)}, unexpected {sorted(names-expected)}")
 PY
-ok "public tool surface is EXACTLY the seven garden verbs (no v1 verb, no undecided extra, no duplicate)"
+ok "public tool surface is EXACTLY the eight garden verbs (no v1 verb, no undecided extra, no duplicate)"
 
 SELF_JSON="$(printf '%s\n' "$OUT" | grep '"id":3' | tail -1)"
 [[ "$SELF_JSON" == *"isError"* ]] || fail "entwurf_self without identity should be an error: $SELF_JSON"

@@ -621,7 +621,11 @@ describe("optional cwd — cross-repo fresh placement (#73)", () => {
 				const args = buildFreshCallArgs(
 					TARGET_SESSION,
 					runtime,
-					buildBackendArgs(backend, { prompt: "PROMPT", bootstrapPayload: "PAYLOAD" }, "m", { HOME: "/home/operator" }),
+					buildBackendArgs(backend, { prompt: "PROMPT", bootstrapPayload: "PAYLOAD" }, "m", {
+						HOME: "/home/operator",
+					}),
+					undefined,
+					{ target: GID, nonce: NONCE },
 				);
 				for (const carrier of ["PI_SESSION_ID=", "PI_AGENT_ID="]) {
 					const at = args.indexOf(carrier);
@@ -630,17 +634,44 @@ describe("optional cwd — cross-repo fresh placement (#73)", () => {
 					// Before the -t target, so the assignment applies to the window being created.
 					expect(at).toBeLessThan(args.indexOf("-t"));
 				}
-				// A fixed two-variable seam, never a general carrier: no other -e reaches tmux.
-				expect(args.filter((a) => a === "-e")).toHaveLength(2);
+				// A fixed four-variable seam (2 scrub + 2 callback), never a general carrier.
+				expect(args.filter((a) => a === "-e")).toHaveLength(4);
 			}
+		});
+	});
+
+	it("[QK:FRESHCALL-CALLBACK-ENV] every launch injects the launcher-computed callback pair as two more -e assignments beside the scrub — the sibling's first action must not retype an address out of prose", () => {
+		withCwdFixture(({ runtime }) => {
+			const args = buildFreshCallArgs(TARGET_SESSION, runtime, ["PROMPT"], undefined, {
+				target: GID,
+				nonce: NONCE,
+			});
+			const targetAt = args.indexOf(`ENTWURF_CALLBACK_TARGET=${GID}`);
+			const nonceAt = args.indexOf(`ENTWURF_CALLBACK_NONCE=${NONCE}`);
+			expect(targetAt).toBeGreaterThan(0);
+			expect(args[targetAt - 1]).toBe("-e");
+			expect(nonceAt).toBeGreaterThan(targetAt);
+			expect(args[nonceAt - 1]).toBe("-e");
+			expect(targetAt).toBeLessThan(args.indexOf("-t"));
+			expect(() =>
+				buildFreshCallArgs(TARGET_SESSION, runtime, ["PROMPT"], undefined, {
+					target: "not-a-gid",
+					nonce: NONCE,
+				}),
+			).toThrow(/malformed/);
 		});
 	});
 
 	it("[QK:FRESHCALL-CWD-OMITTED-NO-CARRIER] an omitted cwd emits no -c, and the exact empty string means the SAME omit — the argv keeps the pre-#73 shape and the sibling starts in the caller's own directory", () => {
 		withCwdFixture(({ runtime }) => {
-			const args = buildFreshCallArgs(TARGET_SESSION, runtime, ["PROMPT"]);
+			const args = buildFreshCallArgs(TARGET_SESSION, runtime, ["PROMPT"], undefined, {
+				target: GID,
+				nonce: NONCE,
+			});
 			expect(args).not.toContain("-c");
-			expect(buildFreshCallArgs(TARGET_SESSION, runtime, ["PROMPT"], undefined)).toEqual(args);
+			expect(buildFreshCallArgs(TARGET_SESSION, runtime, ["PROMPT"], undefined, { target: GID, nonce: NONCE })).toEqual(
+				args,
+			);
 		});
 		// "" is an omit, never a classification candidate: with a hermetic runtime on PATH and
 		// no tmux, the refusal must be the leaf's no-tmux-context, not cwd-not-absolute.
@@ -652,7 +683,10 @@ describe("optional cwd — cross-repo fresh placement (#73)", () => {
 
 	it("[QK:FRESHCALL-CWD-ARGV] a valid absolute directory reaches tmux as exactly one `-c <dir>` at the resume-symmetric token position — after the -t target, before -P -F", () => {
 		withCwdFixture(({ runtime, realDir }) => {
-			const args = buildFreshCallArgs(TARGET_SESSION, runtime, ["PROMPT"], realDir);
+			const args = buildFreshCallArgs(TARGET_SESSION, runtime, ["PROMPT"], realDir, {
+				target: GID,
+				nonce: NONCE,
+			});
 			const c = args.indexOf("-c");
 			expect(args.slice(0, c)).toEqual([
 				"new-window",
@@ -662,6 +696,10 @@ describe("optional cwd — cross-repo fresh placement (#73)", () => {
 				"PI_SESSION_ID=",
 				"-e",
 				"PI_AGENT_ID=",
+				"-e",
+				`ENTWURF_CALLBACK_TARGET=${GID}`,
+				"-e",
+				`ENTWURF_CALLBACK_NONCE=${NONCE}`,
 				"-t",
 				"$0:{end}",
 			]);
@@ -684,15 +722,21 @@ describe("optional cwd — cross-repo fresh placement (#73)", () => {
 
 	it("a cwd that classification refuses can never be built into argv either — the builder re-checks rather than trusting its caller", () => {
 		withCwdFixture(({ runtime, tmp }) => {
-			expect(() => buildFreshCallArgs(TARGET_SESSION, runtime, ["PROMPT"], path.join(tmp, "#x"))).toThrow(
-				/cwd-format-token/,
-			);
+			expect(() =>
+				buildFreshCallArgs(TARGET_SESSION, runtime, ["PROMPT"], path.join(tmp, "#x"), {
+					target: GID,
+					nonce: NONCE,
+				}),
+			).toThrow(/cwd-format-token/);
 		});
 	});
 
 	it("whitespace stays measured-OK through the fresh consumer: a directory with spaces arrives intact, while a lone space is a real UNTRIMMED value refused as not absolute — nothing repairs a path into a different directory", () => {
 		withCwdFixture(({ runtime, spaceDir }) => {
-			const args = buildFreshCallArgs(TARGET_SESSION, runtime, ["PROMPT"], spaceDir);
+			const args = buildFreshCallArgs(TARGET_SESSION, runtime, ["PROMPT"], spaceDir, {
+				target: GID,
+				nonce: NONCE,
+			});
 			expect(args[args.indexOf("-c") + 1]).toBe(spaceDir);
 		});
 		expect(reasonOf(freshCall({ backend: "pi", model: PI_MODEL, task: TASK, callerGardenId: GID, cwd: " " }, {}))).toBe(
@@ -1054,12 +1098,15 @@ describe("optional project seat — cross-session fresh placement (#105)", () =>
 	});
 
 	it("[QK:FRESHCALL-PLACEMENT-TARGET-ARGV] the RESOLVED target id is what reaches `-t`, and `-d` rides with it — the builder takes a session id rather than the caller's placement, so a cross-session launch cannot silently open in the caller's own session, and without `-d` a window opened into another session was measured to steal that session's focus", () => {
-		const args = buildFreshCallArgs(TARGET_SESSION, "/bin/sh", ["PROMPT"]);
+		const args = buildFreshCallArgs(TARGET_SESSION, "/bin/sh", ["PROMPT"], undefined, {
+			target: GID,
+			nonce: NONCE,
+		});
 		expect(args[args.indexOf("-t") + 1]).toBe(`${TARGET_SESSION}:{end}`);
 		expect(args).not.toContain(`${CALLER_SESSION}:{end}`);
 		expect(args[1]).toBe("-d");
 		// A name never reaches the argv: only a native id is addressable.
-		expect(() => buildFreshCallArgs("org", "/bin/sh", ["PROMPT"])).toThrow();
+		expect(() => buildFreshCallArgs("org", "/bin/sh", ["PROMPT"], undefined, { target: GID, nonce: NONCE })).toThrow();
 	});
 
 	it("[QK:FRESHCALL-PLACEMENT-BACKEND-PARITY] the seat is not a pi capability — every backend in the fixed set gets the SAME grammar refusal, decided before the runtime is resolved and before the copilot/omp capability preflights, and the SAME `-t` target in argv, because the target session and the backend dialect are separate parameters rather than one branch. The cwd axis (#73) already carries this parity; the seat axis landed with every behavioural assertion in this repo written against `pi` alone, which is exactly the shape in which a later backend branch would go unnoticed", () => {
@@ -1083,6 +1130,8 @@ describe("optional project seat — cross-session fresh placement (#105)", () =>
 				TARGET_SESSION,
 				"/bin/sh",
 				buildBackendArgs(backend, { prompt: "PROMPT", bootstrapPayload: "PAYLOAD" }, PI_MODEL),
+				undefined,
+				{ target: GID, nonce: NONCE },
 			);
 			expect(args[args.indexOf("-t") + 1], backend).toBe(`${TARGET_SESSION}:{end}`);
 			expect(args.indexOf("-t"), backend).toBeLessThan(args.indexOf("--"));

@@ -321,7 +321,7 @@ function finish(t) {
   // artifact ship" is precisely the question it owns. The subset form named only the five
   // pre-0.14 verbs and would have accepted a candidate with no entwurf_fresh_call /
   // entwurf_resume_call; equality also refuses an extra or duplicated verb.
-  const EXPECT_TOOLS = ['entwurf_fresh_call', 'entwurf_inbox_read', 'entwurf_peers', 'entwurf_register_native', 'entwurf_resume_call', 'entwurf_self', 'entwurf_v2'];
+  const EXPECT_TOOLS = ['entwurf_callback', 'entwurf_fresh_call', 'entwurf_inbox_read', 'entwurf_peers', 'entwurf_register_native', 'entwurf_resume_call', 'entwurf_self', 'entwurf_v2'];
   if (names.length !== EXPECT_TOOLS.length || EXPECT_TOOLS.some((n, i) => names[i] !== n)) {
     console.error('MCP tool set MISMATCH — want exactly [' + EXPECT_TOOLS.join(',') + '] got [' + names.join(',') + ']');
     process.exit(1);

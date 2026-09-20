@@ -689,6 +689,17 @@
 			"timeoutSeconds": 300,
 			"signature": "[QK:FRESHCOMP-TOOL-LOAD-HINT-CLAUDE-ONLY]",
 			"signatureSource": "test/fresh-call-composition.contract.test.ts"
+		},
+		{
+			"claim": "FRESHCALL-CALLBACK-ENV",
+			"title": "the launcher-computed callback pair is dropped from tmux -e, so the sibling's first action has to retype a garden id out of prose — Hard Rule 2",
+			"subject": "pi-extensions/lib/mux-fresh-call.ts",
+			"find": ["\t\t...callbackEnvAssignments(callback).flatMap((assignment) => [\"-e\", assignment]),"],
+			"replace": [""],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:FRESHCALL-CALLBACK-ENV]",
+			"signatureSource": "test/mux-fresh-call.test.ts"
 		}
 	]
 }

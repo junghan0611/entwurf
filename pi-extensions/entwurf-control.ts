@@ -81,6 +81,7 @@ import type {
 import { getMarkdownTheme, type Theme } from "@earendil-works/pi-coding-agent";
 import { Box, type Component, Markdown, Spacer, Text } from "@earendil-works/pi-tui";
 import { ENTWURF_SENT_MESSAGE_TYPE } from "../protocol.js";
+import { readCallbackEnv } from "./lib/callback-env.js";
 import {
 	type CompactionGuard,
 	compactionSendReject,
@@ -1118,6 +1119,7 @@ export default function (pi: ExtensionAPI) {
 	if (shouldRegisterControlTools(pi)) {
 		registerListSessionsTool(pi);
 		registerEntwurfV2Tool(pi);
+		registerCallbackTool(pi);
 		registerFreshCallTool(pi);
 		registerResumeCallTool(pi);
 	}
@@ -1738,6 +1740,60 @@ interface VisibleResumeModule {
 	visibleResume(target: string, deps: unknown): Promise<{ ok: boolean }>;
 	makeVisibleResumeDeps(launch: unknown): unknown;
 	renderVisibleResume(result: { ok: boolean }): { text: string; isError: boolean };
+}
+
+function registerCallbackTool(pi: ExtensionAPI): void {
+	const registerTool = pi.registerTool as (def: any) => void;
+	registerTool({
+		name: "entwurf_callback",
+		label: "Fresh Callback",
+		description: `ZERO-ARGUMENT callback for a fresh sibling this process was launched as. Reads ENTWURF_CALLBACK_TARGET and ENTWURF_CALLBACK_NONCE from this process environment (injected by the launcher next to the identity scrub), validates garden-id and nonce grammar, and dispatches through the existing v2 runner with intent fire-and-forget, message=nonce, wants_reply=false. The target is re-resolved by record/decider. REFUSES BY NAME when the pair is absent, malformed, or this process is a Codex-provenance bridge. No arguments, no fallback to a model-supplied target.`,
+		parameters: Type.Object({}),
+		async execute(
+			_toolCallId: string,
+			_params: Record<string, never>,
+			_signal: AbortSignal | undefined,
+			_onUpdate: unknown,
+			ctx: ExtensionContext,
+		) {
+			const read = readCallbackEnv(process.env);
+			if (!read.ok) {
+				return {
+					content: [{ type: "text", text: `entwurf_callback: ${read.reason}` }],
+					isError: true,
+				};
+			}
+			try {
+				const selfMod = (await import(ENTWURF_SELF_ADDRESS_MODULE)) as unknown as EntwurfSelfAddressModule;
+				const senderProvider = (): SenderEnvelope | undefined => {
+					const s = buildLocalSenderEnvelope(ctx);
+					return s ? decoratePiSenderAddressability(s, selfMod.computeSelfAddressability) : undefined;
+				};
+				const mod = (await import(ENTWURF_V2_SURFACE_MODULE)) as unknown as EntwurfV2SurfaceModule;
+				const rendered = await mod.runAndRenderEntwurfV2FromSurface(
+					{
+						target: read.target,
+						intent: "fire-and-forget",
+						message: read.nonce,
+						wants_reply: false,
+					},
+					{ senderProvider },
+				);
+				return {
+					content: [{ type: "text", text: rendered.text }],
+					isError: rendered.isError,
+					details: { isError: rendered.isError },
+				};
+			} catch (err) {
+				const msg = err instanceof Error ? err.message : String(err);
+				return {
+					content: [{ type: "text", text: `entwurf_callback error: ${msg}` }],
+					isError: true,
+					details: { error: msg },
+				};
+			}
+		},
+	});
 }
 
 /**

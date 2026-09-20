@@ -443,6 +443,17 @@
 			"timeoutSeconds": 120,
 			"signature": "[QK:HFC-WITNESS-BINDING-COMPLETE]",
 			"signatureSource": "scripts/check-herdr-fresh-call.ts"
+		},
+		{
+			"claim": "HFC-CALLBACK-ENV",
+			"title": "the launcher-computed callback pair is dropped from herdr --env, so a herdr sibling's first action has to retype a garden id out of prose",
+			"subject": "pi-extensions/lib/herdr-fresh-call.ts",
+			"find": ["\t\t...callbackEnvAssignments(params.callback).flatMap((assignment) => [\"--env\", assignment]),"],
+			"replace": [""],
+			"gate": ["bash", "run.sh", "check-herdr-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:HFC-CALLBACK-ENV]",
+			"signatureSource": "scripts/check-herdr-fresh-call.ts"
 		}
 	]
 }

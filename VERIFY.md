@@ -5,7 +5,7 @@ invariants live in gates; this file defines evidence strength, release acceptanc
 and the manual judgements a gate cannot make.
 
 > **Current surface.** `entwurf-bridge` exposes `entwurf_v2`, `entwurf_peers`,
-> `entwurf_fresh_call`, `entwurf_resume_call`, `entwurf_self`, `entwurf_inbox_read`, and `entwurf_register_native`. The ACP
+> `entwurf_fresh_call`, `entwurf_resume_call`, `entwurf_callback`, `entwurf_self`, `entwurf_inbox_read`, and `entwurf_register_native`. The ACP
 > backends are Claude and Snowflake Cortex Code. Antigravity is a separate shipped
 > native-push citizen lane. Codex is a native-push citizen supported in 0.21.0, whose birth hook is
 > operator-owned and gated on one vendor trust receipt, with strict request-scoped identity and

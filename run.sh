@@ -122,7 +122,7 @@ Usage:
   ./run.sh setup [project-dir]        # ONE presence-driven composition (#86): per-component PASS/SKIP/FAIL for pi/claude/agy/copilot/omp/codex + stable dev bins + v2 install smoke. Codex birth/MCP/status-line atoms are composed at user scope; setup stays non-green until the operator trusts the birth declaration once in visible Codex. Absent harness = zero-state SKIP, detected-incomplete = named FAIL + nonzero exit. Never installs a harness, starts a daemon, touches credentials, or writes the vendor trust receipt
   ./run.sh release-gate [project-dir] [--cut] [--allow-skip-gemini]  # SINGLE release gate: full static (pnpm run check:full) + the v2-native live gates (v2 matrix-live, check-bridge, doctor-pi-provider, RGG) + the ACP plugin acceptance floor (12 LIVE smokes: socket-citizen/raw-turn/overlay/provider/session-reuse/carrier-augment/memory-containment/rgg/mcp/skill/bundled-mcp/v2-send) + the one surviving axis the aggregate used to omit silently (claude-native-resume; Cortex stays a documented on-demand direct call) + the cross-harness delivery chain (smoke-entwurf-chain-live) + the Codex Pi -> visible Codex -> visible Pi receipt chain (smoke-codex-fresh-live; initial Pi and the Codex it opens in one session S, explicit operator-owned app-server PID in a DIFFERENT session — that separation is the lane B claim). TWO-TIER summary: MUST (release-blocking, owns the exit code — "green" applies here) + BEHAVIOR (advisory, non-blocking: RGG positives model-in-loop turn). STEP OUTCOME protocol: every step is INVOKED and reports its own PASS / SKIP (exit 97, a prerequisite it does not have) / FAIL — a skip is never counted as a pass. Without --cut this is the unattended diagnostic (SKIPs reported, exit 0). WITH --cut it is read as release acceptance and ANY MUST SKIP is red, which is what makes "a CUT needs LIVE=1, SKIP=0" executable instead of prose. --allow-skip-gemini accepted-but-ignored (back-compat). final cut authorization is GLG's.
   ./run.sh check-bridge               # entwurf-bridge direct MCP smoke + protocol/negative-path test.sh (live substrate = v2 live smokes)
-  ./run.sh check-entwurf-bridge-boot # deterministic gate (5d-5-pre, G1a/G1b/G1e/G1f, IN pnpm run check:full): boot start.sh under strip-types + assert v2 fence graph loads + entwurf_v2 and entwurf_resume_call registered/schema + the tools/list surface is EXACTLY the seven shipped garden verbs; tools/list only, no auth/side-effect
+  ./run.sh check-entwurf-bridge-boot # deterministic gate (5d-5-pre, G1a/G1b/G1e/G1f/G1h, IN pnpm run check:full): boot start.sh under strip-types + assert v2 fence graph loads + entwurf_v2, entwurf_resume_call and entwurf_callback registered/schema + the tools/list surface is EXACTLY the eight shipped garden verbs; tools/list only, no auth/side-effect
   ./run.sh check-entwurf-bridge-pi-free # deterministic gate (0.12.1 A, IN pnpm check): static — bridge index eager value-import closure must carry no @earendil-works/pi-* (type-only + dynamic import excluded); proves the meta-bridge boots pi-free
   ./run.sh check-model-lock           # deterministic unit test for pi-extensions/model-lock.ts (4-quadrant + edge cases, no API)
   ./run.sh check-shell-quote          # POSIX-safety gate for shellQuote (remote SSH arg quoting in entwurf paths) — source parity + behavior matrix, no SSH
@@ -4705,7 +4705,7 @@ function finish(trimmed) {
   // gate that exists to catch "green clone, dead consumer". Equality also catches the
   // other direction the narrow-surface rule cares about: an extra or duplicated verb
   // reaching hosts without a decision. Written sorted; `names` is sorted above.
-  const EXPECT_TOOLS = ['entwurf_fresh_call', 'entwurf_inbox_read', 'entwurf_peers', 'entwurf_register_native', 'entwurf_resume_call', 'entwurf_self', 'entwurf_v2'];
+  const EXPECT_TOOLS = ['entwurf_callback', 'entwurf_fresh_call', 'entwurf_inbox_read', 'entwurf_peers', 'entwurf_register_native', 'entwurf_resume_call', 'entwurf_self', 'entwurf_v2'];
   if (names.length !== EXPECT_TOOLS.length || EXPECT_TOOLS.some((n, i) => names[i] !== n)) {
     console.error('installed MCP tool set MISMATCH — want exactly [' + EXPECT_TOOLS.join(',') + '] got [' + names.join(',') + ']');
     process.exit(1);
@@ -5264,12 +5264,12 @@ function finishOk(trimmed) {
   }
   const names = tools.map((t) => t?.name).sort();
   // EXACT set, not a floor. This is the assertion behind the operator-facing claim that
-  // `entwurf check-bridge` proves the installed bytes list the seven garden tools — and
+  // `entwurf check-bridge` proves the installed bytes list the eight garden tools — and
   // under an installed package this launcher IS the dist branch of start.sh, so a subset
   // check here let an artifact missing entwurf_fresh_call / entwurf_resume_call read as a
   // green bridge. Equality also refuses an undecided extra verb. Written sorted; `names`
   // is sorted above.
-  const expected = ['entwurf_fresh_call', 'entwurf_inbox_read', 'entwurf_peers', 'entwurf_register_native', 'entwurf_resume_call', 'entwurf_self', 'entwurf_v2'];
+  const expected = ['entwurf_callback', 'entwurf_fresh_call', 'entwurf_inbox_read', 'entwurf_peers', 'entwurf_register_native', 'entwurf_resume_call', 'entwurf_self', 'entwurf_v2'];
   if (names.length !== expected.length || expected.some((n, i) => names[i] !== n)) {
     console.error(`MCP tool set MISMATCH — want exactly [${expected.join(',')}] got [${names.join(',')}]`);
     process.exit(1);
