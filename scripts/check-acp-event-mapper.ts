@@ -11,8 +11,8 @@
 // Pure/deterministic — IN pnpm check.
 
 import { strict as assert } from "node:assert";
-import type { AssistantMessageEvent, Context } from "@earendil-works/pi-ai";
-import { createAssistantMessageEventStream } from "@earendil-works/pi-ai";
+import type { AssistantMessageEvent } from "@earendil-works/pi-ai";
+import { createAssistantMessageEventStream, normalizeContext } from "@earendil-works/pi-ai";
 import { contextToAcpPrompt, contextTranscript } from "../pi-extensions/lib/acp/context.ts";
 import {
 	type AcpPiStreamState,
@@ -183,7 +183,14 @@ const deltas = (events: AssistantMessageEvent[]): string[] =>
 // 6) context conversion — transcript passthrough, no systemPrompt, single block
 // ---------------------------------------------------------------------------
 {
-	const context: Context = {
+	// `normalizeContext` is the 0.86 provider-path shape: the systemPrompt and the
+	// declared tools are FOLDED INTO a leading `role:"system"` message rather than
+	// staying on their own Context fields. That is exactly why the no-leak
+	// assertion below matters now — the secret is INSIDE `messages`, so the only
+	// thing keeping it out of the ACP child's transcript is renderMessage's
+	// explicit `case "system"` drop. A hand-built Context literal here would have
+	// proved nothing: the transcript loop never saw those fields to begin with.
+	const context = normalizeContext({
 		systemPrompt: "SECRET-SYSTEM-PROMPT-DO-NOT-LEAK",
 		tools: [{ name: "x", description: "d", parameters: {} as never }],
 		messages: [
@@ -226,9 +233,13 @@ const deltas = (events: AssistantMessageEvent[]): string[] =>
 				timestamp: 0,
 			},
 		],
-	};
+	});
+	// The fixture really does carry the prompt as a transcript message — assert the
+	// premise so a future pi that stops folding cannot turn the no-leak assertion
+	// into a vacuous one.
+	assert.equal(context.messages[0].role, "system", "normalizeContext put the systemPrompt in a leading system message");
 	const transcript = contextTranscript(context);
-	assert.ok(!transcript.includes("SECRET-SYSTEM-PROMPT"), "transcript must NOT leak context.systemPrompt");
+	assert.ok(!transcript.includes("SECRET-SYSTEM-PROMPT"), "transcript must NOT leak the folded system prompt");
 	assert.ok(!transcript.includes("private reasoning"), "transcript must NOT include assistant thinking");
 	assert.match(transcript, /User: first question/, "includes prior user turn");
 	assert.match(transcript, /Assistant: an answer/, "includes assistant text");
@@ -243,7 +254,7 @@ const deltas = (events: AssistantMessageEvent[]): string[] =>
 	assert.equal(prompt[0].type, "text", "prompt block is text");
 	assert.equal(prompt[0].text, transcript, "prompt text equals the transcript");
 
-	assert.deepEqual(contextToAcpPrompt({ messages: [] }), [], "empty history → empty prompt array");
+	assert.deepEqual(contextToAcpPrompt(normalizeContext({ messages: [] })), [], "empty history → empty prompt array");
 }
 
 console.log(

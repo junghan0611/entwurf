@@ -1,0 +1,20 @@
+{
+	"schemaVersion": 1,
+	"lane": "acp-backend-preflight",
+	"mutants": [
+		{
+			"claim": "ACP-PREFLIGHT-REPLAYS-TRANSCRIPT-TOOLS",
+			"title": "reading a `context.tools` field instead of replaying the transcript makes the exclude-tools preflight unfireable on every pi 0.86 turn — the operator is told a tool is excluded while the backend still runs it",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": ["\t\t\tconst activeToolNames = getCurrentTools(context.messages).map((t) => t.name);"],
+			"replace": [
+				"\t\t\tconst activeToolNames =",
+				"\t\t\t\t(context as unknown as { tools?: { name: string }[] }).tools?.map((t) => t.name) ?? [\"read\", \"bash\", \"edit\", \"write\"];"
+			],
+			"gate": ["bash", "run.sh", "check-acp-backend-preflight"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:ACP-PREFLIGHT-REPLAYS-TRANSCRIPT-TOOLS]",
+			"signatureSource": "scripts/check-acp-backend-preflight.ts"
+		}
+	]
+}

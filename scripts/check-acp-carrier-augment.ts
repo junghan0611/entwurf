@@ -19,7 +19,7 @@ import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { Context } from "@earendil-works/pi-ai";
+import { normalizeContext } from "@earendil-works/pi-ai";
 import {
 	buildPiContextAugment,
 	prependNewPromptAugment,
@@ -163,8 +163,10 @@ const BRIDGE_MARK = "operating through entwurf";
 // ===========================================================================
 // helper: a context whose first user message is `firstUser`
 // ===========================================================================
-function ctxWith(firstUser: string): Context {
-	return {
+// Built through `normalizeContext` (pi 0.86 provider-path shape): a custom
+// provider receives a TranscriptContext, never a raw Context.
+function ctxWith(firstUser: string) {
+	return normalizeContext({
 		messages: [
 			{ role: "user", content: firstUser, timestamp: 0 },
 			{
@@ -186,7 +188,7 @@ function ctxWith(firstUser: string): Context {
 			},
 			{ role: "user", content: "latest turn", timestamp: 0 },
 		],
-	};
+	});
 }
 
 // ===========================================================================

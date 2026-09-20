@@ -19,20 +19,39 @@ import { execFileSync } from "node:child_process";
 import { readFileSync, rmSync } from "node:fs";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import type { Api, AssistantMessageEvent, Context, Model } from "@earendil-works/pi-ai";
+import type { Api, AssistantMessageEvent, Model, TranscriptContext } from "@earendil-works/pi-ai";
+import { normalizeContext } from "@earendil-works/pi-ai";
 
 const model = { id: "claude-sonnet-5" } as unknown as Model<Api>;
 
 // Declared tools exclude `read`, but the Claude child always exposes Read →
 // declared != actual → the preflight must reject before spawning.
-const context: Context = {
+//
+// Built through `normalizeContext` — NOT as a `Context` literal. Since pi 0.86
+// a custom provider is handed a TranscriptContext (model-runtime.ts calls
+// `normalizeContext(context)` before `provider.streamSimple`), so `context.tools`
+// is ALWAYS undefined on the provider path and the declared surface lives in the
+// leading system message's `toolsAdded`. Feeding a 0.85-shaped literal straight
+// into streamShellAcp would bypass the fold and let this gate stay green over a
+// preflight that can no longer see any tools at all.
+const context: TranscriptContext = normalizeContext({
 	messages: [{ role: "user", content: "hi", timestamp: 0 }],
 	tools: [
 		{ name: "bash", description: "", parameters: {} as never },
 		{ name: "edit", description: "", parameters: {} as never },
 		{ name: "write", description: "", parameters: {} as never },
 	],
-};
+});
+
+// Premise guard: the fixture must really carry its tools as transcript state. If
+// a future pi stops folding, this fails loudly instead of leaving the exclude-
+// tools assertion below testing an empty surface for the wrong reason.
+assert.equal(context.messages[0].role, "system", "normalizeContext folded the tools into a leading system message");
+assert.deepEqual(
+	(context.messages[0] as { toolsAdded?: { name: string }[] }).toolsAdded?.map((t) => t.name),
+	["bash", "edit", "write"],
+	"the declared surface rides the system message's toolsAdded",
+);
 
 const TMP_EMIT = ".tmp-verify/acp-backend-preflight";
 rmSync(TMP_EMIT, { recursive: true, force: true });
@@ -44,7 +63,7 @@ try {
 	const mod = (await import(backendUrl)) as {
 		streamShellAcp: (
 			m: Model<Api>,
-			c: Context,
+			c: TranscriptContext,
 		) => AsyncIterable<AssistantMessageEvent> & {
 			result: () => Promise<{ stopReason: string; errorMessage?: string }>;
 		};
@@ -101,8 +120,25 @@ try {
 	for await (const ev of stream) events.push(ev);
 
 	const types = events.map((e) => e.type);
-	assert.ok(!types.includes("done"), `a tool-surface lie must NOT complete as done (got ${types.join(",")})`);
 	const errorEvent = events.find((e): e is Extract<AssistantMessageEvent, { type: "error" }> => e.type === "error");
+
+	// The whole claim in ONE assertion, placed BEFORE the diagnostic breakdown so
+	// a mutant always dies here and carries the signature. The breakdown below
+	// still runs on a green tree and says WHICH half broke.
+	const preflightFired =
+		!types.includes("done") &&
+		/cannot honor --exclude-tools \(read\)/.test(String(errorEvent?.error.errorMessage ?? ""));
+	assert.ok(
+		preflightFired,
+		"[QK:ACP-PREFLIGHT-REPLAYS-TRANSCRIPT-TOOLS] the runtime tool-surface preflight must read the active tools by " +
+			"REPLAYING the transcript's system messages (`getCurrentTools(context.messages)`), which is where pi 0.86 puts " +
+			"the declared surface. Reading a `context.tools` field instead yields undefined on every 0.86 provider call; " +
+			"with a fallback to the full builtin set that makes assertExcludeToolsHonored unfireable — the turn reaches a " +
+			"spawn and the operator is told a tool is excluded while the backend can still run it. " +
+			`Got events [${types.join(",")}], error=${JSON.stringify(errorEvent?.error.errorMessage ?? null)}`,
+	);
+
+	assert.ok(!types.includes("done"), `a tool-surface lie must NOT complete as done (got ${types.join(",")})`);
 	assert.ok(errorEvent, `expected an error event (got ${types.join(",")})`);
 	assert.equal(errorEvent.reason, "error", "tool-surface divergence is a hard error, not aborted");
 	assert.equal(errorEvent.error.stopReason, "error", "final message stopReason must be error");
@@ -124,7 +160,8 @@ try {
 }
 
 console.log(
-	"[check-acp-backend-preflight] ok — streamShellAcp runs assertExcludeToolsHonored before spawn; a declared-vs-actual " +
+	"[check-acp-backend-preflight] ok — streamShellAcp replays the 0.86 transcript's system messages for the active tool " +
+		"surface and runs assertExcludeToolsHonored before spawn; a declared-vs-actual " +
 		"tool-surface lie fails fast into the stream as an error event (no backend launched, no done); " +
 		"actionableAcpBackendHint (A-c) classifies a context-window 400 into an actionable hint without misclassifying unrelated failures",
 );

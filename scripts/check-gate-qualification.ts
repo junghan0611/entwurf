@@ -820,6 +820,7 @@ let manifestCount: number;
 	// manifest lost in a merge must name itself here — "0/0 killed" is not a pass.
 	// Extend this inventory and the manifests TOGETHER, never silently.
 	const EXPECTED_LANE_MUTANTS: Record<string, number> = {
+		"acp-backend-preflight": 1,
 		"acp-augment": 10,
 		"acp-cortex": 14,
 		"acp-launch-namespace": 2,
@@ -848,7 +849,7 @@ let manifestCount: number;
 		"herdr-placement": 13,
 		"herdr-plugin": 11,
 		"herdr-plugin-profile": 14,
-		"herdr-activation": 24,
+		"herdr-activation": 25,
 		"herdr-plugin-build": 13,
 		"herdr-runtime-bootstrap": 31,
 		"herdr-fresh-call": 37,

@@ -37,9 +37,17 @@ The earlier candidate receipt, taken on the branch these nine steps were written
 (`--ref set/119-verify-herdr` at `1685d078`), is superseded by the line above: that branch
 landed as `d905a95` and its content is in `main`.
 
+The pi range below is not a second number this file gets to choose: it is the
+`peerDependencies` range Entwurf publishes for `@earendil-works/pi-coding-agent`
+(`package.json`), and `check-dep-versions` fails if this file and that pin ever
+disagree. Since 0.86.0 the activation door enforces it too — `run.sh
+install-user-scope` refuses an out-of-range pi by name and writes nothing, the
+same verdict `entwurf setup` gives — so an unpinned `npm install -g` here would
+just move the failure to step 5.
+
 ```bash
-# 1. pi
-npm install -g @earendil-works/pi-coding-agent
+# 1. pi — the range Entwurf declares as its peer, quoted so the shell keeps it in one word
+npm install -g "@earendil-works/pi-coding-agent@>=0.86.0 <0.87"
 
 # 2. herdr — see the herdr project for its own install
 herdr --version

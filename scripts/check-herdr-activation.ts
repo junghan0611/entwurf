@@ -205,6 +205,21 @@ const {
 	COMPONENT_STATES,
 } = mod;
 
+/** The pi pin package.json declares — the SSOT `run.sh pi_supported_range` derives its range from. */
+const PI_PIN = (
+	JSON.parse(fs.readFileSync(path.join(REPO, "package.json"), "utf8")) as {
+		devDependencies: Record<string, string>;
+	}
+).devDependencies["@earendil-works/pi-coding-agent"];
+
+/** A `pi` stand-in that reports `version` and nothing else — enough for a `--version` floor probe. */
+function fakePi(dir: string, name: string, version: string): string {
+	fs.mkdirSync(dir, { recursive: true });
+	const file = path.join(dir, name);
+	fs.writeFileSync(file, `#!/bin/sh\necho ${version}\n`, { mode: 0o755 });
+	return file;
+}
+
 function world(tag: string): NodeJS.ProcessEnv {
 	const home = reclaimOnExit(fs.mkdtempSync(path.join(os.tmpdir(), `entwurf-hac-${tag}-`)));
 	for (const d of [".config", ".state", ".data", ".cache", "pi-agent", ".claude"]) {
@@ -220,6 +235,13 @@ function world(tag: string): NodeJS.ProcessEnv {
 		XDG_CACHE_HOME: path.join(home, ".cache"),
 		PI_CODING_AGENT_DIR: path.join(home, "pi-agent"),
 		CLAUDE_CONFIG_DIR: path.join(home, ".claude"),
+		// PI_BIN is a sandbox root like the four XDG vars above, not a convenience. Since #119
+		// `install-user-scope` probes `pi --version` against the same closed range setup enforces,
+		// so leaving this unset would let the OPERATOR'S installed pi decide whether these cells
+		// pass — the gate would go red on a developer machine sitting one minor behind the pin and
+		// green on another, for reasons none of these cells are about. It is pinned IN RANGE here;
+		// the one cell whose subject IS the floor overrides it per run.
+		PI_BIN: fakePi(path.join(home, "bin"), "pi", PI_PIN),
 	};
 }
 
@@ -327,6 +349,57 @@ function ledgerWith(
 			after.entwurfProvider !== undefined &&
 			projectWrites.length === 0 &&
 			fs.readFileSync(path.join(opencode, "plugins.json"), "utf8") === opencodeBefore,
+	);
+}
+
+// ── 1b. the plugin door enforces the SAME pi floor the setup door does ────────
+// #119: `setup` refuses an out-of-range pi by name before it writes any Pi wiring, but
+// `install-user-scope` — the door herdr plugin activation actually goes through
+// (plugins/herdr/lib/build.mjs → scripts/herdr-plugin-activate.mjs → `run.sh
+// install-user-scope --plugin-runtime …`) — had no version check at all. Two doors onto ONE
+// registration telling different truths is the whole defect, so the oracle here is the
+// out-of-range/in-range PAIR: the refusal alone would also be satisfied by a door that refuses
+// everything. Absent pi is deliberately NOT asserted as a third state — this verb invents no
+// presence verdict, setup owns that one.
+{
+	const env = world("pi-floor");
+	const bin = path.join(env.HOME as string, "bin");
+	// The supported range is DERIVED from the package.json devDep pin (run.sh
+	// `pi_supported_range`), so the fixtures are derived from it too — a hardcoded "0.85.1" here
+	// would silently stop being out-of-range the day the pin moves past it.
+	const [maj, min] = PI_PIN.split(".").map(Number);
+	const belowFloor = `${maj}.${min - 1}.0`;
+	const settingsPath = path.join(env.PI_CODING_AGENT_DIR as string, "settings.json");
+	fs.writeFileSync(settingsPath, '{"theme":"dark"}\n');
+	const before = fs.readFileSync(settingsPath, "utf8");
+
+	const stale = sh({ ...env, PI_BIN: fakePi(bin, "stale-pi", belowFloor) }, [
+		"install-user-scope",
+		"--plugin-runtime",
+		runtimeRootOf(env),
+	]);
+	const afterRefusal = fs.readFileSync(settingsPath, "utf8");
+	const current = sh({ ...env, PI_BIN: fakePi(bin, "current-pi", PI_PIN) }, [
+		"install-user-scope",
+		"--plugin-runtime",
+		runtimeRootOf(env),
+	]);
+	const afterAccept = readJson(settingsPath) as { packages?: string[] };
+
+	ok(
+		"[QK:HAC-PI-FLOOR-BOTH-DOORS] the plugin activation door enforces the SAME closed pi range as the " +
+			"setup door: a below-floor pi is a named FAIL that writes zero settings bytes (not a SKIP, not a " +
+			"silent write), while an in-range pi still registers — one registration reached through two doors " +
+			"may not report two different verdicts, and the range both read is DERIVED from one package.json pin " +
+			`(pin=${PI_PIN} stale=${belowFloor}/exit=${stale.status} named=${(stale.stderr || "").includes("outside the supported range")} ` +
+			`untouched=${before === afterRefusal} current=exit=${current.status}/packages=${JSON.stringify(afterAccept.packages)})`,
+		stale.status !== 0 &&
+			(stale.stderr || "").includes("[install-user-scope] pi: FAIL") &&
+			(stale.stderr || "").includes("outside the supported range") &&
+			before === afterRefusal &&
+			current.status === 0 &&
+			Array.isArray(afterAccept.packages) &&
+			afterAccept.packages.length === 1,
 	);
 }
 

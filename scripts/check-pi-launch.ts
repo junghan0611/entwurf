@@ -15,7 +15,8 @@
  * six receiver-state facts before it execs, because setting its flag is a PROMISE of a
  * doorbell that may not exist. `entwurf pi` promises nothing pi does not already own: on a
  * host where the entwurf extension is not registered, `pi --entwurf-control` refuses itself
- * with `Error: Unknown option: --entwurf-control` and exit 1 (measured, pi 0.85.1). A
+ * with `Error: Unknown option: --entwurf-control` and exit 1 (`[측정 2026-09-20]` pi 0.86.0,
+ * sandbox HOME + PI_CODING_AGENT_DIR, that exact stderr line and exit 1). A
  * pre-check here would duplicate that refusal and go stale the day pi renames it.
  *
  * WHY ONE RECURSION FENCE AND NOT TWO. The sentinel closes the only real loop — a PATH
@@ -26,7 +27,9 @@
  *
  * WHY THE FLAG IS ADDED AND NEVER DEDUPLICATED. `pit`/`pius`-style operator wrappers already
  * pass `--entwurf-control`; passing it twice was measured byte-identical to passing it once
- * (pi 0.85.1, extension registered). The launcher therefore injects exactly ONE and leaves
+ * (pi 0.85.1, extension registered — that receipt was NOT retaken at 0.86.0, because it needs a
+ * host with the extension registered and taking it would have meant opening a control session on
+ * the operator's own pi; the 0.86.0 re-measure above covers the unregistered refusal instead). The launcher therefore injects exactly ONE and leaves
  * the operator's copies alone — an argv scan would be code earning nothing.
  */
 

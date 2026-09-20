@@ -30,7 +30,26 @@ import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmdirSync, rmSync, 
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import type { Api, AssistantMessageEvent, Context, Message, Model } from "@earendil-works/pi-ai";
+import type { Api, AssistantMessageEvent, Context, Message, Model, TranscriptContext } from "@earendil-works/pi-ai";
+import { normalizeContext } from "@earendil-works/pi-ai";
+
+// The pi built-ins the Claude child also exposes natively. pi declares its tool
+// surface on every turn; since 0.86 that declaration reaches a provider as the
+// leading system message's `toolsAdded` (normalizeContext), and backend.ts
+// replays it for the exclude-tools truthfulness preflight. A fixture that
+// declares NO tools is therefore not "a turn with the defaults" — it is a turn
+// where the operator excluded everything, and the preflight rejects it before
+// any spawn. So every provider-path context in this gate is built through `tctx`.
+const PI_DECLARED_TOOLS = ["read", "bash", "edit", "write"].map((name) => ({
+	name,
+	description: "",
+	parameters: {} as never,
+}));
+
+/** A provider-path context in the 0.86 shape: tools folded into a leading system message. */
+function tctx(messages: Context["messages"]): TranscriptContext {
+	return normalizeContext({ tools: PI_DECLARED_TOOLS, messages });
+}
 
 const sonnet = { id: "claude-sonnet-5" } as unknown as Model<Api>;
 const opus = { id: "claude-opus-5" } as unknown as Model<Api>;
@@ -222,30 +241,28 @@ function mkAssistant(content: Array<{ type: "text"; text: string; textSignature?
 }
 
 // A multi-turn (reuse-shaped) context: a prior user, an assistant, a new user.
-function reuseCtx(prior: string, latest: string): Context {
-	return {
-		messages: [
-			{ role: "user", content: prior, timestamp: 0 },
-			{
-				role: "assistant",
-				content: [{ type: "text", text: "ok" }],
-				api: "x",
-				provider: "x",
-				model: "x",
-				usage: {
-					input: 0,
-					output: 0,
-					cacheRead: 0,
-					cacheWrite: 0,
-					totalTokens: 0,
-					cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
-				},
-				stopReason: "stop",
-				timestamp: 0,
+function reuseCtx(prior: string, latest: string): TranscriptContext {
+	return tctx([
+		{ role: "user", content: prior, timestamp: 0 },
+		{
+			role: "assistant",
+			content: [{ type: "text", text: "ok" }],
+			api: "x",
+			provider: "x",
+			model: "x",
+			usage: {
+				input: 0,
+				output: 0,
+				cacheRead: 0,
+				cacheWrite: 0,
+				totalTokens: 0,
+				cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
 			},
-			{ role: "user", content: latest, timestamp: 0 },
-		],
-	};
+			stopReason: "stop",
+			timestamp: 0,
+		},
+		{ role: "user", content: latest, timestamp: 0 },
+	]);
 }
 
 const TMP_EMIT = ".tmp-verify/acp-session-reuse";
@@ -282,7 +299,7 @@ try {
 
 		// Pre-write a COMPATIBLE persisted record at a DIFFERENT acp id — if the
 		// backend (wrongly) resumed it, turn 1 would prompt "OLD-RESUME-ID".
-		const turn1Ctx: Context = { messages: [{ role: "user", content: "remember NONCE-AAA", timestamp: 0 }] };
+		const turn1Ctx = tctx([{ role: "user", content: "remember NONCE-AAA", timestamp: 0 }]);
 		store.writeSessionRecord(
 			store.buildSessionRecord(
 				{
@@ -350,7 +367,7 @@ try {
 		await collect(
 			backend.streamAcpTurn(
 				sonnet,
-				{ messages: [{ role: "user", content: "first", timestamp: 0 }] },
+				tctx([{ role: "user", content: "first", timestamp: 0 }]),
 				{ sessionId: "gate-B" },
 				h.deps,
 			) as Stream,
@@ -384,7 +401,7 @@ try {
 		const h = makeHarness(recordDir);
 		let release!: () => void;
 		h.setBlock(new Promise<void>((r) => (release = r)));
-		const ctx: Context = { messages: [{ role: "user", content: "only", timestamp: 0 }] };
+		const ctx = tctx([{ role: "user", content: "only", timestamp: 0 }]);
 		// turn A: first turn, blocks in prompt (still in flight, not yet retained).
 		const aDone = collect(backend.streamAcpTurn(sonnet, ctx, { sessionId: "gate-D" }, h.deps) as Stream);
 		await new Promise((r) => setTimeout(r, 20)); // let turn A claim the key + spawn
@@ -410,7 +427,7 @@ try {
 		await collect(
 			backend.streamAcpTurn(
 				sonnet,
-				{ messages: [{ role: "user", content: "x", timestamp: 0 }] },
+				tctx([{ role: "user", content: "x", timestamp: 0 }]),
 				{ sessionId: "gate-E1", cwd: "/w1" },
 				h.deps,
 			) as Stream,
@@ -421,7 +438,7 @@ try {
 		await collect(
 			backend.streamAcpTurn(
 				sonnet,
-				{ messages: [{ role: "user", content: "y", timestamp: 0 }] },
+				tctx([{ role: "user", content: "y", timestamp: 0 }]),
 				{ sessionId: "gate-E1", cwd: "/w2" },
 				h.deps,
 			) as Stream,
@@ -434,7 +451,7 @@ try {
 		await collect(
 			backend.streamAcpTurn(
 				sonnet,
-				{ messages: [{ role: "user", content: "x", timestamp: 0 }] },
+				tctx([{ role: "user", content: "x", timestamp: 0 }]),
 				{ sessionId: "gate-E2" },
 				h2.deps,
 			) as Stream,
@@ -481,7 +498,7 @@ try {
 		const t1 = await collect(
 			backend.streamAcpTurn(
 				sonnet,
-				{ messages: [{ role: "user", content: "hi NONCE-F", timestamp: 0 }] },
+				tctx([{ role: "user", content: "hi NONCE-F", timestamp: 0 }]),
 				{ sessionId: "gate-F" },
 				h.deps,
 			) as Stream,
@@ -513,15 +530,13 @@ try {
 
 		// F4: a `new` full-transcript rebuild DROPS a lifecycle-marked assistant block
 		// (context.ts filter) while keeping the real transcript text.
-		const ctxWithNotice: Context = {
-			messages: [
-				{ role: "user", content: "real user line", timestamp: 0 },
-				mkAssistant([
-					{ type: "text", text: "\n[acp: session ready model=claude-sonnet-5]\n", textSignature: MARKER },
-					{ type: "text", text: "real assistant line" },
-				]),
-			],
-		};
+		const ctxWithNotice = tctx([
+			{ role: "user", content: "real user line", timestamp: 0 },
+			mkAssistant([
+				{ type: "text", text: "\n[acp: session ready model=claude-sonnet-5]\n", textSignature: MARKER },
+				{ type: "text", text: "real assistant line" },
+			]),
+		]);
 		const built = ctxMod
 			.buildAcpPrompt(ctxWithNotice, "new")
 			.map((b: { text: string }) => b.text)
@@ -534,12 +549,10 @@ try {
 
 		// F5: a lifecycle-marked block does NOT change the reuse-compat signature —
 		// the per-message signature is identical with and without the notice.
-		const ctxNoNotice: Context = {
-			messages: [
-				{ role: "user", content: "real user line", timestamp: 0 },
-				mkAssistant([{ type: "text", text: "real assistant line" }]),
-			],
-		};
+		const ctxNoNotice = tctx([
+			{ role: "user", content: "real user line", timestamp: 0 },
+			mkAssistant([{ type: "text", text: "real assistant line" }]),
+		]);
 		assert.deepEqual(
 			store.contextMessageSignatures(ctxWithNotice),
 			store.contextMessageSignatures(ctxNoNotice),
@@ -639,7 +652,7 @@ try {
 			await collect(
 				backend.streamAcpTurn(
 					sonnet,
-					{ messages: [{ role: "user", content: "hi NONCE-G", timestamp: 0 }] },
+					tctx([{ role: "user", content: "hi NONCE-G", timestamp: 0 }]),
 					{ sessionId: "gate-G" },
 					h.deps,
 				) as Stream,
@@ -704,7 +717,7 @@ try {
 			await collect(
 				backend.streamAcpTurn(
 					sonnet,
-					{ messages: [{ role: "user", content: "hi NONCE-H", timestamp: 0 }] },
+					tctx([{ role: "user", content: "hi NONCE-H", timestamp: 0 }]),
 					{ sessionId: "gate-H-off" },
 					hOff.deps,
 				) as Stream,
@@ -720,7 +733,7 @@ try {
 			await collect(
 				backend.streamAcpTurn(
 					sonnet,
-					{ messages: [{ role: "user", content: "hi NONCE-H2", timestamp: 0 }] },
+					tctx([{ role: "user", content: "hi NONCE-H2", timestamp: 0 }]),
 					{ sessionId: "gate-H-on" },
 					hOn.deps,
 				) as Stream,
@@ -761,7 +774,7 @@ try {
 			await collect(
 				backend.streamAcpTurn(
 					sonnet,
-					{ messages: [{ role: "user", content: "hi NONCE-I1", timestamp: 0 }] },
+					tctx([{ role: "user", content: "hi NONCE-I1", timestamp: 0 }]),
 					{ sessionId: "gate-I-one" },
 					h.deps,
 				) as Stream,
@@ -769,7 +782,7 @@ try {
 			await collect(
 				backend.streamAcpTurn(
 					sonnet,
-					{ messages: [{ role: "user", content: "hi NONCE-I2", timestamp: 0 }] },
+					tctx([{ role: "user", content: "hi NONCE-I2", timestamp: 0 }]),
 					{ sessionId: "gate-I-two" },
 					h.deps,
 				) as Stream,

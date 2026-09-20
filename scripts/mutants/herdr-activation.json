@@ -14,6 +14,22 @@
 			"signatureSource": "scripts/check-herdr-activation.ts"
 		},
 		{
+			"claim": "HAC-PI-FLOOR-BOTH-DOORS",
+			"title": "dropping the pi range check from install-user-scope re-opens the door asymmetry: setup refuses a below-floor pi by name while the herdr activation door writes the same registration in silence, so one host reports two verdicts for one citizen",
+			"subject": "run.sh",
+			"find": [
+				"    if ! pi_version_in_range \"${pi_ver:-0}\" \"$pi_range\"; then",
+				"      echo \"[install-user-scope] pi: FAIL — detected pi ${pi_ver:-<unreadable version>} is outside the supported range $pi_range; nothing was written. Align pi, then re-run.\" >&2",
+				"      exit 1",
+				"    fi"
+			],
+			"replace": ["    : \"$pi_range\""],
+			"gate": ["bash", "run.sh", "check-herdr-activation"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:HAC-PI-FLOOR-BOTH-DOORS]",
+			"signatureSource": "scripts/check-herdr-activation.ts"
+		},
+		{
 			"claim": "HAC-COMMAND-IS-DERIVED",
 			"title": "accepting any absolute directory as 'the plugin runtime' is a way to point every pi session at an executable of the caller's choosing — 'absolute' was never the contract, 'this host's stable runtime' was",
 			"subject": "scripts/register-pi-provider.py",

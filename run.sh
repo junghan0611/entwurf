@@ -276,7 +276,7 @@ Usage:
   ./run.sh check-dep-versions         # local deterministic check that the pi pin agrees across package.json (devDeps + peer range), run.sh (peer-install pins), and the baseline docs (AGENTS/README/ROADMAP/setup-clean-host/demo)
   ./run.sh check-node-floor-coherence # binds the Node floor (24+, single axis) across engines.node, run.sh setup preflight, meta-bridge install/doctor judgment logic, clean-host docs, the bridge launcher header, and the CI runner node-version — engines.node is the SSOT, everything else is derived; sweeps tracked contract text for an unregistered declaration
   ./run.sh check-pack                 # publish gate (dry-run): npm pack --dry-run + tarball invariants (runtime-critical present, dev residue absent)
-  ./run.sh check-pack-pin-matcher     # pure self-test of check-pack-install's pin-leak matcher against synthetic .pnpm lookalikes, one cell per property: version boundary (@0.85.10 must leak, @0.85.1 bare or with either measured peer-hash must pass) and closure prefix (an off-pin @earendil-works/chord must leak — it carries no `pi-` prefix); snapshot-safe qualification oracle, also run first inside check-pack-install
+  ./run.sh check-pack-pin-matcher     # pure self-test of check-pack-install's pin-leak matcher against synthetic .pnpm lookalikes, one cell per property: version boundary (a prefix-extended @0.86.0-beta.1 and an off-pin @0.85.1 must leak, @0.86.0 bare or with any measured peer-hash must pass) and closure prefix (an off-pin @earendil-works/chord must leak — it carries no `pi-` prefix); snapshot-safe qualification oracle, also run first inside check-pack-install
   ./run.sh check-fresh-cut-gate       # SOURCE cell of the generation-boundary proof (IN pnpm run check:full): drives real install/setup/fresh-cut in a sandbox; certification refusal is pre-write, quiescence is fail-closed, archives preserve bytes, and the #54 exit matrix distinguishes complete / no-move / usage / incomplete transition / complete-with-cleanup-residue. No model/network/cost
   ./run.sh check-pack-install         # heavy publish gate (prepublishOnly): actual npm pack + tar -tf + fresh-temp install smoke + the #116 M3-b1 herdr-plugin RUNTIME VERIFIER run against that actual installed tarball (the focused check-herdr-runtime-bootstrap drives a fixture; THIS is where the real package is proven) with the pinned pi peers (pins derived from the package.json devDep; check-dep-versions binds them) + the npm-installed bridge BOOTS (tools/list) and DELIVERS (tools/call entwurf_v2 → .msg lands) + the installed all-absent and copilot-present (four-unit fake-vendor) `entwurf setup` rows + the INSTALLED generation lifecycle on a seeded previous-generation host (REFUSE before activation writes / zero Claude invocations → installed fresh-cut archives + opens empty → install-meta-bridge PASSES) + the INSTALLED-PACKAGE branch of the Copilot and OMP birth installers actually RUN (compiled entry selected, no raw .ts, and a real birth edge mints a citizen — the half a required-artifact list can never stand in for)
   ./run.sh check-install-container    # 0.12.8 (#51 C): Linux artifact-CONSUMER gate — one candidate .tgz handed read-only to a checkout-invisible node:<engines-major>-bookworm cell. Default packs once to temp; ENTWURF_CANDIDATE_TGZ=/absolute/preserved.tgz consumes those exact bytes with no re-pack and prints canonical path+sha256 for release. Non-root global PATH install, frozen package, MCP tools/list, fake-Claude install-meta-bridge, path+sha256 fence, strict doctor, and the GENERATION host-state matrix (clean / v3-only store bytes unchanged / previous-generation REFUSE→fresh-cut→retry PASS) seeded inline. Docker missing = honest SKIP; ENTWURF_REQUIRE_DOCKER=1 makes that RED (required CI)
@@ -709,6 +709,31 @@ install_user_scope() {
     esac
     shift
   done
+  # pi FLOOR — the same closed range `setup` enforces (#119 door symmetry). setup refuses an
+  # out-of-range pi by name before it writes any Pi wiring; this verb is the OTHER door onto the
+  # same registration (herdr plugin activation reaches it through plugins/herdr/lib/build.mjs →
+  # scripts/herdr-plugin-activate.mjs → `run.sh install-user-scope --plugin-runtime …`) and had no
+  # version check at all, so a host pi setup would name as FAIL got its citizen written here in
+  # silence. Both doors now tell the same truth, off the SAME derived range — `pi_supported_range`
+  # reads the package.json devDep pin, so there is one range in the repo and no second parser.
+  #
+  # ABSENT pi is deliberately NOT changed here. This verb is called by an activation that has
+  # already decided pi is one of its backends; inventing a presence verdict at the writer would put
+  # a second detection authority next to setup's. Out-of-range is the asymmetry that was real, and
+  # it is the only one closed. PI_BIN is the same probe seam setup uses (hermetic gates pin it;
+  # production leaves it unset).
+  local pi_bin="${PI_BIN:-pi}" pi_range pi_ver
+  if command -v "$pi_bin" >/dev/null 2>&1; then
+    pi_range=$(pi_supported_range)
+    # Bounded capture, same reason as setup's: a resolvable pi whose --version crashes or prints
+    # garbage must reach the refusal below, never abort through set -e with nothing said.
+    pi_ver="$("$pi_bin" --version 2>/dev/null | head -n 1 | tr -d '[:space:]')" || pi_ver=""
+    if ! pi_version_in_range "${pi_ver:-0}" "$pi_range"; then
+      echo "[install-user-scope] pi: FAIL — detected pi ${pi_ver:-<unreadable version>} is outside the supported range $pi_range; nothing was written. Align pi, then re-run." >&2
+      exit 1
+    fi
+  fi
+
   preflight_v3_store install-user-scope
   section "install-user-scope: the GLOBAL pi citizen only (no project wiring)"
   register_user_scope_citizen "$plugin_runtime"
@@ -2120,13 +2145,16 @@ assert.equal(peerTui, piAi,
 // floor tracks the devDep pin so a consumer can't install against a pi lacking
 // the public trust exports the bridge imports at the pinned minor, AND an upper
 // bound at the next minor stops a fresh install from silently pulling a future
-// pi (past the declared ceiling — 0.86+ at the current 0.85.1 pin) whose
+// pi (past the declared ceiling — 0.87+ at the current 0.86.0 pin) whose
 // internal export surface has drifted from the one we typecheck against.
 // pi moves its public surface every minor (the 0.79→0.80 getModels→provider-
-// factory churn is exactly this), so an open `>=` floor is exactly how the next
-// installer re-acquires the drift. The floor is also the HARD MINIMUM a consumer
-// install resolves: at `>=0.85.1` an existing 0.85.0 host is upgraded, not kept.
-// Expected shape: `>=<devDep> <0.<minor+1>` (e.g. `>=0.85.1 <0.86`).
+// factory churn is exactly this, and 0.86 is the same shape again: a custom
+// provider's streamSimple now receives a branded TranscriptContext instead of a
+// raw Context, with systemPrompt/tools folded into a leading system message), so
+// an open `>=` floor is exactly how the next installer re-acquires the drift.
+// The floor is also the HARD MINIMUM a consumer install resolves: at `>=0.86.0`
+// an existing 0.85.1 host is upgraded, not kept.
+// Expected shape: `>=<devDep> <0.<minor+1>` (e.g. `>=0.86.0 <0.87`).
 const [piMaj, piMin] = piAi.split('.').map(Number);
 assert.equal(piMaj, 0,
   `pi pin major must stay 0 for the next-minor ceiling rule (got ${piAi}); revisit check-dep-versions when pi reaches 1.x`);
@@ -2157,10 +2185,41 @@ assert.equal(peerDepTui, expectedPeer,
 // read, and sat two bumps stale (`>=0.84.3 <0.85` at a 0.85.1 pin) precisely
 // because it was outside this list. Its declaration is a plain range, so the
 // range scan below binds it — no new PROSE_DECL is needed for it.
-const BASELINE_DOCS = ['README.md', 'ROADMAP.md', 'docs/setup-clean-host.md', 'demo/README.md', 'VERIFY.md'];
+// plugins/herdr/README.md joined on 2026-09-20, the same repair one bump later:
+// its step-1 `npm install -g @earendil-works/pi-coding-agent` was UNPINNED, so
+// from the hour 0.86.0 published it installed a pi outside the range the plugin
+// ships against — and nothing read that line. It now carries the range and is
+// scanned here, which is the only reason writing the number down is allowed.
+const BASELINE_DOCS = ['README.md', 'ROADMAP.md', 'docs/setup-clean-host.md', 'demo/README.md', 'VERIFY.md', 'plugins/herdr/README.md'];
+
+// ROADMAP.md is a baseline doc AND the home of the dated bump ledger, and those
+// are opposite kinds of sentence. A ledger entry is a RECEIPT: `2026-09-06 bump
+// — pi 0.84.4 → 0.85.1` records the range that landed THAT day, and rewriting it
+// at the next bump would destroy the evidence trail the entry exists to keep.
+// The comment above always said history keeps its old versions; until 0.86.0
+// that was only true because the newest entry happened to name the live pin, so
+// the FIRST bump after an entry was written is what exposed it. A ledger entry
+// opens at its dated bullet and runs until the enclosing list resumes at column
+// 0 (measured: every `  - ` bullet inside the Dep-bump block is a bump entry).
+function stripBumpLedger(file, text) {
+  if (file !== 'ROADMAP.md') return text;
+  let inLedger = false, dropped = 0;
+  const kept = text.split('\n').filter((line) => {
+    if (/^  - \*\*\d{4}-\d{2}-\d{2} bump — /.test(line)) { inLedger = true; }
+    else if (inLedger && /^(- |#|\S)/.test(line)) { inLedger = false; }
+    if (inLedger) dropped++;
+    return !inLedger;
+  });
+  // Guard the exclusion itself: it must find a real ledger and must not eat the
+  // whole file. Either way the range/exact scans below would pass vacuously.
+  assert.ok(dropped > 0, 'ROADMAP.md: no dated bump-ledger entry found — the ledger moved or its bullet shape changed; re-point stripBumpLedger instead of leaving history inside the pin scan');
+  assert.ok(kept.length > 100, `ROADMAP.md: the bump-ledger exclusion swallowed the document (${kept.length} lines left) — the live pin declarations would no longer be scanned`);
+  return kept.join('\n');
+}
+
 let rangeDecls = 0, exactDecls = 0;
 for (const file of BASELINE_DOCS) {
-  const text = readFileSync(file, 'utf8');
+  const text = stripBumpLedger(file, readFileSync(file, 'utf8'));
   // Closed-range declarations: `>=<floor> <0.<ceiling>` (spaces optional).
   for (const [decl, floor, ceilMinor] of text.matchAll(/>=\s?(\d+\.\d+\.\d+)\s?<\s?0\.(\d+)/g)) {
     rangeDecls++;
@@ -3470,8 +3529,10 @@ check_pack() {
 #
 # (1) The version BOUNDARY. A pnpm .pnpm entry is `<name>@<version>` followed by either
 #     `_<peer-hash>` or end-of-name (measured pnpm 11.20.0 on this tree), so an unbounded
-#     substring match would bless a lookalike such as `@0.85.10` while announcing the pinned
-#     floor — a false-green oracle (found by independent review, 2026-08-25).
+#     substring match would bless a lookalike whose version merely STARTS with the pin — a
+#     prerelease such as `@0.86.0-beta.1`, or the `@0.85.10` shape that first exposed this —
+#     while announcing the pinned floor: a false-green oracle (found by independent review,
+#     2026-08-25).
 # (2) The name PREFIX covers the whole @earendil-works closure, not the `pi-` families alone.
 #     0.85.0 added `@earendil-works/chord`, declared as a runtime `dependencies` entry by
 #     pi-coding-agent, pi-agent-core, pi-client and pi-protocol — inside the closure, with a
@@ -3479,15 +3540,17 @@ check_pack() {
 #     `@earendil-works+chord@0.85.1` next to the seven pi entries, and the old
 #     `^@earendil-works+pi-` filter did not see it: chord would have floated silently while
 #     this gate printed a verified pin. The prefix is the closure's org, not one family in it.
-#     (The measured peer-hash suffix moved too — `_ws@8.21.3` at 0.85.1 where 0.84.4 carried
-#     `_@modelcontextprotocol+sdk@…` — which is exactly what property (1)'s `(_|$)` absorbs;
-#     both shapes are fixtures below so a future suffix change cannot pass vacuously.)
+#     (The measured peer-hash suffix keeps moving — `_@modelcontextprotocol+sdk@…` at 0.84.4,
+#     `_ws@8.21.3` at 0.85.1, and `[측정 2026-09-20]` the combined
+#     `_@modelcontextprotocol+sdk@1.29.0_zod@4.3.6__ws@8.21.3_zod@4.3.6` on a 0.86.0 tree —
+#     which is exactly what property (1)'s `(_|$)` absorbs; all three shapes are fixtures
+#     below so a future suffix change cannot pass vacuously.)
 pack_install_leaked_pi() {
-  grep '^@earendil-works+' | grep -Ev '@0\.85\.1(_|$)' || true
+  grep '^@earendil-works+' | grep -Ev '@0\.86\.0(_|$)' || true
 }
 
 # Matcher self-test on SYNTHETIC lookalikes: a healthy install tree cannot exercise either
-# false-green shape (it contains no 0.85.10 and no off-pin chord), so the oracle is proven
+# false-green shape (it contains no prefix-extended version and no off-pin chord), so the oracle is proven
 # against fixture listings. One cell per property of pack_install_leaked_pi, so a regression
 # in either is named by its own signature rather than folded into a single verdict. Exposed
 # as its own snapshot-safe subcommand because the heavy check-pack-install cannot run inside
@@ -3497,30 +3560,33 @@ pack_install_leaked_pi() {
 check_pack_pin_matcher() {
   local matcher_probe
 
-  # Cell 1 — the version boundary. Both measured peer-hash shapes are fixtures: the
-  # 0.84.4-era `_@modelcontextprotocol+sdk@…` and the `_ws@8.21.3` observed on a real
-  # 0.85.1 tree. Neither may leak; the two lookalikes must.
+  # Cell 1 — the version boundary. Every measured peer-hash shape is a fixture: the
+  # 0.84.4-era `_@modelcontextprotocol+sdk@…`, the `_ws@8.21.3` observed on a real
+  # 0.85.1 tree, and `[측정 2026-09-20]` the combined suffix a 0.86.0 install carries.
+  # None may leak; the two lookalikes must — a PREFIX-EXTENDED version (`0.86.0-beta.1`,
+  # the prerelease shape that an unanchored match would bless) and an off-pin version.
   matcher_probe=$(printf '%s\n' \
-    '@earendil-works+pi-ai@0.85.1' \
-    '@earendil-works+pi-ai@0.85.1_@modelcontextprotocol+sdk@1.29.0_zod@4.3.6' \
-    '@earendil-works+pi-ai@0.85.1_ws@8.21.3' \
-    '@earendil-works+pi-ai@0.85.10' \
-    '@earendil-works+pi-agent-core@0.85.0' | pack_install_leaked_pi)
-  if [ "$matcher_probe" != '@earendil-works+pi-ai@0.85.10
-@earendil-works+pi-agent-core@0.85.0' ]; then
-    fail "[QK:PACK-INSTALL-PIN-MATCHER-BOUNDED] the pin-leak matcher must flag the 0.85.10/0.85.0 lookalikes and pass 0.85.1 bare or with either measured peer-hash — got: ${matcher_probe:-<nothing leaked>}"
+    '@earendil-works+pi-ai@0.86.0' \
+    '@earendil-works+pi-ai@0.86.0_@modelcontextprotocol+sdk@1.29.0_zod@4.3.6' \
+    '@earendil-works+pi-ai@0.86.0_ws@8.21.3' \
+    '@earendil-works+pi-ai@0.86.0_@modelcontextprotocol+sdk@1.29.0_zod@4.3.6__ws@8.21.3_zod@4.3.6' \
+    '@earendil-works+pi-ai@0.86.0-beta.1' \
+    '@earendil-works+pi-agent-core@0.85.1' | pack_install_leaked_pi)
+  if [ "$matcher_probe" != '@earendil-works+pi-ai@0.86.0-beta.1
+@earendil-works+pi-agent-core@0.85.1' ]; then
+    fail "[QK:PACK-INSTALL-PIN-MATCHER-BOUNDED] the pin-leak matcher must flag the prefix-extended 0.86.0-beta.1 and the off-pin 0.85.1 lookalikes, and pass 0.86.0 bare or with any measured peer-hash — got: ${matcher_probe:-<nothing leaked>}"
     return 1
   fi
 
   # Cell 2 — the closure prefix. chord is a non-`pi-` member of the same runtime closure
-  # (0.85.0 onward). An off-pin chord MUST leak; the pinned one must not. A matcher narrowed
+  # (0.85.0 onward, still true at 0.86.0). An off-pin chord MUST leak; the pinned one must not. A matcher narrowed
   # back to `^@earendil-works+pi-` sees nothing here and dies at this signature.
   matcher_probe=$(printf '%s\n' \
+    '@earendil-works+chord@0.86.0' \
     '@earendil-works+chord@0.85.1' \
-    '@earendil-works+chord@0.85.0' \
-    '@earendil-works+pi-ai@0.85.1' | pack_install_leaked_pi)
-  if [ "$matcher_probe" != '@earendil-works+chord@0.85.0' ]; then
-    fail "[QK:PACK-INSTALL-PIN-MATCHER-COVERS-CLOSURE] the pin-leak matcher must cover every @earendil-works closure member, not just the pi-* families — an off-pin @earendil-works/chord has to leak (it is a runtime dependency of pi-coding-agent/pi-agent-core/pi-client/pi-protocol at 0.85.x) — got: ${matcher_probe:-<nothing leaked>}"
+    '@earendil-works+pi-ai@0.86.0' | pack_install_leaked_pi)
+  if [ "$matcher_probe" != '@earendil-works+chord@0.85.1' ]; then
+    fail "[QK:PACK-INSTALL-PIN-MATCHER-COVERS-CLOSURE] the pin-leak matcher must cover every @earendil-works closure member, not just the pi-* families — an off-pin @earendil-works/chord has to leak (it is a runtime dependency of pi-coding-agent, pi-agent-core, pi-client and pi-protocol at 0.86.0 — `[측정 2026-09-20]` `npm view <pkg>@0.86.0 dependencies`) — got: ${matcher_probe:-<nothing leaked>}"
     return 1
   fi
 
@@ -3753,7 +3819,7 @@ _check_pack_install_impl() {
   printf '%s\n' '{ "name": "entwurf-install-smoke", "version": "0.0.0", "private": true }' > "$tmp/package.json"
 
   # pi-agent-core is pinned even though we never import it: pi-coding-agent depends
-  # on it by CARET (`^0.85.x`), so with no lockfile in this fresh temp project it
+  # on it by CARET (`^0.86.x`), so with no lockfile in this fresh temp project it
   # floats to whatever pi published last — and that newer core then drags a NESTED
   # pi-ai of its own. Measured 2026-07-21: pinning only the three we import left
   # pi-agent-core@0.80.10 + pi-ai@0.80.10 in the tree while the gate still announced
@@ -3782,19 +3848,31 @@ _check_pack_install_impl() {
   # It is pinned here for the first time. The leak assertion below covers every
   # other @earendil-works package too — but only because the matcher's prefix was
   # widened from `pi-` to the org in the same change; before that it was blind to
-  # precisely this class of new member. The verified floor is 0.85.1 as of 2026-09-06.
-  echo "[check-pack-install] pnpm add into $tmp (with 0.85.x peers + chord + typebox)"
+  # precisely this class of new member.
+  #
+  # `[측정 2026-09-20]` at 0.86.0 the constellation SHRANK for the first time:
+  # `npm view @earendil-works/pi-coding-agent@0.86.0 dependencies` lists only
+  # {chord, pi-ai, pi-tui, pi-agent-core} — pi-client and pi-protocol are no
+  # longer reachable from the three packages we import (pi-client still carries
+  # {chord, pi-protocol}, pi-protocol still carries {chord}, both published at
+  # 0.86.0). Their explicit pins stay: a pin that is momentarily redundant costs
+  # two frozen rows in a temp tree, while retiring one is how a caret re-enters
+  # the closure unwatched on the next minor — the same shape as the 2026-07-21
+  # pi-agent-core incident. The list moves WITH the floor and is re-measured at
+  # each bump, never pruned on a single quiet minor.
+  # The verified floor is 0.86.0 as of 2026-09-20.
+  echo "[check-pack-install] pnpm add into $tmp (with 0.86.x peers + chord + typebox)"
   local install_log
   install_log=$(cd "$tmp" && pnpm add \
     "$tgz_path" \
-    "@earendil-works/pi-ai@0.85.1" \
-    "@earendil-works/pi-coding-agent@0.85.1" \
-    "@earendil-works/pi-tui@0.85.1" \
-    "@earendil-works/pi-agent-core@0.85.1" \
-    "@earendil-works/pi-client@0.85.1" \
-    "@earendil-works/pi-protocol@0.85.1" \
-    "@earendil-works/pi-telemetry@0.85.1" \
-    "@earendil-works/chord@0.85.1" \
+    "@earendil-works/pi-ai@0.86.0" \
+    "@earendil-works/pi-coding-agent@0.86.0" \
+    "@earendil-works/pi-tui@0.86.0" \
+    "@earendil-works/pi-agent-core@0.86.0" \
+    "@earendil-works/pi-client@0.86.0" \
+    "@earendil-works/pi-protocol@0.86.0" \
+    "@earendil-works/pi-telemetry@0.86.0" \
+    "@earendil-works/chord@0.86.0" \
     "typebox@latest" \
     --ignore-workspace --ignore-scripts 2>&1) || {
     fail "[check-pack-install] pnpm add failed:"

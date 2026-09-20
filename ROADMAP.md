@@ -90,7 +90,7 @@ ACP는 중심이 아니라 v2 core 위에 provider/model로 들어오는 **plugi
 | v2 live Antigravity → native-push direct injection | native-push adapter/register/decider gates + `smoke-agy-native-push-live` |
 | agy automatic citizen birth + sender/reply identity | hooks/statusline/install/sender gates + three doctors + fresh live round trip |
 | v2 honest reject (false-delivered/`.msg` garbage 0) | matrix-live C3 + deliverability/native-push reject gates |
-| pi 0.85.1 fence | `pnpm check` + release-gate MUST |
+| pi 0.86.0 fence | `pnpm check` + release-gate MUST |
 
 ### Historical — 0.12.0 cutover close checklist
 
@@ -302,7 +302,7 @@ v2 필드 `parentGardenId`/`isEntwurf`는 **stray key로 거부된다** — 되�
 ## 검증 원장 (measured, 재탐색 불필요)
 
 - **pi 0.80 public export:** `hasProjectTrustInputs`/`ProjectTrustStore`/`getAgentDir`/`VERSION` 모두 index
-  public export → TS 직접 import(재구현 불필요). floor = **0.85.1** (`>=0.85.1 <0.86`, next-minor 상한).
+  public export → TS 직접 import(재구현 불필요). floor = **0.86.0** (`>=0.86.0 <0.87`, next-minor 상한).
 - **pi trust(0.79.1+):** `pi -p`는 trust에서 안 멈춤(비대화 미결정→`false` degraded). `--approve`(`-a`)=
   project 파일 로드, `--no-approve`(`-na`)=무시·degraded. `ProjectTrustStore.get`은 nearest-ancestor
   walk-up(조상 cwd 결정을 자식이 상속). `AGENTS.md`/`CLAUDE.md`는 0.79.1에서 trust input에서 제거(항상
@@ -805,6 +805,90 @@ v2 필드 `parentGardenId`/`isEntwurf`는 **stray key로 거부된다** — 되�
     `pnpm-lock.yaml`, baseline 문서 5곳(AGENTS/README/ROADMAP/setup-clean-host/demo) +
     `docs/acp-backend-rail.md` 지원 matrix + `VERIFY.md`(그 자리는 어느 게이트도 읽지 않아
     0.84.3 세대에 멈춰 있었다 — BASELINE_DOCS 밖이라 두 번의 bump 를 그냥 지나쳤다).
+  - **2026-09-20 bump — pi 0.85.1 → 0.86.0.** `~/repos/3rd/pi/pi-mono` `v0.85.1..v0.86.0`
+    (SHA `ecac0a9c`). **성격: 우리 provider 경로를 실제로 깬 벤더 계약 변경.** 규모 164 commits /
+    566 files / +63405 −10737 — 이 대장에서 가장 큰 bump 다.
+    ⑴ **하중 파일 sha256 (0.85.1→0.86.0, 앞 12):** DIFF `ai/src/compat.ts` `c1212487653e` →
+    `fe077a90f918` · `ai/src/types.ts` `ae0427bfba13` → `419d28638be0` ·
+    `coding-agent/src/core/extensions/loader.ts` `7e0e3a709946` → `ba9af64db7ff` ·
+    `.../runner.ts` `6d5101ab0551` → `e43a3dcc2821` · `.../agent-session.ts` `23e4acac8446` →
+    `3ea88a751cd8` · `.../session-manager.ts` `57bc70a75156` → `860b01d43063`. 이전 대장이 읽던
+    `.../api.ts` · `.../sdk.ts` · `.../pi-manifest.ts` 세 줄은 **양쪽 태그 모두 빈 sha**
+    (`e3b0c44298fc`) 다 — 파일이 없다는 뜻이고, 0.86.0 의 `extensions/` 는
+    {index, jiti-loader, jiti-static-loader, loader, runner, types, virtual-modules, wrapper}
+    뿐이다. 다음 bump 는 이 세 줄을 목록에서 빼고 읽어야 한다.
+    ⑵ **도달한 것 — upstream 이 선언한 breaking 1건, 우리 쪽은 false-green 이었다.**
+    벤더 CHANGELOG(ai · coding-agent 양쪽 Breaking 첫 줄): custom provider 의 `streamSimple`
+    입력이 raw `Context` → 정규화된 `TranscriptContext` 로 바뀌고, systemPrompt 와 tool 선언이
+    선행 `role:"system"` 메시지 안으로 접힌다(`getCurrentSystemPrompt()` / `getCurrentTools()`
+    로 읽으라고 명시). 도달 지점: `pi-extensions/lib/acp/backend.ts` 의 exclude-tools 진실성
+    preflight 가 `context.tools?.map(…) ?? [...PI_BUILTIN_BACKED_TOOLS]` 를 읽고 있었다.
+    0.86 에서 `context.tools` 는 **항상 undefined** 이므로 fallback 이 매번 전체 builtin 을
+    선언해 `assertExcludeToolsHonored` 가 영영 못 던진다 — 운영자에게 "tool 을 뺐다"고 말하면서
+    backend 는 그대로 쓰는 false-green. **타입은 안 잡아준다**(`Context` → `TranscriptContext`
+    파라미터는 assignable), 그리고 게이트도 안 잡았다: `check-acp-backend-preflight` 가
+    0.85 모양 `Context`(`tools:` 필드 포함)를 `streamAcpTurn` 에 직접 먹여
+    `normalizeContext` 를 우회했기 때문이다. 수리는 `getCurrentTools(context.messages)` 로
+    replay 하고 fallback 을 **없앴다** — 빈 목록은 "운영자가 전부 뺐다"라는 정직한 사실이고
+    preflight 가 거부해야 한다. 함께: provider 경로 context 는 전부 `TranscriptContext` 로
+    retype(`backend.ts` `streamShellAcp`/`streamAcpTurn`, `acp/context.ts` 4함수,
+    `acp/session-store.ts` `contextMessageSignatures`), `acp/context.ts` `renderMessage` 에
+    명시적 `case "system": return undefined`(never-forward-systemPrompt 불변식을 상속이 아니라
+    선언으로).
+    ⑶ **나머지 선언 breaking 3건은 미도달(실측):** `ToolCall.arguments`/`ToolResultMessage.details`
+    JSON 제한 + `ToolResultMessage` conditional type + `JsonValue` readonly → `pnpm typecheck`
+    3-fence 전부 green, 우리는 그 타입을 구성하지 않는다. `user_bash` fail-closed → 리포 전체에
+    핸들러 0건(`scripts/raw-omp-measure/README.md` 의 서술 1줄이 전부). `ProviderStreams`/
+    `StreamFunction` 이름은 우리 소스에 등장하지 않는다.
+    ⑷ **게이트가 0.86 모양을 받도록 이동 — 이게 이번 bump 의 본체다.** provider 경로 픽스처를
+    전부 `normalizeContext()` 로 만들었다: `check-acp-backend-preflight`(+ 접힘 전제 guard 2줄),
+    `check-acp-event-mapper` §6(systemPrompt 미유출 주장이 이제서야 **의미를 가진다** — 비밀이
+    `messages` 안에 있다), `check-acp-prompt-builder`, `check-acp-session-store`,
+    `check-acp-carrier-augment`, `check-acp-session-reuse`. 마지막 것은 실제로 **빨개졌다**:
+    tool 을 하나도 선언하지 않던 픽스처가 이제 "전부 제외" 로 읽혀 preflight 에 막혀 spawn 이
+    0건이 되었다 — pi 가 매 턴 선언하는 builtin 4종을 픽스처에 넣어 고쳤다. 새 claim
+    `[QK:ACP-PREFLIGHT-REPLAYS-TRANSCRIPT-TOOLS]` + mutant 1종(`getCurrentTools` 를 옛 fallback 으로
+    되돌림) 신설, lane `acp-backend-preflight` 신설. 뮤턴트 733 → **734**, lane 58 → **59**.
+    `check-acp-session-store` 에는 셀 하나 추가 — 접힌 system message 가 reuse 서명에 들어가므로
+    carrier drift 가 prefix 호환을 깬다.
+    ⑸ **벤더 floor 재실측(상속 금지).** `herdr-placement.ts` 세션 파일명 layout:
+    session-manager.ts 가 +269 −141 로 재작성됐지만 **이름을 만드는 줄은 byte 불변**
+    (`${fileTimestamp}_${this.sessionId}.jsonl`, :991/1527/1703; `.jsonl` 줄의 유일한 diff 는
+    reader 쪽 lambda 인자 rename). 소스 읽기로는 부족해서 **실제 0.86.0 세션 파일 1개**로 확인:
+    sandbox HOME 에서 pi 0.86.0 이 쓴
+    `2026-09-20T00-35-44-197Z_01a0bc3d-87c4-738e-b391-265c8ba5a1b0.jsonl` 의 헤더
+    `{"type":"session"}` `id` 와 `piNativeSessionIdFromPath()` 결과가 같은 문자열. floor →
+    **0.86.0 (측정 2026-09-20)**. `compaction-send-guard.ts`: 설치된
+    `dist/core/extensions/types.d.ts` 에 `isCompacting` 멤버 **여전히 없음**(`isIdle()` :233,
+    `signal` :237) → 0.86.0 으로 이동. `check-pi-launch.ts:18`: sandbox HOME 에서
+    `pi --entwurf-control` → `Error: Unknown option: --entwurf-control`, exit 1 재현 → 0.86.0.
+    `:29` 의 중복 플래그 byte-동일 영수증은 **재측정하지 않았다**(확장이 등록된 호스트가 필요해서
+    운영자 pi 에 control 세션을 열어야 한다) — 0.85.1 영수증을 날짜째로 남기고 그 사실을 주석에
+    적었다.
+    ⑹ **`check-dep-versions` 의 구조적 구멍 하나 동봉 수리.** BASELINE_DOCS 스캔이 ROADMAP.md
+    **전체**를 읽는데 이 bump 대장이 바로 그 안에 산다. 0.85.1 항목 ⑸ 가 적어 둔
+    `>=0.85.1 <0.86` 은 **영수증**이지 선언이 아닌데, pin 이 움직이는 순간 게이트가 그걸
+    staleness 로 읽는다. 지금까지 통과한 건 가장 최근 항목이 늘 현행 pin 을 적고 있었기 때문 —
+    항목이 쓰인 뒤 **첫 bump** 가 이걸 드러낸다. `stripBumpLedger()` 를 넣어 날짜 bullet
+    (`  - **YYYY-MM-DD bump — `)부터 열이 0 으로 돌아올 때까지를 스캔에서 제외하고, 제외 자체에
+    guard 2개(대장을 못 찾으면 red, 문서를 통째로 삼켜도 red)를 달았다. 게이트 주석이 원래
+    약속하던 "history keeps its old versions" 가 이제 구현으로도 참이다.
+    ⑺ **typebox.** pi-ai 0.86 의 `dependencies.typebox` 가 `1.3.27` 로 올라온다(0.85.1 은
+    1.3.7). `pnpm why typebox` → **단일 해석 1.3.27**, lock 에 `typebox@1.3.7` 항목 없음.
+    우리 peer 는 `"*"` 라 움직일 것이 없다.
+    ⑻ **별자리 재실측 — 처음으로 줄었다.** `[측정]` `npm view @earendil-works/pi-coding-agent@0.86.0
+    dependencies` = {chord, pi-ai, pi-tui, pi-agent-core}. **pi-client 와 pi-protocol 이
+    pi-coding-agent 의 직접 의존에서 빠졌다**(둘 다 0.86.0 으로 publish 는 되어 있고, pi-client 는
+    {chord, pi-protocol}, pi-protocol 은 {chord} 를 그대로 가진다). 명시 핀 8행은 **유지**한다 —
+    잠깐 잉여인 핀의 비용은 temp tree 두 줄이고, 은퇴시킨 핀이 다음 minor 에 caret 으로 되돌아오는
+    비용은 2026-07-21 pi-agent-core 사건 그 자체다.
+    ⑼ **기계 이동:** `package.json` devDep 3종 exact `0.86.0` + peer `>=0.86.0 <0.87` 3종,
+    `pnpm-workspace.yaml` `minimumReleaseAgeExclude` 6행에 `|| 0.86.0`, `run.sh`
+    pack-install 핀 8행 · `pack_install_leaked_pi` 정규식 · 자기시험 2셀(경계 픽스처를
+    prefix-확장 prerelease `0.86.0-beta.1` 로 갈아끼움 — `0.85.10` 모양은 새 핀에서 같은 성질을
+    시험하지 못한다) · 별자리 주석 · peer-range 주석 · `stripBumpLedger`,
+    `scripts/mutants/acp-backend-preflight.json` 신설, `scripts/check-gate-qualification.ts`
+    lane inventory, `pnpm-lock.yaml`, baseline 문서 5곳 + `docs/mux-launch-rail.md` §읽은 근거.
   - **2026-09-06 bump — claude-agent-acp 0.73.0 → 0.75.1 (ACP SDK 1.4.0 · claude-agent-sdk
     0.3.257 유지).** #104, pi 범프와 같은 랜딩이지만 **다른 원인**이다.
     ⑴ **선언 deps 를 태그별로 실측 — 네 태그 전부 불변:** v0.73.0 / v0.74.0 / v0.75.0 / v0.75.1 모두

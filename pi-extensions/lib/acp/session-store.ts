@@ -27,7 +27,7 @@ import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import type { Context, Message, ToolResultMessage } from "@earendil-works/pi-ai";
+import type { Message, ToolResultMessage, TranscriptContext } from "@earendil-works/pi-ai";
 import type { AcpBootstrapPath } from "./context.js";
 
 // MUST equal event-mapper.ts `LIFECYCLE_NOTICE_SIGNATURE` (the SSOT/producer).
@@ -236,7 +236,7 @@ function rawMessageSignature(message: Message): string {
  * record never stores raw prompt/tool text — the prefix check works the same on
  * the digest array (GPT `c617cb` hardening).
  */
-export function contextMessageSignatures(context: Context): string[] {
+export function contextMessageSignatures(context: TranscriptContext): string[] {
 	return context.messages.map((m: Message) => sha256(rawMessageSignature(m)));
 }
 

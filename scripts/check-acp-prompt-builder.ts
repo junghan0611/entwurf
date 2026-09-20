@@ -16,7 +16,8 @@
 // pure scope lock over it. Pure/deterministic — IN pnpm check.
 
 import { strict as assert } from "node:assert";
-import type { Context } from "@earendil-works/pi-ai";
+import type { TranscriptContext } from "@earendil-works/pi-ai";
+import { normalizeContext } from "@earendil-works/pi-ai";
 import {
 	type AcpBootstrapPath,
 	buildAcpPrompt,
@@ -28,8 +29,15 @@ const REUSE_PATHS: AcpBootstrapPath[] = ["reuse", "resume", "load"];
 
 // A multi-turn context: a prior turn, an assistant answer, the real latest user
 // turn (with an image), and a SessionStart hook user-message appended AFTER it.
-function multiTurn(): Context {
-	return {
+//
+// Built through `normalizeContext` (pi-ai) because that is what pi 0.86 hands a
+// custom provider: `systemPrompt`/`tools` are folded into a LEADING
+// `role:"system"` message, never their own fields. A hand-built `Context`
+// literal here would test a shape production no longer receives — the
+// systemPrompt-leak assertions below only mean something when the prompt is
+// actually inside `messages`.
+function multiTurn(): TranscriptContext {
+	return normalizeContext({
 		systemPrompt: "SECRET-SYSTEM-PROMPT",
 		tools: [{ name: "x", description: "d", parameters: {} as never }],
 		messages: [
@@ -63,7 +71,7 @@ function multiTurn(): Context {
 			// must NOT pick this as the latest user delta.
 			{ role: "user", content: "device=thinkpad time_kst=20260618T160000", timestamp: 0 },
 		],
-	};
+	});
 }
 
 // ---------------------------------------------------------------------------
@@ -120,12 +128,12 @@ for (const path of REUSE_PATHS) {
 // 4) no assistant yet → first user of the whole context is the delta
 // ---------------------------------------------------------------------------
 {
-	const ctx: Context = {
+	const ctx = normalizeContext({
 		messages: [
 			{ role: "user", content: "only question", timestamp: 0 },
 			{ role: "user", content: "device=thinkpad time_kst=x", timestamp: 0 },
 		],
-	};
+	});
 	const delta = latestUserDelta(ctx);
 	assert.equal(delta.length, 1, "delta exists when there is a user turn");
 	assert.equal(delta[0].text, "only question", "first user wins (hook message skipped) even with no assistant");
@@ -135,7 +143,7 @@ for (const path of REUSE_PATHS) {
 // 5) trailing message is assistant (no user after it) → empty delta
 // ---------------------------------------------------------------------------
 {
-	const ctx: Context = {
+	const ctx = normalizeContext({
 		messages: [
 			{ role: "user", content: "q", timestamp: 0 },
 			{
@@ -156,7 +164,7 @@ for (const path of REUSE_PATHS) {
 				timestamp: 0,
 			},
 		],
-	};
+	});
 	assert.deepEqual(latestUserDelta(ctx), [], "no user after the last assistant → empty delta");
 }
 
@@ -164,7 +172,7 @@ for (const path of REUSE_PATHS) {
 // 6) empty context → empty for every path
 // ---------------------------------------------------------------------------
 {
-	const empty: Context = { messages: [] };
+	const empty = normalizeContext({ messages: [] });
 	assert.deepEqual(buildAcpPrompt(empty, "new"), [], "empty context → empty new prompt");
 	for (const path of REUSE_PATHS) {
 		assert.deepEqual(buildAcpPrompt(empty, path), [], `empty context → empty ${path} prompt`);

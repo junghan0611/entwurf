@@ -8,16 +8,26 @@
 //
 // S2c/S2d boundary (GPT S2c Q2): this is CONVERSATION TRANSCRIPT PASSTHROUGH, not
 // rich-carrier identity injection. Deliberately EXCLUDED here (all S2d):
-//   - `context.systemPrompt` — never read into the prompt or `_meta.systemPrompt`
+//   - the system prompt — never read into the prompt or `_meta.systemPrompt`
 //     (the billing carrier stays absent — NEXT §S2-scout 핀1);
 //   - `~/AGENTS.md` / cwd AGENTS / bridge identity narrative;
 //   - first-user-message augment + project-context de-dup;
-//   - `context.tools` — the ACP child tool surface is the S2b
+//   - the declared tool surface — the ACP child tool surface is the S2b
 //     `_meta.claudeCode.options` SSOT, never re-sent here.
+// Since pi 0.86 both of those ride a leading `role:"system"` message inside the
+// `TranscriptContext` (pi-ai `normalizeContext`) rather than their own `Context`
+// fields, so the exclusion is enforced by `renderMessage`'s explicit
+// `case "system"` below, not by simply not reading two fields.
 // Structured tool replay is also excluded: tool calls/results render as plain
 // transcript text, never as ACP tool invocations (the child runs its own tools).
 
-import type { AssistantMessage, Context, Message, ToolResultMessage, UserMessage } from "@earendil-works/pi-ai";
+import type {
+	AssistantMessage,
+	Message,
+	ToolResultMessage,
+	TranscriptContext,
+	UserMessage,
+} from "@earendil-works/pi-ai";
 
 // MUST equal event-mapper.ts `LIFECYCLE_NOTICE_SIGNATURE` (the SSOT/producer).
 // It is mirrored, not imported: the strip-types deterministic gates load these
@@ -80,16 +90,26 @@ function renderMessage(message: Message): string | undefined {
 			const tag = message.isError ? "Tool error" : "Tool result";
 			return text ? `${tag} (${message.toolName}): ${text}` : undefined;
 		}
+		case "system":
+			// The never-forward-systemPrompt invariant, stated rather than inherited.
+			// Since pi 0.86 the system prompt and the declared tool surface arrive AS
+			// transcript messages (`normalizeContext`), so what used to be "we simply
+			// do not read `context.systemPrompt`" is now an active decision on every
+			// turn. `default` would already skip it; the explicit case exists so
+			// deleting it is a visible change and a new pi role cannot quietly start
+			// leaking the prompt into the ACP child's transcript.
+			return undefined;
 		default:
 			return undefined;
 	}
 }
 
 /**
- * Flatten a pi Context into a single transcript string. Excludes
- * `context.systemPrompt` and `context.tools` by construction.
+ * Flatten a pi transcript into a single transcript string. Excludes the system
+ * prompt and the declared tool surface by construction — since 0.86 both ride
+ * the leading `role:"system"` message, which `renderMessage` drops explicitly.
  */
-export function contextTranscript(context: Context): string {
+export function contextTranscript(context: TranscriptContext): string {
 	const lines: string[] = [];
 	for (const message of context.messages) {
 		const line = renderMessage(message);
@@ -99,11 +119,11 @@ export function contextTranscript(context: Context): string {
 }
 
 /**
- * Convert a pi Context into the ACP `prompt` array (a single text block holding
+ * Convert a pi transcript into the ACP `prompt` array (a single text block holding
  * the flattened transcript). Empty history yields an empty array — the caller
  * decides whether that is a hard error.
  */
-export function contextToAcpPrompt(context: Context): AcpTextBlock[] {
+export function contextToAcpPrompt(context: TranscriptContext): AcpTextBlock[] {
 	const transcript = contextTranscript(context);
 	if (!transcript) return [];
 	return [{ type: "text", text: transcript }];
@@ -129,7 +149,7 @@ export type AcpBootstrapPath = "new" | "reuse" | "resume" | "load";
  * (reuse/resume/load): re-sending the whole transcript there would duplicate
  * history the backend already remembers.
  */
-export function latestUserDelta(context: Context): AcpTextBlock[] {
+export function latestUserDelta(context: TranscriptContext): AcpTextBlock[] {
 	let lastAssistantIdx = -1;
 	for (let i = context.messages.length - 1; i >= 0; i--) {
 		if (context.messages[i].role === "assistant") {
@@ -160,7 +180,7 @@ export function latestUserDelta(context: Context): AcpTextBlock[] {
  * `contextMessageSignatures` prefix-compat gate (mismatch → fall back to
  * `"new"` + full transcript); this pure function only splits the scope.
  */
-export function buildAcpPrompt(context: Context, bootstrapPath: AcpBootstrapPath): AcpTextBlock[] {
+export function buildAcpPrompt(context: TranscriptContext, bootstrapPath: AcpBootstrapPath): AcpTextBlock[] {
 	switch (bootstrapPath) {
 		case "new":
 			return contextToAcpPrompt(context);

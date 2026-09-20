@@ -14,6 +14,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "no
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Context } from "@earendil-works/pi-ai";
+import { normalizeContext } from "@earendil-works/pi-ai";
 
 const sha256 = (v: string) => createHash("sha256").update(v).digest("hex");
 const isSha256Hex = (v: string) => /^[0-9a-f]{64}$/.test(v);
@@ -114,13 +115,16 @@ const baseInput = (): BridgeConfigInput => ({
 			stopReason: "stop" as const,
 			timestamp: 0,
 		}) satisfies Context["messages"][number];
-	const ctx: Context = {
+	// Built through `normalizeContext` — the 0.86 provider-path shape. With no
+	// systemPrompt and no tools it adds no leading system message, so the exact
+	// three-entry expectation below is the same list production hashes.
+	const ctx = normalizeContext({
 		messages: [
 			{ role: "user", content: "hello", timestamp: 0 },
 			assistant("hi"),
 			{ role: "user", content: [{ type: "image", data: "RAWIMAGEBYTES", mimeType: "image/png" }], timestamp: 0 },
 		],
-	};
+	});
 	const sigs = contextMessageSignatures(ctx);
 	// every entry is a sha256 digest of the pre-hash role:content form.
 	assert.ok(sigs.every(isSha256Hex), "every message signature is a sha256 digest");
@@ -139,21 +143,21 @@ const baseInput = (): BridgeConfigInput => ({
 
 	// toolResult folds in toolName + isError → same text, different tool/flag = different sig.
 	const trContent = [{ type: "text" as const, text: "out" }];
-	const trBase: Context = {
+	const trBase = normalizeContext({
 		messages: [
 			{ role: "toolResult", toolCallId: "t1", toolName: "bash", isError: false, content: trContent, timestamp: 0 },
 		],
-	};
-	const trErr: Context = {
+	});
+	const trErr = normalizeContext({
 		messages: [
 			{ role: "toolResult", toolCallId: "t1", toolName: "bash", isError: true, content: trContent, timestamp: 0 },
 		],
-	};
-	const trOther: Context = {
+	});
+	const trOther = normalizeContext({
 		messages: [
 			{ role: "toolResult", toolCallId: "t1", toolName: "edit", isError: false, content: trContent, timestamp: 0 },
 		],
-	};
+	});
 	assert.notEqual(
 		contextMessageSignatures(trBase)[0],
 		contextMessageSignatures(trErr)[0],
@@ -164,6 +168,25 @@ const baseInput = (): BridgeConfigInput => ({
 		contextMessageSignatures(trOther)[0],
 		"toolResult toolName changes the signature",
 	);
+
+	// 0.86 shape: `normalizeContext` folds systemPrompt+tools into a LEADING
+	// `role:"system"` message, so the carrier now rides INSIDE `messages` and is
+	// hashed like any other turn. Two consequences this cell locks:
+	//   - a systemPrompt drift changes signature[0] → the prefix check declares the
+	//     candidate incompatible → no reuse of a session built under the old prompt;
+	//   - the same user turn under a system prompt is NOT a prefix of the same turn
+	//     without one, so a 0.85-shaped record cannot silently be reused at 0.86.
+	const sameUser = [{ role: "user" as const, content: "hello", timestamp: 0 }];
+	const bare = contextMessageSignatures(normalizeContext({ messages: [...sameUser] }));
+	const withPrompt = contextMessageSignatures(normalizeContext({ systemPrompt: "carrier A", messages: [...sameUser] }));
+	const withOtherPrompt = contextMessageSignatures(
+		normalizeContext({ systemPrompt: "carrier B", messages: [...sameUser] }),
+	);
+	assert.equal(bare.length, 1, "no systemPrompt and no tools → no leading system message");
+	assert.equal(withPrompt.length, 2, "a systemPrompt becomes a leading system message that is hashed too");
+	assert.notEqual(withPrompt[0], withOtherPrompt[0], "a systemPrompt drift changes the leading signature");
+	assert.ok(!hasPrefix(withPrompt, bare), "a prompt-carrying transcript is not a prefix of a bare one");
+	assert.ok(!hasPrefix(withPrompt, withOtherPrompt), "a drifted carrier breaks prefix compatibility");
 }
 
 // ---------------------------------------------------------------------------

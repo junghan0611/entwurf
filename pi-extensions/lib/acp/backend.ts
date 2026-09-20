@@ -44,8 +44,8 @@ import { type ChildProcessByStdio, spawn } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { Readable, Writable } from "node:stream";
 import { ndJsonStream, PROTOCOL_VERSION } from "@agentclientprotocol/sdk";
-import type { Api, AssistantMessage, Context, Model, SimpleStreamOptions } from "@earendil-works/pi-ai";
-import { createAssistantMessageEventStream } from "@earendil-works/pi-ai";
+import type { Api, AssistantMessage, Model, SimpleStreamOptions, TranscriptContext } from "@earendil-works/pi-ai";
+import { createAssistantMessageEventStream, getCurrentTools } from "@earendil-works/pi-ai";
 import {
 	type AcpClientHandlers,
 	type AcpConnectionLike,
@@ -81,7 +81,7 @@ import {
 	resolveLifecyclePolicy,
 	writeSessionRecord,
 } from "./session-store.js";
-import { assertExcludeToolsHonored, PI_BUILTIN_BACKED_TOOLS } from "./tool-surface.js";
+import { assertExcludeToolsHonored } from "./tool-surface.js";
 
 // Bootstrap boundaries ONLY. initialize / newSession / set-model are handshake
 // steps that make no model progress, so a stuck one is a dead session and a cold
@@ -1108,7 +1108,7 @@ async function applyProviderPayloadHook<T extends { sessionId: string }>(
  */
 export function streamShellAcp(
 	model: Model<Api>,
-	context: Context,
+	context: TranscriptContext,
 	options?: SimpleStreamOptions,
 ): ReturnType<typeof createAssistantMessageEventStream> {
 	return streamAcpTurn(model, context, options, defaultDeps());
@@ -1117,7 +1117,7 @@ export function streamShellAcp(
 /** The seam-aware turn driver. `streamShellAcp` calls this with the real deps. */
 export function streamAcpTurn(
 	model: Model<Api>,
-	context: Context,
+	context: TranscriptContext,
 	options: SimpleStreamOptions | undefined,
 	deps: AcpTurnDeps,
 ): ReturnType<typeof createAssistantMessageEventStream> {
@@ -1510,7 +1510,17 @@ export function streamAcpTurn(
 		// rather than lie to the model. Uses the RESOLVED tool surface (S2g) so an
 		// operator-narrowed `tools` is what the truthfulness check honors.
 		try {
-			const activeToolNames = context.tools?.map((t) => t.name) ?? [...PI_BUILTIN_BACKED_TOOLS];
+			// pi 0.86 folded `Context.systemPrompt`/`Context.tools` into a leading
+			// `role:"system"` message (`normalizeContext`, pi-ai
+			// `utils/transcript.ts`), so a provider only ever sees a
+			// `TranscriptContext`. The active surface is therefore REPLAYED from the
+			// system messages — `getCurrentTools` applies every toolsAdded/toolsRemoved
+			// delta in order. No `?? [...PI_BUILTIN_BACKED_TOOLS]` fallback: under 0.86
+			// the old `context.tools` read was ALWAYS undefined, so that fallback
+			// silently declared the full builtin set and the truthfulness preflight
+			// could never fire (false green). An empty replayed list means the operator
+			// excluded everything — keep that honest and let the preflight reject.
+			const activeToolNames = getCurrentTools(context.messages).map((t) => t.name);
 			assertExcludeToolsHonored(activeToolNames, { backend: adapter.backend, tools: config.tools });
 		} catch (err) {
 			finishError(err, false);

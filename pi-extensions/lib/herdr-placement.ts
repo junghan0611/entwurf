@@ -21,7 +21,7 @@
  * THE TWO AXES ARE NOT EQUALLY EXACT, AND THE DIFFERENCE IS NAMED. On the claude axis
  * the reported value IS the key, byte for byte. On the pi axis it is a session FILE
  * PATH, and the key is recovered from that filename by a strict conversion measured on
- * pi 0.85.1 — a VENDOR FLOOR, not a key equality. Calling both "a unique-key join"
+ * pi 0.86.0 — a VENDOR FLOOR, not a key equality. Calling both "a unique-key join"
  * would hide which one can drift when a vendor renames a file. The conversion is
  * deliberately strict at both ends so that drift lands as a missed join, never a wrong
  * one, and a listing that declined to read anything says so (see `declinedReports`).
@@ -112,14 +112,23 @@ const OFFICIAL_REPORTS: Readonly<
 };
 
 /**
- * A pi session filename, measured 2026-09-14 on pi 0.85.1:
+ * A pi session filename, measured 2026-09-20 on pi 0.86.0:
  *
- *   2026-09-14T05-17-03-979Z_01a09e58-f06a-70e8-b14a-1f0f0c7f7c7d.jsonl
+ *   2026-09-20T00-35-44-197Z_01a0bc3d-87c4-738e-b391-265c8ba5a1b0.jsonl
  *   └────────── start stamp ─────────┘ └──────── nativeSessionId ────────┘
+ *
+ * `[측정 2026-09-20]` that is a REAL file a sandboxed pi 0.86.0 wrote, and its own
+ * `{"type":"session"}` header carries `id: 01a0bc3d-87c4-738e-b391-265c8ba5a1b0` —
+ * the exact string `piNativeSessionIdFromPath` recovers from the name. The layout was
+ * re-measured rather than carried: pi 0.86.0 rewrote session-manager.ts (+269 −141
+ * over v0.85.1), but every line that BUILDS a name is byte-unchanged
+ * (`${fileTimestamp}_${this.sessionId}.jsonl`, session-manager.ts:991/1527/1703); the
+ * only diff in that file's `.jsonl` lines is a lambda parameter rename on the READER
+ * side. A source read alone would not have settled it, so the real file is the receipt.
  *
  * WHY THIS IS PINNED HERE AND NOT INFERRED. The uuid is the join key and it lives in
  * a VENDOR filename, so this rule depends on pi's naming and would break silently if
- * pi changed it. **Vendor floor: pi 0.85.1, measured 2026-09-14** — whether that layout
+ * pi changed it. **Vendor floor: pi 0.86.0, measured 2026-09-20** — whether that layout
  * is a vendor contract or a convention is NOT measured, so this is the one place in the
  * axis that can drift under us. It is therefore strict on both ends — the name must end
  * in `.jsonl` and the tail after the last `_` must be a well-formed uuid — and a name
