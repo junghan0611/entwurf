@@ -186,17 +186,38 @@ function transcriptRecords(file: string): string[] {
 }
 
 /**
- * The id of the `entwurf_v2` toolCall in this record that IS the callback, or null. Pi writes a call
- * and its result as two records; this is one half of the join that replaces a same-record read.
+ * The BARE verb names, as the two surfaces this smoke reads actually spell them — NOT the
+ * model-facing dialect. `[측정 2026-09-20, this smoke's own red fixture]` the claude MCP activity
+ * log carries `Calling MCP tool: entwurf_callback` / `Tool 'entwurf_callback' completed`, and pi
+ * writes `"type":"toolCall","name":"entwurf_callback"`; neither records
+ * `mcp__entwurf-bridge__entwurf_callback`. The per-host dialect is owned by
+ * `FRESH_CALL_CALLBACK_TOOL` / `FRESH_CALL_DELIVERY_TOOL` in `fresh-call-composition.ts` and is
+ * what the FRAMING says; these two are what an OBSERVER sees, and conflating them is what this
+ * pair of constants exists to stop.
+ */
+const CALLBACK_VERB = "entwurf_callback";
+const DELIVERY_VERB = "entwurf_v2";
+
+/**
+ * The id of the CALLBACK toolCall in this record, or null. Pi writes a call and its result as two
+ * records; this is one half of the join that replaces a same-record read.
  *
- * WHAT MAKES IT THE CALLBACK, READ STRUCTURALLY `[sol 재검 2026-09-18]`. An earlier version only
- * asked whether the serialised arguments CONTAINED the nonce, which a call carrying `prefix+nonce`,
- * or the right nonce to the wrong target, satisfies just as well — and then the later, correct call
- * is the one that produces the artifact, so the predicate could join a wrong call to a right
- * delivery. The arguments are an object, so they are read as one: the message must BE the nonce,
- * the target must be the caller that minted it, and the intent must be the one the framing names.
+ * WHAT MAKES IT THE CALLBACK `[ff09522]`. It used to be the ARGUMENTS: message === nonce, target
+ * === the caller, intent === fire-and-forget. That predicate is gone because the thing it read is
+ * gone — the birth verb takes ZERO arguments and reads the caller and the nonce out of its own
+ * process env, so there is nothing in the call for a model to get wrong and nothing here to
+ * compare. What identifies the callback now is the verb plus the ABSENCE of an address: a call
+ * carrying a target or a message is a model supplying an address, which is the second address axis
+ * Hard Rule 2 refuses, and it is not this act.
+ *
+ * The nonce↔sender correlation the old predicate carried did not disappear with it — it moved to
+ * the DELIVERED ARTIFACT, which this smoke checks independently and earlier ("the child's callback
+ * ARRIVED … its body is a production nonce and its sender is the child the direct witness resolved
+ * to"). Two records, one event, same as before; only the half that names the call has changed.
  */
 function entwurfCallIdFor(record: string, nonce: string, callerGid: string): string | null {
+	void nonce;
+	void callerGid;
 	let parsed: unknown;
 	try {
 		parsed = JSON.parse(record);
@@ -207,16 +228,14 @@ function entwurfCallIdFor(record: string, nonce: string, callerGid: string): str
 	if (!Array.isArray(content)) return null;
 	for (const part of content) {
 		const call = part as { type?: unknown; name?: unknown; id?: unknown; arguments?: unknown };
-		if (call.type !== "toolCall" || call.name !== "entwurf_v2") continue;
-		const args = call.arguments as
-			| { message?: unknown; target?: unknown; intent?: unknown; wants_reply?: unknown }
-			| undefined;
-		if (typeof args !== "object" || args === null) continue;
-		if (args.message !== nonce) continue;
-		if (args.target !== callerGid) continue;
-		if (args.intent !== "fire-and-forget") continue;
-		// The framing asks for no reply; a call that asked for one is a different act.
-		if (args.wants_reply === true) continue;
+		if (call.type !== "toolCall" || call.name !== CALLBACK_VERB) continue;
+		// Zero-argument verb: absent, null and `{}` are all the shape it is called with. A supplied
+		// target or message is a model naming an address the env already owns — not this act.
+		const args = call.arguments as { message?: unknown; target?: unknown } | undefined | null;
+		if (args !== undefined && args !== null) {
+			if (typeof args !== "object" || Array.isArray(args)) continue;
+			if (args.target !== undefined || args.message !== undefined) continue;
+		}
 		return typeof call.id === "string" ? call.id : null;
 	}
 	return null;
@@ -864,23 +883,27 @@ async function main(): Promise<void> {
 				// OFFERS exactly that corroboration ("you can corroborate the caller first if you
 				// want to"), so the old oracle contradicted our own prompt and would have forbidden
 				// the behaviour we asked for. What still must hold is everything the claim was
-				// actually about — the callback lands before any work, it completes, and no
-				// entwurf_v2 in the log failed or timed out.
+				// actually about — the callback lands before any work, it completes, and neither the
+				// callback verb nor the delivery verb failed or timed out anywhere in the log.
+				// `[ff09522]` the verb this joins on MOVED: the birth callback is `entwurf_callback`
+				// and `entwurf_v2` is now only the DELIVERY the closing line asks for. Joining on the
+				// old name does not merely miss — it mis-attributes, finding the result-delivery call
+				// and then reporting the real callback as forbidden work before it.
 				// ONLY what the framing actually offers. `entwurf_self` used to sit in this set and
 				// nothing ever proposed it to the child — an allowance for a tool we do not mention
 				// widens the oracle without widening the contract (sol D1, 2026-09-18).
 				const READ_ONLY_FIRST = new Set(["entwurf_peers"]);
-				const beforeCallback = order.slice(0, Math.max(order.indexOf("entwurf_v2"), 0));
+				const beforeCallback = order.slice(0, Math.max(order.indexOf(CALLBACK_VERB), 0));
 				// THE JOIN THIS AXIS CAN ACTUALLY MAKE. The claude MCP log records WHICH tool was
 				// called and whether it completed — never its arguments or its result body — so
-				// "the first entwurf_v2 completed" alone would also be true of a call that delivered
+				// "the first callback completed" alone would also be true of a call that delivered
 				// somebody else's nonce or came back as a semantic reject over a successful
 				// transport. The second artifact closes it: the caller's own delivered message
 				// carries the EXACT nonce and the child as its sender, and its enqueue timestamp has
 				// to fall inside the window of that first call. Two independent records, one event.
-				const callAt = indexOfEntry(childActivity, (e) => (e.debug ?? "") === "Calling MCP tool: entwurf_v2");
+				const callAt = indexOfEntry(childActivity, (e) => (e.debug ?? "") === `Calling MCP tool: ${CALLBACK_VERB}`);
 				const doneAt = indexOfEntry(childActivity, (e) =>
-					(e.debug ?? "").startsWith("Tool 'entwurf_v2' completed successfully"),
+					(e.debug ?? "").startsWith(`Tool '${CALLBACK_VERB}' completed successfully`),
 				);
 				const callbackStamp = deliveredMessages(String(fenced.ENTWURF_META_MAILBOX_DIR), callerGid)[0]?.file ?? "";
 				const stampedAt = Date.parse(
@@ -902,14 +925,19 @@ async function main(): Promise<void> {
 					// here, and a claim about "any work" is wider than the oracle. What IS observed, and
 					// is the thing the framing actually asks for, is the ORDER OF TOOLS: the first
 					// non-read-only tool this child called was the callback.
-					`${cell.label}: the child's FIRST non-read-only tool call was the callback — the FIRST entwurf_v2 completed successfully and the delivered callback carrying this exact nonce was enqueued inside that call's own window, preceded only by the read-only corroboration the framing offers, with no failed or timed-out entwurf_v2 anywhere in its log (this cell reads tool activity only; assistant text is not observable on this rail)`,
+					`${cell.label}: the child's FIRST non-read-only tool call was the zero-argument ${CALLBACK_VERB} — it completed successfully and the delivered callback carrying this exact nonce was enqueued inside that call's own window, preceded only by the read-only corroboration the framing offers, with neither ${CALLBACK_VERB} nor ${DELIVERY_VERB} failing or timing out anywhere in its log (this cell reads tool activity only; assistant text is not observable on this rail)`,
 					childActivity.length > 0 &&
-						order.includes("entwurf_v2") &&
+						order.includes(CALLBACK_VERB) &&
 						beforeCallback.every((name) => READ_ONLY_FIRST.has(name)) &&
 						within &&
 						callbackArrived &&
-						!childActivity.some(
-							(e) => (e.debug ?? "").startsWith("Tool 'entwurf_v2' failed") || (e.error ?? "").includes("entwurf_v2"),
+						// BOTH verbs, because the child uses both: the birth callback and, after the
+						// work, the delivery verb the framing's closing line names. A failed delivery
+						// is as fatal to this rail as a failed callback.
+						![CALLBACK_VERB, DELIVERY_VERB].some((verb) =>
+							childActivity.some(
+								(e) => (e.debug ?? "").startsWith(`Tool '${verb}' failed`) || (e.error ?? "").includes(verb),
+							),
 						),
 				);
 			}
