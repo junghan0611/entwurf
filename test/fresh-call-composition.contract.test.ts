@@ -151,10 +151,13 @@ describe("the tmux rail's bytes did not move when the code did", () => {
 			nonce: NONCE,
 			openingLine: TMUX_FRESH_CALL_OPENING_LINE,
 		}).join("\n");
-		// ONE select carries both tools: the corroboration the framing offers has to stay reachable
-		// for the child that takes the offer, and a second ToolSearch is a second thing to get right.
+		// ONE select carries all THREE tools: the birth callback, the DELIVERY verb the last line of
+		// this same framing names, and the peers listing the corroboration offers. A select that
+		// omits the delivery verb does not remove the deferral, it MOVES it — from the first action
+		// to the last, where a sibling that finished its work cannot report it. A second ToolSearch
+		// is a second thing to get right.
 		expect(claude).toContain(
-			`ToolSearch("select:${FRESH_CALL_CALLBACK_TOOL["claude-code"]},${FRESH_CALL_PEERS_TOOL["claude-code"]}")`,
+			`ToolSearch("select:${FRESH_CALL_CALLBACK_TOOL["claude-code"]},${FRESH_CALL_DELIVERY_TOOL["claude-code"]},${FRESH_CALL_PEERS_TOOL["claude-code"]}")`,
 		);
 		expect((claude.match(/ToolSearch/g) ?? []).length).toBe(1);
 		// It states a fact and asks for a call. The REGISTER is checked on the hint's own lines, not

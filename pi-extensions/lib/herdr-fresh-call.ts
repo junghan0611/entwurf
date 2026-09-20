@@ -1212,9 +1212,10 @@ export function renderHerdrFreshCall(result: HerdrFreshCallResult): { text: stri
 			`mean the sibling is running, that its first turn ran, or that the task was delivered. The tab and pane ` +
 			`coordinates are a view and can change under the sibling — they are not an address and nothing may be ` +
 			`dispatched to them.\n` +
-			`The sibling's garden id arrives separately — it calls entwurf_v2 back with the nonce above as its first ` +
-			`action, and the sender envelope of THAT message is the address. Nothing is polling for it; if it never ` +
-			`comes, the pane is visible and can be read directly.`,
+			`The sibling's garden id arrives separately — its first action is the zero-argument callback verb, and ` +
+			`the sender envelope of THAT message is the address. The nonce above is the correlation tag it carries; ` +
+			`the sibling reads it from its own launch env, never from this receipt. Nothing is polling for it; if it ` +
+			`never comes, the pane is visible and can be read directly.`,
 		isError: false,
 	};
 }

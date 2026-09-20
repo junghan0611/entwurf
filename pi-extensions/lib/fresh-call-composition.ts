@@ -112,8 +112,11 @@ export const FRESH_CALL_PEERS_TOOL: Record<FreshCallBackend, string> = {
  * `[측정, n=3, same model]` adding the sentence below produced 3/3 callbacks. It is a FACT about the
  * runtime, in the register the rest of this framing uses since the prohibitions came out: it grants
  * nothing, forbids nothing, and names the one call that turns a listed name into a callable tool.
- * Both tools ride ONE `ToolSearch` select, so the corroboration the framing offers stays reachable
- * for a child that takes the offer.
+ * ALL THREE tools ride ONE `ToolSearch` select — the birth callback, the DELIVERY verb the last
+ * line of the framing names, and the peers listing the corroboration sentence offers. The delivery
+ * verb has to be in the same select or the deferral simply moves from the first action to the last:
+ * a sibling that finishes its task and cannot call `entwurf_v2` is the same production silence,
+ * spent instead of saved.
  *
  * Every other backend gets an EMPTY array, deliberately: pi has no deferred-tool surface, and the
  * other three were never measured to need it. A hint invented for a runtime nobody probed would be
@@ -123,7 +126,7 @@ export const FRESH_CALL_TOOL_LOAD_HINT: Record<FreshCallBackend, readonly string
 	pi: [],
 	"claude-code": [
 		"If ${callbackTool} is not callable yet, the entwurf-bridge server is still connecting or its",
-		'tools are deferred: load them first with ToolSearch("select:${callbackTool},${peersTool}") —',
+		'tools are deferred: load them first with ToolSearch("select:${callbackTool},${deliveryTool},${peersTool}") —',
 		"it waits for the server — then call ${callbackTool}.",
 	],
 	copilot: [],
@@ -376,7 +379,10 @@ export function composeFreshCallFraming(params: {
 	// own spelling here too — a hint that hard-coded Claude's name would go stale the day a dialect
 	// moves, and it would go stale silently, in the one sentence a stuck child depends on.
 	const loadHint = FRESH_CALL_TOOL_LOAD_HINT[params.backend].map((line) =>
-		line.replaceAll("${callbackTool}", birthTool).replaceAll("${peersTool}", peersTool),
+		line
+			.replaceAll("${callbackTool}", birthTool)
+			.replaceAll("${deliveryTool}", deliveryTool)
+			.replaceAll("${peersTool}", peersTool),
 	);
 	const hintBlock = loadHint.length === 0 ? [] : ["", ...loadHint];
 	if (params.openingLine.length === 0) {

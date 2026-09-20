@@ -765,7 +765,10 @@ began ~830ms before the tool it was told to call existed**, and no argv can clos
 So the launch carries a PAYLOAD and the in-process extension owns the first two messages:
 
 1. **A fixed registered flag, never a carrier.** `--entwurf-bootstrap <json>` with a closed
-   `{v,target,nonce,task}` grammar; an unknown key is a refusal. `[측정]` a normal discovered
+   `{v,task}` grammar; an unknown key is a refusal — including a `target` or a `nonce`, which
+   moved OUT of the payload on 2026-09-20 (`ff09522`): the caller's address rides the sibling's
+   process env (`ENTWURF_CALLBACK_TARGET` / `ENTWURF_CALLBACK_NONCE`) and a second copy on the
+   flag would be a second address axis. `v` is `2` since that move. `[측정]` a normal discovered
    extension that calls `registerFlag` at factory time receives the argv value byte-identical
    (quotes, `$VAR`, backticks, `;` all survived), because extensions load BEFORE argv
    classification and the reparse fills the registered map (`main.ts:1799-1810`,
@@ -782,8 +785,11 @@ So the launch carries a PAYLOAD and the in-process extension owns the first two 
 4. **The task ARMED by a tool RESULT, never a call.** `tool_call` fires before scheduling and
    before approval (`agent-session.ts:3431-3467`), so it proves only an attempt. Store the
    matching call's `toolCallId`; arm only when the `tool_result` carries that same id, the same
-   tool/target/nonce, and `isError === false` (`extensions/types.ts:966-1017`; MCP protocol
-   errors set it, `mcp/tool-bridge.ts:230-275`).
+   tool name, NO `target` and NO `message` argument, and `isError === false`
+   (`extensions/types.ts:966-1017`; MCP protocol errors set it, `mcp/tool-bridge.ts:230-275`).
+   The callback verb takes zero arguments, so the release predicate compares the tool name and
+   the ABSENCE of an address — a supplied one is the model inventing a second address axis and
+   never releases the task. (Before `ff09522` this compared target and nonce values instead.)
 5. **The task SENT at the next `turn_end`, with no delivery option — and this is the step that
    cost a second LIVE.** `[LIVE 2026-08-30]` the first attempt sent from inside the `tool_result`
    handler with an explicit `deliverAs: "followUp"`. The whole chain logged correctly

@@ -395,9 +395,15 @@ caller가 fresh token N을 민팅
 그것을 모를 뿐이다.** 첫 turn이 필요한 이유는 id를 *만들기* 위해서가 아니라 **새 citizen이 그것을 caller에게
 말하기** 위해서다.
 
-그래서 fresh-call은 lookup을 만들지 않는다. launch argv에 first task와 함께 **callback 지시**를 실어
-보내고, 새 citizen의 첫 행동이 기존 `entwurf_v2`로 nonce를 되돌린다. **그 메시지의 sender envelope이
-곧 exact garden id**다 — 우리가 조회한 것이 아니라 delivery 계층이 스스로 붙인 것이다.
+그래서 fresh-call은 lookup을 만들지 않는다. launch argv에 first task와 함께 **callback 지시**를 싣고,
+caller garden id와 nonce는 **argv가 아니라 launch env**(`ENTWURF_CALLBACK_TARGET` /
+`ENTWURF_CALLBACK_NONCE`, `callback-env.ts`)로 간다. 새 citizen의 첫 행동은 **인자 없는
+`entwurf_callback`**이고 — codex만 예외로 여전히 인자 형태의 `entwurf_v2`를 쓴다(그 rail의 tool
+프로세스는 pane이 아니라 operator app-server다) — 그 verb가 자기 프로세스에서 쌍을 읽어 기존 v2
+runner로 되돌린다. **그 메시지의 sender envelope이 곧 exact garden id**다 — 우리가 조회한 것이
+아니라 delivery 계층이 스스로 붙인 것이다. `[2026-09-20 ff09522]` 그 전까지는 이 두 값이 **프롬프트
+산문**으로만 형제에게 닿았고, 형제가 그것을 다시 타이핑해야 했다 — transcript가 address axis가 되는
+유일한 자리였고, Hard Rule 2가 거부하는 것이 정확히 그것이다.
 
 | 축 | §6의 T1-b | §6-a의 fresh-call |
 |---|---|---|

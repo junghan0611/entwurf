@@ -24,9 +24,11 @@ import { SESSION_ID_RE } from "./session-id.js";
 export const CALLBACK_TARGET_ENV = "ENTWURF_CALLBACK_TARGET";
 export const CALLBACK_NONCE_ENV = "ENTWURF_CALLBACK_NONCE";
 
-/** Production `mintNonce` writes `mux-fresh-call-` + 12 random bytes as hex. The herdr
- *  gate fixture uses the `herdr-fresh-call-` prefix of the same length; both are 24 hex. */
-export const CALLBACK_NONCE_RE = /^(?:mux|herdr)-fresh-call-[0-9a-f]{24}$/;
+/** Exactly what `mintNonce` emits (`fresh-call-composition.ts`): `mux-fresh-call-` + 12 random
+ *  bytes as hex. ONE minter, ONE grammar — both rails call the same `mintNonce`, so a second
+ *  accepted prefix would be a spelling no launcher produces and this leaf exists to refuse
+ *  exactly that. A gate fixture is an oracle and never a reason to widen the subject. */
+export const CALLBACK_NONCE_RE = /^mux-fresh-call-[0-9a-f]{24}$/;
 
 export type CallbackEnvReject = "callback-env-absent" | "callback-env-malformed" | "codex-callback-env-unsupported";
 

@@ -684,7 +684,7 @@
 			"title": "the Claude child loses the one sentence that tells it how to load a deferred callback tool — the framing goes back to naming a tool the child cannot call on its first turn, which is the measured silence: 0/5 directly callable, 5 of 14 production launches dead",
 			"subject": "pi-extensions/lib/fresh-call-composition.ts",
 			"find": [
-				"\t\"claude-code\": [\n\t\t\"If ${callbackTool} is not callable yet, the entwurf-bridge server is still connecting or its\",\n\t\t'tools are deferred: load them first with ToolSearch(\"select:${callbackTool},${peersTool}\") —',\n\t\t\"it waits for the server — then call ${callbackTool}.\",\n\t],"
+				"\t\"claude-code\": [\n\t\t\"If ${callbackTool} is not callable yet, the entwurf-bridge server is still connecting or its\",\n\t\t'tools are deferred: load them first with ToolSearch(\"select:${callbackTool},${deliveryTool},${peersTool}\") —',\n\t\t\"it waits for the server — then call ${callbackTool}.\",\n\t],"
 			],
 			"replace": ["\t\"claude-code\": [],"],
 			"gate": ["bash", "run.sh", "check-mux-fresh-call"],

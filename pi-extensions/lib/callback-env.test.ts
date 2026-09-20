@@ -45,7 +45,9 @@ describe("callback-env", () => {
 
 	it("the nonce grammar matches mintNonce's 24-hex suffix", () => {
 		expect(CALLBACK_NONCE_RE.test(NONCE)).toBe(true);
-		expect(CALLBACK_NONCE_RE.test("herdr-fresh-call-0123456789abcdef01234567")).toBe(true);
 		expect(CALLBACK_NONCE_RE.test("mux-fresh-call-deadbeef")).toBe(false);
+		// Both rails mint through the SAME `mintNonce`, so a rail-flavoured prefix is a spelling
+		// nothing produces — accepting one would widen the subject to fit a fixture.
+		expect(CALLBACK_NONCE_RE.test("herdr-fresh-call-0123456789abcdef01234567")).toBe(false);
 	});
 });

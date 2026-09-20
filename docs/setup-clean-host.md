@@ -264,9 +264,10 @@ process. Open omp yourself and it is a two-way citizen either way — it sends u
 garden id and a reply lands on it.
 
 The first turn of a fresh omp sibling is a TWO-STAGE BOOTSTRAP, not a positional prompt: the
-launcher carries `{v,target,nonce,task}` on the fixed registered flag `--entwurf-bootstrap`,
-and the installed birth extension waits until the callback tool is actually callable, sends a
-callback-only prompt, and delivers the operator's task only after that exact call succeeds.
+launcher carries `{v,task}` on the fixed registered flag `--entwurf-bootstrap` while the
+caller's address rides the sibling's own process env, and the installed birth extension waits
+until the zero-argument callback tool is actually callable, sends a callback-only prompt, and
+delivers the operator's task only after that exact call succeeds.
 That is a measured correction — the interactive host defers MCP discovery, so a positional
 first turn began before the tool it named existed.
 

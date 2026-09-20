@@ -734,13 +734,20 @@ export function ompCallbackToolReady(pi: OmpExtensionApi): boolean {
 }
 
 /**
- * Does this tool event name OUR callback, with OUR target and OUR nonce?
+ * Does this tool event name OUR callback?
  *
  * The event carries no server name, no session id and no original MCP tool name
- * (`extensions/types.ts:916-1017`), so the match is built from what IS there: the canonical
- * minted tool name plus the two argument values this rail already owns as contract. Exact
- * string equality on both — a prefix or `includes` here would let a sibling's nonce release
- * this session's task.
+ * (`extensions/types.ts:916-1017`), so the match is built from what IS there: exact string
+ * equality on the canonical minted tool name — a prefix or `includes` here would let a
+ * neighbouring tool release this session's task.
+ *
+ * The target/nonce half of this predicate is GONE, and that is the point of the out-of-band
+ * callback: the address rides the sibling's process env, so the verb takes no arguments and
+ * there are no argument values left to compare. What replaces the comparison is the ABSENCE
+ * of arguments — a call carrying a target or a message is a model supplying an address, which
+ * is the second address axis Hard Rule 2 refuses, and it must not release the task. Correlation
+ * to THIS bootstrap is not weakened by the removal: it is carried by the stored `toolCallId`
+ * (one session, one live tool call) plus the fact that only this session's env named the caller.
  */
 function matchesCallback(event: OmpToolCallEvent, _payload: OmpBootstrapPayload): boolean {
 	if (event?.toolName !== OMP_BOOTSTRAP_CALLBACK_TOOL) return false;

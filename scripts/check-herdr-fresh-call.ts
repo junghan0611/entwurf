@@ -270,7 +270,7 @@ const START_ERR = JSON.stringify({
 });
 
 const CALLER = "20260914T174741-2e9ba9";
-const NONCE = "herdr-fresh-call-0123456789abcdef01234567";
+const NONCE = "mux-fresh-call-0123456789abcdef01234567";
 const HERDR_ENV = { HERDR_ENV: "1", HERDR_BIN_PATH: "/home/operator/.local/bin/herdr", HERDR_PANE_ID: "w7:p1" };
 
 type ScriptedReply =
