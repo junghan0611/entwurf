@@ -88,11 +88,13 @@ found`. Both commands above are ordinary invocations — no model turn, no login
 is about the prompt, never about a missing herdr server. (An install with no server running is
 fine: it was measured completing on 0.9.1 through herdr's offline-persist path.)
 
-### What 0.3.1 does not give you
+### What 0.4.0 does not give you
 
-This release makes the Herdr integration easier to identify; it changes no runtime behavior. Its
-lock currently names the `herdr-checkout` candidate carrier for the 0.23.2 cut, and returns to an
-npm pin (`@junghanacs/entwurf@0.23.2` plus its published sha512) in a follow-up commit once that
+This release moves the pi floor to `>=0.86.0 <0.87` and makes the install-time build refuse an
+out-of-range pi by name instead of registering it in silence; it adds no new pane. The eighth
+garden verb, `entwurf_callback`, comes from the Entwurf runtime the lock names, not from here. Its
+lock currently names the `herdr-checkout` candidate carrier for the 0.24.0 cut, and returns to an
+npm pin (`@junghanacs/entwurf@0.24.0` plus its published sha512) in a follow-up commit once that
 version is on the registry. With either of those runtimes it does **not** ship:
 
 - Anything on your `PATH`. This is the one that decides how you start a session. The npm

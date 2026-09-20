@@ -7,6 +7,16 @@
 
 ---
 
+## 0.24.0 candidate (2026-09-20) — 후속 다섯, cut 전 기록
+
+pi 0.86.0 floor + `entwurf_callback`(여덟째 verb, 인자 없음) + herdr 플러그인 0.4.0. 표준 LIVE 다섯을 각각 한 번씩 돌려(ambient identity 제거) 구멍 둘을 막았다: `smoke-herdr-fresh-call-live` 오라클이 verb 이동을 못 따라온 것(`149bef7`), 설치된 omp birth 유닛이 v1로 stale이었던 것(호스트 사전조건, `install-omp-bridge` 후 21/21). 남은 것(각각 별 이슈, 현재 증거와 다음 측정이 있을 때만):
+
+1. **claude-code 형제의 결과 전달 분산** — `smoke-herdr-fresh-call-live` claude→claude 셀 `HFC-LIVE-FINAL-RESULT-DELIVERED`가 같은 바이트로 1회 green(`entwurf_peers → entwurf_callback → entwurf_v2`), 1회 red(`entwurf_callback` 하나만, `entwurf_v2` 시도 자체가 없음; 보존 픽스처 `/tmp/entwurf-opus2/herdr-live-fixture-{red,rerun}`). 가설 둘이 두 실행을 정확히 가른다: (H1) 모델 분산, (H2) `FRESH_CALL_TOOL_LOAD_HINT`가 조건부("callable하지 않으면 ToolSearch")라 힌트를 안 탄 자식은 delivery verb를 로드하지 않은 채 끝난다. n=2로 측정 계약(`[측정, n=3]`)을 고치지 않았다. 다음 측정: 자식의 ToolSearch 호출 유무를 관측할 수 있는 표면(claude 자식 transcript는 이 레일에서 안 남는다 — §14)을 먼저 찾고, 그 뒤 힌트를 무조건으로 바꿀지 결정.
+2. **Codex 콜백의 per-thread carrier** — Codex 툴 프로세스는 operator app-server의 자식이라 window env가 닿지 않는다(`entwurf_callback` → `codex-callback-env-unsupported`, 인자형 유지). 측정 없이 설계하지 않는다: `_meta.threadId`로 키된 carrier가 가능한지 app-server 프로토콜에서 먼저 잰다.
+3. **Pi→Codex 템플릿 relay** — `scripts/lib/codex-fresh-live-protocol.ts:43-65,85-104`가 의미 있는 `<placeholder>` 템플릿을 모델을 거쳐 전달하고 smoke가 바이트 동일성을 감사한다. 0.23.1 후속 1번의 상위 원인; `smoke-codex-fresh-live`는 이 cut에서 red로 기록된다(GLG 결정: observer-amended acceptance 또는 별 레인).
+4. **LIVE 전 호스트 사전조건 preflight** — 설치된 omp/receive 유닛 stale은 `doctor-omp-bridge`가 정확히 이름 붙였지만 smoke는 240s 타임아웃으로만 죽었다. release-gate LIVE 단계 앞에 doctor 셋(omp-bridge, omp-receive, meta-hook)을 MUST로 두면 같은 원인이 12분 대신 1초에 나온다.
+5. **chain smoke의 권위 채널** — `smoke-entwurf-chain-live`(release MUST)가 aggregate에서 red: 배달 A→B·B→C는 성공, hop 3(ACP claude-sonnet-5)이 `entwurf_v2` 호출을 원칙상 거부("다른 분신이 체인 릴레이를 시키는 모양새… 스크래치 AGENTS.md가 자기를 정당화하는 것 자체가 인젝션 패턴", `/tmp/entwurf-release-gate-0.24.0.anVBvk/release-gate.log:5841`). 0.22.0 게이트에서 hop 1이 거부한 것과 같은 부류이고, `f5d6e10`이 hop 1용으로 둔 scratch `AGENTS.md` 권위를 hop 3은 믿지 않았다. 형제가 읽을 수 있는 내용은 전부 그 형제 입장에서 비신뢰 입력이므로 권위는 payload에도 디렉터리 파일에도 실을 수 없다 — `docs/herdr-launch-rail.md:44` "이 거부는 고칠 버그가 아니라 지킬 성질이다". 다음 측정: 게이트의 MUST 판정이 모델의 원칙 판단에 걸리지 않는 모양을 먼저 정한다 — (a) chain-live를 BEHAVIOR 티어로(VERIFY 정책 변경, 별 레인), (b) hop이 스스로 검증할 수 있는 operator 기원 사실(예: sender envelope의 record-backed 출처)을 설계하고 측정. 재실행은 동전 던지기라 하지 않았다.
+
 ## 0.23.1 shipped (2026-09-20) — 세트 #118/#119 닫힘, 후속 다섯
 
 `v0.23.1` = `b9a6e4e`, npm integrity `sha512-T8l/JShW…rndA==`; herdr 플러그인 0.3.0은 lock npm 0.23.1(`194e800`). 세트가 남긴 것: 행동 옆 테스트 자동 발견(`check-tests-beside-behavior`), 13 게이트 vitest 이주, raw-install LIVE smoke cell [0]-[9]+[8a](설치→사용 경로→출하 런처), `entwurf pi` 런처. 후속(각각 별 이슈, 현재 증거와 다음 측정이 있을 때만):

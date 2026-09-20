@@ -4,7 +4,166 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+## 0.24.0 - 2026-09-20
+
+### Added
+
+- **`entwurf_callback` — the eighth garden verb, and it takes no arguments.** The fresh-call
+  callback was the one place in the garden where the transcript was the address axis: the caller
+  garden id and the launch nonce reached a new sibling only as prose in its first prompt, and the
+  sibling had to retype both into `entwurf_v2`. Three releases of symptoms were one cause — 0.23.1
+  dropped `$`/`@` sigils, this lane's first release gate filled in `<placeholders>` early, its second lost the
+  trailing character of a garden id (`…-26428c` → `…-26428`, refused correctly by the decider) —
+  and the protocol had no error-detecting property: a mangled id is indistinguishable from a
+  different one, so the decider could only refuse, never repair. GLG's ruling: "luna만 못하는게
+  아니라 구조적 문제". Now both launch rails inject `ENTWURF_CALLBACK_TARGET` and
+  `ENTWURF_CALLBACK_NONCE` beside the identity scrub (tmux `-e` in `mux-fresh-call`,
+  `tab create --env` in `herdr-fresh-call`), computed by the rail and never caller-chosen;
+  `callback-env.ts` is the single leaf that formats and parses the pair, so a drifted regex cannot
+  inject what the verb rejects; and `entwurf_callback {}` reads the pair from its own process,
+  validates garden-id and nonce grammar (exactly what `mintNonce` emits), and dispatches through
+  the existing v2 runner so the target is still re-resolved by record and decider (Hard Rule 2).
+  Absent or malformed env is a named refusal with no fallback to a model-supplied target (Hard
+  Rule 5). Framing for pi, claude-code, copilot and omp now says only "call the callback with no
+  arguments"; a separate `FRESH_CALL_DELIVERY_TOOL` names the v2 dialect for the task result, and
+  Claude's `--allowedTools` and ToolSearch hint carry callback, delivery and peers together (the
+  review found the first cut loaded only two, which would have left a claude-code sibling unable
+  to send its result). OMP's bootstrap payload moves to v2 with the closed shape `{v, task}`; a
+  leftover `target`/`nonce` key is refused. Measured before the seam was written: the
+  entwurf-bridge MCP child inherits the pane env for claude-code, copilot and omp (canary in
+  `/proc/<child>/environ`, private tmux, fixture roots); pi is in-process. **Codex is the named
+  exception:** the bridge serving a Codex tool call is the operator app-server's child (ppid
+  measured) and its identity is request-scoped `_meta.threadId`, so a window env never reaches
+  it; `entwurf_callback` refuses there as `codex-callback-env-unsupported`, the Codex framing
+  keeps the argument form and says why, and a per-thread carrier is a follow-up after a
+  measurement that does not exist yet. The separate Pi→Codex template relay in
+  `codex-fresh-live-protocol.ts` (a semantic `<placeholder>` template pushed through a model and
+  audited for byte equality) is recorded, not fixed. Surface gates moved with the verb
+  (`check-entwurf-bridge-boot` exact eight-verb set + `QK:BRIDGEBOOT-CALLBACK-ZERO-ARG`,
+  `check-probe-bridge-command`, `check-bridge`, install/state smokes, README/VERIFY); manifests
+  735 → 739 mutants, 59 lanes. Commits `cb86d44`, `ff09522`, `ca04c1b`; designs by
+  `claude-opus-5` and `openai-codex/gpt-5.6-terra`, Codex verdict and implementation by
+  `xai/grok-4.6`, closing review by a fresh `claude-opus-5`.
+- **`plugins/herdr` 0.4.0.** The plugin's install-time build now reaches a pi range check
+  (`install-user-scope`, above), its README installs pi at the published peer range, and its
+  runtime lock rides the 0.24.0 candidate window. A minor rather than a patch because a host that
+  activated 0.3.1 against an out-of-range pi was silently accepted and is now refused by name.
+
 ### Changed
+
+- **pi floor moves to 0.86.0 (`>=0.86.0 <0.87`), and the ACP provider reads the 0.86 shape
+  honestly.** pi 0.86 hands a custom provider a branded `TranscriptContext`: `systemPrompt`
+  and `tools` are folded into a leading `role:"system"` message (`normalizeContext`,
+  pi-mono `model-runtime.ts:639-642`, `v0.86.0` = `ecac0a9c`). The ACP preflight read
+  `context.tools`, which is always `undefined` there, and fell back to the full builtin set —
+  so `assertExcludeToolsHonored` could never fire, while `tsc` (the old parameter type is
+  assignable) and `check-acp-backend-preflight` (a 0.85-shaped literal fed straight to
+  `streamAcpTurn`) both stayed green. Measured on real `pi-ai@0.86.0`: raw Context with `bash`
+  excluded → THROW; the same input through `normalizeContext` → PASS with no throw. The adapter
+  now replays the transcript (`getCurrentTools(context.messages)`, no fallback — an empty
+  replayed list is "the operator excluded everything" and is rejected as such),
+  `renderMessage` drops system messages by an explicit `case` so the never-forward-systemPrompt
+  invariant is a decision rather than a `default`, and every provider-path gate builds its
+  fixture through `normalizeContext()`. New lane `acp-backend-preflight`
+  (`[QK:ACP-PREFLIGHT-REPLAYS-TRANSCRIPT-TOOLS]`, exact-once mutant = the old fallback).
+  Session-reuse signatures now hash the folded leading system message, so a record persisted
+  under 0.85.1 is not a prefix of a 0.86 turn and falls back to `new` (the designed safe path).
+- **Pin move, with every mirror.** devDeps 0.86.0; peers `>=0.86.0 <0.87`; the eight explicit
+  `check-pack-install` pins and its leak regex (`@0\.86\.0(_|$)`, boundary lookalike now the
+  prefix-extended `0.86.0-beta.1`); lockfile (typebox resolves to a single 1.3.27); baseline
+  docs; ROADMAP bump ledger. `check-dep-versions` now excludes dated ledger entries from its
+  baseline scan (`stripBumpLedger`, guarded both ways), because a ledger line is a receipt of
+  the range that landed THAT day and the first bump after an entry is written is what exposed
+  it. Vendor floors were re-measured rather than carried: a real 0.86.0 session file
+  (`herdr-placement.ts`), the installed `types.d.ts` (`compaction-send-guard.ts`), the
+  unregistered `--entwurf-control` refusal (`check-pi-launch.ts:18`); the registered-host
+  duplicate-flag receipt at `check-pi-launch.ts:29` stays dated 0.85.1 with the reason.
+  Constellation shrank for the first time (`pi-client`/`pi-protocol` left pi-coding-agent's
+  direct deps at 0.86.0); all eight pins are kept on purpose — a retired pin is how a caret
+  re-enters unwatched.
+- **The two doors onto one pi registration tell the same truth (#119).** `entwurf setup`
+  refused an out-of-range pi by name, but `run.sh install-user-scope` — the verb herdr plugin
+  activation actually reaches (`build.mjs` → `herdr-plugin-activate.mjs`) — had no range check
+  and wrote the citizen in silence. It now enforces the same closed range through the same
+  helpers (`pi_supported_range`/`pi_version_in_range`, one parser), refuses with
+  `[install-user-scope] pi: FAIL … outside the supported range` and zero bytes written; absent
+  pi is deliberately unchanged (this verb invents no presence verdict). `check-herdr-activation`
+  gains `[QK:HAC-PI-FLOOR-BOTH-DOORS]` (24 → 25, the out-of-range/in-range PAIR, fixtures
+  derived from the package.json pin) and pins `PI_BIN` in its sandbox `world()` — without that
+  the gate's verdict depended on the operator's installed pi. `plugins/herdr/README.md` now
+  installs pi at the published peer range and joined `check-dep-versions` BASELINE_DOCS, so
+  the number cannot drift. Since 0.86.0 published (2026-09-19T23:15Z) the old unpinned line
+  installed a pi the shipped range rejects; the plugin had no known installs, so the repair is
+  a correction, not a migration.
+- **Provider-path fixtures are built through `normalizeContext`, and a cast past the brand is
+  now a red gate.** The full floor on the bump commit went red in four ACP gates
+  (`check-acp-stop-reason`, `-prompt-lifecycle`, `-stream-hooks`, `-usage-accounting`) as
+  `'error' !== 'done'` — the new preflight correctly rejecting seven fixture helpers that cast a
+  tool-less literal `as Context`, which is exactly the operation that silences the
+  `TranscriptContext` brand at typecheck time. Every helper now declares the four pi builtins
+  through `normalizeContext`; no production source or assertion text changed.
+  `check-acp-backend-preflight` gains a static sweep (`[QK:ACP-FIXTURE-NO-CONTEXT-CAST]`) over
+  `scripts/check-acp-*.ts` and the lib tests so that class cannot come back silently; no mutant
+  by decision (the claim is the absence of a token and has no production subject — its
+  kill-proof is an injected offender named by `file:line`). Full floor on `5d3140c`:
+  `check:full` exit 0 in 598s. Manifests: 733 → 735 mutants, 58 → 59 lanes.
+- **The first release gate of this lane (then numbered 0.23.2) was red on three MUST steps, and
+  two of them were this lane's own holes** (`/tmp/entwurf-release-gate-0.23.2.3s5A0o`, `MUST: PASS=21 FAIL=3 SKIP=0`).
+  `check-gate-qualification` 733/735: both `pack-install` mutants still quoted the old run.sh
+  `@0\.85\.1(_|$)` line after the pin mirror moved it (MUTANT-STALE), and nothing in
+  `check:full` looks at whether a `find` still matches — `check-gate-manifests` proved the
+  subject was tracked but never opened it. The finds now mirror run.sh byte-exact and the head
+  gains `[QK:MUTANT-FIND-MATCHES-SUBJECT]` (every `find` matches its subject exactly once, using
+  the body's own `countOccurrences`), which would have caught this at commit time instead of
+  fifty minutes into the gate. `smoke-acp-session-reuse-live`: `turn1`/`turn2` were annotated
+  `: Context` with no tools and the preflight rejected them — the third fixture of this class,
+  and the sweep written to stop it had globbed only `check-acp-*` and only the cast spelling.
+  Both turns build through `normalizeContext`; the sweep now covers `scripts/smoke-*.ts` and the
+  annotation form (indexed-access types such as `Context["messages"]` excluded), and retyped
+  `startTurn` in `check-acp-prompt-lifecycle` on the way (`5aeb8d4`). The third red,
+  `smoke-codex-fresh-live`, was a host prerequisite: the gate shell did not export
+  `ENTWURF_CODEX_APP_SERVER_PID` / `ENTWURF_CODEX_FRESH_MODEL` / `ENTWURF_CODEX_FRESH_PI_MODEL`
+  (the app-server was alive, PID 3969303); the rerun carries them. An independent audit
+  (`openai-codex/gpt-5.6-terra`, read-only) re-measured every mutant `find` against its subject
+  (0 stale), every direct provider-path fixture (0 tool-less), and named four stale declarations
+  fixed before the rerun: `docs/acp-backend-rail.md` support table, `pnpm-workspace.yaml`
+  release-age exclusions for pi-client/pi-protocol, `check-pack-install` diagnostic wording, and
+  the filename-floor sentence in `docs/mux-launch-rail.md`.
+  The qualification body on `ca04c1b` then reported 737/739 with two WRONG-REASON verdicts —
+  mutants dying at a neighbouring claim: `check-herdr-fresh-call` asserted the umbrella
+  whole-argv cell before the callback-pair cell, and the `pack-install` COVERS-CLOSURE `replace`
+  still carried the 0.85.1 pin. Both fixed in `3a9ae38`; a lane-scoped replay through the real
+  `qualifyMutants` runner (herdr-fresh-call + pack-install, 40/40 killed, 504s) is the fix
+  receipt, and the exact-SHA full body is read from `release-gate --cut`. Bridge source changes
+  need `pnpm run build-bridge` before any gate: `check-bridge-delivery` compares the gitignored
+  `dist` against source and reports staleness as red, which it did once in this lane.
+  The standalone LIVE pass that followed (each smoke once, ambient identity stripped) found the
+  one surface the verb move had not reached: `smoke-herdr-fresh-call-live` still joined both of
+  its cells on `entwurf_v2` as the callback — the pi cell on an argument predicate the
+  zero-argument verb can never satisfy, the claude cell on `indexOf("entwurf_v2")`, which landed
+  on the result delivery and reported the real callback as forbidden work before the callback.
+  The same red run is the receipt that production was right: the claude child's MCP activity
+  log reads `entwurf_peers → entwurf_callback (completed) → entwurf_v2 (completed)`, the pi
+  child's own tool result says the callback was delivered, and every delivery/fence cell passed
+  (2 FAILED / 30 ok, preserved fixture `/tmp/entwurf-opus2/herdr-live-fixture-red`). The oracle
+  now joins on the bare `entwurf_callback` the observing surfaces spell and on the ABSENCE of an
+  address in the pi call (`149bef7`); no deterministic gate covers this on-demand axis, which is
+  why it surfaced only here.
+  The same pass found the host behind the tree: `smoke-omp-fresh-live` timed out waiting for the
+  callback because the INSTALLED omp birth unit still spoke bootstrap v1 (no
+  `entwurf_bridge_entwurf_callback`, `{v:1}`), so the v2 payload the checkout launcher sent was
+  refused as `version-unsupported` — the exact condition `doctor-omp-bridge` exists to name, and
+  it did (runtime FAIL / ownership PASS). `install-omp-bridge` with no omp session open, doctor
+  green on both axes, re-run 21/21. The herdr re-run on `149bef7` is 31/32: the two repaired
+  cells pass; the remaining red is a claude-code child that called back and then never attempted
+  the delivery verb, recorded in ROADMAP as a follow-up rather than patched on n=2.
+- **The plugin runtime lock names `herdr-checkout` again, for the length of the 0.24.0
+  candidate window** — the same two steps 0.23.0 (`dd84ac0`) and 0.23.1 (`3c3a67d`/`194e800`)
+  took: an `npm` lock must name a version that is already published and coherent with this
+  checkout's `package.json` (`certifyLockCoherence`, `check-herdr-runtime-bootstrap` 8a), and the
+  version bump lands before the publish. Lock and `check-herdr-plugin-build` moved together
+  (`47f6d36`, the measured inverse of `194e800`); the npm pin returns with its published sha512
+  once 0.24.0 is on the registry.
 
 - **`plugins/herdr` 0.3.1 leads with the workbench a visitor is looking at.** Its manifest and
   README now say that Entwurf brings sibling AI sessions into Herdr, then name its actual narrow
