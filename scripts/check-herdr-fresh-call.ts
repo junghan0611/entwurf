@@ -460,15 +460,20 @@ async function main(): Promise<void> {
 		nonce: "mux-fresh-call-deadbeefdeadbeefdeadbeef",
 	};
 	const tabArgs = buildHerdrTabCreateArgs({ workspaceId: "w7", cwd: "/repo/dir", callback: tabCallback });
-	ok(
-		"[QK:HFC-TAB-ARGV] one placement policy — a NEW TAB in the caller's own workspace, named explicitly so herdr cannot default it to the focused one, focus left alone, cwd carried literally, and BOTH identity carriers scrubbed by explicit repeated --env",
-		tabArgs.join(" ") ===
-			"tab create --workspace w7 --no-focus --cwd /repo/dir --env PI_SESSION_ID= --env PI_AGENT_ID= --env ENTWURF_CALLBACK_TARGET=20260101T010101-aaaaaa --env ENTWURF_CALLBACK_NONCE=mux-fresh-call-deadbeefdeadbeefdeadbeef",
-	);
+	// The SPECIFIC claim runs before the umbrella one. `ok` throws, so the first red assertion is
+	// the only one a mutant run ever prints: with the exact-argv cell first, the callback-pair
+	// mutant died on the whole-argv claim below and never reached its own — a WRONG-REASON that
+	// qualification is exactly there to catch. Order is the fix; both cells keep their subject,
+	// and the argv cell keeps its own mutant, which drops `--no-focus` and this cell cannot see.
 	ok(
 		"[QK:HFC-CALLBACK-ENV] the launcher-computed callback pair rides as two more --env assignments beside the scrub",
 		tabArgs.includes("ENTWURF_CALLBACK_TARGET=20260101T010101-aaaaaa") &&
 			tabArgs.includes("ENTWURF_CALLBACK_NONCE=mux-fresh-call-deadbeefdeadbeefdeadbeef"),
+	);
+	ok(
+		"[QK:HFC-TAB-ARGV] one placement policy — a NEW TAB in the caller's own workspace, named explicitly so herdr cannot default it to the focused one, focus left alone, cwd carried literally, and BOTH identity carriers scrubbed by explicit repeated --env",
+		tabArgs.join(" ") ===
+			"tab create --workspace w7 --no-focus --cwd /repo/dir --env PI_SESSION_ID= --env PI_AGENT_ID= --env ENTWURF_CALLBACK_TARGET=20260101T010101-aaaaaa --env ENTWURF_CALLBACK_NONCE=mux-fresh-call-deadbeefdeadbeefdeadbeef",
 	);
 	ok(
 		"a cwd-free tab create omits --cwd entirely rather than sending an empty value, and the rail adds no layout axis of its own — no label, no ratio, no direction",
