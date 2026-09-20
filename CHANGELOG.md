@@ -4,6 +4,24 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+### Changed
+
+- **The plugin runtime lock is pinned to npm `@junghanacs/entwurf@0.24.0`** and its published
+  sha512, closing the candidate window 0.24.0 shipped in — the second of the two steps the 0.24.0
+  entry below names. The integrity was measured here twice, independently: `npm view
+  @junghanacs/entwurf@0.24.0 dist.integrity` and `openssl dgst -sha512` over the preserved
+  candidate `make` accepted (`/tmp/entwurf-release-candidate-0.24.0.LXYL1S`, sha256
+  `fd750bcb…`) agree, and the registry tarball's sha256 equals the candidate's, so the lock names
+  the exact bytes the release gate consumed. Lock and `check-herdr-plugin-build` moved together
+  (the measured forward of `47f6d36`, version literals and the `IDENTITY` fixture's sha512 moved
+  to 0.24.0), the plugin README drops the candidate sentence, and `herdr-plugin.toml` already says
+  0.4.0. Receipts: `check-herdr-plugin-build` 14/14, `check-herdr-runtime-bootstrap` 31 ok with
+  `source=npm … version 0.24.0 … npm-coherent=true`, `check-herdr-plugin` 32 ok,
+  `check-gate-manifests` 739/59 unchanged, `pnpm check` exit 0 (57 s). Registry smoke: a
+  sandboxed `pi install npm:@junghanacs/entwurf@0.24.0` resolves the bridge to the registry
+  install and `--list-models entwurf` lists the curated Claude and Cortex anchors; dist-tags
+  `latest=0.24.0`, `repair=0.12.8-repair.1` preserved.
+
 ## 0.24.0 - 2026-09-20
 
 ### Added
