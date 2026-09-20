@@ -32,7 +32,8 @@ import { copyFileSync, mkdirSync, mkdtempSync, rmdirSync, rmSync } from "node:fs
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import type { Api, AssistantMessageEvent, Context, Message, Model } from "@earendil-works/pi-ai";
+import type { Api, AssistantMessageEvent, Message, Model, TranscriptContext } from "@earendil-works/pi-ai";
+import { normalizeContext } from "@earendil-works/pi-ai";
 
 const sonnet = { id: "claude-sonnet-5" } as unknown as Model<Api>;
 
@@ -133,10 +134,26 @@ async function collect(stream: Stream): Promise<AssistantMessageEvent[]> {
 const sealed = (events: AssistantMessageEvent[]) =>
 	events.filter((e) => e.type === "done" || e.type === "error") as any[];
 
-const userCtx = (text: string): Context => ({ messages: [{ role: "user", content: text, timestamp: 0 }] }) as Context;
+// The pi built-ins the Claude child also exposes natively. pi declares its tool surface on
+// every turn, and since 0.86 that declaration reaches a provider as the leading system
+// message's `toolsAdded` (`normalizeContext`), which backend.ts replays for the exclude-tools
+// truthfulness preflight. A fixture that declares NO tools is therefore not "a turn with the
+// defaults" — it is a turn where the operator excluded everything, and the preflight rejects it
+// before the prompt is ever sent. So every provider-path context here is built through
+// `normalizeContext`, never cast `as Context`: the cast is exactly what hid this shape from
+// typecheck when the 0.86 pin landed.
+const PI_DECLARED_TOOLS = ["read", "bash", "edit", "write"].map((name) => ({
+	name,
+	description: "",
+	parameters: {} as never,
+}));
 
-function reuseCtx(prior: string, latest: string): Context {
-	return {
+const userCtx = (text: string): TranscriptContext =>
+	normalizeContext({ tools: PI_DECLARED_TOOLS, messages: [{ role: "user", content: text, timestamp: 0 }] });
+
+function reuseCtx(prior: string, latest: string): TranscriptContext {
+	return normalizeContext({
+		tools: PI_DECLARED_TOOLS,
 		messages: [
 			{ role: "user", content: prior, timestamp: 0 },
 			{
@@ -158,7 +175,7 @@ function reuseCtx(prior: string, latest: string): Context {
 			} as unknown as Message,
 			{ role: "user", content: latest, timestamp: 0 },
 		],
-	} as Context;
+	});
 }
 
 // EVERY cell registers onResponse; the exemption claim at the end judges the sum.

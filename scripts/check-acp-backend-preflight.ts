@@ -16,8 +16,8 @@
 
 import { strict as assert } from "node:assert";
 import { execFileSync } from "node:child_process";
-import { readFileSync, rmSync } from "node:fs";
-import { resolve } from "node:path";
+import { readdirSync, readFileSync, rmSync } from "node:fs";
+import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import type { Api, AssistantMessageEvent, Model, TranscriptContext } from "@earendil-works/pi-ai";
 import { normalizeContext } from "@earendil-works/pi-ai";
@@ -159,9 +159,64 @@ try {
 	rmSync(TMP_EMIT, { recursive: true, force: true });
 }
 
+// ---------------------------------------------------------------------------
+// Provider-path fixture sweep — the cast that got past typecheck twice
+// ---------------------------------------------------------------------------
+// The behavioral cells above prove ONE gate feeds the 0.86 shape. This proves the
+// others cannot quietly stop doing so. When the pi 0.86 pin landed, the branded
+// `TranscriptContext` named every gate that built a provider-path fixture as a
+// `Context` LITERAL — and named none of the four that wrote `as Context`, because a
+// cast is exactly the operation that silences the brand. Those four then failed in
+// the full floor with `'error' !== 'done'`, a message that says nothing about the
+// cause. A fixture cast to `Context` declares no tools, `getCurrentTools` replays
+// none, and every turn seals as an exclude-tools rejection before the prompt is
+// sent — which reads like broken streaming and is actually a stale fixture.
+//
+// So: no provider-path source may cast to `Context` at all. Static by nature —
+// there is no production subject here and nothing to drive, the claim IS the
+// absence of a token in a file set — so this carries no mutant. Its kill-proof is
+// the sweep itself: delete the assertion and nothing else changes, which is true of
+// any absence check and is why it lives beside the capability it protects rather
+// than in a lane of its own.
+{
+	const swept = [
+		...readdirSync(resolve("scripts"))
+			.filter((f) => f.startsWith("check-acp-") && f.endsWith(".ts"))
+			.map((f) => join("scripts", f)),
+		...readdirSync(resolve("pi-extensions", "lib"), { recursive: true, encoding: "utf8" })
+			.filter((f) => f.endsWith(".test.ts"))
+			.map((f) => join("pi-extensions", "lib", f)),
+	];
+	// Guard the sweep: a glob that matches nothing passes vacuously and says so to nobody.
+	assert.ok(swept.length >= 10, `provider-path sweep matched only ${swept.length} files — the globs stopped resolving`);
+
+	const offenders: string[] = [];
+	for (const file of swept) {
+		readFileSync(file, "utf8")
+			.split("\n")
+			.forEach((line, i) => {
+				// Prose about the rule is not a violation of it.
+				if (line.trimStart().startsWith("//") || line.trimStart().startsWith("*")) return;
+				if (/\bas\s+Context\b/.test(line)) offenders.push(`${file}:${i + 1}: ${line.trim()}`);
+			});
+	}
+	assert.deepEqual(
+		offenders,
+		[],
+		"[QK:ACP-FIXTURE-NO-CONTEXT-CAST] a provider-path fixture may not be cast to the raw `Context` type. Since pi 0.86 a custom " +
+			"provider receives a branded TranscriptContext, and the brand is the only thing that names a stale fixture at " +
+			"typecheck time — a cast silences it, so the fixture declares no tools, the exclude-tools preflight rejects " +
+			"every turn before the prompt is sent, and the gate fails as `'error' !== 'done'` with nothing pointing at the " +
+			"cause. Build it with `normalizeContext({ tools, messages })` instead. Found:\n" +
+			offenders.join("\n"),
+	);
+}
+
 console.log(
 	"[check-acp-backend-preflight] ok — streamShellAcp replays the 0.86 transcript's system messages for the active tool " +
 		"surface and runs assertExcludeToolsHonored before spawn; a declared-vs-actual " +
 		"tool-surface lie fails fast into the stream as an error event (no backend launched, no done); " +
-		"actionableAcpBackendHint (A-c) classifies a context-window 400 into an actionable hint without misclassifying unrelated failures",
+		"actionableAcpBackendHint (A-c) classifies a context-window 400 into an actionable hint without misclassifying " +
+		"unrelated failures; and no provider-path fixture in the acp gates or the lib tests is cast to the raw `Context` type, so the " +
+		"TranscriptContext brand still names a stale one at typecheck time",
 );

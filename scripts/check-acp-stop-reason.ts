@@ -52,7 +52,8 @@ import { copyFileSync, mkdirSync, mkdtempSync, rmdirSync, rmSync } from "node:fs
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import type { Api, AssistantMessageEvent, Context, Model } from "@earendil-works/pi-ai";
+import type { Api, AssistantMessageEvent, Model } from "@earendil-works/pi-ai";
+import { normalizeContext } from "@earendil-works/pi-ai";
 
 const sonnet = { id: "claude-sonnet-5" } as unknown as Model<Api>;
 
@@ -82,6 +83,20 @@ function makeFakeChild() {
 		once() {},
 	};
 }
+
+// The pi built-ins the Claude child also exposes natively. pi declares its tool surface on
+// every turn, and since 0.86 that declaration reaches a provider as the leading system
+// message's `toolsAdded` (`normalizeContext`), which backend.ts replays for the exclude-tools
+// truthfulness preflight. A fixture that declares NO tools is therefore not "a turn with the
+// defaults" — it is a turn where the operator excluded everything, and the preflight rejects it
+// before the prompt is ever sent. So every provider-path context here is built through
+// `normalizeContext`, never cast `as Context`: the cast is exactly what hid this shape from
+// typecheck when the 0.86 pin landed.
+const PI_DECLARED_TOOLS = ["read", "bash", "edit", "write"].map((name) => ({
+	name,
+	description: "",
+	parameters: {} as never,
+}));
 
 const EMPTY_MCP_HASH = "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945";
 const DEFAULT_RESOLVED_CONFIG: any = {
@@ -267,7 +282,10 @@ try {
 		const events = await collect(
 			backend.streamAcpTurn(
 				sonnet,
-				{ messages: [{ role: "user", content: `drive ${label}`, timestamp: 0 }] } as Context,
+				normalizeContext({
+					tools: PI_DECLARED_TOOLS,
+					messages: [{ role: "user", content: `drive ${label}`, timestamp: 0 }],
+				}),
 				{ sessionId: `stop-${label}` },
 				makeHarness(recordDir, cell.wire),
 			) as Stream,
