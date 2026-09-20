@@ -28,6 +28,7 @@ import {
 	buildOmpBootstrapPayload,
 	FRESH_CALL_BACKENDS,
 	FRESH_CALL_CALLBACK_TOOL,
+	FRESH_CALL_DELIVERY_TOOL,
 	FRESH_CALL_RUNTIME,
 	type FreshCallReceipt,
 	type FreshCallResult,
@@ -152,7 +153,9 @@ describe("argv dialects", () => {
 
 	it("[QK:FRESHCALL-CLAUDE-ARGV-EQUALS-FORM] claude-code argv is the prompt then a SINGLE --allowedTools=<tool> token — the space form is variadic and was measured to eat the prompt", () => {
 		expect(clArgs[0]).toBe("PROMPT");
-		expect(clArgs[1]).toBe(`--allowedTools=${FRESH_CALL_CALLBACK_TOOL["claude-code"]}`);
+		expect(clArgs[1]).toBe(
+			`--allowedTools=${FRESH_CALL_CALLBACK_TOOL["claude-code"]},${FRESH_CALL_DELIVERY_TOOL["claude-code"]}`,
+		);
 		expect(clArgs[1]).not.toContain(" ");
 		expect(clArgs).not.toContain("--allowedTools");
 	});
@@ -199,10 +202,10 @@ describe("argv dialects", () => {
 	});
 
 	it("[QK:FRESHCALL-COPILOT-CALLBACK-TOOL] the Copilot callback tool is the MEASURED `<server>-<tool>` composition, not Claude Code's `mcp__server__tool` spelling — a copied dialect costs the whole first turn", () => {
-		expect(FRESH_CALL_CALLBACK_TOOL.copilot).toBe("entwurf-bridge-entwurf_v2");
+		expect(FRESH_CALL_CALLBACK_TOOL.copilot).toBe("entwurf-bridge-entwurf_callback");
 		expect(FRESH_CALL_CALLBACK_TOOL.copilot).not.toBe(FRESH_CALL_CALLBACK_TOOL["claude-code"]);
 		expect(buildFreshCallPrompt({ backend: "copilot", task: TASK, callerGardenId: GID, nonce: NONCE })).toContain(
-			"entwurf-bridge-entwurf_v2",
+			"entwurf-bridge-entwurf_callback",
 		);
 	});
 
@@ -241,10 +244,10 @@ describe("argv dialects", () => {
 		for (const a of ompArgs) expect(a).not.toMatch(/^-(e|c|n|b)$/);
 	});
 
-	it("[QK:FRESHCALL-OMP-PAYLOAD-SHAPE] the payload is the closed {v,target,nonce,task} object and carries no model, path, command or env name", () => {
+	it("[QK:FRESHCALL-OMP-PAYLOAD-SHAPE] the payload is the closed {v,task} object — address rides env — and carries no model, path, command or env name", () => {
 		const raw = buildOmpBootstrapPayload({ callerGardenId: GID, nonce: NONCE, task: TASK });
-		expect(JSON.parse(raw)).toEqual({ v: OMP_BOOTSTRAP_VERSION, target: GID, nonce: NONCE, task: TASK });
-		expect(Object.keys(JSON.parse(raw)).sort()).toEqual(["nonce", "target", "task", "v"]);
+		expect(JSON.parse(raw)).toEqual({ v: OMP_BOOTSTRAP_VERSION, task: TASK });
+		expect(Object.keys(JSON.parse(raw)).sort()).toEqual(["task", "v"]);
 	});
 
 	it("[QK:FRESHCALL-OMP-EXPLICIT-POLICY] the permission width is an explicit argv token even though omp's schema default is ALREADY yolo — a default that grants the same thing is exactly the drift step 9 clause 2 forbids, and nothing observable would fail if this token were dropped", () => {
@@ -253,12 +256,12 @@ describe("argv dialects", () => {
 		expect(ompArgs[policyAt + 1]).toBe("yolo");
 	});
 
-	it("[QK:FRESHCALL-OMP-CALLBACK-TOOL-DIALECT] omp's model-facing callback name drops the DIGIT from entwurf_v2 and underscores the server key — a sibling's spelling copied here costs the whole first turn", () => {
-		expect(FRESH_CALL_CALLBACK_TOOL.omp).toBe("mcp__entwurf_bridge_entwurf_v");
+	it("[QK:FRESHCALL-OMP-CALLBACK-TOOL-DIALECT] omp's model-facing callback name underscores the server key — a sibling's spelling copied here costs the whole first turn", () => {
+		expect(FRESH_CALL_CALLBACK_TOOL.omp).toBe("mcp__entwurf_bridge_entwurf_callback");
 		expect(FRESH_CALL_CALLBACK_TOOL.omp).not.toContain("entwurf_v2");
 		expect(FRESH_CALL_CALLBACK_TOOL.omp).not.toBe(FRESH_CALL_CALLBACK_TOOL["claude-code"]);
 		expect(buildFreshCallPrompt({ backend: "omp", task: TASK, callerGardenId: GID, nonce: NONCE })).toContain(
-			"mcp__entwurf_bridge_entwurf_v",
+			"mcp__entwurf_bridge_entwurf_callback",
 		);
 	});
 
@@ -277,13 +280,17 @@ describe("first-turn framing", () => {
 		expect(taskAt).toBeGreaterThan(callbackAt);
 	});
 
-	it("carries the caller garden id and the exact nonce", () => {
+	it("carries the caller garden id for corroboration; the nonce is NOT in prose on env-callback rails", () => {
 		expect(prompt).toContain(GID);
-		expect(prompt).toContain(NONCE);
+		expect(prompt).not.toContain(NONCE);
+		expect(prompt).toContain("with no arguments");
+		const codex = buildFreshCallPrompt({ backend: "codex", task: TASK, callerGardenId: GID, nonce: NONCE });
+		expect(codex).toContain(NONCE);
+		expect(codex).toContain("entwurf_callback is refused on this rail");
 	});
 
-	it("names the backend's own callback tool (native entwurf_v2 vs the MCP-namespaced one)", () => {
-		expect(prompt).toContain("entwurf_v2");
+	it("names the backend's own callback tool (native entwurf_callback vs the MCP-namespaced one)", () => {
+		expect(prompt).toContain("entwurf_callback");
 		expect(buildFreshCallPrompt({ backend: "claude-code", task: TASK, callerGardenId: GID, nonce: NONCE })).toContain(
 			FRESH_CALL_CALLBACK_TOOL["claude-code"],
 		);

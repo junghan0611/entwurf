@@ -45,7 +45,7 @@
 			"claim": "FRESHCALL-OMP-CALLBACK-TOOL-DIALECT",
 			"title": "the callback tool name spelled the way a reader expects instead of the way omp mints it — `entwurf_v2` keeps its digit, which omp's sanitizer charset [a-z_] eats. The sibling is told to call a tool that does not exist in its session, so the whole first turn is spent and no address ever comes back. A launch receipt still prints",
 			"subject": "pi-extensions/lib/fresh-call-composition.ts",
-			"find": ["\tomp: \"mcp__entwurf_bridge_entwurf_v\","],
+			"find": ["\tomp: \"mcp__entwurf_bridge_entwurf_callback\","],
 			"replace": ["\tomp: \"mcp__entwurf_bridge_entwurf_v2\","],
 			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
 			"timeoutSeconds": 300,
@@ -167,10 +167,8 @@
 			"claim": "OMP-BOOTSTRAP-CALLBACK-ONLY",
 			"title": "the task folded back into the stage-one prompt, so the sibling is asked to call back AND to work in one message. This is the prompt the failed LIVE actually ran, minus the missing tool: a competing goal beside the callback is what the two-stage split exists to remove, and nothing about argv or readiness would notice it coming back",
 			"subject": "pi-extensions/meta-bridge-omp.ts",
-			"find": ["\t\t\tsend(buildOmpCallbackOnlyPrompt({ target: payload.target, nonce: payload.nonce }));"],
-			"replace": [
-				"\t\t\tsend(`${buildOmpCallbackOnlyPrompt({ target: payload.target, nonce: payload.nonce })}\\n\\n${payload.task}`);"
-			],
+			"find": ["\t\t\tsend(buildOmpCallbackOnlyPrompt());"],
+			"replace": ["\t\t\tsend(`${buildOmpCallbackOnlyPrompt()}\\n\\n${payload.task}`);"],
 			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
 			"timeoutSeconds": 300,
 			"signature": "[QK:OMP-BOOTSTRAP-CALLBACK-ONLY]",
@@ -204,11 +202,9 @@
 			"claim": "OMP-BOOTSTRAP-RESULT-ARMS-ONLY",
 			"title": "the task sent from inside the tool_result handler again, instead of at the turn_end boundary. `[LIVE 2026-08-30]` this is the exact shape that failed: the hook log showed armed/ready/callback-observed/released, the release predicate was provably correct, and the task still never appeared in the session — because that handler runs while the callback turn is streaming. Every static contract about correlation and readiness stays green while the product delivers nothing",
 			"subject": "pi-extensions/meta-bridge-omp.ts",
-			"find": [
-				"\t\t\tlog(\"INFO\", `bootstrap-released nonce=${payload.nonce} toolCallId=${callId}: task armed for the next turn_end`);"
-			],
+			"find": ["\t\t\tlog(\"INFO\", `bootstrap-released toolCallId=${callId}: task armed for the next turn_end`);"],
 			"replace": [
-				"\t\t\tlog(\"INFO\", `bootstrap-released nonce=${payload.nonce} toolCallId=${callId}: task armed for the next turn_end`);\n\t\t\tphase = \"task-sent\";\n\t\t\tsend(payload.task);"
+				"\t\t\tlog(\"INFO\", `bootstrap-released toolCallId=${callId}: task armed for the next turn_end`);\n\t\t\tphase = \"task-sent\";\n\t\t\tsend(payload.task);"
 			],
 			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
 			"timeoutSeconds": 300,

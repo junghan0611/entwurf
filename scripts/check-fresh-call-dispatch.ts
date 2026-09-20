@@ -170,14 +170,13 @@ async function main(): Promise<void> {
 
 	// ── one nonce, into whichever rail ───────────────────────────────────────────────────
 	const nonceSpawn = recordingSpawn();
-	await dispatchFreshCall(REQUEST, HERDR_ENV, nonceSpawn.spawn, "fresh-call-dispatch-test-nonce");
-	const startCall = nonceSpawn.calls.find((call) => call[1] === "agent" && call[2] === "start");
+	const dispatchNonce = "mux-fresh-call-deadbeefdeadbeefdeadbeef";
+	await dispatchFreshCall(REQUEST, HERDR_ENV, nonceSpawn.spawn, dispatchNonce);
+	const tabCall = nonceSpawn.calls.find((call) => call[1] === "tab" && call[2] === "create");
 	ok(
 		"[QK:FCD-ONE-NONCE] ONE nonce is minted per call and handed to the selected rail — two mints would mean the sibling calls back with a tag the caller never recorded",
 		dispatchCode.split("mintNonce(").length - 1 === 1 &&
-			(startCall === undefined ||
-				startCall.some((token) => token.includes("fresh-call-dispatch-test-nonce")) ||
-				nonceSpawn.calls.length > 0),
+			(tabCall === undefined || tabCall.some((token) => token.includes(dispatchNonce)) || nonceSpawn.calls.length > 0),
 	);
 
 	// ── the composition root holds no synchronous child authority ────────────────────────

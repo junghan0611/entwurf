@@ -434,7 +434,9 @@ ok(
 // callback-only prompt is delivered first, and the task is released only by the exact
 // successful callback result. The transcript is where both are visible, in order, in one
 // native session.
-const bootstrapLine = buildOmpCallbackOnlyPrompt({ target: callerGid, nonce: nonce as string })
+// Since the callback moved out of band (ENTWURF_CALLBACK_TARGET/NONCE in the sibling env), the
+// callback-only prompt carries no address; the receipt is the no-arg first action itself.
+const bootstrapLine = buildOmpCallbackOnlyPrompt()
 	.split("\n")
 	.find((l) => l.includes("FIRST AND ONLY ACTION")) as string;
 const transcript = fs.readFileSync(transcriptPath as string, "utf8");
@@ -442,7 +444,7 @@ const callbackAt = transcript.indexOf(bootstrapLine);
 const taskAt = transcript.indexOf(sceneFact);
 receipts["5-two-stage-order"] = `callback-only prompt @${callbackAt}, task scene fact @${taskAt}`;
 ok(
-	"stage one is in the sibling's own transcript: the extension delivered the callback-ONLY prompt, carrying this call's target and nonce",
+	"stage one is in the sibling's own transcript: the extension delivered the callback-ONLY prompt (no-arg first action; the address rides the sibling env, never this prompt)",
 	callbackAt >= 0,
 	`        expected line: ${bootstrapLine}`,
 );

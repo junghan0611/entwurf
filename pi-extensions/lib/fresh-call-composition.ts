@@ -54,6 +54,17 @@ export type FreshCallBackend = (typeof FRESH_CALL_BACKENDS)[number];
  * permission dialect: omp's approval layer consults the same minted string (`source-audit.md`).
  */
 export const FRESH_CALL_CALLBACK_TOOL: Record<FreshCallBackend, string> = {
+	pi: "entwurf_callback",
+	"claude-code": "mcp__entwurf-bridge__entwurf_callback",
+	copilot: "entwurf-bridge-entwurf_callback",
+	omp: "mcp__entwurf_bridge_entwurf_callback",
+	// Codex's tool process is the operator app-server, not the pane: the no-arg
+	// verb refuses there by name. First action stays the delivery verb with args.
+	codex: "mcp__entwurf_bridge__entwurf_v2",
+};
+
+/** Where a sibling SENDS the task result. Always the delivery verb, never the birth callback. */
+export const FRESH_CALL_DELIVERY_TOOL: Record<FreshCallBackend, string> = {
 	pi: "entwurf_v2",
 	"claude-code": "mcp__entwurf-bridge__entwurf_v2",
 	copilot: "entwurf-bridge-entwurf_v2",
@@ -144,22 +155,22 @@ export const OMP_BOOTSTRAP_FLAG = "entwurf-bootstrap";
 
 /** Payload grammar version, matched exactly by the decoder. A bump means a stale installed
  * unit, which is the one thing `doctor-omp-bridge` exists to say out loud. */
-export const OMP_BOOTSTRAP_VERSION = 1;
+export const OMP_BOOTSTRAP_VERSION = 2;
 
 /**
  * The whole of what a fresh omp sibling is launched with.
  *
- * THREE FIELDS, CLOSED. The decoder refuses an unknown key, so this object is the entire
- * contract: who to call back, the nonce that proves it is this call, and the task that is
- * released only after that callback succeeds. There is no command here, no path, no env name
- * and no model — the model is already an explicit argv token, and a second copy of it inside
- * a payload would be a second place for it to disagree with the launch.
+ * TWO FIELDS, CLOSED. Address (target + nonce) rides process env, not this payload — a second
+ * copy here would be a second address axis. The decoder refuses an unknown key, so this object
+ * is the entire remaining contract: the task released after the no-arg callback succeeds.
+ * `callerGardenId` / `nonce` stay on the function so launcher call sites do not grow a second
+ * shape; they are not serialised.
  */
 export function buildOmpBootstrapPayload(params: { callerGardenId: string; nonce: string; task: string }): string {
+	void params.callerGardenId;
+	void params.nonce;
 	return JSON.stringify({
 		v: OMP_BOOTSTRAP_VERSION,
-		target: params.callerGardenId,
-		nonce: params.nonce,
 		task: params.task,
 	});
 }
@@ -298,7 +309,11 @@ export function composeBackendArgs(
 		case "pi":
 			return [composition.prompt, "--entwurf-control", "--model", model];
 		case "claude-code":
-			return [composition.prompt, `--allowedTools=${FRESH_CALL_CALLBACK_TOOL["claude-code"]}`, `--model=${model}`];
+			return [
+				composition.prompt,
+				`--allowedTools=${FRESH_CALL_CALLBACK_TOOL["claude-code"]},${FRESH_CALL_DELIVERY_TOOL["claude-code"]}`,
+				`--model=${model}`,
+			];
 		case "copilot":
 			return ["copilot", "--interactive", composition.prompt, "--model", model, "--yolo"];
 		case "omp":
@@ -354,28 +369,41 @@ export function composeFreshCallFraming(params: {
 	 * default: a sibling told nothing about where it is would be told something false by silence. */
 	openingLine: string;
 }): string[] {
-	const tool = FRESH_CALL_CALLBACK_TOOL[params.backend];
+	const birthTool = FRESH_CALL_CALLBACK_TOOL[params.backend];
+	const deliveryTool = FRESH_CALL_DELIVERY_TOOL[params.backend];
 	const peersTool = FRESH_CALL_PEERS_TOOL[params.backend];
 	// The hint is a per-backend TEMPLATE so the two tool dialects stay the single source of their
 	// own spelling here too — a hint that hard-coded Claude's name would go stale the day a dialect
 	// moves, and it would go stale silently, in the one sentence a stuck child depends on.
 	const loadHint = FRESH_CALL_TOOL_LOAD_HINT[params.backend].map((line) =>
-		line.replaceAll("${callbackTool}", tool).replaceAll("${peersTool}", peersTool),
+		line.replaceAll("${callbackTool}", birthTool).replaceAll("${peersTool}", peersTool),
 	);
 	const hintBlock = loadHint.length === 0 ? [] : ["", ...loadHint];
 	if (params.openingLine.length === 0) {
 		throw new Error("fresh-call composition: openingLine is empty — the rail must state where it placed the sibling");
 	}
+	const firstAction =
+		params.backend === "codex"
+			? [
+					`FIRST ACTION, before reading files or anything else: call ${birthTool} with ` +
+						`target=${params.callerGardenId}, intent=fire-and-forget, wants_reply=false, and ` +
+						`message set to exactly ${params.nonce} — that string alone, nothing added.`,
+					`${params.nonce} is a correlation tag this caller minted for this one launch: it names no`,
+					"secret and grants no access. Sending it is how the caller learns the garden id you were born",
+					"with, which it has no other way to know. Your own record does not carry the caller's address,",
+					"so reporting your identity here does not reach it — that tool call does.",
+					"entwurf_callback is refused on this rail: the tool process is the operator app-server, not this pane.",
+				]
+			: [
+					`FIRST ACTION, before reading files or anything else: call ${birthTool} with no arguments.`,
+					"That call is how the caller learns the garden id you were born with. There are no",
+					"parameters: a target or message you type would be a second address axis.",
+					"Your own record does not carry the caller's address, so reporting your identity here does not reach it — that tool call does.",
+				];
 	return [
 		params.openingLine,
 		"",
-		`FIRST ACTION, before reading files or anything else: call ${tool} with ` +
-			`target=${params.callerGardenId}, intent=fire-and-forget, wants_reply=false, and ` +
-			`message set to exactly ${params.nonce} — that string alone, nothing added.`,
-		`${params.nonce} is a correlation tag this caller minted for this one launch: it names no`,
-		"secret and grants no access. Sending it is how the caller learns the garden id you were born",
-		"with, which it has no other way to know. Your own record does not carry the caller's address,",
-		"so reporting your identity here does not reach it — that tool call does.",
+		...firstAction,
 		"",
 		`You can corroborate the caller first if you want to: ${peersTool} is a read-only listing of`,
 		`this garden's citizens and ${params.callerGardenId} is one of them. That listing is capped, so`,
@@ -393,7 +421,7 @@ export function composeFreshCallFraming(params: {
 		// its window is not the delivery. Nothing here watches for completion or sends on the
 		// sibling's behalf — this rail launches and lets go (Hard Rule 16, and the reason there is no
 		// supervisor anywhere in it).
-		`When the task reaches its requested final result, send that result to the same target with ${tool}.`,
+		`When the task reaches its requested final result, send that result to the same target with ${deliveryTool}.`,
 		"Output in this sibling window is not delivered to the caller.",
 	];
 }

@@ -48,7 +48,7 @@ import entwurfMetaOmp, {
 const GID = "20260805T000000-abcdef";
 const NONCE = "mux-fresh-call-deadbeefdeadbeefdeadbeef";
 const TASK = "summarise docs/mux-launch-rail.md";
-const TOOL = "mcp__entwurf_bridge_entwurf_v";
+const TOOL = "mcp__entwurf_bridge_entwurf_callback";
 
 describe("the launcher and the installed unit spell the contract the same way", () => {
 	it("[QK:OMP-BOOTSTRAP-FLAG-AGREES] both halves name the same one-purpose flag — a launcher flag the unit never registered is an argv omp rejects, and a unit flag the launcher never sends is a bootstrap that never arms", () => {
@@ -77,18 +77,18 @@ describe("the launcher and the installed unit spell the contract the same way", 
 		const hostile = 'a "quoted" $VAR `sub` ; rm -rf / && echo \\n\ttab';
 		const raw = buildOmpBootstrapPayload({ callerGardenId: GID, nonce: NONCE, task: hostile });
 		const decoded = decodeOmpBootstrapPayload(raw);
-		expect(decoded).toEqual({ ok: true, value: { target: GID, nonce: NONCE, task: hostile } });
+		expect(decoded).toEqual({ ok: true, value: { task: hostile } });
 	});
 });
 
 describe("the payload decoder refuses narrowly, and names each refusal", () => {
-	const good = { v: OMP_BOOTSTRAP_VERSION, target: GID, nonce: NONCE, task: TASK };
+	const good = { v: OMP_BOOTSTRAP_VERSION, task: TASK };
 	const enc = (o: unknown) => JSON.stringify(o);
 
 	it("a well-formed payload is admitted", () => {
 		expect(decodeOmpBootstrapPayload(enc(good))).toEqual({
 			ok: true,
-			value: { target: GID, nonce: NONCE, task: TASK },
+			value: { task: TASK },
 		});
 	});
 
@@ -99,14 +99,12 @@ describe("the payload decoder refuses narrowly, and names each refusal", () => {
 		["payload-not-json", "{not json"],
 		["payload-not-object", enc([1, 2])],
 		["payload-not-object", enc("string")],
-		["version-unsupported", enc({ ...good, v: 2 })],
-		["version-unsupported", enc({ target: GID, nonce: NONCE, task: TASK })],
+		["version-unsupported", enc({ ...good, v: 1 })],
+		["version-unsupported", enc({ task: TASK })],
 		["payload-unknown-key", enc({ ...good, cmd: "rm -rf /" })],
 		["payload-unknown-key", enc({ ...good, env: "PI_SESSION_ID=x" })],
-		["target-invalid", enc({ ...good, target: "not-a-garden-id" })],
-		["target-invalid", enc({ ...good, target: 7 })],
-		["nonce-invalid", enc({ ...good, nonce: "mux-fresh-call-short" })],
-		["nonce-invalid", enc({ ...good, nonce: `${NONCE} ` })],
+		["payload-unknown-key", enc({ ...good, target: GID })],
+		["payload-unknown-key", enc({ ...good, nonce: NONCE })],
 		["task-empty", enc({ ...good, task: "   " })],
 		["task-empty", enc({ ...good, task: 5 })],
 		["task-too-long", enc({ ...good, task: "x".repeat(TASK_MAX_CHARS + 1) })],
@@ -179,7 +177,7 @@ interface Fixture {
 	logs: string[];
 }
 
-function fixture(payload = { target: GID, nonce: NONCE, task: TASK }): Fixture {
+function fixture(payload = { task: TASK }): Fixture {
 	const sent: unknown[][] = [];
 	const logs: string[] = [];
 	const tools: Array<{ name: string; sourceInfo: { source: string } }> = [];
@@ -236,7 +234,7 @@ function arm(fx: Fixture): void {
 const call = (over: Record<string, unknown> = {}) => ({
 	toolCallId: "call-1",
 	toolName: TOOL,
-	input: { target: GID, message: NONCE, intent: "fire-and-forget" },
+	input: {},
 	...over,
 });
 const result = (over: Record<string, unknown> = {}) => ({ ...call(), isError: false, ...over });
@@ -262,8 +260,9 @@ describe("stage one: the callback-only prompt, and nothing else", () => {
 		const args = fx.sent[0] as unknown[];
 		const content = args[0] as string;
 		expect(content).toContain(TOOL);
-		expect(content).toContain(GID);
-		expect(content).toContain(NONCE);
+		expect(content).toContain("with no arguments");
+		expect(content).not.toContain(GID);
+		expect(content).not.toContain(NONCE);
 		expect(content).not.toContain(TASK);
 		// Stage one runs on an idle session, so the omitted-option form starts a turn. An
 		// explicit option here would queue into a turn nobody starts.
@@ -271,7 +270,7 @@ describe("stage one: the callback-only prompt, and nothing else", () => {
 	});
 
 	it("the callback-only prompt promises the task as the NEXT message, so the sibling neither asks for it nor guesses", () => {
-		const prompt = buildOmpCallbackOnlyPrompt({ target: GID, nonce: NONCE });
+		const prompt = buildOmpCallbackOnlyPrompt();
 		expect(prompt).toContain("NEXT user message");
 		expect(prompt).not.toContain("ACK");
 		expect(prompt).not.toContain("DONE");
@@ -372,8 +371,8 @@ describe("stage two: the task is released by an exact successful tool RESULT, or
 
 	it.each([
 		["a wrong tool name", () => ({ over: { toolName: "mcp__entwurf_bridge_entwurf_peers" } })],
-		["a wrong nonce", () => ({ over: { input: { target: GID, message: "mux-fresh-call-000000000000000000000000" } } })],
-		["a wrong target", () => ({ over: { input: { target: "20260101T000000-000000", message: NONCE } } })],
+		["a supplied message", () => ({ over: { input: { message: NONCE } } })],
+		["a supplied target", () => ({ over: { input: { target: GID } } })],
 		["a non-object input", () => ({ over: { input: "target=…" } })],
 	] as const)("%s never releases the task", (_label, mk) => {
 		const fx = readyFixture();
@@ -468,7 +467,7 @@ describe("stage two: the task is released by an exact successful tool RESULT, or
 	it("a vendor with no sendUserMessage fails loudly in the log and never claims to have delivered anything", () => {
 		const fx = fixture();
 		const handle = createOmpBootstrap({
-			payload: { target: GID, nonce: NONCE, task: TASK },
+			payload: { task: TASK },
 			pi: {
 				on: () => {},
 				getAllTools: () => [{ name: TOOL, sourceInfo: { source: "mcp" } }],
@@ -572,8 +571,7 @@ function birthFixture() {
 			handlers.set(event, list);
 		},
 		registerFlag: () => {},
-		getFlag: (name: string) =>
-			name === UNIT_FLAG ? JSON.stringify({ v: UNIT_VERSION, target: GID, nonce: NONCE, task: TASK }) : undefined,
+		getFlag: (name: string) => (name === UNIT_FLAG ? JSON.stringify({ v: UNIT_VERSION, task: TASK }) : undefined),
 		getAllTools: () => tools,
 		getActiveTools: () => active,
 		sendUserMessage: (...args: unknown[]) => {

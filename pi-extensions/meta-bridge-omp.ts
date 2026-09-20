@@ -83,7 +83,6 @@ import {
 	type MetaRootBundle,
 	ompMetaRootBase,
 	ompMetaRoots,
-	requireGardenId,
 	upsertMetaSession,
 	writeMetaSenderMarker,
 } from "./lib/meta-session.ts";
@@ -162,7 +161,7 @@ export const OMP_BOOTSTRAP_FLAG = "entwurf-bootstrap";
 /** Payload grammar version. A payload that does not say exactly this is refused rather than
  * best-guessed: the launcher and this unit ship in the same package, so a mismatch means a
  * STALE installed unit — the one condition `doctor-omp-bridge` exists to name out loud. */
-export const OMP_BOOTSTRAP_VERSION = 1;
+export const OMP_BOOTSTRAP_VERSION = 2;
 
 /**
  * The model-facing callback tool, spelled for omp. `[측정]` the vendor's minter sanitises to
@@ -177,7 +176,7 @@ export const OMP_BOOTSTRAP_VERSION = 1;
  * spellings are held equal by `test/omp-fresh-bootstrap.contract.test.ts`, the same shape
  * `check-omp-fresh-preflight` already uses for the preflight's reproduced oracles.
  */
-export const OMP_BOOTSTRAP_CALLBACK_TOOL = "mcp__entwurf_bridge_entwurf_v";
+export const OMP_BOOTSTRAP_CALLBACK_TOOL = "mcp__entwurf_bridge_entwurf_callback";
 
 /** Task ceiling, held equal to the launcher's `TASK_MAX_CHARS` by the same contract test. */
 export const OMP_BOOTSTRAP_TASK_MAX_CHARS = 16000;
@@ -195,15 +194,9 @@ export const OMP_BOOTSTRAP_READY_TIMEOUT_MS = 60_000;
  * primitive; a FIXED DELAY is forbidden because the gap is a race, not a constant. */
 export const OMP_BOOTSTRAP_POLL_MS = 100;
 
-/** The nonce the launcher mints (`mintNonce`: `mux-fresh-call-` + 12 random bytes as hex). */
-const BOOTSTRAP_NONCE_RE = /^mux-fresh-call-[0-9a-f]{24}$/;
-
-/** What the launcher put on the flag. Exactly three fields — a target to call back to, the
- * correlation nonce, and the operator's task. Nothing here is a command, a path or an env
- * name, and the decoder refuses anything wider. */
+/** What the launcher put on the flag. Address rides process env; this payload is the task
+ * released after the no-arg callback succeeds. The decoder refuses anything wider. */
 export interface OmpBootstrapPayload {
-	target: string;
-	nonce: string;
 	task: string;
 }
 
@@ -216,8 +209,6 @@ export type OmpBootstrapRejectReason =
 	| "payload-not-object"
 	| "version-unsupported"
 	| "payload-unknown-key"
-	| "target-invalid"
-	| "nonce-invalid"
 	| "task-empty"
 	| "task-too-long";
 
@@ -228,7 +219,7 @@ export type OmpBootstrapDecode =
 /** The wire keys, closed. An unknown key is a REFUSAL rather than an ignored extra: this
  * flag is the one thing a caller can put arbitrary bytes into, so the decoder's job is to
  * make "what the launcher meant" and "what this unit will act on" the same set. */
-const BOOTSTRAP_KEYS = new Set(["v", "target", "nonce", "task"]);
+const BOOTSTRAP_KEYS = new Set(["v", "task"]);
 
 /**
  * Read the flag value into a payload, or name why not.
@@ -256,18 +247,10 @@ export function decodeOmpBootstrapPayload(raw: unknown): OmpBootstrapDecode {
 	for (const key of Object.keys(obj)) {
 		if (!BOOTSTRAP_KEYS.has(key)) return { ok: false, reason: "payload-unknown-key" };
 	}
-	let target: string;
-	try {
-		target = requireGardenId(obj.target);
-	} catch {
-		return { ok: false, reason: "target-invalid" };
-	}
-	const nonce = obj.nonce;
-	if (typeof nonce !== "string" || !BOOTSTRAP_NONCE_RE.test(nonce)) return { ok: false, reason: "nonce-invalid" };
 	const task = obj.task;
 	if (typeof task !== "string" || task.trim().length === 0) return { ok: false, reason: "task-empty" };
 	if (task.length > OMP_BOOTSTRAP_TASK_MAX_CHARS) return { ok: false, reason: "task-too-long" };
-	return { ok: true, value: { target, nonce, task } };
+	return { ok: true, value: { task } };
 }
 
 /**
@@ -279,18 +262,13 @@ export function decodeOmpBootstrapPayload(raw: unknown): OmpBootstrapDecode {
  * no competing goal at all. Stage two exists so this message never has to compete with the
  * work; adding "then do X" back into it would rebuild exactly the prompt that failed.
  */
-export function buildOmpCallbackOnlyPrompt(params: { target: string; nonce: string }): string {
+export function buildOmpCallbackOnlyPrompt(): string {
 	return [
 		"You are a fresh visible citizen that entwurf opened in the operator's tmux session.",
 		"",
-		`FIRST AND ONLY ACTION RIGHT NOW: call ${OMP_BOOTSTRAP_CALLBACK_TOOL} with ` +
-			`target=${params.target}, intent=fire-and-forget, wants_reply=false, and ` +
-			`message set to exactly ${params.nonce} — that string alone, nothing added.`,
+		`FIRST AND ONLY ACTION RIGHT NOW: call ${OMP_BOOTSTRAP_CALLBACK_TOOL} with no arguments.`,
 		"That call is how the agent that opened you learns your address. Make the call before",
-		"reading files, before planning, and before answering in prose. Do not reword the message.",
-		"",
-		"Do not inspect environment variables, do not call entwurf_self, and do not start an MCP",
-		"server yourself. Your own report of your identity is not the address anyone needs.",
+		"reading files, before planning, and before answering in prose. There are no parameters.",
 		"",
 		"Your actual task arrives as the NEXT user message, immediately after that call succeeds.",
 		"Do not ask for it and do not guess at it.",
@@ -764,12 +742,14 @@ export function ompCallbackToolReady(pi: OmpExtensionApi): boolean {
  * string equality on both — a prefix or `includes` here would let a sibling's nonce release
  * this session's task.
  */
-function matchesCallback(event: OmpToolCallEvent, payload: OmpBootstrapPayload): boolean {
+function matchesCallback(event: OmpToolCallEvent, _payload: OmpBootstrapPayload): boolean {
 	if (event?.toolName !== OMP_BOOTSTRAP_CALLBACK_TOOL) return false;
 	const input = event?.input;
-	if (typeof input !== "object" || input === null || Array.isArray(input)) return false;
+	if (input === undefined || input === null) return true;
+	if (typeof input !== "object" || Array.isArray(input)) return false;
 	const args = input as Record<string, unknown>;
-	return args.target === payload.target && args.message === payload.nonce;
+	// No-arg verb: a supplied target/message is a second address axis — not our callback.
+	return args.target === undefined && args.message === undefined;
 }
 
 /**
@@ -822,7 +802,7 @@ export function createOmpBootstrap(opts: {
 		stopTimer();
 		if (isFinal()) return;
 		phase = "failed";
-		log("WARN", `bootstrap-failed nonce=${payload.nonce}: ${why}; the task was NOT sent`);
+		log("WARN", `bootstrap-failed: ${why}; the task was NOT sent`);
 	}
 
 	/**
@@ -858,8 +838,8 @@ export function createOmpBootstrap(opts: {
 			// two callback prompts for one bootstrap.
 			phase = "callback-sent";
 			stopTimer();
-			log("INFO", `bootstrap-ready nonce=${payload.nonce}: callback tool live, sending callback-only prompt`);
-			send(buildOmpCallbackOnlyPrompt({ target: payload.target, nonce: payload.nonce }));
+			log("INFO", "bootstrap-ready: callback tool live, sending callback-only prompt");
+			send(buildOmpCallbackOnlyPrompt());
 			return;
 		}
 		if (timers.now() >= deadline) {
@@ -895,14 +875,14 @@ export function createOmpBootstrap(opts: {
 			const id = event?.toolCallId;
 			if (typeof id !== "string" || id.length === 0) return;
 			callId = id;
-			log("INFO", `bootstrap-callback-observed nonce=${payload.nonce} toolCallId=${id}`);
+			log("INFO", `bootstrap-callback-observed toolCallId=${id}`);
 		},
 		onToolResult(event: OmpToolResultEvent): void {
 			if (phase !== "callback-sent" || callId === null) return;
 			if (event?.toolCallId !== callId) return;
 			if (!matchesCallback(event, payload)) return;
 			if (event?.isError !== false) {
-				log("WARN", `bootstrap-callback-errored nonce=${payload.nonce} toolCallId=${callId}; the task was NOT sent`);
+				log("WARN", `bootstrap-callback-errored toolCallId=${callId}; the task was NOT sent`);
 				return;
 			}
 			// RELEASED, AND THE TASK IS NOT SENT HERE. This handler runs inside the callback
@@ -911,7 +891,7 @@ export function createOmpBootstrap(opts: {
 			// record that the callback provably succeeded; `onTurnEnd` owns the send.
 			phase = "released";
 			stopTimer();
-			log("INFO", `bootstrap-released nonce=${payload.nonce} toolCallId=${callId}: task armed for the next turn_end`);
+			log("INFO", `bootstrap-released toolCallId=${callId}: task armed for the next turn_end`);
 		},
 		/**
 		 * The stage-two boundary: the callback turn is over, so the session is at the edge
@@ -932,7 +912,7 @@ export function createOmpBootstrap(opts: {
 		onTurnEnd(): void {
 			if (phase !== "released") return;
 			phase = "task-sent";
-			log("INFO", `bootstrap-task-sent nonce=${payload.nonce}: delivering the task at the turn_end boundary`);
+			log("INFO", "bootstrap-task-sent: delivering the task at the turn_end boundary");
 			send(payload.task);
 		},
 		invalidate(why: string): void {
@@ -942,7 +922,7 @@ export function createOmpBootstrap(opts: {
 			// caller's task must die with the session it was addressed to.
 			if (isFinal()) return;
 			phase = "failed";
-			log("INFO", `bootstrap-invalidated nonce=${payload.nonce}: ${why}; the task was NOT sent`);
+			log("INFO", `bootstrap-invalidated: ${why}; the task was NOT sent`);
 		},
 	};
 }
@@ -1118,7 +1098,7 @@ export function startOmpBootstrap(opts: {
 	const handle = createOmpBootstrap({ payload: decoded.value, pi, timers, log });
 	activeBootstrap = { sessionId: envelope.nativeSessionId, handle };
 	bootstrapConsumed = true;
-	log("INFO", `bootstrap-armed nonce=${decoded.value.nonce} target=${decoded.value.target}`);
+	log("INFO", "bootstrap-armed: payload admitted, waiting for callback tool");
 	handle.start();
 }
 

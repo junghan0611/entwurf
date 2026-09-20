@@ -24,6 +24,7 @@ import {
 	composeFreshCallPrompt,
 	FRESH_CALL_BACKENDS,
 	FRESH_CALL_CALLBACK_TOOL,
+	FRESH_CALL_DELIVERY_TOOL,
 	FRESH_CALL_PEERS_TOOL,
 	FRESH_CALL_TOOL_LOAD_HINT,
 	type FreshCallComposition,
@@ -106,13 +107,13 @@ describe("the tmux rail's bytes did not move when the code did", () => {
 		}
 		// omp is read, never pattern-matched: its `[a-z_]` sanitizer ate the digit in `entwurf_v2`,
 		// and `entwurf_peers` has no digit, so the same rule keeps the whole word here.
-		expect(FRESH_CALL_CALLBACK_TOOL.omp).toBe("mcp__entwurf_bridge_entwurf_v");
+		expect(FRESH_CALL_CALLBACK_TOOL.omp).toBe("mcp__entwurf_bridge_entwurf_callback");
 		expect(FRESH_CALL_PEERS_TOOL.omp).toBe("mcp__entwurf_bridge_entwurf_peers");
 	});
 
 	it("[QK:FRESHCOMP-RESULT-GOES-TO-CALLER] the first turn names WHERE the result goes, in the same dialect as the callback and identically on both rails — a sibling with a visible window has no way to know its window is not the delivery", () => {
 		for (const backend of FRESH_CALL_BACKENDS) {
-			const tool = FRESH_CALL_CALLBACK_TOOL[backend];
+			const tool = FRESH_CALL_DELIVERY_TOOL[backend];
 			// The sentence is TOPOLOGY, in two halves: where to send it, and why sending is needed
 			// at all. The second half is what makes the first one necessary.
 			const expected = [
@@ -128,8 +129,8 @@ describe("the tmux rail's bytes did not move when the code did", () => {
 				// rail that grew its own version of this one would be composing a second contract.
 				expect(framing.slice(-2)).toEqual(expected);
 			}
-			// And it is the CALLBACK tool, never the peers one: the result is a delivery, not a lookup.
-			expect(expected[0]).toContain(FRESH_CALL_CALLBACK_TOOL[backend]);
+			// And it is the DELIVERY tool, never the birth callback or the peers one.
+			expect(expected[0]).toContain(FRESH_CALL_DELIVERY_TOOL[backend]);
 			expect(expected[0]).not.toContain(FRESH_CALL_PEERS_TOOL[backend]);
 		}
 		// Nothing in the leaf watches for completion or sends on the sibling's behalf: the sentence

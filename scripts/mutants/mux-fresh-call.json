@@ -18,7 +18,7 @@
 			"title": "claude-code goes back to the variadic space form, which swallows the prompt as an option value",
 			"subject": "pi-extensions/lib/fresh-call-composition.ts",
 			"find": [
-				"\t\t\treturn [composition.prompt, `--allowedTools=${FRESH_CALL_CALLBACK_TOOL[\"claude-code\"]}`, `--model=${model}`];"
+				"\t\t\treturn [\n\t\t\t\tcomposition.prompt,\n\t\t\t\t`--allowedTools=${FRESH_CALL_CALLBACK_TOOL[\"claude-code\"]},${FRESH_CALL_DELIVERY_TOOL[\"claude-code\"]}`,\n\t\t\t\t`--model=${model}`,\n\t\t\t];"
 			],
 			"replace": [
 				"\t\t\treturn [composition.prompt, \"--allowedTools\", FRESH_CALL_CALLBACK_TOOL[\"claude-code\"], `--model=${model}`];"
@@ -55,9 +55,11 @@
 			"title": "Claude Code drops the explicit model token and silently resolves its ambient Opus default again",
 			"subject": "pi-extensions/lib/fresh-call-composition.ts",
 			"find": [
-				"\t\t\treturn [composition.prompt, `--allowedTools=${FRESH_CALL_CALLBACK_TOOL[\"claude-code\"]}`, `--model=${model}`];"
+				"\t\t\treturn [\n\t\t\t\tcomposition.prompt,\n\t\t\t\t`--allowedTools=${FRESH_CALL_CALLBACK_TOOL[\"claude-code\"]},${FRESH_CALL_DELIVERY_TOOL[\"claude-code\"]}`,\n\t\t\t\t`--model=${model}`,\n\t\t\t];"
 			],
-			"replace": ["\t\t\treturn [composition.prompt, `--allowedTools=${FRESH_CALL_CALLBACK_TOOL[\"claude-code\"]}`];"],
+			"replace": [
+				"\t\t\treturn [\n\t\t\t\tcomposition.prompt,\n\t\t\t\t`--allowedTools=${FRESH_CALL_CALLBACK_TOOL[\"claude-code\"]},${FRESH_CALL_DELIVERY_TOOL[\"claude-code\"]}`,\n\t\t\t];"
+			],
 			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
 			"timeoutSeconds": 120,
 			"signature": "[QK:FRESHCALL-CLAUDE-MODEL-ARGV]",
@@ -67,8 +69,8 @@
 			"claim": "FRESHCALL-CALLBACK-PRECEDES-TASK",
 			"title": "the task is framed before the callback instruction, so a sibling that stalls in the task never names itself",
 			"subject": "pi-extensions/lib/fresh-call-composition.ts",
-			"find": ["\t\t`FIRST ACTION, before reading files or anything else: call ${tool} with ` +"],
-			"replace": ["\t\t`FINAL ACTION, after completing the task: call ${tool} with ` +"],
+			"find": ["\t\t\t\t\t`FIRST ACTION, before reading files or anything else: call ${birthTool} with no arguments.`"],
+			"replace": ["\t\t\t\t\t`FINAL ACTION, after completing the task: call ${birthTool} with no arguments.`"],
 			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
 			"timeoutSeconds": 120,
 			"signature": "[QK:FRESHCALL-CALLBACK-PRECEDES-TASK]",
@@ -275,7 +277,7 @@
 			"claim": "FRESHCALL-COPILOT-CALLBACK-TOOL",
 			"title": "the Copilot callback names Claude Code's `mcp__server__tool` spelling — a dialect copied instead of measured, and the whole first turn is spent looking for a tool that is not there",
 			"subject": "pi-extensions/lib/fresh-call-composition.ts",
-			"find": ["\tcopilot: \"entwurf-bridge-entwurf_v2\","],
+			"find": ["\tcopilot: \"entwurf-bridge-entwurf_callback\","],
 			"replace": ["\tcopilot: \"mcp__entwurf-bridge__entwurf_v2\","],
 			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
 			"timeoutSeconds": 180,
@@ -669,7 +671,7 @@
 			"title": "the first turn stops naming where the result goes, so a sibling finishes its task, prints the answer in its own window, and the caller never learns it is done",
 			"subject": "pi-extensions/lib/fresh-call-composition.ts",
 			"find": [
-				"\t\t`When the task reaches its requested final result, send that result to the same target with ${tool}.`,"
+				"\t\t`When the task reaches its requested final result, send that result to the same target with ${deliveryTool}.`,"
 			],
 			"replace": [""],
 			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
