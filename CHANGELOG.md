@@ -6,6 +6,28 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ### Changed
 
+- **`plugins/herdr` 0.4.1 — the README is rebuilt around the two questions a visitor actually
+  arrives with: which route do I want, and what do I type first.** It now opens by saying what the
+  plugin is *not* (a second workbench), then a route chooser, the Herdr built-ins this plugin
+  depends on versus what Entwurf adds, a quick start that runs from a raw box in nine steps to the
+  first status pane, and only then the direct/mux comparison, boundaries, runtime and developer
+  detail. Four facts were repaired against source while re-reading it: the install narration is
+  four usage notes, not two (`lib/build.mjs:217-227,292-294`); the receipt section named the
+  superseded npm 0.23.1 pin instead of the 0.24.0 lock at `deb73f1`; `check-bridge` asserts
+  **eight** garden verbs, not seven (`run.sh:4708` `EXPECT_TOOLS`); and an unmeasured "~45 s,
+  hundreds of MB" claim was dropped. The route paragraph no longer says the two routes install the
+  same *runtime* — they install the same capability package, but this plugin pins an exact
+  `@junghanacs/entwurf@<version>` plus its published sha512 while a direct `npm install -g`
+  follows whatever version npm is asked for. The neighbouring-plugin table is now explicitly
+  "observed mechanism families, not a census or a compatibility matrix", and every family-wide
+  property assertion in it (pane-bound addresses, workspace-scoped identity, receipts as a
+  non-goal, "structurally the closest to Entwurf") was narrowed to implementation-specific: the
+  differentiator stated in prose is Entwurf's record-backed garden id and the no-argument same-id
+  `entwurf_resume_call`, not a uniqueness claim about durable addresses. Docs ship with the
+  plugin, so the manifest moves with them. Receipts: `check-herdr-plugin` 32 ok,
+  `check-herdr-plugin-build` 14 ok, `check-herdr-plugin-profile` 14 ok, `check-dep-versions` ok
+  (pi 0.86.0 across 9 ranges, unchanged), `check-node-floor-coherence` ok, all four relative links
+  resolve, `git diff --check` clean.
 - **The plugin runtime lock is pinned to npm `@junghanacs/entwurf@0.24.0`** and its published
   sha512, closing the candidate window 0.24.0 shipped in — the second of the two steps the 0.24.0
   entry below names. The integrity was measured here twice, independently: `npm view
