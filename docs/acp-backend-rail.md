@@ -93,7 +93,7 @@ undifferentiated "supported" column is what let a Claude PASS read as if it also
 | Surface | Declaration | Class | What a green actually says |
 |---|---|---|---|
 | Entwurf package | `0.24.0` | shipped baseline | the package contract these rows belong to |
-| pi runtime | devDep exact `0.86.0`, peer `>=0.86.0 <0.87` | **exact** oracle + **closed range** | built and certified against 0.86.0; hosts inside the range are accepted, and the ceiling moves only on measurement |
+| pi runtime | devDep exact `0.87.0`, peer `>=0.87.0 <0.88` | **exact** oracle + **closed range** | built and certified against 0.87.0; hosts inside the range are accepted, and the ceiling moves only on measurement |
 | ACP wire SDK | `@agentclientprotocol/sdk 1.4.0` | **exact** | the shared wire oracle both adapters speak |
 | Claude ACP adapter | `@agentclientprotocol/claude-agent-acp 0.79.0` | **exact**, bundled | the adapter we ship and certify; resolved before any PATH fallback |
 | Claude Agent SDK | `0.3.274` (transitive) | **exact** oracle | the runtime risk surface behind the adapter |
@@ -475,6 +475,53 @@ already emitted a `usage_update` at `compact_boundary` and 0.75.1 still does
 `backend.ts:1286-1288` names as #96's weak floor gains no new trigger here.
 
 Receipt, limits and the `completed`-branch gap: `scripts/raw-acp-compaction-measure/README.md`.
+
+## 11-9. A steer reaches an ACP receiver one child turn late (#120 P5, measurement only)
+
+`entwurf_v2 mode:"steer"` injects into the receiver's pi steering queue; it is not an ACP concept.
+On a NATIVE pi receiver that queue is drained seconds later, and on an ACP receiver it is drained
+one whole child turn later. The difference is not a different drain point — it is the same one.
+
+`[측정 2026-09-22, pi-agent-core 0.87.0]` `dist/agent-loop.js:141` awaits `streamAssistantResponse`
+once per turn, and the steering drain is `:186`, after the `turn_end` emit at `:185`. For this rail
+that one await is `pi-extensions/lib/acp/backend.ts:815` —
+`await Promise.race([session.connection.prompt(promptArgs), lifecycle])` — so it spans the entire
+`session/prompt` round trip. The child's own tool calls and subagent turns are invisible to pi, so
+pi cannot reach `:186` until the child turn ends. Same code path as native, one long await.
+
+That is a property, not a silent failure: the sender's receipt already says `queued-steer` and
+`DELIVERY.md` already states that both queues are volatile and unordered against each other, so
+nothing here is promised and then quietly not delivered. `[QK:PI-QUEUE-NO-MIDFLIGHT-MERGE]`
+(`test/pi-queue.oracle.test.ts`) proves the mechanism on the installed vendor: a message queued
+while a turn is in flight never joins that turn and arrives as a later one. The delay's SIZE is
+that turn's duration, which the same cell fixes by construction.
+
+**Forwarding is not adopted here.** `[측정 2026-09-22]` standard ACP has no steer method at all —
+enumerating the installed `@agentclientprotocol/sdk`'s `AGENT_METHODS` and `CLIENT_METHODS` yields
+zero entries containing `steer`. What exists is a PRIVATE vendor extension,
+`_session/steering` in `@agentclientprotocol/claude-agent-acp@0.79.0`
+(`dist/acp-agent.js:163`, handler at `:7792`), client→agent, advertised through
+`InitializeResponse._meta.steering.supported`. Our client sends `initialize`, `session/new`,
+`session/prompt`, `session/set_config_option` and `session/cancel` (`acp-client.ts:138-149`) and
+has no steering path at all.
+
+Adopting it would mean owning five things this driver does not own today, each a new contract
+rather than a wiring change:
+
+1. reading the `_meta.steering.supported` capability, and deciding what a backend without it is;
+2. a typed schema and version fence for a request that is outside the SDK's method set, so a
+   private extension changing shape is a named refusal rather than a silent no-op;
+3. a backend-specific concurrent-request seam from the control extension to a live ACP connection —
+   today a turn is one in-flight `prompt`, and this adds a second request during it;
+4. an exactly-once / ordering policy that picks the outer pi queue or the vendor injection but never
+   both, since those are two independent orderings that currently do not meet;
+5. a receipt mapping for the extension's outcomes — `injected`, `promptRequired`, `startedNewTurn` —
+   plus the idle race, cancel and release meanings behind them. (`idleBehavior:"promptRequired"`
+   lets a host refuse the detached `startedNewTurn` path, but that opt-in is itself a new contract.)
+
+The adapter keeps its own turn-settlement bookkeeping internally, and our event mapper ignores
+update kinds it does not handle (`event-mapper.ts:377-378`), so nothing above is a claim that
+Entwurf must replicate vendor internals. The reason to stay put is the five contracts, not a ledger.
 
 ## Open work
 

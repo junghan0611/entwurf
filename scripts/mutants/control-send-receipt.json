@@ -1,0 +1,235 @@
+{
+	"schemaVersion": 1,
+	"lane": "control-send-receipt",
+	"mutants": [
+		{
+			"claim": "SEND-RECEIPT-IDLE-IS-SENT",
+			"title": "an idle receiver's DIRECT trigger is reported as a queue it never touched, so the one boundary that actually started a turn becomes indistinguishable from the two that did not",
+			"subject": "pi-extensions/lib/control-send-receipt.ts",
+			"find": ["\tif (input.idle) return \"sent\";"],
+			"replace": ["\tif (false) return \"sent\";"],
+			"gate": ["bash", "run.sh", "check-control-send-receipt"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:SEND-RECEIPT-IDLE-IS-SENT]",
+			"signatureSource": "pi-extensions/lib/control-send-receipt.test.ts"
+		},
+		{
+			"claim": "SEND-RECEIPT-BUSY-STEER-IS-QUEUED",
+			"title": "a busy receiver's steering queue is reported as `sent`, which is the exact false claim #120 was opened about: the sender is told the message landed while it lies in volatile process memory behind whatever else is there",
+			"subject": "pi-extensions/lib/control-send-receipt.ts",
+			"find": ["\treturn input.mode === \"follow_up\" ? \"queued-follow-up\" : \"queued-steer\";"],
+			"replace": ["\treturn input.mode === \"follow_up\" ? \"queued-follow-up\" : \"sent\";"],
+			"gate": ["bash", "run.sh", "check-control-send-receipt"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:SEND-RECEIPT-BUSY-STEER-IS-QUEUED]",
+			"signatureSource": "pi-extensions/lib/control-send-receipt.test.ts"
+		},
+		{
+			"claim": "SEND-RECEIPT-BUSY-FOLLOWUP-IS-QUEUED",
+			"title": "the follow-up queue is reported under the steering queue's name, collapsing the only fact that explains a reorder after it happens — a later steer overtakes every earlier follow_up, and one name for both makes that unaccountable",
+			"subject": "pi-extensions/lib/control-send-receipt.ts",
+			"find": ["? \"queued-follow-up\" : \"queued-steer\";"],
+			"replace": ["? \"queued-steer\" : \"queued-steer\";"],
+			"gate": ["bash", "run.sh", "check-control-send-receipt"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:SEND-RECEIPT-BUSY-FOLLOWUP-IS-QUEUED]",
+			"signatureSource": "pi-extensions/lib/control-send-receipt.test.ts"
+		},
+		{
+			"claim": "SEND-RECEIPT-UNKNOWN-IS-ACCEPTED-NOT-SENT",
+			"title": "an answer this build cannot classify is reported as `sent`, so a version-skewed peer's acceptance is dressed as a direct injection nobody observed",
+			"subject": "pi-extensions/lib/control-send-receipt.ts",
+			"find": ["\treturn isObservedBoundary(value) ? value : \"accepted-unknown-boundary\";"],
+			"replace": ["\treturn isObservedBoundary(value) ? value : \"sent\";"],
+			"gate": ["bash", "run.sh", "check-control-send-receipt"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:SEND-RECEIPT-UNKNOWN-IS-ACCEPTED-NOT-SENT]",
+			"signatureSource": "pi-extensions/lib/control-send-receipt.test.ts"
+		},
+		{
+			"claim": "SEND-BOUNDARY-CARRIED",
+			"title": "the primary leg reports a fixed `sent` instead of the boundary the receiver actually named, so every busy acceptance reads as a direct trigger again",
+			"subject": "pi-extensions/lib/entwurf-v2-send.ts",
+			"find": [
+				"\treturn result.success ? { outcome: \"sent\", boundary: requireBoundary(result) } : inBandRejected(result);"
+			],
+			"replace": ["\treturn result.success ? { outcome: \"sent\", boundary: \"sent\" } : inBandRejected(result);"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-send"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:SEND-BOUNDARY-CARRIED]",
+			"signatureSource": "pi-extensions/lib/entwurf-v2-send.test.ts"
+		},
+		{
+			"claim": "SEND-FALLBACK-KEEPS-BOUNDARY",
+			"title": "a re-resolved socket drops the boundary it was handed, so a first socket that died and a second that was BUSY come out reading as a delivery — the route axis erasing the receipt axis",
+			"subject": "pi-extensions/lib/entwurf-v2-send.ts",
+			"find": [
+				"\t\t\t\treturn r.success ? { outcome: \"fallback-sent\", boundary: requireBoundary(r) } : inBandRejected(r);"
+			],
+			"replace": ["\t\t\t\treturn r.success ? { outcome: \"fallback-sent\", boundary: \"sent\" } : inBandRejected(r);"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-send"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:SEND-FALLBACK-KEEPS-BOUNDARY]",
+			"signatureSource": "pi-extensions/lib/entwurf-v2-send.test.ts"
+		},
+		{
+			"claim": "SEND-SOCKET-SUCCESS-NEEDS-BOUNDARY",
+			"title": "a successful socket answer with no boundary is accepted silently, so a bypassed wire seam — the one shape that must never pass for a direct trigger — reads exactly like one",
+			"subject": "pi-extensions/lib/entwurf-v2-send.ts",
+			"find": ["\tif (result.boundary === undefined) {"],
+			"replace": ["\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-send"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:SEND-SOCKET-SUCCESS-NEEDS-BOUNDARY]",
+			"signatureSource": "pi-extensions/lib/entwurf-v2-send.test.ts"
+		},
+		{
+			"claim": "SEND-RECEIVER-EMITS-BOUNDARY",
+			"title": "the receiver goes back to answering with a bare `delivered:true`, which was equally true of a direct trigger and of a message rotting in a queue — the bare `delivered` DELIVERY.md refuses by name, and the sender is left with nothing to render",
+			"subject": "pi-extensions/entwurf-control.ts",
+			"find": ["\t\t\tboundary: sendReceiptBoundary({ idle: isIdle, mode }),"],
+			"replace": ["\t\t\tdelivered: true,"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-surface"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:SEND-RECEIVER-EMITS-BOUNDARY]",
+			"signatureSource": "scripts/check-entwurf-v2-surface.ts"
+		},
+		{
+			"claim": "SEND-SURFACE-RENDERS-BOUNDARY",
+			"title": "the sender surface renders the internal route word again instead of the receiver's boundary, putting `control-socket → sent` back on a message that is sitting in a queue",
+			"subject": "pi-extensions/lib/entwurf-v2-surface.ts",
+			"find": [
+				"\t\t\t\t\treturn { text: `entwurf_v2 control-socket → ${boundary}${route}${enqueued}`, isError: false };"
+			],
+			"replace": [
+				"\t\t\t\t\treturn { text: `entwurf_v2 control-socket → ${o.outcome}${route}${enqueued}`, isError: false };"
+			],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-surface"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:SEND-SURFACE-RENDERS-BOUNDARY]",
+			"signatureSource": "scripts/check-entwurf-v2-surface.ts"
+		},
+		{
+			"claim": "SEND-SURFACE-UNKNOWN-NOT-SENT",
+			"title": "an unclassifiable acceptance is rendered with the word `sent`, which is the claim the whole axis exists to stop making — it was accepted, and nobody observed a direct injection",
+			"subject": "pi-extensions/lib/entwurf-v2-surface.ts",
+			"find": [
+				"\t\t\t\t\t\to.boundary ?? (o.outcome === \"fallback-sent\" ? \"mailbox-enqueued\" : \"accepted-unknown-boundary\");"
+			],
+			"replace": [
+				"\t\t\t\t\t\to.boundary === \"accepted-unknown-boundary\" ? \"sent\" : (o.boundary ?? \"mailbox-enqueued\");"
+			],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-surface"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:SEND-SURFACE-UNKNOWN-NOT-SENT]",
+			"signatureSource": "scripts/check-entwurf-v2-surface.ts"
+		},
+		{
+			"claim": "SEND-SURFACE-FALLBACK-KEEPS-BOUNDARY",
+			"title": "the re-resolved route annotation is dropped, so a caller cannot tell that its first socket was dead — the two legs render identically and a dead-socket host looks healthy",
+			"subject": "pi-extensions/lib/entwurf-v2-surface.ts",
+			"find": ["\t\t\t\t\tconst route = o.outcome === \"fallback-sent\" ? \" (via a re-resolved route)\" : \"\";"],
+			"replace": ["\t\t\t\t\tconst route = \"\";"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-surface"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:SEND-SURFACE-FALLBACK-KEEPS-BOUNDARY]",
+			"signatureSource": "scripts/check-entwurf-v2-surface.ts"
+		},
+		{
+			"claim": "SEND-PROSE-NO-INTERRUPT",
+			"title": "the caller-facing description of `mode` goes back to promising that steer interrupts the current turn — a caller picks it for urgency and gets a queue drained only after the turn ends, with no order against the other queue",
+			"subject": "pi-extensions/lib/entwurf-v2-contract-schema.ts",
+			"find": ["\t\t\t\t\"delivery mode — NOT the ownership axis (F1) nor liveness routing."],
+			"replace": [
+				"\t\t\t\t\"delivery mode (steer = interrupt current turn, follow_up = queue) — NOT the ownership axis (F1) nor liveness routing."
+			],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-surface"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:SEND-PROSE-NO-INTERRUPT]",
+			"signatureSource": "scripts/check-entwurf-v2-surface.ts"
+		},
+		{
+			"claim": "SEND-DIRTY-LOCK-NAMES-ACCEPTANCE",
+			"title": "the dirty-lock line goes back to `DELIVERED (<route>)` for all three shapes that reach it — a refusal that delivered nothing, a message lying in a volatile queue, and a durable mailbox file all read as one word, at the exact moment an operator is deciding BY HAND whether anything still needs sending",
+			"subject": "pi-extensions/lib/entwurf-v2-surface.ts",
+			"find": [
+				"\t\t\t\t\t\t? `rejected${result.finalizedRejectReason ? ` (${result.finalizedRejectReason})` : \"\"} — the receiver refused it; nothing was accepted`"
+			],
+			"replace": ["\t\t\t\t\t\t? `DELIVERED (${result.finalizedOutcome})`"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-surface"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:SEND-DIRTY-LOCK-NAMES-ACCEPTANCE]",
+			"signatureSource": "scripts/check-entwurf-v2-surface.ts"
+		},
+		{
+			"claim": "VITEST-TEST-DIR-ON-THE-FLOOR",
+			"title": "the pi queue oracle's public coordinate is dropped from `check:vitest`, so the file that proves every claim the receipt makes about a receiver's queues is green only when somebody runs `pnpm test` by hand — the discovery door deliberately does not select `test/**`, so nothing else would notice",
+			"subject": "package.json",
+			"find": [
+				"\"check:vitest\": \"./run.sh check-mux-fresh-call && ./run.sh check-acp-sdk-surface && ./run.sh check-pi-queue-oracle && ./run.sh check-tests-beside-behavior\""
+			],
+			"replace": [
+				"\"check:vitest\": \"./run.sh check-mux-fresh-call && ./run.sh check-acp-sdk-surface && ./run.sh check-tests-beside-behavior\""
+			],
+			"gate": ["bash", "run.sh", "check-tests-beside-behavior"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:VITEST-TEST-DIR-ON-THE-FLOOR]",
+			"signatureSource": "run.sh"
+		},
+		{
+			"claim": "PI-CORE-PIN-TRACKS-FLOOR",
+			"title": "the queue oracle's pi-agent-core pin drifts off the floor the rest of the pi runtime is pinned to, so the oracle keeps answering honestly — about a pi nobody in this repo runs",
+			"subject": "package.json",
+			"find": ["\"@earendil-works/pi-agent-core\": \"0.87.0\","],
+			"replace": ["\"@earendil-works/pi-agent-core\": \"0.86.0\","],
+			"gate": ["bash", "run.sh", "check-dep-versions"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PI-CORE-PIN-TRACKS-FLOOR]",
+			"signatureSource": "run.sh"
+		},
+		{
+			"claim": "SEND-DIRTY-LOCK-ERROR-CARRIES-ACCEPTANCE",
+			"title": "the structured dirty-lock error stops carrying the refusal's reason, so a receiver that said WHY it refused loses that word at the one moment an operator is deciding by hand whether the message still needs sending — the render cell cannot see this, because it builds its own result object",
+			"subject": "pi-extensions/lib/entwurf-v2-send.ts",
+			"find": ["\t\t\t\trejectReason: drive.rejectReason,"],
+			"replace": ["\t\t\t\trejectReason: undefined,"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-send"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:SEND-DIRTY-LOCK-ERROR-CARRIES-ACCEPTANCE]",
+			"signatureSource": "pi-extensions/lib/entwurf-v2-send.test.ts"
+		},
+		{
+			"claim": "SEND-DIRTY-LOCK-RUNNER-MOVES-ACCEPTANCE",
+			"title": "the runner drops the acceptance fields on the way from the thrown error to the result, so the hand proves it fills them and the surface proves it renders them while the operator still sees nothing — the classic middle-seam hole two端 tests cannot cover",
+			"subject": "pi-extensions/lib/entwurf-v2-runner.ts",
+			"find": ["\t\t\t\t\t\tfinalizedRejectReason: err.finalizedRejectReason,"],
+			"replace": ["\t\t\t\t\t\tfinalizedRejectReason: undefined,"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-runner"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:SEND-DIRTY-LOCK-RUNNER-MOVES-ACCEPTANCE]",
+			"signatureSource": "pi-extensions/lib/entwurf-v2-runner.test.ts"
+		},
+		{
+			"claim": "VITEST-TEST-DIR-HAS-COORDINATE",
+			"title": "the only line that EXECUTES the pi queue oracle is deleted while its verb and its explanatory comment stay, so the file is run by nothing at all — and a checker that accepted a mention instead of a call would keep reporting the floor as complete",
+			"subject": "run.sh",
+			"find": ["  run_vitest test/pi-queue.oracle.test.ts"],
+			"replace": ["  : # the oracle is no longer executed here"],
+			"gate": ["bash", "run.sh", "check-tests-beside-behavior"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:VITEST-TEST-DIR-HAS-COORDINATE]",
+			"signatureSource": "run.sh"
+		},
+		{
+			"claim": "SEND-OUTCOME-LIST-NAMES-EVERY-RAIL",
+			"title": "the caller-facing outcome list drops the native-push rail, so a caller reading the one blurb it reads before dispatching is told the control rail's vocabulary covers a rail that answers with a direct injection instead",
+			"subject": "mcp/entwurf-bridge/src/index.ts",
+			"find": ["\t\t\"native-push INJECTION, a rejection, or lock-dirty. EXISTING targets only; discover with \" +"],
+			"replace": ["\t\t\"a rejection, or lock-dirty. EXISTING targets only; discover with \" +"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-surface"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:SEND-OUTCOME-LIST-NAMES-EVERY-RAIL]",
+			"signatureSource": "scripts/check-entwurf-v2-surface.ts"
+		}
+	]
+}

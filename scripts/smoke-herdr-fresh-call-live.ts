@@ -83,6 +83,16 @@ import { joinKeyOf, parseHerdrPaneList } from "../pi-extensions/lib/herdr-placem
 import { assessLauncherCleanup, snapshotClaudeLauncher, verifyClaudeLauncher } from "./lib/claude-launcher-fence.ts";
 import { skipLive } from "./lib/live-skip.ts";
 
+/**
+ * #120 P2: the control-socket rail answers with the ACCEPTANCE BOUNDARY the receiver observed, and
+ * every member of that set is a success. The caller here is mid-turn while its child calls back,
+ * so `queued-steer` is the ORDINARY answer — the old literal `→ sent` pin would have gone red on
+ * the common case and passed only when the caller happened to be idle. What must still be absent
+ * is a REFUSAL, which the negative beside it now names directly (`rejected` / `failed`) instead of
+ * as "anything that is not the word sent".
+ */
+const CONTROL_ACCEPTED = /entwurf_v2 control-socket → (?:sent|queued-steer|queued-follow-up|accepted-unknown-boundary)/;
+
 const LABEL = "smoke-herdr-fresh-call-live";
 const REPO_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const REAL_HOME = process.env.HOME ?? os.homedir();
@@ -849,10 +859,7 @@ async function main(): Promise<void> {
 					callId === null
 						? -1
 						: childRecords.findIndex(
-								(record, i) =>
-									i > callAt &&
-									record.includes("entwurf_v2 control-socket → sent") &&
-									toolResultIdOf(record) === callId,
+								(record, i) => i > callAt && CONTROL_ACCEPTED.test(record) && toolResultIdOf(record) === callId,
 							);
 				// The LAST mention of the task token, so the birth prompt — which carries it, first —
 				// cannot be what satisfies "the work came after".
@@ -864,14 +871,14 @@ async function main(): Promise<void> {
 					}
 				}
 				ok(
-					`${cell.label}: the child decoded the one-line birth argv and ran the task only AFTER its callback — the \`sent\` outcome belongs, by toolCallId, to the very call that carried the delivered nonce, and the task token appears in a record after it`,
+					`${cell.label}: the child decoded the one-line birth argv and ran the task only AFTER its callback — the ACCEPTED outcome belongs, by toolCallId, to the very call that carried the delivered nonce, and the task token appears in a record after it`,
 					nonce.length > 0 && callAt >= 0 && sentAt > callAt && workedAt > sentAt,
 				);
 				ok(
-					`${cell.label}: the child's OWN tool result says the callback was DELIVERED on the rail its caller answers on — \`entwurf_v2 control-socket → sent\` — not a timeout, not a reject, not a dirty lock`,
-					childText.includes("entwurf_v2 control-socket → sent") &&
+					`${cell.label}: the child's OWN tool result says the callback was ACCEPTED on the rail its caller answers on — one of \`sent|queued-steer|queued-follow-up|accepted-unknown-boundary\` — not a timeout, not a reject, not a dirty lock`,
+					CONTROL_ACCEPTED.test(childText) &&
 						!/entwurf_v2 [a-z-]+ (?:execution failed:|DELIVERED \()/.test(childText) &&
-						!/entwurf_v2 control-socket → (?!sent)[a-z-]+/.test(childText),
+						!/entwurf_v2 control-socket → (?:rejected|failed)/.test(childText),
 				);
 			} else {
 				const childActivity = mcpActivityBySession(root).get(childNative) ?? [];

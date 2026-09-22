@@ -1,0 +1,32 @@
+{
+	"schemaVersion": 1,
+	"lane": "retired-sent-surface",
+	"mutants": [
+		{
+			"claim": "NO-RENDERER-WITHOUT-PRODUCER",
+			"title": "a renderer is registered for a customType nothing in this extension emits — a producer-less orphan box no operator can ever reach, the same shape that shipped for two releases behind comments naming producers that did not exist",
+			"subject": "pi-extensions/entwurf-control.ts",
+			"find": ["\tpi.registerMessageRenderer(SESSION_MESSAGE_TYPE, renderSessionMessage);"],
+			"replace": [
+				"\tpi.registerMessageRenderer(SESSION_MESSAGE_TYPE, renderSessionMessage);\n\tpi.registerMessageRenderer(\"entwurf-orphan\", renderSessionMessage);"
+			],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-surface"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:NO-RENDERER-WITHOUT-PRODUCER]",
+			"signatureSource": "scripts/check-entwurf-v2-surface.ts"
+		},
+		{
+			"claim": "RETIRED-SENT-SURFACE-ABSENT",
+			"title": "the retired sender-side echo constant comes back as a public export of a SHIPPED file — a name an npm consumer can import and nothing in the repo can ever produce, which is the promise #120 P3 removed rather than renamed",
+			"subject": "protocol.js",
+			"find": ["export const ENTWURF_PROJECT_CONTEXT_OPEN_TAG = \"<project-context\";"],
+			"replace": [
+				"export const ENTWURF_PROJECT_CONTEXT_OPEN_TAG = \"<project-context\";\nexport const ENTWURF_SENT_MESSAGE_TYPE = \"entwurf-sent\";"
+			],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-surface"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:RETIRED-SENT-SURFACE-ABSENT]",
+			"signatureSource": "scripts/check-entwurf-v2-surface.ts"
+		}
+	]
+}

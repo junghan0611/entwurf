@@ -27,7 +27,7 @@ API. The levels compare capabilities, not implementation shapes.
 
 | State | Meaning |
 |---|---|
-| `queued` | A message is durable; the backend may not have seen it. |
+| `queued` | A receiver queue accepted the message; the backend may not have seen it. Durability is a property of the RAIL, not of this word — see the acceptance table below. |
 | `triggered` | A supported event/API accepted the signal. |
 | `woke` | An idle interactive session began a turn without user typing. |
 | `injected` | The message reached model-visible context. |
@@ -35,6 +35,29 @@ API. The levels compare capabilities, not implementation shapes.
 | `replied` | A result returned through an explicit garden-side path. |
 
 Avoid bare `delivered`; name the observed boundary.
+
+### Control-socket acceptance boundaries (#120)
+
+A control-socket send answers with ONE of these, and the sender renders that word rather than the
+internal route it took. They are not four spellings of success: they differ on every axis an
+operator has to reason about.
+
+| Boundary | Order | Durability | Visibility | Rejection |
+|---|---|---|---|---|
+| `sent` | n/a — the receiver was idle and the turn was TRIGGERED directly | none needed; the turn started | the turn is running, but the model has NOT necessarily read the text yet, and nothing here says the turn completed | an in-band refusal is `rejected`, never this |
+| `queued-steer` | drained after each turn; overtakes every `queued-follow-up` already waiting | **none** — volatile receiver process memory | nothing shows it: it is not in the TUI's pending-message count | an abort clears the queue and the message is gone, silently |
+| `queued-follow-up` | drained only when the receiver's inner loop ends; a steer arriving later still goes first | **none** — volatile receiver process memory | same: invisible in the receiver's own queue display | same: an abort drops it |
+| `accepted-unknown-boundary` | unknown | unknown | unknown | the receiver ACCEPTED; this names our inability to classify its answer (version skew), and it must never be retried or rendered as `sent` |
+
+`[측정 2026-09-22, pi-agent-core 0.87.0]` `dist/agent.js:60-71,96-97,137-138`
+(two independent `one-at-a-time` queues, no FIFO between them)
+and `dist/agent-loop.js:85,186,191-197`
+(steering drained every turn, follow-ups only once the inner loop ends).
+
+The **meta-mailbox** rail is the contrast, not a fifth boundary: it writes a durable `*.msg` before
+ringing any doorbell, its filenames are ISO stamps so a drain is a global FIFO, an undrained inbox
+is an honest `mailbox-undeliverable` refusal, and its receipt is that FILE. A mailbox enqueue is a
+durable file receipt; a control-socket queue is process memory.
 
 ## Levels (D0–D8)
 

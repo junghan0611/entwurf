@@ -29,6 +29,7 @@
  * claiming "no conflict". The decider's later `inspectSocket` probe is a SEPARATE step.
  */
 
+import { describeUnknownBoundary, parseAcceptanceBoundary } from "./control-send-receipt.ts";
 import {
 	type RpcClientOptions,
 	type RpcCommand,
@@ -318,7 +319,24 @@ export function makeProductionEntwurfV2Deps(opts: ProductionEntwurfV2Opts): Entw
 				wants_reply: plan.wantsReply,
 				sender: opts.senderProvider(),
 			});
-			return { success: response.success, error: response.error };
+			// #120 P2 THE WIRE SEAM. `response.data` is another process's payload, so it is
+			// classified here by one total function and never carried raw any further: a shape we
+			// do not recognise becomes `accepted-unknown-boundary`, an ACCEPTANCE we could not
+			// name rather than a failure — the RPC already answered success, so the message is out
+			// of our hands and inventing a failure here would invite a double delivery. Only a
+			// SUCCESSFUL answer gets a boundary; a refusal carries its error instead.
+			const boundary = response.success ? parseAcceptanceBoundary(response.data) : undefined;
+			if (boundary === "accepted-unknown-boundary") {
+				// The operator has to be able to tell version skew from a broken peer, and the
+				// receipt itself may not carry another process's payload onto a status line.
+				// Hard Rule 15: diagnostics go to stderr, bounded and single-line.
+				const shape = describeUnknownBoundary(response.data);
+				process.stderr.write(
+					`[entwurf_v2] ${plan.targetGardenId} accepted the message but named no boundary this build knows` +
+						`${shape === undefined ? "" : ` (${shape})`}\n`,
+				);
+			}
+			return { success: response.success, error: response.error, boundary };
 		},
 		classifyConnect: io.classifyConnect,
 		releaseLock: release,

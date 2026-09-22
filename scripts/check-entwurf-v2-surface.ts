@@ -282,6 +282,22 @@ const SUCCESS_RECEIPT = {
 	observedLiveness: "alive" as const,
 };
 
+/** Collect `const X = "literal"` bindings out of a parsed source, so a customType that travels
+ * through a named constant resolves to the same string a literal would. */
+function visitConstsInto(
+	src: import("typescript").SourceFile,
+	into: Map<string, string>,
+	ts: typeof import("typescript"),
+): void {
+	const walk = (node: import("typescript").Node): void => {
+		if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.initializer !== undefined) {
+			if (ts.isStringLiteral(node.initializer)) into.set(node.name.text, node.initializer.text);
+		}
+		ts.forEachChild(node, walk);
+	};
+	walk(src);
+}
+
 async function main(): Promise<void> {
 	// ── 1: toDispatchInput mapping ────────────────────────────────────────────
 	{
@@ -336,16 +352,50 @@ async function main(): Promise<void> {
 			rr.isError && rr.text.includes("target-locked") && rr.text.includes("pid 999"),
 		);
 
-		// control sent → delivered
-		const sent: EntwurfV2RunResult = {
+		// #120 P2 — THE BOUNDARY IS WHAT THIS LINE SAYS, and the route is an annotation beside it.
+		// The delivered branch renders what the RECEIVER observed, never which leg carried the
+		// bytes: for 78 minutes `control-socket → sent` was printed about messages lying in a
+		// queue, and the word `sent` is the whole reason nobody could tell.
+		const ctl = (
+			outcome: "sent" | "fallback-sent",
+			boundary?: "sent" | "queued-steer" | "queued-follow-up" | "accepted-unknown-boundary",
+			messagePath?: string,
+		): EntwurfV2RunResult => ({
 			kind: "executed",
 			receipt: SUCCESS_RECEIPT,
 			transport: "control-socket",
-			outcome: { transport: "control-socket", outcome: "sent" },
-		};
+			outcome: { transport: "control-socket", outcome, boundary, messagePath },
+		});
+		const idle = renderEntwurfV2Result(ctl("sent", "sent"));
+		ok("2: an idle direct trigger renders `sent`, and is not an error", !idle.isError && idle.text.endsWith("→ sent"));
+		const steered = renderEntwurfV2Result(ctl("sent", "queued-steer"));
+		const followed = renderEntwurfV2Result(ctl("sent", "queued-follow-up"));
 		ok(
-			"2: control sent → not error",
-			!renderEntwurfV2Result(sent).isError && renderEntwurfV2Result(sent).text.includes("sent"),
+			"[QK:SEND-SURFACE-RENDERS-BOUNDARY] 2: a BUSY receiver renders its queue by name, as a success — and never the word `sent`. The route word answers WHICH LEG carried the bytes; this line has to answer what the receiver did with them, because for 78 minutes it said `sent` about messages lying in a queue",
+			!steered.isError &&
+				steered.text.endsWith("→ queued-steer") &&
+				!followed.isError &&
+				followed.text.endsWith("→ queued-follow-up") &&
+				!/→ sent/.test(steered.text) &&
+				!/→ sent/.test(followed.text),
+		);
+		const unknown = renderEntwurfV2Result(ctl("sent", "accepted-unknown-boundary"));
+		ok(
+			"[QK:SEND-SURFACE-UNKNOWN-NOT-SENT] 2: an answer we cannot classify renders `accepted-unknown-boundary` — a success (the receiver accepted; a retry would double-deliver) and NOT spelled with `sent`, which would put the removed false claim straight back",
+			!unknown.isError && unknown.text.endsWith("→ accepted-unknown-boundary") && !/sent/.test(unknown.text),
+		);
+		const fbQueued = renderEntwurfV2Result(ctl("fallback-sent", "queued-steer"));
+		ok(
+			"[QK:SEND-SURFACE-FALLBACK-KEEPS-BOUNDARY] 2: a re-resolved SOCKET keeps the boundary and annotates the route — a dead first socket re-resolving to a BUSY one must not come out reading as a plain delivery",
+			!fbQueued.isError && fbQueued.text.includes("queued-steer") && fbQueued.text.includes("re-resolved"),
+		);
+		const fbMail = renderEntwurfV2Result(ctl("fallback-sent", undefined, "/m/20260903T134455-e55e87/x.msg"));
+		ok(
+			"2: a re-resolved MAILBOX renders the durable receipt, not a bare route word",
+			!fbMail.isError &&
+				fbMail.text.includes("mailbox-enqueued") &&
+				fbMail.text.includes("enqueued x.msg") &&
+				!/fallback-sent/.test(fbMail.text),
 		);
 
 		// control in-band rejected with N3 rejectReason → non-delivery
@@ -375,7 +425,12 @@ async function main(): Promise<void> {
 			},
 		};
 		const fb = renderEntwurfV2Result(fallback);
-		ok("2: fallback-sent is a delivery (not an error)", !fb.isError && fb.text.includes("fallback-sent"));
+		// #120 P2: it is still a delivery, and it is now named by what it actually was — a durable
+		// mailbox enqueue reached through a re-resolved route — rather than by the internal leg word.
+		ok(
+			"2: a re-resolved mailbox delivery is not an error, and says mailbox-enqueued rather than the leg word",
+			!fb.isError && fb.text.includes("mailbox-enqueued") && fb.text.includes("re-resolved"),
+		);
 		ok(
 			"2: fallback-sent names the enqueued FILE (#98 R, fallback leg)",
 			fb.text.includes("2026-09-03T09-58-02-114Z-ab12cd.msg"),
@@ -393,12 +448,12 @@ async function main(): Promise<void> {
 			kind: "executed",
 			receipt: { ...SUCCESS_RECEIPT, transport: "control-socket" },
 			transport: "control-socket",
-			outcome: { transport: "control-socket", outcome: "fallback-sent" },
+			outcome: { transport: "control-socket", outcome: "fallback-sent", boundary: "sent" },
 		};
 		const fbs = renderEntwurfV2Result(fallbackSocket);
 		ok(
-			"2: socket-retry fallback-sent degrades to the bare outcome (no file to name)",
-			fbs.text === "entwurf_v2 control-socket → fallback-sent" && !fbs.isError,
+			"2: a socket-to-socket retry names no file (none was written) and still carries its boundary",
+			fbs.text === "entwurf_v2 control-socket → sent (via a re-resolved route)" && !fbs.isError,
 		);
 
 		// The two spawn-bg render cells (lock-retained / socket-alive) were deleted with the
@@ -487,6 +542,53 @@ async function main(): Promise<void> {
 		ok(
 			"2: N1 → isError + 'do NOT retry' + DIRTY surfaced",
 			n1r.isError && n1r.text.includes("DIRTY") && n1r.text.includes("do NOT retry"),
+		);
+
+		// #120 P2 — A DIRTY LOCK IS A REASON TO BE MORE PRECISE, NOT LESS. This line used to read
+		// `DELIVERED (<route>)` for all three shapes that reach it, and it was wrong about two: a
+		// `rejected` finalization delivered nothing at all, and a `queued-*` one is sitting in
+		// volatile receiver memory. The operator reading it is about to decide BY HAND whether
+		// anything still needs sending, which is the worst possible moment for the one word on
+		// screen to be the internal route.
+		const dirty = (
+			finalizedOutcome: "sent" | "fallback-sent" | "rejected",
+			finalizedBoundary?: "sent" | "queued-steer" | "queued-follow-up" | "accepted-unknown-boundary",
+			finalizedMessagePath?: string,
+			finalizedRejectReason?: string,
+		): { text: string; isError: boolean } =>
+			renderEntwurfV2Result({
+				kind: "execution-failed",
+				receipt: SUCCESS_RECEIPT,
+				transport: "control-socket",
+				error: "release boom",
+				finalizedOutcome,
+				finalizedBoundary,
+				finalizedMessagePath,
+				finalizedRejectReason,
+				releaseFailed: true,
+				retrySafe: false,
+			});
+		const dirtyBusy = dirty("sent", "queued-steer");
+		const dirtyMailbox = dirty("fallback-sent", undefined, "/m/20260903T134455-e55e87/x.msg");
+		const dirtyRefused = dirty("rejected", undefined, undefined, "compacting");
+		ok(
+			"[QK:SEND-DIRTY-LOCK-NAMES-ACCEPTANCE] a release failure after a terminal send names the ACCEPTANCE it reached — the receiver's queue, the enqueued file, or the refusal — and never a bare `DELIVERED (<route>)`, while the retry-unsafe dirty-lock meaning stays intact on all three",
+			// the queue, by name, and not the word delivered
+			dirtyBusy.text.includes("queued-steer") &&
+				!/DELIVERED|\bdelivered\b/.test(dirtyBusy.text) &&
+				// the mailbox leg names its durable file rather than a route word
+				dirtyMailbox.text.includes("mailbox-enqueued") &&
+				dirtyMailbox.text.includes("enqueued x.msg") &&
+				!/DELIVERED|\bdelivered\b/.test(dirtyMailbox.text) &&
+				// a REFUSAL is never dressed as a delivery
+				dirtyRefused.text.includes("rejected") &&
+				// the receiver's OWN reason survives to the line the operator acts on
+				dirtyRefused.text.includes("compacting") &&
+				!/DELIVERED|\bdelivered\b/.test(dirtyRefused.text) &&
+				// and every one of them keeps the thing the operator must act on
+				[dirtyBusy, dirtyMailbox, dirtyRefused].every(
+					(r) => r.isError && r.text.includes("DIRTY") && r.text.includes("do NOT retry"),
+				),
 		);
 
 		// plain execution-failed → error
@@ -623,6 +725,25 @@ async function main(): Promise<void> {
 		ok(
 			"4: pi-native — NO static import of the self-address fence (TS5097 stays closed)",
 			!/import[^;]*from\s*"\.\/lib\/entwurf-self-address\.(js|ts)"/.test(code),
+		);
+		// #120 P2: the RECEIVER's own answer. The sender can only render a boundary the receiver
+		// actually names, so this is the far end of the same contract — and the bare `delivered`
+		// it replaced is the one DELIVERY.md refuses by name, because it was equally true of a
+		// direct trigger and of a message rotting in a queue nobody drains.
+		ok(
+			"[QK:SEND-RECEIVER-EMITS-BOUNDARY] the control-socket `send` answers with the typed boundary its own state produces, and with no bare `delivered` / unconsumed `deliveredAs` beside it — a field that is true of every outcome tells a sender nothing, and there is no sender left that reads those two",
+			(() => {
+				// Scoped to the RPC ANSWER, not the whole file: `deliveredAs` also appears in the
+				// (separately owned, #120 Part 2) sent-message renderer, and a whole-file ban here
+				// would make this claim fail for a reason it is not about.
+				const at = code.indexOf('respond(true, "send"');
+				const answer = at < 0 ? "" : code.slice(at, code.indexOf(");", at));
+				return (
+					/boundary:\s*sendReceiptBoundary\(\{\s*idle:\s*isIdle,\s*mode\s*\}\)/.test(answer) &&
+					!/\bdelivered:\s*true/.test(answer) &&
+					!/\bdeliveredAs\b/.test(answer)
+				);
+			})(),
 		);
 		// Every SHIPPED rail must appear in the model-facing text. Measured 2026-07-27: both
 		// surfaces described only control-socket/mailbox and told the model that an
@@ -844,6 +965,164 @@ async function main(): Promise<void> {
 		ok(
 			"5: MCP — entwurf_inbox_read resolves NO authoritative self identity (so 'caller-supplied, not verified' is true)",
 			!inboxIdentityGuard,
+		);
+	}
+
+	// ── #120 P3: a renderer nobody can produce for, and the retired surface it drew ──
+	// PARSED, NOT GREPPED. The defect being closed here is a renderer registered for a customType
+	// that no code emits — and the thing that hid it for two releases was PROSE: `protocol.js` said
+	// "the bridge emits it", `entwurf-control.ts` named a producer in `streamShellAcp`, and neither
+	// was true. A regex oracle would have been satisfied by exactly those sentences. So the
+	// registration and the producer are both read out of the TypeScript AST: a `registerMessageRenderer`
+	// CALL, and an object literal property `customType` whose value resolves to the same string.
+	//
+	// SCOPE, stated: this is the pi-native file's own contract — registrations here must have a
+	// producer here. A future cross-file producer is a reason to widen this gate WITH the evidence,
+	// never a reason to let a comment satisfy it.
+	{
+		const ts = (await import("typescript")).default;
+		const file = path.join(REPO, "pi-extensions", "entwurf-control.ts");
+		const src = ts.createSourceFile(file, await fs.readFile(file, "utf8"), ts.ScriptTarget.Latest, true);
+
+		// `const X = "literal"` — the only indirection a customType is allowed to take here.
+		const consts = new Map<string, string>();
+		const visitConsts = (node: import("typescript").Node): void => {
+			if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.initializer !== undefined) {
+				if (ts.isStringLiteral(node.initializer)) consts.set(node.name.text, node.initializer.text);
+			}
+			ts.forEachChild(node, visitConsts);
+		};
+		visitConsts(src);
+		// Imported constants resolve through `protocol.js`, which is a string-literal module too.
+		const protocolSrc = ts.createSourceFile(
+			"protocol.js",
+			await fs.readFile(path.join(REPO, "protocol.js"), "utf8"),
+			ts.ScriptTarget.Latest,
+			true,
+		);
+		visitConstsInto(protocolSrc, consts, ts);
+
+		const resolve = (expr: import("typescript").Expression): string | null => {
+			if (ts.isStringLiteral(expr)) return expr.text;
+			if (ts.isIdentifier(expr)) return consts.get(expr.text) ?? null;
+			return null;
+		};
+
+		const registered: { type: string | null; text: string }[] = [];
+		const produced = new Set<string>();
+		const visit = (node: import("typescript").Node): void => {
+			if (
+				ts.isCallExpression(node) &&
+				ts.isPropertyAccessExpression(node.expression) &&
+				node.expression.name.text === "registerMessageRenderer" &&
+				node.arguments.length > 0
+			) {
+				registered.push({ type: resolve(node.arguments[0]), text: node.arguments[0].getText(src) });
+			}
+			if (ts.isPropertyAssignment(node) && ts.isIdentifier(node.name) && node.name.text === "customType") {
+				const value = resolve(node.initializer);
+				if (value !== null) produced.add(value);
+			}
+			ts.forEachChild(node, visit);
+		};
+		visit(src);
+
+		const orphans = registered.filter((r) => r.type === null || !produced.has(r.type));
+		ok(
+			`[QK:NO-RENDERER-WITHOUT-PRODUCER] every message renderer this extension registers is registered for a customType this extension actually EMITS — read from the AST, because the producer-less one that prompted this claim was covered by two comments naming producers that do not exist. A renderer nobody can reach is a box the operator will never see and a maintenance surface that answers no question (registered ${JSON.stringify(registered.map((r) => r.text))}, produced ${JSON.stringify([...produced])}, orphans ${JSON.stringify(orphans.map((o) => o.text))})`,
+			registered.length > 0 && orphans.length === 0,
+		);
+
+		// The retired surface itself, sealed in the two LIVE files it lived in. History keeps its
+		// own record — CHANGELOG, ROADMAP and the demo note are deliberately NOT scanned.
+		// The PHRASES too, not just the identifiers: what kept this surface alive through two
+		// releases was prose — a comment promising "the [entwurf sent →] box exists for every
+		// session that DOES send" outlived the code by one removal and would have been read as a
+		// live guarantee. Sealing the identifiers alone leaves the lie behind.
+		const retired =
+			/ENTWURF_SENT_MESSAGE_TYPE|entwurf-sent|renderSentMessage|buildSentMessageBox|SentBoxData|entwurf sent|sender-side UI box/i;
+		const live = [
+			{ rel: "protocol.js", text: await fs.readFile(path.join(REPO, "protocol.js"), "utf8") },
+			{ rel: "pi-extensions/entwurf-control.ts", text: await fs.readFile(file, "utf8") },
+		];
+		const survivors = live.filter((f) => retired.test(f.text)).map((f) => f.rel);
+		ok(
+			`[QK:RETIRED-SENT-SURFACE-ABSENT] the sender-side echo surface is gone from the live bytes — no constant, no renderer, no box builder, no payload type — rather than left as a public export nothing produces. It was shipped in \`files\`, so an unreachable name there is a promise to a consumer that no code could ever keep (survivors: ${JSON.stringify(survivors)})`,
+			survivors.length === 0,
+		);
+	}
+
+	// ── #120 P2 (D8): the OUTCOME list in both tool descriptions names every rail ──
+	// A caller reads one of these two blurbs and nothing else before dispatching. The control
+	// rail's four boundaries are the ONLY receiver-acceptance values; a mailbox answers with an
+	// ENQUEUE receipt and native-push with an INJECTION, and folding those into the boundary union
+	// would tell a caller that `mailbox-enqueued` is something a receiver observed about its own
+	// queues. Missing either rail is red — the earlier draft listed `mailbox-enqueued` beside the
+	// four and left native-push out entirely, and nothing noticed.
+	{
+		const outcomeSites = ["mcp/entwurf-bridge/src/index.ts", "pi-extensions/entwurf-control.ts"];
+		const missing: string[] = [];
+		for (const rel of outcomeSites) {
+			const text = await fs.readFile(path.join(REPO, rel), "utf8");
+			const at = text.indexOf("reports ONE");
+			const blurb = at < 0 ? "" : text.slice(at, at + 900);
+			if (!/acceptance boundary/i.test(blurb)) missing.push(`${rel}: control receiver acceptance boundary`);
+			for (const b of ["sent", "queued-steer", "queued-follow-up", "accepted-unknown-boundary"]) {
+				if (!blurb.includes(b)) missing.push(`${rel}: boundary ${b}`);
+			}
+			if (!/those four only/i.test(blurb)) missing.push(`${rel}: the four-only scope of the boundary union`);
+			if (!/mailbox ENQUEUE/i.test(blurb)) missing.push(`${rel}: mailbox enqueue receipt`);
+			if (!/native-push INJECTION/i.test(blurb)) missing.push(`${rel}: native-push injection`);
+			if (!/rejection|rejected/i.test(blurb)) missing.push(`${rel}: rejection`);
+			if (!/lock-dirty/i.test(blurb)) missing.push(`${rel}: accepted-but-lock-dirty`);
+			if (/mailbox-enqueued`? \/|\/ `?mailbox-enqueued/i.test(blurb)) {
+				missing.push(`${rel}: mailbox-enqueued is listed INSIDE the receiver-boundary union`);
+			}
+		}
+		ok(
+			`[QK:SEND-OUTCOME-LIST-NAMES-EVERY-RAIL] both tool descriptions name each rail's own result — the control receiver's four acceptance boundaries (and that those four are the whole union), the mailbox ENQUEUE receipt, the native-push INJECTION, a rejection, and accepted-but-lock-dirty — so a caller is never told that one rail's vocabulary describes another's (missing: ${JSON.stringify(missing)})`,
+			missing.length === 0,
+		);
+	}
+
+	// ── #120 P2: the four caller-facing prose sites, checked for what they SAY ──
+	// `[측정 2026-09-22, pi-agent-core 0.87.0]` neither mode interrupts anything: `agent-loop.js:186`
+	// drains steering after a turn ENDS and `:191-197` drains follow-ups only once the inner loop
+	// has ended. A caller who reads "interrupt the current turn" picks `steer` for urgency and gets
+	// a queue with no order against the other one — the decision #120 was opened about.
+	//
+	// POSITIVE, not merely a banned-word sweep. The first cut of this claim only looked for the old
+	// wording, which meant a site could pass by deleting its description entirely — the assertion
+	// would have said four sites explain the queues while one of them explained nothing. Each site
+	// now has to carry all four facts a caller needs before choosing a mode, and the old wording is
+	// still banned beside them.
+	{
+		const sites = [
+			"mcp/entwurf-bridge/src/index.ts",
+			"pi-extensions/entwurf-control.ts",
+			"pi-extensions/lib/entwurf-v2-contract.ts",
+			"pi-extensions/lib/entwurf-v2-contract-schema.ts",
+		];
+		const axes: { name: string; holds: (t: string) => boolean }[] = [
+			{ name: "names both queues", holds: (t) => /steering/i.test(t) && /follow-?ups?\b/i.test(t) },
+			{ name: "says neither is an interrupt", holds: (t) => /(neither|not)\s+(is\s+)?an?\s+interrupt/i.test(t) },
+			{ name: "says a later steer overtakes an earlier follow_up", holds: (t) => /overtakes/i.test(t) },
+			{
+				name: "says the queues are volatile and an abort drops them",
+				holds: (t) => /volatile/i.test(t) && /abort/i.test(t),
+			},
+		];
+		const gaps: string[] = [];
+		for (const rel of sites) {
+			const text = await fs.readFile(path.join(REPO, rel), "utf8");
+			for (const axis of axes) if (!axis.holds(text)) gaps.push(`${rel}: ${axis.name}`);
+			if (/steer \((?:interrupt|immediate)|interrupt the current turn|steer = interrupt/i.test(text)) {
+				gaps.push(`${rel}: still claims steer interrupts`);
+			}
+		}
+		ok(
+			`[QK:SEND-PROSE-NO-INTERRUPT] every caller-facing description of \`mode\` names BOTH queues, says neither is an interrupt, says a later steer overtakes an earlier follow_up, and says both are volatile so an abort drops them — and none of them still claims an interrupt. A caller chooses a mode from this text alone (gaps: ${JSON.stringify(gaps)})`,
+			gaps.length === 0,
 		);
 	}
 

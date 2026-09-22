@@ -46,7 +46,10 @@ a background driver types the scene prompts into the sender pane.
 1. **Spawn** a sonnet sibling (memory write — "tempered indigo").
 2. **Resume** that same sibling (memory recall — identity preservation,
    the #9 regression guard).
-3. **Cross-session greeting** via `entwurf_send` (sent box ↔ received box).
+3. **Cross-session greeting** via `entwurf_send`. *(Historical: `entwurf_send` was retired in the
+   0.12 cutover, and the "sent box" half of that pairing was never actually reachable — the
+   sender-side renderer had zero producers and was removed in #120 P3. What the recording shows on
+   the receive side is real; the send side is a box the operator could not have seen.)*
 
 Run:
 
@@ -139,7 +142,7 @@ SCENE_DELAY=30 FINAL_PAUSE=10 bash demo.sh
 
 ## Prerequisites
 
-- `pi` on PATH (current floor 0.86.0)
+- `pi` on PATH (current floor 0.87.0)
 - `entwurf` provider configured + auth ready for the selected sender/peer models
 - `asciinema` installed
 - `agg` installed (optional — only for GIF conversion)

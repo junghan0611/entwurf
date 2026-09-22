@@ -159,9 +159,35 @@ export function renderEntwurfV2Result(result: EntwurfV2RunResult): EntwurfV2Surf
 				// socket-to-socket retry (no file) and on every non-mailbox outcome, so the
 				// line degrades to the bare outcome rather than printing "undefined".
 				const enqueued = o.messagePath ? ` (enqueued ${basename(o.messagePath)})` : "";
+				if (delivered) {
+					// #120 P2 — THE BOUNDARY IS THE RECEIPT, and the route is an annotation.
+					// `sent` / `fallback-sent` name which LEG carried the bytes. An operator
+					// cannot act on that: for 78 minutes this line said `sent` about a message
+					// lying in a queue. So the visible word is what the RECEIVER observed —
+					// `sent` only for an idle direct trigger, `queued-steer` /
+					// `queued-follow-up` for the two volatile in-process queues, and
+					// `accepted-unknown-boundary` when a peer answered success in a shape this
+					// build cannot classify. That last one is never spelled with the word
+					// "sent": it was accepted, and saying "sent (unknown)" would put back the
+					// exact false claim this axis exists to remove.
+					//
+					// A re-resolved MAILBOX leg has no turn-injection boundary at all — it
+					// wrote a durable file — so it says `mailbox-enqueued` rather than a bare
+					// route word. The route survives as a separate annotation either way,
+					// because "your first socket was dead" is a real thing to have been told.
+					const route = o.outcome === "fallback-sent" ? " (via a re-resolved route)" : "";
+					// A re-resolved leg with no boundary IS the mailbox leg — that rail reports a
+					// durable file instead. A PRIMARY leg with no boundary is structurally
+					// impossible (the send hand throws on it), so if one ever arrives here it is
+					// named as the acceptance we could not classify rather than dressed as a
+					// mailbox file that was never written.
+					const boundary =
+						o.boundary ?? (o.outcome === "fallback-sent" ? "mailbox-enqueued" : "accepted-unknown-boundary");
+					return { text: `entwurf_v2 control-socket → ${boundary}${route}${enqueued}`, isError: false };
+				}
 				return {
 					text: `entwurf_v2 control-socket → ${o.outcome}${reason}${enqueued}`,
-					isError: !delivered,
+					isError: true,
 				};
 			}
 			if (o.transport === "native-push") {
@@ -185,10 +211,23 @@ export function renderEntwurfV2Result(result: EntwurfV2RunResult): EntwurfV2Surf
 		}
 		case "execution-failed": {
 			if (result.releaseFailed && result.finalizedOutcome) {
-				// N1: the delivery/refusal reached a terminal outcome but releaseLock then threw.
+				// N1: the send reached a terminal result and `releaseLock` then threw.
+				//
+				// #120 P2 — THIS LINE USED TO SAY `DELIVERED (<route>)` ABOUT ALL THREE SHAPES THAT
+				// REACH IT, and it was wrong about two of them: a `rejected` finalization delivered
+				// nothing at all, and a `queued-*` one is sitting in volatile receiver memory. So
+				// the same acceptance vocabulary the ordinary receipt uses is named here too — a
+				// dirty lock is a reason to be MORE precise about what happened, not less, because
+				// the operator is about to decide by hand whether anything needs re-sending.
+				const what =
+					result.finalizedOutcome === "rejected"
+						? `rejected${result.finalizedRejectReason ? ` (${result.finalizedRejectReason})` : ""} — the receiver refused it; nothing was accepted`
+						: `${result.finalizedBoundary ?? "mailbox-enqueued"}${
+								result.finalizedMessagePath ? ` (enqueued ${basename(result.finalizedMessagePath)})` : ""
+							}`;
 				return {
 					text:
-						`entwurf_v2 ${result.transport} DELIVERED (${result.finalizedOutcome}) but the lock is DIRTY ` +
+						`entwurf_v2 ${result.transport} finalized as ${what}, and the lock is DIRTY ` +
 						`(release failed) — do NOT retry, a re-send would double-deliver. Clear the lock by hand.` +
 						`\n  error: ${result.error}`,
 					isError: true,

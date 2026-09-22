@@ -265,8 +265,12 @@ export type EntwurfV2Transport = (typeof ENTWURF_V2_TRANSPORTS)[number];
 // and a future visible-resume verb would speak them again.
 export const ENTWURF_V2_ACTIONS = ["send"] as const;
 export const ENTWURF_V2_OWNERSHIPS = ["ack-only"] as const;
-// Delivery mode of the message to the target (how it is injected) — steer =
-// interrupt the current turn, follow_up = queue after it. A SEPARATE axis from
+// Delivery mode of the message to the target: WHICH QUEUE a busy receiver is asked for.
+// `[측정 2026-09-22, pi-agent-core 0.87.0]` neither is an interrupt — `dist/agent-loop.js:186`
+// drains steering after each turn and `:191-197` drains follow-ups only once the inner loop has
+// ended, and the two queues (`dist/agent.js:96-97,137-138`) have no FIFO between them, so a later
+// steer overtakes every earlier follow_up. Both are volatile process memory and an abort drops
+// them. A SEPARATE axis from
 // both the intent/ownership axis (F1) and the liveness-routing axis. The removed
 // v1 `entwurf_send` carried the same steer|follow_up surface, so this axis is
 // inherited vocabulary, not a second live delivery verb.

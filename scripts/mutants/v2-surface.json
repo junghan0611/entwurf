@@ -29,10 +29,10 @@
 		},
 		{
 			"claim": "V2PROD-INBAND-ERROR-WIRED",
-			"title": "the production sendOverSocket closure stops copying response.error onto the RpcSendResult, so a receiver's named in-band refusal is stranded one hop before driveSend and the caller sees a reasonless rejected",
+			"title": "the production sendOverSocket closure stops copying response.error onto the RpcSendResult, so a receiver's named in-band refusal is stranded one hop before driveSend and the caller sees a reasonless rejected (#120 P2: the wire seam now also classifies the acceptance boundary, so the same line carries one more field — the mutation still drops the receiver's own error)",
 			"subject": "pi-extensions/lib/entwurf-v2-production.ts",
-			"find": ["\t\t\treturn { success: response.success, error: response.error };"],
-			"replace": ["\t\t\treturn { success: response.success };"],
+			"find": ["\t\t\treturn { success: response.success, error: response.error, boundary };"],
+			"replace": ["\t\t\treturn { success: response.success, boundary };"],
 			"gate": ["bash", "run.sh", "check-entwurf-v2-production"],
 			"timeoutSeconds": 60,
 			"signature": "[QK:V2PROD-INBAND-ERROR-WIRED]",
@@ -40,15 +40,15 @@
 		},
 		{
 			"claim": "V2SURF-PI-MODE-SCOPE",
-			"title": "pi-native mode param reverts to \"Delivery mode for a live send\" (false for native-push)",
+			"title": "pi-native mode param reverts to \"Delivery mode for a live send\" (false for native-push) (#120 P2: the description was rewritten to stop claiming an interrupt, so the mutation now strips the rail scope from the corrected sentence)",
 			"subject": "pi-extensions/entwurf-control.ts",
 			"find": [
-				"\t\t\t\t\t\"Injection style for a CONTROL-SOCKET send only: steer (immediate) or follow_up (after task). \" +",
+				"\t\t\t\t\t\"Injection style for a CONTROL-SOCKET send only: steer (ask the receiver's steering queue) or follow_up (ask its follow-up queue). NEITHER is an interrupt: a busy receiver drains steering after each turn and follow-ups only when its inner loop ends, so a later steer overtakes every earlier follow_up and there is no order between the two. Both queues are volatile process memory — an abort drops what is in them. The receipt names which queue accepted the message (`queued-steer` / `queued-follow-up`); an idle receiver answers `sent`, meaning the turn was TRIGGERED, not that the model has seen the text. \" +",
 				"\t\t\t\t\t\"The mailbox and native-push plans carry no mode, so it has no effect on those rails.\","
 			],
 			"replace": [
-				"\t\t\t\t\t\"Delivery mode for a live send: steer (immediate, interrupt the current turn) or follow_up \" +",
-				"\t\t\t\t\t\"(queued after the current task finishes running to completion).\","
+				"\t\t\t\t\t\"Delivery mode for a live send: steer (ask the steering queue) or follow_up (ask the follow-up queue). \" +",
+				"\t\t\t\t\t\"Both queues are volatile process memory.\","
 			],
 			"gate": ["bash", "run.sh", "check-entwurf-v2-surface"],
 			"timeoutSeconds": 60,

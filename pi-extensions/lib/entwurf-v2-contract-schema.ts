@@ -51,7 +51,7 @@ export const EntwurfV2InputSchema = Type.Object(
 		mode: Type.Optional(
 			StringEnum(ENTWURF_V2_MODES, {
 				description:
-					"delivery mode (steer = interrupt current turn, follow_up = queue) — NOT the ownership axis (F1) nor liveness routing. MEANINGLESS on the meta-mailbox transport (F-mailbox): a mailbox ack is enqueue+doorbell, not a turn injection, so steer/follow_up does not apply when the verdict transport is meta-mailbox.",
+					"delivery mode — NOT the ownership axis (F1) nor liveness routing. steer (ask the receiver's steering queue) or follow_up (ask its follow-up queue). NEITHER is an interrupt: a busy receiver drains steering after each turn and follow-ups only when its inner loop ends, so a later steer overtakes every earlier follow_up and there is no order between the two. Both queues are volatile process memory — an abort drops what is in them. The receipt names which queue accepted the message (`queued-steer` / `queued-follow-up`); an idle receiver answers `sent`, meaning the turn was TRIGGERED, not that the model has seen the text. MEANINGLESS on the meta-mailbox transport (F-mailbox): a mailbox ack is enqueue+doorbell, not a turn injection, so steer/follow_up does not apply when the verdict transport is meta-mailbox.",
 			}),
 		),
 		wantsReply: Type.Optional(

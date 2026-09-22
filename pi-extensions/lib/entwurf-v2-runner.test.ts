@@ -288,6 +288,49 @@ describe("executeDispatch — what a throwing hand becomes", () => {
 		expect(res.kind === "execution-failed" && res.retrySafe).toBe(false);
 	});
 
+	// ── #120 P2 crossing (b): the error's acceptance fields reach the RESULT ────
+	// The hand proves it puts the acceptance into the thrown error; the surface proves it renders
+	// whatever the result holds. Neither can see this middle step, and a runner that simply did
+	// not copy the fields would leave both of them green while the operator saw nothing.
+	it("[QK:SEND-DIRTY-LOCK-RUNNER-MOVES-ACCEPTANCE] the structured error's acceptance — the boundary, the enqueued file, the refusal reason — moves onto the execution-failed result unchanged", async () => {
+		const queued = await executeDispatch(
+			executeDecision(CONTROL_PLAN, lockClaim()),
+			makeDeps({
+				control: {
+					throw: new SendDeliveredReleaseFailedError("sent", new Error("release boom"), {
+						boundary: "queued-steer",
+					}),
+				},
+			}).deps,
+		);
+		expect(queued.kind === "execution-failed" && queued.finalizedBoundary).toBe("queued-steer");
+
+		const enqueued = await executeDispatch(
+			executeDecision(CONTROL_PLAN, lockClaim()),
+			makeDeps({
+				control: {
+					throw: new SendDeliveredReleaseFailedError("fallback-sent", new Error("release boom"), {
+						messagePath: "/m/20260922T000000-aaaaaa/x.msg",
+					}),
+				},
+			}).deps,
+		);
+		expect(enqueued.kind === "execution-failed" && enqueued.finalizedMessagePath).toContain(".msg");
+		expect(enqueued.kind === "execution-failed" && enqueued.finalizedBoundary).toBeUndefined();
+
+		const refused = await executeDispatch(
+			executeDecision(CONTROL_PLAN, lockClaim()),
+			makeDeps({
+				control: {
+					throw: new SendDeliveredReleaseFailedError("rejected", new Error("release boom"), {
+						rejectReason: "compacting",
+					}),
+				},
+			}).deps,
+		);
+		expect(refused.kind === "execution-failed" && refused.finalizedRejectReason).toBe("compacting");
+	});
+
 	it("a plain transport throw → execution-failed with no finalizedOutcome and no releaseFailed", async () => {
 		const { deps } = makeDeps({ control: { throw: new Error("connect indeterminate / dep boom") } });
 		const res = await executeDispatch(executeDecision(CONTROL_PLAN, lockClaim()), deps);

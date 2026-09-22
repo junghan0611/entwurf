@@ -191,7 +191,7 @@ describe("the control-socket send hand", () => {
 	// ── 1: ack success → sent, release once, no fallback ──────────────────────
 	it("1: ack success → sent, release once, no fallback", async () => {
 		{
-			const { result, trace } = await run({ firstSend: { result: { success: true } } });
+			const { result, trace } = await run({ firstSend: { result: { success: true, boundary: "sent" } } });
 			ok("ack success → sent", result.outcome === "sent");
 			ok("ack success → release ×1", trace.releases.length === 1 && trace.releases[0].nonce === lockClaim().nonce);
 			ok("ack success → deadFallback NOT called", trace.deadFallbackCalls === 0);
@@ -202,6 +202,91 @@ describe("the control-socket send hand", () => {
 	// ── 2: in-band reject → rejected, release once, NO fallback ───────────────
 	// Its own test, not a line inside the scenario above: this claim carries a mutant, and
 	// `run_vitest` attributes a kill from the failed TEST TITLE (run.sh:104-113).
+	// ── #120 P2: the ACCEPTANCE BOUNDARY rides beside the route, and never instead of it ──
+	// `sent` / `fallback-sent` answer WHICH LEG delivered — they are the release reducer's
+	// vocabulary and they say nothing about what the receiver did with the bytes. The boundary is
+	// the sender-visible receipt, and the two axes must not be able to overwrite each other.
+	it("[QK:SEND-BOUNDARY-CARRIED] a primary ack carries the receiver's own boundary out, beside the route outcome", async () => {
+		for (const boundary of ["sent", "queued-steer", "queued-follow-up", "accepted-unknown-boundary"] as const) {
+			const { result } = await run({ firstSend: { result: { success: true, boundary } } });
+			expect(result.outcome, "the ROUTE is still the first socket").toBe("sent");
+			expect(result.boundary, `boundary ${boundary} must reach the caller`).toBe(boundary);
+		}
+	});
+
+	it("[QK:SEND-FALLBACK-KEEPS-BOUNDARY] a re-resolved socket keeps the boundary it was given — `fallback-sent` may not erase a queue", async () => {
+		// The edge the route axis alone cannot express: the first socket was dead, the re-resolved
+		// one was BUSY. Reporting only `fallback-sent` would say "delivered" about a message that
+		// is sitting in a volatile queue behind whatever else is in it.
+		const { result } = await run({
+			firstSend: { throwCode: "ECONNREFUSED" },
+			deadFallback: { kind: "execute", plan: RERESOLVED_CONTROL_PLAN },
+			fallbackSend: { result: { success: true, boundary: "queued-steer" } },
+		});
+		expect(result.outcome, "release authority still sees a fallback leg").toBe("fallback-sent");
+		expect(result.boundary, "and the operator still sees the queue").toBe("queued-steer");
+	});
+
+	it("[QK:SEND-SOCKET-SUCCESS-NEEDS-BOUNDARY] a successful socket RPC with no boundary at all is impossible, and fails loudly rather than quietly reading as delivered", async () => {
+		// Every socket answer is classified by one total function, so `undefined` here means the
+		// wire seam was bypassed — a wiring defect, not a host state. A silent default would make
+		// the most dangerous shape (delivered, boundary unknown to us) indistinguishable from a
+		// direct trigger.
+		const err = await rejects(() => run({ firstSend: { result: { success: true } } }));
+		expect(String(err)).toMatch(/boundary/i);
+		// The MAILBOX fallback leg is the deliberate exception: that rail has no turn-injection
+		// boundary to report, and it answers with a durable file receipt instead.
+		const { result } = await run({
+			firstSend: { throwCode: "ECONNREFUSED" },
+			deadFallback: { kind: "execute", plan: MAILBOX_PLAN },
+			fallbackSend: { result: { success: true, messagePath: "/m/20260922T000000-aaaaaa/x.msg" } },
+		});
+		expect(result.outcome).toBe("fallback-sent");
+		expect(result.boundary, "a mailbox enqueue reports no control boundary").toBeUndefined();
+		expect(result.messagePath, "it reports the durable file instead").toContain(".msg");
+	});
+
+	// ── #120 P2 crossing (a): the STRUCTURED ERROR, from the real hand ──────────
+	// The render cell for this contract builds an `EntwurfV2RunResult` by hand, so it cannot see
+	// whether `finalizeRelease` actually puts the acceptance INTO the error. That seam is here:
+	// a real `executeControlSocketSend` whose `releaseLock` throws, asked what the thrown object
+	// carries. Without this the whole dirty-lock claim could be green while the error was empty.
+	it("[QK:SEND-DIRTY-LOCK-ERROR-CARRIES-ACCEPTANCE] a release failure after a terminal send throws a structured error that still carries the acceptance — the queue, the enqueued file, or the refusal AND its reason", async () => {
+		const boom = new Error("release boom");
+
+		// busy socket: the boundary must survive the failure that happened after it
+		const queued = (await rejects(() =>
+			run({ firstSend: { result: { success: true, boundary: "queued-follow-up" } }, releaseThrows: boom }),
+		)) as SendDeliveredReleaseFailedError;
+		expect(queued).toBeInstanceOf(SendDeliveredReleaseFailedError);
+		expect(queued.finalizedOutcome, "the route is still the first socket").toBe("sent");
+		expect(queued.finalizedBoundary, "and the queue is still named").toBe("queued-follow-up");
+		expect(queued.message, "the message says what it finalized as, never a bare `delivered`").toContain(
+			"queued-follow-up",
+		);
+		expect(queued.message).not.toMatch(/\bdelivered\b/);
+
+		// mailbox fallback: the durable file is what this rail has instead of a boundary
+		const enqueued = (await rejects(() =>
+			run({
+				firstSend: { throwCode: "ECONNREFUSED" },
+				deadFallback: { kind: "execute", plan: MAILBOX_PLAN },
+				fallbackSend: { result: { success: true, messagePath: "/m/20260922T000000-aaaaaa/x.msg" } },
+				releaseThrows: boom,
+			}),
+		)) as SendDeliveredReleaseFailedError;
+		expect(enqueued.finalizedMessagePath, "the operator has to know WHICH letter was written").toContain(".msg");
+		expect(enqueued.finalizedBoundary, "a mailbox enqueue has no turn-injection boundary").toBeUndefined();
+
+		// in-band refusal: nothing was accepted, and the receiver's own reason is the point
+		const refused = (await rejects(() =>
+			run({ firstSend: { result: { success: false, error: "compacting" } }, releaseThrows: boom }),
+		)) as SendDeliveredReleaseFailedError;
+		expect(refused.finalizedOutcome).toBe("rejected");
+		expect(refused.finalizedRejectReason, "the refusal keeps its reason through the dirty lock").toBe("compacting");
+		expect(refused.message).toContain("compacting");
+	});
+
 	it("[QK:V2SEND-INBAND-REJECT-REASON] in-band control reject carries its receiver error", async () => {
 		const { result } = await run({ firstSend: { result: { success: false, error: "compacting" } } });
 		expect(result.rejectReason).toBe("compacting");
@@ -232,7 +317,7 @@ describe("the control-socket send hand", () => {
 			const { result, trace } = await run({
 				firstSend: { throwCode: "ECONNREFUSED" },
 				deadFallback: { kind: "execute", plan: RERESOLVED_CONTROL_PLAN },
-				fallbackSend: { result: { success: true } },
+				fallbackSend: { result: { success: true, boundary: "sent" } },
 			});
 			ok("dead → re-resolve(control) success → fallback-sent", result.outcome === "fallback-sent");
 			// A socket retry hands the body to a live receiver and writes no file: no receipt to
@@ -349,12 +434,12 @@ describe("the control-socket send hand", () => {
 	it("9: single-release across every outcome (release at most once)", async () => {
 		{
 			const specs: FakeSpec[] = [
-				{ firstSend: { result: { success: true } } },
+				{ firstSend: { result: { success: true, boundary: "sent" } } },
 				{ firstSend: { result: { success: false } } },
 				{
 					firstSend: { throwCode: "ECONNREFUSED" },
 					deadFallback: { kind: "execute", plan: RERESOLVED_CONTROL_PLAN },
-					fallbackSend: { result: { success: true } },
+					fallbackSend: { result: { success: true, boundary: "sent" } },
 				},
 			];
 			let allSingle = true;
@@ -385,11 +470,11 @@ describe("the control-socket send hand", () => {
 	// ── 11: lock invariants → throws (decideReleasePolicy) ────────────────────
 	it("11: lock invariants → throws (decideReleasePolicy)", async () => {
 		{
-			const { deps } = makeDeps({ firstSend: { result: { success: true } } });
+			const { deps } = makeDeps({ firstSend: { result: { success: true, boundary: "sent" } } });
 			const nullErr = await rejects(() => executeControlSocketSend(CONTROL_PLAN, null, deps));
 			ok("null lock → throws (must hold lock)", nullErr instanceof Error);
 
-			const { deps: deps2 } = makeDeps({ firstSend: { result: { success: true } } });
+			const { deps: deps2 } = makeDeps({ firstSend: { result: { success: true, boundary: "sent" } } });
 			const mismatchErr = await rejects(() => executeControlSocketSend(CONTROL_PLAN, lockClaim(WRONG_GID), deps2));
 			ok("mismatched-gid lock → throws (mis-paired plan/lock)", mismatchErr instanceof Error);
 		}
@@ -418,7 +503,7 @@ describe("the control-socket send hand", () => {
 			const { deps, trace } = makeDeps({
 				firstSend: { throwCode: "ECONNREFUSED" },
 				deadFallback: { kind: "execute", plan: otherTargetControl },
-				fallbackSend: { result: { success: true } },
+				fallbackSend: { result: { success: true, boundary: "sent" } },
 			});
 			const err = await rejects(() => executeControlSocketSend(CONTROL_PLAN, lockClaim(), deps));
 			ok("mis-route (control, other target) → throws", err instanceof Error);
@@ -457,7 +542,10 @@ describe("the control-socket send hand", () => {
 	it("16: non-failed releaseLock throw — the delivery already HAPPENED, so a re-send", async () => {
 		{
 			const releaseErr = new Error("release boom after delivery");
-			const { deps, trace } = makeDeps({ firstSend: { result: { success: true } }, releaseThrows: releaseErr });
+			const { deps, trace } = makeDeps({
+				firstSend: { result: { success: true, boundary: "sent" } },
+				releaseThrows: releaseErr,
+			});
 			const err = await rejects(() => executeControlSocketSend(CONTROL_PLAN, lockClaim(), deps));
 			ok(
 				"sent + releaseLock throw → SendDeliveredReleaseFailedError (N1)",

@@ -78,9 +78,8 @@ import type {
 	ExtensionContext,
 	MessageRenderer,
 } from "@earendil-works/pi-coding-agent";
-import { getMarkdownTheme, type Theme } from "@earendil-works/pi-coding-agent";
-import { Box, type Component, Markdown, Spacer, Text } from "@earendil-works/pi-tui";
-import { ENTWURF_SENT_MESSAGE_TYPE } from "../protocol.js";
+import { getMarkdownTheme } from "@earendil-works/pi-coding-agent";
+import { Box, Markdown, Spacer, Text } from "@earendil-works/pi-tui";
 import { readCallbackEnv } from "./lib/callback-env.js";
 import {
 	type CompactionGuard,
@@ -89,6 +88,7 @@ import {
 	noteCompactionBefore,
 	noteCompactionTerminal,
 } from "./lib/compaction-send-guard.js";
+import { sendReceiptBoundary } from "./lib/control-send-receipt.js";
 import { CONTROL_SOCKET_SUFFIX, controlSocketPathIn, defaultControlSocketDir } from "./lib/control-socket-path.js";
 import {
 	attachAcceptedSocketDisconnectPolicy,
@@ -112,15 +112,6 @@ const EMACS_AGENT_SOCKET_FLAG = "emacs-agent-socket";
 // comes from the `.js` leaf both runtime lanes can import.
 const ENTWURF_DIR = defaultControlSocketDir(os.homedir());
 const SESSION_MESSAGE_TYPE = "entwurf-message";
-// Sender-side UI marker. Layer B (ACP path) emits a CustomMessage with this
-// customType so the operator sees a first-class [entwurf sent →] box paired
-// with the receive-side [entwurf received ⟵] box. The provider-level context
-// filter in index.ts drops this customType before the LLM sees it — colocated
-// with the emitter so sessions without --entwurf-control are still protected.
-// There is no second emitter: the v1 native send path ("Layer A") that also drew
-// this box through renderSentMessage() was removed in the 0.12 cutover, and
-// renderSentMessage is now registered for exactly one customType (see
-// registerMessageRenderer below). Do not describe a native sender-side box.
 const SENDER_INFO_PATTERN = /<sender_info>[\s\S]*?<\/sender_info>/g;
 
 // ============================================================================
@@ -478,10 +469,12 @@ const renderSessionMessage: MessageRenderer = (message, { expanded }, theme) => 
 	//
 	// The label is "[entwurf received ⟵]" with a left-pointing arrow so the
 	// receiving operator immediately sees the directionality (this is an
-	// incoming message). The corresponding sender-side surface in
-	// mcp/entwurf-bridge/entwurf_v2 renders "[entwurf sent →]" — same
-	// transport, opposite arrows, no confusion about who-said-what when the
-	// transcript is read end-to-end.
+	// incoming message). There is no matching box on the sending side: the one
+	// that used to be described here had zero producers and was removed (#120 P3).
+	// A sender sees a TEXT receipt naming the acceptance boundary
+	// (`entwurf-v2-surface.ts`), which is the honest thing to show — a box would
+	// claim the message was rendered into someone's transcript, and only the
+	// receiver can say that.
 	//
 	// wants_reply defaults to false (etiquette marker, not protocol contract).
 	// We show the badge only when the sender explicitly set it true; an
@@ -521,124 +514,6 @@ const renderSessionMessage: MessageRenderer = (message, { expanded }, theme) => 
 		}),
 	);
 	return box;
-};
-
-// Sender-side payload — what renderSentMessage needs to draw the [entwurf sent →]
-// box. Carried by the ACP path's CustomMessage `details` — the ONLY carrier since
-// the v1 native renderResult path was removed (0.12 cutover). All four envelope fields are intentionally
-// echoed in the box even though the sender is "this same session" — operators
-// reading a busy multi-session transcript should be able to verify at a glance
-// which 담당자 is on the wire (cwd) and which model identity (agentId) actually
-// signed the message, without scrolling up to find the session header.
-//
-// timestamp is captured at execute() / send-emit time, not at render time, so
-// re-renders (resize, expand toggle) keep showing the moment the message was
-// actually delivered rather than drifting forward to "now".
-//
-// wants_reply mirrors the receive-side etiquette badge. It stays optional because
-// the box is drawn from a CustomMessage whose `details` may predate the field; the
-// v1 `registerSessionTool` / `entwurfSendParameters` schema this note used to point
-// at is gone (0.12 cutover), so there is no native call site left to grow.
-interface SentBoxData {
-	to: string; // target sessionId
-	from?: string; // sender agentId, e.g. "entwurf/claude-opus-5"
-	cwd?: string; // sender cwd (raw, abbreviateHome applied at render)
-	timestamp?: string; // ISO 8601 UTC; rendered in KST
-	mode?: string; // "steer" | "follow_up" | string passed through
-	wants_reply?: boolean;
-	deliveredAs?: string; // RPC echo — surfaces when receiver remapped (e.g. queued as followUp)
-	body: string; // message text the operator sent
-}
-
-// Visual mirror of renderSessionMessage. Same Box / Markdown / theme tokens —
-// the two boxes must share the customMessageBg / customMessageLabel /
-// customMessageText surface so they are pixel-equivalent in any theme. The
-// only deliberate visual differences are:
-//   - label: [entwurf sent →]   vs  [entwurf received ⟵]
-//   - "to:" leads, "from:" follows  vs  "from:" only
-//   - mode: line                  (no equivalent on receive side — receiver
-//                                   doesn't see how the sender queued it)
-//
-// `expanded` truncates the body the same way as renderSessionMessage so a
-// large send shows the same preview shape as a large receive. operators
-// reading the transcript should not need different mental models.
-// Return type is `Component`, the interface `MessageRenderer` actually asks for
-// (`Component | undefined`, read at pi-coding-agent
-// `dist/core/extensions/types.d.ts:889`) — NOT the concrete `Container`.
-// `[측정 2026-09-06]` pi 0.85.0's mouse work gave `Container` a `private mouseLayout?`
-// (`pi-tui dist/tui.d.ts:198`; 0.84.4's `Container` had no private member at all), and
-// `Box` declares a SEPARATE private `mouseLayout` of its own. TypeScript only accepts a
-// private member from the same declaration, so the structural assignment `Box -> Container`
-// that held through 0.84.4 became TS2322 at 0.85.x. This was an UNDECLARED break — the
-// upstream Breaking section names only `createGatewayBindingFetch`. Annotating the shared
-// interface is the honest fix: nothing here ever needed Container's own surface.
-const buildSentMessageBox = (data: SentBoxData, expanded: boolean, theme: Theme): Component => {
-	let body = data.body || "(no content)";
-	if (!expanded) {
-		const lines = body.split("\n");
-		if (lines.length > 5) {
-			body = `${lines.slice(0, 5).join("\n")}\n...`;
-		}
-	}
-
-	const box = new Box(1, 1, (t) => theme.bg("customMessageBg", t));
-	const labelBase = theme.fg("customMessageLabel", `\x1b[1m[entwurf sent →]\x1b[22m`);
-
-	// Header line: label + KST + optional (wants reply) badge — matches the
-	// receive-side header layout 1:1.
-	const kst = formatTimestampKst(data.timestamp) ?? "(unknown time)";
-	const replyBadge = data.wants_reply === true ? "  (wants reply)" : "";
-	const headerLine = `${labelBase} ${theme.fg("dim", `${kst}${replyBadge}`)}`;
-	box.addChild(new Text(headerLine, 0, 0));
-
-	// to: <sessionId>  — target peer
-	box.addChild(new Text(theme.fg("dim", `to:   ${data.to || "(unknown sessionId)"}`), 0, 0));
-
-	// from: <agentId> @ <cwd>  — self identity. Shown even though it's "us"
-	// because in a multi-session human-greeted topology the operator is
-	// switching between several pi sessions and needs to confirm which one
-	// signed this send.
-	const fromAgent = data.from ?? "(unknown agent)";
-	const fromCwd = data.cwd ? abbreviateHome(data.cwd) : "(unknown cwd)";
-	box.addChild(new Text(theme.fg("dim", `from: ${fromAgent} @ ${fromCwd}`), 0, 0));
-
-	// mode: <mode>[ → deliveredAs]  — show RPC remap when it differs from
-	// what the caller asked for (e.g. caller said "steer" but receiver was
-	// idle so it became a direct prompt). Silent when they agree.
-	if (data.mode) {
-		const remap = data.deliveredAs && data.deliveredAs !== data.mode ? theme.fg("muted", ` → ${data.deliveredAs}`) : "";
-		box.addChild(new Text(theme.fg("dim", `mode: ${data.mode}${remap}`), 0, 0));
-	}
-
-	box.addChild(new Spacer(1));
-	box.addChild(
-		new Markdown(body, 0, 0, getMarkdownTheme(), {
-			color: (value: string) => theme.fg("customMessageText", value),
-		}),
-	);
-	return box;
-};
-
-// CustomMessageRenderer adapter for Layer B (ACP path). The CustomMessage
-// carries the SentBoxData under `details` (set by index.ts streamShellAcp
-// when a completed mcp__entwurf-bridge__entwurf_v2 is observed). `content`
-// holds the raw message body too, but we prefer details.body because the
-// content channel may have been routed through string-only persistence and
-// trimmed.
-const renderSentMessage: MessageRenderer = (message, { expanded }, theme) => {
-	const details = (message.details ?? {}) as Partial<SentBoxData>;
-	const fallbackBody = extractTextContent(message.content);
-	const data: SentBoxData = {
-		to: details.to ?? "(unknown sessionId)",
-		from: details.from,
-		cwd: details.cwd,
-		timestamp: details.timestamp,
-		mode: details.mode,
-		wants_reply: details.wants_reply,
-		deliveredAs: details.deliveredAs,
-		body: details.body ?? fallbackBody,
-	};
-	return buildSentMessageBox(data, expanded, theme);
 };
 
 // ============================================================================
@@ -824,9 +699,17 @@ async function handleCommand(
 			return;
 		}
 
+		// #120 P2: the receiver reports the BOUNDARY it actually observed — `sent` for an idle
+		// direct trigger, `queued-steer` / `queued-follow-up` for the two in-process queues — and
+		// nothing else. The bare `delivered:true` that used to lead this payload is GONE rather
+		// than kept for compatibility: it was equally true of all three states and therefore said
+		// nothing, which is the bare `delivered` DELIVERY.md refuses by name. The `deliveredAs`
+		// beside it had no consumer at all. Skew is safe in both directions without a translator —
+		// an old sender keys on `response.success` and never reads `data`, and a new sender reads
+		// an old receiver's payload as `accepted-unknown-boundary`, the honest name for an
+		// acceptance it cannot classify.
 		respond(true, "send", {
-			delivered: true,
-			deliveredAs: isIdle ? "direct" : mode === "follow_up" ? "followUp" : "steer",
+			boundary: sendReceiptBoundary({ idle: isIdle, mode }),
 			wants_reply: wantsReply,
 		});
 		return;
@@ -1104,17 +987,6 @@ export default function (pi: ExtensionAPI) {
 	};
 
 	pi.registerMessageRenderer(SESSION_MESSAGE_TYPE, renderSessionMessage);
-	// Layer B (ACP path) sender-side UI box. Registered unconditionally because
-	// renderer registration happens at extension load, BEFORE we know whether
-	// this session ends up with a routable identity: `updateSessionEnv` only
-	// publishes PI_SESSION_ID once a garden id exists, and clears it otherwise.
-	// A session without `--entwurf-control` therefore does NOT send — a bundled
-	// `entwurf_v2` sender call there fails loud on the missing envelope (the
-	// documented provider-vs-citizen boundary), and this renderer simply never
-	// fires. Registering it up front keeps one registration path instead of a
-	// conditional seam, and guarantees the [entwurf sent →] box exists for every
-	// session that DOES send.
-	pi.registerMessageRenderer(ENTWURF_SENT_MESSAGE_TYPE, renderSentMessage);
 
 	if (shouldRegisterControlTools(pi)) {
 		registerListSessionsTool(pi);
@@ -1387,7 +1259,7 @@ function registerEntwurfV2Tool(pi: ExtensionAPI): void {
 		mode: Type.Optional(
 			StringEnum(["steer", "follow_up"] as const, {
 				description:
-					"Injection style for a CONTROL-SOCKET send only: steer (immediate) or follow_up (after task). " +
+					"Injection style for a CONTROL-SOCKET send only: steer (ask the receiver's steering queue) or follow_up (ask its follow-up queue). NEITHER is an interrupt: a busy receiver drains steering after each turn and follow-ups only when its inner loop ends, so a later steer overtakes every earlier follow_up and there is no order between the two. Both queues are volatile process memory — an abort drops what is in them. The receipt names which queue accepted the message (`queued-steer` / `queued-follow-up`); an idle receiver answers `sent`, meaning the turn was TRIGGERED, not that the model has seen the text. " +
 					"The mailbox and native-push plans carry no mode, so it has no effect on those rails.",
 			}),
 		),
@@ -1415,9 +1287,11 @@ function registerEntwurfV2Tool(pi: ExtensionAPI): void {
 		description: `CANONICAL DELIVERY SURFACE for garden ids: message, reply, or hand off to whoever an id names. The id alone
 does not say which rail that citizen answers on. Give target + intent; the decider picks transport from
 liveness (live socket citizen → control-socket send; deliverable self-fetch citizen → meta-bridge mailbox;
-probe-alive native-push citizen → direct injection into its conversation) and reports ONE outcome
-(delivered / rejected / delivered-but-lock-dirty). EXISTING targets only; discover with entwurf_peers.
-A peer entwurf_peers shows as liveness=alive → fire-and-forget. A citizen with NO socket liveness
+probe-alive native-push citizen → direct injection into its conversation) and reports ONE outcome, per rail: a control
+receiver's acceptance boundary ("sent" / "queued-steer" / "queued-follow-up" /
+"accepted-unknown-boundary" — those four only), a mailbox ENQUEUE receipt, a native-push INJECTION,
+a rejection, or lock-dirty. EXISTING targets only (see entwurf_peers).
+A peer shown as liveness=alive → fire-and-forget. A citizen with NO socket liveness
 (liveness=unsupported) is ALSO fire-and-forget — unsupported means only "no control-socket probe" — and the
 decider picks its own rail: a self-fetch backend (e.g. Claude Code) gets the mailbox, a native-push backend
 (e.g. Antigravity) gets direct injection and has NO mailbox at all. THERE IS A THIRD RESULT: the mailbox
@@ -1426,9 +1300,8 @@ rather than queued for an inbox nobody drains. The native-push probe is 3-valued
 alive → injected; dead → native-push-target-dead; indeterminate → native-push-probe-indeterminate
 (unestablished ≠ gone). DORMANT IS UNREACHABLE: a socket-domain citizen that is not running gets
 dormant-fire-forget-unsupported — same receiver rule as the mailbox, no active drainer means no
-delivery. The intent that used to answer there, owned-outcome, resumed it by
-launching a hidden background child; it was withdrawn under the visible-first rule, so re-open the session
-yourself and dispatch again. LOCK: taken for a control-socket-DOMAIN dispatch. The mailbox and native-push
+delivery. The intent that used to answer there, owned-outcome, was withdrawn
+under the visible-first rule — re-open the session yourself and dispatch again. LOCK: taken for a control-socket-DOMAIN dispatch. The mailbox and native-push
 rails are lock-free — deliverability and the adapter probe guard them. mode applies to a CONTROL-SOCKET
 send only; other plans carry no mode. wants_reply rides every rail. message caps at 16000 chars; send an
 artifact path + digest for more.`,

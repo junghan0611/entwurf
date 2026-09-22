@@ -28,6 +28,7 @@
  * lets the hand's `decideReleasePolicy` fail loud on a mis-pairing.
  */
 
+import type { AcceptanceBoundary } from "./control-send-receipt.ts";
 import type {
 	DispatchDecision,
 	DispatchInput,
@@ -71,7 +72,15 @@ export interface DispatchExecutorDeps {
  * and it is the ONLY enqueue-side datum carried (never a read timestamp; see
  * `RpcSendResult`). */
 export type ExecutedOutcome =
-	| { transport: "control-socket"; outcome: SendFinalOutcome; rejectReason?: string; messagePath?: string }
+	| {
+			transport: "control-socket";
+			outcome: SendFinalOutcome;
+			rejectReason?: string;
+			messagePath?: string;
+			/** #120 P2: the receiver's acceptance boundary. The SURFACE renders this, not
+			 * `outcome` — that one names the route/release leg, which an operator cannot act on. */
+			boundary?: AcceptanceBoundary;
+	  }
 	| { transport: "meta-mailbox"; success: true; messagePath?: string }
 	// native-push carries `retried` so the surface can note the 1-shot re-probe retry fired.
 	| { transport: "native-push"; success: true; retried: boolean };
@@ -89,6 +98,15 @@ export type EntwurfV2RunResult =
 			receipt: SuccessReceipt;
 			transport: ExecutionPlan["transport"];
 			error: string;
+			/** #120 P2, N1: the ACCEPTANCE the send reached before the release failed. Without it
+			 * the dirty-lock line is the one surface left that answers "what happened to my
+			 * message" with an internal route word. Absent on a `rejected` finalization (nothing
+			 * was accepted) and on the mailbox fallback leg (which carries a file instead). */
+			finalizedBoundary?: AcceptanceBoundary;
+			/** #98 R, same case: the `.msg` a mailbox fallback wrote before the release failed. */
+			finalizedMessagePath?: string;
+			/** The receiver's own refusal text, when the finalization was a `rejected` one. */
+			finalizedRejectReason?: string;
 			/** Present ONLY for the N1 case: the delivery/refusal reached a terminal outcome
 			 * but `releaseLock` then threw (lock dirty). A re-send would double-deliver. */
 			finalizedOutcome?: Exclude<SendFinalOutcome, "failed">;
@@ -129,6 +147,7 @@ export async function executeDispatch(
 						outcome: r.outcome,
 						rejectReason: r.rejectReason,
 						messagePath: r.messagePath,
+						boundary: r.boundary,
 					},
 				};
 			} catch (err) {
@@ -140,6 +159,9 @@ export async function executeDispatch(
 						transport,
 						error: errorMessage(err),
 						finalizedOutcome: err.finalizedOutcome,
+						finalizedBoundary: err.finalizedBoundary,
+						finalizedMessagePath: err.finalizedMessagePath,
+						finalizedRejectReason: err.finalizedRejectReason,
 						releaseFailed: true,
 						retrySafe: false,
 					};

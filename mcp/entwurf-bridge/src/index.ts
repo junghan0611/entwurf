@@ -431,7 +431,9 @@ server.tool(
 		"alone does not say which rail that citizen answers on. Give target + intent; the decider picks transport " +
 		"from liveness (live socket citizen → control-socket send; deliverable self-fetch citizen → meta-bridge " +
 		"mailbox; probe-alive native-push citizen → direct injection into its conversation) and reports ONE " +
-		"outcome (delivered / rejected / delivered-but-lock-dirty). EXISTING targets only; discover with " +
+		"outcome, named per rail: a control receiver's acceptance boundary (`sent` / `queued-steer` / " +
+		"`queued-follow-up` / `accepted-unknown-boundary` — those four only), a mailbox ENQUEUE receipt, a " +
+		"native-push INJECTION, a rejection, or lock-dirty. EXISTING targets only; discover with " +
 		"entwurf_peers. A peer entwurf_peers shows as liveness=alive → fire-and-forget. A " +
 		"citizen with NO socket liveness (liveness=unsupported) is ALSO fire-and-forget — unsupported means only " +
 		'"no control-socket probe." The decider resolves the actual rail at dispatch time: a self-fetch ' +
@@ -472,9 +474,8 @@ server.tool(
 			.enum(["steer", "follow_up"])
 			.optional()
 			.describe(
-				"Injection style for a CONTROL-SOCKET send only: steer (interrupt the current turn) or " +
-					"follow_up (queue after it). The mailbox and native-push plans carry no mode, so it has no " +
-					"effect on those rails.",
+				"Injection style for a CONTROL-SOCKET send only: steer (ask the receiver's steering queue) or follow_up (ask its follow-up queue). NEITHER is an interrupt: a busy receiver drains steering after each turn and follow-ups only when its inner loop ends, so a later steer overtakes every earlier follow_up and there is no order between the two. Both queues are volatile process memory — an abort drops what is in them. The receipt names which queue accepted the message (`queued-steer` / `queued-follow-up`); an idle receiver answers `sent`, meaning the turn was TRIGGERED, not that the model has seen the text. " +
+					"The mailbox and native-push plans carry no mode, so it has no effect on those rails.",
 			),
 		wants_reply: z.boolean().optional().describe("Human-conversation reply hint (default false)"),
 	},

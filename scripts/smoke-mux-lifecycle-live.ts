@@ -786,9 +786,16 @@ async function main(): Promise<void> {
 				mode: "follow_up",
 				message: `Scene 2 (${liveNeedle}): you were told a color. Reply with that color only, then stop.`,
 			});
+			// #120 P2: the rail answers with the ACCEPTANCE BOUNDARY, and this send names `follow_up`
+			// against a citizen that may well be mid-turn — `queued-follow-up` is a correct, normal
+			// answer here. Pinning the word `sent` would have demanded an idle receiver the scene
+			// never promises. What is asserted is the rail plus an accepted boundary; a refusal
+			// still fails through `isError`.
 			ok(
-				`${cell}: tools/call entwurf_v2 fire-and-forget delivered on the CONTROL-SOCKET rail to the fresh citizen`,
-				!send.isError && send.text.includes("control-socket") && send.text.includes("sent"),
+				`${cell}: tools/call entwurf_v2 fire-and-forget was ACCEPTED on the CONTROL-SOCKET rail by the fresh citizen`,
+				!send.isError &&
+					send.text.includes("control-socket") &&
+					/→ (?:sent|queued-steer|queued-follow-up|accepted-unknown-boundary)/.test(send.text),
 				`--- response ---\n${send.text}\n--- bridge stderr ---\n${bridge.stderrTail()}`,
 			);
 			receipts[`${cell}/3-live-send`] = send.text;

@@ -32,6 +32,7 @@
  * `releaseLock` throw never MASKS a send failure — the original error wins (5b).
  */
 
+import type { AcceptanceBoundary } from "./control-send-receipt.ts";
 import type { ExecutionPlan } from "./entwurf-v2-decider.ts";
 import type { LockClaim } from "./entwurf-v2-lock.ts";
 import {
@@ -50,6 +51,12 @@ export type MetaMailboxPlan = Extract<ExecutionPlan, { transport: "meta-mailbox"
  * `send-final` outcomes. `fallback-sent` is a REAL final outcome (legacy parity: a
  * re-resolved delivery is not a hidden retry). */
 export type SendFinalOutcome = "sent" | "fallback-sent" | "rejected" | "failed";
+// NOTE (#120 P2): the type above is the ROUTE/RELEASE algebra and is NOT the sender-visible
+// delivery boundary. It answers WHICH LEG carried the bytes — first socket, re-resolved socket,
+// mailbox — which is exactly what the release reducer needs and exactly what an operator cannot
+// act on: `sent` here says a receiver accepted, never what the receiver then did with it. The
+// boundary is a SEPARATE axis (`AcceptanceBoundary`, control-send-receipt.ts) riding beside this
+// one, so neither can overwrite the other.
 
 /** What a single RPC / mailbox enqueue reports. `success:false` is an in-band reject
  * (the receiver answered and refused) — distinct from a thrown connect error.
@@ -66,6 +73,12 @@ export interface RpcSendResult {
 	success: boolean;
 	error?: string;
 	messagePath?: string;
+	/** #120 P2: the receiver's OWN acceptance boundary, already classified by
+	 * `control-send-receipt.ts` at the wire seam. Present on every SUCCESSFUL control-socket
+	 * answer — an answer we could not classify is `accepted-unknown-boundary`, not an absence —
+	 * and absent on the mailbox rail, which has no turn-injection boundary to report and answers
+	 * with a durable file receipt instead. */
+	boundary?: AcceptanceBoundary;
 }
 
 /** The same-lock one-shot re-resolve result (5c-2b implements the resolver; 5c-2a
@@ -116,6 +129,12 @@ export interface ControlSocketSendResult {
 	 * mailbox delivery whose sender gets no per-message identifier — the same letter the
 	 * primary mailbox rail names. */
 	messagePath?: string;
+	/** #120 P2: the acceptance boundary the receiver reported, on EVERY successful
+	 * control-socket leg including the re-resolved one — a `fallback-sent` that dropped it would
+	 * say "delivered" about a message sitting in a volatile queue behind whatever else is in it.
+	 * Absent on the mailbox fallback leg (no turn-injection boundary exists there) and on
+	 * rejected/failed. */
+	boundary?: AcceptanceBoundary;
 }
 
 // A drive step's verdict: the terminal outcome, plus the original error to RETHROW on
@@ -127,6 +146,24 @@ interface SendDrive {
 	rejectReason?: string;
 	/** #98 R receipt from the mailbox fallback leg (see `ControlSocketSendResult`). */
 	messagePath?: string;
+	/** #120 P2 acceptance boundary from a socket leg (see `ControlSocketSendResult`). */
+	boundary?: AcceptanceBoundary;
+}
+
+/**
+ * A successful SOCKET answer always carries a boundary: the wire seam classifies every answer with
+ * one total function, and an answer it cannot place is `accepted-unknown-boundary` rather than
+ * nothing. So `undefined` here is not a host state, it is a bypassed seam — a dep wired straight
+ * past the classifier. Fail loud. A silent default would make the one shape that must never be
+ * mistaken for a direct trigger — delivered, boundary unknown to us — look exactly like one.
+ */
+function requireBoundary(result: RpcSendResult): AcceptanceBoundary {
+	if (result.boundary === undefined) {
+		throw new Error(
+			"entwurf-v2-send: a successful control-socket RPC reported no acceptance boundary — the wire seam that classifies one was bypassed (contract violation).",
+		);
+	}
+	return result.boundary;
 }
 
 /**
@@ -159,7 +196,12 @@ export async function executeControlSocketSend(
 		drive = { outcome: "failed", error: err };
 	}
 	finalizeRelease(policy, deps, held, drive);
-	return { outcome: drive.outcome, rejectReason: drive.rejectReason, messagePath: drive.messagePath };
+	return {
+		outcome: drive.outcome,
+		rejectReason: drive.rejectReason,
+		messagePath: drive.messagePath,
+		boundary: drive.boundary,
+	};
 }
 
 /** Drive the 1차 send and route a connect failure through the F3 split. */
@@ -179,7 +221,7 @@ async function driveSend(plan: ControlSocketPlan, lock: LockClaim, deps: Control
 	}
 	// A completed RPC: ack ⇒ sent; in-band refusal ⇒ rejected, NO fallback. Preserve
 	// its receiver error verbatim when supplied; do not make a reason up when absent.
-	return result.success ? { outcome: "sent" } : inBandRejected(result);
+	return result.success ? { outcome: "sent", boundary: requireBoundary(result) } : inBandRejected(result);
 }
 
 /**
@@ -224,7 +266,7 @@ async function driveDeadFallback(
 			// connect failure finalizes as failed (no further fallback).
 			try {
 				const r = await deps.sendOverSocket(rePlan);
-				return r.success ? { outcome: "fallback-sent" } : inBandRejected(r);
+				return r.success ? { outcome: "fallback-sent", boundary: requireBoundary(r) } : inBandRejected(r);
 			} catch (err) {
 				return { outcome: "failed", error: err };
 			}
@@ -261,14 +303,42 @@ async function driveDeadFallback(
  */
 export class SendDeliveredReleaseFailedError extends Error {
 	readonly finalizedOutcome: Exclude<SendFinalOutcome, "failed">;
+	/** #120 P2: the ACCEPTANCE the send actually reached, carried through the failure so the
+	 * dirty-lock line can say what happened instead of a bare route word. Absent on a `rejected`
+	 * finalization (nothing was accepted) and on the mailbox fallback leg (which carries a file
+	 * instead) — those two are exactly why this is optional rather than defaulted. */
+	readonly finalizedBoundary?: AcceptanceBoundary;
+	/** #98 R receipt, same reason: a mailbox fallback that then failed to release still wrote a
+	 * `.msg`, and the operator has to be told WHICH one before touching the lock. */
+	readonly finalizedMessagePath?: string;
+	/** The receiver's own refusal text on a `rejected` finalization. Without it the dirty-lock line
+	 * is the ONE place a refusal loses its reason — and it is the place an operator reads while
+	 * deciding by hand whether the message still needs sending. */
+	readonly finalizedRejectReason?: string;
 	readonly releaseError: unknown;
-	constructor(finalizedOutcome: Exclude<SendFinalOutcome, "failed">, releaseError: unknown) {
+	constructor(
+		finalizedOutcome: Exclude<SendFinalOutcome, "failed">,
+		releaseError: unknown,
+		accepted: { boundary?: AcceptanceBoundary; messagePath?: string; rejectReason?: string } = {},
+	) {
 		const detail = releaseError instanceof Error ? releaseError.message : String(releaseError);
+		// NOT "delivered". The word was wrong on two of the three shapes that reach here — a
+		// `rejected` finalization delivered nothing at all, and a `queued-*` one is sitting in
+		// volatile memory — and DELIVERY.md refuses a bare `delivered` for exactly that reason.
+		// What is true of all three is that the send REACHED A TERMINAL RESULT and must not be
+		// repeated.
+		const what =
+			finalizedOutcome === "rejected"
+				? `rejected${accepted.rejectReason ? ` (${accepted.rejectReason})` : ""}`
+				: (accepted.boundary ?? "mailbox-enqueued");
 		super(
-			`entwurf-v2-send: ${finalizedOutcome} delivered but releaseLock failed (lock dirty, do NOT re-send): ${detail}`,
+			`entwurf-v2-send: the send finalized as \`${what}\` and releaseLock then failed (lock dirty, do NOT re-send): ${detail}`,
 		);
 		this.name = "SendDeliveredReleaseFailedError";
 		this.finalizedOutcome = finalizedOutcome;
+		this.finalizedBoundary = accepted.boundary;
+		this.finalizedMessagePath = accepted.messagePath;
+		this.finalizedRejectReason = accepted.rejectReason;
 		this.releaseError = releaseError;
 	}
 }
@@ -294,7 +364,13 @@ function finalizeRelease(policy: ReleasePolicy, deps: ControlSocketSendDeps, loc
 			if (drive.outcome === "failed") throw original;
 			// N1: the delivery/refusal already happened — surface it as a structured,
 			// retry-unsafe error rather than a bare release throw.
-			throw new SendDeliveredReleaseFailedError(drive.outcome, releaseErr);
+			// The acceptance truth rides along: without it the dirty-lock line is the ONE place
+			// left that still answers "what happened to my message" with a route word.
+			throw new SendDeliveredReleaseFailedError(drive.outcome, releaseErr, {
+				boundary: drive.boundary,
+				messagePath: drive.messagePath,
+				rejectReason: drive.rejectReason,
+			});
 		}
 	}
 	if (drive.outcome === "failed") throw original;
