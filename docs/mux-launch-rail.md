@@ -282,7 +282,7 @@ session 디렉터리 스캔이 symlink를 허용하게 된 것(identity minting�
 
 ### 읽은 근거
 
-`<pi>` = 설치된 `@earendil-works/pi-coding-agent@0.84.0`(이 절의 표본을 뜬 install; 현 supported range 는 `>=0.86.0 <0.87` — 아래 0.84.x 재확인 문단들은 그 시점의 측정이다) 패키지 루트(pnpm global store).
+`<pi>` = 설치된 `@earendil-works/pi-coding-agent@0.84.0`(이 절의 표본을 뜬 install; 현 supported range 는 `>=0.87.0 <0.88` — 아래 0.84.x 재확인 문단들은 그 시점의 측정이다) 패키지 루트(pnpm global store).
 아래 표에서 출처가 `(0.83.0)`으로 적힌 행은 **앵커 시점의 역사적 표본**이고, 그 행의 사실이 0.84.0에서도
 성립하는지는 위 재실측 문단이 따로 진다. 접두사 없는
 경로는 이 repo 기준이다.
@@ -601,10 +601,13 @@ exact evidence로 인정되는 것은 셋이다.
    있는 backend를 레코드 backend와 대조한다: pi가 보고한 pane을 claude-code citizen에게 주지 않는다.
 
    **두 축의 정확도가 같지 않다는 것도 적는다.** claude 축은 보고된 값이 **곧 키**다(바이트 동등).
-   pi 축은 값이 세션 **파일 경로**이고, 키는 그 파일명에서 **pi 0.86.0에서 측정한 strict 변환**으로
-   꺼낸다 — 유일 키 동등이 아니라 **vendor floor**다. 그 0.86.0 영수증은 상속이 아니라 실측이고,
-   `pi-extensions/lib/herdr-placement.ts:115-131`이 그것을 진다: sandbox HOME 에서 pi 0.86.0 이 실제로
-   쓴 세션 파일 하나의 이름과, 그 파일 자신의 `{"type":"session"}` 헤더 `id` 가 같은 문자열이라는 것.
+   pi 축은 값이 세션 **파일 경로**이고, 키는 그 파일명에서 **strict 변환**으로 꺼낸다 — 유일 키
+   동등이 아니라 **vendor floor**다. `[측정 2026-09-22, pi 0.87.0]` 그 floor 는 이제 **게이트가 매
+   실행마다 스스로 다시 잰다**: `scripts/check-herdr-placement.ts` 가 설치된 `SessionManager` 로
+   temp dir 에 실제 세션 파일을 쓰게 하고(모델·네트워크·자식 프로세스 0), 그 basename 을
+   `piNativeSessionIdFromPath` 로 되읽어 파일 자신의 `{"type":"session"}` 헤더 `id` 및 manager id 와
+   같은 문자열임을 단언한다. 손으로 한 번 찍고 기억하는 영수증이 아니다. 앞선 0.86.0 실측(sandbox
+   HOME 에서 pi 가 쓴 파일 하나)은 그 시점의 사실로 bump ledger 에 남는다.
    그 layout이 벤더 계약인지 관례인지는 미측정이고,
    그래서 이 축이 드리프트할 수 있는 유일한 자리다. 변환을 양끝에서 조여 두었으므로 드리프트는
    **놓친 조인**으로 끝나지 **틀린 조인**이 되지 않는다.

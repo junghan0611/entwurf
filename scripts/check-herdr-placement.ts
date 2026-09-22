@@ -165,6 +165,57 @@ async function main(): Promise<void> {
 			piNativeSessionIdFromPath("/s/2026-09-14T05-17-03-979Z_not-a-uuid.jsonl") === null &&
 			piNativeSessionIdFromPath(`/s/${PI_NATIVE}.jsonl`) === null,
 	);
+	{
+		// THE VENDOR HALF OF THAT CLAIM, FROM THE INSTALLED VENDOR — not a literal we typed.
+		// The key this parser recovers lives inside a filename pi builds, so the rule is only as
+		// true as pi's naming, and a source read cannot settle whether that naming is a contract
+		// or a convention. `[측정 2026-09-22, @earendil-works/pi-coding-agent 0.87.0]` the installed
+		// `SessionManager` writes a REAL session file here, in a temp dir, with zero model, zero
+		// network and zero child process: `create()` then one `appendMessage` flushes
+		// `<stamp>_<id>.jsonl` whose own `{"type":"session"}` header carries the same id.
+		//
+		// The 0.86.0 receipt this replaces needed a provider call and was therefore taken by hand
+		// once; it stays in the bump ledger as a 0.86.0 fact. This one re-takes itself on every
+		// run, so the vendor floor cannot drift under us silently again.
+		const dir = fs.mkdtempSync(path.join(os.tmpdir(), "entwurf-hp-vendor-"));
+		try {
+			const { SessionManager } = await import("@earendil-works/pi-coding-agent");
+			const manager = await SessionManager.create(process.cwd(), dir);
+			await manager.appendMessage({
+				role: "assistant",
+				content: [{ type: "text", text: "placement vendor-floor probe" }],
+				api: "test",
+				provider: "test",
+				model: "test",
+				// Zero everything: this message exists to make the manager flush a file, and a
+				// fixture that invented usage numbers would be inventing vendor accounting too.
+				usage: {
+					input: 0,
+					output: 0,
+					cacheRead: 0,
+					cacheWrite: 0,
+					totalTokens: 0,
+					cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+				},
+				stopReason: "stop",
+				timestamp: Date.now(),
+			});
+			const written = fs.readdirSync(dir).filter((f) => f.endsWith(".jsonl"));
+			const header = JSON.parse(readFileSync(path.join(dir, written[0]), "utf8").split("\n")[0]);
+			const recovered = piNativeSessionIdFromPath(path.join(dir, written[0]));
+			ok(
+				"the vendor floor is re-measured, not remembered: the installed pi writes a real session file whose " +
+					"basename this parser reads back to the same id its own header declares",
+				written.length === 1 &&
+					header.type === "session" &&
+					typeof header.id === "string" &&
+					recovered === header.id &&
+					recovered === manager.getSessionId(),
+			);
+		} finally {
+			fs.rmSync(dir, { recursive: true, force: true });
+		}
+	}
 	ok(
 		"[QK:HP-JOIN-NEVER-GUESSES] an unmeasured agent_session kind and an empty value both yield NO key — an " +
 			"unknown herdr shape is declined, never coerced into one of the two rules we actually measured",

@@ -170,7 +170,7 @@ Usage:
   ./run.sh smoke-codex-fresh-live    # #95 RELEASE MUST: record-backed receipt fixture -> PUBLIC initial Pi fresh/callback in a session S that is NOT the app-server's -> Pi PUBLIC omitted-placement Codex fresh/exact callback, also in S -> Pi-to-Codex addressed native-push v2 -> Codex PUBLIC omitted-placement AND omitted-cwd fresh Pi/exact callback IN S beside its own TUI (lane B claim: the app-server env names another session, so S can only come from the caller's pane title; lane C claim: no cwd was asked for, so the directory can only come from the Codex caller's own record — and the Codex thread's own rollout session_meta.cwd, its pane and its record must all be the requested scratch, not the app-server's repo) -> Codex final v2 evidence. Needs LIVE=1 + ENTWURF_CODEX_APP_SERVER_PID + ENTWURF_CODEX_FRESH_MODEL + ENTWURF_CODEX_FRESH_PI_MODEL, and its ONE stable launch directory answered 'Trust' once in a plain codex -C there: codex records its direct consent per exact directory, so a directory with no answer at all opens a consent screen instead of a first turn. Only THIS gate treats that as a precondition and fails up front as codex-launch-cwd-undecided rather than timing out on a callback — an ordinary entwurf_fresh_call only prints the note and opens the window, because a human can answer the screen. The smoke PRINTS that directory as 'launch-cwd <dir>' and repeats it in the failure as a ready-to-run repair command — do not retype it from memory, and do not write it as \$TMPDIR/... (os.tmpdir() falls back to /tmp when TMPDIR is unset, so that spelling names a different directory in the filesystem root). The PID names the operator-owned app-server, which must sit in a DIFFERENT session from S; the smoke checks/prints all four coordinates, never starts/stops/guesses the app-server/session, never reads screen text, interrupts only its exact still-running Codex turn, and cleans only receipt-named window ids
   ./run.sh smoke-mux-lifecycle-live  # RELEASE MUST integrated LIVE lifecycle acceptance for mux, through the REAL MCP surface — OUT of pnpm check, needs LIVE=1 and spends model turns (two pi siblings: native + recorded-ACP provider, each resumed once; one Claude Code sibling). tools/call fresh_call -> nonce callback sender envelope -> v2 control send landing in the sibling's own transcript -> resume_call REFUSED while live (window count unchanged) -> stable-handle close (pane gone, socket dead, record kept) -> dormant delivery refused honestly -> public entwurf_resume_call with LAUNCH and OBSERVATION receipts kept apart, same-gid socket alive, zero new citizens, zero lock residue, resumed pane_start_path == RECORD cwd (separate tmux query), transcript byte-identical across the resume -> v2 recall of the pre-close fact. claude-code resume refused target-not-pi, no window opened and no lock residue. LIVE=1 ./run.sh smoke-mux-lifecycle-live
   ./run.sh check-meta-facts            # deterministic gate for the meta-facts projection (#65): drives the REAL CLI — full-record join, parse-before-uniqueness, no-winner duplicates, drift/symlink/invalid-UTF-8 defects in-band, deterministic bytes, exit contract 0/2/3, dispatch+emit reachability
-  ./run.sh check-herdr-plugin          # deterministic gate for the #116 M2-b herdr plugin (`plugins/herdr/`): STATIC manifest shape for herdr 0.9.0 + the forbidden sections ([[startup]]/[[events]]/[[actions]]/[[link_handlers]]) asserted absent ([[build]] is check-herdr-plugin-build's subject since #116 M3-b3); BEHAVIOURAL drive of the REAL pane entry against a stub `entwurf` and stub HERDR_BIN_PATH that LOG every call — exactly one peer-facts + one agent list per open (counted, not claimed), skip-by-name when Entwurf is absent, four distinct named refusals instead of an empty table, ambiguous never first-wins, diagnostics shown, activity in its own column, and zero writes to the plugin state/config dirs. No herdr binary, no Entwurf install
+  ./run.sh check-herdr-plugin          # deterministic gate for the #116 M2-b herdr plugin (`plugins/herdr/`): STATIC manifest shape for herdr 0.9.0 + the forbidden sections ([[startup]]/[[events]]/[[actions]]/[[link_handlers]]) asserted absent ([[build]] is check-herdr-plugin-build's subject since #116 M3-b3); BEHAVIOURAL drive of the REAL pane entry against a stub `entwurf` and stub HERDR_BIN_PATH that LOG every call — exactly one `herdr integration status` + one `entwurf peer-facts` + one `herdr agent list` per open, in that order (counted, not claimed), through ONE spawn call site; the four blocks each naming their own owner/observation time with no aggregate verdict; the D3=C fallback reading the activation ledger from the path its WRITER owns (XDG state, never the runtime's data root) and only when the phase is `active`, with ENTWURF_BIN and PATH still winning outright; the citizen axis alone skipping by name when no binary is reachable; every broken-evidence state a named red rather than a crash or an empty table, and a selected herdr atom that is `outdated`/`needs repair` as block [1]'s OWN red (`not installed` stays a reported skip); ambiguous never first-wins, diagnostics shown, activity in its own column, and zero writes to the plugin state/config dirs. No herdr binary, no Entwurf install
   ./run.sh check-herdr-runtime-bootstrap # deterministic gate for the #116 M3-b1 runtime leaf (`plugins/herdr/lib/runtime-bootstrap.mjs`): the Entwurf-owned stable active root as a REAL directory (nothing is put on PATH — the scoped wiring above names ABSOLUTE commands under it), ownership decided BEFORE the first mkdir, disk facts from lstat (a dangling symlink is not 'absent' and a link into another tree is not a directory), exact name@version + compiled entry + all three required bins present AND executable + a real `check-bridge`, the plugin-owned artifact lock coherent with the checkout, the owned npm cache and --ignore-scripts, a CERTIFIED journal (non-object/array/scalar/blank-identity/phase-contradicting-digest all refused) as the only ownership proof, all EIGHT active/staging/previous combinations named, the last good runtime never lost (torn swap AND corrupt-active beside a good backup), prior provenance carried across an install that may not finish, a failed candidate leaving the running runtime byte-identical, idempotent same-spec reinstall, a journal believed only while the disk backs it, a preflight-then-mutate inverse taking runtime last, and the refusal to record Herdr's commit as ours. NETWORK ZERO, npm ZERO — it drives a FIXTURE package, so the ACTUAL package proof lives in check-pack-install
   ./run.sh check-herdr-activation      # deterministic gate for the #116 M3-b2 scoped activation: the pi user-scope-ONLY forward seam (no project write, OpenCode byte-untouched), the absolute command DERIVED from the runtime root for BOTH harnesses (relative/unnormalised refused), default bare/clone bytes unchanged when no mode is asked, the pi inverse refusing a drifted command instead of deleting an override, a certified activation ledger that can never name an atom outside {pi, claude-code}, add-only reinstall (a shrinking H retains, never removes), a roots-drift refusal before the first byte, the teardown order components->runtime->ledger LAST, one refused preflight leaving every byte untouched, and no deferred module load on the path that deletes its own runtime. Drives the REAL pi writers; the vendor `claude` CLI is NOT invoked and its acceptance of an absolute executable stays a named LIVE boundary
   ./run.sh check-herdr-plugin-profile  # deterministic gate for the #116 M3-a PURE activation leaf (`plugins/herdr/lib/integration-profile.mjs`): the closed {pi→pi, claude→claude-code} table, exactly-one-row-or-named-refusal, the FRONT-ANCHORED state grammar (a `/srv/current (v9)/` directory name may not decide a verdict), no path in the plan, outdated/needs-repair as named FAILs, not-installed as a zero-write SKIP, `current` as herdr's admission with no floor of our own, OpenCode observed but never planned, and the leaf's purity. Listing strings only — no herdr binary, no install, no environment, no writes
@@ -1218,6 +1218,26 @@ check_entwurf_v2_send() {
   run_vitest pi-extensions/lib/entwurf-v2-send.test.ts
 }
 
+check_entwurf_v2_runner() {
+  # MUTANT EXECUTION COORDINATE, not a discovery path — the file is found by
+  # check-tests-beside-behavior like every other beside-behaviour lane. This case exists because
+  # the #120 P2 SEND-DIRTY-LOCK-RUNNER-MOVES-ACCEPTANCE mutant names it as gate argv, and
+  # attribution is read from the JSON test titles `run_vitest` emits. Narrow file filter, same
+  # reason as check-entwurf-v2-send: a mutant pointed at the discovery door would re-run every
+  # beside-behaviour test once per mutant.
+  section "v2 dispatch runner (mutant execution coordinate)"
+  run_vitest pi-extensions/lib/entwurf-v2-runner.test.ts
+}
+
+check_control_send_receipt() {
+  # MUTANT EXECUTION COORDINATE, not a discovery path — the test is found by
+  # check-tests-beside-behavior like every other beside-behaviour lane. This case exists because
+  # the #120 P2 SEND-RECEIPT-* mutants name it as gate argv, and attribution is read from the JSON
+  # test titles `run_vitest` emits. Narrow file filter, same reason as check-entwurf-v2-send.
+  section "control-socket acceptance boundary (mutant execution coordinate)"
+  run_vitest pi-extensions/lib/control-send-receipt.test.ts
+}
+
 check_entwurf_v2_native_push() {
   # MUTANT EXECUTION COORDINATE, not a discovery path — the test is found by
   # check-tests-beside-behavior like every other beside-behaviour lane. This case exists
@@ -2123,7 +2143,14 @@ const runSh = readFileSync('run.sh', 'utf8');
 const piAi = pkg.devDependencies?.['@earendil-works/pi-ai'];
 const piCoding = pkg.devDependencies?.['@earendil-works/pi-coding-agent'];
 const piTui = pkg.devDependencies?.['@earendil-works/pi-tui'];
+// #120 P2: pi-agent-core is now DIRECTLY imported by test/pi-queue.oracle.test.ts, which proves
+// what the control-socket receipt says about a receiver's queues. An oracle pinned to a DIFFERENT
+// pi than the one this repo targets would answer honestly about a pi nobody runs, so its exact
+// dev pin moves with the floor or the floor is not a floor.
+const piCore = pkg.devDependencies?.['@earendil-works/pi-agent-core'];
 assert.ok(piAi, 'package.json devDependencies must pin @earendil-works/pi-ai');
+assert.equal(piCore, piAi,
+  `[QK:PI-CORE-PIN-TRACKS-FLOOR] @earendil-works/pi-agent-core (${piCore}) must match @earendil-works/pi-ai (${piAi}) — the queue oracle imports it directly to prove what the control-socket receipt claims about a receiver's queues, so a pin that drifts off the floor would answer honestly about a pi nobody here runs`);
 assert.equal(piCoding, piAi,
   `@earendil-works/pi-coding-agent (${piCoding}) must match @earendil-works/pi-ai (${piAi})`);
 assert.equal(piTui, piAi,
@@ -2254,6 +2281,79 @@ for (const [file, re, shape] of PROSE_DECLS) {
   assert.ok(m, `${file}: the baseline sentence "${shape}" is gone — restore it or update check-dep-versions; a doc reword must not silently drop the pin from the gate`);
   assert.equal(m[1], piAi, `${file}: "${shape}" declares ${m[1]}, but the devDep pin is ${piAi}`);
 }
+// ── #120 P4: ONE FLOOR, FOUR MECHANICAL SURFACES ──────────────────────────
+// The bump is mostly a number substitution, and that is exactly how a bump goes
+// wrong: three surfaces move and the fourth is noticed months later by an install
+// that fails somewhere else. `[측정 2026-09-22]` the workspace closure was already
+// outside this gate — nothing here read `pnpm-workspace.yaml` at all — so a stale
+// row there could only surface at `pnpm install` time, far from the change.
+//
+// ONE assertion, because the claim token may appear exactly once in a gate source.
+// Every way the floor can fragment is collected first and named individually in the
+// failure, so "which surface" is never lost to the single-token rule.
+const nextFloorRange = `>=${piAi} <0.${piMin + 1}`;
+const floorGaps = [];
+const PI_CONSTELLATION = [
+  '@earendil-works/pi-ai', '@earendil-works/pi-coding-agent', '@earendil-works/pi-tui',
+  '@earendil-works/pi-agent-core', '@earendil-works/pi-client', '@earendil-works/pi-protocol',
+  '@earendil-works/pi-telemetry', '@earendil-works/chord',
+];
+const sameSet = (got, want, where) => {
+  const missing = want.filter((n) => !got.includes(n));
+  const extra = got.filter((n) => !want.includes(n));
+  if (missing.length > 0) floorGaps.push(`${where}: missing ${missing.join(', ')}`);
+  if (extra.length > 0) floorGaps.push(`${where}: unexpected ${extra.join(', ')}`);
+};
+// run.sh check-pack-install: the packages a consumer's fresh tree must resolve.
+const installed = [];
+for (const [, name, ver] of runSh.matchAll(/"(@earendil-works\/[a-z-]+)@(\d+\.\d+\.\d+)"/g)) {
+  installed.push(name);
+  if (ver !== piAi) floorGaps.push(`run.sh install constellation: ${name}@${ver} is not the floor ${piAi}`);
+}
+sameSet(installed, PI_CONSTELLATION, 'run.sh install constellation');
+// pnpm-workspace.yaml minimumReleaseAgeExclude: the same eight, each ADMITTING the
+// current floor. History stays (`0.85.0 || 0.85.1 || …`) — only the newest term is
+// the contract, because that is what an install resolves against.
+const closure = [...readFileSync('pnpm-workspace.yaml', 'utf8').matchAll(/^\s*-\s*'(@earendil-works\/[a-z-]+)@([^']+)'/gm)];
+sameSet(closure.map(([, name]) => name), PI_CONSTELLATION, 'pnpm-workspace.yaml closure');
+for (const [, name, spec] of closure) {
+  if (!spec.split('||').map((t) => t.trim()).includes(piAi)) {
+    floorGaps.push(`pnpm-workspace.yaml closure: ${name}@${spec} does not admit the floor ${piAi} — a stranded row fails only at install time`);
+  }
+}
+// The PIN-LEAK MATCHER's own version bound. `[측정 2026-09-22]` this one was missed by the
+// first cut of this very claim and only surfaced when check-pack-install actually ran: the
+// install resolved 0.87.0 correctly and the gate refused it, because the matcher still said
+// `@0\.86\.0`. It is a regex literal, not a quoted `@pkg@version` spec, so the scan above
+// walked straight past it — which is exactly the "surface nothing else reads" this claim is
+// about, found the hard way. It is bound by name now.
+const matcherPin = runSh.match(/grep -Ev '@(\d+\\?\.\d+\\?\.\d+)\(_\|\$\)'/);
+if (!matcherPin) {
+  floorGaps.push("run.sh pack_install_leaked_pi: the version-bounded pin regex is gone — a matcher that stopped bounding the version would pass every leaked runtime");
+} else if (matcherPin[1].replace(/\\/g, '') !== piAi) {
+  floorGaps.push(`run.sh pack_install_leaked_pi: the pin-leak matcher bounds @${matcherPin[1].replace(/\\/g, '')}, but the floor is ${piAi} — the consumer install proof would refuse the very runtime this repo pins`);
+}
+
+// The three CURRENT-contract doc sentences the range/exact scans above cannot see,
+// each anchored on its own wording. Historical samples (the 0.84.x placement
+// measurement in docs/mux-launch-rail.md, for one) are deliberately NOT scanned:
+// they record what was true then, and rewriting them would falsify evidence.
+const CURRENT_CONTRACT_DECLS = [
+  ['plugins/herdr/README.md', /npm install -g "@earendil-works\/pi-coding-agent@(>=[\d.]+ <0\.\d+)"/, 'the herdr install line'],
+  ['docs/mux-launch-rail.md', /현 supported range 는 `(>=[\d.]+ <0\.\d+)`/, "mux-launch-rail's current supported range"],
+  ['docs/acp-backend-rail.md', /devDep exact `(\d+\.\d+\.\d+)`, peer `(>=[\d.]+ <0\.\d+)`/, "the ACP support row's exact+range pair"],
+];
+for (const [file, re, shape] of CURRENT_CONTRACT_DECLS) {
+  const m = readFileSync(file, 'utf8').match(re);
+  if (!m) { floorGaps.push(`${file}: ${shape} is gone — a reworded current-contract sentence must fail loud, not drop out silently`); continue; }
+  for (const captured of m.slice(1)) {
+    const expected = captured.startsWith('>=') ? nextFloorRange : piAi;
+    if (captured !== expected) floorGaps.push(`${file}: ${shape} declares "${captured}", but the floor is ${piAi} (${nextFloorRange})`);
+  }
+}
+assert.deepEqual(floorGaps, [],
+  `[QK:PI-FLOOR-SINGLE-SOURCE] the pi floor is declared on four mechanical surfaces — the package's exact dev pins and peer ceiling, run.sh's install constellation, the pnpm workspace closure, and the current-contract sentences in the docs — and every one of them must name the SAME floor. A bump that moves three of the four is the ordinary way this breaks, and the surface left behind is the one nothing else reads`);
+
 // Guard the guard: if the patterns ever stop matching, the loops above pass
 // vacuously and the docs fall back OUT of the gate without a word.
 assert.ok(rangeDecls >= 5, `expected at least 5 pi range declarations across the baseline docs, found ${rangeDecls} — the doc scan matched (almost) nothing and would pass vacuously`);
@@ -3025,6 +3125,21 @@ check_acp_sdk_surface() {
   run_vitest test/acp-sdk-surface.contract.test.ts
 }
 
+check_pi_queue_oracle() {
+  # #120 P2. The PUBLIC execution coordinate for `test/pi-queue.oracle.test.ts`, and the reason it
+  # needs one: the discovery door below selects `pi-extensions/**/*.test.ts` and
+  # `plugins/herdr/**/*.test.mjs` and deliberately NOT `test/**`, so a file under `test/` that
+  # nothing names is green only when somebody runs `pnpm test` by hand. This oracle backs every
+  # sentence the receipt and DELIVERY.md make about `queued-steer` / `queued-follow-up`, which is
+  # exactly the kind of claim that must not rest on a manual run.
+  #
+  # It is a Vitest file, not a new hand-built gate: the subject is the INSTALLED
+  # @earendil-works/pi-agent-core (exact dev pin), driven with a fake stream function. Zero model,
+  # zero network, zero child process.
+  section "pi receiver queue oracle (installed pi-agent-core, no model)"
+  run_vitest test/pi-queue.oracle.test.ts
+}
+
 check_tests_beside_behavior() {
   # The DISCOVERY door (issue #119 V2). A `.test.ts` beside a pi extension or a
   # `.test.mjs` beside the herdr plugin lib is run by public `pnpm check` without
@@ -3054,6 +3169,44 @@ check_tests_beside_behavior() {
       return 1
     fi
   done
+
+  # #120 P2 — THE OTHER HALF OF THE SAME CONTRACT: what this door deliberately does NOT open.
+  # `test/**` is excluded on purpose (see the positional-substring measurement above), so a vitest
+  # file under `test/` is reached by public `pnpm check` ONLY if some run.sh verb names it AND that
+  # verb is in the `check:vitest` chain. Measured: a queue-oracle file under test/ landed green under
+  # a manual `pnpm test` while the floor never ran it at all. A claim proven only when somebody
+  # remembers to run it by hand is not on the floor, so the reachability is asserted rather than
+  # assumed — every file, every time, with no filename list living here either.
+  #
+  # AND NO PATH IS SPELLED IN THIS FUNCTION. Measured: naming the oracle's path in the comment above
+  # made the scan match its OWN comment — this verb is in the chain, so every file appeared reachable
+  # and the regression mutant survived. A checker that can satisfy itself is not a checker.
+  local chain tf verb
+  chain="$(cd "$REPO_DIR" && node -e 'process.stdout.write(require("./package.json").scripts["check:vitest"] ?? "")')"
+  while IFS= read -r tf; do
+    [ -n "$tf" ] || continue
+    # The enclosing `check_xxx()` is the coordinate; `check:vitest` must call its `check-xxx` form.
+    # ONE failure message, because the claim token may appear exactly once in a gate source — and
+    # the two ways this can break ("nothing names it" / "what names it is never called") are the
+    # same defect seen from two sides: the file is not on the floor.
+      # THE COORDINATE IS AN EXECUTABLE LINE, NOT A MENTION. Measured: when this scan accepted any
+    # line inside an enclosing function that contained the path, deleting the `run_vitest` call
+    # itself left the function's own COMMENT matching — the file stopped being run and the checker
+    # stayed green. So only `run_vitest <path>` counts, and the two seams are separated: does
+    # something execute it, and is that something on the floor.
+    verb="$(awk -v needle="$tf" -v chain="$chain" '
+      /^check_[a-z0-9_]+\(\) \{/ { fn = $1; sub(/\(\).*/, "", fn); gsub(/_/, "-", fn) }
+      $1 == "run_vitest" && fn != "" { for (i = 2; i <= NF; i++) if ($i == needle) { print fn; found = 1; exit } }
+      END { if (!found) print "" }' "$REPO_DIR/run.sh")"
+    if [ -z "$verb" ]; then
+      fail "[QK:VITEST-TEST-DIR-HAS-COORDINATE] $tf is under test/, which the discovery door deliberately excludes, and no run.sh verb EXECUTES it — a mention in a comment is not a coordinate, so nothing runs this file at all"
+      return 1
+    fi
+    if ! printf '%s' "$chain" | grep -qF "$verb"; then
+      fail "[QK:VITEST-TEST-DIR-ON-THE-FLOOR] $tf is executed by run.sh verb '$verb', which check:vitest does not call — the file has a coordinate nobody walks, so it is green only when somebody remembers to run pnpm test by hand"
+      return 1
+    fi
+  done < <(cd "$REPO_DIR" && find test -type f -name '*.test.ts' -print | LC_ALL=C sort)
 
   local -a selected=()
   local f
@@ -3553,7 +3706,7 @@ check_pack() {
 #     which is exactly what property (1)'s `(_|$)` absorbs; all three shapes are fixtures
 #     below so a future suffix change cannot pass vacuously.)
 pack_install_leaked_pi() {
-  grep '^@earendil-works+' | grep -Ev '@0\.86\.0(_|$)' || true
+  grep '^@earendil-works+' | grep -Ev '@0\.87\.0(_|$)' || true
 }
 
 # Matcher self-test on SYNTHETIC lookalikes: a healthy install tree cannot exercise either
@@ -3573,27 +3726,27 @@ check_pack_pin_matcher() {
   # None may leak; the two lookalikes must — a PREFIX-EXTENDED version (`0.86.0-beta.1`,
   # the prerelease shape that an unanchored match would bless) and an off-pin version.
   matcher_probe=$(printf '%s\n' \
-    '@earendil-works+pi-ai@0.86.0' \
-    '@earendil-works+pi-ai@0.86.0_@modelcontextprotocol+sdk@1.29.0_zod@4.3.6' \
-    '@earendil-works+pi-ai@0.86.0_ws@8.21.3' \
-    '@earendil-works+pi-ai@0.86.0_@modelcontextprotocol+sdk@1.29.0_zod@4.3.6__ws@8.21.3_zod@4.3.6' \
-    '@earendil-works+pi-ai@0.86.0-beta.1' \
-    '@earendil-works+pi-agent-core@0.85.1' | pack_install_leaked_pi)
-  if [ "$matcher_probe" != '@earendil-works+pi-ai@0.86.0-beta.1
-@earendil-works+pi-agent-core@0.85.1' ]; then
-    fail "[QK:PACK-INSTALL-PIN-MATCHER-BOUNDED] the pin-leak matcher must flag the prefix-extended 0.86.0-beta.1 and the off-pin 0.85.1 lookalikes, and pass 0.86.0 bare or with any measured peer-hash — got: ${matcher_probe:-<nothing leaked>}"
+    '@earendil-works+pi-ai@0.87.0' \
+    '@earendil-works+pi-ai@0.87.0_@modelcontextprotocol+sdk@1.29.0_zod@4.3.6' \
+    '@earendil-works+pi-ai@0.87.0_ws@8.21.3' \
+    '@earendil-works+pi-ai@0.87.0_@modelcontextprotocol+sdk@1.29.0_zod@4.3.6__ws@8.21.3_zod@4.3.6' \
+    '@earendil-works+pi-ai@0.87.0-beta.1' \
+    '@earendil-works+pi-agent-core@0.86.0' | pack_install_leaked_pi)
+  if [ "$matcher_probe" != '@earendil-works+pi-ai@0.87.0-beta.1
+@earendil-works+pi-agent-core@0.86.0' ]; then
+    fail "[QK:PACK-INSTALL-PIN-MATCHER-BOUNDED] the pin-leak matcher must flag the prefix-extended 0.87.0-beta.1 and the off-pin 0.86.0 lookalikes, and pass 0.87.0 bare or with any measured peer-hash — got: ${matcher_probe:-<nothing leaked>}"
     return 1
   fi
 
   # Cell 2 — the closure prefix. chord is a non-`pi-` member of the same runtime closure
-  # (0.85.0 onward, still true at 0.86.0). An off-pin chord MUST leak; the pinned one must not. A matcher narrowed
+  # (0.85.0 onward, still true at 0.87.0). An off-pin chord MUST leak; the pinned one must not. A matcher narrowed
   # back to `^@earendil-works+pi-` sees nothing here and dies at this signature.
   matcher_probe=$(printf '%s\n' \
+    '@earendil-works+chord@0.87.0' \
     '@earendil-works+chord@0.86.0' \
-    '@earendil-works+chord@0.85.1' \
-    '@earendil-works+pi-ai@0.86.0' | pack_install_leaked_pi)
-  if [ "$matcher_probe" != '@earendil-works+chord@0.85.1' ]; then
-    fail "[QK:PACK-INSTALL-PIN-MATCHER-COVERS-CLOSURE] the pin-leak matcher must cover every @earendil-works closure member, not just the pi-* families — an off-pin @earendil-works/chord has to leak (it is a runtime dependency of pi-coding-agent, pi-agent-core, pi-client and pi-protocol at 0.86.0 — `[측정 2026-09-20]` `npm view <pkg>@0.86.0 dependencies`) — got: ${matcher_probe:-<nothing leaked>}"
+    '@earendil-works+pi-ai@0.87.0' | pack_install_leaked_pi)
+  if [ "$matcher_probe" != '@earendil-works+chord@0.86.0' ]; then
+    fail "[QK:PACK-INSTALL-PIN-MATCHER-COVERS-CLOSURE] the pin-leak matcher must cover every @earendil-works closure member, not just the pi-* families — an off-pin @earendil-works/chord has to leak (it is a runtime dependency of pi-coding-agent, pi-agent-core, pi-client and pi-protocol — `[측정 2026-09-20]` at 0.86.0, re-measured `[측정 2026-09-22]` at 0.87.0: the same four @earendil-works direct deps) — got: ${matcher_probe:-<nothing leaked>}"
     return 1
   fi
 
@@ -3825,7 +3978,9 @@ _check_pack_install_impl() {
 
   printf '%s\n' '{ "name": "entwurf-install-smoke", "version": "0.0.0", "private": true }' > "$tmp/package.json"
 
-  # pi-agent-core is pinned even though we never import it: pi-coding-agent depends
+  # pi-agent-core is pinned for TWO reasons now. Directly: `test/pi-queue.oracle.test.ts` imports
+  # it to drive a real `Agent` (#120 P2), so its version is part of what the receipt's claims are
+  # true OF. And transitively, which is why it was pinned here first: pi-coding-agent depends
   # on it by CARET (`^0.86.x`), so with no lockfile in this fresh temp project it
   # floats to whatever pi published last — and that newer core then drags a NESTED
   # pi-ai of its own. Measured 2026-07-21: pinning only the three we import left
@@ -3868,18 +4023,18 @@ _check_pack_install_impl() {
   # pi-agent-core incident. The list moves WITH the floor and is re-measured at
   # each bump, never pruned on a single quiet minor.
   # The verified floor is 0.86.0 as of 2026-09-20.
-  echo "[check-pack-install] pnpm add into $tmp (with 0.86.x peers + chord + typebox)"
+  echo "[check-pack-install] pnpm add into $tmp (with 0.87.x peers + chord + typebox)"
   local install_log
   install_log=$(cd "$tmp" && pnpm add \
     "$tgz_path" \
-    "@earendil-works/pi-ai@0.86.0" \
-    "@earendil-works/pi-coding-agent@0.86.0" \
-    "@earendil-works/pi-tui@0.86.0" \
-    "@earendil-works/pi-agent-core@0.86.0" \
-    "@earendil-works/pi-client@0.86.0" \
-    "@earendil-works/pi-protocol@0.86.0" \
-    "@earendil-works/pi-telemetry@0.86.0" \
-    "@earendil-works/chord@0.86.0" \
+    "@earendil-works/pi-ai@0.87.0" \
+    "@earendil-works/pi-coding-agent@0.87.0" \
+    "@earendil-works/pi-tui@0.87.0" \
+    "@earendil-works/pi-agent-core@0.87.0" \
+    "@earendil-works/pi-client@0.87.0" \
+    "@earendil-works/pi-protocol@0.87.0" \
+    "@earendil-works/pi-telemetry@0.87.0" \
+    "@earendil-works/chord@0.87.0" \
     "typebox@latest" \
     --ignore-workspace --ignore-scripts 2>&1) || {
     fail "[check-pack-install] pnpm add failed:"
@@ -3895,11 +4050,11 @@ _check_pack_install_impl() {
   local leaked_pi
   leaked_pi=$(ls "$tmp/node_modules/.pnpm" 2>/dev/null | pack_install_leaked_pi)
   if [ -n "$leaked_pi" ]; then
-    fail "[check-pack-install] UNVERIFIED pi runtime resolved into the install tree (expected only 0.86.0):"
+    fail "[check-pack-install] UNVERIFIED pi runtime resolved into the install tree (expected only 0.87.0):"
     printf '%s\n' "$leaked_pi" | sed 's/^/    /' >&2
     return 1
   fi
-  echo "[check-pack-install] pi runtime tree pin verified: every @earendil-works package is 0.86.0 (chord included)"
+  echo "[check-pack-install] pi runtime tree pin verified: every @earendil-works package is 0.87.0 (chord included)"
 
   # Resolve the installed package.json and confirm pi.extensions
   # arrived intact. If pi.extensions is empty or missing, the
@@ -6466,6 +6621,12 @@ case "$cmd" in
   check-entwurf-v2-send)
     check_entwurf_v2_send
     ;;
+  check-entwurf-v2-runner)
+    check_entwurf_v2_runner
+    ;;
+  check-control-send-receipt)
+    check_control_send_receipt
+    ;;
   check-entwurf-v2-native-push)
     check_entwurf_v2_native_push
     ;;
@@ -7426,6 +7587,9 @@ case "$cmd" in
     ;;
   check-acp-sdk-surface)
     check_acp_sdk_surface
+    ;;
+  check-pi-queue-oracle)
+    check_pi_queue_oracle
     ;;
   check-tests-beside-behavior)
     check_tests_beside_behavior

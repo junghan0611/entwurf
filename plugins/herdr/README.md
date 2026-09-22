@@ -119,7 +119,7 @@ commands are ordinary invocations — no model turn, no login, no account.
 
 ```bash
 # 1. pi — the range Entwurf declares as its peer, quoted so the shell keeps it in one word
-npm install -g "@earendil-works/pi-coding-agent@>=0.86.0 <0.87"
+npm install -g "@earendil-works/pi-coding-agent@>=0.87.0 <0.88"
 
 # 2. herdr — see the herdr project for its own install
 herdr --version
@@ -331,12 +331,41 @@ exactly the hook that would grow a watcher.
   Entwurf owns that conversion and a copy out here would fork a vendor floor. If two Herdr agents
   claim one pane, the activity column says `ambiguous` rather than picking one.
 - **Show an empty table for a failed read.** Every way this can go wrong prints its own name.
+- **Merge its four blocks into one verdict.** Herdr's integration listing is true *now*; the activation
+  ledger is an *install-time* receipt nobody re-checked; the rails table is *static*; the citizen table is
+  true *now*. Each block renders its own owner, its own observation time and its own outcome, and there
+  is no aggregate green — a host whose integration is current, whose ledger is a week old and whose
+  runtime has since been deleted is exactly the case a summary word erases.
+
+### Two kinds of sibling, two promises about delivery (#120)
+
+`entwurf_v2` answers with the boundary the RECEIVER observed, and the two rails this plugin wires
+do not make the same promise:
+
+- A **pi** sibling answers on a control socket. Idle → `sent`: its turn was triggered. Busy →
+  `queued-steer` / `queued-follow-up`: accepted into one of two in-process queues that have no
+  order between them and no durability at all — an abort in that session drops what is waiting.
+- A **Claude Code** sibling answers through a disk mailbox. The message is a `*.msg` file written
+  before any doorbell rings; filenames are ISO stamps, so a drain is a global FIFO, and an inbox
+  nobody drains is refused honestly as `mailbox-undeliverable` rather than accepted into nothing.
+
+Neither `sent` nor a queue word means the model has read the text. `DELIVERY.md` carries the full
+table.
 
 ### The failure vocabulary
 
 | what you see | what happened |
 |---|---|
-| `entwurf-not-found` (exit 0) | no `entwurf` on `PATH` and no `ENTWURF_BIN`. A host without Entwurf is not a broken host, so this is a **skip** |
+| `entwurf-not-found` (exit 0, CITIZENS block only) | no `ENTWURF_BIN`, no `entwurf` on `PATH`, and no certified activation ledger to fall back to. A host without Entwurf is not a broken host, so this is a **skip** — and only of the citizen axis: blocks 1-3 still render |
+| `activation-reader-unavailable` | an activation ledger or runtime exists, but the installed runtime's own reader could not be imported. We hold a receipt we cannot read |
+| `activation-ledger-missing` | a runtime is installed here and no ledger describes it — a partial install, a finished teardown, or a file removed under us. The runtime's own binary is not spent on a receipt we do not have |
+| `activation-env-root-unresolvable` | a user root one of the layouts needs could not be resolved — with `HOME` unset, each of `XDG_DATA_HOME`, `XDG_CACHE_HOME` and `XDG_STATE_HOME` has to stand on its own, and the message names which one did not. The other three blocks still render |
+| `activation-phase-not-active` (exit 0) | the ledger is certified and true, but its phase is `activating` or `deactivating` — wiring in flight, not a runtime standing ready. It is **reported, not red**, and it supplies no fallback binary |
+| `activation-ledger-uncertified` | the installed runtime's reader refused the ledger body. Its reason is printed with it |
+| `activation-runtime-root-mismatch` | the certified ledger describes a runtime root that is not the one this host derives — the receipt is about somewhere else |
+| `runtime-bin-missing` | certified and aligned, but `node_modules/.bin/entwurf` under that root is gone or not executable |
+| `herdr-integration-status-failed` | `herdr integration status` could not be run or answered non-zero |
+| `herdr-integration-not-current` | a selected atom is `outdated` or `needs repair`. This is block [1]'s own red and the pane leaves non-zero; `not installed` is a reported **skip** at exit 0, not this |
 | `entwurf-bin-not-absolute` | `ENTWURF_BIN` is set to a bare name; a second, quieter PATH lookup is not allowed |
 | `entwurf-bin-not-executable` | `ENTWURF_BIN` points at something that is not an executable file |
 | `herdr-bin-path-missing` | `HERDR_BIN_PATH` was not in the pane's environment |
@@ -360,7 +389,7 @@ read. Every field the provider attached is shown, in sorted key order.
 | `pi extension directory not found` from `herdr integration install pi` | the harness has never run, so its config directory does not exist | run `pi --help` (or `claude mcp list`) once, then integrate |
 | the install exits 2 immediately | stdin is not a terminal and `--yes` was not passed. This is about the prompt, not a missing server | add `--yes` |
 | a plain `pi` has no entwurf tools | citizenship is argv-gated | start it as `pi --entwurf-control` |
-| the pane prints `entwurf-not-found` | the plugin puts nothing on `PATH` | run the pane on a host where `entwurf` is on `PATH`, or set `ENTWURF_BIN` to the absolute path under the runtime root |
+| the CITIZENS block says `entwurf-not-found` | the plugin puts nothing on `PATH`, **and** this host's activation evidence granted no fallback — the skip line names which code that was — so nothing was activated here, or the activation block beside it names why | read the ACTIVATION block first: it is the one that says whether this host ever activated. `ENTWURF_BIN` remains available as an explicit override and always wins, but on a healthy install it should not be needed |
 | your citizen is counted under `unobserved` instead of drawn as a row | the session is not running inside a Herdr pane Herdr can report a placement for | start it inside a Herdr pane |
 | the build activates nothing and exits 0 | `A` is empty: Herdr has integrated neither pi nor Claude. A host that asked for nothing gets nothing written, and nothing removed | integrate a harness first |
 | `pi --model entwurf/<claude model>` cannot start on NixOS | the ACP rail runs a dynamically linked vendor binary shipped inside the Claude Agent SDK, and stock NixOS cannot start one `[observed: GLG, raw PC, 2026-09-17]` | `programs.nix-ld.enable = true`. This is not a plugin failure, and the two things this plugin wires — `pi --entwurf-control` and an ordinary `claude` — need no such thing |
@@ -380,7 +409,9 @@ read. Every field the provider attached is shown, in sorted key order.
   registry artifact, in an Entwurf-owned XDG npm cache reclaimed by `herdr-plugin-deactivate`. You do
   **not** clone Entwurf or run `npm install`; the build acquires and integrity-checks the exact npm
   artifact its committed lock names.
-- **For the pane:** Entwurf on `PATH` as `entwurf`, or an absolute path in `ENTWURF_BIN`.
+- **For the pane:** nothing, on a host this plugin activated — the pane falls back to the runtime the
+  certified activation ledger names. `ENTWURF_BIN` (absolute) and then `entwurf` on `PATH` are still
+  honoured first and always win; the ledger is consulted only when you have set neither.
 - **Node, for the pane entry itself.** It is a plain `.mjs` using only Node builtins — no
   `node_modules`, no `jq`; the manifest names `node` in its argv and nothing else.
 - **A model id when you open a sibling.** `entwurf_fresh_call` has no default (see Quick start).

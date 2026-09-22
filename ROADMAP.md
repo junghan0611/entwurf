@@ -100,7 +100,7 @@ ACP는 중심이 아니라 v2 core 위에 provider/model로 들어오는 **plugi
 | v2 live Antigravity → native-push direct injection | native-push adapter/register/decider gates + `smoke-agy-native-push-live` |
 | agy automatic citizen birth + sender/reply identity | hooks/statusline/install/sender gates + three doctors + fresh live round trip |
 | v2 honest reject (false-delivered/`.msg` garbage 0) | matrix-live C3 + deliverability/native-push reject gates |
-| pi 0.86.0 fence | `pnpm check` + release-gate MUST |
+| pi 0.87.0 fence | `pnpm check` + release-gate MUST |
 
 ### Historical — 0.12.0 cutover close checklist
 
@@ -312,7 +312,7 @@ v2 필드 `parentGardenId`/`isEntwurf`는 **stray key로 거부된다** — 되�
 ## 검증 원장 (measured, 재탐색 불필요)
 
 - **pi 0.80 public export:** `hasProjectTrustInputs`/`ProjectTrustStore`/`getAgentDir`/`VERSION` 모두 index
-  public export → TS 직접 import(재구현 불필요). floor = **0.86.0** (`>=0.86.0 <0.87`, next-minor 상한).
+  public export → TS 직접 import(재구현 불필요). floor = **0.87.0** (`>=0.87.0 <0.88`, next-minor 상한).
 - **pi trust(0.79.1+):** `pi -p`는 trust에서 안 멈춤(비대화 미결정→`false` degraded). `--approve`(`-a`)=
   project 파일 로드, `--no-approve`(`-na`)=무시·degraded. `ProjectTrustStore.get`은 nearest-ancestor
   walk-up(조상 cwd 결정을 자식이 상속). `AGENTS.md`/`CLAUDE.md`는 0.79.1에서 trust input에서 제거(항상
@@ -572,9 +572,18 @@ v2 필드 `parentGardenId`/`isEntwurf`는 **stray key로 거부된다** — 되�
       `resolvePermissionResponse`는 라벨이 아니라 **`kind`**(`allow_once`/`allow_always`)로 고르고, 0.65.0도
       그 kind와 optionId(`reject`/`allow`/`allow_always`)를 그대로 낸다(`acp-agent.ts:4885-4890`).
       즉 "기능이 off"가 아니라 **라벨 독립성** 주장이다. #958은 **구조적으로 미도달**이다 —
-      새 분기는 전부 `isSteering(turn)` 가드이고 `steeredEchoes`는 `session/steer` 핸들러
+      새 분기는 전부 `isSteering(turn)` 가드이고 `steeredEchoes`는 steering 핸들러
       (`agent.steer`, `:1922`/`:7880`)에서만 채워지는데 entwurf ACP 클라이언트는
-      initialize/newSession/prompt/setSessionConfigOption/cancel만 보낸다. 가드 아닌 유일한 수정
+      initialize/newSession/prompt/setSessionConfigOption/cancel만 보낸다.
+      **[후대 정정 2026-09-22, #120 P5]** 위에서 이 메서드를 `session/steer`라고 적은 것은 부정확하다.
+      당시 측정의 결론(미도달, 우리 전달 경로 0)은 그대로 유효하고 정정 대상이 아니지만, 이름과 지위는
+      다음이 사실이다: 표준 ACP에 steer 메서드는 **없다** — `[측정 2026-09-22]` 설치된
+      `@agentclientprotocol/sdk`의 `AGENT_METHODS`/`CLIENT_METHODS` 전체를 런타임으로 열거했을 때
+      `steer`를 포함하는 항목이 0개다. 실제로 존재하는 것은 벤더 확장 `_session/steering`이고
+      (`claude-agent-acp` `src/acp-agent.ts:201` STEER_METHOD / handler `:7879` — 로컬 upstream
+      v0.65.0에도 이미 같았고 현재 0.79.0도 같다), **방향은 client→agent**, 지원 여부는
+      `InitializeResponse._meta.steering.supported`로 광고된다. 우리 client는 그 capability를
+      읽지도 그 request를 보내지도 않는다(경로 0). 가드 아닌 유일한 수정
       (`owesTrailingIdle`)도 비-steering에서 `true`로 접혀 이전 조건과 동치다.
       (entwurf MCP의 `mode:"steer"`는 우리 control-socket 주입 방식이고 ACP steering과 무관하다.)
       공개 export `describeAlwaysAllow` 제거도 미도달 — 우리는 어댑터 심볼을 import하지 않고 bin만 spawn한다.
@@ -789,7 +798,9 @@ v2 필드 `parentGardenId`/`isEntwurf`는 **stray key로 거부된다** — 되�
     0.85.x 에서 `private mouseLayout?` 를 얻었다(`dist/tui.d.ts:198`; 0.84.4 의 `Container` 는
     private 멤버가 아예 없었다). `Box` 는 자기 소유의 별개 `private mouseLayout` 을 선언하므로
     TypeScript 의 private-멤버 동일선언 규칙에 걸려 `Box → Container` 구조적 할당이 TS2322 로 깨졌다
-    (`entwurf-control.ts:551` `buildSentMessageBox` 반환 타입). upstream Breaking 절은
+    (`entwurf-control.ts:551` `buildSentMessageBox` 반환 타입 — **후대 주석 2026-09-22**: 그 심볼은
+    당시 실재했고 이 측정도 그대로 유효하지만, #120 P3 에서 producer 0 인 dead surface 로 제거됐다.
+    지금 그 줄을 따라가면 아무것도 없다). upstream Breaking 절은
     `createGatewayBindingFetch` 만 이름한다 — 이건 **미선언**이고, #99 정찰의 "계약 파손 후보 8개
     전부 미도달"이 `packages/tui` 를 안 읽어서 놓친 자리다. 수리는 벤더 계약이 실제로 요구하는
     인터페이스로 좁힌 것: `MessageRenderer` 는 `Component | undefined` 를 원한다
@@ -815,6 +826,70 @@ v2 필드 `parentGardenId`/`isEntwurf`는 **stray key로 거부된다** — 되�
     `pnpm-lock.yaml`, baseline 문서 5곳(AGENTS/README/ROADMAP/setup-clean-host/demo) +
     `docs/acp-backend-rail.md` 지원 matrix + `VERIFY.md`(그 자리는 어느 게이트도 읽지 않아
     0.84.3 세대에 멈춰 있었다 — BASELINE_DOCS 밖이라 두 번의 bump 를 그냥 지나쳤다).
+  - **2026-09-22 bump — pi 0.86.0 → 0.87.0 (direct; 0.86.1 skipped, 아래 ⑹).**
+    `~/repos/3rd/pi/pi-mono` `v0.86.0..v0.87.0` (30 commits) 직독 + `npm view @…@0.87.0` 직독.
+
+    ⑴ **하중 파일 sha256 (실제 경로, 앞 12) — 0.86.0 → 0.87.0:**
+    SAME `packages/ai/src/compat.ts` `fe077a90f918`.
+    DIFF `packages/coding-agent/src/core/session-manager.ts` `860b01d43063` → `ded5d65112f8`;
+    `packages/coding-agent/src/core/extensions/types.ts` `292cc98f1dfb` → `601261b3deee`;
+    `packages/coding-agent/src/core/extensions/runner.ts` `e43a3dcc2821` → `bf68eaf27a3e`;
+    `packages/agent/src/agent.ts` `a586b3b5488c` → `fad42fdcea12`;
+    `packages/agent/src/agent-loop.ts` `2f4e22805572` → `c3d99a5b0f24`.
+    **경로를 접두사 없이 적지 않는다** — 지난 ledger 가 그렇게 적어 존재하지 않는 파일의
+    empty-file sha(`e3b0c44298fc`)를 기록한 자리가 있었다. 위 6개는 두 태그 모두에서 실재한다.
+
+    ⑵ **declared breaking 5건 × 우리 접촉 판정 (grep receipt, 전부 production 0건):**
+    `shouldStopAfterTurn`→`finishTurn` = 0 (**production 은 `Agent` 를 구성하지 않고**, 구성하는 것은
+    P2 의 deterministic oracle `test/pi-queue.oracle.test.ts` 하나인데 그 옵션을 쓰지 않는다) · `ContextEditEntry`/`SessionEntry`
+    union = 0 (exhaustive switch 없음, 세션 읽기는 파일명/JSONL 텍스트 레벨) · `SessionManager`
+    canonical = 0 (`SessionManager` 11 hit 전부 OMP v18 또는 주석; `navigateTree` 는
+    `entwurf-control.ts` 주석 한 줄, 호출 0) · `TurnEndEvent` 확장 + `ExtensionRunner.emit`
+    = consumer 한 곳(`entwurf-control.ts` `pi.on("turn_end", (_event, ctx) …)`)이 payload 를
+    버린다, `emitBoundary`/`ExtensionEvent` 참조 0 · `agent_settled` 지연 = 구독 0
+    (간접으로 `model-lock.ts` 의 `agent_start` 호출 횟수만 영향 가능 → `check-model-lock` 재측정 green).
+
+    ⑶ **타입 울타리가 유일한 판정자였고 셋 다 green:** `tsc --noEmit` / `-p scripts` / `-p mcp` rc=0.
+    ⑵ 의 "접촉 0" 은 grep 이 아니라 이 셋이 확정한다.
+
+    ⑷ **재측정 영수증 (0.86 영수증을 재라벨하지 않았다):**
+    `[측정 2026-09-22, pi 0.87.0]` sandbox HOME + `PI_CODING_AGENT_DIR` 에서
+    `pi --entwurf-control` → `Error: Unknown option: --entwurf-control`, exit 1 (0.86.0 과 바이트 동일).
+    설치본 `dist/core/extensions/types.d.ts` 의 `isIdle(): boolean` `:233` / `signal` `:237` —
+    **좌표까지 동일**, `isCompacting` 여전히 0.
+    `pi-agent-core` 큐 좌표는 **이동**: `agent.js` 큐 필드 `:98-99` → `:96-97`,
+    `agent-loop.js` steering drain `:159` → `:186`, follow-up drain `:162-166` → `:191-197`
+    (`PendingMessageQueue` `:60`, 생성자 `:137-138` 은 동일). DELIVERY/leaf/SKILL 라벨을 그 값으로 갱신.
+    `check-pi-queue-oracle` 4 QK 는 0.87 에서도 green — 기아·one-at-a-time·mid-flight 미병합·abort 유실 불변.
+
+    ⑸ **세션 파일명 — 소스 + 실제 파일 둘 다.** `${fileTimestamp}_${sessionId}.jsonl` 세 줄이
+    `session-manager.ts` 에서 **바이트 불변**(:991/:1527/:1703 → :1080/:1666/:1842, 파일 전체는 +148/−9).
+    그리고 `[측정 2026-09-22, pi 0.87.0]` **실제 파일 영수증도 있다**: 설치본의 공개 export
+    `SessionManager.create(cwd, tempDir)` 뒤 최소 assistant message 하나를 `appendMessage` 하면
+    모델·API·네트워크·자식 프로세스 **0** 으로 `<stamp>_<id>.jsonl` 이 flush 되고, 그 헤더 `id` 가
+    basename suffix 와 바이트 동일하다. 처음엔 provider 가 필요하다고 판단했으나 **그것은 내 오판이었고**
+    (`pi -p` 경로만 봤다), 코디네이터가 공개 export 로 가능함을 실측해 정정했다. 그래서 이 축은
+    `check-herdr-placement` 안에서 **매 실행 재측정**된다. 0.86.0 의 손측정 파일 영수증은 그 시점의
+    사실로 여기 남는다.
+
+    ⑹ **0.86.1 skip-with-reason.** `v0.86.1` coding-agent CHANGELOG 에 **Breaking Changes 절 자체가
+    없고**(New Feature = Meta Muse provider 로그인, Changed = Node persistent compile cache,
+    Fixed 4건), `packages/agent` 0.86.1 은 **빈 엔트리**다. 우리 접촉면(extension API·session
+    format·agent loop)에 변경이 없어 별도 floor 로 채택하지 않고 0.86.0 → 0.87.0 **direct bump**
+    으로 갔다. 0.86.1 의 provider/CLI 개선은 floor 를 올리지 않아도 0.87.0 에 포함된다.
+
+    ⑺ **별자리 — 변화 없음.** `[측정]` `npm view @earendil-works/pi-coding-agent@0.87.0 dependencies`
+    의 `@earendil-works/*` 직접 의존은 `chord, pi-agent-core, pi-ai, pi-tui` 4종으로 **0.86.0 과 동일**.
+    0.85→0.86 에서 빠진 client/protocol/telemetry 는 여전히 직접 의존이 아니다(설치 closure 에는 남는다).
+
+    ⑻ **기계 이동:** `package.json` devDep **4종** exact `0.87.0`(P2 가 추가한 `pi-agent-core` 포함)
+    + peer 3종 `>=0.87.0 <0.88`, `pnpm-workspace.yaml` closure 8행에 `|| 0.87.0`,
+    `run.sh` install constellation 8종, 현행 계약 문장(herdr README 설치줄 · mux-launch-rail
+    현 supported range · acp-backend-rail support row 의 exact+range · setup-clean-host 설치 예시 ·
+    README/VERIFY/demo/ROADMAP floor 선언). 그 전부를 하나의 floor 로 묶는
+    `[QK:PI-FLOOR-SINGLE-SOURCE]` 를 **핀을 옮기기 전에** 심어 closure 한 행 stale 이 정적 red 임을
+    먼저 확인했다 — 지금까지 closure 는 어떤 게이트도 읽지 않아 설치 시점에야 터지는 자리였다.
+
   - **2026-09-20 bump — pi 0.85.1 → 0.86.0.** `~/repos/3rd/pi/pi-mono` `v0.85.1..v0.86.0`
     (SHA `ecac0a9c`). **성격: 우리 provider 경로를 실제로 깬 벤더 계약 변경.** 규모 164 commits /
     566 files / +63405 −10737 — 이 대장에서 가장 큰 bump 다.

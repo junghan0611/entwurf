@@ -1,9 +1,10 @@
 /**
  * compaction-send-guard — whether a control-socket `send` may call `pi.sendMessage`.
  *
- * Pi 0.86.0 has no public `ExtensionContext.isCompacting()` (`[측정 2026-09-20]` the
- * installed `dist/core/extensions/types.d.ts` declares `isIdle(): boolean` at :233 and
- * `signal` at :237, and carries no `isCompacting` member at all; the identifier exists
+ * Pi has no public `ExtensionContext.isCompacting()`. `[측정 2026-09-20, pi 0.86.0]` and
+ * re-measured `[측정 2026-09-22, pi 0.87.0]`: the installed `dist/core/extensions/types.d.ts`
+ * declares `isIdle(): boolean` at :233 and `signal` at :237 — the SAME coordinates at both
+ * floors — and carries no `isCompacting` member at all (grep count 0 on 0.87.0); the identifier exists
  * only inside the interactive/rpc modes' own bundles). Compaction is non-idle
  * (`AgentSession.isIdle` = no agent run AND not compacting) but `sendCustomMessage`
  * does not refuse it. A non-streaming `triggerTurn:true` send starts `_runAgentPrompt`

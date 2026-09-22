@@ -126,6 +126,17 @@ const OFFICIAL_REPORTS: Readonly<
  * only diff in that file's `.jsonl` lines is a lambda parameter rename on the READER
  * side. A source read alone would not have settled it, so the real file is the receipt.
  *
+ * `[측정 2026-09-22, pi 0.87.0]` re-measured, and the shape of the evidence CHANGED for the better.
+ * Source: the three lines that BUILD a session name are byte-unchanged from 0.86.0
+ * (`packages/coding-agent/src/core/session-manager.ts` `${fileTimestamp}_${sessionId}.jsonl` at
+ * :1080/:1666/:1842, moved from :991/:1527/:1703 by the +148/−9 `SessionManager`-canonical work
+ * 0.87.0 declares as breaking). File: `scripts/check-herdr-placement.ts` now makes the installed
+ * `SessionManager` write a real session file into a temp dir on EVERY run — `create()` plus one
+ * `appendMessage`, zero model, zero network, zero child process — and asserts this parser reads
+ * that basename back to the id the file's own header declares. So the vendor floor below is no
+ * longer a receipt somebody took once; it is re-taken by the gate. The 0.86.0 hand-measured file
+ * stays a 0.86.0 fact in the bump ledger rather than being re-dated.
+ *
  * WHY THIS IS PINNED HERE AND NOT INFERRED. The uuid is the join key and it lives in
  * a VENDOR filename, so this rule depends on pi's naming and would break silently if
  * pi changed it. **Vendor floor: pi 0.86.0, measured 2026-09-20** — whether that layout
