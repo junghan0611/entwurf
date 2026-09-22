@@ -50,6 +50,7 @@ import {
 	resolveComponentRoots,
 	runtimeIdentityOnDisk,
 } from "../../../scripts/herdr-activation.mjs";
+import { HERDR_FRESH_CALL_BACKENDS, MODEL_SYNTAX_EXAMPLE, RAIL_ENTRY_NOTE } from "../../../scripts/herdr-rails.mjs";
 import {
 	artifactCompleteness,
 	bootstrapRuntime,
@@ -214,16 +215,13 @@ export function certifyActivationPlan(env, { lock, checkoutRoot, requested: requ
  */
 function usageNotes(activated) {
 	const notes = [];
-	if (activated.includes("pi")) {
-		notes.push(
-			"pi: start it as `pi --entwurf-control` to be a garden citizen — a plain `pi` loads this " +
-				"extension but has no garden id, no control socket and no entwurf tools.",
-		);
-		notes.push("pi: a model id looks like `openai-codex/gpt-5.6-terra` — provider-qualified.");
-	}
-	if (activated.includes("claude-code")) {
-		notes.push("claude-code: nothing to add — an ordinary `claude` picks up the entwurf tools through MCP.");
-		notes.push("claude-code: a model id looks like `claude-sonnet-5` — the vendor id, not a provider path.");
+	// Both sentences come from `scripts/herdr-rails.mjs`, which is also what the status pane's
+	// RAILS block renders. One source, so an operator cannot be told two different things about
+	// one backend by the installer and by the pane.
+	for (const backend of HERDR_FRESH_CALL_BACKENDS) {
+		if (!activated.includes(backend)) continue;
+		notes.push(`${backend}: ${RAIL_ENTRY_NOTE[backend]}.`);
+		notes.push(`${backend}: a model string looks like \`${MODEL_SYNTAX_EXAMPLE[backend]}\` — one example, not a list.`);
 	}
 	return notes;
 }

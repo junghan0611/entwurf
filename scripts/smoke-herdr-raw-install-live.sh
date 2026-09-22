@@ -741,6 +741,62 @@ if printf '%s' "$fan_with_server" | grep -qx '1 citizen(s) not shown: nobody cou
 else
   bad "the fan drew no '1 citizen(s) not shown ... (unobserved)' accounting for the citizen born in [7]"
 fi
+
+# ── 8b. the SAME fan with the ENTWURF_BIN crutch REMOVED (#116 A-D3=C) ──────
+# The two runs above hand the pane `ENTWURF_BIN`, which is exactly the operator crutch D3=C exists
+# to delete: with it, this cell stays green whether or not the ledger fallback exists, so it can
+# certify nothing about the first screen a real user sees. `plugins/herdr/README.md` says the plugin
+# puts NOTHING on PATH, so pathless is the state a correct install actually leaves behind.
+# The herdr server from [8] is still up — the fan's second read needs it, and [9] stops it below.
+PATHLESS="$(printf '%s' "$PATH" | tr ':' '\n' | while IFS= read -r d; do [ -n "$d" ] && [ -x "$d/entwurf" ] || printf '%s\n' "$d"; done | paste -sd:)"
+run_fan_pathless() {
+  env -u ENTWURF_BIN PATH="$PATHLESS" HERDR_BIN_PATH="$(command -v herdr)" node "$FAN" </dev/null 2>&1
+}
+if command -v entwurf >/dev/null 2>&1 && PATH="$PATHLESS" command -v entwurf >/dev/null 2>&1; then
+  bad "the pathless PATH still resolves an entwurf — this cell would prove nothing"
+else
+  ok "the pathless PATH resolves no entwurf (the crutch is really gone, not merely unset)"
+fi
+
+fan_pathless="$(run_fan_pathless)"; fan_pathless_rc=$?
+echo "$fan_pathless" | sed 's/^/    /'
+echo "    → exit $fan_pathless_rc"
+# The IDENTICAL literal the crutched run asserts at the cell above, so the two runs are comparable
+# rather than two different claims.
+if [ "$fan_pathless_rc" -eq 0 ] && printf '%s' "$fan_pathless" | grep -qx '1 citizen(s) not shown: nobody could observe placement for them (unobserved)\.'; then
+  ok "[QK:HRIL-FAN-LEDGER-FALLBACK] with NO ENTWURF_BIN and no entwurf on PATH, the certified activation ledger supplies the runtime and the citizen read completes — the same accounting sentence, from a binary nobody put on PATH"
+else
+  bad "the ledger-fallback claim failed: pathless fan rc=$fan_pathless_rc did not reproduce the crutched run's citizen accounting"
+fi
+if printf '%s' "$fan_pathless" | grep -q 'via activation-ledger'; then
+  ok "the pathless run says WHICH source supplied the binary, so the fallback cannot be mistaken for a PATH hit"
+else
+  bad "the pathless run did not name activation-ledger as the binary's source"
+fi
+
+# ── 8c. pathless AND no ledger: the CITIZEN axis alone skips, and it is not red ──
+# The other half of the same contract. A host that never activated must not read as broken, and the
+# three blocks that need no entwurf binary must still answer.
+# XDG_STATE_HOME is redirected TOO, and that is the whole isolation: the ledger lives under XDG
+# **state** ($LEDGER above) while the runtime lives under XDG **data**. Moving only the second would
+# leave this cell reading the real host's ledger, and "no ledger here" would be unfalsifiable.
+HOMELESS="$(mktemp -d)"
+fan_no_ledger="$(env -u ENTWURF_BIN PATH="$PATHLESS" HOME="$HOMELESS" XDG_DATA_HOME="$HOMELESS/.local/share" \
+  XDG_STATE_HOME="$HOMELESS/.local/state" \
+  HERDR_BIN_PATH="$(command -v herdr)" node "$FAN" </dev/null 2>&1)"; fan_no_ledger_rc=$?
+echo "$fan_no_ledger" | sed 's/^/    /'
+echo "    → exit $fan_no_ledger_rc"
+if [ "$fan_no_ledger_rc" -eq 0 ] &&
+   printf '%s' "$fan_no_ledger" | grep -q 'entwurf-not-found' &&
+   printf '%s' "$fan_no_ledger" | grep -q '\[1\] HERDR INTEGRATION' &&
+   printf '%s' "$fan_no_ledger" | grep -q '\[2\] ENTWURF ACTIVATION' &&
+   printf '%s' "$fan_no_ledger" | grep -q '\[3\] RAILS'; then
+  ok "[QK:HRIL-FAN-NO-LEDGER-SKIPS-CITIZENS-ONLY] with no ledger and no runtime the CITIZEN block alone skips by name at exit 0, and blocks 1-3 still render — never activating is a state, not a defect, and this is what stops D3=C drifting into 'install it from the pane'"
+else
+  bad "the no-ledger citizen-skip claim failed: fan rc=$fan_no_ledger_rc did not render blocks 1-3 with a citizen-only skip"
+fi
+rm -rf "$HOMELESS"
+
 herdr server stop >/dev/null 2>&1 || true
 
 # ── 8a. the SHIPPED LAUNCHER, from the bin the user actually received ───────

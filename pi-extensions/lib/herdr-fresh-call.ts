@@ -44,6 +44,7 @@
 import { createHash } from "node:crypto";
 import { statSync } from "node:fs";
 import path from "node:path";
+import { HERDR_FRESH_CALL_BACKENDS } from "../../scripts/herdr-rails.mjs";
 import { callbackEnvAssignments } from "./callback-env.ts";
 import {
 	buildOmpBootstrapPayload,
@@ -55,11 +56,20 @@ import {
 	TASK_MAX_CHARS,
 } from "./fresh-call-composition.ts";
 
-/** The pilot set, closed. `[#116 decision]` herdr's own `--kind` enum is much larger, and that is
+/**
+ * The pilot set, closed. `[#116 decision]` herdr's own `--kind` enum is much larger, and that is
  * NOT evidence of support: every other backend is a pre-mutation named reject here, and there is
  * no fallback to the tmux rail — a caller inside herdr who asks for codex gets a refusal, not a
- * window somewhere else. */
-export const HERDR_FRESH_CALL_BACKENDS = ["pi", "claude-code"] as const;
+ * window somewhere else.
+ *
+ * The VALUE now lives in `scripts/herdr-rails.mjs`, the one leaf the status pane and the install
+ * narration also read (#116 A7), so a fourth backend cannot appear in prose on one surface while
+ * this rail still refuses it. The re-export keeps this module's public name unchanged. The TYPE
+ * still has to be a tuple: a `.mjs` leaf infers `readonly string[]` without the JSDoc cast there,
+ * and `HerdrFreshCallBackend` would silently widen to `string` while every runtime check still
+ * passed. A gate pins that.
+ */
+export { HERDR_FRESH_CALL_BACKENDS };
 export type HerdrFreshCallBackend = (typeof HERDR_FRESH_CALL_BACKENDS)[number];
 
 /** Our backend name → the `--kind` token herdr accepts. `[측정 2026-09-14]` both round-tripped with

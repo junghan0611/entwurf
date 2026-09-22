@@ -132,14 +132,10 @@
 		},
 		{
 			"claim": "HPB-USAGE-NOTE-NAMES-A-MODEL",
-			"title": "the install names a model id in the wrong harness's grammar, so the first fresh call an operator copies is refused",
-			"subject": "plugins/herdr/lib/build.mjs",
-			"find": [
-				"\t\tnotes.push(\"claude-code: a model id looks like `claude-sonnet-5` — the vendor id, not a provider path.\");"
-			],
-			"replace": [
-				"\t\tnotes.push(\"claude-code: a model id looks like `anthropic/claude-sonnet-5` — provider-qualified.\");"
-			],
+			"title": "the install names a model id in the wrong harness's grammar, so the first fresh call an operator copies is refused (#116 A7: the example moved to the shared rails leaf; the mutation still gives claude-code a provider-qualified id, which is the grammar confusion this claim exists to catch)",
+			"subject": "scripts/herdr-rails.mjs",
+			"find": ["\t\"claude-code\": \"claude-sonnet-5\","],
+			"replace": ["\t\"claude-code\": \"anthropic/claude-sonnet-5\","],
 			"gate": ["bash", "run.sh", "check-herdr-plugin-build"],
 			"timeoutSeconds": 180,
 			"signature": "[QK:HPB-USAGE-NOTE-NAMES-A-MODEL]",
@@ -147,10 +143,10 @@
 		},
 		{
 			"claim": "HPB-INSTALL-USAGE-NOTE",
-			"title": "dropping the pi line leaves the one backend whose wiring is invisible from the operator's chair unexplained: claude-code picks the tools up through MCP with nothing added, while a plain pi loads the extension on every session of the host and is still not a citizen — a green install followed by a silent, tool-less pi is indistinguishable from an install that did nothing",
+			"title": "dropping the pi line leaves the one backend whose wiring is invisible from the operator's chair unexplained: claude-code picks the tools up through MCP with nothing added, while a plain pi loads the extension on every session of the host and is still not a citizen — a green install followed by a silent, tool-less pi is indistinguishable from an install that did nothing (#116 A7: usageNotes now loops the shared backend tuple instead of a literal pair, so the mutation suppresses pi's notes at the loop guard rather than at a per-backend `if`)",
 			"subject": "plugins/herdr/lib/build.mjs",
-			"find": ["\tif (activated.includes(\"pi\")) {"],
-			"replace": ["\tif (false && activated.includes(\"pi\")) {"],
+			"find": ["\t\tif (!activated.includes(backend)) continue;"],
+			"replace": ["\t\tif (backend === \"pi\" || !activated.includes(backend)) continue;"],
 			"gate": ["bash", "run.sh", "check-herdr-plugin-build"],
 			"timeoutSeconds": 300,
 			"signature": "[QK:HPB-INSTALL-USAGE-NOTE]",

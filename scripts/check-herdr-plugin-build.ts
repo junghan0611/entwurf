@@ -33,6 +33,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import * as HERDR_RAILS from "./herdr-rails.mjs";
 import { reclaimOnExit } from "./lib/reclaim-on-exit.ts";
 import { treeDigest } from "./lib/tree-digest.ts";
 
@@ -799,17 +800,23 @@ function drive(
 			// contains `claude-sonnet-5`, so a containment test cannot tell the two grammars apart —
 			// which is the whole claim.
 			const idIn = (lines: string[], backend: string): string | null => {
-				const line = lines.find((l) => l.startsWith(`note: ${backend}: `) && l.includes("model id looks like"));
+				const line = lines.find((l) => l.startsWith(`note: ${backend}: `) && l.includes("model string looks like"));
 				return line === undefined ? null : (/`([^`]+)`/.exec(line)?.[1] ?? null);
 			};
 			const piId = idIn(notesOf(full), "pi");
 			const claudeId = idIn(notesOf(full), "claude-code");
 			return (
-				piId === "openai-codex/gpt-5.6-terra" &&
+				// Compared against the SHARED leaf, not a literal copied into this gate: the install
+				// narration and the status pane's RAILS block now read one declaration
+				// (`scripts/herdr-rails.mjs`, #116 A7), and a gate holding its own third copy would
+				// be the very drift that leaf exists to stop. The GRAMMAR assertions stay literal —
+				// provider-qualified vs bare vendor id is the fact, and it must not become whatever
+				// the leaf happens to say.
+				piId === HERDR_RAILS.MODEL_SYNTAX_EXAMPLE.pi &&
 				piId.includes("/") &&
-				claudeId === "claude-sonnet-5" &&
+				claudeId === HERDR_RAILS.MODEL_SYNTAX_EXAMPLE["claude-code"] &&
 				!claudeId.includes("/") &&
-				idIn(notesOf(piOnly), "pi") === "openai-codex/gpt-5.6-terra" &&
+				idIn(notesOf(piOnly), "pi") === HERDR_RAILS.MODEL_SYNTAX_EXAMPLE.pi &&
 				idIn(notesOf(piOnly), "claude-code") === null
 			);
 		})(),

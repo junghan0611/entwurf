@@ -344,10 +344,18 @@ async function main(): Promise<void> {
 	const code = MODULE_SRC.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:])\/\/.*$/gm, "$1");
 	const specifiers = [...MODULE_SRC.matchAll(/^import\s[^;]*?from\s+"([^"]+)";$/gm)].map((m) => m[1]);
 	ok(
-		"[QK:HFC-RAIL-IMPORT-FENCE] the herdr rail imports only node builtins, the neutral composition leaf, and the callback-env pair — one mux or entwurf import here would re-couple the two rails and make either one undeletable",
+		"[QK:HFC-RAIL-IMPORT-FENCE] the herdr rail imports only node builtins, the neutral composition leaf, the callback-env pair, and the dependency-free rails DECLARATION leaf — one mux or entwurf import here would re-couple the two rails and make either one undeletable",
 		specifiers.length > 0 &&
 			specifiers.every(
-				(s) => s.startsWith("node:") || s === "./fresh-call-composition.ts" || s === "./callback-env.ts",
+				(s) =>
+					s.startsWith("node:") ||
+					s === "./fresh-call-composition.ts" ||
+					s === "./callback-env.ts" ||
+					// #116 A7 — the ONE place the backend tuple and the per-backend model syntax
+					// example are written, shared with the status pane and the install narration.
+					// It imports nothing itself, so admitting it couples this rail to a constant
+					// rather than to another rail; the mux/entwurf ban below is untouched.
+					s === "../../scripts/herdr-rails.mjs",
 			) &&
 			!/from\s+"\.\/(mux-|entwurf-)/.test(code),
 	);

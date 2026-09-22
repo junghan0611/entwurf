@@ -6,9 +6,9 @@
 			"claim": "HPL-ONE-OPEN-ONE-READ",
 			"title": "re-reading either listing turns one answered question into a poll — peer-facts observes every citizen unbounded (measured 4.1s on a 1,150-record store) and herdr publishes no 'the session reference landed' event, so a second read is both the slow path and the discovery watcher docs/mux-launch-rail.md §7 refuses by name (#116 M2-b)",
 			"subject": "plugins/herdr/lib/status.mjs",
-			"find": ["\t\t\tconst agents = readJson(herdrBin, [\"agent\", \"list\"], {"],
+			"find": ["\tconst agents = readJson(herdrBin, [\"agent\", \"list\"], {"],
 			"replace": [
-				"\t\t\treadJson(herdrBin, [\"agent\", \"list\"], { failed: \"x\", unparsable: \"y\" });\n\t\t\tconst agents = readJson(herdrBin, [\"agent\", \"list\"], {"
+				"\treadJson(herdrBin, [\"agent\", \"list\"], { failed: \"x\", unparsable: \"y\" });\n\tconst agents = readJson(herdrBin, [\"agent\", \"list\"], {"
 			],
 			"gate": ["bash", "run.sh", "check-herdr-plugin"],
 			"timeoutSeconds": 180,
@@ -19,8 +19,8 @@
 			"claim": "HPL-SKIP-NOT-FAILURE",
 			"title": "turning a missing Entwurf into a red makes every host that simply has not installed it look broken, and invites the plugin to 'fix' it — installing Entwurf is not a plugin's business (AGENTS.md Hard Rule 17, #116 M2-b)",
 			"subject": "plugins/herdr/lib/status.mjs",
-			"find": ["\tfinish([\"entwurf-not-found\"], OK);"],
-			"replace": ["\tfinish([\"entwurf-not-found\"], RED);"],
+			"find": ["\t\t\t\t\tcode: \"entwurf-not-found\","],
+			"replace": ["\t\t\t\t\tcode: \"quietly-nothing\","],
 			"gate": ["bash", "run.sh", "check-herdr-plugin"],
 			"timeoutSeconds": 180,
 			"signature": "[QK:HPL-SKIP-NOT-FAILURE]",
@@ -28,12 +28,12 @@
 		},
 		{
 			"claim": "HPL-FAILED-READ-IS-RED",
-			"title": "treating a nonzero listing exit as success renders an empty table for a listing that was never read — a host whose store could not be opened becomes indistinguishable from a host with no citizens (#116 M2-b)",
+			"title": "treating a nonzero listing exit as success renders an empty table for a listing that was never read — a host whose store could not be opened becomes indistinguishable from a host with no citizens (#116 M2-b) (#116 P1: the non-zero check moved into the single `spawnOnce` call site, so the mutation follows its subject — both listings now lose their exit check at once, which is the same defect stated in one place)",
 			"subject": "plugins/herdr/lib/status.mjs",
 			"find": [
-				"\tif (run.status !== 0) return { error: names.failed, detail: `exit ${run.status}: ${(run.stderr ?? \"\").trim()}` };"
+				"\tif (run.status !== 0) return { error: failedCode, detail: `exit ${run.status}: ${(run.stderr ?? \"\").trim()}` };"
 			],
-			"replace": ["\tif (false) return { error: names.failed, detail: `exit ${run.status}` };"],
+			"replace": ["\tif (false) return { error: failedCode, detail: `exit ${run.status}` };"],
 			"gate": ["bash", "run.sh", "check-herdr-plugin"],
 			"timeoutSeconds": 180,
 			"signature": "[QK:HPL-FAILED-READ-IS-RED]",
@@ -65,8 +65,12 @@
 			"claim": "HPL-DIAGNOSTICS-SHOWN",
 			"title": "dropping the provider's diagnostics shows a store carrying hazards as a clean listing — the one lie a status pane can tell while looking green (#116 M2-b)",
 			"subject": "plugins/herdr/lib/status.mjs",
-			"find": ["\t\t\t\t\t\t...renderDiagnostics(diagnostics),"],
-			"replace": ["\t\t\t\t\t\t...renderDiagnostics([]),"],
+			"find": [
+				"\t\tlines: [...renderTable(peers, indexActivityByPane(agentRows)), \"\", ...renderDiagnostics(diagnostics)],"
+			],
+			"replace": [
+				"\t\tlines: [...renderTable(peers, indexActivityByPane(agentRows)), \"\", ...renderDiagnostics([])],"
+			],
 			"gate": ["bash", "run.sh", "check-herdr-plugin"],
 			"timeoutSeconds": 180,
 			"signature": "[QK:HPL-DIAGNOSTICS-SHOWN]",
@@ -127,6 +131,159 @@
 			"gate": ["bash", "run.sh", "check-herdr-plugin"],
 			"timeoutSeconds": 180,
 			"signature": "[QK:HPL-DIAGNOSTIC-SUBJECTS]",
+			"signatureSource": "scripts/check-herdr-plugin.ts"
+		},
+		{
+			"claim": "HPL-BLOCK-PROVENANCE",
+			"title": "the activation block stops saying it is an install-time receipt and claims it was read now — the one sentence that keeps an add-only ledger from being mistaken for a live probe, and the moment it goes the four blocks collapse into one implied 'as of now'",
+			"subject": "plugins/herdr/lib/capability-report.mjs",
+			"find": ["\tactivation: \"install-time\","],
+			"replace": ["\tactivation: \"now\","],
+			"gate": ["bash", "run.sh", "check-herdr-plugin"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:HPL-BLOCK-PROVENANCE]",
+			"signatureSource": "scripts/check-herdr-plugin.ts"
+		},
+		{
+			"claim": "HPL-NO-AGGREGATE-VERDICT",
+			"title": "a summary line is added over the four blocks, which is exactly the merged green this surface exists to refuse: one word has to pick one observation time and be wrong about the other two",
+			"subject": "plugins/herdr/lib/capability-report.mjs",
+			"find": ["\tconst out = [];"],
+			"replace": ["\tconst out = [\"Overall: all ready.\"];"],
+			"gate": ["bash", "run.sh", "check-herdr-plugin"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:HPL-NO-AGGREGATE-VERDICT]",
+			"signatureSource": "scripts/check-herdr-plugin.ts"
+		},
+		{
+			"claim": "HPL-RAILS-SHARED-SOURCE",
+			"title": "the RAILS block stops reading the shared declaration leaf and renders a hardcoded model string, re-opening the third-copy drift that leaf was created to close",
+			"subject": "plugins/herdr/lib/capability-report.mjs",
+			"find": [
+				"\t\t\t`  ${backend}: ${railEntryNote[backend]}\\n    model string syntax, one example only: \\`${modelSyntaxExample[backend]}\\``,"
+			],
+			"replace": [
+				"\t\t\t`  ${backend}: ${railEntryNote[backend]}\\n    model string syntax, one example only: \\`some-provider/some-model\\``,"
+			],
+			"gate": ["bash", "run.sh", "check-herdr-plugin"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:HPL-RAILS-SHARED-SOURCE]",
+			"signatureSource": "scripts/check-herdr-plugin.ts"
+		},
+		{
+			"claim": "HPL-LEDGER-FALLBACK-READS-CITIZENS",
+			"title": "the D3=C fallback is removed, so a correct plugin install — which puts nothing on PATH — closes its own first screen with entwurf-not-found again, and the operator is back to setting ENTWURF_BIN by hand",
+			"subject": "plugins/herdr/lib/status.mjs",
+			"find": ["\tif (evidence.kind === \"ledger\" && evidence.runtimeBin !== null) {"],
+			"replace": ["\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-herdr-plugin"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:HPL-LEDGER-FALLBACK-READS-CITIZENS]",
+			"signatureSource": "scripts/check-herdr-plugin.ts"
+		},
+		{
+			"claim": "HPL-OVERRIDE-BEATS-LEDGER",
+			"title": "the ledger is consulted BEFORE the operator's own ENTWURF_BIN and PATH, so a receipt silently out-votes the person at the keyboard — the failure mode a fallback is most likely to grow",
+			"subject": "plugins/herdr/lib/status.mjs",
+			"find": ["\tconst declared = process.env.ENTWURF_BIN;\n\tif (declared !== undefined && declared !== \"\") {"],
+			"replace": [
+				"\tconst declared = process.env.ENTWURF_BIN;\n\tif (evidence.kind !== \"ledger\" && declared !== undefined && declared !== \"\") {"
+			],
+			"gate": ["bash", "run.sh", "check-herdr-plugin"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:HPL-OVERRIDE-BEATS-LEDGER]",
+			"signatureSource": "scripts/check-herdr-plugin.ts"
+		},
+		{
+			"claim": "HPL-ACTIVATION-NAMED-REDS",
+			"title": "every broken activation state collapses into one generic code, so `we cannot import the reader`, `the body is not certifiable`, `this receipt is about another root` and `the promised binary is gone` become indistinguishable — four different repairs behind one word",
+			"subject": "plugins/herdr/lib/activation-evidence.mjs",
+			"find": ["\t\t\tcode: \"activation-runtime-root-mismatch\","],
+			"replace": ["\t\t\tcode: \"activation-reader-unavailable\","],
+			"gate": ["bash", "run.sh", "check-herdr-plugin"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:HPL-ACTIVATION-NAMED-REDS]",
+			"signatureSource": "scripts/check-herdr-plugin.ts"
+		},
+		{
+			"claim": "HPL-LEDGER-AT-WRITER-PATH",
+			"title": "the ledger is addressed at the RUNTIME's data root again instead of the writer's XDG state root, so on every correctly activated host the pane finds no ledger where one certainly exists — and because the writer's reader answers a missing file with `null`, the original of this mutation did not merely lose the D3=C fallback, it killed the pane before a single block was drawn",
+			"subject": "plugins/herdr/lib/activation-evidence.mjs",
+			"find": ["\t\tledgerPath: activation.ledgerPath,"],
+			"replace": ["\t\tledgerPath: path.join(layout.pluginRoot, \"activation.json\"),"],
+			"gate": ["bash", "run.sh", "check-herdr-plugin"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:HPL-LEDGER-AT-WRITER-PATH]",
+			"signatureSource": "scripts/check-herdr-plugin.ts"
+		},
+		{
+			"claim": "HPL-LEDGER-MISSING-IS-NAMED",
+			"title": "a missing ledger is only noticed AFTER the installed reader has been located, so a host whose single real fact is that nothing ever wrote a receipt is told its runtime is broken instead — two different repairs behind one name, and the ledger's address needed no installed artifact to resolve in the first place",
+			"subject": "plugins/herdr/lib/activation-evidence.mjs",
+			"find": ["\tif (!ledgerPresent) {"],
+			"replace": ["\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-herdr-plugin"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:HPL-LEDGER-MISSING-IS-NAMED]",
+			"signatureSource": "scripts/check-herdr-plugin.ts"
+		},
+		{
+			"claim": "HPL-ENV-ROOT-IS-NAMED",
+			"title": "the layout resolvers are called outside any guard, so a host with neither HOME nor an XDG root takes the pane down on an unhandled rejection instead of being told, in the activation block, that we cannot even say where its ledger would live — the other three blocks never needed that root",
+			"subject": "plugins/herdr/lib/activation-evidence.mjs",
+			"find": [
+				"\tlet roots;\n\ttry {\n\t\troots = deriveRoots(env, { runtimeModule, activationModule });\n\t} catch (err) {"
+			],
+			"replace": [
+				"\tlet roots;\n\troots = deriveRoots(env, { runtimeModule, activationModule });\n\ttry {\n\t\tif (roots === undefined) throw new Error(\"unreachable\");\n\t} catch (err) {"
+			],
+			"gate": ["bash", "run.sh", "check-herdr-plugin"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:HPL-ENV-ROOT-IS-NAMED]",
+			"signatureSource": "scripts/check-herdr-plugin.ts"
+		},
+		{
+			"claim": "HPL-PHASE-GATES-FALLBACK",
+			"title": "any certified ledger grants the runtime fallback, including one written mid-teardown, so an add-only install-time receipt is spent as if it were a live probe — `deactivating` says what was wired, not what is standing there now, and merging those two is how this pane would start answering a runtime question with an install-time answer",
+			"subject": "plugins/herdr/lib/activation-evidence.mjs",
+			"find": ["\tif (ledger.phase !== \"active\") {"],
+			"replace": ["\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-herdr-plugin"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:HPL-PHASE-GATES-FALLBACK]",
+			"signatureSource": "scripts/check-herdr-plugin.ts"
+		},
+		{
+			"claim": "HPL-INTEGRATION-NONCURRENT-IS-RED",
+			"title": "a selected atom herdr reports as outdated or needs-repair leaves block [1] a neutral `reported` and the pane at exit 0, so a surface that has ALREADY classified those two into `profile.fail` — and whose build runner refuses them — reports them as if nothing were wrong. `no aggregate green` keeps each axis's own receipt; it never meant an axis that failed leaves at zero",
+			"subject": "plugins/herdr/lib/capability-report.mjs",
+			"find": ["\tif (failing.length > 0) {"],
+			"replace": ["\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-herdr-plugin"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:HPL-INTEGRATION-NONCURRENT-IS-RED]",
+			"signatureSource": "scripts/check-herdr-plugin.ts"
+		},
+		{
+			"claim": "HPL-READER-EXPORT-IS-REQUIRED",
+			"title": "the export check is dropped, so an installed reader that loads without `readCertifiedLedger` raises its TypeError inside the certification try and is filed as `activation-ledger-uncertified` — the operator is sent to inspect a ledger that is fine instead of to the install that is not, and no body was ever read",
+			"subject": "plugins/herdr/lib/activation-evidence.mjs",
+			"find": ["\tif (typeof reader.readCertifiedLedger !== \"function\") {"],
+			"replace": ["\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-herdr-plugin"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:HPL-READER-EXPORT-IS-REQUIRED]",
+			"signatureSource": "scripts/check-herdr-plugin.ts"
+		},
+		{
+			"claim": "HPL-LEDGER-VANISHED-IS-NAMED",
+			"title": "the LATE null guard is dropped, so a ledger that passed the presence check and is gone by the time the installed reader reads it is dereferenced — the early branch cannot cover that race because it already answered while the file existed, and the pane dies with a TypeError before drawing a block",
+			"subject": "plugins/herdr/lib/activation-evidence.mjs",
+			"find": ["\tif (ledger === null) {"],
+			"replace": ["\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-herdr-plugin"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:HPL-LEDGER-VANISHED-IS-NAMED]",
 			"signatureSource": "scripts/check-herdr-plugin.ts"
 		}
 	]
