@@ -38,6 +38,44 @@
 			"signatureSource": "scripts/smoke-pi-provider-state.sh"
 		},
 		{
+			"claim": "PI-DOCTOR-PLUGIN-COMMAND-IS-NOT-DRIFT",
+			"title": "the recorded-command comparison degenerates to 'always drifted', so a Herdr-plugin host whose effective command IS exactly the absolute bridge this install wrote is red again — the #116 M3-b2 false-red restored in the new wording. It is the always-red half of a symmetric pair with PI-DOCTOR-REAL-DRIFT-STILL-RED's always-green half; a mutation that instead re-scoped the comparison under `!isBare` would also kill that claim's bare cell, so this one deliberately does not touch the managedState predicate",
+			"subject": "scripts/doctor-pi-provider.ts",
+			"find": ["\t\tif (cmd !== stateCommand) {"],
+			"replace": ["\t\tif (true) {"],
+			"gate": ["bash", "scripts/smoke-pi-provider-state.sh"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:PI-DOCTOR-PLUGIN-COMMAND-IS-NOT-DRIFT]",
+			"signatureSource": "scripts/smoke-pi-provider-state.sh"
+		},
+		{
+			"claim": "PI-DOCTOR-REAL-DRIFT-STILL-RED",
+			"title": "the drift comparison is dropped entirely, so a managed key repointed at a command entwurf never wrote reads as 'the managed command this install recorded' — the ownership axis silently stops existing",
+			"subject": "scripts/doctor-pi-provider.ts",
+			"find": ["\t\tif (cmd !== stateCommand) {"],
+			"replace": ["\t\tif (false) {"],
+			"gate": ["bash", "scripts/smoke-pi-provider-state.sh"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:PI-DOCTOR-REAL-DRIFT-STILL-RED]",
+			"signatureSource": "scripts/smoke-pi-provider-state.sh"
+		},
+		{
+			"claim": "PI-DOCTOR-LEGACY-STATE-UNCHANGED",
+			"title": "the plugin-mode repair is turned into a schema amnesty: a managed record written before `command` existed stops being red and its unrecorded, uncomparable entry is adopted as a note — a green nobody measured, handed out by the doctor instead of by ./run.sh setup",
+			"subject": "scripts/doctor-pi-provider.ts",
+			"find": [
+				"\t\t\tlog(`  FAIL: state owns entwurf-bridge (ownership=${ownership}) but the effective command drifted to '${cmd}'.`);",
+				"\t\t\thardFail = 1;"
+			],
+			"replace": [
+				"\t\t\tlog(`  note: legacy record (ownership=${ownership}) — no recorded command, adopting '${cmd}'.`);"
+			],
+			"gate": ["bash", "scripts/smoke-pi-provider-state.sh"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:PI-DOCTOR-LEGACY-STATE-UNCHANGED]",
+			"signatureSource": "scripts/smoke-pi-provider-state.sh"
+		},
+		{
 			"claim": "AGY-DOCTOR-PROBES-ARGS",
 			"title": "the agy invocation parser drops configured args, so the doctor boots command defaults while agy executes a failing argv",
 			"subject": "scripts/agy-bridge-config.py",

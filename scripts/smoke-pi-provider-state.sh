@@ -282,6 +282,112 @@ if doctor >/dev/null 2>&1; then die "doctor(drift): should FAIL (state owns but 
 ok "doctor(drift): FAILS on state-owned + effective-drifted"
 rm -f "$STATE"
 
+# ── H-3a..d: the RECORDED managed command is the canonical one (#116 M3-b2 plugin mode) ──
+# `register-pi-provider.py --plugin-runtime` writes an ABSOLUTE bridge under the certified stable
+# runtime into BOTH the settings entry and the install-state `command` (:332-342, :368-369), because
+# a Herdr-plugin host has nothing entwurf on PATH and a bare name cannot resolve there. The
+# `ownership` field in that state is the PREIMAGE classification — what stood at the key BEFORE this
+# install — so `absent` means "we created it" and `managed-current` means "we rewrote our own", and
+# NEITHER means "unowned". A doctor whose only non-drift shape is the bare bin therefore calls every
+# plugin-mode host red while the bridge it points at boots and serves all eight verbs. The canonical
+# command is the one the state RECORDS; the stable runtime root is the writer's business and is
+# deliberately not re-derived here.
+PLUGIN_BRIDGE="$SB/runtime/active/node_modules/.bin/entwurf-bridge"
+mkdir -p "$(dirname "$PLUGIN_BRIDGE")"
+write_mcp_fake "$PLUGIN_BRIDGE"
+THIRD_BRIDGE="$SB/bin/third-party-bridge"
+write_mcp_fake "$THIRD_BRIDGE"
+# $1 ownership, $2 recorded command (omit to record NO command at all)
+write_state() {
+  if [ "$#" -ge 2 ]; then
+    python3 -c 'import json,sys; json.dump({"schemaVersion":1,"managedSettingsPath":sys.argv[1],"scope":"user","key":"entwurfProvider.mcpServers.entwurf-bridge","ownership":sys.argv[3],"command":sys.argv[4],"installerRoot":"/fake/root","preimage":None}, open(sys.argv[2],"w"))' "$GLOBAL" "$STATE" "$1" "$2"
+  else
+    python3 -c 'import json,sys; json.dump({"schemaVersion":1,"managedSettingsPath":sys.argv[1],"scope":"user","key":"entwurfProvider.mcpServers.entwurf-bridge","ownership":sys.argv[3],"installerRoot":"/fake/root","preimage":None}, open(sys.argv[2],"w"))' "$GLOBAL" "$STATE" "$1"
+  fi
+}
+set_effective() { printf '{"entwurfProvider":{"mcpServers":{"entwurf-bridge":{"command":"%s"}}}}\n' "$1" > "$GLOBAL"; printf '{}\n' > "$PROJECT"; }
+
+# H-3a: both preimage classifications a plugin install can record, against the command it recorded.
+set_effective "$PLUGIN_BRIDGE"
+write_state absent "$PLUGIN_BRIDGE"
+set +e
+OUT_ABSENT="$(doctor 2>&1)"; RC_ABSENT=$?
+write_state managed-current "$PLUGIN_BRIDGE"
+OUT_CURRENT="$(doctor 2>&1)"; RC_CURRENT=$?
+set -e
+want "[QK:PI-DOCTOR-PLUGIN-COMMAND-IS-NOT-DRIFT] doctor(effective == recorded managed command): GREEN for preimage ownership absent AND managed-current — a plugin-mode host is not drifted" \
+  "[ '$RC_ABSENT' -eq 0 ] && [ '$RC_CURRENT' -eq 0 ]"
+want "doctor(plugin command): the green names the RECORDED command as the canonical one" \
+  "printf '%s' \"\$OUT_ABSENT\" | grep -q 'the managed command this install recorded'"
+want "doctor(plugin command): ownership is still reported, not silently dropped" \
+  "printf '%s' \"\$OUT_CURRENT\" | grep -q 'ownership=managed-current'"
+want "doctor(plugin command): the boot evidence is still the exact verb set (#81 unweakened)" \
+  "printf '%s' \"\$OUT_ABSENT\" | grep -q 'exact entwurf verb set'"
+
+# H-3b: REAL drift, in BOTH spellings the effective command can take. Every command here BOOTS on
+# purpose: a cell whose command also failed to resolve would go red for the runtime reason and prove
+# nothing about the ownership axis (that is H-3's shape, and it is why this is a separate cell).
+#   (i)  a third absolute path the record never named
+#   (ii) the BARE name — the escape that a `!isBare`-scoped comparison lets through, because the
+#        bare bridge boots and the ownership compare never runs. "Spellable as our old default" is
+#        not evidence that it is the command this install wrote, so both must red the same way.
+set_effective "$THIRD_BRIDGE"
+write_state managed-current "$PLUGIN_BRIDGE"
+set +e
+OUT="$(doctor 2>&1)"; RC=$?
+set_effective "entwurf-bridge"
+OUT_BARE="$(doctor 2>&1)"; RC_BARE=$?
+set -e
+want "[QK:PI-DOCTOR-REAL-DRIFT-STILL-RED] doctor(effective != recorded managed command): FAILS for a third absolute path AND for the bare name — a managed key pointing somewhere we never wrote is drift however it is spelled" \
+  "[ '$RC' -ne 0 ] && [ '$RC_BARE' -ne 0 ]"
+want "doctor(real drift, third path): the failure names BOTH the recorded command and the effective one" \
+  "printf '%s' \"\$OUT\" | grep -q \"records '$PLUGIN_BRIDGE'\" && printf '%s' \"\$OUT\" | grep -q \"effective command is '$THIRD_BRIDGE'\""
+want "doctor(real drift, BARE): names recorded/effective too — a booting bare bridge does not buy the record's green" \
+  "printf '%s' \"\$OUT_BARE\" | grep -q \"records '$PLUGIN_BRIDGE'\" && printf '%s' \"\$OUT_BARE\" | grep -q \"effective command is 'entwurf-bridge'\""
+want "doctor(real drift): the drift verdict is independent of the boot, which PASSED in both spellings — not a vacuous red" \
+  "printf '%s' \"\$OUT\" | grep -q 'configured override BOOTS' && printf '%s' \"\$OUT_BARE\" | grep -q 'and it BOOTS'"
+
+# H-3c: a LEGACY record — one written before `command` existed — keeps the verdict it has always
+# had. Repairing the plugin-mode defect must not migrate the state schema or hand an amnesty to
+# records the doctor cannot compare: a green here would be one nobody measured. Both directions are
+# pinned in ONE cell because they are one claim — non-bare stays red, and the bare bin (which never
+# reaches the ownership branch at all) stays green.
+write_state managed-legacy   # no `command` key at all
+set_effective "$THIRD_BRIDGE"
+set +e
+OUT_LEGACY_NONBARE="$(doctor 2>&1)"; RC_LEGACY_NONBARE=$?
+set_effective "entwurf-bridge"
+OUT_LEGACY_BARE="$(doctor 2>&1)"; RC_LEGACY_BARE=$?
+set -e
+want "[QK:PI-DOCTOR-LEGACY-STATE-UNCHANGED] doctor(managed record with NO recorded command): byte-equivalent to before — non-bare red, bare green; this repair grants no schema amnesty" \
+  "[ '$RC_LEGACY_NONBARE' -ne 0 ] && [ '$RC_LEGACY_BARE' -eq 0 ]"
+want "doctor(legacy record, non-bare): keeps the ORIGINAL drift wording, not the recorded-command one" \
+  "printf '%s' \"\$OUT_LEGACY_NONBARE\" | grep -q \"but the effective command drifted to '$THIRD_BRIDGE'\" && ! printf '%s' \"\$OUT_LEGACY_NONBARE\" | grep -q 'state records'"
+# An ownership word this doctor does not know is NOT a managed record, even when the recorded
+# command matches the effective one exactly. A string that happens to agree is not authority.
+write_state some-future-word "$THIRD_BRIDGE"
+set_effective "$THIRD_BRIDGE"
+set +e
+OUT_UNKNOWN="$(doctor 2>&1)"; RC_UNKNOWN=$?
+set -e
+want "doctor(unknown ownership word + matching command): falls through to the OLD logic — red as a non-bare owned entry, never a managed green" \
+  "[ '$RC_UNKNOWN' -ne 0 ] && printf '%s' \"\$OUT_UNKNOWN\" | grep -q 'but the effective command drifted to' && ! printf '%s' \"\$OUT_UNKNOWN\" | grep -q 'the managed command this install recorded'"
+want "doctor(legacy record, bare): the green is still the bare-bin BOOTS line, untouched by the ownership branch" \
+  "printf '%s' \"\$OUT_LEGACY_BARE\" | grep -q 'bare stable bin' && printf '%s' \"\$OUT_LEGACY_BARE\" | grep -q 'and it BOOTS'"
+
+# H-3d: no install-state at all. A non-bare override that boots stays the operator's choice and an
+# honest note — the pre-Task-2 and never-installed hosts are untouched by everything above. No QK
+# signature: this path is guarded by no mutant of its own, it is here so a regression in it cannot
+# hide behind the cells that do carry one.
+rm -f "$STATE"
+set_effective "$THIRD_BRIDGE"
+OUT="$(doctor)"; RC=$?
+want "doctor(non-bare override, NO install-state): unchanged — runtime judged, ownership left alone, exit 0" \
+  "[ '$RC' -eq 0 ]"
+want "doctor(no state): still names it an UNOWNED override rather than adopting it" \
+  "printf '%s' \"\$OUT\" | grep -q 'UNOWNED override'"
+rm -f "$STATE"
+
 # H-4: bare-but-dangling (bin not on PATH) → FAIL
 printf '{"entwurfProvider":{"mcpServers":{"entwurf-bridge":{"command":"entwurf-bridge"}}}}\n' > "$GLOBAL"
 printf '{}\n' > "$PROJECT"

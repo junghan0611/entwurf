@@ -159,11 +159,24 @@ log(`  EFFECTIVE (${effectiveScope}): ${effectiveDesc}`);
 
 // install-state ownership (user scope). absent state on a configured effective is either a
 // pre-Task-2 install or a user-override we deliberately did not own.
+//
+// `command` is read beside it because it — not the bare name — is the CANONICAL managed command
+// (#116 M3-b2). `register-pi-provider.py` writes the same string into the settings entry and into
+// this record (:332-342, :368-369), and in plugin mode that string is an absolute bridge under the
+// certified stable runtime, because a Herdr-plugin host has nothing entwurf on PATH. Reading it
+// here is what lets this doctor judge drift without re-deriving the stable runtime root: the root
+// is the writer's business, and a second derivation in this file would be a second address axis.
+//
+// `ownership` is the PREIMAGE classification — what stood at the key BEFORE that install — so
+// `absent` means "we created it", not "nobody owns it". Treating it as an ownership verdict is what
+// made every plugin-mode host red while its bridge booted and served all eight verbs.
 let ownership: string | undefined;
+let stateCommand: string | undefined;
 if (existsSync(statePath)) {
 	try {
-		const st = JSON.parse(readFileSync(statePath, "utf8")) as { ownership?: string };
+		const st = JSON.parse(readFileSync(statePath, "utf8")) as { ownership?: string; command?: string };
 		ownership = typeof st.ownership === "string" ? st.ownership : undefined;
+		stateCommand = typeof st.command === "string" ? st.command : undefined;
 		log(`  state: install-state present (ownership=${ownership}).`);
 	} catch {
 		log(`  state: FAIL — install-state ${statePath} is unreadable/corrupt.`);
@@ -219,9 +232,36 @@ if (effectiveEntry === undefined) {
 		}
 	}
 
-	if (!isBare) {
-		// Ownership classification never rounds a broken runtime up to green. It only says who may
-		// repair the non-canonical entry after the independent boot verdict above.
+	// Ownership classification never rounds a broken runtime up to green. It only says who may
+	// repair the entry after the independent boot verdict above.
+	//
+	// A MANAGED record is the pair (known preimage ownership, recorded command). For that pair the
+	// recorded command is canonical and the comparison runs REGARDLESS of whether the effective
+	// command happens to be the bare name. Keeping this decision inside a `!isBare` branch is how
+	// real drift escaped: a record naming the absolute plugin bridge, with the settings repointed to
+	// the bare `entwurf-bridge`, is drift — and a bare bridge that boots would otherwise carry it to
+	// green. "The effective command is spellable as our old default" is not evidence that it is the
+	// command this install wrote.
+	//
+	// Everything else — a record that names no command, or one whose ownership is a word this
+	// doctor does not know — falls through to the ORIGINAL logic below, unchanged. Repairing this
+	// defect is not a licence to migrate the state schema, to grant an amnesty to records written
+	// before `command` existed, or to let an unknown ownership word buy a managed green because a
+	// string happened to match. The state is rewritten by `./run.sh setup`, not by its reader.
+	const knownManagedOwnership =
+		ownership === "absent" || ownership === "managed-current" || ownership === "managed-legacy";
+	if (knownManagedOwnership && stateCommand !== undefined) {
+		if (cmd !== stateCommand) {
+			log(
+				`  FAIL: state records '${stateCommand}' as the managed command (ownership=${ownership}), but the effective command is '${cmd}' — the key drifted to something entwurf never wrote.`,
+			);
+			hardFail = 1;
+		} else {
+			log(
+				`  ok: effective command is the managed command this install recorded ('${stateCommand}', preimage ownership=${ownership}).`,
+			);
+		}
+	} else if (!isBare) {
 		if (ownership && ownership !== "user-override") {
 			log(`  FAIL: state owns entwurf-bridge (ownership=${ownership}) but the effective command drifted to '${cmd}'.`);
 			hardFail = 1;
