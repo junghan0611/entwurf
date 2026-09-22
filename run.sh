@@ -1225,6 +1225,8 @@ check_entwurf_v2_runner() {
   # attribution is read from the JSON test titles `run_vitest` emits. Narrow file filter, same
   # reason as check-entwurf-v2-send: a mutant pointed at the discovery door would re-run every
   # beside-behaviour test once per mutant.
+  # It stays inside check:contracts even though the discovery door also runs this file — see
+  # check-release-gate-outcomes: a gate a mutant names must be reachable outside qualification.
   section "v2 dispatch runner (mutant execution coordinate)"
   run_vitest pi-extensions/lib/entwurf-v2-runner.test.ts
 }
@@ -1234,6 +1236,8 @@ check_control_send_receipt() {
   # check-tests-beside-behavior like every other beside-behaviour lane. This case exists because
   # the #120 P2 SEND-RECEIPT-* mutants name it as gate argv, and attribution is read from the JSON
   # test titles `run_vitest` emits. Narrow file filter, same reason as check-entwurf-v2-send.
+  # It stays inside check:contracts even though the discovery door also runs this file — see
+  # check-release-gate-outcomes: a gate a mutant names must be reachable outside qualification.
   section "control-socket acceptance boundary (mutant execution coordinate)"
   run_vitest pi-extensions/lib/control-send-receipt.test.ts
 }

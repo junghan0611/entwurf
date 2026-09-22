@@ -288,10 +288,30 @@ function main(): void {
 			// env object that assigns the fixture XDG_DATA_HOME also relocates HOME", which is the
 			// relation that actually keeps the vendor's store and its launcher in one tree.
 			const dataRootAssignment = (file: string): RegExp => (file.endsWith(".sh") ? /XDG_DATA_HOME=/ : /XDG_DATA_HOME:/);
+			/** A shell `env ... \` invocation is ONE logical command, and that command — not a brace
+			 * pair — is the env block there. `${...}` is everywhere in a shell script, so the brace
+			 * walk below would answer with a two-character slice and read HOME from a neighbouring
+			 * line that assigns nothing. Walk the backslash continuations instead. */
+			const shellCommandAround = (src: string, at: number): string => {
+				const lines = src.split("\n");
+				let idx = 0;
+				let line = 0;
+				for (; line < lines.length - 1; line += 1) {
+					const next = idx + lines[line].length + 1;
+					if (next > at) break;
+					idx = next;
+				}
+				let first = line;
+				while (first > 0 && lines[first - 1].endsWith("\\")) first -= 1;
+				let last = line;
+				while (last < lines.length - 1 && lines[last].endsWith("\\")) last += 1;
+				return lines.slice(first, last + 1).join("\n");
+			};
 			/** The object literal / env block that carries the fixture data root, not the whole file. */
 			const envBlockAround = (src: string, file: string): string => {
 				const at = src.search(dataRootAssignment(file));
 				if (at < 0) return "";
+				if (file.endsWith(".sh")) return shellCommandAround(src, at);
 				const from = src.lastIndexOf("{", at);
 				if (from < 0) return src.slice(Math.max(0, at - 800), at + 800);
 				let depth = 0;
@@ -308,6 +328,11 @@ function main(): void {
 				"smoke-herdr-plugin-build-live.ts": {
 					reason: "it relocates HOME into the same sandbox, so store and launcher stay in one tree",
 					holds: (src, file) => /(^|\n)\s*HOME[,:]/.test(envBlockAround(src, file)),
+				},
+				"smoke-herdr-raw-install-live.sh": {
+					reason:
+						"its single fixture data root rides one `env` invocation that relocates HOME into the same mktemp sandbox, so the child it starts there never meets a fixture data root beside the operator's real HOME",
+					holds: (src, file) => /(^|\s)HOME=/.test(envBlockAround(src, file)),
 				},
 			};
 			/** Where each smoke's FIRST Claude-capable child begins. Named per smoke, because the
@@ -360,6 +385,18 @@ function main(): void {
 				"the exemption discriminates rather than excuses: the exempt smoke relocates HOME in the SAME env block that fences its data root, and moving that line out of the block would put it back in the constituency",
 				Object.entries(EXEMPT).every(([f, e]) => e.holds(read(path.join("scripts", f)), f)),
 			);
+			{
+				// The shell half of that same sentence, proved rather than asserted: the exemption is
+				// read off the `env` invocation, so deleting HOME from THAT line — and only that line —
+				// must put the smoke straight back into the constituency.
+				const file = "smoke-herdr-raw-install-live.sh";
+				const src = read(path.join("scripts", file));
+				const withoutHome = src.replace(/ HOME="\$HOMELESS"/, "");
+				ok(
+					"the shell exemption is read from the env INVOCATION, not from the file: deleting the HOME assignment out of the same `env` line puts smoke-herdr-raw-install-live.sh back in the constituency",
+					withoutHome !== src && !EXEMPT[file].holds(withoutHome, file),
+				);
+			}
 			{
 				const IMPORT =
 					'import { assessLauncherCleanup, snapshotClaudeLauncher, verifyClaudeLauncher } from "./lib/claude-launcher-fence.ts";';

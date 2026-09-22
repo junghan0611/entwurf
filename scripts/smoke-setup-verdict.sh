@@ -98,7 +98,17 @@ export PI_BIN="$ABSENT" CLAUDE_BIN="$ABSENT" AGY_BIN="$ABSENT" COPILOT_BIN="$ABS
 
 PASS=0
 ok()   { PASS=$((PASS + 1)); printf '  ok    %s\n' "$*"; }
-die()  { printf 'FAIL: %s\n' "$*" >&2; exit 1; }
+# A cell that judges output it CAPTURED hands that output over here before its `want`, so a
+# red is readable from the run that produced it. The S-8 idempotence cell went red twice under
+# gate qualification and green on every standalone rerun, and neither log could say why: the
+# condition was a pipeline whose output went to `grep -q` and nowhere else. A rerun is not
+# evidence about the run that failed.
+FAIL_CONTEXT=""
+die()  {
+  printf 'FAIL: %s\n' "$*" >&2
+  [ -n "${FAIL_CONTEXT:-}" ] && printf '%s\n%s\n' "--- captured output of the failing step ---" "$FAIL_CONTEXT" >&2
+  exit 1
+}
 want() { # $1 = label, $2 = shell condition
   if eval "$2"; then ok "$1"; else die "$1"; fi
 }
@@ -308,8 +318,14 @@ want "S-8: both extension units landed in the sandbox omp agent dir" \
   "[ -d '$HOME/.omp/agent/extensions/entwurf-meta-omp' ] && [ -d '$HOME/.omp/agent/extensions/entwurf-receive-omp' ]"
 want "S-8: the MCP hand wrote the pinned key and the setting reached the config the vendor reads" \
   "grep -q 'entwurf-bridge' '$HOME/.omp/agent/mcp.json' && [ \"\$(python3 '$REPO_DIR/scripts/omp-tool-surface.py' '$HOME/.omp/agent' | awk '/^verdict /{print \$2}')\" = 'xdev-off' ]"
+# Captured rather than piped straight into `grep -q`: this is the cell that went red under
+# qualification and green standalone, and the discarded output was the only place the reason
+# could have been.
+set +e; OUT8B="$(OMP_BIN="$FAKE_OMP/omp" ENTWURF_OMP_AGENT_DIR="$OMP_AGENT" PATH="$FAKE_OMP:$PATH" bash "$REPO_DIR/run.sh" setup "$PROJ8" 2>&1)"; set -e
+FAIL_CONTEXT="$OUT8B"
 want "S-8: setup is idempotent — a second run over the composed host is still green" \
-  "OMP_BIN='$FAKE_OMP/omp' ENTWURF_OMP_AGENT_DIR='$HOME/.omp/agent' PATH='$FAKE_OMP:$PATH' bash '$REPO_DIR/run.sh' setup '$PROJ8' 2>&1 | grep -q 'result: green (computed from the component outcomes above)'"
+  "printf '%s' \"\$OUT8B\" | grep -q 'result: green (computed from the component outcomes above)'"
+FAIL_CONTEXT=""
 want_auth_untouched "S-8"
 # Reset the composed OMP state so the next cell decides on a clean host.
 rm -rf "$HOME/.omp" "$XDG_DATA_HOME/entwurf/omp-bridge" "$XDG_DATA_HOME/entwurf/omp-mcp" \
