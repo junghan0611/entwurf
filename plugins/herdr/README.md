@@ -532,8 +532,8 @@ atomic ledger write. A version is never an identity here: two commits can both c
 **It puts nothing on `PATH`.** An earlier cut exposed bare `entwurf` / `entwurf-bridge` through an
 owned bin directory; that was load-bearing on a condition nothing here can establish — there is no
 reason a fresh `$XDG_DATA_HOME/…/bin` is on a clean host's PATH, and this plugin may not edit a shell
-profile or write into a bin directory it does not own. The npm artifact this lock names **does** carry
-the `entwurf pi` launcher — exercised in the receipt above, where
+profile or write into a bin directory it does not own. The npm artifact the receipt above measured **does**
+carry the `entwurf pi` launcher — that is where
 `<runtime>/node_modules/.bin/entwurf pi` becomes a garden citizen with no model turn — but that bin is
 reachable only by its absolute path under the runtime root. The command this README tells you to type
 is therefore still `pi --entwurf-control`.
