@@ -1016,11 +1016,19 @@ async function run(): Promise<void> {
 		message: initialPiInstruction,
 	});
 	receipts["5-fixture-to-initial-pi-v2"] = instructInitialPi.text;
+	// #120 P2: the control-socket rail answers with the ACCEPTANCE BOUNDARY the receiver observed,
+	// and every member of that closed set is a success. The initial Pi is mid-turn while the fixture
+	// addresses it, so `queued-follow-up` is an ORDINARY answer here — measured 2026-09-23, this
+	// exact step. The old `sent|delivered` pin passed only when the caller happened to be idle, and
+	// before P2 it passed on the busy path too because the rail said `sent` either way; `delivered`
+	// was never a member of the set at all. The sibling LIVE smokes took this widening in 6d90d73
+	// (`smoke-herdr-fresh-call-live.ts`, `smoke-mux-lifecycle-live.ts`); this step was missed.
 	ok(
 		"the fixture addressed the real initial Pi caller through an actual control-socket entwurf_v2 receipt",
 		!instructInitialPi.isError &&
-			/control-socket/i.test(instructInitialPi.text) &&
-			/(?:sent|delivered)/i.test(instructInitialPi.text),
+			/entwurf_v2 control-socket → (?:sent|queued-steer|queued-follow-up|accepted-unknown-boundary)/.test(
+				instructInitialPi.text,
+			),
 		instructInitialPi.text,
 	);
 
