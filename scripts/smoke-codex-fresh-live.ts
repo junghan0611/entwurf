@@ -1333,15 +1333,22 @@ async function run(): Promise<void> {
 	assertExactSourceToolCalls(
 		piSourceToolReceipts(readInitialPiEntries()),
 		[
-			{
-				toolName: "entwurf_v2",
-				arguments: {
-					target: callerGid,
-					intent: "fire-and-forget",
-					message: initialPiNonce,
-					wants_reply: false,
-				},
-			},
+			// 0.24.0 moved a pi sibling's first action to the ZERO-ARGUMENT eighth verb, and this
+			// smoke's own launch receipt says so in the same run: "its first action is the
+			// zero-argument callback verb (codex is the one arm that still sends the nonce as
+			// arguments)". The Codex audit below therefore keeps its `entwurf_v2` shape, and only
+			// this one moves. `{}` is matched by deep-strict equality, so it pins the verb's actual
+			// contract — a target or message typed here would be a second address axis and the verb
+			// refuses it by name.
+			//
+			// Nothing is weakened by dropping the nonce from THIS expectation: the correlation is
+			// proven earlier and from the delivered body, which is where a nonce can actually be
+			// corrupted — `the initial Pi callback carries the exact launch nonce` (:970-973) reads
+			// the fixture's own mailbox, requires exactly one exact match and refuses duplicates,
+			// and the two cells beside it bind that callback's sender envelope to a real pi V3
+			// citizen. This audit's job is the different one its name says: exactly these calls,
+			// once each, and nothing else.
+			{ toolName: "entwurf_callback", arguments: {} },
 			{
 				toolName: "entwurf_fresh_call",
 				arguments: {
