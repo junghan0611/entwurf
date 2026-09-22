@@ -4,9 +4,95 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+## 0.25.0 - 2026-09-23
+
+### Added
+
+- **The Herdr status pane stopped reporting presence and started reporting capability, in four
+  blocks that never merge (#120 P1-A).** `herdr plugin pane open --plugin junghan0611.entwurf
+  --entrypoint status` now draws HERDR INTEGRATION, ACTIVATION, RAILS and CITIZENS, and each block
+  carries three things that do not merge: `owner` (who is speaking — Herdr's listing is Herdr's
+  word about Herdr, the ledger is Entwurf's word about its own install, the rails table is this
+  package's own declaration), `observedAt` (`now`, `install-time`, or `static`) and its own
+  `outcome`. **There is deliberately no aggregate** — no reducer, no `overall`, no readiness word:
+  three of the four blocks answer at different times, so one token over them would have to pick one
+  time and lie about the other two, and a host whose Herdr integration is current, whose ledger was
+  written last week, and whose runtime has since been deleted is exactly the case a summary word
+  erases. A block that could not be read says so in its own voice with the gatherer's named code
+  rather than degrading to an empty section, because an empty section and a failed read look
+  identical on a screen and only one of them is safe to act on. The render is a pure data-to-data
+  leaf (`plugins/herdr/lib/capability-report.mjs`: no `fs`, no `spawnSync`, no `process.env`, no
+  dynamic import, no clock) and the gathering that must open files and import an installed module
+  lives in `activation-evidence.mjs`, so it stays visible WHICH artifact answered — the checkout or
+  the runtime. The measured blocker repaired on the way in: the writer's ledger is XDG **state**,
+  not XDG **data**, and the first candidate crashed before drawing any block on a normal
+  writer-produced ledger. Herdr `outdated|needs-repair` is block [1]'s own named red while
+  `not-installed` stays a reported skip; only `phase=active` grants a runtime fallback, and
+  `activating|deactivating` remain visible install-time receipts that grant no binary. THREE READS
+  / ONE OPEN is restored behind exactly one spawn callsite. Receipts: `check-herdr-plugin` 48
+  assertions, and that lane 24/24 mutants killed in the implementer's scratch mirror and again in
+  the coordinator's body.
+
 ### Changed
 
-- **`plugins/herdr` 0.4.1 — the README is rebuilt around the two questions a visitor actually
+- **A control-socket send now reports the acceptance boundary it actually got, and that
+  vocabulary is closed (#120 P2).** `entwurf_v2` answered `sent` whether the receiver was idle or
+  busy, and prose in four places called the busy path an interrupt or an immediate delivery.
+  Neither queue is an interrupt: a busy receiver drains steering after each turn and follow-ups
+  only when its inner loop ends, so a later steer overtakes every earlier follow-up and there is no
+  order between the two. Sender-visible acceptance is now its own closed axis — `sent |
+  queued-steer | queued-follow-up | accepted-unknown-boundary` — preserved through send →
+  structured error → runner → surface, while the route/release `SendFinalOutcome` is unchanged.
+  `sent` means the turn was TRIGGERED, not that the model has seen the text, and both queues are
+  volatile process memory an abort drops. A fallback socket preserves that boundary; a fallback
+  mailbox names its own durable enqueue receipt; dirty-lock receipts keep the actual boundary, file
+  and refusal reason instead of flattening them. The receiver wire no longer emits a bare
+  `delivered:true` or the unused `deliveredAs`. The oracle is the installed `pi-agent-core` itself
+  (`test/pi-queue.oracle.test.ts`, now on `check:full` with its exact core pin gated to the pi
+  floor): cross-mode overtaking, one-at-a-time drain, no mid-flight merge, and abort loss, proven
+  with zero model, network or ACP child turn. `DELIVERY.md`, `docs/acp-backend-rail.md`, the demo
+  README and the `entwurf-dev` skill were corrected to those same four words. Three proof holes
+  were closed before acceptance: dirty-lock end-to-end field loss, a `test/**` oracle that was not
+  on the public floor, and a reachability checker a comment could satisfy.
+
+- **pi runtime floor 0.86.0 → 0.87.0, direct (#120 P4).** Four exact dev pins (including P2's
+  direct `pi-agent-core` queue oracle), three closed peer ranges (`>=0.87.0 <0.88`), the
+  eight-package install/workspace constellation (seven `pi-*` packages plus `chord`), the
+  pack-install version matcher, and the support declarations in README, the Herdr install docs, mux
+  docs, setup docs, VERIFY and the ACP support matrix now name one floor.
+  `[QK:PI-FLOOR-SINGLE-SOURCE]` closes a measured static hole: before this, `check-dep-versions`
+  did not read `pnpm-workspace.yaml`, so one stale release-age row failed only later, during
+  installation. The five declared 0.87 breaking changes were re-measured rather than relabelled and
+  production contact is zero — and the three type fences are what confirm that, not grep
+  (`tsc --noEmit`, `-p scripts`, `-p mcp`, all rc=0). The installed 0.87 extension context still
+  exposes `isIdle()` / `signal` at the same coordinates and still has no `isCompacting`; the
+  `pi-agent-core` queue drain coordinates MOVED (`agent.js` `:98-99` → `:96-97`, `agent-loop.js`
+  steering drain `:159` → `:186`, follow-up drain `:162-166` → `:191-197`) while all four
+  queue-behaviour QKs stayed green; the sandbox CLI still refuses an unregistered
+  `--entwurf-control`. A deterministic gate now writes a REAL 0.87 session JSONL through the
+  installed public `SessionManager` with zero model, network or child process and proves basename
+  id = header id = manager id, so `check-herdr-placement` re-measures that axis on every run rather
+  than carrying a hand-made receipt. **0.86.1 was skipped with a reason:** its coding-agent
+  CHANGELOG has no Breaking Changes section at all and `packages/agent` 0.86.1 is an empty entry,
+  so it touches none of our surfaces and its provider/CLI improvements arrive inside 0.87.0 anyway.
+  ROADMAP's dated ledger carries the per-file sha256 pairs (written with real `packages/...`
+  paths, after a prior entry recorded an empty-file hash for a path that did not exist) and the
+  per-breaking-change contact receipts.
+
+- **The Herdr plugin manifest version moves 0.4.1 → 0.5.1 for this cut, and nothing else reads
+  that literal.** `plugins/herdr/herdr-plugin.toml` is the sole declaration (measured: one hit
+  repository-wide); `check-herdr-plugin` asserts semver SHAPE, not a value
+  (`scripts/check-herdr-plugin.ts:82`), and `min_herdr_version` stays the measured 0.9.0 floor.
+  `plugins/herdr/runtime-lock.json` returns to the `herdr-checkout` candidate carrier for the cut,
+  because `certifyLockCoherence` requires an npm lock to name a version that is BOTH already
+  published and equal to this checkout's `package.json` — and the version bump lands before the
+  publish. That is the same order `dd84ac0`/`3c3a67d`/`47f6d36` recorded: `v0.23.1` and `v0.24.0`
+  were both tagged on that carrier and the npm pin returned afterwards. The lock never moves onto an
+  unpublished version, and the 0.25.0 npm pin plus its published sha512 is a follow-up commit, not
+  part of this cut. The build gate and the README's release sentence move with it, because they read
+  the committed lock beside it.
+
+- **The Herdr plugin README is rebuilt around the two questions a visitor actually
   arrives with: which route do I want, and what do I type first.** It now opens by saying what the
   plugin is *not* (a second workbench), then a route chooser, the Herdr built-ins this plugin
   depends on versus what Entwurf adds, a quick start that runs from a raw box in nine steps to the
@@ -50,6 +136,133 @@ All notable changes to this project will be documented here. Format follows [Kee
   0-token citizen and teardown/reinstall cell green, only that copy red; with the eighth verb
   named the smoke is PASS (`ref=main`, runtime `@junghanacs/entwurf@0.24.0`, observed sha256
   `fd750bcb…`). The comment's stale `run.sh:5187` line reference now names the constant instead.
+
+### Removed
+
+- **The sender-side `entwurf-sent` transcript box, which had no producer (#120 P3).** Repository
+  measurement found one definition, one renderer registration and **zero** producers, while two
+  live comments named producers that did not exist. The shipped `ENTWURF_SENT_MESSAGE_TYPE` export
+  and the dead `SentBoxData` / builder / renderer / registration are gone; the independent
+  receive-side `entwurf-message` producer and renderer are untouched. The remaining receive-side
+  comment now states the true boundary — a sender receives an acceptance-boundary text receipt, and
+  only a receiver can claim a transcript box was rendered. Two claims keep it retired: AST-based
+  `[QK:NO-RENDERER-WITHOUT-PRODUCER]`, so a comment or a string literal cannot satisfy the producer
+  proof, and `[QK:RETIRED-SENT-SURFACE-ABSENT]`, which seals both identifiers and the stale
+  `entwurf sent` / `sender-side UI box` prose. The two mutants went into their own
+  `retired-sent-surface` lane rather than mixing into P2 receipt semantics, and historical
+  ROADMAP/demo evidence was kept as history with a dated correction rather than rewritten.
+
+### Fixed
+
+- **The Herdr status pane died before drawing a single block on the carrier every candidate window
+  rides.** `plugins/herdr/lib/activation-evidence.mjs` located the installed ledger reader by
+  reading the package directory name off `runtime-lock.json` — but that file is a discriminated
+  union and only its `npm` arm carries a `name`, so on the `herdr-checkout` arm
+  (`{source, repository}`) the name was `undefined` and `path.join` answered it with a `TypeError`
+  raised OUTSIDE the `try` that was supposed to name every failure this module can have. Measured on
+  this cut: with that lock committed, `check-herdr-plugin` reported `block was ""` and every one of
+  its 48 assertions stood on a pane that had crashed. The carrier is not an edge case — `v0.23.1`
+  and `v0.24.0` were both tagged on it. The gatherer now takes `checkoutRoot` and asks
+  `readCheckoutPackageSpec`: the manifest is the one name both lock arms already agree about, since
+  the npm arm is certified coherent with it and the checkout arm packs that very manifest. The join
+  moved inside the same `try`, so a locator that ever yields a non-string is a named
+  `activation-reader-unavailable` rather than a process death. `VERIFY.md` had already written this
+  rule down for `smoke-herdr-raw-install-live`; the lesson had not crossed to the gatherer `79391fb`
+  added. `[QK:HPL-PACKAGE-NAME-FROM-MANIFEST]` measures the premise instead of quoting it — it
+  writes a checkout-arm lock and asks the real reader what `.name` is — then requires the module to
+  ask the manifest and never the lock, with comments stripped first so prose cannot satisfy it; its
+  mutant drifts the call back to `readRuntimeLock`.
+
+- **`doctor-pi-provider` called every Herdr-plugin host red while its bridge booted and served all
+  eight verbs (#120 P1-B).** The install-state's `ownership` field is a PREIMAGE classification —
+  what stood at the key BEFORE that install — so `absent` means "we created it", not "nobody owns
+  it"; reading it as an ownership verdict is what produced the false red. The doctor now reads the
+  recorded `command` beside it, because that string and not the bare name is the canonical managed
+  command (`register-pi-provider.py` writes the same string into the settings entry and into the
+  record), and in plugin mode it is an absolute bridge under the certified stable runtime, since a
+  Herdr-plugin host has nothing `entwurf` on PATH. For a known managed preimage carrying a recorded
+  command the comparison now runs REGARDLESS of whether the effective command happens to be the
+  bare name: keeping that decision inside a `!isBare` branch is how real drift escaped — a record
+  naming the absolute plugin bridge with the settings repointed at bare `entwurf-bridge` is drift,
+  and a bare bridge that boots would otherwise have carried it to green. A record that names no
+  command, or one whose ownership is a word this doctor does not know, falls through to the
+  original logic unchanged; the state is rewritten by `./run.sh setup`, never by its reader.
+
+- **Three qualification control reds, which were gate defects rather than product ones (#120).**
+  The first committed body at `bad2677` ran 69m42s and ended 746/777, with the remaining 31 voided
+  only by baseline-red controls. `[QK:MUTANT-GATES-INSIDE-FULL-FLOOR]`: `check-control-send-receipt`
+  and `check-entwurf-v2-runner` were valid narrow mutant coordinates but absent from `check:full`,
+  so they are now wired into `check:contracts` (~1.5 s combined, measured) while keeping their
+  source-adjacent discovery. `[QK:LAUNCHFENCE-EXPOSED-SMOKE-WIRED]`: P1's new XDG data-root cell
+  moved `smoke-herdr-raw-install-live.sh` into launcher-fence scrutiny, and the fence's env-block
+  parser understood only TypeScript object literals, not a continued shell `env` command — it now
+  reads that actual invocation and grants the exemption only when `HOME=` is relocated in the same
+  block, with a negative cell deleting that assignment to prove the exemption disappears.
+  `smoke-setup-verdict` S-8's intermittent second-run idempotence red had its output discarded by a
+  `| grep -q`, leaving no causal receipt; the second setup output is now captured and printed on
+  failure. No retry, sleep, enlarged timeout or speculative behaviour change was added, and S-8 is
+  explicitly NOT claimed fixed — it did not recur in the accepted body, and if it returns the next
+  receipt carries the output instead of one context-free FAIL line.
+
+- **Two stale oracles in `smoke-codex-fresh-live`, both surfaced by the LIVE floor of this cut.**
+  (a) The step read a control-socket receipt as successful only when it said `sent|delivered`.
+  `6d90d73` widened two sibling LIVE smokes to the closed four-value axis and named the reason in
+  `smoke-herdr-fresh-call-live.ts:89` — *"the old literal `→ sent` pin would have gone red on the
+  common case and passed only when the caller happened to be idle"* — and this third one was missed.
+  Measured on this exact step: the fixture addresses the initial Pi mid-turn, the rail answered
+  `queued-follow-up`, and a release-gate MUST went red on a delivery that had succeeded. Before P2
+  it passed on the busy path only because the rail said `sent` either way, which is the dishonesty
+  P2 removed; `delivered` was never a member of the set. (b) The initial-Pi exact-once audit still
+  expected the PRE-0.24.0 callback shape — an `entwurf_v2` carrying the nonce as arguments — while a
+  pi sibling's first action has been the zero-argument `entwurf_callback` since 0.24.0, as this
+  smoke's own launch receipt says in the same run: *"its first action is the zero-argument callback
+  verb (codex is the one arm that still sends the nonce as arguments)"*. A sibling obeying the
+  shipped framing was therefore reported as an unexpected call. Only the pi branch moved; the Codex
+  audit keeps `entwurf_v2`, because codex really is still the argument-carrying arm
+  (`codex-callback-env-unsupported`). This is the class `e506716` closed for
+  `smoke-herdr-raw-install-live`, and it stayed hidden in 0.24.0 because that cut's run died earlier
+  at the Pi→Codex template relay. Neither repair weakens an assertion: `{}` is matched by
+  `isDeepStrictEqual`, so it pins the verb's zero-argument contract rather than accepting any
+  arguments, the exact-once count is unchanged, a refusal still fails, and the callback-nonce
+  correlation was never carried by that audit — it is proven earlier and from the DELIVERED body by
+  `the initial Pi callback carries the exact launch nonce`, which reads the fixture's own mailbox,
+  requires exactly one exact match and refuses duplicates.
+
+### Verification
+
+Frozen candidate `69a6f1d`, host `oracle`, 2026-09-23 KST. Two receipts, kept apart on purpose.
+
+- **Deterministic floor:** `pnpm run check:full` exit 0, 607 s.
+- **Aggregate LIVE floor**, `LIVE=1 ./run.sh release-gate <scratch> --cut` with ambient identity
+  carriers stripped, scratch `/tmp/entwurf-release-gate-0.25.0-final.HghiXh`:
+  **MUST PASS=23 FAIL=1 SKIP=0**, **BEHAVIOR PASS=1 FAIL=0 SKIP=0**, `cut: BLOCKED (MUST FAIL)`.
+  Inside it, `check-gate-qualification` killed **778/778** with `[gate-qualification] ok` and both
+  purity axes green — measured on these exact bytes, which is why the aggregate was re-run after the
+  two gate commits above: `scripts/smoke-codex-fresh-live.ts` is the subject of three committed
+  mutants (`CODEX-LIVE-EVIDENCE-RECORD-PATH`, `CODEX-LIVE-EVIDENCE-RECOVERY-FAILSAFE`,
+  `CODEX-LIVE-RECOVERY-SOURCE-ONLY`), and all three killed at `sha256=40c7852fc273…`.
+- **The one MUST red is the shape of that step, not a defect.** `release_gate()` supplies no
+  `ENTWURF_CODEX_APP_SERVER_PID`, and `smoke-codex-fresh-live` refuses to infer one — VERIFY: *"The A
+  cell takes no inferred server or models"* — so it declines inside every aggregate on every host.
+  Its pair is the standalone run on the SAME frozen `69a6f1d`: `LIVE=1
+  ENTWURF_CODEX_APP_SERVER_PID=3969303 ENTWURF_CODEX_FRESH_MODEL=gpt-5.6-luna
+  ENTWURF_CODEX_FRESH_PI_MODEL=openai-codex/gpt-5.6-terra ./run.sh smoke-codex-fresh-live` →
+  **66 assertions ok, exit 0**, `initial-pi=3/3 completed exact`, `codex=3/3 completed exact`.
+  The Pi tier is terra rather than luna, and that is a recorded tier choice, not a gate change: the
+  0.23.1 follow-up already measured luna losing relay fidelity where terra preserves it, and on this
+  cut luna pre-substituted the `<placeholder>` template the smoke audits for byte equality
+  (ROADMAP 0.24.0 follow-up 3). The receipt this cell is accepted on is the run that actually ran.
+- **Host residue (P9, run at the gate's verdict and again at the end of prepare):** 588 → 586 dirs,
+  2 roots / 112 K reclaimed, by prefix `entwurf-s2b-overlay` and `check-probe-ordering`. One
+  reparented process holds a `/tmp` path and was named rather than killed: pid 489788, the
+  operator's own `emacs --init-directory=/tmp/agent-emacs-init --daemon`, which no gate mints.
+- **Open, pre-cut, not resolved by this candidate:** `./run.sh doctor-meta-bridge` is FAIL on this
+  host for exactly one managed scalar — `settings showTurnDuration missing/drifted`, where
+  `~/.claude/settings.json` says `true` and `scripts/meta-bridge-state.py:90` requires `false`.
+  Every other axis of that doctor reads ok (hook launch form, doorbell static contract, statusline,
+  user-scope MCP reachability, cached artifact). The install-state carries no per-scalar provenance,
+  so whether this is drift from our write or the operator's own UI choice is not decided here, and
+  the host was deliberately left untouched.
 
 ## 0.24.0 - 2026-09-20
 
