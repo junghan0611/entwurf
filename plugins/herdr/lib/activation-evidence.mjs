@@ -30,10 +30,19 @@
  * AND THE CIRCLE IS BROKEN BY DERIVATION, NOT BY A SECOND READER. Locating that reader must not
  * require reading the ledger first. It does not: the stable active root comes from
  * `resolveRuntimeLayout(env)`, which is a pure function of XDG/HOME, and the package directory
- * name comes from the plugin's own committed `runtime-lock.json` — the declared acquisition
- * authority, not a caller input and not a ledger field. `ledger.runtimeRoot` is therefore never a
- * LOCATOR here; it is a CROSS-CHECK against the root we derived independently, and a disagreement
- * is a named red rather than a silent follow.
+ * name comes from the CHECKOUT MANIFEST (`readCheckoutPackageSpec`), not a caller input and not a
+ * ledger field. `ledger.runtimeRoot` is therefore never a LOCATOR here; it is a CROSS-CHECK against
+ * the root we derived independently, and a disagreement is a named red rather than a silent follow.
+ *
+ * WHY THE MANIFEST AND NOT THE LOCK. `runtime-lock.json` is a DISCRIMINATED UNION and only its
+ * `npm` arm carries a `name`; the `herdr-checkout` arm is `{source, repository}` and nothing else
+ * (`scripts/herdr-runtime.mjs:288-350`). Reading `.name` off it therefore yields `undefined` on
+ * exactly the carrier every candidate window rides — `[측정 2026-09-22]` both `v0.23.1` and
+ * `v0.24.0` were tagged on it — and `path.join` answers `undefined` with a TypeError, not with a
+ * refusal this state machine can name. The manifest has no such arm: it is the one place both lock
+ * kinds already agree about, because the `npm` arm is certified coherent with it
+ * (`certifyLockCoherence`) and the checkout arm packs that very manifest. `VERIFY.md` had already
+ * written this rule down for `smoke-herdr-raw-install-live`; the lesson had not crossed to here.
  *
  * THE STATE MACHINE, AND EVERY ARM IS NAMED:
  *   activation-env-root-unresolvable a user root a layout needs could not be resolved — with HOME
@@ -104,11 +113,12 @@ const exists = (p) => fs.existsSync(p);
  * @param deps.activationModule  the checkout's `scripts/herdr-activation.mjs`, asked WHERE the
  *                               ledger lives and nothing else — its body is certified by the
  *                               installed runtime's copy, never by this one
- * @param deps.pluginDir      the checkout plugin dir holding `runtime-lock.json`
+ * @param deps.checkoutRoot   the checkout root holding `package.json` — the manifest that names
+ *                            the installed package directory on BOTH lock carriers
  * @param deps.importModule   seam for the dynamic import, so a gate can drive every arm
  */
 export async function gatherActivationEvidence(env, deps) {
-	const { runtimeModule, activationModule, pluginDir, importModule = (u) => import(u) } = deps;
+	const { runtimeModule, activationModule, checkoutRoot, importModule = (u) => import(u) } = deps;
 	// Both resolvers refuse an environment with no user root, by design. That refusal is a fact
 	// about the host and this surface has to be able to SAY it; letting it throw past the caller
 	// replaced four blocks with an unhandled rejection.
@@ -153,22 +163,29 @@ export async function gatherActivationEvidence(env, deps) {
 		});
 	}
 
-	// The package directory name comes from the committed lock — the plugin's declared acquisition
-	// authority. Never from the ledger (that would be the circle) and never from a caller.
-	let packageName;
+	// The package directory name comes from the CHECKOUT MANIFEST. Never from the ledger (that
+	// would be the circle), never from a caller, and never from the lock — see the header: the
+	// `herdr-checkout` arm has no `name` at all.
+	//
+	// THE JOIN IS INSIDE THIS TRY ON PURPOSE. It used to sit after it, so the one input that could
+	// be a non-string arrived at `path.join` with nothing to catch it and the pane died with an
+	// uncaught `TypeError` before drawing a single block — measured 2026-09-22 on the checkout
+	// carrier. Every failure this module can have carries a name; a locator that cannot produce one
+	// is a failure like any other, and it says so here rather than taking the process down.
+	let readerPath;
 	try {
-		packageName = runtimeModule.readRuntimeLock(pluginDir).name;
+		const packageName = runtimeModule.readCheckoutPackageSpec(checkoutRoot).name;
+		readerPath = path.join(roots.activeDir, "node_modules", packageName, "scripts", "herdr-activation.mjs");
 	} catch (err) {
 		return Object.freeze({
 			kind: "error",
 			code: "activation-reader-unavailable",
-			detail: `runtime lock unreadable, so the installed reader cannot be located: ${err?.message ?? String(err)}`,
+			detail: `the checkout manifest does not name the package, so the installed reader cannot be located: ${err?.message ?? String(err)}`,
 			derivedRuntimeRoot: roots.activeDir,
 			runtimeBin: null,
 		});
 	}
 
-	const readerPath = path.join(roots.activeDir, "node_modules", packageName, "scripts", "herdr-activation.mjs");
 	let reader;
 	try {
 		if (!fs.statSync(readerPath).isFile()) throw new Error(`${readerPath} is not a regular file`);

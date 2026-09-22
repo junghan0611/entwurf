@@ -850,7 +850,7 @@ let manifestCount: number;
 		"fresh-cut": 3,
 		"gate-qualification": 2,
 		"herdr-placement": 13,
-		"herdr-plugin": 24,
+		"herdr-plugin": 25,
 		"herdr-plugin-profile": 14,
 		"herdr-activation": 25,
 		"herdr-plugin-build": 13,

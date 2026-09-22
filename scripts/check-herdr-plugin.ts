@@ -46,6 +46,7 @@ import path from "node:path";
 import { parse as parseToml } from "smol-toml";
 import * as HERDR_RAILS from "../scripts/herdr-rails.mjs";
 import * as ACTIVATION from "./herdr-activation.mjs";
+import * as RUNTIME from "./herdr-runtime.mjs";
 import { reclaimOnExit } from "./lib/reclaim-on-exit.ts";
 
 let passed = 0;
@@ -424,6 +425,44 @@ const PEERS = JSON.stringify({
 	ok(
 		"the ledger body is parsed exactly once, by the installed runtime's own reader",
 		reads.length === 1 && reads[0] === "reader" && !code.includes("activationModule.readCertifiedLedger"),
+	);
+}
+
+// ── #120: the package name is the CHECKOUT MANIFEST's, on BOTH lock carriers ──
+{
+	// THE PREMISE IS MEASURED HERE, NOT QUOTED. `runtime-lock.json` is a discriminated union and
+	// only its `npm` arm carries a `name`; the `herdr-checkout` arm is `{source, repository}` and
+	// nothing more. So this cell writes that arm and asks the real reader what `.name` is, rather
+	// than asserting a sentence about it — if a future lock schema grows a name on that arm, the
+	// premise stops being true HERE instead of quietly somewhere else.
+	const lockDir = tmp("lock-arm");
+	fs.writeFileSync(
+		path.join(lockDir, "runtime-lock.json"),
+		`${JSON.stringify({ schemaVersion: 2, source: "herdr-checkout", repository: RUNTIME.CHECKOUT_REPOSITORY })}\n`,
+	);
+	const checkoutArm = RUNTIME.readRuntimeLock(lockDir) as { name?: unknown };
+	// AND THE CONSEQUENCE IS STRUCTURAL, because the behavioural half is only true while the
+	// committed lock happens to BE the checkout carrier. Every candidate window rides that carrier
+	// and every published cut re-pins to npm afterwards, so a cell that merely spawned the pane
+	// today would silently stop testing this the moment the npm pin returns. What must hold on both
+	// carriers is that this module never asks the lock at all: the manifest is the one name both
+	// arms already agree about (`certifyLockCoherence` binds the npm arm to it, and the checkout arm
+	// packs that very manifest). Comments are stripped first, so prose about the lock cannot satisfy
+	// the claim — and prose about it is exactly what the retired doctrine left behind.
+	const code = fs
+		.readFileSync(path.join(PLUGIN_DIR, "lib", "activation-evidence.mjs"), "utf8")
+		.replace(/\/\*[\s\S]*?\*\//g, "")
+		.replace(/^\s*\/\/.*$/gm, "");
+	ok(
+		"[QK:HPL-PACKAGE-NAME-FROM-MANIFEST] the installed reader's package directory name comes from the " +
+			"CHECKOUT MANIFEST and the lock is never asked for it — measured, the `herdr-checkout` arm carries no " +
+			"`name` at all, so reading one off it yields `undefined` and `path.join` answers that with a TypeError " +
+			"rather than any refusal this state machine can name: the pane died before drawing a single block on " +
+			"exactly the carrier both v0.23.1 and v0.24.0 were tagged on " +
+			`(checkout-arm-name=${JSON.stringify(checkoutArm.name)} asks-manifest=${code.includes("runtimeModule.readCheckoutPackageSpec(")} asks-lock=${/readRuntimeLock\s*\(/.test(code)})`,
+		checkoutArm.name === undefined &&
+			code.includes("runtimeModule.readCheckoutPackageSpec(") &&
+			!/readRuntimeLock\s*\(/.test(code),
 	);
 }
 

@@ -68,7 +68,6 @@
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import * as activationModule from "../../../scripts/herdr-activation.mjs";
 import { HERDR_FRESH_CALL_BACKENDS, MODEL_SYNTAX_EXAMPLE, RAIL_ENTRY_NOTE } from "../../../scripts/herdr-rails.mjs";
 import * as runtimeModule from "../../../scripts/herdr-runtime.mjs";
@@ -358,7 +357,7 @@ if (herdrBin === undefined || herdrBin === "") {
 	const evidence = await gatherActivationEvidence(process.env, {
 		runtimeModule,
 		activationModule,
-		pluginDir: path.resolve(path.dirname(fileURLToPath(import.meta.url)), ".."),
+		checkoutRoot: runtimeModule.defaultCheckoutRoot(),
 	});
 	const entwurf = resolveEntwurfBin(evidence);
 

@@ -285,6 +285,17 @@
 			"timeoutSeconds": 180,
 			"signature": "[QK:HPL-LEDGER-VANISHED-IS-NAMED]",
 			"signatureSource": "scripts/check-herdr-plugin.ts"
+		},
+		{
+			"claim": "HPL-PACKAGE-NAME-FROM-MANIFEST",
+			"title": "reading the installed package's directory name off `runtime-lock.json` works only on the `npm` arm — the `herdr-checkout` arm is `{source, repository}` and carries no `name`, so this drift yields `undefined`, `path.join` answers that with a TypeError past every named refusal, and the status pane dies before drawing one block on exactly the carrier every candidate window rides (#120; born in 79391fb)",
+			"subject": "plugins/herdr/lib/activation-evidence.mjs",
+			"find": ["\t\tconst packageName = runtimeModule.readCheckoutPackageSpec(checkoutRoot).name;"],
+			"replace": ["\t\tconst packageName = runtimeModule.readRuntimeLock(checkoutRoot).name;"],
+			"gate": ["bash", "run.sh", "check-herdr-plugin"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:HPL-PACKAGE-NAME-FROM-MANIFEST]",
+			"signatureSource": "scripts/check-herdr-plugin.ts"
 		}
 	]
 }
