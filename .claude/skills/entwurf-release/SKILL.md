@@ -666,15 +666,23 @@ manual fallback on the agenda target.
 
 ## M6. Create and verify the GitHub release
 
+`CHANGELOG.md` stays hard-wrapped: it is a source file, and GitHub's file view
+already joins single newlines inside a paragraph. A release body does not. It
+renders every newline as a line break, so a hard-wrapped section reads as ragged
+short lines. The extraction therefore joins each paragraph and list item into
+one line. Fenced code blocks stay byte-for-byte, and the script refuses to write
+notes whose text differs from the section by anything other than whitespace.
+
 ```bash
 NOTES_FILE="/tmp/release-notes-v${VERSION}.md"
 VERSION="$VERSION" python3 - <<'PY'
 import os
+import re
 from pathlib import Path
 
 version = os.environ["VERSION"]
 lines = Path("CHANGELOG.md").read_text().splitlines()
-out = []
+section = []
 inside = False
 for line in lines:
     if line.startswith(f"## {version} ") or line == f"## {version}":
@@ -683,8 +691,45 @@ for line in lines:
     if inside and line.startswith("## "):
         break
     if inside:
+        section.append(line)
+
+# Soft-wrap: join continuation lines; a heading, list item, quote or table row
+# starts a new block; blank lines and fenced code are kept as they are.
+block_start = re.compile(r"^\s*(#{1,6}\s|[-*+]\s|\d+\.\s|>|\|)")
+out, cur, fence = [], None, False
+for line in section:
+    if line.lstrip().startswith("```"):
+        if cur is not None:
+            out.append(cur)
+            cur = None
         out.append(line)
-Path(f"/tmp/release-notes-v{version}.md").write_text("\n".join(out).strip() + "\n")
+        fence = not fence
+        continue
+    if fence:
+        out.append(line)
+        continue
+    if not line.strip():
+        if cur is not None:
+            out.append(cur)
+            cur = None
+        out.append(line)
+        continue
+    if cur is None or block_start.match(line):
+        if cur is not None:
+            out.append(cur)
+        cur = line.rstrip()
+        continue
+    cur += " " + line.strip()
+if cur is not None:
+    out.append(cur)
+
+def squash(text):
+    return re.sub(r"\s+", " ", text).strip()
+
+notes = "\n".join(out).strip() + "\n"
+if squash(notes) != squash("\n".join(section)):
+    raise SystemExit("ABORT: soft-wrap changed release-note text beyond whitespace")
+Path(f"/tmp/release-notes-v{version}.md").write_text(notes)
 PY
 
 test -s "$NOTES_FILE"
