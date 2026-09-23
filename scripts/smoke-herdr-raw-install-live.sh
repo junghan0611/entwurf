@@ -714,8 +714,13 @@ run_fan() {
 fan_no_server="$(run_fan)"; fan_no_server_rc=$?
 echo "$fan_no_server" | sed 's/^/    /'
 echo "    → exit $fan_no_server_rc"
-if [ "$fan_no_server_rc" -ne 0 ] && printf '%s' "$fan_no_server" | grep -q '^herdr-agent-list-failed'; then
-  ok "with no herdr server the fan names herdr-agent-list-failed and goes red (not an empty table)"
+# Since #120, each block owns its own verdict: a failed `agent list` is indented inside
+# [4] CITIZENS, not at column zero above the report. Anchor both the owner block and its
+# exact failure line; a mention in the closing guidance or a different block is no receipt.
+if [ "$fan_no_server_rc" -ne 0 ] &&
+   printf '%s\n' "$fan_no_server" | grep -q '^\[4\] CITIZENS — owner: entwurf; read now, this open$' &&
+   printf '%s\n' "$fan_no_server" | grep -q '^  herdr-agent-list-failed: exit [1-9]'; then
+  ok "with no herdr server the CITIZENS block names herdr-agent-list-failed and goes red (not an empty table)"
 else
   bad "with no herdr server the fan answered rc=$fan_no_server_rc without naming herdr-agent-list-failed"
 fi

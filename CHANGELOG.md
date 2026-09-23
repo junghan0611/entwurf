@@ -6,6 +6,18 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ### Changed
 
+- **Herdr plugin 0.5.1 is the follow-up for the #120-aware raw-install LIVE oracle.**
+  Plugin 0.5.0 already shipped on the `v0.25.0` tag and its npm-pinned follow-up commit
+  `113ca5327074b77eb5d81453b1a277afcdf4ddca` was publicly reachable. The first clean-host
+  test of that commit completed install, npm integrity, pi/Claude activation and record-backed
+  birth, then falsely marked the status pane red: it still required `herdr-agent-list-failed` at
+  column zero, while #120 moved that name into the owner-labelled `[4] CITIZENS` block. The
+  corrected assertion anchors both that block and its indented failure line; the same remote
+  0.5.0 commit then passed the full first-user path without production-code changes (receipt
+  below). The manifest alone advances to 0.5.1 here to distinguish this verified follow-up from
+  the already public 0.5.0. **This is not yet a LIVE acceptance claim for 0.5.1**; its remote
+  commit must be tested separately before a physical-host install is handed to GLG.
+
 - **Herdr plugin 0.5.0 pins its runtime to the published npm `@junghanacs/entwurf@0.25.0`.**
   The `v0.25.0` tag already carries `plugins/herdr/herdr-plugin.toml` at 0.5.0; this post-publish
   follow-up replaces its candidate-window `herdr-checkout` lock with the exact published npm
@@ -22,6 +34,21 @@ All notable changes to this project will be documented here. Format follows [Kee
   `check-gate-manifests` passed; the last confirms 782 mutants across 62 lanes without executing
   qualification. These are local pin/protocol receipts, **not** a public-remote first-user-path
   receipt: that journey needs the committed pin on a reachable ref and must be measured separately.
+- **Public-remote first-user path (2026-09-23, after pin push).** In a clean `node:24` container,
+  `LIVE=1 ENTWURF_REQUIRE_DOCKER=1 ./run.sh smoke-herdr-raw-install-live --ref main`
+  resolved `main` to `113ca5327074b77eb5d81453b1a277afcdf4ddca`, read plugin manifest 0.5.0,
+  fetched `kind=npm @junghanacs/entwurf@0.25.0` at tarball SHA-256
+  `6ed3d67c8db30b71572738b9cddce38c9cf12d73c4f494b48b1475235918a968`, wired pi and
+  Claude, born a record-backed pi citizen without a model turn, read the status fan with and
+  without a Herdr server, and deactivated/reinstalled successfully. **PASS**; full log
+  `/tmp/entwurf-herdr050-raw-install-113ca53-amended.log`, sha256
+  `406ff681166e596c9b358ffbac9129fe32c9c7878c874d177ebc3f1cab661788` (decisive lines
+  above are reproduced here for cross-host readers). The first attempt on this same remote SHA
+  failed only at the fan oracle: #120 now reports `herdr-agent-list-failed` inside the `[4] CITIZENS`
+  block, not at column zero. `scripts/smoke-herdr-raw-install-live.sh` now anchors that block and
+  its indented failure line; the corrected run passed with no product-source change. The older
+  `smoke-herdr-plugin-build-live` still asserts the **checkout** carrier and is not evidence for
+  this npm pin — running it here reported the expected source mismatch, not an install failure.
 
 ## 0.25.0 - 2026-09-23
 

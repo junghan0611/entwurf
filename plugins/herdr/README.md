@@ -466,12 +466,14 @@ citizen twice with no model turn (once on the wiring as `pi --entwurf-control`, 
 shipped `entwurf pi` launcher), drives the status pane against the real `entwurf` and `herdr`
 binaries, and finally tears the whole activation down and reinstalls onto the host it left.
 
-**Previous public-remote receipt (2026-09-20):** PASS at `--ref main`, runtime
-`kind=npm @junghanacs/entwurf@0.24.0`, observed tarball sha256 `fd750bcb…` (CHANGELOG.md).
-The resolved commit printed by the gate keeps that receipt exact as `main` moves. The 0.5.0
-manifest and npm 0.25.0 lock are a newer candidate; the first-user-path proof for their exact
-remote commit must be run after the pin reaches a public ref. The local lock and fixture gates
-alone do not supply that receipt.
+**Public-remote receipt (2026-09-23):** PASS at `--ref main`, resolved commit
+`113ca5327074b77eb5d81453b1a277afcdf4ddca`, plugin manifest 0.5.0, runtime
+`kind=npm @junghanacs/entwurf@0.25.0`, fetched tarball sha256 `6ed3d67c…` (CHANGELOG.md,
+`/tmp/entwurf-herdr050-raw-install-113ca53-amended.log`). The first attempt at that commit
+failed only because the smoke's oracle still looked for `herdr-agent-list-failed` at column zero;
+#120 moved it inside CITIZENS. The corrected oracle passed without changing production code.
+Plugin 0.5.1 carries that gate correction as a separately named follow-up. This receipt belongs
+to **0.5.0** only; re-run the public-remote smoke at 0.5.1 before claiming it is accepted.
 
 What the container cannot measure: a citizen drawn as a **ROW**. That needs
 `placement.kind === "herdr-pane"`, and a headless container has no panes — so the row is evidence
