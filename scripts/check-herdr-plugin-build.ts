@@ -175,9 +175,10 @@ function tree(root: string): string[] {
  */
 function fixtureAcquire(opts: { activate: "absent" | "incapable" | "recorder"; log?: string; fail?: boolean }) {
 	return ({ identity, prefix }: AcquireArgs) => {
+		const version = identity.version ?? "0.21.0";
 		const root = path.join(prefix, "node_modules", PACKAGE);
 		fs.mkdirSync(path.join(root, path.dirname(COMPILED_ENTRY)), { recursive: true });
-		fs.writeFileSync(path.join(root, "package.json"), `${JSON.stringify({ name: PACKAGE, version: "0.21.0" })}\n`);
+		fs.writeFileSync(path.join(root, "package.json"), `${JSON.stringify({ name: PACKAGE, version })}\n`);
 		fs.writeFileSync(path.join(root, COMPILED_ENTRY), "// compiled entry fixture\n");
 		const bin = path.join(prefix, "node_modules", ".bin");
 		fs.mkdirSync(bin, { recursive: true });
@@ -208,7 +209,7 @@ function fixtureAcquire(opts: { activate: "absent" | "incapable" | "recorder"; l
 				.update(identity.commit ?? "x")
 				.digest("hex")}`,
 			packageName: PACKAGE,
-			packageVersion: "0.21.0",
+			packageVersion: version,
 		};
 	};
 }
@@ -429,34 +430,35 @@ function drive(
 	});
 	const calls = fs.readFileSync(log, "utf8").trim().split("\n");
 	const journal = JSON.parse(fs.readFileSync(journalPathOf(env), "utf8")) as {
-		artifactIdentity: { commit: string };
+		artifactIdentity: { kind: string; version: string };
 	};
 	ok(
 		"[QK:HPB-SEQUENTIAL-TWO-STAGE] the sequence a real operator performs, as the runner composes it: `{pi}` first, " +
-			"then `{pi, claude-code}` after they integrated Claude Code, then a NEW commit of the same package version. " +
-			"The unchanged commit acquires nothing while still reconciling the widened set; the new commit reinstalls. " +
+			"then `{pi, claude-code}` after they integrated Claude Code, then the same exact npm lock again. " +
+			"The locked artifact acquires once while the widened set is still reconciled on each reinstall. " +
 			"OpenCode is present in every listing and appears in NO activation argv — the bytes those activations write " +
 			"are `check-herdr-activation`'s HAC-TWO-STAGE-ADD-ONLY, which drives the real Pi writers; what this cell owns " +
-			`is what the runner hands down (codes=${stage1.code}/${stage2.code}/${stage3.code} acquisitions=${acquisitions} calls=${JSON.stringify(calls)} commit=${journal.artifactIdentity.commit.slice(0, 8)})`,
+			`is what the runner hands down (codes=${stage1.code}/${stage2.code}/${stage3.code} acquisitions=${acquisitions} calls=${JSON.stringify(calls)} identity=${journal.artifactIdentity.kind}@${journal.artifactIdentity.version})`,
 		stage1.code === 0 &&
 			stage2.code === 0 &&
 			stage3.code === 0 &&
-			acquisitions === 2 &&
+			acquisitions === 1 &&
 			JSON.stringify(calls) === JSON.stringify(["pi", "pi,claude-code", "pi,claude-code"]) &&
 			!calls.some((c) => c.includes("opencode")) &&
-			journal.artifactIdentity.commit === COMMIT_B,
+			journal.artifactIdentity.kind === "npm" &&
+			journal.artifactIdentity.version === "0.25.0",
 	);
 }
 
 // ── 6a. the authority check happens BEFORE any runtime work ───────────────────
 {
-	const IDENTITY = (commit: string) => ({
-		kind: "herdr-checkout",
-		repository: "junghan0611/entwurf",
-		commit,
-		packageName: PACKAGE,
-		packageVersion: "0.21.0",
-		observedDigest: `sha256-${createHash("sha256").update(commit).digest("hex")}`,
+	const IDENTITY = (seed: string) => ({
+		kind: "npm",
+		name: PACKAGE,
+		version: "0.25.0",
+		expectedIntegrity:
+			"sha512-6Cm5qFZiR8OtqSszcfv/bhxhFlLL0dmeBOnBp3wnnL5JOI6e68anEG3SUuUXKK7CuCaM4S+ft7H8vgVKw4vDhg==",
+		observedDigest: `sha256-${createHash("sha256").update(seed).digest("hex")}`,
 	});
 	/** A host that already has a runtime at commit A and a ledger that says so. */
 	const seeded = (tag: string, backends: string[]): NodeJS.ProcessEnv => {
@@ -468,12 +470,17 @@ function drive(
 		});
 		const states: Record<string, string> = {};
 		for (const b of backends) states[b] = "active";
+		const artifactIdentity = (
+			JSON.parse(fs.readFileSync(journalPathOf(env), "utf8")) as {
+				artifactIdentity: Record<string, unknown>;
+			}
+		).artifactIdentity;
 		activation.writeLedger(
 			activation.resolveActivationLayout(env),
 			activation.ledgerBody({
 				phase: "active",
 				runtimeRoot: activeDirOf(env),
-				artifactIdentity: IDENTITY(COMMIT_A),
+				artifactIdentity,
 				roots: activation.resolveComponentRoots(env),
 				states,
 			}),
@@ -518,16 +525,17 @@ function drive(
 	const emptiedDirSeen = treeDigest(oracleRoot) !== oracleBase;
 	const oracleHonest = sameTree && sameLengthEditSeen && restored && modeSeen && emptiedDirSeen;
 
-	// (a) a SOURCE switch: the committed lock would now name npm over a checkout-sourced activation.
+	// (a) a SOURCE switch: the committed lock would name checkout over the active npm runtime.
 	// (a) is asked of the SHARED authority directly: the runner reads its lock from the committed
 	// file, and this gate does not add a seam that would let any caller choose the source.
 	const src = seeded("plan-source", ["pi"]);
 	const srcBefore = snapshot(src);
 	const srcRefusal = refusalOf(() =>
 		runner.certifyActivationPlan(src, {
-			lock: { source: "npm", name: PACKAGE, version: "0.21.0", integrity: "sha512-x" },
+			lock: { source: "herdr-checkout", repository: "junghan0611/entwurf" },
 			checkoutRoot: fixtureCheckoutRoot(),
 			requested: ["pi"],
+			resolveCommit: () => COMMIT_A,
 		}),
 	);
 	const srcUnchanged = unchanged(src, srcBefore);
@@ -541,6 +549,12 @@ function drive(
 			dropAcquired++;
 			return fixtureAcquire({ activate: "recorder", log: path.join(drop.HOME as string, "argv.log") })(args);
 		},
+		readRuntimeLock: () => ({
+			source: "npm",
+			name: PACKAGE,
+			version: "0.25.0",
+			integrity: "sha512-AR2VCui7JjK3w56rQSDs3AuAJMMuiXCNWH7HB52SQ3E/7p0oPhcxD+fb6Gdzi0VcBnheqxPzvJHMPQQcdYtNiw==",
+		}),
 		resolveCommit: () => COMMIT_B,
 	});
 
@@ -549,7 +563,18 @@ function drive(
 	const tornLedger = activation.resolveActivationLayout(torn).ledgerPath;
 	fs.writeFileSync(
 		tornLedger,
-		`${JSON.stringify({ ...(JSON.parse(fs.readFileSync(tornLedger, "utf8")) as Record<string, unknown>), artifactIdentity: IDENTITY(COMMIT_B) }, null, 2)}\n`,
+		`${JSON.stringify(
+			{
+				...(JSON.parse(fs.readFileSync(tornLedger, "utf8")) as Record<string, unknown>),
+				artifactIdentity: {
+					...IDENTITY(COMMIT_B),
+					expectedIntegrity:
+						"sha512-AR2VCui7JjK3w56rQSDs3AuAJMMuiXCNWH7HB52SQ3E/7p0oPhcxD+fb6Gdzi0VcBnheqxPzvJHMPQQcdYtNiw==",
+				},
+			},
+			null,
+			2,
+		)}\n`,
 	);
 	const tornBefore = snapshot(torn);
 	let tornAcquired = 0;
@@ -561,14 +586,13 @@ function drive(
 		resolveCommit: () => COMMIT_A,
 	});
 
-	// (d) the LEGAL case still passes: same source, new commit, request covers the ledger. The
-	// authority is asked on the PRE-install state, which is the only state it is ever asked about.
+	// (d) the LEGAL case still passes: same exact npm source and lock, request covers the ledger.
+	// The authority is asked on the PRE-install state, which is the only state it is ever asked about.
 	const legal = seeded("plan-legal", ["pi"]);
 	const legalPlan = runner.certifyActivationPlan(legal, {
-		lock: { source: "herdr-checkout", repository: "junghan0611/entwurf" },
-		checkoutRoot: fixtureCheckoutRoot(),
+		lock: { source: "npm", name: PACKAGE, version: "0.25.0", integrity: IDENTITY("x").expectedIntegrity },
+		checkoutRoot: REPO,
 		requested: ["pi"],
-		resolveCommit: () => COMMIT_B,
 	});
 	const legalDrive = drive(legal, listing({ pi: "current (v8) (/home/u/.pi)" }), {
 		acquire: fixtureAcquire({ activate: "recorder", log: path.join(legal.HOME as string, "argv.log") }),
@@ -577,7 +601,7 @@ function drive(
 
 	ok(
 		"[QK:HPB-PRE-BOOTSTRAP-AUTHORITY] the activation authority is asked BEFORE any runtime work, through the SAME " +
-			"shipped functions the installed verb runs: a source switch, a new commit whose request drops an activated " +
+			"shipped functions the installed verb runs: a source switch, a request that drops an activated " +
 			"backend, and a ledger that already disagrees with the runtime standing there are each refused with the " +
 			"runtime tree, its journal, our cache, the ledger and the activation log ALL byte-identical and the " +
 			"acquisition never called. The first cut bootstrapped first and let the installed verb refuse afterwards, " +
@@ -596,7 +620,7 @@ function drive(
 			tornAcquired === 0 &&
 			unchanged(torn, tornBefore) &&
 			legalDrive.code === 0 &&
-			legalPlan.disposition === "rebind",
+			legalPlan.disposition === "match",
 	);
 }
 
@@ -607,15 +631,19 @@ function drive(
 	const commits = [COMMIT_A, COMMIT_B, COMMIT_B];
 	let call = 0;
 	const moving = () => commits[Math.min(call++, commits.length - 1)] as string;
+	// Candidate source is a closed, retained branch. This test seam does not expose a caller input:
+	// production `runBuild` reads only the committed lock, while the gate drives the branch whose
+	// identity can move between D1 and D2.
 	const drifted = drive(env, listing({ pi: "current (v8) (/home/u/.pi)" }), {
 		acquire: fixtureAcquire({ activate: "recorder", log }),
+		readRuntimeLock: () => ({ source: "herdr-checkout", repository: "junghan0611/entwurf" }),
 		resolveCommit: moving,
 	});
 	const journal = JSON.parse(fs.readFileSync(journalPathOf(env), "utf8")) as { artifactIdentity: { commit: string } };
 	const activated = fs.existsSync(log) ? fs.readFileSync(log, "utf8").trim() : "";
 	ok(
 		"[QK:HPB-BOOTSTRAP-IDENTITY-EXACT] the artifact that lands must be EXACTLY the one the authority check admitted: " +
-			"when the source moves between the judgement and the install, the run refuses by name instead of handing the " +
+			"when the candidate source moves between the judgement and the install, the run refuses by name instead of handing the " +
 			"installed activation verb a different artifact than the one this build was cleared to place — the verb would " +
 			"then re-judge, and pass or fail on a question nobody asked. The refusal is honest about what did happen: the " +
 			`runtime was replaced, and NO activation ran (refusal=${drifted.refusal} landed=${journal.artifactIdentity.commit.slice(0, 8)} admitted=${COMMIT_A.slice(0, 8)} activations=${JSON.stringify(activated)})`,
@@ -709,7 +737,7 @@ function drive(
 	ok(
 		"[QK:HPB-PROGRESS-NAMED-SEQUENCE] a build narrates the five steps IN ORDER and names the long one — herdr pipes " +
 			"both of this process's streams into a buffer it DISCARDS on success (`src/cli/plugin.rs:1328-1373` @ c77af189), " +
-			"so an operator who has just answered the install prompt sees nothing at all through a multi-minute `npm pack` " +
+			"so an operator who has just answered the install prompt sees nothing at all through a multi-minute registry fetch " +
 			"and reads it as a hang. The sequence is reported, not logged: each step names the work about to start, the " +
 			"acquisition step says out loud that silence is expected and which source it is reaching for, and a run with " +
 			"nothing to activate takes exactly ONE step and then closes — it must not narrate work it never did. " +
@@ -721,7 +749,7 @@ function drive(
 			full.progress[0].includes("integration status") &&
 			full.progress[1].includes("pi, claude-code") &&
 			longStep.includes("long step") &&
-			longStep.includes(COMMIT_A.slice(0, 8)) &&
+			longStep.includes("@junghanacs/entwurf@0.25.0") &&
 			full.progress[3].includes("what landed") &&
 			full.progress[4].includes("wiring pi, claude-code") &&
 			full.progress[5].startsWith("done: ") &&

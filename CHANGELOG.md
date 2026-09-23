@@ -4,6 +4,25 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+### Changed
+
+- **Herdr plugin 0.5.0 pins its runtime to the published npm `@junghanacs/entwurf@0.25.0`.**
+  The `v0.25.0` tag already carries `plugins/herdr/herdr-plugin.toml` at 0.5.0; this post-publish
+  follow-up replaces its candidate-window `herdr-checkout` lock with the exact published npm
+  version and sha512. `npm view @junghanacs/entwurf@0.25.0 dist.integrity` and an independent
+  SHA-512 over the preserved accepted candidate
+  (`/tmp/entwurf-release-candidate-0.25.0.pyaGKq/junghanacs-entwurf-0.25.0.tgz`, sha256
+  `6ed3d67c8db30b71572738b9cddce38c9cf12d73c4f494b48b1475235918a968`) agree on
+  `sha512-6Cm5qFZiR8OtqSszcfv/bhxhFlLL0dmeBOnBp3wnnL5JOI6e68anEG3SUuUXKK7CuCaM4S+ft7H8vgVKw4vDhg==`;
+  npm's published `dist.shasum` matches the accepted candidate's SHA-1, and registry `latest` is
+  0.25.0 while `repair` remains 0.12.8-repair.1. The lock and its three committed-lock gate cells
+  move together (forward of the 0.25.0 candidate inverse); source switches still require explicit
+  deactivation. Focused `check-herdr-plugin-build`, `check-herdr-runtime-bootstrap`,
+  `check-herdr-plugin`, `check-herdr-plugin-profile`, `check-dep-versions`, and
+  `check-gate-manifests` passed; the last confirms 782 mutants across 62 lanes without executing
+  qualification. These are local pin/protocol receipts, **not** a public-remote first-user-path
+  receipt: that journey needs the committed pin on a reachable ref and must be measured separately.
+
 ## 0.25.0 - 2026-09-23
 
 ### Added
