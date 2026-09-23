@@ -869,6 +869,171 @@ function runSubcommand(sub: string, env: Record<string, string | undefined>): { 
 }
 
 // ===========================================================================
+// A MUST step's ABSENT operator input is a SKIP; a WRONG one is a FAIL
+//
+// The step above is a MUST that takes three values only the operator can give.
+// `[측정 2026-09-23]` all three were `ok()` assertions, and `ok()` throws, so
+// their absence exited as FAIL — while `release_gate()` supplies none of them.
+// The step therefore declined as a FAILURE inside every aggregate on every host,
+// and 0.25.0's candidate receipt (`MUST PASS=23 FAIL=1`, `cut: BLOCKED (MUST
+// FAIL)`) carries a prose classification of that red, and reading it as a floor
+// would require a per-cut exception. The release skill says "Do not waive a MUST
+// failure without diagnosing and explicitly classifying the failing axis", and
+// classifying is what that record does -- but a contract that manufactures the same
+// red every cut invites the exception rather than earning a floor. (The cut stayed
+// BLOCKED; nothing was approved.)
+//
+// This cell pins the repaired boundary in BOTH directions, because either half
+// alone is a different defect: make absence a FAIL and the exception comes back;
+// make a wrong answer a SKIP and a dead pid or a foreign process buys silence.
+// It is deliberately separate from the claim above — that one owns WHERE the step
+// is wired, this one owns WHAT its outcome means — so one mutant cannot satisfy
+// both, and it reads the smoke with comments stripped so a promise in prose
+// cannot stand in for the arm that actually executes.
+// ===========================================================================
+{
+	const SMOKE = "scripts/smoke-codex-fresh-live.ts";
+	const smokeRaw = readFileSync(join(REPO_DIR, SMOKE), "utf8");
+	// Comments are where this exact defect hid for a release: the old skip line
+	// NAMED all three env vars while only LIVE=1 could produce a skip.
+	const smoke = smokeRaw
+		.replace(/\/\*[\s\S]*?\*\//g, "")
+		.split("\n")
+		.map((line) => line.replace(/(^|\s)\/\/.*$/, ""))
+		.join("\n");
+	const verify = readFileSync(join(REPO_DIR, "VERIFY.md"), "utf8");
+	const skill = readFileSync(join(REPO_DIR, ".claude/skills/entwurf-release/SKILL.md"), "utf8");
+	const TRIPLE = ["ENTWURF_CODEX_APP_SERVER_PID", "ENTWURF_CODEX_FRESH_MODEL", "ENTWURF_CODEX_FRESH_PI_MODEL"] as const;
+	const broken: string[] = [];
+
+	// (a) Absence must reach `skipLive`, and the GUARD that routes it there is part of
+	//     the claim — not just the presence of a skipLive call somewhere nearby. A
+	//     dead arm behind a constant-false condition would satisfy "there is a skip"
+	//     while every absent input fell through to the assertions below and threw,
+	//     which is precisely the pre-repair behaviour. So the emptiness test, the
+	//     guard and the arm are pinned as one contiguous shape, and nothing may
+	//     assert in between.
+	const absenceArm = smoke.match(
+		/const absentInputs\s*=\s*OPERATOR_INPUTS\.filter\(([^\n]*?)===\s*""\);\s*if \(absentInputs\.length > 0\) \{\s*skipLive\(([\s\S]{0,1400}?)\n\t\}/,
+	);
+	if (absenceArm === null) {
+		broken.push(
+			`${SMOKE}: the absent-operator-input arm is not the contiguous shape ` +
+				'`absentInputs = OPERATOR_INPUTS.filter(... === "")` -> `if (absentInputs.length > 0)` -> `skipLive(` — ' +
+				"an unset prerequisite would fall through to an assertion and exit as FAIL again",
+		);
+	} else if (!absenceArm[2]?.includes("absentInputs")) {
+		broken.push(`${SMOKE}: the skipLive arm does not report WHICH operator inputs were absent`);
+	}
+	for (const name of TRIPLE) {
+		if (!new RegExp(`\\[\\s*"${name}"`).test(smoke)) {
+			broken.push(`${SMOKE}: ${name} is not in the declared operator-input set, so its absence is unclassified`);
+		}
+	}
+
+	// (c) The reproducible green must be WRITTEN DOWN where a cut is taken from,
+	//     or "supply the triple" is folklore. VERIFY owns the acceptance condition;
+	//     the release skill owns the command an operator actually types at P5.
+	const p5 = skill.slice(skill.indexOf("## P5."), skill.indexOf("## P6."));
+	for (const name of TRIPLE) {
+		if (!p5.includes(name)) {
+			broken.push(`.claude/skills/entwurf-release/SKILL.md P5: the release-gate invocation does not carry ${name}`);
+		}
+	}
+	if (!verify.includes("`release-gate --cut` inherits that triple")) {
+		broken.push(
+			"VERIFY.md no longer states that the aggregate cut inherits the operator-supplied Codex triple — " +
+				"without that sentence a cut host cannot know why the MUST step skipped",
+		);
+	}
+
+	// (d) The policy half is unchanged: a MUST SKIP still blocks a cut. Asked of the
+	//     SHARED shell authority rather than re-implemented here, so this cell cannot
+	//     drift from the truth table the protocol owns. Reclassifying an absent
+	//     prerequisite as SKIP is only honest while that answer stays NO.
+	const cutReleasable = (failc: number, skipc: number, cut: number): boolean =>
+		inShell(`if entwurf_release_releasable ${failc} ${skipc} ${cut}; then echo YES; else echo NO; fi`) === "YES";
+	if (cutReleasable(0, 1, 1) !== false) {
+		broken.push("a MUST SKIP no longer blocks --cut, so classifying an absent prerequisite as SKIP would hide it");
+	}
+	if (cutReleasable(0, 1, 0) !== true) {
+		broken.push("a MUST SKIP now blocks the unattended diagnostic run, which was never the contract");
+	}
+
+	assert.ok(
+		broken.length === 0,
+		"[QK:CODEX-OPERATOR-PREREQ-ABSENT-SKIPS] a MUST step that takes operator-supplied inputs must DECLINE when they " +
+			"are absent — protocol SKIP naming each missing one — while `--cut` keeps refusing that SKIP and the cut " +
+			"invocation that supplies the triple is written in VERIFY and the release skill. Absence classified as FAIL " +
+			"is what made this step red inside every cut and would require a per-cut exception. " +
+			`Broken: ${broken.join("; ")}`,
+	);
+
+	// The MIRROR claim, and its own token: a value the operator DID supply stays a
+	// FAIL when it is wrong. Kept apart from the arm above because softening this
+	// direction is the opposite defect and must not be killable by the same mutant —
+	// a dead pid, a foreign process or an app-server in the gate's own session would
+	// otherwise buy silence instead of a red.
+	const softened: string[] = [];
+	if (!/ok\(\s*\n?\s*"ENTWURF_CODEX_APP_SERVER_PID explicitly names/.test(smoke)) {
+		softened.push(
+			`${SMOKE}: the pid grammar is no longer an ok() assertion — a malformed operator answer must FAIL, not decline`,
+		);
+	}
+	// A model env asserted non-empty would put absence back behind a throw, making
+	// the decline arm above dead code. One direction repaired at the cost of the
+	// other is not the boundary.
+	if (/ok\([^)]*ENTWURF_CODEX_FRESH_(?:PI_)?MODEL[^)]*length\s*>\s*0/.test(smoke)) {
+		softened.push(`${SMOKE}: a model env is still asserted non-empty, which re-classifies its absence as FAIL`);
+	}
+	assert.ok(
+		softened.length === 0,
+		"[QK:CODEX-OPERATOR-PREREQ-WRONG-FAILS] the same step must still FAIL on an operator input that is PRESENT and " +
+			"wrong. Declining there would let a dead pid or a non-Codex process pass as a missing prerequisite, and a " +
+			`cut would read silence as acceptance. Broken: ${softened.join("; ")}`,
+	);
+
+	// A THIRD claim, because this one is about a different subject: not what the smoke
+	// does with an input, but WHERE the release operator's input comes from.
+	//
+	// `[측정 2026-09-23]` the first cut of the P5 instructions above derived the pid with
+	// `pgrep -f 'codex.*app-server' | head -1`. That is exactly the inference the step
+	// refuses, written into the page an operator follows — and worse than a stale
+	// sentence, because a host can hold more than one app-server and `head -1` picks an
+	// arbitrary one, which the smoke would then dutifully verify as "the operator's
+	// answer". A no-inference rule that the operating instructions violate is enforced
+	// nowhere. So provenance is pinned in the skill itself: each value is STATED, the
+	// three `:` guards refuse an unset or empty one before any LIVE cost, and no process
+	// search or command substitution may manufacture them.
+	const provenance: string[] = [];
+	const SKILL_REL = ".claude/skills/entwurf-release/SKILL.md";
+	for (const forbidden of ["pgrep", "pidof", "ps -", "$(pgrep"]) {
+		if (p5.includes(forbidden)) {
+			provenance.push(
+				`${SKILL_REL} P5: builds an operator input with \`${forbidden}\` — the pid is stated, never searched for`,
+			);
+		}
+	}
+	for (const name of ["CODEX_APP_SERVER_PID", "CODEX_FRESH_MODEL", "CODEX_FRESH_PI_MODEL"]) {
+		// `: "${VAR:?...}"` — an explicit required-parameter guard. Anything weaker
+		// (a default via `:-`, or no guard) lets a forgotten export reach a LIVE run.
+		if (!new RegExp(`: "\\$\\{${name}:\\?[^"]+}"`).test(p5)) {
+			provenance.push(`${SKILL_REL} P5: ${name} has no \`: "\${${name}:?…}"\` required-value guard`);
+		}
+		if (new RegExp(`${name}=\\$\\(`).test(p5)) {
+			provenance.push(`${SKILL_REL} P5: ${name} is assigned from a command substitution rather than stated`);
+		}
+	}
+	assert.ok(
+		provenance.length === 0,
+		"[QK:CODEX-OPERATOR-PREREQ-STATED-NOT-SEARCHED] the release instructions must make the operator STATE each Codex " +
+			"input and guard it with an explicit required-value check, never derive one by process search or command " +
+			"substitution. A page that infers the app-server pid teaches the very inference the gate refuses, and picks an " +
+			`arbitrary process when a host runs several. Broken: ${provenance.join("; ")}`,
+	);
+}
+
+// ===========================================================================
 // The operator's CONFIGURED bridge invocation is proven BEFORE the cost-bearing LIVE tier
 //
 // `check-bridge` boots the launcher this checkout SHIPS. It cannot speak for the string

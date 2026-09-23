@@ -227,6 +227,54 @@
 			"timeoutSeconds": 180,
 			"signature": "[QK:CODEX-FIRST-ADMISSION-IS-RELEASE-MUST]",
 			"signatureSource": "scripts/check-release-gate-outcomes.ts"
+		},
+		{
+			"claim": "CODEX-OPERATOR-PREREQ-ABSENT-SKIPS",
+			"title": "a constant-false guard leaves the decline arm as dead code, so every absent operator input falls through to the assertions and exits FAIL again — the shape that made this MUST step red inside every cut and would require a per-cut exception",
+			"subject": "scripts/smoke-codex-fresh-live.ts",
+			"find": [
+				"\tconst absentInputs = OPERATOR_INPUTS.filter(([name]) => (process.env[name]?.trim() ?? \"\") === \"\");",
+				"\tif (absentInputs.length > 0) {"
+			],
+			"replace": [
+				"\tconst absentInputs = OPERATOR_INPUTS.filter(([name]) => (process.env[name]?.trim() ?? \"\") === \"\");",
+				"\tif (absentInputs.length > 0 && process.env.ENTWURF_NEVER_SET === \"1\") {"
+			],
+			"gate": ["bash", "run.sh", "check-release-gate-outcomes"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:CODEX-OPERATOR-PREREQ-ABSENT-SKIPS]",
+			"signatureSource": "scripts/check-release-gate-outcomes.ts"
+		},
+		{
+			"claim": "CODEX-OPERATOR-PREREQ-WRONG-FAILS",
+			"title": "turning the pid grammar into a decline means a malformed, dead or non-Codex app-server pid the operator DID supply reports as a missing prerequisite, so a broken answer buys silence where a cut reads silence as an unmet precondition rather than a defect",
+			"subject": "scripts/smoke-codex-fresh-live.ts",
+			"find": [
+				"\tok(",
+				"\t\t\"ENTWURF_CODEX_APP_SERVER_PID explicitly names the existing operator-owned app-server\",",
+				"\t\t/^[1-9]\\d*$/.test(pidText),"
+			],
+			"replace": [
+				"\tif (!/^[1-9]\\d*$/.test(pidText)) skipLive(LABEL, \"no usable app-server pid was supplied\");",
+				"\tok(",
+				"\t\t\"an app-server pid was supplied\",",
+				"\t\ttrue,"
+			],
+			"gate": ["bash", "run.sh", "check-release-gate-outcomes"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:CODEX-OPERATOR-PREREQ-WRONG-FAILS]",
+			"signatureSource": "scripts/check-release-gate-outcomes.ts"
+		},
+		{
+			"claim": "CODEX-OPERATOR-PREREQ-STATED-NOT-SEARCHED",
+			"title": "deriving the app-server pid by process search in the release instructions teaches the exact inference the MUST step refuses, and on a host running several app-servers it hands the gate an arbitrary process to verify as the operator's answer",
+			"subject": ".claude/skills/entwurf-release/SKILL.md",
+			"find": [": \"${CODEX_APP_SERVER_PID:?state the app-server pid you started; never search for it}\""],
+			"replace": ["CODEX_APP_SERVER_PID=$(pgrep -f 'codex.*app-server' | head -1)"],
+			"gate": ["bash", "run.sh", "check-release-gate-outcomes"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:CODEX-OPERATOR-PREREQ-STATED-NOT-SEARCHED]",
+			"signatureSource": "scripts/check-release-gate-outcomes.ts"
 		}
 	]
 }

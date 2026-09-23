@@ -3,7 +3,7 @@
  *
  * The subject is a pure classifier, so every cell here is inputs → one name. What the cells are
  * really defending is the SEPARATION: an idle receiver's `sent` and a busy receiver's
- * `queued-*` are different promises (`[측정 pi-agent-core 0.87.0]` `dist/agent-loop.js:186` drains
+ * `queued-*` are different promises (`[측정 pi-agent-core 0.87.0, 재측정 0.87.1]` `dist/agent-loop.js:186` drains
  * steering every turn, `:191-197` drains follow-ups only when the inner loop ends, and the two
  * queues in `dist/agent.js:96-97,137-138` have no FIFO between them), and an answer we could not
  * classify is an ACCEPTANCE we could not name — never a failure and never `sent`.

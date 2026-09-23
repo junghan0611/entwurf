@@ -6,7 +6,7 @@
 			"claim": "PI-FLOOR-SINGLE-SOURCE",
 			"title": "one row of the pnpm workspace closure is left on the previous floor while every other surface moved — the shape a version bump actually fails in. Nothing else reads that file, so the stranded row surfaces only at install time, in a different command, far from the change that stranded it",
 			"subject": "pnpm-workspace.yaml",
-			"find": ["  - '@earendil-works/pi-telemetry@0.85.0 || 0.85.1 || 0.86.0 || 0.87.0'"],
+			"find": ["  - '@earendil-works/pi-telemetry@0.85.0 || 0.85.1 || 0.86.0 || 0.87.0 || 0.87.1'"],
 			"replace": ["  - '@earendil-works/pi-telemetry@0.85.0 || 0.85.1 || 0.86.0'"],
 			"gate": ["bash", "run.sh", "check-dep-versions"],
 			"timeoutSeconds": 300,

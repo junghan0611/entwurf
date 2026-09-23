@@ -10,14 +10,14 @@ allowBuilds:
   esbuild: false
   protobufjs: false
 minimumReleaseAgeExclude:
-  - '@earendil-works/pi-agent-core@0.85.0 || 0.85.1 || 0.86.0 || 0.87.0'
-  - '@earendil-works/pi-ai@0.85.0 || 0.85.1 || 0.86.0 || 0.87.0'
-  - '@earendil-works/pi-client@0.85.0 || 0.85.1 || 0.86.0 || 0.87.0'
-  - '@earendil-works/pi-coding-agent@0.85.0 || 0.85.1 || 0.86.0 || 0.87.0'
-  - '@earendil-works/pi-protocol@0.85.0 || 0.85.1 || 0.86.0 || 0.87.0'
-  - '@earendil-works/pi-telemetry@0.85.0 || 0.85.1 || 0.86.0 || 0.87.0'
-  - '@earendil-works/pi-tui@0.85.0 || 0.85.1 || 0.86.0 || 0.87.0'
-  - '@earendil-works/chord@0.85.0 || 0.85.1 || 0.86.0 || 0.87.0'
+  - '@earendil-works/pi-agent-core@0.85.0 || 0.85.1 || 0.86.0 || 0.87.0 || 0.87.1'
+  - '@earendil-works/pi-ai@0.85.0 || 0.85.1 || 0.86.0 || 0.87.0 || 0.87.1'
+  - '@earendil-works/pi-client@0.85.0 || 0.85.1 || 0.86.0 || 0.87.0 || 0.87.1'
+  - '@earendil-works/pi-coding-agent@0.85.0 || 0.85.1 || 0.86.0 || 0.87.0 || 0.87.1'
+  - '@earendil-works/pi-protocol@0.85.0 || 0.85.1 || 0.86.0 || 0.87.0 || 0.87.1'
+  - '@earendil-works/pi-telemetry@0.85.0 || 0.85.1 || 0.86.0 || 0.87.0 || 0.87.1'
+  - '@earendil-works/pi-tui@0.85.0 || 0.85.1 || 0.86.0 || 0.87.0 || 0.87.1'
+  - '@earendil-works/chord@0.85.0 || 0.85.1 || 0.86.0 || 0.87.0 || 0.87.1'
   - '@agentclientprotocol/claude-agent-acp@0.65.0 || 0.66.0 || 0.67.0 || 0.68.0 || 0.69.0 || 0.70.0 || 0.71.0 || 0.72.0 || 0.73.0 || 0.74.0 || 0.75.0 || 0.75.1 || 0.76.0 || 0.77.0 || 0.78.0 || 0.79.0'
   - '@anthropic-ai/claude-agent-sdk-darwin-arm64@0.3.274'
   - '@anthropic-ai/claude-agent-sdk-darwin-x64@0.3.274'

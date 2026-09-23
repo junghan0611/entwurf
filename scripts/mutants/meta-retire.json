@@ -42,6 +42,28 @@
 			"timeoutSeconds": 300,
 			"signature": "[QK:META-RETIRE-FRESH-TOUCH]",
 			"signatureSource": "scripts/smoke-meta-install-state.sh"
+		},
+		{
+			"claim": "META-RETIRE-TURN-DURATION-OPERATOR-OWNED",
+			"title": "putting showTurnDuration back under management makes entwurf force the operator's own turn-duration display to false, and re-collides the cross-repo managed-keys contract with the operator's own settings fragment",
+			"subject": "scripts/meta-bridge-state.py",
+			"find": [
+				"    (\"showTurnDuration\", [\"showTurnDuration\"], False),",
+				"]",
+				"",
+				"_managed_scalar_names = {name for name, _path, _desired in MANAGED_SETTINGS_SCALARS}"
+			],
+			"replace": [
+				"]",
+				"",
+				"MANAGED_SETTINGS_SCALARS.append((\"showTurnDuration\", [\"showTurnDuration\"], False))",
+				"",
+				"_managed_scalar_names = {name for name, _path, _desired in MANAGED_SETTINGS_SCALARS}"
+			],
+			"gate": ["bash", "run.sh", "smoke-meta-install-state"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:META-RETIRE-TURN-DURATION-OPERATOR-OWNED]",
+			"signatureSource": "scripts/smoke-meta-install-state.sh"
 		}
 	]
 }

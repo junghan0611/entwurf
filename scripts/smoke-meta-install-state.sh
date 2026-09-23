@@ -380,6 +380,74 @@ cell(
     "#94 compaction keys relinquish across nested/string axes: restore, delete, operator-changed, fresh, type-strict",
     compaction_cells,
 )
+
+TURN_DURATION = "showTurnDuration"
+
+def turn_duration_cells():
+    # GLG's ruling: showTurnDuration reports how long a turn took. That is
+    # operator INFORMATION, not a single-driver policy surface, so entwurf must
+    # neither own it nor force it to false.
+    #
+    # The claim is measured against the two constants and the real leaf, never
+    # quoted from a comment: a drift that puts the key back under management has
+    # to redden HERE and not only at the drive level, because the drive level
+    # runs one install shape while the constant governs every host.
+    managed = m.managed_keys()["settings"]["scalar"]
+    assert TURN_DURATION not in managed, managed
+    assert TURN_DURATION not in m._managed_scalar_names
+    assert TURN_DURATION in m._retired_scalar_names
+    retired = {name: last for name, _path, last in m.RETIRED_SETTINGS_SCALARS}
+    # The last managed value is the comparison relinquishment turns on. A wrong
+    # one here would either skip a value we really wrote or overwrite one we
+    # never did, so it is pinned by type as well as equality.
+    assert retired[TURN_DURATION] is False, retired[TURN_DURATION]
+
+    path = [TURN_DURATION]
+
+    def call(current=MISSING, old=MISSING):
+        settings = {} if current is MISSING else {TURN_DURATION: current}
+        keys = {} if old is MISSING else {TURN_DURATION: copy.deepcopy(old)}
+        state = {"files": {"settings": {"keys": keys}}}
+        m.relinquish_retired_scalar(state, settings, TURN_DURATION, path, False)
+        return state, settings
+
+    def led(existed, value):
+        return {"kind": "scalar", "path": path, "original": {"existed": existed, "value": value}}
+
+    # THE MEASURED HOST SHAPE (2026-09-23): ledger says we wrote false over a
+    # pre-install false, and the operator has since set true. Their true must
+    # survive, and the entry must be consumed so uninstall cannot reach back.
+    state, settings = call(True, led(True, False))
+    assert settings[TURN_DURATION] is True, settings
+    assert TURN_DURATION not in state["files"]["settings"]["keys"]
+    # Consumption is the inverse: restore_entry is the only writer uninstall has,
+    # and with the row gone there is no entry left to hand it.
+    before = copy.deepcopy((state, settings))
+    m.relinquish_retired_scalar(state, settings, TURN_DURATION, path, False)
+    assert (state, settings) == before
+
+    # Still carrying OUR false, with provenance -> undo our own write honestly.
+    state, settings = call(False, led(True, False))
+    assert settings[TURN_DURATION] is False, settings
+    state, settings = call(False, led(False, None))
+    assert TURN_DURATION not in settings, settings
+
+    # No provenance at all -> the value is the operator's whatever it says.
+    for current in [True, False, MISSING]:
+        state, settings = call(current)
+        assert settings == ({} if current is MISSING else {TURN_DURATION: current})
+
+    # Type strictness on the bool axis: `0 == False` while `type(0) is not bool`,
+    # so an untyped comparison would rewrite a value that was never ours.
+    state, settings = call(0, led(True, False))
+    assert settings[TURN_DURATION] == 0 and type(settings[TURN_DURATION]) is int
+
+cell(
+    "[QK:META-RETIRE-TURN-DURATION-OPERATOR-OWNED]",
+    "showTurnDuration is operator-owned: unmanaged in the SSOT, retired at false, "
+    "and relinquishment preserves the measured live true while consuming the ledger entry",
+    turn_duration_cells,
+)
 sys.exit(failed)
 PY
 then ok "#71 retirement leaf: provenance, bool strictness, malformed refusal, one-shot convergence"
@@ -409,6 +477,10 @@ assert s['files']['settings']['keys']['promptSuggestionEnabled']['original']['va
 assert 'autoCompactEnabled' not in s['files']['settings']['keys']
 assert 'env.DISABLE_AUTOCOMPACT' not in s['files']['settings']['keys']
 assert 'skipDangerousModePermissionPrompt' not in s['files']['settings']['keys']
+# Same for showTurnDuration: a fresh install takes no ownership evidence for it,
+# so on a host entwurf meets for the first time there is nothing to relinquish
+# and nothing uninstall could ever restore.
+assert 'showTurnDuration' not in s['files']['settings']['keys']
 assert s['files']['claudeRoot']['keys']['mcpServers.entwurf-bridge']['original']['value']['command'] == 'old'
 PY
 then ok "state captures original scalar/map values, excludes the retired scalar, and is mode 0600"; else bad "state did not capture original values / retirement / mode 0600"; fi
@@ -440,6 +512,18 @@ state['files']['settings']['keys']['env.DISABLE_AUTOCOMPACT']={
   'kind':'scalar', 'path':['env','DISABLE_AUTOCOMPACT'],
   'original':{'existed':True, 'value':'0'}
 }
+# showTurnDuration: the upgrade shape MEASURED on the source host 2026-09-23,
+# planted verbatim so apply() is judged against the state a real prior version
+# left behind. The ledger proves entwurf wrote `false` over a pre-install
+# `false`; the live value is the `true` the operator set afterwards. This is the
+# only branch where relinquishment could plausibly damage an operator choice —
+# restoring the snapshot here would hand `false` back to somebody who had since
+# turned the display on — so it is the branch the drive level must carry.
+settings['showTurnDuration']=True
+state['files']['settings']['keys']['showTurnDuration']={
+  'kind':'scalar', 'path':['showTurnDuration'],
+  'original':{'existed':True, 'value':False}
+}
 json.dump(settings, open(sp,'w'), indent=2); open(sp,'a').write('\n')
 json.dump(state, open(stp,'w'), indent=2); open(stp,'a').write('\n')
 PY
@@ -459,9 +543,16 @@ assert settings['env']['DISABLE_AUTOCOMPACT'] == '0'
 assert 'autoCompactEnabled' not in settings
 assert settings['env']['KEEP_ME'] == 'yes'
 assert settings['statusLine']['command'] == os.environ['REPO'] + '/scripts/meta-bridge-statusline.sh'
-for key in ['promptSuggestionEnabled','awaySummaryEnabled','autoMemoryEnabled','verbose','showTurnDuration','terminalProgressBarEnabled','useAutoModeDuringPlan','enableWorkflows','workflowKeywordTriggerEnabled']:
+for key in ['promptSuggestionEnabled','awaySummaryEnabled','autoMemoryEnabled','verbose','terminalProgressBarEnabled','useAutoModeDuringPlan','enableWorkflows','workflowKeywordTriggerEnabled']:
     assert settings[key] is False, key
 assert settings['skipDangerousModePermissionPrompt'] is False
+# showTurnDuration retirement, drive level. Two facts that must not be read off
+# one assertion: the operator's PRE-install `true` (fixture) is still `true`
+# AFTER apply, and it is still `true` because apply never wrote the key rather
+# than because it happened to write the same value. The upgrade shape planted
+# above supplies the second half — a ledger entry proving entwurf wrote `false`
+# here, over a live `true` the operator set afterwards.
+assert settings['showTurnDuration'] is True
 # #94 drive-level relinquishment, both branches:
 #   nested path  -> the operator's pre-entwurf '0' is back, and the env map that
 #                   carries it survives with the neighbour key untouched.
@@ -473,6 +564,9 @@ state=json.load(open(cfg + '/entwurf.install-state.json'))
 assert 'skipDangerousModePermissionPrompt' not in state['files']['settings']['keys']
 assert 'autoCompactEnabled' not in state['files']['settings']['keys']
 assert 'env.DISABLE_AUTOCOMPACT' not in state['files']['settings']['keys']
+# The consumed entry is the whole inverse: with no ledger row left, uninstall()
+# has no authority over this key and can never write our `false` back.
+assert 'showTurnDuration' not in state['files']['settings']['keys']
 for item in ['Bash','Read','Write','Edit','Grep','Glob','WebFetch','WebSearch','Skill','mcp__entwurf-bridge__*']:
     assert item in settings['permissions']['allow'], item
 assert settings['permissions']['allow'].count('Read') == 1
@@ -493,6 +587,13 @@ then ok "apply installs managed keyset without clobbering unrelated keys"; else 
 if py check >/dev/null 2>&1; then ok "survival check passes after relinquishing the retired scalar"; else bad "survival check failed right after retirement apply"; fi
 MANAGED_JSON="$(py managed-keys)"
 if printf '%s' "$MANAGED_JSON" | grep -q 'skipDangerousModePermissionPrompt'; then bad "managed-keys still claims the retired operator key"; else ok "managed-keys returns skipDangerousModePermissionPrompt to the operator"; fi
+# managed-keys is the CROSS-REPO contract: check-keyset-overlap and the
+# agent-config fragment read it to stay disjoint. Measured 2026-09-23 —
+# `check-keyset-overlap agent-config/claude/settings.fragment.json` failed on
+# exactly one key, showTurnDuration, because both sides claimed it. Dropping our
+# claim is what resolves that collision, so the SSOT output is asserted here and
+# not only in the Python constants.
+if printf '%s' "$MANAGED_JSON" | grep -q 'showTurnDuration'; then bad "managed-keys still claims showTurnDuration — a consumer fragment setting the operator's own value would keep colliding"; else ok "managed-keys returns showTurnDuration to the operator (cross-repo collision resolved at the SSOT)"; fi
 # A provenance-less true cannot be changed safely, but doctor/check must make it visible.
 python3 - <<'PY'
 import json, os
@@ -577,6 +678,11 @@ assert settings['env']['KEEP_ME'] == 'yes'
 assert settings['statusLine']['command'] == '/old/user/statusline.sh'
 assert settings['promptSuggestionEnabled'] is True
 assert settings['skipDangerousModePermissionPrompt'] is False
+# showTurnDuration survives uninstall at the operator's value. The install above
+# ran against a ledger row saying entwurf had written `false` here; relinquish
+# consumed that row, so uninstall reaches this key with no authority at all and
+# the `true` the operator set is still `true`. The key must also be ABSENT from
+# the removal list below — a retired key is neither restored nor deleted.
 assert settings['showTurnDuration'] is True
 # One list, one meaning: these are the keys UNINSTALL removed. `autoCompactEnabled`
 # is not among them post-#94 — that entwurf never introduced it is a different

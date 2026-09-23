@@ -319,12 +319,42 @@ recovery above creates.
 Use the `tmux` skill because this command is long-running. Preserve the scratch
 directory and complete log.
 
+Three `ENTWURF_CODEX_*` values are the operator-supplied prerequisite of the
+`smoke-codex-fresh-live` MUST step. The gate inherits them and never infers a
+server or a model, so YOU state each one before the run. Do not derive the pid
+from a process search: a host can hold more than one app-server, picking the
+first match is the inference this step exists to refuse, and the one that counts
+is the app-server you started in a DIFFERENT tmux session from this gate's.
+Decide all three, record them beside the receipt, then export them:
+
 ```bash
+CODEX_APP_SERVER_PID=      # pid of the app-server YOU started (fill in, no process search)
+CODEX_FRESH_MODEL=         # Codex-side model tier this cut is accepted on
+CODEX_FRESH_PI_MODEL=      # pi-side model tier of its callback sibling
+```
+
+```bash
+: "${CODEX_APP_SERVER_PID:?state the app-server pid you started; never search for it}"
+: "${CODEX_FRESH_MODEL:?state the Codex-side model tier this cut is accepted on}"
+: "${CODEX_FRESH_PI_MODEL:?state the pi-side model tier of the callback sibling}"
 SCRATCH=$(mktemp -d "/tmp/entwurf-release-gate-${VERSION}.XXXXXX")
 LOG="$SCRATCH/release-gate.log"
 set -o pipefail
-LIVE=1 ./run.sh release-gate "$SCRATCH" --cut 2>&1 | tee "$LOG"
+LIVE=1 \
+  ENTWURF_CODEX_APP_SERVER_PID="$CODEX_APP_SERVER_PID" \
+  ENTWURF_CODEX_FRESH_MODEL="$CODEX_FRESH_MODEL" \
+  ENTWURF_CODEX_FRESH_PI_MODEL="$CODEX_FRESH_PI_MODEL" \
+  ./run.sh release-gate "$SCRATCH" --cut 2>&1 | tee "$LOG"
 ```
+
+The three `:` guards refuse an unset or empty value before the gate starts, so a
+forgotten export costs one line instead of a LIVE run. Omit one anyway and that
+step reports a protocol SKIP naming what was missing, which `--cut` then reads as
+red (`cut: BLOCKED (MUST SKIP)`). That is a prerequisite to supply, not a defect
+to diagnose: run the gate again with the triple rather than explaining the skip in
+the release record. A *present but wrong* value (a dead pid, a process that is not
+a Codex app-server, an app-server sharing this gate's session) stays a FAIL,
+because the operator answered and the answer is broken.
 
 The release gate has two tiers:
 

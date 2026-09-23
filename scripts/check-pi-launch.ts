@@ -15,9 +15,9 @@
  * six receiver-state facts before it execs, because setting its flag is a PROMISE of a
  * doorbell that may not exist. `entwurf pi` promises nothing pi does not already own: on a
  * host where the entwurf extension is not registered, `pi --entwurf-control` refuses itself
- * with `Error: Unknown option: --entwurf-control` and exit 1 (`[측정 2026-09-20]` pi 0.86.0 and
- * `[측정 2026-09-22]` pi 0.87.0 — sandbox HOME + PI_CODING_AGENT_DIR, byte-identical stderr line
- * and exit 1 at both floors). A
+ * with `Error: Unknown option: --entwurf-control` and exit 1 (`[측정 2026-09-20]` pi 0.86.0,
+ * `[측정 2026-09-22]` pi 0.87.0 and `[측정 2026-09-23]` pi 0.87.1 — sandbox HOME +
+ * PI_CODING_AGENT_DIR, byte-identical stderr line and exit 1 at all three floors). A
  * pre-check here would duplicate that refusal and go stale the day pi renames it.
  *
  * WHY ONE RECURSION FENCE AND NOT TWO. The sentinel closes the only real loop — a PATH
@@ -28,10 +28,10 @@
  *
  * WHY THE FLAG IS ADDED AND NEVER DEDUPLICATED. `pit`/`pius`-style operator wrappers already
  * pass `--entwurf-control`; passing it twice was measured byte-identical to passing it once
- * (pi 0.85.1, extension REGISTERED — and that receipt has NOT been retaken at 0.86.0 or 0.87.0.
+ * (pi 0.85.1, extension REGISTERED — and that receipt has NOT been retaken at 0.86.0, 0.87.0 or 0.87.1.
  * It needs a host where the extension is registered, which means opening a control session on the
  * operator's own pi; the unregistered refusal above is what gets re-measured at each floor
- * instead. So this line is a 0.85.1 fact and is not promoted to a 0.87.0 one — a LIVE observation
+ * instead. So this line is a 0.85.1 fact and is not promoted to a 0.87.1 one — a LIVE observation
  * candidate for a future release, never part of a deterministic green.) The launcher therefore injects exactly ONE and leaves
  * the operator's copies alone — an argv scan would be code earning nothing.
  */

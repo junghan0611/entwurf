@@ -81,13 +81,18 @@ LEGACY_PERMISSION_ALLOW = ["mcp__pi-tools-bridge__*"]
 # native rail stops owning `autoCompactEnabled` / `env.DISABLE_AUTOCOMPACT` too.
 # Backend-native context management is allowed; we add no guard and only measure.
 # Both keys live in RETIRED_SETTINGS_SCALARS below.
+#
+# NEITHER IS `showTurnDuration`. It reports how long a turn took, which is
+# OPERATOR INFORMATION — it opens no background autonomy surface and drives no
+# single-driver behaviour, so the policy reason the rest of this list stands on
+# never applied to it. GLG's ruling: the operator owns that scalar and entwurf
+# must not force it to false. It joins RETIRED_SETTINGS_SCALARS below.
 MANAGED_SETTINGS_SCALARS: list[tuple[str, list[str], Any]] = [
     ("cleanupPeriodDays", ["cleanupPeriodDays"], 365),
     ("promptSuggestionEnabled", ["promptSuggestionEnabled"], False),
     ("awaySummaryEnabled", ["awaySummaryEnabled"], False),
     ("autoMemoryEnabled", ["autoMemoryEnabled"], False),
     ("verbose", ["verbose"], False),
-    ("showTurnDuration", ["showTurnDuration"], False),
     ("terminalProgressBarEnabled", ["terminalProgressBarEnabled"], False),
     ("useAutoModeDuringPlan", ["useAutoModeDuringPlan"], False),
     ("enableWorkflows", ["enableWorkflows"], False),
@@ -108,6 +113,18 @@ RETIRED_SETTINGS_SCALARS: list[tuple[str, list[str], Any]] = [
     # reach it.
     ("env.DISABLE_AUTOCOMPACT", ["env", "DISABLE_AUTOCOMPACT"], "1"),
     ("autoCompactEnabled", ["autoCompactEnabled"], False),
+    # `showTurnDuration` returns to the operator for the same structural reason
+    # and by the same one-shot path. It is retired rather than deleted because an
+    # existing install-state ALREADY carries its entry — measured on the source
+    # host 2026-09-23: `~/.claude/entwurf.install-state.json` records
+    # `original {existed: true, value: false}` while live settings say `true`,
+    # i.e. the operator turned it on after our install. Deleting the constant
+    # would orphan that entry, and uninstall() walks every ledger entry through
+    # restore_entry(), so it would write `false` back over the operator's own
+    # choice. relinquish_retired_scalar() is what makes the inverse honest: the
+    # live `true` is not what we last managed, so it is left untouched and the
+    # entry is consumed, after which no code path can reach that key again.
+    ("showTurnDuration", ["showTurnDuration"], False),
 ]
 
 _managed_scalar_names = {name for name, _path, _desired in MANAGED_SETTINGS_SCALARS}

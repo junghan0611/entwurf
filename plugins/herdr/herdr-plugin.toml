@@ -29,7 +29,7 @@
 # has Entwurf has Node (see README).
 id = "junghan0611.entwurf"
 name = "Herdr Entwurf"
-version = "0.5.1"
+version = "0.5.0"
 min_herdr_version = "0.9.0"
 description = "Herdr panes for Entwurf sibling AI sessions, with setup for integrated pi and Claude Code."
 platforms = ["linux"]

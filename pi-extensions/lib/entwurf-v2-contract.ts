@@ -266,7 +266,7 @@ export type EntwurfV2Transport = (typeof ENTWURF_V2_TRANSPORTS)[number];
 export const ENTWURF_V2_ACTIONS = ["send"] as const;
 export const ENTWURF_V2_OWNERSHIPS = ["ack-only"] as const;
 // Delivery mode of the message to the target: WHICH QUEUE a busy receiver is asked for.
-// `[측정 2026-09-22, pi-agent-core 0.87.0]` neither is an interrupt — `dist/agent-loop.js:186`
+// `[측정 2026-09-22, pi-agent-core 0.87.0; 재측정 2026-09-23, 0.87.1 — 좌표 동일]` neither is an interrupt — `dist/agent-loop.js:186`
 // drains steering after each turn and `:191-197` drains follow-ups only once the inner loop has
 // ended, and the two queues (`dist/agent.js:96-97,137-138`) have no FIFO between them, so a later
 // steer overtakes every earlier follow_up. Both are volatile process memory and an abort drops

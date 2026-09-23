@@ -132,6 +132,24 @@ that moved out of `scripts/` and into a file beside its subject would otherwise 
 > `LIVE=1 ENTWURF_CODEX_APP_SERVER_PID=<existing-app-server-pid>
 > ENTWURF_CODEX_FRESH_MODEL=<codex-model>
 > ENTWURF_CODEX_FRESH_PI_MODEL=<pi-model> ./run.sh smoke-codex-fresh-live`.
+>
+> Those three values are the step's operator-supplied prerequisite, and
+> **`release-gate --cut` inherits that triple** — it is exported onto the aggregate invocation (the
+> release skill's P5 carries it), never inferred by the gate, so the no-inference rule above holds
+> unchanged inside the aggregate. **An ABSENT value is a protocol SKIP naming what was missing; a PRESENT but wrong one
+> stays a FAIL.** That split is the honest reading of the step-outcome protocol — a step that never
+> ran and a step that ran and broke are different facts — and it is what makes this MUST reproducible
+> at every cut instead of inviting a standing exception: before 2026-09-23 all three were assertions, so their
+> absence threw, and because the aggregate supplied none of them this step went red inside every
+> cut on every host (0.25.0's candidate receipt, `MUST PASS=23 FAIL=1`, is that shape). A SKIP is
+> **not** a softening: `--cut` refuses it as `cut: BLOCKED (MUST SKIP)`, so a cut without this
+> receipt is still impossible — the operator supplies the triple and re-runs. A host with no Codex
+> app-server therefore cannot take a cut, which is the intended cost of #87's release stop
+> (「A visible-fresh receipt outside the MUST tier is no longer the general rule」above) rather than
+> an accident. The installed-config preflights are deliberately NOT in that split and remain FAIL
+> on absence — a missing Codex birth, user MCP/status/terminal-title config, runtime, bridge, tmux
+> seat, or an unanswered launch directory is host state `setup` and the Codex doctors own, not a
+> per-invocation input.
 > **Both of THIS cell's live-spend defaults are `gpt-5.6-luna` from 2026-09-17**
 > (`openai-codex/gpt-5.6-luna` on the pi side) — the Codex leg came down off `sol`. It is a tier
 > choice and not a gate change; the receipt this cell is accepted on must be the one that actually
@@ -269,7 +287,7 @@ The goal is not merely "invoke Claude Code." We want:
 **One install command to remember: `./run.sh setup <project>`.** It is idempotent — re-run the exact same command whenever anything looks wrong. There is no second install surface to juggle: from a clone `setup` runs the whole floor in order.
 
 1. `pnpm install` — installs the pinned development dependencies and builds the bridge (source-checkout bootstrap only; an installed package never runs npm/pnpm inside `node_modules`)
-2. pi wiring → `<project>/.pi/settings.json` + user-scope registration — only when a `pi` inside the supported range (`>=0.87.0 <0.88`) is on PATH; absent pi is an explicit zero-state SKIP, a below-floor pi is a detected FAIL. The user-scope entry is owner-recorded (#86 C2): another root's live-or-missing ownership makes this step a zero-write refusal (setup: pi FAIL) that names `takeover-user-scope`; the install-states bind the exact managed settings path (a drifted/symlinked/corrupt target is a zero-write refusal) and the inverse removes only the recorded owner's exact entry; `doctor-pi-package` reports the verdict
+2. pi wiring → `<project>/.pi/settings.json` + user-scope registration — only when a `pi` inside the supported range (`>=0.87.1 <0.88`) is on PATH; absent pi is an explicit zero-state SKIP, a below-floor pi is a detected FAIL. The user-scope entry is owner-recorded (#86 C2): another root's live-or-missing ownership makes this step a zero-write refusal (setup: pi FAIL) that names `takeover-user-scope`; the install-states bind the exact managed settings path (a drifted/symlinked/corrupt target is a zero-write refusal) and the inverse removes only the recorded owner's exact entry; `doctor-pi-package` reports the verdict
 3. Claude meta-bridge global plugin — only when `claude` is on PATH; otherwise skipped cleanly
 4. source stable-bin exposure — including certified `entwurf` → this checkout's `run.sh`, the managed runtime Copilot fresh resolves; helper units are attempted independently and a foreign helper is a named FAIL
 5. agy bridge + exact permission + statusline + `PreInvocation` hook — only when `agy` is on PATH; each adapter is idempotent and independently doctorable

@@ -100,7 +100,7 @@ ACP는 중심이 아니라 v2 core 위에 provider/model로 들어오는 **plugi
 | v2 live Antigravity → native-push direct injection | native-push adapter/register/decider gates + `smoke-agy-native-push-live` |
 | agy automatic citizen birth + sender/reply identity | hooks/statusline/install/sender gates + three doctors + fresh live round trip |
 | v2 honest reject (false-delivered/`.msg` garbage 0) | matrix-live C3 + deliverability/native-push reject gates |
-| pi 0.87.0 fence | `pnpm check` + release-gate MUST |
+| pi 0.87.1 fence | `pnpm check` + release-gate MUST |
 
 ### Historical — 0.12.0 cutover close checklist
 
@@ -312,7 +312,7 @@ v2 필드 `parentGardenId`/`isEntwurf`는 **stray key로 거부된다** — 되�
 ## 검증 원장 (measured, 재탐색 불필요)
 
 - **pi 0.80 public export:** `hasProjectTrustInputs`/`ProjectTrustStore`/`getAgentDir`/`VERSION` 모두 index
-  public export → TS 직접 import(재구현 불필요). floor = **0.87.0** (`>=0.87.0 <0.88`, next-minor 상한).
+  public export → TS 직접 import(재구현 불필요). floor = **0.87.1** (`>=0.87.1 <0.88`, next-minor 상한).
 - **pi trust(0.79.1+):** `pi -p`는 trust에서 안 멈춤(비대화 미결정→`false` degraded). `--approve`(`-a`)=
   project 파일 로드, `--no-approve`(`-na`)=무시·degraded. `ProjectTrustStore.get`은 nearest-ancestor
   walk-up(조상 cwd 결정을 자식이 상속). `AGENTS.md`/`CLAUDE.md`는 0.79.1에서 trust input에서 제거(항상
@@ -826,6 +826,68 @@ v2 필드 `parentGardenId`/`isEntwurf`는 **stray key로 거부된다** — 되�
     `pnpm-lock.yaml`, baseline 문서 5곳(AGENTS/README/ROADMAP/setup-clean-host/demo) +
     `docs/acp-backend-rail.md` 지원 matrix + `VERIFY.md`(그 자리는 어느 게이트도 읽지 않아
     0.84.3 세대에 멈춰 있었다 — BASELINE_DOCS 밖이라 두 번의 bump 를 그냥 지나쳤다).
+  - **2026-09-23 bump — pi 0.87.0 → 0.87.1 (patch; breaking 0건).**
+    `~/repos/3rd/pi/pi-mono` `v0.87.0..v0.87.1` (19 commits) 직독 + `npm view @…@0.87.1` 직독.
+    npm `dist-tags.latest` 이 이미 0.87.1 이었고 후보는 0.87.0 을 선언하고 있었다 — 그 격차를
+    읽는 게이트는 없다(upstream latest 를 보는 자리가 없음). 이번엔 사람이 발견했다.
+
+    ⑴ **성격: breaking 절이 아예 없다.** 7개 패키지 CHANGELOG 를 태그에서 직독 —
+    `agent`/`client`/`protocol`/`telemetry`/`tui` 는 버전 헤더만 있는 빈 엔트리, `ai`/`coding-agent`
+    는 model catalog 추가 + fix 4건. 0.86.1 때와 같은 모양이지만 결론은 반대다: 그때는 floor 를
+    올릴 이유가 없어 건너뛰었고, 이번엔 **이미 published latest** 이므로 후보가 그것을 선언해야 한다.
+
+    ⑵ **하중 파일 sha256 (실제 경로, 앞 12) — 0.87.0 → 0.87.1: 6/6 SAME.**
+    `packages/ai/src/compat.ts` `fe077a90f918` ·
+    `packages/coding-agent/src/core/session-manager.ts` `ded5d65112f8` ·
+    `packages/coding-agent/src/core/extensions/types.ts` `601261b3deee` ·
+    `packages/coding-agent/src/core/extensions/runner.ts` `bf68eaf27a3e` ·
+    `packages/agent/src/agent.ts` `fad42fdcea12` ·
+    `packages/agent/src/agent-loop.ts` `c3d99a5b0f24`.
+    여섯 값이 위 0.87.0 항목이 기록한 값과 그대로 일치한다 — 대장 자체가 교차 확인이 된다.
+
+    ⑶ **실제 src 접촉면은 3파일뿐이고 우리 접촉은 0이다.** `packages/coding-agent/src` 전체
+    diff = `cli/args.ts`(`de0b21efa0cc` → `94d1490f9c0f`) · `core/model-resolver.ts`
+    (`afe357efe95c` → `b0119e2e18f2`) · `core/compaction/compaction.ts`. 판정:
+    **`--mode` 엄격화** — 무효값을 조용히 무시하던 것이 error + nonzero 가 됐다. 우리가 pi 에
+    넘기는 `--mode` 는 전수 `rpc` 또는 `json` 뿐이다(9개 LIVE smoke + `resident-rpc-drive.ts:176`;
+    `check-omp-birth-hook.ts:636` 와 `raw-omp-measure/` 의 `--mode` 는 **OMP CLI** 로 같은 이름의
+    다른 벤더다). 유효값만 넘기므로 접촉 0 — 그리고 이 변경은 우리에게 유리하다: 오타가 침묵하지
+    않는다 · **xai default `grok-4.6` → `4.7`** — 우리는 어떤 경로에서도 xai default 에 의존하지
+    않는다(`grok` 참조는 OMP fixture 와 저자 표기 2곳) · **compaction summary 문구** — 우리는
+    어느 rail 에서도 compaction 을 소유하지 않는다(#94).
+
+    ⑷ **`packages/agent`(= `pi-agent-core`) 는 CHANGELOG + package.json 만 변경.** src 0줄.
+    따라서 P2 queue oracle 의 좌표가 움직일 수 없고, 추론이 아니라 **설치본으로 재측정했다**:
+    `[측정 2026-09-23, pi-agent-core 0.87.1]` `dist/agent.js:96-97` = `steeringQueue`/`followUpQueue`,
+    `dist/agent-loop.js:186` steering drain, `:191-197` follow-up drain — 0.87.0 과 좌표까지 동일.
+    `test/pi-queue.oracle.test.ts` 는 리터럴 버전 핀이 없고 설치본 `Agent` 를 import 하므로 그대로
+    새 floor 를 측정한다.
+
+    ⑸ **타입 울타리 셋 다 green:** `tsc --noEmit` / `-p scripts` / `-p mcp` rc=0. ⑶ 의 "접촉 0"
+    은 grep 이 아니라 이 셋이 확정한다.
+
+    ⑹ **per-floor 재측정 영수증 (0.87.0 영수증을 재라벨하지 않고 덧붙였다):**
+    `[측정 2026-09-23, pi 0.87.1]` sandbox HOME + `PI_CODING_AGENT_DIR` 에서
+    `pi --entwurf-control` → `Error: Unknown option: --entwurf-control`, exit 1 (0.86.0/0.87.0 과
+    바이트 동일). 설치본 `dist/core/extensions/types.d.ts` 의 `isIdle(): boolean` `:233` /
+    `signal` `:237` — 좌표 동일, `isCompacting` 여전히 grep 0.
+
+    ⑺ **별자리 — 변화 없음.** `[측정 2026-09-23]` `npm view @earendil-works/pi-coding-agent@0.87.1
+    dependencies` 의 `@earendil-works/*` 직접 의존은 `chord, pi-agent-core, pi-ai, pi-tui` 4종으로
+    0.87.0 과 동일. 8종 전부 0.87.1 로 published 확인(`npm view @…@0.87.1 version`).
+
+    ⑻ **기계 이동 — floor 손잡이는 하나다.** `check-dep-versions` 가 peer range 를
+    (`>=${devDep} <0.${minor+1}`) devDep exact 핀에서 파생하고 `check_pi_runtime_version` 의 FLOOR
+    도 같은 핀에서 파생하므로, "devDep 만 올리고 floor 는 둔다" 는 구조적으로 불가능하다.
+    옮긴 것: `package.json` devDep 4종 + peer 3종 `>=0.87.1 <0.88` · `pnpm-workspace.yaml`
+    `minimumReleaseAgeExclude` 8행에 `|| 0.87.1`(빠지면 install 시점에만 터진다) · `run.sh`
+    install constellation 8종 + pin-leak matcher 의 버전 경계 + 그 matcher self-test 합성
+    lookalike(0.87.0 이 이제 **off-pin leak** 쪽 fixture 다) · baseline docs 7종의 range/exact/prose
+    선언 + `docs/mux-launch-rail.md` 현 supported range · mutant find 문자열 4개
+    (`pi-floor`, `control-send-receipt`, `pack-install` 의 PIN-MATCHER 2건 — 마지막 둘은
+    `[QK:MUTANT-FIND-MATCHES-SUBJECT]` 가 0× 로 잡아줬다) · `pnpm-lock.yaml`.
+    **ledger 는 건드리지 않았다**: 위 0.87.0 항목의 ⑺⑻ 은 그날 내려앉은 값이라 그대로 둔다.
+
   - **2026-09-22 bump — pi 0.86.0 → 0.87.0 (direct; 0.86.1 skipped, 아래 ⑹).**
     `~/repos/3rd/pi/pi-mono` `v0.86.0..v0.87.0` (30 commits) 직독 + `npm view @…@0.87.0` 직독.
 

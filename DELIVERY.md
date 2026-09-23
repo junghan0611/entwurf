@@ -49,7 +49,7 @@ operator has to reason about.
 | `queued-follow-up` | drained only when the receiver's inner loop ends; a steer arriving later still goes first | **none** — volatile receiver process memory | same: invisible in the receiver's own queue display | same: an abort drops it |
 | `accepted-unknown-boundary` | unknown | unknown | unknown | the receiver ACCEPTED; this names our inability to classify its answer (version skew), and it must never be retried or rendered as `sent` |
 
-`[측정 2026-09-22, pi-agent-core 0.87.0]` `dist/agent.js:60-71,96-97,137-138`
+`[측정 2026-09-22, pi-agent-core 0.87.0; 재측정 2026-09-23, 0.87.1 — 좌표 동일]` `dist/agent.js:60-71,96-97,137-138`
 (two independent `one-at-a-time` queues, no FIFO between them)
 and `dist/agent-loop.js:85,186,191-197`
 (steering drained every turn, follow-ups only once the inner loop ends).

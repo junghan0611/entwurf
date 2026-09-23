@@ -669,12 +669,75 @@ async function run(): Promise<void> {
 			"set LIVE=1 plus ENTWURF_CODEX_APP_SERVER_PID, ENTWURF_CODEX_FRESH_MODEL, and ENTWURF_CODEX_FRESH_PI_MODEL to run; this opens real Codex and Pi windows and spends model turns.",
 		);
 	}
+
+	// ── THE OPERATOR-SUPPLIED PREREQUISITE TRIPLE, AND WHY ITS ABSENCE IS A SKIP ──
+	//
+	// Entwurf does not own the Codex app-server (VERIFY: "The A cell takes no inferred
+	// server or models"), so these three values can only come from the operator. That
+	// stays true. What was wrong is the CLASSIFICATION of their absence.
+	//
+	// `[측정 2026-09-23]` the skip line directly above promised four prerequisites in one
+	// breath — LIVE=1 *plus* the three env names — but only the first could ever produce a
+	// SKIP. The other three were `ok()` assertions, and `ok()` throws, so a missing
+	// operator input exited as FAIL. `release_gate()` supplies none of them, so this MUST
+	// step declined as a FAILURE inside every aggregate on every host: 0.25.0's own
+	// candidate receipt reads `MUST PASS=23 FAIL=1`, and the release record had to carry a
+	// prose classification explaining that the one red was "the shape of that step", and the
+	// cut stayed BLOCKED. A contract that manufactures a red every cut and then needs a human
+	// to excuse it is not a floor.
+	//
+	// `scripts/lib/step-outcome.sh` already wrote the rule this violated: "a step that RAN
+	// AND BROKE and a step that NEVER RAN are different facts, and a release record that
+	// blurs them is worthless: the first is a defect to fix, the second is a prerequisite to
+	// supply." An absent operator input is the second.
+	//
+	// So the axis is split, and the split is the whole repair:
+	//   ABSENT  (unset/empty) -> skipLive: nothing ran, the missing names are printed, and
+	//                            `--cut` still refuses it as BLOCKED (MUST SKIP). Nothing is
+	//                            excused — a cut without this receipt remains impossible.
+	//   PRESENT BUT WRONG     -> FAIL, unchanged: a malformed or dead PID, a process whose
+	//                            argv is not a Codex app-server, a foreign uid, A == S. The
+	//                            operator answered, and the answer is a defect.
+	// Nothing is inferred either way, and no default is invented for a value the operator
+	// did not give. The reproducible green is the invocation VERIFY and the release skill's
+	// P5 both now spell out, and `release_gate` needs no plumbing for it: measured on this
+	// source, that function exports no scrub and unsets nothing, so an exported triple
+	// already reaches this step.
+	//
+	// DELIBERATELY NOT MOVED: the installed-config preflights below (`codexFreshPreflight`,
+	// `codexCallerFreshPreflight`, `codexLaunchCwdFreshPreflight`). Those are host state
+	// `setup` establishes and the Codex doctors cover, and the file header's contract
+	// already decided them — "missing system birth, user MCP/status/terminal-title config,
+	// app-server, models, runtime, bridge, or tmux seat is a FAIL". A one-time answered
+	// launch directory is host setup, not a per-invocation input, and reclassifying it would
+	// be a second contract change riding this one.
+	const OPERATOR_INPUTS = [
+		["ENTWURF_CODEX_APP_SERVER_PID", "the pid of the app-server YOU started (never inferred)"],
+		["ENTWURF_CODEX_FRESH_MODEL", "the Codex-side model this cell may spend a turn on"],
+		["ENTWURF_CODEX_FRESH_PI_MODEL", "the pi-side model of the callback sibling"],
+	] as const;
+	const absentInputs = OPERATOR_INPUTS.filter(([name]) => (process.env[name]?.trim() ?? "") === "");
+	if (absentInputs.length > 0) {
+		skipLive(
+			LABEL,
+			`this cell takes no inferred server or models, and ${absentInputs.length} operator-supplied ` +
+				`prerequisite(s) are absent: ${absentInputs.map(([name, why]) => `${name} (${why})`).join("; ")}. ` +
+				"Supply them on the invocation — LIVE=1 ENTWURF_CODEX_APP_SERVER_PID=<pid> " +
+				"ENTWURF_CODEX_FRESH_MODEL=<codex-model> ENTWURF_CODEX_FRESH_PI_MODEL=<pi-model> — either for the " +
+				"standalone run or for `./run.sh release-gate <scratch> --cut`, which inherits them. " +
+				"A cut is still blocked without this receipt: --cut reads a MUST SKIP as red.",
+		);
+	}
+
 	ok("the measured/certified host axis is Linux", process.platform === "linux", `host=${process.platform}`);
 
+	// Present, so a malformed value is the operator's answer being wrong — a FAIL, not a
+	// declined prerequisite. The absence arm above already left.
 	const pidText = process.env.ENTWURF_CODEX_APP_SERVER_PID?.trim() ?? "";
 	ok(
 		"ENTWURF_CODEX_APP_SERVER_PID explicitly names the existing operator-owned app-server",
 		/^[1-9]\d*$/.test(pidText),
+		`ENTWURF_CODEX_APP_SERVER_PID=${JSON.stringify(pidText)} is not a positive decimal pid`,
 	);
 	const appServerPid = Number(pidText);
 	const procDir = `/proc/${appServerPid}`;
@@ -749,10 +812,13 @@ async function run(): Promise<void> {
 		`fixture-session=${fixtureCoordinate.sessionId}\nfixture-name=${fixtureSessionName}\n` +
 		`fixture-window=${fixtureCoordinate.windowId}`;
 
+	// Both are non-empty: the prerequisite arm at the top of `run` left otherwise. Asserting
+	// `.length > 0` again here would be a tautology dressed as a check, so the pair is
+	// RECORDED instead — the tier a live receipt is read on is a fact the evidence needs, and
+	// 0.25.0 already had to explain in prose that its pi leg ran on terra rather than luna.
 	const codexModel = process.env.ENTWURF_CODEX_FRESH_MODEL?.trim() ?? "";
 	const piModel = process.env.ENTWURF_CODEX_FRESH_PI_MODEL?.trim() ?? "";
-	ok("ENTWURF_CODEX_FRESH_MODEL explicitly names the Codex runtime model", codexModel.length > 0);
-	ok("ENTWURF_CODEX_FRESH_PI_MODEL explicitly names the Pi callback sibling model", piModel.length > 0);
+	receipts["1b-operator-supplied-models"] = `codex=${codexModel}\npi=${piModel}`;
 	const codexRuntime = resolveExecutable("codex", appServerEnv);
 	ok("the Codex runtime resolves on the app-server PATH", codexRuntime !== null);
 	const bridgeRuntime = resolveExecutable("entwurf-bridge", appServerEnv);

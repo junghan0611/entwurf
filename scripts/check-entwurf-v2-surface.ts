@@ -1086,7 +1086,7 @@ async function main(): Promise<void> {
 	}
 
 	// ── #120 P2: the four caller-facing prose sites, checked for what they SAY ──
-	// `[측정 2026-09-22, pi-agent-core 0.87.0]` neither mode interrupts anything: `agent-loop.js:186`
+	// `[측정 2026-09-22, pi-agent-core 0.87.0; 재측정 2026-09-23, 0.87.1 — 좌표 동일]` neither mode interrupts anything: `agent-loop.js:186`
 	// drains steering after a turn ENDS and `:191-197` drains follow-ups only once the inner loop
 	// has ended. A caller who reads "interrupt the current turn" picks `steer` for urgency and gets
 	// a queue with no order against the other one — the decision #120 was opened about.

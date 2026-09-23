@@ -92,8 +92,8 @@ undifferentiated "supported" column is what let a Claude PASS read as if it also
 
 | Surface | Declaration | Class | What a green actually says |
 |---|---|---|---|
-| Entwurf package | `0.24.0` | shipped baseline | the package contract these rows belong to |
-| pi runtime | devDep exact `0.87.0`, peer `>=0.87.0 <0.88` | **exact** oracle + **closed range** | built and certified against 0.87.0; hosts inside the range are accepted, and the ceiling moves only on measurement |
+| Entwurf package | `0.25.0` | shipped baseline | the package contract these rows belong to |
+| pi runtime | devDep exact `0.87.1`, peer `>=0.87.1 <0.88` | **exact** oracle + **closed range** | built and certified against 0.87.1; hosts inside the range are accepted, and the ceiling moves only on measurement |
 | ACP wire SDK | `@agentclientprotocol/sdk 1.4.0` | **exact** | the shared wire oracle both adapters speak |
 | Claude ACP adapter | `@agentclientprotocol/claude-agent-acp 0.79.0` | **exact**, bundled | the adapter we ship and certify; resolved before any PATH fallback |
 | Claude Agent SDK | `0.3.274` (transitive) | **exact** oracle | the runtime risk surface behind the adapter |
@@ -482,7 +482,7 @@ Receipt, limits and the `completed`-branch gap: `scripts/raw-acp-compaction-meas
 On a NATIVE pi receiver that queue is drained seconds later, and on an ACP receiver it is drained
 one whole child turn later. The difference is not a different drain point — it is the same one.
 
-`[측정 2026-09-22, pi-agent-core 0.87.0]` `dist/agent-loop.js:141` awaits `streamAssistantResponse`
+`[측정 2026-09-22, pi-agent-core 0.87.0; 재측정 2026-09-23, 0.87.1 — 좌표 동일]` `dist/agent-loop.js:141` awaits `streamAssistantResponse`
 once per turn, and the steering drain is `:186`, after the `turn_end` emit at `:185`. For this rail
 that one await is `pi-extensions/lib/acp/backend.ts:815` —
 `await Promise.race([session.connection.prompt(promptArgs), lifecycle])` — so it spans the entire

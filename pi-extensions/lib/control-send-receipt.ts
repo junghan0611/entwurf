@@ -11,7 +11,7 @@
  * `control-socket → sent` came to mean four different things, one of which was
  * "queued behind ten steers and dropped when the operator hit ESC".
  *
- * `[측정 2026-09-22, pi-agent-core 0.87.0]` the receiver's two queues are independent and each is
+ * `[측정 2026-09-22, pi-agent-core 0.87.0; 재측정 2026-09-23, 0.87.1 — 좌표 동일]` the receiver's two queues are independent and each is
  * `one-at-a-time` (`dist/agent.js:60-71,96-97,137-138`); steering is drained after every turn
  * (`dist/agent-loop.js:85,186`) while follow-ups are drained ONLY when the inner loop has ended
  * (`:191-197`). There is no global FIFO across them. So `steer` and `follow_up` are not two

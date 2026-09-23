@@ -55,8 +55,9 @@ All notable changes to this project will be documented here. Format follows [Kee
   were closed before acceptance: dirty-lock end-to-end field loss, a `test/**` oracle that was not
   on the public floor, and a reachability checker a comment could satisfy.
 
-- **pi runtime floor 0.86.0 → 0.87.0, direct (#120 P4).** Four exact dev pins (including P2's
-  direct `pi-agent-core` queue oracle), three closed peer ranges (`>=0.87.0 <0.88`), the
+- **pi runtime floor 0.86.0 → 0.87.1 (#120 P4, landed in two measured steps).** Four exact dev
+  pins (including P2's direct `pi-agent-core` queue oracle), three closed peer ranges
+  (`>=0.87.1 <0.88`), the
   eight-package install/workspace constellation (seven `pi-*` packages plus `chord`), the
   pack-install version matcher, and the support declarations in README, the Herdr install docs, mux
   docs, setup docs, VERIFY and the ACP support matrix now name one floor.
@@ -78,8 +79,64 @@ All notable changes to this project will be documented here. Format follows [Kee
   ROADMAP's dated ledger carries the per-file sha256 pairs (written with real `packages/...`
   paths, after a prior entry recorded an empty-file hash for a path that did not exist) and the
   per-breaking-change contact receipts.
+  **The second step, 2026-09-23: 0.87.0 → 0.87.1, and it is the floor this release declares.**
+  0.87.0 was already superseded on npm (`dist-tags.latest` said 0.87.1) while the prepared
+  candidate still named 0.87.0, and no gate reads upstream `latest`, so a person found the gap
+  rather than a check. The patch carries **no Breaking Changes section in any of the seven
+  package changelogs**, and the contact measurement says why: all six load-bearing files this
+  repo tracks are byte-identical across the two tags (their sha256 pairs match the values the
+  0.87.0 entry above recorded, so the ledger cross-checks itself), `packages/agent` changed only
+  its CHANGELOG and `package.json`, and the whole `coding-agent/src` diff is three files. Each
+  was judged, not skimmed: `--mode` now rejects an invalid value instead of ignoring it, and
+  every `--mode` this repo passes pi is `rpc` or `json` (the other `--mode` hits are OMP's CLI,
+  a different vendor under the same flag name); the xAI default moved to Grok 4.7 and nothing
+  here depends on a provider default; the third is compaction summary wording, which entwurf
+  does not own on any rail (#94). Because `pi-agent-core` shipped no source change, the P2
+  queue coordinates could not move — and that was re-measured on the installed 0.87.1 rather
+  than inferred: `agent.js:96-97`, `agent-loop.js:186` and `:191-197` are where they were. The
+  per-floor hand receipts were re-taken too, additively: the sandbox CLI still refuses an
+  unregistered `--entwurf-control` byte-identically, and the extension context still declares
+  `isIdle()` at `:233` and `signal` at `:237` with no `isCompacting`. **The floor has exactly one
+  knob**, which is what made this a small change: `check-dep-versions` derives the peer range
+  and `check_pi_runtime_version` derives its FLOOR from the same exact devDep pin, so a
+  candidate cannot pin 0.87.1 while advertising 0.87.0. Moving it reddened four surfaces on cue
+  — and the gates named two omissions the author had missed: `[QK:MUTANT-FIND-MATCHES-SUBJECT]`
+  caught two `pack-install` pin-matcher mutants at `matched 0×`, and the prose scan caught
+  `demo/README.md`'s `current floor` and ROADMAP's `pi <version> fence`. The 0.87.0 numbers
+  above and in ROADMAP's two dated ledgers are preserved as the measurements of their own day;
+  one blind pass had rewritten two ledger receipts and was reverted.
 
-- **The Herdr plugin manifest version moves 0.4.1 → 0.5.1 for this cut, and nothing else reads
+- **The Codex first-admission acceptance stays a release MUST, and what a cut must supply to it is
+  now written where a cut is taken from.** Reclassifying its absent prerequisite as a SKIP (see
+  Fixed) could have been read as demoting the step to an on-demand axis; that boundary is decided
+  the other way and gated. #87 made a newly admitted harness's visible-fresh receipt a MUST **after
+  measuring what the on-demand wording permitted** — a harness could be admitted as a full citizen
+  that `entwurf_fresh_call` cannot open and still pass the whole floor — so demoting Codex would
+  reopen exactly that hole. (VERIFY's standing "on-demand host axis" sentence is about
+  `smoke-codex-native-push-live`, the operator-loaded-thread probe, and is unchanged.) A SKIP is
+  therefore not a softening: `--cut` refuses it as `cut: BLOCKED (MUST SKIP)`, asked of the shared
+  shell authority rather than re-implemented, so a cut without this receipt is still impossible and
+  a host with no Codex app-server cannot take one — the intended cost of that release stop rather
+  than an accident. What changed is that the reproducible green is now stated: VERIFY says
+  `release-gate --cut` inherits the operator-supplied triple, and the release skill's P5 carries it
+  on the invocation (measured: `release_gate` exports no scrub and unsets nothing, so an exported
+  triple already reaches the step — no plumbing was added). **The instructions obey the
+  no-inference rule they teach.** The first draft of that P5 derived the pid with
+  `pgrep -f 'codex.*app-server' | head -1`, which is the inference the step exists to refuse,
+  written onto the page an operator follows, and on a host running several app-servers it hands the
+  gate an arbitrary process to verify as "the operator's answer". Each value is now STATED and
+  guarded by an explicit `: "${VAR:?...}"` required-value check before any LIVE cost. Three claims
+  keep the boundary from drifting back, one per direction, each with its own exact-once mutant:
+  `[QK:CODEX-OPERATOR-PREREQ-ABSENT-SKIPS]` (which pins the filter → guard → `skipLive` shape as one
+  contiguous sequence, reading the source with comments stripped — a promise in prose is precisely
+  where this defect hid for a release, and a first candidate mutant SURVIVED a weaker regex before
+  that cell was tightened), `[QK:CODEX-OPERATOR-PREREQ-WRONG-FAILS]`, and
+  `[QK:CODEX-OPERATOR-PREREQ-STATED-NOT-SEARCHED]`. The installed-config preflights are
+  deliberately OUTSIDE this split and still FAIL on absence: a missing Codex birth, user
+  MCP/status/terminal-title config, runtime, bridge, tmux seat or an unanswered launch directory is
+  host state `setup` and the Codex doctors own, not a per-invocation input.
+
+- **The Herdr plugin manifest version moves 0.4.1 → 0.5.0 for this cut, and nothing else reads
   that literal.** `plugins/herdr/herdr-plugin.toml` is the sole declaration (measured: one hit
   repository-wide); `check-herdr-plugin` asserts semver SHAPE, not a value
   (`scripts/check-herdr-plugin.ts:82`), and `min_herdr_version` stays the measured 0.9.0 floor.
@@ -153,6 +210,49 @@ All notable changes to this project will be documented here. Format follows [Kee
   ROADMAP/demo evidence was kept as history with a dated correction rather than rewritten.
 
 ### Fixed
+
+- **`showTurnDuration` was never ours, and entwurf had been forcing the operator's own display
+  off.** The native meta-bridge install owned a list of Claude Code policy scalars that close
+  background autonomy and suggestion surfaces — and this one had been sitting in it, pinned to
+  `false`. It closes nothing: it reports how long a turn took, which is operator INFORMATION, so the
+  policy reason the rest of that list stands on never applied to it. GLG's ruling is that the
+  operator owns the scalar and entwurf must neither own it nor force it. The symptom had been
+  misread as drift: `./run.sh doctor-meta-bridge` was FAIL on the source host for exactly one
+  managed scalar, with `~/.claude/settings.json` saying `true` and the writer requiring `false`, and
+  the install-state carries no per-scalar provenance to say whose value that was. The actual cause
+  is measurable and is **two owners on one key**: `check-keyset-overlap` against the operator's own
+  `agent-config` settings fragment failed on `showTurnDuration` and on nothing else, because both
+  sides claimed it. Dropping our claim is what resolves that collision, with **zero change to
+  agent-config**. The key is RETIRED rather than deleted, through the same one-shot path #94 built
+  for compaction, because an existing install-state already carries its entry — measured on the
+  source host, `original {existed: true, value: false}` under a live `true`, i.e. the operator
+  turned the display on after our install — and `uninstall()` walks every ledger entry through
+  `restore_entry`, so deleting the constant would have written `false` back over that choice.
+  `[QK:META-RETIRE-TURN-DURATION-OPERATOR-OWNED]` measures the premise instead of quoting it: it
+  asks the SSOT whether the key is claimed, pins the retired comparison value by type as well as
+  equality, drives the real relinquish leaf on the exact host shape above, and proves the ledger row
+  is consumed so no later inverse can reach the key. Its mutant drifts the scalar back under
+  management. **The migration ran on the host and was measured on both sides:** before
+  `showTurnDuration=true`, after `showTurnDuration=true`, the ledger entry gone (15 managed keys
+  → 14), and `doctor-meta-bridge` now PASS with 33 ok where it had been exit 1 on that one axis.
+
+- **A release MUST step reported a missing operator input as a FAILURE, so the aggregate gate was
+  structurally red on every host at every cut.** `smoke-codex-fresh-live` takes three values only
+  the operator can supply — the app-server pid and two model tiers — and `release_gate()` supplies
+  none of them, by design: entwurf neither starts nor supervises that app-server. Its own skip line
+  promised four prerequisites in one breath (`LIVE=1` plus the three env names), but only the first
+  could produce a SKIP; the other three were `ok()` assertions, and `ok()` throws. So the step
+  declined as a defect. `scripts/lib/step-outcome.sh` had already written the rule this broke —
+  *"a step that RAN AND BROKE and a step that NEVER RAN are different facts, and a release record
+  that blurs them is worthless: the first is a defect to fix, the second is a prerequisite to
+  supply"* — and the candidate receipt below shows the cost: `MUST PASS=23 FAIL=1`,
+  `cut: BLOCKED (MUST FAIL)`, with a prose classification standing in for a floor. **The repair is
+  the classification, not the requirement.** An ABSENT input is now a protocol SKIP naming each
+  missing one; a PRESENT but wrong one — a malformed or dead pid, a process whose argv is not a
+  Codex app-server, a foreign uid, an app-server sharing the gate's own session — stays a FAIL.
+  Both arms were measured, and neither opens a window or spends a turn: unset triple under `LIVE=1`
+  exits 97 with its `[entwurf:skip]` line, `ENTWURF_CODEX_APP_SERVER_PID=abc` exits 1 naming the
+  value. No inference was added and no default invented for a value nobody gave.
 
 - **The Herdr status pane died before drawing a single block on the carrier every candidate window
   rides.** `plugins/herdr/lib/activation-evidence.mjs` located the installed ledger reader by
@@ -263,6 +363,101 @@ Frozen candidate `69a6f1d`, host `oracle`, 2026-09-23 KST. Two receipts, kept ap
   user-scope MCP reachability, cached artifact). The install-state carries no per-scalar provenance,
   so whether this is drift from our write or the operator's own UI choice is not decided here, and
   the host was deliberately left untouched.
+
+- **Resolved 2026-09-23, after the paragraph above was written.** That doctor red was not drift and
+  not undecidable: the key had two owners, and GLG ruled the operator owns it. The scalar is retired
+  (see Fixed), and the host migration was measured on both sides — `showTurnDuration=true` before
+  and after, the install-state ledger entry consumed (15 managed keys → 14), and
+  `./run.sh doctor-meta-bridge` now **exit 0, PASS, 33 ok**. The paragraph above is kept as what was
+  true when the frozen candidate was measured.
+
+**Post-prepare release-fix candidate (2026-09-23, host `oracle`) — source, focused and host
+receipts only.** This is not a cut receipt. `check-gate-qualification`'s body (`782/782` killed,
+`[gate-qualification] ok`) and `pnpm run check:full` (`total elapsed 603s exit 0`) ran on the earlier
+frozen seal (`git diff --cached --binary | sha256sum` =
+`ee478d4eac77aae6db187eeb5da2d357ab275c00e6d1eb9463ca04f29bf42425`), before this paragraph and two
+documentation lines were amended; they are not re-attributed to the amended bytes. When this
+paragraph was written (2026-09-23, before 09:44 KST) the LIVE release gate (`--cut`) had not been run
+on this candidate, so this paragraph by itself does not speak to releasability; the LIVE receipt is
+the dated addendum below, and it belongs to the `00264f…` seal only. What was measured:
+
+- **Focused gates, green on the working candidate:** `check-dep-versions`
+  (`ok — pi 0.87.1 is coherent … 9 range + 1 exact + 3 prose declarations`), `check-gate-manifests`
+  (**782** committed mutants across 62 lanes, every `find` still matching its subject exactly once,
+  lane inventory matching its declared contract), `check-release-gate-outcomes`,
+  `smoke-meta-install-state`, `smoke-meta-keyset-guard`, `check-keyset-overlap` against the
+  operator's own agent-config fragment (exit 1 → exit 0, `keyset disjoint ok: 1 fragment vs 15
+  pi-owned key(s)`), `check-meta-doctor-oracle`, `check-meta-manifest-schema`, `smoke-meta-honesty`,
+  `smoke-setup-verdict`, `smoke-user-scope-citizen`, `smoke-meta-prune`, `check-pi-runtime-version`,
+  `check-pi-import-surface`, `check-model-lock`, `check-node-floor-coherence`, `check-pi-preflight`,
+  `check-pi-launch`, `check-pack-pin-matcher`, `check-pack` (540 files), `check-herdr-activation`,
+  `check-herdr-placement`, `check-pi-queue-oracle`, `check-entwurf-v2-surface`,
+  `check-control-send-receipt`, `check-compaction-send-guard`, `check-mux-launcher-fence`,
+  `check-codex-bridge-identity`, `check-codex-native-push`, `check-env-namespace`,
+  `check-shell-quote`, `check-tests-beside-behavior`, `check-install-surface`,
+  `smoke-agy-install-state`, `check-acp-sdk-surface`, `check-mux-fresh-call`. Three type fences
+  `tsc --noEmit` / `-p scripts` / `-p mcp` rc=0, and `pnpm lint` at 0 errors / 22 warnings — the
+  same counts a pristine HEAD produces, measured in its own snapshot for the comparison.
+- **Four new mutants, each killed at its own claimed signature** in a scratch snapshot mirror with
+  control-pre and control-post green, because the shared checkout is never mutated in place:
+  `META-RETIRE-TURN-DURATION-OPERATOR-OWNED`, `CODEX-OPERATOR-PREREQ-ABSENT-SKIPS`,
+  `CODEX-OPERATOR-PREREQ-WRONG-FAILS`, `CODEX-OPERATOR-PREREQ-STATED-NOT-SEARCHED`. The
+  release-gate lane inventory moves 19 → 22 and meta-retire 3 → 4.
+- **`check-install-surface` was re-run the only way it can tell the truth about an unstaged
+  edit, and that mattered.** It reads the candidate through `git show :<file>`, so a first run over
+  a working-tree-only change is a false green — a trap `NEXT.md` already documented from the
+  previous release. Two U+2014 em dashes had in fact landed in the ASCII-only release skill at
+  `(334,64)` and `(347,9)`. They are gone, and the proof was taken in a scratch snapshot where the
+  whole candidate was `git add -A`ed (**exit 0**, S7e and S6's 494 NUL-free sources included), with
+  a negative control planting one em dash back to confirm S7e really reddens rather than passing
+  vacuously. No staging was performed in the shared checkout.
+- **Host receipts (operator-owned steps, run by the coordinator under GLG's authority and verified
+  independently here):** the retired-scalar migration applied with the operator's `true` intact and
+  the ledger entry consumed; `doctor-meta-bridge` PASS; the global pi CLI moved 0.87.0 → **0.87.1**
+  and this repo's installed `pi-coding-agent` reads **0.87.1**. The running pi coordinator process
+  may predate that upgrade, so it is not used as evidence for it — the versions above were read from
+  the CLI and the installed package.
+
+**LIVE release gate on the amended candidate (2026-09-23 09:44–11:15 KST, host `oracle`) — dated
+addendum.** Candidate seal: HEAD `61cde06755c1eb353c2338c314cdf1eed384b26e`, `git diff HEAD --binary |
+sha256sum` = `git diff --cached --binary | sha256sum` =
+`00264f9177cfc2fde16d468299f12a4d00abc8d54fad1fd3c6c70df06d56478f`, unstaged 0, untracked 0. The
+coordinator's launcher refused to start unless HEAD and both seals matched, and printed them again
+after the run: pre and post identical. That seal is the bytes with the D1/D2/O2 documentation
+amendment above and WITHOUT this addendum; the result is not re-attributed to the documentation-only
+seal that adds these lines. The 69a6f1d `FAIL=1` receipt and the `ee478d…` seal receipts above stay
+as history.
+
+- **Command:** `env -u CLAUDE_CONFIG_DIR -u PI_SESSION_ID -u PI_AGENT_ID LIVE=1
+  ENTWURF_CODEX_APP_SERVER_PID=3067196 ENTWURF_CODEX_FRESH_MODEL=gpt-5.6-luna
+  ENTWURF_CODEX_FRESH_PI_MODEL=openai-codex/gpt-5.6-terra ./run.sh release-gate
+  /tmp/entwurf-release-gate-0.25.0-00264f --cut`, exit 0. The app-server pid is the pane pid of the
+  one the coordinator started (on GLG's direct instruction) in its own tmux session
+  `entwurf025_codex_server`; it was stated, not searched. Its uid and exact `app-server --listen`
+  argv were checked through `/proc`, and its session differs from the gate's.
+- **Log (cross-host artifact):** `/tmp/entwurf-release-gate-0.25.0-00264f/release-gate.log`, sha256
+  `100c61a5721dee3e693a5f6d4851138d52172ad5301a231431a10478237bf20d`. The decisive lines, verbatim:
+
+  ```text
+  [check:full] total elapsed 621s exit 0
+  [gate-qualification] origin checkout: HEAD + work-surface content hash identical before/after
+  [gate-qualification] qualified claims: 782/782 killed — …
+  [gate-qualification] ok
+  [smoke-codex-fresh-live] 64 assertions ok — fixture -> initial visible Pi -> visible Codex/exact callback -> Pi-addressed native-push v2 -> Codex outbound v2 -> visible Pi/exact callback
+      MUST: PASS=24  FAIL=0  SKIP=0
+      BEHAVIOR: PASS=1  FAIL=0  SKIP=0
+    mode: --cut (a MUST SKIP is a BLOCKER — this run is being read as release acceptance)
+    cut: OK
+  ```
+
+- **Claude Code host:** `claude --version` = 2.1.280, which is above the `>=2.1.217` floor. Host
+  doctor log `/tmp/entwurf-0251-claude-280-doctor.log`, sha256
+  `568f73883a60025e370b5f45cba111620a60c45af351165bab25ddfa0d5be1e7`, exit 0, PASS.
+- **P9, run right after the verdict:** the prefix-blind census found one reparented process holding
+  a `/tmp` path (pid 489788, the operator's own emacs). It is not gate residue and was left alone.
+  `OWNED` derived 107 prefixes. Idle roots older than 60 minutes: 3 (128K). Two were
+  `check-probe-ordering` and one `entwurf-s2b-overlay`; they were inspected, then removed. After P9,
+  the operator owned 592 directories under `/tmp`.
 
 ## 0.24.0 - 2026-09-20
 
