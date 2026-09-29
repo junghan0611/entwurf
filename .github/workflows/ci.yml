@@ -22,6 +22,12 @@ on:
         description: 'Force the check-gate-qualification body to run'
         type: boolean
         default: false
+      # #124: a dispatch with this set runs the COLLECTION steps at the end of the check job
+      # below. "all" or a JSON array of exact gate argv. An inventory, never a verdict.
+      composite_groups:
+        description: 'JSON array of exact gate argv, or "all": collect per-group qualification receipts (an inventory, not a verdict)'
+        type: string
+        default: ''
   # Weekly, 04:00 KST Sunday (19:00 UTC Saturday). The path filter below means a
   # long run of docs-only pushes never re-proves kill-power, and the things that
   # rot underneath it are not in our diff at all: the ubuntu-latest image, and
@@ -100,6 +106,25 @@ jobs:
       # contracts survive.
       - run: ./run.sh check-gate-qualification
         if: steps.qualify-decide.outputs.run_body == 'true'
+      # #124: dispatch-only COLLECTION of per-group receipts, inside this Linux job so it shares
+      # the pinned herdr install and runs after the FULL floor, like the body above. It is an
+      # inventory, never a verdict: the offline #124 composite oracle (scripts/qualification-oracle.ts)
+      # recomputes the ledger from the uploaded receipts. It is NOT the release oracle, which stays
+      # verify-exact-ci.sh + this job's full body until #124 P3.
+      # The input reaches the shell only through env, never as ${{ }} in `run:`.
+      - name: collect qualification receipts (not a verdict)
+        if: github.event_name == 'workflow_dispatch' && inputs.composite_groups != ''
+        env:
+          COMPOSITE_GROUPS: ${{ inputs.composite_groups }}
+        run: node --experimental-strip-types scripts/check-gate-qualification.ts --groups "$COMPOSITE_GROUPS" --collect "$RUNNER_TEMP/qualification-collection"
+      - name: upload qualification collection
+        if: github.event_name == 'workflow_dispatch' && inputs.composite_groups != '' && !cancelled()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qualification-collection-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/qualification-collection/
+          if-no-files-found: error
+          retention-days: 90
 
   # The install surface has its own job because `pnpm run check:full` is a SOURCE-tree
   # floor: it can only ever prove a dev clone works. Every fence bug this repo has shipped —

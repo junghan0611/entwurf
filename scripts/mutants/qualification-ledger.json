@@ -1,0 +1,489 @@
+{
+	"schemaVersion": 1,
+	"lane": "qualification-ledger",
+	"mutants": [
+		{
+			"claim": "LEDGER-DIGEST-CHECKED",
+			"title": "the composer stops re-deriving receiptSha256 — a receipt whose verdict was edited after it was written would count as the measurement it no longer is (#124 P2)",
+			"subject": "scripts/lib/qualification-ledger.ts",
+			"find": ["\tif (sha256(canonicalJson(body)) !== receiptSha256) {"],
+			"replace": ["\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-gate-manifests"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:LEDGER-DIGEST-CHECKED]",
+			"signatureSource": "scripts/check-gate-qualification.ts"
+		},
+		{
+			"claim": "LEDGER-FLAG-BLOCKS-GREEN",
+			"title": "the verdict ignores group flags — content-identical provenance, a red-then-green on identical bytes or observed cache drift would read COMPOSITE-GREEN instead of RISK-PENDING (#124 P2)",
+			"subject": "scripts/lib/qualification-ledger.ts",
+			"find": ["\t\t\t\t: gCounts.MEASURED === gCounts.total && gCounts.total > 0 && flagged.length === 0"],
+			"replace": ["\t\t\t\t: gCounts.MEASURED === gCounts.total && gCounts.total > 0"],
+			"gate": ["bash", "run.sh", "check-gate-manifests"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:LEDGER-FLAG-BLOCKS-GREEN]",
+			"signatureSource": "scripts/check-gate-qualification.ts"
+		},
+		{
+			"claim": "LEDGER-SEAL-IN-PASS-RECOMPUTE",
+			"title": "the composer's pass recompute forgets the seal — a receipt whose candidate moved during the run could still claim passed and count as MEASURED (#124 P2)",
+			"subject": "scripts/lib/qualification-ledger.ts",
+			"find": ["\t\tr.result.porcelainClean &&", "\t\tr.seal.stable;"],
+			"replace": ["\t\tr.result.porcelainClean;"],
+			"gate": ["bash", "run.sh", "check-gate-manifests"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:LEDGER-SEAL-IN-PASS-RECOMPUTE]",
+			"signatureSource": "scripts/check-gate-qualification.ts"
+		},
+		{
+			"claim": "LEDGER-INVALID-BLOCKS-GREEN",
+			"title": "the verdict stops failing closed on invalid receipts — a broken or duplicated receipt beside all-MEASURED groups would read COMPOSITE-GREEN instead of RED (#124 P2 review D2)",
+			"subject": "scripts/lib/qualification-ledger.ts",
+			"find": ["\t\tgCounts.FAIL > 0 || invalid.length > 0 || inputErrors.length > 0"],
+			"replace": ["\t\tgCounts.FAIL > 0 || inputErrors.length > 0"],
+			"gate": ["bash", "run.sh", "check-gate-manifests"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:LEDGER-INVALID-BLOCKS-GREEN]",
+			"signatureSource": "scripts/check-gate-qualification.ts"
+		},
+		{
+			"claim": "RECEIPT-SEAL-MOVED-IS-RED",
+			"title": "the group receipt producer drops the seal from `passed` — a run during which the origin candidate changed would be written green (#124 P1)",
+			"subject": "scripts/lib/qualification-receipt.ts",
+			"find": ["\tconst passed = reportPassed(report) && sealStable;"],
+			"replace": ["\tconst passed = reportPassed(report);"],
+			"gate": ["bash", "run.sh", "check-gate-manifests"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:RECEIPT-SEAL-MOVED-IS-RED]",
+			"signatureSource": "scripts/check-gate-qualification.ts"
+		},
+		{
+			"claim": "RECEIPT-PARENT-REALPATH-CONTAINED",
+			"title": "fingerprints lose the parent-realpath containment — a declared input reached through an intermediate directory symlink would hash bytes outside the repo as if they were the candidate's (#124 P1 review)",
+			"subject": "scripts/lib/qualification-receipt.ts",
+			"find": [
+				"\t\tif (parentReal !== repoReal && !parentReal.startsWith(repoReal + path.sep)) {",
+				"\t\t\tout[rel] = \"outside-repo\";",
+				"\t\t\tcontinue;",
+				"\t\t}"
+			],
+			"replace": ["\t\t// containment removed"],
+			"gate": ["bash", "run.sh", "check-gate-manifests"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:RECEIPT-PARENT-REALPATH-CONTAINED]",
+			"signatureSource": "scripts/check-gate-qualification.ts"
+		},
+		{
+			"claim": "COLLECT-RED-DOES-NOT-STOP",
+			"title": "the collector stops at the first red group — the tail after a late failure is never measured, which is exactly the serial-body gap #124 exists to close",
+			"subject": "scripts/lib/qualification-collection.ts",
+			"find": ["\t\t\tif (!r.sealStable) c.stoppedBy = \"seal-moved\";"],
+			"replace": ["\t\t\tif (!r.sealStable || !r.passed) c.stoppedBy = \"seal-moved\";"],
+			"gate": ["bash", "run.sh", "check-gate-manifests"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:COLLECT-RED-DOES-NOT-STOP]",
+			"signatureSource": "scripts/check-gate-qualification.ts"
+		},
+		{
+			"claim": "COLLECT-SEAL-MOVED-STOPS",
+			"title": "the collector ignores a moved origin seal — groups after a candidate change would still be collected as if they measured the same bytes",
+			"subject": "scripts/lib/qualification-collection.ts",
+			"find": ["\t\t\tif (!r.sealStable) c.stoppedBy = \"seal-moved\";"],
+			"replace": ["\t\t\tif (false) c.stoppedBy = \"seal-moved\";"],
+			"gate": ["bash", "run.sh", "check-gate-manifests"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:COLLECT-SEAL-MOVED-STOPS]",
+			"signatureSource": "scripts/check-gate-qualification.ts"
+		},
+		{
+			"claim": "COLLECT-UNDECLARED-FILE-NAMED",
+			"title": "checkCollection stops listing undeclared files — a stray receipt dropped into a collection would ride along unnamed",
+			"subject": "scripts/lib/qualification-collection.ts",
+			"find": ["\tfor (const f of names) if (!declared.has(f)) errors.push(`collection-extra: ${f}`);"],
+			"replace": ["\tvoid names;"],
+			"gate": ["bash", "run.sh", "check-gate-manifests"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:COLLECT-UNDECLARED-FILE-NAMED]",
+			"signatureSource": "scripts/check-gate-qualification.ts"
+		},
+		{
+			"claim": "COLLECT-CANDIDATE-DRIFT-STOPS",
+			"title": "the collector does not compare each receipt with the candidate it started on — bytes moved BETWEEN seal-stable groups would yield a COMPLETE collection of two candidates (#124 step-1 review D1)",
+			"subject": "scripts/lib/qualification-collection.ts",
+			"find": ["\t\t\t\tif (drift.length > 0) {"],
+			"replace": ["\t\t\t\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-gate-manifests"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:COLLECT-CANDIDATE-DRIFT-STOPS]",
+			"signatureSource": "scripts/check-gate-qualification.ts"
+		},
+		{
+			"claim": "COLLECT-FILE-NAME-CONFINED",
+			"title": "checkCollection trusts the file name collection.json declares — a `../` or absolute name would steer the read outside the collection (#124 step-1 review D2)",
+			"subject": "scripts/lib/qualification-collection.ts",
+			"find": ["\t\tif (a.file !== receiptFileName(i)) {"],
+			"replace": ["\t\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-gate-manifests"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:COLLECT-FILE-NAME-CONFINED]",
+			"signatureSource": "scripts/check-gate-qualification.ts"
+		},
+		{
+			"claim": "RELEASE-RED-REMEASURED-CLEARS",
+			"title": "the release composer forgets which groups were red on the ancestor chain — the section that broke would no longer be required on the final SHA, so an unre-measured late failure could hide behind older greens (#124 step 2)",
+			"subject": "scripts/lib/qualification-release.ts",
+			"find": ["\tfor (const [k, passed] of newestPassed) if (!passed) requiredKeys.add(k);"],
+			"replace": ["\tvoid newestPassed;"],
+			"gate": ["bash", "run.sh", "check-gate-manifests"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:RELEASE-RED-REMEASURED-CLEARS]",
+			"signatureSource": "scripts/check-gate-qualification.ts"
+		},
+		{
+			"claim": "RELEASE-UNRUN-BLOCKS",
+			"title": "release mode stops blocking UNRUN — a group with no pass receipt anywhere in the chain could ride into a RISK proposal as if it had ever been measured (#124 step 2)",
+			"subject": "scripts/lib/qualification-ledger.ts",
+			"find": ["\t\tif (opts.mode === \"release\" && g.state === \"UNRUN\") {"],
+			"replace": ["\t\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-gate-manifests"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:RELEASE-UNRUN-BLOCKS]",
+			"signatureSource": "scripts/check-gate-qualification.ts"
+		},
+		{
+			"claim": "RELEASE-CANDIDATE-CROSS-CHECKED",
+			"title": "the release composer ignores a CI-claimed candidate the final tree contradicts — receipts measured on other bytes would be composed as the final SHA's (#124 step 2)",
+			"subject": "scripts/lib/qualification-release.ts",
+			"find": ["\tconst red = contractErrors.length > 0 || crossCheck.length > 0;"],
+			"replace": ["\tconst red = contractErrors.length > 0;"],
+			"gate": ["bash", "run.sh", "check-gate-manifests"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:RELEASE-CANDIDATE-CROSS-CHECKED]",
+			"signatureSource": "scripts/check-gate-qualification.ts"
+		},
+		{
+			"claim": "RELEASE-NEWEST-ATTEMPT-WINS",
+			"title": "the per-SHA run choice keeps whichever attempt came first in the input — an older, more favorable attempt could be selected over the newest one (#124 step 2)",
+			"subject": "scripts/lib/qualification-release.ts",
+			"find": ["\t\tif (!cur || newer(a.run, cur.run)) {"],
+			"replace": ["\t\tif (!cur) {"],
+			"gate": ["bash", "run.sh", "check-gate-manifests"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:RELEASE-NEWEST-ATTEMPT-WINS]",
+			"signatureSource": "scripts/check-gate-qualification.ts"
+		},
+		{
+			"claim": "RELEASE-INPUT-CONTRACT",
+			"title": "the release composer admits a run whose headSha is off the first-parent chain — a side branch's or an unrelated SHA's receipts could count toward this release (#124 step 2)",
+			"subject": "scripts/lib/qualification-release.ts",
+			"find": ["\t\tif (!chainPos.has(run.headSha)) {"],
+			"replace": ["\t\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-gate-manifests"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:RELEASE-INPUT-CONTRACT]",
+			"signatureSource": "scripts/check-gate-qualification.ts"
+		},
+		{
+			"claim": "RELEASE-FINAL-COLLECTION-REQUIRED",
+			"title": "the release composer accepts an INCOMPLETE final-SHA collection — a final run that crashed or stopped midway would be composed as if every requested group had been measured (#124 step 2)",
+			"subject": "scripts/lib/qualification-release.ts",
+			"find": [
+				"\telse if (!finalEntry.complete)",
+				"\t\tcontractErrors.push(`final-SHA collection incomplete: ${finalEntry.errors.join(\"; \")}`);"
+			],
+			"replace": [
+				"\telse if (false)",
+				"\t\tcontractErrors.push(`final-SHA collection incomplete: ${finalEntry.errors.join(\"; \")}`);"
+			],
+			"gate": ["bash", "run.sh", "check-gate-manifests"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:RELEASE-FINAL-COLLECTION-REQUIRED]",
+			"signatureSource": "scripts/check-gate-qualification.ts"
+		},
+		{
+			"claim": "ARTIFACT-SELECT-EXACTLY-ONE",
+			"title": "artifact selection only refuses zero hits — with two artifacts of the run's name the first would be taken silently (#124 stage 3a)",
+			"subject": "scripts/lib/qualification-artifact.ts",
+			"find": ["\tif (hits.length !== 1)"],
+			"replace": ["\tif (hits.length === 0)"],
+			"gate": ["bash", "run.sh", "check-gate-manifests"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:ARTIFACT-SELECT-EXACTLY-ONE]",
+			"signatureSource": "scripts/check-gate-qualification.ts"
+		},
+		{
+			"claim": "ARTIFACT-DIGEST-CHECKED",
+			"title": "artifact admission stops comparing GitHub's recorded digest with the zip bytes' own sha256 — any bytes could be admitted as that artifact (#124 stage 3a)",
+			"subject": "scripts/lib/qualification-artifact.ts",
+			"find": ["\tif (a.digest !== `sha256:${zipSha}`)"],
+			"replace": ["\tif (false)"],
+			"gate": ["bash", "run.sh", "check-gate-manifests"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:ARTIFACT-DIGEST-CHECKED]",
+			"signatureSource": "scripts/check-gate-qualification.ts"
+		},
+		{
+			"claim": "ARTIFACT-ZIP-CONFINED",
+			"title": "the zip reader stops refusing symlink entries — a link named like a receipt would be read as one (#124 stage 3a)",
+			"subject": "scripts/lib/qualification-artifact.ts",
+			"find": ["\t\tif ((unixMode & 0o170000) === 0o120000) {"],
+			"replace": ["\t\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-gate-manifests"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:ARTIFACT-ZIP-CONFINED]",
+			"signatureSource": "scripts/check-gate-qualification.ts"
+		},
+		{
+			"claim": "ARTIFACT-ZIP-STRUCTURE",
+			"title": "the zip reader stops requiring its entry count to consume the whole central directory — a lowered EOCD count hides a listed entry (#124 stage 3a review)",
+			"subject": "scripts/lib/qualification-artifact.ts",
+			"find": ["\tif (p !== cdOff + cdSize) {"],
+			"replace": ["\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-gate-manifests"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:ARTIFACT-ZIP-STRUCTURE]",
+			"signatureSource": "scripts/check-gate-qualification.ts"
+		},
+		{
+			"claim": "ARTIFACT-CORE-RECOMPUTED",
+			"title": "admission stops recomputing core.sha256 from the receipt's own parts — a C0 witness could be edited while keeping its hash (#124 stage 3a)",
+			"subject": "scripts/lib/qualification-artifact.ts",
+			"find": ["\t\tif (recomputed !== core.sha256)"],
+			"replace": ["\t\tif (false)"],
+			"gate": ["bash", "run.sh", "check-gate-manifests"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:ARTIFACT-CORE-RECOMPUTED]",
+			"signatureSource": "scripts/check-gate-qualification.ts"
+		},
+		{
+			"claim": "ARTIFACT-CORE-SHAPE",
+			"title": "admission stops checking the core's fields — a receipt without node identity could be labelled a CI witness (#124 stage 3a review)",
+			"subject": "scripts/lib/qualification-artifact.ts",
+			"find": ["\t\tconst shapeErr = coreShapeError(core);"],
+			"replace": ["\t\tconst shapeErr = null as string | null;"],
+			"gate": ["bash", "run.sh", "check-gate-manifests"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:ARTIFACT-CORE-SHAPE]",
+			"signatureSource": "scripts/check-gate-qualification.ts"
+		},
+		{
+			"claim": "GH-PROVENANCE-BOUNDARY",
+			"title": "the GitHub boundary stops checking a run's head repository — a fork's run could supply this repository's release evidence (#124 stage 3b)",
+			"subject": "scripts/lib/qualification-gh.ts",
+			"find": ["\tif (run.head_repository?.full_name !== repo) {"],
+			"replace": ["\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-gate-manifests"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:GH-PROVENANCE-BOUNDARY]",
+			"signatureSource": "scripts/check-gate-qualification.ts"
+		},
+		{
+			"claim": "GH-NEWEST-RUN-ONLY",
+			"title": "the GitHub boundary judges the OLDEST ci.yml run at the SHA — an older, friendlier collection would be chosen over the newest run (#124 stage 3b)",
+			"subject": "scripts/lib/qualification-gh.ts",
+			"find": ["\tconst run = runs.reduce((a, b) => (b.id > a.id ? b : a));"],
+			"replace": ["\tconst run = runs.reduce((a, b) => (b.id < a.id ? b : a));"],
+			"gate": ["bash", "run.sh", "check-gate-manifests"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:GH-NEWEST-RUN-ONLY]",
+			"signatureSource": "scripts/check-gate-qualification.ts"
+		},
+		{
+			"claim": "GH-NEWER-FAILED-COLLECTION-NOT-PAPERED",
+			"title": "an ancestor run is admitted although a newer run at that SHA attempted a collection and failed — the new failure would be papered over by the old green (#124 stage 3b review)",
+			"subject": "scripts/lib/qualification-gh.ts",
+			"find": ["\t\tif (compositeSucceeded(jobs).length > 0 || r.conclusion !== \"success\") {"],
+			"replace": ["\t\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-gate-manifests"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:GH-NEWER-FAILED-COLLECTION-NOT-PAPERED]",
+			"signatureSource": "scripts/check-gate-qualification.ts"
+		},
+		{
+			"claim": "GH-COLLECT-STEPS-REQUIRED",
+			"title": "the GitHub boundary stops requiring the collect and upload steps to have succeeded — a run whose collection failed could still be read (#124 stage 3b)",
+			"subject": "scripts/lib/qualification-gh.ts",
+			"find": ["\tfor (const name of [COMPOSITE_STEP, COMPOSITE_UPLOAD_STEP]) {"],
+			"replace": ["\tfor (const name of [] as string[]) {"],
+			"gate": ["bash", "run.sh", "check-gate-manifests"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:GH-COLLECT-STEPS-REQUIRED]",
+			"signatureSource": "scripts/check-gate-qualification.ts"
+		},
+		{
+			"claim": "RELEASE-DIRTY-NOT-INVENTED",
+			"title": "the release composer asserts a clean final candidate instead of keeping the independent one's porcelain — a dirty tree could compose to COMPOSITE-GREEN (#124 Grok review F1)",
+			"subject": "scripts/lib/qualification-release.ts",
+			"find": ["\t\thead: input.finalSha,"],
+			"replace": ["\t\thead: input.finalSha,", "\t\tporcelainClean: true,"],
+			"gate": ["bash", "run.sh", "check-gate-manifests"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:RELEASE-DIRTY-NOT-INVENTED]",
+			"signatureSource": "scripts/check-gate-qualification.ts"
+		},
+		{
+			"claim": "ORACLE-SELF-CHECK",
+			"title": "the oracle core's self-check stops refusing a dirty checkout — run in place, an operator's uncommitted bytes could be judged as the SHA they are not (#124 P1)",
+			"subject": "scripts/lib/qualification-oracle-core.ts",
+			"find": ["\tif (st.status !== 0 || st.stdout !== \"\") errors.push(\"self-check: this checkout is not clean\");"],
+			"replace": ["\tif (st.status !== 0) errors.push(\"self-check: this checkout is not clean\");"],
+			"gate": ["bash", "run.sh", "check-gate-manifests"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:ORACLE-SELF-CHECK]",
+			"signatureSource": "scripts/check-gate-qualification.ts"
+		},
+		{
+			"claim": "ORACLE-FINAL-RUN-PINNED",
+			"title": "the oracle core stops comparing the newest run at the SHA with the pinned final run — evidence from a run the exact-CI oracle did not choose would be composed (#124 P1)",
+			"subject": "scripts/lib/qualification-oracle-core.ts",
+			"find": ["\tif (final.runId !== null && final.runId !== input.finalRunId) {"],
+			"replace": ["\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-gate-manifests"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:ORACLE-FINAL-RUN-PINNED]",
+			"signatureSource": "scripts/check-gate-qualification.ts"
+		},
+		{
+			"claim": "ORACLE-DIGEST-MACHINE-INDEPENDENT",
+			"title": "a non-deterministic input leaks into the decision digest — two runs over identical inputs would name different ledgers; this negative covers the REPEAT axis of the claim only, not the clone-location axis (#124 P1)",
+			"subject": "scripts/lib/qualification-oracle-core.ts",
+			"find": ["\treturn sha256(canonicalJson(ledger));"],
+			"replace": ["\treturn sha256(canonicalJson(ledger) + process.hrtime.bigint());"],
+			"gate": ["bash", "run.sh", "check-gate-manifests"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:ORACLE-DIGEST-MACHINE-INDEPENDENT]",
+			"signatureSource": "scripts/check-gate-qualification.ts"
+		},
+		{
+			"claim": "ORACLE-SOURCE-MISSING",
+			"title": "the launcher stops refusing a SHA that does not carry the oracle core — the 8d508d3 shape would fail as a node error instead of ABORT oracle-source-missing (#124 P1)",
+			"subject": "scripts/qualification-oracle.ts",
+			"find": ["\t\tif (!fs.existsSync(path.join(clone, ORACLE_CORE_PATH))) {"],
+			"replace": ["\t\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-gate-manifests"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:ORACLE-SOURCE-MISSING]",
+			"signatureSource": "scripts/check-gate-qualification.ts"
+		},
+		{
+			"claim": "ORACLE-RUNS-TARGET-BYTES",
+			"title": "the launcher runs the ORIGIN checkout's oracle core instead of the target SHA's — the operator's working-tree bytes would judge a SHA (#124 P1)",
+			"subject": "scripts/qualification-oracle.ts",
+			"find": [
+				"\t\tconst child = spawnSync(process.execPath, [\"--experimental-strip-types\", ORACLE_CORE_PATH, ...passArgs], {"
+			],
+			"replace": [
+				"\t\tconst child = spawnSync(process.execPath, [\"--experimental-strip-types\", path.join(origin, ORACLE_CORE_PATH), ...passArgs], {"
+			],
+			"gate": ["bash", "run.sh", "check-gate-manifests"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:ORACLE-RUNS-TARGET-BYTES]",
+			"signatureSource": "scripts/check-gate-qualification.ts"
+		},
+		{
+			"claim": "ORACLE-ORIGIN-TRIPWIRE",
+			"title": "the launcher stops re-reading the origin tripwire — a core that wrote the operator's checkout while it ran would keep its own exit 0 (#124 P1)",
+			"subject": "scripts/qualification-oracle.ts",
+			"find": ["\t\tif (after !== before) {"],
+			"replace": ["\t\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-gate-manifests"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:ORACLE-ORIGIN-TRIPWIRE]",
+			"signatureSource": "scripts/check-gate-qualification.ts"
+		},
+		{
+			"claim": "ACCEPT-ONLY-RISK-PENDING",
+			"title": "the acceptance-record check stops requiring a RISK-PENDING ledger — a record against a NOT-QUALIFIED (or RED/GREEN) ledger would read RECORD-CONSISTENT (#124 P2)",
+			"subject": "scripts/lib/qualification-acceptance.ts",
+			"find": [
+				"\tif (ledger.verdict !== \"RISK-PENDING\") errors.push(`ledger: verdict is ${ledger.verdict}, not RISK-PENDING`);"
+			],
+			"replace": ["\tif (false) errors.push(`ledger: verdict is ${ledger.verdict}, not RISK-PENDING`);"],
+			"gate": ["bash", "run.sh", "check-gate-manifests"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:ACCEPT-ONLY-RISK-PENDING]",
+			"signatureSource": "scripts/check-gate-qualification.ts"
+		},
+		{
+			"claim": "ACCEPT-DIGEST-RECOMPUTED",
+			"title": "the acceptance-record check stops recomputing the ledger digest — a ledger edited after the record named it would still read RECORD-CONSISTENT (#124 P2)",
+			"subject": "scripts/lib/qualification-acceptance.ts",
+			"find": ["\tif (sha256(canonicalJson(ledger)) !== rec.ledgerSha256)"],
+			"replace": ["\tif (false)"],
+			"gate": ["bash", "run.sh", "check-gate-manifests"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:ACCEPT-DIGEST-RECOMPUTED]",
+			"signatureSource": "scripts/check-gate-qualification.ts"
+		},
+		{
+			"claim": "ACCEPT-RISKS-EXACT",
+			"title": "the acceptance-record check compares risks as a multiset — a record listing the risks in another order would read RECORD-CONSISTENT (#124 P2)",
+			"subject": "scripts/lib/qualification-acceptance.ts",
+			"find": ["\tif (canonicalJson(rec.risks) !== canonicalJson(ledger.risks))"],
+			"replace": ["\tif (multiset(rec.risks) !== multiset(ledger.risks))"],
+			"gate": ["bash", "run.sh", "check-gate-manifests"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:ACCEPT-RISKS-EXACT]",
+			"signatureSource": "scripts/check-gate-qualification.ts"
+		},
+		{
+			"claim": "ACCEPT-RISKS-REDERIVED",
+			"title": "the acceptance-record check trusts the ledger's own risk list — a composer that dropped a risk its groups imply would go unnoticed behind a consistent digest (#124 P2)",
+			"subject": "scripts/lib/qualification-acceptance.ts",
+			"find": ["\tif (multiset(rederiveRisks(ledger.groups)) !== multiset(ledger.risks))"],
+			"replace": ["\tif (false)"],
+			"gate": ["bash", "run.sh", "check-gate-manifests"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:ACCEPT-RISKS-REDERIVED]",
+			"signatureSource": "scripts/check-gate-qualification.ts"
+		},
+		{
+			"claim": "ACCEPT-DATE-REAL",
+			"title": "the acceptance-record check accepts any date-shaped acceptedOn — 2026-02-30 would read RECORD-CONSISTENT (#124 P2)",
+			"subject": "scripts/lib/qualification-acceptance.ts",
+			"find": ["\t} else if (!isRealDate(r.acceptedOn)) {"],
+			"replace": ["\t} else if (false) {"],
+			"gate": ["bash", "run.sh", "check-gate-manifests"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:ACCEPT-DATE-REAL]",
+			"signatureSource": "scripts/check-gate-qualification.ts"
+		},
+		{
+			"claim": "ORACLE-DECLARED-REQUIRED",
+			"title": "the oracle core drops --require-group before the release composer — a group GLG required on the final SHA would never be required (#124 P2)",
+			"subject": "scripts/lib/qualification-oracle-core.ts",
+			"find": ["\t\toperatorDeclared: input.operatorDeclared,"],
+			"replace": ["\t\toperatorDeclared: [],"],
+			"gate": ["bash", "run.sh", "check-gate-manifests"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:ORACLE-DECLARED-REQUIRED]",
+			"signatureSource": "scripts/check-gate-qualification.ts"
+		},
+		{
+			"claim": "CORE-FILES-COVER-QUALIFICATION",
+			"title": "CORE_FILES forgets a qualification source — acceptance.ts bytes could change without moving the receipt core seal, the c-core decision or the CI core witness (#124 D1)",
+			"subject": "scripts/lib/qualification-receipt.ts",
+			"find": ["\t\"scripts/lib/qualification-acceptance.ts\","],
+			"replace": ["\t// (qualification-acceptance.ts not listed)"],
+			"gate": ["bash", "run.sh", "check-gate-manifests"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:CORE-FILES-COVER-QUALIFICATION]",
+			"signatureSource": "scripts/check-gate-qualification.ts"
+		},
+		{
+			"claim": "ACCEPT-REFUSAL-REDERIVED",
+			"title": "the acceptance-record check trusts the ledger's own blockers — a RISK-PENDING ledger with an UNRUN group or a dirty candidate and its blockers stripped would read RECORD-CONSISTENT (#124 D2)",
+			"subject": "scripts/lib/qualification-acceptance.ts",
+			"find": [
+				"\tif (refusals.length > 0) errors.push(`ledger: refusal state in its own groups/candidate: ${refusals.join(\"; \")}`);"
+			],
+			"replace": [
+				"\tif (false) errors.push(`ledger: refusal state in its own groups/candidate: ${refusals.join(\"; \")}`);"
+			],
+			"gate": ["bash", "run.sh", "check-gate-manifests"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:ACCEPT-REFUSAL-REDERIVED]",
+			"signatureSource": "scripts/check-gate-qualification.ts"
+		}
+	]
+}
