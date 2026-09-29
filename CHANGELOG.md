@@ -4,7 +4,39 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+## 0.25.1 - 2026-09-30
+
+### Added
+
+- **Per-group qualification receipts, a composite ledger, and an offline exact-SHA oracle (#124,
+  development tooling — not release policy).** `check-gate-qualification --group <argv> --receipt
+  <path>` runs one exact-argv group through the unchanged control → mutant → restore → control body
+  and writes a sealed `PARTIAL/local` receipt; `--groups <JSON|all> --collect <dir>` runs several in
+  one process and writes an inventory (`collection.json` + `gNNN.json`), never a verdict;
+  `--compose` builds a local ledger whose groups are MEASURED, FAIL, INHERITED-UNVERIFIED or UNRUN
+  (CARRIED is defined and never populated — no audited dependency projection exists), with verdicts
+  RED / NOT-QUALIFIED / RISK-PENDING / COMPOSITE-GREEN. A dispatch-only `ci.yml` step
+  (`workflow_dispatch -f composite_groups=…`) uploads a collection artifact, and
+  `scripts/qualification-oracle.ts` composes an exact-SHA ledger from GitHub run, job and artifact
+  evidence inside a clean clone of that SHA. **Release acceptance is unchanged:**
+  `verify-exact-ci.sh` plus the full qualification body stay the release MUST until #124 P3, and no
+  release path calls the composite oracle. **Unobserved:** no collection artifact has been uploaded
+  yet, so the real GitHub zip layout, the CI work-surface cross-check and the collector's CI
+  environment are unmeasured; the reader fails closed on anything it does not recognize. New mutant
+  lane `qualification-ledger` (42 QK claims); the committed set is 824 mutants across 63 lanes.
+  Frozen-candidate evidence before commit (host `oracle`, work surface `ccfb8bbe9cd2…`):
+  qualification body 824/824 killed in 5,053 s, `check:full` exit 0 in 617 s. Issue #124 stays open.
+
 ### Changed
+
+- **Herdr plugin runtime lock returns to `herdr-checkout` for the 0.25.1 candidate window.** An npm
+  lock must name a version that is already published and coherent with the checkout's
+  `package.json` (`check-herdr-runtime-bootstrap` `[QK:HRB-LOCK-SOURCE-CLOSED]`), so the 0.25.0 npm
+  pin cannot ride a 0.25.1 cut. The npm pin returns as a follow-up once 0.25.1 is on the registry
+  (the dd84ac0 pattern).
+- **GitHub release notes are soft-wrapped at M6 extraction** (`entwurf-release`): paragraphs and
+  list items are joined, fenced code stays byte-for-byte, and the extraction refuses notes whose text
+  differs from the CHANGELOG section by anything beyond whitespace.
 
 - **Herdr plugin 0.5.1 is the follow-up for the #120-aware raw-install LIVE oracle.**
   Plugin 0.5.0 already shipped on the `v0.25.0` tag and its npm-pinned follow-up commit
@@ -49,6 +81,37 @@ All notable changes to this project will be documented here. Format follows [Kee
   its indented failure line; the corrected run passed with no product-source change. The older
   `smoke-herdr-plugin-build-live` still asserts the **checkout** carrier and is not evidence for
   this npm pin — running it here reported the expected source mismatch, not an install failure.
+
+### Verification
+
+Prepared tree over `8b92e09` (CHANGELOG + `package.json` 0.25.1, uncommitted and frozen while the
+gates ran), host `oracle`, 2026-09-30 KST, ambient identity carriers stripped (`ENTWURF_*`,
+`CLAUDE*`, `PI_SESSION_ID`, `PI_AGENT_ID`).
+
+- **Deterministic floor (P4):** `pnpm run build-bridge` then `pnpm run check:full`,
+  `[check:full] total elapsed 624s exit 0`, `[check-pack] 550 files in tarball`.
+- **Aggregate LIVE floor (P5):** `LIVE=1 ./run.sh release-gate <scratch> --cut`, scratch
+  `/tmp/entwurf-release-gate-0.25.1.pDnZeR`, log `release-gate.log` sha256
+  `9a7e698cafa4fd476301be2e61b291c88ec40b059955c97aae8d829c3d213a7c`, 6,022 s:
+  **MUST PASS=24 FAIL=0 SKIP=0**, **BEHAVIOR PASS=1 FAIL=0 SKIP=0**, `cut: OK`. Inside it,
+  `check-gate-qualification` reported `qualified claims: 824/824 killed` and
+  `[gate-qualification] ok` (824 mutants, 63 lanes), and `smoke-codex-fresh-live` ran inside the
+  aggregate for the first time with the operator-supplied triple: app-server PID `2786140`,
+  started by this release lane with `./run.sh codex-app-server` in its own tmux session `$261`
+  (the native process owning the control socket, read from that pane's own process tree, never a
+  search), Codex `gpt-5.6-luna`, Pi `openai-codex/gpt-5.6-terra` →
+  `64 assertions ok`. The app-server was stopped after the gate.
+- **Pre-LIVE doctors:** meta-bridge, pi-package, the four Codex doctors, the three OMP doctors and
+  agy-bridge exit 0; `doctor-copilot-bridge` exits 1 with `copilot CLI missing from PATH` (Copilot is
+  not a release MUST rail on this host).
+- **Host residue (P9, at the gate's verdict):** 628 → 619 owned `/tmp` dirs; 9 roots / 1.1 G
+  reclaimed, none minted by this run (7 `check-probe-ordering` roots dated 2026-09-23..29, one
+  `entwurf-s2b-overlay`, one 1.1 G `entwurf-hpbl` from 2026-09-23). The recurring
+  `check-probe-ordering` residue names a gate that still leaks on some path. One reparented process
+  holds a `/tmp` path and was named, not killed: the operator's own
+  `emacs --init-directory=/tmp/agent-emacs-init --daemon`.
+- **Not claimed:** exact-SHA CI and the preserved-artifact acceptance belong to `make`; the #124
+  composite collection has not been dispatched, so no composite ledger exists for this release.
 
 ## 0.25.0 - 2026-09-23
 
