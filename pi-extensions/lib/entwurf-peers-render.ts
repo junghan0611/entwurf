@@ -3,7 +3,7 @@
  * surface (0.11 Stage 0 step 4, slice 4c). The MCP handler stays thin: it does IO
  * (readdir the meta-store + probe sockets via `listEntwurfFacts`) and then calls
  * THIS to shape the text + JSON. No IO here, so the gate drives it without a
- * filesystem and the SAME facts can feed pi-native / doctor / v2 dispatch later
+ * filesystem and the SAME facts can feed the bridge / doctor / v2 dispatch
  * (a handler that did its own brain work would deny them that reuse).
  *
  * Two hard rules carried from the frozen contract (동결결정 10 + #50 C4):

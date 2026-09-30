@@ -1,18 +1,19 @@
 /**
  * Shared fixtures for the fresh-call vitest pilot (issue #62).
  *
- * Two runtime observation surfaces live here so the contract tests measure what a
+ * One runtime observation surface lives here so the contract tests measure what a
  * host actually receives instead of regex-matching source text:
  *
  *   - `bootBridgeAndListTools()` boots the REAL MCP bridge exactly as it ships
  *     (start.sh → node --experimental-strip-types src/index.ts) and returns the
- *     runtime tools/list response — the same bytes an MCP host validates.
- *   - `capturePiToolDefinitions()` loads the REAL pi extension default export with a
- *     capturing ExtensionAPI stub and returns every `registerTool` definition — the
- *     same objects pi hands to its provider conversion.
+ *     runtime tools/list response — the same bytes an MCP host validates, and since
+ *     #125 the same schema a pi session receives through Pi's built-in MCP.
  *
- * Neither surface is a fake re-statement of the schema: the escape that opened #62
- * lived precisely in the gap between source text and what the host was sent.
+ * The native-pi `registerTool` capture that used to sit beside it is retired with the
+ * native verbs themselves (#125): there is no second definition left to capture.
+ *
+ * It is not a fake re-statement of the schema: the escape that opened #62 lived
+ * precisely in the gap between source text and what the host was sent.
  */
 
 import { spawn } from "node:child_process";
@@ -118,53 +119,6 @@ export function bootBridgeAndListTools(): Promise<BridgeTool[]> {
 		child.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized" })}\n`);
 		child.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", id: 2, method: "tools/list" })}\n`);
 	});
-}
-
-export interface PiToolDefinition {
-	name: string;
-	label?: string;
-	description: string;
-	parameters: {
-		type?: string;
-		properties?: Record<string, Record<string, unknown>>;
-		required?: string[];
-	};
-	execute: (
-		toolCallId: string,
-		params: Record<string, unknown>,
-		signal?: AbortSignal,
-		onUpdate?: unknown,
-		ctx?: unknown,
-	) => Promise<{ content: Array<{ type: string; text?: string }>; isError?: boolean }>;
-}
-
-let capturedPiTools: PiToolDefinition[] | null = null;
-
-/**
- * Load the real pi extension and capture what it registers. The stub answers
- * `getFlag("entwurf-control") === true` so the control tools register; nothing else
- * runs — session_start handlers are captured but never invoked, so no record is
- * born, no socket starts, and no env carrier is planted.
- */
-export async function capturePiToolDefinitions(): Promise<PiToolDefinition[]> {
-	if (capturedPiTools) return capturedPiTools;
-	const tools: PiToolDefinition[] = [];
-	const stub = {
-		registerFlag: (): void => {},
-		getFlag: (name: string): unknown => name === "entwurf-control",
-		registerMessageRenderer: (): void => {},
-		registerTool: (def: PiToolDefinition): void => {
-			tools.push(def);
-		},
-		on: (): void => {},
-		sendMessage: (): void => {},
-	};
-	const mod = (await import("../../pi-extensions/entwurf-control.ts")) as unknown as {
-		default: (pi: unknown) => void;
-	};
-	mod.default(stub);
-	capturedPiTools = tools;
-	return tools;
 }
 
 export function requireTool<T extends { name?: string }>(tools: T[], name: string): T {

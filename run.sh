@@ -140,6 +140,9 @@ Usage:
   ./run.sh check-omp-fresh-preflight   # #87 C: the OMP fresh preflight reproduces omp_agent_dir and the tools.xdev read in TS (it runs from two emit depths and cannot call a sibling script). This drives the SHIPPED shell/python leaves over the same inputs — refusals included — and requires the TS half to agree, so the reproduction cannot silently drift from the installer's own oracle
   ./run.sh check-codex-sender-identity # Codex tools/call _meta triple agreement + addressable record join + cross-carrier conflict refusal
   ./run.sh check-codex-bridge-identity # real MCP bridge request identity for entwurf_self/v2/fresh; malformed or conflicting _meta fails loud
+  ./run.sh check-pi-mcp-register      # #125: mutant execution coordinate for pi-extensions/entwurf-control.test.ts — the real extension births through Pi's real loader and registers the compiled bridge after birth, before UI, direct with two hidden. Needs build-bridge
+  ./run.sh check-pi-mcp-bridge        # #125: a real Pi runtime (builtin MCP, default stdio, faux model only) spawns the COMPILED bridge as the born citizen — six prefixed verbs declared, hidden two absent, child env = record = entwurf_self, cwd = session cwd; newSession vendor conformance observed (old child gone, new record+child, old record kept). Needs build-bridge
+  ./run.sh check-pi-bridge-sender     # #125: real bridge pi-session carrier is served only when it names a readable pi RECORD; missing / foreign-backend / unreadable each refuse with their own cause; no socket = replyable:false, not refusal
   ./run.sh check-codex-native-push    # app-server WebSocket-over-UDS probe + measured one-shot codex queue delivery; no replay
   ./run.sh check-codex-birth-hook     # sandboxed payload + declaration: first-turn V3 birth, one record per thread, top-level event predicate, no markers
   ./run.sh check-codex-fresh-preflight # pre-mutation birth/MCP/thread-title/default-app-server readiness
@@ -1336,6 +1339,16 @@ check_entwurf_resume_args() {
   run_vitest pi-extensions/lib/entwurf-resume-args.test.ts
 }
 
+check_pi_mcp_register() {
+  # NOT a discovery path — check-tests-beside-behavior finds the test by glob. This case is the
+  # MUTANT EXECUTION COORDINATE for scripts/mutants/pi-mcp-register.json (same reasoning as
+  # check_entwurf_resume_args above): run_vitest is what emits the structured failed-test titles a
+  # kill is attributed from. It sits in check:hermetic, not check:contracts, because the subject
+  # registers the COMPILED bridge and refuses by name when `build-bridge` has not run.
+  section "pi MCP registration after birth (mutant execution coordinate)"
+  run_vitest pi-extensions/entwurf-control.test.ts
+}
+
 check_mux_launcher_fence() {
   # Deterministic gate for the shared operator-launcher fence (issue #67):
   # scripts/lib/claude-launcher-fence.ts plus its wiring into BOTH mux LIVE smokes. Replants the
@@ -2301,6 +2314,8 @@ const PI_CONSTELLATION = [
   '@earendil-works/pi-ai', '@earendil-works/pi-coding-agent', '@earendil-works/pi-tui',
   '@earendil-works/pi-agent-core', '@earendil-works/pi-client', '@earendil-works/pi-protocol',
   '@earendil-works/pi-telemetry', '@earendil-works/chord',
+  // `[측정 2026-09-30]` 0.99.1: pi-coding-agent's runtime deps gained the built-in extensions' packages.
+  '@earendil-works/pi-codemode', '@earendil-works/pi-mcp',
 ];
 const sameSet = (got, want, where) => {
   const missing = want.filter((n) => !got.includes(n));
@@ -3710,7 +3725,7 @@ check_pack() {
 #     which is exactly what property (1)'s `(_|$)` absorbs; all three shapes are fixtures
 #     below so a future suffix change cannot pass vacuously.)
 pack_install_leaked_pi() {
-  grep '^@earendil-works+' | grep -Ev '@0\.87\.1(_|$)' || true
+  grep '^@earendil-works+' | grep -Ev '@0\.99\.1(_|$)' || true
 }
 
 # Matcher self-test on SYNTHETIC lookalikes: a healthy install tree cannot exercise either
@@ -3730,27 +3745,27 @@ check_pack_pin_matcher() {
   # None may leak; the two lookalikes must — a PREFIX-EXTENDED version (`0.86.0-beta.1`,
   # the prerelease shape that an unanchored match would bless) and an off-pin version.
   matcher_probe=$(printf '%s\n' \
-    '@earendil-works+pi-ai@0.87.1' \
-    '@earendil-works+pi-ai@0.87.1_@modelcontextprotocol+sdk@1.29.0_zod@4.3.6' \
-    '@earendil-works+pi-ai@0.87.1_ws@8.21.3' \
-    '@earendil-works+pi-ai@0.87.1_@modelcontextprotocol+sdk@1.29.0_zod@4.3.6__ws@8.21.3_zod@4.3.6' \
-    '@earendil-works+pi-ai@0.87.1-beta.1' \
-    '@earendil-works+pi-agent-core@0.87.0' | pack_install_leaked_pi)
-  if [ "$matcher_probe" != '@earendil-works+pi-ai@0.87.1-beta.1
-@earendil-works+pi-agent-core@0.87.0' ]; then
-    fail "[QK:PACK-INSTALL-PIN-MATCHER-BOUNDED] the pin-leak matcher must flag the prefix-extended 0.87.1-beta.1 and the off-pin 0.87.0 lookalikes, and pass 0.87.1 bare or with any measured peer-hash — got: ${matcher_probe:-<nothing leaked>}"
+    '@earendil-works+pi-ai@0.99.1' \
+    '@earendil-works+pi-ai@0.99.1_@modelcontextprotocol+sdk@1.29.0_zod@4.3.6' \
+    '@earendil-works+pi-ai@0.99.1_ws@8.21.3' \
+    '@earendil-works+pi-ai@0.99.1_@modelcontextprotocol+sdk@1.29.0_zod@4.3.6__ws@8.21.3_zod@4.3.6' \
+    '@earendil-works+pi-ai@0.99.1-beta.1' \
+    '@earendil-works+pi-agent-core@0.87.1' | pack_install_leaked_pi)
+  if [ "$matcher_probe" != '@earendil-works+pi-ai@0.99.1-beta.1
+@earendil-works+pi-agent-core@0.87.1' ]; then
+    fail "[QK:PACK-INSTALL-PIN-MATCHER-BOUNDED] the pin-leak matcher must flag the prefix-extended 0.99.1-beta.1 and the off-pin 0.87.1 lookalikes, and pass 0.99.1 bare or with any measured peer-hash — got: ${matcher_probe:-<nothing leaked>}"
     return 1
   fi
 
   # Cell 2 — the closure prefix. chord is a non-`pi-` member of the same runtime closure
-  # (0.85.0 onward, still true at 0.87.1). An off-pin chord MUST leak; the pinned one must not. A matcher narrowed
+  # (0.85.0 onward, still true at 0.99.1). An off-pin chord MUST leak; the pinned one must not. A matcher narrowed
   # back to `^@earendil-works+pi-` sees nothing here and dies at this signature.
   matcher_probe=$(printf '%s\n' \
+    '@earendil-works+chord@0.99.1' \
     '@earendil-works+chord@0.87.1' \
-    '@earendil-works+chord@0.87.0' \
-    '@earendil-works+pi-ai@0.87.1' | pack_install_leaked_pi)
-  if [ "$matcher_probe" != '@earendil-works+chord@0.87.0' ]; then
-    fail "[QK:PACK-INSTALL-PIN-MATCHER-COVERS-CLOSURE] the pin-leak matcher must cover every @earendil-works closure member, not just the pi-* families — an off-pin @earendil-works/chord has to leak (it is a runtime dependency of pi-coding-agent, pi-agent-core, pi-client and pi-protocol — `[측정 2026-09-20]` at 0.86.0, re-measured `[측정 2026-09-22]` at 0.87.0 and `[측정 2026-09-23]` at 0.87.1: the same four @earendil-works direct deps) — got: ${matcher_probe:-<nothing leaked>}"
+    '@earendil-works+pi-ai@0.99.1' | pack_install_leaked_pi)
+  if [ "$matcher_probe" != '@earendil-works+chord@0.87.1' ]; then
+    fail "[QK:PACK-INSTALL-PIN-MATCHER-COVERS-CLOSURE] the pin-leak matcher must cover every @earendil-works closure member, not just the pi-* families — an off-pin @earendil-works/chord has to leak (it is a runtime dependency of pi-coding-agent, pi-agent-core, pi-client and pi-protocol — `[측정 2026-09-20]` at 0.86.0, re-measured `[측정 2026-09-22]` at 0.87.0, `[측정 2026-09-23]` at 0.87.1 and `[측정 2026-09-30]` at 0.99.1, where pi-coding-agent adds pi-codemode and pi-mcp beside them) — got: ${matcher_probe:-<nothing leaked>}"
     return 1
   fi
 
@@ -4027,18 +4042,24 @@ _check_pack_install_impl() {
   # pi-agent-core incident. The list moves WITH the floor and is re-measured at
   # each bump, never pruned on a single quiet minor.
   # The verified floor is 0.86.0 as of 2026-09-20.
-  echo "[check-pack-install] pnpm add into $tmp (with 0.87.x peers + chord + typebox)"
+  # `[측정 2026-09-30]` at 0.99.1 the constellation GREW: pi-coding-agent now declares
+  # @earendil-works/pi-codemode and @earendil-works/pi-mcp as runtime dependencies (the built-in
+  # codemode and MCP extensions), so both are pinned beside the eight. pi-client and pi-protocol are
+  # still published at 0.99.1 and keep their pins under the rule above.
+  echo "[check-pack-install] pnpm add into $tmp (with 0.99.x peers + chord + codemode + mcp + typebox)"
   local install_log
   install_log=$(cd "$tmp" && pnpm add \
     "$tgz_path" \
-    "@earendil-works/pi-ai@0.87.1" \
-    "@earendil-works/pi-coding-agent@0.87.1" \
-    "@earendil-works/pi-tui@0.87.1" \
-    "@earendil-works/pi-agent-core@0.87.1" \
-    "@earendil-works/pi-client@0.87.1" \
-    "@earendil-works/pi-protocol@0.87.1" \
-    "@earendil-works/pi-telemetry@0.87.1" \
-    "@earendil-works/chord@0.87.1" \
+    "@earendil-works/pi-ai@0.99.1" \
+    "@earendil-works/pi-coding-agent@0.99.1" \
+    "@earendil-works/pi-tui@0.99.1" \
+    "@earendil-works/pi-agent-core@0.99.1" \
+    "@earendil-works/pi-client@0.99.1" \
+    "@earendil-works/pi-protocol@0.99.1" \
+    "@earendil-works/pi-telemetry@0.99.1" \
+    "@earendil-works/chord@0.99.1" \
+    "@earendil-works/pi-codemode@0.99.1" \
+    "@earendil-works/pi-mcp@0.99.1" \
     "typebox@latest" \
     --ignore-workspace --ignore-scripts 2>&1) || {
     fail "[check-pack-install] pnpm add failed:"
@@ -7661,6 +7682,17 @@ case "$cmd" in
   check-codex-bridge-identity)
     shift || true
     run_ts scripts/check-codex-bridge-identity.ts "$@"
+    ;;
+  check-pi-bridge-sender)
+    shift || true
+    run_ts scripts/check-pi-bridge-sender.ts "$@"
+    ;;
+  check-pi-mcp-register)
+    check_pi_mcp_register
+    ;;
+  check-pi-mcp-bridge)
+    shift || true
+    run_ts scripts/check-pi-mcp-bridge.ts "$@"
     ;;
   check-codex-native-push)
     shift || true

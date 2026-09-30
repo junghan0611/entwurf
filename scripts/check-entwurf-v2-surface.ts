@@ -142,7 +142,7 @@ function assertRailSemantics(tag: string, longDescRaw: string, intentDescRaw: st
 	}
 	ok(`${tag} — mode param is isolated (non-vacuous)`, modeDesc.length > 60);
 	ok(
-		`${tag} — mode param scopes itself to a CONTROL-SOCKET send and denies the other rails [QK:V2SURF-PI-MODE-SCOPE]`,
+		`${tag} — mode param scopes itself to a CONTROL-SOCKET send and denies the other rails [QK:V2SURF-MODE-SCOPE]`,
 		/CONTROL-SOCKET send/.test(modeDesc) && /no mode/.test(modeDesc),
 	);
 	ok(
@@ -692,39 +692,21 @@ async function main(): Promise<void> {
 		ok("3: surface is ctx-free — no ExtensionAPI", !code.includes("ExtensionAPI"));
 	}
 
-	// ── 4: pi-native control wiring guard ─────────────────────────────────────
+	// ── 4: pi-native control surface — the RECEIVER half, and no second caller route ──
+	// #125: the Entwurf verbs are no longer native pi tools. A pi session reaches them through Pi's
+	// built-in MCP as `mcp__entwurf-bridge__<verb>` — the SAME bridge §5 certifies — so the pi-native
+	// copies of §5's model-facing checks (rail semantics, dormant honesty, host cap, peers dead row)
+	// and the fence/senderProvider wiring they needed are retired with them, not re-proved against a
+	// file that no longer has them. What stays here is what this file still owns: the control
+	// socket's RECEIVER answer, and the absence of a second caller route.
 	{
 		const src = await fs.readFile(CONTROL_SRC, "utf8");
 		const code = src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
-		ok("4: pi-native — entwurf-control registers entwurf_v2", /name:\s*"entwurf_v2"/.test(src));
+		// Hard Rule 1: one surface name, no dual route. A native registration of any Entwurf verb
+		// beside the MCP one would put the bare and the prefixed name in the same session.
 		ok(
-			"4: pi-native — reaches the fence via a NON-LITERAL dynamic import (string-const specifier)",
-			/const ENTWURF_V2_SURFACE_MODULE\s*=/.test(code) && /await import\(ENTWURF_V2_SURFACE_MODULE\)/.test(code),
-		);
-		// The whole point of the dynamic import: NO static import of the fence v2 chain into the
-		// emit-capable root program (those literal `.ts` imports would be TS5097).
-		ok(
-			"4: pi-native — NO static import of the v2 fence (runner/production/surface) — TS5097 stays closed",
-			!/import[^;]*from\s*"\.\/lib\/entwurf-v2-(runner|production|surface)\.(js|ts)"/.test(code),
-		);
-		// SE-1 2e-a: senderProvider decorates origin:'pi-session' but `replyable` is now an
-		// HONEST fact (canonical socket existsSync via computeSelfAddressability), NOT a
-		// hardcoded true. The self-address fence lib is reached through the same non-literal
-		// dynamic import pattern as the v2 surface.
-		ok(
-			"4: pi-native — senderProvider decorates origin:'pi-session' (no hardcoded replyable:true)",
-			/origin:\s*"pi-session"/.test(code) && !/replyable:\s*true/.test(code),
-		);
-		ok(
-			"4: pi-native — replyability via computeSelfAddressability + existsSync, dynamic-imported",
-			/const ENTWURF_SELF_ADDRESS_MODULE\s*=/.test(code) &&
-				/await import\(ENTWURF_SELF_ADDRESS_MODULE\)/.test(code) &&
-				/computeSelfAddressability/.test(code) &&
-				/existsSync\(/.test(code),
-		);
-		ok(
-			"4: pi-native — NO static import of the self-address fence (TS5097 stays closed)",
-			!/import[^;]*from\s*"\.\/lib\/entwurf-self-address\.(js|ts)"/.test(code),
+			"4: pi-native — entwurf-control registers NO native tool (the verbs live on the one MCP bridge, #125)",
+			!/\bregisterTool\s*\(/.test(code) && !/name:\s*"entwurf_/.test(code),
 		);
 		// #120 P2: the RECEIVER's own answer. The sender can only render a boundary the receiver
 		// actually names, so this is the far end of the same contract — and the bare `delivered`
@@ -745,82 +727,6 @@ async function main(): Promise<void> {
 				);
 			})(),
 		);
-		// Every SHIPPED rail must appear in the model-facing text. Measured 2026-07-27: both
-		// surfaces described only control-socket/mailbox and told the model that an
-		// `unsupported` citizen is reached "→ mailbox" — false for Antigravity, whose native-push
-		// rail is intercepted BEFORE the mailbox mini-table and has no mailbox at all. A model
-		// reading that would pick mailbox semantics for a citizen that has none.
-		//
-		// Scope this to the registration block, NOT the whole file: the first version of this
-		// assertion swept `src`, so deleting the sentence from the description still passed on an
-		// unrelated `native-push` string elsewhere in the module. A rail-completeness claim that
-		// any import line can satisfy is not a claim.
-		const piV2Start = src.indexOf("function registerEntwurfV2Tool");
-		const piV2End = src.indexOf("\nfunction ", piV2Start + 1);
-		// Require a REAL end marker. `piV2End === -1 ? undefined : …` would silently widen the
-		// block to end-of-file and keep passing, which is the opposite of the fail-loud this
-		// scope exists for.
-		ok(
-			"4: pi-native — registration block is isolated (non-vacuous scope for the description checks)",
-			piV2Start !== -1 && piV2End > piV2Start,
-		);
-		const piV2Block = src.slice(piV2Start, piV2End);
-		ok("4: pi-native — registration block is substantial", piV2Block.length > 500);
-		// BLOCK SCOPE IS NOT ENOUGH — the two model-facing strings mask each other. Measured
-		// 2026-07-27 (round 4): the `intent` param description was corrected to split the two
-		// reject reasons while the LONG tool description still advertised the merged, false one,
-		// and this gate stayed green at 51 checks because both live in the same block and only
-		// ONE had to carry each literal. So slice them apart and require EACH to be true.
-		// The start marker MUST be unique to the long description. Measured 2026-07-27 (round 5):
-		// a bare `description:` matched the `target` PARAM first, so this "long description"
-		// slice was 4,468 chars spanning target + intent + the long text — the very masking the
-		// split was added to remove. An over-wide slice is a silent pass, so pin the exact
-		// backtick opening instead, and assert the two slices are actually disjoint.
-		const piLongDesc = sliceDescription(piV2Block, "description: `CANONICAL", "\n\t\tparameters:");
-		const piIntentDesc = sliceDescription(piV2Block, "intent: StringEnum(", "message:");
-		ok(
-			"4: pi-native — long/intent slices are disjoint (neither can satisfy the other's claim)",
-			piLongDesc.length > 0 &&
-				piIntentDesc.length > 0 &&
-				!piLongDesc.includes(piIntentDesc) &&
-				!piIntentDesc.includes(piLongDesc),
-		);
-		for (const [what, text] of [
-			["long tool description", piLongDesc],
-			["intent param description", piIntentDesc],
-		] as const) {
-			ok(`4: pi-native — ${what} is isolated (non-vacuous)`, text.length > 120);
-			ok(`4: pi-native — ${what} names the native-push rail`, /native-push/.test(text));
-			assertDormantHonesty(`4: pi-native — ${what}`, text);
-		}
-		ok("4: pi-native — long description denies native-push a mailbox", /NO mailbox/.test(piLongDesc));
-		ok(
-			"4: pi-native — long description steers live/alive peer → fire-and-forget",
-			/liveness=alive/.test(piLongDesc) && /fire-and-forget/.test(piLongDesc),
-		);
-		assertLongDescExcludesParams("4: pi-native", piLongDesc, [
-			"target: Type.String(",
-			"intent: StringEnum(",
-			"mode: Type.Optional(",
-			"wants_reply: Type.Optional(",
-		]);
-		const piModeDesc = sliceDescription(piV2Block, "mode: Type.Optional(", "wants_reply:");
-		assertRailSemantics("4: pi-native", piLongDesc, piIntentDesc, piModeDesc);
-		assertDescriptionFitsHostCap("4: pi-native", piLongDesc);
-
-		// 4b: pi-native entwurf_peers. Asserted on THIS surface too, not only the MCP one: the two
-		// descriptions are read by different callers (a resident pi model vs a sibling reaching in
-		// over MCP), and a correction that lands on one of them is a correction half the garden
-		// never sees. Same real-boundary rule as every other slice here.
-		const piPeersStart = src.indexOf('name: "entwurf_peers"');
-		const piPeersEnd = src.indexOf("parameters:", piPeersStart + 1);
-		ok(
-			"4b: pi-native — entwurf_peers description block has a REAL end boundary",
-			piPeersStart !== -1 && piPeersEnd > piPeersStart,
-		);
-		const piPeersBlock = src.slice(piPeersStart, piPeersEnd);
-		ok("4b: pi-native — entwurf_peers description is isolated (non-vacuous)", piPeersBlock.length > 200);
-		assertPeersDeadRowHonesty("4b: pi-native", piPeersBlock);
 	}
 
 	// ── 5: MCP bridge wiring guard ────────────────────────────────────────────
@@ -1052,15 +958,16 @@ async function main(): Promise<void> {
 		);
 	}
 
-	// ── #120 P2 (D8): the OUTCOME list in both tool descriptions names every rail ──
-	// A caller reads one of these two blurbs and nothing else before dispatching. The control
+	// ── #120 P2 (D8): the OUTCOME list in the tool description names every rail ──
+	// A caller reads this blurb and nothing else before dispatching. (#125: the pi-native copy is
+	// retired with the native verbs; a pi session reads the bridge's own blurb.) The control
 	// rail's four boundaries are the ONLY receiver-acceptance values; a mailbox answers with an
 	// ENQUEUE receipt and native-push with an INJECTION, and folding those into the boundary union
 	// would tell a caller that `mailbox-enqueued` is something a receiver observed about its own
 	// queues. Missing either rail is red — the earlier draft listed `mailbox-enqueued` beside the
 	// four and left native-push out entirely, and nothing noticed.
 	{
-		const outcomeSites = ["mcp/entwurf-bridge/src/index.ts", "pi-extensions/entwurf-control.ts"];
+		const outcomeSites = ["mcp/entwurf-bridge/src/index.ts"];
 		const missing: string[] = [];
 		for (const rel of outcomeSites) {
 			const text = await fs.readFile(path.join(REPO, rel), "utf8");
@@ -1080,12 +987,14 @@ async function main(): Promise<void> {
 			}
 		}
 		ok(
-			`[QK:SEND-OUTCOME-LIST-NAMES-EVERY-RAIL] both tool descriptions name each rail's own result — the control receiver's four acceptance boundaries (and that those four are the whole union), the mailbox ENQUEUE receipt, the native-push INJECTION, a rejection, and accepted-but-lock-dirty — so a caller is never told that one rail's vocabulary describes another's (missing: ${JSON.stringify(missing)})`,
+			`[QK:SEND-OUTCOME-LIST-NAMES-EVERY-RAIL] the tool description names each rail's own result — the control receiver's four acceptance boundaries (and that those four are the whole union), the mailbox ENQUEUE receipt, the native-push INJECTION, a rejection, and accepted-but-lock-dirty — so a caller is never told that one rail's vocabulary describes another's (missing: ${JSON.stringify(missing)})`,
 			missing.length === 0,
 		);
 	}
 
-	// ── #120 P2: the four caller-facing prose sites, checked for what they SAY ──
+	// ── #120 P2: the caller-facing prose sites, checked for what they SAY ──
+	// (#125: three sites now — the pi-native copy left with the native verbs; a pi session reads
+	// the bridge's own `mode` text, which stays the first site below.)
 	// `[측정 2026-09-22, pi-agent-core 0.87.0; 재측정 2026-09-23, 0.87.1 — 좌표 동일]` neither mode interrupts anything: `agent-loop.js:186`
 	// drains steering after a turn ENDS and `:191-197` drains follow-ups only once the inner loop
 	// has ended. A caller who reads "interrupt the current turn" picks `steer` for urgency and gets
@@ -1099,7 +1008,6 @@ async function main(): Promise<void> {
 	{
 		const sites = [
 			"mcp/entwurf-bridge/src/index.ts",
-			"pi-extensions/entwurf-control.ts",
 			"pi-extensions/lib/entwurf-v2-contract.ts",
 			"pi-extensions/lib/entwurf-v2-contract-schema.ts",
 		];

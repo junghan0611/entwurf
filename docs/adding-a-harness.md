@@ -27,7 +27,7 @@ them there.
 
 | backend | lineage | receive rail — how a message lands | callback spelling (one tool, per-harness dialect) | fresh launch (step 9) |
 |---|---|---|---|---|
-| `pi` | the host adapter itself | control socket: record-keyed UDS; a send steers or follows up the live turn | `entwurf_v2` (native tool) | positional prompt + `--entwurf-control --model` |
+| `pi` | the host adapter itself | control socket: record-keyed UDS; a send steers or follows up the live turn | `mcp__entwurf-bridge__entwurf_v2` (Pi built-in MCP, since #125) | positional prompt + `--entwurf-control --model` |
 | `claude-code` | independent vendor | self-fetch mailbox: exec-form `FileChanged` doorbell + `asyncRewake`; the model drains with `entwurf_inbox_read`. The watch owner is the CLI process itself, which can switch sessions in place, so the receiver marker is only live while that pid's sender marker still names the same garden (#101) | `mcp__entwurf-bridge__entwurf_v2` | positional prompt + `--allowedTools=…` + `--model=` |
 | `copilot` | independent vendor | self-fetch mailbox: the watch lives in a FORKED first-party extension child; the receiver marker names the extension pid | `entwurf-bridge-entwurf_v2` — plus a SECOND permission dialect, `entwurf-bridge(entwurf_v2)` | managed verb `entwurf copilot`, `--interactive … --model … --yolo` |
 | `agy` | independent vendor | native-push: record + probe-alive gRPC `send-message`; no mailbox, no receiver marker | n/a — push rail | not openable; the declared pre-#82 legacy exception |
@@ -606,11 +606,12 @@ and must not be described as supported until it is re-evaluated here.
 7. one real visible LIVE receipt through callback and addressed receive.
 
 A backend the composition can open must appear as the same fixed set on every public surface
-that offers `entwurf_fresh_call` — native pi, the MCP bridge, and the operator skill. A backend
-added to the module but not to a surface is unreachable there; one added to a surface but not
-the module is a schema that admits a value the composition cannot open. All three are now
-observed by `test/fresh-call-surfaces.contract.test.ts`: the two schema surfaces from a real boot
-and a real registration, the skill from its own contract line. The skill was the one that had no
+that offers `entwurf_fresh_call` — the MCP bridge (which a pi session also reaches, through Pi's
+built-in MCP since #125) and the operator skill. A backend added to the module but not to a
+surface is unreachable there; one added to a surface but not the module is a schema that admits a
+value the composition cannot open. Both are observed by `test/fresh-call-surfaces.contract.test.ts`:
+the schema surface from a real bridge boot, the skill from its own contract line. (Until #125 there
+was a third, native-pi registration; it was retired rather than kept in parity.) The skill was the one that had no
 gate at all until #87 Bundle C, which is worth remembering when a rule names surfaces in prose —
 the enumeration is not the enforcement.
 

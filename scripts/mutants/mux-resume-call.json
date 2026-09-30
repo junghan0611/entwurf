@@ -93,43 +93,6 @@
 			"signatureSource": "scripts/check-mux-resume-call.ts"
 		},
 		{
-			"claim": "MUXRESUME-PI-SURFACE-REGISTERED",
-			"title": "the native pi registration is never called, so the verb exists in source and nowhere an operator can reach",
-			"subject": "pi-extensions/entwurf-control.ts",
-			"find": ["\t\tregisterResumeCallTool(pi);"],
-			"replace": ["\t\tvoid registerResumeCallTool;"],
-			"gate": ["bash", "run.sh", "check-mux-resume-call"],
-			"timeoutSeconds": 60,
-			"signature": "[QK:MUXRESUME-PI-SURFACE-REGISTERED]",
-			"signatureSource": "scripts/check-mux-resume-call.ts"
-		},
-		{
-			"claim": "MUXRESUME-PI-SURFACE-TARGET-ONLY",
-			"title": "a task knob is added to the native schema, re-opening the prompt axis a resume deliberately does not have",
-			"subject": "pi-extensions/entwurf-control.ts",
-			"find": [
-				"\t\t\t\tdescription: \"Garden id of the DORMANT pi citizen to reopen (discover with entwurf_peers).\",\n\t\t\t}),"
-			],
-			"replace": [
-				"\t\t\t\tdescription: \"Garden id of the DORMANT pi citizen to reopen (discover with entwurf_peers).\",\n\t\t\t}),\n\t\t\ttask: Type.String({ description: \"What the resumed citizen should do.\" }),"
-			],
-			"gate": ["bash", "run.sh", "check-mux-resume-call"],
-			"timeoutSeconds": 60,
-			"signature": "[QK:MUXRESUME-PI-SURFACE-TARGET-ONLY]",
-			"signatureSource": "scripts/check-mux-resume-call.ts"
-		},
-		{
-			"claim": "MUXRESUME-DESC-CONTRACT-PI",
-			"title": "the native description stops saying a resume runs no turn, so a caller reasonably expects the citizen to act on being reopened",
-			"subject": "pi-extensions/entwurf-control.ts",
-			"find": ["This runs NO turn: the window comes\nback with the conversation and waits"],
-			"replace": ["The window comes\nback with the conversation and waits"],
-			"gate": ["bash", "run.sh", "check-mux-resume-call"],
-			"timeoutSeconds": 60,
-			"signature": "[QK:MUXRESUME-DESC-CONTRACT-PI]",
-			"signatureSource": "scripts/check-mux-resume-call.ts"
-		},
-		{
 			"claim": "MUXRESUME-DESC-CONTRACT-MCP",
 			"title": "the MCP description drops the dormant-only scope, inviting callers to aim the verb at live citizens it will refuse",
 			"subject": "mcp/entwurf-bridge/src/index.ts",
@@ -142,6 +105,19 @@
 			"gate": ["bash", "run.sh", "check-mux-resume-call"],
 			"timeoutSeconds": 60,
 			"signature": "[QK:MUXRESUME-DESC-CONTRACT-MCP]",
+			"signatureSource": "scripts/check-mux-resume-call.ts"
+		},
+		{
+			"claim": "MUXRESUME-MCP-TARGET-PASSTHROUGH",
+			"title": "the bridge resume handler substitutes a constant id for the caller's target, so the record lookup reopens a citizen nobody named while the target-only schema stays green",
+			"subject": "mcp/entwurf-bridge/src/index.ts",
+			"find": ["\t\t\tconst result = await visibleResume(target, makeVisibleResumeDeps(visibleResumeLaunch));"],
+			"replace": [
+				"\t\t\tconst result = await visibleResume(\"20260101T000000-feed00\", makeVisibleResumeDeps(visibleResumeLaunch));"
+			],
+			"gate": ["bash", "run.sh", "check-mux-resume-call"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:MUXRESUME-MCP-TARGET-PASSTHROUGH]",
 			"signatureSource": "scripts/check-mux-resume-call.ts"
 		}
 	]

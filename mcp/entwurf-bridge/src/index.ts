@@ -100,6 +100,7 @@ import {
 	defaultMetaSessionsDir,
 	makeStoreRecordReader,
 	readActiveStoreEntries,
+	readMetaIdentityByGardenId,
 	readMetaInbox,
 	readMetaReceiverMarker,
 	readMetaSenderMarker,
@@ -358,8 +359,34 @@ async function resolveAuthoritativeSender(
 	if (marker && marker.identity.gardenId === selected.id) {
 		return buildMetaSenderEnvelope(marker.identity, marker.marker.cwd || cwd, marker);
 	}
-	if (pi && pi.sessionId === selected.id) return { envelope: pi };
+	if (pi && pi.sessionId === selected.id) return { envelope: requirePiSenderRecord(pi) };
 	throw new Error(`entwurf-bridge: reconciled sender ${selected.id} has no matching identity source`);
+}
+
+/**
+ * PI_SESSION_ID CARRIES a record-established identity; it does not establish one (Hard Rule 2).
+ * Since #125 the pi session reaches every Entwurf verb through this bridge, so the pi rail is the
+ * main road rather than a side door, and the carrier is checked where the sender is SELECTED:
+ * after the claims reconcile (so a complete conflicting Codex claim still earns its own
+ * diagnostic) and before any caller builds on the answer.
+ *
+ * The per-entry targeted read the sender/self policy already uses — no store scan, no second
+ * nativeSessionId carrier. An absent, unreadable or irregular record throws from the reader with
+ * its own cause; a record of another backend throws here. None of it falls back to another rail
+ * or to anonymous. Socket presence stays what it was: replyability, never admission.
+ *
+ * What it does NOT prove: that a trusted host which deliberately exports ANOTHER real pi
+ * citizen's id is that citizen. Carrier integrity below the record is the host's.
+ */
+function requirePiSenderRecord(envelope: SenderEnvelope): SenderEnvelope {
+	const identity = readMetaIdentityByGardenId(envelope.sessionId);
+	if (identity.backend !== "pi") {
+		throw new Error(
+			`entwurf-bridge: PI_SESSION_ID ${envelope.sessionId} names a ${identity.backend} record, not a pi citizen — ` +
+				"the pi-session carrier must name the record this pi session was born with",
+		);
+	}
+	return envelope;
 }
 
 // Async only when the selected sender rides native-push: replyability is the adapter's live fact.
@@ -418,7 +445,7 @@ function abbreviateHomeMcp(cwd: string): string {
 // reports one outcome. The per-target lock is NOT taken by every rail: the decider
 // locks only a control-socket-domain dispatch; the mailbox and native-push branches
 // carry `lock: null` (entwurf-v2-decider.ts). It runs
-// IN-PROCESS here (the same production runner pi-native uses) — NOT a delegating
+// IN-PROCESS here (the one production runner; pi reaches it through this bridge since #125) — NOT a delegating
 // RPC — so control, mailbox and native-push all flow through
 // `runEntwurfV2`. The sender envelope is
 // `buildSendSenderEnvelope()` verbatim (origin/replyable as resolved) — v2 does
@@ -488,7 +515,7 @@ server.tool(
 				{ target, intent, message, mode, wants_reply },
 				// No trust-preflight inputs are passed, and none exist to pass: the preflight on this
 				// path guarded the resume verdict and left with `owned-outcome`. `senderProvider` is
-				// the whole options surface now (see the pi-native surface for the same note).
+				// the whole options surface now.
 				{ senderProvider: () => sender },
 			);
 			return rendered.isError ? textErr(rendered.text) : textOk(rendered.text);

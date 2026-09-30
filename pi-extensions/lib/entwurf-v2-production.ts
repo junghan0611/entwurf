@@ -2,8 +2,8 @@
  * entwurf-v2-production — 5d-2b: the ctx-free PRODUCTION assembly of `runEntwurfV2`'s deps.
  * `makeProductionEntwurfV2Deps(opts)` wires the real 5b decider IO seams + the three 5c
  * transport hands into one `EntwurfV2RunDeps` (`{decide, executor}`). It touches NO
- * `ExtensionContext`/`ExtensionAPI` — the wiring SITE (5d-3, entwurf-control.ts) builds the
- * `senderProvider` from `buildLocalSenderEnvelope(ctx)` and passes it in, so this module
+ * `ExtensionContext`/`ExtensionAPI` — the wiring SITE (the entwurf-bridge `entwurf_v2`
+ * handler; the pi-native one left with #125) builds the `senderProvider` and passes it in, so this module
  * stays in `lib/` with the rest of the gate-/smoke-testable v2 core.
  *
  * Three invariants this factory exists to guarantee (each gate-proven):
@@ -136,7 +136,7 @@ export interface ProductionEntwurfV2Seams {
 }
 
 export interface ProductionEntwurfV2Opts {
-	/** Built at the wiring site from `buildLocalSenderEnvelope(ctx)`, decorated with its
+	/** Built at the wiring site (the bridge's authoritative sender resolution), carrying its
 	 * HONEST pi-session replyability (SE-1 2e-a: `replyable` reflects whether the canonical
 	 * control socket actually exists, not a hardcoded true). ONE provider feeds ALL THREE
 	 * rails — the control-socket RPC sender, the meta-mailbox body sender, and the

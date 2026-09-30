@@ -1,5 +1,5 @@
 /**
- * check-entwurf-peers-surface — deterministic gate for the MCP + pi-native `entwurf_peers`
+ * check-entwurf-peers-surface — deterministic gate for the `entwurf_peers` (one MCP surface since #125)
  * RENDER/PAYLOAD layer (0.11 Stage 0 step 4, slice 4c; #50 C4 re-author). Drives the PURE
  * `renderEntwurfPeers` with a fabricated `EntwurfFactsResult` (no IO) and proves
  * the surface contract (GPi + Fable 수렴 + the C4 demotion):
@@ -17,9 +17,9 @@
  *     dropped),
  *   - diagnostics sharing one (kind + message) AGGREGATE in text (F8) — including
  *     record-less-socket groups, which share a message per liveness,
- *   - WIRING guard (Fable e②/6): the MCP handler and pi-native tool call
- *     listEntwurfFacts + renderEntwurfPeers; getLiveSessions and the
- *     `/entwurf-sessions` socket-scan command stay gone from both surfaces.
+ *   - WIRING guard (Fable e②/6): the MCP handler calls listEntwurfFacts +
+ *     renderEntwurfPeers; getLiveSessions and the `/entwurf-sessions` socket-scan
+ *     command stay gone from the bridge AND the pi extension.
  *
  * No IO — the facts are fabricated; only the wiring guard reads the bridge source
  * as text (a static assertion, not an execution).
@@ -252,30 +252,23 @@ function main(): void {
 		ok("the aggregated record-less line samples gids", agg.text.includes(gids[0] as string));
 	}
 
-	// ── WIRING guard: both surfaces call the provider+render; the socket-scan lane is gone ──
+	// ── WIRING guard: the bridge calls the provider+render; the socket-scan lane is gone ──
+	// #125: the pi-native entwurf_peers copy is retired — a pi session reads the bridge's own
+	// surface through Pi's built-in MCP — so its wiring halves left with it. The pi file is still
+	// held to the lanes it must NOT grow back.
 	{
 		const here = path.dirname(fileURLToPath(import.meta.url));
 		const bridgeSrc = readFileSync(path.join(here, "..", "mcp", "entwurf-bridge", "src", "index.ts"), "utf8");
 		const nativeSrc = readFileSync(path.join(here, "..", "pi-extensions", "entwurf-control.ts"), "utf8");
 		ok("wiring: bridge calls listEntwurfFacts(", bridgeSrc.includes("listEntwurfFacts("));
 		ok("wiring: bridge calls renderEntwurfPeers(", bridgeSrc.includes("renderEntwurfPeers("));
-		ok("wiring: native pi tool calls listEntwurfFacts(", nativeSrc.includes("listEntwurfFacts("));
-		ok("wiring: native pi tool calls renderEntwurfPeers(", nativeSrc.includes("renderEntwurfPeers("));
 		ok(
 			"#112 wiring: MCP observation uses the render limit",
 			bridgeSrc.includes("observationLimit: ENTWURF_PEERS_RENDER_LIMIT"),
 		);
 		ok(
-			"#112 wiring: native pi observation uses the render limit",
-			nativeSrc.includes("observationLimit: render.ENTWURF_PEERS_RENDER_LIMIT"),
-		);
-		ok(
 			"wiring: bridge does not paste full JSON payload into human text",
 			!bridgeSrc.includes("JSON.stringify(payload)"),
-		);
-		ok(
-			"wiring: native pi tool does not paste full JSON payload into human text",
-			!nativeSrc.includes("JSON.stringify(payload)"),
 		);
 		// `\bname\s*\(` catches a definition OR a call (tolerating a space before the
 		// paren, GPi Q4); a bare prose mention in a removal-note comment (no paren) is

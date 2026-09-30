@@ -6,11 +6,18 @@
  * conversion? The original defect reproduced on the former; this cell proves the
  * latter on the pi lane.
  *
+ * WHICH definition rides the pi lane since #125: the bridge's own. A pi session reaches
+ * `entwurf_fresh_call` through Pi's built-in MCP, which turns the tools/list
+ * `inputSchema` into the tool's parameters by a plain spread — `{ ...schema, type:
+ * schema.type ?? "object", properties ?? {} }` (`[측정 2026-09-30, pi 0.99.1]`
+ * `extensions/mcp/tools.ts:232-237`, not exported). So the subject here is the REAL
+ * bridge boot's inputSchema carried through that same spread; the end-to-end Pi
+ * pipeline itself is observed by `check-pi-mcp-bridge`.
+ *
  * Method (pi-mono's own pattern for this defect class): stand up a local HTTP
  * server, point pi-ai's REAL anthropic-messages conversion at it via
- * `model.baseUrl`, prompt once with the REAL captured `entwurf_fresh_call` tool
- * definition, and read the tool schema out of the request body that was actually
- * sent. Hermetic: fake key, loopback only, no real account, no model turn — the
+ * `model.baseUrl`, prompt once with that `entwurf_fresh_call` definition, and read
+ * the tool schema out of the request body that was actually sent. Hermetic: fake key, loopback only, no real account, no model turn — the
  * server answers 400 and the turn is expected to fail; the request BYTES are the
  * subject.
  */
@@ -20,7 +27,14 @@ import type { AddressInfo } from "node:net";
 import { stream } from "@earendil-works/pi-ai/compat";
 import { RRegex } from "rregex";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { capturePiToolDefinitions, type PiToolDefinition, requireTool } from "./helpers/fresh-call-fixtures.ts";
+import { bootBridgeAndListTools, requireTool } from "./helpers/fresh-call-fixtures.ts";
+
+/** What Pi's built-in MCP hands the provider: the tools/list inputSchema, spread (see header). */
+interface PiMcpToolDefinition {
+	name: string;
+	description: string;
+	parameters: { type?: string; properties?: Record<string, Record<string, unknown>>; required?: string[] };
+}
 
 interface CapturedBody {
 	tools?: Array<{
@@ -36,10 +50,20 @@ interface CapturedBody {
 let server: http.Server;
 let baseUrl: string;
 let captured: CapturedBody | null = null;
-let freshDef: PiToolDefinition;
+let freshDef: PiMcpToolDefinition;
 
 beforeAll(async () => {
-	freshDef = requireTool(await capturePiToolDefinitions(), "entwurf_fresh_call");
+	const bridgeFresh = requireTool(await bootBridgeAndListTools(), "entwurf_fresh_call");
+	const schema = (bridgeFresh.inputSchema ?? {}) as Record<string, unknown>;
+	freshDef = {
+		name: bridgeFresh.name ?? "entwurf_fresh_call",
+		description: bridgeFresh.description ?? "",
+		parameters: {
+			...schema,
+			type: (schema.type as string | undefined) ?? "object",
+			...(schema.properties === undefined ? { properties: {} } : {}),
+		} as PiMcpToolDefinition["parameters"],
+	};
 
 	server = http.createServer((req, res) => {
 		let body = "";
@@ -90,7 +114,7 @@ afterAll(async () => {
 });
 
 describe("provider conversion — the schema that actually rides the wire", () => {
-	it("[QK:FRESHCALL-MODEL-PATTERN-PROVIDER-VALID] the model pattern in the REAL anthropic-messages request body is the registered TypeBox pattern verbatim and compiles under a Rust-regex-family engine", () => {
+	it("[QK:FRESHCALL-MODEL-PATTERN-PROVIDER-VALID] the model pattern in the REAL anthropic-messages request body is the bridge's tools/list pattern verbatim and compiles under a Rust-regex-family engine", () => {
 		expect(captured, "the conversion path must have sent a request body").not.toBeNull();
 		const tool = captured?.tools?.find((t) => t.name === "entwurf_fresh_call");
 		expect(tool, "the fresh-call tool definition must ride the request body").toBeDefined();

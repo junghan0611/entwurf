@@ -1252,12 +1252,23 @@ V2_MCP_SRC="$REPO/mcp/entwurf-bridge/src/index.ts"
 if [ -f "$V2_CONTROL_SRC" ] && grep -q 'ENTWURF_FLAG = "entwurf-control"' "$V2_CONTROL_SRC" && grep -q 'registerFlag(ENTWURF_FLAG' "$V2_CONTROL_SRC"; then
   ok "pi-native --entwurf-control flag registered (ENTWURF_FLAG)"
 else
-  bad "pi-native --entwurf-control flag not found in entwurf-control.ts — the v2 pi tool depends on it"
+  bad "pi-native --entwurf-control flag not found in entwurf-control.ts — record birth and the MCP registration depend on it"
 fi
-if [ -f "$V2_CONTROL_SRC" ] && grep -q 'registerEntwurfV2Tool' "$V2_CONTROL_SRC" && grep -q 'name: "entwurf_v2"' "$V2_CONTROL_SRC"; then
-  ok "pi-native entwurf_v2 tool registered"
+# #125: a pi session no longer carries native Entwurf tools — the extension registers the compiled
+# entwurf-bridge with Pi's built-in MCP after record birth. This is STATIC DETECTION only: it proves
+# the shipped source makes that registration and the compiled entry it points at shipped. It does NOT
+# prove a running pi spawned the child or that a same-name mcp.json entry did not replace it (Pi's
+# `/mcp` reports that) — runtime reachability is the MCP verb check below and `doctor-pi-provider`.
+V2_BRIDGE_DIST="$REPO/mcp/entwurf-bridge/dist/mcp/entwurf-bridge/src/index.js"
+if [ -f "$V2_CONTROL_SRC" ] && grep -q 'pi.registerMcpServer(' "$V2_CONTROL_SRC" && grep -q 'ENTWURF_MCP_SERVER_NAME' "$V2_CONTROL_SRC"; then
+  ok "pi-native: entwurf-control registers the entwurf-bridge MCP server (static detection)"
 else
-  bad "pi-native entwurf_v2 tool not found in entwurf-control.ts"
+  bad "pi-native: entwurf-control.ts does not register the entwurf-bridge MCP server — a pi session would have no Entwurf verbs"
+fi
+if [ -f "$V2_BRIDGE_DIST" ]; then
+  ok "pi-native: compiled entwurf-bridge entry present (the path the registration points at)"
+else
+  bad "pi-native: compiled entwurf-bridge entry missing at $V2_BRIDGE_DIST — run: pnpm run build-bridge"
 fi
 if [ -f "$V2_MCP_SRC" ] && grep -q 'server.tool(' "$V2_MCP_SRC" && grep -q '"entwurf_v2"' "$V2_MCP_SRC"; then
   ok "MCP entwurf_v2 verb registered"
@@ -1282,7 +1293,7 @@ case "$REPO" in
     ;;
   *)
     if [ -f "$V2_SURFACE_SRC" ] && (cd "$REPO" && node --experimental-strip-types scripts/check-entwurf-v2-surface.ts >/dev/null 2>&1); then
-      ok "check-entwurf-v2-surface gate passes (surface adapter + pi-native/MCP wiring)"
+      ok "check-entwurf-v2-surface gate passes (surface adapter + MCP wiring + pi receiver)"
     else
       bad "check-entwurf-v2-surface gate FAILED or surface adapter missing — run: ./run.sh check-entwurf-v2-surface"
     fi

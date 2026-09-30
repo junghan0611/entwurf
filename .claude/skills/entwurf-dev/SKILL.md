@@ -108,7 +108,7 @@ tool schema를 로드하지 않는다 — 호스트가 tool 정의를 거부하�
 2. `pi-extensions/lib/mux-resume-call.ts` — resume의 창 열기(placement만 안다)
 3. `pi-extensions/lib/entwurf-v2-visible-resume.ts` — resume 계약, lock, 두 receipt
 4. `pi-extensions/lib/entwurf-v2-contract.ts` — intent와 dormant verdict
-5. `pi-extensions/entwurf-control.ts` — native Pi tool schema
+5. `pi-extensions/entwurf-control.ts` — pi citizen birth와 Pi builtin MCP 등록(`lib/entwurf-mcp-server.ts`); pi도 verb는 6번 bridge로 부른다(#125)
 6. `mcp/entwurf-bridge/src/index.ts` — MCP surface
 
 ## 명령 해석

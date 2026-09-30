@@ -1,0 +1,51 @@
+{
+	"schemaVersion": 1,
+	"lane": "pi-mcp-register",
+	"mutants": [
+		{
+			"claim": "PI-MCP-REGISTER-AFTER-BIRTH",
+			"title": "the extension factory registers the bridge at load, before any record exists — the server is on Pi's registry with no born identity to carry",
+			"subject": "pi-extensions/entwurf-control.ts",
+			"find": ["\tpi.registerMessageRenderer(SESSION_MESSAGE_TYPE, renderSessionMessage);"],
+			"replace": [
+				"\tpi.registerMessageRenderer(SESSION_MESSAGE_TYPE, renderSessionMessage);",
+				"\tpi.registerMcpServer(ENTWURF_MCP_SERVER_NAME, { command: process.execPath, args: [] });"
+			],
+			"gate": ["bash", "run.sh", "check-pi-mcp-register"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:PI-MCP-REGISTER-AFTER-BIRTH]",
+			"signatureSource": "pi-extensions/entwurf-control.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "PI-MCP-IDENTITY-BEFORE-UI",
+			"title": "the status line is rendered before the registration, so a UI failure leaves a born citizen without its verbs",
+			"subject": "pi-extensions/entwurf-control.ts",
+			"find": [
+				"\t\tregisterEntwurfMcpServer(pi, ctx, birth.gardenId);",
+				"\t\tupdateStatus(ctx, true, birth.gardenId);"
+			],
+			"replace": [
+				"\t\tupdateStatus(ctx, true, birth.gardenId);",
+				"\t\tregisterEntwurfMcpServer(pi, ctx, birth.gardenId);"
+			],
+			"gate": ["bash", "run.sh", "check-pi-mcp-register"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:PI-MCP-IDENTITY-BEFORE-UI]",
+			"signatureSource": "pi-extensions/entwurf-control.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "PI-MCP-EXPOSURE",
+			"title": "the verbs are registered behind codemode instead of declared directly, so the model is handed a different surface than every other host",
+			"subject": "pi-extensions/lib/entwurf-mcp-server.ts",
+			"find": ["\t\texposure: \"direct\","],
+			"replace": ["\t\texposure: \"codemode\","],
+			"gate": ["bash", "run.sh", "check-pi-mcp-register"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:PI-MCP-EXPOSURE]",
+			"signatureSource": "pi-extensions/entwurf-control.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		}
+	]
+}

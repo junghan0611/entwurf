@@ -659,9 +659,9 @@ const REJECT_HINT: Record<FreshCallRejectReason, string> = {
 };
 
 /**
- * ONE renderer for both surfaces. Not a convenience: the two registrations are separate literals
- * (that is this repo's shape), so a shared renderer is what keeps the operator-visible answer
- * from drifting apart between native pi and the MCP bridge.
+ * ONE renderer, outside the registration. Not a convenience: it keeps the operator-visible answer
+ * out of a registration literal. (Since #125 the MCP bridge is the only registration; the native
+ * pi copy it once had to agree with is retired.)
  *
  * The success text states the boundary out loud. A caller that reads "launched" and assumes
  * "delivered" is the exact confusion the two-receipt split exists to prevent, so the text refuses

@@ -121,8 +121,8 @@
 			"signatureSource": "test/mux-fresh-call.test.ts"
 		},
 		{
-			"claim": "FRESHCALL-CWD-SURFACE-PARITY",
-			"title": "one surface drops the optional cwd from its schema, so cross-repo fresh works from pi and silently cannot exist from the MCP bridge",
+			"claim": "FRESHCALL-CWD-SURFACE",
+			"title": "the fresh-call surface drops the optional cwd from its schema, so cross-repo fresh silently cannot exist from any caller — pi included, which reaches this bridge since #125",
 			"subject": "mcp/entwurf-bridge/src/index.ts",
 			"find": [
 				"\t\tcwd: z\n\t\t\t.string()\n\t\t\t.optional()\n\t\t\t.describe(\n\t\t\t\t\"Optional literal ABSOLUTE path of an existing directory to start the sibling in (cross-repo fresh). Omit or pass \\\"\\\" to start where the CALLER is — this agent's own cwd on BOTH rails, or for a Codex caller its own record directory, because this bridge is the app-server's child and that process's directory is not the caller's. Taken exactly as given: no trim, no realpath, no project-name resolution. '#' is refused on the tmux rail only, because tmux format-expands a start directory; inside herdr it is an ordinary path character. The receipt echoes the directory that was REQUESTED or the caller record it came from, never an observation of where the pane landed.\",\n\t\t\t),\n"
@@ -130,31 +130,7 @@
 			"replace": [""],
 			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
 			"timeoutSeconds": 120,
-			"signature": "[QK:FRESHCALL-CWD-SURFACE-PARITY]",
-			"signatureSource": "test/fresh-call-surfaces.contract.test.ts"
-		},
-		{
-			"claim": "FRESHCALL-PI-SURFACE-IDENTITY",
-			"title": "native pi takes the caller garden id from the environment instead of its own resident closure — the uuidv7 confusion, reintroduced",
-			"subject": "pi-extensions/entwurf-control.ts",
-			"find": ["\t\t\t\t\tcallerGardenId: residentGardenId,"],
-			"replace": ["\t\t\t\t\tcallerGardenId: process.env.PI_SESSION_ID ?? null,"],
-			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
-			"timeoutSeconds": 120,
-			"signature": "[QK:FRESHCALL-PI-SURFACE-IDENTITY]",
-			"signatureSource": "test/fresh-call-surfaces.contract.test.ts"
-		},
-		{
-			"claim": "FRESHCALL-PI-MODEL-SCHEMA",
-			"title": "native pi drops the required model field from fresh-call while the composition still expects one",
-			"subject": "pi-extensions/entwurf-control.ts",
-			"find": [
-				"\t\t\tmodel: Type.String({\n\t\t\t\tminLength: 1,\n\t\t\t\tmaxLength: 200,\n\t\t\t\tpattern: \"^[A-Za-z0-9][A-Za-z0-9._/:\\\\[\\\\]-]*$\",\n\t\t\t\tdescription:\n\t\t\t\t\t\"Required runtime model: canonical provider/model for pi, a Claude Code model id/alias, or a Copilot/OMP/Codex model name.\",\n\t\t\t}),\n"
-			],
-			"replace": [""],
-			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
-			"timeoutSeconds": 120,
-			"signature": "[QK:FRESHCALL-PI-MODEL-SCHEMA]",
+			"signature": "[QK:FRESHCALL-CWD-SURFACE]",
 			"signatureSource": "test/fresh-call-surfaces.contract.test.ts"
 		},
 		{
@@ -196,10 +172,10 @@
 		},
 		{
 			"claim": "FRESHCALL-MODEL-PATTERN-PROVIDER-VALID",
-			"title": "the same unescape planted on the TypeBox surface rides pi-ai's real anthropic-messages conversion into the request body as an invalid Rust-family pattern",
-			"subject": "pi-extensions/entwurf-control.ts",
-			"find": ["\t\t\t\tpattern: \"^[A-Za-z0-9][A-Za-z0-9._/:\\\\[\\\\]-]*$\","],
-			"replace": ["\t\t\t\tpattern: \"^[A-Za-z0-9][A-Za-z0-9._/:[\\\\]-]*$\","],
+			"title": "the #62 unescape planted on the bridge's zod pattern rides Pi's built-in MCP spread and pi-ai's real anthropic-messages conversion into the request body as an invalid Rust-family pattern",
+			"subject": "mcp/entwurf-bridge/src/index.ts",
+			"find": ["\t\t\t.regex(/^[A-Za-z0-9][A-Za-z0-9._/:\\[\\]-]*$/)"],
+			"replace": ["\t\t\t.regex(/^[A-Za-z0-9][A-Za-z0-9._/:[\\]-]*$/)"],
 			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
 			"timeoutSeconds": 120,
 			"signature": "[QK:FRESHCALL-MODEL-PATTERN-PROVIDER-VALID]",
@@ -431,17 +407,6 @@
 			"signatureSource": "test/mux-fresh-call.test.ts"
 		},
 		{
-			"claim": "FRESHCALL-BACKEND-SET-SURFACE-PARITY-PI",
-			"title": "a backend the composition can open is missing from the native pi surface enum — an in-process pi session cannot name a capability the module already opens",
-			"subject": "pi-extensions/entwurf-control.ts",
-			"find": ["\t\t\tbackend: StringEnum([\"pi\", \"claude-code\", \"copilot\", \"omp\", \"codex\"], {"],
-			"replace": ["\t\t\tbackend: StringEnum([\"pi\", \"claude-code\", \"copilot\", \"omp\"], {"],
-			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
-			"timeoutSeconds": 180,
-			"signature": "[QK:FRESHCALL-BACKEND-SET-SURFACE-PARITY-PI]",
-			"signatureSource": "test/fresh-call-surfaces.contract.test.ts"
-		},
-		{
 			"claim": "TMUXSESSION-LOOKUP-ENGINE",
 			"title": "the seat lookup goes back to the `-f` filter engine, which was measured to match EVERY session when the name contains a '}' — a fresh sibling then opens in whichever session tmux listed first",
 			"subject": "pi-extensions/lib/resolve-tmux-session.ts",
@@ -510,8 +475,8 @@
 			"signatureSource": "test/mux-fresh-call.test.ts"
 		},
 		{
-			"claim": "FRESHCALL-PLACEMENT-SURFACE-PARITY",
-			"title": "one surface drops the optional seat from its schema, so opening a sibling in the operator's project session works from pi and silently cannot exist from the MCP bridge",
+			"claim": "FRESHCALL-PLACEMENT-SURFACE",
+			"title": "the fresh-call surface drops the optional seat from its schema, so opening a sibling in the operator's project session silently cannot exist from any caller",
 			"subject": "mcp/entwurf-bridge/src/index.ts",
 			"find": [
 				"\t\tplacement: z\n\t\t\t.object({\n\t\t\t\ttmuxSession: z\n\t\t\t\t\t.string()\n\t\t\t\t\t.describe(\n\t\t\t\t\t\t\"EXACT name of an EXISTING session on this agent's own tmux server. Nothing is created: an absent session is refused as tmux-session-missing, and a name outside [A-Za-z0-9][A-Za-z0-9_-]* as tmux-session-name-invalid.\",\n\t\t\t\t\t),\n\t\t\t})\n\t\t\t.optional()\n\t\t\t.describe(\n\t\t\t\t\"Optional expert seat override, TMUX ONLY: open the sibling in ONE EXISTING tmux session of this agent's own server, and it always wins. When omitted the seat follows the CALLER, never the backend being opened: a Codex CALLER opens beside its own TUI pane, matched by thread-id in that pane's terminal title (0 or 2+ matching panes refuse, never fall back); every other caller opens in its own session. A pane title is a placement input only — never an address, liveness or delivery fact. Nothing is ever created. Inside herdr this field is refused by name — placement there belongs to herdr, and a tmux session name would silently place the sibling somewhere else. Independent of cwd; neither is inferred from the other. The receipt reports the selected name (absent for the caller-pane rule, which observed a session rather than requesting a name), its source, and resolved target session id.\",\n\t\t\t),\n"
@@ -519,7 +484,7 @@
 			"replace": [""],
 			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
 			"timeoutSeconds": 180,
-			"signature": "[QK:FRESHCALL-PLACEMENT-SURFACE-PARITY]",
+			"signature": "[QK:FRESHCALL-PLACEMENT-SURFACE]",
 			"signatureSource": "test/fresh-call-surfaces.contract.test.ts"
 		},
 		{

@@ -102,8 +102,8 @@ export interface EntwurfFactsDeps {
 	/** Socket axis: injected into scanSocketProbes (controlDir/readdir/probe). */
 	socket?: Partial<SocketScanDeps>;
 	/** Observation axis (#101): per-citizen receiver + transcript facts. Defaults to the
-	 * REAL measurement — the same seam shape `makeProductionEntwurfV2Deps` uses, so the two
-	 * wiring sites (MCP + pi-native) cannot drift by each passing their own observer, and a
+	 * REAL measurement — the same seam shape `makeProductionEntwurfV2Deps` uses, so a wiring
+	 * site cannot drift by passing its own observer (one site, the bridge, since #125), and a
 	 * gate still drives the assembly with a fake and no filesystem. */
 	observe?: PeerObserver;
 	/** Placement axis (#116 S1): the ONE placement-owner read this listing is allowed.

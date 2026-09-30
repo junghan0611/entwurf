@@ -19,6 +19,14 @@
  *     mutants (a gate already red at baseline can produce only fake KILLEDs).
  *   - Bounded: each gate run has a hard timeout and its process GROUP is killed.
  *   - Evidence is claim IDs + killed mutant IDs, never assertion counts.
+ *   - The snapshot is SOURCE-ONLY. An ignored build output a gate consumes (#125: the
+ *     compiled entwurf-bridge a pi citizen registers) enters only through a mutant's
+ *     `build` declaration, and only for that gate's group: the snapshot builds it from its
+ *     OWN bytes before the control, again after every mutation (so the gate judges the
+ *     output of the source it is handed), and again from the restored bytes before the
+ *     post-control, which must reproduce the baseline output exactly. A build red is never
+ *     a kill, a gate that writes into the output voids its run, and the output is removed
+ *     when the group ends — no other group ever sees it, and no origin artifact is copied.
  */
 
 import { spawn, spawnSync } from "node:child_process";
@@ -161,6 +169,20 @@ export interface MutantSpec {
 	signature: string;
 	/** Repo-relative gate source file that owns the claim token. */
 	signatureSource: string;
+	/** Optional: an ignored build output this mutant's gate consumes (see the module header). */
+	build?: MutantBuild;
+}
+
+/**
+ * A build whose OUTPUT a gate group consumes. Never a subject: the output is ignored, so
+ * the snapshot does not carry it, and a gate requiring it would be CONTROL-RED in every
+ * run. Every mutant of one gate declares the same build or none.
+ */
+export interface MutantBuild {
+	/** Build argv (no shell string), run with cwd = snapshot repo root, fenced and bounded like a gate. */
+	argv: string[];
+	/** Repo-relative directory the build writes; absent from the work surface, removed after the group. */
+	output: string;
 }
 
 export interface MutantManifest {
@@ -182,12 +204,14 @@ const MUTANT_KEYS = [
 	"signature",
 	"signatureSource",
 ];
+const OPTIONAL_MUTANT_KEYS = ["build"];
+const BUILD_KEYS = ["argv", "output"];
 
 export class ManifestError extends Error {}
 
-function requireExactKeys(obj: Record<string, unknown>, keys: string[], where: string): void {
+function requireExactKeys(obj: Record<string, unknown>, keys: string[], where: string, optional: string[] = []): void {
 	for (const k of Object.keys(obj)) {
-		if (!keys.includes(k)) throw new ManifestError(`${where}: unknown key \`${k}\``);
+		if (!keys.includes(k) && !optional.includes(k)) throw new ManifestError(`${where}: unknown key \`${k}\``);
 	}
 	for (const k of keys) {
 		if (!(k in obj)) throw new ManifestError(`${where}: missing key \`${k}\``);
@@ -218,7 +242,7 @@ export function validateManifest(raw: unknown, name: string): MutantManifest {
 		const where = `${name} mutants[${i}]`;
 		if (typeof m !== "object" || m === null) throw new ManifestError(`${where}: must be an object`);
 		const rec = m as Record<string, unknown>;
-		requireExactKeys(rec, MUTANT_KEYS, where);
+		requireExactKeys(rec, MUTANT_KEYS, where, OPTIONAL_MUTANT_KEYS);
 		if (typeof rec.claim !== "string" || !CLAIM_RE.test(rec.claim)) {
 			throw new ManifestError(`${where}: claim must match ${CLAIM_RE}`);
 		}
@@ -251,6 +275,7 @@ export function validateManifest(raw: unknown, name: string): MutantManifest {
 		if (typeof sigSrc !== "string" || path.isAbsolute(sigSrc) || sigSrc.split(/[\\/]/).includes("..")) {
 			throw new ManifestError(`${where}: signatureSource must be a repo-relative path`);
 		}
+		const build = "build" in rec ? validateBuild(rec.build, `${where}.build`) : undefined;
 		mutants.push({
 			claim: rec.claim,
 			title: rec.title,
@@ -261,9 +286,52 @@ export function validateManifest(raw: unknown, name: string): MutantManifest {
 			timeoutSeconds: rec.timeoutSeconds,
 			signature: expectedSig,
 			signatureSource: sigSrc,
+			...(build ? { build } : {}),
 		});
 	}
 	return { schemaVersion: 1, lane: doc.lane, mutants };
+}
+
+function validateBuild(raw: unknown, where: string): MutantBuild {
+	if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
+		throw new ManifestError(`${where}: must be an object`);
+	}
+	const rec = raw as Record<string, unknown>;
+	requireExactKeys(rec, BUILD_KEYS, where);
+	const argv = requireLines(rec.argv, `${where}.argv`);
+	const output = rec.output;
+	if (
+		typeof output !== "string" ||
+		path.isAbsolute(output) ||
+		output.split("/").some((seg) => seg === "" || seg === "." || seg === "..") ||
+		output.includes("\\")
+	) {
+		throw new ManifestError(`${where}: output must be a normalized repo-relative directory (got ${String(output)})`);
+	}
+	const top = output.split("/")[0];
+	if (top === "node_modules" || top === ".git") {
+		throw new ManifestError(`${where}: output may not live under ${top}`);
+	}
+	return { argv, output };
+}
+
+/**
+ * The one build a gate group declares, or none. A group is keyed by its exact gate argv;
+ * two mutants of it declaring different builds (or one declaring none) would hand the same
+ * gate different inputs depending on run order, so the set is refused — at manifest time and
+ * again at run time, because the self-test injects specs directly.
+ */
+export function groupBuild(specs: MutantSpec[]): MutantBuild | undefined {
+	const first = JSON.stringify(specs[0]?.build ?? null);
+	for (const m of specs) {
+		const mine = JSON.stringify(m.build ?? null);
+		if (mine !== first) {
+			throw new ManifestError(
+				`gate ${JSON.stringify(m.gate)} mixes build declarations (${first} vs ${mine} at ${m.claim}) — every mutant of one gate declares the same build or none`,
+			);
+		}
+	}
+	return specs[0]?.build;
 }
 
 export interface OriginChecks {
@@ -323,6 +391,12 @@ export function validateManifestSet(manifests: MutantManifest[], origin: OriginC
 			all.push(m);
 		}
 	}
+	const byGate = new Map<string, MutantSpec[]>();
+	for (const m of all) {
+		const key = JSON.stringify(m.gate);
+		byGate.set(key, [...(byGate.get(key) ?? []), m]);
+	}
+	for (const specs of byGate.values()) groupBuild(specs);
 	return all;
 }
 
@@ -461,21 +535,26 @@ export function createRepoSnapshot(originDir: string, tmpRoot: string = os.tmpdi
  * misses ignored-path writes; this does not (hardening #4).
  */
 export function computeTreeManifest(repoDir: string): string {
+	return digestTree(repoDir, [".git", "node_modules"]);
+}
+
+/** The same content manifest over any directory, skipping the named top-level entries. */
+function digestTree(root: string, skipAtRoot: readonly string[]): string {
 	const lines: string[] = [];
 	const walk = (rel: string): void => {
-		const abs = path.join(repoDir, rel);
+		const abs = path.join(root, rel);
 		for (const name of fs.readdirSync(abs).sort()) {
-			if (rel === "" && (name === ".git" || name === "node_modules")) continue;
+			if (rel === "" && skipAtRoot.includes(name)) continue;
 			const childRel = rel === "" ? name : `${rel}/${name}`;
-			const st = fs.lstatSync(path.join(repoDir, childRel));
+			const st = fs.lstatSync(path.join(root, childRel));
 			if (st.isSymbolicLink()) {
-				lines.push(`${childRel}\0link\0${fs.readlinkSync(path.join(repoDir, childRel))}`);
+				lines.push(`${childRel}\0link\0${fs.readlinkSync(path.join(root, childRel))}`);
 			} else if (st.isDirectory()) {
 				lines.push(`${childRel}\0dir`);
 				walk(childRel);
 			} else if (st.isFile()) {
 				const sha = createHash("sha256")
-					.update(fs.readFileSync(path.join(repoDir, childRel)))
+					.update(fs.readFileSync(path.join(root, childRel)))
 					.digest("hex");
 				lines.push(`${childRel}\0${(st.mode & 0o777).toString(8)}\0${sha}`);
 			} else {
@@ -485,6 +564,57 @@ export function computeTreeManifest(repoDir: string): string {
 	};
 	walk("");
 	return createHash("sha256").update(lines.join("\n")).digest("hex");
+}
+
+// ── declared build output (source-only snapshot, #125) ──────────────────────
+
+/**
+ * Absolute path of a group's declared build output, refused unless it is ABSENT from the
+ * snapshot: the snapshot is the work surface, so a present output would be source bytes the
+ * build (and the end-of-group removal) would overwrite. Every existing ancestor must be a
+ * real directory inside the snapshot, so neither the build nor the removal can follow a link out,
+ * and the parent must already exist: a build that created source-tree directories would leave
+ * them behind after the removal.
+ */
+function declaredBuildOutput(repoDir: string, build: MutantBuild): string {
+	const abs = path.join(repoDir, build.output);
+	const rel = path.relative(repoDir, abs);
+	if (rel === "" || rel.startsWith("..") || path.isAbsolute(rel)) {
+		throw new Error(`declared build output ${build.output} is not inside the snapshot — refusing`);
+	}
+	if (fs.existsSync(abs) || isLink(abs)) {
+		throw new Error(
+			`declared build output ${build.output} already exists in the snapshot — it is on the work surface, so building or removing it would touch source bytes; refusing`,
+		);
+	}
+	const repoReal = fs.realpathSync(repoDir) + path.sep;
+	for (let dir = path.dirname(abs); dir !== repoDir; dir = path.dirname(dir)) {
+		if (isLink(dir) || (fs.existsSync(dir) && !(fs.realpathSync(dir) + path.sep).startsWith(repoReal))) {
+			throw new Error(`declared build output ${build.output} has an ancestor that leaves the snapshot — refusing`);
+		}
+	}
+	if (!fs.existsSync(path.dirname(abs)) || !fs.lstatSync(path.dirname(abs)).isDirectory()) {
+		throw new Error(`declared build output ${build.output} has no parent directory in the snapshot — refusing`);
+	}
+	return abs;
+}
+
+function isLink(p: string): boolean {
+	try {
+		return fs.lstatSync(p).isSymbolicLink();
+	} catch {
+		return false;
+	}
+}
+
+/** Content digest of the build output, or null when it is not a real directory (a build that wrote nothing there). */
+function buildOutputDigest(abs: string): string | null {
+	try {
+		if (!fs.lstatSync(abs).isDirectory()) return null;
+	} catch {
+		return null;
+	}
+	return digestTree(abs, []);
 }
 
 // ── bounded gate execution ──────────────────────────────────────────────────
@@ -670,6 +800,12 @@ export async function qualifyMutants(
 		list.push(m);
 		groups.set(key, list);
 	}
+	// Every group's declaration is judged before the first gate runs, so a bad one late in the
+	// set refuses the run up front instead of discarding an hour of earlier groups.
+	for (const specs of groups.values()) {
+		const build = groupBuild(specs);
+		if (build) declaredBuildOutput(snapshot.repoDir, build);
+	}
 
 	const results: GroupResult[] = [];
 	let invocationSeq = 0;
@@ -683,37 +819,79 @@ export async function qualifyMutants(
 		}
 	};
 
-	for (const [key, groupMutants] of groups) {
-		const gate = JSON.parse(key) as string[];
-		const groupTimeout = Math.max(...groupMutants.map((m) => m.timeoutSeconds));
-		const group: GroupResult = { gate, control: "skipped", mutants: [] };
-		results.push(group);
+	const markControlRed = (group: GroupResult, specs: MutantSpec[], detail: string): void => {
+		group.control = "pre-red";
+		for (const m of specs) {
+			group.mutants.push({
+				claim: m.claim,
+				verdict: classifyMutantRun({
+					controlPreOk: false,
+					matchCount: 1,
+					timedOut: false,
+					exitCode: null,
+					signatureOnFailureLine: false,
+					restoredOk: true,
+				}),
+				seconds: 0,
+				subjectSha256: "",
+				detail,
+			});
+		}
+	};
+
+	// The declared output, made from the snapshot's CURRENT bytes. Removed first, so the digest
+	// sees this build's output alone, whatever the build script does about stale files. Green only
+	// when the build exited 0 and left a real directory at the declared path; `digest` is null otherwise.
+	const buildOutput = async (
+		build: MutantBuild,
+		outputAbs: string,
+		timeoutSeconds: number,
+	): Promise<{ run: GateRunResult; digest: string | null }> => {
+		fs.rmSync(outputAbs, { recursive: true, force: true });
+		const run = await runOnce(build.argv, timeoutSeconds);
+		return { run, digest: !run.timedOut && run.exitCode === 0 ? buildOutputDigest(outputAbs) : null };
+	};
+
+	const runGroup = async (
+		gate: string[],
+		groupMutants: MutantSpec[],
+		groupTimeout: number,
+		group: GroupResult,
+		build: MutantBuild | undefined,
+		outputAbs: string | null,
+	): Promise<void> => {
+		let baseline: string | null = null;
+		if (build && outputAbs) {
+			const b = await buildOutput(build, outputAbs, groupTimeout);
+			log(
+				`  build ${build.argv.join(" ")} → ${build.output}: ${b.digest ? "built" : `RED (exit=${b.run.exitCode} timedOut=${b.run.timedOut})`} in ${b.run.seconds.toFixed(1)}s`,
+			);
+			if (!b.digest) {
+				logControlOutput(b.run.output, log);
+				markControlRed(
+					group,
+					groupMutants,
+					"declared build red at baseline — the gate's input could not be made from the snapshot's own bytes",
+				);
+				return;
+			}
+			baseline = b.digest;
+		}
+		// A gate that writes into its declared build output would judge the next run against
+		// bytes no build produced: every gate run below is bracketed by an output digest.
+		const wroteOutput = (expected: string | null): boolean =>
+			outputAbs !== null && buildOutputDigest(outputAbs) !== expected;
 
 		const pre = await runOnce(gate, groupTimeout);
-		const controlPreOk = !pre.timedOut && pre.exitCode === 0;
+		const preWrote = wroteOutput(baseline);
+		const controlPreOk = !pre.timedOut && pre.exitCode === 0 && !preWrote;
 		log(
-			`  control-pre ${gate.join(" ")}: ${controlPreOk ? "green" : `RED (exit=${pre.exitCode} timedOut=${pre.timedOut})`} in ${pre.seconds.toFixed(1)}s`,
+			`  control-pre ${gate.join(" ")}: ${controlPreOk ? "green" : preWrote ? "RED (the gate wrote into its declared build output)" : `RED (exit=${pre.exitCode} timedOut=${pre.timedOut})`} in ${pre.seconds.toFixed(1)}s`,
 		);
 		if (!controlPreOk) {
 			logControlOutput(pre.output, log);
-			group.control = "pre-red";
-			for (const m of groupMutants) {
-				group.mutants.push({
-					claim: m.claim,
-					verdict: classifyMutantRun({
-						controlPreOk: false,
-						matchCount: 1,
-						timedOut: false,
-						exitCode: null,
-						signatureOnFailureLine: false,
-						restoredOk: true,
-					}),
-					seconds: 0,
-					subjectSha256: "",
-					detail: "control-pre red — no kill can be claimed against a baseline-red gate",
-				});
-			}
-			continue;
+			markControlRed(group, groupMutants, "control-pre red — no kill can be claimed against a baseline-red gate");
+			return;
 		}
 
 		let groupImpure = false;
@@ -770,18 +948,34 @@ export async function qualifyMutants(
 				source.replace(find, () => m.replace.join("\n")),
 			);
 			let run: GateRunResult;
+			let buildRed = false;
+			let outputWritten = false;
 			try {
-				run = await runOnce(m.gate, m.timeoutSeconds);
+				if (build && outputAbs) {
+					// Rebuilt from the MUTATED bytes: the gate judges the output of the source it is handed.
+					const b = await buildOutput(build, outputAbs, m.timeoutSeconds);
+					if (b.digest === null) {
+						buildRed = true;
+						run = b.run;
+					} else {
+						run = await runOnce(m.gate, m.timeoutSeconds);
+						outputWritten = wroteOutput(b.digest);
+					}
+				} else {
+					run = await runOnce(m.gate, m.timeoutSeconds);
+				}
 			} finally {
 				fs.writeFileSync(subjectAbs, originalBytes);
 			}
-			const restoredOk = sha256File(subjectAbs) === originalSha;
+			const restoredOk = sha256File(subjectAbs) === originalSha && !outputWritten;
 			const verdict = classifyMutantRun({
 				controlPreOk: true,
 				matchCount: 1,
 				timedOut: run.timedOut,
-				exitCode: run.exitCode,
-				signatureOnFailureLine: signatureAttributedToFailure(run.output, m.signature, run.failedTitles),
+				// A build that exited 0 without leaving its declared output is a build red too.
+				exitCode: buildRed && run.exitCode === 0 ? 1 : run.exitCode,
+				// A build red is never a kill, whatever the build printed: the gate did not run.
+				signatureOnFailureLine: !buildRed && signatureAttributedToFailure(run.output, m.signature, run.failedTitles),
 				restoredOk,
 			});
 			if (!restoredOk) groupImpure = true;
@@ -790,27 +984,58 @@ export async function qualifyMutants(
 				verdict,
 				seconds: run.seconds,
 				subjectSha256: originalSha,
-				detail:
-					`exit=${run.exitCode} timedOut=${run.timedOut} signature=${m.signature}` +
-					` attribution=${describeAttribution(run.failedTitles)}`,
+				detail: buildRed
+					? `declared build red under the mutation (exit=${run.exitCode} timedOut=${run.timedOut}) — the gate did not run`
+					: `exit=${run.exitCode} timedOut=${run.timedOut} signature=${m.signature}` +
+						` attribution=${describeAttribution(run.failedTitles)}` +
+						(outputWritten ? " — the gate wrote into its declared build output" : ""),
 			});
 			log(
-				`  claim ${m.claim}: ${verdict} in ${run.seconds.toFixed(1)}s (subject ${m.subject} sha256=${originalSha.slice(0, 12)}…)`,
+				`  claim ${m.claim}: ${verdict} in ${run.seconds.toFixed(1)}s (subject ${m.subject} sha256=${originalSha.slice(0, 12)}…)${buildRed ? " [build red]" : ""}${outputWritten ? " [gate wrote build output]" : ""}`,
 			);
 			if (!restoredOk) break; // contaminated snapshot — stop the group
 		}
 
 		if (groupImpure) {
 			group.control = "post-red";
-			continue;
+			return;
+		}
+		if (build && outputAbs) {
+			// From the RESTORED bytes the build must reproduce its baseline output exactly.
+			const b = await buildOutput(build, outputAbs, groupTimeout);
+			if (b.digest !== baseline) {
+				group.control = "post-red";
+				log(
+					`  control-post build ${build.argv.join(" ")}: RED (exit=${b.run.exitCode} timedOut=${b.run.timedOut}) — the restored bytes did not rebuild the baseline output`,
+				);
+				logControlOutput(b.run.output, log);
+				return;
+			}
 		}
 		const post = await runOnce(gate, groupTimeout);
-		const controlPostOk = !post.timedOut && post.exitCode === 0;
+		const postWrote = wroteOutput(baseline);
+		const controlPostOk = !post.timedOut && post.exitCode === 0 && !postWrote;
 		group.control = controlPostOk ? "ok" : "post-red";
 		log(
-			`  control-post ${gate.join(" ")}: ${controlPostOk ? "green" : `RED (exit=${post.exitCode} timedOut=${post.timedOut}) — restore contamination or gate state leak`} in ${post.seconds.toFixed(1)}s`,
+			`  control-post ${gate.join(" ")}: ${controlPostOk ? "green" : postWrote ? "RED (the gate wrote into its declared build output)" : `RED (exit=${post.exitCode} timedOut=${post.timedOut}) — restore contamination or gate state leak`} in ${post.seconds.toFixed(1)}s`,
 		);
 		if (!controlPostOk) logControlOutput(post.output, log);
+	};
+
+	for (const [key, groupMutants] of groups) {
+		const gate = JSON.parse(key) as string[];
+		const groupTimeout = Math.max(...groupMutants.map((m) => m.timeoutSeconds));
+		const build = groupBuild(groupMutants);
+		const outputAbs = build ? declaredBuildOutput(snapshot.repoDir, build) : null;
+		const group: GroupResult = { gate, control: "skipped", mutants: [] };
+		results.push(group);
+		try {
+			await runGroup(gate, groupMutants, groupTimeout, group, build, outputAbs);
+		} finally {
+			// The output is this group's alone: removed whatever happened, so no later group — and
+			// not the post-run tree manifest — ever sees it. declaredBuildOutput pinned its ancestors.
+			if (outputAbs) fs.rmSync(outputAbs, { recursive: true, force: true });
+		}
 	}
 
 	const postTree = computeTreeManifest(snapshot.repoDir);

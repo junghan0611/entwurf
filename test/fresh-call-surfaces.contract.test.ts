@@ -8,9 +8,15 @@
  * the tool failed to open. Nothing here reads the schema out of source text:
  *
  *   - the MCP surface is observed from a REAL bridge boot → runtime tools/list —
- *     the same bytes an MCP host validates;
- *   - the pi surface is observed from the REAL extension's registerTool call —
- *     the same definition pi hands to provider conversion;
+ *     the same bytes an MCP host validates. Since #125 it is the ONLY fresh-call
+ *     surface: a pi session reaches it through Pi's built-in MCP, which hands the
+ *     tools/list inputSchema to the provider verbatim (`[측정 2026-09-30, pi 0.99.1]`
+ *     `extensions/mcp/tools.ts:232-237`), so there is no second, hand-written schema
+ *     left to drift. Why the native-pi half was retired rather than kept in parity,
+ *     and where that ownership and coverage boundary moved, is summarized in the
+ *     public #125 checkpoint
+ *     https://github.com/junghan0611/entwurf/issues/125#issuecomment-5906641374
+ *     (a summary, not a per-claim table);
  *   - every emitted `pattern` must compile under a Rust-regex-family engine
  *     (rregex — the rust-lang/regex crate compiled to WASM), not just `new
  *     RegExp`, because that asymmetry IS the defect class;
@@ -35,9 +41,7 @@ import { FRESH_CALL_BACKENDS } from "../pi-extensions/lib/mux-fresh-call.ts";
 import {
 	type BridgeTool,
 	bootBridgeAndListTools,
-	capturePiToolDefinitions,
 	HOST_DESCRIPTION_CAP,
-	type PiToolDefinition,
 	REPO_DIR,
 	requireTool,
 } from "./helpers/fresh-call-fixtures.ts";
@@ -70,10 +74,9 @@ function patternsOf(schema: Record<string, unknown> | undefined, at: string): Ar
 }
 
 let mcpTools: BridgeTool[];
-let piTools: PiToolDefinition[];
 
 beforeAll(async () => {
-	[mcpTools, piTools] = await Promise.all([bootBridgeAndListTools(), capturePiToolDefinitions()]);
+	mcpTools = await bootBridgeAndListTools();
 });
 
 describe("MCP surface — real bridge boot → runtime tools/list", () => {
@@ -144,19 +147,11 @@ describe("MCP surface — real bridge boot → runtime tools/list", () => {
 		expect([...(mcpEnum ?? [])].sort()).toEqual(expected);
 	});
 
-	it("[QK:FRESHCALL-BACKEND-SET-SURFACE-PARITY-PI] the native pi surface enum equals the same fixed set — a backend missing only here is a capability no in-process pi session can name", () => {
-		const expected = [...FRESH_CALL_BACKENDS].sort();
-		const piEnum = (
-			requireTool(piTools, "entwurf_fresh_call").parameters.properties?.backend as { enum?: string[] } | undefined
-		)?.enum;
-		expect([...(piEnum ?? [])].sort()).toEqual(expected);
-	});
-
 	/**
-	 * The THIRD surface. `docs/adding-a-harness.md` step 9 names all three together — "native pi,
-	 * the MCP bridge, and the operator skill" — but only the two schema surfaces were ever
-	 * observed, so the skill's backend list was free to drift and did not even have a gate to
-	 * drift against. A skill that offers three backends is not a cosmetic staleness: it is the
+	 * The SECOND surface. `docs/adding-a-harness.md` step 9 names the public surfaces together — the
+	 * MCP bridge (which every host, pi included since #125, reaches) and the operator skill — but
+	 * only the schema surface was ever observed, so the skill's backend list was free to drift and
+	 * did not even have a gate to drift against. A skill that offers three backends is not a cosmetic staleness: it is the
 	 * document the operator reads to decide what can be opened, so a missing backend is
 	 * unreachable in practice exactly the way a missing enum value is unreachable in schema.
 	 *
@@ -164,7 +159,7 @@ describe("MCP surface — real bridge boot → runtime tools/list", () => {
 	 * no runtime to interrogate — so the assertion is deliberately anchored on the one line that
 	 * states the contract rather than on any mention of a backend name anywhere in the file.
 	 */
-	it("[QK:FRESHCALL-BACKEND-SET-SURFACE-PARITY-SKILL] the operator skill offers the same fixed set — step 9 requires the same backends on all THREE public surfaces, and this one had no gate at all", () => {
+	it("[QK:FRESHCALL-BACKEND-SET-SURFACE-PARITY-SKILL] the operator skill offers the same fixed set — step 9 requires the same backends on every public surface, and this one had no gate at all", () => {
 		const skill = fs.readFileSync(path.join(REPO_DIR, ".claude/skills/entwurf-dev/SKILL.md"), "utf8");
 		const line = skill.split(/\r?\n/).find((l) => l.includes("entwurf_fresh_call") && l.includes("backend"));
 		expect(line, "the skill states its fresh-call backend contract on one line").toBeDefined();
@@ -192,72 +187,10 @@ describe("MCP surface — real bridge boot → runtime tools/list", () => {
 	});
 });
 
-describe("pi surface — real extension registration capture", () => {
-	it("[QK:FRESHCALL-PI-MODEL-SCHEMA] native pi requires model in its RUNTIME schema (present, required, bounded) and passes that exact parameter to the composition", () => {
-		const fresh = requireTool(piTools, "entwurf_fresh_call");
-		const model = fresh.parameters.properties?.model;
-		expect(model, "registerTool carries a model property").toBeDefined();
-		expect(model?.minLength).toBe(1);
-		expect(model?.maxLength).toBe(200);
-		expect(typeof model?.pattern).toBe("string");
-		expect(fresh.parameters.required).toContain("model");
-		const piSrc = fs.readFileSync(path.join(REPO_DIR, "pi-extensions/entwurf-control.ts"), "utf8");
-		expect(piSrc).toMatch(/model:\s*params\.model/);
-	});
-
-	it("the registered pattern compiles under the Rust regex family and the runtime description fits the host cap", () => {
-		const fresh = requireTool(piTools, "entwurf_fresh_call");
-		const all = patternsOf(fresh.parameters as unknown as Record<string, unknown>, "entwurf_fresh_call");
-		expect(all.length).toBeGreaterThan(0);
-		for (const { at, pattern } of all) {
-			const err = rustCompileError(pattern);
-			expect(err, `${at} pattern ${JSON.stringify(pattern)} must compile under Rust regex: ${err ?? ""}`).toBeNull();
-		}
-		expect(fresh.description.length).toBeGreaterThan(400);
-		expect(fresh.description.length).toBeLessThan(HOST_DESCRIPTION_CAP);
-	});
-
-	it("[QK:FRESHCALL-PI-SURFACE-IDENTITY] native pi supplies callerGardenId from its own resident closure — no identity/nonce parameter, and env carriers are ignored even when present", async () => {
-		const fresh = requireTool(piTools, "entwurf_fresh_call");
-		expect(Object.keys(fresh.parameters.properties ?? {}).sort()).toEqual([
-			"backend",
-			"cwd",
-			"model",
-			"placement",
-			"task",
-		]);
-		// Behavioral discrimination, mutation-safe by construction: the model is
-		// INVALID, so even a mutant that steals an id from env can never reach tmux —
-		// it would answer model-invalid, while the resident-closure control (null in
-		// this harness: session_start never ran) refuses identity FIRST.
-		const before = process.env.PI_SESSION_ID;
-		process.env.PI_SESSION_ID = "20260101T000000-feed00";
-		try {
-			const result = await fresh.execute("t1", { backend: "pi", model: "not a model", task: "noop" });
-			expect(result.isError).toBe(true);
-			expect(result.content[0]?.text ?? "").toContain("caller-identity-unavailable");
-			expect(result.content[0]?.text ?? "").not.toContain("model-invalid");
-		} finally {
-			if (before === undefined) delete process.env.PI_SESSION_ID;
-			else process.env.PI_SESSION_ID = before;
-		}
-	});
-});
-
-describe("one grammar, two surfaces", () => {
-	it("the emitted model patterns are byte-identical across the MCP and pi surfaces — the original defect was two hand-written copies disagreeing", () => {
-		const mcpModel = requireTool(mcpTools, "entwurf_fresh_call").inputSchema?.properties?.model;
-		const piModel = requireTool(piTools, "entwurf_fresh_call").parameters.properties?.model;
-		expect(mcpModel?.pattern).toBeDefined();
-		expect(mcpModel?.pattern).toBe(piModel?.pattern);
-		expect(mcpModel?.minLength).toBe(piModel?.minLength);
-		expect(mcpModel?.maxLength).toBe(piModel?.maxLength);
-	});
-
-	it("both runtime descriptions carry the same world map and contract literals", () => {
+describe("the one fresh-call surface — contracts every caller relies on", () => {
+	it("the runtime description carries the world map and contract literals", () => {
 		const mcpDesc = requireTool(mcpTools, "entwurf_fresh_call").description ?? "";
-		const piDesc = requireTool(piTools, "entwurf_fresh_call").description;
-		for (const desc of [mcpDesc, piDesc]) {
+		for (const desc of [mcpDesc]) {
 			// "secrets", not the file-level "no secrets" literal the old gate matched:
 			// that string lived in surrounding source, not in the rendered description a
 			// model actually reads ("Do not put secrets in the task").
@@ -268,7 +201,7 @@ describe("one grammar, two surfaces", () => {
 				"Model is REQUIRED",
 				"entwurf_v2",
 				// #95 D1 retired the fixed `codex` home, so the shared literal is no longer a
-				// room name. What both surfaces must still say is WHOSE session an omitted seat
+				// room name. What the surface must still say is WHOSE session an omitted seat
 				// follows — the caller's, never the backend being opened.
 				"the CALLER",
 			]) {
@@ -277,17 +210,13 @@ describe("one grammar, two surfaces", () => {
 		}
 	});
 
-	it("[QK:FRESHCALL-CWD-SURFACE-PARITY] both surfaces expose the SAME optional cwd — present in each runtime schema, required by neither, same literal-path contract in the description, passed through verbatim to the one composition — so cross-repo fresh cannot become a one-surface customs gap", () => {
+	it("[QK:FRESHCALL-CWD-SURFACE] the fresh-call surface exposes an optional cwd — present in the runtime schema, not required, the literal-path contract in its description, passed through verbatim to the one composition — so cross-repo fresh is reachable from every caller", () => {
 		const mcpFresh = requireTool(mcpTools, "entwurf_fresh_call");
 		const mcpCwd = mcpFresh.inputSchema?.properties?.cwd;
 		expect(mcpCwd, "tools/list carries a cwd property").toBeDefined();
 		expect(mcpCwd?.type).toBe("string");
 		expect(mcpFresh.inputSchema?.required).not.toContain("cwd");
-		const piFresh = requireTool(piTools, "entwurf_fresh_call");
-		const piCwd = piFresh.parameters.properties?.cwd;
-		expect(piCwd, "registerTool carries a cwd property").toBeDefined();
-		expect(piFresh.parameters.required ?? []).not.toContain("cwd");
-		for (const desc of [String(mcpCwd?.description ?? ""), String(piCwd?.description ?? "")]) {
+		for (const desc of [String(mcpCwd?.description ?? "")]) {
 			expect(desc).toContain("ABSOLUTE");
 			expect(desc).toContain("REQUESTED");
 			expect(desc).toContain("no trim");
@@ -295,65 +224,55 @@ describe("one grammar, two surfaces", () => {
 		// The pass-through halves stay structural asserts, same as the model parameter above.
 		const mcpSrc = fs.readFileSync(path.join(REPO_DIR, "mcp/entwurf-bridge/src/index.ts"), "utf8");
 		// The MCP surface passes ONE object to the composition ROOT (#116 C3): rail choice, Codex
-		// preflight ordering and rendering live there, so this surface and pi's own cannot drift.
+		// preflight ordering and rendering live there, not in the surface.
 		// Two of its fields are surface-supplied codex caller facts (#95 lane B/C) that only this
 		// surface can supply, and they ride the same object rather than a second call.
 		expect(mcpSrc).toMatch(
 			/dispatchFreshCall\(\{\s*backend,\s*model,\s*task,\s*cwd,\s*placement,\s*callerGardenId,\s*callerNativeSessionId,\s*callerCwd,\s*\}\)/,
 		);
-		const piSrc = fs.readFileSync(path.join(REPO_DIR, "pi-extensions/entwurf-control.ts"), "utf8");
-		expect(piSrc).toMatch(/cwd:\s*params\.cwd/);
 	});
 
-	it("[QK:FRESHCALL-PLACEMENT-SURFACE-PARITY] both surfaces expose the SAME optional project seat — an object with the one required tmuxSession field, optional on each surface, the same nothing-is-created contract in the description, passed through verbatim to the one composition — so opening a sibling in the operator's project session cannot become a one-surface capability", () => {
+	it("[QK:FRESHCALL-PLACEMENT-SURFACE] the fresh-call surface exposes an optional project seat — an object with the one required tmuxSession field, optional, the nothing-is-created contract in its description, passed through verbatim to the one composition, and the same seat offered by the operator skill", () => {
 		const mcpFresh = requireTool(mcpTools, "entwurf_fresh_call");
 		const mcpPlacement = mcpFresh.inputSchema?.properties?.placement;
 		expect(mcpPlacement, "tools/list carries a placement property").toBeDefined();
 		expect(mcpPlacement?.type).toBe("object");
 		expect(mcpFresh.inputSchema?.required).not.toContain("placement");
-		const piFresh = requireTool(piTools, "entwurf_fresh_call");
-		const piPlacement = piFresh.parameters.properties?.placement;
-		expect(piPlacement, "registerTool carries a placement property").toBeDefined();
-		expect(piFresh.parameters.required ?? []).not.toContain("placement");
-		// The seat itself is the one required field of that object on BOTH surfaces: an empty
-		// object would be a seat request naming no seat.
-		for (const placement of [mcpPlacement, piPlacement]) {
+		// The seat itself is the one required field of that object: an empty object would be a
+		// seat request naming no seat.
+		for (const placement of [mcpPlacement]) {
 			const inner = (placement as { properties?: Record<string, unknown> } | undefined)?.properties;
 			expect(Object.keys(inner ?? {})).toEqual(["tmuxSession"]);
 			expect((placement as { required?: string[] } | undefined)?.required).toEqual(["tmuxSession"]);
 		}
-		for (const desc of [String(mcpPlacement?.description ?? ""), String(piPlacement?.description ?? "")]) {
+		for (const desc of [String(mcpPlacement?.description ?? "")]) {
 			expect(desc).toContain("EXISTING");
 			expect(desc).toContain("Nothing is ever created");
 			expect(desc).toContain("Independent of cwd");
 			expect(desc).toContain("expert seat override");
-			// The omitted-seat rule, stated the same way on both surfaces. It is deliberately
+			// The omitted-seat rule, stated for every caller. It is deliberately
 			// about WHO CALLS rather than what is opened: #95 D1 retired the Codex-target home,
 			// and the asymmetry it left behind is exactly what a stale description would keep
 			// selling to a model.
 			expect(desc).toContain("follows the CALLER, never the backend being opened");
 		}
-		// The Codex caller-pane rule is on the MCP surface ONLY, and its absence from pi is a
-		// FACT rather than a gap: a pi session is never a codex citizen, so that branch cannot
-		// arise there. Asserting both halves keeps a future "parity" edit from selling pi a rule
-		// it can only fail.
+		// The Codex caller-pane rule is stated here for every caller; it only ever FIRES for a codex
+		// caller, because only that sender carries a thread id (a pi-session sender reaching this
+		// surface since #125 has none, so the anchor is never consulted for it).
 		expect(String(mcpPlacement?.description ?? "")).toContain("a Codex CALLER opens beside its own TUI pane");
-		expect(String(piPlacement?.description ?? "")).not.toContain("thread-id");
-		// Both runtime descriptions state the refusal, so a caller cannot read "seat" as "create".
-		for (const desc of [mcpFresh.description ?? "", piFresh.description]) {
+		// The runtime description states the refusal, so a caller cannot read "seat" as "create".
+		for (const desc of [mcpFresh.description ?? ""]) {
 			expect(desc).toContain("placement.tmuxSession");
 			expect(desc).toContain("NOTHING is created");
-			// ...and neither may still advertise the retired room (#95 D1).
+			// ...and it may not still advertise the retired room (#95 D1).
 			expect(desc).not.toContain("`codex` home");
 		}
-		// The pass-through halves stay structural asserts, same as the cwd parity above.
+		// The pass-through stays a structural assert, same as the cwd contract above.
 		const mcpSeatSrc = fs.readFileSync(path.join(REPO_DIR, "mcp/entwurf-bridge/src/index.ts"), "utf8");
 		expect(mcpSeatSrc).toMatch(
 			/dispatchFreshCall\(\{\s*backend,\s*model,\s*task,\s*cwd,\s*placement,\s*callerGardenId,\s*callerNativeSessionId,\s*callerCwd,\s*\}\)/,
 		);
-		const piSeatSrc = fs.readFileSync(path.join(REPO_DIR, "pi-extensions/entwurf-control.ts"), "utf8");
-		expect(piSeatSrc).toMatch(/placement:\s*params\.placement/);
-		// The THIRD surface, for the same reason the backend set is held on all three: the skill
+		// The SKILL surface, for the same reason the backend set is held there: the skill
 		// is the document the operator reads to decide what can be opened, so a seat that is
 		// missing there is unreachable in practice exactly as a missing schema property is.
 		// Source text is the only observation point — a skill is prose with no runtime.
@@ -375,9 +294,9 @@ describe("one grammar, two surfaces", () => {
 	/**
 	 * The Codex capability preflight is the ONE preflight that cannot live in the composition:
 	 * it performs a bounded app-server exchange, and `freshCall` is a synchronous leaf by
-	 * contract. So it sits on the two PUBLIC surfaces instead — which means the ordering that
-	 * every other backend gets for free (preflight inside the leaf, proven by the leaf's own
-	 * cells) is here a property of two hand-written call sites, and nothing executed them.
+	 * contract. So it sits OUTSIDE the leaf — which means the ordering that every other backend
+	 * gets for free (preflight inside the leaf, proven by the leaf's own cells) is here a property
+	 * of the call path a public surface drives, and it has to be executed to be believed.
 	 *
 	 * The argument is the same one the copilot/omp pre-mutation cells make: with NO tmux in the
 	 * environment, a surface that skipped the preflight would answer `no-tmux-context` from the
@@ -442,7 +361,7 @@ describe("one grammar, two surfaces", () => {
 		});
 	}
 
-	it("[QK:CODEX-CALLER-PREFLIGHT-SURFACE-WIRED] the CALLER-side capability question is asked in the shared dispatcher, gated on a codex caller with no explicit seat — a different axis from the target preflight beside it, and one the pi surface can never supply an input for", () => {
+	it("[QK:CODEX-CALLER-PREFLIGHT-SURFACE-WIRED] the CALLER-side capability question is asked in the shared dispatcher, gated on a codex caller with no explicit seat — a different axis from the target preflight beside it, supplied only for a codex sender", () => {
 		// Two facts, and they are separate on purpose. FIRST: the root runs the caller check, and
 		// only when the anchor will be consulted — a codex caller that named a placement never
 		// reads a pane title, so refusing it for a missing `thread-id` would refuse an unused
@@ -457,15 +376,12 @@ describe("one grammar, two surfaces", () => {
 		// the only surface a codex caller reaches entwurf through.
 		const mcpSrc = fs.readFileSync(path.join(REPO_DIR, "mcp/entwurf-bridge/src/index.ts"), "utf8");
 		expect(mcpSrc).toContain("callerNativeSessionId = self.codexThreadId;");
-		// The pi surface is NOT missing a capability here: a pi session is never a codex caller,
-		// so there is no thread id to anchor and nothing for this check to be about. Asserting
-		// its ABSENCE is what keeps a future "parity" edit from adding a check pi can only fail.
-		const piSrc = fs.readFileSync(path.join(REPO_DIR, "pi-extensions/entwurf-control.ts"), "utf8");
-		expect(piSrc).not.toContain("codexCallerFreshPreflight");
-		expect(piSrc).not.toContain("callerNativeSessionId");
+		// A pi session reaching this surface since #125 is a pi-session sender: it carries no
+		// thread id, so `callerNativeSessionId` stays undefined and this check is never consulted
+		// for it — the input is a fact of the codex sender, not of the surface.
 	});
 
-	it("[QK:FRESHCALL-CALLER-CWD-SURFACE] the codex caller's RECORD cwd rides the MCP surface under the SAME condition as its thread id — one resolved sender, two facts, and neither read separately; the pi surface has neither, because a pi caller's own process directory IS its directory", () => {
+	it("[QK:FRESHCALL-CALLER-CWD-SURFACE] the codex caller's RECORD cwd rides the MCP surface under the SAME condition as its thread id — one resolved sender, two facts, and neither read separately; a pi caller supplies neither, because the bridge child it reaches runs in the pi session's own directory", () => {
 		// WHY the bridge is the only surface that can supply this: it runs as the MCP child of
 		// the operator-owned app-server, so `process.cwd()` there is the app-server's directory
 		// and an omitted cwd would open every sibling of every Codex caller in the app-server's
@@ -477,10 +393,9 @@ describe("one grammar, two surfaces", () => {
 		// rather than a separate lookup, an env read or a `_meta.workspaces` inspection.
 		expect(mcpSrc).not.toMatch(/callerCwd\s*=\s*process\.cwd\(\)/);
 		expect(mcpSrc).not.toContain("_meta.workspaces");
-		// The pi surface stays without it for the same reason it stays without the anchor: a pi
-		// session is never a codex caller, and its own process directory is already its own.
-		const piSrc = fs.readFileSync(path.join(REPO_DIR, "pi-extensions/entwurf-control.ts"), "utf8");
-		expect(piSrc).not.toContain("callerCwd");
+		// A pi caller gets neither: it is never a codex sender, and Pi's built-in MCP starts the
+		// bridge child in the pi session's own cwd, so the child's process directory already IS the
+		// caller's. That vendor fact is observed end to end by `check-pi-mcp-bridge` (#125), not here.
 	});
 
 	it("[QK:FRESHCALL-CODEX-PREMUTATION-MCP] the MCP surface carries Codex unchanged into the shared dispatcher, which answers a missing capability BEFORE placement — with no tmux in its environment the reason is still the capability's", async () => {
@@ -497,35 +412,9 @@ describe("one grammar, two surfaces", () => {
 		}
 	}, 30_000);
 
-	it("[QK:FRESHCALL-CODEX-PREMUTATION-PI] the native pi surface carries Codex unchanged into the same dispatcher — one surface relabelling it would bypass the single preflight and open a window before deciding", async () => {
-		const piFresh = requireTool(piTools, "entwurf_fresh_call");
-		const { env, cleanup } = codexPreflightEnv();
-		const saved = { ...process.env };
-		try {
-			for (const key of Object.keys(process.env)) delete process.env[key];
-			Object.assign(process.env, env);
-			const result = await piFresh.execute("pre-mutation", {
-				backend: "codex",
-				model: "gpt-5.6",
-				task: "pre-mutation contract cell — this must never reach tmux",
-			});
-			const text = result.content.map((c) => c.text ?? "").join("\n");
-			expect(text).not.toContain("no-tmux-context");
-			expect(
-				CODEX_REASONS.some((reason) => text.includes(reason)),
-				`expected one of ${CODEX_REASONS.join("/")}, got: ${text}`,
-			).toBe(true);
-		} finally {
-			for (const key of Object.keys(process.env)) delete process.env[key];
-			Object.assign(process.env, saved);
-			cleanup();
-		}
-	}, 30_000);
-
-	it("both peers surfaces stay facts-only and route creation to entwurf_fresh_call", () => {
+	it("the peers surface stays facts-only and routes creation to entwurf_fresh_call", () => {
 		expect(requireTool(mcpTools, "entwurf_peers").description ?? "").toMatch(
 			/facts-only[\s\S]{0,160}entwurf_fresh_call/,
 		);
-		expect(requireTool(piTools, "entwurf_peers").description).toMatch(/facts-only[\s\S]{0,120}entwurf_fresh_call/);
 	});
 });

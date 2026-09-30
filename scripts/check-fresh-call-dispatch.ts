@@ -20,9 +20,9 @@
  *   FCD-HERDR-BACKEND-FIRST   a non-pilot backend refuses before any preflight and any mutation
  *   FCD-CODEX-PREFLIGHT-TMUX  the Codex preflight still gates the tmux rail, and only that rail
  *   FCD-ONE-NONCE             one nonce is minted per call and reaches the selected rail
- *   FCD-SURFACE-PARITY        both surfaces call the same dispatcher and renderer, with no
- *                             second copy of the rail choice or the preflight ordering
- *   FCD-PI-DYNAMIC-IMPORT     pi still reaches it through its lazy dynamic import
+ *   FCD-SURFACE-ROOT-ONLY     the one public surface (the bridge; pi reaches it through Pi's
+ *                             built-in MCP since #125) calls the dispatcher and renderer, with
+ *                             no copy of the rail choice or preflight, and pi keeps no second path
  *   FCD-RENDER-PER-RAIL       each rail renders its own receipt; no universal tmux prose
  *   FCD-HERDR-VIEW-NOT-ADDRESS  the herdr receipt says its coordinates are a view
  *   FCD-RECOVERY-VISIBLE      a post-split failure shows closed vs orphan-unreclaimed:reason
@@ -190,11 +190,16 @@ async function main(): Promise<void> {
 			/result: await herdrFreshCall\(/.test(dispatchCode),
 	);
 
-	// ── one composition root, two surfaces ───────────────────────────────────────────────
+	// ── one composition root, one public surface ─────────────────────────────────────────
+	// #125: the pi-native fresh-call copy is retired — a pi session reaches the bridge's through Pi's
+	// built-in MCP — so the claim is no longer parity between two copies. It is that the ONE
+	// surface reaches the root without carrying rail choice, preflight or render of its own, and
+	// that the pi extension did not keep a second path to the root beside it.
 	ok(
-		"[QK:FCD-SURFACE-PARITY] BOTH surfaces reach the dispatcher and its renderer, and NEITHER carries its own rail choice, its own Codex preflight or its own rail-specific render — a defect planted in one copy would survive on the other",
-		PI_SRC.includes("dispatchFreshCall(") &&
-			PI_SRC.includes("renderDispatchedFreshCall(") &&
+		"[QK:FCD-SURFACE-ROOT-ONLY] the bridge reaches the dispatcher and its renderer and carries no rail choice, Codex preflight or rail-specific render of its own; the pi extension carries no fresh-call path at all",
+		!PI_SRC.includes("dispatchFreshCall(") &&
+			!PI_SRC.includes("renderDispatchedFreshCall(") &&
+			!PI_SRC.includes("fresh-call-dispatch") &&
 			MCP_SRC.includes("dispatchFreshCall({") &&
 			MCP_SRC.includes("renderDispatchedFreshCall(") &&
 			// Both DESCRIBE the rule to callers ("inside herdr (HERDR_ENV=1)…") and must keep
@@ -205,12 +210,6 @@ async function main(): Promise<void> {
 			!MCP_SRC.includes("codexFreshPreflight") &&
 			!MCP_SRC.includes("renderHerdrFreshCall") &&
 			!PI_SRC.includes("renderHerdrFreshCall"),
-	);
-	ok(
-		"[QK:FCD-PI-DYNAMIC-IMPORT] pi still reaches the composition root through its LAZY dynamic import — a static import would pull the rails into pi's startup path, which is the fence that keeps extension load cheap",
-		/const FRESH_CALL_DISPATCH_MODULE = "\.\/lib\/fresh-call-dispatch\.ts";/.test(PI_SRC) &&
-			PI_SRC.includes("await import(FRESH_CALL_DISPATCH_MODULE)") &&
-			!/^import .*fresh-call-dispatch/m.test(PI_SRC),
 	);
 
 	// ── rendering stays rail-honest ──────────────────────────────────────────────────────

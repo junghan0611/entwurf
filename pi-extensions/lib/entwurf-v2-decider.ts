@@ -22,7 +22,7 @@
  *
  * The frozen 7-step order (NEXT.md "통합 decider 순서"):
  *   1. requireGardenId   — runtime guard BEFORE any path is built (F2-P1; closes the
- *      MCP-schema bypass for pi-native/internal callers).
+ *      MCP-schema bypass for internal callers).
  *   2. resolveTarget     — no citizen → bad-target; a record-less control socket →
  *      record-less-socket (#50 C4: the record is the sole address authority);
  *      quarantined (out-of-socket-domain record sharing a socket/symlink) → target-address-conflict.
@@ -227,7 +227,7 @@ export interface DispatchDeciderDeps {
 
 /**
  * F2-P1 defense in depth: never build a lock/socket path from an unvalidated gid.
- * The MCP TypeBox pattern guards that one surface; a pi-native / internal caller
+ * The MCP schema pattern guards that one surface; an internal caller
  * bypasses the schema, so the decider re-validates as its very first step.
  */
 function requireGardenId(target: string): string {

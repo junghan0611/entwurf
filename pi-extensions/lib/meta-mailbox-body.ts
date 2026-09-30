@@ -3,7 +3,7 @@
  * meta-bridge mailbox body. Every transport that can deliver to a garden citizen
  * with no live control socket uses this:
  *   - the MCP bridge entwurf_v2 (mcp/entwurf-bridge) — external/Claude-host sends
- *   - the pi-native entwurf_v2 (pi-extensions/entwurf-control.ts) — pi-session sends
+ *     (pi-session sends included since #125 — a pi session reaches that same verb)
  *   - the native-push rail (pi-extensions/lib/entwurf-v2-native-push.ts) — direct
  *     injection into an Antigravity conversation or a loaded Codex thread. Its
  *     THIRD consumer, added after the #95 A LIVE run measured what an envelope-less

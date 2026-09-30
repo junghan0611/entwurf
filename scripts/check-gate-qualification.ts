@@ -505,6 +505,45 @@ if (ARGS.mode === "attribution-self-test") {
 			validateManifestSet([man], { ...permissiveOrigin, regularContainedFile: (f: string) => f !== "gates/kill.sh" }),
 		"signatureSource gates/kill.sh is not a regular",
 	);
+
+	// A declared build output (#125): optional, exact keys, a normalized repo-relative
+	// directory outside node_modules/.git, and one declaration per gate group.
+	const build = { argv: ["bash", "build.sh"], output: "out" };
+	ok(
+		"manifest: a declared build validates and rides the spec",
+		JSON.stringify(validateManifest(mutate({ build }), "m").mutants[0].build) === JSON.stringify(build),
+	);
+	ok("manifest: a spec without a build carries no build key", !("build" in man.mutants[0]));
+	throws(
+		"manifest: an unknown build key is refused",
+		() => validateManifest(mutate({ build: { ...build, env: {} } }), "m"),
+		"unknown key",
+	);
+	throws(
+		"manifest: a shell-string build is refused (argv array only)",
+		() => validateManifest(mutate({ build: { ...build, argv: "bash build.sh" } }), "m"),
+		"non-empty array",
+	);
+	for (const output of ["../out", "/tmp/out", "out/../x", "./out", "out/", "node_modules/x", ".git/x"]) {
+		throws(
+			`manifest: a build output ${JSON.stringify(output)} is refused`,
+			() => validateManifest(mutate({ build: { ...build, output } }), "m"),
+			"output",
+		);
+	}
+	const withBuild = validateManifest(
+		{
+			...good,
+			lane: "built",
+			mutants: [{ ...good.mutants[0], claim: "SELFTEST-BUILT", signature: "[QK:SELFTEST-BUILT]", build }],
+		},
+		"c",
+	);
+	throws(
+		"[QK:QUALIFY-BUILD-GROUP-CONSISTENT] manifest set: one gate whose mutants declare different builds (here: one none) is refused — the same gate would be handed different inputs by run order",
+		() => validateManifestSet([man, withBuild], permissiveOrigin),
+		"mixes build declarations",
+	);
 }
 
 // ═══ Phase 1c — the pipeline over a synthetic fixture repo ══════════════════
@@ -876,6 +915,207 @@ const quiet = (): void => {};
 	} finally {
 		fs.rmSync(fixtureOrigin, { recursive: true, force: true });
 		fs.rmSync(path.dirname(externalTarget), { recursive: true, force: true });
+	}
+}
+
+// ═══ Phase 1c-b — a declared build output over a source-only fixture (#125) ═══
+//
+// The snapshot replicates the work surface only, so an IGNORED build output a gate consumes
+// (the compiled entwurf-bridge) is absent, and such a gate is CONTROL-RED in every run. A
+// mutant may declare that build instead. Each cell is a discriminating negative: a runner
+// that skipped the rebuild after a mutation, read a build red as a kill, let one group's
+// output reach another, or ignored a gate writing into the output flips exactly one of them.
+
+function buildDeclaredOutputFixture(): string {
+	const dir = reclaimOnExit(fs.mkdtempSync(path.join(os.tmpdir(), "entwurf-qualify-build-")));
+	const write = (rel: string, body: string): void => {
+		const p = path.join(dir, rel);
+		fs.mkdirSync(path.dirname(p), { recursive: true });
+		fs.writeFileSync(p, body);
+	};
+	write(".gitignore", "out/\n");
+	write("src.txt", "alpha\noriginal-line\nomega\n");
+	write("tracked-out/keep.txt", "a tracked directory is source, never a build output\n");
+	// The build prints the build-red mutant's own token on its FAILURE line on purpose: a
+	// runner that read build output as gate output would call the broken build a kill.
+	write(
+		"build.sh",
+		'set -e\nrm -rf out\nmkdir -p out\nif grep -q break-build src.txt; then echo "FAIL: build broke [QK:SELFTEST-BUILD-RED]" >&2; exit 1; fi\ncp src.txt out/built.txt\n',
+	);
+	// Reads ONLY the build output: it can see the planted defect only if the runner rebuilt.
+	write(
+		"gates/built.sh",
+		'if [ ! -f out/built.txt ]; then echo "FAIL: build output missing" >&2; exit 1; fi\nif grep -q defect-line out/built.txt; then echo "FAIL: built defect [QK:SELFTEST-BUILD-KILL]" >&2; exit 1; fi\nexit 0\n',
+	);
+	write(
+		"gates/writer.sh",
+		'if [ ! -f out/built.txt ]; then exit 1; fi\nif grep -q defect-line out/built.txt; then echo stray > out/stray.txt; echo "FAIL: built defect [QK:SELFTEST-BUILD-WRITER]" >&2; exit 1; fi\nexit 0\n',
+	);
+	write(
+		"gates/no-output.sh",
+		'if [ -e out ]; then echo "FAIL: a build output leaked out of its group" >&2; exit 1; fi\nexit 0\n',
+	);
+	const git = (...args: string[]): void => {
+		const r = spawnSync("git", ["-C", dir, ...args], {
+			stdio: "ignore",
+			env: {
+				...process.env,
+				GIT_CONFIG_GLOBAL: "/dev/null",
+				GIT_CONFIG_SYSTEM: "/dev/null",
+				GIT_AUTHOR_NAME: "fx",
+				GIT_AUTHOR_EMAIL: "fx@localhost",
+				GIT_COMMITTER_NAME: "fx",
+				GIT_COMMITTER_EMAIL: "fx@localhost",
+			},
+		});
+		assert.equal(r.status, 0, `fixture git ${args.join(" ")} failed`);
+	};
+	git("init", "-q");
+	git("add", "-A");
+	git("-c", "commit.gpgsign=false", "commit", "-q", "-m", "fixture");
+	return dir;
+}
+
+{
+	const origin = buildDeclaredOutputFixture();
+	const build = { argv: ["bash", "build.sh"], output: "out" };
+	const spec = (patch: Partial<MutantSpec>): MutantSpec => ({
+		claim: "SELFTEST-BUILD-KILL",
+		title: "fixture",
+		subject: "src.txt",
+		find: ["original-line"],
+		replace: ["defect-line"],
+		gate: ["bash", "gates/built.sh"],
+		timeoutSeconds: 30,
+		signature: "[QK:SELFTEST-BUILD-KILL]",
+		signatureSource: "gates/built.sh",
+		build,
+		...patch,
+	});
+	const snap = createRepoSnapshot(origin);
+	try {
+		ok(
+			"build fixture: the snapshot is source-only — the ignored output is not replicated",
+			!fs.existsSync(path.join(snap.repoDir, "out")),
+		);
+		const report = await qualifyMutants(
+			snap,
+			[
+				// No declaration, same script: the #125 shape — the gate needs an output nobody built.
+				// It runs FIRST, so its verdict never depends on whether an earlier group cleaned up.
+				spec({
+					claim: "SELFTEST-BUILD-UNDECLARED",
+					signature: "[QK:SELFTEST-BUILD-UNDECLARED]",
+					gate: ["bash", "gates/built.sh", "undeclared"],
+					build: undefined,
+				}),
+				spec({}),
+				spec({
+					claim: "SELFTEST-BUILD-RED",
+					signature: "[QK:SELFTEST-BUILD-RED]",
+					replace: ["break-build"],
+				}),
+				spec({
+					claim: "SELFTEST-NO-LEAK",
+					signature: "[QK:SELFTEST-NO-LEAK]",
+					gate: ["bash", "gates/no-output.sh"],
+					build: undefined,
+				}),
+			],
+			quiet,
+		);
+		const byClaim = new Map(report.groups.flatMap((g) => g.mutants.map((m) => [m.claim, { g, m }] as const)));
+		ok(
+			"[QK:QUALIFY-BUILD-TRACKS-MUTATION] a gate that reads ONLY the declared build output kills a mutant planted in the build's SOURCE — the runner rebuilt from the mutated bytes, and the restored bytes rebuilt the baseline (control-post green)",
+			byClaim.get("SELFTEST-BUILD-KILL")?.m.verdict === "KILLED" &&
+				byClaim.get("SELFTEST-BUILD-KILL")?.g.control === "ok",
+		);
+		ok(
+			"[QK:QUALIFY-BUILD-RED-NOT-A-KILL] a mutation that breaks the build is never a kill, even when the build prints the claim token on its failure line — the gate did not run",
+			byClaim.get("SELFTEST-BUILD-RED")?.m.verdict === "WRONG-REASON" &&
+				(byClaim.get("SELFTEST-BUILD-RED")?.m.detail ?? "").includes("declared build red"),
+		);
+		ok(
+			"[QK:QUALIFY-BUILD-SCOPED-TO-GROUP] the declared output belongs to its group alone — a later group never sees it, it is gone when the run ends, and the snapshot tree and porcelain are exactly as before",
+			byClaim.get("SELFTEST-NO-LEAK")?.g.control === "ok" &&
+				!fs.existsSync(path.join(snap.repoDir, "out")) &&
+				report.treeClean &&
+				report.porcelainClean,
+		);
+		ok(
+			"build fixture: a gate that needs an output its group did not declare is CONTROL-RED (the #125 qualification shape)",
+			byClaim.get("SELFTEST-BUILD-UNDECLARED")?.m.verdict === "CONTROL-RED",
+		);
+
+		const writer = await qualifyMutants(
+			snap,
+			[
+				spec({
+					claim: "SELFTEST-BUILD-WRITER",
+					signature: "[QK:SELFTEST-BUILD-WRITER]",
+					gate: ["bash", "gates/writer.sh"],
+					signatureSource: "gates/writer.sh",
+				}),
+			],
+			quiet,
+		);
+		ok(
+			"[QK:QUALIFY-BUILD-OUTPUT-GUARDED] a gate that writes into its declared build output voids its own run — IMPURE, never KILLED, and the group is post-red",
+			writer.groups[0].mutants[0].verdict === "IMPURE" && writer.groups[0].control === "post-red",
+		);
+		ok("build fixture: an impure-output report does not pass", reportPassed(writer) === false);
+
+		const baselineRed = await qualifyMutants(
+			snap,
+			[spec({ build: { argv: ["bash", "-c", "exit 3"], output: "out" } })],
+			quiet,
+		);
+		ok(
+			"build fixture: a build red at baseline voids the group — pre-red, every mutant CONTROL-RED",
+			baselineRed.groups[0].control === "pre-red" && baselineRed.groups[0].mutants[0].verdict === "CONTROL-RED",
+		);
+		await assert.rejects(
+			qualifyMutants(snap, [spec({ build: { argv: ["bash", "build.sh"], output: "tracked-out" } })], quiet),
+			/already exists in the snapshot/,
+			"a declared output that is on the work surface must be refused before anything runs",
+		);
+		ok(
+			"build fixture: a declared output that is on the work surface is refused before anything runs, and its source bytes are untouched",
+			fs.existsSync(path.join(snap.repoDir, "tracked-out", "keep.txt")),
+		);
+		await assert.rejects(
+			qualifyMutants(snap, [spec({ build: { argv: ["bash", "build.sh"], output: "absent-parent/out" } })], quiet),
+			/no parent directory in the snapshot/,
+			"a declared output whose parent the snapshot lacks must be refused — the build would leave that directory behind",
+		);
+		ok(
+			"build fixture: a declared output whose parent is absent is refused before anything runs, and nothing was created",
+			!fs.existsSync(path.join(snap.repoDir, "absent-parent")),
+		);
+		// A build that never cleans its output (append-only) still reproduces its baseline: the
+		// runner removes the output before every build, so the contract does not rest on the script.
+		const appending = await qualifyMutants(
+			snap,
+			[
+				spec({
+					gate: ["bash", "gates/built.sh", "appending"],
+					build: {
+						argv: ["bash", "-c", "mkdir -p out && cp src.txt out/built.txt && echo run >> out/append.log"],
+						output: "out",
+					},
+				}),
+			],
+			quiet,
+		);
+		ok(
+			"build fixture: a build that does not clean its own output still kills and reproduces its baseline (control ok, tree clean)",
+			appending.groups[0].mutants[0].verdict === "KILLED" &&
+				appending.groups[0].control === "ok" &&
+				appending.treeClean,
+		);
+	} finally {
+		fs.rmSync(snap.baseDir, { recursive: true, force: true });
+		fs.rmSync(origin, { recursive: true, force: true });
 	}
 }
 
@@ -3094,18 +3334,21 @@ let manifestCount: number;
 		"codex-app-server-launch": 9,
 		"codex-caller-seat": 28,
 		"control-send-receipt": 19,
-		"codex-native": 82,
+		"codex-native": 81,
 		"compaction-send-guard": 7,
 		"control-socket-disconnect": 4,
 		"copilot-birth": 19,
 		"copilot-launch": 14,
 		"pi-launch": 9,
 		"pi-floor": 1,
+		"pi-bridge-sender": 4,
+		"pi-mcp-bridge": 2,
+		"pi-mcp-register": 3,
 		"copilot-receive": 20,
 		"entwurf-peers": 1,
-		"fresh-call-dispatch": 12,
+		"fresh-call-dispatch": 11,
 		"fresh-cut": 3,
-		"gate-qualification": 2,
+		"gate-qualification": 7,
 		"herdr-placement": 13,
 		"herdr-plugin": 25,
 		"herdr-plugin-profile": 14,
@@ -3120,13 +3363,13 @@ let manifestCount: number;
 		"meta-identity": 4,
 		"meta-retire": 4,
 		"mux-boundary": 16,
-		"mux-fresh-call": 59,
+		"mux-fresh-call": 56,
 		"mux-launcher-fence": 8,
 		"mux-parent-artifact": 3,
 		"pack-install": 2,
 		"pi-package-ownership": 8,
 		"qualification-ledger": 42,
-		"mux-resume-call": 12,
+		"mux-resume-call": 10,
 		"omp-birth": 13,
 		"omp-fresh": 24,
 		"omp-receive": 11,

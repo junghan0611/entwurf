@@ -174,14 +174,15 @@
 			"gate": ["bash", "run.sh", "check-tests-beside-behavior"],
 			"timeoutSeconds": 600,
 			"signature": "[QK:VITEST-TEST-DIR-ON-THE-FLOOR]",
-			"signatureSource": "run.sh"
+			"signatureSource": "run.sh",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
 		},
 		{
 			"claim": "PI-CORE-PIN-TRACKS-FLOOR",
 			"title": "the queue oracle's pi-agent-core pin drifts off the floor the rest of the pi runtime is pinned to, so the oracle keeps answering honestly — about a pi nobody in this repo runs",
 			"subject": "package.json",
-			"find": ["\"@earendil-works/pi-agent-core\": \"0.87.1\","],
-			"replace": ["\"@earendil-works/pi-agent-core\": \"0.86.0\","],
+			"find": ["\"@earendil-works/pi-agent-core\": \"0.99.1\","],
+			"replace": ["\"@earendil-works/pi-agent-core\": \"0.87.1\","],
 			"gate": ["bash", "run.sh", "check-dep-versions"],
 			"timeoutSeconds": 300,
 			"signature": "[QK:PI-CORE-PIN-TRACKS-FLOOR]",
@@ -218,7 +219,8 @@
 			"gate": ["bash", "run.sh", "check-tests-beside-behavior"],
 			"timeoutSeconds": 600,
 			"signature": "[QK:VITEST-TEST-DIR-HAS-COORDINATE]",
-			"signatureSource": "run.sh"
+			"signatureSource": "run.sh",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
 		},
 		{
 			"claim": "SEND-OUTCOME-LIST-NAMES-EVERY-RAIL",

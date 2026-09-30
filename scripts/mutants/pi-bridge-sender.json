@@ -1,0 +1,54 @@
+{
+	"schemaVersion": 1,
+	"lane": "pi-bridge-sender",
+	"mutants": [
+		{
+			"claim": "PI-BRIDGE-SENDER-RECORD-BACKED",
+			"title": "the backing check starts treating a missing control socket as inadmissible, so a dormant pi citizen loses its own identity instead of answering replyable:false",
+			"subject": "mcp/entwurf-bridge/src/index.ts",
+			"find": ["\tif (identity.backend !== \"pi\") {"],
+			"replace": [
+				"\tif (identity.backend !== \"pi\" || !existsSync(controlSocketPathIn(ENTWURF_DIR, envelope.sessionId))) {"
+			],
+			"gate": ["bash", "run.sh", "check-pi-bridge-sender"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:PI-BRIDGE-SENDER-RECORD-BACKED]",
+			"signatureSource": "scripts/check-pi-bridge-sender.ts"
+		},
+		{
+			"claim": "PI-BRIDGE-SENDER-MISSING-REFUSED",
+			"title": "the pi branch returns the raw carrier again, so any well-formed PI_SESSION_ID is served as a sender whether or not a record exists",
+			"subject": "mcp/entwurf-bridge/src/index.ts",
+			"find": ["\tif (pi && pi.sessionId === selected.id) return { envelope: requirePiSenderRecord(pi) };"],
+			"replace": ["\tif (pi && pi.sessionId === selected.id) return { envelope: pi };"],
+			"gate": ["bash", "run.sh", "check-pi-bridge-sender"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:PI-BRIDGE-SENDER-MISSING-REFUSED]",
+			"signatureSource": "scripts/check-pi-bridge-sender.ts"
+		},
+		{
+			"claim": "PI-BRIDGE-SENDER-BACKEND-REFUSED",
+			"title": "the backend check is dropped, so a PI_SESSION_ID naming another harness's record is served as a pi sender",
+			"subject": "mcp/entwurf-bridge/src/index.ts",
+			"find": ["\tif (identity.backend !== \"pi\") {"],
+			"replace": ["\tif (identity.backend === undefined) {"],
+			"gate": ["bash", "run.sh", "check-pi-bridge-sender"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:PI-BRIDGE-SENDER-BACKEND-REFUSED]",
+			"signatureSource": "scripts/check-pi-bridge-sender.ts"
+		},
+		{
+			"claim": "PI-BRIDGE-SENDER-UNREADABLE-CAUSE",
+			"title": "reader failures are flattened into the absent-record refusal, so a corrupt store reads as a citizen that simply does not exist",
+			"subject": "mcp/entwurf-bridge/src/index.ts",
+			"find": ["\tconst identity = readMetaIdentityByGardenId(envelope.sessionId);"],
+			"replace": [
+				"\tconst identity = (() => {\n\t\ttry {\n\t\t\treturn readMetaIdentityByGardenId(envelope.sessionId);\n\t\t} catch {\n\t\t\tthrow new Error(`no meta-record for garden id \"${envelope.sessionId}\"`);\n\t\t}\n\t})();"
+			],
+			"gate": ["bash", "run.sh", "check-pi-bridge-sender"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:PI-BRIDGE-SENDER-UNREADABLE-CAUSE]",
+			"signatureSource": "scripts/check-pi-bridge-sender.ts"
+		}
+	]
+}

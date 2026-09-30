@@ -212,6 +212,7 @@ function main(): void {
 
 		const PI_SURFACE = read("pi-extensions/entwurf-control.ts");
 		const MCP_SURFACE = read("mcp/entwurf-bridge/src/index.ts");
+		const PI_CODE = PI_SURFACE.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
 		const V2_RESUME = read("pi-extensions/lib/entwurf-v2-visible-resume.ts");
 		// IMPORTS, not mentions: the module header names the mux side deliberately (that is the
 		// architecture being documented), so an assertion on prose would forbid the explanation
@@ -222,55 +223,43 @@ function main(): void {
 			v2ImportSpecifiers.length > 0 && !v2ImportSpecifiers.some((s) => /mux-/.test(s)),
 		);
 		ok(
-			"both surfaces are the composition root: each imports the mux launcher AND the v2 composition and joins them itself",
-			/mux-resume-call/.test(PI_SURFACE) &&
-				/entwurf-v2-visible-resume/.test(PI_SURFACE) &&
-				/mux-resume-call/.test(MCP_SURFACE) &&
-				/entwurf-v2-visible-resume/.test(MCP_SURFACE),
+			"the bridge is the composition root: it imports the mux launcher AND the v2 composition and joins them itself",
+			/mux-resume-call/.test(MCP_SURFACE) && /entwurf-v2-visible-resume/.test(MCP_SURFACE),
+		);
+		// #125: pi reaches entwurf_resume_call through Pi's built-in MCP — the bridge above IS its
+		// surface. The native pi registration, its target-only TypeBox schema and its description are
+		// retired with it (registration and target-only are held on the runtime tools/list by
+		// BRIDGEBOOT-RESUME-CALL-REGISTERED / -TARGET-ONLY, the description by DESC-CONTRACT-MCP below).
+		// What is left to say about the pi file is that it does not come back as a second root.
+		ok(
+			"the pi extension no longer joins the resume halves itself — no second composition root beside the bridge",
+			!/mux-resume-call/.test(PI_CODE) && !/entwurf-v2-visible-resume/.test(PI_CODE),
+		);
+		// The pass-through half the native claim used to carry, now on the one surface that has it:
+		// the handler hands the validated target to the v2 composition UNCHANGED. The schema proves the
+		// input is target-only; this proves the value that reaches the record lookup is that input.
+		const MCP_RESUME_BLOCK = (MCP_SURFACE.split('"entwurf_resume_call",')[1] ?? "").split("\n);")[0];
+		ok(
+			"[QK:MUXRESUME-MCP-TARGET-PASSTHROUGH] the bridge handler passes its target straight to visibleResume — a rewritten, defaulted or substituted id would reopen a DIFFERENT citizen than the one the caller named",
+			/async \(\{ target \}\) =>/.test(MCP_RESUME_BLOCK) &&
+				/await visibleResume\(target, makeVisibleResumeDeps\(visibleResumeLaunch\)\)/.test(MCP_RESUME_BLOCK),
 		);
 
-		// ── the NATIVE PI registration, judged as a registration ─────────────────────
-		// The MCP half is judged on the real runtime tools/list by check-entwurf-bridge-boot.
-		// Native pi has no equivalent boot oracle here, so its registration is read from source —
-		// but narrowly, on the block itself, because "the module is imported" would stay true with
-		// the tool deleted.
-		const PI_BLOCK = (PI_SURFACE.split('name: "entwurf_resume_call",')[1] ?? "").split("\n}")[0];
-		ok(
-			"[QK:MUXRESUME-PI-SURFACE-REGISTERED] the native pi surface REGISTERS entwurf_resume_call and calls that registration during setup — an imported-but-unregistered verb is invisible to the operator while every import assertion stays green",
-			PI_SURFACE.includes('name: "entwurf_resume_call"') && /registerResumeCallTool\(pi\);/.test(PI_SURFACE),
-		);
-		ok(
-			"[QK:MUXRESUME-PI-SURFACE-TARGET-ONLY] the native schema is target-only and the handler passes params.target straight through — a model, task or prompt knob would be a second way to decide what a resumed citizen is, when the record already decided",
-			/Type\.Object\(\{\s*target: Type\.String\(/.test(PI_BLOCK) &&
-				/visibleResume\(params\.target,/.test(PI_BLOCK) &&
-				!/model|task|prompt/.test(PI_BLOCK.split("parameters:")[1]?.split("async execute")[0] ?? ""),
-		);
-
-		// ── the description contract, both surfaces ──────────────────────────────────
+		// ── the description contract ────────────────────────────────────────────────
 		// Not prose parity — three claims an operator acts on, plus the host's own cap.
-		const PI_DESC = (PI_BLOCK.split("description: `")[1] ?? "").split("`,")[0];
 		const MCP_DESC = (MCP_SURFACE.split('"entwurf_resume_call",')[1] ?? "").split("{")[0];
 		const statesTheContract = (text: string): boolean =>
 			/dormant/i.test(text) && /no turn/i.test(text) && /observation/i.test(text) && /launch/i.test(text);
 
-		for (const [which, text] of [
-			["native pi", PI_DESC],
-			["MCP bridge", MCP_DESC],
-		] as const) {
-			ok(
-				`${which}: the resume description fits the host's 2048-char tool-description cap`,
-				text.length > 0 && text.length <= 2048,
-			);
-		}
-		// The two claim tokens are written OUT, not interpolated: qualification requires each
-		// `[QK:…]` to appear literally exactly once in its gate source, so a token assembled at
-		// runtime names a claim no manifest can bind to.
 		ok(
-			"[QK:MUXRESUME-DESC-CONTRACT-PI] native pi: the description states the three things a caller acts on — DORMANT targets only, no turn is run, and TWO receipts of which the observation is the one that says the citizen is back",
-			statesTheContract(PI_DESC),
+			"MCP bridge: the resume description fits the host's 2048-char tool-description cap",
+			MCP_DESC.length > 0 && MCP_DESC.length <= 2048,
 		);
+		// The claim token is written OUT, not interpolated: qualification requires each `[QK:…]` to
+		// appear literally exactly once in its gate source, so a token assembled at runtime names a
+		// claim no manifest can bind to.
 		ok(
-			"[QK:MUXRESUME-DESC-CONTRACT-MCP] MCP bridge: the description states the same three things — DORMANT targets only, no turn is run, and TWO receipts whose observation is the fact that matters",
+			"[QK:MUXRESUME-DESC-CONTRACT-MCP] MCP bridge: the description states the three things a caller acts on — DORMANT targets only, no turn is run, and TWO receipts whose observation is the fact that matters",
 			statesTheContract(MCP_DESC),
 		);
 	} finally {

@@ -101,7 +101,8 @@
 			"gate": ["bash", "run.sh", "check-meta-doctor-oracle"],
 			"timeoutSeconds": 600,
 			"signature": "[QK:HOOK-LOG-RAIL-SCOPED]",
-			"signatureSource": "scripts/check-meta-doctor-oracle.sh"
+			"signatureSource": "scripts/check-meta-doctor-oracle.sh",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
 		},
 		{
 			"claim": "COPILOT-BIRTH-DOES-NOT-ARM-RECEIVER",

@@ -39,20 +39,20 @@
 			"signatureSource": "scripts/check-entwurf-v2-production.ts"
 		},
 		{
-			"claim": "V2SURF-PI-MODE-SCOPE",
-			"title": "pi-native mode param reverts to \"Delivery mode for a live send\" (false for native-push) (#120 P2: the description was rewritten to stop claiming an interrupt, so the mutation now strips the rail scope from the corrected sentence)",
-			"subject": "pi-extensions/entwurf-control.ts",
+			"claim": "V2SURF-MODE-SCOPE",
+			"title": "the bridge mode param (the one every caller reads, pi included since #125) reverts to \"Delivery mode for a live send\" (false for native-push) (#120 P2: the description was rewritten to stop claiming an interrupt, so the mutation now strips the rail scope from the corrected sentence)",
+			"subject": "mcp/entwurf-bridge/src/index.ts",
 			"find": [
-				"\t\t\t\t\t\"Injection style for a CONTROL-SOCKET send only: steer (ask the receiver's steering queue) or follow_up (ask its follow-up queue). NEITHER is an interrupt: a busy receiver drains steering after each turn and follow-ups only when its inner loop ends, so a later steer overtakes every earlier follow_up and there is no order between the two. Both queues are volatile process memory — an abort drops what is in them. The receipt names which queue accepted the message (`queued-steer` / `queued-follow-up`); an idle receiver answers `sent`, meaning the turn was TRIGGERED, not that the model has seen the text. \" +",
+				"\t\t\t\t\"Injection style for a CONTROL-SOCKET send only: steer (ask the receiver's steering queue) or follow_up (ask its follow-up queue). NEITHER is an interrupt: a busy receiver drains steering after each turn and follow-ups only when its inner loop ends, so a later steer overtakes every earlier follow_up and there is no order between the two. Both queues are volatile process memory — an abort drops what is in them. The receipt names which queue accepted the message (`queued-steer` / `queued-follow-up`); an idle receiver answers `sent`, meaning the turn was TRIGGERED, not that the model has seen the text. \" +",
 				"\t\t\t\t\t\"The mailbox and native-push plans carry no mode, so it has no effect on those rails.\","
 			],
 			"replace": [
-				"\t\t\t\t\t\"Delivery mode for a live send: steer (ask the steering queue) or follow_up (ask the follow-up queue). \" +",
+				"\t\t\t\t\"Delivery mode for a live send: steer (ask the steering queue) or follow_up (ask the follow-up queue). \" +",
 				"\t\t\t\t\t\"Both queues are volatile process memory.\","
 			],
 			"gate": ["bash", "run.sh", "check-entwurf-v2-surface"],
 			"timeoutSeconds": 60,
-			"signature": "[QK:V2SURF-PI-MODE-SCOPE]",
+			"signature": "[QK:V2SURF-MODE-SCOPE]",
 			"signatureSource": "scripts/check-entwurf-v2-surface.ts"
 		},
 		{

@@ -23,6 +23,65 @@
 			"timeoutSeconds": 120,
 			"signature": "[QK:LANE-INVENTORY-DECLARED]",
 			"signatureSource": "scripts/check-gate-qualification.ts"
+		},
+		{
+			"claim": "QUALIFY-BUILD-TRACKS-MUTATION",
+			"title": "the runner keeps the baseline build output across a mutation instead of rebuilding it from the mutated bytes — a gate that reads only the compiled output judges source it was never handed, and every mutant planted in the build's source survives (#125: the compiled entwurf-bridge a pi citizen registers)",
+			"subject": "scripts/lib/mutation-qualify.ts",
+			"find": ["\t\t\t\t\tconst b = await buildOutput(build, outputAbs, m.timeoutSeconds);"],
+			"replace": ["\t\t\t\t\tconst b = { run: pre, digest: baseline };"],
+			"gate": ["bash", "run.sh", "check-gate-manifests"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:QUALIFY-BUILD-TRACKS-MUTATION]",
+			"signatureSource": "scripts/check-gate-qualification.ts"
+		},
+		{
+			"claim": "QUALIFY-BUILD-RED-NOT-A-KILL",
+			"title": "a mutation that breaks the declared build is attributed like a gate run — the build's own failure output is read for the claim token, so a broken build is certified as the gate killing the defect",
+			"subject": "scripts/lib/mutation-qualify.ts",
+			"find": [
+				"\t\t\t\tsignatureOnFailureLine: !buildRed && signatureAttributedToFailure(run.output, m.signature, run.failedTitles),"
+			],
+			"replace": [
+				"\t\t\t\tsignatureOnFailureLine: signatureAttributedToFailure(run.output, m.signature, run.failedTitles),"
+			],
+			"gate": ["bash", "run.sh", "check-gate-manifests"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:QUALIFY-BUILD-RED-NOT-A-KILL]",
+			"signatureSource": "scripts/check-gate-qualification.ts"
+		},
+		{
+			"claim": "QUALIFY-BUILD-SCOPED-TO-GROUP",
+			"title": "the declared build output outlives its group — a later group runs against an input it never declared, and the ignored output is left in the snapshot",
+			"subject": "scripts/lib/mutation-qualify.ts",
+			"find": ["\t\t\tif (outputAbs) fs.rmSync(outputAbs, { recursive: true, force: true });"],
+			"replace": ["\t\t\tif (outputAbs) void 0;"],
+			"gate": ["bash", "run.sh", "check-gate-manifests"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:QUALIFY-BUILD-SCOPED-TO-GROUP]",
+			"signatureSource": "scripts/check-gate-qualification.ts"
+		},
+		{
+			"claim": "QUALIFY-BUILD-OUTPUT-GUARDED",
+			"title": "a gate that writes into its declared build output keeps its KILLED verdict — the next run is judged against bytes no build produced",
+			"subject": "scripts/lib/mutation-qualify.ts",
+			"find": ["\t\t\t\t\t\toutputWritten = wroteOutput(b.digest);"],
+			"replace": ["\t\t\t\t\t\toutputWritten = false;"],
+			"gate": ["bash", "run.sh", "check-gate-manifests"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:QUALIFY-BUILD-OUTPUT-GUARDED]",
+			"signatureSource": "scripts/check-gate-qualification.ts"
+		},
+		{
+			"claim": "QUALIFY-BUILD-GROUP-CONSISTENT",
+			"title": "mutants of one gate may declare different builds (or one none) — the same gate is handed different inputs depending on run order, and a group's control no longer describes all of its mutants",
+			"subject": "scripts/lib/mutation-qualify.ts",
+			"find": ["\t\tif (mine !== first) {"],
+			"replace": ["\t\tif (mine !== first && false) {"],
+			"gate": ["bash", "run.sh", "check-gate-manifests"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:QUALIFY-BUILD-GROUP-CONSISTENT]",
+			"signatureSource": "scripts/check-gate-qualification.ts"
 		}
 	]
 }

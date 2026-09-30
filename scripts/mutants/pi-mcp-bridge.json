@@ -1,0 +1,36 @@
+{
+	"schemaVersion": 1,
+	"lane": "pi-mcp-bridge",
+	"mutants": [
+		{
+			"claim": "PI-MCP-BRIDGE-DECLARED-SURFACE",
+			"title": "entwurf_self joins the hidden list, so a pi model is no longer declared the verb that tells it who it is",
+			"subject": "pi-extensions/lib/entwurf-mcp-server.ts",
+			"find": [
+				"export const ENTWURF_MCP_HIDDEN_TOOLS = [\"entwurf_inbox_read\", \"entwurf_register_native\"] as const;"
+			],
+			"replace": [
+				"export const ENTWURF_MCP_HIDDEN_TOOLS = [\"entwurf_inbox_read\", \"entwurf_register_native\", \"entwurf_self\"] as const;"
+			],
+			"gate": ["bash", "run.sh", "check-pi-mcp-bridge"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:PI-MCP-BRIDGE-DECLARED-SURFACE]",
+			"signatureSource": "scripts/check-pi-mcp-bridge.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "PI-MCP-BRIDGE-SAME-CHILD-IDENTITY",
+			"title": "the explicit carrier is built from the model label when one is known, so the spawned child claims an identity no record holds",
+			"subject": "pi-extensions/lib/entwurf-mcp-server.ts",
+			"find": ["\t\tenv: { PI_SESSION_ID: input.gardenId, ...(input.agentId ? { PI_AGENT_ID: input.agentId } : {}) },"],
+			"replace": [
+				"\t\tenv: { PI_SESSION_ID: input.agentId ?? input.gardenId, ...(input.agentId ? { PI_AGENT_ID: input.agentId } : {}) },"
+			],
+			"gate": ["bash", "run.sh", "check-pi-mcp-bridge"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:PI-MCP-BRIDGE-SAME-CHILD-IDENTITY]",
+			"signatureSource": "scripts/check-pi-mcp-bridge.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		}
+	]
+}

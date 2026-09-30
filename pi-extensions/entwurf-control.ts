@@ -22,12 +22,15 @@
  * commands.
  *
  * Features:
- * - Register the canonical `entwurf_v2` dispatch tool for existing garden citizens.
- * - Expose `entwurf_peers` facts for operator inspection (#50 C4: the socket-scan
- *   `/entwurf-sessions` command is gone — the record listing is the only surface).
- * - Maintain the resident control socket used by the v2 live-send path.
  * - Attach this pi session to its meta-record at session_start (#50 C2) and key
  *   the control socket on the record's gardenId.
+ * - Maintain the resident control socket used by the v2 live-send path (the
+ *   INBOUND half: a send lands here and enters this session through pi.sendMessage).
+ * - Hand the Entwurf verbs (`entwurf_v2`, `entwurf_peers`, `entwurf_fresh_call`,
+ *   `entwurf_resume_call`, `entwurf_callback`, `entwurf_self`) to Pi's built-in MCP by
+ *   registering the compiled entwurf-bridge with the born gardenId as its explicit
+ *   identity carrier (#125). The model calls them as `mcp__entwurf-bridge__<verb>`;
+ *   there are no native copies (see lib/entwurf-mcp-server.ts).
  *
  * Send-is-throw still applies at the control-socket protocol layer: a `send` RPC
  * ack confirms the receiver enqueued the message (`message_processed` semantics)
@@ -65,22 +68,10 @@ import { existsSync, promises as fs } from "node:fs";
 import * as net from "node:net";
 import * as os from "node:os";
 import * as path from "node:path";
-// Use pi-ai's re-exports of typebox so the schema universe matches what
-// pi-coding-agent.registerTool consumes. Importing Type from @sinclair/typebox
-// directly mixes typebox 0.34 (Type.*) with typebox 1.x (StringEnum, TSchema
-// inside pi-coding-agent), which silently widens StringEnum-typed parameters
-// to `unknown` and broke renderCall/execute narrowing. Single-source-of-typebox.
-import { StringEnum, type TextContent, Type } from "@earendil-works/pi-ai";
-import type {
-	AgentToolResult,
-	AgentToolUpdateCallback,
-	ExtensionAPI,
-	ExtensionContext,
-	MessageRenderer,
-} from "@earendil-works/pi-coding-agent";
+import type { TextContent } from "@earendil-works/pi-ai";
+import type { ExtensionAPI, ExtensionContext, MessageRenderer } from "@earendil-works/pi-coding-agent";
 import { getMarkdownTheme } from "@earendil-works/pi-coding-agent";
 import { Box, Markdown, Spacer, Text } from "@earendil-works/pi-tui";
-import { readCallbackEnv } from "./lib/callback-env.js";
 import {
 	type CompactionGuard,
 	compactionSendReject,
@@ -89,15 +80,19 @@ import {
 	noteCompactionTerminal,
 } from "./lib/compaction-send-guard.js";
 import { sendReceiptBoundary } from "./lib/control-send-receipt.js";
-import { CONTROL_SOCKET_SUFFIX, controlSocketPathIn, defaultControlSocketDir } from "./lib/control-socket-path.js";
+import { CONTROL_SOCKET_SUFFIX, defaultControlSocketDir } from "./lib/control-socket-path.js";
 import {
 	attachAcceptedSocketDisconnectPolicy,
 	formatSenderInfoBlock,
 	type RpcCommand,
 	type RpcResponse,
-	type SenderEnvelope,
 } from "./lib/entwurf-control-rpc.js";
 import { computeResidentStatusLabel } from "./lib/entwurf-core.js";
+import {
+	buildEntwurfMcpServerConfig,
+	ENTWURF_MCP_SERVER_NAME,
+	entwurfBridgeCompiledEntry,
+} from "./lib/entwurf-mcp-server.js";
 import { probeSocketLiveness, shouldUnlinkOnGc } from "./lib/socket-probe.js";
 
 // The `--entwurf-control` socket protocol (wire types + the newline-JSON client) now lives
@@ -146,14 +141,6 @@ const STATUS_KEY = "entwurf-control";
 
 function isErrnoException(error: unknown): error is NodeJS.ErrnoException {
 	return typeof error === "object" && error !== null && "code" in error;
-}
-
-function getSocketPath(sessionId: string): string {
-	return controlSocketPathIn(ENTWURF_DIR, sessionId);
-}
-
-function isSafeSessionId(sessionId: string): boolean {
-	return !sessionId.includes("/") && !sessionId.includes("\\") && !sessionId.includes("..") && sessionId.length > 0;
 }
 
 async function ensureControlDir(): Promise<void> {
@@ -399,38 +386,6 @@ function parseSenderInfo(text: string): SenderInfo | null {
 	return null;
 }
 
-// Build a sender envelope for messages originating from the local pi session.
-// Used by every caller-side send path (the mcp + pi-native entwurf_v2
-// surfaces). Returns undefined when any field
-// cannot be resolved — pi-native callers should fall back to body-less sends
-// rather than synthesize partial envelopes that would render as "(unknown ...)"
-// at the receiver. The MCP-side bridge (mcp/entwurf-bridge entwurf_v2) is
-// strict — it throws when its own env wiring is incomplete — because it
-// represents the public transparency contract.
-//
-// agentId preference order:
-//   1. PI_AGENT_ID env (set by updateSessionEnv as `<ctx.model.provider>/<ctx.model.id>`)
-//   2. `<ctx.model.provider>/<ctx.model.id>` reconstructed from the live pi context
-//   3. undefined → envelope omitted
-function buildLocalSenderEnvelope(ctx: ExtensionContext): SenderEnvelope | undefined {
-	// The GARDEN address, not pi's session id (#50 C2): a peer replies to what it
-	// reads here, and only the record gardenId is routable.
-	const sessionId = residentGardenId;
-	if (!sessionId) return undefined;
-	const cwd = ctx.cwd;
-	if (!cwd) return undefined;
-	const envAgent = process.env.PI_AGENT_ID?.trim();
-	const ctxAgent = ctx.model?.provider && ctx.model?.id ? `${ctx.model.provider}/${ctx.model.id}` : undefined;
-	const agentId = envAgent && envAgent.length > 0 ? envAgent : ctxAgent;
-	if (!agentId) return undefined;
-	return {
-		sessionId,
-		agentId,
-		cwd,
-		timestamp: new Date().toISOString(),
-	};
-}
-
 // Format a UTC ISO timestamp as `YYYY-MM-DD HH:MM:SS KST`. We avoid pulling
 // Intl into the hot render path — it's heavy and locale-fragile — and instead
 // compute KST manually (UTC+9, no DST). Returns the raw input unchanged when
@@ -663,7 +618,7 @@ async function handleCommand(
 		const wantsReply = typeof command.wants_reply === "boolean" ? command.wants_reply : false;
 
 		// Synthesize <sender_info> JSON at the receiver side. Caller code paths
-		// (entwurf-bridge entwurf_v2, the pi-native entwurf_v2 senderProvider via buildLocalSenderEnvelope)
+		// (entwurf-bridge entwurf_v2 — the one caller-side surface since #125)
 		// pass the envelope structurally and never touch the message body — the
 		// canonical XML-style payload is the shared formatSenderInfoBlock SSOT
 		// (#50 C3: this is the ONE renderer since the visible-first cut removed the
@@ -880,11 +835,30 @@ function updateSessionEnv(ctx: ExtensionContext | null, enabled: boolean, garden
 	}
 }
 
-// Extension factories run before extension flag values are hydrated into runtime.flagValues,
-// so we inspect argv directly when deciding whether to register tools at load time.
-function wasBooleanFlagPassed(flagName: string): boolean {
-	const flag = `--${flagName}`;
-	return process.argv.slice(2).includes(flag);
+/**
+ * Hand this born citizen's verbs to Pi's built-in MCP (#125): the compiled entwurf-bridge, with the
+ * record gardenId as its EXPLICIT identity carrier. Pi owns the child from here — it spawns it,
+ * and closes it on session_shutdown — so there is deliberately no unregister anywhere in this file.
+ * Re-registering on the next session_start (/new, resume, reload) replaces this registration with
+ * the NEW record's id. A missing compiled entry is a named failure: there is no TypeScript fallback.
+ */
+function registerEntwurfMcpServer(pi: ExtensionAPI, ctx: ExtensionContext, gardenId: string): void {
+	const compiledEntry = entwurfBridgeCompiledEntry(import.meta.dirname);
+	if (!existsSync(compiledEntry)) {
+		throw new Error(
+			`[entwurf-control] compiled entwurf-bridge missing at ${compiledEntry} — build it (\`pnpm run build-bridge\`); ` +
+				"the pi session keeps its garden address and control socket but has no Entwurf verbs until then",
+		);
+	}
+	pi.registerMcpServer(
+		ENTWURF_MCP_SERVER_NAME,
+		buildEntwurfMcpServerConfig({
+			gardenId,
+			agentId: ctx.model?.provider && ctx.model?.id ? `${ctx.model.provider}/${ctx.model.id}` : undefined,
+			compiledEntry,
+			nodePath: process.execPath,
+		}),
+	);
 }
 
 // Read a string-valued CLI flag straight from argv. Handles `--flag value` and
@@ -962,10 +936,6 @@ async function noticeUncitizenedSession(ctx: ExtensionContext, controlEnabled: b
 	);
 }
 
-function shouldRegisterControlTools(pi: ExtensionAPI): boolean {
-	return pi.getFlag(ENTWURF_FLAG) === true || wasBooleanFlagPassed(ENTWURF_FLAG);
-}
-
 // ============================================================================
 // Extension Export
 // ============================================================================
@@ -987,14 +957,6 @@ export default function (pi: ExtensionAPI) {
 	};
 
 	pi.registerMessageRenderer(SESSION_MESSAGE_TYPE, renderSessionMessage);
-
-	if (shouldRegisterControlTools(pi)) {
-		registerListSessionsTool(pi);
-		registerEntwurfV2Tool(pi);
-		registerCallbackTool(pi);
-		registerFreshCallTool(pi);
-		registerResumeCallTool(pi);
-	}
 
 	// The in-process mint refusals (`/new`, `/fork`, `/clone`, RPC new_session) are
 	// GONE with the id grammar they defended (#50 C2). They existed because pi mints a
@@ -1056,8 +1018,12 @@ export default function (pi: ExtensionAPI) {
 		// store to warn about; the store is either clean or this session has no
 		// address.
 		await startControlServer(pi, state, ctx, birth.socketPath);
-		updateStatus(ctx, true, birth.gardenId);
+		// Identity before UI (#125): the carrier env and the MCP registration that carries the
+		// born gardenId are both made before any status rendering, so a visual failure can never
+		// leave a born citizen without its identity carrier or its verbs.
 		updateSessionEnv(ctx, true, birth.gardenId);
+		registerEntwurfMcpServer(pi, ctx, birth.gardenId);
+		updateStatus(ctx, true, birth.gardenId);
 	};
 
 	/** Upsert the record for the CURRENT pi session. Reached through the non-literal
@@ -1143,27 +1109,13 @@ export default function (pi: ExtensionAPI) {
 }
 
 // ============================================================================
-// Tool: entwurf_v2 (5d-3a) — the unified v2 dispatch verb
+// Fence seams
 // ============================================================================
-//
-// The v2 runner + production deps live in the `.ts`-extension fence (excluded from
-// this emit-capable root program). A STATIC import would pull the fence's literal
-// `.ts` imports into root tsc → TS5097. So we reach the surface adapter via a
-// NON-LITERAL dynamic import: root tsc cannot statically resolve a string-const
-// specifier, and the strip-types runtime loads the `.ts` fence entry fine. The
-// local interface below is the only contract this file knows about the fence — the
-// `EntwurfV2RunResult` union stays behind `runAndRenderEntwurfV2FromSurface`, which
-// hands back just `{ text, isError }`.
-const ENTWURF_V2_SURFACE_MODULE = "./lib/entwurf-v2-surface.ts";
-
-// SE-1 (slice 2e-a): a pi-session sender's `replyable` is a FACT (does its canonical
-// control socket actually exist?), not env presence. entwurf-self-address.ts is a
-// `.ts`-extension fence lib, so this root-tsc emit surface reaches it the SAME way as the
-// v2 surface / mailbox guard — a NON-LITERAL dynamic import behind a local interface.
+// entwurf-self-address.ts is a `.ts`-extension fence lib, so this root-tsc emit surface reaches
+// it through a NON-LITERAL dynamic import behind a local interface (a static `.ts` import would be
+// TS5097). Only the not-a-citizen notice decision is consumed here; a pi sender's replyability is
+// the bridge's to compute now that the verbs live there (#125).
 const ENTWURF_SELF_ADDRESS_MODULE = "./lib/entwurf-self-address.ts";
-const ENTWURF_FACT_PROVIDER_MODULE = "./lib/entwurf-fact-provider.ts";
-const ENTWURF_PEERS_RENDER_MODULE = "./lib/entwurf-peers-render.ts";
-const META_SESSION_MODULE = "./lib/meta-session.ts";
 // The #50 C2 attach seam. Same fence, same reason: it is a lib→lib VALUE importer
 // (upsertMetaSession) carrying an explicit `.ts` extension, which the emit-capable
 // root program cannot resolve — so it is reached by a NON-LITERAL dynamic import.
@@ -1189,545 +1141,6 @@ interface PiCitizenBirthModule {
 	}): PiCitizenBirth;
 }
 
-type SelfAddressabilityFn = (facts: {
-	origin: "pi-session" | "meta-session" | "external-mcp";
-	socketAlive?: boolean;
-	socketPathComputable?: boolean;
-	recordBacked?: boolean;
-	ownerAlive?: boolean;
-	watchArmed?: boolean;
-}) => { replyable: boolean; socketState: "alive" | "expected" | "none"; reason: string };
-
 interface EntwurfSelfAddressModule {
-	computeSelfAddressability: SelfAddressabilityFn;
 	decideUncitizenedNotice: (facts: { controlEnabled: boolean; hasUI: boolean; alreadyShown: boolean }) => boolean;
-}
-
-/**
- * Decorate a local pi sender envelope with its HONEST replyability (SE-1 slice 2e-a).
- * The old code hardcoded replyability to true from env presence; a pi session running
- * without --entwurf-control has a session id but no control socket, so a reply silently fails.
- * Route the v2 senderProvider through the shared computeSelfAddressability truth table:
- * replyable ⟺ the canonical socket exists (existsSync
- * — slice-1 level, NOT a listener probe; deeper liveness is a separate hardening slice).
- */
-function decoratePiSenderAddressability(sender: SenderEnvelope, compute: SelfAddressabilityFn): SenderEnvelope {
-	const self = compute({
-		origin: "pi-session",
-		socketAlive: existsSync(getSocketPath(sender.sessionId)),
-		socketPathComputable: true,
-	});
-	return { ...sender, origin: "pi-session", replyable: self.replyable };
-}
-
-interface EntwurfV2SurfaceModule {
-	runAndRenderEntwurfV2FromSurface(
-		params: {
-			target: string;
-			intent: "fire-and-forget";
-			mode?: "steer" | "follow_up";
-			wants_reply?: boolean;
-			message: string;
-		},
-		opts: { senderProvider: () => SenderEnvelope | undefined },
-	): Promise<{ text: string; isError: boolean }>;
-}
-
-function registerEntwurfV2Tool(pi: ExtensionAPI): void {
-	const entwurfV2Parameters = Type.Object({
-		target: Type.String({ description: "Target garden id (use entwurf_peers to discover)" }),
-		intent: StringEnum(["fire-and-forget"] as const, {
-			description:
-				"fire-and-forget = send/reply/hand-off to a LIVE socket target (currently backend pi) or to any " +
-				"citizen with no socket liveness — the decider picks that citizen's rail, and a rail can also " +
-				"REJECT: self-fetch (e.g. Claude Code) → meta-bridge mailbox while that mailbox is DELIVERABLE, " +
-				"else rejected as mailbox-undeliverable; native-push (e.g. Antigravity) → direct injection into " +
-				"its live conversation, which has NO mailbox, and its probe is three-valued — alive: injected, " +
-				"dead: native-push-target-dead, indeterminate: native-push-probe-indeterminate (two rejects, " +
-				"not one). " +
-				"Set wants_reply for an answer. " +
-				"This is the ONLY intent. The second one, owned-outcome, resumed a dormant citizen by launching " +
-				"a hidden background child and was withdrawn under the visible-first rule; it is not selectable, " +
-				"not deprecated-but-tolerated, and a dormant citizen is currently unreachable by this verb and " +
-				"rejects as dormant-fire-forget-unsupported.",
-		}),
-		message: Type.String({
-			description:
-				"Message / prompt to dispatch. Hard cap 16000 chars; for larger payloads send a file/artifact path plus digest.",
-			maxLength: 16000,
-		}),
-		mode: Type.Optional(
-			StringEnum(["steer", "follow_up"] as const, {
-				description:
-					"Injection style for a CONTROL-SOCKET send only: steer (ask the receiver's steering queue) or follow_up (ask its follow-up queue). NEITHER is an interrupt: a busy receiver drains steering after each turn and follow-ups only when its inner loop ends, so a later steer overtakes every earlier follow_up and there is no order between the two. Both queues are volatile process memory — an abort drops what is in them. The receipt names which queue accepted the message (`queued-steer` / `queued-follow-up`); an idle receiver answers `sent`, meaning the turn was TRIGGERED, not that the model has seen the text. " +
-					"The mailbox and native-push plans carry no mode, so it has no effect on those rails.",
-			}),
-		),
-		wants_reply: Type.Optional(Type.Boolean({ description: "Human-conversation reply hint (default false)" })),
-	});
-
-	type EntwurfV2Params = {
-		target: string;
-		intent: "fire-and-forget";
-		message: string;
-		mode?: "steer" | "follow_up";
-		wants_reply?: boolean;
-	};
-
-	// TS2589 ("type instantiation is excessively deep") workaround: pi's registerTool
-	// generic infers the handler signature from the TypeBox schema, and this schema is
-	// deep enough to blow the instantiation budget. Casting the FUNCTION (not the
-	// argument) keeps the schema itself typed while stopping the inference walk.
-	// Revisit when pi's registerTool takes an explicit params type parameter.
-	const registerTool = pi.registerTool as (def: any) => void;
-
-	registerTool({
-		name: "entwurf_v2",
-		label: "Dispatch (v2)",
-		description: `CANONICAL DELIVERY SURFACE for garden ids: message, reply, or hand off to whoever an id names. The id alone
-does not say which rail that citizen answers on. Give target + intent; the decider picks transport from
-liveness (live socket citizen → control-socket send; deliverable self-fetch citizen → meta-bridge mailbox;
-probe-alive native-push citizen → direct injection into its conversation) and reports ONE outcome, per rail: a control
-receiver's acceptance boundary ("sent" / "queued-steer" / "queued-follow-up" /
-"accepted-unknown-boundary" — those four only), a mailbox ENQUEUE receipt, a native-push INJECTION,
-a rejection, or lock-dirty. EXISTING targets only (see entwurf_peers).
-A peer shown as liveness=alive → fire-and-forget. A citizen with NO socket liveness
-(liveness=unsupported) is ALSO fire-and-forget — unsupported means only "no control-socket probe" — and the
-decider picks its own rail: a self-fetch backend (e.g. Claude Code) gets the mailbox, a native-push backend
-(e.g. Antigravity) gets direct injection and has NO mailbox at all. THERE IS A THIRD RESULT: the mailbox
-delivers only to a DELIVERABLE citizen, so a terminated self-fetch session is mailbox-undeliverable
-rather than queued for an inbox nobody drains. The native-push probe is 3-valued:
-alive → injected; dead → native-push-target-dead; indeterminate → native-push-probe-indeterminate
-(unestablished ≠ gone). DORMANT IS UNREACHABLE: a socket-domain citizen that is not running gets
-dormant-fire-forget-unsupported — same receiver rule as the mailbox, no active drainer means no
-delivery. The intent that used to answer there, owned-outcome, was withdrawn
-under the visible-first rule — re-open the session yourself and dispatch again. LOCK: taken for a control-socket-DOMAIN dispatch. The mailbox and native-push
-rails are lock-free — deliverability and the adapter probe guard them. mode applies to a CONTROL-SOCKET
-send only; other plans carry no mode. wants_reply rides every rail. message caps at 16000 chars; send an
-artifact path + digest for more.`,
-		parameters: entwurfV2Parameters,
-		async execute(
-			_toolCallId: string,
-			params: EntwurfV2Params,
-			_signal: AbortSignal | undefined,
-			_onUpdate: unknown,
-			ctx: ExtensionContext,
-		) {
-			const target = params.target?.trim();
-			if (!target) {
-				return { content: [{ type: "text", text: "entwurf_v2: missing target" }], isError: true };
-			}
-			if (!isSafeSessionId(target)) {
-				return { content: [{ type: "text", text: "entwurf_v2: invalid target garden id" }], isError: true };
-			}
-			if (!params.message?.trim()) {
-				return { content: [{ type: "text", text: "entwurf_v2: missing message" }], isError: true };
-			}
-
-			try {
-				// The reply-address envelope for this pi session, decorated with its HONEST
-				// replyability (SE-1 2e-a: socket existsSync, not a hardcoded true). ONE provider
-				// feeds the control-socket RPC sender AND the meta-mailbox body sender (see
-				// entwurf-v2-production). Built per-call so the timestamp is the dispatch moment;
-				// computeSelfAddressability is loaded once here (sync senderProvider can't await).
-				const selfMod = (await import(ENTWURF_SELF_ADDRESS_MODULE)) as unknown as EntwurfSelfAddressModule;
-				const senderProvider = (): SenderEnvelope | undefined => {
-					const s = buildLocalSenderEnvelope(ctx);
-					return s ? decoratePiSenderAddressability(s, selfMod.computeSelfAddressability) : undefined;
-				};
-				const mod = (await import(ENTWURF_V2_SURFACE_MODULE)) as unknown as EntwurfV2SurfaceModule;
-				const rendered = await mod.runAndRenderEntwurfV2FromSurface(
-					{
-						target,
-						intent: params.intent,
-						message: params.message,
-						mode: params.mode,
-						wants_reply: params.wants_reply,
-					},
-					// No trust-preflight inputs are passed, and none exist to pass: the preflight on this
-					// path guarded the resume verdict, so it left with `owned-outcome`. `senderProvider`
-					// is the whole options surface now — do NOT re-add an `ENTWURF_PREFIX_ROOTS` fallback
-					// here without a verdict that reads it (nothing on the dispatch path does).
-					{ senderProvider },
-				);
-				return {
-					content: [{ type: "text", text: rendered.text }],
-					isError: rendered.isError,
-					details: { isError: rendered.isError },
-				};
-			} catch (err) {
-				const msg = err instanceof Error ? err.message : String(err);
-				return {
-					content: [{ type: "text", text: `entwurf_v2 error: ${msg}` }],
-					isError: true,
-					details: { error: msg },
-				};
-			}
-		},
-	});
-}
-
-// ============================================================================
-// Tool: entwurf_peers
-// ============================================================================
-
-interface EntwurfFactProviderModule {
-	listEntwurfFacts(params: {
-		metaEntries: readonly { filename: string; regularFile: boolean }[];
-		readRecord: (filename: string) => string;
-		socket: { dir: string };
-		observationLimit: number;
-	}): Promise<unknown>;
-}
-
-interface EntwurfPeersRenderModule {
-	ENTWURF_PEERS_RENDER_LIMIT: number;
-	renderEntwurfPeers(result: unknown): { text: string; payload: unknown };
-}
-
-interface MetaSessionModule {
-	defaultMetaSessionsDir(): string;
-	readActiveStoreEntries(dir: string): { filename: string; regularFile: boolean }[];
-	makeStoreRecordReader(dir: string): (filename: string) => string;
-}
-
-async function renderEntwurfPeersForSurface(): Promise<{ text: string; payload: unknown }> {
-	const meta = (await import(META_SESSION_MODULE)) as unknown as MetaSessionModule;
-	const sessionsDir = meta.defaultMetaSessionsDir();
-	// Entries carry their KIND. The name-only readdir this used to do left `readRecord`
-	// free to follow a symlinked `.meta.json` into bytes the store does not own — rule 1
-	// held in the doctor and not on the surface operators actually read (pre-existing;
-	// surfaced by the #52 duplicate pass, which would let such a symlink quarantine the
-	// healthy record it shadowed).
-	const provider = (await import(ENTWURF_FACT_PROVIDER_MODULE)) as unknown as EntwurfFactProviderModule;
-	const render = (await import(ENTWURF_PEERS_RENDER_MODULE)) as unknown as EntwurfPeersRenderModule;
-	const result = await provider.listEntwurfFacts({
-		metaEntries: meta.readActiveStoreEntries(sessionsDir),
-		readRecord: meta.makeStoreRecordReader(sessionsDir),
-		// Same socket axis as the legacy live-session scan, but merged with the
-		// meta-record rail by listEntwurfFacts so meta-mailbox citizens are discoverable too.
-		socket: { dir: ENTWURF_DIR },
-		// #112: observation follows the human render budget. The full machine payload
-		// and every authority/diagnostic pass above remain complete.
-		observationLimit: render.ENTWURF_PEERS_RENDER_LIMIT,
-	});
-	return render.renderEntwurfPeers(result);
-}
-
-function registerListSessionsTool(pi: ExtensionAPI): void {
-	// Same TS2589 workaround as registerEntwurfV2Tool — see the comment block there
-	// for the revisit conditions. (It used to point at registerSessionTool, which was
-	// removed in the 0.12 cutover, so the pointer dangled.)
-	const registerTool = pi.registerTool as (def: any) => void;
-	registerTool({
-		name: "entwurf_peers",
-		label: "List Garden Citizens",
-		description:
-			"List the entwurf fact surface: garden citizens from meta-records (including active self-fetch meta receivers such as claude-code) with liveness, plus diagnostics. The record is the sole address axis (#50 C4) — a control socket no record claims surfaces as a record-less-socket diagnostic, never a peer row. Pair with entwurf_v2 to address a peer by garden id; this surface reports facts, never per-row routing verbs. A `dead` row is a REPORTED FACT and nothing more: that citizen is dormant and is currently unreachable by any verb, so listing it grants no action — appearing here is not an invitation to dispatch. It is facts-only and creates nothing: to open a NEW sibling use entwurf_fresh_call.",
-		parameters: Type.Object({}),
-		async execute(
-			_toolCallId: string,
-			_params: Record<string, never>,
-			_signal: AbortSignal | undefined,
-			_onUpdate: AgentToolUpdateCallback<unknown> | undefined,
-			_ctx: ExtensionContext,
-		): Promise<AgentToolResult<unknown>> {
-			try {
-				const { text, payload } = await renderEntwurfPeersForSurface();
-				return {
-					content: [{ type: "text", text }],
-					details: payload,
-				};
-			} catch (err) {
-				const msg = err instanceof Error ? err.message : String(err);
-				return {
-					content: [{ type: "text", text: `entwurf_peers error: ${msg}` }],
-					details: { error: msg },
-				};
-			}
-		},
-	});
-}
-
-// ============================================================================
-// Tool: entwurf_fresh_call
-// ============================================================================
-
-// ONE dynamic import, and it resolves the composition root rather than a rail: which rail opens
-// the sibling, when the Codex preflight runs, and how the receipt renders are decisions this
-// surface must not own a second copy of (#116 C3). The import stays non-literal-free and lazy for
-// the same startup-fence reason it always was.
-const FRESH_CALL_DISPATCH_MODULE = "./lib/fresh-call-dispatch.ts";
-
-interface FreshCallDispatchModule {
-	dispatchFreshCall(
-		request: {
-			backend: "pi" | "claude-code" | "copilot" | "omp" | "codex";
-			model: string;
-			task: string;
-			cwd?: string;
-			placement?: { tmuxSession: string };
-			callerGardenId: string | null;
-		},
-		env?: NodeJS.ProcessEnv,
-	): Promise<{ rail: "herdr" | "tmux"; result: { ok: boolean } }>;
-	renderDispatchedFreshCall(dispatched: { rail: "herdr" | "tmux"; result: { ok: boolean } }): {
-		text: string;
-		isError: boolean;
-	};
-}
-
-/**
- * The caller identity for this surface is the RESIDENT's garden address — the one the record
- * minted at session start and keyed the control socket on. It is read from this extension's own
- * closure, never from a tool parameter and never from `process.env`.
- *
- * A caller that could pass an id could pass a WRONG one, and that value would become the address
- * the sibling calls back to — docs/mux-launch-rail.md §6-b keeps the measured incident. So there
- * is no parameter to be wrong with.
- *
- * A null resident id refuses LOUDLY rather than falling back: without an address to call back to,
- * the launch would be a window with no way home.
- */
-function registerFreshCallTool(pi: ExtensionAPI): void {
-	// Same TS2589 workaround as registerEntwurfV2Tool — see the comment block there.
-	const registerTool = pi.registerTool as (def: any) => void;
-	registerTool({
-		name: "entwurf_fresh_call",
-		label: "Open Fresh Sibling",
-		description: `Open ONE fresh visible sibling beside you and hand it a first task. WHERE it opens is decided by
-where THIS agent runs, never by a parameter: inside herdr (HERDR_ENV=1) it opens a NEW UNFOCUSED TAB in your own
-herdr workspace and only pi and claude-code may be opened; everywhere else it opens in the operator's tmux with all five backends (pi, claude-code,
-copilot, omp, codex). There is no fallback — an incomplete herdr context is refused by name rather than opening a tmux
-window you cannot see from in herdr. The sibling's FIRST action is a callback to you carrying a nonce, whose sender
-envelope is its garden id — that is how you learn the address of a thing that did not exist a moment ago. This returns
-a LAUNCH receipt (the owner's coordinates plus that nonce) and nothing else: it does NOT mean the runtime started, the
-first turn ran, or the task was delivered. Those coordinates are a VIEW, never an address — a herdr tab/pane id can
-change under a running sibling. Nothing polls; if the callback never arrives the tab is visible. For EXISTING citizens use entwurf_v2 — this tool only creates, and entwurf_peers only reports. Model is REQUIRED and passed to the chosen runtime CLI (provider/model for pi, an id/alias for Claude Code, a name or pattern
-for the rest). On tmux, copilot/omp/codex are refused BEFORE any window opens when their birth, MCP, receive or
-visible-identity units are absent, and codex also needs the operator-owned app-server socket entwurf never starts; in
-herdr those three are refused by name first. Optional
-placement.tmuxSession is a TMUX-ONLY seat naming ONE EXISTING session and ALWAYS wins; omitted, the seat
-follows the CALLER, and on this surface that is always your own session — a missing one is
-tmux-session-missing and NOTHING is created. In herdr the field is refused by name. Do not put secrets in the task — model and task argv are visible to same-user processes.`,
-		parameters: Type.Object({
-			backend: StringEnum(["pi", "claude-code", "copilot", "omp", "codex"], {
-				description:
-					"Which fixed runtime to open. Only these five, and only pi/claude-code when this agent runs inside herdr; there is no arbitrary command.",
-			}),
-			model: Type.String({
-				minLength: 1,
-				maxLength: 200,
-				pattern: "^[A-Za-z0-9][A-Za-z0-9._/:\\[\\]-]*$",
-				description:
-					"Required runtime model: canonical provider/model for pi, a Claude Code model id/alias, or a Copilot/OMP/Codex model name.",
-			}),
-			task: Type.String({
-				minLength: 1,
-				maxLength: 16000,
-				description:
-					"What the sibling should do after it calls you back. Plain instructions; no secrets (see the tool description).",
-			}),
-			cwd: Type.Optional(
-				Type.String({
-					description:
-						"Optional literal ABSOLUTE path of an existing directory to start the sibling in (cross-repo fresh). Omit or pass \"\" to start in this agent's own cwd — on BOTH rails. Taken exactly as given: no trim, no realpath, no project-name resolution. '#' is refused on the tmux rail only, because tmux format-expands a start directory; inside herdr it is an ordinary path character. The receipt echoes what was REQUESTED, never an observation.",
-				}),
-			),
-			placement: Type.Optional(
-				Type.Object(
-					{
-						tmuxSession: Type.String({
-							description:
-								"EXACT name of an EXISTING session on this agent's own tmux server. Nothing is created: an absent session is refused as tmux-session-missing, and a name outside [A-Za-z0-9][A-Za-z0-9_-]* as tmux-session-name-invalid.",
-						}),
-					},
-					{
-						description:
-							"Optional expert seat override, TMUX ONLY: open the sibling in ONE EXISTING tmux session of this agent's own server, and it always wins. When omitted the seat follows the CALLER, never the backend being opened: every caller on THIS surface opens in its own session (a pi session is never a Codex citizen, so the Codex caller-pane rule the MCP bridge carries cannot arise here). Nothing is ever created. Inside herdr this field is refused by name — placement there belongs to herdr, and a tmux session name would silently place the sibling somewhere else. Independent of cwd; neither is inferred from the other. The receipt reports the selected name, its source, and resolved target session id.",
-					},
-				),
-			),
-		}),
-		async execute(
-			_toolCallId: string,
-			params: {
-				backend: "pi" | "claude-code" | "copilot" | "omp" | "codex";
-				model: string;
-				task: string;
-				cwd?: string;
-				placement?: { tmuxSession: string };
-			},
-			_signal: AbortSignal | undefined,
-			_onUpdate: unknown,
-			_ctx: ExtensionContext,
-		) {
-			try {
-				const dispatch = (await import(FRESH_CALL_DISPATCH_MODULE)) as unknown as FreshCallDispatchModule;
-				// ONE input object for ONE dispatch call. Rail selection and the Codex preflight
-				// ordering live behind it: duplicating either here would put the same decision in
-				// two places, which is how a mutant that plants a defect in one of them survives
-				// on the other.
-				const dispatched = await dispatch.dispatchFreshCall({
-					backend: params.backend,
-					model: params.model,
-					task: params.task,
-					cwd: params.cwd,
-					placement: params.placement,
-					callerGardenId: residentGardenId,
-				});
-				const rendered = dispatch.renderDispatchedFreshCall(dispatched);
-				return {
-					content: [{ type: "text", text: rendered.text }],
-					isError: rendered.isError,
-					details: { isError: rendered.isError },
-				};
-			} catch (err) {
-				const msg = err instanceof Error ? err.message : String(err);
-				return {
-					content: [{ type: "text", text: `entwurf_fresh_call error: ${msg}` }],
-					isError: true,
-					details: { error: msg },
-				};
-			}
-		},
-	});
-}
-
-// ============================================================================
-// Tool: entwurf_resume_call
-// ============================================================================
-
-const MUX_RESUME_CALL_MODULE = "./lib/mux-resume-call.ts";
-const V2_VISIBLE_RESUME_MODULE = "./lib/entwurf-v2-visible-resume.ts";
-
-interface MuxResumeCallModule {
-	resumeCall(
-		params: { cwd: string; runtimeArgs: readonly string[] },
-		env?: NodeJS.ProcessEnv,
-	): { ok: true; receipt: Record<string, string> } | { ok: false; reason: string };
-	RESUME_CALL_REJECT_HINT: Record<string, string>;
-}
-
-interface VisibleResumeModule {
-	visibleResume(target: string, deps: unknown): Promise<{ ok: boolean }>;
-	makeVisibleResumeDeps(launch: unknown): unknown;
-	renderVisibleResume(result: { ok: boolean }): { text: string; isError: boolean };
-}
-
-function registerCallbackTool(pi: ExtensionAPI): void {
-	const registerTool = pi.registerTool as (def: any) => void;
-	registerTool({
-		name: "entwurf_callback",
-		label: "Fresh Callback",
-		description: `ZERO-ARGUMENT callback for a fresh sibling this process was launched as. Reads ENTWURF_CALLBACK_TARGET and ENTWURF_CALLBACK_NONCE from this process environment (injected by the launcher next to the identity scrub), validates garden-id and nonce grammar, and dispatches through the existing v2 runner with intent fire-and-forget, message=nonce, wants_reply=false. The target is re-resolved by record/decider. REFUSES BY NAME when the pair is absent, malformed, or this process is a Codex-provenance bridge. No arguments, no fallback to a model-supplied target.`,
-		parameters: Type.Object({}),
-		async execute(
-			_toolCallId: string,
-			_params: Record<string, never>,
-			_signal: AbortSignal | undefined,
-			_onUpdate: unknown,
-			ctx: ExtensionContext,
-		) {
-			const read = readCallbackEnv(process.env);
-			if (!read.ok) {
-				return {
-					content: [{ type: "text", text: `entwurf_callback: ${read.reason}` }],
-					isError: true,
-				};
-			}
-			try {
-				const selfMod = (await import(ENTWURF_SELF_ADDRESS_MODULE)) as unknown as EntwurfSelfAddressModule;
-				const senderProvider = (): SenderEnvelope | undefined => {
-					const s = buildLocalSenderEnvelope(ctx);
-					return s ? decoratePiSenderAddressability(s, selfMod.computeSelfAddressability) : undefined;
-				};
-				const mod = (await import(ENTWURF_V2_SURFACE_MODULE)) as unknown as EntwurfV2SurfaceModule;
-				const rendered = await mod.runAndRenderEntwurfV2FromSurface(
-					{
-						target: read.target,
-						intent: "fire-and-forget",
-						message: read.nonce,
-						wants_reply: false,
-					},
-					{ senderProvider },
-				);
-				return {
-					content: [{ type: "text", text: rendered.text }],
-					isError: rendered.isError,
-					details: { isError: rendered.isError },
-				};
-			} catch (err) {
-				const msg = err instanceof Error ? err.message : String(err);
-				return {
-					content: [{ type: "text", text: `entwurf_callback error: ${msg}` }],
-					isError: true,
-					details: { error: msg },
-				};
-			}
-		},
-	});
-}
-
-/**
- * Unlike `entwurf_fresh_call`, this tool needs NO caller identity: a resume names an existing
- * citizen, so the address is the parameter rather than something the sibling has to report back.
- * What it needs instead is the per-gid lock, which is why the composition lives on the v2 side of
- * the fence and only the LAUNCH is handed across (docs/mux-launch-rail.md §11).
- */
-function registerResumeCallTool(pi: ExtensionAPI): void {
-	// Same TS2589 workaround as registerEntwurfV2Tool — see the comment block there.
-	const registerTool = pi.registerTool as (def: any) => void;
-	registerTool({
-		name: "entwurf_resume_call",
-		label: "Resume Dormant Citizen",
-		description: `Reopen ONE DORMANT pi citizen under its OWN garden id, in a visible window in the operator's own tmux
-session. The record supplies everything — which transcript, which model, which provider, which cwd — so the only
-input is the target id: there is no model override, no task, and no prompt. This runs NO turn: the window comes
-back with the conversation and waits, and talking to it is still entwurf_v2 fire-and-forget on the socket this
-call stands up. You get TWO receipts and they mean different things: a LAUNCH receipt (tmux made a window and was
-asked to start pi) and an OBSERVATION receipt (the control socket answered under the same id, or
-resume-unobserved). Unobserved is a real outcome, not an error to retry — the window is visible, so read it. A
-citizen that is already LIVE is refused: address it with entwurf_v2 instead. Only pi citizens have a same-id
-resume, because only they stand a control socket up.`,
-		parameters: Type.Object({
-			target: Type.String({
-				minLength: 1,
-				pattern: "^\\d{8}T\\d{6}-[0-9a-f]{6}$",
-				description: "Garden id of the DORMANT pi citizen to reopen (discover with entwurf_peers).",
-			}),
-		}),
-		async execute(
-			_toolCallId: string,
-			params: { target: string },
-			_signal: AbortSignal | undefined,
-			_onUpdate: unknown,
-			_ctx: ExtensionContext,
-		) {
-			try {
-				const mux = (await import(MUX_RESUME_CALL_MODULE)) as unknown as MuxResumeCallModule;
-				const v2 = (await import(V2_VISIBLE_RESUME_MODULE)) as unknown as VisibleResumeModule;
-				const launch = (input: { cwd: string; runtimeArgs: readonly string[] }) => {
-					const launched = mux.resumeCall(input);
-					return launched.ok
-						? { ok: true, handle: launched.receipt }
-						: { ok: false, reason: launched.reason, hint: mux.RESUME_CALL_REJECT_HINT[launched.reason] };
-				};
-				const result = await v2.visibleResume(params.target, v2.makeVisibleResumeDeps(launch));
-				const rendered = v2.renderVisibleResume(result);
-				return {
-					content: [{ type: "text", text: rendered.text }],
-					isError: rendered.isError,
-					details: { isError: rendered.isError },
-				};
-			} catch (err) {
-				const msg = err instanceof Error ? err.message : String(err);
-				return {
-					content: [{ type: "text", text: `entwurf_resume_call error: ${msg}` }],
-					isError: true,
-					details: { error: msg },
-				};
-			}
-		},
-	});
 }

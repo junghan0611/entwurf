@@ -329,9 +329,9 @@ const REJECT_HINT: Record<VisibleResumeRejectReason, string> = {
 };
 
 /**
- * ONE renderer for both surfaces — the same reason `mux-fresh-call` has one: the two
- * registrations are separate literals, and a shared renderer is what keeps the operator-visible
- * answer from drifting apart between native pi and the MCP bridge.
+ * ONE renderer — the same reason `mux-fresh-call` has one: it keeps the operator-visible answer
+ * out of the registration literal. (Since #125 the MCP bridge is the only registration; the
+ * native pi copy it once had to agree with is retired.)
  *
  * The success text keeps the two receipts visibly apart, including in the good case. A reader
  * who sees "window opened" and "socket alive" as one sentence has been told the resume worked;

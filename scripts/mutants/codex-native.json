@@ -394,17 +394,6 @@
 			"signatureSource": "test/fresh-call-surfaces.contract.test.ts"
 		},
 		{
-			"claim": "FRESHCALL-CODEX-PREMUTATION-PI",
-			"title": "the native pi public surface relabels a Codex request as pi at the shared dispatcher seam, bypassing the same central preflight from the other public door",
-			"subject": "pi-extensions/entwurf-control.ts",
-			"find": ["\t\t\t\t\tbackend: params.backend,"],
-			"replace": ["\t\t\t\t\tbackend: \"pi\","],
-			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
-			"timeoutSeconds": 180,
-			"signature": "[QK:FRESHCALL-CODEX-PREMUTATION-PI]",
-			"signatureSource": "test/fresh-call-surfaces.contract.test.ts"
-		},
-		{
 			"claim": "CODEX-BIRTH-DOCTOR-REQUIRES-TRUST",
 			"title": "the doctor treats the vendor trust receipt as optional, so a declared hook the vendor will never run reports green",
 			"subject": "scripts/codex-birth-doctor.sh",

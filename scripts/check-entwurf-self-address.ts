@@ -495,17 +495,13 @@ ok(
 	/origin:\s*"meta-session"/.test(metaBody) && /replyable:\s*self\.replyable/.test(metaBody),
 );
 
-// ── SE-1 2e-a: pi-native surface derives pi-session replyability the SAME way ──
-// entwurf-control.ts is a root-tsc emit surface, so it reaches the self-address fence via a
-// non-literal dynamic import (never a static `.ts` import — TS5097), then decorates the
-// sender with computeSelfAddressability + canonical socket existsSync (no hardcoded true).
+// ── pi-session replyability has ONE computation now (#125) ──
+// The pi-native sender decoration (`decoratePiSenderAddressability`) left with the native verbs: a
+// pi session reaches entwurf_v2/entwurf_self through the bridge, whose `buildStrictPiSenderEnvelope`
+// derives replyability from the same computeSelfAddressability + canonical-socket existsSync and is
+// pinned above. What the pi file still takes from this fence is the not-a-citizen notice below,
+// reached through the non-literal dynamic import that keeps the `.ts` fence out of root tsc.
 const nativeSrc = readFileSync(path.join(REPO_DIR, "pi-extensions", "entwurf-control.ts"), "utf8");
-ok(
-	"pi-native: decoratePiSenderAddressability derives replyable from computeSelfAddressability + canonical existsSync",
-	/function\s+decoratePiSenderAddressability/.test(nativeSrc) &&
-		/computeSelfAddressability/.test(nativeSrc) &&
-		/existsSync\s*\(\s*getSocketPath/.test(nativeSrc),
-);
 ok(
 	"pi-native: reaches the self-address fence via non-literal dynamic import (no static import; TS5097)",
 	/const ENTWURF_SELF_ADDRESS_MODULE\s*=/.test(nativeSrc) &&
@@ -555,7 +551,7 @@ ok(
 // a mutant to move it into, and passing a constant would make the decision above unreachable.
 const noticeBody = nativeSrc.slice(
 	nativeSrc.indexOf("async function noticeUncitizenedSession"),
-	nativeSrc.indexOf("function shouldRegisterControlTools"),
+	nativeSrc.indexOf("// Extension Export", nativeSrc.indexOf("async function noticeUncitizenedSession")),
 );
 ok(
 	"pi-native: the not-a-citizen notice is decided from the REAL flag, on the UI only, never on stderr " +

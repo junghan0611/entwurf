@@ -77,8 +77,8 @@ export function executeMetaMailboxSend(
  * Build the production `sendViaMailbox(plan, lock)` adapter the 5c-2a send hand consumes.
  * It IGNORES `lock` entirely (release is the hand's job; a mailbox plan is lock-free) and
  * wraps the sync body in the async dep signature. `senderProvider` is supplied by the
- * wiring site — it calls the private `buildLocalSenderEnvelope(ctx)` and decorates
- * origin/replyable — so this module never imports ExtensionContext. `enqueue` defaults to
+ * wiring site — the bridge's authoritative sender resolution (the one caller-side
+ * surface since #125) — so this module never imports ExtensionContext. `enqueue` defaults to
  * the real `enqueueMetaMessage`; the gate injects a fake.
  */
 export function makeProductionSendViaMailbox(opts: {

@@ -1,11 +1,9 @@
 /**
  * entwurf-v2-surface — 5d-3a: the ctx-free SURFACE adapter that joins a surface's raw params
  * to `runEntwurfV2` and renders the outcome-rich result back to a human/tool string. It is the
- * ONE place a surface (pi-native `entwurf_v2` tool now; the MCP `entwurf_v2` verb in 5d-3b)
- * crosses into the v2 fence — so `entwurf-control.ts` (a root-tsc, emit-capable surface that
- * CANNOT statically import the `.ts`-extension fence without TS5097) reaches this via a
- * NON-LITERAL dynamic import, and the MCP bridge (already a `.ts`-import consumer) imports it
- * directly. Either way the ctx binding stays OUT of the fence: the caller builds
+ * ONE place a surface (the MCP `entwurf_v2` verb — the only one since #125 retired the
+ * pi-native copy) crosses into the v2 fence; the MCP bridge (a `.ts`-import consumer) imports
+ * it directly. Either way the ctx binding stays OUT of the fence: the caller builds
  * `senderProvider` from its own envelope source and passes it in `opts`.
  *
  * Three exports:
