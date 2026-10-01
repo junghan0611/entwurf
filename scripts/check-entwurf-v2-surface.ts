@@ -694,7 +694,7 @@ async function main(): Promise<void> {
 
 	// ── 4: pi-native control surface — the RECEIVER half, and no second caller route ──
 	// #125: the Entwurf verbs are no longer native pi tools. A pi session reaches them through Pi's
-	// built-in MCP as `mcp__entwurf-bridge__<verb>` — the SAME bridge §5 certifies — so the pi-native
+	// built-in MCP as `mcp__entwurf_bridge__<verb>` — the SAME bridge §5 certifies — so the pi-native
 	// copies of §5's model-facing checks (rail semantics, dormant honesty, host cap, peers dead row)
 	// and the fence/senderProvider wiring they needed are retired with them, not re-proved against a
 	// file that no longer has them. What stays here is what this file still owns: the control

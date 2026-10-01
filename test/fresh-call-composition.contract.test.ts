@@ -99,7 +99,7 @@ describe("the tmux rail's bytes did not move when the code did", () => {
 			expect(framing).toContain(FRESH_CALL_CALLBACK_TOOL[backend]);
 		}
 		// The two maps are the SAME dialect applied to two tools, so a backend whose callback name
-		// is composed must have a composed peers name too. pi is the one that is bare in both.
+		// is composed must have a composed peers name too.
 		for (const backend of FRESH_CALL_BACKENDS) {
 			expect(FRESH_CALL_PEERS_TOOL[backend].startsWith("entwurf_")).toBe(
 				FRESH_CALL_CALLBACK_TOOL[backend].startsWith("entwurf_"),

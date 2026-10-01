@@ -52,8 +52,10 @@ task만** JSON 리터럴로 인코드하고, 그 리터럴은 **줄바꿈을 싣
 tool 지시를 디코드하거나 바꾸라는 요구가 **아니다**. 정본은 `composeFreshCallFraming()`과
 `HERDR_TASK_LITERAL_INSTRUCTION`이다.
 
+claude-code 대상의 예시다 — pi 대상이면 첫 행동의 도구 이름만 `mcp__entwurf_bridge__entwurf_callback`(Pi 0.99.2 철자)으로 바뀐다. 인자 없는 callback이 두 파일럿의 첫 행동이다; target·nonce를 싣는 `entwurf_v2` 모양은 codex 전용이다.
+
 ```text
-You are a fresh visible citizen that entwurf opened in a new herdr tab. FIRST ACTION, before reading files or anything else: call mcp__entwurf-bridge__entwurf_v2 with target=…, intent=fire-and-forget, wants_reply=false, and message set to exactly herdr-fresh-call-… — that string alone, nothing added. … After the tool receipt, carry out this task: "<operator task as a JSON string literal>"
+You are a fresh visible citizen that entwurf opened in a new herdr tab. FIRST ACTION, before reading files or anything else: call mcp__entwurf-bridge__entwurf_callback with no arguments. That call is how the caller learns the garden id you were born with. … After the tool receipt, carry out this task: "<operator task as a JSON string literal>"
 ```
 
 **이전 모양이 왜 은퇴했는지 — 이 자리에 기록한다.** 한때 프레이밍 **전체**를 JSON 리터럴로 감싸고

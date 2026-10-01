@@ -261,6 +261,39 @@
 			"signatureSource": "test/mux-fresh-call.test.ts"
 		},
 		{
+			"claim": "FRESHCALL-PI-CALLBACK-DIALECT",
+			"title": "pi callback rolls back to the 0.99.1 hyphen spelling, which a 0.99.2 host no longer declares — the first turn is spent on a tool that is not there",
+			"subject": "pi-extensions/lib/fresh-call-composition.ts",
+			"find": ["\tpi: \"mcp__entwurf_bridge__entwurf_callback\","],
+			"replace": ["\tpi: \"mcp__entwurf-bridge__entwurf_callback\","],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:FRESHCALL-PI-CALLBACK-DIALECT]",
+			"signatureSource": "test/mux-fresh-call.test.ts"
+		},
+		{
+			"claim": "FRESHCALL-PI-DELIVERY-DIALECT",
+			"title": "pi delivery rolls back to the 0.99.1 hyphen spelling — the result is sent to a tool a 0.99.2 host does not declare",
+			"subject": "pi-extensions/lib/fresh-call-composition.ts",
+			"find": ["\tpi: \"mcp__entwurf_bridge__entwurf_v2\","],
+			"replace": ["\tpi: \"mcp__entwurf-bridge__entwurf_v2\","],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:FRESHCALL-PI-DELIVERY-DIALECT]",
+			"signatureSource": "test/mux-fresh-call.test.ts"
+		},
+		{
+			"claim": "FRESHCALL-PI-PEERS-DIALECT",
+			"title": "pi peers offer rolls back to the 0.99.1 hyphen spelling — the corroboration tool is named in a spelling the sibling cannot reach",
+			"subject": "pi-extensions/lib/fresh-call-composition.ts",
+			"find": ["\tpi: \"mcp__entwurf_bridge__entwurf_peers\","],
+			"replace": ["\tpi: \"mcp__entwurf-bridge__entwurf_peers\","],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:FRESHCALL-PI-PEERS-DIALECT]",
+			"signatureSource": "test/mux-fresh-call.test.ts"
+		},
+		{
 			"claim": "FRESHCALL-COPILOT-PREFLIGHT-PREMUTATION",
 			"title": "the capability preflight is removed — a host missing the birth, MCP, receiver or footer unit gets a real window and a launch receipt for a sibling that can never call home",
 			"subject": "pi-extensions/lib/mux-fresh-call.ts",

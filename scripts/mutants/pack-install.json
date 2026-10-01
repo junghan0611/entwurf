@@ -6,7 +6,7 @@
 			"claim": "PACK-INSTALL-PIN-MATCHER-BOUNDED",
 			"title": "the pin-leak matcher loses its version boundary and blesses substring lookalikes — @0.85.10 reads as the pinned 0.85.1 and the gate announces a verified tree it never verified (independent review, 2026-08-25)",
 			"subject": "run.sh",
-			"find": ["  grep '^@earendil-works+' | grep -Ev '@0\\.99\\.1(_|$)' || true"],
+			"find": ["  grep '^@earendil-works+' | grep -Ev '@0\\.99\\.2(_|$)' || true"],
 			"replace": ["  grep '^@earendil-works+' | grep -v '@0\\.87\\.1' || true"],
 			"gate": ["bash", "run.sh", "check-pack-pin-matcher"],
 			"timeoutSeconds": 120,
@@ -17,11 +17,22 @@
 			"claim": "PACK-INSTALL-PIN-MATCHER-COVERS-CLOSURE",
 			"title": "the pin-leak matcher narrows back to the pi-* families and goes blind to a non-pi member of the same runtime closure — @earendil-works/chord (new in pi 0.85.0, a runtime dependency of pi-coding-agent/pi-agent-core/pi-client/pi-protocol) floats unpinned while the gate prints a verified pin (measured 2026-09-06 on a real 0.85.1 install tree)",
 			"subject": "run.sh",
-			"find": ["  grep '^@earendil-works+' | grep -Ev '@0\\.99\\.1(_|$)' || true"],
-			"replace": ["  grep '^@earendil-works+pi-' | grep -Ev '@0\\.99\\.1(_|$)' || true"],
+			"find": ["  grep '^@earendil-works+' | grep -Ev '@0\\.99\\.2(_|$)' || true"],
+			"replace": ["  grep '^@earendil-works+pi-' | grep -Ev '@0\\.99\\.2(_|$)' || true"],
 			"gate": ["bash", "run.sh", "check-pack-pin-matcher"],
 			"timeoutSeconds": 120,
 			"signature": "[QK:PACK-INSTALL-PIN-MATCHER-COVERS-CLOSURE]",
+			"signatureSource": "run.sh"
+		},
+		{
+			"claim": "PACK-INSTALL-CONSUMER-ROOTS-CONTAINED",
+			"title": "a consumer subcall stops naming its own PI_CODING_AGENT_DIR, so an inherited agent dir wins over the sandbox HOME and the consumer's user-scope registration lands outside it (measured 2026-10-01, #125)",
+			"subject": "run.sh",
+			"find": ["    \"XDG_CACHE_HOME=$h/.cache\" \\\n    \"PI_CODING_AGENT_DIR=$h/.pi/agent\""],
+			"replace": ["    \"XDG_CACHE_HOME=$h/.cache\""],
+			"gate": ["bash", "run.sh", "check-pack-consumer-roots"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:PACK-INSTALL-CONSUMER-ROOTS-CONTAINED]",
 			"signatureSource": "run.sh"
 		}
 	]

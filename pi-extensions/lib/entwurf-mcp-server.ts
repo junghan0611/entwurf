@@ -9,10 +9,11 @@
  * child: nothing here starts, restarts or stops a process.
  *
  * WHAT THIS MODULE DECIDES, AND NOTHING ELSE:
- *   - the server NAME. `entwurf-bridge` is the key every other host already uses, so a pi model
- *     calls `mcp__entwurf-bridge__<verb>` — byte-identical to Claude Code's spelling
- *     (`[측정 2026-09-30, pi 0.99.1]` `extensions/mcp/tools.ts:83` keeps the hyphen). It is a
- *     call-name prefix, never an address: the record is the only address axis.
+ *   - the server NAME. `entwurf-bridge` is the key every other host already uses. Pi sanitizes it
+ *     into the call name, so a pi model calls `mcp__entwurf_bridge__<verb>` (`[측정 2026-10-01,
+ *     pi 0.99.2]` `extensions/mcp/tools.ts:82-90`: everything outside `[A-Za-z0-9_]` becomes `_`).
+ *     The key itself is unchanged. It is a call-name prefix, never an address: the record is the
+ *     only address axis.
  *   - the ENTRY. The COMPILED bridge (`scripts/build-bridge.sh` output) that a packaged consumer
  *     receives next to `pi-extensions/`. There is no TypeScript fallback: a missing build is a
  *     named failure, not a silent switch to a different artifact.
@@ -26,15 +27,16 @@
  *     mailbox (a pi citizen has no mailbox), and `entwurf_register_native` binds a NATIVE harness
  *     session (a pi citizen is born by this extension).
  *
- * A same-name `entwurf-bridge` entry in the operator's or a trusted project's `mcp.json` replaces
- * this registration by Pi's own precedence, and `/mcp` says so. That is the operator's choice and
+ * A same-namespace entry in the operator's or a trusted project's `mcp.json` — `entwurf-bridge` or
+ * `entwurf_bridge`, which Pi folds to one namespace — replaces this registration by Pi's own
+ * precedence, and `/mcp` says so. That is the operator's choice and
  * Pi's contract; this module does not scan config, fight it, or add a second owner.
  */
 
 import * as path from "node:path";
 import type { McpServerConfig } from "@earendil-works/pi-coding-agent";
 
-/** The built-in MCP server key. A call-name prefix (`mcp__entwurf-bridge__<verb>`), never an address. */
+/** The built-in MCP server key. Pi sanitizes it into the call name (`mcp__entwurf_bridge__<verb>`); never an address. */
 export const ENTWURF_MCP_SERVER_NAME = "entwurf-bridge";
 
 /** Bridge tools with no use on a pi host (see the module header). */

@@ -21,6 +21,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { CODEX_CALLER_SEAT_HINT } from "../pi-extensions/lib/codex-caller-seat.ts";
 import { CODEX_CALLER_PREFLIGHT_HINT } from "../pi-extensions/lib/codex-fresh-preflight.ts";
+import { FRESH_CALL_PEERS_TOOL } from "../pi-extensions/lib/fresh-call-composition.ts";
 import {
 	buildBackendArgs,
 	buildFreshCallArgs,
@@ -136,6 +137,23 @@ describe("argv dialects", () => {
 		expect(FRESH_CALL_CALLBACK_TOOL.codex).toBe("mcp__entwurf_bridge__entwurf_v2");
 		expect(buildFreshCallPrompt({ backend: "codex", task: TASK, callerGardenId: GID, nonce: NONCE })).toContain(
 			FRESH_CALL_CALLBACK_TOOL.codex,
+		);
+	});
+	// Pi 0.99.2 folds every non-[A-Za-z0-9_] character of the MCP server key to `_` (#125), so pi now
+	// shares Codex's spelling. Each literal is written here, never read back from the production map.
+	it("[QK:FRESHCALL-PI-CALLBACK-DIALECT] pi calls back under the 0.99.2 underscore spelling, and the prompt names it", () => {
+		expect(FRESH_CALL_CALLBACK_TOOL.pi).toBe("mcp__entwurf_bridge__entwurf_callback");
+		expect(buildFreshCallPrompt({ backend: "pi", task: TASK, callerGardenId: GID, nonce: NONCE })).toContain(
+			"mcp__entwurf_bridge__entwurf_callback",
+		);
+	});
+	it("[QK:FRESHCALL-PI-DELIVERY-DIALECT] pi delivers its result under the 0.99.2 underscore spelling", () => {
+		expect(FRESH_CALL_DELIVERY_TOOL.pi).toBe("mcp__entwurf_bridge__entwurf_v2");
+	});
+	it("[QK:FRESHCALL-PI-PEERS-DIALECT] pi is offered peers under the 0.99.2 underscore spelling, and the prompt names it", () => {
+		expect(FRESH_CALL_PEERS_TOOL.pi).toBe("mcp__entwurf_bridge__entwurf_peers");
+		expect(buildFreshCallPrompt({ backend: "pi", task: TASK, callerGardenId: GID, nonce: NONCE })).toContain(
+			"mcp__entwurf_bridge__entwurf_peers",
 		);
 	});
 	it("[QK:FRESHCALL-PI-ARGV-PROMPT-FIRST] pi argv is the prompt FIRST, then --entwurf-control — the flag-first order was measured to open a window whose turn never ran", () => {

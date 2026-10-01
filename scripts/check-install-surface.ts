@@ -260,8 +260,9 @@ const operatorCmds = [...targets].filter(([cmd, ts]) => !isDevGate(cmd) && ts.le
 			.replace(/'(?:[^'\\]|\\.)*'/g, "''");
 	const RUNSH_DRIVE = /(?:\$\{?RUN\}?|run\.sh)\s+(install|setup|remove-user-scope|remove)\b/;
 	// install/setup write the operator's REAL user-scope surfaces under "$HOME"
-	// (user settings.json registration ignores PI_CODING_AGENT_DIR), so sandboxing
-	// the agent dir is not isolation for them; only HOME is. (setup:links died with
+	// (settings.json registration follows PI_CODING_AGENT_DIR when set, but provider
+	// state and the rest stay HOME/XDG-rooted), so sandboxing the agent dir alone is not
+	// isolation for them; HOME is required. (setup:links died with
 	// the target registry — #50 C3.)
 	const HOME_ROOTED = new Set(["install", "setup"]);
 

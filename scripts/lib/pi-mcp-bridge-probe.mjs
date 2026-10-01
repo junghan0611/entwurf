@@ -73,7 +73,7 @@ const faux = fauxProvider();
 const callSelf = (ctx) => {
 	out.declaredPerCall.push(getCurrentTools(ctx.messages).map((t) => t.name));
 	return fauxAssistantMessage(
-		[fauxToolCall("mcp__entwurf-bridge__entwurf_self", {}, { id: `pmb-self-${out.declaredPerCall.length}` })],
+		[fauxToolCall("mcp__entwurf_bridge__entwurf_self", {}, { id: `pmb-self-${out.declaredPerCall.length}` })],
 		{
 			stopReason: "toolUse",
 		},

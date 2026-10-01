@@ -282,7 +282,7 @@ session 디렉터리 스캔이 symlink를 허용하게 된 것(identity minting�
 
 ### 읽은 근거
 
-`<pi>` = 설치된 `@earendil-works/pi-coding-agent@0.84.0`(이 절의 표본을 뜬 install; 현 supported range 는 `>=0.99.1 <0.100` — 아래 0.84.x 재확인 문단들은 그 시점의 측정이다) 패키지 루트(pnpm global store).
+`<pi>` = 설치된 `@earendil-works/pi-coding-agent@0.84.0`(이 절의 표본을 뜬 install; 현 supported range 는 `>=0.99.2 <0.100` — 아래 0.84.x 재확인 문단들은 그 시점의 측정이다) 패키지 루트(pnpm global store).
 아래 표에서 출처가 `(0.83.0)`으로 적힌 행은 **앵커 시점의 역사적 표본**이고, 그 행의 사실이 0.84.0에서도
 성립하는지는 위 재실측 문단이 따로 진다. 접두사 없는
 경로는 이 repo 기준이다.
@@ -551,7 +551,7 @@ TUI whose thread nobody named.
 1. 셸에서 `entwurf_self`를 찾다가 exit 127 — **native pi 표면에는 그 도구가 없다.**
    `entwurf-control.ts`가 노출하는 것은 `entwurf_v2`·`entwurf_peers`·`entwurf_fresh_call`·`entwurf_resume_call`뿐이고,
    `entwurf_self`는 MCP bridge의 도구다. (당시 측정. #125부터 pi 세션은 native 도구 대신 Pi builtin MCP로
-   bridge를 부르고 `mcp__entwurf-bridge__entwurf_self`가 선언된다 — 아래 2·3의 교훈은 그대로다.)
+   bridge를 부르고 Pi 0.99.2부터 `mcp__entwurf_bridge__entwurf_self`가 선언된다 — 아래 2·3의 교훈은 그대로다.)
 2. `mcp/entwurf-bridge/start.sh`를 **스스로 스폰**했다. 그 프로세스는 pi의 MCP child가 아니라 셸의 자식이라
    pi가 child MCP에 심는 sender carrier를 받지 못했고, 상속된 env의 `PI_SESSION_ID`만 보고 답했다.
 3. 그 uuidv7을 gardenId로 출력했다. **틀렸다.** 진짜 id는 상태줄에 있었고 control socket 파일명이 그것을

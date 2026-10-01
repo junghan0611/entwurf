@@ -280,6 +280,7 @@ Usage:
   ./run.sh check-node-floor-coherence # binds the Node floor (24+, single axis) across engines.node, run.sh setup preflight, meta-bridge install/doctor judgment logic, clean-host docs, the bridge launcher header, and the CI runner node-version — engines.node is the SSOT, everything else is derived; sweeps tracked contract text for an unregistered declaration
   ./run.sh check-pack                 # publish gate (dry-run): npm pack --dry-run + tarball invariants (runtime-critical present, dev residue absent)
   ./run.sh check-pack-pin-matcher     # pure self-test of check-pack-install's pin-leak matcher against synthetic .pnpm lookalikes, one cell per property: version boundary (a prefix-extended @0.86.0-beta.1 and an off-pin @0.85.1 must leak, @0.86.0 bare or with any measured peer-hash must pass) and closure prefix (an off-pin @earendil-works/chord must leak — it carries no `pi-` prefix); snapshot-safe qualification oracle, also run first inside check-pack-install
+  ./run.sh check-pack-consumer-roots  # pure self-test of check-pack-install's consumer sandbox: under a poisoned inherited HOME/XDG/PI_CODING_AGENT_DIR every writable root a consumer subcall sees resolves inside its own consumer home; snapshot-safe qualification oracle, also run first inside check-pack-install
   ./run.sh check-fresh-cut-gate       # SOURCE cell of the generation-boundary proof (IN pnpm run check:full): drives real install/setup/fresh-cut in a sandbox; certification refusal is pre-write, quiescence is fail-closed, archives preserve bytes, and the #54 exit matrix distinguishes complete / no-move / usage / incomplete transition / complete-with-cleanup-residue. No model/network/cost
   ./run.sh check-pack-install         # heavy publish gate (prepublishOnly): actual npm pack + tar -tf + fresh-temp install smoke + the #116 M3-b1 herdr-plugin RUNTIME VERIFIER run against that actual installed tarball (the focused check-herdr-runtime-bootstrap drives a fixture; THIS is where the real package is proven) with the pinned pi peers (pins derived from the package.json devDep; check-dep-versions binds them) + the npm-installed bridge BOOTS (tools/list) and DELIVERS (tools/call entwurf_v2 → .msg lands) + the installed all-absent and copilot-present (four-unit fake-vendor) `entwurf setup` rows + the INSTALLED generation lifecycle on a seeded previous-generation host (REFUSE before activation writes / zero Claude invocations → installed fresh-cut archives + opens empty → install-meta-bridge PASSES) + the INSTALLED-PACKAGE branch of the Copilot and OMP birth installers actually RUN (compiled entry selected, no raw .ts, and a real birth edge mints a citizen — the half a required-artifact list can never stand in for)
   ./run.sh check-install-container    # 0.12.8 (#51 C): Linux artifact-CONSUMER gate — one candidate .tgz handed read-only to a checkout-invisible node:<engines-major>-bookworm cell. Default packs once to temp; ENTWURF_CANDIDATE_TGZ=/absolute/preserved.tgz consumes those exact bytes with no re-pack and prints canonical path+sha256 for release. Non-root global PATH install, frozen package, MCP tools/list, fake-Claude install-meta-bridge, path+sha256 fence, strict doctor, and the GENERATION host-state matrix (clean / v3-only store bytes unchanged / previous-generation REFUSE→fresh-cut→retry PASS) seeded inline. Docker missing = honest SKIP; ENTWURF_REQUIRE_DOCKER=1 makes that RED (required CI)
@@ -3725,7 +3726,7 @@ check_pack() {
 #     which is exactly what property (1)'s `(_|$)` absorbs; all three shapes are fixtures
 #     below so a future suffix change cannot pass vacuously.)
 pack_install_leaked_pi() {
-  grep '^@earendil-works+' | grep -Ev '@0\.99\.1(_|$)' || true
+  grep '^@earendil-works+' | grep -Ev '@0\.99\.2(_|$)' || true
 }
 
 # Matcher self-test on SYNTHETIC lookalikes: a healthy install tree cannot exercise either
@@ -3745,15 +3746,15 @@ check_pack_pin_matcher() {
   # None may leak; the two lookalikes must — a PREFIX-EXTENDED version (`0.86.0-beta.1`,
   # the prerelease shape that an unanchored match would bless) and an off-pin version.
   matcher_probe=$(printf '%s\n' \
-    '@earendil-works+pi-ai@0.99.1' \
-    '@earendil-works+pi-ai@0.99.1_@modelcontextprotocol+sdk@1.29.0_zod@4.3.6' \
-    '@earendil-works+pi-ai@0.99.1_ws@8.21.3' \
-    '@earendil-works+pi-ai@0.99.1_@modelcontextprotocol+sdk@1.29.0_zod@4.3.6__ws@8.21.3_zod@4.3.6' \
-    '@earendil-works+pi-ai@0.99.1-beta.1' \
+    '@earendil-works+pi-ai@0.99.2' \
+    '@earendil-works+pi-ai@0.99.2_@modelcontextprotocol+sdk@1.29.0_zod@4.3.6' \
+    '@earendil-works+pi-ai@0.99.2_ws@8.21.3' \
+    '@earendil-works+pi-ai@0.99.2_@modelcontextprotocol+sdk@1.29.0_zod@4.3.6__ws@8.21.3_zod@4.3.6' \
+    '@earendil-works+pi-ai@0.99.2-beta.1' \
     '@earendil-works+pi-agent-core@0.87.1' | pack_install_leaked_pi)
-  if [ "$matcher_probe" != '@earendil-works+pi-ai@0.99.1-beta.1
+  if [ "$matcher_probe" != '@earendil-works+pi-ai@0.99.2-beta.1
 @earendil-works+pi-agent-core@0.87.1' ]; then
-    fail "[QK:PACK-INSTALL-PIN-MATCHER-BOUNDED] the pin-leak matcher must flag the prefix-extended 0.99.1-beta.1 and the off-pin 0.87.1 lookalikes, and pass 0.99.1 bare or with any measured peer-hash — got: ${matcher_probe:-<nothing leaked>}"
+    fail "[QK:PACK-INSTALL-PIN-MATCHER-BOUNDED] the pin-leak matcher must flag the prefix-extended 0.99.2-beta.1 and the off-pin 0.87.1 lookalikes, and pass 0.99.2 bare or with any measured peer-hash — got: ${matcher_probe:-<nothing leaked>}"
     return 1
   fi
 
@@ -3761,9 +3762,9 @@ check_pack_pin_matcher() {
   # (0.85.0 onward, still true at 0.99.1). An off-pin chord MUST leak; the pinned one must not. A matcher narrowed
   # back to `^@earendil-works+pi-` sees nothing here and dies at this signature.
   matcher_probe=$(printf '%s\n' \
-    '@earendil-works+chord@0.99.1' \
+    '@earendil-works+chord@0.99.2' \
     '@earendil-works+chord@0.87.1' \
-    '@earendil-works+pi-ai@0.99.1' | pack_install_leaked_pi)
+    '@earendil-works+pi-ai@0.99.2' | pack_install_leaked_pi)
   if [ "$matcher_probe" != '@earendil-works+chord@0.87.1' ]; then
     fail "[QK:PACK-INSTALL-PIN-MATCHER-COVERS-CLOSURE] the pin-leak matcher must cover every @earendil-works closure member, not just the pi-* families — an off-pin @earendil-works/chord has to leak (it is a runtime dependency of pi-coding-agent, pi-agent-core, pi-client and pi-protocol — `[측정 2026-09-20]` at 0.86.0, re-measured `[측정 2026-09-22]` at 0.87.0, `[측정 2026-09-23]` at 0.87.1 and `[측정 2026-09-30]` at 0.99.1, where pi-coding-agent adds pi-codemode and pi-mcp beside them) — got: ${matcher_probe:-<nothing leaked>}"
     return 1
@@ -3772,8 +3773,61 @@ check_pack_pin_matcher() {
   echo "[check-pack-pin-matcher] ok — the pin-leak matcher is version-bounded (lookalikes leak, pinned version passes bare and with either measured peer-hash) and covers the whole @earendil-works closure (chord included)"
 }
 
+# The writable roots of ONE consumer sandbox, shared by every consumer subcall of
+# check-pack-install that drives an installed `run.sh` writer. The writers resolve their agent
+# dir as `${PI_CODING_AGENT_DIR:-$HOME/.pi/agent}` (`resolve`/`install` below), so swapping HOME
+# alone let an INHERITED PI_CODING_AGENT_DIR win and the consumer's user-scope registration land
+# outside the sandbox (#125, measured 2026-10-01: an inherited agent dir received the npm
+# consumer's settings.json while the gate looked under the temp HOME). Every root is named here,
+# none is left to the caller's environment. One NAME=value per line; read with mapfile.
+pack_install_consumer_env() {
+  local h="$1"
+  printf '%s\n' \
+    "HOME=$h" \
+    "XDG_CONFIG_HOME=$h/.config" \
+    "XDG_DATA_HOME=$h/.local/share" \
+    "XDG_STATE_HOME=$h/.local/state" \
+    "XDG_CACHE_HOME=$h/.cache" \
+    "PI_CODING_AGENT_DIR=$h/.pi/agent"
+}
+
+# Self-test of the consumer roots, snapshot-safe like the pin matcher: under a POISONED inherited
+# environment every root a consumer subcall sees must sit inside the consumer home. Runs first
+# inside check-pack-install too, so the heavy gate cannot proceed on a leaking root set.
+check_pack_consumer_roots() {
+  local h="/pack-consumer-home" roots=() seen line
+  mapfile -t roots < <(pack_install_consumer_env "$h")
+  seen=$(env HOME=/poisoned/home XDG_CONFIG_HOME=/poisoned/config XDG_DATA_HOME=/poisoned/data \
+    XDG_STATE_HOME=/poisoned/state XDG_CACHE_HOME=/poisoned/cache PI_CODING_AGENT_DIR=/poisoned/agent \
+    "${roots[@]}" sh -c 'printf "%s\n" "$HOME" "$XDG_CONFIG_HOME" "$XDG_DATA_HOME" "$XDG_STATE_HOME" "$XDG_CACHE_HOME" "$PI_CODING_AGENT_DIR"')
+  while IFS= read -r line; do
+    case "$line" in
+      "$h" | "$h"/*) ;;
+      *)
+        fail "[QK:PACK-INSTALL-CONSUMER-ROOTS-CONTAINED] every writable root of a consumer subcall must be inside its own consumer home ($h) whatever the caller inherited — got: $(printf '%s' "$seen" | tr '\n' ' ')"
+        return 1
+        ;;
+    esac
+  done <<<"$seen"
+  echo "[check-pack-consumer-roots] ok — HOME, the four XDG roots and PI_CODING_AGENT_DIR of a consumer subcall all resolve inside the consumer home under a poisoned inherited environment"
+}
+
+# Hand-built oracle for the REAL consumer run: check-pack-install exports a sentinel agent dir for
+# its whole body, standing in for whatever a caller inherits; a subcall that falls back to it
+# writes there, and this names the stage that did.
+pack_install_sentinel_untouched() {
+  local sentinel="$1" stage="$2" found
+  found=$(find "$sentinel" -mindepth 1 2>/dev/null | head -5)
+  if [ -n "$found" ]; then
+    fail "[QK:PACK-INSTALL-INHERITED-AGENTDIR-UNTOUCHED] $stage wrote into the inherited PI_CODING_AGENT_DIR instead of its own consumer sandbox:"
+    printf '%s\n' "$found" | sed 's/^/    /' >&2
+    return 1
+  fi
+}
+
 _check_pack_install_impl() {
   check_pack_pin_matcher || return 1
+  check_pack_consumer_roots || return 1
 
   # Heavy publish gate. Runs the remaining three checks in #13's
   # publish checklist that check_pack (dry-run only) does not cover:
@@ -3812,6 +3866,11 @@ _check_pack_install_impl() {
   local pack_tmp
   pack_tmp=$(mktemp -d -t entwurf-pack.XXXXXX)
   tgz_path="${pack_tmp}/${tgz_name}"
+  # Stand-in for an inherited agent dir, scoped to this function: no consumer subcall may fall
+  # back to it (pack_install_sentinel_untouched). It also keeps the caller's own one out of reach.
+  local agentdir_sentinel="${pack_tmp}/inherited-agent-dir"
+  mkdir -p "$agentdir_sentinel"
+  local -x PI_CODING_AGENT_DIR="$agentdir_sentinel"
 
   # 0.12.1 C — stale-dist guard. `tsc` emit does NOT prune orphaned files from
   # outDir, and `files: ["mcp/"]` would carry any leftover dist file into the
@@ -4050,16 +4109,16 @@ _check_pack_install_impl() {
   local install_log
   install_log=$(cd "$tmp" && pnpm add \
     "$tgz_path" \
-    "@earendil-works/pi-ai@0.99.1" \
-    "@earendil-works/pi-coding-agent@0.99.1" \
-    "@earendil-works/pi-tui@0.99.1" \
-    "@earendil-works/pi-agent-core@0.99.1" \
-    "@earendil-works/pi-client@0.99.1" \
-    "@earendil-works/pi-protocol@0.99.1" \
-    "@earendil-works/pi-telemetry@0.99.1" \
-    "@earendil-works/chord@0.99.1" \
-    "@earendil-works/pi-codemode@0.99.1" \
-    "@earendil-works/pi-mcp@0.99.1" \
+    "@earendil-works/pi-ai@0.99.2" \
+    "@earendil-works/pi-coding-agent@0.99.2" \
+    "@earendil-works/pi-tui@0.99.2" \
+    "@earendil-works/pi-agent-core@0.99.2" \
+    "@earendil-works/pi-client@0.99.2" \
+    "@earendil-works/pi-protocol@0.99.2" \
+    "@earendil-works/pi-telemetry@0.99.2" \
+    "@earendil-works/chord@0.99.2" \
+    "@earendil-works/pi-codemode@0.99.2" \
+    "@earendil-works/pi-mcp@0.99.2" \
     "typebox@latest" \
     --ignore-workspace --ignore-scripts 2>&1) || {
     fail "[check-pack-install] pnpm add failed:"
@@ -4075,11 +4134,11 @@ _check_pack_install_impl() {
   local leaked_pi
   leaked_pi=$(ls "$tmp/node_modules/.pnpm" 2>/dev/null | pack_install_leaked_pi)
   if [ -n "$leaked_pi" ]; then
-    fail "[check-pack-install] UNVERIFIED pi runtime resolved into the install tree (expected only 0.87.1):"
+    fail "[check-pack-install] UNVERIFIED pi runtime resolved into the install tree (expected only 0.99.2):"
     printf '%s\n' "$leaked_pi" | sed 's/^/    /' >&2
     return 1
   fi
-  echo "[check-pack-install] pi runtime tree pin verified: every @earendil-works package is 0.87.1 (chord included)"
+  echo "[check-pack-install] pi runtime tree pin verified: every @earendil-works package is 0.99.2 (chord included)"
 
   # Resolve the installed package.json and confirm pi.extensions
   # arrived intact. If pi.extensions is empty or missing, the
@@ -4292,11 +4351,14 @@ _check_pack_install_impl() {
     ls -l "$npmroot/node_modules/.bin" 2>/dev/null | sed 's/^/    /' >&2 || true
     return 1
   fi
-  wire_log=$(HOME="$npmhome" XDG_DATA_HOME="$npmhome/.local/share" XDG_STATE_HOME="$npmhome/.local/state" XDG_CACHE_HOME="$npmhome/.cache" "$npm_pkg/run.sh" install "$npmproj" 2>&1) || {
+  local consumer_env=()
+  mapfile -t consumer_env < <(pack_install_consumer_env "$npmhome")
+  wire_log=$(env "${consumer_env[@]}" "$npm_pkg/run.sh" install "$npmproj" 2>&1) || {
     fail "[check-pack-install] npm-managed run.sh install failed (preflight rejected hoisted deps?):"
     echo "$wire_log" | tail -15 | sed 's/^/    /' >&2
     return 1
   }
+  pack_install_sentinel_untouched "$agentdir_sentinel" "npm-managed run.sh install" || return 1
   if [ ! -f "$npmproj/.pi/settings.json" ]; then
     fail "[check-pack-install] npm-managed run.sh install did not write settings.json:"
     echo "$wire_log" | tail -15 | sed 's/^/    /' >&2
@@ -4334,7 +4396,7 @@ sys.exit(0 if any(isinstance(s,str) and s.endswith('/node_modules/@junghanacs/en
   # a KNOWN flag and the entwurf provider must load, sourced only from user scope.
   # Before the fix this printed "Unknown options: --entwurf-control".
   local foreign_out
-  foreign_out=$(cd "$tmp" && HOME="$npmhome" XDG_DATA_HOME="$npmhome/.local/share" XDG_STATE_HOME="$npmhome/.local/state" XDG_CACHE_HOME="$npmhome/.cache" PI_CODING_AGENT_DIR="$npmhome/.pi/agent" "$pi_bin" --entwurf-control --list-models entwurf 2>&1) || {
+  foreign_out=$(cd "$tmp" && env "${consumer_env[@]}" "$pi_bin" --entwurf-control --list-models entwurf 2>&1) || {
     fail "[check-pack-install] foreign-cwd --entwurf-control smoke failed (user-scope citizen not loading?):"
     echo "$foreign_out" | tail -10 | sed 's/^/    /' >&2
     return 1
@@ -4359,7 +4421,7 @@ sys.exit(0 if any(isinstance(s,str) and s.endswith('/node_modules/@junghanacs/en
   }
   npm2_pkg="$npmroot2/node_modules/@junghanacs/entwurf"
   set +e
-  two_root_out=$(HOME="$npmhome" XDG_DATA_HOME="$npmhome/.local/share" XDG_STATE_HOME="$npmhome/.local/state" XDG_CACHE_HOME="$npmhome/.cache" "$npm2_pkg/run.sh" install "$npmproj2" 2>&1)
+  two_root_out=$(env "${consumer_env[@]}" "$npm2_pkg/run.sh" install "$npmproj2" 2>&1)
   two_root_rc=$?
   set -e
   if [ "$two_root_rc" -eq 0 ] || ! grep -q "takeover-user-scope" <<<"$two_root_out"; then
@@ -4380,7 +4442,7 @@ sys.exit(0 if ok_a and not bad_b else 1)
     return 1
   fi
   set +e
-  two_root_out=$(HOME="$npmhome" XDG_DATA_HOME="$npmhome/.local/share" XDG_STATE_HOME="$npmhome/.local/state" XDG_CACHE_HOME="$npmhome/.cache" "$npm2_pkg/run.sh" takeover-user-scope 2>&1)
+  two_root_out=$(env "${consumer_env[@]}" "$npm2_pkg/run.sh" takeover-user-scope 2>&1)
   two_root_rc=$?
   set -e
   if [ "$two_root_rc" -ne 0 ] || ! grep -q "takeover: user-scope entwurf registration moved" <<<"$two_root_out"; then
@@ -4412,7 +4474,7 @@ sys.exit(0 if st.get('installerRoot','').rstrip('/')== '$npm2_pkg' else 1)
     return 1
   fi
   set +e
-  two_root_out=$(HOME="$npmhome" XDG_DATA_HOME="$npmhome/.local/share" XDG_STATE_HOME="$npmhome/.local/state" XDG_CACHE_HOME="$npmhome/.cache" "$npm_pkg/run.sh" remove-user-scope 2>&1)
+  two_root_out=$(env "${consumer_env[@]}" "$npm_pkg/run.sh" remove-user-scope 2>&1)
   two_root_rc=$?
   set -e
   if [ "$two_root_rc" -eq 0 ] || ! python3 -c "
@@ -4425,6 +4487,7 @@ sys.exit(0 if any(isinstance(s,str) and s.rstrip('/')== '$npm2_pkg' for s in src
     echo "$two_root_out" | tail -8 | sed 's/^/    /' >&2
     return 1
   fi
+  pack_install_sentinel_untouched "$agentdir_sentinel" "two-root ownership row (install / takeover-user-scope / remove-user-scope)" || return 1
   echo "[check-pack-install] two-root ownership row pass (second root: normal install refused naming takeover-user-scope; explicit takeover moved entry + provider installerRoot old->new; old root's inverse refused)"
 
   # Installed-package aggregate `setup` row (#86 C1, review blocker 2026-08-26):
@@ -5174,7 +5237,9 @@ process.stdout.write(resolveCodexDefaultSocketPath(process.env));
 JSON
   local pc_seed_sha
   pc_seed_sha=$(sha256sum "$pc_store/$pc_record" | cut -d' ' -f1)
-  local pc_env=(HOME="$pc_home" XDG_DATA_HOME="$pc_home/.local/share" XDG_STATE_HOME="$pc_home/.local/state" XDG_CACHE_HOME="$pc_home/.cache" CLAUDE_CONFIG_DIR="$pc_cfg" FAKE_CLAUDE_LOG="$pc_claude_log" PATH="$fake_claude_dir:$npmroot/node_modules/.bin:$PATH")
+  # `-u`: the default resolution is only proven if no inherited agent dir can pre-empt it
+  # (check-pack-install exports a sentinel one for its whole body).
+  local pc_env=(-u PI_CODING_AGENT_DIR HOME="$pc_home" XDG_DATA_HOME="$pc_home/.local/share" XDG_STATE_HOME="$pc_home/.local/state" XDG_CACHE_HOME="$pc_home/.cache" CLAUDE_CONFIG_DIR="$pc_cfg" FAKE_CLAUDE_LOG="$pc_claude_log" PATH="$fake_claude_dir:$npmroot/node_modules/.bin:$PATH")
   local pc_before pc_after pc_out pc_rc
   pc_before=$(cd "$pc_home" && find . -type f -exec sha256sum {} + 2>/dev/null | sort)
 
@@ -5359,6 +5424,7 @@ JSON
   fi
   echo "[check-pack-install] installed doctor dispatch lock pass (store-scan → dist JS, v2-surface deferred)"
 
+  pack_install_sentinel_untouched "$agentdir_sentinel" "a later installed-consumer cell" || return 1
   ok "[check-pack-install] publish install smoke pass"
   return 0
 }
@@ -7719,6 +7785,9 @@ case "$cmd" in
     ;;
   check-pack-pin-matcher)
     check_pack_pin_matcher
+    ;;
+  check-pack-consumer-roots)
+    check_pack_consumer_roots
     ;;
   check-pack-install)
     check_pack_install

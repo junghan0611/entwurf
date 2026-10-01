@@ -27,7 +27,7 @@ them there.
 
 | backend | lineage | receive rail — how a message lands | callback spelling (one tool, per-harness dialect) | fresh launch (step 9) |
 |---|---|---|---|---|
-| `pi` | the host adapter itself | control socket: record-keyed UDS; a send steers or follows up the live turn | `mcp__entwurf-bridge__entwurf_v2` (Pi built-in MCP, since #125) | positional prompt + `--entwurf-control --model` |
+| `pi` | the host adapter itself | control socket: record-keyed UDS; a send steers or follows up the live turn | `mcp__entwurf_bridge__entwurf_v2` (Pi built-in MCP since #125; Pi ≥0.99.2 sanitizes the server key's hyphen) | positional prompt + `--entwurf-control --model` |
 | `claude-code` | independent vendor | self-fetch mailbox: exec-form `FileChanged` doorbell + `asyncRewake`; the model drains with `entwurf_inbox_read`. The watch owner is the CLI process itself, which can switch sessions in place, so the receiver marker is only live while that pid's sender marker still names the same garden (#101) | `mcp__entwurf-bridge__entwurf_v2` | positional prompt + `--allowedTools=…` + `--model=` |
 | `copilot` | independent vendor | self-fetch mailbox: the watch lives in a FORKED first-party extension child; the receiver marker names the extension pid | `entwurf-bridge-entwurf_v2` — plus a SECOND permission dialect, `entwurf-bridge(entwurf_v2)` | managed verb `entwurf copilot`, `--interactive … --model … --yolo` |
 | `agy` | independent vendor | native-push: record + probe-alive gRPC `send-message`; no mailbox, no receiver marker | n/a — push rail | not openable; the declared pre-#82 legacy exception |

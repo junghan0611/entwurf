@@ -37,10 +37,12 @@ export type FreshCallBackend = (typeof FRESH_CALL_BACKENDS)[number];
  * capability under whatever name its harness composes for the `entwurf-bridge` MCP server, and
  * naming the wrong one costs the whole first turn.
  *
- * `[측정 2026-09-30, pi 0.99.1]` pi reaches the verbs through its BUILT-IN MCP (#125 — the native
- * `registerTool` copies are gone), and Pi composes `mcp__<server>__<tool>` keeping the hyphen
- * (`extensions/mcp/tools.ts:83`): the model-facing names observed in a real 0.99.1 session's
- * request were `mcp__entwurf-bridge__entwurf_*` — byte-identical to Claude Code's.
+ * `[측정 2026-10-01, pi 0.99.2]` pi reaches the verbs through its BUILT-IN MCP (#125 — the native
+ * `registerTool` copies are gone), and Pi composes `mcp__<server>__<tool>` replacing everything
+ * outside `[A-Za-z0-9_]` with `_` (`extensions/mcp/tools.ts:82-90`, tag v0.99.2): the server key
+ * stays `entwurf-bridge`, but the model-facing names are `mcp__entwurf_bridge__entwurf_*` — the
+ * same spelling Codex composes, and NOT Claude Code's. 0.99.1 kept the hyphen; the floor moved to
+ * 0.99.2 as a hard cut — one literal pi dialect, chosen over an alias or a version router.
  *
  * `[측정]` Copilot CLI 1.0.80 composes `<mcpServerName>-<mcpToolName>` — NOT Claude Code's
  * `mcp__<server>__<tool>`. Read from two independent sessions' own event logs
@@ -59,7 +61,7 @@ export type FreshCallBackend = (typeof FRESH_CALL_BACKENDS)[number];
  * permission dialect: omp's approval layer consults the same minted string (`source-audit.md`).
  */
 export const FRESH_CALL_CALLBACK_TOOL: Record<FreshCallBackend, string> = {
-	pi: "mcp__entwurf-bridge__entwurf_callback",
+	pi: "mcp__entwurf_bridge__entwurf_callback",
 	"claude-code": "mcp__entwurf-bridge__entwurf_callback",
 	copilot: "entwurf-bridge-entwurf_callback",
 	omp: "mcp__entwurf_bridge_entwurf_callback",
@@ -70,7 +72,7 @@ export const FRESH_CALL_CALLBACK_TOOL: Record<FreshCallBackend, string> = {
 
 /** Where a sibling SENDS the task result. Always the delivery verb, never the birth callback. */
 export const FRESH_CALL_DELIVERY_TOOL: Record<FreshCallBackend, string> = {
-	pi: "mcp__entwurf-bridge__entwurf_v2",
+	pi: "mcp__entwurf_bridge__entwurf_v2",
 	"claude-code": "mcp__entwurf-bridge__entwurf_v2",
 	copilot: "entwurf-bridge-entwurf_v2",
 	omp: "mcp__entwurf_bridge_entwurf_v",
@@ -92,7 +94,7 @@ export const FRESH_CALL_DELIVERY_TOOL: Record<FreshCallBackend, string> = {
  * SAME rule produces the whole word here.
  */
 export const FRESH_CALL_PEERS_TOOL: Record<FreshCallBackend, string> = {
-	pi: "mcp__entwurf-bridge__entwurf_peers",
+	pi: "mcp__entwurf_bridge__entwurf_peers",
 	"claude-code": "mcp__entwurf-bridge__entwurf_peers",
 	copilot: "entwurf-bridge-entwurf_peers",
 	omp: "mcp__entwurf_bridge_entwurf_peers",

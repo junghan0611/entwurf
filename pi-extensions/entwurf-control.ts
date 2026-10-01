@@ -29,7 +29,7 @@
  * - Hand the Entwurf verbs (`entwurf_v2`, `entwurf_peers`, `entwurf_fresh_call`,
  *   `entwurf_resume_call`, `entwurf_callback`, `entwurf_self`) to Pi's built-in MCP by
  *   registering the compiled entwurf-bridge with the born gardenId as its explicit
- *   identity carrier (#125). The model calls them as `mcp__entwurf-bridge__<verb>`;
+ *   identity carrier (#125). The model calls them as `mcp__entwurf_bridge__<verb>`;
  *   there are no native copies (see lib/entwurf-mcp-server.ts).
  *
  * Send-is-throw still applies at the control-socket protocol layer: a `send` RPC

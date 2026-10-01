@@ -6,7 +6,7 @@
  * process: Pi's AgentSessionRuntime, its extension loader, the built-in MCP extension registered the
  * way the CLI registers it, Pi's default stdio transport, entwurf-control's real record birth and
  * `registerMcpServer`, and the compiled bridge child. Only the model is faux (pi-ai `fauxProvider`):
- * it calls `mcp__entwurf-bridge__entwurf_self` once per session. No network, no paid call.
+ * it calls `mcp__entwurf_bridge__entwurf_self` once per session. No network, no paid call.
  *
  * WHAT THIS ADDS BESIDE `pi-extensions/entwurf-control.test.ts`. That beside test owns the
  * registration itself (factory 0 / session_start 1 / env = record / exposure / identity before UI).
@@ -24,8 +24,8 @@
  *
  * Cells, in order (node:assert stops at the first failure, so each mutant dies at its own claim):
  *   DECLARED-SURFACE     the model is declared exactly the six caller verbs under the actual
- *                        `mcp__entwurf-bridge__` prefix; the two hidden tools and every bare
- *                        `entwurf_*` name are absent.
+ *                        `mcp__entwurf_bridge__` prefix (Pi 0.99.2 sanitizes the server key's
+ *                        hyphen); the two hidden tools and every bare `entwurf_*` name are absent.
  *   SAME-CHILD-IDENTITY  session 1 has exactly one bridge child, running the compiled entry with
  *                        Pi's own node; its PI_SESSION_ID is the gardenId of the record for this
  *                        native session, and `entwurf_self` answered from that child names the same
@@ -53,7 +53,7 @@ const PROBE = path.join(ROOT, "scripts", "lib", "pi-mcp-bridge-probe.mjs");
 // Literal, like the tool names below: the child-argv oracle is NOT derived from the production
 // helper (`entwurfBridgeCompiledEntry`) whose answer it checks.
 const ENTRY = path.join(ROOT, "mcp", "entwurf-bridge", "dist", "mcp", "entwurf-bridge", "src", "index.js");
-const PREFIX = "mcp__entwurf-bridge__";
+const PREFIX = "mcp__entwurf_bridge__";
 const DECLARED = [
 	"entwurf_callback",
 	"entwurf_fresh_call",
