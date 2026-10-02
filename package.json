@@ -92,17 +92,17 @@
 		"zod": "^3.25.0 || ^4.0.0"
 	},
 	"peerDependencies": {
-		"@earendil-works/pi-ai": ">=0.99.2 <0.100",
-		"@earendil-works/pi-coding-agent": ">=0.99.2 <0.100",
-		"@earendil-works/pi-tui": ">=0.99.2 <0.100",
+		"@earendil-works/pi-ai": ">=1.0.0 <1.1",
+		"@earendil-works/pi-coding-agent": ">=1.0.0 <1.1",
+		"@earendil-works/pi-tui": ">=1.0.0 <1.1",
 		"typebox": "*"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "^2.4.13",
-		"@earendil-works/pi-agent-core": "0.99.2",
-		"@earendil-works/pi-ai": "0.99.2",
-		"@earendil-works/pi-coding-agent": "0.99.2",
-		"@earendil-works/pi-tui": "0.99.2",
+		"@earendil-works/pi-agent-core": "1.0.0",
+		"@earendil-works/pi-ai": "1.0.0",
+		"@earendil-works/pi-coding-agent": "1.0.0",
+		"@earendil-works/pi-tui": "1.0.0",
 		"@types/node": "^24.3.0",
 		"husky": "^9.1.7",
 		"rregex": "1.13.1",

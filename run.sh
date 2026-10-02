@@ -2199,11 +2199,11 @@ assert.equal(peerTui, piAi,
 // an open `>=` floor is exactly how the next installer re-acquires the drift.
 // The floor is also the HARD MINIMUM a consumer install resolves: at `>=0.86.0`
 // an existing 0.85.1 host is upgraded, not kept.
-// Expected shape: `>=<devDep> <0.<minor+1>` (e.g. `>=0.86.0 <0.87`).
+// Expected shape: `>=<devDep> <<major>.<minor+1>` (e.g. `>=0.86.0 <0.87`, `>=1.0.0 <1.1`).
+// Pi 1.0 did not change the rule: an unverified minor is still unverified, so the ceiling
+// stays the next minor of the pin's own major.
 const [piMaj, piMin] = piAi.split('.').map(Number);
-assert.equal(piMaj, 0,
-  `pi pin major must stay 0 for the next-minor ceiling rule (got ${piAi}); revisit check-dep-versions when pi reaches 1.x`);
-const expectedPeer = `>=${piAi} <0.${piMin + 1}`;
+const expectedPeer = `>=${piAi} <${piMaj}.${piMin + 1}`;
 const peerDepAi = pkg.peerDependencies?.['@earendil-works/pi-ai'];
 const peerDepCoding = pkg.peerDependencies?.['@earendil-works/pi-coding-agent'];
 const peerDepTui = pkg.peerDependencies?.['@earendil-works/pi-tui'];
@@ -2272,13 +2272,13 @@ function stripBumpLedger(file, text) {
 let rangeDecls = 0, exactDecls = 0;
 for (const file of BASELINE_DOCS) {
   const text = stripBumpLedger(file, readFileSync(file, 'utf8'));
-  // Closed-range declarations: `>=<floor> <0.<ceiling>` (spaces optional).
-  for (const [decl, floor, ceilMinor] of text.matchAll(/>=\s?(\d+\.\d+\.\d+)\s?<\s?0\.(\d+)/g)) {
+  // Closed-range declarations: `>=<floor> <<major>.<ceiling>` (spaces optional).
+  for (const [decl, floor, ceilMajor, ceilMinor] of text.matchAll(/>=\s?(\d+\.\d+\.\d+)\s?<\s?(\d+)\.(\d+)/g)) {
     rangeDecls++;
     assert.equal(floor, piAi,
       `${file}: declared pi floor in "${decl}" is ${floor}, but the devDep pin is ${piAi} — a baseline doc may not advertise a version no gate drives`);
-    assert.equal(Number(ceilMinor), piMin + 1,
-      `${file}: declared pi ceiling in "${decl}" must be the next minor (0.${piMin + 1})`);
+    assert.equal(`${ceilMajor}.${ceilMinor}`, `${piMaj}.${piMin + 1}`,
+      `${file}: declared pi ceiling in "${decl}" must be the next minor (${piMaj}.${piMin + 1})`);
   }
   // Exact install pins: `@earendil-works/pi-<pkg>@<version>`.
   for (const [decl, ver] of text.matchAll(/@earendil-works\/pi-(?:ai|coding-agent|tui)@(\d+\.\d+\.\d+)/g)) {
@@ -2309,7 +2309,7 @@ for (const [file, re, shape] of PROSE_DECLS) {
 // ONE assertion, because the claim token may appear exactly once in a gate source.
 // Every way the floor can fragment is collected first and named individually in the
 // failure, so "which surface" is never lost to the single-token rule.
-const nextFloorRange = `>=${piAi} <0.${piMin + 1}`;
+const nextFloorRange = `>=${piAi} <${piMaj}.${piMin + 1}`;
 const floorGaps = [];
 const PI_CONSTELLATION = [
   '@earendil-works/pi-ai', '@earendil-works/pi-coding-agent', '@earendil-works/pi-tui',
@@ -2359,9 +2359,9 @@ if (!matcherPin) {
 // measurement in docs/mux-launch-rail.md, for one) are deliberately NOT scanned:
 // they record what was true then, and rewriting them would falsify evidence.
 const CURRENT_CONTRACT_DECLS = [
-  ['plugins/herdr/README.md', /npm install -g "@earendil-works\/pi-coding-agent@(>=[\d.]+ <0\.\d+)"/, 'the herdr install line'],
-  ['docs/mux-launch-rail.md', /현 supported range 는 `(>=[\d.]+ <0\.\d+)`/, "mux-launch-rail's current supported range"],
-  ['docs/acp-backend-rail.md', /devDep exact `(\d+\.\d+\.\d+)`, peer `(>=[\d.]+ <0\.\d+)`/, "the ACP support row's exact+range pair"],
+  ['plugins/herdr/README.md', /npm install -g "@earendil-works\/pi-coding-agent@(>=[\d.]+ <\d+\.\d+)"/, 'the herdr install line'],
+  ['docs/mux-launch-rail.md', /현 supported range 는 `(>=[\d.]+ <\d+\.\d+)`/, "mux-launch-rail's current supported range"],
+  ['docs/acp-backend-rail.md', /devDep exact `(\d+\.\d+\.\d+)`, peer `(>=[\d.]+ <\d+\.\d+)`/, "the ACP support row's exact+range pair"],
 ];
 for (const [file, re, shape] of CURRENT_CONTRACT_DECLS) {
   const m = readFileSync(file, 'utf8').match(re);
@@ -2880,13 +2880,14 @@ if (typeof FLOOR !== 'string' || !/^\d+\.\d+\.\d+$/.test(FLOOR)) {
   console.error(`[check-pi-runtime-version] FAIL: package.json devDependencies['@earendil-works/pi-coding-agent'] must be an EXACT x.y.z pin to serve as the runtime floor (got ${FLOOR ?? 'nothing'})`);
   process.exit(1);
 }
-// The declared contract is a CLOSED range (`>=<devDep> <0.<minor+1>`, enforced on
+// The declared contract is a CLOSED range (`>=<devDep> <<major>.<minor+1>`, enforced on
 // package.json by check-dep-versions), so the runtime check must be closed too.
 // A floor-only comparison would bless a resolved pi ABOVE the ceiling — and an
 // out-of-range pi is exactly the drift this cut exists to stop: 0.80.6 landed on
 // the dev box while the repo still declared 0.80.3, and every gate stayed green.
 // Verifying only half of a declared range is the same lie in the other direction.
-const CEILING = `0.${Number(FLOOR.split('.')[1]) + 1}.0`;
+const [FLOOR_MAJOR, FLOOR_MINOR] = FLOOR.split('.').map(Number);
+const CEILING = `${FLOOR_MAJOR}.${FLOOR_MINOR + 1}.0`;
 const cmp = (a, b) => {
   const pa = a.split('.').map(Number), pb = b.split('.').map(Number);
   for (let i = 0; i < 3; i++) { if ((pa[i] || 0) !== (pb[i] || 0)) return (pa[i] || 0) - (pb[i] || 0); }
@@ -3726,7 +3727,7 @@ check_pack() {
 #     which is exactly what property (1)'s `(_|$)` absorbs; all three shapes are fixtures
 #     below so a future suffix change cannot pass vacuously.)
 pack_install_leaked_pi() {
-  grep '^@earendil-works+' | grep -Ev '@0\.99\.2(_|$)' || true
+  grep '^@earendil-works+' | grep -Ev '@1\.0\.0(_|$)' || true
 }
 
 # Matcher self-test on SYNTHETIC lookalikes: a healthy install tree cannot exercise either
@@ -3746,15 +3747,15 @@ check_pack_pin_matcher() {
   # None may leak; the two lookalikes must — a PREFIX-EXTENDED version (`0.86.0-beta.1`,
   # the prerelease shape that an unanchored match would bless) and an off-pin version.
   matcher_probe=$(printf '%s\n' \
-    '@earendil-works+pi-ai@0.99.2' \
-    '@earendil-works+pi-ai@0.99.2_@modelcontextprotocol+sdk@1.29.0_zod@4.3.6' \
-    '@earendil-works+pi-ai@0.99.2_ws@8.21.3' \
-    '@earendil-works+pi-ai@0.99.2_@modelcontextprotocol+sdk@1.29.0_zod@4.3.6__ws@8.21.3_zod@4.3.6' \
-    '@earendil-works+pi-ai@0.99.2-beta.1' \
+    '@earendil-works+pi-ai@1.0.0' \
+    '@earendil-works+pi-ai@1.0.0_@modelcontextprotocol+sdk@1.29.0_zod@4.3.6' \
+    '@earendil-works+pi-ai@1.0.0_ws@8.21.3' \
+    '@earendil-works+pi-ai@1.0.0_@modelcontextprotocol+sdk@1.29.0_zod@4.3.6__ws@8.21.3_zod@4.3.6' \
+    '@earendil-works+pi-ai@1.0.0-beta.1' \
     '@earendil-works+pi-agent-core@0.87.1' | pack_install_leaked_pi)
-  if [ "$matcher_probe" != '@earendil-works+pi-ai@0.99.2-beta.1
+  if [ "$matcher_probe" != '@earendil-works+pi-ai@1.0.0-beta.1
 @earendil-works+pi-agent-core@0.87.1' ]; then
-    fail "[QK:PACK-INSTALL-PIN-MATCHER-BOUNDED] the pin-leak matcher must flag the prefix-extended 0.99.2-beta.1 and the off-pin 0.87.1 lookalikes, and pass 0.99.2 bare or with any measured peer-hash — got: ${matcher_probe:-<nothing leaked>}"
+    fail "[QK:PACK-INSTALL-PIN-MATCHER-BOUNDED] the pin-leak matcher must flag the prefix-extended 1.0.0-beta.1 and the off-pin 0.87.1 lookalikes, and pass 1.0.0 bare or with any measured peer-hash — got: ${matcher_probe:-<nothing leaked>}"
     return 1
   fi
 
@@ -3762,9 +3763,9 @@ check_pack_pin_matcher() {
   # (0.85.0 onward, still true at 0.99.1). An off-pin chord MUST leak; the pinned one must not. A matcher narrowed
   # back to `^@earendil-works+pi-` sees nothing here and dies at this signature.
   matcher_probe=$(printf '%s\n' \
-    '@earendil-works+chord@0.99.2' \
+    '@earendil-works+chord@1.0.0' \
     '@earendil-works+chord@0.87.1' \
-    '@earendil-works+pi-ai@0.99.2' | pack_install_leaked_pi)
+    '@earendil-works+pi-ai@1.0.0' | pack_install_leaked_pi)
   if [ "$matcher_probe" != '@earendil-works+chord@0.87.1' ]; then
     fail "[QK:PACK-INSTALL-PIN-MATCHER-COVERS-CLOSURE] the pin-leak matcher must cover every @earendil-works closure member, not just the pi-* families — an off-pin @earendil-works/chord has to leak (it is a runtime dependency of pi-coding-agent, pi-agent-core, pi-client and pi-protocol — `[측정 2026-09-20]` at 0.86.0, re-measured `[측정 2026-09-22]` at 0.87.0, `[측정 2026-09-23]` at 0.87.1 and `[측정 2026-09-30]` at 0.99.1, where pi-coding-agent adds pi-codemode and pi-mcp beside them) — got: ${matcher_probe:-<nothing leaked>}"
     return 1
@@ -4105,20 +4106,20 @@ _check_pack_install_impl() {
   # @earendil-works/pi-codemode and @earendil-works/pi-mcp as runtime dependencies (the built-in
   # codemode and MCP extensions), so both are pinned beside the eight. pi-client and pi-protocol are
   # still published at 0.99.1 and keep their pins under the rule above.
-  echo "[check-pack-install] pnpm add into $tmp (with 0.99.x peers + chord + codemode + mcp + typebox)"
+  echo "[check-pack-install] pnpm add into $tmp (with 1.0.x peers + chord + codemode + mcp + typebox)"
   local install_log
   install_log=$(cd "$tmp" && pnpm add \
     "$tgz_path" \
-    "@earendil-works/pi-ai@0.99.2" \
-    "@earendil-works/pi-coding-agent@0.99.2" \
-    "@earendil-works/pi-tui@0.99.2" \
-    "@earendil-works/pi-agent-core@0.99.2" \
-    "@earendil-works/pi-client@0.99.2" \
-    "@earendil-works/pi-protocol@0.99.2" \
-    "@earendil-works/pi-telemetry@0.99.2" \
-    "@earendil-works/chord@0.99.2" \
-    "@earendil-works/pi-codemode@0.99.2" \
-    "@earendil-works/pi-mcp@0.99.2" \
+    "@earendil-works/pi-ai@1.0.0" \
+    "@earendil-works/pi-coding-agent@1.0.0" \
+    "@earendil-works/pi-tui@1.0.0" \
+    "@earendil-works/pi-agent-core@1.0.0" \
+    "@earendil-works/pi-client@1.0.0" \
+    "@earendil-works/pi-protocol@1.0.0" \
+    "@earendil-works/pi-telemetry@1.0.0" \
+    "@earendil-works/chord@1.0.0" \
+    "@earendil-works/pi-codemode@1.0.0" \
+    "@earendil-works/pi-mcp@1.0.0" \
     "typebox@latest" \
     --ignore-workspace --ignore-scripts 2>&1) || {
     fail "[check-pack-install] pnpm add failed:"
@@ -4134,11 +4135,11 @@ _check_pack_install_impl() {
   local leaked_pi
   leaked_pi=$(ls "$tmp/node_modules/.pnpm" 2>/dev/null | pack_install_leaked_pi)
   if [ -n "$leaked_pi" ]; then
-    fail "[check-pack-install] UNVERIFIED pi runtime resolved into the install tree (expected only 0.99.2):"
+    fail "[check-pack-install] UNVERIFIED pi runtime resolved into the install tree (expected only 1.0.0):"
     printf '%s\n' "$leaked_pi" | sed 's/^/    /' >&2
     return 1
   fi
-  echo "[check-pack-install] pi runtime tree pin verified: every @earendil-works package is 0.99.2 (chord included)"
+  echo "[check-pack-install] pi runtime tree pin verified: every @earendil-works package is 1.0.0 (chord included)"
 
   # Resolve the installed package.json and confirm pi.extensions
   # arrived intact. If pi.extensions is empty or missing, the
@@ -5650,15 +5651,15 @@ setup_mode() {
 }
 
 # Supported pi range, derived at runtime from the package.json devDependencies
-# pin (the SSOT check-dep-versions binds: peer range == `>=<pin> <0.<minor+1>`).
+# pin (the SSOT check-dep-versions binds: peer range == `>=<pin> <<major>.<minor+1>`).
 # Never retyped here as a second literal.
 pi_supported_range() {
   node -e '
     const pkg = require(process.argv[1]);
     const pin = pkg.devDependencies?.["@earendil-works/pi-coding-agent"];
-    if (!/^0\.\d+\.\d+$/.test(pin ?? "")) { console.error(`unparseable pi pin: ${pin}`); process.exit(1); }
-    const [, min] = pin.split(".").map(Number);
-    console.log(`>=${pin} <0.${min + 1}`);
+    if (!/^\d+\.\d+\.\d+$/.test(pin ?? "")) { console.error(`unparseable pi pin: ${pin}`); process.exit(1); }
+    const [maj, min] = pin.split(".").map(Number);
+    console.log(`>=${pin} <${maj}.${min + 1}`);
   ' "$REPO_DIR/package.json"
 }
 
