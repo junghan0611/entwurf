@@ -3,13 +3,20 @@
 //   LIVE=1 ./run.sh smoke-acp-session-reuse-live
 //
 // The deterministic gate (check-acp-session-reuse) proves the prompt SCOPE
-// (delta-only) and the wiring with a fake seam. This proves the REAL thing: a
-// process-scoped pi process drives TWO real ACP turns over ONE reused
-// claude-agent-acp child, and turn 2 — which sends ONLY the latest user delta —
-// gets an answer that depends on a codeword introduced in turn 1. That is only
-// possible if (a) the child/connection were actually reused (not respawned) and
-// (b) the live ACP session kept turn 1 in its own history (so the delta was
-// enough). A respawn-per-turn backend (S2c) would forget the codeword.
+// (delta-only) and the wiring with a fake seam. This drives the REAL backend
+// (real overlay + spawn + vendor) through TWO ACP turns in one process-scoped
+// process and asserts that turn 2 took the REUSE path.
+//
+// The reuse verdict is the production lifecycle notice, NOT the recall. A
+// respawned (`new`) turn re-sends the FULL transcript (context.ts
+// buildAcpPrompt "new"), and turn 2's context below carries turn 1's codeword, so
+// a respawn-per-turn backend would recall it just as well — recall alone cannot
+// tell reuse from rebuild. Turn 2 must therefore announce `[acp: reusing live
+// session]` and must not announce `[acp: preparing …]`; check-acp-session-reuse
+// pins that the reuse branch emits exactly that and the new branch the opposite.
+// The recall is kept as a supporting check that the reused session still answers
+// from its own history. Delta-only on the wire stays the deterministic gate's
+// claim: the vendor stdio is not observed here.
 //
 // It forces process-scoped by pushing the real `--entwurf-control` resident flag
 // into argv (resolveLifecyclePolicy reads process.argv), then calls the REAL
@@ -175,18 +182,28 @@ async function main(): Promise<void> {
 	if (!r2.done) fail("turn 2 did not complete");
 	console.error(`[smoke-acp-session-reuse-live] turn 2 reply: ${JSON.stringify(r2.text.slice(-120))}`);
 
-	// The codeword only lives in turn 1. Turn 2 sent only the delta question, so a
-	// correct answer proves the reused live ACP session remembered turn 1.
+	// The reuse verdict: the backend's own lifecycle notices ride the text stream, so
+	// turn 2 names the path it took. A rebuild would announce `preparing` instead.
+	assert.ok(
+		r2.text.includes("[acp: reusing live session]"),
+		`turn 2 did not take the reuse path — no "[acp: reusing live session]" notice (reply: ${JSON.stringify(r2.text.slice(-200))})`,
+	);
+	assert.ok(
+		!r2.text.includes("[acp: preparing"),
+		`turn 2 re-bootstrapped a session ("[acp: preparing …]") instead of reusing turn 1's (reply: ${JSON.stringify(r2.text.slice(-200))})`,
+	);
+	// Supporting only: the reused session still answers from its own history. A rebuild
+	// would pass this too (it re-sends the codeword), which is why it is not the verdict.
 	assert.ok(
 		r2.text.includes(codeword),
-		`turn 2 reply did not contain the turn-1 codeword ${codeword} — reuse/memory failed (reply: ${JSON.stringify(r2.text.slice(-200))})`,
+		`turn 2 reply did not contain the turn-1 codeword ${codeword} — the reused session lost its history (reply: ${JSON.stringify(r2.text.slice(-200))})`,
 	);
 
 	console.log(
-		"[smoke-acp-session-reuse-live] PASS — 2-turn reuse over one ACP child; turn-2 delta recalled the turn-1 codeword",
+		"[smoke-acp-session-reuse-live] PASS — turn 2 took the reuse path ([acp: reusing live session], no re-bootstrap) and recalled the turn-1 codeword",
 	);
 	console.log(`  model:    entwurf/${MODEL}`);
-	console.log(`  codeword: ${codeword} recalled in turn 2 (delta-only)`);
+	console.log(`  codeword: ${codeword} recalled in turn 2 (supporting; delta-only is check-acp-session-reuse's claim)`);
 }
 
 main()
