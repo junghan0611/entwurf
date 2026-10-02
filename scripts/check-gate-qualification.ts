@@ -3335,7 +3335,7 @@ let manifestCount: number;
 		"codex-app-server-launch": 9,
 		"codex-caller-seat": 28,
 		"control-send-receipt": 19,
-		"codex-native": 81,
+		"codex-native": 82,
 		"compaction-send-guard": 7,
 		"control-socket-disconnect": 4,
 		"copilot-birth": 19,

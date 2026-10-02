@@ -179,7 +179,25 @@ export function parseJsonLines(source: string): unknown[] {
 	return entries;
 }
 
-/** Join Pi's own toolCall and toolResult rows by native id, retaining pending calls. */
+// Pi 1.0 records the current MCP-qualified names; downstream receipt audits use
+// semantic verbs. This is an exact Pi dialect boundary, not a prefix stripper or
+// a legacy alias. Codex's separate native source reader is unchanged.
+const PI_SOURCE_VERBS = new Map([
+	["mcp__entwurf_bridge__entwurf_callback", "entwurf_callback"],
+	["mcp__entwurf_bridge__entwurf_fresh_call", "entwurf_fresh_call"],
+	["mcp__entwurf_bridge__entwurf_peers", "entwurf_peers"],
+	["mcp__entwurf_bridge__entwurf_resume_call", "entwurf_resume_call"],
+	["mcp__entwurf_bridge__entwurf_self", "entwurf_self"],
+	["mcp__entwurf_bridge__entwurf_v2", "entwurf_v2"],
+]);
+
+function piSourceVerb(nativeName: string): string {
+	if ([...PI_SOURCE_VERBS.values()].includes(nativeName)) throw new Error(`retired raw Pi tool name ${nativeName}`);
+	return PI_SOURCE_VERBS.get(nativeName) ?? nativeName;
+}
+
+/** Join Pi's own toolCall and toolResult rows by native id, retaining pending calls.
+ * Native-name equality is checked before translating the exact current Pi dialect. */
 export function piSourceToolReceipts(entries: readonly unknown[]): SourceToolReceipt[] {
 	const calls = new Map<string, { toolName: string; arguments: Record<string, unknown> }>();
 	const results = new Map<string, { toolName: string; text: string; isError: boolean }>();
@@ -234,13 +252,14 @@ export function piSourceToolReceipts(entries: readonly unknown[]): SourceToolRec
 	for (const [id, call] of calls) {
 		const result = results.get(id);
 		if (result === undefined) {
-			joined.push({ ...call, text: "", status: "pending", isError: false });
+			joined.push({ ...call, toolName: piSourceVerb(call.toolName), text: "", status: "pending", isError: false });
 			continue;
 		}
 		if (result.toolName !== call.toolName)
 			throw new Error(`Pi tool name drift for ${id}: call=${call.toolName} result=${result.toolName}`);
 		joined.push({
 			...call,
+			toolName: piSourceVerb(call.toolName),
 			text: result.text,
 			status: result.isError ? "failed" : "completed",
 			isError: result.isError,

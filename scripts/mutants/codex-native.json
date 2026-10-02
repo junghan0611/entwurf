@@ -638,6 +638,17 @@
 			"signatureSource": "test/codex-fresh-live-protocol.test.ts"
 		},
 		{
+			"claim": "CODEX-LIVE-PI-MCP-SOURCE-DIALECT",
+			"title": "Pi's current qualified fresh-call receipt no longer reaches semantic launch and cleanup authority, recreating the Pi 1.0 timeout",
+			"subject": "scripts/lib/codex-fresh-source-receipts.ts",
+			"find": ["\t[\"mcp__entwurf_bridge__entwurf_fresh_call\", \"entwurf_fresh_call\"],"],
+			"replace": ["\t[\"mcp__entwurf_bridge__entwurf_fresh_call\", \"unrecognized_pi_fresh_call\"],"],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:CODEX-LIVE-PI-MCP-SOURCE-DIALECT]",
+			"signatureSource": "test/codex-fresh-live-protocol.test.ts"
+		},
+		{
 			"claim": "CODEX-LIVE-SOURCE-JOIN",
 			"title": "a Pi tool result can be joined to a call whose tool name differs, turning an unrelated result body into launch authority",
 			"subject": "scripts/lib/codex-fresh-source-receipts.ts",

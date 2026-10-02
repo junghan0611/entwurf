@@ -1,0 +1,34 @@
+{
+	"provenance": "Tool-only projection of 2026-10-02 failed P5 initial Pi snapshot: native call/result names, backend, model and LAUNCH window are measured. Tool call id shortened consistently; cwd and vendor executable path redacted. No thinking, credentials or session prompt retained.",
+	"entries": [
+		{
+			"type": "message",
+			"message": {
+				"role": "assistant",
+				"content": [
+					{
+						"type": "toolCall",
+						"id": "measured-launch",
+						"name": "mcp__entwurf_bridge__entwurf_fresh_call",
+						"arguments": { "backend": "codex", "model": "gpt-6-luna", "cwd": "/tmp/fixture" }
+					}
+				]
+			}
+		},
+		{
+			"type": "message",
+			"message": {
+				"role": "toolResult",
+				"toolCallId": "measured-launch",
+				"toolName": "mcp__entwurf_bridge__entwurf_fresh_call",
+				"isError": false,
+				"content": [
+					{
+						"type": "text",
+						"text": "[entwurf fresh call →]\n  backend:  codex (/fixture/codex)\n  model:    gpt-6-luna (requested on the runtime CLI)\n  window:   @759 (index 3) in session $287\n  pane:     %759 pid 3731021\n  nonce:    mux-fresh-call-f076aaafb4f38dc2d7fdc1ff\n"
+					}
+				]
+			}
+		}
+	]
+}

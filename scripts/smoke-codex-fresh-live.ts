@@ -75,6 +75,7 @@ import {
 import {
 	buildCodexInstruction,
 	buildInitialPiPhaseOne,
+	buildInitialPiRelay,
 	runCleanupStages,
 	selectReport,
 } from "./lib/codex-fresh-live-protocol.ts";
@@ -954,6 +955,8 @@ async function run(): Promise<void> {
 		model: piModel,
 		cwd: scratch,
 		task:
+			"Session-info already supplies device and time. Do not recheck time, cwd, or identity with shell or other tools. " +
+			"Your FIRST tool call must be mcp__entwurf_bridge__entwurf_callback with no arguments, and nothing before it. " +
 			`After your required callback receipt, end the turn and wait passively for one addressed message containing ${initialPiWaitToken}. ` +
 			"That message is the only authority to open the Codex sibling. Do not call shell, sleep, terminal, or any tool to wait.",
 	});
@@ -1070,7 +1073,6 @@ async function run(): Promise<void> {
 		codexWaitToken,
 		codexModel,
 		scratch,
-		codexInstruction,
 	});
 
 	// The model is asked to operate public tools, but every launch and delivery assertion below
@@ -1189,6 +1191,23 @@ async function run(): Promise<void> {
 	receipts["8b-codex-thread-cwd"] =
 		`requested=${scratch}\npane=${codexPaneCwd}\nrollout-session_meta=${codexRolloutCwd}\n` +
 		`record=${codexIdentity.cwd}\napp-server=${appServerCwd}`;
+
+	// Only after the exact callback and record/cwd joins: instruct the initial Pi to relay,
+	// never deliver the Codex payload on its behalf.
+	const relayInitialPi = await bridge.call("entwurf_v2", {
+		target: initialPiGid,
+		intent: "fire-and-forget",
+		message: buildInitialPiRelay({ codexGardenId, codexInstruction }),
+	});
+	receipts["8c-fixture-to-initial-pi-relay"] = relayInitialPi.text;
+	ok(
+		"the fixture addressed the initial Pi relay phase through the control socket",
+		!relayInitialPi.isError &&
+			/entwurf_v2 control-socket → (?:sent|queued-steer|queued-follow-up|accepted-unknown-boundary)/.test(
+				relayInitialPi.text,
+			),
+		relayInitialPi.text,
+	);
 
 	const initialPiToCodex = await awaitOrRecover("the initial Pi joined native-push receipt", SOURCE_WAIT_MS, () => {
 		const piSources = piSourceToolReceipts(readInitialPiEntries());
