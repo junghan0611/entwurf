@@ -7,6 +7,20 @@
 
 ---
 
+## 0.30.0 candidate (2026-10-02) — Pi 1.0 · ACP 기본기, cut 전 기록
+
+GLG 범위 결정(2026-10-02): 0.30.0은 Pi 1.0 수용과 ACP 기본기까지 포괄하는 기본기 릴리즈다. 브랜치 `research/125-pi-admission` = `d2e7f05`(tree `0e4a2595`), 증거 진입점은 #125 thread의 브랜치 완료 코멘트(5946960829). 이것은 branch proof이고 release `--cut` 수용이 아니다 — 수용은 prepare/make가 만든다.
+
+- **버전 정책:** Pi dev pin `1.0.0`, peer `>=1.0.0 <1.1`(next-minor 상한). ACP/vendor·Herdr 동반 범프 없음. #124 P3 / composite release-policy는 HOLD.
+- **이 컷 밖:** pi-durable, structuredContent/codemode, virtual model, autopilot, 새 orchestrator. MCP discovery와 하네스 복구를 Entwurf가 떠맡지 않는다.
+
+후속(관측 — 지금 여는 작업이 아니다):
+
+1. **Herdr 0.9.3 지원** — 이 컷 뒤 별도 레인. 현 admission floor 0.9.0 / CI pin 0.9.1은 이 컷에서 그대로다.
+2. **control socket 경로 길이** — pi citizen의 control socket 경로가 Linux 한도(107B, 종결자 제외)를 넘으면 `listen`이 `EINVAL`로 실패하고, 이미 born된 record와 Entwurf 동사가 없는 세션이 남는다(신호는 `session_start`의 `extension_error` 하나). `smoke-mux-lifecycle-live`에는 fixture socket 경로 길이 preflight가 없다. `[측정 2026-10-02, oracle, 0-token A/B]` 115B 경로에서 global·frozen Pi 1.0.0 둘 다 `listen EINVAL`, bridge 0; ~70B 경로에서 둘 다 `extension_error` 0, bridge 1. `[측정]` 원래 LIVE RED의 fixture 경로는 111B(통과한 L4는 98B, 기본 `/tmp`는 83B). `[추론]` 그 run의 EINVAL 줄 자체는 forensic 40줄 밖이라 캡처되지 않았고, 그 RED(300s callback timeout)를 이 메커니즘에 잇는 것은 같은 형상에 근거한 추론이다. 결정적 줄: #125 [issuecomment-5946114905](https://github.com/junghan0611/entwurf/issues/125#issuecomment-5946114905).
+3. **Codex fixture의 TMPDIR 민감도** — `/home/junghan` 아래 `TMPDIR`에서 Codex fixture의 ancestor config 판정이 바뀌어 9건 red, 기본 `/tmp`에서 301/301(브랜치 NEXT 기록, 상속). tmp-root 리팩터는 이 컷 밖.
+4. **foreground-only의 경계** — Claude ACP child의 `CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1`은 vendor가 관리하는 background(Bash/Agent `run_in_background`, timeout/turn-abort 자동 전환)만 끈다. 명령이 스스로 떼어 낸 프로세스(`&`, `setsid`, daemon)는 보장 밖이고, `backgroundedToDeliverMessage` 등록 차단은 정적 판독 추론(UNKNOWN)이지 출하 증명이 아니다.
+
 ## 0.24.0 candidate (2026-09-20) — 후속 다섯, cut 전 기록
 
 pi 0.86.0 floor + `entwurf_callback`(여덟째 verb, 인자 없음) + herdr 플러그인 0.4.0. 표준 LIVE 다섯을 각각 한 번씩 돌려(ambient identity 제거) 구멍 둘을 막았다: `smoke-herdr-fresh-call-live` 오라클이 verb 이동을 못 따라온 것(`149bef7`), 설치된 omp birth 유닛이 v1로 stale이었던 것(호스트 사전조건, `install-omp-bridge` 후 21/21). 남은 것(각각 별 이슈, 현재 증거와 다음 측정이 있을 때만):

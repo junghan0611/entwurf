@@ -1,4 +1,4 @@
-# NEXT — 문서 표면 다이어트
+# NEXT — 0.30.0 컷 (Pi 1.0 · ACP 기본기)
 
 > NEXT는 disposable boot sector다. 완료 이력은 issue/git이 지고, 방향은 ROADMAP,
 > 운영 규율은 AGENTS가 진다. 새 하네스 입학 경로는
@@ -6,15 +6,34 @@
 
 # RAIL — 현재 좌표
 
+- [x] **1. Pi 1.0 · ACP 기본기 브랜치** — `research/125-pi-admission` = `d2e7f05` (tree `0e4a2595`): Pi 0.99 → 0.99.2 → 1.0.0 수용(`>=1.0.0 <1.1`), Pi citizen 동사가 Pi built-in MCP로, Claude ACP foreground-only. 실제 설치 post-F LIVE 3(lifecycle·bundled-MCP·reuse)과 exact-SHA CI 36969666301(required 4 + qualification body). 정본은 #125 thread의 브랜치 완료 코멘트(5946960829). branch proof이지 release `--cut` 수용이 아니다.
+- [x] **2. 문서 amendment** — GLM→Grok read-only 검수 F1–F5 수선(현행 8-verb 개수, callback 표, ACP 지원표 주어, VERIFY 배너, Herdr lock carrier 문장). 브랜치 NEXT의 durable 사실은 CHANGELOG Unreleased·ROADMAP 0.30.0 절로 승격하고 브랜치 NEXT를 지웠다(이 커밋).
+- [ ] **3. main merge** ← CURRENT: GLG 승인("main 병합 릴리즈 컷 가자"). 브랜치 tip을 그대로 main으로.
+- [ ] **4. 0.30.0 prepare → make → publish** — `entwurf-release` 모드마다 GLG grant(`.claude/skills/entwurf-release/SKILL.md` PREPARE/MAKE/PUBLISH). prepare = version·CHANGELOG 승격 + `check:full`(P4) + 새 scratch의 release-gate `--cut`(P5, qualification body 포함) + prep commit, push·tag 없음. make = prepared HEAD push + exact-SHA CI + 보존된 candidate 하나의 수용(M3) + tag·GitHub Release, npm 없음. publish = make가 수용한 그 candidate의 npm·dist-tag·registry 설치 증명(U1–U3)만.
+- [ ] **5. Herdr 0.9.3 지원** ← NEXT LANE: 0.30.0 컷 뒤 별도 레인. 이 컷은 Herdr floor 0.9.0 / CI pin 0.9.1을 범프하지 않는다.
+
+현재 좌표: 1·2 완료 → 3 진행 → 4 대기 → 5 후속. 문서 다이어트(아래 보류 RAIL)는 컷 뒤 재개한다.
+
+# NOW — main merge, 그다음 0.30.0 prepare
+
+- **Stem:** 브랜치 증거(#125)를 release 증거로 바꿔 쓰지 않고 0.30.0을 자른다.
+- **Next:** main merge(GLG 승인, 코디네이터 라우팅으로 실행) → `entwurf-release` prepare(GLG mode 확인 뒤): version 0.30.0, CHANGELOG Unreleased를 0.30.0 섹션으로, runtime-lock carrier 결정과 주석.
+- **Verify:** 0.30.0 수용은 prepare의 `check:full`과 release-gate `--cut`(qualification body 포함), make의 exact-SHA CI와 candidate 수용이 만든다. 브랜치 CI·LIVE receipt(#125)를 그 수용으로 옮겨 적지 않는다.
+- **Blocker:** 기술 blocker 없음. 권한 대기: prepare·make는 GLG의 mode 확인 대기, npm publish는 그와 별도인 grant.
+- **Read:** #125 thread(브랜치 완료 코멘트), `.claude/skills/entwurf-release/SKILL.md`, ROADMAP "0.30.0 candidate" 절.
+- **Do not touch:** dated 영수증·ledger, Herdr floor/pin(0.9.3은 다음 레인), #124 P3 정책(HOLD).
+
+## Paused RAIL — 문서 표면 다이어트 (0.30.0 컷 동안 보류, 2026-10-02)
+
 - [x] **1. Entwurf 0.23.1 + Herdr integration 0.3.1** — published and documented; the public project page now leads with the Herdr route without shrinking Entwurf to that one integration.
 - [x] **2. First public boundary question captured** — the Agentwire exchange exposed a recurring distinction: Entwurf bridges independent visible siblings; it neither becomes an agent factory nor owns project/session state.
 - [x] **5. Entwurf 0.24.0 + Herdr integration 0.4.0 cut** — pi floor 0.86.0 (`>=0.86.0 <0.87`, ACP provider reads the branded `TranscriptContext`), `entwurf_callback` eighth verb (out-of-band callback env, no transcript address axis), install-user-scope pi range door, gate holes closed (`MUTANT-FIND-MATCHES-SUBJECT`, fixture cast sweep, two WRONG-REASON mutants, herdr LIVE oracle). Acceptance is observer-amended (BASELINE row; `smoke-codex-fresh-live` relay template + `smoke-entwurf-chain-live` hop-3 principled refusal, both ROADMAP follow-ups). Shipped: tag `v0.24.0` = `ab206a3`, npm `latest=0.24.0` (integrity `sha512-or99ifxr…`), plugin lock re-pinned to npm 0.24.0 (`deb73f1`), first-user-path `smoke-herdr-raw-install-live` PASS on the public remote. Five follow-ups in ROADMAP "0.24.0 candidate".
-- [ ] **3. FAQ baseline and documentation-diet map** ← CURRENT: land the short boundary answers, then map duplicated README material to its owning document before removing anything.
+- [ ] **3. FAQ baseline and documentation-diet map** ← 당시 진행 위치: land the short boundary answers, then map duplicated README material to its owning document before removing anything.
 - [ ] **4. Surgical README reduction** ← PAUSED: requires the map, retained-link checks, and GLG's choice of the first section to move.
 
-현재 좌표: 1·2·5 완료 → 3 진행 → 4 보류
+당시 좌표: 1·2·5 완료 → 3 진행 → 4 보류 (2026-10-02부터 레인 전체 보류)
 
-# NOW — FAQ와 문서 다이어트
+## Paused NOW — FAQ와 문서 다이어트
 
 - **Stem:** 외부 질문에 짧고 정확하게 답하면서, 긴 README를 제품 계약·설치 경로·상세 증거 문서로 무리 없이 나눈다.
 - **Next:** `FAQ.md`의 첫 세트(공방/공장, garden id, session·project state, internal subagents, delivery·visible sibling)를 검토하고 README에서 FAQ 링크가 닿는지 확인한다.
@@ -436,6 +455,12 @@ WSL2 는 계약상 리눅스의 연장이라 새 작업 없음.
   사이에 만료될 때 bound가 약한 floor가 된다는 한계뿐이다(`backend.ts:1286-1288`). 계약은 산문이 아니라
   `scripts/mutants/acp-usage-accounting.json` 12뮤턴트가 지킨다. **agent-config 쪽 두 줄은 아직 고아다** —
   기본 pi 푸터로 복귀 금지, 캐리어 착지 시 `nocache` 가드 필요. 항구적 자리는 `glg-footer.ts` 헤더 주석.
+- **#94·#98이 남긴 열린 후속 (2026-09 기록 — 원문은 아래 dated archive)** — #94: (a) `overlay.ts` `hooks:{}` LIVE 관측, (b) doctor가 retired NOTE를 못 보여줌. #98: (a) `fallback-sent`가 `messagePath`를 버림, (b) P4 관측창 제품 승격 여부. 별건 둘: `lastDeliveredAt` 제거 마이그레이션, `stampMailboxReceipt` 2-writer lost-update. **현재 상태는 측정하지 않았다** — 착수 전에 재측정한다.
+
+<details><summary>0.16–0.18 시기 진행형 문장 (2026-10-02 정리 — 원문 역사 보존)</summary>
+
+`[측정 2026-10-02]` `3bb0f9e`·`2f53a97`·`6306f93`·`c10b904`는 `v0.17.2`부터 태그에 들어 있다(`git tag --contains`). `v0.16.1` 태그는 `f1cc499`(2026-09-01)다. #94·#98은 2026-09-03, #101은 2026-09-04에 CLOSED. 아래 문장의 "푸시 전 / 0.17.2에 실린다 / 승인 대기 / 0.18.0에 실린다"는 쓰인 날의 상태이지 지금의 대기가 아니다. 그 안의 열린 후속은 위 CARRIED 항목이 현재 관측으로 가리킨다.
+
 - **컴팩션 소유권 반환 — #94, 커밋 `3bb0f9e`+`2f53a97` (푸시 전). 0.17.2에 실린다.**
   `autoCompactEnabled` / `env.DISABLE_AUTOCOMPACT`가 managed → retired로 옮겨졌다. 무엇을 왜는
   이슈 #94와 두 커밋이 진다.
@@ -463,13 +488,20 @@ WSL2 는 계약상 리눅스의 연장이라 새 작업 없음.
   재파싱, 온디스크 v1 180여 개), `stampMailboxReceipt`의 2-writer lost-update는 오늘 이미 있는 경합이다.
 - **0.16.1 make** — prepare는 끝났고 make는 GLG 승인 대기. 오늘 요청 없었다.
 
+이전 LEDGER와 DURABLE LINKS 줄(같은 시기):
+
+- **L2 CHANGELOG — 닫힘:** `## Unreleased`가 구현 범위 `v0.15.1..19ad90c` 30커밋 전수로 채워졌다(그중 `ec311a2`·`c3894be`·`7e45057`·`1143177` 4개는 v0.15.1 이후 이미 origin/main에 있던 것). 그 위에 쌓이는 릴리즈 준비 커밋은 이 30에 포함되지 않으므로, 범위를 다시 셀 때는 `v0.15.1..HEAD`가 아니라 이 끝점을 쓴다. 섹션 승격·버전 범프·release-gate 수치는 prepare 몫이고, Verification의 release-gate 줄은 일부러 빈 슬롯으로 남겼다. 이 리포의 릴리즈 도구는 CalVer `tag-release`가 아니라 SemVer `.claude/skills/entwurf-release`의 4모드다.
+- #98 (딜리버리 투명성 — `6306f93` 랩 영수증 + `c10b904` 제품, 푸시 전): https://github.com/junghan0611/entwurf/issues/98
+- #101 (세션 전환 유령 시민과 거짓 배달 — 수리 랜딩, 0.18.0에 실린다): https://github.com/junghan0611/entwurf/issues/101
+
+</details>
+
 # LEDGER — land 전에 정할 것
 
 - **B에서 닫힌 것:** L1(두 state smoke가 `check:hermetic`에 편입, 이제 receive 짝까지 셋), L3(doctor가 `tools.xdev`를 읽고 LIVE 스모크도 선행 검사), L4(`entwurf_self`의 mailbox 렌더가 이제 참이다 — 드레인하는 프로세스가 실제로 있다).
 - **B가 일부러 닫지 않은 것 (정직하게 기록):** event loop wedge 셀. marker는 "살아있는 소유자가 arm을 시도했다"까지만 뜻하며 watch 등록 ack이 아니다 — Claude 레일이 `meta-bridge-hook.ts:279-280`에서 같은 문장으로 이미 인정한 잔여 위험이고, OMP는 새로 만드는 게 아니라 물려받는다. 닫으려면 marker heartbeat + 리더 쪽 max-age가 필요하고 그건 claude·copilot 레일을 동시에 움직이므로 별도 이슈감이다.
 - **런타임 extension reload/disable 셀은 미측정**이다. doctor 노트로만 남아 있다.
 
-- **L2 CHANGELOG — 닫힘:** `## Unreleased`가 구현 범위 `v0.15.1..19ad90c` 30커밋 전수로 채워졌다(그중 `ec311a2`·`c3894be`·`7e45057`·`1143177` 4개는 v0.15.1 이후 이미 origin/main에 있던 것). 그 위에 쌓이는 릴리즈 준비 커밋은 이 30에 포함되지 않으므로, 범위를 다시 셀 때는 `v0.15.1..HEAD`가 아니라 이 끝점을 쓴다. 섹션 승격·버전 범프·release-gate 수치는 prepare 몫이고, Verification의 release-gate 줄은 일부러 빈 슬롯으로 남겼다. 이 리포의 릴리즈 도구는 CalVer `tag-release`가 아니라 SemVer `.claude/skills/entwurf-release`의 4모드다.
 - **L5 claude 시민의 model 필드 — 답 나옴, 고치는 일만 남음 (#90 CLOSED):** 설치된 Claude Code **2.1.245**에서 우리 훅 stdin을 캡처한 결과, interactive `SessionStart` 봉투는 `model`을 **문자열**로 보낸다(`claude-opus-5[1m]`). print 모드(`claude -p`)는 아예 안 보낸다. 우리 리더(`meta-bridge-hook.ts:184-191`)가 객체 `.id`/`model_id`만 받아 그 문자열을 버리므로 claude-code 레코드는 0/353이다. 남은 일: 리더를 문자열 수용으로 넓히고 birth-hook fixture로 고정하되 **print 모드의 부재도 같이 고정**한다. 벤더 버전이 오르면 캡처를 다시 떠야 답이 유지된다. 별도 grant.
 - **L8 OMP child가 bridge 권한을 물려받는다 (측정, GLG 세션 2026-08-28):** OMP task child의 `entwurf_self`는 **부모의 garden id**를 반환한다(두 번째 주소 없음 — §3.5 요구사항 충족, 게이트가 증명하는 그대로). 그러나 그 빌린 신원으로 `entwurf_v2`와 `entwurf_fresh_call`을 호출할 수 있다. §3.5(b)가 도구 차용을 의도적으로 허용하므로 깨진 불변식은 아니다. **열린 질문은 C에서 닫혔다 — 판정이 아니라 원칙으로:** `docs/adding-a-harness.md` §3.5의 principal doctrine이 visible host citizen을 가든 principal로 두고, 내부 위임과 그 책임을 그 시민·벤더 소유로 명시하며, Entwurf가 내부 ACL·subagent provenance·시민 아래 authority 축을 만들지 않는다고 못박았다. 빌린 신원의 dispatch는 principal이 자기가 고른 delegate를 통해 보낸 것이다. 따라서 아래 울타리 측정은 참고 자료로만 남는다. 값싼 울타리 후보 측정: omp 18.0.0에 subagent의 MCP 접근을 막는 `mcp.*` 키는 없으나 `task.enableLsp`(기본 false)가 **subagent별 개별 도구 차단 기제가 존재함**을 증명한다. 자체 tool set을 든 custom agent 정의는 미검증 단서.
 - **L6 벤더 드리프트 — 트리거가 발동했다:** 이 호스트는 이제 **omp 18.1.12** 다(`omp --version`, 2026-09-10 재측정; 2026-08-30 의 18.0.0 에서 이동). 그러므로 `mode === "tui"` 판별자, `xd://` 동작, §M7 의 다섯 셀(호출 자리·idle wake·`clearTimer`·핸들러 순서)은 **지금 재측정 대상이고 아직 재측정되지 않았다**. 18.0.0 위에서 딴 §M7 영수증은 그 버전의 기록으로 유효하다 — 덮어쓰지 말고 새 측정을 옆에 붙여라.
@@ -481,8 +513,8 @@ WSL2 는 계약상 리눅스의 연장이라 새 작업 없음.
 
 - #87: https://github.com/junghan0611/entwurf/issues/87
 - #90 (claude-code model 필드, CLOSED — 측정 완료, 리더 수정만 남음): https://github.com/junghan0611/entwurf/issues/90
-- #98 (딜리버리 투명성 — `6306f93` 랩 영수증 + `c10b904` 제품, 푸시 전): https://github.com/junghan0611/entwurf/issues/98
-- #101 (세션 전환 유령 시민과 거짓 배달 — 수리 랜딩, 0.18.0에 실린다): https://github.com/junghan0611/entwurf/issues/101
+- #98 (딜리버리 투명성 — CLOSED 2026-09-03; 커밋은 `v0.17.2`부터 태그 포함): https://github.com/junghan0611/entwurf/issues/98
+- #101 (세션 전환 유령 시민과 거짓 배달 — CLOSED 2026-09-04): https://github.com/junghan0611/entwurf/issues/101
 - Admission path: `docs/adding-a-harness.md`
 - OMP operator boundary: `docs/setup-clean-host.md` §4b
 - OMP tool-surface dialect: `docs/external-mcp-host.md` OMP row

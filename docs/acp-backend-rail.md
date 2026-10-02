@@ -89,11 +89,14 @@ cutoff in source).
 
 What "supported" means here, per declaration class. The classes are kept apart on purpose: one
 undifferentiated "supported" column is what let a Claude PASS read as if it also certified Cortex.
+The rows are THIS checkout's declarations, not a shipped release: what a published version carried
+is that version's CHANGELOG entry, and a candidate's own evidence is its issue thread, LIVE receipts
+and exact-SHA CI (#125 for the Pi 1.0 candidate).
 
 | Surface | Declaration | Class | What a green actually says |
 |---|---|---|---|
-| Entwurf package | `0.25.0` | shipped baseline | the package contract these rows belong to |
-| pi runtime | devDep exact `1.0.0`, peer `>=1.0.0 <1.1` | **exact** oracle + **closed range** | built and certified against 1.0.0; hosts inside the range are accepted, and the ceiling moves only on measurement |
+| Entwurf package | `package.json` `version` | checkout declaration, not a release receipt | names the package label these rows sit beside; whether that label shipped, and with which rows, is CHANGELOG's record |
+| pi runtime | devDep exact `1.0.0`, peer `>=1.0.0 <1.1` | **exact** oracle + **closed range** | the source pin this checkout builds and gates against; hosts inside the range are accepted, and the ceiling moves only on measurement. Its 1.0.0 evidence is #125's branch receipts, not a shipped release |
 | ACP wire SDK | `@agentclientprotocol/sdk 1.4.0` | **exact** | the shared wire oracle both adapters speak |
 | Claude ACP adapter | `@agentclientprotocol/claude-agent-acp 0.79.0` | **exact**, bundled | the adapter we ship and certify; resolved before any PATH fallback |
 | Claude Agent SDK | `0.3.274` (transitive) | **exact** oracle | the runtime risk surface behind the adapter |

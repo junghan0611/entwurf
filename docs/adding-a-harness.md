@@ -25,15 +25,23 @@ VARIETY is expected rather than alarming. Cells summarize facts whose receipts l
 `DELIVERY.md`'s matrix and in this document's worked examples — do not re-derive them, reopen
 them there.
 
-| backend | lineage | receive rail — how a message lands | callback spelling (one tool, per-harness dialect) | fresh launch (step 9) |
+| backend | lineage | receive rail — how a message lands | first-action callback (one tool, per-harness dialect — `FRESH_CALL_CALLBACK_TOOL`) | fresh launch (step 9) |
 |---|---|---|---|---|
-| `pi` | the host adapter itself | control socket: record-keyed UDS; a send steers or follows up the live turn | `mcp__entwurf_bridge__entwurf_v2` (Pi built-in MCP since #125; Pi ≥0.99.2 sanitizes the server key's hyphen) | positional prompt + `--entwurf-control --model` |
-| `claude-code` | independent vendor | self-fetch mailbox: exec-form `FileChanged` doorbell + `asyncRewake`; the model drains with `entwurf_inbox_read`. The watch owner is the CLI process itself, which can switch sessions in place, so the receiver marker is only live while that pid's sender marker still names the same garden (#101) | `mcp__entwurf-bridge__entwurf_v2` | positional prompt + `--allowedTools=…` + `--model=` |
-| `copilot` | independent vendor | self-fetch mailbox: the watch lives in a FORKED first-party extension child; the receiver marker names the extension pid | `entwurf-bridge-entwurf_v2` — plus a SECOND permission dialect, `entwurf-bridge(entwurf_v2)` | managed verb `entwurf copilot`, `--interactive … --model … --yolo` |
+| `pi` | the host adapter itself | control socket: record-keyed UDS; a send steers or follows up the live turn | `mcp__entwurf_bridge__entwurf_callback` (Pi built-in MCP since #125; Pi ≥0.99.2 sanitizes the server key's hyphen) | positional prompt + `--entwurf-control --model` |
+| `claude-code` | independent vendor | self-fetch mailbox: exec-form `FileChanged` doorbell + `asyncRewake`; the model drains with `entwurf_inbox_read`. The watch owner is the CLI process itself, which can switch sessions in place, so the receiver marker is only live while that pid's sender marker still names the same garden (#101) | `mcp__entwurf-bridge__entwurf_callback` | positional prompt + `--allowedTools=…` + `--model=` |
+| `copilot` | independent vendor | self-fetch mailbox: the watch lives in a FORKED first-party extension child; the receiver marker names the extension pid | `entwurf-bridge-entwurf_callback` | managed verb `entwurf copilot`, `--interactive … --model … --yolo` |
 | `agy` | independent vendor | native-push: record + probe-alive gRPC `send-message`; no mailbox, no receiver marker | n/a — push rail | not openable; the declared pre-#82 legacy exception |
-| `omp` | **a pi fork** — inherits pi's env vocabulary (step 1(6)) | self-fetch mailbox: Claude's SHAPE, but the watch runs IN-PROCESS in the operator's TUI; announce-only doorbell via the vendor's own `sendUserMessage` | `mcp__entwurf_bridge_entwurf_v` — the sanitizer eats the digit | bare `omp`, NO positional prompt: the two-stage `--entwurf-bootstrap` payload |
-| `codex` | independent vendor | native-push: `thread/loaded/list` probe on the operator-owned app-server UDS, then one-shot `codex queue`; no mailbox, no receiver marker, no retry | `mcp__entwurf_bridge__entwurf_v2`; strict request metadata is the sender join | supported in 0.21.0: `--remote unix://<default-socket> --model <model> --dangerously-bypass-approvals-and-sandbox <prompt>`. Birth is a trust-gated USER `SessionStart` declaration in `$CODEX_HOME/hooks.json` with its closure under `$XDG_DATA_HOME/entwurf/codex-birth` — no root, and the operator answers the vendor prompt once. Parser, env-boundary, setup, preflight and clause-7 composition landed, and acceptance closed them: installed doctors green, `check:full` exit 0, and `release-gate --cut` at MUST 24/0/0 with `check-gate-qualification` 475/475. With placement omitted the seat follows the CALLER: a Codex CALLER opens its sibling beside its own TUI pane, matched by the `thread-id` in that pane's terminal title (0 or 2+ matching panes reject, no fallback); every other caller opens in its own seat. (0.21.0 shipped a fixed operator-owned `codex` home for omitted-placement Codex TARGETS; #95 D1 retired it on 2026-09-16.) Still bounded: no request→arbitrary-attached-TUI seat join, no resume lane, and macOS NOT CERTIFIED — pending physical host |
+| `omp` | **a pi fork** — inherits pi's env vocabulary (step 1(6)) | self-fetch mailbox: Claude's SHAPE, but the watch runs IN-PROCESS in the operator's TUI; announce-only doorbell via the vendor's own `sendUserMessage` | `mcp__entwurf_bridge_entwurf_callback` | bare `omp`, NO positional prompt: the two-stage `--entwurf-bootstrap` payload |
+| `codex` | independent vendor | native-push: `thread/loaded/list` probe on the operator-owned app-server UDS, then one-shot `codex queue`; no mailbox, no receiver marker, no retry | `mcp__entwurf_bridge__entwurf_v2` — the one exception: the no-arg callback refuses in the app-server's tool process, so the first action stays the delivery verb with arguments; strict request metadata is the sender join | supported in 0.21.0: `--remote unix://<default-socket> --model <model> --dangerously-bypass-approvals-and-sandbox <prompt>`. Birth is a trust-gated USER `SessionStart` declaration in `$CODEX_HOME/hooks.json` with its closure under `$XDG_DATA_HOME/entwurf/codex-birth` — no root, and the operator answers the vendor prompt once. Parser, env-boundary, setup, preflight and clause-7 composition landed, and acceptance closed them: installed doctors green, `check:full` exit 0, and `release-gate --cut` at MUST 24/0/0 with `check-gate-qualification` 475/475. With placement omitted the seat follows the CALLER: a Codex CALLER opens its sibling beside its own TUI pane, matched by the `thread-id` in that pane's terminal title (0 or 2+ matching panes reject, no fallback); every other caller opens in its own seat. (0.21.0 shipped a fixed operator-owned `codex` home for omitted-placement Codex TARGETS; #95 D1 retired it on 2026-09-16.) Still bounded: no request→arbitrary-attached-TUI seat join, no resume lane, and macOS NOT CERTIFIED — pending physical host |
 
+
+The verb a sibling SENDS its result with is a separate source column, `FRESH_CALL_DELIVERY_TOOL`
+(`pi-extensions/lib/fresh-call-composition.ts`): `entwurf_v2` in each harness's dialect. Two dialect
+lessons belong to that verb, not to the callback. Copilot carries a SECOND permission dialect,
+`entwurf-bridge(entwurf_v2)`, beside `entwurf-bridge-entwurf_v2`. omp's sanitizer charset `[a-z_]`
+eats the digit, so its delivery verb is `mcp__entwurf_bridge_entwurf_v` — `entwurf_callback` has no
+digit to lose. The Copilot (2026-08-25) and omp (2026-08-30) worked examples below predate
+`entwurf_callback` (0.24.0) and keep the `entwurf_v2` spellings their sessions actually called.
 
 Two facts this table exists to make obvious:
 
@@ -681,7 +689,9 @@ edge — and if the answer is neither, that edge is where the next release will 
 ### Worked example — Copilot CLI 1.0.80, the first admission under this contract (#82 RAIL 9)
 
 Read this for the SHAPE of the evidence, not to copy its strings; every one of them is a measured
-vendor fact with an expiry date at the next CLI upgrade.
+vendor fact with an expiry date at the next CLI upgrade. Clause 5 is the admission-day contract
+(2026-08-25, before `entwurf_callback` existed): the first action was the delivery verb, so the
+measured name is `entwurf_v2`'s. Today's first action is the source map's table above.
 
 | clause | what it turned out to be | where the fact came from |
 |---|---|---|
@@ -711,7 +721,10 @@ Three lessons generalise past Copilot:
 ### Worked example — OMP 18.0.0, the second admission (#87 Bundle C)
 
 Read it against Copilot's, because the instructive part is where the two DIVERGE. Every clause is
-the same; not one of its answers is.
+the same; not one of its answers is. Clause 5 and the readiness `[측정 2026-08-30]` note below are
+likewise the admission-day contract, measured on the delivery verb before `entwurf_callback`
+(0.24.0); the current first action is in the source map above, and the digit lesson still holds
+for delivery.
 
 | clause | OMP's answer | why it differs from Copilot's |
 |---|---|---|

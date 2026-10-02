@@ -4,6 +4,55 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+### Changed
+
+- **Pi 1.0 admission — the pi fence is `>=1.0.0 <1.1` (#125).** Dev pins move to Pi 1.0.0 and the
+  peer range to the next-minor ceiling `>=1.0.0 <1.1`. The range checks are major-aware; pack
+  literals, the four affected mutants, the live docs and ROADMAP's two gate-read lines follow. No
+  ACP, vendor or Herdr companion bump rides it. The 0.99.1 and 0.99.2 floors this cycle passed
+  through were branch steps and never shipped.
+- **A pi citizen's Entwurf verbs ride Pi's built-in MCP (#125).** A born pi citizen registers the
+  compiled `entwurf-bridge` with `pi.registerMcpServer` under its record gardenId, so a pi model
+  reaches the same server every other host does. The five hand-written native tools are gone;
+  `entwurf_inbox_read` and `entwurf_register_native` are hidden on a pi host, leaving six declared.
+  Pi folds every character outside `[A-Za-z0-9_]` in an MCP tool name to `_`, so a pi model calls
+  `mcp__entwurf_bridge__<verb>`, and the pi fresh-call dialect (callback, delivery, peers) moved to
+  that spelling as one literal hard cut — no alias, no version router. The server key stays
+  `entwurf-bridge`; a same-namespace `mcp.json` entry overrides the registration by Pi's own
+  precedence.
+- **Qualification builds what a gate consumes (#125, development tooling).** The snapshot stays
+  source-only; a mutant may declare `build {argv, output}`, and for that gate group only the
+  runner builds the output from the snapshot's own bytes, rebuilds it after every mutation and
+  before the post-control (baseline digest required), never counts a build red as a kill, voids a
+  run whose gate writes into the output, and removes it when the group ends (`[QK:QUALIFY-BUILD-*]`).
+
+### Fixed
+
+- **Claude ACP turns no longer get vendor-managed background work (#125).** The Claude adapter's
+  child env sets `CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1`, which turns off the vendor's own
+  Bash/Agent `run_in_background` option and its timeout / turn-abort auto-backgrounding. Cortex is
+  unchanged. A process a command detaches on its own (`&`, `setsid`, a daemon) is outside this
+  switch, so it is not a general termination guarantee. Observed on the branch (#125, one host,
+  not a release acceptance): cancelling a reused turn's foreground work ended it and the same
+  session served the next turn, while a cancelled FIRST turn is not retained and the next turn
+  bootstraps a new session. Pinned by `[QK:ACP-CLAUDE-FOREGROUND-ONLY]` with one rollback mutant.
+- **`check-pack-install` keeps the consumer inside its own sandbox.** Its consumer subcalls name
+  every writable root (HOME, four XDG, `PI_CODING_AGENT_DIR`); an inherited agent dir had received
+  the npm consumer's user-scope settings (`[QK:PACK-INSTALL-INHERITED-AGENTDIR-UNTOUCHED]`,
+  `[QK:PACK-INSTALL-CONSUMER-ROOTS-CONTAINED]`).
+- **LIVE smokes match Pi 1.0 (#125).** Isolated pi citizens load `-e builtin:mcp` beside
+  `--no-extensions`, which turns the built-in MCP off too; the chain hop-2 tool name uses the
+  underscore form. `smoke-acp-session-reuse-live` judges reuse by turn 2's `[acp: reusing live
+  session]` notice rather than by recall alone, since a rebuilt turn re-sends the full transcript.
+  The native lifecycle cell drives `openai-codex/gpt-6-luna`.
+- **Docs state the current contract.** The bridge's eight verbs are counted as eight wherever a
+  current sentence counts them (dated seven-tool receipts stay as they were). The harness source
+  map's callback column names `FRESH_CALL_CALLBACK_TOOL`, with the delivery dialects moved to a
+  note. The ACP support table is this checkout's declaration rather than a shipped baseline,
+  VERIFY's surface banner no longer carries 0.21.0's acceptance numbers, the Herdr docs separate
+  the committed `herdr-checkout` carrier from npm's production authority, and VERIFY's ACP
+  troubleshooting reads turn evidence from lifecycle notices and the session's stopReason.
+
 ## 0.25.1 - 2026-09-30
 
 ### Added

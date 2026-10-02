@@ -491,7 +491,7 @@ for (const name of ["entwurf", "entwurf-bridge", "entwurf-statusline"]) {
 
 // The REAL subcommand, from the installed bin, under node_modules — which is the branch of
 // start.sh that runs the prebuilt dist. Its own oracle is an EXACT set (`EXPECT_TOOLS` in run.sh check-bridge), so a
-// zero exit here is the artifact listing all seven garden verbs and no eighth.
+// zero exit here is the artifact listing all eight garden verbs and no ninth.
 const run = spawnSync(path.join(binDir, "entwurf"), ["check-bridge"], { encoding: "utf8" });
 const said = `${run.stdout ?? ""}${run.stderr ?? ""}`;
 // [a-z0-9_] and not [a-z_]: the first draft of this line printed `entwurf_v` for entwurf_v2

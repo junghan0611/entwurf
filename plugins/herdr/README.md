@@ -575,8 +575,10 @@ successful install reconciles them rather than duplicating them. Nothing here ca
 transaction and not this package. `./run.sh check-pack-install` packs this checkout, installs the
 tarball into a fresh temp project, and runs the same `verifyInstalledRuntime` against it.
 
-**Switching source is a re-proof, not a config change.** The active production lock is npm; moving
-from `herdr-checkout` to npm — or to another future authority — re-decides where the bytes come from,
+**Switching source is a re-proof, not a config change.** npm is the production authority class; the
+lock committed in this checkout is the `herdr-checkout` verification carrier, set for the 0.25.1
+candidate window on 2026-09-30 (`8b92e09`) with the npm re-pin left as a follow-up. Moving between
+them — or to another future authority — re-decides where the bytes come from,
 and candidate evidence does not transfer. Exact acquisition and integrity, the installed runtime
 (`name@version`, compiled entry, three executable bins, real `check-bridge`), the swap and torn-swap
 recovery, activation and deactivation, and the package-consumer proof must be re-run against that

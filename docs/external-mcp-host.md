@@ -254,7 +254,7 @@ spawned. The installer refuses to write into a config that denylists its own key
 lowercasing and replacing every `[^a-z_]+` run with `_`, collapsing runs and trimming edges,
 so `entwurf_v2` surfaces as `mcp__entwurf_bridge_entwurf_v` — the trailing digit is eaten by
 the charset, not by the length cap. The live tool list is the acceptance oracle; a live
-session mounts all seven.
+session mounts all eight.
 
 **And the NAME is not the invocation. Under omp's default settings an MCP tool is not a
 function the model calls — it is a virtual file it writes to.** `tools.xdev` (boolean,
