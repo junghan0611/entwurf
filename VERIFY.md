@@ -268,7 +268,7 @@ When injecting a fact for a continuity check, use **plaintext that does not trig
 - **bridge continuity:** same `sessionKey` / same `acpSessionId` through in-memory process-scoped reuse. Persisted session records are written for a future resume/load lane but are not consumed today.
 - **semantic continuity:** a fact from a prior turn is retrievable in a later turn.
 
-Either can be alive while the other looks dead (the wording case above is bridge-alive / semantic-looks-dead). When in doubt, change the wording and retry once, and check the `[entwurf:bootstrap]` lines in bridge stderr. No automated smoke separates these yet.
+Either can be alive while the other looks dead (the wording case above is bridge-alive / semantic-looks-dead). When in doubt, change the wording and retry once, and read the turn's own lifecycle notices in the assistant text (`[acp: preparing …]` on a new session, `[acp: reusing live session]` on reuse). No automated smoke separates these yet.
 
 ## 0. Quality Criteria
 
@@ -464,10 +464,10 @@ Passing establishes a **release verification floor**, not an 8-hour/day operatio
 
 ### Troubleshooting hooks
 
-- **`ENTWURF_CHILD_STDERR_LOG`** mirrors child stderr to a file for bootstrap-path visibility — but it must be present at **bridge-process spawn time**; `export` from a shell already bound to a running bridge does not propagate. Restart the parent session with it exported, then `grep -E '\[entwurf:(bootstrap|model-switch|cancel|shutdown)\]' "$ENTWURF_CHILD_STDERR_LOG"`.
+- **ACP turn evidence.** The ACP path writes no `[entwurf:*]` stderr markers, and `ENTWURF_CHILD_STDERR_LOG` is not an ACP observation surface (its mirror in `pi-extensions/lib/entwurf-core.ts` belongs to the retired child-pi spawn and has no caller). Read three things instead: the lifecycle notices the backend writes into the assistant text (`[acp: preparing …]` / `[acp: reusing live session]`), the turn's typed `stopReason` (an ACP `cancelled` ending maps to `aborted`, `pi-extensions/lib/acp/backend.ts:865-866`), and the identity (pid + starttime) of the launcher and of any process the turn started.
 - **Retired dedicated smokes, live code invariants** (manual/troubleshooting only — *not* part of the release floor):
   - *Model-switch lock* — entwurf sessions are locked to their starting model. Gate: `check-model-lock` (in `pnpm check`, core tier). The dedicated live `smoke-model-switch` was retired in v2; the invariant lives in `pi-extensions/model-lock.ts` (extension guard) + `session-store.ts` `SessionModelLockedError` (the `decideBootstrap` fail-loud model lock).
-  - *Cancel / abort cleanup* — `onAbort` → `cancelActivePrompt()` (session stays reusable); the stream catch closes the bridge only on `stopReason === "error"`. Dedicated `smoke-cancel` retired; invariant in code.
+  - *Cancel / abort cleanup* — an abort sends ACP `session/cancel` and lets the agent end its own turn (`awaitAcpPromptTurn`, `pi-extensions/lib/acp/backend.ts:762-801`); process-group teardown follows only after a bounded grace. A cancelled reuse turn keeps its live session; a cancelled first turn is not retained (`backend.ts:1861`), so the next turn bootstraps a new one. Dedicated `smoke-cancel` retired; invariant in code.
 
 ### Evidence preservation when a problem occurs
 
@@ -475,7 +475,7 @@ Passing establishes a **release verification floor**, not an 8-hour/day operatio
 pgrep -af 'claude-agent-acp|codex-acp' || true
 find "$CACHE_DIR" -maxdepth 1 -type f | sort
 ls ~/.pi/agent/sessions/--*--/*_${SESSION_ID}.jsonl 2>/dev/null
-[ -n "$ENTWURF_CHILD_STDERR_LOG" ] && grep -E '\[entwurf:(bootstrap|model-switch|cancel|shutdown)\]' "$ENTWURF_CHILD_STDERR_LOG"
+# ACP: the turn's lifecycle notices and stopReason live in that pi session file
 ```
 
 Also preserve: the exact calls used, full stdout/stderr, the child pi session file path, cache-directory changes, and the expected-vs-actual difference.
