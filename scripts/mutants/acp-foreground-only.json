@@ -1,0 +1,17 @@
+{
+	"schemaVersion": 1,
+	"lane": "acp-foreground-only",
+	"mutants": [
+		{
+			"claim": "ACP-CLAUDE-FOREGROUND-ONLY",
+			"title": "the claude launch env loses the background-task switch — a backgrounded command outlives an ACP cancel and is orphaned to init when the child exits",
+			"subject": "pi-extensions/lib/acp/backend-adapter.ts",
+			"find": ["\t\treturn { ...claudeLaunchEnvDefaults(), ...CLAUDE_FOREGROUND_ONLY_ENV };"],
+			"replace": ["\t\treturn claudeLaunchEnvDefaults();"],
+			"gate": ["bash", "run.sh", "check-acp-foreground-only"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-CLAUDE-FOREGROUND-ONLY]",
+			"signatureSource": "pi-extensions/lib/acp/backend-adapter.test.ts"
+		}
+	]
+}

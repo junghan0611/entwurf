@@ -297,6 +297,7 @@ operator's repair named.
 | Carrier | engraving in `_meta.systemPrompt` | no system-prompt carrier; engraving rides the first-user augment |
 | Overlay | `CLAUDE_CONFIG_DIR` whitelist, configured-empty hooks, native memory hidden | session-scoped isolated HOME + `SNOWFLAKE_HOME`, private `cortex/mcp.json`, measured-minimum auth passthrough |
 | MCP | explicit wire `mcpServers` | explicit declarations projected to private `mcp.json` because Cortex ignores the wire field |
+| Background work | the launch env sets Claude Code's `CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1`: the vendor's Bash/Agent `run_in_background` option and its timeout / turn-abort auto-backgrounding are off. A process a command detaches on its own (`&`, `setsid`, a daemon) is outside this switch | not declared |
 | Backend setting | none | `cortexConnection`; env override wins and participates in the signature |
 
 ### Claude

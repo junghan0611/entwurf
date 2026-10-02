@@ -1,43 +1,48 @@
-# NEXT — #125 / Pi0.99.2 수용 / 목표 Entwurf0.30.0
+# NEXT — Pi 1.0 · ACP 기본기 → Entwurf 0.30.0
 
 # RAIL — 현재 좌표
 
-- [x] **1. 방향·접점 분석** — 같은 커버리지의 뺄셈, Pi에 도구 표면 소유 반환.
-- [x] **2. 구현·독립 review·amendment** — native5 삭제, builtin MCP에 compiled bridge 등록.
-- [x] **3. 격리 소비자·CLI·기본 실제 ACP** — Pi0.99.1의 범위 한정 PASS.
-- [x] **4. 브랜치 보존·oracle0.99.1 전환** — 2f7c883 push, qualification831/831 + frozen full.
-- [ ] **5. Pi0.99.2 → 남은 기본기 → 관련 MCP 기능 →0.30.0** ← CURRENT: A2 review·소비자 CLI/namespace/reload 관측 완료. 동결된0.99.2 격리 후보 qualification→full, 통과 후 oracle cutover/LIVE→commit/push.
+- [x] **1. Pi 0.99.2 기준선** — builtin MCP 수용·운영 전환·branch push·exact-SHA CI 완료.
+- [x] **2. Pi 1.0 · ACP 기본기** — 후보 구현·focused 검증·retained foreground 취소/재사용·독립 검수 완료. 운영 설치 증거는 3에서 닫는다.
+- [ ] **3. 브랜치 정리** ← CURRENT: 최종 NEXT 포함 후보 FREEZE → qualification/full → 안전한 세대 전환·post-F public LIVE → atomic commits·ordinary push·도장·exact-SHA CI.
+- [ ] **4. main · 0.30.0 컷** ← PAUSED: 브랜치 정리 뒤 GLG의 merge/각 release-mode 승인.
+
+현재 좌표: 1·2 완료 → 3 진행. Durable·MCP 고도화는 이 컷 밖이다.
 
 # NOW
 
-- **실무 책임:** CC Opus `20261001T033500-9ead9b`, reviewer Fable `20261001T063853-5fe11e`(WAIT). coordinator Pi `20260930T122614-5e4b39`는 cutover 시 재시작이 필요할 수 있다. 단절 자체를 새 승인 대기로 만들지 않는다.
-- **기준 [coordinator 측정]:** origin HEAD `2f7c883edf5e611910c0026719c4ad1839119b94`, 운영/checkout deps0.99.1, tracked dirty는 coordinator NEXT뿐. apply/install/cutover0.
-- **최종 검토 후보:** `/tmp/e992/src` exact0.99.2, full patch `/tmp/e992/ev/a2/pi-0992-a2.patch` sha256 `870b9b4cd7b1de03703d5a5a3ee43dd69eebd7183b60f0846d5bc7fc94591df1`, A2 report sha256 `37152f519ec8073a2cd69441f92bb4c9d941f371f13d08fcb12a3f150c2b2f88` [coordinator hash/read 확인]. 원본/A1 patch·expected-red 보존.
-- **다음 한 걸음:** 정상 git provenance와 최종0.99.2 후보 tree를 확인하고 이 NEXT를 포함한 의도된 변경을 freeze 전에 확정한다. 격리 후보 qualification→full을 한 번씩 실행; 실패하면 진단/필요 수선/영향 리뷰 후 새 후보로 재측정. 통과 뒤 source/lock/deps/dist/operator/caller 세대의 일관된 cutover→실제 visible fresh/callback/v2→정상 hook commit/push/agenda. floor 중 NEXT/index/source 변경 금지; 결과는 issue receipt로 운반. 이전831/full carry0, release/tag 미승인.
-- **3셀 receipt:** `.agent-reports/125-pi-0992-cells-20261001.md` sha256 `d90ff93860cbce0507b2604422b1022f3d7d55937deb4e432244339799fa2495` [coordinator 전문/hash·원시 CLI/reload/중복키 JSON read, SHA256SUMS15/15 확인]. Opus 측정: 설치본6underscore/2hidden/bare0·record/sessionManager/env/socket/child/cwd·EOF cleanup; hyphen/underscore 단독 override marker; 양키는 conflict 알림 후 첫 entry 유지(파일 전체 거절 아님). ctx.reload 같은 native/garden/socket·옛child 소멸/new1·6/2 유지. model0, 운영 설정/후보 source 변경0. defaultTools 추가/수동 비활성 의미론 및 모델 tools/call은 미측정.
-- **완료 근거:** Fable A2 finalreview `.agent-reports/125-pi-0992-fable-review-a2-20261001.md` sha256 `15375981ff552e64763768c377dedd77ccab7ff686b23e2c811837c932db08bc` [coordinator 전문/hash 확인]. D1/D2·herdr no-arg callback·기존 소비자 gate 격리 defect 닫힘. Opus receipt: check-pack-install poisoned inherited agentDir 아래 PASS, samehome two-root ownership 유지. helper의 M1 runner-coordinate와 wiring의 M2 heavy hand-kill은 구별, qualification body는 아직 UNRUN.
-- **남긴 Observation:** mb row는 local sentinel로 operator agentDir이 차단되어 empty store를 읽는다; seeded-store 인증은 pc cell만 소유. mb 선언적 -u 제안은 현재 false 결과 없는 Observation으로 남기고 추가 source 보완 루프를 열지 않는다. 보고서 'No install'은 operator0/sandbox actual install로 정정. 권한/전체 순서는 `.agent-reports/125-pi-0992-continuation-20261001.md`.
-- **전환 경계 [source-derived]:** Pi0.99.2는 `mcp__entwurf_bridge__*`; CC는 hyphen 유지, 서버키 `entwurf-bridge` 불변. CC 등 caller의 running compiled bridge도 Pi-target framing을 캐시한다. mixed window fresh Pi 금지; source/deps/dist/globalPi와 실제 호출할 caller 세대를 함께 맞춘다. 문서화된 native 재연결로 identity/transcript 보존, coordinator 비가시적 재실행 금지.
-- **승인 [GLG 직접, 2026-10-01]:** “우리 리포 작업에 집중… 새 버전 설치되면 배선 끊길테니까 그때 다시 시작… 오푸스가 밀고가야지뭐 커밋푸시까지.” oracle Pi0.99.2 install/cutover 및 research/125-pi-admission commit/push까지. Entwurf0.30.0 version/CHANGELOG/tag/release/publish/main merge/타 host takeover는 미승인.
-- **독립 연구:** agent-config Opus `20261001T064420-a2a671`은 GLG 요청으로 checkpoint를 llmlog `20261001T070752`와 [#88 comment5920592842](https://github.com/junghan0611/entwurf/issues/88#issuecomment-5920592842)에 보존했다고 회신했다[상속, coordinator 원문 미검증]. 현재 WAIT, #125와 합치거나 새 연구 요청하지 않는다.
-- **금지:** record/transcript 삭제·fresh-cut, credential 복사/로그인 probe, OpenRouter fallback, alias/version-router/새 하네스. failed gate를 bypass하거나 기존 floor receipt를 새 tree로 이월하지 않는다.
+- **GLG 범위/권한 [현재 세션 직접 결정, 2026-10-02]:** 0.30.0은 Pi 1.0 수용과 ACP까지 포괄하는 기본기 릴리즈. "커밋푸시꺼지 쭉 가게 오푸스 가이드 해줘"로 `research/125-pi-admission` 구현·검증·commit/push 승인. main merge·branch NEXT 삭제·version/CHANGELOG prepare·tag/GitHub Release/npm publish는 아직 다음 경계다. agent-config 연구는 GLG가 직접 대화하며 이 레인은 조율하지 않는다.
+- **역할:** 실무 Claude Code Opus `20261002T101619-6cbbbe`; 코디네이터 Pi `20261002T100622-43047f`. source/검증은 Opus, NEXT/독립 검수/범위 라우팅은 코디네이터. 새 형제 임의 호출 없음. 각 동일 승인 leaf마다 GLG 재승인을 요구하지 않는다.
+- **현재 source 좌표 [coordinator git 측정]:** origin branch HEAD/remote `bc3d9b64fbd81bc03d68de8e6f95ef976a4f32f9`, tree `2b4e1b4357ae15950eb1aef5c5756eee68e58043`; dirty는 이 NEXT와 `scripts/smoke-acp-session-reuse-live.ts` 둘. origin deps/global Pi는 0.99.2, 패키지 label 0.25.1. Pi 1.0 후보는 `/home/junghan/tmp/e125-pi10-sb/src` sandbox에만 있다. 원본 반영/운영 전환/commit/push는 아직 실행되지 않았다.
+- **다음 한 걸음 [coordinator 최종 검수·라우팅, 2026-10-02 12:07 KST]:** D1→A→B→C→E→F와 이 NEXT를 포함한 /home frozen clone을 만들고 tracked/untracked 후보 목록·index tree·content manifest·diff digest를 확정한다. qualification BODY 1회 → full 1회, 기본 TMPDIR=/tmp. FREEZE receipt 뒤 coordinator도 NEXT/source를 바꾸지 않는다. 실패는 원인 측정·수선·새 freeze가 필요하며 무효 receipt를 이월하지 않는다.
+- **출하 HOLD:** background 고아 재현은 보존하며, leaf 적용 retained foreground 취소에서는 작업 종료≤100ms·동일 launcher/vendor·다음 턴 재사용·자기 고아0이 실측됐다. 독립 검수는 완료. 남은 acceptance는 frozen deterministic proof와 실제 설치 post-F lifecycle/MCP/reuse·source/env join이다. arbitrary shell daemon 차단은 이 switch의 보장이 아니다.
 
-# READ — 이동 가능한 근거
+## 마지막 독립 검수
 
-- [#125 thread](https://github.com/junghan0611/entwurf/issues/125): 댓글 우선. [0.99.1 commit5919438846](https://github.com/junghan0611/entwurf/issues/125#issuecomment-5919438846), [0.99.2 방향5920127682](https://github.com/junghan0611/entwurf/issues/125#issuecomment-5920127682), [최신 grant5920503395](https://github.com/junghan0611/entwurf/issues/125#issuecomment-5920503395), [3셀·floor 먼저5920888282](https://github.com/junghan0611/entwurf/issues/125#issuecomment-5920888282).
-- `AGENTS.md`, `VERIFY.md`: review 끝→검증 변화 확정→qualification1회→frozen full1회→commit. source-only snapshot은 그룹별 `build:{argv,output}`로 자기 바이트를 빌드. NEXT/의도된 index 변경은 freeze 전에 끝낸다. pre-commit은 full 아님.
-- `.agent-reports/125-pi-0992-fable-review-20261001.md` Amendment1: source prediction≠mutant 실행, check-pack-install loader7≠builtin CLI6/2, Pi-target caller bridge 세대까지 cutover. ignored 파일은 host-local 보조; 결정적 로그는 issue로 운반한다.
+- [#125 이전 검수 5944829771](https://github.com/junghan0611/entwurf/issues/125#issuecomment-5944829771)을 갱신하는 최종 검수: F sha256 `a38b64c37e691c46112b861268da9944e802268277bd36e82723b9369ebf7cde`, E `ec6db6f08dae5c39284ea49b6de2ade3787616e53a50edc739e74516cafacc7a` coordinator 일치 측정/F 전문 읽음. 문구 범위 보완 수용. `check-acp-foreground-only` 2/2를 12:07 KST 직접 재실행 green, 후보 diff --check clean; prompt-lifecycle 직접 green은 직전 검수 기록.
+- **F:** Claude adapter child env에 vendor `CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1`만 강제, Cortex에는 추가하지 않음. shared overlay/helper·process 전역·operator config 변경0. beside literal QK + rollback mutant1 + 기존 mutant coordinate; 새 manager/sweeper 없음. 현재 module Map/loader 경계상 새 signature 필드는 불필요하다고 검수했으며 미래 persisted lane까지 보장하지 않는다.
+- **문구 수선 완료:** vendor-managed background 옵션과 판독된 timeout/turn-abort 경로의 비활성화로 좁혔다. arbitrary Bash daemonization은 명시적으로 제외했다. `backgroundedToDeliverMessage` 등록 차단 정적 설명은 Opus 판독에서 온 추론이며 UNKNOWN 유지; 출하 증명으로 승격하지 않는다.
+- **retained run [Opus LIVE, coordinator JSON 읽음·hash 측정]:** `/home/junghan/tmp/e125-pi10-sb/live/rc-20261002T120155`. T1 정상 완료 → T2 실제 foreground 작업 확인/취소 → T3 same-session reuse. ambient0보다 child env1이 우선, abort99ms/작업 종료≤100ms, typed aborted, launcher2493096/264521258·vendor2493139/264521311 동일, preparing 없이 재사용. vendor 파일1개/delta-only, 종료 자기 생존자0·marker0/real6roots entry 집합 동일. t2 sha256 `f88612c49c404368fac8f5d867e088154d86fcff1569da5045bac11b358d9a37`, final `9a296585ede67c8fc28de6728a0eb203be9ba33e41e6ff3054ec4fb06a6ea7d3`. 이 run에 승인한 Sonnet3턴 소진.
+- **첫 foreground 취소 [Opus LIVE + coordinator artifact 읽음]:** child env는 ambient0보다 leaf1이 우선. 실제 Python 작업을 확인한 뒤 abort100ms/작업 종료≤100ms/typed aborted, 자기 트리 잔존0. 다음 턴은 new bootstrap이었다: 첫 턴 abort는 `backend.ts:1861`상 retain하지 않는다. 재사용 턴 취소와 구분하며 E가 이 문구를 바로잡는다.
+- **새 후보 증거 경계:** F가 pi-extensions를 바꿨으므로 이전 L4의 origin/candidate bytes 동등성 전제가 깨졌다. sandbox Pi PATH + old origin extension의 green을 새 F lifecycle로 가져오지 않는다. final source/실제 child env·runtime/bridge 출처를 join해야 한다.
 
-# RECENT — Pi0.99.1 역사적 checkpoint, 현재 후보로 이월 금지
+# REMAINING — 브랜치 끝까지
 
-- **제품 [2f7c883 source]:** birth/socket→env→builtin MCP 등록→UI; 당시 hyphen6direct/2hidden. inbound socket→pi.sendMessage·renderer/status/compaction 잔류, builtin child lifecycle. bridge sender reconcile 뒤 V3 targeted reader/backend pi 확인; 다른 실존 record 선택을 인증까지 한다고 주장하지 않는다.
-- **보존 [Opus receipt,5919438846]:** tree `dea4b415d6c5722dbdc8792526d6b236c530960a`; qualification831/831·5100s, full634s, freeze 전후 동일, 정상 hook/push. 이전 coordinator red와 혼합하지 않는다.
-- **소비자/CLI/실턴 [범위 한정]:** hejdev6 `/tmp/e125-174426`0.99.1 tarball/loader·CLI6/2/env join/EOF cleanup. 운영 Herdr/plugin/globalPi 교체0. sonnet5 ACP explicit bridge self/peers1회; host builtin child tools/call은 별개. realHOME 정상쓰기·제거 actor 미관측 경계는 thread에 보존.
-- **실제 fresh [Opus receipt]:** Pi `20261001T035618-63a467` fresh→callback→v2 왕복 후 정리. new-session만, 다른 lifecycle 이월0.
+1. frozen clone은 후보 bytes뿐 아니라 실행 명령·deps1.0.0·compiled dist 출처까지 기록한다. 신규 untracked beside test/manifest 누락0. qualification/full 동안 HEAD/index/worktree/NEXT 고정, 종료 manifests 동일. root free 시작≥1.5G, 30초 표본에서<600M이면 작업 중단·증거 보존. floor green 전 origin/operator 불변.
+2. green 뒤 controlled cutover: origin 동일 patches/NEXT 적용 → tree join → frozen lock install → compiled dist digest → global Pi1.0 업데이트. 전환 창 setup/fresh 금지. 복구는 원래 tree/dirty D1/NEXT와 0.99.2 lock/runtime를 보존해 되돌리는 계획이지 dirty checkout 강제 삭제가 아니다. 코디네이터 가시 재시작이 필요하면 GLG 요청 후 대기, 숨겨 재시작0.
+3. 실제 설치 post-F public LIVE: lifecycle(MUST), bundled-MCP(MUST), D1 reuse/delta 각1회. /proc runtime1.0.0·bridge path·gid·ACP vendor child env1 및 frozen/origin source join 필수. 명시 leaf 승인이지 전체 release-gate --cut 완료가 아니다. 실패 시 원인 수선과 필요한 새 frozen 증거, 통째 모델 턴 자동 replay0.
+4. commit skill 준수: intended files만 atomic commits, hooks/unsafe override/force 우회0, batch ordinary branch push 성공 뒤 agenda1회. exact-SHA required4 CI jobs + qualification BODY가 필요. 실패는 새 commit/push·새 증거로 해결, main/tag로 우회0.
 
-# REMAINING
+## 자원/범위 경계
 
-- Pi0.99.2 수용≠#125/0.30.0 해결 선언. ACP2턴 reuse/cancel/exclusion, close→dormant→resume/recall, trust/TUI/Herdr wiring, 다른 lifecycle/wasm은 별도 증거 필요.
-- codemode는 기본 뒤. structuredContent/self·peers readonly 합성/discovery/hidden/error/permission은 설계 후보, 이번 Pi bump 자동 구현 아님. only projection/ACP guard·R9 hook 지원/exemption은 별도 지원 결정.
-- release LIVE·exact-SHA CI·0.30.0 cut/publish는 별도 권한/근거. #124 P1/P2 도구 출하≠P3 composite acceptance(HOLD). CARRIED0.
-- push 후 agenda1회, 장기 완료 시 Opus 자기 명의 DM1회. branch NEXT는 durable 결과 승격 후 merge 전에 삭제.
+- **디스크 [coordinator df 12:07 KST]:** `/` 2.7G free, `/home` 약11G. 큰 source/logs는 `/home/junghan/tmp`. `/home/junghan` TMPDIR는 Codex fixture의 ancestor config 판정을 바꿔9건 red를 낸다(기본 `/tmp`에서는301/301). 이 admission을 tmp-root 리팩터로 넓히지 않는다. 최종 floor는 기본 `/tmp`의 peak/reserve를 입증한 뒤에만; 불가하면 큰 floor BLOCK. 지원되는 명시 seam만 쓰고 path 속임수·기존 증거 삭제0.
+- **버전 정책:** Pi dev pin1.0.0/peer `>=1.0.0 <1.1`, next-minor 유지. ACP/vendor·Herdr 동반 범프 없음. ROADMAP은 gate-read live 선언2줄만 정합, 방향/dated ledger 수정0. #124 P3/composite release-policy HOLD.
+- **고도화 제외:** pi-durable, structuredContent/codemode, virtual model, autopilot, 새 orchestrator. MCP discovery·하네스 복구를 Entwurf가 떠맡지 않는다.
+- **보존:** records/transcripts/기존 receipts/fresh-cut 삭제0, credential 복사·login probe0, OpenRouter sibling0. 판정은 current thread가 body보다 우선한다.
+
+# RECENT / READ — 근거 진입점
+
+- [checkpoint1/source+격리](https://github.com/junghan0611/entwurf/issues/125#issuecomment-5944056334) · [branch commit/push grant](https://github.com/junghan0611/entwurf/issues/125#issuecomment-5944114557) · [checkpoint2 검수](https://github.com/junghan0611/entwurf/issues/125#issuecomment-5944275740) · [background 고아 incident](https://github.com/junghan0611/entwurf/issues/125#issuecomment-5944455794).
+- 이전 F 전 후보 L3 reuse PASS, L4 public native/ACP/CC lifecycle81/RC0, L5 chain24/v2send15/bundledMCP14 모두RC0는 Opus 실행/coordinator log·hash 읽음. 새 F 계약 증거로 자동 이월하지 않는다. logs는 `/home/junghan/tmp/e125-pi10-sb/live/l{3,4,5}-*`, patches는 같은 sandbox root의 D1→A→B→C→E→F 적용 순서다(겹치는 docs/package/run hunks 포함).
+- Pi0.99.2 원래 기준선: [commit/cutover](https://github.com/junghan0611/entwurf/issues/125#issuecomment-5922109555), [qualification835/full](https://github.com/junghan0611/entwurf/issues/125#issuecomment-5922043242), [실제 ACP2턴](https://github.com/junghan0611/entwurf/issues/125#issuecomment-5923407014). CI run36795542287의 required4/body success는 coordinator 재측정, 새 후보 proof 아님.
+- 계약 정본: `AGENTS.md`, `VERIFY.md`, `docs/acp-backend-rail.md`, `.claude/skills/entwurf-release/SKILL.md`, 공통 commit/next-handoff skill. main/prepare/make/publish는 이 branch 완료 후 별도 GLG 결정.

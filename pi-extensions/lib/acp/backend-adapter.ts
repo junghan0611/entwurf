@@ -267,6 +267,18 @@ function resolveClaudeLaunch(): AcpLaunchSpec {
 	return { command: process.execPath, args: [launcher] };
 }
 
+/**
+ * The claude child runs with Claude Code's own background-task switch on (#125): the vendor drops
+ * `run_in_background` from the Bash/Agent schemas it declares to the model and turns off timeout and
+ * turn-abort backgrounding. Without it a vendor-backgrounded command runs in its own session (setsid),
+ * outlives an ACP cancel, and is orphaned to init when the child exits — the process-group teardown
+ * cannot reach it (`[측정 2026-10-02]` claude-agent-sdk 0.3.274 / claude-agent-acp 0.79.0). A process a
+ * command detaches on its own is outside the switch. It rides
+ * the claude adapter's launch env, which backend.ts spreads over `process.env` at spawn, so an
+ * ambient value cannot turn it off. Cortex declares nothing of the kind.
+ */
+export const CLAUDE_FOREGROUND_ONLY_ENV = { CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: "1" } as const;
+
 export const claudeAdapter: AcpBackendAdapter = {
 	backend: "claude",
 
@@ -292,7 +304,7 @@ export const claudeAdapter: AcpBackendAdapter = {
 	},
 
 	launchEnvDefaults() {
-		return claudeLaunchEnvDefaults();
+		return { ...claudeLaunchEnvDefaults(), ...CLAUDE_FOREGROUND_ONLY_ENV };
 	},
 
 	ensureOverlay() {

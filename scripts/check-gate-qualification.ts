@@ -3321,6 +3321,7 @@ let manifestCount: number;
 		"acp-backend-preflight": 1,
 		"acp-augment": 10,
 		"acp-cortex": 14,
+		"acp-foreground-only": 1,
 		"acp-launch-namespace": 2,
 		"acp-overlay": 1,
 		"acp-prompt-lifecycle": 15,

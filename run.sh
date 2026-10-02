@@ -1340,6 +1340,14 @@ check_entwurf_resume_args() {
   run_vitest pi-extensions/lib/entwurf-resume-args.test.ts
 }
 
+check_acp_foreground_only() {
+  # NOT a discovery path — check-tests-beside-behavior finds the test by glob. This case is the
+  # MUTANT EXECUTION COORDINATE for scripts/mutants/acp-foreground-only.json (same reasoning as
+  # check_entwurf_resume_args above), with a file filter narrow on purpose.
+  section "claude ACP foreground-only launch env (mutant execution coordinate)"
+  run_vitest pi-extensions/lib/acp/backend-adapter.test.ts
+}
+
 check_pi_mcp_register() {
   # NOT a discovery path — check-tests-beside-behavior finds the test by glob. This case is the
   # MUTANT EXECUTION COORDINATE for scripts/mutants/pi-mcp-register.json (same reasoning as
@@ -6742,6 +6750,9 @@ case "$cmd" in
     ;;
   check-entwurf-resume-args)
     check_entwurf_resume_args
+    ;;
+  check-acp-foreground-only)
+    check_acp_foreground_only
     ;;
   check-resume-launch-identity)
     check_resume_launch_identity
