@@ -91,7 +91,9 @@ TIMEOUT="${SMOKE_RGG_TIMEOUT:-90}"
 # Release-gate topology: this is a repo-under-test smoke, not a deployment smoke.
 # Load ONLY this checkout's extension so results do not depend on device-local global
 # packages / current branch wiring.
-REPO_EXTENSION_ARGS=(--no-extensions -e "$REPO")
+# `builtin:mcp`: `--no-extensions` also turns off Pi's built-in MCP, which a citizen's entwurf-bridge
+# registration needs (scripts/resident-rpc-drive.ts has the measurement).
+REPO_EXTENSION_ARGS=(--no-extensions -e builtin:mcp -e "$REPO")
 
 pass=0
 fail=0

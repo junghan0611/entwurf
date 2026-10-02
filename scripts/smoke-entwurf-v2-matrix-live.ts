@@ -76,7 +76,9 @@ const SOCKET_SUFFIX = ".sock";
 // Release-gate topology: repo-under-test, not deployment smoke. Load only this
 // checkout's extension so resident behavior is independent of global pi packages.
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const REPO_EXTENSION_ARGS = ["--no-extensions", "-e", REPO_ROOT] as const;
+// `builtin:mcp`: `--no-extensions` also turns off Pi's built-in MCP, which a citizen's entwurf-bridge
+// registration needs (scripts/resident-rpc-drive.ts has the measurement).
+const REPO_EXTENSION_ARGS = ["--no-extensions", "-e", "builtin:mcp", "-e", REPO_ROOT] as const;
 
 // Staged timeouts (automation): short and per-stage so a stall is attributable.
 //

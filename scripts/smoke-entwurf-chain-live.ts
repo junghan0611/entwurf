@@ -67,7 +67,9 @@ import { terminateChild } from "./lib/acp-child-cleanup.ts";
 import { skipLive } from "./lib/live-skip.ts";
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const REPO_EXTENSION_ARGS = ["--no-extensions", "-e", REPO_ROOT] as const;
+// `builtin:mcp`: `--no-extensions` also turns off Pi's built-in MCP, which a citizen's entwurf-bridge
+// registration needs (scripts/resident-rpc-drive.ts has the measurement).
+const REPO_EXTENSION_ARGS = ["--no-extensions", "-e", "builtin:mcp", "-e", REPO_ROOT] as const;
 const REAL_CONTROL_DIR = path.join(os.homedir(), ".pi", "entwurf-control");
 const SOCKET_SUFFIX = ".sock";
 
@@ -329,9 +331,11 @@ async function main(): Promise<void> {
 			`Call the tool mcp__entwurf-bridge__entwurf_v2 exactly once with target=${gidD}, intent=fire-and-forget,`,
 			`and message=${nonce} terminus. Then reply with only the tool's outcome line.`,
 		].join(" ");
+		// hop2 is read by B, a NATIVE pi citizen: Pi folds the server key's hyphen, so B is declared
+		// `mcp__entwurf_bridge__entwurf_v2`. hop1 (Claude Code) and hop3 (ACP Claude) keep the hyphen.
 		const hop2 = [
 			`${nonce} hop2. You are the second hop of a delivery chain.`,
-			`Call the tool mcp__entwurf-bridge__entwurf_v2 exactly once with target=${gidC}, intent=fire-and-forget,`,
+			`Call the tool mcp__entwurf_bridge__entwurf_v2 exactly once with target=${gidC}, intent=fire-and-forget,`,
 			"and message set to exactly the text between INNER-BEGIN and INNER-END.",
 			"Then reply with only the tool's outcome line.",
 			"INNER-BEGIN",

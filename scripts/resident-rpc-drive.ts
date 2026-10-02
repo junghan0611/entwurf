@@ -169,7 +169,11 @@ const result: DriveResult = {
 	timedOut: false,
 };
 
-const piArgs = ["--no-extensions", "-e", REPO_ROOT, "--entwurf-control"];
+// `--no-extensions` keeps ambient discovery out, and since Pi 0.99 it also turns the BUILT-IN
+// extensions off: a citizen born here had no MCP, so its entwurf-bridge registration threw
+// `register_mcp_server` (`[측정 2026-10-02]` pi 0.99.2 and 1.0.0 alike). `-e builtin:mcp` restores
+// that one built-in — the MCP a resident has — and nothing else.
+const piArgs = ["--no-extensions", "-e", "builtin:mcp", "-e", REPO_ROOT, "--entwurf-control"];
 // NO --session-id. That injection is what the #50 C2 cut removed: pi mints its own
 // id and the record mints the address. A resume names the FILE, never an id.
 if (sessionFile) piArgs.push("--session", sessionFile);

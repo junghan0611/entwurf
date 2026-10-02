@@ -68,7 +68,9 @@ const CORTEX_OVERLAYS_ROOT = path.join(os.homedir(), ".pi", "agent", "cortex-ove
 const SOCKET_SUFFIX = ".sock";
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 // Load ONLY this checkout's extensions so the resident registers THIS acp-provider.ts.
-const REPO_EXTENSION_ARGS = ["--no-extensions", "-e", REPO_ROOT] as const;
+// `builtin:mcp`: `--no-extensions` also turns off Pi's built-in MCP, which a citizen's entwurf-bridge
+// registration needs (scripts/resident-rpc-drive.ts has the measurement).
+const REPO_EXTENSION_ARGS = ["--no-extensions", "-e", "builtin:mcp", "-e", REPO_ROOT] as const;
 
 const BOOT_TIMEOUT_MS = PI_BOOT_TIMEOUT_MS; // shared: pi lock-stale window + boot (see pi-record-discovery)
 // The cortex CLI self-extracts on first launch and its newSession alone is
