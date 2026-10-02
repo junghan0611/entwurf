@@ -1,6 +1,12 @@
 # Clean-host setup
 
-Operator recipe for a POSIX host. **Linux is the certified axis** — §2–§6 are
+Operator recipe for the **direct installation route** on a POSIX host. Start at
+[the product entry](../README.md#install); for the separate Herdr plugin route,
+use [Herdr Entwurf](https://github.com/junghan0611/entwurf/blob/main/plugins/herdr/README.md).
+Neither route installs a harness, subscription, credential, or login. Entwurf installs
+its own bytes; `setup` composes the operator-installed harnesses it finds.
+
+**Linux is the certified axis** — §2–§6 are
 written for it and their receipts are Linux receipts. What follows is the macOS
 evidence split, and its three states must not collapse into "macOS is supported":
 
@@ -77,6 +83,7 @@ working directory:
 ```bash
 npm install -g @junghanacs/entwurf
 entwurf --help
+entwurf setup /path/to/your-project
 entwurf check-bridge
 ```
 
@@ -86,8 +93,13 @@ A project-local installation is also supported:
 mkdir -p ~/entwurf-smoke && cd ~/entwurf-smoke
 npm init -y
 npm install --save-dev @junghanacs/entwurf
+npx entwurf setup .
 npx entwurf check-bridge
 ```
+
+Use `entwurf <command>` for a global install, `npx entwurf <command>` from the
+project-local install, or `./run.sh <command>` from a source checkout. Keep that
+same scope when upgrading and checking; native process restarts are separate (§7).
 
 `check-bridge` is auth-free. It proves the installed prebuilt MCP server boots and
 lists the eight garden tools; it does not prove a backend model turn or native hook.
@@ -118,6 +130,28 @@ MCP, and status-line atoms but never escalates or starts the app-server. It repo
 component outcomes, preserves exact env forwarding and idempotence, and returns a named
 `codex-birth FAIL` until the vendor trust receipt exists.
 §4, §4b, and §4c keep the explicit per-unit install/doctor/inverse surfaces.
+
+### Stable bins and external MCP hosts
+
+The package exposes six bins: `entwurf` (the operator command), `entwurf-bridge`
+(MCP stdio), `entwurf-statusline` (Claude Code), `entwurf-agy-statusline`,
+`entwurf-agy-imprint` (the agy birth hook), and `entwurf-copilot-statusline`.
+Stable bin names keep native settings independent of versioned package-store paths.
+
+A plain MCP registration exposes tools, but **does not make a garden citizen**:
+a trusted lifecycle/identity unit must also birth the record. A plain host has no
+authoritative sender and `entwurf_v2` is refused by default. `setup` composes those
+units for detected harnesses; the per-harness commands below are repair surfaces.
+For explicit manual registration, for example:
+
+```bash
+claude mcp add --scope user entwurf-bridge entwurf-bridge
+```
+
+A project-local MCP host can point at `node_modules/.bin/entwurf-bridge`.
+[External MCP hosts](./external-mcp-host.md) owns each host's config paths,
+PATH/env boundary (including GUI-launched servers), anonymous-sender hatch, and
+external-versus-garden-native semantics. There is no ambient MCP config scan.
 
 ### 1.1 User-scope ownership (one shared registration, one recorded owner)
 
@@ -173,10 +207,80 @@ For daily garden-native pi sessions:
 
 ```bash
 cd ~/entwurf-smoke
-pi -e "$(npm root -g)/@junghanacs/entwurf" --entwurf-control
+entwurf pi
+# equivalent when the package is already registered:
+pi --entwurf-control
 ```
 
+A project-local install uses `npx entwurf pi`. `entwurf pi` execs the operator's
+pi with the control flag; it does not install pi or inject model/Emacs preferences.
 The V3 record births the garden id; do not inject a pi session id manually.
+A plain `pi` can load the package without becoming a citizen.
+
+In that session ask for `entwurf_self`, then `entwurf_peers`. Pick an existing
+live garden id and ask for `entwurf_v2` with `intent: "fire-and-forget"` and your
+message. These are harness tools, not shell subcommands; pi exposes them through
+Pi's built-in MCP as `mcp__entwurf_bridge__<verb>`. The bridge has eight tools;
+pi hides `entwurf_inbox_read` and `entwurf_register_native`, leaving six active.
+Tool-call ingress is MCP; delivery to a pi citizen is still its record-addressed
+Unix control socket. A boot/listing from `check-bridge` is not a model-turn or
+native-rail acceptance.
+
+To inspect the ACP provider from a project-local package instead of a global one:
+
+```bash
+pi -e ./node_modules/@junghanacs/entwurf --list-models entwurf
+```
+
+The ACP provider, `entwurf-control`, and `model-lock` extensions ship as one set.
+Disable the package as a whole rather than filtering individual entries into a
+partially wired state. A pi-less external-only host can skip this section: no
+delivery rail launches pi, and OMP remains its own binary with its own agent dir.
+
+### Starting in Herdr by hand
+
+Herdr's ordinary pi start has no control flag. Forward it through Herdr's own argv
+passthrough when starting a citizen manually:
+
+```bash
+herdr agent start <name> --kind pi --pane <pane-id> -- --entwurf-control
+```
+
+An Entwurf-opened pi sibling already carries the flag. Native Claude Code needs
+no extra argv: its installed `SessionStart` hook births the record. Where the
+citizen is drawn is placement evidence, never its address. The
+[Herdr plugin guide](https://github.com/junghan0611/entwurf/blob/main/plugins/herdr/README.md#quick-start)
+owns plugin installation, activation, first-use status pane and removal; direct
+installation does not prevent context-selected fresh calls inside Herdr.
+
+Pi's own `/new`, `/fork`, `/clone` and RPC replacement retain their native meaning:
+`session_start` attaches the replacement to its own record and drops the old
+control socket. Pi's native session id is not a garden address.
+
+### Emacs frontends
+
+Terminal and Emacs frontends that launch
+[pi-coding-agent](https://github.com/dnouri/pi-coding-agent) use the same control
+flag. For a dedicated agent socket:
+
+```elisp
+(setq pi-coding-agent-extra-args
+      '("--entwurf-control" "--emacs-agent-socket" "pi"))
+```
+
+The bridge exports that name to ACP children as `PI_EMACS_AGENT_SOCKET`, so skills
+can use the operator's socket without hardcoding it:
+
+```bash
+emacsclient -s "${PI_EMACS_AGENT_SOCKET:-server}" --eval '(...)'
+```
+
+<details>
+<summary>Watch entwurf in Doom Emacs (click to expand)</summary>
+
+![entwurf in Doom Emacs](./assets/entwurf-doomemacs.gif)
+
+</details>
 
 ## 3. Optional Claude Code native citizen
 
@@ -245,6 +349,40 @@ scanning for that process, checks the receiver, removes inherited pi identity ca
 the model/permission defaults. Birth occurs on the first prompt. `entwurf_fresh_call` uses this
 same managed invocation and requires the birth, MCP, receiver, and visible-identity preflight.
 
+### Managed launch and permissions
+
+Copilot silently skips extension scanning without
+`COPILOT_CLI_ENABLED_FEATURE_FLAGS=EXTENSIONS`. Entwurf owns one invocation, not
+your shell profile:
+
+```bash
+entwurf copilot
+entwurf copilot -p "…" --model gpt-5.4
+copilot                         # the plain vendor CLI, untouched
+```
+
+The managed launch execs the vendor CLI in this terminal: same cwd/pid/exit status,
+no tmux window and no citizen before the first prompt. It checks the receiver
+before launch, refusing with `entwurf install-copilot-receive` if absent.
+**Running it is consent to this process's profile:**
+
+| Injected | When |
+|---|---|
+| `COPILOT_CLI_ENABLED_FEATURE_FLAGS=EXTENSIONS` | always; existing tokens preserved, in order, deduplicated |
+| `--model auto` | only when no `--model` was supplied |
+| `--yolo` | only when no explicit permission or surface policy flag was supplied |
+
+Any of `--yolo`, `--allow-all`, `--allow-all-tools`, `--allow-all-paths`,
+`--allow-all-urls`, `--allow-tool`, `--deny-tool`, `--allow-url`, `--deny-url`,
+`--available-tools` or `--excluded-tools` suppresses injected `--yolo`. Narrowing
+flags count so a default cannot silently widen your restriction.
+`--allow-all-mcp-server-instructions` (prompt content) and `--autopilot` (mode)
+are not policy flags. Arguments are forwarded byte-identically; defaults land
+before `--`, and arguments after it are not read as policy. Nothing is written to
+disk; plain `copilot` gets none of this profile. The unattended managed lane uses
+`--yolo` because an idle session cannot answer the default interactive approvals
+needed to drain `entwurf_inbox_read`.
+
 ## 4b. Optional OMP (`omp`) native citizen — accepted on one Linux host (thinkpad)
 
 This rail is CERTIFIED on Linux (one host, named in the version rule
@@ -252,7 +390,7 @@ below); on macOS it is NOT CERTIFIED — pending physical host. The Darwin
 install fences for `install-omp-bridge` and `install-omp-receive` are
 open (`Linux | Darwin`); a completed install is not a rail receipt.
 
-Three independently owned surfaces, and a boundary that is part of the instructions rather
+Four independently owned surfaces, and a boundary that is part of the instructions rather
 than a footnote. Birth, visible identity, who-sent, the MCP hand and RECEIVE are landed, and
 `entwurf_fresh_call` opens an omp sibling on all three public surfaces. The clause 7 LIVE
 receipt has been taken: `smoke-omp-fresh-live` went green on 2026-08-30 (omp 18.0.0, one
@@ -401,6 +539,26 @@ SHADOWS it; see [`external-mcp-host.md`](./external-mcp-host.md) for why that ke
 why `disabledServers` is never the way to hide an import.
 
 ## 4c. Optional OpenAI Codex CLI native citizen
+
+### Three operator decisions before fresh
+
+`setup` writes every byte Entwurf owns, but three decisions remain yours:
+
+1. Trust the birth hook once in a visible plain Codex: answer `Trust all and continue`
+   and send a first turn. `setup`/`doctor-codex-birth` remain non-green until the
+   vendor's receipt exists; Entwurf never authors your security decision.
+2. Start `entwurf codex-app-server` in your own detached tmux session. For LIVE
+   acceptance it must differ from the Pi/Codex work session. The command execs
+   the vendor's default Unix-socket server here; Ctrl-C is yours, with no Entwurf
+   supervision or restart.
+3. Answer folder consent once per exact sibling launch directory, for example
+   `codex -C <the directory you will launch siblings in>`, then quit. An ordinary
+   fresh call notes `codex-launch-cwd-undecided` and opens the window anyway so
+   you can answer it; the unattended smoke requires that answer beforehand.
+
+Your own `codex --remote` attachment is optional and independent: an Entwurf-opened
+sibling brings its own TUI. That operator attachment has no managed Entwurf spelling.
+The detailed neighbouring consent cases and ownership boundaries follow.
 
 Supported in 0.21.0 with Linux-focused evidence; on macOS it is NOT CERTIFIED —
 pending physical host. It is native, not ACP: the purpose is to preserve the operator's
@@ -589,10 +747,174 @@ LIVE=1 ENTWURF_ACP_CORTEX_CONNECTION=<conn> \
 The aggregate release gate is Claude-backed and does not run Cortex automatically.
 Its silence is not a Cortex PASS.
 
+### Backend prerequisites and resolver
+
+Claude is the reference ACP backend. `@agentclientprotocol/claude-agent-acp` and
+its SDK are pinned dependencies of Entwurf; authentication belongs to the local
+operator-installed Claude runtime. Resolution order:
+
+1. `CLAUDE_AGENT_ACP_COMMAND` — explicit alternative binary/wrapper override.
+2. `require.resolve(...)` against the bundled `@agentclientprotocol/claude-agent-acp`.
+3. `PATH:claude-agent-acp` fallback if package resolution fails.
+
+The curated Claude ids are `claude-opus-5`, `claude-sonnet-5`, and
+`claude-fable-5-1`. Cortex exposes `cortex-auto`, `cortex-claude-opus-5`,
+`cortex-claude-sonnet-5`, and `cortex-openai-gpt-5.4`.
+`entwurfProvider.cortexConnection` or `ENTWURF_ACP_CORTEX_CONNECTION` selects
+an authenticated connection; the env override wins. Codex and Antigravity are
+native-push citizens (§4c/§5), not ACP backends.
+
+### Settings reference and backend-specific keys
+
+The reference shape is [pi/settings.reference.json](../pi/settings.reference.json).
+A minimum declaration:
+
+```json
+{
+  "compaction": { "enabled": false },
+  "entwurfProvider": {
+    "appendSystemPrompt": false,
+    "settingSources": [],
+    "strictMcpConfig": true,
+    "showToolNotifications": true,
+    "tools": ["Read", "Bash", "Edit", "Write"],
+    "skillPlugins": [],
+    "permissionAllow": ["Read(*)", "Bash(*)", "Edit(*)", "Write(*)", "mcp__*"],
+    "mcpServers": {
+      "entwurf-bridge": {
+        "command": "/path/to/entwurf/mcp/entwurf-bridge/start.sh",
+        "args": []
+      }
+    }
+  }
+}
+```
+
+`mcpServers` is the only ACP MCP injection path; invalid entries throw
+`McpServerConfigError`. `install` writes the bundled bridge entry and prunes the
+retired bundled `session-bridge` entry. It is not a general MCP catalog.
+`appendSystemPrompt: false` is intentional: pi / AGENTS context rides the first
+user augment. Large Claude `_meta.systemPrompt` carriers can route OAuth sessions
+to metered “extra usage” billing.
+
+`entwurfProvider` is one block, not a promise that every key shapes both backends.
+`tools`, `permissionAllow`, `disallowedTools`, `settingSources`, `skillPlugins`
+and `appendSystemPrompt` are Claude's declaration surface, not Cortex's native
+tool surface. They still enter the config signature (and `tools` the common
+exclude-tools preflight), so editing them forces a fresh Cortex session.
+`cortexConnection` is Cortex-only; `mcpServers` reaches both through their own
+transports. `compaction` is a **top-level pi key**, not a backend knob. Unknown
+and retired keys are ignored; a wrong-backend key can fail silently, so check
+which backend consumes it before diagnosing bridge failure.
+
+### Backend operation and containment
+
+Claude honors operator `CLAUDE_CONFIG_DIR`. The ACP overlay whitelists required
+auth/runtime state while hiding operator memory, hooks, agents, history, local
+settings and project memory. It writes explicit empty `hooks: {}` for the SDK's
+organic compaction shape and `permissions.defaultMode: "bypassPermissions"`
+so unattended turns do not suspend on permission prompts. Explicit `tools` /
+`disallowedTools` still constrain callable tools. The four-tool baseline is
+Read/Bash/Edit/Write; `Skill` is added for non-empty `skillPlugins`.
+`ENTWURF_ACP_CLAUDE_CONTEXT=<int>` overrides the operator context cap.
+The launch env sets `CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1`: vendor-managed
+background work is off, not arbitrary processes a command detaches itself.
+
+Cortex uses its native tools, session-private HOME / `SNOWFLAKE_HOME`, and private
+`cortex/mcp.json` projection because it ignores wire `mcpServers`. Only the bridge
+receives the real operator HOME needed for the garden store; `CORTEX_HOME` is
+refused, including an empty value, because it bypasses containment.
+[ACP backend rail — Shipped adapters](./acp-backend-rail.md#shipped-adapters)
+owns the exact overlay/carrier/backend mechanics and audit limits.
+
+Entwurf owns no memory layer or memory DB, and no backend is another's memory
+authority. Operator semantic-memory / Denote tools remain host-native skills,
+not a bridge or pi privilege.
+
+### Custom skills
+
+Claude ACP accepts `skillPlugins`: absolute directories following the Claude
+Agent SDK plugin layout, outside pi's internal `~/.pi/agent/` cache:
+
+```text
+<your-plugin-root>/
+├── .claude-plugin/
+│   └── plugin.json
+└── skills/
+    └── <skill-name>/
+        └── SKILL.md
+```
+
+Example: [pi/skill-plugin-example](../pi/skill-plugin-example/).
+
+```json
+{
+  "entwurfProvider": {
+    "skillPlugins": ["/absolute/path/to/your-plugin-root"]
+  }
+}
+```
+
+Non-empty `skillPlugins` auto-adds `Skill` to `tools` and `Skill(*)` to
+`permissionAllow`. Settings parsing refuses a missing, relative, non-directory
+path or missing `.claude-plugin/plugin.json` before starting the session; the
+SDK, not the bridge, validates plugin.json contents and SKILL.md bodies.
+Start a fresh Claude session and ask it to list callable skills. The operator
+judgement is `Q-SKILL-CALLABLE` in [VERIFY](../VERIFY.md).
+This is Claude-only; Codex uses native `~/.codex/skills/` passthrough.
+[agent-config](https://github.com/junghan0611/agent-config) is a real multi-harness
+consumer, not a requirement for this setup.
+
+### Context carriers
+
+An optional short engraving and rich pi context are separate. Runtime default:
+`pi-extensions/lib/acp/prompts/engraving.md` (`# Engraving Here`, pinned non-empty
+by a gate). [prompts/engraving.md](../prompts/engraving.md) is a sample:
+copy it and set `ENTWURF_ACP_ENGRAVING_PATH=/path/to/alt.md`.
+Template variables are `{{backend}}` and `{{mcp_servers}}`; empty/missing operator
+text is fine. Do not put AGENTS, tool catalogs or bridge narrative in the carrier:
+large Claude system carriers can change billing semantics.
+
+The loader trims leading/trailing whitespace and then opens the rendered carrier
+with one blank line. Claude's SDK prefixes its identity sentence with no separator;
+the boundary prevents the engraving from becoming its tail. The measured
+2026-07-31 unseparated string was
+`You are a Claude agent, built on Anthropic's Claude Agent SDK.# Engraving Here`.
+Template whitespace cannot supply the boundary because it is trimmed away.
+
+Bridge identity, pi context, `~/AGENTS.md`, cwd AGENTS and date/cwd ride a one-shot
+first-user prepend (`pi-context-augment.ts`), not the system carrier. It removes
+duplicate cwd AGENTS already in `<project-context ...>`. Its descriptions do not
+grant tools: the actual callable schema is truth (`read` / `Read` / `exec_command`,
+MCP only when schema-visible). Cortex engraving rides this augment because it
+has no system-prompt carrier; Claude uses `_meta.systemPrompt`.
+
+### Session reuse and compaction
+
+Current process-scoped turns reuse a live ACP session; persisted records are
+written/validated for a future resume/load path, not consumed as today's live
+continuation mechanism. The `pi:<sessionId>` mapping lives under
+`~/.pi/agent/cache/entwurf/sessions/`; it never hydrates backend transcripts into
+pi history. Backend stores such as `~/.claude/` and `~/.codex/` are interoperability
+side effects, never Entwurf identity authority.
+[VERIFY — bridge continuity vs semantic continuity](../VERIFY.md#bridge-continuity-vs-semantic-continuity)
+owns the reuse policy and distinguishes live mapping from semantic recall.
+
+**Entwurf does not implement compaction.** A backend's native compaction preserves
+the pi session/mapping; configure its policy through that backend's own interface,
+not a pi-side JSONL summary. The bridge exposes no backend-specific compaction
+knobs. The ACP footer uses `usage_update.used / size` (backend prompt/tools/cache/
+session included) with `[entwurf:usage]` diagnostics. Near limit choose a visible
+action: clear, open a new session with a different model, or let the backend
+compact natively.
+
 ## 7. Upgrade and repair
 
-After upgrading the package, rerun the managed installers for every native harness
-in use and restart their existing processes. Native plugin caches are not live-reload
+After an npm upgrade, rerun `entwurf setup <project>` in the same installation
+scope (`npx entwurf setup .` for project-local), then `check-bridge` in that scope.
+Use `@junghanacs/entwurf@latest` when explicitly choosing the registry stable line.
+Setup re-composes every detected harness; use a single `install-*` only to repair
+one unit, and restart existing native processes. Native plugin caches are not live-reload
 safe across launch-contract changes.
 
 On Darwin the four previously closed install fences
@@ -624,6 +946,20 @@ that mode first, never runs npm/pnpm inside `node_modules` (the frozen pnpm boot
 source-checkout-only), and composes the detected harnesses with the same per-component
 PASS/SKIP/FAIL summary. The complete quiescence, archive, and exit-code contract is
 [fresh-cut-policy.md](./fresh-cut-policy.md).
+
+### Source checkout and pi-only repair
+
+`entwurf install <project>` is the narrower pi wiring leaf: it writes the target
+`.pi/settings.json` with the installed bridge's absolute launcher path and composes
+no native harness. The retired `~/.pi/agent/` target-registry link is not read.
+User-scope ownership/refusal/takeover remains §1.1, not an automatic repair.
+
+The development bridge uses Node strip-types directly; the npm artifact runs
+prebuilt `mcp/entwurf-bridge/dist/` JS because Node refuses to strip TypeScript
+under `node_modules`. Source `./run.sh check-bridge` needs no build. After a pull,
+run `pnpm install` when the lockfile changed and `pnpm run build-bridge` before
+artifact-consuming checks such as `./run.sh check-bridge-delivery`; ignored dist
+may be missing or stale. Installed mode never bootstraps pnpm in `node_modules`.
 
 ## 8. Release acceptance versus host acceptance
 

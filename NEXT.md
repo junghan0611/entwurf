@@ -8,22 +8,25 @@
 
 - [x] **1. Pi 1.0 · ACP 기본기 브랜치** — `research/125-pi-admission` = `d2e7f05` (tree `0e4a2595`): Pi 0.99 → 0.99.2 → 1.0.0 수용(`>=1.0.0 <1.1`), Pi citizen 동사가 Pi built-in MCP로, Claude ACP foreground-only. 실제 설치 post-F LIVE 3(lifecycle·bundled-MCP·reuse)과 exact-SHA CI 36969666301(required 4 + qualification body). 정본은 #125 thread의 브랜치 완료 코멘트(5946960829). branch proof이지 release `--cut` 수용이 아니다.
 - [x] **2. 문서 amendment** — GLM→Grok read-only 검수 F1–F5 수선(현행 8-verb 개수, callback 표, ACP 지원표 주어, VERIFY 배너, Herdr lock carrier 문장). 브랜치 NEXT의 durable 사실은 CHANGELOG Unreleased·ROADMAP 0.30.0 절로 승격하고 브랜치 NEXT를 지웠다(이 커밋).
-- [ ] **3. main merge** ← CURRENT: GLG 승인("main 병합 릴리즈 컷 가자"). 브랜치 tip을 그대로 main으로.
-- [ ] **4. 0.30.0 prepare → make → publish** — `entwurf-release` 모드마다 GLG grant(`.claude/skills/entwurf-release/SKILL.md` PREPARE/MAKE/PUBLISH). prepare = version·CHANGELOG 승격 + `check:full`(P4) + 새 scratch의 release-gate `--cut`(P5, qualification body 포함) + prep commit, push·tag 없음. make = prepared HEAD push + exact-SHA CI + 보존된 candidate 하나의 수용(M3) + tag·GitHub Release, npm 없음. publish = make가 수용한 그 candidate의 npm·dist-tag·registry 설치 증명(U1–U3)만.
-- [ ] **5. Herdr 0.9.3 지원** ← NEXT LANE: 0.30.0 컷 뒤 별도 레인. 이 컷은 Herdr floor 0.9.0 / CI pin 0.9.1을 범프하지 않는다.
+- [x] **3. main land** — `main = origin/main = 6955d77`, tree `a457b829` (2026-10-02 17:24 KST 담당자 git 측정, clean). 이전 브랜치 증거는 그때의 증거로 보존한다.
+- [ ] **4. 컷 전 README B → 0.30.0 prepare/make** ← CURRENT: GLG가 Sol medium을 문서 구현·컷 담당으로 지정(2026-10-02), coordinator가 독립 검수·경계 조율. setup destination-first → README 제품 입구 + scoped VERIFY parity 수선 → 검수/amendment → 문서 atomic commit. 그 뒤 prepare(P4 full/P5 fresh `--cut` + qualification body/P9/prep commit), make(M0 full/ordinary main push/exact prepared-SHA CI/보존 candidate 수용/tag·GitHub Release). 각 floor를 과거 branch green으로 대체하지 않는다.
+- [ ] **5. npm publish / Herdr 0.9.3** — publish는 별도 GLG grant 전 금지; make가 수용한 candidate만 대상. Herdr 0.9.3은 컷 뒤 별도 레인, floor 0.9.0 / CI pin 0.9.1은 이 컷에서 그대로.
 
-현재 좌표: 1·2 완료 → 3 진행 → 4 대기 → 5 후속. 문서 다이어트(아래 보류 RAIL)는 컷 뒤 재개한다.
+현재 좌표: 1·2·3 완료 → 4 문서 draft·독립 검수 → prepare/make → 5 별도 승인/후속.
 
-# NOW — main merge, 그다음 0.30.0 prepare
+# NOW — README B 검수, 그다음 0.30.0 prepare/make
 
-- **Stem:** 브랜치 증거(#125)를 release 증거로 바꿔 쓰지 않고 0.30.0을 자른다.
-- **Next:** main merge(GLG 승인, 코디네이터 라우팅으로 실행) → `entwurf-release` prepare(GLG mode 확인 뒤): version 0.30.0, CHANGELOG Unreleased를 0.30.0 섹션으로, runtime-lock carrier 결정과 주석.
-- **Verify:** 0.30.0 수용은 prepare의 `check:full`과 release-gate `--cut`(qualification body 포함), make의 exact-SHA CI와 candidate 수용이 만든다. 브랜치 CI·LIVE receipt(#125)를 그 수용으로 옮겨 적지 않는다.
-- **Blocker:** 기술 blocker 없음. 권한 대기: prepare·make는 GLG의 mode 확인 대기, npm publish는 그와 별도인 grant.
-- **Read:** #125 thread(브랜치 완료 코멘트), `.claude/skills/entwurf-release/SKILL.md`, ROADMAP "0.30.0 candidate" 절.
-- **Do not touch:** dated 영수증·ledger, Herdr floor/pin(0.9.3은 다음 레인), #124 P3 정책(HOLD).
+- **Stem:** 설치→setup→시민 첫 사용이 보이는 제품 입구를 만들고, Pi 1.0·ACP 기본기를 0.30.0으로 자른다. GLG 최신 원문: "줄여서 가자. 작업을 직접 sol medium 한테 맡겨. 맡기고 0.30.0 릴리즈 컷도 맡기자. pi 1.0.0에서 해내는게 좋겠다."
+- **Next:** 문서 draft/coverage/앵커·literal checkpoint를 coordinator에 → amendment 한 번들 → normal docs commit(release-prep와 분리). 비싼 P4/P5 전에 effective Pi1.0/source, candidate carrier, operator-supplied Codex triple, MUST prerequisites/예산/quiet-window/새 `/tmp` scratch 계획을 보고한다. source switch나 unpublished npm integrity를 만들지 않는다.
+- **Verify:** 문서 링크·gate literal·scoped parity 설명을 affected cheap checks로 확인. release는 P4/P5/M0/M2 및 exact candidate의 독립 영수증이 필요. HEAD/index/tree는 aggregate 중 동결; P5 종료 즉시 P9, prepare 종료 때 P9 다시.
+- **Blocker:** 문서 독립 검수 전 commit 대기. release prerequisites/quiet-window는 비싼 실행 전 확인할 입력이며, absent operator Codex triple은 이름을 불러 요청(ambient PID 추론 없음). npm publish grant 없음.
+- **Read:** `.claude/skills/entwurf-release/SKILL.md` 전문, #125 thread(5946960829·5946114905), ROADMAP "0.30.0 candidate"; 외부 IA·구현 handoff는 `~/tmp/e125-cutover/reports/`.
+- **Do not touch:** Herdr README 본문/floor/pin, runtime/gates/mutants, dated receipts·ledger, #124 P3 정책(HOLD), Durable/codemode 채택 주장, 새 peer/로그인 probe/npm publish.
 
-## Paused RAIL — 문서 표면 다이어트 (0.30.0 컷 동안 보류, 2026-10-02)
+## Archived RAIL — 문서 표면 다이어트 (이전 보류 snapshot, 2026-10-02)
+
+아래는 컷 뒤 재개하려던 당시 좌표다. 이후 GLG가 컷 전 B 구현을 승인했고,
+현재 실행 좌표는 위 RAIL/NOW가 소유한다. 아래 dated 출하 사실은 고치지 않는다.
 
 - [x] **1. Entwurf 0.23.1 + Herdr integration 0.3.1** — published and documented; the public project page now leads with the Herdr route without shrinking Entwurf to that one integration.
 - [x] **2. First public boundary question captured** — the Agentwire exchange exposed a recurring distinction: Entwurf bridges independent visible siblings; it neither becomes an agent factory nor owns project/session state.
@@ -33,7 +36,7 @@
 
 당시 좌표: 1·2·5 완료 → 3 진행 → 4 보류 (2026-10-02부터 레인 전체 보류)
 
-## Paused NOW — FAQ와 문서 다이어트
+## Archived NOW — FAQ와 문서 다이어트 (이전 보류 snapshot)
 
 - **Stem:** 외부 질문에 짧고 정확하게 답하면서, 긴 README를 제품 계약·설치 경로·상세 증거 문서로 무리 없이 나눈다.
 - **Next:** `FAQ.md`의 첫 세트(공방/공장, garden id, session·project state, internal subagents, delivery·visible sibling)를 검토하고 README에서 FAQ 링크가 닿는지 확인한다.
