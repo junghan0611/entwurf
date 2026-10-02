@@ -10,7 +10,10 @@ All notable changes to this project will be documented here. Format follows [Kee
   peer range to the next-minor ceiling `>=1.0.0 <1.1`. The range checks are major-aware; pack
   literals, the four affected mutants, the live docs and ROADMAP's two gate-read lines follow. No
   ACP, vendor or Herdr companion bump rides it. The 0.99.1 and 0.99.2 floors this cycle passed
-  through were branch steps and never shipped.
+  through were branch steps and never shipped. Pi now carries MCP in its core
+  ([You Said No MCP!](https://earendil.com/posts/you-said-no-mcp/), 2026-09-29) and this admission
+  builds on it rather than duplicating native tools; `pi-durable` and Pi's codemode are not adopted
+  here, and what they mean for Entwurf is undecided.
 - **A pi citizen's Entwurf verbs ride Pi's built-in MCP (#125).** A born pi citizen registers the
   compiled `entwurf-bridge` with `pi.registerMcpServer` under its record gardenId, so a pi model
   reaches the same server every other host does. The five hand-written native tools are gone;
