@@ -4,6 +4,8 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+## 0.30.0 - 2026-10-02
+
 ### Changed
 
 - **Pi 1.0 admission — the pi fence is `>=1.0.0 <1.1` (#125).** Dev pins move to Pi 1.0.0 and the
@@ -14,6 +16,18 @@ All notable changes to this project will be documented here. Format follows [Kee
   ([You Said No MCP!](https://earendil.com/posts/you-said-no-mcp/), 2026-09-29) and this admission
   builds on it rather than duplicating native tools; `pi-durable` and Pi's codemode are not adopted
   here, and what they mean for Entwurf is undecided.
+- **Codex first-admission verification follows the current Pi MCP dialect.** Joined native
+  call/result names must still agree before exact Pi-qualified names become semantic receipts;
+  downstream source audits and receipt-owned cleanup use the same boundary. The LIVE driver now
+  separates launch from callback-validated relay, and clarifies callback-first startup without
+  relaxing message bytes, role counts, omitted cwd/seat, or claiming guaranteed model obedience.
+  The final standalone Codex chain passed 65 assertions, including both exact source-role audits.
+- **This cut has an explicit local acceptance exception (GLG, 2026-10-02).** The original P5
+  remains MUST 23 PASS / 1 FAIL / 0 SKIP, BEHAVIOR PASS; subsequent scoped Codex acceptance is a
+  separate run on amended bytes, not a synthetic 24/24 single-run result. GLG chose not to repeat
+  local full/qualification BODY/P5/M0 after the repairs. Exact prepared-SHA CI (including fresh
+  full and qualification BODY) and preserved-candidate Docker acceptance remain required. The
+  grouped development proofs do not activate #124 P3 composite release policy.
 - **A pi citizen's Entwurf verbs ride Pi's built-in MCP (#125).** A born pi citizen registers the
   compiled `entwurf-bridge` with `pi.registerMcpServer` under its record gardenId, so a pi model
   reaches the same server every other host does. The five hand-written native tools are gone;
@@ -28,6 +42,13 @@ All notable changes to this project will be documented here. Format follows [Kee
   runner builds the output from the snapshot's own bytes, rebuilds it after every mutation and
   before the post-control (baseline digest required), never counts a build red as a kill, voids a
   run whose gate writes into the output, and removes it when the group ends (`[QK:QUALIFY-BUILD-*]`).
+
+- **README is the product entry; clean-host setup owns the operating detail.** Installation,
+  prerequisites, citizen first use, terms and short history stay in README. Detailed settings,
+  harness configuration, context, skills and upgrades move to `docs/setup-clean-host.md` with
+  retained entry anchors and links. Herdr keeps its separate installation document. VERIFY
+  distinguishes Pi's built-in MCP tool ingress from record-addressed Unix-socket receive and
+  the ACP explicit tool projection; this is contract prose, not a new acceptance receipt.
 
 ### Fixed
 

@@ -9,19 +9,20 @@
 - [x] **1. Pi 1.0 · ACP 기본기 브랜치** — `research/125-pi-admission` = `d2e7f05` (tree `0e4a2595`): Pi 0.99 → 0.99.2 → 1.0.0 수용(`>=1.0.0 <1.1`), Pi citizen 동사가 Pi built-in MCP로, Claude ACP foreground-only. 실제 설치 post-F LIVE 3(lifecycle·bundled-MCP·reuse)과 exact-SHA CI 36969666301(required 4 + qualification body). 정본은 #125 thread의 브랜치 완료 코멘트(5946960829). branch proof이지 release `--cut` 수용이 아니다.
 - [x] **2. 문서 amendment** — GLM→Grok read-only 검수 F1–F5 수선(현행 8-verb 개수, callback 표, ACP 지원표 주어, VERIFY 배너, Herdr lock carrier 문장). 브랜치 NEXT의 durable 사실은 CHANGELOG Unreleased·ROADMAP 0.30.0 절로 승격하고 브랜치 NEXT를 지웠다(이 커밋).
 - [x] **3. main land** — `main = origin/main = 6955d77`, tree `a457b829` (2026-10-02 17:24 KST 담당자 git 측정, clean). 이전 브랜치 증거는 그때의 증거로 보존한다.
-- [ ] **4. 컷 전 README B → 0.30.0 prepare/make** ← CURRENT: GLG가 Sol medium을 문서 구현·컷 담당으로 지정(2026-10-02), coordinator가 독립 검수·경계 조율. setup destination-first → README 제품 입구 + scoped VERIFY parity 수선 → 검수/amendment → 문서 atomic commit. 그 뒤 prepare(P4 full/P5 fresh `--cut` + qualification body/P9/prep commit), make(M0 full/ordinary main push/exact prepared-SHA CI/보존 candidate 수용/tag·GitHub Release). 각 floor를 과거 branch green으로 대체하지 않는다.
+- [ ] **4. 컷 전 README B → 0.30.0 prepare/make** ← CURRENT: GLG가 Sol medium을 문서 구현·컷 담당으로 지정(2026-10-02), coordinator가 독립 검수·경계 조율. 문서 B·scoped VERIFY 수선은 `8127d09`(tree `31e51d9e`, normal hooks RC0)로 완료했다. 현재 scoped Codex 수선·최종 단독 LIVE 65 PASS 및 P9 완료 → final metadata 검수 → implementation/prep 분리 커밋. GLG의 이번 컷 한정 결정으로 local full/BODY/P5/M0 재실행은 생략한다. 그 뒤 ordinary main push/exact prepared-SHA CI(full·BODY 포함)/보존 candidate Docker 수용/tag·GitHub Release. 원 P5 BLOCKED와 후속 다른 bytes의 PASS는 합성하지 않는다.
 - [ ] **5. npm publish / Herdr 0.9.3** — publish는 별도 GLG grant 전 금지; make가 수용한 candidate만 대상. Herdr 0.9.3은 컷 뒤 별도 레인, floor 0.9.0 / CI pin 0.9.1은 이 컷에서 그대로.
 
-현재 좌표: 1·2·3 완료 → 4 문서 draft·독립 검수 → prepare/make → 5 별도 승인/후속.
+현재 좌표: 1·2·3 및 문서 B 완료 → 4 최종 metadata 검수·분리 커밋 → 새 prepared-SHA CI·candidate 수용·make → 5 별도 승인/후속.
 
-# NOW — README B 검수, 그다음 0.30.0 prepare/make
+# NOW — 최종 metadata 검수 → 분리 커밋 → prepared-SHA CI·make
 
 - **Stem:** 설치→setup→시민 첫 사용이 보이는 제품 입구를 만들고, Pi 1.0·ACP 기본기를 0.30.0으로 자른다. GLG 최신 원문: "줄여서 가자. 작업을 직접 sol medium 한테 맡겨. 맡기고 0.30.0 릴리즈 컷도 맡기자. pi 1.0.0에서 해내는게 좋겠다."
-- **Next:** 문서 draft/coverage/앵커·literal checkpoint를 coordinator에 → amendment 한 번들 → normal docs commit(release-prep와 분리). 비싼 P4/P5 전에 effective Pi1.0/source, candidate carrier, operator-supplied Codex triple, MUST prerequisites/예산/quiet-window/새 `/tmp` scratch 계획을 보고한다. source switch나 unpublished npm integrity를 만들지 않는다.
-- **Verify:** 문서 링크·gate literal·scoped parity 설명을 affected cheap checks로 확인. release는 P4/P5/M0/M2 및 exact candidate의 독립 영수증이 필요. HEAD/index/tree는 aggregate 중 동결; P5 종료 즉시 P9, prepare 종료 때 P9 다시.
-- **Blocker:** 문서 독립 검수 전 commit 대기. release prerequisites/quiet-window는 비싼 실행 전 확인할 입력이며, absent operator Codex triple은 이름을 불러 요청(ambient PID 추론 없음). npm publish grant 없음.
+- **Next:** final amendment 검수 후 7 repair paths implementation commit / 4 metadata paths prep commit을 정상 hooks로 분리한다. prepared clean SHA를 main에 push·도장 → 해당 SHA required4 CI+BODY(실제 skip이면 exact-SHA dispatch) → CI green 뒤 one preserved tgz Docker → immutable tag/GH Release. lock delta0, carrier source `herdr-checkout` 유지. 새 로컬 전체 검증은 실행하지 않는다.
+- **Evidence:** P4 옛 metadata bytes RC0/663s. 원 P5 qualification836/836 및 다른 MUST23 PASS, 마지막 Codex FAIL; 뒤 RGG BEHAVIOR도 PASS여서 미실행 LIVE tail0. exact Pi MCP receipt/cleanup 수선 뒤 역할 실행 실패를 driver launch→relay 및 callback-first clarification으로 좁혔고 최종 leaf65 PASS. 잘못된 run.sh group entry가 argv를 전달하지 않아 약60분 full을 실행하다 중단한 비용도 보존한다; 올바른 direct group은141/141 PASS·696 UNRUN(당시 bytes), final release 정책 전환은 없다. host-local 원문 증거는 외부 `~/tmp/e125-cutover/reports/`에 보존한다.
+- **Verify:** 마지막 Codex leaf 65 assertions PASS, initial Pi/Codex 각각 3/3 exact completed; audit/filter/expected count 불변. 현재 bytes의 로컬 full/BODY/P5 결합 부족은 이번 컷의 알려진 증거 차이다. 원 P5(23/1/0, BEHAVIOR PASS)는 BLOCKED로 보존. 옛836/141 PARTIAL/단일·3mutant를 현 후보에 자동 CARRIED로 합산하지 않는다. prepared-SHA required4 CI·fresh full/BODY와 exact tgz Docker는 아직 UNRUN이며 필수다.
+- **Boundary:** GLG 승인 아래 띄운 known app-server3214100 유지, native `gpt-5.6-luna` / callback Pi `openai-codex/gpt-6-luna`, OMP 현행 config 유지. native6-luna는 installed Codex0.153.4의 HTTP400으로 거절됐고 catalog에는5.6-luna가 있었다. Codex 업데이트로 지원이 달라질지는 후속 미검증 lead이며 이번 컷에서 업데이트·restart하지 않는다. 최종 SHA CI/Docker 미측정이 남아 있으며 npm publish grant는 없다.
 - **Read:** `.claude/skills/entwurf-release/SKILL.md` 전문, #125 thread(5946960829·5946114905), ROADMAP "0.30.0 candidate"; 외부 IA·구현 handoff는 `~/tmp/e125-cutover/reports/`.
-- **Do not touch:** Herdr README 본문/floor/pin, runtime/gates/mutants, dated receipts·ledger, #124 P3 정책(HOLD), Durable/codemode 채택 주장, 새 peer/로그인 probe/npm publish.
+- **Do not touch:** Herdr README 본문/floor/pin, dated receipts·ledger, #124 P3 정책(HOLD), Durable/codemode 채택 주장, 새 peer/로그인 probe/npm publish. local full/BODY/P5/M0 재실행 금지; exact-SHA CI·Docker 외 새 gate/모델 반복/공통 launcher 변경 없음.
 
 ## Archived RAIL — 문서 표면 다이어트 (이전 보류 snapshot, 2026-10-02)
 
