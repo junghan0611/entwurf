@@ -125,12 +125,16 @@ What "supported" means here, per declaration class. The classes are kept apart o
 undifferentiated "supported" column is what let a Claude PASS read as if it also certified Cortex.
 The rows are THIS checkout's declarations, not a shipped release: what a published version carried
 is that version's CHANGELOG entry, and a candidate's own evidence is its issue thread, LIVE receipts
-and exact-SHA CI (#125 for the Pi 1.0 candidate, #127 for the Claude ACP candidate).
+and exact-SHA CI. The pi row shipped in 0.30.0 (#125). The ACP wire SDK, Claude adapter and Claude
+Agent SDK rows are the unpublished #127 candidate: published 0.30.0 still declares
+`claude-agent-acp 0.79.0` and `@agentclientprotocol/sdk 1.4.0`
+(`[측정 2026-10-04]` `npm view @junghanacs/entwurf@0.30.0`; per-bump record in the ROADMAP Dep bump
+ledger, 2026-10-03).
 
 | Surface | Declaration | Class | What a green actually says |
 |---|---|---|---|
 | Entwurf package | `package.json` `version` | checkout declaration, not a release receipt | names the package label these rows sit beside; whether that label shipped, and with which rows, is CHANGELOG's record |
-| pi runtime | devDep exact `1.0.0`, peer `>=1.0.0 <1.1` | **exact** oracle + **closed range** | the source pin this checkout builds and gates against; hosts inside the range are accepted, and the ceiling moves only on measurement. Its 1.0.0 evidence is #125's branch receipts, not a shipped release |
+| pi runtime | devDep exact `1.0.0`, peer `>=1.0.0 <1.1` | **exact** oracle + **closed range** | the source pin this checkout builds and gates against; hosts inside the range are accepted, and the ceiling moves only on measurement. Shipped in 0.30.0 (`[측정 2026-10-04]` npm `latest` `0.30.0` declares this same peer range); its acceptance record is CHANGELOG 0.30.0, with #125 as the branch evidence |
 | ACP wire SDK | `@agentclientprotocol/sdk 1.6.0` | **exact** | the shared wire oracle both adapters speak |
 | Claude ACP adapter | `@agentclientprotocol/claude-agent-acp 0.85.1` | **exact**, bundled | checkout candidate; resolved before any PATH fallback; declaration is not compatibility evidence |
 | Claude Agent SDK | `0.3.286` (transitive) | **exact** oracle | the runtime risk surface behind the adapter |
@@ -215,7 +219,7 @@ different reasons, and collapsing them would hide a real risk**:
   imported nowhere: `[측정 2026-09-18]` `git grep -c` over `pi-extensions/`, `test/`, `scripts/`,
   `mcp/` is **0**. We never imported the adapter as a library at all — we spawn its binary.
 - **0.77.0's `allowDangerouslySkipPermissions` opt-out is a new lever we deliberately do not
-  pull, and our effective permission mode is unchanged.** 0.76.0 sent
+  pull, and at 0.79.0 our effective permission mode was unchanged.** 0.76.0 sent
   `allowDangerouslySkipPermissions: ALLOW_BYPASS` unconditionally and computed
   `initialPermissionMode = creationOpts.permissionMode ?? resolvePermissionMode(settings…)`.
   0.79.0 computes `allowBypass = ALLOW_BYPASS && sessionMeta?.claudeCode?.options?.allowDangerouslySkipPermissions !== false`
@@ -226,7 +230,9 @@ different reasons, and collapsing them would hide a real risk**:
   versions (`dist/permissions/modes.js` 직독). Our overlay pins
   `permissions.defaultMode: "bypassPermissions"` (`overlay.ts:122`), which resolves the same
   under both. The lever now EXISTS for a host that wants a non-bypass sibling; declaring it is a
-  separate axis, not a one-line flip, and nothing in this bump takes it.
+  separate axis, not a one-line flip, and nothing in this bump takes it. That is the 0.79.0
+  measurement; at 0.85.1 project or managed settings can drop bypass (the 0.79.0 → 0.85.1 entry
+  below).
 - **0.77.0's system-reminder strip never touches our first-user-message augment.**
   `INJECTED_CONTEXT_MARKERS = ["system-reminder"]` joins the local-command markers in
   `stripMarkerTags`, and `stripLocalCommandMetadata` has exactly two call sites
@@ -281,6 +287,51 @@ different reasons, and collapsing them would hide a real risk**:
   is byte-identical (`md5 cfd031d0…` both versions). The `settings`-as-STRING-PATH branch our
   call-site contract names is still on the unconditional `session/new` path
   (`dist/acp-agent.js:6010-6012`).
+- **0.79.0 → 0.85.1 (#127) is a source classification, not a runtime certification.**
+  `[측정 2026-10-03, tag v0.85.1 = 686c0c99, src and dist read directly; nothing executed]`.
+  Coordinates and evidence classes are in the ROADMAP Dep bump entry for 2026-10-03. The typed
+  rejection above is the only failure-policy change Entwurf wrote for this bump. The reachable
+  upstream changes below are classified, not new Entwurf contracts:
+  - **Permission mode is conditional (#1165, reachable on a host/project basis).** The adapter
+    builds its own `SettingsManager(params.cwd, …)` over `claudeConfigDir/settings.json`, the
+    cwd's `.claude/settings.json` and `settings.local.json`, and the managed path, then calls
+    `resolveSettings({ cwd })` without a `settingSources` argument. That call flow is separate
+    from our SDK query's `settingSources: []` (`tool-surface.ts:152`). When those settings carry
+    `disableBypassPermissionsMode: "disable"`, `allowBypass` drops, more permission requests reach
+    our approve-all-by-kind handler, and `[permission:approved]` notices appear. The SDK's
+    default `resolveSettings` source set is UNREAD, and no gate covers this case.
+  - **Reachable, classified from source only.**
+    - `createSession` starts a background `getContextUsage()` refresh (call at tag `85:8317`), and
+      does so again after a model change. Upstream comments (`85:8301`, `85:8350-8352`) describe
+      SDK control requests as serialized. The SDK internals are UNREAD, so whether our bounded
+      set-model and early-abort grace queue behind it is a lead, and its timing is UNRUN.
+    - A turn made only of `<synthetic>` frames emits no `usage_update` (#1132), and our
+      keep-prior occupancy seals the prior value.
+    - `tool_call_update` omits unchanged fields for every client (#1153). No producer was found
+      that sends a pre-terminal `rawOutput.isError`, so a tool failure still arrives as
+      `status: "failed"`.
+    - #1216's `teardownSession` stops awaiting the interrupt reply. It is reached only
+      indirectly, through dispose on stdin EOF or a signal: we never send `session/close`, and
+      our `session/cancel` still awaits.
+    - A sign-out during an unsettled turn fails it with `RequestError.authRequired()` and no
+      extra message (#1179, tag `85:4420`). The stock text is the SDK default
+      `Authentication required` (sdk 1.6.0 `jsonrpc.js:1032-1033`), and that message ALONE is not
+      transient to pi's real classifier. The sealed legacy `errorMessage` also carries the
+      stderr tail, lifecycle and hint (`backend.ts:1463-1490`), and a tail can still match the
+      retry pattern. `[측정 2026-10-04, coordinator classifier probe]`: `"Authentication required"`
+      → `retryable: false`; the same text plus `\n--- backend stderr (tail) ---\n500` →
+      `retryable: true`. #127 does not sanitize this path and certifies no auth runtime.
+    - The nine other vendor `internalError` sites keep the same legacy path. Their
+      `Internal error:` prefix can match the classifier, and that pre-existing policy is
+      unchanged here. This is a source and classifier reading, not a frequency claim and not a
+      complete-callee identity claim.
+  - **Capability-gated:** `notice`, the one new `sessionUpdate` literal (17 → 18 kinds).
+  - **Ambient only:** `CLAUDE_AGENT_ACP_EXPERIMENTAL_V2=1` selects a v1/v2 router. Entwurf
+    neither sets nor scrubs it, and the router's v1 path for a v1 client is UNRUN.
+  - **Entry identity is not settlement identity.** `newSession`, `prompt`,
+    `setSessionConfigOption`, `requestPermission`, `closeSession`, `sessionUsage`,
+    `turnQuotaMeta` and `quotaTokenCount` are byte-identical as extracted entry bodies. Turn
+    settlement moved inside the changed `runConsumer`.
 
 - **The one 0.73.0 → 0.75.1 change that DOES reach us:** context compaction is now surfaced as a
   synthetic ACP tool lifecycle (0.75.0, #991) — a `tool_call` with `kind: "think"`, title

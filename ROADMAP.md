@@ -7,9 +7,15 @@
 
 ---
 
-## 0.30.0 candidate (2026-10-02) — Pi 1.0 · ACP 기본기, cut 전 기록
+## 미출하 후보 — #127 Claude ACP 0.85.1 (2026-10-04)
 
-GLG 범위 결정(2026-10-02): 0.30.0은 Pi 1.0 수용과 ACP 기본기까지 포괄하는 기본기 릴리즈다. 브랜치 `research/125-pi-admission` = `d2e7f05`(tree `0e4a2595`), 증거 진입점은 #125 thread의 브랜치 완료 코멘트(5946960829). 이것은 branch proof이고 release `--cut` 수용이 아니다 — 수용은 prepare/make가 만든다.
+branch `fix/acp-0851-no-replay`의 Claude ACP closure(adapter 0.85.1 · wire SDK 1.6.0 · Agent SDK 0.3.286)와 #1212 no-replay leaf다. 0.30.x 출하물이 아니다. 측정·증거 등급·UNRUN은 Dep bump 원장 2026-10-03 항목, 수용 판단의 live 원본은 [#127](https://github.com/junghan0611/entwurf/issues/127)이다.
+
+## 0.30.0 shipped (2026-10-02) — Pi 1.0 · ACP 기본기; 아래 범위 문단은 cut 전 기록
+
+`[측정 2026-10-04]` tag `v0.30.0` = `6f47efa`; npm `@junghanacs/entwurf` `latest` = `0.30.0`(pi peer는 아래 버전 정책의 범위 그대로), ACP deps `claude-agent-acp 0.79.0` · `@agentclientprotocol/sdk 1.4.0`(`npm view`). 출하 기록과 수용 예외는 CHANGELOG 0.30.0이 소유한다.
+
+GLG 범위 결정(2026-10-02, cut 전): 0.30.0은 Pi 1.0 수용과 ACP 기본기까지 포괄하는 기본기 릴리즈다. 브랜치 `research/125-pi-admission` = `d2e7f05`(tree `0e4a2595`), 증거 진입점은 #125 thread의 브랜치 완료 코멘트(5946960829). 이것은 branch proof이고 release `--cut` 수용이 아니다 — 수용은 prepare/make가 만든다.
 
 - **버전 정책:** Pi dev pin `1.0.0`, peer `>=1.0.0 <1.1`(next-minor 상한). ACP/vendor·Herdr 동반 범프 없음. #124 P3 / composite release-policy는 HOLD.
 - **이 컷 밖:** pi-durable, structuredContent/codemode, virtual model, autopilot, 새 orchestrator. MCP discovery와 하네스 복구를 Entwurf가 떠맡지 않는다.
@@ -1265,6 +1271,72 @@ v2 필드 `parentGardenId`/`isEntwurf`는 **stray key로 거부된다** — 되�
     `3853-3866`→`3916-3929`), 부수 좌표 둘(rate-limit 경로 `:4273-4281`→`:4336-4344`,
     claude-agent-sdk `sdk.d.ts:4884`@0.3.257 → `:5342`@0.3.274)도 같은 방식으로 다시 읽었다.
     게이트 신설 없음.
+  - **2026-10-03 bump — claude-agent-acp 0.79.0 → 0.85.1 · ACP SDK 1.4.0 → 1.6.0 ·
+    claude-agent-sdk 0.3.274 → 0.3.286 (#127, 미출하 후보 — npm 0.30.0은 여전히 0.79.0 / 1.4.0).**
+    branch `fix/acp-0851-no-replay`, 구현 commit `6eccd07`(branch push). 앞 범프 논거를 상속하지
+    않는다. 줄 prefix `79:`/`85:` = 각 tag의 `src/acp-agent.ts`.
+    ⑴ **성격: 이번에 Entwurf가 새로 쓴 failure-policy 변경은 #1212 typed leaf 하나다.** 그 밖의
+    도달 가능한 upstream 변경(permission · synthetic · teardown 등)은 rail §Capability posture에서
+    분류만 했고 새 Entwurf 계약이 아니다. 0.85.1은 이번 turn의 foreground tool이 미응답인 채
+    `end_turn`하면 tool마다 failed update를 보낸 뒤 prompt를 `RequestError(-32603, "Internal error:
+    Claude ended the turn without returning results for tool calls: <ids>",
+    {errorKind: "incomplete_tool_call"})`로 거절한다 `[src 85:4286-4340, failActive 85:4408-4427]`.
+    0.79.0에서 success로 봉인되던 turn이 pi가 transient로 읽는 error가 되고, 우리는 그 세션을
+    drop하므로 pi retry는 tool이 이미 돈 뒤의 cold whole-prompt replay가 된다(정적 연역, 빈도
+    UNKNOWN). 대응: Claude adapter 전용 `readPromptRejection` leaf, gate `check-acp-vendor-rejection`
+    (`check:contracts` 편입), mutant manifest `acp-vendor-rejection.json` 4건. 계약과 증거 경계는
+    rail §Typed Claude prompt rejection이 소유한다.
+    ⑵ **provenance — 축을 섞지 않는다.** upstream tag `v0.85.1` =
+    `686c0c99b3b89217b74d1f5de8272e7c9ef1aab4`(clone HEAD가 아니라 `git show <tag>:` 내용),
+    `src/acp-agent.ts` blob sha256 `656da6ec…f68f8b`. npm tarball(adapter · wire SDK · agent-sdk ·
+    linux-x64 native, 각 old/new)의 sha512 = registry `dist.integrity`; adapter 0.85.1
+    `sha512-XpBAh6m9…MsMQ==`. native: agent-sdk 0.3.286 `optionalDependencies`는 8 platform
+    (linux x64/arm64 각각 glibc · musl, darwin 2, win32 2; 측정 metadata)이다. linux-arm64 resolved
+    binary sha256 `0292fa22…d0f8`만 `--version` `2.1.286`으로 실행했다(model turn 0). linux-x64는
+    manifest `2.1.286` · checksum = binary sha256 `fe503f65…fc73f` 정적 일치뿐 runtime은 UNRUN이고,
+    나머지 6은 실행하지 않았다 — native runtime 7개 UNKNOWN. CLI version은 model/SDK 동작 증거가
+    아니다.
+    ⑶ **설치 closure (linux-arm64, 2026-10-03T16:20:21Z resolver metadata):** adapter 0.85.1,
+    direct/child wire 1.6.0(L2c 공유 wire 계약 유지), agent-sdk 0.3.286, adapter child context의
+    zod 4.6.5, diff 9.0.0(새 runtime dep), Anthropic peer 0.100.1. zod 값은 그 child context의
+    것이다 — direct/root SDK와 Agent SDK peer는 다른 loader context이고, lock의 root importer는
+    `@agentclientprotocol/sdk 1.6.0(zod@4.3.6)`, adapter 쪽 snapshot은 `1.6.0(zod@4.6.5)`이다. closure
+    전체를 zod 한 값으로 읽지 않는다. `pnpm-workspace.yaml` `minimumReleaseAgeExclude`에
+    adapter 0.85.1 · `@agentclientprotocol/sdk@1.6.0` 추가, agent-sdk/native 9행 0.3.274 → 0.3.286.
+    ⑷ **재측정, 상속 아님 (source-only):** MCP — `mcpServerStatus` 호출 2건 → 2건
+    (`79:1773`/`:1866` → `85:2261`/`:2354`), `startMcpAuthentication`(`79:1737` / `85:2225`) 기점
+    첫 144줄이 diff 상 동일. auth handshake이지 readiness fence가 아니며 #72를 닫지 않는다.
+    Accounting — `sessionUsage` · `turnQuotaMeta` · `quotaTokenCount`는 함수 본문 추출 범위에서
+    byte-identical이고 dist 좌표만 이동했다(turnQuotaMeta 6562→7343, quotaTokenCount 6579→7360,
+    sessionUsage 6530→7311, usage_update 네 곳 2756/3509/3941/4340 → 3324/4107/4561/4924).
+    Wire SDK — AGENT_METHODS 동일, `jsonrpc.js` byte-identical, CLIENT_METHODS는 우리가 쓰지 않는
+    `mcp_connect`/`mcp_disconnect`만 제거, 새 동작은 수신 메시지당 32 MiB reader 상한(client→agent
+    총 payload 대비는 UNKNOWN). entry 본문 동일성은 그 추출 범위 한정이다 — 바뀐 callee
+    (`runConsumer`, `createSession`, `cancelTurns`, `teardownSession`, `canUseTool`, `initialize`,
+    SettingsManager)의 동일성이나 settlement 불변을 뜻하지 않는다. 도달 분류(#1165 조건부
+    permission, background `getContextUsage`, #1132, #1153, #1216, #1179, `notice`, v2 env)는 rail
+    §Capability posture의 0.79.0 → 0.85.1 항목.
+    ⑸ **출처 주석은 재좌표화하지 않았다.** `backend.ts` · `backend-adapter.ts` · `acp-client.ts` ·
+    `event-mapper.ts` · `tool-surface.ts` · `check-acp-usage-accounting.ts` ·
+    `check-acp-stop-reason.ts`의 "read at 0.79.0 / sdk 1.4.0 / 0.3.274" 좌표는 그 버전에서 읽은
+    역사 좌표로 남는다(앞 범프들과 다른 선택). ⑷의 동일성은 거기 적힌 범위만 재측정했고,
+    agent-sdk 0.3.274 → 0.3.286 내부는 UNREAD다.
+    ⑹ **증거 등급 — 서로 대체하지 않는다.** design §F와 `check-acp-vendor-rejection` fake cell
+    12개(adapter 3 + pipeline 9; pi의 real retry/overflow classifier가 oracle) → 관련 MUST LIVE
+    12 gate / 요청 model turn 11(정상 `end_turn` · reuse 샘플이며 이 rejection을 유발하지 않는다)
+    → local qualification BODY 841/841 killed(candidate `d16f…`, `qualification.log` sha256
+    `cf3e36bf…`) → frozen `check:full` rc0/643s(candidate `ea83e…`; d16f 대비 SDK contract test의
+    formatter 1건만 다르며, 첫 full의 formatter rc1 원 log는 보존. BODY를 ea83e exact-SHA로
+    재표기하지 않는다) → commit `6eccd07` branch push. exact-SHA CI
+    ([run 37147369716](https://github.com/junghan0611/entwurf/actions/runs/37147369716))는 별도
+    증거이고 결과는 #127이 운반한다. 이 항목은 CI green도 release PASS도 주장하지 않는다.
+    ⑺ **UNRUN / UNKNOWN:** 실제 `incomplete_tool_call` 빈도, vendor 내부 retry 횟수, rejection 뒤
+    warm reuse(H1, agent-shell 비교의 source lead일 뿐), Cortex(공유 wire SDK 1.6 위에서 미실행 —
+    이 호스트에선 `smoke-acp-cortex-live`가 SKIP만 가능하므로 cut 때 absent axis로 기록), AIR-on,
+    EOF-vs-rejection race, 2.1.286의 `CLAUDE_CODE_DISABLE_BACKGROUND_TASKS` 동작, background
+    `getContextUsage` latency, 다른 platform runtime, 긴 payload. 결정적 원문 좌표는
+    [#127 동결 source](https://github.com/junghan0611/entwurf/issues/127#issuecomment-5969949281)와
+    [target focused + MUST](https://github.com/junghan0611/entwurf/issues/127#issuecomment-5971362554).
 - **Standing focus — Mitsein over MCP:** plain external(non-replyable) vs garden-native meta-session
   (replyable by garden id) 구분이 agent 발화에 정직히 반영되는가. native Claude meta-session이
   external-mcp로 퇴행하거나 `wants_reply=true`를 비대칭 거절하면 버그.
