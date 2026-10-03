@@ -1,10 +1,10 @@
 {
 	"$comment": "SSOT for the herdr binary this repository has MEASURED against. Nothing else may carry a version or a digest: the CI installer, the sandbox gate's boundary check and the launch-rail document all read or cite this file. Re-measuring a new herdr means running check-herdr-sandbox against it FIRST, then editing this file, then repairing the measured sentences in docs/herdr-launch-rail.md in the same commit — miss one and the gate fails on version mismatch, which is the point.",
-	"version": "0.9.1",
-	"tag": "v0.9.1",
-	"tagCommit": "065ef9d6a531c49fb8bee7e818ef837065b21ee9",
+	"version": "0.9.3",
+	"tag": "v0.9.3",
+	"tagCommit": "7b116c05bfda646af39d2524c54e70c751f57ee8",
 	"socketProtocol": 22,
-	"measuredOn": "2026-09-17",
+	"measuredOn": "2026-10-03",
 	"measuredArch": "aarch64",
 	"releaseUrlPrefix": "https://github.com/herdrdev/herdr/releases/download",
 	"integrity": {
@@ -15,15 +15,15 @@
 	"assets": {
 		"x86_64": {
 			"name": "herdr-linux-x86_64",
-			"sha256": "2a02fed16beb651ef006e1d43f048f652ca4dc58ad053cd2d44450563d5c54b7",
+			"sha256": "18a8dc65f1c2fa485884344356dea1cfd911c6f06cf46fa78e193f4087f4dba7",
 			"executed": false,
-			"executedNote": "pending the first CI run on an x86_64 runner — the digest is pinned, but no cell of this rail has ever run on this binary"
+			"executedNote": "pending the first CI run on an x86_64 runner — the digest is pinned (and named by GitHub's release attestation for pkg:github/herdrdev/herdr@v0.9.3), but no cell of this rail has ever run on this binary"
 		},
 		"aarch64": {
 			"name": "herdr-linux-aarch64",
-			"sha256": "f4ccf4de745f2cb9a39a983e9ba3703dad50ec2a58dea83026ceab721bbd8d9e",
+			"sha256": "4de7aa3e25678812e92960de64f7c2aaa1bca1f0f80a3c5e559837e231e1f5c0",
 			"executed": true,
-			"executedNote": "the #116 rail was re-measured on this exact binary on 2026-09-17: `check-herdr-sandbox` green, `herdr status client` reports protocol 22 (unchanged from 0.9.0), and `integration status` adds exactly one row — `letta (experimental)` — with every other row byte-identical to 0.9.0. The operator host still runs the 0.9.0 asset at that date; the binary measured here was fetched by digest into a temp dir"
+			"executedNote": "the #116 rail was re-measured on this exact binary on 2026-10-03 (#126), fetched by digest through scripts/install-herdr-ci.sh into a temp dir and run from an isolated snapshot whose manifest named it: `check-herdr-sandbox` green (12 assertions, private server), `herdr status client` reports protocol 22 (unchanged from 0.9.1), and `integration status` prints the same 18 rows as 0.9.1 in a sandbox HOME once that root path is normalized; pi (v9) and claude (v10) integrations installed by 0.9.1 read `current` under 0.9.3 and a 0.9.3 reinstall leaves their bytes identical. The operator host still runs the 0.9.1 asset at that date and was not touched. The 0.9.1 receipt (2026-09-17) stays dated in docs/herdr-launch-rail.md"
 		}
 	}
 }

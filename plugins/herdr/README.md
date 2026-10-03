@@ -66,7 +66,7 @@ to *reach*; it does not own it and does not gate it.
 | built-in | what it gives | this plugin's use |
 |---|---|---|
 | `herdr integration install <agent>` | writes Herdr's own hooks/extensions into a harness's config directory so panes report agent lifecycle state | it is the **precondition**. The build reads `herdr integration status`; a harness Herdr has not integrated is not activated |
-| `herdr integration status` | one prose row per harness — 18 rows on herdr 0.9.1 `[measured 2026-09-21]` | the sole source of the set `H` |
+| `herdr integration status` | one prose row per harness — 18 rows on herdr 0.9.1 `[measured 2026-09-21]`, the same 18 on 0.9.3 once the sandbox root path is normalized `[measured 2026-10-03]` | the sole source of the set `H` |
 | `herdr plugin install / link / uninstall` | GitHub-managed or linked plugin lifecycle, with a `[[build]]` hook | the **only** door this plugin gets. Every install is also the refresh trigger |
 | `herdr agent list` | Herdr's agents and their `agent_status` (`idle` / `working` / `blocked` / `done` / `unknown`) | one of the pane's two reads |
 | `[[panes]]` overlay | a temporary zoomed view over the active pane that restores focus when it closes | the status surface |
@@ -402,9 +402,10 @@ read. Every field the provider attached is shown, in sorted key order.
   `herdr-plugin.toml`; Herdr refuses to link a plugin whose floor is newer than the running binary.
   You must open the pane from inside a Herdr session.
   - That floor is not the same claim as the version this was MEASURED on. Entwurf's reproducible and
-    CI rail is pinned to exactly **0.9.1** by `scripts/fixtures/herdr-supply.json`, which is what
-    `check-herdr-sandbox` requires and what every receipt in this repo was taken against. A different
-    Herdr inside the admission window is permitted and carries no receipt of ours.
+    CI rail is pinned to exactly **0.9.3** by `scripts/fixtures/herdr-supply.json`, which is what
+    `check-herdr-sandbox` requires; every receipt in this repo names the Herdr it was taken against,
+    and the older ones stay dated at 0.9.0 or 0.9.1. A different Herdr inside the admission window is
+    permitted and carries no receipt of ours.
 - **For the install-time build:** `git`, `node` >= 24, `npm`, and network access for the locked
   registry artifact, in an Entwurf-owned XDG npm cache reclaimed by `herdr-plugin-deactivate`. You do
   **not** clone Entwurf or run `npm install`; the build acquires and integrity-checks the exact npm
@@ -437,14 +438,14 @@ command this manifest declares. It composes, in this order:
    and its capability is probed with a zero-write call whose own named refusal is the evidence.
 
 `herdr integration status` is prose because Herdr has no machine format for it: measured against
-0.9.0 and re-measured against 0.9.1, `--json`, `--format=json` and `-o json` each exit 2. So the rows
+0.9.0 and re-measured against 0.9.1 and 0.9.3, `--json`, `--format=json` and `-o json` each exit 2. So the rows
 are the protocol, and a row is accepted **whole or not at all** — a state phrase, then exactly
 ` (<absolute path>)`, then end of line. The path is framing, never an address: `/srv/current (v9)/…`
 is a legal directory name, so the state is matched front-anchored and the path never becomes a field.
 
 Herdr's atom set grows and that is ordinary — 0.9.1 prints 18 rows where 0.9.0 printed 17, the one
-addition being `letta (experimental)`, every other row byte-identical. The two rows this leaf reads
-are unchanged. Unselected atoms are **observed, never planned**: OpenCode may be installed and
+addition being `letta (experimental)`, every other row byte-identical; 0.9.3 prints the same 18,
+identical to 0.9.1 once the sandbox root path is normalized `[measured 2026-10-03]`. The two rows this leaf reads are unchanged. Unselected atoms are **observed, never planned**: OpenCode may be installed and
 current and still receives no entry in the plan.
 
 `./run.sh check-herdr-plugin-build` owns that composition. The real journey — a real
@@ -473,7 +474,9 @@ binaries, and finally tears the whole activation down and reinstalls onto the ho
 failed only because the smoke's oracle still looked for `herdr-agent-list-failed` at column zero;
 #120 moved it inside CITIZENS. The corrected oracle passed without changing production code.
 Plugin 0.5.1 carries that gate correction as a separately named follow-up. This receipt belongs
-to **0.5.0** only; re-run the public-remote smoke at 0.5.1 before claiming it is accepted.
+to **0.5.0** only. The follow-up that sets the manifest to 0.30.0 and locks the npm 0.30.0 runtime
+needs its own public-remote receipt after its commit reaches a public ref; that separate acceptance is recorded in the
+[#126 thread](https://github.com/junghan0611/entwurf/issues/126), never inherited from this row.
 
 What the container cannot measure: a citizen drawn as a **ROW**. That needs
 `placement.kind === "herdr-pane"`, and a headless container has no panes — so the row is evidence
@@ -575,9 +578,13 @@ successful install reconciles them rather than duplicating them. Nothing here ca
 transaction and not this package. `./run.sh check-pack-install` packs this checkout, installs the
 tarball into a fresh temp project, and runs the same `verifyInstalledRuntime` against it.
 
-**Switching source is a re-proof, not a config change.** npm is the production authority class; the
-lock committed in this checkout is the `herdr-checkout` verification carrier, set for the 0.25.1
-candidate window on 2026-09-30 (`8b92e09`) with the npm re-pin left as a follow-up. Moving between
+**Switching source is a re-proof, not a config change.** npm is the production authority class, and
+the lock committed in this checkout names it: `@junghanacs/entwurf@0.30.0` with the sha512 the
+registry published (re-read with `npm view` on 2026-10-03), returning from the `herdr-checkout`
+carrier the 0.25.1–0.30.0 candidate windows rode (`8b92e09`). The plugin manifest's own `version`
+is 0.30.0 from the same follow-up, set to match the runtime it locks so the two numbers do not
+diverge; they are still two fields — the manifest version is what Herdr lists for this plugin, the
+lock is which Entwurf bytes the build acquires. Moving between
 them — or to another future authority — re-decides where the bytes come from,
 and candidate evidence does not transfer. Exact acquisition and integrity, the installed runtime
 (`name@version`, compiled entry, three executable bins, real `check-bridge`), the swap and torn-swap

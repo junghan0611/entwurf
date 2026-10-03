@@ -3,6 +3,7 @@
 > 이 문서는 **herdr 안에서 형제를 여는 레일**을 소유한다. tmux 레일은 [`mux-launch-rail.md`](./mux-launch-rail.md)가 그대로 소유하고, 두 문서는 합쳐지지 않는다 — 좌표도 실패 모양도 다르기 때문이다.
 > 대상: `pi-extensions/lib/herdr-fresh-call.ts` (#116 S2-c1). 측정 환경: herdr 0.9.0 / socket protocol 22, oracle — 2026-09-14, 배치 정책 교체분은 2026-09-15. herdr 소스 인용은 전부 `@ c77af189` 고정본이다.
 > `[재측정 2026-09-17, oracle, herdr 0.9.1]` 공급 핀이 0.9.1로 올라갔다(`scripts/fixtures/herdr-supply.json`). 이 문서의 payload 리터럴은 **재기록하지 않았다** — 0.9.1에서 바뀐 관측은 셋뿐이고 전부 이 레일 밖이거나 무해하다: `herdr status client`의 `protocol: 22` 그대로, `check-herdr-sandbox` 11 assertions green(같은 argv·같은 응답 모양), `integration status`가 행 하나를 더한다(17→18, 추가분은 `letta (experimental)` 하나뿐이고 나머지 17행은 바이트 동일). 0.9.1 바이너리는 digest로 받아 temp에서 실행했고 오퍼레이터 설치본은 건드리지 않았다.
+> `[재측정 2026-10-03, oracle aarch64, herdr 0.9.3, #126]` 공급 핀이 0.9.3으로 올라갔다. payload 리터럴은 이번에도 **재기록하지 않았다** — 이 레일이 소비하는 면에서 바뀐 관측은 없다: `status client`의 `protocol: 22` 그대로, `check-herdr-sandbox` 12 assertions green(같은 argv·같은 응답 모양), `integration status` 18행이 샌드박스 root 경로를 정규화한 뒤 0.9.1과 동일, 0.9.1이 설치한 pi(v9)·claude(v10) integration을 0.9.3이 `current`로 읽는다. 소스상 0.9.2의 변화는 응답의 **추가** 필드(`completion_seq`, `resume_argv`)와 새 pane env 스크럽(#4461 — 외부 `CLAUDECODE`/`CLAUDE_CODE_SESSION_ID` 등을 지우고 명시 `--env`는 허용)이며, 우리 파서는 필드 단위로 읽고 우리 `PI_*` 스크럽은 그대로 필요하다. 0.9.3은 키 입력 hotfix다. 바이너리는 snapshot의 provisional manifest로 `install-herdr-ci.sh`가 digest 검증해 temp에 받았고, 오퍼레이터 설치본(0.9.1)은 건드리지 않았다.
 
 ## 1. 이 레일이 무엇을 나누어 갖는가
 

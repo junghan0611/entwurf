@@ -196,10 +196,9 @@ function transcriptRecords(file: string): string[] {
 }
 
 /**
- * The BARE verb names, as the two surfaces this smoke reads actually spell them — NOT the
- * model-facing dialect. `[측정 2026-09-20, this smoke's own red fixture]` the claude MCP activity
- * log carries `Calling MCP tool: entwurf_callback` / `Tool 'entwurf_callback' completed`, and pi
- * writes `"type":"toolCall","name":"entwurf_callback"`; neither records
+ * The verb names as the CLAUDE MCP activity log spells them — NOT the model-facing dialect.
+ * `[측정 2026-09-20, this smoke's own red fixture]` that log carries `Calling MCP tool:
+ * entwurf_callback` / `Tool 'entwurf_callback' completed`, never
  * `mcp__entwurf-bridge__entwurf_callback`. The per-host dialect is owned by
  * `FRESH_CALL_CALLBACK_TOOL` / `FRESH_CALL_DELIVERY_TOOL` in `fresh-call-composition.ts` and is
  * what the FRAMING says; these two are what an OBSERVER sees, and conflating them is what this
@@ -207,6 +206,17 @@ function transcriptRecords(file: string): string[] {
  */
 const CALLBACK_VERB = "entwurf_callback";
 const DELIVERY_VERB = "entwurf_v2";
+
+/**
+ * The callback as a Pi 1.0 TRANSCRIPT spells it. Pi's built-in MCP is the tool ingress since
+ * 0.30.0, and Pi records the qualified name the model called. The bare `entwurf_callback` this
+ * smoke read on 2026-09-20 belonged to the retired native-tool registration; a pi→pi child that
+ * called back correctly would then never match, which is a red about the oracle, not the rail.
+ * Declared here as the OBSERVED literal, not imported from the compositor, so a change to the
+ * production framing cannot quietly move this expectation with it — the same rule as
+ * `PI_SOURCE_VERBS` in `lib/codex-fresh-source-receipts.ts`. No prefix strip, no legacy OR.
+ */
+const PI_CALLBACK_TOOL = "mcp__entwurf_bridge__entwurf_callback";
 
 /**
  * The id of the CALLBACK toolCall in this record, or null. Pi writes a call and its result as two
@@ -238,7 +248,9 @@ function entwurfCallIdFor(record: string, nonce: string, callerGid: string): str
 	if (!Array.isArray(content)) return null;
 	for (const part of content) {
 		const call = part as { type?: unknown; name?: unknown; id?: unknown; arguments?: unknown };
-		if (call.type !== "toolCall" || call.name !== CALLBACK_VERB) continue;
+		if (call.type !== "toolCall") continue;
+		if (call.name === CALLBACK_VERB) throw new Error(`${LABEL}: retired raw Pi tool name ${CALLBACK_VERB}`);
+		if (call.name !== PI_CALLBACK_TOOL) continue;
 		// Zero-argument verb: absent, null and `{}` are all the shape it is called with. A supplied
 		// target or message is a model naming an address the env already owns — not this act.
 		const args = call.arguments as { message?: unknown; target?: unknown } | undefined | null;
@@ -444,8 +456,10 @@ async function main(): Promise<void> {
 			childBackend: "pi",
 			callerKind: "pi",
 			childKind: "pi",
-			callerModel: "openai-codex/gpt-5.6-sol",
-			childModel: "openai-codex/gpt-5.6-sol",
+			// The approved roster's lighter Pi GPT tier (agent-config MODELS.md, 2026-09-30); gpt-5.6-sol
+			// is still in the catalog but no longer on the roster. A LIVE cost choice, not a product set.
+			callerModel: "openai-codex/gpt-6-luna",
+			childModel: "openai-codex/gpt-6-luna",
 		},
 		{
 			label: "claude→claude",

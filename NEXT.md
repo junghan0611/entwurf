@@ -1,4 +1,4 @@
-# NEXT — 0.30.0 컷 (Pi 1.0 · ACP 기본기)
+# NEXT — #126 Herdr·플러그인 0.30.0 정합
 
 > NEXT는 disposable boot sector다. 완료 이력은 issue/git이 지고, 방향은 ROADMAP,
 > 운영 규율은 AGENTS가 진다. 새 하네스 입학 경로는
@@ -6,23 +6,29 @@
 
 # RAIL — 현재 좌표
 
-- [x] **1. Pi 1.0 · ACP 기본기 브랜치** — `research/125-pi-admission` = `d2e7f05` (tree `0e4a2595`): Pi 0.99 → 0.99.2 → 1.0.0 수용(`>=1.0.0 <1.1`), Pi citizen 동사가 Pi built-in MCP로, Claude ACP foreground-only. 실제 설치 post-F LIVE 3(lifecycle·bundled-MCP·reuse)과 exact-SHA CI 36969666301(required 4 + qualification body). 정본은 #125 thread의 브랜치 완료 코멘트(5946960829). branch proof이지 release `--cut` 수용이 아니다.
-- [x] **2. 문서 amendment** — GLM→Grok read-only 검수 F1–F5 수선(현행 8-verb 개수, callback 표, ACP 지원표 주어, VERIFY 배너, Herdr lock carrier 문장). 브랜치 NEXT의 durable 사실은 CHANGELOG Unreleased·ROADMAP 0.30.0 절로 승격하고 브랜치 NEXT를 지웠다(이 커밋).
-- [x] **3. main land** — `main = origin/main = 6955d77`, tree `a457b829` (2026-10-02 17:24 KST 담당자 git 측정, clean). 이전 브랜치 증거는 그때의 증거로 보존한다.
-- [ ] **4. 컷 전 README B → 0.30.0 prepare/make** ← CURRENT: GLG가 Sol medium을 문서 구현·컷 담당으로 지정(2026-10-02), coordinator가 독립 검수·경계 조율. 문서 B·scoped VERIFY 수선은 `8127d09`(tree `31e51d9e`, normal hooks RC0)로 완료했다. 현재 scoped Codex 수선·최종 단독 LIVE 65 PASS 및 P9 완료 → final metadata 검수 → implementation/prep 분리 커밋. GLG의 이번 컷 한정 결정으로 local full/BODY/P5/M0 재실행은 생략한다. 그 뒤 ordinary main push/exact prepared-SHA CI(full·BODY 포함)/보존 candidate Docker 수용/tag·GitHub Release. 원 P5 BLOCKED와 후속 다른 bytes의 PASS는 합성하지 않는다.
-- [ ] **5. npm publish / Herdr 0.9.3** — publish는 별도 GLG grant 전 금지; make가 수용한 candidate만 대상. Herdr 0.9.3은 컷 뒤 별도 레인, floor 0.9.0 / CI pin 0.9.1은 이 컷에서 그대로.
+- [x] **1. 0.30.0 출하·npm 발행** — Pi 1.0/ACP 기본기, README 제품 입구, Codex 검증기 수선 완료. main/tag `6f47efa`; exact-SHA CI·Docker 수용 및 registry bytes 대조 완료. #125 종료.
+- [x] **2. 후속 경계 기록·재개 승인** — #126 Herdr 0.9.3/플러그인, #127 Claude ACP 0.85.1 개설. 2026-10-03 GLG가 #126의 0.30.0 정합 구현·커밋·push를 승인했다. ACP는 별도 보류.
+- [x] **3. 소비 경계 측정 → scoped 구현·독립 검수** — C1 npm 0.30.0 re-pin + C2 Herdr 0.9.3 공급핀. sandbox/focused PASS, 경로 정규화 표현·Pi 1.0 exact callback oracle 수선 완료. L1 단일 LIVE 32 PASS(4 turns, retry 0), closure review 완료.
+- [ ] **4. 고정 후보 검증 → 커밋·push** ← CURRENT: GLG의 plugin version=0.30.0 정렬 결정(2026-10-03)에 따른 metadata 정합·focused·closure 완료, Opus 편집 종료. 새 최종 후보 qualification BODY→frozen full→정상 hooks·ordinary push·agenda를 실행한다(이전 BODY는 의도 중단·별도 보존). 코디네이터 `20261003T164401-a30dda`가 검증/출하를 소유.
+- [ ] **5. exact-SHA CI·public raw-install 소비자 수용** — x86_64/공개 설치 영수증은 #126 스레드로 운반. 릴리즈·npm 발행은 포함하지 않는다.
 
-현재 좌표: 1·2·3 및 문서 B 완료 → 4 최종 metadata 검수·분리 커밋 → 새 prepared-SHA CI·candidate 수용·make → 5 별도 승인/후속.
+현재 좌표: 1·2·3 완료 → 4 검증·commit/push → 5 별도 증거 수용. 최신 권한 원문·진행 정본: [#126 재개 댓글](https://github.com/junghan0611/entwurf/issues/126#issuecomment-5966917810).
 
-# NOW — 최종 metadata 검수 → 분리 커밋 → prepared-SHA CI·make
+# NOW — #126 Herdr·기존 플러그인 0.30.0 정합
 
-- **Stem:** 설치→setup→시민 첫 사용이 보이는 제품 입구를 만들고, Pi 1.0·ACP 기본기를 0.30.0으로 자른다. GLG 최신 원문: "줄여서 가자. 작업을 직접 sol medium 한테 맡겨. 맡기고 0.30.0 릴리즈 컷도 맡기자. pi 1.0.0에서 해내는게 좋겠다."
-- **Next:** final amendment 검수 후 7 repair paths implementation commit / 4 metadata paths prep commit을 정상 hooks로 분리한다. prepared clean SHA를 main에 push·도장 → 해당 SHA required4 CI+BODY(실제 skip이면 exact-SHA dispatch) → CI green 뒤 one preserved tgz Docker → immutable tag/GH Release. lock delta0, carrier source `herdr-checkout` 유지. 새 로컬 전체 검증은 실행하지 않는다.
-- **Evidence:** P4 옛 metadata bytes RC0/663s. 원 P5 qualification836/836 및 다른 MUST23 PASS, 마지막 Codex FAIL; 뒤 RGG BEHAVIOR도 PASS여서 미실행 LIVE tail0. exact Pi MCP receipt/cleanup 수선 뒤 역할 실행 실패를 driver launch→relay 및 callback-first clarification으로 좁혔고 최종 leaf65 PASS. 잘못된 run.sh group entry가 argv를 전달하지 않아 약60분 full을 실행하다 중단한 비용도 보존한다; 올바른 direct group은141/141 PASS·696 UNRUN(당시 bytes), final release 정책 전환은 없다. host-local 원문 증거는 외부 `~/tmp/e125-cutover/reports/`에 보존한다.
-- **Verify:** 마지막 Codex leaf 65 assertions PASS, initial Pi/Codex 각각 3/3 exact completed; audit/filter/expected count 불변. 현재 bytes의 로컬 full/BODY/P5 결합 부족은 이번 컷의 알려진 증거 차이다. 원 P5(23/1/0, BEHAVIOR PASS)는 BLOCKED로 보존. 옛836/141 PARTIAL/단일·3mutant를 현 후보에 자동 CARRIED로 합산하지 않는다. prepared-SHA required4 CI·fresh full/BODY와 exact tgz Docker는 아직 UNRUN이며 필수다.
-- **Boundary:** GLG 승인 아래 띄운 known app-server3214100 유지, native `gpt-5.6-luna` / callback Pi `openai-codex/gpt-6-luna`, OMP 현행 config 유지. native6-luna는 installed Codex0.153.4의 HTTP400으로 거절됐고 catalog에는5.6-luna가 있었다. Codex 업데이트로 지원이 달라질지는 후속 미검증 lead이며 이번 컷에서 업데이트·restart하지 않는다. 최종 SHA CI/Docker 미측정이 남아 있으며 npm publish grant는 없다.
-- **Read:** `.claude/skills/entwurf-release/SKILL.md` 전문, #125 thread(5946960829·5946114905), ROADMAP "0.30.0 candidate"; 외부 IA·구현 handoff는 `~/tmp/e125-cutover/reports/`.
-- **Do not touch:** Herdr README 본문/floor/pin, dated receipts·ledger, #124 P3 정책(HOLD), Durable/codemode 채택 주장, 새 peer/로그인 probe/npm publish. local full/BODY/P5/M0 재실행 금지; exact-SHA CI·Docker 외 새 gate/모델 반복/공통 launcher 변경 없음.
+- **Next:** 코디네이터가 plugin/runtime 0.30.0으로 맞춘 새 최종 candidate의 qualification·full을 단일 스케줄하고 정상 commit/push→exact-SHA CI·public raw-install 수용을 진행한다. 실행 중 worktree/index/HEAD를 움직이지 않는다. 진행/완료의 최신 좌표는 [#126 스레드](https://github.com/junghan0611/entwurf/issues/126)가 소유한다(이 NEXT는 freeze 직전 책갈피). 끝난 뒤 GLG가 요청한 `homepage/content/projects/entwurf/index{,.ko}.md`의 한·영 문서를 실제 plugin/runtime `0.30.0`, 측정 Herdr `0.9.3` 수용에 맞춘다(기존 블로그 untracked 초안은 제외). #127 범위 결정은 여전히 별도이며 자동 착수하지 않는다.
+- **Baseline:** release `6f47efaca2954dd5d58d3898969e2dafa6b0a9fd`; Pi `1.0.0` / `>=1.0.0 <1.1`; 출하 당시 plugin `0.5.1` / floor `0.9.0`; ACP `0.79.0`. 최신 GLG 결정으로 candidate plugin도 `0.30.0`에 정렬; runtime-lock npm `0.30.0`, supply `0.9.3`(aarch64 sandbox/focused PASS), 운영 herdr는 `0.9.1` 그대로. freeze 직전 L1 fresh/callback 32 PASS(2026-10-03 17:11–17:12 KST), x86_64(CI)·public npm 소비자는 post-push 축으로 분리. 최신 실행 상태는 #126 스레드, ACP 0.85.1은 미착수.
+- **Blocker:** 현재 기술 blocker 미확정. 커밋·push는 이번 세션에 명시 승인됐다. 열린 구현 목적 5건은 그대로이며 새 구현 이슈를 자동 추가하지 않는다. #126은 결정 계약과 실제 diff 완료를 구분해 기록한다; #127은 미착수.
+- **Verify:** 최종 게이트에는 `PATH=/home/junghan/tmp/e126/herdr093:$PATH`를 노출한다 — 운영 0.9.1은 신규 exact supply gate에서 HS-VERSION-BOUNDARY negative로 정상 거절된다. 첫 C1 그룹 qualification(13/31/25)은 그 당시 candidate PARTIAL이며 최종 full로 합성하지 않는다. 이전 plugin 0.5.1 후보의 BODY는 GLG 버전 정렬 결정으로 15m48s 시점에 의도 중단(exit 143); 새 metadata 후보와 합성하거나 gate defect로 해석하지 않는다. L2 checkout-only build LIVE는 npm carrier oracle와 충돌해 UNRUN; 그 기존 gap-probe의 `version = "0.1.0"` 치환도 현재 manifest에서 matches=0/byte-identical로 좁게 측정했다(후속 수선 lead, LIVE 성공/실패 영수증 아님). 실제 npm 경로는 push 뒤 public raw-install LIVE가 소유한다. 이전 #125 local-full 생략 예외는 이 레인에 이월하지 않는다.
+- **Read:** [#126](https://github.com/junghan0611/entwurf/issues/126), [#127](https://github.com/junghan0611/entwurf/issues/127), [#125 종결 영수증](https://github.com/junghan0611/entwurf/issues/125#issuecomment-5960364610); `plugins/herdr/README.md`, `docs/herdr-launch-rail.md`, `scripts/fixtures/herdr-supply.json`, `docs/acp-backend-rail.md`.
+- **Do not touch:** ACP #127·Codex 업데이트·새 UI/action/watcher·운영 설정 전환·npm 재발행·태그 변경 제외. 기존 0.30.0/tag 바이트 불변. #124 P3 HOLD·Pi durable/codemode 미결정 유지. 측정 Herdr는 격리 설치로 운영자 바이너리를 교체하지 않는다. 새 형제는 GLG가 요청한 Opus 1명뿐; 필요한 모델 LIVE의 범위·비용은 checkpoint에 먼저 밝힌다.
+
+## 0.30.0 종결 영수증 — 2026-10-03 확인
+
+- GLG가 npm을 직접 발행했다. `latest=0.30.0`; registry tarball은 Docker 수용 후보와 `cmp` byte-identical, SHA256 `2242d56b098f482fb2d20cae1fe58a863733f9640defd331f2eed5fbf8ed0715`. SHA1/SHA512와 image/repoDigest는 #125 종결 댓글에 운반했다.
+- main/tag `6f47efa`, CI [37014897417](https://github.com/junghan0611/entwurf/actions/runs/37014897417) required4 + fresh full/BODY success, preserved tgz Docker PASS, [GitHub Release](https://github.com/junghan0611/entwurf/releases/tag/v0.30.0) 완료. 이 NEXT만 출하 뒤 핸드오프 수정이며 release/tag 바이트는 바꾸지 않는다.
+- 원 P5 23/1/0 BLOCKED와 후속 Codex leaf 65 PASS는 별도 bytes/실행이다. GLG의 이번 컷 local full/BODY/P5/M0 재실행 생략 예외를 보존하며 synthetic 24/24·자동 CARRIED·#124 P3 완료로 쓰지 않는다. 잘못된 wrapper의 60분 및 direct group PARTIAL도 #125 종결 댓글에 보존했다.
+- 보존 원문: #125 종결 댓글이 결정적 영수증(SHA·CI·digest·P5 경계·Codex leaf 로그 SHA256)을 운반한다. 로컬 `~/tmp/e125-*`·`/tmp` 컷 산출물과 `entwurf-0300-*` tmux 세션은 2026-10-03 정리로 삭제했다. Herdr npm re-pin·Codex 업데이트는 지금 실행하지 않았다.
 
 ## Archived RAIL — 문서 표면 다이어트 (이전 보류 snapshot, 2026-10-02)
 

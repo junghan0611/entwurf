@@ -184,7 +184,7 @@ compiled bridge after record birth, under the citizen's identity, and Pi supervi
 that MCP child. **MCP is ingress; pi receive remains the record-addressed Unix
 control socket.** Garden identity and dispatch stay Entwurf's. What `pi-durable`
 or Pi codemode should mean here remains undecided: this cut neither adopts nor
-certifies them. Herdr 0.9.3 is a later lane, not a companion upgrade.
+certifies them. Herdr 0.9.3 is a separate follow-up to this cut, not a companion upgrade: it measures the supply pin at 0.9.3 and re-pins the plugin runtime to npm 0.30.0 with the plugin manifest set to the same 0.30.0 (two fields, one number), and its public consumer and CI receipts live in the #126 thread.
 
 Entwurf is the 0.12+ successor to
 [`@junghanacs/pi-shell-acp`](https://www.npmjs.com/package/@junghanacs/pi-shell-acp):
