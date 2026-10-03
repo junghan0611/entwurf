@@ -1,4 +1,26 @@
-# NEXT — #126 정합·수용 완료 · 다음 범위 결정
+# NEXT — #127 main landing · 0.30.1 선택
+
+# RAIL — 현재 좌표
+
+- [x] **1. #126 Herdr 정합·수용** — 기존 출하0.30.0/tag/npm 불변; 종결 영수증은 #126.
+- [x] **2. #127 구현·문서·브랜치 수용** — 6eccd07 구현 + b3323ae 문서, source/focused/MUST/review/CI 완료.
+- [ ] **3. Main landing + exact-SHA CI** ← CURRENT: GLG 승인으로 두 커밋 ff 반영; 이 책갈피 정상 commit/push 후 main SHA CI를 읽는다.
+- [ ] **4. Prepare 0.30.1** ← PAUSED: version 선택은 완료, prepare 모드 승인 필요.
+- [ ] **5. Make → publish** ← PAUSED: 각각 별도 권한·exact candidate/release 증거 필요.
+
+# NOW — main 반영, 출하 아님
+
+- **Next:** main handoff commit/push의 exact-SHA CI required4/full/BODY를 읽는다. 성공 후 `/entwurf-release prepare 0.30.1` 승인 요청. 실제 version/changelog/tag/npm 변경은 아직 하지 않는다.
+- **Version:** GLG가 0.31.0 또는 0.30.1 판단을 위임했다(2026-10-04). **0.30.1 patch** 선택: 공개 verb/schema·하네스 입학·Pi range 추가 없이 #127 unsafe whole-prompt replay 수정, vendor closure 갱신과 #126 Herdr 기존 경계 정합을 싣는다. Dep의 minor 숫자가 Entwurf minor를 자동 요구하지 않는다.
+- **Main scope:** base8b9c98d → reviewed b3323ae fast-forward, source16files 그대로 + 이 NEXT-only handoff. Disposable branch NEXT는 보존본을 남기고 merge 전에 삭제했다. Main push는 이번 landing 승인 범위, prepare/make/publish는 별도 경계다.
+- **Receipts:** [#127 final branch acceptance](https://github.com/junghan0611/entwurf/issues/127#issuecomment-5973225522): implementation6eccd07 CI37147369716 required4/full473s/BODY841/841 PASS. Docsb3323ae CI37149878236 required4/full471s PASS/BODY SKIP. 이후 main SHA·release SHA로 이 BODY를 재표기하지 않는다. [#126 acceptance](https://github.com/junghan0611/entwurf/issues/126#issuecomment-5968831307)는 별도.
+- **Release bounds:** related MUST12gates/11requested turns는 전체 P5 수용이 아니고 실제 incomplete-tool을 강제하지 않았다. Cortex shared-wire1.6 absent axis, vendor retry/frequency·warm-after-rejection·AIR/EOF/background/latency·other platform/long payload는 UNKNOWN/UNRUN. Prepare는 VERIFY/entwurf-release의 fresh full/P5·Codex 명시적 prerequisite와 release-specific on-demand axes를 적용한다; 임의 waiver/기존0.30.0 예외 자동상속 없음.
+- **Read:** #127 thread, ROADMAP dep ledger2026-10-03, docs/acp-backend-rail.md, VERIFY.md, `.claude/skills/entwurf-release/SKILL.md`.
+- **Do not touch:** 추가 런타임·게이트·SDK/하네스 범프, setup/login/auth/credential, 새 peer, README 다이어트/#124 P3/새 harness, 기존 tag/npm 바이트. 모든 협업 레인 STOP. Release mode 승인 없이 무거운 LIVE/qualification dispatch를 시작하지 않는다.
+
+<details><summary>#126 완료 시점 NEXT — 2026-10-03 snapshot, 현재 실행 좌표 아님</summary>
+
+# Archived NEXT — #126 정합·수용 완료 · 다음 범위 결정
 
 > NEXT는 disposable boot sector다. 완료 이력은 issue/git이 지고, 방향은 ROADMAP,
 > 운영 규율은 AGENTS가 진다. 새 하네스 입학 경로는
@@ -23,6 +45,8 @@
 - **Bounds:** L1은 앞 metadata 후보32 PASS/4 turns/retry0; 옛 C1 PARTIAL13/31/25와 의도 중단 BODY(exit143/15m48s)는 합성하지 않았다. L2 checkout-only LIVE는 npm lock/oracle mismatch로 UNRUN, gap-probe의 오래된 version0.1.0 치환 no-op은 측정된 후속 lead다. pane-joined ROW·npm swap/torn-swap·다중 host/model LIVE를 새로 주장하지 않는다. 세부 원문·hash는 #126 스레드에 운반했다.
 - **Read:** [#126](https://github.com/junghan0611/entwurf/issues/126), [#127](https://github.com/junghan0611/entwurf/issues/127), [#125 종결 영수증](https://github.com/junghan0611/entwurf/issues/125#issuecomment-5960364610); `plugins/herdr/README.md`, `docs/herdr-launch-rail.md`, `scripts/fixtures/herdr-supply.json`, `docs/acp-backend-rail.md`.
 - **Do not touch:** ACP #127·Codex 업데이트·새 UI/action/watcher·운영 설정 전환·npm 재발행·태그 변경 제외. 기존 0.30.0/tag 바이트 불변. #124 P3 HOLD·Pi durable/codemode 미결정 유지. 측정 Herdr는 격리 설치로 운영자 바이너리를 교체하지 않는다. 새 형제는 GLG가 요청한 Opus 1명뿐; 필요한 모델 LIVE의 범위·비용은 checkpoint에 먼저 밝힌다.
+
+</details>
 
 ## 0.30.0 종결 영수증 — #126 착수 전 확인 snapshot (2026-10-03)
 
