@@ -21,6 +21,7 @@
 import { createRequire } from "node:module";
 import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
+import { RequestError } from "@agentclientprotocol/sdk";
 
 import type { AcpConnectionLike } from "./acp-client.js";
 import { enrichMcpServersWithEnvelope, type ResolvedAcpConfig } from "./config.js";
@@ -235,13 +236,72 @@ export interface AcpBackendAdapter {
 	 *  entwurf actually reads from a NOTIFICATION cannot desync from a response
 	 *  shape it never inspects. */
 	sealsTurnAccounting?: true;
+
+	/** OPTIONAL capability (#127): recognise a typed vendor rejection of `session/prompt`
+	 *  whose raw text must not become pi's `errorMessage`. pi decides a whole-prompt replay
+	 *  from `errorMessage` alone, and a vendor's "Internal error" — or any digit run in the
+	 *  ids it carries — reads as transient, so a turn whose tools already ran would be resent
+	 *  from a cold session. A recognised rejection returns a fixed, authored verdict for
+	 *  `errorMessage`; backend.ts keeps the raw rejection as a pi diagnostic instead.
+	 *
+	 *  ABSENT means every failure of this backend keeps the verbatim-first `errorMessage`.
+	 *  The vocabulary is the vendor's, so only the adapter that speaks it may declare it. */
+	readPromptRejection?(err: unknown): AcpPromptRejection | undefined;
 }
+
+/** A vendor rejection an adapter recognised (`readPromptRejection`). */
+export interface AcpPromptRejection {
+	/** The vendor's own failure kind, as it named it on the wire. */
+	errorKind: string;
+	/** Entwurf-authored and fixed — no vendor text, ids or numbers: this is what pi classifies. */
+	verdict: string;
+	/** The JSON-RPC `data`, re-serialized as evidence (it arrived as parsed JSON). */
+	dataJson: string;
+}
+
+/** The pi diagnostic type under which backend.ts preserves a recognised rejection verbatim. */
+export const ACP_PROMPT_REJECTION_DIAGNOSTIC = "entwurf_acp_prompt_rejection";
+
+/** The verdict for claude-agent-acp's `incomplete_tool_call` (#127; upstream #1212, 0.85.0+). */
+export const INCOMPLETE_TOOL_CALL_VERDICT =
+	"ACP turn failed because foreground tool results are incomplete. Some tools may already have run; automatic replay is unsafe. Inspect the preserved vendor rejection before continuing.";
 
 // ---------------------------------------------------------------------------
 // claude adapter — the first implementation (the rail's reference backend)
 // ---------------------------------------------------------------------------
 
 const SUPPORTED_CLAUDE_IDS: ReadonlySet<string> = new Set(SUPPORTED_ANTHROPIC_MODEL_IDS);
+
+/** JSON-RPC internal error — the code claude-agent-acp rejects an unfinished-tool turn with. */
+const JSONRPC_INTERNAL_ERROR = -32603;
+/** claude-agent-acp's own kind for a turn that hit `end_turn` with foreground tools unanswered
+ *  (read at v0.85.1 `src/acp-agent.ts:4286-4340`, `errorKindData("incomplete_tool_call")`). */
+const CLAUDE_INCOMPLETE_TOOL_CALL = "incomplete_tool_call";
+
+/**
+ * The claude reader for `readPromptRejection` (#127). Only the root wire SDK's own decode
+ * counts: its client rejects a JSON-RPC error response with `new RequestError(code, message,
+ * data)`, `data` being the parsed `error.data` (sdk 1.4.0 `dist/jsonrpc.js:842-844`). A
+ * look-alike object, another code, or another `errorKind` is not this failure and keeps the
+ * verbatim-first path.
+ */
+function readClaudePromptRejection(err: unknown): AcpPromptRejection | undefined {
+	if (!(err instanceof RequestError) || err.code !== JSONRPC_INTERNAL_ERROR) return undefined;
+	const data = err.data;
+	if (typeof data !== "object" || data === null || !("errorKind" in data)) return undefined;
+	if (data.errorKind !== CLAUDE_INCOMPLETE_TOOL_CALL) return undefined;
+	return { errorKind: CLAUDE_INCOMPLETE_TOOL_CALL, verdict: INCOMPLETE_TOOL_CALL_VERDICT, dataJson: jsonText(data) };
+}
+
+/** Evidence text for a wire value. A value that came off the wire serializes; one that cannot
+ *  (a hand-built fake) is named as such, so recording evidence never breaks the turn's seal. */
+function jsonText(value: unknown): string {
+	try {
+		return JSON.stringify(value) ?? String(value);
+	} catch (err) {
+		return `[unserializable: ${err instanceof Error ? err.name : typeof err}]`;
+	}
+}
 
 /**
  * Resolve the claude launch — an ENTWURF-OWNED launcher, or the env override for debug.
@@ -359,6 +419,10 @@ export const claudeAdapter: AcpBackendAdapter = {
 	// The token partition is NOT declared here: ACP's only token carrier is a
 	// per-turn round-trip aggregate, which is not what pi's four fields mean.
 	sealsTurnAccounting: true,
+
+	// #127: claude-agent-acp 0.85.0+ rejects an `end_turn` with unanswered foreground tools as
+	// -32603 `incomplete_tool_call` (upstream #1212). Its raw text reads as transient to pi.
+	readPromptRejection: readClaudePromptRejection,
 };
 
 // ---------------------------------------------------------------------------
@@ -527,6 +591,10 @@ export const cortexAdapter: AcpBackendAdapter = {
 	// backend.ts seals nothing for a backend without this flag, so cortex's
 	// emitted usage is byte-identical to what it was before #93. Declaring this
 	// with a guess would mint exactly the silent misaccounting #93 exists to end.
+
+	// NO readPromptRejection — also deliberate. Nobody has read which failures cortex's ACP
+	// server rejects a prompt with, so every cortex failure keeps the verbatim-first
+	// errorMessage. Borrowing claude's `incomplete_tool_call` reader would be a guess.
 };
 
 const ADAPTERS: readonly AcpBackendAdapter[] = [claudeAdapter, cortexAdapter];

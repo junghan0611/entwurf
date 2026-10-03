@@ -1348,6 +1348,14 @@ check_acp_foreground_only() {
   run_vitest pi-extensions/lib/acp/backend-adapter.test.ts
 }
 
+check_acp_vendor_rejection() {
+  # Behaviour-adjacent tests are discovered by the glob lane. This narrow case is the
+  # mutant execution coordinate: include the adapter admission and real turn pipeline,
+  # and keep run_vitest's failed-title attribution for qualification.
+  section "ACP vendor rejection admission (mutant execution coordinate)"
+  run_vitest pi-extensions/lib/acp/backend-adapter.test.ts pi-extensions/lib/acp/backend.vendor-rejection.test.ts
+}
+
 check_pi_mcp_register() {
   # NOT a discovery path — check-tests-beside-behavior finds the test by glob. This case is the
   # MUTANT EXECUTION COORDINATE for scripts/mutants/pi-mcp-register.json (same reasoning as
@@ -1622,9 +1630,9 @@ smoke_acp_session_reuse_live() {
   # needs LIVE=1. Forces process-scoped (pushes --entwurf-control into argv) and
   # drives TWO real ACP turns over ONE reused claude-agent-acp child via the real
   # streamShellAcp: turn 1 introduces a codeword (full transcript), turn 2 sends
-  # ONLY the latest user delta and must recall the codeword — proving the child
-  # was reused and the live ACP session kept turn-1 history (a respawn-per-turn
-  # backend would forget it). The one-shot exit0 half is owned by
+  # ONLY the latest user delta. The REUSE lifecycle notice, with no new bootstrap,
+  # is the verdict; codeword recall is supporting only (a rebuilt full transcript
+  # could recall it too). The one-shot exit0 half is owned by
   # smoke-acp-provider-live.
   # Model override: ENTWURF_ACP_PROVIDER_MODEL (default claude-sonnet-5).
   #   LIVE=1 ./run.sh smoke-acp-session-reuse-live
@@ -7715,6 +7723,9 @@ case "$cmd" in
     ;;
   check-acp-prompt-lifecycle)
     check_acp_prompt_lifecycle
+    ;;
+  check-acp-vendor-rejection)
+    check_acp_vendor_rejection
     ;;
   check-acp-launch-namespace)
     check_acp_launch_namespace

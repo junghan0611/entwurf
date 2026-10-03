@@ -251,8 +251,10 @@ every focused gate green at the time:
   `FRESHCALL-CODEX-PREMUTATION-MCP` in a manifest the lane never touched; qualification reported
   it `MUTANT-STALE` (find matched 0×). **A stale mutant is a claim nobody is testing** — its
   assertion keeps passing while the mutation that gives it meaning is never applied — which is why
-  this is a red rather than a warning. `check-gate-manifests` validates shape and inventory in
-  seconds but cannot see a find that no longer matches; only the executing body can.
+  this is a red rather than a warning. `check-gate-manifests` also reads each subject and
+  validates the joined `find` exactly once (`[QK:MUTANT-FIND-MATCHES-SUBJECT]`): #127's moved
+  reuse-catch anchor was caught by this HEAD. It executes zero committed mutants. Only the
+  qualification body proves that a matching corruption is killed at its claimed signature.
 - **Any `mcp/entwurf-bridge/src/**` edit owes `pnpm run build-bridge` plus
   `./run.sh check-bridge-delivery` in the same inner loop.** `[측정 2026-09-16]` the same candidate
   reached `check:full` with a stale compiled entry and failed in 22 seconds on "artifact is not
@@ -398,6 +400,7 @@ The single-turn / multi-turn / cross-process / persistence-boundary / shutdown i
 | Lifecycle policy — turn-scoped is always new; process-scoped may reuse only the live in-memory session; persisted records are not a resume/load path today | `check-acp-session-store`, `check-acp-session-reuse` |
 | Tool-call / event mapping | `check-acp-event-mapper`, `smoke-acp-provider-live` |
 | Prompt lifecycle — no wall-clock cutoff on a running turn; abort ends it by ACP `session/cancel` with bounded cleanup; a child death is reported with exit status + stderr on new AND reuse turns; our prompt-phase error text is not classified transient by pi | `check-acp-prompt-lifecycle`, `check-probe-ordering` |
+| Claude typed `incomplete_tool_call` prompt failure — real pi retry/overflow classifiers reject the fixed verdict, raw evidence stays in existing diagnostics, exactly one seal and drop on new/reuse; other failures retain the legacy stderr path, cancel stays separate. A deterministic receipt does not certify the target vendor runtime. | `check-acp-vendor-rejection` (four mutants), `smoke-acp-raw-turn-live`, `smoke-acp-session-reuse-live` |
 | Operator mcpServers / skills reach the live session | `smoke-acp-mcp-live`, `smoke-acp-skill-live`, `check-acp-config` |
 | Overlay isolation + memory containment | `check-acp-overlay`, `smoke-acp-memory-containment-live`, `check-acp-tool-surface` |
 

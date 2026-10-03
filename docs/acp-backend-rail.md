@@ -48,6 +48,7 @@ Source of truth: `pi-extensions/lib/acp/backend-adapter.ts`.
 | `buildSessionMeta` | Build optional `newSession._meta` from the already-loaded carrier. |
 | `enforceModel` | Make the requested native model authoritative before the prompt. |
 | `configSignatureFields` | Return a stable primitive map whose changes invalidate reuse. |
+| `readPromptRejection?` | Name a backend-owned typed prompt rejection and its fixed app-policy verdict; absent means the existing verbatim-first failure path. |
 
 `backend.ts` resolves the adapter once at turn entry. Common config never branches on
 backend-specific keys; `adapterSettings` remains opaque until handed back to its owner.
@@ -85,21 +86,54 @@ turned one long turn into four in 0.13.0. Gates: `check-acp-prompt-lifecycle` (b
 with pi's own classifier as the oracle), `check-probe-ordering` (no production prompt
 cutoff in source).
 
+### Typed Claude prompt rejection — no automatic whole-prompt replay (#127)
+
+Claude ACP 0.85.1 can reject a prompt with the wire SDK's `RequestError`, code `-32603`,
+`data.errorKind === "incomplete_tool_call"`, after marking unfinished foreground tools
+failed. Some tools may already have run. This is an RPC failure, not a successful
+`stopReason`, and a failed tool notification alone is not a turn settlement. The code
+is JSON-RPC's internal error; the kind is Claude's extension vocabulary, not a standard
+retry permission. AIR session-failure metadata remains capability-gated off by
+`clientCapabilities: {}`.
+
+Only the Claude adapter declares `readPromptRejection`. The common loop passes the
+once-resolved adapter at the two prompt catches, not at bootstrap failures, and skips
+this reader when the operator's abort wins. A recognized rejection seals once as
+`error/error`, drops the new or reused session under the existing policy, and sets a
+fixed semantic `errorMessage` which pi's real retry **and** overflow classifiers must
+reject. No global retry disable, substring sanitizer, or new failure ledger is added.
+
+The first raw failure remains in pi's existing `AssistantMessage.diagnostics`: original
+name/message/stack/code, serialized data, and applicable stderr tail, lifecycle, launch
+signal and overflow hint. None is remixed into the semantic verdict. Actual wire data
+is parsed JSON; a hand-built non-wire value that cannot serialize gets an explicit
+unserializable marker rather than escaping before the stream seal. Assistant content,
+context replay and reuse signatures remain unchanged; persisted message JSON gains
+these diagnostics. Cortex, other error kinds/codes, preprompt failures and aborts keep
+the existing path. No warm reuse after this failure is newly claimed.
+
+`check-acp-vendor-rejection` owns the source-adjacent adapter/pipeline assertions and
+four defect mutants. Its real classifier oracles, raw positive controls, failed-tool
+ordering, exact-once seal/drop, raw evidence and separate cooperative-cancel cells do
+not certify a real vendor runtime. Target closure installation, focused receipts,
+qualification, full floor and LIVE compatibility remain separate in the
+[#127 thread](https://github.com/junghan0611/entwurf/issues/127).
+
 ## Support contract (#81)
 
 What "supported" means here, per declaration class. The classes are kept apart on purpose: one
 undifferentiated "supported" column is what let a Claude PASS read as if it also certified Cortex.
 The rows are THIS checkout's declarations, not a shipped release: what a published version carried
 is that version's CHANGELOG entry, and a candidate's own evidence is its issue thread, LIVE receipts
-and exact-SHA CI (#125 for the Pi 1.0 candidate).
+and exact-SHA CI (#125 for the Pi 1.0 candidate, #127 for the Claude ACP candidate).
 
 | Surface | Declaration | Class | What a green actually says |
 |---|---|---|---|
 | Entwurf package | `package.json` `version` | checkout declaration, not a release receipt | names the package label these rows sit beside; whether that label shipped, and with which rows, is CHANGELOG's record |
 | pi runtime | devDep exact `1.0.0`, peer `>=1.0.0 <1.1` | **exact** oracle + **closed range** | the source pin this checkout builds and gates against; hosts inside the range are accepted, and the ceiling moves only on measurement. Its 1.0.0 evidence is #125's branch receipts, not a shipped release |
-| ACP wire SDK | `@agentclientprotocol/sdk 1.4.0` | **exact** | the shared wire oracle both adapters speak |
-| Claude ACP adapter | `@agentclientprotocol/claude-agent-acp 0.79.0` | **exact**, bundled | the adapter we ship and certify; resolved before any PATH fallback |
-| Claude Agent SDK | `0.3.274` (transitive) | **exact** oracle | the runtime risk surface behind the adapter |
+| ACP wire SDK | `@agentclientprotocol/sdk 1.6.0` | **exact** | the shared wire oracle both adapters speak |
+| Claude ACP adapter | `@agentclientprotocol/claude-agent-acp 0.85.1` | **exact**, bundled | checkout candidate; resolved before any PATH fallback; declaration is not compatibility evidence |
+| Claude Agent SDK | `0.3.286` (transitive) | **exact** oracle | the runtime risk surface behind the adapter |
 | Anthropic SDK | `0.100.1` | **exact**, peer-resolution only | satisfies the Agent SDK peer floor (0.93.0+); never an API client here (gate L4) |
 | Claude Code runtime | `>=2.1.217` (`entwurf.claudeCodeFloor`) | **floor** | below it, hook args are silently dropped; entwurf enforces this itself |
 | Node | `>=24` (`engines.node`) | **floor** | single axis, derived everywhere else |
@@ -373,10 +407,15 @@ caller-session `_meta`, and cross-machine certification.
 
 A backend can return `newSession` before its declared MCP server is callable. This was
 observed intermittently on the Claude rail and directly on Cortex's private `mcp.json`
-path. Neither `claude-agent-acp` 0.79.0 nor the Cortex landing adds a client-side
-readiness fence over a session's declared MCP servers, and entwurf's common loop
-calls `mcpServerStatus()` nowhere.
-(Re-measured at the 0.76.0 → 0.79.0 bump, not inherited — the previous bump's argument is
+path. Entwurf's common loop calls `mcpServerStatus()` nowhere; it does not add a
+client-side readiness fence over a session's declared MCP servers. The historical
+0.76.0 → 0.79.0 source measurement below is dated evidence, not a current-version
+runtime claim. For the 0.85.1 candidate, #127 re-measured the MCP-authentication
+window as byte-identical and ran the MCP/self/send LIVE samples; neither source
+identity nor green samples establish the cause of the intermittent readiness gap
+or close #72. Changed SDK internals and session initialization remain separate
+risk surfaces.
+(Historical measurement at the 0.76.0 → 0.79.0 bump, not inherited — the previous bump's argument is
 not reused, the way the 0.75.1 → 0.76.0 entry did not reuse 0.73.0 → 0.75.1's.
 `mcpServerStatus` call sites in `src/acp-agent.ts` are **2 at v0.76.0 and 2 at v0.79.0**
 `[측정 2026-09-18, upstream v0.79.0/src/acp-agent.ts read directly, grep -n]`; they first
@@ -392,7 +431,8 @@ empty) and the region moved +11 while the file shrank 10,405 → 10,329 lines. T
 agent-picker removal, the 0.78.0 compaction/checkpoint/AIR work and the 0.79.0 permission
 presentation touch no part of this path, so the other reachable-surface findings stand as
 re-measured in the capability-posture section above.
-This bump changes no readiness behavior and closes no part of #72.)
+That historical source measurement closes no part of #72; it is not a claim that
+all effective readiness behavior stayed unchanged in the 0.85.1 runtime.)
 
 ### 11-7-a/b. Instrument and first measurement
 
@@ -500,12 +540,14 @@ nothing here is promised and then quietly not delivered. `[QK:PI-QUEUE-NO-MIDFLI
 while a turn is in flight never joins that turn and arrives as a later one. The delay's SIZE is
 that turn's duration, which the same cell fixes by construction.
 
-**Forwarding is not adopted here.** `[측정 2026-09-22]` standard ACP has no steer method at all —
-enumerating the installed `@agentclientprotocol/sdk`'s `AGENT_METHODS` and `CLIENT_METHODS` yields
-zero entries containing `steer`. What exists is a PRIVATE vendor extension,
-`_session/steering` in `@agentclientprotocol/claude-agent-acp@0.79.0`
-(`dist/acp-agent.js:163`, handler at `:7792`), client→agent, advertised through
-`InitializeResponse._meta.steering.supported`. Our client sends `initialize`, `session/new`,
+**Forwarding is not adopted here.** The dated `[측정 2026-09-22]` SDK-method enumeration
+and private-extension observation below belong to the then-installed oracle, not a
+0.85.1 runtime measurement: `AGENT_METHODS` and `CLIENT_METHODS` contained zero entries
+matching `steer`; `_session/steering` was a PRIVATE vendor extension in
+`@agentclientprotocol/claude-agent-acp@0.79.0` (`dist/acp-agent.js:163`, handler at `:7792`),
+client→agent, advertised through `InitializeResponse._meta.steering.supported`.
+The current boundary is our client's lack of a steering path, not a claim that the
+old vendor coordinates describe the current pin. Our client sends `initialize`, `session/new`,
 `session/prompt`, `session/set_config_option` and `session/cancel` (`acp-client.ts:138-149`) and
 has no steering path at all.
 

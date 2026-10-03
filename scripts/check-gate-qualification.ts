@@ -3328,6 +3328,7 @@ let manifestCount: number;
 		"acp-stop-reason": 6,
 		"acp-stream-hooks": 10,
 		"acp-usage-accounting": 12,
+		"acp-vendor-rejection": 4,
 		"agy-permission": 6,
 		"bridge-boot-resume": 5,
 		"bridge-command-boot": 12,

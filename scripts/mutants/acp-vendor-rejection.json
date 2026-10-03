@@ -1,0 +1,62 @@
+{
+	"schemaVersion": 1,
+	"lane": "acp-vendor-rejection",
+	"mutants": [
+		{
+			"claim": "ACP-INCOMPLETE-TOOL-NO-REPLAY-NEW",
+			"title": "finishError stops consulting the adapter's prompt-rejection reader — the vendor's raw 'Internal error' text becomes errorMessage again and pi replays a turn whose tools already ran",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": ["\t\tconst rejection = aborted ? undefined : adapter?.readPromptRejection?.(err);"],
+			"replace": ["\t\tconst rejection = aborted ? undefined : undefined;"],
+			"gate": ["bash", "run.sh", "check-acp-vendor-rejection"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:ACP-INCOMPLETE-TOOL-NO-REPLAY-NEW]",
+			"signatureSource": "pi-extensions/lib/acp/backend.vendor-rejection.test.ts"
+		},
+		{
+			"claim": "ACP-PROMPT-REJECTION-CLAUDE-ONLY",
+			"title": "the claude reader stops checking the vendor's errorKind — any -32603 carrying an errorKind (no_result included) is rewritten to the incomplete-tool verdict",
+			"subject": "pi-extensions/lib/acp/backend-adapter.ts",
+			"find": ["\tif (data.errorKind !== CLAUDE_INCOMPLETE_TOOL_CALL) return undefined;"],
+			"replace": ["\tif (data.errorKind === undefined) return undefined;"],
+			"gate": ["bash", "run.sh", "check-acp-vendor-rejection"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:ACP-PROMPT-REJECTION-CLAUDE-ONLY]",
+			"signatureSource": "pi-extensions/lib/acp/backend-adapter.test.ts"
+		},
+		{
+			"claim": "ACP-INCOMPLETE-TOOL-RAW-EVIDENCE",
+			"title": "the recognised rejection is sealed with the verdict but its raw vendor message, data and stderr are dropped instead of riding a pi diagnostic",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": [
+				"\t\t\tappendAssistantMessageDiagnostic(",
+				"\t\t\t\tstate.output,",
+				"\t\t\t\tcreateAssistantMessageDiagnostic(ACP_PROMPT_REJECTION_DIAGNOSTIC, err, {",
+				"\t\t\t\t\terrorKind: rejection.errorKind,",
+				"\t\t\t\t\tdataJson: rejection.dataJson,",
+				"\t\t\t\t\t...(lifecycle ? { lifecycle } : {}),",
+				"\t\t\t\t\t...(observed ? { launchSignal: observed } : {}),",
+				"\t\t\t\t\t...(tail ? { stderrTail: tail } : {}),",
+				"\t\t\t\t\t...(hint ? { hint } : {}),",
+				"\t\t\t\t}),",
+				"\t\t\t);"
+			],
+			"replace": ["\t\t\t// mutant: the raw rejection is not preserved"],
+			"gate": ["bash", "run.sh", "check-acp-vendor-rejection"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:ACP-INCOMPLETE-TOOL-RAW-EVIDENCE]",
+			"signatureSource": "pi-extensions/lib/acp/backend.vendor-rejection.test.ts"
+		},
+		{
+			"claim": "ACP-REUSE-COOPERATIVE-CANCEL",
+			"title": "a reused session's cooperatively cancelled turn is sealed and retained but no longer persisted — the record lags the live session",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": ["\t\t\tfinishSuccess(adapter, session, promptResult);", "\t\t\tpersistRecord(session, deps);"],
+			"replace": ["\t\t\tfinishSuccess(adapter, session, promptResult);"],
+			"gate": ["bash", "run.sh", "check-acp-vendor-rejection"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:ACP-REUSE-COOPERATIVE-CANCEL]",
+			"signatureSource": "pi-extensions/lib/acp/backend.vendor-rejection.test.ts"
+		}
+	]
+}

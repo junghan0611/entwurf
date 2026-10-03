@@ -45,7 +45,12 @@ import { readFileSync } from "node:fs";
 import { Readable, Writable } from "node:stream";
 import { ndJsonStream, PROTOCOL_VERSION } from "@agentclientprotocol/sdk";
 import type { Api, AssistantMessage, Model, SimpleStreamOptions, TranscriptContext } from "@earendil-works/pi-ai";
-import { createAssistantMessageEventStream, getCurrentTools } from "@earendil-works/pi-ai";
+import {
+	appendAssistantMessageDiagnostic,
+	createAssistantMessageDiagnostic,
+	createAssistantMessageEventStream,
+	getCurrentTools,
+} from "@earendil-works/pi-ai";
 import {
 	type AcpClientHandlers,
 	type AcpConnectionLike,
@@ -53,7 +58,11 @@ import {
 	connectAcpClient,
 } from "./acp-client.js";
 import { prependNewPromptAugment } from "./augment.js";
-import { type AcpBackendAdapter, resolveAcpBackendAdapter } from "./backend-adapter.js";
+import {
+	ACP_PROMPT_REJECTION_DIAGNOSTIC,
+	type AcpBackendAdapter,
+	resolveAcpBackendAdapter,
+} from "./backend-adapter.js";
 import {
 	enrichMcpServersWithEnvelope,
 	mcpServerNames,
@@ -1435,13 +1444,18 @@ export function streamAcpTurn(
 		stderrTail?: string[],
 		lifecycle?: string,
 		launchObservation?: AcpLaunchObservation,
+		/** Passed only from the two prompt-phase catches, where the turn's adapter is resolved. */
+		adapter?: AcpBackendAdapter,
 	): void {
 		finalizeAcpStreamState(state);
 		state.output.stopReason = aborted ? "aborted" : "error";
 		const base = err instanceof Error ? err.message : String(err);
 		// The FIRST failure stays first and verbatim (it is what the backend
 		// actually said); the lifecycle line is added, never substituted, so a
-		// reader can still match the transport's own text.
+		// reader can still match the transport's own text. One typed exception
+		// below: a vendor rejection the adapter recognises keeps that verbatim text
+		// as a pi diagnostic instead, because pi reads errorMessage to decide a
+		// whole-prompt replay (#127).
 		const withLifecycle = lifecycle ? `${base}\n${lifecycle}` : base;
 		// Its OWN line, above the vendor tail: an entwurf-owned observation must not
 		// have to be recovered by reading vendor prose.
@@ -1453,7 +1467,28 @@ export function streamAcpTurn(
 		// overflow gets an actionable hint appended, so "API Error" stops hiding
 		// the turn-scoped full-transcript-replay cause.
 		const hint = aborted ? undefined : actionableAcpBackendHint(full);
-		state.output.errorMessage = hint ? `${full}\n\n${hint}` : full;
+		// #127: pi's retry and overflow classifiers read `errorMessage` ALONE, and a
+		// vendor's "Internal error" or any digit run in its ids/stderr reads as transient
+		// — a replay of a turn whose tools already ran. A rejection the adapter names gets
+		// its fixed verdict there; every raw part rides one diagnostic, appended after any
+		// existing ones. An abort keeps the abort path.
+		const rejection = aborted ? undefined : adapter?.readPromptRejection?.(err);
+		if (rejection) {
+			appendAssistantMessageDiagnostic(
+				state.output,
+				createAssistantMessageDiagnostic(ACP_PROMPT_REJECTION_DIAGNOSTIC, err, {
+					errorKind: rejection.errorKind,
+					dataJson: rejection.dataJson,
+					...(lifecycle ? { lifecycle } : {}),
+					...(observed ? { launchSignal: observed } : {}),
+					...(tail ? { stderrTail: tail } : {}),
+					...(hint ? { hint } : {}),
+				}),
+			);
+			state.output.errorMessage = rejection.verdict;
+		} else {
+			state.output.errorMessage = hint ? `${full}\n\n${hint}` : full;
+		}
 		stream.push({ type: "error", reason: aborted ? "aborted" : "error", error: state.output });
 		stream.end();
 	}
@@ -1915,6 +1950,7 @@ export function streamAcpTurn(
 				session?.stderrTail ?? stderrTail,
 				lifecycle,
 				session?.launchObservation ?? launchObservation,
+				adapter,
 			);
 			// error/abort → drop the (uncertain) session and close its child; an
 			// uncertain connection must never be reused (GPT ④).
@@ -1982,7 +2018,7 @@ export function streamAcpTurn(
 			// Without the session-scoped tail a mid-turn child death on a resident
 			// session surfaced as a bare "ACP connection closed" with nothing to read
 			// it by.
-			finishError(err, aborted, session.stderrTail, lifecycle, session.launchObservation);
+			finishError(err, aborted, session.stderrTail, lifecycle, session.launchObservation, adapter);
 			// error/abort on a reused session → drop it and close the child (GPT ④).
 			session.retiring = true;
 			retainedChildren.delete(session.child);
