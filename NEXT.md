@@ -1,4 +1,4 @@
-# NEXT — #126 Herdr·플러그인 0.30.0 정합
+# NEXT — #126 정합·수용 완료 · 다음 범위 결정
 
 > NEXT는 disposable boot sector다. 완료 이력은 issue/git이 지고, 방향은 ROADMAP,
 > 운영 규율은 AGENTS가 진다. 새 하네스 입학 경로는
@@ -6,24 +6,25 @@
 
 # RAIL — 현재 좌표
 
-- [x] **1. 0.30.0 출하·npm 발행** — Pi 1.0/ACP 기본기, README 제품 입구, Codex 검증기 수선 완료. main/tag `6f47efa`; exact-SHA CI·Docker 수용 및 registry bytes 대조 완료. #125 종료.
-- [x] **2. 후속 경계 기록·재개 승인** — #126 Herdr 0.9.3/플러그인, #127 Claude ACP 0.85.1 개설. 2026-10-03 GLG가 #126의 0.30.0 정합 구현·커밋·push를 승인했다. ACP는 별도 보류.
-- [x] **3. 소비 경계 측정 → scoped 구현·독립 검수** — C1 npm 0.30.0 re-pin + C2 Herdr 0.9.3 공급핀. sandbox/focused PASS, 경로 정규화 표현·Pi 1.0 exact callback oracle 수선 완료. L1 단일 LIVE 32 PASS(4 turns, retry 0), closure review 완료.
-- [ ] **4. 고정 후보 검증 → 커밋·push** ← CURRENT: GLG의 plugin version=0.30.0 정렬 결정(2026-10-03)에 따른 metadata 정합·focused·closure 완료, Opus 편집 종료. 새 최종 후보 qualification BODY→frozen full→정상 hooks·ordinary push·agenda를 실행한다(이전 BODY는 의도 중단·별도 보존). 코디네이터 `20261003T164401-a30dda`가 검증/출하를 소유.
-- [ ] **5. exact-SHA CI·public raw-install 소비자 수용** — x86_64/공개 설치 영수증은 #126 스레드로 운반. 릴리즈·npm 발행은 포함하지 않는다.
+- [x] **1. 0.30.0 출하 → #126 재개 승인** — #125 출하/tag `6f47efa`와 npm0.30.0 불변. GLG가 후속 정합·commit/push와 홈페이지·최종 책갈피 push까지 승인했다.
+- [x] **2. 소비 경계 측정 → scoped 구현·독립 검수** — npm0.30.0 re-pin, Herdr0.9.3 공급핀, manifest0.30.0 정렬; 경로 정규화·Pi native callback oracle 수선. L1 32 PASS는 앞 metadata 후보의 독립 receipt로 보존.
+- [x] **3. 고정 후보 검증 → 구현 commit/push·CI** — `506c46f`, local BODY837/837 + full635s, CI [37116290599](https://github.com/junghan0611/entwurf/actions/runs/37116290599) required4 + full492s + BODY837/837 PASS. 첫 x86_64 Herdr0.9.3 sandbox12 실행도 확인(2026-10-03 20:40 KST).
+- [x] **4. public 소비자 수용 → 홈페이지 발행** — public main resolved `506c46f`/npm0.30.0 acquisition/use/deactivate/reinstall PASS. 홈페이지 한·영 `bd165f2` commit/push·Workers Builds·deployed21 paths/양언어 footer exact-SHA PASS; 블로그 초안 불변.
+- [ ] **5. 다음 범위 선택** ← CURRENT: #126 구현·수용은 완료. #127·README 다이어트·#124 P3 중 어느 것도 자동 재개하지 않고 GLG의 다음 선택을 받는다.
 
-현재 좌표: 1·2·3 완료 → 4 검증·commit/push → 5 별도 증거 수용. 최신 권한 원문·진행 정본: [#126 재개 댓글](https://github.com/junghan0611/entwurf/issues/126#issuecomment-5966917810).
+현재 좌표: 1–4 완료 → 5 다음 범위 결정 대기. 이 NEXT는 수용 뒤의 docs-only 책갈피다. 구현 영수증은 [#126 종결 스레드](https://github.com/junghan0611/entwurf/issues/126#issuecomment-5968831307)가 소유하며 뒤 문서 SHA와 합성하지 않는다.
 
-# NOW — #126 Herdr·기존 플러그인 0.30.0 정합
+# NOW — 다음 범위는 GLG가 고른다
 
-- **Next:** 코디네이터가 plugin/runtime 0.30.0으로 맞춘 새 최종 candidate의 qualification·full을 단일 스케줄하고 정상 commit/push→exact-SHA CI·public raw-install 수용을 진행한다. 실행 중 worktree/index/HEAD를 움직이지 않는다. 진행/완료의 최신 좌표는 [#126 스레드](https://github.com/junghan0611/entwurf/issues/126)가 소유한다(이 NEXT는 freeze 직전 책갈피). 끝난 뒤 GLG가 요청한 `homepage/content/projects/entwurf/index{,.ko}.md`의 한·영 문서를 실제 plugin/runtime `0.30.0`, 측정 Herdr `0.9.3` 수용에 맞춘다(기존 블로그 untracked 초안은 제외). #127 범위 결정은 여전히 별도이며 자동 착수하지 않는다.
-- **Baseline:** release `6f47efaca2954dd5d58d3898969e2dafa6b0a9fd`; Pi `1.0.0` / `>=1.0.0 <1.1`; 출하 당시 plugin `0.5.1` / floor `0.9.0`; ACP `0.79.0`. 최신 GLG 결정으로 candidate plugin도 `0.30.0`에 정렬; runtime-lock npm `0.30.0`, supply `0.9.3`(aarch64 sandbox/focused PASS), 운영 herdr는 `0.9.1` 그대로. freeze 직전 L1 fresh/callback 32 PASS(2026-10-03 17:11–17:12 KST), x86_64(CI)·public npm 소비자는 post-push 축으로 분리. 최신 실행 상태는 #126 스레드, ACP 0.85.1은 미착수.
-- **Blocker:** 현재 기술 blocker 미확정. 커밋·push는 이번 세션에 명시 승인됐다. 열린 구현 목적 5건은 그대로이며 새 구현 이슈를 자동 추가하지 않는다. #126은 결정 계약과 실제 diff 완료를 구분해 기록한다; #127은 미착수.
-- **Verify:** 최종 게이트에는 `PATH=/home/junghan/tmp/e126/herdr093:$PATH`를 노출한다 — 운영 0.9.1은 신규 exact supply gate에서 HS-VERSION-BOUNDARY negative로 정상 거절된다. 첫 C1 그룹 qualification(13/31/25)은 그 당시 candidate PARTIAL이며 최종 full로 합성하지 않는다. 이전 plugin 0.5.1 후보의 BODY는 GLG 버전 정렬 결정으로 15m48s 시점에 의도 중단(exit 143); 새 metadata 후보와 합성하거나 gate defect로 해석하지 않는다. L2 checkout-only build LIVE는 npm carrier oracle와 충돌해 UNRUN; 그 기존 gap-probe의 `version = "0.1.0"` 치환도 현재 manifest에서 matches=0/byte-identical로 좁게 측정했다(후속 수선 lead, LIVE 성공/실패 영수증 아님). 실제 npm 경로는 push 뒤 public raw-install LIVE가 소유한다. 이전 #125 local-full 생략 예외는 이 레인에 이월하지 않는다.
+- **Next:** 이번 요청은 완료. #127 ACP0.85.1 또는 보류된 문서 다이어트를 재개하려면 GLG의 별도 범위 승인을 먼저 받는다. 다음 Entwurf bump의 영구 plugin/package equality 정책은 이번 current-number alignment에 포함되지 않았다.
+- **Baseline:** 구현 `506c46fa84094c6a1b53d0562ce9810d4aafd02b`; plugin/runtime `0.30.0`, Herdr supply `0.9.3`, admission floor `0.9.0`, Pi `1.0.0`/`>=1.0.0 <1.1`, ACP `0.79.0`. 출하/tag `6f47efa`·npm0.30.0 바이트와 운영 Herdr0.9.1/config은 불변이다. 홈페이지 구현·배포 `bd165f23dda14814f33edb77f272dd7923c9d34b`; 두 기존 untracked 블로그 초안은 미발행 그대로다.
+- **Blocker:** 이번 레인 blocker 없음. 다음 범위의 권한만 미부여다. #127은 미착수이며 새 구현 이슈를 자동 추가하지 않는다.
+- **Verify:** 구현 SHA의 CI required4/full/BODY와 public npm 소비자는 별도 완료 영수증이다. 뒤 NEXT-only SHA는 정상 CI floor로 관찰하며 BODY filter SKIP을 새 exact-SHA qualification PASS로 쓰지 않는다(새 릴리즈는 VERIFY의 exact-SHA BODY를 별도로 요구). local Herdr 게이트를 새로 돌릴 때는 격리 `~/tmp/e126/herdr093`를 PATH 선두에 둔다; 운영0.9.1은 exact supply boundary negative다. fixture x86 `executed=false`/HSUP-X86-UNEXECUTED는 첫 CI 전 고정 snapshot이고 최신 x86_64 실행은 #126 CI receipt가 소유한다 — 현재 미실행 주장으로 재사용하지 말고 다음 공급핀/증거 schema 수선 때 row+oracle를 함께 다룬다.
+- **Bounds:** L1은 앞 metadata 후보32 PASS/4 turns/retry0; 옛 C1 PARTIAL13/31/25와 의도 중단 BODY(exit143/15m48s)는 합성하지 않았다. L2 checkout-only LIVE는 npm lock/oracle mismatch로 UNRUN, gap-probe의 오래된 version0.1.0 치환 no-op은 측정된 후속 lead다. pane-joined ROW·npm swap/torn-swap·다중 host/model LIVE를 새로 주장하지 않는다. 세부 원문·hash는 #126 스레드에 운반했다.
 - **Read:** [#126](https://github.com/junghan0611/entwurf/issues/126), [#127](https://github.com/junghan0611/entwurf/issues/127), [#125 종결 영수증](https://github.com/junghan0611/entwurf/issues/125#issuecomment-5960364610); `plugins/herdr/README.md`, `docs/herdr-launch-rail.md`, `scripts/fixtures/herdr-supply.json`, `docs/acp-backend-rail.md`.
 - **Do not touch:** ACP #127·Codex 업데이트·새 UI/action/watcher·운영 설정 전환·npm 재발행·태그 변경 제외. 기존 0.30.0/tag 바이트 불변. #124 P3 HOLD·Pi durable/codemode 미결정 유지. 측정 Herdr는 격리 설치로 운영자 바이너리를 교체하지 않는다. 새 형제는 GLG가 요청한 Opus 1명뿐; 필요한 모델 LIVE의 범위·비용은 checkpoint에 먼저 밝힌다.
 
-## 0.30.0 종결 영수증 — 2026-10-03 확인
+## 0.30.0 종결 영수증 — #126 착수 전 확인 snapshot (2026-10-03)
 
 - GLG가 npm을 직접 발행했다. `latest=0.30.0`; registry tarball은 Docker 수용 후보와 `cmp` byte-identical, SHA256 `2242d56b098f482fb2d20cae1fe58a863733f9640defd331f2eed5fbf8ed0715`. SHA1/SHA512와 image/repoDigest는 #125 종결 댓글에 운반했다.
 - main/tag `6f47efa`, CI [37014897417](https://github.com/junghan0611/entwurf/actions/runs/37014897417) required4 + fresh full/BODY success, preserved tgz Docker PASS, [GitHub Release](https://github.com/junghan0611/entwurf/releases/tag/v0.30.0) 완료. 이 NEXT만 출하 뒤 핸드오프 수정이며 release/tag 바이트는 바꾸지 않는다.
