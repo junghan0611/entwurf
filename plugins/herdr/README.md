@@ -41,10 +41,11 @@ Entwurf has two installation routes and they are not competitors either. Pick by
 
 They install the same **Entwurf capability package**, so the garden itself does not change shape by
 route: the same garden ids, the same bridge verbs, the same refusals. But they do not guarantee the
-same bytes. This plugin **pins** its runtime — `runtime-lock.json` names an exact
-`@junghanacs/entwurf@<version>` and the sha512 npm published, and the build compares the tarball
-against it before installing — while a direct `npm install -g @junghanacs/entwurf` follows whatever
-version you ask npm for, `latest` by default. So check the installed version before comparing a
+same bytes. This plugin **pins** its runtime through the closed source in `runtime-lock.json`:
+the production npm carrier names exact `@junghanacs/entwurf@<version>` plus the registry's sha512,
+compared against the tarball before install; an unpublished candidate uses the exact Herdr
+checkout commit instead (see the source contract below). A direct `npm install -g @junghanacs/entwurf`
+follows whatever version you ask npm for, `latest` by default. So check the installed version before comparing a
 surface across the two routes. What else differs is how much of the host gets wired and how you start
 things.
 
@@ -172,6 +173,11 @@ step, plus usage notes that say how to actually start each wired harness:
 [entwurf] claude-code: nothing to add — an ordinary `claude` picks up the entwurf tools through MCP.
 [entwurf] claude-code: a model id looks like `claude-sonnet-5` — the vendor id, not a provider path.
 ```
+
+This is the published npm carrier example. A checkout candidate's third line
+names `junghan0611/entwurf#<8hex> (git)` instead; the current runner prints the
+same npm-worded parenthetical for both sources. The code block keeps the literal
+wording rather than silently improving the product's output.
 
 **The two wirings are opposite, and neither is guessable from outside.** Claude Code gets an MCP
 server, so an ordinary `claude` already has the tools. Pi gets a user-scope package registration, so
@@ -578,14 +584,15 @@ successful install reconciles them rather than duplicating them. Nothing here ca
 transaction and not this package. `./run.sh check-pack-install` packs this checkout, installs the
 tarball into a fresh temp project, and runs the same `verifyInstalledRuntime` against it.
 
-**Switching source is a re-proof, not a config change.** npm is the production authority class, and
-the lock committed in this checkout names it: `@junghanacs/entwurf@0.30.0` with the sha512 the
-registry published (re-read with `npm view` on 2026-10-03), returning from the `herdr-checkout`
-carrier the 0.25.1–0.30.0 candidate windows rode (`8b92e09`). The plugin manifest's own `version`
-is 0.30.0 from the same follow-up, set to match the runtime it locks so the two numbers do not
-diverge; they are still two fields — the manifest version is what Herdr lists for this plugin, the
-lock is which Entwurf bytes the build acquires. Moving between
-them — or to another future authority — re-decides where the bytes come from,
+**Switching source is a re-proof, not a config change.** npm is the production authority class.
+The 0.30.0 follow-up pinned `@junghanacs/entwurf@0.30.0` with the registry's measured sha512
+(re-read with `npm view` on 2026-10-03), returning from the `herdr-checkout` candidate carrier
+(`8b92e09`). This **unpublished 0.30.1 preparation** uses that closed checkout verification
+carrier again: no integrity is invented for an artifact the registry has not published. Re-pin
+npm only after publication, with measured bytes and a fresh source-specific proof. The plugin's
+own version is 0.30.1 for this cut; it is still an independent field — what Herdr lists for the
+plugin, not a permanent equality rule with the acquired package. Moving between
+sources — or to another future authority — re-decides where the bytes come from,
 and candidate evidence does not transfer. Exact acquisition and integrity, the installed runtime
 (`name@version`, compiled entry, three executable bins, real `check-bridge`), the swap and torn-swap
 recovery, activation and deactivation, and the package-consumer proof must be re-run against that

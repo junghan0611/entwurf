@@ -4,6 +4,123 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+## 0.30.1 - 2026-10-04
+
+### Fixed
+
+- **Claude incomplete foreground-tool failures no longer invite a whole-prompt replay (#127).**
+  Only a non-aborted prompt rejection decoded as the root ACP SDK's `RequestError`, code
+  `-32603`, vendor `errorKind: incomplete_tool_call`, receives an authored unsafe-to-replay
+  verdict. Some tools may already have run. The original rejection and stderr/lifecycle/launch
+  evidence stay in existing diagnostics rather than tainting pi's retry/overflow classifier.
+  FIRST failure, abort precedence, exactly one error seal, and new/reuse session drop remain;
+  other failures and Cortex retain their legacy paths. This is not a global retry disable or
+  a claim about vendor-internal retries or real incomplete-tool frequency.
+- **Herdr's existing plugin/runtime consumption boundary is aligned (#126).** The follow-up to
+  0.30.0 aligned the plugin manifest with its locked runtime, re-pinned the published npm bytes,
+  and measured Herdr 0.9.3 supply against the unchanged 0.9.0 admission floor. Sandbox path
+  normalization and the Pi-native callback oracle were corrected. Operating Herdr/config stayed
+  unchanged; no permanent plugin/package equality policy was introduced.
+- **Herdr build verification covers both carriers and the real default lock reader.** Explicit
+  npm and checkout fixtures assert exact sequential acquisition counts and final artifact identity.
+  The uninjected default reader is checked against an independent committed JSON oracle, with a
+  dedicated wrong-directory mutant. This changes proof, not the production build/runtime/activation.
+- **Published support, source observations and execution evidence stay distinct (#127).** The
+  ACP rail and dependency ledger separate conditional settings, capability-gated and ambient
+  changes from runtime certification, stock auth messages from sealed legacy stderr tails,
+  upstream comments from unread SDK internals, and native/platform/loader contexts. The typed
+  rejection row points only to its deterministic gate: normal raw/reuse LIVE turns do not induce
+  that rejection.
+
+### Changed
+
+- **Claude ACP closure:** adapter `0.79.0` → `0.85.1`, shared direct/child ACP wire SDK `1.4.0` →
+  `1.6.0`, Agent SDK `0.3.274` → `0.3.286`; the existing shared-wire contract is retained.
+  New reachable upstream behaviour is classified in the ACP rail and ROADMAP ledger, not
+  silently adopted as new Entwurf policy. Pi 1.0's range and public bridge verbs are unchanged.
+- **Unpublished Herdr verification candidate:** plugin metadata is 0.30.1 and uses the closed `herdr-checkout`
+  verification carrier while 0.30.1 is unpublished. No npm integrity is fabricated. After
+  publication, re-pin only the measured registry artifact and re-prove that acquisition source;
+  switching an installed source still requires explicit deactivate/activate.
+
+### Verification
+
+- Implementation/source review, related MUST LIVE and pre-version landing receipts are in
+  [#127](https://github.com/junghan0611/entwurf/issues/127), with #126's Herdr acceptance separate.
+  Main landing `f24820c` passed required four CI jobs, full411s and qualification841/841.
+  These are pre-version receipts, not this release's exact-SHA acceptance.
+- The gate-only amendment landed separately at `61dbef7`: independent review closed with
+  zero Blockers/Defects; the frozen 0.30.0 source passed local qualification **842/842** and
+  full645s. Its [exact-SHA CI](https://github.com/junghan0611/entwurf/actions/runs/37181269379)
+  passed all four required jobs, full361s and qualification842/842. These are pre-version
+  implementation receipts, not 0.30.1 release acceptance. The original npm-only/version-pinned
+  HPB failure, old wrong-directory mutant survival, inventory RED, PARTIAL13/13 and PARTIAL14/14
+  receipts remain separate history; offline four positive/two negative controls are not registry
+  proof (`~/tmp/e0301-prepare/gate-fix/implementation-floor/`).
+- **Fresh 0.30.1 working-candidate floor:** P4 full641s, followed by
+  `LIVE=1 ./run.sh release-gate /tmp/entwurf-release-gate-0.30.1.SLE9uA --cut`:
+  **MUST PASS=24 FAIL=0 SKIP=0**, **BEHAVIOR PASS=1 FAIL=0 SKIP=0**, exit0/cutOK;
+  its own full645s and qualification **842/842** passed. The versioned candidate on
+  `61dbef7` stayed frozen through both runs (seal
+  `541cc5a368315e6ecac4548a3492ce73024c6fe9dc5613077e14898d4fd76879`).
+  Complete log: `/tmp/entwurf-release-gate-0.30.1.SLE9uA/release-gate.log`, SHA256
+  `ea070c2ea019c05766e40e3442d1a31d68894e6cb3da7f7bbb80460c782bc020`.
+- **Native Codex caller-seat acceptance:** 65 assertions, native `gpt-5.6-luna` and
+  Pi `openai-codex/gpt-6-luna`; personally launched app-server PID2143836 in session
+  A `$309` and initial Pi/fresh Codex/outbound Pi all in S `$316`, windows
+  `@810/@811/@812`. The outbound receipt names `codex-title-anchor`; both exact
+  source-role audits completed3/3. The complete pre-cleanup evidence is retained at
+  `.probe-artifacts/codex-fresh-live-fypXrI/`; decoded decisive receipts accompany
+  `~/tmp/e0301-prepare/fresh-prepare/p5-accepted.json`.
+- **On-demand long-turn:** Sonnet5 completed the original three sequential240s
+  foreground waits in736147ms, with exactly one cold ACP bootstrap and no reported
+  retry/timeout; the same candidate seal remained MATCH. This normal-turn receipt does
+  not induce `incomplete_tool_call` or certify vendor-internal retry frequency.
+- **Immediate P9:** census113 unused roots, four owned/aged/unused roots444K and one
+  reparented GLG Emacs daemon. All four roots were archived before four-fence-checked
+  reclamation; no process was killed. Post-census reports110 unused/zero reclaimable
+  roots, with Emacs untouched. Archive SHA256
+  `3132ab92d26702a5b1e3ddf9298e7e77c6abe63c276625ac2cd93b12558ad19a`;
+  per-root fences and before/after observations are in
+  `~/tmp/e0301-prepare/fresh-prepare/p9-reclaim/receipt.json`.
+- **Claude checkout-provenance certification of the candidate tree:** the local
+  owner-managed installer was refreshed from this working0.30.1 checkout, then a NEW
+  native Claude2.1.289 session was opened without sending a prompt. Install finished
+  `2026-10-04T10:20:16.328Z`; fresh garden `20261004T192019-c50e8a` was created at
+  `10:20:19.625Z`. Exact launched PID3397500/startKey `linux:284430975` joins both
+  markers, its unique V3 record and registered bridge child3397563. Registry-authoritative
+  cached plugin0.1.0 and stable XDG assembly match the checkout's hook/writer/session-id/
+  registry bytes; plugin0.1.0 is not the root package version. Strict doctor exit0:
+  three live owner joins, source=assembled=installed writer `8558bb3a5aa8`, registry
+  `277c8dc2a183`, store v1=0/v2=0/v3=1476, PASS. The targeted leaf completed27s;
+  **full/BODY/P5 reruns=0**, leaf seal
+  `1f754eeb12ff800b2d7c1122d2b8fad030c9311e1784aab67166916ad3eb5364` MATCH.
+  Receipt `~/tmp/e0301-prepare/fresh-prepare/criterion4.json` SHA256
+  `0af3edc3d913eae2157d8229f7408c670f47b8bdd6363ff8e1f1c8a51e2b1fe6`;
+  doctor log SHA256 `6922043ddb500c34edaba5f70115d910cbdbfe7a1d01f8ff9ab28f2b3cf9a83f`.
+  This satisfies the pre-commit fresh-native criterion in dev-clone mode, not emitted-JS
+  package/bin-shim, final-artifact, registry, model-turn or fresh delivery/reply acceptance.
+- **Explicit one-cut agy exception, authorized by GLG (2026-10-04):**
+  “명시 예외 승인 npm publish 전까지 쭉 가줘” authorizes this0.30.1 cut to proceed
+  without criterion7 acceptance. **agy native-push is NOT CERTIFIED on the1.2 line**:
+  measured on oracle/agy1.2.16, the answering LS port requires a CSRF nonce the external
+  sender does not legitimately hold; authenticated current host/CID join and same-gid
+  round-trip are absent. HTTP200/grpc16 `missing CSRF token` is not successful delivery.
+  The requirement's introduction date is unknown. The checked adapter/imprint/raw-send/
+  LIVE/pin subjects are unchanged from0.30.0; last native acceptance remains1.1.0
+  (2026-07-14), `PIN_AGY_MINOR=1.1` and DELIVERY's certification row are unchanged.
+  Follow-up [#128](https://github.com/junghan0611/entwurf/issues/128) is prerequisite
+  research: own tool-shell key presence/current CID/garden first, no nonce extraction,
+  discovery/cache/manager or unapproved implementation. This exception does not label
+  agy green, modify the permanent floor, or authorize npm publication.
+- **No duplicate local floor:** GLG requested retaining the existing green evidence
+  and resolving only the two native leaves. P4/full, qualification BODY, P5 and duplicate
+  local M0/full are not restarted for the post-verdict evidence/policy prose. Exact
+  prepared-SHA CI (four required jobs plus its qualification BODY) and one preserved
+  final-artifact consumer acceptance remain separate mandatory make evidence. The
+  working-candidate receipts above do not certify those later axes or registry bytes;
+  verification prose added after each frozen verdict is not the bytes that run consumed.
+
 ## 0.30.0 - 2026-10-02
 
 ### Changed
