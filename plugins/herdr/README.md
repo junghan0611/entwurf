@@ -120,7 +120,7 @@ commands are ordinary invocations — no model turn, no login, no account.
 
 ```bash
 # 1. pi — the range Entwurf declares as its peer, quoted so the shell keeps it in one word
-npm install -g "@earendil-works/pi-coding-agent@>=1.0.0 <1.1"
+npm install -g "@earendil-works/pi-coding-agent@>=1.0.2 <1.1"
 
 # 2. herdr — see the herdr project for its own install
 herdr --version

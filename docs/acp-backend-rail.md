@@ -134,7 +134,7 @@ ledger, 2026-10-03).
 | Surface | Declaration | Class | What a green actually says |
 |---|---|---|---|
 | Entwurf package | `package.json` `version` | checkout declaration, not a release receipt | names the package label these rows sit beside; whether that label shipped, and with which rows, is CHANGELOG's record |
-| pi runtime | devDep exact `1.0.0`, peer `>=1.0.0 <1.1` | **exact** oracle + **closed range** | the source pin this checkout builds and gates against; hosts inside the range are accepted, and the ceiling moves only on measurement. Shipped in 0.30.0 (`[측정 2026-10-04]` npm `latest` `0.30.0` declares this same peer range); its acceptance record is CHANGELOG 0.30.0, with #125 as the branch evidence |
+| pi runtime | devDep exact `1.0.2`, peer `>=1.0.2 <1.1` | **exact** oracle + **closed range** | the source pin this checkout builds and gates against; hosts inside the range are accepted, and the ceiling moves only on measurement. Unshipped candidate floor: the published 0.30.0 and 0.30.1 declare floor 1.0.0 with the same next-minor ceiling (`[측정 2026-10-05]` `npm view @junghanacs/entwurf@0.30.1 peerDependencies`; acceptance record CHANGELOG 0.30.0, #125 branch evidence). The 1.0.2 move and its receipts are ROADMAP's 2026-10-05 bump entry |
 | ACP wire SDK | `@agentclientprotocol/sdk 1.6.0` | **exact** | the shared wire oracle both adapters speak |
 | Claude ACP adapter | `@agentclientprotocol/claude-agent-acp 0.85.1` | **exact**, bundled | checkout candidate; resolved before any PATH fallback; declaration is not compatibility evidence |
 | Claude Agent SDK | `0.3.286` (transitive) | **exact** oracle | the runtime risk surface behind the adapter |

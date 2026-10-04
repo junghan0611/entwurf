@@ -35,7 +35,7 @@ citizen is not a promise of every lifecycle operation.
 
 Prerequisites: **Node >=24.0.0**, Python 3 for `setup`, and any harnesses you choose
 to use, already installed and authenticated. Pi is optional-by-presence, supported
-range `>=1.0.0 <1.1`; Claude Code supported floor `>=2.1.217` is required for its
+range `>=1.0.2 <1.1`; Claude Code supported floor `>=2.1.217` is required for its
 managed exec-hook lifecycle. pnpm is needed only for source-checkout setup.
 
 ```bash
@@ -187,9 +187,10 @@ or Pi codemode should mean here remains undecided: this cut neither adopts nor
 certifies them. The 0.30.0 follow-up separately measured Herdr supply 0.9.3 and
 re-pinned the plugin runtime to published npm 0.30.0 with manifest 0.30.0; its
 public consumer and CI receipts live in the #126 thread. That dated alignment is
-not a permanent version-equality rule. Unpublished 0.30.1 uses the closed
-`herdr-checkout` verification carrier; the [plugin source contract](./plugins/herdr/README.md)
-owns the measured npm re-pin and source-specific proof owed after publication.
+not a permanent version-equality rule. 0.30.1 is published (npm, 2026-10-04); at its tag the
+plugin's runtime lock is still the closed `herdr-checkout` verification carrier. Publication did
+not re-pin it: the measured npm re-pin and its source-specific proof are separate, still-open
+work that the [plugin source contract](./plugins/herdr/README.md) owns.
 
 Entwurf is the 0.12+ successor to
 [`@junghanacs/pi-shell-acp`](https://www.npmjs.com/package/@junghanacs/pi-shell-acp):

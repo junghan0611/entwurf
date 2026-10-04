@@ -7,9 +7,13 @@
 
 ---
 
-## 미출하 후보 — #127 Claude ACP 0.85.1 (2026-10-04)
+## 미출하 후보 — Pi 1.0.2 floor (2026-10-05)
 
-branch `fix/acp-0851-no-replay`의 Claude ACP closure(adapter 0.85.1 · wire SDK 1.6.0 · Agent SDK 0.3.286)와 #1212 no-replay leaf다. 0.30.x 출하물이 아니다. 측정·증거 등급·UNRUN은 Dep bump 원장 2026-10-03 항목, 수용 판단의 live 원본은 [#127](https://github.com/junghan0611/entwurf/issues/127)이다.
+branch `chore/pi-1.0.2-upstream`: Pi dev pin `1.0.2`, peer `>=1.0.2 <1.1`(next-minor 상한 — 기존 single-source floor 규칙이 pin을 따라 움직인 것이지 새 규칙이 아니다). 0.30.x 출하물이 아니다: 0.30.0/0.30.1 registry의 pi floor는 1.0.0이다. 측정·미측정 축은 Dep bump 원장 2026-10-05 항목.
+
+## 0.30.1 shipped (2026-10-04) — #127 Claude ACP 0.85.1
+
+0.30.1이 branch `fix/acp-0851-no-replay`의 Claude ACP closure(adapter 0.85.1 · wire SDK 1.6.0 · Agent SDK 0.3.286)와 #1212 no-replay leaf를 출하했다. `[측정 2026-10-05]` tag `v0.30.1` = `6932a01`; `npm view @junghanacs/entwurf@0.30.1`: publish 2026-10-04T16:04:15Z, dependencies `claude-agent-acp 0.85.1` · `@agentclientprotocol/sdk 1.6.0`. 출하 기록과 수용 범위는 CHANGELOG 0.30.1과 [release v0.30.1](https://github.com/junghan0611/entwurf/releases/tag/v0.30.1)이 소유한다. 출하가 branch 측정의 등급을 올리지는 않는다: 측정·증거 등급·UNRUN은 Dep bump 원장 2026-10-03 항목 그대로이고, 수용 판단의 live 원본은 [#127](https://github.com/junghan0611/entwurf/issues/127)이다.
 
 ## 0.30.0 shipped (2026-10-02) — Pi 1.0 · ACP 기본기; 아래 범위 문단은 cut 전 기록
 
@@ -17,7 +21,7 @@ branch `fix/acp-0851-no-replay`의 Claude ACP closure(adapter 0.85.1 · wire SDK
 
 GLG 범위 결정(2026-10-02, cut 전): 0.30.0은 Pi 1.0 수용과 ACP 기본기까지 포괄하는 기본기 릴리즈다. 브랜치 `research/125-pi-admission` = `d2e7f05`(tree `0e4a2595`), 증거 진입점은 #125 thread의 브랜치 완료 코멘트(5946960829). 이것은 branch proof이고 release `--cut` 수용이 아니다 — 수용은 prepare/make가 만든다.
 
-- **버전 정책:** Pi dev pin `1.0.0`, peer `>=1.0.0 <1.1`(next-minor 상한). ACP/vendor·Herdr 동반 범프 없음. #124 P3 / composite release-policy는 HOLD.
+- **버전 정책(0.30.0 cut 당시):** Pi dev pin `1.0.0`, peer floor `1.0.0` · 상한 next-minor `1.1`. ACP/vendor·Herdr 동반 범프 없음. #124 P3 / composite release-policy는 HOLD.
 - **이 컷 밖:** pi-durable, structuredContent/codemode, virtual model, autopilot, 새 orchestrator. MCP discovery와 하네스 복구를 Entwurf가 떠맡지 않는다.
 
 후속(관측 — 지금 여는 작업이 아니다):
@@ -120,7 +124,7 @@ ACP는 중심이 아니라 v2 core 위에 provider/model로 들어오는 **plugi
 | v2 live Antigravity → native-push direct injection | native-push adapter/register/decider gates + `smoke-agy-native-push-live` |
 | agy automatic citizen birth + sender/reply identity | hooks/statusline/install/sender gates + three doctors + fresh live round trip |
 | v2 honest reject (false-delivered/`.msg` garbage 0) | matrix-live C3 + deliverability/native-push reject gates |
-| pi 1.0.0 fence | `pnpm check` + release-gate MUST |
+| pi 1.0.2 fence | `pnpm check` + release-gate MUST |
 
 ### Historical — 0.12.0 cutover close checklist
 
@@ -332,7 +336,7 @@ v2 필드 `parentGardenId`/`isEntwurf`는 **stray key로 거부된다** — 되�
 ## 검증 원장 (measured, 재탐색 불필요)
 
 - **pi 0.80 public export:** `hasProjectTrustInputs`/`ProjectTrustStore`/`getAgentDir`/`VERSION` 모두 index
-  public export → TS 직접 import(재구현 불필요). floor = **1.0.0** (`>=1.0.0 <1.1`, next-minor 상한).
+  public export → TS 직접 import(재구현 불필요). floor = **1.0.2** (`>=1.0.2 <1.1`, next-minor 상한).
 - **pi trust(0.79.1+):** `pi -p`는 trust에서 안 멈춤(비대화 미결정→`false` degraded). `--approve`(`-a`)=
   project 파일 로드, `--no-approve`(`-na`)=무시·degraded. `ProjectTrustStore.get`은 nearest-ancestor
   walk-up(조상 cwd 결정을 자식이 상속). `AGENTS.md`/`CLAUDE.md`는 0.79.1에서 trust input에서 제거(항상
@@ -1337,6 +1341,36 @@ v2 필드 `parentGardenId`/`isEntwurf`는 **stray key로 거부된다** — 되�
     `getContextUsage` latency, 다른 platform runtime, 긴 payload. 결정적 원문 좌표는
     [#127 동결 source](https://github.com/junghan0611/entwurf/issues/127#issuecomment-5969949281)와
     [target focused + MUST](https://github.com/junghan0611/entwurf/issues/127#issuecomment-5971362554).
+  - **2026-10-05 bump — pi 1.0.0 → 1.0.2 (미출하 후보, branch `chore/pi-1.0.2-upstream`; 1.0.1은 건너뜀).**
+    upstream `v1.0.0..v1.0.2`(`a13d35a..cd32f77`, 35 commits) 직독 + `npm view @…@1.0.2` 직독.
+    ⑴ **우리 접촉면의 src 변화.** `pi-agent-core` src 0줄. `pi-ai` `utils/retry.ts`가 재시도 패턴에
+    `model is at capacity`를 더했다 — `[측정 2026-10-05]` 같은 문구가 `isRetryableAssistantError` 1.0.0
+    `false` → 1.0.2 `true`, Entwurf가 쓴 prompt-phase 실패 문구는 두 판 모두 `false`. 이 함수가
+    `[QK:PROMPT-ERROR-NOT-TRANSIENT]`·`[QK:ACP-INCOMPLETE-TOOL-NO-REPLAY-*]`의 독립 oracle이고 둘 다
+    1.0.2에서 green. typed rejection이 아닌 vendor 실패(`backend.ts`가 원문 + stderr tail을 그대로
+    errorMessage에 싣는 경로)는 이제 capacity 문구도 pi 재시도 대상이다 — `overloaded`와 같은 부류이고
+    새 Entwurf 계약은 아니다(관측). `pi-coding-agent`: `registerToolRenderer`/`ToolRenderers` 추가뿐.
+    내장 MCP의 project `.pi/mcp.json` override(`command`/`url`/`type` 없는 항목)는 user-level server만
+    대상이라 extension 등록인 `entwurf-bridge`에는 override 경로가 없다. 같은 이름의 완전한 항목이 등록을
+    대체하는 우선순위와 도구 이름 sanitizer(`mcp__entwurf_bridge__*`)는 그대로다. `pi-tui` export 추가,
+    `pi-mcp` OAuth(우리는 stdio), `pi-codemode` 출력 상한(bridge는 `direct`)은 접촉 0.
+    ⑵ **패키징.** 1.0.1이 pi-coding-agent의 `npm-shrinkwrap.json`을 뺐다. 별자리는 불변(run.sh 주석의
+    `npm view` 영수증). lock 변화는 `@earendil-works/*` 10종 1.0.0 → 1.0.2와 pi-ai 전용
+    `@anthropic-ai/sdk` 0.124.0 → 0.129.0뿐이다(우리 `0.100.1`·claude-agent-acp 0.85.1 불변). 1.0.2는
+    publish 24h 미만이라 `minimumReleaseAgeExclude` 10행에 `|| 1.0.2`를 더했다.
+    ⑶ **floor.** single-source floor 규칙 그대로 → peer `>=1.0.2 <1.1`. `[측정 2026-10-05]` oracle
+    호스트의 운영 pi는 `1.0.0`이라 이 후보 기준 below-floor다(setup/install-user-scope의 pi 행 FAIL,
+    운영 pi를 쓰는 LIVE gate 불가). 이 lane은 운영 pi를 건드리지 않는다. 0.30.0/0.30.1 registry의 peer
+    floor는 1.0.0 그대로다(`npm view @junghanacs/entwurf@0.30.1 peerDependencies`).
+    ⑷ **기계 이동.** `package.json` devDep 4 + peer 3 · `pnpm-workspace.yaml` 10행 · `pnpm-lock.yaml` ·
+    `run.sh` install constellation 10 + pin-leak matcher + 그 self-test fixture · mutant find/replace
+    4건(`pi-floor`, `control-send-receipt`, `pack-install` ×2 — claim/QK 불변) · baseline docs의
+    range/exact/prose 선언. 이 문서 0.30.0 절의 cut 당시 정책 문장은 사실을 보존한 채 range 표기만 풀어
+    썼다(그대로 두면 이 스캔이 현재 선언으로 읽는다).
+    ⑸ **focused 영수증(inner loop; sandbox HOME/XDG/`PI_CODING_AGENT_DIR`, identity carrier 제거, model
+    turn 0).** static 7 · pi-ai oracle 소비자 ACP 12 · pi runtime 소비자 14 · 설치 consumer 2
+    (`check-pack`, `check-pack-install`: 1.0.2 10핀 tree, `loader runtime: pinned pi 1.0.2`) 전부 rc=0.
+    **미실행:** qualification body(mutant literal이 움직였으므로 영향 있음), full/frozen floor, LIVE 전부.
 - **Standing focus — Mitsein over MCP:** plain external(non-replyable) vs garden-native meta-session
   (replyable by garden id) 구분이 agent 발화에 정직히 반영되는가. native Claude meta-session이
   external-mcp로 퇴행하거나 `wants_reply=true`를 비대칭 거절하면 버그.
