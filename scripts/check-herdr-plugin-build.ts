@@ -53,6 +53,20 @@ const COMPILED_ENTRY = path.join("mcp", "entwurf-bridge", "dist", "mcp", "entwur
 const COMMIT_A = "a".repeat(40);
 const COMMIT_B = "b".repeat(40);
 
+// Fixture inputs, not registry assertions. The npm coherence check reads this checkout's
+// package.json, so its version is input; neither an unpublished version nor the committed
+// carrier may choose which source these deterministic cells exercise. No network is used.
+const FIXTURE_VERSION = (JSON.parse(fs.readFileSync(path.join(REPO, "package.json"), "utf8")) as { version: string })
+	.version;
+const FIXTURE_NPM_LOCK = Object.freeze({
+	source: "npm",
+	name: PACKAGE,
+	version: FIXTURE_VERSION,
+	integrity: `sha512-${createHash("sha512").update("hpb-npm-fixture").digest("base64")}`,
+});
+const FIXTURE_OTHER_INTEGRITY = `sha512-${createHash("sha512").update("hpb-npm-other-fixture").digest("base64")}`;
+const FIXTURE_CHECKOUT_LOCK = Object.freeze({ source: "herdr-checkout", repository: "junghan0611/entwurf" });
+
 interface SpawnResult {
 	status: number | null;
 	stdout: string;
@@ -175,7 +189,7 @@ function tree(root: string): string[] {
  */
 function fixtureAcquire(opts: { activate: "absent" | "incapable" | "recorder"; log?: string; fail?: boolean }) {
 	return ({ identity, prefix }: AcquireArgs) => {
-		const version = identity.version ?? "0.21.0";
+		const version = identity.version ?? FIXTURE_VERSION;
 		const root = path.join(prefix, "node_modules", PACKAGE);
 		fs.mkdirSync(path.join(root, path.dirname(COMPILED_ENTRY)), { recursive: true });
 		fs.writeFileSync(path.join(root, "package.json"), `${JSON.stringify({ name: PACKAGE, version })}\n`);
@@ -250,6 +264,9 @@ function drive(
 			spawn,
 			write: (t: string) => (out += t),
 			progress,
+			// Existing gate-only seam. Production still reads the committed lock, and its
+			// real source/coherence is independently checked by check-herdr-runtime-bootstrap.
+			readRuntimeLock: () => FIXTURE_NPM_LOCK,
 			...deps,
 		});
 		return { code, refusal: null, out, progress: progressLines };
@@ -409,44 +426,108 @@ function drive(
 
 // ── 6. the two-stage journey, as the RUNNER composes it ────────────────────────
 {
-	const env = world("two-stage");
+	// Declared axes: both closed sources × {initial A, widened A, changed B, repeated B}.
+	// npm identity is the unchanged lock, not a commit; checkout identity IS the commit.
+	const cells = [FIXTURE_NPM_LOCK, FIXTURE_CHECKOUT_LOCK].map((lock) => {
+		const env = world(`two-stage-${lock.source}`);
+		const log = path.join(env.HOME as string, "argv.log");
+		let acquisitions = 0;
+		const counted = (args: AcquireArgs) => {
+			acquisitions++;
+			return fixtureAcquire({ activate: "recorder", log })(args);
+		};
+		const stages = [COMMIT_A, COMMIT_A, COMMIT_B, COMMIT_B].map((commit, index) => {
+			const rows: Record<string, string> = { pi: "current (v8) (/home/u/.pi)" };
+			if (index > 0) rows.claude = "current (v5) (/home/u/.claude)";
+			const result = drive(env, listing(rows), {
+				acquire: counted,
+				readRuntimeLock: () => lock,
+				resolveCommit: () => commit,
+			});
+			return { code: result.code, acquisitions };
+		});
+		const calls = fs.readFileSync(log, "utf8").trim().split("\n");
+		const { artifactIdentity: identity } = JSON.parse(fs.readFileSync(journalPathOf(env), "utf8")) as {
+			artifactIdentity: Record<string, string>;
+		};
+		const expectedCounts = lock.source === "npm" ? [1, 1, 1, 1] : [1, 1, 2, 2];
+		const exactIdentity =
+			lock.source === "npm"
+				? identity.name === PACKAGE &&
+					identity.version === FIXTURE_VERSION &&
+					identity.expectedIntegrity === FIXTURE_NPM_LOCK.integrity
+				: identity.repository === FIXTURE_CHECKOUT_LOCK.repository &&
+					identity.commit === COMMIT_B &&
+					identity.packageName === PACKAGE &&
+					identity.packageVersion === FIXTURE_VERSION;
+		return {
+			source: lock.source,
+			stages,
+			calls,
+			identity,
+			passed:
+				stages.every((stage) => stage.code === 0) &&
+				JSON.stringify(stages.map((stage) => stage.acquisitions)) === JSON.stringify(expectedCounts) &&
+				JSON.stringify(calls) === JSON.stringify(["pi", "pi,claude-code", "pi,claude-code", "pi,claude-code"]) &&
+				identity.kind === lock.source &&
+				exactIdentity,
+		};
+	});
+	ok(
+		"[QK:HPB-SEQUENTIAL-TWO-STAGE] both closed sources hand down `{pi}` then the widened `{pi, claude-code}` " +
+			"on every reinstall, never OpenCode. An unchanged npm lock acquires once; checkout acquires again ONLY " +
+			"when A becomes B, and repeated B acquires nothing. Counts are exact at EACH step, not an aggregate lower " +
+			"bound. Installed identity must retain the input kind and its exact version/integrity or commit/completeness. " +
+			"The real writer bytes are HAC-TWO-STAGE-ADD-ONLY; this cell owns runner composition. " +
+			`Fixture identities do not claim registry acceptance (cells=${JSON.stringify(cells)})`,
+		cells.length === 2 && cells.every((cell) => cell.passed),
+	);
+}
+
+// ── 5b. the production default reader composes with the committed lock ─────────
+{
+	// Independent input oracle: read the committed JSON directly, not the runtime reader
+	// whose invocation this cell certifies. All acquisition/activation bytes remain fixture.
+	const committed = JSON.parse(fs.readFileSync(path.join(PLUGIN_DIR, "runtime-lock.json"), "utf8")) as
+		| { source: "npm"; name: string; version: string; integrity: string }
+		| { source: "herdr-checkout"; repository: string };
+	const env = world("default-lock-reader");
 	const log = path.join(env.HOME as string, "argv.log");
 	let acquisitions = 0;
-	const counted = (args: AcquireArgs) => {
-		acquisitions++;
-		return fixtureAcquire({ activate: "recorder", log })(args);
-	};
-	const stage1 = drive(env, listing({ pi: "current (v8) (/home/u/.pi)" }), {
-		acquire: counted,
+	const acquire = fixtureAcquire({ activate: "recorder", log });
+	const result = drive(env, listing({ pi: "current (v8) (/home/u/.pi)" }), {
+		readRuntimeLock: undefined,
 		resolveCommit: () => COMMIT_A,
+		acquire: (args: AcquireArgs) => {
+			acquisitions++;
+			return acquire(args);
+		},
 	});
-	const stage2 = drive(env, listing({ pi: "current (v8) (/home/u/.pi)", claude: "current (v5) (/home/u/.claude)" }), {
-		acquire: counted,
-		resolveCommit: () => COMMIT_A,
-	});
-	const stage3 = drive(env, listing({ pi: "current (v8) (/home/u/.pi)", claude: "current (v5) (/home/u/.claude)" }), {
-		acquire: counted,
-		resolveCommit: () => COMMIT_B,
-	});
-	const calls = fs.readFileSync(log, "utf8").trim().split("\n");
-	const journal = JSON.parse(fs.readFileSync(journalPathOf(env), "utf8")) as {
-		artifactIdentity: { kind: string; version: string };
-	};
+	const journal = fs.existsSync(journalPathOf(env))
+		? (JSON.parse(fs.readFileSync(journalPathOf(env), "utf8")) as { artifactIdentity: Record<string, string> })
+		: null;
+	const identity = journal?.artifactIdentity;
+	const exactIdentity =
+		identity !== undefined &&
+		identity.kind === committed.source &&
+		(committed.source === "npm"
+			? identity.name === committed.name &&
+				identity.version === committed.version &&
+				identity.expectedIntegrity === committed.integrity
+			: identity.repository === committed.repository &&
+				identity.commit === COMMIT_A &&
+				identity.packageName === PACKAGE &&
+				identity.packageVersion === FIXTURE_VERSION);
 	ok(
-		"[QK:HPB-SEQUENTIAL-TWO-STAGE] the sequence a real operator performs, as the runner composes it: `{pi}` first, " +
-			"then `{pi, claude-code}` after they integrated Claude Code, then the same exact npm lock again. " +
-			"The locked artifact acquires once while the widened set is still reconciled on each reinstall. " +
-			"OpenCode is present in every listing and appears in NO activation argv — the bytes those activations write " +
-			"are `check-herdr-activation`'s HAC-TWO-STAGE-ADD-ONLY, which drives the real Pi writers; what this cell owns " +
-			`is what the runner hands down (codes=${stage1.code}/${stage2.code}/${stage3.code} acquisitions=${acquisitions} calls=${JSON.stringify(calls)} identity=${journal.artifactIdentity.kind}@${journal.artifactIdentity.version})`,
-		stage1.code === 0 &&
-			stage2.code === 0 &&
-			stage3.code === 0 &&
+		"[QK:HPB-DEFAULT-LOCK-READ] without a reader override, runBuild reads this plugin's committed lock " +
+			"from PLUGIN_DIR, not the repository root or a synthetic fixture. The acquired identity retains the " +
+			"independently read source and exact artifact fields; installed activation still runs once for pi. " +
+			`This is composition proof, not registry acquisition (code=${result.code} refusal=${result.refusal} acquisitions=${acquisitions} identity=${JSON.stringify(identity)})`,
+		result.code === 0 &&
 			acquisitions === 1 &&
-			JSON.stringify(calls) === JSON.stringify(["pi", "pi,claude-code", "pi,claude-code"]) &&
-			!calls.some((c) => c.includes("opencode")) &&
-			journal.artifactIdentity.kind === "npm" &&
-			journal.artifactIdentity.version === "0.30.0",
+			exactIdentity &&
+			fs.existsSync(log) &&
+			fs.readFileSync(log, "utf8") === "pi\n",
 	);
 }
 
@@ -455,12 +536,11 @@ function drive(
 	const IDENTITY = (seed: string) => ({
 		kind: "npm",
 		name: PACKAGE,
-		version: "0.30.0",
-		expectedIntegrity:
-			"sha512-ro8NXOmHxYyk9+8k79vK4lLPpNBe4KiUcPzCNdLdeByas92ueFqS1oQ+c33Tc5mnAk1+X3H7iraxpjkRWilIqw==",
+		version: FIXTURE_VERSION,
+		expectedIntegrity: FIXTURE_NPM_LOCK.integrity,
 		observedDigest: `sha256-${createHash("sha256").update(seed).digest("hex")}`,
 	});
-	/** A host that already has a runtime at commit A and a ledger that says so. */
+	/** A host with the explicit npm fixture installed and a ledger describing it. */
 	const seeded = (tag: string, backends: string[]): NodeJS.ProcessEnv => {
 		const env = world(tag);
 		const log = path.join(env.HOME as string, "argv.log");
@@ -540,7 +620,7 @@ function drive(
 	);
 	const srcUnchanged = unchanged(src, srcBefore);
 
-	// (b) a new commit whose request DROPS a backend the ledger holds.
+	// (b) a changed npm integrity whose request DROPS a backend the ledger holds.
 	const drop = seeded("plan-drop", ["pi", "claude-code"]);
 	const dropBefore = snapshot(drop);
 	let dropAcquired = 0;
@@ -549,12 +629,7 @@ function drive(
 			dropAcquired++;
 			return fixtureAcquire({ activate: "recorder", log: path.join(drop.HOME as string, "argv.log") })(args);
 		},
-		readRuntimeLock: () => ({
-			source: "npm",
-			name: PACKAGE,
-			version: "0.30.0",
-			integrity: "sha512-AR2VCui7JjK3w56rQSDs3AuAJMMuiXCNWH7HB52SQ3E/7p0oPhcxD+fb6Gdzi0VcBnheqxPzvJHMPQQcdYtNiw==",
-		}),
+		readRuntimeLock: () => ({ ...FIXTURE_NPM_LOCK, integrity: FIXTURE_OTHER_INTEGRITY }),
 		resolveCommit: () => COMMIT_B,
 	});
 
@@ -568,8 +643,7 @@ function drive(
 				...(JSON.parse(fs.readFileSync(tornLedger, "utf8")) as Record<string, unknown>),
 				artifactIdentity: {
 					...IDENTITY(COMMIT_B),
-					expectedIntegrity:
-						"sha512-AR2VCui7JjK3w56rQSDs3AuAJMMuiXCNWH7HB52SQ3E/7p0oPhcxD+fb6Gdzi0VcBnheqxPzvJHMPQQcdYtNiw==",
+					expectedIntegrity: FIXTURE_OTHER_INTEGRITY,
 				},
 			},
 			null,
@@ -590,7 +664,7 @@ function drive(
 	// The authority is asked on the PRE-install state, which is the only state it is ever asked about.
 	const legal = seeded("plan-legal", ["pi"]);
 	const legalPlan = runner.certifyActivationPlan(legal, {
-		lock: { source: "npm", name: PACKAGE, version: "0.30.0", integrity: IDENTITY("x").expectedIntegrity },
+		lock: FIXTURE_NPM_LOCK,
 		checkoutRoot: REPO,
 		requested: ["pi"],
 	});
@@ -636,7 +710,7 @@ function drive(
 	// identity can move between D1 and D2.
 	const drifted = drive(env, listing({ pi: "current (v8) (/home/u/.pi)" }), {
 		acquire: fixtureAcquire({ activate: "recorder", log }),
-		readRuntimeLock: () => ({ source: "herdr-checkout", repository: "junghan0611/entwurf" }),
+		readRuntimeLock: () => FIXTURE_CHECKOUT_LOCK,
 		resolveCommit: moving,
 	});
 	const journal = JSON.parse(fs.readFileSync(journalPathOf(env), "utf8")) as { artifactIdentity: { commit: string } };
@@ -749,7 +823,7 @@ function drive(
 			full.progress[0].includes("integration status") &&
 			full.progress[1].includes("pi, claude-code") &&
 			longStep.includes("long step") &&
-			longStep.includes("@junghanacs/entwurf@0.30.0") &&
+			longStep.includes(`${PACKAGE}@${FIXTURE_VERSION}`) &&
 			full.progress[3].includes("what landed") &&
 			full.progress[4].includes("wiring pi, claude-code") &&
 			full.progress[5].startsWith("done: ") &&

@@ -69,6 +69,17 @@
 			"signatureSource": "scripts/check-herdr-plugin-build.ts"
 		},
 		{
+			"claim": "HPB-DEFAULT-LOCK-READ",
+			"title": "reading the default lock from the repository root rather than the plugin directory breaks the real build while source-injected fixture drives stay green; the production composition must consume this plugin's committed source and artifact fields",
+			"subject": "plugins/herdr/lib/build.mjs",
+			"find": ["\tconst lock = lockReader(PLUGIN_DIR);"],
+			"replace": ["\tconst lock = lockReader(CHECKOUT_ROOT);"],
+			"gate": ["bash", "run.sh", "check-herdr-plugin-build"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:HPB-DEFAULT-LOCK-READ]",
+			"signatureSource": "scripts/check-herdr-plugin-build.ts"
+		},
+		{
 			"claim": "HPB-POST-BUILD-GAP",
 			"title": "claiming Herdr's registration in this runner's own receipt states a step that has not run: herdr commits its checkout and registry only AFTER the build returns, so the next reconcile would be arguing with a lie",
 			"subject": "plugins/herdr/lib/build.mjs",
