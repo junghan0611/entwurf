@@ -7,6 +7,14 @@
 
 ---
 
+## 보류 방향 — #114 독립 garden frontend (2026-10-05)
+
+[GLG 결정, 2026-10-05 현재 세션] 당장 진행하지 않는다. #114를 이 문서로 이관하고 deferred/not-planned로 닫아 #129 native durable 구현에 슬롯을 돌린다. 완료·main 착륙·출하를 뜻하지 않는다.
+
+- **방향:** Herdr 비의존 설치·설정면과 read-only tmux/citizen viewer. Pane은 placement observation, garden id는 record authority다. Screen/keystroke·cwd 일치로 identity/delivery/join을 추정하지 않고, attention 미관측은 그대로 남긴다. Core를 viewer에 맞춰 넓히지 않는다.
+- **보존된 구현:** [#114 최신 인계](https://github.com/junghan0611/entwurf/issues/114#issuecomment-5657853881)에서 읽은 branch `feat/114-garden-frontend`, 구현 `351c23f`, proof amendment `ec49ada`, handoff `f15297a`와 [branch NEXT](https://github.com/junghan0611/entwurf/blob/feat/114-garden-frontend/NEXT--feat_114-garden-frontend.md). 이 결정으로 branch/코드/영수증을 삭제하거나 병합하지 않는다. 과거 gate 수치는 해당 thread의 당시 후보 증거이지 현재 main 증거가 아니다.
+- **재개 조건:** GLG가 실제 사용에서 다시 필요하다고 결정한 뒤 기존 handoff와 source를 읽고 현재 계약에 맞춰 측정한다. 상속된 topology 경고: #115 cherry-pick `1f456df`가 branch에 있으나 main은 standalone `d49e6cb`를 받았으므로 #114-only lane을 normalize/replay한다; wholesale merge 금지. 새 구현 이슈는 당시 queue 슬롯과 증거로 다시 판단한다.
+
 ## 미출하 후보 — Pi 1.0.2 floor (2026-10-05)
 
 branch `chore/pi-1.0.2-upstream`: Pi dev pin `1.0.2`, peer `>=1.0.2 <1.1`(next-minor 상한 — 기존 single-source floor 규칙이 pin을 따라 움직인 것이지 새 규칙이 아니다). 0.30.x 출하물이 아니다: 0.30.0/0.30.1 registry의 pi floor는 1.0.0이다. 측정·미측정 축은 Dep bump 원장 2026-10-05 항목.
