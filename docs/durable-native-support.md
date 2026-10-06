@@ -4,7 +4,7 @@
 
 Support `pi-durable` as a separate native-harness contact, not an enhancement to ordinary Pi. There is no upstream PR or upstream acceptance dependency. The target is **0.31.0**, retaining Pi1.0.2/source `cd32f7725fdbddbaecdff5b1e68491563394e0ca`; later Pi version acceptance belongs to #130.
 
-Development takes place **on a branch in this repository checkout**. No worktrees or tmp development clones. Isolated test fixtures and preserved receipts are evidence, not another implementation authority. `AGENTS.md` owns the working rules; `NEXT--feat_durable-native-support.md` owns the current people, state and next move; #129 owns the live issue contract.
+Development takes place **on a branch in this repository checkout**. No worktrees or tmp development clones. Isolated test fixtures and preserved receipts are evidence, not another implementation authority. `AGENTS.md` owns the working rules; `NEXT.md` owns the current release state and next move. #129 closed at reviewed main `535c2e1` after first native admission; #130 owns runtime-supply, later Pi versions, ACP and UI follow-ups.
 
 Expired per-leaf grants and handoffs are not current instructions. They do not prohibit ordinary source edits or builds, or impose a whole-team shutdown/zero-downtime migration as a commit condition. Commits and releases still require the existing verification and authorization boundaries. Push and npm publication require GLG's separate explicit request.
 
@@ -46,8 +46,8 @@ The existing admission path remains identity → native visible identity → sen
 
 ## Read next
 
-- `NEXT--feat_durable-native-support.md` — current branch closure.
+- `NEXT.md` — current release state and next move; the implementation branch handoff was retired at main landing.
 - `AGENTS.md`, `VERIFY.md`, `DELIVERY.md`, `docs/adding-a-harness.md`, `docs/mux-launch-rail.md` and `.claude/skills/entwurf-release/SKILL.md` — owning contracts.
-- #129 — current implementation; #130 — subsequent Pi version, ACP-Claude and UI decisions.
+- #129 — closed implementation/first-admission record; #130 — runtime-supply, subsequent Pi version, ACP-Claude and UI decisions.
 
 The prior narrative and temporary grant references are preserved only in ignored `.agent-reports/original-closure-20261006/`. They are not a second working surface or authority.

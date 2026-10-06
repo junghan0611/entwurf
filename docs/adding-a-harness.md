@@ -17,9 +17,10 @@ describes entwurf ownership of a concrete invocation/install/config surface; it 
 admission grade. *Supported* means the end-to-end native-harness contract in this document has
 been accepted.
 
-## The current source map — six backends, one gauge
+## The current source map — seven citizen backends, one gauge
 
-Steps 1–9 below are one fixed gauge, and six backends ride it in the current source candidate.
+Steps 1–9 below are one fixed gauge, and seven citizen backends ride it in the current source candidate.
+Six are fresh-openable; Antigravity retains its declared native-push legacy exception.
 Every new harness feels like a special case while you are inside it; read this table first so the
 VARIETY is expected rather than alarming. Cells summarize facts whose receipts live in
 `DELIVERY.md`'s matrix and in this document's worked examples — do not re-derive them, reopen

@@ -29,7 +29,7 @@ evidence split, and its three states must not collapse into "macOS is supported"
 | Python 3 | required by `setup`/`install` (project-path normalization + settings writers); `--help`/`check-bridge` stay Python-free | pi/Claude/agy/Copilot/Codex wiring writers |
 | entwurf | global/project-local `@junghanacs/entwurf`, or a source checkout | operator command and garden capability |
 | pi | optional-by-presence, `>=1.0.2 <1.1` — absent is an explicit setup SKIP, below-floor is a named FAIL | ACP provider, control sockets |
-| Native durable (`pi-durable`) | optional-by-presence, operator-provided experimental source runtime at the fixed `…/entwurf/pi-durable/runtime`, pinned to `cd32f77` plus the narrow runtime-contact overlay; not supplied by ordinary Pi npm installation — absent is an explicit setup SKIP, present-but-not-the-pin a named FAIL | optional 0.31.0 native contact via `entwurf pi-durable`; native admission/LIVE not yet accepted (§2b) |
+| Native durable (`pi-durable`) | optional-by-presence, operator-provided experimental source runtime at the fixed `…/entwurf/pi-durable/runtime`, pinned to `cd32f77` plus the narrow runtime-contact overlay; not supplied by ordinary Pi npm installation — absent is an explicit setup SKIP, present-but-not-the-pin a named FAIL | optional 0.31.0 candidate contact via `entwurf pi-durable`; first native Pi ↔ pi-durable admission/LIVE accepted on one Linux host, runtime provision and release acceptance separate (§2b) |
 | Claude Code | optional, **`>=2.1.217`** — the exec-form hook floor | Claude ACP auth/runtime and mailbox-backed native citizen |
 | GitHub Copilot CLI | optional-by-presence, operator-installed and authenticated — absent is an explicit setup SKIP; detected composes all four units (birth/MCP/receiver/footer) | self-fetch citizen and visible fresh |
 | OMP (`omp`) | optional-by-presence, operator-installed — absent is an explicit setup SKIP; detected composes all four units (birth/MCP/`tools.xdev` setting/receiver) | self-fetch citizen and visible fresh (accepted on one host — see §4b) |
@@ -285,7 +285,9 @@ emacsclient -s "${PI_EMACS_AGENT_SOCKET:-server}" --eval '(...)'
 
 ## 2b. Optional native durable (`pi-durable`)
 
-**0.31.0 installation contract; native admission and LIVE are not yet accepted.**
+**0.31.0 installation contract; first native admission/LIVE accepted on one Linux host.**
+The [DELIVERY matrix](../DELIVERY.md) records the 2026-10-06 LIVE36 candidate
+acceptance; release/artifact and runtime-supply evidence remain separate.
 Durable is a separate native harness contact, not an option automatically enabled
 by `entwurf pi` or by registering ordinary Pi's adapter.
 
@@ -371,10 +373,14 @@ durable, native Pi owns credentials, model settings, SQLite sessions and recover
 keep them in place rather than copying credentials or migrating ordinary Pi
 transcripts. Native recovery does not prove exactly-once Entwurf dispatch or inbox
 read recovery. The contact provides garden attachment, visible identity and
-announce-only root-directed self-fetch. Native admission (visible identity,
-send/receive, fresh/callback, installed and native caller/target/cross-harness LIVE)
-is tracked in [#129](https://github.com/junghan0611/entwurf/issues/129) and is not
-yet accepted; this section states the installation contract, not that acceptance.
+announce-only root-directed self-fetch. First native admission closed
+[#129](https://github.com/junghan0611/entwurf/issues/129) at reviewed main:
+visible fresh/callback, addressed receive and both real Pi ↔ pi-durable LIVE legs
+passed on one Linux host. Installed-bootstrap import-only proof is not a native
+runtime/TUI launch or a live Claude ↔ pi-durable receipt. This section states the
+installation contract; exact release/artifact acceptance is a separate floor.
+[#130](https://github.com/junghan0611/entwurf/issues/130) owns npm-only runtime
+supply, later Pi versions, ACP and UI follow-ups.
 
 ## 3. Optional Claude Code native citizen
 
