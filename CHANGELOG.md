@@ -4,9 +4,11 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+## 0.31.0 - 2026-10-07
+
 ### Added
 
-- **Native durable contact (`pi-durable`, #129; target 0.31.0, in development).**
+- **Native durable contact (`pi-durable`, #129).**
   Treat the experimental durable coding app as a separate native harness. One
   native host attaches to one V3 garden id; the contact adds visible garden
   identity, self/peers, canonical outbound dispatch and announce-only root-directed
@@ -24,15 +26,95 @@ All notable changes to this project will be documented here. Format follows [Kee
   Entwurf does not install a harness or copy credentials. Existing non-durable
   users do not need a source checkout. [Native durable setup boundary](docs/setup-clean-host.md#2b-optional-native-durable-pi-durable).
 
-### Status
+### Changed
 
-- **Unreleased development, not 0.31.0 acceptance.** The packaged compiled contact,
-  fixed-runtime setup/launch contract and installed-bootstrap import are implemented;
-  checkout contact/send/receive cells have scripted S + native H evidence, not vendor V.
-  Full native admission (including visible fresh/callback and native caller/target/cross
-  LIVE), final candidate floors and exact release acceptance remain open. This entry
-  is a draft, not a partial-support shipping exception; final evidence is required
-  before the cut.
+- **Pi dependency/runtime floor is 1.0.2**, with pi peer range `>=1.0.2 <1.1`.
+  Native durable pins upstream source `cd32f77` and its narrow contact overlay;
+  no upgrade to a newer experimental app or replacement runtime is included.
+- **Source workspace discovery is root-only.** Explicit `packages: ['.']` keeps
+  pnpm's workspace scan coherent with the root install, without disabling its
+  dependency verification. Prepack still runs the foreground build lifecycle,
+  with build output on stderr so pack JSON stays readable and failures propagate.
+
+### Verification
+
+- **Reviewed pre-version main:** product `165338e` and native-admission `535c2e1`
+  landed separately with normal hooks/shared safety scans. The final landing's
+  [exact-SHA CI](https://github.com/junghan0611/entwurf/actions/runs/37478003145)
+  at `535c2e1b63e6a66c45227e197de80bf261202aec` passed all four required jobs
+  and the qualification BODY **872/872 KILLED**, including the new foreign-sender
+  guard4.5s KILLED against subject `7bdea2c4c664…`. Implementation issue #129 is closed; #130 owns
+  npm-only runtime supply, Pi upgrades, ACP and UI follow-ups. This main receipt
+  is not the later prepared-commit or preserved-artifact acceptance.
+- **Native first admission:** corrected real Pi → pi-durable → Pi LIVE36
+  passed in41s on `openai-codex/gpt-6.1-sol`, task-wide native5 + contact6 offering.
+  A consistent official SQLite backup establishes first callback, own-id inbox
+  read, joined successful native dispatch and the exact root doorbell reaching done.
+  Pi transcript row19 carries the exact expected payload and authoritative durable
+  sender. Native V evidence is distinct from checkout contact95/send19/receive21
+  scripted S + native H and installed-bootstrap import-only proof.
+- **Receipt-oracle repair is portable and independently reviewed.** Exact payload,
+  terminal sender envelope, root scope, effective offering, call/result and doorbell
+  joins replace substring/union predicates. Eight inline tests and the existing mux
+  coordinate carry a foreign-sender guard mutant. The original35-GREEN predicate
+  selected fixture row15; real old-row19 delivery was independently present. Old raw,
+  wrong receipt and RED857/870 remain preserved, never relabelled new acceptance.
+  Native admission raw: `.tmp-verify/b9ffcb-pack-cause/live-pd-20261006T223708/`.
+- **Versioned working-candidate P4:** FULL666s/exit0, HEAD/index/tracked work-surface
+  and binary diff frozen MATCH; pack dry-run580files. The pre-verdict release-metadata
+  patch/bytes are preserved in `.tmp-verify/031-release/prepare/p4/`, snapshot SHA
+  `2529949384af40c6ca15f65575638b97980817cb85d7a68bb81e9ff1b34c8fa7`, full-log SHA
+  `57da80e9e32159f8bc966381a2756d6a34cca647dd5ee5791ee681ed3509b0df`.
+  This floor used the exact private Herdr0.9.3 aarch64 supply pin; operator0.9.1 stayed
+  unchanged. No qualification BODY or native LIVE was executed in this P4 run.
+- **Explicit agy criterion7 exception for this0.31.0 cut, confirmed by GLG
+  (2026-10-07):** “agy 예외. 0.30.1부터 그렇게 헀어 더 진행가자” permits continuing
+  prepare/make while agy1.2 remains **NOT CERTIFIED**. The historical1.1 pin and
+  DELIVERY certification row stay unchanged; #128 remains first-party own-context
+  prerequisite research. No nonce/credential extraction, old-CID replay, transport
+  implementation, permanent floor change or npm publication is authorized by this
+  exception. Other release axes remain mandatory.
+- **Fresh native Claude host:** owned writer/registry refresh corrected the stale
+  deployed v3 bytes before P5. Source=assembled=installed writer `c8f05d394d0e`,
+  capability registry `2f95e94f1eb9`; strict doctor exits0 with four live owner joins.
+  A new Claude2.1.291 session after install, garden `20261007T024544-c71062`,
+  ownerPID2784041/startKey `linux:304383485`, bridge child2784080, joins sender,
+  receiver and V3 record with no model turn. `prepare/claude-native-cert/accepted.json`
+  retains the exact metadata. This is checkout-provenance certification, not an
+  installed emitted-JS/bin-shim, registry, model-turn or fresh delivery/reply receipt.
+- **First P5 and scoped repair remain distinct.** The frozen candidate's first
+  `--cut` run ended RED: MUST23/2/0, BEHAVIOR1/0/0, qualification872/872 KILLED,
+  HEAD/index/tracked bytes MATCH. Log `/tmp/entwurf-release-gate-0.31.0.JdQ4q6/release-gate.log`.
+  The owned OMP receiver's stale writer was refreshed through its installer; strict
+  runtime/ownership doctor and fresh receive LIVE11 passed. Initial Pi's Codex relay
+  added one trailing newline; the exact source oracle rejected it. A fresh chain on
+  the unchanged candidate passed65 assertions, source audits Pi3/3 + Codex3/3, with
+  no oracle relaxation or old-CID replay. The owed on-demand seat×cwd fresh-call
+  matrix passed39. `prepare/p5-focused-1/accepted.json` retains those focused receipts;
+  they do not turn the original aggregate RED into GREEN. Immediate P9 was report-only,
+  five eligible roots312K after P5 and six328K after the focused bundle; protected
+  Emacs was the only reparented `/tmp` process, with no deletion or signal.
+- **Final fresh P5 cut verdict:** `LIVE=1 ./run.sh release-gate
+  /tmp/entwurf-release-gate-0.31.0.Xzbk2b --cut` exited0 after110m15s:
+  **MUST PASS=25 FAIL=0 SKIP=0**, **BEHAVIOR PASS=1 FAIL=0 SKIP=0**, its own
+  FULL and qualification **872/872 KILLED**, frozen HEAD/index/tracked bytes MATCH.
+  Log SHA256 `609612baff850ec06fc74321002b33a6b71d3dabc76874dc1546b8722c317bf2`;
+  snapshot SHA256 `38c49ca5123ffc9883762d637084dba9ed77adbdd5f3e86287a1ace565f763de`.
+  `prepare/p5-final/accepted.json` retains the boundary; native durable raw is
+  `/tmp/smoke-pi-durable-fresh-live-2026-10-06T23-27-34-983Z`. Immediate P9 reported
+  unused198/eligible6/328K, protected Emacs only; no deletion/signal.
+- **Fresh-eyes documentation alignment:** independent Grok review found one
+  underclaim bundle, not a false green: operator docs still called accepted native
+  admission pending and a direction note pointed to a retired branch handoff.
+  After the final P5 verdict, documentation-only commit `87de9f7` aligns those states
+  with DELIVERY/#129 and distinguishes seven citizen backends from six fresh-openable
+  ones. Bounded independent re-review closed the Defect (Blocker0/Defect0); normal
+  hooks/shared scanner passed, and main fast-forwarded locally before release-prep. Executable/gate/model/pin/manifest bytes are unchanged; no LIVE Claude ↔
+  durable or registry/runtime provision is inferred. Review artifacts live in
+  `.tmp-verify/031-release/grok-fresh-review/` and `docs-amendment/`.
+- **Release acceptance is pending:** prep commit/prepared-SHA CI and preserved
+  artifact remain outstanding. No final candidate, tag, GitHub release or npm
+  publication is asserted here.
 
 ## 0.30.1 - 2026-10-04
 
