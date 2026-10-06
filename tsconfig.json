@@ -66,6 +66,11 @@
 		// root config cannot allow that extension. Typechecked by scripts/tsconfig.json.
 		"pi-extensions/meta-bridge-omp.ts",
 		"pi-extensions/meta-bridge-receive-omp.ts",
+		// meta-bridge-pi-durable.ts is the #129 durable contact. Same fence and reason as the OMP
+		// entry: it is loaded by a strip-types runtime (the durable host, under the pinned overlay's
+		// source resolver) and imports ./lib/meta-session.ts with an explicit `.ts` extension, which
+		// the emit-capable root config cannot allow. Typechecked by scripts/tsconfig.json.
+		"pi-extensions/meta-bridge-pi-durable.ts",
 		// project-trust-handler.ts is a lib→lib VALUE importer (it pulls preflight /
 		// formatPreflightDenial from entwurf-preflight.ts), so it must use an explicit
 		// `.ts` extension to be runnable under the strip-types gate. The emit-capable

@@ -58,6 +58,8 @@ const CLAUDE_MODEL = "claude-sonnet-5";
 const COPILOT_MODEL = "gpt-5.6-terra";
 const OMP_MODEL = "openai-codex/gpt-5.6-terra";
 const CODEX_MODEL = "gpt-5.6-sol";
+/** provider/<exact catalog id>; the id itself carries `/` and `:` so the FIRST-slash split is observable. */
+const PI_DURABLE_MODEL = "loopback/org/exact:v1";
 
 const read = (rel: string): string => fs.readFileSync(path.join(REPO_DIR, rel), "utf8");
 const MODULE_SRC = read("pi-extensions/lib/mux-fresh-call.ts");
@@ -124,7 +126,7 @@ describe("argv dialects", () => {
 	});
 
 	it("[QK:FRESHCALL-CWD-BACKEND-CARRIER-SCOPE] the chosen directory reaches the BACKEND dialect only for codex — the other four are byte-identical whatever directory the launch chose, so one vendor's thread-cwd defect cannot rewrite four argvs", () => {
-		for (const backend of ["pi", "claude-code", "copilot", "omp"] as const) {
+		for (const backend of ["pi", "claude-code", "copilot", "omp", "pi-durable"] as const) {
 			const model = backend === "omp" ? OMP_MODEL : PI_MODEL;
 			const here = buildBackendArgs(backend, COMPOSITION, model, { HOME: "/home/operator" }, LAUNCH_CWD);
 			const there = buildBackendArgs(backend, COMPOSITION, model, { HOME: "/home/operator" }, "/tmp/scratch-repo");
@@ -283,8 +285,44 @@ describe("argv dialects", () => {
 		);
 	});
 
-	it("the five backends are the whole fixed set", () => {
-		expect([...FRESH_CALL_BACKENDS].sort()).toEqual(["claude-code", "codex", "copilot", "omp", "pi"]);
+	const pdArgs = buildBackendArgs("pi-durable", COMPOSITION, PI_DURABLE_MODEL);
+
+	it("[QK:FRESHCALL-PI-DURABLE-MANAGED-RUNTIME] pi-durable opens through the MANAGED `entwurf pi-durable` and never a bare app — the durable app is source-only and only that verb verifies the operator runtime against the pin", () => {
+		expect(FRESH_CALL_RUNTIME["pi-durable"]).toBe("entwurf");
+		expect(pdArgs[0]).toBe("pi-durable");
+	});
+
+	it("[QK:FRESHCALL-PI-DURABLE-ARGV] pi-durable carries the explicit provider and exact model id (split at the FIRST `/`), the explicit task-wide width, and the WHOLE framing on the fixed bootstrap flag — no positional prompt", () => {
+		expect(pdArgs).toEqual([
+			"pi-durable",
+			"--provider",
+			"loopback",
+			"--model",
+			"org/exact:v1",
+			"--width",
+			"task-wide",
+			`--${OMP_BOOTSTRAP_FLAG}`,
+			JSON.stringify({ v: OMP_BOOTSTRAP_VERSION, task: "PROMPT" }),
+		]);
+		// The payload is the closed {v,task} object and its task is the FRAMING, not the omp payload.
+		const payload = JSON.parse(pdArgs.at(-1) as string);
+		expect(Object.keys(payload).sort()).toEqual(["task", "v"]);
+		expect(payload.task).toBe(COMPOSITION.prompt);
+		expect(pdArgs).not.toContain("PROMPT");
+		expect(pdArgs).not.toContain("PAYLOAD");
+		expect(() => buildBackendArgs("pi-durable", COMPOSITION, "scripted")).toThrow(/not <provider>\/<model id>/);
+	});
+
+	it("[QK:FRESHCALL-PI-DURABLE-CALLBACK-DIALECT] pi-durable names the bridge verbs by their bare registered names — the contact registers them as its own tools", () => {
+		expect(FRESH_CALL_CALLBACK_TOOL["pi-durable"]).toBe("entwurf_callback");
+		expect(FRESH_CALL_DELIVERY_TOOL["pi-durable"]).toBe("entwurf_v2");
+		expect(buildFreshCallPrompt({ backend: "pi-durable", task: TASK, callerGardenId: GID, nonce: NONCE })).toContain(
+			"FIRST ACTION, before reading files or anything else: call entwurf_callback with no arguments.",
+		);
+	});
+
+	it("the six backends are the whole fixed set", () => {
+		expect([...FRESH_CALL_BACKENDS].sort()).toEqual(["claude-code", "codex", "copilot", "omp", "pi", "pi-durable"]);
 	});
 });
 
@@ -646,7 +684,8 @@ describe("optional cwd — cross-repo fresh placement (#73)", () => {
 				const args = buildFreshCallArgs(
 					TARGET_SESSION,
 					runtime,
-					buildBackendArgs(backend, { prompt: "PROMPT", bootstrapPayload: "PAYLOAD" }, "m", {
+					// Provider-qualified so every backend composes, pi-durable included; the model is not under test.
+					buildBackendArgs(backend, { prompt: "PROMPT", bootstrapPayload: "PAYLOAD" }, "p/m", {
 						HOME: "/home/operator",
 					}),
 					undefined,
@@ -1314,5 +1353,58 @@ describe("module boundaries (structural contracts, source-text by design)", () =
 		const COMPOSITION_SRC = read("pi-extensions/lib/fresh-call-composition.ts");
 		expect(COMPOSITION_SRC).toContain('"-C",\n\t\t\t\tresolveCodexLaunchCwd(),');
 		expect(COMPOSITION_SRC).not.toMatch(/process\.cwd\(\)/);
+	});
+});
+
+describe("pi-durable capability preflight, decided before any window exists (step 9 clauses 2, 3 and 5)", () => {
+	/**
+	 * Same argument as the omp cells: an executable `entwurf` on PATH, a sandbox HOME and XDG data
+	 * home, and NO tmux. A pi-durable reason rather than `no-tmux-context` proves the decision
+	 * happened before placement. The runtime is the operator's at the fixed locator; the cells only
+	 * ever make it absent or not-a-checkout here — the verified path is the runtime leaf's own test.
+	 */
+	function withEntwurfHost<T>(run: (fx: { env: NodeJS.ProcessEnv; runtimeDir: string }) => T): T {
+		const root = fs.mkdtempSync(path.join(os.tmpdir(), "entwurf-fresh-pi-durable-"));
+		try {
+			const bin = path.join(root, "bin");
+			fs.mkdirSync(bin, { recursive: true });
+			fs.writeFileSync(path.join(bin, "entwurf"), "#!/bin/sh\nexit 0\n", { mode: 0o755 });
+			const home = path.join(root, "home");
+			const xdg = path.join(root, "xdg-data");
+			return run({
+				env: { HOME: home, XDG_DATA_HOME: xdg, PATH: bin },
+				runtimeDir: path.join(xdg, "entwurf", "pi-durable", "runtime"),
+			});
+		} finally {
+			fs.rmSync(root, { recursive: true, force: true });
+		}
+	}
+	const call = (env: NodeJS.ProcessEnv, model = "loopback/scripted"): FreshCallResult =>
+		freshCall({ backend: "pi-durable", model, task: TASK, callerGardenId: GID }, env);
+
+	it("[QK:FRESHCALL-PI-DURABLE-PREFLIGHT-PREMUTATION] an absent operator runtime is answered BEFORE placement — with no tmux at all the reason is the runtime's, so no window can exist by the time the caller reads it", () => {
+		withEntwurfHost((fx) => {
+			expect(reasonOf(call(fx.env))).toBe("pi-durable-runtime-absent");
+			fs.mkdirSync(fx.runtimeDir, { recursive: true });
+			expect(reasonOf(call(fx.env))).toBe("pi-durable-runtime-unverifiable");
+		});
+	});
+
+	it("[QK:FRESHCALL-PI-DURABLE-MODEL-QUALIFIED] a model with no provider part is refused before the runtime is even asked about", () => {
+		withEntwurfHost((fx) => {
+			for (const model of ["scripted", "loopback/"]) {
+				expect(reasonOf(call(fx.env, model)), model).toBe("pi-durable-model-not-provider-qualified");
+			}
+		});
+	});
+
+	it("a host with no `entwurf` on PATH hears runtime-unresolved first, and a pi launch never hears a pi-durable reason", () => {
+		withEntwurfHost((fx) => {
+			expect(reasonOf(call({ ...fx.env, PATH: "/nonexistent-path-for-this-cell" }))).toBe("runtime-unresolved");
+		});
+		const outside = withPiRuntime((env) =>
+			freshCall({ backend: "pi", model: PI_MODEL, task: TASK, callerGardenId: GID }, env),
+		);
+		expect(reasonOf(outside)).toBe("no-tmux-context");
 	});
 });

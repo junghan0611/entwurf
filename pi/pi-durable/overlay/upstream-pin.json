@@ -1,0 +1,16 @@
+{
+	"schemaVersion": 1,
+	"comment": "The one upstream commit this overlay is maintained against, and the patch it applies. The experimental durable app is source-only upstream, so its runtime is a pinned checkout plus this patch, provisioned by the operator; Entwurf ships neither. A checkout's TRACKED tree counts as this overlay only when HEAD equals commit, `git diff` equals the patch bytes exactly, and no non-ignored file is untracked. Git-ignored runtime inputs are outside that equality and are described separately below.",
+	"repository": "https://github.com/earendil-works/pi",
+	"commit": "cd32f7725fdbddbaecdff5b1e68491563394e0ca",
+	"patches": ["runtime-contacts.patch"],
+	"modelData": {
+		"comment": "Git-ignored generated model data the runtime imports at open. Upstream hydrates it by calling vendor model-list endpoints; this overlay instead takes the bytes the v1.0.2 release built from this commit, from the published package below, with no network. aggregateSha256 is sha256 over one `<sha256 of file>  <file name>\\n` line per *.json file (dotfiles excluded), names in C byte order. upstream `packages/ai/scripts/check-model-data.ts` validates these bytes against the manifest.",
+		"path": "packages/ai/src/providers/data",
+		"source": "@earendil-works/pi-ai@1.0.2 dist/providers/data",
+		"integrity": "sha512-JP59xGlSAQ/HhQ6EHN5qmneBlWfDyu6FPPryAvAaSo8A38ubAsEpS9YisCM5Jbbns0srrDffLZonE0OXorHI5A==",
+		"files": 42,
+		"aggregateSha256": "e71a1965a81c29fbe83d6e90dc1f4595602588281374603dee9e3bcbb7f46fa4",
+		"manifestSha256": "d373b99c0860f84281d786d493e8d8237c0a9fd98f142ef31c6db187c5089bc5"
+	}
+}

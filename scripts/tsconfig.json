@@ -39,6 +39,7 @@
 		"../pi-extensions/meta-bridge-hook-codex.ts",
 		"../pi-extensions/meta-bridge-omp.ts",
 		"../pi-extensions/meta-bridge-receive-omp.ts",
+		"../pi-extensions/meta-bridge-pi-durable.ts",
 		"../mcp/entwurf-bridge/src/resume-mode.ts"
 	]
 }

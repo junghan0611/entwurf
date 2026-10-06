@@ -29,6 +29,7 @@ evidence split, and its three states must not collapse into "macOS is supported"
 | Python 3 | required by `setup`/`install` (project-path normalization + settings writers); `--help`/`check-bridge` stay Python-free | pi/Claude/agy/Copilot/Codex wiring writers |
 | entwurf | global/project-local `@junghanacs/entwurf`, or a source checkout | operator command and garden capability |
 | pi | optional-by-presence, `>=1.0.2 <1.1` — absent is an explicit setup SKIP, below-floor is a named FAIL | ACP provider, control sockets |
+| Native durable (`pi-durable`) | optional-by-presence, operator-provided experimental source runtime at the fixed `…/entwurf/pi-durable/runtime`, pinned to `cd32f77` plus the narrow runtime-contact overlay; not supplied by ordinary Pi npm installation — absent is an explicit setup SKIP, present-but-not-the-pin a named FAIL | optional 0.31.0 native contact via `entwurf pi-durable`; native admission/LIVE not yet accepted (§2b) |
 | Claude Code | optional, **`>=2.1.217`** — the exec-form hook floor | Claude ACP auth/runtime and mailbox-backed native citizen |
 | GitHub Copilot CLI | optional-by-presence, operator-installed and authenticated — absent is an explicit setup SKIP; detected composes all four units (birth/MCP/receiver/footer) | self-fetch citizen and visible fresh |
 | OMP (`omp`) | optional-by-presence, operator-installed — absent is an explicit setup SKIP; detected composes all four units (birth/MCP/`tools.xdev` setting/receiver) | self-fetch citizen and visible fresh (accepted on one host — see §4b) |
@@ -281,6 +282,99 @@ emacsclient -s "${PI_EMACS_AGENT_SOCKET:-server}" --eval '(...)'
 ![entwurf in Doom Emacs](./assets/entwurf-doomemacs.gif)
 
 </details>
+
+## 2b. Optional native durable (`pi-durable`)
+
+**0.31.0 installation contract; native admission and LIVE are not yet accepted.**
+Durable is a separate native harness contact, not an option automatically enabled
+by `entwurf pi` or by registering ordinary Pi's adapter.
+
+There are three different things to install or supply:
+
+1. **Entwurf:** the existing global/project-local npm or source-checkout route in
+   §1 stays unchanged. It supplies Entwurf bytes, not the native harness.
+2. **Durable library:** `@earendil-works/pi-durable` is npm-installable. A library
+   dependency does not install the experimental coding app/TUI or birth a citizen.
+3. **Native app/runtime:** upstream's experimental durable app runs from a Pi
+   source checkout through its source resolver. The pinned 1.0.2 ordinary
+   `pi-coding-agent` package excludes experimental app output; upgrading the global
+   `pi` CLI does not supply it. Entwurf's maintained contact requires the exact
+   upstream commit `cd32f7725fdbddbaecdff5b1e68491563394e0ca` plus its narrow
+   runtime-contact overlay, operator-provided dependencies and pinned runtime data.
+
+The upstream [library installation guide](https://github.com/earendil-works/pi/blob/cd32f7725fdbddbaecdff5b1e68491563394e0ca/packages/durable/README.md#installation)
+and [experimental app guide](https://github.com/earendil-works/pi/blob/cd32f7725fdbddbaecdff5b1e68491563394e0ca/packages/coding-agent/src/experimental/durable/README.md)
+describe different consumers. Running the bare upstream app does not attach
+Entwurf's garden contact. Entwurf does not install a second harness distribution,
+rebuild its controller/model/auth/storage system or proxy a subscription.
+
+### What the operator supplies
+
+The runtime lives at ONE fixed place, with no path override:
+`$XDG_DATA_HOME/entwurf/pi-durable/runtime` (an absolute `XDG_DATA_HOME`; otherwise
+`~/.local/share/entwurf/pi-durable/runtime`). It counts as the pin only when:
+
+- HEAD is `cd32f7725fdbddbaecdff5b1e68491563394e0ca`, nothing is staged, `git diff`
+  equals the packaged overlay `pi/pi-durable/overlay/runtime-contacts.patch` byte for
+  byte, and no non-ignored file is untracked;
+- the upstream source resolver
+  `packages/coding-agent/src/experimental/source-resolver.ts` is present;
+- the git-ignored model data in `packages/ai/src/providers/data` matches the pinned
+  digest: the bytes `@earendil-works/pi-ai@1.0.2` ships in `dist/providers/data`,
+  **including its `.manifest.json` dotfile** (recorded in
+  `pi/pi-durable/overlay/upstream-pin.json`).
+
+The operator supplies it by hand; Entwurf never downloads, installs, repairs,
+moves or deletes the runtime. The sequence below was run on a Linux host
+(2026-10-06); afterwards the runtime verifier `entwurf setup` consults returned
+the pin (exit 0) and the checkout's native contact cells passed against it.
+`ENTWURF_ROOT` is your Entwurf package root or checkout, which ships the patch:
+
+```bash
+case "${XDG_DATA_HOME:-}" in
+  /*) R="$XDG_DATA_HOME/entwurf/pi-durable/runtime" ;;
+  *)  R="$HOME/.local/share/entwurf/pi-durable/runtime" ;;
+esac
+git clone --no-checkout https://github.com/earendil-works/pi.git "$R"
+git -C "$R" checkout --detach cd32f7725fdbddbaecdff5b1e68491563394e0ca
+git -C "$R" apply "$ENTWURF_ROOT/pi/pi-durable/overlay/runtime-contacts.patch"  # worktree only; do not stage
+(cd "$R" && npm ci --ignore-scripts)    # upstream lockfile; dependency install scripts skipped
+T=$(mktemp -d)
+(cd "$T" && npm pack @earendil-works/pi-ai@1.0.2)
+tar -xzf "$T/earendil-works-pi-ai-1.0.2.tgz" -C "$T" package/dist/providers/data
+cp -a "$T/package/dist/providers/data/." "$R/packages/ai/src/providers/data/"   # dotfiles too
+entwurf setup                           # expect: pi-durable PASS
+```
+
+Why it is a source checkout and not `npm install`: `@earendil-works/pi-coding-agent`
+(1.0.2 and 1.0.4 alike) excludes `dist/experimental` from its `files`, and its only
+experimental export resolves to `src/`, which the tarball does not ship, so the
+durable app's `experimental/durable/runtime.ts` and `tui.ts` exist only in a source
+checkout. `@earendil-works/pi-durable` on npm is the library (no app, TUI or bin).
+
+### What Entwurf does with it
+
+- `entwurf setup` reports a `pi-durable` row from that check and writes no durable
+  wiring in any case: **PASS** when the runtime is the pin, **SKIP** when nothing is
+  at the fixed place, **FAIL** with the named refusal when something is there but is
+  not the pin.
+- `entwurf pi-durable [args…]` is the managed launch. It verifies the same runtime
+  first (refusal exit 4 when absent, 3 otherwise), then runs the packaged bootstrap
+  `pi/pi-durable/bootstrap.mjs` under the runtime's source resolver, owning this
+  terminal. The bootstrap imports only the compiled closure shipped beside it
+  (`mcp/entwurf-bridge/dist/…`), so an installed package never imports checkout
+  TypeScript; a source checkout needs a built bridge (`pnpm run build-bridge`) first.
+  `plugins/pi-durable/bootstrap.mjs` is only the checkout path that re-exports it.
+
+Existing users who do not enable durable keep the same installation steps. For
+durable, native Pi owns credentials, model settings, SQLite sessions and recovery;
+keep them in place rather than copying credentials or migrating ordinary Pi
+transcripts. Native recovery does not prove exactly-once Entwurf dispatch or inbox
+read recovery. The contact provides garden attachment, visible identity and
+announce-only root-directed self-fetch. Native admission (visible identity,
+send/receive, fresh/callback, installed and native caller/target/cross-harness LIVE)
+is tracked in [#129](https://github.com/junghan0611/entwurf/issues/129) and is not
+yet accepted; this section states the installation contract, not that acceptance.
 
 ## 3. Optional Claude Code native citizen
 

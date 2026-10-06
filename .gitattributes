@@ -1,0 +1,2 @@
+# Unified-diff context markers are data; preserve the runtime overlay byte-for-byte.
+pi/pi-durable/overlay/runtime-contacts.patch whitespace=-blank-at-eol,-space-before-tab

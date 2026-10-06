@@ -1,3 +1,10 @@
+# Root-only, stated explicitly. Without `packages`, pnpm 11's install records the root alone
+# (config default ['.']) while the non-recursive run/exec deps check re-discovers with
+# find-packages' own default ['.', '**'], which also finds the nested pi/* unit manifests —
+# so `verifyDepsBeforeRun` reports "The workspace structure has changed since last install"
+# on every run, and in its default mode silently re-runs install first.
+packages:
+  - '.'
 autoInstallPeers: false
 allowBuilds:
   '@google/genai': false

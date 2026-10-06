@@ -81,7 +81,7 @@ export class MetaRecordError extends Error {
  * every write, including its own. `./run.sh doctor-meta-bridge` already flags a
  * stale deployed writer — run it after the change.
  */
-export const META_BACKENDS = ["claude-code", "antigravity", "codex", "copilot", "omp"] as const;
+export const META_BACKENDS = ["claude-code", "antigravity", "codex", "copilot", "omp", "pi-durable"] as const;
 export type MetaBackend = (typeof META_BACKENDS)[number];
 
 /**
@@ -222,6 +222,24 @@ export const META_BACKEND_DESCRIPTORS: Record<MetaBackend, MetaBackendDescriptor
 		deliveryLevel: "D6",
 		nativeIdLabel: "sessionId",
 	},
+	// The long-running durable app (#129). Graded only as far as its RECORDED receipts reach.
+	//   sessionId the durable session directory name `<13-digit ms>-<uuid>` that
+	//             `selectSession` creates and `--continue` reopens
+	//             (`experimental/durable/sessions.ts:18-55` @cd32f77), surfaced as
+	//             `view.current().session.id`. Not `pi.provider.sessionId`, which a
+	//             fork changes.
+	//   D2        receiver armed: the contact mints the record, names the host as sender, and arms
+	//             a root doorbell (the receiver marker is owned by the host pid as `pi-durable-host`,
+	//             which the owner join admits). The addressed-enqueue → idle-wake → root-notice → drain
+	//             chain has ONE recorded receipt, on the scripted-model + native-harness lab cell
+	//             (`check-pi-durable-receive`, S+H, V not run) — lab evidence, not a vendor-turn D4–D6
+	//             acceptance, and no sibling-isolation (D3) or LIVE fresh receipt exists yet.
+	"pi-durable": {
+		backend: "pi-durable",
+		wakeMode: "self-fetch",
+		deliveryLevel: "D2",
+		nativeIdLabel: "sessionId",
+	},
 };
 
 // ---------------------------------------------------------------------------
@@ -305,7 +323,15 @@ function isoNow(now: Date): string {
 export const META_SCHEMA_VERSION_V3 = 3 as const;
 
 /** Every backend admitted by the one V3 record-citizen schema. */
-export const META_CITIZEN_BACKENDS = ["claude-code", "antigravity", "codex", "copilot", "omp", "pi"] as const;
+export const META_CITIZEN_BACKENDS = [
+	"claude-code",
+	"antigravity",
+	"codex",
+	"copilot",
+	"omp",
+	"pi-durable",
+	"pi",
+] as const;
 export type MetaCitizenBackend = (typeof META_CITIZEN_BACKENDS)[number];
 
 /**

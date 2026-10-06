@@ -27,6 +27,14 @@ Claude and Cortex Code are ACP backends. Codex and Antigravity stay native so th
 retain their own tools and work context. Capabilities differ by rail: a shipped
 citizen is not a promise of every lifecycle operation.
 
+**Native durable support (`pi-durable`) is being implemented for 0.31.0 (#129).**
+It is a separate native harness contact, not ordinary Pi's control-socket adapter.
+The development contact attaches one durable host to a garden id, adds visible
+identity and two-way mailbox contact, while the upstream harness keeps its TUI,
+models/auth, SQLite storage and recovery. This is not yet a shipped/certified rail;
+[installation requirements](#optional-native-durable--0310-in-development) differ
+from installing the ordinary Pi CLI.
+
 ## Install
 
 **Choose by where you work. Neither route installs a harness, subscription or login.**
@@ -62,6 +70,30 @@ harness rails, ACP and mux remain **NOT CERTIFIED — pending physical host**.
 Detected harness wiring on Darwin can therefore be written while setup stays
 non-green. Native Windows is **UNSUPPORTED**. The package has no npm `os`
 restriction; that is not certification of every platform's harness rails.
+
+### Optional native durable — 0.31.0 in development
+
+**Entwurf's npm installation does not change. Enabling durable additionally needs
+an operator-provided native runtime; installing ordinary Pi from npm is not enough.**
+
+| Component | How it is supplied | What it does not supply |
+|---|---|---|
+| Entwurf | Existing npm or source-checkout route above | A harness binary, source runtime, subscription or login |
+| `@earendil-works/pi-durable` | npm **library** | The experimental app/TUI or Entwurf citizen attachment |
+| Native experimental durable app | Pinned upstream **source checkout**, with Entwurf's narrow runtime-contact overlay | A replacement ordinary Pi CLI or an Entwurf-owned harness |
+
+This lane retains Pi 1.0.2/source `cd32f77`; a newer global Pi installation does
+not provision that experimental runtime. Existing non-durable users do not need
+a Pi source checkout. Native auth and sessions stay upstream-owned: Entwurf does
+not copy credentials or convert ordinary Pi sessions into durable SQLite sessions.
+
+The package ships the compiled adapter and bootstrap: `entwurf setup` reports the
+operator runtime as PASS/SKIP/FAIL without writing durable wiring, and
+`entwurf pi-durable` is the managed launch. Native admission (fresh/callback and
+installed native caller/target/cross-harness LIVE) is not yet accepted, so npm
+installation alone is not a durable readiness verdict.
+See [setup: native durable](./docs/setup-clean-host.md#2b-optional-native-durable-pi-durable)
+and [#129](https://github.com/junghan0611/entwurf/issues/129) for the current boundary.
 
 ### Herdr workbench
 
@@ -182,9 +214,11 @@ and [Herdr launch](https://github.com/junghan0611/entwurf/blob/main/docs/herdr-l
 Instead of keeping native pi copies of the verbs, the adapter registers the same
 compiled bridge after record birth, under the citizen's identity, and Pi supervises
 that MCP child. **MCP is ingress; pi receive remains the record-addressed Unix
-control socket.** Garden identity and dispatch stay Entwurf's. What `pi-durable`
-or Pi codemode should mean here remains undecided: this cut neither adopts nor
-certifies them. The 0.30.0 follow-up separately measured Herdr supply 0.9.3 and
+control socket.** Garden identity and dispatch stay Entwurf's. That 0.30.0 cut
+did not adopt or certify `pi-durable` or codemode. Native durable support is now
+being implemented separately for 0.31.0, as described above; codemode remains a
+harness-internal capability, not another garden citizen. The 0.30.0 follow-up
+separately measured Herdr supply 0.9.3 and
 re-pinned the plugin runtime to published npm 0.30.0 with manifest 0.30.0; its
 public consumer and CI receipts live in the #126 thread. That dated alignment is
 not a permanent version-equality rule. 0.30.1 is published (npm, 2026-10-04); at its tag the

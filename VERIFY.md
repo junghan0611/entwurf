@@ -200,6 +200,21 @@ that moved out of `scripts/` and into a file beside its subject would otherwise 
 
 Do not collapse source, package, fixture, and native-host evidence into one “green.”
 
+**Native durable contact (#129).** `check-pi-durable-beside` is the deterministic
+beside-test/mutant coordinate in `check:contracts`. The separate
+`check-pi-durable-contact`, `check-pi-durable-send` and `check-pi-durable-receive`
+are CHECKOUT-ONLY SDK/contact gates: they require the provisioned pinned overlay
+runtime (`ENTWURF_PI_DURABLE_RUNTIME`) and a private compiled bridge emitted from
+this candidate (`ENTWURF_PI_DURABLE_BRIDGE_ENTRY`). Missing inputs report SKIP 97,
+never PASS; present invalid inputs fail. Installed packages refuse these developer
+gates. Contact is adapter-direct/harness-bypassed; send/receive exercise scripted
+loopback S plus actual native harness H, not vendor V. Their scoped raw records,
+wire, native view and SQLite oracles do not certify every queue/crash window.
+The installed-bootstrap import in `check-pack-install` proves package closure,
+not runtime supply or native admission. First-release visible fresh/callback and
+native caller/target/cross-harness LIVE still owe the existing admission and
+release-stop receipts; SDK or package green does not waive them.
+
 | Axis | Required proof | Limit |
 |---|---|---|
 | Source | `pnpm run check:full` + `./run.sh check-gate-qualification` | Does not prove an installed consumer. |

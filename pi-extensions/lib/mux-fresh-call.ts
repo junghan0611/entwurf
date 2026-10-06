@@ -143,6 +143,12 @@ import {
 } from "./mux-placement.ts";
 import { resolveCodexDefaultSocketPath } from "./native-push/codex-ws-client.ts";
 import { OMP_PREFLIGHT_HINT, type OmpPreflightRejectReason, ompFreshPreflight } from "./omp-fresh-preflight.ts";
+import {
+	PI_DURABLE_PREFLIGHT_HINT,
+	type PiDurablePreflightRejectReason,
+	piDurableFreshPreflight,
+} from "./pi-durable-fresh-preflight.ts";
+import { checkPiDurableRuntime, PI_DURABLE_RUNTIME_HINT, piDurablePackageLayout } from "./pi-durable-runtime.ts";
 import { classifyTmuxSessionName, resolveTmuxSessionId, type TmuxSessionRejectReason } from "./resolve-tmux-session.ts";
 
 /**
@@ -238,6 +244,10 @@ export const FRESH_CALL_RUNTIME: Record<FreshCallBackend, string> = {
 	copilot: "entwurf",
 	omp: "omp",
 	codex: "codex",
+	// #129: like copilot, a MANAGED verb and never the bare app. The durable app is source-only
+	// and runs under the operator-provided runtime's own resolver; `entwurf pi-durable` is the one
+	// fixed invocation that verifies that runtime against the pin and execs the packaged bootstrap.
+	"pi-durable": "entwurf",
 };
 
 /** A launch that was refused, or a placement that could not be established. Every value is a
@@ -251,6 +261,7 @@ export type FreshCallRejectReason =
 	| TmuxSessionRejectReason
 	| CopilotPreflightRejectReason
 	| OmpPreflightRejectReason
+	| PiDurablePreflightRejectReason
 	| CodexPreflightRejectReason
 	| CodexCallerPreflightRejectReason
 	| CodexCallerSeatRejectReason
@@ -350,9 +361,9 @@ export type FreshCallResult = { ok: true; receipt: FreshCallReceipt } | { ok: fa
  * for. That is sufficient and not a compromise: every reader of the carrier trims and tests
  * truthiness (`index.ts:212-217`), so empty and absent are the same answer by construction.
  *
- * It is applied to all five backends because the leak is a property of tmux, not of a vendor. A
+ * It is applied to all six backends because the leak is a property of tmux, not of a vendor. A
  * scrub only on the backend whose measurement surfaced it would encode the claim that the other
- * four are immune, which is false. It costs the legitimate case nothing: a carrier is only ever
+ * five are immune, which is false. It costs the legitimate case nothing: a carrier is only ever
  * authoritative when the process that owns it exported it ITSELF, and a fresh `pi` sibling does
  * exactly that after this argv has run. This is a fixed seam and deliberately NOT a general env
  * carrier — an arbitrary `-e` passthrough would hand callers the environment-shaping power this
@@ -506,6 +517,25 @@ export function freshCall(
 		const missing = ompFreshPreflight(env);
 		if (missing) return { ok: false, reason: missing };
 	}
+	if (params.backend === "pi-durable") {
+		// The framed first input is computed here only to MEASURE it against the bootstrap payload
+		// cap; the same pure function composes it again below. The runtime is located and verified
+		// with THIS process's env, before anything is placed. That is the bridge's env, not
+		// necessarily the window's: a new-window pane inherits the tmux SERVER's environment
+		// (measured, see SCRUBBED_INHERITED_ENV), and the window runs whatever `entwurf` PATH names.
+		// The managed verb re-verifies with its own env before it execs anything, so the window never
+		// runs an unverified runtime — but when HOME/XDG_DATA_HOME or the package closure differ, this
+		// verdict and the window's can disagree, and the window is left showing its own refusal.
+		const layout = piDurablePackageLayout();
+		const runtime = layout === null ? null : checkPiDurableRuntime(env, layout);
+		const missing = piDurableFreshPreflight({
+			model,
+			firstInput: buildFreshCallPrompt({ backend: params.backend, task, callerGardenId, nonce }),
+			layout,
+			runtime: runtime === null || runtime.ok ? null : runtime.reason,
+		});
+		if (missing) return { ok: false, reason: missing };
+	}
 	const inspected = inspectPlacement(env);
 	if (!inspected.ok) return { ok: false, reason: inspected.reason };
 	const placement = inspected.placement;
@@ -626,6 +656,8 @@ const REJECT_HINT: Record<FreshCallRejectReason, string> = {
 	// the sentence an operator reads cannot drift away from the predicate that produced it.
 	...COPILOT_PREFLIGHT_HINT,
 	...OMP_PREFLIGHT_HINT,
+	...PI_DURABLE_RUNTIME_HINT,
+	...PI_DURABLE_PREFLIGHT_HINT,
 	...CODEX_PREFLIGHT_HINT,
 	...CODEX_CALLER_PREFLIGHT_HINT,
 	...CODEX_CALLER_SEAT_HINT,

@@ -132,6 +132,10 @@ Usage:
   ./run.sh check-mailbox-receipt-state # deterministic gate (0.11 Stage 0 step 3B): mailbox receipt state schema + store (stamp→persist→read-back) in a temp mailbox, strict keyset, no API
   ./run.sh check-copilot-birth-hook   # #82 gate: drives the real Copilot assembler into a temp dir, fires the baked launcher with NO ARGV (the way Copilot's `exec`-string schema forces), and requires a backend:"copilot" v3 record + attach + peer row + a SENDER marker the resolver joins back to that record, and still zero mailbox/receiver marker (who-sent needs a shared parent; a receiver needs a doorbell this backend has not got). Hermetic; no Copilot, no model turn
   ./run.sh check-omp-birth-hook       # #87 gate: drives the real OMP assembler into a temp dir, imports the ASSEMBLED index.ts into a MOCK omp host and fires session_start/session_switch. tui mints one backend:"omp" record + a sender marker keyed to the host's OWN pid (the one-process join) + the garden id on the status line; print/rpc/json mint NOTHING (hasUI is true on the rpc rows, as in the vendor); switch attaches on the same native id and mints the replacement on a new one; the CERTIFIED receiver reader still finds no marker. Also the four-root joint binding: extension and omp-labeled bridge child resolve the same sessions/mailbox/senders/receivers bundle against test-built literals (never the production resolver as its own oracle), under a poisoned PI_CODING_AGENT_DIR and under four distinct ENTWURF_META_* overrides; the override grammar is absolute-or-~ and both halves plus the doctor refuse anything else by name; and a drifted provenance label selects no root policy at all. Hermetic; no omp, no model turn
+  ./run.sh check-pi-durable-contact   # #129 L-identity gate, CHECKOUT-ONLY (an installed package refuses it in run_ts). Opens the REAL durable app from a provisioned overlay checkout (ENTWURF_PI_DURABLE_RUNTIME: tracked tree = pin + patch exactly, git-ignored model data = the pin's recorded digest) with the pi-durable contact, births the citizen and runs its tools adapter-direct through a privately emitted branch bridge (ENTWURF_PI_DURABLE_BRIDGE_ENTRY; its registry must match this checkout). Matrix roots {default, explicit} x {fresh, --continue}: one record keyed by the durable session dir, sender marker on the spawned host pid, exactly one bridge child whose /proc PPID is that host, poisoned identity carriers kept from it, its four root carriers bound to the roots written, the receiver ARMED (raw marker owned by the host pid + start key as pi-durable-host, joined to the sender marker; removed on close), self = the record and replyable, peers from an outside bridge, same garden id on reopen; the bundle's compiled owner join must admit pi-durable-host. Reaps only the host/bridges it owns on any failure. Harness-bypassed: no model turn, no ToolTask. Missing inputs → SKIP (97), never a pass
+  ./run.sh check-pi-durable-send      # #129 L-send FIRST CELL, CHECKOUT-ONLY. Same two inputs as check-pi-durable-contact. One native durable turn: the app's own controller input → GenerationTask → ToolTask → the contact's entwurf_v2 → the private bridge → a seeded self-fetch target (C2 recipe, owned by a separate idle child). S = a 127.0.0.1 scripted OpenAI-compatible endpoint configured through the app's documented models.json (dummy key, PI_OFFLINE); H = the native ToolTask path; V (a vendor turn) is NOT run. Oracles: the wire (tools offered, v2 schema = the bridge's tools/list, exactly two requests, the tool result + receipt in the second), the raw mailbox (.msg 1, signal, sender = the host record), the native view (one call, its settled result, root current). Not exactly-once, not recovery, not a recipient turn. Missing inputs → SKIP (97)
+  ./run.sh check-pi-durable-beside    # #129 mutant execution coordinate (VERIFY rule 3): run_vitest over the four pi-durable beside tests (adapter, runtime, preflight, owner join) — the pi-durable qualification lane's gate argv. Same files check-tests-beside-behavior already runs.
+  ./run.sh check-pi-durable-receive   # #129 L-receive FIRST CELL, CHECKOUT-ONLY. Same two inputs (the bundle must carry the pi-durable-host owner join). The host driver gives the app NO input; a seeded claude-code sender (marker owned by a separate idle child, handed to a gate-owned sending bridge through ENTWURF_META_SENDER_MARKER) enqueues one message, the host's doorbell admits its notice to the ROOT conversation, and the scripted model drains it with entwurf_inbox_read. S withholds response #1 until the ENQUEUE receipt, the .delivered bytes, the signal, the host-owned receiver marker and the notice are captured. Oracles: receiver() admission, native view, raw archive (.delivered.read + lastReadAt), wire (exactly two requests, drain result = view), and after a green reap a forensic read-only SQLite copy (submission row by request id = reported id, root, input, done, placed entry = the notice). V NOT run. Missing inputs → SKIP (97)
   ./run.sh check-copilot-receive-arm  # #82 RAIL 5 gate: the REAL receiver installer + the REAL extension.mjs forked with a stubbed SDK. Arms only after birth, marker owned by the WATCHER pid, self-fetch dispatch answer, doorbell carries the garden id and NOT the body, id-drift/foreign-parent refusals. Hermetic; no Copilot, no model turn
   ./run.sh check-copilot-launch       # #82 RAIL 7 gate: the MANAGED launch `entwurf copilot`, driven through its public address against a FAKE VENDOR on a sandbox PATH. Receiver precondition refusals, EXTENSIONS token + operator token preservation, injected defaults before the `--` terminator, byte-identical argv, the 11 explicit permission/surface policy overrides that suppress `--yolo`, exec (not fork) pid identity, exit passthrough, recursion refusal. Hermetic; no Copilot, no model turn
   ./run.sh check-codex-app-server-launch # #95 gate: the MANAGED app-server launch `entwurf codex-app-server`, driven through its public address against a FAKE VENDOR on a sandbox PATH. The injected `app-server --listen unix://<socket>` required to equal the product's own resolveCodexDefaultSocketPath over an env matrix that includes the inputs a bash transcription was MEASURED to diverge on (BOM-only CODEX_HOME, trailing slash, `..`), non-absolute and control-character addresses refused before any write, byte-identical operator argv, exec (not fork) parent identity, exit passthrough, live-socket and indeterminate-socket and second---listen and recursion refusals, dead-socket launch-over, the tmux fact line, and both identity carriers stripped. Hermetic; no Codex, no app-server, no model turn
@@ -221,6 +225,7 @@ Usage:
   ./run.sh uninstall-meta-bridge      # 1.0.0 meta-bridge Phase 2: stateful GLOBAL uninstall (restore only keys/items captured in install-state)
   ./run.sh doctor-meta-bridge         # THE RELEASE ORACLE (#51, Linux-certified repair axis). exit 0 = every required layer was MEASURED on this Linux host: toolchain + state + plugin/MCP + resolved-artifact launch-form classification (all 3 owner hooks + doorbell static contract) + synthetic owner join + store scan + hook errors + SessionStart evidence + REQUIRED live MCP↔marker join + writer-version parity. Missing live evidence is NOT CERTIFIED (open a Claude session and re-run), never a pass; Darwin is NOT CERTIFIED and stays nonzero, on ONE narrowed reason — start-key and ppid are portable there (`ps` fallback, same string the TS core mints), so what holds the lane closed is per-process environment DISCOVERY alone, pending physical-host evidence. Detection power is held by check-meta-doctor-oracle
   ./run.sh copilot [args...]          # #82 RAIL 7: the MANAGED Copilot launch. exec()s the vendor CLI in THIS terminal (cwd/pid/exit preserved) with COPILOT_CLI_ENABLED_FEATURE_FLAGS=EXTENSIONS set for that one invocation — entwurf owns no part of your shell and writes nothing to it, but it owns the process it is about to become. Without that flag Copilot skips the extension scan SILENTLY. Refuses to launch unless the receiver unit is actually installed. Injects `--model auto` when no --model was given and `--yolo` when no explicit permission/surface policy flag was given, both BEFORE any `--`; every argument you pass is forwarded byte-identical. RUNNING THIS IS YOUR CONSENT to that profile — use plain `copilot` for stock vendor behaviour. Not tmux, not fresh-call, mints no citizen (birth is still the first prompt)
+  ./run.sh pi-durable [args...]       # #129: the MANAGED durable launch. Locates the operator-provided durable runtime at its ONE fixed place ($XDG_DATA_HOME/entwurf/pi-durable/runtime, else ~/.local/share/...), refuses by name unless it is the packaged pin (HEAD, exact overlay patch, no untracked file, pinned model data), then exec()s node under THAT runtime's source resolver with the packaged bootstrap (pi/pi-durable/bootstrap.mjs) in this terminal. A new session needs --provider <p> --model <exact catalog id> --width task-wide [--entwurf-bootstrap <{v:2,task}>]; --continue takes none of them. Entwurf never installs, repairs or moves the runtime
   ./run.sh install-copilot-bridge     # #82: GLOBAL install of the Copilot BIRTH plugin (own marketplace root; node+entry baked into the no-argv exec string). MCP wiring and the RECEIVER extension are separate install surfaces (install-copilot-mcp, install-copilot-receive). Also retires the stale Claude unit (--keep-stale-claude-unit opts out)
   ./run.sh uninstall-copilot-bridge   # #86 C3a: honest inverse of install-copilot-bridge from the package-owned install-state (exact qualified id + exact marketplace name/path + recorded assembly only; state deleted LAST; a failing vendor list is UNKNOWN and refuses; never --force, never the stale Claude unit)
   ./run.sh doctor-copilot-bridge      # #82/#86: fail-loud surface for that unit — runtime axis (red = a hook that RAN and failed, or a broken/unbaked artifact; "installed with zero records" is NOT red and is reported as NOT-YET: a Copilot session is born on its FIRST PROMPT, not when the window opens, measured) + ownership axis (install-state shape/binding, marketplace path drift, UNKNOWN vendor lists; legacy no-state install = named non-green, repair = install-copilot-bridge adoption). Either axis red = red
@@ -282,7 +287,7 @@ Usage:
   ./run.sh check-pack-pin-matcher     # pure self-test of check-pack-install's pin-leak matcher against synthetic .pnpm lookalikes, one cell per property: version boundary (a prefix-extended @0.86.0-beta.1 and an off-pin @0.85.1 must leak, @0.86.0 bare or with any measured peer-hash must pass) and closure prefix (an off-pin @earendil-works/chord must leak — it carries no `pi-` prefix); snapshot-safe qualification oracle, also run first inside check-pack-install
   ./run.sh check-pack-consumer-roots  # pure self-test of check-pack-install's consumer sandbox: under a poisoned inherited HOME/XDG/PI_CODING_AGENT_DIR every writable root a consumer subcall sees resolves inside its own consumer home; snapshot-safe qualification oracle, also run first inside check-pack-install
   ./run.sh check-fresh-cut-gate       # SOURCE cell of the generation-boundary proof (IN pnpm run check:full): drives real install/setup/fresh-cut in a sandbox; certification refusal is pre-write, quiescence is fail-closed, archives preserve bytes, and the #54 exit matrix distinguishes complete / no-move / usage / incomplete transition / complete-with-cleanup-residue. No model/network/cost
-  ./run.sh check-pack-install         # heavy publish gate (prepublishOnly): actual npm pack + tar -tf + fresh-temp install smoke + the #116 M3-b1 herdr-plugin RUNTIME VERIFIER run against that actual installed tarball (the focused check-herdr-runtime-bootstrap drives a fixture; THIS is where the real package is proven) with the pinned pi peers (pins derived from the package.json devDep; check-dep-versions binds them) + the npm-installed bridge BOOTS (tools/list) and DELIVERS (tools/call entwurf_v2 → .msg lands) + the installed all-absent and copilot-present (four-unit fake-vendor) `entwurf setup` rows + the INSTALLED generation lifecycle on a seeded previous-generation host (REFUSE before activation writes / zero Claude invocations → installed fresh-cut archives + opens empty → install-meta-bridge PASSES) + the INSTALLED-PACKAGE branch of the Copilot and OMP birth installers actually RUN (compiled entry selected, no raw .ts, and a real birth edge mints a citizen — the half a required-artifact list can never stand in for)
+  ./run.sh check-pack-install         # heavy publish gate (prepublishOnly): actual npm pack + tar -tf + fresh-temp install smoke + the #116 M3-b1 herdr-plugin RUNTIME VERIFIER run against that actual installed tarball (the focused check-herdr-runtime-bootstrap drives a fixture; THIS is where the real package is proven) with the pinned pi peers (pins derived from the package.json devDep; check-dep-versions binds them) + the npm-installed bridge BOOTS (tools/list) and DELIVERS (tools/call entwurf_v2 → .msg lands) + the installed all-absent and copilot-present (four-unit fake-vendor) `entwurf setup` rows + the INSTALLED generation lifecycle on a seeded previous-generation host (REFUSE before activation writes / zero Claude invocations → installed fresh-cut archives + opens empty → install-meta-bridge PASSES) + the INSTALLED-PACKAGE branch of the Copilot and OMP birth installers actually RUN (compiled entry selected, no raw .ts, and a real birth edge mints a citizen — the half a required-artifact list can never stand in for) + the INSTALLED #129 durable bootstrap (pi/pi-durable/bootstrap.mjs) imported from node_modules: main/openDurableCitizen exported and PACKAGED_BRIDGE_ENTRY = the installed package's own dist entry — import only, no runtime/TUI/birth/bridge started
   ./run.sh check-install-container    # 0.12.8 (#51 C): Linux artifact-CONSUMER gate — one candidate .tgz handed read-only to a checkout-invisible node:<engines-major>-bookworm cell. Default packs once to temp; ENTWURF_CANDIDATE_TGZ=/absolute/preserved.tgz consumes those exact bytes with no re-pack and prints canonical path+sha256 for release. Non-root global PATH install, frozen package, MCP tools/list, fake-Claude install-meta-bridge, path+sha256 fence, strict doctor, and the GENERATION host-state matrix (clean / v3-only store bytes unchanged / previous-generation REFUSE→fresh-cut→retry PASS) seeded inline. Docker missing = honest SKIP; ENTWURF_REQUIRE_DOCKER=1 makes that RED (required CI)
   ./run.sh install [project-dir]      # INTERNAL part of `setup` (project .pi/settings.json wiring) + npm-consumer entry — prefer `setup`, don't call directly for dev
   ./run.sh remove [project-dir]       # remove entwurf entries from project .pi/settings.json (project scope only; global user-scope citizen left intact)
@@ -1493,6 +1498,16 @@ check_mux_fresh_call() {
   # only as freshCall's Codex placement input (#95 lane B), so certifying it apart from the
   # composition it feeds would let the two halves of one seat decision drift.
   run_vitest test/mux-fresh-call.test.ts test/fresh-call-composition.contract.test.ts test/copilot-fresh-preflight.test.ts test/codex-fresh-preflight.test.ts test/fresh-call-surfaces.contract.test.ts test/fresh-call-provider.contract.test.ts test/omp-fresh-bootstrap.contract.test.ts test/tmux-coordinate-row.test.ts test/codex-fresh-live-protocol.test.ts test/codex-caller-seat.test.ts
+}
+
+check_pi_durable_beside() {
+  # #129: the pi-durable qualification lane's execution coordinate (VERIFY 「Four rules」 rule 3). It is
+  # not a discovery path — check-tests-beside-behavior already finds these files. It exists because the
+  # qualification runner re-invokes a gate argv once per mutant, and the narrow filter keeps one mutant
+  # from re-running every beside test. The four files are one contact: the adapter and its packaged
+  # bootstrap, the runtime locator/verifier (which also reads the three checkout gates as SOURCE), the
+  # fresh preflight, and the owner join that admits the durable host.
+  run_vitest pi-extensions/meta-bridge-pi-durable.test.ts pi-extensions/lib/pi-durable-runtime.test.ts pi-extensions/lib/pi-durable-fresh-preflight.test.ts pi-extensions/lib/entwurf-deliverability.owner-join.test.ts
 }
 
 smoke_mux_fresh_call_live() {
@@ -2806,6 +2821,18 @@ check_pi_import_surface() {
   # `/providers/*`, and any deeper path stay FORBIDDEN (we use only `/compat`).
   # Do NOT widen this to a `providers/*` subpath — it typechecks but CANNOT
   # resolve under the extension loader.
+  #
+  # #129 EXCEPTION — exactly TWO specifiers, in exactly ONE file:
+  #   @earendil-works/pi-coding-agent/experimental/durable/runtime.ts and …/tui.ts
+  #   in pi/pi-durable/bootstrap.mjs
+  # The durable app is source-only upstream (the published pi-coding-agent excludes
+  # dist/experimental and ships no src/), so these resolve ONLY against the operator's
+  # pinned runtime checkout, through the source resolver `entwurf pi-durable` loads with
+  # --import — never against this package's pi dependency. They are the one way to reach
+  # the app at all; building the string to dodge this scan would be the evasion this gate
+  # exists to stop. Only those quoted specifiers on that file's lines are neutralised
+  # before the forbidden pattern is applied again, so any other pi subpath in that file,
+  # and the same specifier in any other file, stay FORBIDDEN (proved on the fixture below).
   # ONE corpus, TWO callers. The real scan and the denominator fixture must run the
   # SAME two lines, or the fixture would prove a command the gate does not use.
   pi_import_work_surface() {
@@ -2814,7 +2841,9 @@ check_pi_import_surface() {
   pi_import_scan() {
     pi_import_work_surface \
       | xargs -0r grep -HnE "[\"'\`]@earendil-works/pi-(ai|coding-agent|tui)/" 2>/dev/null \
-      | grep -vE "[\"'\`]@earendil-works/pi-ai/compat[\"'\`]" 2>/dev/null || true
+      | grep -vE "[\"'\`]@earendil-works/pi-ai/compat[\"'\`]" 2>/dev/null \
+      | sed -E "/^pi\/pi-durable\/bootstrap\.mjs:[0-9]+:/ s#[\"'\`]@earendil-works/pi-coding-agent/experimental/durable/(runtime|tui)\.ts[\"'\`]#(durable-runtime-specifier)#g" \
+      | grep -E "[\"'\`]@earendil-works/pi-(ai|coding-agent|tui)/" 2>/dev/null || true
   }
 
   local probe_dir probe_hits hits
@@ -2825,6 +2854,13 @@ check_pi_import_surface() {
     printf '%s\n' 'import { getModels } from "@earendil-works/pi-ai/compat";' > tracked-allowed.ts
     git add tracked-allowed.ts
     printf '%s\n' 'import "@earendil-works/pi-ai/private-probe";' > untracked-forbidden.ts
+    mkdir -p pi/pi-durable
+    printf '%s\n' 'const RUNTIME = "@earendil-works/pi-coding-agent/experimental/durable/runtime.ts";' \
+      'import "@earendil-works/pi-coding-agent/experimental/other.ts";' \
+      'const TUI = "@earendil-works/pi-coding-agent/experimental/durable/tui.ts"; import "@earendil-works/pi-tui/private";' \
+      > pi/pi-durable/bootstrap.mjs
+    printf '%s\n' 'const RUNTIME = "@earendil-works/pi-coding-agent/experimental/durable/runtime.ts";' > elsewhere.mjs
+    git add pi/pi-durable/bootstrap.mjs elsewhere.mjs
   ) || { fail "[check-pi-import-surface] could not build the denominator fixture in $probe_dir"; rm -rf "$probe_dir"; return 1; }
   probe_hits=$(cd "$probe_dir" && pi_import_scan)
   rm -rf "$probe_dir"
@@ -2838,6 +2874,15 @@ check_pi_import_surface() {
     fail "[QK:PIIMPORT-WORK-SURFACE] the denominator fixture disagrees with the corpus — untracked-forbidden reached=$saw_untracked_forbidden (want yes: a brand-new forbidden import must not escape until it is staged), tracked-allowed flagged=$saw_tracked_allowed (want no: the /compat exception must survive)"
     return 1
   fi
+  local durable_allowed_flagged="no" durable_other_reached="no" durable_sameline_reached="no" durable_elsewhere_reached="no"
+  grep -qE '^pi/pi-durable/bootstrap\.mjs:1:' <<<"$probe_hits" && durable_allowed_flagged="yes"
+  grep -qE '^pi/pi-durable/bootstrap\.mjs:2:' <<<"$probe_hits" && durable_other_reached="yes"
+  grep -qE '^pi/pi-durable/bootstrap\.mjs:3:' <<<"$probe_hits" && durable_sameline_reached="yes"
+  grep -qE '^elsewhere\.mjs:1:' <<<"$probe_hits" && durable_elsewhere_reached="yes"
+  if [ "$durable_allowed_flagged" != "no" ] || [ "$durable_other_reached" != "yes" ] || [ "$durable_sameline_reached" != "yes" ] || [ "$durable_elsewhere_reached" != "yes" ]; then
+    fail "[QK:PIIMPORT-DURABLE-BOOTSTRAP-EXACT] the #129 durable exception is not exact — its runtime specifier in pi/pi-durable/bootstrap.mjs flagged=$durable_allowed_flagged (want no), another experimental subpath in that file reached=$durable_other_reached (want yes), a forbidden specifier sharing a line with an allowed one reached=$durable_sameline_reached (want yes), the same specifier in another file reached=$durable_elsewhere_reached (want yes)"
+    return 1
+  fi
 
   hits=$(cd "$REPO_DIR" && pi_import_scan)
   if [ -n "$hits" ]; then
@@ -2845,7 +2890,7 @@ check_pi_import_surface() {
     echo "$hits"
     exit 1
   fi
-  ok "[check-pi-import-surface] pi references are root/compat-only across tracked + untracked-non-ignored ts/js; the untracked denominator is proved on an external fixture repo"
+  ok "[check-pi-import-surface] pi references are root/compat-only (plus the exact #129 durable bootstrap pair) across tracked + untracked-non-ignored ts/js; the untracked denominator and the durable exception's exactness are proved on an external fixture repo"
 }
 
 check_env_namespace() {
@@ -3508,19 +3553,25 @@ check_pack() {
   # Intent + policy live in NEXT.md Phase 2.3.
   section "pack invariants (dry-run)"
 
-  local json
-  # --silent so the `prepack` build (pnpm --silent run build-bridge → tsc) and
-  # npm's own lifecycle banner stay off stdout; otherwise they pollute the --json
-  # payload this parses. prepack runs on dry-run too, which is how dist lands in
-  # this gate's file list.
+  local json pack_err
+  # --silent keeps npm's own lifecycle banner off stdout, and prepack sends its build
+  # output to stderr (`pnpm run build-bridge 1>&2`); either on stdout would pollute the
+  # --json payload this parses. --foreground-scripts streams that stderr instead of
+  # npm's pipe buffer, and it is CAPTURED, not discarded: a pnpm verify-deps refusal
+  # inside prepack used to fail this gate with no reason anywhere. prepack runs on
+  # dry-run too, which is how dist lands in this gate's file list.
   # with-dist-lock wraps the WHOLE pack (prepack build-bridge emit + npm's
   # post-build dist read) so a concurrent pack/build can't `rm -rf dist` mid-read
   # (the 2026-07-03 phantom "dist missing" race). The nested prepack build-bridge
   # is reentrant via ENTWURF_BUILD_LOCK_HELD.
-  json=$(cd "$REPO_DIR" && bash scripts/with-dist-lock.sh npm pack --dry-run --json --silent 2>/dev/null) || {
+  pack_err=$(mktemp)
+  json=$(cd "$REPO_DIR" && bash scripts/with-dist-lock.sh npm pack --dry-run --json --silent --foreground-scripts 2>"$pack_err") || {
     fail "[check-pack] npm pack --dry-run failed"
+    sed 's/^/    /' "$pack_err" >&2
+    rm -f "$pack_err"
     return 1
   }
+  rm -f "$pack_err"
 
   local file_list
   file_list=$(node -e '
@@ -3615,6 +3666,12 @@ check_pack() {
     # check before assembling anything. The unit skeleton's package.json below is the other
     # half — the installer copies it, and `pi/` ships per-FILE.
     "mcp/entwurf-bridge/dist/pi-extensions/meta-bridge-omp.js"
+    "mcp/entwurf-bridge/dist/pi-extensions/meta-bridge-pi-durable.js"
+    "mcp/entwurf-bridge/dist/pi-extensions/lib/pi-durable-runtime.js"
+    "mcp/entwurf-bridge/dist/pi-extensions/lib/pi-durable-fresh-preflight.js"
+    "pi/pi-durable/bootstrap.mjs"
+    "pi/pi-durable/overlay/upstream-pin.json"
+    "pi/pi-durable/overlay/runtime-contacts.patch"
     "pi/meta-bridge-omp/entwurf-meta-omp/package.json"
     "mcp/entwurf-bridge/dist/pi-extensions/lib/meta-session.js"
     "scripts/postinstall-chmod.cjs"
@@ -3981,6 +4038,12 @@ _check_pack_install_impl() {
     # check before assembling anything. The unit skeleton's package.json below is the other
     # half — the installer copies it, and `pi/` ships per-FILE.
     "mcp/entwurf-bridge/dist/pi-extensions/meta-bridge-omp.js"
+    "mcp/entwurf-bridge/dist/pi-extensions/meta-bridge-pi-durable.js"
+    "mcp/entwurf-bridge/dist/pi-extensions/lib/pi-durable-runtime.js"
+    "mcp/entwurf-bridge/dist/pi-extensions/lib/pi-durable-fresh-preflight.js"
+    "pi/pi-durable/bootstrap.mjs"
+    "pi/pi-durable/overlay/upstream-pin.json"
+    "pi/pi-durable/overlay/runtime-contacts.patch"
     "pi/meta-bridge-omp/entwurf-meta-omp/package.json"
     "mcp/entwurf-bridge/dist/pi-extensions/lib/meta-session.js"
     "scripts/postinstall-chmod.cjs"
@@ -4176,6 +4239,34 @@ _check_pack_install_impl() {
     return 1
   }
   echo "[check-pack-install] installed: $probe"
+
+  # #129 — the packaged durable bootstrap, imported FROM the installed tree. The tarball listing
+  # above proves the file ships, not that its static imports reach the shipped compiled closure
+  # under node_modules (where a checkout .ts import would be refused by the strip-types fence), nor
+  # that the bridge entry it hands the adapter is this package's own dist. Import only: main() runs
+  # solely when the file is the process entry, and the runtime/TUI are dynamic imports inside it, so
+  # no runtime, TUI, birth or bridge starts here.
+  local durable_proof
+  durable_proof=$(cd "$tmp" && node --input-type=module -e "
+    const { realpathSync } = await import('node:fs');
+    const pkg = realpathSync(process.cwd() + '/node_modules/@junghanacs/entwurf');
+    const m = await import(pkg + '/pi/pi-durable/bootstrap.mjs');
+    for (const name of ['main', 'openDurableCitizen']) {
+      if (typeof m[name] !== 'function') { console.error(name + ' is not an exported function'); process.exit(1); }
+    }
+    const want = pkg + '/mcp/entwurf-bridge/dist/mcp/entwurf-bridge/src/index.js';
+    const entry = m.PACKAGED_BRIDGE_ENTRY;
+    if (typeof entry !== 'string' || realpathSync(entry) !== want) {
+      console.error('PACKAGED_BRIDGE_ENTRY ' + entry + ' is not the dist entry of the installed package (' + want + ')');
+      process.exit(1);
+    }
+    console.log('exports main/openDurableCitizen; PACKAGED_BRIDGE_ENTRY is the installed dist entry');
+  " 2>&1) || {
+    fail "[check-pack-install] installed durable bootstrap import failed:"
+    echo "$durable_proof" | sed 's/^/    /' >&2
+    return 1
+  }
+  echo "[check-pack-install] installed durable bootstrap: $durable_proof"
 
   # #116 M3-b1/b2 — THE ACTUAL-PACKAGE RUNTIME PROOF, THROUGH THE SHIPPED OWNER.
   # The Herdr plugin's runtime verifier decides whether a tree npm placed is a runtime the scoped
@@ -4562,7 +4653,7 @@ sys.exit(0 if any(isinstance(s,str) and s.rstrip('/')== '$npm2_pkg' for s in src
     return 1
   fi
   local skip_probe
-  for skip_probe in "pi: SKIP" "claude: SKIP" "agy: SKIP" "copilot: SKIP" "omp: SKIP" "codex: SKIP"; do
+  for skip_probe in "pi: SKIP" "claude: SKIP" "agy: SKIP" "copilot: SKIP" "omp: SKIP" "codex: SKIP" "pi-durable: SKIP"; do
     if ! grep -q "$skip_probe" <<<"$setup_out"; then
       fail "[QK:CODEX-PACK-SETUP-ZERO-STATE] [check-pack-install] installed all-absent setup missing explicit zero-state '$skip_probe':"
       echo "$setup_out" | tail -25 | sed 's/^/    /' >&2
@@ -6027,6 +6118,20 @@ setup_all() {
       setup_result codex-terminal-title FAIL "detected codex, but the terminal-title setting did not complete (see above)"
     fi
   fi
+  # ── pi-durable ── #129: presence-driven like every harness, but the "harness" is the
+  # operator-provided durable runtime at its ONE fixed place, and setup writes NOTHING for it.
+  # Absent is a zero-state SKIP; present and the pin is PASS; present but not the pin is a
+  # named FAIL the operator repairs. The verdict is the same leaf the managed launch and the
+  # fresh preflight ask — 0 verified, 4 absent, anything else refused. Entwurf never installs
+  # the runtime (docs/setup-clean-host.md §2b).
+  local pd_rc pd_out
+  pd_rc=0; pd_out=$(run_ts pi-extensions/lib/pi-durable-runtime.ts resolve 2>&1) || pd_rc=$?
+  case "$pd_rc" in
+    0) setup_result pi-durable PASS "operator runtime is the pin — launch with 'entwurf pi-durable'" ;;
+    4) setup_result pi-durable SKIP "no operator-provided durable runtime at the fixed location — zero durable wiring written (Entwurf never installs it)" ;;
+    *) setup_result pi-durable FAIL "a durable runtime is present but refused — ${pd_out##*$'\n'}" ;;
+  esac
+
   # ── core bridge boundary ── deterministic preflight lives in `pnpm run
   # check:full`; live substrate acceptance lives in `LIVE=1 ./run.sh
   # release-gate <scratch> --cut`. Setup is the install path, so it verifies the
@@ -6702,6 +6807,26 @@ case "$cmd" in
     # on the status line; and still zero mailbox/receiver marker. Hermetic; no omp, no model turn
     run_ts scripts/check-omp-birth-hook.ts
     ;;
+  check-pi-durable-contact)
+    # #129 L-identity G-contact, checkout-only. Spawning gate (VERIFY: a vitest lane cannot hold
+    # it): the real overlay durable app as a child host, the branch-emitted bridge as ITS child,
+    # /proc as the PPID oracle. Both runtime inputs are operator-provisioned; absent → SKIP 97,
+    # never pass. Installed: run_ts refuses it (no compiled twin) before any input is read.
+    run_ts scripts/check-pi-durable-contact.ts
+    ;;
+  check-pi-durable-send)
+    # #129 L-send first cell, checkout-only spawning gate: one native durable turn against a
+    # gate-owned scripted endpoint (S) through the native ToolTask (H) to a seeded target. No
+    # vendor turn (V). Inputs as check-pi-durable-contact; absent → SKIP 97.
+    run_ts scripts/check-pi-durable-send.ts
+    ;;
+  check-pi-durable-receive)
+    # #129 L-receive first cell, checkout-only spawning gate: no controller input; a gate-owned
+    # sending bridge enqueues, the host's doorbell admits to the root, the scripted endpoint (S)
+    # holds request #1 until the enqueue is captured, the native turn (H) drains it. No vendor (V).
+    # Inputs as check-pi-durable-contact; absent → SKIP 97.
+    run_ts scripts/check-pi-durable-receive.ts
+    ;;
   check-copilot-statusline)
     check_copilot_statusline
     ;;
@@ -6779,6 +6904,9 @@ case "$cmd" in
     ;;
   check-mux-fresh-call)
     check_mux_fresh_call
+    ;;
+  check-pi-durable-beside)
+    check_pi_durable_beside
     ;;
   check-mux-resume-call)
     check_mux_resume_call
@@ -7417,6 +7545,20 @@ case "$cmd" in
     # "copilot" would arrive as a prompt argument.
     shift || true
     exec bash "$REPO_DIR/scripts/copilot-launch.sh" "$@"
+    ;;
+  pi-durable)
+    # #129 W (L3): the MANAGED durable launch. Same shape and reasons as `copilot` above: `exec`,
+    # no subshell and no cd — the durable TUI must own this terminal, the caller's cwd, this pid
+    # and its exit status — and `shift`, because everything after the verb is the bootstrap's argv.
+    #
+    # The durable app is source-only upstream, so its runtime is the OPERATOR's, at ONE fixed
+    # place, and it is verified against the packaged pin BEFORE any of it runs: its source
+    # resolver is the first code this launch would load from it. Absent or drifted is a named
+    # refusal from the same leaf the fresh preflight and setup ask (exit 4 absent, 3 otherwise).
+    # Entwurf never installs, repairs or moves that runtime.
+    shift || true
+    pd_resolver=$(run_ts pi-extensions/lib/pi-durable-runtime.ts resolve) || exit $?
+    exec node --import "$pd_resolver" "$REPO_DIR/pi/pi-durable/bootstrap.mjs" "$@"
     ;;
   pi)
     # #118 홉 2: the managed pi launch. Same shape and same reasons as `copilot` above —

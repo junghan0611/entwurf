@@ -4,6 +4,36 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+### Added
+
+- **Native durable contact (`pi-durable`, #129; target 0.31.0, in development).**
+  Treat the experimental durable coding app as a separate native harness. One
+  native host attaches to one V3 garden id; the contact adds visible garden
+  identity, self/peers, canonical outbound dispatch and announce-only root-directed
+  mailbox receive with explicit inbox read. Runtime, TUI, model/auth, SQLite
+  storage, transcript and recovery remain upstream-owned. Internal subagents do
+  not mint another citizen. Native recovery is not exactly-once Entwurf delivery.
+
+### Installation
+
+- **Entwurf's npm/source installation route stays unchanged.** Optional native
+  durable use additionally requires an operator-provided pinned upstream source
+  runtime and the narrow runtime-contact overlay (Pi 1.0.2/source `cd32f77` in this
+  lane). The `@earendil-works/pi-durable` **library** is npm-installable; the
+  experimental coding app/TUI is not supplied by the ordinary Pi npm package.
+  Entwurf does not install a harness or copy credentials. Existing non-durable
+  users do not need a source checkout. [Native durable setup boundary](docs/setup-clean-host.md#2b-optional-native-durable-pi-durable).
+
+### Status
+
+- **Unreleased development, not 0.31.0 acceptance.** The packaged compiled contact,
+  fixed-runtime setup/launch contract and installed-bootstrap import are implemented;
+  checkout contact/send/receive cells have scripted S + native H evidence, not vendor V.
+  Full native admission (including visible fresh/callback and native caller/target/cross
+  LIVE), final candidate floors and exact release acceptance remain open. This entry
+  is a draft, not a partial-support shipping exception; final evidence is required
+  before the cut.
+
 ## 0.30.1 - 2026-10-04
 
 ### Fixed

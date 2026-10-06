@@ -752,8 +752,8 @@ server.tool(
 	"Open ONE fresh visible sibling beside you and hand it a first task. WHERE it opens is decided by where THIS " +
 		"agent runs, never by a parameter: inside herdr (HERDR_ENV=1) it opens a NEW UNFOCUSED TAB in your own " +
 		"herdr workspace, pi and claude-code " +
-		"only; everywhere else it opens in the operator's tmux with all five backends (pi, " +
-		"claude-code, copilot, omp, codex). No fallback: an incomplete herdr context is refused by name, " +
+		"only; everywhere else it opens in the operator's tmux with all six backends (pi, " +
+		"claude-code, copilot, omp, codex, pi-durable). No fallback: an incomplete herdr context is refused by name, " +
 		"never by a tmux window you cannot see from herdr. The sibling's FIRST action " +
 		"is a callback to you carrying a nonce, whose sender envelope is its garden id — that is how you learn the " +
 		"address of a thing that did not exist a moment ago. This returns a LAUNCH receipt (the owner's " +
@@ -761,8 +761,8 @@ server.tool(
 		"the task was delivered. Those coordinates are a VIEW, never an address — a herdr tab/pane id can change under " +
 		"a running sibling. Nothing polls. " +
 		"For EXISTING citizens use entwurf_v2 — this tool only creates, and entwurf_peers only reports. Model is REQUIRED and passed to the chosen " +
-		"runtime CLI (`provider/model` for pi, an id/alias for Claude Code, a pattern for the rest). On tmux, copilot/omp/codex are refused BEFORE any window " +
-		"opens when their birth, MCP, receive or visible-identity units are absent, and codex also needs the " +
+		"runtime CLI (`provider/model` for pi, an id/alias for Claude Code, `provider/model id` exactly as the catalog names it for pi-durable, a pattern for the rest). On tmux, copilot/omp/codex/pi-durable are refused BEFORE any window " +
+		"opens when their birth, MCP, receive or visible-identity units are absent, pi-durable also when its operator-provided pinned runtime is absent or drifted, and codex also needs the " +
 		"operator-owned app-server socket entwurf never starts; in herdr they are refused by name first. " +
 		"Optional placement.tmuxSession is a TMUX-ONLY seat naming ONE EXISTING session and " +
 		"ALWAYS wins; omitted, the seat follows the CALLER, never the backend opened: a CODEX CALLER opens beside " +
@@ -771,9 +771,9 @@ server.tool(
 		"processes.",
 	{
 		backend: z
-			.enum(["pi", "claude-code", "copilot", "omp", "codex"])
+			.enum(["pi", "claude-code", "copilot", "omp", "codex", "pi-durable"])
 			.describe(
-				"Which fixed runtime to open. Only these five, and only pi/claude-code when this agent runs inside herdr; there is no arbitrary command.",
+				"Which fixed runtime to open. Only these six, and only pi/claude-code when this agent runs inside herdr; there is no arbitrary command.",
 			),
 		model: z
 			.string()
@@ -789,7 +789,7 @@ server.tool(
 			// biome-ignore lint/complexity/noUselessEscapeInRegex: emitted to a Rust regex validator, see above
 			.regex(/^[A-Za-z0-9][A-Za-z0-9._/:\[\]-]*$/)
 			.describe(
-				"Required runtime model: canonical provider/model for pi, a Claude Code model id/alias, or a Copilot/OMP/Codex model name.",
+				"Required runtime model: canonical provider/model for pi, provider/<exact catalog model id> for pi-durable, a Claude Code model id/alias, or a Copilot/OMP/Codex model name.",
 			),
 		task: z
 			.string()

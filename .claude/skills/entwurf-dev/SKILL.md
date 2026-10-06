@@ -45,7 +45,7 @@ transcript를 가진 garden citizen이다.
   herdr 이유로 거절하지, tmux 창을 대신 열지 않는다(그 창은 herdr 안에서 보이지 않는다). 호출자가 레일을
   고르는 파라미터는 없다. herdr receipt의 pane 좌표는 **view**이고 주소가 아니다 — 형제가 움직이면 바뀔 수
   있고, 주소는 언제나 콜백 sender envelope다.
-- `entwurf_fresh_call` backend는 정확히 `pi | claude-code | copilot | omp | codex`이고 model은 required다. `cwd`는
+- `entwurf_fresh_call` backend는 정확히 `pi | claude-code | copilot | omp | codex | pi-durable`이고 model은 required다. `cwd`는
   선택 입력 하나: literal 절대경로(존재하는 디렉터리, `#`·trim·realpath 없음), 생략·`""`면
   caller cwd에서 시작한다. **Codex caller만 예외이고 그것이 정확히 옳다(#95 lane C)**: Codex가
   부를 때 `cwd`를 생략하면 그 시민의 **record cwd**(= 그 thread가 실제로 열린 디렉터리)에서

@@ -142,7 +142,13 @@ export function receiverMarkerMatchesIdentity(
 // previous garden in-process on its `/new` edge (the unarm the claude hook lacked),
 // so the cell this join closes has a different owner there. Admitting it needs its
 // own measurement, not this file's optimism.
-export const SENDER_JOINED_RECEIVER_OWNER_KINDS: readonly string[] = ["claude-code-cli"];
+//
+// `pi-durable-host` is admitted because the join holds by construction: the durable contact
+// writes its sender marker under the host's own pid and arms its watch in that same process
+// (`meta-bridge-pi-durable.ts`), so the receiver marker's `ownerPid` IS the sender-marker key.
+// Inside the scope a host whose sender marker is gone or names another garden is a retired
+// watch, which is the refusal this admission exists to make reachable.
+export const SENDER_JOINED_RECEIVER_OWNER_KINDS: readonly string[] = ["claude-code-cli", "pi-durable-host"];
 
 /** Does this watch owner share its pid with the backend's sender marker? */
 export function receiverOwnerKindJoinsSender(ownerKind: string): boolean {

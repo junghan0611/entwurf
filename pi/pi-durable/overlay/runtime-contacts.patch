@@ -1,0 +1,91 @@
+diff --git a/packages/coding-agent/src/experimental/durable/runtime.ts b/packages/coding-agent/src/experimental/durable/runtime.ts
+index fcd6e523..929dbc79 100644
+--- a/packages/coding-agent/src/experimental/durable/runtime.ts
++++ b/packages/coding-agent/src/experimental/durable/runtime.ts
+@@ -8,7 +8,9 @@ import {
+ 	type ConversationView,
+ 	type Cursor,
+ 	type EntryRecord,
++	type Extension,
+ 	Harness,
++	type InputSubmissionDraft,
+ 	type ModelRef,
+ 	ROOT_CONVERSATION_ID,
+ 	type Submission,
+@@ -81,6 +83,10 @@ export interface DurableController {
+ export interface OpenDurableOptions {
+ 	readonly cwd?: string;
+ 	readonly continueSession?: boolean;
++	/** Installed after the built-in extensions and before the Harness opens, so recovered work finds their tools. */
++	readonly extensions?: readonly Extension[];
++	/** A new session's explicit model, resolved as pi's `--provider`/`--model`; unresolved, the open fails. */
++	readonly model?: { readonly provider: string; readonly model: string };
+ }
+ 
+ export interface OpenDurableResult {
+@@ -88,6 +94,8 @@ export interface OpenDurableResult {
+ 	readonly controller: DurableController;
+ 	/** pi's settings, for the TUI's theme and terminal capabilities. */
+ 	readonly settings: SettingsManager;
++	/** Admits input to the root conversation, whichever one is on screen; resolves at admission, not at the answer. */
++	submitToRoot(draft: InputSubmissionDraft): Promise<Submission>;
+ 	close(): Promise<void>;
+ }
+ 
+@@ -122,6 +130,9 @@ function titleOf(entry: EntryRecord | undefined): { title?: string } {
+ }
+ 
+ export async function openDurable(options: OpenDurableOptions = {}): Promise<OpenDurableResult> {
++	if (options.model !== undefined && options.continueSession) {
++		throw new Error("An explicit model applies only to a new session, not to a continued one");
++	}
+ 	const location = await selectSession(options.cwd ?? process.cwd(), options.continueSession ?? false);
+ 	const envs = new ExecutionEnvs(location.cwd);
+ 	let harness: Harness | undefined;
+@@ -132,6 +143,7 @@ export async function openDurable(options: OpenDurableOptions = {}): Promise<Ope
+ 		const settings = createHarnessSettings(settingsManager);
+ 		const registry = createCodingRegistry(settingsManager, location.cwd);
+ 		registry.install(Subagent);
++		for (const extension of options.extensions ?? []) registry.install(extension);
+ 
+ 		const pendingReports: unknown[] = [];
+ 		let report: (error: unknown) => void = (error) => pendingReports.push(error);
+@@ -146,7 +158,29 @@ export async function openDurable(options: OpenDurableOptions = {}): Promise<Ope
+ 			},
+ 			context,
+ 		);
+-		const initial = location.created ? await findInitialAgentModel(settingsManager, modelRuntime) : undefined;
++		const initial = location.created
++			? await findInitialAgentModel(settingsManager, modelRuntime, options.model)
++			: undefined;
++		if (options.model !== undefined) {
++			// pi resolves case-insensitive, partial and unknown ids too (a custom-id fallback with only a warning);
++			// an explicit model must be exactly one registered catalog model, named by its canonical id.
++			const asked = options.model;
++			const ref = initial?.model;
++			const thinking = initial?.thinkingLevel;
++			const registered = ref !== undefined && modelRuntime.getModel(ref.provider, ref.modelId) !== undefined;
++			const named =
++				ref !== undefined &&
++				(asked.model === ref.modelId || (thinking !== undefined && asked.model === `${ref.modelId}:${thinking}`));
++			if (ref === undefined || ref.provider !== asked.provider || !registered || !named) {
++				const resolved =
++					ref === undefined
++						? "none"
++						: `${ref.provider}/${ref.modelId}${thinking === undefined ? "" : `:${thinking}`}`;
++				throw new Error(
++					`explicit-model-not-exact: asked ${asked.provider}/${asked.model}, resolved ${resolved} (registered=${registered})`,
++				);
++			}
++		}
+ 		const root = await harness.root(context, {
+ 			agent: {
+ 				cwd: location.cwd,
+@@ -342,6 +376,7 @@ export async function openDurable(options: OpenDurableOptions = {}): Promise<Ope
+ 			},
+ 			controller,
+ 			settings: settingsManager,
++			submitToRoot: (draft) => root.submit(draft, context),
+ 			close() {
+ 				closing ??= (async () => {
+ 					unsubscribe();

@@ -122,6 +122,12 @@
 	// twin would make the one-command launch die before its first line. Its only repo import is
 	// native-push/codex-ws-client.ts, ALREADY emitted for meta-bridge-hook-codex, so this adds ONE
 	// leaf JS and ZERO new deps.
+	// WHY meta-bridge-pi-durable rides THIS build (#129 W, L4): the packaged durable bootstrap
+	// (pi/pi-durable/bootstrap.mjs) imports the contact from THIS closure — the same closure whose
+	// bridge entry the contact spawns and whose meta-bridge-omp.js decodes the first-input payload —
+	// so an installed Entwurf never imports checkout TypeScript. Its only repo import is
+	// meta-session, ALREADY emitted for the bridge; it is never in index.ts's boot closure. The runtime locator/verifier and the fresh preflight arrive
+	// through the import graph (mux-fresh-call) and need no entry here.
 	// WHY meta-bridge-omp rides THIS build (#87): `install-omp-bridge` explicitly SELECTS
 	// `dist/pi-extensions/meta-bridge-omp.js` when REPO_DIR is under node_modules — the same
 	// strip-types fence the Claude and Copilot birth entries cross — and
@@ -149,6 +155,7 @@
 		"../../pi-extensions/meta-bridge-hook-copilot.ts",
 		"../../pi-extensions/meta-bridge-hook-codex.ts",
 		"../../pi-extensions/meta-bridge-omp.ts",
-		"../../pi-extensions/meta-bridge-receive-omp.ts"
+		"../../pi-extensions/meta-bridge-receive-omp.ts",
+		"../../pi-extensions/meta-bridge-pi-durable.ts"
 	]
 }

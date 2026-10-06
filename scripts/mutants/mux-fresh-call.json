@@ -151,7 +151,7 @@
 			"title": "MCP drops the required model field from fresh-call while the composition still expects one",
 			"subject": "mcp/entwurf-bridge/src/index.ts",
 			"find": [
-				"\t\tmodel: z\n\t\t\t.string()\n\t\t\t.min(1)\n\t\t\t.max(200)\n\t\t\t// The `\\[` below is USELESS TO JS AND LOAD-BEARING TO THE HOST. zod emits this source\n\t\t\t// text verbatim as the JSON Schema `pattern`, and the host's tool-schema validator is a\n\t\t\t// Rust regex engine that rejects an unescaped `[` inside a character class as \"unclosed\n\t\t\t// character class\" — a 400 on tools/list that stops EVERY Claude session from opening\n\t\t\t// (7-M-fix). Biome's safe fix removes it; do not accept that fix. The suppression must\n\t\t\t// stay on the line DIRECTLY above the expression, or it attaches to nothing and reads\n\t\t\t// as an unused suppression while the escape goes back to being fixable.\n\t\t\t// biome-ignore lint/complexity/noUselessEscapeInRegex: emitted to a Rust regex validator, see above\n\t\t\t.regex(/^[A-Za-z0-9][A-Za-z0-9._/:\\[\\]-]*$/)\n\t\t\t.describe(\n\t\t\t\t\"Required runtime model: canonical provider/model for pi, a Claude Code model id/alias, or a Copilot/OMP/Codex model name.\",\n\t\t\t),\n"
+				"\t\tmodel: z\n\t\t\t.string()\n\t\t\t.min(1)\n\t\t\t.max(200)\n\t\t\t// The `\\[` below is USELESS TO JS AND LOAD-BEARING TO THE HOST. zod emits this source\n\t\t\t// text verbatim as the JSON Schema `pattern`, and the host's tool-schema validator is a\n\t\t\t// Rust regex engine that rejects an unescaped `[` inside a character class as \"unclosed\n\t\t\t// character class\" — a 400 on tools/list that stops EVERY Claude session from opening\n\t\t\t// (7-M-fix). Biome's safe fix removes it; do not accept that fix. The suppression must\n\t\t\t// stay on the line DIRECTLY above the expression, or it attaches to nothing and reads\n\t\t\t// as an unused suppression while the escape goes back to being fixable.\n\t\t\t// biome-ignore lint/complexity/noUselessEscapeInRegex: emitted to a Rust regex validator, see above\n\t\t\t.regex(/^[A-Za-z0-9][A-Za-z0-9._/:\\[\\]-]*$/)\n\t\t\t.describe(\n\t\t\t\t\"Required runtime model: canonical provider/model for pi, provider/<exact catalog model id> for pi-durable, a Claude Code model id/alias, or a Copilot/OMP/Codex model name.\",\n\t\t\t),\n"
 			],
 			"replace": [""],
 			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
@@ -190,6 +190,17 @@
 			"gate": ["bash", "run.sh", "check-pi-import-surface"],
 			"timeoutSeconds": 60,
 			"signature": "[QK:PIIMPORT-WORK-SURFACE]",
+			"signatureSource": "run.sh"
+		},
+		{
+			"claim": "PIIMPORT-DURABLE-BOOTSTRAP-EXACT",
+			"title": "the #129 durable exception loses its file scope: the two experimental durable specifiers become allowed in every file, so a new pi private-subpath import elsewhere passes the floor",
+			"subject": "run.sh",
+			"find": ["      | sed -E \"/^pi\\/pi-durable\\/bootstrap\\.mjs:[0-9]+:/ s#"],
+			"replace": ["      | sed -E \"s#"],
+			"gate": ["bash", "run.sh", "check-pi-import-surface"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:PIIMPORT-DURABLE-BOOTSTRAP-EXACT]",
 			"signatureSource": "run.sh"
 		},
 		{
@@ -323,8 +334,8 @@
 			"claim": "FRESHCALL-BACKEND-SET-SURFACE-PARITY",
 			"title": "a backend the composition can open is missing from the MCP surface enum — the capability exists and no external host can reach it",
 			"subject": "mcp/entwurf-bridge/src/index.ts",
-			"find": ["\t\t\t.enum([\"pi\", \"claude-code\", \"copilot\", \"omp\", \"codex\"])"],
-			"replace": ["\t\t\t.enum([\"pi\", \"claude-code\", \"copilot\", \"omp\"])"],
+			"find": ["\t\t\t.enum([\"pi\", \"claude-code\", \"copilot\", \"omp\", \"codex\", \"pi-durable\"])"],
+			"replace": ["\t\t\t.enum([\"pi\", \"claude-code\", \"copilot\", \"omp\", \"pi-durable\"])"],
 			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
 			"timeoutSeconds": 180,
 			"signature": "[QK:FRESHCALL-BACKEND-SET-SURFACE-PARITY]",
@@ -699,6 +710,50 @@
 			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
 			"timeoutSeconds": 120,
 			"signature": "[QK:FRESHCALL-CALLBACK-ENV]",
+			"signatureSource": "test/mux-fresh-call.test.ts"
+		},
+		{
+			"claim": "FRESHCALL-PI-DURABLE-ARGV",
+			"title": "pi-durable loses its explicit task-wide width, so the packaged bootstrap refuses a launch the composition said it built",
+			"subject": "pi-extensions/lib/fresh-call-composition.ts",
+			"find": ["\t\t\t\t\"--width\",\n\t\t\t\t\"task-wide\",\n"],
+			"replace": [""],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:FRESHCALL-PI-DURABLE-ARGV]",
+			"signatureSource": "test/mux-fresh-call.test.ts"
+		},
+		{
+			"claim": "FRESHCALL-PI-DURABLE-PREFLIGHT-PREMUTATION",
+			"title": "the pi-durable runtime/unit preflight is skipped, so an absent or drifted operator runtime is discovered only after a window was placed",
+			"subject": "pi-extensions/lib/mux-fresh-call.ts",
+			"find": ["\tif (params.backend === \"pi-durable\") {\n"],
+			"replace": ["\tif (false) {\n"],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:FRESHCALL-PI-DURABLE-PREFLIGHT-PREMUTATION]",
+			"signatureSource": "test/mux-fresh-call.test.ts"
+		},
+		{
+			"claim": "FRESHCALL-PI-DURABLE-MANAGED-RUNTIME",
+			"title": "pi-durable opens the bare app instead of the managed `entwurf pi-durable`, so nothing verifies the operator runtime against the pin before its resolver runs",
+			"subject": "pi-extensions/lib/mux-fresh-call.ts",
+			"find": ["\t\"pi-durable\": \"entwurf\","],
+			"replace": ["\t\"pi-durable\": \"pi\","],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:FRESHCALL-PI-DURABLE-MANAGED-RUNTIME]",
+			"signatureSource": "test/mux-fresh-call.test.ts"
+		},
+		{
+			"claim": "FRESHCALL-PI-DURABLE-CALLBACK-DIALECT",
+			"title": "pi-durable is told the composed MCP callback name, which the durable contact never registers — the contact offers the bridge verbs under their bare names",
+			"subject": "pi-extensions/lib/fresh-call-composition.ts",
+			"find": ["\t\"pi-durable\": \"entwurf_callback\","],
+			"replace": ["\t\"pi-durable\": \"mcp__entwurf-bridge__entwurf_callback\","],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:FRESHCALL-PI-DURABLE-CALLBACK-DIALECT]",
 			"signatureSource": "test/mux-fresh-call.test.ts"
 		}
 	]

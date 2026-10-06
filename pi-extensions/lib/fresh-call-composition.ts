@@ -25,11 +25,12 @@
 import { randomBytes } from "node:crypto";
 
 /** The backends this rail can open. Fixed set, not a profile — a further one is a decision,
- * not a config entry. `copilot` was added by #82 RAIL 9, `omp` by #87 Bundle C, and `codex`
- * by #95 after its system birth and app-server rails were measured. The set is joined to the
+ * not a config entry. `copilot` was added by #82 RAIL 9, `omp` by #87 Bundle C, `codex`
+ * by #95 after its system birth and app-server rails were measured, and `pi-durable` by #129
+ * (the operator-provided durable app through the managed `entwurf pi-durable`). The set is joined to the
  * citizen backends by `check-harness-admission-parity`: a harness that mints records but is
  * missing HERE is not an unwired convenience, it is a release blocker. */
-export const FRESH_CALL_BACKENDS = ["pi", "claude-code", "copilot", "omp", "codex"] as const;
+export const FRESH_CALL_BACKENDS = ["pi", "claude-code", "copilot", "omp", "codex", "pi-durable"] as const;
 export type FreshCallBackend = (typeof FRESH_CALL_BACKENDS)[number];
 
 /**
@@ -68,6 +69,11 @@ export const FRESH_CALL_CALLBACK_TOOL: Record<FreshCallBackend, string> = {
 	// Codex's tool process is the operator app-server, not the pane: the no-arg
 	// verb refuses there by name. First action stays the delivery verb with args.
 	codex: "mcp__entwurf_bridge__entwurf_v2",
+	// The durable contact registers the bridge verbs as its OWN tools under their bare names, and the
+	// app offers a tool to the model by its registered name (`durable/harness/registry.ts:99`
+	// @cd32f77). Measured for `entwurf_v2` on the S+native-H wire (receipt 4012c066); the callback
+	// spelling follows the same rule and is owed its first LIVE observation.
+	"pi-durable": "entwurf_callback",
 };
 
 /** Where a sibling SENDS the task result. Always the delivery verb, never the birth callback. */
@@ -77,6 +83,7 @@ export const FRESH_CALL_DELIVERY_TOOL: Record<FreshCallBackend, string> = {
 	copilot: "entwurf-bridge-entwurf_v2",
 	omp: "mcp__entwurf_bridge_entwurf_v",
 	codex: "mcp__entwurf_bridge__entwurf_v2",
+	"pi-durable": "entwurf_v2",
 };
 
 /**
@@ -99,6 +106,7 @@ export const FRESH_CALL_PEERS_TOOL: Record<FreshCallBackend, string> = {
 	copilot: "entwurf-bridge-entwurf_peers",
 	omp: "mcp__entwurf_bridge_entwurf_peers",
 	codex: "mcp__entwurf_bridge__entwurf_peers",
+	"pi-durable": "entwurf_peers",
 };
 
 /**
@@ -139,13 +147,16 @@ export const FRESH_CALL_TOOL_LOAD_HINT: Record<FreshCallBackend, readonly string
 	copilot: [],
 	omp: [],
 	codex: [],
+	"pi-durable": [],
 };
 
 /**
- * What a launch has to say, in the two shapes the five backends need. Four of them are
- * handed a first-turn PROMPT; omp is handed a bootstrap PAYLOAD its own installed extension
- * unpacks. Both are always built, because building one is cheap and a backend switch must
- * never be able to reach a field that was not composed.
+ * What a launch has to say, in the two shapes the six backends need. pi, claude-code, copilot
+ * and codex are handed the first-turn PROMPT as an argument; pi-durable is handed that same
+ * PROMPT inside the closed `{v,task}` payload on the bootstrap flag, which its packaged bootstrap
+ * decodes; omp is handed its own bootstrap PAYLOAD, which its installed extension unpacks. Both
+ * are always built, because building one is cheap and a backend switch must never be able to
+ * reach a field that was not composed.
  */
 export interface FreshCallComposition {
 	prompt: string;
@@ -339,6 +350,30 @@ export function composeBackendArgs(
 				"--dangerously-bypass-approvals-and-sandbox",
 				composition.prompt,
 			];
+		case "pi-durable": {
+			// The managed verb (`entwurf pi-durable`) carries the explicit model as pi's own
+			// `--provider`/`--model` pair, split at the FIRST `/` (the preflight already refused a model
+			// with no provider), the explicit width, and the WHOLE framing as the closed `{v,task}`
+			// payload — the durable bootstrap submits it to the root once, after the birth. The
+			// caller's address rides the env pair, never this payload.
+			const at = model.indexOf("/");
+			if (at <= 0 || at === model.length - 1) {
+				throw new Error(
+					`fresh-call composition: pi-durable model ${JSON.stringify(model)} is not <provider>/<model id>`,
+				);
+			}
+			return [
+				"pi-durable",
+				"--provider",
+				model.slice(0, at),
+				"--model",
+				model.slice(at + 1),
+				"--width",
+				"task-wide",
+				`--${OMP_BOOTSTRAP_FLAG}`,
+				JSON.stringify({ v: OMP_BOOTSTRAP_VERSION, task: composition.prompt }),
+			];
+		}
 	}
 }
 

@@ -591,7 +591,8 @@ registry grades: a pre-contract backend that has not walked this step remains le
 and must not be described as supported until it is re-evaluated here.
 
 1. one fixed managed runtime path — never an arbitrary command or raw tmux workaround;
-2. an explicit model and an explicit permission policy in the vendor's measured argv dialect.
+2. an explicit model and an explicit permission policy in the measured vendor dialect: argv
+   for CLI harnesses, or the narrow pinned native-app API mapping specified below.
    The policy has a **width**, not just a spelling: say whether the grant is callback-only or
    task-wide, and carry the chosen width as an explicit argv token rather than relying on a
    launcher's injected default. A callback-only sibling will reliably name itself and may then
@@ -612,6 +613,22 @@ and must not be described as supported until it is re-evaluated here.
 6. exact nonce correlation from the callback sender envelope, with launch and callback receipts
    kept separate;
 7. one real visible LIVE receipt through callback and addressed receive.
+
+**Pinned native-app API mapping (#129; design route, not admission evidence).** The source-only
+pi-durable app at `cd32f77` has no model/width argv surface. Its one fixed managed Entwurf command
+must therefore carry required, explicit provider/model/width tokens and map them through the
+native app's existing model API, exposed by the narrowly maintained contact overlay. The chosen
+model and actual offered tool set must be measured through the native harness; parsing the tokens
+or observing an Entwurf stub alone is insufficient. For this route, `task-wide` means the native
+installed-tool offering with no tool filter, and its explicit token is mandatory: it is not an OS
+sandbox, approval prompt, or credential grant. Permanent callback-only filtering is not a supported
+width. This route permits no generic command/env carrier, permission interpreter, alternate
+creation API, or reconstruction of native runtime/auth/storage/recovery. `--continue` combined
+with fresh-only model/width/bootstrap arguments must refuse before opening; it selects newest-cwd,
+not a record-targeted session. Model resolution failure must prevent citizen birth, but may leave
+native allocation whose cleanup remains upstream-owned. All four preflight capabilities, compiled
+consumer proof, first-action callback, exact nonce, visible LIVE and release stops remain binding;
+this API mapping is not a waiver or a claim that pi-durable is already supported.
 
 A backend the composition can open must appear as the same fixed set on every public surface
 that offers `entwurf_fresh_call` — the MCP bridge (which a pi session also reaches, through Pi's

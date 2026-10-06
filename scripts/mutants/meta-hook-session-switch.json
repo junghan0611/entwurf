@@ -182,9 +182,11 @@
 			"claim": "MHSS-JOIN-SCOPE-OWNERKIND",
 			"title": "admitting copilot-extension into the sender-marker join makes every Copilot citizen permanently mailbox-undeliverable: its watch owner is a forked child whose pid never carries a sender marker, so the join can only ever answer no",
 			"subject": "pi-extensions/lib/entwurf-deliverability.ts",
-			"find": ["export const SENDER_JOINED_RECEIVER_OWNER_KINDS: readonly string[] = [\"claude-code-cli\"];"],
+			"find": [
+				"export const SENDER_JOINED_RECEIVER_OWNER_KINDS: readonly string[] = [\"claude-code-cli\", \"pi-durable-host\"];"
+			],
 			"replace": [
-				"export const SENDER_JOINED_RECEIVER_OWNER_KINDS: readonly string[] = [\"claude-code-cli\", \"copilot-extension\"];"
+				"export const SENDER_JOINED_RECEIVER_OWNER_KINDS: readonly string[] = [\"claude-code-cli\", \"pi-durable-host\", \"copilot-extension\"];"
 			],
 			"gate": ["bash", "run.sh", "check-meta-hook-session-switch"],
 			"timeoutSeconds": 300,

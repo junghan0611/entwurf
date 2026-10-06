@@ -138,6 +138,24 @@ async function main(): Promise<void> {
 			!herdrBranch.includes("codexCallerFreshPreflight"),
 	);
 
+	// #129: pi-durable joined the tmux fresh set, NOT the herdr pilot set (GLG, 2026-10-06: no herdr
+	// pi-durable support in 0.31). Same axis as the codex cell: refused by the herdr reason, nothing
+	// spawned, no tmux fallback, and its operator-runtime preflight is never asked on this branch.
+	const durable = recordingSpawn();
+	const durableRefused = await dispatchFreshCall(
+		{ ...REQUEST, backend: "pi-durable", model: "loopback/scripted" },
+		HERDR_ENV,
+		durable.spawn,
+	);
+	ok(
+		"[QK:FCD-HERDR-PI-DURABLE-UNSUPPORTED] inside herdr pi-durable is not a pilot backend: it refuses by the herdr reason with nothing spawned, never falls back to a tmux window, and its runtime preflight is never consulted there",
+		durableRefused.rail === "herdr" &&
+			!durableRefused.result.ok &&
+			durableRefused.result.reason === "herdr-backend-unsupported" &&
+			durable.calls.length === 0 &&
+			!herdrBranch.includes("piDurable"),
+	);
+
 	// ── the tmux rail keeps its pre-existing ordering ────────────────────────────────────
 	// The import line names the preflight too, so the body is what gets counted: the claim is
 	// "called once, on one path", not "the word appears once".
