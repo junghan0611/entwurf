@@ -212,8 +212,9 @@ loopback S plus actual native harness H, not vendor V. Their scoped raw records,
 wire, native view and SQLite oracles do not certify every queue/crash window.
 The installed-bootstrap import in `check-pack-install` proves package closure,
 not runtime supply or native admission. First-release visible fresh/callback and
-native caller/target/cross-harness LIVE still owe the existing admission and
-release-stop receipts; SDK or package green does not waive them.
+native caller/target/cross-harness LIVE are owed by `smoke-pi-durable-fresh-live`, a
+release-gate MUST (LIVE=1; vendor V on a real Pi and a real pi-durable host, operator
+runtime required); SDK or package green does not waive it.
 
 | Axis | Required proof | Limit |
 |---|---|---|

@@ -755,6 +755,17 @@
 			"timeoutSeconds": 120,
 			"signature": "[QK:FRESHCALL-PI-DURABLE-CALLBACK-DIALECT]",
 			"signatureSource": "test/mux-fresh-call.test.ts"
+		},
+		{
+			"claim": "PD-FRESH-LIVE-FOREIGN-SENDER-REFUSED",
+			"title": "the pi-durable LIVE gate's Pi-side oracle drops its expected-sender check, so the exact payload relayed by any other citizen counts as pd's delivery",
+			"subject": "scripts/lib/pi-durable-fresh-live-receipts.ts",
+			"find": ["\t\tif (senders.length === 1 && senders[0] === expectedSender) hits.push({ row, index });"],
+			"replace": ["\t\tif (senders.length === 1) hits.push({ row, index });"],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:PD-FRESH-LIVE-FOREIGN-SENDER-REFUSED]",
+			"signatureSource": "test/pi-durable-fresh-live-receipts.test.ts"
 		}
 	]
 }

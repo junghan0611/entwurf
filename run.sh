@@ -203,6 +203,7 @@ Usage:
   ./run.sh smoke-setup-verdict        # #86 C1+C3b aggregate setup verdict fixture: all-absent SKIP/green, pi presence+floor, detected-FAIL nonzero, copilot four-unit composition (present=independent PASS/FAIL rows, absent=zero-state SKIP), installed-mode named branch, credential store untouched. Offline/deterministic
   ./run.sh check-agy-permission-matrix # AGY permission CONTRACT SPACE as a literal table (55 cells): parser-state × operation × settings × ownership × precedence with stated exclusion rules; expectations are hand-written literals, never read from the SUT. Offline/deterministic (deps: python3)
   ./run.sh smoke-omp-fresh-live        # #87 bundle C acceptance, RELEASE MUST: omp opened as ONE visible fresh sibling through the PUBLIC entwurf_fresh_call surface (never raw tmux), exact nonce callback -> garden id from the SENDER ENVELOPE -> record/backend identity -> addressed receive -> lastReadAt -> the drain visible in that same native session's own transcript. Needs LIVE=1 and spends real model turns. Self-deciding: omp outside FRESH_CALL_BACKENDS or without a mailbox rail is a protocol SKIP, which --cut reads as RED
+  ./run.sh smoke-pi-durable-fresh-live # #129 first-admission acceptance, RELEASE MUST: real Pi opens pi-durable through entwurf_fresh_call (managed verb), exact-nonce callback into Pi, Pi→pd addressed receive drained by pd's live turn, pd→Pi dispatch relayed to the collector; pd's actual model + task-wide offering read from its native store (online sqlite backup). LIVE=1; models ENTWURF_PI_DURABLE_FRESH_MODEL / _PI_MODEL (default openai-codex/gpt-6.1-sol)
   ./run.sh smoke-omp-receive-live      # #87 bundle B acceptance: another harness wakes an ALREADY-OPEN omp citizen, which reads its inbox and answers in the same session. Decides its own outcome from the capability registry — omp without a drainable mailbox is a protocol SKIP (no receiver unit exists to arm), which an unattended release-gate reports and `--cut` reads as RED; a registry that claims a receive rail with no acceptance body here is a FAIL
   ./run.sh smoke-entwurf-chain-live    # LIVE cross-harness delivery chain: native Claude Code -> pi GPT -> pi ACP Sonnet -> mailbox terminus, proving sender identity/replyable at every hop and a real read receipt at the end. Prerequisites (claude on PATH, pi credentials per backend) report protocol SKIP, never a pass
   ./run.sh check-release-gate-outcomes  # release-gate STEP OUTCOME protocol (P1): one skip exit code shared by the shell + TS halves, classifier never rounds a skip up to a pass, `--cut` refuses a MUST SKIP while a bare diagnostic stays exit 0, no LIVE smoke keeps the old exit-0 skip shape, and both real skip surfaces are INVOKED and observed to propagate the code
@@ -973,6 +974,19 @@ smoke_omp_fresh_live() {
   run_ts scripts/smoke-omp-fresh-live.ts
 }
 
+smoke_pi_durable_fresh_live() {
+  # #129 first-admission acceptance, RELEASE MUST: docs/adding-a-harness.md step 9 clause 7 and
+  # the two cross-harness dispatch receipts. A collector fixture opens a REAL visible Pi through
+  # the public entwurf_fresh_call; Pi's live turn opens pi-durable through the managed verb; pd's
+  # first action calls back into Pi by exact nonce; Pi's live turn → pd (mailbox, drained by pd's
+  # live turn) and pd's live turn → Pi (control socket), relayed to the fixture. pd's actual
+  # offering and model are read from its native store via an online node:sqlite backup. Private
+  # tmux server; REAL meta roots (one Pi + one pd minted, asserted); records/transcripts/DB kept.
+  # pi-durable absent from FRESH_CALL_BACKENDS or without a mailbox rail, or LIVE!=1, is a
+  # protocol SKIP; with LIVE=1 every missing prerequisite (operator runtime, pi, tmux, bridge) FAILs.
+  run_ts scripts/smoke-pi-durable-fresh-live.ts
+}
+
 smoke_codex_fresh_live() {
   # #95 first-admission RELEASE MUST. The explicit operator-owned app-server PID is the
   # seat authority: validate its Codex app-server argv and /proc TMUX/TMUX_PANE, then use
@@ -1497,7 +1511,10 @@ check_mux_fresh_call() {
   # codex-caller-seat rides here for the same reason as the two preflights: the leaf exists
   # only as freshCall's Codex placement input (#95 lane B), so certifying it apart from the
   # composition it feeds would let the two halves of one seat decision drift.
-  run_vitest test/mux-fresh-call.test.ts test/fresh-call-composition.contract.test.ts test/copilot-fresh-preflight.test.ts test/codex-fresh-preflight.test.ts test/fresh-call-surfaces.contract.test.ts test/fresh-call-provider.contract.test.ts test/omp-fresh-bootstrap.contract.test.ts test/tmux-coordinate-row.test.ts test/codex-fresh-live-protocol.test.ts test/codex-caller-seat.test.ts
+  # pi-durable-fresh-live-receipts rides here for tmux-coordinate-row's reason: it is the
+  # deterministic half of a LIVE sibling (smoke-pi-durable-fresh-live, #129) — the oracles that judge
+  # that gate's receipts, proven on inline rows, so no model turn and no durable host is needed.
+  run_vitest test/mux-fresh-call.test.ts test/fresh-call-composition.contract.test.ts test/copilot-fresh-preflight.test.ts test/codex-fresh-preflight.test.ts test/fresh-call-surfaces.contract.test.ts test/fresh-call-provider.contract.test.ts test/omp-fresh-bootstrap.contract.test.ts test/tmux-coordinate-row.test.ts test/codex-fresh-live-protocol.test.ts test/codex-caller-seat.test.ts test/pi-durable-fresh-live-receipts.test.ts
 }
 
 check_pi_durable_beside() {
@@ -6644,6 +6661,8 @@ release_gate() {
   # Codex then opens the outbound Pi and correlates that callback. Actor coordinates travel,
   # and fresh Codex == app-server/MCP inherited session == outbound Pi is a hard check.
   run_live_step "smoke-codex-fresh-live (#95: visible Pi -> visible Codex/callback/addressed v2 -> visible Pi/callback)" gate bash "$self" smoke-codex-fresh-live
+  # #129 first-admission: step 9 clause 7 + the two cross-harness receipts for pi-durable.
+  run_live_step "smoke-pi-durable-fresh-live (#129: visible Pi -> visible pi-durable/callback/addressed v2 -> Pi relay)" gate bash "$self" smoke-pi-durable-fresh-live
 
   # 4. BEHAVIOR lane (advisory, non-blocking). Model-in-loop gates that probe
   #     whether the model AUTONOMOUSLY drives the MCP entwurf surface. These never
@@ -6767,6 +6786,9 @@ case "$cmd" in
     ;;
   smoke-omp-fresh-live)
     smoke_omp_fresh_live
+    ;;
+  smoke-pi-durable-fresh-live)
+    smoke_pi_durable_fresh_live
     ;;
   check-capability-bundle-reach)
     check_capability_bundle_reach
