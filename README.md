@@ -36,7 +36,7 @@ SQLite storage and recovery. Native admission passed on one Linux host on the
 Entwurf package as a pinned [carrier](#native-durable-pi-durable--130--032-contract), so
 it no longer depends on installing the ordinary Pi CLI or provisioning a runtime.
 
-> **Source candidate, not a release.** This branch describes unshipped #130/0.32 work. The
+> **Source candidate, not a release.** The current source describes unshipped #130/0.32 work. The
 > package stays 0.31.0 until a separately authorized release prepare, and the published 0.31.0
 > on npm follows its own source-runtime docs — it does not supply the carrier described in the
 > 0.32 contract below.
