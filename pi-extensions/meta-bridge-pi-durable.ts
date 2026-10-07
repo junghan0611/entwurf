@@ -2,8 +2,9 @@
  * meta-bridge-pi-durable — the durable app's native contact, identity leaf (#129 L-identity).
  *
  * WHAT THIS IS. The long-running durable app (`@earendil-works/pi-coding-agent`
- * `experimental/durable`, source-only upstream) owns its runtime, TUI, models/auth, storage,
- * prompt and recovery. This module is the whole Entwurf side of its contact:
+ * `experimental/durable`, which upstream omits from its npm distribution — Entwurf's package
+ * supplies it as a pinned carrier, #130, not as an operator prerequisite) owns its runtime, TUI,
+ * models/auth, storage, prompt and recovery. This module is the whole Entwurf side of its contact:
  *
  *   createPiDurableContact({ bridgeEntry })
  *     .extension          tools-only durable Extension, handed to the overlay's
@@ -13,8 +14,9 @@
  *                         release the tools
  *
  * The bootstrap that composes the two lives with the overlay (`pi/pi-durable/bootstrap.mjs`), not
- * here: this module never imports the durable runtime, so Entwurf carries no path into a
- * vendor checkout and no `@earendil-works/pi-durable` dependency.
+ * here: this module never imports or initializes the durable app runtime and carries no path into
+ * a vendor checkout. That is this module's import boundary, not the package's dependency list: the
+ * package does declare the exact `@earendil-works/pi-durable` (1.0.4) for its carrier (#130).
  *
  * WHY BIRTH IS AFTER OPEN, BEHIND A GATE. `[read @cd32f77]` The native session id is chosen
  * inside `openDurable` (`runtime.ts:125`, `sessions.ts:18-55`), and `openDurable` calls
@@ -272,9 +274,11 @@ export interface PiDurableRoots {
 }
 
 // ---------------------------------------------------------------------------
-// Durable surface, typed NARROWLY and locally (pi-durable 1.0.2 @cd32f77,
-// `harness/types.ts`). `defineExtension`/`defineTool` are identity functions
-// (`harness/define.ts:6-17`), so a plain object is the extension.
+// Durable surface, typed NARROWLY and locally — read at pi-durable 1.0.2 @cd32f77 (#129,
+// `harness/types.ts`; historical coordinates, not re-anchored here). The current supply is the
+// 1.0.4 carrier at `7c10bd43`, whose authority is `pi/pi-durable/overlay/upstream-pin.json`.
+// `defineExtension`/`defineTool` are identity functions (`harness/define.ts:6-17`), so a plain
+// object is the extension.
 // ---------------------------------------------------------------------------
 
 /** `DurableView.session` — `runtime.ts:53`. */

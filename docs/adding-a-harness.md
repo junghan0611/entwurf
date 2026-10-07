@@ -34,7 +34,7 @@ them there.
 | `agy` | independent vendor | native-push: record + probe-alive gRPC `send-message`; no mailbox, no receiver marker | n/a — push rail | not openable; the declared pre-#82 legacy exception |
 | `omp` | **a pi fork** — inherits pi's env vocabulary (step 1(6)) | self-fetch mailbox: Claude's SHAPE, but the watch runs IN-PROCESS in the operator's TUI; announce-only doorbell via the vendor's own `sendUserMessage` | `mcp__entwurf_bridge_entwurf_callback` | bare `omp`, NO positional prompt: the two-stage `--entwurf-bootstrap` payload |
 | `codex` | independent vendor | native-push: `thread/loaded/list` probe on the operator-owned app-server UDS, then one-shot `codex queue`; no mailbox, no receiver marker, no retry | `mcp__entwurf_bridge__entwurf_v2` — the one exception: the no-arg callback refuses in the app-server's tool process, so the first action stays the delivery verb with arguments; strict request metadata is the sender join | supported in 0.21.0: `--remote unix://<default-socket> --model <model> --dangerously-bypass-approvals-and-sandbox <prompt>`. Birth is a trust-gated USER `SessionStart` declaration in `$CODEX_HOME/hooks.json` with its closure under `$XDG_DATA_HOME/entwurf/codex-birth` — no root, and the operator answers the vendor prompt once. Parser, env-boundary, setup, preflight and clause-7 composition landed, and acceptance closed them: installed doctors green, `check:full` exit 0, and `release-gate --cut` at MUST 24/0/0 with `check-gate-qualification` 475/475. With placement omitted the seat follows the CALLER: a Codex CALLER opens its sibling beside its own TUI pane, matched by the `thread-id` in that pane's terminal title (0 or 2+ matching panes reject, no fallback); every other caller opens in its own seat. (0.21.0 shipped a fixed operator-owned `codex` home for omitted-placement Codex TARGETS; #95 D1 retired it on 2026-09-16.) Still bounded: no request→arbitrary-attached-TUI seat join, no resume lane, and macOS NOT CERTIFIED — pending physical host |
-| `pi-durable` | upstream's source-only experimental app on the pinned Pi revision, with a narrow overlay | self-fetch mailbox: the receiver runs IN the durable host; an announce-only doorbell submits a root notice through the native submission API, and the model drains with `entwurf_inbox_read` | `entwurf_callback` (the contact registers the six tools by their plain names) | managed verb `entwurf pi-durable --provider … --model … --width task-wide --entwurf-bootstrap <{v,task}>`; LIVE MUST `smoke-pi-durable-fresh-live` (first green 2026-10-06, see DELIVERY) |
+| `pi-durable` | upstream's experimental app/TUI, which upstream omits from its npm distribution; Entwurf supplies it as a pinned v1.0.4 carrier with a narrow overlay (`pi/pi-durable/carrier/`, #130). The 0.31 operator-XDG source route is retired, with no fallback | self-fetch mailbox: the receiver runs IN the durable host; an announce-only doorbell submits a root notice through the native submission API, and the model drains with `entwurf_inbox_read` | `entwurf_callback` (the contact registers the six tools by their plain names) | managed verb `entwurf pi-durable --provider … --model … --width task-wide --entwurf-bootstrap <{v,task}>`; LIVE MUST `smoke-pi-durable-fresh-live` (first green 2026-10-06 on the **0.31 operator source-runtime route**, see DELIVERY — not acceptance of the 0.32 carrier, whose vendor LIVE is still pending) |
 
 
 The verb a sibling SENDS its result with is a separate source column, `FRESH_CALL_DELIVERY_TOOL`
@@ -616,8 +616,10 @@ and must not be described as supported until it is re-evaluated here.
    kept separate;
 7. one real visible LIVE receipt through callback and addressed receive.
 
-**Pinned native-app API mapping (#129; design route, not admission evidence).** The source-only
-pi-durable app at `cd32f77` has no model/width argv surface. Its one fixed managed Entwurf command
+**Pinned native-app API mapping (#129 design route, carried by the #130 carrier; not admission
+evidence).** The upstream experimental app — omitted from upstream's npm distribution, not an
+operator prerequisite — had no model/width argv surface in the #129 read at `cd32f77` (historical
+source evidence, not re-anchored here). Its one fixed managed Entwurf command
 must therefore carry required, explicit provider/model/width tokens and map them through the
 native app's existing model API, exposed by the narrowly maintained contact overlay. The chosen
 model and actual offered tool set must be measured through the native harness; parsing the tokens
@@ -629,8 +631,12 @@ creation API, or reconstruction of native runtime/auth/storage/recovery. `--cont
 with fresh-only model/width/bootstrap arguments must refuse before opening; it selects newest-cwd,
 not a record-targeted session. Model resolution failure must prevent citizen birth, but may leave
 native allocation whose cleanup remains upstream-owned. All four preflight capabilities, compiled
-consumer proof, first-action callback, exact nonce, visible LIVE and release stops remain binding;
-this API mapping is not a waiver or a claim that pi-durable is already supported.
+consumer proof, first-action callback, exact nonce, visible LIVE and release stops remain binding.
+Since #130 the same mapping and the same narrow boundary run on the installed v1.0.4 carrier, whose
+pin authority is `pi/pi-durable/overlay/upstream-pin.json`. The mapping alone is not admission and
+not a waiver: 0.31.0 shipped pi-durable's admission on the operator source-runtime route, and the
+0.32 carrier's own supply acceptance (FULL, qualification, vendor LIVE) is a separate floor that is
+still pending. No carrier green is inherited from 0.31.
 
 A backend the composition can open must appear as the same fixed set on every public surface
 that offers `entwurf_fresh_call` — the MCP bridge (which a pi session also reaches, through Pi's

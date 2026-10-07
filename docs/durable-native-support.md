@@ -2,9 +2,9 @@
 
 ## Decision and working surface
 
-Support `pi-durable` as a separate native-harness contact, not an enhancement to ordinary Pi. There is no upstream PR or upstream acceptance dependency. **Released 0.31.0** retains Pi1.0.2/source `cd32f7725fdbddbaecdff5b1e68491563394e0ca`. **#130 /0.32.0 targets Pi1.0.4 and simpler installation**: the supply contract below is implemented on the #130 branch (P1; review, qualification and release floors pending), and the explicit native-module contract (P2) is approved direction, not yet implemented.
+Support `pi-durable` as a separate native-harness contact, not an enhancement to ordinary Pi. There is no upstream PR or upstream acceptance dependency. **Released 0.31.0** retains Pi1.0.2/source `cd32f7725fdbddbaecdff5b1e68491563394e0ca`. **#130 /0.32.0 targets Pi1.0.4 and simpler installation**: the supply contract (P1) and the explicit native-module contract (P2) below are both implemented on the #130 branch; review, qualification, vendor LIVE and release floors are pending, and the package stays 0.31.0 until a separately authorized release prepare.
 
-Development takes place **on a branch in this repository checkout**. No worktrees or tmp development clones. Isolated test fixtures and preserved receipts are evidence, not another implementation authority. `AGENTS.md` owns the working rules; `NEXT.md` owns the current release state and next move. #129 closed at reviewed main `535c2e1` after first native admission; #130 owns runtime-supply, later Pi versions, ACP and UI follow-ups.
+Development takes place **on a branch in this repository checkout**. No worktrees or tmp development clones. Isolated test fixtures and preserved receipts are evidence, not another implementation authority. `AGENTS.md` owns the working rules. On the #130 branch the current handoff is `NEXT--feat_130-install-surface.md`; `NEXT.md` takes over the release state and next move when the branch lands (main's `NEXT.md` still describes #130 as discussion and is not this branch's compass). #129 closed at reviewed main `535c2e1` after first native admission; #130 owns runtime-supply, later Pi versions, ACP and UI follow-ups.
 
 Expired per-leaf grants and handoffs are not current instructions. They do not prohibit ordinary source edits or builds, or impose a whole-team shutdown/zero-downtime migration as a commit condition. Commits and releases still require the existing verification and authorization boundaries. Push and npm publication require GLG's separate explicit request.
 
@@ -60,7 +60,7 @@ The existing admission path remains identity → native visible identity → sen
 
 ## Read next
 
-- `NEXT.md` — current release state and next move; the implementation branch handoff was retired at main landing.
+- `NEXT--feat_130-install-surface.md` — the #130 branch's current handoff; `NEXT.md` resumes that role at landing. (The handoff "retired at main landing" was #129's branch, not #130's.)
 - `AGENTS.md`, `VERIFY.md`, `DELIVERY.md`, `docs/adding-a-harness.md`, `docs/mux-launch-rail.md` and `.claude/skills/entwurf-release/SKILL.md` — owning contracts.
 - #129 — closed implementation/first-admission record; #130 — runtime-supply, subsequent Pi version, ACP-Claude and UI decisions.
 

@@ -1357,8 +1357,10 @@ v2 필드 `parentGardenId`/`isEntwurf`는 **stray key로 거부된다** — 되�
     pi-agent-core→pi-ai, pi-durable→{chord, pi-ai} — 9 member, 10 member edge, 전부 caret `^1.0.4`. pi-durable과
     proper-lockfile은 coding-agent dep이 아니라 Entwurf가 직접 선언한다. dev/peer 이중 선언은 제거(check-dep-versions가 금지).
     ⑶ **floor.** single-source floor 규칙 그대로 → host 범위 `>=1.0.4 <1.1`; `minimumReleaseAgeExclude`에 `|| 1.0.4`와
-    pi-durable 행. 운영자 PATH pi(oracle 1.0.2)는 범위 밖으로 정직하게 non-green — setup이 이름으로 말한다.
-    ⑷ **측정 · 수선 · UNRUN.** `[측정 2026-10-07]` checkout S+H gate가 carrier + 실제 1.0.4 SDK 위에서 contact 91/91 ·
+    pi-durable 행. `[측정 2026-10-07 오전, 역사]` 당시 운영자 PATH pi(oracle 1.0.2)는 범위 밖이었다(setup이 이름으로
+    non-green을 말하는 경우). `[측정 2026-10-07 저녁]` GLG가 갱신한 뒤 oracle PATH pi는 `pi --version` 1.0.4다(Grok·coordinator
+    독립 측정). CLI 버전일 뿐 현재 setup·cache·native admission PASS가 아니고 setup은 다시 돌리지 않았다. ⑸ 경고와는 별개다.
+    ⑷ **측정 · 수선 · UNRUN.** `[측정 2026-10-07, P1 후보(커밋 전 작업 트리) 범위 — 6e16923이나 최종 후보 증거 아님]` checkout S+H gate가 carrier + 실제 1.0.4 SDK 위에서 contact 91/91 ·
     send 19/19 · receive 21/21(host-local log `.tmp-verify/032-implementation/opus/p1b-amend/verify.log`). 그 전 측정의
     유일한 red였던 `*-OPERATOR-UNTOUCHED`는 빈 operator root를 요구한 guard 결함이었고, 실행 전후 불변(pi-durable
     record·receiver·sender marker의 이름+sha256, durable session 항목 이름)으로 수선했다. installed verifier와 독립
@@ -1373,7 +1375,9 @@ v2 필드 `parentGardenId`/`isEntwurf`는 **stray key로 거부된다** — 되�
     ⑹ **P2 명시 native module.** `--native-module` 하나, 초기화는 TUI·runtime import 전, default export를 contact 뒤에
     참조 그대로, ingress 검사는 이름·예약 4종·contact tool 충돌뿐, identity carrier·cwd는 import 전후 비교(실수 방지,
     sandbox 아님), fresh_call 입력 불변. 증명: beside 8 QK + exact mutant 8(lane 39→47, 같은 build 선언), send gate
-    `native-module` cell(S+H), pack-install 설치본 cell. 실제 env-loader는 릴리스 후 agent-config 소유.
+    `native-module` cell(S+H), pack-install 설치본 cell — `[측정 2026-10-07, P2 후보 범위]` 그 측정은 P2 커밋 전 작업 트리와
+    `945f22b`(step2)의 것이며, bridge 바이트가 바뀐 `6e16923` 이후 후보의 증거가 아니다(새 후보에서 재실행 필요). 실제
+    env-loader는 릴리스 후 agent-config 소유.
   - **2026-10-05 bump — pi 1.0.0 → 1.0.2 (미출하 후보, branch `chore/pi-1.0.2-upstream`; 1.0.1은 건너뜀).**
     upstream `v1.0.0..v1.0.2`(`a13d35a..cd32f77`, 35 commits) 직독 + `npm view @…@1.0.2` 직독.
     ⑴ **우리 접촉면의 src 변화.** `pi-agent-core` src 0줄. `pi-ai` `utils/retry.ts`가 재시도 패턴에
