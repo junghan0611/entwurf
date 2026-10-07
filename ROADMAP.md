@@ -17,7 +17,7 @@
 
 ## 미출하 후보 — #130 0.32: Pi 1.0.4 SDK 출하 + pi-durable carrier (2026-10-07)
 
-branch `feat/130-install-surface`: pi SDK 9종(`@earendil-works/*`, `pi-durable` 포함)이 exact `1.0.4` production dependency로 승격되고 durable app/TUI가 pinned upstream `v1.0.4` carrier로 패키지에 실린다. host 범위 `>=1.0.4 <1.1`(single-source floor 규칙 그대로 pin을 따라 움직임). bootstrap은 명시적 `--native-module <절대경로>` 하나를 받는다(P2: 일반 ES module 초기화가 TUI·runtime import보다 먼저, default export native `Extension`을 contact 뒤에 참조 그대로). 0.31.0 출하물이 아니다: 0.31.0 registry는 peer floor 1.0.2와 source-runtime 경로다. 측정·미측정 축은 Dep bump 원장 2026-10-07 항목과 #130 thread.
+#130 구현(`feat/130-install-surface`에서 개발, current handoff `NEXT.md`): pi SDK 9종(`@earendil-works/*`, `pi-durable` 포함)이 exact `1.0.4` production dependency로 승격되고 durable app/TUI가 pinned upstream `v1.0.4` carrier로 패키지에 실린다. host 범위 `>=1.0.4 <1.1`(single-source floor 규칙 그대로 pin을 따라 움직임). bootstrap은 명시적 `--native-module <절대경로>` 하나를 받는다(P2: 일반 ES module 초기화가 TUI·runtime import보다 먼저, default export native `Extension`을 contact 뒤에 참조 그대로). 0.31.0 출하물이 아니다: 0.31.0 registry는 peer floor 1.0.2와 source-runtime 경로다. 측정·미측정 축은 Dep bump 원장 2026-10-07 항목과 #130 thread. `[수용 영수증 2026-10-08]` frozen `b220b20`는 FULL716s/body898 IDs 모두1회 KILLED/controls178green/explicit packed install/MUST25·FAIL0·SKIP0/BEHAVIOR1 후보바닥을 닫았다([#130 원천](https://github.com/junghan0611/entwurf/issues/130#issuecomment-6043744944)). Required exact-SHA CI/container·prepared versioned artifact·registry proof는 별도이며 출하 수용이 아니다. r3 원RED/복구불가 snapshot삭제/미확정 vendor원인은 그대로 보존한다.
 
 ## 0.30.1 shipped (2026-10-04) — #127 Claude ACP 0.85.1
 
@@ -1365,8 +1365,8 @@ v2 필드 `parentGardenId`/`isEntwurf`는 **stray key로 거부된다** — 되�
     유일한 red였던 `*-OPERATOR-UNTOUCHED`는 빈 operator root를 요구한 guard 결함이었고, 실행 전후 불변(pi-durable
     record·receiver·sender marker의 이름+sha256, durable session 항목 이름)으로 수선했다. installed verifier와 독립
     oracle은 도달 가능한 SDK closure 전체를 realpath당 한 번, package name identity까지 확인한다(depth-3 대조군 L4).
-    **UNRUN:** native/LIVE(`smoke-pi-durable-fresh-live`, Pi ↔ pi-durable on the carrier), qualification body,
-    frozen full, pnpm/Bun/SEA consumer layout.
+    **그 P1 측정 당시 UNRUN:** native/LIVE(`smoke-pi-durable-fresh-live`, Pi ↔ pi-durable on the carrier), qualification body,
+    frozen full, pnpm/Bun/SEA consumer layout. 이후 frozen b220의 별도 FULL/body/설치본/required LIVE 수용은 위 #130 receipt가 소유한다; P1 측정의 등급을 올리지 않는다. pnpm/Bun/SEA consumer layout은 여전히 미측정.
     ⑸ **알려진 host 경고(GLG D-A 수용).** Pi 0.99.1부터 있는 정적 manifest 검사가 root `dependencies`의 host-provided
     4종을 경고한다(1.0.2·1.0.4 동일 로직, 비차단). 원인은 P1의 production 승격이며 0.31 잔재가 아니다. exact SDK 사본은
     별도 native process용으로 의도된 것이고, 경고는 알려진 manifest 제약으로 문서화한다 — 모든 경로가 무해하다는 인증도,
@@ -1376,7 +1376,7 @@ v2 필드 `parentGardenId`/`isEntwurf`는 **stray key로 거부된다** — 되�
     참조 그대로, ingress 검사는 이름·예약 4종·contact tool 충돌뿐, identity carrier·cwd는 import 전후 비교(실수 방지,
     sandbox 아님), fresh_call 입력 불변. 증명: beside 8 QK + exact mutant 8(lane 39→47, 같은 build 선언), send gate
     `native-module` cell(S+H), pack-install 설치본 cell — `[측정 2026-10-07, P2 후보 범위]` 그 측정은 P2 커밋 전 작업 트리와
-    `945f22b`(step2)의 것이며, bridge 바이트가 바뀐 `6e16923` 이후 후보의 증거가 아니다(새 후보에서 재실행 필요). 실제
+    `945f22b`(step2)의 것이며, bridge 바이트가 바뀐 `6e16923` 이후 후보의 증거가 아니다. 이후 SDK4-r2 checkout S+H는9c 범위, r4 installed-module은b220 범위로 각각 별도 측정됐고, native production 대상9c..b220 불변으로 checkout 셀을 다시 돌리지 않았다(옛 green 승격 아님). 실제
     env-loader는 릴리스 후 agent-config 소유.
   - **2026-10-05 bump — pi 1.0.0 → 1.0.2 (미출하 후보, branch `chore/pi-1.0.2-upstream`; 1.0.1은 건너뜀).**
     upstream `v1.0.0..v1.0.2`(`a13d35a..cd32f77`, 35 commits) 직독 + `npm view @…@1.0.2` 직독.
