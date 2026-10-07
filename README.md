@@ -15,7 +15,7 @@ Git branches, worktrees, file isolation and internal delegation remain their con
 [Short answers: FAQ](./FAQ.md).
 
 ```text
-pi / Claude Code / Copilot / OMP / Antigravity / Codex
+pi / pi-durable / Claude Code / Copilot / OMP / Antigravity / Codex
   → record-backed garden id
     → entwurf_v2
       → control-socket | self-fetch mailbox | native-push
@@ -27,12 +27,13 @@ Claude and Cortex Code are ACP backends. Codex and Antigravity stay native so th
 retain their own tools and work context. Capabilities differ by rail: a shipped
 citizen is not a promise of every lifecycle operation.
 
-**Native durable contact (`pi-durable`) is accepted in the 0.31.0 candidate (#129).**
+**Native durable contact (`pi-durable`) ships in the [0.31.0 release](https://github.com/junghan0611/entwurf/releases/tag/v0.31.0) (#129).**
 It is a separate native harness contact, not ordinary Pi's control-socket adapter.
 The contact attaches one durable host to a garden id, adds visible identity and
 two-way mailbox contact, while the upstream harness keeps its TUI, models/auth,
-SQLite storage and recovery. First native admission passed on one Linux host;
-release/artifact acceptance is separate. The
+SQLite storage and recovery. Native admission passed on one Linux host; the
+0.31.0 release separately passed exact-SHA CI and preserved-tarball Docker acceptance.
+That does not provision or certify a runtime on every host. The
 [installation requirements](#optional-native-durable--0310) differ from installing
 the ordinary Pi CLI.
 
@@ -94,8 +95,8 @@ operator runtime as PASS/SKIP/FAIL without writing durable wiring, and
 2026-10-06: visible fresh/callback, addressed receive and real Pi ↔ pi-durable
 LIVE36 on one Linux host ([receipts](./DELIVERY.md)). Installed-bootstrap import
 proof does not supply or certify the native runtime; npm installation alone is
-not a durable readiness verdict. #129 closed at reviewed main; release acceptance
-remains its own floor.
+not a durable readiness verdict. #129 closed at reviewed main, and 0.31.0's
+release/artifact acceptance is complete; native runtime readiness remains host-specific.
 See [setup: native durable](./docs/setup-clean-host.md#2b-optional-native-durable-pi-durable)
 and [#130](https://github.com/junghan0611/entwurf/issues/130) for runtime-supply,
 Pi-upgrade, ACP and UI follow-ups.
@@ -169,9 +170,9 @@ Liveness is read at dispatch time; an id's shape does not tell you its transport
 | Reopen a dormant pi citizen under its own id | `entwurf_resume_call {target}` | Separate LAUNCH and socket OBSERVATION receipts; no turn is run |
 
 **Delivery starts no process.** A live pi receives over its record-addressed Unix
-control socket; an armed self-fetch citizen (Claude Code, Copilot, OMP) through its
-mailbox; a probe-alive native-push citizen (Antigravity, Codex) through its native
-conversation/thread. Dormant pi, undeliverable mailboxes, dead/indeterminate native
+control socket; an armed self-fetch citizen (Claude Code, Copilot, OMP, pi-durable)
+through its mailbox; a probe-alive native-push citizen (Antigravity, Codex) through
+its native conversation/thread. Dormant pi, undeliverable mailboxes, dead/indeterminate native
 push and record-less sockets reject honestly. Only control-socket dispatch takes
 the per-target lock; the other rails use their own deliverability/probe evidence.
 
@@ -185,9 +186,10 @@ is a live rail fact, not merely a consequence of trusted identity.
 
 **Mux launches; it never delivers.** Inside Herdr, fresh opens a new unfocused tab
 in the caller's workspace, pi/Claude Code only, with no tmux fallback. Outside,
-it opens pi/Claude Code/Copilot/OMP/Codex visibly on the caller's own tmux server.
-The model is required; optional `cwd` is a literal absolute directory, omitted or
-empty means the caller's cwd. Optional `placement.tmuxSession` names an existing
+it opens pi/pi-durable/Claude Code/Copilot/OMP/Codex visibly on the caller's own tmux
+server. pi-durable requires the operator-provided pinned runtime described above;
+Herdr does not fresh-open it. The model is required; optional `cwd` is a literal
+absolute directory, omitted or empty means the caller's cwd. Optional `placement.tmuxSession` names an existing
 tmux session (not permitted inside Herdr), never a new session or a cwd lookup.
 Omitted tmux placement follows the caller: Codex beside its own TUI pane matched
 by thread-id, everyone else in their own session. Missing/ambiguous context refuses.
@@ -221,7 +223,7 @@ compiled bridge after record birth, under the citizen's identity, and Pi supervi
 that MCP child. **MCP is ingress; pi receive remains the record-addressed Unix
 control socket.** Garden identity and dispatch stay Entwurf's. That 0.30.0 cut
 did not adopt or certify `pi-durable` or codemode. Native durable support is now
-accepted as a separate 0.31.0 candidate contact, as described above; codemode remains a
+released as a separate 0.31.0 native contact, as described above; codemode remains a
 harness-internal capability, not another garden citizen. The 0.30.0 follow-up
 separately measured Herdr supply 0.9.3 and
 re-pinned the plugin runtime to published npm 0.30.0 with manifest 0.30.0; its
