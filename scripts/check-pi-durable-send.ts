@@ -38,7 +38,11 @@
  *                                   REQUIRED `intent`, and the app's own validation must settle it as
  *                                   `invalid_arguments`; `reject-undeliverable` — valid arguments, a
  *                                   target with no receiver marker, and the bridge must refuse by name
- *                                   (`mailbox-undeliverable`), surfacing natively as `tool_error`.
+ *                                   (`mailbox-undeliverable`), surfacing natively as `tool_error`;
+ *                                   `native-module` (#130 P2) — no send: the packaged `main` runs with
+ *                                   the synthetic operator module test/fixtures/pi-durable-native-module/
+ *                                   mock.mjs, and ONE scripted answer calls its tool, the native `bash`
+ *                                   and the contact's `entwurf_self`.
  *                                   Unknown selector exits 2 before anything spawns.
  *
  * Both cells read the bridge child's kernel counters (/proc/<pid>/io `rchar`, `syscr`) at sampled
@@ -61,6 +65,7 @@ import * as path from "node:path";
 import { createInterface } from "node:readline";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+import { CARRIER_SCHEME } from "../pi/pi-durable/carrier-relocation.mjs";
 import {
 	metaReceiverMarkerPath,
 	upsertMetaSession,
@@ -84,9 +89,15 @@ const REPORT_TIMEOUT_MS = 120_000;
 const CLOSE_TIMEOUT_MS = 30_000;
 const REAP_TIMEOUT_MS = 5_000;
 const CELL = process.env.ENTWURF_PI_DURABLE_SEND_CELL?.trim() || "valid";
-if (CELL !== "valid" && CELL !== "invalid-args" && CELL !== "reject-undeliverable" && CELL !== "r1-unsafe-recovery") {
+if (
+	CELL !== "valid" &&
+	CELL !== "invalid-args" &&
+	CELL !== "reject-undeliverable" &&
+	CELL !== "r1-unsafe-recovery" &&
+	CELL !== "native-module"
+) {
 	console.error(
-		`check-pi-durable-send: unknown ENTWURF_PI_DURABLE_SEND_CELL ${JSON.stringify(CELL)} (only "valid", "invalid-args", "reject-undeliverable", "r1-unsafe-recovery")`,
+		`check-pi-durable-send: unknown ENTWURF_PI_DURABLE_SEND_CELL ${JSON.stringify(CELL)} (only "valid", "invalid-args", "reject-undeliverable", "r1-unsafe-recovery", "native-module")`,
 	);
 	process.exit(2);
 }
@@ -106,9 +117,69 @@ const REJECT = CELL === "reject-undeliverable";
  * input, and the call must settle as interrupted without the tool implementation running again.
  */
 const R1 = CELL === "r1-unsafe-recovery";
-const QK = INVALID ? "PDI" : REJECT ? "PDR" : R1 ? "PR1" : "PDS";
-const CALL_ID = INVALID ? "call_pdi_1" : REJECT ? "call_pdr_1" : R1 ? "call_pr1_1" : "call_pds_1";
-const FINAL_TEXT = INVALID ? "invalid noted." : REJECT ? "reject noted." : R1 ? "recovered." : "sent.";
+/**
+ * native-module (#130 P2): the host runs the whole packaged `main` with ONE operator module — the
+ * synthetic fixture, node:* only — and the scripted first answer calls the module's tool, the native
+ * `bash` and the contact's `entwurf_self` in one assistant message. An observing resolve hook,
+ * preloaded after the carrier resolver and before the host driver, appends the first resolution of
+ * every `@earendil-works/*` and carrier-scheme (CARRIER_SCHEME) specifier to the same file the module's
+ * initialization appends `init` to: one file, so its line order IS the event order. The bridge's
+ * environment is not judged here — the beside QK PI-DURABLE-MODULE-BRIDGE-ENV-SPEC owns that spec.
+ */
+const NATIVE = CELL === "native-module";
+const QK = INVALID ? "PDI" : REJECT ? "PDR" : R1 ? "PR1" : NATIVE ? "PDM" : "PDS";
+const CALL_ID = INVALID
+	? "call_pdi_1"
+	: REJECT
+		? "call_pdr_1"
+		: R1
+			? "call_pr1_1"
+			: NATIVE
+				? "call_pdm_1"
+				: "call_pds_1";
+const FINAL_TEXT = INVALID
+	? "invalid noted."
+	: REJECT
+		? "reject noted."
+		: R1
+			? "recovered."
+			: NATIVE
+				? "module noted."
+				: "sent.";
+const MOCK_MODULE = path.join(REPO, "test", "fixtures", "pi-durable-native-module", "mock.mjs");
+/** What the fixture's initialization sets — typed here, not imported from it. */
+const MOCK_MARK = "mock-native-mark-0f5c";
+const NATIVE_CALLS = [
+	{ id: CALL_ID, name: "mock_native_echo", arguments: { text: "pdm" } },
+	{ id: "call_pdm_2", name: "bash", arguments: { command: 'printf %s "$MOCK_NATIVE_MARK"' } },
+	{ id: "call_pdm_3", name: "entwurf_self", arguments: {} },
+];
+/** The contact's six tool names, typed here (this gate imports no adapter constant). */
+const CONTACT_TOOLS = [
+	"entwurf_self",
+	"entwurf_peers",
+	"entwurf_v2",
+	"entwurf_inbox_read",
+	"entwurf_callback",
+	"entwurf_fresh_call",
+];
+const IMPORT_OBSERVER = `data:text/javascript,${encodeURIComponent(
+	[
+		'import { appendFileSync } from "node:fs";',
+		'import { registerHooks } from "node:module";',
+		"const file = process.env.MOCK_NATIVE_RECEIPT;",
+		"const seen = new Set();",
+		"registerHooks({",
+		"\tresolve(specifier, context, nextResolve) {",
+		`\t\tif (file && !seen.has(specifier) && (specifier.startsWith("@earendil-works/") || specifier.startsWith(${JSON.stringify(CARRIER_SCHEME)}))) {`,
+		"\t\t\tseen.add(specifier);",
+		'\t\t\tappendFileSync(file, "resolve " + specifier + "\\n");',
+		"\t\t}",
+		"\t\treturn nextResolve(specifier, context);",
+		"\t},",
+		"});",
+	].join("\n"),
+)}`;
 /** The committed-intent frame must arrive within this of `go` — a validity cutoff under the MCP
  * SDK's 60s request timeout, never an elapsed-time success inference. */
 const INTENT_DEADLINE_MS = 30_000;
@@ -254,6 +325,7 @@ const env: Record<string, string> = {
 const hostEnv: Record<string, string> = {
 	...env,
 	...(FAULT === undefined ? {} : { ENTWURF_PI_DURABLE_SEND_FAULT: FAULT }),
+	...(NATIVE ? { MOCK_NATIVE_RECEIPT: path.join(dirs.tmp, "native-module.receipt") } : {}),
 };
 
 // ---------------------------------------------------------------------------
@@ -310,18 +382,17 @@ const server = http.createServer((req, res) => {
 		wire.push({ method: req.method ?? "", url: req.url ?? "", body });
 		const n = wire.length;
 		if (req.method === "POST" && req.url === "/v1/chat/completions" && n === 1) {
+			const calls = NATIVE ? NATIVE_CALLS : [{ id: CALL_ID, name: "entwurf_v2", arguments: scriptedArgs }];
 			sse(res, [
 				chunk(
 					{
 						role: "assistant",
-						tool_calls: [
-							{
-								index: 0,
-								id: CALL_ID,
-								type: "function",
-								function: { name: "entwurf_v2", arguments: JSON.stringify(scriptedArgs) },
-							},
-						],
+						tool_calls: calls.map((call, index) => ({
+							index,
+							id: call.id,
+							type: "function",
+							function: { name: call.name, arguments: JSON.stringify(call.arguments) },
+						})),
 					},
 					null,
 				),
@@ -1101,8 +1172,9 @@ interface LaunchedHost {
 	stderr(): string;
 }
 
-async function launchHost(args: string[], what: string): Promise<LaunchedHost> {
-	const child = spawn(process.execPath, ["--import", resolver, HOST_DRIVER, bridgeEntry, ...args], {
+async function launchHost(args: string[], what: string, imports: string[] = []): Promise<LaunchedHost> {
+	const preload = ["--import", resolver, ...imports.flatMap((url) => ["--import", url])];
+	const child = spawn(process.execPath, [...preload, HOST_DRIVER, bridgeEntry, ...args], {
 		cwd: dirs.project,
 		env: hostEnv,
 		stdio: ["pipe", "pipe", "pipe"],
@@ -1570,9 +1642,131 @@ function exportR1Receipts(dir: string, ctx: R1Context | undefined): void {
 	);
 }
 
+interface NativeContext {
+	report: Report & { native?: boolean };
+	receipt: string[];
+	hostGardenId: string | undefined;
+}
+let nativeContext: NativeContext | undefined;
+
+/**
+ * #130 P2: one operator module through the packaged `main`, one native turn. The order oracle is the
+ * receipt file (module `init` vs the observer's first SDK/carrier resolutions); the registration,
+ * coexistence and child-environment oracles are the native view's three settled results and the
+ * host's own record; the wire is judged after the run (finalWireNative).
+ */
+async function nativeModuleCell(): Promise<void> {
+	console.log("1. native module: the packaged main with one operator module, then one native turn");
+	const host = await launchHost(["use the native module", "--native-module", MOCK_MODULE], "host", [IMPORT_OBSERVER]);
+	const report = (await host.next(REPORT_TIMEOUT_MS)) as unknown as NativeContext["report"];
+	if (report.error !== undefined) throw new Error(`host: ${report.error}`);
+	// The host is alive and holding: own its bridge child from /proc now, as the other cells do.
+	if (!observeBridges(host.owned))
+		throw new Error(`GAP: host ${host.owned.pid}'s children were not observed coherently`);
+	const receipt = fs
+		.readFileSync(hostEnv.MOCK_NATIVE_RECEIPT as string, "utf8")
+		.split("\n")
+		.filter(Boolean);
+	const firstResolve = receipt.findIndex((line) => line.startsWith("resolve "));
+	ok(
+		`[QK:PDM-INIT-BEFORE-SDK] the module's initialization completed before the first @earendil-works / carrier-scheme resolution in the host, and the TUI's and the runtime's own imports came after it (${receipt.length} receipt lines; first: ${receipt.slice(0, 3).join(" | ")})`,
+		receipt[0] === "init" &&
+			receipt.filter((line) => line === "init").length === 1 &&
+			firstResolve === 1 &&
+			receipt.includes("resolve @earendil-works/pi-tui") &&
+			receipt.includes(`resolve ${CARRIER_SCHEME}core/model-runtime.js`),
+	);
+	const records = fs
+		.readdirSync(dirs.sessions)
+		.filter((name) => name.endsWith(".meta.json"))
+		.map(
+			(name) =>
+				JSON.parse(fs.readFileSync(path.join(dirs.sessions, name), "utf8")) as { backend?: string; gardenId?: string },
+		);
+	const hostRecords = records.filter((r) => r.backend === "pi-durable");
+	const hostGardenId = hostRecords.length === 1 ? hostRecords[0]?.gardenId : undefined;
+	const calls = report.entries.flatMap((e) => e.toolCalls);
+	const resultOf = (id: string) => report.entries.find((e) => e.kind === "pi.tool-result" && e.toolCallId === id);
+	ok(
+		`[QK:PDM-NATIVE-CALLS] the native view records the scripted assistant message's three calls — the module's tool, the native bash and the contact's entwurf_self — each with a settled, non-error result (${calls.map((c) => `${c.id}:${c.name}`).join(", ")})`,
+		calls.length === 3 &&
+			NATIVE_CALLS.every((want) => calls.some((c) => c.id === want.id && c.name === want.name)) &&
+			NATIVE_CALLS.every((want) => resultOf(want.id)?.isError === false),
+	);
+	ok(
+		`[QK:PDM-MODULE-TOOL-RAN] the module's own tool ran natively and answered its text (got ${JSON.stringify(resultOf(CALL_ID)?.text)})`,
+		resultOf(CALL_ID)?.text === "mock:pdm",
+	);
+	ok(
+		`[QK:PDM-BASH-CHILD-ENV] the native bash child process saw the value the module's initialization set (got ${JSON.stringify(resultOf("call_pdm_2")?.text)})`,
+		resultOf("call_pdm_2")?.text === MOCK_MARK,
+	);
+	ok(
+		`[QK:PDM-CONTACT-COEXISTS] beside the module, the contact still answers natively: entwurf_self names the host's own record (${hostGardenId ?? `${hostRecords.length} pi-durable records`})`,
+		hostGardenId !== undefined && (resultOf("call_pdm_3")?.text ?? "").includes(hostGardenId),
+	);
+	const lastAssistant = report.entries.filter((e) => e.kind === "pi.assistant").at(-1);
+	ok(
+		`[QK:PDM-TURN-SETTLED] the turn ends on the scripted text and the conversation is no longer busy (last: ${JSON.stringify(lastAssistant?.text)}, busy ${report.busy})`,
+		lastAssistant?.text === FINAL_TEXT && report.busy === false,
+	);
+	console.log(`     notices: ${report.notices.join(" | ") || "none"}`);
+	nativeContext = { report, receipt, hostGardenId };
+	host.child.stdin?.write("close\n");
+	const closed = await host.next(CLOSE_TIMEOUT_MS);
+	await Promise.race([host.exited, sleep(CLOSE_TIMEOUT_MS)]);
+	ok(
+		`[QK:PDM-CLOSE] the host closes and exits 0 (closed ${String(closed.closed)}, exit ${host.exit().code})`,
+		closed.closed === true && host.exit().code === 0,
+	);
+}
+
+/** The native-module cell's wire, judged on the closed run's final snapshot. */
+function finalWireNative(ctx: NativeContext): void {
+	console.log("3. wire, final snapshot (host exited, endpoint closed)");
+	const first = wire[0]?.body ?? {};
+	const offered = ((first.tools as { function?: { name?: string } }[] | undefined) ?? []).map(
+		(t) => t.function?.name ?? "",
+	);
+	ok(
+		`[QK:PDM-WIRE-TOOLS-OFFERED] the app's first model request offers the module's tool, the native bash and all six contact tools together (offered: ${offered.join(", ")})`,
+		["mock_native_echo", "bash", ...CONTACT_TOOLS].every((name) => offered.includes(name)),
+	);
+	ok(
+		`[QK:PDM-WIRE-TWO-REQUESTS] over the whole closed run the endpoint saw exactly the two scripted requests, nothing unexpected (${wire.map((w) => `${w.method} ${w.url}`).join(" | ")})`,
+		!server.listening &&
+			wire.length === 2 &&
+			wire.every((w) => w.method === "POST" && w.url === "/v1/chat/completions"),
+	);
+	const second =
+		(wire[1]?.body?.messages as { role?: string; tool_call_id?: string; content?: unknown }[] | undefined) ?? [];
+	const toolText = (id: string) => messageText(second.find((m) => m.role === "tool" && m.tool_call_id === id)?.content);
+	ok(
+		`[QK:PDM-RESULTS-REACH-MODEL] the second model request carries all three results as the native view recorded them (module ${JSON.stringify(toolText(CALL_ID))})`,
+		NATIVE_CALLS.every(
+			(call) =>
+				toolText(call.id) !== "" &&
+				toolText(call.id) ===
+					ctx.report.entries.find((e) => e.kind === "pi.tool-result" && e.toolCallId === call.id)?.text,
+		),
+	);
+}
+
+/** The native-module cell's raw bytes. */
+function exportNativeReceipts(dir: string, ctx: NativeContext | undefined): void {
+	fs.writeFileSync(path.join(dir, "wire.json"), `${JSON.stringify(wire, null, 1)}\n`);
+	if (ctx === undefined) return;
+	fs.writeFileSync(path.join(dir, "native-view.json"), `${JSON.stringify(ctx.report, null, 1)}\n`);
+	fs.writeFileSync(path.join(dir, "module-receipt.log"), `${ctx.receipt.join("\n")}\n`);
+	fs.writeFileSync(
+		path.join(dir, "correlation.json"),
+		`${JSON.stringify({ cell: CELL, module: MOCK_MODULE, hostGardenId: ctx.hostGardenId, calls: NATIVE_CALLS, wireRequests: wire.length }, null, 1)}\n`,
+	);
+}
+
 let primary: unknown;
 try {
-	await (R1 ? r1Cell() : cell());
+	await (R1 ? r1Cell() : NATIVE ? nativeModuleCell() : cell());
 } catch (error) {
 	primary = error;
 }
@@ -1598,10 +1792,13 @@ ok(
 );
 if (R1) {
 	if (r1Context !== undefined) finalWireR1(r1Context);
+} else if (NATIVE) {
+	if (nativeContext !== undefined) finalWireNative(nativeContext);
 } else if (context !== undefined) finalWire(context);
 if (receiptsInput !== undefined) {
 	try {
 		if (R1) exportR1Receipts(receiptsInput, r1Context);
+		else if (NATIVE) exportNativeReceipts(receiptsInput, nativeContext);
 		else exportReceipts(receiptsInput, context);
 		ok(`[QK:${QK}-RECEIPTS-EXPORTED] the cell's raw bytes and correlation are in ${receiptsInput}`, true);
 	} catch (error) {

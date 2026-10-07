@@ -89,7 +89,12 @@ package edge binds the declared name at exactly the pinned version — and refus
 `entwurf setup` reports the same verdict as PASS or FAIL (never SKIP) without writing durable
 wiring. The ordinary Pi on PATH is a separate subject with its own range above. Native auth,
 models, sessions and recovery stay upstream-owned: Entwurf does not copy credentials or convert
-ordinary Pi sessions into durable SQLite sessions.
+ordinary Pi sessions into durable SQLite sessions. One operator module of your own can ride the
+launch with `--native-module <absolute file>`: it initializes before the durable runtime and its
+default export, a native durable `Extension`, is installed after Entwurf's contact ([setup
+§2b](./docs/setup-clean-host.md#2b-optional-native-durable-pi-durable)). Ordinary Pi may warn
+that Entwurf's `@earendil-works/*` belong in `peerDependencies`; the exact set is a production
+dependency on purpose, for the native process — a known manifest constraint accepted for 0.32.
 
 The installed carrier's runtime/TUI load, its physical SDK edges and the public launch up to the
 app's own model resolution are package-gate evidence; the checkout contact/send/receive gates run the

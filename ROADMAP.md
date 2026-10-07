@@ -17,7 +17,7 @@
 
 ## 미출하 후보 — #130 0.32: Pi 1.0.4 SDK 출하 + pi-durable carrier (2026-10-07)
 
-branch `feat/130-install-surface`: pi SDK 9종(`@earendil-works/*`, `pi-durable` 포함)이 exact `1.0.4` production dependency로 승격되고 durable app/TUI가 pinned upstream `v1.0.4` carrier로 패키지에 실린다. host 범위 `>=1.0.4 <1.1`(single-source floor 규칙 그대로 pin을 따라 움직임). 0.31.0 출하물이 아니다: 0.31.0 registry는 peer floor 1.0.2와 source-runtime 경로다. 측정·미측정 축은 Dep bump 원장 2026-10-07 항목과 #130 thread.
+branch `feat/130-install-surface`: pi SDK 9종(`@earendil-works/*`, `pi-durable` 포함)이 exact `1.0.4` production dependency로 승격되고 durable app/TUI가 pinned upstream `v1.0.4` carrier로 패키지에 실린다. host 범위 `>=1.0.4 <1.1`(single-source floor 규칙 그대로 pin을 따라 움직임). bootstrap은 명시적 `--native-module <절대경로>` 하나를 받는다(P2: 일반 ES module 초기화가 TUI·runtime import보다 먼저, default export native `Extension`을 contact 뒤에 참조 그대로). 0.31.0 출하물이 아니다: 0.31.0 registry는 peer floor 1.0.2와 source-runtime 경로다. 측정·미측정 축은 Dep bump 원장 2026-10-07 항목과 #130 thread.
 
 ## 0.30.1 shipped (2026-10-04) — #127 Claude ACP 0.85.1
 
@@ -1365,6 +1365,15 @@ v2 필드 `parentGardenId`/`isEntwurf`는 **stray key로 거부된다** — 되�
     oracle은 도달 가능한 SDK closure 전체를 realpath당 한 번, package name identity까지 확인한다(depth-3 대조군 L4).
     **UNRUN:** native/LIVE(`smoke-pi-durable-fresh-live`, Pi ↔ pi-durable on the carrier), qualification body,
     frozen full, pnpm/Bun/SEA consumer layout.
+    ⑸ **알려진 host 경고(GLG D-A 수용).** Pi 0.99.1부터 있는 정적 manifest 검사가 root `dependencies`의 host-provided
+    4종을 경고한다(1.0.2·1.0.4 동일 로직, 비차단). 원인은 P1의 production 승격이며 0.31 잔재가 아니다. exact SDK 사본은
+    별도 native process용으로 의도된 것이고, 경고는 알려진 manifest 제약으로 문서화한다 — 모든 경로가 무해하다는 인증도,
+    다른 버전 수용도 아니다. 실제 문제가 관찰되면 그 근거로 upstream에 요청한다. 분석 영수증:
+    `.tmp-verify/032-implementation/opus/host-warning/`(host-local).
+    ⑹ **P2 명시 native module.** `--native-module` 하나, 초기화는 TUI·runtime import 전, default export를 contact 뒤에
+    참조 그대로, ingress 검사는 이름·예약 4종·contact tool 충돌뿐, identity carrier·cwd는 import 전후 비교(실수 방지,
+    sandbox 아님), fresh_call 입력 불변. 증명: beside 8 QK + exact mutant 8(lane 39→47, 같은 build 선언), send gate
+    `native-module` cell(S+H), pack-install 설치본 cell. 실제 env-loader는 릴리스 후 agent-config 소유.
   - **2026-10-05 bump — pi 1.0.0 → 1.0.2 (미출하 후보, branch `chore/pi-1.0.2-upstream`; 1.0.1은 건너뜀).**
     upstream `v1.0.0..v1.0.2`(`a13d35a..cd32f77`, 35 commits) 직독 + `npm view @…@1.0.2` 직독.
     ⑴ **우리 접촉면의 src 변화.** `pi-agent-core` src 0줄. `pi-ai` `utils/retry.ts`가 재시도 패턴에

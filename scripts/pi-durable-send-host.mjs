@@ -16,11 +16,16 @@
 // holds. It prints one JSON report line, holds the host alive until the gate writes `close`,
 // closes, prints `{"closed":true}` and exits. With ENTWURF_PI_DURABLE_SEND_FAULT=malformed-report
 // (the gate's control) it gives the app no input and sends a non-JSON report line instead.
+//
+// --native-module <file> (#130 P2): the whole packaged `main` runs instead — its argument parse, the
+// operator module's initialization, the TUI load and the open, in main's own order — with ONE seam:
+// the TUI runner is this driver, which gives the app the one input through the controller it is
+// handed and reports the view as above. Nothing else of main is replaced.
 import { createInterface } from "node:readline";
-import { openDurableCitizen } from "../plugins/pi-durable/bootstrap.mjs";
+import { main, openDurableCitizen } from "../plugins/pi-durable/bootstrap.mjs";
 
 const USAGE =
-	"usage: pi-durable-send-host.mjs <bridge entry> <prompt> [--await-go] [--report-intent <callId> | --recover <callId>]";
+	"usage: pi-durable-send-host.mjs <bridge entry> <prompt> [--await-go] [--report-intent <callId> | --recover <callId> | --native-module <file>]";
 const [bridgeEntry, prompt, ...flags] = process.argv.slice(2);
 if (bridgeEntry === undefined || prompt === undefined) throw new Error(USAGE);
 // --await-go: report `born` once the citizen exists, and give the app its one input only after the
@@ -36,13 +41,18 @@ if (bridgeEntry === undefined || prompt === undefined) throw new Error(USAGE);
 let awaitGo = false;
 let reportIntent;
 let recoverCall;
+let nativeModule;
 for (let i = 0; i < flags.length; i++) {
 	if (flags[i] === "--await-go") awaitGo = true;
 	else if (flags[i] === "--report-intent" && flags[i + 1] !== undefined) reportIntent = flags[++i];
 	else if (flags[i] === "--recover" && flags[i + 1] !== undefined) recoverCall = flags[++i];
+	else if (flags[i] === "--native-module" && flags[i + 1] !== undefined) nativeModule = flags[++i];
 	else throw new Error(USAGE);
 }
 if (reportIntent !== undefined && recoverCall !== undefined) throw new Error(USAGE);
+if (nativeModule !== undefined && (awaitGo || reportIntent !== undefined || recoverCall !== undefined)) {
+	throw new Error(USAGE);
+}
 
 const stdinLines = createInterface({ input: process.stdin })[Symbol.asyncIterator]();
 /** Wait for one exact line from the gate; the gate closing stdin first is a failure. */
@@ -78,6 +88,67 @@ function summarize(entry) {
 			: {}),
 		text,
 	};
+}
+
+/** Give the app one input through `controller` and resolve once `source` shows the turn settled. */
+function submitAndSettle(source, controller) {
+	const before = source.current();
+	const noticesBefore = before.notices.length;
+	let submitted = false;
+	return new Promise((resolve) => {
+		const check = () => {
+			if (!submitted) return;
+			const view = source.current();
+			const busy = view.conversation.docs["pi.live"]?.run !== undefined;
+			const answered = view.conversation.entries.some((e) => e.kind === "pi.assistant");
+			const failed = view.notices.slice(noticesBefore).some((n) => n.level === "error");
+			if ((!busy && answered) || failed) {
+				unsubscribe();
+				resolve(before);
+			}
+		};
+		const unsubscribe = source.subscribe(check);
+		controller.submit(prompt, "followUp").then(() => {
+			submitted = true;
+			check();
+		});
+	});
+}
+
+if (nativeModule !== undefined) {
+	let code = 0;
+	try {
+		await main(
+			["--provider", "loopback", "--model", "scripted", "--width", "task-wide", "--native-module", nativeModule],
+			{
+				bridgeEntry,
+				loadTui: async () => ({
+					runDurableTui: async (source, controller) => {
+						const before = await submitAndSettle(source, controller);
+						const view = source.current();
+						process.stdout.write(
+							`${JSON.stringify({
+								native: true,
+								hostPid: process.pid,
+								session: view.session,
+								conversationIdBefore: before.conversation.conversation.id,
+								conversationIdAfter: view.conversation.conversation.id,
+								entries: view.conversation.entries.filter((e) => e.kind.startsWith("pi.")).map(summarize),
+								busy: view.conversation.docs["pi.live"]?.run !== undefined,
+								notices: view.notices.map((n) => `${n.level}: ${n.message}`),
+							})}\n`,
+						);
+						await waitFor("close");
+					},
+				}),
+			},
+		);
+	} catch (error) {
+		code = 1;
+		process.stdout.write(`${JSON.stringify({ error: error instanceof Error ? error.message : String(error) })}\n`);
+	}
+	process.stdout.write(`${JSON.stringify({ closed: true })}\n`);
+	process.exit(code);
 }
 
 const citizen = await openDurableCitizen({

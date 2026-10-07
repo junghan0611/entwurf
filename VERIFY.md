@@ -202,8 +202,11 @@ Do not collapse source, package, fixture, and native-host evidence into one “g
 
 **Native durable contact (#129, #130 carrier).** `check-pi-durable-beside` is the deterministic
 beside-test/mutant coordinate in `check:contracts`: the adapter, the installed carrier/SDK-set
-verifier, the preflight, the owner join, and the carrier's relocation grammar, resolver and
-maintainer emitter (its source reads refuse replace refs). `check-pi-runtime-version` asks the
+verifier, the preflight, the owner join, the carrier's relocation grammar, resolver and
+maintainer emitter (its source reads refuse replace refs), and the bootstrap's explicit
+`--native-module` ingress (#130 P2), driven through the packaged `main`'s own seams: initialization
+before the TUI and the open, named refusals, the identity and directory guards, the contact-first
+order by reference, and the bridge spawn *spec* (not the child's inheritance). `check-pi-runtime-version` asks the
 same verifier whether this checkout resolves exactly the pinned SDK set (the native set; the PATH
 host is setup's subject), and `check-pi-import-surface` asserts the carrier fence. The separate
 `check-pi-durable-contact`, `check-pi-durable-send` and `check-pi-durable-receive` are
@@ -212,14 +215,19 @@ name — and require a private compiled bridge emitted from this candidate
 (`ENTWURF_PI_DURABLE_BRIDGE_ENTRY`). A missing bridge input reports SKIP 97, never PASS; a
 refused carrier fails. Installed packages refuse these developer gates. Contact is
 adapter-direct/harness-bypassed; send/receive exercise scripted loopback S plus actual native
-harness H, not vendor V. Their scoped raw records, wire, native view and SQLite oracles do not
-certify every queue/crash window. `check-pack-install` proves the INSTALLED carrier on actual npm
+harness H, not vendor V. `check-pi-durable-send` with `ENTWURF_PI_DURABLE_SEND_CELL=native-module`
+runs the whole packaged `main` with the synthetic module (`test/fixtures/pi-durable-native-module/`):
+its initialization lands before the host's first `@earendil-works`/`entwurf-pi-dist:` resolution
+(one receipt file, observing resolve hook), and one scripted answer calls the module's tool, the
+native `bash` (whose child sees the module's value) and the contact's `entwurf_self`. Their scoped
+raw records, wire, native view and SQLite oracles do not certify every queue/crash window. `check-pack-install` proves the INSTALLED carrier on actual npm
 consumers (Entwurf-only, aligned host, isolated global): the installed verifier, a consumer oracle
 whose every resolved product file lies inside that consumer's own `node_modules` (with a
 same-sandbox neighbour as the rejected control), every reachable physical SDK edge at the pinned
 version and declared name, a mixed-version tree refused by name although it still imports, a
 constructed depth-3 mismatch refused by the verifier and seen by the oracle, the public launch reaching the
-app's own model refusal before any birth, and the HOST kept a separate subject — a real pi 1.0.2
+app's own model refusal before any birth — also with one installed `--native-module` initialized
+first, and a reserved extension name refused before anything opens — and the HOST kept a separate subject — a real pi 1.0.2
 binary beside the pinned native set is a named pi FAIL with zero Pi wiring while pi-durable still
 PASSes — not native admission. The maintainer's rebuild
 equality is `emit-pi-durable-carrier --check` against a supplied upstream clone; without one it is

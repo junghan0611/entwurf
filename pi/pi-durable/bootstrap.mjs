@@ -45,15 +45,31 @@
 // `--continue` opens the newest session for this directory as upstream does (not a chosen
 // record), so every flag that only a new session can honour is refused beside it by name.
 //
+// `--native-module <absolute file>` (#130 P2) names ONE operator module, for a new or a continued
+// session. It is an ordinary ES module: its own top-level evaluation (top-level await included) is
+// its initialization, and its default export is a native durable Extension, handed to `openDurable`
+// by reference after the contact. Initialization runs before the TUI or the runtime is imported —
+// the runtime creates the provider runtime before it installs any extension (carrier/runtime.js
+// 140-146), so an extension object cannot carry an environment phase. Entwurf checks only what the
+// ingress needs: a default export object with a name, no extension name the app installs itself (a
+// same-name install REPLACES), and no tool name of the contact. Every other field is the native
+// registry's to validate. The module is trusted operator code: the identity carriers and the
+// process directory are compared across its initialization and a change is refused by name — a
+// mistake guard, not a sandbox, and nothing is rolled back. Nothing is discovered: no directory,
+// setting, environment variable or profile names a module.
+//
 // Without that resolver the carrier's first pi-coding-agent internal import fails by name (an
 // unsupported entwurf-pi-dist: URL scheme), and that failure is the honest one.
-import { realpathSync } from "node:fs";
-import { fileURLToPath } from "node:url";
+import { realpathSync, statSync } from "node:fs";
+import { isAbsolute } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { decodeOmpBootstrapPayload } from "../../mcp/entwurf-bridge/dist/pi-extensions/meta-bridge-omp.js";
 import {
 	closeAll,
 	createPiDurableContact,
 	failAfterCleanup,
+	PI_DURABLE_EXTENSION_NAME,
+	PI_DURABLE_TOOL_NAMES,
 	withGardenIdentity,
 } from "../../mcp/entwurf-bridge/dist/pi-extensions/meta-bridge-pi-durable.js";
 
@@ -67,9 +83,18 @@ export const PACKAGED_BRIDGE_ENTRY = fileURLToPath(
 
 /** Flags that take a value. Anything else but `--continue`/`-c` is an unknown argument — a bridge
  * entry included: the launch argv cannot point the contact at another bridge. */
-const VALUE_FLAGS = ["--provider", "--model", "--width", "--entwurf-bootstrap"];
+const VALUE_FLAGS = ["--provider", "--model", "--width", "--entwurf-bootstrap", "--native-module"];
 /** Flags only a NEW session can honour. */
 const FRESH_ONLY_FLAGS = ["--provider", "--model", "--width", "--entwurf-bootstrap"];
+
+/**
+ * Extension names the durable app installs itself — the contact, then the carrier's own
+ * (`coding-tools` pi-durable/tools, `pi-prompt` carrier/prompt.js:70, `subagent`
+ * carrier/subagent.js:25). The native registry REPLACES an installed extension of the same name.
+ */
+const RESERVED_EXTENSION_NAMES = [PI_DURABLE_EXTENSION_NAME, "coding-tools", "pi-prompt", "subagent"];
+/** The identity carriers a module's initialization must leave as it found them, every ENTWURF_* included. */
+const IDENTITY_KEYS = ["PI_SESSION_ID", "PI_CODING_AGENT_DIR", "HOME"];
 
 /** A refusal with a stable name first, so a launcher and an operator can tell the repairs apart. */
 function refuse(reason, detail) {
@@ -77,6 +102,90 @@ function refuse(reason, detail) {
 }
 
 const nonEmpty = (value) => typeof value === "string" && value.trim().length > 0;
+
+/** The identity carriers present now: names and values, compared in memory and never printed. */
+function identitySnapshot() {
+	return Object.fromEntries(
+		Object.entries(process.env).filter(([key]) => IDENTITY_KEYS.includes(key) || key.startsWith("ENTWURF_")),
+	);
+}
+
+/** Keys changed, added or removed between two snapshots, sorted. */
+function identityChanges(before, after) {
+	return [...new Set([...Object.keys(before), ...Object.keys(after)])]
+		.filter((key) => before[key] !== after[key])
+		.sort();
+}
+
+/** The operator's module path: absolute, resolving to a regular file. Decided before anything loads. */
+function nativeModuleFile(value) {
+	if (!isAbsolute(value))
+		throw refuse("native-module-path-not-absolute", `--native-module takes an absolute path, got ${value}`);
+	let file;
+	try {
+		file = realpathSync(value);
+	} catch (error) {
+		throw Object.assign(refuse("native-module-path-invalid", `${value} does not resolve`), { cause: error });
+	}
+	if (!statSync(file).isFile()) throw refuse("native-module-path-invalid", `${value} is not a regular file`);
+	return file;
+}
+
+/** The module's default export, checked only for what the ingress needs and returned BY REFERENCE. */
+function nativeExtensionOf(extension, file) {
+	if (typeof extension === "function") {
+		throw refuse(
+			"native-module-export-invalid",
+			`${file} exports a function by default — a classic ExtensionAPI factory is not a native durable extension; export the Extension object ({ name, tools?, … })`,
+		);
+	}
+	if (typeof extension !== "object" || extension === null || Array.isArray(extension)) {
+		throw refuse("native-module-export-invalid", `${file} has no default export object`);
+	}
+	if (!nonEmpty(extension.name)) throw refuse("native-module-export-invalid", `${file}'s default export has no name`);
+	if (RESERVED_EXTENSION_NAMES.includes(extension.name)) {
+		throw refuse(
+			"native-module-name-reserved",
+			`${file} names its extension ${extension.name}, which the durable app installs itself; the same name would replace it`,
+		);
+	}
+	const taken = (Array.isArray(extension.tools) ? extension.tools : [])
+		.map((tool) => tool?.name)
+		.filter((name) => PI_DURABLE_TOOL_NAMES.includes(name));
+	if (taken.length > 0) {
+		throw refuse("native-module-name-reserved", `${file} registers ${taken.join(", ")}, the contact's own tool name`);
+	}
+	return extension;
+}
+
+/**
+ * Initialize the operator's module and return its native Extension. The identity carriers and the
+ * process directory are read BEFORE its first line runs and compared once its evaluation completes.
+ */
+async function loadNativeModule(file) {
+	const before = identitySnapshot();
+	const cwd = process.cwd();
+	let namespace;
+	try {
+		namespace = await import(pathToFileURL(file).href);
+	} catch (error) {
+		throw Object.assign(
+			refuse("native-module-import-failed", `${file}: ${error instanceof Error ? error.message : String(error)}`),
+			{ cause: error },
+		);
+	}
+	const changed = identityChanges(before, identitySnapshot());
+	if (changed.length > 0) {
+		throw refuse(
+			"native-module-env-identity-changed",
+			`initializing ${file} changed ${changed.join(", ")}; a module sets its own environment, never an identity carrier`,
+		);
+	}
+	if (process.cwd() !== cwd) {
+		throw refuse("native-module-cwd-changed", `initializing ${file} moved the process out of ${cwd}`);
+	}
+	return nativeExtensionOf(namespace.default, file);
+}
 
 /**
  * Open the durable app with the contact installed, then birth the citizen and arm its doorbell on
@@ -89,6 +198,8 @@ const nonEmpty = (value) => typeof value === "string" && value.trim().length > 0
  * roots; tests also pass a connector). `open` replaces the runtime's `openDurable` for tests.
  * `bridgeEntry` defaults to this package's own compiled bridge; only a programmatic caller (the
  * checkout-only gates, which drive a private bundle) passes another one — never the launch argv.
+ * `extensions` are the operator's native extensions (`--native-module`), installed after the
+ * contact, by reference.
  *
  * @param {{
  *   bridgeEntry?: string,
@@ -96,6 +207,7 @@ const nonEmpty = (value) => typeof value === "string" && value.trim().length > 0
  *   cwd?: string,
  *   model?: { provider: string, model: string },
  *   firstInput?: string,
+ *   extensions?: readonly object[],
  *   contact?: Record<string, unknown>,
  *   open?: (options: { cwd: string, continueSession: boolean, extensions: readonly object[], model?: { provider: string, model: string } }) => Promise<any>,
  * }} options
@@ -109,6 +221,7 @@ export async function openDurableCitizen({
 	cwd = process.cwd(),
 	model,
 	firstInput,
+	extensions = [],
 	contact: contactOptions = {},
 	open,
 }) {
@@ -131,7 +244,7 @@ export async function openDurableCitizen({
 		durable = await openDurable({
 			cwd,
 			continueSession,
-			extensions: [contact.extension],
+			extensions: [contact.extension, ...extensions],
 			...(model === undefined ? {} : { model }),
 		});
 	} catch (error) {
@@ -206,7 +319,9 @@ function parseArgs(argv) {
 			`${fresh.join(", ")} apply only to a new session; --continue reopens this directory's newest session as it was saved`,
 		);
 	}
-	if (continueSession) return { continueSession };
+	const moduleArg = values.get("--native-module");
+	const nativeModule = moduleArg === undefined ? {} : { nativeModule: nativeModuleFile(moduleArg) };
+	if (continueSession) return { continueSession, ...nativeModule };
 	const provider = values.get("--provider");
 	if (provider === undefined) {
 		throw refuse(
@@ -234,26 +349,33 @@ function parseArgs(argv) {
 		continueSession,
 		model: { provider, model },
 		...(firstInput === undefined ? {} : { firstInput }),
+		...nativeModule,
 	};
 }
 
 /**
- * Parse, load the TUI, open, run, close. `loadTui`, `open` and `contact` are test seams.
+ * Parse, initialize the operator's module, load the TUI, open, run, close. `loadTui`, `open` and
+ * `contact` are test seams; `bridgeEntry` is the checkout-only gates' private bundle, as in
+ * `openDurableCitizen` — never the launch argv.
  *
  * @param {readonly string[]} argv
  * @param {{
  *   loadTui?: () => Promise<{ runDurableTui: (...args: any[]) => Promise<void> }>,
  *   open?: (options: any) => Promise<any>,
  *   contact?: Record<string, unknown>,
+ *   bridgeEntry?: string,
  * }} [seams]
  */
-export async function main(argv, { loadTui = () => import(TUI), open, contact } = {}) {
-	// Every refusal is decided here, before the TUI loads and before anything opens.
-	const args = parseArgs(argv);
+export async function main(argv, { loadTui = () => import(TUI), open, contact, bridgeEntry } = {}) {
+	// Every argument refusal is decided here, before any module, the TUI or the app loads.
+	const { nativeModule, ...args } = parseArgs(argv);
+	// The caller's directory, fixed before any operator code runs and handed to the app explicitly.
+	const cwd = process.cwd();
+	const extensions = nativeModule === undefined ? [] : [await loadNativeModule(nativeModule)];
 	// Loaded before anything opens, as upstream main.ts imports it statically: a TUI that cannot
 	// load opens no session, mints no citizen and leaves nothing to clean up.
 	const { runDurableTui } = await loadTui();
-	const citizen = await openDurableCitizen({ ...args, open, contact });
+	const citizen = await openDurableCitizen({ ...args, cwd, extensions, bridgeEntry, open, contact });
 	try {
 		await runDurableTui(
 			withGardenIdentity(citizen.durable.view, citizen.attachment.gardenId),

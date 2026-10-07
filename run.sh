@@ -288,7 +288,7 @@ Usage:
   ./run.sh check-pack-pin-matcher     # pure self-test of check-pack-install's pin-leak matcher against synthetic .pnpm lookalikes, one cell per property: version boundary (a prefix-extended @0.86.0-beta.1 and an off-pin @0.85.1 must leak, @0.86.0 bare or with any measured peer-hash must pass) and closure prefix (an off-pin @earendil-works/chord must leak — it carries no `pi-` prefix); snapshot-safe qualification oracle, also run first inside check-pack-install
   ./run.sh check-pack-consumer-roots  # pure self-test of check-pack-install's consumer sandbox: under a poisoned inherited HOME/XDG/PI_CODING_AGENT_DIR every writable root a consumer subcall sees resolves inside its own consumer home; snapshot-safe qualification oracle, also run first inside check-pack-install
   ./run.sh check-fresh-cut-gate       # SOURCE cell of the generation-boundary proof (IN pnpm run check:full): drives real install/setup/fresh-cut in a sandbox; certification refusal is pre-write, quiescence is fail-closed, archives preserve bytes, and the #54 exit matrix distinguishes complete / no-move / usage / incomplete transition / complete-with-cleanup-residue. No model/network/cost
-  ./run.sh check-pack-install         # heavy publish gate (prepublishOnly): actual npm pack + tar -tf + fresh-temp install smoke + the #116 M3-b1 herdr-plugin RUNTIME VERIFIER run against that actual installed tarball (the focused check-herdr-runtime-bootstrap drives a fixture; THIS is where the real package is proven) with the pinned pi SDK (pins derived from the package.json exact production dependency; check-dep-versions binds them) + the npm-installed bridge BOOTS (tools/list) and DELIVERS (tools/call entwurf_v2 → .msg lands) + the installed all-absent and copilot-present (four-unit fake-vendor) `entwurf setup` rows + the INSTALLED generation lifecycle on a seeded previous-generation host (REFUSE before activation writes / zero Claude invocations → installed fresh-cut archives + opens empty → install-meta-bridge PASSES) + the INSTALLED-PACKAGE branch of the Copilot and OMP birth installers actually RUN (compiled entry selected, no raw .ts, and a real birth edge mints a citizen — the half a required-artifact list can never stand in for) + the INSTALLED #129 durable bootstrap (pi/pi-durable/bootstrap.mjs) imported from node_modules: main/openDurableCitizen exported and PACKAGED_BRIDGE_ENTRY = the installed package's own dist entry — import only, no runtime/TUI/birth/bridge started + the #130 pi-durable CARRIER on actual npm consumers (Entwurf-only / aligned host / isolated global): the installed verifier, a consumer-contained resolution oracle with a same-sandbox neighbour control, every physical SDK edge at the pin, a mixed tree refused as pi-durable-sdk-mismatch though it still imports, and the public `entwurf pi-durable` reaching the app's own explicit-model refusal before any birth (offline, sandbox HOME)
+  ./run.sh check-pack-install         # heavy publish gate (prepublishOnly): actual npm pack + tar -tf + fresh-temp install smoke + the #116 M3-b1 herdr-plugin RUNTIME VERIFIER run against that actual installed tarball (the focused check-herdr-runtime-bootstrap drives a fixture; THIS is where the real package is proven) with the pinned pi SDK (pins derived from the package.json exact production dependency; check-dep-versions binds them) + the npm-installed bridge BOOTS (tools/list) and DELIVERS (tools/call entwurf_v2 → .msg lands) + the installed all-absent and copilot-present (four-unit fake-vendor) `entwurf setup` rows + the INSTALLED generation lifecycle on a seeded previous-generation host (REFUSE before activation writes / zero Claude invocations → installed fresh-cut archives + opens empty → install-meta-bridge PASSES) + the INSTALLED-PACKAGE branch of the Copilot and OMP birth installers actually RUN (compiled entry selected, no raw .ts, and a real birth edge mints a citizen — the half a required-artifact list can never stand in for) + the INSTALLED #129 durable bootstrap (pi/pi-durable/bootstrap.mjs) imported from node_modules: main/openDurableCitizen exported and PACKAGED_BRIDGE_ENTRY = the installed package's own dist entry — import only, no runtime/TUI/birth/bridge started + the #130 pi-durable CARRIER on actual npm consumers (Entwurf-only / aligned host / isolated global): the installed verifier, a consumer-contained resolution oracle with a same-sandbox neighbour control, every physical SDK edge at the pin, a mixed tree refused as pi-durable-sdk-mismatch though it still imports, and the public `entwurf pi-durable` reaching the app's own explicit-model refusal before any birth, also with one explicit `--native-module` (the synthetic fixture, initialized first; a reserved extension name refused before anything opens) (offline, sandbox HOME)
   ./run.sh check-install-container    # 0.12.8 (#51 C): Linux artifact-CONSUMER gate — one candidate .tgz handed read-only to a checkout-invisible node:<engines-major>-bookworm cell. Default packs once to temp; ENTWURF_CANDIDATE_TGZ=/absolute/preserved.tgz consumes those exact bytes with no re-pack and prints canonical path+sha256 for release. Non-root global PATH install, frozen package, MCP tools/list, fake-Claude install-meta-bridge, path+sha256 fence, strict doctor, and the GENERATION host-state matrix (clean / v3-only store bytes unchanged / previous-generation REFUSE→fresh-cut→retry PASS) seeded inline. Docker missing = honest SKIP; ENTWURF_REQUIRE_DOCKER=1 makes that RED (required CI)
   ./run.sh install [project-dir]      # INTERNAL part of `setup` (project .pi/settings.json wiring) + npm-consumer entry — prefer `setup`, don't call directly for dev
   ./run.sh remove [project-dir]       # remove entwurf entries from project .pi/settings.json (project scope only; global user-scope citizen left intact)
@@ -1517,11 +1517,12 @@ check_pi_durable_beside() {
   # #129: the pi-durable qualification lane's execution coordinate (VERIFY 「Four rules」 rule 3). It is
   # not a discovery path — check-tests-beside-behavior already finds these files. It exists because the
   # qualification runner re-invokes a gate argv once per mutant, and the narrow filter keeps one mutant
-  # from re-running every beside test. The five files are one contact: the adapter and its packaged
+  # from re-running every beside test. The six files are one contact: the adapter and its packaged
   # bootstrap, the installed carrier/SDK-set verifier (which also reads the three checkout gates as
-  # SOURCE), the fresh preflight, the owner join that admits the durable host, and the carrier's
-  # relocation grammar, resolver and maintainer emitter (#130).
-  run_vitest pi-extensions/meta-bridge-pi-durable.test.ts pi-extensions/lib/pi-durable-runtime.test.ts pi-extensions/lib/pi-durable-fresh-preflight.test.ts pi-extensions/lib/entwurf-deliverability.owner-join.test.ts pi-extensions/lib/pi-durable-carrier.test.ts
+  # SOURCE), the fresh preflight, the owner join that admits the durable host, the carrier's
+  # relocation grammar, resolver and maintainer emitter (#130), and the bootstrap's explicit
+  # --native-module ingress (#130 P2).
+  run_vitest pi-extensions/meta-bridge-pi-durable.test.ts pi-extensions/lib/pi-durable-runtime.test.ts pi-extensions/lib/pi-durable-fresh-preflight.test.ts pi-extensions/lib/entwurf-deliverability.owner-join.test.ts pi-extensions/lib/pi-durable-carrier.test.ts pi-extensions/lib/pi-durable-native-module.test.ts
 }
 
 smoke_mux_fresh_call_live() {
@@ -4012,6 +4013,33 @@ ORACLE
     return 1
   fi
   echo "[check-pack-install] pi-durable public launch: the installed verb ran the carrier's openDurable on the pinned SDK, whose own model resolution refused the unregistered provider, before any birth"
+
+  # (c2) #130 P2: ONE explicit operator module on the INSTALLED package. The synthetic fixture is
+  # copied from this checkout into the sandbox — it never ships (test/ is outside the package files).
+  # Its initialization appends `init` to the receipt this cell names; the same public launch must then
+  # reach the same carrier model refusal, so the installed bootstrap loaded the module before the
+  # runtime and the native registry installed its extension (carrier/runtime.js 146) before that
+  # refusal (runtime.js 162). A module claiming an extension name the app installs itself is refused by
+  # name before anything opens: no durable session directory, no citizen, in a fresh sandbox home.
+  # Native SDK file opens here are ordinary (the module runs in the native process); none is judged.
+  local mod_dir="$box/pd-module" mod_home="$box/pd-module-home" mod_env=()
+  mkdir -p "$mod_dir" "$mod_home/.pi/agent"
+  cp "$REPO_DIR/test/fixtures/pi-durable-native-module/mock.mjs" "$mod_dir/mock.mjs"
+  printf 'export default { name: "subagent" };\n' > "$mod_dir/reserved.mjs"
+  rc=0; out=$(cd "$launch_cwd" && env "${launch_env[@]}" PI_OFFLINE=1 MOCK_NATIVE_RECEIPT="$mod_dir/receipt.log" "$l1s/node_modules/.bin/entwurf" pi-durable --provider entwurf-pack-probe --model no-such-model --width task-wide --native-module "$mod_dir/mock.mjs" 2>&1 </dev/null) || rc=$?
+  if [ "$rc" -eq 0 ] || [ "$(cat "$mod_dir/receipt.log" 2>/dev/null)" != "init" ] || ! grep -q 'Could not resolve model: Unknown provider "entwurf-pack-probe"' <<<"$out" || ! grep -q "at openDurable (file://.*/pi/pi-durable/carrier/runtime.js" <<<"$out" || grep -q "native-module-" <<<"$out"; then
+    fail "[QK:PACK-INSTALL-DURABLE-NATIVE-MODULE] [check-pack-install] the installed 'entwurf pi-durable --native-module' did not initialize the module once and then reach the carrier openDurable's own model refusal (rc=$rc, receipt $(cat "$mod_dir/receipt.log" 2>/dev/null | tr '\n' ' ')):"
+    echo "$out" | tail -15 | sed 's/^/    /' >&2
+    return 1
+  fi
+  mapfile -t mod_env < <(pack_install_consumer_env "$mod_home")
+  rc=0; out=$(cd "$launch_cwd" && env "${mod_env[@]}" PI_OFFLINE=1 "$l1s/node_modules/.bin/entwurf" pi-durable --provider entwurf-pack-probe --model no-such-model --width task-wide --native-module "$mod_dir/reserved.mjs" 2>&1 </dev/null) || rc=$?
+  if [ "$rc" -eq 0 ] || ! grep -q "native-module-name-reserved: .*subagent" <<<"$out" || grep -q "Unknown provider" <<<"$out" || [ -e "$mod_home/.pi/agent/experimental" ] || [ -e "$mod_home/.pi/agent/meta-sessions" ]; then
+    fail "[QK:PACK-INSTALL-DURABLE-NATIVE-MODULE] [check-pack-install] the installed launch did not refuse a reserved-name module by name before anything opened (rc=$rc):"
+    echo "$out" | tail -15 | sed 's/^/    /' >&2
+    return 1
+  fi
+  echo "[check-pack-install] pi-durable native module: the installed bootstrap initialized one explicit module before the carrier's runtime (then the same model refusal), and refused a reserved extension name before anything opened"
 
   # (d) Host vs native are two subjects. The installed package's native SDK set is the pin (above);
   # the ordinary Pi HOST on PATH is judged by its OWN real `pi --version` against the derived range.

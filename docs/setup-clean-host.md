@@ -348,6 +348,30 @@ tree (for example an override that binds pi-durable's `pi-ai` one patch behind) 
   (`pnpm run build-bridge`) and its development dependencies installed first.
   `plugins/pi-durable/bootstrap.mjs` is only the checkout path that re-exports it.
 
+- **One explicit native module (optional).** Add `--native-module <absolute file>` to either
+  launch to load ONE module of your own. It is an ordinary ES module: its top-level code (top-level
+  await included) runs first, before the TUI and the durable runtime load, so it can prepare the
+  environment the provider runtime and tool children will read; its default export is a native
+  durable `Extension` (`{ name, tools?, sections?, hooks?, … }`, the upstream durable API, not
+  ordinary Pi's `ExtensionAPI`), installed after Entwurf's contact. An env-only module exports
+  just `{ name }`. Refused by name before anything opens: a relative or non-file path
+  (`native-module-path-*`), a module that throws (`native-module-import-failed`), a function or
+  nameless default (`native-module-export-invalid`), an extension named like one the app installs
+  itself (`entwurf`, `coding-tools`, `pi-prompt`, `subagent`) or a tool named like one of Entwurf's
+  contact tools (`native-module-name-reserved`; any other duplicate is the native registry's to
+  judge), and a module whose initialization changes
+  `PI_SESSION_ID`, `PI_CODING_AGENT_DIR`, `HOME` or any `ENTWURF_*` (`native-module-env-identity-changed`)
+  or the process directory (`native-module-cwd-changed`). Your module is trusted code; those
+  checks catch mistakes, they do not sandbox it. Nothing else names a module — no directory,
+  setting or profile — and a sibling opened by `entwurf_fresh_call` starts without one.
+
+- **Known warning.** Ordinary Pi may print `Host-provided extension packages must be declared in
+  peerDependencies with a "*" range, not dependencies: @earendil-works/…` for Entwurf's
+  `package.json`. Entwurf declares the exact pi SDK set as production dependencies on purpose:
+  the installed copies serve the separate pi-durable native process. Pi's check reads that
+  manifest field; it is a known constraint of supplying both from one package, accepted for 0.32,
+  not a claim that every load path is harmless.
+
 The ordinary Pi CLI on PATH is a separate subject (§2, range `>=1.0.4 <1.1`): a host Pi is
 not needed to run pi-durable, and a host inside the range need not be the same copy as the
 carrier's. Native Pi owns credentials, model settings and durable SQLite sessions; keep them

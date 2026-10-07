@@ -53,9 +53,11 @@
 			"claim": "PI-DURABLE-BOOTSTRAP-ARGV-NO-BRIDGE-ENTRY",
 			"title": "the launch argv accepts --bridge-entry, so a caller can point the contact at a bridge outside this package",
 			"subject": "pi/pi-durable/bootstrap.mjs",
-			"find": ["const VALUE_FLAGS = [\"--provider\", \"--model\", \"--width\", \"--entwurf-bootstrap\"];"],
+			"find": [
+				"const VALUE_FLAGS = [\"--provider\", \"--model\", \"--width\", \"--entwurf-bootstrap\", \"--native-module\"];"
+			],
 			"replace": [
-				"const VALUE_FLAGS = [\"--bridge-entry\", \"--provider\", \"--model\", \"--width\", \"--entwurf-bootstrap\"];"
+				"const VALUE_FLAGS = [\"--bridge-entry\", \"--provider\", \"--model\", \"--width\", \"--entwurf-bootstrap\", \"--native-module\"];"
 			],
 			"gate": ["bash", "run.sh", "check-pi-durable-beside"],
 			"timeoutSeconds": 300,
@@ -581,6 +583,141 @@
 			"signature": "[QK:PI-DURABLE-GATE-OPERATOR-GUARD-WIRED]",
 			"signatureSource": "pi-extensions/lib/pi-durable-runtime.test.ts",
 			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "PI-DURABLE-MODULE-ABSENT-UNCHANGED",
+			"title": "the module phase runs without a --native-module, so a launch that names no module still tries to import one",
+			"subject": "pi/pi-durable/bootstrap.mjs",
+			"find": ["\tconst extensions = nativeModule === undefined ? [] : [await loadNativeModule(nativeModule)];"],
+			"replace": ["\tconst extensions = false ? [] : [await loadNativeModule(nativeModule)];"],
+			"gate": ["bash", "run.sh", "check-pi-durable-beside"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PI-DURABLE-MODULE-ABSENT-UNCHANGED]",
+			"signatureSource": "pi-extensions/lib/pi-durable-native-module.test.ts",
+			"build": {
+				"argv": ["bash", "scripts/build-bridge.sh"],
+				"output": "mcp/entwurf-bridge/dist"
+			}
+		},
+		{
+			"claim": "PI-DURABLE-MODULE-PATH-REFUSED",
+			"title": "a relative --native-module is resolved against whatever directory the launch happens to be in",
+			"subject": "pi/pi-durable/bootstrap.mjs",
+			"find": ["\tif (!isAbsolute(value))"],
+			"replace": ["\tif (false)"],
+			"gate": ["bash", "run.sh", "check-pi-durable-beside"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PI-DURABLE-MODULE-PATH-REFUSED]",
+			"signatureSource": "pi-extensions/lib/pi-durable-native-module.test.ts",
+			"build": {
+				"argv": ["bash", "scripts/build-bridge.sh"],
+				"output": "mcp/entwurf-bridge/dist"
+			}
+		},
+		{
+			"claim": "PI-DURABLE-MODULE-INIT-BEFORE-RUNTIME",
+			"title": "the module initializes after the TUI is imported, so its environment arrives after the SDK modules have evaluated",
+			"subject": "pi/pi-durable/bootstrap.mjs",
+			"find": [
+				"\tconst extensions = nativeModule === undefined ? [] : [await loadNativeModule(nativeModule)];",
+				"\t// Loaded before anything opens, as upstream main.ts imports it statically: a TUI that cannot",
+				"\t// load opens no session, mints no citizen and leaves nothing to clean up.",
+				"\tconst { runDurableTui } = await loadTui();"
+			],
+			"replace": [
+				"\t// Loaded before anything opens, as upstream main.ts imports it statically: a TUI that cannot",
+				"\t// load opens no session, mints no citizen and leaves nothing to clean up.",
+				"\tconst { runDurableTui } = await loadTui();",
+				"\tconst extensions = nativeModule === undefined ? [] : [await loadNativeModule(nativeModule)];"
+			],
+			"gate": ["bash", "run.sh", "check-pi-durable-beside"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PI-DURABLE-MODULE-INIT-BEFORE-RUNTIME]",
+			"signatureSource": "pi-extensions/lib/pi-durable-native-module.test.ts",
+			"build": {
+				"argv": ["bash", "scripts/build-bridge.sh"],
+				"output": "mcp/entwurf-bridge/dist"
+			}
+		},
+		{
+			"claim": "PI-DURABLE-MODULE-IMPORT-FAILED",
+			"title": "a module that throws during initialization is treated as no module and the app opens anyway",
+			"subject": "pi/pi-durable/bootstrap.mjs",
+			"find": ["\t} catch (error) {", "\t\tthrow Object.assign(", "\t\t\trefuse(\"native-module-import-failed\","],
+			"replace": [
+				"\t} catch (error) {",
+				"\t\treturn undefined;",
+				"\t\tthrow Object.assign(",
+				"\t\t\trefuse(\"native-module-import-failed\","
+			],
+			"gate": ["bash", "run.sh", "check-pi-durable-beside"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PI-DURABLE-MODULE-IMPORT-FAILED]",
+			"signatureSource": "pi-extensions/lib/pi-durable-native-module.test.ts",
+			"build": {
+				"argv": ["bash", "scripts/build-bridge.sh"],
+				"output": "mcp/entwurf-bridge/dist"
+			}
+		},
+		{
+			"claim": "PI-DURABLE-MODULE-IDENTITY-GUARD",
+			"title": "the identity carriers are compared only after the module ran, so a change its initialization made is never seen",
+			"subject": "pi/pi-durable/bootstrap.mjs",
+			"find": ["\tconst changed = identityChanges(before, identitySnapshot());"],
+			"replace": ["\tconst changed = identityChanges(identitySnapshot(), identitySnapshot());"],
+			"gate": ["bash", "run.sh", "check-pi-durable-beside"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PI-DURABLE-MODULE-IDENTITY-GUARD]",
+			"signatureSource": "pi-extensions/lib/pi-durable-native-module.test.ts",
+			"build": {
+				"argv": ["bash", "scripts/build-bridge.sh"],
+				"output": "mcp/entwurf-bridge/dist"
+			}
+		},
+		{
+			"claim": "PI-DURABLE-MODULE-CWD-PINNED",
+			"title": "the app is opened wherever the process is at open time, not in the caller's directory fixed before the module ran",
+			"subject": "pi/pi-durable/bootstrap.mjs",
+			"find": ["\tconst citizen = await openDurableCitizen({ ...args, cwd, extensions, bridgeEntry, open, contact });"],
+			"replace": ["\tconst citizen = await openDurableCitizen({ ...args, extensions, bridgeEntry, open, contact });"],
+			"gate": ["bash", "run.sh", "check-pi-durable-beside"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PI-DURABLE-MODULE-CWD-PINNED]",
+			"signatureSource": "pi-extensions/lib/pi-durable-native-module.test.ts",
+			"build": {
+				"argv": ["bash", "scripts/build-bridge.sh"],
+				"output": "mcp/entwurf-bridge/dist"
+			}
+		},
+		{
+			"claim": "PI-DURABLE-MODULE-EXPORT-NAME",
+			"title": "a module may name its extension entwurf, coding-tools, pi-prompt or subagent, and the native registry silently replaces that extension",
+			"subject": "pi/pi-durable/bootstrap.mjs",
+			"find": ["\tif (RESERVED_EXTENSION_NAMES.includes(extension.name)) {"],
+			"replace": ["\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-pi-durable-beside"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PI-DURABLE-MODULE-EXPORT-NAME]",
+			"signatureSource": "pi-extensions/lib/pi-durable-native-module.test.ts",
+			"build": {
+				"argv": ["bash", "scripts/build-bridge.sh"],
+				"output": "mcp/entwurf-bridge/dist"
+			}
+		},
+		{
+			"claim": "PI-DURABLE-MODULE-EXTENSION-ORDER",
+			"title": "the module's extension is installed before the contact",
+			"subject": "pi/pi-durable/bootstrap.mjs",
+			"find": ["\t\t\textensions: [contact.extension, ...extensions],"],
+			"replace": ["\t\t\textensions: [...extensions, contact.extension],"],
+			"gate": ["bash", "run.sh", "check-pi-durable-beside"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PI-DURABLE-MODULE-EXTENSION-ORDER]",
+			"signatureSource": "pi-extensions/lib/pi-durable-native-module.test.ts",
+			"build": {
+				"argv": ["bash", "scripts/build-bridge.sh"],
+				"output": "mcp/entwurf-bridge/dist"
+			}
 		}
 	]
 }
