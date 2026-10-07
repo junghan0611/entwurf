@@ -2,7 +2,7 @@
 
 ## Decision and working surface
 
-Support `pi-durable` as a separate native-harness contact, not an enhancement to ordinary Pi. There is no upstream PR or upstream acceptance dependency. The target is **0.31.0**, retaining Pi1.0.2/source `cd32f7725fdbddbaecdff5b1e68491563394e0ca`; later Pi version acceptance belongs to #130.
+Support `pi-durable` as a separate native-harness contact, not an enhancement to ordinary Pi. There is no upstream PR or upstream acceptance dependency. **Released 0.31.0** retains Pi1.0.2/source `cd32f7725fdbddbaecdff5b1e68491563394e0ca`. **#130 /0.32.0 targets Pi1.0.4 and simpler installation**; the supply/extension contract below is approved direction, not yet implemented or certified.
 
 Development takes place **on a branch in this repository checkout**. No worktrees or tmp development clones. Isolated test fixtures and preserved receipts are evidence, not another implementation authority. `AGENTS.md` owns the working rules; `NEXT.md` owns the current release state and next move. #129 closed at reviewed main `535c2e1` after first native admission; #130 owns runtime-supply, later Pi versions, ACP and UI follow-ups.
 
@@ -29,7 +29,20 @@ Installation has two independent subjects:
 1. **Entwurf package:** the existing npm/source installation surface, compiled adapter, setup and package-consumer checks. The canonical bootstrap/overlay live under `pi/pi-durable/`; a checkout compatibility wrapper is not a second installation API.
 2. **Native runtime:** the optional experimental app is source-only upstream; installing/upgrading the ordinary Pi CLI does not supply it. The durable library is separately npm-consumable. The operator supplies the pinned source runtime and overlay at the existing fixed XDG runtime location; Entwurf detects and verifies it, never downloads/repairs a runtime or supplies credentials.
 
-[README](../README.md), [setup](setup-clean-host.md#2b-optional-native-durable-pi-durable) and the release notes must describe that distinction and agree with the accepted installation evidence before shipment.
+[README](../README.md), [setup](setup-clean-host.md#2b-optional-native-durable-pi-durable) and the release notes must describe that distinction and agree with the accepted installation evidence before shipment. The source-runtime route above describes released0.31.0, not the target0.32.0 supply contract.
+
+## 0.32 supply and explicit native-module contract (#130)
+
+Approved direction, implementation pending:
+
+- **One installation unit, Pi1.0.4:** supply the omitted upstream durable app/TUI alongside one declared, coherent published SDK version set. The operator does not clone, patch, compile or copy provider model data. Reuse native app/TUI files; native harness semantics stay upstream-owned.
+- **Maintainer supply:** pinned upstream commit/tag, declared contact overlay, deterministic emit/import relocation, MIT license, manifest and rebuild equality. A narrow installed-dist resolver connects the omitted app to published libraries. This does not endorse a new harness, sidecar, bundler or updater.
+- **Installed verifier:** physical member and member-of-member resolution from the carrier's location must match the declared library set. `npm ls`'s logical tree and directory placement alone are not proof; same-version sharing need not refuse. Carrier drift and incoherent edges refuse by name, with an installation hint. The actual PATH Pi host-version check is separate from this native set check.
+- **Measured design input, not1.0.4 acceptance:** intentionally mismatched native1.0.2/host1.0.4 project-local fixtures retained host Pi value/TUI identity. Full exact dependencies still let a unique-name library hoist to a shared root and bind wrong-version libraries. Entwurf-only and isolated npm-global fixtures were coherent. Neither observation certifies an emitted1.0.4 carrier, every package manager, or native admission. Source receipts are recorded in the #130 thread and branch handoff.
+- **Explicit native modules:** the bootstrap admits only operator-named modules, with a small startup/native-extension boundary. No directory scan, ambient discovery, automatic retrieval, classic `ExtensionAPI` shim or plugin manager. Determine initialization order against1.0.4 before freezing the ingress format: environment preparation must precede runtime/provider creation; native registry installation is a different phase.
+- **Mock proof in this release:** a completely synthetic external module, fake HOME/cwd/env, observed initialization order, native registration/contact coexistence, child-process inheritance and named refusal for invalid modules. No real dotenv, secret values, operator settings or credential access. The mock is a development fixture, not an automatically installed personal extension.
+- **Downstream after release:** agent-config creates and owns the real durable-specific env-loader using the released ingress. Do not put its dotenv policy in Entwurf or modify agent-config in this implementation lane. Existing search/knowledge capability already rides skills/CLI; no andenken port is needed. Native ACP/provider-switch work is deferred.
+- **Acceptance:** source-invisible installed runtime/TUI load, affected contact gates and native/LIVE admission on the chosen1.0.4 installation surface remain separate proofs. Existing qualification, frozen FULL and release floors are unchanged.
 
 ## Evidence boundaries
 
