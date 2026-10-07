@@ -1,24 +1,23 @@
-# NEXT — #130 pre-version main landing accepted → prepare0.32.0 approval
+# NEXT — 0.32.0 prepared-SHA CI → 보존된 versioned artifact
 
 # RAIL — 현재 좌표
 
-- [x] **1. 구현·리뷰** — Pi1.0.4 exact SDK9종/one npm carrier/explicit native module, reviewed checkpoints through b220b20.
-- [x] **2. Frozen 후보바닥** — b220 source/FULL716s/body898/898/explicit packed install/required aggregate LIVE 수용. Versioned release acceptance 아님.
-- [x] **3. Main landing** — main/remote78c917a, 정상push/stamp1회; exact-SHA CI37679372365 four jobs+BODY success/body898/898/container exit0 수용.
-- [ ] **4. Prepare → make → publish** ← CURRENT: 먼저 prepare0.32.0의 GLG 승인 대기. 각 mode 별도 권한, package0.31.0 유지.
+- [x] **1. Source/native + pre-version landing** — frozen b220 r4와 main78c917a CI37679372365 수용. 각각 고유 fingerprint.
+- [x] **2. Grok 정합성 + metadata 준비** — B0/D2/O6, prose 수선/test0. 0.32.0 version/CHANGELOG 묶음은 정상 hooks/scanner로 닫는다.
+- [ ] **3. Prepared-SHA CI / 보존 artifact 결과** ← CURRENT: `.tmp-verify/032-release/`의 owning receipt 확인. Four jobs+BODY success 뒤 one preserved candidate만 exact Docker 소비. 완료 receipt가 있으면 다음 GLG 승인 대기로 이동; 반복 실행 없음.
+- [ ] **4. Tag/GitHub Release → npm publish** ← PAUSED: 이번 승인 범위 밖, 별도 GLG 결정.
 
 # NOW
 
-- **Next:** `/entwurf-release prepare 0.32.0`의 GLG 승인 대기. Landing은 `.tmp-verify/032-final/main-landing/accepted.json`과 원 CI log로 닫혔다. Main/remote SHA78c917a는 현재 그대로; required four jobs+BODY success, committed898 IDs 각각1회 KILLED/controls178green/originpure, Linux artifact-consumer exit0 확인. 새 버전·태그·출하를 자동 진행하지 않는다.
-- **Scope:** branch NEXT는 원문·closure patch를 `main-landing/`에 보존한 뒤 merge 전 retire. Landing diff는 인계/상태 prose뿐이며 reviewed b220의 source/runtime/pins는 불변. Local r4 반복0; push CI는 새 landing SHA의 독립 증거다. CI 수용 당시clean/indexHEAD; verdict뒤coordinator가 이 NEXT만갱신했다. 새commit/push없음, 다음prepare에서인계delta를명시검토한다.
-- **Read:** [#130 live thread](https://github.com/junghan0611/entwurf/issues/130), `docs/durable-native-support.md`의 accepted-candidate 절, `AGENTS.md`, `VERIFY.md`, `.claude/skills/entwurf-release/SKILL.md` LAND. `main-landing/accepted.json`은 완료 결과 영수증이지 다음 mode의 실행 권한이 아니다.
-- **Protect:** source/runtime/TUI/models/auth/queues/SQLite/transcripts/native recovery와 operator Emacs/foreign roots/0.31 archive/원RED는 건드리지 않는다. P9 census는 cleanup 권한 아님. 새 RED는 raw 보존·owning leaf 확인 후 STOP, blind replay/model fallback 없음. Opus/Grok 실행 grant는 소진, 임의 peer 재개 없음.
-- **Downstream:** 실제 durable env-loader는 release 후 agent-config 소유; 이번 landing에서 구현하지 않는다. Host manifest 경고 D-A는 수용된 알려진 제약이며 전체 무해함 인증이 아니다.
+- **Next:** `prepared.sha`, `ci/accepted.json`, `artifact/accepted.json`에서 실제 prepared SHA/CI/body/candidate canonical path/SHA256/image를 읽는다. Missing은 미완료, PASS receipt는 그 단계의 결과이지 다음 mode 권한이 아니다. 두 축이 수용되면 태그/GH Release의 GLG 승인 대기. npm publish는 별도 explicit version/candidate/dist-tag 승인이 필요하다.
+- **Authorized:** GLG가 local FULL+LIVE 반복 생략 → version 준비 → prepared-SHA main push/required CI → 보존된0.32 artifact 검증에 명시 승인했다. `.tmp-verify/032-release/authority.md`가 이 좁은 계약을 소유한다. 정상 hooks/shared scanner, prepared-SHA 필수 CI/body, one exact Docker는 유지한다. 문서 수정으로 local FULL/body/LIVE/pack-install을 반복하지 않는다. Generic P4/P5/M0 반복은 이번 명시 범위에서 없으며 원 b220/78 영수증을 새 SHA로 승격하지 않는다.
+- **Freeze:** branch NEXT는 main merge 전 원문 보존 후 retire. Prepared commit/index/worktree를 CI→pack→artifact verdict까지 고정한다. 임시 CI tar를 release candidate로 재사용하지 않는다. 최종 candidate는 한 번 pack한 같은 canonical file/hash로 검증한다. 이후 상태 갱신은 ignored receipt/issue에 기록하고 태그 대상 SHA를 움직이지 않는다.
+- **Protect:** runtime/native SDK/overlay/pins/mutants/gates 불변. Operator auth/settings/records/transcripts/SQLite/Emacs/foreign roots/0.31 archives/원r3 RED 보존. P9는 read-only, cleanup/signals0. RED는 raw/candidate 보존 → owning leaf → STOP; model fallback/blind replay 없음. 실제 env-loader는 release 후 agent-config.
+- **Read:** `.claude/skills/entwurf-release/SKILL.md` mode boundaries/exact CI/M3, `VERIFY.md` evidence axes, `.tmp-verify/032-release/{authority.md,docs-commit.sha,prepared.sha,ci/,artifact/}`, [#130 thread](https://github.com/junghan0611/entwurf/issues/130).
 
-# RECENT / EVIDENCE
+# RECENT / SCOPE
 
-- **Pre-version landing accepted 2026-10-08:** [CI37679372365](https://github.com/junghan0611/entwurf/actions/runs/37679372365), push event/headSHA `78c917ae2dbec01281c41287db14ed8d008a3c82`; four required jobs +qualification step success. 원raw8264lines SHA256 `aae9df5e8e84fb3e190a9f3d6b9558859381ef705d57e231be5d57ec796495b6`; exact898 committed IDs all once KILLED/178controlsgreen/originunchanged 직접 대조. Container temporary CI tarSHA256 `9cb0fd6843e983e1cf213b56cd9a2adb26e1900aabcb7b256c721bc75c75481d`/13567897bytes/exit0, imageID `sha256:5738ddb39d7f2420a5d43b86be907de09eed5c0751a034f233b3a0aa2d5cbebe`; repoDigest는 `main-landing/accepted.json`. **이 0.31.0 이름의 pre-version CI tar는 published0.31 artifact도 보존된0.32 release candidate도 아니다.** Prepared release SHA/보존artifact/registry proof는 아직 별도 미완료. Push/stamp1회, 추가tag/npm/cleanup0.
-
-- **R4 candidate:** [수용 원천](https://github.com/junghan0611/entwurf/issues/130#issuecomment-6043744944), frozen `b220b20c1b95f0ecafe8e679668bda3c5678be81`, acceptance `.tmp-verify/032-final/aggregate-r4-accepted.json` SHA256 `f16dcfa360f9e8b2cd34daa92152bb7ab064892d80e840ffe164bc435f23cf58`. FULL716s0/all898 IDs exactly once KILLED/controls178green/originpure/MUST25/0/0/BEHAVIOR1/0/0/cutOK. Separate installed raw6/6 +aggregate raw11/11 independently checked; official saved Codex65/PD36 snapshots rejudged read-only through owning oracles. Freeze closed after verdict. **FULL/aggregate ≠ pack-install/container.** Later prepared SHA/artifact/registry remains separate.
-- **R3 integrity:** aggregate RED, FULL714s0. Protected36MB `/tmp/entwurf-qualify-DLx7qj` irreversibly deleted by retired ambient sweep; wider deletion extent and vendor-32603 cause unknown. Original raw/confirmation/review+erratum preserved. New prior-evidence regression is private-fixture proof; r4 actualtmp had no prior root, so no invented in-situ preservation claim.
-- **0.31 immutable:** tag `a2c1aad0d89a33880d7b2f1ac43102d47a1ff207`, tarSHA256 `7a03bbe091a0ad9d2167fd6f1eb1fe2e7ff15402331c9f7f5d4042f429cf5c9f`, archive `/home/junghan/archives/entwurf/20261007T102356-v0.31.0/`. Postrelease docs pushed0450bd6 (`031-release/post-release/accepted.json`); registry download hashed equal and extracted-vs-installed580-file tree diff exit0 (`registry-byte-install-observed.json`). Those receipts retire main's earlier propagation404 lead, not certify1.0.4/native/current release. No re-publication or moved tag.
+- **b220:** `.tmp-verify/032-final/aggregate-r4-accepted.json` f16dcfa3…cf58 — FULL716s,898 IDs each once KILLED,178 controls green,origin pure,MUST25/0/0,BEHAVIOR1. Explicit installed proof 별도, Codex65/PD36 공식 saved snapshots를 owning oracles로 재판정. 이 pre-version source/native receipt는 prepared-SHA/0.32 artifact/registry 증거가 아니다.
+- **78c917a:** CI37679372365 four jobs+BODY success/898 once KILLED/178 green/container exit0. Temporary CI tar9cb0fd68…5481d는0.31.0 이름의 당시 source bytes이며 published0.31 artifact나 보존된0.32 candidate가 아니다.
+- **Grok:** pre-prepare reportca021850…dd5e/6907bytes/B0D2O6. Source/status/index before/after MATCH, old reports 불변,test/build0. Carrier pending underclaim/issue 첫RED 문장과 README branch 표현을 prose-only로 수선. 기존 peer grants는 소진, STOP 유지.
+- **Integrity:** r3 aggregate RED/FULL714s0, protected36MB snapshot 복구불가/wider extent unknown/vendor-32603 cause unknown. 원 raw/confirmation/erratum 보존. Prior-evidence regression은 private-fixture proof이고 r4 실제 tmp에는 이전 root가 없었다. Immutable0.31 tag/artifact/archive 유지. agy1.2 NOT CERTIFIED/핀1.1 unchanged; 새 native agy acceptance 없음.

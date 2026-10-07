@@ -4,6 +4,83 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+## 0.32.0 - 2026-10-08
+
+### Added
+
+- **One npm installation unit for native `pi-durable` (#130).** The package
+  supplies the omitted experimental app/TUI as a pinned Pi1.0.4 carrier, with the
+  declared contact overlay, deterministic emit/import relocation, MIT license
+  and rebuild contract. Nine exact published SDK dependencies supply the native
+  library set. The operator no longer clones, patches or builds a separate
+  fixed-XDG source runtime; there is no old-route fallback, downloader or repair.
+  Native runtime/TUI/models/auth/queues/SQLite/transcripts/recovery remain upstream-owned.
+- **One explicit native extension ingress.** `--native-module <absolute file>`
+  loads ordinary ESM, including top-level await, before TUI/runtime imports;
+  its default native durable Extension is installed by reference after the
+  contact. Reserved extension/contact names and identity/cwd changes refuse by
+  name. These are trusted-code mistake guards, not a sandbox or rollback. No
+  ambient discovery, classic ExtensionAPI shim, persistent module profile or
+  fresh-call propagation. Synthetic node:* development fixtures prove the
+  contact, module tool and native bash child; real dotenv policy stays downstream
+  in agent-config after release.
+
+### Changed
+
+- **Pi host floor and native SDK set are separate subjects.** Host CLI range is
+  `>=1.0.4 <1.1`; native SDK members are exact1.0.4 production dependencies,
+  with `proper-lockfile`4.1.2. The installed verifier walks reachable physical
+  member edges by name/version, allows coherent sharing and cycles, and refuses
+  incomplete, drifted or mixed-version supply even when imports work.
+- **Known ordinary-Pi manifest warning retained.** The host warns that its
+  extension packages belong in peer dependencies; the exact installed SDK copies
+  intentionally serve the separate native process. GLG accepted this manifest
+  constraint for0.32, not a universal harmlessness or peer-contract certification.
+
+### Fixed
+
+- **Qualification preserves prior-run evidence.** Retire the ambient dead-pid /
+  prefix sweep and its marker-based authority. Full/group execution share only
+  invocation-owned snapshot creation/teardown; prior names and bytes survive
+  green, red and collection fixture cases. No replacement GC or cleanup manager.
+  Repair the malformed-carrier oracle's discriminator and run the actual rebuilt
+  verifier inside its own copied package so the READ-ONLY mutant cannot contaminate
+  the checkout. The production refusal and read-only contracts remain unchanged.
+- **Fresh-call tool description fits the existing host cap.** One clause was
+  shortened from2068 to2021 characters; callable schema, cap2048, named refusals
+  and the installed-carrier contract are unchanged.
+
+### Verification and evidence boundaries
+
+- **Frozen source/native candidate:** `b220b20c1b95f0ecafe8e679668bda3c5678be81`
+  accepted FULL716s/exit0, all898 committed mutant IDs exactly once KILLED,
+  178 green controls, unchanged origin, MUST25/0/0 and BEHAVIOR1/0/0/cutOK.
+  Explicit installed `check-pack-install` passed separately; FULL/aggregate do
+  not contain that gate or the container gate. Saved official Codex65/Pi-durable36
+  snapshots were independently rejudged through their shipped receipt oracles.
+  [Owning #130 receipt](https://github.com/junghan0611/entwurf/issues/130#issuecomment-6043744944).
+- **Pre-version landing:** main `78c917ae2dbec01281c41287db14ed8d008a3c82`,
+  [push CI37679372365](https://github.com/junghan0611/entwurf/actions/runs/37679372365),
+  all four required jobs plus qualification BODY success, exact898/898 KILLED,
+  controls178green/origin unchanged and Linux artifact-consumer exit0. Its
+  temporary tarball retained package version0.31.0; it is neither the published
+  0.31.0 artifact nor a preserved accepted0.32 candidate.
+- **Independent pre-prepare consistency review:** Grok Blocker0/Defect2; the
+  two stale pending underclaims were corrected as prose, not a gate restart.
+  GLG explicitly approved version metadata preparation, new prepared-SHA CI and
+  one preserved exact artifact without repeating local FULL/LIVE for documentation
+  changes. Source/native receipts retain their original fingerprints; prepared-SHA
+  qualification, versioned artifact and registry equality remain independent
+  evidence. This preparation text does not assert a tag, GitHub release or npm publish.
+- **Historical RED retained.** R3 aggregate remains RED despite FULL714s/exit0.
+  Its protected36MB snapshot was irreversibly deleted by the retired sweep;
+  wider deletion extent and the vendor `-32603` cause remain unknown. Original
+  raw/confirmation/review erratum are preserved. Prior-run preservation is a
+  private-fixture proof: r4 had no prior root in actual tmp, so no in-situ claim.
+  Original0.31 release/tag/artifact/archive are immutable. Native agy1.2 remains
+  NOT CERTIFIED and its historical1.1 pin is unchanged; no new native agy acceptance
+  or permanent exception is inferred.
+
 ## 0.31.0 - 2026-10-07
 
 ### Added
