@@ -46,6 +46,11 @@ All notable changes to this project will be documented here. Format follows [Kee
   Repair the malformed-carrier oracle's discriminator and run the actual rebuilt
   verifier inside its own copied package so the READ-ONLY mutant cannot contaminate
   the checkout. The production refusal and read-only contracts remain unchanged.
+- **Installed-gate host fixtures keep their SDK generation closed.** Derive the
+  aligned host's complete exact SDK roots from the owning pin, and the same
+  member names at1.0.2 for the previous-host control. The first prepared CI's
+  coinstalled host tried pi-ai1.1.0 and received npm404 through its caret edges;
+  its RED is preserved. Product pins/overrides and native assertions are unchanged.
 - **Fresh-call tool description fits the existing host cap.** One clause was
   shortened from2068 to2021 characters; callable schema, cap2048, named refusals
   and the installed-carrier contract are unchanged.

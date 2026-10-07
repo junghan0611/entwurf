@@ -9,11 +9,12 @@
 
 # NOW
 
-- **Next:** `prepared.sha`, `ci/accepted.json`, `artifact/accepted.json`에서 실제 prepared SHA/CI/body/candidate canonical path/SHA256/image를 읽는다. Missing은 미완료, PASS receipt는 그 단계의 결과이지 다음 mode 권한이 아니다. 두 축이 수용되면 태그/GH Release의 GLG 승인 대기. npm publish는 별도 explicit version/candidate/dist-tag 승인이 필요하다.
+- **Next:** `.tmp-verify/032-release/correction/{prepared.sha,ci/accepted.json}`와 `artifact/accepted.json`에서 실제 corrected prepared SHA/CI/body/candidate canonical path/SHA256/image를 읽는다. 원1c6c96a/CI37694671506은 install-surface RED이며 다른 job의 green으로 승격하지 않는다. SDK host fixture만 수선하여 affected check-pack-install 131s/exit0; 새 SHA의 CI가 다음 구획이다. Missing은 미완료, PASS receipt는 그 단계의 결과이지 다음 mode 권한이 아니다. 두 축이 수용되면 태그/GH Release의 GLG 승인 대기. npm publish는 별도 explicit version/candidate/dist-tag 승인이 필요하다.
 - **Authorized:** GLG가 local FULL+LIVE 반복 생략 → version 준비 → prepared-SHA main push/required CI → 보존된0.32 artifact 검증에 명시 승인했다. `.tmp-verify/032-release/authority.md`가 이 좁은 계약을 소유한다. 정상 hooks/shared scanner, prepared-SHA 필수 CI/body, one exact Docker는 유지한다. 문서 수정으로 local FULL/body/LIVE/pack-install을 반복하지 않는다. Generic P4/P5/M0 반복은 이번 명시 범위에서 없으며 원 b220/78 영수증을 새 SHA로 승격하지 않는다.
 - **Freeze:** branch NEXT는 main merge 전 원문 보존 후 retire. Prepared commit/index/worktree를 CI→pack→artifact verdict까지 고정한다. 임시 CI tar를 release candidate로 재사용하지 않는다. 최종 candidate는 한 번 pack한 같은 canonical file/hash로 검증한다. 이후 상태 갱신은 ignored receipt/issue에 기록하고 태그 대상 SHA를 움직이지 않는다.
-- **Protect:** runtime/native SDK/overlay/pins/mutants/gates 불변. Operator auth/settings/records/transcripts/SQLite/Emacs/foreign roots/0.31 archives/원r3 RED 보존. P9는 read-only, cleanup/signals0. RED는 raw/candidate 보존 → owning leaf → STOP; model fallback/blind replay 없음. 실제 env-loader는 release 후 agent-config.
-- **Read:** `.claude/skills/entwurf-release/SKILL.md` mode boundaries/exact CI/M3, `VERIFY.md` evidence axes, `.tmp-verify/032-release/{authority.md,docs-commit.sha,prepared.sha,ci/,artifact/}`, [#130 thread](https://github.com/junghan0611/entwurf/issues/130).
+- **Correction:** GLG가 main CI 결과를 보고 반영·진행하라고 명시 요청했다. `install-red/diagnosis.md`와 `focused.log/.rc`가 owning receipt. `run.sh`의 dev-only installed gate는 coinstalled1.0.4/previous-host1.0.2의 SDK roots를 pin에서 파생한다. Npm caret의 pi-ai1.1.0 tar404를 피하되 제품 pin/override/host range/기존 assertions/mutants를 바꾸지 않는다. 원1c6 watcher와 새 corrected CI raw는 별도 directory로 격리한다.
+- **Protect:** runtime/native SDK/overlay/pins/mutants 불변. Gate 수정은 위 host fixture leaf뿐이다. Operator auth/settings/records/transcripts/SQLite/Emacs/foreign roots/0.31 archives/원r3 RED 보존. P9는 read-only, cleanup/signals0. RED는 raw/candidate 보존 → owning leaf → STOP; model fallback/blind replay 없음. 실제 env-loader는 release 후 agent-config.
+- **Read:** `.claude/skills/entwurf-release/SKILL.md` mode boundaries/exact CI/M3, `VERIFY.md` evidence axes, `.tmp-verify/032-release/{authority.md,docs-commit.sha,prepared.sha,ci/,install-red/,correction/,artifact/}`, [#130 thread](https://github.com/junghan0611/entwurf/issues/130).
 
 # RECENT / SCOPE
 

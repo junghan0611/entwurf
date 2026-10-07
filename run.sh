@@ -3871,7 +3871,13 @@ check_pack_pin_matcher() {
 # Same-version sharing within the consumer is an ordinary layout; copies are recorded, not refused.
 pack_install_durable_cells() {
   local tgz="$1" box="$2" l1s="$3" pin_ver oracle_dir cell root control pkg out rc
+  local host_specs=() host_old_specs=() spec
   pin_ver=$(cd "$REPO_DIR" && node -p "require('./pi/pi-durable/overlay/upstream-pin.json').sdk.members['@earendil-works/pi-coding-agent']")
+  # The HOST fixture needs a coherent generation too: coding-agent@1.0.4 alone
+  # has ^1.0.4 SDK edges, which can resolve 1.1.0 (CI37694671506: pi-ai tar 404).
+  # These are fixture roots from the owning pin, not product overrides or fallback.
+  out=$(cd "$REPO_DIR" && node -e 'const p = require("./pi/pi-durable/overlay/upstream-pin.json"); console.log(Object.entries(p.sdk.members).map(([n,v]) => `${n}@${v}`).join("\n"));') || return 1
+  mapfile -t host_specs <<<"$out"
   oracle_dir="$box/pd-oracle"; mkdir -p "$oracle_dir"
   cat > "$oracle_dir/oracle.mjs" <<'ORACLE'
 // node --import <pkg>/pi/pi-durable/carrier-resolver.mjs oracle.mjs <pkg> <consumer node_modules> <control file> <receipt>
@@ -3925,7 +3931,7 @@ process.exit(ok ? 0 : 1);
 ORACLE
 
   mkdir -p "$box/pd-aligned" "$box/pd-global" "$box/pd-mismatch"
-  out=$(cd "$box/pd-aligned" && npm install "$tgz" "@earendil-works/pi-coding-agent@$pin_ver" --no-audit --no-fund 2>&1) || {
+  out=$(cd "$box/pd-aligned" && npm install "$tgz" "${host_specs[@]}" --no-audit --no-fund 2>&1) || {
     fail "[check-pack-install] pi-durable L1 (aligned host) install failed:"; echo "$out" | tail -10 | sed 's/^/    /' >&2; return 1; }
   out=$(cd "$box" && npm install -g --prefix "$box/pd-global" "$tgz" --no-audit --no-fund 2>&1) || {
     fail "[check-pack-install] pi-durable L2 (isolated global) install failed:"; echo "$out" | tail -10 | sed 's/^/    /' >&2; return 1; }
@@ -4050,7 +4056,8 @@ ORACLE
   # those specs as this repo's install pins, and this one is deliberately off the floor.
   local host_home host_proj host_old="$box/pd-host-old" host_env=() host_old_ver="1.0.2"
   mkdir -p "$host_old"
-  out=$(cd "$host_old" && npm install "@earendil-works/pi-coding-agent@$host_old_ver" --no-audit --no-fund 2>&1) || {
+  for spec in "${host_specs[@]}"; do host_old_specs+=("${spec%@*}@$host_old_ver"); done
+  out=$(cd "$host_old" && npm install "${host_old_specs[@]}" --no-audit --no-fund 2>&1) || {
     fail "[check-pack-install] could not install the previous-host pi fixture (1.0.2):"; echo "$out" | tail -10 | sed 's/^/    /' >&2; return 1; }
   for cell in old aligned; do
     host_home="$box/pd-host-$cell-home"; host_proj="$box/pd-host-$cell-proj"
