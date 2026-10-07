@@ -46,7 +46,7 @@ describe("pi-durable fresh preflight", () => {
 		expect(splitPiDurableModel("loopback/org/exact:v1")).toEqual({ provider: "loopback", model: "org/exact:v1" });
 		for (const model of ["scripted", "/scripted", "loopback/"]) {
 			expect(splitPiDurableModel(model), model).toBeNull();
-			expect(decide({ model, runtime: "pi-durable-runtime-absent" }), model).toBe(
+			expect(decide({ model, runtime: "pi-durable-sdk-absent" }), model).toBe(
 				"pi-durable-model-not-provider-qualified",
 			);
 		}
@@ -61,13 +61,13 @@ describe("pi-durable fresh preflight", () => {
 		);
 	});
 
-	it("[QK:PI-DURABLE-PREFLIGHT-RUNTIME-FIRST] an incomplete package, then the runtime verdict, are answered before any unit — verbatim", () => {
+	it("[QK:PI-DURABLE-PREFLIGHT-RUNTIME-FIRST] an incomplete package, then the carrier verdict, are answered before any unit — verbatim", () => {
 		expect(decide({ layout: null })).toBe("pi-durable-package-incomplete");
 		for (const reason of [
-			"pi-durable-runtime-absent",
-			"pi-durable-runtime-pin-drift",
-			"pi-durable-runtime-modeldata-drift",
-			"pi-durable-runtime-unverifiable",
+			"pi-durable-package-incomplete",
+			"pi-durable-carrier-drift",
+			"pi-durable-sdk-absent",
+			"pi-durable-sdk-mismatch",
 		] as const) {
 			fs.rmSync(layout.adapter);
 			expect(decide({ runtime: reason }), reason).toBe(reason);

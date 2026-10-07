@@ -1,7 +1,7 @@
-// G-send host half (#129 L-send first cell). Runs AS the durable host, under the pinned overlay
-// checkout's source resolver, and is spawned only by scripts/check-pi-durable-send.ts:
+// G-send host half (#129 L-send first cell). Runs AS the durable host, under this checkout's
+// pi-durable carrier resolver (#130), and is spawned only by scripts/check-pi-durable-send.ts:
 //
-//   node --import <checkout>/packages/coding-agent/src/experimental/source-resolver.ts \
+//   node --import <checkout>/pi/pi-durable/carrier-resolver.mjs \
 //        scripts/pi-durable-send-host.mjs <bridge entry> <prompt>
 //
 // It opens the durable app through the production bootstrap composition, then gives the app ONE

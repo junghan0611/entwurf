@@ -91,6 +91,7 @@ implement → affected focused gates → independent review → one amendment bu
           → qualification once if gate/mutant/matrix changed → full floor once on frozen candidate → commit
 ```
 
+- GLG-requested branch checkpoint commits keep completed subject/proof bundles small: scoped review, affected focused checks and normal hooks/shared scanner before each checkpoint, with known RED/unmeasured boundaries recorded. A checkpoint is not frozen-candidate acceptance. The sequence above owns final candidate acceptance: required changed qualification, frozen FULL and native/LIVE/release floors remain mandatory before landing/shipment, never inherited from an interim commit.
 - Inner loop runs only affected gates; review and its corrections finish before the full floor.
 - A changed contract names a production subject and independent oracle; its focused assertion has a stable QK and exact-once mutant. Matrices change by their declared axes/cells, not appended anecdotes.
 - Qualification body is scheduled once when its surface changes; its manifest/head checks remain in the deterministic floor. A release requires the exact-SHA qualification evidence required by VERIFY, never a nearby green run.

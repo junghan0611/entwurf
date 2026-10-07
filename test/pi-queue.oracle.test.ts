@@ -5,7 +5,7 @@
  * to `pi.sendMessage` and the receiver's own agent decides everything after that. Every sentence
  * the receipt and `DELIVERY.md` now make about `queued-steer` / `queued-follow-up` — the ordering,
  * the volatility, the absence of a FIFO between the two queues — is a claim about pi, so it is
- * proven against the INSTALLED `@earendil-works/pi-agent-core`, pinned exactly in devDependencies,
+ * proven against the INSTALLED `@earendil-works/pi-agent-core`, pinned exactly as a production dependency (#130),
  * and not against a re-implementation of it here. A re-implementation would agree with our prose
  * by construction and tell us nothing.
  *

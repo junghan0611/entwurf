@@ -1,10 +1,12 @@
 // check-entwurf-bridge-pi-free (0.12.1 A-gate, static half)
 //
-// INVARIANT: the entwurf-bridge MCP server must boot WITHOUT any pi package
-// (`@earendil-works/pi-*`). entwurf is a harness-neutral npm package; pi is one
-// optional adapter lane, not a boot dependency. A plain `npm install
-// @junghanacs/entwurf` (no pi peers) must still stand `entwurf-bridge` up and
-// answer MCP `tools/list`.
+// INVARIANT: the entwurf-bridge MCP server must boot WITHOUT importing any pi
+// package (`@earendil-works/pi-*`). entwurf is a harness-neutral npm package; pi is
+// one adapter lane, not a boot dependency. A plain `npm install @junghanacs/entwurf`
+// must still stand `entwurf-bridge` up and answer MCP `tools/list` without touching
+// pi. Since #130 that install carries the pi SDK as a production dependency (the
+// pi-durable carrier's), so the runtime half proves this under a deny hook in
+// check-pack-install rather than by the SDK's absence.
 //
 // This gate is the STATIC half of that contract: it walks the EAGER static
 // value-import closure of the bridge entry (`mcp/entwurf-bridge/src/index.ts`)

@@ -1,2 +1,4 @@
 # Unified-diff context markers are data; preserve the runtime overlay byte-for-byte.
 pi/pi-durable/overlay/runtime-contacts.patch whitespace=-blank-at-eol,-space-before-tab
+# Node's pinned strip-only emitter pads erased types with spaces; carrier digests own these bytes.
+pi/pi-durable/carrier/*.js whitespace=-blank-at-eol,-space-before-tab

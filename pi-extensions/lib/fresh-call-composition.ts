@@ -27,7 +27,7 @@ import { randomBytes } from "node:crypto";
 /** The backends this rail can open. Fixed set, not a profile — a further one is a decision,
  * not a config entry. `copilot` was added by #82 RAIL 9, `omp` by #87 Bundle C, `codex`
  * by #95 after its system birth and app-server rails were measured, and `pi-durable` by #129
- * (the operator-provided durable app through the managed `entwurf pi-durable`). The set is joined to the
+ * (the durable app this package carries, through the managed `entwurf pi-durable`). The set is joined to the
  * citizen backends by `check-harness-admission-parity`: a harness that mints records but is
  * missing HERE is not an unwired convenience, it is a release blocker. */
 export const FRESH_CALL_BACKENDS = ["pi", "claude-code", "copilot", "omp", "codex", "pi-durable"] as const;

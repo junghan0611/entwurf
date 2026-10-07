@@ -762,7 +762,7 @@ server.tool(
 		"a running sibling. Nothing polls. " +
 		"For EXISTING citizens use entwurf_v2 — this tool only creates, and entwurf_peers only reports. Model is REQUIRED and passed to the chosen " +
 		"runtime CLI (`provider/model` for pi, an id/alias for Claude Code, `provider/model id` exactly as the catalog names it for pi-durable, a pattern for the rest). On tmux, copilot/omp/codex/pi-durable are refused BEFORE any window " +
-		"opens when their birth, MCP, receive or visible-identity units are absent, pi-durable also when its operator-provided pinned runtime is absent or drifted, and codex also needs the " +
+		"opens when their birth, MCP, receive or visible-identity units are absent, pi-durable also when its installed carrier or exact SDK set is refused by name (incomplete, drifted, absent or mismatched), and codex also needs the " +
 		"operator-owned app-server socket entwurf never starts; in herdr they are refused by name first. " +
 		"Optional placement.tmuxSession is a TMUX-ONLY seat naming ONE EXISTING session and " +
 		"ALWAYS wins; omitted, the seat follows the CALLER, never the backend opened: a CODEX CALLER opens beside " +

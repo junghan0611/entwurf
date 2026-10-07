@@ -193,17 +193,6 @@
 			"signatureSource": "run.sh"
 		},
 		{
-			"claim": "PIIMPORT-DURABLE-BOOTSTRAP-EXACT",
-			"title": "the #129 durable exception loses its file scope: the two experimental durable specifiers become allowed in every file, so a new pi private-subpath import elsewhere passes the floor",
-			"subject": "run.sh",
-			"find": ["      | sed -E \"/^pi\\/pi-durable\\/bootstrap\\.mjs:[0-9]+:/ s#"],
-			"replace": ["      | sed -E \"s#"],
-			"gate": ["bash", "run.sh", "check-pi-import-surface"],
-			"timeoutSeconds": 60,
-			"signature": "[QK:PIIMPORT-DURABLE-BOOTSTRAP-EXACT]",
-			"signatureSource": "run.sh"
-		},
-		{
 			"claim": "VITEST-FAILED-TITLE-ATTRIBUTION",
 			"title": "the pilot's kill attribution collects PASSING test titles instead of failed ones, recreating the code-frame false-KILLED hole this lane exists to close",
 			"subject": "scripts/lib/mutation-qualify.ts",
@@ -725,7 +714,7 @@
 		},
 		{
 			"claim": "FRESHCALL-PI-DURABLE-PREFLIGHT-PREMUTATION",
-			"title": "the pi-durable runtime/unit preflight is skipped, so an absent or drifted operator runtime is discovered only after a window was placed",
+			"title": "the pi-durable preflight (model, framed input cap, carrier, units) is skipped, so a refusal it owns is discovered only after a window was placed",
 			"subject": "pi-extensions/lib/mux-fresh-call.ts",
 			"find": ["\tif (params.backend === \"pi-durable\") {\n"],
 			"replace": ["\tif (false) {\n"],
@@ -736,7 +725,7 @@
 		},
 		{
 			"claim": "FRESHCALL-PI-DURABLE-MANAGED-RUNTIME",
-			"title": "pi-durable opens the bare app instead of the managed `entwurf pi-durable`, so nothing verifies the operator runtime against the pin before its resolver runs",
+			"title": "pi-durable opens the bare app instead of the managed `entwurf pi-durable`, so nothing verifies the carrier and its SDK set before its resolver runs",
 			"subject": "pi-extensions/lib/mux-fresh-call.ts",
 			"find": ["\t\"pi-durable\": \"entwurf\","],
 			"replace": ["\t\"pi-durable\": \"pi\","],
@@ -766,6 +755,17 @@
 			"timeoutSeconds": 120,
 			"signature": "[QK:PD-FRESH-LIVE-FOREIGN-SENDER-REFUSED]",
 			"signatureSource": "test/pi-durable-fresh-live-receipts.test.ts"
+		},
+		{
+			"claim": "PIIMPORT-CARRIER-FENCE",
+			"title": "the carrier fence stops naming bare imports, so a pi-coding-agent specifier or an undeclared package in an emitted carrier file passes the floor",
+			"subject": "run.sh",
+			"find": ["if (name === \"@earendil-works/pi-coding-agent\" || !declared.has(name)) console.log("],
+			"replace": ["if (false) console.log("],
+			"gate": ["bash", "run.sh", "check-pi-import-surface"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:PIIMPORT-CARRIER-FENCE]",
+			"signatureSource": "run.sh"
 		}
 	]
 }

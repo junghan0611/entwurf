@@ -40,7 +40,8 @@
  * Intended single idle cell: controller input 0, doorbell admission 1, S requests 2, V 0.
  *
  * Inputs as check-pi-durable-contact (missing → SKIP 97, never a pass):
- *   ENTWURF_PI_DURABLE_RUNTIME, ENTWURF_PI_DURABLE_BRIDGE_ENTRY (a bundle carrying the owner join)
+ *   ENTWURF_PI_DURABLE_BRIDGE_ENTRY (a bundle carrying the owner join; the durable app is this
+ *   checkout's verified carrier, #130)
  * Optional:
  *   ENTWURF_PI_DURABLE_RECEIPTS  a NEW absolute directory (refused if it exists) for the cell's raw bytes.
  *
@@ -58,12 +59,13 @@ import { createInterface } from "node:readline";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { metaReceiverMarkerPath, upsertMetaSession, writeMetaSenderMarker } from "../pi-extensions/lib/meta-session.ts";
-import {
-	inspectPiDurableRuntime,
-	PI_DURABLE_RESOLVER_RELATIVE,
-	readPiDurablePin,
-} from "../pi-extensions/lib/pi-durable-runtime.ts";
+import { checkPiDurableRuntime, piDurableLayoutAt } from "../pi-extensions/lib/pi-durable-runtime.ts";
 import { skipLive } from "./lib/live-skip.ts";
+import {
+	describeOperatorSnapshot,
+	operatorPiDurableSnapshot,
+	operatorSnapshotUnchanged,
+} from "./lib/pi-durable-operator-guard.ts";
 import { ownedReapVerdict } from "./lib/pi-durable-reap.ts";
 import {
 	encodedRequestIdColumn,
@@ -75,7 +77,6 @@ import {
 const LABEL = "check-pi-durable-receive";
 const QK = "PRX";
 const REPO = path.resolve(import.meta.dirname, "..");
-const OVERLAY = path.join(REPO, "pi", "pi-durable", "overlay");
 const HOST_DRIVER = path.join(REPO, "scripts", "pi-durable-receive-host.mjs");
 const REPORT_TIMEOUT_MS = 120_000;
 /** Validity cutoff for request #1 after the ENQUEUE — a gap bound, never a success inference. */
@@ -85,17 +86,14 @@ const REAP_TIMEOUT_MS = 5_000;
 const CALL_ID = "call_prx_1";
 const FINAL_TEXT = "read.";
 
-const runtimeInput = process.env.ENTWURF_PI_DURABLE_RUNTIME?.trim();
 const bridgeInput = process.env.ENTWURF_PI_DURABLE_BRIDGE_ENTRY?.trim();
-if (!runtimeInput || !bridgeInput) {
+if (!bridgeInput) {
 	skipLive(
 		LABEL,
-		"set ENTWURF_PI_DURABLE_RUNTIME=<overlay checkout at the pin, patch applied, deps and model data installed> and " +
-			"ENTWURF_PI_DURABLE_BRIDGE_ENTRY=<bridge index.js emitted from this checkout into a private bundle>; " +
-			"this gate provisions neither",
+		"set ENTWURF_PI_DURABLE_BRIDGE_ENTRY=<bridge index.js emitted from this checkout into a private bundle>; " +
+			"this gate does not provision it",
 	);
 }
-const runtime = path.resolve(runtimeInput);
 const bridgeEntry = path.resolve(bridgeInput);
 const receiptsInput = process.env.ENTWURF_PI_DURABLE_RECEIPTS?.trim() || undefined;
 if (receiptsInput !== undefined) {
@@ -158,28 +156,19 @@ function messageText(content: unknown): string {
 }
 
 // ---------------------------------------------------------------------------
-// 0. Inputs — the pinned overlay, its model data, the bundle registry, and the bundle's owner join.
+// 0. Inputs — the verified checkout carrier, the bundle registry, and the bundle's owner join.
 // ---------------------------------------------------------------------------
-// The pin and the runtime facts come from the ONE verifier the managed launch, setup and the fresh
-// preflight use (pi-extensions/lib/pi-durable-runtime.ts).
-const { pin } = readPiDurablePin(OVERLAY);
-const facts = inspectPiDurableRuntime(runtime, OVERLAY);
-const resolver = path.join(runtime, PI_DURABLE_RESOLVER_RELATIVE);
+// The carrier and its SDK set are verified by the ONE verifier the managed launch, setup and the fresh
+// preflight use (pi-extensions/lib/pi-durable-runtime.ts), from this checkout's layout.
+const carrier = checkPiDurableRuntime(piDurableLayoutAt(REPO));
+const resolver = carrier.ok ? carrier.resolver : "";
 const bundleRoot = path.resolve(bridgeEntry, "..", "..", "..", "..");
 const bundleRegistry = path.join(bundleRoot, "pi-extensions", "entwurf-capabilities.json");
 const bundleDeliverability = path.join(bundleRoot, "pi-extensions", "lib", "entwurf-deliverability.js");
 console.log("0. inputs");
 ok(
-	`[QK:${QK}-INPUTS] runtime is the pin with exactly the tracked overlay (index == HEAD, nothing staged), the pin's ignored model data, the resolver, and a bridge bundle whose registry matches this checkout`,
-	facts.gitAnswered &&
-		facts.head === pin.commit &&
-		facts.indexMatchesHead &&
-		facts.diffEqualsPatch &&
-		facts.untracked === "" &&
-		facts.modelDataFiles === pin.modelData.files &&
-		facts.modelDataAggregate === pin.modelData.aggregateSha256 &&
-		facts.manifestSha256 === pin.modelData.manifestSha256 &&
-		facts.resolverPresent &&
+	`[QK:${QK}-INPUTS] this checkout's pi-durable carrier and the pi SDK set it resolves are the pin (${carrier.ok ? "verified" : `${carrier.reason}: ${carrier.detail}`}), and the bridge bundle's registry matches this checkout`,
+	carrier.ok &&
 		fs.existsSync(bridgeEntry) &&
 		fs.existsSync(bundleRegistry) &&
 		fs.readFileSync(bundleRegistry).equals(fs.readFileSync(path.join(REPO, "pi", "entwurf-capabilities.json"))),
@@ -192,33 +181,11 @@ ok(
 	`[QK:${QK}-BUNDLE-OWNER-JOIN] the bridge bundle's compiled owner join admits pi-durable-host (${joinLine || "not found"})`,
 	joinLine.includes('"pi-durable-host"'),
 );
-if (failed > 0) fatal("inputs are not the pinned overlay, its model data, this checkout's registry and owner join");
+if (failed > 0) fatal("inputs are not the verified carrier, this checkout's registry and owner join");
 
 // Coarse pi-durable-specific operator guard (as G-contact): no operator-byte claim beyond it.
 const operatorAgent = path.join(os.homedir(), ".pi", "agent");
-function operatorPiDurableFacts(): string {
-	const backendOf = (file: string): unknown => {
-		try {
-			return (JSON.parse(fs.readFileSync(file, "utf8")) as { backend?: unknown }).backend;
-		} catch {
-			return undefined;
-		}
-	};
-	const list = (dir: string, suffix: string) =>
-		fs.existsSync(dir)
-			? fs
-					.readdirSync(dir)
-					.filter((n) => n.endsWith(suffix))
-					.filter((n) => backendOf(path.join(dir, n)) === "pi-durable")
-			: [];
-	return JSON.stringify({
-		durableRecords: list(path.join(operatorAgent, "meta-sessions"), ".meta.json"),
-		senders: fs.existsSync(path.join(operatorAgent, "meta-senders", "pi-durable")),
-		durableReceivers: list(path.join(operatorAgent, "meta-receivers"), ".json"),
-		durableSessions: fs.existsSync(path.join(operatorAgent, "experimental", "durable-sessions")),
-	});
-}
-const operatorBefore = operatorPiDurableFacts();
+const operatorBefore = operatorPiDurableSnapshot(operatorAgent);
 
 // ---------------------------------------------------------------------------
 // Sandbox: one private world — HOME/XDG/agent, the four garden roots and ENTWURF_DIR.
@@ -1096,13 +1063,9 @@ if (receiptsInput !== undefined) {
 		ok(`[QK:${QK}-RECEIPTS-EXPORTED] receipt export failed: ${(error as Error).message}`, false);
 	}
 }
-const before = JSON.parse(operatorBefore) as { durableRecords: string[]; senders: boolean; durableReceivers: string[] };
 ok(
-	`[QK:${QK}-OPERATOR-UNTOUCHED] coarse pi-durable guard: the operator's own roots are unchanged by this run and hold no pi-durable record, sender dir or receiver marker (${operatorBefore})`,
-	operatorPiDurableFacts() === operatorBefore &&
-		before.durableRecords.length === 0 &&
-		!before.senders &&
-		before.durableReceivers.length === 0,
+	`[QK:${QK}-OPERATOR-UNTOUCHED] coarse pi-durable registration guard: this run left the operator's pi-durable registrations exactly as it found them (${describeOperatorSnapshot(operatorBefore)} — same names, same bytes; existing state is not a red; no auth or session content read)`,
+	operatorSnapshotUnchanged(operatorBefore, operatorPiDurableSnapshot(operatorAgent)),
 );
 if (alive.length > 0) console.log(`sandbox kept because owned processes are still alive: ${root}`);
 else if (process.env.ENTWURF_PI_DURABLE_KEEP === "1") console.log(`sandbox kept: ${root}`);

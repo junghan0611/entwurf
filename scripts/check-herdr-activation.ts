@@ -205,12 +205,13 @@ const {
 	COMPONENT_STATES,
 } = mod;
 
-/** The pi pin package.json declares — the SSOT `run.sh pi_supported_range` derives its range from. */
+/** The pi pin package.json declares (an exact production dependency since #130) — the SSOT
+ * `run.sh pi_supported_range` derives its range from. */
 const PI_PIN = (
 	JSON.parse(fs.readFileSync(path.join(REPO, "package.json"), "utf8")) as {
-		devDependencies: Record<string, string>;
+		dependencies: Record<string, string>;
 	}
-).devDependencies["@earendil-works/pi-coding-agent"];
+).dependencies["@earendil-works/pi-coding-agent"];
 
 /** A `pi` stand-in that reports `version` and nothing else — enough for a `--version` floor probe. */
 function fakePi(dir: string, name: string, version: string): string {
@@ -364,7 +365,7 @@ function ledgerWith(
 {
 	const env = world("pi-floor");
 	const bin = path.join(env.HOME as string, "bin");
-	// The supported range is DERIVED from the package.json devDep pin (run.sh
+	// The supported range is DERIVED from the package.json production dependency pin (run.sh
 	// `pi_supported_range`), so the fixtures are derived from it too — a hardcoded "0.85.1" here
 	// would silently stop being out-of-range the day the pin moves past it.
 	const [maj, min] = PI_PIN.split(".").map(Number);

@@ -1966,17 +1966,24 @@ describe("pi-durable bootstrap — the packaged compiled closure (needs a built 
 		const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, "package.json"), "utf8")) as { engines: { node: string } };
 		expect(pkg.engines.node).toBe(">=24.0.0");
 		// Executed directly (on THIS Node — the floor itself is not a runtime here): the compiled verifier
-		// answers an absent runtime with 4 and prints no resolver; both bootstraps refuse an unknown argument
-		// before any TUI loads.
+		// answers — this checkout's carrier verified (0, its resolver on stdout) or refused by name (3,
+		// nothing on stdout), never a silent 0 — and both bootstraps refuse an unknown argument before any
+		// TUI loads.
 		const own = fs.mkdtempSync(path.join(os.tmpdir(), "pi-durable-entry-"));
 		try {
 			const env = { PATH: process.env.PATH ?? "", HOME: own, XDG_DATA_HOME: path.join(own, "data"), LANG: "C.UTF-8" };
 			const dist = path.join(ROOT, "mcp", "entwurf-bridge", "dist");
 			const verifier = path.join(dist, "pi-extensions", "lib", "pi-durable-runtime.js");
-			const absent = spawnSync(process.execPath, [verifier, "resolve"], { cwd: own, env, timeout: 20_000 });
-			expect(absent.status, `${absent.stderr}`).toBe(4);
-			expect(absent.stdout.toString()).toBe("");
-			expect(absent.stderr.toString()).toMatch(/^pi-durable-runtime-absent \(/);
+			const answered = spawnSync(process.execPath, [verifier, "resolve"], { cwd: own, env, timeout: 20_000 });
+			if (answered.status === 0) {
+				expect(answered.stdout.toString()).toBe(`${path.join(ROOT, "pi", "pi-durable", "carrier-resolver.mjs")}\n`);
+			} else {
+				expect(answered.status, `${answered.stderr}`).toBe(3);
+				expect(answered.stdout.toString()).toBe("");
+				expect(answered.stderr.toString()).toMatch(
+					/^pi-durable-(package-incomplete|carrier-drift|sdk-absent|sdk-mismatch): /,
+				);
+			}
 			for (const file of entries.slice(1)) {
 				const run = spawnSync(process.execPath, [file, "--bridge-entry", "x"], { cwd: own, env, timeout: 20_000 });
 				expect(run.status, file).not.toBe(0);

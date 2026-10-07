@@ -1,7 +1,7 @@
-// G-contact host half (#129 L-identity). Runs AS the durable host, under the pinned overlay
-// checkout's source resolver, and is spawned only by scripts/check-pi-durable-contact.ts:
+// G-contact host half (#129 L-identity). Runs AS the durable host, under this checkout's pi-durable
+// carrier resolver (#130), and is spawned only by scripts/check-pi-durable-contact.ts:
 //
-//   node --import <checkout>/packages/coding-agent/src/experimental/source-resolver.ts \
+//   node --import <checkout>/pi/pi-durable/carrier-resolver.mjs \
 //        scripts/pi-durable-contact-host.mjs <bridge entry> new|continue \
 //        [<sessions dir> <senders dir> <mailbox dir> <receivers dir>]
 //

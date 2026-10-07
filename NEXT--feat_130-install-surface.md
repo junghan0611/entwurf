@@ -5,17 +5,19 @@
 - [x] **1. 기준선** —0.31.0 종료, branch `feat/130-install-surface`, base main0450bd6.
 - [x] **2. 설계·격리 실측·독립 리뷰** —E1/E1b/E1g 종료, 원본/실패/정정 영수증 보존.
 - [x] **3. GLG 방향·규칙·핸드오프** —Pi1.0.4 설치 간소화 +완전 목업 native 모듈 실증. 실제 env-loader는 릴리즈 후 agent-config.
-- [ ] **4. 새 실무자 형성 →1.0.4 공급 구현** ← CURRENT: 좌표 커밋(no push) 뒤 fresh Claude Code Opus; 기존 Opus 재사용 금지.
+- [x] **4.1.0.4 공급 구현·scoped review** —P1b+amendment+authority sweep+3 mutant anchor수선/spotkill 완료. 단일57파일source/proof P1checkpoint 입력freeze. Commit판정은 `p1-commit/accepted.json`/gitHEAD; 최종수용아님.
+- [ ] **4b. 체크포인트 →restart 준비 DM** ← CURRENT: staging head/scanner/normalhooks →local P1commit영수증 →actualPATH1.0.2·SDK/dist1.0.4 구분한1회DM. GLG 업데이트/같은세션재실행.
 - [ ] **5. 목업 모듈·영향 검증·0.32 수용** ← PAUSED: 설치 consumer 경로 뒤 목업 ingress 실증, qualification/full/LIVE/release gate 별도.
 
 # NOW
 
-- **State:** 제품0.31.0/Pi1.0.2/source cd32f77 그대로. 이 checkpoint는 docs only: Hard6/17 공급·명시적 module 방향 개정, owning doc/NEXT 정리. carrier emit/SDK pin/config/dist/code/version 변경 없음. 구현/1.0.4 인증 완료 아님.
-- **Next:** coordinator가 요청된 좌표 커밋을 만든 뒤 새 Opus를 한 번 형성한다. nonce callback으로 garden id 확정; formation-only read/report에는 편집/테스트/구현/위임 없음. 인간의 직접 role grant와 coordinator의 bounded scope routing은 별도. 기존 Opus `20261007T121904-27ebf3`는 GLG가 퇴근시켰다.
-- **First implementation leaf:**1.0.4 upstream/metadata를 확인하고 coherent SDK +빠진 native app/TUI emit/import relocation +좁은 installed resolver의 production subject/independent consumer oracle/affected QK를 명명. source/HOME/XDG-checkout 비가시성 positive runtime/TUI load와 named absence/mismatch/drift refusal부터. 전체 verifier framework/즉시 full floor 재시작 없음.
+- **State:** HEAD255a9d6/version0.31.0, worktree P1b공급/cutover 구현. Dev9SDK1.0.4+lockfile4.1.2, 실제type3/build/package focused PASS(P1b report596f4648…46c3). 이전schema2 launch break복구, installed public carrier openDurable→unknown provider거절까지측정(no birth). Operator PATHPi1.0.2 재측정/oldXDG불변. Self07:04Z alive/replyable, module upgrade증거아님. Contact/send/receive S+H와registration guard 모두PASS(91/91·19/19·21/21). 기존 빈root guard3RED 원본은보존, before-after invariant로수선완료. Native vendor LIVE미실행.
+- **Next:** v4 57파일list/digest 일치/3 stale anchors spotkill/STOP 확인. Coordinator staging+manifest head+sharedscanner/normalhooks→local P1checkpoint(완료영수증 `.tmp-verify/032-implementation/p1-commit/accepted.json`). Source/proof/SDK floor 결합hardcut은단일bundle. Qualified final수용으로상속안함. P2목업은공급checkpoint뒤별도구획/commit, body/FULL/vendorLIVE는최종후보에별도.
+- **Review closed:** Reachable realpath visited walk+name/version으로depth3/다른name 모두거절(독립coordinator `p1b-review-edge-after-fix.json`, sha567ad797…10706); same-version copies/cycles PASS. Operator registration snapshot은기존5 records/4 receivers/5 senders/10 session names와bytes불변, auth/SQLite미독/삭제없음. Contact91/91·send19/19·receive21/21·L4depth3/pack-installPASS는amendment artifact5973b5d3…8dadf. Coordinator beside96/emit equality rc0도별도측정(`coordinator-p1-review/focused.log`). Prose/callable source oldauthority은sweep으로정정(v3 57files). Metadata version0.31.0·actual PATHPi1.0.2 불변.
+- **P1 decisions:**9 exact production deps(동명 Earendil peer/dev 중복 제거),6-file pinned Node strip emit+LICENSE+rebuild equality, declared-parent/target-only reserved resolver, proper-lockfile4.1.2, existing check-pack-install+beside negatives. Maintainer source 없는 SKIP은 rebuild acceptance 아님. 현재 operator PATHPi1.0.2(S0 측정)는 자동업그레이드하지 않음; earlier1.0.4 host layout은 fixture. Actual host gate 별도 수선, SDK nested VERSION으로 host 인증 금지. P1b에서 기존 XDG/source route와 그 proof 함께 retire; 전체 verifier framework/즉시 full floor 없음.
 - **Mock leaf after supply:** explicit external module 한 개, synthetic HOME/cwd/env만 사용. 초기화가 runtime/provider 전에 완료됨, native registration/contact 공존, child inheritance, invalid module/export refusal, installed consumer에서의 로드까지 실증. mock을 운영자에게 자동설치하지 않음. real dotenv/env-loader/agent-config 변경 없음.
 - **Contract:** [live #130 thread](https://github.com/junghan0611/entwurf/issues/130), `docs/durable-native-support.md`의0.32 contract, `AGENTS.md` Hard6/9/17, `VERIFY.md`. actual host CLI version과 native physical SDK graph 검사는 다른 subject. same-version sharing 허용; intentionally mixed1.0.2/1.0.4 local FAIL로 global-only 지원을 강제하지 않음.
-- **Authority:** GLG가 이번 좌표 commit +fresh Opus 형성을 요청했다. 이후 구현 commit/push/release는 별도 gate. push하지 않으며 local-only commit에는 agenda 도장 없음.
+- **Authority:** GLG 직접 rolling checkpoint commit 승인(이슈진행댓글도즉시요청). Scopedreview/affectedchecks→normalhooks+sharedscanner로완료subject/proof작게커밋, KnownRED/미측정명시; finalfrozenqualification/full/nativeLIVE 그대로. Push/release미승인, localcommit agenda없음. `rolling-checkpoint-authority.json`, [진행댓글6032533847](https://github.com/junghan0611/entwurf/issues/130#issuecomment-6032533847). Coordinator가AGENTS/NEXT cadence만추가편집;Opus P1bSTOP 관찰 후리뷰로좁은graph/guard amendment만재개. 다음focused/경계보고후STOP. [리뷰댓글6032794273](https://github.com/junghan0611/entwurf/issues/130#issuecomment-6032794273).
 
 # RECENT — 측정 / 제안 경계
 
@@ -32,4 +34,4 @@
 - E1 Fable/Opus research lane는 종료. 새 실무자 checkpoints/blockers/review는 coordinator로만. role/launch/callback/turn/model실행 증거를 섞지 않음.
 - operator auth/settings/records/transcripts/SQLite/Emacs/old fixtures 보호. Original branch만, worktree/tmp development clone 금지. fixture/raw는 증거. manager/updater/downloader/credential mediation/foreign API shim 금지.
 - scoped implementation→affected focused gates→independent review→one amendment bundle→changed qualification→frozen full/LIVE/release. main NEXT를 건드리지 않고 merge 전 branch NEXT 삭제.
-- DM433 discussion-ready 사건은 이미1회 전달(rc0); 중복 DM 없음. 향후 장기 작업 완료는 별개 사건일 때만 dm skill.
+- **GLG 최신 direct:** 수선 진행, Pi 업데이트 뒤 본인이 재실행해 최신 환경을 잡을 테니 DM 요청. 실제dev/shared/global/PATH 상태를 구분해 재실행 준비/필요 시 coordinator가 `dm.sh --as pi/gpt-6.1-sol`로 한 번; 진행중계/peer중복 없음. `p1b-routed-restart-dm-pending.json`에 pending; post-sync health는 `p1b-post-sync-health.json`. SDK동기화만으로 재실행 준비라고 DM하지 않음: actual1.0.4 type/focused/compiled checkpoint를 기다림. DM433 discussion-ready는 다른 완료사건, 재전송 금지.

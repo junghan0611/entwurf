@@ -19,9 +19,9 @@
  *                 `{v:2,task}` payload, whose decoder caps `task` at 16000 characters. A framed
  *                 task over that cap would open a window whose bootstrap refuses its own argv.
  *
- * ── Then the runtime, then the four units ──
+ * ── Then the carrier, then the four units ──
  *
- *   runtime          operator-provided at the fixed locator and verified against the pin
+ *   carrier          the package's own pi-durable carrier and its declared SDK set, verified
  *                    (`pi-durable-runtime.ts`); passed in as that check's verdict.
  *   birth            the compiled contact in this package's closure — it mints the record.
  *   MCP hand         the compiled entwurf-bridge entry in the same closure — the contact spawns it.
@@ -32,7 +32,7 @@
  *
  * ── What this deliberately does NOT claim ──
  *
- * Filesystem truth about ONE package closure and ONE runtime directory. It does not prove the durable
+ * Filesystem truth about ONE package closure and the SDK it resolves. It does not prove the durable
  * app opens, the bridge connects, the doorbell arms or a garden id renders — that is runtime truth for
  * the clause 7 LIVE receipt. No spawn, no network, no mutation; every path arrives as an argument, so
  * this leaf imports nothing but types.

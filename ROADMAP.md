@@ -15,9 +15,9 @@
 - **보존된 구현:** [#114 최신 인계](https://github.com/junghan0611/entwurf/issues/114#issuecomment-5657853881)에서 읽은 branch `feat/114-garden-frontend`, 구현 `351c23f`, proof amendment `ec49ada`, handoff `f15297a`와 [branch NEXT](https://github.com/junghan0611/entwurf/blob/feat/114-garden-frontend/NEXT--feat_114-garden-frontend.md). 이 결정으로 branch/코드/영수증을 삭제하거나 병합하지 않는다. 과거 gate 수치는 해당 thread의 당시 후보 증거이지 현재 main 증거가 아니다.
 - **재개 조건:** GLG가 실제 사용에서 다시 필요하다고 결정한 뒤 기존 handoff와 source를 읽고 현재 계약에 맞춰 측정한다. 상속된 topology 경고: #115 cherry-pick `1f456df`가 branch에 있으나 main은 standalone `d49e6cb`를 받았으므로 #114-only lane을 normalize/replay한다; wholesale merge 금지. 새 구현 이슈는 당시 queue 슬롯과 증거로 다시 판단한다.
 
-## 미출하 후보 — Pi 1.0.2 floor (2026-10-05)
+## 미출하 후보 — #130 0.32: Pi 1.0.4 SDK 출하 + pi-durable carrier (2026-10-07)
 
-branch `chore/pi-1.0.2-upstream`: Pi dev pin `1.0.2`, peer `>=1.0.2 <1.1`(next-minor 상한 — 기존 single-source floor 규칙이 pin을 따라 움직인 것이지 새 규칙이 아니다). 0.30.x 출하물이 아니다: 0.30.0/0.30.1 registry의 pi floor는 1.0.0이다. 측정·미측정 축은 Dep bump 원장 2026-10-05 항목.
+branch `feat/130-install-surface`: pi SDK 9종(`@earendil-works/*`, `pi-durable` 포함)이 exact `1.0.4` production dependency로 승격되고 durable app/TUI가 pinned upstream `v1.0.4` carrier로 패키지에 실린다. host 범위 `>=1.0.4 <1.1`(single-source floor 규칙 그대로 pin을 따라 움직임). 0.31.0 출하물이 아니다: 0.31.0 registry는 peer floor 1.0.2와 source-runtime 경로다. 측정·미측정 축은 Dep bump 원장 2026-10-07 항목과 #130 thread.
 
 ## 0.30.1 shipped (2026-10-04) — #127 Claude ACP 0.85.1
 
@@ -132,7 +132,7 @@ ACP는 중심이 아니라 v2 core 위에 provider/model로 들어오는 **plugi
 | v2 live Antigravity → native-push direct injection | native-push adapter/register/decider gates + `smoke-agy-native-push-live` |
 | agy automatic citizen birth + sender/reply identity | hooks/statusline/install/sender gates + three doctors + fresh live round trip |
 | v2 honest reject (false-delivered/`.msg` garbage 0) | matrix-live C3 + deliverability/native-push reject gates |
-| pi 1.0.2 fence | `pnpm check` + release-gate MUST |
+| pi 1.0.4 fence | `pnpm check` + release-gate MUST |
 
 ### Historical — 0.12.0 cutover close checklist
 
@@ -344,7 +344,7 @@ v2 필드 `parentGardenId`/`isEntwurf`는 **stray key로 거부된다** — 되�
 ## 검증 원장 (measured, 재탐색 불필요)
 
 - **pi 0.80 public export:** `hasProjectTrustInputs`/`ProjectTrustStore`/`getAgentDir`/`VERSION` 모두 index
-  public export → TS 직접 import(재구현 불필요). floor = **1.0.2** (`>=1.0.2 <1.1`, next-minor 상한).
+  public export → TS 직접 import(재구현 불필요). floor = **1.0.4** (`>=1.0.4 <1.1`, next-minor 상한).
 - **pi trust(0.79.1+):** `pi -p`는 trust에서 안 멈춤(비대화 미결정→`false` degraded). `--approve`(`-a`)=
   project 파일 로드, `--no-approve`(`-na`)=무시·degraded. `ProjectTrustStore.get`은 nearest-ancestor
   walk-up(조상 cwd 결정을 자식이 상속). `AGENTS.md`/`CLAUDE.md`는 0.79.1에서 trust input에서 제거(항상
@@ -1349,6 +1349,22 @@ v2 필드 `parentGardenId`/`isEntwurf`는 **stray key로 거부된다** — 되�
     `getContextUsage` latency, 다른 platform runtime, 긴 payload. 결정적 원문 좌표는
     [#127 동결 source](https://github.com/junghan0611/entwurf/issues/127#issuecomment-5969949281)와
     [target focused + MUST](https://github.com/junghan0611/entwurf/issues/127#issuecomment-5971362554).
+  - **2026-10-07 bump — pi 1.0.2 → 1.0.4 (#130 0.32 후보, branch `feat/130-install-surface`; SDK가 production dependency로 승격).**
+    ⑴ **identity.** `[측정 2026-10-07]` `npm view @earendil-works/<m>@1.0.4 gitHead` = `7c10bd4` (9종 모두) =
+    upstream tag `v1.0.4`; `cd32f77`(v1.0.2) → `v1.0.4` 51 commits, `experimental/durable/` tree 동일, overlay patch base
+    blob `fcd6e523` 일치. raw metadata는 `.tmp-verify/032-implementation/opus/s0/npm/`(host-local 증거, 결정 줄은 #130).
+    ⑵ **closure.** 선언에서 도출: coding-agent→{chord, pi-agent-core, pi-ai, pi-codemode, pi-mcp, pi-tui}, pi-ai→pi-telemetry,
+    pi-agent-core→pi-ai, pi-durable→{chord, pi-ai} — 9 member, 10 member edge, 전부 caret `^1.0.4`. pi-durable과
+    proper-lockfile은 coding-agent dep이 아니라 Entwurf가 직접 선언한다. dev/peer 이중 선언은 제거(check-dep-versions가 금지).
+    ⑶ **floor.** single-source floor 규칙 그대로 → host 범위 `>=1.0.4 <1.1`; `minimumReleaseAgeExclude`에 `|| 1.0.4`와
+    pi-durable 행. 운영자 PATH pi(oracle 1.0.2)는 범위 밖으로 정직하게 non-green — setup이 이름으로 말한다.
+    ⑷ **측정 · 수선 · UNRUN.** `[측정 2026-10-07]` checkout S+H gate가 carrier + 실제 1.0.4 SDK 위에서 contact 91/91 ·
+    send 19/19 · receive 21/21(host-local log `.tmp-verify/032-implementation/opus/p1b-amend/verify.log`). 그 전 측정의
+    유일한 red였던 `*-OPERATOR-UNTOUCHED`는 빈 operator root를 요구한 guard 결함이었고, 실행 전후 불변(pi-durable
+    record·receiver·sender marker의 이름+sha256, durable session 항목 이름)으로 수선했다. installed verifier와 독립
+    oracle은 도달 가능한 SDK closure 전체를 realpath당 한 번, package name identity까지 확인한다(depth-3 대조군 L4).
+    **UNRUN:** native/LIVE(`smoke-pi-durable-fresh-live`, Pi ↔ pi-durable on the carrier), qualification body,
+    frozen full, pnpm/Bun/SEA consumer layout.
   - **2026-10-05 bump — pi 1.0.0 → 1.0.2 (미출하 후보, branch `chore/pi-1.0.2-upstream`; 1.0.1은 건너뜀).**
     upstream `v1.0.0..v1.0.2`(`a13d35a..cd32f77`, 35 commits) 직독 + `npm view @…@1.0.2` 직독.
     ⑴ **우리 접촉면의 src 변화.** `pi-agent-core` src 0줄. `pi-ai` `utils/retry.ts`가 재시도 패턴에

@@ -16,11 +16,13 @@
 //   (`withGardenIdentity`).
 // Nothing of the native registry, controller or TUI is rebuilt here.
 //
-// It runs under the operator-provided runtime's own source resolver, which is what selects the
-// runtime — this file carries no path into it. `entwurf pi-durable` (run.sh) locates that runtime
-// at its one fixed place, verifies it against the pin, and execs:
+// The durable app itself is this package's CARRIER (./carrier/, the pinned upstream files emitted by
+// the maintainer — upstream publishes no experimental app), and it runs under the carrier's resolver,
+// which maps the app's pi-coding-agent internals to the published package the carrier resolves.
+// `entwurf pi-durable` (run.sh) verifies the carrier and its SDK set (pi-durable-runtime.ts) and
+// execs:
 //
-//   node --import <runtime>/packages/coding-agent/src/experimental/source-resolver.ts \
+//   node --import <entwurf>/pi/pi-durable/carrier-resolver.mjs \
 //        <entwurf>/pi/pi-durable/bootstrap.mjs \
 //        --provider <provider> --model <model id> --width task-wide [--entwurf-bootstrap <json>]
 //   ... bootstrap.mjs --continue
@@ -43,9 +45,8 @@
 // `--continue` opens the newest session for this directory as upstream does (not a chosen
 // record), so every flag that only a new session can honour is refused beside it by name.
 //
-// Without that resolver the two pi-coding-agent experimental subpath imports below fail: the
-// published package ships no experimental source, and that failure is the honest one. They are the
-// one sanctioned pi private-subpath exception (check-pi-import-surface, #129).
+// Without that resolver the carrier's first pi-coding-agent internal import fails by name (an
+// unsupported entwurf-pi-dist: URL scheme), and that failure is the honest one.
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { decodeOmpBootstrapPayload } from "../../mcp/entwurf-bridge/dist/pi-extensions/meta-bridge-omp.js";
@@ -56,8 +57,8 @@ import {
 	withGardenIdentity,
 } from "../../mcp/entwurf-bridge/dist/pi-extensions/meta-bridge-pi-durable.js";
 
-const RUNTIME = "@earendil-works/pi-coding-agent/experimental/durable/runtime.ts";
-const TUI = "@earendil-works/pi-coding-agent/experimental/durable/tui.ts";
+const RUNTIME = "./carrier/runtime.js";
+const TUI = "./carrier/tui.js";
 
 /** The entwurf-bridge of THIS package closure: the one the contact spawns as its MCP hand. */
 export const PACKAGED_BRIDGE_ENTRY = fileURLToPath(

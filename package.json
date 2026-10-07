@@ -53,6 +53,9 @@
 		"pi/entwurf-capabilities.json",
 		"pi/settings.reference.json",
 		"pi/pi-durable/bootstrap.mjs",
+		"pi/pi-durable/carrier-relocation.mjs",
+		"pi/pi-durable/carrier-resolver.mjs",
+		"pi/pi-durable/carrier/",
 		"pi/pi-durable/overlay/upstream-pin.json",
 		"pi/pi-durable/overlay/runtime-contacts.patch",
 		"pi/meta-bridge/.claude-plugin/marketplace.json",
@@ -90,22 +93,25 @@
 		"@agentclientprotocol/claude-agent-acp": "0.85.1",
 		"@agentclientprotocol/sdk": "1.6.0",
 		"@anthropic-ai/sdk": "0.100.1",
+		"@earendil-works/chord": "1.0.4",
+		"@earendil-works/pi-agent-core": "1.0.4",
+		"@earendil-works/pi-ai": "1.0.4",
+		"@earendil-works/pi-codemode": "1.0.4",
+		"@earendil-works/pi-coding-agent": "1.0.4",
+		"@earendil-works/pi-durable": "1.0.4",
+		"@earendil-works/pi-mcp": "1.0.4",
+		"@earendil-works/pi-telemetry": "1.0.4",
+		"@earendil-works/pi-tui": "1.0.4",
 		"@modelcontextprotocol/sdk": "^1.12.1",
+		"proper-lockfile": "4.1.2",
 		"smol-toml": "^1.8.0",
 		"zod": "^3.25.0 || ^4.0.0"
 	},
 	"peerDependencies": {
-		"@earendil-works/pi-ai": ">=1.0.2 <1.1",
-		"@earendil-works/pi-coding-agent": ">=1.0.2 <1.1",
-		"@earendil-works/pi-tui": ">=1.0.2 <1.1",
 		"typebox": "*"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "^2.4.13",
-		"@earendil-works/pi-agent-core": "1.0.2",
-		"@earendil-works/pi-ai": "1.0.2",
-		"@earendil-works/pi-coding-agent": "1.0.2",
-		"@earendil-works/pi-tui": "1.0.2",
 		"@types/node": "^24.3.0",
 		"husky": "^9.1.7",
 		"rregex": "1.13.1",
@@ -201,15 +207,6 @@
 		"entwurf-copilot-statusline": "./scripts/copilot-statusline.sh"
 	},
 	"peerDependenciesMeta": {
-		"@earendil-works/pi-ai": {
-			"optional": true
-		},
-		"@earendil-works/pi-coding-agent": {
-			"optional": true
-		},
-		"@earendil-works/pi-tui": {
-			"optional": true
-		},
 		"typebox": {
 			"optional": true
 		}

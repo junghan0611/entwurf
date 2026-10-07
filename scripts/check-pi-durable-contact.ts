@@ -3,7 +3,8 @@
  * CHECKOUT-ONLY dev gate: an installed package refuses it in `run_ts` before it reads an input.
  *
  * LABEL: adapter-direct, harness-bypassed. The durable app is opened through the production
- * bootstrap composition against a provisioned overlay checkout, the contact is born, and its
+ * bootstrap composition from THIS checkout's carrier (pi/pi-durable/carrier/, under its resolver,
+ * against the checkout's pinned pi SDK set — verified first), the contact is born, and its
  * registered tools are executed DIRECTLY in the host (scripts/pi-durable-contact-host.mjs). No
  * model turn, no ToolTask: this gate does NOT prove that the harness selects, validates or
  * replays these tools, that a model accepts their schema, or anything about send / delivery /
@@ -11,10 +12,9 @@
  * the contact's own `receiver()` state and the bridge's replyability verdict — never a doorbell, an
  * admission or a drain; those are check-pi-durable-receive's.
  *
- * Inputs, both required, neither provisioned here (missing → SKIP, never a pass):
- *   ENTWURF_PI_DURABLE_RUNTIME       an upstream checkout at pi/pi-durable/overlay's pin,
- *                                    with exactly the overlay patch applied, its deps installed
- *                                    and the pin's git-ignored model data in place
+ * Input, required, not provisioned here (missing → SKIP, never a pass). The durable app itself is
+ * no longer an input: it is this checkout's carrier, refused by name before anything spawns when it
+ * or the SDK set it resolves is not the pin (#130).
  *   ENTWURF_PI_DURABLE_BRIDGE_ENTRY  <bundle>/mcp/entwurf-bridge/src/index.js emitted from THIS
  *                                    checkout into a private bundle (a shared/installed bridge
  *                                    carries the old backend list and is refused as stale) — the
@@ -44,7 +44,7 @@
  * `malformed-report` makes the gate's host driver send a non-JSON report line, which arrives while
  * the gate is already waiting for it (the pending-line path of `Host.next`).
  */
-import { type ChildProcess, spawn, spawnSync } from "node:child_process";
+import { type ChildProcess, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import * as fs from "node:fs";
 import * as os from "node:os";
@@ -52,16 +52,16 @@ import * as path from "node:path";
 import { createInterface } from "node:readline";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
-import {
-	inspectPiDurableRuntime,
-	PI_DURABLE_RESOLVER_RELATIVE,
-	readPiDurablePin,
-} from "../pi-extensions/lib/pi-durable-runtime.ts";
+import { checkPiDurableRuntime, piDurableLayoutAt } from "../pi-extensions/lib/pi-durable-runtime.ts";
 import { skipLive } from "./lib/live-skip.ts";
+import {
+	describeOperatorSnapshot,
+	operatorPiDurableSnapshot,
+	operatorSnapshotUnchanged,
+} from "./lib/pi-durable-operator-guard.ts";
 
 const LABEL = "check-pi-durable-contact";
 const REPO = path.resolve(import.meta.dirname, "..");
-const OVERLAY = path.join(REPO, "pi", "pi-durable", "overlay");
 const HOST_DRIVER = path.join(REPO, "scripts", "pi-durable-contact-host.mjs");
 const REPORT_TIMEOUT_MS = 90_000;
 const CLOSE_TIMEOUT_MS = 30_000;
@@ -74,17 +74,14 @@ if (FAULT !== undefined && FAULT !== "after-birth" && FAULT !== "malformed-repor
 	process.exit(2);
 }
 
-const runtimeInput = process.env.ENTWURF_PI_DURABLE_RUNTIME?.trim();
 const bridgeInput = process.env.ENTWURF_PI_DURABLE_BRIDGE_ENTRY?.trim();
-if (!runtimeInput || !bridgeInput) {
+if (!bridgeInput) {
 	skipLive(
 		LABEL,
-		"set ENTWURF_PI_DURABLE_RUNTIME=<overlay checkout at the pin, patch applied, deps and model data installed> and " +
-			"ENTWURF_PI_DURABLE_BRIDGE_ENTRY=<bridge index.js emitted from this checkout into a private bundle>; " +
-			"this gate provisions neither",
+		"set ENTWURF_PI_DURABLE_BRIDGE_ENTRY=<bridge index.js emitted from this checkout into a private bundle>; " +
+			"this gate does not provision it",
 	);
 }
-const runtime = path.resolve(runtimeInput);
 const bridgeEntry = path.resolve(bridgeInput);
 
 let passed = 0;
@@ -104,36 +101,18 @@ function fatal(message: string): never {
 	process.exit(1);
 }
 
-const sha256 = (data: string | Buffer): string => createHash("sha256").update(data).digest("hex");
-
 // ---------------------------------------------------------------------------
 // 0. Inputs. A provisioned-but-wrong input is broken, not absent: these FAIL, they do not skip.
 // ---------------------------------------------------------------------------
-// The pin and the runtime facts come from the ONE verifier the managed launch, setup and the fresh
-// preflight use (pi-extensions/lib/pi-durable-runtime.ts); this gate keeps its finer-grained QKs over
-// those facts and adds the reverse-apply check only it makes.
-const { pin, patchBytes } = readPiDurablePin(OVERLAY);
-const patchFile = path.join(OVERLAY, pin.patches[0] as string);
-const facts = inspectPiDurableRuntime(runtime, OVERLAY);
-const reverse = spawnSync("git", ["-C", runtime, "apply", "-R", "--check", patchFile]);
-console.log("0. inputs: tracked overlay, ignored model data, bridge bundle registry");
+// The carrier and its SDK set are verified by the ONE verifier the managed launch, setup and the
+// fresh preflight use (pi-extensions/lib/pi-durable-runtime.ts), from this checkout's layout.
+const carrier = checkPiDurableRuntime(piDurableLayoutAt(REPO));
+console.log("0. inputs: the checkout carrier and its pi SDK set, bridge bundle registry");
 ok(
-	`[QK:PDC-PIN] runtime HEAD is the overlay pin ${pin.commit} (got ${facts.head || "no answer"})`,
-	facts.gitAnswered && facts.head === pin.commit,
+	`[QK:PDC-CARRIER-VERIFIED] this checkout's pi-durable carrier and the pi SDK set it resolves are the pin (${carrier.ok ? "verified" : `${carrier.reason}: ${carrier.detail}`})`,
+	carrier.ok,
 );
-ok(
-	`[QK:PDC-TRACKED-OVERLAY-EXACT] the TRACKED tree is exactly pin + overlay patch and no non-ignored file is untracked (index ${facts.indexMatchesHead ? "==" : "!="} HEAD, diff ${facts.diffEqualsPatch ? "==" : "!="} patch ${sha256(patchBytes).slice(0, 12)}, untracked ${facts.untracked || "none"}) — git-ignored runtime inputs are outside this assertion`,
-	facts.gitAnswered && facts.indexMatchesHead && facts.diffEqualsPatch && facts.untracked === "",
-);
-ok("[QK:PDC-OVERLAY-REVERSE] the patch reverse-applies cleanly", reverse.status === 0);
-ok(
-	`[QK:PDC-MODEL-DATA-DIGEST] the git-ignored model data is the pin's recorded bytes (${facts.modelDataFiles} files, aggregate ${facts.modelDataAggregate.slice(0, 12)}, manifest ${facts.manifestSha256.slice(0, 12)})`,
-	facts.modelDataFiles === pin.modelData.files &&
-		facts.modelDataAggregate === pin.modelData.aggregateSha256 &&
-		facts.manifestSha256 === pin.modelData.manifestSha256,
-);
-const resolver = path.join(runtime, PI_DURABLE_RESOLVER_RELATIVE);
-ok("[QK:PDC-RESOLVER] the checkout carries the experimental source resolver", facts.resolverPresent);
+const resolver = carrier.ok ? carrier.resolver : "";
 const bundleRoot = path.resolve(bridgeEntry, "..", "..", "..", "..");
 const bundleRegistry = path.join(bundleRoot, "pi-extensions", "entwurf-capabilities.json");
 const repoRegistry = path.join(REPO, "pi", "entwurf-capabilities.json");
@@ -154,52 +133,14 @@ ok(
 	`[QK:PDC-BUNDLE-OWNER-JOIN] the bridge bundle's compiled owner join admits pi-durable-host (${joinLine || "not found"})`,
 	joinLine.includes('"pi-durable-host"'),
 );
-if (failed > 0)
-	fatal("inputs are not the pinned overlay, its model data, this checkout's registry and owner join — refusing to run");
+if (failed > 0) fatal("inputs are not the verified carrier, this checkout's registry and owner join — refusing to run");
 
 // ---------------------------------------------------------------------------
 // Operator guard — COARSE and pi-durable-specific: the operator's own roots gain no pi-durable
 // record, sender dir or durable session tree. Not a proof about any other operator byte.
 // ---------------------------------------------------------------------------
 const operatorAgent = path.join(os.homedir(), ".pi", "agent");
-function operatorPiDurableFacts(): string {
-	const sessions = path.join(operatorAgent, "meta-sessions");
-	const durableRecords = fs.existsSync(sessions)
-		? fs
-				.readdirSync(sessions)
-				.filter((n) => n.endsWith(".meta.json"))
-				.filter((n) => {
-					try {
-						return (
-							(JSON.parse(fs.readFileSync(path.join(sessions, n), "utf8")) as { backend?: unknown }).backend ===
-							"pi-durable"
-						);
-					} catch {
-						return false;
-					}
-				})
-		: [];
-	const senders = fs.existsSync(path.join(operatorAgent, "meta-senders", "pi-durable"));
-	const durableSessions = fs.existsSync(path.join(operatorAgent, "experimental", "durable-sessions"));
-	const receiversDir = path.join(operatorAgent, "meta-receivers");
-	const durableReceivers = fs.existsSync(receiversDir)
-		? fs
-				.readdirSync(receiversDir)
-				.filter((n) => n.endsWith(".json"))
-				.filter((n) => {
-					try {
-						return (
-							(JSON.parse(fs.readFileSync(path.join(receiversDir, n), "utf8")) as { backend?: unknown }).backend ===
-							"pi-durable"
-						);
-					} catch {
-						return false;
-					}
-				})
-		: [];
-	return JSON.stringify({ durableRecords, senders, durableSessions, durableReceivers });
-}
-const operatorBefore = operatorPiDurableFacts();
+const operatorBefore = operatorPiDurableSnapshot(operatorAgent);
 
 // ---------------------------------------------------------------------------
 // Sandbox: private root, env built from nothing, children at umask 022.
@@ -810,17 +751,9 @@ ok(
 	`[QK:PDC-OWNED-REAPED] every host this gate spawned and every bridge observed under it is gone (${ownedSummary || "none spawned"}; alive ${stillAlive.join(",") || "none"})`,
 	stillAlive.length === 0 && cleanupProblems.length === 0,
 );
-const before = JSON.parse(operatorBefore) as {
-	durableRecords: string[];
-	senders: boolean;
-	durableReceivers: string[];
-};
 ok(
-	`[QK:PDC-OPERATOR-UNTOUCHED] coarse pi-durable guard: the operator's own roots are unchanged by this run and hold no pi-durable record, sender dir or receiver marker (${operatorBefore})`,
-	operatorPiDurableFacts() === operatorBefore &&
-		before.durableRecords.length === 0 &&
-		!before.senders &&
-		before.durableReceivers.length === 0,
+	`[QK:PDC-OPERATOR-UNTOUCHED] coarse pi-durable registration guard: this run left the operator's pi-durable registrations exactly as it found them (${describeOperatorSnapshot(operatorBefore)} — same names, same bytes; existing state is not a red; no auth or session content read)`,
+	operatorSnapshotUnchanged(operatorBefore, operatorPiDurableSnapshot(operatorAgent)),
 );
 if (stillAlive.length > 0) console.log(`sandbox kept because owned processes are still alive: ${root}`);
 else if (process.env.ENTWURF_PI_DURABLE_KEEP === "1") console.log(`sandbox kept: ${root}`);

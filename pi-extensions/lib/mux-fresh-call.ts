@@ -244,9 +244,9 @@ export const FRESH_CALL_RUNTIME: Record<FreshCallBackend, string> = {
 	copilot: "entwurf",
 	omp: "omp",
 	codex: "codex",
-	// #129: like copilot, a MANAGED verb and never the bare app. The durable app is source-only
-	// and runs under the operator-provided runtime's own resolver; `entwurf pi-durable` is the one
-	// fixed invocation that verifies that runtime against the pin and execs the packaged bootstrap.
+	// #129/#130: like copilot, a MANAGED verb and never the bare app. The durable app is this
+	// package's carrier and runs under the carrier's resolver; `entwurf pi-durable` is the one fixed
+	// invocation that verifies the carrier and its SDK set and execs the packaged bootstrap.
 	"pi-durable": "entwurf",
 };
 
@@ -519,15 +519,13 @@ export function freshCall(
 	}
 	if (params.backend === "pi-durable") {
 		// The framed first input is computed here only to MEASURE it against the bootstrap payload
-		// cap; the same pure function composes it again below. The runtime is located and verified
-		// with THIS process's env, before anything is placed. That is the bridge's env, not
-		// necessarily the window's: a new-window pane inherits the tmux SERVER's environment
-		// (measured, see SCRUBBED_INHERITED_ENV), and the window runs whatever `entwurf` PATH names.
-		// The managed verb re-verifies with its own env before it execs anything, so the window never
-		// runs an unverified runtime — but when HOME/XDG_DATA_HOME or the package closure differ, this
+		// cap; the same pure function composes it again below. The carrier is verified from THIS
+		// process's package closure, before anything is placed. The window runs whatever `entwurf`
+		// PATH names, and the managed verb re-verifies its own package before it execs anything, so
+		// the window never runs an unverified carrier — but when the two package closures differ, this
 		// verdict and the window's can disagree, and the window is left showing its own refusal.
 		const layout = piDurablePackageLayout();
-		const runtime = layout === null ? null : checkPiDurableRuntime(env, layout);
+		const runtime = layout === null ? null : checkPiDurableRuntime(layout);
 		const missing = piDurableFreshPreflight({
 			model,
 			firstInput: buildFreshCallPrompt({ backend: params.backend, task, callerGardenId, nonce }),

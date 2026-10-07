@@ -214,11 +214,11 @@ for (const bin of ["pi", "entwurf", "tmux"]) {
 }
 const layout = piDurablePackageLayout();
 ok("this package closure carries the pi-durable units", layout !== null);
-const runtime = checkPiDurableRuntime(process.env, layout);
+const runtime = checkPiDurableRuntime(layout);
 ok(
-	"the operator-provided durable runtime is present and is the pin (the 0.31.0 supply contract)",
+	"this package's pi-durable carrier and its declared SDK set verify (the 0.32.0 supply contract)",
 	runtime.ok,
-	runtime.ok ? "" : `${runtime.reason}`,
+	runtime.ok ? "" : `${runtime.reason}: ${runtime.detail}`,
 );
 receipts["0-runtime"] = runtime.ok ? JSON.stringify(runtime) : "";
 

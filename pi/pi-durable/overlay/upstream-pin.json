@@ -1,16 +1,108 @@
 {
-	"schemaVersion": 1,
-	"comment": "The one upstream commit this overlay is maintained against, and the patch it applies. The experimental durable app is source-only upstream, so its runtime is a pinned checkout plus this patch, provisioned by the operator; Entwurf ships neither. A checkout's TRACKED tree counts as this overlay only when HEAD equals commit, `git diff` equals the patch bytes exactly, and no non-ignored file is untracked. Git-ignored runtime inputs are outside that equality and are described separately below.",
+	"schemaVersion": 2,
+	"comment": "The one upstream commit the pi-durable carrier is emitted from, the patch it applies, the emitted files and the published SDK set they run against. The experimental durable app is source-only upstream (published pi-coding-agent ships no dist/experimental), so Entwurf ships it as a CARRIER: the pinned app files, type-stripped, with the relocation in pi/pi-durable/carrier-relocation.mjs. scripts/emit-pi-durable-carrier.ts is the only writer of the generated fields (blob, sha256, emitter.node) and the only reader of upstream source; an installed package never reads source. Model data rides the published @earendil-works/pi-ai.",
 	"repository": "https://github.com/earendil-works/pi",
-	"commit": "cd32f7725fdbddbaecdff5b1e68491563394e0ca",
+	"tag": "v1.0.4",
+	"commit": "7c10bd4337495ee613f2224843ecdf349b80d1df",
 	"patches": ["runtime-contacts.patch"],
-	"modelData": {
-		"comment": "Git-ignored generated model data the runtime imports at open. Upstream hydrates it by calling vendor model-list endpoints; this overlay instead takes the bytes the v1.0.2 release built from this commit, from the published package below, with no network. aggregateSha256 is sha256 over one `<sha256 of file>  <file name>\\n` line per *.json file (dotfiles excluded), names in C byte order. upstream `packages/ai/scripts/check-model-data.ts` validates these bytes against the manifest.",
-		"path": "packages/ai/src/providers/data",
-		"source": "@earendil-works/pi-ai@1.0.2 dist/providers/data",
-		"integrity": "sha512-JP59xGlSAQ/HhQ6EHN5qmneBlWfDyu6FPPryAvAaSo8A38ubAsEpS9YisCM5Jbbns0srrDffLZonE0OXorHI5A==",
-		"files": 42,
-		"aggregateSha256": "e71a1965a81c29fbe83d6e90dc1f4595602588281374603dee9e3bcbb7f46fa4",
-		"manifestSha256": "d373b99c0860f84281d786d493e8d8237c0a9fd98f142ef31c6db187c5089bc5"
+	"carrier": {
+		"comment": "files: the six app files bootstrap.mjs needs (main.ts is replaced by the bootstrap). distTargets: every pi-coding-agent internal the stripped files import, as paths under the published dist/; the emitter refuses a set that differs and the resolver answers no other.",
+		"emitter": {
+			"tool": "node:module.stripTypeScriptTypes",
+			"mode": "strip",
+			"node": "v24.18.1"
+		},
+		"license": {
+			"source": "LICENSE",
+			"blob": "b0a8e9b81083294360c69b4ec45d3d39a2b28197",
+			"sha256": "0457f5bcec3b3b211605dfb5d1a49042fd638f3686a410fe099c24a25af13c48"
+		},
+		"files": [
+			{
+				"name": "runtime.js",
+				"source": "packages/coding-agent/src/experimental/durable/runtime.ts",
+				"patched": true,
+				"blob": "fcd6e5239e999ebf17dea0335fb3dc9cd7f7ce45",
+				"sha256": "ca0ee10dc904a57d46bb33b37fcc4efe48dfa08b2f0d10e79e7bc22136871f0a"
+			},
+			{
+				"name": "tui.js",
+				"source": "packages/coding-agent/src/experimental/durable/tui.ts",
+				"patched": false,
+				"blob": "397b276cbeb1c90e1fbc96c3cc59e6a25f92dad7",
+				"sha256": "bef1ea4bd6e8ab150273752a9b94552d8ce672b518ba3d1ed1a209b8405be1b3"
+			},
+			{
+				"name": "harness-setup.js",
+				"source": "packages/coding-agent/src/experimental/durable/harness-setup.ts",
+				"patched": false,
+				"blob": "4d6a4be5333ebb8e0f17eac1987f18ea35a91fc7",
+				"sha256": "712b630145dc6f5c655a85b01b1e20299c962542e63c5494d2202bb7bf414a15"
+			},
+			{
+				"name": "prompt.js",
+				"source": "packages/coding-agent/src/experimental/durable/prompt.ts",
+				"patched": false,
+				"blob": "8e2f5d5273fba58da8b314766956ed62951c3814",
+				"sha256": "ff1ff765fa313e5cb1c3d7537c901c23adb0562ee433bd050fd35eb3d892134c"
+			},
+			{
+				"name": "sessions.js",
+				"source": "packages/coding-agent/src/experimental/durable/sessions.ts",
+				"patched": false,
+				"blob": "34f9ceeeaeaf874f7478d56115da2e4f726c6a85",
+				"sha256": "1bd1a04ece66f5ab3ca22860c64dba9abc848334d11a27a9afe543f1365c7254"
+			},
+			{
+				"name": "subagent.js",
+				"source": "packages/coding-agent/src/experimental/durable/subagent.ts",
+				"patched": false,
+				"blob": "e767d54e0bf2908e0f4f41c6933b55c00562eb25",
+				"sha256": "8a75d934ef87efbb0bb2006a2141f1ea932560851f1718b991ed947d6efdb54c"
+			}
+		],
+		"distTargets": [
+			"config.js",
+			"core/http-dispatcher.js",
+			"core/keybindings.js",
+			"core/model-resolver.js",
+			"core/model-runtime.js",
+			"core/resource-loader.js",
+			"core/settings-manager.js",
+			"core/skills.js",
+			"core/system-prompt.js",
+			"core/tools/bash.js",
+			"core/tools/edit.js",
+			"core/tools/read.js",
+			"core/tools/renderers/index.js",
+			"core/tools/write.js",
+			"modes/interactive/components/assistant-message.js",
+			"modes/interactive/components/custom-editor.js",
+			"modes/interactive/components/dynamic-border.js",
+			"modes/interactive/components/footer.js",
+			"modes/interactive/components/keybinding-hints.js",
+			"modes/interactive/components/status-indicator.js",
+			"modes/interactive/components/tool-execution.js",
+			"modes/interactive/components/user-message.js",
+			"modes/interactive/theme/theme-controller.js",
+			"modes/interactive/theme/theme.js"
+		]
+	},
+	"sdk": {
+		"comment": "The published library set the carrier runs against, derived from the 1.0.4 declarations. members: the @earendil-works packages the carrier imports and every @earendil-works package those declare. direct: a third-party package a carrier file imports itself (sessions.ts: proper-lockfile, at the version pi-coding-agent 1.0.4 pins). Each is an exact production dependency in package.json; the members' own edges are caret ranges, so the installed physical edges, not semver, are what must equal these versions.",
+		"members": {
+			"@earendil-works/chord": "1.0.4",
+			"@earendil-works/pi-agent-core": "1.0.4",
+			"@earendil-works/pi-ai": "1.0.4",
+			"@earendil-works/pi-codemode": "1.0.4",
+			"@earendil-works/pi-coding-agent": "1.0.4",
+			"@earendil-works/pi-durable": "1.0.4",
+			"@earendil-works/pi-mcp": "1.0.4",
+			"@earendil-works/pi-telemetry": "1.0.4",
+			"@earendil-works/pi-tui": "1.0.4"
+		},
+		"direct": {
+			"proper-lockfile": "4.1.2"
+		}
 	}
 }

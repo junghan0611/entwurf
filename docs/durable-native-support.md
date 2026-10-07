@@ -2,7 +2,7 @@
 
 ## Decision and working surface
 
-Support `pi-durable` as a separate native-harness contact, not an enhancement to ordinary Pi. There is no upstream PR or upstream acceptance dependency. **Released 0.31.0** retains Pi1.0.2/source `cd32f7725fdbddbaecdff5b1e68491563394e0ca`. **#130 /0.32.0 targets Pi1.0.4 and simpler installation**; the supply/extension contract below is approved direction, not yet implemented or certified.
+Support `pi-durable` as a separate native-harness contact, not an enhancement to ordinary Pi. There is no upstream PR or upstream acceptance dependency. **Released 0.31.0** retains Pi1.0.2/source `cd32f7725fdbddbaecdff5b1e68491563394e0ca`. **#130 /0.32.0 targets Pi1.0.4 and simpler installation**: the supply contract below is implemented on the #130 branch (P1; review, qualification and release floors pending), and the explicit native-module contract (P2) is approved direction, not yet implemented.
 
 Development takes place **on a branch in this repository checkout**. No worktrees or tmp development clones. Isolated test fixtures and preserved receipts are evidence, not another implementation authority. `AGENTS.md` owns the working rules; `NEXT.md` owns the current release state and next move. #129 closed at reviewed main `535c2e1` after first native admission; #130 owns runtime-supply, later Pi versions, ACP and UI follow-ups.
 
@@ -27,13 +27,13 @@ The receive contact is announce-only self-fetch: a fresh mailbox signal submits 
 Installation has two independent subjects:
 
 1. **Entwurf package:** the existing npm/source installation surface, compiled adapter, setup and package-consumer checks. The canonical bootstrap/overlay live under `pi/pi-durable/`; a checkout compatibility wrapper is not a second installation API.
-2. **Native runtime:** the optional experimental app is source-only upstream; installing/upgrading the ordinary Pi CLI does not supply it. The durable library is separately npm-consumable. The operator supplies the pinned source runtime and overlay at the existing fixed XDG runtime location; Entwurf detects and verifies it, never downloads/repairs a runtime or supplies credentials.
+2. **Native app/TUI and SDK set:** upstream does not publish the experimental app (installing or upgrading the ordinary Pi CLI does not supply it; `pi-durable` on npm is the library). Since #130 the Entwurf package itself carries the pinned app as a carrier (`pi/pi-durable/carrier/`) and declares the 1.0.4 SDK set as exact production dependencies; Entwurf verifies both where it is installed and never downloads, repairs or supplies credentials. The released 0.31.0 source-runtime route (an operator checkout at a fixed XDG location) is retired, with no fallback.
 
-[README](../README.md), [setup](setup-clean-host.md#2b-optional-native-durable-pi-durable) and the release notes must describe that distinction and agree with the accepted installation evidence before shipment. The source-runtime route above describes released0.31.0, not the target0.32.0 supply contract.
+[README](../README.md), [setup](setup-clean-host.md#2b-optional-native-durable-pi-durable) and the release notes must describe that distinction and agree with the accepted installation evidence before shipment.
 
 ## 0.32 supply and explicit native-module contract (#130)
 
-Approved direction, implementation pending:
+Supply (P1) implemented on the branch, pending review/qualification/release floors; explicit modules (P2) pending:
 
 - **One installation unit, Pi1.0.4:** supply the omitted upstream durable app/TUI alongside one declared, coherent published SDK version set. The operator does not clone, patch, compile or copy provider model data. Reuse native app/TUI files; native harness semantics stay upstream-owned.
 - **Maintainer supply:** pinned upstream commit/tag, declared contact overlay, deterministic emit/import relocation, MIT license, manifest and rebuild equality. A narrow installed-dist resolver connects the omitted app to published libraries. This does not endorse a new harness, sidecar, bundler or updater.

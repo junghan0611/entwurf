@@ -31,11 +31,10 @@ citizen is not a promise of every lifecycle operation.
 It is a separate native harness contact, not ordinary Pi's control-socket adapter.
 The contact attaches one durable host to a garden id, adds visible identity and
 two-way mailbox contact, while the upstream harness keeps its TUI, models/auth,
-SQLite storage and recovery. Native admission passed on one Linux host; the
-0.31.0 release separately passed exact-SHA CI and preserved-tarball Docker acceptance.
-That does not provision or certify a runtime on every host. The
-[installation requirements](#optional-native-durable--0310) differ from installing
-the ordinary Pi CLI.
+SQLite storage and recovery. Native admission passed on one Linux host on the
+0.31.0 source-runtime route. Under the #130/0.32 contract the app ships inside the
+Entwurf package as a pinned [carrier](#native-durable-pi-durable--130--032-contract), so
+it no longer depends on installing the ordinary Pi CLI or provisioning a runtime.
 
 ## Install
 
@@ -45,7 +44,7 @@ the ordinary Pi CLI.
 
 Prerequisites: **Node >=24.0.0**, Python 3 for `setup`, and any harnesses you choose
 to use, already installed and authenticated. Pi is optional-by-presence, supported
-range `>=1.0.2 <1.1`; Claude Code supported floor `>=2.1.217` is required for its
+range `>=1.0.4 <1.1`; Claude Code supported floor `>=2.1.217` is required for its
 managed exec-hook lifecycle. pnpm is needed only for source-checkout setup.
 
 ```bash
@@ -73,33 +72,32 @@ Detected harness wiring on Darwin can therefore be written while setup stays
 non-green. Native Windows is **UNSUPPORTED**. The package has no npm `os`
 restriction; that is not certification of every platform's harness rails.
 
-### Optional native durable — 0.31.0
+### Native durable (pi-durable) — #130 / 0.32 contract
 
-**Entwurf's npm installation does not change. Enabling durable additionally needs
-an operator-provided native runtime; installing ordinary Pi from npm is not enough.**
+**Installing Entwurf from npm supplies pi-durable. There is no runtime checkout, patch,
+build or model-data copy for the operator.**
 
 | Component | How it is supplied | What it does not supply |
 |---|---|---|
-| Entwurf | Existing npm or source-checkout route above | A harness binary, source runtime, subscription or login |
-| `@earendil-works/pi-durable` | npm **library** | The experimental app/TUI or Entwurf citizen attachment |
-| Native experimental durable app | Pinned upstream **source checkout**, with Entwurf's narrow runtime-contact overlay | A replacement ordinary Pi CLI or an Entwurf-owned harness |
+| Entwurf | Existing npm or source-checkout route above | A harness binary, subscription or login |
+| pi SDK set (`@earendil-works/*` 1.0.4, incl. the `pi-durable` library) | Exact production dependencies of Entwurf | The experimental app, which upstream does not publish |
+| Native experimental durable app/TUI | Entwurf's **carrier**: the pinned upstream v1.0.4 app files, type-stripped, with the narrow runtime-contact overlay (`pi/pi-durable/carrier/`, MIT) | A replacement ordinary Pi CLI or an Entwurf-owned harness |
 
-This lane retains Pi 1.0.2/source `cd32f77`; a newer global Pi installation does
-not provision that experimental runtime. Existing non-durable users do not need
-a Pi source checkout. Native auth and sessions stay upstream-owned: Entwurf does
-not copy credentials or convert ordinary Pi sessions into durable SQLite sessions.
+`entwurf pi-durable` verifies the carrier and the pi SDK set it resolves — every reachable
+package edge binds the declared name at exactly the pinned version — and refuses by name otherwise
+(`pi-durable-package-incomplete`, `-carrier-drift`, `-sdk-absent`, `-sdk-mismatch`);
+`entwurf setup` reports the same verdict as PASS or FAIL (never SKIP) without writing durable
+wiring. The ordinary Pi on PATH is a separate subject with its own range above. Native auth,
+models, sessions and recovery stay upstream-owned: Entwurf does not copy credentials or convert
+ordinary Pi sessions into durable SQLite sessions.
 
-The package ships the compiled adapter and bootstrap: `entwurf setup` reports the
-operator runtime as PASS/SKIP/FAIL without writing durable wiring, and
-`entwurf pi-durable` is the managed launch. First native admission passed on
-2026-10-06: visible fresh/callback, addressed receive and real Pi ↔ pi-durable
-LIVE36 on one Linux host ([receipts](./DELIVERY.md)). Installed-bootstrap import
-proof does not supply or certify the native runtime; npm installation alone is
-not a durable readiness verdict. #129 closed at reviewed main, and 0.31.0's
-release/artifact acceptance is complete; native runtime readiness remains host-specific.
+The installed carrier's runtime/TUI load, its physical SDK edges and the public launch up to the
+app's own model resolution are package-gate evidence; the checkout contact/send/receive gates run the
+same carrier with scripted S plus native H; Pi ↔ pi-durable LIVE on this supply surface is a separate
+release proof. 0.31.0 shipped the earlier source-runtime
+route (Pi 1.0.2/source `cd32f77`), which this contract replaces.
 See [setup: native durable](./docs/setup-clean-host.md#2b-optional-native-durable-pi-durable)
-and [#130](https://github.com/junghan0611/entwurf/issues/130) for runtime-supply,
-Pi-upgrade, ACP and UI follow-ups.
+and [#130](https://github.com/junghan0611/entwurf/issues/130).
 
 ### Herdr workbench
 
@@ -187,8 +185,8 @@ is a live rail fact, not merely a consequence of trusted identity.
 **Mux launches; it never delivers.** Inside Herdr, fresh opens a new unfocused tab
 in the caller's workspace, pi/Claude Code only, with no tmux fallback. Outside,
 it opens pi/pi-durable/Claude Code/Copilot/OMP/Codex visibly on the caller's own tmux
-server. pi-durable requires the operator-provided pinned runtime described above;
-Herdr does not fresh-open it. The model is required; optional `cwd` is a literal
+server. pi-durable runs the installed carrier on its exact SDK set described above and
+refuses by name before any window when that verdict is not green; Herdr does not fresh-open it. The model is required; optional `cwd` is a literal
 absolute directory, omitted or empty means the caller's cwd. Optional `placement.tmuxSession` names an existing
 tmux session (not permitted inside Herdr), never a new session or a cwd lookup.
 Omitted tmux placement follows the caller: Codex beside its own TUI pane matched

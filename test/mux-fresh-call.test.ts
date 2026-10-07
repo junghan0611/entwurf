@@ -287,7 +287,7 @@ describe("argv dialects", () => {
 
 	const pdArgs = buildBackendArgs("pi-durable", COMPOSITION, PI_DURABLE_MODEL);
 
-	it("[QK:FRESHCALL-PI-DURABLE-MANAGED-RUNTIME] pi-durable opens through the MANAGED `entwurf pi-durable` and never a bare app — the durable app is source-only and only that verb verifies the operator runtime against the pin", () => {
+	it("[QK:FRESHCALL-PI-DURABLE-MANAGED-RUNTIME] pi-durable opens through the MANAGED `entwurf pi-durable` and never a bare app — the durable app is this package's carrier and only that verb verifies it and its SDK set before the resolver runs", () => {
 		expect(FRESH_CALL_RUNTIME["pi-durable"]).toBe("entwurf");
 		expect(pdArgs[0]).toBe("pi-durable");
 	});
@@ -1360,10 +1360,12 @@ describe("pi-durable capability preflight, decided before any window exists (ste
 	/**
 	 * Same argument as the omp cells: an executable `entwurf` on PATH, a sandbox HOME and XDG data
 	 * home, and NO tmux. A pi-durable reason rather than `no-tmux-context` proves the decision
-	 * happened before placement. The runtime is the operator's at the fixed locator; the cells only
-	 * ever make it absent or not-a-checkout here — the verified path is the runtime leaf's own test.
+	 * happened before placement. The carrier is this package's own (#130), so its verdict depends on
+	 * the development install, not on anything a cell can place in the environment; the cells use the
+	 * preflight reasons that are decided before it (the model, the framed first-input cap) — the
+	 * carrier's own refusals are the runtime leaf's and the preflight leaf's tests.
 	 */
-	function withEntwurfHost<T>(run: (fx: { env: NodeJS.ProcessEnv; runtimeDir: string }) => T): T {
+	function withEntwurfHost<T>(run: (fx: { env: NodeJS.ProcessEnv }) => T): T {
 		const root = fs.mkdtempSync(path.join(os.tmpdir(), "entwurf-fresh-pi-durable-"));
 		try {
 			const bin = path.join(root, "bin");
@@ -1371,22 +1373,19 @@ describe("pi-durable capability preflight, decided before any window exists (ste
 			fs.writeFileSync(path.join(bin, "entwurf"), "#!/bin/sh\nexit 0\n", { mode: 0o755 });
 			const home = path.join(root, "home");
 			const xdg = path.join(root, "xdg-data");
-			return run({
-				env: { HOME: home, XDG_DATA_HOME: xdg, PATH: bin },
-				runtimeDir: path.join(xdg, "entwurf", "pi-durable", "runtime"),
-			});
+			return run({ env: { HOME: home, XDG_DATA_HOME: xdg, PATH: bin } });
 		} finally {
 			fs.rmSync(root, { recursive: true, force: true });
 		}
 	}
-	const call = (env: NodeJS.ProcessEnv, model = "loopback/scripted"): FreshCallResult =>
-		freshCall({ backend: "pi-durable", model, task: TASK, callerGardenId: GID }, env);
+	const call = (env: NodeJS.ProcessEnv, model = "loopback/scripted", task = TASK): FreshCallResult =>
+		freshCall({ backend: "pi-durable", model, task, callerGardenId: GID }, env);
 
-	it("[QK:FRESHCALL-PI-DURABLE-PREFLIGHT-PREMUTATION] an absent operator runtime is answered BEFORE placement — with no tmux at all the reason is the runtime's, so no window can exist by the time the caller reads it", () => {
+	it("[QK:FRESHCALL-PI-DURABLE-PREFLIGHT-PREMUTATION] the pi-durable preflight is answered BEFORE placement — with no tmux at all a task at the generic cap, whose framed first input exceeds the bootstrap payload cap, is refused by its own name, so no window can exist by the time the caller reads it", () => {
 		withEntwurfHost((fx) => {
-			expect(reasonOf(call(fx.env))).toBe("pi-durable-runtime-absent");
-			fs.mkdirSync(fx.runtimeDir, { recursive: true });
-			expect(reasonOf(call(fx.env))).toBe("pi-durable-runtime-unverifiable");
+			// At the generic task cap exactly: accepted as a task, but its callback framing pushes the
+			// first input over the bootstrap payload cap — a reason only the pi-durable preflight owns.
+			expect(reasonOf(call(fx.env, "loopback/scripted", "x".repeat(16_000)))).toBe("pi-durable-first-input-too-long");
 		});
 	});
 

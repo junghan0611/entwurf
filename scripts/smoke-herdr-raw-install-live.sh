@@ -108,7 +108,7 @@ if ! command -v docker >/dev/null 2>&1 || ! docker info >/dev/null 2>&1; then
   exit 0
 fi
 
-PI_SPEC="$(node -p "require('$REPO/package.json').devDependencies['@earendil-works/pi-coding-agent']")"
+PI_SPEC="$(node -p "require('$REPO/package.json').dependencies['@earendil-works/pi-coding-agent']")"
 # Pinned, not floating: a receipt that cannot say WHICH Claude Code it ran is not
 # reproducible. This is the version measured in the container on 2026-09-19. Claude Code
 # is scaffolding here (Rule 17) — the product face starts at `herdr integration install`.

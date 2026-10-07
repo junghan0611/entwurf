@@ -120,7 +120,7 @@ commands are ordinary invocations — no model turn, no login, no account.
 
 ```bash
 # 1. pi — the range Entwurf declares as its peer, quoted so the shell keeps it in one word
-npm install -g "@earendil-works/pi-coding-agent@>=1.0.2 <1.1"
+npm install -g "@earendil-works/pi-coding-agent@>=1.0.4 <1.1"
 
 # 2. herdr — see the herdr project for its own install
 herdr --version
@@ -149,9 +149,9 @@ herdr integration install claude
 herdr plugin install junghan0611/entwurf/plugins/herdr --yes
 ```
 
-The pi range in step 1 is not a number this file chooses. It is the `peerDependencies` range Entwurf
-publishes for `@earendil-works/pi-coding-agent` (`package.json`), and `check-dep-versions` fails if
-this file and that pin disagree. The activation door enforces it too: `run.sh install-user-scope`
+The pi range in step 1 is not a number this file chooses. It is the host range derived from the exact
+`dependencies` pin Entwurf publishes for `@earendil-works/pi-coding-agent` (`package.json`), and
+`check-dep-versions` fails if this file and that pin disagree. The activation door enforces it too: `run.sh install-user-scope`
 refuses an out-of-range pi by name and writes nothing — the same verdict `entwurf setup` gives — so
 an unpinned `npm install -g` here would only move the failure to step 5.
 

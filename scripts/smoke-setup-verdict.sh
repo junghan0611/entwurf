@@ -140,8 +140,8 @@ want "S-1: claude absent is an explicit zero-state SKIP" "printf '%s' \"\$OUT\" 
 want "S-1: agy absent is an explicit zero-state SKIP" "printf '%s' \"\$OUT\" | grep -q 'agy: SKIP'"
 want "S-1: copilot absent is an explicit zero-state SKIP" "printf '%s' \"\$OUT\" | grep -q 'copilot: SKIP'"
 want "S-1: omp absent is an explicit zero-state SKIP" "printf '%s' \"\$OUT\" | grep -q 'omp: SKIP'"
-want "S-1: an absent operator durable runtime is an explicit zero-state SKIP" "printf '%s' \"\$OUT\" | grep -q 'pi-durable: SKIP'"
-want "S-1: setup wrote no durable runtime (Entwurf never installs it)" "[ ! -e '$XDG_DATA_HOME/entwurf/pi-durable' ]"
+want "S-1: the pi-durable row is the package's own carrier verdict (PASS: carrier + pinned SDK set verify; never a SKIP)" "printf '%s' \"\$OUT\" | grep -q 'pi-durable: PASS'"
+want "S-1: setup writes nothing for pi-durable (the carrier ships in the package)" "[ ! -e '$XDG_DATA_HOME/entwurf/pi-durable' ]"
 want "S-1: core bridge boundary validated (PASS)" "printf '%s' \"\$OUT\" | grep -q 'core: PASS'"
 want "S-1: final verdict is computed, not unconditional" \
   "printf '%s' \"\$OUT\" | grep -q 'result: green (computed from the component outcomes above)'"
@@ -151,20 +151,20 @@ want "S-1: zero Pi wiring written for an absent pi" "[ ! -e '$PROJ1/.pi' ]"
 want "S-1: no user-scope pi settings were created" "[ ! -e '$PI_CODING_AGENT_DIR/settings.json' ]"
 want "S-1: no agy config was created" "[ ! -e '$HOME/.gemini' ]"
 
-# ── S-PD: a durable runtime PRESENT at the fixed place but not the pin → named FAIL, non-green ──
-# #129 W (L5). Presence is the locator directory under this sandbox's XDG_DATA_HOME; an empty
-# directory is not a git checkout, so the shared verifier answers pi-durable-runtime-unverifiable.
-# A drifted runtime must never read as SKIP (not installed) or PASS: it is detected and broken.
-echo "[smoke-setup-verdict] S-PD present-but-not-the-pin durable runtime"
+# ── S-PD: the retired source-runtime location decides nothing (#130 hard cut, no legacy reader) ──
+# 0.31.0 read an operator runtime at $XDG_DATA_HOME/entwurf/pi-durable/runtime. Since #130 the
+# carrier ships in the package and that location is not a fallback: debris left there (here, an
+# empty non-checkout directory, which 0.31.0 refused as unverifiable) must neither turn the row
+# into a FAIL nor be touched. The row stays the package's own carrier verdict.
+echo "[smoke-setup-verdict] S-PD debris at the retired durable runtime location"
 PROJPD="$SB/projpd"; mkdir -p "$PROJPD"
 PD_RUNTIME="$XDG_DATA_HOME/entwurf/pi-durable/runtime"; mkdir -p "$PD_RUNTIME"
 seed_auth
 set +e; OUT="$(bash "$REPO_DIR/run.sh" setup "$PROJPD" 2>&1)"; RC=$?; set -e
-want "S-PD: a present non-pin runtime is a component FAIL that owns a nonzero exit" \
-  "[ '$RC' -ne 0 ] && printf '%s' \"\$OUT\" | grep -q 'pi-durable: FAIL'"
-want "S-PD: the FAIL names the verifier's reason" "printf '%s' \"\$OUT\" | grep -q 'pi-durable-runtime-unverifiable'"
-want "S-PD: the computed summary names the durable component" "printf '%s' \"\$OUT\" | grep -q 'NON-GREEN (FAIL: pi-durable)'"
-want "S-PD: setup changed nothing in the operator's runtime directory" "[ -z \"\$(ls -A '$PD_RUNTIME')\" ]"
+want "S-PD: the retired location does not decide the row — the carrier verdict is still PASS, setup green" \
+  "[ '$RC' -eq 0 ] && printf '%s' \"\$OUT\" | grep -q 'pi-durable: PASS'"
+want "S-PD: no 0.31.0 runtime refusal is named" "! printf '%s' \"\$OUT\" | grep -q 'pi-durable-runtime-'"
+want "S-PD: setup changed nothing at the retired location" "[ -z \"\$(ls -A '$PD_RUNTIME')\" ]"
 want_auth_untouched "S-PD"
 rm -rf "$XDG_DATA_HOME/entwurf/pi-durable"
 want "S-1: no Copilot config/units were created" "[ ! -e '$HOME/.copilot' ]"
@@ -212,7 +212,7 @@ want_auth_untouched "S-2b"
 # ── S-3: pi at the pinned floor → presence completes project + user wiring ──
 echo "[smoke-setup-verdict] S-3 pi present at floor"
 PROJ3="$SB/proj3"; mkdir -p "$PROJ3"
-PI_PIN="$(node -e 'console.log(require(process.argv[1]).devDependencies["@earendil-works/pi-coding-agent"])' "$REPO_DIR/package.json")"
+PI_PIN="$(node -e 'console.log(require(process.argv[1]).dependencies["@earendil-works/pi-coding-agent"])' "$REPO_DIR/package.json")"
 printf '#!/usr/bin/env bash\necho %s\n' "$PI_PIN" > "$SB/harness/pi-ok"; chmod +x "$SB/harness/pi-ok"
 seed_auth
 set +e; OUT="$(PI_BIN="$SB/harness/pi-ok" bash "$REPO_DIR/run.sh" setup "$PROJ3" 2>&1)"; RC=$?; set -e
@@ -529,8 +529,8 @@ PROJ9C="$SB/proj9c"; mkdir -p "$PROJ9C"
 seed_auth
 set +e; OUT="$(PATH="$FAKE_UNAME:$PATH" bash "$REPO_DIR/run.sh" setup "$PROJ9C" 2>&1)"; RC=$?; set -e
 want "S-9c: a harness-free uncertified host still exits 0" "[ '$RC' -eq 0 ]"
-want "S-9c: all seven harness probes are still zero-state SKIPs" \
-  "printf '%s' \"\$OUT\" | grep -q 'pi: SKIP' && printf '%s' \"\$OUT\" | grep -q 'claude: SKIP' && printf '%s' \"\$OUT\" | grep -q 'agy: SKIP' && printf '%s' \"\$OUT\" | grep -q 'copilot: SKIP' && printf '%s' \"\$OUT\" | grep -q 'omp: SKIP' && printf '%s' \"\$OUT\" | grep -q 'codex: SKIP' && printf '%s' \"\$OUT\" | grep -q 'pi-durable: SKIP'"
+want "S-9c: all six harness probes are still zero-state SKIPs, and the packaged pi-durable carrier still verifies" \
+  "printf '%s' \"\$OUT\" | grep -q 'pi: SKIP' && printf '%s' \"\$OUT\" | grep -q 'claude: SKIP' && printf '%s' \"\$OUT\" | grep -q 'agy: SKIP' && printf '%s' \"\$OUT\" | grep -q 'copilot: SKIP' && printf '%s' \"\$OUT\" | grep -q 'omp: SKIP' && printf '%s' \"\$OUT\" | grep -q 'codex: SKIP' && printf '%s' \"\$OUT\" | grep -q 'pi-durable: PASS'"
 want "S-9c: core still PASSes and the computed summary is still green" \
   "printf '%s' \"\$OUT\" | grep -q 'core: PASS' && printf '%s' \"\$OUT\" | grep -q 'result: green (computed from the component outcomes above)'"
 want "S-9c: an absent harness is never given a rail verdict it did not earn" \

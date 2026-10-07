@@ -200,21 +200,32 @@ that moved out of `scripts/` and into a file beside its subject would otherwise 
 
 Do not collapse source, package, fixture, and native-host evidence into one “green.”
 
-**Native durable contact (#129).** `check-pi-durable-beside` is the deterministic
-beside-test/mutant coordinate in `check:contracts`. The separate
-`check-pi-durable-contact`, `check-pi-durable-send` and `check-pi-durable-receive`
-are CHECKOUT-ONLY SDK/contact gates: they require the provisioned pinned overlay
-runtime (`ENTWURF_PI_DURABLE_RUNTIME`) and a private compiled bridge emitted from
-this candidate (`ENTWURF_PI_DURABLE_BRIDGE_ENTRY`). Missing inputs report SKIP 97,
-never PASS; present invalid inputs fail. Installed packages refuse these developer
-gates. Contact is adapter-direct/harness-bypassed; send/receive exercise scripted
-loopback S plus actual native harness H, not vendor V. Their scoped raw records,
-wire, native view and SQLite oracles do not certify every queue/crash window.
-The installed-bootstrap import in `check-pack-install` proves package closure,
-not runtime supply or native admission. First-release visible fresh/callback and
-native caller/target/cross-harness LIVE are owed by `smoke-pi-durable-fresh-live`, a
-release-gate MUST (LIVE=1; vendor V on a real Pi and a real pi-durable host, operator
-runtime required); SDK or package green does not waive it.
+**Native durable contact (#129, #130 carrier).** `check-pi-durable-beside` is the deterministic
+beside-test/mutant coordinate in `check:contracts`: the adapter, the installed carrier/SDK-set
+verifier, the preflight, the owner join, and the carrier's relocation grammar, resolver and
+maintainer emitter (its source reads refuse replace refs). `check-pi-runtime-version` asks the
+same verifier whether this checkout resolves exactly the pinned SDK set (the native set; the PATH
+host is setup's subject), and `check-pi-import-surface` asserts the carrier fence. The separate
+`check-pi-durable-contact`, `check-pi-durable-send` and `check-pi-durable-receive` are
+CHECKOUT-ONLY SDK/contact gates: they run the checkout's own carrier — verified first, refused by
+name — and require a private compiled bridge emitted from this candidate
+(`ENTWURF_PI_DURABLE_BRIDGE_ENTRY`). A missing bridge input reports SKIP 97, never PASS; a
+refused carrier fails. Installed packages refuse these developer gates. Contact is
+adapter-direct/harness-bypassed; send/receive exercise scripted loopback S plus actual native
+harness H, not vendor V. Their scoped raw records, wire, native view and SQLite oracles do not
+certify every queue/crash window. `check-pack-install` proves the INSTALLED carrier on actual npm
+consumers (Entwurf-only, aligned host, isolated global): the installed verifier, a consumer oracle
+whose every resolved product file lies inside that consumer's own `node_modules` (with a
+same-sandbox neighbour as the rejected control), every reachable physical SDK edge at the pinned
+version and declared name, a mixed-version tree refused by name although it still imports, a
+constructed depth-3 mismatch refused by the verifier and seen by the oracle, the public launch reaching the
+app's own model refusal before any birth, and the HOST kept a separate subject — a real pi 1.0.2
+binary beside the pinned native set is a named pi FAIL with zero Pi wiring while pi-durable still
+PASSes — not native admission. The maintainer's rebuild
+equality is `emit-pi-durable-carrier --check` against a supplied upstream clone; without one it is
+a named SKIP, not acceptance. First-release visible fresh/callback and native
+caller/target/cross-harness LIVE are owed by `smoke-pi-durable-fresh-live`, a release-gate MUST
+(LIVE=1; vendor V on a real Pi and a real pi-durable host); SDK or package green does not waive it.
 
 | Axis | Required proof | Limit |
 |---|---|---|
@@ -306,7 +317,7 @@ The goal is not merely "invoke Claude Code." We want:
 **One install command to remember: `./run.sh setup <project>`.** It is idempotent — re-run the exact same command whenever anything looks wrong. There is no second install surface to juggle: from a clone `setup` runs the whole floor in order.
 
 1. `pnpm install` — installs the pinned development dependencies and builds the bridge (source-checkout bootstrap only; an installed package never runs npm/pnpm inside `node_modules`)
-2. pi wiring → `<project>/.pi/settings.json` + user-scope registration — only when a `pi` inside the supported range (`>=1.0.2 <1.1`) is on PATH; absent pi is an explicit zero-state SKIP, a below-floor pi is a detected FAIL. The user-scope entry is owner-recorded (#86 C2): another root's live-or-missing ownership makes this step a zero-write refusal (setup: pi FAIL) that names `takeover-user-scope`; the install-states bind the exact managed settings path (a drifted/symlinked/corrupt target is a zero-write refusal) and the inverse removes only the recorded owner's exact entry; `doctor-pi-package` reports the verdict
+2. pi wiring → `<project>/.pi/settings.json` + user-scope registration — only when a `pi` inside the supported range (`>=1.0.4 <1.1`) is on PATH; absent pi is an explicit zero-state SKIP, a below-floor pi is a detected FAIL. The user-scope entry is owner-recorded (#86 C2): another root's live-or-missing ownership makes this step a zero-write refusal (setup: pi FAIL) that names `takeover-user-scope`; the install-states bind the exact managed settings path (a drifted/symlinked/corrupt target is a zero-write refusal) and the inverse removes only the recorded owner's exact entry; `doctor-pi-package` reports the verdict
 3. Claude meta-bridge global plugin — only when `claude` is on PATH; otherwise skipped cleanly
 4. source stable-bin exposure — including certified `entwurf` → this checkout's `run.sh`, the managed runtime Copilot fresh resolves; helper units are attempted independently and a foreign helper is a named FAIL
 5. agy bridge + exact permission + statusline + `PreInvocation` hook — only when `agy` is on PATH; each adapter is idempotent and independently doctorable

@@ -18,7 +18,7 @@
 #
 # Cell 15 closes the third (#110), and it is the one cell here that SPAWNS pi: the
 # defect is not a byte, it is which of two checkouts wins `--entwurf-control`, and
-# only the real loader can say. It uses the pinned devDep pi, never PATH.
+# only the real loader can say. It uses the pinned dependency pi, never PATH.
 set -euo pipefail
 export PYTHONDONTWRITEBYTECODE=1 # snapshot purity: no ignored scripts/__pycache__ writes under qualification
 

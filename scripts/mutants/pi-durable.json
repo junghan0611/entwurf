@@ -3,81 +3,6 @@
 	"lane": "pi-durable",
 	"mutants": [
 		{
-			"claim": "PI-DURABLE-RUNTIME-UNTRACKED-DRIFT",
-			"title": "a non-ignored untracked file in the operator runtime no longer counts as pin drift",
-			"subject": "pi-extensions/lib/pi-durable-runtime.ts",
-			"find": [" || facts.untracked !== \"\" || "],
-			"replace": [" || "],
-			"gate": ["bash", "run.sh", "check-pi-durable-beside"],
-			"timeoutSeconds": 300,
-			"signature": "[QK:PI-DURABLE-RUNTIME-UNTRACKED-DRIFT]",
-			"signatureSource": "pi-extensions/lib/pi-durable-runtime.test.ts",
-			"build": {
-				"argv": ["bash", "scripts/build-bridge.sh"],
-				"output": "mcp/entwurf-bridge/dist"
-			}
-		},
-		{
-			"claim": "PI-DURABLE-RUNTIME-MODELDATA-DRIFT",
-			"title": "model data that is not the pinned bytes is no longer its own refusal",
-			"subject": "pi-extensions/lib/pi-durable-runtime.ts",
-			"find": ["\t\treturn \"pi-durable-runtime-modeldata-drift\";\n"],
-			"replace": ["\t\treturn null;\n"],
-			"gate": ["bash", "run.sh", "check-pi-durable-beside"],
-			"timeoutSeconds": 300,
-			"signature": "[QK:PI-DURABLE-RUNTIME-MODELDATA-DRIFT]",
-			"signatureSource": "pi-extensions/lib/pi-durable-runtime.test.ts",
-			"build": {
-				"argv": ["bash", "scripts/build-bridge.sh"],
-				"output": "mcp/entwurf-bridge/dist"
-			}
-		},
-		{
-			"claim": "PI-DURABLE-RUNTIME-READ-ONLY",
-			"title": "verification runs git against the operator checkout's own index instead of a private copy, so a stale stat cache is rewritten",
-			"subject": "pi-extensions/lib/pi-durable-runtime.ts",
-			"find": ["const onCopy = { ...base, GIT_INDEX_FILE: copy };"],
-			"replace": ["const onCopy = { ...base };"],
-			"gate": ["bash", "run.sh", "check-pi-durable-beside"],
-			"timeoutSeconds": 300,
-			"signature": "[QK:PI-DURABLE-RUNTIME-READ-ONLY]",
-			"signatureSource": "pi-extensions/lib/pi-durable-runtime.test.ts",
-			"build": {
-				"argv": ["bash", "scripts/build-bridge.sh"],
-				"output": "mcp/entwurf-bridge/dist"
-			}
-		},
-		{
-			"claim": "PI-DURABLE-RUNTIME-LOCATOR-FIXED",
-			"title": "a relative XDG_DATA_HOME is honoured, so the runtime's one fixed place follows the caller's cwd",
-			"subject": "pi-extensions/lib/pi-durable-runtime.ts",
-			"find": [" && xdg.length > 0 && path.isAbsolute(xdg)) {"],
-			"replace": [" && xdg.length > 0) {"],
-			"gate": ["bash", "run.sh", "check-pi-durable-beside"],
-			"timeoutSeconds": 300,
-			"signature": "[QK:PI-DURABLE-RUNTIME-LOCATOR-FIXED]",
-			"signatureSource": "pi-extensions/lib/pi-durable-runtime.test.ts",
-			"build": {
-				"argv": ["bash", "scripts/build-bridge.sh"],
-				"output": "mcp/entwurf-bridge/dist"
-			}
-		},
-		{
-			"claim": "PI-DURABLE-RUNTIME-STAGED-DRIFT",
-			"title": "the index == HEAD term leaves the verdict, so a staged change behind an equal worktree diff verifies as the pin",
-			"subject": "pi-extensions/lib/pi-durable-runtime.ts",
-			"find": ["\tif (!facts.indexMatchesHead) return \"pi-durable-runtime-pin-drift\";\n"],
-			"replace": [""],
-			"gate": ["bash", "run.sh", "check-pi-durable-beside"],
-			"timeoutSeconds": 300,
-			"signature": "[QK:PI-DURABLE-RUNTIME-STAGED-DRIFT]",
-			"signatureSource": "pi-extensions/lib/pi-durable-runtime.test.ts",
-			"build": {
-				"argv": ["bash", "scripts/build-bridge.sh"],
-				"output": "mcp/entwurf-bridge/dist"
-			}
-		},
-		{
 			"claim": "PI-DURABLE-ENTRY-GUARD-FLOOR-SAFE",
 			"title": "the verifier's entry guard goes back to import.meta.main, which the floor's runner can misread as the process entry",
 			"subject": "pi-extensions/lib/pi-durable-runtime.ts",
@@ -87,38 +12,6 @@
 			"timeoutSeconds": 300,
 			"signature": "[QK:PI-DURABLE-ENTRY-GUARD-FLOOR-SAFE]",
 			"signatureSource": "pi-extensions/meta-bridge-pi-durable.test.ts",
-			"build": {
-				"argv": ["bash", "scripts/build-bridge.sh"],
-				"output": "mcp/entwurf-bridge/dist"
-			}
-		},
-		{
-			"claim": "PI-DURABLE-RUNTIME-CONFIG-NEUTRAL",
-			"title": "the diff's blank-context spacing is left to the runtime's git configuration again, so a config can move the verdict",
-			"subject": "pi-extensions/lib/pi-durable-runtime.ts",
-			"find": [
-				"[\"-c\", \"core.abbrev=8\", \"-c\", \"diff.suppressBlankEmpty=false\", \"diff\", ...PI_DURABLE_DIFF_SHAPE]"
-			],
-			"replace": ["[\"-c\", \"core.abbrev=8\", \"diff\", ...PI_DURABLE_DIFF_SHAPE]"],
-			"gate": ["bash", "run.sh", "check-pi-durable-beside"],
-			"timeoutSeconds": 300,
-			"signature": "[QK:PI-DURABLE-RUNTIME-CONFIG-NEUTRAL]",
-			"signatureSource": "pi-extensions/lib/pi-durable-runtime.test.ts",
-			"build": {
-				"argv": ["bash", "scripts/build-bridge.sh"],
-				"output": "mcp/entwurf-bridge/dist"
-			}
-		},
-		{
-			"claim": "PI-DURABLE-RUNTIME-GATES-CONSUME-INDEX-TERM",
-			"title": "the contact gate's tracked-overlay assertion loses the index term, so it certifies a runtime tree it never saw",
-			"subject": "scripts/check-pi-durable-contact.ts",
-			"find": ["facts.gitAnswered && facts.indexMatchesHead && facts.diffEqualsPatch && facts.untracked"],
-			"replace": ["facts.gitAnswered && facts.diffEqualsPatch && facts.untracked"],
-			"gate": ["bash", "run.sh", "check-pi-durable-beside"],
-			"timeoutSeconds": 300,
-			"signature": "[QK:PI-DURABLE-RUNTIME-GATES-CONSUME-INDEX-TERM]",
-			"signatureSource": "pi-extensions/lib/pi-durable-runtime.test.ts",
 			"build": {
 				"argv": ["bash", "scripts/build-bridge.sh"],
 				"output": "mcp/entwurf-bridge/dist"
@@ -385,6 +278,309 @@
 				"argv": ["bash", "scripts/build-bridge.sh"],
 				"output": "mcp/entwurf-bridge/dist"
 			}
+		},
+		{
+			"claim": "PI-DURABLE-CARRIER-RELOCATION-TWO-RULES",
+			"title": "a carrier file's import of a sibling keeps its .ts specifier, so the installed carrier asks Node for a file that was never emitted",
+			"subject": "pi/pi-durable/carrier-relocation.mjs",
+			"find": ["return `./${name}`;"],
+			"replace": ["return spec;"],
+			"gate": ["bash", "run.sh", "check-pi-durable-beside"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PI-DURABLE-CARRIER-RELOCATION-TWO-RULES]",
+			"signatureSource": "pi-extensions/lib/pi-durable-carrier.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "PI-DURABLE-CARRIER-RELOCATION-REFUSES",
+			"title": "the emitter stops counting specifier openings against recognized statements, so a dynamic or single-quoted import escapes the relocation unrewritten",
+			"subject": "pi/pi-durable/carrier-relocation.mjs",
+			"find": ["if (begun !== statements) {"],
+			"replace": ["if (false) {"],
+			"gate": ["bash", "run.sh", "check-pi-durable-beside"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PI-DURABLE-CARRIER-RELOCATION-REFUSES]",
+			"signatureSource": "pi-extensions/lib/pi-durable-carrier.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "PI-DURABLE-CARRIER-RESOLVE-DECLARED",
+			"title": "the resolver maps a declared target one directory above the package's dist, so every carrier internal import binds a file the pin never named",
+			"subject": "pi/pi-durable/carrier-relocation.mjs",
+			"find": ["return pathToFileURL(file).href;"],
+			"replace": ["return pathToFileURL(path.join(dist(), \"..\", target)).href;"],
+			"gate": ["bash", "run.sh", "check-pi-durable-beside"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PI-DURABLE-CARRIER-RESOLVE-DECLARED]",
+			"signatureSource": "pi-extensions/lib/pi-durable-carrier.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "PI-DURABLE-CARRIER-RESOLVE-REFUSES",
+			"title": "the resolver only asks that a parent be somewhere under the carrier directory, so an undeclared or nested file there may reach pi-coding-agent internals",
+			"subject": "pi/pi-durable/carrier-relocation.mjs",
+			"find": ["if (!files.includes(parent)) {"],
+			"replace": ["if (parent === \"\") {"],
+			"gate": ["bash", "run.sh", "check-pi-durable-beside"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PI-DURABLE-CARRIER-RESOLVE-REFUSES]",
+			"signatureSource": "pi-extensions/lib/pi-durable-carrier.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "PI-DURABLE-CARRIER-HOST-ROOT",
+			"title": "the coding-agent root is taken from any package directory above the root export, so a different package named in that place becomes the dist the carrier binds",
+			"subject": "pi/pi-durable/carrier-relocation.mjs",
+			"find": ["if (name !== CODING_AGENT) {"],
+			"replace": ["if (false) {"],
+			"gate": ["bash", "run.sh", "check-pi-durable-beside"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PI-DURABLE-CARRIER-HOST-ROOT]",
+			"signatureSource": "pi-extensions/lib/pi-durable-carrier.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "PI-DURABLE-CARRIER-PIN-MATCHES",
+			"title": "the pin records a digest the committed carrier file does not carry, so a carrier edited after emission would still be the declared one",
+			"subject": "pi/pi-durable/overlay/upstream-pin.json",
+			"find": ["\"sha256\": \"ca0ee10dc904a57d46bb33b37fcc4efe48dfa08b2f0d10e79e7bc22136871f0a\""],
+			"replace": ["\"sha256\": \"0000000000000000000000000000000000000000000000000000000000000000\""],
+			"gate": ["bash", "run.sh", "check-pi-durable-beside"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PI-DURABLE-CARRIER-PIN-MATCHES]",
+			"signatureSource": "pi-extensions/lib/pi-durable-carrier.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "PI-DURABLE-CARRIER-PIN-MALFORMED",
+			"title": "the carrier declaration no longer requires plain file names, so a pin naming ../escape.js is accepted and the resolver answers a path outside the carrier",
+			"subject": "pi/pi-durable/carrier-relocation.mjs",
+			"find": ["if (!names?.every(plain) || names.length === 0"],
+			"replace": ["if (!names || names.length === 0"],
+			"gate": ["bash", "run.sh", "check-pi-durable-beside"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PI-DURABLE-CARRIER-PIN-MALFORMED]",
+			"signatureSource": "pi-extensions/lib/pi-durable-carrier.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "PI-DURABLE-CARRIER-EMIT-NO-REPLACE",
+			"title": "the emitter reads source objects without --no-replace-objects, so a refs/replace entry in the maintainer's repository stands in for a pinned file",
+			"subject": "scripts/emit-pi-durable-carrier.ts",
+			"find": ["return [\"--no-replace-objects\", \"-C\", source, ...args];"],
+			"replace": ["return [\"-C\", source, ...args];"],
+			"gate": ["bash", "run.sh", "check-pi-durable-beside"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PI-DURABLE-CARRIER-EMIT-NO-REPLACE]",
+			"signatureSource": "pi-extensions/lib/pi-durable-carrier.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "PI-DURABLE-RUNTIME-VERIFIED",
+			"title": "the verifier stops walking from each member to its own member dependencies, so only the carrier's direct edges are ever compared",
+			"subject": "pi-extensions/lib/pi-durable-runtime.ts",
+			"find": ["\t\tif (name in pin.members && edge.at !== null) pending.push({ name, at: edge.at });\n"],
+			"replace": [""],
+			"gate": ["bash", "run.sh", "check-pi-durable-beside"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PI-DURABLE-RUNTIME-VERIFIED]",
+			"signatureSource": "pi-extensions/lib/pi-durable-runtime.test.ts",
+			"build": {
+				"argv": ["bash", "scripts/build-bridge.sh"],
+				"output": "mcp/entwurf-bridge/dist"
+			}
+		},
+		{
+			"claim": "PI-DURABLE-RUNTIME-PACKAGE-INCOMPLETE",
+			"title": "a missing carrier resolver or relocation grammar is no longer an incomplete package, so the launcher prints a resolver path that does not exist",
+			"subject": "pi-extensions/lib/pi-durable-runtime.ts",
+			"find": ["for (const at of [layout.resolver, layout.relocation]) {"],
+			"replace": ["for (const at of [] as string[]) {"],
+			"gate": ["bash", "run.sh", "check-pi-durable-beside"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PI-DURABLE-RUNTIME-PACKAGE-INCOMPLETE]",
+			"signatureSource": "pi-extensions/lib/pi-durable-runtime.test.ts",
+			"build": {
+				"argv": ["bash", "scripts/build-bridge.sh"],
+				"output": "mcp/entwurf-bridge/dist"
+			}
+		},
+		{
+			"claim": "PI-DURABLE-RUNTIME-CARRIER-DRIFT",
+			"title": "a carrier file whose bytes are not the pinned ones verifies, so an edited app runs as the emitted one",
+			"subject": "pi-extensions/lib/pi-durable-runtime.ts",
+			"find": ["else if (sha256(fs.readFileSync(at)) !== file.sha256) drifted.push("],
+			"replace": ["else if (false) drifted.push("],
+			"gate": ["bash", "run.sh", "check-pi-durable-beside"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PI-DURABLE-RUNTIME-CARRIER-DRIFT]",
+			"signatureSource": "pi-extensions/lib/pi-durable-runtime.test.ts",
+			"build": {
+				"argv": ["bash", "scripts/build-bridge.sh"],
+				"output": "mcp/entwurf-bridge/dist"
+			}
+		},
+		{
+			"claim": "PI-DURABLE-RUNTIME-SDK-ABSENT",
+			"title": "a declared package that resolves nothing is no longer named absent and reads as a version mismatch",
+			"subject": "pi-extensions/lib/pi-durable-runtime.ts",
+			"find": ["if (absent !== undefined) return { reason: \"pi-durable-sdk-absent\", detail: edgeText(absent) };"],
+			"replace": [""],
+			"gate": ["bash", "run.sh", "check-pi-durable-beside"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PI-DURABLE-RUNTIME-SDK-ABSENT]",
+			"signatureSource": "pi-extensions/lib/pi-durable-runtime.test.ts",
+			"build": {
+				"argv": ["bash", "scripts/build-bridge.sh"],
+				"output": "mcp/entwurf-bridge/dist"
+			}
+		},
+		{
+			"claim": "PI-DURABLE-RUNTIME-SDK-MISMATCH",
+			"title": "only the carrier's own edges are compared, so a member binding another version of a member through its nested copy verifies",
+			"subject": "pi-extensions/lib/pi-durable-runtime.ts",
+			"find": ["const mismatch = facts.edges.find((e) => e.got !== e.want || e.name !== e.to);"],
+			"replace": [
+				"const mismatch = facts.edges.find((e) => e.from === \"carrier\" && (e.got !== e.want || e.name !== e.to));"
+			],
+			"gate": ["bash", "run.sh", "check-pi-durable-beside"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PI-DURABLE-RUNTIME-SDK-MISMATCH]",
+			"signatureSource": "pi-extensions/lib/pi-durable-runtime.test.ts",
+			"build": {
+				"argv": ["bash", "scripts/build-bridge.sh"],
+				"output": "mcp/entwurf-bridge/dist"
+			}
+		},
+		{
+			"claim": "PI-DURABLE-RUNTIME-SHARED-COPY-PASSES",
+			"title": "a same-version copy shared from above the package is treated as absent, so an ordinary hoisted install of the pinned set is refused",
+			"subject": "pi-extensions/lib/pi-durable-runtime.ts",
+			"find": ["\t\tconst edge = resolveEdge(\"carrier\", name, want, base);\n"],
+			"replace": [
+				"\t\tconst edge = ((e) => (e.at !== null && !e.at.startsWith(layout.root) ? { ...e, got: null } : e))(resolveEdge(\"carrier\", name, want, base));\n"
+			],
+			"gate": ["bash", "run.sh", "check-pi-durable-beside"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PI-DURABLE-RUNTIME-SHARED-COPY-PASSES]",
+			"signatureSource": "pi-extensions/lib/pi-durable-runtime.test.ts",
+			"build": {
+				"argv": ["bash", "scripts/build-bridge.sh"],
+				"output": "mcp/entwurf-bridge/dist"
+			}
+		},
+		{
+			"claim": "PI-DURABLE-RUNTIME-READ-ONLY",
+			"title": "verifying leaves a marker in the installed carrier directory, so a read-only check mutates the package it certifies",
+			"subject": "pi-extensions/lib/pi-durable-runtime.ts",
+			"find": ["\tconst facts = inspectPiDurableRuntime(layout);\n\tconst verdict = piDurableRuntimeVerdict(facts);"],
+			"replace": [
+				"\tfs.writeFileSync(path.join(layout.carrierDir, \".verified\"), \"\");\n\tconst facts = inspectPiDurableRuntime(layout);\n\tconst verdict = piDurableRuntimeVerdict(facts);"
+			],
+			"gate": ["bash", "run.sh", "check-pi-durable-beside"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PI-DURABLE-RUNTIME-READ-ONLY]",
+			"signatureSource": "pi-extensions/lib/pi-durable-runtime.test.ts",
+			"build": {
+				"argv": ["bash", "scripts/build-bridge.sh"],
+				"output": "mcp/entwurf-bridge/dist"
+			}
+		},
+		{
+			"claim": "PI-DURABLE-RUNTIME-CHECKOUT-CARRIER",
+			"title": "a committed carrier file is edited by hand after emission, so the checkout ships app bytes its pin does not record",
+			"subject": "pi/pi-durable/carrier/sessions.js",
+			"find": ["import lockfile from \"proper-lockfile\";"],
+			"replace": ["import lockfile from \"proper-lockfile\"; // edited"],
+			"gate": ["bash", "run.sh", "check-pi-durable-beside"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PI-DURABLE-RUNTIME-CHECKOUT-CARRIER]",
+			"signatureSource": "pi-extensions/lib/pi-durable-runtime.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "PI-DURABLE-RUNTIME-CLI-EXITS",
+			"title": "a refused carrier exits 0 from resolve, so the launcher execs node under whatever the refusal printed",
+			"subject": "pi-extensions/lib/pi-durable-runtime.ts",
+			"find": ["\treturn PI_DURABLE_RUNTIME_EXIT.refused;\n}"],
+			"replace": ["\treturn PI_DURABLE_RUNTIME_EXIT.verified;\n}"],
+			"gate": ["bash", "run.sh", "check-pi-durable-beside"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PI-DURABLE-RUNTIME-CLI-EXITS]",
+			"signatureSource": "pi-extensions/lib/pi-durable-runtime.test.ts",
+			"build": {
+				"argv": ["bash", "scripts/build-bridge.sh"],
+				"output": "mcp/entwurf-bridge/dist"
+			}
+		},
+		{
+			"claim": "PI-DURABLE-RUNTIME-REACHABLE-CLOSURE",
+			"title": "the walk stops at the members the carrier finds itself, so a same-version nested copy's own wrong-version dependency verifies",
+			"subject": "pi-extensions/lib/pi-durable-runtime.ts",
+			"find": ["\t\t\tif (edge.at !== null) pending.push({ name: dep, at: edge.at });\n"],
+			"replace": [""],
+			"gate": ["bash", "run.sh", "check-pi-durable-beside"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PI-DURABLE-RUNTIME-REACHABLE-CLOSURE]",
+			"signatureSource": "pi-extensions/lib/pi-durable-runtime.test.ts",
+			"build": {
+				"argv": ["bash", "scripts/build-bridge.sh"],
+				"output": "mcp/entwurf-bridge/dist"
+			}
+		},
+		{
+			"claim": "PI-DURABLE-RUNTIME-PACKAGE-IDENTITY",
+			"title": "an edge is judged by version alone, so a different package that happens to carry the pinned version stands in for the member",
+			"subject": "pi-extensions/lib/pi-durable-runtime.ts",
+			"find": [" || e.name !== e.to);"],
+			"replace": [");"],
+			"gate": ["bash", "run.sh", "check-pi-durable-beside"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PI-DURABLE-RUNTIME-PACKAGE-IDENTITY]",
+			"signatureSource": "pi-extensions/lib/pi-durable-runtime.test.ts",
+			"build": {
+				"argv": ["bash", "scripts/build-bridge.sh"],
+				"output": "mcp/entwurf-bridge/dist"
+			}
+		},
+		{
+			"claim": "PI-DURABLE-RUNTIME-SHARED-WALKED-ONCE",
+			"title": "a copy reached by two paths is walked twice, so its edges are reported twice and a member cycle never ends",
+			"subject": "pi-extensions/lib/pi-durable-runtime.ts",
+			"find": ["\t\tif (walked.has(next.at)) continue;\n"],
+			"replace": [""],
+			"gate": ["bash", "run.sh", "check-pi-durable-beside"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PI-DURABLE-RUNTIME-SHARED-WALKED-ONCE]",
+			"signatureSource": "pi-extensions/lib/pi-durable-runtime.test.ts",
+			"build": {
+				"argv": ["bash", "scripts/build-bridge.sh"],
+				"output": "mcp/entwurf-bridge/dist"
+			}
+		},
+		{
+			"claim": "PI-DURABLE-GATE-OPERATOR-GUARD-INVARIANT",
+			"title": "the registration snapshot keeps names but not bytes, so an edit to an existing pi-durable record under the same filename passes the guard",
+			"subject": "scripts/lib/pi-durable-operator-guard.ts",
+			"find": ["if (fs.lstatSync(file).isFile() && keep(name)) out[name] = sha256(file);"],
+			"replace": ["if (fs.lstatSync(file).isFile() && keep(name)) out[name] = \"\";"],
+			"gate": ["bash", "run.sh", "check-pi-durable-beside"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PI-DURABLE-GATE-OPERATOR-GUARD-INVARIANT]",
+			"signatureSource": "pi-extensions/lib/pi-durable-runtime.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "PI-DURABLE-GATE-OPERATOR-GUARD-WIRED",
+			"title": "the contact gate compares the operator snapshot with itself, so a run that changed the operator's registrations still passes its guard",
+			"subject": "scripts/check-pi-durable-contact.ts",
+			"find": ["operatorSnapshotUnchanged(operatorBefore, operatorPiDurableSnapshot(operatorAgent)),"],
+			"replace": ["operatorSnapshotUnchanged(operatorBefore, operatorBefore),"],
+			"gate": ["bash", "run.sh", "check-pi-durable-beside"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PI-DURABLE-GATE-OPERATOR-GUARD-WIRED]",
+			"signatureSource": "pi-extensions/lib/pi-durable-runtime.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
 		}
 	]
 }

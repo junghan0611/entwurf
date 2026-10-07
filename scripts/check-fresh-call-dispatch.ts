@@ -140,7 +140,7 @@ async function main(): Promise<void> {
 
 	// #129: pi-durable joined the tmux fresh set, NOT the herdr pilot set (GLG, 2026-10-06: no herdr
 	// pi-durable support in 0.31). Same axis as the codex cell: refused by the herdr reason, nothing
-	// spawned, no tmux fallback, and its operator-runtime preflight is never asked on this branch.
+	// spawned, no tmux fallback, and its installed-carrier preflight is never asked on this branch.
 	const durable = recordingSpawn();
 	const durableRefused = await dispatchFreshCall(
 		{ ...REQUEST, backend: "pi-durable", model: "loopback/scripted" },

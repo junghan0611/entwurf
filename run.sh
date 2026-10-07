@@ -132,10 +132,10 @@ Usage:
   ./run.sh check-mailbox-receipt-state # deterministic gate (0.11 Stage 0 step 3B): mailbox receipt state schema + store (stamp→persist→read-back) in a temp mailbox, strict keyset, no API
   ./run.sh check-copilot-birth-hook   # #82 gate: drives the real Copilot assembler into a temp dir, fires the baked launcher with NO ARGV (the way Copilot's `exec`-string schema forces), and requires a backend:"copilot" v3 record + attach + peer row + a SENDER marker the resolver joins back to that record, and still zero mailbox/receiver marker (who-sent needs a shared parent; a receiver needs a doorbell this backend has not got). Hermetic; no Copilot, no model turn
   ./run.sh check-omp-birth-hook       # #87 gate: drives the real OMP assembler into a temp dir, imports the ASSEMBLED index.ts into a MOCK omp host and fires session_start/session_switch. tui mints one backend:"omp" record + a sender marker keyed to the host's OWN pid (the one-process join) + the garden id on the status line; print/rpc/json mint NOTHING (hasUI is true on the rpc rows, as in the vendor); switch attaches on the same native id and mints the replacement on a new one; the CERTIFIED receiver reader still finds no marker. Also the four-root joint binding: extension and omp-labeled bridge child resolve the same sessions/mailbox/senders/receivers bundle against test-built literals (never the production resolver as its own oracle), under a poisoned PI_CODING_AGENT_DIR and under four distinct ENTWURF_META_* overrides; the override grammar is absolute-or-~ and both halves plus the doctor refuse anything else by name; and a drifted provenance label selects no root policy at all. Hermetic; no omp, no model turn
-  ./run.sh check-pi-durable-contact   # #129 L-identity gate, CHECKOUT-ONLY (an installed package refuses it in run_ts). Opens the REAL durable app from a provisioned overlay checkout (ENTWURF_PI_DURABLE_RUNTIME: tracked tree = pin + patch exactly, git-ignored model data = the pin's recorded digest) with the pi-durable contact, births the citizen and runs its tools adapter-direct through a privately emitted branch bridge (ENTWURF_PI_DURABLE_BRIDGE_ENTRY; its registry must match this checkout). Matrix roots {default, explicit} x {fresh, --continue}: one record keyed by the durable session dir, sender marker on the spawned host pid, exactly one bridge child whose /proc PPID is that host, poisoned identity carriers kept from it, its four root carriers bound to the roots written, the receiver ARMED (raw marker owned by the host pid + start key as pi-durable-host, joined to the sender marker; removed on close), self = the record and replyable, peers from an outside bridge, same garden id on reopen; the bundle's compiled owner join must admit pi-durable-host. Reaps only the host/bridges it owns on any failure. Harness-bypassed: no model turn, no ToolTask. Missing inputs → SKIP (97), never a pass
-  ./run.sh check-pi-durable-send      # #129 L-send FIRST CELL, CHECKOUT-ONLY. Same two inputs as check-pi-durable-contact. One native durable turn: the app's own controller input → GenerationTask → ToolTask → the contact's entwurf_v2 → the private bridge → a seeded self-fetch target (C2 recipe, owned by a separate idle child). S = a 127.0.0.1 scripted OpenAI-compatible endpoint configured through the app's documented models.json (dummy key, PI_OFFLINE); H = the native ToolTask path; V (a vendor turn) is NOT run. Oracles: the wire (tools offered, v2 schema = the bridge's tools/list, exactly two requests, the tool result + receipt in the second), the raw mailbox (.msg 1, signal, sender = the host record), the native view (one call, its settled result, root current). Not exactly-once, not recovery, not a recipient turn. Missing inputs → SKIP (97)
-  ./run.sh check-pi-durable-beside    # #129 mutant execution coordinate (VERIFY rule 3): run_vitest over the four pi-durable beside tests (adapter, runtime, preflight, owner join) — the pi-durable qualification lane's gate argv. Same files check-tests-beside-behavior already runs.
-  ./run.sh check-pi-durable-receive   # #129 L-receive FIRST CELL, CHECKOUT-ONLY. Same two inputs (the bundle must carry the pi-durable-host owner join). The host driver gives the app NO input; a seeded claude-code sender (marker owned by a separate idle child, handed to a gate-owned sending bridge through ENTWURF_META_SENDER_MARKER) enqueues one message, the host's doorbell admits its notice to the ROOT conversation, and the scripted model drains it with entwurf_inbox_read. S withholds response #1 until the ENQUEUE receipt, the .delivered bytes, the signal, the host-owned receiver marker and the notice are captured. Oracles: receiver() admission, native view, raw archive (.delivered.read + lastReadAt), wire (exactly two requests, drain result = view), and after a green reap a forensic read-only SQLite copy (submission row by request id = reported id, root, input, done, placed entry = the notice). V NOT run. Missing inputs → SKIP (97)
+  ./run.sh check-pi-durable-contact   # #129 L-identity gate, CHECKOUT-ONLY (an installed package refuses it in run_ts). Opens the REAL durable app from THIS checkout's verified carrier (pi/pi-durable/carrier/ under its resolver, against the checkout's pinned pi SDK set — refused by name first) with the pi-durable contact, births the citizen and runs its tools adapter-direct through a privately emitted branch bridge (ENTWURF_PI_DURABLE_BRIDGE_ENTRY; its registry must match this checkout). Matrix roots {default, explicit} x {fresh, --continue}: one record keyed by the durable session dir, sender marker on the spawned host pid, exactly one bridge child whose /proc PPID is that host, poisoned identity carriers kept from it, its four root carriers bound to the roots written, the receiver ARMED (raw marker owned by the host pid + start key as pi-durable-host, joined to the sender marker; removed on close), self = the record and replyable, peers from an outside bridge, same garden id on reopen; the bundle's compiled owner join must admit pi-durable-host. Reaps only the host/bridges it owns on any failure. Harness-bypassed: no model turn, no ToolTask. Missing inputs → SKIP (97), never a pass
+  ./run.sh check-pi-durable-send      # #129 L-send FIRST CELL, CHECKOUT-ONLY. Same input as check-pi-durable-contact. One native durable turn: the app's own controller input → GenerationTask → ToolTask → the contact's entwurf_v2 → the private bridge → a seeded self-fetch target (C2 recipe, owned by a separate idle child). S = a 127.0.0.1 scripted OpenAI-compatible endpoint configured through the app's documented models.json (dummy key, PI_OFFLINE); H = the native ToolTask path; V (a vendor turn) is NOT run. Oracles: the wire (tools offered, v2 schema = the bridge's tools/list, exactly two requests, the tool result + receipt in the second), the raw mailbox (.msg 1, signal, sender = the host record), the native view (one call, its settled result, root current). Not exactly-once, not recovery, not a recipient turn. Missing inputs → SKIP (97)
+  ./run.sh check-pi-durable-beside    # #129 mutant execution coordinate (VERIFY rule 3): run_vitest over the five pi-durable beside tests (adapter, carrier/SDK-set verifier, preflight, owner join, carrier relocation/resolver/emitter) — the pi-durable qualification lane's gate argv. Same files check-tests-beside-behavior already runs.
+  ./run.sh check-pi-durable-receive   # #129 L-receive FIRST CELL, CHECKOUT-ONLY. Same input (the bundle must carry the pi-durable-host owner join). The host driver gives the app NO input; a seeded claude-code sender (marker owned by a separate idle child, handed to a gate-owned sending bridge through ENTWURF_META_SENDER_MARKER) enqueues one message, the host's doorbell admits its notice to the ROOT conversation, and the scripted model drains it with entwurf_inbox_read. S withholds response #1 until the ENQUEUE receipt, the .delivered bytes, the signal, the host-owned receiver marker and the notice are captured. Oracles: receiver() admission, native view, raw archive (.delivered.read + lastReadAt), wire (exactly two requests, drain result = view), and after a green reap a forensic read-only SQLite copy (submission row by request id = reported id, root, input, done, placed entry = the notice). V NOT run. Missing inputs → SKIP (97)
   ./run.sh check-copilot-receive-arm  # #82 RAIL 5 gate: the REAL receiver installer + the REAL extension.mjs forked with a stubbed SDK. Arms only after birth, marker owned by the WATCHER pid, self-fetch dispatch answer, doorbell carries the garden id and NOT the body, id-drift/foreign-parent refusals. Hermetic; no Copilot, no model turn
   ./run.sh check-copilot-launch       # #82 RAIL 7 gate: the MANAGED launch `entwurf copilot`, driven through its public address against a FAKE VENDOR on a sandbox PATH. Receiver precondition refusals, EXTENSIONS token + operator token preservation, injected defaults before the `--` terminator, byte-identical argv, the 11 explicit permission/surface policy overrides that suppress `--yolo`, exec (not fork) pid identity, exit passthrough, recursion refusal. Hermetic; no Copilot, no model turn
   ./run.sh check-codex-app-server-launch # #95 gate: the MANAGED app-server launch `entwurf codex-app-server`, driven through its public address against a FAKE VENDOR on a sandbox PATH. The injected `app-server --listen unix://<socket>` required to equal the product's own resolveCodexDefaultSocketPath over an env matrix that includes the inputs a bash transcription was MEASURED to diverge on (BOM-only CODEX_HOME, trailing slash, `..`), non-absolute and control-character addresses refused before any write, byte-identical operator argv, exec (not fork) parent identity, exit passthrough, live-socket and indeterminate-socket and second---listen and recursion refusals, dead-socket launch-over, the tmux fact line, and both identity carriers stripped. Hermetic; no Codex, no app-server, no model turn
@@ -226,7 +226,7 @@ Usage:
   ./run.sh uninstall-meta-bridge      # 1.0.0 meta-bridge Phase 2: stateful GLOBAL uninstall (restore only keys/items captured in install-state)
   ./run.sh doctor-meta-bridge         # THE RELEASE ORACLE (#51, Linux-certified repair axis). exit 0 = every required layer was MEASURED on this Linux host: toolchain + state + plugin/MCP + resolved-artifact launch-form classification (all 3 owner hooks + doorbell static contract) + synthetic owner join + store scan + hook errors + SessionStart evidence + REQUIRED live MCP↔marker join + writer-version parity. Missing live evidence is NOT CERTIFIED (open a Claude session and re-run), never a pass; Darwin is NOT CERTIFIED and stays nonzero, on ONE narrowed reason — start-key and ppid are portable there (`ps` fallback, same string the TS core mints), so what holds the lane closed is per-process environment DISCOVERY alone, pending physical-host evidence. Detection power is held by check-meta-doctor-oracle
   ./run.sh copilot [args...]          # #82 RAIL 7: the MANAGED Copilot launch. exec()s the vendor CLI in THIS terminal (cwd/pid/exit preserved) with COPILOT_CLI_ENABLED_FEATURE_FLAGS=EXTENSIONS set for that one invocation — entwurf owns no part of your shell and writes nothing to it, but it owns the process it is about to become. Without that flag Copilot skips the extension scan SILENTLY. Refuses to launch unless the receiver unit is actually installed. Injects `--model auto` when no --model was given and `--yolo` when no explicit permission/surface policy flag was given, both BEFORE any `--`; every argument you pass is forwarded byte-identical. RUNNING THIS IS YOUR CONSENT to that profile — use plain `copilot` for stock vendor behaviour. Not tmux, not fresh-call, mints no citizen (birth is still the first prompt)
-  ./run.sh pi-durable [args...]       # #129: the MANAGED durable launch. Locates the operator-provided durable runtime at its ONE fixed place ($XDG_DATA_HOME/entwurf/pi-durable/runtime, else ~/.local/share/...), refuses by name unless it is the packaged pin (HEAD, exact overlay patch, no untracked file, pinned model data), then exec()s node under THAT runtime's source resolver with the packaged bootstrap (pi/pi-durable/bootstrap.mjs) in this terminal. A new session needs --provider <p> --model <exact catalog id> --width task-wide [--entwurf-bootstrap <{v:2,task}>]; --continue takes none of them. Entwurf never installs, repairs or moves the runtime
+  ./run.sh pi-durable [args...]       # #129/#130: the MANAGED durable launch. Verifies this package's pi-durable CARRIER (pi/pi-durable/carrier/, the pinned upstream app emitted by the maintainer) and the pi SDK set it resolves — every declared member/direct edge at exactly the pinned version — refusing by name (package-incomplete / carrier-drift / sdk-absent / sdk-mismatch, exit 3), then exec()s node under the carrier resolver with the packaged bootstrap (pi/pi-durable/bootstrap.mjs) in this terminal. A new session needs --provider <p> --model <exact catalog id> --width task-wide [--entwurf-bootstrap <{v:2,task}>]; --continue takes none of them. Nothing outside the package is located, installed or repaired
   ./run.sh install-copilot-bridge     # #82: GLOBAL install of the Copilot BIRTH plugin (own marketplace root; node+entry baked into the no-argv exec string). MCP wiring and the RECEIVER extension are separate install surfaces (install-copilot-mcp, install-copilot-receive). Also retires the stale Claude unit (--keep-stale-claude-unit opts out)
   ./run.sh uninstall-copilot-bridge   # #86 C3a: honest inverse of install-copilot-bridge from the package-owned install-state (exact qualified id + exact marketplace name/path + recorded assembly only; state deleted LAST; a failing vendor list is UNKNOWN and refuses; never --force, never the stale Claude unit)
   ./run.sh doctor-copilot-bridge      # #82/#86: fail-loud surface for that unit — runtime axis (red = a hook that RAN and failed, or a broken/unbaked artifact; "installed with zero records" is NOT red and is reported as NOT-YET: a Copilot session is born on its FIRST PROMPT, not when the window opens, measured) + ownership axis (install-state shape/binding, marketplace path drift, UNKNOWN vendor lists; legacy no-state install = named non-green, repair = install-copilot-bridge adoption). Either axis red = red
@@ -282,13 +282,13 @@ Usage:
   ./run.sh peer-facts                 # #116 M2-a owner-normalized READ-ONLY peer projection: the same listEntwurfFacts provider through the same renderer entwurf_peers uses, emitted as deterministic JSON {schemaVersion:1, storeDir, peers, diagnostics} so a consumer never re-implements the placement join (whose pi half is a measured vendor floor). NOT the same bytes as an entwurf_peers call and deliberately so: that surface is a human listing (observationLimit, text over the wire), this is a machine projection with UNBOUNDED observation, because a rationed row says `unobserved` and a machine cannot tell that from "nobody could look". `placement` stays a STRUCTURED tagged union ({kind:"herdr-pane",paneId} / unobserved / none / ambiguous) — never the human `herdr <pane>` string. Publishes NO socket coordinate (ENTWURF_DIR selects what is PROBED, #50 C4) and NO herdr agent_status / interactive_ready / screen text. One placement read per listing, no watcher. EXIT: 0 readable (diagnostics in-band; missing store = empty), 2 usage, 3 unreadable ([dir])
   ./run.sh meta-bridge-managed-keys   # 0.10.0 meta-bridge: print the SSOT of settings keys entwurf OWNS (consumers read this to stay disjoint — keyset-owner invariant)
   ./run.sh check-keyset-overlap <fragment.json...>  # 0.10.0 meta-bridge: PREVENTIVE keyset guard — fail if a consumer fragment collides with any pi-owned key (cross-repo; not in pnpm check)
-  ./run.sh check-dep-versions         # local deterministic check that the pi pin agrees across package.json (devDeps + peer range), run.sh (peer-install pins), and the baseline docs (AGENTS/README/ROADMAP/setup-clean-host/demo)
+  ./run.sh check-dep-versions         # local deterministic check that the pi pin agrees across the durable pin's SDK set, package.json (exact production dependencies, no Earendil dev/peer duplicate), run.sh (install pins), the workspace closure and the baseline docs (README/ROADMAP/setup-clean-host/demo/VERIFY/herdr/acp)
   ./run.sh check-node-floor-coherence # binds the Node floor (24+, single axis) across engines.node, run.sh setup preflight, meta-bridge install/doctor judgment logic, clean-host docs, the bridge launcher header, and the CI runner node-version — engines.node is the SSOT, everything else is derived; sweeps tracked contract text for an unregistered declaration
   ./run.sh check-pack                 # publish gate (dry-run): npm pack --dry-run + tarball invariants (runtime-critical present, dev residue absent)
   ./run.sh check-pack-pin-matcher     # pure self-test of check-pack-install's pin-leak matcher against synthetic .pnpm lookalikes, one cell per property: version boundary (a prefix-extended @0.86.0-beta.1 and an off-pin @0.85.1 must leak, @0.86.0 bare or with any measured peer-hash must pass) and closure prefix (an off-pin @earendil-works/chord must leak — it carries no `pi-` prefix); snapshot-safe qualification oracle, also run first inside check-pack-install
   ./run.sh check-pack-consumer-roots  # pure self-test of check-pack-install's consumer sandbox: under a poisoned inherited HOME/XDG/PI_CODING_AGENT_DIR every writable root a consumer subcall sees resolves inside its own consumer home; snapshot-safe qualification oracle, also run first inside check-pack-install
   ./run.sh check-fresh-cut-gate       # SOURCE cell of the generation-boundary proof (IN pnpm run check:full): drives real install/setup/fresh-cut in a sandbox; certification refusal is pre-write, quiescence is fail-closed, archives preserve bytes, and the #54 exit matrix distinguishes complete / no-move / usage / incomplete transition / complete-with-cleanup-residue. No model/network/cost
-  ./run.sh check-pack-install         # heavy publish gate (prepublishOnly): actual npm pack + tar -tf + fresh-temp install smoke + the #116 M3-b1 herdr-plugin RUNTIME VERIFIER run against that actual installed tarball (the focused check-herdr-runtime-bootstrap drives a fixture; THIS is where the real package is proven) with the pinned pi peers (pins derived from the package.json devDep; check-dep-versions binds them) + the npm-installed bridge BOOTS (tools/list) and DELIVERS (tools/call entwurf_v2 → .msg lands) + the installed all-absent and copilot-present (four-unit fake-vendor) `entwurf setup` rows + the INSTALLED generation lifecycle on a seeded previous-generation host (REFUSE before activation writes / zero Claude invocations → installed fresh-cut archives + opens empty → install-meta-bridge PASSES) + the INSTALLED-PACKAGE branch of the Copilot and OMP birth installers actually RUN (compiled entry selected, no raw .ts, and a real birth edge mints a citizen — the half a required-artifact list can never stand in for) + the INSTALLED #129 durable bootstrap (pi/pi-durable/bootstrap.mjs) imported from node_modules: main/openDurableCitizen exported and PACKAGED_BRIDGE_ENTRY = the installed package's own dist entry — import only, no runtime/TUI/birth/bridge started
+  ./run.sh check-pack-install         # heavy publish gate (prepublishOnly): actual npm pack + tar -tf + fresh-temp install smoke + the #116 M3-b1 herdr-plugin RUNTIME VERIFIER run against that actual installed tarball (the focused check-herdr-runtime-bootstrap drives a fixture; THIS is where the real package is proven) with the pinned pi SDK (pins derived from the package.json exact production dependency; check-dep-versions binds them) + the npm-installed bridge BOOTS (tools/list) and DELIVERS (tools/call entwurf_v2 → .msg lands) + the installed all-absent and copilot-present (four-unit fake-vendor) `entwurf setup` rows + the INSTALLED generation lifecycle on a seeded previous-generation host (REFUSE before activation writes / zero Claude invocations → installed fresh-cut archives + opens empty → install-meta-bridge PASSES) + the INSTALLED-PACKAGE branch of the Copilot and OMP birth installers actually RUN (compiled entry selected, no raw .ts, and a real birth edge mints a citizen — the half a required-artifact list can never stand in for) + the INSTALLED #129 durable bootstrap (pi/pi-durable/bootstrap.mjs) imported from node_modules: main/openDurableCitizen exported and PACKAGED_BRIDGE_ENTRY = the installed package's own dist entry — import only, no runtime/TUI/birth/bridge started + the #130 pi-durable CARRIER on actual npm consumers (Entwurf-only / aligned host / isolated global): the installed verifier, a consumer-contained resolution oracle with a same-sandbox neighbour control, every physical SDK edge at the pin, a mixed tree refused as pi-durable-sdk-mismatch though it still imports, and the public `entwurf pi-durable` reaching the app's own explicit-model refusal before any birth (offline, sandbox HOME)
   ./run.sh check-install-container    # 0.12.8 (#51 C): Linux artifact-CONSUMER gate — one candidate .tgz handed read-only to a checkout-invisible node:<engines-major>-bookworm cell. Default packs once to temp; ENTWURF_CANDIDATE_TGZ=/absolute/preserved.tgz consumes those exact bytes with no re-pack and prints canonical path+sha256 for release. Non-root global PATH install, frozen package, MCP tools/list, fake-Claude install-meta-bridge, path+sha256 fence, strict doctor, and the GENERATION host-state matrix (clean / v3-only store bytes unchanged / previous-generation REFUSE→fresh-cut→retry PASS) seeded inline. Docker missing = honest SKIP; ENTWURF_REQUIRE_DOCKER=1 makes that RED (required CI)
   ./run.sh install [project-dir]      # INTERNAL part of `setup` (project .pi/settings.json wiring) + npm-consumer entry — prefer `setup`, don't call directly for dev
   ./run.sh remove [project-dir]       # remove entwurf entries from project .pi/settings.json (project scope only; global user-scope citizen left intact)
@@ -455,17 +455,12 @@ preflight_dep_integrity() {
   # still catching a pnpm dir-move that left the symlink store dangling
   # (accessSync follows the link).
   #
-  # Probe set = the BUNDLED runtime `dependencies` only. The `@earendil-works/pi-*`
-  # peer trio is intentionally EXCLUDED, and the reason depends on the lane — the old
-  # blanket claim ("the pi loader provides that runtime itself") was true for only one
-  # of them and is corrected here:
-  #   pi-managed install — pi omits peers (--legacy-peer-deps) and its own loader
-  #     supplies the runtime, so the trio is legitimately absent.
-  #   neutral npm/pnpm install — nothing supplies it. The optional peer is simply
-  #     unresolved (entwurf-preflight.ts:51), and the project-trust lane that needs it
-  #     is dead on that host. Excluding the trio from this probe is still right (a hard
-  #     require would reject every consumer install), but it is a KNOWN GAP, not proof
-  #     that the runtime is present by another route.
+  # Probe set = the non-Earendil bundled runtime `dependencies` below. The
+  # `@earendil-works/*` SDK set has been an exact production dependency since #130
+  # (before that it was an optional peer trio this probe could not require), and #130
+  # left it out of this probe: its installed integrity — every edge at the exact pin —
+  # is the pi-durable carrier verifier's subject (setup's pi-durable row and
+  # `entwurf pi-durable`), not a presence probe's.
   # pi runtime presence/version is covered by check-pi-runtime-version /
   # check-pi-import-surface, neither of which runs on a consumer host.
   local probe=(
@@ -725,7 +720,7 @@ install_user_scope() {
   # scripts/herdr-plugin-activate.mjs → `run.sh install-user-scope --plugin-runtime …`) and had no
   # version check at all, so a host pi setup would name as FAIL got its citizen written here in
   # silence. Both doors now tell the same truth, off the SAME derived range — `pi_supported_range`
-  # reads the package.json devDep pin, so there is one range in the repo and no second parser.
+  # reads the pinned SDK generation, so there is one range in the repo and no second parser.
   #
   # ABSENT pi is deliberately NOT changed here. This verb is called by an activation that has
   # already decided pi is one of its backends; inventing a presence verdict at the writer would put
@@ -983,7 +978,7 @@ smoke_pi_durable_fresh_live() {
   # offering and model are read from its native store via an online node:sqlite backup. Private
   # tmux server; REAL meta roots (one Pi + one pd minted, asserted); records/transcripts/DB kept.
   # pi-durable absent from FRESH_CALL_BACKENDS or without a mailbox rail, or LIVE!=1, is a
-  # protocol SKIP; with LIVE=1 every missing prerequisite (operator runtime, pi, tmux, bridge) FAILs.
+  # protocol SKIP; with LIVE=1 every missing prerequisite (a verified carrier, pi, tmux, bridge) FAILs.
   run_ts scripts/smoke-pi-durable-fresh-live.ts
 }
 
@@ -1302,8 +1297,9 @@ check_entwurf_bridge_boot() {
 
 check_entwurf_bridge_pi_free() {
   # 0.12.1 A-gate (static half): the entwurf-bridge MCP server must boot WITHOUT any
-  # pi package. entwurf is a harness-neutral npm package; pi is one optional adapter
-  # lane, not a boot dependency. Walks the EAGER static value-import closure of
+  # pi package. entwurf is a harness-neutral npm package; pi is one adapter lane, not a
+  # boot dependency — since #130 the pi SDK is installed (the pi-durable carrier's), but
+  # the bridge must still not import it. Walks the EAGER static value-import closure of
   # mcp/entwurf-bridge/src/index.ts and fails if any reachable module statically
   # value-imports @earendil-works/pi-*. Type-only imports and dynamic `await import()`
   # (the intended lazy preflight boundary) are excluded — the runtime boot smoke is the
@@ -1521,10 +1517,11 @@ check_pi_durable_beside() {
   # #129: the pi-durable qualification lane's execution coordinate (VERIFY 「Four rules」 rule 3). It is
   # not a discovery path — check-tests-beside-behavior already finds these files. It exists because the
   # qualification runner re-invokes a gate argv once per mutant, and the narrow filter keeps one mutant
-  # from re-running every beside test. The four files are one contact: the adapter and its packaged
-  # bootstrap, the runtime locator/verifier (which also reads the three checkout gates as SOURCE), the
-  # fresh preflight, and the owner join that admits the durable host.
-  run_vitest pi-extensions/meta-bridge-pi-durable.test.ts pi-extensions/lib/pi-durable-runtime.test.ts pi-extensions/lib/pi-durable-fresh-preflight.test.ts pi-extensions/lib/entwurf-deliverability.owner-join.test.ts
+  # from re-running every beside test. The five files are one contact: the adapter and its packaged
+  # bootstrap, the installed carrier/SDK-set verifier (which also reads the three checkout gates as
+  # SOURCE), the fresh preflight, the owner join that admits the durable host, and the carrier's
+  # relocation grammar, resolver and maintainer emitter (#130).
+  run_vitest pi-extensions/meta-bridge-pi-durable.test.ts pi-extensions/lib/pi-durable-runtime.test.ts pi-extensions/lib/pi-durable-fresh-preflight.test.ts pi-extensions/lib/entwurf-deliverability.owner-join.test.ts pi-extensions/lib/pi-durable-carrier.test.ts
 }
 
 smoke_mux_fresh_call_live() {
@@ -2200,67 +2197,57 @@ assert.equal(geminiBundled, undefined, 'package.json must not bundle @google/gem
 // heredoc (which is indented, so won't match `^...`).
 const runSh = readFileSync('run.sh', 'utf8');
 
-// pi peer/dev alignment (#26 / 0.8.0 dep-alignment gate). The three
-// @earendil-works/pi-* devDeps must pin one identical version, and that
-// version must match the check-pack-install peer-install pins below
-// (`pnpm add @earendil-works/pi-ai@X ...`). Without this, a pi bump could
-// drift package.json devDeps away from the fresh-temp install smoke and
-// the "dependency alignment gate" would not actually verify pi.
-const piAi = pkg.devDependencies?.['@earendil-works/pi-ai'];
-const piCoding = pkg.devDependencies?.['@earendil-works/pi-coding-agent'];
-const piTui = pkg.devDependencies?.['@earendil-works/pi-tui'];
-// #120 P2: pi-agent-core is now DIRECTLY imported by test/pi-queue.oracle.test.ts, which proves
-// what the control-socket receipt says about a receiver's queues. An oracle pinned to a DIFFERENT
-// pi than the one this repo targets would answer honestly about a pi nobody runs, so its exact
-// dev pin moves with the floor or the floor is not a floor.
-const piCore = pkg.devDependencies?.['@earendil-works/pi-agent-core'];
-assert.ok(piAi, 'package.json devDependencies must pin @earendil-works/pi-ai');
+// pi SDK alignment (#26 / 0.8.0 dep-alignment gate; #130 production set). Since 0.32 the pi SDK is
+// a PRODUCTION dependency set — the pi-durable carrier runs against it — declared once, exactly, in
+// pi/pi-durable/overlay/upstream-pin.json (`sdk.members` + `sdk.direct`). package.json must carry
+// exactly that set in `dependencies`, and no @earendil-works package as a dev, peer or optional
+// dependency beside it: one name in two dependency classes is install behaviour nothing here has
+// measured. The members are one SDK generation, and that version is the FLOOR every other surface
+// below names (the check-pack-install constellation, the workspace closure, the docs) — the host
+// range `>=<floor> <<major>.<minor+1>` is derived from it, never retyped.
+const durablePin = JSON.parse(readFileSync('pi/pi-durable/overlay/upstream-pin.json', 'utf8'));
+const sdkMembers = durablePin.sdk?.members ?? {};
+const sdkDirect = durablePin.sdk?.direct ?? {};
+const piAi = sdkMembers['@earendil-works/pi-ai'];
+assert.ok(/^\d+\.\d+\.\d+$/.test(piAi ?? ''), 'pi/pi-durable/overlay/upstream-pin.json sdk.members must pin @earendil-works/pi-ai exactly');
+// #120 P2: pi-agent-core is DIRECTLY imported by test/pi-queue.oracle.test.ts, which proves what the
+// control-socket receipt says about a receiver's queues. An oracle pinned to a DIFFERENT pi than the
+// one this repo targets would answer honestly about a pi nobody runs, so its exact pin moves with
+// the floor or the floor is not a floor.
+const piCore = pkg.dependencies?.['@earendil-works/pi-agent-core'];
 assert.equal(piCore, piAi,
   `[QK:PI-CORE-PIN-TRACKS-FLOOR] @earendil-works/pi-agent-core (${piCore}) must match @earendil-works/pi-ai (${piAi}) — the queue oracle imports it directly to prove what the control-socket receipt claims about a receiver's queues, so a pin that drifts off the floor would answer honestly about a pi nobody here runs`);
-assert.equal(piCoding, piAi,
-  `@earendil-works/pi-coding-agent (${piCoding}) must match @earendil-works/pi-ai (${piAi})`);
-assert.equal(piTui, piAi,
-  `@earendil-works/pi-tui (${piTui}) must match @earendil-works/pi-ai (${piAi})`);
+for (const [name, ver] of Object.entries(sdkMembers)) {
+  assert.equal(ver, piAi, `pi/pi-durable/overlay/upstream-pin.json: sdk member ${name}@${ver} is not the one SDK generation ${piAi}`);
+}
+for (const [name, ver] of Object.entries({ ...sdkMembers, ...sdkDirect })) {
+  assert.equal(pkg.dependencies?.[name], ver,
+    `[QK:PI-SDK-PRODUCTION-SET] package.json dependencies ${name} (${pkg.dependencies?.[name]}) must be exactly the pinned ${ver} (pi/pi-durable/overlay/upstream-pin.json sdk) — the carrier runs against the package's own production set, not whatever a host provides`);
+}
+for (const name of Object.keys(pkg.dependencies ?? {}).filter((n) => n.startsWith('@earendil-works/'))) {
+  assert.ok(name in sdkMembers, `package.json dependencies ${name} is not a declared sdk member — declare it in the pin or remove it`);
+}
+for (const field of ['devDependencies', 'peerDependencies', 'optionalDependencies', 'peerDependenciesMeta']) {
+  const dual = Object.keys(pkg[field] ?? {}).filter((n) => n.startsWith('@earendil-works/'));
+  assert.deepEqual(dual, [], `[QK:PI-SDK-NO-DUAL-DECLARATION] package.json ${field} must carry no @earendil-works package beside the production set (found ${dual.join(', ')}) — one name in two dependency classes is install behaviour nothing here has measured`);
+}
 
-// check-pack-install peer-install pins (quoted `@earendil-works/pi-*@<ver>`
+// check-pack-install install pins (quoted `@earendil-works/pi-*@<ver>`
 // args; the `\d`-anchored version avoids matching this regex literal itself).
 const peerAi = runSh.match(/"@earendil-works\/pi-ai@(\d[\d.]*)"/)?.[1];
 const peerCoding = runSh.match(/"@earendil-works\/pi-coding-agent@(\d[\d.]*)"/)?.[1];
 const peerTui = runSh.match(/"@earendil-works\/pi-tui@(\d[\d.]*)"/)?.[1];
 assert.equal(peerAi, piAi,
-  `run.sh check-pack-install pi-ai peer pin (${peerAi}) must match package.json devDep (${piAi})`);
+  `run.sh check-pack-install pi-ai install pin (${peerAi}) must match the pinned SDK (${piAi})`);
 assert.equal(peerCoding, piAi,
-  `run.sh check-pack-install pi-coding-agent peer pin (${peerCoding}) must match (${piAi})`);
+  `run.sh check-pack-install pi-coding-agent install pin (${peerCoding}) must match (${piAi})`);
 assert.equal(peerTui, piAi,
-  `run.sh check-pack-install pi-tui peer pin (${peerTui}) must match (${piAi})`);
+  `run.sh check-pack-install pi-tui install pin (${peerTui}) must match (${piAi})`);
 
-// peerDependencies must be a CLOSED range (0.11 Stage 0, drift-proofing): the
-// floor tracks the devDep pin so a consumer can't install against a pi lacking
-// the public trust exports the bridge imports at the pinned minor, AND an upper
-// bound at the next minor stops a fresh install from silently pulling a future
-// pi (past the declared ceiling — 0.87+ at the current 0.86.0 pin) whose
-// internal export surface has drifted from the one we typecheck against.
-// pi moves its public surface every minor (the 0.79→0.80 getModels→provider-
-// factory churn is exactly this, and 0.86 is the same shape again: a custom
-// provider's streamSimple now receives a branded TranscriptContext instead of a
-// raw Context, with systemPrompt/tools folded into a leading system message), so
-// an open `>=` floor is exactly how the next installer re-acquires the drift.
-// The floor is also the HARD MINIMUM a consumer install resolves: at `>=0.86.0`
-// an existing 0.85.1 host is upgraded, not kept.
-// Expected shape: `>=<devDep> <<major>.<minor+1>` (e.g. `>=0.86.0 <0.87`, `>=1.0.0 <1.1`).
-// Pi 1.0 did not change the rule: an unverified minor is still unverified, so the ceiling
-// stays the next minor of the pin's own major.
+// The supported HOST range a doc may declare is derived, closed: `>=<floor> <<major>.<minor+1>`.
+// pi moves its public surface every minor (the 0.79→0.80 getModels churn, the 0.86 TranscriptContext
+// change), so an unverified minor is still unverified; the ceiling stays the next minor of the floor.
 const [piMaj, piMin] = piAi.split('.').map(Number);
-const expectedPeer = `>=${piAi} <${piMaj}.${piMin + 1}`;
-const peerDepAi = pkg.peerDependencies?.['@earendil-works/pi-ai'];
-const peerDepCoding = pkg.peerDependencies?.['@earendil-works/pi-coding-agent'];
-const peerDepTui = pkg.peerDependencies?.['@earendil-works/pi-tui'];
-assert.equal(peerDepAi, expectedPeer,
-  `package.json peerDependencies @earendil-works/pi-ai (${peerDepAi}) must be "${expectedPeer}" (devDep floor + next-minor ceiling)`);
-assert.equal(peerDepCoding, expectedPeer,
-  `package.json peerDependencies @earendil-works/pi-coding-agent (${peerDepCoding}) must be "${expectedPeer}"`);
-assert.equal(peerDepTui, expectedPeer,
-  `package.json peerDependencies @earendil-works/pi-tui (${peerDepTui}) must be "${expectedPeer}"`);
 
 // BASELINE DOCS (0.12.8). This gate was BORN reading a doc: 362becd added it
 // after the 21de0f9 drift and asserted README.md's codex-acp install pin against
@@ -2324,14 +2311,14 @@ for (const file of BASELINE_DOCS) {
   for (const [decl, floor, ceilMajor, ceilMinor] of text.matchAll(/>=\s?(\d+\.\d+\.\d+)\s?<\s?(\d+)\.(\d+)/g)) {
     rangeDecls++;
     assert.equal(floor, piAi,
-      `${file}: declared pi floor in "${decl}" is ${floor}, but the devDep pin is ${piAi} — a baseline doc may not advertise a version no gate drives`);
+      `${file}: declared pi floor in "${decl}" is ${floor}, but the pinned SDK is ${piAi} — a baseline doc may not advertise a version no gate drives`);
     assert.equal(`${ceilMajor}.${ceilMinor}`, `${piMaj}.${piMin + 1}`,
       `${file}: declared pi ceiling in "${decl}" must be the next minor (${piMaj}.${piMin + 1})`);
   }
   // Exact install pins: `@earendil-works/pi-<pkg>@<version>`.
   for (const [decl, ver] of text.matchAll(/@earendil-works\/pi-(?:ai|coding-agent|tui)@(\d+\.\d+\.\d+)/g)) {
     exactDecls++;
-    assert.equal(ver, piAi, `${file}: install example "${decl}" pins ${ver}, but the devDep pin is ${piAi}`);
+    assert.equal(ver, piAi, `${file}: install example "${decl}" pins ${ver}, but the pinned SDK is ${piAi}`);
   }
 }
 // Prose declarations carry the pin in sentences the two patterns above cannot
@@ -2345,7 +2332,7 @@ const PROSE_DECLS = [
 for (const [file, re, shape] of PROSE_DECLS) {
   const m = readFileSync(file, 'utf8').match(re);
   assert.ok(m, `${file}: the baseline sentence "${shape}" is gone — restore it or update check-dep-versions; a doc reword must not silently drop the pin from the gate`);
-  assert.equal(m[1], piAi, `${file}: "${shape}" declares ${m[1]}, but the devDep pin is ${piAi}`);
+  assert.equal(m[1], piAi, `${file}: "${shape}" declares ${m[1]}, but the pinned SDK is ${piAi}`);
 }
 // ── #120 P4: ONE FLOOR, FOUR MECHANICAL SURFACES ──────────────────────────
 // The bump is mostly a number substitution, and that is exactly how a bump goes
@@ -2365,6 +2352,8 @@ const PI_CONSTELLATION = [
   '@earendil-works/pi-telemetry', '@earendil-works/chord',
   // `[측정 2026-09-30]` 0.99.1: pi-coding-agent's runtime deps gained the built-in extensions' packages.
   '@earendil-works/pi-codemode', '@earendil-works/pi-mcp',
+  // #130: the durable library the pi-durable carrier imports — a production dependency since 0.32.
+  '@earendil-works/pi-durable',
 ];
 const sameSet = (got, want, where) => {
   const missing = want.filter((n) => !got.includes(n));
@@ -2409,7 +2398,7 @@ if (!matcherPin) {
 const CURRENT_CONTRACT_DECLS = [
   ['plugins/herdr/README.md', /npm install -g "@earendil-works\/pi-coding-agent@(>=[\d.]+ <\d+\.\d+)"/, 'the herdr install line'],
   ['docs/mux-launch-rail.md', /현 supported range 는 `(>=[\d.]+ <\d+\.\d+)`/, "mux-launch-rail's current supported range"],
-  ['docs/acp-backend-rail.md', /devDep exact `(\d+\.\d+\.\d+)`, peer `(>=[\d.]+ <\d+\.\d+)`/, "the ACP support row's exact+range pair"],
+  ['docs/acp-backend-rail.md', /SDK exact `(\d+\.\d+\.\d+)`, host `(>=[\d.]+ <\d+\.\d+)`/, "the ACP support row's exact+range pair"],
 ];
 for (const [file, re, shape] of CURRENT_CONTRACT_DECLS) {
   const m = readFileSync(file, 'utf8').match(re);
@@ -2420,14 +2409,14 @@ for (const [file, re, shape] of CURRENT_CONTRACT_DECLS) {
   }
 }
 assert.deepEqual(floorGaps, [],
-  `[QK:PI-FLOOR-SINGLE-SOURCE] the pi floor is declared on four mechanical surfaces — the package's exact dev pins and peer ceiling, run.sh's install constellation, the pnpm workspace closure, and the current-contract sentences in the docs — and every one of them must name the SAME floor. A bump that moves three of the four is the ordinary way this breaks, and the surface left behind is the one nothing else reads`);
+  `[QK:PI-FLOOR-SINGLE-SOURCE] the pi floor is declared on four mechanical surfaces — the durable pin's SDK set with package.json's exact production dependencies, run.sh's install constellation, the pnpm workspace closure, and the current-contract sentences in the docs — and every one of them must name the SAME floor. A bump that moves three of the four is the ordinary way this breaks, and the surface left behind is the one nothing else reads`);
 
 // Guard the guard: if the patterns ever stop matching, the loops above pass
 // vacuously and the docs fall back OUT of the gate without a word.
 assert.ok(rangeDecls >= 5, `expected at least 5 pi range declarations across the baseline docs, found ${rangeDecls} — the doc scan matched (almost) nothing and would pass vacuously`);
 assert.ok(exactDecls >= 1, `expected at least 1 exact pi install pin in the baseline docs, found ${exactDecls}`);
 
-console.log(`[check-dep-versions] ok — pi ${piAi} is coherent across package.json (devDeps + peer range), run.sh (peer-install pins), and ${BASELINE_DOCS.length} baseline docs (${rangeDecls} range + ${exactDecls} exact + ${PROSE_DECLS.length} prose declarations)`);
+console.log(`[check-dep-versions] ok — pi ${piAi} is coherent across the durable pin's SDK set, package.json (exact production dependencies, no dev/peer duplicate), run.sh (install pins), and ${BASELINE_DOCS.length} baseline docs (${rangeDecls} range + ${exactDecls} exact + ${PROSE_DECLS.length} prose declarations)`);
 EOF
   )
 }
@@ -2839,17 +2828,17 @@ check_pi_import_surface() {
   # Do NOT widen this to a `providers/*` subpath — it typechecks but CANNOT
   # resolve under the extension loader.
   #
-  # #129 EXCEPTION — exactly TWO specifiers, in exactly ONE file:
-  #   @earendil-works/pi-coding-agent/experimental/durable/runtime.ts and …/tui.ts
-  #   in pi/pi-durable/bootstrap.mjs
-  # The durable app is source-only upstream (the published pi-coding-agent excludes
-  # dist/experimental and ships no src/), so these resolve ONLY against the operator's
-  # pinned runtime checkout, through the source resolver `entwurf pi-durable` loads with
-  # --import — never against this package's pi dependency. They are the one way to reach
-  # the app at all; building the string to dodge this scan would be the evasion this gate
-  # exists to stop. Only those quoted specifiers on that file's lines are neutralised
-  # before the forbidden pattern is applied again, so any other pi subpath in that file,
-  # and the same specifier in any other file, stay FORBIDDEN (proved on the fixture below).
+  # #130 CARRIER FENCE (replaces the #129 bootstrap exception, retired with the source runtime):
+  # the pi-durable carrier (pi/pi-durable/carrier/*.js, upstream app files emitted by
+  # scripts/emit-pi-durable-carrier.ts) is the ONE place pi-coding-agent internals are reached,
+  # and only through the reserved `entwurf-pi-dist:` scheme its resolver answers. The fence is
+  # declared and asserted here, not inferred from the root-only scan staying quiet:
+  #   - the scheme is quoted ONLY in carrier files and at its one definition
+  #     (pi/pi-durable/carrier-relocation.mjs);
+  #   - a carrier file names no pi-coding-agent specifier at all, and every bare specifier it does
+  #     name is `node:*`, a declared sdk member (root or subpath) or a declared direct dependency
+  #     (pi/pi-durable/overlay/upstream-pin.json `sdk`).
+  # Proved on an external fixture repo below, like the work-surface denominator.
   # ONE corpus, TWO callers. The real scan and the denominator fixture must run the
   # SAME two lines, or the fixture would prove a command the gate does not use.
   pi_import_work_surface() {
@@ -2858,12 +2847,35 @@ check_pi_import_surface() {
   pi_import_scan() {
     pi_import_work_surface \
       | xargs -0r grep -HnE "[\"'\`]@earendil-works/pi-(ai|coding-agent|tui)/" 2>/dev/null \
-      | grep -vE "[\"'\`]@earendil-works/pi-ai/compat[\"'\`]" 2>/dev/null \
-      | sed -E "/^pi\/pi-durable\/bootstrap\.mjs:[0-9]+:/ s#[\"'\`]@earendil-works/pi-coding-agent/experimental/durable/(runtime|tui)\.ts[\"'\`]#(durable-runtime-specifier)#g" \
-      | grep -E "[\"'\`]@earendil-works/pi-(ai|coding-agent|tui)/" 2>/dev/null || true
+      | grep -vE "[\"'\`]@earendil-works/pi-ai/compat[\"'\`]" 2>/dev/null || true
+  }
+  # The carrier fence over the same work surface: prints one line per violation. $1 = the pin.
+  pi_carrier_fence_scan() {
+    pi_import_work_surface | node -e '
+      const fs = require("node:fs");
+      const pin = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+      const declared = new Set([...Object.keys(pin.sdk?.members ?? {}), ...Object.keys(pin.sdk?.direct ?? {})]);
+      const files = fs.readFileSync(0, "utf8").split("\0").filter(Boolean);
+      const carrier = (f) => /^pi\/pi-durable\/carrier\/[^/]+\.js$/.test(f);
+      const scheme = /["\x27`]entwurf-pi-dist:/g;
+      for (const f of files) {
+        const text = fs.readFileSync(f, "utf8");
+        const quoted = (text.match(scheme) ?? []).length;
+        if (!carrier(f) && quoted > (f === "pi/pi-durable/carrier-relocation.mjs" ? 1 : 0)) {
+          console.log(`${f}: quotes the reserved entwurf-pi-dist: scheme outside the carrier`);
+        }
+        if (!carrier(f)) continue;
+        for (const m of text.matchAll(/^\s*(?:import|export|\})[^;]*?\bfrom\s*"([^"]+)";|^\s*import\s*"([^"]+)";/gm)) {
+          const spec = m[1] ?? m[2];
+          if (spec.startsWith("./") || spec.startsWith("entwurf-pi-dist:") || spec.startsWith("node:")) continue;
+          const name = spec.startsWith("@") ? spec.split("/").slice(0, 2).join("/") : spec.split("/")[0];
+          if (name === "@earendil-works/pi-coding-agent" || !declared.has(name)) console.log(`${f}: imports ${spec}, outside the declared carrier set`);
+        }
+      }
+    ' "$1"
   }
 
-  local probe_dir probe_hits hits
+  local probe_dir probe_hits probe_fence hits fence
   probe_dir=$(mktemp -d "${TMPDIR:-/tmp}/entwurf-pi-import-denominator.XXXXXX")
   (
     cd "$probe_dir" || exit 1
@@ -2871,15 +2883,19 @@ check_pi_import_surface() {
     printf '%s\n' 'import { getModels } from "@earendil-works/pi-ai/compat";' > tracked-allowed.ts
     git add tracked-allowed.ts
     printf '%s\n' 'import "@earendil-works/pi-ai/private-probe";' > untracked-forbidden.ts
-    mkdir -p pi/pi-durable
-    printf '%s\n' 'const RUNTIME = "@earendil-works/pi-coding-agent/experimental/durable/runtime.ts";' \
-      'import "@earendil-works/pi-coding-agent/experimental/other.ts";' \
-      'const TUI = "@earendil-works/pi-coding-agent/experimental/durable/tui.ts"; import "@earendil-works/pi-tui/private";' \
-      > pi/pi-durable/bootstrap.mjs
-    printf '%s\n' 'const RUNTIME = "@earendil-works/pi-coding-agent/experimental/durable/runtime.ts";' > elsewhere.mjs
-    git add pi/pi-durable/bootstrap.mjs elsewhere.mjs
+    mkdir -p pi/pi-durable/carrier pi/pi-durable/overlay
+    printf '%s\n' '{"sdk":{"members":{"@earendil-works/pi-ai":"1.0.4","@earendil-works/pi-durable":"1.0.4"},"direct":{"proper-lockfile":"4.1.2"}}}' \
+      > pi/pi-durable/overlay/upstream-pin.json
+    printf '%s\n' 'import { a } from "@earendil-works/pi-ai";' 'import { b } from "@earendil-works/pi-durable/tools";' \
+      'import lock from "proper-lockfile";' 'import { c } from "entwurf-pi-dist:core/x.js";' 'import { d } from "./sibling.js";' \
+      > pi/pi-durable/carrier/allowed.js
+    printf '%s\n' 'import { e } from "@earendil-works/pi-coding-agent";' > pi/pi-durable/carrier/coding-agent.js
+    printf '%s\n' 'import { f } from "left-pad";' > pi/pi-durable/carrier/undeclared.js
+    printf '%s\n' 'import { g } from "entwurf-pi-dist:core/x.js";' > elsewhere.mjs
+    git add pi/pi-durable elsewhere.mjs
   ) || { fail "[check-pi-import-surface] could not build the denominator fixture in $probe_dir"; rm -rf "$probe_dir"; return 1; }
   probe_hits=$(cd "$probe_dir" && pi_import_scan)
+  probe_fence=$(cd "$probe_dir" && pi_carrier_fence_scan pi/pi-durable/overlay/upstream-pin.json)
   rm -rf "$probe_dir"
   # ONE assertion, ONE claim token: the manifest contract requires the signature to
   # occur exactly once in this file, so both fixture conditions are folded into a
@@ -2891,13 +2907,13 @@ check_pi_import_surface() {
     fail "[QK:PIIMPORT-WORK-SURFACE] the denominator fixture disagrees with the corpus — untracked-forbidden reached=$saw_untracked_forbidden (want yes: a brand-new forbidden import must not escape until it is staged), tracked-allowed flagged=$saw_tracked_allowed (want no: the /compat exception must survive)"
     return 1
   fi
-  local durable_allowed_flagged="no" durable_other_reached="no" durable_sameline_reached="no" durable_elsewhere_reached="no"
-  grep -qE '^pi/pi-durable/bootstrap\.mjs:1:' <<<"$probe_hits" && durable_allowed_flagged="yes"
-  grep -qE '^pi/pi-durable/bootstrap\.mjs:2:' <<<"$probe_hits" && durable_other_reached="yes"
-  grep -qE '^pi/pi-durable/bootstrap\.mjs:3:' <<<"$probe_hits" && durable_sameline_reached="yes"
-  grep -qE '^elsewhere\.mjs:1:' <<<"$probe_hits" && durable_elsewhere_reached="yes"
-  if [ "$durable_allowed_flagged" != "no" ] || [ "$durable_other_reached" != "yes" ] || [ "$durable_sameline_reached" != "yes" ] || [ "$durable_elsewhere_reached" != "yes" ]; then
-    fail "[QK:PIIMPORT-DURABLE-BOOTSTRAP-EXACT] the #129 durable exception is not exact — its runtime specifier in pi/pi-durable/bootstrap.mjs flagged=$durable_allowed_flagged (want no), another experimental subpath in that file reached=$durable_other_reached (want yes), a forbidden specifier sharing a line with an allowed one reached=$durable_sameline_reached (want yes), the same specifier in another file reached=$durable_elsewhere_reached (want yes)"
+  local fence_allowed="no" fence_coding_agent="no" fence_undeclared="no" fence_elsewhere="no"
+  grep -qF 'carrier/allowed.js' <<<"$probe_fence" && fence_allowed="yes"
+  grep -qF 'carrier/coding-agent.js' <<<"$probe_fence" && fence_coding_agent="yes"
+  grep -qF 'carrier/undeclared.js' <<<"$probe_fence" && fence_undeclared="yes"
+  grep -qF 'elsewhere.mjs' <<<"$probe_fence" && fence_elsewhere="yes"
+  if [ "$fence_allowed" != "no" ] || [ "$fence_coding_agent" != "yes" ] || [ "$fence_undeclared" != "yes" ] || [ "$fence_elsewhere" != "yes" ]; then
+    fail "[QK:PIIMPORT-CARRIER-FENCE] the #130 carrier fence is not exact — declared imports in a carrier file flagged=$fence_allowed (want no), a pi-coding-agent specifier in a carrier file reached=$fence_coding_agent (want yes), an undeclared package in a carrier file reached=$fence_undeclared (want yes), the reserved scheme outside the carrier reached=$fence_elsewhere (want yes)"
     return 1
   fi
 
@@ -2907,7 +2923,13 @@ check_pi_import_surface() {
     echo "$hits"
     exit 1
   fi
-  ok "[check-pi-import-surface] pi references are root/compat-only (plus the exact #129 durable bootstrap pair) across tracked + untracked-non-ignored ts/js; the untracked denominator and the durable exception's exactness are proved on an external fixture repo"
+  fence=$(cd "$REPO_DIR" && pi_carrier_fence_scan pi/pi-durable/overlay/upstream-pin.json)
+  if [ -n "$fence" ]; then
+    echo "[check-pi-import-surface] FAIL: the #130 pi-durable carrier fence is broken:"
+    echo "$fence"
+    exit 1
+  fi
+  ok "[check-pi-import-surface] pi references are root/compat-only across tracked + untracked-non-ignored ts/js, and the pi-durable carrier reaches pi-coding-agent only through its reserved scheme with declared bare imports; the untracked denominator and the carrier fence are proved on an external fixture repo"
 }
 
 check_env_namespace() {
@@ -2934,65 +2956,26 @@ check_env_namespace() {
 }
 
 check_pi_runtime_version() {
-  # 0.11 Stage 0 (동결결정 9, runtime half): tsc catches a missing 0.80 export
-  # at dev time, but an installed environment can still resolve a pi OUTSIDE the
-  # supported range at runtime — older, where the named trust exports / 0.80
-  # provider-factory surface do not exist; or newer, where they have moved again.
-  # Verify VERSION against the DECLARED CLOSED RANGE (both ends, see below) via a
-  # DYNAMIC import of the package root only — never statically import a
-  # range-only symbol here, or this guard would crash before it can fail loud.
+  # 0.11 Stage 0 (동결결정 9, runtime half), re-scoped by #130. tsc catches a missing export at
+  # dev time, but an environment can still resolve a pi other than the one this repo pins at
+  # runtime. Since 0.32 the pi SDK is a production dependency set (the pi-durable carrier runs
+  # against it), so the runtime this checkout's tests, bridge and carrier import IS that set, and
+  # the question is no longer "inside a range" but "exactly the pinned generation, edge by edge".
+  # It is answered by the ONE native-set verifier the launcher, setup and the fresh preflight use
+  # (pi-extensions/lib/pi-durable-runtime.ts): every declared member and direct dependency resolves
+  # from the carrier, and every member's own member edge, at exactly the pinned version. A stale
+  # development node_modules (an older pi left behind a bump) is a named sdk-absent/sdk-mismatch.
   #
-  # The floor is DERIVED from the package.json devDep pin, never a second literal.
-  # A hand-kept `const FLOOR = '<version>'` is a declaration no gate enforces:
-  # check-dep-versions binds the devDeps, the peer range, and the check-pack-install
-  # peer pins to one another, but it never saw this constant — so a pi bump that
-  # forgot it would leave the runtime gate still blessing the OLD floor, silently.
-  # That is the same "declared runtime ≠ verified runtime" split the 0.12.8
-  # check-pack-install fix closed; there must be exactly ONE pin to move.
-  (cd "$REPO_DIR" && node --input-type=module <<'EOF'
-import { readFileSync } from 'node:fs';
-
-const pkg = JSON.parse(readFileSync('package.json', 'utf8'));
-const FLOOR = pkg.devDependencies?.['@earendil-works/pi-coding-agent'];
-if (typeof FLOOR !== 'string' || !/^\d+\.\d+\.\d+$/.test(FLOOR)) {
-  console.error(`[check-pi-runtime-version] FAIL: package.json devDependencies['@earendil-works/pi-coding-agent'] must be an EXACT x.y.z pin to serve as the runtime floor (got ${FLOOR ?? 'nothing'})`);
-  process.exit(1);
-}
-// The declared contract is a CLOSED range (`>=<devDep> <<major>.<minor+1>`, enforced on
-// package.json by check-dep-versions), so the runtime check must be closed too.
-// A floor-only comparison would bless a resolved pi ABOVE the ceiling — and an
-// out-of-range pi is exactly the drift this cut exists to stop: 0.80.6 landed on
-// the dev box while the repo still declared 0.80.3, and every gate stayed green.
-// Verifying only half of a declared range is the same lie in the other direction.
-const [FLOOR_MAJOR, FLOOR_MINOR] = FLOOR.split('.').map(Number);
-const CEILING = `${FLOOR_MAJOR}.${FLOOR_MINOR + 1}.0`;
-const cmp = (a, b) => {
-  const pa = a.split('.').map(Number), pb = b.split('.').map(Number);
-  for (let i = 0; i < 3; i++) { if ((pa[i] || 0) !== (pb[i] || 0)) return (pa[i] || 0) - (pb[i] || 0); }
-  return 0;
-};
-let VERSION;
-try {
-  ({ VERSION } = await import('@earendil-works/pi-coding-agent'));
-} catch (e) {
-  console.error(`[check-pi-runtime-version] FAIL: cannot import @earendil-works/pi-coding-agent root — ${e?.message ?? e}`);
-  process.exit(1);
-}
-if (typeof VERSION !== 'string') {
-  console.error('[check-pi-runtime-version] FAIL: pi root export VERSION is not a string');
-  process.exit(1);
-}
-if (cmp(VERSION, FLOOR) < 0) {
-  console.error(`[check-pi-runtime-version] FAIL: pi VERSION ${VERSION} < ${FLOOR} — the bridge is built and tested against the ${FLOOR} public/runtime surface (trust exports hasTrustRequiringProjectResources + ProjectTrustStore nearest-ancestor get, the 0.80 model-catalog API getModels reached via the deprecated /compat entrypoint — 0.80 moved the standalone root getModels there, and the extension loader resolves only /compat, NOT the providers/* factory subpath — provider registration surface, compaction semantics) that older pi lacks or behaves differently on. Bump @earendil-works/pi-*.`);
-  process.exit(1);
-}
-if (cmp(VERSION, CEILING) >= 0) {
-  console.error(`[check-pi-runtime-version] FAIL: pi VERSION ${VERSION} >= ${CEILING} — OUTSIDE the declared range (>=${FLOOR} <${CEILING.slice(0, -2)}). pi moves its public surface every minor (the 0.79→0.80 getModels→/compat churn), so a next-minor runtime is unverified by definition: no gate here has driven it. Either pin the repo to that pi (devDeps + peer range + baseline docs move together) or install the declared one.`);
-  process.exit(1);
-}
-console.log(`[check-pi-runtime-version] ok — pi VERSION ${VERSION} within the declared range (>=${FLOOR} <${CEILING.slice(0, -2)})`);
-EOF
-  )
+  # What this deliberately does NOT answer: the ordinary Pi HOST on PATH. That is a separate
+  # subject with its own range (`pi_supported_range`, enforced by setup and install-user-scope on a
+  # real `pi --version`), and a green here says nothing about it.
+  local out rc=0
+  out=$(cd "$REPO_DIR" && run_ts pi-extensions/lib/pi-durable-runtime.ts resolve 2>&1) || rc=$?
+  if [ "$rc" -ne 0 ]; then
+    fail "[check-pi-runtime-version] the pinned pi SDK set is not what this checkout resolves: ${out##*$'\n'}"
+    return 1
+  fi
+  echo "[check-pi-runtime-version] ok — this checkout resolves exactly the pinned pi SDK set (native set; the PATH host is setup's subject)"
 }
 
 check_install_preflight() {
@@ -3038,8 +3021,8 @@ check_install_preflight() {
   # (a bare `test -d` would pass) with the other runtime deps symlinked live, but a
   # representative dep (@anthropic-ai/sdk) dangles. Asserts the dir-move blind spot
   # is closed AND that the failure names the broken dep. Uses a BUNDLED runtime dep
-  # because the @earendil-works/pi-* peer trio is loader-provided and no longer part
-  # of the install preflight probe set.
+  # because the @earendil-works SDK set is not part of the install preflight probe
+  # set (the carrier verifier owns its integrity).
   fake=$(mktemp -d); proj=$(mktemp -d)
   cp "$REPO_DIR/run.sh" "$fake/run.sh"
   mkdir -p "$fake/node_modules/@modelcontextprotocol" "$fake/node_modules/@agentclientprotocol" "$fake/node_modules/@anthropic-ai"
@@ -3689,6 +3672,15 @@ check_pack() {
     "pi/pi-durable/bootstrap.mjs"
     "pi/pi-durable/overlay/upstream-pin.json"
     "pi/pi-durable/overlay/runtime-contacts.patch"
+    "pi/pi-durable/carrier-resolver.mjs"
+    "pi/pi-durable/carrier-relocation.mjs"
+    "pi/pi-durable/carrier/runtime.js"
+    "pi/pi-durable/carrier/tui.js"
+    "pi/pi-durable/carrier/harness-setup.js"
+    "pi/pi-durable/carrier/prompt.js"
+    "pi/pi-durable/carrier/sessions.js"
+    "pi/pi-durable/carrier/subagent.js"
+    "pi/pi-durable/carrier/LICENSE"
     "pi/meta-bridge-omp/entwurf-meta-omp/package.json"
     "mcp/entwurf-bridge/dist/pi-extensions/lib/meta-session.js"
     "scripts/postinstall-chmod.cjs"
@@ -3817,7 +3809,7 @@ check_pack() {
 #     which is exactly what property (1)'s `(_|$)` absorbs; all three shapes are fixtures
 #     below so a future suffix change cannot pass vacuously.)
 pack_install_leaked_pi() {
-  grep '^@earendil-works+' | grep -Ev '@1\.0\.2(_|$)' || true
+  grep '^@earendil-works+' | grep -Ev '@1\.0\.4(_|$)' || true
 }
 
 # Matcher self-test on SYNTHETIC lookalikes: a healthy install tree cannot exercise either
@@ -3837,15 +3829,15 @@ check_pack_pin_matcher() {
   # None may leak; the two lookalikes must — a PREFIX-EXTENDED version (`0.86.0-beta.1`,
   # the prerelease shape that an unanchored match would bless) and an off-pin version.
   matcher_probe=$(printf '%s\n' \
-    '@earendil-works+pi-ai@1.0.2' \
-    '@earendil-works+pi-ai@1.0.2_@modelcontextprotocol+sdk@1.29.0_zod@4.3.6' \
-    '@earendil-works+pi-ai@1.0.2_ws@8.21.3' \
-    '@earendil-works+pi-ai@1.0.2_@modelcontextprotocol+sdk@1.29.0_zod@4.3.6__ws@8.21.3_zod@4.3.6' \
-    '@earendil-works+pi-ai@1.0.2-beta.1' \
+    '@earendil-works+pi-ai@1.0.4' \
+    '@earendil-works+pi-ai@1.0.4_@modelcontextprotocol+sdk@1.29.0_zod@4.3.6' \
+    '@earendil-works+pi-ai@1.0.4_ws@8.21.3' \
+    '@earendil-works+pi-ai@1.0.4_@modelcontextprotocol+sdk@1.29.0_zod@4.3.6__ws@8.21.3_zod@4.3.6' \
+    '@earendil-works+pi-ai@1.0.4-beta.1' \
     '@earendil-works+pi-agent-core@0.87.1' | pack_install_leaked_pi)
-  if [ "$matcher_probe" != '@earendil-works+pi-ai@1.0.2-beta.1
+  if [ "$matcher_probe" != '@earendil-works+pi-ai@1.0.4-beta.1
 @earendil-works+pi-agent-core@0.87.1' ]; then
-    fail "[QK:PACK-INSTALL-PIN-MATCHER-BOUNDED] the pin-leak matcher must flag the prefix-extended 1.0.2-beta.1 and the off-pin 0.87.1 lookalikes, and pass 1.0.2 bare or with any measured peer-hash — got: ${matcher_probe:-<nothing leaked>}"
+    fail "[QK:PACK-INSTALL-PIN-MATCHER-BOUNDED] the pin-leak matcher must flag the prefix-extended 1.0.4-beta.1 and the off-pin 0.87.1 lookalikes, and pass 1.0.4 bare or with any measured peer-hash — got: ${matcher_probe:-<nothing leaked>}"
     return 1
   fi
 
@@ -3853,15 +3845,208 @@ check_pack_pin_matcher() {
   # (0.85.0 onward, still true at 0.99.1). An off-pin chord MUST leak; the pinned one must not. A matcher narrowed
   # back to `^@earendil-works+pi-` sees nothing here and dies at this signature.
   matcher_probe=$(printf '%s\n' \
-    '@earendil-works+chord@1.0.2' \
+    '@earendil-works+chord@1.0.4' \
     '@earendil-works+chord@0.87.1' \
-    '@earendil-works+pi-ai@1.0.2' | pack_install_leaked_pi)
+    '@earendil-works+pi-ai@1.0.4' | pack_install_leaked_pi)
   if [ "$matcher_probe" != '@earendil-works+chord@0.87.1' ]; then
     fail "[QK:PACK-INSTALL-PIN-MATCHER-COVERS-CLOSURE] the pin-leak matcher must cover every @earendil-works closure member, not just the pi-* families — an off-pin @earendil-works/chord has to leak (it is a runtime dependency of pi-coding-agent, pi-agent-core, pi-client and pi-protocol — `[측정 2026-09-20]` at 0.86.0, re-measured `[측정 2026-09-22]` at 0.87.0, `[측정 2026-09-23]` at 0.87.1 and `[측정 2026-09-30]` at 0.99.1, where pi-coding-agent adds pi-codemode and pi-mcp beside them) — got: ${matcher_probe:-<nothing leaked>}"
     return 1
   fi
 
   echo "[check-pack-pin-matcher] ok — the pin-leak matcher is version-bounded (lookalikes leak, pinned version passes bare and with either measured peer-hash) and covers the whole @earendil-works closure (chord included)"
+}
+
+# #130 — the pi-durable carrier proved on ACTUAL npm consumers of the candidate tarball.
+# $1 tarball  $2 the gate's npm sandbox  $3 an existing Entwurf-only npm consumer root inside it.
+# Cells: L1s (Entwurf alone, $3), L1 (project-local beside an aligned host pi-coding-agent at the
+# pinned SDK version), L2 (an isolated `npm -g --prefix`), each through (a) the INSTALLED verifier
+# (exit 0, prints its own carrier-resolver) and (b) an independent consumer oracle; then the L3
+# NEGATIVE (an override binds pi-durable's pi-ai edge one patch behind: the installed verifier must
+# refuse it by name, while a bare import still succeeds); then (c) the public launch on L1s.
+# The oracle observes RESOLUTIONS (a resolve hook), not every filesystem read; it asserts each
+# resolved product file lies inside THIS consumer's node_modules — a sandbox ancestor is not the
+# boundary (#130 P1a review, Defect B) — and proves that predicate on a control: the installed
+# package of a NEIGHBOUR consumer in the same sandbox, which must be judged outside.
+# Same-version sharing within the consumer is an ordinary layout; copies are recorded, not refused.
+pack_install_durable_cells() {
+  local tgz="$1" box="$2" l1s="$3" pin_ver oracle_dir cell root control pkg out rc
+  pin_ver=$(cd "$REPO_DIR" && node -p "require('./pi/pi-durable/overlay/upstream-pin.json').sdk.members['@earendil-works/pi-coding-agent']")
+  oracle_dir="$box/pd-oracle"; mkdir -p "$oracle_dir"
+  cat > "$oracle_dir/oracle.mjs" <<'ORACLE'
+// node --import <pkg>/pi/pi-durable/carrier-resolver.mjs oracle.mjs <pkg> <consumer node_modules> <control file> <receipt>
+import fs from "node:fs";
+import { registerHooks } from "node:module";
+import path from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
+const [pkg, consumerRoot, control, receiptPath] = process.argv.slice(2);
+const seen = [];
+registerHooks({ resolve(specifier, context, next) { const r = next(specifier, context); seen.push({ specifier, parent: context.parentURL ?? null, url: r.url }); return r; } });
+const root = fs.realpathSync(consumerRoot);
+const inside = (file) => fs.realpathSync(file).startsWith(root + path.sep);
+const pin = JSON.parse(fs.readFileSync(path.join(pkg, "pi/pi-durable/overlay/upstream-pin.json"), "utf8"));
+const members = pin.sdk.members, direct = pin.sdk.direct;
+const carrier = path.join(pkg, "pi/pi-durable/carrier");
+const exportsOk = (await import(pathToFileURL(path.join(carrier, "runtime.js")).href)).openDurable instanceof Function
+  && (await import(pathToFileURL(path.join(carrier, "tui.js")).href)).runDurableTui instanceof Function;
+const files = [...new Set(seen.filter((s) => s.url.startsWith("file:")).map((s) => fileURLToPath(s.url)))];
+const outside = files.filter((f) => !inside(f));
+const owner = (file) => { for (let d = path.dirname(fs.realpathSync(file)); d !== path.dirname(d); d = path.dirname(d)) { const m = path.join(d, "package.json"); if (fs.existsSync(m)) { const j = JSON.parse(fs.readFileSync(m, "utf8")); if (typeof j.name === "string") return { name: j.name, version: j.version, root: d }; } } return null; };
+const copies = {};
+for (const f of files) { const o = owner(f); if (o?.name.startsWith("@earendil-works/")) (copies[o.name] ??= new Set()).add(`${o.version}@${path.relative(root, o.root)}`); }
+const relocated = seen.filter((s) => s.specifier.startsWith("entwurf-pi-dist:"));
+const codingAgentRoots = new Set(relocated.map((s) => owner(fileURLToPath(s.url))?.root));
+// Independent of the product's resolver: the package directory a bare import from `fromFile` binds is the
+// nearest ancestor `node_modules/<name>` of the file's REAL directory, walked here by hand.
+const lookup = (name, fromFile) => { for (let d = fs.realpathSync(path.dirname(fromFile)); ; d = path.dirname(d)) { const m = path.join(d, "node_modules", name, "package.json"); if (fs.existsSync(m)) return m; if (d === path.dirname(d)) return null; } };
+const edge = (from, to, want, fromFile) => { const m = lookup(to, fromFile); if (!m) return { from, to, want, got: null, name: null }; const j = JSON.parse(fs.readFileSync(m, "utf8")); return { from, to, want, got: j.version, name: j.name, at: path.relative(root, fs.realpathSync(path.dirname(m))) }; };
+const base = path.join(carrier, "runtime.js");
+const edges = Object.entries({ ...members, ...direct }).map(([n, v]) => edge("carrier", n, v, base));
+// Every reachable member copy, at any depth, once per real directory.
+const queue = edges.filter((e) => e.to in members && e.at).map((e) => e.at), seenCopies = new Set();
+while (queue.length > 0) { const at = queue.shift(); if (seenCopies.has(at)) continue; seenCopies.add(at); const m = path.join(root, at, "package.json"); const j = JSON.parse(fs.readFileSync(m, "utf8")); for (const dep of Object.keys(j.dependencies ?? {}).filter((x) => x in members)) { const e = edge(j.name, dep, members[dep], m); edges.push(e); if (e.at) queue.push(e.at); } }
+const verdict = {
+  exportsOk,
+  resolvedFiles: files.length,
+  outsideConsumer: outside,
+  controlRejected: fs.existsSync(control) && !inside(control),
+  loadedVersionsOk: Object.entries(copies).every(([n, set]) => [...set].every((c) => c.startsWith(`${members[n]}@`))),
+  relocations: relocated.length,
+  relocationOneDistInside: codingAgentRoots.size === 1 && relocated.every((s) => inside(fileURLToPath(s.url))),
+  memberEdges: edges.filter((e) => e.from !== "carrier").length,
+  memberCopiesWalked: seenCopies.size,
+  edgeMismatches: edges.filter((e) => e.got !== e.want || e.name !== e.to),
+};
+fs.writeFileSync(receiptPath, JSON.stringify({ consumerRoot: root, verdict, copies: Object.fromEntries(Object.entries(copies).map(([n, s]) => [n, [...s]])), edges, resolutions: seen }, null, 1));
+const ok = verdict.exportsOk && verdict.outsideConsumer.length === 0 && verdict.controlRejected && verdict.loadedVersionsOk
+  && verdict.relocations > 0 && verdict.relocationOneDistInside && verdict.memberEdges > 0 && verdict.edgeMismatches.length === 0;
+console.log(JSON.stringify({ ok, ...verdict, outsideConsumer: verdict.outsideConsumer.length, edgeMismatches: verdict.edgeMismatches.length }));
+process.exit(ok ? 0 : 1);
+ORACLE
+
+  mkdir -p "$box/pd-aligned" "$box/pd-global" "$box/pd-mismatch"
+  out=$(cd "$box/pd-aligned" && npm install "$tgz" "@earendil-works/pi-coding-agent@$pin_ver" --no-audit --no-fund 2>&1) || {
+    fail "[check-pack-install] pi-durable L1 (aligned host) install failed:"; echo "$out" | tail -10 | sed 's/^/    /' >&2; return 1; }
+  out=$(cd "$box" && npm install -g --prefix "$box/pd-global" "$tgz" --no-audit --no-fund 2>&1) || {
+    fail "[check-pack-install] pi-durable L2 (isolated global) install failed:"; echo "$out" | tail -10 | sed 's/^/    /' >&2; return 1; }
+
+  for cell in L1s L1 L2; do
+    case "$cell" in
+      L1s) root="$l1s/node_modules" control="$box/pd-aligned/node_modules/@junghanacs/entwurf/package.json" ;;
+      L1) root="$box/pd-aligned/node_modules" control="$box/pd-global/lib/node_modules/@junghanacs/entwurf/package.json" ;;
+      L2) root="$box/pd-global/lib/node_modules" control="$l1s/node_modules/@junghanacs/entwurf/package.json" ;;
+    esac
+    pkg="$root/@junghanacs/entwurf"
+    rc=0; out=$(cd "$box" && node "$pkg/mcp/entwurf-bridge/dist/pi-extensions/lib/pi-durable-runtime.js" resolve 2>&1) || rc=$?
+    if [ "$rc" -ne 0 ] || [ "$(realpath "$out" 2>/dev/null)" != "$(realpath "$pkg/pi/pi-durable/carrier-resolver.mjs")" ]; then
+      fail "[check-pack-install] pi-durable $cell: the INSTALLED verifier did not verify its own carrier (rc=$rc): $out"
+      return 1
+    fi
+    rc=0; out=$(cd "$box" && node --import "$out" "$oracle_dir/oracle.mjs" "$pkg" "$root" "$control" "$box/pd-oracle/$cell.json" 2>&1) || rc=$?
+    if [ "$rc" -ne 0 ]; then
+      fail "[QK:PACK-INSTALL-DURABLE-CONSUMER] [check-pack-install] pi-durable $cell: the carrier is not a coherent, consumer-contained load (receipt $box/pd-oracle/$cell.json): $out"
+      return 1
+    fi
+    echo "[check-pack-install] pi-durable $cell: installed verifier PASS; consumer oracle $out"
+  done
+
+  printf '%s\n' "{\"name\":\"pd-mismatch\",\"version\":\"1.0.0\",\"private\":true,\"overrides\":{\"@earendil-works/pi-durable\":{\"@earendil-works/pi-ai\":\"1.0.3\"}}}" > "$box/pd-mismatch/package.json"
+  out=$(cd "$box/pd-mismatch" && npm install "$tgz" --no-audit --no-fund 2>&1) || {
+    fail "[check-pack-install] pi-durable L3 (mismatch control) install failed:"; echo "$out" | tail -10 | sed 's/^/    /' >&2; return 1; }
+  pkg="$box/pd-mismatch/node_modules/@junghanacs/entwurf"
+  rc=0; out=$(cd "$box" && node "$pkg/mcp/entwurf-bridge/dist/pi-extensions/lib/pi-durable-runtime.js" resolve 2>&1) || rc=$?
+  if [ "$rc" -ne 3 ] || ! grep -q "pi-durable-sdk-mismatch: @earendil-works/pi-durable → @earendil-works/pi-ai wants $pin_ver, binds 1.0.3" <<<"$out"; then
+    fail "[QK:PACK-INSTALL-DURABLE-MISMATCH-REFUSED] [check-pack-install] pi-durable L3: an installed tree whose pi-durable binds pi-ai 1.0.3 must be refused by name as pi-durable-sdk-mismatch (rc=$rc): $out"
+    return 1
+  fi
+  rc=0; out=$(cd "$box" && node --input-type=module -e "import { pathToFileURL } from 'node:url'; await import('$pkg/pi/pi-durable/carrier-resolver.mjs'); const m = await import(pathToFileURL('$pkg/pi/pi-durable/carrier/runtime.js').href); console.log(typeof m.openDurable);" 2>&1) || rc=$?
+  if [ "$rc" -ne 0 ] || [ "$out" != "function" ]; then
+    fail "[check-pack-install] pi-durable L3: the control premise failed — the mixed tree was expected to still IMPORT (rc=$rc): $out"
+    return 1
+  fi
+  echo "[check-pack-install] pi-durable L3: the mixed tree still imports, and the installed verifier refuses it as pi-durable-sdk-mismatch"
+
+  # L4 — a THIRD-depth mismatch control on the same coherence axis. `[측정 2026-10-07]` npm 11 does not
+  # produce this layout from an override (nested strategy included, it dedupes pi-durable's pi-ai to the
+  # shared copy and overrides that), so it is CONSTRUCTED from real package bytes inside the already
+  # proved L2 consumer: pi-durable gets its own same-version copy of the installed pi-ai, whose
+  # pi-telemetry is the real published 1.0.3. Both the installed verifier and the independent oracle
+  # must name the depth-3 edge; a walk that stopped at the carrier's own members would pass it.
+  local l4_root="$box/pd-global/lib/node_modules" l4_tel="$box/pd-tel-103" l4_tel_ver="1.0.3"
+  pkg="$l4_root/@junghanacs/entwurf"
+  mkdir -p "$l4_tel" "$pkg/node_modules/@earendil-works/pi-durable/node_modules/@earendil-works"
+  out=$(cd "$l4_tel" && npm pack "@earendil-works/pi-telemetry@$l4_tel_ver" --silent 2>&1 && tar -xzf ./*.tgz 2>&1) || {
+    fail "[check-pack-install] could not fetch the real pi-telemetry 1.0.3 for the L4 control:"; echo "$out" | tail -5 | sed 's/^/    /' >&2; return 1; }
+  local l4_ai="$pkg/node_modules/@earendil-works/pi-durable/node_modules/@earendil-works/pi-ai"
+  cp -a "$(realpath "$pkg/node_modules/@earendil-works/pi-ai")" "$l4_ai"
+  mkdir -p "$l4_ai/node_modules/@earendil-works"
+  cp -a "$l4_tel/package" "$l4_ai/node_modules/@earendil-works/pi-telemetry"
+  rc=0; out=$(cd "$box" && node "$pkg/mcp/entwurf-bridge/dist/pi-extensions/lib/pi-durable-runtime.js" resolve 2>&1) || rc=$?
+  if [ "$rc" -ne 3 ] || ! grep -q "pi-durable-sdk-mismatch: @earendil-works/pi-ai → @earendil-works/pi-telemetry wants $pin_ver, binds 1.0.3 at $(realpath "$l4_ai")/node_modules/@earendil-works/pi-telemetry" <<<"$out"; then
+    fail "[QK:PACK-INSTALL-DURABLE-DEPTH3-REFUSED] [check-pack-install] pi-durable L4: a depth-3 pi-telemetry 1.0.3 under pi-durable's own pi-ai copy must be refused by name (rc=$rc): $out"
+    return 1
+  fi
+  rc=0; out=$(cd "$box" && node --import "$pkg/pi/pi-durable/carrier-resolver.mjs" "$oracle_dir/oracle.mjs" "$pkg" "$l4_root" "$l1s/node_modules/@junghanacs/entwurf/package.json" "$box/pd-oracle/L4.json" 2>&1) || rc=$?
+  if [ "$rc" -eq 0 ] || ! grep -q '"edgeMismatches":1' <<<"$out"; then
+    fail "[check-pack-install] pi-durable L4: the independent oracle did not see exactly the one depth-3 mismatch (rc=$rc): $out"
+    return 1
+  fi
+  echo "[check-pack-install] pi-durable L4: a constructed depth-3 pi-telemetry 1.0.3 is refused by the installed verifier and seen by the independent oracle"
+
+  # (c) The public launch on L1s, through the installed bin: verifier → resolver → bootstrap → TUI
+  # module → the carrier's real openDurable on the pinned SDK, whose own model resolution
+  # (`findInitialAgentModel`) refuses a provider no catalog registers — `[측정 2026-10-07]` the
+  # upstream message, before the overlay's exact-model check is reached. Offline (PI_OFFLINE),
+  # sandbox HOME/agent dir, no credential; the contact's bridge
+  # is spawned only at the birth, which this refusal precedes, so no citizen may exist after it.
+  local launch_home="$box/pd-launch-home" launch_cwd="$box/pd-launch-cwd" launch_env=()
+  mkdir -p "$launch_home/.pi/agent" "$launch_cwd"
+  mapfile -t launch_env < <(pack_install_consumer_env "$launch_home")
+  rc=0; out=$(cd "$launch_cwd" && env "${launch_env[@]}" PI_OFFLINE=1 "$l1s/node_modules/.bin/entwurf" pi-durable --provider entwurf-pack-probe --model no-such-model --width task-wide 2>&1 </dev/null) || rc=$?
+  if [ "$rc" -eq 0 ] || ! grep -q 'Could not resolve model: Unknown provider "entwurf-pack-probe"' <<<"$out" || ! grep -q "at openDurable (file://.*/pi/pi-durable/carrier/runtime.js" <<<"$out" || grep -qE "pi-durable-(package-incomplete|carrier-drift|sdk-absent|sdk-mismatch)|ERR_MODULE_NOT_FOUND|ERR_UNSUPPORTED_ESM_URL_SCHEME" <<<"$out"; then
+    fail "[QK:PACK-INSTALL-DURABLE-PUBLIC-LAUNCH] [check-pack-install] the installed 'entwurf pi-durable' did not reach the carrier openDurable's own model refusal on the pinned SDK (rc=$rc):"
+    echo "$out" | tail -15 | sed 's/^/    /' >&2
+    return 1
+  fi
+  if ls "$launch_home/.pi/agent/meta-sessions" 2>/dev/null | grep -q .; then
+    fail "[check-pack-install] the refused durable launch minted a meta record — a refusal before birth must leave no citizen"
+    return 1
+  fi
+  echo "[check-pack-install] pi-durable public launch: the installed verb ran the carrier's openDurable on the pinned SDK, whose own model resolution refused the unregistered provider, before any birth"
+
+  # (d) Host vs native are two subjects. The installed package's native SDK set is the pin (above);
+  # the ordinary Pi HOST on PATH is judged by its OWN real `pi --version` against the derived range.
+  # Real host binaries, no forged version: a sandbox install of the previous pi (1.0.2) must make the
+  # installed setup's pi row a named FAIL with ZERO Pi wiring while pi-durable still PASSes, and the
+  # aligned host binary (the pinned version, installed above for L1) must be inside the range.
+  # The previous host version is a variable, not a quoted `@pkg@x.y.z` spec: check-dep-versions reads
+  # those specs as this repo's install pins, and this one is deliberately off the floor.
+  local host_home host_proj host_old="$box/pd-host-old" host_env=() host_old_ver="1.0.2"
+  mkdir -p "$host_old"
+  out=$(cd "$host_old" && npm install "@earendil-works/pi-coding-agent@$host_old_ver" --no-audit --no-fund 2>&1) || {
+    fail "[check-pack-install] could not install the previous-host pi fixture (1.0.2):"; echo "$out" | tail -10 | sed 's/^/    /' >&2; return 1; }
+  for cell in old aligned; do
+    host_home="$box/pd-host-$cell-home"; host_proj="$box/pd-host-$cell-proj"
+    mkdir -p "$host_home/.pi/agent" "$host_proj"
+    mapfile -t host_env < <(pack_install_consumer_env "$host_home")
+    local host_bin="$host_old/node_modules/.bin/pi"
+    [ "$cell" = aligned ] && host_bin="$box/pd-aligned/node_modules/.bin/pi"
+    rc=0; out=$(cd "$box" && env "${host_env[@]}" PI_BIN="$host_bin" CLAUDE_BIN="$box/definitely-absent" AGY_BIN="$box/definitely-absent" \
+      COPILOT_BIN="$box/definitely-absent" OMP_BIN="$box/definitely-absent" CODEX_BIN="$box/definitely-absent" \
+      "$l1s/node_modules/.bin/entwurf" setup "$host_proj" 2>&1) || rc=$?
+    if ! grep -q "pi-durable: PASS" <<<"$out"; then
+      fail "[check-pack-install] host $cell: the native pi-durable row must stay PASS whatever the PATH host is:"; echo "$out" | tail -20 | sed 's/^/    /' >&2; return 1
+    fi
+    if [ "$cell" = old ]; then
+      if [ "$rc" -eq 0 ] || ! grep -q "pi: FAIL — detected pi 1.0.2 is outside the supported range >=$pin_ver <1.1" <<<"$out" || [ -e "$host_proj/.pi" ] || [ -e "$host_home/.pi/agent/settings.json" ]; then
+        fail "[QK:PACK-INSTALL-HOST-RANGE-SEPARATE] [check-pack-install] a real pi 1.0.2 host beside the $pin_ver native set must be a named pi FAIL with zero Pi wiring and a non-green setup (rc=$rc):"
+        echo "$out" | tail -20 | sed 's/^/    /' >&2
+        return 1
+      fi
+    elif grep -q "outside the supported range" <<<"$out"; then
+      fail "[check-pack-install] host aligned: the pinned-version host binary was judged outside the range:"; echo "$out" | tail -20 | sed 's/^/    /' >&2; return 1
+    fi
+  done
+  echo "[check-pack-install] host vs native: a real pi 1.0.2 host is a named pi FAIL with no wiring while pi-durable PASSes; the $pin_ver host binary is inside the range"
 }
 
 # The writable roots of ONE consumer sandbox, shared by every consumer subcall of
@@ -4061,6 +4246,15 @@ _check_pack_install_impl() {
     "pi/pi-durable/bootstrap.mjs"
     "pi/pi-durable/overlay/upstream-pin.json"
     "pi/pi-durable/overlay/runtime-contacts.patch"
+    "pi/pi-durable/carrier-resolver.mjs"
+    "pi/pi-durable/carrier-relocation.mjs"
+    "pi/pi-durable/carrier/runtime.js"
+    "pi/pi-durable/carrier/tui.js"
+    "pi/pi-durable/carrier/harness-setup.js"
+    "pi/pi-durable/carrier/prompt.js"
+    "pi/pi-durable/carrier/sessions.js"
+    "pi/pi-durable/carrier/subagent.js"
+    "pi/pi-durable/carrier/LICENSE"
     "pi/meta-bridge-omp/entwurf-meta-omp/package.json"
     "mcp/entwurf-bridge/dist/pi-extensions/lib/meta-session.js"
     "scripts/postinstall-chmod.cjs"
@@ -4139,9 +4333,9 @@ _check_pack_install_impl() {
   # repo packages with; --ignore-workspace stops it from re-attaching
   # to our pnpm-workspace.yaml; --ignore-scripts blocks the husky
   # prepare hook (and any future install scripts) from running inside
-  # the consumer project. Peer deps are pinned to the CURRENT pi release
-  # baseline (the package.json devDep pin — the pins below are what
-  # check-dep-versions binds to that devDep) so the smoke matches the same
+  # the consumer project. The pi SDK is pinned to the CURRENT pi release
+  # baseline (the package.json exact production dependency — the pins below
+  # are what check-dep-versions binds to it) so the smoke matches the same
   # shape an external pi user would have after `pi install`.
   local tmp npm_tmp
   tmp=$(mktemp -d -t entwurf-install-smoke.XXXXXX)
@@ -4205,20 +4399,25 @@ _check_pack_install_impl() {
   # `[측정 2026-10-05]` at 1.0.2 the constellation is unchanged: `npm view <pkg>@1.0.2 dependencies`
   # gives pi-coding-agent {chord, pi-agent-core, pi-ai, pi-codemode, pi-mcp, pi-tui}, pi-ai
   # {pi-telemetry}, pi-client {chord, pi-protocol}, pi-protocol {chord}, all ten published at 1.0.2.
-  echo "[check-pack-install] pnpm add into $tmp (with 1.0.x peers + chord + codemode + mcp + typebox)"
+  # `[측정 2026-10-07]` at 1.0.4 the same edges hold, and #130 adds @earendil-works/pi-durable: the
+  # library the pi-durable carrier imports, a production dependency of this package since 0.32 (its
+  # own deps: chord, pi-ai). All eleven are published at 1.0.4. The tarball now DECLARES the nine-member
+  # SDK set itself, so these pins are an aligned host install beside it, not peers it lacks.
+  echo "[check-pack-install] pnpm add into $tmp (with the aligned 1.0.x SDK + chord + codemode + mcp + durable + typebox)"
   local install_log
   install_log=$(cd "$tmp" && pnpm add \
     "$tgz_path" \
-    "@earendil-works/pi-ai@1.0.2" \
-    "@earendil-works/pi-coding-agent@1.0.2" \
-    "@earendil-works/pi-tui@1.0.2" \
-    "@earendil-works/pi-agent-core@1.0.2" \
-    "@earendil-works/pi-client@1.0.2" \
-    "@earendil-works/pi-protocol@1.0.2" \
-    "@earendil-works/pi-telemetry@1.0.2" \
-    "@earendil-works/chord@1.0.2" \
-    "@earendil-works/pi-codemode@1.0.2" \
-    "@earendil-works/pi-mcp@1.0.2" \
+    "@earendil-works/pi-ai@1.0.4" \
+    "@earendil-works/pi-coding-agent@1.0.4" \
+    "@earendil-works/pi-tui@1.0.4" \
+    "@earendil-works/pi-agent-core@1.0.4" \
+    "@earendil-works/pi-client@1.0.4" \
+    "@earendil-works/pi-protocol@1.0.4" \
+    "@earendil-works/pi-telemetry@1.0.4" \
+    "@earendil-works/chord@1.0.4" \
+    "@earendil-works/pi-codemode@1.0.4" \
+    "@earendil-works/pi-mcp@1.0.4" \
+    "@earendil-works/pi-durable@1.0.4" \
     "typebox@latest" \
     --ignore-workspace --ignore-scripts 2>&1) || {
     fail "[check-pack-install] pnpm add failed:"
@@ -4234,11 +4433,11 @@ _check_pack_install_impl() {
   local leaked_pi
   leaked_pi=$(ls "$tmp/node_modules/.pnpm" 2>/dev/null | pack_install_leaked_pi)
   if [ -n "$leaked_pi" ]; then
-    fail "[check-pack-install] UNVERIFIED pi runtime resolved into the install tree (expected only 1.0.2):"
+    fail "[check-pack-install] UNVERIFIED pi runtime resolved into the install tree (expected only 1.0.4):"
     printf '%s\n' "$leaked_pi" | sed 's/^/    /' >&2
     return 1
   fi
-  echo "[check-pack-install] pi runtime tree pin verified: every @earendil-works package is 1.0.2 (chord included)"
+  echo "[check-pack-install] pi runtime tree pin verified: every @earendil-works package is 1.0.4 (chord and pi-durable included)"
 
   # Resolve the installed package.json and confirm pi.extensions
   # arrived intact. If pi.extensions is empty or missing, the
@@ -4347,8 +4546,8 @@ _check_pack_install_impl() {
   # and safe to run in CI. Output goes to stderr; capture both
   # streams with 2>&1.
   #
-  # The pi that loads the tarball is the PINNED peer this smoke just installed next to
-  # it ($tmp/node_modules/.bin/pi = the floor of the supported peer range), NEVER
+  # The pi that loads the tarball is the PINNED SDK pi this smoke just installed next to
+  # it ($tmp/node_modules/.bin/pi = the floor of the supported host range), NEVER
   # whatever `pi` the host happens to have on PATH. A gate may not READ the operator's
   # global install any more than it may WRITE it: PATH resolution made this gate green
   # on a dev box carrying a newer global pi and RED in CI, which carries no global pi
@@ -4371,14 +4570,14 @@ _check_pack_install_impl() {
   )
 
   # Assert the version: a gate that cannot name which pi it proved has proved nothing.
-  # package.json devDeps is the pin SSOT (check-dep-versions keeps the peer-install
-  # literals above in step with it).
+  # The pinned SDK generation is the pin SSOT (package.json's exact production dependency, which
+  # check-dep-versions binds to the durable pin and to the install literals above).
   local pi_bin="$tmp/node_modules/.bin/pi" pi_pin pi_ver
   if [ ! -x "$pi_bin" ]; then
     fail "[check-pack-install] pinned pi missing from the install-smoke tree ($pi_bin) — cannot run loader smoke"
     return 1
   fi
-  pi_pin=$(cd "$REPO_DIR" && node -p "require('./package.json').devDependencies['@earendil-works/pi-coding-agent']")
+  pi_pin=$(cd "$REPO_DIR" && node -p "require('./package.json').dependencies['@earendil-works/pi-coding-agent']")
   pi_ver=$(cd "$tmp" && env "${pi_env[@]}" "$pi_bin" --version 2>&1 | head -1 | tr -d '[:space:]')
   if [ "$pi_ver" != "$pi_pin" ]; then
     fail "[check-pack-install] install-smoke pi is '$pi_ver', expected the pinned '$pi_pin' — the loader smoke would prove the wrong runtime"
@@ -4445,8 +4644,9 @@ _check_pack_install_impl() {
   # npm-managed neutral install regression — the README's PRIMARY install path is
   # now `npm install @junghanacs/entwurf` (NOT `pi install npm:...`). This layout
   # lands the package under node_modules, hoists runtime deps to the sibling
-  # node_modules, has no package-local node_modules, and the pi peer trio must be
-  # absent because pi is an optional adapter lane. The old cwd-relative
+  # node_modules, has no package-local node_modules, and (since #130) carries the
+  # pi SDK as a production dependency the bridge must still not import — the
+  # pi-free boot below proves that under a deny hook. The old cwd-relative
   # preflight_dep_integrity rejected every hoisted-dep npm install; 0.12.0 then
   # additionally died because start.sh tried strip-types under node_modules.
   # Prove `entwurf`/`entwurf-bridge` bins exist, `run.sh install` writes settings
@@ -4535,6 +4735,10 @@ sys.exit(0 if any(isinstance(s,str) and s.endswith('/node_modules/@junghanacs/en
     return 1
   fi
   echo "[check-pack-install] user-scope citizen regression pass (npm consumer: --entwurf-control loads from a foreign cwd)"
+
+  # #130: the pi-durable carrier on actual npm consumers (L1s = this Entwurf-only root, L1 aligned
+  # host, L2 isolated global, L3 mismatch control) and the public launch.
+  pack_install_durable_cells "$tgz_path" "$npm_tmp" "$npmroot" || return 1
 
   # Two-root ownership row (#86 C2, L1b extension): a SECOND npm root under the
   # SAME consumer HOME must not silently steal the user-scope registration the
@@ -4670,13 +4874,20 @@ sys.exit(0 if any(isinstance(s,str) and s.rstrip('/')== '$npm2_pkg' for s in src
     return 1
   fi
   local skip_probe
-  for skip_probe in "pi: SKIP" "claude: SKIP" "agy: SKIP" "copilot: SKIP" "omp: SKIP" "codex: SKIP" "pi-durable: SKIP"; do
+  for skip_probe in "pi: SKIP" "claude: SKIP" "agy: SKIP" "copilot: SKIP" "omp: SKIP" "codex: SKIP"; do
     if ! grep -q "$skip_probe" <<<"$setup_out"; then
       fail "[QK:CODEX-PACK-SETUP-ZERO-STATE] [check-pack-install] installed all-absent setup missing explicit zero-state '$skip_probe':"
       echo "$setup_out" | tail -25 | sed 's/^/    /' >&2
       return 1
     fi
   done
+  # #130: pi-durable is not a detected harness — its carrier and pi SDK set ship IN this package, so
+  # the installed row must verify them from node_modules (PASS), never fall back to a zero-state SKIP.
+  if ! grep -q "pi-durable: PASS" <<<"$setup_out"; then
+    fail "[check-pack-install] installed all-absent setup did not verify the packaged pi-durable carrier and its SDK set (want 'pi-durable: PASS'):"
+    echo "$setup_out" | tail -25 | sed 's/^/    /' >&2
+    return 1
+  fi
   if ! grep -q "bins: PASS — provided by npm bin linking" <<<"$setup_out"; then
     fail "[check-pack-install] installed setup must report stable bins PASS as npm-provided (capability present, not absent):"
     echo "$setup_out" | tail -25 | sed 's/^/    /' >&2
@@ -5031,29 +5242,55 @@ PY
   # surface. Two proofs in one: (1) the prepack dist JS boots under node_modules
   # with plain node — a strip-types fallback would crash with the exact error
   # above, so a parseable tools/list IS proof the dist path was taken; (2) the
-  # boot is pi-free — the @earendil-works peer trio is optional and must NOT be
-  # installed by the neutral npm path, so the eager closure stands up with pi absent.
+  # boot is pi-free. Until #130 that was proved by ABSENCE (the pi peers were optional and the
+  # neutral npm path did not install them). Since 0.32 the pi SDK is a production dependency, so
+  # it is always installed and absence can no longer be the premise; the proof is now adversarial
+  # in the other direction: the bridge boots under a preloaded resolve hook that REFUSES every
+  # `@earendil-works/*` specifier, so an eager graph that imported pi would die at boot.
   local installed_start="$npmroot/node_modules/.bin/entwurf-bridge"
   local installed_dist="$npm_pkg/mcp/entwurf-bridge/dist/mcp/entwurf-bridge/src/index.js"
   if [ ! -f "$installed_dist" ]; then
     fail "[check-pack-install] installed bridge missing prebuilt dist (prepack did not emit into the tarball?): $installed_dist"
     return 1
   fi
-  if [ -d "$npmroot/node_modules/@earendil-works" ]; then
-    fail "[check-pack-install] @earendil-works present in npm-managed node_modules — pi-free boot proof is void (neutral npm install should not install optional pi peers)"
+  if [ ! -d "$npmroot/node_modules/@earendil-works/pi-coding-agent" ]; then
+    fail "[check-pack-install] the npm-managed install lacks @earendil-works/pi-coding-agent — the pi-free boot proof below needs pi PRESENT to deny it (#130 production SDK)"
     return 1
   fi
+  local deny_pi="$npm_tmp/deny-pi/deny-pi.mjs"
+  mkdir -p "$(dirname "$deny_pi")"
+  cat > "$deny_pi" <<'DENY'
+import { registerHooks } from "node:module";
+registerHooks({
+  resolve(specifier, context, next) {
+    if (specifier.startsWith("@earendil-works/")) throw new Error(`pi-free boot violated: the bridge imported ${specifier}`);
+    return next(specifier, context);
+  },
+});
+DENY
+  # Control: the hook really refuses an @earendil-works import from this tree (else the proof is vacuous).
+  local deny_ctl
+  deny_ctl=$(cd "$npmroot" && node --import "$deny_pi" --input-type=module -e "await import('@earendil-works/pi-ai')" 2>&1) && {
+    fail "[check-pack-install] the pi-deny hook let @earendil-works/pi-ai load — the pi-free boot proof would be vacuous"
+    return 1
+  }
+  if ! grep -q "pi-free boot violated: the bridge imported @earendil-works/pi-ai" <<<"$deny_ctl"; then
+    fail "[check-pack-install] the pi-deny control failed for another reason:"; echo "$deny_ctl" | tail -5 | sed 's/^/    /' >&2; return 1
+  fi
   local boot_out
-  if ! boot_out=$(START_SH="$installed_start" node --input-type=module <<'JS'
+  if ! boot_out=$(START_SH="$installed_start" DENY_PI="$deny_pi" node --input-type=module <<'JS'
 import { spawn } from 'node:child_process';
 const start = process.env.START_SH;
 // Sanitize the child env so the pi-free proof cannot be masked by a leaked
 // module-resolution path: if NODE_PATH (or a stray pi env) pointed at a tree
 // holding @earendil-works, a statically pi-importing eager graph could resolve
 // and boot anyway, turning this gate falsely green. Strip it so "boots with
-// @earendil absent" stays an honest adversarial proof.
+// every @earendil-works resolution refused" stays an honest adversarial proof.
 const env = { ...process.env };
 delete env.NODE_PATH;
+// #130: pi is installed beside the bridge now; every @earendil-works resolution is refused instead.
+env.NODE_OPTIONS = `${env.NODE_OPTIONS ?? ''} --import ${process.env.DENY_PI}`.trim();
+delete env.DENY_PI;
 const child = spawn(start, { stdio: ['pipe', 'pipe', 'pipe'], env });
 let stdout = '', stderr = '', done = false;
 const timer = setTimeout(() => {
@@ -5777,13 +6014,15 @@ setup_mode() {
   esac
 }
 
-# Supported pi range, derived at runtime from the package.json devDependencies
-# pin (the SSOT check-dep-versions binds: peer range == `>=<pin> <<major>.<minor+1>`).
-# Never retyped here as a second literal.
+# Supported HOST pi range, derived at runtime from the pinned SDK generation — package.json's exact
+# production dependency on pi-coding-agent, which check-dep-versions binds to the durable pin's SDK
+# set: `>=<pin> <<major>.<minor+1>`. Never retyped here as a second literal. This is the ordinary Pi
+# on PATH that loads Entwurf's extensions; the carrier's own SDK set is a different subject
+# (pi-durable-runtime.ts), and a host inside this range is not required to be the same copy.
 pi_supported_range() {
   node -e '
     const pkg = require(process.argv[1]);
-    const pin = pkg.devDependencies?.["@earendil-works/pi-coding-agent"];
+    const pin = pkg.dependencies?.["@earendil-works/pi-coding-agent"];
     if (!/^\d+\.\d+\.\d+$/.test(pin ?? "")) { console.error(`unparseable pi pin: ${pin}`); process.exit(1); }
     const [maj, min] = pin.split(".").map(Number);
     console.log(`>=${pin} <${maj}.${min + 1}`);
@@ -6135,19 +6374,18 @@ setup_all() {
       setup_result codex-terminal-title FAIL "detected codex, but the terminal-title setting did not complete (see above)"
     fi
   fi
-  # ── pi-durable ── #129: presence-driven like every harness, but the "harness" is the
-  # operator-provided durable runtime at its ONE fixed place, and setup writes NOTHING for it.
-  # Absent is a zero-state SKIP; present and the pin is PASS; present but not the pin is a
-  # named FAIL the operator repairs. The verdict is the same leaf the managed launch and the
-  # fresh preflight ask — 0 verified, 4 absent, anything else refused. Entwurf never installs
-  # the runtime (docs/setup-clean-host.md §2b).
+  # ── pi-durable ── #129, #130: the durable app is this package's own carrier and its pi SDK set
+  # is a production dependency, so there is nothing to detect and setup writes NOTHING for it —
+  # the row reports whether the installed carrier can run. There is no SKIP: a missing piece is an
+  # incomplete installation, a named FAIL repaired by reinstalling Entwurf. The verdict is the
+  # same leaf the managed launch and the fresh preflight ask — 0 verified, anything else refused.
   local pd_rc pd_out
   pd_rc=0; pd_out=$(run_ts pi-extensions/lib/pi-durable-runtime.ts resolve 2>&1) || pd_rc=$?
-  case "$pd_rc" in
-    0) setup_result pi-durable PASS "operator runtime is the pin — launch with 'entwurf pi-durable'" ;;
-    4) setup_result pi-durable SKIP "no operator-provided durable runtime at the fixed location — zero durable wiring written (Entwurf never installs it)" ;;
-    *) setup_result pi-durable FAIL "a durable runtime is present but refused — ${pd_out##*$'\n'}" ;;
-  esac
+  if [ "$pd_rc" -eq 0 ]; then
+    setup_result pi-durable PASS "carrier and its pi SDK set verify — launch with 'entwurf pi-durable --provider <p> --model <id> --width task-wide'"
+  else
+    setup_result pi-durable FAIL "the installed pi-durable carrier is refused — ${pd_out##*$'\n'}"
+  fi
 
   # ── core bridge boundary ── deterministic preflight lives in `pnpm run
   # check:full`; live substrate acceptance lives in `LIVE=1 ./run.sh
@@ -7569,15 +7807,15 @@ case "$cmd" in
     exec bash "$REPO_DIR/scripts/copilot-launch.sh" "$@"
     ;;
   pi-durable)
-    # #129 W (L3): the MANAGED durable launch. Same shape and reasons as `copilot` above: `exec`,
-    # no subshell and no cd — the durable TUI must own this terminal, the caller's cwd, this pid
-    # and its exit status — and `shift`, because everything after the verb is the bootstrap's argv.
+    # #129 W (L3), #130: the MANAGED durable launch. Same shape and reasons as `copilot` above:
+    # `exec`, no subshell and no cd — the durable TUI must own this terminal, the caller's cwd, this
+    # pid and its exit status — and `shift`, because everything after the verb is the bootstrap's argv.
     #
-    # The durable app is source-only upstream, so its runtime is the OPERATOR's, at ONE fixed
-    # place, and it is verified against the packaged pin BEFORE any of it runs: its source
-    # resolver is the first code this launch would load from it. Absent or drifted is a named
-    # refusal from the same leaf the fresh preflight and setup ask (exit 4 absent, 3 otherwise).
-    # Entwurf never installs, repairs or moves that runtime.
+    # The durable app is this package's CARRIER (pi/pi-durable/carrier/), and it is verified with its
+    # declared pi SDK set BEFORE any of it runs: the resolver it prints is the first code this launch
+    # loads. An incomplete package, a drifted carrier or an absent/mismatched SDK edge is a named
+    # refusal (exit 3) from the same leaf the fresh preflight and setup ask. Nothing outside the
+    # package is located, installed or repaired.
     shift || true
     pd_resolver=$(run_ts pi-extensions/lib/pi-durable-runtime.ts resolve) || exit $?
     exec node --import "$pd_resolver" "$REPO_DIR/pi/pi-durable/bootstrap.mjs" "$@"
