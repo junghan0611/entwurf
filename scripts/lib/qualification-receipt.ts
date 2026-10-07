@@ -38,12 +38,12 @@ import { createHash } from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import {
-	createRepoSnapshot,
 	type MutantSpec,
 	originHead,
 	originWorkSurfaceSha,
 	qualifyMutants,
 	reportPassed,
+	withOwnSnapshot,
 } from "./mutation-qualify.ts";
 
 export const RECEIPT_SCHEMA = "entwurf.qualification-group-receipt/v0";
@@ -471,16 +471,12 @@ export async function runGroupReceipt(
 	const declaredInputs = declaredInputPaths(repoDir, groupSpecs, gate);
 	const inputsBefore = fileFingerprints(repoDir, declaredInputs);
 
-	const snap = createRepoSnapshot(repoDir, opts.tmpRoot);
-	opts.log(
-		`[gate-qualification --group] PARTIAL: ${groupSpecs.length}/${selected.length} mutants of ${groupKey}; snapshot ${snap.repoDir} (origin HEAD ${headBefore.slice(0, 12)})`,
-	);
-	let report: Awaited<ReturnType<typeof qualifyMutants>>;
-	try {
-		report = await qualifyMutants(snap, groupSpecs, opts.log);
-	} finally {
-		fs.rmSync(snap.baseDir, { recursive: true, force: true });
-	}
+	const report = await withOwnSnapshot(repoDir, opts.tmpRoot, (snap) => {
+		opts.log(
+			`[gate-qualification --group] PARTIAL: ${groupSpecs.length}/${selected.length} mutants of ${groupKey}; snapshot ${snap.repoDir} (origin HEAD ${headBefore.slice(0, 12)})`,
+		);
+		return qualifyMutants(snap, groupSpecs, opts.log);
+	});
 
 	const headAfter = originHead(repoDir);
 	const workSurfaceAfter = originWorkSurfaceSha(repoDir);

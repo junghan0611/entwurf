@@ -163,6 +163,10 @@ describe("the committed carrier", () => {
 			const write = (carrier: unknown) => fs.writeFileSync(bad, JSON.stringify({ ...pin, carrier }));
 			write({ ...pin.carrier, files: [{ name: "../escape.js" }] });
 			expect(reasonOf(() => readCarrierDeclaration(bad))).toBe("pi-durable-carrier-pin-malformed");
+			// No slash, still not a plain carrier .js name: only the plain-name rule refuses it
+			// (the slash rule above would also catch `../escape.js`, so it cannot tell them apart).
+			write({ ...pin.carrier, files: [{ name: "escape.mjs" }] });
+			expect(reasonOf(() => readCarrierDeclaration(bad))).toBe("pi-durable-carrier-pin-malformed");
 			write({ ...pin.carrier, distTargets: ["core/../../x.js"] });
 			expect(reasonOf(() => readCarrierDeclaration(bad))).toBe("pi-durable-carrier-pin-malformed");
 			write(undefined);

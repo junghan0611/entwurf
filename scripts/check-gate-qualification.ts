@@ -66,9 +66,9 @@ import {
 	runGateBounded,
 	signatureAttributedToFailure,
 	signatureOnFailureLine,
-	sweepStaleSnapshots,
 	validateManifest,
 	validateManifestSet,
+	withOwnSnapshot,
 } from "./lib/mutation-qualify.ts";
 import { ACCEPTANCE_SCHEMA, checkAcceptanceRecord, RECORD_CONSISTENT } from "./lib/qualification-acceptance.ts";
 import {
@@ -637,6 +637,32 @@ function fixtureSpec(patch: Partial<MutantSpec>): MutantSpec {
 	};
 }
 
+/**
+ * A PRIOR run's snapshot root inside a self-test's private `tmpRoot`, in the exact shape the
+ * retired ambient sweep deleted (snapshot prefix, a `runner.json` naming a dead pid). It is
+ * that run's evidence: no qualification run may list it, let alone remove it. `state()`
+ * names every entry with its bytes, so a removal or a rewrite both read as a change.
+ */
+const PRIOR_RUN_ROOT = "entwurf-qualify-prior1";
+function seedPriorRunRoot(tmpRoot: string): { before: string; state: () => string } {
+	const dir = path.join(tmpRoot, PRIOR_RUN_ROOT);
+	fs.mkdirSync(dir);
+	fs.writeFileSync(path.join(dir, "runner.json"), JSON.stringify({ pid: 999_999_999, startedAt: 0 }));
+	fs.writeFileSync(path.join(dir, "evidence.log"), "a prior run's red evidence\n");
+	const state = (): string =>
+		fs.existsSync(dir)
+			? fs
+					.readdirSync(dir)
+					.sort()
+					.map((name) => `${name}\0${fs.readFileSync(path.join(dir, name), "utf8")}`)
+					.join("\n")
+			: "absent";
+	return { before: state(), state };
+}
+
+/** Each prior-root observation, asserted ONCE under its QK by Phase 1c-s (the token is exactly-once). */
+const priorRunKept: Record<string, boolean> = {};
+
 const quiet = (): void => {};
 
 {
@@ -896,21 +922,6 @@ const quiet = (): void => {};
 			}
 			ok(`pgroup: the GRANDCHILD (pid ${grandchild}) is dead after the group SIGKILL`, dead);
 			fs.rmSync(invocationDir, { recursive: true, force: true });
-		}
-
-		// Stale-snapshot sweep: dead-pid residue is reclaimed, a live runner's dir survives.
-		{
-			const tmpRoot = reclaimOnExit(fs.mkdtempSync(path.join(os.tmpdir(), "entwurf-qualify-sweep-")));
-			const deadDir = path.join(tmpRoot, "entwurf-qualify-dead1");
-			fs.mkdirSync(deadDir);
-			fs.writeFileSync(path.join(deadDir, "runner.json"), JSON.stringify({ pid: 999_999_999, startedAt: 0 }));
-			const liveDir = path.join(tmpRoot, "entwurf-qualify-live1");
-			fs.mkdirSync(liveDir);
-			fs.writeFileSync(path.join(liveDir, "runner.json"), JSON.stringify({ pid: process.pid, startedAt: Date.now() }));
-			const swept = sweepStaleSnapshots(tmpRoot);
-			ok("sweep: a dead-pid snapshot dir is reclaimed", swept.includes(deadDir) && !fs.existsSync(deadDir));
-			ok("sweep: a live runner's snapshot dir survives", fs.existsSync(liveDir));
-			fs.rmSync(tmpRoot, { recursive: true, force: true });
 		}
 	} finally {
 		fs.rmSync(fixtureOrigin, { recursive: true, force: true });
@@ -1262,8 +1273,11 @@ function buildDeclaredOutputFixture(): string {
 				logError: quiet,
 				tmpRoot,
 			});
-		const snapshotsLeft = (): string[] => fs.readdirSync(tmpRoot).filter((f) => f.startsWith("entwurf-qualify-"));
+		// This run's own snapshots only: the seeded prior root is not this run's to reclaim.
+		const snapshotsLeft = (): string[] =>
+			fs.readdirSync(tmpRoot).filter((f) => f.startsWith("entwurf-qualify-") && f !== PRIOR_RUN_ROOT);
 		const readReceipt = (name: string) => JSON.parse(fs.readFileSync(out(name), "utf8"));
+		const prior = seedPriorRunRoot(tmpRoot);
 
 		const green = await runFx(["bash", "gates/kill.sh"], "green.json");
 		const gr = readReceipt("green.json");
@@ -1279,6 +1293,7 @@ function buildDeclaredOutputFixture(): string {
 				gr.receiptSha256 === green.receiptSha256,
 		);
 		ok("group run: the snapshot is reclaimed", snapshotsLeft().length === 0);
+		priorRunKept["group green"] = prior.state() === prior.before;
 
 		const red = await runFx(["bash", "gates/survive.sh"], "red.json");
 		const rr = readReceipt("red.json");
@@ -1286,6 +1301,7 @@ function buildDeclaredOutputFixture(): string {
 			"group run: a SURVIVED mutant is still written — red receipt, passed false",
 			red.passed === false && rr.result.passed === false && rr.result.mutants[0].verdict === "SURVIVED",
 		);
+		priorRunKept["group red"] = prior.state() === prior.before && snapshotsLeft().length === 0;
 
 		let refused = "";
 		try {
@@ -1405,6 +1421,7 @@ const refuseArgs = (argv: string[], naming: string): void =>
 		const receiptOf = (dir: string, file: string | null) =>
 			JSON.parse(fs.readFileSync(path.join(tmpRoot, dir, file ?? ""), "utf8"));
 
+		const prior = seedPriorRunRoot(tmpRoot);
 		const abc = await collect("abc", [sA, sB, sC]);
 		ok(
 			"[QK:COLLECT-RED-DOES-NOT-STOP] collect: green / red / green — the red middle does not stop the tail; collection COMPLETE and intact",
@@ -1430,8 +1447,9 @@ const refuseArgs = (argv: string[], naming: string): void =>
 			) &&
 				rB.result.control === "ok" &&
 				rB.result.mutants[0].verdict === "SURVIVED" &&
-				fs.readdirSync(tmpRoot).every((f) => !f.startsWith("entwurf-qualify-")),
+				fs.readdirSync(tmpRoot).every((f) => f === PRIOR_RUN_ROOT || !f.startsWith("entwurf-qualify-")),
 		);
+		priorRunKept["collect green/red/green"] = prior.state() === prior.before;
 		ok(
 			"collect: runId/runAttempt recorded exactly as the environment gave them; requested order kept",
 			abc.runId === "123" &&
@@ -1584,6 +1602,47 @@ const refuseArgs = (argv: string[], naming: string): void =>
 		fs.rmSync(path.dirname(externalTarget), { recursive: true, force: true });
 		fs.rmSync(tmpRoot, { recursive: true, force: true });
 	}
+}
+
+// ═══ Phase 1c-s — every real run owns exactly its own snapshot (#130 r3) ═════
+//
+// The group (1c-g) and collection (1c-m) fixtures above seeded a prior run's root and
+// recorded whether it survived their green and red runs. That holds for real runs only while
+// every real run goes THROUGH the seam, so the production callers are read here too: the full
+// body and the group receipt each make their snapshot only via withOwnSnapshot, the collection
+// only via the group receipt, and the library exports no sweep and lists no tmp root. The
+// retired ambient sweep removed a protected prior snapshot during a release-gate run; the
+// fixtures cannot see a caller that bypasses the seam, this can. All four observations are
+// asserted once, under the claim's single token.
+
+{
+	const read = (rel: string): string => fs.readFileSync(path.join(REPO_DIR, rel), "utf8");
+	const qualifier = read("scripts/check-gate-qualification.ts");
+	// The LAST occurrence is the real header: this block's own needle sits above it.
+	const bodyAt = qualifier.lastIndexOf("// ═══ Phase 2m — several exact-argv groups");
+	const body = qualifier.slice(bodyAt);
+	const receipt = read("scripts/lib/qualification-receipt.ts");
+	const collection = read("scripts/lib/qualification-collection.ts");
+	const lib = read("scripts/lib/mutation-qualify.ts");
+	const libExports = Object.keys(await import("./lib/mutation-qualify.ts"));
+	priorRunKept.wiring =
+		bodyAt > qualifier.indexOf("// ═══ Phase 1c-s") &&
+		countOccurrences(body, "withOwnSnapshot(REPO_DIR, undefined,") === 1 &&
+		countOccurrences(body, "createRepoSnapshot(") === 0 &&
+		countOccurrences(receipt, "withOwnSnapshot(repoDir, opts.tmpRoot,") === 1 &&
+		countOccurrences(receipt, "createRepoSnapshot(") === 0 &&
+		countOccurrences(collection, "runGroupReceipt(") >= 1 &&
+		countOccurrences(collection, "createRepoSnapshot(") === 0 &&
+		countOccurrences(collection, "withOwnSnapshot(") === 0 &&
+		countOccurrences(lib, "createRepoSnapshot(") === 2 &&
+		countOccurrences(lib, "const snap = createRepoSnapshot(originDir, tmpRoot);") === 1 &&
+		countOccurrences(lib, "readdirSync(tmpRoot") === 0 &&
+		!libExports.some((name) => /sweep/i.test(name));
+	const failed = Object.keys(priorRunKept).filter((k) => !priorRunKept[k]);
+	ok(
+		`[QK:QUALIFY-PRIOR-RUN-EVIDENCE-KEPT] a prior run's dead-pid snapshot root keeps every name and byte through a green and a red group run and a green/red/green collection, each run's own snapshot is reclaimed, and the full body and group receipt snapshot only through withOwnSnapshot — failed: ${failed.join(", ") || "none"}`,
+		Object.keys(priorRunKept).length === 4 && failed.length === 0,
+	);
 }
 
 // ═══ Phase 1c-l — the composite ledger over REAL fixture receipts (#124 P2) ═
@@ -3351,7 +3410,7 @@ let manifestCount: number;
 		"entwurf-peers": 1,
 		"fresh-call-dispatch": 11,
 		"fresh-cut": 3,
-		"gate-qualification": 7,
+		"gate-qualification": 8,
 		"herdr-placement": 13,
 		"herdr-plugin": 25,
 		"herdr-plugin-profile": 14,
@@ -3503,7 +3562,6 @@ if (ARGS.mode === "compose") {
 if (ARGS.mode === "groups") {
 	const requested = ARGS.groups === "all" ? allGroupArgv(selected) : ARGS.groups;
 	checkRequestedGroups(requested, selected);
-	sweepStaleSnapshots(os.tmpdir());
 	const c = await collectGroups({
 		repoDir: REPO_DIR,
 		selected,
@@ -3532,7 +3590,6 @@ if (ARGS.mode === "groups") {
 // prints `[gate-qualification] ok` and never claims the full set.
 
 if (ARGS.mode === "group") {
-	sweepStaleSnapshots(os.tmpdir());
 	const { passed: groupPassed } = await runGroupReceipt({
 		repoDir: REPO_DIR,
 		selected,
@@ -3550,17 +3607,12 @@ if (ARGS.mode === "group") {
 	const headBefore = originHead(REPO_DIR);
 	const workSurfaceBefore = originWorkSurfaceSha(REPO_DIR);
 
-	sweepStaleSnapshots(os.tmpdir());
-	const snap = createRepoSnapshot(REPO_DIR);
-	console.log(
-		`[gate-qualification] snapshot: ${snap.repoDir} (${snap.fileCount} files, origin HEAD ${headBefore.slice(0, 12)})`,
-	);
-	let report: Awaited<ReturnType<typeof qualifyMutants>>;
-	try {
-		report = await qualifyMutants(snap, selected, (line) => console.log(line));
-	} finally {
-		fs.rmSync(snap.baseDir, { recursive: true, force: true });
-	}
+	const report = await withOwnSnapshot(REPO_DIR, undefined, (snap) => {
+		console.log(
+			`[gate-qualification] snapshot: ${snap.repoDir} (${snap.fileCount} files, origin HEAD ${headBefore.slice(0, 12)})`,
+		);
+		return qualifyMutants(snap, selected, (line) => console.log(line));
+	});
 
 	// Tripwire, not recovery: the runner never writes the origin, so any drift here is
 	// an outside writer racing the qualification — evidence cannot be attributed.

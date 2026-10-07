@@ -82,6 +82,19 @@
 			"timeoutSeconds": 120,
 			"signature": "[QK:QUALIFY-BUILD-GROUP-CONSISTENT]",
 			"signatureSource": "scripts/check-gate-qualification.ts"
+		},
+		{
+			"claim": "QUALIFY-PRIOR-RUN-EVIDENCE-KEPT",
+			"title": "the snapshot seam lists its tmp root and removes every snapshot-prefixed root before making its own — the retired ambient sweep is back, and a prior run's evidence is deleted by the qualifier instead of left to the operator (scoped to an explicit tmpRoot, which only self-test fixtures pass, so the defect never reaches the real tmp dir)",
+			"subject": "scripts/lib/mutation-qualify.ts",
+			"find": ["\tconst snap = createRepoSnapshot(originDir, tmpRoot);"],
+			"replace": [
+				"\tif (tmpRoot !== undefined) for (const name of fs.readdirSync(tmpRoot)) if (name.startsWith(SNAPSHOT_PREFIX)) fs.rmSync(path.join(tmpRoot, name), { recursive: true, force: true });\n\tconst snap = createRepoSnapshot(originDir, tmpRoot);"
+			],
+			"gate": ["bash", "run.sh", "check-gate-manifests"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:QUALIFY-PRIOR-RUN-EVIDENCE-KEPT]",
+			"signatureSource": "scripts/check-gate-qualification.ts"
 		}
 	]
 }

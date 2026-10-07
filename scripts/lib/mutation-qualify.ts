@@ -426,50 +426,6 @@ function gitIn(dir: string, args: string[]): string {
 	return r.stdout;
 }
 
-/**
- * Sweep stale snapshot dirs left by a SIGKILLed/powered-off run. Only dirs whose
- * recorded runner pid is dead are removed; a dir with no runner.json is removed only
- * once it is old (another runner may be mid-mkdtemp). Residue is inert tmp garbage —
- * the real checkout was never written — so this is tidiness, not recovery.
- */
-export function sweepStaleSnapshots(tmpRoot: string): string[] {
-	const swept: string[] = [];
-	let entries: string[];
-	try {
-		entries = fs.readdirSync(tmpRoot);
-	} catch {
-		return swept;
-	}
-	for (const name of entries) {
-		if (!name.startsWith(SNAPSHOT_PREFIX)) continue;
-		const dir = path.join(tmpRoot, name);
-		const marker = path.join(dir, "runner.json");
-		let dead = false;
-		try {
-			const rec = JSON.parse(fs.readFileSync(marker, "utf8")) as { pid?: number };
-			if (typeof rec.pid !== "number") dead = true;
-			else if (rec.pid !== process.pid) {
-				try {
-					process.kill(rec.pid, 0);
-				} catch {
-					dead = true;
-				}
-			}
-		} catch {
-			try {
-				dead = Date.now() - fs.statSync(dir).mtimeMs > 60_000;
-			} catch {
-				continue;
-			}
-		}
-		if (dead) {
-			fs.rmSync(dir, { recursive: true, force: true });
-			swept.push(dir);
-		}
-	}
-	return swept;
-}
-
 export interface Snapshot {
 	baseDir: string;
 	repoDir: string;
@@ -488,7 +444,6 @@ export interface Snapshot {
 export function createRepoSnapshot(originDir: string, tmpRoot: string = os.tmpdir()): Snapshot {
 	const baseDir = fs.mkdtempSync(path.join(tmpRoot, SNAPSHOT_PREFIX));
 	fs.chmodSync(baseDir, 0o700);
-	fs.writeFileSync(path.join(baseDir, "runner.json"), JSON.stringify({ pid: process.pid, startedAt: Date.now() }));
 	const repoDir = path.join(baseDir, "repo");
 	fs.mkdirSync(repoDir, { mode: 0o700 });
 
@@ -527,6 +482,27 @@ export function createRepoSnapshot(originDir: string, tmpRoot: string = os.tmpdi
 		fs.appendFileSync(path.join(repoDir, ".git", "info", "exclude"), "node_modules\n");
 	}
 	return { baseDir, repoDir, fileCount: copied };
+}
+
+/**
+ * The one snapshot lifecycle every real run uses (full body and each group): create
+ * exactly one snapshot, run, then remove exactly the `baseDir` this call created. It
+ * never lists `tmpRoot` and never removes a root it did not create here: a prior run's
+ * snapshot is that run's evidence, whatever its process state, and deleting it is the
+ * operator's decision, never the qualifier's. `tmpRoot` is passed only by self-test
+ * fixtures; real runs leave it undefined (the OS tmp dir).
+ */
+export async function withOwnSnapshot<T>(
+	originDir: string,
+	tmpRoot: string | undefined,
+	run: (snap: Snapshot) => Promise<T>,
+): Promise<T> {
+	const snap = createRepoSnapshot(originDir, tmpRoot);
+	try {
+		return await run(snap);
+	} finally {
+		fs.rmSync(snap.baseDir, { recursive: true, force: true });
+	}
 }
 
 /**

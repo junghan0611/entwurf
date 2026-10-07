@@ -1966,17 +1966,37 @@ describe("pi-durable bootstrap — the packaged compiled closure (needs a built 
 		const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, "package.json"), "utf8")) as { engines: { node: string } };
 		expect(pkg.engines.node).toBe(">=24.0.0");
 		// Executed directly (on THIS Node — the floor itself is not a runtime here): the compiled verifier
-		// answers — this checkout's carrier verified (0, its resolver on stdout) or refused by name (3,
-		// nothing on stdout), never a silent 0 — and both bootstraps refuse an unknown argument before any
-		// TUI loads.
+		// answers — the carrier verified (0, its resolver on stdout) or refused by name (3, nothing on
+		// stdout), never a silent 0 — and both bootstraps refuse an unknown argument before any TUI loads.
+		// The verifier runs from a PRIVATE package copy, never against this checkout: the compiled bytes
+		// (under qualification, the group's rebuild from a mutated source) are copied with the pin, the
+		// carrier and the manifest, and only the dependency tree is shared, read-only, by symlink. A
+		// defect that writes into the package it verifies then writes into the copy, where its own QK
+		// (PI-DURABLE-RUNTIME-READ-ONLY) still sees it, instead of drifting the tree that the carrier's
+		// pin-match test reads.
 		const own = fs.mkdtempSync(path.join(os.tmpdir(), "pi-durable-entry-"));
+		const pkgCopy = fs.mkdtempSync(path.join(os.tmpdir(), "pi-durable-entry-pkgCopy-"));
 		try {
 			const env = { PATH: process.env.PATH ?? "", HOME: own, XDG_DATA_HOME: path.join(own, "data"), LANG: "C.UTF-8" };
-			const dist = path.join(ROOT, "mcp", "entwurf-bridge", "dist");
-			const verifier = path.join(dist, "pi-extensions", "lib", "pi-durable-runtime.js");
+			const compiled = path.join(
+				ROOT,
+				"mcp",
+				"entwurf-bridge",
+				"dist",
+				"pi-extensions",
+				"lib",
+				"pi-durable-runtime.js",
+			);
+			const verifier = path.join(pkgCopy, path.relative(ROOT, compiled));
+			fs.mkdirSync(path.dirname(verifier), { recursive: true });
+			fs.copyFileSync(compiled, verifier);
+			fs.cpSync(path.join(ROOT, "pi", "pi-durable"), path.join(pkgCopy, "pi", "pi-durable"), { recursive: true });
+			fs.copyFileSync(path.join(ROOT, "package.json"), path.join(pkgCopy, "package.json"));
+			fs.symlinkSync(path.join(ROOT, "node_modules"), path.join(pkgCopy, "node_modules"));
+			expect(fs.readFileSync(verifier).equals(fs.readFileSync(compiled))).toBe(true);
 			const answered = spawnSync(process.execPath, [verifier, "resolve"], { cwd: own, env, timeout: 20_000 });
 			if (answered.status === 0) {
-				expect(answered.stdout.toString()).toBe(`${path.join(ROOT, "pi", "pi-durable", "carrier-resolver.mjs")}\n`);
+				expect(answered.stdout.toString()).toBe(`${path.join(pkgCopy, "pi", "pi-durable", "carrier-resolver.mjs")}\n`);
 			} else {
 				expect(answered.status, `${answered.stderr}`).toBe(3);
 				expect(answered.stdout.toString()).toBe("");
@@ -1992,6 +2012,7 @@ describe("pi-durable bootstrap — the packaged compiled closure (needs a built 
 			expect(fs.readdirSync(own)).toEqual([]);
 		} finally {
 			fs.rmSync(own, { recursive: true, force: true });
+			fs.rmSync(pkgCopy, { recursive: true, force: true });
 		}
 	});
 
