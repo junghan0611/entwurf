@@ -4,15 +4,35 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
-### Release coordination (in progress — not a completion claim)
+## 0.33.0 - 2026-10-08
 
-- **First cut coordinated by a pi-durable citizen (#132).** This cut is being coordinated by the
+### Release coordination
+
+- **First cut coordinated by a pi-durable citizen (#132).** This cut is coordinated by the
   pi-durable citizen `20261008T113104-801621`, implemented by Claude Code Opus, and independently
   scrutinized by Grok. Per GLG's direct report (carried here as that report, not as a source
   receipt), an earlier durable-coordination attempt during the 0.31.0 process broke down; 0.31.0
   itself shipped with the accepted receipts recorded in its own section below, and neither that
   report nor 0.32.0's snapshot-loss incident is restated here as a package-publication failure.
-  Whether this cut completes is recorded only when prepare and make actually close.
+  This section is written at prepare time: the prepared-SHA CI, the preserved artifact and the tag
+  that close the cut are recorded in the GitHub release and the #132 thread, not claimed here.
+- **Verified for this cut.** The Pi SDK 1.1.0 implementation landed at `aceba59` with exact-SHA CI
+  run 37739273349 green on all four required jobs and its qualification body (898/898 killed),
+  after a local body of 898/898 and a frozen `check:full` on that candidate. The prepared tree
+  (scheduling policy, ASCII fix, version metadata) passed a frozen `check:full`. The policy's
+  affected 22-mutant partial run killed 22/22, and its later format/doc amendments re-ran their
+  focused gates. After the operator-owned Codex app-server was restarted, the Codex and
+  Antigravity native doctors were green.
+- **Not run for this cut — GLG's direct cost/deadline decision, one cut only** ("아니야 30분 내로
+  npm publish 전까지 끝내줘. 이 부랜치 핵심은 검증했지? 그럼 됬어. … 시간 아끼자.";
+  [authority record](https://github.com/junghan0611/entwurf/issues/132#issuecomment-6057425161)). The LIVE
+  `release-gate --cut` was started and then aborted inside its `check:full`, before any LIVE step;
+  that is not a verdict, so the live MUST floor is unproven here. Also not run: the pre-commit
+  native acceptance (provider-instruction wire observation, warm/cold retention, the Codex
+  caller-seat cell), the second `check:full` before the push, and waiting for the prepared SHA's CI
+  qualification body before the candidate was packed. That CI run continues and its outcome is
+  recorded with the release; a red result is new scope. Antigravity criterion 7 stays NOT
+  CERTIFIED. VERIFY's release floor is unchanged — this is not a standing waiver.
 
 ### Changed
 
@@ -22,6 +42,13 @@ All notable changes to this project will be documented here. Format follows [Kee
   ordinary Pi host range follows the pin to `>=1.1.0 <1.2`. The installed-consumer previous-host
   control moves from a real pi 1.0.2 to 1.0.4 — the immediately prior generation is now the refused
   host — while the L3/L4 mixed and depth-3 controls keep their real 1.0.3 packages.
+- **A cut runs its qualification body once, at the prepared SHA (#132, #133).** `release-gate` no
+  longer runs a local `check-gate-qualification` body; the release's one body is the exact-SHA CI
+  step at the prepared SHA, which the release oracle already required. The scheduling assertion now
+  keeps `release-gate` at zero invocations and its mutant plants the call back. The development rule
+  of one local run when a gate or mutant changes is unchanged; retiring it stays with #133. For this
+  cut alone GLG granted two exceptions: the policy commit rides the prepared push without its own
+  pre-version CI, and its local whole body was replaced by its affected 22-mutant partial run.
 
 ## 0.32.0 - 2026-10-08
 
