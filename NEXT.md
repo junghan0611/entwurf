@@ -1,24 +1,26 @@
-# NEXT — 0.32.0 prepared-SHA CI → 보존된 versioned artifact
+# NEXT — #132: Pi 1.1.0 → Entwurf 0.33.0 → Herdr alignment
 
 # RAIL — 현재 좌표
 
-- [x] **1. Source/native + pre-version landing** — frozen b220 r4와 main78c917a CI37679372365 수용. 각각 고유 fingerprint.
-- [x] **2. Grok 정합성 + metadata 준비** — B0/D2/O6, prose 수선/test0. 0.32.0 version/CHANGELOG 묶음은 정상 hooks/scanner로 닫는다.
-- [ ] **3. Prepared-SHA CI / 보존 artifact 결과** ← CURRENT: `.tmp-verify/032-release/`의 owning receipt 확인. Four jobs+BODY success 뒤 one preserved candidate만 exact Docker 소비. 완료 receipt가 있으면 다음 GLG 승인 대기로 이동; 반복 실행 없음.
-- [ ] **4. Tag/GitHub Release → npm publish** ← PAUSED: 이번 승인 범위 밖, 별도 GLG 결정.
+- [x] **1. 0.32.0 closure** — tag/registry accepted, requested README shortened, exact release-residue cleanup complete; historical evidence archived.
+- [ ] **2. #132 local preparation** ← CURRENT: verify the inherited upstream diff/pins, separate measured changes from hypotheses, choose the previous-host control and focused proof scope before editing.
+- [ ] **3. Pi 1.1.0 implementation and 0.33.0 release** — scoped pin/contract edits → affected proofs/review → required final floors → separately authorized land/prepare/make/publish.
+- [ ] **4. Herdr 0.33.0** — after registry publication, re-pin measured npm bytes and manifest, run source-specific proof; manual durable launch → agent detection → GLG fresh-call decision → plugin release.
 
 # NOW
 
-- **Next:** `.tmp-verify/032-release/correction/{prepared.sha,ci/accepted.json}`와 `artifact/accepted.json`에서 실제 corrected prepared SHA/CI/body/candidate canonical path/SHA256/image를 읽는다. 원1c6c96a/CI37694671506은 install-surface RED이며 다른 job의 green으로 승격하지 않는다. SDK host fixture만 수선하여 affected check-pack-install 131s/exit0; 새 SHA의 CI가 다음 구획이다. Missing은 미완료, PASS receipt는 그 단계의 결과이지 다음 mode 권한이 아니다. 두 축이 수용되면 태그/GH Release의 GLG 승인 대기. npm publish는 별도 explicit version/candidate/dist-tag 승인이 필요하다.
-- **Authorized:** GLG가 local FULL+LIVE 반복 생략 → version 준비 → prepared-SHA main push/required CI → 보존된0.32 artifact 검증에 명시 승인했다. `.tmp-verify/032-release/authority.md`가 이 좁은 계약을 소유한다. 정상 hooks/shared scanner, prepared-SHA 필수 CI/body, one exact Docker는 유지한다. 문서 수정으로 local FULL/body/LIVE/pack-install을 반복하지 않는다. Generic P4/P5/M0 반복은 이번 명시 범위에서 없으며 원 b220/78 영수증을 새 SHA로 승격하지 않는다.
-- **Freeze:** branch NEXT는 main merge 전 원문 보존 후 retire. Prepared commit/index/worktree를 CI→pack→artifact verdict까지 고정한다. 임시 CI tar를 release candidate로 재사용하지 않는다. 최종 candidate는 한 번 pack한 같은 canonical file/hash로 검증한다. 이후 상태 갱신은 ignored receipt/issue에 기록하고 태그 대상 SHA를 움직이지 않는다.
-- **Correction:** GLG가 main CI 결과를 보고 반영·진행하라고 명시 요청했다. `install-red/diagnosis.md`와 `focused.log/.rc`가 owning receipt. `run.sh`의 dev-only installed gate는 coinstalled1.0.4/previous-host1.0.2의 SDK roots를 pin에서 파생한다. Npm caret의 pi-ai1.1.0 tar404를 피하되 제품 pin/override/host range/기존 assertions/mutants를 바꾸지 않는다. 원1c6 watcher와 새 corrected CI raw는 별도 directory로 격리한다.
-- **Protect:** runtime/native SDK/overlay/pins/mutants 불변. Gate 수정은 위 host fixture leaf뿐이다. Operator auth/settings/records/transcripts/SQLite/Emacs/foreign roots/0.31 archives/원r3 RED 보존. P9는 read-only, cleanup/signals0. RED는 raw/candidate 보존 → owning leaf → STOP; model fallback/blind replay 없음. 실제 env-loader는 release 후 agent-config.
-- **Read:** `.claude/skills/entwurf-release/SKILL.md` mode boundaries/exact CI/M3, `VERIFY.md` evidence axes, `.tmp-verify/032-release/{authority.md,docs-commit.sha,prepared.sha,ci/,install-red/,correction/,artifact/}`, [#130 thread](https://github.com/junghan0611/entwurf/issues/130).
+- **Stem:** [#132](https://github.com/junghan0611/entwurf/issues/132), read its body and latest thread before acting. The issue is GLG's next direction; its thinkpad measurements are inherited leads, not local receipts.
+- **Next:** On a new branch in this checkout, (1) independently compare upstream v1.0.4/v1.1.0 carrier blobs/import targets/API changes, (2) enumerate pin/SDK/host-range/fixture/mutant sites and decide the previous-host negative control, (3) report one scoped amendment/proof plan. No blanket version-string replacement.
+- **LIVE hypotheses, not facts:** Q-B0 system/developer context ordering; first-turn ordinary-Pi MCP availability; durable self-fetch and same-id `--continue` under context retention. Name independent oracles and preserve 1.0.4 observations before new LIVE/model work.
+- **Herdr:** Current pilot remains pi/Claude Code; no durable fresh-call promise or tmux fallback. Manual installed-runtime launch and agent detection precede any pilot expansion decision. npm re-pin requires actual 0.33.0 publication bytes, not predicted integrity.
+- **External lane:** GLG reported on 2026-10-08 that the notebook agent-config maintainer has started the env-loader plugin. Not locally inspected; real dotenv policy stays there. Do not duplicate its implementation or open a sibling without GLG asking.
+- **Authority:** Current request authorizes the README/NEXT checkpoint commit+push and #132 preparation. Do not inherit 0.32's local-replay omission or agy exception into 0.33. New implementation checkpoints, LIVE/model calls and release/publish boundaries follow their explicit grants; no operator Pi update/setup/auth repair during preparation.
+- **Read:** #132 body/thread; `AGENTS.md`, `VERIFY.md`, `pi/pi-durable/overlay/upstream-pin.json`, carrier emitter/verifier and tests, `run.sh` host/install fixtures, `plugins/herdr/{README.md,runtime-lock.json,herdr-plugin.toml}`.
+- **Protect:** Native auth/settings/records/transcripts/SQLite, foreign processes and roots; 0.32 tag/artifact and historical raw/REDs. Entwurf supplies missing execution bytes, never owns the native harness; no classic shim/catalog copy/ambient module discovery or generic cleanup manager.
 
-# RECENT / SCOPE
+# RECENT
 
-- **b220:** `.tmp-verify/032-final/aggregate-r4-accepted.json` f16dcfa3…cf58 — FULL716s,898 IDs each once KILLED,178 controls green,origin pure,MUST25/0/0,BEHAVIOR1. Explicit installed proof 별도, Codex65/PD36 공식 saved snapshots를 owning oracles로 재판정. 이 pre-version source/native receipt는 prepared-SHA/0.32 artifact/registry 증거가 아니다.
-- **78c917a:** CI37679372365 four jobs+BODY success/898 once KILLED/178 green/container exit0. Temporary CI tar9cb0fd68…5481d는0.31.0 이름의 당시 source bytes이며 published0.31 artifact나 보존된0.32 candidate가 아니다.
-- **Grok:** pre-prepare reportca021850…dd5e/6907bytes/B0D2O6. Source/status/index before/after MATCH, old reports 불변,test/build0. Carrier pending underclaim/issue 첫RED 문장과 README branch 표현을 prose-only로 수선. 기존 peer grants는 소진, STOP 유지.
-- **Integrity:** r3 aggregate RED/FULL714s0, protected36MB snapshot 복구불가/wider extent unknown/vendor-32603 cause unknown. 원 raw/confirmation/erratum 보존. Prior-evidence regression은 private-fixture proof이고 r4 실제 tmp에는 이전 root가 없었다. Immutable0.31 tag/artifact/archive 유지. agy1.2 NOT CERTIFIED/핀1.1 unchanged; 새 native agy acceptance 없음.
+- 0.32.0 tag/source `80d66f4ca66f0be674b2d2bfbe20c49717c0340e`; [#130 closed at registry acceptance](https://github.com/junghan0611/entwurf/issues/130#issuecomment-6049936030). Public tar byte equality and 591 installed files passed; source/native, prepared CI, final Docker artifact and registry remain distinct evidence scopes.
+- Requested cleanup: 23 completed verification windows, three full-backed/independently compared fixture roots and the published candidate tmp path retired; ~7.5GiB tmp allocation reclaimed, no sibling/server closure or global-cache sweep. Classified proc visibility limits are preserved, not a whole-machine inactivity proof. [Cleanup receipt](https://github.com/junghan0611/entwurf/issues/130#issuecomment-6050201524).
+- Full evidence and final candidate live at `~/archives/entwurf/20261008T095118-v0.32.0/`; candidate `published-candidate/junghanacs-entwurf-0.32.0.tgz`, SHA256 `91d8abfdada9d6ada1f1e600ad006ccd74268edbccffc3327393da18b4bfd8b1`. Local post-publication receipts: `.tmp-verify/032-release/post-publish/`.
+- Original 1c6 prepared CI and R3 aggregate remain RED. Protected 36MiB snapshot irreversibly lost; wider deletion extent/vendor cause unknown; raw/confirmation/erratum retained. agy1.2 remains NOT CERTIFIED. The separately retired 0.31 runtime and archive remain protected.

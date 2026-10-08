@@ -27,23 +27,17 @@ Claude and Cortex Code are ACP backends. Codex and Antigravity stay native so th
 retain their own tools and work context. Capabilities differ by rail: a shipped
 citizen is not a promise of every lifecycle operation.
 
-**Native durable contact (`pi-durable`) ships in the [0.31.0 release](https://github.com/junghan0611/entwurf/releases/tag/v0.31.0) (#129).**
-It is a separate native harness contact, not ordinary Pi's control-socket adapter.
-The contact attaches one durable host to a garden id, adds visible identity and
-two-way mailbox contact, while the upstream harness keeps its TUI, models/auth,
-SQLite storage and recovery. Native admission passed on one Linux host on the
-0.31.0 source-runtime route. Under the #130/0.32 contract the app ships inside the
-Entwurf package as a pinned [carrier](#native-durable-pi-durable--130--032-contract), so
-it no longer depends on installing the ordinary Pi CLI or provisioning a runtime.
-
-> **Prepared 0.32.0 candidate, not a published release.** The current source contains #130's
-> carrier and explicit native-module contract. Prepared-SHA CI and one preserved versioned
-> artifact have their own acceptance receipts; preparation alone does not assert npm publication.
-> The published 0.31.0 follows its source-runtime docs — it does not supply this carrier.
+> **Current release: [0.32.0](https://github.com/junghan0611/entwurf/releases/tag/v0.32.0)**
+> ([`80d66f4`](https://github.com/junghan0611/entwurf/commit/80d66f4ca66f0be674b2d2bfbe20c49717c0340e)).
+> Includes the pinned Pi 1.0.4 native durable app/TUI and one explicit native-module ingress.
+> npm publication and registry byte equality are [verified](https://github.com/junghan0611/entwurf/issues/130#issuecomment-6049936030).
+> Release history and detailed evidence belong in [CHANGELOG](./CHANGELOG.md).
 
 ## Install
 
-**Choose by where you work. Neither route installs a harness, subscription or login.**
+**Choose by where you work. Bring your own harnesses, subscriptions and login.**
+The native durable route below additionally supplies the upstream app/TUI missing from its npm
+release; it does not supply credentials or take ownership of the harness.
 
 ### Direct — ordinary shell or tmux
 
@@ -77,37 +71,28 @@ Detected harness wiring on Darwin can therefore be written while setup stays
 non-green. Native Windows is **UNSUPPORTED**. The package has no npm `os`
 restriction; that is not certification of every platform's harness rails.
 
-### Native durable (pi-durable) — #130 / 0.32 contract
+### Native durable (pi-durable)
 
-**Installing Entwurf from npm supplies pi-durable. There is no runtime checkout, patch,
-build or model-data copy for the operator.**
+**Entwurf 0.32.0 supplies the pinned upstream app/TUI and nine exact Pi 1.0.4 SDK
+members.** No separate runtime checkout, patch, build or ordinary Pi CLI is needed.
+The launch verifies carrier integrity and every reachable SDK edge's name/version;
+incomplete, drifted or mixed supply refuses by name.
 
-| Component | How it is supplied | What it does not supply |
-|---|---|---|
-| Entwurf | Existing npm or source-checkout route above | A harness binary, subscription or login |
-| pi SDK set (`@earendil-works/*` 1.0.4, incl. the `pi-durable` library) | Exact production dependencies of Entwurf | The experimental app, which upstream does not publish |
-| Native experimental durable app/TUI | Entwurf's **carrier**: the pinned upstream v1.0.4 app files, type-stripped, with the narrow runtime-contact overlay (`pi/pi-durable/carrier/`, MIT) | A replacement ordinary Pi CLI or an Entwurf-owned harness |
+```bash
+entwurf pi-durable --provider <provider> --model <model-id> --width task-wide
+entwurf pi-durable --continue
+```
 
-`entwurf pi-durable` verifies the carrier and the pi SDK set it resolves — every reachable
-package edge binds the declared name at exactly the pinned version — and refuses by name otherwise
-(`pi-durable-package-incomplete`, `-carrier-drift`, `-sdk-absent`, `-sdk-mismatch`);
-`entwurf setup` reports the same verdict as PASS or FAIL (never SKIP) without writing durable
-wiring. The ordinary Pi on PATH is a separate subject with its own range above. Native auth,
-models, sessions and recovery stay upstream-owned: Entwurf does not copy credentials or convert
-ordinary Pi sessions into durable SQLite sessions. One operator module of your own can ride the
-launch with `--native-module <absolute file>`: it initializes before the durable runtime and its
-default export, a native durable `Extension`, is installed after Entwurf's contact ([setup
-§2b](./docs/setup-clean-host.md#2b-optional-native-durable-pi-durable)). Ordinary Pi may warn
-that Entwurf's `@earendil-works/*` belong in `peerDependencies`; the exact set is a production
-dependency on purpose, for the native process — a known manifest constraint accepted for 0.32.
+The contact adds garden identity and two-way mailbox communication. Runtime/TUI,
+models/auth, queues, SQLite, transcripts and recovery remain upstream-owned:
+[Hard Rule 17](./AGENTS.md#hard-rules), **supply the missing surface; do not become the harness**.
 
-The installed carrier's runtime/TUI load, its physical SDK edges and the public launch up to the
-app's own model resolution are package-gate evidence; the checkout contact/send/receive gates run the
-same carrier with scripted S plus native H; Pi ↔ pi-durable LIVE on this supply surface is a separate
-release proof. 0.31.0 shipped the earlier source-runtime
-route (Pi 1.0.2/source `cd32f77`), which this contract replaces.
-See [setup: native durable](./docs/setup-clean-host.md#2b-optional-native-durable-pi-durable)
-and [#130](https://github.com/junghan0611/entwurf/issues/130).
+Optional `--native-module <absolute file>` initializes trusted ESM before runtime/TUI
+imports, then installs its default native Extension after the contact. No automatic
+module discovery or classic Pi API shim; guards are not a sandbox or rollback.
+Ordinary Pi's known `peerDependencies` warning reflects the separate native SDK supply.
+[Native setup](./docs/setup-clean-host.md#2b-optional-native-durable-pi-durable)
+owns flags, refusals and the extension contract.
 
 ### Herdr workbench
 
@@ -115,13 +100,11 @@ and [#130](https://github.com/junghan0611/entwurf/issues/130).
 herdr plugin install junghan0611/entwurf/plugins/herdr --yes
 ```
 
-This is a separate consumer path: it activates only Herdr-integrated **pi and
-Claude Code**, acquires the locked Entwurf runtime, and adds an observation pane.
-It puts no Entwurf bins on PATH. The
-[Herdr integration guide](https://github.com/junghan0611/entwurf/blob/main/plugins/herdr/README.md)
-owns its prerequisites, first install → first use, evidence and explicit removal.
-The plugin does not own delivery or the Herdr launch rail; a direct-installed
-citizen inside Herdr selects that rail from its own process context too.
+This separate path activates Herdr-integrated **pi and Claude Code** with an
+independently locked runtime and an observation pane; it puts no Entwurf bins on PATH.
+An Entwurf release does not automatically re-pin that runtime.
+[Herdr guide](./plugins/herdr/README.md) owns install, use, evidence and removal;
+the plugin does not own delivery or the Herdr launch rail.
 
 ### Garden launcher
 
@@ -207,74 +190,26 @@ a live or non-pi target refuses, and an unobserved window stays visible without 
 Exact boundaries: [tmux launch](https://github.com/junghan0611/entwurf/blob/main/docs/mux-launch-rail.md)
 and [Herdr launch](https://github.com/junghan0611/entwurf/blob/main/docs/herdr-launch-rail.md).
 
-## Concept primer
+## Concepts
 
-- **Entwurf** (기투, projection-of-self): opening and addressing independent visible
-  siblings, not turning them into workers of a second orchestrator.
-- **Garden / garden id:** the shared address space and stable id of one V3
-  record-backed citizen. Native harnesses keep their own identity and transcript.
-- **ACP:** a plugin that exposes backend turns as pi provider/models under the
-  operator's own auth. The host pi is already a citizen; ACP mints no second one.
-- **MCP:** tool-call ingress to the same compiled `entwurf-bridge`, not a general
-  MCP platform or the pi receive rail. ACP uses explicit `mcpServers` declarations;
-  no ambient config scan or automatic retrieval. Plain anonymous hosts have no
-  authoritative reply address and sends are refused by default.
-- **Engraving:** optional short operator text in the backend's identity carrier,
-  not rich project context or a hidden tool catalog.
+**Entwurf** (기투, projection-of-self) connects independent visible siblings;
+**garden id** names a record-backed citizen, not its pane or native transcript.
+[FAQ](./FAQ.md) explains ACP, MCP and context carriers.
 
-## Pi 1.0 and a short history
+## Pi integration
 
-**We welcome Pi's built-in MCP:** [You Said No MCP!](https://earendil.com/posts/you-said-no-mcp/)
-(Earendil, 2026-09-29). The 0.30.0 cut targets Pi 1.0 admission and ACP basics.
-Instead of keeping native pi copies of the verbs, the adapter registers the same
-compiled bridge after record birth, under the citizen's identity, and Pi supervises
-that MCP child. **MCP is ingress; pi receive remains the record-addressed Unix
-control socket.** Garden identity and dispatch stay Entwurf's. That 0.30.0 cut
-did not adopt or certify `pi-durable` or codemode. Native durable support is now
-released as a separate 0.31.0 native contact, as described above; codemode remains a
-harness-internal capability, not another garden citizen. The 0.30.0 follow-up
-separately measured Herdr supply 0.9.3 and
-re-pinned the plugin runtime to published npm 0.30.0 with manifest 0.30.0; its
-public consumer and CI receipts live in the #126 thread. That dated alignment is
-not a permanent version-equality rule. 0.30.1 is published (npm, 2026-10-04); at its tag the
-plugin's runtime lock is still the closed `herdr-checkout` verification carrier. Publication did
-not re-pin it: the measured npm re-pin and its source-specific proof are separate, still-open
-work that the [plugin source contract](./plugins/herdr/README.md) owns.
+The pi adapter registers the compiled bridge with Pi's built-in MCP after record
+birth; Pi supervises the MCP child. **MCP is ingress; pi receive remains the
+record-addressed Unix control socket.** Garden identity and dispatch stay Entwurf's.
+Codemode is harness-internal, not another garden citizen.
 
-Entwurf is the 0.12+ successor to
-[`@junghanacs/pi-shell-acp`](https://www.npmjs.com/package/@junghanacs/pi-shell-acp):
-the work was renamed around the dispatch substrate rather than the pi adapter.
-The pre-0.12 [two-pane demo](./demo/README.md) is **archived evidence**, including
-retired resume behaviour, not current instructions. [CHANGELOG](./CHANGELOG.md)
-keeps the release history; dated Codex topology and qualification receipts remain
-in [DELIVERY](./DELIVERY.md) and [BASELINE](./BASELINE.md), not rewritten as today's acceptance.
+## Operation guides
 
-## Detailed operation
-
-### Settings
-
-[Setup — settings and backend-specific keys](./docs/setup-clean-host.md#settings-reference-and-backend-specific-keys)
-owns configuration, including billing-safe carrier choices and pi-versus-backend keys.
-
-### External MCP registration
-
-[Setup — external hosts](./docs/setup-clean-host.md#stable-bins-and-external-mcp-hosts)
-and [manual wiring](./docs/external-mcp-host.md) own paths, env and identity prerequisites.
-
-### Custom skills
-
-[Setup — custom skills](./docs/setup-clean-host.md#custom-skills) owns the Claude ACP
-plugin layout and validation; other harnesses keep their native skill mechanisms.
-
-### Context carriers
-
-[Setup — carriers](./docs/setup-clean-host.md#context-carriers) separates short
-engraving from the rich first-user augment and the actual callable schema.
-
-### Compaction policy
-
-[Setup — reuse and compaction](./docs/setup-clean-host.md#session-reuse-and-compaction):
-Entwurf does not implement backend compaction or hydrate another harness's transcript.
+- [Settings and backend keys](./docs/setup-clean-host.md#settings-reference-and-backend-specific-keys)
+- [External MCP registration](./docs/setup-clean-host.md#stable-bins-and-external-mcp-hosts) · [manual wiring](./docs/external-mcp-host.md)
+- [Custom skills](./docs/setup-clean-host.md#custom-skills)
+- [Context carriers](./docs/setup-clean-host.md#context-carriers)
+- [Reuse and compaction](./docs/setup-clean-host.md#session-reuse-and-compaction) — native harness-owned; no transcript hydration
 
 ## What this repo owns, and does not
 
