@@ -358,16 +358,18 @@ function runSubcommand(sub: string, env: Record<string, string | undefined>): { 
 //    check-gate-qualification left the default check chains (operator
 //    inner-loop cost, 2026-08 subtraction). That move is a gate/release
 //    contract: the step must stay REACHABLE on the axes that now own it — the
-//    CI check job (on the pushes #103's filter still sends it) and release_gate
-//    as its own MUST step — and
-//    must not silently return to the default chain. Without this cell,
-//    deleting the release_gate qualification block or the CI line leaves every
-//    focused gate green while a cut quietly loses its discriminating-power
-//    step.
+//    CI check job (on the pushes #103's filter still sends it) and, for a cut,
+//    the exact-SHA release oracle that requires that CI step at the prepared SHA
+//    (8c) — and must not silently return to the default chain or to release_gate.
+//    #132/#133 moved the cut's one BODY off release_gate: a local BODY there re-ran
+//    the same proof on a SHA nobody ships, so release_gate now invokes it ZERO
+//    times. Without this cell, deleting the CI line leaves every focused gate green
+//    while a cut quietly loses its discriminating-power step, and re-adding the
+//    release_gate block silently doubles every cut again.
 //
 //    THREE claims, because each is an independent contract. 8a is REACHABILITY
-//    (absent from the default chain; present exactly once in CI and exactly once
-//    as a wired release_gate MUST step; named in VERIFY). 8b is what the CI step
+//    (absent from the default chain and from release_gate; present exactly once in
+//    CI; named in VERIFY). 8b is what the CI step
 //    qualifies (the FULL floor, before the qualification run), added by #70. 8c is
 //    what the RELEASE path ACCEPTS as evidence for one SHA — that the body step
 //    actually ran there (#103). Each carries its own replant — one mutant must
@@ -399,25 +401,27 @@ function runSubcommand(sub: string, env: Record<string, string | undefined>): { 
 			"package.json's default `check` chain contains check-gate-qualification again (doubles every closure floor)",
 		);
 	if (ciHits !== 1) holes.push(`the CI check job runs check-gate-qualification ${ciHits}x (need exactly once)`);
-	if (invocations !== 1)
-		holes.push(`release_gate invokes check-gate-qualification ${invocations}x (need exactly one MUST step)`);
+	if (invocations !== 0)
+		holes.push(
+			`release_gate invokes check-gate-qualification ${invocations}x (need none: the cut's one BODY is the prepared SHA's CI step)`,
+		);
 	if (
-		!qualGateBody.includes('results+=("PASS  check-gate-qualification")') ||
-		!qualGateBody.includes('results+=("FAIL  check-gate-qualification")')
+		qualGateBody.includes("PASS  check-gate-qualification") ||
+		qualGateBody.includes("FAIL  check-gate-qualification")
 	)
-		holes.push("the release_gate qualification step does not wire PASS/FAIL into the MUST counters");
+		holes.push("release_gate still counts a check-gate-qualification MUST row");
 	if (
 		!verifyDoc.includes(
-			"in the CI `check` job on a branch push that touched the qualification surface, and as a release-gate MUST step",
+			"in the CI `check` job on a branch push that touched the qualification surface, and — for a cut — at the prepared SHA, where the exact-SHA release oracle requires that CI step",
 		)
 	)
 		holes.push("VERIFY.md no longer names the owners of the moved qualification step");
 	assert.ok(
 		holes.length === 0,
 		"[QK:QUALIFICATION-SCHEDULING-REACHABLE] check-gate-qualification left the default check chains " +
-			"deliberately, so it must stay REACHABLE on the axes that own it now — absent from the default chain, " +
-			"exactly once in the CI check job, exactly once as a release_gate MUST step with its " +
-			`outcome wired, and named in VERIFY. Broken: ${holes.join("; ")}`,
+			"deliberately, so it must stay REACHABLE on the axes that own it now — absent from the default chain " +
+			"and from release_gate (the cut's one BODY is the prepared SHA's CI step), exactly once in the CI check job, " +
+			`and named in VERIFY. Broken: ${holes.join("; ")}`,
 	);
 
 	// 8b. WHAT the CI qualification step qualifies — its own claim, not a branch

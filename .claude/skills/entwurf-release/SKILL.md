@@ -304,10 +304,13 @@ gates. The current `package.json` check:* scripts are the SSOT. If any check
 fails, stop at that axis, fix it, and rerun the complete aggregate.
 
 The check chains carry only the qualification HEAD (`check-gate-manifests`) and
-deliberately exclude the mutant-executing body `check-gate-qualification`: the
-LIVE release gate (P5) runs the body as its own MUST step, and the exact-SHA CI
-`check` job (M2) requires it on the release commit. Do not add a manual
-qualification rerun here.
+deliberately exclude the mutant-executing body `check-gate-qualification`. This
+release path's one body is the exact-SHA CI `check` job at the prepared SHA, which
+M2 requires before any candidate exists; the LIVE release gate (P5) no longer runs
+a local body (#132). That does not retire the development rule in `AGENTS.md`
+(qualification once when a gate/mutant/matrix changes) — retiring it is #133; the
+0.33.0 cut skips that local body only by its one-cut exception (#132 G2). Do not add
+a manual qualification rerun here.
 
 Pushing the release tag creates no run, so the exact-SHA oracle never reads a
 tag run. It reads whichever run at that commit carries the body: the branch push
@@ -371,15 +374,14 @@ Do not expect a fixed PASS count. Record actual output. Do not waive a MUST
 failure without diagnosing and explicitly classifying the failing axis. Do not
 hide a BEHAVIOR failure.
 
-**Freeze HEAD, index, and working tree while the gate is running.** `check-gate-qualification` pins
-the origin HEAD and aborts if that moves, but the other sequential P5 steps consume the candidate
-checkout directly. A working-tree or index edit can therefore make one release-gate verdict describe
-multiple candidates even when qualification's own snapshot stays pure. Queue every edit and commit
+**Freeze HEAD, index, and working tree while the gate is running.** The sequential P5 steps consume
+the candidate checkout directly, so a working-tree or index edit can make one release-gate verdict
+describe multiple candidates. Queue every edit and commit
 request (including one from GLG) until the gate reports its verdict; any movement voids that P5 receipt.
 
 **When the gate reports its verdict, run P9 before doing anything else.** This is the
-heaviest resource event in the whole release (the full floor, `check-gate-qualification`
-and every LIVE smoke on one host), and it is where residue is BOTH largest and freshest,
+heaviest resource event in the whole release (the full floor and every LIVE smoke on
+one host), and it is where residue is BOTH largest and freshest,
 so the prefix a leak carries still names the gate that produced it. Do it here, not only
 at P8: by P8 the trail is cold. Report the P9 numbers together with the gate's own
 verdict; a large residue at this point is a finding about a gate, not housekeeping.
@@ -424,7 +426,7 @@ Report:
 - prepared version and commit SHA
 - `pnpm run check:full` result
 - release-gate scratch, log, and artifact paths
-- actual `MUST: PASS=n FAIL=0 SKIP=n` (includes the `check-gate-qualification` MUST step)
+- actual `MUST: PASS=n FAIL=0 SKIP=n` (no qualification step: that body runs once in M2's CI)
 - actual `BEHAVIOR: PASS=n FAIL=n`
 - release-specific work deliberately deferred to `make`
 - clean-tree result

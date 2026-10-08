@@ -103,10 +103,12 @@
 		},
 		{
 			"claim": "QUALIFICATION-SCHEDULING-REACHABLE",
-			"title": "release_gate stops invoking check-gate-qualification — the discriminating-power step moved out of the default chain silently vanishes from the cut while VERIFY still promises it",
+			"title": "release_gate starts invoking check-gate-qualification again — every cut silently pays a second ~100-minute BODY on a SHA nobody ships, the repetition #132/#133 moved to the prepared SHA's one CI step",
 			"subject": "run.sh",
-			"find": ["  if (cd \"$REPO_DIR\" && bash \"$self\" check-gate-qualification); then"],
-			"replace": ["  if (cd \"$REPO_DIR\" && true); then"],
+			"find": ["  # 2. (gemini-availability step removed — claude-only floor; gemini CLI is"],
+			"replace": [
+				"  (cd \"$REPO_DIR\" && bash \"$self\" check-gate-qualification) || true\n  # 2. (gemini-availability step removed — claude-only floor; gemini CLI is"
+			],
 			"gate": ["bash", "run.sh", "check-release-gate-outcomes"],
 			"timeoutSeconds": 180,
 			"signature": "[QK:QUALIFICATION-SCHEDULING-REACHABLE]",

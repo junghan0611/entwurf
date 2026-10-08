@@ -6808,19 +6808,11 @@ release_gate() {
     results+=("FAIL  static (pnpm run check:full)"); failc=$((failc + 1))
   fi
 
-  # 1b. Discriminating power of that floor. The mutant-EXECUTING body left the
-  # default check chains (operator inner-loop cost) — only its head rides along,
-  # as check-gate-manifests inside check:hermetic — so release acceptance carries
-  # the body explicitly as its own MUST step: a cut must re-prove the gates still
-  # kill what they claim to kill.
-  section "release-gate step: check-gate-qualification"
-  if (cd "$REPO_DIR" && bash "$self" check-gate-qualification); then
-    ok "check-gate-qualification: PASS"
-    results+=("PASS  check-gate-qualification"); pass=$((pass + 1))
-  else
-    fail "check-gate-qualification: FAIL"
-    results+=("FAIL  check-gate-qualification"); failc=$((failc + 1))
-  fi
+  # 1b. Discriminating power is NOT re-proven here. A cut re-proves that the gates still kill
+  # what they claim exactly once: the qualification BODY step of the exact-SHA CI run at the
+  # prepared SHA, which the release oracle (verify-exact-ci.sh) requires before any candidate
+  # exists (#132 / #133 — a local BODY here repeated that ~100-minute proof on a SHA nobody ships).
+  # Its head still rides check:full as check-gate-manifests.
 
   # 2. (gemini-availability step removed — claude-only floor; gemini CLI is
   #    deprecated, so the gate no longer asserts a three-backend claim.)
