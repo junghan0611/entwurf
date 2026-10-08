@@ -88,13 +88,13 @@ A new contract's test goes beside the behavior it certifies — `pi-extensions/*
 
 ```text
 implement → affected focused gates → independent review → one amendment bundle
-          → qualification once if gate/mutant/matrix changed → full floor once on frozen candidate → commit
+          → affected qualification PARTIAL once if gate/mutant/matrix changed → full floor once on frozen candidate → commit
 ```
 
-- GLG-requested branch checkpoint commits keep completed subject/proof bundles small: scoped review, affected focused checks and normal hooks/shared scanner before each checkpoint, with known RED/unmeasured boundaries recorded. A checkpoint is not frozen-candidate acceptance. The sequence above owns final candidate acceptance: required changed qualification, frozen FULL and native/LIVE/release floors remain mandatory before landing/shipment, never inherited from an interim commit.
+- GLG-requested branch checkpoint commits keep completed subject/proof bundles small: scoped review, affected focused checks and normal hooks/shared scanner before each checkpoint, with known RED/unmeasured boundaries recorded. A checkpoint is not frozen-candidate acceptance. The sequence above owns final candidate acceptance: the affected qualification PARTIAL, frozen FULL and native/LIVE/release floors remain mandatory before landing, and the prepared SHA's CI qualification body before shipment, never inherited from an interim commit.
 - Inner loop runs only affected gates; review and its corrections finish before the full floor.
 - A changed contract names a production subject and independent oracle; its focused assertion has a stable QK and exact-once mutant. Matrices change by their declared axes/cells, not appended anecdotes.
-- Qualification body is scheduled once when its surface changes; its manifest/head checks remain in the deterministic floor. A release requires the exact-SHA qualification evidence required by VERIFY, never a nearby green run.
+- Development never runs the whole qualification body. A changed gate/mutant/matrix runs its affected exact-argv groups once, after review and amendment, as PARTIAL receipts (`./run.sh check-gate-qualification --group '<argv JSON>' --receipt <absolute path outside the repo>`); the manifest head stays in the deterministic floor. The whole body runs once per cut, in the prepared SHA's CI: a prepared state awaits it and is never presumed PASS, and a release requires the exact-SHA evidence VERIFY names, never a nearby green run or a PARTIAL.
 - Freeze the candidate while the full floor runs; any worktree/index movement voids that receipt. Pre-commit is not the full floor.
 - LIVE/release floors are not lowered by a shorter inner loop. Failed gate or evidence downgrade blocks the relevant commit/release decision.
 

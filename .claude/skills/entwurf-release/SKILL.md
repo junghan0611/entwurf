@@ -306,11 +306,13 @@ fails, stop at that axis, fix it, and rerun the complete aggregate.
 The check chains carry only the qualification HEAD (`check-gate-manifests`) and
 deliberately exclude the mutant-executing body `check-gate-qualification`. This
 release path's one body is the exact-SHA CI `check` job at the prepared SHA, which
-M2 requires before any candidate exists; the LIVE release gate (P5) no longer runs
-a local body (#132). That does not retire the development rule in `AGENTS.md`
-(qualification once when a gate/mutant/matrix changes); retiring it is #133; the
-0.33.0 cut skips that local body only by its one-cut exception (#132 G2). Do not add
-a manual qualification rerun here.
+M2 requires before any candidate exists; until it concludes, the prepared state is
+awaiting CI, never presumed PASS. The LIVE release gate (P5) runs no local body
+(#132), and development runs none either (#133): a lane that changed a
+gate/mutant/matrix ran only its affected exact-argv groups as PARTIAL receipts
+(`./run.sh check-gate-qualification --group '<argv JSON>' --receipt <abs path>`).
+A receipt measures one group; it is never this release's qualification evidence.
+Do not add a manual whole-body rerun here.
 
 Pushing the release tag creates no run, so the exact-SHA oracle never reads a
 tag run. It reads whichever run at that commit carries the body: the branch push

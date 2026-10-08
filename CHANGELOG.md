@@ -20,6 +20,18 @@ All notable changes to this project will be documented here. Format follows [Kee
   discovery stay forbidden.
 - **Deferred:** #106 no-turn retirement moved to ROADMAP as GLG's deferral, not implemented.
 
+### Verification
+
+- **Development runs no whole qualification body (#133).** `run.sh check-gate-qualification` now
+  hands its arguments to the runner's parser: `--group '<argv JSON>' --receipt <absolute path>`
+  runs one affected exact-argv group as a PARTIAL receipt, and a malformed, missing or repeated flag
+  is refused by name before any body or snapshot. Until now the wrapper dropped them, so a requested
+  PARTIAL started the whole body. Bare, it stays the whole body, which runs once per cut at the
+  prepared SHA's CI; a prepared state awaits it and is never presumed PASS. AGENTS, VERIFY and the
+  release skill retire the development rule of a local whole run when a gate, mutant or matrix
+  changes. Native/LIVE, the deterministic and package floors, the four required CI jobs and the
+  artifact acceptance are unchanged; P4 FULL and its CI repetition are not reduced here.
+
 ## 0.33.0 - 2026-10-08
 
 ### Release coordination

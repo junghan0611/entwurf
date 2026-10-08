@@ -95,6 +95,30 @@
 			"timeoutSeconds": 120,
 			"signature": "[QK:QUALIFY-PRIOR-RUN-EVIDENCE-KEPT]",
 			"signatureSource": "scripts/check-gate-qualification.ts"
+		},
+		{
+			"claim": "QUALIFY-DOOR-FORWARDS-ARGV",
+			"title": "run.sh check-gate-qualification drops its arguments again — a requested --group/--receipt PARTIAL reaches the runner as a bare call and starts the whole ~900-mutant body nobody asked for (#133: the wrapper defect that made every development PARTIAL a whole run)",
+			"subject": "run.sh",
+			"find": ["    run_ts scripts/check-gate-qualification.ts \"$@\""],
+			"replace": ["    run_ts scripts/check-gate-qualification.ts"],
+			"gate": ["bash", "run.sh", "check-gate-manifests"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:QUALIFY-DOOR-FORWARDS-ARGV]",
+			"signatureSource": "scripts/check-gate-qualification.ts"
+		},
+		{
+			"claim": "QUALIFY-DOOR-REFUSES-BEFORE-BODY",
+			"title": "run.sh check-gate-qualification retries bare when the runner refuses — a malformed, missing or repeated flag is named, then the whole body starts anyway in place of the PARTIAL that was asked for (#133)",
+			"subject": "run.sh",
+			"find": ["    run_ts scripts/check-gate-qualification.ts \"$@\""],
+			"replace": [
+				"    run_ts scripts/check-gate-qualification.ts \"$@\" || run_ts scripts/check-gate-qualification.ts"
+			],
+			"gate": ["bash", "run.sh", "check-gate-manifests"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:QUALIFY-DOOR-REFUSES-BEFORE-BODY]",
+			"signatureSource": "scripts/check-gate-qualification.ts"
 		}
 	]
 }

@@ -49,7 +49,7 @@ import { createHash } from "node:crypto";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import {
 	classifyMutantRun,
 	countOccurrences,
@@ -1176,6 +1176,63 @@ function buildDeclaredOutputFixture(): string {
 		parsedCompose.mode === "compose" &&
 			JSON.stringify(parsedCompose.receipts) === '["/a.json","/b.json"]' &&
 			parsedCompose.expectPath === "/e.txt",
+	);
+
+	// The operator's door to this parser is `run.sh check-gate-qualification` (#133): it
+	// once dropped every argument, so a requested PARTIAL started the whole body. The
+	// cells run a byte copy of this checkout's run.sh whose runner is a fixture: the REAL
+	// parser, then a print where the body would start — so neither a refusal nor a mutated
+	// wrapper can launch a body or a snapshot from here. Mutation acceptance stays the
+	// runner's own; this proves only the door's control flow.
+	const door = reclaimOnExit(fs.mkdtempSync(path.join(os.tmpdir(), "entwurf-qualification-door-")));
+	fs.mkdirSync(path.join(door, "scripts"));
+	fs.copyFileSync(path.join(REPO_DIR, "run.sh"), path.join(door, "run.sh"));
+	const parserUrl = pathToFileURL(path.join(REPO_DIR, "scripts", "lib", "qualification-receipt.ts")).href;
+	fs.writeFileSync(
+		path.join(door, "scripts", "check-gate-qualification.ts"),
+		[
+			`import { parseQualificationArgs } from ${JSON.stringify(parserUrl)};`,
+			"const argv = process.argv.slice(2);",
+			"let parsed;",
+			"try { parsed = parseQualificationArgs(argv); }",
+			'catch (err) { process.stderr.write("refused: " + (err instanceof Error ? err.message : String(err)) + "\\n"); process.exit(2); }',
+			'process.stdout.write(JSON.stringify({ argv, parsed }) + "\\n");',
+			"",
+		].join("\n"),
+	);
+	const viaDoor = (argv: string[]) => {
+		const r = spawnSync("bash", [path.join(door, "run.sh"), "check-gate-qualification", ...argv], {
+			cwd: door,
+			encoding: "utf8",
+			env: { PATH: process.env.PATH ?? "", HOME: door },
+			timeout: 30_000,
+		});
+		const started = r.stdout.trim() === "" ? undefined : JSON.parse(r.stdout);
+		return { status: r.status, stderr: r.stderr, started };
+	};
+	const requested = ["--group", '["bash","run.sh","check pi *"]', "--receipt", "/x/r.json"];
+	const partial = viaDoor(requested);
+	const bare = viaDoor([]);
+	ok(
+		"[QK:QUALIFY-DOOR-FORWARDS-ARGV] run.sh check-gate-qualification hands --group/--receipt to the parser unchanged (a space and a glob inside the argv JSON included) and the parser reads one PARTIAL group; called bare it still reads the whole body — the prepared SHA's CI call",
+		partial.status === 0 &&
+			JSON.stringify(partial.started?.argv) === JSON.stringify(requested) &&
+			partial.started?.parsed.mode === "group" &&
+			partial.started.parsed.receiptPath === "/x/r.json" &&
+			bare.status === 0 &&
+			JSON.stringify(bare.started?.argv) === "[]" &&
+			bare.started?.parsed.mode === "full",
+	);
+	const doorRefusals: Array<[string[], string]> = [
+		[["--group", '["bash","run.sh","check-x"]'], "--group needs --receipt"],
+		[["--group", '["a"]', "--group", '["a"]', "--receipt", "/x/r.json"], "repeated flag"],
+		[["--grop", '["a"]', "--receipt", "/x/r.json"], "unknown argument"],
+		[["--group", "check-x", "--receipt", "/x/r.json"], "JSON array"],
+	];
+	const refused = doorRefusals.map(([argv, naming]) => ({ naming, run: viaDoor(argv) }));
+	ok(
+		"[QK:QUALIFY-DOOR-REFUSES-BEFORE-BODY] through run.sh, a missing --receipt, a repeated flag, a misspelled flag and a non-array --group are each refused by name and nothing starts — never a whole body in place of the PARTIAL that was asked for",
+		refused.every(({ naming, run }) => run.status === 2 && run.stderr.includes(naming) && run.started === undefined),
 	);
 
 	const tmpRoot = reclaimOnExit(fs.mkdtempSync(path.join(os.tmpdir(), "entwurf-receipt-selftest-")));
@@ -3410,7 +3467,7 @@ let manifestCount: number;
 		"entwurf-peers": 1,
 		"fresh-call-dispatch": 11,
 		"fresh-cut": 3,
-		"gate-qualification": 8,
+		"gate-qualification": 10,
 		"herdr-placement": 13,
 		"herdr-plugin": 25,
 		"herdr-plugin-profile": 14,

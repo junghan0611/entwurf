@@ -1098,7 +1098,7 @@ console.log(
 		"a run.sh wrapper declining its own prerequisite (including the measured LIVE=1 no-cortex-connection cell); and every " +
 		"LIVE smoke is either wired into release_gate or excluded by a sentence the docs still carry; and the moved " +
 		"check-gate-qualification stays reachable on its owners (absent from the default chain, exactly once in CI, " +
-		"exactly once as a release-gate MUST step) and the CI step qualifies the FULL floor, which runs before it, " +
+		"absent from release_gate: the one body is the prepared SHA's CI step) and the CI step qualifies the FULL floor, which runs before it, " +
 		"while the exact-SHA release oracle requires that BODY step to have concluded success at the release SHA, " +
 		"and the CI filter that decides when that body runs covers every mutant subject and still runs it for all " +
 		"five historical reds; and " +
