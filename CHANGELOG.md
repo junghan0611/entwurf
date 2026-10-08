@@ -4,6 +4,25 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+### Release coordination (in progress — not a completion claim)
+
+- **First cut coordinated by a pi-durable citizen (#132).** This cut is being coordinated by the
+  pi-durable citizen `20261008T113104-801621`, implemented by Claude Code Opus, and independently
+  scrutinized by Grok. Per GLG's direct report (carried here as that report, not as a source
+  receipt), an earlier durable-coordination attempt during the 0.31.0 process broke down; 0.31.0
+  itself shipped with the accepted receipts recorded in its own section below, and neither that
+  report nor 0.32.0's snapshot-loss incident is restated here as a package-publication failure.
+  Whether this cut completes is recorded only when prepare and make actually close.
+
+### Changed
+
+- **Pi SDK 1.1.0 (#132).** The nine exact production SDK members move to `1.1.0` and the
+  pi-durable carrier pin to upstream `v1.1.0` (`abe508e`); the emitter's `--check` reproduces the
+  existing carrier bytes at that commit, so only the pin's tag/commit/SDK set change. The supported
+  ordinary Pi host range follows the pin to `>=1.1.0 <1.2`. The installed-consumer previous-host
+  control moves from a real pi 1.0.2 to 1.0.4 — the immediately prior generation is now the refused
+  host — while the L3/L4 mixed and depth-3 controls keep their real 1.0.3 packages.
+
 ## 0.32.0 - 2026-10-08
 
 ### Added

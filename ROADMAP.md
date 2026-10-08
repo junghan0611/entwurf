@@ -15,9 +15,9 @@
 - **보존된 구현:** [#114 최신 인계](https://github.com/junghan0611/entwurf/issues/114#issuecomment-5657853881)에서 읽은 branch `feat/114-garden-frontend`, 구현 `351c23f`, proof amendment `ec49ada`, handoff `f15297a`와 [branch NEXT](https://github.com/junghan0611/entwurf/blob/feat/114-garden-frontend/NEXT--feat_114-garden-frontend.md). 이 결정으로 branch/코드/영수증을 삭제하거나 병합하지 않는다. 과거 gate 수치는 해당 thread의 당시 후보 증거이지 현재 main 증거가 아니다.
 - **재개 조건:** GLG가 실제 사용에서 다시 필요하다고 결정한 뒤 기존 handoff와 source를 읽고 현재 계약에 맞춰 측정한다. 상속된 topology 경고: #115 cherry-pick `1f456df`가 branch에 있으나 main은 standalone `d49e6cb`를 받았으므로 #114-only lane을 normalize/replay한다; wholesale merge 금지. 새 구현 이슈는 당시 queue 슬롯과 증거로 다시 판단한다.
 
-## 미출하 후보 — #130 0.32: Pi 1.0.4 SDK 출하 + pi-durable carrier (2026-10-07)
+## 0.32.0 shipped (2026-10-08) — #130 Pi 1.0.4 SDK + pi-durable carrier; 아래 범위 문단은 cut 당시 기록
 
-#130 구현(`feat/130-install-surface`에서 개발, current handoff `NEXT.md`): pi SDK 9종(`@earendil-works/*`, `pi-durable` 포함)이 exact `1.0.4` production dependency로 승격되고 durable app/TUI가 pinned upstream `v1.0.4` carrier로 패키지에 실린다. host 범위 `>=1.0.4 <1.1`(single-source floor 규칙 그대로 pin을 따라 움직임). bootstrap은 명시적 `--native-module <절대경로>` 하나를 받는다(P2: 일반 ES module 초기화가 TUI·runtime import보다 먼저, default export native `Extension`을 contact 뒤에 참조 그대로). 0.31.0 출하물이 아니다: 0.31.0 registry는 peer floor 1.0.2와 source-runtime 경로다. 측정·미측정 축은 Dep bump 원장 2026-10-07 항목과 #130 thread. `[수용 영수증 2026-10-08]` frozen `b220b20`는 FULL716s/body898 IDs 모두1회 KILLED/controls178green/explicit packed install/MUST25·FAIL0·SKIP0/BEHAVIOR1 후보바닥을 닫았다([#130 원천](https://github.com/junghan0611/entwurf/issues/130#issuecomment-6043744944)). Required exact-SHA CI/container·prepared versioned artifact·registry proof는 별도이며 출하 수용이 아니다. r3 원RED/복구불가 snapshot삭제/미확정 vendor원인은 그대로 보존한다.
+#130 구현(`feat/130-install-surface`에서 개발, current handoff `NEXT.md`): pi SDK 9종(`@earendil-works/*`, `pi-durable` 포함)이 exact `1.0.4` production dependency로 승격되고 durable app/TUI가 pinned upstream `v1.0.4` carrier로 패키지에 실린다. host 범위는 당시 1.0.4 floor의 next-minor 상한(single-source floor 규칙 그대로 pin을 따라 움직임; 현재 floor는 아래 버전 정책). bootstrap은 명시적 `--native-module <절대경로>` 하나를 받는다(P2: 일반 ES module 초기화가 TUI·runtime import보다 먼저, default export native `Extension`을 contact 뒤에 참조 그대로). 0.31.0 출하물이 아니다: 0.31.0 registry는 peer floor 1.0.2와 source-runtime 경로다. 측정·미측정 축은 Dep bump 원장 2026-10-07 항목과 #130 thread. `[수용 영수증 2026-10-08]` frozen `b220b20`는 FULL716s/body898 IDs 모두1회 KILLED/controls178green/explicit packed install/MUST25·FAIL0·SKIP0/BEHAVIOR1 후보바닥을 닫았다([#130 원천](https://github.com/junghan0611/entwurf/issues/130#issuecomment-6043744944)). Required exact-SHA CI/container·prepared versioned artifact·registry proof는 별도이며 출하 수용이 아니다. r3 원RED/복구불가 snapshot삭제/미확정 vendor원인은 그대로 보존한다.
 
 ## 0.30.1 shipped (2026-10-04) — #127 Claude ACP 0.85.1
 
@@ -132,7 +132,7 @@ ACP는 중심이 아니라 v2 core 위에 provider/model로 들어오는 **plugi
 | v2 live Antigravity → native-push direct injection | native-push adapter/register/decider gates + `smoke-agy-native-push-live` |
 | agy automatic citizen birth + sender/reply identity | hooks/statusline/install/sender gates + three doctors + fresh live round trip |
 | v2 honest reject (false-delivered/`.msg` garbage 0) | matrix-live C3 + deliverability/native-push reject gates |
-| pi 1.0.4 fence | `pnpm check` + release-gate MUST |
+| pi 1.1.0 fence | `pnpm check` + release-gate MUST |
 
 ### Historical — 0.12.0 cutover close checklist
 
@@ -344,7 +344,7 @@ v2 필드 `parentGardenId`/`isEntwurf`는 **stray key로 거부된다** — 되�
 ## 검증 원장 (measured, 재탐색 불필요)
 
 - **pi 0.80 public export:** `hasProjectTrustInputs`/`ProjectTrustStore`/`getAgentDir`/`VERSION` 모두 index
-  public export → TS 직접 import(재구현 불필요). floor = **1.0.4** (`>=1.0.4 <1.1`, next-minor 상한).
+  public export → TS 직접 import(재구현 불필요). floor = **1.1.0** (`>=1.1.0 <1.2`, next-minor 상한).
 - **pi trust(0.79.1+):** `pi -p`는 trust에서 안 멈춤(비대화 미결정→`false` degraded). `--approve`(`-a`)=
   project 파일 로드, `--no-approve`(`-na`)=무시·degraded. `ProjectTrustStore.get`은 nearest-ancestor
   walk-up(조상 cwd 결정을 자식이 상속). `AGENTS.md`/`CLAUDE.md`는 0.79.1에서 trust input에서 제거(항상
@@ -1349,6 +1349,19 @@ v2 필드 `parentGardenId`/`isEntwurf`는 **stray key로 거부된다** — 되�
     `getContextUsage` latency, 다른 platform runtime, 긴 payload. 결정적 원문 좌표는
     [#127 동결 source](https://github.com/junghan0611/entwurf/issues/127#issuecomment-5969949281)와
     [target focused + MUST](https://github.com/junghan0611/entwurf/issues/127#issuecomment-5971362554).
+  - **2026-10-08 bump — pi 1.0.4 → 1.1.0 (#132 0.33 후보, branch `feat/132-pi-110-herdr`; package 0.32.0 유지).**
+    ⑴ **identity.** `[측정 2026-10-08]` upstream tag `v1.1.0` = `abe508e`(`7c10bd4` 뒤 53 commits),
+    `experimental/` diff 0, carrier 원본 6개 blob과 LICENSE blob이 pin과 같다. `emit-pi-durable-carrier --check`가
+    `abe508e`에서 rc0 — carrier 바이트와 sha256은 그대로이고 바뀐 것은 pin의 tag/commit/sdk뿐이다.
+    ⑵ **closure.** production SDK는 9종(package.json = pin `sdk.members`), install fixture/workspace
+    constellation은 pi-client·pi-protocol을 더한 11종. 9종 registry manifest의 edge가 source와 같고
+    (`.tmp-verify/033-prep/registry-sdk-manifests.json`), pi-client {chord, pi-protocol}, pi-protocol {chord}도
+    1.1.0에 그대로다. 재생성된 lock은 9종만 움직였고 integrity 9/9가 registry 값과 같다 — third-party 신규 0.
+    ⑶ **floor.** host 범위 `>=1.1.0 <1.2`. `minimumReleaseAgeExclude` 11행에 `|| 1.1.0`. previous-host
+    대조군은 1.0.2 → 1.0.4(직전 지원 세대가 거부되는 host), L3/L4의 실제 1.0.3 mixed/depth-3 대조군은
+    다른 축이라 유지. `[측정 2026-10-08 오전, bump 직후]` 운영자 PATH pi는 1.0.4 — 범위 밖이었다(host 갱신은 GLG 몫).
+    `[측정 2026-10-08 12:24–12:25 KST]` GLG의 명시적 재설치(`pnpm add -g @earendil-works/pi-coding-agent@1.1.0`) 뒤
+    coordinator·Grok이 각각 `~/.local/share/pnpm/bin/pi` `pi --version` = 1.1.0을 관측했다. CLI 버전일 뿐 native admission은 아니다.
   - **2026-10-07 bump — pi 1.0.2 → 1.0.4 (#130 0.32 후보, branch `feat/130-install-surface`; SDK가 production dependency로 승격).**
     ⑴ **identity.** `[측정 2026-10-07]` `npm view @earendil-works/<m>@1.0.4 gitHead` = `7c10bd4` (9종 모두) =
     upstream tag `v1.0.4`; `cd32f77`(v1.0.2) → `v1.0.4` 51 commits, `experimental/durable/` tree 동일, overlay patch base

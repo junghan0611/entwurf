@@ -2,8 +2,8 @@
 	"schemaVersion": 2,
 	"comment": "The one upstream commit the pi-durable carrier is emitted from, the patch it applies, the emitted files and the published SDK set they run against. The experimental durable app is source-only upstream (published pi-coding-agent ships no dist/experimental), so Entwurf ships it as a CARRIER: the pinned app files, type-stripped, with the relocation in pi/pi-durable/carrier-relocation.mjs. scripts/emit-pi-durable-carrier.ts is the only writer of the generated fields (blob, sha256, emitter.node) and the only reader of upstream source; an installed package never reads source. Model data rides the published @earendil-works/pi-ai.",
 	"repository": "https://github.com/earendil-works/pi",
-	"tag": "v1.0.4",
-	"commit": "7c10bd4337495ee613f2224843ecdf349b80d1df",
+	"tag": "v1.1.0",
+	"commit": "abe508e1b89912adde45528136c3221eb69acdd7",
 	"patches": ["runtime-contacts.patch"],
 	"carrier": {
 		"comment": "files: the six app files bootstrap.mjs needs (main.ts is replaced by the bootstrap). distTargets: every pi-coding-agent internal the stripped files import, as paths under the published dist/; the emitter refuses a set that differs and the resolver answers no other.",
@@ -89,17 +89,17 @@
 		]
 	},
 	"sdk": {
-		"comment": "The published library set the carrier runs against, derived from the 1.0.4 declarations. members: the @earendil-works packages the carrier imports and every @earendil-works package those declare. direct: a third-party package a carrier file imports itself (sessions.ts: proper-lockfile, at the version pi-coding-agent 1.0.4 pins). Each is an exact production dependency in package.json; the members' own edges are caret ranges, so the installed physical edges, not semver, are what must equal these versions.",
+		"comment": "The published library set the carrier runs against, derived from the 1.1.0 declarations. members: the @earendil-works packages the carrier imports and every @earendil-works package those declare. direct: a third-party package a carrier file imports itself (sessions.ts: proper-lockfile, at the version pi-coding-agent 1.1.0 pins). Each is an exact production dependency in package.json; the members' own edges are caret ranges, so the installed physical edges, not semver, are what must equal these versions.",
 		"members": {
-			"@earendil-works/chord": "1.0.4",
-			"@earendil-works/pi-agent-core": "1.0.4",
-			"@earendil-works/pi-ai": "1.0.4",
-			"@earendil-works/pi-codemode": "1.0.4",
-			"@earendil-works/pi-coding-agent": "1.0.4",
-			"@earendil-works/pi-durable": "1.0.4",
-			"@earendil-works/pi-mcp": "1.0.4",
-			"@earendil-works/pi-telemetry": "1.0.4",
-			"@earendil-works/pi-tui": "1.0.4"
+			"@earendil-works/chord": "1.1.0",
+			"@earendil-works/pi-agent-core": "1.1.0",
+			"@earendil-works/pi-ai": "1.1.0",
+			"@earendil-works/pi-codemode": "1.1.0",
+			"@earendil-works/pi-coding-agent": "1.1.0",
+			"@earendil-works/pi-durable": "1.1.0",
+			"@earendil-works/pi-mcp": "1.1.0",
+			"@earendil-works/pi-telemetry": "1.1.0",
+			"@earendil-works/pi-tui": "1.1.0"
 		},
 		"direct": {
 			"proper-lockfile": "4.1.2"

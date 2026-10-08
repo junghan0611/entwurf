@@ -43,7 +43,7 @@ release; it does not supply credentials or take ownership of the harness.
 
 Prerequisites: **Node >=24.0.0**, Python 3 for `setup`, and any harnesses you choose
 to use, already installed and authenticated. Pi is optional-by-presence, supported
-range `>=1.0.4 <1.1`; Claude Code supported floor `>=2.1.217` is required for its
+range `>=1.1.0 <1.2`; Claude Code supported floor `>=2.1.217` is required for its
 managed exec-hook lifecycle. pnpm is needed only for source-checkout setup.
 
 ```bash
@@ -73,7 +73,7 @@ restriction; that is not certification of every platform's harness rails.
 
 ### Native durable (pi-durable)
 
-**Entwurf 0.32.0 supplies the pinned upstream app/TUI and nine exact Pi 1.0.4 SDK
+**The package supplies the pinned upstream app/TUI and nine exact Pi 1.1.0 SDK
 members.** No separate runtime checkout, patch, build or ordinary Pi CLI is needed.
 The launch verifies carrier integrity and every reachable SDK edge's name/version;
 incomplete, drifted or mixed supply refuses by name.

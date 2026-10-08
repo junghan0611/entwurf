@@ -16,7 +16,7 @@
  * The bootstrap that composes the two lives with the overlay (`pi/pi-durable/bootstrap.mjs`), not
  * here: this module never imports or initializes the durable app runtime and carries no path into
  * a vendor checkout. That is this module's import boundary, not the package's dependency list: the
- * package does declare the exact `@earendil-works/pi-durable` (1.0.4) for its carrier (#130).
+ * package does declare the exact `@earendil-works/pi-durable` (per the pin's SDK set) for its carrier (#130).
  *
  * WHY BIRTH IS AFTER OPEN, BEHIND A GATE. `[read @cd32f77]` The native session id is chosen
  * inside `openDurable` (`runtime.ts:125`, `sessions.ts:18-55`), and `openDurable` calls
@@ -276,7 +276,9 @@ export interface PiDurableRoots {
 // ---------------------------------------------------------------------------
 // Durable surface, typed NARROWLY and locally — read at pi-durable 1.0.2 @cd32f77 (#129,
 // `harness/types.ts`; historical coordinates, not re-anchored here). The current supply is the
-// 1.0.4 carrier at `7c10bd43`, whose authority is `pi/pi-durable/overlay/upstream-pin.json`.
+// carrier `pi/pi-durable/overlay/upstream-pin.json` names (1.1.0 at `abe508e`). `[read 2026-10-08]`
+// v1.0.4 → v1.1.0 `harness/types.ts` adds `models`, `contextRetentionMs` and a `context()` options
+// bag only; none of the shapes typed below moved.
 // `defineExtension`/`defineTool` are identity functions (`harness/define.ts:6-17`), so a plain
 // object is the extension.
 // ---------------------------------------------------------------------------
