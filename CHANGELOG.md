@@ -4,6 +4,33 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+## 0.34.0 - 2026-10-09
+
+### Release coordination
+
+- **One cut for #134 and #133.** Coordinated by the pi-durable citizen `20261008T113104-801621` and
+  implemented by Claude Code Opus under GLG's grant for prepare and make; npm publication is
+  coordinated with GLG separately. This section is written at prepare time: the prepared SHA's CI,
+  the preserved artifact and the tag are recorded in the GitHub release, not claimed here.
+- **Verified for this cut.** `check:full` passed on the prepare tree (719 s). The first
+  `release-gate --cut` ended RED, MUST 23/1/0: `smoke-codex-fresh-live` timed out because Codex
+  0.153.4 refused the stated Codex-side model `gpt-6-luna` for a ChatGPT account (vendor 400); that
+  run is preserved as RED. The rerun with the Codex model `gpt-5.6-terra` (Pi side unchanged) passed
+  MUST 24/0/0 and BEHAVIOR 1/0/0 in 1115 s, its own `check:full` 723 s. Before the commit,
+  `check-pack-install` (with the module-directory cell) and the `check-pi-durable-contact`/`-send`/
+  `-receive` gates against a bridge bundle emitted from the candidate passed, and an installed-package
+  fixture drove agent-config's background-bash module through a faux model: badge with the panel
+  hidden and at narrow sizes, report once, an interrupted task never re-run after `--continue`.
+  Vendor model calls there were 0 by construction; its token counts are faux accounting. Affected
+  qualification partials: 58/58 for #134 (earlier tree), 52/52 and 22/22 for #133. The whole
+  qualification body runs once, in the prepared SHA's CI.
+- **Not measured, by GLG's decision for this cut.** GLG waived the agy shipped-lane criterion: the
+  three agy doctors passed, the first native-push probe of a fresh conversation was indeterminate,
+  and agy native-push stays NOT CERTIFIED. GLG deferred the badge on GLG's own visible terminal and
+  the new post-install Claude session of the meta-bridge criterion to a later session; the host's
+  dev-linked doctor passed with five live joins, and the meta-bridge writer is unchanged since
+  0.33.0. None of these is a pass, and no 0.33.0 exception carries over.
+
 ### pi-durable
 
 - **Background-task badge (#134).** The carrier runtime observes the native task graph from open to
@@ -19,6 +46,8 @@ All notable changes to this project will be documented here. Format follows [Kee
   operator-named directory read once; ambient, default, recursive, watched and setting/environment
   discovery stay forbidden.
 - **Deferred:** #106 no-turn retirement moved to ROADMAP as GLG's deferral, not implemented.
+  #132's unfinished Herdr plugin alignment (npm re-pin, source proof, pi-durable under Herdr) moved
+  to ROADMAP, closed not-planned, to reopen against this release's published bytes.
 
 ### Verification
 
