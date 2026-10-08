@@ -365,7 +365,7 @@ tree (for example an override that binds pi-durable's `pi-ai` to an older publis
   checks catch mistakes, they do not sandbox it. Nothing else names a module — no default
   directory, setting or profile — and a sibling opened by `entwurf_fresh_call` starts without one.
 
-- **A module directory instead (unreleased, #134 — not in 0.33.0).** `--native-module-dir
+- **A module directory instead (#134, after 0.33.0).** `--native-module-dir
   <absolute directory>` replaces `--native-module` (naming both is `native-module-ingress-exclusive`).
   Entwurf reads that one directory once, at its top level: every `*.extension.mjs` that is not a
   dotfile is a module; helpers such as `env.mjs` or `index.mjs`, other suffixes, subdirectories and
@@ -378,7 +378,7 @@ tree (for example an override that binds pi-durable's `pi-ai` to an older publis
   the native registry would replace that extension or keep both tools). A refusal at a later module
   leaves the earlier ones already evaluated; nothing is rolled back.
 
-- **Background-task badge (unreleased, #134).** While a native background task is live, the durable
+- **Background-task badge (#134, after 0.33.0).** While a native background task is live, the durable
   TUI shows `⏳ n tasks` as the first line under the transcript, whatever kind of task it is, with
   the ones not running named (`aborting`, `completing`, `waiting`, `pending`). It never shrinks: a
   short terminal loses the editor and footer before it, a one-row terminal shows only the badge, and

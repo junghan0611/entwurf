@@ -88,7 +88,7 @@ models/auth, queues, SQLite, transcripts and recovery remain upstream-owned:
 [Hard Rule 17](./AGENTS.md#hard-rules), **supply the missing surface; do not become the harness**.
 
 Optional `--native-module <absolute file>` initializes trusted ESM before runtime/TUI
-imports, then installs its default native Extension after the contact. Unreleased (#134):
+imports, then installs its default native Extension after the contact. After 0.33.0 (#134):
 `--native-module-dir <absolute directory>` loads the top-level `*.extension.mjs` files of that
 one named directory in byte-wise order instead, and the durable TUI keeps a live
 background-task badge on screen at any terminal size. No automatic module discovery or
