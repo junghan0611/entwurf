@@ -23,12 +23,14 @@ import {
 	SelectList,
 	                     
 	Spacer,
+	                
 	setCapabilityOverrides,
 	setKeybindings,
 	Text,
 	TruncatedText,
 	TuiAltScreen,
 	VStack,
+	visibleWidth,
 } from "@earendil-works/pi-tui";
 import { getAgentDir } from "entwurf-pi-dist:config.js";
 import { KeybindingsManager } from "entwurf-pi-dist:core/keybindings.js";
@@ -150,10 +152,75 @@ class CompactionComponent extends Box {
 	                      
  
 
+/**
+ * The live background-task badge: the dock's first row, never shrunk, so live background work stays on
+ * screen however small the terminal gets. It counts the graph's background tasks whatever their kind and
+ * names the ones that are not running; with none it renders nothing and the dock is upstream's.
+ */
+export class TaskBadge                      {
+	#count = 0;
+	#detail = "";
+
+	get count()         {
+		return this.#count;
+	}
+
+	set(graph                       )       {
+		const nodes = Object.values(graph?.tasks ?? {}).filter((node) => node.background);
+		const tally = (state        , match                                  )           => {
+			const n = nodes.filter(match).length;
+			return n === 0 ? [] : [`${n} ${state}`];
+		};
+		this.#count = nodes.length;
+		this.#detail = [
+			...tally("aborting", (node) => node.abortRequested),
+			...tally("completing", (node) => !node.abortRequested && node.state.status === "completing"),
+			...tally("waiting", (node) => !node.abortRequested && node.state.status === "waiting"),
+			...tally("pending", (node) => !node.abortRequested && node.state.status === "pending"),
+		].join(", ");
+	}
+
+	/** The widest form that fits, padded when there is room; narrower terminals drop detail, then words. */
+	render(width        )           {
+		const n = this.#count;
+		if (n === 0) return [];
+		const tasks = `⏳ ${n} ${n === 1 ? "task" : "tasks"}`;
+		const detailed = this.#detail ? [`${tasks} (${this.#detail})`] : [];
+		const forms = [...detailed, tasks, `⏳ ${n}`, `⏳${n}`, `*${n}`, "*+", "*"];
+		for (const form of forms) {
+			if (visibleWidth(form) < width) return [theme.fg("accent", ` ${form}`)];
+			if (visibleWidth(form) === width) return [theme.fg("accent", form)];
+		}
+		return [theme.fg("accent", "*")];
+	}
+
+	invalidate()       {}
+}
+
+/**
+ * The screen: the transcript above the dock. The badge is the dock's first row and never shrinks, so the
+ * renderer, which clips from the bottom, drops the editor and the footer before it; a one-row terminal
+ * with live background work shows the badge instead of the transcript.
+ */
+export function durableLayout(transcript           , badge           , dock                       )         {
+	return new VStack([
+		{
+			component: transcript,
+			basis: 0,
+			grow: 1,
+			shrink: 1,
+			minSize: 1,
+			visible: (viewport) => badge.count === 0 || viewport.height > 1,
+		},
+		{ component: new VStack([{ component: badge, shrink: 0 }, ...dock]), basis: "auto", grow: 0, shrink: 1, minSize: 1 },
+	]);
+}
+
 class DurableTui {
 	static          #renderers                                = createAllToolRenderers();
 	         #ui              ;
 	         #chat = new Container();
+	         #taskBadge = new TaskBadge();
 	         #tasks = new Container();
 	         #queue = new Container();
 	         #notices = new Container();
@@ -216,15 +283,9 @@ class DurableTui {
 		content.addChild(new Spacer(1));
 		const transcript = new ScrollView(content, { follow: "end", primary: true, overscroll: "chain" });
 		this.#transcript = transcript;
-		const dock = new VStack([
-			{ component: this.#tasks, shrink: 1, minSize: 0 },
-			{ component: this.#queue, shrink: 1, minSize: 0 },
-			{ component: this.#notices, shrink: 1, minSize: 0 },
-			{ component: this.#editorContainer, shrink: 1, minSize: 3 },
-			{ component: this.#footer, shrink: 1, minSize: 0 },
-		]);
 		for (const component of [
 			this.#chat,
+			this.#taskBadge,
 			this.#tasks,
 			this.#queue,
 			this.#notices,
@@ -234,9 +295,12 @@ class DurableTui {
 			this.#ui.addChild(component);
 		}
 		this.#ui.setLayoutRoot(
-			new VStack([
-				{ component: transcript, basis: 0, grow: 1, shrink: 1, minSize: 1 },
-				{ component: dock, basis: "auto", grow: 0, shrink: 1, minSize: 1 },
+			durableLayout(transcript, this.#taskBadge, [
+				{ component: this.#tasks, shrink: 1, minSize: 0 },
+				{ component: this.#queue, shrink: 1, minSize: 0 },
+				{ component: this.#notices, shrink: 1, minSize: 0 },
+				{ component: this.#editorContainer, shrink: 1, minSize: 3 },
+				{ component: this.#footer, shrink: 1, minSize: 0 },
 			]),
 		);
 		this.#ui.setFocus(this.#editor);
@@ -299,7 +363,8 @@ class DurableTui {
 				);
 			}
 		}
-		this.#syncTasks(view.tasks);
+		this.#taskBadge.set(view.tasks);
+		this.#syncTasks(view.tasksPanel ? view.tasks : undefined);
 		this.#syncQueue((view.conversation.docs["pi.inbox"] ?? { items: [] })              );
 		this.#syncNotices(view);
 		this.#editor.borderColor = theme.getThinkingBorderColor(agentOf(view.conversation).thinkingLevel ?? "off");

@@ -134,7 +134,7 @@ Usage:
   ./run.sh check-omp-birth-hook       # #87 gate: drives the real OMP assembler into a temp dir, imports the ASSEMBLED index.ts into a MOCK omp host and fires session_start/session_switch. tui mints one backend:"omp" record + a sender marker keyed to the host's OWN pid (the one-process join) + the garden id on the status line; print/rpc/json mint NOTHING (hasUI is true on the rpc rows, as in the vendor); switch attaches on the same native id and mints the replacement on a new one; the CERTIFIED receiver reader still finds no marker. Also the four-root joint binding: extension and omp-labeled bridge child resolve the same sessions/mailbox/senders/receivers bundle against test-built literals (never the production resolver as its own oracle), under a poisoned PI_CODING_AGENT_DIR and under four distinct ENTWURF_META_* overrides; the override grammar is absolute-or-~ and both halves plus the doctor refuse anything else by name; and a drifted provenance label selects no root policy at all. Hermetic; no omp, no model turn
   ./run.sh check-pi-durable-contact   # #129 L-identity gate, CHECKOUT-ONLY (an installed package refuses it in run_ts). Opens the REAL durable app from THIS checkout's verified carrier (pi/pi-durable/carrier/ under its resolver, against the checkout's pinned pi SDK set — refused by name first) with the pi-durable contact, births the citizen and runs its tools adapter-direct through a privately emitted branch bridge (ENTWURF_PI_DURABLE_BRIDGE_ENTRY; its registry must match this checkout). Matrix roots {default, explicit} x {fresh, --continue}: one record keyed by the durable session dir, sender marker on the spawned host pid, exactly one bridge child whose /proc PPID is that host, poisoned identity carriers kept from it, its four root carriers bound to the roots written, the receiver ARMED (raw marker owned by the host pid + start key as pi-durable-host, joined to the sender marker; removed on close), self = the record and replyable, peers from an outside bridge, same garden id on reopen; the bundle's compiled owner join must admit pi-durable-host. Reaps only the host/bridges it owns on any failure. Harness-bypassed: no model turn, no ToolTask. Missing inputs → SKIP (97), never a pass
   ./run.sh check-pi-durable-send      # #129 L-send FIRST CELL, CHECKOUT-ONLY. Same input as check-pi-durable-contact. One native durable turn: the app's own controller input → GenerationTask → ToolTask → the contact's entwurf_v2 → the private bridge → a seeded self-fetch target (C2 recipe, owned by a separate idle child). S = a 127.0.0.1 scripted OpenAI-compatible endpoint configured through the app's documented models.json (dummy key, PI_OFFLINE); H = the native ToolTask path; V (a vendor turn) is NOT run. Oracles: the wire (tools offered, v2 schema = the bridge's tools/list, exactly two requests, the tool result + receipt in the second), the raw mailbox (.msg 1, signal, sender = the host record), the native view (one call, its settled result, root current). Not exactly-once, not recovery, not a recipient turn. Missing inputs → SKIP (97)
-  ./run.sh check-pi-durable-beside    # #129 mutant execution coordinate (VERIFY rule 3): run_vitest over the five pi-durable beside tests (adapter, carrier/SDK-set verifier, preflight, owner join, carrier relocation/resolver/emitter) — the pi-durable qualification lane's gate argv. Same files check-tests-beside-behavior already runs.
+  ./run.sh check-pi-durable-beside    # #129 mutant execution coordinate (VERIFY rule 3): run_vitest over the six pi-durable beside tests (adapter, carrier/SDK-set verifier, preflight, owner join, carrier relocation/resolver/emitter/task footer, native-module file and directory ingress) — the pi-durable qualification lane's gate argv. Same files check-tests-beside-behavior already runs.
   ./run.sh check-pi-durable-receive   # #129 L-receive FIRST CELL, CHECKOUT-ONLY. Same input (the bundle must carry the pi-durable-host owner join). The host driver gives the app NO input; a seeded claude-code sender (marker owned by a separate idle child, handed to a gate-owned sending bridge through ENTWURF_META_SENDER_MARKER) enqueues one message, the host's doorbell admits its notice to the ROOT conversation, and the scripted model drains it with entwurf_inbox_read. S withholds response #1 until the ENQUEUE receipt, the .delivered bytes, the signal, the host-owned receiver marker and the notice are captured. Oracles: receiver() admission, native view, raw archive (.delivered.read + lastReadAt), wire (exactly two requests, drain result = view), and after a green reap a forensic read-only SQLite copy (submission row by request id = reported id, root, input, done, placed entry = the notice). V NOT run. Missing inputs → SKIP (97)
   ./run.sh check-copilot-receive-arm  # #82 RAIL 5 gate: the REAL receiver installer + the REAL extension.mjs forked with a stubbed SDK. Arms only after birth, marker owned by the WATCHER pid, self-fetch dispatch answer, doorbell carries the garden id and NOT the body, id-drift/foreign-parent refusals. Hermetic; no Copilot, no model turn
   ./run.sh check-copilot-launch       # #82 RAIL 7 gate: the MANAGED launch `entwurf copilot`, driven through its public address against a FAKE VENDOR on a sandbox PATH. Receiver precondition refusals, EXTENSIONS token + operator token preservation, injected defaults before the `--` terminator, byte-identical argv, the 11 explicit permission/surface policy overrides that suppress `--yolo`, exec (not fork) pid identity, exit passthrough, recursion refusal. Hermetic; no Copilot, no model turn
@@ -1520,8 +1520,8 @@ check_pi_durable_beside() {
   # from re-running every beside test. The six files are one contact: the adapter and its packaged
   # bootstrap, the installed carrier/SDK-set verifier (which also reads the three checkout gates as
   # SOURCE), the fresh preflight, the owner join that admits the durable host, the carrier's
-  # relocation grammar, resolver and maintainer emitter (#130), and the bootstrap's explicit
-  # --native-module ingress (#130 P2).
+  # relocation grammar, resolver and maintainer emitter (#130) with the carrier's task footer (#134),
+  # and the bootstrap's explicit --native-module ingress (#130 P2) and its --native-module-dir (#134).
   run_vitest pi-extensions/meta-bridge-pi-durable.test.ts pi-extensions/lib/pi-durable-runtime.test.ts pi-extensions/lib/pi-durable-fresh-preflight.test.ts pi-extensions/lib/entwurf-deliverability.owner-join.test.ts pi-extensions/lib/pi-durable-carrier.test.ts pi-extensions/lib/pi-durable-native-module.test.ts
 }
 
@@ -4025,8 +4025,8 @@ ORACLE
   # copied from this checkout into the sandbox — it never ships (test/ is outside the package files).
   # Its initialization appends `init` to the receipt this cell names; the same public launch must then
   # reach the same carrier model refusal, so the installed bootstrap loaded the module before the
-  # runtime and the native registry installed its extension (carrier/runtime.js 146) before that
-  # refusal (runtime.js 162). A module claiming an extension name the app installs itself is refused by
+  # runtime and the native registry installed its extension (carrier/runtime.js 148) before that
+  # refusal (runtime.js 164). A module claiming an extension name the app installs itself is refused by
   # name before anything opens: no durable session directory, no citizen, in a fresh sandbox home.
   # Native SDK file opens here are ordinary (the module runs in the native process); none is judged.
   local mod_dir="$box/pd-module" mod_home="$box/pd-module-home" mod_env=()
@@ -4047,6 +4047,32 @@ ORACLE
     return 1
   fi
   echo "[check-pack-install] pi-durable native module: the installed bootstrap initialized one explicit module before the carrier's runtime (then the same model refusal), and refused a reserved extension name before anything opened"
+
+  # (c3) #134: the paired --native-module-dir on the INSTALLED package. One named directory holding the
+  # same synthetic module under a matching name beside a helper and a dotfile that would throw if
+  # opened: the installed bootstrap must read only the top-level *.extension.mjs, initialize it once
+  # (one `init` receipt) and reach the same carrier model refusal. A directory without a matching
+  # module is refused by name before anything opens: no durable session directory, no citizen.
+  local dir_mods="$box/pd-module-dir" dir_empty="$box/pd-module-dir-empty" dir_home="$box/pd-module-dir-home" dir_env=()
+  mkdir -p "$dir_mods" "$dir_empty" "$dir_home/.pi/agent"
+  cp "$REPO_DIR/test/fixtures/pi-durable-native-module/mock.mjs" "$dir_mods/10-mock.extension.mjs"
+  printf 'throw new Error("pack-install: helper opened");\n' > "$dir_mods/helper.mjs"
+  printf 'throw new Error("pack-install: dotfile opened");\n' > "$dir_mods/.hidden.extension.mjs"
+  cp "$dir_mods/helper.mjs" "$dir_empty/index.mjs"
+  rc=0; out=$(cd "$launch_cwd" && env "${launch_env[@]}" PI_OFFLINE=1 MOCK_NATIVE_RECEIPT="$dir_mods/receipt.log" "$l1s/node_modules/.bin/entwurf" pi-durable --provider entwurf-pack-probe --model no-such-model --width task-wide --native-module-dir "$dir_mods" 2>&1 </dev/null) || rc=$?
+  if [ "$rc" -eq 0 ] || [ "$(cat "$dir_mods/receipt.log" 2>/dev/null)" != "init" ] || ! grep -q 'Could not resolve model: Unknown provider "entwurf-pack-probe"' <<<"$out" || ! grep -q "at openDurable (file://.*/pi/pi-durable/carrier/runtime.js" <<<"$out" || grep -q -e "native-module-" -e "pack-install: .* opened" <<<"$out"; then
+    fail "[QK:PACK-INSTALL-DURABLE-NATIVE-MODULE-DIR] [check-pack-install] the installed 'entwurf pi-durable --native-module-dir' did not initialize exactly its one top-level *.extension.mjs and then reach the carrier openDurable's own model refusal (rc=$rc, receipt $(cat "$dir_mods/receipt.log" 2>/dev/null | tr '\n' ' ')):"
+    echo "$out" | tail -15 | sed 's/^/    /' >&2
+    return 1
+  fi
+  mapfile -t dir_env < <(pack_install_consumer_env "$dir_home")
+  rc=0; out=$(cd "$launch_cwd" && env "${dir_env[@]}" PI_OFFLINE=1 "$l1s/node_modules/.bin/entwurf" pi-durable --provider entwurf-pack-probe --model no-such-model --width task-wide --native-module-dir "$dir_empty" 2>&1 </dev/null) || rc=$?
+  if [ "$rc" -eq 0 ] || ! grep -q "native-module-dir-empty: " <<<"$out" || grep -q -e "Unknown provider" -e "pack-install: .* opened" <<<"$out" || [ -e "$dir_home/.pi/agent/experimental" ] || [ -e "$dir_home/.pi/agent/meta-sessions" ]; then
+    fail "[QK:PACK-INSTALL-DURABLE-NATIVE-MODULE-DIR] [check-pack-install] the installed launch did not refuse a directory without a module by name before anything opened (rc=$rc):"
+    echo "$out" | tail -15 | sed 's/^/    /' >&2
+    return 1
+  fi
+  echo "[check-pack-install] pi-durable module directory: the installed bootstrap initialized only the named directory's one top-level *.extension.mjs before the carrier's runtime (then the same model refusal), and refused a directory without a module before anything opened"
 
   # (d) Host vs native are two subjects. The installed package's native SDK set is the pin (above);
   # the ordinary Pi HOST on PATH is judged by its OWN real `pi --version` against the derived range.

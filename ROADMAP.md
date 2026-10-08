@@ -7,6 +7,22 @@
 
 ---
 
+## 보류 방향 — #132 잔여 Herdr B/C (2026-10-09)
+
+[GLG 결정, 2026-10-09 #134 코디네이터 세션에서 승인] #132의 A(pi 1.1.0 정렬)와 entwurf 0.33.0 출하는 `fea9b3d`(tag `v0.33.0`)에서 끝났다(`[측정 2026-10-09]` `npm view` latest `0.33.0`). 남은 B·C는 **끝나지 않았다**. 이 문서로 이관하고 #132를 not-planned로 닫아 #133에 구현 슬롯을 돌린다. 완료·연구 결론·범위 철회를 뜻하지 않으며, herdr plugin 0.33.0 릴리즈는 일어나지 않았다.
+
+- **B — plugin 정렬, 미완:** `plugins/herdr/herdr-plugin.toml:32` `version = "0.30.1"`, `runtime-lock.json:4` `source: "herdr-checkout"`(읽음, 2026-10-09). plugin은 0.31–0.33 npm 아티팩트에 한 번도 re-pin되지 않았다. 남은 일: 실제 publish된 아티팩트의 name/version/sha512를 실측해 npm source로 re-pin, manifest 번호 정렬, VERIFY의 source별 proof를 그 바이트로 재실행.
+- **C — herdr 위 pi-durable 판정, 미완:** fresh-call pilot set은 `["pi", "claude-code"]`(`scripts/herdr-rails.mjs:44`)라 `pi-durable`은 생성 전에 거절되고, herdr `--kind`는 bare executable 토큰이라 `entwurf pi-durable …`을 담지 못한다. 측정 축은 #132 본문 C 그대로: pane 수동 실행(record birth·self-fetch 수신) → herdr agent 감지 → (GLG 결정) pilot 확대.
+- **재개 조건:** 0.34.0이 npm에 실제 publish된 뒤, 그 바이트로 같은 [#132](https://github.com/junghan0611/entwurf/issues/132)를 다시 열어 B re-pin·source proof → C 축 1→2→3을 측정한다. 원천은 #132 본문 B/C와 thread이며, 당시 측정은 그 HEAD의 증거이지 현재 main 증거가 아니다.
+
+## 보류 방향 — #106 no-turn retirement (2026-10-08)
+
+[GLG 결정, 2026-10-08 #134 코디네이터 세션에서 승인] 당장 구현하지 않는다. #106을 이 문서로 이관하고 deferred/not-planned로 닫아 #134 pi-durable 공급(필수 task footer·명시 module 디렉터리)에 구현 슬롯을 돌린다. 구현·main 착륙·출하를 뜻하지 않는다.
+
+- **방향:** 살아 있는 형제를 작별 프롬프트나 추가 모델 턴 없이 퇴근시키는 별도 lifecycle verb. 검증된 소유 프로세스만 종료하고, target이 소유하는 append-only retirement event(gardenId로 참조하는 sidecar, 본문에 `actorGardenId`/`targetGardenId` 명시 필드)를 남긴다. 추측한 PID·tmux pane·garden-id 문자열 단독·검증 안 된 marker로는 절대 종료하지 않고, 소유 증명이 불가하면 거절한다. tmux는 address/liveness/delivery authority가 아니다(Hard Rule 16). API 모양은 초안이며 계약이 아니다.
+- **보존된 groundwork:** [#106 본문](https://github.com/junghan0611/entwurf/issues/106)과 thread가 원천이다. (1) transcript 수용조건은 byte-identical이 아니라 **prefix 불변 + append-only**다: Claude Code 2.1.263이 종료 경로에서 `last-prompt` 한 줄을 append하므로, 신호 전 길이 N에 대해 `head -c N` 해시 동일이 성립한 불변식이다([측정 2/2, 2026-09-07]). (2) 죽은 owner의 receiver marker는 `readMetaReceiverMarker(verifyOwner)`가 `null`로 읽으므로 marker 제거는 위생이지 정합성이 아니며, **dead marker는 cleanup 권한이 아니다**. (3) owner-pid 축이 backend마다 다르다: `pi`는 pid를 기록하지 않고 `antigravity`는 receiver marker가 없다. 첫 지원 backend는 **미정**이며 나머지는 capability로 거절해야 한다. Retirement event를 identity record 안에 넣으면 `META_IDENTITY_KEYS` 9키 계약 때문에 generation cut이 필요하다(thread 2026-09-14/15 측정).
+- **재개 조건:** GLG가 다시 필요하다고 결정하고, 첫 지원 backend의 프로세스 소유 증명과 no-turn 종료를 현재 증거로 측정한 뒤 새 구현 이슈로 연다. 과거 수치는 당시 HEAD의 증거이지 현재 main 증거가 아니다. 이 결정으로 branch·record·transcript·프로세스를 폐기하지 않는다.
+
 ## 보류 방향 — #114 독립 garden frontend (2026-10-05)
 
 [GLG 결정, 2026-10-05 현재 세션] 당장 진행하지 않는다. #114를 이 문서로 이관하고 deferred/not-planned로 닫아 #129 native durable 구현에 슬롯을 돌린다. 완료·main 착륙·출하를 뜻하지 않는다.

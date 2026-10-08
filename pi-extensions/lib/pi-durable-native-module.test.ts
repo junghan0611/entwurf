@@ -292,3 +292,157 @@ describe("pi-durable --native-module ingress (#130 P2)", () => {
 		expect(trace.specs[0]?.env.MOCK_NATIVE_MARK).toBe(MOCK_MARK);
 	});
 });
+
+describe("pi-durable --native-module-dir ingress (#134)", () => {
+	/** A module file whose evaluation appends its tag to a shared order list, with a native default export. */
+	const tagged = (tag: string, extension = `{ name: "mod-${tag}" }`) =>
+		`(globalThis.__dirOrder ??= []).push(${JSON.stringify(tag)});\nexport default ${extension};\n`;
+	const SENTINEL = 'throw new Error("this entry must never be opened");\n';
+	const order = () => ((globalThis as { __dirOrder?: string[] }).__dirOrder ?? []).slice();
+	/** A fresh module directory under the test root; entries are files unless given as a function. */
+	function moduleDir(entries: Record<string, string | ((at: string) => void)>): string {
+		const dir = fs.mkdtempSync(path.join(root, "modules-"));
+		for (const [name, entry] of Object.entries(entries)) {
+			const at = path.join(dir, name);
+			if (typeof entry === "function") entry(at);
+			else fs.writeFileSync(at, entry);
+		}
+		return dir;
+	}
+	beforeEach(() => {
+		delete (globalThis as { __dirOrder?: string[] }).__dirOrder;
+	});
+
+	it("[QK:PI-DURABLE-MODULE-DIR-TOPLEVEL-FILTER] only top-level *.extension.mjs files that are not dotfiles are modules; helpers, dotfiles, other suffixes, subdirectories and directory links are never opened", async () => {
+		const sub = path.join(root, "outside-sub");
+		fs.mkdirSync(sub);
+		fs.writeFileSync(path.join(sub, "inner.extension.mjs"), SENTINEL);
+		const dir = moduleDir({
+			"a.extension.mjs": tagged("a"),
+			"helper.mjs": SENTINEL,
+			".hidden.extension.mjs": SENTINEL,
+			"a.extension.mjs.bak": SENTINEL,
+			"a.extension.js": SENTINEL,
+			nested: (at) => {
+				fs.mkdirSync(at);
+				fs.writeFileSync(path.join(at, "deep.extension.mjs"), SENTINEL);
+			},
+			"linked-dir": (at) => fs.symlinkSync(sub, at),
+		});
+		for (const argv of [
+			[...FRESH_ARGS, "--native-module-dir", dir],
+			["--continue", "--native-module-dir", dir],
+		]) {
+			delete (globalThis as { __dirOrder?: string[] }).__dirOrder;
+			const trace = newTrace();
+			// A second launch re-imports the cached module, so only the first one records an evaluation.
+			await runMain(argv, trace);
+			expect(trace.events).toEqual(["loadTui", "open", "tui"]);
+			expect(trace.opened[0]?.extensions.map((e) => e.name)).toEqual(["entwurf", "mod-a"]);
+			expect(trace.opened[0]?.continueSession).toBe(argv[0] === "--continue");
+		}
+	});
+
+	it("[QK:PI-DURABLE-MODULE-DIR-ORDER-BYTEWISE] modules initialize one by one in byte-wise name order, after the contact and before the TUI, and install in that order", async () => {
+		const dir = moduleDir({
+			"b.extension.mjs": tagged("b"),
+			"Z.extension.mjs": tagged("Z"),
+			"a.extension.mjs": tagged("a"),
+			"é.extension.mjs": tagged("é"),
+		});
+		const trace = newTrace();
+		await runMain([...FRESH_ARGS, "--native-module-dir", dir], trace);
+		// Byte-wise: "Z" (0x5a) before "a" (0x61), and the two-byte "é" (0xc3 0xa9) last — not locale order.
+		expect(order()).toEqual(["Z", "a", "b", "é"]);
+		expect(trace.events).toEqual(["loadTui", "open", "tui"]);
+		expect(trace.opened[0]?.extensions.map((e) => e.name)).toEqual(["entwurf", "mod-Z", "mod-a", "mod-b", "mod-é"]);
+	});
+
+	it("[QK:PI-DURABLE-MODULE-DIR-REFUSED] a relative, missing or non-directory path, a directory without a module, a matching entry that is not a regular file and two names for one file are refused by name before any module, the TUI or the app loads", async () => {
+		const file = path.join(root, "plain.mjs");
+		fs.writeFileSync(file, SENTINEL);
+		process.chdir(root);
+		const cases: [string, RegExp][] = [
+			[path.basename(moduleDir({ "a.extension.mjs": SENTINEL })), /^native-module-path-not-absolute: /],
+			[path.join(root, "absent-dir"), /^native-module-path-invalid: .* does not resolve/],
+			[file, /^native-module-path-invalid: .* is not a directory/],
+			[
+				moduleDir({ "index.mjs": SENTINEL, "helper.mjs": SENTINEL, ".x.extension.mjs": SENTINEL }),
+				/^native-module-dir-empty: /,
+			],
+			[
+				moduleDir({ "a.extension.mjs": SENTINEL, "b.extension.mjs": (at) => fs.mkdirSync(at) }),
+				/^native-module-path-invalid: b\.extension\.mjs .* is not a regular file/,
+			],
+			[
+				moduleDir({ "a.extension.mjs": (at) => fs.symlinkSync(path.join(root, "nowhere.mjs"), at) }),
+				/^native-module-path-invalid: a\.extension\.mjs .* does not resolve/,
+			],
+			[
+				moduleDir({
+					"a.extension.mjs": SENTINEL,
+					"b.extension.mjs": (at) => fs.symlinkSync(path.join(path.dirname(at), "a.extension.mjs"), at),
+				}),
+				/^native-module-dir-duplicate-target: a\.extension\.mjs and b\.extension\.mjs /,
+			],
+		];
+		for (const [value, reason] of cases) {
+			const trace = newTrace();
+			await expect(runMain([...FRESH_ARGS, "--native-module-dir", value], trace)).rejects.toThrow(reason);
+			expect(trace.events).toEqual([]);
+		}
+	});
+
+	it("[QK:PI-DURABLE-MODULE-DIR-EXCLUSIVE] the file and the directory are two forms of one ingress: naming both is refused before anything loads", async () => {
+		const trace = newTrace();
+		const dir = moduleDir({ "a.extension.mjs": SENTINEL });
+		await expect(
+			runMain([...FRESH_ARGS, "--native-module", moduleFile({ text: SENTINEL }), "--native-module-dir", dir], trace),
+		).rejects.toThrow(/^native-module-ingress-exclusive: /);
+		await expect(runMain(["--native-module-dir", dir, "--native-module-dir", dir], trace)).rejects.toThrow(
+			/^argument-repeated: /,
+		);
+		expect(trace.events).toEqual([]);
+	});
+
+	it("[QK:PI-DURABLE-MODULE-DIR-NAME-DUPLICATE] a later module that repeats an earlier module's extension or tool name, or moves an identity carrier, is refused naming that module; the earlier modules stay evaluated", async () => {
+		const tool = (name: string) => `{ name: ${JSON.stringify(name)}, parameters: {}, execute() {} }`;
+		const cases: [Record<string, string>, RegExp][] = [
+			[
+				{ "a.extension.mjs": tagged("a", '{ name: "same" }'), "b.extension.mjs": tagged("b", '{ name: "same" }') },
+				/^native-module-name-duplicate: .*b\.extension\.mjs and .*a\.extension\.mjs both name extension same/,
+			],
+			[
+				{
+					"a.extension.mjs": tagged("a", `{ name: "mod-a", tools: [${tool("shared_tool")}] }`),
+					"b.extension.mjs": tagged("b", `{ name: "mod-b", tools: [${tool("shared_tool")}] }`),
+				},
+				/^native-module-name-duplicate: .*b\.extension\.mjs and .*a\.extension\.mjs both name tool shared_tool/,
+			],
+			[
+				{
+					"a.extension.mjs": tagged("a"),
+					"b.extension.mjs": `process.env.PI_SESSION_ID = "moved";\n${tagged("b")}`,
+				},
+				/^native-module-env-identity-changed: initializing .*b\.extension\.mjs changed PI_SESSION_ID/,
+			],
+		];
+		for (const [entries, reason] of cases) {
+			delete (globalThis as { __dirOrder?: string[] }).__dirOrder;
+			const trace = newTrace();
+			await expect(runMain([...FRESH_ARGS, "--native-module-dir", moduleDir(entries)], trace)).rejects.toThrow(reason);
+			expect(order()).toEqual(["a", "b"]);
+			expect(trace.events).toEqual([]);
+			for (const k of Object.keys(process.env)) if (!(k in envBefore)) delete process.env[k];
+			for (const [k, v] of Object.entries(envBefore)) process.env[k] = v;
+		}
+		// Control: distinct extension and tool names pass, in order.
+		const trace = newTrace();
+		const dir = moduleDir({
+			"a.extension.mjs": tagged("a", `{ name: "mod-a", tools: [${tool("tool_a")}] }`),
+			"b.extension.mjs": tagged("b", `{ name: "mod-b", tools: [${tool("tool_b")}] }`),
+		});
+		await runMain([...FRESH_ARGS, "--native-module-dir", dir], trace);
+		expect(trace.opened[0]?.extensions.map((e) => e.name)).toEqual(["entwurf", "mod-a", "mod-b"]);
+	});
+});

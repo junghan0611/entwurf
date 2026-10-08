@@ -4,6 +4,22 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+### pi-durable
+
+- **Background-task badge (#134).** The carrier runtime observes the native task graph from open to
+  close; `/tasks` now toggles only the panel. The carrier TUI draws a kind-agnostic badge of live
+  background tasks (`node.background`) as the dock's first, never-shrunk row, naming the ones not
+  running and shortening down to one ASCII cell; a one-row terminal with live background work shows
+  the badge, and with none the screen is upstream's. The overlay patch now carries one section per
+  patched carrier file (`runtime.js`, `tui.js`), and the emitter refuses any other shape.
+- **Module directory ingress (#134).** `--native-module-dir <absolute directory>` is the paired,
+  exclusive form of `--native-module`: one top-level read, `*.extension.mjs` non-dotfiles only,
+  byte-wise order, per-module guards, and named refusals for an empty directory, a non-regular
+  match, two names for one file and a cross-module extension or tool name. Hard Rule 6 now admits an
+  operator-named directory read once; ambient, default, recursive, watched and setting/environment
+  discovery stay forbidden.
+- **Deferred:** #106 no-turn retirement moved to ROADMAP as GLG's deferral, not implemented.
+
 ## 0.33.0 - 2026-10-08
 
 ### Release coordination

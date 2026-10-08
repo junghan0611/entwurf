@@ -53,12 +53,8 @@
 			"claim": "PI-DURABLE-BOOTSTRAP-ARGV-NO-BRIDGE-ENTRY",
 			"title": "the launch argv accepts --bridge-entry, so a caller can point the contact at a bridge outside this package",
 			"subject": "pi/pi-durable/bootstrap.mjs",
-			"find": [
-				"const VALUE_FLAGS = [\"--provider\", \"--model\", \"--width\", \"--entwurf-bootstrap\", \"--native-module\"];"
-			],
-			"replace": [
-				"const VALUE_FLAGS = [\"--bridge-entry\", \"--provider\", \"--model\", \"--width\", \"--entwurf-bootstrap\", \"--native-module\"];"
-			],
+			"find": ["const VALUE_FLAGS = ["],
+			"replace": ["const VALUE_FLAGS = [\n\t\"--bridge-entry\","],
 			"gate": ["bash", "run.sh", "check-pi-durable-beside"],
 			"timeoutSeconds": 300,
 			"signature": "[QK:PI-DURABLE-BOOTSTRAP-ARGV-NO-BRIDGE-ENTRY]",
@@ -345,7 +341,7 @@
 			"claim": "PI-DURABLE-CARRIER-PIN-MATCHES",
 			"title": "the pin records a digest the committed carrier file does not carry, so a carrier edited after emission would still be the declared one",
 			"subject": "pi/pi-durable/overlay/upstream-pin.json",
-			"find": ["\"sha256\": \"ca0ee10dc904a57d46bb33b37fcc4efe48dfa08b2f0d10e79e7bc22136871f0a\""],
+			"find": ["\"sha256\": \"bfd88844fae61e8bd32d57b5b986f48056c64eebb5466d9826318a0783ac9005\""],
 			"replace": ["\"sha256\": \"0000000000000000000000000000000000000000000000000000000000000000\""],
 			"gate": ["bash", "run.sh", "check-pi-durable-beside"],
 			"timeoutSeconds": 300,
@@ -588,8 +584,8 @@
 			"claim": "PI-DURABLE-MODULE-ABSENT-UNCHANGED",
 			"title": "the module phase runs without a --native-module, so a launch that names no module still tries to import one",
 			"subject": "pi/pi-durable/bootstrap.mjs",
-			"find": ["\tconst extensions = nativeModule === undefined ? [] : [await loadNativeModule(nativeModule)];"],
-			"replace": ["\tconst extensions = false ? [] : [await loadNativeModule(nativeModule)];"],
+			"find": ["\tconst { nativeModules = [], ...args } = parseArgs(argv);"],
+			"replace": ["\tconst { nativeModules = [undefined], ...args } = parseArgs(argv);"],
 			"gate": ["bash", "run.sh", "check-pi-durable-beside"],
 			"timeoutSeconds": 300,
 			"signature": "[QK:PI-DURABLE-MODULE-ABSENT-UNCHANGED]",
@@ -619,7 +615,7 @@
 			"title": "the module initializes after the TUI is imported, so its environment arrives after the SDK modules have evaluated",
 			"subject": "pi/pi-durable/bootstrap.mjs",
 			"find": [
-				"\tconst extensions = nativeModule === undefined ? [] : [await loadNativeModule(nativeModule)];",
+				"\tconst extensions = await loadNativeModules(nativeModules);",
 				"\t// Loaded before anything opens, as upstream main.ts imports it statically: a TUI that cannot",
 				"\t// load opens no session, mints no citizen and leaves nothing to clean up.",
 				"\tconst { runDurableTui } = await loadTui();"
@@ -628,7 +624,7 @@
 				"\t// Loaded before anything opens, as upstream main.ts imports it statically: a TUI that cannot",
 				"\t// load opens no session, mints no citizen and leaves nothing to clean up.",
 				"\tconst { runDurableTui } = await loadTui();",
-				"\tconst extensions = nativeModule === undefined ? [] : [await loadNativeModule(nativeModule)];"
+				"\tconst extensions = await loadNativeModules(nativeModules);"
 			],
 			"gate": ["bash", "run.sh", "check-pi-durable-beside"],
 			"timeoutSeconds": 300,
@@ -713,6 +709,177 @@
 			"gate": ["bash", "run.sh", "check-pi-durable-beside"],
 			"timeoutSeconds": 300,
 			"signature": "[QK:PI-DURABLE-MODULE-EXTENSION-ORDER]",
+			"signatureSource": "pi-extensions/lib/pi-durable-native-module.test.ts",
+			"build": {
+				"argv": ["bash", "scripts/build-bridge.sh"],
+				"output": "mcp/entwurf-bridge/dist"
+			}
+		},
+		{
+			"claim": "PI-DURABLE-CARRIER-PATCH-SECTIONS",
+			"title": "a declared patched file with no section of its own passes the patch-shape check, so the emitter would ship that file unpatched",
+			"subject": "scripts/emit-pi-durable-carrier.ts",
+			"find": ["\tif (undeclared.length > 0 || missing.length > 0) {"],
+			"replace": ["\tif (undeclared.length > 0) {"],
+			"gate": ["bash", "run.sh", "check-pi-durable-beside"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PI-DURABLE-CARRIER-PATCH-SECTIONS]",
+			"signatureSource": "pi-extensions/lib/pi-durable-carrier.test.ts",
+			"build": {
+				"argv": ["bash", "scripts/build-bridge.sh"],
+				"output": "mcp/entwurf-bridge/dist"
+			}
+		},
+		{
+			"claim": "PI-DURABLE-FOOTER-GRAPH-LIFETIME",
+			"title": "/tasks closes the task-graph observation again, so hiding the panel also hides live background work from the badge",
+			"subject": "pi/pi-durable/carrier/runtime.js",
+			"find": ["\t\t\ttoggleTasks: () => command(async () => update({ tasksPanel: !state.tasksPanel })),"],
+			"replace": [
+				"\t\t\ttoggleTasks: () => command(async () => update({ tasksPanel: !state.tasksPanel, tasks: state.tasksPanel ? undefined : state.tasks })),"
+			],
+			"gate": ["bash", "run.sh", "check-pi-durable-beside"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PI-DURABLE-FOOTER-GRAPH-LIFETIME]",
+			"signatureSource": "pi-extensions/lib/pi-durable-carrier.test.ts",
+			"build": {
+				"argv": ["bash", "scripts/build-bridge.sh"],
+				"output": "mcp/entwurf-bridge/dist"
+			}
+		},
+		{
+			"claim": "PI-DURABLE-FOOTER-BADGE-COUNT",
+			"title": "the badge counts every live task, foreground generation and tool tasks included, so an idle-but-turning session shows phantom background work",
+			"subject": "pi/pi-durable/carrier/tui.js",
+			"find": ["\t\tconst nodes = Object.values(graph?.tasks ?? {}).filter((node) => node.background);"],
+			"replace": ["\t\tconst nodes = Object.values(graph?.tasks ?? {});"],
+			"gate": ["bash", "run.sh", "check-pi-durable-beside"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PI-DURABLE-FOOTER-BADGE-COUNT]",
+			"signatureSource": "pi-extensions/lib/pi-durable-carrier.test.ts",
+			"build": {
+				"argv": ["bash", "scripts/build-bridge.sh"],
+				"output": "mcp/entwurf-bridge/dist"
+			}
+		},
+		{
+			"claim": "PI-DURABLE-FOOTER-BADGE-WIDTH",
+			"title": "the badge has no one- or two-cell form, so a very narrow terminal shows a bare marker with no count",
+			"subject": "pi/pi-durable/carrier/tui.js",
+			"find": ["\t\tconst forms = [...detailed, tasks, `⏳ ${n}`, `⏳${n}`, `*${n}`, \"*+\", \"*\"];"],
+			"replace": ["\t\tconst forms = [...detailed, tasks, `⏳ ${n}`, `⏳${n}`, \"*\"];"],
+			"gate": ["bash", "run.sh", "check-pi-durable-beside"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PI-DURABLE-FOOTER-BADGE-WIDTH]",
+			"signatureSource": "pi-extensions/lib/pi-durable-carrier.test.ts",
+			"build": {
+				"argv": ["bash", "scripts/build-bridge.sh"],
+				"output": "mcp/entwurf-bridge/dist"
+			}
+		},
+		{
+			"claim": "PI-DURABLE-FOOTER-BADGE-PROTECTED",
+			"title": "the badge sits last in the dock, so the renderer's bottom clip drops it first on a short terminal",
+			"subject": "pi/pi-durable/carrier/tui.js",
+			"find": [
+				"\t\t{ component: new VStack([{ component: badge, shrink: 0 }, ...dock]), basis: \"auto\", grow: 0, shrink: 1, minSize: 1 },"
+			],
+			"replace": [
+				"\t\t{ component: new VStack([...dock, { component: badge, shrink: 0 }]), basis: \"auto\", grow: 0, shrink: 1, minSize: 1 },"
+			],
+			"gate": ["bash", "run.sh", "check-pi-durable-beside"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PI-DURABLE-FOOTER-BADGE-PROTECTED]",
+			"signatureSource": "pi-extensions/lib/pi-durable-carrier.test.ts",
+			"build": {
+				"argv": ["bash", "scripts/build-bridge.sh"],
+				"output": "mcp/entwurf-bridge/dist"
+			}
+		},
+		{
+			"claim": "PI-DURABLE-FOOTER-ZERO-UPSTREAM",
+			"title": "a one-row terminal hides the transcript even with no background work, so the idle screen is no longer upstream's",
+			"subject": "pi/pi-durable/carrier/tui.js",
+			"find": ["\t\t\tvisible: (viewport) => badge.count === 0 || viewport.height > 1,"],
+			"replace": ["\t\t\tvisible: (viewport) => viewport.height > 1,"],
+			"gate": ["bash", "run.sh", "check-pi-durable-beside"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PI-DURABLE-FOOTER-ZERO-UPSTREAM]",
+			"signatureSource": "pi-extensions/lib/pi-durable-carrier.test.ts",
+			"build": {
+				"argv": ["bash", "scripts/build-bridge.sh"],
+				"output": "mcp/entwurf-bridge/dist"
+			}
+		},
+		{
+			"claim": "PI-DURABLE-MODULE-DIR-TOPLEVEL-FILTER",
+			"title": "a dotfile ending in .extension.mjs counts as a module, so a hidden file in the named directory is evaluated as operator code",
+			"subject": "pi/pi-durable/bootstrap.mjs",
+			"find": ["const MODULE_ENTRY = /^[^.].*\\.extension\\.mjs$/;"],
+			"replace": ["const MODULE_ENTRY = /\\.extension\\.mjs$/;"],
+			"gate": ["bash", "run.sh", "check-pi-durable-beside"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PI-DURABLE-MODULE-DIR-TOPLEVEL-FILTER]",
+			"signatureSource": "pi-extensions/lib/pi-durable-native-module.test.ts",
+			"build": {
+				"argv": ["bash", "scripts/build-bridge.sh"],
+				"output": "mcp/entwurf-bridge/dist"
+			}
+		},
+		{
+			"claim": "PI-DURABLE-MODULE-DIR-ORDER-BYTEWISE",
+			"title": "modules are ordered by the locale's collation, so the initialization order depends on the host's language settings",
+			"subject": "pi/pi-durable/bootstrap.mjs",
+			"find": ["\t\t.sort((a, b) => Buffer.compare(Buffer.from(a), Buffer.from(b)));"],
+			"replace": ["\t\t.sort((a, b) => a.localeCompare(b));"],
+			"gate": ["bash", "run.sh", "check-pi-durable-beside"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PI-DURABLE-MODULE-DIR-ORDER-BYTEWISE]",
+			"signatureSource": "pi-extensions/lib/pi-durable-native-module.test.ts",
+			"build": {
+				"argv": ["bash", "scripts/build-bridge.sh"],
+				"output": "mcp/entwurf-bridge/dist"
+			}
+		},
+		{
+			"claim": "PI-DURABLE-MODULE-DIR-REFUSED",
+			"title": "a named directory without a module launches with none, so a wrong path or an unrenamed plain index.mjs goes unnoticed",
+			"subject": "pi/pi-durable/bootstrap.mjs",
+			"find": ["\tif (names.length === 0) {"],
+			"replace": ["\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-pi-durable-beside"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PI-DURABLE-MODULE-DIR-REFUSED]",
+			"signatureSource": "pi-extensions/lib/pi-durable-native-module.test.ts",
+			"build": {
+				"argv": ["bash", "scripts/build-bridge.sh"],
+				"output": "mcp/entwurf-bridge/dist"
+			}
+		},
+		{
+			"claim": "PI-DURABLE-MODULE-DIR-EXCLUSIVE",
+			"title": "naming both the file and the directory silently keeps only the file",
+			"subject": "pi/pi-durable/bootstrap.mjs",
+			"find": ["\tif (moduleArg !== undefined && dirArg !== undefined) {"],
+			"replace": ["\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-pi-durable-beside"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PI-DURABLE-MODULE-DIR-EXCLUSIVE]",
+			"signatureSource": "pi-extensions/lib/pi-durable-native-module.test.ts",
+			"build": {
+				"argv": ["bash", "scripts/build-bridge.sh"],
+				"output": "mcp/entwurf-bridge/dist"
+			}
+		},
+		{
+			"claim": "PI-DURABLE-MODULE-DIR-NAME-DUPLICATE",
+			"title": "a second module's same-named extension or tool is accepted, so the native registry replaces the first extension or keeps both tools without a word",
+			"subject": "pi/pi-durable/bootstrap.mjs",
+			"find": ["\t\t\tif (owners.has(name)) {"],
+			"replace": ["\t\t\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-pi-durable-beside"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PI-DURABLE-MODULE-DIR-NAME-DUPLICATE]",
 			"signatureSource": "pi-extensions/lib/pi-durable-native-module.test.ts",
 			"build": {
 				"argv": ["bash", "scripts/build-bridge.sh"],

@@ -58,8 +58,10 @@ const context = BACKGROUND_CONTEXT;
 	                                                       
 	                                         
 	                                    
-	                                                        
+	                                                                                                  
 	                           
+	                                                                 
+	                             
  
 
                                     
@@ -213,6 +215,7 @@ export async function openDurable(options                     = {})             
 			conversations: summaries,
 			models: models(),
 			notices: [],
+			tasksPanel: true,
 		};
 		const listeners = new Set            ();
 		let notifying = false;
@@ -330,17 +333,8 @@ export async function openDurable(options                     = {})             
 					const thinking                     = agentOf(state.conversation).thinkingLevel ?? "off";
 					await current.configure({ model: ref, thinkingLevel: clampThinkingLevel(model, thinking) }, context);
 				}),
-			toggleTasks: () =>
-				command(async () => {
-					if (tasks !== undefined) {
-						closeTasks();
-						update({ tasks: undefined });
-						return;
-					}
-					const graph = await opened.taskGraph(context);
-					tasks = graph;
-					unsubscribeTasks = graph.subscribe((value) => update({ tasks: value }));
-				}),
+			// Only the panel: the graph stays observed, so live background work is never out of view.
+			toggleTasks: () => command(async () => update({ tasksPanel: !state.tasksPanel })),
 			switchConversation: (id) =>
 				command(async () => {
 					const next = await opened.conversation(id, context);
@@ -360,8 +354,11 @@ export async function openDurable(options                     = {})             
 			notice("warning", `Saved model is unavailable: ${saved.provider}/${saved.modelId}`);
 		}
 		if (initial?.fallbackMessage !== undefined) notice("info", initial.fallbackMessage);
-		// The task panel starts open; /tasks hides it.
-		await controller.toggleTasks();
+		// The task graph is observed until close; its panel starts open and /tasks hides it.
+		const graph = await opened.taskGraph(context);
+		tasks = graph;
+		update({ tasks: graph.value });
+		unsubscribeTasks = graph.subscribe((value) => update({ tasks: value }));
 		// Recovered work from an interrupted turn continues now.
 		harness.resume();
 

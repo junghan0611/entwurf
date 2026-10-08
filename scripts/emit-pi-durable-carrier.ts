@@ -10,9 +10,10 @@
  * Inputs, and nothing else: the pinned commit's OBJECTS (each declared file and the license, read as
  * `<commit>:<path>` — never a worktree, so the repository's checkout state cannot enter), the packaged
  * overlay patch, and this Node's `stripTypeScriptTypes` in strip mode (upstream runs these exact
- * sources under Node's strip-only TypeScript). The patch is applied by git's own engine to a private
- * scratch copy; the base blob and the patched result must carry the blob ids the patch's `index` line
- * names. Each stripped file is then relocated by pi/pi-durable/carrier-relocation.mjs, and the targets
+ * sources under Node's strip-only TypeScript). The one patch carries exactly one section per file the
+ * pin declares `patched`, and no other section (#134). Each section is applied by git's own engine to a
+ * private scratch copy of its file; the base blob and the patched result must carry the blob ids that
+ * section's `index` line names. Each stripped file is then relocated by pi/pi-durable/carrier-relocation.mjs, and the targets
  * the six files import must equal the pin's declared `distTargets` exactly.
  *
  * `--write` emits pi/pi-durable/carrier/{<files>,LICENSE} and fills the pin's generated fields
@@ -118,22 +119,60 @@ function readPin(): CarrierPin {
 			`the emitter is ${EMITTER_TOOL} in ${EMITTER_MODE} mode, not ${JSON.stringify(pin.carrier.emitter)}`,
 		);
 	}
-	if (pin.carrier.files.filter((f) => f.patched).length !== 1) {
-		throw refuse("carrier-pin-malformed", "exactly one carrier file carries the overlay patch");
+	if (!pin.carrier.files.some((f) => f.patched)) {
+		throw refuse("carrier-pin-malformed", "at least one carrier file carries the overlay patch");
 	}
 	return pin;
 }
 
-/** The overlay patch's one file and the two blob ids its `index` line names. */
-function readPatch(pin: CarrierPin): { bytes: Buffer; file: string; base: string; result: string } {
-	const bytes = fs.readFileSync(path.join(DURABLE, "overlay", pin.patches[0]));
-	const text = bytes.toString("utf8");
-	const files = [...text.matchAll(/^diff --git a\/(\S+) b\/(\S+)$/gm)];
-	const index = [...text.matchAll(/^index ([0-9a-f]+)\.\.([0-9a-f]+) 100644$/gm)];
-	if (files.length !== 1 || files[0][1] !== files[0][2] || index.length !== 1) {
-		throw refuse("carrier-patch-shape", `${pin.patches[0]} must change exactly one existing file`);
+/** One file's section of the overlay patch: its own bytes and the two blob ids its `index` line names. */
+export interface PatchSection {
+	bytes: Buffer;
+	base: string;
+	result: string;
+}
+
+/**
+ * The overlay patch split into its per-file sections, keyed by the existing file each one changes, and
+ * matched against the source paths the pin declares `patched`: exactly one section per declared file and
+ * no section for any other file. Anything else is the patch's shape, refused by name.
+ */
+export function patchSections(
+	text: string,
+	patched: readonly string[],
+	name = "the overlay patch",
+): Map<string, PatchSection> {
+	const starts = [...text.matchAll(/^diff --git /gm)].map((m) => m.index);
+	if (starts.length === 0 || starts[0] !== 0) {
+		throw refuse("carrier-patch-shape", `${name} must start with its first file section`);
 	}
-	return { bytes, file: files[0][1], base: index[0][1], result: index[0][2] };
+	const sections = new Map<string, PatchSection>();
+	for (const [at, start] of starts.entries()) {
+		const chunk = text.slice(start, starts[at + 1] ?? text.length);
+		const files = [...chunk.matchAll(/^diff --git a\/(\S+) b\/(\S+)$/gm)];
+		const index = [...chunk.matchAll(/^index ([0-9a-f]+)\.\.([0-9a-f]+) 100644$/gm)];
+		if (files.length !== 1 || files[0][1] !== files[0][2] || index.length !== 1) {
+			throw refuse("carrier-patch-shape", `every section of ${name} changes exactly one existing file`);
+		}
+		const file = files[0][1];
+		if (sections.has(file)) throw refuse("carrier-patch-shape", `${name} changes ${file} in two sections`);
+		sections.set(file, { bytes: Buffer.from(chunk, "utf8"), base: index[0][1], result: index[0][2] });
+	}
+	const undeclared = [...sections.keys()].filter((file) => !patched.includes(file));
+	const missing = patched.filter((file) => !sections.has(file));
+	if (undeclared.length > 0 || missing.length > 0) {
+		throw refuse(
+			"carrier-patch-shape",
+			`${name} must change exactly the files the pin declares patched (undeclared: ${undeclared.join(", ") || "none"}; missing: ${missing.join(", ") || "none"})`,
+		);
+	}
+	return sections;
+}
+
+function readPatch(pin: CarrierPin): Map<string, PatchSection> {
+	const text = fs.readFileSync(path.join(DURABLE, "overlay", pin.patches[0]), "utf8");
+	const patched = pin.carrier.files.filter((f) => f.patched).map((f) => f.source);
+	return patchSections(text, patched, pin.patches[0]);
 }
 
 /** `base` with the patch applied by git, in a private scratch tree outside any repository. */
@@ -172,7 +211,7 @@ function emit(source: string, pin: CarrierPin): Emission {
 	if (git(source, ["cat-file", "-t", pin.commit]).toString().trim() !== "commit") {
 		throw refuse("carrier-source-unreadable", `${pin.commit} is not a commit in ${source}`);
 	}
-	const patch = readPatch(pin);
+	const sections = readPatch(pin);
 	const names = pin.carrier.files.map((f) => f.name);
 	const targets = pin.carrier.distTargets;
 	if (new Set(targets).size !== targets.length) throw refuse("carrier-pin-malformed", "distTargets repeats a path");
@@ -183,18 +222,19 @@ function emit(source: string, pin: CarrierPin): Emission {
 		const original = readSourceObject(source, `${pin.commit}:${declared.source}`);
 		const blob = blobId(original);
 		let text = original;
-		if (declared.patched) {
-			if (declared.source !== patch.file || !blob.startsWith(patch.base)) {
+		const section = declared.patched ? sections.get(declared.source) : undefined;
+		if (section !== undefined) {
+			if (!blob.startsWith(section.base)) {
 				throw refuse(
 					"carrier-patch-base",
-					`the patch changes ${patch.file} from ${patch.base}; ${declared.source} is ${blob}`,
+					`the patch changes ${declared.source} from ${section.base}; the pinned object is ${blob}`,
 				);
 			}
-			text = applyPatch(declared.source, original, patch.bytes);
-			if (!blobId(text).startsWith(patch.result)) {
+			text = applyPatch(declared.source, original, section.bytes);
+			if (!blobId(text).startsWith(section.result)) {
 				throw refuse(
 					"carrier-patch-result",
-					`patched ${declared.source} is ${blobId(text)}, the patch names ${patch.result}`,
+					`patched ${declared.source} is ${blobId(text)}, the patch names ${section.result}`,
 				);
 			}
 		}

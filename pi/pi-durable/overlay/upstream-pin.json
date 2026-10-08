@@ -23,14 +23,14 @@
 				"source": "packages/coding-agent/src/experimental/durable/runtime.ts",
 				"patched": true,
 				"blob": "fcd6e5239e999ebf17dea0335fb3dc9cd7f7ce45",
-				"sha256": "ca0ee10dc904a57d46bb33b37fcc4efe48dfa08b2f0d10e79e7bc22136871f0a"
+				"sha256": "bfd88844fae61e8bd32d57b5b986f48056c64eebb5466d9826318a0783ac9005"
 			},
 			{
 				"name": "tui.js",
 				"source": "packages/coding-agent/src/experimental/durable/tui.ts",
-				"patched": false,
+				"patched": true,
 				"blob": "397b276cbeb1c90e1fbc96c3cc59e6a25f92dad7",
-				"sha256": "bef1ea4bd6e8ab150273752a9b94552d8ce672b518ba3d1ed1a209b8405be1b3"
+				"sha256": "f61cc68e5d32552a8196785093ae9e2f4a946088fe71582bb05690517db8c5b4"
 			},
 			{
 				"name": "harness-setup.js",

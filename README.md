@@ -27,10 +27,10 @@ Claude and Cortex Code are ACP backends. Codex and Antigravity stay native so th
 retain their own tools and work context. Capabilities differ by rail: a shipped
 citizen is not a promise of every lifecycle operation.
 
-> **Current release: [0.32.0](https://github.com/junghan0611/entwurf/releases/tag/v0.32.0)**
-> ([`80d66f4`](https://github.com/junghan0611/entwurf/commit/80d66f4ca66f0be674b2d2bfbe20c49717c0340e)).
-> Includes the pinned Pi 1.0.4 native durable app/TUI and one explicit native-module ingress.
-> npm publication and registry byte equality are [verified](https://github.com/junghan0611/entwurf/issues/130#issuecomment-6049936030).
+> **Current release: [0.33.0](https://github.com/junghan0611/entwurf/releases/tag/v0.33.0)**
+> ([`fea9b3d`](https://github.com/junghan0611/entwurf/commit/fea9b3dc4779ac5deb34e239abc8e0b5e3e95382)).
+> Includes the pinned Pi 1.1.0 native durable app/TUI and one explicit native-module ingress;
+> `npm` `latest` is `0.33.0`. What that cut ran and did not run is in its CHANGELOG section.
 > Release history and detailed evidence belong in [CHANGELOG](./CHANGELOG.md).
 
 ## Install
@@ -88,8 +88,11 @@ models/auth, queues, SQLite, transcripts and recovery remain upstream-owned:
 [Hard Rule 17](./AGENTS.md#hard-rules), **supply the missing surface; do not become the harness**.
 
 Optional `--native-module <absolute file>` initializes trusted ESM before runtime/TUI
-imports, then installs its default native Extension after the contact. No automatic
-module discovery or classic Pi API shim; guards are not a sandbox or rollback.
+imports, then installs its default native Extension after the contact. Unreleased (#134):
+`--native-module-dir <absolute directory>` loads the top-level `*.extension.mjs` files of that
+one named directory in byte-wise order instead, and the durable TUI keeps a live
+background-task badge on screen at any terminal size. No automatic module discovery or
+classic Pi API shim; guards are not a sandbox or rollback.
 Ordinary Pi's known `peerDependencies` warning reflects the separate native SDK supply.
 [Native setup](./docs/setup-clean-host.md#2b-optional-native-durable-pi-durable)
 owns flags, refusals and the extension contract.

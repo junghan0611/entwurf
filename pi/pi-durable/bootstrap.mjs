@@ -50,18 +50,27 @@
 // its initialization, and its default export is a native durable Extension, handed to `openDurable`
 // by reference after the contact. Initialization runs before the TUI or the runtime is imported —
 // the runtime creates the provider runtime before it installs any extension (carrier/runtime.js
-// 140-146), so an extension object cannot carry an environment phase. Entwurf checks only what the
+// 142-148), so an extension object cannot carry an environment phase. Entwurf checks only what the
 // ingress needs: a default export object with a name, no extension name the app installs itself (a
 // same-name install REPLACES), and no tool name of the contact. Every other field is the native
 // registry's to validate. The module is trusted operator code: the identity carriers and the
 // process directory are compared across its initialization and a change is refused by name — a
-// mistake guard, not a sandbox, and nothing is rolled back. Nothing is discovered: no directory,
-// setting, environment variable or profile names a module.
+// mistake guard, not a sandbox, and nothing is rolled back. Nothing is discovered: no ambient or
+// default directory, setting, environment variable or profile names a module.
+//
+// `--native-module-dir <absolute directory>` (#134) is the paired form, exclusive with the file
+// ingress: the operator-named directory is read ONCE, top level only, and a name is a module exactly
+// when it matches `*.extension.mjs` and does not start with a dot. Every other name (helpers, tests,
+// subdirectories, directory symlinks) is ignored unopened; a matching name must resolve to a regular
+// file. The modules initialize one by one in byte-wise name order, each under the same guards; two
+// modules naming one extension or one tool are refused by name, because the native registry would
+// REPLACE the first extension or keep both tools. A refusal at module k leaves modules before it
+// evaluated: nothing is rolled back. No watch, no recursion, nothing persisted.
 //
 // Without that resolver the carrier's first pi-coding-agent internal import fails by name (an
 // unsupported entwurf-pi-dist: URL scheme), and that failure is the honest one.
-import { realpathSync, statSync } from "node:fs";
-import { isAbsolute } from "node:path";
+import { readdirSync, realpathSync, statSync } from "node:fs";
+import { isAbsolute, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { decodeOmpBootstrapPayload } from "../../mcp/entwurf-bridge/dist/pi-extensions/meta-bridge-omp.js";
 import {
@@ -83,7 +92,14 @@ export const PACKAGED_BRIDGE_ENTRY = fileURLToPath(
 
 /** Flags that take a value. Anything else but `--continue`/`-c` is an unknown argument — a bridge
  * entry included: the launch argv cannot point the contact at another bridge. */
-const VALUE_FLAGS = ["--provider", "--model", "--width", "--entwurf-bootstrap", "--native-module"];
+const VALUE_FLAGS = [
+	"--provider",
+	"--model",
+	"--width",
+	"--entwurf-bootstrap",
+	"--native-module",
+	"--native-module-dir",
+];
 /** Flags only a NEW session can honour. */
 const FRESH_ONLY_FLAGS = ["--provider", "--model", "--width", "--entwurf-bootstrap"];
 
@@ -93,6 +109,8 @@ const FRESH_ONLY_FLAGS = ["--provider", "--model", "--width", "--entwurf-bootstr
  * carrier/subagent.js:25). The native registry REPLACES an installed extension of the same name.
  */
 const RESERVED_EXTENSION_NAMES = [PI_DURABLE_EXTENSION_NAME, "coding-tools", "pi-prompt", "subagent"];
+/** A directory entry that is an operator module: `*.extension.mjs`, not a dotfile. */
+const MODULE_ENTRY = /^[^.].*\.extension\.mjs$/;
 /** The identity carriers a module's initialization must leave as it found them, every ENTWURF_* included. */
 const IDENTITY_KEYS = ["PI_SESSION_ID", "PI_CODING_AGENT_DIR", "HOME"];
 
@@ -129,6 +147,51 @@ function nativeModuleFile(value) {
 	}
 	if (!statSync(file).isFile()) throw refuse("native-module-path-invalid", `${value} is not a regular file`);
 	return file;
+}
+
+/**
+ * The operator's module directory: absolute, resolving to a directory, read once at the top level. The
+ * matching entries in byte-wise name order, each resolved to a regular file and none twice. Decided
+ * before anything loads.
+ */
+function nativeModuleDirFiles(named) {
+	if (!isAbsolute(named))
+		throw refuse("native-module-path-not-absolute", `--native-module-dir takes an absolute path, got ${named}`);
+	let dir;
+	try {
+		dir = realpathSync(named);
+	} catch (error) {
+		throw Object.assign(refuse("native-module-path-invalid", `${named} does not resolve`), { cause: error });
+	}
+	if (!statSync(dir).isDirectory()) throw refuse("native-module-path-invalid", `${named} is not a directory`);
+	const names = readdirSync(dir)
+		.filter((name) => MODULE_ENTRY.test(name))
+		.sort((a, b) => Buffer.compare(Buffer.from(a), Buffer.from(b)));
+	if (names.length === 0) {
+		throw refuse("native-module-dir-empty", `${named} holds no *.extension.mjs module at its top level`);
+	}
+	const seen = new Map();
+	return names.map((name) => {
+		let file;
+		try {
+			file = realpathSync(join(dir, name));
+		} catch (error) {
+			throw Object.assign(refuse("native-module-path-invalid", `${name} in ${named} does not resolve`), {
+				cause: error,
+			});
+		}
+		if (!statSync(file).isFile()) {
+			throw refuse(
+				"native-module-path-invalid",
+				`${name} in ${named} matches *.extension.mjs but is not a regular file`,
+			);
+		}
+		if (seen.has(file)) {
+			throw refuse("native-module-dir-duplicate-target", `${seen.get(file)} and ${name} in ${named} are the same file`);
+		}
+		seen.set(file, name);
+		return file;
+	});
 }
 
 /** The module's default export, checked only for what the ingress needs and returned BY REFERENCE. */
@@ -188,6 +251,31 @@ async function loadNativeModule(file) {
 }
 
 /**
+ * Initialize the operator's modules in order. A later module that names an extension or a tool an
+ * earlier one already did is refused by name: the native registry would replace that extension, or keep
+ * both tools, without a word.
+ */
+async function loadNativeModules(files) {
+	const extensions = [];
+	const owners = new Map();
+	for (const file of files) {
+		const extension = await loadNativeModule(file);
+		const names = [
+			`extension ${extension.name}`,
+			...(Array.isArray(extension.tools) ? extension.tools : []).map((tool) => `tool ${tool?.name}`),
+		];
+		for (const name of names) {
+			if (owners.has(name)) {
+				throw refuse("native-module-name-duplicate", `${file} and ${owners.get(name)} both name ${name}`);
+			}
+		}
+		for (const name of names) owners.set(name, file);
+		extensions.push(extension);
+	}
+	return extensions;
+}
+
+/**
  * Open the durable app with the contact installed, then birth the citizen and arm its doorbell on
  * the root conversation, then admit the first input (when given) to the root once. On any failure
  * the contact is told why (waiting tools reject by name), everything opened is closed again, and a
@@ -198,8 +286,8 @@ async function loadNativeModule(file) {
  * roots; tests also pass a connector). `open` replaces the runtime's `openDurable` for tests.
  * `bridgeEntry` defaults to this package's own compiled bridge; only a programmatic caller (the
  * checkout-only gates, which drive a private bundle) passes another one — never the launch argv.
- * `extensions` are the operator's native extensions (`--native-module`), installed after the
- * contact, by reference.
+ * `extensions` are the operator's native extensions (`--native-module` or `--native-module-dir`),
+ * installed after the contact, by reference.
  *
  * @param {{
  *   bridgeEntry?: string,
@@ -320,7 +408,19 @@ function parseArgs(argv) {
 		);
 	}
 	const moduleArg = values.get("--native-module");
-	const nativeModule = moduleArg === undefined ? {} : { nativeModule: nativeModuleFile(moduleArg) };
+	const dirArg = values.get("--native-module-dir");
+	if (moduleArg !== undefined && dirArg !== undefined) {
+		throw refuse(
+			"native-module-ingress-exclusive",
+			"--native-module and --native-module-dir are two forms of one ingress; name the file or the directory",
+		);
+	}
+	const nativeModule =
+		moduleArg !== undefined
+			? { nativeModules: [nativeModuleFile(moduleArg)] }
+			: dirArg !== undefined
+				? { nativeModules: nativeModuleDirFiles(dirArg) }
+				: {};
 	if (continueSession) return { continueSession, ...nativeModule };
 	const provider = values.get("--provider");
 	if (provider === undefined) {
@@ -368,10 +468,10 @@ function parseArgs(argv) {
  */
 export async function main(argv, { loadTui = () => import(TUI), open, contact, bridgeEntry } = {}) {
 	// Every argument refusal is decided here, before any module, the TUI or the app loads.
-	const { nativeModule, ...args } = parseArgs(argv);
+	const { nativeModules = [], ...args } = parseArgs(argv);
 	// The caller's directory, fixed before any operator code runs and handed to the app explicitly.
 	const cwd = process.cwd();
-	const extensions = nativeModule === undefined ? [] : [await loadNativeModule(nativeModule)];
+	const extensions = await loadNativeModules(nativeModules);
 	// Loaded before anything opens, as upstream main.ts imports it statically: a TUI that cannot
 	// load opens no session, mints no citizen and leaves nothing to clean up.
 	const { runDurableTui } = await loadTui();

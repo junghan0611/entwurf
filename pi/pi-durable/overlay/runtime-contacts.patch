@@ -1,5 +1,5 @@
 diff --git a/packages/coding-agent/src/experimental/durable/runtime.ts b/packages/coding-agent/src/experimental/durable/runtime.ts
-index fcd6e523..929dbc79 100644
+index fcd6e523..7f00e27f 100644
 --- a/packages/coding-agent/src/experimental/durable/runtime.ts
 +++ b/packages/coding-agent/src/experimental/durable/runtime.ts
 @@ -8,7 +8,9 @@ import {
@@ -12,7 +12,19 @@ index fcd6e523..929dbc79 100644
  	type ModelRef,
  	ROOT_CONVERSATION_ID,
  	type Submission,
-@@ -81,6 +83,10 @@ export interface DurableController {
+@@ -56,8 +58,10 @@ export interface DurableView {
+ 	readonly conversations: readonly ConversationSummary[];
+ 	readonly models: readonly ModelSummary[];
+ 	readonly notices: readonly Notice[];
+-	/** The live task graph while the task panel is open. */
++	/** The live task graph, observed for the session's lifetime whether or not its panel is shown. */
+ 	readonly tasks?: TaskGraph;
++	/** Whether the task panel is shown; /tasks toggles only this. */
++	readonly tasksPanel: boolean;
+ }
+ 
+ export interface DurableViewSource {
+@@ -81,6 +85,10 @@ export interface DurableController {
  export interface OpenDurableOptions {
  	readonly cwd?: string;
  	readonly continueSession?: boolean;
@@ -23,7 +35,7 @@ index fcd6e523..929dbc79 100644
  }
  
  export interface OpenDurableResult {
-@@ -88,6 +94,8 @@ export interface OpenDurableResult {
+@@ -88,6 +96,8 @@ export interface OpenDurableResult {
  	readonly controller: DurableController;
  	/** pi's settings, for the TUI's theme and terminal capabilities. */
  	readonly settings: SettingsManager;
@@ -32,7 +44,7 @@ index fcd6e523..929dbc79 100644
  	close(): Promise<void>;
  }
  
-@@ -122,6 +130,9 @@ function titleOf(entry: EntryRecord | undefined): { title?: string } {
+@@ -122,6 +132,9 @@ function titleOf(entry: EntryRecord | undefined): { title?: string } {
  }
  
  export async function openDurable(options: OpenDurableOptions = {}): Promise<OpenDurableResult> {
@@ -42,7 +54,7 @@ index fcd6e523..929dbc79 100644
  	const location = await selectSession(options.cwd ?? process.cwd(), options.continueSession ?? false);
  	const envs = new ExecutionEnvs(location.cwd);
  	let harness: Harness | undefined;
-@@ -132,6 +143,7 @@ export async function openDurable(options: OpenDurableOptions = {}): Promise<Ope
+@@ -132,6 +145,7 @@ export async function openDurable(options: OpenDurableOptions = {}): Promise<Ope
  		const settings = createHarnessSettings(settingsManager);
  		const registry = createCodingRegistry(settingsManager, location.cwd);
  		registry.install(Subagent);
@@ -50,7 +62,7 @@ index fcd6e523..929dbc79 100644
  
  		const pendingReports: unknown[] = [];
  		let report: (error: unknown) => void = (error) => pendingReports.push(error);
-@@ -146,7 +158,29 @@ export async function openDurable(options: OpenDurableOptions = {}): Promise<Ope
+@@ -146,7 +160,29 @@ export async function openDurable(options: OpenDurableOptions = {}): Promise<Ope
  			},
  			context,
  		);
@@ -81,7 +93,49 @@ index fcd6e523..929dbc79 100644
  		const root = await harness.root(context, {
  			agent: {
  				cwd: location.cwd,
-@@ -342,6 +376,7 @@ export async function openDurable(options: OpenDurableOptions = {}): Promise<Ope
+@@ -179,6 +215,7 @@ export async function openDurable(options: OpenDurableOptions = {}): Promise<Ope
+ 			conversations: summaries,
+ 			models: models(),
+ 			notices: [],
++			tasksPanel: true,
+ 		};
+ 		const listeners = new Set<() => void>();
+ 		let notifying = false;
+@@ -296,17 +333,8 @@ export async function openDurable(options: OpenDurableOptions = {}): Promise<Ope
+ 					const thinking: ModelThinkingLevel = agentOf(state.conversation).thinkingLevel ?? "off";
+ 					await current.configure({ model: ref, thinkingLevel: clampThinkingLevel(model, thinking) }, context);
+ 				}),
+-			toggleTasks: () =>
+-				command(async () => {
+-					if (tasks !== undefined) {
+-						closeTasks();
+-						update({ tasks: undefined });
+-						return;
+-					}
+-					const graph = await opened.taskGraph(context);
+-					tasks = graph;
+-					unsubscribeTasks = graph.subscribe((value) => update({ tasks: value }));
+-				}),
++			// Only the panel: the graph stays observed, so live background work is never out of view.
++			toggleTasks: () => command(async () => update({ tasksPanel: !state.tasksPanel })),
+ 			switchConversation: (id) =>
+ 				command(async () => {
+ 					const next = await opened.conversation(id, context);
+@@ -326,8 +354,11 @@ export async function openDurable(options: OpenDurableOptions = {}): Promise<Ope
+ 			notice("warning", `Saved model is unavailable: ${saved.provider}/${saved.modelId}`);
+ 		}
+ 		if (initial?.fallbackMessage !== undefined) notice("info", initial.fallbackMessage);
+-		// The task panel starts open; /tasks hides it.
+-		await controller.toggleTasks();
++		// The task graph is observed until close; its panel starts open and /tasks hides it.
++		const graph = await opened.taskGraph(context);
++		tasks = graph;
++		update({ tasks: graph.value });
++		unsubscribeTasks = graph.subscribe((value) => update({ tasks: value }));
+ 		// Recovered work from an interrupted turn continues now.
+ 		harness.resume();
+ 
+@@ -342,6 +373,7 @@ export async function openDurable(options: OpenDurableOptions = {}): Promise<Ope
  			},
  			controller,
  			settings: settingsManager,
@@ -89,3 +143,141 @@ index fcd6e523..929dbc79 100644
  			close() {
  				closing ??= (async () => {
  					unsubscribe();
+diff --git a/packages/coding-agent/src/experimental/durable/tui.ts b/packages/coding-agent/src/experimental/durable/tui.ts
+index 397b276c..6a8fce8f 100644
+--- a/packages/coding-agent/src/experimental/durable/tui.ts
++++ b/packages/coding-agent/src/experimental/durable/tui.ts
+@@ -23,12 +23,14 @@ import {
+ 	SelectList,
+ 	type SelectListTheme,
+ 	Spacer,
++	type StackEntry,
+ 	setCapabilityOverrides,
+ 	setKeybindings,
+ 	Text,
+ 	TruncatedText,
+ 	TuiAltScreen,
+ 	VStack,
++	visibleWidth,
+ } from "@earendil-works/pi-tui";
+ import { getAgentDir } from "../../config.ts";
+ import { KeybindingsManager } from "../../core/keybindings.ts";
+@@ -150,10 +152,75 @@ interface Handlers {
+ 	cycleThinking(): void;
+ }
+ 
++/**
++ * The live background-task badge: the dock's first row, never shrunk, so live background work stays on
++ * screen however small the terminal gets. It counts the graph's background tasks whatever their kind and
++ * names the ones that are not running; with none it renders nothing and the dock is upstream's.
++ */
++export class TaskBadge implements Component {
++	#count = 0;
++	#detail = "";
++
++	get count(): number {
++		return this.#count;
++	}
++
++	set(graph: TaskGraph | undefined): void {
++		const nodes = Object.values(graph?.tasks ?? {}).filter((node) => node.background);
++		const tally = (state: string, match: (node: TaskGraphNode) => boolean): string[] => {
++			const n = nodes.filter(match).length;
++			return n === 0 ? [] : [`${n} ${state}`];
++		};
++		this.#count = nodes.length;
++		this.#detail = [
++			...tally("aborting", (node) => node.abortRequested),
++			...tally("completing", (node) => !node.abortRequested && node.state.status === "completing"),
++			...tally("waiting", (node) => !node.abortRequested && node.state.status === "waiting"),
++			...tally("pending", (node) => !node.abortRequested && node.state.status === "pending"),
++		].join(", ");
++	}
++
++	/** The widest form that fits, padded when there is room; narrower terminals drop detail, then words. */
++	render(width: number): string[] {
++		const n = this.#count;
++		if (n === 0) return [];
++		const tasks = `⏳ ${n} ${n === 1 ? "task" : "tasks"}`;
++		const detailed = this.#detail ? [`${tasks} (${this.#detail})`] : [];
++		const forms = [...detailed, tasks, `⏳ ${n}`, `⏳${n}`, `*${n}`, "*+", "*"];
++		for (const form of forms) {
++			if (visibleWidth(form) < width) return [theme.fg("accent", ` ${form}`)];
++			if (visibleWidth(form) === width) return [theme.fg("accent", form)];
++		}
++		return [theme.fg("accent", "*")];
++	}
++
++	invalidate(): void {}
++}
++
++/**
++ * The screen: the transcript above the dock. The badge is the dock's first row and never shrinks, so the
++ * renderer, which clips from the bottom, drops the editor and the footer before it; a one-row terminal
++ * with live background work shows the badge instead of the transcript.
++ */
++export function durableLayout(transcript: Component, badge: TaskBadge, dock: readonly StackEntry[]): VStack {
++	return new VStack([
++		{
++			component: transcript,
++			basis: 0,
++			grow: 1,
++			shrink: 1,
++			minSize: 1,
++			visible: (viewport) => badge.count === 0 || viewport.height > 1,
++		},
++		{ component: new VStack([{ component: badge, shrink: 0 }, ...dock]), basis: "auto", grow: 0, shrink: 1, minSize: 1 },
++	]);
++}
++
+ class DurableTui {
+ 	static readonly #renderers: Record<string, ToolRenderers> = createAllToolRenderers();
+ 	readonly #ui: TuiAltScreen;
+ 	readonly #chat = new Container();
++	readonly #taskBadge = new TaskBadge();
+ 	readonly #tasks = new Container();
+ 	readonly #queue = new Container();
+ 	readonly #notices = new Container();
+@@ -216,15 +283,9 @@ class DurableTui {
+ 		content.addChild(new Spacer(1));
+ 		const transcript = new ScrollView(content, { follow: "end", primary: true, overscroll: "chain" });
+ 		this.#transcript = transcript;
+-		const dock = new VStack([
+-			{ component: this.#tasks, shrink: 1, minSize: 0 },
+-			{ component: this.#queue, shrink: 1, minSize: 0 },
+-			{ component: this.#notices, shrink: 1, minSize: 0 },
+-			{ component: this.#editorContainer, shrink: 1, minSize: 3 },
+-			{ component: this.#footer, shrink: 1, minSize: 0 },
+-		]);
+ 		for (const component of [
+ 			this.#chat,
++			this.#taskBadge,
+ 			this.#tasks,
+ 			this.#queue,
+ 			this.#notices,
+@@ -234,9 +295,12 @@ class DurableTui {
+ 			this.#ui.addChild(component);
+ 		}
+ 		this.#ui.setLayoutRoot(
+-			new VStack([
+-				{ component: transcript, basis: 0, grow: 1, shrink: 1, minSize: 1 },
+-				{ component: dock, basis: "auto", grow: 0, shrink: 1, minSize: 1 },
++			durableLayout(transcript, this.#taskBadge, [
++				{ component: this.#tasks, shrink: 1, minSize: 0 },
++				{ component: this.#queue, shrink: 1, minSize: 0 },
++				{ component: this.#notices, shrink: 1, minSize: 0 },
++				{ component: this.#editorContainer, shrink: 1, minSize: 3 },
++				{ component: this.#footer, shrink: 1, minSize: 0 },
+ 			]),
+ 		);
+ 		this.#ui.setFocus(this.#editor);
+@@ -299,7 +363,8 @@ class DurableTui {
+ 				);
+ 			}
+ 		}
+-		this.#syncTasks(view.tasks);
++		this.#taskBadge.set(view.tasks);
++		this.#syncTasks(view.tasksPanel ? view.tasks : undefined);
+ 		this.#syncQueue((view.conversation.docs["pi.inbox"] ?? { items: [] }) as InboxState);
+ 		this.#syncNotices(view);
+ 		this.#editor.borderColor = theme.getThinkingBorderColor(agentOf(view.conversation).thinkingLevel ?? "off");

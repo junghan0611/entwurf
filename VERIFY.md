@@ -203,10 +203,21 @@ Do not collapse source, package, fixture, and native-host evidence into one “g
 **Native durable contact (#129, #130 carrier).** `check-pi-durable-beside` is the deterministic
 beside-test/mutant coordinate in `check:contracts`: the adapter, the installed carrier/SDK-set
 verifier, the preflight, the owner join, the carrier's relocation grammar, resolver and
-maintainer emitter (its source reads refuse replace refs), and the bootstrap's explicit
-`--native-module` ingress (#130 P2), driven through the packaged `main`'s own seams: initialization
-before the TUI and the open, named refusals, the identity and directory guards, the contact-first
-order by reference, and the bridge spawn *spec* (not the child's inheritance). `check-pi-runtime-version` asks the
+maintainer emitter (its source reads refuse replace refs; its one patch carries exactly one
+section per patched carrier file, #134), and the bootstrap's explicit `--native-module` ingress
+(#130 P2) with its paired `--native-module-dir` (#134), driven through the packaged `main`'s own
+seams: initialization before the TUI and the open, named refusals, the identity and directory
+guards, the top-level `*.extension.mjs` filter and byte-wise order, cross-module name refusals, the
+contact-first order by reference, and the bridge spawn *spec* (not the child's inheritance). The
+carrier's task footer (#134) is observed in ONE sandboxed child that loads the committed carrier
+through its own resolver: the real carrier runtime opened and closed with no model (graph observed
+for the session, `/tasks` toggling only the panel), then continued after one native background task
+was committed into that session through the SDK's public `Conversation.commit` (the carrier's graph
+holds that node and the badge counts it, `pending` while recovered), and the carrier TUI's badge and
+`durableLayout` drawn by the published pi-tui renderer on a fake terminal across rows 1–8 × cols
+1–12, count changes and resizes, against the pinned upstream screen for the zero-task case. Its
+editor is a fixed stand-in: the real `CustomEditor`, overlays, emoji width and a consumer's own task
+are the visible-terminal and consumer subjects. `check-pi-runtime-version` asks the
 same verifier whether this checkout resolves exactly the pinned SDK set (the native set; the PATH
 host is setup's subject), and `check-pi-import-surface` asserts the carrier fence. The separate
 `check-pi-durable-contact`, `check-pi-durable-send` and `check-pi-durable-receive` are
@@ -227,7 +238,9 @@ same-sandbox neighbour as the rejected control), every reachable physical SDK ed
 version and declared name, a mixed-version tree refused by name although it still imports, a
 constructed depth-3 mismatch refused by the verifier and seen by the oracle, the public launch reaching the
 app's own model refusal before any birth — also with one installed `--native-module` initialized
-first, and a reserved extension name refused before anything opens — and the HOST kept a separate subject — a real pi 1.0.4
+first, a reserved extension name refused before anything opens, one installed `--native-module-dir`
+initializing only its top-level `*.extension.mjs` (#134) and a directory without a module refused
+before anything opens — and the HOST kept a separate subject — a real pi 1.0.4
 binary (the previous generation) beside the pinned native set is a named pi FAIL with zero Pi wiring while pi-durable still
 PASSes — not native admission. The maintainer's rebuild
 equality is `emit-pi-durable-carrier --check` against a supplied upstream clone; without one it is

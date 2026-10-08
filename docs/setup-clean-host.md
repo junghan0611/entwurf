@@ -358,12 +358,33 @@ tree (for example an override that binds pi-durable's `pi-ai` to an older publis
   (`native-module-path-*`), a module that throws (`native-module-import-failed`), a function or
   nameless default (`native-module-export-invalid`), an extension named like one the app installs
   itself (`entwurf`, `coding-tools`, `pi-prompt`, `subagent`) or a tool named like one of Entwurf's
-  contact tools (`native-module-name-reserved`; any other duplicate is the native registry's to
-  judge), and a module whose initialization changes
+  contact tools (`native-module-name-reserved`; within one module, any other duplicate is the native
+  registry's to judge), and a module whose initialization changes
   `PI_SESSION_ID`, `PI_CODING_AGENT_DIR`, `HOME` or any `ENTWURF_*` (`native-module-env-identity-changed`)
   or the process directory (`native-module-cwd-changed`). Your module is trusted code; those
-  checks catch mistakes, they do not sandbox it. Nothing else names a module — no directory,
-  setting or profile — and a sibling opened by `entwurf_fresh_call` starts without one.
+  checks catch mistakes, they do not sandbox it. Nothing else names a module — no default
+  directory, setting or profile — and a sibling opened by `entwurf_fresh_call` starts without one.
+
+- **A module directory instead (unreleased, #134 — not in 0.33.0).** `--native-module-dir
+  <absolute directory>` replaces `--native-module` (naming both is `native-module-ingress-exclusive`).
+  Entwurf reads that one directory once, at its top level: every `*.extension.mjs` that is not a
+  dotfile is a module; helpers such as `env.mjs` or `index.mjs`, other suffixes, subdirectories and
+  directory links are never opened. The modules initialize one by one in byte-wise name order
+  (`00-env.extension.mjs` before `10-tools.extension.mjs`), each under the same checks as above,
+  and install in that order after the contact. Also refused by name: a directory without a module
+  (`native-module-dir-empty`), a matching entry that is not a regular file
+  (`native-module-path-invalid`), two names for one file (`native-module-dir-duplicate-target`), and
+  a module repeating an earlier module's extension or tool name (`native-module-name-duplicate` —
+  the native registry would replace that extension or keep both tools). A refusal at a later module
+  leaves the earlier ones already evaluated; nothing is rolled back.
+
+- **Background-task badge (unreleased, #134).** While a native background task is live, the durable
+  TUI shows `⏳ n tasks` as the first line under the transcript, whatever kind of task it is, with
+  the ones not running named (`aborting`, `completing`, `waiting`, `pending`). It never shrinks: a
+  short terminal loses the editor and footer before it, a one-row terminal shows only the badge, and
+  a narrow one shortens it down to `*`. `/tasks` only shows or hides the task panel; the badge stays.
+  With no background task the screen is unchanged. A task that has already finished leaves the
+  count — its outcome is reported by the task's own extension.
 
 - **Known warning.** Ordinary Pi may print `Host-provided extension packages must be declared in
   peerDependencies with a "*" range, not dependencies: @earendil-works/…` for Entwurf's
