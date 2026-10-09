@@ -585,13 +585,18 @@ transaction and not this package. `./run.sh check-pack-install` packs this check
 tarball into a fresh temp project, and runs the same `verifyInstalledRuntime` against it.
 
 **Switching source is a re-proof, not a config change.** npm is the production authority class.
-The 0.30.0 follow-up pinned `@junghanacs/entwurf@0.30.0` with the registry's measured sha512
-(re-read with `npm view` on 2026-10-03), returning from the `herdr-checkout` candidate carrier
-(`8b92e09`). This **unpublished 0.30.1 preparation** uses that closed checkout verification
-carrier again: no integrity is invented for an artifact the registry has not published. Re-pin
-npm only after publication, with measured bytes and a fresh source-specific proof. The plugin's
-own version is 0.30.1 for this cut; it is still an independent field — what Herdr lists for the
-plugin, not a permanent equality rule with the acquired package. Moving between
+This plugin pins `@junghanacs/entwurf@0.34.0` with the registry's measured sha512 (re-read with
+`npm view` on 2026-10-09), returning from the `herdr-checkout` carrier the 0.30.1 preparation rode
+(#132); 0.31–0.33 were never pinned here. Its source-specific proof is recorded in the #132 thread
+and CHANGELOG, not inherited from any earlier pin. The plugin's own version is 0.34.0 for this cut;
+it is still an independent field — what Herdr lists for the plugin, not a permanent equality rule
+with the acquired package.
+
+**Upgrading from a checkout-carrier install.** A host that installed the 0.30.1 plugin holds a
+runtime and ledger recorded as `herdr-checkout`, and this pin is a source switch, which is refused
+rather than inherited (`activation-artifact-source-drifted`). Run `entwurf herdr-plugin-deactivate`
+first, then `herdr plugin install` again. A host with no plugin installation starts fresh; one whose
+settled ledger already names an npm artifact rebinds in place. Moving between
 sources — or to another future authority — re-decides where the bytes come from,
 and candidate evidence does not transfer. Exact acquisition and integrity, the installed runtime
 (`name@version`, compiled entry, three executable bins, real `check-bridge`), the swap and torn-swap

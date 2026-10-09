@@ -4,6 +4,49 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+## v2026.10.9-herdr.0.34.0 — Herdr Entwurf plugin 0.34.0
+
+A Herdr plugin snapshot, not a core release: no package version, npm artifact or core tag moves.
+
+### Herdr plugin
+
+- **Runtime re-pinned to the published 0.34.0 (#132 B).** `plugins/herdr/runtime-lock.json`
+  returns from the `herdr-checkout` verification carrier the 0.30.1 preparation rode to the npm
+  production source: `@junghanacs/entwurf@0.34.0` with the registry's measured sha512
+  (`sha512-rUpQ…/uJ/fw==`), which is the artifact accepted and published as 0.34.0. 0.31–0.33
+  were never pinned here. The manifest version moves 0.30.1 → 0.34.0; `min_herdr_version` stays
+  0.9.0 and the measured Herdr supply stays 0.9.3.
+- **Upgrading from a 0.30.1 plugin install needs an explicit deactivate.** That install recorded a
+  `herdr-checkout` runtime and ledger, and npm is a different acquisition source, which is refused
+  rather than inherited (`activation-artifact-source-drifted`). Run `entwurf
+  herdr-plugin-deactivate`, then `herdr plugin install` again. A host with no plugin installation
+  starts fresh.
+- **The release skill's core baseline ignores Herdr snapshot tags.** `prepare` P1 took the newest
+  tag by version sort, and a `vYYYY.M.D-herdr.*` tag sorts above every `v0.x`, so it would have
+  become the next core audit baseline. P1 now excludes exactly that shape; a core `v20.1.0` is
+  still picked.
+
+### Verification
+
+- **Real-npm swap and torn-swap recovery, measured before commit.** This is the row the 0.30.0
+  pin left open. A one-shot driver ran the registry-shipped `scripts/herdr-runtime.mjs`, whose
+  sha256 equals this checkout's, against the real registry:
+  - A 0.33.0 → 0.34.0 swap.
+  - The same upgrade torn between its two renames (`torn-swap-with-candidate`), then resumed.
+    The last-good 0.33.0 tree was restored before 0.34.0 was acquired again.
+  - Both ended `runtime-ready` with observed digest
+    `sha256-e9d995ff3858ffca40fa12b4fce2a6db3802da3ee27c7b233142fc4c71f23450`, the accepted
+    artifact. Neither left a staging or backup directory behind.
+  - Each 0.34.0 runtime passed the installed-runtime check: three executable bins, the compiled
+    entry, and `check-bridge` with its exact eight verbs. The owned inverse removed cache,
+    runtime and journal.
+  - Two earlier runs stopped on defects in the driver's own verb parser, not on product behaviour.
+- The focused Herdr gates (`check-herdr-plugin`, `-plugin-profile`, `-plugin-build`,
+  `-runtime-bootstrap`, `-activation`) and `check-gate-manifests` are green on this tree. No gate,
+  mutant or matrix changed, so no qualification PARTIAL is owed.
+- The public-ref first-user path (`smoke-herdr-raw-install-live`) and the exact-SHA CI run on the
+  pushed commit. Their receipts are recorded in the GitHub release and #132, not claimed here.
+
 ## 0.34.0 - 2026-10-09
 
 ### Release coordination

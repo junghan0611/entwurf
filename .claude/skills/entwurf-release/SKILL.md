@@ -256,7 +256,11 @@ Forbidden in prepare mode:
 ## P1. Audit changes since the last release
 
 ```bash
-LAST_TAG=$(git tag --sort=-version:refname | head -1)
+# The baseline is the newest CORE release tag. A Herdr plugin snapshot tag
+# (tag-release CalVer, `vYYYY.M.D-herdr.<runtime>`) version-sorts above the
+# current v0.x core tags but ships no core version, so exactly that shape is
+# excluded here.
+LAST_TAG=$(git tag --sort=-version:refname | grep -vE '^v[0-9]{4}\.[0-9]{1,2}\.[0-9]{1,2}-herdr\.' | head -1)
 printf 'baseline=%s\n' "$LAST_TAG"
 git log "${LAST_TAG}..HEAD" --oneline
 ```

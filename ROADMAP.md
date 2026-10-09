@@ -7,13 +7,15 @@
 
 ---
 
-## 보류 방향 — #132 잔여 Herdr B/C (2026-10-09)
+## 진행 방향 — #132 Herdr B 진행 중 / C 보류 (2026-10-09)
 
-[GLG 결정, 2026-10-09 #134 코디네이터 세션에서 승인] #132의 A(pi 1.1.0 정렬)와 entwurf 0.33.0 출하는 `fea9b3d`(tag `v0.33.0`)에서 끝났다(`[측정 2026-10-09]` `npm view` latest `0.33.0`). 남은 B·C는 **끝나지 않았다**. 이 문서로 이관하고 #132를 not-planned로 닫아 #133에 구현 슬롯을 돌린다. 완료·연구 결론·범위 철회를 뜻하지 않으며, herdr plugin 0.33.0 릴리즈는 일어나지 않았다.
+현재: 0.34.0이 npm에 실제 publish되어(`latest=0.34.0`, registry SRI = 수락 아티팩트) [#132](https://github.com/junghan0611/entwurf/issues/132)가 다시 열렸고, GLG의 Herdr 컷 요청으로 B를 검증 중이다. C는 B와 분리되어 보류 상태다.
 
-- **B — plugin 정렬, 미완:** `plugins/herdr/herdr-plugin.toml:32` `version = "0.30.1"`, `runtime-lock.json:4` `source: "herdr-checkout"`(읽음, 2026-10-09). plugin은 0.31–0.33 npm 아티팩트에 한 번도 re-pin되지 않았다. 남은 일: 실제 publish된 아티팩트의 name/version/sha512를 실측해 npm source로 re-pin, manifest 번호 정렬, VERIFY의 source별 proof를 그 바이트로 재실행.
-- **C — herdr 위 pi-durable 판정, 미완:** fresh-call pilot set은 `["pi", "claude-code"]`(`scripts/herdr-rails.mjs:44`)라 `pi-durable`은 생성 전에 거절되고, herdr `--kind`는 bare executable 토큰이라 `entwurf pi-durable …`을 담지 못한다. 측정 축은 #132 본문 C 그대로: pane 수동 실행(record birth·self-fetch 수신) → herdr agent 감지 → (GLG 결정) pilot 확대.
-- **재개 조건:** 0.34.0이 npm에 실제 publish된 뒤, 그 바이트로 같은 [#132](https://github.com/junghan0611/entwurf/issues/132)를 다시 열어 B re-pin·source proof → C 축 1→2→3을 측정한다. 원천은 #132 본문 B/C와 thread이며, 당시 측정은 그 HEAD의 증거이지 현재 main 증거가 아니다.
+- **B — plugin 정렬, 진행 중(#132 재개, 2026-10-09):** 0.34.0이 npm에 실제 publish된 뒤(registry SRI = 수락 아티팩트) `runtime-lock.json`을 npm `@junghanacs/entwurf@0.34.0` + 실측 sha512로, `herdr-plugin.toml` version을 0.34.0으로 re-pin한다. 0.31–0.33은 plugin에 한 번도 pin되지 않았다. source별 proof(public-ref raw-install, 실제 npm swap/torn-swap)는 #132 thread에 기록하며, plugin 컷 태그 `v2026.10.9-herdr.0.34.0`이 붙기 전까지 B는 완료가 아니다.
+- **C — herdr 위 pi-durable 판정, 보류(미측정):** fresh-call pilot set은 `["pi", "claude-code"]`(`scripts/herdr-rails.mjs:44`)라 `pi-durable`은 생성 전에 거절되고, herdr `--kind`는 bare executable 토큰이라 `entwurf pi-durable …`을 담지 못한다. 측정 축은 #132 본문 C 그대로: pane 수동 실행(record birth·self-fetch 수신) → herdr agent 감지 → (GLG 결정) pilot 확대.
+- **재개 조건 — 충족:** 0.34.0이 npm에 실제 publish되었고 #132가 OPEN이며 Herdr 컷이 직접 요청되어, 지금 B를 검증 중이다. C 축 1→2→3은 B와 따로이며 아직 측정되지 않았다. 원천은 #132 본문 B/C와 thread이며, 당시 측정은 그 HEAD의 증거이지 현재 main 증거가 아니다.
+
+이전 보류 결정(역사): [GLG 결정, 2026-10-09 #134 코디네이터 세션에서 승인] #132의 A(pi 1.1.0 정렬)와 entwurf 0.33.0 출하는 `fea9b3d`(tag `v0.33.0`)에서 끝났다(당시 측정 `[측정 2026-10-09]` `npm view` latest `0.33.0`). 남은 B·C는 **끝나지 않았다**. 이 문서로 이관하고 #132를 not-planned로 닫아 #133에 구현 슬롯을 돌린다. 완료·연구 결론·범위 철회를 뜻하지 않으며, herdr plugin 0.33.0 릴리즈는 일어나지 않았다.
 
 ## 보류 방향 — #106 no-turn retirement (2026-10-08)
 
