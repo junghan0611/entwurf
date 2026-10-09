@@ -398,10 +398,10 @@
 		},
 		{
 			"claim": "HRB-PREPARE-STDOUT-CLEAN",
-			"title": "silencing stderr instead of stdout is the exact byte that broke the first clean-host install: husky writes `.git can't be found` to STDOUT when npm packs our GitHub git spec (no `.git` in a codeload tarball), npm merges that line into `npm pack --json`, and a perfectly good artifact is refused as `runtime-checkout-source-unavailable` — invisible to both the fake-npm cells here and to the LIVE gate, whose `insteadOf` mirror is cloned and therefore HAS a `.git`",
+			"title": "silencing stderr instead of routing stdout to it lets the `prepare` bridge build's stdout into the `npm pack --json` stream this rail parses — the class of byte that broke the first clean-host install, when husky (then part of `prepare`) wrote `.git can't be found` to STDOUT while npm packed our GitHub git spec (no `.git` in a codeload tarball) and a perfectly good artifact was refused as `runtime-checkout-source-unavailable`, invisible to both the fake-npm cells here and to the LIVE gate, whose `insteadOf` mirror is cloned and therefore HAS a `.git`",
 			"subject": "package.json",
-			"find": ["\t\t\"prepare\": \"husky 1>&2 || true; npm run --silent build-bridge 1>&2\","],
-			"replace": ["\t\t\"prepare\": \"husky 2>/dev/null || true; npm run --silent build-bridge\","],
+			"find": ["\t\t\"prepare\": \"npm run --silent build-bridge 1>&2\","],
+			"replace": ["\t\t\"prepare\": \"npm run --silent build-bridge 2>/dev/null\","],
 			"gate": ["bash", "run.sh", "check-herdr-runtime-bootstrap"],
 			"timeoutSeconds": 300,
 			"signature": "[QK:HRB-PREPARE-STDOUT-CLEAN]",

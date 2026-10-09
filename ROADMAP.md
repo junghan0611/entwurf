@@ -532,13 +532,7 @@ v2 필드 `parentGardenId`/`isEntwurf`는 **stray key로 거부된다** — 되�
     probe는 backend 무관(operator MCP 서버 + paired control/intervention run)이라 `cortex acp serve`에도 그대로 겨눠 rail readiness 축의 "미측정"
     질문을 대칭 가정 없이 잴 수 있다.
 - **repair/v2-core-debt 승격분 (2026-07-24):**
-  - **[GLG 결정 대기 — 에이전트 무접촉] `core.hooksPath` 이중화.** 이 리포 `.git/config`의
-    `core.hooksPath=.husky/_`가 전역 안전 레일(`~/repos/gh/agent-config/git-hooks`)을 덮는다.
-    husky엔 `pre-push`가 없어 push 시 identity/secret 스캔이 0회 돈다(공개 리포라 원래 strict 대상).
-    방향 ⓐ husky 훅이 전역 스캐너를 역방향 호출, ⓑ hooksPath를 전역으로 되돌리고 husky를 그 아래
-    체인(전역 훅이 이미 `_delegate.sh`로 repo-local을 부르게 설계됨 — 설계 의도에 부합). 어느 쪽도
-    에이전트가 임의로 바꾸지 않는다(AGENTS: hooksPath 변경은 GLG 명시 요청). 대체물 = push 전
-    `bash ~/repos/gh/agent-config/git-hooks/_scan.sh range origin/<branch> HEAD` 수동 실행.
+  - **[해결 2026-10-09] `core.hooksPath` 이중화.** 이 checkout의 로컬 `.husky/_` override와 `prepare`의 husky 호출을 제거했다; 다른 기존 clone에 로컬 값이 남아 있으면 개별 제거가 필요하다(상태 미측정). 재발 부재는 이 checkout에서 실측했다(#135 R9: 실제 `npm pack`을 포함한 check-pack-install 전후 `.git/config`·`.husky/_` 불변).
   - **[아는 채로 두는 한계] `check-fresh-cut-gate`의 Claude sentinel 봉인.** PATH-local
     sentinel(나머지 PATH 유지)이 store 게이트 회귀 시 Claude 접촉을 기록·차단(D8)하지만, 그 개입
     자체가 이 게이트의 어떤 셀도 claude floor 너머를 검증하지 못하게 한다 — 회귀 시 게이트는

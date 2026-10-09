@@ -7,6 +7,8 @@
  *   1. read Herdr's own `integration status` — the source of set H, prose only, exit 0 always;
  *   2. hand that listing to the pure profile leaf, which yields `A = E ∩ H ∩ P`;
  *   2b. ask the ACTIVATION AUTHORITY before touching anything — see `certifyActivationPlan` below;
+ *   2c. ask each SELECTED component's ownership authority about the prospective installed root —
+ *       see `certifyComponentOwners` below (#135);
  *   3. a selected atom Herdr calls `outdated` / `needs repair`, or a row that is malformed, is a
  *      NAMED FAILURE HERE — before any runtime work. Those are not absence: `outdated (legacy < vN)`
  *      is also what an empty or unreadable integration file looks like (measured 2026-09-16), so
@@ -50,11 +52,13 @@ import {
 	resolveComponentRoots,
 	runtimeIdentityOnDisk,
 } from "../../../scripts/herdr-activation.mjs";
+import { describeRefusedComponents, preflightSelectedComponents } from "../../../scripts/herdr-plugin-activate.mjs";
 import { HERDR_FRESH_CALL_BACKENDS, MODEL_SYNTAX_EXAMPLE, RAIL_ENTRY_NOTE } from "../../../scripts/herdr-rails.mjs";
 import {
 	artifactCompleteness,
 	bootstrapRuntime,
 	readCertifiedJournal,
+	readCheckoutPackageSpec,
 	readRuntimeLock,
 	requestedArtifactIdentity,
 	resolveRuntimeLayout,
@@ -194,6 +198,57 @@ export function certifyActivationPlan(env, { lock, checkoutRoot, requested: requ
 }
 
 /**
+ * The installed package root this build is about to create, in the PHYSICAL form the installed
+ * activation verb will later see as its own package root (Node realpaths an ESM entry): the deepest
+ * existing ancestor is resolved, the rest is appended. Asking the owners with the lexical form would
+ * make a same-owner reinstall under a symlinked XDG_DATA_HOME look like a foreign root (#135 D2).
+ */
+export function prospectivePackageRoot(activeDir, packageName) {
+	const target = path.join(activeDir, "node_modules", packageName);
+	const rest = [];
+	let probe = target;
+	for (;;) {
+		try {
+			return path.join(fs.realpathSync(probe), ...rest);
+		} catch (err) {
+			if (err.code !== "ENOENT") throw err;
+		}
+		const parent = path.dirname(probe);
+		if (parent === probe) return target;
+		rest.unshift(path.basename(probe));
+		probe = parent;
+	}
+}
+
+/**
+ * THE COMPONENT OWNERS ARE ASKED BEFORE ANY RUNTIME WORK TOO (#135). `certifyActivationPlan` above
+ * asks the activation authority; this asks each SELECTED component's own ownership authority — the
+ * same list, through the same shipped function, the installed verb runs after bootstrap — against
+ * the root that verb will run from. A Pi registration another root owns used to be found only after
+ * the runtime was fetched and installed; now nothing is fetched. The installed recheck stays: this
+ * runs the checkout's copy of the owners, and the host can change in between.
+ */
+export function certifyComponentOwners(env, { packageRoot, runtimeRoot, selected, spawn }) {
+	const refused = preflightSelectedComponents(env, {
+		scriptRoot: CHECKOUT_ROOT,
+		packageRoot,
+		runtimeRoot,
+		selected,
+		spawn,
+	});
+	if (refused.length > 0) {
+		throw new HerdrBuildError(
+			"herdr-build-component-ownership-refused",
+			`${describeRefusedComponents(refused)} — refused before anything was fetched; no runtime, journal, cache or ` +
+				`ledger was written. Where a Pi component names another owner root, release it from THAT root (its own ` +
+				"`remove-user-scope`), then run `herdr plugin install` again. " +
+				`Any takeover hint above is for direct installs: a takeover from ${packageRoot} is not a route, because the ` +
+				"plugin never takes a registration over",
+		);
+	}
+}
+
+/**
  * How to actually USE what was just wired, one line per activated backend.
  *
  * WHY THIS IS NOT DECORATION. The two backends are wired in ways that feel opposite from the
@@ -286,6 +341,14 @@ function runBuildReported(env, deps, progress) {
 		requested: profile.activate,
 		resolveCommit: deps.resolveCommit,
 	});
+	const plannedName = readCheckoutPackageSpec(CHECKOUT_ROOT).name;
+	const plannedRoot = prospectivePackageRoot(resolveRuntimeLayout(env).activeDir, plannedName);
+	certifyComponentOwners(env, {
+		packageRoot: plannedRoot,
+		runtimeRoot: resolveRuntimeLayout(env).activeDir,
+		selected: profile.activate,
+		spawn,
+	});
 
 	progress.step(
 		`fetching and installing the Entwurf runtime from ${describeRequest(plan.requested)} — this is the long step ` +
@@ -308,6 +371,15 @@ function runBuildReported(env, deps, progress) {
 		);
 	}
 	const completeness = artifactCompleteness(result.journal.artifactIdentity);
+	// The owners were asked about `plannedRoot`; the installed verb is about to run from where the
+	// artifact actually landed. They must be the same root, or the early answer was about another one.
+	const landedRoot = prospectivePackageRoot(layout.activeDir, completeness.name);
+	if (completeness.name !== plannedName || landedRoot !== plannedRoot) {
+		throw new HerdrBuildError(
+			"herdr-build-artifact-drifted",
+			`the component owners were asked about ${plannedRoot}, but the runtime that landed installs ${completeness.name} at ${landedRoot}`,
+		);
+	}
 	write(
 		`[herdr-plugin-build] runtime ${result.phase}${result.changed ? " (replaced)" : " (already exact)"}` +
 			`${result.recovered ? ` after ${result.recovered}` : ""}: ${completeness.name}@${completeness.version} from ${lock.source} at ${layout.activeDir} (${plan.disposition})\n`,

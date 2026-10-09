@@ -316,6 +316,41 @@
 			"timeoutSeconds": 420,
 			"signature": "[QK:HAC-REBIND-ATOMIC-CHECKPOINT]",
 			"signatureSource": "scripts/check-herdr-activation.ts"
+		},
+		{
+			"claim": "HAC-PI-STATE-PATHS-SHARED",
+			"title": "resolving the provider owner record with `??` turns an empty XDG_DATA_HOME into a relative path no writer uses, so the preflight sees no owner and the ledger lands on a host the provider writer then refuses",
+			"subject": "scripts/herdr-plugin-activate.mjs",
+			"find": ["\t\tconst piState = piStatePaths(env);"],
+			"replace": [
+				"\t\tconst piState = { packageState: piStatePaths(env).packageState, providerState: path.join(env.XDG_DATA_HOME ?? path.join(env.HOME, \".local\", \"share\"), \"entwurf\", \"pi-provider\", \"install-state.json\") };"
+			],
+			"gate": ["bash", "run.sh", "check-herdr-activation"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:HAC-PI-STATE-PATHS-SHARED]",
+			"signatureSource": "scripts/check-herdr-activation.ts"
+		},
+		{
+			"claim": "HAC-NO-LEDGER-LEFTOVERS-REPORTED",
+			"title": "answering 'nothing to undo' whenever the ledger is absent is a false success over the journal, runtime or cache an aborted install left behind",
+			"subject": "scripts/herdr-plugin-deactivate.mjs",
+			"find": ["\t\tif (leftovers.length === 0) {"],
+			"replace": ["\t\tif (true) {"],
+			"gate": ["bash", "run.sh", "check-herdr-activation"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:HAC-NO-LEDGER-LEFTOVERS-REPORTED]",
+			"signatureSource": "scripts/check-herdr-activation.ts"
+		},
+		{
+			"claim": "HAC-LEDGER-PATH-KIND",
+			"title": "reading the ledger without lstat lets a dangling symlink answer ENOENT, i.e. 'no ledger', and every verb then acts as if nothing had ever been activated",
+			"subject": "scripts/herdr-activation.mjs",
+			"find": ["\tif (!kind.isFile()) {"],
+			"replace": ["\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-herdr-activation"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:HAC-LEDGER-PATH-KIND]",
+			"signatureSource": "scripts/check-herdr-activation.ts"
 		}
 	]
 }

@@ -187,12 +187,18 @@ function tree(root: string): string[] {
  * installed package's activation verb is — absent, incapable (exits 0 on an empty request), or a
  * faithful recorder that refuses an empty request by name and logs the argv it was given.
  */
-function fixtureAcquire(opts: { activate: "absent" | "incapable" | "recorder"; log?: string; fail?: boolean }) {
+function fixtureAcquire(opts: {
+	activate: "absent" | "incapable" | "recorder";
+	log?: string;
+	fail?: boolean;
+	name?: string;
+}) {
+	const name = opts.name ?? PACKAGE;
 	return ({ identity, prefix }: AcquireArgs) => {
 		const version = identity.version ?? FIXTURE_VERSION;
-		const root = path.join(prefix, "node_modules", PACKAGE);
+		const root = path.join(prefix, "node_modules", name);
 		fs.mkdirSync(path.join(root, path.dirname(COMPILED_ENTRY)), { recursive: true });
-		fs.writeFileSync(path.join(root, "package.json"), `${JSON.stringify({ name: PACKAGE, version })}\n`);
+		fs.writeFileSync(path.join(root, "package.json"), `${JSON.stringify({ name, version })}\n`);
 		fs.writeFileSync(path.join(root, COMPILED_ENTRY), "// compiled entry fixture\n");
 		const bin = path.join(prefix, "node_modules", ".bin");
 		fs.mkdirSync(bin, { recursive: true });
@@ -222,7 +228,7 @@ function fixtureAcquire(opts: { activate: "absent" | "incapable" | "recorder"; l
 			observedDigest: `sha256-${createHash("sha256")
 				.update(identity.commit ?? "x")
 				.digest("hex")}`,
-			packageName: PACKAGE,
+			packageName: name,
 			packageVersion: version,
 		};
 	};
@@ -238,7 +244,7 @@ function drive(
 	env: NodeJS.ProcessEnv,
 	text: string | { error: string } | { status: number; stderr: string },
 	deps: Record<string, unknown> = {},
-): { code: number | null; refusal: string | null; out: string; progress: string[] } {
+): { code: number | null; refusal: string | null; detail: string; out: string; progress: string[] } {
 	let out = "";
 	// The operator's terminal is a SEAM here, never the real `/dev/tty`: a gate that narrated into
 	// whatever terminal happened to be running it would be writing outside its own sandbox.
@@ -269,11 +275,12 @@ function drive(
 			readRuntimeLock: () => FIXTURE_NPM_LOCK,
 			...deps,
 		});
-		return { code, refusal: null, out, progress: progressLines };
+		return { code, refusal: null, detail: "", out, progress: progressLines };
 	} catch (err) {
 		return {
 			code: null,
 			refusal: (err as { code?: string }).code ?? `not-a-HerdrBuildError:${String(err)}`,
+			detail: (err as { detail?: string }).detail ?? String(err),
 			out,
 			progress: progressLines,
 		};
@@ -724,6 +731,228 @@ function drive(
 		drifted.refusal === "herdr-build-artifact-drifted" &&
 			journal.artifactIdentity.commit === COMMIT_B &&
 			activated === "",
+	);
+}
+
+// ── 6c. the selected components' owners are asked before the first byte (#135) ─
+/** Run one of the shipped Pi ownership writers against a sandbox, exactly as run.sh does. */
+function piOwner(env: NodeJS.ProcessEnv, script: string, args: string[]): SpawnResult {
+	return spawnSync("python3", [path.join(REPO, "scripts", script), ...args], {
+		encoding: "utf8",
+		env,
+	}) as unknown as SpawnResult;
+}
+function piSettingsOf(env: NodeJS.ProcessEnv): string {
+	return path.join(env.HOME as string, ".pi", "agent", "settings.json");
+}
+function piStateOf(env: NodeJS.ProcessEnv, half: "package" | "provider"): string {
+	return path.join(env.XDG_DATA_HOME as string, "entwurf", `pi-${half}`, "install-state.json");
+}
+/** A LIVE foreign owner: a real directory standing for a developer checkout, registered for real. */
+function foreignPiOwner(env: NodeJS.ProcessEnv, halves: ("package" | "provider")[]): string {
+	const checkout = path.join(env.HOME as string, "dev", "entwurf");
+	fs.mkdirSync(checkout, { recursive: true });
+	fs.mkdirSync(path.dirname(piSettingsOf(env)), { recursive: true });
+	fs.writeFileSync(piSettingsOf(env), '{"theme":"dark"}\n');
+	if (halves.includes("package")) {
+		const r = piOwner(env, "register-pi-package.py", [
+			piSettingsOf(env),
+			checkout,
+			"--scope",
+			"user",
+			"--state",
+			piStateOf(env, "package"),
+		]);
+		assert.equal(r.status, 0, `fixture: seeding the foreign package owner failed: ${r.stderr}`);
+	}
+	if (halves.includes("provider")) {
+		const r = piOwner(env, "register-pi-provider.py", [
+			"install",
+			piSettingsOf(env),
+			checkout,
+			"--scope",
+			"user",
+			"--state",
+			piStateOf(env, "provider"),
+		]);
+		assert.equal(r.status, 0, `fixture: seeding the foreign provider owner failed: ${r.stderr}`);
+	}
+	return checkout;
+}
+/** An acquisition that must never be reached: it counts, and it throws a sentinel instead of fetching. */
+function countingSentinel(): { acquire: () => never; calls: () => number } {
+	let calls = 0;
+	return {
+		acquire: () => {
+			calls++;
+			throw new Error("HPB_OWNERSHIP_SENTINEL_NO_NETWORK");
+		},
+		calls: () => calls,
+	};
+}
+{
+	const env = world("owner-package");
+	foreignPiOwner(env, ["package"]);
+	const before = treeDigest(env.HOME as string);
+	const sentinel = countingSentinel();
+	const r = drive(env, listing({ pi: "current (v8) (/home/u/.pi)" }), {
+		acquire: sentinel.acquire,
+		resolveCommit: () => COMMIT_A,
+	});
+	const after = treeDigest(env.HOME as string);
+	ok(
+		"[QK:HPB-OWNERSHIP-BEFORE-ACQUISITION] a Pi user-scope registration owned by another LIVE root refuses the " +
+			"plugin install BEFORE anything is fetched or written: the SAME shipped package-owner preflight the installed " +
+			"activation runs is asked against the prospective plugin root, so the refusal names the component and the " +
+			"acquisition is never called — no installing journal, runtime, cache or ledger appears and every byte under " +
+			"the sandbox HOME is unchanged. The first cut asked only after bootstrap, so a known refusal still fetched and " +
+			`installed a runtime first (refusal=${r.refusal} acquired=${sentinel.calls()} home-unchanged=${before === after} ` +
+			`journal=${fs.existsSync(journalPathOf(env))} detail=${JSON.stringify(r.detail.slice(0, 160))})`,
+		r.refusal === "herdr-build-component-ownership-refused" &&
+			r.detail.includes("pi-package") &&
+			sentinel.calls() === 0 &&
+			before === after &&
+			!fs.existsSync(journalPathOf(env)),
+	);
+}
+{
+	// The provider key carries its OWN ownership record; a host whose package entry is free but whose
+	// provider key another root owns must refuse just as early.
+	const env = world("owner-provider");
+	foreignPiOwner(env, ["provider"]);
+	const before = treeDigest(env.HOME as string);
+	const sentinel = countingSentinel();
+	const r = drive(env, listing({ pi: "current (v8) (/home/u/.pi)" }), {
+		acquire: sentinel.acquire,
+		resolveCommit: () => COMMIT_A,
+	});
+	ok(
+		"[QK:HPB-OWNERSHIP-PROVIDER-HALF] the provider half is asked on its own: a free package entry with a provider " +
+			"key another LIVE root owns still refuses before acquisition, names `pi-provider`, and leaves the sandbox " +
+			`HOME byte-identical (refusal=${r.refusal} acquired=${sentinel.calls()} home-unchanged=${before === treeDigest(env.HOME as string)} detail=${JSON.stringify(r.detail.slice(0, 120))})`,
+		r.refusal === "herdr-build-component-ownership-refused" &&
+			r.detail.includes("pi-provider") &&
+			!r.detail.includes("pi-package:") &&
+			sentinel.calls() === 0 &&
+			before === treeDigest(env.HOME as string),
+	);
+}
+{
+	// Claude's preflight is its PLAN check (documents and managed-key shapes), run against the
+	// prospective root in plugin mode. It is not a claim about which root owns Claude.
+	const env = world("owner-claude-plan");
+	fs.mkdirSync(path.join(env.HOME as string, ".claude"), { recursive: true });
+	fs.writeFileSync(path.join(env.HOME as string, ".claude", "settings.json"), "[]\n");
+	const before = treeDigest(env.HOME as string);
+	const sentinel = countingSentinel();
+	const r = drive(env, listing({ claude: "current (v2) (/home/u/.claude)" }), {
+		acquire: sentinel.acquire,
+		resolveCommit: () => COMMIT_A,
+	});
+	ok(
+		"[QK:HPB-OWNERSHIP-CLAUDE-PLAN] a selected Claude whose install plan its own state owner refuses (a settings " +
+			"file that is not a JSON object) refuses before acquisition, names `claude-code`, and writes nothing " +
+			`(refusal=${r.refusal} acquired=${sentinel.calls()} home-unchanged=${before === treeDigest(env.HOME as string)} detail=${JSON.stringify(r.detail.slice(0, 120))})`,
+		r.refusal === "herdr-build-component-ownership-refused" &&
+			r.detail.includes("claude-code") &&
+			sentinel.calls() === 0 &&
+			before === treeDigest(env.HOME as string),
+	);
+}
+{
+	// Only the SELECTED components are asked: a backend Herdr has not integrated cannot veto another's install.
+	const piOnly = world("owner-unselected-claude");
+	fs.mkdirSync(path.join(piOnly.HOME as string, ".claude"), { recursive: true });
+	fs.writeFileSync(path.join(piOnly.HOME as string, ".claude", "settings.json"), "[]\n");
+	const piLog = path.join(piOnly.HOME as string, "argv.log");
+	const piRun = drive(piOnly, listing({ pi: "current (v8) (/home/u/.pi)" }), {
+		acquire: fixtureAcquire({ activate: "recorder", log: piLog }),
+		resolveCommit: () => COMMIT_A,
+	});
+	const claudeOnly = world("owner-unselected-pi");
+	foreignPiOwner(claudeOnly, ["package", "provider"]);
+	const claudeLog = path.join(claudeOnly.HOME as string, "argv.log");
+	const claudeRun = drive(claudeOnly, listing({ claude: "current (v2) (/home/u/.claude)" }), {
+		acquire: fixtureAcquire({ activate: "recorder", log: claudeLog }),
+		resolveCommit: () => COMMIT_A,
+	});
+	const logged = (f: string) => (fs.existsSync(f) ? fs.readFileSync(f, "utf8").trim() : "");
+	ok(
+		"[QK:HPB-OWNERSHIP-SELECTED-ONLY] only the backends in `A` are asked: Pi alone installs over a Claude settings " +
+			"file its owner would refuse, and Claude alone installs over a Pi registration another root owns — an " +
+			"unselected backend's owner never vetoes the selected one " +
+			`(pi-only=${piRun.code}/${piRun.refusal}/${JSON.stringify(logged(piLog))} claude-only=${claudeRun.code}/${claudeRun.refusal}/${JSON.stringify(logged(claudeLog))})`,
+		piRun.code === 0 && logged(piLog) === "pi" && claudeRun.code === 0 && logged(claudeLog) === "claude-code",
+	);
+}
+{
+	// A SAME-owner reinstall under a symlinked XDG_DATA_HOME. The installed verb sees its own root in
+	// PHYSICAL form (Node realpaths the ESM entry) and the provider owner records that root without
+	// resolving it, so the early ask must use the physical form too, while the stable command stays the
+	// lexical runtime address.
+	const home = reclaimOnExit(fs.mkdtempSync(path.join(os.tmpdir(), "entwurf-hpb-owner-symlinked-")));
+	const realData = path.join(home, "real-data");
+	fs.mkdirSync(realData, { recursive: true });
+	fs.symlinkSync(realData, path.join(home, "data"));
+	const env: NodeJS.ProcessEnv = {
+		HOME: home,
+		XDG_DATA_HOME: path.join(home, "data"),
+		XDG_CACHE_HOME: path.join(home, "cache"),
+		XDG_STATE_HOME: path.join(home, "state"),
+		PATH: process.env.PATH,
+	};
+	const physicalRoot = path.join(realData, "entwurf", "herdr-plugin", "runtime", "active", "node_modules", PACKAGE);
+	fs.mkdirSync(path.dirname(piSettingsOf(env)), { recursive: true });
+	fs.writeFileSync(piSettingsOf(env), '{"theme":"dark"}\n');
+	const pkg = piOwner(env, "register-pi-package.py", [
+		piSettingsOf(env),
+		physicalRoot,
+		"--scope",
+		"user",
+		"--state",
+		piStateOf(env, "package"),
+	]);
+	const prov = piOwner(env, "register-pi-provider.py", [
+		"install",
+		piSettingsOf(env),
+		physicalRoot,
+		"--scope",
+		"user",
+		"--state",
+		piStateOf(env, "provider"),
+		"--plugin-runtime",
+		activeDirOf(env),
+	]);
+	assert.equal(pkg.status, 0, `fixture: same-owner package seed failed: ${pkg.stderr}`);
+	assert.equal(prov.status, 0, `fixture: same-owner provider seed failed: ${prov.stderr}`);
+	const log = path.join(home, "argv.log");
+	const r = drive(env, listing({ pi: "current (v8) (/home/u/.pi)" }), {
+		acquire: fixtureAcquire({ activate: "recorder", log }),
+		resolveCommit: () => COMMIT_A,
+	});
+	ok(
+		"[QK:HPB-OWNERSHIP-PHYSICAL-ROOT] a same-owner reinstall under a symlinked XDG_DATA_HOME is admitted, not " +
+			"mistaken for a foreign root: the early owner preflight asks with the PHYSICAL prospective package root " +
+			"(the form the installed verb records as its own) and passes the LEXICAL stable runtime as the plugin-mode " +
+			"runtime flag (the only form the provider owner accepts), so the build reaches activation " +
+			`(code=${r.code} refusal=${r.refusal} detail=${JSON.stringify(r.detail.slice(0, 160))})`,
+		r.code === 0 && fs.existsSync(log) && fs.readFileSync(log, "utf8").trim() === "pi",
+	);
+}
+{
+	// The owners were asked about one root; the installed verb must run from that same root.
+	const env = world("owner-root-tie");
+	const log = path.join(env.HOME as string, "argv.log");
+	const r = drive(env, listing({ pi: "current (v8) (/home/u/.pi)" }), {
+		acquire: fixtureAcquire({ activate: "recorder", log, name: "@elsewhere/entwurf" }),
+		readRuntimeLock: () => FIXTURE_CHECKOUT_LOCK,
+		resolveCommit: () => COMMIT_A,
+	});
+	ok(
+		"[QK:HPB-PLANNED-ROOT-TIE] the root the component owners were asked about is the root the installed verb runs " +
+			"from: an artifact that lands under another package name is refused by name before activation, so the early " +
+			`answer can never have been about a different root (refusal=${r.refusal} activated=${fs.existsSync(log)} detail=${JSON.stringify(r.detail.slice(0, 160))})`,
+		r.refusal === "herdr-build-artifact-drifted" && !fs.existsSync(log),
 	);
 }
 

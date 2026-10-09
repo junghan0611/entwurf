@@ -155,6 +155,22 @@ export function writeLedger(layout, entry) {
  * host it was never describing.
  */
 export function readCertifiedLedger(layout) {
+	// lstat FIRST (#135). `readFileSync` follows links, so a dangling symlink at the ledger address
+	// read as ENOENT — "no ledger" — and every verb then acted as if nothing had ever been activated.
+	// Only a regular file, or nothing at all, may stand there.
+	let kind;
+	try {
+		kind = fs.lstatSync(layout.ledgerPath, { throwIfNoEntry: false });
+	} catch (err) {
+		throw new ActivationError("activation-ledger-uncertified", `${layout.ledgerPath}: ${err.message}`);
+	}
+	if (kind === undefined) return null;
+	if (!kind.isFile()) {
+		throw new ActivationError(
+			"activation-ledger-uncertified",
+			`${layout.ledgerPath} is ${kind.isSymbolicLink() ? "a symlink" : kind.isDirectory() ? "a directory" : "not a regular file"}; only a regular file or nothing may stand at the ledger address`,
+		);
+	}
 	let raw;
 	try {
 		raw = fs.readFileSync(layout.ledgerPath, "utf8");

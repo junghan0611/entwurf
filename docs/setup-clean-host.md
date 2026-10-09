@@ -179,6 +179,23 @@ packageRoot↔installerRoot coupling mismatch and a package/provider managed-pat
 | source checkout | the checkout dir | `dev-bin` symlinks (`setup`) | `<project>/.pi/settings.json` | shared entry + owner state | `takeover-user-scope` from the new checkout | `remove` (project) / `remove-user-scope` (global, same-owner-only) | `doctor-pi-package` → `missing-owner`; normal install still refuses |
 | global npm (`npm i -g`) | the global `node_modules/@junghanacs/entwurf` | npm bin linking | same | same shared entry | same explicit action | same; a LIVE foreign owner always refuses | same |
 | project-local npm | that project's `node_modules/@junghanacs/entwurf` | `node_modules/.bin` | same | same shared entry | same explicit action | same | same; a deleted root becomes the aligned `remove-user-scope` orphan cleanup (entry + package state + provider installerRoot must all name that missing root) |
+| Herdr plugin | `$XDG_DATA_HOME/entwurf/herdr-plugin/runtime/active/node_modules/@junghanacs/entwurf` | none on PATH — Pi provider and Claude MCP/statusLine record ABSOLUTE commands under that runtime | none | same shared entry, plus the plugin's activation ledger (`$XDG_STATE_HOME/entwurf/herdr-plugin/activation.json`) | none — the plugin never takes a registration over; release it from its owner first | the runtime's own absolute `…/node_modules/.bin/entwurf herdr-plugin-deactivate` | — |
+
+The three installation paths keep separate records: Herdr's plugin registry (changed only by `herdr
+plugin install` / `unlink` / `uninstall`), the plugin's runtime journal and activation ledger, the shared Pi
+package/provider ownership above, and the Claude meta-bridge install state
+(`${CLAUDE_CONFIG_DIR:-~/.claude}/entwurf.install-state.json`). Moving between them is explicit: release the
+shared registration from its owner (`remove-user-scope`, plus `uninstall-meta-bridge` for Claude) before
+`herdr plugin install` — a foreign Pi owner refuses the plugin build before anything is fetched (#135) — and
+run the plugin's `herdr-plugin-deactivate` before going back to `setup`. Do not `takeover-user-scope` a
+registration the plugin owns, even though a refused `setup` suggests it: it splits ownership (the plugin's
+provider key becomes an unowned override while its ledger still records pi) and the plugin's deactivate
+then refuses. Limits that stay as they are: the Claude install state records the LAST installer and is not
+root-bound — an install from another root rewrites it rather than refusing; nothing covers roots (XDG,
+`PI_CODING_AGENT_DIR`, Claude config) changed between runs or a host that changes between the plugin's
+early owner check and its installed recheck, which can still refuse after the download; and the plugin's
+deactivate, finding no activation ledger, reports what is left at its addresses and neither reclaims nor
+reuses it.
 
 ## 2. Optional pi adapter / ACP plugin
 

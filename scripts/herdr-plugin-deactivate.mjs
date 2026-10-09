@@ -25,6 +25,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
+	ActivationError,
 	certifyPhaseForInverse,
 	certifyRootsAgainstLedger,
 	componentStates,
@@ -49,6 +50,31 @@ function fail(code, detail) {
 	process.exit(1);
 }
 
+/**
+ * What stands at this host's fixed plugin addresses — journal, runtime root, our npm cache — by
+ * lstat, without reading or following anything. Only consulted when there is no ledger.
+ */
+function leftoversAtPluginAddresses(runtime) {
+	const found = [];
+	for (const [label, target] of [
+		["journal", runtime.journalPath],
+		["runtime", runtime.runtimeRoot],
+		["cache", runtime.cacheDir],
+	]) {
+		const stat = fs.lstatSync(target, { throwIfNoEntry: false });
+		if (stat === undefined) continue;
+		const kind = stat.isSymbolicLink()
+			? "symlink"
+			: stat.isDirectory()
+				? "directory"
+				: stat.isFile()
+					? "file"
+					: "other";
+		found.push(`${label}=${kind} (${target})`);
+	}
+	return found;
+}
+
 export function deactivate(env) {
 	const activation = resolveActivationLayout(env);
 	const runtime = resolveRuntimeLayout(env);
@@ -56,8 +82,21 @@ export function deactivate(env) {
 
 	const ledger = readCertifiedLedger(activation);
 	if (ledger === null) {
-		process.stdout.write("[herdr-plugin-deactivate] no certified activation ledger — nothing to undo\n");
-		return 0;
+		// NO LEDGER IS NOT "NOTHING HERE" (#135). An install that stopped before its activation was
+		// recorded leaves a journal, a runtime or a cache behind, and saying "nothing to undo" over them
+		// was a false success. Without a ledger nothing proves what they belong to or that no harness
+		// wiring names them, so this verb removes nothing: it names what it found and exits non-zero.
+		const leftovers = leftoversAtPluginAddresses(runtime);
+		if (leftovers.length === 0) {
+			process.stdout.write("[herdr-plugin-deactivate] no certified activation ledger — nothing to undo\n");
+			return 0;
+		}
+		throw new ActivationError(
+			"deactivate-unattributed-leftovers",
+			`no certified activation ledger, yet ${leftovers.join(", ")} — NOTHING was removed. Without an activation ` +
+				"ledger nothing proves what these belong to or that no harness wiring still names them; inspect them and " +
+				"remove them by hand only if they are yours",
+		);
 	}
 	certifyRootsAgainstLedger(ledger, roots, runtime.activeDir);
 	certifyPhaseForInverse(ledger);

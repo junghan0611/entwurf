@@ -33,11 +33,11 @@ import {
 	certifyRootsAgainstLedger,
 	componentStates,
 	ledgerBody,
+	piStatePaths,
 	planActivation,
 	readCertifiedLedger,
 	resolveActivationLayout,
 	resolveComponentRoots,
-	resolveEntwurfDataRoot,
 	writeLedger,
 } from "./herdr-activation.mjs";
 import {
@@ -49,8 +49,109 @@ import {
 
 const PACKAGE_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
-function run(command, args, env) {
-	return spawnSync(command, args, { encoding: "utf8", env, stdio: ["ignore", "pipe", "pipe"] });
+function run(command, args, env, spawn = spawnSync) {
+	return spawn(command, args, { encoding: "utf8", env, stdio: ["ignore", "pipe", "pipe"] });
+}
+
+/**
+ * Ask every selected component's OWN ownership authority, read-only, whether a write for
+ * `packageRoot` would be admitted. Returns the refused `[name, result]` pairs; writes nothing.
+ *
+ * TWO CALL POSITIONS, ONE LIST (#135). The installed verb below asks it about itself, after the
+ * runtime exists. The Herdr build asks it BEFORE any byte of runtime work, with the checkout's copy
+ * of the same owners and the PROSPECTIVE installed root — so an owner the late check would refuse
+ * is refused while nothing has been fetched. `scriptRoot` is whose owner scripts run; `packageRoot`
+ * is the root they judge. The prospective root must be in the form this verb will later see as its
+ * own PACKAGE_ROOT (physical: Node realpaths the ESM entry), because the provider owner records the
+ * root without resolving it; `runtimeRoot` stays the lexical stable address the commands are
+ * derived from.
+ *
+ * Claude's preflight is its document/plan-shape check. It does not judge which root owns Claude.
+ */
+export function preflightSelectedComponents(
+	env,
+	{ scriptRoot, packageRoot, runtimeRoot, selected, spawn = spawnSync },
+) {
+	const preflights = [];
+	if (selected.includes("claude-code")) {
+		preflights.push([
+			"claude-code",
+			// The mode rides the ARGV, because that is what the state owner reads. The env var is the
+			// installer script's channel; passing only that preflights the DEFAULT mode and then
+			// installs the plugin one — a green check of work nobody is going to do.
+			run(
+				"python3",
+				[
+					path.join(scriptRoot, "scripts", "meta-bridge-state.py"),
+					"preflight-install",
+					"--repo",
+					packageRoot,
+					"--plugin-runtime",
+					runtimeRoot,
+				],
+				{ ...env, ENTWURF_PLUGIN_RUNTIME: runtimeRoot },
+				spawn,
+			),
+		]);
+	}
+	if (selected.includes("pi")) {
+		const agentSettings = path.join(resolveComponentRoots(env).piAgentDir.path, "settings.json");
+		// ONE resolution for both owner records, the one their writers use (`run.sh` `${XDG_DATA_HOME:-…}`).
+		const piState = piStatePaths(env);
+		// BOTH halves. The user-scope citizen is a package registration and a provider key with
+		// SEPARATE ownership records, and a foreign or corrupt package state refuses independently —
+		// preflighting only the provider would let the first ledger write land on a host the package
+		// writer was always going to refuse.
+		preflights.push([
+			"pi-package",
+			run(
+				"python3",
+				[
+					path.join(scriptRoot, "scripts", "register-pi-package.py"),
+					agentSettings,
+					packageRoot,
+					"--scope",
+					"user",
+					"--state",
+					piState.packageState,
+					"--preflight",
+				],
+				env,
+				spawn,
+			),
+		]);
+		preflights.push([
+			"pi-provider",
+			run(
+				"python3",
+				[
+					path.join(scriptRoot, "scripts", "register-pi-provider.py"),
+					"install",
+					agentSettings,
+					packageRoot,
+					"--scope",
+					"user",
+					"--state",
+					piState.providerState,
+					"--plugin-runtime",
+					runtimeRoot,
+					"--preflight",
+				],
+				env,
+				spawn,
+			),
+		]);
+	}
+	return preflights.filter(([, r]) => r.status !== 0);
+}
+
+/** The owner's own last line for each refused component, for the operator to act on. */
+export function describeRefusedComponents(refused) {
+	return refused
+		.map(
+			([name, r]) => `${name}: ${(r.stderr || r.stdout || (r.error ? r.error.message : "")).trim().split("\n").pop()}`,
+		)
+		.join("; ");
 }
 
 /** The only input: a subset of P, parsed from argv and refused if it is anything else. */
@@ -113,79 +214,14 @@ export function activate(env, requested) {
 	const plan = planActivation({ ledger, requested });
 	const selected = [...plan.reconcile, ...plan.add];
 
-	// 3. preflight EVERY selected component before the first byte.
-	const preflights = [];
-	if (selected.includes("claude-code")) {
-		preflights.push([
-			"claude-code",
-			// The mode rides the ARGV, because that is what the state owner reads. The env var is the
-			// installer script's channel; passing only that preflights the DEFAULT mode and then
-			// installs the plugin one — a green check of work nobody is going to do.
-			run(
-				"python3",
-				[
-					path.join(PACKAGE_ROOT, "scripts", "meta-bridge-state.py"),
-					"preflight-install",
-					"--repo",
-					PACKAGE_ROOT,
-					"--plugin-runtime",
-					runtime.activeDir,
-				],
-				{ ...env, ENTWURF_PLUGIN_RUNTIME: runtime.activeDir },
-			),
-		]);
-	}
-	if (selected.includes("pi")) {
-		const agentSettings = path.join(roots.piAgentDir.path, "settings.json");
-		const dataRoot = resolveEntwurfDataRoot(env);
-		// BOTH halves. The user-scope citizen is a package registration and a provider key with
-		// SEPARATE ownership records, and a foreign or corrupt package state refuses independently —
-		// preflighting only the provider would let the first ledger write land on a host the package
-		// writer was always going to refuse.
-		preflights.push([
-			"pi-package",
-			run(
-				"python3",
-				[
-					path.join(PACKAGE_ROOT, "scripts", "register-pi-package.py"),
-					agentSettings,
-					PACKAGE_ROOT,
-					"--scope",
-					"user",
-					"--state",
-					path.join(dataRoot, "pi-package", "install-state.json"),
-					"--preflight",
-				],
-				env,
-			),
-		]);
-		preflights.push([
-			"pi-provider",
-			run(
-				"python3",
-				[
-					path.join(PACKAGE_ROOT, "scripts", "register-pi-provider.py"),
-					"install",
-					agentSettings,
-					PACKAGE_ROOT,
-					"--scope",
-					"user",
-					"--state",
-					path.join(
-						env.XDG_DATA_HOME ?? path.join(env.HOME, ".local", "share"),
-						"entwurf",
-						"pi-provider",
-						"install-state.json",
-					),
-					"--plugin-runtime",
-					runtime.activeDir,
-					"--preflight",
-				],
-				env,
-			),
-		]);
-	}
-	const refused = preflights.filter(([, r]) => r.status !== 0);
+	// 3. preflight EVERY selected component before the first byte — the same list the Herdr build
+	// already asked about the prospective root; this is the installed recheck.
+	const refused = preflightSelectedComponents(env, {
+		scriptRoot: PACKAGE_ROOT,
+		packageRoot: PACKAGE_ROOT,
+		runtimeRoot: runtime.activeDir,
+		selected,
+	});
 	if (refused.length > 0) {
 		for (const [name, r] of refused) {
 			process.stderr.write(`  ${name}: ${(r.stderr || r.stdout || "").trim().split("\n").pop()}\n`);

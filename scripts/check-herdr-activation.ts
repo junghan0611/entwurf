@@ -27,6 +27,7 @@ import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { reclaimOnExit } from "./lib/reclaim-on-exit.ts";
+import { treeDigest } from "./lib/tree-digest.ts";
 
 let passed = 0;
 function ok(label: string, cond: boolean): void {
@@ -737,21 +738,12 @@ function ledgerWith(
 	const dataRoot = resolveEntwurfDataRoot(bare);
 	const states = piStatePaths(bare);
 	const piExpected = path.join(home, ".local", "share", "entwurf");
-	// The python writers derive the SAME stable root from the SAME environment.
-	const pyRoot = spawnSync(
-		"python3",
-		[
-			"-c",
-			"import sys; sys.path.insert(0, 'scripts'); from importlib import import_module; m = import_module('register-pi-provider'.replace('-', '_')) if False else None",
-		],
-		{ encoding: "utf8", env: bare },
-	);
 	ok(
 		"[QK:HAC-XDG-RESOLUTION-SHARED] every root comes from one resolution — `XDG_DATA_HOME`, else " +
 			"`$HOME/.local/share` — so a host with XDG unset is the same host to the teardown as it is to the writers. " +
 			'The first cut built its Pi state paths from `env.XDG_DATA_HOME || ""`, which on such a host pointed at ' +
 			"`/entwurf/...`: a preflight that looked at a file nobody writes and passed for the wrong reason " +
-			`(dataRoot=${dataRoot === piExpected} packageState=${path.relative(home, states.packageState)} py=${pyRoot.status === 0})`,
+			`(dataRoot=${dataRoot === piExpected} packageState=${path.relative(home, states.packageState)})`,
 		dataRoot === piExpected &&
 			states.packageState === path.join(piExpected, "pi-package", "install-state.json") &&
 			states.providerState === path.join(piExpected, "pi-provider", "install-state.json"),
@@ -1361,6 +1353,134 @@ function ledgerWith(
 			finished.phase === "active" &&
 			finished.artifactIdentity.commit === IDENTITY_B.commit &&
 			finished.components.every((c) => c.state === "active"),
+	);
+}
+
+// ── 26. both Pi owner records are asked where their writers keep them (#135 D1) ─
+{
+	const env = world("pi-state-paths");
+	const defaultData = path.join(env.HOME as string, ".local", "share");
+	// An EMPTY XDG_DATA_HOME: run.sh and the runtime owner both fall back to $HOME/.local/share.
+	const runEnv = { ...env, XDG_DATA_HOME: "" };
+	seedRuntime({ ...env, XDG_DATA_HOME: defaultData });
+	const agentSettings = path.join(env.PI_CODING_AGENT_DIR as string, "settings.json");
+	fs.writeFileSync(agentSettings, '{"theme":"dark"}\n');
+	const foreign = path.join(env.HOME as string, "dev", "entwurf");
+	fs.mkdirSync(foreign, { recursive: true });
+	const seeded = py(env, "register-pi-provider.py", [
+		"install",
+		agentSettings,
+		foreign,
+		"--scope",
+		"user",
+		"--state",
+		path.join(defaultData, "entwurf", "pi-provider", "install-state.json"),
+	]);
+	assert.equal(seeded.status, 0, `fixture: seeding the provider owner failed: ${seeded.stderr}`);
+	const layout = resolveActivationLayout(runEnv);
+	const run = spawnSync("node", [ACTIVATE, "pi"], { encoding: "utf8", env: runEnv, cwd: env.HOME as string });
+	ok(
+		"[QK:HAC-PI-STATE-PATHS-SHARED] both Pi ownership preflights read the record where its writer keeps it: with " +
+			"XDG_DATA_HOME set but EMPTY, run.sh writes to $HOME/.local/share, so the provider preflight must look there " +
+			"too — the first cut built a RELATIVE path for the provider half alone, saw no owner, and let the ledger land " +
+			`on a host the provider writer then refused (exit=${run.status} ledger=${fs.existsSync(layout.ledgerPath)} refusal=${JSON.stringify((run.stderr || "").trim().split("\n").pop())})`,
+		run.status !== 0 &&
+			(run.stderr || "").includes("activation-preflight-refused") &&
+			(run.stderr || "").includes("pi-provider") &&
+			!fs.existsSync(layout.ledgerPath),
+	);
+}
+
+// ── 27. no ledger is not "nothing here" (#135) ─────────────────────────────────
+{
+	const plugin = (env: NodeJS.ProcessEnv) => path.join(env.XDG_DATA_HOME as string, "entwurf", "herdr-plugin");
+	const rows: [string, (env: NodeJS.ProcessEnv) => void][] = [
+		[
+			"installing-journal",
+			(env) => {
+				fs.mkdirSync(path.join(plugin(env), "runtime"), { recursive: true });
+				fs.writeFileSync(
+					path.join(plugin(env), "journal.json"),
+					`${JSON.stringify({
+						schemaVersion: 2,
+						phase: "installing",
+						runtimeRoot: runtimeRootOf(env),
+						artifactIdentity: { kind: "npm", name: PACKAGE, version: "0.21.0", expectedIntegrity: "sha512-fixture" },
+						previousRuntime: null,
+					})}\n`,
+				);
+			},
+		],
+		["ready-runtime", (env) => void seedRuntime(env)],
+		[
+			"cache-only",
+			(env) =>
+				fs.mkdirSync(path.join(env.XDG_CACHE_HOME as string, "entwurf", "herdr-plugin", "npm"), { recursive: true }),
+		],
+		["journal-less-runtime", (env) => fs.mkdirSync(path.join(plugin(env), "runtime", "active"), { recursive: true })],
+	];
+	const results = rows.map(([tag, make]) => {
+		const env = world(`no-ledger-${tag}`);
+		make(env);
+		const before = treeDigest(env.HOME as string);
+		const run = spawnSync("node", [DEACTIVATE], { encoding: "utf8", env });
+		return {
+			tag,
+			status: run.status,
+			named: (run.stderr || "").includes("deactivate-unattributed-leftovers"),
+			unchanged: before === treeDigest(env.HOME as string),
+		};
+	});
+	const clean = world("no-ledger-clean");
+	const cleanRun = spawnSync("node", [DEACTIVATE], { encoding: "utf8", env: clean });
+	ok(
+		"[QK:HAC-NO-LEDGER-LEFTOVERS-REPORTED] without a ledger the teardown no longer says 'nothing to undo' over what " +
+			"an aborted install left: an installing journal, a ready runtime, our npm cache, or a runtime with no journal " +
+			"are each NAMED and the verb exits non-zero with every byte untouched — nothing proves what they belong to, so " +
+			"nothing is removed. A truly clean host still exits 0 with the old line " +
+			`(rows=${JSON.stringify(results)} clean=${cleanRun.status}/${JSON.stringify((cleanRun.stdout || "").trim())})`,
+		results.every((r) => r.status !== 0 && r.named && r.unchanged) &&
+			cleanRun.status === 0 &&
+			(cleanRun.stdout || "").includes("no certified activation ledger — nothing to undo"),
+	);
+}
+
+// ── 28. only a regular file — or nothing — may stand at the ledger address (#135) ─
+{
+	const env = world("ledger-kinds");
+	seedRuntime(env);
+	const layout = resolveActivationLayout(env);
+	fs.mkdirSync(layout.stateRoot, { recursive: true });
+	// a DANGLING symlink: readFileSync used to answer ENOENT, i.e. "no ledger".
+	fs.symlinkSync(path.join(env.HOME as string, "nowhere.json"), layout.ledgerPath);
+	const dangling = refusal(() => readCertifiedLedger(layout));
+	const danglingRun = spawnSync("node", [DEACTIVATE], { encoding: "utf8", env });
+	fs.unlinkSync(layout.ledgerPath);
+	// a symlink to a perfectly valid ledger is still not OUR ledger file.
+	const elsewhere = path.join(env.HOME as string, "ledger-elsewhere.json");
+	fs.writeFileSync(elsewhere, `${JSON.stringify({ schemaVersion: 2, ...ledgerFor(env, ["pi"]) }, null, 2)}\n`);
+	fs.symlinkSync(elsewhere, layout.ledgerPath);
+	const linked = refusal(() => readCertifiedLedger(layout));
+	fs.unlinkSync(layout.ledgerPath);
+	fs.mkdirSync(layout.ledgerPath);
+	const directory = refusal(() => readCertifiedLedger(layout));
+	// a state root that is a FILE: lstat answers ENOTDIR, which must stay a named refusal, not a raw errno.
+	const fileRoot = path.join(env.HOME as string, "state-root-is-a-file");
+	fs.writeFileSync(fileRoot, "not a directory\n");
+	const notDir = refusal(() =>
+		readCertifiedLedger({ stateRoot: fileRoot, ledgerPath: path.join(fileRoot, "activation.json") }),
+	);
+	ok(
+		"[QK:HAC-LEDGER-PATH-KIND] the ledger address is read by lstat first: a dangling symlink, a symlink to a valid " +
+			"ledger elsewhere, a directory, and a state root that is a file are each refused by name — none of them is " +
+			"'no ledger', which is what a dangling link used to read as, letting every verb act as if nothing had been " +
+			`activated (dangling=${dangling}/teardown-exit=${danglingRun.status} linked=${linked} directory=${directory} not-dir=${notDir})`,
+		dangling === "activation-ledger-uncertified" &&
+			danglingRun.status !== 0 &&
+			(danglingRun.stderr || "").includes("activation-ledger-uncertified") &&
+			linked === "activation-ledger-uncertified" &&
+			directory === "activation-ledger-uncertified" &&
+			notDir === "activation-ledger-uncertified",
 	);
 }
 

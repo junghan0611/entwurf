@@ -257,6 +257,26 @@ This plugin puts nothing on `PATH`, so that absolute path is the command. A bare
 It establishes every deletion authority before the first deletion, and removes components → runtime →
 ledger, so the record outlives what it authorised.
 
+**With no activation ledger it removes nothing (#135).** An install that stopped before its activation
+was recorded can leave a journal, a runtime or the plugin's npm cache behind. Without a ledger nothing
+proves what those belong to or that no harness wiring still names them, so the verb lists what it found
+at those fixed addresses and exits non-zero (`deactivate-unattributed-leftovers`), writing nothing; a
+truly clean host still exits 0 with "nothing to undo". Removing such leftovers is a manual decision.
+This behaviour is not in the published 0.34.0 runtime, whose own deactivate still answers "nothing to
+undo" whenever the ledger is absent; a plugin host gets it only from a later published runtime the plugin
+pins.
+
+**Moving between this plugin and a direct install is explicit, in this order:**
+
+- direct install (checkout or npm) → plugin: release the shared registration from the root that owns
+  it first — that root's own `remove-user-scope` for Pi, and `uninstall-meta-bridge` for Claude if Herdr
+  has Claude integrated — then `herdr plugin install`. The plugin never takes a registration over.
+- plugin → direct install: run the absolute `herdr-plugin-deactivate` above first, then `entwurf setup`
+  (or `./run.sh setup` in a checkout). `herdr plugin unlink` / `uninstall` only change Herdr's registry.
+  Do not `takeover-user-scope` a registration the plugin owns, even though a refused `setup` suggests it:
+  that splits ownership (the plugin's provider key becomes an unowned override while its ledger still
+  records pi) and the plugin's deactivate then refuses. Deactivate first.
+
 ---
 
 ## What the direct route gives you that this one does not
@@ -544,11 +564,24 @@ first and refused afterwards, which left the stable root holding an artifact no 
 while the run reported failure — and the wiring names that root, not the version.) After the install,
 what landed must be exactly what was admitted; a source that moved in between is a named refusal.
 
+**The selected harnesses' own owners are asked before anything is installed, too (#135).** For each
+backend in `A`, the build runs the same read-only preflight the installed activation verb runs —
+Pi's package and provider ownership records, Claude's install-plan check — against the root the
+runtime is about to be installed at. A Pi registration another root owns (a developer checkout, an npm
+install) is refused before anything is fetched, with no runtime, journal, cache or ledger written
+(`herdr-build-component-ownership-refused`), and the refusal names the component. The installed verb
+still asks again after the install. Known limit, not changed here: Claude's wiring has no root-bound
+owner — its install state records the last installer, and a later installer from another root rewrites
+it — so the Claude check refuses only what its own plan check refuses, not another root's wiring. Nor
+does it cover roots (XDG, `PI_CODING_AGENT_DIR`, Claude config) changed between runs, a host that changes
+between this check and the installed recheck (which can still refuse after the download), or any
+reclamation or reuse of what an aborted install left behind.
+
 **Records written before this contract are refused, not migrated.** A v1 journal or ledger fails
 certification by name (`runtime-journal-uncertified`, `activation-ledger-uncertified`): the older
 shape cannot say WHICH artifact it was, so nothing can be inferred from it. The current inverse
 refuses it too: `herdr-plugin-deactivate` reads that same certified ledger
-(`scripts/herdr-plugin-deactivate.mjs:57`) and has no authority to delete what it cannot certify.
+(`scripts/herdr-plugin-deactivate.mjs:83`) and has no authority to delete what it cannot certify.
 Such a host needs its operator to recover that owned state first, keeping the bytes and their old
 provenance, before a fresh install. Nothing here migrates it or purges unknown state on your
 behalf. A 0.30.1 install is not this case: its records are already the current schema, and the

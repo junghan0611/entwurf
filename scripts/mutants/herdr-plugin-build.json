@@ -162,6 +162,72 @@
 			"timeoutSeconds": 300,
 			"signature": "[QK:HPB-INSTALL-USAGE-NOTE]",
 			"signatureSource": "scripts/check-herdr-plugin-build.ts"
+		},
+		{
+			"claim": "HPB-OWNERSHIP-BEFORE-ACQUISITION",
+			"title": "not asking the selected components' owners before bootstrap fetches and installs a runtime for a registration another root owns — the refusal only arrives after the bytes are on disk, which is the #135 ordering defect",
+			"subject": "plugins/herdr/lib/build.mjs",
+			"find": ["\tcertifyComponentOwners(env, {"],
+			"replace": ["\t((_env, _args) => {})(env, {"],
+			"gate": ["bash", "run.sh", "check-herdr-plugin-build"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:HPB-OWNERSHIP-BEFORE-ACQUISITION]",
+			"signatureSource": "scripts/check-herdr-plugin-build.ts"
+		},
+		{
+			"claim": "HPB-OWNERSHIP-PROVIDER-HALF",
+			"title": "dropping the provider half lets a host whose provider key another root owns pass the early check, so the runtime is fetched for an install its own provider writer was always going to refuse",
+			"subject": "scripts/herdr-plugin-activate.mjs",
+			"find": ["\t\tpreflights.push([", "\t\t\t\"pi-provider\","],
+			"replace": ["\t\tif (false) preflights.push([", "\t\t\t\"pi-provider\","],
+			"gate": ["bash", "run.sh", "check-herdr-plugin-build"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:HPB-OWNERSHIP-PROVIDER-HALF]",
+			"signatureSource": "scripts/check-herdr-plugin-build.ts"
+		},
+		{
+			"claim": "HPB-OWNERSHIP-CLAUDE-PLAN",
+			"title": "skipping Claude's plan preflight lets a selected Claude whose settings its own state owner cannot plan reach acquisition, and the refusal lands only after the runtime is installed",
+			"subject": "scripts/herdr-plugin-activate.mjs",
+			"find": ["\tif (selected.includes(\"claude-code\")) {"],
+			"replace": ["\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-herdr-plugin-build"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:HPB-OWNERSHIP-CLAUDE-PLAN]",
+			"signatureSource": "scripts/check-herdr-plugin-build.ts"
+		},
+		{
+			"claim": "HPB-OWNERSHIP-SELECTED-ONLY",
+			"title": "asking every backend instead of the selected ones lets a harness Herdr has not integrated veto the install of one it has",
+			"subject": "plugins/herdr/lib/build.mjs",
+			"find": ["\t\tselected: profile.activate,", "\t\tspawn,"],
+			"replace": ["\t\tselected: [\"pi\", \"claude-code\"],", "\t\tspawn,"],
+			"gate": ["bash", "run.sh", "check-herdr-plugin-build"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:HPB-OWNERSHIP-SELECTED-ONLY]",
+			"signatureSource": "scripts/check-herdr-plugin-build.ts"
+		},
+		{
+			"claim": "HPB-OWNERSHIP-PHYSICAL-ROOT",
+			"title": "asking the owners with the lexical prospective root makes a same-owner reinstall under a symlinked XDG_DATA_HOME look like a foreign root, because the installed verb records its own root in physical form",
+			"subject": "plugins/herdr/lib/build.mjs",
+			"find": ["\t\t\treturn path.join(fs.realpathSync(probe), ...rest);"],
+			"replace": ["\t\t\treturn path.join(probe, ...rest);"],
+			"gate": ["bash", "run.sh", "check-herdr-plugin-build"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:HPB-OWNERSHIP-PHYSICAL-ROOT]",
+			"signatureSource": "scripts/check-herdr-plugin-build.ts"
+		},
+		{
+			"claim": "HPB-PLANNED-ROOT-TIE",
+			"title": "without the tie the owners can have been asked about one root while the installed verb runs from another, so the early answer is about bytes nobody installed",
+			"subject": "plugins/herdr/lib/build.mjs",
+			"find": ["\tif (completeness.name !== plannedName || landedRoot !== plannedRoot) {"],
+			"replace": ["\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-herdr-plugin-build"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:HPB-PLANNED-ROOT-TIE]",
+			"signatureSource": "scripts/check-herdr-plugin-build.ts"
 		}
 	]
 }
