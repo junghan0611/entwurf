@@ -25,6 +25,18 @@ A Herdr plugin snapshot, not a core release: no package version, npm artifact or
   tag by version sort, and a `vYYYY.M.D-herdr.*` tag sorts above every `v0.x`, so it would have
   become the next core audit baseline. P1 now excludes exactly that shape; a core `v20.1.0` is
   still picked.
+- **Plugin docs corrected before the tag (GLG's final review).**
+  - The direct route opens six fresh-call backends, `pi-durable` among them as the managed launcher.
+    The plugin's Herdr pair stays `{pi, claude-code}`, and the manifest now says it does not widen
+    with the core list.
+  - `smoke-herdr-plugin-build-live` is described as the checkout-carrier journey it is, not as
+    registry evidence.
+  - `herdr-plugin-deactivate` is given by its absolute runtime path, because the plugin puts nothing
+    on `PATH`.
+  - The plugin tag namespace is explained.
+  - A v1 record is now described as refused by the current inverse as well. The launch-rail doc
+    separates the `0.9.0` admission floor from the single Herdr version the gates certify (the
+    supply pin, 0.9.3).
 
 ### Verification
 

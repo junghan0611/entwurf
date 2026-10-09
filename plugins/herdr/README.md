@@ -247,8 +247,12 @@ Herdr has **no cleanup hook**, so either command leaves the runtime and the harn
 than in the deleted checkout:
 
 ```bash
-entwurf herdr-plugin-deactivate              # or <runtime>/node_modules/.bin/entwurf, since nothing is on PATH
+DATA_ROOT="${XDG_DATA_HOME:-$HOME/.local/share}"
+"$DATA_ROOT/entwurf/herdr-plugin/runtime/active/node_modules/.bin/entwurf" herdr-plugin-deactivate
 ```
+
+This plugin puts nothing on `PATH`, so that absolute path is the command. A bare
+`entwurf herdr-plugin-deactivate` works only where a direct install has put `entwurf` on `PATH`.
 
 It establishes every deletion authority before the first deletion, and removes components → runtime →
 ledger, so the record outlives what it authorised.
@@ -266,17 +270,25 @@ a wider host wants the direct route (`npm install -g @junghanacs/entwurf`, then 
 | Claude Code (self-fetch mailbox) | ✅ MCP registration | ✅ |
 | Codex, Copilot, OMP, Antigravity rails | ❌ | ✅ where the harness is present |
 | ACP rail (`pi --model entwurf/<claude model>`) | ✅ — the pi user-scope wiring registers the provider too | ✅ |
-| `entwurf_fresh_call` backends | `pi`, `claude-code` | `pi`, `claude-code`, `copilot`, `omp`, `codex` |
+| `entwurf_fresh_call` backends | `pi`, `claude-code` | `pi`, `claude-code`, `copilot`, `omp`, `codex`, `pi-durable` |
 | launch seat | a new tab in the caller's Herdr workspace | a visible tmux window, with an optional `placement.tmuxSession` expert seat |
 | `entwurf`, `entwurf-bridge`, statusline/hook bins on `PATH` | ❌ | ✅ six bins |
 | `entwurf setup <project>`, `entwurf doctor-*` repair surfaces | reachable only by absolute path under the runtime root | ✅ |
 | platform | `linux` | no `os` restriction in the package |
 
-The direct route is the **wider bench**: its tmux rail carries five fresh-call backends and the
-operator-seat override, and `entwurf setup` reaches every harness rail the package ships. If you work
+The direct route is the **wider bench**: its tmux rail carries six fresh-call backends
+(`FRESH_CALL_BACKENDS`, `pi-extensions/lib/fresh-call-composition.ts:33`) and the operator-seat
+override, and `entwurf setup` reaches every harness rail the package ships. If you work
 mostly outside Herdr, install directly and treat this plugin as optional — and note that installing
 directly does **not** cost you the Herdr rail, because the rail is selected from the caller's process
 context, not from how Entwurf got onto the machine.
+
+`pi-durable` is on that list only through the direct route: the tmux rail opens it as the managed
+`entwurf pi-durable` launcher, and this plugin neither wires it nor launches it. The Herdr rail's
+set stays `{pi, claude-code}` (`HERDR_FRESH_CALL_BACKENDS`, `scripts/herdr-rails.mjs:44`) and does
+not widen when the core list does; Herdr's `--kind` is a bare executable token that cannot carry
+`entwurf pi-durable …`. So no Herdr support for `pi-durable` is claimed here. Whether to add it is
+#132 C, which is paused and unmeasured.
 
 ---
 
@@ -454,10 +466,12 @@ addition being `letta (experimental)`, every other row byte-identical; 0.9.3 pri
 identical to 0.9.1 once the sandbox root path is normalized `[measured 2026-10-03]`. The two rows this leaf reads are unchanged. Unselected atoms are **observed, never planned**: OpenCode may be installed and
 current and still receives no entry in the plan.
 
-`./run.sh check-herdr-plugin-build` owns that composition. The real journey — a real
-`herdr plugin install` acquiring the locked registry artifact — is
-`LIVE=1 ./run.sh smoke-herdr-plugin-build-live`; it remains a network axis no deterministic gate may
-claim. The `herdr-checkout` path is separately retained for candidate verification.
+`./run.sh check-herdr-plugin-build` owns that composition. `LIVE=1 ./run.sh
+smoke-herdr-plugin-build-live` is a real `herdr plugin install` journey on the **checkout carrier**:
+it redirects the product remote to a local bare clone and asserts `identity.kind ===
+"herdr-checkout"`, so it is candidate evidence and never evidence for the npm source. The npm
+first user path on the public remote is the receipt below. Both remain network axes no
+deterministic gate may claim.
 
 ### The first-user-path receipt
 
@@ -531,9 +545,14 @@ while the run reported failure — and the wiring names that root, not the versi
 what landed must be exactly what was admitted; a source that moved in between is a named refusal.
 
 **Records written before this contract are refused, not migrated.** A v1 journal or ledger fails
-certification by name: the older shape cannot say WHICH artifact it was, so nothing can be inferred
-from it. On such a host, run `entwurf herdr-plugin-deactivate` (or clear the runtime and ledger state
-by hand) before installing again.
+certification by name (`runtime-journal-uncertified`, `activation-ledger-uncertified`): the older
+shape cannot say WHICH artifact it was, so nothing can be inferred from it. The current inverse
+refuses it too: `herdr-plugin-deactivate` reads that same certified ledger
+(`scripts/herdr-plugin-deactivate.mjs:57`) and has no authority to delete what it cannot certify.
+Such a host needs its operator to recover that owned state first, keeping the bytes and their old
+provenance, before a fresh install. Nothing here migrates it or purges unknown state on your
+behalf. A 0.30.1 install is not this case: its records are already the current schema, and the
+certified deactivate above applies.
 
 A **switch between the two sources is refused**, not inferred: it is a different acquisition
 authority inheriting an existing activation, so it needs an explicit `herdr-plugin-deactivate` first.
@@ -594,9 +613,15 @@ with the acquired package.
 
 **Upgrading from a checkout-carrier install.** A host that installed the 0.30.1 plugin holds a
 runtime and ledger recorded as `herdr-checkout`, and this pin is a source switch, which is refused
-rather than inherited (`activation-artifact-source-drifted`). Run `entwurf herdr-plugin-deactivate`
-first, then `herdr plugin install` again. A host with no plugin installation starts fresh; one whose
-settled ledger already names an npm artifact rebinds in place. Moving between
+rather than inherited (`activation-artifact-source-drifted`). Run `herdr-plugin-deactivate` first,
+by the absolute path under [Remove it](#remove-it), then `herdr plugin install` again. A host with no plugin installation starts fresh; one whose
+settled ledger already names an npm artifact rebinds in place.
+
+**Plugin release tags.** A Herdr plugin snapshot is tagged `vYYYY.M.D-herdr.<runtime>`, here
+`v2026.10.9-herdr.0.34.0`. `v0.34.0` is the core npm package's tag, not a plugin release. The
+default `--ref main` stays valid. Once a plugin tag is published, `herdr plugin install
+junghan0611/entwurf/plugins/herdr --ref <tag>` can pin that snapshot: `--ref` takes a named remote
+ref (a bare commit is refused), but no run has measured a tag as that ref yet. Moving between
 sources — or to another future authority — re-decides where the bytes come from,
 and candidate evidence does not transfer. Exact acquisition and integrity, the installed runtime
 (`name@version`, compiled entry, three executable bins, real `check-bridge`), the swap and torn-swap

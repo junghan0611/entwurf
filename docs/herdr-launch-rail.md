@@ -271,7 +271,7 @@ TN  = () => join(home, ".local", "bin")          // 런처       ← HOME
 | herdr 없음 + `ENTWURF_REQUIRE_HERDR=1` | **FAIL**. 미래의 CI가 이 파일을 고치지 않고 부재를 빨강으로 바꾸는 손잡이 |
 | herdr 있는데 셀을 완주 못함(pi 부재 포함) | **FAIL.** 부재는 선택이지만 고장은 아니다 |
 
-**버전 경계**는 잰 것만 말한다: `herdr 0.9.x`가 아니면 **실패**하고 재측정을 요구한다. 이 문서가 그 경계를 소유하며, **entwurf setup은 herdr를 설치하지 않는다**(Hard Rule 17).
+**버전 경계**는 잰 것만 말하며, 축이 둘이다. 플러그인 **admission**은 manifest의 `min_herdr_version = "0.9.0"`이다. 결정론·CI 게이트가 **인증**하는 것은 `scripts/fixtures/herdr-supply.json`이 pin한 정확한 한 버전(현재 0.9.3)뿐이다. `check-herdr-sandbox`의 `[QK:HS-VERSION-BOUNDARY]`는 `herdr <supply.version>`이 아니면 실패한다(`scripts/check-herdr-sandbox.ts:228`). admission 범위 안의 다른 버전은 인증되지 않았다. 그 버전으로 이 게이트를 통과하려면 재측정한 뒤 supply pin을 명시적으로 바꿔야 한다. 이 문서가 그 경계를 소유하며, **entwurf setup은 herdr를 설치하지 않는다**(Hard Rule 17).
 
 **`--approve`는 픽스처 전용이다.** 게이트는 자기 샌드박스의 오퍼레이터이므로 그 한 번의 실행을 스스로 승인할 수 있다. 프로덕션 argv에는 절대 들어가지 않는다 — `project-trust-handler.ts`가 "에이전트는 스스로 신뢰를 승격할 수 없다"를 의도된 보안 비대칭으로 적어 두었고, 런처가 오퍼레이터 대신 승인하면 그 판단을 조용히 가져가는 것이 된다. `[측정]` `--approve`는 `trust.json`을 만들지 않는다.
 
