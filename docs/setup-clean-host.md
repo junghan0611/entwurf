@@ -181,7 +181,7 @@ packageRoot↔installerRoot coupling mismatch and a package/provider managed-pat
 | project-local npm | that project's `node_modules/@junghanacs/entwurf` | `node_modules/.bin` | same | same shared entry | same explicit action | same | same; a deleted root becomes the aligned `remove-user-scope` orphan cleanup (entry + package state + provider installerRoot must all name that missing root) |
 | Herdr plugin | `$XDG_DATA_HOME/entwurf/herdr-plugin/runtime/active/node_modules/@junghanacs/entwurf` | none on PATH — Pi provider and Claude MCP/statusLine record ABSOLUTE commands under that runtime | none | same shared entry, plus the plugin's activation ledger (`$XDG_STATE_HOME/entwurf/herdr-plugin/activation.json`) | none — the plugin never takes a registration over; release it from its owner first | the runtime's own absolute `…/node_modules/.bin/entwurf herdr-plugin-deactivate` | — |
 
-The three installation paths keep separate records: Herdr's plugin registry (changed only by `herdr
+The four installation paths keep separate records: Herdr's plugin registry (changed only by `herdr
 plugin install` / `unlink` / `uninstall`), the plugin's runtime journal and activation ledger, the shared Pi
 package/provider ownership above, and the Claude meta-bridge install state
 (`${CLAUDE_CONFIG_DIR:-~/.claude}/entwurf.install-state.json`). Moving between them is explicit: release the
@@ -195,7 +195,8 @@ root-bound — an install from another root rewrites it rather than refusing; no
 `PI_CODING_AGENT_DIR`, Claude config) changed between runs or a host that changes between the plugin's
 early owner check and its installed recheck, which can still refuse after the download; and the plugin's
 deactivate, finding no activation ledger, reports what is left at its addresses and neither reclaims nor
-reuses it.
+reuses it. The no-ledger diagnostic is not in the published 0.34.0 runtime; a plugin host receives it only
+from a later published runtime the plugin pins.
 
 ## 2. Optional pi adapter / ACP plugin
 
