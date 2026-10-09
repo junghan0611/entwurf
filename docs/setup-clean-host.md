@@ -195,8 +195,8 @@ root-bound — an install from another root rewrites it rather than refusing; no
 `PI_CODING_AGENT_DIR`, Claude config) changed between runs or a host that changes between the plugin's
 early owner check and its installed recheck, which can still refuse after the download; and the plugin's
 deactivate, finding no activation ledger, reports what is left at its addresses and neither reclaims nor
-reuses it. The no-ledger diagnostic is not in the published 0.34.0 runtime; a plugin host receives it only
-from a later published runtime the plugin pins.
+reuses it. The 0.34.0 runtime predates that no-ledger diagnostic; a plugin host runs the runtime its
+`runtime-lock.json` pins.
 
 ## 2. Optional pi adapter / ACP plugin
 

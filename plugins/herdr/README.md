@@ -262,9 +262,8 @@ was recorded can leave a journal, a runtime or the plugin's npm cache behind. Wi
 proves what those belong to or that no harness wiring still names them, so the verb lists what it found
 at those fixed addresses and exits non-zero (`deactivate-unattributed-leftovers`), writing nothing; a
 truly clean host still exits 0 with "nothing to undo". Removing such leftovers is a manual decision.
-This behaviour is not in the published 0.34.0 runtime, whose own deactivate still answers "nothing to
-undo" whenever the ledger is absent; a plugin host gets it only from a later published runtime the plugin
-pins.
+The 0.34.0 runtime predates it: its deactivate still answers "nothing to undo" whenever the
+ledger is absent. A plugin host runs the runtime its `runtime-lock.json` pins.
 
 **Moving between this plugin and a direct install is explicit, in this order:**
 
@@ -637,27 +636,26 @@ transaction and not this package. `./run.sh check-pack-install` packs this check
 tarball into a fresh temp project, and runs the same `verifyInstalledRuntime` against it.
 
 **Switching source is a re-proof, not a config change.** npm is the production authority class.
-The last published plugin snapshot, `v2026.10.9-herdr.0.34.0`, pins `@junghanacs/entwurf@0.34.0`
-with the registry's measured sha512 (re-read with `npm view` on 2026-10-09), returning from the
-`herdr-checkout` carrier the 0.30.1 preparation rode (#132); 0.31–0.33 were never pinned here. Its
-source-specific proof is recorded in the #132 thread and CHANGELOG, not inherited from any earlier
-pin. **This checkout's unpublished 0.34.1 preparation** rides that closed `herdr-checkout` carrier
-again, for verification only: it has no published npm SRI and is not a plugin pair, and the npm
-re-pin waits for publication, measured bytes and its own source proof. The plugin's own version
-stays 0.34.0, the last snapshot; it is still an independent field — what Herdr lists for the
-plugin, not a permanent equality rule with the acquired package.
+What a ref pins is what that ref's `runtime-lock.json` names — for npm, the exact `name@version` and
+the registry's measured sha512 — and the plugin's own version is `herdr-plugin.toml`'s `version`, an
+independent field: what Herdr lists for the plugin, not a permanent equality rule with the acquired
+package. Published snapshots and what each pinned are on
+[Releases](https://github.com/junghan0611/entwurf/releases) and in [CHANGELOG](../../CHANGELOG.md).
+Each npm pin's source-specific proof is recorded with that pin, never inherited from an earlier one.
+A candidate that rides the `herdr-checkout` carrier between pins is for verification only: it has
+no published npm SRI and is not a plugin pair.
 
-**Upgrading from a checkout-carrier install.** A host that installed the 0.30.1 plugin holds a
-runtime and ledger recorded as `herdr-checkout`, and this pin is a source switch, which is refused
-rather than inherited (`activation-artifact-source-drifted`). Run `herdr-plugin-deactivate` first,
-by the absolute path under [Remove it](#remove-it), then `herdr plugin install` again. A host with no plugin installation starts fresh; one whose
-settled ledger already names an npm artifact rebinds in place. While this checkout rides the 0.34.1
-carrier the same holds in both directions: moving a host from the published npm 0.34.0 plugin to
-this checkout, or back to npm later, is a source switch and needs `herdr-plugin-deactivate` first.
+**Moving a host between sources needs an explicit deactivate, in both directions.** An npm pin over
+a `herdr-checkout` installation, or a checkout candidate over an npm one, is a source switch, refused
+rather than inherited (`activation-artifact-source-drifted`). Run `herdr-plugin-deactivate` first, by
+the absolute path under [Remove it](#remove-it), then `herdr plugin install` again. A host with no
+plugin installation starts fresh; one whose settled ledger already names the same source rebinds in
+place under the conditions above. A host that installed the 0.30.1 plugin, for example, holds a
+runtime and ledger recorded as `herdr-checkout`, so any npm pin is a switch for it.
 
-**Plugin release tags.** A Herdr plugin snapshot is tagged `vYYYY.M.D-herdr.<runtime>`, here
-`v2026.10.9-herdr.0.34.0`. `v0.34.0` is the core npm package's tag, not a plugin release. The
-default `--ref main` stays valid. Once a plugin tag is published, `herdr plugin install
+**Plugin release tags.** A Herdr plugin snapshot is tagged `vYYYY.M.D-herdr.<runtime>`; the first
+was `v2026.10.9-herdr.0.34.0`. A `v<major>.<minor>.<patch>` tag is the core npm package's, not a
+plugin release. The default `--ref main` stays valid. Once a plugin tag is published, `herdr plugin install
 junghan0611/entwurf/plugins/herdr --ref <tag>` can pin that snapshot: `--ref` takes a named remote
 ref (a bare commit is refused), but no run has measured a tag as that ref yet. Moving between
 sources — or to another future authority — re-decides where the bytes come from,

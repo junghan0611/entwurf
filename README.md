@@ -27,11 +27,8 @@ Claude and Cortex Code are ACP backends. Codex and Antigravity stay native so th
 retain their own tools and work context. Capabilities differ by rail: a shipped
 citizen is not a promise of every lifecycle operation.
 
-> **Current release: [0.33.0](https://github.com/junghan0611/entwurf/releases/tag/v0.33.0)**
-> ([`fea9b3d`](https://github.com/junghan0611/entwurf/commit/fea9b3dc4779ac5deb34e239abc8e0b5e3e95382)).
-> Includes the pinned Pi 1.1.0 native durable app/TUI and one explicit native-module ingress;
-> `npm` `latest` is `0.33.0`. What that cut ran and did not run is in its CHANGELOG section.
-> Release history and detailed evidence belong in [CHANGELOG](./CHANGELOG.md).
+[Releases](https://github.com/junghan0611/entwurf/releases) contain each cut's notes and acceptance
+receipts; [CHANGELOG](./CHANGELOG.md) records source history.
 
 ## Install
 
@@ -88,8 +85,8 @@ models/auth, queues, SQLite, transcripts and recovery remain upstream-owned:
 [Hard Rule 17](./AGENTS.md#hard-rules), **supply the missing surface; do not become the harness**.
 
 Optional `--native-module <absolute file>` initializes trusted ESM before runtime/TUI
-imports, then installs its default native Extension after the contact. After 0.33.0 (#134):
-`--native-module-dir <absolute directory>` loads the top-level `*.extension.mjs` files of that
+imports, then installs its default native Extension after the contact.
+`--native-module-dir <absolute directory>` (#134) loads the top-level `*.extension.mjs` files of that
 one named directory in byte-wise order instead, and the durable TUI keeps a live
 background-task badge on screen at any terminal size. No automatic module discovery or
 classic Pi API shim; guards are not a sandbox or rollback.

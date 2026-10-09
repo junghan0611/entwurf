@@ -4,6 +4,46 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+## v2026.10.9-herdr.0.34.1 — Herdr Entwurf plugin 0.34.1
+
+A Herdr plugin snapshot, not a core release: no package version, npm artifact or core tag moves.
+
+### Herdr plugin
+
+- **Runtime re-pinned to the published 0.34.1 (#135).** `plugins/herdr/runtime-lock.json` returns
+  from the `herdr-checkout` verification carrier the 0.34.1 preparation rode to the npm production
+  source: `@junghanacs/entwurf@0.34.1` with the registry's measured sha512
+  (`sha512-AiB88Ext…GDxA==`). The manifest version moves 0.34.0 → 0.34.1; `min_herdr_version`
+  stays 0.9.0. A plugin host now receives the #135 fixes listed under 0.34.1: owner preflight
+  before acquisition, the no-ledger deactivate, and the regular-file-or-nothing ledger address.
+- **Upgrading.** A host on the npm 0.34.0 snapshot stays on the npm source, so its next
+  `herdr plugin install` is a same-source rebind under the plugin README's conditions. A host that
+  installed while the lock named `herdr-checkout` — the 0.30.1 plugin, or `main` during the 0.34.1
+  preparation window — holds a checkout-source runtime and ledger, and npm is a different
+  acquisition source, refused rather than inherited (`activation-artifact-source-drifted`). Run
+  `herdr-plugin-deactivate` by its absolute runtime path, then `herdr plugin install` again.
+- **The READMEs no longer state a current release.** The root README's hardcoded release block and
+  the plugin README's snapshot and carrier prose went stale with every version bump; they now point
+  at `runtime-lock.json`, `herdr-plugin.toml`, Releases and this file. The source-switch rules and
+  the 0.34.0 runtime's no-ledger limit stay, the latter as a historical fact.
+
+### Verification
+
+- **Registry, measured before the pin.** One scheduled observation, after a 300 s delay:
+  version 0.34.1 published at 2026-10-09T14:29:48.184Z with `latest` → 0.34.1, and the downloaded
+  tarball re-hashed to the artifact accepted as 0.34.1 (sha256 `73407ba8…`, 13587297 bytes), with
+  `dist.integrity` re-derived equal. Dist-tags before publication were not captured, so no
+  before/after claim is made about them.
+- **VERIFY's 0.34.0 public-ref row is closed with its measured receipts:** `--ref main` PASS at
+  `b5d15d8` and `8ed4d1a`, both acquiring npm 0.34.0. That is a main-ref receipt, not a tag-ref
+  or native claim.
+- No gate, mutant or matrix changed, so no qualification PARTIAL is owed. The npm-source re-proof
+  for this pin — the focused Herdr gates, a real-npm 0.34.0 → 0.34.1 swap and torn-swap recovery,
+  an installed registry consumer, the registry-file container consumer, the public `main`
+  first-user path and the exact-SHA CI run — is recorded in the GitHub release, not claimed here.
+  A `--ref <tag>` install, a citizen drawn as a ROW in a real Herdr pane, and native hosts stay
+  unmeasured.
+
 ## 0.34.1 - 2026-10-09
 
 ### Release coordination

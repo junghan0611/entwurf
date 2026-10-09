@@ -36,7 +36,7 @@
 # purpose (#132 C).
 id = "junghan0611.entwurf"
 name = "Herdr Entwurf"
-version = "0.34.0"
+version = "0.34.1"
 min_herdr_version = "0.9.0"
 description = "Herdr panes for Entwurf sibling AI sessions, with setup for integrated pi and Claude Code."
 platforms = ["linux"]
