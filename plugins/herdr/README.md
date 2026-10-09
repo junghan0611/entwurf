@@ -637,18 +637,23 @@ transaction and not this package. `./run.sh check-pack-install` packs this check
 tarball into a fresh temp project, and runs the same `verifyInstalledRuntime` against it.
 
 **Switching source is a re-proof, not a config change.** npm is the production authority class.
-This plugin pins `@junghanacs/entwurf@0.34.0` with the registry's measured sha512 (re-read with
-`npm view` on 2026-10-09), returning from the `herdr-checkout` carrier the 0.30.1 preparation rode
-(#132); 0.31–0.33 were never pinned here. Its source-specific proof is recorded in the #132 thread
-and CHANGELOG, not inherited from any earlier pin. The plugin's own version is 0.34.0 for this cut;
-it is still an independent field — what Herdr lists for the plugin, not a permanent equality rule
-with the acquired package.
+The last published plugin snapshot, `v2026.10.9-herdr.0.34.0`, pins `@junghanacs/entwurf@0.34.0`
+with the registry's measured sha512 (re-read with `npm view` on 2026-10-09), returning from the
+`herdr-checkout` carrier the 0.30.1 preparation rode (#132); 0.31–0.33 were never pinned here. Its
+source-specific proof is recorded in the #132 thread and CHANGELOG, not inherited from any earlier
+pin. **This checkout's unpublished 0.34.1 preparation** rides that closed `herdr-checkout` carrier
+again, for verification only: it has no published npm SRI and is not a plugin pair, and the npm
+re-pin waits for publication, measured bytes and its own source proof. The plugin's own version
+stays 0.34.0, the last snapshot; it is still an independent field — what Herdr lists for the
+plugin, not a permanent equality rule with the acquired package.
 
 **Upgrading from a checkout-carrier install.** A host that installed the 0.30.1 plugin holds a
 runtime and ledger recorded as `herdr-checkout`, and this pin is a source switch, which is refused
 rather than inherited (`activation-artifact-source-drifted`). Run `herdr-plugin-deactivate` first,
 by the absolute path under [Remove it](#remove-it), then `herdr plugin install` again. A host with no plugin installation starts fresh; one whose
-settled ledger already names an npm artifact rebinds in place.
+settled ledger already names an npm artifact rebinds in place. While this checkout rides the 0.34.1
+carrier the same holds in both directions: moving a host from the published npm 0.34.0 plugin to
+this checkout, or back to npm later, is a source switch and needs `herdr-plugin-deactivate` first.
 
 **Plugin release tags.** A Herdr plugin snapshot is tagged `vYYYY.M.D-herdr.<runtime>`, here
 `v2026.10.9-herdr.0.34.0`. `v0.34.0` is the core npm package's tag, not a plugin release. The

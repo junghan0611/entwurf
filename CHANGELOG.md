@@ -4,6 +4,56 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+## 0.34.1 - 2026-10-09
+
+### Release coordination
+
+- **A patch cut for #135.** Coordinated by the pi-durable citizen `20261008T113104-801621` and
+  implemented by Claude Code Opus as sole writer, under the maintainer's grant through prepare and
+  make; npm publication is not part of that grant. This section is written at prepare time, before
+  the release gates run: the `check:full`, package-consumer and `release-gate --cut` results are
+  recorded in the operator handoff and the GitHub release, not claimed here. Their raw logs stay
+  under the ignored `.tmp-verify/135-install-ownership/writer/release-0341/{p4,p6,p5}/`.
+- **The published 0.34.0 does not carry these fixes.** Its registry bytes stay as accepted.
+
+### Herdr plugin
+
+- **Component owners are asked before anything is fetched (#135).** The plugin build now runs the
+  selected components' read-only owner preflights — Pi package, Pi provider, and the Claude
+  meta-bridge plan — before runtime acquisition, on the same Pi state paths the activation reads. A
+  foreign Pi owner refuses with no runtime, journal, cache or ledger written, and the refusal says
+  to release the registration from the root that owns it (its own `remove-user-scope`): a takeover
+  from the plugin's root is not a route. The check is planned against the physical prospective
+  runtime root; a landed package whose name or root differs from that plan refuses as
+  `herdr-build-artifact-drifted`. The installed activation keeps its own preflight recheck.
+- **`herdr-plugin-deactivate` without a ledger no longer reports success over leftovers.** With no
+  certified activation ledger it exits 0 only when nothing stands at the plugin's journal, runtime
+  and cache addresses; otherwise it names what it found and exits non-zero
+  (`deactivate-unattributed-leftovers`), removing nothing.
+- **Only a regular file or nothing may stand at the activation ledger address.** A symlink,
+  dangling or not, or a directory at `activation.json` refuses as `activation-ledger-uncertified`.
+- **Limits that stay.** The Claude install state records the last installer and is not root-bound.
+  Roots changed between runs, or a host changing between the early owner check and the installed
+  recheck, can still refuse after the download. The no-ledger deactivate reports leftovers and
+  neither reclaims nor reuses them. No wider Claude-root or ownership guarantee is added.
+  `docs/setup-clean-host.md` §1.1 names the four installation paths and these limits.
+- **The runtime lock rides the `herdr-checkout` verification carrier for this window.**
+  `plugins/herdr/runtime-lock.json` returns from npm 0.34.0 to the closed `herdr-checkout` source,
+  so the lock stays coherent with the 0.34.1 package version without inventing a registry
+  integrity. The plugin manifest stays 0.34.0, and this is not a plugin pair: the npm re-pin to
+  0.34.1 follows publication with its measured sha512 and its own source proof. Moving a host
+  between the published npm 0.34.0 plugin and this carrier, in either direction, needs
+  `herdr-plugin-deactivate` first.
+
+### Repository hooks
+
+- **`prepare` no longer runs husky.** It only builds the bridge. The local
+  `core.hooksPath=.husky/_` override that shadowed the configured global guard was removed on this
+  checkout, and `.husky/pre-commit` (whitespace, lint, typecheck) is reached through a global guard
+  that chains to repository-local hooks. Another existing clone may keep its local value until it
+  is unset there (unmeasured). On this checkout a real `npm pack` inside `check-pack-install` left
+  `.git/config` and `.husky/_` unchanged. The `husky` devDependency is unchanged.
+
 ## v2026.10.9-herdr.0.34.0 — Herdr Entwurf plugin 0.34.0
 
 A Herdr plugin snapshot, not a core release: no package version, npm artifact or core tag moves.
