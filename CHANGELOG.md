@@ -4,6 +4,48 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+## v2026.10.12-herdr.0.35.0 — Herdr Entwurf plugin 0.35.0
+
+A separate Herdr plugin snapshot, not another core release: core package0.35.0 and
+its `v0.35.0` tag remain unchanged. The operator has published the core to npm.
+
+### Herdr plugin
+
+- **Re-pin the published core0.35.0 and close the checkout window.**
+  `plugins/herdr/runtime-lock.json` returns to production npm source
+  `@junghanacs/entwurf@0.35.0` with the registry's measured sha512
+  (`sha512-ENivJbtr…umf2zA==`). The plugin manifest moves0.34.2→0.35.0;
+  admission remains Herdr>=0.9.0 and the one-build/one-pane/Linux shape is unchanged.
+- **The same core capability through Herdr.** This snapshot follows the renewed demo
+  and source-tooling restoration, plus #137's conservative TOML-only qualification
+  refinement. It records no new demo or model turn and changes no rail, gate or mutant.
+- **Upgrade by acquisition source, not just version.** A settled npm-source0.34.2
+  installation can rebind under the plugin README's ownership conditions. A host that
+  installed the intervening `herdr-checkout` candidate must explicitly deactivate by
+  its own absolute runtime path before reinstalling the npm-source snapshot.
+  No operator installation or active session is rewired by this release work.
+
+### Source-specific verification
+
+- Registry metadata reports version/latest0.35.0, repair0.12.8-repair.1. The downloaded
+  tarball is11083782 bytes, SHA256
+  `82ae9ab99b799c987fe0dac4bb76fc406afe42088a128a131af4d69a97592e71`, equal to the preserved
+  core release candidate. Independently computed sha512 equals `dist.integrity`;
+  the registry-shipped runtime helper is byte-equal to this checkout's.
+- Required exact-registry-tarball Docker consumer passed without repacking. Real-npm
+  0.34.2→0.35.0 swap and harness-seeded torn-swap recovery passed: the product restored
+  the last-good tree before reacquisition, certified the new registry digest, then
+  performed an exact-request no-op and owned-fixture removal. Seven focused
+  Herdr/manifests gates passed; HEAD/index/work surface stayed unchanged during that run.
+- At preparation time, public-ref install/use/deactivate/reinstall and the exact pushed
+  plugin SHA's ordinary four-job CI/#137 next-plugin BODY-SKIP observation are still
+  pending. Their actual outcomes must be recorded in the release checkpoint and #137
+  before tagging/closing; this paragraph is not their acceptance. Earlier npm or
+  checkout-carrier receipts cannot certify these source-specific axes.
+- Core0.35.0's whole940 qualification and native Codex LIVE remain explicit per-cut
+  unmeasured exceptions, never PASS or standing waivers. This plugin-only metadata
+  change does not run the approximately95-minute BODY or another core release aggregate.
+
 ## 0.35.0 - 2026-10-12
 
 ### Collaboration and qualification
