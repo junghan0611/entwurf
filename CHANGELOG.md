@@ -57,6 +57,14 @@ All notable changes to this project will be documented here. Format follows [Kee
   A floor-only run is not exact-SHA whole qualification acceptance, and no skipped BODY
   is reported as PASS. The unchanged release oracle would refuse it; make's preserved
   artifact/tag/GitHub Release sequence remains pending, rather than bypassing that oracle.
+- **Supply the real GIF decoder to the offline CI floor, not to the product.** The first
+  floor-only main run `38170795980` passed the three install/artifact jobs but stopped
+  `check:full` on the new demo fixtures because Ubuntu lacked `ffprobe` (`ENOENT`).
+  The check job now installs Ubuntu's `ffmpeg` package before the FULL floor and records
+  the decoder version. The fixtures still fake the renderer/caption tools and judge real
+  GIF bytes through `ffprobe`; no decoding assertion or missing-tool failure is skipped.
+  This is job-only scaffolding, not operator/global or npm setup. The CI recovery result
+  belongs in #137/#138's live checkpoint; the original failed run remains historical.
 - **Native Codex LIVE is explicitly deferred for this cut, to the next release.** The operator
   requested its exclusion from this verification. No native Codex sibling/app-server or turn
   is started, and its product MUST wiring remains intact. This is an unmeasured per-cut

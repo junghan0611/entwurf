@@ -51,6 +51,9 @@ The named source-only floor verb discovers `demo/**/*.test.ts` and runs Node's o
 runner, including fake-tool/child-process fixtures. It is reached by `pnpm check` and
 `pnpm run check:full`; these are not Vitest tests and are not reached by the adapter beside
 Vitest globs. HOME, writable XDG roots and identity carriers are sandboxed by the verb.
+`agg` and `ffmpeg` are faked, but the renderer/caption fixtures decode real GIF bytes, so
+this floor needs a real `ffprobe` on PATH; without it they fail (`ffprobe ENOENT`) rather
+than skip. CI installs Ubuntu's `ffmpeg` package (which carries `ffprobe`) in the check job.
 The receiving type fence is `scripts/tsconfig.json`, paired with the root `demo` exclusion.
 
 ### Explicit new LIVE take

@@ -69,6 +69,16 @@ jobs:
       # installs herdr (Rule 17) — this is CI-job scaffolding, not a product surface.
       - name: install the pinned herdr binary
         run: ./scripts/install-herdr-ci.sh
+      # The demo Node floor (check-demo-reproducibility, inside check:full) fakes agg and
+      # ffmpeg but decodes its GIF fixtures with the REAL ffprobe; Ubuntu ships ffprobe only
+      # in the ffmpeg package. CI-job scaffolding, like herdr above: Entwurf's own
+      # setup/package never installs it. The version line records which decoder judged.
+      - name: install the GIF decoder the demo floor reads (ffprobe)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends ffmpeg
+          command -v ffprobe
+          ffprobe -hide_banner -version
       # Push CI owns the FULL deterministic floor (#70 tiering): `pnpm check`
       # is the operator's ≤60s everyday core, while `check:full` adds the
       # hermetic-integration and package/install tiers machine time pays for.
