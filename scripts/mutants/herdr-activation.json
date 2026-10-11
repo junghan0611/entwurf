@@ -351,6 +351,77 @@
 			"timeoutSeconds": 300,
 			"signature": "[QK:HAC-LEDGER-PATH-KIND]",
 			"signatureSource": "scripts/check-herdr-activation.ts"
+		},
+		{
+			"claim": "DOCTOR-MODE-DERIVED",
+			"title": "a resolver that never answers plugin mode leaves the doctor computing bare-bin expectations on a plugin-activated host, so the activation's correct absolute wiring is reported as drift and the supported route can never be certified (#136)",
+			"subject": "scripts/herdr-activation.mjs",
+			"find": ["\treturn activeDir;\n}"],
+			"replace": ["\treturn null;\n}"],
+			"gate": ["bash", "run.sh", "check-herdr-activation"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:DOCTOR-MODE-DERIVED]",
+			"signatureSource": "scripts/check-herdr-activation.ts"
+		},
+		{
+			"claim": "DOCTOR-MODE-CHECKOUT-NEVER-DERIVES",
+			"title": "dropping the runtime-package precondition lets a checkout's doctor read the plugin ledger and adopt its absolute wiring as its own expectations, so the checkout certifies a runtime it does not own (#136)",
+			"subject": "scripts/herdr-activation.mjs",
+			"find": ["\t\tif (!same) return null;"],
+			"replace": ["\t\tvoid same;"],
+			"gate": ["bash", "run.sh", "check-herdr-activation"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:DOCTOR-MODE-CHECKOUT-NEVER-DERIVES]",
+			"signatureSource": "scripts/check-herdr-activation.ts"
+		},
+		{
+			"claim": "DOCTOR-MODE-UNCERTIFIED-DIES",
+			"title": "swallowing the reader's refusal turns an uncertified ledger into 'not plugin mode', so a doctor silently falls back to bare expectations over a record nobody can vouch for (#136)",
+			"subject": "scripts/herdr-activation.mjs",
+			"find": [
+				"\tconst ledger = readCertifiedLedger(resolveActivationLayout(env));\n\tif (ledger === null) {\n\t\tif (override === undefined) return null;"
+			],
+			"replace": [
+				"\tlet ledger = null;\n\ttry {\n\t\tledger = readCertifiedLedger(resolveActivationLayout(env));\n\t} catch {\n\t\tledger = null;\n\t}\n\tif (ledger === null) {\n\t\tif (override === undefined || override !== undefined) return null;"
+			],
+			"gate": ["bash", "run.sh", "check-herdr-activation"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:DOCTOR-MODE-UNCERTIFIED-DIES]",
+			"signatureSource": "scripts/check-herdr-activation.ts"
+		},
+		{
+			"claim": "DOCTOR-MODE-OVERRIDE-AGREES",
+			"title": "an override that need not agree with the ledger lets any caller-named root become the doctor's expectation, so the doctor would certify absolute commands pointing anywhere (#136)",
+			"subject": "scripts/herdr-activation.mjs",
+			"find": ["\tif (override !== undefined && override !== activeDir) {"],
+			"replace": ["\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-herdr-activation"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:DOCTOR-MODE-OVERRIDE-AGREES]",
+			"signatureSource": "scripts/check-herdr-activation.ts"
+		},
+		{
+			"claim": "DOCTOR-PLUGIN-MODE-GREEN",
+			"title": "a doctor that resolves plugin mode but never passes it to its desired-state calls still expects bare bins, so the plugin activation's absolute wiring stays falsely red (#136). One mutant for the shared wire on purpose: omitting the mode at any single one of the three call sites also turns P1 red, but no per-site mutant proves that",
+			"subject": "scripts/meta-bridge-doctor.sh",
+			"find": ["    PLUGIN_ARGS=(--plugin-runtime \"$MODE_ROOT\")"],
+			"replace": ["    : \"$MODE_ROOT\""],
+			"gate": ["bash", "run.sh", "check-meta-doctor-oracle"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:DOCTOR-PLUGIN-MODE-GREEN]",
+			"signatureSource": "scripts/check-meta-doctor-oracle.sh",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "DOCTOR-MODE-ADMISSION-CLAUSES",
+			"title": "dropping the phase clause lets a ledger caught mid-activation or mid-teardown admit plugin mode, so the doctor certifies absolute wiring the activation has not finished writing or is already removing (#136)",
+			"subject": "scripts/herdr-activation.mjs",
+			"find": ["\tif (ledger.phase !== \"active\") refuse(`activation ledger phase is ${ledger.phase}, not active`);"],
+			"replace": ["\tvoid refuse;"],
+			"gate": ["bash", "run.sh", "check-herdr-activation"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:DOCTOR-MODE-ADMISSION-CLAUSES]",
+			"signatureSource": "scripts/check-herdr-activation.ts"
 		}
 	]
 }

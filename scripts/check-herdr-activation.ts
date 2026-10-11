@@ -183,6 +183,7 @@ interface Mod {
 	resolveEntwurfDataRoot: (env: NodeJS.ProcessEnv) => string;
 	LEDGER_PHASES: string[];
 	COMPONENT_STATES: string[];
+	resolveDoctorPluginRuntime: (env: NodeJS.ProcessEnv, opts: { repo: string; override?: string }) => string | null;
 }
 
 const mod = (await import(pathToFileURL(ACTIVATION).href)) as Mod;
@@ -204,6 +205,7 @@ const {
 	resolveEntwurfDataRoot,
 	LEDGER_PHASES,
 	COMPONENT_STATES,
+	resolveDoctorPluginRuntime,
 } = mod;
 
 /** The pi pin package.json declares (an exact production dependency since #130) — the SSOT
@@ -1481,6 +1483,84 @@ function ledgerWith(
 			linked === "activation-ledger-uncertified" &&
 			directory === "activation-ledger-uncertified" &&
 			notDir === "activation-ledger-uncertified",
+	);
+}
+
+// ── 29. the doctor's expectation mode comes from the activation ledger (#136) ────
+// `doctor-meta-bridge` must compute the plugin activation's ABSOLUTE expectations exactly when the
+// ledger authorised that wiring, and never adopt it from a checkout. The oracle for the returned
+// root is `runtimeRootOf`, computed here independently of the resolver.
+{
+	const env = world("doctor-mode");
+	seedRuntime(env);
+	const active = runtimeRootOf(env);
+	const runtimeRepo = path.join(active, "node_modules", "@junghanacs", "entwurf");
+	const layout = resolveActivationLayout(env);
+	const mode = (opts: { repo: string; override?: string }): string | null => {
+		try {
+			return resolveDoctorPluginRuntime(env, opts);
+		} catch (err) {
+			return `refused:${(err as { code?: string }).code ?? String(err)}`;
+		}
+	};
+	// D2 — no ledger: a doctor running from the runtime package is simply not in plugin mode.
+	const absent = mode({ repo: runtimeRepo });
+	writeLedger(layout, ledgerFor(env, ["pi", "claude-code"]));
+	// D1 — runtime package + an active ledger that activated claude-code at THIS stable root.
+	const derived = mode({ repo: runtimeRepo });
+	ok(
+		"[QK:DOCTOR-MODE-DERIVED] a doctor running from the plugin runtime's package derives plugin-runtime mode from " +
+			`an active ledger that activated claude-code at this host's stable root, and from nothing else (no-ledger=${absent} derived=${derived})`,
+		absent === null && derived === active,
+	);
+	// D3 — the checkout never derives, and never even opens the ledger: an uncertified body is
+	// planted first, so reading it would throw instead of returning null.
+	fs.writeFileSync(layout.ledgerPath, "not json\n");
+	const checkout = mode({ repo: REPO });
+	ok(
+		"[QK:DOCTOR-MODE-CHECKOUT-NEVER-DERIVES] a doctor whose repo is not the runtime package returns no plugin mode " +
+			`without opening the ledger, so a checkout never adopts plugin wiring (checkout=${checkout})`,
+		checkout === null,
+	);
+	// D5 — on a reading path an uncertified ledger dies with the reader's own refusal, never null.
+	fs.unlinkSync(layout.ledgerPath);
+	fs.symlinkSync(path.join(env.HOME as string, "nowhere.json"), layout.ledgerPath);
+	const viaRuntime = mode({ repo: runtimeRepo });
+	const viaOverride = mode({ repo: REPO, override: active });
+	fs.unlinkSync(layout.ledgerPath);
+	ok(
+		"[QK:DOCTOR-MODE-UNCERTIFIED-DIES] an uncertified ledger on either reading path (runtime-repo derivation, explicit " +
+			`override) refuses with the reader's own code, never 'not plugin mode' (runtime=${viaRuntime} override=${viaOverride})`,
+		viaRuntime === "refused:activation-ledger-uncertified" && viaOverride === "refused:activation-ledger-uncertified",
+	);
+	// D4 — the admission clauses on a reading path, each on a CERTIFIED ledger so only the clause can
+	// refuse: a phase other than active, a ledger that never activated claude-code, and a runtimeRoot
+	// that is not this host's stable root. Each is refused by name, never read as 'not plugin mode'.
+	writeLedger(layout, ledgerWith(env, "activating", { pi: "active", "claude-code": "pending" }));
+	const notActive = mode({ repo: runtimeRepo });
+	writeLedger(layout, ledgerFor(env, ["pi"]));
+	const piOnly = mode({ repo: runtimeRepo });
+	writeLedger(layout, {
+		...ledgerFor(env, ["pi", "claude-code"]),
+		runtimeRoot: path.join(env.HOME as string, "another-runtime", "active"),
+	});
+	const foreignRoot = mode({ repo: runtimeRepo });
+	ok(
+		"[QK:DOCTOR-MODE-ADMISSION-CLAUSES] on the runtime repo a certified ledger still admits plugin mode only when " +
+			"phase is active, claude-code was activated and its runtimeRoot is this host's stable root — each other case " +
+			`is refused by name (activating=${notActive} pi-only=${piOnly} foreign-root=${foreignRoot})`,
+		notActive === "refused:doctor-plugin-runtime-unadmitted" &&
+			piOnly === "refused:doctor-plugin-runtime-unadmitted" &&
+			foreignRoot === "refused:doctor-plugin-runtime-unadmitted",
+	);
+	// D6 — the override must agree with the ledger's root; agreeing, it is admitted from a checkout.
+	writeLedger(layout, ledgerFor(env, ["pi", "claude-code"]));
+	const elsewhere = mode({ repo: REPO, override: path.join(env.HOME as string, "elsewhere") });
+	const agreeing = mode({ repo: REPO, override: active });
+	ok(
+		"[QK:DOCTOR-MODE-OVERRIDE-AGREES] an explicit --plugin-runtime is admitted only when it names the ledger's own " +
+			`stable root (elsewhere=${elsewhere} agreeing=${agreeing})`,
+		elsewhere === "refused:doctor-plugin-runtime-unadmitted" && agreeing === active,
 	);
 }
 

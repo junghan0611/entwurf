@@ -227,6 +227,8 @@ ok "fake live entwurf MCP bridge running as a child of the stand-in Claude pid (
 # --- doctor driver -----------------------------------------------------------
 DOC_OUT=""
 DOC_RC=0
+# #136: arguments for the plugin-runtime block at the end; empty for every clone cell.
+DOC_ARGS=()
 run_doctor() {
   set +e
   # Deliberate cross-harness poison. Before the doctor scrubbed these carriers, the
@@ -237,7 +239,7 @@ run_doctor() {
   DOC_OUT="$(PI_SESSION_ID=ambient-pi-session-must-not-win \
     PI_AGENT_ID=ambient-pi-agent/must-not-win \
     ENTWURF_META_SENDER_MARKER="$TMP/ambient-sender-marker-must-not-win.json" \
-    bash "$REPO/scripts/meta-bridge-doctor.sh" 2>&1)"
+    bash "$REPO/scripts/meta-bridge-doctor.sh" ${DOC_ARGS[@]+"${DOC_ARGS[@]}"} 2>&1)"
   DOC_RC=$?
   set -e
 }
@@ -712,6 +714,89 @@ if [ "$DOC_RC" -eq 0 ]; then
 else
   bad "doctor stayed red after reverting every mutation (a restore is incomplete):"$'\n'"$(printf '%s\n' "$DOC_OUT" | grep -E '^  FAIL' | sed 's/^/        /')"
 fi
+
+# --- 6. #136: a Herdr plugin activation's ABSOLUTE wiring ---------------------
+# The plugin activation runs the same installer with ENTWURF_PLUGIN_RUNTIME, so Claude's MCP and
+# statusLine name absolute bins under the stable runtime. The doctor must learn that mode from the
+# activation ledger and certify the wiring, not call it drift. FIXTURE HONESTY: the two runtime
+# bins are wrappers onto this checkout's own launcher and statusline, and the ledger is written by
+# the shipped writer with a fixture artifact identity; no npm runtime is installed here.
+echo "[plugin-runtime] the installer's absolute wiring, certified through the activation ledger"
+ACTIVE="$XDG_DATA_HOME/entwurf/herdr-plugin/runtime/active"
+mkdir -p "$ACTIVE/node_modules/.bin" "$ACTIVE/node_modules/@junghanacs/entwurf"
+printf '#!/usr/bin/env bash\nexec bash "%s/mcp/entwurf-bridge/start.sh" "$@"\n' "$REPO" > "$ACTIVE/node_modules/.bin/entwurf-bridge"
+printf '#!/usr/bin/env bash\nexec "%s/scripts/meta-bridge-statusline.sh" "$@"\n' "$REPO" > "$ACTIVE/node_modules/.bin/entwurf-statusline"
+chmod +x "$ACTIVE/node_modules/.bin/entwurf-bridge" "$ACTIVE/node_modules/.bin/entwurf-statusline"
+if ENTWURF_PLUGIN_RUNTIME="$ACTIVE" bash "$REPO/scripts/meta-bridge-install.sh" >"$TMP/install-plugin.log" 2>&1; then
+  ok "real meta-bridge-install.sh wires the plugin-runtime mode (absolute bins under the sandbox stable root)"
+else
+  bad "plugin-runtime install-meta-bridge failed in the sandbox:"$'\n'"$(sed 's/^/        install| /' "$TMP/install-plugin.log")"
+fi
+rm -rf "$PLANTED"
+mkdir -p "$PLANTED"
+cp -r "$ASM/$PLUGIN/." "$PLANTED/"
+write_ledger() {
+  node --input-type=module - "$REPO/scripts/herdr-activation.mjs" "$ACTIVE" "$1" <<'JS'
+import { pathToFileURL } from "node:url";
+const [modPath, active, backends] = process.argv.slice(2);
+const m = await import(pathToFileURL(modPath).href);
+const states = Object.fromEntries(backends.split(",").map((b) => [b, "active"]));
+m.writeLedger(m.resolveActivationLayout(process.env), m.ledgerBody({
+	phase: "active",
+	runtimeRoot: active,
+	artifactIdentity: { kind: "npm", name: "@junghanacs/entwurf", version: "0.34.1", expectedIntegrity: "sha512-fixture", observedDigest: `sha256-${"c".repeat(64)}` },
+	roots: m.resolveComponentRoots(process.env),
+	states,
+}));
+JS
+}
+write_ledger "pi,claude-code"
+DOC_ARGS=(--plugin-runtime "$ACTIVE")
+
+# P1 — the plugin wiring the installer wrote is certified: PASS, and the doctor names its mode.
+# The [QK:] token lives on the `bad` line only (see M9b).
+run_doctor
+if [ "$DOC_RC" -eq 0 ] && printf '%s\n' "$DOC_OUT" | grep -q 'meta-bridge doctor: PASS' \
+   && printf '%s\n' "$DOC_OUT" | grep -qF "mode: plugin-runtime $ACTIVE (activation ledger)" \
+   && printf '%s\n' "$DOC_OUT" | grep -qF 'live mcpServers.entwurf-bridge equals desired_mcp()'; then
+  ok "plugin-runtime wiring reaches doctor PASS through the activation ledger, and the doctor names that mode"
+else
+  bad "[QK:DOCTOR-PLUGIN-MODE-GREEN] the plugin activation's absolute wiring did NOT reach PASS (exit $DOC_RC):"$'\n'"$(printf '%s\n' "$DOC_OUT" | grep -E '^  (FAIL|WARN)|mode:' | sed 's/^/        /')"
+fi
+
+# P2 — genuine drift stays red in plugin mode: an absolute statusLine under the same root, but not ours.
+cp "$CLAUDE_CONFIG_DIR/settings.json" "$TMP/settings-p2.bak"
+python3 - "$CLAUDE_CONFIG_DIR/settings.json" "$ACTIVE/node_modules/.bin/evil" <<'PY'
+import json, sys
+p = sys.argv[1]
+d = json.load(open(p, encoding="utf-8"))
+d["statusLine"]["command"] = sys.argv[2]
+json.dump(d, open(p, "w", encoding="utf-8"), indent=2)
+PY
+expect_red "plugin-mode statusLine repointed under the same runtime root" "statusLine.command drifted"
+cp "$TMP/settings-p2.bak" "$CLAUDE_CONFIG_DIR/settings.json"
+
+# P3 — a ledger that did not activate claude-code admits no plugin mode. The refusal is named,
+# and it is NOT an early exit: the store and live-owner sections still run (Hard Rule 13).
+write_ledger "pi"
+expect_red "override against a ledger that never activated claude-code" "doctor-plugin-runtime-unadmitted"
+# Each of the three expectation sites says UNKNOWN for that reason (never a bare-bin fallback),
+# and the runtime axes still run: the live command still DELIVERS, the store and owner join report.
+for claim in \
+  'managed settings/MCP keyset is UNKNOWN: the expectation mode was not established' \
+  'statusLine expectation is UNKNOWN: the expectation mode was not established' \
+  'live-vs-desired MCP ownership is UNKNOWN: the expectation mode was not established' \
+  'live bridge command DELIVERS' \
+  '[meta-record store]' \
+  '[live Claude MCP owner join]'
+do
+  if printf '%s\n' "$DOC_OUT" | sed -n '/expectation mode refused: doctor-plugin-runtime-unadmitted/,$p' | grep -qF "$claim"; then
+    ok "after the mode refusal the doctor still reports: $claim"
+  else
+    bad "after the mode refusal the doctor never reported: $claim"
+  fi
+done
+write_ledger "pi,claude-code"
 
 echo
 if [ "$fail" -eq 0 ]; then echo "check-meta-doctor-oracle: PASS"; else echo "check-meta-doctor-oracle: FAIL (see above)"; exit 1; fi

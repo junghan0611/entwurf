@@ -28,7 +28,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { artifactStage, certifyArtifactIdentity, sameArtifactRequest } from "./herdr-runtime.mjs";
+import { artifactStage, certifyArtifactIdentity, resolveRuntimeLayout, sameArtifactRequest } from "./herdr-runtime.mjs";
 
 /** Ledger format. Bump only with a reader that understands both. */
 export const ACTIVATION_SCHEMA_VERSION = 2;
@@ -500,6 +500,55 @@ export function piStatePaths(env) {
 		packageState: path.join(root, "pi-package", "install-state.json"),
 		providerState: path.join(root, "pi-provider", "install-state.json"),
 	});
+}
+
+/**
+ * Which expectations `doctor-meta-bridge` must compute (#136): the stable active root when this
+ * host's Claude wiring was written by a plugin activation, otherwise null (clone / installed).
+ *
+ * The plugin activation writes Claude's MCP and statusLine as ABSOLUTE commands under the stable
+ * runtime. A doctor that does not know that expects bare bins and calls correct wiring drifted. The
+ * mode is read from the record that authorised the wiring, the certified activation ledger, never
+ * from settings, environment or a path guess:
+ *   - phase `active`, `claude-code` activated, and the ledger's runtimeRoot is THIS host's stable root;
+ *   - without an override, only a doctor running FROM that runtime's package derives the mode. A
+ *     checkout's doctor returns null without opening the ledger, so it never adopts plugin wiring;
+ *   - an explicit override must agree with the ledger, or it is refused.
+ * An absent ledger is "not plugin mode"; an uncertified one throws the reader's own refusal.
+ */
+export function resolveDoctorPluginRuntime(env, { repo, override } = {}) {
+	const activeDir = resolveRuntimeLayout(env).activeDir;
+	if (override === undefined) {
+		const runtimePackage = path.join(activeDir, "node_modules", "@junghanacs", "entwurf");
+		let same = false;
+		try {
+			same = fs.realpathSync(repo) === fs.realpathSync(runtimePackage);
+		} catch {
+			// Bounded probe: no runtime package at the stable address means this repo is not it.
+			same = false;
+		}
+		if (!same) return null;
+	}
+	const ledger = readCertifiedLedger(resolveActivationLayout(env));
+	if (ledger === null) {
+		if (override === undefined) return null;
+		throw new ActivationError(
+			"doctor-plugin-runtime-unadmitted",
+			"--plugin-runtime was given but no activation ledger exists",
+		);
+	}
+	const refuse = (clause) => {
+		throw new ActivationError("doctor-plugin-runtime-unadmitted", clause);
+	};
+	if (ledger.phase !== "active") refuse(`activation ledger phase is ${ledger.phase}, not active`);
+	if (!ledger.activatedBackends.includes("claude-code")) refuse("the activation ledger did not activate claude-code");
+	if (ledger.runtimeRoot !== activeDir) {
+		refuse(`the ledger's runtimeRoot ${ledger.runtimeRoot} is not this host's stable runtime root ${activeDir}`);
+	}
+	if (override !== undefined && override !== activeDir) {
+		refuse(`--plugin-runtime ${override} does not name the ledger's runtime root ${activeDir}`);
+	}
+	return activeDir;
 }
 
 /** A component row, in the one shape the certifier accepts. */

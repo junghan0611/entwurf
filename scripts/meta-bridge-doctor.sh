@@ -17,6 +17,18 @@ MKT_NAME="meta-bridge-local"
 PLUGIN="entwurf-meta-receive"
 CLAUDE_CFG="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# #136: the one argument. A Herdr plugin activation wires Claude with ABSOLUTE commands under the
+# stable runtime; the mode is normally derived from the activation ledger (see [expectation mode]),
+# and this override exists so a checkout's doctor can name that root. It must agree with the ledger.
+PLUGIN_RUNTIME_OVERRIDE=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --plugin-runtime)
+      [ -n "${2:-}" ] || { echo "meta-bridge-doctor: --plugin-runtime requires a value" >&2; exit 2; }
+      PLUGIN_RUNTIME_OVERRIDE="$2"; shift 2 ;;
+    *) echo "usage: meta-bridge-doctor.sh [--plugin-runtime <stable active runtime root>]" >&2; exit 2 ;;
+  esac
+done
 # The live artifact lives under the XDG data dir (dev clone and installed package
 # alike — never the checkout). Prefer the path RECORDED in install-state so a doctor
 # run under a different XDG_DATA_HOME than install still hashes the REAL assembled
@@ -110,6 +122,44 @@ if command -v node >/dev/null; then
   if [ "${MJ:-0}" -ge 24 ]; then ok "node $NV (>= 24, supported axis)"; else bad "node $NV too old (need >= 24; there is no Node 22 lane)"; fi
 else bad "node not on PATH"; fi
 
+echo "[expectation mode]"
+# #136: which expectations the three desired-state calls below compute. The judgement is the
+# activation owner's (`resolveDoctorPluginRuntime`, herdr-activation.mjs) reached through one narrow
+# call, so no second reader of the ledger exists. A refusal is NOT a fallback to bare expectations:
+# each call site then reports UNKNOWN, and every other section still runs (Hard Rule 13).
+PLUGIN_ARGS=()
+MODE_ERR=""
+if ! command -v node >/dev/null; then
+  MODE_ERR="node not on PATH, so the activation ledger could not be read"
+  bad "expectation mode is UNKNOWN: $MODE_ERR"
+else
+  MODE_STDERR="$(mktemp -t entwurf-doctor-mode.XXXXXX)"
+  set +e
+  if [ -n "$PLUGIN_RUNTIME_OVERRIDE" ]; then
+    MODE_ROOT="$(node "$REPO/scripts/herdr-doctor-mode.mjs" "$REPO" "$PLUGIN_RUNTIME_OVERRIDE" 2>"$MODE_STDERR")"
+  else
+    MODE_ROOT="$(node "$REPO/scripts/herdr-doctor-mode.mjs" "$REPO" 2>"$MODE_STDERR")"
+  fi
+  MODE_RC=$?
+  set -e
+  MODE_DETAIL="$(tr '\n' ' ' < "$MODE_STDERR" | cut -c1-400)"
+  rm -f "$MODE_STDERR"
+  if [ "$MODE_RC" -eq 3 ]; then
+    MODE_ERR="$MODE_DETAIL"
+    bad "expectation mode refused: $MODE_ERR"
+  elif [ "$MODE_RC" -ne 0 ]; then
+    MODE_ERR="herdr-doctor-mode.mjs exited $MODE_RC: $MODE_DETAIL"
+    bad "expectation mode is UNKNOWN: $MODE_ERR"
+  elif [ -n "$MODE_ROOT" ]; then
+    PLUGIN_ARGS=(--plugin-runtime "$MODE_ROOT")
+    ok "mode: plugin-runtime $MODE_ROOT (activation ledger)"
+  elif [ "$LIB_EXT" = "js" ]; then
+    ok "mode: installed (no activation ledger, or this package is not the plugin runtime)"
+  else
+    ok "mode: clone (this checkout is not the plugin runtime)"
+  fi
+fi
+
 echo "[managed config state]"
 if command -v python3 >/dev/null; then
   # state.py check is the effect-based keyset-survival guard: it asserts every
@@ -123,7 +173,9 @@ if command -v python3 >/dev/null; then
   # which key drifted — silent instead of fail-loud. As an `if` condition the
   # substitution's nonzero status is consumed (set -e suspended), so we always
   # reach the detail. stderr (drift detail) is captured via `2>&1 >/dev/null`.
-  if CHECK_ERR="$(python3 "$REPO/scripts/meta-bridge-state.py" check --repo "$REPO" --asm "$ASM" 2>&1 >/dev/null)"; then
+  if [ -n "$MODE_ERR" ]; then
+    bad "managed settings/MCP keyset is UNKNOWN: the expectation mode was not established ($MODE_ERR)"
+  elif CHECK_ERR="$(python3 "$REPO/scripts/meta-bridge-state.py" check --repo "$REPO" --asm "$ASM" ${PLUGIN_ARGS[@]+"${PLUGIN_ARGS[@]}"} 2>&1 >/dev/null)"; then
     ok "state file present and managed settings/MCP keyset survives intact"
   else
     bad "managed settings/MCP keyset missing or overwritten — another consumer may have clobbered a pi-owned key. Re-run ./run.sh install-meta-bridge. Drift detail:"
@@ -565,25 +617,29 @@ except Exception:
     print('')
 PY
 )"
-  EXPECTED_STATUSLINE="$(python3 "$REPO/scripts/meta-bridge-state.py" desired-statusline --repo "$REPO" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("command", ""))')"
-  if [ "$STATUSLINE_CMD" = "$EXPECTED_STATUSLINE" ]; then ok "statusLine.command matches expected (dev: checkout path; installed: entwurf-statusline bin shim): $STATUSLINE_CMD"; else bad "statusLine.command drifted (got '$STATUSLINE_CMD', expected '$EXPECTED_STATUSLINE')"; fi
-  if [[ "$EXPECTED_STATUSLINE" == */* ]]; then
-    if [ -x "$EXPECTED_STATUSLINE" ]; then ok "statusline executable"; else bad "statusline script not executable: $EXPECTED_STATUSLINE"; fi
-  elif command -v "$EXPECTED_STATUSLINE" >/dev/null 2>&1; then
-    ok "statusline bin resolves on PATH: $(command -v "$EXPECTED_STATUSLINE")"
+  if [ -n "$MODE_ERR" ]; then
+    bad "statusLine expectation is UNKNOWN: the expectation mode was not established ($MODE_ERR)"
   else
-    bad "statusline bin not on PATH: $EXPECTED_STATUSLINE"
+    EXPECTED_STATUSLINE="$(python3 "$REPO/scripts/meta-bridge-state.py" desired-statusline --repo "$REPO" ${PLUGIN_ARGS[@]+"${PLUGIN_ARGS[@]}"} | python3 -c 'import json,sys; print(json.load(sys.stdin).get("command", ""))')"
+    if [ "$STATUSLINE_CMD" = "$EXPECTED_STATUSLINE" ]; then ok "statusLine.command matches expected (dev: checkout path; installed: entwurf-statusline bin shim): $STATUSLINE_CMD"; else bad "statusLine.command drifted (got '$STATUSLINE_CMD', expected '$EXPECTED_STATUSLINE')"; fi
+    if [[ "$EXPECTED_STATUSLINE" == */* ]]; then
+      if [ -x "$EXPECTED_STATUSLINE" ]; then ok "statusline executable"; else bad "statusline script not executable: $EXPECTED_STATUSLINE"; fi
+    elif command -v "$EXPECTED_STATUSLINE" >/dev/null 2>&1; then
+      ok "statusline bin resolves on PATH: $(command -v "$EXPECTED_STATUSLINE")"
+    else
+      bad "statusline bin not on PATH: $EXPECTED_STATUSLINE"
+    fi
+    SAMPLE_STATUSLINE_OUT="$(printf '%s' '{"session_id":"doctor-no-record","workspace":{"current_dir":"/tmp"},"model":{"id":"claude-sonnet-5"},"context_window":{"context_window_size":200000,"used_percentage":1,"current_usage":{"input_tokens":1}}}' | "$EXPECTED_STATUSLINE" 2>/dev/null || true)"
+    # The identity row may carry the #98 B unread badge between `cc` and the model letter:
+    # ` ✉N` when mail is waiting, nothing when the mailbox is empty, ` ✉?` when the count
+    # could not be taken. All three are healthy renders, so the shape test admits any of them.
+    if [ "$(printf '%s\n' "$SAMPLE_STATUSLINE_OUT" | wc -l | tr -d ' ')" = "2" ] && printf '%s\n' "$SAMPLE_STATUSLINE_OUT" | sed -n '1p' | grep -q 'tmp' && printf '%s\n' "$SAMPLE_STATUSLINE_OUT" | sed -n '2p' | grep -q '🪛' && printf '%s\n' "$SAMPLE_STATUSLINE_OUT" | sed -n '2p' | grep -qE ' cc( ✉([0-9]+|\?))? \| s'; then ok "statusline synthetic execution emits two rows (work context + identity)"; else bad "statusline synthetic execution failed or omitted two-row work/identity marker"; fi
+    # The synthetic feeds a session_id with no meta-record, so the garden id does not
+    # resolve and there is no mailbox to count. `✉?` is the required answer: a statusline
+    # that drew nothing there would be claiming "no mail" about a mailbox it never opened —
+    # the exact silence #98 was opened to remove.
+    if printf '%s\n' "$SAMPLE_STATUSLINE_OUT" | sed -n '2p' | grep -q '✉?'; then ok "statusline badge distinguishes 'could not count' (✉?) from zero on the no-record synthetic"; else bad "statusline badge omitted ✉? for the no-record synthetic (a false zero would be indistinguishable from an empty mailbox)"; fi
   fi
-  SAMPLE_STATUSLINE_OUT="$(printf '%s' '{"session_id":"doctor-no-record","workspace":{"current_dir":"/tmp"},"model":{"id":"claude-sonnet-5"},"context_window":{"context_window_size":200000,"used_percentage":1,"current_usage":{"input_tokens":1}}}' | "$EXPECTED_STATUSLINE" 2>/dev/null || true)"
-  # The identity row may carry the #98 B unread badge between `cc` and the model letter:
-  # ` ✉N` when mail is waiting, nothing when the mailbox is empty, ` ✉?` when the count
-  # could not be taken. All three are healthy renders, so the shape test admits any of them.
-  if [ "$(printf '%s\n' "$SAMPLE_STATUSLINE_OUT" | wc -l | tr -d ' ')" = "2" ] && printf '%s\n' "$SAMPLE_STATUSLINE_OUT" | sed -n '1p' | grep -q 'tmp' && printf '%s\n' "$SAMPLE_STATUSLINE_OUT" | sed -n '2p' | grep -q '🪛' && printf '%s\n' "$SAMPLE_STATUSLINE_OUT" | sed -n '2p' | grep -qE ' cc( ✉([0-9]+|\?))? \| s'; then ok "statusline synthetic execution emits two rows (work context + identity)"; else bad "statusline synthetic execution failed or omitted two-row work/identity marker"; fi
-  # The synthetic feeds a session_id with no meta-record, so the garden id does not
-  # resolve and there is no mailbox to count. `✉?` is the required answer: a statusline
-  # that drew nothing there would be claiming "no mail" about a mailbox it never opened —
-  # the exact silence #98 was opened to remove.
-  if printf '%s\n' "$SAMPLE_STATUSLINE_OUT" | sed -n '2p' | grep -q '✉?'; then ok "statusline badge distinguishes 'could not count' (✉?) from zero on the no-record synthetic"; else bad "statusline badge omitted ✉? for the no-record synthetic (a false zero would be indistinguishable from an empty mailbox)"; fi
 else
   bad "cannot validate statusline without python3"
 fi
@@ -669,9 +725,12 @@ PY
     [ -n "$LIVE_MCP_DESC" ] || LIVE_MCP_DESC="(unprintable live command)"
     # Ownership axis. `|| true` on the pipeline only: a state.py failure must read as
     # UNKNOWN-and-loud below, never abort the doctor before the delivery drive.
-    DESIRED_MCP="$( { python3 "$REPO/scripts/meta-bridge-state.py" desired-mcp --repo "$REPO" \
+    DESIRED_MCP=""
+    [ -n "$MODE_ERR" ] || DESIRED_MCP="$( { python3 "$REPO/scripts/meta-bridge-state.py" desired-mcp --repo "$REPO" ${PLUGIN_ARGS[@]+"${PLUGIN_ARGS[@]}"} \
       | python3 -c 'import json,sys; print(json.dumps(json.load(sys.stdin), sort_keys=True))'; } 2>/dev/null || true)"
-    if [ -z "$DESIRED_MCP" ]; then
+    if [ -n "$MODE_ERR" ]; then
+      bad "live-vs-desired MCP ownership is UNKNOWN: the expectation mode was not established ($MODE_ERR)"
+    elif [ -z "$DESIRED_MCP" ]; then
       bad "could not compute the desired MCP entry (meta-bridge-state.py desired-mcp failed) — live-vs-desired ownership is UNKNOWN"
     elif [ "$LIVE_MCP" = "$DESIRED_MCP" ]; then
       ok "live mcpServers.entwurf-bridge equals desired_mcp() for this mode (installed: bin shim; clone: this checkout's start.sh)"

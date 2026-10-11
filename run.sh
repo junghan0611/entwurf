@@ -7634,6 +7634,8 @@ case "$cmd" in
     # global plugin install, USER MCP reach, meta-record store integrity, hook log
     # no-ERROR, and actual SessionStart creation evidence. A plugin present with
     # zero claude-code meta-records is a SILENT MISS -> non-zero exit.
+    # #136: the only argument is `--plugin-runtime <root>`; shift the verb so the doctor sees it.
+    shift || true
     (cd "$REPO_DIR" && bash scripts/meta-bridge-doctor.sh "$@")
     ;;
   install-copilot-bridge)
