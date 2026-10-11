@@ -4,6 +4,36 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+## v2026.10.11-herdr.0.34.2 — Herdr Entwurf plugin 0.34.2
+
+A Herdr plugin snapshot, not a core release: no package version, npm artifact or core tag moves.
+
+### Herdr plugin
+
+- **Runtime re-pinned to the published 0.34.2 (#136).** `plugins/herdr/runtime-lock.json` returns
+  from the `herdr-checkout` verification carrier the 0.34.2 preparation rode to the npm production
+  source: `@junghanacs/entwurf@0.34.2` with the registry's measured sha512
+  (`sha512-RbEkv3Ha…s/5ksg==`). The manifest version moves 0.34.1 → 0.34.2; `min_herdr_version`
+  stays 0.9.0. The checkout window is closed. A plugin host now receives the #136 fix: its
+  runtime's `doctor-meta-bridge` derives plugin-runtime mode from the activation ledger and
+  certifies the activation's absolute wiring.
+- **Upgrading.** A host on the npm 0.34.1 snapshot stays on the npm source, so its next
+  `herdr plugin install` is a same-source rebind under the plugin README's conditions. A host that
+  installed from `main` while the lock named `herdr-checkout` needs `herdr-plugin-deactivate` by
+  its absolute runtime path, then `herdr plugin install` again.
+
+### Verification
+
+- **Registry, measured before the pin.** `npm view` reports version 0.34.2 with `latest` →
+  0.34.2 and `repair` → 0.12.8-repair.1. The downloaded tarball is 13595042 bytes with sha256
+  `e75efb0c…c009`, equal to the artifact accepted as 0.34.2. Its sha512, computed independently
+  from those bytes, equals `dist.integrity`. A sandboxed `pi install
+  npm:@junghanacs/entwurf@0.34.2` resolved the bridge to the registry install and listed the
+  `entwurf` models.
+- The focused Herdr gates, `pnpm check`, the public `main` install journey and the exact-SHA CI run
+  on the pushed commit will be recorded in the GitHub release and #136, not claimed here. No gate, mutant or matrix changed, so no
+  qualification PARTIAL is owed.
+
 ## 0.34.2 - 2026-10-11
 
 ### Release coordination
