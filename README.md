@@ -6,6 +6,11 @@ transcript, authentication, tools, or runtime.
 
 ![entwurf — a forged screwdriver for garden-citizen dispatch](docs/assets/entwurf-hero.jpg)
 
+**Pi ↔ native Claude Code inside the [Herdr workbench](#herdr-workbench).**
+A recorded source-checkout demo: callback → task → native Bash → reply.
+
+![Pi and native Claude Code collaborating inside Herdr](docs/assets/entwurf-demo.gif)
+
 [![npm](https://img.shields.io/npm/v/@junghanacs/entwurf?logo=npm)](https://www.npmjs.com/package/@junghanacs/entwurf) · maintained by [junghanacs.com](https://junghanacs.com/)
 
 A sibling is a visible session with its own runtime boundary, not a disposable
