@@ -4,6 +4,68 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+## 0.34.2 - 2026-10-11
+
+### Release coordination
+
+- **A patch cut for #136.** Coordinated by the Claude Code Fable citizen `20261011T132613-9a46b6`,
+  implemented by Claude Code Opus `20261008T094901-5d295e` as sole writer on the thinkpad that
+  holds the failing installation, and independently reviewed by a pi `gpt-6.1-sol` sibling. GLG
+  authorized the commits, main and this release. This section is written at prepare time: the
+  `check:full` and exact-SHA CI results will be recorded at make time in the GitHub release and
+  #136, not claimed here.
+- **GLG waived the LIVE `release-gate --cut` for this cut** (doctor-only change, no LIVE surface
+  touched). The deterministic floor `check:full` and the exact-SHA CI body are this release's
+  evidence, and acceptance 4 (host rebind + new Claude session) is owed after publication. This is
+  not a PASS and not a standing waiver.
+- **The plugin runtime lock rides `herdr-checkout` for this window.** `certifyLockCoherence`
+  (`scripts/herdr-runtime.mjs:353-361`) refuses an npm lock whose version differs from the
+  checkout's package, so `plugins/herdr/runtime-lock.json` leaves npm 0.34.1 for the closed
+  `herdr-checkout` source from this prep until the post-publish npm 0.34.2 re-pin; the plugin
+  manifest moves with that re-pin. A host already on npm 0.34.1 is unaffected until then and
+  upgrades same-source; a host that installs the plugin from `main` inside the window gets a
+  checkout-source runtime and needs `herdr-plugin-deactivate` before the npm reinstall.
+
+### Fixed
+
+- **`doctor-meta-bridge` certifies a Herdr plugin installation (#136).** The plugin activation
+  writes Claude's MCP and statusLine as absolute commands under the stable runtime, but the doctor
+  computed its three expectations (`meta-bridge-state.py check`, `desired-statusline`,
+  `desired-mcp`) without that mode. It expected bare bins and reported correct wiring as drift, so
+  no plugin host could reach a green doctor. The doctor now learns its mode from the certified
+  activation ledger through one narrow call (`resolveDoctorPluginRuntime`,
+  `scripts/herdr-doctor-mode.mjs`). Derived plugin mode needs all four clauses:
+  - the ledger phase is `active`;
+  - `claude-code` was activated;
+  - the ledger's runtimeRoot is this host's stable root;
+  - the doctor runs from that runtime's package.
+  A flagless checkout doctor never opens the ledger. The explicit `--plugin-runtime <root>`
+  override bypasses only the repo clause and still reads and certifies the ledger, which it must
+  agree with. A refusal reports each expectation as UNKNOWN, never a bare-bin fallback, and
+  the runtime sections still run. The doctor prints the mode it used on one line.
+- **`run.sh doctor-meta-bridge` forwards its arguments.** The verb was never shifted, so it rode
+  into the doctor's argv; the override was unreachable through the operator entrypoint.
+
+### Docs
+
+- **CONTRIBUTING matches the scheduling rule.** A gate, mutant or matrix change runs only its
+  affected exact-argv groups as PARTIAL receipts; the whole qualification body runs once per cut,
+  in the prepared SHA's CI. CONTRIBUTING still told a gate-changing PR to run the body itself.
+
+### Verification
+
+- New cells: `check-herdr-activation` D1-D6 and `check-meta-doctor-oracle` P1-P3. The existing
+  clone control is unchanged (P4). Six mutants joined the `herdr-activation` lane (now 34).
+  PARTIAL receipts: herdr-activation group 33/33 and doctor-oracle group 2/2 killed, control ok.
+  No whole body ran in development.
+- **Host acceptance before publication (thinkpad, live plugin 0.34.1 wiring).** The patched
+  checkout doctor with `--plugin-runtime <stable root>` named `mode: plugin-runtime … (activation
+  ledger)`. Its only FAIL was writer-version parity, the declared non-goal of a checkout doctor on
+  a plugin host. The seven drift lines the shipped doctor printed are gone.
+- **Owed after publication.** After the plugin is re-pinned to 0.34.2 and rebound on that host, a
+  flagless runtime-absolute `doctor-meta-bridge` must exit 0 and a new Claude session must call
+  `entwurf_self`. That is what closes #136.
+
 ## v2026.10.9-herdr.0.34.1 — Herdr Entwurf plugin 0.34.1
 
 A Herdr plugin snapshot, not a core release: no package version, npm artifact or core tag moves.
