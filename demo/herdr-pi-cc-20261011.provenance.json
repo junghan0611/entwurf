@@ -1,0 +1,64 @@
+{
+	"schemaVersion": 1,
+	"scene": "whole-Herdr Pi to native Claude Code",
+	"take": "take-herdr-pi-cc-2026-10-11T11-57-22-297Z",
+	"startedAt": "2026-10-11T11:57:22.299Z",
+	"stage": "SOURCE checkout, not an npm consumer",
+	"gif": {
+		"path": "docs/assets/entwurf-demo.gif",
+		"sha256": "b686739b5c68fa458dd47c844711aea0f6ab5819eb3eb5d2850449922fa084c0",
+		"bytes": 1835518,
+		"seconds": 43.5,
+		"width": 1126,
+		"height": 764,
+		"frames": 340,
+		"captions": false
+	},
+	"cast": {
+		"sha256": "bbf8a409c58f8b48e88346d232a66ee41ac0c2acf8e605a3f568fd7d40857cf2",
+		"public": false
+	},
+	"runtime": {
+		"entwurf": "0.34.2",
+		"pi": "1.1.0",
+		"herdr": "0.9.3",
+		"gitHead": "9f4c9983fed1dd0ba619bc5a50f0f5abccefeef4",
+		"gitDirty": true,
+		"measuredPiModel": "openai-codex/gpt-6.1-sol",
+		"requestedClaudeAlias": "sonnet",
+		"measuredClaudeNativeModel": "claude-sonnet-5-5"
+	},
+	"auditedOriginalSourceSha256": {
+		"demo/take-herdr-pi-cc.ts": "f9cd30f1bb5b06236559a9f1283f0e030b300f6a17858d778c40d246327a6349",
+		"demo/lib/take-recorder.ts": "d47d824b90a7265c5ab6e7c4bf313b4f81b27cef836b4ddd15f971f3de386256",
+		"demo/render-take.ts": "f6e68157d7f8fb1f0e00a359efaa04aa30eeca1112ce2571661f39aea826b55d",
+		"demo/lib/herdr-take.ts": "57089d883323b2582aadd7f54f63cfce541f3a2c584bb6940313fbcdc940d83e"
+	},
+	"render": {
+		"aggArgs": [
+			"--idle-time-limit",
+			"2",
+			"--speed",
+			"1",
+			"--last-frame-duration",
+			"8",
+			"--font-size",
+			"14",
+			"--theme",
+			"monokai"
+		],
+		"trimmedTailEvents": 2,
+		"trimmedWhat": "recorder teardown: herdr client exit (alt-screen exit + server shut down line)",
+		"renderedAt": "2026-10-11T11:58:32.828Z",
+		"aggVersion": null,
+		"ffprobeVersion": null,
+		"toolVersionEvidence": "not recorded for this original; current versions cannot fill historical fields"
+	},
+	"limits": [
+		"Original cast, manifests and native records remain private; this tree cannot replay that capture.",
+		"The tracked command is a new LIVE take recipe, not byte-identical reproduction.",
+		"Current maintainer source is amended; original source hashes are historical observations, not a complete import-closure seal.",
+		"Operator approved the rough original pixels; this is not privacy or public-readability certification.",
+		"No claim of 0.35.0 release, published-package acceptance or future Herdr plugin observation follows from this take."
+	]
+}

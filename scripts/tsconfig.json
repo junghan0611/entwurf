@@ -27,6 +27,7 @@
 	"include": [
 		"./**/*.ts",
 		"../test/**/*.ts",
+		"../demo/**/*.ts",
 		"../pi-extensions/lib/**/*.ts",
 		// The behavior-adjacent tests the root config just excluded (#119 V2). Listed at
 		// pi-extensions/** rather than pi-extensions/lib/** so a test beside an extension

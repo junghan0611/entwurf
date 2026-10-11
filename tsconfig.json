@@ -39,6 +39,9 @@
 		"mcp",
 		"scripts",
 		"plugins",
+		// demo/ takes (#138) are strip-types scripts importing `.ts` like scripts/*; typechecked by
+		// scripts/tsconfig.json, which includes ../demo/**/*.ts — the pair moves together.
+		"demo",
 		// test/ is the vitest pilot lane (issue #62). Its files import product lib
 		// modules with explicit `.ts` extensions, so they live in the
 		// scripts/tsconfig.json fence (allowImportingTsExtensions), not the

@@ -5,7 +5,7 @@
 # retired v1 verbs (`entwurf` / `entwurf_resume` / `entwurf_send`), which the 0.12
 # cutover removed; a run would fail at scene 1. Kept for historical comparison only.
 # See demo/README.md. Scene 3's delivery proof was recovered as a deterministic gate
-# (scripts/check-bridge-delivery.ts); the v2-native retake is a post-0.12 follow-up.
+# (scripts/check-bridge-delivery.ts); current v2-native source recipes live in demo/README.md.
 #
 #
 # MODEL NOTE (2026-08-20). The model ids below are the ARCHIVED values these
@@ -28,7 +28,11 @@
 
 set -euo pipefail
 
-# ---------- config ----------
+# Hard retirement: preserve historical source, not a second runnable v1 route.
+printf '%s\n' 'entwurf demo: archived v1 peer scene refused; see demo/README.md for current source recipes.' >&2
+exit 2
+
+# ---------- historical body (unreachable) ----------
 SESSION=${SESSION:-entwurf-demo}
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 REPO_ROOT=$(cd "$SCRIPT_DIR/.." && pwd)

@@ -9,10 +9,24 @@ All notable changes to this project will be documented here. Format follows [Kee
 - **Real Pi ↔ native Claude Code collaboration in Herdr (#138).** The README now shows the
   accepted whole-workbench recording below the hero, linked to the Herdr section. The original
   GIF bytes were published without captions or a retake; recording tooling remains separate.
-- **Avoid redundant qualification for untouched data-find ranges (#137).** Push replay reads
+- **Restore maintainer demo recipes and source tooling (#138).** The checkout now carries
+  the take/renderer/helpers and Node fixtures, including the actual whole-Herdr recipe and
+  original publication provenance. A new LIVE take is distinct from the private original;
+  missing historical tool versions are not invented. Archived v1 scripts refuse before any
+  command. Every LIVE scene refuses a non-approved selector or OpenRouter redirect first, and
+  missing LIVE cannot allocate capture resources; mixed subject/terminal tails are
+  kept, absent recording cannot certify success, and rerendering preserves the original
+  take's agg input. The renderer refuses publication destinations and parent aliases;
+  publication still requires separate review and copy. Source tests have their own discovered
+  Node floor and type fence, while maintainer TypeScript stays out of the installed package.
+  Neither source tooling nor the narrow privacy scan certifies a package consumer, original
+  capture replay, or whole-host/public-readability acceptance.
+- **Avoid redundant qualification for untouched TOML find ranges (#137).** Push replay reads
   manifests at the named HEAD and checks every joined find span on both blobs. Only exact-once,
-  unmoved, untouched data spans may skip; code/unknown subjects, signature sources and deciding
-  machinery remain file-level, and uncertainty runs the body. The FULL floor and exact-SHA core
+  unmoved, untouched TOML spans may skip. Markdown/JSON data stays file-level, because a
+  shorter presence literal or a later duplicate JSON key outside the find can re-satisfy an
+  oracle. Code/unknown subjects, signature sources and deciding machinery also remain
+  file-level, and uncertainty runs the body. The FULL floor and exact-SHA core
   release qualification obligation are unchanged. These changes belong in the next 0.35.0 story;
   no version bump, release cut or npm publication is part of this landing.
 

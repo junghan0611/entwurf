@@ -1,0 +1,155 @@
+{
+	"schemaVersion": 1,
+	"lane": "demo-reproducibility",
+	"mutants": [
+		{
+			"claim": "DEMO-BASELINE-ARCHIVED",
+			"title": "the archived baseline resumes launching the retired scene and can overwrite the approved GIF",
+			"subject": "demo/demo-baseline.sh",
+			"find": ["exit 2"],
+			"replace": [":"],
+			"gate": ["bash", "run.sh", "check-demo-reproducibility"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:DEMO-BASELINE-ARCHIVED]",
+			"signatureSource": "demo/maintenance-guards.test.ts"
+		},
+		{
+			"claim": "DEMO-PEER-ARCHIVED",
+			"title": "the archived peer scene becomes a second runnable v1 route again",
+			"subject": "demo/demo.sh",
+			"find": ["exit 2"],
+			"replace": [":"],
+			"gate": ["bash", "run.sh", "check-demo-reproducibility"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:DEMO-PEER-ARCHIVED]",
+			"signatureSource": "demo/maintenance-guards.test.ts"
+		},
+		{
+			"claim": "DEMO-LIVE-OPT-IN",
+			"title": "the Herdr scene reaches preflight without the explicit LIVE grant",
+			"subject": "demo/take-herdr-pi-cc.ts",
+			"find": ["if (process.env.LIVE !== \"1\")"],
+			"replace": ["if (false)"],
+			"gate": ["bash", "run.sh", "check-demo-reproducibility"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:DEMO-LIVE-OPT-IN]",
+			"signatureSource": "demo/maintenance-guards.test.ts"
+		},
+		{
+			"claim": "DEMO-PUBLISHED-PROVENANCE",
+			"title": "the tracked provenance names another GIF digest while the approved pixels stay unchanged",
+			"subject": "demo/herdr-pi-cc-20261011.provenance.json",
+			"find": ["\t\t\"sha256\": \"b686739b5c68fa458dd47c844711aea0f6ab5819eb3eb5d2850449922fa084c0\","],
+			"replace": ["\t\t\"sha256\": \"0000000000000000000000000000000000000000000000000000000000000000\","],
+			"gate": ["bash", "run.sh", "check-demo-reproducibility"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:DEMO-PUBLISHED-PROVENANCE]",
+			"signatureSource": "demo/maintenance-guards.test.ts"
+		},
+		{
+			"claim": "DEMO-PACK-SOURCE-ONLY",
+			"title": "a directory allowlist ships maintainer TypeScript as if it were an installed entrypoint",
+			"subject": "package.json",
+			"find": [
+				"\t\t\"demo/README.md\",",
+				"\t\t\"demo/herdr-pi-cc-20261011.provenance.json\",",
+				"\t\t\"!demo/**/*.ts\","
+			],
+			"replace": ["\t\t\"demo/\","],
+			"gate": ["bash", "run.sh", "check-demo-reproducibility"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:DEMO-PACK-SOURCE-ONLY]",
+			"signatureSource": "demo/maintenance-guards.test.ts"
+		},
+		{
+			"claim": "DEMO-PUBLICATION-DESTINATION",
+			"title": "a live-pass renderer can overwrite publication assets through a direct or aliased destination",
+			"subject": "demo/render-take.ts",
+			"find": ["\tif (isPublicationOutput(out))"],
+			"replace": ["\tif (false)"],
+			"gate": ["bash", "run.sh", "check-demo-reproducibility"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:DEMO-PUBLICATION-DESTINATION]",
+			"signatureSource": "demo/maintenance-guards.test.ts"
+		},
+		{
+			"claim": "DEMO-TMUX-SUBJECT-TAIL",
+			"title": "the tmux tail trimmer drops real subject text merged with the terminal teardown",
+			"subject": "demo/render-take.ts",
+			"find": ["\t\tisOnlyCsi(teardown[2])"],
+			"replace": ["\t\ttrue"],
+			"gate": ["bash", "run.sh", "check-demo-reproducibility"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:DEMO-TMUX-SUBJECT-TAIL]",
+			"signatureSource": "demo/render-take.test.ts"
+		},
+		{
+			"claim": "DEMO-RECORDING-REQUIRED",
+			"title": "no recorder means no assertion, so an empty capture again certifies live-pass",
+			"subject": "demo/lib/take-recorder.ts",
+			"find": [
+				"\t\tthis.step(",
+				"\t\t\t\"the recording ran until the take ended and the recorder stopped cleanly (no cut, no signal, exit 0)\","
+			],
+			"replace": [
+				"\t\tif (recorder) this.step(",
+				"\t\t\t\"the recording ran until the take ended and the recorder stopped cleanly (no cut, no signal, exit 0)\","
+			],
+			"gate": ["bash", "run.sh", "check-demo-reproducibility"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:DEMO-RECORDING-REQUIRED]",
+			"signatureSource": "demo/lib/take-recorder.test.ts"
+		},
+		{
+			"claim": "DEMO-TEST-DISCOVERY",
+			"title": "a dead discovery glob produces no tests but the demo floor is still invoked",
+			"subject": "run.sh",
+			"find": [
+				"  while IFS= read -r f; do [ -n \"$f\" ] && tests+=(\"$f\"); done < <(cd \"$REPO_DIR\" && find demo -type f -name '*.test.ts' -print | LC_ALL=C sort)"
+			],
+			"replace": [
+				"  while IFS= read -r f; do [ -n \"$f\" ] && tests+=(\"$f\"); done < <(cd \"$REPO_DIR\" && find demo -type f -name '*.test.NO-MATCH' -print | LC_ALL=C sort)"
+			],
+			"gate": ["bash", "run.sh", "check-demo-reproducibility"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:DEMO-TEST-DISCOVERY]",
+			"signatureSource": "run.sh"
+		},
+		{
+			"claim": "DEMO-NO-EARLY-RESOURCES",
+			"title": "a Take allocated before missing-LIVE refusal writes resources without calling any fake tool",
+			"subject": "demo/take-pi-cc.ts",
+			"find": ["if (process.env.LIVE !== \"1\") {"],
+			"replace": [
+				"if (process.env.LIVE !== \"1\") {",
+				"\tnew Take({ label: LABEL, repo: REPO, cols: 132, rows: 38 });"
+			],
+			"gate": ["bash", "run.sh", "check-demo-reproducibility"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:DEMO-NO-EARLY-RESOURCES]",
+			"signatureSource": "demo/maintenance-guards.test.ts"
+		},
+		{
+			"claim": "DEMO-ORIGINAL-RENDER-INPUT",
+			"title": "rerendering replaces the original approved GIF's exact agg input inside the take directory",
+			"subject": "demo/render-take.ts",
+			"find": ["\tconst renderCast = path.join(path.dirname(out), `.${path.basename(out)}.${tag}.render.cast`);"],
+			"replace": ["\tconst renderCast = path.join(takeDir, \"take.render.cast\");"],
+			"gate": ["bash", "run.sh", "check-demo-reproducibility"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:DEMO-ORIGINAL-RENDER-INPUT]",
+			"signatureSource": "demo/render-take.test.ts"
+		},
+		{
+			"claim": "DEMO-RAIL-POLICY",
+			"title": "the pi-durable scene stops refusing an OpenRouter base-URL redirect, so LIVE=1 could spend a sibling turn through OpenRouter",
+			"subject": "demo/take-pi-durable.ts",
+			"find": ["const routedVia = openRouterOverride(process.env);"],
+			"replace": ["const routedVia = null;"],
+			"gate": ["bash", "run.sh", "check-demo-reproducibility"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:DEMO-RAIL-POLICY]",
+			"signatureSource": "demo/maintenance-guards.test.ts"
+		}
+	]
+}

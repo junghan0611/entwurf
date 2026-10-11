@@ -25,7 +25,11 @@
 
 set -euo pipefail
 
-# ---------- config ----------
+# Hard retirement: the preserved v1 body must never launch or overwrite today's approved GIF.
+printf '%s\n' 'entwurf demo: archived v1 baseline refused; see demo/README.md for the source-only Herdr recipe.' >&2
+exit 2
+
+# ---------- historical body (unreachable) ----------
 SESSION=${SESSION:-entwurf-baseline-demo}
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 REPO_ROOT=$(cd "$SCRIPT_DIR/.." && pwd)

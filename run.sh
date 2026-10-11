@@ -134,6 +134,7 @@ Usage:
   ./run.sh check-omp-birth-hook       # #87 gate: drives the real OMP assembler into a temp dir, imports the ASSEMBLED index.ts into a MOCK omp host and fires session_start/session_switch. tui mints one backend:"omp" record + a sender marker keyed to the host's OWN pid (the one-process join) + the garden id on the status line; print/rpc/json mint NOTHING (hasUI is true on the rpc rows, as in the vendor); switch attaches on the same native id and mints the replacement on a new one; the CERTIFIED receiver reader still finds no marker. Also the four-root joint binding: extension and omp-labeled bridge child resolve the same sessions/mailbox/senders/receivers bundle against test-built literals (never the production resolver as its own oracle), under a poisoned PI_CODING_AGENT_DIR and under four distinct ENTWURF_META_* overrides; the override grammar is absolute-or-~ and both halves plus the doctor refuse anything else by name; and a drifted provenance label selects no root policy at all. Hermetic; no omp, no model turn
   ./run.sh check-pi-durable-contact   # #129 L-identity gate, CHECKOUT-ONLY (an installed package refuses it in run_ts). Opens the REAL durable app from THIS checkout's verified carrier (pi/pi-durable/carrier/ under its resolver, against the checkout's pinned pi SDK set — refused by name first) with the pi-durable contact, births the citizen and runs its tools adapter-direct through a privately emitted branch bridge (ENTWURF_PI_DURABLE_BRIDGE_ENTRY; its registry must match this checkout). Matrix roots {default, explicit} x {fresh, --continue}: one record keyed by the durable session dir, sender marker on the spawned host pid, exactly one bridge child whose /proc PPID is that host, poisoned identity carriers kept from it, its four root carriers bound to the roots written, the receiver ARMED (raw marker owned by the host pid + start key as pi-durable-host, joined to the sender marker; removed on close), self = the record and replyable, peers from an outside bridge, same garden id on reopen; the bundle's compiled owner join must admit pi-durable-host. Reaps only the host/bridges it owns on any failure. Harness-bypassed: no model turn, no ToolTask. Missing inputs → SKIP (97), never a pass
   ./run.sh check-pi-durable-send      # #129 L-send FIRST CELL, CHECKOUT-ONLY. Same input as check-pi-durable-contact. One native durable turn: the app's own controller input → GenerationTask → ToolTask → the contact's entwurf_v2 → the private bridge → a seeded self-fetch target (C2 recipe, owned by a separate idle child). S = a 127.0.0.1 scripted OpenAI-compatible endpoint configured through the app's documented models.json (dummy key, PI_OFFLINE); H = the native ToolTask path; V (a vendor turn) is NOT run. Oracles: the wire (tools offered, v2 schema = the bridge's tools/list, exactly two requests, the tool result + receipt in the second), the raw mailbox (.msg 1, signal, sender = the host record), the native view (one call, its settled result, root current). Not exactly-once, not recovery, not a recipient turn. Missing inputs → SKIP (97)
+  ./run.sh check-demo-reproducibility # source-checkout-only: discover offline demo Node tests; no LIVE, model, render or publication
   ./run.sh check-pi-durable-beside    # #129 mutant execution coordinate (VERIFY rule 3): run_vitest over the six pi-durable beside tests (adapter, carrier/SDK-set verifier, preflight, owner join, carrier relocation/resolver/emitter/task footer, native-module file and directory ingress) — the pi-durable qualification lane's gate argv. Same files check-tests-beside-behavior already runs.
   ./run.sh check-pi-durable-receive   # #129 L-receive FIRST CELL, CHECKOUT-ONLY. Same input (the bundle must carry the pi-durable-host owner join). The host driver gives the app NO input; a seeded claude-code sender (marker owned by a separate idle child, handed to a gate-owned sending bridge through ENTWURF_META_SENDER_MARKER) enqueues one message, the host's doorbell admits its notice to the ROOT conversation, and the scripted model drains it with entwurf_inbox_read. S withholds response #1 until the ENQUEUE receipt, the .delivered bytes, the signal, the host-owned receiver marker and the notice are captured. Oracles: receiver() admission, native view, raw archive (.delivered.read + lastReadAt), wire (exactly two requests, drain result = view), and after a green reap a forensic read-only SQLite copy (submission row by request id = reported id, root, input, done, placed entry = the notice). V NOT run. Missing inputs → SKIP (97)
   ./run.sh check-copilot-receive-arm  # #82 RAIL 5 gate: the REAL receiver installer + the REAL extension.mjs forked with a stubbed SDK. Arms only after birth, marker owned by the WATCHER pid, self-fetch dispatch answer, doorbell carries the garden id and NOT the body, id-drift/foreign-parent refusals. Hermetic; no Copilot, no model turn
@@ -1027,6 +1028,37 @@ check_capability_bundle_reach() {
   # mcp/entwurf-bridge/dist/pi-extensions/lib/ that answers the real entwurf_v2.
   # Requires a built bridge; a missing dist FAILS (never skips).
   run_ts scripts/check-capability-bundle-reach.ts
+}
+
+check_demo_reproducibility() {
+  # Source-only Node strip-types/CLI and subprocess fixtures, not adapter Vitest tests.
+  # Discovery lives beside demo behavior; no filename list or npm TS crossing.
+  section "demo reproducibility (offline source fixtures, no model or recording)"
+  case "$REPO_DIR" in */node_modules/*) fail "check-demo-reproducibility is source-checkout-only"; return 1 ;; esac
+  local -a tests=()
+  local f
+  while IFS= read -r f; do [ -n "$f" ] && tests+=("$f"); done < <(cd "$REPO_DIR" && find demo -type f -name '*.test.ts' -print | LC_ALL=C sort)
+  if [ "${#tests[@]}" -eq 0 ]; then
+    fail "[QK:DEMO-TEST-DISCOVERY] demo test discovery is empty — no fixtures is not a passing floor"
+    return 1
+  fi
+  (
+    local sandbox name
+    sandbox=$(mktemp -d /tmp/entwurf-demo-unit.XXXXXX)
+    trap 'rm -rf -- "$sandbox"' EXIT
+    while IFS= read -r name; do
+      case "$name" in ENTWURF_*|HERDR_*|PI_SESSION_ID|PI_AGENT_ID|CLAUDECODE|CLAUDE_CODE_SESSION_ID|TMUX|TMUX_PANE|LIVE) unset "$name" ;; esac
+    done < <(compgen -e)
+    export HOME="$sandbox/home" PI_CODING_AGENT_DIR="$sandbox/pi"
+    export XDG_CONFIG_HOME="$sandbox/config" XDG_DATA_HOME="$sandbox/data" XDG_STATE_HOME="$sandbox/state" XDG_CACHE_HOME="$sandbox/cache" XDG_RUNTIME_DIR="$sandbox/runtime"
+    mkdir -m 700 "$HOME" "$PI_CODING_AGENT_DIR" "$XDG_CONFIG_HOME" "$XDG_DATA_HOME" "$XDG_STATE_HOME" "$XDG_CACHE_HOME" "$XDG_RUNTIME_DIR" "$sandbox/bin"
+    # Take.finish records PATH versions; fixtures must not depend on an installed Pi or run it.
+    printf '#!/bin/sh\n[ "$1" = --version ] && { printf "offline-fixture\\n"; exit 0; }\nexit 81\n' > "$sandbox/bin/pi"
+    chmod +x "$sandbox/bin/pi"
+    export PATH="$sandbox/bin:$PATH"
+    cd "$REPO_DIR"
+    node --test "${tests[@]}"
+  )
 }
 
 check_bridge_delivery() {
@@ -3756,6 +3788,8 @@ check_pack() {
     # pi-extensions/ so it also covers any future allowlist entry; `plugins/` needs no
     # companion negation because `^plugins/` above already refuses that whole tree.
     '\.test\.[cm]?[jt]s$'
+    # Maintainer take/renderer/helper TS is source-only, including non-test implementations.
+    '^demo/.*\.ts$'
   )
 
   local pass=1 f pat hit
@@ -8174,6 +8208,9 @@ case "$cmd" in
     ;;
   check-pi-queue-oracle)
     check_pi_queue_oracle
+    ;;
+  check-demo-reproducibility)
+    check_demo_reproducibility
     ;;
   check-tests-beside-behavior)
     check_tests_beside_behavior

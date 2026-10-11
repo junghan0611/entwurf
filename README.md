@@ -8,6 +8,8 @@ transcript, authentication, tools, or runtime.
 
 **Pi ↔ native Claude Code inside the [Herdr workbench](#herdr-workbench).**
 A recorded source-checkout demo: callback → task → native Bash → reply.
+[Source recipe and original provenance](demo/README.md#whole-herdr-pi--native-claude-code-138)
+(the recipe creates a new take; the original private capture is not shipped).
 
 ![Pi and native Claude Code collaborating inside Herdr](docs/assets/entwurf-demo.gif)
 

@@ -651,8 +651,9 @@ function runSubcommand(sub: string, env: Record<string, string | undefined>): { 
 }
 
 // ===========================================================================
-// 8g. #137: data-subject hunks, not path identity; code/signatures/machinery
-// remain file-level. Hermetic like 8f: real history is NOT in a qualification snapshot.
+// 8g. #137: TOML data-subject hunks, not path identity; Markdown/JSON data and
+// code/signatures/machinery remain file-level. Hermetic like 8f: real history is NOT
+// in a qualification snapshot.
 // ==========================================================================
 {
 	const tmp = mkdtempSync(join(tmpdir(), "entwurf-qualify-hunks-"));
@@ -678,6 +679,8 @@ function runSubcommand(sub: string, env: Record<string, string | undefined>): { 
 				{ subject: "fixture/code.ts", find: ["return 1"], signatureSource: "fixture/signature.md" },
 				{ subject: "fixture/signature.md", find: ["signature"] },
 				{ subject: "fixture/joined.toml", find: ["alpha = 1", "beta = 2"] },
+				{ subject: "fixture/doc.md", find: ["Legacy rows are documented: kept for history."] },
+				{ subject: "fixture/reg.json", find: ['"mode": "self-fetch",'] },
 				{ subject: "scripts/fixtures/pin.json", find: ['"pinned": 1'] },
 				{ subject: "scripts/ci-qualify-decide.sh", find: ["set -euo pipefail"] },
 			],
@@ -687,18 +690,23 @@ function runSubcommand(sub: string, env: Record<string, string | undefined>): { 
 		writeFileSync(join(tmp, "fixture/code.ts"), "// outside\nfunction f() { return 1; }\n");
 		writeFileSync(join(tmp, "fixture/signature.md"), "signature\n# outside\n");
 		writeFileSync(join(tmp, "fixture/joined.toml"), "version = 1\nalpha = 1\nbeta = 2\n");
+		const doc = "# Doc\nLegacy rows are documented: kept for history.\n# outside\n";
+		const reg = '{\n"copilot": {\n"mode": "self-fetch",\n"level": 6\n}\n}\n';
+		writeFileSync(join(tmp, "fixture/doc.md"), doc);
+		writeFileSync(join(tmp, "fixture/reg.json"), reg);
 		writeFileSync(join(tmp, "scripts/fixtures/pin.json"), '{\n"version": 1,\n"pinned": 1\n}\n');
 		git("add", "-A");
 		git("commit", "-qm", "seed");
 		const base = head();
-		const check = (name: string, expected: boolean, reason?: string, before = base) => {
+		const nonToml: string[] = [];
+		const check = (name: string, expected: boolean, reason?: string, before = base, into = wrong) => {
 			const r = spawnSync("bash", [join(tmp, "scripts/ci-qualify-decide.sh"), before, head()], {
 				cwd: tmp,
 				encoding: "utf8",
 				env: { ...process.env, CI_EVENT_NAME: "push", CI_FORCED: "false" },
 			});
 			if (r.status !== 0 || r.stdout.trim() !== `run_body=${expected}` || (reason && !r.stderr.includes(reason)))
-				wrong.push(`${name}: status=${r.status}, out=${r.stdout.trim()}, err=${r.stderr.trim()}`);
+				into.push(`${name}: status=${r.status}, out=${r.stdout.trim()}, err=${r.stderr.trim()}`);
 		};
 		const commit = () => {
 			git("add", "-A");
@@ -758,6 +766,19 @@ function runSubcommand(sub: string, env: Record<string, string | undefined>): { 
 		commit();
 		check("machinery also subject remains file-level", true);
 		reset();
+		// Outside an untouched exact-once span, a shorter presence literal (measured on DELIVERY.md)
+		// or a later JSON duplicate key (JSON.parse: last wins) can re-satisfy the oracle.
+		writeFileSync(join(tmp, "fixture/doc.md"), `${doc}Legacy rows are documented\n`);
+		commit();
+		check("markdown restatement outside find", true, "conservative:", base, nonToml);
+		reset();
+		writeFileSync(
+			join(tmp, "fixture/reg.json"),
+			reg.replace("6\n}\n}\n", '6\n},\n"copilot": { "level": 6, "mode": "self-fetch" }\n}\n'),
+		);
+		commit();
+		check("json duplicate key outside find", true, "conservative:", base, nonToml);
+		reset();
 		// The first quoted name must still fail open after a >pipe-buffer list:
 		// printf | grep -q can lose its match to SIGPIPE under pipefail.
 		writeFileSync(join(tmp, '000"quoted'), "x\n");
@@ -771,9 +792,16 @@ function runSubcommand(sub: string, env: Record<string, string | undefined>): { 
 		check("missing manifests", true);
 		assert.ok(
 			wrong.length === 0,
-			"[QK:QUALIFY-FILTER-SUBJECT-HUNKS] only untouched, unmoved, exact-once data find ranges may skip; " +
+			"[QK:QUALIFY-FILTER-SUBJECT-HUNKS] only untouched, unmoved, exact-once TOML find ranges may skip; " +
 				"unknown ranges run, and code/signature/machinery retain file-level protection. " +
 				wrong.join("; "),
+		);
+		assert.ok(
+			nonToml.length === 0,
+			"[QK:QUALIFY-FILTER-TOML-ONLY-REFINEMENT] Markdown and JSON subjects stay file-level: an untouched exact-once " +
+				"find does not pin kill-power when a shorter presence literal or a later duplicate JSON key outside it can " +
+				"re-satisfy the oracle. " +
+				nonToml.join("; "),
 		);
 	} finally {
 		rmSync(tmp, { recursive: true, force: true });

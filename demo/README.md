@@ -1,193 +1,124 @@
-# entwurf recorded demos
+# Recorded demos — source checkout recipes
 
-> **Archived pre-0.12 evidence.** These scripts still describe the retired v1 `entwurf` / `entwurf_resume` / `entwurf_send` demo flow. They are kept for historical comparison and will be replaced by a v2-native retake in a post-0.12 follow-up; do not treat them as the current 0.12 runnable recipe.
+## Whole Herdr: Pi ↔ native Claude Code (#138)
 
-> **Model ids here are archived, not recommended (2026-08-20).** The `entwurf/gpt-5.4` rows below record what these GIFs actually ran on. They are stale twice over: `entwurf/gpt-5.4` is no longer a curated `entwurf` ACP id at all — that provider serves only the `claude-*` and `cortex-*` rows in `pi-extensions/lib/acp/models.ts` — and the live-spend default has since moved to `openai-codex/gpt-5.6-luna` under a cheaper plan. Read them as a record of the recording, never as a default to copy; the current defaults live in `VERIFY.md` and `NEXT.md`.
+This is the scene shown by the [README GIF](../README.md). The recording is the **whole
+Herdr client**, with sidebar and tabs, without captions. It observes a real Pi citizen
+opening native Claude Code, receiving its callback, sending one task, and receiving the
+sibling's native Bash result. Camera focus is a view, never an address or delivery receipt.
 
-Two recorded GIF scripts live here. Both use `asciinema` for capture and
-`agg` for cast → GIF conversion. Both share the same gitignore policy
-(`*.cast` global, `demo/*.gif`, `demo/*.log` — only the `.sh` and this
-README are tracked).
+### Original publication versus a new take
 
-## `demo-baseline.sh` — single-pane baseline + entwurf surface
+[Original provenance](./herdr-pi-cc-20261011.provenance.json) records the approved GIF hash,
+original cast hash, measured runtime/models, audited source hashes and render arguments.
+The original raw cast, transcripts, native records and full manifests remain private.
+**A fresh checkout cannot replay that original capture.** The command below creates a
+**new LIVE take of the same scene**, not byte-identical GIF reproduction or renewed
+acceptance of the original. Model text, timing, ids and terminal banners vary. The original
+agg/ffprobe versions were not recorded; current tool versions cannot retroactively fill them.
 
-Historical pre-0.12 demo, still linked from the top-level `README.md` as archived evidence. `package.json#pi.image` now points at the `entwurf` release hero instead. Two scenes driven into one pi pane:
+### Prerequisites — no automatic install or repair
 
-1. **Baseline self-awareness** — the `Q-B0` + `Q-B0-CARRIER` interview,
-   English answer enforced. The pane exposes how the running model
-   names its harness, distinguishes native tools from MCP / custom
-   tools, names the carrier surface for each cited piece of
-   information, and admits unknowns instead of fabricating.
-2. **Entwurf surface** — the same pane spawns a sibling via the
-   `entwurf` tool (`mode=sync`, cross-model — driver `claude-sonnet-5`,
-   sibling `gpt-5.4`), prints the Session ID, and quotes the sibling's
-   one-line reply verbatim.
+Run from an installed development **source checkout**, not an npm consumer. The `.ts`
+takes/helpers/tests are maintainer tooling and are deliberately excluded from the tarball.
 
-Run from the repo root (or `demo/`):
+- Node at the `package.json#engines.node` floor; the checkout's pinned dependencies and
+  current compiled bridge. After a source/bootstrap change, build with `pnpm run build-bridge`.
+- Pi at the checkout's supported floor (**current floor 1.1.0**); `entwurf` on PATH must be
+  the intended source stable-bin. Source evidence is not registry-package acceptance.
+- `herdr` on PATH at exactly `scripts/fixtures/herdr-supply.json#version`; `asciinema` v3.
+- Herdr's existing Pi integration at
+  `${PI_CODING_AGENT_DIR:-$HOME/.pi/agent}/extensions/herdr-agent-state.ts`.
+- The operator's existing Claude launcher/auth and vendor data at
+  `${XDG_DATA_HOME:-$HOME/.local/share}/claude`. Missing or drifted ownership is a refusal,
+  not permission to install, copy credentials or fix global hooks/settings.
+- For offline rendering only: `agg` and `ffprobe` on PATH. Rendering is optional and
+  requires the original private `take.cast` **and its same-run manifest**.
 
-```bash
-bash demo/demo-baseline.sh
-```
+Selectors for this scene are fixed: Pi `openai-codex/gpt-6.1-sol`, thinking `low`, native
+Claude Code alias `sonnet`. Overrides may only restate these. An OpenRouter base-URL
+redirect is refused before inference; no fallback model or automatic retry is used.
+A requested alias and the native model id observed in its transcript are recorded separately.
 
-Output lands directly in the publish surface — re-running the script
-overwrites the previous take so the gallery preview always matches the
-current branch:
-
-- `docs/assets/entwurf-demo.cast` — raw asciinema recording (gitignored)
-- `docs/assets/entwurf-demo.gif` — tracked, referenced by the top-level `README.md` as archived pre-0.12 evidence
-- `demo/baseline-debug.log` — `ENTWURF_DEBUG=1` stderr (gitignored, stays next to the script)
-
-## `demo.sh` — two-pane entwurf flow (regression guard)
-
-Three-scene entwurf flow used for regression evidence, not for the
-public README. Two pi sessions run side-by-side in one tmux window;
-a background driver types the scene prompts into the sender pane.
-
-1. **Spawn** a sonnet sibling (memory write — "tempered indigo").
-2. **Resume** that same sibling (memory recall — identity preservation,
-   the #9 regression guard).
-3. **Cross-session greeting** via `entwurf_send`. *(Historical: `entwurf_send` was retired in the
-   0.12 cutover, and the "sent box" half of that pairing was never actually reachable — the
-   sender-side renderer had zero producers and was removed in #120 P3. What the recording shows on
-   the receive side is real; the send side is a box the operator could not have seen.)*
-
-Run:
+### Offline verification first
 
 ```bash
-bash demo/demo.sh
+./run.sh check-demo-reproducibility
+pnpm exec tsc --noEmit -p scripts/tsconfig.json
 ```
 
-Output mirrors the baseline demo's layout — recording artifacts land in
-`docs/assets/` so the publish surface and the demo script share one
-naming convention:
+The named source-only floor verb discovers `demo/**/*.test.ts` and runs Node's own test
+runner, including fake-tool/child-process fixtures. It is reached by `pnpm check` and
+`pnpm run check:full`; these are not Vitest tests and are not reached by the adapter beside
+Vitest globs. HOME, writable XDG roots and identity carriers are sandboxed by the verb.
+The receiving type fence is `scripts/tsconfig.json`, paired with the root `demo` exclusion.
 
-- `docs/assets/entwurf-entwurf.cast` — raw asciinema recording (gitignored via global `*.cast`)
-- `docs/assets/entwurf-entwurf.gif` — tracked, referenced by the top-level `README.md` Entwurf section
-- `demo/peer-debug.log` — `ENTWURF_DEBUG=1` stderr from the top pane (gitignored, stays next to the script)
-- `demo/sender-debug.log` — same from the bottom pane
+### Explicit new LIVE take
 
-Watch debug live (separate terminal, before `bash demo.sh`):
+Only run after deciding to spend real subscription turns:
 
 ```bash
-tail -F demo/sender-debug.log demo/peer-debug.log
+LIVE=1 node demo/take-herdr-pi-cc.ts
 ```
 
-Quick post-run greps:
+With approved selectors/policy and without `LIVE=1`, it exits 97 **before tool preflight
+or resource creation**. Invalid selectors or an OpenRouter redirect can refuse earlier
+with exit 2, still without tools or writes. Once authorized, it creates a private Herdr
+server/fence, starts the scene, and stops only resources whose
+ownership it can prove. Failure ends observation; it cannot undo a citizen's completed work.
+No automatic retry, rerender or promotion follows a failure. Failed evidence is retained.
+
+The fence isolates Herdr XDG state and Entwurf record/mailbox roots, **not the whole host**:
+HOME/auth/vendor stores remain real; the existing Claude data directory is linked into the
+private fence. Pi's control socket and the addressed v2 lock use real `~/.pi/` directories.
+The native transcripts, records and fence are kept, not erased by teardown. Do not run this
+against an operator server or broaden cleanup to unrelated sessions.
+
+The default output is `.tmp-verify/138-demo-gifs/takes/<take-id>/` (ignored); an explicit
+`ENTWURF_DEMO_OUT` changes its parent. `manifest.json` contains assertions, camera views,
+raw receipts, measured models and the cast digest. The stage describes source **tooling**;
+`entwurfOnPath` is observed, not checked against this checkout's stable-bin. Confirm that
+binding separately before calling a take source-runtime evidence. Git HEAD and dirty state
+are observed; a dirty HEAD is **not** an immutable source fingerprint.
+Keep the exact source and manifest with any subsequent take you intend to audit.
+
+### Offline rendering and publication boundary
+
+Given an existing same-run private take, no model turn is needed:
 
 ```bash
-grep 'entwurf:debug'        demo/sender-debug.log
-grep -E '(entwurf|model-switch)' demo/sender-debug.log
+node demo/render-take.ts <private-take-dir> <private-output.gif>
 ```
 
-## Tunables (env vars)
+The renderer verifies cast digest, trims only recorder-only teardown, and promotes the
+private GIF only after agg exits successfully and ffprobe decodes it. Each render keeps a
+uniquely named `.render.cast` beside its output (also on failure), with name/digest in a
+successful sidecar; the original take's `take.render.cast` is never overwritten. Non-live-pass takes
+can render only to a private FAILED name. A mixed subject/teardown event is retained whole.
+The renderer refuses repository `docs/assets/` destinations, including parent-directory
+aliases: **publication is a separate reviewed copy**, never a rendering side effect.
 
-### `demo.sh` (entwurf two-pane)
+Its email/company-path scan is deliberately narrow, **not a privacy/public-readability
+certificate**: personal paths, hostnames, footers and native progress language can remain.
+The operator approved the original rough pixels with their disclosed limitations. A new
+render requires its own review; it must not overwrite the approved original implicitly.
+The GIF and sidecar rename separately; a crash between them leaves a mismatched pair, not
+atomic two-file publication. Optional `caption-take.ts` produces a separate derivative;
+it is not this uncaptioned publication recipe.
 
-| Var | Default | Meaning |
-|---|---|---|
-| `PEER_MODEL` | `entwurf/gpt-5.4` (≡ `piat`) | top pane backend (receives greeting) |
-| `SENDER_MODEL` | `entwurf/claude-sonnet-5` (≡ `pias`) | bottom pane backend (drives scenes) |
-| `SCENE_DELAY` | `25` | seconds to wait for each scene's agent work |
-| `WARMUP` | `3` | seconds to wait for both pi banners |
-| `FINAL_PAUSE` | `5` | extra wait after scene 3 (peer reply lag) |
-| `GIF_SPEED` | `2.8` | agg playback multiplier (cast time → GIF time) |
-| `SESSION` | `entwurf-demo` | tmux session name |
-| `OUTDIR` | `demo/` | debug log directory (cast + gif live in `docs/assets/`) |
+## Other source scenes
 
-### `demo-baseline.sh` (single-pane baseline + entwurf)
+`take-pi-durable.ts`, `take-pi-acp.ts` and `take-pi-cc.ts` record **different**, private tmux
+scenes. Each requires its own explicit `LIVE=1` and, like the Herdr scene, refuses a
+non-approved selector or an OpenRouter base-URL redirect first (exit 2, no tools or writes).
+They are not the Herdr GIF's recipe.
+Their helper tests remain in the same offline discovery verb. Original FAILED takes and
+offline rejudgements are distinct evidence, never replacement LIVE acceptance.
 
-| Var | Default | Meaning |
-|---|---|---|
-| `DRIVER_MODEL` | `entwurf/claude-sonnet-5` (≡ `pias`) | the driven pane — answers Q-B0 and spawns the sibling |
-| `SIBLING_MODEL` | `entwurf/gpt-5.4` (≡ `piat`) | cross-backend sibling spawned in scene 2 |
-| `SIBLING_CWD` | repo root | cwd passed to the entwurf sibling (drives `<project-context>` injection) |
-| `SCENE1_DELAY` | `60` | seconds for the long English baseline answer |
-| `SCENE2_DELAY` | `30` | seconds for the sync entwurf round-trip |
-| `WARMUP` | `3` | seconds to wait for the pi banner |
-| `FINAL_PAUSE` | `4` | extra wait after scene 2 |
-| `GIF_SPEED` | `2.0` | agg playback multiplier (slower than `demo.sh` — the answer rewards reading) |
-| `GIF_COMPRESS` | `1` | run gifsicle after agg (`0` to skip) |
-| `GIF_LOSSY` | `200` | gifsicle `--lossy` strength (drop to `80` if a future scenario shows artifacts) |
-| `GIF_COLORS` | `64` | gifsicle `--colors` palette size |
-| `SESSION` | `entwurf-baseline-demo` | tmux session name |
-| `OUTDIR` | `demo/` | debug log directory (cast + gif live in `docs/assets/`) |
+## Archived pre-0.12 scripts
 
-### Model ↔ alias map
-
-The demo launch lines correspond to your shell aliases:
-
-| Alias | Model id | Use as |
-|---|---|---|
-| `piao` | `entwurf/claude-opus-5` | `SENDER_MODEL` (precision scenes) |
-| `pias` | `entwurf/claude-sonnet-5` | `SENDER_MODEL` (default) |
-| `piat` | `entwurf/gpt-5.4` | `PEER_MODEL` (default) |
-| `piat5` | `entwurf/gpt-5.5` | either |
-| `piag` | `entwurf/gemini-3.1-pro-preview` | either |
-
-Each pane runs with `ENTWURF_DEBUG=1` baked in — same shape as
-the aliases — so every spawn/model-switch/entwurf trace lands in the
-debug log files (see below).
-
-Examples:
-
-```bash
-# Swap peer to gemini
-PEER_MODEL=entwurf/gemini-3.1-pro-preview bash demo.sh
-
-# Faster pacing for short retake
-SCENE_DELAY=30 FINAL_PAUSE=10 bash demo.sh
-
-# All three backends in one demo would need a 3-pane variant — out of scope here.
-```
-
-## Prerequisites
-
-- `pi` on PATH (current floor 1.1.0)
-- `entwurf` provider configured + auth ready for the selected sender/peer models
-- `asciinema` installed
-- `agg` installed (optional — only for GIF conversion)
-- `gifsicle` installed (optional — `demo-baseline.sh` post-compress step; skip with `GIF_COMPRESS=0`. On NixOS: `nix-shell -p gifsicle` covers both scripts)
-- `tmux` installed
-
-If you watch the demo live: open another terminal and run
-`tmux attach -t entwurf-demo -r` (read-only attach) **before** the script
-starts recording. Do not attach writable — keystrokes from your terminal
-would collide with the driver.
-
-## Why pre-baked prompts
-
-Each scene's prompt asks the inner agent to discover state itself
-(`entwurf_peers`, prior Session ID from this conversation). So the driver
-script types static strings only — no sessionId injection, no
-output parsing. That's what makes it reproducible.
-
-## Editing scenes
-
-Open `demo.sh`, edit the three `tmux send-keys -t "$SENDER_PANE" -l '...'`
-blocks under the `drive()` function. The `-l` flag tells tmux to send the
-argument literally (no key-name interpretation), so quotes inside the prompt
-are safe as long as you don't use single quotes inside the single-quoted
-argument.
-
-## Tracked vs. ignored
-
-Tracked (committed):
-
-- `demo/demo.sh`
-- `demo/demo-baseline.sh`
-- `demo/README.md`
-- `docs/assets/entwurf-demo.gif` — archived pre-0.12 README demo GIF (no longer `package.json#pi.image`)
-- `docs/assets/entwurf-entwurf.gif` — archived pre-0.12 Entwurf section illustration
-
-Ignored (regenerable recording artifacts — both demos):
-
-- `*.cast` (global rule — applies under `docs/assets/` too)
-- `demo/*.log`
-
-Both demos write their recording artifacts directly into `docs/assets/`
-using the names above. Re-running a demo overwrites the previous take so
-the published preview always matches `main`. The `.cast` source stays
-local (global `*.cast` ignore); only the `.gif` rides the publish surface.
-The `gifsicle` step inside `demo-baseline.sh` makes the take reproducible
-without a manual compression pass — see the Tunables table for tuning the
-lossy/colors flags.
+`demo-baseline.sh` and `demo.sh` retain their historical bodies for comparison, but now
+**refuse immediately with exit 2**, even with `LIVE=1`. They cannot launch retired v1 flows
+or overwrite today's published assets. Historical commands, selectors and old output paths
+inside those bodies are tombstones, not runnable advice. Scene 3's current deterministic
+delivery proof is `./run.sh check-bridge-delivery`; do not revive the v1 route.

@@ -185,6 +185,17 @@
 			"signatureSource": "scripts/check-release-gate-outcomes.ts"
 		},
 		{
+			"claim": "QUALIFY-FILTER-TOML-ONLY-REFINEMENT",
+			"title": "Markdown/JSON data re-enter hunk refinement, so an out-of-find presence restatement or later duplicate JSON key skips a body whose mutant now survives",
+			"subject": "scripts/ci-qualify-decide.sh",
+			"find": ["\t\t\t\t\t*.toml) ;;"],
+			"replace": ["\t\t\t\t\t*.toml|*.json|*.md) ;;"],
+			"gate": ["bash", "run.sh", "check-release-gate-outcomes"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:QUALIFY-FILTER-TOML-ONLY-REFINEMENT]",
+			"signatureSource": "scripts/check-release-gate-outcomes.ts"
+		},
+		{
 			"claim": "MUX-LIFECYCLE-IS-RELEASE-MUST",
 			"title": "the integrated mux lifecycle stays listed but bypasses run_live_step, so a missing prerequisite returns SKIP into a branch that never classifies it and the cut reads green",
 			"subject": "run.sh",

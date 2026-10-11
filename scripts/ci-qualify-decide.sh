@@ -74,7 +74,7 @@ load_manifest_surface() {
 	SIGNATURE_PATHS="$(printf '%s' "$MANIFEST_DATA" | python3 -c 'import json,sys;print("\n".join(json.load(sys.stdin)["signatures"]))')" || fail_open 6 "unreadable signature paths"
 }
 
-# Return success ONLY when every exact-once data find span is demonstrably
+# Return success ONLY when every exact-once TOML find span is demonstrably
 # untouched and unmoved on BOTH blobs. Any uncertainty leaves the body armed.
 subject_find_untouched() {
 	python3 - "$REPO_DIR" "$BEFORE" "$HEAD_SHA" "$1" 3<<< "$MANIFEST_DATA" <<'PY'
@@ -129,8 +129,10 @@ PY
 }
 
 # Signature sources and machinery MUST precede subjects: many paths are BOTH.
-# Code/unknown subjects retain file-level protection; only ordinary data gets
-# hunk refinement (#137 non-goal: no skipping code/gate/mutant/matrix changes).
+# Code/unknown subjects retain file-level protection; only TOML data gets hunk
+# refinement (#137 non-goal: no skipping code/gate/mutant/matrix changes). TOML
+# refuses a redefined key, but a shorter Markdown presence literal or a later JSON
+# duplicate key outside an untouched find can still re-satisfy an oracle.
 matches_qualification_surface() {
 	local file="$1"
 	local subject
@@ -155,8 +157,8 @@ matches_qualification_surface() {
 		if [ "$file" = "$subject" ]; then
 			if [ "${MATCH_MODE:-files}" = range ]; then
 				case "$file" in
-					*.toml|*.json|*.md) ;;
-					*) echo "conservative:code-or-unknown-subject"; return 0 ;;
+					*.toml) ;;
+					*) echo "conservative:non-toml-subject"; return 0 ;;
 				esac
 				if subject_find_untouched "$file"; then
 					return 1
