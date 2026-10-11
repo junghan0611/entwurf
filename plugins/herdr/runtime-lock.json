@@ -1,8 +1,6 @@
 {
 	"schemaVersion": 2,
-	"comment": "WHICH SOURCE this plugin acquires its Entwurf runtime from, and it is committed on purpose (#116 M3-b3): an environment variable or a caller flag would let the acquisition authority be chosen by whoever happens to be running, and a fallback would turn an unreachable source into 'install something else'. The `npm` branch (name+version+integrity) is the active production authority, re-pinned to the published 0.34.2 with the registry's measured sha512 (#136); `herdr-checkout` remains the candidate-verification path and switching source still requires an explicit deactivate/activate, never inheritance.",
-	"source": "npm",
-	"name": "@junghanacs/entwurf",
-	"version": "0.34.2",
-	"integrity": "sha512-RbEkv3HaD6aZ9MD9y1Zps+3dB/Nu5B5tV5OYkauctxO6dn4/xkn90g2mEPWI2eZAJMlrNyYPHlCEF3nRs/5ksg=="
+	"comment": "Core 0.35.0 is an unpublished prepared candidate: the existing closed herdr-checkout source verifies the checkout commit without fabricating an npm integrity. The last published npm pin was @junghanacs/entwurf@0.34.2 in the separate Herdr 0.34.2 snapshot; no Herdr manifest version is bumped here. npm remains the production authority class. Re-pin the measured registry bytes only after the operator publishes core 0.35.0, and measure the later Herdr snapshot's own #137 integration. Source switches require explicit deactivate/activate, never inherited activation, an environment choice or fallback.",
+	"source": "herdr-checkout",
+	"repository": "junghan0611/entwurf"
 }

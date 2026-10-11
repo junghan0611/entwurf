@@ -4,8 +4,14 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+## 0.35.0 - 2026-10-12
+
 ### Collaboration and qualification
 
+- **A renewed demo after the 0.12.0 transition.** This is the first newly recorded
+  collaboration demo release since the 0.12.0 hard cut from `pi-shell-acp` to `entwurf`.
+  The capability is visible again in a real shared workbench, while #137 reduces redundant
+  qualification work without introducing a blanket plugin or data-file exemption.
 - **Real Pi ↔ native Claude Code collaboration in Herdr (#138).** The README now shows the
   accepted whole-workbench recording below the hero, linked to the Herdr section. The original
   GIF bytes were published without captions or a retake; recording tooling remains separate.
@@ -27,8 +33,53 @@ All notable changes to this project will be documented here. Format follows [Kee
   shorter presence literal or a later duplicate JSON key outside the find can re-satisfy an
   oracle. Code/unknown subjects, signature sources and deciding machinery also remain
   file-level, and uncertainty runs the body. The FULL floor and exact-SHA core
-  release qualification obligation are unchanged. These changes belong in the next 0.35.0 story;
-  no version bump, release cut or npm publication is part of this landing.
+  release qualification obligation are unchanged. The earlier source landing kept 0.34.2;
+  this separate preparation moves the core package to 0.35.0.
+
+### Release boundary and verification
+
+- **Reviewed source, not borrowed release evidence.** The implementation commit `52cdd7f`
+  follows the final consistency closure and independent review. Its frozen source candidate
+  passed the FULL deterministic floor in 762 seconds with HEAD, index and work surface
+  unchanged. Affected PARTIAL groups killed all 24 release-gate and 12 demo claims at their
+  owning QK signatures, with four green controls; the other 904 claims were not run locally.
+  The set now contains 940 distinct claims. Those local receipts are development evidence,
+  not a whole qualification pass. The later test-only checkpoint `41a8d78` closes fixture
+  cleanup on green and assertion-red paths, including the fake recorder's owned teardown.
+  Its affected demo PARTIAL killed all 12 claims at their QKs with two green controls,
+  followed by frozen FULL 766s/0 on identical source/index/HEAD. All five measured fixture
+  prefixes had zero new residue; historical and original/native evidence was preserved.
+- **Whole qualification BODY deferred by explicit operator instruction for this cut.**
+  The operator requested main publication without repeating the approximately 95-minute
+  qualification body. The ordinary push uses a one-commit `[skip ci]` marker to prevent its
+  automatic start; the existing `workflow_dispatch` with `qualify=false` can run the four
+  ordinary CI jobs without the body. This changes no product gate or workflow wiring.
+  A floor-only run is not exact-SHA whole qualification acceptance, and no skipped BODY
+  is reported as PASS. The unchanged release oracle would refuse it; make's preserved
+  artifact/tag/GitHub Release sequence remains pending, rather than bypassing that oracle.
+- **Native Codex LIVE is explicitly deferred for this cut, to the next release.** The operator
+  requested its exclusion from this verification. No native Codex sibling/app-server or turn
+  is started, and its product MUST wiring remains intact. This is an unmeasured per-cut
+  exception, not PASS or a standing waiver. Other required axes remain required; record
+  their actual outcomes and any named Codex SKIP separately, never round that SKIP green.
+  The earlier frozen versioned candidate's LIVE aggregate ran in
+  `/tmp/entwurf-release-gate-0.35.0.wypGz0/release-gate.log`: MUST PASS=23 FAIL=0 SKIP=1
+  (only native Codex), BEHAVIOR PASS=1 FAIL=0 SKIP=0, standard `--cut` exit 1 / BLOCKED.
+  Its runtime observation predates the test-only fixture checkpoint and is not borrowed
+  as that changed candidate's full release acceptance.
+- **Unpublished candidate verification carrier.** The npm-source lock must agree with the
+  checkout's core version, so the 0.35.0 preparation temporarily uses the existing closed
+  `herdr-checkout` carrier without inventing an npm integrity. The published 0.34.2 pin and
+  Herdr manifest version remain historical/separate; this is not a Herdr 0.35.0 snapshot.
+  A host that changes acquisition source must explicitly deactivate/activate, never inherit
+  an activation. Operator installations are not rewired by this preparation. After the
+  operator publishes core 0.35.0, the later Herdr snapshot must re-pin the measured registry
+  bytes and perform literal #137 next-plugin acceptance; neither is claimed here.
+- **Publication boundary.** The latest instruction narrows this lane to the 0.35.0 main
+  preparation and ordinary push, then a completion handoff. npm publication belongs to
+  the operator; after it, the Herdr plugin's separate 0.35.0 snapshot and measured npm
+  re-pin can follow. No npm publication, Herdr version bump or registry pin is executed
+  here. No accepted make artifact, core tag or GitHub Release is claimed prematurely.
 
 ## v2026.10.11-herdr.0.34.2 — Herdr Entwurf plugin 0.34.2
 
