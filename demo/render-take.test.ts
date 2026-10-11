@@ -5,6 +5,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { test } from "node:test";
+import { reclaimOnExit } from "../scripts/lib/reclaim-on-exit.ts";
 import { type CastEvent, isOnlyCsi, renderTake, trimRecorderTeardown } from "./render-take.ts";
 
 const TEARDOWN: CastEvent = [6.0, "o", "\u001b[1;38r\u001b[H\u001b[J\u001b[?2004l\u001b[?1049l\u001b[?2031l"];
@@ -105,7 +106,8 @@ test("an unrecognized tail is not trimmed", () => {
 
 // ── renderTake with a fake agg: last good stays last good ────────────────────
 function fixtureTake(verdict: string, castExtra = ""): { root: string; takeDir: string } {
-	const root = fs.mkdtempSync(path.join(os.tmpdir(), "render-take-test-"));
+	// Registered for exit, so a red assertion or signal cannot leave the synthetic root behind.
+	const root = reclaimOnExit(fs.mkdtempSync(path.join(os.tmpdir(), "render-take-test-")));
 	const takeDir = path.join(root, "takes", "take-demo-1");
 	fs.mkdirSync(takeDir, { recursive: true });
 	const cast = `${[
@@ -134,7 +136,7 @@ const VALID_GIF = Buffer.from(
 	"47494638396101000100800000ffffff00000021f90401000000002c00000000010001000002024401003b",
 	"hex",
 );
-const BYTES_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "render-take-bytes-"));
+const BYTES_DIR = reclaimOnExit(fs.mkdtempSync(path.join(os.tmpdir(), "render-take-bytes-")));
 function bytesFile(name: string, bytes: Buffer): string {
 	const f = path.join(BYTES_DIR, name);
 	fs.writeFileSync(f, bytes);

@@ -5,6 +5,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { test } from "node:test";
+import { reclaimOnExit } from "../scripts/lib/reclaim-on-exit.ts";
 import { captionTake, gifTimeAt, gifTimes, segments, snapToFrame } from "./caption-take.ts";
 import { type CastEvent, renderTake } from "./render-take.ts";
 
@@ -79,7 +80,8 @@ function take(root: string, id: string, token: string, extra = ""): string {
 	return takeDir;
 }
 function setup() {
-	const root = fs.mkdtempSync(path.join(os.tmpdir(), "caption-take-test-"));
+	// Registered for exit, so a red assertion or signal cannot leave the synthetic root behind.
+	const root = reclaimOnExit(fs.mkdtempSync(path.join(os.tmpdir(), "caption-take-test-")));
 	const validFile = path.join(root, "valid.gif");
 	fs.writeFileSync(validFile, VALID_GIF);
 	const copyValid = bin(root, "cp-valid.sh", `for a; do out="$a"; done; cp '${validFile}' "$out"`);

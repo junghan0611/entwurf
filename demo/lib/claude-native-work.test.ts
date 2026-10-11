@@ -6,6 +6,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { test } from "node:test";
+import { reclaimOnExit } from "../../scripts/lib/reclaim-on-exit.ts";
 import {
 	acpSessionRecordPath,
 	claudeNativeView,
@@ -122,7 +123,8 @@ function cacheRecord(key: string, over: Record<string, unknown> = {}) {
 	};
 }
 function cacheDirs() {
-	const root = fs.mkdtempSync(path.join(os.tmpdir(), "acp-cache-test-"));
+	// Registered for exit, so a red assertion or signal cannot leave the synthetic root behind.
+	const root = reclaimOnExit(fs.mkdtempSync(path.join(os.tmpdir(), "acp-cache-test-")));
 	const cache = path.join(root, "cache");
 	fs.mkdirSync(cache);
 	return { root, cache, overlay: path.join(root, "overlay") };
