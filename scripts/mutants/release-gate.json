@@ -151,8 +151,12 @@
 			"claim": "QUALIFY-FILTER-READS-PUSH-RANGE",
 			"title": "the filter reads the tip commit instead of the two-dot push range - the exact misreading that once concluded four of the five historical qualification reds would have been skipped",
 			"subject": "scripts/ci-qualify-decide.sh",
-			"find": ["CHANGED=\"$(git -C \"$REPO_DIR\" diff --name-only \"$BEFORE\"..\"$HEAD_SHA\" 2>/dev/null)\""],
-			"replace": ["CHANGED=\"$(git -C \"$REPO_DIR\" diff --name-only \"$HEAD_SHA~1\"..\"$HEAD_SHA\" 2>/dev/null)\""],
+			"find": [
+				"CHANGED=\"$(git -C \"$REPO_DIR\" diff --no-renames --no-ext-diff --no-textconv --name-only \"$BEFORE\"..\"$HEAD_SHA\" 2>/dev/null)\""
+			],
+			"replace": [
+				"CHANGED=\"$(git -C \"$REPO_DIR\" diff --no-renames --no-ext-diff --no-textconv --name-only \"$HEAD_SHA~1\"..\"$HEAD_SHA\" 2>/dev/null)\""
+			],
 			"gate": ["bash", "run.sh", "check-release-gate-outcomes"],
 			"timeoutSeconds": 180,
 			"signature": "[QK:QUALIFY-FILTER-READS-PUSH-RANGE]",
@@ -167,6 +171,17 @@
 			"gate": ["bash", "run.sh", "check-release-gate-outcomes"],
 			"timeoutSeconds": 180,
 			"signature": "[QK:QUALIFY-FILTER-REPLAYS-PAST-CATCHES]",
+			"signatureSource": "scripts/check-release-gate-outcomes.ts"
+		},
+		{
+			"claim": "QUALIFY-FILTER-SUBJECT-HUNKS",
+			"title": "data-subject hunk refinement collapses back to file identity, so a version-only pin repeats the unchanged mutant body",
+			"subject": "scripts/ci-qualify-decide.sh",
+			"find": ["\t\t\t\tif subject_find_untouched \"$file\"; then"],
+			"replace": ["\t\t\t\tif false; then"],
+			"gate": ["bash", "run.sh", "check-release-gate-outcomes"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:QUALIFY-FILTER-SUBJECT-HUNKS]",
 			"signatureSource": "scripts/check-release-gate-outcomes.ts"
 		},
 		{

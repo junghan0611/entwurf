@@ -43,7 +43,7 @@
 // Pure + subprocess, no network/model — IN pnpm run check:full.
 
 import { strict as assert } from "node:assert";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { copyFileSync, globSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
@@ -644,6 +644,136 @@ function runSubcommand(sub: string, env: Record<string, string | undefined>): { 
 				"commit: a push whose tip is docs-only can still carry a mutant subject underneath it, which is how " +
 				"four of the five historical reds look like docs pushes when read tip-first. " +
 				`Broken: range=${overRange}, tip-only=${overTip} (tip-only must be false, or this fixture proves nothing).`,
+		);
+	} finally {
+		rmSync(tmp, { recursive: true, force: true });
+	}
+}
+
+// ===========================================================================
+// 8g. #137: data-subject hunks, not path identity; code/signatures/machinery
+// remain file-level. Hermetic like 8f: real history is NOT in a qualification snapshot.
+// ==========================================================================
+{
+	const tmp = mkdtempSync(join(tmpdir(), "entwurf-qualify-hunks-"));
+	const git = (...args: string[]) =>
+		execFileSync("git", ["-c", "core.hooksPath=/dev/null", "-c", "user.email=g@e", "-c", "user.name=g", ...args], {
+			cwd: tmp,
+			stdio: "ignore",
+		});
+	const head = () => execFileSync("git", ["rev-parse", "HEAD"], { cwd: tmp, encoding: "utf8" }).trim();
+	const data = 'version = "1"\n[[panes]]\ncommand = ["node", "build.mjs"]\n# outside\n';
+	const wrong: string[] = [];
+	try {
+		git("init", "-q", "-b", "main");
+		mkdirSync(join(tmp, "scripts/mutants"), { recursive: true });
+		mkdirSync(join(tmp, "fixture"));
+		mkdirSync(join(tmp, "scripts/fixtures"));
+		copyFileSync(join(REPO_DIR, "scripts/ci-qualify-decide.sh"), join(tmp, "scripts/ci-qualify-decide.sh"));
+		const manifest = JSON.stringify({
+			mutants: [
+				{ subject: "fixture/data.toml", find: ["[[panes]]"] },
+				{ subject: "fixture/data.toml", find: ['command = ["node", "build.mjs"]'] },
+				{ subject: "fixture/data.toml", find: ["[[panes]]", 'command = ["node", "build.mjs"]'] },
+				{ subject: "fixture/code.ts", find: ["return 1"], signatureSource: "fixture/signature.md" },
+				{ subject: "fixture/signature.md", find: ["signature"] },
+				{ subject: "fixture/joined.toml", find: ["alpha = 1", "beta = 2"] },
+				{ subject: "scripts/fixtures/pin.json", find: ['"pinned": 1'] },
+				{ subject: "scripts/ci-qualify-decide.sh", find: ["set -euo pipefail"] },
+			],
+		});
+		writeFileSync(join(tmp, "scripts/mutants/fixture.json"), manifest);
+		writeFileSync(join(tmp, "fixture/data.toml"), data);
+		writeFileSync(join(tmp, "fixture/code.ts"), "// outside\nfunction f() { return 1; }\n");
+		writeFileSync(join(tmp, "fixture/signature.md"), "signature\n# outside\n");
+		writeFileSync(join(tmp, "fixture/joined.toml"), "version = 1\nalpha = 1\nbeta = 2\n");
+		writeFileSync(join(tmp, "scripts/fixtures/pin.json"), '{\n"version": 1,\n"pinned": 1\n}\n');
+		git("add", "-A");
+		git("commit", "-qm", "seed");
+		const base = head();
+		const check = (name: string, expected: boolean, reason?: string, before = base) => {
+			const r = spawnSync("bash", [join(tmp, "scripts/ci-qualify-decide.sh"), before, head()], {
+				cwd: tmp,
+				encoding: "utf8",
+				env: { ...process.env, CI_EVENT_NAME: "push", CI_FORCED: "false" },
+			});
+			if (r.status !== 0 || r.stdout.trim() !== `run_body=${expected}` || (reason && !r.stderr.includes(reason)))
+				wrong.push(`${name}: status=${r.status}, out=${r.stdout.trim()}, err=${r.stderr.trim()}`);
+		};
+		const commit = () => {
+			git("add", "-A");
+			git("commit", "-qm", "cell");
+		};
+		const reset = () => git("reset", "--hard", base); // ONLY this test-owned throwaway repository.
+		writeFileSync(join(tmp, "fixture/data.toml"), data.replace('version = "1"', 'version = "2"'));
+		commit();
+		check("outside", false, "fixture/data.toml: no find range touched");
+		// A replay must read HEAD's manifest, not an unrelated dirty worktree's find.
+		writeFileSync(
+			join(tmp, "scripts/mutants/fixture.json"),
+			'{"mutants":[{"subject":"fixture/data.toml","find":["version"]}]}',
+		);
+		check("HEAD manifest, not dirty worktree", false);
+		reset();
+		for (const [name, content] of [
+			["panes line", data.replace("[[panes]]", "[[panes]] # changed")],
+			["command line", data.replace('command = ["node", "build.mjs"]', 'command = ["node", "build.mjs"] # changed')],
+			["moved", `# inserted above\n${data}`],
+			["ambiguous", `${data}[[panes]]\n`],
+			["missing find", data.replace("[[panes]]", "[[other]]")],
+		] as const) {
+			writeFileSync(join(tmp, "fixture/data.toml"), content);
+			commit();
+			check(name, true);
+			reset();
+		}
+		git("rm", "fixture/data.toml");
+		commit();
+		check("deleted subject", true);
+		reset();
+		git("mv", "fixture/data.toml", "fixture/renamed.toml");
+		commit();
+		check("renamed subject", true);
+		reset();
+		writeFileSync(join(tmp, "fixture/code.ts"), "// outside changed\nfunction f() { return 1; }\n");
+		commit();
+		check("code outside find remains file-level", true);
+		reset();
+		writeFileSync(join(tmp, "fixture/signature.md"), "signature\n# outside changed\n");
+		commit();
+		check("signature also data subject remains file-level", true);
+		reset();
+		writeFileSync(join(tmp, "fixture/joined.toml"), "version = 1\nalpha = 1\nbeta = 2 # changed\n");
+		commit();
+		check("only multiline find, second line touched", true);
+		reset();
+		writeFileSync(join(tmp, "scripts/fixtures/pin.json"), '{\n"version": 2,\n"pinned": 1\n}\n');
+		commit();
+		check("machinery also data subject remains file-level", true);
+		reset();
+		writeFileSync(
+			join(tmp, "scripts/ci-qualify-decide.sh"),
+			`${readFileSync(join(tmp, "scripts/ci-qualify-decide.sh"), "utf8")}\n# outside find\n`,
+		);
+		commit();
+		check("machinery also subject remains file-level", true);
+		reset();
+		// The first quoted name must still fail open after a >pipe-buffer list:
+		// printf | grep -q can lose its match to SIGPIPE under pipefail.
+		writeFileSync(join(tmp, '000"quoted'), "x\n");
+		for (let i = 0; i < 768; i++) writeFileSync(join(tmp, "fixture", `${i}_${"x".repeat(180)}.txt`), "x\n");
+		commit();
+		check("large quoted changed-name list", true, "quoted changed path cannot be read honestly");
+		reset();
+		check("unreadable range", true, "fail-open 4", "f".repeat(40));
+		git("rm", "scripts/mutants/fixture.json");
+		commit();
+		check("missing manifests", true);
+		assert.ok(
+			wrong.length === 0,
+			"[QK:QUALIFY-FILTER-SUBJECT-HUNKS] only untouched, unmoved, exact-once data find ranges may skip; " +
+				"unknown ranges run, and code/signature/machinery retain file-level protection. " +
+				wrong.join("; "),
 		);
 	} finally {
 		rmSync(tmp, { recursive: true, force: true });

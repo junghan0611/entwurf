@@ -3493,7 +3493,7 @@ let manifestCount: number;
 		"omp-fresh": 24,
 		"omp-receive": 11,
 		"probe-ordering": 1,
-		"release-gate": 22,
+		"release-gate": 23,
 		"retired-sent-surface": 2,
 		"resume-args": 6,
 		"resume-launch-identity": 6,

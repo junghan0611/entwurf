@@ -28,37 +28,115 @@ fail_open() {
 }
 
 collect_paths_from_manifests() {
-	python3 - "$REPO_DIR" <<'PY'
+	python3 - "$REPO_DIR" "${1:-}" <<'PY'
 import glob
 import json
 import os
 import sys
+import subprocess
 
-repo = sys.argv[1]
-out = set()
-for path in sorted(glob.glob(os.path.join(repo, "scripts/mutants/*.json"))):
-	with open(path, encoding="utf-8") as handle:
-		manifest = json.load(handle)
+repo, rev = sys.argv[1:]
+def git(*args):
+	return subprocess.check_output(["git", "-C", repo, *args])
+paths = (git("ls-tree", "-r", "--name-only", rev, "scripts/mutants").decode().splitlines()
+	if rev else sorted(glob.glob(os.path.join(repo, "scripts/mutants/*.json"))))
+paths = [p for p in paths if p.endswith(".json")]
+if not paths:
+	raise ValueError("no mutant manifests")
+out, signatures, subjects = set(), set(), {}
+for path in paths:
+	if rev:
+		manifest = json.loads(git("show", f"{rev}:{path}"))
+	else:
+		with open(path, encoding="utf-8") as handle:
+			manifest = json.load(handle)
 	for mutant in manifest.get("mutants", []):
 		subject = mutant.get("subject")
 		if subject:
 			out.add(subject)
+			find = mutant.get("find")
+			# The runner joins a find ARRAY into ONE multiline occurrence.
+			needle = "\n".join(find) if isinstance(find, list) and all(isinstance(s, str) for s in find) else None
+			subjects.setdefault(subject, []).append(needle)
 		signature_source = mutant.get("signatureSource")
 		if signature_source:
 			out.add(signature_source)
-for entry in sorted(out):
-	print(entry)
+			signatures.add(signature_source)
+if not out or any(any(c in p for c in '\n\r\t"\\') for p in out):
+	raise ValueError("empty or unrepresentable manifest paths")
+print(json.dumps({"paths": sorted(out), "signatures": sorted(signatures), "subjects": subjects}))
 PY
 }
 
-# A changed path matters when it is a mutant's subject or signature source, or
-# when it sits in the machinery that decides what those mutants prove.
+load_manifest_surface() {
+	MANIFEST_DATA="$(collect_paths_from_manifests "${1:-}")" || fail_open 6 "missing/unreadable mutant manifests"
+	MANIFEST_PATHS="$(printf '%s' "$MANIFEST_DATA" | python3 -c 'import json,sys;print("\n".join(json.load(sys.stdin)["paths"]))')" || fail_open 6 "unreadable manifest paths"
+	SIGNATURE_PATHS="$(printf '%s' "$MANIFEST_DATA" | python3 -c 'import json,sys;print("\n".join(json.load(sys.stdin)["signatures"]))')" || fail_open 6 "unreadable signature paths"
+}
+
+# Return success ONLY when every exact-once data find span is demonstrably
+# untouched and unmoved on BOTH blobs. Any uncertainty leaves the body armed.
+subject_find_untouched() {
+	python3 - "$REPO_DIR" "$BEFORE" "$HEAD_SHA" "$1" 3<<< "$MANIFEST_DATA" <<'PY'
+import json
+import os
+import re
+import subprocess
+import sys
+
+repo, before, head, path = sys.argv[1:]
+def git(*args):
+	return subprocess.check_output(["git", "-C", repo, *args], stderr=subprocess.DEVNULL).decode("utf-8")
+def span(source, needle):
+	if not needle or source.count(needle) != 1:
+		raise ValueError("find absent or ambiguous")
+	start = source[:source.index(needle)].count("\n") + 1
+	return start, start + needle.count("\n") - int(needle.endswith("\n"))
+try:
+	finds = json.load(os.fdopen(3))["subjects"].get(path)
+	if not finds or any(not needle for needle in finds):
+		raise ValueError("missing find spans")
+	old, new = git("show", f"{before}:{path}"), git("show", f"{head}:{path}")
+	if "\0" in old or "\0" in new:
+		raise ValueError("binary subject")
+	diff = git("diff", "--no-renames", "--no-ext-diff", "--no-textconv", "--no-color", "-U0", before, head, "--", path)
+	if "Binary files " in diff or "GIT binary patch" in diff:
+		raise ValueError("binary diff")
+	hunks = []
+	for line in diff.splitlines():
+		if not line.startswith("@@"):
+			continue
+		match = re.fullmatch(r"@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@(?: .*)?", line)
+		if not match:
+			raise ValueError("unreadable hunk")
+		a, b, c, d = match.groups()
+		hunks.append((int(a), int(b or 1), int(c), int(d or 1)))
+	if not hunks:
+		raise ValueError("no readable text hunks")
+	for needle in set(finds):
+		os_, oe = span(old, needle)
+		ns, ne = span(new, needle)
+		if (os_, oe) != (ns, ne):
+			raise ValueError("find range moved")
+		for a, b, c, d in hunks:
+			if (b > 0 and a <= oe and a + b - 1 >= os_) or (d > 0 and c <= ne and c + d - 1 >= ns):
+				raise ValueError("find range touched")
+except (ValueError, KeyError, TypeError, OSError, subprocess.SubprocessError) as error:
+	print(f"ci-qualify-decide: fail-open 7 {path}: {error} -> run_body=true", file=sys.stderr)
+	sys.exit(1)
+print(f"ci-qualify-decide: {path}: no find range touched (all exact-once spans unmoved)", file=sys.stderr)
+PY
+}
+
+# Signature sources and machinery MUST precede subjects: many paths are BOTH.
+# Code/unknown subjects retain file-level protection; only ordinary data gets
+# hunk refinement (#137 non-goal: no skipping code/gate/mutant/matrix changes).
 matches_qualification_surface() {
 	local file="$1"
 	local subject
 	while IFS= read -r subject; do
-		[ "$file" = "$subject" ] && { echo "manifest-subject"; return 0; }
-	done <<< "$MANIFEST_PATHS"
+		[ "$file" = "$subject" ] && { echo "manifest-signature-source"; return 0; }
+	done <<< "$SIGNATURE_PATHS"
 	case "$file" in
 		scripts/mutants/*) echo "glob:scripts/mutants/**"; return 0 ;;
 		scripts/check-*) echo "glob:scripts/check-*"; return 0 ;;
@@ -73,6 +151,20 @@ matches_qualification_surface() {
 		# that stopped covering something cannot hide behind its own change.
 		scripts/ci-qualify-decide.sh) echo "exact:scripts/ci-qualify-decide.sh"; return 0 ;;
 	esac
+	while IFS= read -r subject; do
+		if [ "$file" = "$subject" ]; then
+			if [ "${MATCH_MODE:-files}" = range ]; then
+				case "$file" in
+					*.toml|*.json|*.md) ;;
+					*) echo "conservative:code-or-unknown-subject"; return 0 ;;
+				esac
+				if subject_find_untouched "$file"; then
+					return 1
+				fi
+			fi
+			echo "manifest-subject"; return 0
+		fi
+	done <<< "$MANIFEST_PATHS"
 	return 1
 }
 
@@ -98,13 +190,12 @@ decide_from_files() {
 	fi
 }
 
-MANIFEST_PATHS="$(collect_paths_from_manifests)"
-[ -n "$MANIFEST_PATHS" ] || { echo "ABORT: no mutant manifests read from $REPO_DIR/scripts/mutants" >&2; exit 1; }
-
 if [ "${1:-}" = "--files-from" ]; then
+	MATCH_MODE=files
+	load_manifest_surface
 	SRC="${2:-}"
 	[ -n "$SRC" ] || { echo "ABORT: --files-from needs a path or -" >&2; exit 1; }
-	if [ "$SRC" = "-" ]; then FILES="$(cat)"; else FILES="$(cat "$SRC")"; fi
+	if [ "$SRC" = "-" ]; then FILES="$(cat)"; else FILES="$(cat "$SRC")"; fi || fail_open 4 "unreadable files-from input"
 	decide_from_files "$FILES"
 	exit 0
 fi
@@ -154,6 +245,10 @@ esac
 git -C "$REPO_DIR" cat-file -e "$BEFORE^{commit}" 2>/dev/null || fail_open 4 "before=$BEFORE is not a commit object in this checkout"
 git -C "$REPO_DIR" cat-file -e "$HEAD_SHA^{commit}" 2>/dev/null || fail_open 4 "head=$HEAD_SHA is not a commit object in this checkout"
 
-CHANGED="$(git -C "$REPO_DIR" diff --name-only "$BEFORE".."$HEAD_SHA" 2>/dev/null)" || fail_open 4 "git diff $BEFORE..$HEAD_SHA failed"
+MATCH_MODE=range
+load_manifest_surface "$HEAD_SHA"
+CHANGED="$(git -C "$REPO_DIR" diff --no-renames --no-ext-diff --no-textconv --name-only "$BEFORE".."$HEAD_SHA" 2>/dev/null)" || fail_open 4 "git diff $BEFORE..$HEAD_SHA failed"
+# Git quotes unrepresentable changed names; never interpret those as absent paths.
+if grep -q '^"' <<< "$CHANGED"; then fail_open 4 "quoted changed path cannot be read honestly"; fi
 
 decide_from_files "$CHANGED"

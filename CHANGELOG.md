@@ -4,6 +4,18 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+### Collaboration and qualification
+
+- **Real Pi ↔ native Claude Code collaboration in Herdr (#138).** The README now shows the
+  accepted whole-workbench recording below the hero, linked to the Herdr section. The original
+  GIF bytes were published without captions or a retake; recording tooling remains separate.
+- **Avoid redundant qualification for untouched data-find ranges (#137).** Push replay reads
+  manifests at the named HEAD and checks every joined find span on both blobs. Only exact-once,
+  unmoved, untouched data spans may skip; code/unknown subjects, signature sources and deciding
+  machinery remain file-level, and uncertainty runs the body. The FULL floor and exact-SHA core
+  release qualification obligation are unchanged. These changes belong in the next 0.35.0 story;
+  no version bump, release cut or npm publication is part of this landing.
+
 ## v2026.10.11-herdr.0.34.2 — Herdr Entwurf plugin 0.34.2
 
 A Herdr plugin snapshot, not a core release: no package version, npm artifact or core tag moves.
