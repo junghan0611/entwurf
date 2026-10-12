@@ -4,6 +4,50 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+## v2026.10.13-herdr.0.35.1 — Herdr Entwurf plugin 0.35.1
+
+A separate Herdr plugin snapshot, not another core release: core package 0.35.1 and
+its `v0.35.1` tag remain unchanged. The operator has published the core to npm.
+
+### Herdr plugin
+
+- **Re-pin the published core 0.35.1 and close the checkout window.**
+  `plugins/herdr/runtime-lock.json` returns to production npm source
+  `@junghanacs/entwurf@0.35.1` with the registry's measured sha512
+  (`sha512-cZZaGfNP…EIchcQ==`). The plugin manifest moves 0.35.0 → 0.35.1;
+  admission remains Herdr >= 0.9.0 and the one-build/one-pane/Linux shape is unchanged.
+- **The same core capability through Herdr.** The runtime this snapshot acquires carries
+  core 0.35.1: the Claude 5.5 curation with its set-model readback and the pi-durable inbox
+  repair (#140). The core release also adds an English, source-only checkout menu. The
+  plugin changes no rail, gate or mutant.
+- **Upgrade by acquisition source, not just version.** A settled npm-source 0.35.0
+  installation can rebind under the plugin README's ownership conditions. A host that
+  installed the intervening `herdr-checkout` candidate must explicitly deactivate by
+  its own absolute runtime path before reinstalling the npm-source snapshot.
+  No operator installation or active session is rewired by this release work.
+
+### Source-specific verification
+
+- Registry metadata reports version/latest 0.35.1, repair 0.12.8-repair.1. The downloaded
+  tarball is 11101943 bytes, SHA256
+  `6edbcf9fbf31a6df1aff04f34b28ac279a071917d13916410bf466fd33a44eae`, equal to the preserved
+  core release candidate. Independently computed sha512 equals `dist.integrity`;
+  the registry-shipped runtime helper is byte-equal to this checkout's.
+- Required exact-registry-tarball Docker consumer passed without repacking. Real-npm
+  0.35.0 → 0.35.1 swap and harness-seeded torn-swap recovery passed: the product restored
+  the last-good tree before reacquisition, certified the new registry digest, then
+  performed an exact-request no-op and owned-fixture removal. Seven focused
+  Herdr/manifest gates passed with HEAD, index and work surface unchanged.
+  `check-herdr-sandbox` was not run locally for this snapshot because it reads the
+  operator's own herdr panes; it rides the pushed SHA's FULL floor in CI.
+- At preparation time, the public-ref install/use/deactivate/reinstall journey and the
+  pushed plugin SHA's ordinary four-job CI are still pending. Their actual outcomes belong
+  to the release checkpoint; this paragraph is not their acceptance. Earlier npm or
+  checkout-carrier receipts cannot certify these source-specific axes.
+- Core 0.35.1's native Codex LIVE remains an explicit per-cut unmeasured exception, not a
+  PASS or a standing waiver. Its whole qualification body ran at the core release SHA;
+  this plugin-only metadata change does not borrow that body as its own.
+
 ## 0.35.1 - 2026-10-13
 
 ### ACP
