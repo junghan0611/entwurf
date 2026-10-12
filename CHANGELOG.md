@@ -4,7 +4,7 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
-## 0.35.1 - 2026-10-12
+## 0.35.1 - 2026-10-13
 
 ### ACP
 
@@ -57,22 +57,39 @@ All notable changes to this project will be documented here. Format follows [Kee
   control: the #128 launch cut killed 99/99 claims in 12 groups, the set-model readback
   75/75 in 12 groups, and the menu 6/6 in one group. The set now holds 956 claims across
   72 lanes. By operator instruction the FULL floor and the whole qualification BODY were
-  not repeated locally; both belong to the prepared SHA's exact CI run, which is pending at
-  preparation time and is not presumed PASS.
-- **LIVE evidence is narrow.** One no-prompt wire measurement against 0.85.1 recorded the
-  set-model answers above. One operator-started ACP turn on `claude-sonnet-5-5` reported,
-  from its own environment text, "The exact model ID is claude-sonnet-5-5"; that is a
-  model's self-report, not a gate. Opus 5.5 and Fable 5.1 have no prompt-turn evidence.
-  The LIVE release gate was not run for this preparation, so native Codex and the other
-  MUST steps carry no 0.35.1 receipt.
+  not repeated locally during development; both ran in the first prepared SHA's exact CI.
+  Push run 38258514409 at `b93bb37` first failed `check` at `check-herdr-sandbox`
+  `[QK:HS-NO-RESIDUE]`: a sandbox process still held the private HOME after
+  `herdr server stop` and the gate's fixed 2 s wait. A rerun of the failed job on the same
+  SHA passed that assertion, and the run concluded with all four required jobs green and
+  the qualification body at 956/956 claims killed. The first red stays on record as a
+  teardown-timing observation; it is not read as a pass.
+- **LIVE release gate, native Codex excluded for this cut.** As in 0.35.0, the operator
+  excluded native Codex: its MUST step stays wired and declined for lack of the
+  operator-supplied app-server pid and model tiers, so no Codex app-server, sibling or
+  turn started. That SKIP is an unmeasured per-cut exception, not a PASS or a standing
+  waiver. The gate ran from fresh scratch at `b93bb37`, with HEAD, index and tracked tree
+  identical before and after: `/tmp/entwurf-release-gate-0.35.1.aXzo1A/release-gate.log`,
+  MUST PASS=23 FAIL=0 SKIP=1 (only native Codex), BEHAVIOR PASS=1 FAIL=0 SKIP=0, standard
+  `--cut` exit 1 / BLOCKED (MUST SKIP). An earlier attempt failed only its static step,
+  because the checkout's bridge `dist` was older than the source mtimes
+  (`check-bridge-delivery` staleness); the bridge was rebuilt and the whole gate re-run,
+  and only the re-run is the receipt.
+- **What the 5.5 evidence covers.** The ACP steps drove `claude-sonnet-5-5` prompt turns,
+  the provider-path ones through the set-model readback above. `claude-opus-5-5` ran only
+  as a turn-free socket citizen whose record and `get_info` report
+  `entwurf/claude-opus-5-5`; neither it nor Fable 5.1 has prompt-turn evidence. Before the
+  gate, one no-prompt wire measurement against 0.85.1 recorded the set-model answers for
+  all three ids, and one operator-started ACP turn on `claude-sonnet-5-5` reported its own
+  exact model id; that is a model's self-report, not a gate.
 - **Unpublished candidate carrier.** As in 0.35.0, `plugins/herdr/runtime-lock.json`
   temporarily names the closed `herdr-checkout` source: an npm-source lock must agree with
   the checkout's core version, and 0.35.1 has no published integrity yet. The Herdr
   manifest stays 0.35.0. After the operator publishes core 0.35.1, a separate Herdr
   snapshot re-pins the measured registry bytes.
-- **Publication boundary.** A main push and the prepared SHA's exact CI are the next
-  checkpoint after this preparation. No make artifact, core tag, GitHub Release or npm
-  publication is claimed; they wait for the LIVE release-gate decision and the operator.
+- **Publication boundary.** This record amendment carries no source change and takes its
+  own exact CI, qualification body included, before the make artifact, core tag and GitHub
+  Release. npm publication belongs to the operator; the Herdr re-pin follows it.
 
 ## v2026.10.12-herdr.0.35.0 — Herdr Entwurf plugin 0.35.0
 
