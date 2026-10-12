@@ -1,0 +1,70 @@
+{
+	"schemaVersion": 1,
+	"lane": "herdr-dev-checkout",
+	"mutants": [
+		{
+			"claim": "DEV-MENU-EXPLICIT-CONFIRM",
+			"title": "the source menu invokes apply after an unconfirmed selection instead of requiring exact DEV; the existing helper guards do not substitute for the operator's choice",
+			"subject": "run.sh",
+			"find": ["      if [ \"$confirm\" != DEV ]; then"],
+			"replace": ["      if false; then"],
+			"gate": ["bash", "run.sh", "check-tests-beside-behavior"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:DEV-MENU-EXPLICIT-CONFIRM]",
+			"signatureSource": "plugins/herdr/use-dev-checkout.test.mjs",
+			"build": {
+				"argv": ["bash", "scripts/build-bridge.sh"],
+				"output": "mcp/entwurf-bridge/dist"
+			}
+		},
+		{
+			"claim": "HERDR-DEV-PREPARE-BEFORE-TEARDOWN",
+			"title": "deactivation must be preceded by a successful source bridge proof, not merely a build",
+			"subject": "plugins/herdr/use-dev-checkout.sh",
+			"find": ["(cd \"$ROOT\" && pnpm run build-bridge)", "\"$ROOT/run.sh\" check-bridge"],
+			"replace": ["(cd \"$ROOT\" && pnpm run build-bridge)", ":"],
+			"gate": ["bash", "run.sh", "check-tests-beside-behavior"],
+			"timeoutSeconds": 600,
+			"signatureSource": "plugins/herdr/use-dev-checkout.test.mjs",
+			"build": {
+				"argv": ["bash", "scripts/build-bridge.sh"],
+				"output": "mcp/entwurf-bridge/dist"
+			},
+			"signature": "[QK:HERDR-DEV-PREPARE-BEFORE-TEARDOWN]"
+		},
+		{
+			"claim": "HERDR-DEV-RECHECK-BEFORE-TEARDOWN",
+			"title": "an old-runtime process appearing during source preparation must refuse before the owner is deactivated",
+			"subject": "plugins/herdr/use-dev-checkout.sh",
+			"find": ["quiescent", "", "stage=owned-deactivate"],
+			"replace": [":", "", "stage=owned-deactivate"],
+			"gate": ["bash", "run.sh", "check-tests-beside-behavior"],
+			"timeoutSeconds": 600,
+			"signatureSource": "plugins/herdr/use-dev-checkout.test.mjs",
+			"build": {
+				"argv": ["bash", "scripts/build-bridge.sh"],
+				"output": "mcp/entwurf-bridge/dist"
+			},
+			"signature": "[QK:HERDR-DEV-RECHECK-BEFORE-TEARDOWN]"
+		},
+		{
+			"claim": "HERDR-DEV-NO-SUCCESS-ON-DRIFT",
+			"title": "actual Pi model-id drift must remain non-green rather than claiming successful developer wiring",
+			"subject": "plugins/herdr/use-dev-checkout.sh",
+			"find": [
+				"[ \"$ACTUAL_IDS\" = \"$SOURCE_IDS\" ] || { echo '[use-dev-checkout] actual Pi model IDs differ from the explicit checkout provider; not accepted.' >&2; exit 1; }"
+			],
+			"replace": [
+				"true || { echo '[use-dev-checkout] actual Pi model IDs differ from the explicit checkout provider; not accepted.' >&2; exit 1; }"
+			],
+			"gate": ["bash", "run.sh", "check-tests-beside-behavior"],
+			"timeoutSeconds": 600,
+			"signatureSource": "plugins/herdr/use-dev-checkout.test.mjs",
+			"build": {
+				"argv": ["bash", "scripts/build-bridge.sh"],
+				"output": "mcp/entwurf-bridge/dist"
+			},
+			"signature": "[QK:HERDR-DEV-NO-SUCCESS-ON-DRIFT]"
+		}
+	]
+}

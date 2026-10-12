@@ -523,6 +523,55 @@ only a real Herdr workbench can produce.
 
 ---
 
+## Developer checkout: return after an installed-package check
+
+Use npm installation to verify the consumer surface; use a prepared local checkout as the
+developer board. These are separate modes and evidence: development wiring is not
+installed-artifact acceptance. In the source checkout, open the menu:
+
+```bash
+./run.sh menu
+```
+
+Choose **1** for a read-only readiness check, **2** to return Pi and Claude Code wiring and
+Herdr's local plugin link to this checkout, or **0** to quit. Switching first runs the same
+read-only check, then requires the exact confirmation `DEV`. A refused check stops before
+that prompt; cancellation calls no apply. The menu requires an interactive terminal and is
+source-only, not an npm acquisition or a second installation authority.
+
+The underlying procedure remains available for explicit terminal use:
+
+```bash
+./plugins/herdr/use-dev-checkout.sh          # read-only readiness check (default)
+./plugins/herdr/use-dev-checkout.sh --apply  # explicit host wiring change
+```
+
+This source-only helper composes the existing ownership verbs: build/check the checkout first,
+invoke the old runtime's owned deactivate, expose the two development command links, install
+checkout Pi/Claude wiring, then `herdr plugin link` (no plugin build or npm acquisition). It does
+not run the broad multi-harness `setup`, install credentials, close processes, fresh-cut records,
+force takeover, or change `runtime-lock.json`. The checkout's dependencies must already exist;
+use `pnpm install --frozen-lockfile` to prepare them, not a second global Entwurf install.
+
+**Readiness is deliberately partial:** it certifies source/prerequisite presence, the existing
+ledger/root/phase, observable old-runtime argv paths and the active record store. It does not
+certify all destination writers' version floors, settings shapes or ownership refusals. The source
+build/bridge/provider checks run before deactivation, but a later Pi/Claude writer can still refuse
+after the old owner is removed. Check the supported Node/Claude/Pi versions and the existing
+installers' requirements first; this helper neither duplicates those policies nor promises atomic
+switching or automatic recovery.
+
+Before applying, stop new session creation and close all sessions using the old installation.
+The helper refuses processes whose argv explicitly names old-runtime files before writes and
+rechecks before deactivation. An in-process loaded extension with no such argv is not proved
+quiescent by this scan; this is a manual-switch guard, not complete liveness certification or
+continuous supervision. Any failed step
+stops without rollback or blind retry. Start new Pi/Claude sessions afterwards. Registration/path
+checks are not a real model turn or a release floor. This helper's host procedure is Linux-only
+until separately measured elsewhere; the default check performs no build or installation.
+Herdr's local link replaces the registry entry without a build; any former GitHub-managed plugin
+checkout/cache bytes are left in place. This helper adds no cache deletion authority.
+
 ## The runtime, and the two sources it may come from
 
 `scripts/herdr-runtime.mjs` (shipped; `lib/runtime-bootstrap.mjs` is a one-line re-export) acquires

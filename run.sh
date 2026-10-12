@@ -116,9 +116,55 @@ run_vitest() {
   (cd "$REPO_DIR" && "$bin" run "$@")
 }
 
+# A source-only UI over the existing owned developer-return procedure. No second
+# installer, npm acquisition, automatic mode switch or ownership writer lives here.
+developer_menu() {
+  [ "$#" -eq 0 ] || { echo 'usage: ./run.sh menu' >&2; return 2; }
+  if [ ! -d "$REPO_DIR/.git" ] || [ ! -f "$REPO_DIR/plugins/herdr/use-dev-checkout.sh" ]; then
+    echo '[menu] developer-checkout-source-only — run ./run.sh menu from the prepared source checkout, not the npm installation.' >&2
+    return 1
+  fi
+  if [ ! -t 0 ]; then
+    echo '[menu] menu-tty-required — interactive stdin is required; nothing was changed.' >&2
+    return 2
+  fi
+  local choice confirm
+  printf '\nHerdr — npm 설치 검증 → 개발자 보드 (local checkout)\n'
+  printf '체크아웃: %s\n' "$REPO_DIR"
+  printf '  1) 전환 준비 점검 — 읽기 전용 (설치 사전조건 전체 인증 아님)\n'
+  printf '  2) 개발자 보드로 전환 — Pi / Claude Code / Herdr local link\n'
+  printf '  0) 종료 — 변경 없음\n'
+  if ! IFS= read -r -p '선택 [0/1/2]: ' choice; then
+    echo '[menu] menu-input-closed — nothing was changed.' >&2
+    return 2
+  fi
+  case "$choice" in
+    0) return 0 ;;
+    1) bash "$REPO_DIR/plugins/herdr/use-dev-checkout.sh" --check ;;
+    2)
+      # Show the real owner's readiness first. Busy sessions or bad ownership
+      # stop here; confirmation grants no authority to bypass those guards.
+      bash "$REPO_DIR/plugins/herdr/use-dev-checkout.sh" --check || return $?
+      printf '\n관련 세션을 직접 종료하고, 전환 중에는 새 세션을 만들지 마세요.\n'
+      printf '기존 소유 설치를 해제한 뒤 이 checkout으로 연결합니다. 자동 복구·재시도는 없습니다.\n'
+      if ! IFS= read -r -p '전환하려면 DEV를 입력하세요 (그 외 취소): ' confirm; then
+        echo '[menu] menu-input-closed — apply was not called.' >&2
+        return 2
+      fi
+      if [ "$confirm" != DEV ]; then
+        echo '[menu] 취소 — 설치 연결 변경 없음.'
+        return 0
+      fi
+      bash "$REPO_DIR/plugins/herdr/use-dev-checkout.sh" --apply
+      ;;
+    *) echo '[menu] invalid-menu-choice — choose 0, 1 or 2; nothing was changed.' >&2; return 2 ;;
+  esac
+}
+
 usage() {
   cat <<'EOF'
 Usage:
+  ./run.sh menu                       # source-only Herdr developer board: read-only readiness check or explicitly confirmed return to checkout wiring; never closes sessions or acquires npm artifacts
   ./run.sh setup [project-dir]        # ONE presence-driven composition (#86): per-component PASS/SKIP/FAIL for pi/claude/agy/copilot/omp/codex + stable dev bins + v2 install smoke. Codex birth/MCP/status-line atoms are composed at user scope; setup stays non-green until the operator trusts the birth declaration once in visible Codex. Absent harness = zero-state SKIP, detected-incomplete = named FAIL + nonzero exit. Never installs a harness, starts a daemon, touches credentials, or writes the vendor trust receipt
   ./run.sh release-gate [project-dir] [--cut] [--allow-skip-gemini]  # SINGLE release gate: full static (pnpm run check:full) + the v2-native live gates (v2 matrix-live, check-bridge, doctor-pi-provider, RGG) + the ACP plugin acceptance floor (12 LIVE smokes: socket-citizen/raw-turn/overlay/provider/session-reuse/carrier-augment/memory-containment/rgg/mcp/skill/bundled-mcp/v2-send) + the one surviving axis the aggregate used to omit silently (claude-native-resume; Cortex stays a documented on-demand direct call) + the cross-harness delivery chain (smoke-entwurf-chain-live) + the Codex Pi -> visible Codex -> visible Pi receipt chain (smoke-codex-fresh-live; initial Pi and the Codex it opens in one session S, explicit operator-owned app-server PID in a DIFFERENT session — that separation is the lane B claim). TWO-TIER summary: MUST (release-blocking, owns the exit code — "green" applies here) + BEHAVIOR (advisory, non-blocking: RGG positives model-in-loop turn). STEP OUTCOME protocol: every step is INVOKED and reports its own PASS / SKIP (exit 97, a prerequisite it does not have) / FAIL — a skip is never counted as a pass. Without --cut this is the unattended diagnostic (SKIPs reported, exit 0). WITH --cut it is read as release acceptance and ANY MUST SKIP is red, which is what makes "a CUT needs LIVE=1, SKIP=0" executable instead of prose. --allow-skip-gemini accepted-but-ignored (back-compat). final cut authorization is GLG's.
   ./run.sh check-bridge               # entwurf-bridge direct MCP smoke + protocol/negative-path test.sh (live substrate = v2 live smokes)
@@ -223,7 +269,7 @@ Usage:
   ./run.sh check-meta-manifest-schema # 0.12.2 meta-bridge: CLI-version-INDEPENDENT static guard — plugin manifests pinned to the minimal keyset that validates on the lowest supported Claude (closed-schema regression that broke 0.12.1 install on floor) + desired_mcp installed-vs-clone dual-mode. Offline (deps: python3)
   ./run.sh smoke-claude-native-resume-live # LIVE-only: Claude Code native fresh→--resume continuity + meta-record uniqueness; proves meta-bridge records identity without touching the backend resume path
 
-  ./run.sh install-meta-bridge        # INTERNAL part of `setup` (native-harness plugin) + doctor recovery path — prefer `setup`; stateful GLOBAL install (plugin + USER MCP + settings keyset, honest uninstall state)
+  ./run.sh install-meta-bridge        # INTERNAL wiring leaf: setup, the source-only developer menu and doctor recovery compose it; stateful GLOBAL install (plugin + USER MCP + settings keyset, honest uninstall state)
   ./run.sh uninstall-meta-bridge      # 1.0.0 meta-bridge Phase 2: stateful GLOBAL uninstall (restore only keys/items captured in install-state)
   ./run.sh doctor-meta-bridge         # THE RELEASE ORACLE (#51, Linux-certified repair axis). exit 0 = every required layer was MEASURED on this Linux host: toolchain + state + plugin/MCP + resolved-artifact launch-form classification (all 3 owner hooks + doorbell static contract) + synthetic owner join + store scan + hook errors + SessionStart evidence + REQUIRED live MCP↔marker join + writer-version parity. Missing live evidence is NOT CERTIFIED (open a Claude session and re-run), never a pass; Darwin is NOT CERTIFIED and stays nonzero, on ONE narrowed reason — start-key and ppid are portable there (`ps` fallback, same string the TS core mints), so what holds the lane closed is per-process environment DISCOVERY alone, pending physical-host evidence. Detection power is held by check-meta-doctor-oracle
   ./run.sh copilot [args...]          # #82 RAIL 7: the MANAGED Copilot launch. exec()s the vendor CLI in THIS terminal (cwd/pid/exit preserved) with COPILOT_CLI_ENABLED_FEATURE_FLAGS=EXTENSIONS set for that one invocation — entwurf owns no part of your shell and writes nothing to it, but it owns the process it is about to become. Without that flag Copilot skips the extension scan SILENTLY. Refuses to launch unless the receiver unit is actually installed. Injects `--model auto` when no --model was given and `--yolo` when no explicit permission/surface policy flag was given, both BEFORE any `--`; every argument you pass is forwarded byte-identical. RUNNING THIS IS YOUR CONSENT to that profile — use plain `copilot` for stock vendor behaviour. Not tmux, not fresh-call, mints no citizen (birth is still the first prompt)
@@ -291,7 +337,7 @@ Usage:
   ./run.sh check-fresh-cut-gate       # SOURCE cell of the generation-boundary proof (IN pnpm run check:full): drives real install/setup/fresh-cut in a sandbox; certification refusal is pre-write, quiescence is fail-closed, archives preserve bytes, and the #54 exit matrix distinguishes complete / no-move / usage / incomplete transition / complete-with-cleanup-residue. No model/network/cost
   ./run.sh check-pack-install         # heavy publish gate (prepublishOnly): actual npm pack + tar -tf + fresh-temp install smoke + the #116 M3-b1 herdr-plugin RUNTIME VERIFIER run against that actual installed tarball (the focused check-herdr-runtime-bootstrap drives a fixture; THIS is where the real package is proven) with the pinned pi SDK (pins derived from the package.json exact production dependency; check-dep-versions binds them) + the npm-installed bridge BOOTS (tools/list) and DELIVERS (tools/call entwurf_v2 → .msg lands) + the installed all-absent and copilot-present (four-unit fake-vendor) `entwurf setup` rows + the INSTALLED generation lifecycle on a seeded previous-generation host (REFUSE before activation writes / zero Claude invocations → installed fresh-cut archives + opens empty → install-meta-bridge PASSES) + the INSTALLED-PACKAGE branch of the Copilot and OMP birth installers actually RUN (compiled entry selected, no raw .ts, and a real birth edge mints a citizen — the half a required-artifact list can never stand in for) + the INSTALLED #129 durable bootstrap (pi/pi-durable/bootstrap.mjs) imported from node_modules: main/openDurableCitizen exported and PACKAGED_BRIDGE_ENTRY = the installed package's own dist entry — import only, no runtime/TUI/birth/bridge started + the #130 pi-durable CARRIER on actual npm consumers (Entwurf-only / aligned host / isolated global): the installed verifier, a consumer-contained resolution oracle with a same-sandbox neighbour control, every physical SDK edge at the pin, a mixed tree refused as pi-durable-sdk-mismatch though it still imports, and the public `entwurf pi-durable` reaching the app's own explicit-model refusal before any birth, also with one explicit `--native-module` (the synthetic fixture, initialized first; a reserved extension name refused before anything opens) (offline, sandbox HOME)
   ./run.sh check-install-container    # 0.12.8 (#51 C): Linux artifact-CONSUMER gate — one candidate .tgz handed read-only to a checkout-invisible node:<engines-major>-bookworm cell. Default packs once to temp; ENTWURF_CANDIDATE_TGZ=/absolute/preserved.tgz consumes those exact bytes with no re-pack and prints canonical path+sha256 for release. Non-root global PATH install, frozen package, MCP tools/list, fake-Claude install-meta-bridge, path+sha256 fence, strict doctor, and the GENERATION host-state matrix (clean / v3-only store bytes unchanged / previous-generation REFUSE→fresh-cut→retry PASS) seeded inline. Docker missing = honest SKIP; ENTWURF_REQUIRE_DOCKER=1 makes that RED (required CI)
-  ./run.sh install [project-dir]      # INTERNAL part of `setup` (project .pi/settings.json wiring) + npm-consumer entry — prefer `setup`, don't call directly for dev
+  ./run.sh install [project-dir]      # INTERNAL wiring leaf: setup/npm-consumer entry and the source-only developer menu compose it; prefer those owning procedures
   ./run.sh remove [project-dir]       # remove entwurf entries from project .pi/settings.json (project scope only; global user-scope citizen left intact)
   ./run.sh install-user-scope [--plugin-runtime <root>]  # #116 M3-b2 PLUGIN-ONLY forward seam: compose ONLY the global pi citizen (user-scope packages[] + provider), never a project `.pi/settings.json` — a Herdr plugin activation has no project and must not invent one. With --plugin-runtime the provider's managed command becomes the absolute bridge under that certified stable runtime (a clean host has nothing entwurf on PATH); without it every byte is the historical bare-bin install. Inverse: remove-user-scope
   ./run.sh herdr-plugin-activate <backend...>  # #116 M3-b2 public forward activation. Takes a subset of {pi, claude-code} and NOTHING else — the stable runtime root is DERIVED from XDG here and handed down, and both harness writers accept a named root only when it IS that derived one. Certifies the runtime-ready journal AND the installed tree, certifies the existing ledger and its recorded harness roots, plans ADD-ONLY (a backend absent from this request is retained, never removed), preflights every selected component before the first byte, then writes each component `pending` BEFORE mutating and checkpoints `active` the moment its writer returns — so a run that dies halfway leaves a record of how far it got. Which backends is M3-b3's question: this verb is handed the answer, it does not read Herdr's integration status
@@ -7069,6 +7115,10 @@ release_gate() {
 
 cmd=${1:-}
 case "$cmd" in
+  menu)
+    shift
+    developer_menu "$@"
+    ;;
   setup)
     setup_all "$TARGET_PROJECT_DIR"
     ;;
