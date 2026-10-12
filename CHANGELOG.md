@@ -4,16 +4,20 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+## 0.35.1 - 2026-10-12
+
 ### ACP
 
 - **Claude rows move to Opus/Sonnet 5.5 (#128).** The curated `entwurf` Claude ids are
   now `claude-opus-5-5`, `claude-sonnet-5-5` and `claude-fable-5-1`; the Cortex rows keep
   their native 5 ids. Driver `claude-agent-acp` stays 0.85.1, whose SDK already lists the
-  5.5 ids; no live 5.5 turn is claimed. The retired `claude-opus-5` / `claude-sonnet-5`
-  are not aliased: an Entwurf-built pi launch (`entwurf_fresh_call` `entwurf/<id>`, or
-  `entwurf_resume_call` of a session recorded on one) refuses them as
-  `acp-model-not-curated` before a pane opens, because Pi's substring resolver would
-  otherwise open them on the Cortex rows. Records and transcripts are not rewritten.
+  5.5 ids. Curation and launch checks alone do not certify a live 5.5 turn; the narrow
+  LIVE evidence is recorded under the release boundary below. The retired
+  `claude-opus-5` / `claude-sonnet-5` are not aliased: an Entwurf-built pi launch
+  (`entwurf_fresh_call` `entwurf/<id>`, or `entwurf_resume_call` of a session recorded on
+  one) refuses them as `acp-model-not-curated` before a pane opens, because Pi's substring
+  resolver would otherwise open them on the Cortex rows. Records and transcripts are not
+  rewritten.
 - **Claude set-model answers are read back before the prompt (#128).** The driver answers
   `claude-sonnet-5-5` and `claude-opus-5-5` with its alias rows `sonnet` / `opus`, named
   `Sonnet 5.5` / `Opus 5.5`, and `claude-fable-5-1` with its own row (measured against
@@ -31,6 +35,44 @@ All notable changes to this project will be documented here. Format follows [Kee
   Herdr's local plugin to this checkout. It needs an interactive terminal, runs only from a
   source checkout, and adds no installer, npm acquisition, retry or recovery. Its prompts
   and messages are English.
+
+### pi-durable
+
+- **A read withdraws the inbox notices it made stale (#140).** A doorbell queues one native
+  follow-up per arriving message, while `entwurf_inbox_read` drains them all, so each
+  leftover notice started a run that read an empty inbox. After a read attempt, the
+  pi-durable host aborts (`Submission.abort`) its own queued notices whose announced mail is
+  no longer unread. Reads and rings share one gate. A failed inspection of the mailbox
+  retains the tracked notices; a failed abort releases its tracked handle without retry.
+  Both are named on stderr and leave the read's outcome unchanged. This does not claim the
+  native queued notice was removed after a failed abort, nor crash-safe receive.
+
+### Release boundary and verification
+
+- **Driver unchanged by operator instruction.** `claude-agent-acp` stays 0.85.1. The 0.89.1
+  line (ACP SDK 1.6 → 1.8, agent SDK 0.3.293) is a separate lane and is not read as
+  compatible here.
+- **Local evidence is focused, not a whole pass.** Each slice ran its affected focused gates
+  and its affected qualification groups once as PARTIAL receipts, each with a green
+  control: the #128 launch cut killed 99/99 claims in 12 groups, the set-model readback
+  75/75 in 12 groups, and the menu 6/6 in one group. The set now holds 956 claims across
+  72 lanes. By operator instruction the FULL floor and the whole qualification BODY were
+  not repeated locally; both belong to the prepared SHA's exact CI run, which is pending at
+  preparation time and is not presumed PASS.
+- **LIVE evidence is narrow.** One no-prompt wire measurement against 0.85.1 recorded the
+  set-model answers above. One operator-started ACP turn on `claude-sonnet-5-5` reported,
+  from its own environment text, "The exact model ID is claude-sonnet-5-5"; that is a
+  model's self-report, not a gate. Opus 5.5 and Fable 5.1 have no prompt-turn evidence.
+  The LIVE release gate was not run for this preparation, so native Codex and the other
+  MUST steps carry no 0.35.1 receipt.
+- **Unpublished candidate carrier.** As in 0.35.0, `plugins/herdr/runtime-lock.json`
+  temporarily names the closed `herdr-checkout` source: an npm-source lock must agree with
+  the checkout's core version, and 0.35.1 has no published integrity yet. The Herdr
+  manifest stays 0.35.0. After the operator publishes core 0.35.1, a separate Herdr
+  snapshot re-pins the measured registry bytes.
+- **Publication boundary.** A main push and the prepared SHA's exact CI are the next
+  checkpoint after this preparation. No make artifact, core tag, GitHub Release or npm
+  publication is claimed; they wait for the LIVE release-gate decision and the operator.
 
 ## v2026.10.12-herdr.0.35.0 — Herdr Entwurf plugin 0.35.0
 

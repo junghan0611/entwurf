@@ -1,8 +1,6 @@
 {
 	"schemaVersion": 2,
-	"comment": "Production npm pin for the separate Herdr 0.35.0 snapshot, after the operator published core 0.35.0. The downloaded registry tarball's independently computed sha512 equals dist.integrity and its sha256 equals the preserved accepted core artifact. This closes the temporary herdr-checkout verification window; no environment choice or acquisition fallback. Hosts moving from herdr-checkout to npm require explicit deactivate/activate, never inherited activation. Same-source settled npm installations may rebind under the plugin README's ownership conditions.",
-	"source": "npm",
-	"name": "@junghanacs/entwurf",
-	"version": "0.35.0",
-	"integrity": "sha512-ENivJbtrfrJgngdV+ECNM2uTj9MOZnl1qoqxRIVrV43/BwYMLauVfnUWO0ZHE+we3zDTqrVzR1o1ZaT5umf2zA=="
+	"comment": "Core 0.35.1 is an unpublished prepared candidate: the existing closed herdr-checkout source verifies the checkout commit without fabricating an npm integrity. The last published npm pin was @junghanacs/entwurf@0.35.0 in the separate Herdr 0.35.0 snapshot; no Herdr manifest version is bumped here. npm remains the production authority class. Re-pin the measured registry bytes only after the operator publishes core 0.35.1, and measure the later Herdr snapshot's own #137 integration. Source switches require explicit deactivate/activate, never inherited activation, an environment choice or fallback.",
+	"source": "herdr-checkout",
+	"repository": "junghan0611/entwurf"
 }
