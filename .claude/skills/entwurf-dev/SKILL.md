@@ -84,7 +84,7 @@ transcript를 가진 garden citizen이다.
 - 기본 정책은 Pi=`openai-codex/gpt-5.6-luna`, Claude Code=`claude-sonnet-5`, Codex=`gpt-5.6-luna`이다.
   Codex 기본값은 2026-09-17에 `sol`에서 내렸다 — live-spend 결정이고, GLG가 명시적으로 상위 tier를 말할
   때만 올라간다.
-- GLG가 “entwurf 소넷”이라고 하면 Pi + `entwurf/claude-sonnet-5`다.
+- GLG가 “entwurf 소넷”이라고 하면 Pi + `entwurf/claude-sonnet-5-5`다.
 - **Provider budget:** sibling launch에 OpenRouter를 쓰지 않는다. 이는 GLG 개인의 embedding/image 전용 제한 rail이다. Claude Code 구독, Pi의 승인된 GPT/Codex·xAI 구독, 또는 direct endpoint로 이미 설정된 회사 API만 쓴다. model label은 billing rail 증거가 아니다. 요청된 model이 현재 OpenRouter로 resolve되면 launch·test turn·login check·probe script를 하지 말고 그 한 사실만 즉시 보고한다. GLG가 이미 승인한 rail의 형제를 요청하면 credential/login을 다시 묻거나 찾지 말고 fresh-call을 바로 한 번 호출한다.
 - `entwurf_v2` intent는 정확히 `fire-and-forget` 하나다. 이 verb는 어떤 rail에서도 프로세스를 열지 않는다.
 - `entwurf_peers`는 사실 조회이며 생성·재개 명령이 아니다.
@@ -151,7 +151,7 @@ citizen의 맥락을 요구한 경우에만 그 exact id로 `entwurf_v2`를 보�
    omp는 `openai-codex/gpt-5.6-sol` — 2026-08-30 two-stage bootstrap callback이 실제로 측정된 모델이고,
    `smoke-omp-fresh-live`의 기본값과 같은 값이다 — Codex는 `gpt-5.6-luna`다.
    - “sol/terra/luna” → Pi `openai-codex/gpt-5.6-<tier>`
-   - “entwurf 소넷” → Pi `entwurf/claude-sonnet-5`
+   - “entwurf 소넷” → Pi `entwurf/claude-sonnet-5-5`
    - “클로드코드 소넷” → Claude Code `claude-sonnet-5`
    - 그 밖의 model은 GLG가 말한 canonical id/alias를 그대로 쓴다. 다만 model label로 provider를 추측하지 않는다: provider-budget 정책의 승인된 direct route인 것이 이미 알려진 경우에만 launch한다.
 3. task가 생략되면 다음처럼 작고 관측 가능한 기본 task를 쓴다.

@@ -2,10 +2,10 @@
 #
 # Model id convention (see AGENTS.md Hard Rule #1):
 #   - User-facing examples use the qualified form `entwurf/<backend-model>`
-#     (e.g. `entwurf/claude-sonnet-5`); the prefix routes to this provider
+#     (e.g. `entwurf/claude-sonnet-5-5`); the prefix routes to this provider
 #     so `--provider` is redundant and is dropped in docs.
 #   - Smoke helpers that feed `ensureBridgeSession({modelId})` directly (cancel,
-#     model-switch) pass BARE backend ids (`claude-sonnet-5`, `gpt-5.4`)
+#     model-switch) pass BARE backend ids (`claude-sonnet-5-5`, `gpt-5.4`)
 #     because the bridge library contract is bare. Smoke helpers that invoke pi
 #     via the CLI still pin `--provider entwurf` and can accept either
 #     bare or qualified model, but we keep bare here to match the bridge-level
@@ -32,7 +32,7 @@ TARGET_PROJECT_DIR=${2:-$PROJECT_DIR_DEFAULT}
 # and install path against the same scope for traceability.
 PACKAGE_NAME="@junghanacs/entwurf"
 # Runtime provider id — DO NOT change. Embedded in model strings
-# (`entwurf/claude-sonnet-5`), settings keys (`entwurfProvider`),
+# (`entwurf/claude-sonnet-5-5`), settings keys (`entwurfProvider`),
 # log prefixes (`[entwurf:bootstrap]`), and the `--provider entwurf`
 # CLI surface. Renaming this would break every consumer transcript and every
 # saved session anchor.
@@ -1649,12 +1649,12 @@ check_mux_launch_tmux() {
 smoke_acp_socket_citizen_live() {
   # S1 acceptance smoke (ACP plugin on v2) — OUT of pnpm check, needs LIVE=1.
   # Spawns a REAL `pi --entwurf-control` resident on an ACP model
-  # (entwurf/claude-opus-5) and proves it is a first-class socket-citizen:
+  # (entwurf/claude-opus-5-5) and proves it is a first-class socket-citizen:
   # the control socket stands up, get_info answers with the ACP model (model-lock
   # did NOT revert — QM1), idle/cwd are reported, and the fail-loud streamSimple
   # stub never fires (turn-free launch — QM2). No prompt is sent: S1 proves
   # citizenship, never a backend turn (that is S2). Honest skip when LIVE!=1.
-  # Model override: ENTWURF_S1_MODEL (default claude-opus-5).
+  # Model override: ENTWURF_S1_MODEL (default claude-opus-5-5).
   #   LIVE=1 ./run.sh smoke-acp-socket-citizen-live
   run_ts scripts/smoke-acp-socket-citizen-live.ts
 }
@@ -1668,7 +1668,7 @@ smoke_acp_raw_turn_live() {
   # plus captured raw NDJSON bytes. NO provider/overlay/streamSimple/_meta — the
   # raw backend pipe only. Launch source must be the package bin (PATH fallback
   # fails acceptance unless ENTWURF_ACP_RAW_TURN_ALLOW_PATH_FALLBACK=1, debug).
-  # Model override: ENTWURF_ACP_RAW_TURN_MODEL (default claude-sonnet-5).
+  # Model override: ENTWURF_ACP_RAW_TURN_MODEL (default claude-sonnet-5-5).
   #   LIVE=1 ./run.sh smoke-acp-raw-turn-live
   run_ts scripts/smoke-acp-raw-turn-live.ts
 }
@@ -1686,7 +1686,7 @@ smoke_acp_overlay_live() {
   # meta-store for mailbox absence (flaky — concurrent sessions); the honest
   # claim is overlay-supplies-hooks:{}. Launch must be the package bin (PATH
   # fallback fails acceptance unless ENTWURF_ACP_OVERLAY_ALLOW_PATH_FALLBACK=1).
-  # Model override: ENTWURF_ACP_OVERLAY_MODEL (default claude-sonnet-5).
+  # Model override: ENTWURF_ACP_OVERLAY_MODEL (default claude-sonnet-5-5).
   #   LIVE=1 ./run.sh smoke-acp-overlay-live
   run_ts scripts/smoke-acp-overlay-live.ts
 }
@@ -1701,7 +1701,7 @@ smoke_acp_memory_containment_live() {
   # can stop a memory write is the lever — not us. Fails loud if engraving.md is
   # empty (carrier OFF = no containment). Launch must be the package bin (PATH
   # fallback fails acceptance unless ENTWURF_ACP_MEMORY_ALLOW_PATH_FALLBACK=1).
-  # Model override: ENTWURF_ACP_MEMORY_MODEL (default claude-sonnet-5).
+  # Model override: ENTWURF_ACP_MEMORY_MODEL (default claude-sonnet-5-5).
   #   LIVE=1 ./run.sh smoke-acp-memory-containment-live
   run_ts scripts/smoke-acp-memory-containment-live.ts
 }
@@ -1728,7 +1728,7 @@ smoke_acp_provider_live() {
   # assistant reply (live model proof) + the removed S0 stub error never appears
   # (provider path actually opened) + pi exits 0. Tool-free prompt; the
   # event-mapper gate owns the tool→notice contract.
-  # Model override: ENTWURF_ACP_PROVIDER_MODEL (default claude-sonnet-5).
+  # Model override: ENTWURF_ACP_PROVIDER_MODEL (default claude-sonnet-5-5).
   #   LIVE=1 ./run.sh smoke-acp-provider-live
   run_ts scripts/smoke-acp-provider-live.ts
 }
@@ -1742,7 +1742,7 @@ smoke_acp_session_reuse_live() {
   # is the verdict; codeword recall is supporting only (a rebuilt full transcript
   # could recall it too). The one-shot exit0 half is owned by
   # smoke-acp-provider-live.
-  # Model override: ENTWURF_ACP_PROVIDER_MODEL (default claude-sonnet-5).
+  # Model override: ENTWURF_ACP_PROVIDER_MODEL (default claude-sonnet-5-5).
   #   LIVE=1 ./run.sh smoke-acp-session-reuse-live
   run_ts scripts/smoke-acp-session-reuse-live.ts
 }
@@ -1754,7 +1754,7 @@ smoke_acp_carrier_augment_live() {
   # secret (the augment rode the wire to the model) and the EMPTY default carrier
   # must bill clean (exit 0, no HTTP-400 canary — 핀1 live). Optional tiny carrier
   # check via SMOKE_ACP_CARRIER_PRESENT=1 (non-blocking).
-  # Model override: ENTWURF_ACP_PROVIDER_MODEL (default claude-sonnet-5).
+  # Model override: ENTWURF_ACP_PROVIDER_MODEL (default claude-sonnet-5-5).
   #   LIVE=1 ./run.sh smoke-acp-carrier-augment-live
   run_ts scripts/smoke-acp-carrier-augment-live.ts
 }
@@ -1840,9 +1840,9 @@ smoke_acp_rgg_live() {
   # birth, record-keyed socket, attach-on-reopen, no pi-session-id socket) holds
   # under the ACP provider too — the logic is provider-agnostic. The POSITIVE cell
   # (one real turn completing transcriptPath/model) is the only model-in-loop part.
-  # Target override: ENTWURF_RGG_TARGET (default entwurf/claude-sonnet-5).
+  # Target override: ENTWURF_RGG_TARGET (default entwurf/claude-sonnet-5-5).
   #   ./run.sh smoke-acp-rgg-live
-  local target="${ENTWURF_RGG_TARGET:-entwurf/claude-sonnet-5}"
+  local target="${ENTWURF_RGG_TARGET:-entwurf/claude-sonnet-5-5}"
   (cd "$REPO_DIR" && ENTWURF_LIVE_TARGET="$target" SMOKE_RGG_POSITIVE=0 bash scripts/smoke-resident-garden-guard.sh)
 }
 
@@ -3692,7 +3692,7 @@ check_pack() {
     "package.json" "README.md" "LICENSE" "CHANGELOG.md"
     "protocol.js" "run.sh"
     "pi-extensions/acp-provider.ts"
-    "pi-extensions/lib/acp/models.ts" "pi-extensions/lib/acp/backend.ts"
+    "pi-extensions/lib/acp/models.ts" "pi-extensions/lib/acp/model-ids.js" "pi-extensions/lib/acp/backend.ts"
     "pi-extensions/lib/acp/overlay.ts" "pi-extensions/lib/acp/tool-surface.ts"
     "pi-extensions/lib/acp/event-mapper.ts" "pi-extensions/lib/acp/context.ts"
     "pi-extensions/entwurf-control.ts"
@@ -4340,7 +4340,7 @@ _check_pack_install_impl() {
     "package.json" "README.md" "LICENSE" "CHANGELOG.md"
     "protocol.js" "run.sh"
     "pi-extensions/acp-provider.ts"
-    "pi-extensions/lib/acp/models.ts" "pi-extensions/lib/acp/backend.ts"
+    "pi-extensions/lib/acp/models.ts" "pi-extensions/lib/acp/model-ids.js" "pi-extensions/lib/acp/backend.ts"
     "pi-extensions/lib/acp/overlay.ts" "pi-extensions/lib/acp/tool-surface.ts"
     "pi-extensions/lib/acp/event-mapper.ts" "pi-extensions/lib/acp/context.ts"
     "pi-extensions/entwurf-control.ts"
@@ -4766,8 +4766,8 @@ _check_pack_install_impl() {
   loader_ids=$(awk '$1 == "entwurf" { print $2 }' <<<"$loader_out" | LC_ALL=C sort)
   loader_expected=$(printf '%s\n' \
     claude-fable-5-1 \
-    claude-opus-5 \
-    claude-sonnet-5 \
+    claude-opus-5-5 \
+    claude-sonnet-5-5 \
     cortex-auto \
     cortex-claude-opus-5 \
     cortex-claude-sonnet-5 \
@@ -4876,7 +4876,7 @@ sys.exit(0 if any(isinstance(s,str) and s.endswith('/node_modules/@junghanacs/en
     echo "$foreign_out" | tail -10 | sed 's/^/    /' >&2
     return 1
   }
-  if grep -qi "Unknown option" <<<"$foreign_out" || ! grep -q "claude-opus-5" <<<"$foreign_out"; then
+  if grep -qi "Unknown option" <<<"$foreign_out" || ! grep -q "claude-opus-5-5" <<<"$foreign_out"; then
     fail "[check-pack-install] foreign-cwd --entwurf-control did not load the entwurf extension from user scope:"
     echo "$foreign_out" | tail -10 | sed 's/^/    /' >&2
     return 1

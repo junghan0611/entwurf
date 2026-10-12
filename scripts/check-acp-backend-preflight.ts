@@ -16,13 +16,13 @@
 
 import { strict as assert } from "node:assert";
 import { execFileSync } from "node:child_process";
-import { readdirSync, readFileSync, rmSync } from "node:fs";
+import { readdirSync, readFileSync, rmdirSync, rmSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import type { Api, AssistantMessageEvent, Model, TranscriptContext } from "@earendil-works/pi-ai";
 import { normalizeContext } from "@earendil-works/pi-ai";
 
-const model = { id: "claude-sonnet-5" } as unknown as Model<Api>;
+const model = { id: "claude-sonnet-5-5" } as unknown as Model<Api>;
 
 // Declared tools exclude `read`, but the Claude child always exposes Read →
 // declared != actual → the preflight must reject before spawning.
@@ -157,6 +157,14 @@ try {
 	);
 } finally {
 	rmSync(TMP_EMIT, { recursive: true, force: true });
+	try {
+		// Same as check-acp-cortex: the emit created `.tmp-verify/` as TMP_EMIT's parent, and
+		// check-gate-qualification's snapshot manifest walks ignored paths, so a leftover empty
+		// parent reads as a dirty tree. Remove it when empty; a sibling's emit keeps it alive.
+		rmdirSync(".tmp-verify");
+	} catch {
+		// non-empty or already gone — fine either way
+	}
 }
 
 // ---------------------------------------------------------------------------

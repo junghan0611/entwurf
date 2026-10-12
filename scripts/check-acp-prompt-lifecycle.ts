@@ -40,7 +40,7 @@ import type { Api, AssistantMessageEvent, Message, Model, TranscriptContext } fr
 import { normalizeContext } from "@earendil-works/pi-ai";
 import { isRetryableAssistantError } from "@earendil-works/pi-ai/compat";
 
-const sonnet = { id: "claude-sonnet-5" } as unknown as Model<Api>;
+const sonnet = { id: "claude-sonnet-5-5" } as unknown as Model<Api>;
 
 type Stream = AsyncIterable<AssistantMessageEvent>;
 

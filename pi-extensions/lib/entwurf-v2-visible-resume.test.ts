@@ -49,6 +49,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { AcpModelNotCuratedError } from "./acp/model-ids.js";
 import type { AcquireLockResult, LockClaim, ReleaseResult } from "./entwurf-v2-lock.ts";
 import {
 	makeVisibleResumeDeps,
@@ -82,7 +83,7 @@ const IDENTITY: LaunchIdentity = {
 	cwd: "/home/op/project",
 	explicitExtensionArgs: ["-e", "/opt/entwurf"],
 	provider: "entwurf",
-	model: "claude-sonnet-5",
+	model: "claude-sonnet-5-5",
 };
 
 const CLAIM: LockClaim = {
@@ -365,6 +366,34 @@ describe("an unresumable record: the leaf's cause-rich throw survives", () => {
 	});
 });
 
+// ── #128: a recorded entwurf model that is not an exact curated ACP id ────────────
+describe("a recorded entwurf model that is not an exact curated ACP id", () => {
+	it("[QK:V2RESUME-ACP-MODEL-REFUSED] the identity leaf's AcpModelNotCuratedError becomes the named acp-model-not-curated refusal with no window — Pi would otherwise reopen a retired Claude 5 id on a Cortex row by substring", async () => {
+		const h = harness({
+			livenessSequence: ["dead"],
+			resolveIdentity: () => {
+				throw new AcpModelNotCuratedError("claude-sonnet-5");
+			},
+		});
+		const result = await visibleResume(GID, h.deps).catch(
+			(err): VisibleResumeResult => ({
+				ok: false,
+				reason: "target-invalid",
+				detail: `threw instead of refusing: ${err instanceof Error ? err.message : String(err)}`,
+			}),
+		);
+		ok(
+			"the identity leaf's AcpModelNotCuratedError becomes the named acp-model-not-curated refusal with no window",
+			!result.ok &&
+				result.reason === "acp-model-not-curated" &&
+				result.detail.includes('would launch model "claude-sonnet-5" under the entwurf provider') &&
+				!result.detail.includes("recorded model") &&
+				h.launches === 0 &&
+				renderVisibleResume(result).text.includes("exact curated ACP id"),
+		);
+	});
+});
+
 // ── a citizen of a backend that has no same-id resume ────────────────────────────
 describe("a citizen of a backend that has no same-id resume", () => {
 	it("[QK:V2RESUME-NOT-PI-REFUSED] a claude-code / agy target is a NAMED refusal, not an error report: nothing is corrupt, the record is right, and the operator simply reached past a capability boundary — only pi stands a control socket up", async () => {
@@ -521,7 +550,7 @@ describe("THE HAPPY PATH", () => {
 			ok(
 				"the launcher receives the RECORD's cwd and the measured interactive argv — no prompt, no --mode, no -p, and the bridge args exactly where the runtime accepted them",
 				h.trace.includes(
-					`launch:${IDENTITY.cwd}:--entwurf-control -e /opt/entwurf --session ${IDENTITY.sessionFile} --provider entwurf --model claude-sonnet-5`,
+					`launch:${IDENTITY.cwd}:--entwurf-control -e /opt/entwurf --session ${IDENTITY.sessionFile} --provider entwurf --model claude-sonnet-5-5`,
 				),
 			);
 		}
@@ -545,7 +574,7 @@ describe("THE HAPPY PATH", () => {
 			ok(
 				"the launcher receives the RECORD's cwd and the measured interactive argv — no prompt, no --mode, no -p, and the bridge args exactly where the runtime accepted them",
 				h.trace.includes(
-					`launch:${IDENTITY.cwd}:--entwurf-control -e /opt/entwurf --session ${IDENTITY.sessionFile} --provider entwurf --model claude-sonnet-5`,
+					`launch:${IDENTITY.cwd}:--entwurf-control -e /opt/entwurf --session ${IDENTITY.sessionFile} --provider entwurf --model claude-sonnet-5-5`,
 				),
 			);
 			ok(
@@ -576,7 +605,7 @@ describe("THE HAPPY PATH", () => {
 			ok(
 				"the launcher receives the RECORD's cwd and the measured interactive argv — no prompt, no --mode, no -p, and the bridge args exactly where the runtime accepted them",
 				h.trace.includes(
-					`launch:${IDENTITY.cwd}:--entwurf-control -e /opt/entwurf --session ${IDENTITY.sessionFile} --provider entwurf --model claude-sonnet-5`,
+					`launch:${IDENTITY.cwd}:--entwurf-control -e /opt/entwurf --session ${IDENTITY.sessionFile} --provider entwurf --model claude-sonnet-5-5`,
 				),
 			);
 			ok(
@@ -608,7 +637,7 @@ describe("THE HAPPY PATH", () => {
 			ok(
 				"the launcher receives the RECORD's cwd and the measured interactive argv — no prompt, no --mode, no -p, and the bridge args exactly where the runtime accepted them",
 				h.trace.includes(
-					`launch:${IDENTITY.cwd}:--entwurf-control -e /opt/entwurf --session ${IDENTITY.sessionFile} --provider entwurf --model claude-sonnet-5`,
+					`launch:${IDENTITY.cwd}:--entwurf-control -e /opt/entwurf --session ${IDENTITY.sessionFile} --provider entwurf --model claude-sonnet-5-5`,
 				),
 			);
 			ok(
@@ -641,7 +670,7 @@ describe("THE HAPPY PATH", () => {
 			ok(
 				"the launcher receives the RECORD's cwd and the measured interactive argv — no prompt, no --mode, no -p, and the bridge args exactly where the runtime accepted them",
 				h.trace.includes(
-					`launch:${IDENTITY.cwd}:--entwurf-control -e /opt/entwurf --session ${IDENTITY.sessionFile} --provider entwurf --model claude-sonnet-5`,
+					`launch:${IDENTITY.cwd}:--entwurf-control -e /opt/entwurf --session ${IDENTITY.sessionFile} --provider entwurf --model claude-sonnet-5-5`,
 				),
 			);
 			ok(
@@ -682,7 +711,7 @@ describe("THE HAPPY PATH", () => {
 			ok(
 				"the launcher receives the RECORD's cwd and the measured interactive argv — no prompt, no --mode, no -p, and the bridge args exactly where the runtime accepted them",
 				h.trace.includes(
-					`launch:${IDENTITY.cwd}:--entwurf-control -e /opt/entwurf --session ${IDENTITY.sessionFile} --provider entwurf --model claude-sonnet-5`,
+					`launch:${IDENTITY.cwd}:--entwurf-control -e /opt/entwurf --session ${IDENTITY.sessionFile} --provider entwurf --model claude-sonnet-5-5`,
 				),
 			);
 			ok(

@@ -105,8 +105,8 @@ const OVERFLOW_NOISE = "prompt is too long: 250000 tokens > 200000 maximum";
 const LEGACY_STDERR = "vendor says goodbye";
 
 const SONNET: Model<Api> = {
-	id: "claude-sonnet-5",
-	name: "claude-sonnet-5",
+	id: "claude-sonnet-5-5",
+	name: "claude-sonnet-5-5",
 	api: "entwurf",
 	provider: "entwurf",
 	baseUrl: "",

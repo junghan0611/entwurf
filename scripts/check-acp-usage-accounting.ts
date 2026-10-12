@@ -61,7 +61,7 @@ import type {
 import { isContextOverflow, normalizeContext } from "@earendil-works/pi-ai";
 import { calculateContextTokens } from "@earendil-works/pi-coding-agent";
 
-const claude = { id: "claude-sonnet-5" } as unknown as Model<Api>;
+const claude = { id: "claude-sonnet-5-5" } as unknown as Model<Api>;
 const cortex = { id: "cortex-auto" } as unknown as Model<Api>;
 
 type Stream = AsyncIterable<AssistantMessageEvent>;

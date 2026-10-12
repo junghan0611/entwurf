@@ -42,6 +42,7 @@ import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import { AcpModelNotCuratedError } from "../pi-extensions/lib/acp/model-ids.js";
 import { serializeMetaIdentity, upsertMetaSession } from "../pi-extensions/lib/meta-session.ts";
 import {
 	ResumeBackendUnsupportedError,
@@ -159,6 +160,43 @@ function main(): void {
 				gidRel,
 				"RELATIVE transcriptPath",
 				"4: a relative recorded transcriptPath → refused before launch, because --session would resolve against the WINDOW's cwd, not this one [QK:RESUME-ID-SESSION-ABSOLUTE]",
+			);
+		}
+
+		// 4d. #128 — the second EXPECTED refusal. Under the `entwurf` provider Pi resolves `--model`
+		// by substring, so a retired Claude 5 id would reopen on a Cortex row. The pair judged is the
+		// one the launch would EMIT: a bare Claude id recorded under another provider is routed to
+		// `entwurf` too, so judging the recorded provider alone would let that one through.
+		{
+			const acpModelLine = (provider: string, modelId: string): string =>
+				`${JSON.stringify({ type: "model_change", provider, modelId })}\n`;
+			const settle = (gid: string): { identity?: ReturnType<typeof resolveResumeLaunchIdentity>; err?: unknown } => {
+				try {
+					return { identity: resolveResumeLaunchIdentity(gid) };
+				} catch (err) {
+					return { err };
+				}
+			};
+			const minted = (native: string, name: string, provider: string, modelId: string): string =>
+				mintRecord(native, writeTranscript(name, sessionLine(native) + acpModelLine(provider, modelId)));
+			const retired = settle(
+				minted("0199a5a5-1111-4222-8333-444455556666", "acp-retired.jsonl", "entwurf", "claude-sonnet-5"),
+			);
+			const routed = settle(
+				minted("0199b5b5-1111-4222-8333-444455556666", "acp-routed.jsonl", "anthropic", "claude-opus-5"),
+			);
+			const current = settle(
+				minted("0199c5c5-1111-4222-8333-444455556666", "acp-current.jsonl", "entwurf", "claude-sonnet-5-5"),
+			);
+			ok(
+				"4d: an entwurf-provider resume of a non-curated id is a TYPED refusal — recorded under entwurf, or a bare Claude id the launch would route to entwurf — while the exact 5.5 id resolves unchanged [QK:RESUME-ID-ACP-EXACT-CURATION]",
+				retired.err instanceof AcpModelNotCuratedError &&
+					retired.err.reason === "acp-model-not-curated" &&
+					retired.err.model === "claude-sonnet-5" &&
+					routed.err instanceof AcpModelNotCuratedError &&
+					routed.err.model === "claude-opus-5" &&
+					current.identity?.provider === "entwurf" &&
+					current.identity.model === "claude-sonnet-5-5",
 			);
 		}
 

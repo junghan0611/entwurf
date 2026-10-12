@@ -36,7 +36,7 @@ import { connectAcpClient } from "../pi-extensions/lib/acp/acp-client.ts";
 import { terminateChild } from "./lib/acp-child-cleanup.ts";
 import { skipLive } from "./lib/live-skip.ts";
 
-const REQUESTED_MODEL_ID = process.env.ENTWURF_ACP_RAW_TURN_MODEL ?? "claude-sonnet-5";
+const REQUESTED_MODEL_ID = process.env.ENTWURF_ACP_RAW_TURN_MODEL ?? "claude-sonnet-5-5";
 const ALLOW_PATH_FALLBACK = process.env.ENTWURF_ACP_RAW_TURN_ALLOW_PATH_FALLBACK === "1";
 const RAW_TAIL_CAP = 64 * 1024; // cap captured raw NDJSON to 64KB tail on report.
 

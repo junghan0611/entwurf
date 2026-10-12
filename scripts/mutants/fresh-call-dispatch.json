@@ -138,6 +138,17 @@
 			"timeoutSeconds": 120,
 			"signature": "[QK:FCD-NO-SYNC-SPAWN]",
 			"signatureSource": "scripts/check-fresh-call-dispatch.ts"
+		},
+		{
+			"claim": "FCD-ACP-MODEL-EXACT",
+			"title": "dropping the exact-curation check lets a retired entwurf/claude-sonnet-5 reach a rail, where Pi opens it on the Cortex row by substring",
+			"subject": "pi-extensions/lib/fresh-call-dispatch.ts",
+			"find": ["\treturn !isCuratedAcpModelId(trimmed.slice(slash + 1));"],
+			"replace": ["\treturn false;"],
+			"gate": ["bash", "run.sh", "check-fresh-call-dispatch"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:FCD-ACP-MODEL-EXACT]",
+			"signatureSource": "scripts/check-fresh-call-dispatch.ts"
 		}
 	]
 }

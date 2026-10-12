@@ -91,6 +91,21 @@
 			"timeoutSeconds": 60,
 			"signature": "[QK:RESUME-ID-SESSION-ABSOLUTE]",
 			"signatureSource": "scripts/check-resume-launch-identity.ts"
+		},
+		{
+			"claim": "RESUME-ID-ACP-EXACT-CURATION",
+			"title": "judging the RECORDED provider instead of the emitted one lets a bare Claude 5 id recorded under another provider reopen under entwurf on a Cortex row",
+			"subject": "pi-extensions/lib/resume-launch-identity.ts",
+			"find": [
+				"\tif (provider === PROVIDER_ID && !isCuratedAcpModelId(model)) throw new AcpModelNotCuratedError(model);"
+			],
+			"replace": [
+				"\tif (identity.provider === PROVIDER_ID && !isCuratedAcpModelId(model)) throw new AcpModelNotCuratedError(model);"
+			],
+			"gate": ["bash", "run.sh", "check-resume-launch-identity"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:RESUME-ID-ACP-EXACT-CURATION]",
+			"signatureSource": "scripts/check-resume-launch-identity.ts"
 		}
 	]
 }

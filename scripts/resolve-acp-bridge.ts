@@ -16,7 +16,7 @@ import type { ResolvedTarget } from "../pi-extensions/lib/entwurf-core.ts";
 import { getRegistryRouting } from "../pi-extensions/lib/entwurf-core.ts";
 
 const isRemote = process.argv[2] === "remote";
-const target: ResolvedTarget = { provider: "entwurf", model: "claude-sonnet-5", explicitOnly: false };
+const target: ResolvedTarget = { provider: "entwurf", model: "claude-sonnet-5-5", explicitOnly: false };
 
 // Throws EntwurfRoutingError (non-zero exit) when the bridge cannot be resolved —
 // exactly the fail-fast the smoke wants to observe as a failure, not a pass.

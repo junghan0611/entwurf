@@ -210,6 +210,17 @@
 			"timeoutSeconds": 60,
 			"signature": "[QK:V2RESUME-SHARED-ID-GRAMMAR]",
 			"signatureSource": "pi-extensions/lib/entwurf-v2-visible-resume.test.ts"
+		},
+		{
+			"claim": "V2RESUME-ACP-MODEL-REFUSED",
+			"title": "not matching AcpModelNotCuratedError turns the named refusal into a raw error escaping the resume verb",
+			"subject": "pi-extensions/lib/entwurf-v2-visible-resume.ts",
+			"find": ["\t\t\tif (err instanceof AcpModelNotCuratedError) {"],
+			"replace": ["\t\t\tif (err instanceof AcpModelNotCuratedError && false) {"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:V2RESUME-ACP-MODEL-REFUSED]",
+			"signatureSource": "pi-extensions/lib/entwurf-v2-visible-resume.test.ts"
 		}
 	]
 }

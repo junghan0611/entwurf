@@ -116,7 +116,7 @@ that moved out of `scripts/` and into a file beside its subject would otherwise 
 >
 > A cut that touches the prompt-lifecycle contract (no wall clock on a running turn) owes one long-turn acceptance the aggregate floor is too short to carry: `LIVE=1 ./run.sh smoke-acp-long-turn-live` drives a real turn whose tool work outlasts the retired 600s cutoff and requires exactly one cold ACP bootstrap in the transcript. It takes >12 minutes by construction and is on-demand, not part of `release-gate`.
 >
-> **The integrated mux lifecycle IS a release-gate MUST.** `LIVE=1 ./run.sh smoke-mux-lifecycle-live` enters through a real MCP `tools/call` on the shipped bridge launcher and follows one citizen the whole way: fresh-call launch receipt, the sibling's own nonce callback whose SENDER ENVELOPE is the address, an `entwurf_v2` control-socket send that lands in the sibling's own transcript, `entwurf_resume_call` REFUSED while that citizen is live, a stable-handle close proving pane and socket gone with the record preserved, delivery to the dormant citizen refused honestly, then the public `entwurf_resume_call` — whose LAUNCH and OBSERVATION receipts stay apart — and finally an `entwurf_v2` send the resumed session answers with a fact it was told BEFORE the window closed. That last step is the point: a socket answering under the same garden id proves a process stood up at that address, and only the recall proves the same conversation came back. Both pi provider shapes are driven to it (native `openai-codex/gpt-6-luna` and recorded-ACP `entwurf/claude-sonnet-5`, the only shape that re-injects a bridge extension), and the Claude Code cell ends where its capability ends: its resume is refused as `target-not-pi` with no window opened and no lock residue (the per-gid coordination lock is released).
+> **The integrated mux lifecycle IS a release-gate MUST.** `LIVE=1 ./run.sh smoke-mux-lifecycle-live` enters through a real MCP `tools/call` on the shipped bridge launcher and follows one citizen the whole way: fresh-call launch receipt, the sibling's own nonce callback whose SENDER ENVELOPE is the address, an `entwurf_v2` control-socket send that lands in the sibling's own transcript, `entwurf_resume_call` REFUSED while that citizen is live, a stable-handle close proving pane and socket gone with the record preserved, delivery to the dormant citizen refused honestly, then the public `entwurf_resume_call` — whose LAUNCH and OBSERVATION receipts stay apart — and finally an `entwurf_v2` send the resumed session answers with a fact it was told BEFORE the window closed. That last step is the point: a socket answering under the same garden id proves a process stood up at that address, and only the recall proves the same conversation came back. Both pi provider shapes are driven to it (native `openai-codex/gpt-6-luna` and recorded-ACP `entwurf/claude-sonnet-5-5`, the only shape that re-injects a bridge extension), and the Claude Code cell ends where its capability ends: its resume is refused as `target-not-pi` with no window opened and no lock residue (the per-gid coordination lock is released).
 >
 > One cell cannot be fully fenced, and that is recorded rather than glossed: the recorded-ACP pi cell runs under the operator's REAL home, because its provider spawns `claude` as a child that authenticates from there — measured, a fenced HOME kills that turn with `Authentication required` before the model is ever reached, and `CLAUDE_CONFIG_DIR` alone does not fix it. That is the same trade `smoke-acp-bundled-mcp-live` already makes. While that cell runs, its citizen's control socket and per-gid lock exist under the operator's own `~/.pi/entwurf-control` and `~/.pi/entwurf-v2-locks`; its meta store stays fixture, so no garden record is minted outside the fixture, and the run ends by proving all six real roots hold the entry sets they started with, with no fixture garden id and no leftover lock.
 >
@@ -278,7 +278,7 @@ consumer image outside this standing protocol.
 ### Verifying the two capabilities a gate cannot fully judge
 
 - **Garden-id delivery:** discover a target with `entwurf_peers`, then `entwurf_v2 fire-and-forget` — the intent axis is single-valued since the visible-first cut. It reaches a live pi target over its control socket, a deliverable self-fetch citizen through the mailbox, and a probe-alive native-push conversation by direct injection. A DORMANT in-domain citizen rejects as `dormant-fire-forget-unsupported` — delivery never wakes it; reopen it with the separate lifecycle verb `entwurf_resume_call {target}`, then dispatch again. A wrong target state is rejected, never auto-fixed and never launched into.
-- **ACP continuity:** a direct `pi --provider entwurf --model claude-sonnet-5` turn, or the `smoke-acp-session-reuse-live` gate (process-scoped reuse + recall). Multi-turn reuse is proven by that gate, not by any v1 resume tool.
+- **ACP continuity:** a direct `pi --provider entwurf --model claude-sonnet-5-5` turn, or the `smoke-acp-session-reuse-live` gate (process-scoped reuse + recall). Multi-turn reuse is proven by that gate, not by any v1 resume tool.
 - **agy citizenship:** in a fresh agy conversation, the first `PreInvocation` must yield a garden id, `entwurf_self` must report `agentId=meta-session/antigravity` and `replyable:true` only while the native probe is alive, and a reply to that same garden id must direct-inject into the same conversation. No mailbox/receiver-marker evidence counts on this rail.
 
 ### What NOT to do — bypassing the operational path
@@ -393,7 +393,7 @@ strips Claude hooks (`hooks: {}` overlay). Strip those carriers:
 cd /path/to/scratch
 env -u CLAUDE_CONFIG_DIR -u PI_SESSION_ID -u PI_AGENT_ID \
   LIVE=1 /path/to/entwurf/run.sh release-gate /path/to/scratch --cut
-pi --provider entwurf --model claude-sonnet-5 -p "reply with ok only"   # one-turn smoke
+pi --provider entwurf --model claude-sonnet-5-5 -p "reply with ok only"   # one-turn smoke
 ```
 
 The one-turn smoke is a **provider**-surface check (auth + model routing + a real
@@ -421,7 +421,7 @@ frozen here.
 
 ## 1A. Main Agent Evaluation — Is `entwurf` Claude strong enough?
 
-Separate from continuity gates. Gates prove "sessions continue"; this questionnaire examines tool self-awareness / native tool usability / MCP-boundary awareness / long-turn focus / quality vs direct Claude Code. Run it against `entwurf/claude-sonnet-5` via a direct `pi --provider entwurf` turn (or a live ACP session); accumulate turns by re-prompting the same target.
+Separate from continuity gates. Gates prove "sessions continue"; this questionnaire examines tool self-awareness / native tool usability / MCP-boundary awareness / long-turn focus / quality vs direct Claude Code. Run it against `entwurf/claude-sonnet-5-5` via a direct `pi --provider entwurf` turn (or a live ACP session); accumulate turns by re-prompting the same target.
 
 ### 1A.0 Two carrier surfaces — engraving vs pi-context-augment (load-bearing)
 

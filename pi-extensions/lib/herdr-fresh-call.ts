@@ -119,6 +119,7 @@ export type HerdrFreshCallRejectReason =
 	// The caller-facing input contract, shared with the tmux rail so a mistyped model or an
 	// oversized task is answered with the SAME word on either placement owner.
 	| FreshCallInputRejectReason
+	| "acp-model-not-curated"
 	| "herdr-context-missing"
 	| "herdr-caller-pane-missing"
 	/** herdr would not tell us where the CALLER is sitting. Three separate names because the
@@ -1102,6 +1103,10 @@ const HERDR_REJECT_HINT: Record<HerdrFreshCallRejectReason | HerdrLaunchFailureR
 		"this surface has no record-backed identity, so a sibling would have nowhere to call home",
 	"model-empty": "pass the model you want the sibling opened with — it is never inherited from this process",
 	"model-invalid": "the model is not in the accepted grammar (no whitespace, no leading dash)",
+	// #128: decided at the dispatch root (`fresh-call-dispatch.ts`), worded here because this rail's
+	// import fence admits no ACP module. The curated list itself lives in `acp/model-ids.js`.
+	"acp-model-not-curated":
+		"an entwurf model must be one exact curated ACP id — Pi would otherwise pick another row by substring (a retired claude-sonnet-5 lands on cortex-claude-sonnet-5), so nothing was opened and nothing was aliased",
 	"task-empty": "a sibling opened with nothing to do is a window nobody asked for",
 	"task-too-long": `the task is over the ${TASK_MAX_CHARS}-character interface bound this verb shares with entwurf_v2`,
 	"herdr-context-missing":

@@ -26,6 +26,8 @@
  *   FCD-RENDER-PER-RAIL       each rail renders its own receipt; no universal tmux prose
  *   FCD-HERDR-VIEW-NOT-ADDRESS  the herdr receipt says its coordinates are a view
  *   FCD-RECOVERY-VISIBLE      a post-split failure shows closed vs orphan-unreclaimed:reason
+ *   FCD-ACP-MODEL-EXACT       a pi `entwurf/<id>` that is not an exact curated ACP id refuses on
+ *                             either rail before anything runs (#128)
  */
 
 import assert from "node:assert/strict";
@@ -112,10 +114,18 @@ async function main(): Promise<void> {
 	// Up to the FIRST statement of the tmux path, which is the target capability question
 	// (#95 lane B added a caller-side one beside it, so `const missing =` is no longer the
 	// boundary — it is the line that FOLDS the two).
-	const herdrBranch = dispatchCode.slice(
-		dispatchCode.indexOf('if (selectFreshCallRail(env) === "herdr")'),
-		dispatchCode.indexOf("\tconst targetMissing ="),
-	);
+	// Fail closed on the anchors: a renamed or reordered line would otherwise slice an EMPTY branch,
+	// and every negative `!herdrBranch.includes(…)` below would pass on nothing (#128 review D2).
+	// The slice ends at the herdr branch's OWN return, not at a tmux-path statement, so a mutant
+	// that edits the tmux path cannot move this boundary and fail this cell for its reason.
+	const herdrStart = dispatchCode.indexOf('if (selectFreshCallRail(env) === "herdr")');
+	const herdrReturn = 'return { rail: "herdr", result: await herdrFreshCall(';
+	const herdrReturnAt = dispatchCode.indexOf(herdrReturn);
+	const herdrBranch =
+		herdrStart >= 0 && herdrReturnAt > herdrStart
+			? dispatchCode.slice(herdrStart, herdrReturnAt + herdrReturn.length)
+			: "";
+	const herdrBranchLocated = herdrBranch.includes("herdrFreshCall(");
 
 	// ── no fallback, either direction ────────────────────────────────────────────────────
 	const incomplete = await dispatchFreshCall(REQUEST, { HERDR_ENV: "1" }, recordingSpawn().spawn);
@@ -123,6 +133,37 @@ async function main(): Promise<void> {
 		"[QK:FCD-NO-FALLBACK] herdr selected but incomplete refuses with the HERDR reason and opens nothing — quietly opening a tmux window instead would put the sibling where the operator cannot see it from inside herdr, under a receipt that looks fine",
 		incomplete.rail === "herdr" && !incomplete.result.ok && incomplete.result.reason === "herdr-context-missing",
 	);
+
+	// ── #128: an entwurf/<id> pi launch names an EXACT curated ACP id ───────────────────────
+	{
+		const herdrSpawn = recordingSpawn();
+		const pi = (model: string) => ({ ...REQUEST, model });
+		const herdrRetired = await dispatchFreshCall(pi("entwurf/claude-sonnet-5"), HERDR_ENV, herdrSpawn.spawn);
+		const tmuxRetired = await dispatchFreshCall(pi(" entwurf/claude-opus-5 "), {}, recordingSpawn().spawn);
+		const current = recordingSpawn();
+		const herdrCurrent = await dispatchFreshCall(pi("entwurf/claude-opus-5-5"), HERDR_ENV, current.spawn);
+		const cortex = await dispatchFreshCall(pi("entwurf/cortex-claude-sonnet-5"), {}, recordingSpawn().spawn);
+		const otherBackend = await dispatchFreshCall(
+			{ ...REQUEST, backend: "claude-code", model: "entwurf/claude-sonnet-5" },
+			{},
+			recordingSpawn().spawn,
+		);
+		const reasonOf = (d: Awaited<ReturnType<typeof dispatchFreshCall>>) => (d.result.ok ? null : d.result.reason);
+		ok(
+			"[QK:FCD-ACP-MODEL-EXACT] a pi sibling under the entwurf provider must name an EXACT curated ACP id: a retired Claude 5 id refuses as acp-model-not-curated on BOTH rails (trimmed like the rails read it) before herdr is asked anything, while the 5.5 id and a Cortex id pass through and another backend is not judged — Pi would otherwise open the retired id on a Cortex row by substring",
+			herdrRetired.rail === "herdr" &&
+				reasonOf(herdrRetired) === "acp-model-not-curated" &&
+				herdrSpawn.calls.length === 0 &&
+				tmuxRetired.rail === "tmux" &&
+				reasonOf(tmuxRetired) === "acp-model-not-curated" &&
+				reasonOf(herdrCurrent) !== "acp-model-not-curated" &&
+				current.calls.length > 0 &&
+				reasonOf(cortex) !== "acp-model-not-curated" &&
+				reasonOf(otherBackend) !== "acp-model-not-curated" &&
+				renderDispatchedFreshCall(herdrRetired).text.includes("exact curated ACP id") &&
+				renderDispatchedFreshCall(tmuxRetired).text.includes("exact curated ACP id"),
+		);
+	}
 
 	const nonPilot = recordingSpawn();
 	const refused = await dispatchFreshCall({ ...REQUEST, backend: "codex" }, HERDR_ENV, nonPilot.spawn);
@@ -132,6 +173,7 @@ async function main(): Promise<void> {
 			!refused.result.ok &&
 			refused.result.reason === "herdr-backend-unsupported" &&
 			nonPilot.calls.length === 0 &&
+			herdrBranchLocated &&
 			// And structurally: the herdr branch names NEITHER capability preflight — not the
 			// target one, and not the caller-seat one #95 lane B put beside it.
 			!herdrBranch.includes("codexFreshPreflight") &&
@@ -153,6 +195,7 @@ async function main(): Promise<void> {
 			!durableRefused.result.ok &&
 			durableRefused.result.reason === "herdr-backend-unsupported" &&
 			durable.calls.length === 0 &&
+			herdrBranchLocated &&
 			!herdrBranch.includes("piDurable"),
 	);
 

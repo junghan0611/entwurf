@@ -379,7 +379,7 @@ operator's repair named.
 
 | Seam | Claude | Cortex Code |
 |---|---|---|
-| Model ids | unprefixed `claude-sonnet-5`, `claude-opus-5`, `claude-fable-5-1` | `cortex-auto`, `cortex-claude-opus-5`, `cortex-claude-sonnet-5`, `cortex-openai-gpt-5.4`; prefix stripped before set-model |
+| Model ids | unprefixed `claude-sonnet-5-5`, `claude-opus-5-5`, `claude-fable-5-1` | `cortex-auto`, `cortex-claude-opus-5`, `cortex-claude-sonnet-5`, `cortex-openai-gpt-5.4`; prefix stripped before set-model |
 | Launch | bundled `claude-agent-acp`; `CLAUDE_AGENT_ACP_COMMAND` override | `cortex acp serve`; optional connection; `CORTEX_ACP_COMMAND` override; never a launch-time `-m` |
 | Model authority | per-turn ACP set-model | per-turn ACP set-model; an unavailable curated id fails before prompt |
 | Carrier | engraving in `_meta.systemPrompt` | no system-prompt carrier; engraving rides the first-user augment |
@@ -389,6 +389,20 @@ operator's repair named.
 | Backend setting | none | `cortexConnection`; env override wins and participates in the signature |
 
 ### Claude
+
+The unprefixed Claude curation uses exact Opus/Sonnet 5.5 ids; the ACP adapter does
+not route the retired exact ids `claude-opus-5` or `claude-sonnet-5`, alias them to
+a newer model, or rewrite existing session records. Cortex retains its separate
+native 5 ids. Pi owns fuzzy CLI model selection before the adapter: with this
+seven-row set, its 1.1.0 resolver matches the old bare 5 patterns to the Cortex rows
+instead of refusing them (measured with the pure upstream resolver and synthetic rows,
+not a vendor turn). So the launches Entwurf builds admit only an EXACT curated id
+(`pi-extensions/lib/acp/model-ids.js`): `entwurf_fresh_call` with backend `pi` and an
+`entwurf/<id>` model, and `entwurf_resume_call` of a session whose emitted provider is
+`entwurf`, refuse anything else as `acp-model-not-curated` before a pane opens. A human
+typing `pi --model …` keeps the upstream fuzzy behaviour, so use the full 5.5 ids there.
+Registration and a mocked set-model request prove selection and forwarding, not the
+vendor's actual response model or a live 5.5 turn.
 
 The bundled adapter resolves before any PATH fallback. Its overlay retains only the
 auth/runtime state required by the Claude Agent SDK and hides operator memory, hooks,

@@ -20,13 +20,13 @@ set -euo pipefail
 #
 # Environment:
 #   PI_BENCH_MODEL_DIRECT  — direct model (default: github-copilot/claude-sonnet-4.6)
-#   PI_BENCH_MODEL_SDK     — ACP bridge model (default: entwurf/claude-sonnet-5)
+#   PI_BENCH_MODEL_SDK     — ACP bridge model (default: entwurf/claude-sonnet-5-5)
 #   PI_BENCH_SUITE         — test suite: "quick" (3 tests) or "full" (default, all tests)
 
 REPO_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 PROJECT_DIR=${1:-$(pwd)}
 MODEL_DIRECT=${PI_BENCH_MODEL_DIRECT:-github-copilot/claude-sonnet-4.6}
-MODEL_SDK=${PI_BENCH_MODEL_SDK:-entwurf/claude-sonnet-5}
+MODEL_SDK=${PI_BENCH_MODEL_SDK:-entwurf/claude-sonnet-5-5}
 SUITE=${PI_BENCH_SUITE:-full}
 OUT_DIR="/tmp/pi-bench-$(date +%Y%m%dT%H%M%S)"
 

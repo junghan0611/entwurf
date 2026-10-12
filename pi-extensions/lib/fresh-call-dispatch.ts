@@ -25,8 +25,9 @@
  */
 
 import { spawn as spawnChildProcess } from "node:child_process";
+import { ACP_MODEL_NOT_CURATED, isCuratedAcpModelId, PROVIDER_ID } from "./acp/model-ids.js";
 import { codexCallerFreshPreflight, codexFreshPreflight } from "./codex-fresh-preflight.ts";
-import { mintNonce } from "./fresh-call-composition.ts";
+import { isSafeFreshCallModel, mintNonce } from "./fresh-call-composition.ts";
 import {
 	createHerdrRunner,
 	type HerdrFreshCallResult,
@@ -68,6 +69,23 @@ export type DispatchedFreshCall =
 	| { readonly rail: "herdr"; readonly result: HerdrFreshCallResult };
 
 /**
+ * #128: a pi sibling asked for under the `entwurf` provider must name an EXACT curated ACP id. Pi
+ * resolves `--model` by substring among that provider's rows, so a retired `entwurf/claude-sonnet-5`
+ * would open on `cortex-claude-sonnet-5` — another vendor and billing rail — with a receipt that
+ * still names the requested id. Asked here, at the one root both rails share, so neither rail can
+ * forget it. It reads the model the way the rails will (trimmed), and only a model that already
+ * passes their grammar: a malformed one keeps its own `model-invalid` answer from the rail.
+ */
+export function isUncuratedEntwurfPiModel(backend: string, model: string): boolean {
+	if (backend !== "pi") return false;
+	const trimmed = model.trim();
+	if (!isSafeFreshCallModel(trimmed)) return false;
+	const slash = trimmed.indexOf("/");
+	if (slash < 0 || trimmed.slice(0, slash) !== PROVIDER_ID) return false;
+	return !isCuratedAcpModelId(trimmed.slice(slash + 1));
+}
+
+/**
  * Open a sibling on whichever rail this process is actually standing in.
  *
  * ORDER MATTERS TWICE. On tmux, the Codex capability preflights run BEFORE the composition, which
@@ -88,6 +106,12 @@ export async function dispatchFreshCall(
 	spawn?: SpawnFn,
 	nonce: string = mintNonce(),
 ): Promise<DispatchedFreshCall> {
+	// Before either rail is asked anything: both would open a pane on the wrong row.
+	if (isUncuratedEntwurfPiModel(request.backend, request.model)) {
+		return selectFreshCallRail(env) === "herdr"
+			? { rail: "herdr", result: { ok: false, reason: ACP_MODEL_NOT_CURATED } }
+			: { rail: "tmux", result: { ok: false, reason: ACP_MODEL_NOT_CURATED } };
+	}
 	if (selectFreshCallRail(env) === "herdr") {
 		const context = resolveHerdrContext(env);
 		if (!context.ok) {

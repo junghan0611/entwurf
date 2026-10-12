@@ -3466,7 +3466,7 @@ let manifestCount: number;
 		"pi-durable": 65,
 		"copilot-receive": 20,
 		"entwurf-peers": 1,
-		"fresh-call-dispatch": 11,
+		"fresh-call-dispatch": 12,
 		"fresh-cut": 3,
 		"gate-qualification": 10,
 		"herdr-placement": 13,
@@ -3498,13 +3498,13 @@ let manifestCount: number;
 		"release-gate": 24,
 		"retired-sent-surface": 2,
 		"resume-args": 6,
-		"resume-launch-identity": 6,
+		"resume-launch-identity": 7,
 		"self-address": 8,
 		"setup-verdict": 14,
 		"source-install": 2,
 		"typing-call-fence": 1,
 		"v2-surface": 13,
-		"v2-visible-resume": 17,
+		"v2-visible-resume": 18,
 	};
 	const laneTally: Record<string, number> = {};
 	for (const man of manifests) laneTally[man.lane] = (laneTally[man.lane] ?? 0) + man.mutants.length;

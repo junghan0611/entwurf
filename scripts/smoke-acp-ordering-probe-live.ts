@@ -93,7 +93,7 @@ const SHIM_RUNTIME_FILES: readonly string[] = [
 	join(REPO_ROOT, "scripts", "lib", "probe-cli-target.ts"),
 	join(REPO_ROOT, "scripts", "lib", "probe-event-log.ts"),
 ];
-const MODEL_ID = process.env.ENTWURF_ACP_PROBE_MODEL?.trim() || "claude-sonnet-5";
+const MODEL_ID = process.env.ENTWURF_ACP_PROBE_MODEL?.trim() || "claude-sonnet-5-5";
 const D1_MS = Number(process.env.PROBE_D1_MS ?? "2000") || 2000;
 const D2_MS = Number(process.env.PROBE_D2_MS ?? "8000") || 8000;
 const TEXT_TAIL_CAP = 400;

@@ -47,6 +47,7 @@
  * outcome for this module to claim.
  */
 
+import { ACP_MODEL_NOT_CURATED_HINT, AcpModelNotCuratedError } from "./acp/model-ids.js";
 import { buildResumePiArgs } from "./entwurf-resume-args.ts";
 import {
 	type AcquireLockResult,
@@ -93,6 +94,7 @@ export const RESUME_OBSERVE_INTERVAL_MS = 500;
 export type VisibleResumeRejectReason =
 	| "target-invalid"
 	| "target-not-pi"
+	| "acp-model-not-curated"
 	| "target-locked"
 	| "target-live"
 	| "target-indeterminate"
@@ -227,6 +229,15 @@ export async function visibleResume(targetGardenId: string, deps: VisibleResumeD
 		try {
 			identity = deps.resolveIdentity(targetGardenId);
 		} catch (err) {
+			// #128: the recorded model is not an exact curated ACP id, so Pi would pick another row
+			// by substring. Same shape as `target-not-pi`: a named refusal matched on its FIELD.
+			if (err instanceof AcpModelNotCuratedError) {
+				return {
+					ok: false,
+					reason: err.reason,
+					detail: `${targetGardenId} would launch model ${JSON.stringify(err.model)} under the entwurf provider (the resolved launch pair, which may differ from the recorded provider)`,
+				};
+			}
 			if (err instanceof ResumeBackendUnsupportedError) {
 				return {
 					ok: false,
@@ -321,6 +332,7 @@ export async function observeSameGidSocket(
 const REJECT_HINT: Record<VisibleResumeRejectReason, string> = {
 	"target-invalid": "no citizen has that id; discover targets with entwurf_peers",
 	"target-not-pi": "that citizen's backend has no same-id resume — reach it with entwurf_v2, or open a fresh sibling",
+	"acp-model-not-curated": ACP_MODEL_NOT_CURATED_HINT,
 	"target-locked": "another resume or dispatch holds this citizen's lock right now",
 	"target-live": "that citizen is already running — this verb only reopens dormant ones",
 	"target-indeterminate": "the socket probe could not prove the citizen is dormant, so nothing was started",

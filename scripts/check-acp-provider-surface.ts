@@ -123,7 +123,7 @@ try {
 	assert.equal(cap.cfg.apiKey, ENTWURF_ACP_NO_AUTH_SENTINEL, "entry apiKey is not the no-auth sentinel");
 	assert.equal(cap.cfg.api, "entwurf", "entry api field drifted");
 	const capIds = (cap.cfg.models ?? []).map((m) => m.id);
-	for (const want of ["claude-sonnet-5", CURATED_ANCHOR_MODEL_ID]) {
+	for (const want of ["claude-sonnet-5-5", CURATED_ANCHOR_MODEL_ID]) {
 		assert.ok(capIds.includes(want), `entry model surface missing ${want} (got: ${capIds.join(", ") || "none"})`);
 	}
 

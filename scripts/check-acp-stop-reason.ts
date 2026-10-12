@@ -55,7 +55,7 @@ import { pathToFileURL } from "node:url";
 import type { Api, AssistantMessageEvent, Model } from "@earendil-works/pi-ai";
 import { normalizeContext } from "@earendil-works/pi-ai";
 
-const sonnet = { id: "claude-sonnet-5" } as unknown as Model<Api>;
+const sonnet = { id: "claude-sonnet-5-5" } as unknown as Model<Api>;
 
 type Stream = AsyncIterable<AssistantMessageEvent> & {
 	result: () => Promise<{ stopReason: string; errorMessage?: string }>;

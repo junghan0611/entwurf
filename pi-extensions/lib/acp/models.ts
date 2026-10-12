@@ -33,9 +33,18 @@
 // re-export of `getBuiltinModels`. When pi removes compat we migrate to whatever
 // the loader then exposes.
 import { getModels } from "@earendil-works/pi-ai/compat";
+import { CURATED_ANCHOR_MODEL_ID, SUPPORTED_ANTHROPIC_MODEL_IDS } from "./model-ids.js";
 
-/** Provider id — current pre-rename surface; S1 renames this load-bearing id to `entwurf`. */
-export const PROVIDER_ID = "entwurf";
+// The provider id and the curated ID lists live in the dependency-free
+// `model-ids.js` leaf, shared with the launch seams (#128); this file is the only
+// one that loads the upstream catalog to turn them into registry rows.
+export {
+	CORTEX_MODEL_PREFIX,
+	CURATED_ANCHOR_MODEL_ID,
+	PROVIDER_ID,
+	SUPPORTED_ANTHROPIC_MODEL_IDS,
+	SUPPORTED_CORTEX_MODEL_IDS,
+} from "./model-ids.js";
 
 // #26 auth-boundary sentinel. `pi.registerProvider` requires an apiKey when a
 // provider defines custom models, but the ACP plugin consumes NO key: backend
@@ -49,17 +58,8 @@ export const PROVIDER_ID = "entwurf";
 // check-auth-boundary gate pins this.
 export const ENTWURF_ACP_NO_AUTH_SENTINEL = "entwurf-no-auth";
 
-// The curated Claude ids. Adding one here is a commitment to verify it across
-// both axes (protocol smoke + agent interview) — do not extend casually.
-// Exported so the claude backend adapter (backend-adapter.ts) can answer
-// `routeModel` without re-deriving the set from curatedClaudeModels().
-export const SUPPORTED_ANTHROPIC_MODEL_IDS = ["claude-sonnet-5", "claude-opus-5", "claude-fable-5-1"] as const;
-
-/** The anchor model whose absence is a hard registry regression, not a soft skip. */
-export const CURATED_ANCHOR_MODEL_ID = "claude-opus-5";
-
-// Anthropic's registry reports 1M for Sonnet 5, Opus 5 and Fable 5.1, and the
-// entwurf surface exposes the full 1M for all three. Sonnet 5's 1M window is the
+// Anthropic's registry reports 1M for Sonnet 5.5, Opus 5.5 and Fable 5.1, and the
+// entwurf surface exposes the full 1M for all three. Sonnet 5's 1M window was the
 // whole point of the 0.12.3 bump — it is the compact-free long-context floor the
 // earlier 200K Sonnet cap could not provide. We still clamp to a 1M ceiling so a
 // future registry value can't silently inflate the surface past what we verify.
@@ -92,7 +92,7 @@ function claudeContextWindow(model: { id: string; contextWindow: number }): numb
 // carries the reserved `cortex-` prefix: the prefix is the SINGLE routing
 // authority (backend-adapter.ts `routeModel`) and keeps the ids off the Claude
 // native ids Cortex routes to (`cortex-claude-sonnet-5` vs the unprefixed
-// `claude-sonnet-5` the claude adapter owns). `routeModel` strips the prefix to
+// `claude-sonnet-5-5` the claude adapter owns). `routeModel` strips the prefix to
 // recover the native id, which is enforced per-turn via
 // session/set_config_option — never a launch `-m` pin (CP0-M).
 //
@@ -101,14 +101,7 @@ function claudeContextWindow(model: { id: string; contextWindow: number }): numb
 // the running cortex no longer serves fails LOUD at set-model, before the
 // prompt (measured: `Unsupported model: …` names the live set). Adding an id
 // here is the same verify-both-axes commitment as the Claude set — do not
-// extend casually.
-export const CORTEX_MODEL_PREFIX = "cortex-";
-export const SUPPORTED_CORTEX_MODEL_IDS = [
-	"cortex-auto",
-	"cortex-claude-opus-5",
-	"cortex-claude-sonnet-5",
-	"cortex-openai-gpt-5.4",
-] as const;
+// extend casually. The prefix and the four ids are declared in model-ids.js.
 
 // Hand-set conservative context window. Cortex reports the LIVE window via its
 // own ACP session config, not this curated metadata — this is a floor for the

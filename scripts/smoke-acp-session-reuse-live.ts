@@ -36,7 +36,7 @@ import { normalizeContext } from "@earendil-works/pi-ai";
 import { skipLive } from "./lib/live-skip.ts";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const MODEL = process.env.ENTWURF_ACP_PROVIDER_MODEL?.trim() || "claude-sonnet-5";
+const MODEL = process.env.ENTWURF_ACP_PROVIDER_MODEL?.trim() || "claude-sonnet-5-5";
 // The pi built-ins the Claude child also exposes natively. pi declares its tool surface on
 // every turn, and since 0.86 that declaration reaches a provider as the leading system
 // message's `toolsAdded` (`normalizeContext`), which backend.ts replays for the exclude-tools

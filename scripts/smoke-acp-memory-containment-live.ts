@@ -70,7 +70,7 @@ import {
 import { terminateChild } from "./lib/acp-child-cleanup.ts";
 import { skipLive } from "./lib/live-skip.ts";
 
-const REQUESTED_MODEL_ID = process.env.ENTWURF_ACP_MEMORY_MODEL ?? "claude-sonnet-5";
+const REQUESTED_MODEL_ID = process.env.ENTWURF_ACP_MEMORY_MODEL ?? "claude-sonnet-5-5";
 const ALLOW_PATH_FALLBACK = process.env.ENTWURF_ACP_MEMORY_ALLOW_PATH_FALLBACK === "1";
 const RAW_TAIL_CAP = 64 * 1024;
 

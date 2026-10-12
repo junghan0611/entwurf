@@ -53,11 +53,11 @@ import {
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+import { getModels } from "@earendil-works/pi-ai/compat";
 import { buildPiContextAugment } from "../pi-extensions/lib/acp/augment.ts";
 import type { AcpMcpServer } from "../pi-extensions/lib/acp/config.ts";
 import {
 	CORTEX_MODEL_PREFIX,
-	curatedClaudeModels,
 	curatedCortexModels,
 	SUPPORTED_CORTEX_MODEL_IDS,
 } from "../pi-extensions/lib/acp/models.ts";
@@ -87,12 +87,13 @@ const cortexRowIds = cortexRows.map((m) => m.id);
 assert.deepEqual(cortexRowIds, [...SUPPORTED_CORTEX_MODEL_IDS], "curated cortex rows must match the supported id set");
 // The two Claude rows ride their OWN registry bases (a fabricated row would
 // drift from the pi-ai catalog); auto/gpt ride the sonnet base as a floor.
-const claudeRows = curatedClaudeModels();
+// Cortex retains its own native 5 ids even when Claude's curated set moves to 5.5.
+const claudeRows = getModels("anthropic");
 const sonnetBase = claudeRows.find((m) => m.id === "claude-sonnet-5");
 const opusBase = claudeRows.find((m) => m.id === "claude-opus-5");
 // Plain throw (not assert.ok): an asserts-function premise makes tsc report the
 // downstream `base` const as circularly-typed (TS7022).
-if (!sonnetBase || !opusBase) throw new Error("test premise: sonnet-5/opus-5 present in curated claude surface");
+if (!sonnetBase || !opusBase) throw new Error("test premise: sonnet-5/opus-5 present in pi-ai registry");
 for (const row of cortexRows) {
 	// Explicit annotation: node:assert's asserts-typed helpers otherwise make tsc
 	// flag this flow-dependent const as circularly typed (TS7022).
@@ -480,7 +481,7 @@ try {
 	// throwing IS the anti-collision proof; we also assert the rows are present.
 	const registered = mod.allCuratedModels().map((m) => m.id);
 	for (const want of [
-		"claude-sonnet-5",
+		"claude-sonnet-5-5",
 		"cortex-auto",
 		"cortex-claude-opus-5",
 		"cortex-claude-sonnet-5",
@@ -494,12 +495,12 @@ try {
 	assert.equal(routedSonnet.adapter.backend, "cortex", "cortex-claude-sonnet-5 must route to the cortex adapter");
 	assert.equal(routedSonnet.nativeModelId, "claude-sonnet-5", "prefix strip must recover the native model id");
 	assert.equal(
-		mod.resolveAcpBackendAdapter("claude-sonnet-5").adapter.backend,
+		mod.resolveAcpBackendAdapter("claude-sonnet-5-5").adapter.backend,
 		"claude",
 		"the unprefixed claude id must still route to claude (prefix keeps the namespaces apart)",
 	);
 	assert.equal(
-		mod.cortexAdapter.routeModel("claude-sonnet-5"),
+		mod.cortexAdapter.routeModel("claude-sonnet-5-5"),
 		undefined,
 		"cortex must NOT claim the unprefixed claude id",
 	);

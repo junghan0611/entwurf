@@ -86,6 +86,7 @@
  *     there is no "session created" field because nothing here creates one.
  */
 
+import { ACP_MODEL_NOT_CURATED_HINT } from "./acp/model-ids.js";
 import { callbackEnvAssignments } from "./callback-env.ts";
 import { classifyTmuxCwd, type TmuxCwdRejectReason } from "./classify-tmux-cwd.ts";
 import {
@@ -265,6 +266,7 @@ export type FreshCallRejectReason =
 	| CodexPreflightRejectReason
 	| CodexCallerPreflightRejectReason
 	| CodexCallerSeatRejectReason
+	| "acp-model-not-curated"
 	| "caller-identity-unavailable"
 	| "model-empty"
 	| "model-invalid"
@@ -678,6 +680,7 @@ const REJECT_HINT: Record<FreshCallRejectReason, string> = {
 		"no session with that exact name answers on this agent's tmux server (or that server stopped answering) — nothing was created, so open the session yourself and call again",
 	"model-empty": "model is empty after trimming; fresh calls require an explicit model",
 	"model-invalid": `model must be one ${MODEL_MAX_CHARS}-character argv-safe id/alias without whitespace or tmux syntax`,
+	"acp-model-not-curated": ACP_MODEL_NOT_CURATED_HINT,
 	"task-empty": "task is empty after trimming",
 	"task-too-long": `task exceeds ${TASK_MAX_CHARS} characters`,
 	"runtime-unresolved": "the backend's runtime is not installed on PATH",

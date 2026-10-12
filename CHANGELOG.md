@@ -4,6 +4,17 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+### ACP
+
+- **Claude rows move to Opus/Sonnet 5.5 (#128).** The curated `entwurf` Claude ids are
+  now `claude-opus-5-5`, `claude-sonnet-5-5` and `claude-fable-5-1`; the Cortex rows keep
+  their native 5 ids. Driver `claude-agent-acp` stays 0.85.1, whose SDK already lists the
+  5.5 ids; no live 5.5 turn is claimed. The retired `claude-opus-5` / `claude-sonnet-5`
+  are not aliased: an Entwurf-built pi launch (`entwurf_fresh_call` `entwurf/<id>`, or
+  `entwurf_resume_call` of a session recorded on one) refuses them as
+  `acp-model-not-curated` before a pane opens, because Pi's substring resolver would
+  otherwise open them on the Cortex rows. Records and transcripts are not rewritten.
+
 ## v2026.10.12-herdr.0.35.0 — Herdr Entwurf plugin 0.35.0
 
 A separate Herdr plugin snapshot, not another core release: core package0.35.0 and

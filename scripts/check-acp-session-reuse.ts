@@ -51,8 +51,8 @@ function tctx(messages: Context["messages"]): TranscriptContext {
 	return normalizeContext({ tools: PI_DECLARED_TOOLS, messages });
 }
 
-const sonnet = { id: "claude-sonnet-5" } as unknown as Model<Api>;
-const opus = { id: "claude-opus-5" } as unknown as Model<Api>;
+const sonnet = { id: "claude-sonnet-5-5" } as unknown as Model<Api>;
+const opus = { id: "claude-opus-5-5" } as unknown as Model<Api>;
 
 type Stream = AsyncIterable<AssistantMessageEvent> & {
 	result: () => Promise<{ stopReason: string; errorMessage?: string }>;
@@ -505,7 +505,7 @@ try {
 		);
 		const d1 = deltaText(t1);
 		const iPrep = d1.indexOf("[acp: preparing claude session]");
-		const iReady = d1.indexOf("[acp: session ready model=claude-sonnet-5]");
+		const iReady = d1.indexOf("[acp: session ready model=claude-sonnet-5-5]");
 		const iSent = d1.indexOf("[acp: sending prompt]");
 		assert.ok(
 			iPrep >= 0 && iReady > iPrep && iSent > iReady,
@@ -533,7 +533,7 @@ try {
 		const ctxWithNotice = tctx([
 			{ role: "user", content: "real user line", timestamp: 0 },
 			mkAssistant([
-				{ type: "text", text: "\n[acp: session ready model=claude-sonnet-5]\n", textSignature: MARKER },
+				{ type: "text", text: "\n[acp: session ready model=claude-sonnet-5-5]\n", textSignature: MARKER },
 				{ type: "text", text: "real assistant line" },
 			]),
 		]);

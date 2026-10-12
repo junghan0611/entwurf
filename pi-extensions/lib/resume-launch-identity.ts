@@ -20,12 +20,13 @@
 
 import { existsSync } from "node:fs";
 import path from "node:path";
+import { AcpModelNotCuratedError, isCuratedAcpModelId, PROVIDER_ID } from "./acp/model-ids.js";
 import { getEntwurfExplicitExtensions, readSessionIdentity } from "./entwurf-core.ts";
 import { readAddressableMetaIdentity } from "./meta-session.ts";
 
 /**
- * The ONE expected refusal on this leaf: the target is a citizen of a backend that has no
- * same-id resume at all.
+ * One of the TWO expected refusals on this leaf: the target is a citizen of a backend that has no
+ * same-id resume at all. The other is `AcpModelNotCuratedError` (#128, `acp/model-ids.js`).
  *
  * Everything else this function throws is a defect in the record, the transcript or the
  * environment — a stale path, a foreign session file, an unrecorded model, an unresolvable
@@ -152,11 +153,18 @@ export function resolveResumeLaunchIdentity(gardenId: string): LaunchIdentity {
 	if (!identity.cwd) {
 		throw new Error(`resume-launch-identity: ${gardenId} header has no cwd (the cold-resume authority, #9).`);
 	}
+	// #128: the pair checked is the one the launch will EMIT, not the recorded provider alone —
+	// `getEntwurfExplicitExtensions` also routes a bare Claude model id to `entwurf`. Under that
+	// provider Pi resolves `--model` by substring, so a retired `claude-sonnet-5` would reopen on
+	// `cortex-claude-sonnet-5`. The record and transcript stay as they are; the resume is refused.
+	const provider = explicitExtensions.provider ?? identity.provider;
+	const model = explicitExtensions.modelOverride ?? resumeModel;
+	if (provider === PROVIDER_ID && !isCuratedAcpModelId(model)) throw new AcpModelNotCuratedError(model);
 	return {
 		sessionFile,
 		cwd: identity.cwd,
 		explicitExtensionArgs: explicitExtensions.args,
-		provider: explicitExtensions.provider ?? identity.provider,
-		model: explicitExtensions.modelOverride ?? resumeModel,
+		provider,
+		model,
 	};
 }
