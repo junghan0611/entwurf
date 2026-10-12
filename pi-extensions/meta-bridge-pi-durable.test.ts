@@ -2,7 +2,9 @@
  * G-birth (#129) — the pi-durable contact's birth, its tool gate, its root binding, its doorbell
  * and its lifecycle, plus the bootstrap composition that drives it. Hermetic: temp stores, a stub
  * bridge connector, a fake `openDurable` with a stub `submitToRoot`, an injected file watch where
- * a case drives events, no durable runtime. Two cases spawn a process: the dev-clone SOURCE
+ * a case drives events, no durable runtime — except one #140 case, which installs the real contact
+ * extension in the PUBLISHED SDK's `Harness` over `MemoryStorage` with a scripted faux model (no
+ * host store, no network, no vendor, no carrier). Two cases spawn a process: the dev-clone SOURCE
  * entwurf-bridge (`mcp/entwurf-bridge/start.sh`), for initialize + tools/list only, under a literal
  * private environment — the vitest-lane check that the exposed schema copies equal the real bridge's —
  * and a bare `node` that only imports the packaged bootstrap, to prove that import starts nothing.
@@ -27,13 +29,25 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
+import { createModels } from "@earendil-works/pi-ai/models";
+import { fauxAssistantMessage, fauxProvider, fauxToolCall } from "@earendil-works/pi-ai/providers/faux";
+import {
+	createRegistry,
+	type Extension,
+	Harness,
+	MemoryStorage,
+	ROOT_CONVERSATION_ID,
+	type SubmissionId,
+} from "@earendil-works/pi-durable";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { main, openDurableCitizen, PACKAGED_BRIDGE_ENTRY } from "../plugins/pi-durable/bootstrap.mjs";
 import { FRESH_CALL_BACKENDS } from "./lib/fresh-call-composition.ts";
-import { enqueueMetaMessage, upsertMetaSession, writeMetaReceiverMarker } from "./lib/meta-session.ts";
+import { enqueueMetaMessage, readMetaInbox, upsertMetaSession, writeMetaReceiverMarker } from "./lib/meta-session.ts";
 import {
+	type BridgeCallResult,
 	type BridgeClient,
 	type BridgeConnector,
 	type BridgeSpawnSpec,
@@ -1125,19 +1139,54 @@ describe("pi-durable contact — the doorbell", () => {
 		};
 	}
 
-	/** A stub root admission: records each draft; `hold` keeps the next answer until released. */
-	function rootAdmission() {
+	/** One stub native submission: the state its `abort` answers from, and an optional rejection. */
+	interface StubSubmission {
+		status: "queued" | "placed" | "settled";
+		abortFails?: Error;
+	}
+
+	/**
+	 * A stub root admission: records each draft; `hold` keeps the next answer until released. Each
+	 * handle answers `abort` as the native `Submission.abort` does on the published SDK (queued →
+	 * `aborted` and settled, placed → `already_placed`, settled → `settled`; measured in
+	 * `pd-inbox-opus-sdk-probe/probe2`), and keeps the Context it was handed. Every step lands in
+	 * `log`, the case's temporal oracle.
+	 */
+	function rootAdmission(log: string[] = []) {
 		const drafts: DurableDoorbellDraft[] = [];
+		const handles = new Map<number, StubSubmission>();
+		const contexts: unknown[] = [];
 		let hold: Promise<void> | undefined;
 		let rejectWith: Error | undefined;
 		return {
 			drafts,
+			handles,
+			contexts,
 			admission: {
 				submitToRoot: async (draft: DurableDoorbellDraft) => {
 					drafts.push(draft);
+					const n = drafts.length;
+					log.push(`admit-request ${n}`);
 					if (rejectWith) throw rejectWith;
 					if (hold) await hold;
-					return { id: drafts.length };
+					const handle: StubSubmission = { status: "queued" };
+					handles.set(n, handle);
+					log.push(`admit-resolved ${n}`);
+					return {
+						id: n,
+						abort: async (context: unknown) => {
+							contexts.push(context);
+							if (handle.abortFails) {
+								log.push(`abort ${n} rejected`);
+								throw handle.abortFails;
+							}
+							const answer =
+								handle.status === "queued" ? "aborted" : handle.status === "placed" ? "already_placed" : "settled";
+							handle.status = handle.status === "queued" ? "settled" : handle.status;
+							log.push(`abort ${n} ${answer}`);
+							return answer;
+						},
+					};
 				},
 			},
 			holdNext() {
@@ -1156,7 +1205,7 @@ describe("pi-durable contact — the doorbell", () => {
 		};
 	}
 
-	function doorbellContact(stub: StubBridge, watch: ReturnType<typeof fakeWatch>, extra = {}) {
+	function doorbellContact(stub: Pick<StubBridge, "connect">, watch: ReturnType<typeof fakeWatch>, extra = {}) {
 		return createPiDurableContact({
 			bridgeEntry: BRIDGE_ENTRY,
 			sessionsDir,
@@ -1173,8 +1222,75 @@ describe("pi-durable contact — the doorbell", () => {
 	const markerFile = (gid: string) => path.join(receiversDir, `${gid}.json`);
 	const mailbox = (gid: string) => path.join(mailboxDir, gid);
 	const listing = (gid: string) => fs.readdirSync(mailbox(gid)).sort();
-	const enqueue = (gid: string, body: string) =>
-		path.basename(enqueueMetaMessage({ gardenId: gid, body, sessionsDir, mailboxDir }).messagePath);
+	const enqueue = (gid: string, body: string, now?: Date) =>
+		path.basename(enqueueMetaMessage({ gardenId: gid, body, sessionsDir, mailboxDir, now }).messagePath);
+	const unreadIn = (gid: string) => listing(gid).filter((name) => name.endsWith(".msg.delivered"));
+
+	/**
+	 * A bridge whose `entwurf_inbox_read` is the REAL drain (`readMetaInbox`) over this case's temp
+	 * roots, answered the way the bridge answers it (`mcp/entwurf-bridge/src/index.ts:676-692`: a
+	 * throw becomes an isError text). Every step lands in `log`; `holdAfterDrain` parks the answer
+	 * AFTER the drain, before it returns, until released.
+	 */
+	function drainingBridge(log: string[]) {
+		let hold: Promise<void> | undefined;
+		const answers: BridgeCallResult[] = [];
+		const client: BridgeClient = {
+			pid: 4242,
+			listTools: agreeingListing,
+			async callTool(name, args) {
+				log.push(`bridge-call ${name}`);
+				if (name !== "entwurf_inbox_read") return { text: `${name} ok`, isError: false };
+				let answer: BridgeCallResult;
+				try {
+					const read = readMetaInbox({ gardenId: String(args.gardenId), sessionsDir, mailboxDir });
+					answer = { text: `[stub inbox read] ${read.gardenId}: ${read.messages.length}`, isError: false };
+				} catch (error) {
+					answer = { text: `entwurf_inbox_read error: ${(error as Error).message}`, isError: true };
+				}
+				answers.push(answer);
+				log.push("drain-done");
+				if (hold) await hold;
+				log.push("bridge-return");
+				return answer;
+			},
+			async close() {},
+		};
+		return {
+			connect: async () => client,
+			answers,
+			holdAfterDrain() {
+				let release!: () => void;
+				hold = new Promise<void>((resolve) => {
+					release = resolve;
+				});
+				return () => {
+					hold = undefined;
+					release();
+				};
+			},
+		};
+	}
+
+	/** Every stderr write while `run` runs, kept and not printed: a withdrawal failure is one named line. */
+	async function stderrDuring<T>(run: () => Promise<T>): Promise<{ result: T; lines: string[] }> {
+		const lines: string[] = [];
+		const spy = vi.spyOn(process.stderr, "write").mockImplementation((chunk: string | Uint8Array) => {
+			lines.push(String(chunk));
+			return true;
+		});
+		try {
+			return { result: await run(), lines };
+		} finally {
+			spy.mockRestore();
+		}
+	}
+
+	const inboxRead = (c: ReturnType<typeof createPiDurableContact>) => {
+		const tool = c.extension.tools.find((t) => t.name === "entwurf_inbox_read");
+		if (tool === undefined) throw new Error("entwurf_inbox_read missing");
+		return tool;
+	};
 
 	it("[QK:PI-DURABLE-RECEIVER-ARM-ORDER] mailbox, signal and watch exist before the receiver marker, the marker is last, and no waiting tool reaches the bridge before the arm", async () => {
 		const stub = stubBridge();
@@ -1469,6 +1585,412 @@ describe("pi-durable contact — the doorbell", () => {
 		});
 		expect(stub.calls).toEqual(["entwurf_inbox_read"]);
 		expect(stub.args).toEqual([{ gardenId: "20261005T000000-abcdef" }]);
+	});
+
+	// #140 — the read withdraws the notices its drain made stale. Each case reads its event log as
+	// the temporal oracle: what the root admitted, what the bridge drained, what was withdrawn, in order.
+
+	it("[QK:PI-DURABLE-RECEIVER-READ-WITHDRAWS-STALE] one read-all withdraws, with the read's own Context, every notice whose mail it drained: a placed one answers already_placed, the queued ones are withdrawn, the read's own text comes back unchanged, and nothing is admitted or judged twice", async () => {
+		const log: string[] = [];
+		const watch = fakeWatch();
+		const root = rootAdmission(log);
+		const bridge = drainingBridge(log);
+		const c = doorbellContact(bridge, watch);
+		const { gardenId: gid } = await c.attach(session(), root.admission);
+		await flush();
+		for (const body of ["one", "two", "three"]) {
+			enqueue(gid, body);
+			watch.fire();
+			await flush();
+		}
+		expect([...root.handles.values()].map((h) => h.status)).toEqual(["queued", "queued", "queued"]);
+		(root.handles.get(1) as StubSubmission).status = "placed"; // the native queue places one per run
+		log.length = 0;
+		const context = { abortSignal: new AbortController().signal };
+		const answer = await inboxRead(c).execute({ gardenId: gid }, undefined, context);
+		expect(answer).toEqual({ content: [{ type: "text", text: bridge.answers[0]?.text }] });
+		expect(bridge.answers[0]).toEqual({ text: `[stub inbox read] ${gid}: 3`, isError: false });
+		expect(log).toEqual([
+			"bridge-call entwurf_inbox_read",
+			"drain-done",
+			"bridge-return",
+			"abort 1 already_placed",
+			"abort 2 aborted",
+			"abort 3 aborted",
+		]);
+		expect(root.contexts).toHaveLength(3);
+		expect(root.contexts.every((handed) => handed === context)).toBe(true);
+		expect(unreadIn(gid)).toEqual([]);
+		log.length = 0;
+		await inboxRead(c).execute({ gardenId: gid }, undefined, context);
+		expect(log).toEqual(["bridge-call entwurf_inbox_read", "drain-done", "bridge-return"]);
+		expect(root.drafts).toHaveLength(3);
+		expect(c.receiver()).not.toHaveProperty("withdrawalFailure");
+	});
+
+	it("[QK:PI-DURABLE-RECEIVER-FOREIGN-GARDEN-READ-KEEPS] a read of ANOTHER garden's mailbox withdraws no own notice — its own mail is still unread — and the next own read still withdraws them all", async () => {
+		const log: string[] = [];
+		const watch = fakeWatch();
+		const root = rootAdmission(log);
+		const c = doorbellContact(drainingBridge(log), watch);
+		const { gardenId: gid } = await c.attach(session(), root.admission);
+		await flush();
+		for (const body of ["one", "two", "three"]) {
+			enqueue(gid, body);
+			watch.fire();
+			await flush();
+		}
+		const foreign = upsertMetaSession({
+			input: {
+				backend: "pi-durable",
+				nativeSessionId: "1759622400000-0b5e2a4c-1f3d-4e8a-9c7b-2d6f8e1a3c5c",
+				cwd,
+				model: null,
+				transcriptPath: null,
+			},
+			dir: sessionsDir,
+		}).record.gardenId;
+		enqueue(foreign, "theirs");
+		expect([...root.handles.values()].map((h) => h.status)).toEqual(["queued", "queued", "queued"]);
+		const own = unreadIn(gid);
+		expect(own).toHaveLength(3);
+		log.length = 0;
+		await inboxRead(c).execute({ gardenId: foreign }, undefined, {});
+		expect(log).toEqual(["bridge-call entwurf_inbox_read", "drain-done", "bridge-return"]);
+		expect(unreadIn(gid)).toEqual(own);
+		expect([...root.handles.values()].map((h) => h.status)).toEqual(["queued", "queued", "queued"]);
+		log.length = 0;
+		await inboxRead(c).execute({ gardenId: gid }, undefined, {});
+		expect(log.filter((line) => line.startsWith("abort"))).toEqual([
+			"abort 1 aborted",
+			"abort 2 aborted",
+			"abort 3 aborted",
+		]);
+	});
+
+	it("[QK:PI-DURABLE-RECEIVER-PARTIAL-DRAIN-WITHDRAWS-ONLY-ARCHIVED] a read that fails part-way still withdraws the notice all of whose mail it archived, keeps the notice that announced one archived and one still-unread message, and rejects with the bridge's own error", async () => {
+		const log: string[] = [];
+		const watch = fakeWatch();
+		const root = rootAdmission(log);
+		const bridge = drainingBridge(log);
+		const c = doorbellContact(bridge, watch);
+		const { gardenId: gid } = await c.attach(session(), root.admission);
+		await flush();
+		const at = (second: number) => new Date(Date.UTC(2026, 9, 12, 7, 0, second));
+		const first = enqueue(gid, "one", at(1));
+		watch.fire();
+		await flush();
+		// N2 announces TWO messages in one ring; between them sorts an entry unread by suffix but no
+		// file, so the drain archives the first of the pair and stops before the second.
+		const before = enqueue(gid, "two", at(2));
+		const after = enqueue(gid, "three", at(3));
+		fs.mkdirSync(path.join(mailbox(gid), `${before.slice(0, 24)}2-blocker.msg.delivered`));
+		watch.fire();
+		await flush();
+		expect([...root.handles.keys()]).toEqual([1, 2]);
+		expect(c.receiver()).toMatchObject({ admissions: [{ fresh: [before, after] }] });
+		log.length = 0;
+		const reading = inboxRead(c).execute({ gardenId: gid }, undefined, {});
+		await expect(reading).rejects.toThrow(/^entwurf_inbox_read error: EISDIR/);
+		await expect(reading).rejects.toHaveProperty("message", bridge.answers[0]?.text);
+		expect(log).toEqual(["bridge-call entwurf_inbox_read", "drain-done", "bridge-return", "abort 1 aborted"]);
+		expect(listing(gid)).toEqual(expect.arrayContaining([`${first}.delivered.read`, `${before}.delivered.read`]));
+		expect(unreadIn(gid)).toContain(`${after}.delivered`);
+		expect(root.handles.get(2)?.status).toBe("queued");
+	});
+
+	it("[QK:PI-DURABLE-RECEIVER-READ-SERIALIZED] a read waits for an admission in flight before it drains, so the notice that admission returns is withdrawn instead of left stale", async () => {
+		const log: string[] = [];
+		const watch = fakeWatch();
+		const root = rootAdmission(log);
+		const c = doorbellContact(drainingBridge(log), watch);
+		const { gardenId: gid } = await c.attach(session(), root.admission);
+		await flush();
+		const release = root.holdNext();
+		enqueue(gid, "four");
+		watch.fire();
+		await flush();
+		const reading = inboxRead(c).execute({ gardenId: gid }, undefined, {});
+		await flush();
+		await flush();
+		expect(log).toEqual(["admit-request 1"]);
+		release();
+		await reading;
+		expect(log).toEqual([
+			"admit-request 1",
+			"admit-resolved 1",
+			"bridge-call entwurf_inbox_read",
+			"drain-done",
+			"bridge-return",
+			"abort 1 aborted",
+		]);
+		expect(root.handles.get(1)?.status).toBe("settled");
+	});
+
+	it("[QK:PI-DURABLE-RECEIVER-ARRIVAL-DURING-READ-ANNOUNCED] an arrival after the drain but before the read returns is rung once the read lets go, and its notice is not withdrawn", async () => {
+		const log: string[] = [];
+		const watch = fakeWatch();
+		const root = rootAdmission(log);
+		const bridge = drainingBridge(log);
+		const c = doorbellContact(bridge, watch);
+		const { gardenId: gid } = await c.attach(session(), root.admission);
+		await flush();
+		enqueue(gid, "one");
+		watch.fire();
+		await flush();
+		log.length = 0;
+		const release = bridge.holdAfterDrain();
+		const reading = inboxRead(c).execute({ gardenId: gid }, undefined, {});
+		await flush();
+		expect(log).toEqual(["bridge-call entwurf_inbox_read", "drain-done"]);
+		const late = enqueue(gid, "late");
+		watch.fire();
+		await flush();
+		expect(log).toEqual(["bridge-call entwurf_inbox_read", "drain-done"]);
+		expect(listing(gid)).toContain(late);
+		release();
+		await reading;
+		await flush();
+		expect(log).toEqual([
+			"bridge-call entwurf_inbox_read",
+			"drain-done",
+			"bridge-return",
+			"abort 1 aborted",
+			"admit-request 2",
+			"admit-resolved 2",
+		]);
+		expect(root.drafts[1]?.requestId).toBe(`entwurf-doorbell:${gid}:${late}`);
+		expect(unreadIn(gid)).toEqual([`${late}.delivered`]);
+		expect(root.handles.get(2)?.status).toBe("queued");
+	});
+
+	it("[QK:PI-DURABLE-RECEIVER-WITHDRAW-FAILURE-KEEPS-READ] a withdraw that rejects is named in one stderr line and on the report, and let go: the read's own answer stands, the doorbell stays armed, the next notice is still withdrawn, and nothing is retried", async () => {
+		const log: string[] = [];
+		const watch = fakeWatch();
+		const root = rootAdmission(log);
+		const bridge = drainingBridge(log);
+		const c = doorbellContact(bridge, watch);
+		const { gardenId: gid } = await c.attach(session(), root.admission);
+		await flush();
+		const first = enqueue(gid, "one");
+		watch.fire();
+		await flush();
+		enqueue(gid, "two");
+		watch.fire();
+		await flush();
+		(root.handles.get(1) as StubSubmission).abortFails = new Error("harness is\nclosed");
+		log.length = 0;
+		const { result: answer, lines } = await stderrDuring(() => inboxRead(c).execute({ gardenId: gid }, undefined, {}));
+		expect(answer).toEqual({ content: [{ type: "text", text: bridge.answers[0]?.text }] });
+		expect(lines).toEqual([
+			`[entwurf pi-durable] notice withdrawal abort-failed entwurf-doorbell:${gid}:${first}: harness is closed\n`,
+		]);
+		expect(bridge.answers[0]).toEqual({ text: `[stub inbox read] ${gid}: 2`, isError: false });
+		expect(log).toEqual([
+			"bridge-call entwurf_inbox_read",
+			"drain-done",
+			"bridge-return",
+			"abort 1 rejected",
+			"abort 2 aborted",
+		]);
+		expect(c.receiver()).toMatchObject({
+			status: "armed",
+			withdrawalFailure: {
+				reason: "abort-failed",
+				requestId: `entwurf-doorbell:${gid}:${first}`,
+				detail: "harness is\nclosed",
+			},
+		});
+		expect(fs.existsSync(markerFile(gid))).toBe(true);
+		log.length = 0;
+		const again = await stderrDuring(() => inboxRead(c).execute({ gardenId: gid }, undefined, {}));
+		expect(log).toEqual(["bridge-call entwurf_inbox_read", "drain-done", "bridge-return"]);
+		expect(again.lines).toEqual([]);
+	});
+
+	it("[QK:PI-DURABLE-RECEIVER-INSPECTION-FAILURE-KEEPS-NOTICES] a mailbox that cannot be listed proves nothing absent: every notice is kept, the failure named in one stderr line and on the report, the read's own error unchanged, and once the mailbox reads again they are withdrawn", async () => {
+		const log: string[] = [];
+		const watch = fakeWatch();
+		const root = rootAdmission(log);
+		const bridge = drainingBridge(log);
+		const c = doorbellContact(bridge, watch);
+		const { gardenId: gid } = await c.attach(session(), root.admission);
+		await flush();
+		for (const body of ["one", "two"]) {
+			enqueue(gid, body);
+			watch.fire();
+			await flush();
+		}
+		const aside = `${mailbox(gid)}.aside`;
+		fs.renameSync(mailbox(gid), aside);
+		fs.writeFileSync(mailbox(gid), "");
+		log.length = 0;
+		const { result: outcome, lines } = await stderrDuring(() =>
+			inboxRead(c)
+				.execute({ gardenId: gid }, undefined, {})
+				.then(
+					() => "resolved",
+					(error: Error) => error.message,
+				),
+		);
+		expect(outcome).toBe(bridge.answers[0]?.text);
+		expect(outcome).toMatch(/^entwurf_inbox_read error: ENOTDIR/);
+		expect(log).toEqual(["bridge-call entwurf_inbox_read", "drain-done", "bridge-return"]);
+		expect(lines).toHaveLength(1);
+		expect(lines[0]).toMatch(
+			new RegExp(`^\\[entwurf pi-durable\\] notice withdrawal inspection-failed: ${mailbox(gid)}: .*ENOTDIR.*\\n$`),
+		);
+		expect(c.receiver()).toMatchObject({
+			status: "armed",
+			withdrawalFailure: { reason: "inspection-failed", detail: expect.stringContaining("ENOTDIR") },
+		});
+		fs.rmSync(mailbox(gid));
+		fs.renameSync(aside, mailbox(gid));
+		log.length = 0;
+		await inboxRead(c).execute({ gardenId: gid }, undefined, {});
+		expect(log.filter((line) => line.startsWith("abort"))).toEqual(["abort 1 aborted", "abort 2 aborted"]);
+	});
+
+	it("[QK:PI-DURABLE-RECEIVER-RETIRED-READ-WITHDRAWS-ADMITTED] after a rejected admission retires the doorbell, a read still withdraws the notices admitted before it and admits nothing", async () => {
+		const log: string[] = [];
+		const watch = fakeWatch();
+		const root = rootAdmission(log);
+		const c = doorbellContact(drainingBridge(log), watch);
+		const { gardenId: gid } = await c.attach(session(), root.admission);
+		await flush();
+		enqueue(gid, "one");
+		watch.fire();
+		await flush();
+		root.rejectNext(new Error("harness is closed"));
+		enqueue(gid, "two");
+		watch.fire();
+		await flush();
+		expect(c.receiver()).toMatchObject({ status: "retired", reason: "root-admission-rejected" });
+		log.length = 0;
+		await inboxRead(c).execute({ gardenId: gid }, undefined, {});
+		expect(log).toEqual(["bridge-call entwurf_inbox_read", "drain-done", "bridge-return", "abort 1 aborted"]);
+		expect(root.drafts).toHaveLength(2);
+	});
+
+	it("[QK:PI-DURABLE-RECEIVER-RESTART-HOLDS-NOTHING] a contact opened after another holds none of its notices: its read withdraws nothing it did not admit and asks the root for nothing (the documented restart residual)", async () => {
+		const log: string[] = [];
+		const before = rootAdmission(log);
+		const firstWatch = fakeWatch();
+		const first = doorbellContact(drainingBridge(log), firstWatch);
+		const { gardenId: gid } = await first.attach(session(), before.admission);
+		await flush();
+		enqueue(gid, "one");
+		firstWatch.fire();
+		await flush();
+		await first.close();
+		const after = rootAdmission(log);
+		const second = doorbellContact(drainingBridge(log), fakeWatch());
+		await second.attach(session(), after.admission);
+		await flush();
+		log.length = 0;
+		await inboxRead(second).execute({ gardenId: gid }, undefined, {});
+		expect(log).toEqual(["bridge-call entwurf_inbox_read", "drain-done", "bridge-return"]);
+		expect(after.drafts).toEqual([]);
+		expect(before.handles.get(1)?.status).toBe("queued");
+	});
+
+	describe("pi-durable doorbell — native withdrawal on the published runtime (in-memory storage, faux model)", () => {
+		/**
+		 * The real contact extension installed in a real published `Harness` over `MemoryStorage`, its
+		 * doorbell handed the overlay's exact admission (`carrier/runtime.js:376`), and a scripted faux
+		 * model: no host store, no network, no vendor. The bridge is the real drain over temp roots. The
+		 * oracle is the native submission records and how often the model was asked.
+		 */
+		async function scenario(readTool: "entwurf_inbox_read" | "stand_in_drain") {
+			const context = BACKGROUND_CONTEXT;
+			const faux = fauxProvider({ provider: "faux", models: [{ id: "scripted" }] });
+			const models = createModels();
+			models.setProvider(faux.provider);
+			let releaseRun!: () => void;
+			const busy = new Promise<void>((resolve) => {
+				releaseRun = resolve;
+			});
+			let gid = "";
+			faux.setResponses([
+				async () => {
+					await busy;
+					return fauxAssistantMessage("first run done");
+				},
+				() => fauxAssistantMessage(fauxToolCall(readTool, { gardenId: gid }), { stopReason: "toolUse" }),
+				fauxAssistantMessage("read the mail"),
+				...["a", "b", "c", "d"].map((text) => fauxAssistantMessage(`extra run ${text}`)),
+			]);
+			const watch = fakeWatch();
+			const c = doorbellContact(drainingBridge([]), watch);
+			// The control's drain: the same real read, offered as a tool the contact does not own.
+			const standIn = {
+				name: "stand_in_drain",
+				description: "read-all with no withdrawal",
+				parameters: { type: "object", properties: { gardenId: { type: "string" } }, required: ["gardenId"] },
+				async execute(args: { gardenId: string }) {
+					const read = readMetaInbox({ gardenId: args.gardenId, sessionsDir, mailboxDir });
+					return { content: [{ type: "text" as const, text: `read ${read.messages.length}` }] };
+				},
+			};
+			const registry = createRegistry();
+			// The overlay installs this same object (`openDurable({ extensions })`); its shape is the native one.
+			registry.install(c.extension as unknown as Extension);
+			registry.install({ name: "control", tools: [standIn] } as unknown as Extension);
+			const harness = await Harness.open(new MemoryStorage(), { models, registry }, context);
+			try {
+				const root = await harness.root(context, { agent: { model: { provider: "faux", modelId: "scripted" } } });
+				({ gardenId: gid } = await c.attach(session(), { submitToRoot: (draft) => root.submit(draft, context) }));
+				await root.submit({ type: "input", content: "busy work" }, context);
+				// Each ring is awaited on its own admission: the diagnostic names the native id once the root admitted it.
+				const admitted: SubmissionId[] = [];
+				for (const body of ["one", "two", "three"]) {
+					const requestId = `entwurf-doorbell:${gid}:${enqueue(gid, body)}`;
+					watch.fire();
+					for (let i = 0; i < 200 && admitted.length < 3; i++) {
+						const latest = (c.receiver() as { admissions: { requestId: string; submissionId: unknown }[] })
+							.admissions[0];
+						if (latest?.requestId === requestId) {
+							admitted.push(latest.submissionId as SubmissionId);
+							break;
+						}
+						await flush();
+					}
+				}
+				expect(admitted).toHaveLength(3);
+				const status = async () =>
+					Promise.all(
+						admitted.map(async (id) => {
+							const record = await (await harness.submission(id, context))?.status(context);
+							if (record?.conversationId !== ROOT_CONVERSATION_ID) return `not-root:${record?.conversationId}`;
+							return record.status === "unanswered" ? `unanswered/${record.reason}` : record.status;
+						}),
+					);
+				const queued = await status();
+				releaseRun();
+				await harness.waitForIdle(context);
+				return { queued, settled: await status(), calls: faux.state.callCount, unread: unreadIn(gid) };
+			} finally {
+				await c.close();
+				await harness.close(context);
+			}
+		}
+
+		it("[QK:PI-DURABLE-RECEIVER-NATIVE-STALE-WITHDRAWN] three notices queued behind a busy run, one read-all through the contact: the native records end done + unanswered/aborted ×2 and the model is asked 3 times — the same drain without the contact's read leaves all three done after 5", async () => {
+			const control = await scenario("stand_in_drain");
+			expect(control).toEqual({
+				queued: ["queued", "queued", "queued"],
+				settled: ["done", "done", "done"],
+				calls: 5,
+				unread: [],
+			});
+			const fixed = await scenario("entwurf_inbox_read");
+			expect(fixed).toEqual({
+				queued: ["queued", "queued", "queued"],
+				settled: ["done", "unanswered/aborted", "unanswered/aborted"],
+				calls: 3,
+				unread: [],
+			});
+		});
 	});
 });
 

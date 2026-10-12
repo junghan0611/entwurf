@@ -278,6 +278,123 @@
 			}
 		},
 		{
+			"claim": "PI-DURABLE-RECEIVER-READ-WITHDRAWS-STALE",
+			"title": "an inbox read no longer withdraws the notices its drain made stale, so each still-queued notice is placed later as its own run and an empty read (#140)",
+			"subject": "pi-extensions/meta-bridge-pi-durable.ts",
+			"find": ["\t\t\t\tawait withdrawDrained(context);\n"],
+			"replace": [""],
+			"gate": ["bash", "run.sh", "check-pi-durable-beside"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PI-DURABLE-RECEIVER-READ-WITHDRAWS-STALE]",
+			"signatureSource": "pi-extensions/meta-bridge-pi-durable.test.ts",
+			"build": {
+				"argv": ["bash", "scripts/build-bridge.sh"],
+				"output": "mcp/entwurf-bridge/dist"
+			}
+		},
+		{
+			"claim": "PI-DURABLE-RECEIVER-FOREIGN-GARDEN-READ-KEEPS",
+			"title": "the per-notice file predicate is bypassed, so any read — another garden's included — withdraws notices whose own mail is still unread, and that mail is never announced again",
+			"subject": "pi-extensions/meta-bridge-pi-durable.ts",
+			"find": ["\t\t\tif (notice.fresh.some((name) => unread.has(`${name}.delivered`))) continue;\n"],
+			"replace": [""],
+			"gate": ["bash", "run.sh", "check-pi-durable-beside"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PI-DURABLE-RECEIVER-FOREIGN-GARDEN-READ-KEEPS]",
+			"signatureSource": "pi-extensions/meta-bridge-pi-durable.test.ts",
+			"build": {
+				"argv": ["bash", "scripts/build-bridge.sh"],
+				"output": "mcp/entwurf-bridge/dist"
+			}
+		},
+		{
+			"claim": "PI-DURABLE-RECEIVER-PARTIAL-DRAIN-WITHDRAWS-ONLY-ARCHIVED",
+			"title": "the withdrawal runs only after a successful read, so a drain that failed part-way leaves the notices of the mail it already archived queued, stale",
+			"subject": "pi-extensions/meta-bridge-pi-durable.ts",
+			"find": [
+				"\t\t\treturn await call();\n\t\t} finally {\n\t\t\ttry {\n\t\t\t\tawait withdrawDrained(context);\n\t\t\t} finally {\n\t\t\t\tleaveGate();\n\t\t\t}\n\t\t}\n"
+			],
+			"replace": [
+				"\t\t\tconst answered = await call();\n\t\t\tif (!answered.isError) await withdrawDrained(context);\n\t\t\treturn answered;\n\t\t} finally {\n\t\t\tleaveGate();\n\t\t}\n"
+			],
+			"gate": ["bash", "run.sh", "check-pi-durable-beside"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PI-DURABLE-RECEIVER-PARTIAL-DRAIN-WITHDRAWS-ONLY-ARCHIVED]",
+			"signatureSource": "pi-extensions/meta-bridge-pi-durable.test.ts",
+			"build": {
+				"argv": ["bash", "scripts/build-bridge.sh"],
+				"output": "mcp/entwurf-bridge/dist"
+			}
+		},
+		{
+			"claim": "PI-DURABLE-RECEIVER-READ-SERIALIZED",
+			"title": "an inbox read no longer waits for the doorbell's gate, so a drain that overtakes an admission in flight withdraws before that notice's handle exists and the notice stays queued, stale",
+			"subject": "pi-extensions/meta-bridge-pi-durable.ts",
+			"find": ["\t\tawait enterGate();\n"],
+			"replace": [""],
+			"gate": ["bash", "run.sh", "check-pi-durable-beside"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PI-DURABLE-RECEIVER-READ-SERIALIZED]",
+			"signatureSource": "pi-extensions/meta-bridge-pi-durable.test.ts",
+			"build": {
+				"argv": ["bash", "scripts/build-bridge.sh"],
+				"output": "mcp/entwurf-bridge/dist"
+			}
+		},
+		{
+			"claim": "PI-DURABLE-RECEIVER-ARRIVAL-DURING-READ-ANNOUNCED",
+			"title": "the gate opening after a read forgets the signal that landed while it was held, so mail that arrived after the drain is never announced until another arrival",
+			"subject": "pi-extensions/meta-bridge-pi-durable.ts",
+			"find": ["\t\tif (pending) void ring(\"signal\");\n"],
+			"replace": [""],
+			"gate": ["bash", "run.sh", "check-pi-durable-beside"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PI-DURABLE-RECEIVER-ARRIVAL-DURING-READ-ANNOUNCED]",
+			"signatureSource": "pi-extensions/meta-bridge-pi-durable.test.ts",
+			"build": {
+				"argv": ["bash", "scripts/build-bridge.sh"],
+				"output": "mcp/entwurf-bridge/dist"
+			}
+		},
+		{
+			"claim": "PI-DURABLE-RECEIVER-WITHDRAW-FAILURE-KEEPS-READ",
+			"title": "a notice whose native withdraw rejected is put back among the held ones, so every later read retries that withdraw and names the same failure again",
+			"subject": "pi-extensions/meta-bridge-pi-durable.ts",
+			"find": [
+				"\t\t\t\tnoteWithdrawalFailure({ reason: \"abort-failed\", requestId: notice.requestId, detail: describeError(error) });\n"
+			],
+			"replace": [
+				"\t\t\t\tnoteWithdrawalFailure({ reason: \"abort-failed\", requestId: notice.requestId, detail: describeError(error) });\n\t\t\t\tnotices.push(notice);\n"
+			],
+			"gate": ["bash", "run.sh", "check-pi-durable-beside"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PI-DURABLE-RECEIVER-WITHDRAW-FAILURE-KEEPS-READ]",
+			"signatureSource": "pi-extensions/meta-bridge-pi-durable.test.ts",
+			"build": {
+				"argv": ["bash", "scripts/build-bridge.sh"],
+				"output": "mcp/entwurf-bridge/dist"
+			}
+		},
+		{
+			"claim": "PI-DURABLE-RECEIVER-INSPECTION-FAILURE-KEEPS-NOTICES",
+			"title": "a mailbox that could not be listed is judged as if it held no unread mail, so every held notice is withdrawn while its mail may still be unread",
+			"subject": "pi-extensions/meta-bridge-pi-durable.ts",
+			"find": [
+				"\t\t\tnoteWithdrawalFailure({ reason: \"inspection-failed\", detail: `${inbox}: ${describeError(error)}` });\n\t\t\treturn;\n"
+			],
+			"replace": [
+				"\t\t\tnoteWithdrawalFailure({ reason: \"inspection-failed\", detail: `${inbox}: ${describeError(error)}` });\n\t\t\tunread = new Set();\n"
+			],
+			"gate": ["bash", "run.sh", "check-pi-durable-beside"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PI-DURABLE-RECEIVER-INSPECTION-FAILURE-KEEPS-NOTICES]",
+			"signatureSource": "pi-extensions/meta-bridge-pi-durable.test.ts",
+			"build": {
+				"argv": ["bash", "scripts/build-bridge.sh"],
+				"output": "mcp/entwurf-bridge/dist"
+			}
+		},
+		{
 			"claim": "PI-DURABLE-CARRIER-RELOCATION-TWO-RULES",
 			"title": "a carrier file's import of a sibling keeps its .ts specifier, so the installed carrier asks Node for a file that was never emitted",
 			"subject": "pi/pi-durable/carrier-relocation.mjs",

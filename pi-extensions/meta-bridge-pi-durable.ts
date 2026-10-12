@@ -58,6 +58,24 @@
  * vanished signal, a failed ring, a rejected admission or close retires the doorbell — watch
  * closed, our own marker removed, the reason kept by name — and nothing retries it.
  *
+ * WITHDRAW (#140). Each notice is a native `followUp`, placed one per run; a read drains EVERY
+ * unread body. So after a read the notices still queued for that mail would each cost a turn and an
+ * empty read. The contact keeps the native `Submission` handle of each notice it admitted, with the
+ * `.msg` names that notice announced, only while that mail is unread. After every
+ * `entwurf_inbox_read` attempt — whatever its garden id or outcome — it lists its OWN mailbox once
+ * and withdraws, through the native `Submission.abort` and the read's own invocation Context, each
+ * notice none of whose names is still `.msg.delivered`. That per-notice file predicate is the only
+ * authority: no garden-id guard, no requestId lookup, no queue of our own, no rewritten text. A placed
+ * or settled notice answers so and is let go; a withdraw that fails is let go too, named in one
+ * stderr line and on the receiver report, never retried and never retiring the doorbell; a mailbox
+ * that cannot be listed proves nothing absent, so every notice is kept and that is named the same
+ * way. The read's own result or error is returned unchanged — no diagnostic joins it. Ring passes
+ * and reads share one gate: a read waits for an admission in flight (else its drain could beat the
+ * handle it must withdraw), and an arrival during a read is rung once the read lets go. The count
+ * in a notice is its admission-time snapshot. Not covered: notices admitted before a restart (no
+ * handle), mail drained by another process (until this contact's next read), and operator abort,
+ * which natively withdraws queued notices while their mail stays unread.
+ *
  * VISIBLE IDENTITY (a static projection). `withGardenIdentity` hands the native TUI a view whose
  * every conversation label carries this citizen's garden id, so the footer the TUI keeps on screen
  * names the citizen; the bootstrap composes it only after birth succeeded. That is evidence of what
@@ -79,7 +97,8 @@
  *
  * NOT HERE: crash-safe receive. `entwurf_inbox_read` archives a body before the durable tool
  * result commits, so a crash between the two loses that body to the model; recovery settles the
- * call as interrupted and no doorbell rings again. No resume.
+ * call as interrupted and no doorbell rings again. A drain that fails part-way has archived the
+ * bodies before it (the bridge returns its error), and those too never reach the model. No resume.
  */
 
 import * as fs from "node:fs";
@@ -530,9 +549,14 @@ export interface DurableDoorbellDraft {
 	readonly requestId: string;
 }
 
-/** The part of the native `Submission` handle a doorbell records; admission is not completion. */
+/** What the native `Submission.abort` answers: only a still-queued input is withdrawn. */
+export type DurableWithdrawal = "aborted" | "already_placed" | "settled";
+
+/** The part of the native `Submission` handle a doorbell keeps; admission is not completion. */
 export interface DurableAdmittedSubmission {
 	readonly id: unknown;
+	/** Native `Submission.abort(context)`, handed the read's own invocation Context unchanged. */
+	abort(context: DurableCallContext | undefined): Promise<DurableWithdrawal>;
 }
 
 /** The overlay's `OpenDurableResult.submitToRoot`. */
@@ -563,20 +587,39 @@ export interface PiDurableDoorbellAdmission {
 }
 
 /**
+ * The LATEST notice withdrawal that failed. `inspection-failed`: the own mailbox could not be listed,
+ * so no notice was judged and every one is kept. `abort-failed`: the native withdraw of the notice
+ * named by `requestId` rejected; that notice is let go, not retried.
+ */
+export interface PiDurableWithdrawalFailure {
+	reason: "inspection-failed" | "abort-failed";
+	requestId?: string;
+	detail: string;
+}
+
+/**
  * The receiver's diagnostic. `admissions` is the LATEST successful admission only — an empty array
  * before the first ring, then exactly one entry, replaced by each later success; a retirement keeps
  * the last one. It is a diagnostic, not a history: it never grows with the host's lifetime, and its
  * length is no count of how often the root was asked (the root's own submissions are that record).
+ * `withdrawalFailure`, present only once a withdrawal failed, is likewise the latest one only.
  */
 export type PiDurableReceiverReport =
 	| { status: "off" }
-	| { status: "armed"; gardenId: string; markerPath: string; admissions: PiDurableDoorbellAdmission[] }
+	| {
+			status: "armed";
+			gardenId: string;
+			markerPath: string;
+			admissions: PiDurableDoorbellAdmission[];
+			withdrawalFailure?: PiDurableWithdrawalFailure;
+	  }
 	| {
 			status: "retired";
 			gardenId: string;
 			reason: PiDurableReceiverRetirement;
 			detail: string;
 			admissions: PiDurableDoorbellAdmission[];
+			withdrawalFailure?: PiDurableWithdrawalFailure;
 	  };
 
 export interface PiDurableAttachment {
@@ -639,6 +682,13 @@ interface ArmedDoorbell {
 	markerPath: string;
 	watcher: fs.FSWatcher;
 	submitToRoot: DurableSubmitToRoot;
+}
+
+/** One admitted notice: its native handle and the `.msg` names it announced. */
+interface HeldNotice {
+	readonly requestId: string;
+	readonly fresh: readonly string[];
+	readonly submission: DurableAdmittedSubmission;
 }
 
 const TOOL_DESCRIPTIONS: Record<PiDurableToolName, string> = {
@@ -730,7 +780,8 @@ export function createPiDurableContact(options: PiDurableContactOptions): PiDura
 				throw new Error(`${name} arguments must be an object`);
 			}
 			const client = await waitReady(context?.abortSignal);
-			const result = await client.callTool(name, (args ?? {}) as Record<string, unknown>, context?.abortSignal);
+			const call = () => client.callTool(name, (args ?? {}) as Record<string, unknown>, context?.abortSignal);
+			const result = name === "entwurf_inbox_read" ? await readInbox(call, context) : await call();
 			if (result.isError) throw new Error(result.text || `${name} failed`);
 			return { content: [{ type: "text", text: result.text }] };
 		},
@@ -745,8 +796,34 @@ export function createPiDurableContact(options: PiDurableContactOptions): PiDura
 	let doorbell: ArmedDoorbell | null = null;
 	let report: PiDurableReceiverReport = { status: "off" };
 	const admissions: PiDurableDoorbellAdmission[] = [];
-	let ringing = false;
+	/** The armed mailbox, kept past a retirement so notices admitted before it can still be judged. */
+	let inbox: string | null = null;
+	/** Every admitted notice still owed a withdraw judgement, oldest first. */
+	const notices: HeldNotice[] = [];
+	let withdrawalFailure: PiDurableWithdrawalFailure | undefined;
+	// One gate for ring passes and inbox reads; `pending` is a signal that landed while it was held.
+	let gated = false;
 	let pending = false;
+	const gateWaiters: (() => void)[] = [];
+
+	const enterGate = (): Promise<void> => {
+		if (!gated) {
+			gated = true;
+			return Promise.resolve();
+		}
+		return new Promise<void>((resolve) => gateWaiters.push(resolve));
+	};
+
+	/** Hand the gate to the next waiting read, else open it — and ring once for a signal that landed meanwhile. */
+	const leaveGate = (): void => {
+		const next = gateWaiters.shift();
+		if (next !== undefined) {
+			next();
+			return;
+		}
+		gated = false;
+		if (pending) void ring("signal");
+	};
 
 	/**
 	 * Give the doorbell back: close the watch and remove the marker, in one step, because a
@@ -791,19 +868,19 @@ export function createPiDurableContact(options: PiDurableContactOptions): PiDura
 	/**
 	 * One contract with the other self-fetch doorbells: a fresh `*.msg` is the trigger, it is
 	 * stamped `.msg.delivered` before the announce, and the announced count is every
-	 * `.msg.delivered`. Events that land while an admission is in flight coalesce into one more
-	 * pass. A failed pass retires the doorbell; it is not retried. Only a fresh `.msg` rings —
-	 * the startup pass included — so a `.msg.delivered` left undrained by an earlier host is not
-	 * announced again on its own; it shows only in the count of the next fresh arrival.
+	 * `.msg.delivered`. Events that land while an admission or an inbox read holds the gate coalesce
+	 * into one more pass. A failed pass retires the doorbell; it is not retried. Only a fresh `.msg`
+	 * rings — the startup pass included — so a `.msg.delivered` left undrained by an earlier host is
+	 * not announced again on its own; it shows only in the count of the next fresh arrival.
 	 */
 	const ring = async (why: PiDurableDoorbellAdmission["why"]): Promise<void> => {
 		const armed = doorbell;
 		if (armed === null) return;
-		if (ringing) {
+		if (gated) {
 			pending = true;
 			return;
 		}
-		ringing = true;
+		gated = true;
 		try {
 			do {
 				pending = false;
@@ -836,11 +913,71 @@ export function createPiDurableContact(options: PiDurableContactOptions): PiDura
 				}
 				// Latest only: the diagnostic names the LAST success and never grows with the host's lifetime.
 				admissions.splice(0, admissions.length, { why, requestId, submissionId: submission.id, fresh, unread });
+				notices.push({ requestId, fresh, submission });
 			} while (pending && doorbell === armed);
 		} catch (error) {
 			retire("doorbell-failed", describeError(error));
 		} finally {
-			ringing = false;
+			leaveGate();
+		}
+	};
+
+	/**
+	 * One named stderr line per failed withdrawal — stderr ALWAYS, as `entwurf-control` does, since
+	 * nothing in the native app reads the receiver report — and the report keeps the latest one.
+	 */
+	const noteWithdrawalFailure = (failure: PiDurableWithdrawalFailure): void => {
+		withdrawalFailure = failure;
+		const subject = failure.requestId === undefined ? "" : ` ${failure.requestId}`;
+		const detail = failure.detail.replace(/\s+/g, " ");
+		process.stderr.write(`[entwurf pi-durable] notice withdrawal ${failure.reason}${subject}: ${detail}\n`);
+	};
+
+	/**
+	 * Withdraw every held notice none of whose announced `.msg` names is still `.msg.delivered` in the
+	 * armed mailbox, listed once. A mailbox that cannot be listed proves nothing absent: every notice
+	 * is kept and that is named. A judged notice is let go whatever the native withdraw answers — or
+	 * when it rejects, which is named and never retried — so no handle outlives its mail by more
+	 * than one read. Never throws: the read's own answer is what the caller gets.
+	 */
+	const withdrawDrained = async (context: DurableCallContext | undefined): Promise<void> => {
+		if (inbox === null || notices.length === 0) return;
+		let unread: Set<string>;
+		try {
+			unread = new Set(fs.readdirSync(inbox).filter((name) => name.endsWith(".msg.delivered")));
+		} catch (error) {
+			noteWithdrawalFailure({ reason: "inspection-failed", detail: `${inbox}: ${describeError(error)}` });
+			return;
+		}
+		for (const notice of [...notices]) {
+			if (notice.fresh.some((name) => unread.has(`${name}.delivered`))) continue;
+			notices.splice(notices.indexOf(notice), 1);
+			try {
+				await notice.submission.abort(context);
+			} catch (error) {
+				noteWithdrawalFailure({ reason: "abort-failed", requestId: notice.requestId, detail: describeError(error) });
+			}
+		}
+	};
+
+	/**
+	 * An inbox read under the doorbell's gate, then the withdrawal its drain made due — after a
+	 * failed read too, whose partial drain may already have archived mail. The bridge's own answer,
+	 * result or rejection, is returned unchanged.
+	 */
+	const readInbox = async (
+		call: () => Promise<BridgeCallResult>,
+		context: DurableCallContext | undefined,
+	): Promise<BridgeCallResult> => {
+		await enterGate();
+		try {
+			return await call();
+		} finally {
+			try {
+				await withdrawDrained(context);
+			} finally {
+				leaveGate();
+			}
 		}
 	};
 
@@ -893,6 +1030,7 @@ export function createPiDurableContact(options: PiDurableContactOptions): PiDura
 				receiversDir: roots.receiversDir,
 			});
 			doorbell = { gardenId, ownerPid, mailbox, signal, markerPath, watcher, submitToRoot };
+			inbox = mailbox;
 			report = { status: "armed", gardenId, markerPath, admissions };
 			return markerPath;
 		} catch (error) {
@@ -1011,13 +1149,15 @@ export function createPiDurableContact(options: PiDurableContactOptions): PiDura
 			settleFailed(describeError(error));
 		},
 		receiver() {
-			return report;
+			return withdrawalFailure === undefined || report.status === "off" ? report : { ...report, withdrawalFailure };
 		},
 		async close() {
 			const previous = state;
 			settleFailed("the contact closed before attach completed");
 			state = { kind: "closed" };
 			const client = previous.kind === "ready" ? previous.client : undefined;
+			// Queued notices stay native (a continued session places them); this contact judges no more.
+			notices.length = 0;
 			await closeAll(disarmOnClose, async () => {
 				await client?.close();
 			});
