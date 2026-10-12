@@ -200,7 +200,7 @@ describe("public run.sh developer menu", () => {
 		const f = menuFixture();
 		const result = f.run("0\n");
 		expect(result.status, result.stderr).toBe(0);
-		expect(result.stdout).toContain("개발자 보드");
+		expect(result.stdout).toContain("developer board");
 		expect(f.lines()).toEqual([]);
 	});
 	it("offers a read-only readiness check", () => {
@@ -213,7 +213,7 @@ describe("public run.sh developer menu", () => {
 			const f = menuFixture();
 			const result = f.run(`2\n${confirmation}\n`);
 			expect(result.status, result.stderr).toBe(0);
-			expect(result.stdout).toContain("취소");
+			expect(result.stdout).toContain("menu-cancelled");
 			expect(f.lines()).toEqual(["--check"]);
 		}
 	});

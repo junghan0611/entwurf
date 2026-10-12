@@ -22,6 +22,16 @@ All notable changes to this project will be documented here. Format follows [Kee
   turn before the prompt instead of letting a different model answer under the requested
   id. Cortex answers are not read back; they are unmeasured.
 
+### Developer checkout
+
+- **A source-only menu returns a host to its checkout.** `./run.sh menu` offers a read-only
+  readiness check, or switches to the developer board: after that same check and the exact
+  confirmation `DEV`, it runs the existing `plugins/herdr/use-dev-checkout.sh --apply`, which
+  deactivates the currently owned installation and then links Pi / Claude Code wiring and
+  Herdr's local plugin to this checkout. It needs an interactive terminal, runs only from a
+  source checkout, and adds no installer, npm acquisition, retry or recovery. Its prompts
+  and messages are English.
+
 ## v2026.10.12-herdr.0.35.0 — Herdr Entwurf plugin 0.35.0
 
 A separate Herdr plugin snapshot, not another core release: core package0.35.0 and

@@ -129,12 +129,12 @@ developer_menu() {
     return 2
   fi
   local choice confirm
-  printf '\nHerdr — npm 설치 검증 → 개발자 보드 (local checkout)\n'
-  printf '체크아웃: %s\n' "$REPO_DIR"
-  printf '  1) 전환 준비 점검 — 읽기 전용 (설치 사전조건 전체 인증 아님)\n'
-  printf '  2) 개발자 보드로 전환 — Pi / Claude Code / Herdr local link\n'
-  printf '  0) 종료 — 변경 없음\n'
-  if ! IFS= read -r -p '선택 [0/1/2]: ' choice; then
+  printf '\nHerdr — npm installation check → developer board (local checkout)\n'
+  printf 'Checkout: %s\n' "$REPO_DIR"
+  printf '  1) Readiness check — read-only (not a full certificate of installation prerequisites)\n'
+  printf '  2) Switch to the developer board — Pi / Claude Code / Herdr local link\n'
+  printf '  0) Quit — nothing is changed\n'
+  if ! IFS= read -r -p 'Choose [0/1/2]: ' choice; then
     echo '[menu] menu-input-closed — nothing was changed.' >&2
     return 2
   fi
@@ -145,14 +145,14 @@ developer_menu() {
       # Show the real owner's readiness first. Busy sessions or bad ownership
       # stop here; confirmation grants no authority to bypass those guards.
       bash "$REPO_DIR/plugins/herdr/use-dev-checkout.sh" --check || return $?
-      printf '\n관련 세션을 직접 종료하고, 전환 중에는 새 세션을 만들지 마세요.\n'
-      printf '기존 소유 설치를 해제한 뒤 이 checkout으로 연결합니다. 자동 복구·재시도는 없습니다.\n'
-      if ! IFS= read -r -p '전환하려면 DEV를 입력하세요 (그 외 취소): ' confirm; then
+      printf '\nClose the affected sessions yourself, and start no new session while switching.\n'
+      printf 'The currently owned installation is deactivated, then this checkout is linked. There is no automatic recovery or retry.\n'
+      if ! IFS= read -r -p 'Type DEV to switch (anything else cancels): ' confirm; then
         echo '[menu] menu-input-closed — apply was not called.' >&2
         return 2
       fi
       if [ "$confirm" != DEV ]; then
-        echo '[menu] 취소 — 설치 연결 변경 없음.'
+        echo '[menu] menu-cancelled — installation wiring is unchanged.'
         return 0
       fi
       bash "$REPO_DIR/plugins/herdr/use-dev-checkout.sh" --apply
