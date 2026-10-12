@@ -381,7 +381,7 @@ operator's repair named.
 |---|---|---|
 | Model ids | unprefixed `claude-sonnet-5-5`, `claude-opus-5-5`, `claude-fable-5-1` | `cortex-auto`, `cortex-claude-opus-5`, `cortex-claude-sonnet-5`, `cortex-openai-gpt-5.4`; prefix stripped before set-model |
 | Launch | bundled `claude-agent-acp`; `CLAUDE_AGENT_ACP_COMMAND` override | `cortex acp serve`; optional connection; `CORTEX_ACP_COMMAND` override; never a launch-time `-m` |
-| Model authority | per-turn ACP set-model | per-turn ACP set-model; an unavailable curated id fails before prompt |
+| Model authority | per-turn ACP set-model, its answer read back before the prompt | per-turn ACP set-model; an unavailable curated id fails before prompt; the answer is not read back |
 | Carrier | engraving in `_meta.systemPrompt` | no system-prompt carrier; engraving rides the first-user augment |
 | Overlay | `CLAUDE_CONFIG_DIR` whitelist, configured-empty hooks, native memory hidden | session-scoped isolated HOME + `SNOWFLAKE_HOME`, private `cortex/mcp.json`, measured-minimum auth passthrough |
 | MCP | explicit wire `mcpServers` | explicit declarations projected to private `mcp.json` because Cortex ignores the wire field |
@@ -401,8 +401,20 @@ not a vendor turn). So the launches Entwurf builds admit only an EXACT curated i
 `entwurf/<id>` model, and `entwurf_resume_call` of a session whose emitted provider is
 `entwurf`, refuse anything else as `acp-model-not-curated` before a pane opens. A human
 typing `pi --model …` keeps the upstream fuzzy behaviour, so use the full 5.5 ids there.
-Registration and a mocked set-model request prove selection and forwarding, not the
-vendor's actual response model or a live 5.5 turn.
+
+The adapter reads its set-model answer back before the prompt. The driver resolves the
+requested id onto one of the rows it offers and answers with that row's `value` as the
+model option's `currentValue` (0.85.1 `dist/acp-agent.js:5459-5499`). Measured on
+2026-10-12 against 0.85.1 with no prompt sent: `claude-fable-5-1` answers its own row,
+while `claude-sonnet-5-5` and `claude-opus-5-5` answer the alias rows `sonnet` and
+`opus`, named `Sonnet 5.5` and `Opus 5.5`. The id an alias row resolves to is not on the
+ACP wire, so `CLAUDE_SET_MODEL_ALIAS_ROWS` (`backend-adapter.ts`) declares, for each
+alias-answered id, the one measured row it is accepted as, value and name together. A
+missing model option, another row, or any other value/name pair refuses the turn before
+the prompt, with text pi does not classify as transient. A curated id added later needs
+its own measured answer before it ships. `check-acp-set-model-readback` holds the
+contract offline; it does not certify the installed driver's runtime, and no 5.5 prompt
+turn is claimed by this measurement.
 
 The bundled adapter resolves before any PATH fallback. Its overlay retains only the
 auth/runtime state required by the Claude Agent SDK and hides operator memory, hooks,

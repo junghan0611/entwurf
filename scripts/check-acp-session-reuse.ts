@@ -154,7 +154,7 @@ function makeHarness(recordDir: string, config: any = DEFAULT_RESOLVED_CONFIG, e
 			newSessionSeq++;
 			return { sessionId: `ACP-${newSessionSeq}` };
 		},
-		setSessionConfigOption: async () => ({}),
+		setSessionConfigOption: async (p: any) => ({ configOptions: [{ id: "model", currentValue: p.value }] }),
 		prompt: async ({ sessionId, prompt }: any) => {
 			promptCalls.push({ sessionId, text: prompt.map((b: { text: string }) => b.text).join("\n") });
 			if (block) await block;

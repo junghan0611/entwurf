@@ -160,7 +160,7 @@ function makeHarness(recordDir: string, scripts: TurnScript[]) {
 			newSessionCalls++;
 			return { sessionId: "ACP-1" };
 		},
-		setSessionConfigOption: async () => ({}),
+		setSessionConfigOption: async (p: any) => ({ configOptions: [{ id: "model", currentValue: p.value }] }),
 		prompt: async ({ sessionId }: any) => {
 			const script = scripts[turnIndex++] ?? {};
 			const update: Record<string, unknown> = { sessionUpdate: "usage_update" };

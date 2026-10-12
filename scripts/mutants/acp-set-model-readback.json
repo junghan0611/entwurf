@@ -1,0 +1,28 @@
+{
+	"schemaVersion": 1,
+	"lane": "acp-set-model-readback",
+	"mutants": [
+		{
+			"claim": "ACP-CLAUDE-SET-MODEL-READBACK",
+			"title": "the claude set-model answer is no longer read back — a missing model option or another row reaches the prompt, so a different model answers under the requested id",
+			"subject": "pi-extensions/lib/acp/backend-adapter.ts",
+			"find": ["\t\tconfirmClaudeSetModelAnswer(answer, nativeModelId);"],
+			"replace": ["\t\tvoid answer;"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-CLAUDE-SET-MODEL-READBACK]",
+			"signatureSource": "pi-extensions/lib/acp/backend-adapter.test.ts"
+		},
+		{
+			"claim": "ACP-CLAUDE-SET-MODEL-ALIAS-EXACT",
+			"title": "an alias answer is matched by row name alone — the `default` row or a retired id's row carrying the 5.5 name answers silently under the 5.5 id",
+			"subject": "pi-extensions/lib/acp/backend-adapter.ts",
+			"find": ["\tif (alias !== undefined && currentValue === alias.value && selected?.name === alias.name) return;"],
+			"replace": ["\tif (alias !== undefined && selected?.name === alias.name) return;"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-CLAUDE-SET-MODEL-ALIAS-EXACT]",
+			"signatureSource": "pi-extensions/lib/acp/backend-adapter.test.ts"
+		}
+	]
+}

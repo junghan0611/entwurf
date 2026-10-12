@@ -223,7 +223,7 @@ function makeWorld() {
 			const connection: AcpConnectionLike = {
 				initialize: async () => ({}),
 				newSession: async () => ({ sessionId: `ACP-${children.length}` }),
-				setSessionConfigOption: async () => ({}),
+				setSessionConfigOption: async (p: any) => ({ configOptions: [{ id: "model", currentValue: p.value }] }),
 				prompt: (params) => {
 					const script = scripts.shift();
 					if (!script) return Promise.reject(new Error("fake: no scripted prompt left"));

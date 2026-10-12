@@ -174,7 +174,7 @@ function makeRecordingConnection(calls: RecordedCall[]): AcpConnectionLike {
 		},
 		setSessionConfigOption: async (params) => {
 			calls.push({ method: "setSessionConfigOption", params });
-			return {};
+			return { configOptions: [{ id: "model", currentValue: (params as { value?: unknown }).value }] };
 		},
 		prompt: async (params) => {
 			calls.push({ method: "prompt", params });
@@ -381,12 +381,19 @@ function makeRecordingConnection(calls: RecordedCall[]): AcpConnectionLike {
 		"backend.ts still sends the clientInfo the probe mirrors",
 	);
 	// The claude adapter's enforceModel wire shape — the LIVE probe executes THIS
-	// method (emitted twin), so its shape is pinned where it lives.
+	// method (emitted twin), so its shape is pinned where it lives. Sliced to the claude
+	// adapter: the cortex adapter makes the same call, and must not satisfy this pin.
+	const claudeAdapterSrc = ADAPTER_SRC.slice(
+		ADAPTER_SRC.indexOf("export const claudeAdapter"),
+		ADAPTER_SRC.indexOf("export const cortexAdapter"),
+	);
 	assert.ok(
-		ADAPTER_SRC.includes(
-			'await setConfig.call(connection, { sessionId: acpSessionId, configId: "model", value: nativeModelId });',
-		),
-		'claudeAdapter.enforceModel still sends setSessionConfigOption({configId:"model"})',
+		claudeAdapterSrc.length > 0 &&
+			claudeAdapterSrc.includes(
+				'await setConfig.call(connection, {\n\t\t\tsessionId: acpSessionId,\n\t\t\tconfigId: "model",\n\t\t\tvalue: nativeModelId,\n\t\t});',
+			) &&
+			claudeAdapterSrc.includes("confirmClaudeSetModelAnswer(answer, nativeModelId);"),
+		'claudeAdapter.enforceModel still sends setSessionConfigOption({configId:"model"}) and reads its answer back',
 	);
 
 	// Permission policy: the runner's copy must mirror backend.ts's private

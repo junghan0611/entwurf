@@ -1441,6 +1441,14 @@ check_acp_foreground_only() {
   run_vitest pi-extensions/lib/acp/backend-adapter.test.ts
 }
 
+check_acp_set_model_readback() {
+  # NOT a discovery path — check-tests-beside-behavior finds the test by glob. This case is the
+  # MUTANT EXECUTION COORDINATE for scripts/mutants/acp-set-model-readback.json (#128): the claude
+  # adapter refuses a set-model answer that does not name the requested model, before the prompt.
+  section "claude ACP set-model readback (mutant execution coordinate)"
+  run_vitest pi-extensions/lib/acp/backend-adapter.test.ts
+}
+
 check_acp_vendor_rejection() {
   # Behaviour-adjacent tests are discovered by the glob lane. This narrow case is the
   # mutant execution coordinate: include the adapter admission and real turn pipeline,
@@ -7292,6 +7300,9 @@ case "$cmd" in
     ;;
   check-acp-foreground-only)
     check_acp_foreground_only
+    ;;
+  check-acp-set-model-readback)
+    check_acp_set_model_readback
     ;;
   check-resume-launch-identity)
     check_resume_launch_identity

@@ -8,8 +8,13 @@
  * The claude adapter alone reads a vendor prompt rejection (#127): the `incomplete_tool_call`
  * vocabulary belongs to claude-agent-acp, so a capability check — not a backend-name branch in the
  * common loop — keeps it from capturing another backend's failures.
+ *
+ * The claude adapter reads its set-model answer back before the prompt (#128). The rows below are
+ * the shape claude-agent-acp 0.85.1 answered on 2026-10-12, copied as literals so a change to the
+ * adapter's declared names cannot move its own oracle. No vendor runtime is certified here.
  */
 import { RequestError } from "@agentclientprotocol/sdk";
+import { isRetryableAssistantError } from "@earendil-works/pi-ai/compat";
 import { describe, expect, it } from "vitest";
 import { claudeAdapter, cortexAdapter, INCOMPLETE_TOOL_CALL_VERDICT } from "./backend-adapter.ts";
 import { CLAUDE_CONFIG_OVERLAY_DIR } from "./overlay.ts";
@@ -62,5 +67,82 @@ describe("ACP prompt rejection — claude-only capability", () => {
 		// Structural only: cortex declares no reader, so backend.ts keeps its old path for every
 		// cortex failure. No cortex runtime or LIVE behaviour is certified here.
 		expect("readPromptRejection" in cortexAdapter).toBe(false);
+	});
+});
+
+describe("ACP set-model readback — claude", () => {
+	// Measured 0.85.1 rows (a subset): two alias rows, the exact Fable row, and the rows a wrong
+	// resolution could land on.
+	const MEASURED_ROWS = [
+		{ value: "default", name: "Default (recommended)", description: "Opus 5.5" },
+		{ value: "opus", name: "Opus 5.5", description: "For complex work and everyday tasks" },
+		{ value: "claude-fable-5-1", name: "Fable 5.1", description: "For your toughest challenges" },
+		{ value: "sonnet", name: "Sonnet 5.5", description: "Most efficient for simpler tasks" },
+		{ value: "claude-sonnet-5", name: "Sonnet 5", description: "Efficient for routine tasks" },
+		{ value: "claude-opus-5", name: "Opus 5", description: "Best for everyday, complex tasks" },
+	];
+	const answer = (currentValue: unknown, options: unknown[] = MEASURED_ROWS) => ({
+		configOptions: [{ id: "model", type: "select", currentValue, options }],
+	});
+	const enforce = async (nativeModelId: string, response: unknown) => {
+		const sent: unknown[] = [];
+		const connection = {
+			setSessionConfigOption: async (params: unknown) => {
+				sent.push(params);
+				return response;
+			},
+		} as never;
+		await claudeAdapter.enforceModel({ connection, acpSessionId: "S", modelId: nativeModelId, nativeModelId });
+		return sent;
+	};
+
+	it("[QK:ACP-CLAUDE-SET-MODEL-READBACK] enforceModel refuses an answer that does not name the requested model", async () => {
+		expect(await enforce("claude-fable-5-1", answer("claude-fable-5-1"))).toEqual([
+			{ sessionId: "S", configId: "model", value: "claude-fable-5-1" },
+		]);
+		const refused: Array<[string, unknown]> = [
+			["claude-fable-5-1", {}],
+			["claude-fable-5-1", undefined],
+			["claude-fable-5-1", { configOptions: [{ id: "effort", currentValue: "claude-fable-5-1" }] }],
+			["claude-fable-5-1", answer("claude-fable-5")],
+			["claude-fable-5-1", answer(undefined)],
+			["claude-sonnet-5-5", answer("claude-sonnet-5")],
+			["claude-opus-5-5", answer("default")],
+		];
+		for (const [id, response] of refused) {
+			const failure = await enforce(id, response).then(
+				() => undefined,
+				(err: unknown) => err,
+			);
+			expect(failure, `${id} answered ${JSON.stringify(response)}`).toBeInstanceOf(Error);
+			const message = (failure as Error).message;
+			expect(message).toContain(JSON.stringify(id));
+			// A refusal we author must not invite pi's blind replay of the whole prompt.
+			expect(isRetryableAssistantError({ stopReason: "error", errorMessage: message } as never)).toBe(false);
+		}
+	});
+
+	it("[QK:ACP-CLAUDE-SET-MODEL-ALIAS-EXACT] an alias answer is accepted only as the row measured for the requested id, value and name", async () => {
+		await enforce("claude-sonnet-5-5", answer("sonnet"));
+		await enforce("claude-opus-5-5", answer("opus"));
+		const grouped = [{ group: "all", name: "All", options: MEASURED_ROWS }];
+		await enforce("claude-opus-5-5", answer("opus", grouped));
+		// The alias value under another generation's name; the 5.5 name on a row that is not the
+		// alias (the default row, a retired id, the other alias); or answering the other id.
+		const renamed = (value: string, name: string) =>
+			MEASURED_ROWS.map((row) => (row.value === value ? { ...row, name } : row));
+		for (const [id, response] of [
+			["claude-sonnet-5-5", answer("sonnet", renamed("sonnet", "Sonnet 6"))],
+			["claude-sonnet-5-5", answer("sonnet", [])],
+			["claude-sonnet-5-5", answer("default", renamed("default", "Sonnet 5.5"))],
+			["claude-sonnet-5-5", answer("claude-sonnet-5", renamed("claude-sonnet-5", "Sonnet 5.5"))],
+			["claude-sonnet-5-5", answer("opus", renamed("opus", "Sonnet 5.5"))],
+			["claude-opus-5-5", answer("sonnet")],
+			["claude-fable-5-1", answer("opus")],
+		] as const) {
+			await expect(enforce(id, response), `${id} answered ${JSON.stringify(response)}`).rejects.toThrow(
+				/does not name the requested model/,
+			);
+		}
 	});
 });

@@ -124,7 +124,7 @@ function makeHarness(recordDir: string, wireReason: string | null) {
 		createConnection: (_child: any, handlers: any) => ({
 			initialize: async () => ({ agentCapabilities: {} }),
 			newSession: async () => ({ sessionId: "ACP-1" }),
-			setSessionConfigOption: async () => ({}),
+			setSessionConfigOption: async (p: any) => ({ configOptions: [{ id: "model", currentValue: p.value }] }),
 			prompt: async ({ sessionId }: any) => {
 				await handlers.sessionUpdate({
 					update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text: "PARTIAL" } },

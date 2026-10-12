@@ -339,6 +339,50 @@ function resolveClaudeLaunch(): AcpLaunchSpec {
  */
 export const CLAUDE_FOREGROUND_ONLY_ENV = { CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: "1" } as const;
 
+/**
+ * The set-model answer is read back before the prompt (#128). claude-agent-acp resolves the
+ * requested id onto one of the rows it offers and answers with that row's `value` as the model
+ * option's `currentValue` (0.85.1 `dist/acp-agent.js:5459-5499`). `[측정 2026-10-12]` 0.85.1, no
+ * prompt: `claude-fable-5-1` answers its own row, while `claude-sonnet-5-5` and `claude-opus-5-5`
+ * answer the alias rows `sonnet` and `opus`, named `Sonnet 5.5` and `Opus 5.5`. The id an alias row
+ * resolves to (`ModelInfo.resolvedModel`) is not on the ACP wire, so an alias answer is accepted
+ * only as the exact measured row, value AND name, declared here for the requested id. No other
+ * spelling is matched.
+ */
+export const CLAUDE_SET_MODEL_ALIAS_ROWS: Readonly<Record<string, Readonly<{ value: string; name: string }>>> =
+	Object.freeze({
+		"claude-sonnet-5-5": Object.freeze({ value: "sonnet", name: "Sonnet 5.5" }),
+		"claude-opus-5-5": Object.freeze({ value: "opus", name: "Opus 5.5" }),
+	});
+
+/** Refuse unless the set-model answer names the requested model. A missing model option, another
+ *  row, or a row that is not the measured alias row would let a different model answer under this id. */
+export function confirmClaudeSetModelAnswer(response: unknown, nativeModelId: string): void {
+	const configOptions = (response as { configOptions?: unknown } | null | undefined)?.configOptions;
+	const modelOption = Array.isArray(configOptions)
+		? (configOptions as Array<Record<string, unknown> | null>).find((option) => option?.id === "model")
+		: undefined;
+	const currentValue = modelOption?.currentValue;
+	if (typeof currentValue === "string" && currentValue === nativeModelId) return;
+	const rows = Array.isArray(modelOption?.options)
+		? (modelOption.options as Array<Record<string, unknown> | null>).flatMap((row) =>
+				Array.isArray(row?.options) ? (row.options as Array<Record<string, unknown> | null>) : [row],
+			)
+		: [];
+	const selected = typeof currentValue === "string" ? rows.find((row) => row?.value === currentValue) : undefined;
+	const alias = CLAUDE_SET_MODEL_ALIAS_ROWS[nativeModelId];
+	if (alias !== undefined && currentValue === alias.value && selected?.name === alias.name) return;
+	const answered =
+		modelOption === undefined
+			? "no model option"
+			: `model ${jsonText(currentValue)} named ${jsonText(selected?.name ?? null)}`;
+	throw new Error(
+		`entwurf: claude-agent-acp answered set-model ${JSON.stringify(nativeModelId)} with ${answered}, which does not ` +
+			`name the requested model. Refusing before the prompt so a different model cannot answer under this id; ` +
+			`the installed driver and the curated id disagree, and repeating the turn cannot change that.`,
+	);
+}
+
 export const claudeAdapter: AcpBackendAdapter = {
 	backend: "claude",
 
@@ -402,7 +446,12 @@ export const claudeAdapter: AcpBackendAdapter = {
 		if (typeof setConfig !== "function") {
 			throw new Error(`setSessionConfigOption unsupported — cannot enforce model ${modelId}`);
 		}
-		await setConfig.call(connection, { sessionId: acpSessionId, configId: "model", value: nativeModelId });
+		const answer = await setConfig.call(connection, {
+			sessionId: acpSessionId,
+			configId: "model",
+			value: nativeModelId,
+		});
+		confirmClaudeSetModelAnswer(answer, nativeModelId);
 	},
 
 	configSignatureFields(_adapterSettings) {
@@ -566,7 +615,8 @@ export const cortexAdapter: AcpBackendAdapter = {
 	// serves fails loud BEFORE the prompt (`Unsupported model: …`). PR #40's
 	// launch-time `-m` pin was retired for this: set-model is the single model
 	// authority (resolveLaunch never passes `-m`), and "auto" is set explicitly
-	// rather than treated as an unspoken default.
+	// rather than treated as an unspoken default. NO answer readback, unlike claude: nobody has
+	// measured what cortex's set_config_option response carries, so a check would be a guess.
 	async enforceModel({ connection, acpSessionId, nativeModelId, modelId }) {
 		const setConfig = connection.setSessionConfigOption;
 		if (typeof setConfig !== "function") {

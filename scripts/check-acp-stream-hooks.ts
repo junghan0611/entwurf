@@ -93,7 +93,7 @@ function makeHarness(recordDir: string) {
 	const makeConnection = (_handlers: any) => ({
 		initialize: async () => ({ agentCapabilities: {} }),
 		newSession: async () => ({ sessionId: "ACP-1" }),
-		setSessionConfigOption: async () => ({}),
+		setSessionConfigOption: async (p: any) => ({ configOptions: [{ id: "model", currentValue: p.value }] }),
 		prompt: async (params: any) => {
 			// Deep-cloned: the capture must be the bytes that crossed the seam, not a
 			// live reference a later mutation could rewrite.

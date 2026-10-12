@@ -14,6 +14,13 @@ All notable changes to this project will be documented here. Format follows [Kee
   `entwurf_resume_call` of a session recorded on one) refuses them as
   `acp-model-not-curated` before a pane opens, because Pi's substring resolver would
   otherwise open them on the Cortex rows. Records and transcripts are not rewritten.
+- **Claude set-model answers are read back before the prompt (#128).** The driver answers
+  `claude-sonnet-5-5` and `claude-opus-5-5` with its alias rows `sonnet` / `opus`, named
+  `Sonnet 5.5` / `Opus 5.5`, and `claude-fable-5-1` with its own row (measured against
+  0.85.1 without a prompt). The claude adapter now accepts only that answer: a missing
+  model option, another row, or any row other than that exact value/name pair refuses the
+  turn before the prompt instead of letting a different model answer under the requested
+  id. Cortex answers are not read back; they are unmeasured.
 
 ## v2026.10.12-herdr.0.35.0 — Herdr Entwurf plugin 0.35.0
 

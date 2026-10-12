@@ -151,7 +151,7 @@ function makeHarness(recordDir: string) {
 	const makeConnection = (handlers: any) => ({
 		initialize: async () => ({ agentCapabilities: {} }),
 		newSession: async () => ({ sessionId: "ACP-1" }),
-		setSessionConfigOption: async () => ({}),
+		setSessionConfigOption: async (p: any) => ({ configOptions: [{ id: "model", currentValue: p.value }] }),
 		prompt: ({ sessionId }: any) => {
 			promptCount++;
 			notifier = (update) => handlers.sessionUpdate({ update, sessionId });
