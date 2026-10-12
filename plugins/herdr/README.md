@@ -3,9 +3,11 @@
 **This plugin does not rebuild the Herdr workbench. It turns on the Entwurf driver inside the one
 you already have.**
 
-[Entwurf](../../README.md) is a garden-citizen dispatch substrate: it gives an already-running agent
-session a **garden id**, an address that outlives the pane it happens to be drawn in, and one
-official delivery verb for reaching it. That substrate is independent of Herdr and normally arrives
+[Entwurf](../../README.md) opens and messages visible sibling AI sessions, and reopens dormant pi
+siblings in tmux. It gives an already-running agent session a **garden id**, an address that
+outlives the pane it happens to be drawn in, lets it open new siblings — inside Herdr, a pi or
+Claude Code sibling arrives as a new unfocused tab in its own workspace — and carries one official
+delivery verb for reaching them. That capability is independent of Herdr and normally arrives
 through an ordinary npm install. The cost of that route is the entry: you have to know the package
 exists, install it, and run `entwurf setup` before anything is visible.
 
@@ -19,8 +21,8 @@ things and deliberately not a third:
 | **an observation window** | one overlay pane that lays Entwurf's garden citizens beside Herdr's own agent list, read once when you ask |
 | **not** | a second workbench, a second address space, or a delivery surface — the pane sends nothing and the plugin competes with nothing |
 
-Herdr owns the workbench. Entwurf owns the screwdriver — garden identity, official delivery,
-receipts, named refusals. This manifest is the smallest useful place those two meet: one `[[build]]`
+Herdr owns the workbench. Entwurf owns the screwdriver — garden identity, the named lifecycle verbs
+that open siblings (and reopen pi siblings in tmux), official delivery, receipts, named refusals. This manifest is the smallest useful place those two meet: one `[[build]]`
 and one `[[panes]]`, and no `[[startup]]`, `[[events]]`, `[[actions]]` or `[[link_handlers]]`
 (`herdr-plugin.toml`).
 

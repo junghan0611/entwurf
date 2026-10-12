@@ -1,6 +1,6 @@
 # AGENTS.md — Maintainer Guidelines for entwurf
 
-For agents who own this repository: durable invariants and the documents that own the changing evidence. This is the **entwurf capability package**: garden-citizen dispatch substrate, native-harness bridges, ACP plugin, and pi adapter. Entwurf is the subject; pi is one adapter. ACP is a plugin, not the boundary. V2 addresses existing citizens; `entwurf_fresh_call` creates a new sibling.
+For agents who own this repository: durable invariants and the documents that own the changing evidence. This is the **entwurf capability package**: visible sibling lifecycle and garden-id delivery — the v2 dispatch core, native-harness bridges, ACP plugin, and pi adapter. Entwurf is the subject; pi is one adapter. ACP is a plugin, not the boundary. V2 addresses existing citizens; `entwurf_fresh_call` creates a new sibling.
 
 ## North Star — One Forged Screwdriver
 

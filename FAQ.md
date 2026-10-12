@@ -8,7 +8,7 @@ No. Entwurf is closer to a workshop than a factory: it connects independently ow
 
 ## What does Entwurf do?
 
-It gives an existing session a stable **garden id** and routes a message, reply, or visible sibling launch through the rail that session actually supports. It does not reconstruct prompts, hydrate transcripts, manage credentials, or emulate another harness.
+It opens, reopens and messages visible sibling sessions across independent harnesses, each under a stable **garden id**. `entwurf_fresh_call` opens a new sibling in the caller's Herdr workspace or tmux session by default, `entwurf_resume_call` reopens a dormant pi sibling under the same id, and `entwurf_v2` delivers a message, reply or hand-off to an existing one through the rail it actually supports. It does not reconstruct prompts, hydrate transcripts, manage credentials, or emulate another harness.
 
 ## What is a garden id?
 
@@ -28,11 +28,11 @@ No. [`entwurf_v2`](./README.md#entwurf_v2--canonical-dispatch-verb) only address
 
 ## Where do visible siblings open?
 
-Inside Herdr, Entwurf opens a new unfocused tab in the caller's workspace and currently admits pi and Claude Code. Outside Herdr, it opens one of the fixed pi, Claude Code, Copilot, OMP, or Codex runtimes in a visible tmux window. The runtime keeps its own model, tools, authentication, and transcript.
+Inside Herdr, Entwurf opens a new unfocused tab in the caller's workspace and currently admits pi and Claude Code. Outside Herdr, it opens one of the fixed pi, pi-durable, Claude Code, Copilot, OMP, or Codex runtimes in a new window of the caller's tmux session, or of an existing session the caller names; without an explicit tmux placement, a Codex caller opens beside its own TUI pane. A dormant pi sibling reopens under the same id in a visible tmux window. The runtime keeps its own model, tools, authentication, and transcript.
 
 ## Does Entwurf replace Herdr or tmux?
 
-No. Herdr and tmux provide visible seats. Entwurf provides identity, delivery, and receipts across independent harness sessions. A pane or tmux session is a location for a sibling, never its address or liveness proof.
+No. Herdr and tmux provide visible seats. Entwurf opens siblings into them, reopens dormant pi siblings, and carries identity, delivery, and receipts across independent harness sessions. A pane or tmux session is a location for a sibling, never its address or liveness proof.
 
 ## How do I install it?
 

@@ -1,10 +1,12 @@
 # entwurf
 
-`entwurf` is a garden-citizen dispatch substrate: a thin bridge that lets independent
-agent harnesses address one another by **garden id**, without owning each other's
-transcript, authentication, tools, or runtime.
+`entwurf` connects independent agent harnesses as visible siblings: open a new session,
+reopen a dormant pi session in tmux, or reach an existing sibling by **garden id**. Fresh
+sessions open in the caller's Herdr workspace or tmux session by default; explicit tmux
+placement can name another existing session. Each harness keeps its own runtime,
+authentication, tools and transcript.
 
-![entwurf — a forged screwdriver for garden-citizen dispatch](docs/assets/entwurf-hero.jpg)
+![entwurf — a forged screwdriver for visible sibling sessions](docs/assets/entwurf-hero.jpg)
 
 **Pi ↔ native Claude Code inside the [Herdr workbench](#herdr-workbench).**
 A recorded source-checkout demo: callback → task → native Bash → reply.
@@ -21,12 +23,15 @@ receipts and named lifecycle verbs; the operator and native harnesses keep steer
 Git branches, worktrees, file isolation and internal delegation remain their concern.
 [Short answers: FAQ](./FAQ.md).
 
-```text
-pi / pi-durable / Claude Code / Copilot / OMP / Antigravity / Codex
-  → record-backed garden id
-    → entwurf_v2
-      → control-socket | self-fetch mailbox | native-push
-```
+| Verb | Tool | Where it lands | Harnesses |
+|---|---|---|---|
+| **Open** a new sibling | `entwurf_fresh_call` | Herdr: a new unfocused tab in the caller's workspace. tmux: a new window in the caller's session, or an existing session named by `placement.tmuxSession`; without an explicit tmux placement, a Codex caller opens beside its own TUI pane | Herdr: pi, Claude Code. tmux: pi, pi-durable, Claude Code, Copilot, OMP, Codex |
+| **Reopen** a dormant sibling | `entwurf_resume_call` | A visible tmux window under the same garden id, with the transcript, model, provider and cwd its record names; no turn is run | pi |
+| **Message** an existing sibling | `entwurf_v2` | Its own rail: control socket, self-fetch mailbox or native push; delivery starts no process | pi, pi-durable, Claude Code, Copilot, OMP, Antigravity, Codex |
+
+Antigravity is message-only: an existing conversation registers itself, and Entwurf never
+launches one. A launch receipt is neither the new sibling's address nor proof that it
+processed its task; the sibling's own callback envelope supplies its garden id.
 
 The package holds the v2 core, native-harness bridges, a pi adapter and an ACP
 plugin. ACP is one ingress, not the boundary; pi is one adapter, not the center.
@@ -160,6 +165,13 @@ model or process marker is a carrier or observation, never a second address axis
 Liveness is read at dispatch time; an id's shape does not tell you its transport.
 
 ### `entwurf_v2` — canonical dispatch verb
+
+```text
+pi / pi-durable / Claude Code / Copilot / OMP / Antigravity / Codex
+  → record-backed garden id
+    → entwurf_v2
+      → control-socket | self-fetch mailbox | native-push
+```
 
 | What you want | Tool | What its receipt means |
 |---|---|---|

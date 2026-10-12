@@ -1,7 +1,7 @@
 {
 	"name": "@junghanacs/entwurf",
 	"version": "0.35.1",
-	"description": "Garden-citizen dispatch substrate and meta-bridge for pi, Claude Code, Copilot CLI, OMP, Antigravity, and Codex CLI; Claude and Snowflake Cortex Code ACP backends.",
+	"description": "Visible sibling sessions across independent agent harnesses: launch in Herdr or tmux, reopen pi in tmux, and deliver messages by garden id; native bridges and Claude/Cortex ACP adapters.",
 	"license": "MIT",
 	"author": {
 		"name": "Junghan Kim",
@@ -30,7 +30,12 @@
 		"copilot",
 		"antigravity",
 		"pi-coding-agent",
-		"pi-extension"
+		"pi-extension",
+		"herdr",
+		"tmux",
+		"visible-sessions",
+		"session-lifecycle",
+		"multi-agent"
 	],
 	"type": "module",
 	"files": [
