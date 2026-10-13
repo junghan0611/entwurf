@@ -4,6 +4,8 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+## 0.36.0 - 2026-10-13
+
 ### pi-durable
 
 - **The thin app/TUI composition is Entwurf-owned source (#141).** The six carrier files
@@ -11,9 +13,10 @@ All notable changes to this project will be documented here. Format follows [Kee
   folds in the retired `runtime-contacts.patch`, and run on the 1.2.0 SDK set (below). Net
   against 0.35.1, three carrier files change: `runtime.js` `60c2965e…118403`, `tui.js`
   `0f9ebaf8…b3abc5` and `subagent.js` `1cb2390b…a64220`. `harness-setup.js`, `prompt.js`,
-  `sessions.js` and LICENSE keep their 0.35.1 bytes. The package version is still 0.35.1. The
-  first step (S0) moved ownership alone: no carrier byte, no LICENSE and no SDK version (then
-  1.1.0) changed, only the pin's carrier source blob ids. The upstream SDK still owns
+  `sessions.js` and LICENSE keep their 0.35.1 bytes. The source checkpoint `86d4b65` left the
+  package version at 0.35.1; this release sets 0.36.0. The first step (S0) moved ownership
+  alone: no carrier byte, no LICENSE and no SDK version (then 1.1.0) changed, only the pin's
+  carrier source blob ids. The upstream SDK still owns
   execution, auth, queues, storage/transcript, compaction, cancellation and recovery (Rule 17).
 - **Pin schema 3.** `pi/pi-durable/overlay/upstream-pin.json` keeps its path and the shapes
   installed readers use. A frozen `origin` holds the upstream commit, its recorded blobs, the
@@ -71,6 +74,100 @@ All notable changes to this project will be documented here. Format follows [Kee
   `-COMPACTION-FAILURE-SHOWN` run the real bootstrap and carrier on the published 1.2.0 SDK with a
   faux model and an injected storage failure; each mutant plants its fault in the generated carrier
   or the bridge source.
+
+### Codex
+
+- **The 0.162.1 control endpoint is accepted as its exact alias (#141).** Codex 0.162.1 binds its
+  0600 control socket under `realpath(/tmp)/codex-daemon-<euid>/`, named by the sha256 of the
+  canonical advertised path, and makes the advertised path a symlink to it. One classifier,
+  `checkCodexSocketFile`, accepts a plain socket or exactly that alias (link owner, byte-equal
+  target, a 0700 socket directory owned by the same euid, a socket no other user can open) and
+  refuses every other symlink. The delivery probe, `codex queue --remote` and the fresh-call
+  preflight connect to the socket it verified. The managed launcher runs the same classifier's
+  compiled twin (`mcp/entwurf-bridge/dist/scripts/codex-socket-classify.js`) and keeps no copy of
+  its own: a missing twin is an incomplete installation, refused as
+  `codex-app-server-classifier-missing` (reinstall the package, or run `pnpm run build-bridge` in
+  a source checkout), and an answer it does not recognise is refused by name. This is measured
+  on the 0.162.1 layout only and promises nothing about a later Codex. The plain-socket layout is
+  kept; its native acceptance remains the dated 0.153.4 record, not a claim about every older or
+  newer version.
+- **Stated limits.** The launcher reports a dangling exact alias as the dead leftover the vendor
+  removes on start and launches over it, but its alias and dangling-alias paths have no LIVE
+  observation; they are proven on the classifier in a sandbox. The birth hook's thread naming,
+  the fresh Codex TUI's `--remote` endpoint and the fresh-call smoke's thread reads still hand the
+  advertised path to a connect without classifying it. Those connections worked in the named
+  diagnostic on this host; they remain unclassified. That is recorded as an Observation: not
+  every Codex connection goes through the classifier. A same-euid process can still replace the
+  verified socket file; that residual is named, not locked.
+
+### Docs
+
+- **Open, reopen and message lead the one-line surfaces.** The README, FAQ, CONTRIBUTING,
+  AGENTS, the Herdr plugin README and manifest description, and the package description and
+  keywords name the three verbs and where each lands, instead of describing Entwurf as
+  garden-id messaging alone. The README gains an open/reopen/message table with each verb's
+  harness scope. FAQ's tmux list includes pi-durable again, and CONTRIBUTING no longer calls
+  the shipped Codex native-push citizen an unreleased candidate.
+
+### Release boundary and verification
+
+- **Review.** The source checkpoint `86d4b65` and its amendment `d1c9103` were reviewed by
+  the #141 coordinator, Fable advisory reviews (no Blocker; their Defects were fixed before
+  the checkpoint) and a read-only Grok review of `86d4b65`. Grok's eight documentation and
+  live-authority findings were closed in `d1c9103`, and its recheck found no new Defect. The
+  Codex fix `90fa8bb` follows a coordinator-approved design with a read-only Grok design
+  review; a Fable advisory review of its pre-commit bytes found no Blocker, and its one Defect,
+  the missing Codex entry above, is closed in this section.
+- **Local evidence before this preparation is focused, not a whole pass.** Each affected
+  qualification wave (PARTIAL) measured its own candidate and none is carried to another. S0
+  killed 70/70 in two groups; 891 of its 961 committed claims were not run. The S1-B3 source
+  bytes killed 82/82 in three groups (dep-versions 4, pin-matcher 2, pi-durable beside 76), each
+  with a green control; 887 of the 969 committed claims were not run there, nor was the
+  node-floor coherence group. The Codex fix bytes, verified content-identical to `90fa8bb`,
+  killed 219/219 in six groups (app-server launch 10, native push 8, admission parity 2,
+  attribution self-test 1, gate manifests 52, mux fresh call 146), each with a green control;
+  752 of the 971 committed claims were not run. An earlier wave over that fix stopped at its
+  first group with 9 killed and one WRONG-REASON; it is kept as it was, not relabelled. The
+  vitest results cache drifting outside the dependency seal and one socket fixture temp root
+  observed during the native-push group are recorded, not waived. A fresh Entwurf-only npm
+  consumer of the `86d4b65` source bytes (packed with 0.35.1 metadata) proved graph and load
+  only: nine SDK members at 1.2.0, 24/24 carrier dist targets inside the consumer, and the
+  public launch reaching the SDK's own model refusal before any birth. A store migrated by a
+  1.2.0 run and reopened on 1.1.0 kept its version-2 tool task blocked as `task_too_old`: a
+  one-time fixture receipt, not a supported downgrade.
+- **Codex 0.162.1 diagnostic is not a cut.** On the pre-amendment candidate, one Linux
+  `smoke-codex-fresh-live` diagnostic against a live 0.162.1 app-server passed 65 assertions,
+  native push included, with `gpt-5.6-sol` on the Codex side and `openai-codex/gpt-6.1-sol` for
+  the Pi sibling only. It is not release-gate acceptance and covers no other model. The earlier
+  local FULL and LIVE `--cut` were taken on the pre-fix candidate (the cut was BLOCKED when the
+  advertised alias was refused) and are not evidence for this one. The frozen FULL and the final
+  LIVE `--cut` passed on this candidate (below); the installed-consumer proof
+  (`check-pack-install`, run by the CI `install-surface` job, not by `check:full`) and the
+  prepared SHA's CI body are pending.
+- **Final frozen floor on this candidate.** One frozen tree, HEAD `90fa8bb` plus this release's
+  metadata, with the same work-surface fingerprint before and after both runs.
+  `pnpm run check:full` passed once (817 s, exit 0; 599 files in the dry-run pack).
+  `LIVE=1 ./run.sh release-gate <scratch> --cut` passed once: **MUST PASS=24 FAIL=0 SKIP=0**,
+  **BEHAVIOR PASS=1 FAIL=0 SKIP=0**, `cut: OK`. Its own static FULL (814 s) means this floor ran
+  FULL twice. The Codex step named the operator-owned 0.162.1 app-server by pid (851181) with
+  `gpt-5.6-sol` on the Codex side and `openai-codex/gpt-6.1-sol` for the Pi siblings, and passed
+  65 assertions, native push included; it attaches to an existing server, so the managed
+  launcher's alias and dangling-alias paths remain unobserved. Scratch
+  `/tmp/entwurf-release-gate-0.36.0.lw5Xju`, log SHA-256
+  `17a2bd54efaaeba2899bf9bbd3c13c0e68749d9d03367347c4872d6f4126ad30`; FULL log SHA-256
+  `184ea443326a72858d25b70ba25b44e804307205586d8a03d4af7c5b07ee1288`. A read-only host census
+  afterwards found one `entwurf-chain-*` and one `smoke-pi-durable-fresh-live-*` root from this
+  run, the same per-run residue earlier LIVE runs left; it is recorded and was not cleaned. This
+  is local acceptance only: not the exact CI, not a whole qualification pass.
+- **Exact CI pending.** The prepared SHA's exact CI (the four required jobs and the
+  qualification body) is the next checkpoint and is not presumed PASS.
+- **Unpublished candidate carrier.** As in 0.35.1, `plugins/herdr/runtime-lock.json`
+  temporarily names the closed `herdr-checkout` source: an npm-source lock must agree with
+  the checkout's core version, and 0.36.0 has no published integrity yet. The Herdr
+  manifest stays 0.35.1. After the operator publishes core 0.36.0, a separate Herdr snapshot
+  re-pins the measured registry bytes.
+- **Publication boundary.** No make artifact, core tag, GitHub Release or npm publication
+  is claimed; they wait for the exact CI, the make decision and the operator.
 
 ## v2026.10.13-herdr.0.35.1 — Herdr Entwurf plugin 0.35.1
 

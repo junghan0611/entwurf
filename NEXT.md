@@ -1,28 +1,35 @@
-# NEXT — 최우선 #141 / 목표0.36.0
+# NEXT — Entwurf 0.36.0 prepare / main handoff
 Author: gpt-6.1-sol (pi-durable/session20261008T113104-801621, 2026-10-13) — not GLG direct.
 
 # RAIL — 현재 좌표
-- [x] **1. #141 설계·planning checkpoint** — thin Entwurf application/TUI; engine은 upstream.
-- [x] **2. S0/S1 구현·review·보완·영향 PARTIAL** — scoped proof 완료, frozen/release acceptance 아님.
-- [x] **3. 외부 ABI/ordinaryPi 정렬·GLG 수동 재시작** — 세 peer 실제 왕복·native BG 시작/완료 출력 PASS.
-- [ ] **4. checkpoint commit → 새 Grok 검수 → Opus 반영·publish 직전 준비** ← CURRENT: GLG 직접승인, checkpoint86d4b65 완료, 코디HEAD/clean/stat 실측. 새Grok xai/grok-4.7 실제callback9930e0/nonce일치·garden20261013T193609-cc9307 확인, Grok013355 reportSHA84cf353b…3dab 검토완료, Opus04d032 prose/comment/help amendment 반환·코디full/currentdiff검토, Grok b7ffb2 recheck7Defects닫힘·코디full/SHA검토, repairedv2manifest15OK 독립확인·원본오류보존. Opus scopedlocal amendmentcommit→최종검증/릴리즈권한경계. npm publish 금지; push/tag/GHrelease 모드 권한 별도확인.
-- [ ] **5. #128 ACP/#78 등 queue 복귀** ← PAUSED: #141 priority00. 옛 archive 전체 apply 금지.
+- [x] **1. #141 source and Codex0.162.1 compatibility** — checkpoints86d4b65/d1c9103/90fa8bb, SDK1.2/ordinaryPi1.2; engine stays upstream.
+- [x] **2. Review, documentation and local frozen floors** — Fable D1 closed; PARTIAL219/971; P4 green and P5 cutOK (MUST24/0/0, BEHAVIOR1/0/0), coordinator seals checked.
+- [ ] **3. Prepare commit** ← CURRENT: 9c3f61 post-verdict evidence note SHA d54632a0 fullreview accepted; P7 release-only commit → P8 clean checks and read-only main FF report. Branch NEXT deletion is part of the reviewed five-path P7 set after this promotion.
+- [ ] **4. main integration / make** ← PAUSED: clean prepared state first, then read-only FF feasibility and coordinator local-main GO. Push/tag/GitHub release require explicit make authority, not inferred.
+- [ ] **5. npm publish / Herdr0.36.0** ← PAUSED: npm publish GLG personally; exact prepared-SHA CI and accepted preserved artifact required first. Herdr after core publication, not now.
 
-현재 좌표: 1–3 scoped 완료 → 4 체크포인트커밋/검수/최종검증 및 릴리즈 모드 경계. 0.36.0 target은 acceptance가 아님.
+# NOW
+- **Next after this prepare commit:** Opus `20261011T202615-521a11` single writer retains same garden after compaction. Run P8 clean/version/changelog checks, final read-only P9 and main ahead/behind/FF feasibility report, then await coordinator local-main GO or stop Ready-for-make. The prepared SHA is the resulting HEAD. No new runtime/gates/manifest/deps, FULL/LIVE/PARTIAL or local CPI.
+- **State:** source HEAD `90fa8bbd366a1f012fc046881ede15178437c8a6`; package worktree0.36; index empty, five unstaged metadata files. P7 reviewed five-path set: CHANGELOG/package/runtime-lock/rootNEXT +DELETION disposable branchNEXT after promotion, lockfile unchanged. Final post-verdict CHANGELOG SHA d54632a0699920da0fd9a4c7095514884dcebf8ea0111bd7ae53c4ee68d0aff3; no source changes since90fa. Normal commit skill/hooks/scanner, explicit paths/noadd-u. Prepared SHA is the resulting P7 HEAD, not this source checkpoint.
+- **GLG:** sleeping; requested main timing/continuation by Opus. npm publish strictly GLG's own action after waking. No progress DMs; coordinator one final completion or actual authority-decision DM. Source checkpoint completion DM516 already sent for a distinct prior event.
 
-# NOW — 상세 실무 좌표는 branch
-- **Next:** [NEXT--feat_141-pi-durable-owned-surface.md](./NEXT--feat_141-pi-durable-owned-surface.md). 외부 관찰 prose/README stale정정 직접검토 완료. GLG 요청대로 Opus 체크포인트커밋 반환→코디 새Grok 정합성/문서 검수→검토한수정bundle Opus반영→최종검증/릴리즈준비. npm publish 전 정지. Main에는 branch 상세 ledger를 중복하지 않음.
-- **계약:** [docs/pi-durable-owned-surface-plan.md](./docs/pi-durable-owned-surface-plan.md), [#141 최신 thread](https://github.com/junghan0611/entwurf/issues/141), `VERIFY.md`.
-- **권한:** GLG 요청 checkpoint HEAD `86d4b65` 완료, no push. Frozen/release acceptance는아님. GLG가이번turn 로컬#141 scoped commit·새Grok검수·Opus후속반영 직접요청. Normalhooks/commit skill 필수; checkpoint는 frozen acceptance아님. Push/tag/GHrelease는 commit에서추론하지않고 Release skill `land/prepare/make/publish` 모드 경계에서확인. npm publish 금지.
-- **검증:** development FULL/whole qualification BODY 반복 금지. 최종 frozen FULL과 prepared exact-SHA CI BODY/native LIVE/정확한 artifact acceptance는 별개.
-- **환경:** Codex LIVE는 fresh operator app-server + 명시한 triple 필요. 없으면 SKIP→cut BLOCKED; restart/dialogue/consumer graph를 대체 증거로 삼지 않음.
-- **Operator:** 같은 checkout에서 작업·normal install→ready 안내→GLG 수동 stop/start→실제 왕복. 완료; 자동 이전/격리/supervisor/agent kill·restart 없음.
-- **Merge 전:** owning docs/issue에 결과 승격 후 disposable branch NEXT 제거.
+# CURRENT RELEASE EVIDENCE — durable operator handoff
+- Final candidate during floors: HEAD90fa8bb, indexa2be22c0, custom work-surface SHA `198c63e4730e777be0384a1c20af3a06337610597471f628d826540e78d778cc`; CHANGELOG SHAde16fead61800ecad236b3db446e541b126bc1594ffcadb3e9cb547cd04c41ff. Four P4/P5 producer fingerprints identicalSHA81bc552aae502e6ff291c386b785cacaf8dcdcb6135168e21907d737321ab1e9; coordinator current producer-fp cmp verified. Post-verdict evidence handoff edits are separate, not movement during gates.
+- **P4:** `pnpm run check:full`, 2026-10-13 23:12:17–23:25:56 KST, rc0/817s. Log `/tmp/entwurf-036-final-prepare.mOrbXd/p4-full.log`, SHA184ea443326a72858d25b70ba25b44e804307205586d8a03d4af7c5b07ee1288; check-pack599 files.
+- **P5:** `LIVE=1 ./run.sh release-gate /tmp/entwurf-release-gate-0.36.0.lw5Xju --cut`, 23:27:00–23:46:10, rc0. MUST PASS24/FAIL0/SKIP0; BEHAVIOR PASS1/FAIL0/SKIP0; cutOK. Raw logSHA17a2bd54efaaeba2899bf9bbd3c13c0e68749d9d03367347c4872d6f4126ad30. Official P5 includes another staticFULL814s: TWO static invocations in this protocol, not one; no local qualification BODY.
+- Explicit pre-run tuple: PID851181/Codex `gpt-5.6-sol`/Pi `openai-codex/gpt-6.1-sol`. Default tmux server5772, operator server$443 untouched; P4$450 and P5$451 distinct. Named Codex65 and pi-durable36 LIVE assertions passed on candidate compiled checkout bridge; exact callbacks/native-push/title/caller-seat/SDK-native offering/model/reply inspected. No claim arbitrary models/platforms/versions or managed-launcher alias/dangling LIVE.
+- `.probe-artifacts/codex-fresh-live-JJ7sQ2`; Codex garden20261013T234432-246018/thread01a135b8-dc4a-7200-8121-40641f01bc1d, initialPi234416-4d1961/outboundPi234456-8ea36a. Durable LIVE receipts `/tmp/smoke-pi-durable-fresh-live-2026-10-13T14-45-09-732Z`, pd234525-2244e2/Pi234511-56e2f2. Named gate cleaned only its own windows/turn, no server restart.
+- Durable ignored copies `.tmp-verify/141-kickoff/codex-0162/final-floor/`; manifest is at PARENT `codex-0162/final-floor.sha256.txt` (basenames relative to final-floor directory). Coordinator verified17rows. Current metadata v3manifest `codex-0162/prep-note/sha256-v3.txt`18rows verified; historical invalid ledger preserved.
+- **P9:** read-only at verdict:1469 owner roots, protected Emacs3364025 sole reparented/tmp holder, disk93%/6.6G free. New `entwurf-chain-orR3a0`88K and `smoke-pi-durable-fresh-live-*`300K per-run residue finding kept, no deletes/kills. Earlier `entwurf-codex-ws-oversize-lIYQdL` leak and excluded `.vite` drift kept, not waived. P8 final census still due.
 
-# RECENT / 보존
-- 코디 실제 inbox drain `lastReadAt=2026-10-13T10:18:27.957Z`: Entwurf Opus/Fable/agent-config Opus 세 nonce 일치·실제 회신 수신. Self/continuity/error-none는 각 peer receipt, enqueue만으로 PASS하지 않음.
-- Native BG17099 start+automatic completion exactmarker model-visible, exited0/1s. Scoped post-restart dialogue/BG PASS, 전체 LIVE 아님. 증거 `.tmp-verify/141-kickoff/coordinator-b3-review/POST-RESTART-LIVE.md`.
-- 마지막 영향 PARTIAL 82/969 KILLED·887 unrun; excluded `.vite` cache drift/실패 receipts 보존. Consumer는 graph/load, kept tarball0.35.1 metadata. 과거0.35.1 CI/#140 FULL 예외 상속 없음.
-- 원본 records/transcripts/DB/WAL/credentials/company files/stash/cache/vendor/unknown-owned/media 보존. No reset/force/hook bypass/clone/worktree/store probe·recovery/자동 migration.
-- Protected drafts `content/blog/20260804T094556.ko.md`, `content/blog/20260804T094556.md`; GLG가 만드는 agent-config extension issues를 들여다보지 않음.
-- 이전 긴 main ledger `.tmp-verify/141-kickoff/coordinator-b3-review/MAIN-NEXT-PRE-DIALOG-CLOSE.md`; 기존 receipts 모두 보존. Local-only commit은 agenda stamp 없음. 완료/판단 사건만 DM1회, progress/중복 DM 없음.
+# REMAINING ACCEPTANCE / AUTHORITY
+- **Installed consumer correction:** `check-pack-install` is NOT part of check:full or P5. It runs CI `install-surface` (`ci.yml:166`) and prepublishOnly. Retire earlier Fable/coordinator inherited premise; local599file pack list/checkout LIVE are not installed-consumer proof. Do not rerun locally just to inflate evidence.
+- Prepared exact-SHA CI must have `check`, `install-surface`, `artifact-consumer`, `macos-install-surface`, and the qualification BODY actually executed once for the cut. No branch badge/nearby-SHA/219PARTIAL substitution. Local cutOK is a necessary condition, not shipment authority.
+- Exact preserved candidate creation/acceptance happens AFTER prepared-SHA CI in gated make; no finaltarball exists yet. Never repack accepted bytes or hand GLG old0.35.1 B5 artifact. No npm publication by agents.
+- Only clean local-main FF integration after explicit coordinator GO/actual ancestor check; no rebase/force/stash/checkout relocation. Never infer push/tag/GHrelease from prepare/local commit. If make approval needed, stop Ready-for-make and send exact next command once to GLG.
+
+# PRESERVED HISTORY / GUARDRAILS
+- S0 70/961 and S1-B3 82/969 are oldcandidate PARTIAL; fresh219/971 source proof leaves752UNRUN. First Codex wave9K/WRONG-REASON kept, no carry. PREamendGPTdiag65/rc0 and originalpre-fixP5BLOCKED23/1/0 remain their own bytes; not relabelled. Three overwritten early raw redlogs survive only authentic partial excerpts, not full receipts.
+- Contract AGENTS/VERIFY/release skill, owned-surface plan and #141 thread remain SSOT. Thin app/TUI source six TS+LICENSE, deterministic carrier, coherent nineSDK1.2 vs ordinaryPi seven,24genuine targets; upstream owns execution/storage/transcript/auth/queues/compaction/cancel/recovery.
+- Same checkout only, no clone/worktree/old-installed isolation or second harness. Preserve original stores/records/transcripts/DB/WAL/credentials/stash/company/vendor/cache/media/unknown assets, protected drafts `content/blog/20260804T094556.ko.md` and `.md`. No automatic restart/socket rewrite/reset/migration/supervisor/manualcleanup. Don't inspect GLG's agent-config useful-extension issues; #128/#78 deferred.
+- During every acceptance run freeze source/index/NEXT/plan/deps/version, ignored receipts allowed; failure STOPretain/no automatic retry. Source checkpoint90fa canonical committed patch73e5aab9…292f1 independently equals reviewed12file artifact; normalhooks/noAItrailers, no push.

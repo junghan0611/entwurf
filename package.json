@@ -1,6 +1,6 @@
 {
 	"name": "@junghanacs/entwurf",
-	"version": "0.35.1",
+	"version": "0.36.0",
 	"description": "Visible sibling sessions across independent agent harnesses: launch in Herdr or tmux, reopen pi in tmux, and deliver messages by garden id; native bridges and Claude/Cortex ACP adapters.",
 	"license": "MIT",
 	"author": {
