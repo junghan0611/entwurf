@@ -3,8 +3,9 @@
  *
  * WHAT THIS IS. The long-running durable app (`@earendil-works/pi-coding-agent`
  * `experimental/durable`, which upstream omits from its npm distribution — Entwurf's package
- * supplies it as a pinned carrier, #130, not as an operator prerequisite) owns its runtime, TUI,
- * models/auth, storage, prompt and recovery. This module is the whole Entwurf side of its contact:
+ * supplies it as a carrier emitted from its owned source, #130/#141, not as an operator
+ * prerequisite) owns its runtime, TUI, models/auth, storage, prompt and recovery. This module is
+ * the whole Entwurf side of its contact:
  *
  *   createPiDurableContact({ bridgeEntry })
  *     .extension          tools-only durable Extension, handed to the overlay's
@@ -300,8 +301,10 @@ export interface PiDurableRoots {
 // carrier emitted from Entwurf's owned source (pi/pi-durable/src, #141) against the 1.2.0 SDK set
 // `pi/pi-durable/overlay/upstream-pin.json` names (origin `abe508e`). `[read 2026-10-13]` at
 // v1.2.0 one shape typed below moved: `ToolExecutionResult.content` is now `output`, beside the new
-// `structuredOutput` (`harness/types.ts`, its CHANGELOG's breaking changes); a result still naming
-// `content` type-checks against the SDK's all-optional result and reaches the model as nothing.
+// `structuredOutput` (`harness/types.ts`, its CHANGELOG's breaking changes). An omitted `output`
+// gives the model the text a tool retained through `api.output()`; `content` is not read, so a
+// result naming only `content` that retained no output reaches the model as nothing. The contact's
+// tools retain none, so they answer in `output`.
 // The submission draft, its `abort()` answers and the identity `define*` helpers did not move.
 // `defineExtension`/`defineTool` are identity functions (`harness/define.ts:6-17`), so a plain
 // object is the extension.

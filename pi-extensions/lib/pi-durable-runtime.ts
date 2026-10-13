@@ -3,9 +3,9 @@
  * under (#129 W, #130).
  *
  * The experimental durable app is source-only upstream: published `@earendil-works/pi-coding-agent`
- * ships no `dist/experimental`. Entwurf therefore ships the app itself as a CARRIER — the pinned
- * upstream files, type-stripped and relocated (pi/pi-durable/carrier/, emitted only by the
- * maintainer's scripts/emit-pi-durable-carrier.ts) — and declares the published SDK set it runs
+ * ships no `dist/experimental`. Entwurf therefore ships the app itself as a CARRIER — its owned
+ * source (pi/pi-durable/src, #141), type-stripped and relocated (pi/pi-durable/carrier/, emitted only
+ * by scripts/emit-pi-durable-carrier.ts) — and declares the published SDK set it runs
  * against as exact production dependencies. Nothing is provisioned beside the package: there is no
  * runtime directory, no source checkout and no model data to copy (it rides the published pi-ai).
  *
@@ -47,7 +47,7 @@ export type PiDurableRuntimeRejectReason =
 export interface PiDurablePackageLayout {
 	readonly root: string;
 	readonly overlayDir: string;
-	/** The emitted upstream app files and their license. */
+	/** The app files emitted from the owned source, and their license. */
 	readonly carrierDir: string;
 	/** The `--import` resolver the launcher runs the bootstrap under. */
 	readonly resolver: string;

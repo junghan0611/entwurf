@@ -1,7 +1,7 @@
 # NEXT — #141 / 0.36.0 / pi-durable 정본화·SDK1.2.0
 Author: gpt-6.1-sol (pi-durable/session20261008T113104-801621, 2026-10-13) — not GLG direct.
 
-- Branch `feat/141-pi-durable-owned-surface`; HEAD `d8cfc21fce1ad5039fe479af3a5feeb66a1a6cb2` (planning-only, no push).
+- Branch `feat/141-pi-durable-owned-surface`; HEAD `86d4b6559c4931d140c727a10b9f960689e5bf09` (GLG-requested #141 checkpoint, parent planning d8cfc21; no push).
 - 계약: [정본 plan](./docs/pi-durable-owned-surface-plan.md), [#141 최신 thread](https://github.com/junghan0611/entwurf/issues/141).
 - 코디는 계약/독립검토/레일; Entwurf Opus `20261011T202615-521a11` 단일 implementation writer. 새 형제/별도 coordination lane 없음.
 
@@ -10,12 +10,12 @@ Author: gpt-6.1-sol (pi-durable/session20261008T113104-801621, 2026-10-13) — n
 - [x] **2. S0 정본·emit/type/pack** — focused/review/amendment/PARTIAL 완료; frozen acceptance 아님.
 - [x] **3. S1 coherent1.2·UX/receiver·transition/consumer** — 보완과 단일 영향 PARTIAL 검토 완료; consumer는 graph/load만.
 - [x] **4. 외부 ABI/ordinaryPi 정렬·GLG 수동 재시작** — 세 peer 실제 nonce 왕복 및 native BG 시작/완료 출력 PASS.
-- [ ] **5. GLG 요청 checkpoint commit → 새 Grok 검수 → Opus 반영·publish 직전 준비** ← CURRENT: Opus 로컬 커밋7d242d 진행, SHA 반환후 코디가새Grok호출. Push/tag/GHrelease 모드 경계 별도 확인, npm publish 금지.
+- [ ] **5. GLG 요청 checkpoint commit → 새 Grok 검수 → Opus 반영·publish 직전 준비** ← CURRENT: Opus checkpoint86d4b65 완료·코디HEAD/clean/stat 실측. 새Grok xai/grok-4.7 launch @1063/nonce mux-fresh-call-47fa1274e20db2399fc0326e; callback9930e0 실제수신·nonce정확일치·sendergarden20261013T193609-cc9307/xai-grok/cwdEntwurf/replyable 확인; Grok013355/fullreportSHA84cf353b…3dab 검토완료, inspectedBlocker없음·8prosefindings. Opus04d032 amendment13files+58/-47 반환, 코디full/currentdiff 일치검토. Grok b7ffb2 recheckSHA3b34404f…3d21 full검토·7Defects닫힘/새Defect없음. V2 receipts SHA09ebc3a8…3d92/all15OK 코디검증·원본실패보존. NEXT-ready→Opus scopedlocal amendmentcommit; Source/test/gate 변화없음. Push/tag/GHrelease 모드 경계 별도 확인, npm publish 금지.
 
 현재 좌표: 1–4 scoped 완료 → 5 체크포인트 커밋·새검수·최종 검증/릴리즈 권한 경계. #128 ACP/#78 등 기존 queue는 뒤.
 
 # NOW
-- **Next:** 외부 prose5b264d+README148 정정5ecb40 직접 diff검토/gitdiffcheck PASS, 문서정렬 완료. Owner reports GLG직접요청으로 external6files commit2fe26624/no push; 후속 README1line은 worktree만. 외부승인은 Entwurf에 전이하지 않음. GLG 직접 '일단우리커밋→새Grok 정합성/문서검수→수정검토/반영→npm publish전까지, Opus맡김' 승인. Opus 체크포인트SHA 반환→코디가 새 xai/grok-4.7 reviewer(정확한 cwd) 호출→finding검토후 단일writer Opus반영→affected checks/review/필요한PARTIAL→최종 candidate를고정한 FULL/nativeLIVE. Development FULL/whole BODY 반복 금지; npm publish하지 않음.
+- **Next:** 외부 prose5b264d+README148 정정5ecb40 직접 diff검토/gitdiffcheck PASS, 문서정렬 완료. Owner reports GLG직접요청으로 external6files commit2fe26624/no push; 후속 README1line은 worktree만. 외부승인은 Entwurf에 전이하지 않음. GLG 직접 '일단우리커밋→새Grok 정합성/문서검수→수정검토/반영→npm publish전까지, Opus맡김' 승인. checkpoint86d4b65→새Grok 실제report 검토완료→Opus1a3d50 최소prose/comment/help bundle반영→focusedreport/코디review→NEXT-ready후scopedcommit→최종candidate frozenFULL/nativeLIVE. Gate/mutant/matrix 변경없으면 prose만으로82PARTIAL/CPI 재실행하지않음. Development FULL/whole BODY 반복 금지; npm publish하지 않음.
 - **Permission:** 이번GLG요청은 로컬 #141 scoped checkpoint staging/commit 및 새Grok검수/Opus후속반영 권한. Normalhooks/commit skill 필수, checkpoint는 acceptance아님. Push/tag/GHrelease는 commit에서 추론하지 않고 release skill의 `land → prepare → make → publish` 모드 경계에서확인. 0.36.0 target이나 수동 restart는 승인 대체물이 아님.
 - **Environment:** native Codex LIVE는 fresh operator app-server + 명시한 `ENTWURF_CODEX_*` triple 필요. 없으면 SKIP→cut BLOCKED; PID 검색/추론/waiver 금지.
 - **Verify:** 최종 FULL receipt는 고정 candidate의 결과만. Prepared exact-SHA CI qualification BODY와 native LIVE/정확한 release artifact는 별개. 현재 82 PARTIAL/consumer/실제 대화를 그 증거로 승격하지 않음.
@@ -41,7 +41,7 @@ Author: gpt-6.1-sol (pi-durable/session20261008T113104-801621, 2026-10-13) — n
 # GUARDRAILS
 - Same checkout만; clone/worktree/relocation/old-installed isolation lane 없음. Runtime 보호/quiesce 선행 승인은 GLG가 철회한 요구. 자동 migration/supervisor/kill/restart 금지.
 - 원본 records/transcripts/DB/WAL/credentials, 회사 files/cache/archive/vendor/stash/unknown assets/failed media 보존. 원본 store probe/recovery/reset 금지; 정상 자기 mailbox/tool 사용과 구분.
-- 체크포인트 stage 전 index는 새8파일만, hash `03b3bc6b17102220c514d4ffc799032944f31bc185f7e8307f00d6b59cc0a926`; staged bytes는 이전 준비 상태, accepted source artifact 아님. Current updates unstaged; 새 source commit 없음.
+- 체크포인트 stage 전 index는 새8파일만, hash `03b3bc6b17102220c514d4ffc799032944f31bc185f7e8307f00d6b59cc0a926`; staged bytes는 이전 준비 상태, accepted source artifact 아님. 이전 staged상태는 checkpoint86d4b65로종료. 48files+3177/-1073/normalhooks는 Opus b4c3f1 receipt; 코디 HEAD/clean/stat 직접확인. 현재 NEXT는 postcommit coordination update, frozen상태아님.
 - Protected drafts `content/blog/20260804T094556.ko.md`, `content/blog/20260804T094556.md`; #128 deferred archive 전체 apply 금지. GLG가 만드는 agent-config useful-extension issues를 들여다보지 않음.
 - Upstream owns execution/scheduler/queues/storage/transcript/compaction/cancel/recovery/providers/auth. No second engine. Public subscribeClose/reports만; private failure getter/casts 금지. 실패 UX는 outstanding tool의 즉시 종료를 거짓 보장하지 않음.
 - 완료 사건/판단 필요 사건만 DM1회; progress DM/중복 notice 소비 없음. Merge 전 durable docs/issue 승격 후 branch NEXT 제거.

@@ -6,12 +6,15 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ### pi-durable
 
-- **The thin app/TUI composition is Entwurf-owned source (#141 S0).** The six carrier files
+- **The thin app/TUI composition is Entwurf-owned source (#141).** The six carrier files
   are emitted from `pi/pi-durable/src/experimental/durable/*.ts` (with `src/LICENSE`), which
-  folds in the retired `runtime-contacts.patch`. Every carrier byte, LICENSE and the SDK set
-  (1.1.0) are unchanged; only the pin's carrier source blob ids move to the owned files. The
-  upstream SDK still owns execution, auth, queues, storage/transcript, compaction,
-  cancellation and recovery (Rule 17).
+  folds in the retired `runtime-contacts.patch`, and run on the 1.2.0 SDK set (below). Net
+  against 0.35.1, three carrier files change: `runtime.js` `60c2965e…118403`, `tui.js`
+  `0f9ebaf8…b3abc5` and `subagent.js` `1cb2390b…a64220`. `harness-setup.js`, `prompt.js`,
+  `sessions.js` and LICENSE keep their 0.35.1 bytes. The package version is still 0.35.1. The
+  first step (S0) moved ownership alone: no carrier byte, no LICENSE and no SDK version (then
+  1.1.0) changed, only the pin's carrier source blob ids. The upstream SDK still owns
+  execution, auth, queues, storage/transcript, compaction, cancellation and recovery (Rule 17).
 - **Pin schema 3.** `pi/pi-durable/overlay/upstream-pin.json` keeps its path and the shapes
   installed readers use. A frozen `origin` holds the upstream commit, its recorded blobs, the
   retired patch's digest and the 0.35.1 carrier digests. Only `carrier` is generated.
@@ -27,7 +30,8 @@ All notable changes to this project will be documented here. Format follows [Kee
   `@types/proper-lockfile@4.1.4` supplies the one missing declaration.
 - **Formatting.** The owned source uses upstream width (indentWidth 3), with no per-file
   exception. Formatting `tui.ts` wrapped its one Entwurf-written dock line and added one trailing
-  comma, so `tui.js` was re-emitted (sha256 `63600d4b…095b`). A parser-derived token/AST
+  comma, so `tui.js` was re-emitted (sha256 `63600d4b…095b`, the S1-B1 intermediate; the S1-B3
+  changes below produce the current `0f9ebaf8…b3abc5`). A parser-derived token/AST
   comparison found nothing else changed. The `PI-DURABLE-FOOTER-BADGE-PROTECTED` mutant follows
   the wrapped line and plants the same fault.
 - **Proof.** New claims: `PI-DURABLE-CARRIER-EMIT-SOURCE-EQUAL`, `-EMIT-NODE-EXACT`,
@@ -41,10 +45,12 @@ All notable changes to this project will be documented here. Format follows [Kee
   move from 1.1.0 to 1.2.0, with the pin's `sdk.members`, the install constellation, the pin-leak
   matcher and the declared ranges (`>=1.2.0 <1.3`). `pi-client` and `pi-protocol` leave the set (not
   published at 1.2.0); the only new third-party package is `@silvia-odwyer/photon@0.3.3`.
-- **1.2.0 tool output (#141 S1-B3).** On the 1.2.0 SDK set a tool's model-visible answer is its
-  result's `output`; the 1.1 field `content` still type-checks against the all-optional result and
-  reaches the model as nothing. The subagent tool (now `satisfies ToolExecutionResult`), the
-  contact's bridge tools and the synthetic native-module fixture answer in `output`. The ordinary Pi
+- **1.2.0 tool output (#141 S1-B3).** On the 1.2.0 SDK set a native durable tool result's model
+  channel is `output`, which the SDK renamed from 1.1's `content`. When a result omits `output`, the
+  model gets the text the tool retained through `api.output()`. `content` is not read, so a result
+  naming only `content` that retained no output reaches the model as nothing. The subagent tool (now
+  `satisfies ToolExecutionResult`), the contact's bridge tools and the synthetic native-module
+  fixture retain none, so they answer in `output`. The ordinary Pi
   `ToolExecutionComponent.updateResult` and `InputSubmissionDraft` keep `content`.
 - **Fatal session.** The carrier runtime takes the Session's own close listener and the report that
   follows it: a session that failed and closed itself is on screen at once (`Session failed: <cause>.

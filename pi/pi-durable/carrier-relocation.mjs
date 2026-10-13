@@ -3,8 +3,8 @@
 // rewrite the emitter performs and the resolution the runtime accepts cannot drift apart.
 //
 // The durable app is source-only upstream: published `@earendil-works/pi-coding-agent` ships no
-// `dist/experimental`, and its exports map exposes no deep `dist/` path. The carrier is the pinned
-// upstream app files, type-stripped, with exactly two rewrites:
+// `dist/experimental`, and its exports map exposes no deep `dist/` path. The carrier is Entwurf's
+// owned app source (pi/pi-durable/src, #141), type-stripped, with exactly two rewrites:
 //
 //   "./<sibling>.ts"   → "./<sibling>.js"                 a carrier file importing another carrier file
 //   "../../<path>.ts"  → entwurf-pi-dist:<path>.js        the app importing a pi-coding-agent internal

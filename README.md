@@ -45,8 +45,9 @@ receipts; [CHANGELOG](./CHANGELOG.md) records source history.
 ## Install
 
 **Choose by where you work. Bring your own harnesses, subscriptions and login.**
-The native durable route below additionally supplies the upstream app/TUI missing from its npm
-release; it does not supply credentials or take ownership of the harness.
+The native durable route below additionally supplies an app/TUI, Entwurf's own thin composition of
+the durable app upstream omits from its npm release; it does not supply credentials or take
+ownership of the harness.
 
 ### Direct — ordinary shell or tmux
 

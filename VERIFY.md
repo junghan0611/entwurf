@@ -213,8 +213,8 @@ Do not collapse source, package, fixture, and native-host evidence into one “g
 **Native durable contact (#129, #130 carrier).** `check-pi-durable-beside` is the deterministic
 beside-test/mutant coordinate in `check:contracts`: the adapter, the installed carrier/SDK-set
 verifier, the preflight, the owner join, the carrier's relocation grammar, resolver and
-maintainer emitter (its source reads refuse replace refs; its one patch carries exactly one
-section per patched carrier file, #134), and the bootstrap's explicit `--native-module` ingress
+maintainer emitter (its `--check` reads only the owned in-repo source, #141; the overlay patch is
+retired, and `--origin <clone>` checks provenance only), and the bootstrap's explicit `--native-module` ingress
 (#130 P2) with its paired `--native-module-dir` (#134), driven through the packaged `main`'s own
 seams: initialization before the TUI and the open, named refusals, the identity and directory
 guards, the top-level `*.extension.mjs` filter and byte-wise order, cross-module name refusals, the
@@ -250,7 +250,7 @@ constructed depth-3 mismatch refused by the verifier and seen by the oracle, the
 app's own model refusal before any birth — also with one installed `--native-module` initialized
 first, a reserved extension name refused before anything opens, one installed `--native-module-dir`
 initializing only its top-level `*.extension.mjs` (#134) and a directory without a module refused
-before anything opens — and the HOST kept a separate subject — a real pi 1.0.4
+before anything opens — and the HOST kept a separate subject — a real pi 1.1.0
 binary (the previous generation) beside the pinned native set is a named pi FAIL with zero Pi wiring while pi-durable still
 PASSes — not native admission. The carrier's rebuild
 equality is the owned source's emission (#141): the beside claim `PI-DURABLE-CARRIER-EMIT-SOURCE-EQUAL`

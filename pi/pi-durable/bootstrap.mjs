@@ -9,7 +9,7 @@
 // with these differences:
 // - Entwurf's tools-only extension is handed to `openDurable`;
 // - a NEW session is opened with an explicit model and an explicit width, never a default (below);
-// - the citizen is born once `openDurable` returns, with the overlay's `submitToRoot` so its
+// - the citizen is born once `openDurable` returns, with the owned runtime's `submitToRoot` so its
 //   doorbell can announce mail to the root conversation, and its `onFailed` so a session that
 //   fails and closes itself retires that doorbell at once;
 // - a launcher's first input, when given, is admitted to the root ONCE, after that birth;
@@ -17,8 +17,8 @@
 //   (`withGardenIdentity`).
 // Nothing of the native registry, controller or TUI is rebuilt here.
 //
-// The durable app itself is this package's CARRIER (./carrier/, the pinned upstream files emitted by
-// the maintainer — upstream publishes no experimental app), and it runs under the carrier's resolver,
+// The durable app itself is this package's CARRIER (./carrier/, emitted from Entwurf's owned source
+// pi/pi-durable/src — upstream publishes no experimental app), and it runs under the carrier's resolver,
 // which maps the app's pi-coding-agent internals to the published package the carrier resolves.
 // `entwurf pi-durable` (run.sh) verifies the carrier and its SDK set (pi-durable-runtime.ts) and
 // execs:
@@ -30,11 +30,11 @@
 //
 // Explicit means the native API, not a vendor argv: upstream's durable main takes only
 // `--continue`, so `--provider`/`--model` reach pi's own `findInitialAgentModel` through the
-// overlay's `model` option, for a new session only, and an unresolvable pair fails the open
+// owned runtime's `model` option, for a new session only, and an unresolvable pair fails the open
 // before any citizen is born (the native session directory may already exist by then). The model
 // must be one registered catalog model of that provider, named by its canonical id or by
 // `id:<level>` as pi's own parser reads a thinking level: a typo, a partial or case-variant match, a
-// provider-prefixed id or an unregistered custom-id fallback is refused by the overlay as
+// provider-prefixed id or an unregistered custom-id fallback is refused by the owned runtime as
 // `explicit-model-not-exact`, before the birth and the first input.
 // `--width task-wide` is the one width: no tool filter, so the model is offered exactly the tools
 // the installed extensions register. It is a statement of what is OFFERED, not an approval or
@@ -51,7 +51,7 @@
 // its initialization, and its default export is a native durable Extension, handed to `openDurable`
 // by reference after the contact. Initialization runs before the TUI or the runtime is imported —
 // the runtime creates the provider runtime before it installs any extension (carrier/runtime.js
-// 142-148), so an extension object cannot carry an environment phase. Entwurf checks only what the
+// 153-159), so an extension object cannot carry an environment phase. Entwurf checks only what the
 // ingress needs: a default export object with a name, no extension name the app installs itself (a
 // same-name install REPLACES), and no tool name of the contact. Every other field is the native
 // registry's to validate. The module is trusted operator code: the identity carriers and the

@@ -320,8 +320,7 @@ What the Entwurf package supplies:
 2. **The native app/TUI carrier** — upstream does not publish the experimental durable
    app (`pi-coding-agent` excludes `dist/experimental`; `pi-durable` on npm is the
    library). Entwurf owns the six app files as canonical source (`pi/pi-durable/src`,
-   first taken from upstream tag `v1.1.0` `abe508e1b89912adde45528136c3221eb69acdd7`, whose
-   v1.2.0 removed them) and ships them type-stripped and relocated in `pi/pi-durable/carrier/`
+   first taken from upstream tag `v1.1.0` `abe508e1b89912adde45528136c3221eb69acdd7`) and ships them type-stripped and relocated in `pi/pi-durable/carrier/`
    with upstream's MIT license. Each file's source blob and emitted digest are in the pin.
    The carrier reaches pi-coding-agent's internals only through its resolver
    (`pi/pi-durable/carrier-resolver.mjs`), which maps them to the published package's
