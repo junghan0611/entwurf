@@ -29,6 +29,21 @@
 			"signatureSource": "scripts/check-codex-native-push.ts"
 		},
 		{
+			"claim": "CODEX-SOCKET-ALIAS-EXACT",
+			"title": "accepting any symlink into Codex's socket directory instead of the one target Codex derives for THIS advertised path lets a retargeted alias hand delivery, preflight and the launcher a socket that belongs to a different listen address \u2014 the exact-target equality is the whole of what makes the 0.162.1 alias trustworthy",
+			"subject": "pi-extensions/lib/native-push/codex-ws-client.ts",
+			"find": [
+				"\tif (target !== expected) {",
+				"\t\treturn refuse(`app-server socket is a symlink that is not Codex's rendezvous alias: ${socketPath} -> ${target}`);",
+				"\t}"
+			],
+			"replace": ["\t// any target inside Codex's socket directory is good enough"],
+			"gate": ["bash", "run.sh", "check-codex-native-push"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:CODEX-SOCKET-ALIAS-EXACT]",
+			"signatureSource": "scripts/check-codex-native-push.ts"
+		},
+		{
 			"claim": "CODEX-NATIVE-VENDOR-QUEUE",
 			"title": "native delivery invokes a different Codex subcommand instead of the measured one-shot queue surface",
 			"subject": "pi-extensions/lib/native-push/codex-ws-client.ts",

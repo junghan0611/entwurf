@@ -181,18 +181,219 @@ assert.equal(
 	"[QK:CODEX-NATIVE-FIXED-SOCKET] CODEX_HOME owns the vendor default socket root",
 );
 
-const temp = fs.mkdtempSync(path.join(os.tmpdir(), "entwurf-codex-native-"));
+// ── the control endpoint: a plain socket, or Codex's EXACT rendezvous alias (#141) ──────────
+// From Codex 0.162.1 the advertised path is a symlink to a 0600 socket the vendor binds under
+// `realpath(/tmp)/codex-daemon-<euid>/`, named by the sha256 hex of the canonical advertised
+// parent + "/" + basename (`[source]` rust-v0.162.1 `app-server-transport/src/transport/
+// unix_socket.rs:290-304`, `uds/src/daemon_directory.rs:13-38`). The expected target below is
+// derived HERE from that upstream rule, not read back from the product, and every cell builds
+// its own sandbox socket directory: `daemonRoot`/`euid` point the product at it, so the real
+// `/tmp/codex-daemon-<euid>` is never touched. Each refusal cell keeps every OTHER hop valid,
+// so it fails on its own rule and not on a neighbour's. A real other-uid owner needs root and
+// stays unmeasured; so does macOS, where `/tmp` canonicalizes to `/private/tmp`.
+//
+// The root and the socket directory names are SHORT on purpose: a bound socket path must fit
+// sun_path (108 bytes on Linux), and a 64-hex name under a long sandbox root does not — listen
+// fails with EINVAL. That limit is why the vendor keeps its own root at `/tmp/codex-daemon-<euid>`.
+const temp = fs.mkdtempSync(path.join(os.tmpdir(), "entwurf-cnp-"));
+const euid = process.geteuid?.() ?? -1;
+const sandboxServers: net.Server[] = [];
+// A tree whose canonical path is longer than PATH_MAX can only be removed through the short
+// symlinked path that reaches it, so it is removed first, before the root.
+const overlongTrees: string[] = [];
 try {
 	const missing = checkCodexSocketFile(path.join(temp, "missing.sock"));
-	assert.deepEqual(missing.ok ? null : missing.status, "dead", "missing socket is a dead app-server");
+	assert.deepEqual(
+		missing.ok ? null : [missing.status, missing.status === "dead" ? missing.layout : null],
+		["dead", "absent"],
+		"missing socket is a dead app-server, and says it is the absent layout",
+	);
 	const regular = path.join(temp, "regular");
 	fs.writeFileSync(regular, "not a socket");
 	const wrongType = checkCodexSocketFile(regular);
 	assert.deepEqual(wrongType.ok ? null : wrongType.status, "indeterminate", "wrong path type never reads dead");
-	const link = path.join(temp, "link");
-	fs.symlinkSync(regular, link);
-	assert.match(JSON.stringify(checkCodexSocketFile(link)), /symlink/, "symlinked socket is refused by name");
+
+	const listen = async (socketPath: string, mode: number): Promise<void> => {
+		const server = net.createServer();
+		sandboxServers.push(server);
+		await new Promise<void>((resolve, reject) => {
+			server.once("error", reject);
+			server.listen(socketPath, () => resolve());
+		});
+		fs.chmodSync(socketPath, mode);
+	};
+	const layout = (name: string): { caseRoot: string; advertised: string; daemonRoot: string; expected: string } => {
+		const caseRoot = path.join(temp, name);
+		const parent = path.join(caseRoot, "home", "app-server-control");
+		fs.mkdirSync(parent, { recursive: true });
+		const daemonRoot = path.join(caseRoot, "d");
+		fs.mkdirSync(daemonRoot);
+		fs.chmodSync(daemonRoot, 0o700);
+		const hash = crypto
+			.createHash("sha256")
+			.update(`${fs.realpathSync(parent)}/app-server-control.sock`)
+			.digest("hex");
+		return {
+			caseRoot,
+			advertised: path.join(parent, "app-server-control.sock"),
+			daemonRoot,
+			expected: path.join(daemonRoot, hash),
+		};
+	};
+	const classify = (advertised: string, daemonRoot: string, over: { euid?: number } = {}) =>
+		checkCodexSocketFile(advertised, { daemonRoot, euid, ...over });
+	const statusOf = (check: ReturnType<typeof checkCodexSocketFile>): string => (check.ok ? "ok" : check.status);
+
+	const plainDir = path.join(temp, "plain");
+	fs.mkdirSync(plainDir);
+	const plain = path.join(plainDir, "app-server-control.sock");
+	await listen(plain, 0o600);
+	assert.deepEqual(
+		classify(plain, path.join(temp, "no-daemon-dir")),
+		{ ok: true, connectPath: plain },
+		"(A) a plain socket owned by the effective uid is the endpoint itself — the <=0.153.4 layout is unchanged",
+	);
+
+	const exact = layout("exact");
+	await listen(exact.expected, 0o600);
+	fs.symlinkSync(exact.expected, exact.advertised);
+	assert.deepEqual(
+		classify(exact.advertised, exact.daemonRoot),
+		{ ok: true, connectPath: exact.expected },
+		"(B) Codex's exact rendezvous alias is accepted, and the endpoint is the verified physical socket, not the alias",
+	);
+
+	const wrongHash = layout("wrong-hash");
+	const elsewhere = path.join(wrongHash.daemonRoot, "0".repeat(64));
+	await listen(elsewhere, 0o600);
+	fs.symlinkSync(elsewhere, wrongHash.advertised);
+	const wrongHashCheck = classify(wrongHash.advertised, wrongHash.daemonRoot);
+	assert.equal(
+		statusOf(wrongHashCheck),
+		"indeterminate",
+		"[QK:CODEX-SOCKET-ALIAS-EXACT] an alias into Codex's own socket directory whose name is not the hash of THIS advertised path is refused — a valid 0600 socket in the right 0700 directory is not enough",
+	);
+	assert.match(JSON.stringify(wrongHashCheck), /not Codex's rendezvous alias/, "that refusal says why, by name");
+
+	const relative = layout("relative");
+	await listen(relative.expected, 0o600);
+	fs.symlinkSync(path.relative(path.dirname(relative.advertised), relative.expected), relative.advertised);
+	assert.equal(
+		statusOf(classify(relative.advertised, relative.daemonRoot)),
+		"indeterminate",
+		"a relative alias target is refused even when it resolves to the expected socket",
+	);
+
+	const chain = layout("chain");
+	await listen(chain.expected, 0o600);
+	const hop = path.join(chain.caseRoot, "hop.sock");
+	fs.symlinkSync(chain.expected, hop);
+	fs.symlinkSync(hop, chain.advertised);
+	assert.equal(
+		statusOf(classify(chain.advertised, chain.daemonRoot)),
+		"indeterminate",
+		"an alias that reaches the expected socket through a second link is refused; only the vendor's one hop is accepted",
+	);
+
+	const dangling = layout("dangling");
+	fs.symlinkSync(dangling.expected, dangling.advertised);
+	const danglingCheck = classify(dangling.advertised, dangling.daemonRoot);
+	assert.deepEqual(
+		danglingCheck.ok ? null : [danglingCheck.status, danglingCheck.status === "dead" ? danglingCheck.layout : null],
+		["dead", "dangling-alias"],
+		"the exact alias with its socket gone is dead, named as the dangling alias the vendor itself removes on start",
+	);
+
+	const openDir = layout("dir-0755");
+	await listen(openDir.expected, 0o600);
+	fs.symlinkSync(openDir.expected, openDir.advertised);
+	fs.chmodSync(openDir.daemonRoot, 0o755);
+	assert.equal(
+		statusOf(classify(openDir.advertised, openDir.daemonRoot)),
+		"indeterminate",
+		"a socket directory other users can enter is refused — the vendor's own rule is mode & 0o777 == 0o700",
+	);
+
+	const stickyDir = layout("dir-1700");
+	await listen(stickyDir.expected, 0o600);
+	fs.symlinkSync(stickyDir.expected, stickyDir.advertised);
+	fs.chmodSync(stickyDir.daemonRoot, 0o1700);
+	assert.deepEqual(
+		classify(stickyDir.advertised, stickyDir.daemonRoot),
+		{ ok: true, connectPath: stickyDir.expected },
+		"a sticky 01700 socket directory is accepted: the vendor masks with 0o777, so refusing it would reject a directory Codex itself uses",
+	);
+
+	const linkedDir = layout("dir-symlink");
+	await listen(linkedDir.expected, 0o600);
+	fs.symlinkSync(linkedDir.expected, linkedDir.advertised);
+	const realDir = path.join(linkedDir.caseRoot, "real-daemon-dir");
+	fs.renameSync(linkedDir.daemonRoot, realDir);
+	fs.symlinkSync(realDir, linkedDir.daemonRoot);
+	assert.equal(
+		statusOf(classify(linkedDir.advertised, linkedDir.daemonRoot)),
+		"indeterminate",
+		"a socket directory that is itself a symlink is refused, as the vendor refuses it",
+	);
+
+	const fileTarget = layout("physical-file");
+	fs.writeFileSync(fileTarget.expected, "", { mode: 0o600 });
+	fs.symlinkSync(fileTarget.expected, fileTarget.advertised);
+	assert.equal(
+		statusOf(classify(fileTarget.advertised, fileTarget.daemonRoot)),
+		"indeterminate",
+		"an exact alias whose target is a regular file is refused, never connected to",
+	);
+
+	const readable = layout("physical-0644");
+	await listen(readable.expected, 0o644);
+	fs.symlinkSync(readable.expected, readable.advertised);
+	assert.equal(
+		statusOf(classify(readable.advertised, readable.daemonRoot)),
+		"indeterminate",
+		"an exact alias whose socket group or other users can open is refused",
+	);
+
+	assert.deepEqual(
+		[
+			statusOf(classify(plain, path.join(temp, "no-daemon-dir"), { euid: euid + 1 })),
+			statusOf(classify(exact.advertised, exact.daemonRoot, { euid: euid + 1 })),
+		],
+		["indeterminate", "indeterminate"],
+		"ownership is compared with the EFFECTIVE uid (the vendor's geteuid): under another euid both layouts are refused",
+	);
+
+	// canonicalize(parent) failure is the alias state lstat cannot see coming. The advertised
+	// path is short, but it reaches its parent through a symlink, and the parent's canonical
+	// path is longer than PATH_MAX — the vendor's own `canonicalize` fails on it the same way.
+	// It must be indeterminate: never dead, and never a throw the launcher would read as an
+	// unrecognised status.
+	const canonicalCase = path.join(temp, "canonical");
+	let far = canonicalCase;
+	while (far.length < 3600) far = path.join(far, "d".repeat(200));
+	fs.mkdirSync(far, { recursive: true });
+	const via = path.join(canonicalCase, "via");
+	fs.symlinkSync(far, via);
+	overlongTrees.push(path.join(via, "e".repeat(200)));
+	let overlongParent = via;
+	for (let i = 0; i < 4; i += 1) overlongParent = path.join(overlongParent, "e".repeat(200));
+	fs.mkdirSync(overlongParent, { recursive: true });
+	const overlongAdvertised = path.join(overlongParent, "app-server-control.sock");
+	fs.symlinkSync(exact.expected, overlongAdvertised);
+	const overlongCheck = classify(overlongAdvertised, exact.daemonRoot);
+	assert.equal(
+		statusOf(overlongCheck),
+		"indeterminate",
+		"an alias whose parent cannot be canonicalized is indeterminate",
+	);
+	assert.match(
+		JSON.stringify(overlongCheck),
+		/could not verify/,
+		"that refusal names the verification it could not do",
+	);
 } finally {
+	for (const server of sandboxServers) server.close();
+	for (const tree of overlongTrees) fs.rmSync(tree, { recursive: true, force: true });
 	fs.rmSync(temp, { recursive: true, force: true });
 }
 
@@ -201,15 +402,33 @@ const firstPage = new FakeProtocol([
 	{ data: ["other"], nextCursor: "next" },
 	{ data: ["target"], nextCursor: null },
 ]);
+// The check is asked about the advertised default path, and everything after it — the probe's
+// connect AND the route the queue send uses — goes to the endpoint the check returned. Here
+// the two are different strings, so a probe that went back to the advertised path goes red.
+let checkedPath = "";
+let openedPath = "";
 const alive = await probeCodexThread("target", {
 	env: { CODEX_HOME: "/fixed" },
-	checkSocket: () => ({ ok: true }),
-	openProtocol: opener(firstPage),
+	checkSocket: (advertised) => {
+		checkedPath = advertised;
+		return { ok: true, connectPath: "/verified/physical.sock" };
+	},
+	openProtocol: {
+		open: async (socketPath) => {
+			openedPath = socketPath;
+			return firstPage;
+		},
+	},
 });
 assert.deepEqual(
 	alive,
-	{ status: "alive", route: { backend: "codex", socketPath: "/fixed/app-server-control/app-server-control.sock" } },
-	"[QK:CODEX-NATIVE-LOADED-PROBE] full loaded-thread pagination proves the volatile route",
+	{ status: "alive", route: { backend: "codex", socketPath: "/verified/physical.sock" } },
+	"[QK:CODEX-NATIVE-LOADED-PROBE] full loaded-thread pagination proves the volatile route, on the endpoint the socket check verified",
+);
+assert.deepEqual(
+	[checkedPath, openedPath],
+	["/fixed/app-server-control/app-server-control.sock", "/verified/physical.sock"],
+	"the socket check reads the advertised default path; the probe connects to the endpoint it verified, never the alias again",
 );
 assert.equal(firstPage.closed, true, "successful probe closes its connection");
 assert.deepEqual(
@@ -221,7 +440,7 @@ assert.deepEqual(firstPage.calls[3]?.params, { cursor: "next" }, "pagination car
 const absentProtocol = new FakeProtocol([{}, { data: [], nextCursor: null }]);
 const absent = await probeCodexThread("target", {
 	env: { CODEX_HOME: "/fixed" },
-	checkSocket: () => ({ ok: true }),
+	checkSocket: (advertised) => ({ ok: true, connectPath: advertised }),
 	openProtocol: opener(absentProtocol),
 });
 assert.equal(absent.status, "dead", "a clean loaded inventory without the target is not delivery-capable");
@@ -230,7 +449,7 @@ assert.equal(absentProtocol.closed, true, "negative probe closes its connection"
 const malformedProtocol = new FakeProtocol([{}, { data: [{ id: "wrong-shape" }], nextCursor: null }]);
 const malformed = await probeCodexThread("target", {
 	env: { CODEX_HOME: "/fixed" },
-	checkSocket: () => ({ ok: true }),
+	checkSocket: (advertised) => ({ ok: true, connectPath: advertised }),
 	openProtocol: opener(malformedProtocol),
 });
 assert.equal(malformed.status, "indeterminate", "a malformed inventory is unknown, never dead");
@@ -374,7 +593,7 @@ assert.deepEqual(
 
 const adapter = createCodexNativePushAdapter({
 	env: { CODEX_HOME: "/fixed" },
-	checkSocket: () => ({ ok: true }),
+	checkSocket: (advertised) => ({ ok: true, connectPath: advertised }),
 	openProtocol: opener(new FakeProtocol([{}, { data: ["target"], nextCursor: null }])),
 	runner: queueRunner,
 });

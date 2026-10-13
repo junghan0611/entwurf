@@ -193,6 +193,21 @@ no daemon and no pid file: Ctrl-C is the operator's. A live socket, an unidentif
 second `--listen` are named refusals; a dead socket file is reported and launched over. Passing
 the raw vendor command by hand remains equivalent and is not deprecated.
 
+**The control endpoint from Codex 0.162.1 (#141).** `[source rust-v0.162.1]` The advertised path is
+now only an alias: the vendor binds a 0600 socket under `realpath(/tmp)/codex-daemon-<euid>/`, named
+by the sha256 of the canonical advertised path, and symlinks the advertised path to it
+(`app-server-transport/src/transport/unix_socket.rs:43-131, 290-304`; `uds/src/daemon_directory.rs:1-38`).
+One classifier, `checkCodexSocketFile`, accepts exactly a plain socket or that exact alias — link
+owner, byte-equal target, a 0700 socket directory, a socket no other user can open — and refuses
+every other symlink. The delivery probe, `codex queue --remote` and the fresh-call preflight connect
+to the socket it verified, never to the alias again. The launcher runs the same classifier's
+compiled twin (`mcp/entwurf-bridge/dist/scripts/codex-socket-classify.js`) directly, refuses any
+answer it does not recognise, and reports a dangling exact alias as the dead leftover the vendor
+removes on start. A same-euid process can still replace the verified socket file; that residual is
+named, not locked. The alias layout is certified on the classifier in a sandbox; the 0.162.1
+app-server protocol itself requires a named LIVE observation; a diagnostic is not release-cut
+acceptance, which separately requires the official release gate.
+
 #95 D1 (GLG, 2026-09-16) retired the requirement that this session be named `codex`, and with it the
 rule that an omitted-placement Codex TARGET selected it. The operator still owns the app-server and
 still chooses its room; Entwurf neither creates nor supervises it, and a missing app-server rejects.

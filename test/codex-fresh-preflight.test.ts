@@ -201,7 +201,7 @@ beforeEach(() => {
 	deps = {
 		unitPathsOverride: { hooksFile, helperDir, stateFile },
 		operatorUid: process.getuid?.() ?? 0,
-		checkSocket: () => ({ ok: true }),
+		checkSocket: (advertised) => ({ ok: true, connectPath: advertised }),
 		openProtocol: liveOpener(),
 		appServerTimeoutMs: 50,
 	};
@@ -223,7 +223,7 @@ describe("Codex fresh preflight", () => {
 		expect(
 			await codexFreshPreflight(
 				{ HOME: home },
-				{ ...deps, checkSocket: () => ({ ok: false, status: "dead", reason: "absent" }) },
+				{ ...deps, checkSocket: () => ({ ok: false, status: "dead", layout: "absent", reason: "absent" }) },
 			),
 		).toBe("codex-app-server-unavailable");
 		expect(await codexFreshPreflight({ HOME: home }, deps)).toBeNull();
@@ -247,6 +247,23 @@ describe("Codex fresh preflight", () => {
 		expect(closedProtocols).toBe(1);
 		expect(await codexFreshPreflight({ HOME: home }, deps)).toBeNull();
 		expect(closedProtocols).toBe(2);
+		// The exchange goes to the endpoint the socket check verified. On Codex 0.162.1 that is
+		// the physical socket behind the advertised alias, so the two strings differ here, and a
+		// preflight that went back to the advertised path would open the wrong one.
+		const opened: string[] = [];
+		const verified: CodexProtocolOpener = {
+			open: async (socketPath) => {
+				opened.push(socketPath);
+				return liveOpener().open(socketPath);
+			},
+		};
+		expect(
+			await codexFreshPreflight(
+				{ HOME: home },
+				{ ...deps, checkSocket: () => ({ ok: true, connectPath: "/verified/physical.sock" }), openProtocol: verified },
+			),
+		).toBeNull();
+		expect(opened).toEqual(["/verified/physical.sock"]);
 	});
 
 	it("[QK:FRESHCALL-CODEX-APP-SERVER-NO-LEAK] closes an app-server connection that lands after the bound expired", async () => {

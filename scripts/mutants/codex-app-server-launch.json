@@ -20,7 +20,8 @@
 			"gate": ["bash", "run.sh", "check-codex-app-server-launch"],
 			"timeoutSeconds": 300,
 			"signature": "[QK:CODEX-APP-SERVER-ADDRESS-MATCHES-PRODUCT-LEAF]",
-			"signatureSource": "scripts/check-codex-app-server-launch.ts"
+			"signatureSource": "scripts/check-codex-app-server-launch.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
 		},
 		{
 			"claim": "CODEX-APP-SERVER-EXECS-NOT-FORKS",
@@ -31,7 +32,8 @@
 			"gate": ["bash", "run.sh", "check-codex-app-server-launch"],
 			"timeoutSeconds": 300,
 			"signature": "[QK:CODEX-APP-SERVER-EXECS-NOT-FORKS]",
-			"signatureSource": "scripts/check-codex-app-server-launch.ts"
+			"signatureSource": "scripts/check-codex-app-server-launch.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
 		},
 		{
 			"claim": "CODEX-APP-SERVER-REFUSES-LIVE-SOCKET",
@@ -42,18 +44,20 @@
 			"gate": ["bash", "run.sh", "check-codex-app-server-launch"],
 			"timeoutSeconds": 300,
 			"signature": "[QK:CODEX-APP-SERVER-REFUSES-LIVE-SOCKET]",
-			"signatureSource": "scripts/check-codex-app-server-launch.ts"
+			"signatureSource": "scripts/check-codex-app-server-launch.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
 		},
 		{
 			"claim": "CODEX-APP-SERVER-REFUSES-INDETERMINATE-SOCKET",
-			"title": "reading an unidentifiable path (symlink, foreign owner, not a socket) as an absent one lets the launch clobber something it could not identify \u2014 the same classification the delivery rail refuses on, silently downgraded at the one place that would overwrite it",
+			"title": "reading the classifier's indeterminate verdict (a symlink that is not Codex's exact alias, a foreign owner, not a socket) as an absent path lets the launch clobber something it could not identify \u2014 the same classification the delivery rail refuses on, silently downgraded at the one place that would overwrite it",
 			"subject": "scripts/codex-app-server-launch.sh",
-			"find": ["\tprint(\"indeterminate\\tthe path is a symlink\")"],
-			"replace": ["\tprint(\"absent\")"],
+			"find": ["\tindeterminate) probe=\"indeterminate\t$classified_detail\" ;;"],
+			"replace": ["\tindeterminate) probe=\"absent\" ;;"],
 			"gate": ["bash", "run.sh", "check-codex-app-server-launch"],
 			"timeoutSeconds": 300,
 			"signature": "[QK:CODEX-APP-SERVER-REFUSES-INDETERMINATE-SOCKET]",
-			"signatureSource": "scripts/check-codex-app-server-launch.ts"
+			"signatureSource": "scripts/check-codex-app-server-launch.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
 		},
 		{
 			"claim": "CODEX-APP-SERVER-REFUSES-SECOND-LISTEN",
@@ -72,7 +76,8 @@
 			"gate": ["bash", "run.sh", "check-codex-app-server-launch"],
 			"timeoutSeconds": 300,
 			"signature": "[QK:CODEX-APP-SERVER-REFUSES-SECOND-LISTEN]",
-			"signatureSource": "scripts/check-codex-app-server-launch.ts"
+			"signatureSource": "scripts/check-codex-app-server-launch.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
 		},
 		{
 			"claim": "CODEX-APP-SERVER-READS-PROC-HOLDER",
@@ -94,7 +99,8 @@
 			"gate": ["bash", "run.sh", "check-codex-app-server-launch"],
 			"timeoutSeconds": 300,
 			"signature": "[QK:CODEX-APP-SERVER-READS-PROC-HOLDER]",
-			"signatureSource": "scripts/check-codex-app-server-launch.ts"
+			"signatureSource": "scripts/check-codex-app-server-launch.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
 		},
 		{
 			"claim": "CODEX-APP-SERVER-REFUSES-UNRECOGNISED-PROBE",
@@ -115,7 +121,26 @@
 			"gate": ["bash", "run.sh", "check-codex-app-server-launch"],
 			"timeoutSeconds": 300,
 			"signature": "[QK:CODEX-APP-SERVER-REFUSES-UNRECOGNISED-PROBE]",
-			"signatureSource": "scripts/check-codex-app-server-launch.ts"
+			"signatureSource": "scripts/check-codex-app-server-launch.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "CODEX-APP-SERVER-REFUSES-UNRECOGNISED-CLASSIFIER",
+			"title": "passing an unrecognised classifier word through to the probe verdicts lets a word the classifier never gives \u2014 'stale' \u2014 be read as a dead socket file and launched over, so a classifier that answers something nobody wrote decides that this launch may clobber the endpoint",
+			"subject": "scripts/codex-app-server-launch.sh",
+			"find": [
+				"\t*)",
+				"\t\tfail \"codex-app-server-socket-probe-unrecognised: the socket classifier answered",
+				"  '$classified_word', which is not one of socket/absent/dangling/indeterminate. Refusing to launch on a",
+				"  reading nothing understands.\"",
+				"\t\t;;"
+			],
+			"replace": ["\t*) probe=\"$classified_word\" ;;"],
+			"gate": ["bash", "run.sh", "check-codex-app-server-launch"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:CODEX-APP-SERVER-REFUSES-UNRECOGNISED-CLASSIFIER]",
+			"signatureSource": "scripts/check-codex-app-server-launch.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
 		},
 		{
 			"claim": "CODEX-APP-SERVER-REFUSES-RELATIVE-SOCKET",
@@ -135,7 +160,8 @@
 			"gate": ["bash", "run.sh", "check-codex-app-server-launch"],
 			"timeoutSeconds": 300,
 			"signature": "[QK:CODEX-APP-SERVER-REFUSES-RELATIVE-SOCKET]",
-			"signatureSource": "scripts/check-codex-app-server-launch.ts"
+			"signatureSource": "scripts/check-codex-app-server-launch.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
 		},
 		{
 			"claim": "CODEX-APP-SERVER-REFUSES-CONTROL-CHAR-SOCKET",
@@ -151,7 +177,8 @@
 			"gate": ["bash", "run.sh", "check-codex-app-server-launch"],
 			"timeoutSeconds": 300,
 			"signature": "[QK:CODEX-APP-SERVER-REFUSES-CONTROL-CHAR-SOCKET]",
-			"signatureSource": "scripts/check-codex-app-server-launch.ts"
+			"signatureSource": "scripts/check-codex-app-server-launch.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
 		}
 	]
 }

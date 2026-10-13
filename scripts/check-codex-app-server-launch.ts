@@ -322,25 +322,35 @@ exit "\${FAKE_CODEX_EXIT:-0}"
 		);
 	}
 	{
+		// The classifier's INDETERMINATE domain, as one claim: two unidentifiable paths, both
+		// reaching the launcher through the one `indeterminate)` arm. A path that exists and is
+		// not a socket must read indeterminate, not stale, so the launcher refuses instead of
+		// clobbering it. A symlink that is NOT Codex's exact rendezvous alias must be refused with
+		// the product classifier's own reason, which is what pins the WIRING: a launcher that grew
+		// its own symlink rule again would refuse there too, but not in those words. Both runs are
+		// made before the one assertion, so a regression on that shared arm fails HERE, at this
+		// claim, and not at an earlier unnamed cell. The exact alias's accept path is certified on
+		// `checkCodexSocketFile` (check-codex-native-push), not here: this gate has no seam to put
+		// Codex's socket directory in a sandbox.
 		const fileHome = path.join(root, "file-home");
 		const fileSock = resolveCodexDefaultSocketPath({ CODEX_HOME: fileHome });
 		mkdirSync(path.dirname(fileSock), { recursive: true });
 		writeFileSync(fileSock, "");
-		const r = launch([], { CODEX_HOME: fileHome });
-		ok(
-			"a path that exists and is not a socket is indeterminate, not stale — the launcher refuses instead of clobbering something it cannot identify",
-			r.status !== 0 && r.out.includes("codex-app-server-socket-indeterminate") && r.args.length === 0,
-		);
-	}
-	{
+		const regular = launch([], { CODEX_HOME: fileHome });
 		const linkHome = path.join(root, "link-home");
 		const linkSock = resolveCodexDefaultSocketPath({ CODEX_HOME: linkHome });
 		mkdirSync(path.dirname(linkSock), { recursive: true });
 		symlinkSync(path.join(root, "nowhere.sock"), linkSock);
-		const r = launch([], { CODEX_HOME: linkHome });
+		const link = launch([], { CODEX_HOME: linkHome });
 		ok(
-			"[QK:CODEX-APP-SERVER-REFUSES-INDETERMINATE-SOCKET] a symlinked control socket is refused by name — the same classification the delivery rail's socket check uses",
-			r.status !== 0 && r.out.includes("codex-app-server-socket-indeterminate") && r.args.length === 0,
+			"[QK:CODEX-APP-SERVER-REFUSES-INDETERMINATE-SOCKET] an unidentifiable path is refused, never launched over: a path that exists and is not a socket, and a symlink that is not Codex's rendezvous alias (refused with the classifier's own reason) — the same classification the delivery rail's socket check uses",
+			regular.status !== 0 &&
+				regular.out.includes("codex-app-server-socket-indeterminate") &&
+				regular.args.length === 0 &&
+				link.status !== 0 &&
+				link.out.includes("codex-app-server-socket-indeterminate") &&
+				link.out.includes("is not Codex's rendezvous alias") &&
+				link.args.length === 0,
 		);
 	}
 	{
@@ -358,16 +368,49 @@ exit "\${FAKE_CODEX_EXIT:-0}"
 		// Hard Rule 15: an unrecognised reading is the one case where proceeding is unsafe,
 		// because every branch above is a decision about whether this launch would clobber a
 		// running server. The stimulus is a sandbox `python3` that exits 0 while printing
-		// something nobody wrote — the exact shape a silent fall-through needs.
+		// something nobody wrote — the exact shape a silent fall-through needs. The launcher runs
+		// that connect probe only on an endpoint the classifier verified as a socket, so the cell
+		// puts a (dead) socket file there; without one the probe would never be asked.
+		const oddHome = path.join(root, "odd-home");
+		const oddSock = resolveCodexDefaultSocketPath({ CODEX_HOME: oddHome });
+		mkdirSync(path.dirname(oddSock), { recursive: true });
+		spawnSync("python3", ["-c", "import socket,sys;s=socket.socket(socket.AF_UNIX);s.bind(sys.argv[1])", oddSock]);
 		const oddBin = path.join(root, "odd-probe-bin");
 		mkdirSync(oddBin, { recursive: true });
 		const oddPython = path.join(oddBin, "python3");
 		writeFileSync(oddPython, "#!/usr/bin/env bash\ncat >/dev/null\necho 'unexpected-probe-status'\nexit 0\n");
 		chmodSync(oddPython, 0o755);
-		const r = launch([], { PATH: `${oddBin}:${bin}:${process.env.PATH ?? ""}` });
+		const r = launch([], { CODEX_HOME: oddHome, PATH: `${oddBin}:${bin}:${process.env.PATH ?? ""}` });
+		// The second stimulus is the CLASSIFIER answering a word it never gives. `stale` is the
+		// discriminating one: it is a valid verdict of the connect probe, so a launcher that passed
+		// unknown classifier words through would read it as a dead socket and LAUNCH. A sandbox
+		// `node` answers for the classifier's basename only and hands every other invocation to
+		// the real Node — a test fixture on this gate's PATH, not a seam the product reads.
+		const oddClassifierHome = path.join(root, "odd-classifier-home");
+		const oddClassifierBin = path.join(root, "odd-classifier-bin");
+		mkdirSync(oddClassifierBin, { recursive: true });
+		const oddNode = path.join(oddClassifierBin, "node");
+		writeFileSync(
+			oddNode,
+			"#!/usr/bin/env bash\n" +
+				'for a in "$@"; do case "$a" in */codex-socket-classify.js) printf \'stale\'; exit 0 ;; esac; done\n' +
+				`exec ${JSON.stringify(process.execPath)} "$@"\n`,
+		);
+		chmodSync(oddNode, 0o755);
+		const c = launch([], {
+			CODEX_HOME: oddClassifierHome,
+			PATH: `${oddClassifierBin}:${bin}:${process.env.PATH ?? ""}`,
+		});
 		ok(
 			"[QK:CODEX-APP-SERVER-REFUSES-UNRECOGNISED-PROBE] a socket classifier that exits 0 with a reading nobody wrote REFUSES instead of falling through to the exec",
 			r.status !== 0 && r.out.includes("codex-app-server-socket-probe-unrecognised") && r.args.length === 0,
+		);
+		ok(
+			`[QK:CODEX-APP-SERVER-REFUSES-UNRECOGNISED-CLASSIFIER] a classifier word the classifier never gives is refused before it can be read as one of the probe's own verdicts — 'stale' would otherwise launch (status ${c.status}, ${c.args.length} vendor args)`,
+			c.status !== 0 &&
+				c.out.includes("codex-app-server-socket-probe-unrecognised") &&
+				c.out.includes("the socket classifier answered\n  'stale'") &&
+				c.args.length === 0,
 		);
 	}
 

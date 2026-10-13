@@ -23,30 +23,135 @@ export function resolveCodexDefaultSocketPath(env: CodexSocketEnv): string {
 	return path.join(resolveCodexHome(env), "app-server-control", "app-server-control.sock");
 }
 
-export type CodexSocketFileCheck = { ok: true } | { ok: false; status: "dead" | "indeterminate"; reason: string };
+/**
+ * What the advertised control-socket path is, and the one endpoint a caller may connect to.
+ *
+ * `connectPath` is a transport endpoint for one exchange: the socket this check verified. It is
+ * not an address, a record field or a replacement for `resolveCodexDefaultSocketPath`. `dead`
+ * names which absence it is, because the managed launcher treats them differently: an absent
+ * path is a first launch, and a dangling rendezvous alias is the leftover of a crashed server
+ * that the vendor removes on its next start.
+ */
+export type CodexSocketFileCheck =
+	| { ok: true; connectPath: string }
+	| { ok: false; status: "dead"; layout: "absent" | "dangling-alias"; reason: string }
+	| { ok: false; status: "indeterminate"; reason: string };
 
-export function checkCodexSocketFile(socketPath: string): CodexSocketFileCheck {
+/** Test seam only: the gate points these at a sandbox. Production callers pass nothing. */
+export interface CodexSocketFileDeps {
+	readonly daemonRoot?: string;
+	readonly euid?: number;
+}
+
+/**
+ * The advertised path is exactly one of two layouts, and anything else is refused.
+ *
+ * (A) A plain socket owned by the effective uid: Codex up to 0.153.4 binds the advertised
+ *     path itself. `connectPath` is that path.
+ * (B) Codex's rendezvous alias. From 0.162.1 the advertised path "is only an alias": the
+ *     server binds a 0600 socket under `realpath(/tmp)/codex-daemon-<euid>/` named by the
+ *     sha256 of the canonical advertised path, then symlinks the advertised path to it
+ *     (`[source]` rust-v0.162.1 `app-server-transport/src/transport/unix_socket.rs:43-131,
+ *     290-304`; `uds/src/daemon_directory.rs:1-38`). Upstream's reason is a privileged
+ *     rendezvous root that sandboxes hide; the alias also keeps an over-long advertised path
+ *     usable (`uds/src/lib.rs:167-174`). The alias is accepted only when every hop is the
+ *     vendor's own: the link is owned by the effective uid; its target is BYTE-EQUAL to the
+ *     path Codex derives (a relative, foreign, re-hashed or chained target is refused); the
+ *     daemon directory is a real directory owned by the effective uid with `mode & 0o777`
+ *     exactly 0700, the vendor's own rule; and the target is a socket owned by the effective
+ *     uid that no group or other user can open. `connectPath` is the verified target, so the
+ *     alias is never re-resolved between this check and the connect. A same-euid process can
+ *     still replace the verified socket file itself; that residual is named, not locked.
+ *
+ * Only `lstat` and one `readlink` touch the alias; it is never followed or `realpath`ed.
+ * The effective uid is the vendor's (`libc::geteuid`), not the real uid.
+ */
+export function checkCodexSocketFile(socketPath: string, deps: CodexSocketFileDeps = {}): CodexSocketFileCheck {
+	const euid = deps.euid ?? process.geteuid?.();
+	let stat: fs.Stats;
 	try {
-		const stat = fs.lstatSync(socketPath);
-		if (stat.isSymbolicLink()) {
-			return { ok: false, status: "indeterminate", reason: `app-server socket is a symlink: ${socketPath}` };
-		}
-		if (!stat.isSocket()) {
-			return { ok: false, status: "indeterminate", reason: `app-server path is not a socket: ${socketPath}` };
-		}
-		if (typeof process.getuid === "function" && stat.uid !== process.getuid()) {
-			return {
-				ok: false,
-				status: "indeterminate",
-				reason: `app-server socket is owned by uid ${stat.uid}, not ${process.getuid()}`,
-			};
-		}
-		return { ok: true };
+		stat = fs.lstatSync(socketPath);
 	} catch (error) {
 		const code = (error as NodeJS.ErrnoException).code;
-		if (code === "ENOENT") return { ok: false, status: "dead", reason: `app-server socket is absent: ${socketPath}` };
+		if (code === "ENOENT") {
+			return { ok: false, status: "dead", layout: "absent", reason: `app-server socket is absent: ${socketPath}` };
+		}
 		return { ok: false, status: "indeterminate", reason: error instanceof Error ? error.message : String(error) };
 	}
+	if (stat.isSymbolicLink()) return checkCodexRendezvousAlias(socketPath, stat, euid, deps);
+	if (!stat.isSocket()) {
+		return { ok: false, status: "indeterminate", reason: `app-server path is not a socket: ${socketPath}` };
+	}
+	if (euid !== undefined && stat.uid !== euid) {
+		return {
+			ok: false,
+			status: "indeterminate",
+			reason: `app-server socket is owned by uid ${stat.uid}, not the effective uid ${euid}`,
+		};
+	}
+	return { ok: true, connectPath: socketPath };
+}
+
+function checkCodexRendezvousAlias(
+	socketPath: string,
+	link: fs.Stats,
+	euid: number | undefined,
+	deps: CodexSocketFileDeps,
+): CodexSocketFileCheck {
+	const refuse = (reason: string): CodexSocketFileCheck => ({ ok: false, status: "indeterminate", reason });
+	if (euid === undefined) {
+		return refuse(`app-server socket is a symlink and this platform has no effective uid to verify it: ${socketPath}`);
+	}
+	if (link.uid !== euid) {
+		return refuse(`app-server socket symlink is owned by uid ${link.uid}, not the effective uid ${euid}`);
+	}
+	let daemonRoot: string;
+	let expected: string;
+	let target: string;
+	try {
+		daemonRoot = deps.daemonRoot ?? path.join(fs.realpathSync("/tmp"), `codex-daemon-${euid}`);
+		const canonical = path.join(fs.realpathSync(path.dirname(socketPath)), path.basename(socketPath));
+		expected = path.join(daemonRoot, crypto.createHash("sha256").update(canonical).digest("hex"));
+		target = fs.readlinkSync(socketPath);
+	} catch (error) {
+		return refuse(
+			`could not verify the app-server socket symlink ${socketPath}: ${error instanceof Error ? error.message : String(error)}`,
+		);
+	}
+	if (target !== expected) {
+		return refuse(`app-server socket is a symlink that is not Codex's rendezvous alias: ${socketPath} -> ${target}`);
+	}
+	let directory: fs.Stats;
+	try {
+		directory = fs.lstatSync(daemonRoot);
+	} catch (error) {
+		return refuse(`Codex's socket directory cannot be read: ${error instanceof Error ? error.message : String(error)}`);
+	}
+	if (!directory.isDirectory() || directory.uid !== euid || (directory.mode & 0o777) !== 0o700) {
+		return refuse(
+			`Codex's socket directory ${daemonRoot} must be a real directory owned by uid ${euid} with mode 0700`,
+		);
+	}
+	let physical: fs.Stats;
+	try {
+		physical = fs.lstatSync(expected);
+	} catch (error) {
+		if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+			return {
+				ok: false,
+				status: "dead",
+				layout: "dangling-alias",
+				reason: `app-server socket is a dangling rendezvous alias: ${socketPath} -> ${expected}`,
+			};
+		}
+		return refuse(error instanceof Error ? error.message : String(error));
+	}
+	if (!physical.isSocket() || physical.uid !== euid || (physical.mode & 0o077) !== 0) {
+		return refuse(
+			`Codex's physical socket ${expected} must be a socket owned by uid ${euid} that no group or other user can open`,
+		);
+	}
+	return { ok: true, connectPath: expected };
 }
 
 export interface CodexRpcProtocol {
@@ -315,6 +420,7 @@ async function initialize(protocol: CodexRpcProtocol): Promise<void> {
 
 export interface CodexRoute {
 	readonly backend: "codex";
+	/** The endpoint `checkCodexSocketFile` verified for this probe, which the send also uses. Not an address. */
 	readonly socketPath: string;
 }
 
@@ -359,9 +465,14 @@ export async function probeCodexThread(
 	nativeSessionId: string,
 	deps: CodexAdapterDeps = {},
 ): Promise<CodexProbeResult> {
-	const socketPath = resolveCodexDefaultSocketPath(deps.env ?? process.env);
-	const socketCheck = (deps.checkSocket ?? checkCodexSocketFile)(socketPath);
+	const socketCheck = (deps.checkSocket ?? checkCodexSocketFile)(
+		resolveCodexDefaultSocketPath(deps.env ?? process.env),
+	);
 	if (!socketCheck.ok) return { status: socketCheck.status, reason: socketCheck.reason };
+	// The probe, and the queue send its route carries, both use the endpoint just verified. The
+	// advertised path is not resolved again: on 0.162.1 it is an alias that could be retargeted
+	// between the check and a second transport.
+	const socketPath = socketCheck.connectPath;
 	let protocol: CodexRpcProtocol;
 	try {
 		protocol = await (deps.openProtocol ?? realCodexProtocolOpener).open(socketPath);

@@ -156,38 +156,53 @@ done
 # --- is somebody already listening there? ----------------------------------
 # Three outcomes, and they are NOT the same repair. A live socket means a second server
 # would either lose the bind race or silently replace the endpoint every citizen's record
-# already points at — refuse and name the holder. An indeterminate path (symlink, not a
-# socket, owned by another uid) is the classification `checkCodexSocketFile` already uses in
-# the product, and a launcher that guessed past it would be clobbering something it cannot
-# identify. A dead socket file is the ordinary leftover of a Ctrl-C, and the vendor replaces
-# it — that one is a fact line, not a refusal.
-probe="$(python3 - "$SOCK" <<'PY'
-import os, socket, stat, sys
-
-path = sys.argv[1]
-try:
-	st = os.lstat(path)
-except FileNotFoundError:
-	print("absent")
-	raise SystemExit(0)
-except OSError as exc:
-	print(f"indeterminate\t{exc.strerror or exc}")
-	raise SystemExit(0)
-
-if stat.S_ISLNK(st.st_mode):
-	print("indeterminate\tthe path is a symlink")
-	raise SystemExit(0)
-if not stat.S_ISSOCK(st.st_mode):
-	print("indeterminate\tthe path exists and is not a socket")
-	raise SystemExit(0)
-if st.st_uid != os.getuid():
-	print(f"indeterminate\tthe socket is owned by uid {st.st_uid}, not {os.getuid()}")
-	raise SystemExit(0)
+# already points at — refuse and name the holder. An indeterminate path (a symlink that is not
+# Codex's own alias, not a socket, owned by another uid) is refused, because a launcher that
+# guessed past it would be clobbering something it cannot identify. A dead socket file is the
+# ordinary leftover of a Ctrl-C, and the vendor replaces it — that one is a fact line, not a
+# refusal. So is a dangling rendezvous alias: from Codex 0.162.1 the advertised path is a
+# symlink into the vendor's own socket directory, and the vendor removes exactly that alias
+# when it starts.
+#
+# WHAT A LAUNCH IS ALLOWED TO TRUST is decided ONCE, by the classifier delivery and preflight
+# use (`checkCodexSocketFile`). This launcher keeps no copy of it: telling Codex's exact alias
+# from any other symlink takes a hash and an exact readlink comparison, and a second
+# implementation here would be the transcription `codex-socket-path` already measured drifting.
+# It runs that classifier's COMPILED twin directly with `node`, in a checkout and in an installed
+# package alike: `build-bridge` emits it (`pnpm install` runs it through `prepare`, and the package
+# ships it through `prepack`), so a missing file is an incomplete installation, refused by name —
+# never a reason to fall back to the TypeScript source. The Python below only CONNECTS to the
+# endpoint the classifier verified, to tell a live server from a stale socket file. An answer the
+# classifier never gives is refused right here, before it can be read as one of the probe's own
+# verdicts.
+#
+# The gate's limit, stated rather than hidden: it executes this launcher on non-alias layouts
+# and on a non-exact symlink, so it proves the launcher accepts no more than the classifier.
+# The exact-alias accept path is proven on `checkCodexSocketFile` itself, with a sandbox socket
+# directory. This launcher's own alias branch is NOT exercised by an existing-server LIVE
+# diagnostic; that launch/refusal path needs its own explicitly authorised LIVE observation.
+CLASSIFIER="$REPO_DIR/mcp/entwurf-bridge/dist/scripts/codex-socket-classify.js"
+[ -f "$CLASSIFIER" ] \
+	|| fail "codex-app-server-classifier-missing: the compiled socket classifier is not at
+  $CLASSIFIER
+  This launcher runs it directly and keeps no other copy of it. Reinstall @junghanacs/entwurf (the
+  package ships it through prepack build-bridge), or run 'pnpm run build-bridge' in a source checkout."
+if ! classified="$(node "$CLASSIFIER")"; then
+	fail "could not classify the control socket at $SOCK.
+  'node $CLASSIFIER' failed; it is the only classification of this socket,
+  and this launcher will not guess past it. Its output above says why."
+fi
+classified_word="${classified%%	*}"
+classified_detail="${classified#*	}"
+case "$classified_word" in
+	socket)
+		probe="$(python3 - "$classified_detail" <<'PY'
+import socket, sys
 
 probe = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
 probe.settimeout(2)
 try:
-	probe.connect(path)
+	probe.connect(sys.argv[1])
 except (ConnectionRefusedError, FileNotFoundError):
 	print("stale")
 except OSError as exc:
@@ -197,7 +212,17 @@ else:
 finally:
 	probe.close()
 PY
-)" || fail "could not classify the control socket at $SOCK (python3 is required by this launcher)."
+)" || fail "could not probe the control socket at $classified_detail (python3 is required by this launcher)."
+		;;
+	absent) probe="absent" ;;
+	dangling) probe="stale	$classified_detail" ;;
+	indeterminate) probe="indeterminate	$classified_detail" ;;
+	*)
+		fail "codex-app-server-socket-probe-unrecognised: the socket classifier answered
+  '$classified_word', which is not one of socket/absent/dangling/indeterminate. Refusing to launch on a
+  reading nothing understands."
+		;;
+esac
 
 probe_status="${probe%%	*}"
 probe_reason="${probe#*	}"

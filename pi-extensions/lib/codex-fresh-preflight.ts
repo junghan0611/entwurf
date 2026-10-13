@@ -624,11 +624,12 @@ export async function codexFreshPreflight(
 	if (config === null || trustReceiptMissing(config, key)) return "codex-birth-trust-missing";
 	if (mcpMissing(config)) return "codex-mcp-hand-missing";
 	if (visibleIdentityMissing(config)) return "codex-visible-identity-missing";
-	const socketPath = resolveCodexDefaultSocketPath(env);
-	const socket = (deps.checkSocket ?? checkCodexSocketFile)(socketPath);
+	const socket = (deps.checkSocket ?? checkCodexSocketFile)(resolveCodexDefaultSocketPath(env));
 	if (!socket.ok) return "codex-app-server-unavailable";
+	// The protocol exchange goes to the endpoint the check verified, never the advertised path
+	// again (on Codex 0.162.1 that path is an alias; see `checkCodexSocketFile`).
 	const live = await appServerIsLive(
-		socketPath,
+		socket.connectPath,
 		deps.openProtocol ?? realCodexProtocolOpener,
 		deps.appServerTimeoutMs ?? DEFAULT_APP_SERVER_TIMEOUT_MS,
 	);
