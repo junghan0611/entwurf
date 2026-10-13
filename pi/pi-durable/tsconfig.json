@@ -1,0 +1,26 @@
+{
+	// The owned pi-durable application source (#141): src/experimental/durable/*.ts is the canonical
+	// thin composition the carrier is emitted from (scripts/emit-pi-durable-carrier.ts). It keeps
+	// upstream's relative layout, so `../../<t>.ts` names a pi-coding-agent internal. rootDirs maps
+	// that specifier onto the INSTALLED published dist/, so every internal is typed by its real
+	// published declaration, never by a stub or a re-export copy.
+	//
+	// The emitter's contract is checked here too: erasableSyntaxOnly is "Node strip-types can emit
+	// this file", verbatimModuleSyntax is "an `import type` disappears whole under strip".
+	"extends": "../../tsconfig.json",
+	"compilerOptions": {
+		"noEmit": true,
+		"allowJs": false,
+		"allowImportingTsExtensions": true,
+		"erasableSyntaxOnly": true,
+		"verbatimModuleSyntax": true,
+		"target": "ES2024",
+		"lib": ["ES2024"],
+		"types": ["node"],
+		"rootDirs": ["./src", "../../node_modules/@earendil-works/pi-coding-agent/dist"]
+	},
+	"include": ["./src/**/*.ts"],
+	// Explicit and empty: the root program excludes pi/pi-durable/src because THIS fence receives it.
+	// An inherited exclude would remove the same files here and leave them in no program at all.
+	"exclude": []
+}

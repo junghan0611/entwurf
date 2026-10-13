@@ -53,6 +53,7 @@ import {
 	closeAll,
 	createPiDurableContact,
 	type DurableDoorbellDraft,
+	type DurableRootAdmission,
 	PI_DURABLE_BRIDGE_SCRUBBED_ENV,
 	PI_DURABLE_TOOL_NAMES,
 	PI_DURABLE_TOOL_SCHEMAS,
@@ -288,7 +289,7 @@ describe("pi-durable contact — the extension and its gate", () => {
 		const v2 = c.extension.tools.find((t) => t.name === "entwurf_v2");
 		const args = { target: "20261005T000000-abcdef", intent: "fire-and-forget", message: "hello", wants_reply: false };
 		await expect(v2?.execute(args, undefined, {})).resolves.toEqual({
-			content: [{ type: "text", text: "entwurf_v2 ok" }],
+			output: [{ type: "text", text: "entwurf_v2 ok" }],
 		});
 		expect(stub.calls).toEqual(["entwurf_v2"]);
 		expect(stub.args).toEqual([args]);
@@ -305,7 +306,7 @@ describe("pi-durable contact — the extension and its gate", () => {
 		expect(callback).not.toHaveProperty("replay");
 		expect(callback?.parameters).toBe(PI_DURABLE_TOOL_SCHEMAS.entwurf_callback);
 		await expect(callback?.execute({}, undefined, {})).resolves.toEqual({
-			content: [{ type: "text", text: "entwurf_callback ok" }],
+			output: [{ type: "text", text: "entwurf_callback ok" }],
 		});
 		expect(stub.calls).toEqual(["entwurf_callback"]);
 		expect(stub.args).toEqual([{}]);
@@ -318,7 +319,7 @@ describe("pi-durable contact — the extension and its gate", () => {
 		await new Promise((resolve) => setImmediate(resolve));
 		expect(stub.calls).toEqual([]);
 		await c.attach(session());
-		await expect(pending).resolves.toEqual({ content: [{ type: "text", text: "entwurf_self ok" }] });
+		await expect(pending).resolves.toEqual({ output: [{ type: "text", text: "entwurf_self ok" }] });
 		expect(stub.calls).toEqual(["entwurf_self"]);
 	});
 
@@ -590,6 +591,7 @@ describe("pi-durable bootstrap composition", () => {
 								record.drafts.push(draft);
 								return { id: 40 + record.drafts.length };
 							},
+							onFailed: () => () => {},
 						}
 					: {}),
 				close: async () => {
@@ -1187,6 +1189,7 @@ describe("pi-durable contact — the doorbell", () => {
 						},
 					};
 				},
+				onFailed: () => () => {},
 			},
 			holdNext() {
 				let release!: () => void;
@@ -1322,7 +1325,7 @@ describe("pi-durable contact — the doorbell", () => {
 			ownerKind: "pi-durable-host",
 			armProvenance: "session-start",
 		});
-		await expect(waiting).resolves.toEqual({ content: [{ type: "text", text: "entwurf_self ok" }] });
+		await expect(waiting).resolves.toEqual({ output: [{ type: "text", text: "entwurf_self ok" }] });
 		expect(c.receiver()).toEqual({ status: "armed", gardenId: gid, markerPath: markerFile(gid), admissions: [] });
 		expect(root.drafts).toEqual([]);
 	});
@@ -1338,9 +1341,9 @@ describe("pi-durable contact — the doorbell", () => {
 		expect(c.receiver()).toEqual({ status: "off" });
 	});
 
-	it("[QK:PI-DURABLE-RECEIVER-REFUSES-UNVERIFIED-IDENTITY] a sender marker gone or naming another garden, a drifted record, or a foreign owner pid refuses the arm: no marker, watch and bridge closed, waiters refused", async () => {
+	it("[QK:PI-DURABLE-RECEIVER-REFUSES-UNVERIFIED-IDENTITY] a sender marker gone or naming another garden, a drifted record, a foreign owner pid, or a root admission whose failure registration throws refuses the arm: no marker, watch and bridge closed, waiters refused", async () => {
 		const senderFile = path.join(sendersDir, "pi-durable", `${process.pid}.json`);
-		const cases: [string, () => void, Record<string, unknown>, RegExp][] = [
+		const cases: [string, () => void, Record<string, unknown>, RegExp, Partial<DurableRootAdmission>?][] = [
 			["sender gone", () => fs.rmSync(senderFile), {}, /no live sender marker for owner/],
 			[
 				"sender names another garden",
@@ -1375,8 +1378,19 @@ describe("pi-durable contact — the doorbell", () => {
 				/names pi-durable\/1759622400001-drifted, not pi-durable\//,
 			],
 			["foreign owner pid", () => {}, { ownerPid: process.ppid }, /the doorbell's watch lives in this process/],
+			[
+				"failure registration throws",
+				() => {},
+				{},
+				/S1B3-ONFAILED-REFUSED/,
+				{
+					onFailed: () => {
+						throw new Error("S1B3-ONFAILED-REFUSED");
+					},
+				},
+			],
 		];
-		for (const [name, mutate, extra, cause] of cases) {
+		for (const [name, mutate, extra, cause, admit] of cases) {
 			fs.rmSync(root, { recursive: true, force: true });
 			fs.mkdirSync(cwd, { recursive: true });
 			const stub = stubBridge();
@@ -1389,7 +1403,7 @@ describe("pi-durable contact — the doorbell", () => {
 			const c = doorbellContact(stub, watch, extra);
 			const waiting = self(c).execute({}, undefined, {});
 			const rootStub = rootAdmission();
-			await expect(c.attach(session(), rootStub.admission), name).rejects.toThrow(cause);
+			await expect(c.attach(session(), { ...rootStub.admission, ...admit }), name).rejects.toThrow(cause);
 			await expect(waiting, name).rejects.toBeInstanceOf(PiDurableIdentityNotReady);
 			expect(fs.existsSync(receiversDir), name).toBe(false);
 			expect(stub.closed, name).toBe(1);
@@ -1515,7 +1529,7 @@ describe("pi-durable contact — the doorbell", () => {
 		expect(root.drafts).toHaveLength(1);
 		expect(listing(gid)).toEqual(["inbox.signal", `${one}.delivered`, two, "state.json"].sort());
 		await expect(self(c).execute({}, undefined, {})).resolves.toEqual({
-			content: [{ type: "text", text: "entwurf_self ok" }],
+			output: [{ type: "text", text: "entwurf_self ok" }],
 		});
 	});
 
@@ -1580,7 +1594,7 @@ describe("pi-durable contact — the doorbell", () => {
 		await c.attach(session());
 		const read = c.extension.tools.find((t) => t.name === "entwurf_inbox_read");
 		await expect(read?.execute({ gardenId: "20261005T000000-abcdef" }, undefined, {})).resolves.toEqual({
-			content: [{ type: "text", text: "entwurf_inbox_read ok" }],
+			output: [{ type: "text", text: "entwurf_inbox_read ok" }],
 		});
 		expect(stub.calls).toEqual(["entwurf_inbox_read"]);
 		expect(stub.args).toEqual([{ gardenId: "20261005T000000-abcdef" }]);
@@ -1607,7 +1621,7 @@ describe("pi-durable contact — the doorbell", () => {
 		log.length = 0;
 		const context = { abortSignal: new AbortController().signal };
 		const answer = await inboxRead(c).execute({ gardenId: gid }, undefined, context);
-		expect(answer).toEqual({ content: [{ type: "text", text: bridge.answers[0]?.text }] });
+		expect(answer).toEqual({ output: [{ type: "text", text: bridge.answers[0]?.text }] });
 		expect(bridge.answers[0]).toEqual({ text: `[stub inbox read] ${gid}: 3`, isError: false });
 		expect(log).toEqual([
 			"bridge-call entwurf_inbox_read",
@@ -1780,7 +1794,7 @@ describe("pi-durable contact — the doorbell", () => {
 		(root.handles.get(1) as StubSubmission).abortFails = new Error("harness is\nclosed");
 		log.length = 0;
 		const { result: answer, lines } = await stderrDuring(() => inboxRead(c).execute({ gardenId: gid }, undefined, {}));
-		expect(answer).toEqual({ content: [{ type: "text", text: bridge.answers[0]?.text }] });
+		expect(answer).toEqual({ output: [{ type: "text", text: bridge.answers[0]?.text }] });
 		expect(lines).toEqual([
 			`[entwurf pi-durable] notice withdrawal abort-failed entwurf-doorbell:${gid}:${first}: harness is closed\n`,
 		]);
@@ -1928,7 +1942,7 @@ describe("pi-durable contact — the doorbell", () => {
 				parameters: { type: "object", properties: { gardenId: { type: "string" } }, required: ["gardenId"] },
 				async execute(args: { gardenId: string }) {
 					const read = readMetaInbox({ gardenId: args.gardenId, sessionsDir, mailboxDir });
-					return { content: [{ type: "text" as const, text: `read ${read.messages.length}` }] };
+					return { output: [{ type: "text" as const, text: `read ${read.messages.length}` }] };
 				},
 			};
 			const registry = createRegistry();
@@ -1938,7 +1952,10 @@ describe("pi-durable contact — the doorbell", () => {
 			const harness = await Harness.open(new MemoryStorage(), { models, registry }, context);
 			try {
 				const root = await harness.root(context, { agent: { model: { provider: "faux", modelId: "scripted" } } });
-				({ gardenId: gid } = await c.attach(session(), { submitToRoot: (draft) => root.submit(draft, context) }));
+				({ gardenId: gid } = await c.attach(session(), {
+					submitToRoot: (draft) => root.submit(draft, context),
+					onFailed: () => () => {},
+				}));
 				await root.submit({ type: "input", content: "busy work" }, context);
 				// Each ring is awaited on its own admission: the diagnostic names the native id once the root admitted it.
 				const admitted: SubmissionId[] = [];
@@ -1990,6 +2007,37 @@ describe("pi-durable contact — the doorbell", () => {
 				unread: [],
 			});
 		});
+
+		it("[QK:PI-DURABLE-BRIDGE-TOOL-OUTPUT-MODEL-VISIBLE] a bridge tool's answer is what the model reads: on the published runtime the committed pi.tool-result carries the bridge's text", async () => {
+			const context = BACKGROUND_CONTEXT;
+			const faux = fauxProvider({ provider: "faux", models: [{ id: "scripted" }] });
+			const models = createModels();
+			models.setProvider(faux.provider);
+			faux.setResponses([
+				fauxAssistantMessage(fauxToolCall("entwurf_self", {}), { stopReason: "toolUse" }),
+				fauxAssistantMessage("done"),
+			]);
+			const c = doorbellContact(drainingBridge([]), fakeWatch());
+			const registry = createRegistry();
+			registry.install(c.extension as unknown as Extension);
+			const harness = await Harness.open(new MemoryStorage(), { models, registry }, context);
+			try {
+				const root = await harness.root(context, { agent: { model: { provider: "faux", modelId: "scripted" } } });
+				await c.attach(session());
+				await (await root.submit({ type: "input", content: "who am i" }, context)).wait(context);
+				const page = await root.entries({}, 256, undefined, context);
+				const read = page.items
+					.filter((entry) => entry.kind === "pi.tool-result")
+					.map((entry) => {
+						const message = entry.model?.[0] as { toolName?: string; content?: { text?: string }[] } | undefined;
+						return { tool: message?.toolName, text: message?.content?.map((block) => block.text ?? "").join("") };
+					});
+				expect(read).toEqual([{ tool: "entwurf_self", text: "entwurf_self ok" }]);
+			} finally {
+				await c.close();
+				await harness.close(context);
+			}
+		});
 	});
 });
 
@@ -2014,6 +2062,7 @@ describe("pi-durable bootstrap — the root admission (stub runtime, unit eviden
 							record.drafts.push(draft);
 							return { id: 77 };
 						},
+						onFailed: () => () => {},
 					}
 				: {}),
 			close: async () => {
@@ -2102,6 +2151,7 @@ describe("pi-durable bootstrap — explicit fresh arguments (stub runtime, unit 
 					if (rejectFirstInput !== undefined && draft.content === TASK) throw rejectFirstInput;
 					return { id: 90 + record.drafts.length };
 				},
+				onFailed: () => () => {},
 				close: async () => {
 					record.closed++;
 					if (closeError) throw closeError;
@@ -2394,6 +2444,7 @@ describe("pi-durable bootstrap — the packaged compiled closure (needs a built 
 				controller: {},
 				settings: {},
 				submitToRoot: async () => ({ id: 1 }),
+				onFailed: () => () => {},
 				close: async () => {},
 			}),
 		};

@@ -62,6 +62,11 @@ const context = BACKGROUND_CONTEXT;
 	                           
 	                                                                 
 	                             
+	   
+	                                                                                                               
+	                                                                                             
+	   
+	                                               
  
 
                                     
@@ -98,6 +103,12 @@ const context = BACKGROUND_CONTEXT;
 	                                   
 	                                                                                                                   
 	                                                               
+	   
+	                                                                                                                  
+	                                                                                                                
+	                                            
+	   
+	                                           
 	                       
  
 
@@ -234,8 +245,27 @@ export async function openDurable(options                     = {})             
 			update({ notices: [...state.notices, { id: nextNotice++, level, message }].slice(-20) });
 		};
 		const fail = (error         )       => notice("error", error instanceof Error ? error.message : String(error));
-		report = (error) => notice("warning", error instanceof Error ? error.message : String(error));
+		report = (error) => {
+			const message = error instanceof Error ? error.message : String(error);
+			// A failing Session runs its close listeners first and reports the cause right after: that report names it.
+			if (state.failure !== undefined && state.failure.error === undefined) update({ failure: { error: message } });
+			else notice("warning", message);
+		};
 		for (const error of pendingReports) report(error);
+		const failedListeners = new Set            ();
+		// The Session closes itself when its Storage fails. Its `closed` settles only after every running task returned,
+		// which a task ignoring its abort can delay without end, so the failure is shown from the close listener itself.
+		// `close()` unsubscribes before it closes the Session, so only a Session closing itself gets here.
+		const unsubscribeClose = harness.subscribeClose(() => {
+			update({ failure: {} });
+			for (const listener of failedListeners) {
+				try {
+					listener();
+				} catch (error) {
+					fail(error);
+				}
+			}
+		});
 		let unsubscribe = conversation.subscribe((value) => update({ conversation: value }));
 		// Subagents appear as their conversations are created. A commit listener only records; it calls no Session API.
 		const unsubscribeCommits = harness.subscribeCommits((publication) => {
@@ -286,7 +316,12 @@ export async function openDurable(options                     = {})             
 		};
 		const controller                    = {
 			submit: (text, whenBusy) =>
-				command(async () => watchAnswer(await current.submit({ type: "input", content: text, whenBusy }, context))),
+				command(async () => {
+					if (state.failure !== undefined) {
+						throw new Error("The session failed and takes no input. Close it, then reopen it with --continue.");
+					}
+					watchAnswer(await current.submit({ type: "input", content: text, whenBusy }, context));
+				}),
 			compact: (instructions) =>
 				command(async () => {
 					const id = await current.compact(instructions, context);
@@ -374,8 +409,23 @@ export async function openDurable(options                     = {})             
 			controller,
 			settings: settingsManager,
 			submitToRoot: (draft) => root.submit(draft, context),
+			onFailed(listener) {
+				// The failure is kept in the view, so a listener that comes after it is told at once, and still only once.
+				if (state.failure !== undefined) {
+					try {
+						listener();
+					} catch (error) {
+						fail(error);
+					}
+					return () => {};
+				}
+				failedListeners.add(listener);
+				return () => failedListeners.delete(listener);
+			},
 			close() {
 				closing ??= (async () => {
+					// First: the Session runs its close listeners inside its own close call.
+					unsubscribeClose();
 					unsubscribe();
 					unsubscribeCommits();
 					conversation.dispose();

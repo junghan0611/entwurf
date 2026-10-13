@@ -1,35 +1,36 @@
 #!/usr/bin/env node
 /**
- * emit-pi-durable-carrier — the MAINTAINER's one path from upstream source to the pi-durable
- * carrier (#130). An operator never runs it: an installed package carries the emitted JS and reads
- * no upstream source.
+ * emit-pi-durable-carrier — the MAINTAINER's one path from the owned pi-durable source to the carrier
+ * (#130, #141). An operator never runs it: an installed package carries the emitted JS and reads no
+ * TypeScript.
  *
- *   node scripts/emit-pi-durable-carrier.ts --source <git repository holding the pinned commit> --write
- *   node scripts/emit-pi-durable-carrier.ts --source <git repository holding the pinned commit> --check
+ *   node scripts/emit-pi-durable-carrier.ts --check
+ *   node scripts/emit-pi-durable-carrier.ts --write
+ *   node scripts/emit-pi-durable-carrier.ts --origin <git repository holding origin.commit>
  *
- * Inputs, and nothing else: the pinned commit's OBJECTS (each declared file and the license, read as
- * `<commit>:<path>` — never a worktree, so the repository's checkout state cannot enter), the packaged
- * overlay patch, and this Node's `stripTypeScriptTypes` in strip mode (upstream runs these exact
- * sources under Node's strip-only TypeScript). The one patch carries exactly one section per file the
- * pin declares `patched`, and no other section (#134). Each section is applied by git's own engine to a
- * private scratch copy of its file; the base blob and the patched result must carry the blob ids that
- * section's `index` line names. Each stripped file is then relocated by pi/pi-durable/carrier-relocation.mjs, and the targets
- * the six files import must equal the pin's declared `distTargets` exactly.
+ * Inputs, and nothing else: the in-repo source the pin's `carrier.files[].source` and
+ * `carrier.license.source` name (pi/pi-durable/src, Entwurf's canonical thin composition), and this
+ * Node's `stripTypeScriptTypes` in strip mode. Each stripped file is relocated by
+ * pi/pi-durable/carrier-relocation.mjs, and the targets the files import must equal the pin's declared
+ * `distTargets` exactly. A missing source file is a named refusal, never a skipped rebuild.
  *
- * `--write` emits pi/pi-durable/carrier/{<files>,LICENSE} and fills the pin's generated fields
- * (source blob ids, emitted sha256s, the Node version). `--check` re-emits in memory and compares:
- * equal is the rebuild acceptance; any difference, another Node version, or an undeclared file in the
- * carrier directory is a named FAIL. `--check` without a source holding the commit is a named SKIP —
- * an unavailable observation, never rebuild acceptance. Read-only against the source repository.
+ * `--check` re-emits in memory and compares. The byte proof (carrier == relocate(strip(source)), with the
+ * pin's blob ids and digests) is unconditional. The emitter's Node identity is a separate fact: under
+ * another Node the bytes are still compared, but equal bytes are NOT a rebuild PASS — the identity is a
+ * named SKIP, red under ENTWURF_REQUIRE_EMITTER_NODE=1 (the CI check job, which runs the pinned Node).
+ * `--write` emits pi/pi-durable/carrier/{<files>,LICENSE} and fills the pin's generated fields (source blob
+ * ids, emitted sha256s, the Node version), printing every generated field it changes. `--origin` is
+ * provenance only: it checks the frozen `origin` record against the upstream objects it names, read as
+ * `<commit>:<path>` with `--no-replace-objects`; it never feeds a rebuild.
  *
- * Exit: 0 written / equal, 1 named refusal or drift, 2 usage, 97 skip (no source).
+ * Exit: 0 written / equal / origin matches, 1 named refusal or drift, 2 usage, 97 skip (Node identity
+ * unverified, or no repository holding the origin commit).
  */
 
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import * as fs from "node:fs";
 import { stripTypeScriptTypes } from "node:module";
-import * as os from "node:os";
 import * as path from "node:path";
 import { relocateCarrierSource } from "../pi/pi-durable/carrier-relocation.mjs";
 import { skipLive } from "./lib/live-skip.ts";
@@ -38,6 +39,7 @@ const ROOT = path.resolve(import.meta.dirname, "..");
 const DURABLE = path.join(ROOT, "pi", "pi-durable");
 const PIN_PATH = path.join(DURABLE, "overlay", "upstream-pin.json");
 const CARRIER_DIR = path.join(DURABLE, "carrier");
+const SOURCE_ROOT = "pi/pi-durable/src/";
 const LICENSE_NAME = "LICENSE";
 const EMITTER_TOOL = "node:module.stripTypeScriptTypes";
 const EMITTER_MODE = "strip";
@@ -46,15 +48,19 @@ const GIT_TIMEOUT_MS = 30_000;
 interface CarrierFile {
 	name: string;
 	source: string;
-	patched: boolean;
 	blob: string;
 	sha256: string;
 }
 
-interface CarrierPin {
+export interface CarrierPin {
 	schemaVersion: number;
-	commit: string;
-	patches: string[];
+	origin: {
+		repository: string;
+		tag: string;
+		commit: string;
+		license: { path: string; blob: string };
+		files: { path: string; blob: string }[];
+	};
 	carrier: {
 		emitter: { tool: string; mode: string; node: string };
 		license: { source: string; blob: string; sha256: string };
@@ -67,28 +73,28 @@ class Refusal extends Error {}
 const refuse = (reason: string, detail: string): Refusal => new Refusal(`${reason}: ${detail}`);
 
 const sha256 = (data: Buffer): string => createHash("sha256").update(data).digest("hex");
-/** git's blob id, computed here so no object is ever written into the source repository. */
+/** git's blob id, computed here so no object is ever written into any repository. */
 const blobId = (data: Buffer): string =>
 	createHash("sha1")
 		.update(Buffer.concat([Buffer.from(`blob ${data.length}\0`), data]))
 		.digest("hex");
 
 /** The environment every git child gets: no inherited repository, index or work-tree redirection. */
-function gitEnv(extra: Record<string, string> = {}): NodeJS.ProcessEnv {
-	const env: NodeJS.ProcessEnv = { GIT_OPTIONAL_LOCKS: "0", ...extra };
+function gitEnv(): NodeJS.ProcessEnv {
+	const env: NodeJS.ProcessEnv = { GIT_OPTIONAL_LOCKS: "0" };
 	for (const [key, value] of Object.entries(process.env)) {
 		if (!key.startsWith("GIT_") && env[key] === undefined) env[key] = value;
 	}
 	return env;
 }
 
-/** Every read of the source repository: `--no-replace-objects`, so a `refs/replace/*` entry (or a
- * replacement reached through alternates) can never stand in for a pinned object. */
+/** Every read of the origin repository: `--no-replace-objects`, so a `refs/replace/*` entry (or a
+ * replacement reached through alternates) can never stand in for a recorded object. */
 export function sourceGitArgs(source: string, args: readonly string[]): string[] {
 	return ["--no-replace-objects", "-C", source, ...args];
 }
 
-/** One pinned object's bytes, `<commit>:<path>`, as the source repository stores it. */
+/** One recorded object's bytes, `<commit>:<path>`, as the origin repository stores it. */
 export function readSourceObject(source: string, rev: string): Buffer {
 	return git(source, ["cat-file", "blob", rev]);
 }
@@ -101,17 +107,21 @@ function git(source: string, args: string[]): Buffer {
 	});
 	if (run.status !== 0) {
 		throw refuse(
-			"carrier-source-unreadable",
+			"carrier-origin-unreadable",
 			`git ${args.join(" ")} in ${source}: ${run.stderr?.toString().trim() || run.error?.message || `status ${run.status}`}`,
 		);
 	}
 	return run.stdout;
 }
 
-function readPin(): CarrierPin {
-	const pin = JSON.parse(fs.readFileSync(PIN_PATH, "utf8")) as CarrierPin;
-	if (pin.schemaVersion !== 2 || !/^[0-9a-f]{40}$/.test(pin.commit) || pin.patches?.length !== 1) {
-		throw refuse("carrier-pin-malformed", `${PIN_PATH}: schemaVersion 2, a full commit and one patch are required`);
+/** A pin-declared source path: a plain relative file under pi/pi-durable/src. */
+const ownedSource = (rel: unknown): rel is string =>
+	typeof rel === "string" && rel.startsWith(SOURCE_ROOT) && !rel.split("/").includes("..") && !rel.includes("\\");
+
+export function readPin(file = PIN_PATH): CarrierPin {
+	const pin = JSON.parse(fs.readFileSync(file, "utf8")) as CarrierPin;
+	if (pin.schemaVersion !== 3 || !/^[0-9a-f]{40}$/.test(pin.origin?.commit ?? "")) {
+		throw refuse("carrier-pin-malformed", `${file}: schemaVersion 3 with a full origin commit is required`);
 	}
 	if (pin.carrier.emitter.tool !== EMITTER_TOOL || pin.carrier.emitter.mode !== EMITTER_MODE) {
 		throw refuse(
@@ -119,86 +129,29 @@ function readPin(): CarrierPin {
 			`the emitter is ${EMITTER_TOOL} in ${EMITTER_MODE} mode, not ${JSON.stringify(pin.carrier.emitter)}`,
 		);
 	}
-	if (!pin.carrier.files.some((f) => f.patched)) {
-		throw refuse("carrier-pin-malformed", "at least one carrier file carries the overlay patch");
+	const sources = [...pin.carrier.files.map((f) => f.source), pin.carrier.license.source];
+	const outside = sources.filter((s) => !ownedSource(s));
+	if (outside.length > 0) {
+		throw refuse("carrier-pin-malformed", `carrier sources must be files under ${SOURCE_ROOT}: ${outside.join(", ")}`);
 	}
 	return pin;
 }
 
-/** One file's section of the overlay patch: its own bytes and the two blob ids its `index` line names. */
-export interface PatchSection {
-	bytes: Buffer;
-	base: string;
-	result: string;
-}
-
-/**
- * The overlay patch split into its per-file sections, keyed by the existing file each one changes, and
- * matched against the source paths the pin declares `patched`: exactly one section per declared file and
- * no section for any other file. Anything else is the patch's shape, refused by name.
- */
-export function patchSections(
-	text: string,
-	patched: readonly string[],
-	name = "the overlay patch",
-): Map<string, PatchSection> {
-	const starts = [...text.matchAll(/^diff --git /gm)].map((m) => m.index);
-	if (starts.length === 0 || starts[0] !== 0) {
-		throw refuse("carrier-patch-shape", `${name} must start with its first file section`);
-	}
-	const sections = new Map<string, PatchSection>();
-	for (const [at, start] of starts.entries()) {
-		const chunk = text.slice(start, starts[at + 1] ?? text.length);
-		const files = [...chunk.matchAll(/^diff --git a\/(\S+) b\/(\S+)$/gm)];
-		const index = [...chunk.matchAll(/^index ([0-9a-f]+)\.\.([0-9a-f]+) 100644$/gm)];
-		if (files.length !== 1 || files[0][1] !== files[0][2] || index.length !== 1) {
-			throw refuse("carrier-patch-shape", `every section of ${name} changes exactly one existing file`);
-		}
-		const file = files[0][1];
-		if (sections.has(file)) throw refuse("carrier-patch-shape", `${name} changes ${file} in two sections`);
-		sections.set(file, { bytes: Buffer.from(chunk, "utf8"), base: index[0][1], result: index[0][2] });
-	}
-	const undeclared = [...sections.keys()].filter((file) => !patched.includes(file));
-	const missing = patched.filter((file) => !sections.has(file));
-	if (undeclared.length > 0 || missing.length > 0) {
-		throw refuse(
-			"carrier-patch-shape",
-			`${name} must change exactly the files the pin declares patched (undeclared: ${undeclared.join(", ") || "none"}; missing: ${missing.join(", ") || "none"})`,
-		);
-	}
-	return sections;
-}
-
-function readPatch(pin: CarrierPin): Map<string, PatchSection> {
-	const text = fs.readFileSync(path.join(DURABLE, "overlay", pin.patches[0]), "utf8");
-	const patched = pin.carrier.files.filter((f) => f.patched).map((f) => f.source);
-	return patchSections(text, patched, pin.patches[0]);
-}
-
-/** `base` with the patch applied by git, in a private scratch tree outside any repository. */
-function applyPatch(file: string, base: Buffer, patch: Buffer): Buffer {
-	const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "pi-durable-carrier-"));
+/** An owned source file's bytes. Absent or not a regular file is a named refusal: the source is in this
+ * repository, so there is no "unavailable source" to skip over. */
+function readOwnedSource(rel: string): Buffer {
+	const at = path.join(ROOT, rel);
+	let regular = false;
 	try {
-		const target = path.join(scratch, file);
-		fs.mkdirSync(path.dirname(target), { recursive: true });
-		fs.writeFileSync(target, base);
-		const patchFile = path.join(scratch, "overlay.patch");
-		fs.writeFileSync(patchFile, patch);
-		const run = spawnSync("git", ["apply", "--whitespace=nowarn", "overlay.patch"], {
-			cwd: scratch,
-			env: gitEnv({ GIT_CEILING_DIRECTORIES: path.dirname(scratch) }),
-			timeout: GIT_TIMEOUT_MS,
-		});
-		if (run.status !== 0) {
-			throw refuse("carrier-patch-rejected", run.stderr?.toString().trim() || `git apply status ${run.status}`);
-		}
-		return fs.readFileSync(target);
-	} finally {
-		fs.rmSync(scratch, { recursive: true, force: true });
+		regular = fs.lstatSync(at).isFile();
+	} catch {
+		// Bounded environment probe: an absent path is the refusal below.
 	}
+	if (!regular) throw refuse("carrier-source-missing", `${rel} is not a regular file in this checkout`);
+	return fs.readFileSync(at);
 }
 
-interface Emission {
+export interface Emission {
 	files: Map<string, Buffer>;
 	generated: {
 		node: string;
@@ -207,11 +160,7 @@ interface Emission {
 	};
 }
 
-function emit(source: string, pin: CarrierPin): Emission {
-	if (git(source, ["cat-file", "-t", pin.commit]).toString().trim() !== "commit") {
-		throw refuse("carrier-source-unreadable", `${pin.commit} is not a commit in ${source}`);
-	}
-	const sections = readPatch(pin);
+export function emitCarrier(pin: CarrierPin, read: (rel: string) => Buffer = readOwnedSource): Emission {
 	const names = pin.carrier.files.map((f) => f.name);
 	const targets = pin.carrier.distTargets;
 	if (new Set(targets).size !== targets.length) throw refuse("carrier-pin-malformed", "distTargets repeats a path");
@@ -219,35 +168,17 @@ function emit(source: string, pin: CarrierPin): Emission {
 	const generatedFiles = new Map<string, { blob: string; sha256: string }>();
 	const used = new Set<string>();
 	for (const declared of pin.carrier.files) {
-		const original = readSourceObject(source, `${pin.commit}:${declared.source}`);
-		const blob = blobId(original);
-		let text = original;
-		const section = declared.patched ? sections.get(declared.source) : undefined;
-		if (section !== undefined) {
-			if (!blob.startsWith(section.base)) {
-				throw refuse(
-					"carrier-patch-base",
-					`the patch changes ${declared.source} from ${section.base}; the pinned object is ${blob}`,
-				);
-			}
-			text = applyPatch(declared.source, original, section.bytes);
-			if (!blobId(text).startsWith(section.result)) {
-				throw refuse(
-					"carrier-patch-result",
-					`patched ${declared.source} is ${blobId(text)}, the patch names ${section.result}`,
-				);
-			}
-		}
-		const stripped = stripTypeScriptTypes(text.toString("utf8"), { mode: EMITTER_MODE });
+		const source = read(declared.source);
+		const stripped = stripTypeScriptTypes(source.toString("utf8"), { mode: EMITTER_MODE });
 		const relocated = relocateCarrierSource(declared.name, stripped, { siblings: names, targets });
 		for (const target of relocated.used) used.add(target);
 		const bytes = Buffer.from(relocated.code, "utf8");
 		files.set(declared.name, bytes);
-		generatedFiles.set(declared.name, { blob, sha256: sha256(bytes) });
+		generatedFiles.set(declared.name, { blob: blobId(source), sha256: sha256(bytes) });
 	}
 	const unused = targets.filter((t) => !used.has(t));
 	if (unused.length > 0) throw refuse("carrier-targets-differ", `declared but not imported: ${unused.join(", ")}`);
-	const license = readSourceObject(source, `${pin.commit}:${pin.carrier.license.source}`);
+	const license = read(pin.carrier.license.source);
 	files.set(LICENSE_NAME, license);
 	return {
 		files,
@@ -260,15 +191,30 @@ function emit(source: string, pin: CarrierPin): Emission {
 }
 
 /** Files in the carrier directory that the pin does not declare. */
-function undeclared(pin: CarrierPin): string[] {
+function undeclared(pin: CarrierPin, carrierDir: string): string[] {
 	const declared = new Set([...pin.carrier.files.map((f) => f.name), LICENSE_NAME]);
-	const present = fs.existsSync(CARRIER_DIR) ? fs.readdirSync(CARRIER_DIR) : [];
+	const present = fs.existsSync(carrierDir) ? fs.readdirSync(carrierDir) : [];
 	return present.filter((name) => !declared.has(name)).sort();
 }
 
-function write(pin: CarrierPin, emission: Emission): void {
-	const extra = undeclared(pin);
+/** The pin's generated fields as `field value` pairs, for a write that names what it changed. */
+function generatedFields(pin: CarrierPin): Map<string, string> {
+	const fields = new Map<string, string>([
+		["carrier.emitter.node", pin.carrier.emitter.node],
+		["carrier.license.blob", pin.carrier.license.blob],
+		["carrier.license.sha256", pin.carrier.license.sha256],
+	]);
+	for (const f of pin.carrier.files) {
+		fields.set(`${f.name} blob`, f.blob);
+		fields.set(`${f.name} sha256`, f.sha256);
+	}
+	return fields;
+}
+
+function write(pin: CarrierPin, emission: Emission): string[] {
+	const extra = undeclared(pin, CARRIER_DIR);
 	if (extra.length > 0) throw refuse("carrier-undeclared-file", `remove ${extra.join(", ")} from ${CARRIER_DIR} first`);
+	const before = generatedFields(pin);
 	fs.mkdirSync(CARRIER_DIR, { recursive: true });
 	for (const [name, bytes] of emission.files) fs.writeFileSync(path.join(CARRIER_DIR, name), bytes);
 	pin.carrier.emitter.node = emission.generated.node;
@@ -276,6 +222,11 @@ function write(pin: CarrierPin, emission: Emission): void {
 	pin.carrier.license.sha256 = emission.generated.license.sha256;
 	for (const file of pin.carrier.files) Object.assign(file, emission.generated.files.get(file.name));
 	fs.writeFileSync(PIN_PATH, formatPin(pin));
+	const changed: string[] = [];
+	for (const [field, value] of generatedFields(pin)) {
+		if (before.get(field) !== value) changed.push(`${field}: ${before.get(field) || "(none)"} -> ${value}`);
+	}
+	return changed;
 }
 
 /** The pin as the repository formatter leaves it (biome, tabs, width 120): JSON.stringify, with an array
@@ -294,14 +245,10 @@ function formatPin(pin: CarrierPin): string {
 	return `${text}\n`;
 }
 
-/** Every difference between the committed carrier + pin and a fresh emission. */
-function compare(pin: CarrierPin, emission: Emission): string[] {
+/** Every byte difference between the committed carrier + pin and a fresh emission. The Node that emitted
+ * is not one of them: that is emitterNodeDrift's fact, kept apart so it can never be read as bytes. */
+export function compareCarrier(pin: CarrierPin, emission: Emission, carrierDir = CARRIER_DIR): string[] {
 	const drift: string[] = [];
-	if (pin.carrier.emitter.node !== emission.generated.node) {
-		drift.push(
-			`carrier-emitter-node-mismatch: the carrier was emitted by Node ${pin.carrier.emitter.node || "(none)"}, this is ${emission.generated.node}`,
-		);
-	}
 	const license = emission.generated.license;
 	if (pin.carrier.license.blob !== license.blob || pin.carrier.license.sha256 !== license.sha256) {
 		drift.push(`carrier-pin-drift: license is ${license.blob}/${license.sha256}`);
@@ -315,65 +262,109 @@ function compare(pin: CarrierPin, emission: Emission): string[] {
 		}
 	}
 	for (const [name, bytes] of emission.files) {
-		const onDisk = path.join(CARRIER_DIR, name);
+		const onDisk = path.join(carrierDir, name);
 		if (!fs.existsSync(onDisk)) drift.push(`carrier-file-missing: ${name}`);
 		else if (!fs.readFileSync(onDisk).equals(bytes))
 			drift.push(`carrier-file-drift: ${name} differs from its emission`);
 	}
-	for (const name of undeclared(pin)) drift.push(`carrier-undeclared-file: ${name}`);
+	for (const name of undeclared(pin, carrierDir)) drift.push(`carrier-undeclared-file: ${name}`);
+	return drift;
+}
+
+/** The emitter identity: the carrier's recorded Node against the one running now, exactly. */
+export function emitterNodeDrift(pinned: string, running: string): string | undefined {
+	if (pinned !== running) {
+		return `carrier-emitter-node-mismatch: the carrier was emitted by Node ${pinned || "(none)"}, this is ${running}`;
+	}
+	return undefined;
+}
+
+/** The frozen origin record against the upstream objects it names. Provenance, never rebuild input. */
+function checkOrigin(repo: string, pin: CarrierPin): string[] {
+	const { origin } = pin;
+	if (git(repo, ["cat-file", "-t", origin.commit]).toString().trim() !== "commit") {
+		throw refuse("carrier-origin-unreadable", `${origin.commit} is not a commit in ${repo}`);
+	}
+	const drift: string[] = [];
+	for (const recorded of [...origin.files, origin.license]) {
+		const blob = blobId(readSourceObject(repo, `${origin.commit}:${recorded.path}`));
+		if (blob !== recorded.blob) {
+			drift.push(
+				`carrier-origin-drift: ${recorded.path} is ${blob} at ${origin.commit}, the pin records ${recorded.blob}`,
+			);
+		}
+	}
 	return drift;
 }
 
 function main(argv: readonly string[]): number {
-	const sourceAt = argv.indexOf("--source");
-	const source = sourceAt === -1 ? undefined : argv[sourceAt + 1];
-	const mode = argv.includes("--write") ? "write" : argv.includes("--check") ? "check" : undefined;
-	if (mode === undefined || argv.length !== (source === undefined ? 1 : 3) || (sourceAt !== -1 && !source)) {
+	const mode = argv[0];
+	const repo = argv[1];
+	if (
+		!((mode === "--check" || mode === "--write") && argv.length === 1) &&
+		!(mode === "--origin" && argv.length === 2 && repo)
+	) {
 		console.error(
-			"usage: emit-pi-durable-carrier.ts --source <git repository holding the pinned commit> (--write | --check)",
+			"usage: emit-pi-durable-carrier.ts (--check | --write | --origin <git repository holding origin.commit>)",
 		);
 		return 2;
 	}
 	const pin = readPin();
-	if (mode === "check") {
+	if (mode === "--origin") {
 		const held =
-			source !== undefined &&
-			spawnSync("git", sourceGitArgs(source, ["cat-file", "-e", `${pin.commit}^{commit}`]), {
+			spawnSync("git", sourceGitArgs(path.resolve(repo), ["cat-file", "-e", `${pin.origin.commit}^{commit}`]), {
 				env: gitEnv(),
 				timeout: GIT_TIMEOUT_MS,
 			}).status === 0;
 		if (!held) {
 			skipLive(
-				"emit-pi-durable-carrier --check",
-				`no --source repository holding ${pin.commit} — the rebuild was NOT checked; pass a clone of ${(pin as { repository?: string }).repository ?? "upstream"} that contains it`,
+				"emit-pi-durable-carrier --origin",
+				`${repo} does not hold ${pin.origin.commit} — provenance was NOT checked; pass a clone of ${pin.origin.repository} that contains it`,
 			);
 		}
-	}
-	if (source === undefined) {
-		console.error("emit-pi-durable-carrier --write needs --source");
-		return 2;
-	}
-	const emission = emit(path.resolve(source), pin);
-	if (mode === "write") {
-		write(pin, emission);
+		const drift = checkOrigin(path.resolve(repo), pin);
+		if (drift.length > 0) {
+			for (const line of drift) console.error(`[emit-pi-durable-carrier] ${line}`);
+			return 1;
+		}
 		console.log(
-			`[emit-pi-durable-carrier] wrote ${emission.files.size} files to ${path.relative(ROOT, CARRIER_DIR)} from ${pin.commit} (${emission.generated.node})`,
+			`[emit-pi-durable-carrier] origin ok — ${pin.origin.files.length} files and the license are the recorded objects of ${pin.origin.commit} (provenance only, not a rebuild)`,
 		);
 		return 0;
 	}
-	const drift = compare(pin, emission);
+	const emission = emitCarrier(pin);
+	if (mode === "--write") {
+		const changed = write(pin, emission);
+		for (const line of changed) console.error(`[emit-pi-durable-carrier] changed ${line}`);
+		console.log(
+			`[emit-pi-durable-carrier] wrote ${emission.files.size} files to ${path.relative(ROOT, CARRIER_DIR)} from ${SOURCE_ROOT} (${emission.generated.node}); ${changed.length} generated field(s) changed`,
+		);
+		return 0;
+	}
+	const drift = compareCarrier(pin, emission);
 	if (drift.length > 0) {
 		for (const line of drift) console.error(`[emit-pi-durable-carrier] ${line}`);
 		return 1;
 	}
+	const node = emitterNodeDrift(pin.carrier.emitter.node, emission.generated.node);
+	if (node !== undefined) {
+		if (process.env.ENTWURF_REQUIRE_EMITTER_NODE === "1") {
+			console.error(`[emit-pi-durable-carrier] ${node} (ENTWURF_REQUIRE_EMITTER_NODE=1)`);
+			return 1;
+		}
+		skipLive(
+			"emit-pi-durable-carrier --check",
+			`the carrier bytes equal their emission from ${SOURCE_ROOT}, but ${node} — the emitter identity was NOT checked, so this is no rebuild PASS; run it under ${pin.carrier.emitter.node}`,
+		);
+	}
 	console.log(
-		`[emit-pi-durable-carrier] ok — the carrier is the emission of ${pin.commit} (${emission.generated.node})`,
+		`[emit-pi-durable-carrier] ok — the carrier is the emission of ${SOURCE_ROOT} (${emission.generated.node})`,
 	);
 	return 0;
 }
 
 // Run only when this file is the process entry (argv realpath, as the shipped entries decide it);
-// the beside test imports the source-read seam above without emitting anything.
+// the beside test imports the seams above without emitting anything.
 const invokedDirectly = (() => {
 	const entry = process.argv[1];
 	if (typeof entry !== "string" || entry.length === 0) return false;

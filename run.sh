@@ -181,7 +181,7 @@ Usage:
   ./run.sh check-pi-durable-contact   # #129 L-identity gate, CHECKOUT-ONLY (an installed package refuses it in run_ts). Opens the REAL durable app from THIS checkout's verified carrier (pi/pi-durable/carrier/ under its resolver, against the checkout's pinned pi SDK set — refused by name first) with the pi-durable contact, births the citizen and runs its tools adapter-direct through a privately emitted branch bridge (ENTWURF_PI_DURABLE_BRIDGE_ENTRY; its registry must match this checkout). Matrix roots {default, explicit} x {fresh, --continue}: one record keyed by the durable session dir, sender marker on the spawned host pid, exactly one bridge child whose /proc PPID is that host, poisoned identity carriers kept from it, its four root carriers bound to the roots written, the receiver ARMED (raw marker owned by the host pid + start key as pi-durable-host, joined to the sender marker; removed on close), self = the record and replyable, peers from an outside bridge, same garden id on reopen; the bundle's compiled owner join must admit pi-durable-host. Reaps only the host/bridges it owns on any failure. Harness-bypassed: no model turn, no ToolTask. Missing inputs → SKIP (97), never a pass
   ./run.sh check-pi-durable-send      # #129 L-send FIRST CELL, CHECKOUT-ONLY. Same input as check-pi-durable-contact. One native durable turn: the app's own controller input → GenerationTask → ToolTask → the contact's entwurf_v2 → the private bridge → a seeded self-fetch target (C2 recipe, owned by a separate idle child). S = a 127.0.0.1 scripted OpenAI-compatible endpoint configured through the app's documented models.json (dummy key, PI_OFFLINE); H = the native ToolTask path; V (a vendor turn) is NOT run. Oracles: the wire (tools offered, v2 schema = the bridge's tools/list, exactly two requests, the tool result + receipt in the second), the raw mailbox (.msg 1, signal, sender = the host record), the native view (one call, its settled result, root current). Not exactly-once, not recovery, not a recipient turn. Missing inputs → SKIP (97)
   ./run.sh check-demo-reproducibility # source-checkout-only: discover offline demo Node tests; no LIVE, model, render or publication
-  ./run.sh check-pi-durable-beside    # #129 mutant execution coordinate (VERIFY rule 3): run_vitest over the six pi-durable beside tests (adapter, carrier/SDK-set verifier, preflight, owner join, carrier relocation/resolver/emitter/task footer, native-module file and directory ingress) — the pi-durable qualification lane's gate argv. Same files check-tests-beside-behavior already runs.
+  ./run.sh check-pi-durable-beside    # #129 mutant execution coordinate (VERIFY rule 3): run_vitest over the six pi-durable beside tests (adapter, carrier/SDK-set verifier, preflight, owner join, carrier relocation/resolver, owned-source emission and typecheck fence, task footer, native-module file and directory ingress) — the pi-durable qualification lane's gate argv. Same files check-tests-beside-behavior already runs.
   ./run.sh check-pi-durable-receive   # #129 L-receive FIRST CELL, CHECKOUT-ONLY. Same input (the bundle must carry the pi-durable-host owner join). The host driver gives the app NO input; a seeded claude-code sender (marker owned by a separate idle child, handed to a gate-owned sending bridge through ENTWURF_META_SENDER_MARKER) enqueues one message, the host's doorbell admits its notice to the ROOT conversation, and the scripted model drains it with entwurf_inbox_read. S withholds response #1 until the ENQUEUE receipt, the .delivered bytes, the signal, the host-owned receiver marker and the notice are captured. Oracles: receiver() admission, native view, raw archive (.delivered.read + lastReadAt), wire (exactly two requests, drain result = view), and after a green reap a forensic read-only SQLite copy (submission row by request id = reported id, root, input, done, placed entry = the notice). V NOT run. Missing inputs → SKIP (97)
   ./run.sh check-copilot-receive-arm  # #82 RAIL 5 gate: the REAL receiver installer + the REAL extension.mjs forked with a stubbed SDK. Arms only after birth, marker owned by the WATCHER pid, self-fetch dispatch answer, doorbell carries the garden id and NOT the body, id-drift/foreign-parent refusals. Hermetic; no Copilot, no model turn
   ./run.sh check-copilot-launch       # #82 RAIL 7 gate: the MANAGED launch `entwurf copilot`, driven through its public address against a FAKE VENDOR on a sandbox PATH. Receiver precondition refusals, EXTENSIONS token + operator token preservation, injected defaults before the `--` terminator, byte-identical argv, the 11 explicit permission/surface policy overrides that suppress `--yolo`, exec (not fork) pid identity, exit passthrough, recursion refusal. Hermetic; no Copilot, no model turn
@@ -1606,7 +1606,7 @@ check_pi_durable_beside() {
   # from re-running every beside test. The six files are one contact: the adapter and its packaged
   # bootstrap, the installed carrier/SDK-set verifier (which also reads the three checkout gates as
   # SOURCE), the fresh preflight, the owner join that admits the durable host, the carrier's
-  # relocation grammar, resolver and maintainer emitter (#130) with the carrier's task footer (#134),
+  # relocation grammar, resolver, owned-source emitter (#130, #141) and source fence with the carrier's task footer (#134),
   # and the bootstrap's explicit --native-module ingress (#130 P2) and its --native-module-dir (#134).
   run_vitest pi-extensions/meta-bridge-pi-durable.test.ts pi-extensions/lib/pi-durable-runtime.test.ts pi-extensions/lib/pi-durable-fresh-preflight.test.ts pi-extensions/lib/entwurf-deliverability.owner-join.test.ts pi-extensions/lib/pi-durable-carrier.test.ts pi-extensions/lib/pi-durable-native-module.test.ts
 }
@@ -2435,8 +2435,8 @@ const nextFloorRange = `>=${piAi} <${piMaj}.${piMin + 1}`;
 const floorGaps = [];
 const PI_CONSTELLATION = [
   '@earendil-works/pi-ai', '@earendil-works/pi-coding-agent', '@earendil-works/pi-tui',
-  '@earendil-works/pi-agent-core', '@earendil-works/pi-client', '@earendil-works/pi-protocol',
-  '@earendil-works/pi-telemetry', '@earendil-works/chord',
+  '@earendil-works/pi-agent-core', '@earendil-works/pi-telemetry', '@earendil-works/chord',
+  // `[측정 2026-10-13]` 1.2.0: pi-client and pi-protocol left — upstream removed both, E404 at 1.2.0.
   // `[측정 2026-09-30]` 0.99.1: pi-coding-agent's runtime deps gained the built-in extensions' packages.
   '@earendil-works/pi-codemode', '@earendil-works/pi-mcp',
   // #130: the durable library the pi-durable carrier imports — a production dependency since 0.32.
@@ -2577,6 +2577,65 @@ for (const [file, re, min, label] of SITES) {
   bound += hits.length;
 }
 
+// #141: the pi-durable carrier's emitter identity, the one place CI runs an EXACT Node. The check job
+// runs the Node the pin records as the carrier's emitter (CI-BOUND), and its check:full floor step runs
+// with ENTWURF_REQUIRE_EMITTER_NODE=1 (CI-REQUIRED), so that floor proves the emission under that
+// identity; every other job floats the major so the newest release of the lane stays covered. Both are
+// read from ACTIVE workflow lines only — the step's own `with:` / `env:` mapping, comments stripped —
+// so commented-out text or the same key on another step can never stand in for them.
+const EMITTER_BOUND_QK = '[QK:PI-DURABLE-EMITTER-NODE-CI-BOUND]';
+const EMITTER_REQUIRED_QK = '[QK:PI-DURABLE-EMITTER-NODE-CI-REQUIRED]';
+const emitterNode = JSON.parse(readFileSync('pi/pi-durable/overlay/upstream-pin.json', 'utf8')).carrier?.emitter?.node;
+assert.match(String(emitterNode), /^v\d+\.\d+\.\d+$/,
+  `${EMITTER_BOUND_QK} pi/pi-durable/overlay/upstream-pin.json carrier.emitter.node must be an exact vX.Y.Z (got ${emitterNode})`);
+// jobs → steps → active lines. A full-line comment is dropped and a trailing ` # …` is cut; job heads are
+// the two-space keys under `jobs:`, a step starts at its six-space `- ` item.
+const ciJobs = new Map();
+{
+  let inJobs = false;
+  let steps;
+  for (const raw of readFileSync('.github/workflows/ci.yml', 'utf8').split('\n')) {
+    const line = raw.replace(/\s+#.*$/, '');
+    if (/^\s*#/.test(raw) || line.trim() === '') continue;
+    if (/^\S/.test(line)) { inJobs = line === 'jobs:'; steps = undefined; continue; }
+    if (!inJobs) continue;
+    const head = /^  ([a-z][a-z0-9-]*):$/.exec(line);
+    if (head) { steps = []; ciJobs.set(head[1], steps); continue; }
+    if (steps === undefined) continue;
+    if (/^      - /.test(line)) steps.push([`        ${line.slice(8)}`]);
+    else if (steps.length > 0 && /^        /.test(line)) steps.at(-1).push(line);
+  }
+}
+// A step's own value for `key` (`with:` / `env:` child at ten spaces), or a top-level step key at eight.
+const stepKey = (step, key) => step.find((l) => l.startsWith(`        ${key}: `))?.slice(10 + key.length);
+const stepChild = (step, block, key) => {
+  const at = step.indexOf(`        ${block}:`);
+  if (at === -1) return undefined;
+  const children = [];
+  for (const l of step.slice(at + 1)) { if (!l.startsWith('          ')) break; children.push(l); }
+  return children.find((l) => l.startsWith(`          ${key}: `))?.slice(12 + key.length);
+};
+const setupNodes = (job) => (ciJobs.get(job) ?? []).filter((s) => /^actions\/setup-node@/.test(stepKey(s, 'uses') ?? ''));
+const checkSetup = setupNodes('check');
+assert.equal(checkSetup.length, 1,
+  `${EMITTER_BOUND_QK} .github/workflows/ci.yml: the check job must have exactly one actions/setup-node step (found ${checkSetup.length})`);
+const checkNode = stepChild(checkSetup[0], 'with', 'node-version');
+assert.equal(`v${checkNode}`, emitterNode,
+  `${EMITTER_BOUND_QK} .github/workflows/ci.yml: the check job's setup-node runs Node ${checkNode}, but the carrier's pinned emitter is ${emitterNode} — its floor would prove the emission under another identity`);
+const floors = (ciJobs.get('check') ?? []).filter((s) => stepKey(s, 'run') === 'pnpm run check:full');
+assert.equal(floors.length, 1,
+  `${EMITTER_REQUIRED_QK} .github/workflows/ci.yml: the check job must run \`pnpm run check:full\` in exactly one step (found ${floors.length})`);
+assert.equal(stepChild(floors[0], 'env', 'ENTWURF_REQUIRE_EMITTER_NODE'), '"1"',
+  `${EMITTER_REQUIRED_QK} .github/workflows/ci.yml: the check job's check:full step does not set ENTWURF_REQUIRE_EMITTER_NODE: "1" in its own env, so an emitter-identity mismatch on that floor would be a skip, not red`);
+for (const [job] of ciJobs) {
+  if (job === 'check') continue;
+  for (const s of setupNodes(job)) {
+    const value = stepChild(s, 'with', 'node-version');
+    assert.match(String(value), /^\d+$/,
+      `${EMITTER_BOUND_QK} .github/workflows/ci.yml: job ${job} pins node-version ${value}; only the check job is exact, the others float the major`);
+  }
+}
+
 // Sweep the tracked first-party contract TEXT surfaces, NOT just the files
 // already registered above. The first cut of this gate swept only SITES' own
 // files and therefore could not see a declaration in an UNREGISTERED file —
@@ -2627,7 +2686,7 @@ assert.ok(swept >= 6,
 // `bound` is the real declaration count; SITES.length is the number of RULES
 // (the CI rule alone matches two node-version lines). Naming the rule count a
 // declaration count would be this gate telling a small lie about its own reach.
-console.log(`[check-node-floor-coherence] ok — Node >=${MAJOR} is coherent across engines.node, ${bound} bound declarations from ${SITES.length} site rules, and ${swept} declarations swept over ${tracked.length} tracked first-party contract text surfaces (single supported axis, no legacy lane). Non-text carriers (e.g. a Dockerfile \`FROM node:*\`) are OUTSIDE this pattern and must be bound by their own gate.`);
+console.log(`[check-node-floor-coherence] ok — Node >=${MAJOR} is coherent across engines.node, ${bound} bound declarations from ${SITES.length} site rules, and ${swept} declarations swept over ${tracked.length} tracked first-party contract text surfaces (single supported axis, no legacy lane); the pi-durable emitter ${emitterNode} is the CI check job's exact Node. Non-text carriers (e.g. a Dockerfile \`FROM node:*\`) are OUTSIDE this pattern and must be bound by their own gate.`);
 EOF
   )
 }
@@ -3758,7 +3817,6 @@ check_pack() {
     "mcp/entwurf-bridge/dist/pi-extensions/lib/pi-durable-fresh-preflight.js"
     "pi/pi-durable/bootstrap.mjs"
     "pi/pi-durable/overlay/upstream-pin.json"
-    "pi/pi-durable/overlay/runtime-contacts.patch"
     "pi/pi-durable/carrier-resolver.mjs"
     "pi/pi-durable/carrier-relocation.mjs"
     "pi/pi-durable/carrier/runtime.js"
@@ -3845,6 +3903,11 @@ check_pack() {
     # Maintainer take/renderer/helper TS is source-only, including non-test implementations.
     '^demo/.*\.ts$'
   )
+  # #141: the owned pi-durable source, its typecheck fence and the retired overlay patch are maintainer
+  # input. An installed consumer runs the emitted carrier JS (and its LICENSE) only — Rule 11: compiled
+  # JS for installed entrypoints. The files array lists pi/pi-durable per FILE, so nothing admits these
+  # today; this tripwire is what fails loud the day an allowlist entry would.
+  local durable_source_pattern='^pi/pi-durable/(src/|tsconfig\.json$|overlay/runtime-contacts\.patch$)'
 
   local pass=1 f pat hit
 
@@ -3863,6 +3926,13 @@ check_pack() {
       pass=0
     fi
   done
+
+  hit=$(grep -E "$durable_source_pattern" <<<"$file_list" || true)
+  if [ -n "$hit" ]; then
+    fail "[check-pack] [QK:PI-DURABLE-SOURCE-NOT-SHIPPED] the owned pi-durable source rides the tarball — an installed consumer runs the carrier JS only:"
+    echo "$hit" | sed 's/^/    /' >&2
+    pass=0
+  fi
 
   local total
   total=$(printf '%s\n' "$file_list" | wc -l | tr -d ' ')
@@ -3898,7 +3968,7 @@ check_pack() {
 #     which is exactly what property (1)'s `(_|$)` absorbs; all three shapes are fixtures
 #     below so a future suffix change cannot pass vacuously.)
 pack_install_leaked_pi() {
-  grep '^@earendil-works+' | grep -Ev '@1\.1\.0(_|$)' || true
+  grep '^@earendil-works+' | grep -Ev '@1\.2\.0(_|$)' || true
 }
 
 # Matcher self-test on SYNTHETIC lookalikes: a healthy install tree cannot exercise either
@@ -3918,15 +3988,15 @@ check_pack_pin_matcher() {
   # None may leak; the two lookalikes must — a PREFIX-EXTENDED version (`0.86.0-beta.1`,
   # the prerelease shape that an unanchored match would bless) and an off-pin version.
   matcher_probe=$(printf '%s\n' \
-    '@earendil-works+pi-ai@1.1.0' \
-    '@earendil-works+pi-ai@1.1.0_@modelcontextprotocol+sdk@1.29.0_zod@4.3.6' \
-    '@earendil-works+pi-ai@1.1.0_ws@8.21.3' \
-    '@earendil-works+pi-ai@1.1.0_@modelcontextprotocol+sdk@1.29.0_zod@4.3.6__ws@8.21.3_zod@4.3.6' \
-    '@earendil-works+pi-ai@1.1.0-beta.1' \
+    '@earendil-works+pi-ai@1.2.0' \
+    '@earendil-works+pi-ai@1.2.0_@modelcontextprotocol+sdk@1.29.0_zod@4.3.6' \
+    '@earendil-works+pi-ai@1.2.0_ws@8.21.3' \
+    '@earendil-works+pi-ai@1.2.0_@modelcontextprotocol+sdk@1.29.0_zod@4.3.6__ws@8.21.3_zod@4.3.6' \
+    '@earendil-works+pi-ai@1.2.0-beta.1' \
     '@earendil-works+pi-agent-core@0.87.1' | pack_install_leaked_pi)
-  if [ "$matcher_probe" != '@earendil-works+pi-ai@1.1.0-beta.1
+  if [ "$matcher_probe" != '@earendil-works+pi-ai@1.2.0-beta.1
 @earendil-works+pi-agent-core@0.87.1' ]; then
-    fail "[QK:PACK-INSTALL-PIN-MATCHER-BOUNDED] the pin-leak matcher must flag the prefix-extended 1.1.0-beta.1 and the off-pin 0.87.1 lookalikes, and pass 1.1.0 bare or with any measured peer-hash — got: ${matcher_probe:-<nothing leaked>}"
+    fail "[QK:PACK-INSTALL-PIN-MATCHER-BOUNDED] the pin-leak matcher must flag the prefix-extended 1.2.0-beta.1 and the off-pin 0.87.1 lookalikes, and pass 1.2.0 bare or with any measured peer-hash — got: ${matcher_probe:-<nothing leaked>}"
     return 1
   fi
 
@@ -3934,11 +4004,11 @@ check_pack_pin_matcher() {
   # (0.85.0 onward, still true at 0.99.1). An off-pin chord MUST leak; the pinned one must not. A matcher narrowed
   # back to `^@earendil-works+pi-` sees nothing here and dies at this signature.
   matcher_probe=$(printf '%s\n' \
-    '@earendil-works+chord@1.1.0' \
+    '@earendil-works+chord@1.2.0' \
     '@earendil-works+chord@0.87.1' \
-    '@earendil-works+pi-ai@1.1.0' | pack_install_leaked_pi)
+    '@earendil-works+pi-ai@1.2.0' | pack_install_leaked_pi)
   if [ "$matcher_probe" != '@earendil-works+chord@0.87.1' ]; then
-    fail "[QK:PACK-INSTALL-PIN-MATCHER-COVERS-CLOSURE] the pin-leak matcher must cover every @earendil-works closure member, not just the pi-* families — an off-pin @earendil-works/chord has to leak (it is a runtime dependency of pi-coding-agent, pi-agent-core, pi-client and pi-protocol — `[측정 2026-09-20]` at 0.86.0, re-measured `[측정 2026-09-22]` at 0.87.0, `[측정 2026-09-23]` at 0.87.1 and `[측정 2026-09-30]` at 0.99.1, where pi-coding-agent adds pi-codemode and pi-mcp beside them) — got: ${matcher_probe:-<nothing leaked>}"
+    fail "[QK:PACK-INSTALL-PIN-MATCHER-COVERS-CLOSURE] the pin-leak matcher must cover every @earendil-works closure member, not just the pi-* families — an off-pin @earendil-works/chord has to leak (it was a runtime dependency of pi-coding-agent, pi-agent-core, pi-client and pi-protocol — `[측정 2026-09-20]` at 0.86.0, re-measured `[측정 2026-09-22]` at 0.87.0, `[측정 2026-09-23]` at 0.87.1 and `[측정 2026-09-30]` at 0.99.1, where pi-coding-agent adds pi-codemode and pi-mcp beside them; `[측정 2026-10-13]` at 1.2.0 pi-durable alone declares it) — got: ${matcher_probe:-<nothing leaked>}"
     return 1
   fi
 
@@ -4169,7 +4239,7 @@ ORACLE
   # aligned host binary (the pinned version, installed above for L1) must be inside the range.
   # The previous host version is a variable, not a quoted `@pkg@x.y.z` spec: check-dep-versions reads
   # those specs as this repo's install pins, and this one is deliberately off the floor.
-  local host_home host_proj host_old="$box/pd-host-old" host_env=() host_old_ver="1.0.4"
+  local host_home host_proj host_old="$box/pd-host-old" host_env=() host_old_ver="1.1.0"
   mkdir -p "$host_old"
   for spec in "${host_specs[@]}"; do host_old_specs+=("${spec%@*}@$host_old_ver"); done
   out=$(cd "$host_old" && npm install "${host_old_specs[@]}" --no-audit --no-fund 2>&1) || {
@@ -4187,7 +4257,7 @@ ORACLE
       fail "[check-pack-install] host $cell: the native pi-durable row must stay PASS whatever the PATH host is:"; echo "$out" | tail -20 | sed 's/^/    /' >&2; return 1
     fi
     if [ "$cell" = old ]; then
-      if [ "$rc" -eq 0 ] || ! grep -q "pi: FAIL — detected pi $host_old_ver is outside the supported range >=$pin_ver <1.2" <<<"$out" || [ -e "$host_proj/.pi" ] || [ -e "$host_home/.pi/agent/settings.json" ]; then
+      if [ "$rc" -eq 0 ] || ! grep -q "pi: FAIL — detected pi $host_old_ver is outside the supported range >=$pin_ver <1.3" <<<"$out" || [ -e "$host_proj/.pi" ] || [ -e "$host_home/.pi/agent/settings.json" ]; then
         fail "[QK:PACK-INSTALL-HOST-RANGE-SEPARATE] [check-pack-install] a real pi $host_old_ver host beside the $pin_ver native set must be a named pi FAIL with zero Pi wiring and a non-green setup (rc=$rc):"
         echo "$out" | tail -20 | sed 's/^/    /' >&2
         return 1
@@ -4395,7 +4465,6 @@ _check_pack_install_impl() {
     "mcp/entwurf-bridge/dist/pi-extensions/lib/pi-durable-fresh-preflight.js"
     "pi/pi-durable/bootstrap.mjs"
     "pi/pi-durable/overlay/upstream-pin.json"
-    "pi/pi-durable/overlay/runtime-contacts.patch"
     "pi/pi-durable/carrier-resolver.mjs"
     "pi/pi-durable/carrier-relocation.mjs"
     "pi/pi-durable/carrier/runtime.js"
@@ -4558,21 +4627,26 @@ _check_pack_install_impl() {
   # pi-ai, pi-codemode, pi-mcp, pi-tui}, pi-ai {pi-telemetry}, pi-agent-core {pi-ai}, pi-durable
   # {chord, pi-ai}, and `npm view` gives pi-client {chord, pi-protocol}, pi-protocol {chord}. All
   # eleven are published at 1.1.0.
-  echo "[check-pack-install] pnpm add into $tmp (with the aligned 1.1.x SDK + chord + codemode + mcp + durable + typebox)"
+  # `[측정 2026-10-13]` at 1.2.0 the constellation SHRINKS to the nine-member SDK set: upstream
+  # removed pi-client and pi-protocol (7472cda0d), and `npm view <pkg>@1.2.0` answers E404 for both,
+  # so their pins cannot move with the floor and leave instead of staying redundant. The 1.2.0
+  # registry manifests give pi-coding-agent {pi-agent-core, pi-ai, pi-codemode, pi-mcp, pi-tui}
+  # (chord dropped), pi-ai {pi-telemetry}, pi-agent-core {pi-ai}, pi-durable {chord, pi-ai,
+  # pi-codemode}; all nine are published at 1.2.0
+  # (.tmp-verify/141-kickoff/s1a/map-receipts/01-tarballs.txt).
+  echo "[check-pack-install] pnpm add into $tmp (with the aligned 1.2.x SDK + chord + codemode + mcp + durable + typebox)"
   local install_log
   install_log=$(cd "$tmp" && pnpm add \
     "$tgz_path" \
-    "@earendil-works/pi-ai@1.1.0" \
-    "@earendil-works/pi-coding-agent@1.1.0" \
-    "@earendil-works/pi-tui@1.1.0" \
-    "@earendil-works/pi-agent-core@1.1.0" \
-    "@earendil-works/pi-client@1.1.0" \
-    "@earendil-works/pi-protocol@1.1.0" \
-    "@earendil-works/pi-telemetry@1.1.0" \
-    "@earendil-works/chord@1.1.0" \
-    "@earendil-works/pi-codemode@1.1.0" \
-    "@earendil-works/pi-mcp@1.1.0" \
-    "@earendil-works/pi-durable@1.1.0" \
+    "@earendil-works/pi-ai@1.2.0" \
+    "@earendil-works/pi-coding-agent@1.2.0" \
+    "@earendil-works/pi-tui@1.2.0" \
+    "@earendil-works/pi-agent-core@1.2.0" \
+    "@earendil-works/pi-telemetry@1.2.0" \
+    "@earendil-works/chord@1.2.0" \
+    "@earendil-works/pi-codemode@1.2.0" \
+    "@earendil-works/pi-mcp@1.2.0" \
+    "@earendil-works/pi-durable@1.2.0" \
     "typebox@latest" \
     --ignore-workspace --ignore-scripts 2>&1) || {
     fail "[check-pack-install] pnpm add failed:"
@@ -4588,11 +4662,11 @@ _check_pack_install_impl() {
   local leaked_pi
   leaked_pi=$(ls "$tmp/node_modules/.pnpm" 2>/dev/null | pack_install_leaked_pi)
   if [ -n "$leaked_pi" ]; then
-    fail "[check-pack-install] UNVERIFIED pi runtime resolved into the install tree (expected only 1.1.0):"
+    fail "[check-pack-install] UNVERIFIED pi runtime resolved into the install tree (expected only 1.2.0):"
     printf '%s\n' "$leaked_pi" | sed 's/^/    /' >&2
     return 1
   fi
-  echo "[check-pack-install] pi runtime tree pin verified: every @earendil-works package is 1.1.0 (chord and pi-durable included)"
+  echo "[check-pack-install] pi runtime tree pin verified: every @earendil-works package is 1.2.0 (chord and pi-durable included)"
 
   # Resolve the installed package.json and confirm pi.extensions
   # arrived intact. If pi.extensions is empty or missing, the

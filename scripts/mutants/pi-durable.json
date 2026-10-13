@@ -458,7 +458,7 @@
 			"claim": "PI-DURABLE-CARRIER-PIN-MATCHES",
 			"title": "the pin records a digest the committed carrier file does not carry, so a carrier edited after emission would still be the declared one",
 			"subject": "pi/pi-durable/overlay/upstream-pin.json",
-			"find": ["\"sha256\": \"bfd88844fae61e8bd32d57b5b986f48056c64eebb5466d9826318a0783ac9005\""],
+			"find": ["\"sha256\": \"60c2965eadbdbbe78fce1b7eeb89d97eb3104a30b7d58ebca87009d2e9118403\""],
 			"replace": ["\"sha256\": \"0000000000000000000000000000000000000000000000000000000000000000\""],
 			"gate": ["bash", "run.sh", "check-pi-durable-beside"],
 			"timeoutSeconds": 300,
@@ -833,19 +833,40 @@
 			}
 		},
 		{
-			"claim": "PI-DURABLE-CARRIER-PATCH-SECTIONS",
-			"title": "a declared patched file with no section of its own passes the patch-shape check, so the emitter would ship that file unpatched",
-			"subject": "scripts/emit-pi-durable-carrier.ts",
-			"find": ["\tif (undeclared.length > 0 || missing.length > 0) {"],
-			"replace": ["\tif (undeclared.length > 0) {"],
+			"claim": "PI-DURABLE-CARRIER-EMIT-SOURCE-EQUAL",
+			"title": "the owned source changes and the carrier is not re-emitted, so the shipped app is no longer the emission of the source the repository reviews",
+			"subject": "pi/pi-durable/src/experimental/durable/tui.ts",
+			"find": ["\t\tconst forms = [...detailed, tasks, `⏳ ${n}`, `⏳${n}`, `*${n}`, \"*+\", \"*\"];"],
+			"replace": ["\t\tconst forms = [...detailed, tasks, `⏳ ${n}`, `⏳${n}`, `*${n}`, \"*\"];"],
 			"gate": ["bash", "run.sh", "check-pi-durable-beside"],
 			"timeoutSeconds": 300,
-			"signature": "[QK:PI-DURABLE-CARRIER-PATCH-SECTIONS]",
+			"signature": "[QK:PI-DURABLE-CARRIER-EMIT-SOURCE-EQUAL]",
 			"signatureSource": "pi-extensions/lib/pi-durable-carrier.test.ts",
-			"build": {
-				"argv": ["bash", "scripts/build-bridge.sh"],
-				"output": "mcp/entwurf-bridge/dist"
-			}
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "PI-DURABLE-CARRIER-EMIT-NODE-EXACT",
+			"title": "the emitter stops comparing its own Node with the pinned one, so a carrier emitted under any Node reads as the pinned emission",
+			"subject": "scripts/emit-pi-durable-carrier.ts",
+			"find": ["\tif (pinned !== running) {"],
+			"replace": ["\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-pi-durable-beside"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PI-DURABLE-CARRIER-EMIT-NODE-EXACT]",
+			"signatureSource": "pi-extensions/lib/pi-durable-carrier.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "PI-DURABLE-SOURCE-FENCE-RESOLVES",
+			"title": "the source fence inherits the root program's exclusion of pi/pi-durable/src, so the owned source sits in no typecheck program at all",
+			"subject": "pi/pi-durable/tsconfig.json",
+			"find": ["\t\"exclude\": []"],
+			"replace": ["\t\"files\": []"],
+			"gate": ["bash", "run.sh", "check-pi-durable-beside"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PI-DURABLE-SOURCE-FENCE-RESOLVES]",
+			"signatureSource": "pi-extensions/lib/pi-durable-carrier.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
 		},
 		{
 			"claim": "PI-DURABLE-FOOTER-GRAPH-LIFETIME",
@@ -898,12 +919,8 @@
 			"claim": "PI-DURABLE-FOOTER-BADGE-PROTECTED",
 			"title": "the badge sits last in the dock, so the renderer's bottom clip drops it first on a short terminal",
 			"subject": "pi/pi-durable/carrier/tui.js",
-			"find": [
-				"\t\t{ component: new VStack([{ component: badge, shrink: 0 }, ...dock]), basis: \"auto\", grow: 0, shrink: 1, minSize: 1 },"
-			],
-			"replace": [
-				"\t\t{ component: new VStack([...dock, { component: badge, shrink: 0 }]), basis: \"auto\", grow: 0, shrink: 1, minSize: 1 },"
-			],
+			"find": ["\t\t\tcomponent: new VStack([{ component: badge, shrink: 0 }, ...dock]),"],
+			"replace": ["\t\t\tcomponent: new VStack([...dock, { component: badge, shrink: 0 }]),"],
 			"gate": ["bash", "run.sh", "check-pi-durable-beside"],
 			"timeoutSeconds": 300,
 			"signature": "[QK:PI-DURABLE-FOOTER-BADGE-PROTECTED]",
@@ -1002,6 +1019,138 @@
 				"argv": ["bash", "scripts/build-bridge.sh"],
 				"output": "mcp/entwurf-bridge/dist"
 			}
+		},
+		{
+			"claim": "PI-DURABLE-SOURCE-NOT-SHIPPED",
+			"title": "the files allowlist admits pi/pi-durable/src, so the owned TypeScript source rides the tarball beside the carrier an installed consumer runs",
+			"subject": "package.json",
+			"find": ["\t\t\"pi/pi-durable/carrier/\",\n"],
+			"replace": ["\t\t\"pi/pi-durable/carrier/\",\n\t\t\"pi/pi-durable/src/\",\n"],
+			"gate": ["bash", "run.sh", "check-pi-durable-beside"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PI-DURABLE-SOURCE-NOT-SHIPPED]",
+			"signatureSource": "pi-extensions/lib/pi-durable-carrier.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "PI-DURABLE-EMITTER-NODE-CI-BOUND",
+			"title": "the CI check job floats its Node major again, so the floor that proves the carrier emission runs under a Node other than the pinned emitter",
+			"subject": ".github/workflows/ci.yml",
+			"find": ["          node-version: 24.18.1\n"],
+			"replace": ["          node-version: 24\n"],
+			"gate": ["bash", "run.sh", "check-node-floor-coherence"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:PI-DURABLE-EMITTER-NODE-CI-BOUND]",
+			"signatureSource": "run.sh"
+		},
+		{
+			"claim": "PI-DURABLE-EMITTER-NODE-CI-REQUIRED",
+			"title": "the check:full step's ENTWURF_REQUIRE_EMITTER_NODE line is commented out, so an emitter-identity mismatch on the CI floor becomes a skip while the workflow text still names the variable",
+			"subject": ".github/workflows/ci.yml",
+			"find": ["          ENTWURF_REQUIRE_EMITTER_NODE: \"1\"\n"],
+			"replace": ["          # ENTWURF_REQUIRE_EMITTER_NODE: \"1\"\n"],
+			"gate": ["bash", "run.sh", "check-node-floor-coherence"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:PI-DURABLE-EMITTER-NODE-CI-REQUIRED]",
+			"signatureSource": "run.sh"
+		},
+		{
+			"claim": "PI-DURABLE-SUBAGENT-OUTPUT-MODEL-VISIBLE",
+			"title": "the emitted subagent answers in `content`, the 1.1 field: on 1.2 the result still type-checks against the all-optional result and the parent model reads nothing of the child's answer",
+			"subject": "pi/pi-durable/carrier/subagent.js",
+			"find": ["\t\t\t\t\toutput: [{ type: \"text\", text }],"],
+			"replace": ["\t\t\t\t\tcontent: [{ type: \"text\", text }],"],
+			"gate": ["bash", "run.sh", "check-pi-durable-beside"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PI-DURABLE-SUBAGENT-OUTPUT-MODEL-VISIBLE]",
+			"signatureSource": "pi-extensions/lib/pi-durable-carrier.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "PI-DURABLE-BRIDGE-TOOL-OUTPUT-MODEL-VISIBLE",
+			"title": "the contact's bridge tools answer in `content`, the 1.1 field, past the declared result type: the bridge still builds and the model reads none of the bridge's text",
+			"subject": "pi-extensions/meta-bridge-pi-durable.ts",
+			"find": ["\t\t\treturn { output: [{ type: \"text\", text: result.text }] };"],
+			"replace": ["\t\t\treturn { content: [{ type: \"text\", text: result.text }] } as unknown as DurableToolResult;"],
+			"gate": ["bash", "run.sh", "check-pi-durable-beside"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PI-DURABLE-BRIDGE-TOOL-OUTPUT-MODEL-VISIBLE]",
+			"signatureSource": "pi-extensions/meta-bridge-pi-durable.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "PI-DURABLE-FATAL-SESSION-VIEW",
+			"title": "the close listener stops recording the failure: a Session that failed and closed itself looks open, and the host learns of it only if `closed` ever settles, which a tool ignoring its abort can hold off for good",
+			"subject": "pi/pi-durable/carrier/runtime.js",
+			"find": ["\t\t\tupdate({ failure: {} });"],
+			"replace": ["\t\t\t// the failure is not recorded"],
+			"gate": ["bash", "run.sh", "check-pi-durable-beside"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PI-DURABLE-FATAL-SESSION-VIEW]",
+			"signatureSource": "pi-extensions/lib/pi-durable-carrier.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "PI-DURABLE-FATAL-SESSION-SHOWN",
+			"title": "the TUI stops drawing the failed session's line: the view knows, the screen keeps the last live frame and every later keystroke looks accepted",
+			"subject": "pi/pi-durable/carrier/tui.js",
+			"find": ["\tif (view.failure !== undefined) {"],
+			"replace": ["\tif (view.failure === null) {"],
+			"gate": ["bash", "run.sh", "check-pi-durable-beside"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PI-DURABLE-FATAL-SESSION-SHOWN]",
+			"signatureSource": "pi-extensions/lib/pi-durable-carrier.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "PI-DURABLE-FATAL-SUBMIT-REFUSED",
+			"title": "input to a failed session is handed to the SDK instead of being refused by name: it fails later with the SDK's generic error and the user is not told the session takes no input",
+			"subject": "pi/pi-durable/carrier/runtime.js",
+			"find": ["\t\t\t\t\tif (state.failure !== undefined) {"],
+			"replace": ["\t\t\t\t\tif (state.failure === null) {"],
+			"gate": ["bash", "run.sh", "check-pi-durable-beside"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PI-DURABLE-FATAL-SUBMIT-REFUSED]",
+			"signatureSource": "pi-extensions/lib/pi-durable-carrier.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "PI-DURABLE-RECEIVER-RETIRE-ON-FATAL",
+			"title": "the doorbell ignores the session's failure: its marker stays and senders keep waking a host that can admit nothing, until a ring happens to be rejected",
+			"subject": "pi-extensions/meta-bridge-pi-durable.ts",
+			"find": ["const problems = retire(\"session-failed\", \"the durable session failed and closed itself\");"],
+			"replace": ["const problems: string[] = [];"],
+			"gate": ["bash", "run.sh", "check-pi-durable-beside"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PI-DURABLE-RECEIVER-RETIRE-ON-FATAL]",
+			"signatureSource": "pi-extensions/lib/pi-durable-carrier.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "PI-DURABLE-SELF-CLOSE-NOT-FAILURE",
+			"title": "close() keeps its close listener subscribed: every normal exit reports a failed session and retires its listeners as if the storage had failed",
+			"subject": "pi/pi-durable/carrier/runtime.js",
+			"find": [
+				"\t\t\t\t\t// First: the Session runs its close listeners inside its own close call.\n\t\t\t\t\tunsubscribeClose();"
+			],
+			"replace": ["\t\t\t\t\t// First: the Session runs its close listeners inside its own close call."],
+			"gate": ["bash", "run.sh", "check-pi-durable-beside"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PI-DURABLE-SELF-CLOSE-NOT-FAILURE]",
+			"signatureSource": "pi-extensions/lib/pi-durable-carrier.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "PI-DURABLE-COMPACTION-FAILURE-SHOWN",
+			"title": "the TUI drops the conversation's retained compaction failure: a failed background compaction vanishes from the screen once its status is removed",
+			"subject": "pi/pi-durable/carrier/tui.js",
+			"find": ["\tif (compaction !== undefined) {\n\t\tlines.push"],
+			"replace": ["\tif (compaction === null) {\n\t\tlines.push"],
+			"gate": ["bash", "run.sh", "check-pi-durable-beside"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PI-DURABLE-COMPACTION-FAILURE-SHOWN]",
+			"signatureSource": "pi-extensions/lib/pi-durable-carrier.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
 		}
 	]
 }

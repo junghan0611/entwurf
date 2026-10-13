@@ -4,6 +4,68 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+### pi-durable
+
+- **The thin app/TUI composition is Entwurf-owned source (#141 S0).** The six carrier files
+  are emitted from `pi/pi-durable/src/experimental/durable/*.ts` (with `src/LICENSE`), which
+  folds in the retired `runtime-contacts.patch`. Every carrier byte, LICENSE and the SDK set
+  (1.1.0) are unchanged; only the pin's carrier source blob ids move to the owned files. The
+  upstream SDK still owns execution, auth, queues, storage/transcript, compaction,
+  cancellation and recovery (Rule 17).
+- **Pin schema 3.** `pi/pi-durable/overlay/upstream-pin.json` keeps its path and the shapes
+  installed readers use. A frozen `origin` holds the upstream commit, its recorded blobs, the
+  retired patch's digest and the 0.35.1 carrier digests. Only `carrier` is generated.
+- **Emitter.** `scripts/emit-pi-durable-carrier.ts --check` reads only in-repo source, and a
+  missing file is a named refusal. A host running a different Node gets the byte proof plus a
+  named emitter-identity SKIP, not a PASS. `--write` names every generated field it changes.
+  `--origin <clone>` checks provenance only. The CI `check` job runs the pinned emitter Node
+  exactly, with `ENTWURF_REQUIRE_EMITTER_NODE=1`; other jobs float the major.
+- **Typecheck fence.** `pi/pi-durable/tsconfig.json` is the fourth `pnpm typecheck` program:
+  strict, `erasableSyntaxOnly` / `verbatimModuleSyntax`, and `rootDirs` onto the installed
+  `pi-coding-agent/dist`, so internals are typed by their published declarations. Its explicit
+  empty `exclude` receives what the root program excludes. The exact devDependency
+  `@types/proper-lockfile@4.1.4` supplies the one missing declaration.
+- **Formatting.** The owned source uses upstream width (indentWidth 3), with no per-file
+  exception. Formatting `tui.ts` wrapped its one Entwurf-written dock line and added one trailing
+  comma, so `tui.js` was re-emitted (sha256 `63600d4b…095b`). A parser-derived token/AST
+  comparison found nothing else changed. The `PI-DURABLE-FOOTER-BADGE-PROTECTED` mutant follows
+  the wrapped line and plants the same fault.
+- **Proof.** New claims: `PI-DURABLE-CARRIER-EMIT-SOURCE-EQUAL`, `-EMIT-NODE-EXACT`,
+  `PI-DURABLE-SOURCE-FENCE-RESOLVES`, `PI-DURABLE-SOURCE-NOT-SHIPPED` (the source, the fence and the
+  retired patch stay out of the JS-only tarball; proved on npm's own file list with
+  `--ignore-scripts` beside the carrier, while check-pack keeps the same tripwire on the floor), and
+  `PI-DURABLE-EMITTER-NODE-CI-BOUND` / `-CI-REQUIRED`. These two read the check job's active
+  setup-node input and its actual `check:full` step env, never comment text or another step.
+  Retired with the patch: `PI-DURABLE-CARRIER-PATCH-SECTIONS`.
+- **SDK set 1.2.0 (#141 S1-B2).** The nine published `@earendil-works/*` production dependencies
+  move from 1.1.0 to 1.2.0, with the pin's `sdk.members`, the install constellation, the pin-leak
+  matcher and the declared ranges (`>=1.2.0 <1.3`). `pi-client` and `pi-protocol` leave the set (not
+  published at 1.2.0); the only new third-party package is `@silvia-odwyer/photon@0.3.3`.
+- **1.2.0 tool output (#141 S1-B3).** On the 1.2.0 SDK set a tool's model-visible answer is its
+  result's `output`; the 1.1 field `content` still type-checks against the all-optional result and
+  reaches the model as nothing. The subagent tool (now `satisfies ToolExecutionResult`), the
+  contact's bridge tools and the synthetic native-module fixture answer in `output`. The ordinary Pi
+  `ToolExecutionComponent.updateResult` and `InputSubmissionDraft` keep `content`.
+- **Fatal session.** The carrier runtime takes the Session's own close listener and the report that
+  follows it: a session that failed and closed itself is on screen at once (`Session failed: <cause>.
+  It takes no more input, and a tool still running may take a while to stop. Close this session,
+  then reopen it with --continue.`) and input to it is refused by name, without waiting for
+  `closed`, which a tool ignoring its abort can hold off. A normal `close()` unsubscribes first and
+  is no failure. A failure listener subscribed after the failure is told at once, once. On that
+  signal the contact retires its receiver as `session-failed` before the next doorbell — also when
+  the session had already failed before the contact attached, so no receiver marker is left behind;
+  a normal close still retires it as `closed`, and a cleanup failure is thrown, not swallowed.
+- **Compaction failure.** The TUI draws the conversation's retained `pi.live.compactionFailure`
+  (`Compaction failed (<reason>): <error>`) for as long as the SDK keeps it. A failed background
+  compaction the SDK starts on its own (`threshold`) had no other report; the manual one keeps its
+  existing notice beside the line.
+- **Proof (S1-B3).** New claims `PI-DURABLE-SUBAGENT-OUTPUT-MODEL-VISIBLE`,
+  `-BRIDGE-TOOL-OUTPUT-MODEL-VISIBLE`, `-FATAL-SESSION-VIEW`, `-FATAL-SESSION-SHOWN`,
+  `-FATAL-SUBMIT-REFUSED`, `-RECEIVER-RETIRE-ON-FATAL`, `-SELF-CLOSE-NOT-FAILURE` and
+  `-COMPACTION-FAILURE-SHOWN` run the real bootstrap and carrier on the published 1.2.0 SDK with a
+  faux model and an injected storage failure; each mutant plants its fault in the generated carrier
+  or the bridge source.
+
 ## v2026.10.13-herdr.0.35.1 — Herdr Entwurf plugin 0.35.1
 
 A separate Herdr plugin snapshot, not another core release: core package 0.35.1 and

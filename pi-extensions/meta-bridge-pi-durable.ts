@@ -49,14 +49,16 @@
  * bridge whose list differs: the callable bridge schema is the truth, the copy only has to agree.
  *
  * RECEIVE (self-fetch, announce-only). When the bootstrap hands `attach` the overlay's
- * `submitToRoot`, the contact arms a doorbell after the bridge is ready: mailbox, then signal,
+ * `submitToRoot` and `onFailed`, the contact arms a doorbell after the bridge is ready: mailbox, then signal,
  * then the watch, then a check that the record and this process's sender marker still name the
  * session, and only then the receiver marker. A fresh `.msg` is stamped `.msg.delivered` and
  * announced to the ROOT conversation as input; the body stays in the mailbox until the model
  * calls `entwurf_inbox_read`, which is the read receipt. The watch and the sender marker share
  * this process's pid, so the #101 owner join applies (`pi-durable-host`). A watch error, a
- * vanished signal, a failed ring, a rejected admission or close retires the doorbell — watch
- * closed, our own marker removed, the reason kept by name — and nothing retries it.
+ * vanished signal, a failed ring, a rejected admission, the session failing (at once, from the
+ * overlay's `onFailed`, not at the next ring — and before `attach` returns when it had already
+ * failed, with no receiver marker left behind) or close retires the doorbell — watch closed, our own
+ * marker removed, the reason kept by name — and nothing retries it.
  *
  * WITHDRAW (#140). Each notice is a native `followUp`, placed one per run; a read drains EVERY
  * unread body. So after a read the notices still queued for that mail would each cost a turn and an
@@ -295,9 +297,12 @@ export interface PiDurableRoots {
 // ---------------------------------------------------------------------------
 // Durable surface, typed NARROWLY and locally — read at pi-durable 1.0.2 @cd32f77 (#129,
 // `harness/types.ts`; historical coordinates, not re-anchored here). The current supply is the
-// carrier `pi/pi-durable/overlay/upstream-pin.json` names (1.1.0 at `abe508e`). `[read 2026-10-08]`
-// v1.0.4 → v1.1.0 `harness/types.ts` adds `models`, `contextRetentionMs` and a `context()` options
-// bag only; none of the shapes typed below moved.
+// carrier emitted from Entwurf's owned source (pi/pi-durable/src, #141) against the 1.2.0 SDK set
+// `pi/pi-durable/overlay/upstream-pin.json` names (origin `abe508e`). `[read 2026-10-13]` at
+// v1.2.0 one shape typed below moved: `ToolExecutionResult.content` is now `output`, beside the new
+// `structuredOutput` (`harness/types.ts`, its CHANGELOG's breaking changes); a result still naming
+// `content` type-checks against the SDK's all-optional result and reaches the model as nothing.
+// The submission draft, its `abort()` answers and the identity `define*` helpers did not move.
 // `defineExtension`/`defineTool` are identity functions (`harness/define.ts:6-17`), so a plain
 // object is the extension.
 // ---------------------------------------------------------------------------
@@ -314,8 +319,9 @@ export interface DurableCallContext {
 	readonly abortSignal?: AbortSignal;
 }
 
+/** `ToolExecutionResult`, narrowed: `output` is what the model reads. */
 export interface DurableToolResult {
-	content: { type: "text"; text: string }[];
+	output: { type: "text"; text: string }[];
 }
 
 export interface DurableTool {
@@ -562,14 +568,19 @@ export interface DurableAdmittedSubmission {
 /** The overlay's `OpenDurableResult.submitToRoot`. */
 export type DurableSubmitToRoot = (draft: DurableDoorbellDraft) => Promise<DurableAdmittedSubmission>;
 
+/** The overlay's `OpenDurableResult.onFailed`: one synchronous call when the session fails and closes itself. */
+export type DurableOnFailed = (listener: () => void) => () => void;
+
 /** What `attach` needs to arm the doorbell. Without it the citizen only sends. */
 export interface DurableRootAdmission {
 	submitToRoot: DurableSubmitToRoot;
+	onFailed: DurableOnFailed;
 }
 
 /** Why an armed doorbell was retired. Nothing re-arms it. */
 export type PiDurableReceiverRetirement =
 	| "closed"
+	| "session-failed"
 	| "watch-error"
 	| "signal-vanished"
 	| "doorbell-failed"
@@ -630,7 +641,7 @@ export interface PiDurableAttachment {
 	/** The roots written — and the roots the bridge child was bound to. */
 	roots: PiDurableRoots;
 	bridgePid: number | null;
-	/** The receiver marker this attach published, or null when no root admission was handed in. */
+	/** The receiver marker this attach published; null when no root admission was handed in, or the session had already failed. */
 	receiverMarkerPath: string | null;
 }
 
@@ -682,6 +693,7 @@ interface ArmedDoorbell {
 	markerPath: string;
 	watcher: fs.FSWatcher;
 	submitToRoot: DurableSubmitToRoot;
+	unsubscribeFailed: () => void;
 }
 
 /** One admitted notice: its native handle and the `.msg` names it announced. */
@@ -783,7 +795,7 @@ export function createPiDurableContact(options: PiDurableContactOptions): PiDura
 			const call = () => client.callTool(name, (args ?? {}) as Record<string, unknown>, context?.abortSignal);
 			const result = name === "entwurf_inbox_read" ? await readInbox(call, context) : await call();
 			if (result.isError) throw new Error(result.text || `${name} failed`);
-			return { content: [{ type: "text", text: result.text }] };
+			return { output: [{ type: "text", text: result.text }] };
 		},
 	});
 
@@ -836,6 +848,7 @@ export function createPiDurableContact(options: PiDurableContactOptions): PiDura
 		const armed = doorbell;
 		if (armed === null) return [];
 		doorbell = null;
+		armed.unsubscribeFailed();
 		const problems: string[] = [];
 		try {
 			armed.watcher.close();
@@ -985,15 +998,16 @@ export function createPiDurableContact(options: PiDurableContactOptions): PiDura
 	 * Mailbox, signal, watch — then the check that the record and this process's sender marker
 	 * still name the session — and only then the receiver marker, the one fact a sender reads.
 	 * Synchronous, so nothing can close the contact between the check and the publish. Throws,
-	 * after closing whatever it opened, when any step fails.
+	 * after closing whatever it opened, when any step fails. Returns null when the session had
+	 * already failed: the doorbell was retired as `session-failed` before this returned.
 	 */
 	const arm = (
 		gardenId: string,
 		nativeSessionId: string,
 		ownerPid: number,
 		roots: PiDurableRoots,
-		submitToRoot: DurableSubmitToRoot,
-	): string => {
+		root: DurableRootAdmission,
+	): string | null => {
 		if (ownerPid !== process.pid) {
 			throw new Error(
 				`the doorbell's watch lives in this process (${process.pid}); a receiver marker naming owner ${ownerPid} would advertise a watch that pid does not hold`,
@@ -1004,6 +1018,7 @@ export function createPiDurableContact(options: PiDurableContactOptions): PiDura
 		fs.mkdirSync(mailbox, { recursive: true });
 		if (!fs.existsSync(signal)) fs.writeFileSync(signal, "", { mode: 0o600 });
 		const watcher = watch(signal, () => void ring("signal"));
+		let unsubscribeFailed = (): void => {};
 		try {
 			watcher.on("error", (error) => retire("watch-error", describeError(error)));
 			const identity = readAddressableMetaIdentity(gardenId, roots.sessionsDir);
@@ -1020,6 +1035,21 @@ export function createPiDurableContact(options: PiDurableContactOptions): PiDura
 						: `the sender marker for owner ${ownerPid} names ${sender.gardenId}/${sender.nativeSessionId}, not ${gardenId}/${nativeSessionId}`,
 				);
 			}
+			// A failed session admits nothing: retire at once, so no sender reads a marker for a host that cannot wake.
+			// Subscribed before the marker is written, so a registration that throws leaves no marker. A session that
+			// failed before this arm says so during the subscription, before the doorbell exists: that is noted, and
+			// the retirement runs once the doorbell is published below. It is final; nothing re-arms.
+			let published = false;
+			let failedBeforePublished = false;
+			const sessionFailed = (): void => {
+				if (!published) {
+					failedBeforePublished = true;
+					return;
+				}
+				const problems = retire("session-failed", "the durable session failed and closed itself");
+				if (problems.length > 0) throw new Error(`the doorbell did not retire cleanly: ${problems.join("; ")}`);
+			};
+			unsubscribeFailed = root.onFailed(sessionFailed);
 			const markerPath = writeMetaReceiverMarker({
 				gardenId,
 				backend: PI_DURABLE_BACKEND,
@@ -1029,17 +1059,37 @@ export function createPiDurableContact(options: PiDurableContactOptions): PiDura
 				armProvenance: "session-start",
 				receiversDir: roots.receiversDir,
 			});
-			doorbell = { gardenId, ownerPid, mailbox, signal, markerPath, watcher, submitToRoot };
+			doorbell = {
+				gardenId,
+				ownerPid,
+				mailbox,
+				signal,
+				markerPath,
+				watcher,
+				submitToRoot: root.submitToRoot,
+				unsubscribeFailed,
+			};
 			inbox = mailbox;
 			report = { status: "armed", gardenId, markerPath, admissions };
+			published = true;
+			if (failedBeforePublished) {
+				sessionFailed();
+				return null;
+			}
 			return markerPath;
 		} catch (error) {
-			try {
-				watcher.close();
-			} catch (closeError) {
+			const cleanup: unknown[] = [];
+			for (const step of [unsubscribeFailed, () => watcher.close()]) {
+				try {
+					step();
+				} catch (cleanupError) {
+					cleanup.push(cleanupError);
+				}
+			}
+			if (cleanup.length > 0) {
 				throw new AggregateError(
-					[error, closeError],
-					`${describeError(error)} (cleanup also failed: ${describeError(closeError)})`,
+					[error, ...cleanup],
+					`${describeError(error)} (cleanup also failed: ${cleanup.map(describeError).join("; ")})`,
 				);
 			}
 			throw error;
@@ -1067,6 +1117,9 @@ export function createPiDurableContact(options: PiDurableContactOptions): PiDura
 				}
 				if (root !== undefined && typeof root.submitToRoot !== "function") {
 					throw new Error("the root admission handed to attach has no submitToRoot function");
+				}
+				if (root !== undefined && typeof root.onFailed !== "function") {
+					throw new Error("the root admission handed to attach has no onFailed function");
 				}
 				const ownerPid = options.ownerPid ?? process.pid;
 				const sendersDir = path.resolve(options.sendersDir ?? defaultMetaSendersDir());
@@ -1119,7 +1172,7 @@ export function createPiDurableContact(options: PiDurableContactOptions): PiDura
 				let receiverMarkerPath: string | null = null;
 				if (root !== undefined) {
 					try {
-						receiverMarkerPath = arm(gardenId, id, ownerPid, roots, root.submitToRoot);
+						receiverMarkerPath = arm(gardenId, id, ownerPid, roots, root);
 					} catch (error) {
 						return await failAfterCleanup(new Error(`the doorbell did not arm: ${describeError(error)}`), () =>
 							client.close(),

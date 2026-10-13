@@ -33,5 +33,11 @@
 				"noExplicitAny": "off"
 			}
 		}
-	}
+	},
+	"overrides": [
+		{
+			"includes": ["pi/pi-durable/src/**"],
+			"formatter": { "indentWidth": 3 }
+		}
+	]
 }

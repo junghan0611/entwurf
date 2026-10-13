@@ -24,7 +24,7 @@ export default {
 				additionalProperties: false,
 			},
 			async execute(args) {
-				return { content: [{ type: "text", text: `mock:${args.text}` }] };
+				return { output: [{ type: "text", text: `mock:${args.text}` }] };
 			},
 		},
 	],

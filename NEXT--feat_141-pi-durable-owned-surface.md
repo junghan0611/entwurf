@@ -1,37 +1,49 @@
 # NEXT — #141 / 0.36.0 / pi-durable 정본화·SDK1.2.0
-Author: gpt-6.1-sol (pi-durable/session20261008T113104-801621, 2026-10-13) — GLG가 좌표 커밋 후 실무 진행 지시.
+Author: gpt-6.1-sol (pi-durable/session20261008T113104-801621, 2026-10-13) — not GLG direct.
 
-- Branch: `feat/141-pi-durable-owned-surface`; 시작 base `653becbe89657f38eaf3e47815b1db141bf04414`.
-- 정본 계약: [docs/pi-durable-owned-surface-plan.md](./docs/pi-durable-owned-surface-plan.md), [#141 최신 thread](https://github.com/junghan0611/entwurf/issues/141).
-- 코디: 계약/레일/독립검토/체크포인트; 기존 Opus `20261011T202615-521a11`: 단일 실무 writer. 새 형제 없음.
+- Branch `feat/141-pi-durable-owned-surface`; HEAD `d8cfc21fce1ad5039fe479af3a5feeb66a1a6cb2` (planning-only, no push).
+- 계약: [정본 plan](./docs/pi-durable-owned-surface-plan.md), [#141 최신 thread](https://github.com/junghan0611/entwurf/issues/141).
+- 코디는 계약/독립검토/레일; Entwurf Opus `20261011T202615-521a11` 단일 implementation writer. 새 형제/별도 coordination lane 없음.
 
 # RAIL — 현재 좌표
-- [x] **1. 방향·설계·R0 확정** — 얇은 표면은 Entwurf 정본, 엔진은 upstream. R0 bytes/import feasibility 확인, 실무 계약 작성.
-- [ ] **2. S0 정본·emit/type/pack 경계** ← CURRENT: GLG 승인 좌표 commit을 정상 hooks로 마친 뒤 Opus에 bounded S0 handoff. SDK1.1.0/carrier bytes 유지.
-- [ ] **3. S1 coherent1.2.0·UI/도구/receiver 접점** — S0 검토·한 보완·영향 PARTIAL 후 코디가 다음 묶음 위임.
-- [ ] **4. 격리/설치·동결 증명 + GLG 수동 재시작** —1.2 설치-ready 때 GLG께 시점 안내, 껐다 켠 뒤 서로 보임/대화 실제 확인.
-- [ ] **5. 승인된 release·기존 queue 복귀** ← PAUSED: 해당 commit/push/cut/publish 및 LIVE 판정은 별도. #128/#78은 뒤.
+- [x] **1. 설계·계약·planning commit** — 얇은 Entwurf app/TUI, 엔진은 upstream.
+- [x] **2. S0 정본·emit/type/pack** — focused/review/amendment/PARTIAL 완료; frozen acceptance 아님.
+- [x] **3. S1 coherent1.2·UX/receiver·transition/consumer** — 보완과 단일 영향 PARTIAL 검토 완료; consumer는 graph/load만.
+- [x] **4. 외부 ABI/ordinaryPi 정렬·GLG 수동 재시작** — 세 peer 실제 nonce 왕복 및 native BG 시작/완료 출력 PASS.
+- [ ] **5. GLG 요청 checkpoint commit → 새 Grok 검수 → Opus 반영·publish 직전 준비** ← CURRENT: Opus 로컬 커밋7d242d 진행, SHA 반환후 코디가새Grok호출. Push/tag/GHrelease 모드 경계 별도 확인, npm publish 금지.
 
-현재 좌표: 1 완료 → **2 좌표 commit 후 S0 실무**. 구현/SDK bump/LIVE acceptance는 아직 없음.
+현재 좌표: 1–4 scoped 완료 → 5 체크포인트 커밋·새검수·최종 검증/릴리즈 권한 경계. #128 ACP/#78 등 기존 queue는 뒤.
 
 # NOW
-- **Next:** 좌표 docs/NEXT만 scoped commit(이번 GLG 승인, push 없음) → 정확한 SHA/계약으로 Opus에 S0 handoff → 완료 실제 알림을1회 읽고 source/focused receipts 독립검토. Opus compact 후에도 문서 정본으로 바로 재개 가능.
-- **S0 계약:** owned6TS+LICENSE, dedicated strict fence(rootDirs/child exclude:[]), @types/proper-lockfile4.1.4 실제 devdep, pin v3 origin/source/generated/sdk 분리, patch+proof 은퇴, non-SKIP emit, CI exactNode/별도 identity receipt, JS-only pack. tui formatter만 일시off·lint6파일 유지, S1에서 복귀. 상세 subject/QK/argv/stop는 정본 plan.
-- **R0 판정:**6 carrier/license byte identical;30imports→24 installed1.1 d.ts. Strict typecheck는 TS7016 proper-lockfile **RED1**, 설치 후 실제 green 필요.1.2 타입/production gates는 미측정.
-- **권한:** S0 로컬 구현·필요 devdep/install·offline focused checks 진행; 체크포인트를 코디에 반환한 뒤 review→한 보완→영향 PARTIAL1회. 전체 BODY/FULL 반복, 추가 commit/push/release 자동 실행 없음. 코디-owned NEXT/issue 수정은 writer 범위 밖.
+- **Next:** 외부 prose5b264d+README148 정정5ecb40 직접 diff검토/gitdiffcheck PASS, 문서정렬 완료. Owner reports GLG직접요청으로 external6files commit2fe26624/no push; 후속 README1line은 worktree만. 외부승인은 Entwurf에 전이하지 않음. GLG 직접 '일단우리커밋→새Grok 정합성/문서검수→수정검토/반영→npm publish전까지, Opus맡김' 승인. Opus 체크포인트SHA 반환→코디가 새 xai/grok-4.7 reviewer(정확한 cwd) 호출→finding검토후 단일writer Opus반영→affected checks/review/필요한PARTIAL→최종 candidate를고정한 FULL/nativeLIVE. Development FULL/whole BODY 반복 금지; npm publish하지 않음.
+- **Permission:** 이번GLG요청은 로컬 #141 scoped checkpoint staging/commit 및 새Grok검수/Opus후속반영 권한. Normalhooks/commit skill 필수, checkpoint는 acceptance아님. Push/tag/GHrelease는 commit에서 추론하지 않고 release skill의 `land → prepare → make → publish` 모드 경계에서확인. 0.36.0 target이나 수동 restart는 승인 대체물이 아님.
+- **Environment:** native Codex LIVE는 fresh operator app-server + 명시한 `ENTWURF_CODEX_*` triple 필요. 없으면 SKIP→cut BLOCKED; PID 검색/추론/waiver 금지.
+- **Verify:** 최종 FULL receipt는 고정 candidate의 결과만. Prepared exact-SHA CI qualification BODY와 native LIVE/정확한 release artifact는 별개. 현재 82 PARTIAL/consumer/실제 대화를 그 증거로 승격하지 않음.
+- **Read:** `VERIFY.md`, `.claude/skills/entwurf-release/SKILL.md`, `.tmp-verify/141-kickoff/coordinator-b3-review/{FINAL-B3-B4-REVIEW.md,POST-RESTART-LIVE.md}`.
 
-# OPERATOR — GLG가 확정한 보통의 재시작 절차
-- 같은 checkout에서 새 버전을 작업·설치하고 GLG께 재시작 시점 안내 → GLG가 기존 세션을 껐다 켬 → mutual visibility/message/dialog 확인 → 릴리즈 계속.
-- **별도 runtime 보호/0.35.1 이전/quiesce 선행 승인 대기는 철회.** 자동 세션 이전·새 supervisor·agent의 kill/restart 없음. Checkout live-coupling은 관찰이지 blocker가 아니다. 이전 DM511의 선택 요청도 해소됨; 재전송 없음.
-- agent-config native module content→output 및 ordinary Pi host1.2.x는 S1 실무 호환 목록으로 조율, 별도 보호정책을 GLG께 재질문하지 않는다. 다른 repo writes를 S0에 몰래 섞지 않는다.
+# RECENT — 실측 및 peer receipts
+- GLG 직접 재시작 확인: coordinator/Entwurf Opus/Fable, 이어 agent-config Opus도 다시 켰다고 통보. Agent가 kill/restart하지 않음.
+- 코디 self 19:12:45 KST: 동일 garden `20261008T113104-801621`, cwd Entwurf, self-fetch/replyable.
+- 실제 native BG17099: 시작 출력과 자동 completion 모두 model-visible, exited0/1s, marker `ENTWURF-141-RESTART-BG-OUTPUT-20261013T1913`. Polling 없음.
+- Inbox 1회 drain `lastReadAt=2026-10-13T10:18:27.957Z`: Fable `ca27b7`/Entwurf Opus `64b493`/agent-config Opus `8eb312`, 각각 정확한 nonce와 sender garden/cwd 일치. 실제 읽음→회신→코디 읽음 PASS, enqueue만으로 판정하지 않음.
+- 세 peer의 self/retained-context/error-none는 각 peer receipt. Source/hash 불변에 대한 peer 보고를 코디 raw 재측정처럼 서술하지 않음. Restart/dialogue/BG scoped PASS이며 전체 native LIVE가 아님.
+- 외부 PI-DURABLE.md743–757 관찰 기록·출처 SHA46df6d1f 직접 확인. README148 stale 대기문 한정 정정9c598f 허용; code/install/test/gate/issueboard/commit/push 요청 없음. 외부 HEAD2fe26624 위 README1file/+1/-1 직접검토, GLG commit경위는 owner5ecb40 receipt. 과거 dirty diffsha를 현재 검증했다고 주장하지 않음. `EXTERNAL-POST-RESTART-DOC-REVIEW.md` 참조.
 
-# READ / receipts
-- Opus 설계374줄 SHA `e71f76c0d781ebdd099707baa21b201583a33f7e258ba6605761fcc6877a0395`; R0 96줄 SHA `c8ab5320079c60ab9b00eb5d90bf5bdaf225123e00c385d9bf6b80025b3fc01f`. `.tmp-verify/141-kickoff/{OPUS-EXECUTION-CONTRACT.md,OPUS-R0-PROBES.md,r0/}`. 원문/hash/핵심 receipt 읽음.
-- 상세 bounded handoff `.tmp-verify/141-kickoff/S0-IMPLEMENTATION-HANDOFF.md`; 공개 정본 plan이 cross-host boot pointer. Inbox ea70fe consumed03:13:32.669Z; R0 review reply8dc802 접수. S0 위임은 좌표 commit 성공 후1회.
-- inspect는 migration 안 함: 실제 scheduler 실행→persisted version oracle. Task downgrade 제한은 migrate 후. 원본 live store를 probe하지 않고 WAL snapshot content를 fixture로 증명.1.2 open마다 irreversible 주장 없음.
+# EVIDENCE — 이미 검토한 경계
+- S0 최초 PARTIAL pack CONTROL-RED `ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY` 보존. Pure pack oracle repair 후 R2: 70/961 KILLED, 891 unrun. `.vite` excluded-cache drift를 waiver하지 않음.
+- B3 실제 app probe16596은 lateFailedCalls0 결함. One amendment + throwing-registration supplement 완료. 독립16667: late1/early failed attach retirement/normal close/input refusal/threshold-background compaction retained failure(notices[]) PASS. 16667는 supplement 이전 bytes의 receipt로 보존.
+- B4: fresh old fixture copy에서 actual1.2 scheduler가 safe task13 v2/running/model persisted; physical1.1 downgrade blocked/task_too_old/0calls. Recovery pending도 v2 유지. Pristine DB/SHM/WAL 3 hashes 불변, 원본 fixture open 금지.
+- 마지막 단일 영향 PARTIAL `S1B3-PARTIAL-REPORT.md` SHA `0285c83dbab01572691343d628b433aa3d60d2cfec80db6ae39acda1d7872379`: dep4→pin2→beside76, 82/969 KILLED/887 unrun. 실제 controls/logs/canonical digests/purity/stable seals/모든82 current subject hashes 검토. Node coherence 미실행, 제외 `.vite` drift 보존. Review 후 freeze 종료.
+- B5 `S1B5-CONSUMER-CHECKPOINT.md` SHA `eba540529319f384c786161b42fc68fa8f72062621804b61c71260c765762aae`: normal prepack+Entwurf-only fresh consumer+CPI, 6 carrier pin=shipped=checkout/9SDK1.2/24 genuine targets PASS. Graph/load만. Kept tarball SHA `405c9886e35e520767212bb1b33926f3f548aedf771fc34c0c5f6071b35cba62`, metadata0.35.1; release artifact 아님. npm allowScripts postinstall 미실행은 관찰, 0755/reachability로 실행을 주장하지 않음.
+- External agent-config actualSDK1.2/faux44/44 및 prewrong-key/stub reds 검토, Fable noBlocker/noDefect. Native Harness `output`은 retained `api.output()` text가 있으면 optional; 이 BG helper는 retained text가 없어 `output` 필요. OrdinaryPi/MCP/InputSubmissionDraft `content`는 변경하지 않음.
+- Global ordinary Pi는 승인된 bare Nix pnpm normal pinned1.2 install 완료; 실제 PATH shim/physical coding-agent+ai/core/tui/codemode/mcp1.2 독립 확인. Ordinary7/durable9 구분. Global version/graph는 ordinaryPi interactive LIVE 아님.
 
-# PROTECTED / 마무리
-- 원본 records/transcripts/DB/WAL/mailbox/credentials/회사 파일/cache/archive/vendor/stash/unknown-owned/original·failed media 보존. No reset/stash/force/hook bypass/clone/worktree/자동이전/reapply/recovery. Agent는 original live Harness/store open·kill/restart 하지 않음.
-- Codex LIVE는 새 operator app-server/triple 필요(없으면 SKIP→cut BLOCKED).0.35.1 green/#140 FULL 예외 상속 없음. 현 시점 별도 vendor experiment 없음.
-- Homepage drafts `content/blog/20260804T094556.ko.md`, `content/blog/20260804T094556.md` 보호. #128 deferred archive 전체 apply 금지.
-- GLG는 회사에서 상시 관찰 불가: 준비된 재시작/완료/실제 판단 사건만 DM1회. Local commit은 agenda stamp 없음. Merge 전 결과를 owning docs/issue에 승격한 뒤 branch NEXT 제거.
+# GUARDRAILS
+- Same checkout만; clone/worktree/relocation/old-installed isolation lane 없음. Runtime 보호/quiesce 선행 승인은 GLG가 철회한 요구. 자동 migration/supervisor/kill/restart 금지.
+- 원본 records/transcripts/DB/WAL/credentials, 회사 files/cache/archive/vendor/stash/unknown assets/failed media 보존. 원본 store probe/recovery/reset 금지; 정상 자기 mailbox/tool 사용과 구분.
+- 체크포인트 stage 전 index는 새8파일만, hash `03b3bc6b17102220c514d4ffc799032944f31bc185f7e8307f00d6b59cc0a926`; staged bytes는 이전 준비 상태, accepted source artifact 아님. Current updates unstaged; 새 source commit 없음.
+- Protected drafts `content/blog/20260804T094556.ko.md`, `content/blog/20260804T094556.md`; #128 deferred archive 전체 apply 금지. GLG가 만드는 agent-config useful-extension issues를 들여다보지 않음.
+- Upstream owns execution/scheduler/queues/storage/transcript/compaction/cancel/recovery/providers/auth. No second engine. Public subscribeClose/reports만; private failure getter/casts 금지. 실패 UX는 outstanding tool의 즉시 종료를 거짓 보장하지 않음.
+- 완료 사건/판단 필요 사건만 DM1회; progress DM/중복 notice 소비 없음. Merge 전 durable docs/issue 승격 후 branch NEXT 제거.
+
+이전 긴 checkpoint ledger: `.tmp-verify/141-kickoff/coordinator-b3-review/BRANCH-NEXT-PRE-DIALOG-CLOSE.md`. 보고서와 실패 receipts는 `.tmp-verify/141-kickoff/`에 그대로 보존.

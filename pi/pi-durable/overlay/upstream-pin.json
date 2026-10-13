@@ -1,64 +1,107 @@
 {
-	"schemaVersion": 2,
-	"comment": "The one upstream commit the pi-durable carrier is emitted from, the patch it applies, the emitted files and the published SDK set they run against. The experimental durable app is source-only upstream (published pi-coding-agent ships no dist/experimental), so Entwurf ships it as a CARRIER: the pinned app files, type-stripped, with the relocation in pi/pi-durable/carrier-relocation.mjs. scripts/emit-pi-durable-carrier.ts is the only writer of the generated fields (blob, sha256, emitter.node) and the only reader of upstream source; an installed package never reads source. Model data rides the published @earendil-works/pi-ai.",
-	"repository": "https://github.com/earendil-works/pi",
-	"tag": "v1.1.0",
-	"commit": "abe508e1b89912adde45528136c3221eb69acdd7",
-	"patches": ["runtime-contacts.patch"],
+	"schemaVersion": 3,
+	"comment": "The pi-durable carrier: what it is emitted from, what it is, and the published SDK set it runs against. The experimental durable app is source-only upstream (published pi-coding-agent ships no dist/experimental), so Entwurf owns its thin application/TUI composition as canonical source (pi/pi-durable/src) and ships it as a CARRIER: those files, type-stripped, with the relocation in pi/pi-durable/carrier-relocation.mjs. The SDK engine (execution, scheduler, queues, storage/transcript, compaction, cancellation/recovery, providers, auth) stays the published packages in `sdk`. scripts/emit-pi-durable-carrier.ts is the only writer of the generated fields (carrier blob, sha256, emitter.node); an installed package never reads source. Model data rides the published @earendil-works/pi-ai.",
+	"origin": {
+		"comment": "Frozen history, never an input: the upstream commit the owned source was first taken from, its objects as recorded then, the overlay patch that carried Entwurf's changes until it was folded into the source (#141), and the carrier bytes the last patch-built release shipped. Neither install nor emit reads this; `emit-pi-durable-carrier --origin <clone>` checks it as provenance only.",
+		"repository": "https://github.com/earendil-works/pi",
+		"tag": "v1.1.0",
+		"commit": "abe508e1b89912adde45528136c3221eb69acdd7",
+		"license": {
+			"path": "LICENSE",
+			"blob": "b0a8e9b81083294360c69b4ec45d3d39a2b28197"
+		},
+		"files": [
+			{
+				"path": "packages/coding-agent/src/experimental/durable/runtime.ts",
+				"blob": "fcd6e5239e999ebf17dea0335fb3dc9cd7f7ce45"
+			},
+			{
+				"path": "packages/coding-agent/src/experimental/durable/tui.ts",
+				"blob": "397b276cbeb1c90e1fbc96c3cc59e6a25f92dad7"
+			},
+			{
+				"path": "packages/coding-agent/src/experimental/durable/harness-setup.ts",
+				"blob": "4d6a4be5333ebb8e0f17eac1987f18ea35a91fc7"
+			},
+			{
+				"path": "packages/coding-agent/src/experimental/durable/prompt.ts",
+				"blob": "8e2f5d5273fba58da8b314766956ed62951c3814"
+			},
+			{
+				"path": "packages/coding-agent/src/experimental/durable/sessions.ts",
+				"blob": "34f9ceeeaeaf874f7478d56115da2e4f726c6a85"
+			},
+			{
+				"path": "packages/coding-agent/src/experimental/durable/subagent.ts",
+				"blob": "e767d54e0bf2908e0f4f41c6933b55c00562eb25"
+			}
+		],
+		"retiredOverlay": {
+			"name": "runtime-contacts.patch",
+			"sha256": "5b1bd9b48d4ff58ad223006d81cc12c4e0b18959cca5cda5ab3ad89f68bbe898"
+		},
+		"baselineCarrier": {
+			"release": "0.35.1",
+			"node": "v24.18.1",
+			"files": {
+				"runtime.js": "bfd88844fae61e8bd32d57b5b986f48056c64eebb5466d9826318a0783ac9005",
+				"tui.js": "f61cc68e5d32552a8196785093ae9e2f4a946088fe71582bb05690517db8c5b4",
+				"harness-setup.js": "712b630145dc6f5c655a85b01b1e20299c962542e63c5494d2202bb7bf414a15",
+				"prompt.js": "ff1ff765fa313e5cb1c3d7537c901c23adb0562ee433bd050fd35eb3d892134c",
+				"sessions.js": "1bd1a04ece66f5ab3ca22860c64dba9abc848334d11a27a9afe543f1365c7254",
+				"subagent.js": "8a75d934ef87efbb0bb2006a2141f1ea932560851f1718b991ed947d6efdb54c",
+				"LICENSE": "0457f5bcec3b3b211605dfb5d1a49042fd638f3686a410fe099c24a25af13c48"
+			}
+		}
+	},
 	"carrier": {
-		"comment": "files: the six app files bootstrap.mjs needs (main.ts is replaced by the bootstrap). distTargets: every pi-coding-agent internal the stripped files import, as paths under the published dist/; the emitter refuses a set that differs and the resolver answers no other.",
+		"comment": "files: the six app files bootstrap.mjs needs (main.ts is replaced by the bootstrap), each emitted from its owned `source`. distTargets: every pi-coding-agent internal the stripped files import, as paths under the published dist/; the emitter refuses a set that differs and the resolver answers no other.",
 		"emitter": {
 			"tool": "node:module.stripTypeScriptTypes",
 			"mode": "strip",
 			"node": "v24.18.1"
 		},
 		"license": {
-			"source": "LICENSE",
+			"source": "pi/pi-durable/src/LICENSE",
 			"blob": "b0a8e9b81083294360c69b4ec45d3d39a2b28197",
 			"sha256": "0457f5bcec3b3b211605dfb5d1a49042fd638f3686a410fe099c24a25af13c48"
 		},
 		"files": [
 			{
 				"name": "runtime.js",
-				"source": "packages/coding-agent/src/experimental/durable/runtime.ts",
-				"patched": true,
-				"blob": "fcd6e5239e999ebf17dea0335fb3dc9cd7f7ce45",
-				"sha256": "bfd88844fae61e8bd32d57b5b986f48056c64eebb5466d9826318a0783ac9005"
+				"source": "pi/pi-durable/src/experimental/durable/runtime.ts",
+				"blob": "36c352291620ab86184172a1b4a0df4562ab9581",
+				"sha256": "60c2965eadbdbbe78fce1b7eeb89d97eb3104a30b7d58ebca87009d2e9118403"
 			},
 			{
 				"name": "tui.js",
-				"source": "packages/coding-agent/src/experimental/durable/tui.ts",
-				"patched": true,
-				"blob": "397b276cbeb1c90e1fbc96c3cc59e6a25f92dad7",
-				"sha256": "f61cc68e5d32552a8196785093ae9e2f4a946088fe71582bb05690517db8c5b4"
+				"source": "pi/pi-durable/src/experimental/durable/tui.ts",
+				"blob": "dab99cd4778ae1db7f062e64db2d0c068f7e342d",
+				"sha256": "0f9ebaf8fbb2a532ccd1a7198e1a25533a99720b5fedbf03f42d5c381db3abc5"
 			},
 			{
 				"name": "harness-setup.js",
-				"source": "packages/coding-agent/src/experimental/durable/harness-setup.ts",
-				"patched": false,
+				"source": "pi/pi-durable/src/experimental/durable/harness-setup.ts",
 				"blob": "4d6a4be5333ebb8e0f17eac1987f18ea35a91fc7",
 				"sha256": "712b630145dc6f5c655a85b01b1e20299c962542e63c5494d2202bb7bf414a15"
 			},
 			{
 				"name": "prompt.js",
-				"source": "packages/coding-agent/src/experimental/durable/prompt.ts",
-				"patched": false,
+				"source": "pi/pi-durable/src/experimental/durable/prompt.ts",
 				"blob": "8e2f5d5273fba58da8b314766956ed62951c3814",
 				"sha256": "ff1ff765fa313e5cb1c3d7537c901c23adb0562ee433bd050fd35eb3d892134c"
 			},
 			{
 				"name": "sessions.js",
-				"source": "packages/coding-agent/src/experimental/durable/sessions.ts",
-				"patched": false,
+				"source": "pi/pi-durable/src/experimental/durable/sessions.ts",
 				"blob": "34f9ceeeaeaf874f7478d56115da2e4f726c6a85",
 				"sha256": "1bd1a04ece66f5ab3ca22860c64dba9abc848334d11a27a9afe543f1365c7254"
 			},
 			{
 				"name": "subagent.js",
-				"source": "packages/coding-agent/src/experimental/durable/subagent.ts",
-				"patched": false,
-				"blob": "e767d54e0bf2908e0f4f41c6933b55c00562eb25",
-				"sha256": "8a75d934ef87efbb0bb2006a2141f1ea932560851f1718b991ed947d6efdb54c"
+				"source": "pi/pi-durable/src/experimental/durable/subagent.ts",
+				"blob": "3fa9aebbe93e82cfff436e7b9d4c9877e0ed0e27",
+				"sha256": "1cb2390b673a0d914117bc07708c39b004fb10e48b31436bf9d9d2b953a64220"
 			}
 		],
 		"distTargets": [
@@ -89,17 +132,17 @@
 		]
 	},
 	"sdk": {
-		"comment": "The published library set the carrier runs against, derived from the 1.1.0 declarations. members: the @earendil-works packages the carrier imports and every @earendil-works package those declare. direct: a third-party package a carrier file imports itself (sessions.ts: proper-lockfile, at the version pi-coding-agent 1.1.0 pins). Each is an exact production dependency in package.json; the members' own edges are caret ranges, so the installed physical edges, not semver, are what must equal these versions.",
+		"comment": "The published library set the carrier runs against, derived from the 1.2.0 declarations. members: the @earendil-works packages the carrier imports and every @earendil-works package those declare. direct: a third-party package a carrier file imports itself (sessions.ts: proper-lockfile, at the version pi-coding-agent 1.2.0 pins). Each is an exact production dependency in package.json; the members' own edges are caret ranges, so the installed physical edges, not semver, are what must equal these versions.",
 		"members": {
-			"@earendil-works/chord": "1.1.0",
-			"@earendil-works/pi-agent-core": "1.1.0",
-			"@earendil-works/pi-ai": "1.1.0",
-			"@earendil-works/pi-codemode": "1.1.0",
-			"@earendil-works/pi-coding-agent": "1.1.0",
-			"@earendil-works/pi-durable": "1.1.0",
-			"@earendil-works/pi-mcp": "1.1.0",
-			"@earendil-works/pi-telemetry": "1.1.0",
-			"@earendil-works/pi-tui": "1.1.0"
+			"@earendil-works/chord": "1.2.0",
+			"@earendil-works/pi-agent-core": "1.2.0",
+			"@earendil-works/pi-ai": "1.2.0",
+			"@earendil-works/pi-codemode": "1.2.0",
+			"@earendil-works/pi-coding-agent": "1.2.0",
+			"@earendil-works/pi-durable": "1.2.0",
+			"@earendil-works/pi-mcp": "1.2.0",
+			"@earendil-works/pi-telemetry": "1.2.0",
+			"@earendil-works/pi-tui": "1.2.0"
 		},
 		"direct": {
 			"proper-lockfile": "4.1.2"

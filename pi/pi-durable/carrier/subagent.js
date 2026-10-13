@@ -8,6 +8,7 @@ import {
 	             
 	               
 	                      
+	                         
 } from "@earendil-works/pi-durable";
 
 async function answerText(api                  , answer         , context         )                  {
@@ -48,7 +49,11 @@ export const Subagent            = defineExtension({
 					throw new Error(`Subagent ${child} failed: ${settled.status}`);
 				}
 				const text = await answerText(api, settled.answer, context);
-				return { content: [{ type: "text", text }], details: { conversationId: child } };
+				// `output` is what the model reads; spelled out so the result shape is checked, not just accepted.
+				return {
+					output: [{ type: "text", text }],
+					details: { conversationId: child },
+				}                              ;
 			},
 		}),
 	],

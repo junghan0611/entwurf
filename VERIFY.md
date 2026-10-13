@@ -252,9 +252,11 @@ first, a reserved extension name refused before anything opens, one installed `-
 initializing only its top-level `*.extension.mjs` (#134) and a directory without a module refused
 before anything opens — and the HOST kept a separate subject — a real pi 1.0.4
 binary (the previous generation) beside the pinned native set is a named pi FAIL with zero Pi wiring while pi-durable still
-PASSes — not native admission. The maintainer's rebuild
-equality is `emit-pi-durable-carrier --check` against a supplied upstream clone; without one it is
-a named SKIP, not acceptance. First-release visible fresh/callback and native
+PASSes — not native admission. The carrier's rebuild
+equality is the owned source's emission (#141): the beside claim `PI-DURABLE-CARRIER-EMIT-SOURCE-EQUAL`
+on every floor, `emit-pi-durable-carrier --check` as its CLI. The emitter's exact Node is red in the CI
+`check` job (`ENTWURF_REQUIRE_EMITTER_NODE=1`) and a named SKIP on a host running another Node, not
+acceptance there. First-release visible fresh/callback and native
 caller/target/cross-harness LIVE are owed by `smoke-pi-durable-fresh-live`, a release-gate MUST
 (LIVE=1; vendor V on a real Pi and a real pi-durable host); SDK or package green does not waive it.
 
@@ -348,7 +350,7 @@ The goal is not merely "invoke Claude Code." We want:
 **One install command to remember: `./run.sh setup <project>`.** It is idempotent — re-run the exact same command whenever anything looks wrong. There is no second install surface to juggle: from a clone `setup` runs the whole floor in order.
 
 1. `pnpm install` — installs the pinned development dependencies and builds the bridge (source-checkout bootstrap only; an installed package never runs npm/pnpm inside `node_modules`)
-2. pi wiring → `<project>/.pi/settings.json` + user-scope registration — only when a `pi` inside the supported range (`>=1.1.0 <1.2`) is on PATH; absent pi is an explicit zero-state SKIP, a below-floor pi is a detected FAIL. The user-scope entry is owner-recorded (#86 C2): another root's live-or-missing ownership makes this step a zero-write refusal (setup: pi FAIL) that names `takeover-user-scope`; the install-states bind the exact managed settings path (a drifted/symlinked/corrupt target is a zero-write refusal) and the inverse removes only the recorded owner's exact entry; `doctor-pi-package` reports the verdict
+2. pi wiring → `<project>/.pi/settings.json` + user-scope registration — only when a `pi` inside the supported range (`>=1.2.0 <1.3`) is on PATH; absent pi is an explicit zero-state SKIP, a below-floor pi is a detected FAIL. The user-scope entry is owner-recorded (#86 C2): another root's live-or-missing ownership makes this step a zero-write refusal (setup: pi FAIL) that names `takeover-user-scope`; the install-states bind the exact managed settings path (a drifted/symlinked/corrupt target is a zero-write refusal) and the inverse removes only the recorded owner's exact entry; `doctor-pi-package` reports the verdict
 3. Claude meta-bridge global plugin — only when `claude` is on PATH; otherwise skipped cleanly
 4. source stable-bin exposure — including certified `entwurf` → this checkout's `run.sh`, the managed runtime Copilot fresh resolves; helper units are attempted independently and a foreign helper is a named FAIL
 5. agy bridge + exact permission + statusline + `PreInvocation` hook — only when `agy` is on PATH; each adapter is idempotent and independently doctorable

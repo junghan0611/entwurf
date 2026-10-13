@@ -68,7 +68,7 @@ try {
 		const tool = citizen.contact.extension.tools.find((t) => t.name === name);
 		if (tool === undefined) throw new Error(`the contact registers no ${name}`);
 		const result = await tool.execute({}, undefined, {});
-		return result.content.map((block) => block.text).join("\n");
+		return result.output.map((block) => block.text).join("\n");
 	};
 	const view = citizen.durable.view.current();
 	const report = {

@@ -10,7 +10,8 @@
 // - Entwurf's tools-only extension is handed to `openDurable`;
 // - a NEW session is opened with an explicit model and an explicit width, never a default (below);
 // - the citizen is born once `openDurable` returns, with the overlay's `submitToRoot` so its
-//   doorbell can announce mail to the root conversation;
+//   doorbell can announce mail to the root conversation, and its `onFailed` so a session that
+//   fails and closes itself retires that doorbell at once;
 // - a launcher's first input, when given, is admitted to the root ONCE, after that birth;
 // - the TUI is handed the native view with the garden id on every conversation label
 //   (`withGardenIdentity`).
@@ -341,7 +342,10 @@ export async function openDurableCitizen({
 	}
 	let attachment;
 	try {
-		attachment = await contact.attach(durable.view.current().session, { submitToRoot: durable.submitToRoot });
+		attachment = await contact.attach(durable.view.current().session, {
+			submitToRoot: durable.submitToRoot,
+			onFailed: durable.onFailed,
+		});
 	} catch (error) {
 		return failAfterCleanup(
 			error,

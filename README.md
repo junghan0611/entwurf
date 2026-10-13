@@ -52,7 +52,7 @@ release; it does not supply credentials or take ownership of the harness.
 
 Prerequisites: **Node >=24.0.0**, Python 3 for `setup`, and any harnesses you choose
 to use, already installed and authenticated. Pi is optional-by-presence, supported
-range `>=1.1.0 <1.2`; Claude Code supported floor `>=2.1.217` is required for its
+range `>=1.2.0 <1.3`; Claude Code supported floor `>=2.1.217` is required for its
 managed exec-hook lifecycle. pnpm is needed only for source-checkout setup.
 
 ```bash
@@ -82,7 +82,7 @@ restriction; that is not certification of every platform's harness rails.
 
 ### Native durable (pi-durable)
 
-**The package supplies the pinned upstream app/TUI and nine exact Pi 1.1.0 SDK
+**The package supplies Entwurf's owned app/TUI carrier and nine exact Pi 1.2.0 SDK
 members.** No separate runtime checkout, patch, build or ordinary Pi CLI is needed.
 The launch verifies carrier integrity and every reachable SDK edge's name/version;
 incomplete, drifted or mixed supply refuses by name.
@@ -92,8 +92,9 @@ entwurf pi-durable --provider <provider> --model <model-id> --width task-wide
 entwurf pi-durable --continue
 ```
 
-The contact adds garden identity and two-way mailbox communication. Runtime/TUI,
-models/auth, queues, SQLite, transcripts and recovery remain upstream-owned:
+The contact adds garden identity and two-way mailbox communication. Entwurf owns the
+thin app/TUI composition (shipped as an emitted JS carrier); execution, models/auth, queues,
+SQLite, transcripts and recovery remain the upstream SDK's:
 [Hard Rule 17](./AGENTS.md#hard-rules), **supply the missing surface; do not become the harness**.
 
 Optional `--native-module <absolute file>` initializes trusted ESM before runtime/TUI

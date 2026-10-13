@@ -125,6 +125,7 @@ async function runMain(
 				controller: {},
 				settings: {},
 				submitToRoot: async () => ({ id: 41 }),
+				onFailed: () => () => {},
 				close: async () => {},
 			};
 		},

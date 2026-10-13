@@ -46,7 +46,7 @@ import { ToolExecutionComponent,                    } from "entwurf-pi-dist:mode
 import { UserMessageComponent } from "entwurf-pi-dist:modes/interactive/components/user-message.js";
 import { getEditorTheme, getMarkdownTheme, initTheme, theme } from "entwurf-pi-dist:modes/interactive/theme/theme.js";
 import { InteractiveThemeController } from "entwurf-pi-dist:modes/interactive/theme/theme-controller.js";
-import { agentOf,                                                                  } from "./runtime.js";
+import { agentOf,                                                                               } from "./runtime.js";
 
 const SELECT_THEME                  = {
 	selectedPrefix: (text) => theme.fg("accent", text),
@@ -153,6 +153,26 @@ class CompactionComponent extends Box {
  
 
 /**
+ * The lines above the editor: first what stays true for as long as it is true, the session's failure and the
+ * compaction failure a conversation keeps until a compaction produces a summary, then the latest notices.
+ */
+export function durableNotices(view             )                                               {
+	const lines                                      = [];
+	if (view.failure !== undefined) {
+		const cause = view.failure.error === undefined ? "" : `: ${view.failure.error}`;
+		lines.push({
+			level: "error",
+			message: `Session failed${cause}. It takes no more input, and a tool still running may take a while to stop. Close this session, then reopen it with --continue.`,
+		});
+	}
+	const compaction = ((view.conversation.docs["pi.live"] ?? {})             ).compactionFailure;
+	if (compaction !== undefined) {
+		lines.push({ level: "error", message: `Compaction failed (${compaction.reason}): ${compaction.error}` });
+	}
+	return [...lines, ...view.notices.slice(-4)];
+}
+
+/**
  * The live background-task badge: the dock's first row, never shrunk, so live background work stays on
  * screen however small the terminal gets. It counts the graph's background tasks whatever their kind and
  * names the ones that are not running; with none it renders nothing and the dock is upstream's.
@@ -212,7 +232,13 @@ export function durableLayout(transcript           , badge           , dock     
 			minSize: 1,
 			visible: (viewport) => badge.count === 0 || viewport.height > 1,
 		},
-		{ component: new VStack([{ component: badge, shrink: 0 }, ...dock]), basis: "auto", grow: 0, shrink: 1, minSize: 1 },
+		{
+			component: new VStack([{ component: badge, shrink: 0 }, ...dock]),
+			basis: "auto",
+			grow: 0,
+			shrink: 1,
+			minSize: 1,
+		},
 	]);
 }
 
@@ -368,7 +394,8 @@ class DurableTui {
 		this.#syncQueue((view.conversation.docs["pi.inbox"] ?? { items: [] })              );
 		this.#syncNotices(view);
 		this.#editor.borderColor = theme.getThinkingBorderColor(agentOf(view.conversation).thinkingLevel ?? "off");
-		this.#syncStatus(live);
+		// A failed session's live state is its last one; nothing is working any more.
+		this.#syncStatus(view.failure === undefined ? live : {});
 		this.#syncFooter(view);
 		if (this.#rebuilt) this.#transcript.scrollToEnd();
 		this.#ui.requestRender(this.#rebuilt);
@@ -409,7 +436,7 @@ class DurableTui {
 
 	#syncNotices(view             )       {
 		this.#notices.clear();
-		for (const item of view.notices.slice(-4)) {
+		for (const item of durableNotices(view)) {
 			const color = item.level === "error" ? "error" : item.level === "warning" ? "warning" : "muted";
 			this.#notices.addChild(new TruncatedText(theme.fg(color, item.message), 1, 0));
 		}
