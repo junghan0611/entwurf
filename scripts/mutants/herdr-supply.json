@@ -8,7 +8,7 @@
 			"subject": "scripts/check-herdr-sandbox.ts",
 			"find": ["const SUPPLY_MANIFEST = \"scripts/fixtures/herdr-supply.json\";"],
 			"replace": [
-				"const SUPPLY_MANIFEST = \"scripts/fixtures/herdr-supply.json\";\nconst PINNED_FALLBACK = \"0.9.3\";\nvoid PINNED_FALLBACK;"
+				"const SUPPLY_MANIFEST = \"scripts/fixtures/herdr-supply.json\";\nconst PINNED_FALLBACK = \"0.9.4\";\nvoid PINNED_FALLBACK;"
 			],
 			"gate": ["bash", "run.sh", "check-herdr-supply"],
 			"timeoutSeconds": 120,
@@ -19,8 +19,8 @@
 			"claim": "HSUP-DIGEST-SHAPE",
 			"title": "a pinned digest is truncated, so the check that is supposed to catch a swapped binary can no longer fail",
 			"subject": "scripts/fixtures/herdr-supply.json",
-			"find": ["\"sha256\": \"18a8dc65f1c2fa485884344356dea1cfd911c6f06cf46fa78e193f4087f4dba7\""],
-			"replace": ["\"sha256\": \"18a8dc65f1c2fa485884344356de\""],
+			"find": ["\"sha256\": \"493304fbefb0ed0ea0455f373b47f48d24e8774bc7974f4c916ad2e937675b23\""],
+			"replace": ["\"sha256\": \"493304fbefb0ed0ea0455f373b47\""],
 			"gate": ["bash", "run.sh", "check-herdr-supply"],
 			"timeoutSeconds": 120,
 			"signature": "[QK:HSUP-DIGEST-SHAPE]",
@@ -119,14 +119,14 @@
 			"signatureSource": "scripts/check-herdr-supply.ts"
 		},
 		{
-			"claim": "HSUP-X86-UNEXECUTED",
-			"title": "the x86_64 asset is recorded as executed although no cell of this rail has ever run on it",
+			"claim": "HSUP-EXECUTION-RECEIPT-BOUND",
+			"title": "the x86_64 asset is recorded as executed with no receipt bound to this pin's version and its own full digest",
 			"subject": "scripts/fixtures/herdr-supply.json",
 			"find": ["\"executed\": false"],
 			"replace": ["\"executed\": true"],
 			"gate": ["bash", "run.sh", "check-herdr-supply"],
 			"timeoutSeconds": 120,
-			"signature": "[QK:HSUP-X86-UNEXECUTED]",
+			"signature": "[QK:HSUP-EXECUTION-RECEIPT-BOUND]",
 			"signatureSource": "scripts/check-herdr-supply.ts"
 		}
 	]

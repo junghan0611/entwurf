@@ -4,6 +4,81 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+## v2026.10.14-herdr.0.36.0 — Herdr Entwurf plugin 0.36.0
+
+A separate Herdr plugin snapshot, not another core release: core package 0.36.0 and
+its `v0.36.0` tag remain unchanged. The operator has published the core to npm.
+
+### Herdr plugin
+
+- **Re-pin the published core 0.36.0.** `plugins/herdr/runtime-lock.json` names npm
+  `@junghanacs/entwurf@0.36.0` with the registry's measured sha512
+  (`sha512-3aPk69RmAF35x…244UwQ==`). The plugin manifest moves 0.35.1 → 0.36.0;
+  admission remains Herdr >= 0.9.0 and the one-build/one-pane/Linux shape is unchanged.
+- **The measured Herdr moves to 0.9.4.** `scripts/fixtures/herdr-supply.json` pins
+  v0.9.4 (`7e26bad9`), protocol 22, with both Linux asset digests taken from the
+  immutable release and named by its attestation. On aarch64 the pin rests on a
+  private CLI baseline: version, protocol 22, 18 `integration status` rows unchanged
+  from 0.9.3, pi (v9) and claude (v10) integrations seeded by 0.9.3 reading `current`
+  and reinstalling byte-identically, and a residue-free `server stop`. The full
+  `check-herdr-sandbox` has not run at this pin on either architecture; its first run
+  is this snapshot's CI. The x86_64 asset is recorded as not yet executed.
+- **Herdr 0.9.4 changes how plugins are installed.** It builds each install or update
+  in a new managed installation directory, keeps the previous one until no server uses
+  it, and adds `herdr plugin update`. The plugin README now says so. The Entwurf runtime
+  and harness wiring live outside the checkout, so an update should leave an activated
+  host working; that is not yet measured.
+
+### Source-specific verification
+
+- Registry metadata reports version/latest 0.36.0, repair 0.12.8-repair.1. The downloaded
+  tarball is 11121634 bytes, SHA256
+  `7478acd01828280ccb989c4eeb230ae5238bddeeb791f6caa209a4fca2e24a0a`, byte-identical to
+  the preserved accepted core candidate; independently computed sha512 equals
+  `dist.integrity`. A sandboxed `pi install npm:@junghanacs/entwurf@0.36.0` resolved the
+  ACP bridge inside the sandbox and listed the curated `entwurf` models.
+- **Focused gates on the branch.** On aarch64, with the digest-checked Herdr 0.9.4 first
+  on `PATH`, nine focused gates passed: `check-herdr-supply` (11 assertions),
+  `check-herdr-plugin` (49), `check-herdr-plugin-profile` (14), `check-herdr-plugin-build`
+  (21), `check-herdr-runtime-bootstrap` (31), `check-herdr-activation` (33),
+  `check-herdr-placement` (25), `check-herdr-fresh-call` (45) and `check-gate-manifests`.
+  That last one validated 971 committed mutants across 72 lanes and executed none of them.
+  The scripts typecheck fence was clean.
+- **Receipt binding tightened, then re-checked.** Review found that the supply gate's
+  receipt check accepted a `herdr 0.9.40` receipt for the 0.9.4 pin, because it matched a
+  substring. It now requires the receipt to begin with the exact version token. Nine
+  in-memory stimuli against the gate's own check then returned the expected verdicts. They
+  include that prefix-version counterexample, which is refused, and a synthetic future x86_64
+  positive, which is not execution evidence. The supply gate, the fence and
+  `check-gate-manifests` were re-run green. The supply group's qualification PARTIAL killed
+  11/11 mutants with a green control. The other 960 committed mutants did not run, so this is
+  not qualification of the snapshot.
+- **The npm runtime swap against the real registry.** These cells used the production
+  runtime helper against the real registry, in sandboxed user roots.
+  - Seeding: the 0.35.1 runtime came from its own committed lock and package metadata.
+  - Swap: 0.35.1 → 0.36.0 took one acquisition. The cached 0.36.0 tarball's sha512 equals
+    the lock. Its sha256 `7478acd0…` equals the ready journal's observed digest and the
+    accepted core candidate.
+  - Journals: the `installing` journal carried the 0.35.1 identity as `previousRuntime`;
+    the `runtime-ready` journal carries `previousRuntime: null`.
+  - Last-good tree: when acquisition began, the 0.35.1 tree was still at the active address.
+    That it stays there until the candidate verifies comes from the helper's source order
+    (write `installing`, acquire and verify in staging, then swap). The run observed only
+    the start of that window.
+  - Torn swap: a manually seeded one (the active tree moved to the backup address; not a
+    killed process or power loss) was restored before acquisition and reported
+    `recovered: torn-swap`.
+  - Re-request: an exact re-request acquired nothing and left journal and tree
+    byte-identical.
+  - Removal: the owned removal reclaimed cache, runtime and journal.
+  - Not certified by these cells: Herdr's install/update relocation, harness wiring, the
+    installed CLI's deactivate path, a model turn, or recovery from a real kill.
+- Pending, and not claimed here:
+  - the pushed SHA's four-job CI, with the full `check-herdr-sandbox` and the qualification
+    body (971 mutants);
+  - the public-ref install/use/update/deactivate journey on Herdr 0.9.4, including whether
+    an activated runtime survives a plugin update.
+
 ## 0.36.0 - 2026-10-13
 
 ### pi-durable

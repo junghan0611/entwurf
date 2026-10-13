@@ -32,7 +32,8 @@
  *   HSUP-CI-REQUIRES-HERDR    that floor runs with absence turned red
  *   HSUP-CI-LINUX-ONLY        only the Linux check job takes this; the other jobs are untouched
  *   HSUP-SETUP-NEVER-INSTALLS the product's own setup/package never installs herdr (Rule 17)
- *   HSUP-X86-UNEXECUTED       the x86_64 asset is pinned but recorded as never executed
+ *   HSUP-EXECUTION-RECEIPT-BOUND  an asset recorded as executed declares a receipt bound to this
+ *                                 pin's version and its own full digest; an unexecuted one has none
  */
 
 import assert from "node:assert/strict";
@@ -62,7 +63,34 @@ interface Supply {
 	measuredOn: string;
 	measuredArch: string;
 	releaseUrlPrefix: string;
-	assets: Record<string, { name: string; sha256: string; executed: boolean; executedNote: string }>;
+	assets: Record<
+		string,
+		{ name: string; sha256: string; executed: boolean; executedNote: string; executedReceipt?: string }
+	>;
+}
+
+/** An asset may be RECORDED as executed only with a declared receipt bound to THIS pin: the
+ * receipt BEGINS with the exact token `herdr <supply.version> ` (a substring match would let
+ * `herdr 0.9.40` stand for 0.9.4) and names the asset's FULL sha256. That checks the
+ * declaration's binding and nothing more — it is not a cryptographic receipt and cannot prove the
+ * binary ran. An unexecuted asset carries no receipt, both states keep a note, and the
+ * architecture the manifest says it was measured on must itself be recorded as executed. The
+ * architecture is never hardcoded: a future x86_64 `true` is admitted the same way, with its own. */
+function executionReceiptsBound(supply: Supply): boolean {
+	const assets = Object.values(supply.assets);
+	const noted = (note: unknown): boolean => typeof note === "string" && note.trim().length > 0;
+	return (
+		assets.length > 0 &&
+		assets.every((a) =>
+			a.executed === true
+				? typeof a.executedReceipt === "string" &&
+					a.executedReceipt.startsWith(`herdr ${supply.version} `) &&
+					a.executedReceipt.includes(a.sha256) &&
+					noted(a.executedNote)
+				: a.executed === false && a.executedReceipt === undefined && noted(a.executedNote),
+		) &&
+		supply.assets[supply.measuredArch]?.executed === true
+	);
 }
 
 function main(): void {
@@ -171,11 +199,8 @@ function main(): void {
 
 	// ── honesty about what has actually run ──────────────────────────────────────────────
 	ok(
-		"[QK:HSUP-X86-UNEXECUTED] the x86_64 asset is pinned but RECORDED AS NEVER EXECUTED — every measurement in this lane ran on aarch64, so a pinned digest must not read as evidence that the cell passes on the other architecture",
-		supply.assets.x86_64?.executed === false &&
-			supply.assets.aarch64?.executed === true &&
-			supply.measuredArch === "aarch64" &&
-			(supply.assets.x86_64?.executedNote ?? "").length > 0,
+		"[QK:HSUP-EXECUTION-RECEIPT-BOUND] an asset is recorded as executed only with a DECLARED receipt bound to this pin's version and its own full digest, and an unexecuted one carries none — a pinned digest is never evidence that its cell ran, and a receipt from another pin or another asset is not this one's. This checks the declaration's binding, not that the binary ran",
+		executionReceiptsBound(supply),
 	);
 
 	console.log(`\n[check-herdr-supply] ${passed} assertions ok`);

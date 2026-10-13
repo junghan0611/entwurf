@@ -1,10 +1,10 @@
 {
-	"$comment": "SSOT for the herdr binary this repository has MEASURED against. Nothing else may carry a version or a digest: the CI installer, the sandbox gate's boundary check and the launch-rail document all read or cite this file. Re-measuring a new herdr means running check-herdr-sandbox against it FIRST, then editing this file, then repairing the measured sentences in docs/herdr-launch-rail.md in the same commit — miss one and the gate fails on version mismatch, which is the point.",
-	"version": "0.9.3",
-	"tag": "v0.9.3",
-	"tagCommit": "7b116c05bfda646af39d2524c54e70c751f57ee8",
+	"$comment": "SSOT for the herdr binary this repository has MEASURED against. Nothing else may carry a version or a digest: the CI installer, the sandbox gate's boundary check and the launch-rail document all read or cite this file. Re-measuring a new herdr means measuring it FIRST — fetched by digest and verified before it is made executable, then run against a private sandbox server (at least version, status-client protocol and integration rows) — then editing this file and repairing the measured sentences in docs/herdr-launch-rail.md in the same commit; miss one and the gate fails on version mismatch, which is the point. A private baseline is not the full gate: check-herdr-sandbox at a new pin is certified by its exact-SHA CI run unless it was also run locally, and an asset is recorded `executed` only with a receipt bound to this version and its full digest (check-herdr-supply HSUP-EXECUTION-RECEIPT-BOUND).",
+	"version": "0.9.4",
+	"tag": "v0.9.4",
+	"tagCommit": "7e26bad94044eba205033111a0ce8033ede7e24f",
 	"socketProtocol": 22,
-	"measuredOn": "2026-10-03",
+	"measuredOn": "2026-10-14",
 	"measuredArch": "aarch64",
 	"releaseUrlPrefix": "https://github.com/herdrdev/herdr/releases/download",
 	"integrity": {
@@ -15,15 +15,16 @@
 	"assets": {
 		"x86_64": {
 			"name": "herdr-linux-x86_64",
-			"sha256": "18a8dc65f1c2fa485884344356dea1cfd911c6f06cf46fa78e193f4087f4dba7",
+			"sha256": "493304fbefb0ed0ea0455f373b47f48d24e8774bc7974f4c916ad2e937675b23",
 			"executed": false,
-			"executedNote": "pending the first CI run on an x86_64 runner — the digest is pinned (and named by GitHub's release attestation for pkg:github/herdrdev/herdr@v0.9.3), but no cell of this rail has ever run on this binary"
+			"executedNote": "not yet executed at this pin: the digest is pinned and named by GitHub's release attestation for pkg:github/herdrdev/herdr@v0.9.4, and the first CI check job at a SHA carrying this pin will be its first run. The previous pin's x86_64 asset (v0.9.3, sha256 18a8dc65…) did run there — CI run 38456259822, check-herdr-sandbox 12 assertions — which is dated history of that asset, not evidence for this one"
 		},
 		"aarch64": {
 			"name": "herdr-linux-aarch64",
-			"sha256": "4de7aa3e25678812e92960de64f7c2aaa1bca1f0f80a3c5e559837e231e1f5c0",
+			"sha256": "9511cb70982c1ef115f232058e7ed7cf9640aa5a2c0ca78934cefda3aeb093fd",
 			"executed": true,
-			"executedNote": "the #116 rail was re-measured on this exact binary on 2026-10-03 (#126), fetched by digest through scripts/install-herdr-ci.sh into a temp dir and run from an isolated snapshot whose manifest named it: `check-herdr-sandbox` green (12 assertions, private server), `herdr status client` reports protocol 22 (unchanged from 0.9.1), and `integration status` prints the same 18 rows as 0.9.1 in a sandbox HOME once that root path is normalized; pi (v9) and claude (v10) integrations installed by 0.9.1 read `current` under 0.9.3 and a 0.9.3 reinstall leaves their bytes identical. The operator host still runs the 0.9.1 asset at that date and was not touched. The 0.9.1 receipt (2026-09-17) stays dated in docs/herdr-launch-rail.md"
+			"executedReceipt": "herdr 0.9.4 linux-aarch64 sha256 9511cb70982c1ef115f232058e7ed7cf9640aa5a2c0ca78934cefda3aeb093fd — 2026-10-14, oracle aarch64, Phase A private CLI baseline (docs/herdr-launch-rail.md, 재측정 2026-10-14): `herdr --version` 0.9.4; `status client` protocol 22, endpoint_protocol_generation 1; `integration status` 18 rows, zero diff against 0.9.3; pi (v9) and claude (v10) integrations seeded by 0.9.3 read `current` and a 0.9.4 reinstall leaves their three files byte-identical; `server stop` leaves no socket and no process",
+			"executedNote": "the receipt is a private CLI baseline only. check-herdr-sandbox has NOT run on this architecture at this pin — its operator-untouched cell reads the operator's own panes — so the full gate's first run at this pin is the CI check job, on the x86_64 asset — not this one. The operator host still runs 0.9.3 and was not touched. The 0.9.3 receipt (2026-10-03, #126) stays dated in docs/herdr-launch-rail.md"
 		}
 	}
 }
