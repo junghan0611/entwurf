@@ -1,21 +1,22 @@
-# NEXT — Herdr0.35.0 npm snapshot after core publication
-
-Author: coordinator801621 (model unverified), 2026-10-12 — preparation-time agent handoff; actual acceptance lives in #137 and the release checkpoint, not a second doc-only push.
+# NEXT — 최우선 #141 / 목표0.36.0
+Author: gpt-6.1-sol (pi-durable/session20261008T113104-801621, 2026-10-13) — GLG 승인 좌표 checkpoint; 상세는 branch NEXT/정본 plan.
 
 # RAIL — 현재 좌표
-- [x] **1. Core0.35.0 released and operator npm published** — coremain/tag48dcc9a, GitHubRelease verified; operator publication independently confirmed via registry. Downloaded tarball11083782B/SHA25682ae9ab99b799c987fe0dac4bb76fc406afe42088a128a131af4d69a97592e71 equals the accepted core artifact; SRI matches, latest0.35.0/repair0.12.8-repair.1. Exact-registry-file Docker consumer passed.
-- [x] **2. Herdr0.35.0 source re-pin and focused/source-specific proof** — manifest0.35.0/measured npm lock; task12858 actual2m38s/0, real-npm0.34.2→0.35.0 swap/harness-seeded torn recovery/noop/inverse PASS,7focused gates exit0, stable HEAD/index/source. Independent review0Blocker/1proseDefect amended: pending CI/public-ref proof is not past acceptance. Package/rail/gate/mutant bytes do not change.
-- [ ] **3. Ordinary main push → literal #137 plugin observation and npm install journey** ← CURRENT: normal hooks/ff/push without `[skip ci]`, four ordinary CI jobs and automatic untouched-TOML BODY SKIP; real public-ref clean-container install/use/deactivate/reinstall. These remain pending at preparation time. No95-minute BODY; a skipped BODY is not core qualification PASS.
-- [ ] **4. Plugin snapshot/tag/GitHubRelease, then #137 closure** — `v2026.10.12-herdr.0.35.0`, not core SemVer/tag/version. Actual outcomes and registry/source-specific receipts on the release/#137; stop before operator installation changes or another npm publication.
+- [x] **1. #141 방향·Opus 설계·R0 확정** — 얇은 TUI/application은 Entwurf 정본, 엔진은 upstream SDK.
+- [ ] **2. branch에서 S0 → S1 → 검증** ← CURRENT: 좌표 commit 후 기존 Opus 단일 writer로 S0 실무. 별도 runtime 보호/자동 이전 prerequisite는 GLG가 철회.
+- [ ] **3. GLG 수동 재시작·normal release** ← PAUSED:1.2 설치-ready 알림 → 껐다 켜기 → 서로 보임/대화 실제 확인 → 해당 승인 release gates 계속.
+- [ ] **4. #128/#78 등 queue 복귀** ← PAUSED: #141 priority00; 옛 patch 전체 재개 금지.
 
-# NOW
-- Next: one ordinary main push, then observe actual four-job CI/production filter BODY SKIP and source-specific public npm journey on its exact SHA; prove the unchanged exact-SHA oracle still refuses a body-less plugin SHA. Only then tag/GitHubRelease and close#137. Do not reuse old0.34.x receipts or the core candidate's checkout-carrier evidence for this npm-source pin.
-- Latest user authority: operator npm completed, “herdr 가자.” Corev0.35.0 GitHubRelease is already live at48dcc9a. Agent may release the separate Herdr snapshot; no additional npm publish or dist-tag movement, no personal/global installation repair, and no model/nativeCodex turn/probe. The original demo/media/native evidence remains untouched.
-- #137 acceptance4 is the actual next-plugin metadata snapshot, not another filter implementation. Preserve code/gate/mutant/workflow bytes, exact TOML find spans and line positions; body skip must come from the unchanged production decision on the actual main push, not `[skip ci]` or a forced/floor-only dispatch. If an unexpected long BODY starts, cancel under the no95 authority and record the actual result, never pretend acceptance.
-- Production source is npm. Settled same-source npm installations may rebind under README conditions; checkout→npm is an explicit source switch requiring operator deactivate/activate by the owned runtime's absolute path. This lane does not rewire existing hosts or protected active sessions.
+# NOW — 상세 좌표는 branch
+- **Next:** [NEXT--feat_141-pi-durable-owned-surface.md](./NEXT--feat_141-pi-durable-owned-surface.md).
+- **정본 계약:** [docs/pi-durable-owned-surface-plan.md](./docs/pi-durable-owned-surface-plan.md), https://github.com/junghan0611/entwurf/issues/141 최신 body/thread.
+- **현재 권한:** GLG가 좌표 commit 후 실무 진행 지시. 이번 commit은 docs/NEXT만, SDK/source/carrier/LIVE acceptance 아님; push 없음. 구현은 S0부터, 추가 commit/push/release는 해당 승인 때만.
+- **Operator:** 같은 checkout에서 작업·새 버전 설치, 코디가 시점 안내, GLG가 수동 재시작. 자동 이전/별도 runtime 격리/supervisor 없음. 코디가 routine 호환·검증을 조율하고 실제 결정 사건만 DM.
+- **Merge 전:** owning docs/issue에 결과 승격 후 disposable branch NEXT 제거. 이전 main NEXT는 `.tmp-verify/141-kickoff/main-next.before-branch.md`에 보존.
 
-# READ / preservation
-- [Herdr recipe](./plugins/herdr/README.md), [VERIFY](./VERIFY.md), [CHANGELOG](./CHANGELOG.md), [#137](https://github.com/junghan0611/entwurf/issues/137), [core0.35.0 release](https://github.com/junghan0611/entwurf/releases/tag/v0.35.0). #138 is closed for approved original README media/source restoration; closure does not authorize retakes or certify original/new-LIVE/tooling-consumer boundaries.
-- Core cut exceptions remain explicitly unmeasured: whole940 qualification BODY and native Codex LIVE. Four-floor CI38171776316/FULL549s/Node59 and exact-core artifact Docker proof are real but not whole qualification/standard`--cut` PASS. No repeat prepare/make/P5/full LIVE or local whole BODY; no forced qualification dispatch.
-- Private current evidence `.tmp-verify/138-demo-gifs/coordinator/reproducibility/`: Herdr035 registry metadata/driver/root, new runtime-recovery/focused/public/CI receipts, core actual-tag/Release/candidate handoff. Inventory940/70/90/180 is expectation, not an executed whole BODY. Public checkpoints are model-unverified agent perspective, not GLG-direct wording.
-- Preserve original/failed media, casts/exact render input, native/raw transcripts, DB/cache/archive/vendor roots, scoped stash/unknown-owned files and operator/unrelated sessions. Small isolated runtime/container fixtures only; no extra developer clones/worktrees/peers/models, broad sweep/kill, settings/auth/credential probes, force or bypass. DM487/488/489 delivered once; never resend. No duplicate main completion notification.
+# RECENT / 보존
+- R0:6 carrier/license bytes 동일,30 relative imports→24 installed1.1 d.ts; strict source check는 proper-lockfile 타입 미설치 RED1.1.2 호환은 아직 미측정.
+- 0.35.1 종료 보고 및 exact-SHA CI success는 이전 cut 증거. #141에 상속하지 않음; #140 local FULL 예외도 상속하지 않음.
+- Original records/transcripts/DB/WAL/credentials/company files/stash/unknown-owned/media 보존. No force/reset/stash/hook bypass/new clone/worktree/agent kill·restart·자동이전·reapply/recovery.
+- 다음 Codex LIVE는 operator app-server와 fresh triple 필요; absent SKIP→cut BLOCKED. Operator visibility/dialog만으로 전체 LIVE acceptance를 주장하지 않음.
+- Homepage drafts `content/blog/20260804T094556.ko.md`, `content/blog/20260804T094556.md` 보호. #128 archive 전체 apply 금지. Local-only commit은 agenda stamp/DM 중계 없음.
