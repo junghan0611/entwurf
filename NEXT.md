@@ -1,21 +1,42 @@
-# NEXT — after core 0.36.0 and the Herdr plugin 0.36.0 snapshot
+# NEXT — core 0.36.1 patch cut from #128 checkpoints
 Author: Claude Opus 5.5 (claude-code 20261011T202615-521a11, 2026-10-14) on coordinator routing (pi-durable 20261008T113104-801621) — not GLG direct.
 
 # RAIL — 현재 좌표
-- [x] **1. Core 0.36.0** — `v0.36.0` at `daf8cab`; GLG published npm 0.36.0, registry bytes identical to the accepted artifact. The core CI's oracle refusal of stale step metadata is a GLG-accepted per-cut exception, not a PASS or a later waiver.
-- [x] **2. Herdr plugin 0.36.0 on Herdr 0.9.4** — snapshot `v2026.10.14-herdr.0.36.0` at `9f33dd1` (GitHub release, not Latest). One main push, one CI (38479767989: four jobs, oracle PASS, `check-herdr-sandbox` 12 on 0.9.4, 971/971). Public-ref LIVE before publication: the first user path at `main` = `9f33dd1`, and a version-changing cross-ref reinstall (`install --ref main` over the 0.35.1 snapshot) across a pinned Pi 1.1 → 1.2 upgrade with a running session surviving (10/10); `plugin update` was a same-ref no-op only. #141 closed with its completion comment. Homepage `87940b5` pushed and its deployed gate `verify-deployed.mjs https://junghanacs.com 87940b5…` rc 0 (21 paths); the coordinator updated the steward note 052051 through the Emacs API.
-- [ ] **3. #128 multi-harness inspection (ACP 0.90.0 · Codex · OMP · Copilot)** ← CURRENT: #128 read-only planning / GLG measurement-repair decision pending.
+- [x] **1. Core 0.36.0 / Herdr plugin 0.36.0** — `v0.36.0` at `daf8cab` and `v2026.10.14-herdr.0.36.0` at `9f33dd1`; their acceptance records stay in CHANGELOG and `452c461`. Both tags and the npm 0.36.0 bytes are immutable.
+- [x] **2. #128 checkpoints** (branch `feat/128-codex-socket-ownership`, fast-forwarded onto main):
+  - `fdf8c3d` — the Codex smoke reads app-server socket ownership from the kernel (CP-A1; PARTIAL 150/150);
+  - `3da44be` — Claude ACP closure 0.85.1→0.90.0 (PARTIAL 4/4; first readback launch-and-overlay-seam only);
+  - `3e4f52f` — five ACP turn-loop gates sandboxed off the operator overlay (PARTIAL 45/45);
+  - `3242922` — the production-meta readback on 0.90.0 (no prompt; 3 curated answers unchanged).
+  - PARTIALs are inner-loop evidence only, not a FULL, CI or LIVE pass.
+- [ ] **3. Core 0.36.1 patch cut** ← CURRENT (GLG: "응 진행하자", 2026-10-14). prepare → make with the required LIVE `--cut` and exact-SHA CI; GLG publishes npm.
 
 # NOW
-- **Next:** #128, starting read-only. The issue body's top contract is current (coordinator-updated 2026-10-14). One measured open item: `scripts/smoke-codex-fresh-live.ts:777-785` (read at `9f33dd1`) labels the check "the explicit app-server PID owns the same default UDS" but its predicate compares only `--listen` argv spelling. The repair is a design decision (owner from the socket, not argv; a separate tmux-seat precondition), not yet approved. ACP pin stays 0.85.1 until its own measured move.
-- **Carried limits from the plugin cut (unmeasured, not claimed):** session MCP/model continuity across a reinstall; `pi update self`; host Pi or Herdr upgrade; a `plugin update` that finds a new commit; herdr-pane ROW; x86_64 container; the tag as `--ref`; when Herdr reclaims a retained previous installation. The supply manifest's x86_64 `executed: false` is still the preparation-time declaration — flipping it is a separate, gate-bound change.
-- **Documentation follow-up:** CHANGELOG/README/VERIFY/NEXT record the completed cut on main; this docs-only follow-up changes no package, version, runtime or supply declaration. Acceptance remains bound to the immutable snapshot at `9f33dd1`. GLG approved this commit/push without a CI run (`[skip ci]`), so the docs SHA claims no CI PASS.
-- **Authority:** every step is routed by the coordinator; GLG decides commit, push and release. Agents never npm publish. Core tag `daf8cab`, plugin tag `9f33dd1` and the npm 0.36.0 bytes are immutable.
+- **Cut scope:** the Codex socket-ownership smoke, the ACP 0.90.0 compatibility move and the offline gate isolation. No #142 feature and no Herdr change; the plugin keeps core 0.36.0 / host 0.9.4.
+- **Codex LIVE seat:** the 0.36.0-era app-server (PID 851181 / tmux $443) was stopped by approval at 11:26:50 KST. The cut starts its own owned server in a separate session A (A ≠ S) with the explicit `--listen` wrapper shape that CP-A1 admits. A vendor-managed daemon is not admitted; that is CP-A2.
+- **Open in #128, not claimed by this cut:**
+  - CP-A2 managed-daemon admission;
+  - the Copilot 1.0.97 cell;
+  - agy 1.3.1 (NOT CERTIFIED);
+  - the OMP 18.10.4 doctors;
+  - the remaining native cells (C).
+- **Observations kept with their limits:** overlay `projects/` 524 → 469 during the first readback (cause unmeasured; GLG decided no retention change, which is not a deletion approval), and one inbound-tap stream error per readback.
+- **Parked:** #142. When GLG switches to it, the coordinator re-opens session `20261014T115640-17d999`; memory file `.tmp-verify/128-kickoff-037/COORDINATOR-142-REENTRY.md`.
+- **Carried limits from the Herdr plugin cut (unmeasured, not claimed):**
+  - session MCP/model continuity across a reinstall;
+  - `pi update self`;
+  - host Pi or Herdr upgrade;
+  - a `plugin update` that finds a new commit;
+  - herdr-pane ROW;
+  - x86_64 container;
+  - the tag as `--ref`;
+  - when Herdr reclaims a retained previous installation.
+- **Authority:** the coordinator routes every step; GLG decides commit, push and release. Agents never npm publish.
 
 # GUARDRAILS
 - Engine/auth/queues/storage/transcripts/recovery stay upstream (Rule 9). No second harness, source clone/worktree, ambient discovery, login probing or credential mediation.
 - Never run local `check-herdr-sandbox`: its `operatorPanes()` reads actual host panes. No bypass/new seam/fake PASS; the full gate is CI's.
 - No local qualification BODY or gratuitous FULL/model matrix; affected PARTIAL groups only; one CI per landing, not per checkpoint. No replay of healthy checks.
-- Preserve the operator Codex app-server PID 851181 / tmux $443, records/transcripts/DB/WAL/credentials/stash/assets/unknown roots, and the protected drafts `content/blog/20260804T094556.ko.md` / `.md` in the homepage repo. No operator restart/upgrade/config change, inferred PID replacement, socket rewrite/reset/migration, historical worktree repair/prune or manual cleanup/GC. P9 is read-only.
+- Preserve records/transcripts/DB/WAL/credentials/stash/assets/unknown roots and the protected drafts `content/blog/20260804T094556.ko.md` / `.md` in the homepage repo. Never infer a PID or rewrite/reset/unlink a socket; stop only the server this cut owns, gracefully. Clean only residue whose prefix and provenance are confirmed and not in use; no global prune.
 - Verification drivers use explicit sandbox environment allowlists and names/versions only: no wildcard environment dumps or raw credential/transcript reads. Private incident chronology stays in owned ignored receipts, not public text.
 - #78 and GLG's agent-config useful-extension investigations remain deferred. GLG is watching; no duplicate/progress DM.
