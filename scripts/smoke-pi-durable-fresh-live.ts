@@ -538,9 +538,29 @@ ok(
 	fs.existsSync(liveDb),
 	liveDb,
 );
+const sqlite = await import("node:sqlite");
+// A doorbell input stays `placed` while the run that consumed it is active and turns `done` only when that run
+// ends (pi-durable's SubmissionRecord). Pi's relay can land before pd's final generation commits, so the snapshot
+// waits for THIS message's submission to settle (`done` or `unanswered`); the assertions below judge what settled.
+const msgName = /meta-mailbox → enqueued \(([^)]+)\)/.exec(piToPd.text)?.[1] ?? "";
+const doorbellRequestId = `entwurf-doorbell:${pdGid}:${msgName}`;
+if (msgName !== "") {
+	receipts["6-native-doorbell-settled"] = await until(`pd's doorbell submission to settle`, TURN_WAIT_MS, () => {
+		const live = new sqlite.DatabaseSync(liveDb, { readOnly: true });
+		try {
+			const rows = live.prepare("SELECT status, record FROM submissions").all() as Array<{
+				status: string;
+				record: string;
+			}>;
+			const hit = rows.find((r) => (JSON.parse(r.record) as { requestId?: unknown }).requestId === doorbellRequestId);
+			return hit?.status === "done" || hit?.status === "unanswered" ? hit.status : null;
+		} finally {
+			live.close();
+		}
+	});
+}
 const snapshot = path.join(receiptsDir, "pd-session.snapshot.sqlite");
 fs.mkdirSync(receiptsDir, { recursive: true });
-const sqlite = await import("node:sqlite");
 {
 	const source = new sqlite.DatabaseSync(liveDb, { readOnly: true });
 	try {
@@ -599,8 +619,7 @@ ok(
 	JSON.stringify(pdToPi),
 );
 receipts["6-pd-to-pi-settled"] = JSON.stringify(pdToPi);
-const msgName = /meta-mailbox → enqueued \(([^)]+)\)/.exec(piToPd.text)?.[1] ?? "";
-const doorbell = pdDoorbellSubmission(nativeSubmissions, rootId, `entwurf-doorbell:${pdGid}:${msgName}`);
+const doorbell = pdDoorbellSubmission(nativeSubmissions, rootId, doorbellRequestId);
 receipts["6-native-doorbell-submission"] = JSON.stringify(doorbell);
 ok(
 	"the doorbell admitted THIS message's notice to the root conversation and the submission is done",
