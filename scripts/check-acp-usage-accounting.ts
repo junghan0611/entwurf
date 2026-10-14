@@ -60,6 +60,7 @@ import type {
 } from "@earendil-works/pi-ai";
 import { isContextOverflow, normalizeContext } from "@earendil-works/pi-ai";
 import { calculateContextTokens } from "@earendil-works/pi-coding-agent";
+import { assertOverlayInSandbox, sandboxAcpGateHome } from "./lib/acp-gate-home.ts";
 
 const claude = { id: "claude-sonnet-5-5" } as unknown as Model<Api>;
 const cortex = { id: "cortex-auto" } as unknown as Model<Api>;
@@ -193,8 +194,6 @@ function makeHarness(recordDir: string, scripts: TurnScript[]) {
 			return newSessionCalls;
 		},
 		deps: {
-			resolveLaunch: () => ({ command: "node", args: ["fake"] }),
-			ensureOverlay: () => {},
 			spawnChild: () => {
 				const c = makeFakeChild();
 				children.push(c);
@@ -297,6 +296,7 @@ function reuseCtx3(a: string, b: string, c: string): TranscriptContext {
 const TMP_EMIT = ".tmp-verify/acp-usage-accounting";
 rmSync(TMP_EMIT, { recursive: true, force: true });
 const recordDir = mkdtempSync(resolve(tmpdir(), "acp-usage-acct-"));
+const gateHome = sandboxAcpGateHome("acp-usage-accounting-home-");
 
 try {
 	execFileSync("node_modules/.bin/tsc", ["--outDir", TMP_EMIT, "--rootDir", ".", "--noEmit", "false"], {
@@ -306,6 +306,7 @@ try {
 	mkdirSync(promptsOut, { recursive: true });
 	copyFileSync("pi-extensions/lib/acp/prompts/engraving.md", resolve(promptsOut, "engraving.md"));
 	const backend = (await import(pathToFileURL(resolve(TMP_EMIT, "pi-extensions/lib/acp/backend.js")).href)) as any;
+	await assertOverlayInSandbox(TMP_EMIT, gateHome);
 
 	// ----------------------------------------------------------------------
 	// CELL 1 — the turn aggregate never reaches pi's per-request fields.
@@ -1062,6 +1063,7 @@ try {
 		// non-empty or already gone — fine either way
 	}
 	rmSync(recordDir, { recursive: true, force: true });
+	gateHome.restore();
 }
 
 /** Distinct-but-uninteresting token partition for the cost-focused cells. */

@@ -39,6 +39,7 @@ import { pathToFileURL } from "node:url";
 import type { Api, AssistantMessageEvent, Message, Model, TranscriptContext } from "@earendil-works/pi-ai";
 import { normalizeContext } from "@earendil-works/pi-ai";
 import { isRetryableAssistantError } from "@earendil-works/pi-ai/compat";
+import { assertOverlayInSandbox, sandboxAcpGateHome } from "./lib/acp-gate-home.ts";
 
 const sonnet = { id: "claude-sonnet-5-5" } as unknown as Model<Api>;
 
@@ -196,8 +197,6 @@ function makeHarness(recordDir: string) {
 			await notifier?.({ sessionUpdate: "agent_message_chunk", content: { type: "text", text } });
 		},
 		deps: {
-			resolveLaunch: () => ({ command: "node", args: ["fake"] }),
-			ensureOverlay: () => {},
 			spawnChild: () => {
 				const c = makeFakeChild();
 				children.push(c);
@@ -279,6 +278,7 @@ function reuseCtx(prior: string, latest: string): TranscriptContext {
 const TMP_EMIT = ".tmp-verify/acp-prompt-lifecycle";
 rmSync(TMP_EMIT, { recursive: true, force: true });
 const recordDir = mkdtempSync(resolve(tmpdir(), "acp-prompt-life-"));
+const gateHome = sandboxAcpGateHome("acp-prompt-lifecycle-home-");
 
 try {
 	execFileSync("node_modules/.bin/tsc", ["--outDir", TMP_EMIT, "--rootDir", ".", "--noEmit", "false"], {
@@ -288,6 +288,7 @@ try {
 	mkdirSync(promptsOut, { recursive: true });
 	copyFileSync("pi-extensions/lib/acp/prompts/engraving.md", resolve(promptsOut, "engraving.md"));
 	const backend = (await import(pathToFileURL(resolve(TMP_EMIT, "pi-extensions/lib/acp/backend.js")).href)) as any;
+	await assertOverlayInSandbox(TMP_EMIT, gateHome);
 
 	// ----------------------------------------------------------------------
 	// CELL 1 — a long / quiet turn is NOT killed.
@@ -918,6 +919,7 @@ try {
 		// non-empty or already gone — fine either way
 	}
 	rmSync(recordDir, { recursive: true, force: true });
+	gateHome.restore();
 }
 
 console.log(

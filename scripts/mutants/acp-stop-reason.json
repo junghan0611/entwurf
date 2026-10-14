@@ -75,6 +75,17 @@
 			"timeoutSeconds": 120,
 			"signature": "[QK:STOP-PENDING-SEED]",
 			"signatureSource": "scripts/check-acp-stop-reason.ts"
+		},
+		{
+			"claim": "ACP-GATE-HOME-SANDBOXED",
+			"title": "the ACP gate sandbox leaves HOME on the operator's home — the compiled backend resolves the Claude overlay there, so its real ensureOverlay() would refresh the operator's overlay",
+			"subject": "scripts/lib/acp-gate-home.ts",
+			"find": ["\tprocess.env.HOME = home;"],
+			"replace": ["\t// HOME left on the operator's home"],
+			"gate": ["bash", "run.sh", "check-acp-stop-reason"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:ACP-GATE-HOME-SANDBOXED]",
+			"signatureSource": "scripts/lib/acp-gate-home.ts"
 		}
 	]
 }

@@ -32,6 +32,7 @@ import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import type { Api, AssistantMessageEvent, Context, Message, Model, TranscriptContext } from "@earendil-works/pi-ai";
 import { normalizeContext } from "@earendil-works/pi-ai";
+import { assertOverlayInSandbox, sandboxAcpGateHome } from "./lib/acp-gate-home.ts";
 
 // The pi built-ins the Claude child also exposes natively. pi declares its tool
 // surface on every turn; since 0.86 that declaration reaches a provider as the
@@ -175,8 +176,6 @@ function makeHarness(recordDir: string, config: any = DEFAULT_RESOLVED_CONFIG, e
 	});
 
 	const deps = {
-		resolveLaunch: () => ({ command: "node", args: ["fake"] }),
-		ensureOverlay: () => {},
 		spawnChild: () => {
 			const c = makeFakeChild();
 			children.push(c);
@@ -268,6 +267,7 @@ function reuseCtx(prior: string, latest: string): TranscriptContext {
 const TMP_EMIT = ".tmp-verify/acp-session-reuse";
 rmSync(TMP_EMIT, { recursive: true, force: true });
 const recordDir = mkdtempSync(resolve(tmpdir(), "acp-reuse-rec-"));
+const gateHome = sandboxAcpGateHome("acp-session-reuse-home-");
 
 try {
 	execFileSync("node_modules/.bin/tsc", ["--outDir", TMP_EMIT, "--rootDir", ".", "--noEmit", "false"], {
@@ -283,6 +283,7 @@ try {
 	const backendUrl = pathToFileURL(resolve(TMP_EMIT, "pi-extensions/lib/acp/backend.js")).href;
 	const storeUrl = pathToFileURL(resolve(TMP_EMIT, "pi-extensions/lib/acp/session-store.js")).href;
 	const backend = (await import(backendUrl)) as any;
+	await assertOverlayInSandbox(TMP_EMIT, gateHome);
 	const store = (await import(storeUrl)) as any;
 	const configUrl = pathToFileURL(resolve(TMP_EMIT, "pi-extensions/lib/acp/config.js")).href;
 	const configMod = (await import(configUrl)) as any;
@@ -814,6 +815,7 @@ try {
 		// non-empty or already gone — fine either way
 	}
 	rmSync(recordDir, { recursive: true, force: true });
+	gateHome.restore();
 }
 
 console.log(

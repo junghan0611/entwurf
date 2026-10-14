@@ -54,6 +54,7 @@ import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import type { Api, AssistantMessageEvent, Model } from "@earendil-works/pi-ai";
 import { normalizeContext } from "@earendil-works/pi-ai";
+import { assertOverlayInSandbox, sandboxAcpGateHome } from "./lib/acp-gate-home.ts";
 
 const sonnet = { id: "claude-sonnet-5-5" } as unknown as Model<Api>;
 
@@ -118,8 +119,6 @@ const DEFAULT_RESOLVED_CONFIG: any = {
  */
 function makeHarness(recordDir: string, wireReason: string | null) {
 	return {
-		resolveLaunch: () => ({ command: "node", args: ["fake"] }),
-		ensureOverlay: () => {},
 		spawnChild: () => makeFakeChild(),
 		createConnection: (_child: any, handlers: any) => ({
 			initialize: async () => ({ agentCapabilities: {} }),
@@ -143,6 +142,7 @@ function makeHarness(recordDir: string, wireReason: string | null) {
 const TMP_EMIT = ".tmp-verify/acp-stop-reason";
 rmSync(TMP_EMIT, { recursive: true, force: true });
 const recordDir = mkdtempSync(resolve(tmpdir(), "acp-stop-rec-"));
+const gateHome = sandboxAcpGateHome("acp-stop-reason-home-");
 
 /**
  * One driven turn, described by everything an operator could observe.
@@ -250,6 +250,7 @@ try {
 	const backendUrl = pathToFileURL(resolve(TMP_EMIT, "pi-extensions/lib/acp/backend.js")).href;
 	const eventUrl = pathToFileURL(resolve(TMP_EMIT, "pi-extensions/lib/acp/event-mapper.js")).href;
 	const backend = (await import(backendUrl)) as any;
+	await assertOverlayInSandbox(TMP_EMIT, gateHome);
 	const eventMod = (await import(eventUrl)) as any;
 
 	// ----------------------------------------------------------------------
@@ -354,6 +355,7 @@ try {
 		// non-empty or already gone — fine either way
 	}
 	rmSync(recordDir, { recursive: true, force: true });
+	gateHome.restore();
 }
 
 console.log(
