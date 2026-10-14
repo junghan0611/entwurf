@@ -134,10 +134,10 @@ ledger, 2026-10-03).
 | Surface | Declaration | Class | What a green actually says |
 |---|---|---|---|
 | Entwurf package | `package.json` `version` | checkout declaration, not a release receipt | names the package label these rows sit beside; whether that label shipped, and with which rows, is CHANGELOG's record |
-| pi runtime | SDK exact `1.2.0`, host `>=1.2.0 <1.3` | **exact** oracle + **closed range** | the SDK set this checkout builds, gates and (since #130) ships as exact production dependencies; an ordinary Pi host inside the range is accepted, and the ceiling moves only on measurement. Unshipped candidate: #141's 1.2.0 move has its own acceptance still owed. Historical: the published 0.33.0 through 0.35.1 ship SDK exact 1.1.0, 0.32.0 ships SDK exact 1.0.4 with the next-minor ceiling (ROADMAP's 2026-10-07 bump entry), and 0.31.0 declared the earlier peer floor 1.0.2 |
-| ACP wire SDK | `@agentclientprotocol/sdk 1.6.0` | **exact** | the shared wire oracle both adapters speak |
-| Claude ACP adapter | `@agentclientprotocol/claude-agent-acp 0.85.1` | **exact**, bundled | checkout candidate; resolved before any PATH fallback; declaration is not compatibility evidence |
-| Claude Agent SDK | `0.3.286` (transitive) | **exact** oracle | the runtime risk surface behind the adapter |
+| pi runtime | SDK exact `1.2.0`, host `>=1.2.0 <1.3` | **exact** oracle + **closed range** | the SDK set this checkout builds, gates and (since #130) ships as exact production dependencies; an ordinary Pi host inside the range is accepted, and the ceiling moves only on measurement. The published 0.36.0 ships this 1.2.0 set (#141). Historical: the published 0.33.0 through 0.35.1 ship SDK exact 1.1.0, 0.32.0 ships SDK exact 1.0.4 with the next-minor ceiling (ROADMAP's 2026-10-07 bump entry), and 0.31.0 declared the earlier peer floor 1.0.2 |
+| ACP wire SDK | `@agentclientprotocol/sdk 1.8.0` | **exact** | the shared wire oracle both adapters speak |
+| Claude ACP adapter | `@agentclientprotocol/claude-agent-acp 0.90.0` | **exact**, bundled | checkout candidate; resolved before any PATH fallback; declaration is not compatibility evidence |
+| Claude Agent SDK | `0.3.296` (transitive) | **exact** oracle | the runtime risk surface behind the adapter |
 | Anthropic SDK | `0.100.1` | **exact**, peer-resolution only | satisfies the Agent SDK peer floor (0.93.0+); never an API client here (gate L4) |
 | Claude Code runtime | `>=2.1.217` (`entwurf.claudeCodeFloor`) | **floor** | below it, hook args are silently dropped; entwurf enforces this itself |
 | Node | `>=24` (`engines.node`) | **floor** | single axis, derived everywhere else |
@@ -333,6 +333,55 @@ different reasons, and collapsing them would hide a real risk**:
     `turnQuotaMeta` and `quotaTokenCount` are byte-identical as extracted entry bodies. Turn
     settlement moved inside the changed `runConsumer`.
 
+- **0.85.1 → 0.90.0 (#128) is a compatibility bump; Entwurf writes no new contract for it.**
+  `[측정 2026-10-14; upstream compare 72 commits / 185 files read through the GitHub API; nothing
+  executed but the readback below]`. The closure and evidence classes are in the ROADMAP Dep bump
+  entry for 2026-10-14.
+  - **Set-model readback re-measured, not inherited.** One no-prompt run against the installed
+    0.90.0 through the production launch and overlay seam. On the wire: `initialize` ×1,
+    `session/new` ×4, `session/set_config_option` ×3, no `session/prompt`, and no message,
+    thought, tool, plan or usage update. Production `enforceModel` accepted all three curated
+    ids with the 0.85.1 answers, so `CLAUDE_SET_MODEL_ALIAS_ROWS` is unchanged. The offered list
+    grew from 12 to 13 rows: Fable 5.1 is now offered as the alias `fable` (the set answer still
+    names its own `claude-fable-5-1` row), `haiku` is named `Haiku 5.5`, and
+    `claude-haiku-4-5-20251001` is new. Offered rows are not Entwurf support: only the three
+    curated ids (`model-ids.js`) were set and read back, and no other row is measured or
+    admitted. The vendor's auth-status notifications and context probes are not model turns,
+    and nothing here proves zero API calls; the billing rail is unmeasured.
+  - **Evidence limits, stated before anything builds on this entry.** The readback followed the
+    production launch and overlay seam only. Its session meta carried the model alone and
+    omitted the production `settingSources: []` (`tool-surface.ts:152`), so it is not a full
+    production-shape measurement; a re-measurement through `claudeAdapter.buildSessionMeta`
+    follows. The focused green of `check-acp-{stop-reason,usage-accounting,prompt-lifecycle,
+    stream-hooks,session-reuse}` proves fake semantics only, not Rule 12 isolation: their
+    `ensureOverlay` stub sits on deps, which backend never reads, so the real adapter refreshes
+    the operator overlay. Their isolation repair follows; the earlier "no gate touches the
+    operator overlay" claim is retired.
+  - **Two operating observations from that run, both with the cause unmeasured.** The overlay
+    `projects/` held 524 entries after `ensureOverlay` and before the spawn, and 469 after the
+    child group was reaped; the run itself deletes nothing there and left no entry for its
+    scratch cwd. Which process removed the 55 entries, and whether they were transcripts, is not
+    measured, and it is not claimed for earlier driver versions. Separately, the inbound wire tap
+    saw one stream error event in a phase that was not recorded, while every request was
+    answered and no line failed to parse.
+  - **Permission options are unchanged.** The nine option builders under `permissions/` are
+    byte-identical between the tags. `presentation.ts` adds titles only for v2 clients, and
+    `exit-plan.ts` publishes the approved plan only behind the `plan` client capability; we
+    advertise neither.
+  - **Cancel and turn settlement are fixed upstream and compatible here.** The stop-reason set is
+    unchanged; only `cancelled` gains emission sites (5 → 7), across #1228, #1229, #1242 and
+    #1243 (0.86) and #1221, #1309, #1313 and #1327 (0.90). The typed `incomplete_tool_call`
+    rejection keeps its kind and text. Our abort is still `session/cancel` → grace → teardown;
+    the runtime effect of these fixes is UNRUN.
+  - **Ambient only:** 0.90 merges model settings as `{...CLAUDE_MODEL_CONFIG, ...provided}`, so
+    an ambient `CLAUDE_MODEL_CONFIG` can now shape the model rows. Entwurf neither sets nor
+    scrubs it (the spawn env spreads `process.env`), the same posture as
+    `CLAUDE_AGENT_ACP_EXPERIMENTAL_V2`.
+  - **Behind capabilities we do not advertise:** v2 router fixes, RFD subagents, the AIR session
+    index and background terminals. Observation: a prompt that is exactly `/mcp` is answered by
+    the agent (#1218); a new session's first prompt carries our augment ahead of the user text,
+    a reuse turn does not.
+
 - **The one 0.73.0 → 0.75.1 change that DOES reach us:** context compaction is now surfaced as a
   synthetic ACP tool lifecycle (0.75.0, #991) — a `tool_call` with `kind: "think"`, title
   `Compact conversation`, and `_meta.contextCompaction` schema v1 — where it used to arrive as
@@ -405,7 +454,8 @@ typing `pi --model …` keeps the upstream fuzzy behaviour, so use the full 5.5 
 The adapter reads its set-model answer back before the prompt. The driver resolves the
 requested id onto one of the rows it offers and answers with that row's `value` as the
 model option's `currentValue` (0.85.1 `dist/acp-agent.js:5459-5499`). Measured on
-2026-10-12 against 0.85.1 with no prompt sent: `claude-fable-5-1` answers its own row,
+2026-10-12 against 0.85.1, and again unchanged on 2026-10-14 against 0.90.0, with no
+prompt sent: `claude-fable-5-1` answers its own row,
 while `claude-sonnet-5-5` and `claude-opus-5-5` answer the alias rows `sonnet` and
 `opus`, named `Sonnet 5.5` and `Opus 5.5`. The id an alias row resolves to is not on the
 ACP wire, so `CLAUDE_SET_MODEL_ALIAS_ROWS` (`backend-adapter.ts`) declares, for each

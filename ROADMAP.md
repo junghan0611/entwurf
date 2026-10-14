@@ -1361,6 +1361,49 @@ v2 필드 `parentGardenId`/`isEntwurf`는 **stray key로 거부된다** — 되�
     `getContextUsage` latency, 다른 platform runtime, 긴 payload. 결정적 원문 좌표는
     [#127 동결 source](https://github.com/junghan0611/entwurf/issues/127#issuecomment-5969949281)와
     [target focused + MUST](https://github.com/junghan0611/entwurf/issues/127#issuecomment-5971362554).
+  - **2026-10-14 bump — claude-agent-acp 0.85.1 → 0.90.0 · ACP SDK 1.6.0 → 1.8.0 ·
+    claude-agent-sdk 0.3.286 → 0.3.296 (#128 CP-B1, 미출하 후보 — npm 0.36.0은 여전히 0.85.1 / 1.6.0).**
+    branch `feat/128-codex-socket-ownership`, CP-A1 checkpoint `fdf8c3d` 위의 커밋 전 작업 트리. 앞 범프
+    논거를 상속하지 않는다.
+    ⑴ **성격: Entwurf가 새로 쓴 계약 없음 — 호환성 bump.** upstream 0.86.0 · 0.87.0 · 0.88.0 · 0.89.0 ·
+    0.89.1 · 0.90.0(compare 72 commits / 185 files, GitHub API) 중 우리 v1 표면(caps `{}`, 호출 5개, handler
+    4개)에 닿는 것은 cancel/turn 종료 수정과 bundled agent-sdk/CLI 갱신이다. 새 feature는 우리가 광고하지
+    않는 capability나 env 뒤에 있다. 도달 분류는 rail §Capability posture의 0.85.1 → 0.90.0 항목.
+    ⑵ **wire SDK는 adapter와 함께 1.8.0.** adapter 0.90.0이 `@agentclientprotocol/sdk` 1.8.0을 exact로
+    의존한다(registry metadata). client만 1.6.0에 두면 `test/acp-sdk-surface.contract.test.ts` L2c 공유 wire
+    계약이 깨지므로 그 분리는 택하지 않았다.
+    ⑶ **설치 closure (linux-arm64, NixOS pnpm 11.20.0, `pnpm install` 1회, 2026-10-14 13:28 KST):** lock
+    변경은 resolver 출력뿐이다 — adapter 0.90.0, wire 1.8.0(root `(zod@4.3.6)` · adapter child
+    `(zod@4.6.7)`), agent-sdk와 native 8행 0.3.296, adapter child zod 4.6.5 → 4.6.7. Anthropic peer 0.100.1과
+    MCP peer 1.29.x는 그대로다(`check-acp-sdk-surface` 7/7). `minimumReleaseAgeExclude`: adapter
+    `|| 0.90.0` 추가, sdk 1.6.0 → 1.8.0, agent-sdk/native 9행 0.3.286 → 0.3.296. zod 4.6.7은 install이
+    age로 거절하지 않아 넣지 않았다(측정).
+    ⑷ **set-model readback 재측정, 상속 아님.** `[측정 2026-10-14 13:42 KST, 설치된 0.90.0, production
+    launch/overlay seam, no-prompt probe 1회, 결과 JSON sha256 c21d4b76…]`: wire 바이트로 outbound
+    initialize 1 · session/new 4 · session/set_config_option 3, prompt 0, inbound message/thought/tool/plan/usage
+    update 0, protocolVersion 1. production `enforceModel`이 curated 3 id를 모두 받았고 답은 0.85.1(2026-10-12)과
+    같다 — `claude-sonnet-5-5` → `sonnet`/"Sonnet 5.5", `claude-opus-5-5` → `opus`/"Opus 5.5",
+    `claude-fable-5-1` → 자기 행. 그래서 `CLAUDE_SET_MODEL_ALIAS_ROWS`와 fixture는 바꾸지 않았다. 제공 행
+    12 → 13(Fable 5.1이 alias `fable`로 제공, `haiku` 이름 "Haiku 5.5", `claude-haiku-4-5-20251001` 추가)은
+    Entwurf 지원 범위가 아니다 — 측정한 것은 curated 3 id뿐이다. 이 측정은 production launch/overlay seam만 따랐다:
+    session meta에는 model만 있었고 production `settingSources: []`(`tool-surface.ts:152`)가 빠졌으므로 완전한
+    production-shape 측정이 아니다. `claudeAdapter.buildSessionMeta`로 다시 측정하는 단계가 뒤따른다.
+    vendor 내부 auth-status(`_auth/status_update` 2건)와 context 계산 호출은 model turn이 아니며 API 호출 0을
+    뜻하지 않는다. 결제 rail은 미측정.
+    ⑸ **운영 관찰 두 건, 둘 다 원인 미측정.** 같은 실행에서 overlay `projects/` 항목이 `ensureOverlay` 뒤
+    spawn 전 524 → child group 회수 뒤 469였다. probe는 거기서 아무것도 지우지 않았고 scratch cwd 항목도
+    남기지 않았다. 55개를 누가 지웠는지, transcript였는지는 측정하지 않았고 이전 driver 버전에도 같다고
+    주장하지 않는다 — 정본 보존과 닿는 잠재 위험으로 GLG 판단에 둔다. 또 inbound wire tap에 stream error
+    1건이 기록되지 않은 단계에서 있었다(모든 요청에 응답, parse 실패 0).
+    ⑹ **permission option 빌더는 byte-identical**(`permissions/` 9 파일, 두 tag의 sha256 대조). ExitPlanMode
+    첫 option `exit-plan-clear-*`(allow_always)는 0.85.1부터 있던 동작이며 이 bump에서 수정하지 않는다.
+    ⑺ **출처 주석은 재좌표화하지 않았다**(2026-10-03 선례). agent-sdk 0.3.286 → 0.3.296 내부는 UNREAD.
+    ⑻ **증거 등급 / UNRUN.** focused deterministic gate와 위 readback뿐이다. 그중
+    `check-acp-{stop-reason,usage-accounting,prompt-lifecycle,stream-hooks,session-reuse}`의 green은 fake
+    semantics만 증명하고 Rule 12 격리는 증명하지 않는다 — deps에 둔 `ensureOverlay` stub을 backend가 읽지 않아
+    실제 adapter가 운영 overlay를 갱신한다. 격리 수선이 뒤따르고, "운영 overlay를 건드리는 gate 없음" 주장은 철회했다. vendor prompt turn, LIVE MUST, FULL,
+    qualification BODY, exact-SHA CI는 이 항목이 주장하지 않는다. 0.86–0.90 cancel 수정의 runtime 효과,
+    ambient `CLAUDE_MODEL_CONFIG`의 새 settings 병합, `/mcp` prompt 가로채기(#1218), 다른 platform native는 UNRUN.
   - **2026-10-08 bump — pi 1.0.4 → 1.1.0 (#132 0.33 후보, branch `feat/132-pi-110-herdr`; package 0.32.0 유지).**
     ⑴ **identity.** `[측정 2026-10-08]` upstream tag `v1.1.0` = `abe508e`(`7c10bd4` 뒤 53 commits),
     `experimental/` diff 0, carrier 원본 6개 blob과 LICENSE blob이 pin과 같다. `emit-pi-durable-carrier --check`가

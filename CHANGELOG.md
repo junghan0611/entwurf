@@ -4,6 +4,27 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+### ACP
+
+- **Claude ACP closure (#128):** adapter `0.85.1` → `0.90.0`, shared direct/child ACP wire SDK
+  `1.6.0` → `1.8.0`, Agent SDK `0.3.286` → `0.3.296`; the shared-wire contract is retained and
+  Entwurf adds no new policy. One no-prompt readback against the installed 0.90.0 found the
+  three curated ids answering exactly as on 0.85.1, so the set-model alias rows are unchanged.
+  That run sent no prompt and saw no model-turn update, but it does not prove zero API calls,
+  measure the billing rail, or certify a 0.90.0 prompt turn. Its two operating observations,
+  both with the cause unmeasured, are in the ROADMAP ledger.
+
+### Codex
+
+- **The Codex fresh-call smoke reads app-server socket ownership from the kernel (#128).** It
+  used to accept the named app-server when its argv spelled `--listen` for the default control
+  socket. It now takes the physical endpoint the production socket classifier resolves, and
+  requires exactly one process in the named PID's own subtree (the named PID, bound to the start
+  time read when its identity was checked, or one of its descendants) to hold that socket's
+  kernel LISTEN inode, and a bounded second read must agree. Anything else fails closed as
+  not-owned or indeterminate. No LIVE Codex run certifies this, and a vendor-managed daemon is
+  not admitted by it.
+
 ### Herdr plugin
 
 - **Publication checkpoint for `v2026.10.14-herdr.0.36.0`, measured at its commit `9f33dd1`
