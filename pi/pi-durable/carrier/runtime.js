@@ -90,6 +90,8 @@ const context = BACKGROUND_CONTEXT;
                                      
 	                      
 	                                   
+	                                                                                         
+	                          
 	                                                                                                                 
 	                                           
 	                                                                                                           
@@ -143,10 +145,17 @@ function titleOf(entry                         )                     {
 }
 
 export async function openDurable(options                     = {})                             {
-	if (options.model !== undefined && options.continueSession) {
+	if (options.model !== undefined && (options.continueSession || options.session !== undefined)) {
 		throw new Error("An explicit model applies only to a new session, not to a continued one");
 	}
-	const location = await selectSession(options.cwd ?? process.cwd(), options.continueSession ?? false);
+	if (options.continueSession && options.session !== undefined) {
+		throw new Error("A chosen session and the newest one are two different sessions; name one");
+	}
+	const location = await selectSession(
+		options.cwd ?? process.cwd(),
+		options.continueSession ?? false,
+		options.session,
+	);
 	const envs = new ExecutionEnvs(location.cwd);
 	let harness                     ;
 	try {

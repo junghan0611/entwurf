@@ -90,6 +90,8 @@ export interface DurableController {
 export interface OpenDurableOptions {
 	readonly cwd?: string;
 	readonly continueSession?: boolean;
+	/** An existing session of this directory, by its id, reopened as it was saved (#143). */
+	readonly session?: string;
 	/** Installed after the built-in extensions and before the Harness opens, so recovered work finds their tools. */
 	readonly extensions?: readonly Extension[];
 	/** A new session's explicit model, resolved as pi's `--provider`/`--model`; unresolved, the open fails. */
@@ -143,10 +145,17 @@ function titleOf(entry: EntryRecord | undefined): { title?: string } {
 }
 
 export async function openDurable(options: OpenDurableOptions = {}): Promise<OpenDurableResult> {
-	if (options.model !== undefined && options.continueSession) {
+	if (options.model !== undefined && (options.continueSession || options.session !== undefined)) {
 		throw new Error("An explicit model applies only to a new session, not to a continued one");
 	}
-	const location = await selectSession(options.cwd ?? process.cwd(), options.continueSession ?? false);
+	if (options.continueSession && options.session !== undefined) {
+		throw new Error("A chosen session and the newest one are two different sessions; name one");
+	}
+	const location = await selectSession(
+		options.cwd ?? process.cwd(),
+		options.continueSession ?? false,
+		options.session,
+	);
 	const envs = new ExecutionEnvs(location.cwd);
 	let harness: Harness | undefined;
 	try {

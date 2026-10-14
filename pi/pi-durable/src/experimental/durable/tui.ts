@@ -113,6 +113,29 @@ class ListSelector extends Container implements Focusable {
 	}
 }
 
+/**
+ * Choose one of the sessions `--resume` lists (#143) before any of them opens: the /agents list on a screen of its
+ * own, stopped before the session's TUI starts. Resolves the chosen value, or undefined when cancelled.
+ */
+export function pickDurableSession(title: string, items: SelectItem[]): Promise<string | undefined> {
+	initTheme();
+	const ui = new TuiAltScreen(new ProcessTerminal(), false, getAgentDir());
+	setKeybindings(KeybindingsManager.create());
+	return new Promise((resolve) => {
+		let done = false;
+		const finish = (value: string | undefined): void => {
+			if (done) return;
+			done = true;
+			ui.stop();
+			resolve(value);
+		};
+		const selector = new ListSelector(title, items, finish, () => finish(undefined));
+		ui.addChild(selector);
+		ui.setFocus(selector);
+		ui.start();
+	});
+}
+
 /** The summary that replaced earlier context: collapsed to one line until expanded. */
 class CompactionComponent extends Box {
 	readonly #summary: string;

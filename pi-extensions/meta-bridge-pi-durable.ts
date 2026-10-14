@@ -113,6 +113,7 @@ import {
 	defaultMetaReceiversDir,
 	defaultMetaSendersDir,
 	defaultMetaSessionsDir,
+	listAllMetaIdentitiesDir,
 	readAddressableMetaIdentity,
 	readMetaReceiverMarker,
 	readMetaSenderMarker,
@@ -124,6 +125,25 @@ import {
 
 /** The backend id this contact mints under. */
 export const PI_DURABLE_BACKEND = "pi-durable" as const;
+
+/**
+ * The garden ids the record store holds for these durable sessions (#143 `--resume`), read only: a session no record
+ * names is absent, and an unreadable record is counted, never guessed.
+ */
+export function piDurableGardenIds(
+	nativeSessionIds: readonly string[],
+	sessionsDir: string = defaultMetaSessionsDir(),
+): { gardens: Map<string, string>; unreadable: number } {
+	const wanted = new Set(nativeSessionIds);
+	const { identities, errors } = listAllMetaIdentitiesDir(sessionsDir);
+	const gardens = new Map<string, string>();
+	for (const identity of identities) {
+		if (identity.backend === PI_DURABLE_BACKEND && wanted.has(identity.nativeSessionId)) {
+			gardens.set(identity.nativeSessionId, identity.gardenId);
+		}
+	}
+	return { gardens, unreadable: errors.length };
+}
 
 /** The durable Extension's name, owned exactly. */
 export const PI_DURABLE_EXTENSION_NAME = "entwurf";

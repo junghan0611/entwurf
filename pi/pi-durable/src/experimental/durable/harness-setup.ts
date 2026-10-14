@@ -28,13 +28,16 @@ export function createHarnessSettings(settingsManager: SettingsManager): Harness
 			const provider = settingsManager.getProviderRetrySettings();
 			const idle = settingsManager.getHttpIdleTimeoutMs();
 			return {
+				transport: settingsManager.getTransport(),
 				timeoutMs: provider.timeoutMs ?? (idle === 0 ? 2147483647 : idle),
 				maxRetryDelayMs: provider.maxRetryDelayMs,
 				...(provider.maxRetries === undefined ? {} : { maxRetries: provider.maxRetries }),
 			};
 		},
+		// The reference app waits for a compaction instead of summarizing beside the running turn (#143): no background
+		// compaction. Threshold, manual and overflow compaction stay the SDK's, on pi's own compaction settings.
 		get compaction() {
-			return settingsManager.getCompactionSettings();
+			return { ...settingsManager.getCompactionSettings(), backgroundTokens: 0 };
 		},
 		get retry() {
 			return settingsManager.getRetrySettings();

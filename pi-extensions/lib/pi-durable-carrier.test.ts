@@ -15,6 +15,10 @@
  * The 1.2 contacts (#141 S1-B3) are observed in a second child that drives the real bootstrap with a faux
  * model and the SDK's own storage failing on demand: tool output the model reads, a Session that fails
  * and closes itself, the receiver that retires with it, and a failed compaction kept on screen.
+ *
+ * The stream transport and the reference compaction policy (#143) are observed in a third child that drives the
+ * real bootstrap against a loopback WebSocket server through the published Codex Responses provider: the frames that
+ * server receives decide.
  */
 
 import { spawnSync } from "node:child_process";
@@ -716,7 +720,7 @@ const { ModelRuntime } = await import(dist + "core/model-runtime.js");
 const sandbox = process.env.ORACLE_SANDBOX;
 const report = { waits: {} };
 
-// "small" has a window a long input crosses the SDK's background compaction threshold on (its default policy).
+// "small" has a window a long input crosses the SDK's blocking compaction threshold on (pi's default reserve).
 const faux = fauxProvider({ provider: "faux", models: [{ id: "scripted" }, { id: "small", contextWindow: 60000 }] });
 const create = ModelRuntime.create.bind(ModelRuntime);
 ModelRuntime.create = async (...args) => {
@@ -920,16 +924,16 @@ const fresh = { model: { provider: "faux", model: "scripted" } };
 }
 
 // 4. A compaction whose summarization fails, kept on screen as the conversation keeps it. First the SDK's own
-//    background compaction, started by a long input past its threshold while the turn goes on: nothing but the
-//    conversation records that failure. Then the operator's /compact, which also has its own notice.
+//    threshold compaction, which a long input past the blocking threshold makes the turn wait for (the reference app
+//    runs no background compaction, #143): the turn ends without asking the model. Then the operator's /compact, which
+//    also has its own notice.
 {
-	// Only the summarization request is refused, whichever order the SDK sends the two in.
+	// Only the summarization request is refused.
 	const answer = (text) => (transcript) =>
 		String(transcript.messages?.[0]?.content ?? "").startsWith("You are a context summarization assistant")
 			? fauxAssistantMessage("", { stopReason: "error", errorMessage: "S1B3-COMPACTION-REFUSED" })
 			: fauxAssistantMessage(text);
-	// Slots 2 and 3 are the long turn and its background summarization, in either order: both answer the same text.
-	faux.setResponses([answer("HELLO-S1B3"), answer("AFTER-LONG-S1B3"), answer("AFTER-LONG-S1B3"), answer("unused")]);
+	faux.setResponses([answer("HELLO-S1B3"), answer("unused"), answer("unused"), answer("unused")]);
 	const citizen = await openDurableCitizen({ model: { provider: "faux", model: "small" }, cwd: project("compaction"), contact: roots("compaction") });
 	const failure = () => (citizen.durable.view.current().conversation.docs["pi.live"] ?? {}).compactionFailure;
 	const notices = () => citizen.durable.view.current().notices.map((n) => n.level + ": " + n.message);
@@ -937,21 +941,152 @@ const fresh = { model: { provider: "faux", model: "scripted" } };
 		const { view, controller } = citizen.durable;
 		await controller.submit("hi", "steer");
 		await until("first answer", () => answered(view.current(), "HELLO-S1B3"));
-		await controller.submit("x".repeat(60000), "steer");
-		await until("long answer", () => answered(view.current(), "AFTER-LONG-S1B3"));
-		await until("background compaction failure", () => failure() !== undefined, 5000);
-		const background = { failure: failure() ?? null, lines: lines(view.current()), notices: notices() };
+		const calls = faux.state.callCount;
+		await controller.submit("x".repeat(200000), "steer");
+		await until("threshold compaction failure", () => idle(view.current()) && failure() !== undefined, 5000);
+		const threshold = { failure: failure() ?? null, lines: lines(view.current()), notices: notices(), modelCalls: faux.state.callCount - calls };
 		await controller.compact(undefined);
 		await until("manual compaction failure", () => failure()?.reason === "manual", 5000);
 		await until("manual compaction notice", () => view.current().notices.some((n) => n.message.startsWith("Compaction ")), 5000);
-		report.compaction = { background, manual: { failure: failure() ?? null, lines: lines(view.current()) } };
+		report.compaction = { threshold, manual: { failure: failure() ?? null, lines: lines(view.current()) } };
 	} finally {
 		await citizen.close();
 	}
 }
 
+// 5. --resume (#143 C): two sessions of one directory, then the list, the chosen one reopened as it was saved, and
+//    a cancelled or refused choice that opens nothing. Only the choice (pick) and the TUI loop are seams; the list,
+//    the chosen session's open and its record are the app's own.
+{
+	const cwd = project("resume");
+	const contact = roots("resume");
+	const lockfile = (await import("proper-lockfile")).default;
+	const turnIn = async (text, answer) => {
+		faux.setResponses([fauxAssistantMessage(answer)]);
+		const citizen = await openDurableCitizen({ ...fresh, cwd, contact });
+		try {
+			await citizen.durable.controller.submit(text, "steer");
+			await until("resume: " + text, () => answered(citizen.durable.view.current(), answer));
+			return { id: citizen.durable.view.current().session.id, gardenId: citizen.attachment.gardenId };
+		} finally {
+			await citizen.close();
+		}
+	};
+	const older = await turnIn("OLDER-MARK", "OLDER-ACK");
+	const newer = await turnIn("NEWER-MARK", "NEWER-ACK");
+	const sessionsRoot = path.join(process.env.PI_CODING_AGENT_DIR, "experimental", "durable-sessions");
+	const root = fs.readdirSync(sessionsRoot).map((dir) => path.join(sessionsRoot, dir)).find((dir) => fs.existsSync(path.join(dir, older.id)));
+	const state = () => ({
+		sessions: fs.readdirSync(root).sort(),
+		records: fs.readdirSync(contact.sessionsDir).filter((name) => name.endsWith(".meta.json")).length,
+	});
+	const seen = [];
+	const fakeTui = async () => ({
+		runDurableTui: async (source) => {
+			const view = source.current();
+			seen.push({
+				id: view.session.id,
+				labels: view.conversations.map((summary) => summary.label),
+				users: view.conversation.entries.filter((entry) => entry.kind === "pi.user").map((entry) => textOf(entry.model?.[0])),
+			});
+		},
+	});
+	const reasonOf = async (run) => {
+		try {
+			await run();
+			return "returned";
+		} catch (error) {
+			return error.reason ?? String(error);
+		}
+	};
+	const resume = { older, newer };
+	const here = process.cwd();
+	process.chdir(cwd);
+	try {
+		resume.before = state();
+		await main(["--resume"], {
+			loadTui: fakeTui,
+			contact,
+			pick: async (title, items) => {
+				resume.offered = { title, items };
+				return older.id;
+			},
+		});
+		resume.chosen = { seen: seen.splice(0), after: state() };
+		resume.cancelled = {
+			reason: await reasonOf(() => main(["--resume"], { loadTui: fakeTui, contact, pick: async () => undefined })),
+			seen: seen.splice(0),
+			after: state(),
+		};
+		const release = await lockfile.lock(path.join(root, older.id), { realpath: false });
+		try {
+			let marked;
+			const reason = await reasonOf(() =>
+				main(["--resume"], {
+					loadTui: fakeTui,
+					contact,
+					pick: async (title, items) => {
+						marked = items.find((item) => item.value === older.id)?.description;
+						return older.id;
+					},
+				}),
+			);
+			resume.elsewhere = { reason, marked, seen: seen.splice(0) };
+		} finally {
+			await release();
+		}
+		resume.noTerminal = { reason: await reasonOf(() => main(["--resume"], { loadTui: fakeTui, contact })), seen: seen.splice(0) };
+		resume.withContinue = await reasonOf(() => main(["--resume", "--continue"], { loadTui: fakeTui, contact }));
+		resume.withModel = await reasonOf(() => main(["--resume", "--provider", "faux"], { loadTui: fakeTui, contact }));
+		resume.after = state();
+	} finally {
+		process.chdir(here);
+	}
+	process.chdir(project("resume-empty"));
+	try {
+		resume.empty = await reasonOf(() => main(["--resume"], { loadTui: fakeTui, contact: roots("resume-empty"), pick: async () => older.id }));
+	} finally {
+		process.chdir(here);
+	}
+	// A session whose files cannot be read is an error, never an absent session. A link to itself fails stat with
+	// ELOOP for any user, root included: once for a listed session's database, once for a session named to open.
+	{
+		const { createHash } = await import("node:crypto");
+		const broken = project("resume-broken");
+		const brokenRoot = path.join(sessionsRoot, createHash("sha256").update(fs.realpathSync(broken)).digest("hex").slice(0, 24));
+		const listed = path.join(brokenRoot, "0000000000001-00000000-0000-0000-0000-000000000001");
+		fs.mkdirSync(listed, { recursive: true });
+		fs.symlinkSync("session.sqlite", path.join(listed, "session.sqlite"));
+		const named = "0000000000002-00000000-0000-0000-0000-000000000002";
+		fs.symlinkSync(named, path.join(brokenRoot, named));
+		process.chdir(broken);
+		try {
+			resume.unreadable = {
+				list: await reasonOf(() => main(["--resume"], { loadTui: fakeTui, contact: roots("resume-broken"), pick: async () => undefined })),
+				// A citizen this probe does open is closed, so a defect that opens one still lets the oracle end.
+				open: await reasonOf(async () => (await openDurableCitizen({ cwd: broken, contact: roots("resume-broken"), session: named })).close()),
+				seen: seen.splice(0),
+			};
+		} finally {
+			process.chdir(here);
+		}
+	}
+	report.resume = resume;
+}
+
 console.log(JSON.stringify(report));
 `;
+
+interface ResumeState {
+	sessions: string[];
+	records: number;
+}
+
+interface ResumeSeen {
+	id: string;
+	labels: string[];
+	users: string[];
+}
 
 interface AppReport {
 	waits: Record<string, "met" | "timed out">;
@@ -979,8 +1114,28 @@ interface AppReport {
 	};
 	normal: { failure: unknown; failedCalls: number; receiver: string };
 	compaction: {
-		background: { failure: { reason: string; error: string } | null; lines: string[]; notices: string[] };
+		threshold: {
+			failure: { reason: string; error: string } | null;
+			lines: string[];
+			notices: string[];
+			modelCalls: number;
+		};
 		manual: { failure: { reason: string; error: string } | null; lines: string[] };
+	};
+	resume: {
+		older: { id: string; gardenId: string };
+		newer: { id: string; gardenId: string };
+		before: ResumeState;
+		offered?: { title: string; items: { value: string; label: string; description: string }[] };
+		chosen: { seen: ResumeSeen[]; after: ResumeState };
+		cancelled: { reason: string; seen: ResumeSeen[]; after: ResumeState };
+		elsewhere: { reason: string; marked?: string; seen: ResumeSeen[] };
+		noTerminal: { reason: string; seen: ResumeSeen[] };
+		withContinue: string;
+		withModel: string;
+		after: ResumeState;
+		empty: string;
+		unreadable: { list: string; open: string; seen: ResumeSeen[] };
 	};
 }
 
@@ -1077,23 +1232,564 @@ describe("the carrier on the 1.2 SDK, driven through the real bootstrap (#141)",
 		expect(report.normal).toEqual({ failure: null, failedCalls: 0, receiver: "closed" });
 	});
 
-	it("[QK:PI-DURABLE-COMPACTION-FAILURE-SHOWN] a failed compaction stays on screen by reason and error, kept as the conversation keeps it: the SDK's own background compaction, which nothing else reports, and the manual one beside its own notice", () => {
-		expect(report.waits["long answer"]).toBe("met");
-		expect(report.compaction.background.failure).toMatchObject({
+	it("[QK:PI-DURABLE-COMPACTION-FAILURE-SHOWN] a failed compaction stays on screen by reason and error, kept as the conversation keeps it: the SDK's own threshold compaction a turn waited for, and the manual one beside its own notice", () => {
+		expect(report.waits["threshold compaction failure"]).toBe("met");
+		expect(report.compaction.threshold.failure).toMatchObject({
 			reason: "threshold",
 			error: "Summarization failed: S1B3-COMPACTION-REFUSED",
 		});
-		expect(report.compaction.background.notices).toEqual([]);
-		expect(report.compaction.background.lines).toEqual([
+		expect(report.compaction.threshold.modelCalls).toBe(1);
+		// The turn that waited reports its own missing answer; the compaction's failure is the conversation's to show.
+		expect(report.compaction.threshold.notices).toEqual([
+			'error: No answer: model_error "Compaction failed: Summarization failed: S1B3-COMPACTION-REFUSED"',
+		]);
+		expect(report.compaction.threshold.lines).toEqual([
 			"error: Compaction failed (threshold): Summarization failed: S1B3-COMPACTION-REFUSED",
+			'error: No answer: model_error "Compaction failed: Summarization failed: S1B3-COMPACTION-REFUSED"',
 		]);
 		expect(report.compaction.manual.failure).toMatchObject({
 			reason: "manual",
 			error: "Summarization failed: S1B3-COMPACTION-REFUSED",
 		});
+		// The conversation keeps one compaction failure, now the manual one; the notices keep the earlier turn's.
 		expect(report.compaction.manual.lines).toEqual([
 			"error: Compaction failed (manual): Summarization failed: S1B3-COMPACTION-REFUSED",
+			'error: No answer: model_error "Compaction failed: Summarization failed: S1B3-COMPACTION-REFUSED"',
 			"error: Compaction failed: Summarization failed: S1B3-COMPACTION-REFUSED",
 		]);
+	});
+
+	it("--resume lists this directory's sessions most recently written first, by what their files and records already say", () => {
+		const { older, newer, offered } = report.resume;
+		expect(report.waits["resume: OLDER-MARK"]).toBe("met");
+		expect(report.waits["resume: NEWER-MARK"]).toBe("met");
+		expect(older.id < newer.id).toBe(true);
+		expect(offered?.items.map((item) => item.value)).toEqual([newer.id, older.id]);
+		for (const [item, session] of [
+			[offered?.items[0], newer],
+			[offered?.items[1], older],
+		] as const) {
+			expect(Object.keys(item ?? {}).sort()).toEqual(["description", "label", "value"]);
+			expect(item?.label).toMatch(new RegExp(`^\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}  ${session.gardenId}$`));
+			expect(item?.description).toMatch(new RegExp(`^last write \\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2} · ${session.id}$`));
+		}
+	});
+
+	it("[QK:PI-DURABLE-RESUME-OPENS-CHOSEN] --resume reopens the chosen session as it was saved, under its own garden id: not the newest, not a new one", () => {
+		const { older, before, chosen } = report.resume;
+		expect(chosen.seen).toHaveLength(1);
+		expect(chosen.seen[0]?.id).toBe(older.id);
+		expect(chosen.seen[0]?.users).toEqual(["OLDER-MARK"]);
+		expect(chosen.seen[0]?.labels[0]).toContain(older.gardenId);
+		expect(chosen.after).toEqual(before);
+	});
+
+	it("[QK:PI-DURABLE-RESUME-CANCEL-OPENS-NOTHING] a cancelled --resume opens nothing: no session, no record, no lock, no fallback to another session", () => {
+		const { before, cancelled } = report.resume;
+		expect(cancelled.reason).toBe("returned");
+		expect(cancelled.seen).toEqual([]);
+		expect(cancelled.after).toEqual(before);
+	});
+
+	it("--resume refuses by name and opens nothing: a session open elsewhere, no terminal, no session, and --continue or a new session's argument beside it", () => {
+		const { older, before, elsewhere, noTerminal } = report.resume;
+		expect(elsewhere.reason).toBe("session-open-elsewhere");
+		expect(elsewhere.marked).toBe(`last write ${elsewhere.marked?.slice(11, 27)} · ${older.id} · open elsewhere`);
+		expect(elsewhere.seen).toEqual([]);
+		expect(noTerminal).toEqual({ reason: "resume-needs-terminal", seen: [] });
+		expect(report.resume.withContinue).toBe("resume-continue-exclusive");
+		expect(report.resume.withModel).toBe("fresh-only-argument-with-resume");
+		expect(report.resume.empty).toBe("resume-no-session");
+		expect(report.resume.after).toEqual(before);
+	});
+
+	it("--resume reads a session it cannot stat as an error, not as an absent session or file", () => {
+		const { unreadable } = report.resume;
+		expect(unreadable.list).toContain("ELOOP");
+		expect(unreadable.open).toContain("ELOOP");
+		expect(unreadable.seen).toEqual([]);
+	});
+});
+
+/**
+ * #143 A, the stream transport on the wire: ONE child opens the real bootstrap (`openDurableCitizen`), whose carrier
+ * runtime builds its Harness settings with the owned `createHarnessSettings`, against a 127.0.0.1 WebSocket server
+ * standing in for the Codex Responses endpoint. The model is the operator's documented models.json route (a custom
+ * provider on `openai-codex-responses`, an unsigned token carrying only an account id), so the request goes through
+ * the native Harness and the published pi-ai provider unpatched. The server is the independent oracle: it records
+ * every frame it receives — connection, `previous_response_id`, the raw `input` items — and answers each one normally,
+ * so a run that never continues still completes. The same server shows when a summary is asked for relative to the
+ * turn, which is how the reference app's compaction without background work is observed (#143 B). No vendor, no
+ * credential, no host store; every wait is bounded and recorded, and a step that is never observed is a diagnostic
+ * of its own, not a wire verdict.
+ */
+const WIRE_ORACLE = String.raw`
+const fs = await import("node:fs");
+const http = await import("node:http");
+const path = await import("node:path");
+const { WebSocketServer } = await import("ws");
+const repo = "file://" + process.cwd() + "/";
+const { openDurableCitizen } = await import(new URL("./pi/pi-durable/bootstrap.mjs", repo).href);
+const { createHarnessSettings } = await import(new URL("./pi/pi-durable/carrier/harness-setup.js", repo).href);
+const { PI_DURABLE_TOOL_SCHEMAS } = await import(new URL("./mcp/entwurf-bridge/dist/pi-extensions/meta-bridge-pi-durable.js", repo).href);
+const dist = new URL(".", import.meta.resolve("@earendil-works/pi-coding-agent")).href;
+const { SettingsManager } = await import(dist + "core/settings-manager.js");
+const sandbox = process.env.ORACLE_SANDBOX;
+const agentDir = process.env.PI_CODING_AGENT_DIR;
+const NONCE = "WIRE-NOTE-NONCE-143";
+const CALL_ID = "call_wire_read";
+const MARKERS = ["READ-NOTE", "TURN-TWO", "AFTER-COMPACTION-ONE", "AFTER-COMPACTION-TWO", "CLOSE-AFTER", "AFTER-RECONNECT-ONE", "AFTER-RECONNECT-TWO", "BELOW-BLOCKING", "PAST-BLOCKING", "OVERFLOW-ONCE"];
+const report = { waits: {}, forwarded: {}, frames: [], closes: [], unexpected: [], errors: [], policy: {}, nonce: NONCE, callId: CALL_ID };
+
+// 1. What the owned settings hand the Harness: the operator's transport, read at every use.
+{
+	const transportOf = (settings) => createHarnessSettings(SettingsManager.inMemory(settings)).stream.transport;
+	report.forwarded.unset = transportOf({});
+	report.forwarded.websocket = transportOf({ transport: "websocket" });
+	report.forwarded.sse = transportOf({ transport: "sse" });
+	const manager = SettingsManager.inMemory({ transport: "websocket-cached" });
+	const settings = createHarnessSettings(manager);
+	const before = settings.stream.transport;
+	manager.setTransport("websocket");
+	report.forwarded.changed = [before, settings.stream.transport];
+}
+// ...and pi's own compaction settings with background compaction off (#143 B), also read at every use.
+{
+	const compactionOf = (settings) => createHarnessSettings(SettingsManager.inMemory(settings)).compaction;
+	const manager = SettingsManager.inMemory({ compaction: { enabled: false } });
+	const settings = createHarnessSettings(manager);
+	const before = settings.compaction.enabled;
+	manager.setCompactionEnabled(true);
+	report.compactionSettings = {
+		pi: SettingsManager.inMemory({}).getCompactionSettings(),
+		unset: compactionOf({}),
+		chosen: compactionOf({ compaction: { enabled: false, reserveTokens: 1234, keepRecentTokens: 567 } }),
+		changed: [before, settings.compaction.enabled],
+	};
+}
+
+// 2. The loopback Responses endpoint. Every answer is chosen from the frame alone, so a full and a delta request get
+//    the same reply.
+let phase = "startup";
+let connections = 0;
+let responses = 0;
+const usage = { input_tokens: 10, output_tokens: 2, total_tokens: 12, input_tokens_details: { cached_tokens: 0 } };
+const textOf = (item) => {
+	if (item?.role !== "user") return "";
+	return typeof item.content === "string" ? item.content : (item.content ?? []).map((part) => part.text ?? "").join("");
+};
+const send = (sock, event) => sock.send(JSON.stringify(event));
+// The report keeps every frame's items, with long text cut to its head and length: the long inputs below would not
+// fit the parent's output buffer whole, and every marker and nonce sits at the head.
+const shorten = (value) =>
+	typeof value === "string"
+		? value.length > 2000 ? value.slice(0, 200) + "…[+" + (value.length - 200) + " chars]" : value
+		: Array.isArray(value)
+			? value.map(shorten)
+			: value !== null && typeof value === "object"
+				? Object.fromEntries(Object.entries(value).map(([key, item]) => [key, shorten(item)]))
+				: value;
+const answerText = (sock, text) => {
+	const id = "resp_" + ++responses;
+	const item = { type: "message", id: "msg_" + responses, role: "assistant", status: "completed", content: [{ type: "output_text", text, annotations: [] }] };
+	send(sock, { type: "response.created", response: { id, status: "in_progress" } });
+	send(sock, { type: "response.output_item.added", output_index: 0, item: { ...item, status: "in_progress", content: [] } });
+	send(sock, { type: "response.output_text.delta", output_index: 0, content_index: 0, item_id: item.id, delta: text });
+	send(sock, { type: "response.output_item.done", output_index: 0, item });
+	send(sock, { type: "response.completed", response: { id, status: "completed", output: [item], usage } });
+	return id;
+};
+const answerRead = (sock) => {
+	const id = "resp_" + ++responses;
+	const args = JSON.stringify({ path: "note.txt" });
+	const item = { type: "function_call", id: "fc_" + responses, call_id: CALL_ID, name: "read", arguments: args, status: "completed" };
+	send(sock, { type: "response.created", response: { id, status: "in_progress" } });
+	send(sock, { type: "response.output_item.added", output_index: 0, item: { ...item, arguments: "", status: "in_progress" } });
+	send(sock, { type: "response.function_call_arguments.delta", output_index: 0, item_id: item.id, delta: args });
+	send(sock, { type: "response.function_call_arguments.done", output_index: 0, item_id: item.id, arguments: args });
+	send(sock, { type: "response.output_item.done", output_index: 0, item });
+	send(sock, { type: "response.completed", response: { id, status: "completed", output: [item], usage } });
+	return id;
+};
+// A context overflow as the Responses API reports one, after the response started (so no transport fallback).
+const refused = new Set();
+const refuseOverflow = (sock) => {
+	const id = "resp_" + ++responses;
+	send(sock, { type: "response.created", response: { id, status: "in_progress" } });
+	send(sock, { type: "response.failed", response: { id, status: "failed", error: { code: "context_length_exceeded", message: "Your input exceeds the context window of this model." } } });
+	return id;
+};
+const server = http.createServer((req, res) => {
+	report.unexpected.push(req.method + " " + req.url);
+	res.writeHead(500, { "content-type": "application/json" });
+	res.end(JSON.stringify({ error: { message: "wire oracle: only the WebSocket endpoint answers" } }));
+});
+const wss = new WebSocketServer({ server });
+wss.on("connection", (sock) => {
+	const conn = ++connections;
+	sock.on("close", () => report.closes.push(conn));
+	sock.on("message", (raw) => {
+		try {
+			const text = String(raw);
+			const body = JSON.parse(text);
+			const input = Array.isArray(body.input) ? body.input : [];
+			const said = textOf(input.findLast((item) => item?.role === "user"));
+			const marker = MARKERS.find((m) => said.includes(m));
+			const frame = {
+				phase,
+				conn,
+				bytes: Buffer.byteLength(text, "utf8"),
+				type: body.type,
+				prev: body.previous_response_id ?? null,
+				summary: String(body.instructions ?? "").startsWith("You are a context summarization assistant"),
+				input: shorten(input),
+			};
+			if (frame.summary) frame.response = answerText(sock, "WIRE-SUMMARY");
+			else if (marker === "OVERFLOW-ONCE" && !refused.has(marker)) {
+				refused.add(marker);
+				frame.refused = true;
+				frame.response = refuseOverflow(sock);
+			} else if (input.at(-1)?.type === "function_call_output") frame.response = answerText(sock, "READ-DONE");
+			else if (marker === "READ-NOTE") frame.response = answerRead(sock);
+			else frame.response = answerText(sock, "ACK " + (marker ?? "UNKNOWN"));
+			report.frames.push(frame);
+			if (marker === "CLOSE-AFTER" && !frame.summary) sock.close(1000, "wire-oracle-close");
+		} catch (error) {
+			report.errors.push("server: " + String(error));
+		}
+	});
+});
+await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+const port = server.address().port;
+const b64 = (value) => Buffer.from(JSON.stringify(value)).toString("base64url");
+const token = b64({ alg: "none" }) + "." + b64({ "https://api.openai.com/auth": { chatgpt_account_id: "wire-oracle" } }) + ".unsigned";
+fs.writeFileSync(
+	path.join(agentDir, "models.json"),
+	JSON.stringify({ providers: { "wire-codex": { baseUrl: "http://127.0.0.1:" + port, api: "openai-codex-responses", apiKey: token, models: [{ id: "wire", reasoning: false, contextWindow: 200000, maxTokens: 8192 }, { id: "small", reasoning: false, contextWindow: 60000, maxTokens: 8192 }] } } }) + "\n",
+);
+
+const roots = (name) => {
+	const base = path.join(sandbox, "meta-" + name);
+	const dirs = { sessionsDir: path.join(base, "sessions"), sendersDir: path.join(base, "senders"), mailboxDir: path.join(base, "mailbox"), receiversDir: path.join(base, "receivers") };
+	for (const dir of Object.values(dirs)) fs.mkdirSync(dir, { recursive: true });
+	return { ...dirs, env: {}, connect: async () => ({
+		pid: 4343,
+		listTools: async () => Object.entries(PI_DURABLE_TOOL_SCHEMAS).map(([name, inputSchema]) => ({ name, inputSchema })),
+		callTool: async (name) => ({ text: name + " ok", isError: false }),
+		close: async () => {},
+	}) };
+};
+const project = (name, settings) => {
+	const dir = path.join(sandbox, "project-" + name);
+	fs.mkdirSync(dir, { recursive: true });
+	fs.writeFileSync(path.join(dir, "note.txt"), NONCE + "\n");
+	if (settings !== undefined) {
+		fs.mkdirSync(path.join(dir, ".pi"), { recursive: true });
+		fs.writeFileSync(path.join(dir, ".pi", "settings.json"), JSON.stringify(settings) + "\n");
+	}
+	return dir;
+};
+const until = async (what, predicate, ms = 15000) => {
+	const end = Date.now() + ms;
+	while (!predicate()) {
+		if (Date.now() > end) {
+			report.waits[what] = "timed out";
+			return false;
+		}
+		await new Promise((resolve) => setTimeout(resolve, 10));
+	}
+	report.waits[what] = "met";
+	return true;
+};
+const assistantText = (message) => (Array.isArray(message?.content) ? message.content.map((block) => block.text ?? "").join("") : message?.content);
+const idle = (view) => (view.conversation.docs["pi.live"] ?? {}).run === undefined;
+const answered = (view, text) => idle(view) && view.conversation.entries.some((entry) => entry.kind === "pi.assistant" && assistantText(entry.model?.[0]) === text);
+const model = { provider: "wire-codex", model: "wire" };
+const turn = async (citizen, what, text, expected) => {
+	await citizen.durable.controller.submit(text, "steer");
+	return until(what, () => answered(citizen.durable.view.current(), expected));
+};
+
+// 3. The default transport: a read round, a following turn, a placed compaction, a server-closed connection.
+try {
+	phase = "auto";
+	const citizen = await openDurableCitizen({ model, cwd: project("auto"), contact: roots("auto") });
+	try {
+		const { view, controller } = citizen.durable;
+		if (await turn(citizen, "auto: read round", "READ-NOTE: read note.txt", "READ-DONE")) {
+			await turn(citizen, "auto: second turn", "TURN-TWO", "ACK TURN-TWO");
+		}
+		phase = "compaction";
+		await controller.compact(undefined);
+		const placed = await until("compaction placed", () => idle(view.current()) && view.current().conversation.entries.some((entry) => entry.kind === "pi.compaction"));
+		report.compactionPlaced = placed;
+		phase = "after-compaction";
+		if (await turn(citizen, "after compaction: first turn", "AFTER-COMPACTION-ONE", "ACK AFTER-COMPACTION-ONE")) {
+			await turn(citizen, "after compaction: second turn", "AFTER-COMPACTION-TWO", "ACK AFTER-COMPACTION-TWO");
+		}
+		phase = "close";
+		if (await turn(citizen, "close: turn", "CLOSE-AFTER", "ACK CLOSE-AFTER")) {
+			const closing = report.frames.findLast((frame) => frame.phase === "close" && !frame.summary)?.conn;
+			await until("close: server observed the close", () => closing !== undefined && report.closes.includes(closing));
+		}
+		phase = "after-reconnect";
+		if (await turn(citizen, "after reconnect: first turn", "AFTER-RECONNECT-ONE", "ACK AFTER-RECONNECT-ONE")) {
+			await turn(citizen, "after reconnect: second turn", "AFTER-RECONNECT-TWO", "ACK AFTER-RECONNECT-TWO");
+		}
+	} finally {
+		await citizen.close();
+	}
+
+	// 4. The control: the operator chose the plain WebSocket transport for this project.
+	phase = "websocket";
+	const control = await openDurableCitizen({ model, cwd: project("websocket", { transport: "websocket" }), contact: roots("websocket") });
+	try {
+		if (await turn(control, "websocket: read round", "READ-NOTE: read note.txt", "READ-DONE")) {
+			await turn(control, "websocket: second turn", "TURN-TWO", "ACK TURN-TWO");
+		}
+	} finally {
+		await control.close();
+	}
+
+	// 5. No background compaction (#143 B), on a 60000-token window with pi's default reserve (blocking above 43616
+	//    tokens; the SDK's default background policy would start 32768 below that). The SDK estimates a context from
+	//    the last answer's usage plus the text after it, so each input's length decides which threshold it crosses.
+	const small = await openDurableCitizen({ model: { provider: "wire-codex", model: "small" }, cwd: project("policy"), contact: roots("policy") });
+	try {
+		const { view } = small.durable;
+		const live = () => view.current().conversation.docs["pi.live"] ?? {};
+		const summaries = () => report.frames.filter((frame) => frame.summary && frame.phase.startsWith("policy-")).length;
+		const compactions = () => view.current().conversation.entries.filter((entry) => entry.kind === "pi.compaction").map((entry) => entry.data?.reason ?? null);
+		// A finished turn first: the SDK compacts only when a prefix before the kept tail exists (selectCut), so without
+		// one the next turn would ask for no summary whatever the background policy.
+		phase = "policy-warmup";
+		const warmed = await turn(small, "policy: warmup turn", "TURN-TWO", "ACK TURN-TWO");
+		const kinds = view.current().conversation.entries.map((entry) => entry.kind);
+		report.policy.seed = { users: kinds.filter((kind) => kind === "pi.user").length, assistants: kinds.filter((kind) => kind === "pi.assistant").length };
+		phase = "policy-below";
+		if (warmed && (await turn(small, "policy: past background, below blocking", "BELOW-BLOCKING " + "b".repeat(80000), "ACK BELOW-BLOCKING"))) {
+			report.policy.below = { summaries: summaries(), compactions: compactions(), running: live().compactions ?? null, failure: live().compactionFailure ?? null };
+		}
+		phase = "policy-blocking";
+		if (await turn(small, "policy: past blocking", "PAST-BLOCKING " + "c".repeat(200000), "ACK PAST-BLOCKING")) {
+			report.policy.blocking = { compactions: compactions() };
+		}
+		phase = "policy-overflow";
+		if (await turn(small, "policy: refused overflow", "OVERFLOW-ONCE", "ACK OVERFLOW-ONCE")) {
+			report.policy.overflow = { compactions: compactions() };
+		}
+	} finally {
+		await small.close();
+	}
+} catch (error) {
+	report.errors.push("child: " + String(error?.stack ?? error));
+}
+for (const sock of wss.clients) sock.terminate();
+await new Promise((resolve) => wss.close(resolve));
+await new Promise((resolve) => server.close(resolve));
+console.log(JSON.stringify(report));
+process.exit(0);
+`;
+
+interface WireFrame {
+	phase: string;
+	conn: number;
+	bytes: number;
+	type: string;
+	prev: string | null;
+	summary: boolean;
+	refused?: boolean;
+	input: Record<string, unknown>[];
+	response: string;
+}
+
+interface WireReport {
+	waits: Record<string, "met" | "timed out">;
+	forwarded: {
+		unset?: string;
+		websocket?: string;
+		sse?: string;
+		changed?: string[];
+	};
+	compactionSettings?: {
+		pi: Record<string, unknown>;
+		unset: Record<string, unknown>;
+		chosen: Record<string, unknown>;
+		changed: boolean[];
+	};
+	frames: WireFrame[];
+	closes: number[];
+	unexpected: string[];
+	errors: string[];
+	compactionPlaced?: boolean;
+	policy: {
+		seed?: { users: number; assistants: number };
+		below?: { summaries: number; compactions: (string | null)[]; running: unknown; failure: unknown };
+		blocking?: { compactions: (string | null)[] };
+		overflow?: { compactions: (string | null)[] };
+	};
+	nonce: string;
+	callId: string;
+}
+
+const userTextOf = (item: Record<string, unknown> | undefined): string => {
+	if (item?.role !== "user") return "";
+	const content = item.content;
+	return typeof content === "string"
+		? content
+		: Array.isArray(content)
+			? content.map((part: { text?: string }) => part.text ?? "").join("")
+			: "";
+};
+
+describe("the stream transport on the wire, through the real bootstrap (#143)", () => {
+	let run: { status: number | null; signal: string | null; stderr: string };
+	let report: WireReport | undefined;
+	const main = (phase: string): WireFrame[] => (report?.frames ?? []).filter((f) => f.phase === phase && !f.summary);
+
+	beforeAll(() => {
+		const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), "pi-durable-wire-"));
+		try {
+			const home = path.join(sandbox, "home");
+			const agent = path.join(home, ".pi", "agent");
+			fs.mkdirSync(agent, { recursive: true });
+			// No agent retry, so a broken request is not hidden by another; a short kept window, so /compact has a prefix to summarize.
+			fs.writeFileSync(
+				path.join(agent, "settings.json"),
+				`${JSON.stringify({ retry: { enabled: false }, compaction: { keepRecentTokens: 1 } })}\n`,
+			);
+			const child = spawnSync(
+				process.execPath,
+				["--import", path.join(DURABLE, "carrier-resolver.mjs"), "--input-type=module", "-e", WIRE_ORACLE],
+				{
+					cwd: ROOT,
+					encoding: "utf8",
+					timeout: 120_000,
+					env: {
+						PATH: process.env.PATH ?? "",
+						HOME: home,
+						PI_CODING_AGENT_DIR: agent,
+						XDG_CONFIG_HOME: path.join(home, ".config"),
+						XDG_CACHE_HOME: path.join(home, ".cache"),
+						XDG_DATA_HOME: path.join(home, ".local", "share"),
+						XDG_STATE_HOME: path.join(home, ".local", "state"),
+						PI_OFFLINE: "1",
+						ORACLE_SANDBOX: sandbox,
+					},
+				},
+			);
+			run = { status: child.status, signal: child.signal, stderr: child.stderr };
+			const last = child.stdout.trim().split("\n").at(-1) ?? "";
+			report = last.startsWith("{") ? (JSON.parse(last) as WireReport) : undefined;
+		} finally {
+			fs.rmSync(sandbox, { recursive: true, force: true });
+		}
+	}, 150_000);
+
+	it("the wire child runs to its end: every step observed, no stray HTTP request, no server or child error", () => {
+		expect({ status: run.status, signal: run.signal }, run.stderr).toEqual({ status: 0, signal: null });
+		expect(report, run.stderr).toBeDefined();
+		expect(report?.errors).toEqual([]);
+		expect(report?.unexpected).toEqual([]);
+		expect(Object.entries(report?.waits ?? {}).filter(([, state]) => state !== "met")).toEqual([]);
+	});
+
+	it("[QK:PI-DURABLE-STREAM-TRANSPORT-FORWARDED] the owned Harness settings carry the operator's transport, not a fixed one, and read it again at every use", () => {
+		expect(report?.forwarded).toEqual({
+			unset: "auto",
+			websocket: "websocket",
+			sse: "sse",
+			changed: ["websocket-cached", "websocket"],
+		});
+	});
+
+	it("[QK:PI-DURABLE-STREAM-TRANSPORT-WIRE] on the default transport a tool round and the next turn continue the previous response with only their new input; the operator's plain WebSocket sends everything every time", () => {
+		const [first, tool, next] = main("auto");
+		expect(main("auto")).toHaveLength(3);
+		expect(first?.prev).toBeNull();
+		expect(userTextOf(first?.input.at(-1))).toContain("READ-NOTE");
+		expect(tool?.prev).toBe(first?.response);
+		expect(tool?.input).toHaveLength(1);
+		expect(tool?.input[0]).toMatchObject({ type: "function_call_output", call_id: report?.callId });
+		expect(JSON.stringify(tool?.input[0]?.output)).toContain(report?.nonce);
+		expect(next?.prev).toBe(tool?.response);
+		expect(next?.input).toHaveLength(1);
+		expect(userTextOf(next?.input[0])).toContain("TURN-TWO");
+		expect(new Set([first?.conn, tool?.conn, next?.conn]).size).toBe(1);
+
+		const control = main("websocket");
+		expect(control).toHaveLength(3);
+		expect(control.map((f) => f.prev)).toEqual([null, null, null]);
+		expect(control[1]?.input.some((item) => item.type === "function_call_output")).toBe(true);
+		expect(control[1]?.input.length ?? 0).toBeGreaterThan(1);
+		expect(userTextOf(control[2]?.input.at(-1))).toContain("TURN-TWO");
+	});
+
+	it("after a placed compaction the next request starts over in full and the one after continues it; the summary rides its own uncached connection", () => {
+		const auto = main("auto");
+		const continued = ["auto", "compaction", "after-compaction", "close", "after-reconnect"];
+		const summaries = (report?.frames ?? []).filter((f) => f.summary && continued.includes(f.phase));
+		const [full, delta] = main("after-compaction");
+		expect(report?.compactionPlaced).toBe(true);
+		expect(summaries).toHaveLength(1);
+		expect(summaries[0]?.phase).toBe("compaction");
+		expect(summaries[0]?.prev).toBeNull();
+		expect(summaries[0]?.conn).not.toBe(auto.at(-1)?.conn);
+		expect(full?.conn).toBe(auto.at(-1)?.conn);
+		expect(full?.prev).toBeNull();
+		expect(full?.input.some((item) => userTextOf(item).includes("WIRE-SUMMARY"))).toBe(true);
+		expect(delta?.prev).toBe(full?.response);
+		expect(delta?.input).toHaveLength(1);
+		expect(userTextOf(delta?.input[0])).toContain("AFTER-COMPACTION-TWO");
+	});
+
+	it("after the server closes the connection the next request starts over in full on a new one and the one after continues it", () => {
+		const [closing] = main("close");
+		const [full, delta] = main("after-reconnect");
+		expect(main("close")).toHaveLength(1);
+		expect(report?.closes).toContain(closing?.conn);
+		expect(full?.conn).not.toBe(closing?.conn);
+		expect(full?.prev).toBeNull();
+		expect(delta?.conn).toBe(full?.conn);
+		expect(delta?.prev).toBe(full?.response);
+		expect(delta?.input).toHaveLength(1);
+		expect(userTextOf(delta?.input[0])).toContain("AFTER-RECONNECT-TWO");
+	});
+
+	it("the owned Harness compaction settings are pi's own with background compaction off, read again at every use", () => {
+		const compaction = report?.compactionSettings;
+		expect(compaction?.unset).toEqual({ ...compaction?.pi, backgroundTokens: 0 });
+		expect(compaction?.chosen).toEqual({
+			enabled: false,
+			reserveTokens: 1234,
+			keepRecentTokens: 567,
+			backgroundTokens: 0,
+		});
+		expect(compaction?.changed).toEqual([false, true]);
+	});
+
+	it("[QK:PI-DURABLE-COMPACTION-WAITS] past the SDK's background threshold a turn asks for no summary beside it; past the blocking threshold it waits for the summary and then asks with it", () => {
+		// The turn below has a finished turn before it, so a summary would have had something to summarize.
+		expect(report?.policy.seed).toEqual({ users: 1, assistants: 1 });
+		expect((report?.frames ?? []).filter((f) => f.phase === "policy-warmup").map((f) => f.summary)).toEqual([false]);
+		expect(report?.policy.below).toEqual({ summaries: 0, compactions: [], running: null, failure: null });
+		expect((report?.frames ?? []).filter((f) => f.phase === "policy-below").map((f) => f.summary)).toEqual([false]);
+		const blocking = (report?.frames ?? []).filter((f) => f.phase === "policy-blocking");
+		expect(blocking.map((f) => f.summary)).toEqual([true, false]);
+		expect(blocking[1]?.input.some((item) => userTextOf(item).includes("WIRE-SUMMARY"))).toBe(true);
+		expect(userTextOf(blocking[1]?.input.at(-1))).toContain("PAST-BLOCKING");
+		expect(report?.policy.blocking?.compactions).toEqual(["threshold"]);
+	});
+
+	it("a refused context overflow is compacted by the SDK and the turn is asked again with the summary", () => {
+		const overflow = (report?.frames ?? []).filter((f) => f.phase === "policy-overflow");
+		expect(overflow.map((f) => (f.summary ? "summary" : f.refused ? "refused" : "asked"))).toEqual([
+			"refused",
+			"summary",
+			"asked",
+		]);
+		expect(overflow[2]?.input.some((item) => userTextOf(item).includes("WIRE-SUMMARY"))).toBe(true);
+		// The view starts at the latest summary, so the placed overflow compaction is the one it shows.
+		expect(report?.policy.overflow?.compactions).toEqual(["overflow"]);
 	});
 });

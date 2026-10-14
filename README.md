@@ -91,7 +91,12 @@ incomplete, drifted or mixed supply refuses by name.
 ```bash
 entwurf pi-durable --provider <provider> --model <model-id> --width task-wide
 entwurf pi-durable --continue
+entwurf pi-durable --resume
 ```
+
+`--continue` opens this directory's newest durable session. `--resume` lists its
+sessions, most recently written first, by creation time, garden id and last write, and
+reopens the one you choose as it was saved; a cancelled choice opens nothing.
 
 The contact adds garden identity and two-way mailbox communication. Entwurf owns the
 thin app/TUI composition (shipped as an emitted JS carrier); execution, models/auth, queues,

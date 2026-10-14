@@ -358,6 +358,7 @@ tree (for example an override that binds pi-durable's `pi-ai` to an older publis
   ```bash
   entwurf pi-durable --provider <provider> --model <exact catalog id> --width task-wide
   entwurf pi-durable --continue    # this directory's newest durable session
+  entwurf pi-durable --resume      # choose one of this directory's durable sessions
   ```
 
   The bootstrap imports only the compiled closure shipped beside it

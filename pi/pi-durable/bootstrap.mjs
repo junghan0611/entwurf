@@ -80,19 +80,21 @@ import {
 	failAfterCleanup,
 	PI_DURABLE_EXTENSION_NAME,
 	PI_DURABLE_TOOL_NAMES,
+	piDurableGardenIds,
 	withGardenIdentity,
 } from "../../mcp/entwurf-bridge/dist/pi-extensions/meta-bridge-pi-durable.js";
 
 const RUNTIME = "./carrier/runtime.js";
 const TUI = "./carrier/tui.js";
+const SESSIONS = "./carrier/sessions.js";
 
 /** The entwurf-bridge of THIS package closure: the one the contact spawns as its MCP hand. */
 export const PACKAGED_BRIDGE_ENTRY = fileURLToPath(
 	new URL("../../mcp/entwurf-bridge/dist/mcp/entwurf-bridge/src/index.js", import.meta.url),
 );
 
-/** Flags that take a value. Anything else but `--continue`/`-c` is an unknown argument — a bridge
- * entry included: the launch argv cannot point the contact at another bridge. */
+/** Flags that take a value. Anything else but `--continue`/`-c` and `--resume` is an unknown argument — a
+ * bridge entry included: the launch argv cannot point the contact at another bridge. */
 const VALUE_FLAGS = [
 	"--provider",
 	"--model",
@@ -293,12 +295,13 @@ async function loadNativeModules(files) {
  * @param {{
  *   bridgeEntry?: string,
  *   continueSession?: boolean,
+ *   session?: string,
  *   cwd?: string,
  *   model?: { provider: string, model: string },
  *   firstInput?: string,
  *   extensions?: readonly object[],
  *   contact?: Record<string, unknown>,
- *   open?: (options: { cwd: string, continueSession: boolean, extensions: readonly object[], model?: { provider: string, model: string } }) => Promise<any>,
+ *   open?: (options: { cwd: string, continueSession: boolean, session?: string, extensions: readonly object[], model?: { provider: string, model: string } }) => Promise<any>,
  * }} options
  * @returns {Promise<{ durable: any, contact: any, attachment: { gardenId: string } & Record<string, any>, firstInput?: any, close(): Promise<void> }>}
  *   (stated, because the compiled closure carries no declarations: a cleanup path that rethrows
@@ -307,6 +310,7 @@ async function loadNativeModules(files) {
 export async function openDurableCitizen({
 	bridgeEntry = PACKAGED_BRIDGE_ENTRY,
 	continueSession = false,
+	session,
 	cwd = process.cwd(),
 	model,
 	firstInput,
@@ -318,6 +322,12 @@ export async function openDurableCitizen({
 		throw refuse(
 			"fresh-only-argument-with-continue",
 			"an explicit model and a first input apply only to a new session; a continued session is reopened as it was saved",
+		);
+	}
+	if (session !== undefined && (continueSession || model !== undefined || firstInput !== undefined)) {
+		throw refuse(
+			"fresh-only-argument-with-resume",
+			"a chosen session is reopened as it was saved: no --continue, explicit model or first input",
 		);
 	}
 	if (model !== undefined && !(nonEmpty(model.provider) && nonEmpty(model.model))) {
@@ -333,6 +343,7 @@ export async function openDurableCitizen({
 		durable = await openDurable({
 			cwd,
 			continueSession,
+			...(session === undefined ? {} : { session }),
 			extensions: [contact.extension, ...extensions],
 			...(model === undefined ? {} : { model }),
 		});
@@ -389,11 +400,16 @@ export async function openDurableCitizen({
 
 function parseArgs(argv) {
 	let continueSession = false;
+	let resume = false;
 	const values = new Map();
 	for (let i = 0; i < argv.length; i++) {
 		const arg = argv[i];
 		if (arg === "--continue" || arg === "-c") {
 			continueSession = true;
+			continue;
+		}
+		if (arg === "--resume") {
+			resume = true;
 			continue;
 		}
 		if (!VALUE_FLAGS.includes(arg)) throw new Error(`Unknown argument: ${arg}`);
@@ -404,7 +420,19 @@ function parseArgs(argv) {
 		}
 		values.set(arg, value);
 	}
+	if (resume && continueSession) {
+		throw refuse(
+			"resume-continue-exclusive",
+			"--resume chooses a session and --continue opens the newest one; give one of them",
+		);
+	}
 	const fresh = FRESH_ONLY_FLAGS.filter((flag) => values.has(flag));
+	if (resume && fresh.length > 0) {
+		throw refuse(
+			"fresh-only-argument-with-resume",
+			`${fresh.join(", ")} apply only to a new session; --resume reopens the chosen session as it was saved`,
+		);
+	}
 	if (continueSession && fresh.length > 0) {
 		throw refuse(
 			"fresh-only-argument-with-continue",
@@ -426,6 +454,7 @@ function parseArgs(argv) {
 				? { nativeModules: nativeModuleDirFiles(dirArg) }
 				: {};
 	if (continueSession) return { continueSession, ...nativeModule };
+	if (resume) return { resume, ...nativeModule };
 	const provider = values.get("--provider");
 	if (provider === undefined) {
 		throw refuse(
@@ -457,29 +486,102 @@ function parseArgs(argv) {
 	};
 }
 
+/** A local `YYYY-MM-DD HH:MM` for a list line. */
+function localTime(ms) {
+	const date = new Date(ms);
+	const two = (n) => String(n).padStart(2, "0");
+	return `${date.getFullYear()}-${two(date.getMonth() + 1)}-${two(date.getDate())} ${two(date.getHours())}:${two(date.getMinutes())}`;
+}
+
 /**
- * Parse, initialize the operator's module, load the TUI, open, run, close. `loadTui`, `open` and
- * `contact` are test seams; `bridgeEntry` is the checkout-only gates' private bundle, as in
- * `openDurableCitizen` — never the launch argv.
+ * `--resume` (#143): this directory's durable sessions, most recently written first, each by what its files and
+ * the record store already say — creation time, garden id, last write, whether another process holds it. No
+ * session database is opened to list them, and nothing is named that the store does not hold. Resolves the
+ * chosen session's id, or undefined when the choice was cancelled; never a fallback to another session.
+ */
+async function chooseSession(cwd, sessionsDir, pick) {
+	const { listSessions } = await import(SESSIONS);
+	const sessions = await listSessions(cwd);
+	if (sessions.length === 0) throw refuse("resume-no-session", `no durable session exists for ${cwd}`);
+	const { gardens, unreadable } = piDurableGardenIds(
+		sessions.map((session) => session.id),
+		sessionsDir,
+	);
+	const items = sessions.map((session) => ({
+		value: session.id,
+		label: `${localTime(session.createdAt)}  ${gardens.get(session.id) ?? "no record"}`,
+		description: [
+			session.lastWriteAt === undefined ? "never written" : `last write ${localTime(session.lastWriteAt)}`,
+			session.id,
+			...(session.openElsewhere ? ["open elsewhere"] : []),
+		].join(" · "),
+	}));
+	const title =
+		unreadable === 0 ? "Resume durable session:" : `Resume durable session (${unreadable} unreadable record(s)):`;
+	const id = await pick(title, items);
+	if (id === undefined) return undefined;
+	const chosen = sessions.find((session) => session.id === id);
+	if (chosen === undefined) throw refuse("session-not-found", `${id} is not one of the listed sessions`);
+	if (chosen.openElsewhere) {
+		throw refuse("session-open-elsewhere", `${id} is open in another process; close it there first`);
+	}
+	return chosen.id;
+}
+
+/**
+ * Parse, initialize the operator's module, load the TUI, open, run, close. `loadTui`, `open`,
+ * `contact` and `pick` (the `--resume` list's choice) are test seams; `bridgeEntry` is the
+ * checkout-only gates' private bundle, as in `openDurableCitizen` — never the launch argv.
  *
  * @param {readonly string[]} argv
  * @param {{
- *   loadTui?: () => Promise<{ runDurableTui: (...args: any[]) => Promise<void> }>,
+ *   loadTui?: () => Promise<{ runDurableTui: (...args: any[]) => Promise<void>, pickDurableSession?: (title: string, items: object[]) => Promise<string | undefined> }>,
  *   open?: (options: any) => Promise<any>,
  *   contact?: Record<string, unknown>,
  *   bridgeEntry?: string,
+ *   pick?: (title: string, items: { value: string, label: string, description: string }[]) => Promise<string | undefined>,
  * }} [seams]
  */
-export async function main(argv, { loadTui = () => import(TUI), open, contact, bridgeEntry } = {}) {
+export async function main(argv, { loadTui = () => import(TUI), open, contact, bridgeEntry, pick } = {}) {
 	// Every argument refusal is decided here, before any module, the TUI or the app loads.
-	const { nativeModules = [], ...args } = parseArgs(argv);
+	const { nativeModules = [], resume = false, ...args } = parseArgs(argv);
 	// The caller's directory, fixed before any operator code runs and handed to the app explicitly.
 	const cwd = process.cwd();
 	const extensions = await loadNativeModules(nativeModules);
 	// Loaded before anything opens, as upstream main.ts imports it statically: a TUI that cannot
 	// load opens no session, mints no citizen and leaves nothing to clean up.
-	const { runDurableTui } = await loadTui();
-	const citizen = await openDurableCitizen({ ...args, cwd, extensions, bridgeEntry, open, contact });
+	const tui = await loadTui();
+	const { runDurableTui } = tui;
+	let session;
+	if (resume) {
+		session = await chooseSession(
+			cwd,
+			contact?.sessionsDir,
+			pick ??
+				((title, items) => {
+					if (!process.stdin.isTTY || !process.stdout.isTTY) {
+						throw refuse(
+							"resume-needs-terminal",
+							"--resume lists the sessions to choose from in an interactive terminal",
+						);
+					}
+					return tui.pickDurableSession(title, items);
+				}),
+		);
+		if (session === undefined) {
+			process.stderr.write("[pi-durable] resume-cancelled: nothing was opened\n");
+			return;
+		}
+	}
+	const citizen = await openDurableCitizen({
+		...args,
+		...(session === undefined ? {} : { session }),
+		cwd,
+		extensions,
+		bridgeEntry,
+		open,
+		contact,
+	});
 	try {
 		await runDurableTui(
 			withGardenIdentity(citizen.durable.view, citizen.attachment.gardenId),
