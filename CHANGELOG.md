@@ -4,6 +4,8 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+## 0.36.1 - 2026-10-14
+
 ### ACP
 
 - **Claude ACP closure (#128):** adapter `0.85.1` → `0.90.0`, shared direct/child ACP wire SDK
@@ -27,29 +29,76 @@ All notable changes to this project will be documented here. Format follows [Kee
   requires exactly one process in the named PID's own subtree (the named PID, bound to the start
   time read when its identity was checked, or one of its descendants) to hold that socket's
   kernel LISTEN inode, and a bounded second read must agree. Anything else fails closed as
-  not-owned or indeterminate. No LIVE Codex run certifies this, and a vendor-managed daemon is
-  not admitted by it.
+  not-owned or indeterminate. The 0.36.1 LIVE run exercised it once on an owned app-server
+  started with the explicit `--listen` wrapper (below); a vendor-managed daemon is still not
+  admitted by it.
 
-### Herdr plugin
+### pi-durable
 
-- **Publication checkpoint for `v2026.10.14-herdr.0.36.0`, measured at its commit `9f33dd1`
-  before the snapshot was published.** The snapshot's push CI 38479767989 passed all four jobs
-  and the official exact-SHA oracle. Its check job verified the pinned x86_64 Herdr 0.9.4 digest
-  before execution; `check-herdr-sandbox` passed 12 assertions on private Herdr 0.9.4; the
-  qualification body killed 971/971. On Herdr 0.9.4 in a clean aarch64 container, the unchanged
-  `smoke-herdr-raw-install-live --ref main` passed at that commit. A driver-level journey then
-  went from the public `v2026.10.13-herdr.0.35.1` snapshot on Pi 1.1.0, through a pinned Pi
-  upgrade to 1.2.0, to a version-changing cross-ref reinstall of the 0.36.0 plugin (`herdr
-  plugin install … --ref main`) under a private Herdr server, and passed 10/10: wiring entries
-  unchanged; a session born before the reinstall kept its process, garden id and control socket;
-  a session was born after it; `herdr plugin update` at that same ref was only an
-  already-up-to-date no-op; and deactivate removed the owned runtime, cache, ledger and wiring
-  entries. On a fixed Pi 1.2.0 the 0.35.1 snapshot refuses by its own range: 0.35.1 and 0.36.0
-  accept disjoint Pi ranges. Not certified: a session's MCP or model continuity, `pi update
-  self`, a host upgrade, a `plugin update` that finds a new commit, a herdr-pane row, an x86_64
-  container, the tag as `--ref`, or when Herdr reclaims a retained previous installation. The
-  supply manifest's x86_64 `executed: false` remains the preparation-time declaration; flipping
-  it is a separate change.
+- **The pi-durable fresh-call smoke waits for its doorbell turn to end.** It took pd's native
+  snapshot as soon as Pi's relay reached the fixture, then required the doorbell submission to
+  be `done`. A pi-durable input stays `placed` while the run that consumed it is active and turns
+  `done` only when that run ends, so a slow final generation read as a failed admission. The
+  0.36.1 LIVE run caught exactly that (submission `placed`, the last generation task still
+  `running`, every delivery receipt green). The smoke now waits, with its existing bounded
+  `until`, for this message's submission to settle (`done` or `unanswered`) before the snapshot,
+  and still requires `done`. Smoke-only; no pi-durable runtime byte changes.
+
+### Release boundary and verification
+
+- **Scope.** A core patch over `v0.36.0`: the four #128 checkpoints `fdf8c3d`, `3da44be`,
+  `3e4f52f` and `3242922` above, the handoff `b043833`, and the smoke fix `91cc080`. The
+  pi-durable runtime, the Herdr manifest (0.36.0), its host pin (Herdr 0.9.4) and the plugin
+  implementation are unchanged; the Herdr runtime's acquisition source does change (the carrier
+  below). #142 is not in it. Still open in #128 and not claimed here: admission of a
+  vendor-managed Codex daemon, the Copilot 1.0.97 cell, agy 1.3.1 (not certified), the OMP
+  18.10.4 doctors, and the remaining native cells.
+- **Local evidence before this preparation is focused, not a whole pass.** Each affected
+  qualification wave (PARTIAL) measured its own checkpoint, each with a green control, and none
+  is carried to another. The Codex socket-ownership bytes killed 150/150 in the
+  `check-mux-fresh-call` group; 825 of the 975 committed claims were not run. The dependency move
+  killed 4/4 in `check-dep-versions`; 971 of 975 were not run. The gate isolation killed 45/45 in
+  five groups (prompt lifecycle 15, usage accounting 12, stream hooks 10, stop reason 7, session
+  reuse 1); 931 of the 976 committed claims were not run. The qualification body has not run on
+  any of them.
+- **Unpublished candidate carrier.** As in 0.36.0, `plugins/herdr/runtime-lock.json`
+  temporarily names the closed `herdr-checkout` source: an npm-source lock must agree with the
+  checkout's core version, and 0.36.1 has no published integrity yet. The Herdr manifest stays
+  0.36.0. Operating effect: a Herdr plugin installed from `--ref main` while this carrier stands
+  acquires this cut's checkout runtime, not npm 0.36.0. The `v2026.10.14-herdr.0.36.0` tag and
+  the npm 0.36.0 bytes are unchanged, and moving a host between the two sources needs an
+  explicit deactivate/activate. Re-pinning the registry bytes is a separate, verified commit
+  after the operator publishes core 0.36.1.
+- **The local FULL is RED, and its Herdr cell is CI's.** `pnpm run check:full` ran once on the
+  frozen candidate (642 s, exit 1). `check:core` passed, `check:hermetic` passed every step but
+  its last, and `check-herdr-sandbox` failed its version boundary: the pin is Herdr 0.9.4 and
+  the host binary was 0.9.3. That cell is not to run locally (it reads the operator's own
+  panes), and the aggregate reached it unnoticed; before failing it executed the host binary's
+  `--version` once and read no pane. `check:package`, which never ran, then passed alone
+  (163 s; 601 files in the dry-run pack). By the operator's decision for this cut only, the
+  sandbox cell is owed to the prepared SHA's CI, which runs it on the digest-pinned Herdr 0.9.4
+  and must pass there; the exception is not inherited by a later cut. Logs: FULL
+  `29b08c71e3d3c92fecb936f5611838088d35b8c5566f4dde99e03cc4b76b0078`, package
+  `937e69eeb551bcd0aea049550185e1f6d9f24d917f28099f768928554a16ae84`.
+- **LIVE, taken step by step, not as `release-gate --cut`.** The gate's first MUST step re-runs
+  `check:full`, so it would have reached the same local Herdr cell. By the operator's decision for
+  this cut, the gate's other 23 MUST steps ran in its own order, command, environment and
+  working directory (`run.sh` 7027-7127), stopping at the first red, with no static step. The
+  first run passed steps 1-22 and failed `smoke-pi-durable-fresh-live` on the race fixed above.
+  The fixed smoke then passed alone on the same candidate (36 assertions, 66 s); steps 1-22 are
+  reused because the fix is not an input to them. **MUST 23/23 PASS (22 + the fixed step 23),
+  SKIP 0**. The advisory BEHAVIOR step was not run. Among them: the 12 ACP smokes ran the first
+  prompt turns on the 0.90.0 driver, and `smoke-codex-fresh-live` passed 66 assertions against
+  an app-server started for this cut in its own tmux session (pid 2345801, the named PID's child
+  2345861 holding the kernel LISTEN inode) with `gpt-5.6-luna` and `openai-codex/gpt-5.6-luna`.
+  The gate session held no ambient identity carrier, and the candidate fingerprint was the same
+  before and after each run. Scratch `/tmp/entwurf-release-gate-0.36.1.1aZK83`. This is local
+  LIVE evidence, not a release-gate verdict and not the exact CI.
+- **Exact CI owes the whole floor.** The prepared SHA's exact CI (the four required jobs, the
+  qualification body, and `check-herdr-sandbox` on pinned Herdr 0.9.4) is the next checkpoint and
+  is not presumed PASS.
+- **Publication boundary.** No make artifact, core tag, GitHub Release or npm publication
+  is claimed; they wait for the exact CI, the make decision and the operator.
 
 ## v2026.10.14-herdr.0.36.0 — Herdr Entwurf plugin 0.36.0
 
@@ -125,6 +174,29 @@ its `v0.36.0` tag remain unchanged. The operator has published the core to npm.
     body (971 mutants);
   - the public-ref install/use/update/deactivate journey on Herdr 0.9.4, including whether
     an activated runtime survives a plugin update.
+
+### Publication checkpoint
+
+Recorded after the snapshot, as docs only; no Herdr plugin byte, manifest or pin changes with it.
+
+- **Publication checkpoint for `v2026.10.14-herdr.0.36.0`, measured at its commit `9f33dd1`
+  before the snapshot was published.** The snapshot's push CI 38479767989 passed all four jobs
+  and the official exact-SHA oracle. Its check job verified the pinned x86_64 Herdr 0.9.4 digest
+  before execution; `check-herdr-sandbox` passed 12 assertions on private Herdr 0.9.4; the
+  qualification body killed 971/971. On Herdr 0.9.4 in a clean aarch64 container, the unchanged
+  `smoke-herdr-raw-install-live --ref main` passed at that commit. A driver-level journey then
+  went from the public `v2026.10.13-herdr.0.35.1` snapshot on Pi 1.1.0, through a pinned Pi
+  upgrade to 1.2.0, to a version-changing cross-ref reinstall of the 0.36.0 plugin (`herdr
+  plugin install … --ref main`) under a private Herdr server, and passed 10/10: wiring entries
+  unchanged; a session born before the reinstall kept its process, garden id and control socket;
+  a session was born after it; `herdr plugin update` at that same ref was only an
+  already-up-to-date no-op; and deactivate removed the owned runtime, cache, ledger and wiring
+  entries. On a fixed Pi 1.2.0 the 0.35.1 snapshot refuses by its own range: 0.35.1 and 0.36.0
+  accept disjoint Pi ranges. Not certified: a session's MCP or model continuity, `pi update
+  self`, a host upgrade, a `plugin update` that finds a new commit, a herdr-pane row, an x86_64
+  container, the tag as `--ref`, or when Herdr reclaims a retained previous installation. The
+  supply manifest's x86_64 `executed: false` remains the preparation-time declaration; flipping
+  it is a separate change.
 
 ## 0.36.0 - 2026-10-13
 

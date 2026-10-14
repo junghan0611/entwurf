@@ -9,11 +9,14 @@ Author: Claude Opus 5.5 (claude-code 20261011T202615-521a11, 2026-10-14) on coor
   - `3e4f52f` — five ACP turn-loop gates sandboxed off the operator overlay (PARTIAL 45/45);
   - `3242922` — the production-meta readback on 0.90.0 (no prompt; 3 curated answers unchanged).
   - PARTIALs are inner-loop evidence only, not a FULL, CI or LIVE pass.
-- [ ] **3. Core 0.36.1 patch cut** ← CURRENT (GLG: "응 진행하자", 2026-10-14). prepare → make with the required LIVE `--cut` and exact-SHA CI; GLG publishes npm.
+- [x] **3. Core 0.36.1 prepared** (`91cc080` smoke fix + `chore(release): prepare v0.36.1`). Local FULL RED on the Herdr sandbox cell only (owed to CI by GLG's per-cut decision); `check:package` PASS; LIVE taken step by step, MUST 23/23 (22 + the fixed pi-durable step), BEHAVIOR not run. Evidence: CHANGELOG 0.36.1 "Release boundary and verification".
+- [ ] **4. Make 0.36.1** ← CURRENT (GLG: "0.36.1로 npm publish 전까지 가자"). One main push → exact-SHA CI (4 jobs + whole body + `check-herdr-sandbox` on pinned 0.9.4, which must pass) → one preserved candidate + container acceptance → tag `v0.36.1` → GitHub release. GLG publishes npm, then the Herdr lock is re-pinned in a separate verified commit.
 
 # NOW
-- **Cut scope:** the Codex socket-ownership smoke, the ACP 0.90.0 compatibility move and the offline gate isolation. No #142 feature and no Herdr change; the plugin keeps core 0.36.0 / host 0.9.4.
-- **Codex LIVE seat:** the 0.36.0-era app-server (PID 851181 / tmux $443) was stopped by approval at 11:26:50 KST. The cut starts its own owned server in a separate session A (A ≠ S) with the explicit `--listen` wrapper shape that CP-A1 admits. A vendor-managed daemon is not admitted; that is CP-A2.
+- **Cut scope:** the Codex socket-ownership smoke, the ACP 0.90.0 compatibility move, the offline gate isolation and the pi-durable smoke timing fix. No #142 feature. The Herdr manifest stays 0.36.0, its host pin 0.9.4 and the plugin implementation unchanged, but the runtime acquisition source does change while the carrier below stands.
+- **Herdr runtime-lock carrier:** as in every core prepare, `plugins/herdr/runtime-lock.json` rides the closed `herdr-checkout` source while 0.36.1 has no published integrity (an npm lock must equal the checkout's version). Effect: a `--ref main` Herdr install acquires this cut's checkout runtime until the re-pin; the Herdr 0.36.0 tag and npm 0.36.0 bytes are unchanged, and a source switch needs explicit deactivate/activate. After GLG publishes 0.36.1, a separate verified commit re-pins the measured registry bytes; it is not part of this cut.
+- **Codex LIVE seat:** this cut started its own app-server (`./run.sh codex-app-server`, PID 2345801, tmux $469 ≠ gate $470) and stopped it with one TERM at 16:15:33 KST; the vendor removed its alias. A vendor-managed daemon is not admitted; that is CP-A2.
+- **Follow-up, unresolved (not this cut):** the release floor and the local Herdr guardrail conflict. `check:full` ends `check:hermetic` with `check-herdr-sandbox`, and `release-gate`'s first MUST re-runs `check:full`, so neither can be run locally without the forbidden cell. Before the next prepare, expand the FULL and release-gate chains against GUARDRAILS first. A host Herdr install does not lift the guardrail, and this cut's per-cut exception is not inherited. Separating the floor is a design question for the owning docs (VERIFY / the release skill), not a change made here.
 - **Open in #128, not claimed by this cut:**
   - CP-A2 managed-daemon admission;
   - the Copilot 1.0.97 cell;
