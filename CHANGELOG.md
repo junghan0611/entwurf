@@ -4,6 +4,27 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+### Herdr plugin
+
+- **Publication checkpoint for `v2026.10.14-herdr.0.36.0`, measured at its commit `9f33dd1`
+  before the snapshot was published.** The snapshot's push CI 38479767989 passed all four jobs
+  and the official exact-SHA oracle. Its check job verified the pinned x86_64 Herdr 0.9.4 digest
+  before execution; `check-herdr-sandbox` passed 12 assertions on private Herdr 0.9.4; the
+  qualification body killed 971/971. On Herdr 0.9.4 in a clean aarch64 container, the unchanged
+  `smoke-herdr-raw-install-live --ref main` passed at that commit. A driver-level journey then
+  went from the public `v2026.10.13-herdr.0.35.1` snapshot on Pi 1.1.0, through a pinned Pi
+  upgrade to 1.2.0, to a version-changing cross-ref reinstall of the 0.36.0 plugin (`herdr
+  plugin install … --ref main`) under a private Herdr server, and passed 10/10: wiring entries
+  unchanged; a session born before the reinstall kept its process, garden id and control socket;
+  a session was born after it; `herdr plugin update` at that same ref was only an
+  already-up-to-date no-op; and deactivate removed the owned runtime, cache, ledger and wiring
+  entries. On a fixed Pi 1.2.0 the 0.35.1 snapshot refuses by its own range: 0.35.1 and 0.36.0
+  accept disjoint Pi ranges. Not certified: a session's MCP or model continuity, `pi update
+  self`, a host upgrade, a `plugin update` that finds a new commit, a herdr-pane row, an x86_64
+  container, the tag as `--ref`, or when Herdr reclaims a retained previous installation. The
+  supply manifest's x86_64 `executed: false` remains the preparation-time declaration; flipping
+  it is a separate change.
+
 ## v2026.10.14-herdr.0.36.0 — Herdr Entwurf plugin 0.36.0
 
 A separate Herdr plugin snapshot, not another core release: core package 0.36.0 and

@@ -467,8 +467,13 @@ only command this manifest declares. Where that checkout lives depends on Herdr:
 build runs in a temporary checkout that then replaces the one managed checkout; from 0.9.4 it runs
 in a new Herdr-managed installation directory, and the previous installation stays until no server
 uses it (`src/cli/plugin.rs` `install_github_plugin` @ `7e26bad9`). Either way the runtime and the
-harness wiring live under the stable Entwurf runtime root, not in the checkout. That an update
-leaves an activated host working is a hypothesis until the public-ref journey measures it on 0.9.4. It composes, in this order:
+harness wiring live under the stable Entwurf runtime root, not in the checkout. On 0.9.4 one
+version-changing cross-ref reinstall — `herdr plugin install … --ref main` (0.36.0) over the
+`v2026.10.13-herdr.0.35.1` installation — left an activated host working, measured once in a clean
+container (2026-10-14): the wiring entries were unchanged, and a running pi session kept its
+process, garden id and control socket. That session's MCP or model continuity is not claimed.
+`herdr plugin update` was measured only at the same ref, as an already-up-to-date no-op; an update
+that finds a new commit remains a hypothesis. It composes, in this order:
 
 1. `herdr integration status` — Herdr's own answer to "what is integrated here", prose only, exit 0
    in every state it can describe. No binary, or a non-zero exit, is a **named refusal**: without a
@@ -527,6 +532,12 @@ Plugin 0.5.1 carries that gate correction as a separately named follow-up. This 
 to **0.5.0** only. The follow-up that sets the manifest to 0.30.0 and locks the npm 0.30.0 runtime
 needs its own public-remote receipt after its commit reaches a public ref; that separate acceptance is recorded in the
 [#126 thread](https://github.com/junghan0611/entwurf/issues/126), never inherited from this row.
+
+**Public-remote receipt for 0.36.0 (2026-10-14):** PASS at `--ref main` on Herdr 0.9.4, resolved
+commit `9f33dd1e656df31d6759767a518f650c8982748f`, runtime `kind=npm @junghanacs/entwurf@0.36.0`,
+observed digest `sha256-7478acd0…`, the accepted core artifact (release notes of
+[`v2026.10.14-herdr.0.36.0`](https://github.com/junghan0611/entwurf/releases/tag/v2026.10.14-herdr.0.36.0)).
+It is a main-ref receipt; installing with that tag as `--ref` is not measured.
 
 What the container cannot measure: a citizen drawn as a **ROW**. That needs
 `placement.kind === "herdr-pane"`, and a headless container has no panes — so the row is evidence
