@@ -1014,6 +1014,58 @@
 			"timeoutSeconds": 300,
 			"signature": "[QK:CODEX-BIRTH-INVERSE-SOLE-OWNER]",
 			"signatureSource": "scripts/smoke-codex-birth.sh"
+		},
+		{
+			"claim": "CODEX-SOCKET-OWNER-HELD-INODE",
+			"title": "the named pid counts as the socket's holder for being named, so a wrapper whose subtree holds no fd on the LISTEN inode reads as owning it again",
+			"subject": "scripts/lib/codex-socket-listener.ts",
+			"find": ["\tconst holders = o.nodes.filter((node) => node.holdingFds.length > 0);"],
+			"replace": [
+				"\tconst holders = o.nodes.filter((node) => node.holdingFds.length > 0 || node.pid === o.namedPid);  // mutant: named means holding"
+			],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:CODEX-SOCKET-OWNER-HELD-INODE]",
+			"signatureSource": "test/codex-socket-listener.test.ts"
+		},
+		{
+			"claim": "CODEX-SOCKET-OWNER-PID-REUSE",
+			"title": "only a vanished pid counts as moved, so a pid reused by another process between the two reads keeps the first process's ownership",
+			"subject": "scripts/lib/codex-socket-listener.ts",
+			"find": [
+				"\tconst moved = o.nodes.filter((node) => node.after?.startTime !== node.startTime || node.after?.ppid !== node.ppid);"
+			],
+			"replace": [
+				"\tconst moved = o.nodes.filter((node) => node.after === null || node.after.ppid !== node.ppid);  // mutant: reuse is not movement"
+			],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:CODEX-SOCKET-OWNER-PID-REUSE]",
+			"signatureSource": "test/codex-socket-listener.test.ts"
+		},
+		{
+			"claim": "CODEX-SOCKET-OWNER-FD-REREAD",
+			"title": "the first fd read stands in for the second, so a holder that closed or handed off the LISTEN fd while another process kept the inode still reads as owning it",
+			"subject": "scripts/lib/codex-socket-listener.ts",
+			"find": ["\tconst heldAfter = listener.after?.holdingFds ?? [];"],
+			"replace": [
+				"\tconst heldAfter = listener.after?.holdingFds?.length ? listener.after.holdingFds : listener.holdingFds;  // mutant: the first read stands in"
+			],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:CODEX-SOCKET-OWNER-FD-REREAD]",
+			"signatureSource": "test/codex-socket-listener.test.ts"
+		},
+		{
+			"claim": "CODEX-SOCKET-LISTEN-ROW-ONLY",
+			"title": "an accepted connection, which carries the listener's path without ACCEPTCON, is read as a second LISTEN row, so any attached client turns ownership indeterminate",
+			"subject": "scripts/lib/codex-socket-listener.ts",
+			"find": ["\t\tif ((Number.parseInt(flags ?? \"\", 16) & SO_ACCEPTCON) === 0) continue;"],
+			"replace": ["\t\t// mutant: every bound row at the path counts, listening or not"],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:CODEX-SOCKET-LISTEN-ROW-ONLY]",
+			"signatureSource": "test/codex-socket-listener.test.ts"
 		}
 	]
 }

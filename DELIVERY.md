@@ -504,6 +504,8 @@ ENTWURF_CODEX_FRESH_PI_MODEL=<pi-model> \
 ./run.sh smoke-codex-fresh-live
 ```
 
+The gate reads that ownership from the kernel, not from argv (#128). It takes the endpoint `checkCodexSocketFile` verified, finds its one LISTEN row in the named process's own socket table, and requires exactly one process in the named PID's own subtree to hold that inode — and still hold it on a bounded second read of that holder's fds, with every walked pid's parent and start time unchanged and the named PID still the process whose uid, argv and environment were checked (`scripts/lib/codex-socket-listener.ts`). A wrapper whose child listens (the pnpm `codex.js` shape measured at the 0.36.0 cut) and a listener started with the vendor-default `--listen unix://` are both read as what they are; a subtree that holds no fd on the inode is not-owned, and zero or several rows, several holders, an unreadable entry, or a pid, parent, fd or row that moved between reads is indeterminate. Either is a FAIL. A positive is only this ownership fact: it does not admit a vendor-managed daemon as an operator shape, and it does not satisfy the separate A ≠ S seat precondition.
+
 This is the intended gate entrypoint, not acceptance by command name. The accepted receipt above
 has a fixture only collecting evidence: a real visible record-backed Pi opens Codex from outside the
 home, and the later exact callback and bidirectional delivery receipts close the topology claim.

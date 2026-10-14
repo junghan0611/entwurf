@@ -1596,7 +1596,10 @@ check_mux_fresh_call() {
   # pi-durable-fresh-live-receipts rides here for tmux-coordinate-row's reason: it is the
   # deterministic half of a LIVE sibling (smoke-pi-durable-fresh-live, #129) — the oracles that judge
   # that gate's receipts, proven on inline rows, so no model turn and no durable host is needed.
-  run_vitest test/mux-fresh-call.test.ts test/fresh-call-composition.contract.test.ts test/copilot-fresh-preflight.test.ts test/codex-fresh-preflight.test.ts test/fresh-call-surfaces.contract.test.ts test/fresh-call-provider.contract.test.ts test/omp-fresh-bootstrap.contract.test.ts test/tmux-coordinate-row.test.ts test/codex-fresh-live-protocol.test.ts test/codex-caller-seat.test.ts test/pi-durable-fresh-live-receipts.test.ts
+  # codex-socket-listener rides here for the same reason (#128): it is the ownership precondition
+  # of smoke-codex-fresh-live, judged on synthetic wrapper/self shapes and observed on a throwaway
+  # wrapper → listener pair of its own, so no Codex, no app-server and no model turn is needed.
+  run_vitest test/mux-fresh-call.test.ts test/fresh-call-composition.contract.test.ts test/copilot-fresh-preflight.test.ts test/codex-fresh-preflight.test.ts test/fresh-call-surfaces.contract.test.ts test/fresh-call-provider.contract.test.ts test/omp-fresh-bootstrap.contract.test.ts test/tmux-coordinate-row.test.ts test/codex-fresh-live-protocol.test.ts test/codex-caller-seat.test.ts test/pi-durable-fresh-live-receipts.test.ts test/codex-socket-listener.test.ts
 }
 
 check_pi_durable_beside() {

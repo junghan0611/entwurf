@@ -68,6 +68,7 @@ import {
 } from "../pi-extensions/lib/meta-session.ts";
 import { FRESH_CALL_BACKENDS } from "../pi-extensions/lib/mux-fresh-call.ts";
 import {
+	checkCodexSocketFile,
 	readCodexThread,
 	realCodexProtocolOpener,
 	resolveCodexDefaultSocketPath,
@@ -95,6 +96,12 @@ import {
 	sourceCleanupWindows,
 	validateFinalMailboxBody,
 } from "./lib/codex-fresh-source-receipts.ts";
+import {
+	describeCodexSocketOwnership,
+	judgeCodexSocketOwnership,
+	observeCodexSocketSubtree,
+	parseProcStat,
+} from "./lib/codex-socket-listener.ts";
 import { skipLive } from "./lib/live-skip.ts";
 import { parseTmuxRow, TMUX_COORDINATE_FIELDS, TMUX_COORDINATE_FORMAT } from "./lib/tmux-coordinate-row.ts";
 
@@ -697,7 +704,8 @@ async function run(): Promise<void> {
 	//                            `--cut` still refuses it as BLOCKED (MUST SKIP). Nothing is
 	//                            excused — a cut without this receipt remains impossible.
 	//   PRESENT BUT WRONG     -> FAIL, unchanged: a malformed or dead PID, a process whose
-	//                            argv is not a Codex app-server, a foreign uid, A == S. The
+	//                            argv is not a Codex app-server, a foreign uid, a subtree that
+	//                            does not hold the endpoint's LISTEN socket, A == S. The
 	//                            operator answered, and the answer is a defect.
 	// Nothing is inferred either way, and no default is invented for a value the operator
 	// did not give. The reproducible green is the invocation VERIFY and the release skill's
@@ -747,6 +755,10 @@ async function run(): Promise<void> {
 		fs.existsSync(procDir),
 		`missing ${procDir}`,
 	);
+	// Read BEFORE the uid/argv/environment checks below and handed to the socket-ownership
+	// observer, so the process those checks read and the process that owns the socket are the
+	// same one: a pid reused in between changes this start time and fails closed (#128).
+	const namedStartTime = parseProcStat(fs.readFileSync(path.join(procDir, "stat"), "utf8")).startTime;
 	const procStat = fs.statSync(procDir);
 	if (typeof process.getuid === "function") {
 		ok("the named app-server process belongs to this operator", procStat.uid === process.getuid());
@@ -774,15 +786,27 @@ async function run(): Promise<void> {
 	// cannot be borrowed into a claim about what a Codex MCP child inherits.
 	appServerEnv = { ...procEnv };
 	codexSocketPath = resolveCodexDefaultSocketPath(appServerEnv);
-	const expectedListen = `unix://${codexSocketPath}`;
-	const listensOnDefaultSocket = argv.some(
-		(arg, index) => (arg === "--listen" && argv[index + 1] === expectedListen) || arg === `--listen=${expectedListen}`,
+	// Ownership is read from the kernel, not from argv (#128). The endpoint is the one delivery
+	// itself connects to — the production classifier's verified physical socket — and the claim
+	// is that the named pid's OWN subtree holds its LISTEN inode. The argv `--listen` spelling
+	// is recorded in the receipt below and decides nothing: a wrapper whose child listens and a
+	// listener started with the vendor-default `--listen unix://` are both read as what they are.
+	const socketFile = checkCodexSocketFile(codexSocketPath);
+	ok(
+		"the default control path is a live socket or Codex's exact rendezvous alias — the endpoint delivery connects to",
+		socketFile.ok,
+		socketFile.ok ? "" : `${codexSocketPath}: ${socketFile.reason}`,
+	);
+	const socketOwnership = judgeCodexSocketOwnership(
+		observeCodexSocketSubtree(appServerPid, socketFile.connectPath, namedStartTime),
 	);
 	ok(
-		"the explicit app-server PID owns the same default UDS the fresh Codex runtime will use",
-		listensOnDefaultSocket,
-		`expected --listen ${expectedListen}; argv=${JSON.stringify(argv)}`,
+		"the explicit app-server PID's own process subtree holds the LISTEN socket at that verified endpoint",
+		socketOwnership.verdict === "owned",
+		`${describeCodexSocketOwnership(socketOwnership)}; argv=${JSON.stringify(argv)}`,
 	);
+	receipts["1a-codex-socket-ownership"] =
+		`advertised=${codexSocketPath}\nendpoint=${socketFile.connectPath}\n${describeCodexSocketOwnership(socketOwnership)}`;
 	const appServerCoordinate = inspectTmuxCoordinate("Codex app-server/MCP inherited seat", appServerEnv);
 	const fixtureCoordinate = inspectTmuxCoordinate("fixture/initial-Pi caller seat", process.env);
 	ok(

@@ -3453,7 +3453,7 @@ let manifestCount: number;
 		"codex-app-server-launch": 10,
 		"codex-caller-seat": 28,
 		"control-send-receipt": 19,
-		"codex-native": 83,
+		"codex-native": 87,
 		"compaction-send-guard": 7,
 		"control-socket-disconnect": 4,
 		"demo-reproducibility": 12,
