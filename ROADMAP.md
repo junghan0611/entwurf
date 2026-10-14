@@ -1387,13 +1387,20 @@ v2 필드 `parentGardenId`/`isEntwurf`는 **stray key로 거부된다** — 되�
     12 → 13(Fable 5.1이 alias `fable`로 제공, `haiku` 이름 "Haiku 5.5", `claude-haiku-4-5-20251001` 추가)은
     Entwurf 지원 범위가 아니다 — 측정한 것은 curated 3 id뿐이다. 이 측정은 production launch/overlay seam만 따랐다:
     session meta에는 model만 있었고 production `settingSources: []`(`tool-surface.ts:152`)가 빠졌으므로 완전한
-    production-shape 측정이 아니다. `claudeAdapter.buildSessionMeta`로 다시 측정하는 단계가 뒤따른다.
+    production-shape 측정이 아니다. `[측정 2026-10-14 14:53 KST, no-prompt 1회, 결과 JSON sha256 a3886ced…]` 그래서
+    모든 session을 production 경로(`resolveProviderConfig` 명시적 빈 operator 입력 → `loadCarrier` →
+    `buildSessionMeta` → `enrichMcpServersWithEnvelope`)로 만들어 다시 쟀다: `settingSources: []`, 기본 tools,
+    inline settings, 출하 carrier. wire는 initialize 1 · session/new 3 · set_config_option 3, 응답 7, prompt 0, turn
+    update 0이고 curated 3 id의 답은 그대로였다. 이것은 출하 기본값의 production shape이며 운영자 자신의 설정은
+    측정하지 않았다.
     vendor 내부 auth-status(`_auth/status_update` 2건)와 context 계산 호출은 model turn이 아니며 API 호출 0을
     뜻하지 않는다. 결제 rail은 미측정.
     ⑸ **운영 관찰 두 건, 둘 다 원인 미측정.** 같은 실행에서 overlay `projects/` 항목이 `ensureOverlay` 뒤
     spawn 전 524 → child group 회수 뒤 469였다. probe는 거기서 아무것도 지우지 않았고 scratch cwd 항목도
     남기지 않았다. 55개를 누가 지웠는지, transcript였는지는 측정하지 않았고 이전 driver 버전에도 같다고
-    주장하지 않는다 — 정본 보존과 닿는 잠재 위험으로 GLG 판단에 둔다. 또 inbound wire tap에 stream error
+    주장하지 않는다 — 정본 보존과 닿는 잠재 위험으로 GLG 판단에 둔다. GLG는 오래된 overlay 대화를 보존하기 위한
+    retention 설정 변경을 하지 않기로 결정했다(2026-10-14). 이것은 삭제나 prune 실행의 승인이 아니며, records ·
+    auth · config 일반 보존 원칙도 그대로다. 또 inbound wire tap에 stream error
     1건이 기록되지 않은 단계에서 있었다(모든 요청에 응답, parse 실패 0).
     ⑹ **permission option 빌더는 byte-identical**(`permissions/` 9 파일, 두 tag의 sha256 대조). ExitPlanMode
     첫 option `exit-plan-clear-*`(allow_always)는 0.85.1부터 있던 동작이며 이 bump에서 수정하지 않는다.
@@ -1401,7 +1408,13 @@ v2 필드 `parentGardenId`/`isEntwurf`는 **stray key로 거부된다** — 되�
     ⑻ **증거 등급 / UNRUN.** focused deterministic gate와 위 readback뿐이다. 그중
     `check-acp-{stop-reason,usage-accounting,prompt-lifecycle,stream-hooks,session-reuse}`의 green은 fake
     semantics만 증명하고 Rule 12 격리는 증명하지 않는다 — deps에 둔 `ensureOverlay` stub을 backend가 읽지 않아
-    실제 adapter가 운영 overlay를 갱신한다. 격리 수선이 뒤따르고, "운영 overlay를 건드리는 gate 없음" 주장은 철회했다. vendor prompt turn, LIVE MUST, FULL,
+    실제 adapter가 운영 overlay를 갱신했다. "운영 overlay를 건드리는 gate 없음" 주장은 철회했고, 같은 날 다섯 gate가
+    backend import 전에 HOME/XDG/pi agent dir을 sandbox로 돌리고 overlay 상수가 그 안에 있는지 assert하도록
+    수선했다(`scripts/lib/acp-gate-home.ts`, paired mutant `ACP-GATE-HOME-SANDBOXED`; 영향 PARTIAL 다섯 군 45/45
+    killed). production-meta 실행에서 overlay `projects/`는 469 → 469였다 — vendor가 빈 `settingSources`에서
+    retention sweep을 건너뛴다는 후보와 맞지만 그 원인을 확정하지 않는다. 그 실행의 inbound tap stream error 1건은
+    teardown 단계였고, 첫 실행의 단계를 소급하지 않는다. `smoke-acp-raw-turn-live`는 overlay도 session meta도 없는
+    bare-vendor 형태라 production session shape가 아니다. vendor prompt turn, LIVE MUST, FULL,
     qualification BODY, exact-SHA CI는 이 항목이 주장하지 않는다. 0.86–0.90 cancel 수정의 runtime 효과,
     ambient `CLAUDE_MODEL_CONFIG`의 새 settings 병합, `/mcp` prompt 가로채기(#1218), 다른 platform native는 UNRUN.
   - **2026-10-08 bump — pi 1.0.4 → 1.1.0 (#132 0.33 후보, branch `feat/132-pi-110-herdr`; package 0.32.0 유지).**

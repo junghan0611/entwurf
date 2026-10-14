@@ -454,14 +454,14 @@ The single-turn / multi-turn / cross-process / persistence-boundary / shutdown i
 
 | Invariant | Current gate (pointer) |
 |---|---|
-| Single-turn prompt extraction, SessionStart hook not mistaken for prompt | `smoke-acp-raw-turn-live`, `check-acp-prompt-builder` |
+| Single-turn prompt extraction, SessionStart hook not mistaken for prompt | `smoke-acp-raw-turn-live` (a bare-vendor shape by design: no overlay and no session meta, so it is not the production session shape), `check-acp-prompt-builder` |
 | Multi-turn continuity + recall (process-scoped reuse) | `smoke-acp-session-reuse-live`, `check-acp-session-reuse` |
 | Cross-process continuity / cache before-after | `check-acp-session-store` (signature, decideBootstrap, persist/parse) |
 | Lifecycle policy — turn-scoped is always new; process-scoped may reuse only the live in-memory session; persisted records are not a resume/load path today | `check-acp-session-store`, `check-acp-session-reuse` |
 | Tool-call / event mapping | `check-acp-event-mapper`, `smoke-acp-provider-live` |
 | Prompt lifecycle — no wall-clock cutoff on a running turn; abort ends it by ACP `session/cancel` with bounded cleanup; a child death is reported with exit status + stderr on new AND reuse turns; our prompt-phase error text is not classified transient by pi | `check-acp-prompt-lifecycle`, `check-probe-ordering` |
 | Claude typed `incomplete_tool_call` prompt failure — real pi retry/overflow classifiers reject the fixed verdict, raw evidence stays in existing diagnostics, exactly one seal and drop on new/reuse; other failures retain the legacy stderr path, cancel stays separate. A deterministic receipt does not certify the target vendor runtime. No LIVE gate induces this rejection; the raw-turn and reuse smokes certify only their own rows above. | `check-acp-vendor-rejection` (four mutants) |
-| Claude set-model answer read back before the prompt — an exact row, or the one alias row (value and name) measured for the requested id; a missing model option, another row or any other value/name pair refuses with non-transient text. Deterministic only: the answer shapes measured at 0.85.1, and unchanged at 0.90.0 (no prompt), are fixture literals, not a runtime certificate. | `check-acp-set-model-readback` (two mutants), `check-probe-ordering` |
+| Claude set-model answer read back before the prompt — an exact row, or the one alias row (value and name) measured for the requested id; a missing model option, another row or any other value/name pair refuses with non-transient text. Deterministic only: the answer shapes measured at 0.85.1, and unchanged at 0.90.0 with the production session meta (no prompt), are fixture literals, not a runtime certificate. | `check-acp-set-model-readback` (two mutants), `check-probe-ordering` |
 | Operator mcpServers / skills reach the live session | `smoke-acp-mcp-live`, `smoke-acp-skill-live`, `check-acp-config` |
 | Overlay isolation + memory containment | `check-acp-overlay`, `smoke-acp-memory-containment-live`, `check-acp-tool-surface` |
 

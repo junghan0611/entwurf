@@ -351,19 +351,32 @@ different reasons, and collapsing them would hide a real risk**:
   - **Evidence limits, stated before anything builds on this entry.** The readback followed the
     production launch and overlay seam only. Its session meta carried the model alone and
     omitted the production `settingSources: []` (`tool-surface.ts:152`), so it is not a full
-    production-shape measurement; a re-measurement through `claudeAdapter.buildSessionMeta`
-    follows. The focused green of `check-acp-{stop-reason,usage-accounting,prompt-lifecycle,
-    stream-hooks,session-reuse}` proves fake semantics only, not Rule 12 isolation: their
-    `ensureOverlay` stub sits on deps, which backend never reads, so the real adapter refreshes
-    the operator overlay. Their isolation repair follows; the earlier "no gate touches the
-    operator overlay" claim is retired.
+    production-shape measurement. The focused green of `check-acp-{stop-reason,usage-accounting,
+    prompt-lifecycle,stream-hooks,session-reuse}` at that point proved fake semantics only, not
+    Rule 12 isolation: their `ensureOverlay` stub sat on deps, which backend never reads, so the
+    real adapter refreshed the operator overlay. The earlier "no gate touches the operator
+    overlay" claim is retired.
+  - **Both limits repaired afterwards (2026-10-14).** The five gates now sandbox HOME, XDG and the
+    pi agent dir before importing the compiled backend, assert that the overlay constant resolves
+    inside that sandbox (`scripts/lib/acp-gate-home.ts`, paired mutant
+    `ACP-GATE-HOME-SANDBOXED`), and no longer carry the dead stubs. A second single no-prompt run
+    then built every session through the production path — `resolveProviderConfig` over explicit
+    empty operator input, `loadCarrier`, `buildSessionMeta`, `enrichMcpServersWithEnvelope` — so
+    each `session/new` carried `settingSources: []`, the default tools, the inline settings and
+    the shipped carrier. On the wire: `initialize` ×1, `session/new` ×3, `session/set_config_option`
+    ×3, seven responses, no `session/prompt` and no turn update. The three curated ids answered
+    exactly as before. These are the shipped defaults; an operator's own settings were not
+    measured.
   - **Two operating observations from that run, both with the cause unmeasured.** The overlay
     `projects/` held 524 entries after `ensureOverlay` and before the spawn, and 469 after the
     child group was reaped; the run itself deletes nothing there and left no entry for its
     scratch cwd. Which process removed the 55 entries, and whether they were transcripts, is not
     measured, and it is not claimed for earlier driver versions. Separately, the inbound wire tap
     saw one stream error event in a phase that was not recorded, while every request was
-    answered and no line failed to parse.
+    answered and no line failed to parse. In the production-meta run the overlay `projects/`
+    count stayed 469 → 469, which is consistent with the vendor skipping its retention sweep when
+    `settingSources` is empty but does not establish that cause, and the one inbound-tap stream
+    error fell in its teardown phase; that does not date the first run's.
   - **Permission options are unchanged.** The nine option builders under `permissions/` are
     byte-identical between the tags. `presentation.ts` adds titles only for v2 clients, and
     `exit-plan.ts` publishes the approved plan only behind the `plan` client capability; we
@@ -454,8 +467,9 @@ typing `pi --model …` keeps the upstream fuzzy behaviour, so use the full 5.5 
 The adapter reads its set-model answer back before the prompt. The driver resolves the
 requested id onto one of the rows it offers and answers with that row's `value` as the
 model option's `currentValue` (0.85.1 `dist/acp-agent.js:5459-5499`). Measured on
-2026-10-12 against 0.85.1, and again unchanged on 2026-10-14 against 0.90.0, with no
-prompt sent: `claude-fable-5-1` answers its own row,
+2026-10-12 against 0.85.1, and again unchanged on 2026-10-14 against 0.90.0 (the second
+time also with the production session meta), with no prompt sent: `claude-fable-5-1`
+answers its own row,
 while `claude-sonnet-5-5` and `claude-opus-5-5` answer the alias rows `sonnet` and
 `opus`, named `Sonnet 5.5` and `Opus 5.5`. The id an alias row resolves to is not on the
 ACP wire, so `CLAUDE_SET_MODEL_ALIAS_ROWS` (`backend-adapter.ts`) declares, for each

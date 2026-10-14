@@ -8,11 +8,16 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 - **Claude ACP closure (#128):** adapter `0.85.1` → `0.90.0`, shared direct/child ACP wire SDK
   `1.6.0` → `1.8.0`, Agent SDK `0.3.286` → `0.3.296`; the shared-wire contract is retained and
-  Entwurf adds no new policy. One no-prompt readback against the installed 0.90.0 found the
+  Entwurf adds no new policy. Two no-prompt readbacks against the installed 0.90.0 found the
   three curated ids answering exactly as on 0.85.1, so the set-model alias rows are unchanged.
-  That run sent no prompt and saw no model-turn update, but it does not prove zero API calls,
-  measure the billing rail, or certify a 0.90.0 prompt turn. Its two operating observations,
-  both with the cause unmeasured, are in the ROADMAP ledger.
+  The first followed only the production launch and overlay seam; the second also built every
+  session with the production session meta under the shipped defaults. Neither sent a prompt or
+  saw a model-turn update, but they do not prove zero API calls, measure the billing rail or an
+  operator's own settings, or certify a 0.90.0 prompt turn. The first run's two operating
+  observations, both with the cause unmeasured, are in the ROADMAP ledger.
+- **ACP gates no longer touch the operator's Claude overlay (#128).** Five offline gates that
+  drive the compiled turn loop now sandbox HOME, XDG and the pi agent dir before importing the
+  backend; a tripwire and a paired mutant hold that.
 
 ### Codex
 
