@@ -4,9 +4,39 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+## 0.37.0 - 2026-10-15
+
+### pi-durable
+
+- **The durable app forwards pi's transport and stops compacting beside a running turn (#143).**
+  The owned Harness settings now carry `SettingsManager.getTransport()` (pi's default `auto`)
+  into every request; the reference app had left the field out, so the SDK chose per connection.
+  `auto` permits a cached WebSocket continuation only when the provider's own body and prefix
+  conditions hold; it does not make every request a delta. Background compaction is off
+  (`backgroundTokens: 0`): a turn past the blocking threshold waits for the SDK's summary instead
+  of one being written beside it. Threshold, manual and overflow compaction stay the SDK's, on
+  pi's own compaction settings. The SDK engine, models, auth and storage are unchanged, and this
+  claims neither lower vendor overload nor better memory.
+- **`entwurf pi-durable --resume` reopens a chosen session (#143).** It lists the current
+  directory's durable sessions from their files and the record store only (creation time, garden
+  id, last write, open elsewhere), most recently written first, and opens the chosen one as it
+  was saved, under its own garden id. Cancelling opens nothing. No session, a non-terminal, a
+  session open elsewhere, or a new session's argument beside it refuse by name, with no fallback.
+  `--continue` still opens the newest-created session.
+- **The durable app lists a project's skills again.** The owned prompt handed pi's `skills`
+  setting to the skill loader as written, so a relative entry was read against the session
+  directory: a project's `.pi/settings.json` entry `../.claude/skills` named a `.claude/skills`
+  beside the project, in its parent, and the project's own skills were silently not listed.
+  Relative path entries are now read as pi reads them, the project's against its `.pi` and the
+  global ones against the agent directory. Both scopes are kept, the project's first, so a project
+  skill wins over a global one of the same name. Absolute and `~` entries are unchanged.
+  Patterns, package skills, `.agents/skills` and skill diagnostics are not supported by this
+  change. No project trust check is added: the durable app reads a project's settings without a
+  trust decision, as it did before.
+
 ### Herdr plugin
 
-- **The measured Herdr moves to 0.9.5, the 0.9.4 hotfix.** `scripts/fixtures/herdr-supply.json`
+- **The measured Herdr moves to 0.9.5, the hotfix of 0.9.4.** `scripts/fixtures/herdr-supply.json`
   pins v0.9.5 (`2ecf19a9`), protocol 22, with both Linux asset digests taken from the immutable
   release and named by its attestation. On aarch64 the pin rests on a private CLI baseline:
   version, protocol 22, 18 `integration status` rows unchanged from 0.9.4, and a residue-free
@@ -24,16 +54,51 @@ All notable changes to this project will be documented here. Format follows [Kee
   version line; the pi extension and the Claude settings stayed byte-identical. The plugin README
   and the launch-rail document say so.
 
-### pi-durable
+### Release boundary and verification
 
-- **The durable app lists a project's skills again.** The owned prompt handed pi's `skills` setting
-  to the skill loader as written, so a relative entry was read against the session directory: a
-  project's `.pi/settings.json` entry `../.claude/skills` named the directory above the project, and
-  its skills were silently not listed. Relative entries are now read as pi reads them, the project's
-  against its `.pi`, the global ones against the agent directory. Both scopes are kept, the project's
-  first, so a project skill wins over a global one of the same name. Absolute and `~` entries are
-  unchanged. Patterns, package skills, `.agents/skills`, skill diagnostics and project trust stay as
-  they were: none of them is supported by this change.
+- **Scope.** A core minor over `v0.36.1`: #143 at `3a65c8d`, the Herdr 0.9.5 pin at `d8cd8f3`
+  and its CI record at `dbb8a32`, and the skill fix at `4968ffd`. Not in it: #142 (the ACP
+  thinking option), and the default thinking level of a new durable session named by a model
+  without `:<level>`, which starts at `off` where pi starts at its configured default; that is
+  recorded on #142 and not changed here. The Herdr manifest stays 0.36.0; plugin 0.37.0 is a
+  separate cut after the core is published.
+- **Local evidence before this preparation is focused, not a whole pass.** Each affected
+  qualification group (PARTIAL) measured its own change with a green control, and none is
+  carried to another. #143 killed 81/81 in the `check-pi-durable-beside` group. The supply
+  receipt mutant re-aimed at `dbb8a32` killed with its whole `check-herdr-supply` group, 11/11;
+  that commit skipped CI, so the re-aimed mutant has no CI run yet. The skill fix killed 82/82 in
+  the `check-pi-durable-beside` group (receipt `d934e43c4dad5dc28b49a3a85c5a133d126df9558f2bc260087c1b34cf7422f9`),
+  with 900 of the 982 committed claims not run. The qualification body has not run on any of them.
+- **Unpublished candidate carrier.** As in 0.36.1, `plugins/herdr/runtime-lock.json` names the
+  closed `herdr-checkout` source, because 0.37.0 has no published integrity yet. The npm 0.36.1
+  bytes and every existing tag are unchanged. Re-pinning registry bytes is the separate Herdr
+  0.37.0 cut, after the operator publishes core 0.37.0.
+- **No local static floor; it is the exact CI's.** `check:hermetic` carries
+  `check-herdr-plugin-build` and `check-herdr-sandbox`, which must not run on the operator host,
+  and `release-gate`'s first MUST step is `pnpm run check:full`. By the operator's decision for
+  this cut only, `check:full` was not run locally and is owed whole to the prepared SHA's CI.
+  The decision is not inherited by a later cut.
+- **LIVE, taken step by step, not as `release-gate --cut`.** The gate's 23 non-static MUST steps
+  and its BEHAVIOR step ran in the gate's own order, command, environment and working directory,
+  stopping at the first red, on the frozen candidate (`4968ffd` with this preparation's edits),
+  with the candidate fingerprint the same before and after each run. The first run passed steps
+  1-18 and failed `smoke-mux-lifecycle-live`: its pi-native sibling (`openai-codex/gpt-6-luna`)
+  was alive and answered with a shell call and "ACK" but never called the callback tool within
+  300 s. No input of that step changed in this cut, and the cause was not measured. By the
+  operator's choice it was run again once, unchanged, with steps 1-18 reused: steps 19-23 and the
+  BEHAVIOR step then passed. **MUST 23/23 PASS (18 + 5 on the second run), SKIP 0; BEHAVIOR 1/1
+  PASS.** `smoke-mux-lifecycle-live` passed 81 checks, `smoke-codex-fresh-live` 66 assertions
+  against an app-server started for each run in its own tmux session (named pane pid, a child
+  holding the kernel LISTEN inode, `gpt-5.6-luna` and `openai-codex/gpt-5.6-luna`, stopped by one
+  TERM after the run), and `smoke-pi-durable-fresh-live` 36 assertions. The gate sessions held no
+  ambient identity carrier. This is local LIVE evidence, not a release-gate verdict and not the
+  exact CI.
+- **Exact CI owes the whole floor.** The prepared SHA's exact CI (the four required jobs, the
+  whole qualification body over the 982 committed claims, the re-aimed supply mutant included,
+  and `check-herdr-sandbox` on pinned Herdr 0.9.5) is the next checkpoint and is not presumed
+  PASS.
+- **Publication boundary.** No make artifact, core tag, GitHub Release or npm publication is
+  claimed; they wait for the exact CI, the make decision and the operator.
 
 ## 0.36.1 - 2026-10-14
 

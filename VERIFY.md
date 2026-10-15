@@ -227,7 +227,14 @@ holds that node and the badge counts it, `pending` while recovered), and the car
 `durableLayout` drawn by the published pi-tui renderer on a fake terminal across rows 1–8 × cols
 1–12, count changes and resizes, against the pinned upstream screen for the zero-task case. Its
 editor is a fixed stand-in: the real `CustomEditor`, overlays, emoji width and a consumer's own task
-are the visible-terminal and consumer subjects. `check-pi-runtime-version` asks the
+are the visible-terminal and consumer subjects. The 1.2 bootstrap child also observes `--resume`
+reopening the chosen session and cancelling to nothing (#143). Two more sandboxed children reach the
+reference app's settings and prompt mapping: one drives the real bootstrap against a loopback
+WebSocket Responses endpoint, whose received frames decide the forwarded transport and its
+continuation and the reference compaction policy (no background summary; blocking and overflow
+kept, #143); the other renders the carrier prompt's skills section with no model, against a fixture
+of both settings scopes, an absolute entry, a same-name pair and a wrong-base decoy.
+`check-pi-runtime-version` asks the
 same verifier whether this checkout resolves exactly the pinned SDK set (the native set; the PATH
 host is setup's subject), and `check-pi-import-surface` asserts the carrier fence. The separate
 `check-pi-durable-contact`, `check-pi-durable-send` and `check-pi-durable-receive` are
