@@ -442,8 +442,9 @@ read. Every field the provider attached is shown, in sorted key order.
   You must open the pane from inside a Herdr session.
   - That floor is not the same claim as the version this was MEASURED on. Entwurf's reproducible and
     CI rail is pinned to exactly **0.9.5** by `scripts/fixtures/herdr-supply.json`, which is what
-    `check-herdr-sandbox` requires. At this pin 0.9.5 has a private CLI baseline; the full sandbox
-    gate is certified only by its exact-SHA CI run, and its last completed run was on 0.9.4. Every
+    `check-herdr-sandbox` requires. At this pin the full sandbox gate passed on x86_64 in the CI run
+    of the SHA that introduced it (run 38667564413 at `d8cd8f3`, 12 assertions); on aarch64, 0.9.5
+    has a private CLI baseline only. Every
     receipt in this repo names the Herdr it was taken against, and the older ones stay dated at
     0.9.0, 0.9.1, 0.9.3 or 0.9.4. A different Herdr inside the admission window is
     permitted and carries no receipt of ours.

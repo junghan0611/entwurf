@@ -16,15 +16,16 @@
 		"x86_64": {
 			"name": "herdr-linux-x86_64",
 			"sha256": "14d9e8bc8b4a9e0118d77c32266f76d461f09b40342eb23752960bd89f59929d",
-			"executed": false,
-			"executedNote": "not yet executed at this pin: the digest is pinned and named by GitHub's release attestation for pkg:github/herdrdev/herdr@v0.9.5, and the first CI check job at a SHA carrying this pin will be its first run. The previous pin's x86_64 asset (v0.9.4, sha256 493304fb…) did run there — CI run 38479767989 at 9f33dd1, check-herdr-sandbox 12 assertions (private herdr 0.9.4) — which is dated history of that asset, not evidence for this one"
+			"executed": true,
+			"executedReceipt": "herdr 0.9.5 linux-x86_64 sha256 14d9e8bc8b4a9e0118d77c32266f76d461f09b40342eb23752960bd89f59929d — 2026-10-15, GitHub Actions check job (x86_64), CI run 38667564413 at d8cd8f3, read from that run's check-job log: `install-herdr-ci` verified this digest before execution, and check-herdr-sandbox passed 12 assertions on private herdr 0.9.5, HS-VERSION-BOUNDARY included",
+			"executedNote": "the receipt is the full sandbox gate at the SHA that introduced this pin; it is not a claim for any later SHA. The previous pin's x86_64 asset (v0.9.4, sha256 493304fb…) ran in CI run 38479767989 at 9f33dd1, check-herdr-sandbox 12 assertions — dated history of that asset, not evidence for this one"
 		},
 		"aarch64": {
 			"name": "herdr-linux-aarch64",
 			"sha256": "17d7536f2da50859523680ef279dffcac8e4a235f4e46fe8da6c2ec44141897c",
 			"executed": true,
 			"executedReceipt": "herdr 0.9.5 linux-aarch64 sha256 17d7536f2da50859523680ef279dffcac8e4a235f4e46fe8da6c2ec44141897c — 2026-10-15, oracle aarch64, Phase A private CLI baseline (docs/herdr-launch-rail.md, 재측정 2026-10-15): `herdr --version` 0.9.5; `status client` protocol 22, endpoint_protocol_generation 1; `integration status` 18 rows, zero diff against 0.9.4 in a fresh sandbox; over integrations seeded by 0.9.4, pi reads `current (v9)` and claude reads `outdated (v10 < v11)`; a 0.9.5 reinstall leaves the pi extension and claude settings.json byte-identical, changes the claude hook only in its `HERDR_INTEGRATION_VERSION` line (10 → 11), and then reads `current (v11)`; `server stop` leaves no socket and no process",
-			"executedNote": "the receipt is a private CLI baseline only. check-herdr-sandbox has NOT run on this architecture at this pin — its operator-untouched cell reads the operator's own panes — so the full gate's first run at this pin is the CI check job, on the x86_64 asset — not this one. The operator host was not touched. The 0.9.4 receipt (2026-10-14) stays dated in docs/herdr-launch-rail.md"
+			"executedNote": "the receipt is a private CLI baseline only. check-herdr-sandbox has NOT run on this architecture at this pin — its operator-untouched cell reads the operator's own panes — so the full gate's first run at this pin was the CI check job on the x86_64 asset (CI run 38667564413) — not this one. The operator host was not touched. The 0.9.4 receipt (2026-10-14) stays dated in docs/herdr-launch-rail.md"
 		}
 	}
 }

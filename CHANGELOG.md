@@ -10,10 +10,12 @@ All notable changes to this project will be documented here. Format follows [Kee
   pins v0.9.5 (`2ecf19a9`), protocol 22, with both Linux asset digests taken from the immutable
   release and named by its attestation. On aarch64 the pin rests on a private CLI baseline:
   version, protocol 22, 18 `integration status` rows unchanged from 0.9.4, and a residue-free
-  `server stop`. The full `check-herdr-sandbox` has not run at this pin on either architecture;
-  its first run is the CI check job at the SHA carrying it. The x86_64 asset is recorded as not
-  yet executed. Plugin admission (Herdr >= 0.9.0), the plugin version and the runtime lock are
-  unchanged.
+  `server stop`. The full `check-herdr-sandbox` then passed at this pin on x86_64 in the CI run of
+  the SHA that introduced it (run 38667564413 at `d8cd8f3`, 12 assertions on private Herdr 0.9.5),
+  and the x86_64 asset is recorded as executed with that receipt; it has not run on aarch64. The
+  supply receipt mutant now removes the x86_64 receipt instead of flipping an unexecuted flag,
+  because no asset at this pin is unexecuted. Plugin admission (Herdr >= 0.9.0), the plugin
+  version and the runtime lock are unchanged.
 - **A host that uses the Claude integration needs `herdr integration install claude` again
   after upgrading to Herdr 0.9.5.** 0.9.5 raises its claude integration from v10 to v11 and leaves pi at v9. Over integrations seeded by
   0.9.4 it reads claude as `outdated (v10 < v11)`, which the plugin's activation profile files as
