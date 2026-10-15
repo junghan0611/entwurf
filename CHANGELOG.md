@@ -24,6 +24,17 @@ All notable changes to this project will be documented here. Format follows [Kee
   version line; the pi extension and the Claude settings stayed byte-identical. The plugin README
   and the launch-rail document say so.
 
+### pi-durable
+
+- **The durable app lists a project's skills again.** The owned prompt handed pi's `skills` setting
+  to the skill loader as written, so a relative entry was read against the session directory: a
+  project's `.pi/settings.json` entry `../.claude/skills` named the directory above the project, and
+  its skills were silently not listed. Relative entries are now read as pi reads them, the project's
+  against its `.pi`, the global ones against the agent directory. Both scopes are kept, the project's
+  first, so a project skill wins over a global one of the same name. Absolute and `~` entries are
+  unchanged. Patterns, package skills, `.agents/skills`, skill diagnostics and project trust stay as
+  they were: none of them is supported by this change.
+
 ## 0.36.1 - 2026-10-14
 
 ### ACP

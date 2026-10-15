@@ -1793,3 +1793,94 @@ describe("the stream transport on the wire, through the real bootstrap (#143)", 
 		expect(report?.policy.overflow?.compactions).toEqual(["overflow"]);
 	});
 });
+
+/**
+ * The skills the owned prompt lists, as pi resolves the `skills` setting: each scope's relative entries against its
+ * own directory, the project's against the session directory's `.pi`, the global ones against the agent directory.
+ * ONE child loads the committed carrier's prompt through its resolver and renders its `skills` section for a request
+ * offering `read`, with a sandboxed HOME, XDG roots and agent directory and no model, Harness or network. The oracle is
+ * the fixture layout: a decoy where a relative entry read against the conversation's directory would land.
+ */
+const SKILLS_ORACLE = String.raw`
+const repo = "file://" + process.cwd() + "/";
+const { createPiPrompt } = await import(new URL("./pi/pi-durable/carrier/prompt.js", repo).href);
+const dist = new URL(".", import.meta.resolve("@earendil-works/pi-coding-agent")).href;
+const { SettingsManager } = await import(dist + "core/settings-manager.js");
+const cwd = process.env.SKILLS_PROJECT;
+const extension = createPiPrompt(SettingsManager.create(cwd, process.env.PI_CODING_AGENT_DIR), cwd);
+const skills = extension.sections.find((entry) => entry.key === "skills");
+const text = skills.render({ agent: { tools: [{ name: "read" }], cwd }, env: undefined }) ?? "";
+const listed = [...text.matchAll(/<name>([^<]*)<\/name>\s*<description>([^<]*)<\/description>/g)];
+console.log(JSON.stringify({ skills: Object.fromEntries(listed.map((match) => [match[1], match[2]])) }));
+`;
+
+describe("the owned prompt's skills, read as pi reads the skills setting", () => {
+	let report: { skills: Record<string, string> } | undefined;
+	let run: { status: number | null; stderr: string };
+
+	beforeAll(() => {
+		const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), "pi-durable-skills-"));
+		try {
+			const home = path.join(sandbox, "home");
+			const agent = path.join(home, ".pi", "agent");
+			const project = path.join(sandbox, "work", "project");
+			const skill = (dir: string, name: string, description = `${name} fixture`): void => {
+				fs.mkdirSync(path.join(dir, name), { recursive: true });
+				fs.writeFileSync(
+					path.join(dir, name, "SKILL.md"),
+					`---\nname: ${name}\ndescription: ${description}\n---\n\n${name}\n`,
+				);
+			};
+			// The project's entry is read against <project>/.pi; against the project directory it would be the decoy.
+			skill(path.join(project, ".claude", "skills"), "project-skill");
+			skill(path.join(sandbox, "work", ".claude", "skills"), "wrong-base-decoy");
+			// The global entry is read against the agent directory; against the project directory it names nothing.
+			skill(path.join(agent, "extra-skills"), "global-skill");
+			skill(path.join(sandbox, "absolute-skills"), "absolute-skill");
+			// One name in both scopes: the project's is listed, as pi resolves the project scope first.
+			skill(path.join(project, ".claude", "skills"), "same-name-skill", "the project copy");
+			skill(path.join(agent, "extra-skills"), "same-name-skill", "the global copy");
+			fs.mkdirSync(path.join(project, ".pi"), { recursive: true });
+			fs.writeFileSync(
+				path.join(project, ".pi", "settings.json"),
+				`${JSON.stringify({ skills: ["../.claude/skills", path.join(sandbox, "absolute-skills")] })}\n`,
+			);
+			fs.writeFileSync(path.join(agent, "settings.json"), `${JSON.stringify({ skills: ["extra-skills"] })}\n`);
+			const child = spawnSync(
+				process.execPath,
+				["--import", path.join(DURABLE, "carrier-resolver.mjs"), "--input-type=module", "-e", SKILLS_ORACLE],
+				{
+					cwd: ROOT,
+					encoding: "utf8",
+					timeout: 60_000,
+					env: {
+						PATH: process.env.PATH ?? "",
+						HOME: home,
+						PI_CODING_AGENT_DIR: agent,
+						XDG_CONFIG_HOME: path.join(home, ".config"),
+						XDG_CACHE_HOME: path.join(home, ".cache"),
+						XDG_DATA_HOME: path.join(home, ".local", "share"),
+						XDG_STATE_HOME: path.join(home, ".local", "state"),
+						PI_OFFLINE: "1",
+						SKILLS_PROJECT: project,
+					},
+				},
+			);
+			run = { status: child.status, stderr: child.stderr };
+			const last = child.stdout.trim().split("\n").at(-1) ?? "";
+			report = last.startsWith("{") ? (JSON.parse(last) as { skills: Record<string, string> }) : undefined;
+		} finally {
+			fs.rmSync(sandbox, { recursive: true, force: true });
+		}
+	}, 90_000);
+
+	it("[QK:PI-DURABLE-PROMPT-SKILL-SCOPE-BASE] a relative project entry is read against the project's .pi and a relative global one against the agent directory; both scopes are listed, the project's first, an absolute entry as before, and nothing from where the entry would land read against the conversation's directory", () => {
+		expect(run.status, run.stderr).toBe(0);
+		expect(report?.skills).toEqual({
+			"absolute-skill": "absolute-skill fixture",
+			"global-skill": "global-skill fixture",
+			"project-skill": "project-skill fixture",
+			"same-name-skill": "the project copy",
+		});
+	});
+});

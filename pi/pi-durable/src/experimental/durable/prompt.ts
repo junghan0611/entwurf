@@ -1,5 +1,6 @@
+import { isAbsolute, join, resolve } from "node:path";
 import { defineExtension, type PromptInput, section } from "@earendil-works/pi-durable";
-import { getAgentDir } from "../../config.ts";
+import { CONFIG_DIR_NAME, getAgentDir } from "../../config.ts";
 import { loadProjectContextFiles } from "../../core/resource-loader.ts";
 import type { SettingsManager } from "../../core/settings-manager.ts";
 import { loadSkills, type Skill } from "../../core/skills.ts";
@@ -19,6 +20,29 @@ const CONTRIBUTIONS = {
 /** pi's section order; `buildSystemPromptSections()` omits the ones without content. */
 const KEYS = ["preamble", "tools", "rules", "docs", "project_context", "skills", "cwd"] as const;
 
+/** An entry pi reads as a pattern, not a path: an override or a glob. */
+const PATTERN = /^[!+-]|[*?]/u;
+
+/**
+ * The `skills` setting with each scope's relative entries read against that scope's own directory, as pi resolves
+ * them: the project's against the session directory's `.pi`, the global ones against the agent directory, the
+ * project's first. Read against the conversation's directory, a relative entry names another place. Absolute, `~`
+ * and pattern entries go on unchanged.
+ */
+function scopedSkillPaths(settings: SettingsManager, agentDir: string, projectCwd: string): string[] {
+	const against = (entries: readonly string[] | undefined, base: string): string[] =>
+		(entries ?? []).map((entry) => {
+			const path = entry.trim();
+			return path === "" || isAbsolute(path) || path === "~" || path.startsWith("~/") || PATTERN.test(path)
+				? entry
+				: resolve(base, path);
+		});
+	return [
+		...against(settings.getProjectSettings().skills, join(projectCwd, CONFIG_DIR_NAME)),
+		...against(settings.getGlobalSettings().skills, agentDir),
+	];
+}
+
 /**
  * pi's system prompt as one extension: the sections of `buildSystemPromptSections()` for the request's tools and the
  * conversation's directory. Context files and skills load once per directory, like pi at startup.
@@ -31,7 +55,12 @@ export function createPiPrompt(settings: SettingsManager, fallbackCwd: string) {
 			const agentDir = getAgentDir();
 			found = {
 				contextFiles: loadProjectContextFiles({ cwd, agentDir }),
-				skills: loadSkills({ cwd, agentDir, skillPaths: settings.getSkillPaths(), includeDefaults: true }).skills,
+				skills: loadSkills({
+					cwd,
+					agentDir,
+					skillPaths: scopedSkillPaths(settings, agentDir, fallbackCwd),
+					includeDefaults: true,
+				}).skills,
 			};
 			resources.set(cwd, found);
 		}

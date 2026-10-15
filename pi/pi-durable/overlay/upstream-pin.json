@@ -88,8 +88,8 @@
 			{
 				"name": "prompt.js",
 				"source": "pi/pi-durable/src/experimental/durable/prompt.ts",
-				"blob": "8e2f5d5273fba58da8b314766956ed62951c3814",
-				"sha256": "ff1ff765fa313e5cb1c3d7537c901c23adb0562ee433bd050fd35eb3d892134c"
+				"blob": "0e99ff64214c44986c1c2259490e401898659fd5",
+				"sha256": "15870ea4c9cb465395d70189be4f1480c48544d724bd9fc3b0e6650f17226c0f"
 			},
 			{
 				"name": "sessions.js",

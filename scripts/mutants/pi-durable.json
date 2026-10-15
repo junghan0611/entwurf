@@ -1189,6 +1189,18 @@
 			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
 		},
 		{
+			"claim": "PI-DURABLE-PROMPT-SKILL-SCOPE-BASE",
+			"title": "the prompt hands the skills setting over as written: a relative project entry is read against the conversation's directory and its skills are silently not listed",
+			"subject": "pi/pi-durable/carrier/prompt.js",
+			"find": ["\t\t\t\t\tskillPaths: scopedSkillPaths(settings, agentDir, fallbackCwd),"],
+			"replace": ["\t\t\t\t\tskillPaths: settings.getSkillPaths(),"],
+			"gate": ["bash", "run.sh", "check-pi-durable-beside"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PI-DURABLE-PROMPT-SKILL-SCOPE-BASE]",
+			"signatureSource": "pi-extensions/lib/pi-durable-carrier.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
 			"claim": "PI-DURABLE-RESUME-OPENS-CHOSEN",
 			"title": "the runtime drops the chosen session id: --resume opens a new session instead of the conversation the operator picked",
 			"subject": "pi/pi-durable/carrier/runtime.js",
