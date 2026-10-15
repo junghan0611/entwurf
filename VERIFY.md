@@ -210,16 +210,19 @@ that moved out of `scripts/` and into a file beside its subject would otherwise 
 
 Do not collapse source, package, fixture, and native-host evidence into one “green.”
 
-**Native durable contact (#129, #130 carrier).** `check-pi-durable-beside` is the deterministic
-beside-test/mutant coordinate in `check:contracts`: the adapter, the installed carrier/SDK-set
-verifier, the preflight, the owner join, the carrier's relocation grammar, resolver and
-maintainer emitter (its `--check` reads only the owned in-repo source, #141; the overlay patch is
-retired, and `--origin <clone>` checks provenance only), and the bootstrap's explicit `--native-module` ingress
-(#130 P2) with its paired `--native-module-dir` (#134), driven through the packaged `main`'s own
+**Native durable contact (#129, #130 carrier).** Three deterministic beside-test/mutant
+coordinates in `check:contracts` split the durable contact by the file that carries each claim's QK
+(#144): a carrier or native-module mutant runs its one file, the rest run four. `check-pi-durable-beside` holds the adapter, the installed
+carrier/SDK-set verifier, the preflight and the owner join. `check-pi-durable-carrier` holds the
+carrier's relocation grammar, resolver and maintainer emitter (its `--check` reads only the owned
+in-repo source, #141; the overlay patch is retired, and `--origin <clone>` checks provenance only)
+and the task footer and sandboxed children described below. `check-pi-durable-native-module` is the coordinate of
+the bootstrap's explicit `--native-module` ingress
+(#130 P2) with its paired `--native-module-dir` (#134). That ingress is driven through the packaged `main`'s own
 seams: initialization before the TUI and the open, named refusals, the identity and directory
 guards, the top-level `*.extension.mjs` filter and byte-wise order, cross-module name refusals, the
-contact-first order by reference, and the bridge spawn *spec* (not the child's inheritance). The
-carrier's task footer (#134) is observed in ONE sandboxed child that loads the committed carrier
+contact-first order by reference, and the bridge spawn *spec* (not the child's inheritance). In
+`check-pi-durable-carrier`, the carrier's task footer (#134) is observed in ONE sandboxed child that loads the committed carrier
 through its own resolver: the real carrier runtime opened and closed with no model (graph observed
 for the session, `/tasks` toggling only the panel), then continued after one native background task
 was committed into that session through the SDK's public `Conversation.commit` (the carrier's graph
@@ -235,7 +238,7 @@ continuation and the reference compaction policy (no background summary; blockin
 kept, #143); the other renders the carrier prompt's skills section with no model, against a fixture
 of both settings scopes, an absolute entry, a same-name pair and a wrong-base decoy.
 `check-pi-runtime-version` asks the
-same verifier whether this checkout resolves exactly the pinned SDK set (the native set; the PATH
+same installed verifier (`check-pi-durable-beside`) whether this checkout resolves exactly the pinned SDK set (the native set; the PATH
 host is setup's subject), and `check-pi-import-surface` asserts the carrier fence. The separate
 `check-pi-durable-contact`, `check-pi-durable-send` and `check-pi-durable-receive` are
 CHECKOUT-ONLY SDK/contact gates: they run the checkout's own carrier — verified first, refused by
@@ -260,7 +263,7 @@ initializing only its top-level `*.extension.mjs` (#134) and a directory without
 before anything opens — and the HOST kept a separate subject — a real pi 1.1.0
 binary (the previous generation) beside the pinned native set is a named pi FAIL with zero Pi wiring while pi-durable still
 PASSes — not native admission. The carrier's rebuild
-equality is the owned source's emission (#141): the beside claim `PI-DURABLE-CARRIER-EMIT-SOURCE-EQUAL`
+equality is the owned source's emission (#141): the carrier claim `PI-DURABLE-CARRIER-EMIT-SOURCE-EQUAL`
 on every floor, `emit-pi-durable-carrier --check` as its CLI. The emitter's exact Node is red in the CI
 `check` job (`ENTWURF_REQUIRE_EMITTER_NODE=1`) and a named SKIP on a host running another Node, not
 acceptance there. First-release visible fresh/callback and native

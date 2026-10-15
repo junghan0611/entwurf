@@ -4,6 +4,26 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+### Verification
+
+- **The native-module ingress claims get their own mutant coordinate (#144).** The 13
+  `PI-DURABLE-MODULE-*` claims carry their QKs only in `pi-durable-native-module.test.ts`, and a
+  kill is attributed from the mutant's own QK, yet each of them re-ran all six pi-durable beside
+  tests. `./run.sh check-pi-durable-native-module` runs that one file and is now their gate argv;
+  `check-pi-durable-beside` no longer runs it. No claim, find/replace, signature or build changes.
+- **The carrier claims get their own mutant coordinate too (#144).** The 30 claims whose QKs live
+  only in `pi-durable-carrier.test.ts` move to `./run.sh check-pi-durable-carrier`, which runs that
+  file alone; `check-pi-durable-beside` keeps the adapter, verifier, preflight and owner-join files
+  and their 39 claims. All three coordinates stay in `check:contracts`, and every claim keeps its
+  subject, find/replace, signature and bridge build (the carrier test reaches the bridge through the
+  bootstrap). Measured once on one host, on an isolated copy of `5e1e629` (M1, a composition
+  measurement, not a kill run): the six files together took 24.5s, the carrier file alone 17.6s and
+  the native-module file alone 1.7s, so before the split every mutant of the former six-file
+  `check-pi-durable-beside` group (82; the two `check-node-floor-coherence` claims were never in it)
+  paid the carrier's time. Those seconds are local, not CI timing. A moved mutant no longer runs beside the other
+  files; that was incidental exposure, never the ground of a kill, which is attributed only from the
+  mutant's own QK.
+
 ## v2026.10.15-herdr.0.37.0 — Herdr Entwurf plugin 0.37.0
 
 A separate Herdr plugin snapshot, not another core release: core package 0.37.0 and

@@ -181,7 +181,9 @@ Usage:
   ./run.sh check-pi-durable-contact   # #129 L-identity gate, CHECKOUT-ONLY (an installed package refuses it in run_ts). Opens the REAL durable app from THIS checkout's verified carrier (pi/pi-durable/carrier/ under its resolver, against the checkout's pinned pi SDK set — refused by name first) with the pi-durable contact, births the citizen and runs its tools adapter-direct through a privately emitted branch bridge (ENTWURF_PI_DURABLE_BRIDGE_ENTRY; its registry must match this checkout). Matrix roots {default, explicit} x {fresh, --continue}: one record keyed by the durable session dir, sender marker on the spawned host pid, exactly one bridge child whose /proc PPID is that host, poisoned identity carriers kept from it, its four root carriers bound to the roots written, the receiver ARMED (raw marker owned by the host pid + start key as pi-durable-host, joined to the sender marker; removed on close), self = the record and replyable, peers from an outside bridge, same garden id on reopen; the bundle's compiled owner join must admit pi-durable-host. Reaps only the host/bridges it owns on any failure. Harness-bypassed: no model turn, no ToolTask. Missing inputs → SKIP (97), never a pass
   ./run.sh check-pi-durable-send      # #129 L-send FIRST CELL, CHECKOUT-ONLY. Same input as check-pi-durable-contact. One native durable turn: the app's own controller input → GenerationTask → ToolTask → the contact's entwurf_v2 → the private bridge → a seeded self-fetch target (C2 recipe, owned by a separate idle child). S = a 127.0.0.1 scripted OpenAI-compatible endpoint configured through the app's documented models.json (dummy key, PI_OFFLINE); H = the native ToolTask path; V (a vendor turn) is NOT run. Oracles: the wire (tools offered, v2 schema = the bridge's tools/list, exactly two requests, the tool result + receipt in the second), the raw mailbox (.msg 1, signal, sender = the host record), the native view (one call, its settled result, root current). Not exactly-once, not recovery, not a recipient turn. Missing inputs → SKIP (97)
   ./run.sh check-demo-reproducibility # source-checkout-only: discover offline demo Node tests; no LIVE, model, render or publication
-  ./run.sh check-pi-durable-beside    # #129 mutant execution coordinate (VERIFY rule 3): run_vitest over the six pi-durable beside tests (adapter, carrier/SDK-set verifier, preflight, owner join, carrier relocation/resolver, owned-source emission and typecheck fence, task footer, native-module file and directory ingress) — the pi-durable qualification lane's gate argv. Same files check-tests-beside-behavior already runs.
+  ./run.sh check-pi-durable-beside    # #129 mutant execution coordinate (VERIFY rule 3): run_vitest over four pi-durable beside tests (adapter, carrier/SDK-set verifier, preflight, owner join) — a pi-durable qualification lane gate argv. Same files check-tests-beside-behavior already runs.
+  ./run.sh check-pi-durable-carrier   # #144 mutant execution coordinate (VERIFY rule 3): run_vitest over the carrier test alone (relocation/resolver, owned-source emission and typecheck fence, package file list, task footer, the real bootstrap on the 1.2 SDK, stream transport, skills prompt) — the gate argv of the carrier claims, whose QKs live only in that file. Same file check-tests-beside-behavior already runs.
+  ./run.sh check-pi-durable-native-module # #144 mutant execution coordinate (VERIFY rule 3): run_vitest over the bootstrap's native-module file and directory ingress test alone — the gate argv of the ingress claims, whose QKs live only in that file. Same file check-tests-beside-behavior already runs.
   ./run.sh check-pi-durable-receive   # #129 L-receive FIRST CELL, CHECKOUT-ONLY. Same input (the bundle must carry the pi-durable-host owner join). The host driver gives the app NO input; a seeded claude-code sender (marker owned by a separate idle child, handed to a gate-owned sending bridge through ENTWURF_META_SENDER_MARKER) enqueues one message, the host's doorbell admits its notice to the ROOT conversation, and the scripted model drains it with entwurf_inbox_read. S withholds response #1 until the ENQUEUE receipt, the .delivered bytes, the signal, the host-owned receiver marker and the notice are captured. Oracles: receiver() admission, native view, raw archive (.delivered.read + lastReadAt), wire (exactly two requests, drain result = view), and after a green reap a forensic read-only SQLite copy (submission row by request id = reported id, root, input, done, placed entry = the notice). V NOT run. Missing inputs → SKIP (97)
   ./run.sh check-copilot-receive-arm  # #82 RAIL 5 gate: the REAL receiver installer + the REAL extension.mjs forked with a stubbed SDK. Arms only after birth, marker owned by the WATCHER pid, self-fetch dispatch answer, doorbell carries the garden id and NOT the body, id-drift/foreign-parent refusals. Hermetic; no Copilot, no model turn
   ./run.sh check-copilot-launch       # #82 RAIL 7 gate: the MANAGED launch `entwurf copilot`, driven through its public address against a FAKE VENDOR on a sandbox PATH. Receiver precondition refusals, EXTENSIONS token + operator token preservation, injected defaults before the `--` terminator, byte-identical argv, the 11 explicit permission/surface policy overrides that suppress `--yolo`, exec (not fork) pid identity, exit passthrough, recursion refusal. Hermetic; no Copilot, no model turn
@@ -1606,12 +1608,30 @@ check_pi_durable_beside() {
   # #129: the pi-durable qualification lane's execution coordinate (VERIFY 「Four rules」 rule 3). It is
   # not a discovery path — check-tests-beside-behavior already finds these files. It exists because the
   # qualification runner re-invokes a gate argv once per mutant, and the narrow filter keeps one mutant
-  # from re-running every beside test. The six files are one contact: the adapter and its packaged
+  # from re-running every beside test. The four files are one contact: the adapter and its packaged
   # bootstrap, the installed carrier/SDK-set verifier (which also reads the three checkout gates as
-  # SOURCE), the fresh preflight, the owner join that admits the durable host, the carrier's
-  # relocation grammar, resolver, owned-source emitter (#130, #141) and source fence with the carrier's task footer (#134),
-  # and the bootstrap's explicit --native-module ingress (#130 P2) and its --native-module-dir (#134).
-  run_vitest pi-extensions/meta-bridge-pi-durable.test.ts pi-extensions/lib/pi-durable-runtime.test.ts pi-extensions/lib/pi-durable-fresh-preflight.test.ts pi-extensions/lib/entwurf-deliverability.owner-join.test.ts pi-extensions/lib/pi-durable-carrier.test.ts pi-extensions/lib/pi-durable-native-module.test.ts
+  # SOURCE), the fresh preflight, and the owner join that admits the durable host. The carrier and the
+  # bootstrap's native-module ingress have their own coordinates, check-pi-durable-carrier and
+  # check-pi-durable-native-module (#144).
+  run_vitest pi-extensions/meta-bridge-pi-durable.test.ts pi-extensions/lib/pi-durable-runtime.test.ts pi-extensions/lib/pi-durable-fresh-preflight.test.ts pi-extensions/lib/entwurf-deliverability.owner-join.test.ts
+}
+
+check_pi_durable_carrier() {
+  # #144: the execution coordinate for the carrier — its relocation grammar, resolver, owned-source
+  # emitter (#130, #141), source fence and package file list, its task footer (#134), and the real
+  # bootstrap driving it on the 1.2 SDK, the stream transport and the skills prompt (#141, #143). Every
+  # claim on it carries its QK only in this one file, and a kill is attributed from the mutant's own QK,
+  # so its mutants run this file alone. The file reaches the bridge through the bootstrap, so its
+  # mutants still declare the bridge build. Not a discovery path either.
+  run_vitest pi-extensions/lib/pi-durable-carrier.test.ts
+}
+
+check_pi_durable_native_module() {
+  # #144: the execution coordinate for the bootstrap's explicit --native-module ingress (#130 P2) and its
+  # --native-module-dir (#134). Every claim on that ingress carries its QK only in this one file, and a
+  # kill is attributed from the mutant's own QK, so its mutants run this file alone rather than
+  # re-running the carrier and adapter tests once per mutant. Not a discovery path either.
+  run_vitest pi-extensions/lib/pi-durable-native-module.test.ts
 }
 
 smoke_mux_fresh_call_live() {
@@ -7398,6 +7418,12 @@ case "$cmd" in
     ;;
   check-pi-durable-beside)
     check_pi_durable_beside
+    ;;
+  check-pi-durable-carrier)
+    check_pi_durable_carrier
+    ;;
+  check-pi-durable-native-module)
+    check_pi_durable_native_module
     ;;
   check-mux-resume-call)
     check_mux_resume_call

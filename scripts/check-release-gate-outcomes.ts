@@ -26,8 +26,9 @@
 //   7. every LIVE smoke is either wired into the aggregate or excluded for a
 //      reason the docs actually state — the protocol cannot vouch for a step the
 //      gate never lists;
-//   8. the moved check-gate-qualification stays reachable on its owners, and the
-//      CI step qualifies the FULL floor;
+//   8. the moved check-gate-qualification stays reachable on its owners, the
+//      CI step qualifies the FULL floor, and the exact-SHA release oracle refuses
+//      every required job that did not conclude success;
 //   9. every gate a committed mutant NAMES also runs inside `check:full` (or says
 //      in its own prose why it deliberately does not) — a gate reachable only
 //      through qualification's control-pre puts a whole defect class behind the
@@ -44,7 +45,18 @@
 
 import { strict as assert } from "node:assert";
 import { execFileSync, spawnSync } from "node:child_process";
-import { copyFileSync, globSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+	copyFileSync,
+	existsSync,
+	globSync,
+	mkdirSync,
+	mkdtempSync,
+	readFileSync,
+	realpathSync,
+	rmSync,
+	symlinkSync,
+	writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -455,11 +467,10 @@ function runSubcommand(sub: string, env: Record<string, string | undefined>): { 
 	//     "green with no evidence" class this repo fails closed on, which is why the
 	//     oracle gets the fourth axis BEFORE the skip exists.
 	//
-	//     This is a TEXT oracle, the same grade as check-install-surface S7g. A
-	//     behavioural oracle would need either a second file (S7a/S7g bind the
-	//     release surface to one script read from the index) or an injectable
-	//     RUN_JSON seam -- and that seam would be a way to launder release evidence
-	//     past gh. Both cost more than the axis is worth here.
+	//     This step axis is a TEXT oracle, the same grade as check-install-surface
+	//     S7g. The required-job loop beside it is driven for real in 8c' below,
+	//     through a fake `gh` and never through a RUN_JSON seam in the shipped
+	//     script: such a seam would be a way to launder release evidence past gh.
 	const ciOracle = readFileSync(join(REPO_DIR, ".claude/skills/entwurf-release/scripts/verify-exact-ci.sh"), "utf8");
 	const axis: string[] = [];
 	if (!ciOracle.includes('QUAL_JOB = "check"') || !ciOracle.includes('"Run ./run.sh check-gate-qualification"'))
@@ -474,6 +485,129 @@ function runSubcommand(sub: string, env: Record<string, string | undefined>): { 
 			"at the release SHA -- the `check` job's `Run ./run.sh check-gate-qualification` step concluding 'success', " +
 			"with skipped named as its own failure. Three green job names do not prove the step inside one of them " +
 			`executed. Broken: ${axis.join("; ")}`,
+	);
+}
+
+// ===========================================================================
+// 8c'. The release oracle REFUSES every required job that did not conclude
+//      success -- driven, not read. The shipped verify-exact-ci.sh runs unmodified
+//      in verify mode with a PATH holding only bash, python3 and a fake `gh`, so
+//      the mocked boundary is the external CLI and the script gains no input of
+//      its own. The fake admits only the four argv shapes verify mode sends and
+//      refuses anything else with its own code and marker; it does NOT evaluate
+//      `run list --jq`, so run provenance, event filtering and newest-run choice
+//      are outside this cell, as are `wait` mode and the BODY step axis (8c).
+//      The four job names are this gate's own literals, never read from the
+//      script. Each negative cell changes one job's conclusion and nothing else.
+// ===========================================================================
+{
+	const oracle = join(REPO_DIR, ".claude/skills/entwurf-release/scripts/verify-exact-ci.sh");
+	const required = ["check", "install-surface", "artifact-consumer", "macos-install-surface"];
+	const qualStep = "Run ./run.sh check-gate-qualification";
+	const sha = "0123456789abcdef0123456789abcdef01234567";
+	const unexpected = "UNEXPECTED-GH-ARGV";
+	const tmp = mkdtempSync(join(tmpdir(), "entwurf-exact-ci-"));
+	const bin = join(tmp, "bin");
+	const resolve = (tool: string) =>
+		realpathSync(execFileSync("bash", ["-c", `command -v ${tool}`], { encoding: "utf8" }).trim());
+	const wrong: string[] = [];
+	try {
+		mkdirSync(bin);
+		mkdirSync(join(tmp, "home"));
+		symlinkSync(resolve("bash"), join(bin, "bash"));
+		symlinkSync(resolve("python3"), join(bin, "python3"));
+		const runList = `run list --repo fixture/entwurf --workflow ci.yml --commit ${sha} --limit 10 --json databaseId,headSha,createdAt,event --jq`;
+		writeFileSync(
+			join(bin, "gh"),
+			[
+				`#!${join(bin, "bash")}`,
+				'd="${0%/*}/.."',
+				`printf '%s\\n' "$*" >> "$d/gh.log"`,
+				'case "$*" in',
+				'  "auth status") exit 0 ;;',
+				"  \"repo view --json nameWithOwner --jq .nameWithOwner\") printf 'fixture/entwurf\\n'; exit 0 ;;",
+				'  "run view 4242 --repo fixture/entwurf --json databaseId,headSha,status,conclusion,url,event,jobs")',
+				`    printf '%s\\n' "$(<"$d/run.json")"; exit 0 ;;`,
+				"esac",
+				`if [ "$#" -eq 14 ] && [ "\${*:1:13}" = "${runList}" ]; then printf '4242\\n'; exit 0; fi`,
+				`printf '${unexpected}: %s\\n' "$*" >&2`,
+				"exit 86",
+				"",
+			].join("\n"),
+			{ mode: 0o755 },
+		);
+		const job = (name: string) => ({
+			name,
+			status: "completed",
+			conclusion: "success" as string | null,
+			steps: name === "check" ? [{ name: qualStep, status: "completed", conclusion: "success" }] : [],
+		});
+		const drive = (jobs: ReturnType<typeof job>[]) => {
+			writeFileSync(
+				join(tmp, "run.json"),
+				JSON.stringify({
+					databaseId: 4242,
+					headSha: sha,
+					status: "completed",
+					conclusion: "success",
+					url: "https://example.invalid/runs/4242",
+					event: "push",
+					jobs,
+				}),
+			);
+			rmSync(join(tmp, "gh.log"), { force: true });
+			const r = spawnSync(join(bin, "bash"), [oracle, sha, "verify"], {
+				encoding: "utf8",
+				env: { PATH: bin, HOME: join(tmp, "home") },
+				timeout: 20_000,
+			});
+			// No log means no call reached the fake; the cell names that through its own fields.
+			const log = existsSync(join(tmp, "gh.log")) ? readFileSync(join(tmp, "gh.log"), "utf8") : "";
+			return { ...r, log };
+		};
+
+		const control = drive(required.map(job));
+		const passLines = [
+			`exact-ci: PASS sha=${sha} run=4242 event=push`,
+			...required.map((name) => `exact-ci: job ${name}=success`),
+			`exact-ci: step check/${qualStep}=success`,
+		];
+		const calls = control.log.trim().split("\n");
+		if (
+			control.status !== 0 ||
+			passLines.some((line) => !control.stdout.includes(line)) ||
+			control.stderr.includes(unexpected) ||
+			calls.length !== 4 ||
+			calls.some((call) => call.startsWith("run watch"))
+		)
+			wrong.push(`control: status=${control.status}, out=${control.stdout.trim()}, err=${control.stderr.trim()}`);
+
+		for (const name of required) {
+			for (const state of ["absent", "failure", "skipped", "cancelled", "null"]) {
+				const jobs = required.map(job).filter((j) => state !== "absent" || j.name !== name);
+				for (const j of jobs) if (j.name === name) j.conclusion = state === "null" ? null : state;
+				const shown = state === "absent" || state === "null" ? "None" : `'${state}'`;
+				const diagnostic = `job '${name}' conclusion=${shown}, expected 'success'`;
+				const r = drive(jobs);
+				if (
+					r.status === 0 ||
+					!r.stderr.includes("ABORT: exact-SHA CI contract failed:") ||
+					!r.stderr.includes(diagnostic) ||
+					r.stdout.includes("exact-ci: PASS") ||
+					r.stderr.includes(unexpected)
+				)
+					wrong.push(`${name}=${state}: status=${r.status}, want "${diagnostic}", err=${r.stderr.trim()}`);
+			}
+		}
+	} finally {
+		rmSync(tmp, { recursive: true, force: true });
+	}
+	assert.ok(
+		wrong.length === 0,
+		"[QK:RELEASE-ORACLE-REFUSES-NON-SUCCESS-JOB] the exact-SHA CI oracle must accept a run whose four required " +
+			"jobs concluded success and refuse it, naming the job, when any one of them is absent, failed, skipped, " +
+			"cancelled or unconcluded -- a release SHA is certified only by success, never by the absence of failure. " +
+			`Broken:\n  ${wrong.join("\n  ")}`,
 	);
 }
 
