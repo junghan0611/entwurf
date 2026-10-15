@@ -1,16 +1,16 @@
-# NEXT — 0.37.0 core 컷, 그다음 Herdr 0.37.0 snapshot
+# NEXT — Herdr 0.37.0 snapshot (core 0.37.0 출하 뒤)
 
 # RAIL — 현재 좌표
 
 - [x] **1. 0.36.1 출하 기준점** — `cab1b9f` / `v0.36.1`. 이전 cut의 수용 근거는 CHANGELOG와 #128에 둔다.
 - [x] **2. 0.37.0 범위 착륙** — #143 `3a65c8d`, Herdr 0.9.5 pin `d8cd8f3`과 CI 기록 `dbb8a32`, 프로젝트 skill 수선 `4968ffd`. 각 PARTIAL은 CHANGELOG 0.37.0 Release boundary에 있다.
 - [x] **3. 0.37.0 prepare** — CHANGELOG 승격, version 0.37.0, 문서 정합(독립 readback PASS). 로컬 static FULL은 이번 컷에 한해 exact CI 위임. LIVE MUST 23/23(첫 run 18 + 재실행 5, step 19 1회 재시도), BEHAVIOR 1/1. 근거는 CHANGELOG 0.37.0 Release boundary.
-- [ ] **4. 0.37.0 make** ← CURRENT — main push, exact-SHA CI(4 jobs, BODY 982, check-herdr-sandbox Herdr 0.9.5), 보존 artifact 1개 수용, core tag, GitHub Release(Latest). **npm publish는 GLG만 한다.**
-- [ ] **5. Herdr plugin 0.37.0 snapshot** — GLG의 npm 게시 뒤 registry integrity를 측정하고, runtime-lock을 npm 0.37.0으로, manifest version을 0.37.0으로 바꾼다(min 0.9.0 유지). 그다음 exact CI, CalVer tag(latest=false). 선례는 `9f33dd1` → `v2026.10.14-herdr.0.36.0`.
+- [x] **4. 0.37.0 make** — `d0c2edf` / `v0.37.0`, GitHub Release Latest. exact CI run 38716311132(4 jobs, BODY 982/982, check-herdr-sandbox Herdr 0.9.5). 보존 artifact sha256 `d127a927…2035ee`를 GLG가 npm에 게시했고, registry tarball이 그것과 바이트 동일하다.
+- [ ] **5. Herdr plugin 0.37.0 snapshot** ← CURRENT — runtime-lock npm 0.37.0(registry integrity 측정), manifest 0.37.0(min 0.9.0 유지). 착수 검증은 CHANGELOG `v2026.10.15-herdr.0.37.0` 절. 남은 것: main push, exact CI(qualification body 포함), public-ref install journey(Herdr 0.9.5, 깨끗한 container), CalVer tag `v2026.10.15-herdr.0.37.0`(latest=false). 선례는 `9f33dd1` → `v2026.10.14-herdr.0.36.0`.
 
 # NOW
 
-- **다음 한 걸음:** prepared SHA를 main에 push하고 exact-SHA CI oracle을 기다린다(4 jobs, qualification step). 그 뒤 보존 artifact 1개를 만들어 수용하고, core tag와 GitHub Release를 낸다. RED는 보존하고 멈춘다.
+- **다음 한 걸음:** Herdr 0.37.0 snapshot 커밋을 main에 올리고 exact-SHA CI를 기다린다. 그 뒤 `smoke-herdr-raw-install-live --ref main`을 깨끗한 container에서 돌리고 CalVer tag와 GitHub Release(latest=false)를 낸다. RED는 보존하고 멈춘다.
 - **정본:** 범위와 검증 경계는 CHANGELOG `## 0.37.0`. 절차는 `.claude/skills/entwurf-release/SKILL.md`와 VERIFY.
 - **실사용 반영:** 실행 중인 pi-durable 프로세스는 재시작해야 새 carrier(#143 동작, 프로젝트 skill 목록)가 반영된다. 재시작은 GLG가 한다.
 

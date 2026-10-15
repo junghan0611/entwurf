@@ -4,6 +4,62 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+## v2026.10.15-herdr.0.37.0 — Herdr Entwurf plugin 0.37.0
+
+A separate Herdr plugin snapshot, not another core release: core package 0.37.0 and
+its `v0.37.0` tag remain unchanged. The operator has published the core to npm.
+
+### Herdr plugin
+
+- **Re-pin the published core 0.37.0 and close the checkout window.**
+  `plugins/herdr/runtime-lock.json` returns from the `herdr-checkout` carrier that 0.36.1 and
+  0.37.0 rode to production npm source `@junghanacs/entwurf@0.37.0` with the registry's
+  measured sha512 (`sha512-ETVgzMWf…7964A==`). The plugin manifest moves 0.36.0 → 0.37.0;
+  admission remains Herdr >= 0.9.0 and the one-build/one-pane/Linux shape is unchanged.
+- **The same core capability through Herdr.** The runtime this snapshot acquires carries core
+  0.36.1 and 0.37.0: the Claude ACP driver on 0.90.0, Codex app-server socket ownership read
+  from the kernel, the durable app's transport and compaction tuning (#143) and its project
+  skill list (`4968ffd`). The measured Herdr is the 0.9.5 pin that landed in core 0.37.0
+  (`d8cd8f3`). This snapshot changes no rail, gate or mutant, and Pi's accepted range is the
+  same as 0.36.0's.
+- **Upgrade by acquisition source, not just version.** A settled npm-source 0.36.0 installation
+  can rebind under the plugin README's ownership conditions. A host that installed an
+  intervening `herdr-checkout` candidate must explicitly deactivate by its own absolute runtime
+  path before reinstalling the npm-source snapshot. No operator installation or active session
+  is rewired by this release work.
+
+### Source-specific verification
+
+- Registry metadata reports version/latest 0.37.0, repair 0.12.8-repair.1. The downloaded
+  tarball is 11144951 bytes, SHA256
+  `d127a927e6a9f9c6561f86975dc30697aebaa5eeb2de463e8f0d765ff12035ee`, byte-identical to the
+  preserved accepted core candidate; independently computed sha512 equals `dist.integrity`, and
+  the registry-shipped runtime helper is byte-equal to this checkout's.
+- The exact registry tarball passed the required Docker consumer without repacking
+  (`node:24-bookworm`, repoDigest `node@sha256:6dac556d…`).
+- **The npm runtime swap against the real registry**, by the registry-shipped helper in sandboxed
+  user roots, 20/20 checks. The 0.36.0 runtime was seeded from its own committed lock; the swap
+  to 0.37.0 took one acquisition, the cached tarball's sha512 equals the lock and its sha256
+  equals the ready journal's observed digest and the accepted candidate. The `installing`
+  journal carried the 0.36.0 identity as `previousRuntime` and the `runtime-ready` journal
+  carries `null`; when acquisition began the 0.36.0 tree was still at the active address. A
+  manually seeded torn swap (the active tree moved to the backup address with a half candidate
+  in staging; not a killed process) was restored before acquisition and reported
+  `recovered: torn-swap-with-candidate`. An exact re-request acquired nothing and left journal
+  and tree byte-identical, and the owned removal reclaimed cache, runtime and journal. Not
+  certified by these cells: Herdr's install/update relocation, harness wiring, the installed
+  CLI's deactivate path, a model turn, or recovery from a real kill.
+- **Focused gates on the branch**, with HEAD, index and work surface unchanged across them:
+  `check-herdr-supply` (11 assertions), `check-herdr-plugin` (49),
+  `check-herdr-plugin-profile` (14), `check-herdr-runtime-bootstrap` (31),
+  `check-herdr-activation` (33), `check-herdr-placement` (25), `check-herdr-fresh-call` (45)
+  and `check-gate-manifests` (982 committed mutants across 72 lanes validated, none executed).
+  `check-herdr-plugin-build` and `check-herdr-sandbox` were not run locally because they run
+  the operator's own herdr; they ride the pushed SHA's FULL floor in CI.
+- Pending, and not claimed here: the pushed SHA's four-job CI with the qualification body, and
+  the public-ref install/use/deactivate journey on Herdr 0.9.5. Earlier npm or checkout-carrier
+  receipts cannot certify these source-specific axes.
+
 ## 0.37.0 - 2026-10-15
 
 ### pi-durable
