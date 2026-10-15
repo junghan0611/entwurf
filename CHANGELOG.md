@@ -4,6 +4,24 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+### Herdr plugin
+
+- **The measured Herdr moves to 0.9.5, the 0.9.4 hotfix.** `scripts/fixtures/herdr-supply.json`
+  pins v0.9.5 (`2ecf19a9`), protocol 22, with both Linux asset digests taken from the immutable
+  release and named by its attestation. On aarch64 the pin rests on a private CLI baseline:
+  version, protocol 22, 18 `integration status` rows unchanged from 0.9.4, and a residue-free
+  `server stop`. The full `check-herdr-sandbox` has not run at this pin on either architecture;
+  its first run is the CI check job at the SHA carrying it. The x86_64 asset is recorded as not
+  yet executed. Plugin admission (Herdr >= 0.9.0), the plugin version and the runtime lock are
+  unchanged.
+- **A host that uses the Claude integration needs `herdr integration install claude` again
+  after upgrading to Herdr 0.9.5.** 0.9.5 raises its claude integration from v10 to v11 and leaves pi at v9. Over integrations seeded by
+  0.9.4 it reads claude as `outdated (v10 < v11)`, which the plugin's activation profile files as
+  `herdr-integration-outdated`, so the build and pane block [1] refuse by name until the
+  reinstall. In the measured 0.9.4-seeded private sandbox, the reinstall changed only the hook's
+  version line; the pi extension and the Claude settings stayed byte-identical. The plugin README
+  and the launch-rail document say so.
+
 ## 0.36.1 - 2026-10-14
 
 ### ACP

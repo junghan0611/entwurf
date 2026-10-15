@@ -69,7 +69,7 @@ to *reach*; it does not own it and does not gate it.
 | built-in | what it gives | this plugin's use |
 |---|---|---|
 | `herdr integration install <agent>` | writes Herdr's own hooks/extensions into a harness's config directory so panes report agent lifecycle state | it is the **precondition**. The build reads `herdr integration status`; a harness Herdr has not integrated is not activated |
-| `herdr integration status` | one prose row per harness — 18 rows on herdr 0.9.1 `[measured 2026-09-21]`, the same 18 on 0.9.3 once the sandbox root path is normalized `[measured 2026-10-03]`, and on 0.9.4 with zero diff against 0.9.3 `[measured 2026-10-14]` | the sole source of the set `H` |
+| `herdr integration status` | one prose row per harness — 18 rows on herdr 0.9.1 `[measured 2026-09-21]`, the same 18 on 0.9.3 once the sandbox root path is normalized `[measured 2026-10-03]`, on 0.9.4 with zero diff against 0.9.3 `[measured 2026-10-14]`, and on 0.9.5 with zero diff against 0.9.4 `[measured 2026-10-15]` | the sole source of the set `H` |
 | `herdr plugin install / link / uninstall` | GitHub-managed or linked plugin lifecycle, with a `[[build]]` hook; Herdr 0.9.4 adds `plugin update`, which re-fetches the recorded ref and rebuilds | the **only** door this plugin gets. Every install (and, on 0.9.4, every update that finds a new commit) is also the refresh trigger |
 | `herdr agent list` | Herdr's agents and their `agent_status` (`idle` / `working` / `blocked` / `done` / `unknown`) | one of the pane's two reads |
 | `[[panes]]` overlay | a temporary zoomed view over the active pane that restores focus when it closes | the status surface |
@@ -441,12 +441,20 @@ read. Every field the provider attached is shown, in sorted key order.
   `herdr-plugin.toml`; Herdr refuses to link a plugin whose floor is newer than the running binary.
   You must open the pane from inside a Herdr session.
   - That floor is not the same claim as the version this was MEASURED on. Entwurf's reproducible and
-    CI rail is pinned to exactly **0.9.4** by `scripts/fixtures/herdr-supply.json`, which is what
-    `check-herdr-sandbox` requires. At this pin 0.9.4 has a private CLI baseline; the full sandbox
-    gate is certified only by its exact-SHA CI run, and its last completed run was on 0.9.3. Every
+    CI rail is pinned to exactly **0.9.5** by `scripts/fixtures/herdr-supply.json`, which is what
+    `check-herdr-sandbox` requires. At this pin 0.9.5 has a private CLI baseline; the full sandbox
+    gate is certified only by its exact-SHA CI run, and its last completed run was on 0.9.4. Every
     receipt in this repo names the Herdr it was taken against, and the older ones stay dated at
-    0.9.0, 0.9.1 or 0.9.3. A different Herdr inside the admission window is
+    0.9.0, 0.9.1, 0.9.3 or 0.9.4. A different Herdr inside the admission window is
     permitted and carries no receipt of ours.
+  - **On a host that uses the Claude integration, upgrading Herdr to 0.9.5 needs one reinstall.** 0.9.5 raises its claude integration from v10 to
+    v11 and leaves pi at v9. On a host whose claude integration was installed by 0.9.4 or older,
+    0.9.5 reports `claude: outdated (v10 < v11)` and this plugin's activation profile files that row
+    as `herdr-integration-outdated` `[measured 2026-10-15, real 0.9.5 output in a private sandbox]`.
+    The build then refuses (`herdr-build-selected-integration-unusable`) and pane block [1] is a
+    named red (`herdr-integration-not-current`) until you run `herdr integration install claude`
+    again. In the measured 0.9.4-seeded private sandbox, the reinstall changed only the hook's version
+    line; the pi extension and the Claude settings stayed byte-identical.
 - **For the install-time build:** `git`, `node` >= 24, `npm`, and network access for the locked
   registry artifact, in an Entwurf-owned XDG npm cache reclaimed by `herdr-plugin-deactivate`. You do
   **not** clone Entwurf or run `npm install`; the build acquires and integrity-checks the exact npm
@@ -498,7 +506,9 @@ is a legal directory name, so the state is matched front-anchored and the path n
 Herdr's atom set grows and that is ordinary — 0.9.1 prints 18 rows where 0.9.0 printed 17, the one
 addition being `letta (experimental)`, every other row byte-identical; 0.9.3 prints the same 18,
 identical to 0.9.1 once the sandbox root path is normalized `[measured 2026-10-03]`; 0.9.4 prints
-the same 18 with zero diff against 0.9.3 in one fresh sandbox `[measured 2026-10-14]`. The two rows this leaf reads are unchanged. Unselected atoms are **observed, never planned**: OpenCode may be installed and
+the same 18 with zero diff against 0.9.3 in one fresh sandbox `[measured 2026-10-14]`; 0.9.5 prints
+the same 18 with zero diff against 0.9.4 `[measured 2026-10-15]`. The two rows this leaf reads keep
+their shape; 0.9.5 only raises the claude version they name (v10 → v11). Unselected atoms are **observed, never planned**: OpenCode may be installed and
 current and still receives no entry in the plan.
 
 `./run.sh check-herdr-plugin-build` owns that composition. `LIVE=1 ./run.sh

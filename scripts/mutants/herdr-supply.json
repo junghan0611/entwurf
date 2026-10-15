@@ -8,7 +8,7 @@
 			"subject": "scripts/check-herdr-sandbox.ts",
 			"find": ["const SUPPLY_MANIFEST = \"scripts/fixtures/herdr-supply.json\";"],
 			"replace": [
-				"const SUPPLY_MANIFEST = \"scripts/fixtures/herdr-supply.json\";\nconst PINNED_FALLBACK = \"0.9.4\";\nvoid PINNED_FALLBACK;"
+				"const SUPPLY_MANIFEST = \"scripts/fixtures/herdr-supply.json\";\nconst PINNED_FALLBACK = \"0.9.5\";\nvoid PINNED_FALLBACK;"
 			],
 			"gate": ["bash", "run.sh", "check-herdr-supply"],
 			"timeoutSeconds": 120,
@@ -19,8 +19,8 @@
 			"claim": "HSUP-DIGEST-SHAPE",
 			"title": "a pinned digest is truncated, so the check that is supposed to catch a swapped binary can no longer fail",
 			"subject": "scripts/fixtures/herdr-supply.json",
-			"find": ["\"sha256\": \"493304fbefb0ed0ea0455f373b47f48d24e8774bc7974f4c916ad2e937675b23\""],
-			"replace": ["\"sha256\": \"493304fbefb0ed0ea0455f373b47\""],
+			"find": ["\"sha256\": \"14d9e8bc8b4a9e0118d77c32266f76d461f09b40342eb23752960bd89f59929d\""],
+			"replace": ["\"sha256\": \"14d9e8bc8b4a9e0118d77c32266f\""],
 			"gate": ["bash", "run.sh", "check-herdr-supply"],
 			"timeoutSeconds": 120,
 			"signature": "[QK:HSUP-DIGEST-SHAPE]",
