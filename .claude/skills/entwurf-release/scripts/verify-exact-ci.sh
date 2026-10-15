@@ -18,19 +18,21 @@ gh auth status >/dev/null
 REPO="$(gh repo view --json nameWithOwner --jq .nameWithOwner)"
 [ -n "$REPO" ] || { echo "ABORT: cannot resolve the GitHub repository" >&2; exit 1; }
 
-# Two event kinds may carry the evidence for one SHA: the ordinary branch push,
-# and a workflow_dispatch the release path fires when the qualification BODY did
-# not run at that SHA. The event filter stays in the jq (not `gh run list
-# --event`, which takes one value): without it a pull_request run for the same
-# --commit would be admitted, and a PR run is a merge preview, not this SHA.
+# The witness is the ordinary branch PUSH run, and only that (#144). A
+# workflow_dispatch run is the optional qualification diagnostic now, never
+# release evidence, so a dispatch that is still running or that went red must not
+# become the newest run judged here. The event is filtered twice: `--event push`
+# asks GitHub for push runs, and the jq keeps only push runs of this exact SHA
+# (a pull_request run for the same --commit is a merge preview, not this SHA).
 find_run() {
   gh run list \
     --repo "$REPO" \
     --workflow ci.yml \
     --commit "$SHA" \
+    --event push \
     --limit 10 \
     --json databaseId,headSha,createdAt,event \
-    --jq "map(select(.headSha == \"$SHA\" and (.event == \"push\" or .event == \"workflow_dispatch\"))) | sort_by(.createdAt) | reverse | .[0].databaseId // empty"
+    --jq "map(select(.headSha == \"$SHA\" and .event == \"push\")) | sort_by(.createdAt) | reverse | .[0].databaseId // empty"
 }
 
 RUN_ID="$(find_run)"
@@ -42,7 +44,7 @@ if [ "$MODE" = wait ]; then
   done
 fi
 [ -n "$RUN_ID" ] || {
-  echo "ABORT: no push- or dispatch-triggered ci.yml run exists for exact SHA $SHA" >&2
+  echo "ABORT: no push-triggered ci.yml run exists for exact SHA $SHA (a [skip ci] commit has none: get a push run whose head is this SHA, or re-run the existing push run; a dispatch run is not release evidence)" >&2
   exit 1
 }
 
@@ -54,8 +56,6 @@ fi
 # deterministic and an operator who re-ran CI meant the newer run. In verify mode
 # a still-running newest run therefore ABORTs on status != completed, which is the
 # correct answer -- "not finished" is not evidence.
-# `jobs` already carries each job's steps[], so the qualification-step axis below
-# costs no extra API call.
 RUN_JSON="$(gh run view "$RUN_ID" --repo "$REPO" --json databaseId,headSha,status,conclusion,url,event,jobs)"
 RUN_JSON="$RUN_JSON" EXPECTED_SHA="$SHA" python3 - <<'PY'
 import json
@@ -65,17 +65,13 @@ import sys
 run = json.loads(os.environ["RUN_JSON"])
 expected_sha = os.environ["EXPECTED_SHA"]
 required = ("check", "install-surface", "artifact-consumer", "macos-install-surface")
-# The qualification BODY axis. GitHub names an unnamed step "Run <command>", so
-# this literal is bound to ci.yml's `- run: ./run.sh check-gate-qualification`
-# line -- the one cell 8a already pins to exactly one occurrence.
-QUAL_JOB = "check"
-QUAL_STEP = "Run ./run.sh check-gate-qualification"
+# The qualification BODY is not a release axis (#144): it runs only on the weekly
+# schedule or a manual `qualify=true` dispatch, as a drift diagnostic. This oracle
+# reads no step of it and says so, so its PASS is never read as kill-power evidence.
 errors = []
 
-# headSha is checked unconditionally, for both event kinds. That check only
-# starts carrying load once dispatch runs are admitted: `gh workflow run --ref`
-# takes a branch or tag, never a SHA, so a branch that moved between the dispatch
-# and this read would otherwise pass silently.
+# headSha is checked unconditionally: the run list query and this read are two
+# calls, and the run judged must still be this SHA's.
 if run.get("headSha") != expected_sha:
     errors.append(f"headSha={run.get('headSha')!r}, expected {expected_sha!r}")
 if run.get("status") != "completed":
@@ -89,27 +85,6 @@ for name in required:
     if conclusion != "success":
         errors.append(f"job {name!r} conclusion={conclusion!r}, expected 'success'")
 
-steps = {step.get("name"): step.get("conclusion") for step in (jobs.get(QUAL_JOB) or {}).get("steps", [])}
-# ONE guard owns this axis, so removing it removes the axis whole. Absent,
-# skipped and failed are three ways for the body not to have concluded success
-# here, and a structure that tested them separately could lose one and still
-# look armed.
-qual = steps.get(QUAL_STEP)
-if qual != "success":
-    if qual is None:
-        errors.append(
-            f"job {QUAL_JOB!r} has no step named {QUAL_STEP!r} -- the qualification BODY did not run at this SHA. "
-            "GitHub renders an unnamed `- run: <command>` step as 'Run <command>', so giving that step a `name:` "
-            "in ci.yml also lands here; keep it unnamed, or update this literal with it."
-        )
-    elif qual == "skipped":
-        errors.append(
-            f"step {QUAL_STEP!r} conclusion='skipped' -- a skipped body is NOT evidence. Force it with "
-            "`gh workflow run ci.yml --ref <branch> -f qualify=true`, then re-run this oracle."
-        )
-    else:
-        errors.append(f"step {QUAL_STEP!r} conclusion={qual!r}, expected 'success'")
-
 if errors:
     print("ABORT: exact-SHA CI contract failed:", file=sys.stderr)
     for error in errors:
@@ -120,5 +95,5 @@ if errors:
 print(f"exact-ci: PASS sha={expected_sha} run={run.get('databaseId')} event={run.get('event')} url={run.get('url')}")
 for name in required:
     print(f"exact-ci: job {name}=success")
-print(f"exact-ci: step {QUAL_JOB}/{QUAL_STEP}=success")
+print("exact-ci: qualification BODY is not a release axis (#144)")
 PY

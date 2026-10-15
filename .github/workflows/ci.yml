@@ -10,12 +10,10 @@ on:
   push:
     branches: ['**']
   pull_request:
-  # The release path fires this when the qualification BODY did not run at the
-  # SHA it is about to tag: `verify-exact-ci.sh` requires that step's success as
-  # its fourth axis (#103). `qualify` is the operator's explicit "run the body"
-  # request: the decision step below runs the body for a dispatch ONLY when it is
-  # true, so a dispatch without it is a floor-only rerun that leaves the release
-  # oracle still refusing that SHA.
+  # A dispatch is never release evidence: `verify-exact-ci.sh` reads only the push
+  # run (#144). `qualify` is the operator's explicit "run the body" request — the
+  # qualification BODY's only non-schedule trigger, a drift diagnostic no cut waits
+  # for; a dispatch without it is a floor-only rerun.
   workflow_dispatch:
     inputs:
       qualify:
@@ -28,10 +26,10 @@ on:
         description: 'JSON array of exact gate argv, or "all": collect per-group qualification receipts (an inventory, not a verdict)'
         type: string
         default: ''
-  # Weekly, 04:00 KST Sunday (19:00 UTC Saturday). The path filter below means a
-  # long run of docs-only pushes never re-proves kill-power, and the things that
-  # rot underneath it are not in our diff at all: the ubuntu-latest image, and
-  # the movable @v4 major tags on checkout/setup-node/pnpm. --frozen-lockfile
+  # Weekly, 04:00 KST Sunday (19:00 UTC Saturday). No push re-proves kill-power
+  # since #144, and some things that rot underneath it are not in our diff at
+  # all: the ubuntu-latest image, and the movable @v4 major tags on
+  # checkout/setup-node/pnpm. --frozen-lockfile
   # pins npm dependencies and neither of those (#99 stage-2 SS4). This run is the
   # ceiling on that drift; it is not evidence about any particular commit.
   schedule:
@@ -49,10 +47,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          # The qualification filter reads the two-dot push range GitHub itself
-          # documents, so the BASE commit has to exist here. The default depth of
-          # 1 does not fetch it, which would trip fail-open 4 on every push and
-          # quietly turn the filter off. ~24 MiB of pack, 1.2k commits.
+          # Full history, kept as it was when the push-range qualification filter
+          # that needed it was retired (#144); whether anything else here relies
+          # on it is not re-examined in that change. ~24 MiB of pack, 1.2k commits.
           fetch-depth: 0
       - uses: pnpm/action-setup@v4
         with:
@@ -96,38 +93,25 @@ jobs:
           ENTWURF_REQUIRE_EMITTER_NODE: "1"
       # check-gate-qualification left the default local check chains (operator
       # inner-loop cost) — its HEAD is back inside check:full above as
-      # check-gate-manifests, and the BODY runs here. CI machine time re-proves
-      # the gates' kill-power on a BRANCH push that touched the qualification
-      # surface (see the decision step below); a tag push rebuilds nothing,
-      # because a tag names a SHA some branch push already built. A release SHA
-      # whose push was filtered has NO body here, and verify-exact-ci.sh refuses
-      # it by name rather than reading three green job names -- the operator
-      # dispatches the body with qualify=true and the oracle then reads that run.
-      # Which pushes still owe the body (#103 piece 2). The path set is READ FROM
-      # THE MANIFESTS at runtime, so a new mutant subject cannot fall outside the
-      # filter without anyone noticing; scripts/check-release-gate-outcomes.ts
-      # owns that containment as [QK:QUALIFY-FILTER-COVERS-SUBJECTS], and the
-      # five historical CI catches are replayed against this same script.
-      - id: qualify-decide
-        run: ./scripts/ci-qualify-decide.sh "${{ github.event.before }}" "${{ github.sha }}" >> "$GITHUB_OUTPUT"
-        env:
-          CI_EVENT_NAME: ${{ github.event_name }}
-          CI_FORCED: ${{ github.event.forced }}
-          CI_QUALIFY: ${{ inputs.qualify }}
+      # check-gate-manifests, and the BODY runs here only on the weekly schedule or
+      # a `qualify=true` dispatch (#144). It is a drift diagnostic, not a release
+      # axis: no push runs it, no cut waits for it, and the release oracle
+      # (verify-exact-ci.sh) reads only the push run's four required jobs. A push
+      # that touched a gate or mutant is not re-qualified here; that loss is named
+      # in VERIFY.
       # KEY ORDER IS A CONTRACT HERE. `run:` must lead this step. Cell 8a counts the
       # sequence-item form of this exact command and requires exactly one hit --
       # so it must not appear a second time anywhere in this file, comments
-      # included -- and the release oracle matches GitHub's rendered step name
-      # `Run <command>`, which an `if:` placed first (or any `name:`) would both
-      # destroy. YAML mappings are unordered, so `if` sits underneath and both
-      # contracts survive.
+      # included -- and GitHub renders the unnamed step as `Run <command>`, which
+      # an `if:` placed first (or any `name:`) would change. YAML mappings are
+      # unordered, so `if` sits underneath.
       - run: ./run.sh check-gate-qualification
-        if: steps.qualify-decide.outputs.run_body == 'true'
+        if: github.event_name == 'schedule' || inputs.qualify == true
       # #124: dispatch-only COLLECTION of per-group receipts, inside this Linux job so it shares
       # the pinned herdr install and runs after the FULL floor, like the body above. It is an
       # inventory, never a verdict: the offline #124 composite oracle (scripts/qualification-oracle.ts)
-      # recomputes the ledger from the uploaded receipts. It is NOT the release oracle, which stays
-      # verify-exact-ci.sh + this job's full body until #124 P3.
+      # recomputes the ledger from the uploaded receipts. It is NOT the release oracle, which is
+      # verify-exact-ci.sh over the push run's four required jobs (#144).
       # The input reaches the shell only through env, never as ${{ }} in `run:`.
       - name: collect qualification receipts (not a verdict)
         if: github.event_name == 'workflow_dispatch' && inputs.composite_groups != ''

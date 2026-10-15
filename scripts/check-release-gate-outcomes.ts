@@ -26,9 +26,11 @@
 //   7. every LIVE smoke is either wired into the aggregate or excluded for a
 //      reason the docs actually state — the protocol cannot vouch for a step the
 //      gate never lists;
-//   8. the moved check-gate-qualification stays reachable on its owners, the
-//      CI step qualifies the FULL floor, and the exact-SHA release oracle refuses
-//      every required job that did not conclude success;
+//   8. the moved check-gate-qualification stays reachable as the schedule/dispatch
+//      drift diagnostic it is since #144 (never a push, never release_gate), that
+//      diagnostic runs over the FULL floor, and the exact-SHA release oracle takes
+//      only a push run as its witness, refuses every required job that did not
+//      conclude success, and never reports the qualification body;
 //   9. every gate a committed mutant NAMES also runs inside `check:full` (or says
 //      in its own prose why it deliberately does not) — a gate reachable only
 //      through qualification's control-pre puts a whole defect class behind the
@@ -46,7 +48,6 @@
 import { strict as assert } from "node:assert";
 import { execFileSync, spawnSync } from "node:child_process";
 import {
-	copyFileSync,
 	existsSync,
 	globSync,
 	mkdirSync,
@@ -368,24 +369,19 @@ function runSubcommand(sub: string, env: Record<string, string | undefined>): { 
 // ===========================================================================
 // 8. qualification scheduling topology — the subtraction has its own oracle.
 //    check-gate-qualification left the default check chains (operator
-//    inner-loop cost, 2026-08 subtraction). That move is a gate/release
-//    contract: the step must stay REACHABLE on the axes that now own it — the
-//    CI check job (on the pushes #103's filter still sends it) and, for a cut,
-//    the exact-SHA release oracle that requires that CI step at the prepared SHA
-//    (8c) — and must not silently return to the default chain or to release_gate.
-//    #132/#133 moved the cut's one BODY off release_gate: a local BODY there re-ran
-//    the same proof on a SHA nobody ships, so release_gate now invokes it ZERO
-//    times. Without this cell, deleting the CI line leaves every focused gate green
-//    while a cut quietly loses its discriminating-power step, and re-adding the
-//    release_gate block silently doubles every cut again.
+//    inner-loop cost, 2026-08 subtraction), and #132/#133 moved it off
+//    release_gate. #144 took it off every push and out of release acceptance: the
+//    whole body is a drift diagnostic that runs only on the weekly schedule or a
+//    `qualify=true` dispatch, and the release oracle reads only the push run's four
+//    required jobs. That is a gate/release contract: the step must stay REACHABLE on
+//    exactly those triggers, and must not silently return to the default chain, to
+//    release_gate, to a push, or to the release skill as an automatic dispatch.
 //
-//    THREE claims, because each is an independent contract. 8a is REACHABILITY
-//    (absent from the default chain and from release_gate; present exactly once in
-//    CI; named in VERIFY). 8b is what the CI step
-//    qualifies (the FULL floor, before the qualification run), added by #70. 8c is
-//    what the RELEASE path ACCEPTS as evidence for one SHA — that the body step
-//    actually ran there (#103). Each carries its own replant — one mutant must
-//    never stand in for another.
+//    TWO claims, because each is an independent contract. 8a is REACHABILITY
+//    (absent from the default chain, from release_gate, from push and from the
+//    release skill; present exactly once in CI under its two triggers). 8b is what
+//    that diagnostic runs over (the FULL floor, before it), added by #70. Each
+//    carries its own replant — one mutant must never stand in for another.
 // ===========================================================================
 {
 	// The default chain is tiered (#70): `check` (core) and `check:full` compose the
@@ -403,7 +399,9 @@ function runSubcommand(sub: string, env: Record<string, string | undefined>): { 
 	const runShQ = readFileSync(join(REPO_DIR, "run.sh"), "utf8");
 	const qualGateBody = runShQ.slice(runShQ.indexOf("release_gate() {"), runShQ.indexOf("# 5. Summary"));
 	const invocations = qualGateBody.split('bash "$self" check-gate-qualification').length - 1;
-	const verifyDoc = readFileSync(join(REPO_DIR, "VERIFY.md"), "utf8");
+	const qualStepAt = ciYml.indexOf("- run: ./run.sh check-gate-qualification");
+	const qualIf = qualStepAt === -1 ? "" : (ciYml.slice(qualStepAt).split("\n")[1] ?? "").trim();
+	const releaseSkill = readFileSync(join(REPO_DIR, ".claude/skills/entwurf-release/SKILL.md"), "utf8");
 
 	// One claim token, one assert (the qualification runner requires the exact-once
 	// signature); each broken axis names itself in the joined message.
@@ -415,32 +413,32 @@ function runSubcommand(sub: string, env: Record<string, string | undefined>): { 
 	if (ciHits !== 1) holes.push(`the CI check job runs check-gate-qualification ${ciHits}x (need exactly once)`);
 	if (invocations !== 0)
 		holes.push(
-			`release_gate invokes check-gate-qualification ${invocations}x (need none: the cut's one BODY is the prepared SHA's CI step)`,
+			`release_gate invokes check-gate-qualification ${invocations}x (need none: the body is a schedule/dispatch diagnostic, #144)`,
 		);
 	if (
 		qualGateBody.includes("PASS  check-gate-qualification") ||
 		qualGateBody.includes("FAIL  check-gate-qualification")
 	)
 		holes.push("release_gate still counts a check-gate-qualification MUST row");
-	if (
-		!verifyDoc.includes(
-			"in the CI `check` job on a branch push that touched the qualification surface, and — for a cut — at the prepared SHA, where the exact-SHA release oracle requires that CI step",
-		)
-	)
-		holes.push("VERIFY.md no longer names the owners of the moved qualification step");
+	if (qualIf !== "if: github.event_name == 'schedule' || inputs.qualify == true")
+		holes.push(
+			`the CI qualification step's trigger is \`${qualIf}\` (need the schedule or a qualify=true dispatch only)`,
+		);
+	if (ciYml.includes("qualify-decide")) holes.push("ci.yml still carries the retired push qualification filter step");
+	if (releaseSkill.includes("-f qualify=true"))
+		holes.push("the release skill still dispatches the qualification body (it is not release evidence, #144)");
 	assert.ok(
 		holes.length === 0,
 		"[QK:QUALIFICATION-SCHEDULING-REACHABLE] check-gate-qualification left the default check chains " +
-			"deliberately, so it must stay REACHABLE on the axes that own it now — absent from the default chain " +
-			"and from release_gate (the cut's one BODY is the prepared SHA's CI step), exactly once in the CI check job, " +
-			`and named in VERIFY. Broken: ${holes.join("; ")}`,
+			"deliberately, so it must stay REACHABLE on the triggers that own it now — exactly once in the CI check " +
+			"job, on the weekly schedule or a qualify=true dispatch only — and absent from the default chain, from " +
+			`release_gate, from every push and from the release skill. Broken: ${holes.join("; ")}`,
 	);
 
-	// 8b. WHAT the CI qualification step qualifies — its own claim, not a branch
-	//     folded into the one above. #70 split the deterministic floor into tiers,
-	//     so "CI runs qualification once" stopped being sufficient evidence on its
-	//     own: qualification on top of the ≤60s core would certify kill-power over
-	//     a floor no candidate ships on. This is ONE contract with one condition —
+	// 8b. WHAT the CI qualification step runs over — its own claim, not a branch
+	//     folded into the one above. #70 split the deterministic floor into tiers:
+	//     the diagnostic body on top of the ≤60s core would re-plant mutants over a
+	//     floor no candidate ships on. This is ONE contract with one condition —
 	//     the full floor is present in the CI check job AND qualification follows
 	//     it — because a floor that is absent and a floor that runs afterwards
 	//     break the same promise identically. The committed replant qualifies the
@@ -452,53 +450,33 @@ function runSubcommand(sub: string, env: Record<string, string | undefined>): { 
 		ciFloorAt !== -1 && ciQualAt > ciFloorAt,
 		"[QK:CI-FULL-FLOOR-QUALIFIED] the CI check job owns the FULL deterministic floor (#70): it must run " +
 			"`pnpm run check:full` — not the ≤60s core — and check-gate-qualification must come AFTER it, so the " +
-			"kill-power proof covers the floor a candidate actually ships on. The committed replant qualifies the " +
+			"diagnostic body (schedule or dispatch) re-plants over the floor a candidate actually ships on. The committed replant qualifies the " +
 			"downgrade/omission axis; ordering is directly asserted by this same oracle. " +
 			`Broken: check:full at index ${ciFloorAt}, qualification at index ${ciQualAt}.`,
-	);
-
-	// 8c. The RELEASE oracle requires that body to have actually run at the release
-	//     SHA -- its own contract, not a branch of 8a. 8a is REACHABILITY (the step
-	//     exists in the CI job and in release_gate); this is about what the release
-	//     path ACCEPTS as evidence for one SHA. `verify-exact-ci.sh` read only three
-	//     job names, and a job conclusion says nothing about whether the step inside
-	//     it ran: the moment ci.yml can skip that step (#103 piece 2), a green oracle
-	//     would certify a SHA whose qualification body never executed. That is the
-	//     "green with no evidence" class this repo fails closed on, which is why the
-	//     oracle gets the fourth axis BEFORE the skip exists.
-	//
-	//     This step axis is a TEXT oracle, the same grade as check-install-surface
-	//     S7g. The required-job loop beside it is driven for real in 8c' below,
-	//     through a fake `gh` and never through a RUN_JSON seam in the shipped
-	//     script: such a seam would be a way to launder release evidence past gh.
-	const ciOracle = readFileSync(join(REPO_DIR, ".claude/skills/entwurf-release/scripts/verify-exact-ci.sh"), "utf8");
-	const axis: string[] = [];
-	if (!ciOracle.includes('QUAL_JOB = "check"') || !ciOracle.includes('"Run ./run.sh check-gate-qualification"'))
-		axis.push("the oracle does not name the check job's check-gate-qualification step");
-	if (!ciOracle.includes('qual != "success"'))
-		axis.push("the oracle does not guard that step's conclusion against 'success'");
-	if (!ciOracle.includes('qual == "skipped"'))
-		axis.push("the oracle does not classify a SKIPPED body as a failure of its own");
-	assert.ok(
-		axis.length === 0,
-		"[QK:RELEASE-SHA-QUALIFIED-IN-CI] the exact-SHA CI oracle must require the qualification BODY to have run " +
-			"at the release SHA -- the `check` job's `Run ./run.sh check-gate-qualification` step concluding 'success', " +
-			"with skipped named as its own failure. Three green job names do not prove the step inside one of them " +
-			`executed. Broken: ${axis.join("; ")}`,
 	);
 }
 
 // ===========================================================================
-// 8c'. The release oracle REFUSES every required job that did not conclude
-//      success -- driven, not read. The shipped verify-exact-ci.sh runs unmodified
-//      in verify mode with a PATH holding only bash, python3 and a fake `gh`, so
-//      the mocked boundary is the external CLI and the script gains no input of
-//      its own. The fake admits only the four argv shapes verify mode sends and
-//      refuses anything else with its own code and marker; it does NOT evaluate
-//      `run list --jq`, so run provenance, event filtering and newest-run choice
-//      are outside this cell, as are `wait` mode and the BODY step axis (8c).
-//      The four job names are this gate's own literals, never read from the
-//      script. Each negative cell changes one job's conclusion and nothing else.
+// 8c'. The release oracle, driven, not read (#144). The shipped verify-exact-ci.sh
+//      runs unmodified in verify mode with a PATH holding only bash, python3 and a
+//      fake `gh`, so the mocked boundary is the external CLI and the script gains
+//      no input of its own (a RUN_JSON seam in the shipped script would be a way to
+//      launder release evidence past gh). The fake logs every call first, admits
+//      only the four argv shapes verify mode sends, and refuses anything else with
+//      its own code and marker. THREE claims, asserted in this order so each
+//      mutant dies on its own:
+//        - the witness is a PUSH run: the one `run list` call carries
+//          `--event push` and a jq keeping only push runs of this SHA. That is the
+//          argv the script SENDS; the fake does not evaluate the jq, and GitHub's
+//          own filtering is not observed here;
+//        - every required job that did not conclude success is refused by name
+//          (absent, failure, skipped, cancelled, null);
+//        - the qualification body is not a release axis: the oracle passes whether
+//          the check job's body step is skipped, absent or green, and never prints
+//          it.
+//      `wait` mode and newest-run choice are outside this cell. The four job names
+//      are this gate's own literals, never read from the script. Each negative
+//      cell changes one fact and nothing else.
 // ===========================================================================
 {
 	const oracle = join(REPO_DIR, ".claude/skills/entwurf-release/scripts/verify-exact-ci.sh");
@@ -511,12 +489,15 @@ function runSubcommand(sub: string, env: Record<string, string | undefined>): { 
 	const resolve = (tool: string) =>
 		realpathSync(execFileSync("bash", ["-c", `command -v ${tool}`], { encoding: "utf8" }).trim());
 	const wrong: string[] = [];
+	const wrongWitness: string[] = [];
+	const wrongNoBody: string[] = [];
 	try {
 		mkdirSync(bin);
 		mkdirSync(join(tmp, "home"));
 		symlinkSync(resolve("bash"), join(bin, "bash"));
 		symlinkSync(resolve("python3"), join(bin, "python3"));
-		const runList = `run list --repo fixture/entwurf --workflow ci.yml --commit ${sha} --limit 10 --json databaseId,headSha,createdAt,event --jq`;
+		const runList = `run list --repo fixture/entwurf --workflow ci.yml --commit ${sha} --event push --limit 10 --json databaseId,headSha,createdAt,event --jq`;
+		const pushOnlyJq = `map(select(.headSha == "${sha}" and .event == "push")) | sort_by(.createdAt) | reverse | .[0].databaseId // empty`;
 		writeFileSync(
 			join(bin, "gh"),
 			[
@@ -529,18 +510,20 @@ function runSubcommand(sub: string, env: Record<string, string | undefined>): { 
 				'  "run view 4242 --repo fixture/entwurf --json databaseId,headSha,status,conclusion,url,event,jobs")',
 				`    printf '%s\\n' "$(<"$d/run.json")"; exit 0 ;;`,
 				"esac",
-				`if [ "$#" -eq 14 ] && [ "\${*:1:13}" = "${runList}" ]; then printf '4242\\n'; exit 0; fi`,
+				`if [ "$#" -eq 16 ] && [ "\${*:1:15}" = "${runList}" ]; then printf '4242\\n'; exit 0; fi`,
 				`printf '${unexpected}: %s\\n' "$*" >&2`,
 				"exit 86",
 				"",
 			].join("\n"),
 			{ mode: 0o755 },
 		);
-		const job = (name: string) => ({
+		// The check job carries the body step the way a push run renders it since #144:
+		// present and skipped. The no-body cells below vary only that step.
+		const job = (name: string, body: string | null = "skipped") => ({
 			name,
 			status: "completed",
 			conclusion: "success" as string | null,
-			steps: name === "check" ? [{ name: qualStep, status: "completed", conclusion: "success" }] : [],
+			steps: name === "check" && body !== null ? [{ name: qualStep, status: "completed", conclusion: body }] : [],
 		});
 		const drive = (jobs: ReturnType<typeof job>[]) => {
 			writeFileSync(
@@ -566,13 +549,16 @@ function runSubcommand(sub: string, env: Record<string, string | undefined>): { 
 			return { ...r, log };
 		};
 
-		const control = drive(required.map(job));
+		const control = drive(required.map((name) => job(name)));
 		const passLines = [
 			`exact-ci: PASS sha=${sha} run=4242 event=push`,
 			...required.map((name) => `exact-ci: job ${name}=success`),
-			`exact-ci: step check/${qualStep}=success`,
+			"exact-ci: qualification BODY is not a release axis (#144)",
 		];
 		const calls = control.log.trim().split("\n");
+		const listCalls = calls.filter((call) => call.startsWith("run list "));
+		if (listCalls.length !== 1 || listCalls[0] !== `${runList} ${pushOnlyJq}`)
+			wrongWitness.push(`run list calls: ${JSON.stringify(listCalls)}`);
 		if (
 			control.status !== 0 ||
 			passLines.some((line) => !control.stdout.includes(line)) ||
@@ -584,7 +570,7 @@ function runSubcommand(sub: string, env: Record<string, string | undefined>): { 
 
 		for (const name of required) {
 			for (const state of ["absent", "failure", "skipped", "cancelled", "null"]) {
-				const jobs = required.map(job).filter((j) => state !== "absent" || j.name !== name);
+				const jobs = required.map((n) => job(n)).filter((j) => state !== "absent" || j.name !== name);
 				for (const j of jobs) if (j.name === name) j.conclusion = state === "null" ? null : state;
 				const shown = state === "absent" || state === "null" ? "None" : `'${state}'`;
 				const diagnostic = `job '${name}' conclusion=${shown}, expected 'success'`;
@@ -599,9 +585,26 @@ function runSubcommand(sub: string, env: Record<string, string | undefined>): { 
 					wrong.push(`${name}=${state}: status=${r.status}, want "${diagnostic}", err=${r.stderr.trim()}`);
 			}
 		}
+
+		// The body step skipped (the control), absent, or green: the oracle passes on
+		// the four jobs alone and its output never names the body.
+		const bodyCells: [string, { status: number | null; stdout: string }][] = [["skipped", control]];
+		bodyCells.push(["absent", drive(required.map((name) => job(name, null)))]);
+		bodyCells.push(["success", drive(required.map((name) => job(name, "success")))]);
+		for (const [body, r] of bodyCells) {
+			if (r.status !== 0 || !r.stdout.includes("exact-ci: PASS") || r.stdout.includes("check-gate-qualification"))
+				wrongNoBody.push(`body step ${body}: status=${r.status}, out=${r.stdout.trim()}`);
+		}
 	} finally {
 		rmSync(tmp, { recursive: true, force: true });
 	}
+	assert.ok(
+		wrongWitness.length === 0,
+		"[QK:RELEASE-WITNESS-IS-PUSH-RUN] the exact-SHA CI oracle must ask for the PUSH run of this SHA only: one " +
+			"`run list` call carrying `--event push` and a jq that keeps only push runs at this headSha. A " +
+			"workflow_dispatch run is the optional qualification diagnostic, never release evidence; admitted, a " +
+			`running or red dispatch would become the run judged. Broken: ${wrongWitness.join("; ")}`,
+	);
 	assert.ok(
 		wrong.length === 0,
 		"[QK:RELEASE-ORACLE-REFUSES-NON-SUCCESS-JOB] the exact-SHA CI oracle must accept a run whose four required " +
@@ -609,337 +612,13 @@ function runSubcommand(sub: string, env: Record<string, string | undefined>): { 
 			"cancelled or unconcluded -- a release SHA is certified only by success, never by the absence of failure. " +
 			`Broken:\n  ${wrong.join("\n  ")}`,
 	);
-}
-
-// ===========================================================================
-// 8d. The qualification filter COVERS every mutant subject (#103 piece 2)
-//
-//     The body no longer runs on every branch push; a decision script reads the
-//     push range and answers. Its whole safety argument is that the path set is
-//     DERIVED from the committed manifests rather than copied into a list, so a
-//     new mutant subject cannot land outside the filter and quietly stop being
-//     re-proven in CI. This asserts that property behaviourally: every subject
-//     and signatureSource in scripts/mutants/*.json, fed to the script as a
-//     one-file change, must decide `run_body=true`. The oracle is the manifests
-//     themselves, read here independently of the script.
-// ===========================================================================
-{
-	const decider = join(REPO_DIR, "scripts/ci-qualify-decide.sh");
-	const paths = new Set<string>();
-	for (const file of globSync("scripts/mutants/*.json", { cwd: REPO_DIR })) {
-		const manifest = JSON.parse(readFileSync(join(REPO_DIR, file), "utf8")) as {
-			mutants?: { subject?: string; signatureSource?: string }[];
-		};
-		for (const mutant of manifest.mutants ?? []) {
-			if (mutant.subject) paths.add(mutant.subject);
-			if (mutant.signatureSource) paths.add(mutant.signatureSource);
-		}
-	}
-	assert.ok(paths.size > 50, `read only ${paths.size} mutant paths from the manifests`);
-	const uncovered = [...paths].filter((path) => {
-		const out = execFileSync("bash", [decider, "--files-from", "-"], {
-			cwd: REPO_DIR,
-			encoding: "utf8",
-			input: `${path}\n`,
-			stdio: ["pipe", "pipe", "ignore"],
-		});
-		return out.trim() !== "run_body=true";
-	});
 	assert.ok(
-		uncovered.length === 0,
-		"[QK:QUALIFY-FILTER-COVERS-SUBJECTS] the CI qualification filter must run the body for a change to ANY " +
-			"committed mutant subject or signature source — it derives that set from scripts/mutants/*.json for " +
-			"exactly this reason, so a path it cannot see is a claim that silently stops being re-proven in CI. " +
-			`Uncovered (${uncovered.length} of ${paths.size}): ${uncovered.slice(0, 8).join(", ")}`,
+		wrongNoBody.length === 0,
+		"[QK:RELEASE-ORACLE-CLAIMS-NO-BODY] the qualification body is not a release axis (#144): the exact-SHA CI " +
+			"oracle must pass on the four required jobs whether the check job's body step is skipped, absent or green, " +
+			"and must never print it, since a PASS that names the body would read as kill-power evidence the release " +
+			`did not measure. Broken:\n  ${wrongNoBody.join("\n  ")}`,
 	);
-}
-
-// ===========================================================================
-// 8e. The filter still runs the body for every RED the body has ever produced
-//
-//     Five reds in 549 runs (#99 stage-2). The first reading of them used the
-//     tip COMMIT and concluded the filter would have missed four; replaying the
-//     real two-dot push range — what GitHub actually compares — showed all five
-//     hit. That reversal is the whole evidentiary basis for this filter.
-//
-//     It is asserted from RECORDED file lists, not from live history, and that
-//     is a constraint rather than a convenience: check-gate-qualification runs
-//     every gate inside a snapshot with its own fresh git baseline, where these
-//     2026-07/08 commits do not exist. A cell that read history there would be
-//     CONTROL-RED for the whole lane — measured, not predicted (this cell did
-//     exactly that on 2026-09-06 and cost the release-gate lane its 17 kills).
-//     The fixture carries what history said, measured once, in a repo where the
-//     objects are present.
-//
-//     It has its own replant, and the reason is the SHAPE of the input: 8d feeds
-//     ONE path per call, this feeds a whole push at once. A matcher that only
-//     looked at the first entry would leave 8d green — every single-file call is
-//     its own first entry — while every one of these five pushes opens with a
-//     non-surface path (DELIVERY.md, AGENTS.md, NEXT.md, AGENTS.md,
-//     demo/demo-baseline.sh). Invisible to 8d, fatal here.
-//
-//     The two-dot READING itself is proven separately, below.
-// ===========================================================================
-{
-	const decider = join(REPO_DIR, "scripts/ci-qualify-decide.sh");
-	const fixture = JSON.parse(readFileSync(join(REPO_DIR, "scripts/fixtures/qualify-replay.json"), "utf8")) as {
-		runs: { runId: string; before: string; head: string; files: string[]; tipOnlyFiles: string[] }[];
-	};
-	assert.equal(fixture.runs.length, 5, "the replay fixture holds all five historical qualification reds");
-	const wrong: string[] = [];
-	for (const run of fixture.runs) {
-		assert.ok(run.files.length > 0, `run ${run.runId} has no recorded push range`);
-		const out = execFileSync("bash", [decider, "--files-from", "-"], {
-			cwd: REPO_DIR,
-			encoding: "utf8",
-			input: `${run.files.join("\n")}\n`,
-			stdio: ["pipe", "pipe", "ignore"],
-		}).trim();
-		if (out !== "run_body=true") wrong.push(`run ${run.runId} (${run.files.length} files) decided ${out}`);
-	}
-	assert.ok(
-		wrong.length === 0,
-		"[QK:QUALIFY-FILTER-REPLAYS-PAST-CATCHES] every qualification RED in this repo's CI history must still " +
-			"run the body under the filter, over the two-dot push range GitHub compares — the measurement that " +
-			"overturned the tip-commit reading and justified filtering at all. This reads a whole push at once, " +
-			"which 8d cannot: each of these five opens with a non-surface path, so a matcher that stopped after " +
-			"the first entry would pass every single-file check 8d makes and fail here. " +
-			`Broken: ${wrong.join("; ")}`,
-	);
-}
-
-// ===========================================================================
-// 8f. The filter reads the two-dot PUSH RANGE, not the tip commit
-//
-//     The fixture above proves the matcher's verdict on recorded file lists; it
-//     cannot prove which git range produced them, because it calls no git. This
-//     does, hermetically: a throwaway repo shaped like the real defect — a push
-//     of two commits whose TIP is docs-only while the commit under it touched a
-//     mutant subject. The two-dot range sees the code; the tip alone does not.
-//     That is the exact misreading #99 corrected, and it is what four of the
-//     five recorded pushes look like when read the wrong way.
-//
-//     Hermetic on purpose: no repo history, so it runs identically inside the
-//     qualification snapshot.
-// ===========================================================================
-{
-	const decider = join(REPO_DIR, "scripts/ci-qualify-decide.sh");
-	const tmp = mkdtempSync(join(tmpdir(), "entwurf-qualify-range-"));
-	// core.hooksPath is set globally on this operator's machine; a fixture repo
-	// must not run their hooks.
-	const git = (...args: string[]) =>
-		execFileSync("git", ["-c", "core.hooksPath=/dev/null", "-c", "user.email=g@e", "-c", "user.name=g", ...args], {
-			cwd: tmp,
-			stdio: "ignore",
-		});
-	try {
-		git("init", "-q", "-b", "main");
-		// The decider reads the repo it SITS IN, so the fixture gets a real copy
-		// of it and its own one-entry manifest: no seam, no env override, and the
-		// manifest-reading path is exercised too.
-		mkdirSync(join(tmp, "scripts/mutants"), { recursive: true });
-		mkdirSync(join(tmp, "pi-extensions/lib"), { recursive: true });
-		copyFileSync(decider, join(tmp, "scripts/ci-qualify-decide.sh"));
-		writeFileSync(
-			join(tmp, "scripts/mutants/fixture.json"),
-			`${JSON.stringify(
-				{
-					schemaVersion: 1,
-					lane: "fixture",
-					mutants: [{ claim: "FIXTURE", subject: "pi-extensions/lib/fixture-subject.ts" }],
-				},
-				null,
-				"\t",
-			)}\n`,
-		);
-		writeFileSync(join(tmp, "seed.txt"), "seed\n");
-		git("add", "-A");
-		git("commit", "-qm", "seed");
-		const base = execFileSync("git", ["rev-parse", "HEAD"], { cwd: tmp, encoding: "utf8" }).trim();
-		writeFileSync(join(tmp, "pi-extensions/lib/fixture-subject.ts"), "// a mutant subject\n");
-		git("add", "-A");
-		git("commit", "-qm", "code commit (mid-push)");
-		writeFileSync(join(tmp, "README.md"), "docs only\n");
-		git("add", "-A");
-		git("commit", "-qm", "docs commit (tip)");
-		const head = execFileSync("git", ["rev-parse", "HEAD"], { cwd: tmp, encoding: "utf8" }).trim();
-		const decide = (from: string) =>
-			execFileSync("bash", [join(tmp, "scripts/ci-qualify-decide.sh"), from, head], {
-				cwd: tmp,
-				encoding: "utf8",
-				env: { ...process.env, CI_EVENT_NAME: "push", CI_FORCED: "false" },
-				stdio: ["ignore", "pipe", "ignore"],
-			}).trim();
-		const overRange = decide(base);
-		const overTip = decide(`${head}~1`);
-		assert.ok(
-			overRange === "run_body=true" && overTip === "run_body=false",
-			"[QK:QUALIFY-FILTER-READS-PUSH-RANGE] the filter must diff the whole two-dot push range, not the tip " +
-				"commit: a push whose tip is docs-only can still carry a mutant subject underneath it, which is how " +
-				"four of the five historical reds look like docs pushes when read tip-first. " +
-				`Broken: range=${overRange}, tip-only=${overTip} (tip-only must be false, or this fixture proves nothing).`,
-		);
-	} finally {
-		rmSync(tmp, { recursive: true, force: true });
-	}
-}
-
-// ===========================================================================
-// 8g. #137: TOML data-subject hunks, not path identity; Markdown/JSON data and
-// code/signatures/machinery remain file-level. Hermetic like 8f: real history is NOT
-// in a qualification snapshot.
-// ==========================================================================
-{
-	const tmp = mkdtempSync(join(tmpdir(), "entwurf-qualify-hunks-"));
-	const git = (...args: string[]) =>
-		execFileSync("git", ["-c", "core.hooksPath=/dev/null", "-c", "user.email=g@e", "-c", "user.name=g", ...args], {
-			cwd: tmp,
-			stdio: "ignore",
-		});
-	const head = () => execFileSync("git", ["rev-parse", "HEAD"], { cwd: tmp, encoding: "utf8" }).trim();
-	const data = 'version = "1"\n[[panes]]\ncommand = ["node", "build.mjs"]\n# outside\n';
-	const wrong: string[] = [];
-	try {
-		git("init", "-q", "-b", "main");
-		mkdirSync(join(tmp, "scripts/mutants"), { recursive: true });
-		mkdirSync(join(tmp, "fixture"));
-		mkdirSync(join(tmp, "scripts/fixtures"));
-		copyFileSync(join(REPO_DIR, "scripts/ci-qualify-decide.sh"), join(tmp, "scripts/ci-qualify-decide.sh"));
-		const manifest = JSON.stringify({
-			mutants: [
-				{ subject: "fixture/data.toml", find: ["[[panes]]"] },
-				{ subject: "fixture/data.toml", find: ['command = ["node", "build.mjs"]'] },
-				{ subject: "fixture/data.toml", find: ["[[panes]]", 'command = ["node", "build.mjs"]'] },
-				{ subject: "fixture/code.ts", find: ["return 1"], signatureSource: "fixture/signature.md" },
-				{ subject: "fixture/signature.md", find: ["signature"] },
-				{ subject: "fixture/joined.toml", find: ["alpha = 1", "beta = 2"] },
-				{ subject: "fixture/doc.md", find: ["Legacy rows are documented: kept for history."] },
-				{ subject: "fixture/reg.json", find: ['"mode": "self-fetch",'] },
-				{ subject: "scripts/fixtures/pin.json", find: ['"pinned": 1'] },
-				{ subject: "scripts/ci-qualify-decide.sh", find: ["set -euo pipefail"] },
-			],
-		});
-		writeFileSync(join(tmp, "scripts/mutants/fixture.json"), manifest);
-		writeFileSync(join(tmp, "fixture/data.toml"), data);
-		writeFileSync(join(tmp, "fixture/code.ts"), "// outside\nfunction f() { return 1; }\n");
-		writeFileSync(join(tmp, "fixture/signature.md"), "signature\n# outside\n");
-		writeFileSync(join(tmp, "fixture/joined.toml"), "version = 1\nalpha = 1\nbeta = 2\n");
-		const doc = "# Doc\nLegacy rows are documented: kept for history.\n# outside\n";
-		const reg = '{\n"copilot": {\n"mode": "self-fetch",\n"level": 6\n}\n}\n';
-		writeFileSync(join(tmp, "fixture/doc.md"), doc);
-		writeFileSync(join(tmp, "fixture/reg.json"), reg);
-		writeFileSync(join(tmp, "scripts/fixtures/pin.json"), '{\n"version": 1,\n"pinned": 1\n}\n');
-		git("add", "-A");
-		git("commit", "-qm", "seed");
-		const base = head();
-		const nonToml: string[] = [];
-		const check = (name: string, expected: boolean, reason?: string, before = base, into = wrong) => {
-			const r = spawnSync("bash", [join(tmp, "scripts/ci-qualify-decide.sh"), before, head()], {
-				cwd: tmp,
-				encoding: "utf8",
-				env: { ...process.env, CI_EVENT_NAME: "push", CI_FORCED: "false" },
-			});
-			if (r.status !== 0 || r.stdout.trim() !== `run_body=${expected}` || (reason && !r.stderr.includes(reason)))
-				into.push(`${name}: status=${r.status}, out=${r.stdout.trim()}, err=${r.stderr.trim()}`);
-		};
-		const commit = () => {
-			git("add", "-A");
-			git("commit", "-qm", "cell");
-		};
-		const reset = () => git("reset", "--hard", base); // ONLY this test-owned throwaway repository.
-		writeFileSync(join(tmp, "fixture/data.toml"), data.replace('version = "1"', 'version = "2"'));
-		commit();
-		check("outside", false, "fixture/data.toml: no find range touched");
-		// A replay must read HEAD's manifest, not an unrelated dirty worktree's find.
-		writeFileSync(
-			join(tmp, "scripts/mutants/fixture.json"),
-			'{"mutants":[{"subject":"fixture/data.toml","find":["version"]}]}',
-		);
-		check("HEAD manifest, not dirty worktree", false);
-		reset();
-		for (const [name, content] of [
-			["panes line", data.replace("[[panes]]", "[[panes]] # changed")],
-			["command line", data.replace('command = ["node", "build.mjs"]', 'command = ["node", "build.mjs"] # changed')],
-			["moved", `# inserted above\n${data}`],
-			["ambiguous", `${data}[[panes]]\n`],
-			["missing find", data.replace("[[panes]]", "[[other]]")],
-		] as const) {
-			writeFileSync(join(tmp, "fixture/data.toml"), content);
-			commit();
-			check(name, true);
-			reset();
-		}
-		git("rm", "fixture/data.toml");
-		commit();
-		check("deleted subject", true);
-		reset();
-		git("mv", "fixture/data.toml", "fixture/renamed.toml");
-		commit();
-		check("renamed subject", true);
-		reset();
-		writeFileSync(join(tmp, "fixture/code.ts"), "// outside changed\nfunction f() { return 1; }\n");
-		commit();
-		check("code outside find remains file-level", true);
-		reset();
-		writeFileSync(join(tmp, "fixture/signature.md"), "signature\n# outside changed\n");
-		commit();
-		check("signature also data subject remains file-level", true);
-		reset();
-		writeFileSync(join(tmp, "fixture/joined.toml"), "version = 1\nalpha = 1\nbeta = 2 # changed\n");
-		commit();
-		check("only multiline find, second line touched", true);
-		reset();
-		writeFileSync(join(tmp, "scripts/fixtures/pin.json"), '{\n"version": 2,\n"pinned": 1\n}\n');
-		commit();
-		check("machinery also data subject remains file-level", true);
-		reset();
-		writeFileSync(
-			join(tmp, "scripts/ci-qualify-decide.sh"),
-			`${readFileSync(join(tmp, "scripts/ci-qualify-decide.sh"), "utf8")}\n# outside find\n`,
-		);
-		commit();
-		check("machinery also subject remains file-level", true);
-		reset();
-		// Outside an untouched exact-once span, a shorter presence literal (measured on DELIVERY.md)
-		// or a later JSON duplicate key (JSON.parse: last wins) can re-satisfy the oracle.
-		writeFileSync(join(tmp, "fixture/doc.md"), `${doc}Legacy rows are documented\n`);
-		commit();
-		check("markdown restatement outside find", true, "conservative:", base, nonToml);
-		reset();
-		writeFileSync(
-			join(tmp, "fixture/reg.json"),
-			reg.replace("6\n}\n}\n", '6\n},\n"copilot": { "level": 6, "mode": "self-fetch" }\n}\n'),
-		);
-		commit();
-		check("json duplicate key outside find", true, "conservative:", base, nonToml);
-		reset();
-		// The first quoted name must still fail open after a >pipe-buffer list:
-		// printf | grep -q can lose its match to SIGPIPE under pipefail.
-		writeFileSync(join(tmp, '000"quoted'), "x\n");
-		for (let i = 0; i < 768; i++) writeFileSync(join(tmp, "fixture", `${i}_${"x".repeat(180)}.txt`), "x\n");
-		commit();
-		check("large quoted changed-name list", true, "quoted changed path cannot be read honestly");
-		reset();
-		check("unreadable range", true, "fail-open 4", "f".repeat(40));
-		git("rm", "scripts/mutants/fixture.json");
-		commit();
-		check("missing manifests", true);
-		assert.ok(
-			wrong.length === 0,
-			"[QK:QUALIFY-FILTER-SUBJECT-HUNKS] only untouched, unmoved, exact-once TOML find ranges may skip; " +
-				"unknown ranges run, and code/signature/machinery retain file-level protection. " +
-				wrong.join("; "),
-		);
-		assert.ok(
-			nonToml.length === 0,
-			"[QK:QUALIFY-FILTER-TOML-ONLY-REFINEMENT] Markdown and JSON subjects stay file-level: an untouched exact-once " +
-				"find does not pin kill-power when a shorter presence literal or a later duplicate JSON key outside it can " +
-				"re-satisfy the oracle. " +
-				nonToml.join("; "),
-		);
-	} finally {
-		rmSync(tmp, { recursive: true, force: true });
-	}
 }
 
 // ===========================================================================
@@ -1389,11 +1068,11 @@ console.log(
 		"observed to propagate the code: a smoke with LIVE unset (through run_ts, with its operator-readable marker) and " +
 		"a run.sh wrapper declining its own prerequisite (including the measured LIVE=1 no-cortex-connection cell); and every " +
 		"LIVE smoke is either wired into release_gate or excluded by a sentence the docs still carry; and the moved " +
-		"check-gate-qualification stays reachable on its owners (absent from the default chain, exactly once in CI, " +
-		"absent from release_gate: the one body is the prepared SHA's CI step) and the CI step qualifies the FULL floor, which runs before it, " +
-		"while the exact-SHA release oracle requires that BODY step to have concluded success at the release SHA, " +
-		"and the CI filter that decides when that body runs covers every mutant subject and still runs it for all " +
-		"five historical reds; and " +
+		"check-gate-qualification stays reachable only as the schedule/dispatch drift diagnostic (absent from the " +
+		"default chain, from release_gate, from every push and from the release skill; exactly once in CI) over the " +
+		"FULL floor, which runs before it, while the exact-SHA release oracle, driven through a fake gh, asks only for " +
+		"the push run, refuses every required job that did not conclude success, and passes without ever naming the " +
+		"qualification body; and " +
 		"every gate a committed mutant names is itself inside check:full or states its exclusion in prose an operator " +
 		"reads; and the CI push trigger is filtered to branch refs, so a release tag creates no duplicate run; and " +
 		"Pi -> visible Codex -> visible Pi first-admission callback/addressed/outbound acceptance is a release MUST " +

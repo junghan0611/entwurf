@@ -1214,7 +1214,7 @@ function buildDeclaredOutputFixture(): string {
 	const partial = viaDoor(requested);
 	const bare = viaDoor([]);
 	ok(
-		"[QK:QUALIFY-DOOR-FORWARDS-ARGV] run.sh check-gate-qualification hands --group/--receipt to the parser unchanged (a space and a glob inside the argv JSON included) and the parser reads one PARTIAL group; called bare it still reads the whole body — the prepared SHA's CI call",
+		"[QK:QUALIFY-DOOR-FORWARDS-ARGV] run.sh check-gate-qualification hands --group/--receipt to the parser unchanged (a space and a glob inside the argv JSON included) and the parser reads one PARTIAL group; called bare it still reads the whole body — the CI schedule/dispatch diagnostic (#144)",
 		partial.status === 0 &&
 			JSON.stringify(partial.started?.argv) === JSON.stringify(requested) &&
 			partial.started?.parsed.mode === "group" &&
@@ -3496,7 +3496,7 @@ let manifestCount: number;
 		"omp-fresh": 24,
 		"omp-receive": 11,
 		"probe-ordering": 1,
-		"release-gate": 25,
+		"release-gate": 21,
 		"retired-sent-surface": 2,
 		"resume-args": 6,
 		"resume-launch-identity": 7,

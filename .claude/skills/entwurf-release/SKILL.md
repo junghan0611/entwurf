@@ -151,51 +151,21 @@ CI_ORACLE=".claude/skills/entwurf-release/scripts/verify-exact-ci.sh"
 bash "$CI_ORACLE" "$SHA" wait
 ```
 
-The oracle requires four axes on one run at that exact SHA: the workflow
-conclusion, the FOUR required job conclusions (`check`, `install-surface`,
-`artifact-consumer`, `macos-install-surface`), and the `check` job's
-`./run.sh check-gate-qualification` step concluding `success`. A skipped body is
-not evidence, so it fails the same way a red one does. `macos-install-surface`
-joined the required set in 0.20.0 on its first green; a red macOS runner now
-blocks a cut exactly like any other required job.
+The oracle judges the newest PUSH run at that exact SHA: the workflow conclusion
+and the FOUR required job conclusions (`check`, `install-surface`,
+`artifact-consumer`, `macos-install-surface`). `macos-install-surface` joined the
+required set in 0.20.0 on its first green; a red macOS runner blocks a cut exactly
+like any other required job.
 
-If the oracle names the qualification step -- absent or skipped -- the body did
-not run at this SHA. Force it, wait, and re-run the oracle. `gh workflow run`
-takes a branch, never a SHA, so the branch must still point at `$SHA` when it is
-dispatched; the oracle re-checks `headSha` afterwards and refuses a run whose
-branch moved.
+The qualification body is not a release axis (#144): it runs only on the weekly
+schedule or a manual `qualify=true` dispatch, as a drift diagnostic, and this
+oracle neither reads nor reports it. A dispatch run is never the witness. If the
+oracle finds no push run at the SHA (a `[skip ci]` commit has none), get a push run
+whose head is that SHA, or re-run the existing push run with `gh run rerun`; do
+not assume that pushing a SHA the remote branch already points at creates a run.
 
-`gh workflow run --ref` runs the REMOTE branch head, so check that head, not the
-local one. And do not sleep: until the dispatch run is registered, the oracle's
-newest-run rule would pick the already-finished push run and ABORT on the same
-axis. Wait for the run to appear, then hand it to the oracle.
-
-```bash
-BRANCH="$(git rev-parse --abbrev-ref HEAD)"
-git fetch origin "$BRANCH"
-test "$(git rev-parse FETCH_HEAD)" = "$SHA"
-
-count_dispatch_runs() {
-  gh run list --workflow ci.yml --event workflow_dispatch --commit "$SHA" \
-    --limit 20 --json databaseId --jq length
-}
-BEFORE="$(count_dispatch_runs)"
-gh workflow run ci.yml --ref "$BRANCH" -f qualify=true
-for _ in $(seq 1 12); do
-  sleep 5
-  if [ "$(count_dispatch_runs)" -gt "$BEFORE" ]; then break; fi
-done
-test "$(count_dispatch_runs)" -gt "$BEFORE" || {
-  echo "ABORT: no dispatch run appeared for $SHA within 60s" >&2
-  exit 1
-}
-
-bash "$CI_ORACLE" "$SHA" wait
-```
-
-Report the SHA, workflow URL, the run event, all FOUR required job conclusions
-(`check`, `install-surface`, `artifact-consumer`, `macos-install-surface`), and the
-qualification-step conclusion. End with:
+Report the SHA, workflow URL, the run event and all FOUR required job conclusions
+(`check`, `install-surface`, `artifact-consumer`, `macos-install-surface`). End with:
 
 ```text
 Landing checkpoint complete. Ready for /entwurf-release prepare <version>.
@@ -308,20 +278,27 @@ gates. The current `package.json` check:* scripts are the SSOT. If any check
 fails, stop at that axis, fix it, and rerun the complete aggregate.
 
 The check chains carry only the qualification HEAD (`check-gate-manifests`) and
-deliberately exclude the mutant-executing body `check-gate-qualification`. This
-release path's one body is the exact-SHA CI `check` job at the prepared SHA, which
-M2 requires before any candidate exists; until it concludes, the prepared state is
-awaiting CI, never presumed PASS. The LIVE release gate (P5) runs no local body
-(#132), and development runs none either (#133): a lane that changed a
-gate/mutant/matrix ran only its affected exact-argv groups as PARTIAL receipts
+deliberately exclude the mutant-executing body `check-gate-qualification`. The
+whole body is not a release axis (#144): no push runs it, M2 does not read it, and
+no cut owes a local one; it runs only on the weekly schedule or a manual
+`qualify=true` dispatch, as a drift diagnostic. The LIVE release gate (P5) runs no
+local body (#132), and development runs none either (#133): a lane that changed a
+gate/mutant/matrix runs its affected exact-argv groups as PARTIAL receipts
 (`./run.sh check-gate-qualification --group '<argv JSON>' --receipt <abs path>`).
-A receipt measures one group; it is never this release's qualification evidence.
-Do not add a manual whole-body rerun here.
+A receipt measures one group on its own candidate; it never stands for the release.
+
+The release section therefore says, in its own line, `Kill-power re-measured at
+this shipped SHA: none (all <N> committed claims not re-proved, #144).` Only a
+measurement actually taken at this SHA (a manual dispatch run, or a PARTIAL on
+this SHA's candidate) gets a separate `Measured at this SHA (manual): ...` line with
+its run or receipt. An earlier-candidate PARTIAL is listed one receipt per line as
+`Earlier-candidate PARTIAL (operator-attested, not this SHA): head <sha12> surface
+<sha12> -- <group> <claims>/<group size> receipt <sha12>`, never summed into a k/N
+for the release, and omitted when there is none. Never write "covered",
+"qualified" or "N/N" for the release.
 
 Pushing the release tag creates no run, so the exact-SHA oracle never reads a
-tag run. It reads whichever run at that commit carries the body: the branch push
-when the push touched the qualification surface, otherwise the dispatch run the
-recovery above creates.
+tag run. It reads the newest push run at that commit.
 
 ## P5. Run the LIVE release gate from fresh scratch
 
@@ -432,7 +409,7 @@ Report:
 - prepared version and commit SHA
 - `pnpm run check:full` result
 - release-gate scratch, log, and artifact paths
-- actual `MUST: PASS=n FAIL=0 SKIP=n` (no qualification step: that body runs once in M2's CI)
+- actual `MUST: PASS=n FAIL=0 SKIP=n` (no qualification step: the body is not a release axis, #144)
 - actual `BEHAVIOR: PASS=n FAIL=n`
 - release-specific work deliberately deferred to `make`
 - clean-tree result
@@ -542,12 +519,13 @@ pnpm run check:full
 ```
 
 `pnpm run check:full` here is the full deterministic floor without
-qualification; do not duplicate a manual `check-gate-qualification` run in
-preflight. The exact-SHA
-CI `check` job (M2) is the axis that requires it.
+qualification; do not add a manual `check-gate-qualification` run in preflight.
+The whole body is not a release axis (#144).
 
 Confirm that a fresh release-gate scratch/log path and its actual MUST/BEHAVIOR
-summary are present in the changelog or durable operator handoff. Do not proceed
+summary are present in the changelog or durable operator handoff, and that the
+release section carries the kill-power line P4 describes (no "covered",
+"qualified" or "N/N"). Do not proceed
 when MUST has a failure, evidence is missing, or `NEXT.md` names an unresolved
 pre-release blocker.
 
@@ -603,9 +581,9 @@ bash .claude/skills/entwurf-release/scripts/verify-exact-ci.sh "$SHA" wait
 ```
 
 A CI failure stops make before candidate creation or tagging. This is the same
-four-axis oracle L3 runs, including the qualification-BODY step: if it names that
-step, dispatch the body exactly as L3 documents and re-run the oracle. Do not
-create a candidate or a tag while that axis is unproven.
+oracle L3 runs: the newest push run at the SHA and its four required jobs. It
+reads no qualification body, and a dispatch run is never its witness (#144). Do
+not create a candidate or a tag while that run is not green.
 
 ## M3. Create and accept one preserved exact candidate
 

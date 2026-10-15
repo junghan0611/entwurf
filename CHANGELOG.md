@@ -23,6 +23,31 @@ All notable changes to this project will be documented here. Format follows [Kee
   paid the carrier's time. Those seconds are local, not CI timing. A moved mutant no longer runs beside the other
   files; that was incidental exposure, never the ground of a kill, which is attributed only from the
   mutant's own QK.
+- **The whole qualification body is no longer a release axis (#144).** By GLG's decision of
+  2026-10-16 (split local gates from CI; a named loss of verification is accepted to stop paying for
+  the same proof twice), no push runs the body any more and no cut waits for it. Measured from the
+  GitHub API over one cut window (v0.36.1 push `cab1b9f` through the Herdr 0.37.0 snapshot `5e1e629`,
+  six `ci.yml` runs): the body ran five times on five SHAs for 506.3 minutes of `check`-step time,
+  once as a dispatch that re-bought it for a SHA whose push had skipped it, while a push run without
+  it took 10.9 minutes wall. That is the cost before this change, not a measured saving. The body now
+  runs only on the weekly schedule or a manual `qualify=true` dispatch, as a drift diagnostic. The
+  push-range filter that decided when it ran (`scripts/ci-qualify-decide.sh`, its replay fixture, and
+  the five `QUALIFY-FILTER-*` claims) is retired with it, and the release skill no longer dispatches
+  the body.
+- **The release oracle takes the push run as its only witness, and no longer reads the body
+  (#144).** `verify-exact-ci.sh` asks for push runs of the exact SHA (`--event push`, and a jq that
+  keeps only push runs) and judges the four required jobs. Its fourth axis, the body step, is
+  removed with `RELEASE-SHA-QUALIFIED-IN-CI`, and its PASS prints that the body is not a release
+  axis instead of a body success line. `check-release-gate-outcomes` drives the shipped script
+  through a fake `gh`: `RELEASE-WITNESS-IS-PUSH-RUN` pins the one `run list` call it sends (the
+  fake evaluates no jq, and GitHub's own filtering is not observed), `RELEASE-ORACLE-REFUSES-NON-SUCCESS-JOB`
+  refuses each required job that is absent, failed, skipped, cancelled or unconcluded, and
+  `RELEASE-ORACLE-CLAIMS-NO-BODY` passes the four jobs whether the body step is skipped, absent or
+  green without ever naming it. The `release-gate` lane is 21 claims.
+- **Named loss.** A release no longer re-measures the kill-power of the committed claims at its SHA.
+  Its section says so (`Kill-power re-measured at this shipped SHA: none`), and lists a PARTIAL
+  receipt only with its own candidate, never summed into a count for the release. The weekly run is
+  a drift window, not a guarantee for any commit.
 
 ## v2026.10.15-herdr.0.37.0 — Herdr Entwurf plugin 0.37.0
 

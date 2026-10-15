@@ -302,8 +302,8 @@ const STATES: GroupState[] = ["MEASURED", "CARRIED", "INHERITED-UNVERIFIED", "UN
  * (qualification-oracle-core → composeRelease) passes none: its declared input list is each
  * collection's own `attempted[].sha256` (checkCollectionData) under the GitHub artifact
  * digest (admitArtifact), and an ancestor run it was not given leaves its groups UNRUN, a
- * release-mode blocker. It is not the release oracle: verify-exact-ci.sh stays the strict
- * exact-SHA full-body gate until #124 P3.
+ * release-mode blocker. It is not the release oracle: verify-exact-ci.sh reads the push
+ * run's four required jobs and no qualification body (#144).
  */
 export function composeLedger(
 	loaded: LoadedReceipt[],
