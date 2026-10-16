@@ -456,6 +456,10 @@ read. Every field the provider attached is shown, in sorted key order.
     named red (`herdr-integration-not-current`) until you run `herdr integration install claude`
     again. In the measured 0.9.4-seeded private sandbox, the reinstall changed only the hook's version
     line; the pi extension and the Claude settings stayed byte-identical.
+- **Pi `>=1.3.0 <1.4`** for the runtime this plugin acquires (core 0.38.0). A host still on Pi 1.2
+  is refused by name (`outside the supported range`) at activation, the same check `entwurf setup`
+  applies, and no Pi settings are written. Upgrade Pi to 1.3 first, then install or reinstall the
+  plugin.
 - **For the install-time build:** `git`, `node` >= 24, `npm`, and network access for the locked
   registry artifact, in an Entwurf-owned XDG npm cache reclaimed by `herdr-plugin-deactivate`. You do
   **not** clone Entwurf or run `npm install`; the build acquires and integrity-checks the exact npm
