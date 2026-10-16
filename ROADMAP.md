@@ -4,10 +4,12 @@
 > `CHANGELOG.md`는 게시되는 "닫힌 변경" 핵심 로그, 이 `ROADMAP.md`는 게시되지 않는
 > 내부 방향/설계 SSOT. 닫힌 작업의 세션별 process 잡음은 git 커밋 history에 산다.
 > (NEXT는 npm tarball에서 제외, ROADMAP도 제외 — 내부 detail 안전. CHANGELOG는 게시됨.)
+>
+> 날짜가 달린 "진행 중"·"현재" 섹션은 그 기록 시점의 상태다. 지금 좌표는 `NEXT.md`가 정본이다.
 
 ---
 
-## 진행 방향 — #132 Herdr B 진행 중 / C 보류 (2026-10-09)
+## 방향 (2026-10-09 기록) — #132: B는 0.34.0~0.37.0 Herdr snapshot으로 착지, C 보류
 
 현재: 0.34.0이 npm에 실제 publish되어(`latest=0.34.0`, registry SRI = 수락 아티팩트) [#132](https://github.com/junghan0611/entwurf/issues/132)가 다시 열렸고, GLG의 Herdr 컷 요청으로 B를 검증 중이다. C는 B와 분리되어 보류 상태다.
 
@@ -77,7 +79,7 @@ pi 0.86.0 floor + `entwurf_callback`(여덟째 verb, 인자 없음) + herdr 플�
 4. **H2 이식 본체** — 팬 action/events. #118 "Do not"이 이 홉에서 막았던 것.
 5. **npm 소스 재증명 잔여 행** — swap/torn-swap, package-consumer(VERIFY.md 재증명 표).
 
-## 현재 — 0.22.0 shipped; #116 herdr 레일 + #117 Codex hooks 공존이 0.23.0 컷 대기
+## 과거 현재 — 0.22.0 시점 기록 (0.23.0 컷 전): #116 herdr 레일 + #117 Codex hooks 공존
 
 이 repo는 **entwurf-core(v2 garden-citizen dispatch) + native-harness bridges + pi adapter + ACP plugin**이다.
 `v0.22.0`이 현재 패키지다 (`repair=0.12.8-repair.1` 보존). 0.22.0은 Codex caller-seat(#95 lane B/C)와 launch-directory 진단을 실었고, 그 다음 컷이 #116 herdr 레일과 #117 Codex hooks 공존을 싣는다. 0.15.0은 Copilot을 시민으로 들였고, 0.15.1은 Linux one-command setup honesty(#86)다. 0.16.0은 OMP를 출하했다. 0.19.0은 #105 ① placement였고, 0.20.0은 macOS 설치면을 **CERTIFIED (CI)** 로 실으면서 `claude-fable-5-1`을 curated 행에 더했다. Claude mailbox, pi control-socket,

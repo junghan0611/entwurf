@@ -273,7 +273,7 @@ top-level (`Tool web_search not found`, upstream #5973), fixed by pinning it via
 
 `read xd://` reports exactly what the default hides. `[측정]` on a host with only this
 bridge registered, **11 devices**: omp's own `ast_edit`, `debug`, `lsp`, `browser`, plus all
-seven `entwurf_*`. So the default does not merely wrap entwurf — it wraps omp's own LSP and
+seven `entwurf_*` (as reported in that earlier measurement; the current bridge declares eight). So the default does not merely wrap entwurf — it wraps omp's own LSP and
 debugger too.
 
 **`entwurf setup` writes this for a detected omp host, and `entwurf install-omp-config` is

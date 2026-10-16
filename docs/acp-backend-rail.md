@@ -125,18 +125,19 @@ What "supported" means here, per declaration class. The classes are kept apart o
 undifferentiated "supported" column is what let a Claude PASS read as if it also certified Cortex.
 The rows are THIS checkout's declarations, not a shipped release: what a published version carried
 is that version's CHANGELOG entry, and a candidate's own evidence is its issue thread, LIVE receipts
-and exact-SHA CI. The pi row shipped in 0.30.0 (#125). The ACP wire SDK, Claude adapter and Claude
-Agent SDK rows are the unpublished #127 candidate: published 0.30.0 still declares
-`claude-agent-acp 0.79.0` and `@agentclientprotocol/sdk 1.4.0`
-(`[측정 2026-10-04]` `npm view @junghanacs/entwurf@0.30.0`; per-bump record in the ROADMAP Dep bump
-ledger, 2026-10-03).
+and exact-SHA CI. The pi row shipped in 0.30.0 (#125). The ACP wire SDK and Claude adapter rows
+equal the published 0.36.1–0.37.1 manifests (`claude-agent-acp 0.90.0`, `@agentclientprotocol/sdk
+1.8.0`); 0.31.0–0.36.0 shipped `0.85.1` / `1.6.0` and 0.30.0 shipped `0.79.0` / `1.4.0`
+(`[측정 2026-10-16]` `git show <tag>:package.json`). The transitive Claude Agent SDK `0.3.296`
+row has no direct manifest entry; its bump is recorded in CHANGELOG 0.36.1 (#128) and the ROADMAP
+Dep bump ledger. 0.38.0 (#145) changes only the pi SDK set; the ACP rows are unchanged from 0.37.1.
 
 | Surface | Declaration | Class | What a green actually says |
 |---|---|---|---|
 | Entwurf package | `package.json` `version` | checkout declaration, not a release receipt | names the package label these rows sit beside; whether that label shipped, and with which rows, is CHANGELOG's record |
-| pi runtime | SDK exact `1.3.0`, host `>=1.3.0 <1.4` | **exact** oracle + **closed range** | the SDK set this checkout builds, gates and (since #130) ships as exact production dependencies; an ordinary Pi host inside the range is accepted, and the ceiling moves only on measurement. The published 0.36.0 shipped the 1.2.0 set (#141). Historical: the published 0.33.0 through 0.35.1 ship SDK exact 1.1.0, 0.32.0 ships SDK exact 1.0.4 with the next-minor ceiling (ROADMAP's 2026-10-07 bump entry), and 0.31.0 declared the earlier peer floor 1.0.2 |
+| pi runtime | SDK exact `1.3.0`, host `>=1.3.0 <1.4` | **exact** oracle + **closed range** | the SDK set this checkout builds, gates and (since #130) ships as exact production dependencies; an ordinary Pi host inside the range is accepted, and the ceiling moves only on measurement. The published 0.36.0 through 0.37.1 shipped the 1.2.0 set (#141); 0.38.0 (#145) is the first to carry 1.3.0. Historical: the published 0.33.0 through 0.35.1 ship SDK exact 1.1.0, 0.32.0 ships SDK exact 1.0.4 with the next-minor ceiling (ROADMAP's 2026-10-07 bump entry), and 0.31.0 declared the earlier peer floor 1.0.2 |
 | ACP wire SDK | `@agentclientprotocol/sdk 1.8.0` | **exact** | the shared wire oracle both adapters speak |
-| Claude ACP adapter | `@agentclientprotocol/claude-agent-acp 0.90.0` | **exact**, bundled | checkout candidate; resolved before any PATH fallback; declaration is not compatibility evidence |
+| Claude ACP adapter | `@agentclientprotocol/claude-agent-acp 0.90.0` | **exact**, bundled | shipped since 0.36.1; resolved before any PATH fallback; declaration is not compatibility evidence |
 | Claude Agent SDK | `0.3.296` (transitive) | **exact** oracle | the runtime risk surface behind the adapter |
 | Anthropic SDK | `0.100.1` | **exact**, peer-resolution only | satisfies the Agent SDK peer floor (0.93.0+); never an API client here (gate L4) |
 | Claude Code runtime | `>=2.1.217` (`entwurf.claudeCodeFloor`) | **floor** | below it, hook args are silently dropped; entwurf enforces this itself |
@@ -622,8 +623,12 @@ pnpm run check:full
 ./run.sh check-acp-session-reuse
 ./run.sh check-acp-stop-reason
 ./run.sh check-acp-cortex
-./run.sh check-gate-qualification
 ```
+
+The whole `check-gate-qualification` body is not part of this floor: it is a scheduled drift
+diagnostic only (weekly CI or a manual `qualify=true` dispatch, never a release axis, #144). A
+change to a gate, mutant or matrix runs its affected exact-argv groups as PARTIAL receipts
+(VERIFY.md).
 
 Live axes:
 
