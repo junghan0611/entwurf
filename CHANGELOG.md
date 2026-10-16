@@ -4,6 +4,8 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+## 0.37.1 - 2026-10-16
+
 ### Verification
 
 - **The native-module ingress claims get their own mutant coordinate (#144).** The 13
@@ -48,6 +50,108 @@ All notable changes to this project will be documented here. Format follows [Kee
   Its section says so (`Kill-power re-measured at this shipped SHA: none`), and lists a PARTIAL
   receipt only with its own candidate, never summed into a count for the release. The weekly run is
   a drift window, not a guarantee for any commit.
+- **The mux lifecycle LIVE runs on a different native model, and before the ACP tier.** In 0.37.0's
+  first LIVE run and in this cut's first one, `smoke-mux-lifecycle-live` went red the same way: its
+  pi-native sibling (`openai-codex/gpt-6-luna`) was alive, ran shell no-ops, answered "ACK" and never
+  called the callback tool within 300 s. The cause is not determined; one instrumented diagnostic run
+  saw the callback declared in the first request and called back in about 4 s, so the failure did
+  not reproduce. The test's native model is now `openai-codex/gpt-6.1-sol:low` (`VERIFY.md` names it), and
+  `release-gate` runs this step right after the v2 matrix, before the ACP tier, so a red answer comes
+  before the ACP turns are spent. This is a test-model and order change, not a fix: the `gpt-6-luna`
+  cause stays undetermined. In this cut's second and third LIVE runs the step passed on the new
+  model and order; those are two observations, and neither proves the earlier cause.
+- **The Codex first-admission LIVE now says the id prefixes are part of the ids.** In this cut's
+  second LIVE run the moved mux step passed, and `smoke-codex-fresh-live` failed on its last check:
+  the Codex sibling's final `entwurf_v2` arguments carried `PI_SESSION_ID=485` and
+  `PI_WINDOW_ID=1130` where the launch receipt printed `$485` and `@1130`, with every other field
+  exact. Its instruction named the `$` and `@` only inside the placeholder text; it now tells the
+  sibling to copy both ids byte for byte from the receipt's `window:` line, keeping each leading
+  prefix. The exact-argument comparison is unchanged and nothing is stripped. That the wording
+  invited the drop is a hypothesis: the same code and model passed in 0.37.0. In this cut's third
+  LIVE run the step passed with both prefixes exact (`$488`, `@1136`); that is one run, and it does
+  not prove that the wording caused the earlier drop or rule out model variation.
+
+
+### Release boundary and verification
+
+- **Scope.** A core patch over `v0.37.0` for #144: `1df7926` (the pi-durable native-module and
+  carrier mutant coordinates, and the release oracle's job refusal driven through a fake `gh`) and
+  `c208d37` (the whole qualification body retired as a release axis). The Herdr plugin snapshot
+  `v2026.10.15-herdr.0.37.0` at `5e1e629` is unchanged; pi 1.3.0 (#145) is not in this cut.
+- **Kill-power re-measured at this shipped SHA: none (all 979 committed claims not re-proved,
+  #144).**
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head 5e1e629a5826 surface
+  e907429b9c00 -- `check-pi-durable-native-module` 13/13 receipt e0f96c3374de
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head 5e1e629a5826 surface
+  e907429b9c00 -- `check-pi-durable-beside` 69/69 receipt 36e46bdd4cf0
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head 5e1e629a5826 surface
+  ea26d369b1af -- `check-pi-durable-carrier` 30/30 receipt 01f9096a8eb5
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head 5e1e629a5826 surface
+  ea26d369b1af -- `check-pi-durable-beside` 39/39 receipt 93d9f5cdf699
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head 5e1e629a5826 surface
+  980384f2532f -- `check-release-gate-outcomes` 25/25 receipt eedfb075bf07
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head 5e1e629a5826 surface
+  980384f2532f -- `check-gate-manifests` 52/52 receipt 8a976415c566
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head 5e1e629a5826 surface
+  980384f2532f -- `check-gate-qualification.ts --attribution-self-test` 1/1 receipt 3edfa0af9d3a
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head 1df7926257a9 surface
+  106c59c5cb99 -- `check-release-gate-outcomes` 21/21 receipt c869965b8dbc
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head 1df7926257a9 surface
+  106c59c5cb99 -- `check-gate-manifests` 52/52 receipt 08eae97d65b0
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head 1df7926257a9 surface
+  106c59c5cb99 -- `check-gate-qualification.ts --attribution-self-test` 1/1 receipt 276118d0ba9b
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head c208d37f1442 surface
+  d941509e2e9e -- `check-release-gate-outcomes` 21/21 receipt cd0a59e12569 (taken after the
+  mux model/order change and before the Codex id-prefix sentence; kept locally under
+  `.tmp-verify/release-0.37.1/fix-mux-first/partial-evidence/`)
+- **Not re-measured for the Codex id-prefix sentence.** The five mutants whose subject is
+  `scripts/lib/codex-fresh-live-protocol.ts` were reviewed as lying outside the changed bytes, and
+  their `check-mux-fresh-call` group (150 mutants over 18 subjects) was not run, so those five
+  kills are not re-measured on the new bytes. The new sentence has no deterministic assertion of
+  its own: deleting it would leave the deterministic suite green, and only a LIVE run would see it.
+- **Where those receipts are published.** Each receipt above except the newest (`cd0a59e12569`) is
+  listed with its candidate in a #144 checkpoint comment, so another host can trace it without this
+  operator's paths; the newest is local and operator-attested only, in no #144 comment. A′
+  ([#144 comment 6195663856](https://github.com/junghan0611/entwurf/issues/144#issuecomment-6195663856)),
+  B ([6196318282](https://github.com/junghan0611/entwurf/issues/144#issuecomment-6196318282)),
+  RO-1 ([6200017214](https://github.com/junghan0611/entwurf/issues/144#issuecomment-6200017214)) and
+  P1 ([6202638853](https://github.com/junghan0611/entwurf/issues/144#issuecomment-6202638853)).
+  The links add location only; they prove nothing new.
+- **Branch CI, not this SHA.** The pushed branch head `c208d37` ran the new policy's first push CI
+  (run 38811304369): the four required jobs green, the body step skipped, created to last required
+  job 645 s. That run is evidence for `c208d37`; the prepared SHA owes its own.
+- **Unpublished candidate carrier.** As in 0.37.0, `plugins/herdr/runtime-lock.json` names the
+  closed `herdr-checkout` source, because 0.37.1 has no published integrity yet and the runtime
+  refuses an npm lock whose version is not the checkout's (`scripts/herdr-runtime.mjs:355-358`).
+  The npm 0.37.0 bytes and every existing tag are unchanged; re-pinning registry bytes is a later,
+  separate Herdr snapshot.
+- **No local static floor; it is the exact CI's.** `check:hermetic` carries
+  `check-herdr-plugin-build` and `check-herdr-sandbox`, which must not run on the operator host,
+  and `release-gate`'s first MUST step is `pnpm run check:full`. By GLG's decision of 2026-10-16
+  for this cut (a new approval, not inherited from 0.37.0), `check:full` is not run locally at P4,
+  at P5's first step or at M0, and is owed whole to the prepared SHA's CI.
+- **LIVE, taken step by step, not as `release-gate --cut`.** The gate's 23 non-static MUST steps
+  and its BEHAVIOR step ran in the gate's own order, command, environment and working directory,
+  stopping at the first red, with each run's candidate fingerprint the same at freeze, before and
+  after. The first run (`c208d37` with this preparation's first edits) passed 18 MUST steps and
+  failed `smoke-mux-lifecycle-live` at its old position; the second (with the model and order
+  change) passed 21 and failed `smoke-codex-fresh-live` on the dropped id prefixes. Both red
+  receipts are kept. The third ran on the tested bytes, `c208d37` with this cut's source and package
+  edits; after it only `CHANGELOG.md` and `NEXT.md` changed, to record these results. It ran every
+  step itself, none reused: **MUST 23/23 PASS, FAIL 0, SKIP 0;
+  BEHAVIOR 1/1 PASS.** `smoke-mux-lifecycle-live` passed 81 checks as step 5,
+  `smoke-codex-fresh-live` 66 assertions against one owned app-server in its own tmux session
+  (named pane pid with its recorded start time, `gpt-5.6-luna` and `openai-codex/gpt-5.6-luna`,
+  stopped by one TERM after the run with its subtree, listener and control alias gone), and
+  `smoke-pi-durable-fresh-live` 36 assertions. Receipts on the operator host, under
+  `.tmp-verify/release-0.37.1/`: the third run's freeze fingerprint `3a90e3f1f2a2`, gate log
+  `94d14b3d42af` and step-log manifest `ded0d693c3ff` (24 logs); the red runs' gate logs
+  `3e16e8964f9e` and `da9622fb5312`. This is local LIVE evidence, not a release-gate verdict, and
+  no static CI result is claimed by it.
+- **Publication boundary.** The LIVE and PARTIAL lines above are local preparation evidence.
+  Shipping this version separately requires the prepared SHA's exact CI (the four required jobs), a
+  preserved accepted candidate made from that SHA, and the tag and GitHub Release cut from it; npm
+  publication is the operator's.
 
 ## v2026.10.15-herdr.0.37.0 — Herdr Entwurf plugin 0.37.0
 
