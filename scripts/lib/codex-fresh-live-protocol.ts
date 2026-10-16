@@ -57,7 +57,12 @@ export function buildCodexInstruction(input: CodexInstructionInput): string {
 		"2. Stop and wait for the Pi callback delivered into this Codex thread. Accept only a callback whose body " +
 		"repeats the exact nonce from your LAUNCH receipt and whose sender envelope carries a garden id on its `session:` line.\n" +
 		`3. Only after that match, call public mcp__entwurf_bridge__entwurf_v2 once with target ${input.callerGid}, ` +
-		"intent fire-and-forget, wants_reply false, and message:\n" +
+		// [LIVE 2026-10-16, 0.37.1 r2] a Codex sibling sent PI_SESSION_ID=485 / PI_WINDOW_ID=1130 for
+		// `$485` / `@1130`: the sigils lived only inside the placeholder names below. The exact-argument
+		// check stays; the instruction now says the prefixes are part of the ids.
+		"intent fire-and-forget, wants_reply false, and message (copy PI_SESSION_ID and PI_WINDOW_ID byte for byte " +
+		"from the LAUNCH receipt's `window:` line: the session id keeps its leading `$` and the window id keeps its " +
+		"leading `@`; never drop either prefix):\n" +
 		`${input.finalToken}\nPI_LAUNCH_NONCE=<exact launch nonce>\nPI_CALLBACK_NONCE=<same exact nonce>\n` +
 		"PI_CALLBACK_FROM=<the garden id on the callback envelope's `session:` line — NOT the model name on its `from:` line>\nPI_SESSION_ID=<exact $session id from the LAUNCH receipt>\n" +
 		"PI_WINDOW_ID=<exact @window id from the LAUNCH receipt>\nDo not claim completion in prose."

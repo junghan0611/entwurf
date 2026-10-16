@@ -7090,6 +7090,9 @@ release_gate() {
   #     → first-user augment delivery + empty-carrier billing-clean (핀1) →
   #     ACP-target garden guard (deterministic half). Opt-in LIVE: LIVE!=1 is an
   #     HONEST SKIP via run_live_step (see its note) — a CUT needs LIVE=1, SKIP=0.
+  # The mux lifecycle runs before the ACP tier (0.37.1): its pi-native callback is the step
+  # that went red in the last two cuts, so a red answer must come before the ACP tier spends its turns.
+  run_live_step "smoke-mux-lifecycle-live (mux public-harness lifecycle: fresh -> send -> dormant -> same-id visible resume -> recall)" gate bash "$self" smoke-mux-lifecycle-live
   run_live_step "smoke-acp-socket-citizen-live (S1: turn-free socket citizenship)"        gate bash "$self" smoke-acp-socket-citizen-live
   run_live_step "smoke-acp-raw-turn-live (S2a: pinned ACP pipe + local auth)"             gate bash "$self" smoke-acp-raw-turn-live
   run_live_step "smoke-acp-overlay-live (S2b: config overlay + hooks:{} + tool meta)"     gate bash "$self" smoke-acp-overlay-live
@@ -7118,7 +7121,6 @@ release_gate() {
   #     is either wired here or excluded by a reason the docs still carry.
   run_live_step "smoke-claude-native-resume-live (native Claude Code resume + meta-bridge neutrality)" gate bash "$self" smoke-claude-native-resume-live
   run_live_step "smoke-entwurf-chain-live (P3: Claude Code -> pi GPT -> pi ACP Sonnet -> mailbox, identity + receipt)" gate bash "$self" smoke-entwurf-chain-live
-  run_live_step "smoke-mux-lifecycle-live (mux public-harness lifecycle: fresh -> send -> dormant -> same-id visible resume -> recall)" gate bash "$self" smoke-mux-lifecycle-live
   # #87 bundle B: MUST, and since bundle B moved omp's wakeMode to self-fetch this is a
   # REAL demand under LIVE=1, not a standing SKIP — it reads the registry, so an honest
   # SKIP now only ever names a missing prerequisite, and a registry claiming a receive
