@@ -4,6 +4,89 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+## 0.38.0 - 2026-10-16
+
+### Pi SDK 1.3.0
+
+- **Accept the coherent nine-member Pi SDK 1.3.0 set (#145).** Upgrade exact pins,
+  lockfile, release-age allowlist, upstream constellation metadata and matching fixtures.
+  The supported PATH Pi range is now `>=1.3.0 <1.4`. Owned durable app source and emitted
+  carrier bytes are unchanged; execution, storage, compaction and provider/auth engines
+  remain upstream-owned. Stage2 shell changes and #142 thinking/default/ACP effort are not
+  included.
+- **Known upstream behavior, not an app-level LIVE claim.** SDK 1.3.0 sends Haiku 5.5 /
+  Opus 5 thinking `off` as disabled; Opus 5.5 still does not support `off`. The app's
+  current level-less default reaches the SDK as `off`, so Haiku 5.5 / Opus 5 thinking is
+  EXPECTED to be disabled under 1.3.0. That is an inference inherited from the #142 source
+  reading, not measured in a vendor LIVE turn; the default selection is unchanged here and
+  remains #142's subject. Upstream also changes malformed tool-argument validation and
+  compaction baseline placement; no cross-version prompt-loss or universal compatibility
+  claim is made here.
+
+### Release boundary and verification
+
+- **Implementation checkpoint.** `d25b71e6f320462e67827d71265811de7cd89db1`, reviewed
+  19-file SDK bundle. Its branch push CI run 38843056373 passed all four required jobs
+  (620 s wall, static FULL 571 s). This is checkpoint evidence, not the prepared 0.38.0
+  SHA's CI.
+- **Kill-power re-measured at this shipped SHA: none (all 979 committed claims not
+  re-proved, #144).**
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head 2fa0d8210e98 surface
+  79f961d6d2fa -- `check-dep-versions` 4/4 receipt 5e787c54c298
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head 2fa0d8210e98 surface
+  79f961d6d2fa -- `check-pack-pin-matcher` 2/2 receipt dc1abd661323
+- Both PARTIAL candidates are head 2fa0d82 plus the then-uncommitted SDK diff (patch
+  6f01d8dc), measured before d25b71e existed; they are not the shipped 0.37.1 bytes and
+  not this SHA.
+- **Bounded forward-open proof.** One synthetic 1.2 SDK-written conversation was selected
+  by exact id, resumed by the 1.3 checkout reader under the same carrier, given one faux
+  turn, and reopened with history and identity preserved. Negative 2/2, writer 17/17,
+  reader 16/16; vendor wire counters 0 and final seals stable; independent review B0/D0. This is not a
+  universal migration/rollback/compaction or cross-version MCP schema certificate. The
+  first fixture attempt was RED and remains preserved. Source and limitations are in
+  [#145](https://github.com/junghan0611/entwurf/issues/145#issuecomment-6208532928); no operational DB was opened for this test.
+- **Host alignment and continuity.** GLG authorized exact global Pi 1.3.0 installation and
+  manually restarted harnesses. Actual host and checkout SDK versions were 1.3.0. The same
+  coordinator garden id/cwd resumed, then exchanged real v2 replies with two existing
+  Claude citizens. After GLG reported SDK compaction complete, self identity and bookmark
+  continuity were observed; SDK internals/vendor prompt ordering were not inspected.
+- **Static/LIVE split, newly approved for this cut.** GLG explicitly approved local LIVE
+  and whole static FULL in the prepared SHA's exact push CI. Local P4/P5-static/M0 FULL
+  are deferred, not passed: the FULL includes Herdr checks prohibited on this operator
+  host. The mutation whole BODY remains a weekly/manual diagnostic, never a release axis.
+- **Local LIVE r1: MUST (non-static 23) PASS=23 FAIL=0 SKIP=0 UNRUN=0; BEHAVIOR PASS=1
+  FAIL=0.** The unchanged release aggregate's non-static MUST steps and its advisory
+  BEHAVIOR step ran once, 2026-10-16 14:00:43–14:05:43 KST, through a one-off stepwise
+  driver whose 24 step lines equal `release_gate`'s at d25b71e (source order, argv, env,
+  cwd and classifiers), stopping on the first MUST red. Candidate: d25b71e plus the four
+  release-metadata files, fingerprint `12fca42c` equal at freeze, before and after.
+  `smoke-codex-fresh-live` ran against an owned app-server in its own session A, separate
+  from the gate session S, with `gpt-5.6-luna` / `openai-codex/gpt-5.6-luna`;
+  `smoke-pi-durable-fresh-live` ran on the host's Pi 1.3.0 and is not repeated as a
+  separate smoke. Receipts: `.tmp-verify/release-0.38.0/live-r1/` (`live.log` b676817c,
+  `steps.SHA256SUMS` c7868c81). This is not a local `release-gate --cut` PASS: the
+  static step did not run locally.
+- **Post-LIVE delta: evidence records and prose docs only.** After the LIVE run,
+  `CHANGELOG.md` and `NEXT.md` took the evidence records, and a separate docs-only commit
+  corrected stale prose in `DELIVERY.md`, `ROADMAP.md`, `VERIFY.md`,
+  `docs/acp-backend-rail.md` and `docs/external-mcp-host.md`. `package.json`,
+  `plugins/herdr/runtime-lock.json`, the lockfile, `run.sh` and all source/carrier bytes
+  equal the LIVE candidate; GLG waived a LIVE re-run for prose-only changes, and the
+  prepared SHA's push CI runs the whole static floor over the final bytes.
+- **Native Claude host doctor:** the operator's `entwurf` bin in clone mode (resolving to
+  this checkout) ran `doctor-meta-bridge` and exited 0 (`meta-bridge doctor: PASS`) after
+  the host transition, with two live record-backed Claude MCP owners and a writer at v3
+  parity. This is not a doctor proof of the 0.38.0 tarball or an installed consumer.
+  Receipt: `.tmp-verify/release-0.38.0/doctor-meta-bridge.txt`.
+- **Prepared exact-SHA CI is owed by this SHA's push run.** All four required jobs
+  (`check`, `install-surface`, `artifact-consumer`, `macos-install-surface`) and the
+  preserved post-CI tarball consumer acceptance remain owed; no tag or publication yet.
+- **Herdr follows core.** The closed `herdr-checkout` verification carrier stays unchanged
+  apart from its dated comment. No plugin manifest version, registry pin or production
+  acquisition authority changes here. Re-pin and real Herdr installation/update/use proof
+  follow the published core 0.38.0 bytes as a separate plugin snapshot; this core LIVE is
+  not that proof.
+
 ## 0.37.1 - 2026-10-16
 
 ### Verification
