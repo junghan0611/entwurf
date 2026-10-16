@@ -28,8 +28,8 @@ evidence split, and its three states must not collapse into "macOS is supported"
 | npm/pnpm | npm is bundled with Node; pnpm is required for source setup | package or source installation |
 | Python 3 | required by `setup`/`install` (project-path normalization + settings writers); `--help`/`check-bridge` stay Python-free | pi/Claude/agy/Copilot/Codex wiring writers |
 | entwurf | global/project-local `@junghanacs/entwurf`, or a source checkout | operator command and garden capability |
-| pi | optional-by-presence, `>=1.2.0 <1.3` — absent is an explicit setup SKIP, below-floor is a named FAIL | ACP provider, control sockets |
-| Native durable (`pi-durable`) | supplied by the Entwurf package (#130): Entwurf's owned app carrier plus the exact 1.2.0 pi SDK set as production dependencies — setup PASS when they verify, a named FAIL otherwise (never SKIP) | the `entwurf pi-durable` contact; native birth/LIVE on this supply surface is a separate release proof (§2b) |
+| pi | optional-by-presence, `>=1.3.0 <1.4` — absent is an explicit setup SKIP, below-floor is a named FAIL | ACP provider, control sockets |
+| Native durable (`pi-durable`) | supplied by the Entwurf package (#130): Entwurf's owned app carrier plus the exact 1.3.0 pi SDK set as production dependencies — setup PASS when they verify, a named FAIL otherwise (never SKIP) | the `entwurf pi-durable` contact; native birth/LIVE on this supply surface is a separate release proof (§2b) |
 | Claude Code | optional, **`>=2.1.217`** — the exec-form hook floor | Claude ACP auth/runtime and mailbox-backed native citizen |
 | GitHub Copilot CLI | optional-by-presence, operator-installed and authenticated — absent is an explicit setup SKIP; detected composes all four units (birth/MCP/receiver/footer) | self-fetch citizen and visible fresh |
 | OMP (`omp`) | optional-by-presence, operator-installed — absent is an explicit setup SKIP; detected composes all four units (birth/MCP/`tools.xdev` setting/receiver) | self-fetch citizen and visible fresh (accepted on one host — see §4b) |
@@ -209,7 +209,7 @@ on Darwin; that is wiring, not a rail receipt. If `pi` is on PATH,
 Install the exact release floor, then wire the project:
 
 ```bash
-npm install -g @earendil-works/pi-coding-agent@1.2.0
+npm install -g @earendil-works/pi-coding-agent@1.3.0
 pi --version
 
 cd ~/entwurf-smoke
@@ -217,7 +217,7 @@ entwurf install .
 pi -e "$(npm root -g)/@junghanacs/entwurf" --list-models entwurf
 ```
 
-The supported range is `>=1.2.0 <1.3`. It is a hard minimum: installing this
+The supported range is `>=1.3.0 <1.4`. It is a hard minimum: installing this
 release onto a 0.83.x pi host upgrades the runtime rather than keeping the older
 minor. A host using only the external MCP bridge can skip pi until it needs a
 control socket; no delivery rail launches a pi process.
@@ -313,7 +313,7 @@ by `entwurf pi` or by registering ordinary Pi's adapter.
 What the Entwurf package supplies:
 
 1. **The pi SDK set** — `@earendil-works/{pi-coding-agent, pi-ai, pi-tui, pi-agent-core,
-   pi-durable, chord, pi-mcp, pi-codemode, pi-telemetry}` at exactly `1.2.0`, plus
+   pi-durable, chord, pi-mcp, pi-codemode, pi-telemetry}` at exactly `1.3.0`, plus
    `proper-lockfile`, as Entwurf's own production dependencies (declared once in
    `pi/pi-durable/overlay/upstream-pin.json` `sdk`). Model data rides the published
    `pi-ai`; there is no catalog copy.
@@ -326,7 +326,7 @@ What the Entwurf package supplies:
    (`pi/pi-durable/carrier-resolver.mjs`), which maps them to the published package's
    own `dist/` as installed — never through a source checkout.
 
-The upstream [library guide](https://github.com/earendil-works/pi/blob/v1.2.0/packages/durable/README.md)
+The upstream [library guide](https://github.com/earendil-works/pi/blob/v1.3.0/packages/durable/README.md)
 and the [experimental app guide](https://github.com/earendil-works/pi/blob/v1.1.0/packages/coding-agent/src/experimental/durable/README.md)
 (last published at v1.1.0) describe what the carrier is. Running the bare upstream app does not attach Entwurf's
 garden contact. Entwurf does not rebuild the controller/model/auth/storage system or
@@ -411,7 +411,7 @@ tree (for example an override that binds pi-durable's `pi-ai` to an older publis
   manifest field; it is a known constraint of supplying both from one package, accepted for 0.32,
   not a claim that every load path is harmless.
 
-The ordinary Pi CLI on PATH is a separate subject (§2, range `>=1.2.0 <1.3`): a host Pi is
+The ordinary Pi CLI on PATH is a separate subject (§2, range `>=1.3.0 <1.4`): a host Pi is
 not needed to run pi-durable, and a host inside the range need not be the same copy as the
 carrier's. Native Pi owns credentials, model settings and durable SQLite sessions; keep them
 in place rather than copying credentials or migrating ordinary Pi transcripts. Native
@@ -610,7 +610,7 @@ as a note rather than a fault.
 
 **entwurf sets no OMP version floor in code, and will not grow one on schedule.** Detection is
 presence-only (`command -v "${OMP_BIN:-omp}"`); there is no `entwurf.ompFloor`, no coherence
-gate, and no exact pin — unlike Node (`engines.node`), pi (`>=1.2.0 <1.3`) and Claude Code
+gate, and no exact pin — unlike Node (`engines.node`), pi (`>=1.3.0 <1.4`) and Claude Code
 (`entwurf.claudeCodeFloor`), each of which has an enforcement point. That asymmetry is a
 decision, not an omission. A floor is the answer to a vendor that fails SILENTLY — Claude Code
 earned one because an older binary validates the exec manifest, drops `args` at runtime, and

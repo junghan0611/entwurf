@@ -3991,7 +3991,7 @@ check_pack() {
 #     which is exactly what property (1)'s `(_|$)` absorbs; all three shapes are fixtures
 #     below so a future suffix change cannot pass vacuously.)
 pack_install_leaked_pi() {
-  grep '^@earendil-works+' | grep -Ev '@1\.2\.0(_|$)' || true
+  grep '^@earendil-works+' | grep -Ev '@1\.3\.0(_|$)' || true
 }
 
 # Matcher self-test on SYNTHETIC lookalikes: a healthy install tree cannot exercise either
@@ -4011,15 +4011,15 @@ check_pack_pin_matcher() {
   # None may leak; the two lookalikes must — a PREFIX-EXTENDED version (`0.86.0-beta.1`,
   # the prerelease shape that an unanchored match would bless) and an off-pin version.
   matcher_probe=$(printf '%s\n' \
-    '@earendil-works+pi-ai@1.2.0' \
-    '@earendil-works+pi-ai@1.2.0_@modelcontextprotocol+sdk@1.29.0_zod@4.3.6' \
-    '@earendil-works+pi-ai@1.2.0_ws@8.21.3' \
-    '@earendil-works+pi-ai@1.2.0_@modelcontextprotocol+sdk@1.29.0_zod@4.3.6__ws@8.21.3_zod@4.3.6' \
-    '@earendil-works+pi-ai@1.2.0-beta.1' \
+    '@earendil-works+pi-ai@1.3.0' \
+    '@earendil-works+pi-ai@1.3.0_@modelcontextprotocol+sdk@1.29.0_zod@4.3.6' \
+    '@earendil-works+pi-ai@1.3.0_ws@8.21.3' \
+    '@earendil-works+pi-ai@1.3.0_@modelcontextprotocol+sdk@1.29.0_zod@4.3.6__ws@8.21.3_zod@4.3.6' \
+    '@earendil-works+pi-ai@1.3.0-beta.1' \
     '@earendil-works+pi-agent-core@0.87.1' | pack_install_leaked_pi)
-  if [ "$matcher_probe" != '@earendil-works+pi-ai@1.2.0-beta.1
+  if [ "$matcher_probe" != '@earendil-works+pi-ai@1.3.0-beta.1
 @earendil-works+pi-agent-core@0.87.1' ]; then
-    fail "[QK:PACK-INSTALL-PIN-MATCHER-BOUNDED] the pin-leak matcher must flag the prefix-extended 1.2.0-beta.1 and the off-pin 0.87.1 lookalikes, and pass 1.2.0 bare or with any measured peer-hash — got: ${matcher_probe:-<nothing leaked>}"
+    fail "[QK:PACK-INSTALL-PIN-MATCHER-BOUNDED] the pin-leak matcher must flag the prefix-extended 1.3.0-beta.1 and the off-pin 0.87.1 lookalikes, and pass 1.3.0 bare or with any measured peer-hash — got: ${matcher_probe:-<nothing leaked>}"
     return 1
   fi
 
@@ -4027,9 +4027,9 @@ check_pack_pin_matcher() {
   # (0.85.0 onward, still true at 0.99.1). An off-pin chord MUST leak; the pinned one must not. A matcher narrowed
   # back to `^@earendil-works+pi-` sees nothing here and dies at this signature.
   matcher_probe=$(printf '%s\n' \
-    '@earendil-works+chord@1.2.0' \
+    '@earendil-works+chord@1.3.0' \
     '@earendil-works+chord@0.87.1' \
-    '@earendil-works+pi-ai@1.2.0' | pack_install_leaked_pi)
+    '@earendil-works+pi-ai@1.3.0' | pack_install_leaked_pi)
   if [ "$matcher_probe" != '@earendil-works+chord@0.87.1' ]; then
     fail "[QK:PACK-INSTALL-PIN-MATCHER-COVERS-CLOSURE] the pin-leak matcher must cover every @earendil-works closure member, not just the pi-* families — an off-pin @earendil-works/chord has to leak (it was a runtime dependency of pi-coding-agent, pi-agent-core, pi-client and pi-protocol — `[측정 2026-09-20]` at 0.86.0, re-measured `[측정 2026-09-22]` at 0.87.0, `[측정 2026-09-23]` at 0.87.1 and `[측정 2026-09-30]` at 0.99.1, where pi-coding-agent adds pi-codemode and pi-mcp beside them; `[측정 2026-10-13]` at 1.2.0 pi-durable alone declares it) — got: ${matcher_probe:-<nothing leaked>}"
     return 1
@@ -4262,7 +4262,10 @@ ORACLE
   # aligned host binary (the pinned version, installed above for L1) must be inside the range.
   # The previous host version is a variable, not a quoted `@pkg@x.y.z` spec: check-dep-versions reads
   # those specs as this repo's install pins, and this one is deliberately off the floor.
-  local host_home host_proj host_old="$box/pd-host-old" host_env=() host_old_ver="1.1.0"
+  local host_home host_proj host_old="$box/pd-host-old" host_env=() host_old_ver="1.2.0"
+  # The range ceiling is the next minor of the pin, derived here rather than retyped at each bump.
+  local pin_minor="${pin_ver#*.}"; pin_minor="${pin_minor%%.*}"
+  local pin_ceiling="${pin_ver%%.*}.$((pin_minor + 1))"
   mkdir -p "$host_old"
   for spec in "${host_specs[@]}"; do host_old_specs+=("${spec%@*}@$host_old_ver"); done
   out=$(cd "$host_old" && npm install "${host_old_specs[@]}" --no-audit --no-fund 2>&1) || {
@@ -4280,7 +4283,7 @@ ORACLE
       fail "[check-pack-install] host $cell: the native pi-durable row must stay PASS whatever the PATH host is:"; echo "$out" | tail -20 | sed 's/^/    /' >&2; return 1
     fi
     if [ "$cell" = old ]; then
-      if [ "$rc" -eq 0 ] || ! grep -q "pi: FAIL — detected pi $host_old_ver is outside the supported range >=$pin_ver <1.3" <<<"$out" || [ -e "$host_proj/.pi" ] || [ -e "$host_home/.pi/agent/settings.json" ]; then
+      if [ "$rc" -eq 0 ] || ! grep -q "pi: FAIL — detected pi $host_old_ver is outside the supported range >=$pin_ver <$pin_ceiling" <<<"$out" || [ -e "$host_proj/.pi" ] || [ -e "$host_home/.pi/agent/settings.json" ]; then
         fail "[QK:PACK-INSTALL-HOST-RANGE-SEPARATE] [check-pack-install] a real pi $host_old_ver host beside the $pin_ver native set must be a named pi FAIL with zero Pi wiring and a non-green setup (rc=$rc):"
         echo "$out" | tail -20 | sed 's/^/    /' >&2
         return 1
@@ -4657,19 +4660,22 @@ _check_pack_install_impl() {
   # (chord dropped), pi-ai {pi-telemetry}, pi-agent-core {pi-ai}, pi-durable {chord, pi-ai,
   # pi-codemode}; all nine are published at 1.2.0
   # (.tmp-verify/141-kickoff/s1a/map-receipts/01-tarballs.txt).
-  echo "[check-pack-install] pnpm add into $tmp (with the aligned 1.2.x SDK + chord + codemode + mcp + durable + typebox)"
+  # `[측정 2026-10-16]` at 1.3.0 the constellation is unchanged: the installed manifests give the
+  # same member edges as at 1.2.0, now every one exact 1.3.0 (upstream #10865), and the consumer
+  # oracle walked 10 member edges with 0 mismatches (.tmp-verify/145-stage1/08-pack-install.log).
+  echo "[check-pack-install] pnpm add into $tmp (with the aligned 1.3.x SDK + chord + codemode + mcp + durable + typebox)"
   local install_log
   install_log=$(cd "$tmp" && pnpm add \
     "$tgz_path" \
-    "@earendil-works/pi-ai@1.2.0" \
-    "@earendil-works/pi-coding-agent@1.2.0" \
-    "@earendil-works/pi-tui@1.2.0" \
-    "@earendil-works/pi-agent-core@1.2.0" \
-    "@earendil-works/pi-telemetry@1.2.0" \
-    "@earendil-works/chord@1.2.0" \
-    "@earendil-works/pi-codemode@1.2.0" \
-    "@earendil-works/pi-mcp@1.2.0" \
-    "@earendil-works/pi-durable@1.2.0" \
+    "@earendil-works/pi-ai@1.3.0" \
+    "@earendil-works/pi-coding-agent@1.3.0" \
+    "@earendil-works/pi-tui@1.3.0" \
+    "@earendil-works/pi-agent-core@1.3.0" \
+    "@earendil-works/pi-telemetry@1.3.0" \
+    "@earendil-works/chord@1.3.0" \
+    "@earendil-works/pi-codemode@1.3.0" \
+    "@earendil-works/pi-mcp@1.3.0" \
+    "@earendil-works/pi-durable@1.3.0" \
     "typebox@latest" \
     --ignore-workspace --ignore-scripts 2>&1) || {
     fail "[check-pack-install] pnpm add failed:"
@@ -4685,11 +4691,11 @@ _check_pack_install_impl() {
   local leaked_pi
   leaked_pi=$(ls "$tmp/node_modules/.pnpm" 2>/dev/null | pack_install_leaked_pi)
   if [ -n "$leaked_pi" ]; then
-    fail "[check-pack-install] UNVERIFIED pi runtime resolved into the install tree (expected only 1.2.0):"
+    fail "[check-pack-install] UNVERIFIED pi runtime resolved into the install tree (expected only 1.3.0):"
     printf '%s\n' "$leaked_pi" | sed 's/^/    /' >&2
     return 1
   fi
-  echo "[check-pack-install] pi runtime tree pin verified: every @earendil-works package is 1.2.0 (chord and pi-durable included)"
+  echo "[check-pack-install] pi runtime tree pin verified: every @earendil-works package is 1.3.0 (chord and pi-durable included)"
 
   # Resolve the installed package.json and confirm pi.extensions
   # arrived intact. If pi.extensions is empty or missing, the

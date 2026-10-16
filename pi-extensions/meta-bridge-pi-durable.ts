@@ -318,7 +318,7 @@ export interface PiDurableRoots {
 // ---------------------------------------------------------------------------
 // Durable surface, typed NARROWLY and locally — read at pi-durable 1.0.2 @cd32f77 (#129,
 // `harness/types.ts`; historical coordinates, not re-anchored here). The current supply is the
-// carrier emitted from Entwurf's owned source (pi/pi-durable/src, #141) against the 1.2.0 SDK set
+// carrier emitted from Entwurf's owned source (pi/pi-durable/src, #141) against the 1.3.0 SDK set
 // `pi/pi-durable/overlay/upstream-pin.json` names (origin `abe508e`). `[read 2026-10-13]` at
 // v1.2.0 one shape typed below moved: `ToolExecutionResult.content` is now `output`, beside the new
 // `structuredOutput` (`harness/types.ts`, its CHANGELOG's breaking changes). An omitted `output`
