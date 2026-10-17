@@ -1177,14 +1177,14 @@
 			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
 		},
 		{
-			"claim": "PI-DURABLE-COMPACTION-WAITS",
-			"title": "the Harness settings hand the SDK pi's compaction settings alone: its default background policy summarizes beside a running turn instead of the turn waiting",
+			"claim": "PI-DURABLE-COMPACTION-SDK-BACKGROUND",
+			"title": "the Harness settings force background compaction off again: past the SDK's background threshold the turn asks for no summary beside it",
 			"subject": "pi/pi-durable/carrier/harness-setup.js",
-			"find": ["\t\t\treturn { ...settingsManager.getCompactionSettings(), backgroundTokens: 0 };"],
-			"replace": ["\t\t\treturn settingsManager.getCompactionSettings();"],
+			"find": ["\t\t\treturn settingsManager.getCompactionSettings();"],
+			"replace": ["\t\t\treturn { ...settingsManager.getCompactionSettings(), backgroundTokens: 0 };"],
 			"gate": ["bash", "run.sh", "check-pi-durable-carrier"],
 			"timeoutSeconds": 300,
-			"signature": "[QK:PI-DURABLE-COMPACTION-WAITS]",
+			"signature": "[QK:PI-DURABLE-COMPACTION-SDK-BACKGROUND]",
 			"signatureSource": "pi-extensions/lib/pi-durable-carrier.test.ts",
 			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
 		},

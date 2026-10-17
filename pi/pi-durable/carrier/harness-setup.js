@@ -34,10 +34,10 @@ export function createHarnessSettings(settingsManager                 )         
 				...(provider.maxRetries === undefined ? {} : { maxRetries: provider.maxRetries }),
 			};
 		},
-		// The reference app waits for a compaction instead of summarizing beside the running turn (#143): no background
-		// compaction. Threshold, manual and overflow compaction stay the SDK's, on pi's own compaction settings.
+		// Pi's own compaction settings, which carry no background policy: the SDK supplies its default background,
+		// threshold, overflow and manual compaction (#146; #143 had forced background compaction off).
 		get compaction() {
-			return { ...settingsManager.getCompactionSettings(), backgroundTokens: 0 };
+			return settingsManager.getCompactionSettings();
 		},
 		get retry() {
 			return settingsManager.getRetrySettings();

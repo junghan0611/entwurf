@@ -82,8 +82,8 @@
 			{
 				"name": "harness-setup.js",
 				"source": "pi/pi-durable/src/experimental/durable/harness-setup.ts",
-				"blob": "36a622ec6d5dccda828ffaceaf74ce8ec241e39d",
-				"sha256": "efb06ae25258fbbab5b28f8a9bbb50956c7ebfd77a5ed23b065706f662e70ba3"
+				"blob": "e8561809321ce8833a13e3757c172f4e38faabcc",
+				"sha256": "eb1158030a8ab95187a4fdd5e7b90816a7995e5f446d09a8184d4f5007e7ac5f"
 			},
 			{
 				"name": "prompt.js",

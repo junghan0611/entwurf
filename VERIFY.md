@@ -233,8 +233,8 @@ are the visible-terminal and consumer subjects. The 1.2 bootstrap child also obs
 reopening the chosen session and cancelling to nothing (#143). Two more sandboxed children reach the
 reference app's settings and prompt mapping: one drives the real bootstrap against a loopback
 WebSocket Responses endpoint, whose received frames decide the forwarded transport and its
-continuation and the reference compaction policy (no background summary; blocking and overflow
-kept, #143); the other renders the carrier prompt's skills section with no model, against a fixture
+continuation and the reference compaction policy (the SDK's background summary beside the turn, held on the
+wire while the turn answers; blocking and overflow kept, #146); the other renders the carrier prompt's skills section with no model, against a fixture
 of both settings scopes, an absolute entry, a same-name pair and a wrong-base decoy.
 `check-pi-runtime-version` asks the
 same installed verifier (`check-pi-durable-beside`) whether this checkout resolves exactly the pinned SDK set (the native set; the PATH

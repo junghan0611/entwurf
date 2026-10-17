@@ -924,9 +924,8 @@ const fresh = { model: { provider: "faux", model: "scripted" } };
 }
 
 // 4. A compaction whose summarization fails, kept on screen as the conversation keeps it. First the SDK's own
-//    threshold compaction, which a long input past the blocking threshold makes the turn wait for (the reference app
-//    runs no background compaction, #143): the turn ends without asking the model. Then the operator's /compact, which
-//    also has its own notice.
+//    threshold compaction, which a long input past the blocking threshold makes the turn wait for: the turn ends
+//    without asking the model. Then the operator's /compact, which also has its own notice.
 {
 	// Only the summarization request is refused.
 	const answer = (text) => (transcript) =>
@@ -1353,7 +1352,7 @@ const report = { waits: {}, forwarded: {}, frames: [], closes: [], unexpected: [
 	manager.setTransport("websocket");
 	report.forwarded.changed = [before, settings.stream.transport];
 }
-// ...and pi's own compaction settings with background compaction off (#143 B), also read at every use.
+// ...and pi's own compaction settings, which carry no background policy (#146), also read at every use.
 {
 	const compactionOf = (settings) => createHarnessSettings(SettingsManager.inMemory(settings)).compaction;
 	const manager = SettingsManager.inMemory({ compaction: { enabled: false } });
@@ -1413,6 +1412,9 @@ const answerRead = (sock) => {
 };
 // A context overflow as the Responses API reports one, after the response started (so no transport fallback).
 const refused = new Set();
+// The background summary of the policy-below turn, held on the wire until the fixture releases it, so the turn's own
+// answer can be observed while its summary is still unanswered.
+let heldSummary;
 const refuseOverflow = (sock) => {
 	const id = "resp_" + ++responses;
 	send(sock, { type: "response.created", response: { id, status: "in_progress" } });
@@ -1444,7 +1446,12 @@ wss.on("connection", (sock) => {
 				summary: String(body.instructions ?? "").startsWith("You are a context summarization assistant"),
 				input: shorten(input),
 			};
-			if (frame.summary) frame.response = answerText(sock, "WIRE-SUMMARY");
+			if (frame.summary && phase === "policy-below") {
+				frame.held = true;
+				heldSummary = () => {
+					frame.response = answerText(sock, "WIRE-SUMMARY");
+				};
+			} else if (frame.summary) frame.response = answerText(sock, "WIRE-SUMMARY");
 			else if (marker === "OVERFLOW-ONCE" && !refused.has(marker)) {
 				refused.add(marker);
 				frame.refused = true;
@@ -1551,9 +1558,9 @@ try {
 		await control.close();
 	}
 
-	// 5. No background compaction (#143 B), on a 60000-token window with pi's default reserve (blocking above 43616
-	//    tokens; the SDK's default background policy would start 32768 below that). The SDK estimates a context from
-	//    the last answer's usage plus the text after it, so each input's length decides which threshold it crosses.
+	// 5. The SDK's own compaction policy (#146), on a 60000-token window with pi's default reserve (blocking above 43616
+	//    tokens; the SDK's default background policy starts 32768 below that). The SDK estimates a context from the
+	//    last answer's usage plus the text after it, so each input's length decides which threshold it crosses.
 	const small = await openDurableCitizen({ model: { provider: "wire-codex", model: "small" }, cwd: project("policy"), contact: roots("policy") });
 	try {
 		const { view } = small.durable;
@@ -1568,6 +1575,24 @@ try {
 		report.policy.seed = { users: kinds.filter((kind) => kind === "pi.user").length, assistants: kinds.filter((kind) => kind === "pi.assistant").length };
 		phase = "policy-below";
 		if (warmed && (await turn(small, "policy: past background, below blocking", "BELOW-BLOCKING " + "b".repeat(80000), "ACK BELOW-BLOCKING"))) {
+			// The turn has answered. The SDK's background summary rides its own connection and can reach the wire after
+			// that answer, so while such a compaction is running, wait for its request to be held (none runs when the
+			// background policy is off, and then nothing is waited for).
+			if ((live().compactions ?? []).some((status) => !status.blocking)) {
+				await until("policy: background summary held", () => typeof heldSummary === "function");
+			}
+			// Observed after the turn's answer and before the held summary is answered.
+			report.policy.answered = {
+				held: typeof heldSummary === "function",
+				running: (live().compactions ?? []).map((status) => ({ reason: status.reason, blocking: status.blocking })),
+				compactions: compactions(),
+			};
+		}
+		heldSummary?.();
+		heldSummary = undefined;
+		// Fixture settling only, before the next phase: let the SDK place the released summary.
+		if (report.policy.answered?.held) {
+			await until("policy: background placed", () => live().compactions === undefined && compactions().length > 0);
 			report.policy.below = { summaries: summaries(), compactions: compactions(), running: live().compactions ?? null, failure: live().compactionFailure ?? null };
 		}
 		phase = "policy-blocking";
@@ -1599,6 +1624,7 @@ interface WireFrame {
 	prev: string | null;
 	summary: boolean;
 	refused?: boolean;
+	held?: boolean;
 	input: Record<string, unknown>[];
 	response: string;
 }
@@ -1624,6 +1650,7 @@ interface WireReport {
 	compactionPlaced?: boolean;
 	policy: {
 		seed?: { users: number; assistants: number };
+		answered?: { held: boolean; running: { reason: string; blocking: boolean }[]; compactions: (string | null)[] };
 		below?: { summaries: number; compactions: (string | null)[]; running: unknown; failure: unknown };
 		blocking?: { compactions: (string | null)[] };
 		overflow?: { compactions: (string | null)[] };
@@ -1756,24 +1783,33 @@ describe("the stream transport on the wire, through the real bootstrap (#143)", 
 		expect(userTextOf(delta?.input[0])).toContain("AFTER-RECONNECT-TWO");
 	});
 
-	it("the owned Harness compaction settings are pi's own with background compaction off, read again at every use", () => {
+	it("the owned Harness compaction settings are pi's own, with no background policy of the app's, read again at every use", () => {
 		const compaction = report?.compactionSettings;
-		expect(compaction?.unset).toEqual({ ...compaction?.pi, backgroundTokens: 0 });
-		expect(compaction?.chosen).toEqual({
-			enabled: false,
-			reserveTokens: 1234,
-			keepRecentTokens: 567,
-			backgroundTokens: 0,
-		});
+		expect(compaction?.unset).toEqual(compaction?.pi);
+		expect(compaction?.chosen).toEqual({ enabled: false, reserveTokens: 1234, keepRecentTokens: 567 });
+		expect(compaction?.unset).not.toHaveProperty("backgroundTokens");
 		expect(compaction?.changed).toEqual([false, true]);
 	});
 
-	it("[QK:PI-DURABLE-COMPACTION-WAITS] past the SDK's background threshold a turn asks for no summary beside it; past the blocking threshold it waits for the summary and then asks with it", () => {
-		// The turn below has a finished turn before it, so a summary would have had something to summarize.
+	it("[QK:PI-DURABLE-COMPACTION-SDK-BACKGROUND] past the SDK's background threshold the turn answers while its summary is still unanswered beside it; past the blocking threshold it waits for the summary and then asks with it", () => {
+		// The turn below has a finished turn before it, so a summary has something to summarize.
 		expect(report?.policy.seed).toEqual({ users: 1, assistants: 1 });
 		expect((report?.frames ?? []).filter((f) => f.phase === "policy-warmup").map((f) => f.summary)).toEqual([false]);
-		expect(report?.policy.below).toEqual({ summaries: 0, compactions: [], running: null, failure: null });
-		expect((report?.frames ?? []).filter((f) => f.phase === "policy-below").map((f) => f.summary)).toEqual([false]);
+		// Below blocking: one summary request and one turn request. The summary is held on the wire, and the turn has
+		// answered with the background compaction still running and nothing placed: the turn did not wait for it.
+		const below = (report?.frames ?? []).filter((f) => f.phase === "policy-below");
+		expect(below.filter((f) => f.summary).map((f) => f.held)).toEqual([true]);
+		const asked = below.filter((f) => !f.summary);
+		expect(asked).toHaveLength(1);
+		expect(asked[0]?.input.some((item) => userTextOf(item).includes("WIRE-SUMMARY"))).toBe(false);
+		expect(userTextOf(asked[0]?.input.at(-1))).toContain("BELOW-BLOCKING");
+		expect(report?.policy.answered).toEqual({
+			held: true,
+			running: [{ reason: "threshold", blocking: false }],
+			compactions: [],
+		});
+		// Released, the SDK places that summary.
+		expect(report?.policy.below).toEqual({ summaries: 1, compactions: ["threshold"], running: null, failure: null });
 		const blocking = (report?.frames ?? []).filter((f) => f.phase === "policy-blocking");
 		expect(blocking.map((f) => f.summary)).toEqual([true, false]);
 		expect(blocking[1]?.input.some((item) => userTextOf(item).includes("WIRE-SUMMARY"))).toBe(true);
