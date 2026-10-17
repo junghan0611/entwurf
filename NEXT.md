@@ -10,15 +10,16 @@
   - same-SHA 수동 `qualify=true` whole BODY. **green 전 tag 금지.**
   - 후보 pack과 container acceptance
   - tag, GitHub Release(BODY 결과는 evidence appendix)
-- [ ] **5. npm publish(GLG 전용) → U3 registry proof.** Herdr snapshot은 이번 범위가 아니다(runtime-lock 0.38.0 유지).
+- [ ] **5. npm publish(GLG 전용) → U3 registry proof.** Herdr snapshot은 이번 범위가 아니다. runtime-lock은 미발행 후보를 위해 closed `herdr-checkout`으로 돌렸고, npm pin은 publish 뒤 별도 snapshot에서 다시 넣는다. 별도 0.38.1 snapshot 전까지 Herdr 플러그인을 main에서 재설치하거나 update하지 않는다. npm으로 활성화된 기존 호스트가 source를 전환하면 이름 있는 refusal(`activation-artifact-source-drifted`)로 끝나고 자동 migration은 없다. Herdr가 자동으로 re-fetch하는지는 미측정이다.
 
 현재 좌표: 1–3 완료 → 4 make 대기(prepare checkpoint).
 
 # NOW
 
 - **0.38.1 증거(CHANGELOG `## 0.38.1`이 owning record):**
-  - 로컬 LIVE r1: MUST(non-static) 23/23, BEHAVIOR 1/1. 2026-10-17 15:11–15:16, 영수증 `.tmp-verify/release-0.38.1/live-r1/`.
-  - owned Codex app-server: 기동부터 TERM 종료까지 `.tmp-verify/release-0.38.1/codex-server/`. 첫 tee-pipeline 시도는 `attempt0-pipeline/`에 남겼다.
+  - 첫 prepared SHA `c90b5bf`는 push run 39009471179에서 RED였다(`runtime-lock-incoherent`). 그 SHA의 LIVE r1(23/23)과 함께 역사로 남는다. 수선: lock을 closed `herdr-checkout`으로 되돌림, README와 CHANGELOG 정정(GLG ok, 검수 ee20b5 B0/D2 → 보정).
+  - 수선 후보 LIVE r2는 RED였다(mux step의 pi 첫 턴 vendor "Codex error" → callback 300s timeout). GLG가 1회 재측정을 승인했고, 같은 후보로 돌린 **LIVE r3는 MUST 23/23, BEHAVIOR 1/1**이다. 예외와 continuation driver는 쓰지 않았다. 영수증은 `.tmp-verify/release-0.38.1/live-r{2,3}/`.
+  - owned Codex app-server: LIVE마다 새로 기동하고 TERM으로 종료했다. 기록은 `.tmp-verify/release-0.38.1/codex-server{,-r2,-r3}/`이고, 첫 tee-pipeline 시도는 `codex-server/attempt0-pipeline/`에 남겼다.
   - P9 census는 report만 했다. reparented holder 1개는 보호 대상 Emacs 3364025다.
   - 로컬 `check:full`은 운영 Herdr 금지 때문에 돌리지 않았고 PASS로 세지 않는다. prepared SHA의 push CI에 넘긴다.
 - **BODY:** 이번 0.38.1 최종 SHA에서 CI `qualify=true`로 1회 돌린다. #142 예약을 앞당긴 것이고, 미래 #142 SHA의 증거가 아니다.

@@ -456,14 +456,15 @@ read. Every field the provider attached is shown, in sorted key order.
     named red (`herdr-integration-not-current`) until you run `herdr integration install claude`
     again. In the measured 0.9.4-seeded private sandbox, the reinstall changed only the hook's version
     line; the pi extension and the Claude settings stayed byte-identical.
-- **Pi `>=1.3.0 <1.4`** for the runtime this plugin acquires (core 0.38.0). A host still on Pi 1.2
+- **Pi `>=1.3.0 <1.4`** for the runtime this plugin acquires. A host still on Pi 1.2
   is refused by name (`outside the supported range`) at activation, the same check `entwurf setup`
   applies, and no Pi settings are written. Upgrade Pi to 1.3 first, then install or reinstall the
   plugin.
-- **For the install-time build:** `git`, `node` >= 24, `npm`, and network access for the locked
-  registry artifact, in an Entwurf-owned XDG npm cache reclaimed by `herdr-plugin-deactivate`. You do
-  **not** clone Entwurf or run `npm install`; the build acquires and integrity-checks the exact npm
-  artifact its committed lock names.
+- **For the install-time build:** `git`, `node` >= 24, `npm`, and, for an npm lock, network access
+  for the locked registry artifact, in an Entwurf-owned XDG npm cache reclaimed by
+  `herdr-plugin-deactivate`. You do **not** clone Entwurf or run `npm install`; the build acquires
+  exactly what its committed lock names: the npm source fetches and integrity-checks the registry
+  tarball, and the checkout source packs the exact Herdr checkout commit.
 - **For the pane:** nothing, on a host this plugin activated — the pane falls back to the runtime the
   certified activation ledger names. `ENTWURF_BIN` (absolute) and then `entwurf` on `PATH` are still
   honoured first and always win; the ledger is consulted only when you have set neither.

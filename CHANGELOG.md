@@ -38,21 +38,46 @@ All notable changes to this project will be documented here. Format follows [Kee
 - **Static/LIVE split.** Local P4/M0 `check:full` is not run on this operator host (its FULL
   includes Herdr checks prohibited here) and is not counted as passed: the whole static
   floor is owed to this prepared SHA's exact push CI.
-- **Local LIVE r1: MUST (non-static 23) PASS=23 FAIL=0 SKIP=0 UNRUN=0; BEHAVIOR PASS=1
-  FAIL=0.** The release aggregate's non-static MUST steps and its advisory BEHAVIOR step ran
-  once, 2026-10-17 15:11:01-15:15:47 KST, through the 0.38.0 stepwise driver. Its step lines
-  are unchanged, and `run.sh` is unchanged since d25b71e. Candidate: 9229452 plus
-  `CHANGELOG.md`, `NEXT.md` and `package.json`; the fingerprint was equal at freeze, before
-  and after. `smoke-codex-fresh-live` ran against an owned app-server in its own session A,
-  separate from gate session S, with `gpt-5.6-luna` / `openai-codex/gpt-5.6-luna`; the
-  server was stopped by TERM afterwards. Receipts: `.tmp-verify/release-0.38.1/live-r1/`
-  (`live.log` 3ce295e1, `steps.SHA256SUMS` 5a18e7da). This is not a local
+- **Earlier LIVE r1 (history of the RED SHA c90b5bf, not this release's LIVE): MUST
+  (non-static 23) PASS=23 FAIL=0 SKIP=0 UNRUN=0; BEHAVIOR PASS=1 FAIL=0.** It ran once on
+  2026-10-17 15:11:01-15:15:47 KST through the 0.38.0 stepwise driver. Its step lines are
+  unchanged, and `run.sh` is unchanged since d25b71e. Candidate: 9229452 plus `CHANGELOG.md`,
+  `NEXT.md` and `package.json`, which still carried the 0.38.0 npm runtime lock; the
+  fingerprint was equal at freeze, before and after. `smoke-codex-fresh-live` ran against an
+  owned app-server in its own session A, with `gpt-5.6-luna` / `openai-codex/gpt-5.6-luna`,
+  stopped by TERM afterwards. Receipts: `.tmp-verify/release-0.38.1/live-r1/` (`live.log`
+  3ce295e1, `steps.SHA256SUMS` 5a18e7da). It was not a local `release-gate --cut` PASS.
+- **Herdr follows core.** `plugins/herdr/runtime-lock.json` returns to the closed
+  `herdr-checkout` source for this unpublished candidate, as at the 0.37.1 and 0.38.0 cuts:
+  an npm lock must name the checkout's own version (`certifyLockCoherence`), and 0.38.1 has
+  no registry bytes yet. No plugin manifest version or registry pin changes; the npm pin
+  returns only in a separate Herdr snapshot after the operator publishes 0.38.1.
+- **First prepared SHA was RED.** `c90b5bf` kept the 0.38.0 npm lock; its push run
+  39009471179 failed `check` at `check-herdr-plugin-build` `[QK:HPB-DEFAULT-LOCK-READ]`
+  (`runtime-lock-incoherent`), with the other three jobs green. That gate is prohibited on
+  this operator host, so it first showed in CI. The RED run and that SHA's LIVE r1 stay as
+  history.
+- **Repaired candidate LIVE r2 (RED, kept as history): MUST PASS=4 FAIL=1 UNRUN=19;
+  BEHAVIOR not reached.** It ran 15:31:58-15:37:27 KST on c90b5bf plus `CHANGELOG.md`,
+  `NEXT.md`, `plugins/herdr/README.md` and `plugins/herdr/runtime-lock.json`. Step
+  `smoke-mux-lifecycle-live` failed. In its pi-native arm, the sibling's first model turn
+  (`openai-codex/gpt-6.1-sol:low`) showed "Codex error: An error occurred while processing
+  your request", no nonce callback came, and the gate gave up after 300 s; the claude-code
+  arm passed. Whether that error is transient was not measured. Receipts:
+  `.tmp-verify/release-0.38.1/live-r2/` (`LIVE-R2-RED.md` 96070f72).
+- **Local LIVE r3, this release's LIVE: MUST (non-static 23) PASS=23 FAIL=0 SKIP=0 UNRUN=0;
+  BEHAVIOR PASS=1 FAIL=0.** It ran once, 15:41:19-15:45:47 KST, on the same frozen repaired
+  candidate as r2 (fingerprint equal at freeze, before and after), with the same driver and
+  models. GLG approved this single re-measurement and allowed a repeat of that one vendor
+  failure to be recorded and continued past; it did not repeat, so the exception and its
+  continuation driver were not used. Each LIVE ran against a fresh owned app-server in its
+  own session A, stopped by TERM afterwards. Receipts: `.tmp-verify/release-0.38.1/live-r3/`
+  (`live.log` 929b7952, `steps.SHA256SUMS` 99f87db2). It was not a local
   `release-gate --cut` PASS: the static step did not run locally.
-- **Post-LIVE delta: evidence records only.** After the LIVE run, `CHANGELOG.md` and
-  `NEXT.md` took these evidence records; `package.json`, the lockfile, `run.sh` and all
-  source/carrier bytes equal the LIVE candidate.
-- **Herdr follows core.** No plugin manifest, runtime-lock or registry pin changes here; the
-  runtime lock stays at the published 0.38.0.
+- **Post-LIVE delta: evidence records only.** After r3, `CHANGELOG.md` and `NEXT.md` took
+  these records; `package.json`, the lockfile, `run.sh`, `plugins/herdr/` and all
+  source/carrier bytes equal the r3 candidate. The repaired prepared SHA's exact push CI is
+  owed.
 
 ## v2026.10.16-herdr.0.38.0 — Herdr Entwurf plugin 0.38.0
 
