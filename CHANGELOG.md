@@ -4,6 +4,56 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+## 0.38.1 - 2026-10-17
+
+### pi-durable
+
+- **Background compaction returns to the SDK default (#146).** The owned Harness settings
+  hand the SDK Pi's compaction settings unchanged instead of forcing `backgroundTokens: 0`
+  (#143, 0.37.0-0.38.0), so the SDK's own default background policy applies again; no
+  Entwurf copy of its value exists. Past the background threshold a summary runs beside the
+  turn, which answers without waiting for it; threshold, overflow and manual compaction are
+  unchanged. Transport and the other Harness mappings are unchanged.
+- **Limits.** A process started from 0.37.0-0.38.0 keeps the forced 0 it imported until the
+  operator restarts it. The beside proof is a faux scheduling proof on a loopback wire, not
+  live GPT latency, billing or overload evidence; thresholds for a given window are
+  predictions from the SDK's policy, not measurements. `backgroundTokens` has no operator
+  tuning entry, and Pi's per-model compaction overrides are not applied by the app.
+- **Use native capabilities; refuse what a harness lacks.** `docs/durable-native-support.md`
+  now states the receive-side principle with the Pi / pi-durable contrast and maps which
+  layer decides each Harness setting.
+
+### Release boundary and verification
+
+- **Implementation commits.** `58c4d0f` (principle doc) and `9229452` (#146 source, carrier,
+  pin, proof, mutant, docs). Coordinator independent review B0/D0 after one amendment;
+  additional independent review (ee20b5) B0/D0/O4.
+- **Earlier-candidate PARTIAL (not this SHA):** `["bash","run.sh","check-pi-durable-carrier"]`
+  30/30 killed, control ok, on the uncommitted amendment-1 surface (worktree diff
+  `fc146d97`, head beb5925), receipt seal `7906a9c0d88d`; the other 949 committed claims
+  not run there.
+- **Kill-power at this SHA: not yet measured.** The final same-SHA manual `qualify=true`
+  whole BODY is required before the tag; its result is recorded in the #146 ledger and the
+  GitHub release, not in this frozen text.
+- **Static/LIVE split.** Local P4/M0 `check:full` is not run on this operator host (its FULL
+  includes Herdr checks prohibited here) and is not counted as passed: the whole static
+  floor is owed to this prepared SHA's exact push CI.
+- **Local LIVE r1: MUST (non-static 23) PASS=23 FAIL=0 SKIP=0 UNRUN=0; BEHAVIOR PASS=1
+  FAIL=0.** The release aggregate's non-static MUST steps and its advisory BEHAVIOR step ran
+  once, 2026-10-17 15:11:01-15:15:47 KST, through the 0.38.0 stepwise driver. Its step lines
+  are unchanged, and `run.sh` is unchanged since d25b71e. Candidate: 9229452 plus
+  `CHANGELOG.md`, `NEXT.md` and `package.json`; the fingerprint was equal at freeze, before
+  and after. `smoke-codex-fresh-live` ran against an owned app-server in its own session A,
+  separate from gate session S, with `gpt-5.6-luna` / `openai-codex/gpt-5.6-luna`; the
+  server was stopped by TERM afterwards. Receipts: `.tmp-verify/release-0.38.1/live-r1/`
+  (`live.log` 3ce295e1, `steps.SHA256SUMS` 5a18e7da). This is not a local
+  `release-gate --cut` PASS: the static step did not run locally.
+- **Post-LIVE delta: evidence records only.** After the LIVE run, `CHANGELOG.md` and
+  `NEXT.md` took these evidence records; `package.json`, the lockfile, `run.sh` and all
+  source/carrier bytes equal the LIVE candidate.
+- **Herdr follows core.** No plugin manifest, runtime-lock or registry pin changes here; the
+  runtime lock stays at the published 0.38.0.
+
 ## v2026.10.16-herdr.0.38.0 — Herdr Entwurf plugin 0.38.0
 
 A separate Herdr plugin snapshot, not another core release: core package 0.38.0 and its
