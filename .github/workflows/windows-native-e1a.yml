@@ -1,0 +1,248 @@
+name: windows-native-e1a (experimental)
+
+# #78 E1a — official Win32 on-handle record read, owned disposable fixture only. EXPERIMENTAL,
+# non-voting (the release oracle reads only ci.yml). Not product supply, not an O_NOFOLLOW
+# replacement acceptance and not a citizen (U1): no-hang, other reparse tags, ancestors and
+# races are UNPROVED here. No checkout, install, auth, model or network beyond setup-node.
+
+on:
+  push:
+    branches: ['feat/78-windows-native-probe']
+    paths: ['.github/workflows/windows-native-e1a.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  e1a-onhandle-read:
+    runs-on: windows-2025
+    timeout-minutes: 10
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.18.1
+
+      - name: write the E1a fixture sources (LF, one final newline; hashes must match)
+        shell: pwsh
+        run: |
+          $D = Join-Path $env:RUNNER_TEMP 'e1a-src'
+          New-Item -ItemType Directory -Force -Path $D | Out-Null
+          $e1a_onhandle_cs = @'
+          using System;
+          using System.Runtime.InteropServices;
+          using Microsoft.Win32.SafeHandles;
+          public class E1aResult {
+            public string Decision { get; set; }
+            public int Win32Error { get; set; }
+            public uint FileType { get; set; }
+            public string Attributes { get; set; }
+            public string ReparseTag { get; set; }
+            public string VolumeSerial { get; set; }
+            public string FileIndex { get; set; }
+            public string ContentBase64 { get; set; }
+          }
+          public static class E1a {
+            const uint GENERIC_READ = 0x80000000, SHARE_ALL = 7, OPEN_EXISTING = 3;
+            const uint FLAG_OPEN_REPARSE_POINT = 0x00200000, FLAG_BACKUP_SEMANTICS = 0x02000000;
+            const uint ATTR_DIRECTORY = 0x10, ATTR_REPARSE_POINT = 0x400, FILE_TYPE_DISK = 1;
+            const int FileAttributeTagInfo = 9;
+            [StructLayout(LayoutKind.Sequential)] struct TagInfo { public uint Attributes; public uint ReparseTag; }
+            [StructLayout(LayoutKind.Sequential)] struct ByHandle {
+              public uint Attributes, C1, C2, A1, A2, W1, W2, VolumeSerial, SizeHigh, SizeLow, Links, IndexHigh, IndexLow;
+            }
+            [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+            static extern SafeFileHandle CreateFileW(string name, uint access, uint share, IntPtr sa, uint disposition, uint flags, IntPtr template);
+            [DllImport("kernel32.dll", SetLastError = true)] static extern uint GetFileType(SafeFileHandle h);
+            [DllImport("kernel32.dll", SetLastError = true)] static extern bool GetFileInformationByHandle(SafeFileHandle h, out ByHandle info);
+            [DllImport("kernel32.dll", SetLastError = true)] static extern bool GetFileInformationByHandleEx(SafeFileHandle h, int cls, out TagInfo info, uint size);
+            [DllImport("kernel32.dll", SetLastError = true)] static extern bool ReadFile(SafeFileHandle h, byte[] buf, uint n, out uint read, IntPtr ov);
+            public static E1aResult Probe(string path) {
+              var r = new E1aResult();
+              using (SafeFileHandle h = CreateFileW(path, GENERIC_READ, SHARE_ALL, IntPtr.Zero, OPEN_EXISTING, FLAG_OPEN_REPARSE_POINT | FLAG_BACKUP_SEMANTICS, IntPtr.Zero)) {
+                if (h.IsInvalid) { r.Decision = "open-failed"; r.Win32Error = Marshal.GetLastWin32Error(); return r; }
+                r.FileType = GetFileType(h);
+                int typeError = Marshal.GetLastWin32Error();
+                ByHandle bh;
+                if (!GetFileInformationByHandle(h, out bh)) { r.Decision = "harness-error:by-handle"; r.Win32Error = Marshal.GetLastWin32Error(); return r; }
+                TagInfo ti;
+                if (!GetFileInformationByHandleEx(h, FileAttributeTagInfo, out ti, (uint)Marshal.SizeOf(typeof(TagInfo)))) { r.Decision = "harness-error:tag-info"; r.Win32Error = Marshal.GetLastWin32Error(); return r; }
+                r.Attributes = "0x" + ti.Attributes.ToString("X8");
+                r.ReparseTag = "0x" + ti.ReparseTag.ToString("X8");
+                r.VolumeSerial = bh.VolumeSerial.ToString();
+                r.FileIndex = (((ulong)bh.IndexHigh << 32) | bh.IndexLow).ToString();
+                if (r.FileType != FILE_TYPE_DISK) { r.Decision = "refused-nonregular-type"; if (r.FileType == 0) r.Win32Error = typeError; return r; }
+                if ((ti.Attributes & ATTR_REPARSE_POINT) != 0) { r.Decision = "refused-reparse"; return r; }
+                if ((ti.Attributes & ATTR_DIRECTORY) != 0) { r.Decision = "refused-nonregular-directory"; return r; }
+                var all = new System.IO.MemoryStream();
+                var buf = new byte[4096];
+                for (;;) {
+                  uint got;
+                  if (!ReadFile(h, buf, (uint)buf.Length, out got, IntPtr.Zero)) { r.Decision = "harness-error:read"; r.Win32Error = Marshal.GetLastWin32Error(); return r; }
+                  if (got == 0) break;
+                  all.Write(buf, 0, (int)got);
+                  if (all.Length > 65536) { r.Decision = "harness-error:over-cap"; return r; }
+                }
+                r.Decision = "read";
+                r.ContentBase64 = Convert.ToBase64String(all.ToArray());
+                return r;
+              }
+            }
+          }
+          '@
+          [IO.File]::WriteAllText((Join-Path $D 'e1a-onhandle.cs'), ($e1a_onhandle_cs -replace "`r`n", "`n") + "`n")
+          $e1a_probe_ps1 = @'
+          param([Parameter(Mandatory)][string]$Path)
+          # E1a on-handle read (fixture only, not product supply). One CreateFileW handle with
+          # OPEN_REPARSE_POINT | BACKUP_SEMANTICS; type and tag are decided on that handle, and only a
+          # regular non-reparse disk file is read through the same handle. One JSON line to stdout.
+          $ErrorActionPreference = 'Stop'
+          Add-Type -Path (Join-Path (Split-Path -Parent $PSCommandPath) 'e1a-onhandle.cs')
+          [E1a]::Probe($Path) | ConvertTo-Json -Compress
+          '@
+          [IO.File]::WriteAllText((Join-Path $D 'e1a-probe.ps1'), ($e1a_probe_ps1 -replace "`r`n", "`n") + "`n")
+          $e1a_observer_mjs = @'
+          // E1a independent static observer: a different runtime (Node/libuv) reports each fixture
+          // path's own identity (lstat) and its followed identity (stat). It never reads file bytes.
+          import fs from "node:fs";
+          import path from "node:path";
+
+          const dir = process.argv[2];
+          const id = (st) => ({ dev: String(st.dev), ino: String(st.ino), file: st.isFile(), dir: st.isDirectory(), link: st.isSymbolicLink() });
+          const out = { subject: { platform: process.platform, version: process.version, execPath: process.execPath } };
+          for (const name of ["regular.txt", "target.txt", "link.txt", "subdir"]) {
+            const p = path.join(dir, name);
+            const own = (() => { try { return id(fs.lstatSync(p, { bigint: true })); } catch (e) { return { error: e.code }; } })();
+            const followed = (() => { try { return id(fs.statSync(p, { bigint: true })); } catch (e) { return { error: e.code }; } })();
+            out[name] = { lstat: own, stat: followed };
+          }
+          process.stdout.write(JSON.stringify(out) + "\n");
+          '@
+          [IO.File]::WriteAllText((Join-Path $D 'e1a-observer.mjs'), ($e1a_observer_mjs -replace "`r`n", "`n") + "`n")
+          $e1a_run_ps1 = @'
+          param([Parameter(Mandatory)][string]$Root)
+          # E1a runner: owned fresh fixture -> one bounded probe process per cell -> bounded observer
+          # -> results file (always written) -> oracle -> fixture removal (residue is red).
+          $ErrorActionPreference = 'Stop'
+          trap { "RED: e1a harness exception $($_.Exception.GetType().FullName) at line $($_.InvocationInfo.ScriptLineNumber)"; exit 1 }
+          $Here = Split-Path -Parent $PSCommandPath
+          $Fx = Join-Path $Root 'fx'
+          $Out = Join-Path $Root 'e1a-results.jsonl'
+          if (Test-Path -LiteralPath $Fx) { throw "fixture dir already exists: $Fx" }
+          New-Item -ItemType Directory -Path $Fx | Out-Null
+          $nonceA = [guid]::NewGuid().ToString('N'); $nonceT = [guid]::NewGuid().ToString('N')
+          [IO.File]::WriteAllText((Join-Path $Fx 'regular.txt'), $nonceA)
+          [IO.File]::WriteAllText((Join-Path $Fx 'target.txt'), $nonceT)
+          New-Item -ItemType Directory -Path (Join-Path $Fx 'subdir') | Out-Null
+          $symlink = try { New-Item -ItemType SymbolicLink -Path (Join-Path $Fx 'link.txt') -Target (Join-Path $Fx 'target.txt') | Out-Null; 'created' } catch { "unavailable:$($_.Exception.GetType().FullName)" }
+
+          function Limit([string]$t) { if ($t.Length -gt 4096) { $t.Substring(0, 4096) } else { $t } }
+          function Invoke-Bounded([string]$File, [string[]]$Argv, [int]$Ms) {
+            $psi = [Diagnostics.ProcessStartInfo]::new($File)
+            foreach ($a in $Argv) { $psi.ArgumentList.Add($a) }
+            $psi.UseShellExecute = $false; $psi.RedirectStandardOutput = $true; $psi.RedirectStandardError = $true
+            $p = [Diagnostics.Process]::Start($psi)
+            try {
+              $so = $p.StandardOutput.ReadToEndAsync(); $se = $p.StandardError.ReadToEndAsync()
+              $timedOut = -not $p.WaitForExit($Ms)
+              $reaped = $true
+              $fault = $null
+              if ($timedOut) { try { $p.Kill(); $reaped = $p.WaitForExit(5000) } catch { $fault = "kill:$($_.Exception.GetType().FullName)"; $reaped = $p.HasExited } }
+              $streams = try { [Threading.Tasks.Task]::WaitAll([Threading.Tasks.Task[]]@($so, $se), 5000) } catch { $fault = "streams:$($_.Exception.GetType().FullName)"; $false }
+              return @{ timedOut = $timedOut; reaped = $reaped; streamsComplete = $streams; fault = $fault
+                exit = $(if ($timedOut) { $null } else { $p.ExitCode })
+                stdout = $(if ($so.IsCompletedSuccessfully) { Limit ($so.Result.Trim()) } else { '' }); stderr = $(if ($se.IsCompletedSuccessfully) { Limit ($se.Result.Trim()) } else { '' }) }
+            } finally { $p.Dispose() }
+          }
+          function Parse($run) { try { @{ value = ($run.stdout | ConvertFrom-Json); parseError = $null } } catch { @{ value = $null; parseError = $_.Exception.GetType().FullName } } }
+
+          $pwsh = (Get-Process -Id $PID).Path
+          $probe = Join-Path $Here 'e1a-probe.ps1'
+          $cells = [ordered]@{ regular = 'regular.txt'; symlink = 'link.txt'; directory = 'subdir' }
+          $res = [ordered]@{}
+          foreach ($k in $cells.Keys) {
+            if ($k -eq 'symlink' -and $symlink -ne 'created') { $res[$k] = @{ skipped = $symlink }; continue }
+            $run = Invoke-Bounded $pwsh @('-NoProfile', '-NonInteractive', '-File', $probe, '-Path', (Join-Path $Fx $cells[$k])) 60000
+            $parsed = Parse $run
+            $res[$k] = @{ run = $run; result = $parsed.value; parseError = $parsed.parseError }
+          }
+          $orun = Invoke-Bounded (Get-Command node -CommandType Application | Select-Object -First 1).Source @((Join-Path $Here 'e1a-observer.mjs'), $Fx) 30000
+          $oparsed = Parse $orun
+          $obs = $oparsed.value
+          $fsType = try { [string](Get-Volume -DriveLetter (Split-Path -Qualifier $Root).TrimEnd(':')).FileSystemType } catch { "error:$($_.Exception.GetType().FullName)" }
+          [ordered]@{ symlinkCapability = $symlink; rootFileSystem = $fsType; cells = $res; observer = $obs; observerRun = $orun; observerParseError = $oparsed.parseError } |
+            ConvertTo-Json -Compress -Depth 8 | Set-Content -LiteralPath $Out -Encoding utf8NoBOM
+          Get-Content -LiteralPath $Out
+          "e1a-results.jsonl sha256: $((Get-FileHash -Algorithm SHA256 -LiteralPath $Out).Hash.ToLower())"
+
+          # Oracle: declared outcomes of the candidate under test, plus two-runtime identity agreement.
+          $red = [System.Collections.Generic.List[string]]::new()
+          $incomplete = [System.Collections.Generic.List[string]]::new()
+          foreach ($r in @($orun) + @($res.Values | Where-Object { $_.run } | ForEach-Object { $_.run })) {
+            if ($r.timedOut) { $red.Add('a bounded process timed out') }
+            if (-not $r.reaped) { $red.Add('a timed-out own process was not reaped') }
+            if (-not $r.streamsComplete) { $red.Add('a process output stream did not complete within its bound') }
+            if ($r.fault) { $red.Add("own process handling fault: $($r.fault)") }
+          }
+          if ($orun.exit -ne 0 -or $oparsed.parseError) { $red.Add("observer exit $($orun.exit), parseError $($oparsed.parseError)") }
+          if (-not $obs) { $red.Add('observer evidence missing') }
+          else {
+            if ($obs.subject.platform -ne 'win32' -or $obs.subject.version -ne 'v24.18.1') { $incomplete.Add("subject mismatch: $($obs.subject.platform) $($obs.subject.version)") }
+            if ($obs.'regular.txt'.lstat.file -ne $true -or $obs.'regular.txt'.lstat.link -ne $false) { $red.Add('observer: regular.txt is not a plain file') }
+            if ($obs.subdir.lstat.dir -ne $true -or $obs.subdir.lstat.link -ne $false) { $red.Add('observer: subdir is not a plain directory') }
+            if (-not $obs.'target.txt'.lstat.ino) { $red.Add('observer: target.txt metadata missing') }
+            if ($symlink -eq 'created') {
+              if ($obs.'link.txt'.lstat.link -ne $true) { $red.Add('observer: link.txt is not a symlink') }
+              if ($obs.'link.txt'.stat.ino -ne $obs.'target.txt'.lstat.ino -or $obs.'link.txt'.stat.dev -ne $obs.'target.txt'.lstat.dev) { $red.Add('observer: link.txt does not follow to target.txt') }
+            }
+          }
+          if ($fsType -ne 'NTFS') { $incomplete.Add("subject-not-ntfs $fsType (declared NTFS subject not measured)") }
+          foreach ($k in $cells.Keys) {
+            $c = $res[$k]
+            if ($c.skipped) { $incomplete.Add("$k cell not measured: symlink $($c.skipped)"); continue }
+            if ($c.run.exit -ne 0 -or -not $c.result) { $red.Add("$k probe exit $($c.run.exit), parseError $($c.parseError)"); continue }
+            $want = @{ regular = 'read'; symlink = 'refused-reparse'; directory = 'refused-nonregular-directory' }[$k]
+            if ($c.result.Decision -ne $want) { $red.Add("$k decision $($c.result.Decision), declared $want") }
+            $own = if ($obs) { $obs.($cells[$k]).lstat } else { $null }
+            if (-not $own -or $c.result.FileIndex -ne $own.ino -or $c.result.VolumeSerial -ne $own.dev) { $red.Add("$k handle identity $($c.result.VolumeSerial)/$($c.result.FileIndex) is not the path's own lstat $($own.dev)/$($own.ino)") }
+          }
+          $reg = $res['regular'].result
+          if ($reg) {
+            $text = try { [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String([string]$reg.ContentBase64)) } catch { $null }
+            if (-not $reg.ContentBase64 -or $text -cne $nonceA) { $red.Add('regular cell did not return exactly its own nonce') }
+          }
+          $sym = $res['symlink'].result
+          if ($sym -and $sym.ContentBase64) { $red.Add('symlink cell returned bytes') }
+          if ($sym -and $obs -and $sym.FileIndex -eq $obs.'target.txt'.lstat.ino) { $red.Add('symlink handle is the target file, not the link') }
+
+          try { Remove-Item -LiteralPath $Fx -Recurse -Force } catch { "fixture removal error: $($_.Exception.GetType().FullName)" }
+          if (Test-Path -LiteralPath $Fx) { $red.Add('own fixture residue remains after removal') }
+          if ($red.Count) { $red | ForEach-Object { "RED: $_" }; exit 1 }
+          if ($incomplete.Count) { $incomplete | ForEach-Object { "INCOMPLETE: $_" }; 'e1a: NOT ACCEPTED (required capability or subject missing)'; exit 1 }
+          'e1a: PASS (3/3 declared outcomes on one handle each; identities agree). Not a full replacement: no-hang, other reparse tags, ancestors and races are UNPROVED.'
+          '@
+          [IO.File]::WriteAllText((Join-Path $D 'e1a-run.ps1'), ($e1a_run_ps1 -replace "`r`n", "`n") + "`n")
+          $expected = [ordered]@{ 'e1a-onhandle.cs' = 'ef8e314c09e68109160bc07f5871549367a8a76dfc11b493ba4dd699fa3ce0e8'; 'e1a-probe.ps1' = 'cd118e936305a1550b35dae7e4beb7e4f5db3dfaa1c16619930ecd97a763330f'; 'e1a-observer.mjs' = '80a41f36d0828da9dc5556f620b0f19b4bf4e1b41471c0adc940a128fffa69f6'; 'e1a-run.ps1' = 'cd5dc6c810e92b9862e7b3529e33e5b5f4ef05424373e1f2aaef52c1c09ee651' }
+          $bad = 0
+          foreach ($f in $expected.Keys) {
+            $h = (Get-FileHash -Algorithm SHA256 -LiteralPath (Join-Path $D $f)).Hash.ToLower()
+            "$f sha256: $h (expected $($expected[$f]))"
+            if ($h -ne $expected[$f]) { $bad++ }
+          }
+          if ($bad) { "RED: $bad emitted source(s) differ from the reviewed bytes"; exit 1 }
+
+      - name: run E1a (three cells, bounded)
+        shell: pwsh
+        timeout-minutes: 5
+        run: |
+          $Root = Join-Path $env:RUNNER_TEMP 'e1a'
+          New-Item -ItemType Directory -Force -Path $Root | Out-Null
+          & (Get-Process -Id $PID).Path -NoProfile -NonInteractive -File (Join-Path $env:RUNNER_TEMP 'e1a-src\e1a-run.ps1') -Root $Root
+          exit $LASTEXITCODE
+
+      - name: diagnostics
+        if: always()
+        shell: pwsh
+        run: |
+          $Out = Join-Path $env:RUNNER_TEMP 'e1a\e1a-results.jsonl'
+          if (Test-Path -LiteralPath $Out) { Get-Content -LiteralPath $Out; "e1a-results.jsonl sha256: $((Get-FileHash -Algorithm SHA256 -LiteralPath $Out).Hash.ToLower())" } else { 'no results file' }
