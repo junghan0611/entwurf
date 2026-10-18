@@ -7,9 +7,14 @@ name: windows-native-preview (experimental)
 # profile and runs the addon cells (L0/L0c source and compiled loader, R1 reader, R2
 # no-follow-to-pipe, T1 timeout + reclaim, N1 names and loader refusals) against the installed bytes.
 # A build that is not byte-reproducible keeps its evidence (uploaded always) and fails as
-# publication-blocked, so nothing downstream runs on it. B1 (installed Pi citizen) and D1 (v2 nonce delivery)
-# are not in this increment, so the run ends NOT ACCEPTED by construction. No auth, model, secret or
-# vendor call; network for actions, the pinned Node downloads and the npm registry only.
+# publication-blocked, so nothing downstream runs on it. Then the pinned Pi CLI (its tarball checked
+# against the pinned SRI) is installed into its own prefix, the installed package is wired with
+# `pi install`, and the citizen cells run: B1 births two Pi citizens through `pi --entwurf-control`
+# (records, record-derived pipes, product liveness, installed peer-facts) and D1 has A's model call
+# the real entwurf_v2 tool toward B's garden id with a nonce (A's receipt, B's model context and B's
+# transcript as three separate facts). The only fixture is the model: a -e extension registers a
+# pi-ai fauxProvider. No auth, login, secret or vendor call; network for actions, the pinned Node
+# downloads and the npm registry only. A receipt is not comprehension; no vendor turn is claimed.
 
 on:
   push:
@@ -187,6 +192,35 @@ jobs:
         run: |
           node native/win32/preview/addon-cells.mjs $env:PKG (Join-Path $env:SANDBOX 'work') (Join-Path $env:RUNNER_TEMP 'addon-cells.jsonl')
           "ADDON_CELLS_EXIT=$LASTEXITCODE" >> $env:GITHUB_ENV
+      - name: install the pinned Pi CLI into its own prefix (tarball checked against the pinned SRI)
+        shell: pwsh
+        env:
+          PI_VERSION: 1.3.0
+          PI_INTEGRITY: sha512-V/WoCjA2hQSe3QLWIUB24cTRdtEdeLiIzkDqU5RMXV6VWuD+KGZnzVBMhglwdnQTySkehZsjt8a3g6Jd2g4nnw==
+        run: |
+          $pack = Join-Path $env:SANDBOX 'pi-pack'
+          $prefix = Join-Path $env:SANDBOX 'pi-prefix'
+          New-Item -ItemType Directory -Force -Path $pack, $prefix | Out-Null
+          Push-Location $pack
+          npm pack "@earendil-works/pi-coding-agent@$env:PI_VERSION" --silent
+          $code = $LASTEXITCODE
+          Pop-Location
+          if ($code -ne 0) { Write-Output 'pi: npm pack failed'; exit 1 }
+          $tgz = @(Get-ChildItem $pack -Filter '*.tgz')
+          if ($tgz.Count -ne 1) { Write-Output "pi: expected one tarball, got $($tgz.Count)"; exit 1 }
+          $got = 'sha512-' + [Convert]::ToBase64String([System.Security.Cryptography.SHA512]::HashData([System.IO.File]::ReadAllBytes($tgz[0].FullName)))
+          Write-Output "pi tarball integrity: $got"
+          if ($got -ne $env:PI_INTEGRITY) { Write-Output 'SUPPLY: pi tarball integrity differs from the pin'; exit 1 }
+          npm install --prefix $prefix $tgz[0].FullName --no-audit --no-fund
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $cli = Join-Path $prefix 'node_modules\@earendil-works\pi-coding-agent\dist\bundle\cli.js'
+          if (-not (Test-Path $cli)) { Write-Output "pi: $cli is absent"; exit 1 }
+          "PI_CLI=$cli" >> $env:GITHUB_ENV
+      - name: citizen cells against the installed package and Pi (B1 D1)
+        shell: pwsh
+        run: |
+          node native/win32/preview/citizen-cells.mjs $env:PI_CLI $env:PKG (Join-Path $env:SANDBOX 'citizens') (Join-Path $env:RUNNER_TEMP 'citizen-cells.jsonl') $env:SANDBOX
+          "CITIZEN_CELLS_EXIT=$LASTEXITCODE" >> $env:GITHUB_ENV
       - name: real profile untouched, then the verdict
         if: always()
         shell: pwsh
@@ -199,17 +233,19 @@ jobs:
           Write-Output 'build: accepted (this job only runs after an accepted build receipt)'
           Write-Output 'pack: carrier verified'
           Write-Output "addon cells: $(if ($env:ADDON_CELLS_EXIT -eq '0') { 'PASS' } else { "NOT ACCEPTED (exit $env:ADDON_CELLS_EXIT)" })"
-          Write-Output 'preview B1 (installed Pi citizen): NOT IMPLEMENTED in this increment'
-          Write-Output 'preview D1 (v2 nonce delivery): NOT IMPLEMENTED in this increment'
-          Write-Output 'windows-native-preview: NOT ACCEPTED (B1, D1 absent by construction)'
-          if (-not $profileOk -or $env:ADDON_CELLS_EXIT -ne '0') { exit 1 }
-          exit 1
+          Write-Output "citizen cells: $(if ($env:CITIZEN_CELLS_EXIT -eq '0') { 'PASS' } else { "NOT ACCEPTED (exit $env:CITIZEN_CELLS_EXIT)" })"
+          $green = $profileOk -and $env:ADDON_CELLS_EXIT -eq '0' -and $env:CITIZEN_CELLS_EXIT -eq '0'
+          Write-Output "windows-native-preview: $(if ($green) { 'PASS (first preview cells; a receipt is not comprehension, no vendor turn)' } else { 'NOT ACCEPTED' })"
+          if (-not $green) { exit 1 }
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: win32-preview-evidence
           path: |
             ${{ runner.temp }}/addon-cells.jsonl
+            ${{ runner.temp }}/citizen-cells.jsonl
             ${{ runner.temp }}/real-pi-before.txt
+            ${{ runner.temp }}/sandbox/citizens/a/*.jsonl
+            ${{ runner.temp }}/sandbox/citizens/b/*.jsonl
           if-no-files-found: warn
           retention-days: 14
