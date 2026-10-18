@@ -1,0 +1,264 @@
+name: windows-native-e1b (experimental)
+
+# #78 E1b — named-pipe comparison, own processes only. EXPERIMENTAL, non-voting (the release
+# oracle reads only ci.yml). C1-C3 measure the official .NET NamedPipeServerStream with
+# PipeOptions.CurrentUserOnly (one instance): its actual DACL from the server handle, a bounded
+# nonce round trip with kernel pid identity both ends, and a later same-name creation refusal.
+# C4 observes the actual descriptor of a Node v24.18.1 default pipe for comparison; it adopts
+# nothing. Pipe echo is not Entwurf delivery, product supply, a privacy-policy approval or a
+# citizen. Cross-user, remote, mixed-elevation and pre-existing-name cases are UNPROVED.
+# No checkout, install, auth or model; network only for actions/setup-node.
+
+on:
+  push:
+    branches: ['feat/78-windows-native-probe']
+    paths: ['.github/workflows/windows-native-e1b.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  e1b-pipe-comparison:
+    runs-on: windows-2025
+    timeout-minutes: 10
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.18.1
+
+      - name: write the E1b fixture sources (LF, one final newline; hashes must match)
+        shell: pwsh
+        run: |
+          $D = Join-Path $env:RUNNER_TEMP 'e1b-src'
+          New-Item -ItemType Directory -Force -Path $D | Out-Null
+          $e1b_pipe_cs = @'
+          using System;
+          using System.Runtime.InteropServices;
+          using Microsoft.Win32.SafeHandles;
+          // E1b fixture helper (not product supply): the two official pipe-identity queries .NET
+          // does not expose. Both are handle queries on an already-connected own pipe end.
+          public static class E1bPipe {
+            [DllImport("kernel32.dll", SetLastError = true)] static extern bool GetNamedPipeServerProcessId(SafePipeHandle h, out uint pid);
+            [DllImport("kernel32.dll", SetLastError = true)] static extern bool GetNamedPipeClientProcessId(SafePipeHandle h, out uint pid);
+            public static long ServerPid(SafePipeHandle h) { uint p; return GetNamedPipeServerProcessId(h, out p) ? p : -Marshal.GetLastWin32Error(); }
+            public static long ClientPid(SafePipeHandle h) { uint p; return GetNamedPipeClientProcessId(h, out p) ? p : -Marshal.GetLastWin32Error(); }
+          }
+          '@
+          [IO.File]::WriteAllText((Join-Path $D 'e1b-pipe.cs'), ($e1b_pipe_cs -replace "`r`n", "`n") + "`n")
+          $e1b_client_ps1 = @'
+          param([Parameter(Mandatory)][string]$Name, [Parameter(Mandatory)][string]$Nonce)
+          # E1b own client: CurrentUserOnly connect (the client-side owner check is .NET's), nonce
+          # round trip with bounds, and two handle queries on the connected client end. One JSON line.
+          $ErrorActionPreference = 'Stop'
+          Add-Type -Path (Join-Path (Split-Path -Parent $PSCommandPath) 'e1b-pipe.cs')
+          $me = [Security.Principal.WindowsIdentity]::GetCurrent()
+          function Alias([string]$s) { [regex]::Replace([regex]::Replace($s.Replace($me.User.Value, 'USER'), 'S-1-5-5-[0-9-]+', 'LOGON-SID'), 'S-1-5-21-[0-9-]+', 'OTHER-SID') }
+          $out = [ordered]@{ connected = $false; ownerCheck = $null; serverPid = $null; clientSideSddl = $null; echoOk = $false; bound = $null; error = $null }
+          $c = [IO.Pipes.NamedPipeClientStream]::new('.', $Name, [IO.Pipes.PipeDirection]::InOut, [IO.Pipes.PipeOptions]'Asynchronous, CurrentUserOnly')
+          try {
+            $out.ownerCheck = 'pending'; $c.Connect(10000); $out.connected = $true; $out.ownerCheck = 'passed'
+            $out.serverPid = [E1bPipe]::ServerPid($c.SafePipeHandle)
+            $out.clientSideSddl = Alias ([IO.Pipes.PipesAclExtensions]::GetAccessControl($c).GetSecurityDescriptorSddlForm([Security.AccessControl.AccessControlSections]'Owner, Group, Access'))
+            $bytes = [Text.Encoding]::ASCII.GetBytes($Nonce)
+            if (-not $c.WriteAsync($bytes, 0, $bytes.Length).Wait(5000)) { $out.bound = 'write'; throw [TimeoutException]::new() }
+            $buf = [byte[]]::new($bytes.Length); $got = 0
+            while ($got -lt $buf.Length) {
+              $t = $c.ReadAsync($buf, $got, $buf.Length - $got)
+              if (-not $t.Wait(5000)) { $out.bound = 'read'; throw [TimeoutException]::new() }
+              if ($t.Result -eq 0) { $out.bound = 'server-closed'; throw [IO.EndOfStreamException]::new() }
+              $got += $t.Result
+            }
+            $out.echoOk = ([Text.Encoding]::ASCII.GetString($buf) -ceq $Nonce)
+          } catch { $b = $_.Exception.GetBaseException(); $out.error = "$($b.GetType().FullName):0x$('{0:X8}' -f $b.HResult)"; if ($out.ownerCheck -eq 'pending') { $out.ownerCheck = 'failed' } } finally { $c.Dispose() }
+          $out | ConvertTo-Json -Compress
+          '@
+          [IO.File]::WriteAllText((Join-Path $D 'e1b-client.ps1'), ($e1b_client_ps1 -replace "`r`n", "`n") + "`n")
+          $e1b_run_ps1 = @'
+          param([Parameter(Mandatory)][string]$Root)
+          # E1b runner: one own CurrentUserOnly pipe server (this process) -> C1 descriptor queried from
+          # the server handle before any client -> C2 bounded nonce round trip with an own client process
+          # and official pid queries both ends -> C3 later same-name creation -> results -> oracle.
+          $ErrorActionPreference = 'Stop'
+          trap { "RED: e1b harness exception $($_.Exception.GetType().FullName) at line $($_.InvocationInfo.ScriptLineNumber)"; exit 1 }
+          $Here = Split-Path -Parent $PSCommandPath
+          $Out = Join-Path $Root 'e1b-results.jsonl'
+          Add-Type -Path (Join-Path $Here 'e1b-pipe.cs')
+          $me = [Security.Principal.WindowsIdentity]::GetCurrent()
+          function Alias([string]$s) { [regex]::Replace([regex]::Replace($s.Replace($me.User.Value, 'USER'), 'S-1-5-5-[0-9-]+', 'LOGON-SID'), 'S-1-5-21-[0-9-]+', 'OTHER-SID') }
+          function Limit([string]$t) { if ($t.Length -gt 4096) { $t.Substring(0, 4096) } else { $t } }
+          function Describe($sec) {
+            $o = $sec.GetOwner([Security.Principal.SecurityIdentifier]).Value
+            $rules = @($sec.GetAccessRules($true, $true, [Security.Principal.SecurityIdentifier]) | ForEach-Object { $x = $_.IdentityReference.Value
+                [ordered]@{ sid = (Alias $x); isOwnPrincipal = ($x -eq $me.User.Value -or $x -eq $me.Owner.Value); isUserSid = ($x -eq $me.User.Value); type = "$($_.AccessControlType)"; rights = "$($_.PipeAccessRights)"; inherited = $_.IsInherited; inheritance = "$($_.InheritanceFlags)"; propagation = "$($_.PropagationFlags)" } })
+            [ordered]@{ sddl = (Alias $sec.GetSecurityDescriptorSddlForm([Security.AccessControl.AccessControlSections]'Owner, Group, Access')); owner = (Alias $o); ownerIsOwnToken = ($o -eq $me.User.Value -or $o -eq $me.Owner.Value); ownerIsUserSid = ($o -eq $me.User.Value); rules = $rules
+              userSidOnly = ($o -eq $me.User.Value -and @($rules | Where-Object { -not $_.isUserSid }).Count -eq 0); nonOwnRules = @($rules | Where-Object { -not $_.isOwnPrincipal }).Count }
+          }
+          function Err($e) { $b = $e.GetBaseException(); "$($b.GetType().FullName):0x$('{0:X8}' -f $b.HResult)" }
+          $token = [ordered]@{ ownerIsUser = ($me.Owner.Value -eq $me.User.Value); owner = (Alias $me.Owner.Value)
+            elevated = ([Security.Principal.WindowsPrincipal]::new($me)).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator) }
+          $name = "entwurf-e1b-$PID-$([guid]::NewGuid().ToString('N').Substring(0, 12))"
+          $nonce = [guid]::NewGuid().ToString('N')
+          $opts = [IO.Pipes.PipeOptions]'Asynchronous, CurrentUserOnly'
+          $r = [ordered]@{ runtime = "pwsh $($PSVersionTable.PSVersion) .NET $([Environment]::Version)"; token = $token; c1 = [ordered]@{}; c2 = [ordered]@{}; c3 = [ordered]@{}; c4 = [ordered]@{}; residue = $null }
+          $server = [IO.Pipes.NamedPipeServerStream]::new($name, [IO.Pipes.PipeDirection]::InOut, 1, [IO.Pipes.PipeTransmissionMode]::Byte, $opts)
+          try {
+            try { # C1: handle query on the own server end; no client exists yet.
+              $sec = [IO.Pipes.PipesAclExtensions]::GetAccessControl($server)
+              $r.c1.method = 'server-handle query (GetAccessControl on the listening server; no client connect)'
+              $r.c1.sddl = Alias $sec.GetSecurityDescriptorSddlForm([Security.AccessControl.AccessControlSections]'Owner, Group, Access')
+              $rawOwner = $sec.GetOwner([Security.Principal.SecurityIdentifier]).Value
+              $r.c1.owner = Alias $rawOwner
+              $r.c1.ownerIsOwnToken = ($rawOwner -eq $me.User.Value -or $rawOwner -eq $me.Owner.Value); $r.c1.ownerIsUserSid = ($rawOwner -eq $me.User.Value)
+              $r.c1.rules = @($sec.GetAccessRules($true, $true, [Security.Principal.SecurityIdentifier]) | ForEach-Object {
+                  $raw = $_.IdentityReference.Value
+                  [ordered]@{ sid = (Alias $raw); isOwnPrincipal = ($raw -eq $me.User.Value -or $raw -eq $me.Owner.Value); isUserSid = ($raw -eq $me.User.Value)
+                    type = "$($_.AccessControlType)"; rights = "$($_.PipeAccessRights)"; inherited = $_.IsInherited; inheritance = "$($_.InheritanceFlags)"; propagation = "$($_.PropagationFlags)" } })
+              $r.c1.userSidOnly = ($r.c1.ownerIsUserSid -and @($r.c1.rules | Where-Object { -not $_.isUserSid }).Count -eq 0)
+              $r.c1.connectedAfterQuery = $server.IsConnected
+            } catch { $r.c1.error = Err $_.Exception }
+            $cp = $null
+            try { # C2: own client process; the server waits with a bound.
+              $wait = $server.WaitForConnectionAsync()
+              $psi = [Diagnostics.ProcessStartInfo]::new((Get-Process -Id $PID).Path)
+              foreach ($a in @('-NoProfile', '-NonInteractive', '-File', (Join-Path $Here 'e1b-client.ps1'), '-Name', $name, '-Nonce', $nonce)) { $psi.ArgumentList.Add($a) }
+              $psi.UseShellExecute = $false; $psi.RedirectStandardOutput = $true; $psi.RedirectStandardError = $true
+              $cp = [Diagnostics.Process]::Start($psi); $r.c2.clientProcessId = $cp.Id
+              $so = $cp.StandardOutput.ReadToEndAsync(); $se = $cp.StandardError.ReadToEndAsync()
+              $r.c2.serverConnected = $wait.Wait(30000)
+              if ($r.c2.serverConnected) {
+                $buf = [byte[]]::new($nonce.Length); $got = 0
+                while ($got -lt $buf.Length) { $t = $server.ReadAsync($buf, $got, $buf.Length - $got); if (-not $t.Wait(10000) -or $t.Result -eq 0) { break }; $got += $t.Result }
+                $r.c2.serverReceivedNonce = ([Text.Encoding]::ASCII.GetString($buf, 0, $got) -ceq $nonce)
+                $r.c2.clientPidFromServer = [E1bPipe]::ClientPid($server.SafePipeHandle)
+                try { $imp = $server.GetImpersonationUserName(); $r.c2.clientUserEqualsTokenName = ($imp -eq $me.Name); $r.c2.clientUserEqualsUnqualifiedName = ($imp -eq $me.Name.Split('\')[-1]) } catch { $r.c2.impError = Err $_.Exception }
+                if ($r.c2.serverReceivedNonce) { $r.c2.echoWritten = $server.WriteAsync($buf, 0, $buf.Length).Wait(5000) }
+              }
+            } catch { $r.c2.error = Err $_.Exception }
+            finally {
+              if ($cp) {
+                $r.c2.clientExited = $cp.WaitForExit(60000)
+                if (-not $r.c2.clientExited) { try { $cp.Kill() } catch { $r.c2.killError = Err $_.Exception }; $r.c2.clientReaped = $cp.WaitForExit(5000) } else { $r.c2.clientReaped = $true }
+                $r.c2.streamsComplete = try { [Threading.Tasks.Task]::WaitAll([Threading.Tasks.Task[]]@($so, $se), 5000) } catch { $false }
+                $r.c2.clientExit = $(if ($r.c2.clientExited) { $cp.ExitCode } else { $null })
+                $r.c2.clientStdout = $(if ($so.IsCompletedSuccessfully) { Limit ($so.Result.Trim()) } else { '' })
+                $r.c2.clientStderrPresent = ($se.IsCompletedSuccessfully -and $se.Result.Trim().Length -gt 0)
+                $r.c2.client = try { $r.c2.clientStdout | ConvertFrom-Json } catch { $null }
+                $cp.Dispose()
+              }
+            }
+            try { # C3: a later owned server on the same name while ours exists (not pre-existing-name protection).
+              $dup = [IO.Pipes.NamedPipeServerStream]::new($name, [IO.Pipes.PipeDirection]::InOut, 1, [IO.Pipes.PipeTransmissionMode]::Byte, $opts); $dup.Dispose(); $r.c3.outcome = 'later-creation-succeeded'
+            } catch { $r.c3.outcome = 'refused'; $r.c3.error = Err $_.Exception }
+            $np = $null
+            try { # C4 (comparison observation): an own Node server with Node's default security; its actual
+                  # descriptor queried through ONE own connected .NET client handle (this connect is the method).
+              $npsi = [Diagnostics.ProcessStartInfo]::new((Get-Command node -CommandType Application | Select-Object -First 1).Source)
+              foreach ($a in @((Join-Path $Here 'e1b-nodesrv.mjs'), "$name-node")) { $npsi.ArgumentList.Add($a) }
+              $npsi.UseShellExecute = $false; $npsi.RedirectStandardInput = $true; $npsi.RedirectStandardOutput = $true; $npsi.RedirectStandardError = $true
+              $np = [Diagnostics.Process]::Start($npsi); $r.c4.nodeProcessId = $np.Id
+              $nse = $np.StandardError.ReadToEndAsync(); $line = $np.StandardOutput.ReadLineAsync()
+              $r.c4.nodeLine = $(if ($line.Wait(15000) -and $line.IsCompletedSuccessfully) { Limit "$($line.Result)" } else { '' })
+              if ($r.c4.nodeLine -like 'LISTENING *') {
+                $nc = [IO.Pipes.NamedPipeClientStream]::new('.', "$name-node", [IO.Pipes.PipeDirection]::InOut)
+                try {
+                  $nc.Connect(5000); $r.c4.method = 'connected-client handle query (one own client connect to the own Node server)'
+                  $r.c4.serverPidFromClient = [E1bPipe]::ServerPid($nc.SafePipeHandle)
+                  try { $r.c4.descriptor = Describe ([IO.Pipes.PipesAclExtensions]::GetAccessControl($nc)) } catch { $r.c4.queryError = Err $_.Exception }
+                } finally { $nc.Dispose() }
+              }
+            } catch { $r.c4.error = Err $_.Exception }
+            finally {
+              if ($np) {
+                try { $np.StandardInput.Close() } catch { $r.c4.stdinError = Err $_.Exception }
+                $r.c4.nodeExited = $np.WaitForExit(10000)
+                if (-not $r.c4.nodeExited) { try { $np.Kill() } catch { $r.c4.killError = Err $_.Exception }; $r.c4.nodeReaped = $np.WaitForExit(5000) } else { $r.c4.nodeReaped = $true }
+                $r.c4.nodeExit = $(if ($r.c4.nodeExited) { $np.ExitCode } else { $null })
+                $r.c4.nodeStderrComplete = try { $nse.Wait(5000) -and $nse.IsCompletedSuccessfully } catch { $false }
+                $r.c4.nodeStderrPresent = ($r.c4.nodeStderrComplete -and $nse.Result.Trim().Length -gt 0)
+                $np.Dispose()
+              }
+            }
+          } finally { $server.Dispose() }
+          # Residue: one bounded connect attempt to the own name only, after dispose.
+          $probe = [IO.Pipes.NamedPipeClientStream]::new('.', $name)
+          $r.residue = try { $probe.Connect(500); 'connected-after-dispose' } catch [TimeoutException] { 'absent:no-server-timeout' } catch { "error:$(Err $_.Exception)" } finally { $probe.Dispose() }
+          $nprobe = [IO.Pipes.NamedPipeClientStream]::new('.', "$name-node")
+          $r.c4.residue = try { $nprobe.Connect(500); 'connected-after-exit' } catch [TimeoutException] { 'absent:no-server-timeout' } catch { "error:$(Err $_.Exception)" } finally { $nprobe.Dispose() }
+          $r | ConvertTo-Json -Compress -Depth 8 | Set-Content -LiteralPath $Out -Encoding utf8NoBOM
+          Get-Content -LiteralPath $Out
+          "e1b-results.jsonl sha256: $((Get-FileHash -Algorithm SHA256 -LiteralPath $Out).Hash.ToLower())"
+
+          $red = [System.Collections.Generic.List[string]]::new()
+          $c1 = $r.c1; $c2 = $r.c2; $cl = $c2.client
+          foreach ($k in 'c1', 'c2') { if ($r[$k].error) { $red.Add("$k exception $($r[$k].error)") } }
+          if (-not $c1.rules -or -not @($c1.rules).Count) { $red.Add('C1 no queried DACL rules') }
+          if ($c1.connectedAfterQuery) { $red.Add('C1 descriptor query connected the server') }
+          foreach ($x in @($c1.rules)) { if ($x.type -ne 'Allow' -or -not $x.isOwnPrincipal) { $red.Add("C1 rule outside the own token: $($x.type) $($x.sid) $($x.rights)") } }
+          if (-not $c1.ownerIsOwnToken) { $red.Add("C1 owner $($c1.owner) is not the own token") }
+          if (-not $c2.serverConnected) { $red.Add('C2 server saw no connection within 30 s') }
+          if (-not $c2.clientExited -or -not $c2.clientReaped -or -not $c2.streamsComplete -or $c2.clientExit -ne 0 -or $c2.killError) { $red.Add("C2 client process exit $($c2.clientExit) exited=$($c2.clientExited) reaped=$($c2.clientReaped) streams=$($c2.streamsComplete)") }
+          if (-not $cl) { $red.Add('C2 client evidence unparsable') }
+          elseif ($cl.error -or $cl.ownerCheck -ne 'passed' -or -not $cl.echoOk) { $red.Add("C2 client: ownerCheck=$($cl.ownerCheck) echoOk=$($cl.echoOk) bound=$($cl.bound) error=$($cl.error)") }
+          if (-not $c2.serverReceivedNonce) { $red.Add('C2 server did not receive the exact nonce') }
+          if (-not $c2.echoWritten) { $red.Add('C2 server echo write did not complete within 5 s') }
+          if ($cl -and $cl.serverPid -ne $PID) { $red.Add("C2 server pid seen by client $($cl.serverPid), expected $PID") }
+          if ($c2.clientPidFromServer -ne $c2.clientProcessId) { $red.Add("C2 client pid seen by server $($c2.clientPidFromServer), expected $($c2.clientProcessId)") }
+          if ($cl -and $cl.clientSideSddl -cne $c1.sddl) { $red.Add('C2 client-handle descriptor differs from the server-handle descriptor') }
+          if ($r.c3.outcome -ne 'refused' -or $r.c3.error -notin @('System.UnauthorizedAccessException:0x80070005', 'System.IO.IOException:0x800700E7')) { $red.Add("C3 not a declared name-conflict refusal: $($r.c3.outcome) $($r.c3.error)") }
+          if ($r.residue -ne 'absent:no-server-timeout') { $red.Add("residue: $($r.residue)") }
+          $c4 = $r.c4
+          $red4 = [System.Collections.Generic.List[string]]::new()
+          if ($c4.error) { $red4.Add("c4 exception $($c4.error)") }
+          if ($c4.nodeLine -notlike 'LISTENING * v24.18.1') { $red4.Add("C4 own Node server not listening as v24.18.1: '$($c4.nodeLine)'") }
+          if ("$($c4.serverPidFromClient)" -ne "$($c4.nodeProcessId)") { $red4.Add("C4 server pid seen by client $($c4.serverPidFromClient), expected $($c4.nodeProcessId)") }
+          if (-not $c4.nodeExited -or -not $c4.nodeReaped -or $c4.killError -or $c4.stdinError -or $c4.nodeExit -ne 0 -or -not $c4.nodeStderrComplete) { $red4.Add("C4 node process exit $($c4.nodeExit) exited=$($c4.nodeExited) reaped=$($c4.nodeReaped)") }
+          if ($c4.residue -ne 'absent:no-server-timeout') { $red4.Add("C4 residue: $($c4.residue)") }
+          $nodeSd = $(if ($c4.descriptor) { "owner own=$($c4.descriptor.ownerIsOwnToken), userSidOnly=$($c4.descriptor.userSidOnly), nonOwnRules=$($c4.descriptor.nonOwnRules)" } else { "query error $($c4.queryError)" })
+          $c13 = $(if ($red.Count) { 'RED' } else { 'PASS' })
+          $c4v = $(if ($red4.Count) { 'RED' } elseif ($c4.descriptor) { 'MEASURED' } else { 'INCOMPLETE' })
+          $red | ForEach-Object { "RED C1-C3: $_" }; $red4 | ForEach-Object { "RED C4: $_" }
+          "e1b C1-C3: $c13 (DACL = token owner only: owner=$($c1.owner), userSidOnly=$($c1.userSidOnly); nonce round trip with pid identity both ends; later same-name creation refused)" +
+            $(if ($c13 -eq 'PASS' -and -not $c1.userSidOnly) { '. User-SID-only privacy NOT measured on this runner' } else { '' })
+          "e1b C4: $c4v (Node default descriptor, observation only, not adopted: $nodeSd)"
+          if ($c13 -ne 'PASS' -or $c4v -ne 'MEASURED') { 'e1b: NOT ACCEPTED (pre-existing-name protection, cross-user, remote and mixed-elevation pipes are UNPROVED regardless)'; exit 1 }
+          'e1b: PASS (C1-C3 PASS and C4 measured). Pre-existing-name protection, cross-user, remote and mixed-elevation pipes are UNPROVED.'
+          '@
+          [IO.File]::WriteAllText((Join-Path $D 'e1b-run.ps1'), ($e1b_run_ps1 -replace "`r`n", "`n") + "`n")
+          $e1b_nodesrv_mjs = @'
+          // E1b C4: an own Node pipe server with Node's default security (net offers no descriptor
+          // option). Echoes; exits when the runner closes stdin; 60 s own-exit bound.
+          import net from "node:net";
+          const srv = net.createServer((s) => { s.on("error", () => {}); s.on("data", (d) => s.write(d)); });
+          srv.on("error", (e) => { process.stdout.write(`ERROR ${e.code}\n`); process.exit(3); });
+          srv.listen(`\\\\.\\pipe\\${process.argv[2]}`, () => process.stdout.write(`LISTENING ${process.pid} ${process.version}\n`));
+          process.stdin.on("end", () => srv.close(() => process.exit(0)));
+          process.stdin.resume();
+          setTimeout(() => process.exit(4), 60000).unref();
+          '@
+          [IO.File]::WriteAllText((Join-Path $D 'e1b-nodesrv.mjs'), ($e1b_nodesrv_mjs -replace "`r`n", "`n") + "`n")
+          $expected = [ordered]@{ 'e1b-pipe.cs' = '28f5d611c6252ec7786531fa85a3385fd55dedfdc28408d2c1f723387cf74684'; 'e1b-client.ps1' = '481b66879b2f95e861d54507c98d91e62e037a608faac1c8b6f05ef2b3163bd1'; 'e1b-run.ps1' = 'a9ec35bcc2d6bb68d3ebf851a5fc51ae578fbad90ace16d649f930be5b1aa382'; 'e1b-nodesrv.mjs' = 'fb00a946cc6ad6b9627818a84671bb08f7b588c974737a64345d1376f3f9227f' }
+          $bad = 0
+          foreach ($f in $expected.Keys) {
+            $h = (Get-FileHash -Algorithm SHA256 -LiteralPath (Join-Path $D $f)).Hash.ToLower()
+            "$f sha256: $h (expected $($expected[$f]))"
+            if ($h -ne $expected[$f]) { $bad++ }
+          }
+          if ($bad) { "RED: $bad emitted source(s) differ from the reviewed bytes"; exit 1 }
+          "pwsh $($PSVersionTable.PSVersion) on .NET $([Environment]::Version)"
+
+      - name: run E1b (three cells + one Node comparison observation, bounded)
+        shell: pwsh
+        timeout-minutes: 5
+        run: |
+          $Root = Join-Path $env:RUNNER_TEMP 'e1b'
+          New-Item -ItemType Directory -Force -Path $Root | Out-Null
+          & (Get-Process -Id $PID).Path -NoProfile -NonInteractive -File (Join-Path $env:RUNNER_TEMP 'e1b-src\e1b-run.ps1') -Root $Root
+          exit $LASTEXITCODE
+
+      - name: diagnostics
+        if: always()
+        shell: pwsh
+        run: |
+          $Out = Join-Path $env:RUNNER_TEMP 'e1b\e1b-results.jsonl'
+          if (Test-Path -LiteralPath $Out) { Get-Content -LiteralPath $Out; "e1b-results.jsonl sha256: $((Get-FileHash -Algorithm SHA256 -LiteralPath $Out).Hash.ToLower())" } else { 'no results file' }
