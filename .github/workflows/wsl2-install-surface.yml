@@ -1,0 +1,231 @@
+name: wsl2-install-surface (experimental)
+
+# #78 WSL2 cell 1 — EXPERIMENTAL, non-voting by construction. The release oracle and every
+# gate read only ci.yml runs (verify-exact-ci.sh:26-34, qualification-gh.ts:33), and
+# ci.yml's job list is pinned to the four required jobs ([QK:CI-COMPOSITE-STEPS-PINNED]),
+# so this cell lives in its own file: a red here blocks no cut, and its run conclusion is
+# its honest verdict — no continue-on-error, no retry, no rerun.
+#
+# WHAT A GREEN RUN CERTIFIES: the Entwurf-only install surface inside a real WSL2 guest on
+# a GitHub-hosted Windows runner — this run's packed tgz (producer -> host -> guest digest
+# equal), installed under a guest-native Node 24, `--help`, `check-bridge`, and an
+# all-harness-absent `setup` that leaves the protected auth/harness state unchanged.
+# WHAT IT DOES NOT CERTIFY: native Windows, any harness rail, login, citizen birth or
+# delivery, mux/tmux, Herdr, or a physical user machine. A CI runner is not a host.
+#
+# Supply pins are digests read from the projects' official HTTPS checksum files
+# (releases.ubuntu.com SHA256SUMS, nodejs.org SHASUMS256.txt); their GPG signatures are
+# NOT verified here. Contract: .tmp-verify/78-wsl2-20261018/CONTRACT.md (#78).
+
+on:
+  push:
+    branches: ['feat/78-wsl2-first']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  # The producer. Same pack invocation as the publish gate and the macOS cell, run once in
+  # THIS trial. It is not the tgz the ci.yml jobs pack internally, nor any release or
+  # registry artifact; the digest claim below reaches producer -> host -> guest only.
+  wsl2-pack:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.9.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: pack the candidate and record its digest
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/pack"
+          bash scripts/with-dist-lock.sh npm pack --dry-run=false --pack-destination "$RUNNER_TEMP/pack"
+          cd "$RUNNER_TEMP/pack"
+          test "$(ls junghanacs-entwurf-*.tgz | wc -l)" -eq 1
+          sha256sum junghanacs-entwurf-*.tgz | tee pack.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wsl2-candidate-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/pack/
+          if-no-files-found: error
+
+  # The consumer. No checkout: everything the guest runs is this file's own LF heredoc.
+  wsl2-install-surface:
+    needs: wsl2-pack
+    runs-on: windows-2025
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+    env:
+      DISTRO: entwurf-wsl2
+      UBUNTU_WSL_URL: https://releases.ubuntu.com/24.04.5/ubuntu-24.04.5-wsl-amd64.wsl
+      UBUNTU_WSL_SHA256: bb415d824822c4b878125729af451a5d18fb13d1cf5cbed9a7393ad64ac6039e
+      NODE_VERSION: v24.18.1
+      NODE_DIST: node-v24.18.1-linux-x64
+      NODE_SHA256: 9f5eb6ac21845a66c493c91a253b1da32fd684e89e9b7202d4936982336be4ca
+      # Git Bash must not rewrite the Linux paths handed to wsl.exe.
+      MSYS_NO_PATHCONV: '1'
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: wsl2-candidate-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/candidate
+
+      - name: host digest equals the producer digest
+        run: |
+          set -euo pipefail
+          cd "$(cygpath -u "$RUNNER_TEMP")/candidate"
+          cat pack.sha256
+          sha256sum -c pack.sha256
+
+      - name: fetch and verify the pinned Ubuntu WSL image and guest Node
+        run: |
+          set -euo pipefail
+          S="$(cygpath -u "$RUNNER_TEMP")/supply"
+          mkdir -p "$S"
+          curl -fsSL -o "$S/ubuntu.wsl" "$UBUNTU_WSL_URL"
+          curl -fsSL -o "$S/$NODE_DIST.tar.gz" "https://nodejs.org/dist/$NODE_VERSION/$NODE_DIST.tar.gz"
+          printf '%s  %s\n' "$UBUNTU_WSL_SHA256" "$S/ubuntu.wsl" "$NODE_SHA256" "$S/$NODE_DIST.tar.gz" | sha256sum -c
+
+      - name: install the distro as WSL2
+        run: |
+          set -euo pipefail
+          wsl.exe --version | tr -d '\000\r' || true
+          # Captured, not piped into grep -q: `wsl --help` need not exit 0, and an early grep
+          # exit would SIGPIPE the producer under pipefail.
+          help="$(wsl.exe --help 2>&1 | tr -d '\000\r' || true)"
+          if ! grep -q -- '--from-file' <<<"$help"; then
+            echo "wsl.exe on this image has no --from-file; no fallback" >&2
+            exit 1
+          fi
+          wsl.exe --set-default-version 2 | tr -d '\000\r'
+          wsl.exe --install --from-file "$(cygpath -w "$(cygpath -u "$RUNNER_TEMP")/supply/ubuntu.wsl")" \
+            --no-launch --name "$DISTRO" | tr -d '\000\r'
+
+      - name: write the guest script (LF heredoc, no checkout)
+        run: |
+          set -euo pipefail
+          G="$(cygpath -u "$RUNNER_TEMP")/guest.sh"
+          cat > "$G" <<'GUEST'
+          # Runs as root inside the WSL2 guest. $1 = the runner temp root as a Windows path.
+          set -euo pipefail
+          echo "guest script sha256: $(sha256sum "$0" | cut -d' ' -f1)"
+          red() { echo "RED: $*" >&2; exit 1; }
+
+          # W1-W4 kernel oracle, first and fail-closed.
+          [ "$(uname -s)" = Linux ] || red "W1 uname -s is not Linux"
+          echo "uname -r: $(uname -r)"
+          case "$(cat /proc/sys/kernel/osrelease)" in
+            *microsoft-standard-WSL2*) ;;
+            *) red "W2 osrelease is not microsoft-standard-WSL2 (if the host VERSION row says 2, classify as oracle string drift)" ;;
+          esac
+          [ -n "${WSL_DISTRO_NAME:-}" ] || red "W3 WSL_DISTRO_NAME unset"
+          [ "$WSL_DISTRO_NAME" = "$EXPECT_DISTRO" ] || red "W3 running in '$WSL_DISTRO_NAME', expected '$EXPECT_DISTRO'"
+          ls /proc/sys/fs/binfmt_misc/WSLInterop* >/dev/null 2>&1 || red "W3 no WSLInterop binfmt marker"
+          WSL_EXE=/mnt/c/Windows/System32/wsl.exe
+          "$WSL_EXE" --version | tr -d '\000\r' || true
+          ver="$("$WSL_EXE" --list --verbose | tr -d '\000\r' | awk -v d="$WSL_DISTRO_NAME" '{ sub(/^\*/, ""); if ($1 == d) print $NF }')"
+          [ "$ver" = 2 ] || red "W4 host lists $WSL_DISTRO_NAME at VERSION '$ver', expected 2"
+          echo "--- /etc/wsl.conf"; cat /etc/wsl.conf 2>/dev/null || echo "(absent)"
+
+          # Guest-ext4 scratch; the product steps see only guest Node and Linux standard paths.
+          HOST_TEMP="$(wslpath -u "$1")"
+          S=/var/tmp/entwurf-wsl2-cell
+          rm -rf "$S"; mkdir -p "$S"
+          echo "W5 fstype host=$(stat -f -c %T "$HOST_TEMP") scratch=$(stat -f -c %T "$S")"
+          cp "$HOST_TEMP"/candidate/junghanacs-entwurf-*.tgz "$HOST_TEMP/candidate/pack.sha256" "$S/"
+          cp "$HOST_TEMP/supply/$NODE_DIST.tar.gz" "$S/"
+          (cd "$S" && sha256sum -c pack.sha256)
+          printf '%s  %s\n' "$NODE_SHA256" "$S/$NODE_DIST.tar.gz" | sha256sum -c
+          tar -xzf "$S/$NODE_DIST.tar.gz" -C /opt
+          export PATH="/opt/$NODE_DIST/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+          export npm_config_cache="$S/npm-cache"
+          node -v
+          [ "$(node -v)" = "$NODE_VERSION" ] || red "guest node is $(node -v), expected $NODE_VERSION"
+          command -v python3 >/dev/null || red "python3 absent in the guest image (a setup prerequisite)"
+          python3 --version
+
+          # Every product command runs against a disposable run home, never the guest's /root and
+          # never setup's own $H below (a write there would be blamed on setup).
+          R="$S/runhome"
+          mkdir -p "$R/.config" "$R/.local/share" "$R/.local/state" "$R/.cache" "$R/.pi/agent"
+          export HOME="$R" XDG_CONFIG_HOME="$R/.config" XDG_DATA_HOME="$R/.local/share" \
+            XDG_STATE_HOME="$R/.local/state" XDG_CACHE_HOME="$R/.cache" PI_CODING_AGENT_DIR="$R/.pi/agent"
+          mkdir -p "$S/consumer"
+          printf '%s\n' '{ "name": "entwurf-wsl2-consumer", "version": "0.0.0", "private": true }' > "$S/consumer/package.json"
+          (cd "$S/consumer" && npm install --ignore-scripts "$S"/junghanacs-entwurf-*.tgz)
+          E="$S/consumer/node_modules/.bin/entwurf"
+
+          # W6: what is actually invoked resolves inside the guest; an empty answer is red.
+          for p in "$(command -v node)" "$(command -v npm)" "$(command -v python3)" "$E"; do
+            [ -n "$p" ] && [ -e "$p" ] || red "W6 a product command did not resolve"
+            r="$(readlink -f "$p")"
+            echo "W6 $p -> $r"
+            case "$r" in /mnt/*) red "W6 $p resolves through Windows: $r" ;; esac
+          done
+
+          "$E" --help
+          "$E" check-bridge
+
+          # All-harness-absent setup: the macOS block plus the Linux row's sixth probe (codex).
+          H="$S/setuphome"; P="$S/setupproj"; X="$S/definitely-absent"
+          mkdir -p "$H/.pi/agent" "$P"
+          printf '{ "anthropic": { "type": "oauth", "access": "ci-token" } }\n' > "$H/.pi/agent/auth.json"
+          cp "$H/.pi/agent/auth.json" "$S/auth.before"
+          out=$(HOME="$H" XDG_DATA_HOME="$H/.local/share" XDG_STATE_HOME="$H/.local/state" \
+            XDG_CACHE_HOME="$H/.cache" XDG_CONFIG_HOME="$H/.config" PI_CODING_AGENT_DIR="$H/.pi/agent" \
+            PI_BIN="$X" CLAUDE_BIN="$X" AGY_BIN="$X" COPILOT_BIN="$X" OMP_BIN="$X" CODEX_BIN="$X" \
+            "$E" setup "$P" 2>&1) || { printf '%s\n' "$out"; red "setup exited nonzero"; }
+          printf '%s\n' "$out"
+          grep -q "mode: installed package" <<<"$(head -n 1 <<<"$out")" || red "setup did not name its mode first"
+          for probe in "pi: SKIP" "claude: SKIP" "agy: SKIP" "copilot: SKIP" "omp: SKIP" "codex: SKIP"; do
+            grep -q "$probe" <<<"$out" || red "setup missing '$probe'"
+          done
+          grep -q "core: PASS" <<<"$out" || red "setup core not PASS"
+          grep -q "result: green (computed from the component outcomes above)" <<<"$out" || red "setup result not green"
+          # The no-write axis: protected auth/harness state unchanged (not "setup writes nothing").
+          test ! -e "$P/.pi"
+          test ! -e "$H/.pi/agent/settings.json"
+          test ! -e "$H/.gemini"
+          test ! -e "$H/.copilot"
+          test ! -e "$H/.codex"
+          test ! -e "$H/.pi/agent/auth.json.bak"
+          cmp -s "$S/auth.before" "$H/.pi/agent/auth.json"
+          echo "wsl2-install-surface: PASS"
+          GUEST
+          if grep -q $'\r' "$G"; then echo "guest script carries CR bytes" >&2; exit 1; fi
+          sha256sum "$G"
+
+      - name: run the guest script inside WSL2
+        # A first-launch OOBE waiting on stdin would otherwise surface only as the job timeout.
+        timeout-minutes: 10
+        run: |
+          set -euo pipefail
+          T="$(cygpath -u "$RUNNER_TEMP")"
+          G="$(wsl.exe -d "$DISTRO" -u root --exec wslpath -u "$(cygpath -w "$T/guest.sh")" | tr -d '\r')"
+          test -n "$G"
+          wsl.exe -d "$DISTRO" -u root --exec /usr/bin/env \
+            EXPECT_DISTRO="$DISTRO" NODE_VERSION="$NODE_VERSION" NODE_DIST="$NODE_DIST" NODE_SHA256="$NODE_SHA256" \
+            /bin/bash "$G" "$(cygpath -w "$T")"
+
+      # The most useful single fact in a red run: collected whatever happened above.
+      - name: host-side WSL diagnostics and VERSION row
+        if: always()
+        run: |
+          set -uo pipefail
+          wsl.exe --version | tr -d '\000\r'
+          wsl.exe --list --verbose | tr -d '\000\r'
+          ver="$(wsl.exe --list --verbose | tr -d '\000\r' | awk -v d="$DISTRO" '{ sub(/^\*/, ""); if ($1 == d) print $NF }')"
+          echo "host VERSION for $DISTRO: '$ver'"
+          [ "$ver" = 2 ]
