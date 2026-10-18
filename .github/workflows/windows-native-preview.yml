@@ -1,0 +1,189 @@
+name: windows-native-preview (experimental)
+
+# #78 — the Windows-native first preview. EXPERIMENTAL, non-voting (the release oracle reads only
+# ci.yml). build-addon compiles native/win32/entwurf_win.c twice with pinned node-gyp, verified Node
+# headers and node.lib, /MT /Brepro, and checks the import set; pack builds the with-addon tarball on
+# Linux and proves its carrier pairing; preview installs THAT tarball on Windows into a sandboxed
+# profile and runs the addon cells (L0/L0c source and compiled loader, R1 reader, R2
+# no-follow-to-pipe, T1 timeout + reclaim, N1 names and loader refusals) against the installed bytes.
+# A build that is not byte-reproducible keeps its evidence (uploaded always) and fails as
+# publication-blocked, so nothing downstream runs on it. B1 (installed Pi citizen) and D1 (v2 nonce delivery)
+# are not in this increment, so the run ends NOT ACCEPTED by construction. No auth, model, secret or
+# vendor call; network for actions, the pinned Node downloads and the npm registry only.
+
+on:
+  push:
+    branches: ['feat/78-windows-native-probe']
+    paths:
+      - '.github/workflows/windows-native-preview.yml'
+      - 'native/win32/**'
+      - 'pi-extensions/lib/win32-native.js'
+      - 'pi-extensions/lib/control-socket-path.js'
+      - 'pi-extensions/lib/meta-session.ts'
+      - 'pi-extensions/lib/socket-probe.ts'
+      - 'pi-extensions/lib/socket-discovery.ts'
+      - 'pi-extensions/lib/entwurf-control-rpc.ts'
+      - 'pi-extensions/entwurf-control.ts'
+      - 'mcp/entwurf-bridge/src/index.ts'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-addon:
+    runs-on: windows-2025
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.18.1
+      - name: install the build pin (tracked lockfile, no scripts)
+        working-directory: native/win32
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: build twice, verify pins and imports
+        shell: pwsh
+        run: |
+          $out = Join-Path $env:RUNNER_TEMP 'addon'
+          node native/win32/build.mjs $out
+          $code = $LASTEXITCODE
+          $receipt = Join-Path $out 'build-receipt.json'
+          if (Test-Path $receipt) { Get-Content $receipt }
+          if (Test-Path $out) { Get-FileHash -Algorithm SHA256 (Join-Path $out '*') | Format-Table -AutoSize }
+          switch ($code) {
+            0 { Write-Output 'build: imports as expected, byte-reproducible' }
+            1 { Write-Output 'build: RED (import set)' }
+            3 { Write-Output 'build: PUBLICATION BLOCKED (not byte-reproducible)' }
+            default { Write-Output "build: refused or failed ($code)" }
+          }
+          exit $code
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: win32-addon
+          path: ${{ runner.temp }}/addon/
+          if-no-files-found: error
+          retention-days: 14
+
+  pack:
+    needs: build-addon
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.9.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.18.1
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@v4
+        with:
+          name: win32-addon
+          path: ${{ runner.temp }}/addon
+      - name: the build receipt must be an accepted build
+        run: |
+          node -e '
+            const r = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
+            console.log(`build receipt: ${r.statement}; imports ${JSON.stringify(r.imports)}; importsOk=${r.importsOk}`);
+            if (r.reproducible !== true || r.importsOk !== true) { console.error("build receipt is not an accepted build"); process.exit(1); }
+          ' "$RUNNER_TEMP/addon/build-receipt.json"
+      - name: place exactly the carrier (addon + manifest)
+        run: |
+          mkdir -p native/win32-x64
+          cp "$RUNNER_TEMP/addon/entwurf_win.node" "$RUNNER_TEMP/addon/manifest.json" native/win32-x64/
+          sha256sum native/win32-x64/*
+      - name: check-pack must see the with-addon carrier
+        run: |
+          set -o pipefail
+          ./run.sh check-pack 2>&1 | tee "$RUNNER_TEMP/check-pack.log"
+          grep -q '^\[check-pack\] win32 addon: present sha256=' "$RUNNER_TEMP/check-pack.log"
+          echo "pack: carrier verified (present is not a publication approval)"
+      - name: pack the preview tarball
+        run: |
+          mkdir -p "$RUNNER_TEMP/tgz"
+          npm pack --silent --foreground-scripts --pack-destination "$RUNNER_TEMP/tgz" 1>&2
+          ls -la "$RUNNER_TEMP/tgz"
+          (cd "$RUNNER_TEMP/tgz" && sha256sum *.tgz | tee SHA256SUMS)
+          tar -tzf "$RUNNER_TEMP"/tgz/*.tgz | grep '^package/native/' | sort
+      - uses: actions/upload-artifact@v4
+        with:
+          name: win32-preview-tgz
+          path: ${{ runner.temp }}/tgz/
+          if-no-files-found: error
+          retention-days: 14
+
+  preview:
+    needs: pack
+    runs-on: windows-2025
+    timeout-minutes: 20
+    steps:
+      # The checkout supplies the cell harness only; the subject is the installed tarball.
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.18.1
+      - uses: actions/download-artifact@v4
+        with:
+          name: win32-preview-tgz
+          path: ${{ runner.temp }}/tgz
+      - name: sandbox the profile roots and snapshot the real profile's .pi
+        shell: pwsh
+        run: |
+          $S = Join-Path $env:RUNNER_TEMP 'sandbox'
+          foreach ($d in 'home','appdata','localappdata','pi-agent','consumer','work') { New-Item -ItemType Directory -Force -Path (Join-Path $S $d) | Out-Null }
+          $realPi = Join-Path $env:USERPROFILE '.pi'
+          $snap = if (Test-Path $realPi) { (Get-ChildItem -Recurse -Force -File $realPi | Get-FileHash -Algorithm SHA256 | ForEach-Object { $_.Hash + ' ' + $_.Path } | Sort-Object) -join "`n" } else { 'ABSENT' }
+          Set-Content -NoNewline -Path (Join-Path $env:RUNNER_TEMP 'real-pi-before.txt') -Value $snap
+          "REAL_PI=$realPi" >> $env:GITHUB_ENV
+          "HOME=$(Join-Path $S 'home')" >> $env:GITHUB_ENV
+          "USERPROFILE=$(Join-Path $S 'home')" >> $env:GITHUB_ENV
+          "APPDATA=$(Join-Path $S 'appdata')" >> $env:GITHUB_ENV
+          "LOCALAPPDATA=$(Join-Path $S 'localappdata')" >> $env:GITHUB_ENV
+          "PI_CODING_AGENT_DIR=$(Join-Path $S 'pi-agent')" >> $env:GITHUB_ENV
+          "SANDBOX=$S" >> $env:GITHUB_ENV
+          Write-Output "sandbox roots under $S; real .pi before: $(if ($snap -eq 'ABSENT') { 'ABSENT' } else { 'present' })"
+      - name: install the preview tarball into a consumer prefix
+        shell: pwsh
+        run: |
+          $tgz = Get-ChildItem (Join-Path $env:RUNNER_TEMP 'tgz') -Filter '*.tgz' | Select-Object -First 1
+          Get-FileHash -Algorithm SHA256 $tgz.FullName
+          npm install --prefix (Join-Path $env:SANDBOX 'consumer') $tgz.FullName --ignore-scripts --no-audit --no-fund
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $pkg = Join-Path $env:SANDBOX 'consumer\node_modules\@junghanacs\entwurf'
+          Get-FileHash -Algorithm SHA256 (Join-Path $pkg 'native\win32-x64\*')
+          "PKG=$pkg" >> $env:GITHUB_ENV
+      - name: addon cells against the installed bytes (L0 L0c R1 R2 T1 N1)
+        shell: pwsh
+        run: |
+          node native/win32/preview/addon-cells.mjs $env:PKG (Join-Path $env:SANDBOX 'work') (Join-Path $env:RUNNER_TEMP 'addon-cells.jsonl')
+          "ADDON_CELLS_EXIT=$LASTEXITCODE" >> $env:GITHUB_ENV
+      - name: real profile untouched, then the verdict
+        if: always()
+        shell: pwsh
+        run: |
+          $realPi = $env:REAL_PI
+          $snap = if (Test-Path $realPi) { (Get-ChildItem -Recurse -Force -File $realPi | Get-FileHash -Algorithm SHA256 | ForEach-Object { $_.Hash + ' ' + $_.Path } | Sort-Object) -join "`n" } else { 'ABSENT' }
+          $before = Get-Content -Raw (Join-Path $env:RUNNER_TEMP 'real-pi-before.txt')
+          $profileOk = ($snap -eq $before)
+          Write-Output "real profile .pi unchanged: $profileOk"
+          Write-Output 'build: accepted (this job only runs after an accepted build receipt)'
+          Write-Output 'pack: carrier verified'
+          Write-Output "addon cells: $(if ($env:ADDON_CELLS_EXIT -eq '0') { 'PASS' } else { "NOT ACCEPTED (exit $env:ADDON_CELLS_EXIT)" })"
+          Write-Output 'preview B1 (installed Pi citizen): NOT IMPLEMENTED in this increment'
+          Write-Output 'preview D1 (v2 nonce delivery): NOT IMPLEMENTED in this increment'
+          Write-Output 'windows-native-preview: NOT ACCEPTED (B1, D1 absent by construction)'
+          if (-not $profileOk -or $env:ADDON_CELLS_EXIT -ne '0') { exit 1 }
+          exit 1
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: win32-preview-evidence
+          path: |
+            ${{ runner.temp }}/addon-cells.jsonl
+            ${{ runner.temp }}/real-pi-before.txt
+          if-no-files-found: warn
+          retention-days: 14

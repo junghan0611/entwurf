@@ -1340,6 +1340,15 @@ check_control_send_receipt() {
   run_vitest pi-extensions/lib/control-send-receipt.test.ts
 }
 
+check_win32_preview() {
+  # MUTANT EXECUTION COORDINATE, not a discovery path — the Windows preview's (#78) loader and
+  # platform wiring tests are found by check-tests-beside-behavior like every other beside-behaviour
+  # lane. This case exists because the WIN32-* mutants name it as gate argv. The addon's own Win32
+  # behaviour is measured only on Windows, by windows-native-preview.yml.
+  section "Windows preview loader + platform wiring (mutant execution coordinate)"
+  run_vitest pi-extensions/lib/win32-native.test.ts pi-extensions/lib/win32-wiring.test.ts
+}
+
 check_entwurf_v2_native_push() {
   # MUTANT EXECUTION COORDINATE, not a discovery path — the test is found by
   # check-tests-beside-behavior like every other beside-behaviour lane. This case exists
@@ -3851,6 +3860,14 @@ check_pack() {
     "pi/pi-durable/carrier/LICENSE"
     "pi/meta-bridge-omp/entwurf-meta-omp/package.json"
     "mcp/entwurf-bridge/dist/pi-extensions/lib/meta-session.js"
+    # #78 — the Windows preview loader. The compiled meta-session reaches it only through a
+    # win32-only createRequire, not the import graph, so its compiled copy is pinned by name.
+    "pi-extensions/lib/win32-native.js"
+    "mcp/entwurf-bridge/dist/pi-extensions/lib/win32-native.js"
+    # #78 — the MIT notice for node-gyp's win_delay_load_hook.cc, which build.mjs compiles into the
+    # Windows addon. It rides every pack (one per-FILE entry), so the preview carrier never ships
+    # without it; build.mjs refuses unless it equals the pinned node-gyp LICENSE.
+    "LICENSES/node-gyp.txt"
     "scripts/postinstall-chmod.cjs"
     "pi/entwurf-capabilities.json"
     "pi/meta-bridge/.claude-plugin/marketplace.json"
@@ -3925,6 +3942,9 @@ check_pack() {
     '\.test\.[cm]?[jt]s$'
     # Maintainer take/renderer/helper TS is source-only, including non-test implementations.
     '^demo/.*\.ts$'
+    # #78 — the Windows addon's C source, gyp file and build pin are CI build inputs, never a
+    # consumer repair surface: only the built native/win32-x64/ carrier may ship.
+    '^native/win32/'
   )
   # #141: the owned pi-durable source, its typecheck fence and the retired overlay patch are maintainer
   # input. An installed consumer runs the emitted carrier JS (and its LICENSE) only — Rule 11: compiled
@@ -3957,6 +3977,20 @@ check_pack() {
     pass=0
   fi
 
+  # #78 — a pack carries the Windows addon not at all, or as exactly a verified addon + manifest
+  # pair (pack_win32_carrier_verdict, proven on owned fixtures by check-pack-win32-carrier).
+  # "present" means the carrier verified, never that the build was approved for publication.
+  local carrier_verdict
+  carrier_verdict=$(pack_win32_carrier_verdict "$file_list" "$REPO_DIR")
+  case "$carrier_verdict" in
+    absent) echo "[check-pack] win32 addon: absent (not a Windows preview artifact)" ;;
+    present\ *) echo "[check-pack] win32 addon: present sha256=${carrier_verdict#present } (carrier verified; not a publication approval)" ;;
+    *)
+      fail "[check-pack] native/win32-x64/ is not one verified addon + manifest pair: $carrier_verdict"
+      pass=0
+      ;;
+  esac
+
   local total
   total=$(printf '%s\n' "$file_list" | wc -l | tr -d ' ')
   echo "[check-pack] $total files in tarball"
@@ -3967,6 +4001,68 @@ check_pack() {
   fi
   fail "[check-pack] invariants violated"
   return 1
+}
+
+# #78 — the Windows addon carrier decision, shared by check_pack (the real tarball list) and
+# check_pack_win32_carrier (owned fake-byte fixtures). $1 = tarball file list, $2 = the package root
+# holding native/win32-x64/. Prints ONE verdict: `absent`, `pair-broken`, `invalid <code>` or
+# `present <sha256>`. The manifest + bytes check IS the loader's own verifyWin32NativeAt (manifest
+# shape, N-API 8, digest), so the pack and the consumer cannot disagree about what a carrier is.
+pack_win32_carrier_verdict() {
+  local list="$1" root="$2" carrier
+  carrier=$(grep -E '^native/win32-x64/' <<<"$list" | sort || true)
+  if [ -z "$carrier" ]; then echo "absent"; return 0; fi
+  if [ "$carrier" != $'native/win32-x64/entwurf_win.node\nnative/win32-x64/manifest.json' ]; then echo "pair-broken"; return 0; fi
+  node -e '
+    import(require("node:url").pathToFileURL(process.argv[1]).href).then((m) => {
+      try { process.stdout.write(`present ${m.verifyWin32NativeAt(process.argv[2], { napi: "8" }).sha256}`); }
+      catch (err) { process.stdout.write(`invalid ${err.code ?? "uncoded"}`); }
+    });' "$REPO_DIR/pi-extensions/lib/win32-native.js" "$root"
+}
+
+check_pack_win32_carrier() {
+  section "pack: Windows addon carrier verdict (owned fake-byte fixtures)"
+  # Fake bytes and node-written manifests, never a PE: this proves the pair/digest/ABI decision,
+  # not a loadable addon (windows-native-preview.yml owns that, on installed bytes).
+  local fx pair=$'native/win32-x64/entwurf_win.node\nnative/win32-x64/manifest.json' got
+  fx=$(mktemp -d "${TMPDIR:-/tmp}/entwurf-pack-carrier.XXXXXX")
+  trap 'rm -rf -- "$fx"' RETURN
+  win32_carrier_cell() { # name napiVersion -> a root with a matching addon + manifest
+    mkdir -p "$fx/$1/native/win32-x64"
+    printf 'fake addon %s\n' "$1" >"$fx/$1/native/win32-x64/entwurf_win.node"
+    node -e '
+      const fs = require("node:fs"), dir = process.argv[1];
+      const sha = require("node:crypto").createHash("sha256").update(fs.readFileSync(dir + "/entwurf_win.node")).digest("hex");
+      fs.writeFileSync(dir + "/manifest.json", JSON.stringify({ schema: 1, platform: "win32", arch: "x64", file: "entwurf_win.node", sha256: sha, napiVersion: Number(process.argv[2]) }));
+    ' "$fx/$1/native/win32-x64" "$2"
+  }
+  win32_carrier_cell match 8
+  win32_carrier_cell drift 8 && printf 'changed\n' >"$fx/drift/native/win32-x64/entwurf_win.node"
+  win32_carrier_cell abi 7
+  win32_carrier_cell garbled 8 && printf 'not json' >"$fx/garbled/native/win32-x64/manifest.json"
+  local want_sha
+  want_sha=$(sha256sum "$fx/match/native/win32-x64/entwurf_win.node" | cut -d' ' -f1)
+  got=$(pack_win32_carrier_verdict "package.json" "$fx/match")
+  [ "$got" = "absent" ] || { fail "[check-pack-win32-carrier] a list without native/win32-x64/ must be absent — got: $got"; return 1; }
+  for cell in drift abi garbled; do
+    got=$(pack_win32_carrier_verdict "$pair" "$fx/$cell")
+    [ "$got" = "invalid ENTWURF_WIN32_NATIVE_DRIFT" ] || {
+      fail "[QK:WIN32-PACK-DIGEST] the $cell carrier (changed byte / N-API 7 / unparsable manifest) must be invalid as drift, never present — got: $got"
+      return 1
+    }
+  done
+  # The positive cell comes after the refusals, so a weakened check dies on its own QK first.
+  got=$(pack_win32_carrier_verdict "$pair" "$fx/match")
+  [ "$got" = "present $want_sha" ] || { fail "[check-pack-win32-carrier] a matching pair must be present $want_sha — got: $got"; return 1; }
+  local list
+  for list in 'native/win32-x64/entwurf_win.node' 'native/win32-x64/manifest.json' "$pair"$'\nnative/win32-x64/x.dll'; do
+    got=$(pack_win32_carrier_verdict "$list" "$fx/match")
+    [ "$got" = "pair-broken" ] || {
+      fail "[QK:WIN32-PACK-PAIR] native/win32-x64/ must carry exactly the addon + manifest pair — $(tr '\n' ' ' <<<"$list") gave: $got"
+      return 1
+    }
+  done
+  echo "[check-pack-win32-carrier] ok — absent, present, three drift shapes and three broken pairs decided by the shared verdict"
 }
 
 # The pin-leak filter for the install tree's .pnpm listing, shared by the real scan and its
@@ -7378,6 +7474,9 @@ case "$cmd" in
   check-control-send-receipt)
     check_control_send_receipt
     ;;
+  check-win32-preview)
+    check_win32_preview
+    ;;
   check-entwurf-v2-native-push)
     check_entwurf_v2_native_push
     ;;
@@ -8488,6 +8587,9 @@ case "$cmd" in
     ;;
   check-pack-pin-matcher)
     check_pack_pin_matcher
+    ;;
+  check-pack-win32-carrier)
+    check_pack_win32_carrier
     ;;
   check-pack-consumer-roots)
     check_pack_consumer_roots

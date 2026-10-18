@@ -3488,7 +3488,7 @@ let manifestCount: number;
 		"mux-fresh-call": 65,
 		"mux-launcher-fence": 8,
 		"mux-parent-artifact": 3,
-		"pack-install": 3,
+		"pack-install": 5,
 		"pi-package-ownership": 8,
 		"qualification-ledger": 42,
 		"mux-resume-call": 10,
@@ -3506,6 +3506,7 @@ let manifestCount: number;
 		"typing-call-fence": 1,
 		"v2-surface": 13,
 		"v2-visible-resume": 18,
+		"win32-preview": 19,
 	};
 	const laneTally: Record<string, number> = {};
 	for (const man of manifests) laneTally[man.lane] = (laneTally[man.lane] ?? 0) + man.mutants.length;

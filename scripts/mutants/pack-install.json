@@ -4,7 +4,7 @@
 	"mutants": [
 		{
 			"claim": "PACK-INSTALL-PIN-MATCHER-BOUNDED",
-			"title": "the pin-leak matcher loses its version boundary and blesses substring lookalikes — @0.85.10 reads as the pinned 0.85.1 and the gate announces a verified tree it never verified (independent review, 2026-08-25)",
+			"title": "the pin-leak matcher loses its version boundary and blesses substring lookalikes \u2014 @0.85.10 reads as the pinned 0.85.1 and the gate announces a verified tree it never verified (independent review, 2026-08-25)",
 			"subject": "run.sh",
 			"find": ["  grep '^@earendil-works+' | grep -Ev '@1\\.3\\.0(_|$)' || true"],
 			"replace": ["  grep '^@earendil-works+' | grep -v '@0\\.87\\.1' || true"],
@@ -15,7 +15,7 @@
 		},
 		{
 			"claim": "PACK-INSTALL-PIN-MATCHER-COVERS-CLOSURE",
-			"title": "the pin-leak matcher narrows back to the pi-* families and goes blind to a non-pi member of the same runtime closure — @earendil-works/chord (new in pi 0.85.0, a runtime dependency of pi-coding-agent/pi-agent-core/pi-client/pi-protocol) floats unpinned while the gate prints a verified pin (measured 2026-09-06 on a real 0.85.1 install tree)",
+			"title": "the pin-leak matcher narrows back to the pi-* families and goes blind to a non-pi member of the same runtime closure \u2014 @earendil-works/chord (new in pi 0.85.0, a runtime dependency of pi-coding-agent/pi-agent-core/pi-client/pi-protocol) floats unpinned while the gate prints a verified pin (measured 2026-09-06 on a real 0.85.1 install tree)",
 			"subject": "run.sh",
 			"find": ["  grep '^@earendil-works+' | grep -Ev '@1\\.3\\.0(_|$)' || true"],
 			"replace": ["  grep '^@earendil-works+pi-' | grep -Ev '@1\\.3\\.0(_|$)' || true"],
@@ -33,6 +33,32 @@
 			"gate": ["bash", "run.sh", "check-pack-consumer-roots"],
 			"timeoutSeconds": 120,
 			"signature": "[QK:PACK-INSTALL-CONSUMER-ROOTS-CONTAINED]",
+			"signatureSource": "run.sh"
+		},
+		{
+			"claim": "WIN32-PACK-PAIR",
+			"title": "the Windows carrier pair check becomes a presence test, so an addon without its manifest, or with an extra DLL beside it, is packed as a carrier",
+			"subject": "run.sh",
+			"find": [
+				"  if [ \"$carrier\" != $'native/win32-x64/entwurf_win.node\\nnative/win32-x64/manifest.json' ]; then echo \"pair-broken\"; return 0; fi"
+			],
+			"replace": ["  if ! grep -q 'entwurf_win.node' <<<\"$carrier\"; then echo \"pair-broken\"; return 0; fi"],
+			"gate": ["bash", "run.sh", "check-pack-win32-carrier"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:WIN32-PACK-PAIR]",
+			"signatureSource": "run.sh"
+		},
+		{
+			"claim": "WIN32-PACK-DIGEST",
+			"title": "the pack stops verifying the carrier with the loader's own check, so changed bytes or a foreign N-API manifest are packed as `present`",
+			"subject": "run.sh",
+			"find": [
+				"      try { process.stdout.write(`present ${m.verifyWin32NativeAt(process.argv[2], { napi: \"8\" }).sha256}`); }"
+			],
+			"replace": ["      try { process.stdout.write(`present unverified`); }"],
+			"gate": ["bash", "run.sh", "check-pack-win32-carrier"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:WIN32-PACK-DIGEST]",
 			"signatureSource": "run.sh"
 		}
 	]

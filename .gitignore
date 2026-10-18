@@ -77,3 +77,12 @@ plugins/*/node_modules/
 # out of tracking and out of `biome check .` (vcs-ignore-aware) so `pnpm lint`
 # reflects only repo source.
 .pi-subagents/
+
+# Windows preview addon (#78): the carrier is built in CI from native/win32/ and never tracked;
+# its build tree and build-only dependencies stay local. The build pin's lockfile is the one npm
+# lockfile this repo tracks: it pins node-gyp for that CI build alone and competes with nothing
+# (native/win32/ is not a workspace member and never ships).
+native/win32-x64/
+native/win32/build/
+native/win32/node_modules/
+!native/win32/package-lock.json

@@ -15,6 +15,7 @@
  */
 
 import * as net from "node:net";
+import { win32Native } from "./win32-native.js";
 
 // `sender` carries the transparency envelope (agentId / sessionId / cwd /
 // timestamp). All four fields are mandatory whenever `sender` is present —
@@ -199,6 +200,7 @@ export async function sendRpcCommand(
 	options: RpcClientOptions = {},
 ): Promise<{ response: RpcResponse }> {
 	const { timeout = 5000 } = options;
+	if (process.platform === "win32") return await sendPipeRpcCommand(socketPath, command, timeout);
 
 	return new Promise((resolve, reject) => {
 		const socket = net.createConnection(socketPath);
@@ -276,4 +278,34 @@ export async function sendRpcCommand(
 			doReject(error);
 		});
 	});
+}
+
+/**
+ * The Windows client (#78). The addon makes one owner-validated connect, writes the request
+ * line and returns the first response line, all inside one deadline; a timeout is
+ * `ETIMEDOUT`, a pipe owned by anyone but this token's expected owner is `EPERM` before any
+ * byte. The protocol is request-bound on its own connection, so that first line IS the
+ * answer: anything other than this command's response is refused, never waited past.
+ */
+async function sendPipeRpcCommand(
+	pipeName: string,
+	command: RpcCommand,
+	timeout: number,
+): Promise<{ response: RpcResponse }> {
+	const { responseLine } = await win32Native().pipeRpc(
+		pipeName,
+		JSON.stringify(command),
+		Math.max(0, Math.floor(timeout)),
+	);
+	let msg: unknown;
+	try {
+		msg = JSON.parse(responseLine.trim());
+	} catch {
+		throw new Error(`control pipe answered ${command.type} with a line that is not JSON`);
+	}
+	const response = msg as RpcResponse & { type?: unknown };
+	if (response?.type !== "response" || response.command !== command.type) {
+		throw new Error(`control pipe answered something other than the ${command.type} response`);
+	}
+	return { response };
 }

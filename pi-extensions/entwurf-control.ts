@@ -147,8 +147,12 @@ async function ensureControlDir(): Promise<void> {
 	await fs.mkdir(ENTWURF_DIR, { recursive: true });
 }
 
+// On Windows the control address is a named pipe (`\\.\pipe\…`, #78): the kernel owns the
+// name and drops it with the last handle, so there is no file to unlink and none to sweep.
+const PIPE_ADDRESSED = process.platform === "win32";
+
 async function removeSocket(socketPath: string | null): Promise<void> {
-	if (!socketPath) return;
+	if (!socketPath || PIPE_ADDRESSED) return;
 	try {
 		await fs.unlink(socketPath);
 	} catch (error) {
@@ -162,6 +166,7 @@ async function removeSocket(socketPath: string | null): Promise<void> {
 // alias-era artifacts. Runs once per startControlServer call. We only touch
 // entries that are demonstrably dead — a live peer's socket survives.
 async function gcStaleSockets(): Promise<void> {
+	if (PIPE_ADDRESSED) return;
 	let entries: import("node:fs").Dirent[];
 	try {
 		entries = await fs.readdir(ENTWURF_DIR, { withFileTypes: true });

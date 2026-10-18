@@ -1,0 +1,215 @@
+{
+	"schemaVersion": 1,
+	"lane": "win32-preview",
+	"mutants": [
+		{
+			"claim": "WIN32-NATIVE-ABSENT-UNSUPPORTED",
+			"title": "an install without the addon reads as drift instead of the honest 'no Windows addon here', so an ordinary Linux pack on Windows is reported as tampering",
+			"subject": "pi-extensions/lib/win32-native.js",
+			"find": ["\t\tif (/** @type {{ code?: unknown }} */ (err).code === \"ENOENT\") {"],
+			"replace": ["\t\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-win32-preview"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:WIN32-NATIVE-ABSENT-UNSUPPORTED]",
+			"signatureSource": "pi-extensions/lib/win32-native.test.ts"
+		},
+		{
+			"claim": "WIN32-NATIVE-SHA-DRIFT",
+			"title": "the addon digest is no longer compared, so bytes the manifest never named reach process.dlopen",
+			"subject": "pi-extensions/lib/win32-native.js",
+			"find": ["\tif (sha256 !== manifest.sha256) {"],
+			"replace": ["\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-win32-preview"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:WIN32-NATIVE-SHA-DRIFT]",
+			"signatureSource": "pi-extensions/lib/win32-native.test.ts"
+		},
+		{
+			"claim": "WIN32-NATIVE-MANIFEST-DRIFT",
+			"title": "a manifest for another architecture is accepted, so a foreign binary is loaded as the win32-x64 addon",
+			"subject": "pi-extensions/lib/win32-native.js",
+			"find": ["\t\tmanifest.arch !== \"x64\" ||"],
+			"replace": ["\t\tfalse ||"],
+			"gate": ["bash", "run.sh", "check-win32-preview"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:WIN32-NATIVE-MANIFEST-DRIFT]",
+			"signatureSource": "pi-extensions/lib/win32-native.test.ts"
+		},
+		{
+			"claim": "WIN32-NATIVE-NAPI-FLOOR",
+			"title": "the N-API floor is dropped, so an older Node loads an addon whose symbols it may not provide",
+			"subject": "pi-extensions/lib/win32-native.js",
+			"find": ["\tif (!(napi >= ADDON_NAPI_VERSION)) {"],
+			"replace": ["\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-win32-preview"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:WIN32-NATIVE-NAPI-FLOOR]",
+			"signatureSource": "pi-extensions/lib/win32-native.test.ts"
+		},
+		{
+			"claim": "WIN32-NATIVE-OFF-WINDOWS",
+			"title": "the platform guard is dropped, so a non-Windows host goes looking for the Windows addon and fails for the wrong reason",
+			"subject": "pi-extensions/lib/win32-native.js",
+			"find": ["\tif (process.platform !== \"win32\" || process.arch !== \"x64\") {"],
+			"replace": ["\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-win32-preview"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:WIN32-NATIVE-OFF-WINDOWS]",
+			"signatureSource": "pi-extensions/lib/win32-native.test.ts"
+		},
+		{
+			"claim": "WIN32-NATIVE-DOS-DEVICE",
+			"title": "a DOS device name reaches CreateFileW, which opens the device rather than a store file",
+			"subject": "pi-extensions/lib/win32-native.js",
+			"find": ["\tif (DOS_DEVICE.test(stem)) {"],
+			"replace": ["\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-win32-preview"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:WIN32-NATIVE-DOS-DEVICE]",
+			"signatureSource": "pi-extensions/lib/win32-native.test.ts"
+		},
+		{
+			"claim": "WIN32-PIPE-CANON-STABLE",
+			"title": "a control dir that does not exist yet makes the root canonicalisation throw, so a passive peer-facts run before the first birth cannot name any pipe",
+			"subject": "pi-extensions/lib/control-socket-path.js",
+			"find": ["\t\t\tif (/** @type {{ code?: unknown }} */ (err).code !== \"ENOENT\" || parent === head) throw err;"],
+			"replace": ["\t\t\tthrow err;"],
+			"gate": ["bash", "run.sh", "check-win32-preview"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:WIN32-PIPE-CANON-STABLE]",
+			"signatureSource": "pi-extensions/lib/win32-wiring.test.ts"
+		},
+		{
+			"claim": "WIN32-PIPE-CANON-ONLY-ENOENT",
+			"title": "an access-denied ancestor is walked past like an absent one, so a root this process cannot resolve is silently spelled from a shorter path",
+			"subject": "pi-extensions/lib/control-socket-path.js",
+			"find": ["\t\t\tif (/** @type {{ code?: unknown }} */ (err).code !== \"ENOENT\" || parent === head) throw err;"],
+			"replace": ["\t\t\tif (parent === head) throw err;"],
+			"gate": ["bash", "run.sh", "check-win32-preview"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:WIN32-PIPE-CANON-ONLY-ENOENT]",
+			"signatureSource": "pi-extensions/lib/win32-wiring.test.ts"
+		},
+		{
+			"claim": "WIN32-PIPE-CANON-FOLD",
+			"title": "the root is no longer case-folded, so two spellings of one store root derive two pipe names and the citizens never find each other",
+			"subject": "pi-extensions/lib/control-socket-path.js",
+			"find": ["\t\t\treturn joined.replace(/[\\\\/]+$/, \"\").toLowerCase();"],
+			"replace": ["\t\t\treturn joined.replace(/[\\\\/]+$/, \"\");"],
+			"gate": ["bash", "run.sh", "check-win32-preview"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:WIN32-PIPE-CANON-FOLD]",
+			"signatureSource": "pi-extensions/lib/win32-wiring.test.ts"
+		},
+		{
+			"claim": "WIN32-PIPE-POSIX-UNCHANGED",
+			"title": "the Windows grammar leaks onto Linux/macOS, replacing the `<dir>/<gid>.sock` address every existing citizen listens on",
+			"subject": "pi-extensions/lib/control-socket-path.js",
+			"find": ["\tif (process.platform === \"win32\") return win32PipeNameFor(dir, gardenId);"],
+			"replace": ["\tif (true) return win32PipeNameFor(dir, gardenId);"],
+			"gate": ["bash", "run.sh", "check-win32-preview"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:WIN32-PIPE-POSIX-UNCHANGED]",
+			"signatureSource": "pi-extensions/lib/win32-wiring.test.ts"
+		},
+		{
+			"claim": "WIN32-PIPE-NEVER-STAT",
+			"title": "a pipe name is stat-ed like a socket file, and on Windows that open connects to whoever holds the name",
+			"subject": "pi-extensions/lib/socket-discovery.ts",
+			"find": ["\tif (socketPath.startsWith(WIN32_PIPE_PREFIX)) return { kind: \"socket-file\", socketPath };"],
+			"replace": ["\tif (false) return { kind: \"socket-file\", socketPath };"],
+			"gate": ["bash", "run.sh", "check-win32-preview"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:WIN32-PIPE-NEVER-STAT]",
+			"signatureSource": "pi-extensions/lib/win32-wiring.test.ts"
+		},
+		{
+			"claim": "WIN32-PIPE-NO-RECORDLESS-CLAIM",
+			"title": "an unstat-ed pipe name is reported as a confirmed record-less socket, a presence claim nothing measured",
+			"subject": "pi-extensions/lib/socket-discovery.ts",
+			"find": ["\treturn inspection.kind === \"socket-file\" && !inspection.socketPath.startsWith(WIN32_PIPE_PREFIX);"],
+			"replace": ["\treturn inspection.kind === \"socket-file\";"],
+			"gate": ["bash", "run.sh", "check-win32-preview"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:WIN32-PIPE-NO-RECORDLESS-CLAIM]",
+			"signatureSource": "pi-extensions/lib/win32-wiring.test.ts"
+		},
+		{
+			"claim": "WIN32-DISCOVERY-FROM-RECORDS",
+			"title": "the Windows scan lists the control dir again, so a stray `.sock` file adds a citizen no record names",
+			"subject": "pi-extensions/lib/socket-discovery.ts",
+			"find": ["\t\t\tif (process.platform === \"win32\") return [];"],
+			"replace": ["\t\t\tif (false) return [];"],
+			"gate": ["bash", "run.sh", "check-win32-preview"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:WIN32-DISCOVERY-FROM-RECORDS]",
+			"signatureSource": "pi-extensions/lib/win32-wiring.test.ts"
+		},
+		{
+			"claim": "WIN32-PROBE-CLASSIFY",
+			"title": "the Windows probe falls back to a Unix-socket connect, which cannot reach a named pipe and reads every live citizen as dead",
+			"subject": "pi-extensions/lib/socket-probe.ts",
+			"find": ["\tif (process.platform === \"win32\") return await probePipeLiveness(socketPath, timeoutMs);"],
+			"replace": ["\tif (false) return await probePipeLiveness(socketPath, timeoutMs);"],
+			"gate": ["bash", "run.sh", "check-win32-preview"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:WIN32-PROBE-CLASSIFY]",
+			"signatureSource": "pi-extensions/lib/win32-wiring.test.ts"
+		},
+		{
+			"claim": "WIN32-PROBE-REFUSAL-THROWS",
+			"title": "a missing or drifted addon is swallowed into an indeterminate liveness instead of refusing loudly",
+			"subject": "pi-extensions/lib/socket-probe.ts",
+			"find": ["\tconst native = win32Native();", "\ttry {"],
+			"replace": ["\ttry {", "\t\tconst native = win32Native();"],
+			"gate": ["bash", "run.sh", "check-win32-preview"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:WIN32-PROBE-REFUSAL-THROWS]",
+			"signatureSource": "pi-extensions/lib/win32-wiring.test.ts"
+		},
+		{
+			"claim": "WIN32-RPC-FIRST-LINE",
+			"title": "the Windows rpc accepts another command's response as this one's answer",
+			"subject": "pi-extensions/lib/entwurf-control-rpc.ts",
+			"find": ["\tif (response?.type !== \"response\" || response.command !== command.type) {"],
+			"replace": ["\tif (response?.type !== \"response\") {"],
+			"gate": ["bash", "run.sh", "check-win32-preview"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:WIN32-RPC-FIRST-LINE]",
+			"signatureSource": "pi-extensions/lib/win32-wiring.test.ts"
+		},
+		{
+			"claim": "WIN32-RECORD-READ-NATIVE",
+			"title": "a Windows record read goes back to the Node open, which follows a final-component reparse point",
+			"subject": "pi-extensions/lib/meta-session.ts",
+			"find": ["\tif (process.platform === \"win32\") return win32RecordReader()(file).toString(\"utf8\");"],
+			"replace": ["\tif (false) return win32RecordReader()(file).toString(\"utf8\");"],
+			"gate": ["bash", "run.sh", "check-win32-preview"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:WIN32-RECORD-READ-NATIVE]",
+			"signatureSource": "pi-extensions/lib/win32-wiring.test.ts"
+		},
+		{
+			"claim": "WIN32-NATIVE-ABI-DRIFT",
+			"title": "a manifest declaring another N-API version is accepted, so a build for some other ABI is verified as this addon",
+			"subject": "pi-extensions/lib/win32-native.js",
+			"find": ["\t\tmanifest.napiVersion !== ADDON_NAPI_VERSION"],
+			"replace": ["\t\tfalse"],
+			"gate": ["bash", "run.sh", "check-win32-preview"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:WIN32-NATIVE-ABI-DRIFT]",
+			"signatureSource": "pi-extensions/lib/win32-native.test.ts"
+		},
+		{
+			"claim": "WIN32-NATIVE-COMPILED-DEPTH",
+			"title": "the compiled depth is dropped from the root search, so the bridge's dist copy of the loader cannot find the package it ships in",
+			"subject": "pi-extensions/lib/win32-native.js",
+			"find": ["\t\t[\"..\", \"..\", \"..\", \"..\", \"..\"],"],
+			"replace": [""],
+			"gate": ["bash", "run.sh", "check-win32-preview"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:WIN32-NATIVE-COMPILED-DEPTH]",
+			"signatureSource": "pi-extensions/lib/win32-native.test.ts"
+		}
+	]
+}

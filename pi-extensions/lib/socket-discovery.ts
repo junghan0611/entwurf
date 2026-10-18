@@ -57,6 +57,7 @@ import {
 	controlSocketPathIn,
 	defaultControlSocketDir,
 	gardenIdFromSocketFilename,
+	WIN32_PIPE_PREFIX,
 } from "./control-socket-path.js";
 import type { SocketProbe } from "./entwurf-facts.ts";
 import { SESSION_ID_RE } from "./session-id.js";
@@ -117,7 +118,9 @@ export type TargetSocketInspection =
  * `record-less-socket` reject (a diagnostic state) — no probe, no acceptance.
  */
 export function isRecordLessSocketCandidate(inspection: TargetSocketInspection): boolean {
-	return inspection.kind === "socket-file";
+	// A Windows pipe name (#78) is never lstat-ed (see inspectControlSocketPath), so its
+	// `socket-file` carries no presence evidence and cannot confirm a record-less socket.
+	return inspection.kind === "socket-file" && !inspection.socketPath.startsWith(WIN32_PIPE_PREFIX);
 }
 
 export interface LstatLike {
@@ -139,6 +142,11 @@ export async function inspectControlSocketPath(
 	socketPath: string,
 	lstatFn: (p: string) => Promise<LstatLike> = (p) => fs.lstat(p),
 ): Promise<TargetSocketInspection> {
+	// Windows (#78): the address is a named pipe. The pipe filesystem has no symlinks to
+	// catch, and opening the name to stat it would CONNECT to it and consume an instance.
+	// So the name is never stat-ed: it is safe to probe because the probe itself refuses a
+	// pipe whose owner is not this token's expected owner before any byte.
+	if (socketPath.startsWith(WIN32_PIPE_PREFIX)) return { kind: "socket-file", socketPath };
 	let st: LstatLike;
 	try {
 		st = await lstatFn(socketPath);
@@ -243,9 +251,12 @@ export async function scanSocketProbes(
 	deps: Partial<SocketScanDeps> = {},
 ): Promise<SocketScanResult> {
 	const dir = deps.dir ?? CONTROL_SOCKET_DIR;
+	// Windows (#78) has no socket files to list and nothing scans the pipe namespace: the
+	// candidates are the record-backed citizens alone.
 	const readdir =
 		deps.readdir ??
 		(async (d: string): Promise<SocketDirEntry[]> => {
+			if (process.platform === "win32") return [];
 			const dirents = await fs.readdir(d, { withFileTypes: true });
 			return dirents.map((e) => ({ name: e.name, isSymbolicLink: e.isSymbolicLink() }));
 		});

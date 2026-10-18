@@ -263,8 +263,19 @@ ok(
 // call: the dir is still this adapter's own policy (ENTWURF_DIR honours the env
 // override the pi side does not), but the join is not re-authored here.
 ok(
-	"buildStrictPiSenderEnvelope existsSync-probes the canonical socket via the shared grammar (controlSocketPathIn(ENTWURF_DIR, …))",
-	/existsSync\s*\(/.test(piBody) && /controlSocketPathIn\s*\(\s*ENTWURF_DIR\s*,/.test(piBody),
+	"buildStrictPiSenderEnvelope probes the canonical address via the shared grammar (controlSocketPathIn(ENTWURF_DIR, …))",
+	/controlAddressPresent\s*\(\s*socketPath\s*\)/.test(piBody) &&
+		/controlSocketPathIn\s*\(\s*ENTWURF_DIR\s*,/.test(piBody),
+);
+// The presence probe keeps the socket-file existsSync off Windows; on Windows (#78) the address
+// is a named pipe, which only the owner-validated probe may touch (a stat would connect).
+const presentBody = functionBody("controlAddressPresent");
+ok(
+	"controlAddressPresent: existsSync(socketPath) off Windows, the owner-validated pipe probe on it",
+	/existsSync\s*\(\s*socketPath\s*\)/.test(presentBody) &&
+		/process\.platform === "win32"\)\s*return \(await probeSocketLiveness\(socketPath\)\) === "alive"/.test(
+			presentBody,
+		),
 );
 
 const metaBuilder = functionBody("buildMetaSenderEnvelope");
@@ -280,8 +291,8 @@ ok(
 
 const selfRegion = toolRegion("entwurf_self");
 ok(
-	"entwurf_self existsSync-probes the pi socket (alive vs expected, no synthesized path lie)",
-	/existsSync\s*\(/.test(selfRegion),
+	"entwurf_self probes the pi control address (alive vs expected, no synthesized path lie)",
+	/controlAddressPresent\s*\(\s*socketPath\s*\)/.test(selfRegion),
 );
 
 // ── SLICE INTEGRITY (before any claim is read off the slice) ─────────────────

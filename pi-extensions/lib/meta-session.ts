@@ -53,6 +53,7 @@
 import { execFileSync } from "node:child_process";
 import * as crypto from "node:crypto";
 import * as fs from "node:fs";
+import { createRequire } from "node:module";
 import * as os from "node:os";
 import * as path from "node:path";
 import { generateSessionId, SESSION_ID_RE } from "./session-id.js";
@@ -1017,6 +1018,7 @@ const O_NONBLOCK_FLAG = typeof fs.constants.O_NONBLOCK === "number" ? fs.constan
  * Shaping a message is the job of the caller that knows what the answer is FOR.
  */
 export function readStoreRecordFile(file: string): string {
+	if (process.platform === "win32") return win32RecordReader()(file).toString("utf8");
 	if (O_NOFOLLOW_FLAG === 0) {
 		throw new MetaRecordError(
 			`cannot read meta-record ${path.basename(file)} safely: this platform exposes no O_NOFOLLOW, so a record ` +
@@ -1037,6 +1039,18 @@ export function readStoreRecordFile(file: string): string {
 	} finally {
 		fs.closeSync(fd);
 	}
+}
+
+/**
+ * Windows has no `O_NOFOLLOW` (libuv defines it as 0), so the same three decisions — a
+ * final-component reparse point refused as `ELOOP`, a non-regular entry as
+ * `ENTWURF_ENOTREG`, both on the handle the read uses — are made by the preview addon
+ * (#78). It is reached only here and only on win32, through `createRequire`, so the
+ * installers that copy this file without its siblings never load it on Linux or macOS.
+ */
+function win32RecordReader(): (file: string) => Buffer {
+	const native = createRequire(import.meta.url)("./win32-native.js") as typeof import("./win32-native.js");
+	return native.win32ReadNoFollow;
 }
 
 /** The reader every store-WIDE scan pairs with {@link readActiveStoreEntries}. The

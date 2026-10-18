@@ -24,9 +24,18 @@
  * adapter keeps its own root policy: the pi side derives from HOME, the MCP
  * bridge honours `ENTWURF_DIR`. What is unified is the grammar, not the policy.
  *
- * Keep dependency-free except `node:path`.
+ * Windows (#78) has no socket files: the address is a named pipe,
+ * `\\.\pipe\entwurf-<sha256(canonRoot(dir))[:16]>-<gardenId>`. The digest keeps two
+ * store roots on one host apart without putting a path in the pipe namespace; it is not
+ * a new address axis (still the garden id plus the store root). The inverse grammar has
+ * no Windows half because nothing scans the pipe namespace: candidates come from records.
+ *
+ * Keep dependency-free except node builtins (`node:path`, and `node:crypto`/`node:fs`
+ * for the Windows root canonicalisation only).
  */
 
+import { createHash } from "node:crypto";
+import * as fs from "node:fs";
 import * as path from "node:path";
 
 /** Control-socket filename suffix. The stem is a bare garden id. */
@@ -51,7 +60,53 @@ export function defaultControlSocketDir(home) {
  * @returns {string}
  */
 export function controlSocketPathIn(dir, gardenId) {
+	if (process.platform === "win32") return win32PipeNameFor(dir, gardenId);
 	return path.join(dir, `${gardenId}${CONTROL_SOCKET_SUFFIX}`);
+}
+
+/** Every Windows control pipe this package names starts here. */
+export const WIN32_PIPE_PREFIX = "\\\\.\\pipe\\entwurf-";
+
+/**
+ * The one spelling of a Windows store root, so Pi A, Pi B, the bridge and peer-facts
+ * derive the same pipe name from differently written paths. The nearest EXISTING ancestor
+ * of `path.win32.resolve(dir)` goes through `realpath` (8.3 names expanded, case from the
+ * filesystem); the components below it are appended as written. Separators become `\`,
+ * there is no trailing separator, and the whole string is lower-cased. Nothing is created
+ * or touched, so the control dir need not exist yet. A failure other than ENOENT throws.
+ *
+ * @param {string} dir
+ * @param {(p: string) => string} [realpath]
+ * @returns {string}
+ */
+export function canonRootWin32(dir, realpath = fs.realpathSync.native) {
+	let head = path.win32.resolve(dir);
+	/** @type {string[]} */
+	const tail = [];
+	for (;;) {
+		try {
+			const joined = path.win32.join(realpath(head), ...tail);
+			return joined.replace(/[\\/]+$/, "").toLowerCase();
+		} catch (err) {
+			const parent = path.win32.dirname(head);
+			if (/** @type {{ code?: unknown }} */ (err).code !== "ENOENT" || parent === head) throw err;
+			tail.unshift(path.win32.basename(head));
+			head = parent;
+		}
+	}
+}
+
+/**
+ * Forward grammar on Windows: `\\.\pipe\entwurf-<16 hex>-<gardenId>`.
+ *
+ * @param {string} dir
+ * @param {string} gardenId
+ * @param {(p: string) => string} [realpath]
+ * @returns {string}
+ */
+export function win32PipeNameFor(dir, gardenId, realpath) {
+	const digest = createHash("sha256").update(canonRootWin32(dir, realpath), "utf8").digest("hex").slice(0, 16);
+	return `${WIN32_PIPE_PREFIX}${digest}-${gardenId}`;
 }
 
 /**

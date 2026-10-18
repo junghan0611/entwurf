@@ -29,6 +29,7 @@
  */
 
 import * as net from "node:net";
+import { win32Native } from "./win32-native.js";
 
 export type SocketLiveness = "alive" | "dead" | "indeterminate";
 
@@ -66,6 +67,7 @@ export async function probeSocketLiveness(
 	opts: { timeoutMs?: number } = {},
 ): Promise<SocketLiveness> {
 	const timeoutMs = opts.timeoutMs ?? DEFAULT_PROBE_TIMEOUT_MS;
+	if (process.platform === "win32") return await probePipeLiveness(socketPath, timeoutMs);
 	return await new Promise<SocketLiveness>((resolve) => {
 		const socket = net.createConnection(socketPath);
 		const timer = setTimeout(() => {
@@ -85,4 +87,22 @@ export async function probeSocketLiveness(
 			settle(classifyConnectError(err.code));
 		});
 	});
+}
+
+/**
+ * The Windows probe (#78): the control address is a named pipe, and a connect alone would
+ * talk to whoever holds the name. The addon connects within one deadline and refuses a pipe
+ * whose owner is not this token's expected owner (`EPERM`) before any byte. Only `ENOENT`
+ * (no instance) is dead; a refused owner, a busy pipe past the deadline and every Win32
+ * failure stay indeterminate. A missing or drifted addon is not a liveness fact: that
+ * refusal throws.
+ */
+async function probePipeLiveness(pipeName: string, timeoutMs: number): Promise<SocketLiveness> {
+	const native = win32Native();
+	try {
+		await native.pipeProbe(pipeName, Math.max(0, Math.floor(timeoutMs)));
+		return "alive";
+	} catch (err) {
+		return classifyConnectError((err as { code?: string }).code);
+	}
 }

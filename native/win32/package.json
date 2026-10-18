@@ -1,0 +1,8 @@
+{
+	"name": "entwurf-win32-native-build",
+	"private": true,
+	"description": "Build-only pin for the Windows preview addon (#78). Never installed by consumers.",
+	"devDependencies": {
+		"node-gyp": "13.1.0"
+	}
+}

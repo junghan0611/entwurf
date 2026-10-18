@@ -108,6 +108,7 @@ import {
 } from "../../../pi-extensions/lib/meta-session.ts";
 import { RESUME_CALL_REJECT_HINT, resumeCall } from "../../../pi-extensions/lib/mux-resume-call.ts";
 import { registerNativeConversation } from "../../../pi-extensions/lib/native-push/register.ts";
+import { probeSocketLiveness } from "../../../pi-extensions/lib/socket-probe.ts";
 
 const HOME = os.homedir();
 
@@ -136,6 +137,14 @@ try {
 // Directory SOURCE is this adapter's own policy — the bridge honours an explicit
 // ENTWURF_DIR override the pi side does not. The path GRAMMAR is the shared leaf.
 const ENTWURF_DIR = process.env.ENTWURF_DIR ?? defaultControlSocketDir(HOME);
+
+/** Is this session's own control address up? A socket file's presence on Linux/macOS. On
+ * Windows (#78) the address is a named pipe, which has no file to look at and must not be
+ * opened by a stat (that connects): the owner-validated probe answers instead. */
+async function controlAddressPresent(socketPath: string): Promise<boolean> {
+	if (process.platform === "win32") return (await probeSocketLiveness(socketPath)) === "alive";
+	return existsSync(socketPath);
+}
 
 // ============================================================================
 // Live control-socket discovery for entwurf_peers lives in the TS fact-provider
@@ -219,7 +228,7 @@ class EntwurfSenderIdentityError extends Error {
 	}
 }
 
-function buildStrictPiSenderEnvelope(): SenderEnvelope {
+async function buildStrictPiSenderEnvelope(): Promise<SenderEnvelope> {
 	const sessionId = process.env.PI_SESSION_ID?.trim();
 	const agentId = process.env.PI_AGENT_ID?.trim();
 	const cwd = process.cwd();
@@ -239,7 +248,7 @@ function buildStrictPiSenderEnvelope(): SenderEnvelope {
 	const socketPath = controlSocketPathIn(ENTWURF_DIR, sessionId as string);
 	const self = computeSelfAddressability({
 		origin: "pi-session",
-		socketAlive: existsSync(socketPath),
+		socketAlive: await controlAddressPresent(socketPath),
 		socketPathComputable: true,
 	});
 	return {
@@ -338,7 +347,7 @@ async function resolveAuthoritativeSender(
 ): Promise<AuthoritativeSelf | null> {
 	const sessionId = process.env.PI_SESSION_ID?.trim();
 	const agentId = process.env.PI_AGENT_ID?.trim();
-	const pi = sessionId && agentId && cwd ? buildStrictPiSenderEnvelope() : null;
+	const pi = sessionId && agentId && cwd ? await buildStrictPiSenderEnvelope() : null;
 	const marker = resolveTrustedMetaSenderIdentity({
 		markerPath: process.env.ENTWURF_META_SENDER_MARKER?.trim() || undefined,
 	});
@@ -559,7 +568,7 @@ server.tool(
 				// live socket). The old code synthesized the path and printed it as if
 				// it existed — a lie when the session has no --entwurf-control (SE-1).
 				const socketPath = controlSocketPathIn(ENTWURF_DIR, sender.sessionId);
-				const socketState = existsSync(socketPath) ? "alive" : "expected";
+				const socketState = (await controlAddressPresent(socketPath)) ? "alive" : "expected";
 				extra.socketPath = socketPath;
 				extra.socketState = socketState;
 				lines.push(
