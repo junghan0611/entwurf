@@ -35,6 +35,15 @@ jobs:
     runs-on: windows-2025
     timeout-minutes: 20
     steps:
+      # Explicit LF policy before checkout, runner-scoped and disposable. If the hosted git uses
+      # core.autocrlf=true it would hand build.mjs CRLF copies of tracked LF files; the setting
+      # found is printed first, so this run measures it.
+      - name: keep the checkout's tracked LF bytes (this runner only)
+        shell: pwsh
+        run: |
+          Write-Output "core.autocrlf before: $(git config --show-origin --get-all core.autocrlf)"
+          git config --global core.autocrlf false
+          Write-Output "core.autocrlf after: $(git config --show-origin --get-all core.autocrlf)"
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
@@ -42,6 +51,14 @@ jobs:
       - name: install the build pin (tracked lockfile, no scripts)
         working-directory: native/win32
         run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: notice bytes vs the installed pinned LICENSE (read-only diagnostic)
+        shell: pwsh
+        run: |
+          foreach ($f in 'LICENSES/node-gyp.txt', 'native/win32/node_modules/node-gyp/LICENSE') {
+            $b = [System.IO.File]::ReadAllBytes((Resolve-Path $f))
+            $cr = ($b | Where-Object { $_ -eq 13 }).Count
+            Write-Output "$f bytes=$($b.Length) cr=$cr sha256=$((Get-FileHash -Algorithm SHA256 $f).Hash)"
+          }
       - name: build twice, verify pins and imports
         shell: pwsh
         run: |
@@ -122,6 +139,15 @@ jobs:
     timeout-minutes: 20
     steps:
       # The checkout supplies the cell harness only; the subject is the installed tarball.
+      # Explicit LF policy before checkout, runner-scoped and disposable. If the hosted git uses
+      # core.autocrlf=true it would hand the harness CRLF copies of tracked LF files; the setting
+      # found is printed first, so this run measures it.
+      - name: keep the checkout's tracked LF bytes (this runner only)
+        shell: pwsh
+        run: |
+          Write-Output "core.autocrlf before: $(git config --show-origin --get-all core.autocrlf)"
+          git config --global core.autocrlf false
+          Write-Output "core.autocrlf after: $(git config --show-origin --get-all core.autocrlf)"
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:

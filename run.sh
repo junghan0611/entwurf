@@ -2676,6 +2676,8 @@ for (const [job] of ciJobs) {
 // to what is already bound is not a safety net; it is a restatement.
 // pnpm-lock.yaml is excluded on purpose: those engine ranges belong to third-
 // party dependencies and are not this repo's supported axis.
+// native/win32/package-lock.json (#78) is excluded for the same reason: a generated
+// lock of the Windows addon's build-only dependency tree (node-gyp), never shipped.
 // `--cached` ONLY — deliberately not `--others`. The corpus must be the
 // candidate contract (what is tracked/staged), never the operator's working
 // directory: an un-ignored scratch file would otherwise turn this gate RED on
@@ -2685,7 +2687,7 @@ for (const [job] of ciJobs) {
 // before the commit that would ship it. (Review lane, 2026-07-21.)
 const tracked = execFileSync('git', ['ls-files', '--cached', '--', '*.sh', '*.json', '*.ts', '*.md', '*.yml', '*.yaml'], { encoding: 'utf8' })
   .split('\n')
-  .filter((f) => f && f !== 'pnpm-lock.yaml' && f !== 'CHANGELOG.md' && f !== 'NEXT.md');
+  .filter((f) => f && f !== 'pnpm-lock.yaml' && f !== 'native/win32/package-lock.json' && f !== 'CHANGELOG.md' && f !== 'NEXT.md');
 assert.ok(tracked.length >= 20,
   `git ls-files returned ${tracked.length} first-party files — the sweep lost its corpus and would pass vacuously`);
 
