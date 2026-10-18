@@ -81,10 +81,11 @@ Detected harness wiring on Darwin can therefore be written while setup stays
 non-green. WSL2: a CI runner (experimental) measured the Entwurf-only install and a
 zero-token Pi citizen; general, physical-machine or harness-parity WSL2 support is **not
 declared**, and delivery, other harnesses and physical machines are unmeasured. Native
-Windows has an **experimental first preview** on the `feat/78-windows-native-probe` branch
-only; no published release carries it (the registry's 0.38.1 has no Windows addon). On a
-GitHub Actions `windows-2025` x64 runner with Node 24.18.1 and Pi 1.3.0, that branch's
-CI-built artifact was installed, wired with `pi install`, birthed two Pi citizens and
+Windows has an **experimental first preview**, a CI-built x64 addon on `main` for the
+0.39.0 candidate (not yet released; release and npm publication pending); the registry's
+0.38.1 has no Windows addon. On a GitHub Actions `windows-2025` x64 runner with Node
+24.18.1 and Pi 1.3.0, a CI-built artifact was installed, wired with `pi install`, birthed
+two Pi citizens and
 delivered one garden-id `entwurf_v2` message between them, with an offline scripted model
 and no vendor turn. Every other native-Windows surface (other harnesses, `setup` and the
 `.sh` bins, fresh/resume, mux/Herdr/ACP, physical machines) is **not declared**; the

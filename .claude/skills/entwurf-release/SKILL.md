@@ -590,6 +590,13 @@ not create a candidate or a tag while that run is not green.
 Create the candidate only after exact-SHA CI is green. Keep the directory and
 log; do not clean them automatically.
 
+**A carrier-bearing release does not run the local `npm pack` below.** From 0.39.0
+the package `files` array ships `native/win32-x64/` (the native-Windows addon and
+its manifest, #78). That directory is gitignored and only the Windows CI builds
+it, so a local Linux pack would silently omit the carrier. Such a release takes
+its candidate from M3w, then continues here from `SHA256_BEFORE=` with the same
+`check-install-container` acceptance.
+
 ```bash
 ARTIFACT_DIR=$(mktemp -d "/tmp/entwurf-release-candidate-${VERSION}.XXXXXX")
 LOG="$ARTIFACT_DIR/acceptance.log"
@@ -618,6 +625,90 @@ The handoff must preserve:
 - exact prepared commit SHA
 
 The accepted file is now the only file eligible for `publish`. Never repack it.
+
+### M3w. Carrier-bearing candidate: retrieve, never pack
+
+The producer is exactly one `windows-native-preview.yml` dispatch at the prepared
+SHA, run after M2 is green. Its `pack` job (Linux) places the carrier from an
+accepted `build-addon` receipt (two byte-identical MSVC builds, exact import set),
+requires `check-pack` to print `present`, packs once and writes `SHA256SUMS`; its
+`preview` job installs that same tarball on Windows and runs the eight addon and
+citizen cells. This is a dispatch on a new SHA, not a blind rerun; a non-green run
+stops make before any tag. Do not reuse an earlier run's carrier, repack, or add a
+workflow.
+
+```bash
+git fetch origin main
+test "$(git rev-parse FETCH_HEAD)" = "$SHA"
+preview_runs() {
+  gh run list --workflow windows-native-preview.yml --event workflow_dispatch \
+    --commit "$SHA" --limit 20 --json databaseId --jq length
+}
+BEFORE="$(preview_runs)"
+gh workflow run windows-native-preview.yml --ref main
+for _ in $(seq 1 12); do
+  sleep 5
+  if [ "$(preview_runs)" -gt "$BEFORE" ]; then break; fi
+done
+test "$(preview_runs)" -gt "$BEFORE"
+RUN=$(gh run list --workflow windows-native-preview.yml --event workflow_dispatch \
+  --commit "$SHA" --limit 1 --json databaseId --jq '.[0].databaseId')
+gh run watch "$RUN" --exit-status
+gh run view "$RUN" --json jobs --jq '.jobs[]|"\(.name) \(.conclusion)"'
+for j in build-addon pack preview; do
+  test "$(gh run view "$RUN" --json jobs --jq ".jobs[]|select(.name==\"$j\").conclusion")" = success
+done
+
+ARTIFACT_DIR=$(mktemp -d "/tmp/entwurf-release-candidate-${VERSION}.XXXXXX")
+LOG="$ARTIFACT_DIR/acceptance.log"
+gh api "repos/{owner}/{repo}/actions/runs/$RUN" \
+  --jq '{id,event,path,head_sha,head_branch,conclusion,html_url}' > "$ARTIFACT_DIR/run-meta.json"
+node -e '
+  const [f, sha] = process.argv.slice(1);
+  const m = JSON.parse(require("fs").readFileSync(f, "utf8"));
+  if (m.event !== "workflow_dispatch" || m.path !== ".github/workflows/windows-native-preview.yml"
+    || m.head_sha !== sha || m.conclusion !== "success") { console.error(m); process.exit(1); }
+' "$ARTIFACT_DIR/run-meta.json" "$SHA"
+gh run download "$RUN" -n win32-preview-tgz -D "$ARTIFACT_DIR"
+gh run download "$RUN" -n win32-addon -D "$ARTIFACT_DIR/addon"
+gh api "repos/{owner}/{repo}/actions/runs/$RUN/artifacts" \
+  --jq '.artifacts[]|"\(.id) \(.name) \(.digest)"' > "$ARTIFACT_DIR/run-artifacts.txt"
+grep -E '^[0-9]+ win32-preview-tgz sha256:[0-9a-f]{64}$' "$ARTIFACT_DIR/run-artifacts.txt"
+CANDIDATE=$(realpath "$ARTIFACT_DIR/junghanacs-entwurf-${VERSION}.tgz")
+(cd "$ARTIFACT_DIR" && sha256sum -c SHA256SUMS)
+node -e 'const r=require(process.argv[1]); if (r.reproducible!==true||r.importsOk!==true) process.exit(1)' \
+  "$ARTIFACT_DIR/addon/build-receipt.json"
+test "$(tar -tzf "$CANDIDATE" | grep '^package/native/' | sort | tr '\n' ' ')" = \
+  "package/native/win32-x64/entwurf_win.node package/native/win32-x64/manifest.json "
+test "$(tar -xzOf "$CANDIDATE" package/package.json | node -p 'JSON.parse(require("fs").readFileSync(0)).version')" = "$VERSION"
+PREVIEW_JOB=$(gh run view "$RUN" --json jobs --jq '.jobs[]|select(.name=="preview").databaseId')
+CANDIDATE_SHA=$(sha256sum "$CANDIDATE" | cut -d' ' -f1)
+gh run view "$RUN" --log --job "$PREVIEW_JOB" > "$ARTIFACT_DIR/preview-job.log"
+grep -F "installed candidate sha256=$CANDIDATE_SHA basename=$(basename "$CANDIDATE")" \
+  "$ARTIFACT_DIR/preview-job.log"
+```
+
+`run-artifacts.txt` records each artifact's `digest` as GitHub reports it (the
+digest of the artifact archive, not of the tarball). The candidate's
+`win32-preview-tgz` digest must be present; a `null` stops make and is never filled
+in from the download.
+
+Then continue at M3's `SHA256_BEFORE=` line with this `$CANDIDATE` and `$LOG`.
+One file now carries three equal hashes: the pack job's `SHA256SUMS`, the hash the
+Windows `preview` job printed for the tarball it installed, and the downloaded
+file's own hash (the `installed candidate` line, printed only after `npm install`
+succeeded). The Linux container then accepts that file unchanged. The
+handoff adds to M3's list:
+
+- the preview run's `run-meta.json` (id, event, workflow path, `head_sha`, URL),
+  `run-artifacts.txt` (artifact ids and digests) and `preview-job.log`
+- the build receipt with the addon sha256
+
+The run's artifacts expire after 14 days; the preserved `$ARTIFACT_DIR` copy is the
+durable one, and `publish` reads only it. Limits stay named in the release record:
+the four required `ci.yml` jobs and their macOS install surface saw an addon-less
+pack, so the carrier-bearing tarball's macOS install is not measured, and
+`check-install-container` asserts no Windows carrier; the tar listing above does.
 
 ## M4. Recheck immutability, tag, and push the tag
 

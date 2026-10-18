@@ -181,9 +181,13 @@ jobs:
         shell: pwsh
         run: |
           $tgz = Get-ChildItem (Join-Path $env:RUNNER_TEMP 'tgz') -Filter '*.tgz' | Select-Object -First 1
+          $candidateHash = (Get-FileHash -Algorithm SHA256 $tgz.FullName).Hash.ToLowerInvariant()
           Get-FileHash -Algorithm SHA256 $tgz.FullName
           npm install --prefix (Join-Path $env:SANDBOX 'consumer') $tgz.FullName --ignore-scripts --no-audit --no-fund
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          # Machine-readable and untruncated (the table above elides long paths); the release
+          # skill's M3w matches this exact line against the retrieved candidate.
+          Write-Output "installed candidate sha256=$candidateHash basename=$($tgz.Name)"
           $pkg = Join-Path $env:SANDBOX 'consumer\node_modules\@junghanacs\entwurf'
           Get-FileHash -Algorithm SHA256 (Join-Path $pkg 'native\win32-x64\*')
           "PKG=$pkg" >> $env:GITHUB_ENV

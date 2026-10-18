@@ -19,8 +19,8 @@ evidence split, and its three states must not collapse into "macOS is supported"
   unmeasured Darwin doctor reason is per-process environment DISCOVERY
   (start-key is portable).
 - **UNSUPPORTED** — native Windows `setup` and its harness rails. macOS is never this.
-  An experimental native-Windows Pi preview exists outside `setup`, on a feature branch
-  only; see [BASELINE](../BASELINE.md#release-host-baseline).
+  An experimental native-Windows Pi preview (0.39.0 candidate, not yet released; release
+  and npm publication pending) exists outside `setup`; see [BASELINE](../BASELINE.md#release-host-baseline).
 
 ## Requirements
 
