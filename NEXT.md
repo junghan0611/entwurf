@@ -1,49 +1,34 @@
-# NEXT — core 0.38.1 prepared (#146 SDK default compaction); make waits for coordinator checkpoint
+# NEXT — #78 WSL2 first stage settled in source; landing CI pending → Windows-native probe
+
+WSL2 실험 CI 증거 문서·trigger와 #146 closeout 문서를 source에 정착했다. main FF push와 그 exact-SHA CI·natural WSL run 수용은 아직이다. 그 결과를 기록한 뒤 새 native branch에서 제품 미설치·무모델 Windows capability probe 계약 하나로 간다. 승인 원장: [#78 phase decision](https://github.com/junghan0611/entwurf/issues/78#issuecomment-6245990618)과 그 뒤 thread(thread가 body보다 우선).
 
 # RAIL — 현재 좌표
 
-- [x] **1. 0.38.0 core·Herdr snapshot 출하와 정리.** main = `beb5925`, tag `v0.38.0`, `v2026.10.16-herdr.0.38.0`. 장부: https://github.com/junghan0611/entwurf/issues/145#issuecomment-6209375125
-- [x] **2. ACP/#142 보류 결정.** SSOT는 https://github.com/junghan0611/entwurf/issues/142#issuecomment-6211680027 . 0.90 유지, pi-durable은 native GPT.
-- [x] **3. #146 구현과 검토.** `58c4d0f`(native-or-refuse 원칙 문서), `9229452`(SDK 기본 background compaction). 코디 리뷰 B0/D0, 추가 검수 ee20b5 B0/D0/O4.
-- [ ] **4. core 0.38.1 make** ← CURRENT: prepare commit을 만든 뒤 코디 checkpoint를 기다린다. 그다음 순서:
-  - push, exact-SHA push CI 4 jobs
-  - same-SHA 수동 `qualify=true` whole BODY. **green 전 tag 금지.**
-  - 후보 pack과 container acceptance
-  - tag, GitHub Release(BODY 결과는 evidence appendix)
-- [ ] **5. npm publish(GLG 전용) → U3 registry proof.** Herdr snapshot은 이번 범위가 아니다. runtime-lock은 미발행 후보를 위해 closed `herdr-checkout`으로 돌렸고, npm pin은 publish 뒤 별도 snapshot에서 다시 넣는다. 별도 0.38.1 snapshot 전까지 Herdr 플러그인을 main에서 재설치하거나 update하지 않는다. npm으로 활성화된 기존 호스트가 source를 전환하면 이름 있는 refusal(`activation-artifact-source-drifted`)로 끝나고 자동 migration은 없다. Herdr가 자동으로 re-fetch하는지는 미측정이다.
+- [x] **1. core 0.38.1 release · #146 closed.** `v0.38.1` = `6c3c6f4`, exact push CI four jobs GREEN, manual BODY 979/979 killed. #146 재진입 질문은 `docs/durable-native-support.md`의 `#146 decision closeout and re-entry`.
+- [x] **2. WSL2 cells 1+2.** `b03d646`, WSL run 39098773010 + exact-SHA ci 39098773011 GREEN. [Measured receipt](https://github.com/junghan0611/entwurf/issues/78#issuecomment-6245947301). BASELINE WSL2 두 행에 기록.
+- [x] **3. WSL2 정착 source (이 commit).** BASELINE/VERIFY/README/CHANGELOG 기록 + `.github/workflows/wsl2-install-surface.yml` trigger = main push 중 이 파일 변경 + `workflow_dispatch`. 릴리스 없음.
+- [ ] **4. main FF push 수용** ← CURRENT: main 한 번만 push. exact-SHA `ci.yml` 네 job과 workflow path 변경으로 생기는 natural WSL run의 결과를 #78 thread에 기록한다. WSL run이 생기지 않으면 그 사실을 기록하고 hold — 자동 dispatch·빈 commit 없음.
+- [ ] **5. Windows-native capability probe:** 4의 결과 기록 뒤에만 시작. 새 branch에서 작은 contract + 독립 review 먼저, 그다음 실험 workflow 하나와 feature-branch CI trial 1회.
 
-현재 좌표: 1–3 완료 → 4 make 대기(prepare checkpoint).
+현재 좌표: 1–3 완료 → 4 landing CI 수용 → 5 contract.
 
 # NOW
 
-- **0.38.1 증거(CHANGELOG `## 0.38.1`이 owning record):**
-  - 첫 prepared SHA `c90b5bf`는 push run 39009471179에서 RED였다(`runtime-lock-incoherent`). 그 SHA의 LIVE r1(23/23)과 함께 역사로 남는다. 수선: lock을 closed `herdr-checkout`으로 되돌림, README와 CHANGELOG 정정(GLG ok, 검수 ee20b5 B0/D2 → 보정).
-  - 수선 후보 LIVE r2는 RED였다(mux step의 pi 첫 턴 vendor "Codex error" → callback 300s timeout). GLG가 1회 재측정을 승인했고, 같은 후보로 돌린 **LIVE r3는 MUST 23/23, BEHAVIOR 1/1**이다. 예외와 continuation driver는 쓰지 않았다. 영수증은 `.tmp-verify/release-0.38.1/live-r{2,3}/`.
-  - owned Codex app-server: LIVE마다 새로 기동하고 TERM으로 종료했다. 기록은 `.tmp-verify/release-0.38.1/codex-server{,-r2,-r3}/`이고, 첫 tee-pipeline 시도는 `codex-server/attempt0-pipeline/`에 남겼다.
-  - P9 census는 report만 했다. reparented holder 1개는 보호 대상 Emacs 3364025다.
-  - 로컬 `check:full`은 운영 Herdr 금지 때문에 돌리지 않았고 PASS로 세지 않는다. prepared SHA의 push CI에 넘긴다.
-- **BODY:** 이번 0.38.1 최종 SHA에서 CI `qualify=true`로 1회 돌린다. #142 예약을 앞당긴 것이고, 미래 #142 SHA의 증거가 아니다.
-  - 결과는 #146 장부와 GitHub release에 기록하고, frozen CHANGELOG는 편집하지 않는다.
-  - 실패하거나 중단되면 원문을 보존하고 판정을 받는다. 자동으로 다시 사지 않는다.
-  - push run과 dispatch run이 FULL을 중복으로 돈다.
-- **earlier candidate:** PARTIAL `[check-pi-durable-carrier]` 30/30 영수증(`.tmp-verify/durable-bg-defaults-20261017/partial-carrier-1/`)은 커밋 전 amendment-1 surface의 측정이다. 0.38.1 acceptance가 아니다.
-- **실행 중 세션:** 0.37–0.38에서 로드된 프로세스는 `backgroundTokens: 0`을 유지한다. GLG가 수동으로 restart해야 바뀐다.
-- **보류(재개 시 GLG 범위 재확정):**
-  - `.tmp-verify/142-sizing-20261016/`(#142 사이즈 자료)
-  - `.tmp-verify/compaction-receive-20261017/READING.md`(compact 중 수신 읽기 조사)
-  - 브랜치 `docs/native-or-refuse`, `feat/pi-durable-sdk-default-compaction`는 main에 합쳐졌고 삭제하지 않았다.
-- **유지되는 규칙:** #144 일반 정책. 운영 호스트에서는 Herdr 검사와 로컬 whole BODY 금지. npm publish는 GLG 전용.
+- **Next:** 4의 push 결과(ci 네 job, WSL natural run)를 #78에 기록한다. 그 뒤 수용된 main에서 새 native branch를 열고 probe contract를 쓴다. 출발 자료 `.tmp-verify/78-native-20261018/OPUS2-NATIVE-FIRST-RAIL.md`(b2a2c362…). PowerShell 아래 host native Node 24.18.1에서 `process.platform === "win32"`와 host filesystem을 증명한다(WSL/Git Bash 실행이 아님). flags/file metadata·link, pipe, process primitive를 관찰하고, 단정은 선언한 관찰만 검사한다(Windows 의미론을 추측해 기대값을 쓰지 않음). symlink 권한 부재(optional)와 positive capability를 구분한다.
+- **Probe가 하지 않는 것:** Entwurf 설치, 제품 변경, auth/vendor/model turn, O_NOFOLLOW guard 대체, Entwurf 인증. post-open file identity 후보는 미증명이며 O_NOFOLLOW 대체가 아니다. start-key 필요성은 backend별·미확인.
+- **권한:** native probe workflow 하나 + feature-branch CI trial 1회까지 승인됨. 그 뒤 main/release/native 제품 구현은 새 결정. blind CI retry, 숨은 dispatch, 빈 commit 없음.
+- **WSL2 workflow:** non-voting. release oracle은 `ci.yml`의 네 required job만 읽는다(변경 없음). 제품 drift는 수동 dispatch로 측정하고, 넓은 path filter 승격(C)은 별도 결정.
+- **#146 운영 경계:** 0.37–0.38 프로세스의 forced `backgroundTokens: 0`은 설치만으로 바뀌지 않는다. GLG 수동 restart를 자동 실행하지 않는다.
+- **Herdr:** main lock은 미발행 후보 때의 closed `herdr-checkout`. published 0.38.1 npm re-pin/snapshot은 별도 요청 사항이며, 그 전 기존 npm 활성화 host에서 main 기반 재설치/update를 하지 않는다(`activation-artifact-source-drifted`).
+- **ACP/#142:** PAUSED, 0.90 유지.
 
-# RECENT / RECEIPTS
+# RECEIPTS
 
-- core 0.38.1 prepare: `.tmp-verify/release-0.38.1/`(live-r1, codex-server, fp.sh). #146 작업 영수증: `.tmp-verify/durable-bg-defaults-20261017/`(CONTRACT.md, opus-checkpoint-1, opus-amendment-1(-toolchain), partial-carrier-1, ADDITIONAL-REVIEW-ee20b5.md).
-- homepage 0.38 반영(코디, 2026-10-16): commit `2f27313`, 배포 영수증 `.tmp-verify/homepage-0380-deployed.json`(EN/KO 200, footer 일치; 시각 검수 아님).
-- core 0.38.0: `.tmp-verify/release-0.38.0/`(live-r1, make, records-r1..r3, codex-server, doctor-meta-bridge.txt). U3 r1 RED는 retired lexical wrapper 술어, r1b가 U3 축 완료.
-- Herdr 0.38.0: `.tmp-verify/herdr-0.38.0/`(swap receipt, focused-summary, raw-install-main.log `95543bd4…`, exact-ci-beb5925.log, tag.txt, release.txt).
-- 정리: `.tmp-verify/cleanup-20261016/`(AUTHORITY.md, census-r1, plan2/RESULT.md·delete.log·post-check.txt, archive-removal-verify.txt). 24 LIVE step 로그 원문은 `.tmp-verify/release-0.38.0/live-r1/steps/`로 옮겨 24/24 검증.
-- 모듈 경로 소멸 노트: U3 receipt가 가리키던 sandbox helper 경로(`…/agent/npm/node_modules/@junghanacs/entwurf/scripts/herdr-runtime.mjs`)는 deps 정리로 사라졌다. helper bytes `f7066aa5…`는 checkout의 `scripts/herdr-runtime.mjs`, 보존 tgz, 공개 장부로 증명된다.
+- WSL2: cell 1 RED `afcda79`/39096827653(native curl path, MSYS scope) 보존 → `f0da4b9`/39097392671 GREEN → `b03d646`/39098773010 GREEN. 보고·contract·raw log: `.tmp-verify/78-wsl2-20261018/`(ignored, 이 host 전용). 정착 계획 `landing/LANDING-PLAN.md`(51d9ffbb…), 인계 전 원본 `landing/handover-preserve/`.
+- 0.38.1: [release evidence](https://github.com/junghan0611/entwurf/releases/tag/v0.38.1), `.tmp-verify/release-0.38.1/`(accepted-artifact 사본 포함).
+- 증명 안 된 것: WSL2 physical user machine, non-pi harness, delivery, vendor turn, fresh/resume; native Windows는 UNSUPPORTED.
 
-# GUARDRAILS / NEXT LANE
+# GUARDRAILS
 
-- 남겨 둔 것(삭제 안 함): forward-open 두 세계의 데이터·DB·기록·SHA256SUMS(원래 seal은 역사), 보존 tgz들, entwurf-chain·smoke-pi-durable 기록, Docker pi1.2 raw-install 이미지 2개와 현재 pi1.3 이미지, 출처 불명 /tmp 접두사(acp-cache-test·render-take·caption-take), /tmp/.pnpm-store, 운영 세션·transcript·DB/WAL·Emacs·서비스.
-- 운영자 herdr를 돌리는 `check-herdr-plugin-build`·`check-herdr-sandbox`는 로컬 금지, CI FULL에서 수행한다. 운영 Herdr wiring·takeover·native 모델 turn은 자동 수행하지 않는다.
+- No npm publish/tag/release, vendor login/model turn, operator rewiring/restart, credential 접근, O_NOFOLLOW/record guard 완화, native 제품 구현, Windows SDK/process framework.
+- Local whole BODY와 operator `check-herdr-plugin-build`/`check-herdr-sandbox` 금지. Operator DB/meta/transcripts, 기존 process, unrelated branch, 보호 artifact 건드리지 않음.
