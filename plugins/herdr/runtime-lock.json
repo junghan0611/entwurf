@@ -1,6 +1,6 @@
 {
 	"schemaVersion": 2,
-	"comment": "Core 0.38.1 is an unpublished prepared candidate: the existing closed herdr-checkout source verifies the checkout commit without fabricating an npm integrity. The last published npm pin was @junghanacs/entwurf@0.38.0 in the separate Herdr 0.38.0 snapshot; no Herdr manifest version is bumped here. npm remains the production authority class. Re-pin the measured registry bytes only after the operator publishes core 0.38.1, in a separate Herdr snapshot. Source switches require explicit deactivate/activate, never inherited activation, an environment choice or fallback.",
+	"comment": "Core 0.39.0 is an unpublished prepared candidate: the existing closed herdr-checkout source verifies the checkout commit without fabricating an npm integrity. The last published npm pin was @junghanacs/entwurf@0.38.0 in the separate Herdr 0.38.0 snapshot; no Herdr manifest version is bumped here. npm remains the production authority class. Re-pin the measured registry bytes only after the operator publishes core 0.39.0, in a separate Herdr snapshot. Source switches require explicit deactivate/activate, never inherited activation, an environment choice or fallback.",
 	"source": "herdr-checkout",
 	"repository": "junghan0611/entwurf"
 }

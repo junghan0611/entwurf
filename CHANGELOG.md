@@ -4,14 +4,92 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+## 0.39.0 - 2026-10-18
+
+### Native Windows (experimental preview, #78)
+
+- **A native-Windows Pi citizen, shape-only.** On Windows x64 the package carries a small
+  N-API addon (`native/win32-x64/entwurf_win.node` plus its `manifest.json`), loaded by
+  `pi-extensions/lib/win32-native.js` only after the manifest's schema, platform, arch,
+  file, sha256 and `napiVersion` 8 agree with the bytes (`ENTWURF_WIN32_UNSUPPORTED` /
+  `ENTWURF_WIN32_NATIVE_DRIFT` otherwise). It supplies the two primitives POSIX gets from
+  the OS: the record read refuses a final-component reparse point (`ELOOP`) and a
+  non-regular file (`ENTWURF_ENOTREG`) on the read handle itself, and the control
+  address is a named pipe `\\.\pipe\entwurf-<sha256(root)[:16]>-<gid>` whose
+  probe and RPC check the server's owner SID and connect at identification level. The
+  POSIX `O_NOFOLLOW` and ancestor policies are unchanged, and non-Windows hosts take the
+  existing POSIX branches of the shared modules; each axis's own CI and LIVE gates are
+  that evidence, not a claim of zero impact.
+- **Wiring.** `meta-session`, `control-socket-path`, `socket-probe`, `socket-discovery`,
+  `entwurf-control-rpc`, `entwurf-control` and the bridge take the win32 branch through
+  that loader; pipe names come from records and are never stat-ed; nothing unlinks or
+  GCs a pipe on win32.
+- **Carrier and provenance.** The release carrier is produced in CI (MSVC, `/Brepro`, two builds
+  compared byte-for-byte, imports exactly advapi32 + kernel32 with `node.exe` the only
+  delay-load, node-gyp 13.1.0 and the Node headers/`node.lib` pinned) and ships with
+  node-gyp's MIT notice (`LICENSES/node-gyp.txt`). `check-pack` reports the carrier as
+  `absent`, `pair-broken`, `invalid` or `present <sha>` through the loader's own verifier.
+  A Linux checkout pack is addon-less, so this release's candidate is the preview
+  workflow's pack at the prepared SHA (release skill M3w), not a local `npm pack`.
+- **Measured scope.** windows-native-preview run 39123555360 @ `3b65bdc` on a GitHub
+  Actions `windows-2025` x64 runner, Node 24.18.1, Pi 1.3.0: six addon cells, then two
+  `pi --entwurf-control` citizens (one V3 record each, pipes alive through the product
+  probe, `peer-facts`, graceful exit with both addresses dead) and one garden-id
+  `entwurf_v2` delivery between them (`control-socket → sent`, B's model context and
+  transcript entry from A), with an offline pi-ai `fauxProvider`: no vendor turn.
+- **Limits.** Experimental and shape-only; not a supported platform. UNSUPPORTED: other
+  harnesses, `setup` and the `.sh` bins, fresh/resume, mux/Herdr/ACP, ARM64, records over
+  16 MiB, reparse-backed store folders. Unmeasured: the own pre-existing pipe-name birth
+  refusal, record link/rename syscalls, descendant cleanup after a forced kill,
+  cross-user, mixed elevation and remote callers, user-SID-only privacy (the runs took
+  the elevated Administrators owner branch), worker/environment teardown with a pipe
+  call in flight, and any physical user machine. Rows in BASELINE.
+
 ### Verification
 
+- **Windows workflows (#78).** `windows-native-probe.yml`, `-e1a.yml`, `-e1b.yml` and
+  `-preview.yml` are experimental and non-voting; their push triggers name the feature
+  branch, so on main they run only by dispatch. The release oracle still reads only the
+  four required `ci.yml` jobs. New gates `check-win32-preview` and
+  `check-pack-win32-carrier` (in `check:contracts`); one new mutant lane, `win32-preview`
+  (19 claims), and the carrier's 2 claims appended to the existing `pack-install` lane.
+  The committed set is now 1000 mutants across 73 lanes.
 - **Experimental WSL2 workflow (#78).** `.github/workflows/wsl2-install-surface.yml`
   installs this run's packed tgz inside a real WSL2 guest on a GitHub-hosted Windows runner,
   runs a harness-absent `setup`, then births a zero-token Pi citizen (record, socket,
   `peer-facts`; `get_state` only). It is not a release axis: the release oracle reads only
   `ci.yml`, whose four required jobs are unchanged. It runs when the workflow file changes
   on main, or by manual dispatch. No WSL2 support, harness rail or physical-machine claim.
+
+### Release boundary and verification
+
+- **Implementation commits.** WSL2 `afcda79`..`9b492a4` (landed `86f0eb5`); native
+  Windows `95933c7`..`5da8f12`, landed with the carrier supply contract `32fcc1c`
+  (exact push CI 39128022109, four jobs green). The runtime proof stays on `3b65bdc`'s
+  own SHA. Coordinator-routed independent reviews (primary and supplemental) closed
+  every shipped implementation leaf.
+- Kill-power re-measured at this shipped SHA: none (all 1000 committed claims not
+  re-proved, #144).
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head 864e026877ca surface
+  200536056020 -- `["bash","run.sh","check-win32-preview"]` 19/19 receipt b4de9e681dfb
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head 864e026877ca surface
+  200536056020 -- `["bash","run.sh","check-pack-win32-carrier"]` 2/2 receipt
+  c51ef11b84a6
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head 3e527cdbea81 surface
+  8f5cc4c34473 -- `["bash","run.sh","check-node-floor-coherence"]` 2/2 receipt
+  6c0ec40a291f
+- **Static/LIVE split.** Local P4/M0 `check:full` is not run on this operator host (its
+  FULL includes Herdr checks prohibited here) and is not counted as passed: the whole
+  static floor is owed to this prepared SHA's exact push CI.
+- **Cut blockers.** VERIFY §3.4 (strict `doctor-meta-bridge` on an installed 0.39.0
+  Claude host in a new post-install session) and §3.7 (three agy doctors and a same-gid
+  native-push reply in a new operator conversation) need the operator and are not met by
+  this record; no tag or GitHub release until they are or GLG decides otherwise. npm
+  publication is outside the current authorization and was not performed; it needs a
+  separate GLG GO.
+- **Herdr follows core.** `plugins/herdr/runtime-lock.json` stays on the closed
+  `herdr-checkout` source (comment re-dated only); no plugin manifest version, registry
+  pin or snapshot changes in this release.
 
 ## 0.38.1 - 2026-10-17
 
