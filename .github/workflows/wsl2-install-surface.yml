@@ -74,8 +74,6 @@ jobs:
       NODE_VERSION: v24.18.1
       NODE_DIST: node-v24.18.1-linux-x64
       NODE_SHA256: 9f5eb6ac21845a66c493c91a253b1da32fd684e89e9b7202d4936982336be4ca
-      # Git Bash must not rewrite the Linux paths handed to wsl.exe.
-      MSYS_NO_PATHCONV: '1'
     steps:
       - uses: actions/download-artifact@v4
         with:
@@ -94,8 +92,11 @@ jobs:
           set -euo pipefail
           S="$(cygpath -u "$RUNNER_TEMP")/supply"
           mkdir -p "$S"
-          curl -fsSL -o "$S/ubuntu.wsl" "$UBUNTU_WSL_URL"
-          curl -fsSL -o "$S/$NODE_DIST.tar.gz" "https://nodejs.org/dist/$NODE_VERSION/$NODE_DIST.tar.gz"
+          # curl is a native Windows program: hand it a Windows destination, never a Git Bash path.
+          type -a curl; curl --version | sed -n '1p'
+          echo "destination: $(cygpath -w "$S")"; ls -ld "$S"
+          curl -fsSL -o "$(cygpath -w "$S/ubuntu.wsl")" "$UBUNTU_WSL_URL"
+          curl -fsSL -o "$(cygpath -w "$S/$NODE_DIST.tar.gz")" "https://nodejs.org/dist/$NODE_VERSION/$NODE_DIST.tar.gz"
           printf '%s  %s\n' "$UBUNTU_WSL_SHA256" "$S/ubuntu.wsl" "$NODE_SHA256" "$S/$NODE_DIST.tar.gz" | sha256sum -c
 
       - name: install the distro as WSL2
@@ -213,9 +214,10 @@ jobs:
         run: |
           set -euo pipefail
           T="$(cygpath -u "$RUNNER_TEMP")"
-          G="$(wsl.exe -d "$DISTRO" -u root --exec wslpath -u "$(cygpath -w "$T/guest.sh")" | tr -d '\r')"
+          # MSYS_NO_PATHCONV only here: these wsl.exe argv carry Linux paths Git Bash must not rewrite.
+          G="$(MSYS_NO_PATHCONV=1 wsl.exe -d "$DISTRO" -u root --exec wslpath -u "$(cygpath -w "$T/guest.sh")" | tr -d '\r')"
           test -n "$G"
-          wsl.exe -d "$DISTRO" -u root --exec /usr/bin/env \
+          MSYS_NO_PATHCONV=1 wsl.exe -d "$DISTRO" -u root --exec /usr/bin/env \
             EXPECT_DISTRO="$DISTRO" NODE_VERSION="$NODE_VERSION" NODE_DIST="$NODE_DIST" NODE_SHA256="$NODE_SHA256" \
             /bin/bash "$G" "$(cygpath -w "$T")"
 
@@ -223,9 +225,11 @@ jobs:
       - name: host-side WSL diagnostics and VERSION row
         if: always()
         run: |
-          set -uo pipefail
+          # The runner forces bash -e; turn it off so every diagnostic line survives a failure,
+          # and keep the one verdict below as an explicit exit.
+          set +e -uo pipefail
           wsl.exe --version | tr -d '\000\r'
           wsl.exe --list --verbose | tr -d '\000\r'
           ver="$(wsl.exe --list --verbose | tr -d '\000\r' | awk -v d="$DISTRO" '{ sub(/^\*/, ""); if ($1 == d) print $NF }')"
           echo "host VERSION for $DISTRO: '$ver'"
-          [ "$ver" = 2 ]
+          [ "$ver" = 2 ] || exit 1
