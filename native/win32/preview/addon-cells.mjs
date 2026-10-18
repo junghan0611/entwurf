@@ -76,9 +76,14 @@ async function cell(name, body) {
 let addon = null;
 await cell("L0-load", async (o) => {
 	addon = loader.win32Native();
-	o.exports = Object.keys(addon).sort();
+	// napi_define_properties with napi_default makes non-enumerable own properties, so the
+	// surface is read as OWN names (never the prototype); Object.keys is an observation only.
+	const expected = ["ioStats", "pipeProbe", "pipeRpc", "readNoFollow"];
+	o.ownNames = Object.getOwnPropertyNames(addon).sort();
+	o.enumerableKeys = Object.keys(addon).sort();
+	o.types = Object.fromEntries(expected.map((n) => [n, Object.hasOwn(addon, n) ? typeof addon[n] : "missing"]));
 	o.ioStats = addon.ioStats();
-	return JSON.stringify(o.exports) === JSON.stringify(["ioStats", "pipeProbe", "pipeRpc", "readNoFollow"])
+	return JSON.stringify(o.ownNames) === JSON.stringify(expected) && expected.every((n) => o.types[n] === "function")
 		? "PASS"
 		: "RED";
 });
