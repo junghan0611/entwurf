@@ -18,7 +18,9 @@ evidence split, and its three states must not collapse into "macOS is supported"
   ACP turn, mux. Wiring may be written; that is not a rail receipt. The remaining
   unmeasured Darwin doctor reason is per-process environment DISCOVERY
   (start-key is portable).
-- **UNSUPPORTED** — native Windows only. macOS is never this.
+- **UNSUPPORTED** — native Windows `setup` and its harness rails. macOS is never this.
+  An experimental native-Windows Pi preview exists outside `setup`, on a feature branch
+  only; see [BASELINE](../BASELINE.md#release-host-baseline).
 
 ## Requirements
 
