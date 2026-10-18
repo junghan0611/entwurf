@@ -266,6 +266,8 @@ jobs:
         env:
           RUN_OUTCOME: ${{ steps.run.outcome }}
         run: |
+          # Any remaining cmdlet exception: keep the reds gathered so far, name the line, red.
+          trap { "RED: oracle harness exception $($_.Exception.GetType().FullName) at script line $($_.InvocationInfo.ScriptLineNumber)"; if ($red) { $red | ForEach-Object { "RED: $_" } }; exit 1 }
           $R = Join-Path $env:RUNNER_TEMP 'entwurf-probe'
           $J = Join-Path $R 'out.jsonl'
           foreach ($f in 'probe.mjs', 'obs.ps1') { $p = Join-Path $R $f; if (Test-Path -LiteralPath $p) { "$f sha256: $((Get-FileHash -Algorithm SHA256 -LiteralPath $p).Hash.ToLower())" } }
@@ -274,7 +276,7 @@ jobs:
           "out.jsonl sha256: $((Get-FileHash -Algorithm SHA256 -LiteralPath $J).Hash.ToLower())"
           $red = [System.Collections.Generic.List[string]]::new()
           $c = @{}
-          foreach ($line in Get-Content -LiteralPath $J) { $r = $line | ConvertFrom-Json; $c[$r.cell] = $r; if ($r.probeFailure) { $red.Add("probe failure in $($r.cell): $($r.probeFailure)") } }
+          foreach ($line in Get-Content -LiteralPath $J) { $row = $line | ConvertFrom-Json; $c[$row.cell] = $row; if ($row.probeFailure) { $red.Add("probe failure in $($row.cell): $($row.probeFailure)") } }
           foreach ($k in 'P1', 'P2', 'P3a', 'P3b', 'P4', 'P5', 'OWNED', 'END') { if (-not $c.ContainsKey($k)) { $red.Add("missing cell $k") } }
           if ($env:RUN_OUTCOME -ne 'success') { $red.Add("run step outcome $env:RUN_OUTCOME") }
           # O1 subject
