@@ -6,8 +6,8 @@ core 0.39.0(native-Windows 실험 preview 포함)이 tag·GitHub release·npm `l
 
 - [x] **1. core 0.38.1 release · #146 closed.** `v0.38.1` = `6c3c6f4`.
 - [x] **2. WSL2 + native-Windows preview on main.** WSL2 `86f0eb5`; native 9 commits `95933c7`..`5da8f12` + supply contract `32fcc1c`. runtime 증거는 `3b65bdc` 자체 SHA(run 39123555360).
-- [x] **3. core 0.39.0.** `v0.39.0` = `551402c`, exact CI 39145255865 four jobs GREEN, local LIVE r2 MUST 23/23 + BEHAVIOR 1/1. Candidate는 M3w로 preview run 39146098592의 tgz(sha256 `1d569324…`), Windows 8 cells + Linux container 수용. §3.4 installed Claude host PASS(테스트 세션 뒤 clone wiring 복구). §3.7 agy는 GLG cut 결정으로 이번 cut만 제외(PASS 아님). [GitHub release](https://github.com/junghan0611/entwurf/releases/tag/v0.39.0). GLG가 npm publish; registry tarball == accepted candidate.
-- [ ] **4. Herdr 0.39.0 snapshot** ← CURRENT: `plugins/herdr/runtime-lock.json` npm 0.39.0 pin + manifest 0.39.0 + CHANGELOG snapshot 절. 남은 것: branch review → commit → main push(GO) → exact CI four jobs → public-ref install/use/deactivate journey → CalVer tag/GitHub snapshot release(GO).
+- [x] **3. core 0.39.0.** `v0.39.0` = `551402c`, exact CI 39145255865 four jobs GREEN, local LIVE r2 MUST 23/23 + BEHAVIOR 1/1. Candidate는 M3w로 preview run 39146098592의 tgz(sha256 `1d569324…`), Windows 8 cells + Linux container 수용. §3.4 installed Claude host PASS(테스트 세션 뒤 clone wiring 복구). §3.7 agy는 GLG cut 결정으로 이번 cut만 제외(PASS 아님). [GitHub release](https://github.com/junghan0611/entwurf/releases/tag/v0.39.0)(본문과 부록은 cut 시점 기록이라 아직 "npm 미발행"이라 적혀 있고 수정하지 않음). 그 뒤 GLG가 npm publish(2026-10-18T21:24:39Z, `latest` 0.39.0); registry tarball == accepted candidate.
+- [ ] **4. Herdr 0.39.0 snapshot** ← CURRENT: `plugins/herdr/runtime-lock.json` npm 0.39.0 pin + manifest 0.39.0 + CHANGELOG snapshot 절. `ba46dec`로 commit됨. 남은 것: 문서 감사 amendment closure → main push(GO) → exact CI four jobs → public-ref install/use/deactivate journey → CalVer tag/GitHub snapshot release(GO).
 
 현재 좌표: 1–3 완료 → 4 Herdr snapshot.
 
@@ -22,7 +22,7 @@ core 0.39.0(native-Windows 실험 preview 포함)이 tag·GitHub release·npm `l
 
 # RECEIPTS
 
-- core 0.39.0: `.tmp-verify/release-0.39.0/`(`P8-FINAL.md`, live-r2, accepted-artifact, host-claude, notes).
+- core 0.39.0: `.tmp-verify/release-0.39.0/`(`P8-FINAL.md`는 publish 이전 기록 — 그 status 줄을 현재 사실로 읽지 않음; live-r2, accepted-artifact, host-claude, notes).
 - Herdr 0.39.0: `.tmp-verify/herdr-0.39.0/`(registry, c3 swap 22/22).
 - native Windows: `.tmp-verify/78-native-20261018/`.
 

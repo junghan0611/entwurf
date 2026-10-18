@@ -197,9 +197,9 @@ pi / pi-durable / Claude Code / Copilot / OMP / Antigravity / Codex
 | Open a new visible sibling | `entwurf_fresh_call {backend, model, task, cwd?}` | Launch receipt only; the sibling's nonce callback envelope supplies its new garden id |
 | Reopen a dormant pi citizen under its own id | `entwurf_resume_call {target}` | Separate LAUNCH and socket OBSERVATION receipts; no turn is run |
 
-**Delivery starts no process.** A live pi receives over its record-addressed Unix
-control socket; an armed self-fetch citizen (Claude Code, Copilot, OMP, pi-durable)
-through its mailbox; a probe-alive native-push citizen (Antigravity, Codex) through
+**Delivery starts no process.** A live pi receives over its record-addressed control
+address (a Unix socket; on the experimental native-Windows Pi preview, a named pipe);
+an armed self-fetch citizen (Claude Code, Copilot, OMP, pi-durable) through its mailbox; a probe-alive native-push citizen (Antigravity, Codex) through
 its native conversation/thread. Dormant pi, undeliverable mailboxes, dead/indeterminate native
 push and record-less sockets reject honestly. Only control-socket dispatch takes
 the per-target lock; the other rails use their own deliverability/probe evidence.
@@ -237,7 +237,8 @@ and [Herdr launch](https://github.com/junghan0611/entwurf/blob/main/docs/herdr-l
 
 The pi adapter registers the compiled bridge with Pi's built-in MCP after record
 birth; Pi supervises the MCP child. **MCP is ingress; pi receive remains the
-record-addressed Unix control socket.** Garden identity and dispatch stay Entwurf's.
+record-addressed control address (a Unix socket, or the native-Windows preview's named
+pipe).** Garden identity and dispatch stay Entwurf's.
 Codemode is harness-internal, not another garden citizen.
 
 ## Operation guides

@@ -243,7 +243,8 @@ message. These are harness tools, not shell subcommands; pi exposes them through
 Pi's built-in MCP as `mcp__entwurf_bridge__<verb>`. The bridge has eight tools;
 pi hides `entwurf_inbox_read` and `entwurf_register_native`, leaving six active.
 Tool-call ingress is MCP; delivery to a pi citizen is still its record-addressed
-Unix control socket. A boot/listing from `check-bridge` is not a model-turn or
+control address (a Unix socket; a named pipe on the experimental native-Windows Pi
+preview). A boot/listing from `check-bridge` is not a model-turn or
 native-rail acceptance.
 
 To inspect the ACP provider from a project-local package instead of a global one:

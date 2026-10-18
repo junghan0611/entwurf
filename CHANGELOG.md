@@ -9,6 +9,14 @@ All notable changes to this project will be documented here. Format follows [Kee
 A separate Herdr plugin snapshot, not another core release: core package 0.39.0 and its
 `v0.39.0` tag remain unchanged. The operator has published the core to npm.
 
+**Reading guide (2026-10-19).** The `## 0.39.0` section below and the appendix of the
+[v0.39.0 GitHub release](https://github.com/junghan0611/entwurf/releases/tag/v0.39.0) are
+prepare- and cut-time text. The appendix records the tag, VERIFY §3.4 met, and §3.7 (agy)
+excluded for that cut only by the operator's decision, not a PASS. Both still say npm was not
+published. The publish is the later registry fact recorded in this section (`latest` 0.39.0,
+published 2026-10-18T21:24:39Z, registry bytes equal to the accepted candidate). Neither the
+published tarball's CHANGELOG nor the release page is amended by this snapshot.
+
 ### Herdr plugin
 
 - **Re-pin the published core 0.39.0 and close the checkout window.**
