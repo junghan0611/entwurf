@@ -68,7 +68,7 @@ The beside tests exercise the real bootstrap/Harness with sandboxed model and lo
 
 ## #146 SDK default compaction and the settings map
 
-The prepared source hands the Harness Pi's compaction settings unchanged and no background policy of its own, so the SDK's default background compaction applies again: past the background threshold a summary runs beside the turn, which answers without waiting for it; past the blocking threshold, on overflow and on manual `/compact` the behaviour is as before. A process started from 0.37.0–0.38.0 keeps its loaded `backgroundTokens: 0` until the operator restarts it; the prepared source changes nothing that is already running.
+Released 0.38.1 (`6c3c6f4`) hands the Harness Pi's compaction settings unchanged and no background policy of its own, so the SDK's default background compaction applies again: past the background threshold a summary runs beside the turn, which answers without waiting for it; past the blocking threshold, on overflow and on manual `/compact` the behaviour is as before. A process started from 0.37.0–0.38.0 keeps its loaded `backgroundTokens: 0` until the operator restarts it; installing the release changes nothing that is already running.
 
 GLG's direction is native defaults first, because every override is more to verify. The map below says which layer decides each Harness setting, so an SDK upgrade that moves a default is noticed where it is decided. It covers the Harness settings the app builds (`createHarnessSettings` in `pi/pi-durable/src/experimental/durable/harness-setup.ts`), not every app feature. Values are observations of the installed SDK set at its version, not Entwurf policy; re-read them from these sources at an upgrade instead of copying them here.
 
@@ -80,6 +80,19 @@ GLG's direction is native defaults first, because every override is more to veri
 | Operator tuning not wired through this app | `backgroundTokens`: an SDK Harness option the app passes none of, and Pi's `settings.json` has no such key, so there is no operator entry for it; Pi's per-model compaction overrides, a Pi settings feature, are not applied because the app calls `getCompactionSettings()` without a model | as above |
 
 The last row is a recorded gap, not a tuning surface: no JSON key, CLI flag or environment variable is added for it. The beside proof (`[QK:PI-DURABLE-COMPACTION-SDK-BACKGROUND]` in `pi-extensions/lib/pi-durable-carrier.test.ts`) runs the real bootstrap and Harness on a loopback wire with the background summary held. It shows the turn answering while that summary is still unanswered, then the summary being placed, with blocking and overflow compaction retained. It is a faux scheduling proof, not live model performance.
+
+### #146 decision closeout and re-entry
+
+The [0.38.1 release evidence](https://github.com/junghan0611/entwurf/releases/tag/v0.38.1) records the exact-SHA push floor, the single manual whole BODY (979/979 mutants killed), local LIVE r3 and the preserved artifact consumer. Those receipts prove their declared contracts, not Pi-equivalent coding quality or live background-summary latency/cost. [#146's closing decision](https://github.com/junghan0611/entwurf/issues/146#issuecomment-6232063133) closes the coordinate/decision exercise, not every possible app-quality gap.
+
+Remaining questions are not an approved implementation backlog:
+
+- **Actual coding experience:** after an operator-chosen restart, does native background compaction preserve responsiveness and useful early context during ordinary coding? Re-enter on a concrete stall, lost context, unexpected failure or cost observation, naming the installed version and visible task/turn state. No automatic restart, soak experiment or performance claim follows from the faux proof.
+- **Settings ingress:** `backgroundTokens` has no operator entry and per-model compaction overrides are not applied (map above). Keep native defaults unless a concrete model/workload requires otherwise; then decide one mapping and its independent proof, not a tuning framework.
+- **App assembly and visibility:** prompt/skill context, tool output and task/cancel/resume feedback are owned app responsibilities. Select one reproducible friction from GLG's actual coding work before comparing or changing it. Unspoken requirements and full Pi parity are not inferred.
+- **Receive durability:** native compaction admission is not immediate handling, exactly-once delivery or crash-safe tool-result commit (evidence boundaries below). Re-enter only if that stronger requirement is actually adopted, beginning with one isolated boundary measurement; do not add a queue/recovery manager by default.
+
+The mux LIVE r2 vendor processing error did not recur in the single approved same-candidate r3 run; timing/transience is not established as its cause. Preserve the failed receipt and reopen a focused investigation if it recurs, rather than adding retry machinery now. #142 ACP remains paused. The separate Herdr npm re-pin/snapshot is release work, not evidence of coding-quality parity; do not update an npm-activated host from the temporary checkout-source main as an implicit migration.
 
 ## Accepted candidate, not a release
 
