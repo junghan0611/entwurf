@@ -385,6 +385,13 @@ not certified, a detected harness is named non-green (FAIL) whose wording is
 not an install failure: the wiring WAS written, but the rail is NOT CERTIFIED —
 pending physical host. That FAIL is the honest setup verdict, not a skip.
 
+WSL2: a separate experimental workflow (`.github/workflows/wsl2-install-surface.yml`)
+measures the Entwurf-only install and a zero-token Pi citizen inside a real WSL2 guest on
+a GitHub-hosted Windows runner. The release oracle does not read it
+(`verify-exact-ci.sh` selects only `ci.yml` runs), so it is not a release axis and a red
+there blocks no cut. It runs when that workflow file changes on main, or by manual
+dispatch. Recorded in [BASELINE.md](./BASELINE.md).
+
 ### 1.1 Variables (optional)
 
 ```bash

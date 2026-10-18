@@ -78,8 +78,11 @@ Plain MCP registration alone does not make a garden citizen.
 installation is **CERTIFIED (CI)**, weaker than a physical-host doctor; its native
 harness rails, ACP and mux remain **NOT CERTIFIED — pending physical host**.
 Detected harness wiring on Darwin can therefore be written while setup stays
-non-green. Native Windows is **UNSUPPORTED**. The package has no npm `os`
-restriction; that is not certification of every platform's harness rails.
+non-green. WSL2: a CI runner (experimental) measured the Entwurf-only install and a
+zero-token Pi citizen; general, physical-machine or harness-parity WSL2 support is **not
+declared**, and delivery, other harnesses and physical machines are unmeasured. Native
+Windows is **UNSUPPORTED**. The package has no npm `os` restriction; that is not
+certification of every platform's harness rails.
 
 ### Native durable (pi-durable)
 

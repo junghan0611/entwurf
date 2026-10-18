@@ -4,6 +4,15 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+### Verification
+
+- **Experimental WSL2 workflow (#78).** `.github/workflows/wsl2-install-surface.yml`
+  installs this run's packed tgz inside a real WSL2 guest on a GitHub-hosted Windows runner,
+  runs a harness-absent `setup`, then births a zero-token Pi citizen (record, socket,
+  `peer-facts`; `get_state` only). It is not a release axis: the release oracle reads only
+  `ci.yml`, whose four required jobs are unchanged. It runs when the workflow file changes
+  on main, or by manual dispatch. No WSL2 support, harness rail or physical-machine claim.
+
 ## 0.38.1 - 2026-10-17
 
 ### pi-durable

@@ -1,25 +1,33 @@
 name: wsl2-install-surface (experimental)
 
-# #78 WSL2 cell 1 — EXPERIMENTAL, non-voting by construction. The release oracle and every
-# gate read only ci.yml runs (verify-exact-ci.sh:26-34, qualification-gh.ts:33), and
+# #78 WSL2 cells 1+2 — EXPERIMENTAL, non-voting by construction. The release oracle and
+# every gate read only ci.yml runs (verify-exact-ci.sh:26-34, qualification-gh.ts:33), and
 # ci.yml's job list is pinned to the four required jobs ([QK:CI-COMPOSITE-STEPS-PINNED]),
 # so this cell lives in its own file: a red here blocks no cut, and its run conclusion is
 # its honest verdict — no continue-on-error, no retry, no rerun.
 #
-# WHAT A GREEN RUN CERTIFIES: the Entwurf-only install surface inside a real WSL2 guest on
-# a GitHub-hosted Windows runner — this run's packed tgz (producer -> host -> guest digest
-# equal), installed under a guest-native Node 24, `--help`, `check-bridge`, and an
-# all-harness-absent `setup` that leaves the protected auth/harness state unchanged.
-# WHAT IT DOES NOT CERTIFY: native Windows, any harness rail, login, citizen birth or
-# delivery, mux/tmux, Herdr, or a physical user machine. A CI runner is not a host.
+# WHAT A GREEN RUN MEASURES (experimental, non-voting): the Entwurf-only install surface
+# inside a real WSL2 guest on a GitHub-hosted Windows runner — this run's packed tgz
+# (producer -> host -> guest digest equal), installed under a guest-native Node 24,
+# `--help`, `check-bridge`, and an all-harness-absent `setup` that leaves the protected
+# auth/harness state unchanged (cell 1); then a zero-token Pi citizen in the same guest —
+# an SRI-pinned Pi wired by `setup`, one V3 record, its gid-keyed control socket and an
+# alive `peer-facts` join, with only `get_state` sent (cell 2).
+# WHAT IT DOES NOT MEASURE OR CLAIM: native Windows, any other harness rail, login or a
+# model turn, delivery, fresh/resume, mux/tmux, Herdr, or a physical user machine. A CI
+# runner is not a host.
 #
 # Supply pins are digests read from the projects' official HTTPS checksum files
-# (releases.ubuntu.com SHA256SUMS, nodejs.org SHASUMS256.txt); their GPG signatures are
-# NOT verified here. Contract: .tmp-verify/78-wsl2-20261018/CONTRACT.md (#78).
+# (releases.ubuntu.com SHA256SUMS, nodejs.org SHASUMS256.txt, the npm registry's integrity
+# for Pi); their GPG signatures are NOT verified here. Contract and receipts: #78.
+#
+# It runs when this file changes on main, or by manual dispatch; product drift between
+# edits is measured by dispatch, not on every push.
 
 on:
   push:
-    branches: ['feat/78-wsl2-first']
+    branches: [main]
+    paths: ['.github/workflows/wsl2-install-surface.yml']
   workflow_dispatch:
 
 permissions:
