@@ -1,0 +1,347 @@
+name: windows-native-probe (experimental)
+
+# #78 native-Windows capability probe — EXPERIMENTAL, non-voting by construction. The release
+# oracle reads only ci.yml runs (verify-exact-ci.sh:26-34), so a red here blocks no cut.
+#
+# SUBJECT: the runner's host-native Node 24.18.1 under pwsh (not Git Bash, not WSL) and its
+# NTFS, file-link, named-pipe and child-process primitives. No checkout, no Entwurf install,
+# no auth, no model, no network beyond actions/setup-node.
+# A GREEN RUN MEANS ONLY: the measurement completed and its independent observers agreed. An
+# absent capability (no O_NOFOLLOW, symlink EPERM, ...) is a recorded value, not a red. It
+# does not mean Entwurf runs on Windows, and the values are not by themselves sufficient for
+# any security decision (record-read guard, pipe ACL, start-key). The in-run pwsh observer is
+# launched by the subject: an availability observer, not a tamper-proof oracle.
+# RED: subject mismatch (not win32 / Node v24.18.1 / NTFS), a missing or failed cell, a bound
+# firing, observer disagreement, or the probe's own process/pipe still present.
+
+on:
+  push:
+    branches: ['feat/78-windows-native-probe']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  native-probe:
+    runs-on: windows-2025
+    timeout-minutes: 15
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.18.1
+
+      - name: write the probe and its observer
+        shell: pwsh
+        run: |
+          $R = Join-Path $env:RUNNER_TEMP 'entwurf-probe'
+          New-Item -ItemType Directory -Force -Path $R | Out-Null
+          $probe = @'
+          import fs from "node:fs";
+          import os from "node:os";
+          import path from "node:path";
+          import net from "node:net";
+          import crypto from "node:crypto";
+          import { spawn } from "node:child_process";
+          import { fileURLToPath } from "node:url";
+
+          const SELF = fileURLToPath(import.meta.url);
+          const argv = process.argv.slice(2);
+          if (argv[0] === "--pipe-client") {
+            // Held on stdin until the observer has stamped this pid's StartTime; the
+            // 5 s round-trip bound starts at "go". Exit 7: no "go" within 30 s.
+            const [, name, nonce] = argv;
+            const hold = setTimeout(() => process.exit(7), 30000);
+            process.stdin.on("error", () => {});
+            process.stdin.once("data", () => {
+              clearTimeout(hold);
+              setTimeout(() => process.exit(4), 5000);
+              let got = "";
+              const c = net.connect(name, () => c.write(nonce));
+              c.on("data", (d) => { got += d; if (got.length >= nonce.length) process.exit(got === nonce ? 0 : 3); });
+              c.on("error", (e) => process.stderr.write(String(e.code ?? ""), () => process.exit(5)));
+            });
+          } else {
+            await main(argv[0], argv[1], argv[2]);
+          }
+
+          async function main(work, out, obsScript) {
+            fs.mkdirSync(work, { recursive: true });
+            const leaf = `entwurf-probe-${process.env.GITHUB_RUN_ID ?? "local"}-${crypto.randomBytes(6).toString("hex")}`;
+            const owned = [];
+            const servers = [];
+            let failed = false;
+            const rec = (cell, o) => fs.appendFileSync(out, JSON.stringify({ cell, ...o }) + "\n");
+            const bound = (p, ms, label) => {
+              let t;
+              const fire = new Promise((_, rej) => { t = setTimeout(() => rej(new Error(`bound fired: ${label}`)), ms); });
+              return Promise.race([p, fire]).finally(() => clearTimeout(t));
+            };
+            const attempt = (fn) => { try { return { ok: true, value: fn() }; } catch (e) { return { ok: false, code: e.code ?? e.message }; } };
+            const id = (st) => ({ dev: String(st.dev), ino: String(st.ino), file: st.isFile(), dir: st.isDirectory(), link: st.isSymbolicLink() });
+            const same = (a, b) => a.dev === b.dev && a.ino === b.ino;
+            const openStat = (p) => attempt(() => { const x = fs.openSync(p, "r"); try { return fs.fstatSync(x, { bigint: true }); } finally { fs.closeSync(x); } });
+            const exited = (h) => (h.exitCode !== null || h.signalCode !== null)
+              ? Promise.resolve({ code: h.exitCode, signal: h.signalCode })
+              : new Promise((res) => h.once("exit", (code, signal) => res({ code, signal })));
+            const closed = (h) => new Promise((res) => h.once("close", (code, signal) => res({ code, signal })));
+            const spawned = (h) => new Promise((res, rej) => { h.once("spawn", res); h.once("error", rej); });
+            const own = (role, h) => { owned.push({ role, h, start: null }); return h; };
+            const stamp = (h, start) => { owned.find((o) => o.h === h).start = start ?? null; };
+            const listen = (srv, at) => bound(new Promise((res) => {
+              srv.once("error", (e) => res({ ok: false, code: e.code }));
+              srv.listen(at, () => { servers.push({ srv, at, closed: false }); res({ ok: true }); });
+            }), 5000, `listen ${at}`);
+
+            async function observe(role, env) {
+              const h = own(role, spawn("pwsh", ["-NoProfile", "-NonInteractive", "-File", obsScript], { env: { ...process.env, ...env }, stdio: ["ignore", "pipe", "pipe"] }));
+              let so = "";
+              let se = "";
+              const done = closed(h);
+              h.stdout.on("data", (d) => (so += d));
+              h.stderr.on("data", (d) => (se += d));
+              const spawnErr = new Promise((res) => h.once("error", (e) => res({ spawnError: e.code })));
+              const r = await bound(Promise.race([done, spawnErr]), 15000, role);
+              if (r.spawnError) throw new Error(`${role} spawn ${r.spawnError}`);
+              if (r.code !== 0) throw new Error(`${role} exit ${r.code}/${r.signal}: ${se.slice(0, 300)}`);
+              const j = JSON.parse(so.trim().split("\n").pop());
+              stamp(h, j.self.start);
+              return j;
+            }
+            async function cell(name, fn) {
+              try { rec(name, { observed: await fn() }); } catch (e) { failed = true; rec(name, { probeFailure: String(e?.message ?? e) }); }
+            }
+
+            await cell("P1", () => ({
+              platform: process.platform, version: process.version, execPath: process.execPath, arch: process.arch,
+              osRelease: os.release(), procExists: fs.existsSync("/proc"), wslDistroNamePresent: "WSL_DISTRO_NAME" in process.env,
+            }));
+            await cell("P2", () => ({
+              constants: Object.keys(fs.constants).sort(), typeofONofollow: typeof fs.constants.O_NOFOLLOW, hasFilemap: "UV_FS_O_FILEMAP" in fs.constants,
+            }));
+            await cell("P3a", () => {
+              const d = path.join(work, "p3a");
+              fs.mkdirSync(d);
+              const f = path.join(d, "f");
+              fs.writeFileSync(f, "probe\n");
+              const fo = openStat(f);
+              if (!fo.ok) throw new Error(`open regular file: ${fo.code}`);
+              const lst = fs.lstatSync(f, { bigint: true });
+              const links = {};
+              for (const [n, make] of [["symlink", (p) => fs.symlinkSync(f, p, "file")], ["hardlink", (p) => fs.linkSync(f, p)]]) {
+                const p = path.join(d, n);
+                const c = attempt(() => make(p));
+                if (!c.ok) { links[n] = { path: p, created: false, measured: false, reason: c.code }; continue; }
+                const l = fs.lstatSync(p, { bigint: true });
+                const o = openStat(p);
+                const nm = { measured: false, reason: o.code };
+                links[n] = { path: p, created: true, measured: true, lstat: id(l), open: o.ok ? id(o.value) : nm,
+                  openReachesTarget: o.ok ? same(o.value, lst) : nm, openEqualsLinkLstat: o.ok ? same(o.value, l) : nm };
+              }
+              const sf = attempt(() => fs.statfsSync(d));
+              const measured = Object.values(links).filter((x) => x.measured).length;
+              return { scope: "regular file and final-component file links (the record-file question)",
+                regular: { fstat: id(fo.value), lstat: id(lst), sameDevIno: same(fo.value, lst) }, links,
+                statfs: sf.ok ? { type: Number(sf.value.type) } : { measured: false, reason: sf.code },
+                linkCells: { measured, notMeasured: Object.keys(links).length - measured } };
+            });
+            await cell("P3b", () => {
+              const d = path.join(work, "p3b", "d");
+              fs.mkdirSync(d, { recursive: true });
+              const df = path.join(d, "df");
+              fs.writeFileSync(df, "probe\n");
+              const j = path.join(work, "p3b", "j");
+              const base = { scope: "directory reparse; not the record-file guard case", path: j };
+              const c = attempt(() => fs.symlinkSync(d, j, "junction"));
+              if (!c.ok) return { ...base, created: false, measured: false, reason: c.code };
+              const t = fs.lstatSync(df, { bigint: true });
+              const rl = attempt(() => fs.readlinkSync(j));
+              const o = openStat(path.join(j, "df"));
+              return { ...base, created: true, measured: true, lstat: id(fs.lstatSync(j, { bigint: true })),
+                readlink: rl.ok ? rl.value : { measured: false, reason: rl.code },
+                throughJunction: o.ok ? { ...id(o.value), sameAsTarget: same(o.value, t) } : { measured: false, reason: o.code } };
+            });
+            await cell("P4", async () => {
+              const name = `\\\\.\\pipe\\${leaf}`;
+              let connections = 0;
+              const first = await listen(net.createServer((k) => { connections++; k.on("error", () => {}).on("data", (x) => k.write(x)); }), name);
+              const nonce = crypto.randomBytes(12).toString("hex");
+              let cl = null;
+              let clDone = null;
+              let clErr = "";
+              let stdinError = null;
+              if (first.ok) {
+                cl = own("pipe-client", spawn(process.execPath, [SELF, "--pipe-client", name, nonce], { stdio: ["pipe", "ignore", "pipe"] }));
+                clDone = closed(cl);
+                cl.stderr.on("data", (d) => (clErr += d));
+                cl.stdin.on("error", (e) => (stdinError = e.code ?? e.message));
+                await bound(spawned(cl), 5000, "pipe-client spawn");
+              }
+              const obs = await observe("observer-p4", { PROBE_PIPE_LEAF: leaf, PROBE_PIDS: cl ? String(cl.pid) : "" });
+              const connectionsAfterObserver = connections;
+              let roundTrip = { measured: false, reason: "first listen failed" };
+              if (cl) {
+                stamp(cl, obs.pids[String(cl.pid)]);
+                cl.stdin.end("go\n");
+                const ex = await bound(clDone, 10000, "pipe-client close");
+                // Two measured forms; anything else is the harness failing (oracle red).
+                const outcome = stdinError ? "harness-failure" : ex.code === 0 ? "echoed" : ex.code === 5 && clErr ? "connect-error" : "harness-failure";
+                roundTrip = { measured: outcome !== "harness-failure", outcome, ...ex, connectErrorCode: clErr || null, stdinError };
+              }
+              const second = first.ok ? await listen(net.createServer(), name) : { measured: false, reason: "first listen failed" };
+              const sockPath = path.join(work, "x.sock");
+              const sock = await listen(net.createServer(), sockPath);
+              for (const s of servers) {
+                await bound(new Promise((res) => s.srv.close(() => res())), 5000, `close ${s.at}`);
+                s.closed = true;
+              }
+              return { leaf, listen: first, observer: { seen: obs.seen, acl: obs.acl }, roundTrip, connectionsAfterObserver, connections,
+                secondListen: { ...second, scope: "same-process re-listen; not cross-process squatting evidence" },
+                sockPathBind: { path: sockPath, ...sock }, servers: servers.map((s) => ({ at: s.at, closed: s.closed })) };
+            });
+            await cell("P5", async () => {
+              const a = own("child-A", spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], { stdio: "ignore" }));
+              await bound(spawned(a), 5000, "child-A spawn");
+              const kill0 = () => { const r = attempt(() => process.kill(a.pid, 0)); return r.ok ? "ok" : r.code; };
+              const whileAlive = kill0();
+              const o1 = await observe("observer-p5-alive", { PROBE_PIDS: String(a.pid) });
+              const start = o1.pids[String(a.pid)];
+              stamp(a, start);
+              const sent = attempt(() => a.kill("SIGTERM"));
+              const exit = await bound(exited(a), 10000, "child-A exit");
+              const afterExit = kill0();
+              const o2 = await observe("observer-p5-after", { PROBE_PIDS: String(a.pid) });
+              const after = o2.pids[String(a.pid)];
+              return { pid: a.pid, startTicks: start, killZeroWhileAlive: whileAlive, observerWhileAlive: start != null,
+                sigterm: sent.ok ? { returned: sent.value } : { error: sent.code }, exit,
+                killZeroAfterExit: afterExit, observerAfterExitPresent: after != null,
+                afterExitIdentity: after == null ? "absent" : after === start ? "same instance (pid and StartTime)" : "reused pid, StartTime differs, not A" };
+            });
+
+            // Teardown only through owned handles; never a bare pid.
+            const cleanup = [];
+            for (const o of owned) {
+              if (!o.h.pid || o.h.exitCode !== null || o.h.signalCode !== null) continue;
+              o.h.kill();
+              try { await bound(exited(o.h), 5000, `cleanup ${o.role}`); cleanup.push({ role: o.role, killed: true }); }
+              catch (e) { failed = true; cleanup.push({ role: o.role, killed: false, error: e.message }); }
+            }
+            for (const s of servers.filter((x) => !x.closed)) { s.srv.close(); cleanup.push({ server: s.at, closeRequestedAtCleanup: true }); }
+            rec("OWNED", { observed: { pipeLeaf: leaf, cleanup, processes: owned.map((o) => ({ role: o.role, pid: o.h.pid ?? null, start: o.start })) } });
+            rec("END", { failed });
+            process.exit(failed ? 1 : 0);
+          }
+          '@
+          $obs = @'
+          $ErrorActionPreference = 'Stop'
+          $out = @{ self = @{ pid = $PID; start = [string](Get-Process -Id $PID).StartTime.ToUniversalTime().Ticks } }
+          $leaf = $env:PROBE_PIPE_LEAF
+          if ($leaf) {
+            $out.seen = [bool]([System.IO.Directory]::GetFiles('\\.\pipe\') | Where-Object { [System.IO.Path]::GetFileName($_) -eq $leaf })
+            $out.acl = try { $a = Get-Acl -LiteralPath "\\.\pipe\$leaf"; @{ status = 'ok'; rules = @($a.Access).Count } } catch { @{ status = 'error'; type = $_.Exception.GetType().FullName } }
+          }
+          $pids = @{}
+          foreach ($i in ($env:PROBE_PIDS -split ',' | Where-Object { $_ })) {
+            $p = Get-Process -Id ([int]$i) -ErrorAction SilentlyContinue
+            $pids[$i] = if ($p) { [string]$p.StartTime.ToUniversalTime().Ticks } else { $null }
+          }
+          $out.pids = $pids
+          $out | ConvertTo-Json -Compress -Depth 4
+          '@
+          [IO.File]::WriteAllText((Join-Path $R 'probe.mjs'), $probe)
+          [IO.File]::WriteAllText((Join-Path $R 'obs.ps1'), $obs)
+          foreach ($f in 'probe.mjs', 'obs.ps1') { "$f sha256: $((Get-FileHash -Algorithm SHA256 -LiteralPath (Join-Path $R $f)).Hash.ToLower())" }
+
+      - name: run the probe under host-native Node
+        id: run
+        shell: pwsh
+        timeout-minutes: 5
+        run: |
+          $R = Join-Path $env:RUNNER_TEMP 'entwurf-probe'
+          node (Join-Path $R 'probe.mjs') (Join-Path $R 'work') (Join-Path $R 'out.jsonl') (Join-Path $R 'obs.ps1')
+
+      - name: oracle — subject, observer agreement, own-resource hygiene
+        if: always()
+        shell: pwsh
+        env:
+          RUN_OUTCOME: ${{ steps.run.outcome }}
+        run: |
+          $R = Join-Path $env:RUNNER_TEMP 'entwurf-probe'
+          $J = Join-Path $R 'out.jsonl'
+          foreach ($f in 'probe.mjs', 'obs.ps1') { $p = Join-Path $R $f; if (Test-Path -LiteralPath $p) { "$f sha256: $((Get-FileHash -Algorithm SHA256 -LiteralPath $p).Hash.ToLower())" } }
+          if (-not (Test-Path -LiteralPath $J)) { "RED: no out.jsonl (run step: $env:RUN_OUTCOME)"; exit 1 }
+          Get-Content -LiteralPath $J
+          "out.jsonl sha256: $((Get-FileHash -Algorithm SHA256 -LiteralPath $J).Hash.ToLower())"
+          $red = [System.Collections.Generic.List[string]]::new()
+          $c = @{}
+          foreach ($line in Get-Content -LiteralPath $J) { $r = $line | ConvertFrom-Json; $c[$r.cell] = $r; if ($r.probeFailure) { $red.Add("probe failure in $($r.cell): $($r.probeFailure)") } }
+          foreach ($k in 'P1', 'P2', 'P3a', 'P3b', 'P4', 'P5', 'OWNED', 'END') { if (-not $c.ContainsKey($k)) { $red.Add("missing cell $k") } }
+          if ($env:RUN_OUTCOME -ne 'success') { $red.Add("run step outcome $env:RUN_OUTCOME") }
+          # O1 subject
+          $p1 = $c['P1'].observed
+          if (-not $IsWindows -or [Environment]::OSVersion.Platform -ne 'Win32NT') { $red.Add('O1 pwsh does not see Win32NT') }
+          if ($p1.platform -ne 'win32') { $red.Add("O1 node platform $($p1.platform)") }
+          $nv = node -v
+          if ($nv -ne 'v24.18.1' -or $p1.version -ne $nv) { $red.Add("O1 node version pwsh=$nv probe=$($p1.version)") }
+          $src = (Get-Command node -CommandType Application | Select-Object -First 1).Source
+          "node resolved by pwsh: $src"
+          if ($src -ne $p1.execPath) { $red.Add("O1 node path pwsh=$src probe=$($p1.execPath)") }
+          if ($src -match '(?i)system32|bash|wsl') { $red.Add("O1 node resolves through $src") }
+          if ($env:WSL_DISTRO_NAME -or $p1.wslDistroNamePresent) { $red.Add('O1 WSL_DISTRO_NAME present') }
+          # O2 declared NTFS subject
+          $drive = (Split-Path -Qualifier $R).TrimEnd(':')
+          $fs = (Get-Volume -DriveLetter $drive).FileSystemType
+          "workdir drive ${drive}: $fs"
+          if ($fs -ne 'NTFS') { $red.Add("subject-not-ntfs $fs (declared subject not measured; not a support verdict)") }
+          # O3 link existence agrees (LinkType recorded, not asserted)
+          $links = @()
+          if ($c['P3a'].observed) { $links += $c['P3a'].observed.links.PSObject.Properties | ForEach-Object { $_.Value } }
+          if ($c['P3b'].observed) { $links += $c['P3b'].observed }
+          foreach ($l in $links) {
+            $it = Get-Item -LiteralPath $l.path -Force -ErrorAction SilentlyContinue
+            "link $($l.path) created=$($l.created) pwsh-exists=$([bool]$it) LinkType=$($it.LinkType) Target=$($it.Target)"
+            if ([bool]$it -ne [bool]$l.created) { $red.Add("O3 $($l.path) node created=$($l.created) pwsh exists=$([bool]$it)") }
+          }
+          # O4 pipe observer agrees with listen; every bound server closed
+          $p4 = $c['P4'].observed
+          if ($p4) {
+            if ([bool]$p4.observer.seen -ne [bool]$p4.listen.ok) { $red.Add("O4 observer seen=$($p4.observer.seen) listen=$($p4.listen.ok)") }
+            foreach ($s in $p4.servers) { if (-not $s.closed) { $red.Add("O4 server $($s.at) not closed") } }
+            if ($p4.listen.ok -and $p4.roundTrip.outcome -notin 'echoed', 'connect-error') { $red.Add("P4 round trip harness failure: $($p4.roundTrip | ConvertTo-Json -Compress)") }
+          }
+          # O5 stage 1: raw pid presence agrees between node kill(pid,0) and Get-Process.
+          # Stage 2 (afterExitIdentity, pid+StartTime) is a recorded classification only.
+          $p5 = $c['P5'].observed
+          if ($p5) {
+            if ($p5.observerWhileAlive -ne ($p5.killZeroWhileAlive -eq 'ok')) { $red.Add('O5 while-alive raw presence disagreement') }
+            if ($p5.observerAfterExitPresent -ne ($p5.killZeroAfterExit -eq 'ok')) { $red.Add('O5 after-exit raw presence disagreement') }
+            "P5 after exit: $($p5.afterExitIdentity)"
+          }
+          # O6 own resources only: (pid, StartTime) still present, pipe leaf still listed
+          $own = $c['OWNED'].observed
+          if ($own) {
+            foreach ($o in $own.processes) {
+              if ($null -eq $o.pid) { continue }
+              if (-not $o.start) { $red.Add("O6 $($o.role) pid $($o.pid) has no observed StartTime (unverifiable)"); continue }
+              $p = Get-Process -Id $o.pid -ErrorAction SilentlyContinue
+              if ($p -and [string]$p.StartTime.ToUniversalTime().Ticks -eq $o.start) { $red.Add("O6 $($o.role) pid $($o.pid) still running") }
+            }
+            if ([System.IO.Directory]::GetFiles('\\.\pipe\') | Where-Object { [System.IO.Path]::GetFileName($_) -eq $own.pipeLeaf }) { $red.Add('O6 probe pipe still listed') }
+          }
+          if ($red.Count) { $red | ForEach-Object { "RED: $_" }; exit 1 }
+          'windows-native-probe: PASS (measurement complete; observers agree; values above are observations)'
+
+      - name: diagnostics
+        if: always()
+        shell: pwsh
+        run: |
+          $R = Join-Path $env:RUNNER_TEMP 'entwurf-probe'
+          Get-Process -Name node -ErrorAction SilentlyContinue | ForEach-Object { 'node pid={0} start={1}' -f $_.Id, $_.StartTime.ToUniversalTime().ToString('o') }
+          if (Test-Path -LiteralPath $R) { Get-ChildItem -LiteralPath $R -Recurse -Force -ErrorAction SilentlyContinue | ForEach-Object { '{0} {1}' -f $_.Mode, $_.FullName } }
+
+      - name: remove the workdir (cleanup, not a verdict)
+        if: always()
+        shell: pwsh
+        run: |
+          $W = Join-Path $env:RUNNER_TEMP 'entwurf-probe\work'
+          try { if (Test-Path -LiteralPath $W) { Remove-Item -LiteralPath $W -Recurse -Force; 'workdir removed' } } catch { "workdir removal failed: $($_.Exception.GetType().FullName)" }
