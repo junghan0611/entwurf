@@ -221,6 +221,272 @@ jobs:
             EXPECT_DISTRO="$DISTRO" NODE_VERSION="$NODE_VERSION" NODE_DIST="$NODE_DIST" NODE_SHA256="$NODE_SHA256" \
             /bin/bash "$G" "$(cygpath -w "$T")"
 
+      # Cell 2 (#78): a zero-token Pi citizen in the same guest. Its own step and verdict, so a
+      # red here never paints cell 1, and a red cell 1 skips it (skipped is not green).
+      - name: cell 2 — zero-token pi citizen inside WSL2
+        timeout-minutes: 10
+        env:
+          PI_VERSION: 1.3.0
+          PI_INTEGRITY: sha512-V/WoCjA2hQSe3QLWIUB24cTRdtEdeLiIzkDqU5RMXV6VWuD+KGZnzVBMhglwdnQTySkehZsjt8a3g6Jd2g4nnw==
+        run: |
+          set -euo pipefail
+          T="$(cygpath -u "$RUNNER_TEMP")"
+          G2="$T/guest2.sh"
+          cat > "$G2" <<'GUEST2'
+          # Cell 2, as root inside the WSL2 guest, after cell 1 left its consumer install behind.
+          set -euo pipefail
+          echo "cell 2 script sha256: $(sha256sum "$0" | cut -d' ' -f1)"
+          red() { echo "RED: $*" >&2; exit 1; }
+          S=/var/tmp/entwurf-wsl2-cell
+          E="$S/consumer/node_modules/.bin/entwurf"
+          [ -x "$E" ] || red "cell 1's consumer install is absent"
+
+          # Own sandbox, short enough for sun_path; the driver's roots and the product's must agree.
+          unset ENTWURF_META_SESSIONS_DIR ENTWURF_META_MAILBOX_DIR ENTWURF_META_RECEIVERS_DIR ENTWURF_META_SENDERS_DIR PI_BIN
+          export HOME=/var/tmp/c2h
+          P=/var/tmp/c2p
+          rm -rf "$HOME" "$P"
+          mkdir -p "$HOME/.config" "$HOME/.local/share" "$HOME/.local/state" "$HOME/.cache" "$HOME/.pi/agent" "$P"
+          export XDG_CONFIG_HOME="$HOME/.config" XDG_DATA_HOME="$HOME/.local/share" XDG_STATE_HOME="$HOME/.local/state" \
+            XDG_CACHE_HOME="$HOME/.cache" PI_CODING_AGENT_DIR="$HOME/.pi/agent"
+          export npm_config_cache="$S/npm-cache"
+          export PATH="$S/pi-prefix/bin:/opt/$NODE_DIST/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+          echo "W5 cell-2 home fstype=$(stat -f -c %T "$HOME")"
+
+          # Operator-installed pi, exact version, its tarball checked against the pinned SRI (base64).
+          rm -rf "$S/pi-pack"; mkdir -p "$S/pi-pack"
+          (cd "$S/pi-pack" && npm pack "@earendil-works/pi-coding-agent@$PI_VERSION")
+          [ "$(ls "$S"/pi-pack/*.tgz | wc -l)" -eq 1 ] || red "npm pack did not yield exactly one tarball"
+          PT="$(ls "$S"/pi-pack/*.tgz)"
+          got="sha512-$(node -e 'process.stdout.write(require("crypto").createHash("sha512").update(require("fs").readFileSync(process.argv[1])).digest("base64"))' "$PT")"
+          echo "pi tarball integrity: $got"
+          [ "$got" = "$PI_INTEGRITY" ] || red "SUPPLY: pi tarball integrity differs from the pin"
+          npm install -g --prefix "$S/pi-prefix" "$PT"
+          pibin="$(command -v pi || true)"
+          [ -n "$pibin" ] || red "pi did not resolve on PATH"
+          echo "W6 pi $pibin -> $(readlink -f "$pibin")"
+          case "$(readlink -f "$pibin")" in "$S/pi-prefix"/*) ;; *) red "pi resolves outside the guest prefix" ;; esac
+          pi --version
+
+          # setup with pi PRESENT: project + user-scope wiring, every other harness absent.
+          X="$S/definitely-absent"
+          out=$(CLAUDE_BIN="$X" AGY_BIN="$X" COPILOT_BIN="$X" OMP_BIN="$X" CODEX_BIN="$X" "$E" setup "$P" 2>&1) \
+            || { printf '%s\n' "$out"; red "setup exited nonzero"; }
+          printf '%s\n' "$out"
+          grep -q "pi: PASS" <<<"$out" || red "setup did not wire pi"
+          for probe in "claude: SKIP" "agy: SKIP" "copilot: SKIP" "omp: SKIP" "codex: SKIP"; do
+            grep -q "$probe" <<<"$out" || red "setup missing '$probe'"
+          done
+          grep -q "result: green (computed from the component outcomes above)" <<<"$out" || red "setup result not green"
+
+          # The fixture-[7] driver (smoke-herdr-raw-install-live.sh), guest-inline.
+          cat > "$S/cell2-drive.mjs" <<'DRIVER_EOF'
+          import { spawn } from "node:child_process";
+          import fs from "node:fs";
+          import path from "node:path";
+          import { spawnSync } from "node:child_process";
+          import net from "node:net";
+
+          const HOME = process.env.HOME;
+          const SOCKET_DIR = path.join(HOME, ".pi", "entwurf-control");
+          const META_DIR = path.join(HOME, ".pi", "agent", "meta-sessions");
+          const ENTWURF_BIN = process.argv[2];
+          // The ENTRY POINT is an argument, because there are two of them and they are different
+          // claims. `pi --entwurf-control` proves the WIRING; `entwurf pi` proves the LAUNCHER a user
+          // received from npm. One program, so neither claim drifts away from the other.
+          const LABEL = process.argv[3];
+          const [COMMAND, ...COMMAND_ARGS] = process.argv.slice(4);
+
+          let bad = 0;
+          const ok = (m) => console.log("  ok    " + m);
+          const no = (m) => { console.log("  FAIL  " + m); bad = 1; };
+          const ls = (dir) => { try { return fs.readdirSync(dir); } catch { return []; } };
+
+          console.log(`  ENTRY  ${LABEL}: ${COMMAND} ${COMMAND_ARGS.join(" ")}`);
+          const child = spawn(COMMAND, COMMAND_ARGS, { stdio: ["pipe", "pipe", "pipe"] });
+          let stderr = "";
+          child.stderr.on("data", (d) => { stderr += d.toString(); });
+
+          let buf = "";
+          let settled = false;
+          const extensionErrors = [];
+          let agentStartSeen = false;
+
+          // WSL2 cell 2: the fixture's 300 ms TERM-then-exit carried no evidence that pi had exited.
+          // This one waits for its OWN child (exit listener attached before signalling), escalates
+          // once to SIGKILL on that child only, and reports how it ended. No other process is touched.
+          const done = (code) => {
+            if (settled) return;
+            settled = true;
+            try { child.stdin.end(); } catch { /* best-effort */ }
+            const exited = () => child.exitCode !== null || child.signalCode !== null;
+            const waitExit = (ms) => new Promise((resolve) => {
+              if (exited()) { resolve(true); return; }
+              const t = setTimeout(() => resolve(false), ms);
+              child.once("exit", () => { clearTimeout(t); resolve(true); });
+            });
+            const finish = (gone) => {
+              console.log(`  EXIT  pi exitCode=${child.exitCode} signal=${child.signalCode}`);
+              if (!gone) no("pi did not exit after SIGTERM and one SIGKILL");
+              // Evidence, not a billing proof: only get_state was sent, and no agent_start was seen
+              // from spawn through teardown.
+              agentStartSeen ? no("a model turn started — this cell is supposed to cost zero tokens") : ok("no agent_start observed through teardown (only get_state was sent)");
+              process.exit(code || bad ? 1 : 0);
+            };
+            if (exited()) { finish(true); return; }
+            (async () => {
+              const first = waitExit(10_000);
+              try { child.kill("SIGTERM"); } catch { /* best-effort */ }
+              let gone = await first;
+              if (!gone) {
+                no("pi did not exit within 10s of SIGTERM — one SIGKILL to this child");
+                try { child.kill("SIGKILL"); } catch { /* best-effort */ }
+                gone = await waitExit(5_000);
+              }
+              finish(gone);
+            })();
+          };
+
+          /** C2: a native AF_UNIX connect to the citizen socket while pi is alive, settled before peers. */
+          const probeSocket = (rec) => new Promise((resolve) => {
+            const sock = path.join(SOCKET_DIR, `${rec.gardenId}.sock`);
+            let st;
+            try { st = fs.statSync(sock); } catch (err) { no(`stat ${sock}: ${err.message}`); resolve(); return; }
+            st.isSocket() ? ok(`${rec.gardenId}.sock is a socket inode`) : no(`${sock} is not a socket inode`);
+            const c = net.connect(sock);
+            const timer = setTimeout(() => { no(`native connect to ${sock} did not settle within 5s`); c.destroy(); resolve(); }, 5000);
+            c.once("connect", () => { clearTimeout(timer); ok("a native AF_UNIX connect to the citizen socket succeeds while pi is alive"); c.destroy(); resolve(); });
+            c.once("error", (err) => { clearTimeout(timer); no(`native connect to ${sock} failed: ${err.message}`); c.destroy(); resolve(); });
+          });
+
+          const observe = (sessionId) => {
+            const sockets = ls(SOCKET_DIR).filter((f) => f.endsWith(".sock"));
+            const recordFiles = ls(META_DIR).filter((f) => f.endsWith(".meta.json"));
+            const records = recordFiles.map((f) => {
+              try { return { file: f, record: JSON.parse(fs.readFileSync(path.join(META_DIR, f), "utf8")) }; } catch { return null; }
+            }).filter((r) => r !== null);
+            const mine = records.filter((r) => r.record.nativeSessionId === sessionId);
+            console.log(`  PI    nativeSessionId=${sessionId}`);
+            console.log(`  STORE records=${records.length} sockets=${JSON.stringify(sockets)}`);
+
+            if (mine.length === 1) ok("exactly one V3 record claims this pi session");
+            else { no(`${mine.length} records claim ${sessionId} — the wired extension did not birth exactly one citizen`); return null; }
+
+            const rec = mine[0].record;
+            // WSL2 cell 2: the SELECTED pair's own filename must be its body's address.
+            mine[0].file === `${rec.gardenId}.meta.json`
+              ? ok(`the selected record file is named for its own gardenId (${mine[0].file})`)
+              : no(`selected record file ${mine[0].file} does not match its body gardenId ${rec.gardenId}`);
+            console.log(`  RECORD gardenId=${rec.gardenId} backend=${rec.backend} schemaVersion=${rec.schemaVersion} model=${rec.model} transcriptPath=${JSON.stringify(rec.transcriptPath)}`);
+            rec.schemaVersion === 3 && rec.backend === "pi"
+              ? ok("the record is V3 with backend:\"pi\"")
+              : no(`record is schemaVersion=${rec.schemaVersion} backend=${rec.backend}`);
+            // The address is the record's. A gardenId equal to pi's own id would mean the id
+            // authority moved back into the harness — the split #50 C2 exists to hold.
+            typeof rec.gardenId === "string" && /^\d{8}T\d{6}-[0-9a-f]{6}$/.test(rec.gardenId) && rec.gardenId !== sessionId
+              ? ok(`the record minted the address, not pi (${rec.gardenId})`)
+              : no(`gardenId ${JSON.stringify(rec.gardenId)} is not a record-minted address distinct from pi's id`);
+            // A 0-token birth writes no session file, so a resume target here would be a phantom.
+            rec.transcriptPath === null ? ok("0-token birth carries transcriptPath=null (no phantom resume target)") : no(`transcriptPath=${JSON.stringify(rec.transcriptPath)} for a session with no turn`);
+
+            sockets.includes(`${rec.gardenId}.sock`)
+              ? ok(`a control socket is open, keyed on the record gardenId (${rec.gardenId}.sock)`)
+              : no(`no ${rec.gardenId}.sock among ${JSON.stringify(sockets)} — the citizen has an address but no rail`);
+            sockets.some((s) => s === `${sessionId}.sock` || /^[0-9a-f]{8}-[0-9a-f]{4}-/.test(s))
+              ? no(`a socket carries pi's own session id: ${JSON.stringify(sockets)}`)
+              : ok("no socket carries pi's session id");
+            return rec;
+          };
+
+          /** peer-facts from the INSTALLED bin, while pi is still alive. */
+          const askPeers = (rec) => {
+            const run = spawnSync(ENTWURF_BIN, ["peer-facts"], { encoding: "utf8", timeout: 30_000 });
+            if (run.error) { no(`installed \`entwurf peer-facts\` did not complete: ${run.error.message}`); return; }
+            if (run.status !== 0) { no(`installed \`entwurf peer-facts\` exit ${run.status}: ${(run.stderr ?? "").trim().slice(0, 300)}`); return; }
+            let payload;
+            try { payload = JSON.parse(run.stdout); } catch (err) { no(`peer-facts output is not JSON: ${err.message}`); return; }
+            const peers = Array.isArray(payload?.peers) ? payload.peers : null;
+            if (peers === null) { no("peer-facts payload has no `peers` array"); return; }
+            const row = peers.find((p) => p.gardenId === rec.gardenId);
+            console.log(`  PEERS total=${peers.length} mine=${row ? JSON.stringify(row) : "<absent>"}`);
+            if (!row) { no(`peer-facts does not report ${rec.gardenId} — the citizen exists on disk and not in the listing`); return; }
+            ok(`the installed \`entwurf peer-facts\` reports this citizen (backend=${row.backend})`);
+            // Liveness is a FACT here, not a dispatch decision: the process is up and the socket is
+            // bound, so anything but `alive` means the probe cannot see a rail that exists.
+            row.liveness === "alive" ? ok("peer-facts reports liveness=alive while the session is up") : no(`peer-facts reports liveness=${row.liveness} for a running session`);
+          };
+
+          child.stdout.on("data", (d) => {
+            buf += d.toString();
+            let i;
+            while ((i = buf.indexOf("\n")) >= 0) {
+              const line = buf.slice(0, i);
+              buf = buf.slice(i + 1);
+              if (!line.trim()) continue;
+              let evt;
+              try { evt = JSON.parse(line); } catch { continue; }
+              if (evt.type === "agent_start") agentStartSeen = true;
+              if (evt.type === "extension_error") extensionErrors.push({ path: evt.extensionPath, error: evt.error });
+              if (evt.type !== "response" || evt.command !== "get_state") continue;
+              const sessionId = evt.data?.sessionId ?? null;
+              if (typeof sessionId !== "string") { no(`get_state returned no sessionId: ${line.slice(0, 300)}`); done(bad || 1); return; }
+              extensionErrors.length === 0
+                ? ok("the wired extension loaded with no extension_error")
+                : no(`extension errors: ${JSON.stringify(extensionErrors).slice(0, 400)}`);
+              const rec = observe(sessionId);
+              const kids = (spawnSync("ps", ["-o", "pid=,args=", "--ppid", String(child.pid)], { encoding: "utf8" }).stdout ?? "")
+                .split("\n").map((l) => l.trim().slice(0, 160)).filter(Boolean);
+              console.log(`  CHILD pi pid=${child.pid} children=${JSON.stringify(kids)}`);
+              // Order is fixed: connect settles, THEN peers, THEN teardown (never a connect racing done).
+              (rec ? probeSocket(rec).then(() => askPeers(rec)) : Promise.resolve()).then(() => done(bad));
+              return;
+            }
+          });
+
+          child.on("error", (err) => { no(`pi failed to spawn: ${err.message}`); done(1); });
+          child.on("exit", (code) => {
+            if (settled) return;
+            no(`${LABEL}: the session exited ${code} before answering get_state — stderr: ${stderr.trim().slice(0, 600)}`);
+            done(1);
+          });
+
+          setTimeout(() => { child.stdin.write(`${JSON.stringify({ type: "get_state", id: "g1" })}\n`); }, 500);
+          setTimeout(() => { if (!settled) { no("pi did not answer get_state within 60s"); done(1); } }, 60_000);
+          DRIVER_EOF
+          drv=0
+          (cd "$P" && node "$S/cell2-drive.mjs" "$E" "the setup wiring" pi --entwurf-control --mode rpc) || drv=$?
+
+          # Observations, never cleanup claims.
+          echo "--- control-socket dir after exit"; ls -la "$HOME/.pi/entwurf-control" 2>&1 || true
+          if [ -e "$HOME/.pi/agent/auth.json" ]; then
+            echo "auth.json present (pi wrote an auth file; that is not a login): $(stat -c '%s bytes mode %a' "$HOME/.pi/agent/auth.json")"
+            node -e 'const j=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")); console.log("auth.json keys:", JSON.stringify(Object.keys(j)))' "$HOME/.pi/agent/auth.json" || true
+          else
+            echo "auth.json absent"
+          fi
+
+          # Residue under THIS cell's own install paths only; nothing is killed here.
+          # pgrep: 0 = a match, 1 = none, anything else = the check itself could not run.
+          rc=0; pgrep -af -- "$S/pi-prefix" || rc=$?
+          case "$rc" in
+            0) red "a process from this cell's pi install is still running" ;;
+            1) echo "no process remains under $S/pi-prefix" ;;
+            *) red "pgrep could not check for residue (exit $rc)" ;;
+          esac
+          # The consumer bridge is observed, not asserted.
+          rc=0; pgrep -af -- "$S/consumer/node_modules/@junghanacs/entwurf" || rc=$?
+          echo "observation: consumer-path processes after teardown (pgrep exit $rc)"
+          [ "$drv" -eq 0 ] || red "the fixture driver reported FAIL (rc=$drv)"
+          echo "wsl2-cell2-zero-token-pi-citizen: PASS"
+          GUEST2
+          if grep -q $'\r' "$G2"; then echo "cell 2 script carries CR bytes" >&2; exit 1; fi
+          sha256sum "$G2"
+          G="$(MSYS_NO_PATHCONV=1 wsl.exe -d "$DISTRO" -u root --exec wslpath -u "$(cygpath -w "$G2")" | tr -d '\r')"
+          test -n "$G"
+          MSYS_NO_PATHCONV=1 wsl.exe -d "$DISTRO" -u root --exec /usr/bin/env \
+            NODE_DIST="$NODE_DIST" PI_VERSION="$PI_VERSION" PI_INTEGRITY="$PI_INTEGRITY" \
+            /bin/bash "$G"
+
       # The most useful single fact in a red run: collected whatever happened above.
       - name: host-side WSL diagnostics and VERSION row
         if: always()
