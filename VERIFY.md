@@ -209,6 +209,16 @@ that moved out of `scripts/` and into a file beside its subject would otherwise 
 
 Do not collapse source, package, fixture, and native-host evidence into one “green.”
 
+**Remote pair (#107).** Each layer of evidence lives in its own place:
+
+- **Deterministic.** The cells sit beside the behavior in `pi-extensions/lib/remote-pair-*.test.ts` and are found by `check-tests-beside-behavior`. T1 is executor-in. T2 is surface-in: the real bridge over MCP stdio, with a stand-in `ssh` on PATH that runs the other host's real `run.sh` under a separate HOME. Both are offline.
+- **Installed bytes.** `./run.sh check-remote-pair-installed --tgz <abs>` is checkout-only and takes a caller-supplied candidate tarball. It installs a sandboxed copy, checks the compiled surface, and runs the T2 cells against the installed subject. It also audits that every module those processes load resolves inside the consumer prefix, with a checkout negative control. Its audit primitive is mutation-qualified as `check-remote-pair-installed-audit` inside `check:vitest`.
+- **Real two-host exchange (T3).** This is opt-in operator LIVE evidence, recorded in [BASELINE](./BASELINE.md) and #107. It is not a release-gate MUST and not a fixture that needs a second machine online. A T1, T2 or installed green does not stand for it, and its record belongs to the commit it ran on; a later SHA does not inherit it. Re-run T3 when any of these change:
+  - the SSH argv or quoting;
+  - the receive entry's layout, stdout or exit codes;
+  - the declaration schema or root resolution;
+  - either host's Node or Pi.
+
 **Native durable contact (#129, #130 carrier).** Three deterministic beside-test/mutant
 coordinates in `check:contracts` split the durable contact by the file that carries each claim's QK
 (#144): a carrier or native-module mutant runs its one file, the rest run four. `check-pi-durable-beside` holds the adapter, the installed

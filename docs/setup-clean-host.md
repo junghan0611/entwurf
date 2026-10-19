@@ -449,6 +449,34 @@ The owned source is formatted at upstream width (`biome.json` override, indentWi
 per-file exception. A formatting change to an owned file changes its emitted bytes. So it is
 re-emitted with `--write`, and its generated digest is reviewed like any other carrier change.
 
+## 2c. Optional remote pair between two hosts (#107)
+
+This lets one declared pair of existing citizens on two hosts reach each other over SSH that you already run. [DELIVERY](../DELIVERY.md#remote-pair-107-one-declared-pair-across-two-hosts) owns the contract. The machine boundary is set by a person, and nothing here is automatic.
+
+1. **Connect the hosts yourself.** Use a private network (Tailscale or similar is recommended) and SSH keys and authorization you already trust. From each host, `ssh -o BatchMode=yes <alias> true` must succeed non-interactively, and the other host's non-interactive `command -v entwurf` must resolve to the installation you intend. Entwurf edits no SSH config, key, known-hosts file or network setting. Whatever SSH itself writes under your own policy, such as host-key updates, stays yours.
+2. **Run the accepted bytes on both hosts, in the processes that matter.** See [applying new source to a running host](#applying-new-source-to-a-running-host). A pulled checkout or a green setup line does not, by itself, show what a running bridge loaded.
+3. **Write one file on each host,** at `remotePairOptInPath()`. That is the pi agent dir unless `ENTWURF_META_SESSIONS_DIR` moves the meta-record store. Check that the sending bridge's environment and the SSH receive environment resolve the same path. Use mode `0600` and never overwrite a file you did not inspect:
+
+   ```json
+   {
+     "remoteGardenId": "<the other host's garden id>",
+     "ssh": "<your existing alias for the other host>",
+     "localGardenId": "<this host's garden id that talks to it>",
+     "remotePairFile": "<absolute path of the other host's own file>"
+   }
+   ```
+
+   The two files mirror each other: one host's `remoteGardenId` is the other's `localGardenId`. The other host's `remotePairFile` must spell this path as it is normalized, not through a symlinked alias.
+
+   To check a file, read it with the repository's internal parser from a source checkout. Use the same agent/store-root settings the bridge runs with. This is a read-only dev-clone check: there is no installed operator validation verb, and it performs no send and no model input.
+
+   ```bash
+   node --experimental-strip-types -e 'import("./pi-extensions/lib/remote-pair-send.ts").then(m=>console.log(m.readRemotePairOptIn(m.remotePairOptInPath())))'
+   ```
+
+   Do not validate the configuration by sending a test message.
+4. **Use it only between siblings you have open.** The measured self-fetch pair must be active and armed, and the target rail's own admission still applies. Delivery never starts, resumes or wakes an OFF citizen. To an active, armed one it rings the normal doorbell, which may start a turn at once in the receiving TUI. Remove the file to switch the pair off; there is nothing to stop or reconnect.
+
 ## 3. Optional Claude Code native citizen
 
 This rail is CERTIFIED on Linux; on macOS it is NOT CERTIFIED — pending physical
@@ -1127,6 +1155,17 @@ under `node_modules`. Source `./run.sh check-bridge` needs no build. After a pul
 run `pnpm install` when the lockfile changed and `pnpm run build-bridge` before
 artifact-consuming checks such as `./run.sh check-bridge-delivery`; ignored dist
 may be missing or stale. Installed mode never bootstraps pnpm in `node_modules`.
+
+### Applying new source to a running host
+
+New source on disk is not a fresh runtime. A pi-durable host spawns the compiled bridge `mcp/entwurf-bridge/dist/mcp/entwurf-bridge/src/index.js` even from a checkout (the bootstrap's `PACKAGED_BRIDGE_ENTRY`). Ordinary `start.sh` in a checkout runs the TypeScript source instead. An already-running bridge keeps the modules it loaded. So, for a host that has to run new bridge code:
+
+1. Build once from the checkout (`pnpm run build-bridge`, or its body `bash scripts/with-dist-lock.sh bash scripts/build-bridge.sh` when no package lifecycle should run).
+2. Compare the selected entry's hash with the accepted candidate's.
+3. Close the visible session and reopen it with its own native same-id resume.
+4. Confirm `entwurf_self` names the same garden id, and that the receiver/owner join points at the new process, whose bridge child started after the build.
+
+A per-component setup PASS or a `git pull` does not show which bytes a running bridge loaded. On 2026-10-20 one host of the #107 pair still selected a pre-feature dist after a pull and a green setup. The cause was not traced. A hash check caught it before the first message, and a manual build and visible resume fixed it. Entwurf adds no auto-build, reload or watcher for this.
 
 ## 8. Release acceptance versus host acceptance
 

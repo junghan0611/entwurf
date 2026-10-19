@@ -212,6 +212,8 @@ receipt. `wants_reply` is etiquette, not waiting, polling or ownership; replyabi
 is a live rail fact, not merely a consequence of trusted identity.
 [DELIVERY](./DELIVERY.md#control-socket-acceptance-boundaries-120) owns these distinctions.
 
+**One declared remote pair (opt-in, #107).** The operator places an `entwurf-remote-pair.json` on each of two hosts. Then `entwurf_v2` to the declared remote garden id runs the other host's `entwurf remote-pair-receive` once over the operator's own SSH, and that host checks the pair and dispatches locally. The trust is the same operator's SSH account. It makes one attempt with no retry, and it uses no relay or listener. [DELIVERY](./DELIVERY.md#remote-pair-107-one-declared-pair-across-two-hosts) owns the contract; [setup](./docs/setup-clean-host.md#2c-optional-remote-pair-between-two-hosts-107) covers the operator steps.
+
 **Mux launches; it never delivers.** Inside Herdr, fresh opens a new unfocused tab
 in the caller's workspace, pi/Claude Code only, with no tmux fallback. Outside,
 it opens pi/pi-durable/Claude Code/Copilot/OMP/Codex visibly on the caller's own tmux
