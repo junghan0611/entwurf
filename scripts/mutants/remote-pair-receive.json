@@ -12,7 +12,10 @@
 			"timeoutSeconds": 600,
 			"signature": "[QK:REMOTE-PAIR-FROM-OUTSIDE-NO-MUTATION]",
 			"signatureSource": "pi-extensions/lib/remote-pair-receive.test.ts",
-			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+			"build": {
+				"argv": ["bash", "scripts/build-bridge.sh"],
+				"output": "mcp/entwurf-bridge/dist"
+			}
 		},
 		{
 			"claim": "REMOTE-PAIR-TARGET-OUTSIDE-NO-MUTATION",
@@ -24,7 +27,10 @@
 			"timeoutSeconds": 600,
 			"signature": "[QK:REMOTE-PAIR-TARGET-OUTSIDE-NO-MUTATION]",
 			"signatureSource": "pi-extensions/lib/remote-pair-receive.test.ts",
-			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+			"build": {
+				"argv": ["bash", "scripts/build-bridge.sh"],
+				"output": "mcp/entwurf-bridge/dist"
+			}
 		},
 		{
 			"claim": "REMOTE-PAIR-IGNORES-AMBIENT-SENDER",
@@ -36,7 +42,10 @@
 			"timeoutSeconds": 600,
 			"signature": "[QK:REMOTE-PAIR-IGNORES-AMBIENT-SENDER]",
 			"signatureSource": "pi-extensions/lib/remote-pair-receive.test.ts",
-			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+			"build": {
+				"argv": ["bash", "scripts/build-bridge.sh"],
+				"output": "mcp/entwurf-bridge/dist"
+			}
 		},
 		{
 			"claim": "REMOTE-PAIR-MATCH-DISPATCHES-ONCE",
@@ -48,7 +57,10 @@
 			"timeoutSeconds": 600,
 			"signature": "[QK:REMOTE-PAIR-MATCH-DISPATCHES-ONCE]",
 			"signatureSource": "pi-extensions/lib/remote-pair-receive.test.ts",
-			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+			"build": {
+				"argv": ["bash", "scripts/build-bridge.sh"],
+				"output": "mcp/entwurf-bridge/dist"
+			}
 		},
 		{
 			"claim": "REMOTE-PAIR-CLAIM-EXACT-SHAPE",
@@ -60,7 +72,10 @@
 			"timeoutSeconds": 600,
 			"signature": "[QK:REMOTE-PAIR-CLAIM-EXACT-SHAPE]",
 			"signatureSource": "pi-extensions/lib/remote-pair-receive.test.ts",
-			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+			"build": {
+				"argv": ["bash", "scripts/build-bridge.sh"],
+				"output": "mcp/entwurf-bridge/dist"
+			}
 		},
 		{
 			"claim": "REMOTE-PAIR-ENTRY-REFUSES-OUTSIDE",
@@ -72,19 +87,40 @@
 			"timeoutSeconds": 600,
 			"signature": "[QK:REMOTE-PAIR-ENTRY-REFUSES-OUTSIDE]",
 			"signatureSource": "pi-extensions/lib/remote-pair-receive.test.ts",
-			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+			"build": {
+				"argv": ["bash", "scripts/build-bridge.sh"],
+				"output": "mcp/entwurf-bridge/dist"
+			}
 		},
 		{
 			"claim": "REMOTE-PAIR-ENTRY-USAGE",
-			"title": "the entry follows a symlinked --pair, so the declaration it trusts is whatever the link points at today",
+			"title": "the entry accepts any --pair it is given, so the sender picks which declaration scopes the claim on the receiving host",
 			"subject": "scripts/remote-pair-receive.ts",
-			"find": ["\tif (!st.isFile()) throw new Error(`--pair must name a regular non-symlink file (${pairFile})`);"],
-			"replace": ["\tif (false) throw new Error(`--pair must name a regular non-symlink file (${pairFile})`);"],
+			"find": ["\tif (!path.isAbsolute(pairFile) || path.normalize(pairFile) !== own) {"],
+			"replace": ["\tif (false) {"],
 			"gate": ["bash", "run.sh", "check-tests-beside-behavior"],
 			"timeoutSeconds": 600,
 			"signature": "[QK:REMOTE-PAIR-ENTRY-USAGE]",
 			"signatureSource": "pi-extensions/lib/remote-pair-receive.test.ts",
-			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+			"build": {
+				"argv": ["bash", "scripts/build-bridge.sh"],
+				"output": "mcp/entwurf-bridge/dist"
+			}
+		},
+		{
+			"claim": "REMOTE-PAIR-ENTRY-REPLY-ROUTE-DECLARED",
+			"title": "the entry reports no route back for a claim its own opt-in pairs with, so the receiver is told it cannot answer a sender it has declared",
+			"subject": "scripts/remote-pair-receive.ts",
+			"find": ["\treplyRoute: \"declared\","],
+			"replace": ["\treplyRoute: \"none\","],
+			"gate": ["bash", "run.sh", "check-tests-beside-behavior"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:REMOTE-PAIR-ENTRY-REPLY-ROUTE-DECLARED]",
+			"signatureSource": "pi-extensions/lib/remote-pair-receive.test.ts",
+			"build": {
+				"argv": ["bash", "scripts/build-bridge.sh"],
+				"output": "mcp/entwurf-bridge/dist"
+			}
 		}
 	]
 }

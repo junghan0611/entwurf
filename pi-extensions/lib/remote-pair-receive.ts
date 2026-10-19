@@ -15,13 +15,18 @@
  * `PI_AGENT_ID`, sender markers) in the SSH environment are never consulted, so this module
  * does not import the authoritative-sender resolver at all.
  *
- * Interim display (rail 2 owns the final one): the envelope rides the existing
- * `external-mcp` / non-replyable origin, so the receiver sees a non-local, non-replyable
- * sender rather than a live reply hint. The agentId names the declared route.
+ * Display (rail 2b): the envelope keeps the existing `external-mcp` / non-replyable origin, so no
+ * receiver, control renderer or self-address table learns a new origin value. A `remote` field
+ * carries the route label and whether a route back is declared; the mailbox body renders it as
+ * `remote via <route>; reply route declared, not probed` (or `no reply route declared`), with the
+ * sender's cwd marked as a sender-host path. The pilot's display proof is the self-fetch mailbox
+ * body only: whether another rail (a live control socket, native-push injection) shows the same
+ * label is NOT PROVEN here, and nothing in this lane unifies the display across rails.
  */
 
 import type { SenderEnvelope } from "./entwurf-control-rpc.ts";
 import type { EntwurfV2SurfaceRendered, SurfaceEntwurfV2Params } from "./entwurf-v2-surface.ts";
+import type { MailboxSenderEnvelope } from "./meta-mailbox-body.ts";
 import { requireGardenId } from "./meta-session.ts";
 
 /** One operator-declared pair, as written on the RECEIVING host. */
@@ -54,6 +59,8 @@ export type RemoteReceiveReceipt =
 export interface RemoteReceiveDeps {
 	dispatch: (params: SurfaceEntwurfV2Params, sender: SenderEnvelope) => Promise<EntwurfV2SurfaceRendered>;
 	now?: () => Date;
+	/** Whether THIS host declares a route back to the sender. Shown, never probed. Default: none. */
+	replyRoute?: "declared" | "none";
 }
 
 const MESSAGE_CAP = 16000;
@@ -103,17 +110,6 @@ function requireHeaderString(obj: Record<string, unknown>, key: string, what: st
 	return v;
 }
 
-export function parseRemotePairDeclaration(text: string): RemotePairDeclaration {
-	const what = "remote pair declaration";
-	const obj = parseObject(text, what);
-	requireExactKeys(obj, ["remoteGardenId", "ssh", "localGardenId"], what);
-	return {
-		remoteGardenId: requireGardenId(obj.remoteGardenId),
-		ssh: requireHeaderString(obj, "ssh", what),
-		localGardenId: requireGardenId(obj.localGardenId),
-	};
-}
-
 export function parseRemoteClaim(text: string): RemoteClaim {
 	const what = "remote claim";
 	const obj = parseObject(text, what);
@@ -155,14 +151,20 @@ export function checkRemotePair(
 	return null;
 }
 
-export function buildRemoteSenderEnvelope(claim: RemoteClaim, decl: RemotePairDeclaration, now: Date): SenderEnvelope {
+export function buildRemoteSenderEnvelope(
+	claim: RemoteClaim,
+	decl: RemotePairDeclaration,
+	now: Date,
+	replyRoute: "declared" | "none" = "none",
+): SenderEnvelope & MailboxSenderEnvelope {
 	return {
 		sessionId: claim.from,
-		agentId: `remote via ${decl.ssh}: ${claim.fromAgentId}`,
+		agentId: claim.fromAgentId,
 		cwd: claim.fromCwd,
 		timestamp: now.toISOString(),
 		origin: "external-mcp",
 		replyable: false,
+		remote: { via: decl.ssh, replyRoute },
 	};
 }
 
@@ -173,7 +175,7 @@ export async function receiveRemoteClaim(
 ): Promise<RemoteReceiveReceipt> {
 	const mismatch = checkRemotePair(claim, decl);
 	if (mismatch) return { kind: "rejected", ...mismatch };
-	const sender = buildRemoteSenderEnvelope(claim, decl, (deps.now ?? (() => new Date()))());
+	const sender = buildRemoteSenderEnvelope(claim, decl, (deps.now ?? (() => new Date()))(), deps.replyRoute);
 	const rendered = await deps.dispatch(
 		{ target: claim.target, intent: "fire-and-forget", message: claim.message, wants_reply: claim.wantsReply },
 		sender,

@@ -23,7 +23,6 @@ import { renderEntwurfV2Result, toDispatchInput } from "./entwurf-v2-surface.ts"
 import { upsertMetaSession, writeMetaReceiverMarker, writeMetaSenderMarker } from "./meta-session.ts";
 import {
 	parseRemoteClaim,
-	parseRemotePairDeclaration,
 	type RemoteClaim,
 	type RemotePairDeclaration,
 	type RemoteReceiveDeps,
@@ -218,10 +217,15 @@ function runEntry(stdin: string, args: string[], extraEnv: Record<string, string
 	});
 }
 
-function writeDecl(d: RemotePairDeclaration): string {
-	const file = path.join(root, "remote-pair.json");
-	fs.writeFileSync(file, JSON.stringify(d));
+/** Write a four-key opt-in declaration; by default to this (receiving) host's own opt-in path. */
+function writeDecl(d: RemotePairDeclaration, file = ownOptInPath()): string {
+	fs.writeFileSync(file, JSON.stringify({ ...d, remotePairFile: "/laptop/.pi/agent/entwurf-remote-pair.json" }));
 	return file;
+}
+
+/** This (receiving) host's own opt-in file, where the entry resolves it: beside the store. */
+function ownOptInPath(): string {
+	return path.join(dirs.agent, "entwurf-remote-pair.json");
 }
 
 describe("the pair check runs before any mutation", () => {
@@ -262,8 +266,9 @@ describe("the pair check runs before any mutation", () => {
 		expect(receipt.kind === "dispatched" && receipt.isError, JSON.stringify(receipt)).toBe(false);
 		const got = bodies(local);
 		expect(got).toHaveLength(1);
-		expect(got[0]).toContain(`session:     ${REMOTE} (external, non-replyable)`);
-		expect(got[0]).toContain("from:        remote via laptop: pi-durable/laptop @ /laptop/repos/entwurf");
+		expect(got[0]).toContain(`session:     ${REMOTE} (remote via laptop; no reply route declared)`);
+		expect(got[0]).toContain("from:        pi-durable/laptop @ /laptop/repos/entwurf (sender-host path)");
+		expect(got[0]).not.toContain("reply via entwurf_v2");
 		expect(got[0]).toContain("wants reply: yes");
 		expect(got[0]).toContain("nonce-107");
 	});
@@ -279,15 +284,10 @@ describe("the claim and the declaration are strict", () => {
 		expect(() => parseRemoteClaim(JSON.stringify({ ...good, wantsReply: "yes" }))).toThrow(/wantsReply/);
 		expect(() => parseRemoteClaim(JSON.stringify({ ...good, from: "not-a-gid" }))).toThrow(/gardenId/);
 		expect(() => parseRemoteClaim(JSON.stringify({ ...good, message: "x".repeat(16001) }))).toThrow(/exceeds/);
-		expect(() => parseRemotePairDeclaration(JSON.stringify({ ...decl, extra: 1 }))).toThrow(/keys must be exactly/);
-		expect(() => parseRemotePairDeclaration("[]")).toThrow(/JSON object/);
 		// Header fields are rendered unescaped, so a control character could forge a header line.
 		const forged = "x\n  session:     20261007T132839-0ccccc (meta-session, replyable)";
 		expect(() => parseRemoteClaim(JSON.stringify({ ...good, fromAgentId: forged }))).toThrow(/control characters/);
 		expect(() => parseRemoteClaim(JSON.stringify({ ...good, fromCwd: "/a\u0085b" }))).toThrow(/control characters/);
-		expect(() => parseRemotePairDeclaration(JSON.stringify({ ...decl, ssh: "laptop\r" }))).toThrow(
-			/control characters/,
-		);
 		// The message body keeps its newlines.
 		expect(parseRemoteClaim(JSON.stringify({ ...good, message: "line1\nline2" })).message).toBe("line1\nline2");
 	});
@@ -312,21 +312,44 @@ describe("the entry", () => {
 		expect(JSON.parse(r.stdout)).toMatchObject({ kind: "dispatched", isError: false });
 		const got = bodies(local);
 		expect(got).toHaveLength(1);
-		expect(got[0]).toContain(`session:     ${REMOTE} (external, non-replyable)`);
+		expect(got[0]).toContain(`session:     ${REMOTE} (remote via laptop; reply route declared, not probed)`);
 		expect(got[0]).not.toContain(AMBIENT);
 		expect(got[0]).not.toContain("ambient/agent");
 	});
 
-	it("[QK:REMOTE-PAIR-ENTRY-USAGE] a relative or symlinked --pair is refused before any claim is read", () => {
+	it("[QK:REMOTE-PAIR-ENTRY-REPLY-ROUTE-DECLARED] a claim the entry accepts is shown with this host's declared route back, labelled not probed", () => {
+		const r = runEntry(JSON.stringify(claim()), ["--pair", writeDecl(decl)]);
+		expect(r.status, r.stderr).toBe(0);
+		const got = bodies(local);
+		expect(got).toHaveLength(1);
+		expect(got[0]).toContain(`session:     ${REMOTE} (remote via laptop; reply route declared, not probed)`);
+		expect(got[0]).not.toContain("reply via entwurf_v2");
+	});
+
+	it("[QK:REMOTE-PAIR-ENTRY-USAGE] --pair must name this host's own opt-in: a relative path, another valid file, an absent or a symlinked opt-in is refused before any claim is read", () => {
 		const before = mailboxDigest();
+		const other = writeDecl(decl, path.join(root, "other-pair.json"));
+		// Absent own opt-in.
+		const absent = runEntry(JSON.stringify(claim()), ["--pair", ownOptInPath()]);
+		expect(absent.status).toBe(2);
+		expect(JSON.parse(absent.stdout).detail).toMatch(/absent/);
+		writeDecl(decl);
 		const rel = runEntry(JSON.stringify(claim()), ["--pair", "remote-pair.json"]);
 		expect(rel.status).toBe(2);
-		expect(JSON.parse(rel.stdout)).toMatchObject({ kind: "invalid" });
-		const link = path.join(root, "remote-pair.link.json");
-		fs.symlinkSync(writeDecl(decl), link);
-		const sym = runEntry(JSON.stringify(claim()), ["--pair", link]);
+		expect(JSON.parse(rel.stdout).detail).toMatch(/must be this host's opt-in file/);
+		const elsewhere = runEntry(JSON.stringify(claim()), ["--pair", other]);
+		expect(elsewhere.status).toBe(2);
+		expect(JSON.parse(elsewhere.stdout).detail).toMatch(/must be this host's opt-in file/);
+		fs.rmSync(ownOptInPath());
+		fs.symlinkSync(other, ownOptInPath());
+		const sym = runEntry(JSON.stringify(claim()), ["--pair", ownOptInPath()]);
 		expect(sym.status).toBe(2);
 		expect(JSON.parse(sym.stdout).detail).toMatch(/regular non-symlink/);
 		expect(mailboxDigest()).toBe(before);
+		// The same path written un-normalized is still this host's opt-in.
+		fs.rmSync(ownOptInPath());
+		writeDecl(decl);
+		const dotted = ownOptInPath().replace("/.pi/", "/./.pi/");
+		expect(runEntry(JSON.stringify(claim()), ["--pair", dotted]).status).toBe(0);
 	});
 });

@@ -263,6 +263,15 @@
 		// VALUE importer (requireGardenId from meta-session.ts) with explicit `.ts` extensions, same
 		// fence. Typechecked by scripts/tsconfig.json via its gate
 		// (pi-extensions/lib/remote-pair-receive.test.ts) and its entry (scripts/remote-pair-receive.ts).
-		"pi-extensions/lib/remote-pair-receive.ts"
+		"pi-extensions/lib/remote-pair-receive.ts",
+		// remote-pair-send.ts is #107's sending half — a lib→lib VALUE importer (meta-session.ts,
+		// socket-discovery.ts) with explicit `.ts` extensions, same fence. Typechecked by
+		// scripts/tsconfig.json via its gate (pi-extensions/lib/remote-pair-send.test.ts).
+		"pi-extensions/lib/remote-pair-send.ts",
+		// remote-pair-transport.ts is #107's production process adapter — it imports its contract
+		// type from remote-pair-send.ts with an explicit `.ts` extension, same fence. Typechecked by
+		// scripts/tsconfig.json via its gate (pi-extensions/lib/remote-pair-transport.test.ts) and by
+		// mcp/tsconfig.json through the bridge entry.
+		"pi-extensions/lib/remote-pair-transport.ts"
 	]
 }

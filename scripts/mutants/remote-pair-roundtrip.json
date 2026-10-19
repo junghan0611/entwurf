@@ -1,0 +1,83 @@
+{
+	"schemaVersion": 1,
+	"lane": "remote-pair-roundtrip",
+	"mutants": [
+		{
+			"claim": "REMOTE-ROUNDTRIP-A-TO-B",
+			"title": "the bridge never reads the opt-in, so a declared remote target falls through to the local decider as bad-target",
+			"subject": "mcp/entwurf-bridge/src/index.ts",
+			"find": ["\t\t\t\t\troute: readRemotePairOptIn(remotePairOptInPath()),"],
+			"replace": ["\t\t\t\t\troute: null,"],
+			"gate": ["bash", "run.sh", "check-tests-beside-behavior"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:REMOTE-ROUNDTRIP-A-TO-B]",
+			"signatureSource": "pi-extensions/lib/remote-pair-roundtrip.test.ts",
+			"build": {
+				"argv": ["bash", "scripts/build-bridge.sh"],
+				"output": "mcp/entwurf-bridge/dist"
+			}
+		},
+		{
+			"claim": "REMOTE-ROUNDTRIP-REVERSE-DISPATCH",
+			"title": "the bridge's transport never reaches the other host and always answers exit 1, so every declared remote send in either direction becomes indeterminate",
+			"subject": "mcp/entwurf-bridge/src/index.ts",
+			"find": ["\t\t\t\t\ttransport: processTransport,"],
+			"replace": [
+				"\t\t\t\t\ttransport: { run: async () => ({ exitCode: 1, signal: null, timedOut: false, stdout: \"\", stderr: \"\" }) },"
+			],
+			"gate": ["bash", "run.sh", "check-tests-beside-behavior"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:REMOTE-ROUNDTRIP-REVERSE-DISPATCH]",
+			"signatureSource": "pi-extensions/lib/remote-pair-roundtrip.test.ts",
+			"build": {
+				"argv": ["bash", "scripts/build-bridge.sh"],
+				"output": "mcp/entwurf-bridge/dist"
+			}
+		},
+		{
+			"claim": "REMOTE-ROUNDTRIP-OPT-IN-ABSENT-OFF",
+			"title": "the bridge replaces the local surface on the remote path's behalf, so a host with no opt-in stops running the existing local decider",
+			"subject": "mcp/entwurf-bridge/src/index.ts",
+			"find": ["\t\t\t\t\trunLocal: (params, opts) => runAndRenderEntwurfV2FromSurface(params, opts),"],
+			"replace": ["\t\t\t\t\trunLocal: async () => ({ isError: false, text: \"local skipped\" }),"],
+			"gate": ["bash", "run.sh", "check-tests-beside-behavior"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:REMOTE-ROUNDTRIP-OPT-IN-ABSENT-OFF]",
+			"signatureSource": "pi-extensions/lib/remote-pair-roundtrip.test.ts",
+			"build": {
+				"argv": ["bash", "scripts/build-bridge.sh"],
+				"output": "mcp/entwurf-bridge/dist"
+			}
+		},
+		{
+			"claim": "REMOTE-ROUNDTRIP-OTHER-HOST-REFUSES",
+			"title": "the sender renders the other host's pair refusal without naming it, so A cannot tell B refused the pair from any other failure",
+			"subject": "pi-extensions/lib/remote-pair-send.ts",
+			"find": ["refused by the other host's pair: ${o.reason} (${o.detail})"],
+			"replace": ["failed"],
+			"gate": ["bash", "run.sh", "check-tests-beside-behavior"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:REMOTE-ROUNDTRIP-OTHER-HOST-REFUSES]",
+			"signatureSource": "pi-extensions/lib/remote-pair-roundtrip.test.ts",
+			"build": {
+				"argv": ["bash", "scripts/build-bridge.sh"],
+				"output": "mcp/entwurf-bridge/dist"
+			}
+		},
+		{
+			"claim": "REMOTE-ROUNDTRIP-LOCAL-TRACE-BOTH-SOCKET-DIRS",
+			"title": "the bridge checks only its own ENTWURF_DIR, so a live local socket in the decider's canonical dir is bypassed and the gid is sent away",
+			"subject": "mcp/entwurf-bridge/src/index.ts",
+			"find": ["\t\t\t\t\t\tcontrolSocketDirs: [CONTROL_SOCKET_DIR, ENTWURF_DIR],"],
+			"replace": ["\t\t\t\t\t\tcontrolSocketDirs: [ENTWURF_DIR],"],
+			"gate": ["bash", "run.sh", "check-tests-beside-behavior"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:REMOTE-ROUNDTRIP-LOCAL-TRACE-BOTH-SOCKET-DIRS]",
+			"signatureSource": "pi-extensions/lib/remote-pair-roundtrip.test.ts",
+			"build": {
+				"argv": ["bash", "scripts/build-bridge.sh"],
+				"output": "mcp/entwurf-bridge/dist"
+			}
+		}
+	]
+}

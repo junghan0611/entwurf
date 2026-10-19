@@ -1,0 +1,66 @@
+{
+	"schemaVersion": 1,
+	"lane": "remote-pair-transport",
+	"mutants": [
+		{
+			"claim": "REMOTE-TRANSPORT-NO-SHELL-SEPARATE-STREAMS",
+			"title": "the transport runs its argv through a shell, so a remote declaration word is expanded on the sending host before ssh ever sees it",
+			"subject": "pi-extensions/lib/remote-pair-transport.ts",
+			"find": ["{ shell: false, stdio: [\"pipe\", \"pipe\", \"pipe\"] }"],
+			"replace": ["{ shell: true, stdio: [\"pipe\", \"pipe\", \"pipe\"] }"],
+			"gate": ["bash", "run.sh", "check-tests-beside-behavior"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:REMOTE-TRANSPORT-NO-SHELL-SEPARATE-STREAMS]",
+			"signatureSource": "pi-extensions/lib/remote-pair-transport.test.ts",
+			"build": {
+				"argv": ["bash", "scripts/build-bridge.sh"],
+				"output": "mcp/entwurf-bridge/dist"
+			}
+		},
+		{
+			"claim": "REMOTE-TRANSPORT-TIMEOUT-REAPS-OWN-CHILD",
+			"title": "the bound only sends TERM, so an ssh child that ignores it outlives the send and the call never returns",
+			"subject": "pi-extensions/lib/remote-pair-transport.ts",
+			"find": ["\t\t\t\t\tchild.kill(\"SIGKILL\");"],
+			"replace": ["\t\t\t\t\tvoid 0;"],
+			"gate": ["bash", "run.sh", "check-tests-beside-behavior"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:REMOTE-TRANSPORT-TIMEOUT-REAPS-OWN-CHILD]",
+			"signatureSource": "pi-extensions/lib/remote-pair-transport.test.ts",
+			"build": {
+				"argv": ["bash", "scripts/build-bridge.sh"],
+				"output": "mcp/entwurf-bridge/dist"
+			}
+		},
+		{
+			"claim": "REMOTE-TRANSPORT-SPAWN-FAILURE-INDETERMINATE",
+			"title": "a child that never started reports exit 0, so a missing ssh binary reads as a clean exit instead of an unknown outcome",
+			"subject": "pi-extensions/lib/remote-pair-transport.ts",
+			"find": ["\t\t\t\t\texitCode: spawnError ? null : code,"],
+			"replace": ["\t\t\t\t\texitCode: spawnError ? 0 : code,"],
+			"gate": ["bash", "run.sh", "check-tests-beside-behavior"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:REMOTE-TRANSPORT-SPAWN-FAILURE-INDETERMINATE]",
+			"signatureSource": "pi-extensions/lib/remote-pair-transport.test.ts",
+			"build": {
+				"argv": ["bash", "scripts/build-bridge.sh"],
+				"output": "mcp/entwurf-bridge/dist"
+			}
+		},
+		{
+			"claim": "REMOTE-TRANSPORT-HELD-PIPES-STILL-SETTLE",
+			"title": "the send waits for a close that a pipe-holding descendant never lets happen, so one stuck remote leaves entwurf_v2 hanging forever",
+			"subject": "pi-extensions/lib/remote-pair-transport.ts",
+			"find": ["\t\t\t\t\tfinalTimer = setTimeout(() => {"],
+			"replace": ["\t\t\t\t\tfinalTimer = setTimeout(() => {\n\t\t\t\t\t\treturn;"],
+			"gate": ["bash", "run.sh", "check-tests-beside-behavior"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:REMOTE-TRANSPORT-HELD-PIPES-STILL-SETTLE]",
+			"signatureSource": "pi-extensions/lib/remote-pair-transport.test.ts",
+			"build": {
+				"argv": ["bash", "scripts/build-bridge.sh"],
+				"output": "mcp/entwurf-bridge/dist"
+			}
+		}
+	]
+}

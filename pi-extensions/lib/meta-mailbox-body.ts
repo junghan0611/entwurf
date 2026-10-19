@@ -35,6 +35,9 @@ export interface MailboxSenderEnvelope {
 	timestamp: string; // ISO 8601 UTC
 	origin?: "pi-session" | "external-mcp" | "meta-session";
 	replyable?: boolean;
+	/** #107: set only by the receiving half of a declared remote pair. `via` is the route label;
+	 * `replyRoute` says whether this host declares a route back. Neither is a probe. */
+	remote?: { via: string; replyRoute: "declared" | "none" };
 }
 
 /** `~`-abbreviate a home-relative cwd for display. Reads process.env.HOME. */
@@ -72,14 +75,20 @@ export function formatMetaMailboxBody(sender: MailboxSenderEnvelope, message: st
 	const replyable = sender.replyable === true;
 	const isMeta = sender.origin === "meta-session";
 	const kind = isMeta ? "meta-session, " : "";
+	// A remote sender is never replyable here: no reply route was probed. Its cwd is a path on the
+	// SENDING host, so it is neither abbreviated against this host's HOME nor shown as a local path.
+	const remote = !replyable ? sender.remote : undefined;
 	const sessionLine = replyable
 		? `${sender.sessionId} (${kind}replyable — reply via entwurf_v2 to this sessionId, intent=fire-and-forget)`
-		: isMeta
-			? `${sender.sessionId} (meta-session, non-replyable)`
-			: `${sender.sessionId} (external, non-replyable)`;
+		: remote
+			? `${sender.sessionId} (remote via ${remote.via}; ${remote.replyRoute === "declared" ? "reply route declared, not probed" : "no reply route declared"})`
+			: isMeta
+				? `${sender.sessionId} (meta-session, non-replyable)`
+				: `${sender.sessionId} (external, non-replyable)`;
+	const where = remote ? `${sender.cwd} (sender-host path)` : abbreviateHome(sender.cwd);
 	return (
 		`[entwurf received ⟵]\n` +
-		`  from:        ${sender.agentId} @ ${abbreviateHome(sender.cwd)}\n` +
+		`  from:        ${sender.agentId} @ ${where}\n` +
 		`  session:     ${sessionLine}\n` +
 		`  at:          ${formatKstTimestamp(sender.timestamp)}\n` +
 		`  wants reply: ${wantsReply ? "yes" : "no"}\n` +

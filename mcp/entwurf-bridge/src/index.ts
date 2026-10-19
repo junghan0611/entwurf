@@ -108,6 +108,14 @@ import {
 } from "../../../pi-extensions/lib/meta-session.ts";
 import { RESUME_CALL_REJECT_HINT, resumeCall } from "../../../pi-extensions/lib/mux-resume-call.ts";
 import { registerNativeConversation } from "../../../pi-extensions/lib/native-push/register.ts";
+import {
+	makeLocalTraceFact,
+	readRemotePairOptIn,
+	remotePairOptInPath,
+	runEntwurfV2WithRemoteRoute,
+} from "../../../pi-extensions/lib/remote-pair-send.ts";
+import { processTransport } from "../../../pi-extensions/lib/remote-pair-transport.ts";
+import { CONTROL_SOCKET_DIR } from "../../../pi-extensions/lib/socket-discovery.ts";
 import { probeSocketLiveness } from "../../../pi-extensions/lib/socket-probe.ts";
 
 const HOME = os.homedir();
@@ -520,12 +528,24 @@ server.tool(
 			// Resolved ONCE so the dispatch-moment timestamp is fixed and the control RPC sender
 			// + the mailbox body sender share one envelope. No replyability gate (see above).
 			const sender = await buildSendSenderEnvelope({ requestMeta: extra._meta });
-			const rendered = await runAndRenderEntwurfV2FromSurface(
+			// #107: the operator's remote-pair opt-in is read per send. Absent = off and the local
+			// surface below runs exactly as before; a declared target goes over that one route.
+			const rendered = await runEntwurfV2WithRemoteRoute(
 				{ target, intent, message, mode, wants_reply },
-				// No trust-preflight inputs are passed, and none exist to pass: the preflight on this
-				// path guarded the resume verdict and left with `owned-outcome`. `senderProvider` is
-				// the whole options surface now.
-				{ senderProvider: () => sender },
+				{
+					senderProvider: () => sender,
+					route: readRemotePairOptIn(remotePairOptInPath()),
+					// The decider's canonical socket dir AND this bridge's ENTWURF_DIR: a trace in either is local.
+					localTrace: makeLocalTraceFact({
+						sessionsDir: defaultMetaSessionsDir(),
+						controlSocketDirs: [CONTROL_SOCKET_DIR, ENTWURF_DIR],
+					}),
+					transport: processTransport,
+					// No trust-preflight inputs are passed, and none exist to pass: the preflight on this
+					// path guarded the resume verdict and left with `owned-outcome`. `senderProvider` is
+					// the whole options surface now.
+					runLocal: (params, opts) => runAndRenderEntwurfV2FromSurface(params, opts),
+				},
 			);
 			return rendered.isError ? textErr(rendered.text) : textOk(rendered.text);
 		} catch (err) {

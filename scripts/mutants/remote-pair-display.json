@@ -1,0 +1,53 @@
+{
+	"schemaVersion": 1,
+	"lane": "remote-pair-display",
+	"mutants": [
+		{
+			"claim": "REMOTE-DISPLAY-LOCAL-UNCHANGED",
+			"title": "the remote branch is taken for every non-replyable sender, so an ordinary external or meta-session header turns into a remote line naming a route that does not exist",
+			"subject": "pi-extensions/lib/meta-mailbox-body.ts",
+			"find": ["\tconst remote = !replyable ? sender.remote : undefined;"],
+			"replace": [
+				"\tconst remote = !replyable ? (sender.remote ?? { via: \"?\", replyRoute: \"none\" as const }) : undefined;"
+			],
+			"gate": ["bash", "run.sh", "check-tests-beside-behavior"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:REMOTE-DISPLAY-LOCAL-UNCHANGED]",
+			"signatureSource": "pi-extensions/lib/meta-mailbox-body.test.ts",
+			"build": {
+				"argv": ["bash", "scripts/build-bridge.sh"],
+				"output": "mcp/entwurf-bridge/dist"
+			}
+		},
+		{
+			"claim": "REMOTE-DISPLAY-SESSIONLINE",
+			"title": "a remote sender with a declared route back is told to reply via entwurf_v2 as if that route had been probed",
+			"subject": "pi-extensions/lib/meta-mailbox-body.ts",
+			"find": ["\"reply route declared, not probed\""],
+			"replace": ["\"reply via entwurf_v2 to this sessionId\""],
+			"gate": ["bash", "run.sh", "check-tests-beside-behavior"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:REMOTE-DISPLAY-SESSIONLINE]",
+			"signatureSource": "pi-extensions/lib/meta-mailbox-body.test.ts",
+			"build": {
+				"argv": ["bash", "scripts/build-bridge.sh"],
+				"output": "mcp/entwurf-bridge/dist"
+			}
+		},
+		{
+			"claim": "REMOTE-DISPLAY-SENDER-HOST-CWD",
+			"title": "a remote sender's cwd is abbreviated against this host's HOME, so a path on the other machine reads as a local one",
+			"subject": "pi-extensions/lib/meta-mailbox-body.ts",
+			"find": ["\tconst where = remote ? `${sender.cwd} (sender-host path)` : abbreviateHome(sender.cwd);"],
+			"replace": ["\tconst where = abbreviateHome(sender.cwd);"],
+			"gate": ["bash", "run.sh", "check-tests-beside-behavior"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:REMOTE-DISPLAY-SENDER-HOST-CWD]",
+			"signatureSource": "pi-extensions/lib/meta-mailbox-body.test.ts",
+			"build": {
+				"argv": ["bash", "scripts/build-bridge.sh"],
+				"output": "mcp/entwurf-bridge/dist"
+			}
+		}
+	]
+}
