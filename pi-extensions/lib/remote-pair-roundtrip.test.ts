@@ -27,7 +27,33 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { upsertMetaSession, writeMetaReceiverMarker, writeMetaSenderMarker } from "./meta-session.ts";
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
-const BRIDGE = path.join(REPO, "mcp", "entwurf-bridge", "src", "index.ts");
+
+// Subject selection. By default the subject is this checkout's source. `check-remote-pair-installed`
+// sets ENTWURF_REMOTE_PAIR_INSTALLED_PKG to a package installed from a candidate tarball, and then
+// the SAME cells drive that package's bridge (`start.sh` → its compiled dist) and its `run.sh`.
+// ENTWURF_REMOTE_PAIR_RESOLVE_HOOK (an absolute preload) and ENTWURF_REMOTE_PAIR_RESOLVE_LOG_DIR
+// let that gate record what each subject process resolves. Only the subject changes; the fixture
+// writer below stays this checkout's code (the orchestrator), which is not the subject.
+const INSTALLED = process.env.ENTWURF_REMOTE_PAIR_INSTALLED_PKG;
+const SUBJECT_ROOT = INSTALLED ?? REPO;
+const BRIDGE_ARGV = INSTALLED
+	? [path.join(INSTALLED, "mcp", "entwurf-bridge", "start.sh")]
+	: [
+			process.execPath,
+			"--experimental-strip-types",
+			"--no-warnings",
+			path.join(REPO, "mcp", "entwurf-bridge", "src", "index.ts"),
+		];
+const RESOLVE_HOOK = process.env.ENTWURF_REMOTE_PAIR_RESOLVE_HOOK;
+const RESOLVE_LOG_DIR = process.env.ENTWURF_REMOTE_PAIR_RESOLVE_LOG_DIR;
+function subjectEnv(label: string): Record<string, string> {
+	return RESOLVE_HOOK && RESOLVE_LOG_DIR
+		? {
+				NODE_OPTIONS: `--import=${RESOLVE_HOOK}`,
+				ENTWURF_REMOTE_PAIR_RESOLVE_LOG: path.join(RESOLVE_LOG_DIR, `${label}-${process.hrtime.bigint()}.log`),
+			}
+		: {};
+}
 
 interface Host {
 	home: string;
@@ -105,7 +131,9 @@ beforeEach(() => {
 			"shift",
 			// The remote PATH is not under test (U4 measures the real one): pass this process's PATH,
 			// and nothing else of its environment.
-			`exec env -i HOME="$H" PATH='${nodeDir}:${process.env.PATH ?? ""}' '${REPO}/run.sh' "$@"`,
+			`exec env -i HOME="$H" PATH='${nodeDir}:${process.env.PATH ?? ""}' ${Object.entries(subjectEnv("entry"))
+				.map(([k, v]) => `${k}='${v}'`)
+				.join(" ")} '${SUBJECT_ROOT}/run.sh' "$@"`,
 			"",
 		].join("\n"),
 		{ mode: 0o755 },
@@ -155,8 +183,8 @@ async function sendAs(
 	extraEnv: Record<string, string> = {},
 ): Promise<{ text: string; isError: boolean }> {
 	const transport = new StdioClientTransport({
-		command: process.execPath,
-		args: ["--experimental-strip-types", "--no-warnings", BRIDGE],
+		command: BRIDGE_ARGV[0],
+		args: BRIDGE_ARGV.slice(1),
 		cwd: from.cwd,
 		env: {
 			HOME: from.home,
@@ -165,6 +193,7 @@ async function sendAs(
 			XDG_DATA_HOME: path.join(from.home, ".local", "share"),
 			XDG_STATE_HOME: path.join(from.home, ".local", "state"),
 			XDG_CACHE_HOME: path.join(from.home, ".cache"),
+			...subjectEnv("bridge"),
 			...extraEnv,
 		},
 		stderr: "pipe",

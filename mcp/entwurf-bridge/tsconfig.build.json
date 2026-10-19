@@ -141,6 +141,12 @@
 	// only repo import is meta-session.ts, ALREADY emitted for the store-doctor, so this adds
 	// ONE leaf JS and ZERO new deps. It is an omp-loaded extension module, never in
 	// index.ts's boot closure, so check-entwurf-bridge-pi-free is unaffected.
+	// WHY remote-pair-receive rides THIS build (#107): the sending host's ssh runs the receiving
+	// host's `entwurf remote-pair-receive`, and on an installed host run.sh lives under
+	// node_modules, where run_ts needs a compiled twin. Its repo imports (remote-pair-receive,
+	// remote-pair-send, entwurf-v2-surface, meta-session) are ALREADY emitted for the bridge's own
+	// entwurf_v2 handler, so this adds ONE leaf JS and ZERO new deps. It is never in index.ts's boot
+	// closure.
 	"include": [
 		"./src/index.ts",
 		"../../protocol.js",
@@ -156,6 +162,7 @@
 		"../../scripts/omp-receive-facts.ts",
 		"../../scripts/codex-socket-path.ts",
 		"../../scripts/codex-socket-classify.ts",
+		"../../scripts/remote-pair-receive.ts",
 		"../../pi-extensions/meta-bridge-hook.ts",
 		"../../pi-extensions/meta-bridge-hook-copilot.ts",
 		"../../pi-extensions/meta-bridge-hook-codex.ts",

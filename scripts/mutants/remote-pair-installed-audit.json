@@ -1,0 +1,28 @@
+{
+	"schemaVersion": 1,
+	"lane": "remote-pair-installed-audit",
+	"mutants": [
+		{
+			"claim": "RPI-AUDIT-REAL-PATH",
+			"title": "the installed-closure audit judges a resolved file by its link path, so an installed file that is a symlink into a checkout passes as inside the consumer",
+			"subject": "scripts/lib/remote-pair-installed-audit.ts",
+			"find": ["\t\t\tconst real = fs.realpathSync(fileURLToPath(url));"],
+			"replace": ["\t\t\tconst real = fileURLToPath(url);"],
+			"gate": ["bash", "run.sh", "check-remote-pair-installed-audit"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:RPI-AUDIT-REAL-PATH]",
+			"signatureSource": "test/remote-pair-installed-audit.test.ts"
+		},
+		{
+			"claim": "RPI-AUDIT-ROOT-BOUNDARY",
+			"title": "the installed-closure audit treats any path that merely starts with the consumer prefix as inside it, so a sibling directory such as <prefix>-x passes",
+			"subject": "scripts/lib/remote-pair-installed-audit.ts",
+			"find": ["\t\t\tif (real !== realRoot && !real.startsWith(`${realRoot}${path.sep}`)) out.add(real);"],
+			"replace": ["\t\t\tif (real !== realRoot && !real.startsWith(realRoot)) out.add(real);"],
+			"gate": ["bash", "run.sh", "check-remote-pair-installed-audit"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:RPI-AUDIT-ROOT-BOUNDARY]",
+			"signatureSource": "test/remote-pair-installed-audit.test.ts"
+		}
+	]
+}

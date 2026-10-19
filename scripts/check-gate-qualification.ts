@@ -3498,6 +3498,7 @@ let manifestCount: number;
 		"probe-ordering": 1,
 		"release-gate": 21,
 		"remote-pair-display": 3,
+		"remote-pair-installed-audit": 2,
 		"remote-pair-receive": 8,
 		"remote-pair-roundtrip": 5,
 		"remote-pair-send": 11,

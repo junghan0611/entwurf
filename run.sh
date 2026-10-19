@@ -328,7 +328,9 @@ Usage:
   ./run.sh meta-bridge-prune          # 1.0.0 meta-bridge Phase 4: LISTING-ONLY store hygiene — classify orphan/stale/ambiguous/keep, print manual rm commands, delete NOTHING ([dir] [--ttl-days N])
   ./run.sh meta-bridge-fresh-cut      # the ONE generation verb (the verb every v3-only rejection names): quiesce-check live sockets/markers/native-push conversations (refusing any surface it cannot inspect), archive meta-sessions/ + meta-mailbox/ to `<dir>.archive-<ts>`, clear dead transport residue, open an empty v3 generation. No migration, no restore — the archive is forensic only. EXIT CONTRACT (#54, `--help` prints it): 0 complete / 1 NOTHING MOVED (re-run, do not setup) / 2 usage / 3 cut transition incomplete (inspect) / 4 cut complete but residue cleanup failed (`setup` may run; re-run only before new citizen birth, otherwise remove residue manually)
   ./run.sh meta-facts                 # #65 owner-normalized READ-ONLY store projection: deterministic JSON {schemaVersion:1, storeDir, citizens: full v3 records sorted by gardenId, defects: {filename,message}} — THE listing contract emitted by the owner so consumers stop copying the certification. No liveness/sockets/transcript contents. EXIT: 0 readable (defects in-band; missing store = empty), 2 usage, 3 unreadable ([dir])
-  ./run.sh remote-pair-receive        # #107 rail 1: the RECEIVING half of one operator-declared remote pair. Reads ONE JSON claim {from,fromAgentId,fromCwd,target,message,wantsReply} on stdin, refuses a from/target outside the declared pair before any mutation (a scope limit under the same-operator SSH account trust model, not authentication), then hands a match to the existing v2 dispatch. Ambient sender carriers are never read. Dev-clone only until its compiled twin ships (rail 3). EXIT: 0 dispatched / 4 dispatched non-delivery / 3 pair refused / 2 invalid claim or declaration (JSON receipt) or wrong argv (usage on stderr, no receipt) / 1 uncaught dispatch or store throw (no receipt; the sender reads it as indeterminate) (--pair <absolute declaration file>)
+  ./run.sh check-remote-pair-installed # #107 rail 3, CHECKOUT-ONLY: install a caller-supplied candidate tarball (--tgz <abs>) into a sandboxed consumer prefix, check its compiled remote-pair surface, run the installed `entwurf remote-pair-receive` (usage exit 2 = twin reached), run the T2 roundtrip cells against the installed bridge+entry, and audit that the subject processes resolve every module inside the consumer prefix (with a checkout control). Never repacks; no real ssh, no model
+  ./run.sh check-remote-pair-installed-audit # #107 rail 3: the deterministic counterpart of check-remote-pair-installed — its checkout-invisibility acceptance primitive proven on synthetic logs (real path, root boundary). In check:vitest
+  ./run.sh remote-pair-receive        # #107 rail 1: the RECEIVING half of one operator-declared remote pair. Reads ONE JSON claim {from,fromAgentId,fromCwd,target,message,wantsReply} on stdin, refuses a from/target outside the declared pair before any mutation (a scope limit under the same-operator SSH account trust model, not authentication), then hands a match to the existing v2 dispatch. Ambient sender carriers are never read. Installed, run_ts runs its compiled twin (dist/scripts/remote-pair-receive.js). EXIT: 0 dispatched / 4 dispatched non-delivery / 3 pair refused / 2 invalid claim or declaration (JSON receipt) or wrong argv (usage on stderr, no receipt) / 1 uncaught dispatch or store throw (no receipt; the sender reads it as indeterminate) (--pair <absolute declaration file>)
   ./run.sh peer-facts                 # #116 M2-a owner-normalized READ-ONLY peer projection: the same listEntwurfFacts provider through the same renderer entwurf_peers uses, emitted as deterministic JSON {schemaVersion:1, storeDir, peers, diagnostics} so a consumer never re-implements the placement join (whose pi half is a measured vendor floor). NOT the same bytes as an entwurf_peers call and deliberately so: that surface is a human listing (observationLimit, text over the wire), this is a machine projection with UNBOUNDED observation, because a rationed row says `unobserved` and a machine cannot tell that from "nobody could look". `placement` stays a STRUCTURED tagged union ({kind:"herdr-pane",paneId} / unobserved / none / ambiguous) — never the human `herdr <pane>` string. Publishes NO socket coordinate (ENTWURF_DIR selects what is PROBED, #50 C4) and NO herdr agent_status / interactive_ready / screen text. One placement read per listing, no watcher. EXIT: 0 readable (diagnostics in-band; missing store = empty), 2 usage, 3 unreadable ([dir])
   ./run.sh meta-bridge-managed-keys   # 0.10.0 meta-bridge: print the SSOT of settings keys entwurf OWNS (consumers read this to stay disjoint — keyset-owner invariant)
   ./run.sh check-keyset-overlap <fragment.json...>  # 0.10.0 meta-bridge: PREVENTIVE keyset guard — fail if a consumer fragment collides with any pi-owned key (cross-repo; not in pnpm check)
@@ -3388,6 +3390,17 @@ check_acp_sdk_surface() {
   run_vitest test/acp-sdk-surface.contract.test.ts
 }
 
+check_remote_pair_installed_audit() {
+  # #107 rail 3. The deterministic counterpart of `check-remote-pair-installed`: that gate needs a
+  # caller-supplied tarball, so it cannot run in the floor or carry mutants, and its
+  # checkout-invisibility verdict rests on one acceptance primitive
+  # (scripts/lib/remote-pair-installed-audit.ts). This proves that primitive on tiny synthetic
+  # logs and files. `test/**` is not discovered by check-tests-beside-behavior, so it needs this
+  # public coordinate. Zero network, zero child process.
+  section "remote-pair installed-closure audit (synthetic logs)"
+  run_vitest test/remote-pair-installed-audit.test.ts
+}
+
 check_pi_queue_oracle() {
   # #120 P2. The PUBLIC execution coordinate for `test/pi-queue.oracle.test.ts`, and the reason it
   # needs one: the discovery door below selects `pi-extensions/**/*.test.ts` and
@@ -3830,6 +3843,12 @@ check_pack() {
     # out: the placement join it emits is the copy a herdr-side consumer would
     # otherwise fork, and such a consumer runs against an installed host.
     "mcp/entwurf-bridge/dist/scripts/peer-facts.js"
+    # #107 — the receiving host's entry the sender's ssh runs (run_ts twin), plus the three
+    # remote-pair libs the bridge's entwurf_v2 handler and that entry import.
+    "mcp/entwurf-bridge/dist/scripts/remote-pair-receive.js"
+    "mcp/entwurf-bridge/dist/pi-extensions/lib/remote-pair-receive.js"
+    "mcp/entwurf-bridge/dist/pi-extensions/lib/remote-pair-send.js"
+    "mcp/entwurf-bridge/dist/pi-extensions/lib/remote-pair-transport.js"
     # #87 Bundle B — omp-receive-doctor drives this operator projection through
     # run.sh, so installed node_modules must have the compiled twin too.
     "mcp/entwurf-bridge/dist/scripts/omp-receive-facts.js"
@@ -4571,6 +4590,12 @@ _check_pack_install_impl() {
     "mcp/entwurf-bridge/dist/scripts/meta-facts.js"
     # #116 M2-a — the owner-normalized peer projection (see check-pack).
     "mcp/entwurf-bridge/dist/scripts/peer-facts.js"
+    # #107 — the receiving host's entry the sender's ssh runs (run_ts twin), plus the three
+    # remote-pair libs the bridge's entwurf_v2 handler and that entry import.
+    "mcp/entwurf-bridge/dist/scripts/remote-pair-receive.js"
+    "mcp/entwurf-bridge/dist/pi-extensions/lib/remote-pair-receive.js"
+    "mcp/entwurf-bridge/dist/pi-extensions/lib/remote-pair-send.js"
+    "mcp/entwurf-bridge/dist/pi-extensions/lib/remote-pair-transport.js"
     # #87 Bundle B — omp-receive-doctor reaches this through the installed dispatcher.
     "mcp/entwurf-bridge/dist/scripts/omp-receive-facts.js"
     # 0.12.5 — node_modules-safe plugin hook + lib (see check-pack). The installed
@@ -8413,11 +8438,18 @@ case "$cmd" in
     shift || true
     run_ts scripts/meta-facts.ts "$@"
     ;;
+  check-remote-pair-installed)
+    # #107 rail 3, CHECKOUT-ONLY install gate: installs a caller-supplied candidate tarball into a
+    # sandboxed consumer prefix and drives that install's bridge and entry through the T2 scene,
+    # auditing that the subject processes resolve nothing outside the prefix. Never repacks.
+    shift || true
+    run_ts scripts/check-remote-pair-installed.ts "$@"
+    ;;
   remote-pair-receive)
     # #107 rail 1: the receiving host's entry for one declared remote pair. The pair
     # check runs before the v2 dispatch, so a claim outside the pair mutates nothing;
     # a match reaches the same record/owner/deliverability checks every local send does.
-    # No compiled twin yet, so run_ts refuses it on an installed package (rail 3).
+    # Installed, run_ts runs its compiled twin; the sending host's ssh reaches it through the bin.
     shift || true
     run_ts scripts/remote-pair-receive.ts "$@"
     ;;
@@ -8489,6 +8521,9 @@ case "$cmd" in
     ;;
   check-pi-queue-oracle)
     check_pi_queue_oracle
+    ;;
+  check-remote-pair-installed-audit)
+    check_remote_pair_installed_audit
     ;;
   check-demo-reproducibility)
     check_demo_reproducibility
