@@ -258,6 +258,11 @@
 		// socket-probe / resume-args) with explicit `.ts` extensions, same fence. It never imports
 		// mux: the launcher is an injected seam the SURFACES supply (docs/mux-launch-rail.md §11).
 		// Typechecked by scripts/tsconfig.json via its gate (pi-extensions/lib/entwurf-v2-visible-resume.test.ts).
-		"pi-extensions/lib/entwurf-v2-visible-resume.ts"
+		"pi-extensions/lib/entwurf-v2-visible-resume.ts",
+		// remote-pair-receive.ts is #107's receiving half for one declared remote pair — a lib→lib
+		// VALUE importer (requireGardenId from meta-session.ts) with explicit `.ts` extensions, same
+		// fence. Typechecked by scripts/tsconfig.json via its gate
+		// (pi-extensions/lib/remote-pair-receive.test.ts) and its entry (scripts/remote-pair-receive.ts).
+		"pi-extensions/lib/remote-pair-receive.ts"
 	]
 }

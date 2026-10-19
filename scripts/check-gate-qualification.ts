@@ -3497,6 +3497,7 @@ let manifestCount: number;
 		"omp-receive": 11,
 		"probe-ordering": 1,
 		"release-gate": 21,
+		"remote-pair-receive": 7,
 		"retired-sent-surface": 2,
 		"resume-args": 6,
 		"resume-launch-identity": 7,

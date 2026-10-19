@@ -1,0 +1,90 @@
+{
+	"schemaVersion": 1,
+	"lane": "remote-pair-receive",
+	"mutants": [
+		{
+			"claim": "REMOTE-PAIR-FROM-OUTSIDE-NO-MUTATION",
+			"title": "the receiving entry stops checking the claimed sender against the declared pair, so any gid the SSH account writes is dispatched into the declared target's mailbox",
+			"subject": "pi-extensions/lib/remote-pair-receive.ts",
+			"find": ["\tif (claim.from !== decl.remoteGardenId) {"],
+			"replace": ["\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-tests-beside-behavior"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:REMOTE-PAIR-FROM-OUTSIDE-NO-MUTATION]",
+			"signatureSource": "pi-extensions/lib/remote-pair-receive.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "REMOTE-PAIR-TARGET-OUTSIDE-NO-MUTATION",
+			"title": "the receiving entry stops checking the claimed target against the declared pair, so a declared remote can reach every deliverable citizen on this host",
+			"subject": "pi-extensions/lib/remote-pair-receive.ts",
+			"find": ["\tif (claim.target !== decl.localGardenId) {"],
+			"replace": ["\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-tests-beside-behavior"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:REMOTE-PAIR-TARGET-OUTSIDE-NO-MUTATION]",
+			"signatureSource": "pi-extensions/lib/remote-pair-receive.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "REMOTE-PAIR-IGNORES-AMBIENT-SENDER",
+			"title": "the receiving entry lets an ambient PI_SESSION_ID in the SSH environment stand in for the sender, so the header names whoever's carrier leaked instead of the claim",
+			"subject": "pi-extensions/lib/remote-pair-receive.ts",
+			"find": ["\t\tsessionId: claim.from,"],
+			"replace": ["\t\tsessionId: process.env.PI_SESSION_ID ?? claim.from,"],
+			"gate": ["bash", "run.sh", "check-tests-beside-behavior"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:REMOTE-PAIR-IGNORES-AMBIENT-SENDER]",
+			"signatureSource": "pi-extensions/lib/remote-pair-receive.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "REMOTE-PAIR-MATCH-DISPATCHES-ONCE",
+			"title": "the receiving entry marks a remote sender replyable, so the body tells the receiver to reply via entwurf_v2 as if a live local reply route had been probed — none was",
+			"subject": "pi-extensions/lib/remote-pair-receive.ts",
+			"find": ["\t\treplyable: false,"],
+			"replace": ["\t\treplyable: true,"],
+			"gate": ["bash", "run.sh", "check-tests-beside-behavior"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:REMOTE-PAIR-MATCH-DISPATCHES-ONCE]",
+			"signatureSource": "pi-extensions/lib/remote-pair-receive.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "REMOTE-PAIR-CLAIM-EXACT-SHAPE",
+			"title": "the claim parser accepts extra or missing fields, so a sender-side field the receiver never reads can ride in and a partial claim is dispatched",
+			"subject": "pi-extensions/lib/remote-pair-receive.ts",
+			"find": ["\tif (got.length !== want.length || got.some((k, i) => k !== want[i])) {"],
+			"replace": ["\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-tests-beside-behavior"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:REMOTE-PAIR-CLAIM-EXACT-SHAPE]",
+			"signatureSource": "pi-extensions/lib/remote-pair-receive.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "REMOTE-PAIR-ENTRY-REFUSES-OUTSIDE",
+			"title": "the entry reports a pair refusal as exit 0, so the sending host cannot tell a refused claim from a dispatched one without parsing prose",
+			"subject": "scripts/remote-pair-receive.ts",
+			"find": ["emit(receipt, receipt.kind === \"rejected\" ? 3 : receipt.isError ? 4 : 0);"],
+			"replace": ["emit(receipt, receipt.kind === \"rejected\" ? 0 : receipt.isError ? 4 : 0);"],
+			"gate": ["bash", "run.sh", "check-tests-beside-behavior"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:REMOTE-PAIR-ENTRY-REFUSES-OUTSIDE]",
+			"signatureSource": "pi-extensions/lib/remote-pair-receive.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "REMOTE-PAIR-ENTRY-USAGE",
+			"title": "the entry follows a symlinked --pair, so the declaration it trusts is whatever the link points at today",
+			"subject": "scripts/remote-pair-receive.ts",
+			"find": ["\tif (!st.isFile()) throw new Error(`--pair must name a regular non-symlink file (${pairFile})`);"],
+			"replace": ["\tif (false) throw new Error(`--pair must name a regular non-symlink file (${pairFile})`);"],
+			"gate": ["bash", "run.sh", "check-tests-beside-behavior"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:REMOTE-PAIR-ENTRY-USAGE]",
+			"signatureSource": "pi-extensions/lib/remote-pair-receive.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		}
+	]
+}

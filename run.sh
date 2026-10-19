@@ -328,6 +328,7 @@ Usage:
   ./run.sh meta-bridge-prune          # 1.0.0 meta-bridge Phase 4: LISTING-ONLY store hygiene — classify orphan/stale/ambiguous/keep, print manual rm commands, delete NOTHING ([dir] [--ttl-days N])
   ./run.sh meta-bridge-fresh-cut      # the ONE generation verb (the verb every v3-only rejection names): quiesce-check live sockets/markers/native-push conversations (refusing any surface it cannot inspect), archive meta-sessions/ + meta-mailbox/ to `<dir>.archive-<ts>`, clear dead transport residue, open an empty v3 generation. No migration, no restore — the archive is forensic only. EXIT CONTRACT (#54, `--help` prints it): 0 complete / 1 NOTHING MOVED (re-run, do not setup) / 2 usage / 3 cut transition incomplete (inspect) / 4 cut complete but residue cleanup failed (`setup` may run; re-run only before new citizen birth, otherwise remove residue manually)
   ./run.sh meta-facts                 # #65 owner-normalized READ-ONLY store projection: deterministic JSON {schemaVersion:1, storeDir, citizens: full v3 records sorted by gardenId, defects: {filename,message}} — THE listing contract emitted by the owner so consumers stop copying the certification. No liveness/sockets/transcript contents. EXIT: 0 readable (defects in-band; missing store = empty), 2 usage, 3 unreadable ([dir])
+  ./run.sh remote-pair-receive        # #107 rail 1: the RECEIVING half of one operator-declared remote pair. Reads ONE JSON claim {from,fromAgentId,fromCwd,target,message,wantsReply} on stdin, refuses a from/target outside the declared pair before any mutation (a scope limit under the same-operator SSH account trust model, not authentication), then hands a match to the existing v2 dispatch. Ambient sender carriers are never read. Dev-clone only until its compiled twin ships (rail 3). EXIT: 0 dispatched / 4 dispatched non-delivery / 3 pair refused / 2 invalid claim or declaration (JSON receipt) or wrong argv (usage on stderr, no receipt) / 1 uncaught dispatch or store throw (no receipt; the sender reads it as indeterminate) (--pair <absolute declaration file>)
   ./run.sh peer-facts                 # #116 M2-a owner-normalized READ-ONLY peer projection: the same listEntwurfFacts provider through the same renderer entwurf_peers uses, emitted as deterministic JSON {schemaVersion:1, storeDir, peers, diagnostics} so a consumer never re-implements the placement join (whose pi half is a measured vendor floor). NOT the same bytes as an entwurf_peers call and deliberately so: that surface is a human listing (observationLimit, text over the wire), this is a machine projection with UNBOUNDED observation, because a rationed row says `unobserved` and a machine cannot tell that from "nobody could look". `placement` stays a STRUCTURED tagged union ({kind:"herdr-pane",paneId} / unobserved / none / ambiguous) — never the human `herdr <pane>` string. Publishes NO socket coordinate (ENTWURF_DIR selects what is PROBED, #50 C4) and NO herdr agent_status / interactive_ready / screen text. One placement read per listing, no watcher. EXIT: 0 readable (diagnostics in-band; missing store = empty), 2 usage, 3 unreadable ([dir])
   ./run.sh meta-bridge-managed-keys   # 0.10.0 meta-bridge: print the SSOT of settings keys entwurf OWNS (consumers read this to stay disjoint — keyset-owner invariant)
   ./run.sh check-keyset-overlap <fragment.json...>  # 0.10.0 meta-bridge: PREVENTIVE keyset guard — fail if a consumer fragment collides with any pi-owned key (cross-repo; not in pnpm check)
@@ -8411,6 +8412,14 @@ case "$cmd" in
     # no socket paths, no transcript contents, no state.
     shift || true
     run_ts scripts/meta-facts.ts "$@"
+    ;;
+  remote-pair-receive)
+    # #107 rail 1: the receiving host's entry for one declared remote pair. The pair
+    # check runs before the v2 dispatch, so a claim outside the pair mutates nothing;
+    # a match reaches the same record/owner/deliverability checks every local send does.
+    # No compiled twin yet, so run_ts refuses it on an installed package (rail 3).
+    shift || true
+    run_ts scripts/remote-pair-receive.ts "$@"
     ;;
   peer-facts)
     # #116 M2-a READ-ONLY projection of the OBSERVED peer listing: one provider
