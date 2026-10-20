@@ -573,7 +573,7 @@ mechanism cannot be copied — it never proved Copilot had no vendor wake surfac
 
 ### Remote pair (#107): one declared pair across two hosts
 
-This is an opt-in route between two existing citizens on two hosts. It is off unless the operator places a file on each host. The operator owns the connection between the hosts (a private network such as Tailscale is recommended, not required) and owns SSH authentication and authorization. Entwurf installs, configures, discovers and retries none of it. It adds no relay, listener, queue or registry. One SSH process runs per send and then exits.
+This is an opt-in route between two existing citizens on two hosts. Why it keeps these boundaries, and which questions it leaves open, is [remote-sibling-principles](./docs/remote-sibling-principles.md); this section owns the mechanism. It is off unless the operator places a file on each host. The operator owns the connection between the hosts (a private network such as Tailscale is recommended, not required) and owns SSH authentication and authorization. Entwurf installs, configures, discovers and retries none of it. It adds no relay, listener, queue or registry. One SSH process runs per send and then exits.
 
 - **Declaration.** Each host has at most one `entwurf-remote-pair.json`, beside its meta-record store (`remotePairOptInPath()`: the pi agent dir, unless `ENTWURF_META_SESSIONS_DIR` moves the store and the file with it). It has exactly four keys:
   - `remoteGardenId`.

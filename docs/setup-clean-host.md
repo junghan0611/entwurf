@@ -1161,7 +1161,7 @@ may be missing or stale. Installed mode never bootstraps pnpm in `node_modules`.
 New source on disk is not a fresh runtime. A pi-durable host spawns the compiled bridge `mcp/entwurf-bridge/dist/mcp/entwurf-bridge/src/index.js` even from a checkout (the bootstrap's `PACKAGED_BRIDGE_ENTRY`). Ordinary `start.sh` in a checkout runs the TypeScript source instead. An already-running bridge keeps the modules it loaded. So, for a host that has to run new bridge code:
 
 1. Build once from the checkout (`pnpm run build-bridge`, or its body `bash scripts/with-dist-lock.sh bash scripts/build-bridge.sh` when no package lifecycle should run).
-2. Compare the selected entry's hash with the accepted candidate's.
+2. Compare the whole compiled output with the accepted candidate's, as a file-set and hash manifest. A hash of the selected entry alone is not enough: the entry can stay identical while a helper it loads differs. Check the pinned SDK set separately, and that the new process started after the build.
 3. Close the visible session and reopen it with its own native same-id resume.
 4. Confirm `entwurf_self` names the same garden id, and that the receiver/owner join points at the new process, whose bridge child started after the build.
 
