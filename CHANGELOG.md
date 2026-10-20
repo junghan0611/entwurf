@@ -4,6 +4,175 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+## 0.40.0 - 2026-10-20
+
+The bridge is crossed and the questions are carried forward. A person laid a bridge
+between two machines, and a message sent across it to an existing sibling came back. That
+crossing happened once, at pre-release branch commit `e632294`. This cut carries that
+capability and its open questions, not a new two-host LIVE measurement at its own SHA. It
+does not solve remote trust or remote visibility; the questions it leaves open are listed
+below as questions, not as features.
+
+### Remote pair (#107)
+
+- **One operator-declared pair across two hosts.** An opt-in `entwurf-remote-pair.json`
+  beside each host's meta-record store has exactly four keys: `remoteGardenId`, `ssh` (an
+  existing alias), `localGardenId` and `remotePairFile` (the other host's own file). One
+  file serves both directions. An absent file is off. A symlink, non-regular, unreadable
+  or invalid file is refused. The file is read at every send and receive and never cached.
+  The operator owns the connection between the hosts (a private network such as Tailscale
+  is recommended, not required) and SSH authentication. Entwurf installs, configures,
+  discovers and retries none of it.
+- **Send.** `entwurf_v2` to the declared `remoteGardenId` makes exactly one `ssh -o
+  BatchMode=yes -o ConnectTimeout=10 <alias> entwurf remote-pair-receive --pair <file>`
+  call, with no shell and the claim on stdin. A declared target that also has a local
+  trace is refused as `remote-route-local-conflict`. A sender other than `localGardenId`
+  is refused as `remote-sender-not-declared`. Both refusals make zero SSH calls. An
+  undeclared target takes the unchanged local path. The send ends in one of three ways.
+  The first is the other host's receipt, quoted verbatim: an acceptance, or an error it
+  reported while processing (`remote-reported-error`). The second is its named refusal
+  before any mutation. The third is `remote-indeterminate`. A result is decided only when
+  the exit code and JSON kind agree. There is no retry.
+- **Receive.** `entwurf remote-pair-receive` accepts only its own canonical file path
+  (normalized, not realpath). It refuses a `from` or `target` outside the declared pair
+  before any mailbox mutation and hands a match to that host's existing local `entwurf_v2`
+  dispatch. The compiled twin ships in the tarball
+  (`dist/scripts/remote-pair-receive.js`). The received envelope names the remote origin,
+  marks the sender's cwd as a sender-host path and carries `replyable=false`, with "reply
+  route declared, not probed". This display is proven for the self-fetch mailbox body
+  only. `entwurf_callback` stays local.
+- **Trust and visibility, as built.** The trust model is same-operator SSH account trust.
+  The receiving host checks the declared pair. It does not cryptographically authenticate
+  a citizen, and it says nothing about whether the content deserves trust. The route has
+  no launch, fresh or resume path. For the measured self-fetch pair an OFF citizen is
+  undeliverable, and every other target keeps its own rail's admission. The code does not
+  check that the target's screen is open; owner pids, TTYs and garden-id labels are not
+  visibility. Delivery to an active, armed pi-durable can start a turn at once.
+- **A reported error is not read as non-delivery.** When the other host's dispatch reports
+  an error (exit 4), the sender's first line says that an error was reported, that
+  delivery is not inferred from that line and that nothing was retried, and it quotes the
+  other host's text verbatim. That text includes its own `retry-safe: false` after a
+  possible write. An external source review on #107 raised this before the cut.
+- **Docs.** DELIVERY ("Remote pair (#107)") owns the contract. `docs/setup-clean-host.md`
+  gains the operator steps (§2c) and "Applying new source to a running host": a pi-durable
+  host runs the compiled bridge even from a checkout, and a running bridge keeps the
+  modules it loaded, so neither a pull nor a green setup line shows which bytes are live.
+  `docs/remote-sibling-principles.md` is new; it holds the boundaries kept across hosts
+  and the questions below.
+
+### Questions carried forward
+
+- **Is a connection the same as trust?** Today's boundary is an operator-owned SSH account
+  and one exactly declared pair. How should the reach of an account be told apart from
+  trusting the sibling that sent a message?
+- **Does visibility survive a machine boundary?** Locally, the operator's visible-first
+  policy keeps conversation turns to siblings the user has open; that is a policy, not a
+  technical screen check. Across hosts, the first exchange relied on the user's own
+  confirmation that both sessions were open. What would observe and keep visible-first
+  remotely, without a hidden turn or a watcher?
+- **How much can a sender know?** Acceptance is not a read, and a reply does not tell its
+  sender that the reply was read. How should that uncertainty be shown honestly without
+  retries, a third ACK, read tracking or a conversation manager?
+
+None of these is a hidden backlog item;
+[remote-sibling-principles](./docs/remote-sibling-principles.md) keeps them as open
+questions. Automatic discovery, reconnection, OFF wake, hidden model turns, remote
+callbacks and support for every backend or platform are not claimed.
+
+### Evidence boundary
+
+- **Deterministic and installed.** T1 executor-in and T2 surface-in cells sit beside the
+  behavior: the real bridge over MCP stdio, with a stand-in `ssh` running the other host's
+  real entry under a separate HOME. `./run.sh check-remote-pair-installed --tgz <abs>`
+  (checkout-only) runs T2 against installed bytes and audits module realpaths, with a
+  checkout negative control. Six new mutant lanes (remote-pair display 3, receive 8,
+  roundtrip 5, send 12, transport 4, installed-audit 2): the committed set is now 1034
+  mutants across 79 lanes. `check:vitest` runs `check-remote-pair-installed-audit`.
+- **One real exchange, at `e632294`, not at this release's SHA.** On 2026-10-20 B's native
+  `entwurf_v2` went over one SSH call to A's mailbox
+  (`2026-10-19T22-19-47-662Z-13c897.msg`). A's one reply carried nonce
+  `107-live-20261020T071937-B-A-6e42d1`, and B read it at `2026-10-19T22:20:24.837Z`. The
+  pair was two already-open pi-durable siblings on two Linux hosts, which the user
+  reopened visibly beforehand. Before the send, the selected compiled bridge hash, the
+  bridge start time after the build and the record/owner/sender joins were checked on both
+  hosts. That check first caught one host still on a pre-feature build, so the trial was
+  held until a manual build and visible resume. This is L4 (one pair, one run). It is not
+  a release-gate MUST and was not re-measured at this release's SHA. Unmeasured: an OFF
+  target, negative paths over real SSH, other rails, more than one pair, non-Linux hosts,
+  GUI rendering, and SSH's own known-hosts side effects. Receipt:
+  [#107](https://github.com/junghan0611/entwurf/issues/107#issuecomment-6278665895).
+- Kill-power re-measured at this shipped SHA: none (all 1034 committed claims not re-proved,
+  #144).
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head 6ac477d944c6 surface
+  974e264f5879 -- `["bash","run.sh","check-tests-beside-behavior"]` 38/38 receipt
+  c8d59ba79b6a
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head 3afbfb660562 surface
+  bc925701184b -- `["bash","run.sh","check-tests-beside-behavior"]` 37/37 receipt
+  4e324810643d
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head 3afbfb660562 surface
+  bc925701184b -- `["bash","run.sh","check-remote-pair-installed-audit"]` 2/2 receipt
+  bfa5031abc54
+- **An earlier RED is kept as history.** The `check-tests-beside-behavior` group at the R2
+  candidate (head a7aaac7390d8 surface 07625e040df9, receipt b5d681a291f5) killed 34 of
+  37: three mutants failed type-checking rather than the claim. Their replacements were
+  repaired and the group re-ran on the next candidate. No kill-power was carried over from
+  that run.
+- **Static/LIVE split.** Local `check:full` is not run on this operator host and is not
+  counted as passed. The whole static floor is owed to this prepared SHA's exact push CI.
+  The earlier branch commit `e632294` passed all four jobs in run 39202248407; that is not
+  this SHA. The remote-pair installed gate is owed against this release's own candidate
+  tarball. The installed 11/11 on an earlier manually produced tarball is not this
+  release's evidence.
+- **Local LIVE r1, this release's non-static LIVE: MUST (non-static 23) PASS=23 FAIL=0
+  SKIP=0 UNRUN=0; BEHAVIOR PASS=1 FAIL=0.** It ran once, 09:40:03–09:44:49 KST on
+  2026-10-20, on head `de0bf03` plus this preparation's four metadata files (diff
+  `22d0a8b856ae`), with the candidate fingerprint (`22053b62bc0e`) equal at freeze, before
+  and after. The one-off driver (`15d7fb9dd49f`) ran the release gate's non-static steps
+  in its own order, command, environment and working directory; its 24 step lines equal
+  `release_gate()`'s by kind, name and argv, and that body is byte-identical to 0.39.0's.
+  GLG approved this shape for this cut: test-owned scratch sessions only, including
+  headless model turns and the gates' own close/resume, with no existing user or OFF
+  session as a target
+  ([#107](https://github.com/junghan0611/entwurf/issues/107#issuecomment-6280460022)). The
+  Codex step ran against a test-owned app-server in its own tmux session A (named pane pid
+  with its recorded start ticks, stopped by one TERM afterwards) from gate session S, with
+  the requested tiers `gpt-6-luna` and `openai-codex/gpt-6-luna`; that is the request, as
+  the step's own assertions check it, not a billing or model-identity proof. The compiled
+  bridge those steps spawned was rebuilt once beforehand, with GLG's approval, and matched
+  a private emit of this source 87/87. Receipts on the operator host:
+  `.tmp-verify/release-0.40.0/live-r1/` (`live.log` `4ced6b51ec03`, `steps.SHA256SUMS`
+  `f1b7e7b79d97`, 24 logs). It is not a local `release-gate --cut` PASS: the static step
+  did not run locally.
+- **Still owed before the tag.** The static floor is this prepared SHA's exact push CI
+  (four required jobs). This release is carrier-bearing, so its candidate is the
+  native-Windows preview workflow's pack at the prepared SHA (release skill M3w), accepted
+  by the eight Windows cells and the Linux container, never a local `npm pack`; the
+  remote-pair installed gate runs against that same candidate. VERIFY §3.4 (the strict
+  `doctor-meta-bridge` on an installed 0.40.0 Claude host in a new post-install session)
+  follows the accepted candidate. Tag, GitHub release and npm publication each need their
+  own GO.
+- **agy excluded from this cut.** VERIFY §3.7 (three agy doctors and a same-gid
+  native-push reply in a new operator conversation) is excluded by GLG's explicit decision
+  of 2026-10-20: unmeasured, not a PASS. It is a new decision for this cut only, not the
+  0.39.0 exclusion carried over and not a standing waiver
+  ([#107](https://github.com/junghan0611/entwurf/issues/107#issuecomment-6280460022)).
+- **Host residue after LIVE (P9).** The census counted 1934 directories owned by this
+  operator under `/tmp` after one stale, unused root of this repo's own prefix (16K) was
+  reclaimed, from 1935. The largest groups (`acp-cache-test`, `render-take-test`,
+  `caption-take-test`) do not match the prefixes this repo's gates mint, so their
+  ownership is not certified by that extractor; they were not deleted. One reparented
+  holder of a `/tmp` path is an unrelated editor daemon, untouched. Observation: the
+  memory-containment and chain gates left fresh roots of their own prefixes
+  (`entwurf-memguard-overlay-*`, `entwurf-chain-*`); that is a finding about those gates,
+  not fixed in this cut.
+- **Herdr follows core.** `plugins/herdr/runtime-lock.json` returns from the published npm
+  0.39.0 pin to the closed `herdr-checkout` source for this unpublished candidate, as
+  0.38.1 and 0.39.0 did; the comment is re-dated only. The runtime-bootstrap gate requires
+  an npm-source lock to equal the checkout's package version, so an npm 0.39.0 pin cannot
+  sit beside package 0.40.0. There are no plugin manifest, registry pin or snapshot
+  changes; re-pinning the measured 0.40.0 registry bytes is a separate Herdr snapshot
+  after publication.
+
 ## v2026.10.19-herdr.0.39.0 — Herdr Entwurf plugin 0.39.0
 
 A separate Herdr plugin snapshot, not another core release: core package 0.39.0 and its
