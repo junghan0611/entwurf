@@ -20,6 +20,6 @@ core 0.40.0과 Herdr 0.40.0 snapshot이 짝을 이뤄 출하됐다. 승인 원�
 # GUARDRAILS
 
 - npm publish, dist-tag 변경, operator Herdr install·runtime·pane 변경, operator upgrade는 하지 않는다. core tag와 그 bytes는 고치지 않는다.
-- local whole FULL·BODY, local Herdr build·sandbox, 노트북 SSH, 숨은 model 턴은 하지 않는다.
+- local whole FULL·BODY, local Herdr build·sandbox, 노트북 SSH, A 쪽 traffic, 숨은 model 턴은 하지 않는다.
 - 이 host의 모든 local pnpm·hook 실행 앞에 `pnpm_config_verify_deps_before_run=error`를 붙인다. deps가 stale이면 install하지 않고 멈춘다.
 - 수용된 후보와 그 사본, LIVE·PARTIAL·CI·C4 receipt, transcript와 meta-record는 지우지 않는다. 일괄 /tmp 청소나 자동 whole-floor rerun은 도입하지 않는다.
