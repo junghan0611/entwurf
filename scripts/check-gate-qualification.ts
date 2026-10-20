@@ -3501,7 +3501,7 @@ let manifestCount: number;
 		"remote-pair-installed-audit": 2,
 		"remote-pair-receive": 8,
 		"remote-pair-roundtrip": 5,
-		"remote-pair-send": 11,
+		"remote-pair-send": 12,
 		"remote-pair-transport": 4,
 		"retired-sent-surface": 2,
 		"resume-args": 6,

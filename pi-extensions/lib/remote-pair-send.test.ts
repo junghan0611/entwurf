@@ -16,7 +16,12 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { SenderEnvelope } from "./entwurf-control-rpc.ts";
-import type { EntwurfV2SurfaceRendered, SurfaceEntwurfV2Params } from "./entwurf-v2-surface.ts";
+import type { SuccessReceipt } from "./entwurf-v2-decider.ts";
+import {
+	type EntwurfV2SurfaceRendered,
+	renderEntwurfV2Result,
+	type SurfaceEntwurfV2Params,
+} from "./entwurf-v2-surface.ts";
 import { upsertMetaSession } from "./meta-session.ts";
 import { parseRemoteClaim } from "./remote-pair-receive.ts";
 import {
@@ -158,7 +163,7 @@ describe("route selection sits in front of the local decider", () => {
 });
 
 describe("the sender's receipt keeps the other host's facts as the other host's", () => {
-	it("[QK:REMOTE-ROUTE-RECEIPT-PATHS-OTHER-HOST] an accepted or non-delivered receipt quotes the other host's text verbatim and says its paths are on the other host", async () => {
+	it("[QK:REMOTE-ROUTE-RECEIPT-PATHS-OTHER-HOST] an accepted or error-reporting receipt quotes the other host's text verbatim and says its paths are on the other host", async () => {
 		const bText = "entwurf_v2 meta-mailbox → enqueued (/home/b/.pi/agent/meta-mailbox/x/1.msg)";
 		for (const [stdout, exit] of [
 			[{ kind: "dispatched", isError: false, text: bText }, 0],
@@ -171,6 +176,57 @@ describe("the sender's receipt keeps the other host's facts as the other host's"
 	});
 });
 
+describe("an error the other host reports is quoted, not reinterpreted", () => {
+	it("[QK:REMOTE-REPORTED-ERROR-NO-DELIVERY-INFERENCE] a post-write failure the other host reports keeps its own retry-safe:false text, and the sender's header claims neither non-delivery nor safety to resend", async () => {
+		// The lower texts are the existing local renderer's own output for the two execution
+		// failures that can follow a write: a mailbox enqueue whose later step threw, and a
+		// finalized send whose lock release failed. This is the text the receiving entry would
+		// print; it is not a reproduction of a real host failure.
+		const receipt: SuccessReceipt = {
+			ok: true,
+			action: "send",
+			transport: "meta-mailbox",
+			ownership: "ack-only",
+			observedLiveness: "unsupported",
+		};
+		const lowers = [
+			renderEntwurfV2Result({
+				kind: "execution-failed",
+				receipt,
+				transport: "meta-mailbox",
+				error: "signal write failed after the .msg was written",
+				retrySafe: false,
+			}),
+			renderEntwurfV2Result({
+				kind: "execution-failed",
+				receipt: { ...receipt, transport: "control-socket", observedLiveness: "alive" },
+				transport: "control-socket",
+				error: "release failed",
+				finalizedOutcome: "sent",
+				finalizedBoundary: "sent",
+				releaseFailed: true,
+				retrySafe: false,
+			}),
+		];
+		for (const lower of lowers) {
+			expect(lower.isError).toBe(true);
+			const r = await harness(ok({ kind: "dispatched", isError: true, text: lower.text }, 4)).run(
+				PARAMS,
+				ROUTE,
+				SENDER,
+			);
+			expect(r.isError).toBe(true);
+			expect(r.text).toContain(lower.text);
+			const header = r.text.split("\n")[0];
+			expect(header).toMatch(/reported an error/);
+			expect(header).toMatch(/not retried/);
+			expect(header).not.toMatch(/did not deliver|not delivered|undelivered|safe to (re)?send|retry-safe: true/i);
+		}
+		expect(lowers[0].text).toContain("retry-safe: false");
+		expect(lowers[1].text).toMatch(/do NOT retry/);
+	});
+});
+
 describe("the receipt is decided only when exit and JSON agree", () => {
 	it("[QK:REMOTE-RECEIPT-EXIT-AND-KIND-AGREE] each exit/kind pair decides; any disagreement, signal, timeout or malformed line is indeterminate", () => {
 		const acc = { kind: "dispatched", isError: false, text: "t" };
@@ -178,7 +234,7 @@ describe("the receipt is decided only when exit and JSON agree", () => {
 		const rej = { kind: "rejected", reason: "remote-pair-from-mismatch", detail: "d" };
 		const inv = { kind: "invalid", detail: "d" };
 		expect(classifyRemoteReceipt(ok(acc, 0)).kind).toBe("remote-accepted");
-		expect(classifyRemoteReceipt(ok(nd, 4)).kind).toBe("remote-non-delivery");
+		expect(classifyRemoteReceipt(ok(nd, 4)).kind).toBe("remote-reported-error");
 		expect(classifyRemoteReceipt(ok(rej, 3)).kind).toBe("remote-pair-refused");
 		expect(classifyRemoteReceipt(ok(inv, 2)).kind).toBe("remote-invalid");
 		const indeterminate: RemoteTransportResult[] = [

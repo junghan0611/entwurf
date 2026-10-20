@@ -14,7 +14,8 @@
  *
  * EXIT CONTRACT (stdout carries a JSON receipt line only where named):
  *   0 dispatched, the dispatch did not report an error — receipt on stdout
- *   4 dispatched, the dispatch reported a non-delivery (its text names the reject) — receipt
+ *   4 dispatched, the dispatch reported an error (its text says what is known, e.g. a
+ *     rejection or `retry-safe: false` after a possible write) — receipt
  *   3 refused by the pair scope check, no dispatch ran — receipt
  *   2 --pair is not this host's opt-in, the opt-in is absent/broken, or the claim is invalid; no
  *     dispatch ran — `{kind:"invalid"}` receipt;

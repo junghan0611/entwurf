@@ -56,7 +56,7 @@ export interface RemoteTransport {
 export type RemoteSendOutcome =
 	| { kind: "remote-accepted"; text: string }
 	| { kind: "remote-pair-refused"; reason: RemotePairRejectReason; detail: string }
-	| { kind: "remote-non-delivery"; text: string }
+	| { kind: "remote-reported-error"; text: string }
 	| { kind: "remote-invalid"; detail: string }
 	| { kind: "remote-indeterminate"; why: string; exitCode: number | null; stderrTail: string };
 
@@ -128,7 +128,9 @@ function tail(s: string): string {
 
 /**
  * Decide only on agreement. 0 + dispatched/!isError = accepted; 3 + rejected(pair reason) = pair
- * refused; 4 + dispatched/isError = the other host's own non-delivery; 2 + invalid = it refused our
+ * refused; 4 + dispatched/isError = the other host reported an error while processing (its own text
+ * says what is known, e.g. `retry-safe: false` after a possible write; this line infers neither
+ * delivery nor non-delivery); 2 + invalid = it refused our
  * input. Any other exit, a signal, a timeout, no line, more than one line, non-JSON, or a JSON
  * kind/field that disagrees with the exit is indeterminate.
  */
@@ -164,7 +166,7 @@ export function classifyRemoteReceipt(r: RemoteTransportResult): RemoteSendOutco
 		if (typeof o.text === "string") return { kind: "remote-accepted", text: o.text };
 	}
 	if (r.exitCode === 4 && keys === "isError,kind,text" && o.kind === "dispatched" && o.isError === true) {
-		if (typeof o.text === "string") return { kind: "remote-non-delivery", text: o.text };
+		if (typeof o.text === "string") return { kind: "remote-reported-error", text: o.text };
 	}
 	if (r.exitCode === 3 && keys === "detail,kind,reason" && o.kind === "rejected") {
 		if (typeof o.reason === "string" && PAIR_REJECT_REASONS.includes(o.reason) && typeof o.detail === "string") {
@@ -185,10 +187,13 @@ function render(route: RemoteRouteDeclaration, o: RemoteSendOutcome): EntwurfV2S
 				isError: false,
 				text: `entwurf_v2 remote ${via} → accepted by the other host (its fact; read/answer unknown until a reply arrives; paths below are on the other host)\n${o.text}`,
 			};
-		case "remote-non-delivery":
+		case "remote-reported-error":
+			// The other host's dispatch returned isError. That can follow a write (an enqueue whose
+			// stamp or signal then threw is `retry-safe: false`), so this header claims neither
+			// non-delivery nor safety to resend: the other host's own text below is the fact.
 			return {
 				isError: true,
-				text: `entwurf_v2 remote ${via} → the other host did not deliver (paths below are on the other host)\n${o.text}`,
+				text: `entwurf_v2 remote ${via} → the other host reported an error while processing; read its receipt below, delivery is not inferred from this line; not retried (paths below are on the other host)\n${o.text}`,
 			};
 		case "remote-pair-refused":
 			return {

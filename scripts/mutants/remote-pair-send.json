@@ -170,6 +170,25 @@
 				"argv": ["bash", "scripts/build-bridge.sh"],
 				"output": "mcp/entwurf-bridge/dist"
 			}
+		},
+		{
+			"claim": "REMOTE-REPORTED-ERROR-NO-DELIVERY-INFERENCE",
+			"title": "an error the other host reports after a possible write is headed as a non-delivery, inviting a resend that would deliver twice",
+			"subject": "pi-extensions/lib/remote-pair-send.ts",
+			"find": [
+				"\t\t\t\ttext: `entwurf_v2 remote ${via} → the other host reported an error while processing; read its receipt below, delivery is not inferred from this line; not retried (paths below are on the other host)\\n${o.text}`,"
+			],
+			"replace": [
+				"\t\t\t\ttext: `entwurf_v2 remote ${via} → the other host did not deliver (paths below are on the other host)\\n${o.text}`,"
+			],
+			"gate": ["bash", "run.sh", "check-tests-beside-behavior"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:REMOTE-REPORTED-ERROR-NO-DELIVERY-INFERENCE]",
+			"signatureSource": "pi-extensions/lib/remote-pair-send.test.ts",
+			"build": {
+				"argv": ["bash", "scripts/build-bridge.sh"],
+				"output": "mcp/entwurf-bridge/dist"
+			}
 		}
 	]
 }

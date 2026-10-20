@@ -589,8 +589,8 @@ This is an opt-in route between two existing citizens on two hosts. It is off un
   - Otherwise it spawns one `ssh -o BatchMode=yes -o ConnectTimeout=10 <alias> entwurf remote-pair-receive --pair <remotePairFile>`, with no shell and the claim on stdin.
 - **Receive.** The entry accepts only when `--pair` equals its own canonical file path. Canonical means the normalized expected path, not realpath equivalence: a spelling through a symlinked home alias is refused. That file is the entry's whole scope. It refuses a `from` or `target` outside the declared pair before any mailbox mutation. A match goes to that host's existing local `entwurf_v2` dispatch, so every deliverability rule of the target's rail applies there; the measured pair used the self-fetch mailbox.
 - **Outcomes.** The send ends in one of three outcomes:
-  - the other host's receipt, quoted verbatim (its paths are on the other host);
-  - the other host's named refusal;
+  - the other host's receipt, quoted verbatim (its paths are on the other host). This is either an acceptance or an error the other host reported while processing (`remote-reported-error`, exit 4). That error can follow a write, for example an enqueue whose later step threw and is reported `retry-safe: false`. The sender's header therefore claims neither non-delivery nor safety to resend; the quoted text is the fact;
+  - the other host's named refusal, made before any mutation: a pair mismatch (exit 3) or invalid input (exit 2);
   - `remote-indeterminate`.
 
   A result is decided only when the exit code and the JSON kind agree. There is no retry. An unanswered message stays unconfirmed. Acceptance is not a read or a reply. Neither side learns whether its last message was read unless the other side answers, and there is no third ACK.
