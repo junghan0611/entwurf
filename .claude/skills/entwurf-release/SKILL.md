@@ -421,6 +421,17 @@ Run this **twice**: once the moment P5's release gate reports its verdict (fresh
 trail, largest residue), and again here at the end of `prepare`. `publish` calls it a
 third time after U3. It is the same procedure each time.
 
+On a host short of disk, the same order also closes any single gate or sandbox
+journey run outside a cut, before the next one starts: confirm the gate's own
+runtime children have exited; keep its unique receipts, hashes, candidates,
+transcripts, meta-records and model databases (copy a small log that lives only
+inside the scratch into the ignored evidence directory, with its hash, first);
+then remove only that gate's regenerable scratch, once nothing uses it, by exact
+path. An operator or citizen process (editor, language server, container), an
+earlier lane's leftovers, a path whose owner is not proven, and any record or
+memory are never in scope. This is a hand step per gate, not a sweeper: no
+scheduled or bulk `/tmp` clean, no automatic rerun.
+
 The floor and the LIVE gates are the heaviest resource consumers this repo has, and
 what they leave behind is invisible until a disk fills. Measure it on the host that
 just ran them, and reclaim only what nothing is using.
