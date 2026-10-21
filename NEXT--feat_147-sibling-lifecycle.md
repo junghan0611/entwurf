@@ -6,10 +6,10 @@ Branch lane for [#147](https://github.com/junghan0611/entwurf/issues/147): the c
 
 - [x] **1. 관측 1.** GLG의 손으로 닫고 같은 native id로 TUI resume했다. CC 형제가 같은 tuple로 attach했다(n=1). 기록은 [#147 6309403352](https://github.com/junghan0611/entwurf/issues/147#issuecomment-6309403352).
 - [x] **2. 설계 초안 + 이슈 초점 갱신.** r1(Opus2 review B1, D1–D8 반영), #147 본문 r5. G1–G4는 아직 열린 결정이다.
-- [ ] **3. 구현.** ← CURRENT: L1 커밋 `11869b8`. **L2(CC same-id visible resume + B1 arm binding) 코드·scoped review·영향 PARTIAL 마감. GLG가 체크포인트 커밋과 L3/G3 구현·격리 검증의 연속 진행을 승인했다(2026-10-21).** 대상 네 칸은 현재 갱신된 live Pi·CC의 퇴근과 resume이고 tmux·Linux가 먼저다. CC만, bridge만으로는 완료가 아니다.
+- [ ] **3. 구현.** ← CURRENT: L1 `11869b8` → L2 `0771eac` → 내부 종료 부품 `9d47f1b` 커밋. **Pi/CC request adapter 코드·독립 리뷰·동일 후보 영향 PARTIAL70·격리 compiled consumer28 마감 → 체크포인트 커밋 뒤 얇은 공통 core 연결.** GLG가 구현·격리 검증·체크포인트 커밋의 연속 진행을 승인했다. 대상 네 칸은 현재 갱신된 live Pi·CC의 퇴근과 resume이고 tmux·Linux가 먼저다. CC만, bridge만으로는 완료가 아니다.
 - [ ] **4. test-owned LIVE 한 번 + 착륙.** 별도 승인으로 한다.
 
-현재 좌표: 1, 2 완료 → 3의 L1 커밋·L2 코드/영향 검증 마감 및 체크포인트 커밋 → L3/G3 내부 부품 두 개의 코드·리뷰·PARTIAL 마감 → core 통합 진행 → 4의 실제 작업 형제 종료는 별도 grant.
+현재 좌표: 1, 2 완료 → 3의 L1/L2/내부 종료 부품 커밋·양쪽 request adapter 검증 마감 → adapter 체크포인트 커밋·공통 core 통합 → 4의 실제 작업 형제 종료는 별도 grant.
 
 # NOW
 
@@ -22,14 +22,15 @@ Branch lane for [#147](https://github.com/junghan0611/entwurf/issues/147): the c
 - **운영 사건(2026-10-21 oracle):** dev checkout으로 뜬 Pi가 새 key로 record를 썼다. 거절이 **관측된** 것은 CC hook(`upsert failed`), pdc(옛 compiled dist), coor의 옛 bridge뿐이다. Codex birth/helper, Copilot extension·assembled, OMP bridge·receive, 외부 `entwurf-peek` mirror는 옛 codec(grep)과 whole-store certify(source) 근거로 **거절이 예상**될 뿐 실행 관측은 없다 — Pi/CC 완료 뒤 별도 순서. GLG 18:55 직접 지시로 checkout dist build-bridge 1회 + `install-meta-bridge` 1회만 roll-forward했다. **수동 identity repair(record rewrite·삭제·fresh-cut·옛 shape rollback)는 0**이고, 정상 hook/Pi attach에 의한 record 갱신은 계속된다. **checkout source 변경 자체가 다음 Pi 시작에 운영 배포가 된다.** G4 전체 coherent cut은 끝나지 않았다.
 - 미측정: CC dormant→resume LIVE 여정, `CwdChanged` 뒤 record cwd에서 `claude --resume`이 세션을 찾는지(2.1.306), resume 뒤 안 읽은 mail이 턴을 깨우는지, 코디 host의 실제 toolset.
 - 영향 PARTIAL 마감(coor 2026-10-21 직접 11개 receipt 파싱): 167 KILLED, 모든 control green/seal stable. **한 후보의 167이 아니다:** 40@56d7a112, 25+20@711a78c1, 13+10+5@a4b5c5f3, 4@3fbce44c, 4+4+1+41@d7e5e081. 후보 간 수선은 test-only였고 이미 green인 group 입력은 불변이었다. 실패 진단도 보존했다. FULL/실제 native/최종 release SHA kill-power 증거가 아니다.
-- L3 내부 부품 체크포인트: Pi TUI idle/no-pending SDK shutdown + same-path listener/generation 보호, CC Linux pidfd fixed helper/완전한 go frame/무신호 취소/동일 process exit 관측. 독립 리뷰와 focused 완료. coor가 직접 파싱한 **동일 후보 PARTIAL Pi9/9 + CC11/11**, control green/seal stable. 원본 `/tmp/entwurf-147-g3-partial-qw228M/receipt-{1,2}.json`, 검증 diff `3e7525d5d26acc3e559b3871c2a9eb5e926c1c5667d93d9491781b68ce1ddbc8`(후속 NEXT 갱신은 문서만). 공개 MCP/contact/tool 노출·실제 Native 종료는 아직 없다.
-- Next: 이 내부 부품을 정상 hooks 체크포인트 커밋한 뒤 **core의 late record/receiver/sender binding 재검사 + helper/RPC 연결**을 구현·격리 검증한다. 새 권한 DB/manager/자동 retry를 만들지 않는다. 실제 CC graceful/flush/children은 미검증이고, process-incarnation 종료·동시 session-switch 경합·하네스 권한면 수용은 GLG 답변 대기다.
+- L3 내부 부품 체크포인트 **커밋 `9d47f1ba9f3663166c72c7bb0f71328cd6e9ca16`**(정상 hooks/types, push 없음): Pi TUI idle/no-pending SDK shutdown + same-path listener/generation 보호, CC Linux pidfd fixed helper/완전한 go frame/무신호 취소/동일 process exit 관측. 독립 리뷰와 focused 완료. coor가 직접 파싱한 **동일 후보 PARTIAL Pi9/9 + CC11/11**, control green/seal stable. 원본 `/tmp/entwurf-147-g3-partial-qw228M/receipt-{1,2}.json`, 검증 diff `3e7525d5d26acc3e559b3871c2a9eb5e926c1c5667d93d9491781b68ce1ddbc8`(후속 NEXT 갱신은 문서만). 공개 MCP/contact/tool 노출·실제 Native 종료는 아직 없다.
+- **양쪽 request adapter 코드/검증 마감(2026-10-21, parent `9d47f1b`):** CC는 helper ready 전후 fresh record/receiver/sender의 birthday/binding/domain/pid+key를 대조하고 drift 시 cancel, 실패 latch·완전한 출력·닫힌 terminal shape를 보존한다. Pi는 고정 target RPC1회/닫힌 응답/transport unknown이며 실제 handler와 test가 production envelope builder를 함께 쓴다. 독립 리뷰 마감, focused22/22·네 type fence 통과. **동일 후보 PARTIAL9+6+15+40=70 KILLED**, 원본 `/tmp/entwurf-147-core-partial-9YfGs1/receipt-{1,2,3,4}.json`; 코디 직접 digest·seal·90개 현재 파일 hash 대조0 mismatch. full tested diff `3d14159104d7bcb613467c039a47c8aa0b1be79ec5d7425c6934e122e78f2ea9`, workSurface `6dc788fa8155bafa5430161281e8b62639a30c4af3a31a5cdd7e6934f97a9593`. 현재 NEXT 갱신은 검증 뒤 문서 변경이다. 현재 바이트의 private compiled consumer28PASS/E0 누락 named RED도 확인했고 operator dist는 이 단계에서 빌드하지 않았다. 상세 `.tmp-verify/147-g3/core-final/coor-adapters-completion.md`. manifest의 초기 두 find 규약 오류와 비정식 piecewise pre-check도 원본 보존; 정식70은 보정 뒤 한 번이다.
+- Next: adapter 체크포인트를 정상 hooks로 커밋한 뒤, **caller 정체성/self-refusal → 기존 target lock → fresh addressable target/closed backend → 기존 adapter1회 → 결과 보존/정확1회 release**의 내부 공통 core를 연결한다. Astra의 ignored `core-dispatch-proposal.md`를 먼저 읽고 scope를 고정한다. 공개 MCP/contact 노출은 아직 없다. actor 표시는 권한이 아니며 새 grant/role DB·manager·watcher·retry를 만들지 않는다. Pi ACK는 exit가 아니고 CC exit는 conversation/flush/children 보장이 아니다. process-incarnation 종료·동시 session-switch 경합·하네스 권한면 수용은 GLG 답변 대기다.
 - G3 pack 경계 정정: checkout `check-pack`/`npm pack --dry-run`이 prepack으로 dist를 쓴 실행이 3회 있었다(구현자 로그/보고). `.tmp-verify/147-g3/coor-pack-boundary.md`. 운영/build0 주장은 이 범위에서 철회했다. 이후 코디는 private HOME/XDG + `--ignore-scripts` 파일목록만 확인했고, 검증 배치는 현재 운영 바이트를 동결했다. rollback/재설치는 하지 않았다.
 - 승인 범위: Pi/CC 우선 구현·격리 검증·체크포인트 커밋을 npm publish 전까지 계속한다. 대기: 실제 작업 형제를 종료하는 L0/caller LIVE, G4의 타하네스 전환, git push·태그·GitHub Release의 릴리즈 mode. npm publish는 명시적으로 하지 않는다.
 - Read:
   - #147 본문 상단과 thread
   - `.tmp-verify/147-l2/proposal-b1-binding.md`, `r2/opus2-l2-r2-review.md`, `astra-advisory-20261021T1919.md`
-  - `pi-extensions/lib/{resume-launch-identity,entwurf-v2-visible-resume,mux-resume-call,meta-session}.ts`, `pi-extensions/meta-bridge-hook.ts`
+  - `pi-extensions/lib/{resume-launch-identity,entwurf-v2-visible-resume,mux-resume-call,meta-session,pi-retire-request,cc-retire-request,control-retire}.ts`, `pi-extensions/meta-bridge-hook.ts`
 - Do not touch:
   - L3의 승인된 최소 부품 구현·격리 검증은 진행하되, process-incarnation 권한·session-switch 경합·vendor graceful 미검증을 해결됐다고 쓰지 않는다. 실제 작업 형제를 시험 대상으로 종료하지 않는다.
   - 운영 세션과 기존 record/transcript로 실험하지 않는다. record rewrite·삭제·fresh-cut·옛 shape rollback 금지(roll-forward만).

@@ -1,0 +1,171 @@
+{
+	"schemaVersion": 1,
+	"lane": "cc-retire-request",
+	"mutants": [
+		{
+			"claim": "CCREQ-STABLE-GO-EXITS",
+			"title": "a stable binding writes cancel instead of go, so a retirement the caller authorised never happens",
+			"subject": "pi-extensions/lib/cc-retire-request.ts",
+			"find": ["\t\t\twrite(\"go\");"],
+			"replace": ["\t\t\twrite(\"cancel\");"],
+			"gate": ["bash", "run.sh", "check-cc-retire-request"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:CCREQ-STABLE-GO-EXITS]",
+			"signatureSource": "pi-extensions/lib/cc-retire-request.test.ts"
+		},
+		{
+			"claim": "CCREQ-RECORD-DRIFT-CANCELS",
+			"title": "the record is no longer compared with what the caller authorised, so a committed re-arm after ready still gets go",
+			"subject": "pi-extensions/lib/cc-retire-request.ts",
+			"find": ["\t\tif (record[key] !== expected[key]) {"],
+			"replace": ["\t\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-cc-retire-request"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:CCREQ-RECORD-DRIFT-CANCELS]",
+			"signatureSource": "pi-extensions/lib/cc-retire-request.test.ts"
+		},
+		{
+			"claim": "CCREQ-RECEIVER-DRIFT-CANCELS",
+			"title": "the receiver's native session is not joined to the record, so a marker re-armed for another session still gets go",
+			"subject": "pi-extensions/lib/cc-retire-request.ts",
+			"find": ["\t\tmarker.backend !== \"claude-code\" ||\n\t\tmarker.nativeSessionId !== record.nativeSessionId\n"],
+			"replace": ["\t\tmarker.backend !== \"claude-code\"\n"],
+			"gate": ["bash", "run.sh", "check-cc-retire-request"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:CCREQ-RECEIVER-DRIFT-CANCELS]",
+			"signatureSource": "pi-extensions/lib/cc-retire-request.test.ts"
+		},
+		{
+			"claim": "CCREQ-SENDER-DRIFT-CANCELS",
+			"title": "the sender marker's garden is not compared, so an owner that switched to another citizen in place is still terminated",
+			"subject": "pi-extensions/lib/cc-retire-request.ts",
+			"find": ["\t\tsender.gardenId !== gid ||\n"],
+			"replace": [""],
+			"gate": ["bash", "run.sh", "check-cc-retire-request"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:CCREQ-SENDER-DRIFT-CANCELS]",
+			"signatureSource": "pi-extensions/lib/cc-retire-request.test.ts"
+		},
+		{
+			"claim": "CCREQ-PRECHECK-REFUSES",
+			"title": "an unbound record is not refused by name, so a record no arm ever touched reaches the binding comparison as if it had one",
+			"subject": "pi-extensions/lib/cc-retire-request.ts",
+			"find": ["\tif (record.attachIncarnation === null) {"],
+			"replace": ["\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-cc-retire-request"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:CCREQ-PRECHECK-REFUSES]",
+			"signatureSource": "pi-extensions/lib/cc-retire-request.test.ts"
+		},
+		{
+			"claim": "CCREQ-HELPER-MISSING-REFUSED",
+			"title": "a missing packaged helper is not refused, so the interpreter is started on a path that is not the helper",
+			"subject": "pi-extensions/lib/cc-retire-request.ts",
+			"find": ["\tif (helperPath === null) {"],
+			"replace": ["\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-cc-retire-request"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:CCREQ-HELPER-MISSING-REFUSED]",
+			"signatureSource": "pi-extensions/lib/cc-retire-request.test.ts"
+		},
+		{
+			"claim": "CCREQ-HELPER-PATH-FIXED",
+			"title": "the helper entry is followed through a symlink, so a file that is not the packaged bytes can stand in for the helper",
+			"subject": "pi-extensions/lib/cc-retire-request.ts",
+			"find": ["return fs.lstatSync(candidate).isFile() ? candidate : null;"],
+			"replace": ["return fs.statSync(candidate).isFile() ? candidate : null;"],
+			"gate": ["bash", "run.sh", "check-cc-retire-request"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:CCREQ-HELPER-PATH-FIXED]",
+			"signatureSource": "pi-extensions/lib/cc-retire-request.test.ts"
+		},
+		{
+			"claim": "CCREQ-PROTOCOL-NOT-SUCCESS",
+			"title": "a ready line naming another pid is accepted, so the helper's process and the binding the adapter checked need not be the same",
+			"subject": "pi-extensions/lib/cc-retire-request.ts",
+			"find": [" || line.pid !== owner.pid)"],
+			"replace": [")"],
+			"gate": ["bash", "run.sh", "check-cc-retire-request"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:CCREQ-PROTOCOL-NOT-SUCCESS]",
+			"signatureSource": "pi-extensions/lib/cc-retire-request.test.ts"
+		},
+		{
+			"claim": "CCREQ-LATCH-NO-GO-AFTER-FAILURE",
+			"title": "every stdout chunk forgets the protocol failure an earlier chunk recorded, so a buffered ready behind a bad line is parsed on the next chunk and gets go",
+			"subject": "pi-extensions/lib/cc-retire-request.ts",
+			"find": ["\t\tchild.stdout.on(\"data\", (chunk: Buffer) => {"],
+			"replace": ["\t\tchild.stdout.on(\"data\", (chunk: Buffer) => {\n\t\t\tprotocolError = null;"],
+			"gate": ["bash", "run.sh", "check-cc-retire-request"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:CCREQ-LATCH-NO-GO-AFTER-FAILURE]",
+			"signatureSource": "pi-extensions/lib/cc-retire-request.test.ts"
+		},
+		{
+			"claim": "CCREQ-CONTROL-WRITE-THROW-UNKNOWN",
+			"title": "a go whose write threw leaves no trace, so the unknown outcome no longer names why it is unknown",
+			"subject": "pi-extensions/lib/cc-retire-request.ts",
+			"find": ["\t\t\t\tprotocolError ??= `writing the ${frame} frame threw: ${causeOf(err)}`;\n"],
+			"replace": [""],
+			"gate": ["bash", "run.sh", "check-cc-retire-request"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:CCREQ-CONTROL-WRITE-THROW-UNKNOWN]",
+			"signatureSource": "pi-extensions/lib/cc-retire-request.test.ts"
+		},
+		{
+			"claim": "CCREQ-TRAILING-OUTPUT-NOT-SUCCESS",
+			"title": "incomplete trailing stdout is ignored, so a valid exited line followed by junk is reported as an observed exit",
+			"subject": "pi-extensions/lib/cc-retire-request.ts",
+			"find": ["\t\t\tif (buf.length > 0)"],
+			"replace": ["\t\t\tif (false)"],
+			"gate": ["bash", "run.sh", "check-cc-retire-request"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:CCREQ-TRAILING-OUTPUT-NOT-SUCCESS]",
+			"signatureSource": "pi-extensions/lib/cc-retire-request.test.ts"
+		},
+		{
+			"claim": "CCREQ-TERMINAL-SHAPE-CLOSED",
+			"title": "terminal lines are no longer closed to the helper's wire shape, so extra or contradicting keys pass as a known outcome",
+			"subject": "pi-extensions/lib/cc-retire-request.ts",
+			"find": ["\tif (!terminalShapeOk(line)) return null;\n"],
+			"replace": [""],
+			"gate": ["bash", "run.sh", "check-cc-retire-request"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:CCREQ-TERMINAL-SHAPE-CLOSED]",
+			"signatureSource": "pi-extensions/lib/cc-retire-request.test.ts"
+		},
+		{
+			"claim": "CCREQ-DOMAIN-FROM-WRITER",
+			"title": "the receiver owner kind is not checked, so another harness's process holding a matching marker is treated as a Claude Code owner",
+			"subject": "pi-extensions/lib/cc-retire-request.ts",
+			"find": ["\tif (marker.ownerKind !== CC_RECEIVER_OWNER_KIND) {"],
+			"replace": ["\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-cc-retire-request"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:CCREQ-DOMAIN-FROM-WRITER]",
+			"signatureSource": "pi-extensions/lib/cc-retire-request.test.ts"
+		},
+		{
+			"claim": "CCREQ-ABORT-BEFORE-GO-NO-SIGNAL",
+			"title": "the requester's AbortSignal is dropped from the helper exchange, so neither the abort listener nor the ready-time abort check can stop a go while the fd is held (the preflight abort checks before spawn are untouched)",
+			"subject": "pi-extensions/lib/cc-retire-request.ts",
+			"find": ["\t\topts.signal?.addEventListener(\"abort\", onAbort, { once: true });"],
+			"replace": ["\t\topts = { ...opts, signal: undefined };"],
+			"gate": ["bash", "run.sh", "check-cc-retire-request"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:CCREQ-ABORT-BEFORE-GO-NO-SIGNAL]",
+			"signatureSource": "pi-extensions/lib/cc-retire-request.test.ts"
+		},
+		{
+			"claim": "CCREQ-ABORT-AFTER-GO-UNKNOWN",
+			"title": "an abort after go is not recorded, so its ending is reported as a generic protocol failure instead of the requester's abort",
+			"subject": "pi-extensions/lib/cc-retire-request.ts",
+			"find": ["\t\t\t\tabortedAfterGo = true;\n"],
+			"replace": [""],
+			"gate": ["bash", "run.sh", "check-cc-retire-request"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:CCREQ-ABORT-AFTER-GO-UNKNOWN]",
+			"signatureSource": "pi-extensions/lib/cc-retire-request.test.ts"
+		}
+	]
+}

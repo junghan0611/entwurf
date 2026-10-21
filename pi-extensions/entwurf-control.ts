@@ -87,6 +87,7 @@ import {
 	endRetireResponse,
 	invalidateControlBinding,
 	requestControlRetire,
+	retireResponseEnvelope,
 	startOrRebindControlServer,
 } from "./lib/control-retire.js";
 import { sendReceiptBoundary } from "./lib/control-send-receipt.js";
@@ -511,14 +512,7 @@ async function handleCommand(
 	// exists between the receiver's final same-session checks and the SDK void call.
 	if (command.type === "retire") {
 		const result = requestControlRetire(state, serverBinding, residentGardenId, command);
-		endRetireResponse(socket, {
-			type: "response",
-			command: "retire",
-			id,
-			success: result.boundary === "shutdown-requested",
-			data: result,
-			...(result.boundary !== "shutdown-requested" ? { error: result.reason } : {}),
-		});
+		endRetireResponse(socket, retireResponseEnvelope(result, id));
 		return;
 	}
 

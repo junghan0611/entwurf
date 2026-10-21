@@ -3,6 +3,7 @@
  * No prompt, abort, queue clearing, deferred shutdown, or retry is performed here.
  */
 import type * as net from "node:net";
+import type { RpcResponse } from "./entwurf-control-rpc.js";
 
 export interface RetireContext {
 	readonly mode: string;
@@ -145,6 +146,21 @@ export function invalidateControlBinding(state: RetireState): void {
 	state.closing = true;
 	state.binding = null;
 	state.context = null;
+}
+
+/** The production receiver's one wire envelope. The RpcResponse import is type-only:
+ * no runtime dependency on the RPC client is introduced. An absent id is omitted by JSON;
+ * error is present only for refused/unknown, matching the strict core-side parser.
+ */
+export function retireResponseEnvelope(result: RetireResult, id?: string): RpcResponse {
+	return {
+		type: "response",
+		command: "retire",
+		id,
+		success: result.boundary === "shutdown-requested",
+		data: result,
+		...(result.boundary !== "shutdown-requested" ? { error: result.reason } : {}),
+	};
 }
 
 /** One response, then FIN; never wait for SDK termination to acknowledge its request.

@@ -259,6 +259,11 @@
 		// mux: the launcher is an injected seam the SURFACES supply (docs/mux-launch-rail.md §11).
 		// Typechecked by scripts/tsconfig.json via its gate (pi-extensions/lib/entwurf-v2-visible-resume.test.ts).
 		"pi-extensions/lib/entwurf-v2-visible-resume.ts",
+		// cc-retire-request.ts is the #147 G3 core-side Claude Code retire adapter — a lib→lib VALUE
+		// importer (meta-session / entwurf-v2-visible-resume) with explicit `.ts` extensions, same
+		// fence and reason as visible-resume above. Received by scripts/tsconfig.json and
+		// mcp/tsconfig.json through their existing `../pi-extensions/lib/**/*.ts` include.
+		"pi-extensions/lib/cc-retire-request.ts",
 		// remote-pair-receive.ts is #107's receiving half for one declared remote pair — a lib→lib
 		// VALUE importer (requireGardenId from meta-session.ts) with explicit `.ts` extensions, same
 		// fence. Typechecked by scripts/tsconfig.json via its gate

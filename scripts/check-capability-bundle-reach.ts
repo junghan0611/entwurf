@@ -30,6 +30,8 @@
  *
  *   - C (#147 L2 B1): the compiled Claude Code hook's static `from` closure equals what
  *         the installer copies, and the hook staged with only that closure runs.
+ *   - D (#147 G3): the compiled Claude Code retire adapter resolves its helper beside itself,
+ *         byte-identical to pi-extensions/lib/cc-retire-pidfd.py.
  *
  * Deterministic: filesystem, import, and ONE shipped-hook child process (C2) that writes a
  * record into its own private store under a private HOME and XDG roots. No backend, vendor
@@ -216,6 +218,45 @@ for (const copy of copies) {
 		"C2: the compiled hook, staged with only that closure, runs to a written record [QK:BUNDLE-REACH-COMPILED-HOOK-RUNS]",
 		run.status === 0 && fs.existsSync(sessions) && fs.readdirSync(sessions).some((n) => n.endsWith(".meta.json")),
 		`--- exit ${run.status} ---\n${run.stderr}`,
+	);
+}
+
+// D — the COMPILED Claude Code retire adapter reaches its helper from where it lives (#147 G3).
+// `ccRetireHelperPath()` resolves a fixed basename beside its own module, which is a tautology from
+// source; only the emitted copy can say whether build-bridge.sh put the bytes next to it. Import and
+// path only — nothing is spawned or signalled.
+{
+	const DIST_ADAPTER = path.join(BRIDGE_DIST, "pi-extensions", "lib", "cc-retire-request.js");
+	const HELPER_SOURCE = path.join(REPO, "pi-extensions", "lib", "cc-retire-pidfd.py");
+	ok(
+		"D0: the compiled retire adapter exists (a missing dist is a failure, not a skip)",
+		fs.existsSync(DIST_ADAPTER),
+		`--- expected ---\n${DIST_ADAPTER}\nrun: pnpm run build-bridge`,
+	);
+	const adapter = await import(pathToFileURL(DIST_ADAPTER).href);
+	const resolved: string | null = adapter.ccRetireHelperPath();
+	ok(
+		"D1: the compiled adapter resolves the helper beside itself, byte-identical to the canonical source [QK:BUNDLE-REACH-CC-RETIRE-HELPER]",
+		resolved === path.join(path.dirname(DIST_ADAPTER), "cc-retire-pidfd.py") &&
+			fs.readFileSync(resolved).equals(fs.readFileSync(HELPER_SOURCE)),
+		`--- resolved ---\n${resolved}\n--- canonical ---\n${HELPER_SOURCE}`,
+	);
+}
+
+// E — ask the actual emitted Pi request adapter, not its source-path test import.
+// Pure parsing only: no socket, SDK lifecycle, model, or operator state is touched.
+{
+	const entry = path.join(BRIDGE_DIST, "pi-extensions", "lib", "pi-retire-request.js");
+	ok("E0: the compiled Pi retire adapter exists (missing emission is not a skip)", fs.existsSync(entry));
+	const adapter = await import(pathToFileURL(entry).href);
+	const response = { type: "response", command: "retire", success: true, data: { boundary: "shutdown-requested" } };
+	const accepted = adapter.parsePiRetireResponse(response);
+	const rejected = adapter.parsePiRetireResponse({ ...response, command: "send" });
+	ok(
+		"E1: the shipped Pi adapter loads, accepts a requested reply, and rejects a foreign command as unknown [QK:BUNDLE-REACH-PI-RETIRE-ADAPTER]",
+		accepted.boundary === "shutdown-requested" &&
+			rejected.boundary === "unknown" &&
+			rejected.reason === "malformed-response",
 	);
 }
 

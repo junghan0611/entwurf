@@ -1,0 +1,72 @@
+{
+	"schemaVersion": 1,
+	"lane": "pi-retire-request",
+	"mutants": [
+		{
+			"claim": "PI-RETIRE-PREFLIGHT",
+			"title": "a mismatched native session escapes preflight and sends a retirement RPC",
+			"subject": "pi-extensions/lib/pi-retire-request.ts",
+			"find": ["\t\ttarget.nativeSessionId !== expected.nativeSessionId ||\n"],
+			"replace": [""],
+			"gate": ["bash", "run.sh", "check-pi-retire-request"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:PI-RETIRE-PREFLIGHT]",
+			"signatureSource": "pi-extensions/lib/pi-retire-request.test.ts"
+		},
+		{
+			"claim": "PI-RETIRE-WIRE",
+			"title": "the one fixed retirement request carries a different native session than the certified record",
+			"subject": "pi-extensions/lib/pi-retire-request.ts",
+			"find": ["{ type: \"retire\", gardenId: target.gardenId, nativeSessionId: target.nativeSessionId }"],
+			"replace": ["{ type: \"retire\", gardenId: target.gardenId, nativeSessionId: \"wrong-native-id\" }"],
+			"gate": ["bash", "run.sh", "check-pi-retire-request"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:PI-RETIRE-WIRE]",
+			"signatureSource": "pi-extensions/lib/pi-retire-request.test.ts"
+		},
+		{
+			"claim": "PI-RETIRE-PARSE-CLOSED",
+			"title": "a failure response with a requested boundary is incorrectly accepted",
+			"subject": "pi-extensions/lib/pi-retire-request.ts",
+			"find": ["if (response.success === true && data.boundary === \"shutdown-requested\") {"],
+			"replace": ["if (data.boundary === \"shutdown-requested\") {"],
+			"gate": ["bash", "run.sh", "check-pi-retire-request"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:PI-RETIRE-PARSE-CLOSED]",
+			"signatureSource": "pi-extensions/lib/pi-retire-request.test.ts"
+		},
+		{
+			"claim": "PI-RETIRE-REFUSALS",
+			"title": "the known receiver refusal domain is dropped and every named refusal becomes unknown",
+			"subject": "pi-extensions/lib/pi-retire-request.ts",
+			"find": ["if (data.boundary === \"refused\" && RECEIVER_REFUSALS.includes(data.reason as ReceiverRefusal)) {"],
+			"replace": ["if (false) {"],
+			"gate": ["bash", "run.sh", "check-pi-retire-request"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:PI-RETIRE-REFUSALS]",
+			"signatureSource": "pi-extensions/lib/pi-retire-request.test.ts"
+		},
+		{
+			"claim": "PI-RETIRE-TRANSPORT",
+			"title": "a timeout or lost response is misreported as a certain receiver refusal",
+			"subject": "pi-extensions/lib/pi-retire-request.ts",
+			"find": ["\t\treturn { boundary: \"unknown\", reason: \"transport-error\" };"],
+			"replace": ["\t\treturn { boundary: \"refused\", phase: \"receiver\", reason: \"target-closing\" };"],
+			"gate": ["bash", "run.sh", "check-pi-retire-request"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:PI-RETIRE-TRANSPORT]",
+			"signatureSource": "pi-extensions/lib/pi-retire-request.test.ts"
+		},
+		{
+			"claim": "PI-RETIRE-ENVELOPE",
+			"title": "the production receiver drops its error reason so the strict adapter cannot interpret refusals",
+			"subject": "pi-extensions/lib/control-retire.ts",
+			"find": ["\t\t...(result.boundary !== \"shutdown-requested\" ? { error: result.reason } : {}),\n"],
+			"replace": [""],
+			"gate": ["bash", "run.sh", "check-pi-retire-request"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:PI-RETIRE-ENVELOPE]",
+			"signatureSource": "pi-extensions/lib/pi-retire-request.test.ts"
+		}
+	]
+}

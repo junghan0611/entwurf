@@ -36,3 +36,17 @@ TSC="$REPO_DIR/node_modules/.bin/tsc"
 # dependent function called from its own location always resolves).
 cp "$REPO_DIR/pi/entwurf-capabilities.json" \
   "$REPO_DIR/mcp/entwurf-bridge/dist/pi-extensions/entwurf-capabilities.json"
+
+# The Claude Code retire helper must TRAVEL WITH the bundle too (#147 G3).
+#
+# `ccRetireHelperPath()` resolves ONE fixed basename beside its own module, so the emitted
+# dist/pi-extensions/lib/cc-retire-request.js finds the helper only if it sits next to it. The
+# canonical bytes are pi-extensions/lib/cc-retire-pidfd.py; this is a byte copy, never an edit.
+# A missing or non-regular source fails the build — there is no fallback location. Gated by
+# check-capability-bundle-reach (the compiled adapter asks from where it lives, bytes compared).
+CC_RETIRE_HELPER="$REPO_DIR/pi-extensions/lib/cc-retire-pidfd.py"
+if [ ! -f "$CC_RETIRE_HELPER" ] || [ -L "$CC_RETIRE_HELPER" ]; then
+  echo "build-bridge: $CC_RETIRE_HELPER is missing or not a regular file" >&2
+  exit 1
+fi
+cp "$CC_RETIRE_HELPER" "$REPO_DIR/mcp/entwurf-bridge/dist/pi-extensions/lib/cc-retire-pidfd.py"

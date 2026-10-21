@@ -198,6 +198,10 @@ export type ReceiverInspection =
 				ownerPid: number;
 				ownerStartKey: string;
 				attachIncarnation: string | null;
+				/** Already parsed from the same fd; exposed for callers that must join the owner's domain
+				 * (#147 G3 retire). The resume verdict does not read them. */
+				ownerKind: string;
+				armProvenance: string;
 			};
 			owner: MarkerOwnerVerdict;
 	  };
@@ -281,6 +285,8 @@ export function inspectReceiverMarker(gardenId: string, receiversDir?: string): 
 			ownerPid: marker.ownerPid,
 			ownerStartKey: marker.ownerStartKey,
 			attachIncarnation: marker.attachIncarnation,
+			ownerKind: marker.ownerKind,
+			armProvenance: marker.armProvenance,
 		},
 		owner,
 	};

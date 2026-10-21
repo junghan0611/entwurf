@@ -1349,12 +1349,24 @@ check_control_retire() {
   run_vitest pi-extensions/lib/control-retire.test.ts
 }
 
+check_pi_retire_request() {
+  # Mutant execution coordinate only; the existing beside glob owns test discovery.
+  section "Pi retire request adapter (mutant execution coordinate)"
+  run_vitest pi-extensions/lib/pi-retire-request.test.ts
+}
+
 check_cc_retire_pidfd() {
   # MUTANT EXECUTION COORDINATE, not a discovery path — check-tests-beside-behavior finds the test
   # like every other beside lane. This case exists because the #147 G3 CCRETIRE-* mutants name it as
   # gate argv; it stays in check:contracts for the same reason as check-control-send-receipt.
   section "Linux pidfd retire helper (mutant execution coordinate)"
   run_vitest pi-extensions/lib/cc-retire-pidfd.test.ts
+}
+
+check_cc_retire_request() {
+  # Mutant execution coordinate only; the existing beside glob owns test discovery.
+  section "Claude Code retire request adapter (mutant execution coordinate)"
+  run_vitest pi-extensions/lib/cc-retire-request.test.ts
 }
 
 check_win32_preview() {
@@ -7529,8 +7541,14 @@ case "$cmd" in
   check-control-retire)
     check_control_retire
     ;;
+  check-pi-retire-request)
+    check_pi_retire_request
+    ;;
   check-cc-retire-pidfd)
     check_cc_retire_pidfd
+    ;;
+  check-cc-retire-request)
+    check_cc_retire_request
     ;;
   check-win32-preview)
     check_win32_preview

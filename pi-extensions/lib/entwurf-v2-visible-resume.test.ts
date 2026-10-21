@@ -993,6 +993,8 @@ describe("a Claude Code citizen", () => {
 			ownerPid,
 			ownerStartKey: `linux:${ownerPid}00`,
 			attachIncarnation: BIND_A,
+			ownerKind: "claude-code-cli",
+			armProvenance: "session-start",
 			...over,
 		},
 		owner,
