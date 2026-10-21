@@ -72,6 +72,35 @@ import {
 export const PI_RUNTIME_COMMAND = "pi";
 
 /**
+ * The pi identity carrier, scrubbed at the launch seam for EVERY backend (#87 Bundle C).
+ *
+ * `[측정]` 2026-08-30, private tmux server: a `new-window` pane inherits the tmux SERVER's
+ * environment, not the caller's. A server started from a shell that exported `PI_SESSION_ID`
+ * hands that value to every window it will ever open — the control run printed
+ * `SID=[leaked-uuid]` in a pane the caller never touched. Nothing about the fresh call creates
+ * that leak and nothing about it notices: the sibling's own MCP child would read the STALE pair
+ * as its authoritative identity and call home as a citizen it is not (`mcp/entwurf-bridge/
+ * src/index.ts:692-698` keeps the measured incident — a fresh cell answering with the uuidv7 it
+ * found in the environment, confidently and wrong).
+ *
+ * `-e VAR=` sets the variable EMPTY rather than unsetting it, which tmux has no per-window form
+ * for. That is sufficient and not a compromise: every reader of the carrier trims and tests
+ * truthiness (`index.ts:212-217`), so empty and absent are the same answer by construction.
+ *
+ * It is applied to every fresh backend and to every resumed one (#147 L2) because the leak is a
+ * property of tmux, not of a vendor or a verb. A
+ * scrub only on the backend whose measurement surfaced it would encode the claim that the other
+ * five are immune, which is false. It costs the legitimate case nothing: a carrier is only ever
+ * authoritative when the process that owns it exported it ITSELF, and a fresh `pi` sibling does
+ * exactly that after this argv has run. This is a fixed seam and deliberately NOT a general env
+ * carrier — an arbitrary `-e` passthrough would hand callers the environment-shaping power this
+ * rail exists to refuse. Two more `-e` assignments ride beside the scrub: the callback pair
+ * (`callback-env.ts`), launcher-computed, so the sibling's first action does not retype an
+ * address out of prose.
+ */
+export const SCRUBBED_INHERITED_ENV = ["PI_SESSION_ID=", "PI_AGENT_ID="] as const;
+
+/**
  * Why a launch was refused BEFORE any window was opened. Each is a named refusal, never a
  * fallback — a caller that cannot start the official runtime must not be handed a window.
  *

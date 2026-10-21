@@ -73,8 +73,16 @@
 			"claim": "V2RESUME-OBSERVE-IS-BOUNDED-WAIT",
 			"title": "the observation becomes a single immediate probe, which reports every real resume as unobserved (the socket answers ~2-4s later)",
 			"subject": "pi-extensions/lib/entwurf-v2-visible-resume.ts",
-			"find": ["\t\tawait deps.sleep(intervalMs);"],
-			"replace": ["\t\treturn { kind: \"resume-unobserved\", socketPath, waitedMs: deps.now() - started };"],
+			"find": [
+				"\t\t\treturn { kind: \"resume-unobserved\", socketPath, waitedMs: deps.now() - started };",
+				"\t\t}",
+				"\t\tawait deps.sleep(intervalMs);"
+			],
+			"replace": [
+				"\t\t\treturn { kind: \"resume-unobserved\", socketPath, waitedMs: deps.now() - started };",
+				"\t\t}",
+				"\t\treturn { kind: \"resume-unobserved\", socketPath, waitedMs: deps.now() - started };"
+			],
 			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
 			"timeoutSeconds": 60,
 			"signature": "[QK:V2RESUME-OBSERVE-IS-BOUNDED-WAIT]",
@@ -106,8 +114,8 @@
 			"claim": "V2RESUME-ARGV-FROM-RECORD",
 			"title": "the launcher is handed the caller's own directory instead of the record's, so the citizen returns in the wrong project",
 			"subject": "pi-extensions/lib/entwurf-v2-visible-resume.ts",
-			"find": ["\t\tconst launched = deps.launch({ cwd: identity.cwd, runtimeArgs });"],
-			"replace": ["\t\tconst launched = deps.launch({ cwd: process.cwd(), runtimeArgs });"],
+			"find": ["\t\tconst launched = deps.launch({ backend: \"pi\", cwd: identity.cwd, runtimeArgs });"],
+			"replace": ["\t\tconst launched = deps.launch({ backend: \"pi\", cwd: process.cwd(), runtimeArgs });"],
 			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
 			"timeoutSeconds": 60,
 			"signature": "[QK:V2RESUME-ARGV-FROM-RECORD]",
@@ -117,9 +125,11 @@
 			"claim": "V2RESUME-RECEIPTS-SEPARATE",
 			"title": "the launch receipt absorbs the observation, so 'a window opened' and 'the citizen is back' become one claim",
 			"subject": "pi-extensions/lib/entwurf-v2-visible-resume.ts",
-			"find": ["\t\t\tlaunch: { targetGardenId, sessionFile: identity.sessionFile, handle: launched.handle },"],
+			"find": [
+				"\t\t\tlaunch: { backend: \"pi\", targetGardenId, sessionFile: identity.sessionFile, handle: launched.handle },"
+			],
 			"replace": [
-				"\t\t\tlaunch: { targetGardenId, sessionFile: identity.sessionFile, handle: launched.handle, kind: observation.kind } as ResumeLaunchReceipt,"
+				"\t\t\tlaunch: { backend: \"pi\", targetGardenId, sessionFile: identity.sessionFile, handle: launched.handle, kind: observation.kind } as ResumeLaunchReceipt,"
 			],
 			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
 			"timeoutSeconds": 60,
@@ -156,7 +166,8 @@
 			"subject": "pi-extensions/lib/entwurf-v2-visible-resume.ts",
 			"find": ["\t\t\treturn { kind: \"resume-unobserved\", socketPath, waitedMs: deps.now() - started };"],
 			"replace": [
-				"\t\t\t(deps as VisibleResumeDeps).launch({ cwd: \"/tmp\", runtimeArgs: [] });\n\t\t\treturn { kind: \"resume-unobserved\", socketPath, waitedMs: deps.now() - started };"
+				"\t\t\t(deps as VisibleResumeDeps).launch({ backend: \"pi\", cwd: \"/tmp\", runtimeArgs: [] });",
+				"\t\t\treturn { kind: \"resume-unobserved\", socketPath, waitedMs: deps.now() - started };"
 			],
 			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
 			"timeoutSeconds": 60,
@@ -175,29 +186,29 @@
 			"signatureSource": "pi-extensions/lib/entwurf-v2-visible-resume.test.ts"
 		},
 		{
-			"claim": "V2RESUME-NOT-PI-REFUSED",
+			"claim": "V2RESUME-BACKEND-UNSUPPORTED-REFUSED",
 			"title": "an out-of-domain backend is reported as an error instead of a named refusal, so a fine record reads as a broken one",
 			"subject": "pi-extensions/lib/entwurf-v2-visible-resume.ts",
 			"find": ["\t\t\tif (err instanceof ResumeBackendUnsupportedError) {"],
 			"replace": ["\t\t\tif (false && err instanceof ResumeBackendUnsupportedError) {"],
 			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
 			"timeoutSeconds": 60,
-			"signature": "[QK:V2RESUME-NOT-PI-REFUSED]",
+			"signature": "[QK:V2RESUME-BACKEND-UNSUPPORTED-REFUSED]",
 			"signatureSource": "pi-extensions/lib/entwurf-v2-visible-resume.test.ts"
 		},
 		{
-			"claim": "V2RESUME-NOT-PI-BY-FIELD",
+			"claim": "V2RESUME-BACKEND-UNSUPPORTED-BY-FIELD",
 			"title": "the backend is re-derived instead of taken from the typed error, which is the second read this rail refuses",
 			"subject": "pi-extensions/lib/entwurf-v2-visible-resume.ts",
 			"find": [
-				"\t\t\t\t\t\t`${targetGardenId} is a ${err.backend} citizen; only pi citizens stand a control socket up, ` +"
+				"\t\t\t\t\t\t`${targetGardenId} is a ${err.backend} citizen; only pi and Claude Code citizens can be reopened ` +"
 			],
 			"replace": [
-				"\t\t\t\t\t\t`${targetGardenId} is a citizen of another backend; only pi citizens stand a control socket up, ` +"
+				"\t\t\t\t\t\t`${targetGardenId} is a citizen of another backend; only pi and Claude Code citizens can be reopened ` +"
 			],
 			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
 			"timeoutSeconds": 60,
-			"signature": "[QK:V2RESUME-NOT-PI-BY-FIELD]",
+			"signature": "[QK:V2RESUME-BACKEND-UNSUPPORTED-BY-FIELD]",
 			"signatureSource": "pi-extensions/lib/entwurf-v2-visible-resume.test.ts"
 		},
 		{
@@ -220,6 +231,265 @@
 			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
 			"timeoutSeconds": 60,
 			"signature": "[QK:V2RESUME-ACP-MODEL-REFUSED]",
+			"signatureSource": "pi-extensions/lib/entwurf-v2-visible-resume.test.ts"
+		},
+		{
+			"claim": "V2RESUME-CC-DEAD-OWNER-LAUNCHES",
+			"title": "a Claude Code resume is launched as `claude --continue`, which reopens whichever session the vendor picks rather than the one the record names",
+			"subject": "pi-extensions/lib/entwurf-v2-visible-resume.ts",
+			"find": ["\t\truntimeArgs: [\"--resume\", current.nativeSessionId],"],
+			"replace": ["\t\truntimeArgs: [\"--continue\"],"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:V2RESUME-CC-DEAD-OWNER-LAUNCHES]",
+			"signatureSource": "pi-extensions/lib/entwurf-v2-visible-resume.test.ts"
+		},
+		{
+			"claim": "V2RESUME-CC-LIVE-REFUSED",
+			"title": "a live Claude Code owner stops being refused as live, so the caller is told to wait on an inconclusive probe instead of sending to the running session",
+			"subject": "pi-extensions/lib/entwurf-v2-visible-resume.ts",
+			"find": ["\tif (before.owner === \"live\") {"],
+			"replace": ["\tif (before.owner === (\"never\" as string)) {"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:V2RESUME-CC-LIVE-REFUSED]",
+			"signatureSource": "pi-extensions/lib/entwurf-v2-visible-resume.test.ts"
+		},
+		{
+			"claim": "V2RESUME-CC-UNCERTAIN-REFUSED",
+			"title": "an owner the shared rule cannot judge is treated as dormant, which can open a second process on a session that is still running",
+			"subject": "pi-extensions/lib/entwurf-v2-visible-resume.ts",
+			"find": ["\tif (before.owner !== \"dead\") {"],
+			"replace": ["\tif (before.owner === (\"never\" as string)) {"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:V2RESUME-CC-UNCERTAIN-REFUSED]",
+			"signatureSource": "pi-extensions/lib/entwurf-v2-visible-resume.test.ts"
+		},
+		{
+			"claim": "V2RESUME-CC-ABSENT-REFUSED",
+			"title": "a Claude Code citizen with no receiver marker is not refused by name, so a session nothing proves dormant falls through the dormancy proof",
+			"subject": "pi-extensions/lib/entwurf-v2-visible-resume.ts",
+			"find": ["\tif (before.kind === \"absent\") {"],
+			"replace": ["\tif (before.kind === (\"never\" as string)) {"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:V2RESUME-CC-ABSENT-REFUSED]",
+			"signatureSource": "pi-extensions/lib/entwurf-v2-visible-resume.test.ts"
+		},
+		{
+			"claim": "V2RESUME-CC-CORRUPT-REFUSED",
+			"title": "an unreadable receiver marker is not refused by name, so a marker whose owner cannot be judged falls through the dormancy proof",
+			"subject": "pi-extensions/lib/entwurf-v2-visible-resume.ts",
+			"find": ["\tif (before.kind === \"corrupt\") {"],
+			"replace": ["\tif (before.kind === (\"never\" as string)) {"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:V2RESUME-CC-CORRUPT-REFUSED]",
+			"signatureSource": "pi-extensions/lib/entwurf-v2-visible-resume.test.ts"
+		},
+		{
+			"claim": "V2RESUME-CC-MISMATCH-REFUSED",
+			"title": "a dead marker for ANOTHER native session is accepted as this session's dormancy proof",
+			"subject": "pi-extensions/lib/entwurf-v2-visible-resume.ts",
+			"find": ["\t\tmarker.backend !== \"claude-code\" ||", "\t\tmarker.nativeSessionId !== identity.nativeSessionId"],
+			"replace": ["\t\tmarker.backend !== \"claude-code\" ||", "\t\tfalse"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:V2RESUME-CC-MISMATCH-REFUSED]",
+			"signatureSource": "pi-extensions/lib/entwurf-v2-visible-resume.test.ts"
+		},
+		{
+			"claim": "V2RESUME-CC-OBSERVES-NEW-OWNER",
+			"title": "the observation accepts the previous owner's marker as the resumed session coming back",
+			"subject": "pi-extensions/lib/entwurf-v2-visible-resume.ts",
+			"find": [
+				"\t\t\t(seen.marker.ownerPid !== previous.ownerPid || seen.marker.ownerStartKey !== previous.ownerStartKey) &&"
+			],
+			"replace": ["\t\t\ttrue &&"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:V2RESUME-CC-OBSERVES-NEW-OWNER]",
+			"signatureSource": "pi-extensions/lib/entwurf-v2-visible-resume.test.ts"
+		},
+		{
+			"claim": "V2RESUME-CC-RECORD-DRIFT-UNOBSERVED",
+			"title": "the observation stops checking that the record still names the same session with the same createdAt",
+			"subject": "pi-extensions/lib/entwurf-v2-visible-resume.ts",
+			"find": ["\t\t\t\tcurrent.createdAt === identity.createdAt &&"],
+			"replace": ["\t\t\t\ttrue &&"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:V2RESUME-CC-RECORD-DRIFT-UNOBSERVED]",
+			"signatureSource": "pi-extensions/lib/entwurf-v2-visible-resume.test.ts"
+		},
+		{
+			"claim": "V2RESUME-CC-MARKER-READ-RAW",
+			"title": "the receiver marker is read through a path that follows symlinks instead of the no-follow fd reader, so a link to another citizen's marker answers for this one",
+			"subject": "pi-extensions/lib/entwurf-v2-visible-resume.ts",
+			"find": ["\t\tbytes = readStoreRecordFile(markerPath);"],
+			"replace": ["\t\tbytes = process.getBuiltinModule(\"node:fs\").readFileSync(markerPath, \"utf8\");"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:V2RESUME-CC-MARKER-READ-RAW]",
+			"signatureSource": "pi-extensions/lib/entwurf-v2-visible-resume.test.ts"
+		},
+		{
+			"claim": "V2RESUME-PI-NEVER-READS-RECEIVER",
+			"title": "the pi path consults a Claude Code receiver marker, mixing the two backends' dormancy proofs",
+			"subject": "pi-extensions/lib/entwurf-v2-visible-resume.ts",
+			"find": ["\t\tconst launched = deps.launch({ backend: \"pi\", cwd: identity.cwd, runtimeArgs });"],
+			"replace": [
+				"\t\tdeps.inspectReceiver(targetGardenId);",
+				"\t\tconst launched = deps.launch({ backend: \"pi\", cwd: identity.cwd, runtimeArgs });"
+			],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:V2RESUME-PI-NEVER-READS-RECEIVER]",
+			"signatureSource": "pi-extensions/lib/entwurf-v2-visible-resume.test.ts"
+		},
+		{
+			"claim": "V2RESUME-CC-RENDER",
+			"title": "the Claude Code launch receipt stops saying it asked for claude --resume, so a reader cannot tell which session the window was asked to open",
+			"subject": "pi-extensions/lib/entwurf-v2-visible-resume.ts",
+			"find": [
+				"\t\t\t\t`LAUNCH receipt: tmux created that window and was asked to start claude --resume on the session above.\\n` +"
+			],
+			"replace": ["\t\t\t\t`LAUNCH receipt: tmux created that window.\\n` +"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:V2RESUME-CC-RENDER]",
+			"signatureSource": "pi-extensions/lib/entwurf-v2-visible-resume.test.ts"
+		},
+		{
+			"claim": "V2RESUME-CC-OBSERVE-HELPER-BOUNDED",
+			"title": "the Claude Code observation's deadline reports the previous owner as re-armed instead of unobserved",
+			"subject": "pi-extensions/lib/entwurf-v2-visible-resume.ts",
+			"find": ["\t\t\treturn { kind: \"resume-unobserved\", waitedMs: deps.now() - started };"],
+			"replace": [
+				"\t\t\treturn { kind: \"receiver-armed\", ownerPid: previous.ownerPid, waitedMs: deps.now() - started };"
+			],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:V2RESUME-CC-OBSERVE-HELPER-BOUNDED]",
+			"signatureSource": "pi-extensions/lib/entwurf-v2-visible-resume.test.ts"
+		},
+		{
+			"claim": "V2RESUME-CC-BINDING-REREAD",
+			"title": "the binding is compared against the FIRST record read, so an arm committed between that read and the dead verdict is bound by a stale value",
+			"subject": "pi-extensions/lib/entwurf-v2-visible-resume.ts",
+			"find": ["\tconst current = deps.resolveIdentity(targetGardenId);"],
+			"replace": ["\tconst current = identity;"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:V2RESUME-CC-BINDING-REREAD]",
+			"signatureSource": "pi-extensions/lib/entwurf-v2-visible-resume.test.ts"
+		},
+		{
+			"claim": "V2RESUME-CC-UNBOUND-LEGACY",
+			"title": "a record or marker with no binding (null) passes the binding check, so null == null reads as a match",
+			"subject": "pi-extensions/lib/entwurf-v2-visible-resume.ts",
+			"find": ["\tif (current.attachIncarnation === null || marker.attachIncarnation === null) {"],
+			"replace": ["\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:V2RESUME-CC-UNBOUND-LEGACY]",
+			"signatureSource": "pi-extensions/lib/entwurf-v2-visible-resume.test.ts"
+		},
+		{
+			"claim": "V2RESUME-CC-UNBOUND-STALE",
+			"title": "a dead marker whose binding is older than the record's still authorises a launch",
+			"subject": "pi-extensions/lib/entwurf-v2-visible-resume.ts",
+			"find": ["\tif (current.attachIncarnation !== marker.attachIncarnation) {"],
+			"replace": ["\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:V2RESUME-CC-UNBOUND-STALE]",
+			"signatureSource": "pi-extensions/lib/entwurf-v2-visible-resume.test.ts"
+		},
+		{
+			"claim": "V2RESUME-CC-UNBOUND-RECORD-MOVED",
+			"title": "a record whose createdAt changed between the two reads is still bound",
+			"subject": "pi-extensions/lib/entwurf-v2-visible-resume.ts",
+			"find": ["\t\tcurrent.createdAt !== identity.createdAt"],
+			"replace": ["\t\tfalse"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:V2RESUME-CC-UNBOUND-RECORD-MOVED]",
+			"signatureSource": "pi-extensions/lib/entwurf-v2-visible-resume.test.ts"
+		},
+		{
+			"claim": "V2RESUME-CC-OBSERVE-PANE-JOIN",
+			"title": "the observation accepts a live owner anywhere, not only the pane this call opened",
+			"subject": "pi-extensions/lib/entwurf-v2-visible-resume.ts",
+			"find": ["\t\t\tString(seen.marker.ownerPid) === panePid &&"],
+			"replace": [""],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:V2RESUME-CC-OBSERVE-PANE-JOIN]",
+			"signatureSource": "pi-extensions/lib/entwurf-v2-visible-resume.test.ts"
+		},
+		{
+			"claim": "V2RESUME-CC-OBSERVE-BACKEND",
+			"title": "the observation accepts a live receiver marker of another backend",
+			"subject": "pi-extensions/lib/entwurf-v2-visible-resume.ts",
+			"find": ["\t\t\tseen.marker.backend === \"claude-code\" &&"],
+			"replace": [""],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:V2RESUME-CC-OBSERVE-BACKEND]",
+			"signatureSource": "pi-extensions/lib/entwurf-v2-visible-resume.test.ts"
+		},
+		{
+			"claim": "V2RESUME-CC-OBSERVE-FRESH-BINDING",
+			"title": "the observation accepts a new owner still showing the binding the dormancy proof bound",
+			"subject": "pi-extensions/lib/entwurf-v2-visible-resume.ts",
+			"find": ["\t\t\tseen.marker.attachIncarnation !== previous.attachIncarnation"],
+			"replace": ["\t\t\ttrue"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:V2RESUME-CC-OBSERVE-FRESH-BINDING]",
+			"signatureSource": "pi-extensions/lib/entwurf-v2-visible-resume.test.ts"
+		},
+		{
+			"claim": "V2RESUME-CC-OBSERVE-RECORD-BINDING",
+			"title": "the observation stops requiring the current record to carry the marker's binding",
+			"subject": "pi-extensions/lib/entwurf-v2-visible-resume.ts",
+			"find": ["\t\t\t\tcurrent.attachIncarnation === seen.marker.attachIncarnation"],
+			"replace": ["\t\t\t\ttrue"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:V2RESUME-CC-OBSERVE-RECORD-BINDING]",
+			"signatureSource": "pi-extensions/lib/entwurf-v2-visible-resume.test.ts"
+		},
+		{
+			"claim": "V2RESUME-CC-OBSERVE-RECORD-UNREADABLE",
+			"title": "a record defect during the observation is swallowed into the bounded wait instead of stopping it as record-unreadable",
+			"subject": "pi-extensions/lib/entwurf-v2-visible-resume.ts",
+			"find": [
+				"\t\t\t\treturn {",
+				"\t\t\t\t\tkind: \"record-unreadable\",",
+				"\t\t\t\t\tcause: err instanceof Error ? err.message : String(err),",
+				"\t\t\t\t\twaitedMs: deps.now() - started,",
+				"\t\t\t\t};"
+			],
+			"replace": ["\t\t\t\tcurrent = identity;"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:V2RESUME-CC-OBSERVE-RECORD-UNREADABLE]",
+			"signatureSource": "pi-extensions/lib/entwurf-v2-visible-resume.test.ts"
+		},
+		{
+			"claim": "V2RESUME-CC-MARKER-BINDING-READ",
+			"title": "the receiver-marker validator drops the marker's binding, so every marker reads as unbound",
+			"subject": "pi-extensions/lib/meta-session.ts",
+			"find": [
+				"\t\tattachIncarnation: requireAttachIncarnation(raw.attachIncarnation === undefined ? null : raw.attachIncarnation),"
+			],
+			"replace": ["\t\tattachIncarnation: null,"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:V2RESUME-CC-MARKER-BINDING-READ]",
 			"signatureSource": "pi-extensions/lib/entwurf-v2-visible-resume.test.ts"
 		}
 	]

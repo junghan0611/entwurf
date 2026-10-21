@@ -2631,12 +2631,13 @@ describe("pi-durable bootstrap — the packaged compiled closure (needs a built 
 	/**
 	 * The callable path the stub above cannot be: a model's tool call on the PUBLISHED runtime reaches
 	 * THIS package's compiled bridge through the contact's production stdio connector, and the bridge's
-	 * resume handler answers for the target the model named. The target is a test-owned claude-code
-	 * record, so the bridge's own `target-not-pi` refusal ends the call before any liveness probe or
-	 * window; the child also gets no tmux carrier. Private HOME/XDG/agent roots, a literal environment.
+	 * resume handler answers for the target the model named. The target is a test-owned codex record —
+	 * a backend with no same-id resume (#147 L2 moved this fixture off claude-code, which is now
+	 * resumable) — so the bridge's own `target-backend-unsupported` refusal ends the call before any
+	 * liveness probe or window; the child also gets no tmux carrier. Private HOME/XDG/agent roots, a literal environment.
 	 * Nothing here resumes a citizen, and this is not a durable-host LIVE proof.
 	 */
-	it("[QK:PI-DURABLE-RESUME-CALL-REACHES-BRIDGE] a faux model's entwurf_resume_call on the published runtime reaches the compiled bridge's resume handler with its target: the model reads the bridge's named target-not-pi refusal for that id, the record is untouched and no window is asked for", async () => {
+	it("[QK:PI-DURABLE-RESUME-CALL-REACHES-BRIDGE] a faux model's entwurf_resume_call on the published runtime reaches the compiled bridge's resume handler with its target: the model reads the bridge's named target-backend-unsupported refusal for that id, the record is untouched and no window is asked for", async () => {
 		expect(fs.existsSync(CLOSURE_BRIDGE), "the compiled bridge exists — run `pnpm run build-bridge` first").toBe(true);
 		const own = (name: string): string => {
 			const p = path.join(root, name);
@@ -2657,7 +2658,7 @@ describe("pi-durable bootstrap — the packaged compiled closure (needs a built 
 		};
 		const target = upsertMetaSession({
 			input: {
-				backend: "claude-code",
+				backend: "codex",
 				nativeSessionId: "0b5e2a4c-1f3d-4e8a-9c7b-2d6f8e1a3c5d",
 				cwd,
 				model: null,
@@ -2700,8 +2701,8 @@ describe("pi-durable bootstrap — the packaged compiled closure (needs a built 
 					return { tool: message?.toolName, text: message?.content?.map((block) => block.text ?? "").join("") };
 				});
 			expect(read.map((r) => r.tool)).toEqual(["entwurf_resume_call"]);
-			expect(read[0]?.text).toContain("entwurf_resume_call rejected: target-not-pi");
-			expect(read[0]?.text).toContain(`${target} is a claude-code citizen`);
+			expect(read[0]?.text).toContain("entwurf_resume_call rejected: target-backend-unsupported");
+			expect(read[0]?.text).toContain(`${target} is a codex citizen`);
 			expect(read[0]?.text).toContain("No window was opened.");
 		} finally {
 			await c.close();

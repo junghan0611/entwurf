@@ -21,7 +21,11 @@
  *   MUXRESUME-ARGV-HAS-CWD          the `-c` actually reaches tmux, after the append shape
  *   MUXRESUME-ARGV-RUNTIME-AFTER-DASHDASH  the runtime and its flags are exec'd, never parsed as
  *                                   tmux options or run through a shell
- *   MUXRESUME-ARGV-CARRIER-FREE     nothing beyond append + `-c` + runtime + the caller's flags
+ *   MUXRESUME-ARGV-CARRIER-FREE     nothing beyond append + the fixed scrub + `-c` + runtime + flags
+ *   MUXRESUME-ARGV-IDENTITY-SCRUB   the tmux half empties exactly the two pi identity carriers a tmux
+ *                                   server may have inherited — the same scrub fresh-call carries
+ *   MUXRESUME-RUNTIME-TABLE         the runtime is a closed per-backend table: pi → pi, claude-code → claude
+ *   MUXRESUME-HERDR-REFUSED         inside herdr the tmux resume rail refuses by name, opening nothing
  *   MUXRESUME-NO-IDENTITY           this module never learns which citizen it is reopening
  *   MUXRESUME-SURFACE-SEAM          both surfaces hand the launcher IN; neither lets the v2
  *                                   composition import mux
@@ -131,9 +135,16 @@ function main(): void {
 		// whole line would be green only because this fixture has no extensions, and would go red
 		// on the recorded-ACP shape that actually ships.
 		const tmuxPrefix = args.slice(0, args.indexOf("--"));
+		const envAssignments = tmuxPrefix.flatMap((token, at) => (token === "-e" ? [tmuxPrefix[at + 1]] : []));
 		ok(
-			"[QK:MUXRESUME-ARGV-CARRIER-FREE] the TMUX half of the argv is exactly the append shape plus -c — no -n window name, no -e env carrier, no -b; the runtime's own flags live after `--` and are not tmux's business",
-			!tmuxPrefix.includes("-n") && !tmuxPrefix.includes("-e") && !tmuxPrefix.includes("-b"),
+			"[QK:MUXRESUME-ARGV-CARRIER-FREE] the TMUX half of the argv is exactly the append shape plus the fixed scrub and -c — no -n window name, no -b, and every -e only EMPTIES an identity carrier; the runtime's own flags live after `--` and are not tmux's business",
+			!tmuxPrefix.includes("-n") &&
+				!tmuxPrefix.includes("-b") &&
+				envAssignments.every((assignment) => assignment === "PI_SESSION_ID=" || assignment === "PI_AGENT_ID="),
+		);
+		ok(
+			"[QK:MUXRESUME-ARGV-IDENTITY-SCRUB] the TMUX half empties exactly PI_SESSION_ID and PI_AGENT_ID — a tmux server started from a pi shell hands its window a stale identity, and a resumed Claude Code, which never re-exports its own, would present it to its bridge",
+			JSON.stringify(envAssignments) === JSON.stringify(["PI_SESSION_ID=", "PI_AGENT_ID="]),
 		);
 		ok(
 			"a cwd that classification refuses can never be built into argv either — the builder re-checks rather than trusting its caller",
@@ -161,19 +172,31 @@ function main(): void {
 		// ── refusals happen BEFORE any mutation ───────────────────────────────────────
 		// No tmux context at all: a bad cwd must still be the reason, because it is decided first
 		// and nothing may reach tmux while it is wrong.
-		const noTmux = resumeCall({ cwd: path.join(tmp, "gone"), runtimeArgs: [] }, {});
+		const noTmux = resumeCall({ backend: "pi", cwd: path.join(tmp, "gone"), runtimeArgs: [] }, {});
 		ok(
 			"an unusable cwd refuses even outside tmux — the cwd question is settled before placement, so no window can exist by the time it is answered",
 			!noTmux.ok && noTmux.reason === "cwd-missing",
 		);
-		const outsideTmux = resumeCall({ cwd: realDir, runtimeArgs: [] }, { PATH: "/nonexistent" });
+		const outsideTmux = resumeCall({ backend: "pi", cwd: realDir, runtimeArgs: [] }, { PATH: "/nonexistent" });
 		ok(
 			"with a good cwd and no runtime on PATH, the refusal is the runtime — preconditions are proven before placement is even read",
 			!outsideTmux.ok && outsideTmux.reason === "runtime-unresolved",
 		);
 
+		// Inside herdr the rail is refused FIRST and by name: a good cwd, a runtime on PATH and no TMUX
+		// at all would otherwise reach the placement question and answer something about tmux.
+		const insideHerdr = resumeCall(
+			{ backend: "pi", cwd: realDir, runtimeArgs: [] },
+			{ HERDR_ENV: "1", PATH: runtimeDir },
+		);
+		ok(
+			"[QK:MUXRESUME-HERDR-REFUSED] inside herdr (HERDR_ENV=1) the tmux resume rail refuses as herdr-resume-unsupported before anything else — an ambient TMUX would otherwise open the window somewhere the operator is not looking",
+			!insideHerdr.ok && insideHerdr.reason === "herdr-resume-unsupported",
+		);
+
 		// ── every reason is answerable ────────────────────────────────────────────────
 		const reasons: ResumeCallRejectReason[] = [
+			"herdr-resume-unsupported",
 			"no-tmux-context",
 			"anchor-malformed",
 			"anchor-unresolved",
@@ -193,7 +216,10 @@ function main(): void {
 			"every reject reason has a hint a caller can act on — a reason without one is a reason they will guess about",
 			reasons.every((r) => typeof RESUME_CALL_REJECT_HINT[r] === "string" && RESUME_CALL_REJECT_HINT[r].length > 0),
 		);
-		ok("the fixed runtime is pi — only a control-socket backend has a same-id resume", RESUME_CALL_RUNTIME === "pi");
+		ok(
+			"[QK:MUXRESUME-RUNTIME-TABLE] the runtime is a closed per-backend table, pi → pi and claude-code → claude — never a command a caller supplies",
+			JSON.stringify(RESUME_CALL_RUNTIME) === JSON.stringify({ pi: "pi", "claude-code": "claude" }),
+		);
 
 		// ── boundaries, asserted on source ────────────────────────────────────────────
 		const SRC = read("pi-extensions/lib/mux-resume-call.ts");
@@ -241,7 +267,7 @@ function main(): void {
 		const MCP_RESUME_BLOCK = (MCP_SURFACE.split('"entwurf_resume_call",')[1] ?? "").split("\n);")[0];
 		ok(
 			"[QK:MUXRESUME-MCP-TARGET-PASSTHROUGH] the bridge handler passes its target straight to visibleResume — a rewritten, defaulted or substituted id would reopen a DIFFERENT citizen than the one the caller named",
-			/async \(\{ target \}\) =>/.test(MCP_RESUME_BLOCK) &&
+			/async \(\{ target \}, extra\) =>/.test(MCP_RESUME_BLOCK) &&
 				/await visibleResume\(target, makeVisibleResumeDeps\(visibleResumeLaunch\)\)/.test(MCP_RESUME_BLOCK),
 		);
 
@@ -249,7 +275,7 @@ function main(): void {
 		// Not prose parity — three claims an operator acts on, plus the host's own cap.
 		const MCP_DESC = (MCP_SURFACE.split('"entwurf_resume_call",')[1] ?? "").split("{")[0];
 		const statesTheContract = (text: string): boolean =>
-			/dormant/i.test(text) && /no turn/i.test(text) && /observation/i.test(text) && /launch/i.test(text);
+			/dormant/i.test(text) && /submits NO prompt/i.test(text) && /observation/i.test(text) && /launch/i.test(text);
 
 		ok(
 			"MCP bridge: the resume description fits the host's 2048-char tool-description cap",
@@ -259,7 +285,7 @@ function main(): void {
 		// appear literally exactly once in its gate source, so a token assembled at runtime names a
 		// claim no manifest can bind to.
 		ok(
-			"[QK:MUXRESUME-DESC-CONTRACT-MCP] MCP bridge: the description states the three things a caller acts on — DORMANT targets only, no turn is run, and TWO receipts whose observation is the fact that matters",
+			"[QK:MUXRESUME-DESC-CONTRACT-MCP] MCP bridge: the description states the three things a caller acts on — DORMANT targets only, no prompt is submitted, and TWO receipts whose observation is the fact that matters",
 			statesTheContract(MCP_DESC),
 		);
 	} finally {

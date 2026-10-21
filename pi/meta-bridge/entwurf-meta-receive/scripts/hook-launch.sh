@@ -3,7 +3,7 @@
 #
 # WHY THIS EXISTS (measured, #51 B/B2, 2026-07-22 — not inferred)
 #
-# Claude Code >= 2.1.217 supports the shell-less EXEC form: `command` is the
+# Claude Code 2.1.217 and later support the shell-less EXEC form: `command` is the
 # executable and `args` is argv, each element substituted as a plain string, with
 # no shell anywhere on the path. Measured at 2.1.217: a hook declared that way
 # receives every `args` element verbatim (a literal `${HOME}` arrives LITERAL —
@@ -47,8 +47,8 @@ if [ "$#" -eq 0 ]; then
 		still reports the hook as `exit_code: 0, outcome: success` (measured on 2.1.138),
 		so nothing upstream will ever tell you.
 
-		entwurf supports Claude Code >= 2.1.217 — the version whose runtime behavior was
-		actually verified end to end. There is no shell-form fallback.
+		entwurf supports Claude Code >= 2.1.306 (the exec form was verified end to end at
+		2.1.217; same-id resume needs the newer CLI). There is no shell-form fallback.
 
 		Fix: update Claude Code, then re-run
 		    ./run.sh install-meta-bridge && ./run.sh doctor-meta-bridge

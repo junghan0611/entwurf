@@ -44,7 +44,7 @@ tmux server
 ```text
 existing dispatch:   garden identity가 입력이다     — 출하됨 (entwurf_v2)
 fresh explicit call: garden identity가 callback이다 — 출하됨 (`entwurf_fresh_call`)
-same-id pi resume: existing garden identity가 입력이다 — 출하됨 (`entwurf_resume_call`)
+same-id pi / Claude Code resume: existing garden identity가 입력이다 — 출하됨 (`entwurf_resume_call`; Claude Code는 #147 L2)
 ```
 
 2026-08-04의 다중 agent 협업은 mux 없이 existing-citizen dispatch만 증명했다. 그 뒤 0.14.0이 visible
@@ -735,7 +735,7 @@ gate, LIVE smoke, release 배선을 전부 제거했다.
 | pi/ACP harness adapter | official runtime/session lifecycle, auth, model, transcript, record birth | 프로젝트의 작업자 선택·backlog |
 | tmux session lookup leaf (`resolve-tmux-session.ts`) | caller가 준 세션 **이름** 의 문법 판정과 이름→native `$id` 해석 하나 — 엔진은 `list-windows -t '=NAME' -F '#{session_id}'` 고정, 부재는 rc 로 판정(`-f` 필터는 이름 안 `}` 하나로 전 세션 오탐, `display-message` 는 존재해도 빈 출력; 둘 다 측정) | tmux 실행(runner 는 주입), argv, hint 문구(consumer 소유), 세션 **생성**, fallback 세션, 다른 서버 |
 | cwd classification leaf (`classify-tmux-cwd.ts`) | `-c` 후보의 분류 하나 — 4개 stable reason(absolute / `#` 없음 / 존재 / 디렉터리; tmux가 `-c`를 format-expand하고 없는 경로를 조용히 `$HOME`으로 폴백하기 때문) | argv, tmux 실행, hint 문구(각 consumer가 자기 표현을 소유), fallback 디렉터리 |
-| resume-call composition (`mux-resume-call.ts`) | record가 준 cwd에서의 same-session append(`-c`) — 분류는 공유 leaf, "recorded cwd" hint 표현, launch receipt | garden identity, record 조회, lock, delivery, supervision |
+| resume-call composition (`mux-resume-call.ts`) | backend별 고정 runtime 표(pi → `pi`, claude-code → `claude`), record가 준 cwd에서의 same-session append(`-c`) — 분류는 공유 leaf, fresh-call과 같은 고정 identity scrub(`-e PI_SESSION_ID= -e PI_AGENT_ID=`), herdr 안에서의 이름 붙은 거절, "recorded cwd" hint 표현, launch receipt | garden identity, record 조회, lock, delivery, supervision |
 | fresh-call composition (`mux-fresh-call.ts`) | backend별 fixed runtime + argv dialect, explicit model CLI token, optional **requested** cwd(caller가 유일한 출처; `undefined`/`""`만 생략, literal·no-trim, 같은 leaf로 pre-mutation 분류, resume 대칭 `-c` 위치), 요청이 없을 때의 Codex caller record cwd(#95 lane C; 표면이 공급, 같은 emptiness 규칙·같은 분류 leaf), codex argv의 `-C`(같은 한 값의 두 번째 carrier; 없으면 thread가 app-server 디렉터리에서 열린다), selected session seat(#105 explicit request; 생략 시 caller 자기 세션이고, Codex caller만 #95 lane B 제목 앵커로 자기 pane; 이름은 lookup leaf로 `$id` 해석, `-t`에는 `$id`만, `-d` 필수, 없으면 거절·생성 없음), first-turn framing(callback→task 순서), nonce 민팅, launch receipt(선택 이름+source+해석된 target `$id`, 관측 cwd 없음) | garden identity(표면이 공급), cwd 추측·resolve, 세션 생성, arbitrary TUI-seat discovery, delivery transport, task 분해, supervision |
 | copilot capability preflight leaf (`copilot-fresh-preflight.ts`) | Copilot fresh **한 건**에 대한 pre-mutation 판정 — birth·MCP hand·receiver·visible footer 네 축의 **설치/설정 사실**과 축마다 하나인 named reason + repair 문구 | runtime 사실(벤더 spawn·live process·연결 여부는 doctor와 LIVE 소유), mutation, 다른 backend, generic doctor로의 성장 |
 | codex capability preflight leaf (`codex-fresh-preflight.ts`) | Codex fresh 한 건의 state-backed birth closure digests, vendor trust receipt, exact user MCP/env boundary, `thread-title`, operator-owned default app-server socket, 그리고 **launch 디렉터리의 folder consent에 대한 좁은 local 근사**(exact cwd의 direct 결정 `trusted`/`untrusted` 둘 다 통과 · `.codex`가 있을 수 있으면 통과 · layer가 없는 explicit untrusted 조상은 `codex-launch-cwd-untrusted-ancestor` · 그 밖의 미결정만 `codex-launch-cwd-undecided`)를 pre-mutation 판정 | app-server lifecycle/supervision, attached-TUI pane discovery, vendor install/auth, generic doctor, resume, **동의를 대신 써넣기**, 그리고 **벤더 판정과의 동치**(layer 열거는 app-server의 `ConfigRead`가 소유하고, 이 leaf가 못 보는 것은 전부 통과 쪽으로 답한다) |
@@ -787,8 +787,8 @@ composition이고, 각각 source-adjacent gate가 argv 경계를 진다. 출하 
 | mailbox `lastReadAt` | 후속 evidence, **send receipt 아님** | self-fetch receiver가 나중에 읽은 사실 |
 | window opened (`@window/%pane`) | **`entwurf_fresh_call`의 launch receipt로 출하됨** (§6-a) | tmux가 창을 만들었다는 사실까지. 실행 여부·delivery는 주장하지 않는다 |
 | process spawned (`pane_pid`) | 같은 launch receipt에 포함 | 동기 로컬 사실이며, 그 process가 살아 있다는 주장은 아니다 (§5) |
-| resume launch (`@window/%pane` + target gid + 재개하는 transcript) | **`entwurf_resume_call`의 첫 receipt로 출하됨** | tmux가 창을 만들고 pi 시작을 요청했다는 사실까지. 시민이 돌아왔다는 주장은 아니다 |
-| resume observation (same-gid socket-alive 또는 `resume-unobserved`) | **`entwurf_resume_call`의 두 번째 receipt로 출하됨** | 시민이 다시 주소를 갖는다고 말하는 **유일한** 사실. launch와 절대 합치지 않는다. 미관측은 실패가 아니라 결과이며 창은 열린 채 lock은 해제된다 |
+| resume launch (`@window/%pane` + target gid + 재개하는 transcript 또는 Claude Code session id) | **`entwurf_resume_call`의 첫 receipt로 출하됨** | tmux가 창을 만들고 그 backend의 고정 runtime(pi / `claude --resume`) 시작을 요청했다는 사실까지. 시민이 돌아왔다는 주장은 아니다 |
+| resume observation (pi: same-gid socket-alive, Claude Code: 이 호출이 연 pane의 새 live owner가 같은 session의 receiver marker를 record와 같은 새 binding으로 다시 세움, 또는 `resume-unobserved`/`record-unreadable`) | **`entwurf_resume_call`의 두 번째 receipt로 출하됨** | 시민이 다시 주소를 갖는다고 말하는 **유일한** 사실. launch와 절대 합치지 않는다. 미관측은 실패가 아니라 결과이며 창은 열린 채 lock은 해제된다 |
 | launch가 동기 반환한 native session/garden identity | **없음** (§6 조건 1 불성립) | pi 0.83.0도 0.84.0도 제공하지 않는다(재실측). fresh-call도 동기로는 주지 않는다 |
 | callback 메시지의 sender envelope이 실은 gardenId | **fresh-call의 correlation receipt** (§6-a) — 비동기, caller의 기존 수신면에 도착 | delivery 계층이 붙인 사실이며 sibling의 자기 진술이 아니다 (§6-b) |
 | 사전 주입한 native token으로 조회한 gardenId | **CLOSED** — callback correlation이 대체한 폐기 후보 (§6) | 새 증거 + GLG 재승인 없이는 재개하지 않는다 |

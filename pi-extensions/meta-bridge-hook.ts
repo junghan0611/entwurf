@@ -53,20 +53,38 @@
  * closure (build-bridge → dist), because Node REFUSES strip-types on a `.ts` below
  * node_modules (ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING). The installer picks
  * the artifact by layout (0.12.5), mirroring start.sh / store-doctor.
- * Imports `./lib/meta-session.ts` (+ `./lib/session-id.js`); `rewriteRelativeImportExtensions`
- * rewrites that to `./lib/meta-session.js` in the emitted closure. The installer
- * copies the lib dir alongside this file so `${CLAUDE_PLUGIN_ROOT}` self-locates it.
+ * Imports `./lib/meta-session.ts` and `./lib/entwurf-v2-lock.ts` (+ `./lib/session-id.js`);
+ * `rewriteRelativeImportExtensions` rewrites those to `.js` in the emitted closure. The
+ * installer copies exactly those lib files alongside this file so `${CLAUDE_PLUGIN_ROOT}`
+ * self-locates them.
+ *
+ * RECORD-ARM LOCK (#147 L2 B1). Every write this hook makes to an EXISTING record happens
+ * under a per-gid lock (`defaultMetaRecordArmLocksDir`, the shared `acquireLock` primitive in
+ * its own directory — never the v2 dispatch lock dir, which visible resume holds across its
+ * observation). The garden id is learned by a READ-ONLY certified lookup; a record found
+ * absent is published create-only. On an arm-capable event the lock is held from the upsert
+ * that commits a fresh `attachIncarnation` through the receiver marker that copies it, so two
+ * normal arms (or an arm and a UserPromptSubmit) always finish as a matching record/marker
+ * pair. An arm that cannot take the lock within its bound writes NOTHING and logs ERROR: that
+ * attach is not committed, and a live native process may then exist that no record names — a
+ * boundary, not a refusal. A UserPromptSubmit that finds the lock busy skips its backfill.
  */
 
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { acquireLock, type LockClaim, releaseLock } from "./lib/entwurf-v2-lock.ts";
 import {
 	defaultMetaMailboxDir,
+	defaultMetaRecordArmLocksDir,
 	defaultMetaSessionsDir,
+	findCertifiedIdentityByNativeSessionId,
 	isPlausibleOwnerPid,
+	type MetaIdentityMintInput,
 	type MetaReceiverArmProvenance,
+	mintAttachIncarnation,
 	readMetaSenderMarker,
 	removeMetaReceiverMarker,
+	UpsertActionMismatchError,
 	upsertMetaSession,
 	writeMetaReceiverMarker,
 	writeMetaSenderMarker,
@@ -97,8 +115,62 @@ function logLine(level: LogLevel, message: string): void {
 	}
 }
 
+/** The record-arm lock this run holds, released on every exit path (see {@link emit}). */
+let heldArmLock: LockClaim | null = null;
+
+/** Arm-capable events wait this long for the record-arm lock; the critical section is a few file writes. */
+const ARM_LOCK_WAIT_MS = 2_000;
+const ARM_LOCK_POLL_MS = 25;
+
+function sleepSync(ms: number): void {
+	Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
+/**
+ * Take the record-arm lock for `gardenId`: ONE attempt, or (arm-capable events) polled up to
+ * {@link ARM_LOCK_WAIT_MS}. A throw from the primitive (its claim could not be written) is
+ * the same answer as busy — the caller writes nothing.
+ */
+function takeArmLock(gardenId: string, wait: boolean): { ok: true } | { ok: false; detail: string } {
+	const dir = defaultMetaRecordArmLocksDir();
+	const deadline = Date.now() + (wait ? ARM_LOCK_WAIT_MS : 0);
+	for (;;) {
+		let detail: string;
+		try {
+			const acquired = acquireLock(gardenId, { dir });
+			if (acquired.ok) {
+				heldArmLock = acquired.claim;
+				return { ok: true };
+			}
+			detail = acquired.conflict.detail;
+		} catch (err) {
+			detail = err instanceof Error ? err.message : String(err);
+		}
+		if (Date.now() >= deadline) return { ok: false, detail };
+		sleepSync(ARM_LOCK_POLL_MS);
+	}
+}
+
+function releaseArmLock(): void {
+	const claim = heldArmLock;
+	if (claim === null) return;
+	heldArmLock = null;
+	try {
+		const outcome = releaseLock(claim, { dir: defaultMetaRecordArmLocksDir() });
+		if (outcome !== "released") logLine("WARN", `record-arm lock release for ${claim.gardenId}: ${outcome}`);
+	} catch (err) {
+		// The holder pid is this short-lived hook, so a lock it failed to unlink is reclaimed
+		// by the next acquirer once this process is gone (same host + ESRCH).
+		logLine(
+			"WARN",
+			`record-arm lock release failed for ${claim.gardenId}: ${err instanceof Error ? err.message : String(err)}`,
+		);
+	}
+}
+
 /** Emit a hook response on stdout and exit 0. `{}` means "did nothing, do not block startup". */
 function emit(payload: Record<string, unknown>): never {
+	releaseArmLock();
 	process.stdout.write(`${JSON.stringify(payload)}\n`);
 	process.exit(0);
 }
@@ -174,6 +246,59 @@ function resolveMetaHookOwnerPid(): number | null {
 	return ownerPid;
 }
 
+/**
+ * Commit this event's record write and return the garden id (#147 L2 B1). The garden id to
+ * lock is learned READ ONLY; a record found absent is published create-only (a create needs no
+ * lock: its exclusive publish cannot replace anything, and a concurrent publisher turns the
+ * create into a refusal here, never into an unlocked attach). Every write to an EXISTING
+ * record then happens under the record-arm lock, which the caller keeps through the receiver
+ * marker write (released by {@link emit}). An arm-capable event mints its binding in that same
+ * atomic upsert. Lock busy: an arm writes nothing and logs ERROR (admission failure — not a
+ * committed attach, not an armed watch); any other event skips its backfill with a WARN.
+ * Throws on a store defect, exactly as the upsert does.
+ */
+function commitRecord(
+	input: MetaIdentityMintInput,
+	armsWatch: boolean,
+	logContext: string,
+): { gardenId: string; attachIncarnation: string | undefined } {
+	let existing = findCertifiedIdentityByNativeSessionId(input.nativeSessionId);
+	if (existing === null) {
+		try {
+			const created = upsertMetaSession({ input, expectAction: "create" });
+			logLine("INFO", `create record ${path.basename(created.path)} (${logContext})`);
+			// Nothing to bind and nothing older to preserve: the create is the whole write.
+			if (!armsWatch) return { gardenId: created.record.gardenId, attachIncarnation: undefined };
+			existing = created.record;
+		} catch (err) {
+			if (!(err instanceof UpsertActionMismatchError)) throw err;
+			existing = findCertifiedIdentityByNativeSessionId(input.nativeSessionId);
+			if (existing === null) throw err;
+		}
+	}
+	const locked = takeArmLock(existing.gardenId, armsWatch);
+	if (!locked.ok) {
+		if (armsWatch) {
+			// Admission failure: NOTHING is written, so the store keeps whatever pair it had. This
+			// attach is not committed, and a live process may now hold this session unseen.
+			logLine(
+				"ERROR",
+				`record-arm lock busy — attach NOT committed, watch not armed (garden=${existing.gardenId}, ${logContext}): ${locked.detail}`,
+			);
+		} else {
+			logLine(
+				"WARN",
+				`record-arm lock busy — backfill skipped (garden=${existing.gardenId}, ${logContext}): ${locked.detail}`,
+			);
+		}
+		emit({});
+	}
+	const attachIncarnation = armsWatch ? mintAttachIncarnation() : undefined;
+	const result = upsertMetaSession({ input: { ...input, attachIncarnation }, expectAction: "attach" });
+	logLine("INFO", `${result.action} record ${path.basename(result.path)} (${logContext})`);
+	return { gardenId: result.record.gardenId, attachIncarnation };
+}
+
 function main(): void {
 	let raw: string;
 	try {
@@ -230,16 +355,16 @@ function main(): void {
 		emit({});
 	}
 
+	// Arm-capable events commit a fresh binding; every other event preserves it.
+	const armsWatch = armProvenanceFor(eventName) !== null;
 	let gardenId: string;
+	let attachIncarnation: string | undefined;
 	try {
-		const result = upsertMetaSession({
-			input: { backend: "claude-code", nativeSessionId: sessionId, transcriptPath, cwd, model },
-		});
-		gardenId = result.record.gardenId;
-		logLine(
-			"INFO",
-			`${result.action} record ${path.basename(result.path)} (event=${eventName}, source=${source}, native=${sessionId})`,
-		);
+		({ gardenId, attachIncarnation } = commitRecord(
+			{ backend: "claude-code", nativeSessionId: sessionId, transcriptPath, cwd, model },
+			armsWatch,
+			`event=${eventName}, source=${source}, native=${sessionId}`,
+		));
 	} catch (err) {
 		// Best-effort: a broken record store must surface via the doctor, not by
 		// breaking the user's session open. Log and continue with no arm. This is
@@ -362,12 +487,16 @@ function main(): void {
 					nativeSessionId: sessionId,
 					ownerPid,
 					armProvenance,
+					attachIncarnation,
 				});
 				logLine("INFO", `receiver marker ${gardenId} owner=${ownerPid} arm=${eventName} source=${source}`);
 			} catch (err) {
+				// ERROR, after `INFO armed watch` so the hook-log doctor does not read a later arm as
+				// recovery: the record already carries this arm's binding, the marker does not, so the
+				// garden is undeliverable AND a later resume refuses it as unbound.
 				logLine(
-					"WARN",
-					`receiver marker write failed (event=${eventName}, garden=${gardenId}): ${err instanceof Error ? err.message : String(err)}`,
+					"ERROR",
+					`receiver marker write failed — record binding committed, marker not (event=${eventName}, garden=${gardenId}): ${err instanceof Error ? err.message : String(err)}`,
 				);
 			}
 		} else {

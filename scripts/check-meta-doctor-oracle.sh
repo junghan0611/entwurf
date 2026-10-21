@@ -91,7 +91,7 @@ cat > "$BIN/claude" <<'SH'
 printf '%s\n' "$*" >> "$FAKE_CLAUDE_LOG"
 case "$1${2:+ $2}${3:+ $3}" in
   "--version")
-    echo "2.1.217 (Claude Code)" ;;
+    echo "2.1.306 (Claude Code)" ;;
   "plugin list --json")
     # FAKE_NO_JSON stands in for a Claude floor with no --json surface at all.
     [ "${FAKE_NO_JSON:-0}" = 1 ] && exit 0
@@ -213,6 +213,23 @@ if env CLAUDE_PLUGIN_ROOT="$PLANTED" "${HOOK_ARGV[@]}" < "$TMP/hook-input.json" 
   ok "installed owner argv keyed its sender marker to this stand-in Claude pid ($$)"
 else
   bad "owner fixture drive failed: $(tr '\n' ' ' < "$TMP/hook-run.txt" | cut -c1-300)"
+fi
+# The INSTALLED closure, not the checkout, committed the arm binding (#147 L2 B1): the record
+# and the receiver marker the planted bundle wrote carry the same fresh value. A bundle missing
+# the lock module its hook imports could not have loaded far enough to write either.
+if python3 - "$AGENT" <<'PY'
+import glob, json, os, re, sys
+agent = sys.argv[1]
+recs = [json.load(open(f)) for f in glob.glob(os.path.join(agent, "meta-sessions", "*.meta.json"))]
+rec = next(r for r in recs if r.get("nativeSessionId") == "oracle-native-1")
+marker = json.load(open(os.path.join(agent, "meta-receivers", f"{rec['gardenId']}.json")))
+value = rec.get("attachIncarnation")
+sys.exit(0 if isinstance(value, str) and re.fullmatch(r"[0-9a-f]{32}", value) and marker.get("attachIncarnation") == value else 1)
+PY
+then
+  ok "the installed bundle committed a paired arm binding (record == receiver marker)"
+else
+  bad "[QK:DOCTOR-ORACLE-INSTALLED-ARM-BINDING] the installed bundle's arm did not leave a record and receiver marker carrying the same attachIncarnation"
 fi
 
 # Fake live entwurf MCP child of this same stand-in Claude pid. The doctor discovers it
@@ -552,6 +569,15 @@ cp "$TMP/hook-log-preomp.bak" "$AGENT/meta-bridge-hook.log"
 mv "$PLANTED/lib/meta-session.ts" "$TMP/meta-session.bak"
 expect_red "installed writer bundle missing" "deployed writer version is UNKNOWN"
 mv "$TMP/meta-session.bak" "$PLANTED/lib/meta-session.ts"
+
+# M10b/M10c — the hook's record-arm lock module (#147 L2 B1) is part of the deployed writer
+# closure: missing and drifted bytes are each a named red, not a runtime-only surprise.
+mv "$PLANTED/lib/entwurf-v2-lock.ts" "$TMP/entwurf-v2-lock.bak"
+expect_red "installed hook lock module missing" "deployed hook lock module MISSING"
+cp "$TMP/entwurf-v2-lock.bak" "$PLANTED/lib/entwurf-v2-lock.ts"
+printf '\n// drift\n' >> "$PLANTED/lib/entwurf-v2-lock.ts"
+expect_red "installed hook lock module drifted" "deployed hook lock module STALE"
+mv "$TMP/entwurf-v2-lock.bak" "$PLANTED/lib/entwurf-v2-lock.ts"
 
 # M11 — a FAILING `claude mcp get` whose output still matches. `|| true` would have
 # read this as a healthy USER-scope reach; rc must survive the capture.

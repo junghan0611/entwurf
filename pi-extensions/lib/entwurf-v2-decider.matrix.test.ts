@@ -71,6 +71,7 @@ function identity(backend: MetaCitizenBackend): MetaIdentity {
 		transcriptPath: null,
 		createdAt: "2026-06-12T01:00:00.000Z",
 		recordUpdatedAt: "2026-06-12T01:00:00.000Z",
+		attachIncarnation: null,
 	};
 }
 

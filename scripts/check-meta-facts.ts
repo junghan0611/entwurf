@@ -5,7 +5,7 @@
  * Drives the REAL CLI as a subprocess against sandboxed fixture stores (never the
  * live store; every path is an explicit mkdtemp dir). What it proves:
  *
- *   - the join is the FULL verbatim strict 9-field v3 record — gardenId,
+ *   - the join is the FULL verbatim strict v3 record — gardenId,
  *     nativeSessionId AND transcriptPath cross together, sorted by gardenId;
  *   - drift / symlink / invalid-UTF-8 entries become in-band defects with exit 0,
  *     and a symlinked record's target bytes are never followed into the join;
@@ -58,6 +58,7 @@ function record(gardenId: string, over: Partial<MetaIdentity> = {}): string {
 		transcriptPath: `/t/${gardenId}.jsonl`,
 		createdAt: "2026-06-11T00:00:00.000Z",
 		recordUpdatedAt: "2026-06-11T00:00:00.000Z",
+		attachIncarnation: null,
 		...over,
 	});
 }
@@ -119,6 +120,7 @@ function parseProjection(run: CliRun, label: string): Projection {
 				transcriptPath: null,
 				createdAt: "2026-06-11T00:00:00.000Z",
 				recordUpdatedAt: "2026-06-11T00:00:00.000Z",
+				attachIncarnation: null,
 			},
 			{
 				schemaVersion: 3,
@@ -130,11 +132,14 @@ function parseProjection(run: CliRun, label: string): Projection {
 				transcriptPath: `/t/${GID_B}.jsonl`,
 				createdAt: "2026-06-11T00:00:00.000Z",
 				recordUpdatedAt: "2026-06-11T00:00:00.000Z",
+				attachIncarnation: null,
 			},
 		],
-		"[QK:MF-FULL-V3-JOIN] citizens are the full verbatim 9-field v3 records, sorted by gardenId",
+		"[QK:MF-FULL-V3-JOIN] citizens are the full verbatim v3 records (10 fields, attachIncarnation included), sorted by gardenId",
 	);
-	console.log("  ok    citizens are the full verbatim 9-field v3 records, sorted by gardenId");
+	console.log(
+		"  ok    citizens are the full verbatim v3 records (10 fields, attachIncarnation included), sorted by gardenId",
+	);
 	passed++;
 	ok("valid store has no defects", facts.defects.length === 0);
 	const again = cli([dir]);

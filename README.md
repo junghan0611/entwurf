@@ -26,7 +26,7 @@ Git branches, worktrees, file isolation and internal delegation remain their con
 | Verb | Tool | Where it lands | Harnesses |
 |---|---|---|---|
 | **Open** a new sibling | `entwurf_fresh_call` | Herdr: a new unfocused tab in the caller's workspace. tmux: a new window in the caller's session, or an existing session named by `placement.tmuxSession`; without an explicit tmux placement, a Codex caller opens beside its own TUI pane | Herdr: pi, Claude Code. tmux: pi, pi-durable, Claude Code, Copilot, OMP, Codex |
-| **Reopen** a dormant sibling | `entwurf_resume_call` | A visible tmux window under the same garden id, with the transcript, model, provider and cwd its record names; no turn is run | pi |
+| **Reopen** a dormant sibling | `entwurf_resume_call` | A visible tmux window under the same garden id, with what its record names (pi: transcript, model, provider, cwd; Claude Code: `claude --resume <session id>` at the record cwd); the verb submits no prompt | pi, Claude Code |
 | **Message** an existing sibling | `entwurf_v2` | Its own rail: control socket, self-fetch mailbox or native push; delivery starts no process | pi, pi-durable, Claude Code, Copilot, OMP, Antigravity, Codex |
 
 Antigravity is message-only: an existing conversation registers itself, and Entwurf never
@@ -53,7 +53,7 @@ ownership of the harness.
 
 Prerequisites: **Node >=24.0.0**, Python 3 for `setup`, and any harnesses you choose
 to use, already installed and authenticated. Pi is optional-by-presence, supported
-range `>=1.3.0 <1.4`; Claude Code supported floor `>=2.1.217` is required for its
+range `>=1.3.0 <1.4`; Claude Code supported floor `>=2.1.306` is required for its
 managed exec-hook lifecycle. pnpm is needed only for source-checkout setup.
 
 ```bash
@@ -195,7 +195,7 @@ pi / pi-durable / Claude Code / Copilot / OMP / Antigravity / Codex
 |---|---|---|
 | Message, reply or hand off to an existing garden id | `entwurf_v2 {target, intent:"fire-and-forget", message}` | Receiver acceptance boundary, mailbox enqueue or native injection; not completion |
 | Open a new visible sibling | `entwurf_fresh_call {backend, model, task, cwd?}` | Launch receipt only; the sibling's nonce callback envelope supplies its new garden id |
-| Reopen a dormant pi citizen under its own id | `entwurf_resume_call {target}` | Separate LAUNCH and socket OBSERVATION receipts; no turn is run |
+| Reopen a dormant pi or Claude Code citizen under its own id | `entwurf_resume_call {target}` | Separate LAUNCH and OBSERVATION receipts (pi: same-id socket; Claude Code: a new live receiver marker in the opened pane, bound to the record); the verb submits no prompt |
 
 **Delivery starts no process.** A live pi receives over its record-addressed control
 address (a Unix socket; on the experimental native-Windows Pi preview, a named pipe);
@@ -224,8 +224,10 @@ tmux session (not permitted inside Herdr), never a new session or a cwd lookup.
 Omitted tmux placement follows the caller: Codex beside its own TUI pane matched
 by thread-id, everyone else in their own session. Missing/ambiguous context refuses.
 A launch receipt is neither the callback address nor proof of task processing.
-Resume is pi-only, tmux-only, same id, record-supplied transcript/model/provider/cwd;
-a live or non-pi target refuses, and an unobserved window stays visible without retry.
+Resume is pi or Claude Code, tmux-only, same id, every launch fact from the record
+(pi: transcript/model/provider/cwd; Claude Code: `claude --resume <session id>` at the record cwd);
+a live, unprovably dormant, unbound or other-backend target refuses, and an unobserved window
+stays visible without retry.
 Exact boundaries: [tmux launch](https://github.com/junghan0611/entwurf/blob/main/docs/mux-launch-rail.md)
 and [Herdr launch](https://github.com/junghan0611/entwurf/blob/main/docs/herdr-launch-rail.md).
 

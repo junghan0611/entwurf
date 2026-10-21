@@ -46,7 +46,7 @@ cat > "$INS_BIN/claude" <<'SH'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >> "$FAKE_CLAUDE_LOG"
 case "$1${2:+ $2}" in
-  "--version")   echo "2.1.217 (Claude Code)" ;;
+  "--version")   echo "2.1.306 (Claude Code)" ;;
   "plugin list") printf '%s\n' "entwurf-meta-receive@meta-bridge-local" "  Status: enabled" ;;
   "mcp get")     printf '%s\n' "Scope: User config" "Status: Connected" ;;
   *) : ;;
@@ -95,7 +95,7 @@ case "$1${2:+ $2}" in
     # Keep writing well past the pipe buffer: a reader that leaves early SIGPIPEs us.
     cat "$FAKE_MCP_TAIL"
     exit $? ;;
-  "--version")   echo "2.1.217 (Claude Code)" ;;
+  "--version")   echo "2.1.306 (Claude Code)" ;;
   "plugin list") printf '%s\n' "entwurf-meta-receive@meta-bridge-local" "  Status: enabled" ;;
   *) : ;;
 esac
@@ -710,7 +710,7 @@ FAKE_BIN="$TMP/fake-bin"; mkdir -p "$FAKE_BIN"
 cat > "$FAKE_BIN/claude" <<'SH'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >> "$FAKE_CLAUDE_LOG"
-[ "$1" = "--version" ] && echo "2.1.217 (Claude Code)"
+[ "$1" = "--version" ] && echo "2.1.306 (Claude Code)"
 exit 0
 SH
 chmod +x "$FAKE_BIN/claude"
@@ -1027,7 +1027,7 @@ if [ "${1:-} ${2:-} ${3:-}" = "plugin list --json" ]; then
   exit 0
 fi
 case "$1${2:+ $2}" in
-  "--version") echo "2.1.217 (Claude Code)" ;;
+  "--version") echo "2.1.306 (Claude Code)" ;;
   "plugin list") printf '%s\n' "entwurf-meta-receive@meta-bridge-local" "  Status: enabled" ;;
   "mcp get") printf '%s\n' "Scope: User config" "Status: ✔ Connected" ;;
   *) : ;;

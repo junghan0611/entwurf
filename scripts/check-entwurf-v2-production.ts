@@ -80,6 +80,7 @@ function identity(backend: MetaIdentity["backend"], gardenId = GID): MetaIdentit
 		transcriptPath: null,
 		createdAt: "2026-06-13T01:00:00.000Z",
 		recordUpdatedAt: "2026-06-13T01:00:00.000Z",
+		attachIncarnation: null,
 	};
 }
 
@@ -97,6 +98,7 @@ function receiverMarker(gid: string, backend: string, nativeSessionId = "n"): Me
 		ownerKind: "claude-code-cli",
 		armProvenance: "session-start",
 		updatedAt: "t",
+		attachIncarnation: null,
 	};
 }
 

@@ -55,14 +55,8 @@
 			"claim": "RESUME-ID-GATE-SSOT",
 			"title": "the preserved leaf's header stops naming the gate that certifies it, so a consumer-zero identity module ships on prose again",
 			"subject": "pi-extensions/lib/resume-launch-identity.ts",
-			"find": [
-				" * So this leaf is preserved deliberately, with no consumer in the shipped tree today.",
-				" * `check-resume-launch-identity` holds its contract so the record-integrity rules below —"
-			],
-			"replace": [
-				" * So this leaf is preserved deliberately for the later visible lane.",
-				" * The record-integrity rules below —"
-			],
+			"find": [" * `check-resume-launch-identity` holds the record-integrity rules below — the transcript header id"],
+			"replace": [" * the record-integrity rules below — the transcript header id"],
 			"gate": ["bash", "run.sh", "check-resume-launch-identity"],
 			"timeoutSeconds": 60,
 			"signature": "[QK:RESUME-ID-GATE-SSOT]",
@@ -105,6 +99,39 @@
 			"gate": ["bash", "run.sh", "check-resume-launch-identity"],
 			"timeoutSeconds": 60,
 			"signature": "[QK:RESUME-ID-ACP-EXACT-CURATION]",
+			"signatureSource": "scripts/check-resume-launch-identity.ts"
+		},
+		{
+			"claim": "RESUME-ID-CC-RESOLVES",
+			"title": "a claude-code record falls back to the out-of-domain refusal, so the widened domain exists only in prose",
+			"subject": "pi-extensions/lib/resume-launch-identity.ts",
+			"find": ["\tif (record.backend === \"claude-code\") return resolveClaudeCodeLaunchIdentity(gardenId, record);"],
+			"replace": [""],
+			"gate": ["bash", "run.sh", "check-resume-launch-identity"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:RESUME-ID-CC-RESOLVES]",
+			"signatureSource": "scripts/check-resume-launch-identity.ts"
+		},
+		{
+			"claim": "RESUME-ID-CC-SESSION-GRAMMAR",
+			"title": "a recorded Claude Code session id outside the UUID grammar reaches claude --resume, where a value like --dangerously-skip-permissions would be read as a flag",
+			"subject": "pi-extensions/lib/resume-launch-identity.ts",
+			"find": ["\tif (!CLAUDE_SESSION_ID.test(record.nativeSessionId)) {"],
+			"replace": ["\tif (false && !CLAUDE_SESSION_ID.test(record.nativeSessionId)) {"],
+			"gate": ["bash", "run.sh", "check-resume-launch-identity"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:RESUME-ID-CC-SESSION-GRAMMAR]",
+			"signatureSource": "scripts/check-resume-launch-identity.ts"
+		},
+		{
+			"claim": "RESUME-ID-CC-TRANSCRIPT-PRESENT",
+			"title": "a Claude Code record whose transcript is gone still resolves, so the window opens on a session the vendor cannot find",
+			"subject": "pi-extensions/lib/resume-launch-identity.ts",
+			"find": ["\tif (!isFile) {"],
+			"replace": ["\tif (false && !isFile) {"],
+			"gate": ["bash", "run.sh", "check-resume-launch-identity"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:RESUME-ID-CC-TRANSCRIPT-PRESENT]",
 			"signatureSource": "scripts/check-resume-launch-identity.ts"
 		}
 	]

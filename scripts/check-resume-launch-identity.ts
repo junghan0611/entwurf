@@ -1,12 +1,10 @@
 /**
  * check-resume-launch-identity — deterministic gate for `resume-launch-identity.ts`, the
- * record-authoritative leaf preserved when the visible-first cut deleted `spawn-bg` and every
- * caller it had.
+ * record-authoritative leaf of a visible same-id resume (its consumer is `entwurf-v2-visible-resume`).
  *
- * WHY A GATE FOR A CONSUMER-ZERO MODULE. Identity authority is a fail-closed risk class: this
- * leaf's whole job is deciding WHICH being a resume turn lands in. A preserved leaf whose only
- * guarantee is its own header comment is exactly the rot preservation was meant to prevent — it
- * would be re-adopted, months later, by a visible-resume composition that trusts prose. The cells
+ * WHY A GATE FOR AN IDENTITY LEAF. Identity authority is a fail-closed risk class: this leaf's whole
+ * job is deciding WHICH being a resume lands in. A leaf whose only guarantee is its own header
+ * comment would be trusted as prose by every composition that calls it. The cells
  * below are transplanted from the deleted `check-entwurf-v2-spawn-production` §9 (the plan
  * parameter became a bare garden id; nothing else about the identity contract changed), plus one
  * new cell for the #52 read the leaf's header claims and the deleted gate never isolated.
@@ -25,14 +23,18 @@
  *      backend, no recorded transcript, recorded-but-missing file, no model, headerless file. The
  *      missing-file cell is a regression pin: before the existence check that case fell through
  *      `readSessionIdentity`'s ENOENT swallow and lied "no recorded model".
- *   4b. THE ONE EXPECTED REFUSAL — a backend with no same-id resume is not a defect at all: the
- *      record is fine and the operator reached past a capability boundary. It alone carries a
- *      TYPED reason (`target-not-pi`) so the visible-resume composition can match a FIELD instead
- *      of parsing a sentence or re-reading the record. Everything else here stays a bare throw.
+ *   4b. THE ONE EXPECTED REFUSAL — a backend with no same-id resume (since #147 L2: anything but pi
+ *      and claude-code) is not a defect at all: the record is fine and the operator reached past a
+ *      capability boundary. It alone carries a TYPED reason (`target-backend-unsupported`) so the
+ *      visible-resume composition can match a FIELD instead of parsing a sentence or re-reading the
+ *      record. Everything else here stays a bare throw.
+ *   4e. CLAUDE CODE (#147 L2) — a claude-code record resolves to its own session id, the record's
+ *      cwd and createdAt, reading no transcript; a session id outside the lowercase-UUID grammar and
+ *      a recorded transcript that is not a file on disk are each refused with their own cause.
  *   4c. ABSOLUTE TRANSCRIPT — a relative recorded path would resolve against the WINDOW's own cwd
  *      at launch, not against this process's, so it names a different file than the one checked
  *      here. Refused before anything opens.
- *   5. SSOT — the module header names THIS gate, so the preserved leaf cannot advertise a
+ *   5. SSOT — the module header names THIS gate and its consumer, so the leaf cannot advertise a
  *      certification that does not exist.
  *
  * No spawn, no socket, no timer: the launch this identity feeds is deliberately not in scope.
@@ -91,12 +93,49 @@ function main(): void {
 			ok(label, msg.includes(needle));
 		};
 
+		// ── 4e. CLAUDE CODE (#147 L2) ─────────────────────────────────────────────────
+		{
+			const native = "0b5e2a4c-1f3d-4e8a-9c7b-2d6f8e1a3c5d";
+			const transcript = writeTranscript("cc-session.jsonl", "vendor-owned bytes this leaf never parses\n");
+			const gidCc = mintRecord(native, transcript, "claude-code");
+			const raw = JSON.parse(fs.readFileSync(path.join(storeDir, `${gidCc}.meta.json`), "utf8")) as {
+				createdAt: string;
+			};
+			let cc: ReturnType<typeof resolveResumeLaunchIdentity> | null = null;
+			try {
+				cc = resolveResumeLaunchIdentity(gidCc);
+			} catch {
+				cc = null;
+			}
+			ok(
+				"4e: a claude-code record resolves to its own session id, the record's cwd and createdAt [QK:RESUME-ID-CC-RESOLVES]",
+				cc?.backend === "claude-code" &&
+					cc.nativeSessionId === native &&
+					cc.cwd === cwd &&
+					cc.createdAt === raw.createdAt,
+			);
+			rejects(
+				mintRecord("--dangerously-skip-permissions", transcript, "claude-code"),
+				"is not a Claude Code session id",
+				"4e: a recorded session id outside the UUID grammar is refused before it can become a claude flag [QK:RESUME-ID-CC-SESSION-GRAMMAR]",
+			);
+			rejects(
+				mintRecord("0b5e2a4c-1f3d-4e8a-9c7b-2d6f8e1a3c5e", path.join(world, "gone.jsonl"), "claude-code"),
+				"is not a file on disk",
+				"4e: a recorded transcript that is gone is refused — claude --resume would open nothing [QK:RESUME-ID-CC-TRANSCRIPT-PRESENT]",
+			);
+		}
+
 		// ── 1. HAPPY ──────────────────────────────────────────────────────────────
 		const nativeOk = "0199aaaa-1111-4222-8333-444455556666";
 		const fileOk = writeTranscript("own.jsonl", sessionLine(nativeOk) + modelLine);
 		const gidOk = mintRecord(nativeOk, fileOk);
 		const launch = resolveResumeLaunchIdentity(gidOk);
-		ok("1: record-backed resume resolves the recorded transcript", launch.sessionFile === fileOk);
+		assert.ok(launch.backend === "pi", "1: a pi record resolves as pi");
+		ok(
+			"1: record-backed resume resolves the recorded transcript",
+			launch.backend === "pi" && launch.sessionFile === fileOk,
+		);
 		ok("1: resume cwd = transcript header authority (#9 cold-resume)", launch.cwd === cwd);
 		ok(
 			"1: resume model/provider = first model_change",
@@ -122,29 +161,29 @@ function main(): void {
 		// ── 4. CAUSE FIDELITY ─────────────────────────────────────────────────────
 		rejects("20260101T000000-facade", "not a garden citizen", "4: recordless gid → not a citizen");
 
-		const gidClaude = mintRecord("claude-native-1", null, "claude-code");
+		const gidCodex = mintRecord("codex-thread-1", null, "codex");
 		rejects(
-			gidClaude,
-			"is a claude-code citizen",
+			gidCodex,
+			"is a codex citizen",
 			"4: out-of-domain citizen → refused as a capability-domain miss, not as citizen rank",
 		);
 		// This one refusal is EXPECTED, not a defect: the record is perfectly good and the operator
 		// has reached past a capability boundary. So it is the only failure here that carries a
 		// typed `reason` a caller can match on a FIELD — the visible-resume composition turns it
-		// into `target-not-pi`, and if it degraded to a bare Error that caller would either parse
+		// into `target-backend-unsupported`, and if it degraded to a bare Error that caller would either parse
 		// this sentence or read the record a second time to ask which backend it was.
 		{
 			let caught: Error | null = null;
 			try {
-				resolveResumeLaunchIdentity(gidClaude);
+				resolveResumeLaunchIdentity(gidCodex);
 			} catch (err) {
 				caught = err as Error;
 			}
 			ok(
 				"4: the backend miss is a TYPED refusal carrying reason + backend, not a bare Error [QK:RESUME-ID-BACKEND-TYPED-REFUSAL]",
 				caught instanceof ResumeBackendUnsupportedError &&
-					caught.reason === "target-not-pi" &&
-					caught.backend === "claude-code",
+					caught.reason === "target-backend-unsupported" &&
+					caught.backend === "codex",
 			);
 		}
 
@@ -195,7 +234,8 @@ function main(): void {
 					retired.err.model === "claude-sonnet-5" &&
 					routed.err instanceof AcpModelNotCuratedError &&
 					routed.err.model === "claude-opus-5" &&
-					current.identity?.provider === "entwurf" &&
+					current.identity?.backend === "pi" &&
+					current.identity.provider === "entwurf" &&
 					current.identity.model === "claude-sonnet-5-5",
 			);
 		}
@@ -243,6 +283,7 @@ function main(): void {
 				transcriptPath: fileOk,
 				createdAt: "2026-03-01T12:00:00.000Z",
 				recordUpdatedAt: "2026-03-01T12:30:00.000Z",
+				attachIncarnation: null,
 			}),
 		);
 		// The happy-path id resolved a moment ago; the ONLY thing that changed is a second record
@@ -271,9 +312,7 @@ function main(): void {
 			"5: the leaf's header names check-resume-launch-identity (no certification it does not have) [QK:RESUME-ID-GATE-SSOT]",
 			src.includes("`check-resume-launch-identity`"),
 		);
-		// The preservation is deliberate and stated: a reader who finds an uncalled export must
-		// be able to tell "kept on purpose, for the visible lane" from "forgotten".
-		ok("5: the leaf states it is preserved with no consumer, on purpose", /no consumer in the shipped tree/.test(src));
+		ok("5: the leaf names its consumer", /`entwurf-v2-visible-resume` is its consumer/.test(src));
 	}
 
 	console.log(`\ncheck-resume-launch-identity: ${passed} checks passed`);

@@ -53,8 +53,10 @@ esac
 # a second derivation is a second thing to forget when the layout moves.
 if [ "$LIB_EXT" = "js" ]; then
   SRC_MS="$REPO/mcp/entwurf-bridge/dist/pi-extensions/lib/meta-session.js"
+  SRC_LOCK="$REPO/mcp/entwurf-bridge/dist/pi-extensions/lib/entwurf-v2-lock.js"
 else
   SRC_MS="$REPO/pi-extensions/lib/meta-session.ts"
+  SRC_LOCK="$REPO/pi-extensions/lib/entwurf-v2-lock.ts"
 fi
 # shellcheck source=scripts/meta-bridge-hook-log.sh
 source "$REPO/scripts/meta-bridge-hook-log.sh"
@@ -1275,6 +1277,21 @@ else
 fi
 if [ -f "$ASM_MS" ] && [ "$asm_h" != "$src_h" ]; then
   warn "assembled bundle differs from source ($asm_v vs $src_v) — stale .assembled; install re-assembles it"
+fi
+# The hook's record-arm lock (#147 L2 B1) is part of the same writer closure: a writer that
+# commits an arm binding without the lock module it imports cannot load at all, and a stale one
+# serializes against a different contract. Same authority as the writer: the INSTALLED bundle.
+src_lock_h="$(hash12 "$SRC_LOCK")"
+if [ -n "${INST_MS:-}" ]; then
+  INST_LOCK="$(dirname "$INST_MS")/entwurf-v2-lock.$LIB_EXT"
+  inst_lock_h="$(hash12 "$INST_LOCK")"
+  if [ ! -f "$INST_LOCK" ]; then
+    bad "deployed hook lock module MISSING ($INST_LOCK) — the hook imports it, so the installed writer cannot load. Run ./run.sh install-meta-bridge to redeploy."
+  elif [ "$inst_lock_h" != "$src_lock_h" ]; then
+    bad "deployed hook lock module STALE: installed=$inst_lock_h vs source=$src_lock_h ($INST_LOCK). Run ./run.sh install-meta-bridge to redeploy."
+  else
+    ok "deployed hook lock module matches source ($inst_lock_h)"
+  fi
 fi
 
 # Identity-writer dependency: loadMetaCapabilityRegistry reads

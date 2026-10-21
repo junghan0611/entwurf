@@ -1,28 +1,36 @@
 /**
- * resume-launch-identity — the RECORD-AUTHORITATIVE half of resuming a pi citizen,
- * kept after the visible-first cut removed everything that used to call it.
+ * resume-launch-identity — the RECORD-AUTHORITATIVE half of a visible same-id resume: garden id →
+ * the meta-record → which native session is this citizen's, and where it lives.
  *
- * It was the preamble of the `spawn-bg` watcher's `spawnChild` (entwurf-v2-spawn-production.ts,
- * deleted with that transport): garden id → the meta-record → the transcript that record
- * claims → the provider/model/cwd that transcript's own header carries. None of that is
- * about being hidden or visible. It is the answer to "which being is this, and which
- * conversation is theirs", and it is the same answer a VISIBLE resume will need.
+ * It began as the preamble of the retired `spawn-bg` watcher (garden id → the meta-record → the
+ * transcript that record claims → the provider/model/cwd that transcript's own header carries).
+ * None of that is about being hidden or visible; it is the answer to "which being is this, and
+ * which conversation is theirs". `entwurf-v2-visible-resume` is its consumer, and
+ * `check-resume-launch-identity` holds the record-integrity rules below — the transcript header id
+ * must equal `record.nativeSessionId`, an addressable read (#52) rather than a plain targeted one,
+ * a recorded ACP provider must resolve its bridge.
  *
- * So this leaf is preserved deliberately, with no consumer in the shipped tree today.
- * `check-resume-launch-identity` holds its contract so the record-integrity rules below —
- * the transcript header id must equal `record.nativeSessionId`, an addressable read
- * (#52) rather than a plain targeted one, a recorded ACP provider must resolve its
- * bridge — cannot rot while they wait.
+ * The domain is pi and claude-code (#147 L2). Both own their transcript and re-attach to the same
+ * record when their native session reopens; this leaf only names that session. For pi it reads
+ * the transcript header (the launch needs its provider/model/cwd). For claude-code it reads no
+ * transcript at all — the vendor owns it, and `claude --resume <id>` needs nothing from it — and
+ * checks only that the recorded path is an absolute file that still exists. Every other backend
+ * is a named refusal: native-push citizens have no resume authority (AGENTS Hard Rule 10), and a
+ * durable host is not reopened through Entwurf.
  *
  * It takes a bare garden id, not a plan: the plan type it used to destructure belonged to
  * the removed transport, and the identity question never needed the rest of it.
  */
 
-import { existsSync } from "node:fs";
+import { existsSync, statSync } from "node:fs";
 import path from "node:path";
 import { AcpModelNotCuratedError, isCuratedAcpModelId, PROVIDER_ID } from "./acp/model-ids.js";
 import { getEntwurfExplicitExtensions, readSessionIdentity } from "./entwurf-core.ts";
 import { readAddressableMetaIdentity } from "./meta-session.ts";
+
+/** The backends with a visible same-id resume. A closed set: nothing outside it is reopened. */
+export const RESUME_BACKENDS = ["pi", "claude-code"] as const;
+export type ResumeBackend = (typeof RESUME_BACKENDS)[number];
 
 /**
  * One of the TWO expected refusals on this leaf: the target is a citizen of a backend that has no
@@ -33,20 +41,22 @@ import { readAddressableMetaIdentity } from "./meta-session.ts";
  * bridge — and those keep their bare cause-rich `Error`, because a caller cannot act on them
  * except by looking. A Claude Code or agy garden id is different in kind: nothing is broken,
  * the operator simply asked a capability boundary to do something it does not cover, and the
- * honest answer is a named refusal rather than an error report about a store that is fine.
+ * honest answer is a named refusal rather than an error report about a store that is fine. Since
+ * #147 L2 the boundary is `RESUME_BACKENDS`; a Codex, agy, Copilot, OMP or pi-durable garden id is
+ * this refusal.
  *
  * It carries a `reason` so the caller matches on a FIELD. Parsing the message string would make
  * the wording load-bearing, and re-reading the record to ask "was it pi?" would read an address
  * twice and could answer differently the second time.
  */
 export class ResumeBackendUnsupportedError extends Error {
-	readonly reason = "target-not-pi" as const;
+	readonly reason = "target-backend-unsupported" as const;
 	readonly backend: string;
 	constructor(gardenId: string, backend: string) {
 		super(
 			`resume-launch-identity: ${gardenId} is a ${backend} citizen — same-id resume is a host-adapter relaunch ` +
-				`capability, and its domain currently contains backend pi only (only pi stands a control socket up). ` +
-				`This is a capability boundary, not the control-socket rail and not citizen rank.`,
+				`capability, and its domain is ${RESUME_BACKENDS.join(" and ")}. ` +
+				`This is a capability boundary, not citizen rank.`,
 		);
 		this.name = "ResumeBackendUnsupportedError";
 		this.backend = backend;
@@ -55,13 +65,87 @@ export class ResumeBackendUnsupportedError extends Error {
 
 /** The launch-time facts `buildResumePiArgs` needs, resolved from the meta-record + the
  * recorded transcript (record authority, #50 C2/C3). */
-export interface LaunchIdentity {
+export interface PiLaunchIdentity {
+	backend: "pi";
 	/** The EXACT session JSONL to resume — `pi --session <path>`. */
 	sessionFile: string;
 	cwd: string;
 	explicitExtensionArgs: readonly string[];
 	provider: string | null | undefined;
 	model: string;
+}
+
+/**
+ * A Claude Code citizen's launch facts, all from the record. `nativeSessionId` is the argument of
+ * `claude --resume`; `createdAt` is carried so the observation can confirm the SAME record came
+ * back, not merely a record under the same garden id. `attachIncarnation` is the record's arm
+ * binding (#147 L2 B1), compared with the receiver marker's copy — `null` is carried as null,
+ * never filled. No model or permission flag is here: a resume does not restore the options a
+ * session was once started with.
+ */
+export interface ClaudeCodeLaunchIdentity {
+	backend: "claude-code";
+	nativeSessionId: string;
+	cwd: string;
+	createdAt: string;
+	attachIncarnation: string | null;
+}
+
+export type LaunchIdentity = PiLaunchIdentity | ClaudeCodeLaunchIdentity;
+
+/**
+ * Claude Code's session id grammar: a lowercase UUID. The value becomes an argv token after
+ * `--resume`, so anything else — a leading `-`, whitespace, a path — is refused as a bad record
+ * rather than handed to the vendor CLI as something it would parse differently.
+ */
+const CLAUDE_SESSION_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+/** A claude-code record → its resume facts. Throws, with its own cause, on a record that cannot be resumed. */
+function resolveClaudeCodeLaunchIdentity(
+	gardenId: string,
+	record: {
+		nativeSessionId: string;
+		cwd: string;
+		transcriptPath: string | null;
+		createdAt: string;
+		attachIncarnation: string | null;
+	},
+): ClaudeCodeLaunchIdentity {
+	if (!CLAUDE_SESSION_ID.test(record.nativeSessionId)) {
+		throw new Error(
+			`resume-launch-identity: ${gardenId} records nativeSessionId ${JSON.stringify(record.nativeSessionId)}, ` +
+				`which is not a Claude Code session id (lowercase UUID) — refusing to hand it to claude --resume.`,
+		);
+	}
+	const transcript = record.transcriptPath;
+	if (!transcript || !path.isAbsolute(transcript)) {
+		throw new Error(
+			`resume-launch-identity: ${gardenId} records no absolute transcriptPath (${JSON.stringify(transcript)}) — ` +
+				`the birth hook writes one for every Claude Code session, so this record cannot name a session to resume.`,
+		);
+	}
+	let isFile = false;
+	try {
+		isFile = statSync(transcript).isFile();
+	} catch {
+		isFile = false;
+	}
+	if (!isFile) {
+		throw new Error(
+			`resume-launch-identity: ${gardenId} recorded transcriptPath "${transcript}" is not a file on disk — ` +
+				`the session's transcript is gone, so claude --resume would open nothing.`,
+		);
+	}
+	if (!path.isAbsolute(record.cwd)) {
+		throw new Error(`resume-launch-identity: ${gardenId} records a relative cwd ${JSON.stringify(record.cwd)}.`);
+	}
+	return {
+		backend: "claude-code",
+		nativeSessionId: record.nativeSessionId,
+		cwd: record.cwd,
+		createdAt: record.createdAt,
+		attachIncarnation: record.attachIncarnation,
+	};
 }
 
 /**
@@ -95,6 +179,7 @@ export interface LaunchIdentity {
  */
 export function resolveResumeLaunchIdentity(gardenId: string): LaunchIdentity {
 	const record = readAddressableMetaIdentity(gardenId);
+	if (record.backend === "claude-code") return resolveClaudeCodeLaunchIdentity(gardenId, record);
 	if (record.backend !== "pi") {
 		throw new ResumeBackendUnsupportedError(gardenId, record.backend);
 	}
@@ -161,6 +246,7 @@ export function resolveResumeLaunchIdentity(gardenId: string): LaunchIdentity {
 	const model = explicitExtensions.modelOverride ?? resumeModel;
 	if (provider === PROVIDER_ID && !isCuratedAcpModelId(model)) throw new AcpModelNotCuratedError(model);
 	return {
+		backend: "pi",
 		sessionFile,
 		cwd: identity.cwd,
 		explicitExtensionArgs: explicitExtensions.args,

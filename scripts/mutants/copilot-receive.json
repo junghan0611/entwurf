@@ -135,17 +135,13 @@
 			"title": "dropping the receiver marker's liveness guard makes a dead watcher's marker read as an ACTIVE receiver — replies to a closed Copilot session are enqueued into a void and reported as delivered",
 			"subject": "pi-extensions/lib/meta-session.ts",
 			"find": [
-				"\t\t// as an ACTIVE RECEIVER and pull the mailbox rail into delivering to a void.",
-				"\t\tif (!isPlausibleOwnerPid(marker.ownerPid)) return null;",
+				"\t\tif (marker === null) return null;",
 				"\t\tif (opts.verifyOwner !== false) {",
 				"\t\t\tconst liveKey = processStartKey(marker.ownerPid);",
 				"\t\t\tif (!liveKey || liveKey !== marker.ownerStartKey) return null;",
 				"\t\t}"
 			],
-			"replace": [
-				"\t\t// as an ACTIVE RECEIVER and pull the mailbox rail into delivering to a void.",
-				"\t\tif (!isPlausibleOwnerPid(marker.ownerPid)) return null;"
-			],
+			"replace": ["\t\tif (marker === null) return null;"],
 			"gate": ["bash", "run.sh", "check-copilot-receive-arm"],
 			"timeoutSeconds": 300,
 			"signature": "[QK:COPILOT-RECEIVE-DEAD-EXTENSION-REFUSED]",

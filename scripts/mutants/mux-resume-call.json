@@ -72,8 +72,11 @@
 			"claim": "MUXRESUME-NO-IDENTITY",
 			"title": "identity vocabulary enters the placement module, which is the first step of a leaf learning whose citizen it is opening",
 			"subject": "pi-extensions/lib/mux-resume-call.ts",
-			"find": ["export const RESUME_CALL_RUNTIME = \"pi\";"],
-			"replace": ["export const RESUME_CALL_RUNTIME = \"pi\";\nexport const RESUME_CALL_TARGET_KEY = \"gardenId\";"],
+			"find": ["export const RESUME_CALL_RUNTIME = { pi: \"pi\", \"claude-code\": \"claude\" } as const;"],
+			"replace": [
+				"export const RESUME_CALL_RUNTIME = { pi: \"pi\", \"claude-code\": \"claude\" } as const;",
+				"export const RESUME_CALL_TARGET_KEY = \"gardenId\";"
+			],
 			"gate": ["bash", "run.sh", "check-mux-resume-call"],
 			"timeoutSeconds": 60,
 			"signature": "[QK:MUXRESUME-NO-IDENTITY]",
@@ -97,10 +100,10 @@
 			"title": "the MCP description drops the dormant-only scope, inviting callers to aim the verb at live citizens it will refuse",
 			"subject": "mcp/entwurf-bridge/src/index.ts",
 			"find": [
-				"\t\"Reopen ONE DORMANT pi citizen under its OWN garden id, in a visible window in the operator's own tmux \""
+				"\t\"Reopen ONE DORMANT pi or Claude Code citizen under its OWN garden id, in a visible window in the operator's \" +"
 			],
 			"replace": [
-				"\t\"Reopen ONE pi citizen under its OWN garden id, in a visible window in the operator's own tmux \""
+				"\t\"Reopen ONE pi or Claude Code citizen under its OWN garden id, in a visible window in the operator's \" +"
 			],
 			"gate": ["bash", "run.sh", "check-mux-resume-call"],
 			"timeoutSeconds": 60,
@@ -118,6 +121,39 @@
 			"gate": ["bash", "run.sh", "check-mux-resume-call"],
 			"timeoutSeconds": 60,
 			"signature": "[QK:MUXRESUME-MCP-TARGET-PASSTHROUGH]",
+			"signatureSource": "scripts/check-mux-resume-call.ts"
+		},
+		{
+			"claim": "MUXRESUME-RUNTIME-TABLE",
+			"title": "a Claude Code resume is started under pi, so the window opens the wrong runtime on the right session id",
+			"subject": "pi-extensions/lib/mux-resume-call.ts",
+			"find": ["export const RESUME_CALL_RUNTIME = { pi: \"pi\", \"claude-code\": \"claude\" } as const;"],
+			"replace": ["export const RESUME_CALL_RUNTIME = { pi: \"pi\", \"claude-code\": \"pi\" } as const;"],
+			"gate": ["bash", "run.sh", "check-mux-resume-call"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:MUXRESUME-RUNTIME-TABLE]",
+			"signatureSource": "scripts/check-mux-resume-call.ts"
+		},
+		{
+			"claim": "MUXRESUME-HERDR-REFUSED",
+			"title": "inside herdr the tmux resume rail no longer refuses, so an ambient TMUX opens the window where the operator is not looking",
+			"subject": "pi-extensions/lib/mux-resume-call.ts",
+			"find": ["\tif (env.HERDR_ENV === \"1\") return { ok: false, reason: \"herdr-resume-unsupported\" };"],
+			"replace": [""],
+			"gate": ["bash", "run.sh", "check-mux-resume-call"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:MUXRESUME-HERDR-REFUSED]",
+			"signatureSource": "scripts/check-mux-resume-call.ts"
+		},
+		{
+			"claim": "MUXRESUME-ARGV-IDENTITY-SCRUB",
+			"title": "the resume window stops emptying the inherited pi identity carriers, so a resumed Claude Code presents a stale identity to its bridge",
+			"subject": "pi-extensions/lib/mux-resume-call.ts",
+			"find": ["\t\t...SCRUBBED_INHERITED_ENV.flatMap((assignment) => [\"-e\", assignment]),"],
+			"replace": [""],
+			"gate": ["bash", "run.sh", "check-mux-resume-call"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:MUXRESUME-ARGV-IDENTITY-SCRUB]",
 			"signatureSource": "scripts/check-mux-resume-call.ts"
 		}
 	]

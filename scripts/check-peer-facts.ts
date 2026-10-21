@@ -73,6 +73,7 @@ function record(gardenId: string, over: Partial<MetaIdentity> = {}): string {
 		transcriptPath: null,
 		createdAt: "2026-06-11T00:00:00.000Z",
 		recordUpdatedAt: "2026-06-11T00:00:00.000Z",
+		attachIncarnation: null,
 		...over,
 	});
 }

@@ -63,6 +63,7 @@ function identity(backend: MetaCitizenBackend, over: Partial<MetaIdentity> = {})
 		transcriptPath: "/home/junghan/.claude/projects/x/native-abc.jsonl",
 		createdAt: "2026-06-11T00:38:58.000Z",
 		recordUpdatedAt: "2026-06-11T02:40:00.000Z",
+		attachIncarnation: null,
 		...over,
 	};
 }

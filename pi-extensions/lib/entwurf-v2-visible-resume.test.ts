@@ -40,28 +40,42 @@
  *   V2RESUME-UNOBSERVED-IS-REAL      a timeout is ok:true + resume-unobserved: the window is real
  *   V2RESUME-TIMEOUT-RELEASES        …and the lock is released, the pane untouched, nothing retried
  *   V2RESUME-RELEASE-FAILURE-LOUD    a release that does not return "released" throws
- *   V2RESUME-NOT-PI-REFUSED          an out-of-domain backend is a NAMED refusal, not an error
- *   V2RESUME-NOT-PI-BY-FIELD         …matched on the error's reason FIELD, backend quoted from it
+ *   V2RESUME-BACKEND-UNSUPPORTED-REFUSED  an out-of-domain backend is a NAMED refusal, not an error
+ *   V2RESUME-BACKEND-UNSUPPORTED-BY-FIELD …matched on the error's reason FIELD, backend quoted from it
  *   V2RESUME-SHARED-ID-GRAMMAR       the address grammar is the session-id SSOT, not a local copy
+ *
+ * #147 L2 adds the Claude Code half (`V2RESUME-CC-*`, its own describe block below): dormancy only
+ * from a DEAD receiver-marker owner, every other marker state a named refusal, the fixed
+ * `--resume <id>` argv, and an observation that needs a NEW live owner plus the same record.
  */
 
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { AcpModelNotCuratedError } from "./acp/model-ids.js";
 import type { AcquireLockResult, LockClaim, ReleaseResult } from "./entwurf-v2-lock.ts";
 import {
+	inspectReceiverMarker,
 	makeVisibleResumeDeps,
+	observeReceiverReattached,
 	observeSameGidSocket,
 	RESUME_OBSERVE_INTERVAL_MS,
 	RESUME_OBSERVE_TIMEOUT_MS,
+	type ReceiverInspection,
 	renderVisibleResume,
 	type VisibleResumeDeps,
 	type VisibleResumeResult,
 	visibleResume,
 } from "./entwurf-v2-visible-resume.ts";
-import { type LaunchIdentity, ResumeBackendUnsupportedError } from "./resume-launch-identity.ts";
+import { processStartKey } from "./meta-session.ts";
+import {
+	type ClaudeCodeLaunchIdentity,
+	type LaunchIdentity,
+	type PiLaunchIdentity,
+	ResumeBackendUnsupportedError,
+} from "./resume-launch-identity.ts";
 import type { TargetSocketInspection } from "./socket-discovery.ts";
 import type { SocketLiveness } from "./socket-probe.ts";
 
@@ -78,7 +92,8 @@ const read = (rel: string): string => fs.readFileSync(path.join(ROOT, rel), "utf
 const GID = "20260806T183749-145a26";
 const SOCK = `/home/op/.pi/entwurf-control/${GID}.sock`;
 
-const IDENTITY: LaunchIdentity = {
+const IDENTITY: PiLaunchIdentity = {
+	backend: "pi",
 	sessionFile: "/home/op/.pi/agent/sessions/-p/2026-08-06T09-37-48-973Z_019fd66f.jsonl",
 	cwd: "/home/op/project",
 	explicitExtensionArgs: ["-e", "/opt/entwurf"],
@@ -110,10 +125,13 @@ function harness(opts: {
 	release?: ReleaseResult;
 	resolveIdentity?: () => LaunchIdentity;
 	launchOk?: boolean;
+	/** The receiver marker each inspection reads, in order (the last one repeats). Claude Code only. */
+	receiverSequence?: ReceiverInspection[];
 }): Harness {
 	const trace: string[] = [];
 	let clock = 0;
 	let probeIdx = 0;
+	let receiverIdx = 0;
 	let launches = 0;
 	const kind = opts.inspectionKind ?? "socket-file";
 	const deps: VisibleResumeDeps = {
@@ -145,8 +163,16 @@ function harness(opts: {
 			trace.push(`probeSocket:${value}`);
 			return value;
 		},
+		inspectReceiver: () => {
+			const seq = opts.receiverSequence ?? [{ kind: "absent" }];
+			const value = seq[Math.min(receiverIdx, seq.length - 1)] as ReceiverInspection;
+			receiverIdx++;
+			trace.push(`inspectReceiver:${value.kind === "marker" ? `${value.owner}:${value.marker.ownerPid}` : value.kind}`);
+			return value;
+		},
 		launch: (input) => {
 			launches++;
+			trace.push(`launch-backend:${input.backend}`);
 			trace.push(`launch:${input.cwd}:${input.runtimeArgs.join(" ")}`);
 			return opts.launchOk === false
 				? { ok: false, reason: "cwd-missing", hint: "the recorded cwd no longer exists" }
@@ -396,12 +422,12 @@ describe("a recorded entwurf model that is not an exact curated ACP id", () => {
 
 // ── a citizen of a backend that has no same-id resume ────────────────────────────
 describe("a citizen of a backend that has no same-id resume", () => {
-	it("[QK:V2RESUME-NOT-PI-REFUSED] a claude-code / agy target is a NAMED refusal, not an error report: nothing is corrupt, the record is right, and the operator simply reached past a capability boundary — only pi stands a control socket up", async () => {
+	it("[QK:V2RESUME-BACKEND-UNSUPPORTED-REFUSED] a codex / agy target is a NAMED refusal, not an error report: nothing is corrupt, the record is right, and the operator simply reached past a capability boundary — only pi and Claude Code have a same-id resume", async () => {
 		{
 			const h = harness({
 				livenessSequence: ["dead"],
 				resolveIdentity: () => {
-					throw new ResumeBackendUnsupportedError(GID, "claude-code");
+					throw new ResumeBackendUnsupportedError(GID, "codex");
 				},
 			});
 			// The throw is CAUGHT here rather than allowed to escape: "this refusal was reported as a
@@ -415,18 +441,18 @@ describe("a citizen of a backend that has no same-id resume", () => {
 				}),
 			);
 			ok(
-				"a claude-code / agy target is a NAMED refusal, not an error report: nothing is corrupt, the record is right, and the operator simply reached past a capability boundary — only pi stands a control socket up",
-				!result.ok && result.reason === "target-not-pi" && h.launches === 0,
+				"a codex / agy target is a NAMED refusal, not an error report: nothing is corrupt, the record is right, and the operator simply reached past a capability boundary — only pi and Claude Code have a same-id resume",
+				!result.ok && result.reason === "target-backend-unsupported" && h.launches === 0,
 			);
 		}
 	});
 
-	it("[QK:V2RESUME-NOT-PI-BY-FIELD] the refusal is matched on the error's own reason FIELD and its backend is quoted from the error, so no message string is parsed and the record is never read a second time to ask which backend it was", async () => {
+	it("[QK:V2RESUME-BACKEND-UNSUPPORTED-BY-FIELD] the refusal is matched on the error's own reason FIELD and its backend is quoted from the error, so no message string is parsed and the record is never read a second time to ask which backend it was", async () => {
 		{
 			const h = harness({
 				livenessSequence: ["dead"],
 				resolveIdentity: () => {
-					throw new ResumeBackendUnsupportedError(GID, "claude-code");
+					throw new ResumeBackendUnsupportedError(GID, "codex");
 				},
 			});
 			// The throw is CAUGHT here rather than allowed to escape: "this refusal was reported as a
@@ -440,24 +466,24 @@ describe("a citizen of a backend that has no same-id resume", () => {
 				}),
 			);
 			ok(
-				"a claude-code / agy target is a NAMED refusal, not an error report: nothing is corrupt, the record is right, and the operator simply reached past a capability boundary — only pi stands a control socket up",
-				!result.ok && result.reason === "target-not-pi" && h.launches === 0,
+				"a codex / agy target is a NAMED refusal, not an error report: nothing is corrupt, the record is right, and the operator simply reached past a capability boundary — only pi and Claude Code have a same-id resume",
+				!result.ok && result.reason === "target-backend-unsupported" && h.launches === 0,
 			);
 			ok(
 				"the refusal is matched on the error's own reason FIELD and its backend is quoted from the error, so no message string is parsed and the record is never read a second time to ask which backend it was",
 				!result.ok &&
-					/claude-code/.test(result.detail) &&
+					/codex/.test(result.detail) &&
 					h.trace.filter((t) => t.startsWith("resolveIdentity")).length === 1,
 			);
 		}
 	});
 
-	it("the not-pi refusal releases the lock", async () => {
+	it("the backend-unsupported refusal releases the lock", async () => {
 		{
 			const h = harness({
 				livenessSequence: ["dead"],
 				resolveIdentity: () => {
-					throw new ResumeBackendUnsupportedError(GID, "claude-code");
+					throw new ResumeBackendUnsupportedError(GID, "codex");
 				},
 			});
 			// The throw is CAUGHT here rather than allowed to escape: "this refusal was reported as a
@@ -471,16 +497,16 @@ describe("a citizen of a backend that has no same-id resume", () => {
 				}),
 			);
 			ok(
-				"a claude-code / agy target is a NAMED refusal, not an error report: nothing is corrupt, the record is right, and the operator simply reached past a capability boundary — only pi stands a control socket up",
-				!result.ok && result.reason === "target-not-pi" && h.launches === 0,
+				"a codex / agy target is a NAMED refusal, not an error report: nothing is corrupt, the record is right, and the operator simply reached past a capability boundary — only pi and Claude Code have a same-id resume",
+				!result.ok && result.reason === "target-backend-unsupported" && h.launches === 0,
 			);
 			ok(
 				"the refusal is matched on the error's own reason FIELD and its backend is quoted from the error, so no message string is parsed and the record is never read a second time to ask which backend it was",
 				!result.ok &&
-					/claude-code/.test(result.detail) &&
+					/codex/.test(result.detail) &&
 					h.trace.filter((t) => t.startsWith("resolveIdentity")).length === 1,
 			);
-			ok("the not-pi refusal releases the lock", h.trace.includes("releaseLock"));
+			ok("the backend-unsupported refusal releases the lock", h.trace.includes("releaseLock"));
 		}
 	});
 });
@@ -686,8 +712,10 @@ describe("THE HAPPY PATH", () => {
 				"launch and observation are two separate objects: the launch receipt carries the window handle and the transcript and says nothing about liveness, and only the observation says the citizen answered",
 				result.ok &&
 					result.launch.handle.windowId === "@9" &&
+					result.launch.backend === "pi" &&
 					result.launch.sessionFile === IDENTITY.sessionFile &&
 					!("kind" in result.launch) &&
+					"socketPath" in result.observation &&
 					result.observation.socketPath === SOCK,
 			);
 		}
@@ -727,8 +755,10 @@ describe("THE HAPPY PATH", () => {
 				"launch and observation are two separate objects: the launch receipt carries the window handle and the transcript and says nothing about liveness, and only the observation says the citizen answered",
 				result.ok &&
 					result.launch.handle.windowId === "@9" &&
+					result.launch.backend === "pi" &&
 					result.launch.sessionFile === IDENTITY.sessionFile &&
 					!("kind" in result.launch) &&
+					"socketPath" in result.observation &&
 					result.observation.socketPath === SOCK,
 			);
 			const rendered = renderVisibleResume(result.ok ? result : result);
@@ -923,6 +953,454 @@ describe("CONSTANTS AND BOUNDARIES, ASSERTED ON SOURCE", () => {
 					/makeVisibleResumeDeps\(\s*launch/.test(SRC) &&
 					/resolveResumeLaunchIdentity/.test(SRC),
 			);
+		}
+	});
+});
+
+// ══ CLAUDE CODE (#147 L2) ═══════════════════════════════════════════════════════
+// Dormancy is the receiver marker's owner proven DEAD AND bound to the record's last arm (B1), and
+// nothing weaker. Every refusal below opens no window and releases the lock; the observation needs a
+// NEW live owner in the opened pane, a fresh binding, and the same record.
+describe("a Claude Code citizen", () => {
+	const NATIVE = "0b5e2a4c-1f3d-4e8a-9c7b-2d6f8e1a3c5d";
+	const BIND_A = "a".repeat(32);
+	const BIND_B = "b".repeat(32);
+	/** The harness launcher reports pane pid 999; a new owner there is the window this call opened. */
+	const PANE_PID = 999;
+	const CC: ClaudeCodeLaunchIdentity = {
+		backend: "claude-code",
+		nativeSessionId: NATIVE,
+		cwd: "/home/op/cc-project",
+		createdAt: "2026-10-01T00:00:00.000Z",
+		attachIncarnation: BIND_A,
+	};
+	const marker = (
+		owner: "live" | "dead" | "uncertain",
+		ownerPid = 5151,
+		over: Partial<{
+			gardenId: string;
+			backend: string;
+			nativeSessionId: string;
+			ownerStartKey: string;
+			attachIncarnation: string | null;
+		}> = {},
+	): ReceiverInspection => ({
+		kind: "marker",
+		marker: {
+			gardenId: GID,
+			backend: "claude-code",
+			nativeSessionId: NATIVE,
+			ownerPid,
+			ownerStartKey: `linux:${ownerPid}00`,
+			attachIncarnation: BIND_A,
+			...over,
+		},
+		owner,
+	});
+	/** Record reads in order: the first two (identity, then the binding re-read) carry `before`, every
+	 * later one (the observation) carries `after` — the relaunched session's own arm. */
+	const records =
+		(before: ClaudeCodeLaunchIdentity, after: ClaudeCodeLaunchIdentity = { ...CC, attachIncarnation: BIND_B }) =>
+		() => {
+			let reads = 0;
+			return (): LaunchIdentity => {
+				reads++;
+				return reads <= 2 ? before : after;
+			};
+		};
+	const reattached = marker("live", PANE_PID, { attachIncarnation: BIND_B });
+	const ccHarness = (receiverSequence: ReceiverInspection[], resolveIdentity: () => LaunchIdentity = records(CC)()) =>
+		harness({ livenessSequence: ["dead"], receiverSequence, resolveIdentity });
+	const refusedWithNothingOpened = (h: Harness, result: VisibleResumeResult, reason: string): boolean =>
+		!result.ok && result.reason === reason && h.launches === 0 && h.trace.includes("releaseLock");
+
+	it("[QK:V2RESUME-CC-DEAD-OWNER-LAUNCHES] a DEAD owner bound to the record reopens the session as `claude --resume <its id>` at the record's cwd, exactly once, with no socket question asked", async () => {
+		const h = ccHarness([marker("dead"), reattached]);
+		const result = await visibleResume(GID, h.deps);
+		ok(
+			"the launcher gets backend claude-code, the record's cwd and exactly --resume <nativeSessionId>",
+			h.trace.includes("launch-backend:claude-code") && h.trace.includes(`launch:${CC.cwd}:--resume ${NATIVE}`),
+		);
+		ok(
+			"exactly one launch, and pi's socket is never inspected for a Claude Code target",
+			h.launches === 1 && !h.trace.includes("inspectSocket"),
+		);
+		ok(
+			"the dormancy proof is read under the lock, after identity, before the launch",
+			h.trace.indexOf(`resolveIdentity:${GID}`) < h.trace.indexOf("inspectReceiver:dead:5151") &&
+				h.trace.indexOf("inspectReceiver:dead:5151") < h.trace.indexOf("launch-backend:claude-code"),
+		);
+		ok(
+			"the result is ok with the claude-code launch receipt",
+			result.ok && result.launch.backend === "claude-code" && result.launch.nativeSessionId === NATIVE,
+		);
+	});
+
+	it("[QK:V2RESUME-CC-BINDING-REREAD] the binding is the record read AFTER the dead verdict: a later arm committed between the first read and that re-read refuses, and the launch uses the re-read record", async () => {
+		const later = ccHarness([marker("dead")]);
+		let reads = 0;
+		later.deps.resolveIdentity = () => {
+			reads++;
+			return reads === 1 ? CC : { ...CC, attachIncarnation: BIND_B };
+		};
+		const refused = await visibleResume(GID, later.deps);
+		ok(
+			"record A at the first read, B at the re-read, marker A → unbound, nothing opened",
+			refusedWithNothingOpened(later, refused, "target-receiver-unbound"),
+		);
+		const moved = ccHarness([marker("dead"), reattached], records({ ...CC, cwd: "/home/op/moved" })());
+		await visibleResume(GID, moved.deps);
+		ok(
+			"the launch takes its cwd from the re-read record",
+			moved.trace.includes(`launch:/home/op/moved:--resume ${NATIVE}`),
+		);
+	});
+
+	it("[QK:V2RESUME-CC-UNBOUND-LEGACY] a record or marker with no binding (null) is target-receiver-unbound — null is never read as a match, null == null included", async () => {
+		const recordNull = ccHarness(
+			[marker("dead", 5151, { attachIncarnation: null })],
+			records({ ...CC, attachIncarnation: null })(),
+		);
+		const markerNull = ccHarness([marker("dead", 5151, { attachIncarnation: null })]);
+		const onlyRecordNull = ccHarness([marker("dead")], records({ ...CC, attachIncarnation: null })());
+		ok(
+			"both null / marker null / record null each refuse as unbound with nothing opened",
+			refusedWithNothingOpened(recordNull, await visibleResume(GID, recordNull.deps), "target-receiver-unbound") &&
+				refusedWithNothingOpened(markerNull, await visibleResume(GID, markerNull.deps), "target-receiver-unbound") &&
+				refusedWithNothingOpened(
+					onlyRecordNull,
+					await visibleResume(GID, onlyRecordNull.deps),
+					"target-receiver-unbound",
+				),
+		);
+	});
+
+	it("[QK:V2RESUME-CC-UNBOUND-STALE] a dead marker whose binding is older than the record's — an attach committed after that owner's (owner unproven, marker write failed) — is target-receiver-unbound", async () => {
+		const h = ccHarness([marker("dead")], records({ ...CC, attachIncarnation: BIND_B })());
+		const result = await visibleResume(GID, h.deps);
+		ok(
+			"marker A, record B → unbound with nothing opened",
+			refusedWithNothingOpened(h, result, "target-receiver-unbound"),
+		);
+	});
+
+	it("[QK:V2RESUME-CC-UNBOUND-RECORD-MOVED] a record whose session or createdAt changed between the two reads is target-receiver-unbound", async () => {
+		const h = ccHarness([marker("dead")]);
+		let reads = 0;
+		h.deps.resolveIdentity = () => {
+			reads++;
+			return reads === 1 ? CC : { ...CC, createdAt: "2026-10-09T00:00:00.000Z" };
+		};
+		const result = await visibleResume(GID, h.deps);
+		ok(
+			"a moved record refuses as unbound with nothing opened",
+			refusedWithNothingOpened(h, result, "target-receiver-unbound"),
+		);
+	});
+
+	it("[QK:V2RESUME-CC-LIVE-REFUSED] a marker whose owner is still the same live process is target-live: no window, lock released", async () => {
+		const h = ccHarness([marker("live")]);
+		const result = await visibleResume(GID, h.deps);
+		ok(
+			"a live Claude Code owner is refused as target-live with nothing opened",
+			refusedWithNothingOpened(h, result, "target-live"),
+		);
+	});
+
+	it("[QK:V2RESUME-CC-UNCERTAIN-REFUSED] an owner the shared rule cannot judge is target-indeterminate, never treated as dormant", async () => {
+		const h = ccHarness([marker("uncertain")]);
+		const result = await visibleResume(GID, h.deps);
+		ok(
+			"an uncertain owner is refused as target-indeterminate with nothing opened",
+			refusedWithNothingOpened(h, result, "target-indeterminate"),
+		);
+	});
+
+	it("[QK:V2RESUME-CC-ABSENT-REFUSED] no receiver marker at all proves nothing and is target-receiver-absent — a switched-away session is not a false dormant", async () => {
+		const h = ccHarness([{ kind: "absent" }]);
+		const result = await visibleResume(GID, h.deps);
+		ok(
+			"an absent marker is refused as target-receiver-absent with nothing opened",
+			refusedWithNothingOpened(h, result, "target-receiver-absent"),
+		);
+	});
+
+	it("[QK:V2RESUME-CC-CORRUPT-REFUSED] an unreadable marker is target-receiver-corrupt, not absent and not dead", async () => {
+		const h = ccHarness([{ kind: "corrupt" }]);
+		const result = await visibleResume(GID, h.deps);
+		ok(
+			"a corrupt marker is refused as target-receiver-corrupt with nothing opened",
+			refusedWithNothingOpened(h, result, "target-receiver-corrupt"),
+		);
+	});
+
+	it("[QK:V2RESUME-CC-MISMATCH-REFUSED] a dead marker that names another native session than the record is target-receiver-mismatch — its death says nothing about THIS session", async () => {
+		const h = ccHarness([marker("dead", 5151, { nativeSessionId: "0b5e2a4c-1f3d-4e8a-9c7b-2d6f8e1a3c5e" })]);
+		const result = await visibleResume(GID, h.deps);
+		ok(
+			"a marker for another session is refused as target-receiver-mismatch with nothing opened",
+			refusedWithNothingOpened(h, result, "target-receiver-mismatch"),
+		);
+	});
+
+	it("[QK:V2RESUME-CC-OBSERVES-NEW-OWNER] the observation is success only for a DIFFERENT live owner with a FRESH binding the record carries — the old marker read back, or a new owner still showing the old binding, is not success", async () => {
+		const h = ccHarness([
+			marker("dead"),
+			marker("dead"),
+			marker("live", 5151),
+			marker("live", PANE_PID, { attachIncarnation: BIND_A }),
+			reattached,
+		]);
+		const result = await visibleResume(GID, h.deps);
+		ok(
+			"the observation waited past the old marker and the stale binding and reported the NEW owner",
+			result.ok &&
+				result.observation.kind === "receiver-armed" &&
+				"ownerPid" in result.observation &&
+				result.observation.ownerPid === PANE_PID &&
+				h.trace.filter((t) => t.startsWith("sleep:")).length === 3,
+		);
+		// SYNTHETIC same-owner read-back negative (a guard-contract probe, not a measured PID reuse):
+		// the owner the dormancy proof judged dead is read back as live with the SAME pid and the SAME
+		// start key, in the opened pane, with a fresh binding the record carries. Every other join
+		// passes, so only the owner-differ guard can refuse it. (Same pid with a DIFFERENT start key is
+		// a new process and is success.)
+		const sameOwner = ccHarness(
+			[marker("dead", PANE_PID), marker("live", PANE_PID, { attachIncarnation: BIND_B })],
+			records(CC)(),
+		);
+		const readBack = await visibleResume(GID, sameOwner.deps);
+		ok(
+			"the dead owner's own identity (same pid, same start key) read back as live is not a new owner → resume-unobserved",
+			readBack.ok && readBack.observation.kind === "resume-unobserved",
+		);
+	});
+
+	it("[QK:V2RESUME-CC-OBSERVE-PANE-JOIN] a new live owner that is not the pane this call opened is not success: the wait ends as resume-unobserved", async () => {
+		const elsewhere = ccHarness([marker("dead"), marker("live", 6262, { attachIncarnation: BIND_B })]);
+		const result = await visibleResume(GID, elsewhere.deps);
+		ok("an owner elsewhere → resume-unobserved", result.ok && result.observation.kind === "resume-unobserved");
+	});
+
+	it("[QK:V2RESUME-CC-OBSERVE-BACKEND] a live marker of another backend in the opened pane is not success", async () => {
+		const otherBackend = ccHarness([
+			marker("dead"),
+			marker("live", PANE_PID, { attachIncarnation: BIND_B, backend: "codex" }),
+		]);
+		const result = await visibleResume(GID, otherBackend.deps);
+		ok("a foreign-backend marker → resume-unobserved", result.ok && result.observation.kind === "resume-unobserved");
+	});
+
+	it("[QK:V2RESUME-CC-OBSERVE-FRESH-BINDING] a new live owner in the opened pane that still shows the binding the dormancy proof bound is not success", async () => {
+		// SYNTHETIC guard-contract probe: the record still carries A to the end (`records(CC, CC)`), so
+		// the new pane owner's marker A also matches the record — every other join passes and only the
+		// fresh-binding guard can refuse it.
+		const stale = ccHarness(
+			[marker("dead"), marker("live", PANE_PID, { attachIncarnation: BIND_A })],
+			records(CC, CC)(),
+		);
+		const result = await visibleResume(GID, stale.deps);
+		ok("the old binding read back → resume-unobserved", result.ok && result.observation.kind === "resume-unobserved");
+	});
+
+	it("[QK:V2RESUME-CC-OLD-MARKER-NEVER-SUCCESS] when only the old dead marker is ever read back, the bounded wait ends as resume-unobserved: the window stays, the lock is released, nothing is retried", async () => {
+		const h = ccHarness([marker("dead")]);
+		const result = await visibleResume(GID, h.deps);
+		ok(
+			"the old marker alone ends in resume-unobserved after one launch, with the lock released",
+			result.ok &&
+				result.observation.kind === "resume-unobserved" &&
+				h.launches === 1 &&
+				h.trace.filter((t) => t === "releaseLock").length === 1,
+		);
+	});
+
+	it("[QK:V2RESUME-CC-RECORD-DRIFT-UNOBSERVED] a new live bound marker is not success while the record no longer names the same session with the same createdAt", async () => {
+		const drifted = ccHarness(
+			[marker("dead"), reattached],
+			records(CC, { ...CC, attachIncarnation: BIND_B, createdAt: "2026-10-02T00:00:00.000Z" })(),
+		);
+		const result = await visibleResume(GID, drifted.deps);
+		ok(
+			"a drifted createdAt keeps the observation unproven until the deadline",
+			result.ok && result.observation.kind === "resume-unobserved",
+		);
+	});
+
+	it("[QK:V2RESUME-CC-OBSERVE-RECORD-BINDING] a new live marker is not success while the current record carries another binding than the marker's — the marker alone never vouches for the record", async () => {
+		const otherBinding = ccHarness(
+			[marker("dead"), reattached],
+			records(CC, { ...CC, attachIncarnation: "c".repeat(32) })(),
+		);
+		const result = await visibleResume(GID, otherBinding.deps);
+		ok(
+			"a record carrying another binding keeps the observation unproven until the deadline",
+			result.ok && result.observation.kind === "resume-unobserved",
+		);
+	});
+
+	it("[QK:V2RESUME-CC-OBSERVE-RECORD-UNREADABLE] a record defect during the observation stops it at once as record-unreadable with its cause: the launch receipt is kept, the lock released, nothing retried", async () => {
+		const h = ccHarness([marker("dead"), reattached]);
+		let reads = 0;
+		h.deps.resolveIdentity = () => {
+			reads++;
+			if (reads <= 2) return CC;
+			throw new Error("store defect: duplicate nativeSessionId");
+		};
+		const result = await visibleResume(GID, h.deps);
+		ok(
+			"record-unreadable with the cause, no sleep, one launch, one release",
+			result.ok &&
+				result.observation.kind === "record-unreadable" &&
+				"cause" in result.observation &&
+				result.observation.cause.includes("duplicate nativeSessionId") &&
+				!h.trace.some((t) => t.startsWith("sleep:")) &&
+				h.launches === 1 &&
+				h.trace.filter((t) => t === "releaseLock").length === 1 &&
+				renderVisibleResume(result).text.includes("record-unreadable"),
+		);
+	});
+
+	it("[QK:V2RESUME-PI-NEVER-READS-RECEIVER] a pi resume never consults a receiver marker — its dormancy and its return are the control socket's", async () => {
+		const h = harness({ livenessSequence: ["dead", "alive"] });
+		await visibleResume(GID, h.deps);
+		ok(
+			"no inspectReceiver on the pi path, and the pi launch says backend pi",
+			!h.trace.some((t) => t.startsWith("inspectReceiver")) && h.trace.includes("launch-backend:pi"),
+		);
+	});
+
+	it("[QK:V2RESUME-CC-RENDER] the Claude Code receipt names claude --resume, keeps LAUNCH and OBSERVATION apart, claims only that this call submitted no prompt, and states the actor as attribution, not authority", async () => {
+		const h = ccHarness([marker("dead"), reattached]);
+		const result = await visibleResume(GID, h.deps);
+		const attributed = renderVisibleResume(result, { actor: "20261014T212756-68bd94" }).text;
+		const anonymous = renderVisibleResume(result).text;
+		ok(
+			"the rendered Claude Code receipt",
+			attributed.includes("claude --resume") &&
+				attributed.includes("LAUNCH receipt") &&
+				attributed.includes("OBSERVATION receipt: receiver-armed") &&
+				attributed.includes("in the window this call opened") &&
+				/submitted no prompt/.test(attributed) &&
+				/is unmeasured/.test(attributed) &&
+				!/No turn was run/.test(attributed) &&
+				attributed.includes("actor:    20261014T212756-68bd94 (record-backed caller; attribution, not authority)") &&
+				anonymous.includes("actor:    unattributed"),
+		);
+	});
+
+	it("[QK:V2RESUME-CC-OBSERVE-HELPER-BOUNDED] the observation helper alone stops at its deadline and never reports the previous owner", async () => {
+		let clock = 0;
+		const seen = await observeReceiverReattached(
+			GID,
+			CC,
+			{ ownerPid: PANE_PID, ownerStartKey: `linux:${PANE_PID}00`, attachIncarnation: BIND_A },
+			String(PANE_PID),
+			{
+				inspectReceiver: () => marker("live", PANE_PID),
+				resolveIdentity: () => CC,
+				sleep: async (ms: number) => {
+					clock += ms;
+				},
+				now: () => clock,
+			},
+			2_000,
+			500,
+		);
+		ok(
+			"the previous owner read as live is never success, and the wait ends at the deadline",
+			seen.kind === "resume-unobserved" && seen.waitedMs >= 2_000,
+		);
+	});
+});
+
+describe("the receiver marker read, on real files", () => {
+	const dir = fs.mkdtempSync(path.join(os.tmpdir(), "v2resume-receiver-"));
+	const NATIVE = "0b5e2a4c-1f3d-4e8a-9c7b-2d6f8e1a3c5d";
+	const write = (gid: string, body: unknown): string => {
+		const file = path.join(dir, `${gid}.json`);
+		fs.writeFileSync(file, typeof body === "string" ? body : JSON.stringify(body));
+		return file;
+	};
+	const body = (gid: string, ownerStartKey: string) => ({
+		gardenId: gid,
+		backend: "claude-code",
+		nativeSessionId: NATIVE,
+		ownerPid: process.pid,
+		ownerStartKey,
+		ownerKind: "claude-code-cli",
+		armProvenance: "session-start",
+		updatedAt: "2026-10-21T00:00:00.000Z",
+	});
+
+	it("[QK:V2RESUME-CC-MARKER-READ-RAW] the marker is read raw and judged by the shared owner rule: absent, a symlink (never followed), garbage, a live owner and a reused pid are each told apart", () => {
+		try {
+			const live = "20261021T000001-aaaaaa";
+			const reused = "20261021T000002-bbbbbb";
+			const garbage = "20261021T000003-cccccc";
+			const linked = "20261021T000004-dddddd";
+			write(live, body(live, processStartKey(process.pid)));
+			write(reused, body(reused, "linux:1"));
+			write(garbage, "{not json");
+			fs.symlinkSync(
+				write("20261021T000005-eeeeee", body(linked, processStartKey(process.pid))),
+				path.join(dir, `${linked}.json`),
+			);
+			const at = (gid: string) => inspectReceiverMarker(gid, dir);
+			const liveSeen = at(live);
+			const reusedSeen = at(reused);
+			ok(
+				"absent / symlink / garbage / live / reused-pid",
+				at("20261021T000009-ffffff").kind === "absent" &&
+					at(linked).kind === "corrupt" &&
+					at(garbage).kind === "corrupt" &&
+					liveSeen.kind === "marker" &&
+					liveSeen.owner === "live" &&
+					reusedSeen.kind === "marker" &&
+					reusedSeen.owner === "dead",
+			);
+		} finally {
+			fs.rmSync(dir, { recursive: true, force: true });
+		}
+	});
+});
+
+describe("the receiver marker binding, on real files", () => {
+	it("[QK:V2RESUME-CC-MARKER-BINDING-READ] the fd reader carries the marker's binding: a valid copy reads back, an absent key reads as null, a malformed one and a non-regular entry are corrupt", () => {
+		const dir = fs.mkdtempSync(path.join(os.tmpdir(), "v2resume-binding-"));
+		try {
+			const base = {
+				backend: "claude-code",
+				nativeSessionId: "0b5e2a4c-1f3d-4e8a-9c7b-2d6f8e1a3c5d",
+				ownerPid: process.pid,
+				ownerStartKey: processStartKey(process.pid),
+				ownerKind: "claude-code-cli",
+				armProvenance: "session-start",
+				updatedAt: "2026-10-21T00:00:00.000Z",
+			};
+			const bound = "20261021T000011-aaaaaa";
+			const legacy = "20261021T000012-bbbbbb";
+			const malformed = "20261021T000013-cccccc";
+			const directory = "20261021T000014-dddddd";
+			const put = (gid: string, extra: Record<string, unknown>) =>
+				fs.writeFileSync(path.join(dir, `${gid}.json`), JSON.stringify({ gardenId: gid, ...base, ...extra }));
+			put(bound, { attachIncarnation: "e".repeat(32) });
+			put(legacy, {});
+			put(malformed, { attachIncarnation: "not-hex" });
+			fs.mkdirSync(path.join(dir, `${directory}.json`));
+			const b = inspectReceiverMarker(bound, dir);
+			const l = inspectReceiverMarker(legacy, dir);
+			ok(
+				"bound / legacy-null / malformed / directory",
+				b.kind === "marker" &&
+					b.marker.attachIncarnation === "e".repeat(32) &&
+					l.kind === "marker" &&
+					l.marker.attachIncarnation === null &&
+					inspectReceiverMarker(malformed, dir).kind === "corrupt" &&
+					inspectReceiverMarker(directory, dir).kind === "corrupt",
+			);
+		} finally {
+			fs.rmSync(dir, { recursive: true, force: true });
 		}
 	});
 });

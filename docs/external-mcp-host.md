@@ -90,7 +90,7 @@ External/meta-session semantics:
 #### Claude Code
 
 Plain MCP registration works independently of the native lifecycle. A garden-native
-mailbox citizen requires Claude Code >=2.1.217 plus the managed meta-bridge installer;
+mailbox citizen requires Claude Code >=2.1.306 plus the managed meta-bridge installer;
 older versions silently drop exec-hook arguments and are refused.
 
 Claude Code supports both CLI registration and a separated global MCP config. The separated file is recommended for dotfile / `agent-config` workflows because `~/.claude.json` also carries OAuth-bearing state.

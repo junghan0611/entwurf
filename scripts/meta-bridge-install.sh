@@ -58,11 +58,13 @@ case "$REPO" in
     HOOK_ENTRY="meta-bridge-hook.js"
     HOOK_SRC="$REPO/mcp/entwurf-bridge/dist/pi-extensions/meta-bridge-hook.js"
     LIB_SRC="$REPO/mcp/entwurf-bridge/dist/pi-extensions/lib/meta-session.js"
+    LOCK_SRC="$REPO/mcp/entwurf-bridge/dist/pi-extensions/lib/entwurf-v2-lock.js"
     LIB_EXT="js" ;;
   *)
     HOOK_ENTRY="meta-bridge-hook.ts"
     HOOK_SRC="$REPO/pi-extensions/meta-bridge-hook.ts"
     LIB_SRC="$REPO/pi-extensions/lib/meta-session.ts"
+    LOCK_SRC="$REPO/pi-extensions/lib/entwurf-v2-lock.ts"
     LIB_EXT="ts" ;;
 esac
 
@@ -187,9 +189,13 @@ cp -r "$SRC/$PLUGIN" "$ASM/$PLUGIN"
 # Installed → tsc-emitted JS (dist, node_modules-safe); dev clone → strip-types .ts.
 [ -f "$HOOK_SRC" ] || die "hook artifact missing: $HOOK_SRC (installed package ships it via prepack build-bridge → dist; reinstall @junghanacs/entwurf, or run 'pnpm run build-bridge' in a dev clone)."
 [ -f "$LIB_SRC" ]  || die "hook lib artifact missing: $LIB_SRC (same build-bridge dist closure)."
+[ -f "$LOCK_SRC" ] || die "hook lock artifact missing: $LOCK_SRC (same build-bridge dist closure)."
 cp "$HOOK_SRC" "$ASM/$PLUGIN/$HOOK_ENTRY"
 mkdir -p "$ASM/$PLUGIN/lib"
 cp "$LIB_SRC" "$ASM/$PLUGIN/lib/meta-session.$LIB_EXT"
+# The record-arm lock (#147 L2 B1): the hook imports the shared per-gid lock primitive, so it
+# travels in the same closure. The doctor's writer-version parity hashes it beside the writer.
+cp "$LOCK_SRC" "$ASM/$PLUGIN/lib/entwurf-v2-lock.$LIB_EXT"
 cp "$REPO/pi-extensions/lib/session-id.js" "$ASM/$PLUGIN/lib/session-id.js"
 # v2 writer (3D-3+) reads the capability registry at runtime
 # (loadMetaCapabilityRegistry). It MUST travel at the plugin ROOT — meta-session's

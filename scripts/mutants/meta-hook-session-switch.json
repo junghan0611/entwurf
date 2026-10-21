@@ -220,6 +220,94 @@
 			"timeoutSeconds": 300,
 			"signature": "[QK:MHSS-JOIN-BACKEND-EQUALITY]",
 			"signatureSource": "scripts/check-meta-hook-session-switch.ts"
+		},
+		{
+			"claim": "MHSS-ARM-RECORD-BOUND",
+			"title": "an arm-capable event stops minting a binding, so the record never carries one",
+			"subject": "pi-extensions/meta-bridge-hook.ts",
+			"find": ["\tconst attachIncarnation = armsWatch ? mintAttachIncarnation() : undefined;"],
+			"replace": ["\tconst attachIncarnation = undefined;"],
+			"gate": ["bash", "run.sh", "check-meta-hook-session-switch"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:MHSS-ARM-RECORD-BOUND]",
+			"signatureSource": "scripts/check-meta-hook-session-switch.ts"
+		},
+		{
+			"claim": "MHSS-ARM-BINDING-PAIRED",
+			"title": "the receiver marker stops copying the binding the record committed",
+			"subject": "pi-extensions/meta-bridge-hook.ts",
+			"find": ["\t\t\t\t\tattachIncarnation,"],
+			"replace": [""],
+			"gate": ["bash", "run.sh", "check-meta-hook-session-switch"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:MHSS-ARM-BINDING-PAIRED]",
+			"signatureSource": "scripts/check-meta-hook-session-switch.ts"
+		},
+		{
+			"claim": "MHSS-UPS-PRESERVES-BINDING",
+			"title": "a keystroke mints a new binding, so every UserPromptSubmit unbinds the live marker",
+			"subject": "pi-extensions/meta-bridge-hook.ts",
+			"find": ["\tconst attachIncarnation = armsWatch ? mintAttachIncarnation() : undefined;"],
+			"replace": ["\tconst attachIncarnation = mintAttachIncarnation();"],
+			"gate": ["bash", "run.sh", "check-meta-hook-session-switch"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:MHSS-UPS-PRESERVES-BINDING]",
+			"signatureSource": "scripts/check-meta-hook-session-switch.ts"
+		},
+		{
+			"claim": "MHSS-ARM-LOCK-BUSY-NO-WRITE",
+			"title": "the record-arm lock is not taken, so an arm writes while another holder is mid-pair",
+			"subject": "pi-extensions/meta-bridge-hook.ts",
+			"find": ["\tconst locked = takeArmLock(existing.gardenId, armsWatch);"],
+			"replace": ["\tconst locked = { ok: true, detail: \"\" };"],
+			"gate": ["bash", "run.sh", "check-meta-hook-session-switch"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:MHSS-ARM-LOCK-BUSY-NO-WRITE]",
+			"signatureSource": "scripts/check-meta-hook-session-switch.ts"
+		},
+		{
+			"claim": "MHSS-UPS-LOCK-BUSY-SKIPS",
+			"title": "a keystroke writes without the record-arm lock and can revert an arm's binding",
+			"subject": "pi-extensions/meta-bridge-hook.ts",
+			"find": ["\tconst locked = takeArmLock(existing.gardenId, armsWatch);"],
+			"replace": ["\tconst locked = armsWatch ? takeArmLock(existing.gardenId, true) : { ok: true, detail: \"\" };"],
+			"gate": ["bash", "run.sh", "check-meta-hook-session-switch"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:MHSS-UPS-LOCK-BUSY-SKIPS]",
+			"signatureSource": "scripts/check-meta-hook-session-switch.ts"
+		},
+		{
+			"claim": "MHSS-ARM-WAITS-FOR-LOCK",
+			"title": "an arm gives up at the first busy lock instead of waiting its bound",
+			"subject": "pi-extensions/meta-bridge-hook.ts",
+			"find": ["\tconst deadline = Date.now() + (wait ? ARM_LOCK_WAIT_MS : 0);"],
+			"replace": ["\tconst deadline = Date.now();"],
+			"gate": ["bash", "run.sh", "check-meta-hook-session-switch"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:MHSS-ARM-WAITS-FOR-LOCK]",
+			"signatureSource": "scripts/check-meta-hook-session-switch.ts"
+		},
+		{
+			"claim": "MHSS-ARM-LOCK-OWN-DIR",
+			"title": "the record-arm lock moves into the v2 dispatch lock directory visible resume holds across its observation",
+			"subject": "pi-extensions/lib/meta-session.ts",
+			"find": ["\treturn path.join(path.dirname(receiversDir), \"meta-record-arm-locks\");"],
+			"replace": ["\treturn path.join(path.dirname(receiversDir), \"entwurf-v2-locks\");"],
+			"gate": ["bash", "run.sh", "check-meta-hook-session-switch"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:MHSS-ARM-LOCK-OWN-DIR]",
+			"signatureSource": "scripts/check-meta-hook-session-switch.ts"
+		},
+		{
+			"claim": "MHSS-BUNDLE-CLOSURE-INSTALLED",
+			"title": "the installer stops copying the lock module the hook imports, so the installed hook cannot load",
+			"subject": "scripts/meta-bridge-install.sh",
+			"find": ["cp \"$LOCK_SRC\" \"$ASM/$PLUGIN/lib/entwurf-v2-lock.$LIB_EXT\""],
+			"replace": [":"],
+			"gate": ["bash", "run.sh", "check-meta-hook-session-switch"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:MHSS-BUNDLE-CLOSURE-INSTALLED]",
+			"signatureSource": "scripts/check-meta-hook-session-switch.ts"
 		}
 	]
 }

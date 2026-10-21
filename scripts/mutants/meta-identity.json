@@ -48,6 +48,63 @@
 			"timeoutSeconds": 120,
 			"signature": "[QK:META-CREATE-PUBLISHED-CLEANUP]",
 			"signatureSource": "scripts/check-meta-session.ts"
+		},
+		{
+			"claim": "META-V3-INCARNATION-ABSENT-NULL",
+			"title": "a V3 body without attachIncarnation is refused, so every untouched record becomes unreadable",
+			"subject": "pi-extensions/lib/meta-session.ts",
+			"find": [
+				"\t\tattachIncarnation: requireAttachIncarnation(obj.attachIncarnation === undefined ? null : obj.attachIncarnation),"
+			],
+			"replace": ["\t\tattachIncarnation: requireAttachIncarnation(obj.attachIncarnation),"],
+			"gate": ["bash", "run.sh", "check-meta-v3-record"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:META-V3-INCARNATION-ABSENT-NULL]",
+			"signatureSource": "scripts/check-meta-v3-record.ts"
+		},
+		{
+			"claim": "META-V3-INCARNATION-MALFORMED",
+			"title": "any string is accepted as a binding",
+			"subject": "pi-extensions/lib/meta-session.ts",
+			"find": ["\tif (typeof value !== \"string\" || !ATTACH_INCARNATION_RE.test(value)) {"],
+			"replace": ["\tif (typeof value !== \"string\") {"],
+			"gate": ["bash", "run.sh", "check-meta-v3-record"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:META-V3-INCARNATION-MALFORMED]",
+			"signatureSource": "scripts/check-meta-v3-record.ts"
+		},
+		{
+			"claim": "META-V3-INCARNATION-ALWAYS-EMITTED",
+			"title": "the serializer drops attachIncarnation, so a committed binding never reaches disk",
+			"subject": "pi-extensions/lib/meta-session.ts",
+			"find": ["\t\tattachIncarnation: identity.attachIncarnation,"],
+			"replace": [""],
+			"gate": ["bash", "run.sh", "check-meta-v3-record"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:META-V3-INCARNATION-ALWAYS-EMITTED]",
+			"signatureSource": "scripts/check-meta-v3-record.ts"
+		},
+		{
+			"claim": "META-UPSERT-PRESERVES-INCARNATION",
+			"title": "an attach that does not mint clears the binding",
+			"subject": "pi-extensions/lib/meta-session.ts",
+			"find": ["\t\t\t? existing.attachIncarnation"],
+			"replace": ["\t\t\t? null"],
+			"gate": ["bash", "run.sh", "check-meta-v3-record"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:META-UPSERT-PRESERVES-INCARNATION]",
+			"signatureSource": "scripts/check-meta-v3-record.ts"
+		},
+		{
+			"claim": "META-UPSERT-EXPECT-ACTION",
+			"title": "upsert ignores expectAction, so a raced create silently becomes an unlocked attach",
+			"subject": "pi-extensions/lib/meta-session.ts",
+			"find": ["\tif (opts.expectAction !== undefined && decision.action !== opts.expectAction) {"],
+			"replace": ["\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-meta-session"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:META-UPSERT-EXPECT-ACTION]",
+			"signatureSource": "scripts/check-meta-session.ts"
 		}
 	]
 }

@@ -76,6 +76,7 @@ const identity = (gardenId: string, nativeSessionId: string): MetaIdentity => ({
 	transcriptPath: null,
 	createdAt: "2026-03-01T12:00:00.000Z",
 	recordUpdatedAt: "2026-03-01T12:30:00.000Z",
+	attachIncarnation: null,
 });
 
 const GID_A = "20260301T120000-aaaaaa";

@@ -15,7 +15,7 @@
  *   {
  *     "schemaVersion": 1,          // of THIS projection, not of the records
  *     "storeDir": "/abs/path",
- *     "citizens": [ <full verbatim strict 9-field v3 records, sorted by gardenId> ],
+ *     "citizens": [ <full verbatim strict v3 records, sorted by gardenId> ],
  *     "defects":  [ { "filename", "message" }, … sorted by filename ]
  *   }
  *

@@ -6,7 +6,8 @@
 #
 # The floor is a full three-part version, not a major lane: the discriminator sits
 # in the PATCH position (2.1.138 drops `args`, 2.1.139 introduced the exec form,
-# 2.1.217 is the version this repo actually proved in a live session). A major-only
+# 2.1.217 is the version this repo proved the exec form on in a live session, 2.1.223
+# is where `--resume <id>` started finding a session outside the current project). A major-only
 # comparison like the Node floor's `-lt 24` cannot express it, so a real semver
 # compare has to exist — and it must exist exactly ONCE. Two hand-rolled compares in
 # two shell scripts is how "the installer blessed a version the doctor refuses"
@@ -16,15 +17,18 @@
 # `entwurf.claudeCodeFloor` is the SSOT and everything here reads it. There is one
 # number to move. `check-claude-floor-coherence` binds every other spelling of it.
 #
-# WHY THE FLOOR IS 2.1.217 AND NOT 2.1.139
+# WHY THE FLOOR IS 2.1.306
 #
-# 2.1.139 is where the exec-form strings enter the binary, but no session was ever
-# run on it — the floor would have been an inference. 2.1.217 is the version whose
-# runtime behavior was actually observed end to end (#51 B2: `args` honored per
-# element, no shell on the launch path, `asyncRewake` exit 2 waking an idle session).
-# GLG's decision (2026-07-22): Claude Code auto-updates, so entwurf does not carry
-# back-compat for versions it never verified. Declare the proven floor, not the
-# earliest plausible one.
+# 2.1.217 is the version whose exec-form runtime behavior was observed end to end
+# (#51 B2: `args` honored per element, no shell on the launch path, `asyncRewake` exit 2
+# waking an idle session); those observations stand. #147 added same-id visible resume
+# of a Claude Code citizen, which runs `claude --resume <nativeSessionId>` from the
+# record's LAST OBSERVED cwd. The vendor CLI reference (code.claude.com cli-reference,
+# read 2026-10-21, unversioned page) says the session-id search covers every project on
+# the machine only from v2.1.223; below it a session whose cwd moved may not be found.
+# GLG's decision (2026-10-21): the floor follows what the direction needs, with no
+# back-compat — 2.1.306, the version GLG relayed as running here. That number is a
+# declared floor: no LIVE receipt has been taken at it yet.
 #
 # Requires: python3 (already a hard dependency of both callers).
 

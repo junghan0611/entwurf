@@ -99,10 +99,10 @@
  * tool is not a caller LIVE proof.
  *
  * CALLER RESUME (the seventh tool, #147 L1). `entwurf_resume_call` lets this durable citizen reopen a
- * DORMANT pi citizen under its own garden id, under the bridge's own single-`target` schema (pinned
- * below). The bridge decides everything else from the target's record, exactly as for any other caller:
- * only a pi target has a same-id resume, a live target is refused, and the window opens in the tmux
- * session this host was launched in. Exposing the tool names no new authority and is not a caller LIVE
+ * DORMANT pi or Claude Code citizen under its own garden id (#147 L2), under the bridge's own
+ * single-`target` schema (pinned below). The bridge decides everything else from the target's record,
+ * exactly as for any other caller: other backends have no same-id resume, a live target is refused,
+ * and the window opens in the tmux session this host was launched in. Exposing the tool names no new authority and is not a caller LIVE
  * proof; it never resumes this durable host itself.
  *
  * NOT HERE: crash-safe receive. `entwurf_inbox_read` archives a body before the durable tool
@@ -281,7 +281,7 @@ export const PI_DURABLE_TOOL_SCHEMAS: Readonly<Record<PiDurableToolName, Readonl
 				type: "string",
 				minLength: 1,
 				pattern: "^\\d{8}T\\d{6}-[0-9a-f]{6}$",
-				description: "Garden id of the DORMANT pi citizen to reopen (discover with entwurf_peers).",
+				description: "Garden id of the DORMANT pi or Claude Code citizen to reopen (discover with entwurf_peers).",
 			},
 		},
 		required: ["target"],
@@ -770,10 +770,11 @@ const TOOL_DESCRIPTIONS: Record<PiDurableToolName, string> = {
 		"named refusal — not a started runtime, a delivered task or a reply; the sibling's callback names it. Opening " +
 		"beside this host needs the tmux pane this host itself was launched in.",
 	entwurf_resume_call:
-		"Reopen ONE dormant pi citizen under its own garden id in a visible tmux window through the entwurf-bridge " +
-		"(target required; the record supplies transcript, model and cwd — no task, no prompt, no turn). Returns the " +
-		"bridge's LAUNCH and OBSERVATION receipts or its named refusal: a live or non-pi target is refused by name, " +
-		"and opening the window needs the tmux session this host itself was launched in.",
+		"Reopen ONE dormant pi or Claude Code citizen under its own garden id in a visible tmux window through the " +
+		"entwurf-bridge (target required; the record supplies the session and cwd — no task, no prompt, no turn). " +
+		"Returns the bridge's LAUNCH and OBSERVATION receipts or its named refusal: a live target, another backend, " +
+		"or a Claude Code citizen not proven dormant is refused by name, and opening the window needs the tmux " +
+		"session this host itself was launched in.",
 };
 
 /** Announce, never push: the notice names the garden and the tool, never the body. */

@@ -113,7 +113,7 @@ function fakeClaude(env: NodeJS.ProcessEnv): string {
 			"#!/usr/bin/env bash",
 			'printf \'%s\\n\' "$*" >> "${FAKE_CLAUDE_LOG:?}"',
 			'case "$1${2:+ $2}" in',
-			'  "--version") echo "2.1.217 (Claude Code)" ;;',
+			'  "--version") echo "2.1.306 (Claude Code)" ;;',
 			'  "plugin validate") : ;;',
 			'  "plugin uninstall") : ;;',
 			'  "plugin marketplace") : ;;',
@@ -1317,7 +1317,7 @@ function ledgerWith(
 		[
 			"#!/usr/bin/env bash",
 			'case "$1 $2" in',
-			'  "--version "*|"--version") echo "2.1.217 (Claude Code)" ;;',
+			'  "--version "*|"--version") echo "2.1.306 (Claude Code)" ;;',
 			'  *) echo "broken fixture" >&2; exit 1 ;;',
 			"esac",
 		].join("\n"),

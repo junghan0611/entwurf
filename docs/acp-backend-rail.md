@@ -140,7 +140,7 @@ Dep bump ledger. 0.38.0 (#145) changes only the pi SDK set; the ACP rows are unc
 | Claude ACP adapter | `@agentclientprotocol/claude-agent-acp 0.90.0` | **exact**, bundled | shipped since 0.36.1; resolved before any PATH fallback; declaration is not compatibility evidence |
 | Claude Agent SDK | `0.3.296` (transitive) | **exact** oracle | the runtime risk surface behind the adapter |
 | Anthropic SDK | `0.100.1` | **exact**, peer-resolution only | satisfies the Agent SDK peer floor (0.93.0+); never an API client here (gate L4) |
-| Claude Code runtime | `>=2.1.217` (`entwurf.claudeCodeFloor`) | **floor** | below it, hook args are silently dropped; entwurf enforces this itself |
+| Claude Code runtime | `>=2.1.306` (`entwurf.claudeCodeFloor`) | **floor** | below it, hook args are silently dropped; entwurf enforces this itself |
 | Node | `>=24` (`engines.node`) | **floor** | single axis, derived everywhere else |
 | Cortex Code | operator-installed CLI | **on-demand**, external | NOT a pinned dependency. Each LIVE record must name the exact CLI version it measured |
 

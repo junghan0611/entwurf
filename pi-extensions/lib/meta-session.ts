@@ -354,6 +354,17 @@ export interface MetaIdentity {
 	transcriptPath: string | null;
 	createdAt: string;
 	recordUpdatedAt: string;
+	/**
+	 * The Claude Code arm binding (#147 L2 B1): a clock-independent 128-bit random value
+	 * (`randomBytes(16)`, {@link mintAttachIncarnation}) the CC hook mints on every
+	 * arm-capable event and writes in the SAME atomic upsert as that attach, then copies into
+	 * the receiver marker it writes under the record-arm lock. A dead marker carrying the
+	 * value the record still carries is evidence that no later arm-capable attach happened;
+	 * one that does not carry it is not. `null` means no binding was ever observed — every
+	 * other backend, a record no arm has touched since this field existed, a create — and
+	 * is never filled by inference. Every writer that does not mint PRESERVES it.
+	 */
+	attachIncarnation: string | null;
 }
 
 export function requireCitizenBackend(value: unknown): MetaCitizenBackend {
@@ -476,7 +487,27 @@ const META_IDENTITY_KEYS: readonly string[] = [
 	"transcriptPath",
 	"createdAt",
 	"recordUpdatedAt",
+	"attachIncarnation",
 ];
+
+/** `attachIncarnation` grammar: 32 lowercase hex characters (`randomBytes(16)`). */
+const ATTACH_INCARNATION_RE = /^[0-9a-f]{32}$/;
+
+/** Validate an `attachIncarnation`: null, or the 32-hex grammar. Throws on anything else. */
+export function requireAttachIncarnation(value: unknown): string | null {
+	if (value === null) return null;
+	if (typeof value !== "string" || !ATTACH_INCARNATION_RE.test(value)) {
+		throw new MetaRecordError(
+			`meta-record field "attachIncarnation" must be null or 32 lowercase hex characters (got ${describe(value)}).`,
+		);
+	}
+	return value;
+}
+
+/** Mint one arm binding value. Clock-independent: 128 random bits, never derived from time. */
+export function mintAttachIncarnation(): string {
+	return crypto.randomBytes(16).toString("hex");
+}
 
 /** Parse + fully validate untrusted JSON into a v3 MetaIdentity. Throws on any drift. */
 export function parseMetaRecordV3(json: string): MetaIdentity {
@@ -514,6 +545,10 @@ export function parseMetaRecordV3(json: string): MetaIdentity {
 		transcriptPath: requireNullableString(obj.transcriptPath, "transcriptPath"),
 		createdAt: requireNonEmptyString(obj.createdAt, "createdAt"),
 		recordUpdatedAt: requireNonEmptyString(obj.recordUpdatedAt, "recordUpdatedAt"),
+		// The one key a V3 record may omit: a record nothing has touched since the field
+		// existed reads its absence as null ("no binding observed"). One schema, one reader —
+		// not a legacy alias: every serialize emits the key.
+		attachIncarnation: requireAttachIncarnation(obj.attachIncarnation === undefined ? null : obj.attachIncarnation),
 	};
 }
 
@@ -533,6 +568,7 @@ export function normalizeMetaIdentity(record: MetaIdentity): MetaIdentity {
 		transcriptPath: record.transcriptPath,
 		createdAt: record.createdAt,
 		recordUpdatedAt: record.recordUpdatedAt,
+		attachIncarnation: record.attachIncarnation,
 	};
 }
 
@@ -559,6 +595,7 @@ export function serializeMetaIdentity(identity: MetaIdentity): string {
 		transcriptPath: identity.transcriptPath,
 		createdAt: identity.createdAt,
 		recordUpdatedAt: identity.recordUpdatedAt,
+		attachIncarnation: identity.attachIncarnation,
 	};
 	return `${JSON.stringify(ordered, null, 2)}\n`;
 }
@@ -576,6 +613,13 @@ export interface MetaIdentityMintInput {
 	cwd: string;
 	model?: string | null;
 	transcriptPath?: string | null;
+	/**
+	 * The arm binding to commit with this write. ONLY the Claude Code hook passes it, and
+	 * only on an arm-capable event under the record-arm lock; `undefined` (every other
+	 * writer, every UserPromptSubmit) keeps the existing value, and a create without it is
+	 * `null`.
+	 */
+	attachIncarnation?: string;
 }
 
 /**
@@ -598,6 +642,7 @@ export function mintMetaIdentity(input: MetaIdentityMintInput, now: Date = new D
 		transcriptPath: requireNullableString(input.transcriptPath ?? null, "transcriptPath"),
 		createdAt: ts,
 		recordUpdatedAt: ts,
+		attachIncarnation: input.attachIncarnation === undefined ? null : requireAttachIncarnation(input.attachIncarnation),
 	};
 }
 
@@ -1314,9 +1359,14 @@ export function decideUpsert(
 		input.transcriptPath === undefined
 			? existing.transcriptPath
 			: requireNullableString(input.transcriptPath, "transcriptPath");
+	// The arm binding is not a merge axis: only a mint replaces it, and nothing clears it.
+	const attachIncarnation =
+		input.attachIncarnation === undefined
+			? existing.attachIncarnation
+			: requireAttachIncarnation(input.attachIncarnation);
 	return {
 		action: "attach",
-		record: { ...existing, cwd, model, transcriptPath, recordUpdatedAt: isoNow(now) },
+		record: { ...existing, cwd, model, transcriptPath, recordUpdatedAt: isoNow(now), attachIncarnation },
 	};
 }
 
@@ -1414,6 +1464,17 @@ export function defaultMetaSendersDir(): string {
 export function defaultMetaReceiversDir(): string {
 	if (process.env.ENTWURF_META_RECEIVERS_DIR) return path.resolve(expandTilde(process.env.ENTWURF_META_RECEIVERS_DIR));
 	return path.join(piAgentDir(), "meta-receivers");
+}
+
+/**
+ * The record-arm lock directory (#147 L2 B1): a sibling of the receivers dir, so a
+ * sandboxed receivers root sandboxes it too and no new environment carrier exists. It is
+ * deliberately NOT the v2 dispatch lock dir — visible resume holds that per-gid lock across
+ * its whole launch + observation window, and the relaunched session's own arm must not wait
+ * on it. Only the Claude Code hook takes this lock; nothing else reads or writes here.
+ */
+export function defaultMetaRecordArmLocksDir(receiversDir: string = defaultMetaReceiversDir()): string {
+	return path.join(path.dirname(receiversDir), "meta-record-arm-locks");
 }
 
 // ---------------------------------------------------------------------------
@@ -1990,6 +2051,12 @@ export interface MetaReceiverMarker {
 	/** Which arm-capable event wrote this presence (never user-prompt-submit). */
 	armProvenance: MetaReceiverArmProvenance;
 	updatedAt: string;
+	/**
+	 * A copy of the record's `attachIncarnation` this arm committed (#147 L2 B1), written only by
+	 * the Claude Code hook under the record-arm lock. `null` when the writer supplied none (every
+	 * other owner kind, a marker older than the field). Readers that predate the field ignore it.
+	 */
+	attachIncarnation: string | null;
 }
 
 /** `<receiversDir>/<gardenId>.json` — keyed by garden id (the universal address). */
@@ -2003,6 +2070,8 @@ export interface WriteMetaReceiverMarkerOptions {
 	nativeSessionId: string;
 	ownerPid: number;
 	armProvenance: MetaReceiverArmProvenance;
+	/** The record binding this arm committed; only the Claude Code hook passes it. */
+	attachIncarnation?: string;
 	/** Defaults to "claude-code-cli" — the watchPaths subscriber. */
 	ownerKind?: string;
 	receiversDir?: string;
@@ -2025,6 +2094,7 @@ export function writeMetaReceiverMarker(opts: WriteMetaReceiverMarkerOptions): s
 		ownerKind: requireNonEmptyString(opts.ownerKind ?? "claude-code-cli", "ownerKind"),
 		armProvenance: requireArmProvenance(opts.armProvenance),
 		updatedAt: isoNow(opts.now ?? new Date()),
+		attachIncarnation: opts.attachIncarnation === undefined ? null : requireAttachIncarnation(opts.attachIncarnation),
 	};
 	const tmp = `${file}.${crypto.randomBytes(4).toString("hex")}.tmp`;
 	fs.writeFileSync(tmp, `${JSON.stringify(marker, null, 2)}\n`, { mode: 0o600 });
@@ -2043,6 +2113,31 @@ export interface ReadMetaReceiverMarkerOptions {
 }
 
 /**
+ * Validate receiver-marker bytes — the one validator, shared by the path reader below and by
+ * the no-follow fd reader visible resume uses (#147 L2 D3). Throws on a malformed marker;
+ * returns null for an IMPLAUSIBLE owner pid. Same rule as the sender marker, and for the same
+ * reason one layer over: an impossible owner is not a live one, so a refuted marker must never
+ * read back as an ACTIVE RECEIVER and pull the mailbox rail into delivering to a void. An
+ * absent `attachIncarnation` reads as null; a present malformed one throws.
+ */
+export function parseMetaReceiverMarker(json: string): MetaReceiverMarker | null {
+	const raw = JSON.parse(json);
+	const marker: MetaReceiverMarker = {
+		gardenId: requireGardenId(raw.gardenId),
+		backend: requireBackend(raw.backend),
+		nativeSessionId: requireNonEmptyString(raw.nativeSessionId, "nativeSessionId"),
+		ownerPid: typeof raw.ownerPid === "number" ? raw.ownerPid : Number.NaN,
+		ownerStartKey: requireNonEmptyString(raw.ownerStartKey, "ownerStartKey"),
+		ownerKind: requireNonEmptyString(raw.ownerKind, "ownerKind"),
+		armProvenance: requireArmProvenance(raw.armProvenance),
+		updatedAt: requireNonEmptyString(raw.updatedAt, "updatedAt"),
+		attachIncarnation: requireAttachIncarnation(raw.attachIncarnation === undefined ? null : raw.attachIncarnation),
+	};
+	if (!isPlausibleOwnerPid(marker.ownerPid)) return null;
+	return marker;
+}
+
+/**
  * Read the receiver presence marker for a garden id. Returns null when absent,
  * corrupt, or (under verifyOwner) the owner pid is no longer the same live process —
  * each means "no active receiver", which the deliverability predicate turns into
@@ -2057,21 +2152,8 @@ export function readMetaReceiverMarker(opts: ReadMetaReceiverMarkerOptions): Met
 	}
 	if (!file || !fs.existsSync(file)) return null;
 	try {
-		const raw = JSON.parse(fs.readFileSync(file, "utf8"));
-		const marker: MetaReceiverMarker = {
-			gardenId: requireGardenId(raw.gardenId),
-			backend: requireBackend(raw.backend),
-			nativeSessionId: requireNonEmptyString(raw.nativeSessionId, "nativeSessionId"),
-			ownerPid: typeof raw.ownerPid === "number" ? raw.ownerPid : Number.NaN,
-			ownerStartKey: requireNonEmptyString(raw.ownerStartKey, "ownerStartKey"),
-			ownerKind: requireNonEmptyString(raw.ownerKind, "ownerKind"),
-			armProvenance: requireArmProvenance(raw.armProvenance),
-			updatedAt: requireNonEmptyString(raw.updatedAt, "updatedAt"),
-		};
-		// Same rule as the sender marker, and for the same reason one layer over: an
-		// impossible owner is not a live one, so a refuted marker must never read back
-		// as an ACTIVE RECEIVER and pull the mailbox rail into delivering to a void.
-		if (!isPlausibleOwnerPid(marker.ownerPid)) return null;
+		const marker = parseMetaReceiverMarker(fs.readFileSync(file, "utf8"));
+		if (marker === null) return null;
 		if (opts.verifyOwner !== false) {
 			const liveKey = processStartKey(marker.ownerPid);
 			if (!liveKey || liveKey !== marker.ownerStartKey) return null;
@@ -2128,6 +2210,13 @@ export function removeMetaReceiverMarker(opts: RemoveMetaReceiverMarkerOptions):
 
 export interface UpsertMetaSessionOptions {
 	input: MetaIdentityMintInput;
+	/**
+	 * Refuse, BEFORE any write, unless the decision is this action. The Claude Code hook
+	 * creates a record it found absent only with `"create"`: if another writer published one
+	 * in between, the decision would silently become an unlocked ATTACH — exactly the write
+	 * the record-arm lock exists to keep out (#147 L2 B1).
+	 */
+	expectAction?: UpsertAction;
 	/** Override the store directory (defaults to {@link defaultMetaSessionsDir}). */
 	dir?: string;
 	now?: Date;
@@ -2175,10 +2264,45 @@ export function upsertMetaSession(opts: UpsertMetaSessionOptions): UpsertMetaSes
 	const target = requireNonEmptyString(opts.input.nativeSessionId, "nativeSessionId");
 	const existing = cert.records.find((record) => record.identity.nativeSessionId === target)?.identity ?? null;
 	const decision = decideUpsert(existing, opts.input, opts.now);
+	if (opts.expectAction !== undefined && decision.action !== opts.expectAction) {
+		throw new UpsertActionMismatchError(opts.expectAction, decision.action, target);
+	}
 	const file = path.join(dir, metaRecordFilename(decision.record));
 	if (decision.action === "create") publishExclusiveIdentity(file, decision.record);
 	else atomicWriteIdentity(file, decision.record);
 	return { action: decision.action, record: decision.record, dir, path: file };
+}
+
+/** The upsert refused before writing because its decision was not the expected action. */
+export class UpsertActionMismatchError extends MetaRecordError {
+	readonly expected: UpsertAction;
+	readonly actual: UpsertAction;
+	constructor(expected: UpsertAction, actual: UpsertAction, nativeSessionId: string) {
+		super(
+			`upsert expected to ${expected} the record for nativeSessionId "${nativeSessionId}" but would ${actual} ` +
+				"it; nothing was written.",
+		);
+		this.expected = expected;
+		this.actual = actual;
+	}
+}
+
+/**
+ * The certified record a native session id already has, READ ONLY — the same certification
+ * {@link upsertMetaSession} runs (a defective store throws the same refusal), with no write.
+ * The Claude Code hook learns the garden id it must lock this way, so no record write ever
+ * happens outside the record-arm lock for an existing record (#147 L2 B1).
+ */
+export function findCertifiedIdentityByNativeSessionId(
+	nativeSessionId: string,
+	dirOverride?: string,
+): MetaIdentity | null {
+	const dir = path.resolve(expandTilde(dirOverride ?? defaultMetaSessionsDir()));
+	if (!fs.existsSync(dir)) return null;
+	const cert = certifyActiveStoreDir(dir);
+	if (cert.defects.length > 0) throw new MetaRecordError(activeStoreRefusal(cert));
+	const target = requireNonEmptyString(nativeSessionId, "nativeSessionId");
+	return cert.records.find((record) => record.identity.nativeSessionId === target)?.identity ?? null;
 }
 
 /**

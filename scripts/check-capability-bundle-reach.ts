@@ -28,8 +28,12 @@
  *   - B4: the live load seam `metaCapabilityFor()` returns for every
  *         META_CITIZEN_BACKENDS backend without throwing — the real `entwurf_v2` path.
  *
- * Deterministic: filesystem + import only. No backend, no network, no API, no
- * record write. Safe in the `pnpm check` static floor.
+ *   - C (#147 L2 B1): the compiled Claude Code hook's static `from` closure equals what
+ *         the installer copies, and the hook staged with only that closure runs.
+ *
+ * Deterministic: filesystem, import, and ONE shipped-hook child process (C2) that writes a
+ * record into its own private store under a private HOME and XDG roots. No backend, vendor
+ * CLI, model, network or API. Safe in the `pnpm check` static floor.
  *
  * REQUIRES a built bridge (`pnpm run build-bridge`, which `prepare`/`prepack` run).
  * A missing dist is a FAILURE, never a skip — a gate that skips when the artifact
@@ -37,9 +41,13 @@
  */
 
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import { hookImportClosure, installerCopiedLibFiles, stageMetaHookBundle } from "./lib/meta-hook-bundle.ts";
+import { reclaimOnExit } from "./lib/reclaim-on-exit.ts";
 
 const REPO = path.join(import.meta.dirname, "..");
 
@@ -125,6 +133,90 @@ for (const copy of copies) {
 			threw ? `--- threw ---\n${threw}` : undefined,
 		);
 	}
+}
+
+// C — the COMPILED Claude Code hook bundle reaches its whole closure (#147 L2 B1). Moved here from
+// check-meta-hook-session-switch, whose source-only qualification snapshot has no dist: this gate
+// already requires the built bundle, so the emission proof sits with the dist consumer. Scope is
+// the static double-quoted `from` imports scripts/lib/meta-hook-bundle.ts follows; the staged RUN
+// is the independent proof that nothing outside them is needed.
+{
+	const DIST_HOOK = path.join(BRIDGE_DIST, "pi-extensions", "meta-bridge-hook.js");
+	ok(
+		"C0: the compiled hook entry exists (a missing dist is a failure, not a skip)",
+		fs.existsSync(DIST_HOOK),
+		`--- expected ---\n${DIST_HOOK}\nrun: pnpm run build-bridge`,
+	);
+	const installerCopies = installerCopiedLibFiles(
+		fs.readFileSync(path.join(REPO, "scripts", "meta-bridge-install.sh"), "utf8"),
+	);
+	const distClosure = hookImportClosure(DIST_HOOK)
+		.map((rel) => path.basename(rel))
+		.map((base) => (base === "session-id.js" ? base : base.replace(/\.(ts|js)$/, ".$LIB_EXT")))
+		.sort();
+	ok(
+		"C1: the installer copies exactly the compiled hook's static `from` import closure [QK:BUNDLE-REACH-COMPILED-HOOK-CLOSURE]",
+		distClosure.includes("entwurf-v2-lock.$LIB_EXT") && JSON.stringify(distClosure) === JSON.stringify(installerCopies),
+		`--- compiled closure ---\n${distClosure.join("\n")}\n--- installer copies ---\n${installerCopies.join("\n")}`,
+	);
+	// Stage the compiled entry with ONLY that closure and run it the way Claude does: the shipped
+	// manifest's exec argv through the shipped launcher, every meta root sandboxed, provenance never
+	// inherited. A record on disk means the compiled closure loaded end to end.
+	const PLUGIN_SRC = path.join(REPO, "pi", "meta-bridge", "entwurf-meta-receive");
+	const leaf =
+		(
+			JSON.parse(fs.readFileSync(path.join(PLUGIN_SRC, "hooks", "hooks.json"), "utf8")) as {
+				hooks: Record<string, Array<{ hooks: Array<{ command?: string; args?: string[] }> }>>;
+			}
+		).hooks.SessionStart?.[0]?.hooks[0] ?? {};
+	const root = reclaimOnExit(fs.mkdtempSync(path.join(os.tmpdir(), "psa-bundle-reach-jshook-")));
+	const agent = reclaimOnExit(fs.mkdtempSync(path.join(os.tmpdir(), "psa-bundle-reach-jsagent-")));
+	stageMetaHookBundle(root, DIST_HOOK, path.join(PLUGIN_SRC, "scripts", "hook-launch.sh"));
+	const el = (v: string) =>
+		v
+			.replace("__NODE_BIN__", process.execPath)
+			.replaceAll("${CLAUDE_PLUGIN_ROOT}", root)
+			.replace("__HOOK_ENTRY__", "meta-bridge-hook.js");
+	// Hard Rule 12: the child's HOME and every writable XDG root are private too, not only the
+	// meta roots — a hook that resolved anything through HOME/XDG must land inside `agent`.
+	const priv = (name: string) => {
+		const dir = path.join(agent, name);
+		fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+		return dir;
+	};
+	const env: NodeJS.ProcessEnv = {
+		...process.env,
+		HOME: priv("home"),
+		XDG_CONFIG_HOME: priv("xdg-config"),
+		XDG_CACHE_HOME: priv("xdg-cache"),
+		XDG_DATA_HOME: priv("xdg-data"),
+		XDG_STATE_HOME: priv("xdg-state"),
+		XDG_RUNTIME_DIR: priv("xdg-runtime"),
+		CLAUDE_PLUGIN_ROOT: root,
+		PI_CODING_AGENT_DIR: agent,
+		ENTWURF_META_SESSIONS_DIR: path.join(agent, "meta-sessions"),
+		ENTWURF_META_SENDERS_DIR: path.join(agent, "meta-senders"),
+		ENTWURF_META_RECEIVERS_DIR: path.join(agent, "meta-receivers"),
+		ENTWURF_META_MAILBOX_DIR: path.join(agent, "meta-mailbox"),
+	};
+	delete env.ENTWURF_META_HOOK_LAUNCH;
+	const run = spawnSync(el(leaf.command ?? ""), (leaf.args ?? []).map(el), {
+		encoding: "utf8",
+		input: JSON.stringify({
+			hook_event_name: "SessionStart",
+			session_id: "c0c0c0c0-compiled-closure",
+			transcript_path: path.join(agent, "c0c0c0c0.jsonl"),
+			cwd: agent,
+			source: "startup",
+		}),
+		env,
+	});
+	const sessions = path.join(agent, "meta-sessions");
+	ok(
+		"C2: the compiled hook, staged with only that closure, runs to a written record [QK:BUNDLE-REACH-COMPILED-HOOK-RUNS]",
+		run.status === 0 && fs.existsSync(sessions) && fs.readdirSync(sessions).some((n) => n.endsWith(".meta.json")),
+		`--- exit ${run.status} ---\n${run.stderr}`,
+	);
 }
 
 console.log(`\ncheck-capability-bundle-reach: PASS (${passed} assertions)`);

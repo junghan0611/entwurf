@@ -109,7 +109,7 @@ if hooks is not None:
                 # the array at runtime and reports the hook as `exit_code: 0,
                 # outcome: success`. So the minimal keyset never bought protection from
                 # that version — it only kept us on a launch form whose topology no host
-                # could guarantee. The real defenses are the `>=2.1.217` floor
+                # could guarantee. The real defenses are the `>=2.1.306` floor
                 # (check-claude-floor-coherence) and hook-launch.sh refusing an empty
                 # argv. The marketplace/plugin manifests below stay minimal: the closed-
                 # schema lesson that produced this gate was about a DECORATIVE key

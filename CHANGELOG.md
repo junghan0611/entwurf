@@ -28,15 +28,16 @@ All notable changes to this project will be documented here. Format follows [Kee
   coordinator's host) could not call the existing same-id resume verb: its contact exposed six bridge
   tools and resume was not among them. It now registers a seventh, under the bridge's own
   single-`target` schema, and forwards the call to the bridge unchanged. The verb itself is
-  unchanged: pi-only targets, a live target refused, no turn, the record supplies transcript, model
-  and cwd. Nothing new authorises who may resume, Claude Code resume and a retire verb are not
-  here, and a running durable host offers the tool only after it is restarted onto a build that
+  unchanged by L1: at that checkpoint pi-only targets (L2 below widens the domain), a live target
+  refused, no turn, the record supplies the launch facts. Nothing new authorises who may resume, a
+  retire verb is not here, and a running durable host offers the tool only after it is restarted onto a build that
   carries it. Because the bootstrap reserves every contact tool name, an operator native module
   that registers a tool named `entwurf_resume_call` is now refused as `native-module-name-reserved`.
   Proof: two QKs in `pi-extensions/meta-bridge-pi-durable.test.ts` — the tool is offered and hands
   the bridge exactly `{target}`, and a faux model's call on the published runtime reaches this
   package's compiled bridge through the contact's production connector and reads the bridge's named
-  `target-not-pi` refusal for a test-owned claude-code record (no citizen is resumed). Two mutants
+  refusal for a test-owned record of a backend with no same-id resume (codex since L2; no citizen is
+  resumed). Two mutants
   in the `pi-durable` lane (84 → 86), executed through `./run.sh check-pi-durable-beside`. The
   independent tool lists of `check-pi-durable-contact`, `check-pi-durable-send` and
   `smoke-pi-durable-fresh-live` now name seven tools. One default-cell `check-pi-durable-send` run
@@ -45,6 +46,82 @@ All notable changes to this project will be documented here. Format follows [Kee
   bridge's own listed schema — read from that run's raw wire receipt, because the default cell's
   QK judges only self, peers and v2; the seven-tool `native-module` cell was not run. A running
   coordinator host offering seven tools, and any operator rollout, remain unmeasured.
+
+### Resume
+
+- **`entwurf_resume_call` reopens a dormant Claude Code citizen under its own garden id (#147 L2).**
+  The verb's domain is now pi and claude-code, a closed set; every other backend is the named
+  `target-backend-unsupported` (the retired `target-not-pi` has no alias). A Claude Code target is
+  launched as the fixed `claude --resume <record nativeSessionId>` at the record's cwd — no model or
+  permission flag it was once started with is restored, and no transcript is read; the record's
+  session id must be a lowercase UUID and its recorded transcript an existing file. Dormancy means
+  the LAST VALIDATED owner the Entwurf hook armed is proven gone AND that arm is still the record's
+  last one: the receiver marker, read through the no-follow fd reader (`readStoreRecordFile`: a
+  symlink or non-regular entry is corrupt, never followed) and judged by the shared
+  `classifyMarkerOwner`, must name this record's session and an owner proven DEAD, and the record
+  re-read after that verdict must carry the same non-null `attachIncarnation` the marker copied.
+  No marker, an unreadable or mismatched one, a live owner, an inconclusive one and an unbound one
+  each refuse by name (`target-receiver-absent` / `-corrupt` / `-mismatch` / `-unbound`,
+  `target-live`, `target-indeterminate`) with no window; the launch uses the re-read record, and no
+  marker or record is removed or rewritten. The observation succeeds only when a NEW live owner in
+  the pane this call opened re-arms the marker for the same session with a fresh binding the
+  current record also carries (same createdAt); a record defect stops it at once as
+  `record-unreadable` with its cause (window kept), and an unseen re-arm is `resume-unobserved`.
+  The verb submits no prompt; for Claude Code what the runtime does after it comes back (a doorbell
+  on unread mail may wake a turn) is unmeasured. Both backends' resume windows now carry the fixed
+  identity scrub fresh-call already had (`-e PI_SESSION_ID= -e PI_AGENT_ID=`, shared from
+  `mux-launch.ts`), because a resumed Claude Code never re-exports its own. Inside herdr the tmux
+  resume rail refuses as `herdr-resume-unsupported` instead of using an ambient `TMUX` (this also
+  applies to pi). The receipt names the caller from the same authoritative identity fresh_call reads,
+  as attribution only: an anonymous caller is `unattributed`, never refused, while a defect in the
+  caller's own store fails the call loud — for pi resume too — exactly as fresh_call does.
+- **The arm binding: one new V3 key, `attachIncarnation` (#147 L2 B1).** A dead receiver marker
+  used to be resume evidence even when a LATER attach of the same session had committed but could
+  not re-arm the marker (owner unproven, marker write failed), so a second window could open on a
+  live session. Now the Claude Code hook mints a clock-independent 128-bit value (`randomBytes(16)`)
+  on every arm-capable event (SessionStart, CwdChanged, FileChanged — an arm revision, so one live
+  process mints many), commits it in the same atomic record upsert and copies it into the receiver
+  marker; UserPromptSubmit and every other writer preserve it, and nothing fills it by inference.
+  Every write the hook makes to an existing record runs under a per-gid record-arm lock in its own
+  directory (`meta-record-arm-locks`, beside the receivers dir; never the v2 dispatch lock visible
+  resume holds across its observation): the garden id is learned by a read-only certified lookup,
+  an absent record is published create-only (`upsertMetaSession` `expectAction` refuses a raced
+  create instead of turning it into an unlocked attach), an arm waits at most 2 s for the lock and
+  otherwise writes NOTHING and logs ERROR, and a busy UserPromptSubmit skips its backfill. A marker
+  write failure after the record committed is an ERROR logged after `INFO armed watch`, and resume
+  then refuses that garden as unbound. **Schema:** the same V3, one key wider — absent reads as
+  `null` ("no binding observed"), every serialize emits it, a present value must be 32 lowercase
+  hex, every other stray key is still refused; gardenId, nativeSessionId and createdAt keep their
+  values and no record is rewritten. `meta-facts` citizens carry the key verbatim. **One-way per host:** a reader that predates the key refuses
+  every record that carries it, and an old writer certifies the whole store first, so once one new
+  write lands every old reader and writer on that host refuses — a mixed-reader incident on oracle
+  on 2026-10-21 (records written by a Pi loaded from the development checkout) took the CC hook
+  and the pi-durable contact down until the checkout dist and the CC hook bundle were re-deployed.
+  Codex birth, the Copilot extension/receiver, the OMP bridge/receiver and the external
+  `entwurf-peek` mirror still carry the old reader there; their roll-forward is a separate step.
+  Old dormant Claude Code citizens whose record has no binding stay `target-receiver-unbound` until
+  a human reopens them once under a new hook. **Accepted boundary (GLG, 2026-10-21, current live
+  Pi/CC cohort scope):** only committed hook attaches are guarded — a process that holds the session
+  without one (hooks disabled, a record-arm lock timeout or a store failure at its start) is
+  invisible to the proof. The installed CC hook bundle now carries `lib/entwurf-v2-lock`, and the
+  doctor's writer-version parity checks it beside the writer.
+- **Claude Code floor `>=2.1.306`** (`package.json` `entwurf.claudeCodeFloor`, GLG 2026-10-21):
+  same-id resume runs `claude --resume` from the record's last observed cwd, and the vendor CLI
+  reference says the session-id search covers other projects only from v2.1.223. 2.1.306 is the
+  version GLG relayed as running here; it is a declared floor with no LIVE receipt at it yet. The
+  exec-form observations at 2.1.217 stand as observations.
+- Proof: QKs beside the composition (`entwurf-v2-visible-resume.test.ts`), in
+  `check-resume-launch-identity`, `check-mux-resume-call`, `check-meta-v3-record`,
+  `check-meta-session`, `check-meta-hook-session-switch` (binding pair, UPS preserve, unproven owner,
+  lock busy/wait/own-dir, two overlapping successful schedules, and an install-closure check that
+  compares the hook's static double-quoted `from` imports with what the installer copies and then
+  runs the staged compiled hook) and `check-meta-doctor-oracle` (installed binding; lock module
+  missing/drifted). Mutants: v2-visible-resume 18 → 40, mux-resume-call 10 → 13,
+  resume-launch-identity 7 → 10, meta-hook-session-switch 17 → 25, meta-identity 4 → 9, existing
+  ones re-anchored. The LIVE dormant→resume journey for Claude Code is not measured;
+  `smoke-mux-lifecycle-live`'s Claude Code cell expects the still-live sibling's resume to be
+  refused as `target-live`, and that LIVE cell was not run. Retire (G3) and the caller's four cells
+  are not part of this change.
 
 ## v2026.10.20-herdr.0.40.0 — Herdr Entwurf plugin 0.40.0
 

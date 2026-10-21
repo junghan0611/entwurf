@@ -236,8 +236,13 @@ dormant **pi** citizen을 자기 garden id 그대로 보이는 창에 되세운�
    GLG가 직접 읽을 수 있다고 안내한다. lock은 이미 풀렸고 창은 열린 채 남는다.
 5. 거절은 그대로 옮긴다. 어느 것도 창을 열지 않는다.
    - `target-live` — 이미 살아 있다. `entwurf_v2 fire-and-forget`으로 말을 건다.
-   - `target-not-pi` — claude-code 등은 same-id resume이 없다. control socket을 세우는
-     backend만 같은 id로 다시 설 수 있다. 새 형제를 열거나 그 backend의 rail로 보낸다.
+   - `target-backend-unsupported` — pi와 Claude Code 밖의 backend(Codex, agy 등)는 same-id
+     resume이 없다. 새 형제를 열거나 그 backend의 rail로 보낸다.
+   - `target-receiver-absent` / `-corrupt` / `-mismatch` / `-unbound`, 그리고 owner를 판정하지
+     못한 `target-indeterminate` — Claude Code는 hook이 마지막으로 검증해 arm한 owner가 dead로
+     증명되고, 그 arm이 아직 record의 마지막 arm(같은 `attachIncarnation`)일 때만 다시 연다.
+     그 증명이 없으면 창을 열지 않는다. `-unbound`인 옛 잠든 세션은 사람이 같은 id로 한 번 열어
+     새 hook이 arm해야 다시 대상이 된다.
 6. **소켓이 답한 것과 같은 대화가 돌아온 것은 다른 사실이다.** OBSERVATION은 그 주소에
    프로세스가 섰다는 뜻이고, 대화의 연속성은 **회수(recall)** 로만 증명된다. 확인하려면
    창이 닫히기 전에 오간 사실 하나를 `entwurf_v2`로 되물어 답을 받는다. 형제가 모른다고
@@ -282,10 +287,14 @@ dormant **pi** citizen을 자기 garden id 그대로 보이는 창에 되세운�
 3. live handshake를 `wants_reply=true`로 한 번 보낸다.
 4. launch / callback / mailbox delivery receipt를 분리한다.
 5. mailbox enqueue만 확인됐으면 Claude가 읽었다거나 turn을 마쳤다고 과장하지 않는다.
-6. Claude Code에는 same-id resume이 없다고 명시한다. 확인시키려면 그 id에
-   `entwurf_resume_call`을 한 번 보내 `target-not-pi` 거절과 `No window was opened`를
-   관측한다. control socket을 세우는 backend만 같은 id로 다시 설 수 있고, 그 자리에서
-   할 수 있는 일은 새 형제를 여는 것이다.
+6. 살아 있는 Claude Code 형제에 `entwurf_resume_call`을 보내면 `target-live` 거절과
+   `No window was opened`를 관측한다. GLG가 창을 닫은 뒤에는 같은 id로 되세울 수 있다.
+   LAUNCH는 `claude --resume <session id>`를 요청했다는 사실이고, OBSERVATION은 새 live
+   process가 이 호출이 연 pane에서 같은 session의 receiver marker를 새 binding으로 다시
+   세웠는지(`receiver-armed`)다. 이 verb는 prompt를 보내지 않는다. 그 뒤 runtime이 스스로 하는
+   일(안 읽은 mail이 turn을 깨우는지)은 미측정이다. model과
+   권한 옵션은 복원되지 않는다고 말해 준다. 이 dormant→resume 여정의 LIVE 측정은 아직
+   없다(#147 L2는 deterministic 증명까지).
 
 ### `boundary` / “지금 어디까지 돼?”
 
@@ -295,7 +304,8 @@ dormant **pi** citizen을 자기 garden id 그대로 보이는 창에 되세운�
 가능: explicit model로 visible fresh Pi/Claude Code/Copilot → exact callback garden id → live delivery
 가능: Pi window close → peers에서 dormant 확인 → honest reject 관측
 가능: dormant pi를 같은 garden id로 visible resume → OBSERVATION receipt → 다시 delivery → recall
-불가: claude-code의 same-id resume (target-not-pi) — 새 형제를 열 수는 있다
+가능: dormant Claude Code를 같은 garden id로 visible resume (마지막 검증 owner가 dead이고 record binding과 일치할 때만) — LIVE 여정은 미측정
+불가: pi·Claude Code 밖 backend의 same-id resume (target-backend-unsupported) — 새 형제를 열 수는 있다
 불가: 자동 재개. resume은 GLG가 부를 때 한 번 도는 verb이며 watcher/retry/supervisor가 없다
 불가: resume에 model/task/prompt 얹기 — record와 transcript가 그 값을 소유한다
 금지: hidden/background fallback, owned-outcome, transcript/peer 추측 correlation

@@ -19,7 +19,7 @@ Expired per-leaf grants and handoffs are not current instructions. They do not p
 
 ## Contact and installation
 
-The source adapter defines seven tools: `entwurf_self`, `entwurf_peers`, `entwurf_v2`, `entwurf_inbox_read`, `entwurf_callback`, `entwurf_fresh_call` and `entwurf_resume_call`. The last lets this durable citizen, as a caller, reopen a dormant **pi** citizen under that citizen's own garden id (#147 L1). It is not a resume of the durable host: Entwurf has no verb that reopens a pi-durable citizen itself under its garden id. Callable schema and actual tool registration, not this prose, establish support.
+The source adapter defines seven tools: `entwurf_self`, `entwurf_peers`, `entwurf_v2`, `entwurf_inbox_read`, `entwurf_callback`, `entwurf_fresh_call` and `entwurf_resume_call`. The last lets this durable citizen, as a caller, reopen a dormant **pi or Claude Code** citizen under that citizen's own garden id (#147 L1, L2). It is not a resume of the durable host: Entwurf has no verb that reopens a pi-durable citizen itself under its garden id. Callable schema and actual tool registration, not this prose, establish support.
 
 The owned runtime installs extensions before native recovery, provides the required sender-readiness boundary, and exposes root-directed input through the native submission API. Root admission must not change the operator's selected conversation and must propagate native refusal. Runtime internals remain native-owned.
 

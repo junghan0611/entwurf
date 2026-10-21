@@ -1,6 +1,6 @@
 /**
  * mux-resume-call — open ONE window in the caller's own tmux session at a cwd this module did
- * not choose, and hand it argv this module did not author.
+ * not choose, start the backend's FIXED runtime there, and hand it argv this module did not author.
  *
  * ── Why this is a module and not a parameter on fresh-call ──
  *
@@ -15,7 +15,15 @@
  *   visible-resume composition → resume-call → placement leaf (unchanged, carrier-free)
  *   resume-call               -X-> garden identity, records, locks, delivery
  *
- * This module never learns which citizen it is reopening. It sees a cwd and an argv tail.
+ * This module never learns which citizen it is reopening. It sees a backend, a cwd and an argv
+ * tail; the backend only selects a runtime from a closed table (#147 L2).
+ *
+ * ── Tmux only, and said so inside herdr ──
+ *
+ * This is the tmux rail. A caller inside herdr (`HERDR_ENV=1`, herdr's own marker, read for its
+ * exact value as `fresh-call-dispatch` does) is refused by name before anything else: herdr owns
+ * placement there, and an ambient `TMUX` that happens to be set would otherwise put the window in
+ * a session the operator is not looking at. There is no herdr resume rail yet and no fallback.
  *
  * ── The cwd is the whole reason this module owns its own tmux argv ──
  *
@@ -47,6 +55,7 @@ import {
 	LaunchPreconditionError,
 	type LaunchRejectReason,
 	resolveRuntimeOnPath,
+	SCRUBBED_INHERITED_ENV,
 } from "./mux-launch.ts";
 import {
 	APPEND_FORMAT,
@@ -61,15 +70,20 @@ import {
 	type WindowHandle,
 } from "./mux-placement.ts";
 
-/** The fixed runtime a resume reopens. Only pi stands a control socket up, so only pi has a
- * same-id resume at all — the backend boundary is enforced upstream by
- * `resolveResumeLaunchIdentity`, and this constant is the mux half of the same fact. */
-export const RESUME_CALL_RUNTIME = "pi";
+/** The fixed runtime each resumable backend reopens with. A closed table, not a command input: the
+ * backend boundary is enforced upstream by `resolveResumeLaunchIdentity`, and this is the mux half
+ * of the same fact. */
+export const RESUME_CALL_RUNTIME = { pi: "pi", "claude-code": "claude" } as const;
+export type ResumeCallBackend = keyof typeof RESUME_CALL_RUNTIME;
 
 /** Why a resume window could not be opened. Every value is a NAMED refusal; this module has no
  * fallback launch and no fallback directory. The cwd members come from the shared classification
  * leaf and their string values are stable contract. */
-export type ResumeCallRejectReason = PlacementRejectReason | LaunchRejectReason | TmuxCwdRejectReason;
+export type ResumeCallRejectReason =
+	| PlacementRejectReason
+	| LaunchRejectReason
+	| TmuxCwdRejectReason
+	| "herdr-resume-unsupported";
 
 /** Coordinates plus what was handed to tmux. `cwd` is the REQUESTED start directory — the same
  * kind of fact as `runtimePath`, namely what tmux was asked for, not an observation. */
@@ -81,8 +95,11 @@ export interface ResumeCallReceipt extends WindowHandle {
 export type ResumeCallResult = { ok: true; receipt: ResumeCallReceipt } | { ok: false; reason: ResumeCallRejectReason };
 
 /**
- * Launch argv: the leaf's detached-append shape plus `-c`, the runtime, then the caller's flags.
- * `--` is what keeps tmux from reading the runtime or its flags as tmux options.
+ * Launch argv: the leaf's detached-append shape, the fixed identity scrub (`SCRUBBED_INHERITED_ENV`,
+ * the same two assignments every fresh window carries), `-c`, the runtime, then the caller's flags.
+ * `--` is what keeps tmux from reading the runtime or its flags as tmux options. The scrub is not a
+ * carrier: it only empties identity a tmux server may have inherited, and a resumed Claude Code
+ * (which, unlike pi, never re-exports its own) would otherwise present a stale one to its bridge.
  */
 export function buildResumeCallArgs(
 	placement: Placement,
@@ -98,6 +115,7 @@ export function buildResumeCallArgs(
 		"new-window",
 		"-d",
 		"-a",
+		...SCRUBBED_INHERITED_ENV.flatMap((assignment) => ["-e", assignment]),
 		"-t",
 		`${placement.sessionId}:{end}`,
 		"-c",
@@ -119,15 +137,16 @@ export function buildResumeCallArgs(
  * `runtimeArgs` is passed through untouched. This module does not know what `--session` means.
  */
 export function resumeCall(
-	params: { cwd: string; runtimeArgs: readonly string[] },
+	params: { backend: ResumeCallBackend; cwd: string; runtimeArgs: readonly string[] },
 	env: NodeJS.ProcessEnv = process.env,
 ): ResumeCallResult {
+	if (env.HERDR_ENV === "1") return { ok: false, reason: "herdr-resume-unsupported" };
 	const badCwd = classifyTmuxCwd(params.cwd);
 	if (badCwd) return { ok: false, reason: badCwd };
 
 	let runtimePath: string;
 	try {
-		runtimePath = resolveRuntimeOnPath(RESUME_CALL_RUNTIME, env);
+		runtimePath = resolveRuntimeOnPath(RESUME_CALL_RUNTIME[params.backend], env);
 	} catch (err) {
 		if (err instanceof LaunchPreconditionError) return { ok: false, reason: err.reason };
 		throw err;
@@ -180,7 +199,9 @@ export const RESUME_CALL_REJECT_HINT: Record<ResumeCallRejectReason, string> = {
 	"cwd-missing":
 		"the recorded cwd no longer exists; tmux would not report this, it would open the window in $HOME and look successful",
 	"cwd-not-directory": "the recorded cwd exists but is not a directory",
-	"runtime-unresolved": "pi is not installed on PATH",
+	"herdr-resume-unsupported":
+		"this agent runs inside herdr, and same-id resume has only a tmux rail — nothing was opened in any ambient tmux session",
+	"runtime-unresolved": "the citizen's runtime (pi or claude) is not installed on PATH",
 	"runtime-not-absolute": "the resolved runtime path is not absolute",
 	"runtime-path-whitespace": "the resolved runtime path contains whitespace, which tmux would re-split",
 	"runtime-missing": "nothing exists at the resolved runtime path",

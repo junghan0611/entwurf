@@ -47,8 +47,8 @@
  */
 
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
-import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { spawn, spawnSync } from "node:child_process";
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -56,10 +56,12 @@ import { resolveMailboxReceiverFacts } from "../pi-extensions/lib/entwurf-delive
 import { listEntwurfFacts } from "../pi-extensions/lib/entwurf-fact-provider.ts";
 import { renderEntwurfPeers } from "../pi-extensions/lib/entwurf-peers-render.ts";
 import type { DispatchDecision } from "../pi-extensions/lib/entwurf-v2-decider.ts";
+import { acquireLock, releaseLock } from "../pi-extensions/lib/entwurf-v2-lock.ts";
 import { makeProductionEntwurfV2Deps } from "../pi-extensions/lib/entwurf-v2-production.ts";
 import { runEntwurfV2 } from "../pi-extensions/lib/entwurf-v2-runner.ts";
 import { renderEntwurfV2Result } from "../pi-extensions/lib/entwurf-v2-surface.ts";
 import {
+	defaultMetaRecordArmLocksDir,
 	listAllMetaIdentitiesDir,
 	type MetaIdentity,
 	makeStoreRecordReader,
@@ -70,6 +72,7 @@ import {
 	upsertMetaSession,
 	writeMetaReceiverMarker,
 } from "../pi-extensions/lib/meta-session.ts";
+import { hookImportClosure, installerCopiedLibFiles, stageMetaHookBundle } from "./lib/meta-hook-bundle.ts";
 import { reclaimOnExit } from "./lib/reclaim-on-exit.ts";
 
 let passed = 0;
@@ -91,17 +94,9 @@ const sessionStartLeaf = manifest.hooks.SessionStart?.[0]?.hooks[0] ?? {};
 
 /** Stage a plugin bundle: entry + lib closure + the launcher, exactly as installed. */
 function makeBundle(root: string): void {
-	mkdirSync(path.join(root, "lib"), { recursive: true });
-	mkdirSync(path.join(root, "scripts"), { recursive: true });
-	copyFileSync(path.join(REPO_DIR, "pi-extensions", "meta-bridge-hook.ts"), path.join(root, "meta-bridge-hook.ts"));
-	copyFileSync(
-		path.join(REPO_DIR, "pi-extensions", "lib", "meta-session.ts"),
-		path.join(root, "lib", "meta-session.ts"),
-	);
-	copyFileSync(path.join(REPO_DIR, "pi-extensions", "lib", "session-id.js"), path.join(root, "lib", "session-id.js"));
-	const launcher = path.join(root, "scripts", "hook-launch.sh");
-	copyFileSync(LAUNCHER, launcher);
-	chmodSync(launcher, 0o755);
+	// Entry + its OWN import closure + the launcher (scripts/lib/meta-hook-bundle.ts): a hand-kept
+	// list here could stay green while the installer missed a file the hook now imports.
+	stageMetaHookBundle(root, path.join(REPO_DIR, "pi-extensions", "meta-bridge-hook.ts"), LAUNCHER);
 }
 
 /** Resolve one manifest element the way Claude does: plain-string substitution, no shell. */
@@ -555,6 +550,228 @@ ok(
 		"a retirement leaves a marker owned by another live pid alone [QK:MHSS-RETIRE-ONLY-OWN-OWNER]",
 		readMetaReceiverMarker({ gardenId: REAL_GID, receiversDir: ROOTS.receiversDir, verifyOwner: false })?.ownerPid ===
 			process.ppid,
+	);
+}
+
+// ── E. the record-arm binding (#147 L2 B1) ────────────────────────────────────
+// An arm-capable event commits a fresh `attachIncarnation` in the record and copies the SAME
+// value into the receiver marker, under the record-arm lock; every other event preserves it. A
+// dead marker is resume evidence only while those two agree, so every path where the marker was
+// NOT rewritten has to leave them disagreeing, and a normal arm must never leave them so.
+{
+	const BIND_NATIVE = "b1b1b1b1-arm-binding-session";
+	const BIND_TRANSCRIPT = path.join(CWD, `${BIND_NATIVE}.jsonl`);
+	writeFileSync(BIND_TRANSCRIPT, "");
+	const drive = (event: string, source = "startup") =>
+		driveHook({ event, nativeSessionId: BIND_NATIVE, source, transcriptPath: BIND_TRANSCRIPT });
+	const pair = (gid: string) => ({
+		record: identityFor(gid).attachIncarnation,
+		marker: readMetaReceiverMarker({ gardenId: gid, receiversDir: ROOTS.receiversDir })?.attachIncarnation ?? null,
+	});
+	const recordBytes = (gid: string) => readFileSync(path.join(ROOTS.sessionsDir, `${gid}.meta.json`), "utf8");
+	const armLocks = defaultMetaRecordArmLocksDir(ROOTS.receiversDir);
+	const envelope = (event: string) =>
+		JSON.stringify({
+			hook_event_name: event,
+			session_id: BIND_NATIVE,
+			transcript_path: BIND_TRANSCRIPT,
+			cwd: CWD,
+			source: "startup",
+		});
+
+	drive("SessionStart");
+	const BIND_GID = gardenIdFor(BIND_NATIVE);
+	const first = pair(BIND_GID);
+	ok(
+		"a first SessionStart (create, then the locked arm) commits a fresh 32-hex binding in the record [QK:MHSS-ARM-RECORD-BOUND]",
+		typeof first.record === "string" && /^[0-9a-f]{32}$/.test(first.record),
+	);
+	ok(
+		"…and the receiver marker that arm wrote carries the SAME value [QK:MHSS-ARM-BINDING-PAIRED]",
+		first.marker === first.record,
+	);
+
+	drive("UserPromptSubmit");
+	const afterUps = pair(BIND_GID);
+	ok(
+		"a UserPromptSubmit backfill PRESERVES the binding — a keystroke is not a new incarnation [QK:MHSS-UPS-PRESERVES-BINDING]",
+		afterUps.record === first.record && afterUps.marker === first.record,
+	);
+
+	drive("SessionStart", "compact");
+	const reminted = pair(BIND_GID);
+	ok(
+		"every arm-capable event mints a NEW binding and the pair still agrees [QK:MHSS-ARM-REMINTS-PAIRED]",
+		reminted.record !== first.record && reminted.marker === reminted.record,
+	);
+
+	// An arm whose owner cannot be proven (no launcher provenance): the record commits a new
+	// binding, the marker is not rewritten — so they disagree, and a later resume refuses.
+	{
+		const direct = spawnSync(process.execPath, [path.join(PLUGIN_ROOT, "meta-bridge-hook.ts")], {
+			encoding: "utf8",
+			input: envelope("SessionStart"),
+			env: hookEnv(),
+		});
+		assert.equal(direct.status, 0, `direct hook drive exited ${direct.status}: ${direct.stderr}`);
+		const unproven = pair(BIND_GID);
+		ok(
+			"an arm with no validated owner commits a new record binding and leaves the marker's old one — never a matching stale pair [QK:MHSS-UNPROVEN-OWNER-UNBINDS]",
+			unproven.record !== null &&
+				unproven.record !== reminted.record &&
+				readMetaReceiverMarker({ gardenId: BIND_GID, receiversDir: ROOTS.receiversDir, verifyOwner: false })
+					?.attachIncarnation === reminted.record,
+		);
+	}
+	drive("SessionStart", "resume"); // back to a matching pair for the lock cells
+
+	// The lock held by someone else: an arm waits its bound and then writes NOTHING (ERROR); a
+	// keystroke skips its backfill (WARN). Held by THIS gate's live pid, so it cannot be reclaimed.
+	{
+		const held = acquireLock(BIND_GID, { dir: armLocks });
+		assert.ok(held.ok, "the gate could not take the record-arm lock it plants");
+		const before = recordBytes(BIND_GID);
+		const markerBefore = pair(BIND_GID).marker;
+		const logBefore = readFileSync(HOOK_LOG, "utf8").length;
+		drive("SessionStart", "resume");
+		const armDelta = readFileSync(HOOK_LOG, "utf8").slice(logBefore);
+		ok(
+			"an arm that cannot take the record-arm lock writes NOTHING and says so as ERROR (attach not committed) [QK:MHSS-ARM-LOCK-BUSY-NO-WRITE]",
+			recordBytes(BIND_GID) === before &&
+				pair(BIND_GID).marker === markerBefore &&
+				/ERROR record-arm lock busy — attach NOT committed, watch not armed/.test(armDelta) &&
+				!/armed watch/.test(armDelta),
+		);
+		const upsBefore = readFileSync(HOOK_LOG, "utf8").length;
+		drive("UserPromptSubmit");
+		ok(
+			"a keystroke that finds the lock busy skips its backfill, writing nothing [QK:MHSS-UPS-LOCK-BUSY-SKIPS]",
+			recordBytes(BIND_GID) === before &&
+				/WARN record-arm lock busy — backfill skipped/.test(readFileSync(HOOK_LOG, "utf8").slice(upsBefore)),
+		);
+		if (held.ok) releaseLock(held.claim, { dir: armLocks });
+	}
+
+	// The lock released inside the bound: the arm waits, then commits a matching pair.
+	{
+		const held = acquireLock(BIND_GID, { dir: armLocks });
+		assert.ok(held.ok, "the gate could not take the record-arm lock it plants");
+		const before = pair(BIND_GID).record;
+		const exe = resolveEl(sessionStartLeaf.command ?? "", PLUGIN_ROOT);
+		const argv = (sessionStartLeaf.args ?? []).map((a) => resolveEl(a, PLUGIN_ROOT));
+		const child = spawn(exe, argv, { env: hookEnv(), stdio: ["pipe", "ignore", "pipe"] });
+		// The close listener is registered at spawn, so a child that exits early is still observed.
+		const closed = new Promise<number | null>((resolve) => child.on("close", resolve));
+		child.stdin.end(envelope("SessionStart"));
+		await new Promise((resolve) => setTimeout(resolve, 300));
+		if (held.ok) releaseLock(held.claim, { dir: armLocks });
+		const code = await closed;
+		const waited = pair(BIND_GID);
+		ok(
+			"an arm that finds the lock held waits within its bound and, once released, commits a NEW matching pair [QK:MHSS-ARM-WAITS-FOR-LOCK]",
+			code === 0 && waited.record !== before && waited.marker === waited.record,
+		);
+	}
+
+	// TWO SUCCESSFUL OVERLAPPING SCHEDULES (Astra D4): the cells above hold the lock in the
+	// gate and run one child at a time; these put two real hook processes in flight at once and
+	// require BOTH to succeed, then the pair to agree. The lock is held by the gate only to make
+	// the overlap certain (both children start while it is held), never as a substitute writer.
+	// SUPPORTING SCHEDULE CELLS, not the lock proof: they carry no mutant, because a kill here
+	// would rest on process timing. The deterministic lock proof is the three busy cells above
+	// (MHSS-ARM-LOCK-BUSY-NO-WRITE, MHSS-UPS-LOCK-BUSY-SKIPS, MHSS-ARM-WAITS-FOR-LOCK). Schedule 2's
+	// order (arm before keystroke) relies on the keystroke's node startup outlasting the arm's
+	// few-ms critical section; it is asserted, never retried or slept into green.
+	const launch = (event: string) => {
+		const exe = resolveEl(sessionStartLeaf.command ?? "", PLUGIN_ROOT);
+		const argv = (sessionStartLeaf.args ?? []).map((a) => resolveEl(a, PLUGIN_ROOT));
+		const child = spawn(exe, argv, { env: hookEnv(), stdio: ["pipe", "ignore", "pipe"] });
+		child.stdin.end(envelope(event));
+		return new Promise<number | null>((resolve) => child.on("close", resolve));
+	};
+	const count = (text: string, re: RegExp) => (text.match(re) ?? []).length;
+
+	// Schedule 1 — arm × arm: both arms are waiting when the lock frees, so they contend.
+	{
+		const held = acquireLock(BIND_GID, { dir: armLocks });
+		assert.ok(held.ok, "the gate could not take the record-arm lock it plants");
+		const before = pair(BIND_GID).record;
+		const logBefore = readFileSync(HOOK_LOG, "utf8").length;
+		const a = launch("SessionStart");
+		const b = launch("CwdChanged");
+		await new Promise((resolve) => setTimeout(resolve, 300));
+		if (held.ok) releaseLock(held.claim, { dir: armLocks });
+		const codes = await Promise.all([a, b]);
+		const delta = readFileSync(HOOK_LOG, "utf8").slice(logBefore);
+		const end = pair(BIND_GID);
+		ok(
+			"two arms in flight at once BOTH commit (two attaches, two markers, no busy) and end as one matching pair [QK:MHSS-OVERLAP-ARM-ARM-PAIRED]",
+			codes.every((c) => c === 0) &&
+				count(delta, new RegExp(`INFO attach record ${BIND_GID}\\.meta\\.json`, "g")) === 2 &&
+				count(delta, new RegExp(`INFO receiver marker ${BIND_GID} `, "g")) === 2 &&
+				!/record-arm lock busy/.test(delta) &&
+				end.record !== before &&
+				end.marker === end.record,
+		);
+	}
+
+	// Schedule 2 — arm + UserPromptSubmit: the arm is waiting on the lock when the keystroke
+	// starts; the arm takes the freed lock first, and the keystroke's backfill commits after it.
+	// Both succeed, the keystroke preserves the arm's binding, and the pair agrees.
+	{
+		const held = acquireLock(BIND_GID, { dir: armLocks });
+		assert.ok(held.ok, "the gate could not take the record-arm lock it plants");
+		const before = pair(BIND_GID).record;
+		const logBefore = readFileSync(HOOK_LOG, "utf8").length;
+		const arm = launch("SessionStart");
+		await new Promise((resolve) => setTimeout(resolve, 300));
+		const keystroke = launch("UserPromptSubmit");
+		if (held.ok) releaseLock(held.claim, { dir: armLocks });
+		const codes = await Promise.all([arm, keystroke]);
+		const delta = readFileSync(HOOK_LOG, "utf8").slice(logBefore);
+		const end = pair(BIND_GID);
+		ok(
+			"an arm and a keystroke in flight at once BOTH commit, the keystroke preserves the arm's new binding, and the pair agrees [QK:MHSS-OVERLAP-ARM-UPS-PAIRED]",
+			codes.every((c) => c === 0) &&
+				count(delta, new RegExp(`INFO attach record ${BIND_GID}\\.meta\\.json \\(event=SessionStart`, "g")) === 1 &&
+				count(delta, new RegExp(`INFO attach record ${BIND_GID}\\.meta\\.json \\(event=UserPromptSubmit`, "g")) === 1 &&
+				delta.search(new RegExp(`INFO attach record ${BIND_GID}\\.meta\\.json \\(event=SessionStart`)) <
+					delta.search(new RegExp(`INFO attach record ${BIND_GID}\\.meta\\.json \\(event=UserPromptSubmit`)) &&
+				!/record-arm lock busy/.test(delta) &&
+				end.record !== before &&
+				end.marker === end.record,
+		);
+	}
+
+	ok(
+		"the record-arm lock lives beside the receivers dir, never in the v2 dispatch lock dir resume holds [QK:MHSS-ARM-LOCK-OWN-DIR]",
+		armLocks === path.join(AGENT_ROOT, "meta-record-arm-locks") &&
+			armLocks !== ROOTS.locksDir &&
+			!/ENTWURF_V2_LOCK_DIR/.test(readFileSync(path.join(REPO_DIR, "pi-extensions", "meta-bridge-hook.ts"), "utf8")),
+	);
+}
+
+// ── F. the installed closure IS the hook's static `from` import closure ───────
+// The installer copies a fixed set of lib files; the hook imports whatever it imports. If those
+// drift, the installed hook cannot load — and a gate that hand-copied its own list would still be
+// green. SOURCE form only: this gate runs in the source-only qualification snapshot, which has no
+// dist. The compiled-form comparison and the staged compiled-hook run live with the dist consumer,
+// check-capability-bundle-reach ([QK:BUNDLE-REACH-COMPILED-HOOK-CLOSURE] /
+// [QK:BUNDLE-REACH-COMPILED-HOOK-RUNS]; the latter was MHSS-COMPILED-CLOSURE-RUNS here).
+{
+	const installer = readFileSync(path.join(REPO_DIR, "scripts", "meta-bridge-install.sh"), "utf8");
+	const copied = installerCopiedLibFiles(installer);
+	// The installer names each mode-switched module `<name>.$LIB_EXT`; `session-id.js` ships as itself.
+	const asInstalled = (closure: string[]) =>
+		closure
+			.map((rel) => path.basename(rel))
+			.map((base) => (base === "session-id.js" ? base : base.replace(/\.(ts|js)$/, ".$LIB_EXT")))
+			.sort();
+	const sourceClosure = hookImportClosure(path.join(REPO_DIR, "pi-extensions", "meta-bridge-hook.ts"));
+	ok(
+		"the installer copies exactly the hook's static double-quoted `from` import closure, in source form [QK:MHSS-BUNDLE-CLOSURE-INSTALLED]",
+		sourceClosure.includes("lib/entwurf-v2-lock.ts") &&
+			JSON.stringify(asInstalled(sourceClosure)) === JSON.stringify(copied),
 	);
 }
 

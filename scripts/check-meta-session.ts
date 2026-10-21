@@ -22,6 +22,7 @@ import {
 	defaultMetaMailboxDir,
 	defaultMetaSessionsDir,
 	enqueueMetaMessage,
+	findCertifiedIdentityByNativeSessionId,
 	META_SCHEMA_VERSION_V3,
 	type MetaIdentityMintInput,
 	MetaRecordError,
@@ -32,6 +33,7 @@ import {
 	readMailboxReceiptState,
 	readMetaInbox,
 	serializeMetaIdentity,
+	UpsertActionMismatchError,
 	upsertMetaSession,
 } from "../pi-extensions/lib/meta-session.ts";
 
@@ -154,6 +156,35 @@ check("upsertMetaSession: second call attaches — same file/id, recordUpdatedAt
 		fs.rmSync(dir, { recursive: true, force: true });
 	}
 });
+
+check(
+	"upsertMetaSession expectAction refuses BEFORE any write when the decision is not that action (#147 L2 B1)",
+	() => {
+		const dir = fs.mkdtempSync(path.join(os.tmpdir(), "meta-session-store-"));
+		try {
+			assert.throws(
+				() => upsertMetaSession({ dir, input: claudeInput(), now: T0, expectAction: "attach" }),
+				(err: unknown) => err instanceof UpsertActionMismatchError && err.actual === "create",
+				"expectAction refuses before any write when the decision differs [QK:META-UPSERT-EXPECT-ACTION]",
+			);
+			assert.deepEqual(fs.readdirSync(dir), []); // nothing published
+			const first = upsertMetaSession({ dir, input: claudeInput(), now: T0, expectAction: "create" });
+			const bytes = fs.readFileSync(first.path, "utf8");
+			assert.throws(
+				() => upsertMetaSession({ dir, input: claudeInput({ cwd: "/raced" }), now: T1, expectAction: "create" }),
+				(err: unknown) => err instanceof UpsertActionMismatchError && err.actual === "attach",
+			);
+			assert.equal(fs.readFileSync(first.path, "utf8"), bytes); // a raced create never became an attach
+			assert.equal(
+				findCertifiedIdentityByNativeSessionId(claudeInput().nativeSessionId, dir)?.gardenId,
+				first.record.gardenId,
+			);
+			assert.equal(fs.readFileSync(first.path, "utf8"), bytes); // the lookup is read-only
+		} finally {
+			fs.rmSync(dir, { recursive: true, force: true });
+		}
+	},
+);
 
 check("upsertMetaSession: creates the store dir if absent; leaves no .tmp residue", () => {
 	const base = fs.mkdtempSync(path.join(os.tmpdir(), "meta-session-store-"));

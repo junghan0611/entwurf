@@ -96,6 +96,7 @@ function identity(nativeSessionId: string, backend: MetaIdentity["backend"] = "c
 		transcriptPath: null,
 		createdAt: "2026-09-14T00:00:00.000Z",
 		recordUpdatedAt: "2026-09-14T00:00:00.000Z",
+		attachIncarnation: null,
 	};
 }
 

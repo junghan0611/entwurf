@@ -41,10 +41,11 @@
 
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
+import { stageMetaHookBundle } from "./lib/meta-hook-bundle.ts";
 import { reclaimOnExit } from "./lib/reclaim-on-exit.ts";
 
 let passed = 0;
@@ -191,7 +192,7 @@ for (const event of OWNER_EVENTS) {
 	const bare = spawnSync(LAUNCHER, [], { encoding: "utf8", input: "" });
 	ok("launcher with EMPTY argv exits non-zero", bare.status !== null && bare.status !== 0);
 	ok("launcher with empty argv names the args drop on stderr", /discarded the hook's `args`/.test(bare.stderr));
-	ok("launcher with empty argv names the required floor", /2\.1\.217/.test(bare.stderr));
+	ok("launcher with empty argv names the required floor", /2\.1\.306/.test(bare.stderr));
 	ok("launcher with empty argv refuses a fallback", /no shell-form fallback/i.test(bare.stderr));
 	ok("launcher writes nothing to stdout on refusal (never a hook response)", bare.stdout === "");
 }
@@ -232,19 +233,9 @@ for (const event of OWNER_EVENTS) {
 // exactly what the metacharacter cell below silently failed to prove in its first
 // version (cross-review, 2026-07-22).
 function makeBundle(root: string): void {
-	mkdirSync(path.join(root, "lib"), { recursive: true });
-	mkdirSync(path.join(root, "scripts"), { recursive: true });
-	copyFileSync(path.join(REPO_DIR, "pi-extensions", "meta-bridge-hook.ts"), path.join(root, "meta-bridge-hook.ts"));
-	copyFileSync(
-		path.join(REPO_DIR, "pi-extensions", "lib", "meta-session.ts"),
-		path.join(root, "lib", "meta-session.ts"),
-	);
-	copyFileSync(path.join(REPO_DIR, "pi-extensions", "lib", "session-id.js"), path.join(root, "lib", "session-id.js"));
-	const launcher = path.join(root, "scripts", "hook-launch.sh");
-	copyFileSync(LAUNCHER, launcher);
-	// The exec form names the launcher as the executable, so the +x bit is load-bearing:
-	// without it Claude gets ENOEXEC, not a degraded path. The installer chmods it too.
-	chmodSync(launcher, 0o755);
+	// Entry + its OWN import closure + the launcher (scripts/lib/meta-hook-bundle.ts): a hand-kept
+	// list here could stay green while the installer missed a file the hook now imports.
+	stageMetaHookBundle(root, path.join(REPO_DIR, "pi-extensions", "meta-bridge-hook.ts"), LAUNCHER);
 }
 
 /** Resolve one manifest element the way Claude does: plain-string substitution, no shell. */

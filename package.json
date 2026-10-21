@@ -95,7 +95,7 @@
 		"node": ">=24.0.0"
 	},
 	"entwurf": {
-		"claudeCodeFloor": ">=2.1.217"
+		"claudeCodeFloor": ">=2.1.306"
 	},
 	"dependencies": {
 		"@agentclientprotocol/claude-agent-acp": "0.90.0",

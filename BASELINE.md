@@ -30,7 +30,7 @@ outside the experimental preview (rows below).
 |---|---|---|
 | Node 24 Linux package consumer | shape-only | Required `artifact-consumer` CI |
 | Node 24 macOS package consumer (GitHub Actions runner, not a physical Mac) | shape-only · CERTIFIED (CI) | Required `macos-install-surface` CI run 34303884286 @ `70eda03` (`macos-latest`, 65 s, 10/10 steps): pack → clean consumer install → bin links → `entwurf --help` → `check-bridge` (7 tools) → harness-absent `setup` (all SKIP, computed green, zero no-write-axis writes, `auth.json` byte-identical). Certifies no harness rail. |
-| Claude Code >=2.1.217 exec form | **certified** — supported floor | Topology + floor gates, doctor oracle; B2 live NixOS session |
+| Claude Code exec form (observed at 2.1.217) | **certified** at 2.1.217; the supported floor is now `>=2.1.306` (#147 same-id resume), declared with no LIVE receipt at it yet | Topology + floor gates, doctor oracle; B2 live NixOS session |
 | Claude Code 2.1.138 | **unsupported** | Launcher refuses empty argv; no shell-form fallback |
 | Maintainer NixOS installed package | **certified** for `0.12.8-repair.1` | 2026-07-25 registry install → doctor exit 0 (HISTORY) |
 | Secondary Ubuntu installed package | **certified** for `0.12.8-repair.1` | 2026-07-25 same artifact, isolated agent dir → doctor exit 0 (HISTORY) |

@@ -102,7 +102,7 @@ dispatch substrate**다. provider 연결과 TUI/RPC/session lifecycle은 pi에 �
 배달의 정직한 경계에 집중한다. pi launch profile은 tmux placement primitive가 실물로 선 뒤에만 논한다.
 
 v1 entwurf verbs(`entwurf`/`entwurf_resume`/`entwurf_send`)는 끝났고 사라졌다. `entwurf_v2`가 척추다.
-기존 citizen 대상 send/reply → `entwurf_v2`(process를 열지 않으며 dormant는 정직하게 거절); 무에서 새 형제를 여는 fresh creation → `entwurf_fresh_call`(별도 verb, launch receipt만 동기 반환); dormant pi를 같은 garden id로 보이는 창에 다시 세우기 → `entwurf_resume_call {target}`(또 다른 별도 verb, prompt·model override 없음, 턴 없음, launch/observation receipt 분리).
+기존 citizen 대상 send/reply → `entwurf_v2`(process를 열지 않으며 dormant는 정직하게 거절); 무에서 새 형제를 여는 fresh creation → `entwurf_fresh_call`(별도 verb, launch receipt만 동기 반환); dormant pi·Claude Code를 같은 garden id로 보이는 창에 다시 세우기 → `entwurf_resume_call {target}`(또 다른 별도 verb, prompt·model override 없음, 턴 없음, launch/observation receipt 분리; Claude Code는 #147 L2).
 
 ### Vocabulary guard — 익숙한 말로 되돌리지 않는다
 

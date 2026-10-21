@@ -19,9 +19,12 @@
 			"claim": "BRIDGEBOOT-RESUME-CALL-TARGET-ONLY",
 			"title": "a model knob is added to the resume schema, giving the caller a second way to decide what a resumed citizen is after the record already decided",
 			"subject": "mcp/entwurf-bridge/src/index.ts",
-			"find": ["\t\t\t.describe(\"Garden id of the DORMANT pi citizen to reopen (discover with entwurf_peers).\"),"],
+			"find": [
+				"\t\t\t.describe(\"Garden id of the DORMANT pi or Claude Code citizen to reopen (discover with entwurf_peers).\"),"
+			],
 			"replace": [
-				"\t\t\t.describe(\"Garden id of the DORMANT pi citizen to reopen (discover with entwurf_peers).\"),\n\t\tmodel: z.string().optional().describe(\"Override the recorded model.\"),"
+				"\t\t\t.describe(\"Garden id of the DORMANT pi or Claude Code citizen to reopen (discover with entwurf_peers).\"),",
+				"\t\tmodel: z.string().optional().describe(\"Override the recorded model.\"),"
 			],
 			"gate": ["bash", "run.sh", "check-entwurf-bridge-boot"],
 			"timeoutSeconds": 120,

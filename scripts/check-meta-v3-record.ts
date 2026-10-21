@@ -16,11 +16,15 @@
  *     showing the actual rejected version value, and unknown/missing versions
  *     crash,
  *   - strict keyset: a body carrying any retired or unknown field is rejected
- *     as stray, never coerced.
+ *     as stray, never coerced,
+ *   - `attachIncarnation` (#147 L2 B1) is the one key a body may omit (absent reads
+ *     as null), is always emitted, is grammar-checked, and survives every attach
+ *     that does not mint a new one.
  */
 
 import assert from "node:assert/strict";
 import {
+	decideUpsert,
 	FRESH_CUT_COMMAND,
 	type MetaIdentity,
 	MetaRecordError,
@@ -64,6 +68,7 @@ const V3_IDENTITY: MetaIdentity = {
 	transcriptPath: "/synthetic/project/.transcript.jsonl",
 	createdAt: "2026-01-01T00:00:00.000Z",
 	recordUpdatedAt: "2026-01-02T03:04:05.000Z",
+	attachIncarnation: null,
 };
 
 const V3_PI_IDENTITY: MetaIdentity = {
@@ -76,6 +81,7 @@ const V3_PI_IDENTITY: MetaIdentity = {
 	transcriptPath: null,
 	createdAt: "2026-03-01T12:00:00.000Z",
 	recordUpdatedAt: "2026-03-01T12:30:00.000Z",
+	attachIncarnation: null,
 };
 
 const V1_BODY = JSON.stringify({
@@ -190,5 +196,53 @@ throws("parseMetaRecordV3 rejects an unknown/extra field", () =>
 throws("parseMetaRecordV3 rejects an unknown backend", () =>
 	parseMetaRecordV3(JSON.stringify({ ...V3_IDENTITY, backend: "gemini" })),
 );
+
+// --- attachIncarnation: the one key a V3 record may omit (#147 L2 B1) ---------
+// One schema, one reader: absent reads as null ("no binding observed"), every serialize emits
+// the key, a present value must be 32 lowercase hex, and only a mint replaces it — every other
+// attach preserves it, and nothing infers one.
+{
+	const BIND = "0123456789abcdef0123456789abcdef";
+	const { attachIncarnation: _omit, ...withoutKey } = V3_IDENTITY;
+	// Evaluated inside the assertion: a parser that REFUSES the absent key throws, and that refusal is
+	// exactly this claim failing, so it must land on this label rather than escape before it.
+	ok(
+		"a V3 body without attachIncarnation reads it as null — not a stray, not a defect [QK:META-V3-INCARNATION-ABSENT-NULL]",
+		(() => {
+			try {
+				return parseMetaRecordV3(JSON.stringify(withoutKey)).attachIncarnation === null;
+			} catch {
+				return false;
+			}
+		})(),
+	);
+	throws("a malformed attachIncarnation (not 32 lowercase hex) is refused [QK:META-V3-INCARNATION-MALFORMED]", () =>
+		parseMetaRecordV3(JSON.stringify({ ...V3_IDENTITY, attachIncarnation: "ABCDEF" })),
+	);
+	throws("a non-string attachIncarnation is refused", () =>
+		parseMetaRecordV3(JSON.stringify({ ...V3_IDENTITY, attachIncarnation: 7 })),
+	);
+	ok(
+		"serialize always emits the key (null included) and a bound value round-trips [QK:META-V3-INCARNATION-ALWAYS-EMITTED]",
+		serializeMetaIdentity(V3_IDENTITY).includes('"attachIncarnation": null') &&
+			parseMetaRecordV3(serializeMetaIdentity({ ...V3_IDENTITY, attachIncarnation: BIND })).attachIncarnation === BIND,
+	);
+	const bound = { ...V3_IDENTITY, attachIncarnation: BIND };
+	const input = {
+		backend: "claude-code" as const,
+		nativeSessionId: V3_IDENTITY.nativeSessionId,
+		cwd: "/synthetic/moved",
+	};
+	const preserved = decideUpsert(bound, input);
+	const reminted = decideUpsert(bound, { ...input, attachIncarnation: "f".repeat(32) });
+	ok(
+		"an attach without a value PRESERVES the binding; a mint replaces it; a create without one is null [QK:META-UPSERT-PRESERVES-INCARNATION]",
+		preserved.action === "attach" &&
+			preserved.record.attachIncarnation === BIND &&
+			preserved.record.cwd === "/synthetic/moved" &&
+			reminted.record.attachIncarnation === "f".repeat(32) &&
+			decideUpsert(null, input).record.attachIncarnation === null,
+	);
+}
 
 console.log(`[check-meta-v3-record] ${passed} assertions ok`);

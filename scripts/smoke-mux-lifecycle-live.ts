@@ -34,11 +34,11 @@
  * re-injects a bridge extension (#29), and a resume that silently lost its history would look
  * identical from the socket axis.
  *
- * Claude Code runs the same first half and then STOPS where its capability stops: callback id,
- * mailbox delivery, mailbox read receipt — and a resume that is REFUSED as `target-not-pi`, with
- * no window opened and no lock residue after the per-gid coordination lock is released. Only pi
- * stands a control socket up, so only pi has a same-id
- * resume; the refusal is the proof, not an omission.
+ * Claude Code runs the same first half: callback id, mailbox delivery, mailbox read receipt — and a
+ * resume of that still-LIVE sibling that is REFUSED as `target-live` (its receiver marker names a
+ * live owner), with no window opened and no lock residue after the per-gid coordination lock is
+ * released. Claude Code's DORMANT same-id resume (#147 L2) is certified deterministically; its LIVE
+ * close→resume leg is not in this smoke yet, and this cell does not stand in for it.
  *
  * ── Isolate the WRITES, keep the runtimes real ──
  *
@@ -1035,20 +1035,20 @@ async function main(): Promise<void> {
 				`--- response ---\n${ccRead.text}`,
 			);
 
-			// No resume is invented for a backend that never stands a control socket up. The refusal is
-			// the proof: it opens no window, and its per-gid coordination lock leaves no residue.
+			// A live Claude Code sibling is not reopened: its receiver marker names a live owner. The refusal
+			// is the proof: it opens no window, and its per-gid coordination lock leaves no residue.
 			const ccWindowsBefore = windowCount(cc.socket, cc.env);
 			const ccResume = await ccBridge.call("entwurf_resume_call", { target: ccCitizen }, RESUME_CALL_TIMEOUT_MS);
 			ok(
-				"claude-code: entwurf_resume_call is REFUSED as target-not-pi — a capability boundary named as itself, not an error about a record that is perfectly fine",
-				ccResume.isError && ccResume.text.includes("target-not-pi"),
+				"claude-code: entwurf_resume_call of the still-live sibling is REFUSED as target-live — its receiver marker names a live owner, so a second window would put two processes on one session",
+				ccResume.isError && ccResume.text.includes("target-live"),
 				`--- response ---\n${ccResume.text}`,
 			);
 			ok(
 				"claude-code: that refusal opened no window and left no lock behind",
 				windowCount(cc.socket, cc.env) === ccWindowsBefore && lockResidue(cellRoots(REAL_HOME), ccCitizen).length === 0,
 			);
-			receipts["claude-code/5-resume-refused-not-pi"] = ccResume.text;
+			receipts["claude-code/5-resume-refused-live"] = ccResume.text;
 		}
 
 		await runClaudeCell();

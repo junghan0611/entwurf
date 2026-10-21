@@ -226,6 +226,7 @@ describe("end to end: scanSocketProbes feeds resolveFactList", () => {
 			transcriptPath: null,
 			createdAt: "2026-06-11T00:00:00.000Z",
 			recordUpdatedAt: "2026-06-11T00:00:00.000Z",
+			attachIncarnation: null,
 		});
 		const { probes } = await scanSocketProbes([GID_LIVE, GID_DORMANT], {
 			dir: DIR,

@@ -357,7 +357,7 @@ cat > "$FAKEBIN/claude" <<'SH'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >> "$FAKE_CLAUDE_LOG"
 case "$1${2:+ $2}${3:+ $3}" in
-  "--version") echo "2.1.217 (Claude Code)" ;;
+  "--version") echo "2.1.306 (Claude Code)" ;;
   "plugin list --json")
     printf '[{"id":"entwurf-meta-receive@meta-bridge-local","version":"0.1.0","enabled":true,"installPath":"%s"}]\n' "$FAKE_INSTALL_PATH" ;;
   "plugin list"*) printf '%s\n' "entwurf-meta-receive@meta-bridge-local" "  Status: enabled" ;;

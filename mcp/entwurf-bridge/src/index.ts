@@ -31,9 +31,9 @@
  *                       seat, #105; nothing is ever created), optionally at ONE literal requested
  *                       cwd (cross-repo fresh, #73); returns a LAUNCH receipt only, and the new
  *                       address arrives later as the sender envelope of the sibling's nonce callback.
- *   - entwurf_resume_call — reopen ONE DORMANT pi citizen under its OWN garden id in a visible
- *                       window; target-only, runs no turn, LAUNCH and OBSERVATION receipts stay
- *                       apart.
+ *   - entwurf_resume_call — reopen ONE DORMANT pi or Claude Code citizen under its OWN garden id
+ *                       in a visible window; target-only, submits no prompt, LAUNCH and OBSERVATION
+ *                       receipts stay apart, the caller is attributed but grants nothing.
  *   - entwurf_callback — ZERO-ARGUMENT fresh-sibling callback. Reads ENTWURF_CALLBACK_TARGET +
  *                       ENTWURF_CALLBACK_NONCE from this process env (launcher-injected), validates
  *                       grammar, and dispatches through the existing v2 runner. Refuses by name
@@ -904,7 +904,7 @@ server.tool(
 // resume` cannot open a window on its own and `mux-resume-call` cannot read a record — that is
 // the import fence in docs/mux-launch-rail.md §11, expressed as a function argument.
 const visibleResumeLaunch: VisibleResumeDeps["launch"] = (input) => {
-	const launched = resumeCall({ cwd: input.cwd, runtimeArgs: input.runtimeArgs });
+	const launched = resumeCall({ backend: input.backend, cwd: input.cwd, runtimeArgs: input.runtimeArgs });
 	return launched.ok
 		? { ok: true, handle: launched.receipt }
 		: { ok: false, reason: launched.reason, hint: RESUME_CALL_REJECT_HINT[launched.reason] };
@@ -912,27 +912,45 @@ const visibleResumeLaunch: VisibleResumeDeps["launch"] = (input) => {
 
 server.tool(
 	"entwurf_resume_call",
-	"Reopen ONE DORMANT pi citizen under its OWN garden id, in a visible window in the operator's own tmux " +
-		"session. The record supplies everything — which transcript, which model, which provider, which cwd — so " +
-		"the only input is the target id: there is no model override, no task, and no prompt. This runs NO turn: " +
-		"the window comes back with the conversation and waits, and talking to it is still entwurf_v2 " +
-		"fire-and-forget on the socket this call stands up. You get TWO receipts and they mean different things: a " +
-		"LAUNCH receipt (tmux made a window and was asked to start pi) and an OBSERVATION receipt (the control " +
-		"socket answered under the same id, or resume-unobserved). Unobserved is a real outcome, not an error to " +
-		"retry — the window is visible, so read it. A citizen that is already LIVE is refused: address it with " +
-		"entwurf_v2 instead. Only pi citizens have a same-id resume, because only they stand a control socket up. " +
-		"Requires that this agent itself runs inside tmux.",
+	"Reopen ONE DORMANT pi or Claude Code citizen under its OWN garden id, in a visible window in the operator's " +
+		"own tmux session. The record supplies everything — which session, which cwd, and for pi which transcript, " +
+		"model and provider — so the only input is the target id: there is no model override, no task, and no " +
+		"prompt, and a Claude Code session comes back as `claude --resume <its session id>` with none of the model " +
+		"or permission flags it was once started with. This verb submits NO prompt; what the runtime itself does " +
+		"after it comes back (for Claude Code, its hook re-arms the doorbell and unread mail may then wake a turn) " +
+		"is not measured, and talking to it is still entwurf_v2 fire-and-forget. You get TWO receipts and they mean " +
+		"different things: a LAUNCH receipt (tmux made a window and was asked to start the runtime) and an " +
+		"OBSERVATION receipt (pi: the control socket answered under the same id; Claude Code: a NEW live process in " +
+		"the window this call opened re-armed its receiver marker for the same session with a fresh arm binding the " +
+		"record also carries; or resume-unobserved; or record-unreadable with its cause). Unobserved is a real " +
+		"outcome, not an error to retry — the window is visible, so read it. A citizen that is already LIVE is " +
+		"refused: address it with entwurf_v2 instead. A Claude Code citizen is reopened only when the last validated " +
+		"owner the Entwurf hook armed for its session is proven gone AND that arm is still the record's last one; " +
+		"no marker, an unreadable or mismatched one, an inconclusive owner or an unbound one is refused, and a " +
+		"process holding the session without a committed hook attach is invisible to that proof. Other backends " +
+		"have no same-id resume. Requires that this agent itself runs inside tmux (inside herdr it is refused).",
 	{
 		target: z
 			.string()
 			.min(1)
 			.regex(/^\d{8}T\d{6}-[0-9a-f]{6}$/)
-			.describe("Garden id of the DORMANT pi citizen to reopen (discover with entwurf_peers)."),
+			.describe("Garden id of the DORMANT pi or Claude Code citizen to reopen (discover with entwurf_peers)."),
 	},
-	async ({ target }) => {
+	async ({ target }, extra) => {
+		// Who asked, from the same authoritative caller identity fresh_call reads. Attribution only:
+		// an anonymous caller is reported as unattributed, never refused, and a record-backed one is
+		// granted nothing the target's record and live facts do not already decide.
+		let actor: string | null = null;
+		try {
+			actor = (await buildAuthoritativeSelfEnvelope({ requestMeta: extra._meta })).envelope.sessionId;
+		} catch (err) {
+			if (!(err instanceof EntwurfEnvelopeWiringError)) {
+				return textErr(`entwurf_resume_call error: ${err instanceof Error ? err.message : String(err)}`);
+			}
+		}
 		try {
 			const result = await visibleResume(target, makeVisibleResumeDeps(visibleResumeLaunch));
-			const rendered = renderVisibleResume(result);
+			const rendered = renderVisibleResume(result, { actor });
 			return rendered.isError ? textErr(rendered.text) : textOk(rendered.text);
 		} catch (err) {
 			return textErr(`entwurf_resume_call error: ${err instanceof Error ? err.message : String(err)}`);
