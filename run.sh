@@ -5499,6 +5499,8 @@ SH
   mkdir -p "$nm_probe/lib"
   cp "$installed_hook" "$nm_probe/meta-bridge-hook.js"
   cp "$stable_asm/entwurf-meta-receive/lib/meta-session.js" "$nm_probe/lib/meta-session.js"
+  # The real installer already supplies this hook import; the node_modules probe must too.
+  cp "$stable_asm/entwurf-meta-receive/lib/entwurf-v2-lock.js" "$nm_probe/lib/entwurf-v2-lock.js"
   cp "$stable_asm/entwurf-meta-receive/lib/session-id.js" "$nm_probe/lib/session-id.js"
   cp "$stable_asm/entwurf-meta-receive/entwurf-capabilities.json" "$nm_probe/entwurf-capabilities.json"
   local probe_env='{"session_id":"pack-probe","transcript_path":"/tmp/x.jsonl","cwd":"/tmp","hook_event_name":"SessionStart","model":{"id":"probe"}}'
