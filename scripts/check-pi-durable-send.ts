@@ -154,7 +154,7 @@ const NATIVE_CALLS = [
 	{ id: "call_pdm_2", name: "bash", arguments: { command: 'printf %s "$MOCK_NATIVE_MARK"' } },
 	{ id: "call_pdm_3", name: "entwurf_self", arguments: {} },
 ];
-/** The contact's six tool names, typed here (this gate imports no adapter constant). */
+/** The contact's seven tool names, typed here (this gate imports no adapter constant). */
 const CONTACT_TOOLS = [
 	"entwurf_self",
 	"entwurf_peers",
@@ -162,6 +162,7 @@ const CONTACT_TOOLS = [
 	"entwurf_inbox_read",
 	"entwurf_callback",
 	"entwurf_fresh_call",
+	"entwurf_resume_call",
 ];
 const IMPORT_OBSERVER = `data:text/javascript,${encodeURIComponent(
 	[
@@ -1729,7 +1730,7 @@ function finalWireNative(ctx: NativeContext): void {
 		(t) => t.function?.name ?? "",
 	);
 	ok(
-		`[QK:PDM-WIRE-TOOLS-OFFERED] the app's first model request offers the module's tool, the native bash and all six contact tools together (offered: ${offered.join(", ")})`,
+		`[QK:PDM-WIRE-TOOLS-OFFERED] the app's first model request offers the module's tool, the native bash and all seven contact tools together (offered: ${offered.join(", ")})`,
 		["mock_native_echo", "bash", ...CONTACT_TOOLS].every((name) => offered.includes(name)),
 	);
 	ok(

@@ -1223,6 +1223,30 @@
 			"signature": "[QK:PI-DURABLE-RESUME-CANCEL-OPENS-NOTHING]",
 			"signatureSource": "pi-extensions/lib/pi-durable-carrier.test.ts",
 			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "PI-DURABLE-RESUME-CALL-EXPOSED",
+			"title": "entwurf_resume_call drops out of the durable contact's tools, so the coordinator citizen cannot reopen a dormant pi sibling",
+			"subject": "pi-extensions/meta-bridge-pi-durable.ts",
+			"find": ["\t\ttools: PI_DURABLE_TOOL_NAMES.map(tool),"],
+			"replace": ["\t\ttools: PI_DURABLE_TOOL_NAMES.filter((name) => name !== \"entwurf_resume_call\").map(tool),"],
+			"gate": ["bash", "run.sh", "check-pi-durable-beside"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PI-DURABLE-RESUME-CALL-EXPOSED]",
+			"signatureSource": "pi-extensions/meta-bridge-pi-durable.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "PI-DURABLE-RESUME-CALL-REACHES-BRIDGE",
+			"title": "the production stdio connector stops carrying a tool's arguments: every stub-bridge case still passes, but the real bridge never sees the target the model named",
+			"subject": "pi-extensions/meta-bridge-pi-durable.ts",
+			"find": ["const result = await client.callTool({ name, arguments: args }, undefined, { signal });"],
+			"replace": ["const result = await client.callTool({ name, arguments: {} }, undefined, { signal });"],
+			"gate": ["bash", "run.sh", "check-pi-durable-beside"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PI-DURABLE-RESUME-CALL-REACHES-BRIDGE]",
+			"signatureSource": "pi-extensions/meta-bridge-pi-durable.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
 		}
 	]
 }

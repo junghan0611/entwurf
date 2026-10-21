@@ -2,12 +2,15 @@
  * G-birth (#129) — the pi-durable contact's birth, its tool gate, its root binding, its doorbell
  * and its lifecycle, plus the bootstrap composition that drives it. Hermetic: temp stores, a stub
  * bridge connector, a fake `openDurable` with a stub `submitToRoot`, an injected file watch where
- * a case drives events, no durable runtime — except one #140 case, which installs the real contact
- * extension in the PUBLISHED SDK's `Harness` over `MemoryStorage` with a scripted faux model (no
- * host store, no network, no vendor, no carrier). Two cases spawn a process: the dev-clone SOURCE
- * entwurf-bridge (`mcp/entwurf-bridge/start.sh`), for initialize + tools/list only, under a literal
- * private environment — the vitest-lane check that the exposed schema copies equal the real bridge's —
- * and a bare `node` that only imports the packaged bootstrap, to prove that import starts nothing.
+ * a case drives events, no durable runtime — except the cases that install the real contact extension
+ * in the PUBLISHED SDK's `Harness` over `MemoryStorage` with a scripted faux model (no host store, no
+ * network, no vendor, no carrier): the #140 native withdrawal, the model-visible bridge output, and the
+ * #147 L1 resume reach. Some cases spawn a process: the dev-clone SOURCE entwurf-bridge
+ * (`mcp/entwurf-bridge/start.sh`), for initialize + tools/list only, under a literal private
+ * environment — the vitest-lane check that the exposed schema copies equal the real bridge's; a bare
+ * `node` that imports the packaged bootstrap, to prove that import starts nothing, or runs a shipped
+ * entry point directly; and the COMPILED bridge through the contact's own stdio connector, under a
+ * literal private environment, for one `entwurf_resume_call` that the bridge refuses by name.
  *
  * The bootstrap is the PACKAGED one (`pi/pi-durable/bootstrap.mjs`): it imports the COMPILED closure,
  * so like `entwurf-control.test.ts` this file needs a built bridge (`pnpm run build-bridge`) and fails
@@ -265,7 +268,7 @@ describe("pi-durable contact — birth", () => {
 });
 
 describe("pi-durable contact — the extension and its gate", () => {
-	it("[QK:PI-DURABLE-TOOLS-ONLY-UNSAFE] the extension is tools-only, exposes exactly self, peers, v2, inbox_read, callback and fresh_call, and leaves replay at the durable default", () => {
+	it("[QK:PI-DURABLE-TOOLS-ONLY-UNSAFE] the extension is tools-only, exposes exactly self, peers, v2, inbox_read, callback, fresh_call and resume_call, and leaves replay at the durable default", () => {
 		const c = contact(stubBridge());
 		expect(Object.keys(c.extension).sort()).toEqual(["name", "tools"]);
 		expect(c.extension.tools.map((t) => t.name)).toEqual([
@@ -275,6 +278,7 @@ describe("pi-durable contact — the extension and its gate", () => {
 			"entwurf_inbox_read",
 			"entwurf_callback",
 			"entwurf_fresh_call",
+			"entwurf_resume_call",
 		]);
 		for (const tool of c.extension.tools) {
 			expect(tool).not.toHaveProperty("replay");
@@ -2604,4 +2608,113 @@ describe("pi-durable bootstrap — the packaged compiled closure (needs a built 
 		expect(stub.args).toEqual([args]);
 		await c.close();
 	});
+
+	it("[QK:PI-DURABLE-RESUME-CALL-EXPOSED] entwurf_resume_call is offered with the bridge's own single-target schema, keeps the durable replay default, and hands the bridge exactly {target}", async () => {
+		const stub = stubBridge();
+		const c = contact(stub);
+		const tool = c.extension.tools.find((t) => t.name === "entwurf_resume_call");
+		expect(tool).toBeDefined();
+		expect(tool).not.toHaveProperty("replay");
+		expect(tool?.parameters).toBe(PI_DURABLE_TOOL_SCHEMAS.entwurf_resume_call);
+		expect((tool?.parameters as { required: string[] }).required).toEqual(["target"]);
+		expect(Object.keys((tool?.parameters as { properties: object }).properties)).toEqual(["target"]);
+		await c.attach(session());
+		const args = { target: "20261005T000000-abcdef" };
+		await expect(tool?.execute(args, undefined, {})).resolves.toEqual({
+			output: [{ type: "text", text: "entwurf_resume_call ok" }],
+		});
+		expect(stub.calls).toEqual(["entwurf_resume_call"]);
+		expect(stub.args).toEqual([args]);
+		await c.close();
+	});
+
+	/**
+	 * The callable path the stub above cannot be: a model's tool call on the PUBLISHED runtime reaches
+	 * THIS package's compiled bridge through the contact's production stdio connector, and the bridge's
+	 * resume handler answers for the target the model named. The target is a test-owned claude-code
+	 * record, so the bridge's own `target-not-pi` refusal ends the call before any liveness probe or
+	 * window; the child also gets no tmux carrier. Private HOME/XDG/agent roots, a literal environment.
+	 * Nothing here resumes a citizen, and this is not a durable-host LIVE proof.
+	 */
+	it("[QK:PI-DURABLE-RESUME-CALL-REACHES-BRIDGE] a faux model's entwurf_resume_call on the published runtime reaches the compiled bridge's resume handler with its target: the model reads the bridge's named target-not-pi refusal for that id, the record is untouched and no window is asked for", async () => {
+		expect(fs.existsSync(CLOSURE_BRIDGE), "the compiled bridge exists — run `pnpm run build-bridge` first").toBe(true);
+		const own = (name: string): string => {
+			const p = path.join(root, name);
+			fs.mkdirSync(p, { recursive: true });
+			return p;
+		};
+		const env: NodeJS.ProcessEnv = {
+			PATH: process.env.PATH ?? "",
+			LANG: "C.UTF-8",
+			HOME: own("home"),
+			TMPDIR: own("tmp"),
+			XDG_DATA_HOME: own("xdg-data"),
+			XDG_CONFIG_HOME: own("xdg-config"),
+			XDG_CACHE_HOME: own("xdg-cache"),
+			XDG_STATE_HOME: own("xdg-state"),
+			PI_CODING_AGENT_DIR: own("pi-agent"),
+			ENTWURF_DIR: own("entwurf-control"),
+		};
+		const target = upsertMetaSession({
+			input: {
+				backend: "claude-code",
+				nativeSessionId: "0b5e2a4c-1f3d-4e8a-9c7b-2d6f8e1a3c5d",
+				cwd,
+				model: null,
+				transcriptPath: null,
+			},
+			dir: sessionsDir,
+		}).record.gardenId;
+		const recordFile = path.join(sessionsDir, `${target}.meta.json`);
+		const before = fs.readFileSync(recordFile);
+
+		const context = BACKGROUND_CONTEXT;
+		const faux = fauxProvider({ provider: "faux", models: [{ id: "scripted" }] });
+		const models = createModels();
+		models.setProvider(faux.provider);
+		faux.setResponses([
+			fauxAssistantMessage(fauxToolCall("entwurf_resume_call", { target }), { stopReason: "toolUse" }),
+			fauxAssistantMessage("done"),
+		]);
+		const c = createPiDurableContact({
+			bridgeEntry: CLOSURE_BRIDGE,
+			sessionsDir,
+			sendersDir,
+			mailboxDir,
+			receiversDir,
+			env,
+		});
+		const registry = createRegistry();
+		registry.install(c.extension as unknown as Extension);
+		const harness = await Harness.open(new MemoryStorage(), { models, registry }, context);
+		let bridgePid: number | null = null;
+		try {
+			const root = await harness.root(context, { agent: { model: { provider: "faux", modelId: "scripted" } } });
+			({ bridgePid } = await c.attach(session()));
+			await (await root.submit({ type: "input", content: "reopen it" }, context)).wait(context);
+			const page = await root.entries({}, 256, undefined, context);
+			const read = page.items
+				.filter((entry) => entry.kind === "pi.tool-result")
+				.map((entry) => {
+					const message = entry.model?.[0] as { toolName?: string; content?: { text?: string }[] } | undefined;
+					return { tool: message?.toolName, text: message?.content?.map((block) => block.text ?? "").join("") };
+				});
+			expect(read.map((r) => r.tool)).toEqual(["entwurf_resume_call"]);
+			expect(read[0]?.text).toContain("entwurf_resume_call rejected: target-not-pi");
+			expect(read[0]?.text).toContain(`${target} is a claude-code citizen`);
+			expect(read[0]?.text).toContain("No window was opened.");
+		} finally {
+			await c.close();
+			await harness.close(context);
+		}
+		expect(fs.readFileSync(recordFile).equals(before)).toBe(true);
+		// No lock outlives the refusal: the private lock dir is absent or empty, whichever the bridge left.
+		const locks = path.join(env.HOME as string, ".pi", "entwurf-v2-locks");
+		expect(fs.existsSync(locks) ? fs.readdirSync(locks) : []).toEqual([]);
+		// The bridge child the contact spawned is gone once the contact closed: no orphan outlives the case.
+		expect(bridgePid).not.toBeNull();
+		const until = Date.now() + 5_000;
+		while (fs.existsSync(`/proc/${bridgePid}`) && Date.now() < until) await new Promise((r) => setTimeout(r, 50));
+		expect(fs.existsSync(`/proc/${bridgePid}`)).toBe(false);
+	}, 30_000);
 });

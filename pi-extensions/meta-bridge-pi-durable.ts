@@ -98,6 +98,13 @@
  * operator host started outside tmux gets the bridge's named `no-tmux-context` refusal. Exposing the
  * tool is not a caller LIVE proof.
  *
+ * CALLER RESUME (the seventh tool, #147 L1). `entwurf_resume_call` lets this durable citizen reopen a
+ * DORMANT pi citizen under its own garden id, under the bridge's own single-`target` schema (pinned
+ * below). The bridge decides everything else from the target's record, exactly as for any other caller:
+ * only a pi target has a same-id resume, a live target is refused, and the window opens in the tmux
+ * session this host was launched in. Exposing the tool names no new authority and is not a caller LIVE
+ * proof; it never resumes this durable host itself.
+ *
  * NOT HERE: crash-safe receive. `entwurf_inbox_read` archives a body before the durable tool
  * result commits, so a crash between the two loses that body to the model; recovery settles the
  * call as interrupted and no doorbell rings again. A drain that fails part-way has archived the
@@ -156,6 +163,7 @@ export const PI_DURABLE_TOOL_NAMES = [
 	"entwurf_inbox_read",
 	"entwurf_callback",
 	"entwurf_fresh_call",
+	"entwurf_resume_call",
 ] as const;
 export type PiDurableToolName = (typeof PI_DURABLE_TOOL_NAMES)[number];
 
@@ -164,7 +172,7 @@ const DRAFT_07 = "http://json-schema.org/draft-07/schema#";
 /**
  * The bridge's `tools/list` inputSchemas for the exposed tools (`mcp/entwurf-bridge/src/index.ts`
  * `entwurf_v2` 456-507, `entwurf_self`, `entwurf_peers`, `entwurf_inbox_read`, `entwurf_callback`,
- * `entwurf_fresh_call`),
+ * `entwurf_fresh_call`, `entwurf_resume_call`),
  * as the bridge serialises them.
  * `attach` compares the live list against these and refuses on any difference.
  */
@@ -264,6 +272,19 @@ export const PI_DURABLE_TOOL_SCHEMAS: Readonly<Record<PiDurableToolName, Readonl
 			},
 		},
 		required: ["backend", "model", "task"],
+		$schema: DRAFT_07,
+	},
+	entwurf_resume_call: {
+		type: "object",
+		properties: {
+			target: {
+				type: "string",
+				minLength: 1,
+				pattern: "^\\d{8}T\\d{6}-[0-9a-f]{6}$",
+				description: "Garden id of the DORMANT pi citizen to reopen (discover with entwurf_peers).",
+			},
+		},
+		required: ["target"],
 		$schema: DRAFT_07,
 	},
 };
@@ -748,6 +769,11 @@ const TOOL_DESCRIPTIONS: Record<PiDurableToolName, string> = {
 		"(backend, model and task required; optional cwd and placement). Returns the bridge's LAUNCH receipt or its " +
 		"named refusal — not a started runtime, a delivered task or a reply; the sibling's callback names it. Opening " +
 		"beside this host needs the tmux pane this host itself was launched in.",
+	entwurf_resume_call:
+		"Reopen ONE dormant pi citizen under its own garden id in a visible tmux window through the entwurf-bridge " +
+		"(target required; the record supplies transcript, model and cwd — no task, no prompt, no turn). Returns the " +
+		"bridge's LAUNCH and OBSERVATION receipts or its named refusal: a live or non-pi target is refused by name, " +
+		"and opening the window needs the tmux session this host itself was launched in.",
 };
 
 /** Announce, never push: the notice names the garden and the tool, never the body. */

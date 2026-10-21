@@ -22,6 +22,30 @@ All notable changes to this project will be documented here. Format follows [Kee
   `pi-extensions/lib/fresh-call-dispatch.test.ts` (three QKs) and three mutants in the
   `fresh-call-dispatch` lane (12 → 15), executed through `./run.sh check-fresh-call-provider`.
 
+### pi-durable
+
+- **The durable contact offers `entwurf_resume_call` (#147 L1).** A pi-durable citizen (the
+  coordinator's host) could not call the existing same-id resume verb: its contact exposed six bridge
+  tools and resume was not among them. It now registers a seventh, under the bridge's own
+  single-`target` schema, and forwards the call to the bridge unchanged. The verb itself is
+  unchanged: pi-only targets, a live target refused, no turn, the record supplies transcript, model
+  and cwd. Nothing new authorises who may resume, Claude Code resume and a retire verb are not
+  here, and a running durable host offers the tool only after it is restarted onto a build that
+  carries it. Because the bootstrap reserves every contact tool name, an operator native module
+  that registers a tool named `entwurf_resume_call` is now refused as `native-module-name-reserved`.
+  Proof: two QKs in `pi-extensions/meta-bridge-pi-durable.test.ts` — the tool is offered and hands
+  the bridge exactly `{target}`, and a faux model's call on the published runtime reaches this
+  package's compiled bridge through the contact's production connector and reads the bridge's named
+  `target-not-pi` refusal for a test-owned claude-code record (no citizen is resumed). Two mutants
+  in the `pi-durable` lane (84 → 86), executed through `./run.sh check-pi-durable-beside`. The
+  independent tool lists of `check-pi-durable-contact`, `check-pi-durable-send` and
+  `smoke-pi-durable-fresh-live` now name seven tools. One default-cell `check-pi-durable-send` run
+  (scripted loopback endpoint and the carrier app's native tool path; no vendor model turn) offered
+  `entwurf_resume_call` in the app's first model request, and its parameters there equal the
+  bridge's own listed schema — read from that run's raw wire receipt, because the default cell's
+  QK judges only self, peers and v2; the seven-tool `native-module` cell was not run. A running
+  coordinator host offering seven tools, and any operator rollout, remain unmeasured.
+
 ## v2026.10.20-herdr.0.40.0 — Herdr Entwurf plugin 0.40.0
 
 A separate Herdr plugin snapshot, not another core release: core package 0.40.0 and its

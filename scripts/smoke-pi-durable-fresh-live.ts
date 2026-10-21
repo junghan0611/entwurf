@@ -24,7 +24,7 @@
  *   Pi        its own JSONL toolCall/toolResult rows and `entwurf-message` custom rows.
  *   pd        its NATIVE store, read from a consistent snapshot taken with node:sqlite's online
  *             `backup` while the host is live (a raw copy of a live WAL set is not consistent):
- *             the `pi.system` entries' `toolsAdded` (the actual offering — task-wide means the six
+ *             the `pi.system` entries' `toolsAdded` (the actual offering — task-wide means the seven
  *             contact tools AND the native tools, no filter), the generation checkpoint's
  *             `request.model` and the assistant messages' provider/model (the actual model), the
  *             contact tool calls, and the doorbell submission. The live database and its transcript
@@ -74,7 +74,7 @@ const DIST_ENTRY = path.join(REPO, "mcp/entwurf-bridge/dist/mcp/entwurf-bridge/s
 const PD_MODEL = process.env.ENTWURF_PI_DURABLE_FRESH_MODEL?.trim() || "openai-codex/gpt-6.1-sol";
 const PI_MODEL = process.env.ENTWURF_PI_DURABLE_FRESH_PI_MODEL?.trim() || "openai-codex/gpt-6.1-sol";
 const WIDTH = "task-wide";
-/** Independent of the adapter's own constant: the six contact tools step 9 expects the host to offer. */
+/** Independent of the adapter's own constant: the seven contact tools step 9 expects the host to offer. */
 const CONTACT_TOOLS = [
 	"entwurf_self",
 	"entwurf_peers",
@@ -82,6 +82,7 @@ const CONTACT_TOOLS = [
 	"entwurf_inbox_read",
 	"entwurf_callback",
 	"entwurf_fresh_call",
+	"entwurf_resume_call",
 ];
 /** The native app's own tools; task-wide = no filter, so they must be offered beside the contact. */
 const NATIVE_TOOLS = ["bash", "read", "edit", "write", "subagent"];
@@ -584,7 +585,7 @@ const rootId = (roots[0] as { id: number }).id;
 const view = pdRootView(nativeEntries, rootId);
 receipts["6-native-offering"] = view.offering.join(" ") || "(no pi.system offering)";
 ok(
-	"ACTUAL OFFERING (root pi.system, toolsAdded/toolsRemoved applied): the six contact tools AND the native tools — task-wide, no filter",
+	"ACTUAL OFFERING (root pi.system, toolsAdded/toolsRemoved applied): the seven contact tools AND the native tools — task-wide, no filter",
 	CONTACT_TOOLS.every((t) => view.offering.includes(t)) && NATIVE_TOOLS.every((t) => view.offering.includes(t)),
 	`offered: ${view.offering.join(", ") || "(none)"}`,
 );
