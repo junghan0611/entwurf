@@ -1,0 +1,143 @@
+{
+	"schemaVersion": 1,
+	"lane": "entwurf-v2-retire",
+	"mutants": [
+		{
+			"claim": "RETIRE-CORE-ADMISSION",
+			"title": "self retirement reaches target IO instead of refusing before lock acquisition",
+			"subject": "pi-extensions/lib/entwurf-v2-retire.ts",
+			"find": [
+				"\t\tif (actor.sessionId === targetGardenId) return beforeLock({ kind: \"refused\", reason: \"self-target\" });"
+			],
+			"replace": ["\t\t// MUTANT: self guard omitted."],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-retire"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RETIRE-CORE-ADMISSION]",
+			"signatureSource": "pi-extensions/lib/entwurf-v2-retire.test.ts"
+		},
+		{
+			"claim": "RETIRE-CORE-LOCK",
+			"title": "a failed lock acquisition still reads target state",
+			"subject": "pi-extensions/lib/entwurf-v2-retire.ts",
+			"find": [
+				"\tif (!acquired.ok) return beforeLock({ kind: \"refused\", reason: \"target-locked\", detail: acquired.conflict.detail });"
+			],
+			"replace": [
+				"\tif (!acquired.ok) {",
+				"\t\tdeps.recordExists(targetGardenId);",
+				"\t\treturn beforeLock({ kind: \"refused\", reason: \"target-locked\", detail: acquired.conflict.detail });",
+				"\t}"
+			],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-retire"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RETIRE-CORE-LOCK]",
+			"signatureSource": "pi-extensions/lib/entwurf-v2-retire.test.ts"
+		},
+		{
+			"claim": "RETIRE-CORE-RECORD",
+			"title": "a corrupt present record is disguised as target absence",
+			"subject": "pi-extensions/lib/entwurf-v2-retire.ts",
+			"find": ["\t\t\t\t? { kind: \"preflight-error\", cause: causeOf(error) }"],
+			"replace": ["\t\t\t\t? { kind: \"refused\", reason: \"target-not-found\" }"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-retire"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RETIRE-CORE-RECORD]",
+			"signatureSource": "pi-extensions/lib/entwurf-v2-retire.test.ts"
+		},
+		{
+			"claim": "RETIRE-CORE-LIVE",
+			"title": "a dead Pi probe falls through to the retirement adapter",
+			"subject": "pi-extensions/lib/entwurf-v2-retire.ts",
+			"find": [
+				"\t\t\tif (live.liveness === \"dead\") return { kind: \"refused\", reason: \"target-dead\" };",
+				"\t\t\tif (live.liveness !== \"alive\") return { kind: \"refused\", reason: \"target-indeterminate\" };"
+			],
+			"replace": [
+				"\t\t\tif (live.liveness === \"indeterminate\") return { kind: \"refused\", reason: \"target-indeterminate\" };"
+			],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-retire"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RETIRE-CORE-LIVE]",
+			"signatureSource": "pi-extensions/lib/entwurf-v2-retire.test.ts"
+		},
+		{
+			"claim": "RETIRE-CORE-FRESH",
+			"title": "the sole before versus after Pi birth-tuple guard is bypassed",
+			"subject": "pi-extensions/lib/entwurf-v2-retire.ts",
+			"find": [
+				"\t\t\tif (",
+				"\t\t\t\t[\"gardenId\", \"backend\", \"nativeSessionId\", \"createdAt\"].some(",
+				"\t\t\t\t\t(key) => current[key as keyof MetaIdentity] !== identity[key as keyof MetaIdentity],",
+				"\t\t\t\t)",
+				"\t\t\t) {"
+			],
+			"replace": ["\t\t\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-retire"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RETIRE-CORE-FRESH]",
+			"signatureSource": "pi-extensions/lib/entwurf-v2-retire.test.ts"
+		},
+		{
+			"claim": "RETIRE-CORE-PI",
+			"title": "Pi adapter receives a different directory than the inspected canonical address",
+			"subject": "pi-extensions/lib/entwurf-v2-retire.ts",
+			"find": ["\t\t\t\t\tcontrolSocketDir: deps.controlSocketDir,"],
+			"replace": ["\t\t\t\t\tcontrolSocketDir: \"/wrong-control-directory\","],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-retire"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RETIRE-CORE-PI]",
+			"signatureSource": "pi-extensions/lib/entwurf-v2-retire.test.ts"
+		},
+		{
+			"claim": "RETIRE-CORE-CC",
+			"title": "CC expected attach incarnation is not forwarded from the fresh target record",
+			"subject": "pi-extensions/lib/entwurf-v2-retire.ts",
+			"find": [
+				"\t\tconst result = await deps.requestCc({ gardenId, backend, nativeSessionId, createdAt, attachIncarnation });"
+			],
+			"replace": [
+				"\t\tconst result = await deps.requestCc({ gardenId, backend, nativeSessionId, createdAt, attachIncarnation: \"wrong-incarnation\" });"
+			],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-retire"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RETIRE-CORE-CC]",
+			"signatureSource": "pi-extensions/lib/entwurf-v2-retire.test.ts"
+		},
+		{
+			"claim": "RETIRE-CORE-THROW",
+			"title": "an escaped adapter throw is downgraded to a preflight error after possible effects",
+			"subject": "pi-extensions/lib/entwurf-v2-retire.ts",
+			"find": ["\t\t\t\t: { kind: \"unknown\", backend: enteredBackend, cause: causeOf(error) };"],
+			"replace": ["\t\t\t\t: { kind: \"preflight-error\", cause: causeOf(error) };"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-retire"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RETIRE-CORE-THROW]",
+			"signatureSource": "pi-extensions/lib/entwurf-v2-retire.test.ts"
+		},
+		{
+			"claim": "RETIRE-CORE-RELEASE",
+			"title": "a throwing release overwrites the original backend result with a preflight error",
+			"subject": "pi-extensions/lib/entwurf-v2-retire.ts",
+			"find": ["\t\t\trelease = { status: \"error\", cause: causeOf(error) };"],
+			"replace": [
+				"\t\t\trelease = { status: \"error\", cause: causeOf(error) };",
+				"\t\t\toutcome = { kind: \"preflight-error\", cause: causeOf(error) };"
+			],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-retire"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RETIRE-CORE-RELEASE]",
+			"signatureSource": "pi-extensions/lib/entwurf-v2-retire.test.ts"
+		},
+		{
+			"claim": "RETIRE-CORE-FAULT",
+			"title": "an acquired claim is falsely reported released without calling the release seam",
+			"subject": "pi-extensions/lib/entwurf-v2-retire.ts",
+			"find": ["\t\t\trelease = { status: deps.releaseLock(claim) };"],
+			"replace": ["\t\t\trelease = { status: \"released\" };"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-retire"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RETIRE-CORE-FAULT]",
+			"signatureSource": "pi-extensions/lib/entwurf-v2-retire.test.ts"
+		}
+	]
+}

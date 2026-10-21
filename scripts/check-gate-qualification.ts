@@ -3451,6 +3451,7 @@ let manifestCount: number;
 		"bridge-command-boot": 12,
 		"cc-retire-pidfd": 11,
 		"cc-retire-request": 15,
+		"entwurf-v2-retire": 10,
 		"capability-cache": 3,
 		"codex-app-server-launch": 10,
 		"codex-caller-seat": 28,

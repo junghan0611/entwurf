@@ -1369,6 +1369,12 @@ check_cc_retire_request() {
   run_vitest pi-extensions/lib/cc-retire-request.test.ts
 }
 
+check_entwurf_v2_retire() {
+  # Mutant execution coordinate only; the existing beside glob owns test discovery.
+  section "Internal retire dispatcher (mutant execution coordinate)"
+  run_vitest pi-extensions/lib/entwurf-v2-retire.test.ts
+}
+
 check_win32_preview() {
   # MUTANT EXECUTION COORDINATE, not a discovery path — the Windows preview's (#78) loader and
   # platform wiring tests are found by check-tests-beside-behavior like every other beside-behaviour
@@ -7549,6 +7555,9 @@ case "$cmd" in
     ;;
   check-cc-retire-request)
     check_cc_retire_request
+    ;;
+  check-entwurf-v2-retire)
+    check_entwurf_v2_retire
     ;;
   check-win32-preview)
     check_win32_preview
