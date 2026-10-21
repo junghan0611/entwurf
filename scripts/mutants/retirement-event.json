@@ -1,0 +1,195 @@
+{
+	"schemaVersion": 1,
+	"lane": "retirement-event",
+	"mutants": [
+		{
+			"claim": "RETIRE-EVENT-FD-KIND",
+			"title": "an opened non-regular inode passes admission and reaches write",
+			"subject": "pi-extensions/lib/retirement-event.ts",
+			"find": ["\t\tif (!st.isFile()) throw new RetirementEventError(`${path.basename(file)} is not a regular file`);"],
+			"replace": ["\t\t// MUTANT: opened inode kind is not checked."],
+			"gate": ["bash", "run.sh", "check-retirement-event"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:RETIRE-EVENT-FD-KIND]",
+			"signatureSource": "pi-extensions/lib/retirement-event.test.ts"
+		},
+		{
+			"claim": "RETIRE-EVENT-CLOSED-KEYS",
+			"title": "serialized event grows an undeclared field",
+			"subject": "pi-extensions/lib/retirement-event.ts",
+			"find": ["\tconst base = { v, kind, eventId, at, actorGardenId, targetGardenId, targetBackend };"],
+			"replace": [
+				"\tconst base = { v, kind, eventId, at, actorGardenId, targetGardenId, targetBackend, extra: true };"
+			],
+			"gate": ["bash", "run.sh", "check-retirement-event"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:RETIRE-EVENT-CLOSED-KEYS]",
+			"signatureSource": "pi-extensions/lib/retirement-event.test.ts"
+		},
+		{
+			"claim": "RETIRE-EVENT-FORBIDDEN",
+			"title": "free text is admitted as a retirement reason",
+			"subject": "pi-extensions/lib/retirement-event.ts",
+			"find": ["\tif (reason !== null && (typeof reason !== \"string\" || !REASON_RE.test(reason))) {"],
+			"replace": ["\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-retirement-event"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:RETIRE-EVENT-FORBIDDEN]",
+			"signatureSource": "pi-extensions/lib/retirement-event.test.ts"
+		},
+		{
+			"claim": "RETIRE-EVENT-INSTANT",
+			"title": "calendar rollover is accepted as an ISO instant",
+			"subject": "pi-extensions/lib/retirement-event.ts",
+			"find": ["\treturn !Number.isNaN(ms) && new Date(ms).toISOString() === value;"],
+			"replace": ["\treturn !Number.isNaN(ms);"],
+			"gate": ["bash", "run.sh", "check-retirement-event"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:RETIRE-EVENT-INSTANT]",
+			"signatureSource": "pi-extensions/lib/retirement-event.test.ts"
+		},
+		{
+			"claim": "RETIRE-EVENT-BACKEND-DOMAIN",
+			"title": "one backend records the other backend's outcome as its own",
+			"subject": "pi-extensions/lib/retirement-event.ts",
+			"find": ["\tconst allowed: readonly unknown[] = RETIREMENT_OUTCOME_STATUSES_BY_BACKEND[targetBackend];"],
+			"replace": [
+				"\tconst allowed: readonly unknown[] = [\"shutdown-requested\", \"exited\", \"refused\", \"not-signalled\", \"unknown\"];"
+			],
+			"gate": ["bash", "run.sh", "check-retirement-event"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:RETIRE-EVENT-BACKEND-DOMAIN]",
+			"signatureSource": "pi-extensions/lib/retirement-event.test.ts"
+		},
+		{
+			"claim": "RETIRE-EVENT-SNAPSHOT",
+			"title": "foreign prototypes stop being refused at the snapshot boundary",
+			"subject": "pi-extensions/lib/retirement-event.ts",
+			"find": [
+				"\tif (proto !== Object.prototype && proto !== null) throw new RetirementEventError(`${what} must be a plain object`);"
+			],
+			"replace": ["\t// MUTANT: foreign prototype admitted."],
+			"gate": ["bash", "run.sh", "check-retirement-event"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:RETIRE-EVENT-SNAPSHOT]",
+			"signatureSource": "pi-extensions/lib/retirement-event.test.ts"
+		},
+		{
+			"claim": "RETIRE-EVENT-ONE-SNAPSHOT",
+			"title": "filename re-reads the original object after validating a different target snapshot",
+			"subject": "pi-extensions/lib/retirement-event.ts",
+			"find": ["\tconst file = retirementEventFile(retirementsDir, targetGardenId);"],
+			"replace": ["\tconst file = retirementEventFile(retirementsDir, event.targetGardenId);"],
+			"gate": ["bash", "run.sh", "check-retirement-event"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:RETIRE-EVENT-ONE-SNAPSHOT]",
+			"signatureSource": "pi-extensions/lib/retirement-event.test.ts"
+		},
+		{
+			"claim": "RETIRE-EVENT-APPEND",
+			"title": "an append opens at offset zero and overwrites the preserved prefix",
+			"subject": "pi-extensions/lib/retirement-event.ts",
+			"find": ["\tconst fd = fs.openSync(file, O_WRONLY | O_APPEND | O_CREAT | O_NOFOLLOW | O_NONBLOCK, 0o600);"],
+			"replace": ["\tconst fd = fs.openSync(file, O_WRONLY | O_CREAT | O_NOFOLLOW | O_NONBLOCK, 0o600);"],
+			"gate": ["bash", "run.sh", "check-retirement-event"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:RETIRE-EVENT-APPEND]",
+			"signatureSource": "pi-extensions/lib/retirement-event.test.ts"
+		},
+		{
+			"claim": "RETIRE-EVENT-CREATE",
+			"title": "new event files abandon the literal target-gid JSONL filename contract",
+			"subject": "pi-extensions/lib/retirement-event.ts",
+			"find": ["export const RETIREMENT_EVENT_SUFFIX = \".jsonl\";"],
+			"replace": ["export const RETIREMENT_EVENT_SUFFIX = \".log\";"],
+			"gate": ["bash", "run.sh", "check-retirement-event"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:RETIRE-EVENT-CREATE]",
+			"signatureSource": "pi-extensions/lib/retirement-event.test.ts"
+		},
+		{
+			"claim": "RETIRE-EVENT-NOFOLLOW",
+			"title": "a final symlink is followed and its victim is appended to",
+			"subject": "pi-extensions/lib/retirement-event.ts",
+			"find": ["\tconst fd = fs.openSync(file, O_WRONLY | O_APPEND | O_CREAT | O_NOFOLLOW | O_NONBLOCK, 0o600);"],
+			"replace": ["\tconst fd = fs.openSync(file, O_WRONLY | O_APPEND | O_CREAT | O_NONBLOCK, 0o600);"],
+			"gate": ["bash", "run.sh", "check-retirement-event"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:RETIRE-EVENT-NOFOLLOW]",
+			"signatureSource": "pi-extensions/lib/retirement-event.test.ts"
+		},
+		{
+			"claim": "RETIRE-EVENT-NONREGULAR",
+			"title": "a multiply linked event inode can be appended to",
+			"subject": "pi-extensions/lib/retirement-event.ts",
+			"find": [
+				"\t\tif (st.nlink !== 1) throw new RetirementEventError(`${path.basename(file)} has ${st.nlink} links; refusing`);"
+			],
+			"replace": ["\t\t// MUTANT: hardlink guard omitted."],
+			"gate": ["bash", "run.sh", "check-retirement-event"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:RETIRE-EVENT-NONREGULAR]",
+			"signatureSource": "pi-extensions/lib/retirement-event.test.ts"
+		},
+		{
+			"claim": "RETIRE-EVENT-DIR",
+			"title": "a symlinked retirement directory is admitted",
+			"subject": "pi-extensions/lib/retirement-event.ts",
+			"find": ["\tif (st.isSymbolicLink() || !st.isDirectory()) {"],
+			"replace": ["\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-retirement-event"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:RETIRE-EVENT-DIR]",
+			"signatureSource": "pi-extensions/lib/retirement-event.test.ts"
+		},
+		{
+			"claim": "RETIRE-EVENT-PATH",
+			"title": "a relative sessions directory becomes an ambient-CWD-dependent path",
+			"subject": "pi-extensions/lib/retirement-event.ts",
+			"find": [
+				"\tif (!path.isAbsolute(sessionsDir)) throw new RetirementEventError(\"sessionsDir must be an absolute path\");"
+			],
+			"replace": ["\t// MUTANT: relative sessions directory admitted."],
+			"gate": ["bash", "run.sh", "check-retirement-event"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:RETIRE-EVENT-PATH]",
+			"signatureSource": "pi-extensions/lib/retirement-event.test.ts"
+		},
+		{
+			"claim": "RETIRE-EVENT-NO-AMBIENT",
+			"title": "the append leaf begins reading ambient environment",
+			"subject": "pi-extensions/lib/retirement-event.ts",
+			"find": ["export function retirementsDirBesideSessions(sessionsDir: string): string {"],
+			"replace": [
+				"export function retirementsDirBesideSessions(sessionsDir: string): string {",
+				"\tvoid process.env.HOME;"
+			],
+			"gate": ["bash", "run.sh", "check-retirement-event"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:RETIRE-EVENT-NO-AMBIENT]",
+			"signatureSource": "pi-extensions/lib/retirement-event.test.ts"
+		},
+		{
+			"claim": "RETIRE-EVENT-PRIMITIVES",
+			"title": "FIFO admission loses NONBLOCK without a semantic open-flag assertion",
+			"subject": "pi-extensions/lib/retirement-event.ts",
+			"find": ["\tconst fd = fs.openSync(file, O_WRONLY | O_APPEND | O_CREAT | O_NOFOLLOW | O_NONBLOCK, 0o600);"],
+			"replace": ["\tconst fd = fs.openSync(file, O_WRONLY | O_APPEND | O_CREAT | O_NOFOLLOW, 0o600);"],
+			"gate": ["bash", "run.sh", "check-retirement-event"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:RETIRE-EVENT-PRIMITIVES]",
+			"signatureSource": "pi-extensions/lib/retirement-event.test.ts"
+		},
+		{
+			"claim": "RETIRE-EVENT-FAILURE-MATRIX",
+			"title": "the file flush disappears so a flush failure cannot be reported",
+			"subject": "pi-extensions/lib/retirement-event.ts",
+			"find": ["\t\tfs.fsyncSync(fd);"],
+			"replace": ["\t\t// MUTANT: file flush omitted."],
+			"gate": ["bash", "run.sh", "check-retirement-event"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:RETIRE-EVENT-FAILURE-MATRIX]",
+			"signatureSource": "pi-extensions/lib/retirement-event.test.ts"
+		}
+	]
+}

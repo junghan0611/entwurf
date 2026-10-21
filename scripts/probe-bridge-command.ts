@@ -67,6 +67,7 @@ export const EXPECTED_TOOLS = [
 	"entwurf_register_native",
 	"entwurf_fresh_call",
 	"entwurf_resume_call",
+	"entwurf_retire_call",
 	"entwurf_callback",
 ] as const;
 const DEFAULT_TIMEOUT_MS = 10_000;

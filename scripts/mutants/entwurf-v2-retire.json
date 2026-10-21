@@ -138,6 +138,339 @@
 			"timeoutSeconds": 600,
 			"signature": "[QK:RETIRE-CORE-FAULT]",
 			"signatureSource": "pi-extensions/lib/entwurf-v2-retire.test.ts"
+		},
+		{
+			"claim": "RETIRE-CORE-ABORT-BEFORE-LOCK",
+			"title": "a request cancelled before the lock still acquires the target lock",
+			"subject": "pi-extensions/lib/entwurf-v2-retire.ts",
+			"find": ["\t\tif (aborted()) return beforeLock({ kind: \"refused\", reason: \"request-aborted\" });"],
+			"replace": ["\t\t// MUTANT: pre-lock cancellation check omitted."],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-retire"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RETIRE-CORE-ABORT-BEFORE-LOCK]",
+			"signatureSource": "pi-extensions/lib/entwurf-v2-retire.test.ts"
+		},
+		{
+			"claim": "RETIRE-CORE-ABORT-PREFLIGHT",
+			"title": "cancellation during the locked preflight still writes a requested record",
+			"subject": "pi-extensions/lib/entwurf-v2-retire.ts",
+			"find": [
+				"\tconst admit = (targetBackend: RetireTargetBackend): RetireDispatchOutcome | null => {",
+				"\t\tif (aborted()) return { kind: \"refused\", reason: \"request-aborted\" };"
+			],
+			"replace": ["\tconst admit = (targetBackend: RetireTargetBackend): RetireDispatchOutcome | null => {"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-retire"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RETIRE-CORE-ABORT-PREFLIGHT]",
+			"signatureSource": "pi-extensions/lib/entwurf-v2-retire.test.ts"
+		},
+		{
+			"claim": "RETIRE-CORE-ABORT-AFTER-REQUESTED",
+			"title": "cancellation observed after the requested record still enters the adapter",
+			"subject": "pi-extensions/lib/entwurf-v2-retire.ts",
+			"find": [
+				"\t\tattempt = { eventId, context };",
+				"\t\tif (aborted()) return { kind: \"refused\", reason: \"request-aborted\" };"
+			],
+			"replace": ["\t\tattempt = { eventId, context };"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-retire"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RETIRE-CORE-ABORT-AFTER-REQUESTED]",
+			"signatureSource": "pi-extensions/lib/entwurf-v2-retire.test.ts"
+		},
+		{
+			"claim": "RETIRE-CORE-RECORD-JOIN",
+			"title": "the lock is released before the attempt's outcome is recorded",
+			"subject": "pi-extensions/lib/entwurf-v2-retire.ts",
+			"find": [
+				"\t\t// An attempt that was recorded as requested gets ONE outcome record, before release.",
+				"\t\tif (attempt) {"
+			],
+			"replace": ["\t\trelease = { status: deps.releaseLock(claim) };", "\t\tif (attempt) {"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-retire"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RETIRE-CORE-RECORD-JOIN]",
+			"signatureSource": "pi-extensions/lib/entwurf-v2-retire.test.ts"
+		},
+		{
+			"claim": "RETIRE-CORE-RECORD-THROWN-ADAPTER",
+			"title": "a thrown adapter attempt loses its outcome record",
+			"subject": "pi-extensions/lib/entwurf-v2-retire.ts",
+			"find": ["\t\t} catch (error) {", "\t\t\toutcome ="],
+			"replace": ["\t\t} catch (error) {", "\t\t\tattempt = null;", "\t\t\toutcome ="],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-retire"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RETIRE-CORE-RECORD-THROWN-ADAPTER]",
+			"signatureSource": "pi-extensions/lib/entwurf-v2-retire.test.ts"
+		},
+		{
+			"claim": "RETIRE-CORE-REQUESTED-FAIL",
+			"title": "a malformed requested-record id still admits the adapter",
+			"subject": "pi-extensions/lib/entwurf-v2-retire.ts",
+			"find": ["\t\tif (typeof eventId !== \"string\" || !EVENT_ID_RE.test(eventId)) {"],
+			"replace": ["\t\tif (typeof eventId !== \"string\") {"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-retire"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RETIRE-CORE-REQUESTED-FAIL]",
+			"signatureSource": "pi-extensions/lib/entwurf-v2-retire.test.ts"
+		},
+		{
+			"claim": "RETIRE-CORE-OUTCOME-FAIL",
+			"title": "a failed outcome record rewrites an already effective backend result to unknown",
+			"subject": "pi-extensions/lib/entwurf-v2-retire.ts",
+			"find": ["\t\t\t\trecord = { status: \"outcome-append-error\", eventId, cause: causeOf(error) };"],
+			"replace": [
+				"\t\t\t\trecord = { status: \"outcome-append-error\", eventId, cause: causeOf(error) };",
+				"\t\t\t\toutcome = { kind: \"unknown\", backend: context.targetBackend, cause: causeOf(error) };"
+			],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-retire"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RETIRE-CORE-OUTCOME-FAIL]",
+			"signatureSource": "pi-extensions/lib/entwurf-v2-retire.test.ts"
+		},
+		{
+			"claim": "RETIRE-FACTORY-DIRS-EXPLICIT",
+			"title": "lock release is bound to a different directory than lock acquisition",
+			"subject": "pi-extensions/lib/entwurf-v2-retire-production.ts",
+			"find": ["\t\treleaseLock: (claim) => io.releaseLock(claim, { dir: lockDir }),"],
+			"replace": ["\t\treleaseLock: (claim) => io.releaseLock(claim, { dir: controlSocketDir }),"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-retire"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RETIRE-FACTORY-DIRS-EXPLICIT]",
+			"signatureSource": "pi-extensions/lib/entwurf-v2-retire-production.test.ts"
+		},
+		{
+			"claim": "RETIRE-FACTORY-DIRS-MODULE-LOAD",
+			"title": "the default lock directory is re-derived from HOME at construction",
+			"subject": "pi-extensions/lib/entwurf-v2-retire-production.ts",
+			"find": ["\tconst lockDir = opts.lockDir ?? ENTWURF_V2_LOCK_DIR;"],
+			"replace": ["\tconst lockDir = opts.lockDir ?? `${process.env.HOME}/.pi/entwurf-v2-locks`;"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-retire"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RETIRE-FACTORY-DIRS-MODULE-LOAD]",
+			"signatureSource": "pi-extensions/lib/entwurf-v2-retire-production.test.ts"
+		},
+		{
+			"claim": "RETIRE-FACTORY-DIRS-CONSTRUCTION",
+			"title": "record existence re-reads the sessions environment on every call",
+			"subject": "pi-extensions/lib/entwurf-v2-retire-production.ts",
+			"find": ["\t\trecordExists: (gid) => io.metaRecordExists(gid, sessionsDir),"],
+			"replace": ["\t\trecordExists: (gid) => io.metaRecordExists(gid, opts.sessionsDir ?? defaultMetaSessionsDir()),"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-retire"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RETIRE-FACTORY-DIRS-CONSTRUCTION]",
+			"signatureSource": "pi-extensions/lib/entwurf-v2-retire-production.test.ts"
+		},
+		{
+			"claim": "RETIRE-FACTORY-CC-WITNESSES",
+			"title": "the CC sender witness reads a different owner pid than the adapter asked for",
+			"subject": "pi-extensions/lib/entwurf-v2-retire-production.ts",
+			"find": ["\t\treadSender: (ownerPid) => io.readSender({ backend: \"claude-code\", ownerPid, sendersDir }),"],
+			"replace": [
+				"\t\treadSender: (ownerPid) => io.readSender({ backend: \"claude-code\", ownerPid: ownerPid + 1, sendersDir }),"
+			],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-retire"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RETIRE-FACTORY-CC-WITNESSES]",
+			"signatureSource": "pi-extensions/lib/entwurf-v2-retire-production.test.ts"
+		},
+		{
+			"claim": "RETIRE-FACTORY-CC-SIGNAL",
+			"title": "the CC adapter loses the request's AbortSignal",
+			"subject": "pi-extensions/lib/entwurf-v2-retire-production.ts",
+			"find": ["\t\trequestCc: (expected) => io.requestCc(expected, ccDeps, { signal }),"],
+			"replace": ["\t\trequestCc: (expected) => io.requestCc(expected, ccDeps, {}),"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-retire"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RETIRE-FACTORY-CC-SIGNAL]",
+			"signatureSource": "pi-extensions/lib/entwurf-v2-retire-production.test.ts"
+		},
+		{
+			"claim": "RETIRE-FACTORY-PI-OPTIONS",
+			"title": "the Pi adapter receives the caller's whole options object, timeout included",
+			"subject": "pi-extensions/lib/entwurf-v2-retire-production.ts",
+			"find": ["\t\t\tio.requestPi(target, expected, { controlSocketDir: options.controlSocketDir }),"],
+			"replace": ["\t\t\tio.requestPi(target, expected, options),"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-retire"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RETIRE-FACTORY-PI-OPTIONS]",
+			"signatureSource": "pi-extensions/lib/entwurf-v2-retire-production.test.ts"
+		},
+		{
+			"claim": "RETIRE-FACTORY-OPAQUE",
+			"title": "a control-socket inspection result is reshaped instead of returned by identity",
+			"subject": "pi-extensions/lib/entwurf-v2-retire-production.ts",
+			"find": ["\t\tinspectPath: (socketPath) => io.inspectPath(socketPath),"],
+			"replace": ["\t\tinspectPath: async (socketPath) => ({ ...(await io.inspectPath(socketPath)) }),"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-retire"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RETIRE-FACTORY-OPAQUE]",
+			"signatureSource": "pi-extensions/lib/entwurf-v2-retire-production.test.ts"
+		},
+		{
+			"claim": "RETIRE-FACTORY-RECORD-DIR",
+			"title": "the requested event's sidecar directory is re-derived from the environment per call",
+			"subject": "pi-extensions/lib/entwurf-v2-retire-production.ts",
+			"find": ["\t\t\tconst eventId = randomBytes(16).toString(\"hex\");", "\t\t\tio.append(retirementsDir, {"],
+			"replace": [
+				"\t\t\tconst eventId = randomBytes(16).toString(\"hex\");",
+				"\t\t\tio.append(retirementsDirBesideSessions(opts.sessionsDir ?? defaultMetaSessionsDir()), {"
+			],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-retire"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RETIRE-FACTORY-RECORD-DIR]",
+			"signatureSource": "pi-extensions/lib/entwurf-v2-retire-production.test.ts"
+		},
+		{
+			"claim": "RETIRE-FACTORY-RECORD-EVENTS",
+			"title": "caller context fields beyond the three attribution fields leak into sidecar events",
+			"subject": "pi-extensions/lib/entwurf-v2-retire-production.ts",
+			"find": [
+				"\tconst attribution = (context: RetireRecordContext) => ({",
+				"\t\tactorGardenId: context.actorGardenId,"
+			],
+			"replace": [
+				"\tconst attribution = (context: RetireRecordContext) => ({",
+				"\t\t...context,",
+				"\t\tactorGardenId: context.actorGardenId,"
+			],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-retire"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RETIRE-FACTORY-RECORD-EVENTS]",
+			"signatureSource": "pi-extensions/lib/entwurf-v2-retire-production.test.ts"
+		},
+		{
+			"claim": "RETIRE-FACTORY-RECORD-APPEND-FAIL",
+			"title": "a failed requested append is swallowed and its event id still returned",
+			"subject": "pi-extensions/lib/entwurf-v2-retire-production.ts",
+			"find": [
+				"\t\t\tio.append(retirementsDir, {",
+				"\t\t\t\tv: RETIREMENT_EVENT_VERSION,",
+				"\t\t\t\tkind: \"retirement-requested\",",
+				"\t\t\t\teventId,",
+				"\t\t\t\tat: new Date().toISOString(),",
+				"\t\t\t\t...attribution(context),",
+				"\t\t\t});",
+				"\t\t\treturn eventId;"
+			],
+			"replace": [
+				"\t\t\ttry {",
+				"\t\t\t\tio.append(retirementsDir, {",
+				"\t\t\t\t\tv: RETIREMENT_EVENT_VERSION,",
+				"\t\t\t\t\tkind: \"retirement-requested\",",
+				"\t\t\t\t\teventId,",
+				"\t\t\t\t\tat: new Date().toISOString(),",
+				"\t\t\t\t\t...attribution(context),",
+				"\t\t\t\t});",
+				"\t\t\t} catch {}",
+				"\t\t\treturn eventId;"
+			],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-retire"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RETIRE-FACTORY-RECORD-APPEND-FAIL]",
+			"signatureSource": "pi-extensions/lib/entwurf-v2-retire-production.test.ts"
+		},
+		{
+			"claim": "RETIRE-FACTORY-SUMMARY",
+			"title": "a Claude Code adapter's free reason string reaches the sidecar summary",
+			"subject": "pi-extensions/lib/entwurf-v2-retire-production.ts",
+			"find": ["\t\treturn { status: outcome.result.outcome, reason: null };"],
+			"replace": [
+				"\t\treturn { status: outcome.result.outcome, reason: \"reason\" in outcome.result ? outcome.result.reason : null };"
+			],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-retire"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RETIRE-FACTORY-SUMMARY]",
+			"signatureSource": "pi-extensions/lib/entwurf-v2-retire-production.test.ts"
+		},
+		{
+			"claim": "RETIRE-FACTORY-SUMMARY-REFUSE",
+			"title": "a Pi result is summarized under a Claude Code target context",
+			"subject": "pi-extensions/lib/entwurf-v2-retire-production.ts",
+			"find": ["\tif (outcome.kind === \"pi\" && backend === \"pi\") {"],
+			"replace": ["\tif (outcome.kind === \"pi\") {"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-retire"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RETIRE-FACTORY-SUMMARY-REFUSE]",
+			"signatureSource": "pi-extensions/lib/entwurf-v2-retire-production.test.ts"
+		},
+		{
+			"claim": "RETIRE-FACTORY-SIGNAL-CAPTURE",
+			"title": "the CC adapter re-reads a later options signal instead of the captured one",
+			"subject": "pi-extensions/lib/entwurf-v2-retire-production.ts",
+			"find": ["\t\trequestCc: (expected) => io.requestCc(expected, ccDeps, { signal }),"],
+			"replace": ["\t\trequestCc: (expected) => io.requestCc(expected, ccDeps, { signal: opts.signal }),"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-retire"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RETIRE-FACTORY-SIGNAL-CAPTURE]",
+			"signatureSource": "pi-extensions/lib/entwurf-v2-retire-production.test.ts"
+		},
+		{
+			"claim": "RETIRE-FACTORY-CORE-JOIN",
+			"title": "the requested append is deferred past the adapter call",
+			"subject": "pi-extensions/lib/entwurf-v2-retire-production.ts",
+			"find": [
+				"\t\t\tio.append(retirementsDir, {",
+				"\t\t\t\tv: RETIREMENT_EVENT_VERSION,",
+				"\t\t\t\tkind: \"retirement-requested\",",
+				"\t\t\t\teventId,",
+				"\t\t\t\tat: new Date().toISOString(),",
+				"\t\t\t\t...attribution(context),",
+				"\t\t\t});",
+				"\t\t\treturn eventId;"
+			],
+			"replace": [
+				"\t\t\tqueueMicrotask(() => {",
+				"\t\t\t\ttry {",
+				"\t\t\t\t\tio.append(retirementsDir, {",
+				"\t\t\t\t\t\tv: RETIREMENT_EVENT_VERSION,",
+				"\t\t\t\t\t\tkind: \"retirement-requested\",",
+				"\t\t\t\t\t\teventId,",
+				"\t\t\t\t\t\tat: new Date().toISOString(),",
+				"\t\t\t\t\t\t...attribution(context),",
+				"\t\t\t\t\t});",
+				"\t\t\t\t} catch { /* MUTANT ONLY: contain the deliberately deferred append fault. */ }",
+				"\t\t\t});",
+				"\t\t\treturn eventId;"
+			],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-retire"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RETIRE-FACTORY-CORE-JOIN]",
+			"signatureSource": "pi-extensions/lib/entwurf-v2-retire-production.test.ts"
+		},
+		{
+			"claim": "RETIRE-FACTORY-CORE-REQUESTED-FAIL",
+			"title": "a failed requested append is retried, which could double a partial line",
+			"subject": "pi-extensions/lib/entwurf-v2-retire-production.ts",
+			"find": [
+				"\t\t\tio.append(retirementsDir, {",
+				"\t\t\t\tv: RETIREMENT_EVENT_VERSION,",
+				"\t\t\t\tkind: \"retirement-requested\",",
+				"\t\t\t\teventId,",
+				"\t\t\t\tat: new Date().toISOString(),",
+				"\t\t\t\t...attribution(context),",
+				"\t\t\t});",
+				"\t\t\treturn eventId;"
+			],
+			"replace": [
+				"\t\t\tconst event: RetirementEvent = {",
+				"\t\t\t\tv: RETIREMENT_EVENT_VERSION,",
+				"\t\t\t\tkind: \"retirement-requested\",",
+				"\t\t\t\teventId,",
+				"\t\t\t\tat: new Date().toISOString(),",
+				"\t\t\t\t...attribution(context),",
+				"\t\t\t};",
+				"\t\t\ttry {",
+				"\t\t\t\tio.append(retirementsDir, event);",
+				"\t\t\t} catch {",
+				"\t\t\t\tio.append(retirementsDir, event);",
+				"\t\t\t}",
+				"\t\t\treturn eventId;"
+			],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-retire"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RETIRE-FACTORY-CORE-REQUESTED-FAIL]",
+			"signatureSource": "pi-extensions/lib/entwurf-v2-retire-production.test.ts"
 		}
 	]
 }

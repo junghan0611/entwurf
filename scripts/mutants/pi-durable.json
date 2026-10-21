@@ -3,6 +3,61 @@
 	"lane": "pi-durable",
 	"mutants": [
 		{
+			"claim": "PI-DURABLE-RETIRE-CALL",
+			"title": "retirement alone drops the actual request cancellation signal",
+			"subject": "pi-extensions/meta-bridge-pi-durable.ts",
+			"find": [
+				"\t\t\tconst call = () => client.callTool(name, (args ?? {}) as Record<string, unknown>, context?.abortSignal);"
+			],
+			"replace": [
+				"\t\t\tconst call = () => client.callTool(name, (args ?? {}) as Record<string, unknown>, name === \"entwurf_retire_call\" ? undefined : context?.abortSignal);"
+			],
+			"gate": ["bash", "run.sh", "check-pi-durable-beside"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PI-DURABLE-RETIRE-CALL]",
+			"signatureSource": "pi-extensions/meta-bridge-pi-durable.test.ts",
+			"build": {
+				"argv": ["bash", "scripts/build-bridge.sh"],
+				"output": "mcp/entwurf-bridge/dist"
+			}
+		},
+		{
+			"claim": "PI-DURABLE-RETIRE-POLICY",
+			"title": "the native retirement description treats actor identity as a standing grant",
+			"subject": "pi-extensions/meta-bridge-pi-durable.ts",
+			"find": [
+				"\t\t\"Only when the human operator explicitly requested this particular target/work: make ONE retirement attempt for that request \" +"
+			],
+			"replace": [
+				"\t\t\"A caller record alone authorizes this target/work: make ONE retirement attempt for that request \" +"
+			],
+			"gate": ["bash", "run.sh", "check-pi-durable-beside"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PI-DURABLE-RETIRE-POLICY]",
+			"signatureSource": "pi-extensions/meta-bridge-pi-durable.test.ts",
+			"build": {
+				"argv": ["bash", "scripts/build-bridge.sh"],
+				"output": "mcp/entwurf-bridge/dist"
+			}
+		},
+		{
+			"claim": "PI-DURABLE-RETIRE-CALL-REACHES-BRIDGE",
+			"title": "the compiled retirement handler discards the actual host-authoritative caller",
+			"subject": "mcp/entwurf-bridge/src/index.ts",
+			"find": [
+				"\t\t\t\t\tresolveCaller: async () => (await resolveAuthoritativeSender({ requestMeta: extra._meta }))?.envelope ?? null,"
+			],
+			"replace": ["\t\t\t\t\tresolveCaller: async () => null,"],
+			"gate": ["bash", "run.sh", "check-pi-durable-beside"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PI-DURABLE-RETIRE-CALL-REACHES-BRIDGE]",
+			"signatureSource": "pi-extensions/meta-bridge-pi-durable.test.ts",
+			"build": {
+				"argv": ["bash", "scripts/build-bridge.sh"],
+				"output": "mcp/entwurf-bridge/dist"
+			}
+		},
+		{
 			"claim": "PI-DURABLE-ENTRY-GUARD-FLOOR-SAFE",
 			"title": "the verifier's entry guard goes back to import.meta.main, which the floor's runner can misread as the process entry",
 			"subject": "pi-extensions/lib/pi-durable-runtime.ts",

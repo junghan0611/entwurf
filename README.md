@@ -168,8 +168,8 @@ In that **harness session**, ask the agent to:
 ```
 
 These are tools, not shell subcommands. Pi calls
-`mcp__entwurf_bridge__<verb>` through Pi's built-in MCP. The server exposes **eight**
-verbs; a pi citizen has **six active + two hidden** (`entwurf_inbox_read` and
+`mcp__entwurf_bridge__<verb>` through Pi's built-in MCP. The #147 candidate source exposes **nine**
+verbs; a pi citizen has **seven active + two hidden** (`entwurf_inbox_read` and
 `entwurf_register_native`), since it has no mailbox and its own extension births it.
 The server key stays `entwurf-bridge`. An operator/trusted-project MCP entry with
 that normalized namespace can replace the registration by Pi's own precedence;
@@ -196,6 +196,9 @@ pi / pi-durable / Claude Code / Copilot / OMP / Antigravity / Codex
 | Message, reply or hand off to an existing garden id | `entwurf_v2 {target, intent:"fire-and-forget", message}` | Receiver acceptance boundary, mailbox enqueue or native injection; not completion |
 | Open a new visible sibling | `entwurf_fresh_call {backend, model, task, cwd?}` | Launch receipt only; the sibling's nonce callback envelope supplies its new garden id |
 | Reopen a dormant pi or Claude Code citizen under its own id | `entwurf_resume_call {target}` | Separate LAUNCH and OBSERVATION receipts (pi: same-id socket; Claude Code: a new live receiver marker in the opened pane, bound to the record); the verb submits no prompt |
+| Attempt retirement of one explicitly requested Pi or Claude Code target (#147 candidate) | `entwurf_retire_call {target}` | Separate action, append-only record and lock-release results. Pi ACK is request-only; CC exit is that fd-pinned process only |
+
+**Retirement is never autonomous.** Invoke it only for the target/action explicitly requested by the human operator; development, coordinator status and caller identity are not standing permission. Host approval and agent operating policy govern authorization, not annotations or an agent-supplied grant. No roster expansion, timer or automatic retry of an unknown/cancelled/lost result. The candidate records requested/outcome events under a target-gid sidecar; absence is unknown, not proof of no retirement. Source, compiled fixture, Native/LIVE, rollout and release acceptance remain separate; this candidate description is not a 0.40.0 shipment claim.
 
 **Delivery starts no process.** A live pi receives over its record-addressed control
 address (a Unix socket; on the experimental native-Windows Pi preview, a named pipe);

@@ -1,7 +1,21 @@
 /** Internal retire dispatcher. Host-authoritative caller resolution is an injected
  * composition seam, NOT authorization. Public exposure still needs an operator policy;
  * no role DB, permission boolean, or actor-label permission is manufactured here.
- * The same existing v2 target lock spans fresh reads, preflight and ONE adapter call.
+ * The same existing v2 target lock spans fresh reads, preflight, the requested record, ONE adapter
+ * call and its outcome record.
+ *
+ * Recording is two mandatory synchronous callbacks, NOT permission hooks: `recordRequested` runs
+ * after the locked preflight and before the adapter, and must return the attempt's 32-hex event
+ * id; `recordOutcome` runs once after that attempt and must return `undefined`. This module knows
+ * no path, file format or clock. A recorder that throws or returns anything else is a record
+ * failure: before the adapter it refuses (`retirement-record-unavailable`, adapter never entered);
+ * after it, the backend outcome stands and only `record` says so. A returned Promise is never
+ * awaited, `.then`-ed or treated as completion — what it does afterwards is outside this receipt.
+ * `record: not-attempted` means no recorder was called, not a runtime proof that no bytes exist.
+ *
+ * `signal` is request cancellation, not approval. It is checked before the lock, after the
+ * locked preflight and after the requested record; once the adapter is entered it is the
+ * adapter's own business (Pi takes none; CC receives it through the composition).
  */
 import type { CcRetireExpected, CcRetireResult } from "./cc-retire-request.ts";
 import { controlSocketPathIn } from "./control-socket-path.js";
@@ -37,7 +51,28 @@ export interface RetireDispatcherDeps {
 	): Promise<PiRetireRequestResult>;
 	/** Composition binds existing requestCcRetire and its owning first/late witness deps. */
 	requestCc(expected: CcRetireExpected): Promise<CcRetireResult>;
+	/** Append the requested event; return its 32 lowercase hex id only after the append succeeded. */
+	recordRequested(context: RetireRecordContext): string;
+	/** Append the outcome event of that attempt. `undefined`, not `void`: an async recorder does not type. */
+	recordOutcome(eventId: string, context: RetireRecordContext, outcome: RetireDispatchOutcome): undefined;
+	/** This request's cancellation. Not an approval. */
+	signal?: AbortSignal;
 }
+
+export type RetireTargetBackend = "pi" | "claude-code";
+
+/** Attribution only: who asked, about whom, on which rail. */
+export interface RetireRecordContext {
+	actorGardenId: string;
+	targetGardenId: string;
+	targetBackend: RetireTargetBackend;
+}
+
+export type RetireRecordReceipt =
+	| { status: "not-attempted" }
+	| { status: "requested-append-error"; cause: string }
+	| { status: "complete"; eventId: string }
+	| { status: "outcome-append-error"; eventId: string; cause: string };
 
 export type RetireDispatchOutcome =
 	| {
@@ -53,13 +88,15 @@ export type RetireDispatchOutcome =
 				| "target-address-conflict"
 				| "target-dead"
 				| "target-indeterminate"
-				| "target-drifted";
+				| "target-drifted"
+				| "request-aborted"
+				| "retirement-record-unavailable";
 			detail?: string;
 	  }
 	| { kind: "preflight-error"; cause: string }
 	| { kind: "pi"; result: PiRetireRequestResult }
 	| { kind: "claude-code"; result: CcRetireResult }
-	| { kind: "unknown"; backend: "pi" | "claude-code"; cause: string };
+	| { kind: "unknown"; backend: RetireTargetBackend; cause: string };
 
 export type RetireReleaseReceipt =
 	| { status: "not-acquired" }
@@ -74,8 +111,12 @@ export interface RetireDispatchReceipt {
 	targetGardenId: string;
 	actor: SenderEnvelope | null;
 	outcome: RetireDispatchOutcome;
+	/** Independent of `outcome` and `release`: a record failure never rewrites either. */
+	record: RetireRecordReceipt;
 	release: RetireReleaseReceipt;
 }
+
+const EVENT_ID_RE = /^[0-9a-f]{32}$/;
 
 function causeOf(error: unknown): string {
 	return error instanceof Error ? error.message : String(error);
@@ -90,8 +131,10 @@ export async function retireCitizen(
 		targetGardenId,
 		actor,
 		outcome,
+		record: { status: "not-attempted" },
 		release: { status: "not-acquired" },
 	});
+	const aborted = () => deps.signal?.aborted === true;
 	if (!isValidSessionId(targetGardenId)) return beforeLock({ kind: "refused", reason: "target-invalid" });
 	let acquired: AcquireLockResult;
 	try {
@@ -100,15 +143,41 @@ export async function retireCitizen(
 			return beforeLock({ kind: "refused", reason: "caller-unavailable" });
 		}
 		if (actor.sessionId === targetGardenId) return beforeLock({ kind: "refused", reason: "self-target" });
+		if (aborted()) return beforeLock({ kind: "refused", reason: "request-aborted" });
 		acquired = deps.acquireLock(targetGardenId);
 	} catch (error) {
 		return beforeLock({ kind: "preflight-error", cause: causeOf(error) });
 	}
 	if (!acquired.ok) return beforeLock({ kind: "refused", reason: "target-locked", detail: acquired.conflict.detail });
 	const claim = acquired.claim;
-	let enteredBackend: "pi" | "claude-code" | null = null;
+	const actorGardenId = actor.sessionId;
+	let enteredBackend: RetireTargetBackend | null = null;
+	// Assigned inside runLocked; the cast keeps control flow from narrowing it to null here.
+	let attempt = null as { eventId: string; context: RetireRecordContext } | null;
+	let record: RetireRecordReceipt = { status: "not-attempted" };
 	let outcome: RetireDispatchOutcome;
 	let release: RetireReleaseReceipt;
+	/** The last step before ONE adapter: cancellation, requested record, cancellation again.
+	 * Returns the outcome that replaces the adapter, or null to enter it. */
+	const admit = (targetBackend: RetireTargetBackend): RetireDispatchOutcome | null => {
+		if (aborted()) return { kind: "refused", reason: "request-aborted" };
+		const context: RetireRecordContext = { actorGardenId, targetGardenId, targetBackend };
+		let eventId: unknown;
+		try {
+			eventId = deps.recordRequested(context);
+		} catch (error) {
+			record = { status: "requested-append-error", cause: causeOf(error) };
+			return { kind: "refused", reason: "retirement-record-unavailable" };
+		}
+		if (typeof eventId !== "string" || !EVENT_ID_RE.test(eventId)) {
+			record = { status: "requested-append-error", cause: "recorder returned no event id" };
+			return { kind: "refused", reason: "retirement-record-unavailable" };
+		}
+		attempt = { eventId, context };
+		if (aborted()) return { kind: "refused", reason: "request-aborted" };
+		enteredBackend = targetBackend;
+		return null;
+	};
 	const runLocked = async (): Promise<RetireDispatchOutcome> => {
 		const socketPath = controlSocketPathIn(deps.controlSocketDir, targetGardenId);
 		if (!deps.recordExists(targetGardenId)) {
@@ -138,7 +207,8 @@ export async function retireCitizen(
 			) {
 				return { kind: "refused", reason: "target-drifted" };
 			}
-			enteredBackend = "pi";
+			const replaced = admit("pi");
+			if (replaced) return replaced;
 			const result = await deps.requestPi(
 				current,
 				{ gardenId: current.gardenId, nativeSessionId: current.nativeSessionId },
@@ -159,18 +229,34 @@ export async function retireCitizen(
 		if (isOutOfSocketDomainGardenIdConflict(identity.backend, targetGardenId, sockets, symlinks)) {
 			return { kind: "refused", reason: "target-address-conflict" };
 		}
-		enteredBackend = "claude-code";
+		const replaced = admit("claude-code");
+		if (replaced) return replaced;
 		const { gardenId, backend, nativeSessionId, createdAt, attachIncarnation } = identity;
 		const result = await deps.requestCc({ gardenId, backend, nativeSessionId, createdAt, attachIncarnation });
 		return { kind: "claude-code", result };
 	};
 	try {
-		outcome = await runLocked();
-	} catch (error) {
-		outcome =
-			enteredBackend === null
-				? { kind: "preflight-error", cause: causeOf(error) }
-				: { kind: "unknown", backend: enteredBackend, cause: causeOf(error) };
+		try {
+			outcome = await runLocked();
+		} catch (error) {
+			outcome =
+				enteredBackend === null
+					? { kind: "preflight-error", cause: causeOf(error) }
+					: { kind: "unknown", backend: enteredBackend, cause: causeOf(error) };
+		}
+		// An attempt that was recorded as requested gets ONE outcome record, before release.
+		if (attempt) {
+			const { eventId, context } = attempt;
+			try {
+				const returned: unknown = deps.recordOutcome(eventId, context, outcome);
+				record =
+					returned === undefined
+						? { status: "complete", eventId }
+						: { status: "outcome-append-error", eventId, cause: "recorder returned a value" };
+			} catch (error) {
+				record = { status: "outcome-append-error", eventId, cause: causeOf(error) };
+			}
+		}
 	} finally {
 		// One acquired claim, one release attempt. No throw here may overwrite outcome.
 		try {
@@ -179,5 +265,5 @@ export async function retireCitizen(
 			release = { status: "error", cause: causeOf(error) };
 		}
 	}
-	return { targetGardenId, actor, outcome, release };
+	return { targetGardenId, actor, outcome, record, release };
 }

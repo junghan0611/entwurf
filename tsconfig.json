@@ -264,10 +264,17 @@
 		// fence and reason as visible-resume above. Received by scripts/tsconfig.json and
 		// mcp/tsconfig.json through their existing `../pi-extensions/lib/**/*.ts` include.
 		"pi-extensions/lib/cc-retire-request.ts",
+		// The public bridge now reaches the Pi adapter from strip-types source as well as compiled JS.
+		// Its RPC value import needs `.ts`; scripts/tsconfig.json and mcp/tsconfig.json receive it
+		// via their existing ../pi-extensions/lib/**/*.ts includes, like the CC adapter above.
+		"pi-extensions/lib/pi-retire-request.ts",
 		// The #147 internal retire dispatcher imports owning IO seams with explicit `.ts` paths.
 		// scripts/tsconfig.json and mcp/tsconfig.json receive it via their existing
 		// ../pi-extensions/lib/**/*.ts includes; the adjacent test takes the existing test fence.
 		"pi-extensions/lib/entwurf-v2-retire.ts",
+		// Its ctx-free production factory uses the same explicit `.ts` owning imports;
+		// received by the existing scripts/tsconfig.json and mcp/tsconfig.json lib includes.
+		"pi-extensions/lib/entwurf-v2-retire-production.ts",
 		// remote-pair-receive.ts is #107's receiving half for one declared remote pair — a lib→lib
 		// VALUE importer (requireGardenId from meta-session.ts) with explicit `.ts` extensions, same
 		// fence. Typechecked by scripts/tsconfig.json via its gate

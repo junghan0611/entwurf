@@ -164,6 +164,7 @@ export const PI_DURABLE_TOOL_NAMES = [
 	"entwurf_callback",
 	"entwurf_fresh_call",
 	"entwurf_resume_call",
+	"entwurf_retire_call",
 ] as const;
 export type PiDurableToolName = (typeof PI_DURABLE_TOOL_NAMES)[number];
 
@@ -172,7 +173,7 @@ const DRAFT_07 = "http://json-schema.org/draft-07/schema#";
 /**
  * The bridge's `tools/list` inputSchemas for the exposed tools (`mcp/entwurf-bridge/src/index.ts`
  * `entwurf_v2` 456-507, `entwurf_self`, `entwurf_peers`, `entwurf_inbox_read`, `entwurf_callback`,
- * `entwurf_fresh_call`, `entwurf_resume_call`),
+ * `entwurf_fresh_call`, `entwurf_resume_call`, `entwurf_retire_call`),
  * as the bridge serialises them.
  * `attach` compares the live list against these and refuses on any difference.
  */
@@ -282,6 +283,20 @@ export const PI_DURABLE_TOOL_SCHEMAS: Readonly<Record<PiDurableToolName, Readonl
 				minLength: 1,
 				pattern: "^\\d{8}T\\d{6}-[0-9a-f]{6}$",
 				description: "Garden id of the DORMANT pi or Claude Code citizen to reopen (discover with entwurf_peers).",
+			},
+		},
+		required: ["target"],
+		$schema: DRAFT_07,
+	},
+	entwurf_retire_call: {
+		type: "object",
+		properties: {
+			target: {
+				type: "string",
+				minLength: 1,
+				pattern: "^\\d{8}T\\d{6}-[0-9a-f]{6}$",
+				description:
+					"Exact garden id of the Pi or Claude Code target the human operator explicitly requested to retire.",
 			},
 		},
 		required: ["target"],
@@ -775,6 +790,16 @@ const TOOL_DESCRIPTIONS: Record<PiDurableToolName, string> = {
 		"Returns the bridge's LAUNCH and OBSERVATION receipts or its named refusal: a live target, another backend, " +
 		"or a Claude Code citizen not proven dormant is refused by name, and opening the window needs the tmux " +
 		"session this host itself was launched in.",
+	entwurf_retire_call:
+		"Only when the human operator explicitly requested this particular target/work: make ONE retirement attempt for that request " +
+		"through the bridge (target only, Pi or Claude Code; self retirement refuses). Development work, a role or " +
+		"a record-backed actor is NOT a grant. Existing host harness approval and agent operating policy govern " +
+		"permission; MCP annotations are hints, not approval proof. No autonomous cleanup, timers or automatic " +
+		"retry of unknown, cancelled or lost results. Do not manually /resume or /clear the target during the request. " +
+		"Pi shutdown-requested is only an ACK, not process exit, flush or model silence. Claude Code exited is that " +
+		"fd-pinned process only, not conversation end, children or flush. The JSON receipt keeps outcome, record and " +
+		"release separate; receipt return does not mean exit, and cancellation does not undo an action. Invoke once " +
+		"per explicitly named target, never infer a roster. This contact does not turn hints into authorization.",
 };
 
 /** Announce, never push: the notice names the garden and the tool, never the body. */

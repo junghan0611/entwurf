@@ -240,8 +240,11 @@ A plain `pi` can load the package without becoming a citizen.
 In that session ask for `entwurf_self`, then `entwurf_peers`. Pick an existing
 live garden id and ask for `entwurf_v2` with `intent: "fire-and-forget"` and your
 message. These are harness tools, not shell subcommands; pi exposes them through
-Pi's built-in MCP as `mcp__entwurf_bridge__<verb>`. The bridge has eight tools;
-pi hides `entwurf_inbox_read` and `entwurf_register_native`, leaving six active.
+Pi's built-in MCP as `mcp__entwurf_bridge__<verb>`. The #147 candidate bridge has nine tools;
+pi hides `entwurf_inbox_read` and `entwurf_register_native`, leaving seven active.
+The added `entwurf_retire_call` is only for one target/action explicitly requested by the
+human operator, never autonomous cleanup; tool availability and caller identity are not a grant.
+These candidate counts do not claim that an older installed package or running host has rolled forward.
 Tool-call ingress is MCP; delivery to a pi citizen is still its record-addressed
 control address (a Unix socket; a named pipe on the experimental native-Windows Pi
 preview). A boot/listing from `check-bridge` is not a model-turn or

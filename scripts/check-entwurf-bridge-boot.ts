@@ -253,11 +253,12 @@ async function main(): Promise<void> {
 		"entwurf_peers",
 		"entwurf_register_native",
 		"entwurf_resume_call",
+		"entwurf_retire_call",
 		"entwurf_self",
 		"entwurf_v2",
 	];
 	ok(
-		"[QK:BRIDGEBOOT-PUBLIC-SURFACE-EXACT-SET] G1f: the runtime tools/list surface is EXACTLY the eight shipped garden verbs — no missing verb, no undecided extra, no duplicate",
+		"[QK:BRIDGEBOOT-PUBLIC-SURFACE-EXACT-SET] G1f: the runtime tools/list surface is EXACTLY the nine garden verbs — no missing verb, no undecided extra, no duplicate",
 		publicSurface.length === expectedSurface.length && expectedSurface.every((n, i) => publicSurface[i] === n),
 		`--- want ---\n${expectedSurface.join(",")}\n--- got ---\n${publicSurface.join(",")}`,
 	);

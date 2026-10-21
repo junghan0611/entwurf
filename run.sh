@@ -1369,10 +1369,16 @@ check_cc_retire_request() {
   run_vitest pi-extensions/lib/cc-retire-request.test.ts
 }
 
+check_retirement_event() {
+  # Mutant execution coordinate only; the existing beside glob owns test discovery.
+  section "Retirement append leaf (mutant execution coordinate)"
+  run_vitest pi-extensions/lib/retirement-event.test.ts
+}
+
 check_entwurf_v2_retire() {
   # Mutant execution coordinate only; the existing beside glob owns test discovery.
-  section "Internal retire dispatcher (mutant execution coordinate)"
-  run_vitest pi-extensions/lib/entwurf-v2-retire.test.ts
+  section "Requested retirement dispatcher and production binding (mutant execution coordinate)"
+  run_vitest pi-extensions/lib/entwurf-v2-retire.test.ts pi-extensions/lib/entwurf-v2-retire-production.test.ts
 }
 
 check_win32_preview() {
@@ -7557,6 +7563,9 @@ case "$cmd" in
     ;;
   check-cc-retire-request)
     check_cc_retire_request
+    ;;
+  check-retirement-event)
+    check_retirement_event
     ;;
   check-entwurf-v2-retire)
     check_entwurf_v2_retire

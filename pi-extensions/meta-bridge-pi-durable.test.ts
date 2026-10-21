@@ -96,6 +96,7 @@ interface StubBridge {
 	specs: BridgeSpawnSpec[];
 	calls: string[];
 	args: Record<string, unknown>[];
+	signals: (AbortSignal | undefined)[];
 	closed: number;
 }
 
@@ -108,13 +109,14 @@ const agreeingListing = async () =>
 	Object.entries(PI_DURABLE_TOOL_SCHEMAS).map(([name, inputSchema]) => ({ name, inputSchema }));
 
 function stubBridge(answer = (name: string) => `${name} ok`): StubBridge {
-	const stub: StubBridge = { connect: async () => client, specs: [], calls: [], args: [], closed: 0 };
+	const stub: StubBridge = { connect: async () => client, specs: [], calls: [], args: [], signals: [], closed: 0 };
 	const client: BridgeClient = {
 		pid: 4242,
 		listTools: agreeingListing,
-		async callTool(name, args) {
+		async callTool(name, args, signal) {
 			stub.calls.push(name);
 			stub.args.push(args);
+			stub.signals.push(signal);
 			return { text: answer(name), isError: false };
 		},
 		async close() {
@@ -268,7 +270,7 @@ describe("pi-durable contact — birth", () => {
 });
 
 describe("pi-durable contact — the extension and its gate", () => {
-	it("[QK:PI-DURABLE-TOOLS-ONLY-UNSAFE] the extension is tools-only, exposes exactly self, peers, v2, inbox_read, callback, fresh_call and resume_call, and leaves replay at the durable default", () => {
+	it("[QK:PI-DURABLE-TOOLS-ONLY-UNSAFE] the extension is tools-only, exposes exactly self, peers, v2, inbox_read, callback, fresh_call, resume_call and retire_call, and leaves replay at the durable default", () => {
 		const c = contact(stubBridge());
 		expect(Object.keys(c.extension).sort()).toEqual(["name", "tools"]);
 		expect(c.extension.tools.map((t) => t.name)).toEqual([
@@ -279,6 +281,7 @@ describe("pi-durable contact — the extension and its gate", () => {
 			"entwurf_callback",
 			"entwurf_fresh_call",
 			"entwurf_resume_call",
+			"entwurf_retire_call",
 		]);
 		for (const tool of c.extension.tools) {
 			expect(tool).not.toHaveProperty("replay");
@@ -398,6 +401,62 @@ describe("pi-durable contact — the extension and its gate", () => {
 		await c.close();
 		expect(stub.closed).toBe(1);
 		await expect(self(c).execute({}, undefined, {})).rejects.toBeInstanceOf(PiDurableIdentityNotReady);
+	});
+});
+
+describe("pi-durable retirement contact — fake bridge only", () => {
+	it("[QK:PI-DURABLE-RETIRE-CALL] offers one target only and forwards the exact request signal without replay", async () => {
+		const stub = stubBridge();
+		const c = contact(stub);
+		try {
+			const tool = c.extension.tools.find((t) => t.name === "entwurf_retire_call");
+			expect(tool).toBeDefined();
+			expect(tool).not.toHaveProperty("replay");
+			expect(tool?.parameters).toEqual({
+				type: "object",
+				properties: {
+					target: {
+						type: "string",
+						minLength: 1,
+						pattern: "^\\d{8}T\\d{6}-[0-9a-f]{6}$",
+						description:
+							"Exact garden id of the Pi or Claude Code target the human operator explicitly requested to retire.",
+					},
+				},
+				required: ["target"],
+				$schema: "http://json-schema.org/draft-07/schema#",
+			});
+			await c.attach(session());
+			const args = { target: "20261022T060000-abcdef" };
+			const { signal } = new AbortController();
+			await expect(tool?.execute(args, undefined, { abortSignal: signal })).resolves.toEqual({
+				output: [{ type: "text", text: "entwurf_retire_call ok" }],
+			});
+			expect(stub.calls).toEqual(["entwurf_retire_call"]);
+			expect(stub.args).toEqual([args]);
+			expect(stub.signals).toHaveLength(1);
+			expect(stub.signals[0]).toBe(signal);
+		} finally {
+			await c.close();
+		}
+	});
+
+	it("[QK:PI-DURABLE-RETIRE-POLICY] explicitly carries the operator-request and receipt limits in the native description", () => {
+		const tool = contact(stubBridge()).extension.tools.find((t) => t.name === "entwurf_retire_call");
+		for (const text of [
+			"the human operator explicitly requested this particular target/work",
+			"ONE retirement attempt",
+			"actor is NOT a grant",
+			"annotations are hints",
+			"No autonomous cleanup",
+			"automatic retry",
+			"not process exit, flush or model silence",
+			"not conversation end, children or flush",
+			"outcome, record and release separate",
+			"cancellation does not undo",
+		]) {
+			expect(tool?.description).toContain(text);
+		}
 	});
 });
 
@@ -2627,6 +2686,93 @@ describe("pi-durable bootstrap — the packaged compiled closure (needs a built 
 		expect(stub.args).toEqual([args]);
 		await c.close();
 	});
+
+	/** Direct contact execute → compiled Node MCP → unsupported synthetic Codex target.
+	 * No model/provider/Harness/TUI or Pi/CC target is created. This proves only the public
+	 * refusal path and caller attribution, not retirement permission or a native lifecycle.
+	 * Requires the owned compiled closure; no source fallback or ambient-build repair here.
+	 */
+	it("[QK:PI-DURABLE-RETIRE-CALL-REACHES-BRIDGE] direct contact execute reaches the compiled retirement handler and preserves a synthetic unsupported target", async () => {
+		expect(fs.existsSync(CLOSURE_BRIDGE), "the compiled bridge must be supplied by the owning build fixture").toBe(
+			true,
+		);
+		const own = (name: string): string => {
+			const p = path.join(root, name);
+			fs.mkdirSync(p, { recursive: true });
+			return p;
+		};
+		const env: NodeJS.ProcessEnv = {
+			PATH: process.env.PATH ?? "",
+			LANG: "C.UTF-8",
+			HOME: own("home"),
+			TMPDIR: own("tmp"),
+			XDG_DATA_HOME: own("xdg-data"),
+			XDG_CONFIG_HOME: own("xdg-config"),
+			XDG_CACHE_HOME: own("xdg-cache"),
+			XDG_STATE_HOME: own("xdg-state"),
+			PI_CODING_AGENT_DIR: own("pi-agent"),
+			ENTWURF_DIR: own("entwurf-control"),
+		};
+		const target = upsertMetaSession({
+			input: {
+				backend: "codex",
+				nativeSessionId: "0b5e2a4c-1f3d-4e8a-9c7b-2d6f8e1a3c5d",
+				cwd,
+				model: null,
+				transcriptPath: null,
+			},
+			dir: sessionsDir,
+		}).record.gardenId;
+		const retirementsDir = path.join(path.dirname(sessionsDir), "meta-retirements");
+		fs.mkdirSync(retirementsDir);
+		const eventFile = path.join(retirementsDir, `${target}.jsonl`);
+		const priorEventBytes = Buffer.from('{"fixture":"unchanged private prefix"}\n', "utf8");
+		fs.writeFileSync(eventFile, priorEventBytes);
+		const locks = path.join(env.HOME as string, ".pi", "entwurf-v2-locks");
+		fs.mkdirSync(locks, { recursive: true });
+		const sentinel = path.join(locks, "fixture-sentinel");
+		const priorLockBytes = Buffer.from("private sentinel\n", "utf8");
+		fs.writeFileSync(sentinel, priorLockBytes);
+		const c = createPiDurableContact({
+			bridgeEntry: CLOSURE_BRIDGE,
+			sessionsDir,
+			sendersDir,
+			mailboxDir,
+			receiversDir,
+			env,
+		});
+		try {
+			const attached = await c.attach(session());
+			const names = fs.readdirSync(sessionsDir).sort();
+			const before = names.map((name) => fs.readFileSync(path.join(sessionsDir, name)));
+			const tool = c.extension.tools.find((t) => t.name === "entwurf_retire_call");
+			expect(tool).toBeDefined();
+			if (!tool) throw new Error("retirement contact tool missing");
+			const { signal } = new AbortController();
+			const result = await tool.execute({ target }, undefined, { abortSignal: signal });
+			expect(result.output).toHaveLength(1);
+			expect(result.output[0]?.type).toBe("text");
+			const receipt = JSON.parse(result.output[0]?.text ?? "");
+			expect(receipt).toEqual({
+				targetGardenId: target,
+				actor: expect.objectContaining({ sessionId: attached.gardenId }),
+				outcome: { kind: "refused", reason: "target-backend-unsupported" },
+				record: { status: "not-attempted" },
+				release: { status: "released" },
+			});
+			expect(receipt.actor.sessionId).not.toBe(target);
+			expect(fs.readdirSync(sessionsDir).sort()).toEqual(names);
+			for (const [i, name] of names.entries()) {
+				expect(fs.readFileSync(path.join(sessionsDir, name)).equals(before[i] as Buffer)).toBe(true);
+			}
+			expect(fs.readdirSync(retirementsDir)).toEqual([`${target}.jsonl`]);
+			expect(fs.readFileSync(eventFile).equals(priorEventBytes)).toBe(true);
+			expect(fs.readdirSync(locks)).toEqual(["fixture-sentinel"]);
+			expect(fs.readFileSync(sentinel).equals(priorLockBytes)).toBe(true);
+		} finally {
+			await c.close();
+		}
+	}, 30_000);
 
 	/**
 	 * The callable path the stub above cannot be: a model's tool call on the PUBLISHED runtime reaches

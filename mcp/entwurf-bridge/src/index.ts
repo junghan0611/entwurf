@@ -34,13 +34,15 @@
  *   - entwurf_resume_call — reopen ONE DORMANT pi or Claude Code citizen under its OWN garden id
  *                       in a visible window; target-only, submits no prompt, LAUNCH and OBSERVATION
  *                       receipts stay apart, the caller is attributed but grants nothing.
+ *   - entwurf_retire_call — one operator-requested target, one retirement attempt; actor is not
+ *                       permission, and action / append-record / lock-release receipts stay separate.
  *   - entwurf_callback — ZERO-ARGUMENT fresh-sibling callback. Reads ENTWURF_CALLBACK_TARGET +
  *                       ENTWURF_CALLBACK_NONCE from this process env (launcher-injected), validates
  *                       grammar, and dispatches through the existing v2 runner. Refuses by name
  *                       when env is absent/malformed or this process is a Codex-provenance bridge.
  *                       No model-supplied target fallback.
  *
- * That list is the WHOLE public surface — eight verbs — and `check-entwurf-bridge-boot`
+ * That list is the WHOLE public surface — nine verbs — and `check-entwurf-bridge-boot`
  * (G1f) holds it as an exact set on the runtime tools/list, so a verb added or dropped
  * here without a decision is red rather than merely undocumented.
  *
@@ -78,6 +80,8 @@ import { ENTWURF_PEERS_RENDER_LIMIT, renderEntwurfPeers } from "../../../pi-exte
 import { computeSelfAddressability, type MetaDeliveryDomain } from "../../../pi-extensions/lib/entwurf-self-address.ts";
 import { nativePushSupported } from "../../../pi-extensions/lib/entwurf-v2-contract.ts";
 import { resolveMailboxWakeModeCapability } from "../../../pi-extensions/lib/entwurf-v2-decider.ts";
+import { retireCitizen } from "../../../pi-extensions/lib/entwurf-v2-retire.ts";
+import { makeProductionRetireDeps } from "../../../pi-extensions/lib/entwurf-v2-retire-production.ts";
 import { runAndRenderEntwurfV2FromSurface } from "../../../pi-extensions/lib/entwurf-v2-surface.ts";
 import {
 	makeVisibleResumeDeps,
@@ -954,6 +958,57 @@ server.tool(
 			return rendered.isError ? textErr(rendered.text) : textOk(rendered.text);
 		} catch (err) {
 			return textErr(`entwurf_resume_call error: ${err instanceof Error ? err.message : String(err)}`);
+		}
+	},
+);
+
+server.tool(
+	"entwurf_retire_call",
+	"Only when the human operator explicitly requested this particular target/work: make ONE retirement attempt for that request. " +
+		"Development work, a role or a record-backed actor is NOT a grant. Permission belongs to the existing host " +
+		"harness approval surface and agent operating policy; these annotations are hints, not proof of approval. " +
+		"Never use for autonomous cleanup or timers. Never automatically retry an unknown, cancelled or lost result. " +
+		"Target must be an existing Pi or Claude Code garden id; self retirement refuses. Pi shutdown-requested is " +
+		"only an ACK, not process exit, flush or model silence. Claude Code exited means that fd-pinned process only, " +
+		"not conversation end, children or flush. Do not manually /resume or /clear the target during the request. " +
+		"The JSON receipt preserves outcome, record and release separately; returning a receipt does not mean the " +
+		"target exited. Cancellation can suppress the wire response without undoing an action. For plural explicit " +
+		"requests, invoke once for each named target; never infer a roster or expand the request.",
+	{
+		target: z
+			.string()
+			.min(1)
+			.regex(/^\d{8}T\d{6}-[0-9a-f]{6}$/)
+			.describe("Exact garden id of the Pi or Claude Code target the human operator explicitly requested to retire."),
+	},
+	{ readOnlyHint: false, destructiveHint: true, idempotentHint: false },
+	async ({ target }, extra) => {
+		try {
+			const receipt = await retireCitizen(
+				target,
+				makeProductionRetireDeps({
+					resolveCaller: async () => (await resolveAuthoritativeSender({ requestMeta: extra._meta }))?.envelope ?? null,
+					signal: extra.signal,
+				}),
+			);
+			// isError reports uncertainty/faults, NOT a common Pi-ACK/CC-exit success boundary.
+			// Named refusals are completed decisions. Always preserve the full three-axis JSON.
+			const outcome = receipt.outcome;
+			const uncertain =
+				outcome.kind === "unknown" ||
+				outcome.kind === "preflight-error" ||
+				(outcome.kind === "pi" && outcome.result.boundary === "unknown") ||
+				(outcome.kind === "claude-code" && outcome.result.outcome === "unknown");
+			const recordFault =
+				receipt.record.status === "requested-append-error" || receipt.record.status === "outcome-append-error";
+			const releaseFault = receipt.release.status !== "released" && receipt.release.status !== "not-acquired";
+			const json = JSON.stringify(receipt);
+			return uncertain || recordFault || releaseFault ? textErr(json) : textOk(json);
+		} catch (err) {
+			return textErr(
+				`entwurf_retire_call error: ${err instanceof Error ? err.message : String(err)}. ` +
+					"The outcome may be unknown; this does not prove no action. Do not automatically retry.",
+			);
 		}
 	},
 );

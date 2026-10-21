@@ -59,6 +59,7 @@ const DECLARED = [
 	"entwurf_fresh_call",
 	"entwurf_peers",
 	"entwurf_resume_call",
+	"entwurf_retire_call",
 	"entwurf_self",
 	"entwurf_v2",
 ];

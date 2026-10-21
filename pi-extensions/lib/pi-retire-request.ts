@@ -6,7 +6,7 @@
 import * as os from "node:os";
 import type { RetireResult } from "./control-retire.js";
 import { controlSocketPathIn, defaultControlSocketDir } from "./control-socket-path.js";
-import { type RpcRetireCommand, sendRpcCommand } from "./entwurf-control-rpc.js";
+import { type RpcRetireCommand, sendRpcCommand } from "./entwurf-control-rpc.ts";
 import type { MetaIdentity } from "./meta-session.js";
 import { SESSION_ID_RE } from "./session-id.js";
 

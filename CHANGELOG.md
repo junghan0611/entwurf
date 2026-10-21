@@ -47,7 +47,13 @@ All notable changes to this project will be documented here. Format follows [Kee
   QK judges only self, peers and v2; the seven-tool `native-module` cell was not run. A running
   coordinator host offering seven tools, and any operator rollout, remain unmeasured.
 
-### Internal retirement components (#147; not an exposed MCP lifecycle)
+### Operator-requested retirement composition (#147 candidate)
+
+- Candidate `entwurf_retire_call {target}` exposes one explicitly human-requested Pi or Claude Code attempt. Development, coordinator status and record-backed attribution are not standing permission. MCP annotations are hints; existing harness approval and agent operating policy own authorization. No autonomous cleanup, roster expansion or automatic replay.
+- The per-request production binding captures its directories and cancellation signal. Requested/outcome events share an id in a target-gid append-only sidecar with explicit actor/target fields. Action, record-write failure and lock cleanup stay independent; an append failure cannot turn a possibly effective action into a safe retry. The source bridge lists nine tools, ordinary Pi seven active plus two hidden, and the durable contact eight.
+- Independent review repaired a metadata-test oracle, random-id privacy-test flakiness and snapshot/file-target consistency. A private `node_modules` compiled consumer passed29 assertions over anonymous/self refusal, existing resume refusal, inert Node RPC and two-line attribution. Operator dist hashes stayed unchanged. This is not real Pi/Claude Code retirement, Native/LIVE, G4 rollout or release acceptance; final candidate floors and exact-SHA CI are still owed. Earlier component receipts below do not become this candidate's kill-power.
+
+### Internal retirement checkpoints (#147; before public composition)
 
 - **Pi's control server now serves an internal `retire` RPC.** A Pi started from this
   checkout can already receive it; this is not a claim about the published 0.40.0 package.
@@ -63,9 +69,9 @@ All notable changes to this project will be documented here. Format follows [Kee
   prove conversation identity, descendant termination or transcript flush.
 - **A private dispatcher preserves action and cleanup independently.** Trusted caller
   attribution/self refusal, fresh target and liveness checks, one adapter and one lock release
-  are composed through mandatory seams. It creates no grant/role database. These committed
-  components do not include accepted production host composition: its path/lock bindings and
-  runtime acceptance require separate proof. No public retirement MCP/contact tool is registered.
+  are composed through mandatory seams. It creates no grant/role database. At these component
+  checkpoints there was no accepted production host composition or public retirement MCP/contact
+  registration. The later candidate composition above owns its separate binding and runtime proof.
 - **Proof remains candidate-local:** owned receiver/helper fixtures; independent review;
   primitive PARTIAL Pi9 + CC11, later request-adapter PARTIAL9+6+15+40, then pure-dispatcher
   PARTIAL10 on different candidates; private compiled consumer28 and a missing-Pi-entry

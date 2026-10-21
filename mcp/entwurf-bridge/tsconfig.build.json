@@ -148,8 +148,9 @@
 	// entwurf_v2 handler, so this adds ONE leaf JS and ZERO new deps. It is never in index.ts's boot
 	// closure.
 	// WHY cc-retire-request rides THIS build (#147 G3): the core-side Claude Code retire adapter
-	// must run from the compiled bridge as well as from source, and no bridge entry imports it yet,
-	// so it is named here as a private entry (no tool, no new surface). Its helper is not TS: the
+	// must run from the compiled bridge as well as from source. It was first supplied as a private
+	// entry; the #147 public retirement factory now reaches it too. Keep the named entry for the
+	// standalone compiled adapter consumer proof. Its helper is not TS: the
 	// build script byte-copies pi-extensions/lib/cc-retire-pidfd.py beside the emitted adapter.
 	// Its repo imports (meta-session, entwurf-v2-visible-resume) are ALREADY emitted for the bridge.
 	"include": [
@@ -175,7 +176,7 @@
 		"../../pi-extensions/meta-bridge-receive-omp.ts",
 		"../../pi-extensions/meta-bridge-pi-durable.ts",
 		"../../pi-extensions/lib/cc-retire-request.ts",
-		// Internal Pi adapter is also a bridge consumer; emitting it exposes no callable tool.
+		// Keep the standalone Pi adapter consumer entry; the public factory also reaches it now.
 		"../../pi-extensions/lib/pi-retire-request.ts"
 	]
 }

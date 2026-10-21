@@ -586,7 +586,7 @@ async function birthCell(
 		report.hostPid === host.pid,
 	);
 	ok(
-		`[QK:PDC-TOOLS] the registered extension exposes exactly entwurf_self, entwurf_peers, entwurf_v2, entwurf_inbox_read, entwurf_callback, entwurf_fresh_call, entwurf_resume_call, in that order (${report.toolNames.join(", ")})`,
+		`[QK:PDC-TOOLS] the registered extension exposes exactly entwurf_self, entwurf_peers, entwurf_v2, entwurf_inbox_read, entwurf_callback, entwurf_fresh_call, entwurf_resume_call, entwurf_retire_call, in that order (${report.toolNames.join(", ")})`,
 		JSON.stringify(report.toolNames) ===
 			JSON.stringify([
 				"entwurf_self",
@@ -596,6 +596,7 @@ async function birthCell(
 				"entwurf_callback",
 				"entwurf_fresh_call",
 				"entwurf_resume_call",
+				"entwurf_retire_call",
 			]),
 	);
 
