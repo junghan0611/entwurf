@@ -526,6 +526,21 @@ export type FreshCallInputRejectReason =
 	| "task-empty"
 	| "task-too-long";
 
+/** #76: the provider a Pi-dialect model string NAMES, refused at the dispatch root before either
+ * rail is asked anything (`fresh-call-dispatch.ts` decides; the words live here so both rails, one
+ * of which admits no other shared module, answer with the same sentence). */
+export type FreshCallProviderRejectReason = "model-openrouter-forbidden" | "pi-model-not-provider-qualified";
+
+/** No model list on purpose: a hand-kept list of "good" ids would be a second catalog that rots
+ * on the next model version. The repair is to name a provider, and both sentences say what the
+ * refusal does NOT prove. */
+export const FRESH_CALL_PROVIDER_HINT: Record<FreshCallProviderRejectReason, string> = {
+	"model-openrouter-forbidden":
+		"OpenRouter is not a sibling rail — name a subscription or direct provider instead. This refuses the provider name written in the request (in any letter case); it does not inspect which endpoint a differently named provider resolves to",
+	"pi-model-not-provider-qualified":
+		"a pi model is `<provider>/<model id>` — a bare alias resolves to whichever row Pi's catalog prefers, which is not a provider you chose. `entwurf_peers` shows the model each running citizen recorded; that is a record fact, not proof of the endpoint that bills it",
+};
+
 export interface FreshCallInputs {
 	readonly callerGardenId: string;
 	readonly model: string;

@@ -818,7 +818,7 @@ server.tool(
 			// biome-ignore lint/complexity/noUselessEscapeInRegex: emitted to a Rust regex validator, see above
 			.regex(/^[A-Za-z0-9][A-Za-z0-9._/:\[\]-]*$/)
 			.describe(
-				"Required runtime model: canonical provider/model for pi, provider/<exact catalog model id> for pi-durable, a Claude Code model id/alias, or a Copilot/OMP/Codex model name.",
+				"Required runtime model: canonical provider/model for pi (a bare alias is refused), provider/<exact catalog model id> for pi-durable, a Claude Code model id/alias, or a Copilot/OMP/Codex model name. Neither pi nor pi-durable may name the openrouter provider.",
 			),
 		task: z
 			.string()

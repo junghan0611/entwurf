@@ -2,12 +2,13 @@
  * fresh-call-dispatch — the ONE place that decides which rail opens a sibling, and the only module
  * allowed to know that there are two.
  *
- * WHY A COMPOSITION ROOT AND NOT A BRANCH IN EACH SURFACE. Two surfaces register
+ * WHY A COMPOSITION ROOT AND NOT A BRANCH IN EACH SURFACE. Two surfaces once registered
  * `entwurf_fresh_call`: pi's own extension and the MCP bridge. Before this file each of them
  * carried the Codex preflight ordering and the render call itself, and adding a rail choice to
  * both would have made four places where the wrong one could be picked. A defect planted in one
- * copy survives on the other, which is precisely the shape a mutant proves nothing about. So the
- * surfaces now supply identity and an env, and this module supplies everything else.
+ * copy survives on the other, which is precisely the shape a mutant proves nothing about. Since
+ * #125 the bridge is the only registration, and it still supplies only identity and an env; this
+ * module supplies everything else.
  *
  * THE RAIL IS A CAPABILITY FACT, NOT A PARAMETER. `HERDR_ENV=1` — exactly that value, herdr's own
  * variable — means this process is inside herdr and the herdr rail is the honest placement. Every
@@ -27,7 +28,7 @@
 import { spawn as spawnChildProcess } from "node:child_process";
 import { ACP_MODEL_NOT_CURATED, isCuratedAcpModelId, PROVIDER_ID } from "./acp/model-ids.js";
 import { codexCallerFreshPreflight, codexFreshPreflight } from "./codex-fresh-preflight.ts";
-import { isSafeFreshCallModel, mintNonce } from "./fresh-call-composition.ts";
+import { type FreshCallProviderRejectReason, isSafeFreshCallModel, mintNonce } from "./fresh-call-composition.ts";
 import {
 	createHerdrRunner,
 	type HerdrFreshCallResult,
@@ -38,6 +39,7 @@ import {
 	type SpawnFn,
 } from "./herdr-fresh-call.ts";
 import { type FreshCallResult, freshCall, renderFreshCall } from "./mux-fresh-call.ts";
+import { splitPiDurableModel } from "./pi-durable-fresh-preflight.ts";
 
 export type FreshCallRail = "herdr" | "tmux";
 
@@ -67,6 +69,38 @@ export interface FreshCallRequest {
 export type DispatchedFreshCall =
 	| { readonly rail: "tmux"; readonly result: FreshCallResult }
 	| { readonly rail: "herdr"; readonly result: HerdrFreshCallResult };
+
+/**
+ * #76: the provider a Pi-dialect model string NAMES. pi passes the string to `--model` and Pi
+ * resolves it; pi-durable splits it at the first `/` into `--provider`. So for those two backends
+ * the segment before the first `/` is a provider choice, and for every other backend it is that
+ * vendor's own model name, which this does not judge (a claude-code `opus` stays an alias).
+ *
+ *   model-openrouter-forbidden        pi or pi-durable names the OpenRouter provider. Compared in
+ *                                     any letter case: whether Pi folds case is not measured here,
+ *                                     so the spelling difference fails closed instead of passing.
+ *   pi-model-not-provider-qualified   pi names no provider at all. The alias leaves the provider
+ *                                     choice to Pi's catalog instead of the caller naming it — a
+ *                                     bare `terra` once opened on an OpenRouter row. pi-durable
+ *                                     already refuses the same shape in its own preflight, by the
+ *                                     same predicate.
+ *
+ * WHAT THIS IS NOT. A call-time input contract only: it checks the string a caller wrote, never a
+ * model version, never a list of known ids, never a resolved row or the endpoint a provider name
+ * reaches. A later model name passes THIS provider check once it is written `<provider>/<id>` —
+ * which says nothing about whether it launches or what #128 decides after it. It does not touch
+ * resume, which reopens from the record, and it proves nothing about billing beyond the name.
+ * Read trimmed, and only once the rails' grammar admits the model, exactly like #128 below.
+ */
+export function freshCallProviderRefusal(backend: string, model: string): FreshCallProviderRejectReason | null {
+	if (backend !== "pi" && backend !== "pi-durable") return null;
+	const trimmed = model.trim();
+	if (!isSafeFreshCallModel(trimmed)) return null;
+	const slash = trimmed.indexOf("/");
+	if (slash >= 0 && trimmed.slice(0, slash).toLowerCase() === "openrouter") return "model-openrouter-forbidden";
+	if (backend === "pi" && splitPiDurableModel(trimmed) === null) return "pi-model-not-provider-qualified";
+	return null;
+}
 
 /**
  * #128: a pi sibling asked for under the `entwurf` provider must name an EXACT curated ACP id. Pi
@@ -106,6 +140,13 @@ export async function dispatchFreshCall(
 	spawn?: SpawnFn,
 	nonce: string = mintNonce(),
 ): Promise<DispatchedFreshCall> {
+	// Before either rail is asked anything: both would open a pane on a provider nobody chose.
+	const providerRefusal = freshCallProviderRefusal(request.backend, request.model);
+	if (providerRefusal !== null) {
+		return selectFreshCallRail(env) === "herdr"
+			? { rail: "herdr", result: { ok: false, reason: providerRefusal } }
+			: { rail: "tmux", result: { ok: false, reason: providerRefusal } };
+	}
 	// Before either rail is asked anything: both would open a pane on the wrong row.
 	if (isUncuratedEntwurfPiModel(request.backend, request.model)) {
 		return selectFreshCallRail(env) === "herdr"

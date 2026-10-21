@@ -4,6 +4,24 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+### Fresh call
+
+- **A Pi-dialect model names its provider, and never OpenRouter (#76).** The dispatch root both
+  rails share now refuses, before either rail is asked anything, a pi or pi-durable model whose
+  provider segment is `openrouter` in any letter case (`model-openrouter-forbidden`) and a pi
+  model that names no provider at all (`pi-model-not-provider-qualified`). The second replaces
+  the 2026-08-13 non-goal that allowed a bare id: GLG decided on 2026-10-21 that the provider is
+  stated explicitly, because a bare alias resolves to whichever catalog row Pi prefers (the
+  2026-09-17 bare `terra` opened on an OpenRouter row). It is a call-time input contract, not a
+  version pin: no model list, catalog copy, resolved-row or endpoint check was added, so a later
+  model name passes this provider check once it is written `<provider>/<id>` (not a promise
+  that it launches, nor a bypass of #128). Other backends' model names
+  (a claude-code `opus` alias) are not judged; resume and #128 curation are unchanged. The
+  refusal checks the name a caller wrote, not the endpoint a provider name reaches. The
+  `entwurf_fresh_call` model description says both rules. Proof:
+  `pi-extensions/lib/fresh-call-dispatch.test.ts` (three QKs) and three mutants in the
+  `fresh-call-dispatch` lane (12 → 15), executed through `./run.sh check-fresh-call-provider`.
+
 ## v2026.10.20-herdr.0.40.0 — Herdr Entwurf plugin 0.40.0
 
 A separate Herdr plugin snapshot, not another core release: core package 0.40.0 and its

@@ -114,9 +114,11 @@ import {
 	FRESH_CALL_BACKENDS,
 	FRESH_CALL_CALLBACK_TOOL,
 	FRESH_CALL_DELIVERY_TOOL,
+	FRESH_CALL_PROVIDER_HINT,
 	type FreshCallBackend,
 	type FreshCallComposition,
 	type FreshCallInputRejectReason,
+	type FreshCallProviderRejectReason,
 	isSafeFreshCallModel,
 	MODEL_MAX_CHARS,
 	mintNonce,
@@ -266,6 +268,7 @@ export type FreshCallRejectReason =
 	| CodexPreflightRejectReason
 	| CodexCallerPreflightRejectReason
 	| CodexCallerSeatRejectReason
+	| FreshCallProviderRejectReason
 	| "acp-model-not-curated"
 	| "caller-identity-unavailable"
 	| "model-empty"
@@ -661,6 +664,7 @@ const REJECT_HINT: Record<FreshCallRejectReason, string> = {
 	...CODEX_PREFLIGHT_HINT,
 	...CODEX_CALLER_PREFLIGHT_HINT,
 	...CODEX_CALLER_SEAT_HINT,
+	...FRESH_CALL_PROVIDER_HINT,
 	"no-tmux-context": "this agent is not running inside tmux, so there is no session to open a sibling beside",
 	"anchor-malformed": "TMUX_PANE is not a native pane id",
 	"anchor-unresolved": "tmux resolved no pane for this agent's anchor",

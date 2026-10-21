@@ -202,6 +202,8 @@ tab 좌표는 **그것을 만든 응답**에서 온다(`agent start`의 echo가 
 
 **공유 입력 계약**(tmux 레일과 **같은 낱말**, 같은 순서, 같은 trim): `caller-identity-unavailable` · `model-empty` · `model-invalid` · `task-empty` · `task-too-long`. 이 다섯은 공개 verb의 caller-facing 계약이라 herdr 안이라고 다른 단어를 배우면 안 된다. `cwd`의 생략 규칙도 같이 온다 — **`undefined`와 정확히 빈 문자열만** "cwd 없음"이고, 나머지는 리터럴 경로다(untrimmed).
 
+**dispatch root**(두 레일 공통, 레일에 묻기 전 · 아무것도 생기지 않음): `model-openrouter-forbidden` · `pi-model-not-provider-qualified`(#76) · `acp-model-not-curated`(#128). 레일이 정하지 않으므로 herdr 안에서도 tmux와 같은 낱말이다. 문구는 공유 composition leaf에 한 번 있다.
+
 **herdr 고유 pre-mutation**(아무것도 생기지 않음): `herdr-context-missing` · `herdr-caller-pane-missing` · `herdr-caller-pane-get-failed` · `herdr-caller-pane-unparsable` · `herdr-caller-pane-drift` · `herdr-caller-workspace-missing` · `herdr-backend-unsupported` · `herdr-placement-tmux-rejected` · `herdr-argv-control-character` · `cwd-not-absolute` · `cwd-missing` · `cwd-not-directory`
 
 **post-create** (회수 결과를 함께 낸다): `herdr-tab-create-failed` · `herdr-tab-create-unparsable` · `herdr-tab-root-pane-occupied` · `herdr-agent-start-failed` · `herdr-agent-start-unparsable` · `herdr-agent-start-pane-drift` · `herdr-agent-start-vanished` · `herdr-agent-start-argv-drift`

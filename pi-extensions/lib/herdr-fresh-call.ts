@@ -50,8 +50,10 @@ import {
 	buildOmpBootstrapPayload,
 	composeBackendArgs,
 	composeFreshCallFraming,
+	FRESH_CALL_PROVIDER_HINT,
 	type FreshCallComposition,
 	type FreshCallInputRejectReason,
+	type FreshCallProviderRejectReason,
 	normalizeFreshCallInputs,
 	TASK_MAX_CHARS,
 } from "./fresh-call-composition.ts";
@@ -119,6 +121,7 @@ export type HerdrFreshCallRejectReason =
 	// The caller-facing input contract, shared with the tmux rail so a mistyped model or an
 	// oversized task is answered with the SAME word on either placement owner.
 	| FreshCallInputRejectReason
+	| FreshCallProviderRejectReason
 	| "acp-model-not-curated"
 	| "herdr-context-missing"
 	| "herdr-caller-pane-missing"
@@ -1099,6 +1102,8 @@ async function reclaim(pane: HerdrPaneFacts, run: HerdrRun): Promise<HerdrRecove
  * they will guess about. The five shared input reasons keep the wording the public verb has always
  * used; the rest are this rail's own. */
 const HERDR_REJECT_HINT: Record<HerdrFreshCallRejectReason | HerdrLaunchFailureReason, string> = {
+	// #76: decided at the dispatch root, worded once in the shared composition leaf.
+	...FRESH_CALL_PROVIDER_HINT,
 	"caller-identity-unavailable":
 		"this surface has no record-backed identity, so a sibling would have nowhere to call home",
 	"model-empty": "pass the model you want the sibling opened with — it is never inherited from this process",

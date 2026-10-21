@@ -149,6 +149,43 @@
 			"timeoutSeconds": 120,
 			"signature": "[QK:FCD-ACP-MODEL-EXACT]",
 			"signatureSource": "scripts/check-fresh-call-dispatch.ts"
+		},
+		{
+			"claim": "FCD-OPENROUTER-NAMED-REFUSED",
+			"title": "the root stops asking whether a pi or pi-durable model names the openrouter provider, so the 2026-08-13 explicit OpenRouter request opens a sibling again",
+			"subject": "pi-extensions/lib/fresh-call-dispatch.ts",
+			"find": [
+				"\tif (slash >= 0 && trimmed.slice(0, slash).toLowerCase() === \"openrouter\") return \"model-openrouter-forbidden\";\n"
+			],
+			"replace": [""],
+			"gate": ["bash", "run.sh", "check-fresh-call-provider"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:FCD-OPENROUTER-NAMED-REFUSED]",
+			"signatureSource": "pi-extensions/lib/fresh-call-dispatch.test.ts"
+		},
+		{
+			"claim": "FCD-PI-PROVIDER-QUALIFIED",
+			"title": "the root lets a pi model name no provider, so a bare alias like the 2026-09-17 `terra` resolves to whichever catalog row Pi prefers",
+			"subject": "pi-extensions/lib/fresh-call-dispatch.ts",
+			"find": [
+				"\tif (backend === \"pi\" && splitPiDurableModel(trimmed) === null) return \"pi-model-not-provider-qualified\";\n"
+			],
+			"replace": [""],
+			"gate": ["bash", "run.sh", "check-fresh-call-provider"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:FCD-PI-PROVIDER-QUALIFIED]",
+			"signatureSource": "pi-extensions/lib/fresh-call-dispatch.test.ts"
+		},
+		{
+			"claim": "FCD-PROVIDER-OTHER-BACKENDS-UNJUDGED",
+			"title": "the provider rules lose their backend guard, so another vendor's own model name is judged as if it were a Pi provider choice",
+			"subject": "pi-extensions/lib/fresh-call-dispatch.ts",
+			"find": ["\tif (backend !== \"pi\" && backend !== \"pi-durable\") return null;\n"],
+			"replace": [""],
+			"gate": ["bash", "run.sh", "check-fresh-call-provider"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:FCD-PROVIDER-OTHER-BACKENDS-UNJUDGED]",
+			"signatureSource": "pi-extensions/lib/fresh-call-dispatch.test.ts"
 		}
 	]
 }

@@ -1455,6 +1455,15 @@ check_acp_foreground_only() {
   run_vitest pi-extensions/lib/acp/backend-adapter.test.ts
 }
 
+check_fresh_call_provider() {
+  # NOT a discovery path — check-tests-beside-behavior finds the test by glob. This case is the
+  # MUTANT EXECUTION COORDINATE for the #76 provider claims in scripts/mutants/fresh-call-dispatch.json
+  # (same reasoning as check_entwurf_resume_args above): pi and pi-durable refuse a model that names
+  # the openrouter provider, and pi refuses one that names no provider, at the dispatch root.
+  section "fresh-call provider contract (mutant execution coordinate)"
+  run_vitest pi-extensions/lib/fresh-call-dispatch.test.ts
+}
+
 check_acp_set_model_readback() {
   # NOT a discovery path — check-tests-beside-behavior finds the test by glob. This case is the
   # MUTANT EXECUTION COORDINATE for scripts/mutants/acp-set-model-readback.json (#128): the claude
@@ -7531,6 +7540,9 @@ case "$cmd" in
     ;;
   check-acp-foreground-only)
     check_acp_foreground_only
+    ;;
+  check-fresh-call-provider)
+    check_fresh_call_provider
     ;;
   check-acp-set-model-readback)
     check_acp_set_model_readback

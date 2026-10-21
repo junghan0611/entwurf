@@ -3467,7 +3467,7 @@ let manifestCount: number;
 		"pi-durable": 84,
 		"copilot-receive": 20,
 		"entwurf-peers": 1,
-		"fresh-call-dispatch": 12,
+		"fresh-call-dispatch": 15,
 		"fresh-cut": 3,
 		"gate-qualification": 10,
 		"herdr-placement": 13,

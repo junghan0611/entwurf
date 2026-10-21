@@ -421,6 +421,11 @@ Codex는 `--remote unix://<default-socket> -C <dir> --model <name> --dangerously
 OMP는 positional prompt 대신 bootstrap carrier를 쓴다. command/env carrier나 provider/settings knob는
 여전히 없다. Launch receipt의 model은 **무엇을 요청했는지**만 증명하며 runtime이 그 model로 turn을
 완료했다는 증거는 callback 뒤 self-report/record 축에서 따로 얻는다.
+두 레일 앞의 dispatch root는 Pi 방언 model이 **이름 붙인 provider**만 본다(#76, GLG 2026-10-21):
+pi와 pi-durable이 `openrouter` provider를 쓰면(대소문자 무관) `model-openrouter-forbidden`, pi가 provider를
+쓰지 않은 맨 alias면 `pi-model-not-provider-qualified`로 아무것도 열기 전에 거절한다. 다른 backend의
+model 문자열은 그 vendor의 이름이라 판정하지 않는다. 이것은 호출 시점의 입력 계약이지 model 버전 목록,
+catalog 복사, 해석된 row나 과금 endpoint의 증명이 아니며, resume은 record에서 다시 열므로 건드리지 않는다.
 
 **Cwd도 explicit launch input이다 (#73, 2026-08-13).** cross-repo fresh 상담이 target repo의 cwd를 얻으려고
 dormant record를 `entwurf_resume_call`로 되세우는 압력이 실측됐다(2026-08-10 incident) — resume은 continuity

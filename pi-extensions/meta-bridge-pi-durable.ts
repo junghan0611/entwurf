@@ -235,7 +235,7 @@ export const PI_DURABLE_TOOL_SCHEMAS: Readonly<Record<PiDurableToolName, Readonl
 				maxLength: 200,
 				pattern: "^[A-Za-z0-9][A-Za-z0-9._/:\\[\\]-]*$",
 				description:
-					"Required runtime model: canonical provider/model for pi, provider/<exact catalog model id> for pi-durable, a Claude Code model id/alias, or a Copilot/OMP/Codex model name.",
+					"Required runtime model: canonical provider/model for pi (a bare alias is refused), provider/<exact catalog model id> for pi-durable, a Claude Code model id/alias, or a Copilot/OMP/Codex model name. Neither pi nor pi-durable may name the openrouter provider.",
 			},
 			task: {
 				type: "string",
