@@ -84,7 +84,15 @@ entwurf meta-bridge-fresh-cut && entwurf setup /path/to/project
 ## Upgrade order
 
 A checkout-backed host can begin running new code immediately after `git pull`, so
-make the boundary explicit:
+make the boundary explicit. First distinguish an unreadable generation from a stale reader:
+a known V3 schema extension (such as `attachIncarnation`) or newly admitted backend rejected
+by an older strict reader is **reader-version skew, not a generation change**. Preserve the
+records and native identity, roll every participating source/compiled/installed reader and
+external mirror forward to the owning contract, then verify each active rail. Do not delete
+fields, invent bindings, rewrite ids or execute an old reader's fresh-cut prescription merely
+to silence that skew. Unmeasured readers remain an open rollout axis, not a pass.
+
+For an actual generation transition, the order remains:
 
 ```text
 quiesce sessions → update package/checkout → fresh-cut if prescribed → reinstall/setup → reopen

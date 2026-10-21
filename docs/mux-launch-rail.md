@@ -44,7 +44,8 @@ tmux server
 ```text
 existing dispatch:   garden identity가 입력이다     — 출하됨 (entwurf_v2)
 fresh explicit call: garden identity가 callback이다 — 출하됨 (`entwurf_fresh_call`)
-same-id pi / Claude Code resume: existing garden identity가 입력이다 — 출하됨 (`entwurf_resume_call`; Claude Code는 #147 L2)
+same-id pi resume: existing garden identity가 입력이다 — 출하됨 (`entwurf_resume_call`)
+same-id Claude Code resume: 같은 입력, #147 L2 현재 소스에 연결됨 — release/LIVE 수용은 별도
 ```
 
 2026-08-04의 다중 agent 협업은 mux 없이 existing-citizen dispatch만 증명했다. 그 뒤 0.14.0이 visible
@@ -695,7 +696,7 @@ name은 한 서버 scope다. 그러므로 이 값을 저장하지 않고, 다른
 - zmx adapter, 설치, self-fetch, fallback
 - task queue, dependency graph, worker pool, role, quota·context 판단
 
-즉 mux는 여기서 멈추고 supervisor로 키우지 않는다. S1이 착지시킨 것은 fresh-call과 대칭인 좁은 verb 하나이고 — `entwurf_resume_call {target}`, prompt·model override·task 없음, 턴 없음, watcher/retry/supervisor 없음 — 통합 lifecycle LIVE는 이제 **release-gate MUST**다(그것이 이 목록에서 빠진 이유다).
+즉 mux는 여기서 멈추고 supervisor로 키우지 않는다. S1이 착지시킨 것은 fresh-call과 대칭인 좁은 verb 하나다 — `entwurf_resume_call {target}`은 prompt·model override·task를 제출하지 않고 watcher/retry/supervisor를 만들지 않는다. Pi의 과거 no-turn 관측을 모든 backend의 무활동 보장으로 넓히지 않는다. CC 재기동 뒤 안 읽은 mailbox나 하네스가 턴을 깨우는지는 미측정이다. 통합 lifecycle LIVE는 **release-gate MUST**지만, CC dormant→resume 추가 축의 수용 범위는 [VERIFY](../VERIFY.md)가 별도로 소유한다.
 
 ## 9. Repo 밖 baseline — 완료된 선행 증거
 
@@ -787,13 +788,15 @@ composition이고, 각각 source-adjacent gate가 argv 경계를 진다. 출하 
 | mailbox `lastReadAt` | 후속 evidence, **send receipt 아님** | self-fetch receiver가 나중에 읽은 사실 |
 | window opened (`@window/%pane`) | **`entwurf_fresh_call`의 launch receipt로 출하됨** (§6-a) | tmux가 창을 만들었다는 사실까지. 실행 여부·delivery는 주장하지 않는다 |
 | process spawned (`pane_pid`) | 같은 launch receipt에 포함 | 동기 로컬 사실이며, 그 process가 살아 있다는 주장은 아니다 (§5) |
-| resume launch (`@window/%pane` + target gid + 재개하는 transcript 또는 Claude Code session id) | **`entwurf_resume_call`의 첫 receipt로 출하됨** | tmux가 창을 만들고 그 backend의 고정 runtime(pi / `claude --resume`) 시작을 요청했다는 사실까지. 시민이 돌아왔다는 주장은 아니다 |
-| resume observation (pi: same-gid socket-alive, Claude Code: 이 호출이 연 pane의 새 live owner가 같은 session의 receiver marker를 record와 같은 새 binding으로 다시 세움, 또는 `resume-unobserved`/`record-unreadable`) | **`entwurf_resume_call`의 두 번째 receipt로 출하됨** | 시민이 다시 주소를 갖는다고 말하는 **유일한** 사실. launch와 절대 합치지 않는다. 미관측은 실패가 아니라 결과이며 창은 열린 채 lock은 해제된다 |
+| resume launch (`@window/%pane` + target gid + 재개하는 transcript 또는 Claude Code session id) | **Pi는 출하된 첫 receipt; CC는 #147 현재 source contract, 별도 release/LIVE 미수용** | tmux가 창을 만들고 그 backend의 고정 runtime(pi / `claude --resume`) 시작을 요청했다는 사실까지. 시민이 돌아왔다는 주장은 아니다 |
+| resume observation (pi: same-gid socket-alive, Claude Code: 이 호출이 연 pane의 새 live owner가 같은 session의 receiver marker를 record와 같은 새 binding으로 다시 세움, 또는 `resume-unobserved`/`record-unreadable`) | **Pi는 출하된 두 번째 receipt; CC는 #147 현재 source contract, 별도 release/LIVE 미수용** | 시민이 다시 주소를 갖는다고 말하는 **유일한** 사실. launch와 절대 합치지 않는다. 미관측은 실패가 아니라 결과이며 창은 열린 채 lock은 해제된다 |
 | launch가 동기 반환한 native session/garden identity | **없음** (§6 조건 1 불성립) | pi 0.83.0도 0.84.0도 제공하지 않는다(재실측). fresh-call도 동기로는 주지 않는다 |
 | callback 메시지의 sender envelope이 실은 gardenId | **fresh-call의 correlation receipt** (§6-a) — 비동기, caller의 기존 수신면에 도착 | delivery 계층이 붙인 사실이며 sibling의 자기 진술이 아니다 (§6-b) |
 | 사전 주입한 native token으로 조회한 gardenId | **CLOSED** — callback correlation이 대체한 폐기 후보 (§6) | 새 증거 + GLG 재승인 없이는 재개하지 않는다 |
 | unknown record가 나타날 때까지 감시·추측 | 금지된 supervision | 시간에 걸친 발견·상관짓기 |
 | peer stall/context/task outcome, retry·재배정 | Entwurf 밖 supervision | 프로젝트 정책 |
+
+CC의 [arm binding](./adding-a-harness.md#arm-binding-within-v3)은 garden/native identity가 아니다. Dead-owner 판정 뒤 다시 읽은 record의 birth tuple과 non-null marker binding이 일치해야 launch한다. Observation은 그 호출이 연 pane의 새 live owner, 이전과 다른 fresh binding, 현재 record와 같은 binding을 함께 요구한다. 두 파일 전체를 원자적으로 갱신하거나 미관측 프로세스의 부재를 증명한다는 뜻이 아니다.
 
 ## 13. 영속 경계
 

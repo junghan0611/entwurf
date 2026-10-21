@@ -47,6 +47,33 @@ All notable changes to this project will be documented here. Format follows [Kee
   QK judges only self, peers and v2; the seven-tool `native-module` cell was not run. A running
   coordinator host offering seven tools, and any operator rollout, remain unmeasured.
 
+### Internal retirement components (#147; not an exposed MCP lifecycle)
+
+- **Pi's control server now serves an internal `retire` RPC.** A Pi started from this
+  checkout can already receive it; this is not a claim about the published 0.40.0 package.
+  Immutable garden/native identity, TUI, idle and no-pending guards precede one SDK shutdown
+  request. The shared production response envelope and strict one-shot client keep
+  `shutdown-requested` distinct from exit, flush or model silence. Busy work is refused, not
+  aborted or queued for a later shutdown.
+- **Claude Code has a fixed Linux pidfd helper and request adapter.** The helper is copied
+  beside the compiled adapter; it pins a process, checks its start key, accepts one complete
+  go/cancel frame and requests one fd SIGTERM with bounded exit observation. Fresh
+  record/receiver/sender birth, arm binding, owner domain and pid/key joins run before helper
+  spawn and after ready. Unknown is not safe-retry permission. A fd-process exit does not
+  prove conversation identity, descendant termination or transcript flush.
+- **A private dispatcher preserves action and cleanup independently.** Trusted caller
+  attribution/self refusal, fresh target and liveness checks, one adapter and one lock release
+  are composed through mandatory seams. It creates no grant/role database. These committed
+  components do not include accepted production host composition: its path/lock bindings and
+  runtime acceptance require separate proof. No public retirement MCP/contact tool is registered.
+- **Proof remains candidate-local:** owned receiver/helper fixtures; independent review;
+  primitive PARTIAL Pi9 + CC11, later request-adapter PARTIAL9+6+15+40, then pure-dispatcher
+  PARTIAL10 on different candidates; private compiled consumer28 and a missing-Pi-entry
+  negative on the adapter candidate. These are not release-SHA kill-power, installed retirement
+  runtime or four-cell native lifecycle evidence. Actual host composition, G4 reader rollout,
+  public caller integration and the preserved #106 B append-only attribution record remain
+  open. Existing live/release floors are not waived by these checkpoints.
+
 ### Resume
 
 - **`entwurf_resume_call` reopens a dormant Claude Code citizen under its own garden id (#147 L2).**

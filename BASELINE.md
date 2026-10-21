@@ -52,6 +52,22 @@ outside the experimental preview (rows below).
 | Remote pair: OFF target, negative paths over real SSH, other rails, more than one pair, non-Linux hosts, GUI rendering of the received envelope | unverified | No receipt. The deterministic and installed cells (VERIFY) do not stand for these. |
 | native Windows: other harnesses, `setup` and the `.sh` bins, fresh/resume, mux/Herdr/ACP, ARM64, records over 16 MiB, reparse-backed store folders | UNSUPPORTED | Outside the preview's scope by decision; the preview loader refuses an install without the Windows addon by name. |
 
+### #147 candidate host boundary (2026-10-21; not a certification row)
+
+A checkout-started Pi wrote the new V3 `attachIncarnation` field while older hook/bridge
+readers still rejected it. The observed mixed-reader failures were rolled forward under a
+specific operator-approved repair, preserving the same garden/native identity; no manual
+record deletion, id rewrite, fresh-cut or old-shape rollback was used. Normal attach writes
+continued. Other installed native readers and the external Python mirror were identified as
+stale by source inspection; that is predicted impact, not a measured failure on every rail,
+and the complete G4 host rollout remains open. See [upgrade policy](./docs/fresh-cut-policy.md#upgrade-order).
+
+The candidate's internal Pi control `retire`, pidfd helper, request adapters and private
+injected dispatcher have source/fixture and candidate-local proof, not new native-host
+certification. Pi ACK is not exit/flush; CC fd-process exit is not conversation/children/flush.
+The current `>=2.1.306` floor and a historical B2 delivery receipt do not certify this
+lifecycle. A later CI green also cannot certify the operator's mixed-reader deployment.
+
 Notes the table cannot carry without becoming prose again:
 
 - **shape-only is not a live proof.** The `artifact-consumer` job verifies a read-only

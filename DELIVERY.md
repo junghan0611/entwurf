@@ -59,6 +59,18 @@ ringing any doorbell, its filenames are ISO stamps so a drain is a global FIFO, 
 is an honest `mailbox-undeliverable` refusal, and its receipt is that FILE. A mailbox enqueue is a
 durable file receipt; a control-socket queue is process memory.
 
+### Candidate lifecycle commands are not delivery boundaries (#147)
+
+The current checkout's Pi control server also accepts the internal `retire` RPC, so a Pi
+started from that checkout can expose it before a release is cut. It requires matching
+record/native identity, a TUI, idle state and no pending work. Its `shutdown-requested` ACK
+is not socket closure, process exit, flush or model silence. This command is not a public
+MCP/contact retirement verb and is not part of the four send boundaries above. The candidate
+CC pidfd helper observes one fd-pinned process, not a conversation, descendants or flush;
+unknown never grants safe replay. Package/source presence, compiled consumer checks and a
+real native lifecycle remain separate evidence axes. Historical delivery receipts below do
+not certify these candidate components.
+
 ## Levels (D0–D8)
 
 These are independent of VERIFY's `L0–L5` evidence levels and BASELINE's question
@@ -109,7 +121,7 @@ physical host. Do not read a D-level cell as a Darwin receipt.
 | Harness / surface | Product status | Capability | Transport and boundary |
 |---|---|---|---|
 | **pi Entwurf** | shipped | D7; D8 partial | Record-addressed Unix control socket. A record-less socket is diagnostic only and never dispatched. A pi session calls the verbs through Pi's built-in MCP running the compiled `entwurf-bridge` (#125); the receive rail is unchanged. |
-| **Claude Code interactive `>=2.1.306`** | shipped; Linux certified | D6; D7/D8 partial | Per-session mailbox + exec-form `FileChanged`/`asyncRewake`. B2 proved idle wake and same-session continuity on one NixOS host. |
+| **Claude Code interactive `>=2.1.306`** | shipped; Linux certified | D6; D7/D8 partial | Per-session mailbox + exec-form `FileChanged`/`asyncRewake`. B2 proved idle wake and same-session continuity on one NixOS host. `>=2.1.306` is the current declared floor; that historical B2 receipt does not certify #147 resume/retire lifecycle on this floor. |
 | **Antigravity / agy** | shipped | D6; D7 partial | Record-backed native-push through LS gRPC `agentapi send-message`; no mailbox or receiver marker. Admitted before the #82 step 9 contract and not re-evaluated under it, so it is legacy citizen evidence, not a step-9 supported harness: `entwurf_fresh_call` cannot open an agy sibling, and nothing here should be read as claiming visible lifecycle parity. |
 | **Codex CLI app-server citizen** | supported in 0.21.0; caller-seat topology ACCEPTED on Linux at 0.153.4, 2026-09-16 (56 assertions, exit 0), and the caller-DIRECTORY axis ACCEPTED the same day on the same host (#95 lane C, 65 assertions, exit 0; the 2026-09-12 explicit-home acceptance is history — #95 D1 retired that room) | D6 accepted; D7 partial; D8 unproven | Vendor-trusted user-scope `SessionStart` birth plus strict per-request metadata join; no shared-pid sender marker. `thread/loaded/list` probes the operator-owned app-server UDS and one-shot `codex queue` delivers with no retry. The operator owns the app-server and seats it wherever they like; Entwurf creates, moves and supervises none of it. Since #95 lane B a Codex CALLER with no explicit placement opens its sibling beside its OWN pane, located by the `thread-id` its `[tui].terminal_title` writes into the pane title; 0 or 2+ matching panes refuse with no fallback, and the title is a placement input only — never an address, liveness or delivery fact. #95 D1 (2026-09-16) retired the fixed `codex` home that omitted-placement Codex TARGETS used to select, so an omitted seat is the caller's own session for every backend. Exact 0.153.4 source still bounds placing a sibling beside a TUI whose thread nobody named as unsupported; the anchor resolves only the pane showing the caller's own thread. |
 | **Codex embedded TUI** | deferred | D0 partial | At the 2026-09-08 Codex 0.153.4 measurement, standalone mode had no `watchPaths`/`FileChanged`/`asyncRewake` analogue or supported idle receive route. This is dated vendor evidence, not a claim that the current candidate lacks records or fresh. |

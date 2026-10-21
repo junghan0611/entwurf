@@ -46,6 +46,12 @@ The invocation authorizes only the named mode. `prepare` is not `land`
 authorization. `make` is not `publish` authorization. If the mode, version, or a
 mode-specific required argument is missing, ask for it and stop.
 
+A narrower operator restriction may add a requirement or block a mode, never remove a
+`VERIFY.md` release-acceptance axis. If the current lane forbids local FULL or required LIVE
+execution, feature-branch push/CI may proceed when authorized, but prepare/make remains blocked
+until the named cut can run its required floors. Do not reinterpret that restriction as a
+floor waiver, nor a delegated tag/release decision as proof those floors already passed.
+
 ## Shared version contract
 
 Accept a normal SemVer release or prerelease. Reject a leading `v`.

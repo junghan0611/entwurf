@@ -195,6 +195,25 @@ The backend id must exist before any record carrying it can be written or read.
 
 A trusted lifecycle event of the harness turns a session into a record.
 
+<a id="arm-binding-within-v3"></a>
+
+**Arm binding within V3.**
+
+`attachIncarnation` is Claude Code's record–receiver arm witness (#147), not a garden/native
+identity, process count, occupancy proof or authorization token. A V3 reader accepts omission
+as null; a present value must be null or exactly 32 lowercase hex characters. Writers always
+serialize the field, including null. All other unknown keys remain errors. The owning grammar
+is `requireAttachIncarnation` in `meta-session.ts`; do not maintain a weaker parser in a consumer.
+
+The CC arm-capable hook mints a fresh binding under the record-arm lock, atomically upserts the
+record, then copies the binding into the receiver marker. This is not a transaction over both
+files; UserPromptSubmit preserves the binding. Resume requires a fresh record read after the
+dead-owner verdict and a matching non-null marker binding; its observation joins the launched
+pane's new live owner with a different fresh binding matching the current record and birth tuple.
+Old null-bound records remain unbound until a trusted same-native-id arm; do not backfill values
+or erase markers to pass the gate. A stale reader that rejects this known V3 key must roll forward,
+not force healthy citizens through a generation cut (see [fresh-cut policy](./fresh-cut-policy.md#upgrade-order)).
+
 - (a) Source: a package-owned birth unit expressed on the harness's real lifecycle surface.
   Usually that is a per-backend hook unit under `pi/` (manifest + launcher) plus its payload
   under `pi-extensions/`; a USER hook registry may instead point at a fixed package-owned

@@ -1,7 +1,7 @@
 # entwurf
 
 `entwurf` connects independent agent harnesses as visible siblings: open a new session,
-reopen a dormant pi session in tmux, or reach an existing sibling by **garden id**. Fresh
+reopen a supported dormant sibling in tmux, or reach an existing sibling by **garden id**. Fresh
 sessions open in the caller's Herdr workspace or tmux session by default; explicit tmux
 placement can name another existing session. Each harness keeps its own runtime,
 authentication, tools and transcript.
@@ -227,7 +227,10 @@ A launch receipt is neither the callback address nor proof of task processing.
 Resume is pi or Claude Code, tmux-only, same id, every launch fact from the record
 (pi: transcript/model/provider/cwd; Claude Code: `claude --resume <session id>` at the record cwd);
 a live, unprovably dormant, unbound or other-backend target refuses, and an unobserved window
-stays visible without retry.
+stays visible without retry. Claude Code's [V3 arm binding](./docs/adding-a-harness.md#arm-binding-within-v3)
+is a record–receiver witness, not a new identity or an occupancy/permission token.
+The Claude Code resume extension is current #147 candidate source; its release and native
+lifecycle acceptance remain separate from the shipped Pi resume history.
 Exact boundaries: [tmux launch](https://github.com/junghan0611/entwurf/blob/main/docs/mux-launch-rail.md)
 and [Herdr launch](https://github.com/junghan0611/entwurf/blob/main/docs/herdr-launch-rail.md).
 

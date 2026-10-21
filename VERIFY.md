@@ -293,7 +293,10 @@ caller/target/cross-harness LIVE are owed by `smoke-pi-durable-fresh-live`, a re
 | Native Codex host | caller-seat topology accepted 2026-09-16 (56 assertions, exit 0); caller-DIRECTORY axis accepted the same day (65 assertions, exit 0) | Operator-owned birth/MCP/statusline/terminal-title atoms and the on-demand four-coordinate chain are measured on Linux at Codex 0.153.4: the app-server alone in session A (`$30/@41/%45`, pid 737636), and initial Pi / omitted-placement fresh Codex / Codex-opened outbound Pi all in a different session S (`$2`, `@46`/`@47`/`@48`; `@58`/`@59`/`@61` in the lane C run); exact callbacks and addressed delivery both ways. A ≠ S is the load-bearing half — the app-server's inherited `TMUX` names A, so the outbound Pi landing in S can only have come from the caller's own pane title, and its receipt records `seat-source=codex-title-anchor`. **#95 lane C added the second axis to the same card: WHERE the sibling starts.** Hop 1 joins four authorities that cannot borrow from each other — the pane's `#{pane_current_path}`, the vendor rollout's `session_meta.cwd`, the Entwurf record and the requested scratch — and hop 1's leg requests a cwd while hop 2 requests NONE, so hop 2's directory can only come from the Codex caller's own record; both are asserted different from the app-server's live `/proc/<pid>/cwd`. 65 and 56 are different contracts, not a regression. The 2026-09-12 fixed-home chain is PAST CONTRACT (#95 D1); `DELIVERY.md` owns every receipt and digest. Placement beside a TUI whose thread nobody named is unsupported and unclaimed. |
 
 The repo-local `entwurf-release` skill owns the `land → prepare → make → publish`
-state machine. Each mode is a separate GLG authorization. Preserve one candidate
+state machine. Each mode is a separate GLG authorization. A narrower host restriction may
+block a mode; it never waives a release-acceptance axis below. Feature-branch CI is not a
+substitute for a forbidden local/LIVE floor: keep make blocked until the named cut has the
+required execution authority and evidence. Preserve one candidate
 (for a carrier-bearing release, the one retrieved from the preview run, never a local
 pack), accept and publish those exact bytes without repacking, and record its digest and
 consumer image outside this standing protocol.
@@ -344,7 +347,7 @@ every focused gate green at the time:
 
 ### Wording — avoid safety-interpretation contamination
 
-When injecting a fact for a continuity check, use **plaintext that does not trigger model safety interpretation**. Avoid `secret token`, `password`, `API key`, `credential`, and meta-directives like "do not leak" — such wording makes the model treat the prompt as an exfiltration attempt and refuse, which makes **continuity look broken even when it is alive** (this happened once with `test-token-123`, misdiagnosed as a delegation failure). Instead: `The password is owl → reply in one word → owl`; code names / colors / animal names. Do not mix continuity and safety-behavior verification in one prompt.
+When injecting a fact for a continuity check, use **plaintext that does not trigger model safety interpretation**. Avoid `secret token`, `password`, `API key`, `credential`, and meta-directives like "do not leak" — such wording makes the model treat the prompt as an exfiltration attempt and refuse, which makes **continuity look broken even when it is alive** (this happened once with `test-token-123`, misdiagnosed as a delegation failure). Instead: `The code word is owl → reply in one word → owl`; code names / colors / animal names. Do not mix continuity and safety-behavior verification in one prompt.
 
 ### bridge continuity vs semantic continuity
 
@@ -558,7 +561,7 @@ Passing establishes a **release verification floor**, not an 8-hour/day operatio
 
 - **ACP turn evidence.** The ACP path writes no `[entwurf:*]` stderr markers, and `ENTWURF_CHILD_STDERR_LOG` is not an ACP observation surface (its mirror in `pi-extensions/lib/entwurf-core.ts` belongs to the retired child-pi spawn and has no caller). Read three things instead: the lifecycle notices the backend writes into the assistant text (`[acp: preparing …]` / `[acp: reusing live session]`), the turn's typed `stopReason` (an ACP `cancelled` ending maps to `aborted`, `pi-extensions/lib/acp/backend.ts:865-866`), and the identity (pid + starttime) of the launcher and of any process the turn started.
 - **Retired dedicated smokes, live code invariants** (manual/troubleshooting only — *not* part of the release floor):
-  - *Model-switch lock* — entwurf sessions are locked to their starting model. Gate: `check-model-lock` (in `pnpm check`, core tier). The dedicated live `smoke-model-switch` was retired in v2; the invariant lives in `pi-extensions/model-lock.ts` (extension guard) + `session-store.ts` `SessionModelLockedError` (the `decideBootstrap` fail-loud model lock).
+  - *ACP-boundary model guard* — a session using the `entwurf` provider keeps its starting model: `pi-extensions/model-lock.ts` reverts set/cycle transitions touching that provider (native-to-native switching is free). This is an after-event revert, not a transcript-clean refusal. Separately, `session-store.ts` `SessionModelLockedError` refuses a persisted-record model mismatch at `decideBootstrap`. Gate: `check-model-lock` (core tier); the dedicated live `smoke-model-switch` was retired in v2. This is not a lifetime model pin on every garden citizen.
   - *Cancel / abort cleanup* — an abort sends ACP `session/cancel` and lets the agent end its own turn (`awaitAcpPromptTurn`, `pi-extensions/lib/acp/backend.ts:762-801`); process-group teardown follows only after a bounded grace. A cancelled reuse turn keeps its live session; a cancelled first turn is not retained (`backend.ts:1861`), so the next turn bootstraps a new one. Dedicated `smoke-cancel` retired; invariant in code.
 
 ### Evidence preservation when a problem occurs
