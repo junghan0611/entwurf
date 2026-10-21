@@ -104,7 +104,7 @@ project-local install, or `./run.sh <command>` from a source checkout. Keep that
 same scope when upgrading and checking; native process restarts are separate (§7).
 
 `check-bridge` is auth-free. It proves the installed prebuilt MCP server boots and
-lists the eight garden tools; it does not prove a backend model turn or native hook.
+lists the nine garden tools in the #147 candidate; it does not prove a backend model turn, native hook or retirement permission.
 
 Neither npm form installs a harness runtime. `pi`, Claude Code, Copilot CLI, Codex CLI, agy,
 Cortex, and their authentication remain operator-owned optional prerequisites for the

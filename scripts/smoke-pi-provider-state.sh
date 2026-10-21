@@ -67,7 +67,7 @@ write_mcp_fake() {   # $1 = path
 while IFS= read -r line; do
   case "$line" in
     *'"id":1'*) printf '%s\n' '{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2024-11-05","capabilities":{},"serverInfo":{"name":"fake-entwurf-bridge","version":"0"}}}' ;;
-    *'"id":2'*) printf '%s\n' '{"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"entwurf_v2"},{"name":"entwurf_self"},{"name":"entwurf_peers"},{"name":"entwurf_inbox_read"},{"name":"entwurf_register_native"},{"name":"entwurf_fresh_call"},{"name":"entwurf_resume_call"},{"name":"entwurf_callback"}]}}' ;;
+    *'"id":2'*) printf '%s\n' '{"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"entwurf_v2"},{"name":"entwurf_self"},{"name":"entwurf_peers"},{"name":"entwurf_inbox_read"},{"name":"entwurf_register_native"},{"name":"entwurf_fresh_call"},{"name":"entwurf_resume_call"},{"name":"entwurf_retire_call"},{"name":"entwurf_callback"}]}}' ;;
   esac
 done
 FAKE
@@ -93,7 +93,7 @@ write_stale_fake() {  # $1 = path
 while IFS= read -r line; do
   case "$line" in
     *'"id":1'*) printf '%s\n' '{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2024-11-05","capabilities":{},"serverInfo":{"name":"stale-bridge","version":"0"}}}' ;;
-    *'"id":2'*) printf '%s\n' '{"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"entwurf_v2"},{"name":"entwurf_peers"},{"name":"entwurf_inbox_read"},{"name":"entwurf_register_native"},{"name":"entwurf_fresh_call"},{"name":"entwurf_resume_call"},{"name":"entwurf_callback"}]}}' ;;
+    *'"id":2'*) printf '%s\n' '{"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"entwurf_v2"},{"name":"entwurf_peers"},{"name":"entwurf_inbox_read"},{"name":"entwurf_register_native"},{"name":"entwurf_fresh_call"},{"name":"entwurf_resume_call"},{"name":"entwurf_retire_call"},{"name":"entwurf_callback"}]}}' ;;
   esac
 done
 FAKE
@@ -289,7 +289,7 @@ rm -f "$STATE"
 # `ownership` field in that state is the PREIMAGE classification — what stood at the key BEFORE this
 # install — so `absent` means "we created it" and `managed-current` means "we rewrote our own", and
 # NEITHER means "unowned". A doctor whose only non-drift shape is the bare bin therefore calls every
-# plugin-mode host red while the bridge it points at boots and serves all eight verbs. The canonical
+# plugin-mode host red while the bridge it points at boots and serves all nine verbs. The canonical
 # command is the one the state RECORDS; the stable runtime root is the writer's business and is
 # deliberately not re-derived here.
 PLUGIN_BRIDGE="$SB/runtime/active/node_modules/.bin/entwurf-bridge"

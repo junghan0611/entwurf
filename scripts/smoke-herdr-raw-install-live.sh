@@ -490,8 +490,8 @@ for (const name of ["entwurf", "entwurf-bridge", "entwurf-statusline"]) {
 }
 
 // The REAL subcommand, from the installed bin, under node_modules — which is the branch of
-// start.sh that runs the prebuilt dist. Its own oracle is an EXACT set (`EXPECT_TOOLS` in run.sh check-bridge), so a
-// zero exit here is the artifact listing all eight garden verbs and no ninth.
+// start.sh that runs the prebuilt dist. Its own oracle is an EXACT set (`expected` in run.sh `validate_entwurf_bridge`, which check-bridge runs), so a
+// zero exit here is the artifact listing all nine garden verbs and no tenth.
 const run = spawnSync(path.join(binDir, "entwurf"), ["check-bridge"], { encoding: "utf8" });
 const said = `${run.stdout ?? ""}${run.stderr ?? ""}`;
 // [a-z0-9_] and not [a-z_]: the first draft of this line printed `entwurf_v` for entwurf_v2
@@ -502,7 +502,7 @@ const verbs = (said.match(/entwurf_[a-z0-9_]+/g) ?? []).filter((v, i, a) => a.in
 // A SECOND, INDEPENDENT COPY OF THE SET, ON PURPOSE (A5 D1). The exit code alone used to be
 // the oracle here, which left the printed list as decoration a parser bug could quietly
 // corrupt — and did, see the regex note just above. The package under test carries the
-// expectation of run.sh:5187 in its own bytes, so reading the answer from there would let
+// `validate_entwurf_bridge` expectation of run.sh in its own bytes, so reading the answer from there would let
 // the artifact grade itself. The literal below is a copy that must AGREE with the shipped
 // one; the two disagreeing is the signal, and a verb genuinely added upstream reddens this
 // smoke until somebody says so here too.
@@ -513,6 +513,7 @@ const EXPECTED_VERBS = [
   "entwurf_peers",
   "entwurf_register_native",
   "entwurf_resume_call",
+  "entwurf_retire_call",
   "entwurf_self",
   "entwurf_v2",
 ];
@@ -520,7 +521,7 @@ console.log(`  VERBS ${verbs.join(",") || "<none>"}`);
 if (run.status === 0) ok(`entwurf check-bridge exit 0 from the installed bin (${verbs.length} verbs listed)`);
 else no(`entwurf check-bridge exit ${run.status}: ${said.trim().slice(0, 400)}`);
 JSON.stringify(verbs) === JSON.stringify(EXPECTED_VERBS)
-  ? ok(`the receipt names EXACTLY the eight garden verbs (${EXPECTED_VERBS.length}), parsed from what the installed bin answered`)
+  ? ok(`the receipt names EXACTLY the nine garden verbs (${EXPECTED_VERBS.length}), parsed from what the installed bin answered`)
   : no(`verb set mismatch — want ${JSON.stringify(EXPECTED_VERBS)} got ${JSON.stringify(verbs)}`);
 process.exit(bad);
 ' "$ACTIVE" "$REGISTRY" "$PLUGIN_ID" || fail=1

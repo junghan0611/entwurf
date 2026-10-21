@@ -5745,7 +5745,7 @@ function finish(trimmed) {
   // gate that exists to catch "green clone, dead consumer". Equality also catches the
   // other direction the narrow-surface rule cares about: an extra or duplicated verb
   // reaching hosts without a decision. Written sorted; `names` is sorted above.
-  const EXPECT_TOOLS = ['entwurf_callback', 'entwurf_fresh_call', 'entwurf_inbox_read', 'entwurf_peers', 'entwurf_register_native', 'entwurf_resume_call', 'entwurf_self', 'entwurf_v2'];
+  const EXPECT_TOOLS = ['entwurf_callback', 'entwurf_fresh_call', 'entwurf_inbox_read', 'entwurf_peers', 'entwurf_register_native', 'entwurf_resume_call', 'entwurf_retire_call', 'entwurf_self', 'entwurf_v2'];
   if (names.length !== EXPECT_TOOLS.length || EXPECT_TOOLS.some((n, i) => names[i] !== n)) {
     console.error('installed MCP tool set MISMATCH — want exactly [' + EXPECT_TOOLS.join(',') + '] got [' + names.join(',') + ']');
     process.exit(1);
@@ -6307,12 +6307,12 @@ function finishOk(trimmed) {
   }
   const names = tools.map((t) => t?.name).sort();
   // EXACT set, not a floor. This is the assertion behind the operator-facing claim that
-  // `entwurf check-bridge` proves the installed bytes list the eight garden tools — and
+  // `entwurf check-bridge` proves the installed bytes list the nine garden tools — and
   // under an installed package this launcher IS the dist branch of start.sh, so a subset
   // check here let an artifact missing entwurf_fresh_call / entwurf_resume_call read as a
   // green bridge. Equality also refuses an undecided extra verb. Written sorted; `names`
   // is sorted above.
-  const expected = ['entwurf_callback', 'entwurf_fresh_call', 'entwurf_inbox_read', 'entwurf_peers', 'entwurf_register_native', 'entwurf_resume_call', 'entwurf_self', 'entwurf_v2'];
+  const expected = ['entwurf_callback', 'entwurf_fresh_call', 'entwurf_inbox_read', 'entwurf_peers', 'entwurf_register_native', 'entwurf_resume_call', 'entwurf_retire_call', 'entwurf_self', 'entwurf_v2'];
   if (names.length !== expected.length || expected.some((n, i) => names[i] !== n)) {
     console.error(`MCP tool set MISMATCH — want exactly [${expected.join(',')}] got [${names.join(',')}]`);
     process.exit(1);
