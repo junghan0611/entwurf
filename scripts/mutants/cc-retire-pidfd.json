@@ -1,0 +1,129 @@
+{
+	"schemaVersion": 1,
+	"lane": "cc-retire-pidfd",
+	"mutants": [
+		{
+			"claim": "CCRETIRE-WRONG-KEY-NO-SIGNAL",
+			"title": "the start-key re-check after pidfd_open is gone, so a reused pid number pins and offers for termination a process the caller never checked",
+			"subject": "pi-extensions/lib/cc-retire-pidfd.py",
+			"find": ["        if observed != key:"],
+			"replace": ["        if False:"],
+			"gate": ["bash", "run.sh", "check-cc-retire-pidfd"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:CCRETIRE-WRONG-KEY-NO-SIGNAL]",
+			"signatureSource": "pi-extensions/lib/cc-retire-pidfd.test.ts"
+		},
+		{
+			"claim": "CCRETIRE-CANCEL-NO-SIGNAL",
+			"title": "an explicit `cancel` frame is read as `go`, so the caller's own refusal after re-checking its binding terminates the process anyway",
+			"subject": "pi-extensions/lib/cc-retire-pidfd.py",
+			"find": ["            finish(3, \"cancelled\")"],
+			"replace": ["            line = \"go\""],
+			"gate": ["bash", "run.sh", "check-cc-retire-pidfd"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:CCRETIRE-CANCEL-NO-SIGNAL]",
+			"signatureSource": "pi-extensions/lib/cc-retire-pidfd.test.ts"
+		},
+		{
+			"claim": "CCRETIRE-EOF-NO-SIGNAL",
+			"title": "a caller that died or closed the pipe without a word is read as `go`, so losing the caller authorises the signal",
+			"subject": "pi-extensions/lib/cc-retire-pidfd.py",
+			"find": ["            finish(3, \"cancelled-eof\")"],
+			"replace": ["            kind, line = \"line\", \"go\""],
+			"gate": ["bash", "run.sh", "check-cc-retire-pidfd"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:CCRETIRE-EOF-NO-SIGNAL]",
+			"signatureSource": "pi-extensions/lib/cc-retire-pidfd.test.ts"
+		},
+		{
+			"claim": "CCRETIRE-TRUNCATED-GO-NO-SIGNAL",
+			"title": "the bytes `go` followed by EOF with no newline are accepted as a complete frame, so a half-written control authorises the signal",
+			"subject": "pi-extensions/lib/cc-retire-pidfd.py",
+			"find": ["return (\"eof\", None) if not buf else (\"truncated\", None)"],
+			"replace": ["return (\"eof\", None) if not buf else (\"line\", buf.decode(\"ascii\"))"],
+			"gate": ["bash", "run.sh", "check-cc-retire-pidfd"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:CCRETIRE-TRUNCATED-GO-NO-SIGNAL]",
+			"signatureSource": "pi-extensions/lib/cc-retire-pidfd.test.ts"
+		},
+		{
+			"claim": "CCRETIRE-OVERSIZE-NO-SIGNAL",
+			"title": "the control frame bound is lifted, so an over-long frame is parsed as a line instead of refused as oversize-control",
+			"subject": "pi-extensions/lib/cc-retire-pidfd.py",
+			"find": ["CONTROL_MAX = 16"],
+			"replace": ["CONTROL_MAX = 4096"],
+			"gate": ["bash", "run.sh", "check-cc-retire-pidfd"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:CCRETIRE-OVERSIZE-NO-SIGNAL]",
+			"signatureSource": "pi-extensions/lib/cc-retire-pidfd.test.ts"
+		},
+		{
+			"claim": "CCRETIRE-PARTIAL-DEADLINE-NO-SIGNAL",
+			"title": "a partial frame still open at the go deadline is taken as the frame, so a caller that never finished its line authorises the signal",
+			"subject": "pi-extensions/lib/cc-retire-pidfd.py",
+			"find": ["            return (\"deadline\", None)"],
+			"replace": ["            return (\"deadline\", None) if not buf else (\"line\", buf.decode(\"ascii\"))"],
+			"gate": ["bash", "run.sh", "check-cc-retire-pidfd"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:CCRETIRE-PARTIAL-DEADLINE-NO-SIGNAL]",
+			"signatureSource": "pi-extensions/lib/cc-retire-pidfd.test.ts"
+		},
+		{
+			"claim": "CCRETIRE-GO-TERMINATES-SAME-PROCESS",
+			"title": "SIGKILL replaces SIGTERM, so the target gets no chance to run its own shutdown and the receiver sees a different death",
+			"subject": "pi-extensions/lib/cc-retire-pidfd.py",
+			"find": ["signal.pidfd_send_signal(fd, signal.SIGTERM, None, 0)"],
+			"replace": ["signal.pidfd_send_signal(fd, signal.SIGKILL, None, 0)"],
+			"gate": ["bash", "run.sh", "check-cc-retire-pidfd"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:CCRETIRE-GO-TERMINATES-SAME-PROCESS]",
+			"signatureSource": "pi-extensions/lib/cc-retire-pidfd.test.ts"
+		},
+		{
+			"claim": "CCRETIRE-TERM-IGNORED-NO-ESCALATION",
+			"title": "a target that outlives the exit bound is signalled a second time, the escalation the helper promises never to make",
+			"subject": "pi-extensions/lib/cc-retire-pidfd.py",
+			"find": ["finish(4, \"exit-unobserved\", waitedS=EXIT_WAIT_S)"],
+			"replace": [
+				"signal.pidfd_send_signal(fd, signal.SIGTERM, None, 0) or finish(4, \"exit-unobserved\", waitedS=EXIT_WAIT_S)"
+			],
+			"gate": ["bash", "run.sh", "check-cc-retire-pidfd"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:CCRETIRE-TERM-IGNORED-NO-ESCALATION]",
+			"signatureSource": "pi-extensions/lib/cc-retire-pidfd.test.ts"
+		},
+		{
+			"claim": "CCRETIRE-GONE-PID-REFUSED",
+			"title": "a pid with no process behind it is reported as `exited`, so a target that was already gone reads as a termination this helper performed",
+			"subject": "pi-extensions/lib/cc-retire-pidfd.py",
+			"find": ["finish(2, \"refused\", reason=\"pid-not-found\")"],
+			"replace": ["finish(0, \"exited\")"],
+			"gate": ["bash", "run.sh", "check-cc-retire-pidfd"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:CCRETIRE-GONE-PID-REFUSED]",
+			"signatureSource": "pi-extensions/lib/cc-retire-pidfd.test.ts"
+		},
+		{
+			"claim": "CCRETIRE-MALFORMED-REFUSED",
+			"title": "the Linux PID_MAX_LIMIT bound is dropped, so an out-of-range number reaches pidfd_open instead of being refused as malformed input",
+			"subject": "pi-extensions/lib/cc-retire-pidfd.py",
+			"find": ["1 < int(raw_pid) <= PID_MAX"],
+			"replace": ["1 < int(raw_pid)"],
+			"gate": ["bash", "run.sh", "check-cc-retire-pidfd"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:CCRETIRE-MALFORMED-REFUSED]",
+			"signatureSource": "pi-extensions/lib/cc-retire-pidfd.test.ts"
+		},
+		{
+			"claim": "CCRETIRE-NO-NUMERIC-KILL",
+			"title": "the pidfd signal is replaced by a numeric os.kill, reopening the check -> signal race the helper exists to close; no live cell can see it, only the static cell",
+			"subject": "pi-extensions/lib/cc-retire-pidfd.py",
+			"find": ["signal.pidfd_send_signal(fd, signal.SIGTERM, None, 0)"],
+			"replace": ["os.kill(pid, signal.SIGTERM)"],
+			"gate": ["bash", "run.sh", "check-cc-retire-pidfd"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:CCRETIRE-NO-NUMERIC-KILL]",
+			"signatureSource": "pi-extensions/lib/cc-retire-pidfd.test.ts"
+		}
+	]
+}

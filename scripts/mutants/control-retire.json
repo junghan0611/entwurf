@@ -1,0 +1,105 @@
+{
+	"schemaVersion": 1,
+	"lane": "control-retire",
+	"mutants": [
+		{
+			"claim": "RETIRE-SAME-PATH-REBIND",
+			"title": "same-path rebind tears down the live listener instead of preserving it",
+			"subject": "pi-extensions/lib/control-retire.ts",
+			"find": ["if (state.socketPath === socketPath && state.server) {"],
+			"replace": ["if (false) {"],
+			"gate": ["bash", "run.sh", "check-control-retire"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RETIRE-SAME-PATH-REBIND]",
+			"signatureSource": "pi-extensions/lib/control-retire.test.ts"
+		},
+		{
+			"claim": "RETIRE-IDENTITY",
+			"title": "an old generation with equal identity values is allowed to request shutdown",
+			"subject": "pi-extensions/lib/control-retire.ts",
+			"find": ["\t\tstate.binding !== serverBinding ||\n"],
+			"replace": [""],
+			"gate": ["bash", "run.sh", "check-control-retire"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RETIRE-IDENTITY]",
+			"signatureSource": "pi-extensions/lib/control-retire.test.ts"
+		},
+		{
+			"claim": "RETIRE-IDLE",
+			"title": "a busy TUI schedules process-wide shutdown instead of refusing",
+			"subject": "pi-extensions/lib/control-retire.ts",
+			"find": ["if (!ctx.isIdle())"],
+			"replace": ["if (false)"],
+			"gate": ["bash", "run.sh", "check-control-retire"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RETIRE-IDLE]",
+			"signatureSource": "pi-extensions/lib/control-retire.test.ts"
+		},
+		{
+			"claim": "RETIRE-TUI",
+			"title": "a non-TUI context enters an unproven shutdown scheduler",
+			"subject": "pi-extensions/lib/control-retire.ts",
+			"find": ["if (ctx.mode !== \"tui\")"],
+			"replace": ["if (false)"],
+			"gate": ["bash", "run.sh", "check-control-retire"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RETIRE-TUI]",
+			"signatureSource": "pi-extensions/lib/control-retire.test.ts"
+		},
+		{
+			"claim": "RETIRE-PENDING",
+			"title": "queued work is ignored when accepting an idle-only retirement",
+			"subject": "pi-extensions/lib/control-retire.ts",
+			"find": ["if (ctx.hasPendingMessages())"],
+			"replace": ["if (false)"],
+			"gate": ["bash", "run.sh", "check-control-retire"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RETIRE-PENDING]",
+			"signatureSource": "pi-extensions/lib/control-retire.test.ts"
+		},
+		{
+			"claim": "RETIRE-REQUEST-ONCE",
+			"title": "the same binding can invoke SDK shutdown again after its first request",
+			"subject": "pi-extensions/lib/control-retire.ts",
+			"find": ["\tstate.retireRequested = true;"],
+			"replace": ["\tstate.retireRequested = false;"],
+			"gate": ["bash", "run.sh", "check-control-retire"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RETIRE-REQUEST-ONCE]",
+			"signatureSource": "pi-extensions/lib/control-retire.test.ts"
+		},
+		{
+			"claim": "RETIRE-CALL-UNKNOWN",
+			"title": "a requested receipt is fabricated without calling the SDK, bypassing its possible failure",
+			"subject": "pi-extensions/lib/control-retire.ts",
+			"find": ["\t\tshutdown.call(ctx);"],
+			"replace": ["\t\tvoid shutdown;"],
+			"gate": ["bash", "run.sh", "check-control-retire"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RETIRE-CALL-UNKNOWN]",
+			"signatureSource": "pi-extensions/lib/control-retire.test.ts"
+		},
+		{
+			"claim": "RETIRE-INVALIDATE",
+			"title": "teardown fails to establish the closing boundary before awaiting server close",
+			"subject": "pi-extensions/lib/control-retire.ts",
+			"find": ["\tstate.closing = true;"],
+			"replace": ["\tstate.closing = false;"],
+			"gate": ["bash", "run.sh", "check-control-retire"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RETIRE-INVALIDATE]",
+			"signatureSource": "pi-extensions/lib/control-retire.test.ts"
+		},
+		{
+			"claim": "RETIRE-BOUNDED-CLOSE",
+			"title": "a half-open accepted peer holds session teardown indefinitely after FIN",
+			"subject": "pi-extensions/lib/control-retire.ts",
+			"find": ["\t\t\tfor (const socket of sockets) socket.destroy();"],
+			"replace": ["\t\t\tvoid sockets;"],
+			"gate": ["bash", "run.sh", "check-control-retire"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:RETIRE-BOUNDED-CLOSE]",
+			"signatureSource": "pi-extensions/lib/control-retire.test.ts"
+		}
+	]
+}

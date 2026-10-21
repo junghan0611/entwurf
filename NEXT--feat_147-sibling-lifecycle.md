@@ -9,12 +9,12 @@ Branch lane for [#147](https://github.com/junghan0611/entwurf/issues/147): the c
 - [ ] **3. 구현.** ← CURRENT: L1 커밋 `11869b8`. **L2(CC same-id visible resume + B1 arm binding) 코드·scoped review·영향 PARTIAL 마감. GLG가 체크포인트 커밋과 L3/G3 구현·격리 검증의 연속 진행을 승인했다(2026-10-21).** 대상 네 칸은 현재 갱신된 live Pi·CC의 퇴근과 resume이고 tmux·Linux가 먼저다. CC만, bridge만으로는 완료가 아니다.
 - [ ] **4. test-owned LIVE 한 번 + 착륙.** 별도 승인으로 한다.
 
-현재 좌표: 1, 2 완료 → 3의 L1 커밋·L2 코드/영향 검증 마감 및 체크포인트 커밋 → L3/G3 구현·test-owned 격리 검증 진행 → 4의 실제 작업 형제 종료는 별도 grant.
+현재 좌표: 1, 2 완료 → 3의 L1 커밋·L2 코드/영향 검증 마감 및 체크포인트 커밋 → L3/G3 내부 부품 두 개의 코드·리뷰·PARTIAL 마감 → core 통합 진행 → 4의 실제 작업 형제 종료는 별도 grant.
 
 # NOW
 
 - L1: commit `11869b8`(parent 5e1b9f8). receipt `.tmp-verify/147-l1-receipts/`.
-- L2 code/proof checkpoint(uncommitted): 최종 검증 snapshot full `d7e5e081898ee03e5111229ef61e33e03d87ff270d2c5ed992a093e1c65732e9`, NEXT 제외 `470eed65aef17470e2fc50f8772905bee6e49fbef8ccc4f5d396052902bf95e7`. 이 NEXT 마감 갱신은 검증 뒤의 문서 변경이다. receipt/index `.tmp-verify/147-l2/r2/coor-partial-completion.md`, 상세 `.tmp-verify/147-l2/r2/coor-final-byte-check.md`(ignored, host-local).
+- L2 code/proof checkpoint **커밋 `0771eacf3356e9e73d0fd5b6fc41fe859eaf03bc`**(parent `11869b8`, 정상 hooks/types, push 없음). 최종 검증 snapshot full `d7e5e081898ee03e5111229ef61e33e03d87ff270d2c5ed992a093e1c65732e9`, NEXT 제외 `470eed65aef17470e2fc50f8772905bee6e49fbef8ccc4f5d396052902bf95e7`. 이 NEXT 마감 갱신은 검증 뒤의 문서 변경이다. receipt/index `.tmp-verify/147-l2/r2/coor-partial-completion.md`, 상세 `.tmp-verify/147-l2/r2/coor-final-byte-check.md`(ignored, host-local).
   - resume domain은 `pi | claude-code`. CC 휴면 = hook이 마지막으로 검증해 arm한 owner가 dead **이고** 그 판정 뒤 다시 읽은 record의 `attachIncarnation`이 marker 사본과 같음(non-null). 아니면 `target-receiver-absent/-corrupt/-mismatch/-unbound`, `target-live`, `target-indeterminate`. launch는 다시 읽은 record로, 관측은 연 pane의 새 live owner + 새 binding + record 일치.
   - B1 arm binding: V3에 key 하나(`attachIncarnation`, 부재=null, 항상 emit). CC hook이 arm-capable 사건마다 mint → 같은 원자 upsert → marker 사본. 기존 record 쓰기는 모두 record-arm lock(`meta-record-arm-locks`, v2 lock dir 아님) 아래, gid는 read-only lookup, 없는 record는 create-only(`expectAction`). arm busy → 2s 대기 뒤 아무것도 안 씀(ERROR), UPS busy → skip.
   - floor `>=2.1.306`(GLG 결정, 선언, LIVE receipt 없음).
@@ -22,7 +22,9 @@ Branch lane for [#147](https://github.com/junghan0611/entwurf/issues/147): the c
 - **운영 사건(2026-10-21 oracle):** dev checkout으로 뜬 Pi가 새 key로 record를 썼다. 거절이 **관측된** 것은 CC hook(`upsert failed`), pdc(옛 compiled dist), coor의 옛 bridge뿐이다. Codex birth/helper, Copilot extension·assembled, OMP bridge·receive, 외부 `entwurf-peek` mirror는 옛 codec(grep)과 whole-store certify(source) 근거로 **거절이 예상**될 뿐 실행 관측은 없다 — Pi/CC 완료 뒤 별도 순서. GLG 18:55 직접 지시로 checkout dist build-bridge 1회 + `install-meta-bridge` 1회만 roll-forward했다. **수동 identity repair(record rewrite·삭제·fresh-cut·옛 shape rollback)는 0**이고, 정상 hook/Pi attach에 의한 record 갱신은 계속된다. **checkout source 변경 자체가 다음 Pi 시작에 운영 배포가 된다.** G4 전체 coherent cut은 끝나지 않았다.
 - 미측정: CC dormant→resume LIVE 여정, `CwdChanged` 뒤 record cwd에서 `claude --resume`이 세션을 찾는지(2.1.306), resume 뒤 안 읽은 mail이 턴을 깨우는지, 코디 host의 실제 toolset.
 - 영향 PARTIAL 마감(coor 2026-10-21 직접 11개 receipt 파싱): 167 KILLED, 모든 control green/seal stable. **한 후보의 167이 아니다:** 40@56d7a112, 25+20@711a78c1, 13+10+5@a4b5c5f3, 4@3fbce44c, 4+4+1+41@d7e5e081. 후보 간 수선은 test-only였고 이미 green인 group 입력은 불변이었다. 실패 진단도 보존했다. FULL/실제 native/최종 release SHA kill-power 증거가 아니다.
-- Next: L2를 정상 hooks로 로컬 체크포인트 커밋한 뒤 `.tmp-verify/147-l2/astra-g3-pidfd-feasibility-20261021T1957.md`에 근거해 **운영과 분리된 test-owned child의 pidfd leaf 구현·검증**을 이어간다(2026-10-21 GLG 진행 승인). Python stdlib 함수 존재만 측정됐으며 syscall·SIGTERM·CC graceful/flush/children은 미검증이다. process incarnation 종료와 동일 PID의 session switch 잔여 경합/종료 권한은 따로 결정한다. L2 체크포인트 커밋은 승인됐고, push는 릴리즈 mode 확인 전에는 하지 않는다.
+- L3 내부 부품 체크포인트: Pi TUI idle/no-pending SDK shutdown + same-path listener/generation 보호, CC Linux pidfd fixed helper/완전한 go frame/무신호 취소/동일 process exit 관측. 독립 리뷰와 focused 완료. coor가 직접 파싱한 **동일 후보 PARTIAL Pi9/9 + CC11/11**, control green/seal stable. 원본 `/tmp/entwurf-147-g3-partial-qw228M/receipt-{1,2}.json`, 검증 diff `3e7525d5d26acc3e559b3871c2a9eb5e926c1c5667d93d9491781b68ce1ddbc8`(후속 NEXT 갱신은 문서만). 공개 MCP/contact/tool 노출·실제 Native 종료는 아직 없다.
+- Next: 이 내부 부품을 정상 hooks 체크포인트 커밋한 뒤 **core의 late record/receiver/sender binding 재검사 + helper/RPC 연결**을 구현·격리 검증한다. 새 권한 DB/manager/자동 retry를 만들지 않는다. 실제 CC graceful/flush/children은 미검증이고, process-incarnation 종료·동시 session-switch 경합·하네스 권한면 수용은 GLG 답변 대기다.
+- G3 pack 경계 정정: checkout `check-pack`/`npm pack --dry-run`이 prepack으로 dist를 쓴 실행이 3회 있었다(구현자 로그/보고). `.tmp-verify/147-g3/coor-pack-boundary.md`. 운영/build0 주장은 이 범위에서 철회했다. 이후 코디는 private HOME/XDG + `--ignore-scripts` 파일목록만 확인했고, 검증 배치는 현재 운영 바이트를 동결했다. rollback/재설치는 하지 않았다.
 - 승인 범위: Pi/CC 우선 구현·격리 검증·체크포인트 커밋을 npm publish 전까지 계속한다. 대기: 실제 작업 형제를 종료하는 L0/caller LIVE, G4의 타하네스 전환, git push·태그·GitHub Release의 릴리즈 mode. npm publish는 명시적으로 하지 않는다.
 - Read:
   - #147 본문 상단과 thread

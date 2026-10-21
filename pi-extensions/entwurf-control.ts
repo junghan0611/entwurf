@@ -59,6 +59,7 @@
  *   - { type: "get_info" }
  *   - { type: "clear", summarize?: boolean }
  *   - { type: "abort" }
+ *   - { type: "retire", gardenId: "...", nativeSessionId: "..." } (internal, idle TUI only)
  *   Responses are JSON objects with { type: "response", command, success, data?, error? }
  *   (No event channel — the turn_end subscribe surface was removed with the
  *    Send-is-throw cleanup; see note above.)
@@ -79,6 +80,15 @@ import {
 	noteCompactionBefore,
 	noteCompactionTerminal,
 } from "./lib/compaction-send-guard.js";
+import {
+	acceptControlConnection,
+	type ControlBinding,
+	closeControlConnections,
+	endRetireResponse,
+	invalidateControlBinding,
+	requestControlRetire,
+	startOrRebindControlServer,
+} from "./lib/control-retire.js";
 import { sendReceiptBoundary } from "./lib/control-send-receipt.js";
 import { CONTROL_SOCKET_SUFFIX, defaultControlSocketDir } from "./lib/control-socket-path.js";
 import {
@@ -121,6 +131,10 @@ interface SocketState {
 	server: net.Server | null;
 	socketPath: string | null;
 	context: ExtensionContext | null;
+	binding: ControlBinding | null;
+	closing: boolean;
+	retireRequested: boolean;
+	connections: Set<net.Socket>;
 	compaction: CompactionGuard;
 }
 
@@ -485,12 +499,33 @@ async function handleCommand(
 	state: SocketState,
 	command: RpcCommand,
 	socket: net.Socket,
+	serverBinding: ControlBinding | null,
 ): Promise<void> {
 	const id = "id" in command && typeof command.id === "string" ? command.id : undefined;
 	const respond = (success: boolean, commandName: string, data?: unknown, error?: string) => {
 		writeResponse(socket, { type: "response", command: commandName, success, data, error, id });
 	};
 
+	// Internal lifecycle only: attribution is not authorization. The future public core
+	// must enforce its retirement policy before sending this command. No async gap
+	// exists between the receiver's final same-session checks and the SDK void call.
+	if (command.type === "retire") {
+		const result = requestControlRetire(state, serverBinding, residentGardenId, command);
+		endRetireResponse(socket, {
+			type: "response",
+			command: "retire",
+			id,
+			success: result.boundary === "shutdown-requested",
+			data: result,
+			...(result.boundary !== "shutdown-requested" ? { error: result.reason } : {}),
+		});
+		return;
+	}
+
+	if (state.closing || state.retireRequested) {
+		respond(false, command.type, undefined, "target-closing");
+		return;
+	}
 	const ctx = state.context;
 	if (!ctx) {
 		respond(false, command.type, undefined, "Session not ready");
@@ -690,6 +725,7 @@ async function handleCommand(
 
 async function createServer(pi: ExtensionAPI, state: SocketState, socketPath: string): Promise<net.Server> {
 	const server = net.createServer((socket) => {
+		const serverBinding = acceptControlConnection(state, socket);
 		// FIRST — before setEncoding, before the data handler, and before any response can be
 		// written back. The policy itself (and why this process died without it) lives with the
 		// rest of the wire protocol in lib/entwurf-control-rpc.ts.
@@ -729,7 +765,7 @@ async function createServer(pi: ExtensionAPI, state: SocketState, socketPath: st
 				// here would serialize subsequent commands on the same socket and
 				// tangle teardown ordering during socket close.
 				const commandName = parsed.command?.type ?? "unknown";
-				void handleCommand(pi, state, parsed.command!, socket).catch((error) => {
+				void handleCommand(pi, state, parsed.command!, socket, serverBinding).catch((error) => {
 					const message = error instanceof Error ? error.message : String(error);
 					writeResponse(socket, {
 						type: "response",
@@ -762,24 +798,21 @@ async function startControlServer(
 	state: SocketState,
 	ctx: ExtensionContext,
 	socketPath: string,
+	gardenId: string,
 ): Promise<void> {
-	await ensureControlDir();
-	await gcStaleSockets();
-
-	if (state.socketPath === socketPath && state.server) {
-		state.context = ctx;
-		return;
-	}
-
-	await stopControlServer(state);
-	await removeSocket(socketPath);
-
-	state.context = ctx;
-	state.socketPath = socketPath;
-	state.server = await createServer(pi, state, socketPath);
+	await startOrRebindControlServer(state, ctx, socketPath, gardenId, {
+		prepare: async () => {
+			await ensureControlDir();
+			await gcStaleSockets();
+		},
+		stop: () => stopControlServer(state),
+		remove: removeSocket,
+		create: (address) => createServer(pi, state, address),
+	});
 }
 
 async function stopControlServer(state: SocketState): Promise<void> {
+	invalidateControlBinding(state);
 	if (!state.server) {
 		await removeSocket(state.socketPath);
 		state.socketPath = null;
@@ -788,7 +821,7 @@ async function stopControlServer(state: SocketState): Promise<void> {
 
 	const socketPath = state.socketPath;
 	state.socketPath = null;
-	await new Promise<void>((resolve) => state.server?.close(() => resolve()));
+	await closeControlConnections(state.server, state.connections);
 	state.server = null;
 	await removeSocket(socketPath);
 }
@@ -958,6 +991,11 @@ export default function (pi: ExtensionAPI) {
 		server: null,
 		socketPath: null,
 		context: null,
+		binding: null,
+		// Before session_start, commands refuse target-closing rather than Session not ready.
+		closing: true,
+		retireRequested: false,
+		connections: new Set(),
 		compaction: createCompactionGuard(),
 	};
 
@@ -1022,7 +1060,7 @@ export default function (pi: ExtensionAPI) {
 		// naming the fresh-cut command, control server refused. There is no mixed
 		// store to warn about; the store is either clean or this session has no
 		// address.
-		await startControlServer(pi, state, ctx, birth.socketPath);
+		await startControlServer(pi, state, ctx, birth.socketPath, birth.gardenId);
 		// Identity before UI (#125): the carrier env and the MCP registration that carries the
 		// born gardenId are both made before any status rendering, so a visual failure can never
 		// leave a born citizen without its identity carrier or its verbs.
@@ -1082,10 +1120,12 @@ export default function (pi: ExtensionAPI) {
 	// simply rebinds to the new address. There is no id to police at the pre-event.
 
 	pi.on("session_shutdown", async () => {
-		noteCompactionTerminal(state.compaction);
-		updateStatus(state.context, false, null);
-		updateSessionEnv(state.context, false, null);
+		const previousContext = state.context;
+		invalidateControlBinding(state);
 		residentGardenId = null;
+		noteCompactionTerminal(state.compaction);
+		updateStatus(previousContext, false, null);
+		updateSessionEnv(previousContext, false, null);
 		await stopControlServer(state);
 	});
 

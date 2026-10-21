@@ -1343,6 +1343,20 @@ check_control_send_receipt() {
   run_vitest pi-extensions/lib/control-send-receipt.test.ts
 }
 
+check_control_retire() {
+  # Mutant execution coordinate only; the existing beside glob owns test discovery.
+  section "Pi idle-only shutdown boundary (mutant execution coordinate)"
+  run_vitest pi-extensions/lib/control-retire.test.ts
+}
+
+check_cc_retire_pidfd() {
+  # MUTANT EXECUTION COORDINATE, not a discovery path — check-tests-beside-behavior finds the test
+  # like every other beside lane. This case exists because the #147 G3 CCRETIRE-* mutants name it as
+  # gate argv; it stays in check:contracts for the same reason as check-control-send-receipt.
+  section "Linux pidfd retire helper (mutant execution coordinate)"
+  run_vitest pi-extensions/lib/cc-retire-pidfd.test.ts
+}
+
 check_win32_preview() {
   # MUTANT EXECUTION COORDINATE, not a discovery path — the Windows preview's (#78) loader and
   # platform wiring tests are found by check-tests-beside-behavior like every other beside-behaviour
@@ -7511,6 +7525,12 @@ case "$cmd" in
     ;;
   check-control-send-receipt)
     check_control_send_receipt
+    ;;
+  check-control-retire)
+    check_control_retire
+    ;;
+  check-cc-retire-pidfd)
+    check_cc_retire_pidfd
     ;;
   check-win32-preview)
     check_win32_preview

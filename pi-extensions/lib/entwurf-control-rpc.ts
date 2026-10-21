@@ -101,7 +101,23 @@ export interface RpcGetInfoCommand {
 	id?: string;
 }
 
-export type RpcCommand = RpcSendCommand | RpcGetMessageCommand | RpcClearCommand | RpcAbortCommand | RpcGetInfoCommand;
+/** Internal lifecycle request. The core must authorize it; this local socket is not
+ * a cryptographic authorization boundary. Exact target identity is mandatory.
+ */
+export interface RpcRetireCommand {
+	type: "retire";
+	gardenId: string;
+	nativeSessionId: string;
+	id?: string;
+}
+
+export type RpcCommand =
+	| RpcSendCommand
+	| RpcGetMessageCommand
+	| RpcClearCommand
+	| RpcAbortCommand
+	| RpcGetInfoCommand
+	| RpcRetireCommand;
 
 // ============================================================================
 // Accepted-connection disconnect policy (server half of the same wire)
