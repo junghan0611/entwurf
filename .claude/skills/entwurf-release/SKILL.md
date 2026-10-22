@@ -272,6 +272,41 @@ pnpm install --lockfile-only
 Inspect the resulting diff. Do not manufacture a lockfile change when the
 resolver produced none.
 
+The version bump is expected to break the dependency verification that later
+`pnpm run`/`exec` commands and commit hooks run (`pnpm_config_verify_deps_before_run=error`,
+including the hook's `pnpm lint`/`pnpm typecheck`): pnpm compares each workspace
+project's recorded name and version with its manifest, so a new root version
+alone reports `The workspace structure has changed since last install`.
+Re-sync the install state once, right here, before those commands.
+
+First read the manifest diff:
+
+```bash
+git diff -U0 HEAD -- package.json pnpm-lock.yaml pnpm-workspace.yaml
+```
+
+Check it by eye: `package.json` may differ only in `"version"` (and an intended
+`"description"`), and the lockfile and workspace declaration not at all. Any other
+change stops the release at this axis; do not run the next block.
+
+Then sync, failing closed:
+
+```bash
+(
+  set -euo pipefail
+  git diff --quiet HEAD -- pnpm-lock.yaml pnpm-workspace.yaml
+  pnpm_config_verify_deps_before_run=error \
+    pnpm install --frozen-lockfile --offline --ignore-scripts 2>&1 | tee "<evidence dir>/install-sync.log"
+)
+```
+
+This exception covers only the intended release version/description change. If
+the frozen offline install fails, stop at that axis: no network install, repair,
+retry, hand edit of pnpm state or disabling the verification. `--ignore-scripts`
+keeps every lifecycle script out of this sync, `prepare` (`build-bridge`) and
+`postinstall` alike; the builds the FULL floor and the LIVE gate perform themselves
+still follow the dist-preservation and `with-dist-lock` rules.
+
 ## P4. Run the deterministic floor
 
 ```bash
