@@ -50,6 +50,9 @@ demo/compaction-policy-smoke/fixtures/
 # Local agent incident reports / handoff notes (not for GitHub)
 .agent-reports/
 
+# Local sibling bookmarks; the illustrative team.json.example stays tracked.
+/team.json
+
 # Husky plumbing left by older `prepare` runs or a manual `husky` call. No lifecycle
 # script configures hooks any more; only the hook scripts under .husky/ are committed.
 .husky/_/

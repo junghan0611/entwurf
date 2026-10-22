@@ -1,0 +1,39 @@
+{
+	"version": 1,
+	"project": "example-project",
+	"cwd": "/absolute/path/to/project",
+	"notes": [
+		"Illustrative caller-maintained sibling bookmarks, not a runtime standard. All identities below are fictional.",
+		"Copy this file to team.json at the repository root and ignore /team.json in that repository's .gitignore.",
+		"Everyone is a sibling, including the coordinator. Tasks are agreed with the human for each piece of work, not fixed identities.",
+		"The role field is only a descriptive form of address: coordinating sibling or sibling. It assigns no task, standing duty or permission.",
+		"A garden ID marks a sibling's birth and remains its delivery address across supported same-ID returns. The native session ID identifies that harness's conversation.",
+		"The top-level cwd is shared by the members shown in this single-project example; consult each citizen's record for its actual cwd.",
+		"Read both IDs, backend and cwd from Entwurf's current record facts. This bookmark does not replace the record or certify current liveness. If they disagree, the record wins; reconcile the bookmark, never rewrite the record to match it.",
+		"Keep entries after retirement. Membership is not permission to send, resume or retire; use explicit operator requests and the owning lifecycle tools.",
+		"No program loads this example as configuration. It owns no authentication, transcript, model, placement, role assignment or lifecycle automation."
+	],
+	"members": [
+		{
+			"name": "Coordinator",
+			"role": "coordinating sibling",
+			"backend": "pi-durable",
+			"garden_id": "20260101T090000-a1b2c3",
+			"native_session_id": "1767225600000-00000000-0000-4000-8000-000000000001"
+		},
+		{
+			"name": "Sibling A",
+			"role": "sibling",
+			"backend": "pi",
+			"garden_id": "20260101T090100-b2c3d4",
+			"native_session_id": "019b76da-b260-7000-8000-000000000002"
+		},
+		{
+			"name": "Sibling B",
+			"role": "sibling",
+			"backend": "claude-code",
+			"garden_id": "20260101T090200-c3d4e5",
+			"native_session_id": "00000000-0000-4000-8000-000000000003"
+		}
+	]
+}
