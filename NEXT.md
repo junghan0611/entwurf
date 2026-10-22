@@ -1,32 +1,28 @@
-# NEXT — 0.41.0 prepare → #148 pi 1.4.0
+# NEXT — Herdr 0.41.0 snapshot (버전 쌍 맞추기) → #148 pi 1.4.0
 
-[#147](https://github.com/junghan0611/entwurf/issues/147)의 thread가 최종 SHA/CI/main 착륙 상태의 원장이다. #147은 `5db7423`으로 main에 착륙했다([landing](https://github.com/junghan0611/entwurf/issues/147#issuecomment-6330093797)). 소스·bounded Native 관측·운영 reader 반영을 출하와 혼동하지 않는다. 0.41.0 tag/release/npm publication은 아직 없다.
+core 0.41.0은 출하됐고 npm `latest`도 0.41.0이다. 이 snapshot은 Herdr plugin을 그 registry bytes에 다시 pin해서 core와 버전 쌍을 맞춘다. core `v0.41.0` tag와 그 bytes는 바꾸지 않는다. #147 원장은 [#147](https://github.com/junghan0611/entwurf/issues/147) thread다.
 
 # RAIL — 현재 좌표
 
-- [x] **1. core/Herdr 0.40.0 출하 기준.** core `v0.40.0=1f7020a`, accepted tarball sha256 `4a6906ac…fa55`; Herdr snapshot `v2026.10.20-herdr.0.40.0=036e268`, non-Latest. #107의 출하·registry byte 일치 기록을 보존한다.
-- [x] **2. #107 첫 원격 한 쌍 마감.** [종료 결정](https://github.com/junghan0611/entwurf/issues/107#issuecomment-6305817042). 기억 색인 증분은 별도 운영 유보다.
-- [x] **3. #147 요청 기반 출퇴근 구현·bounded 검증.** 공개 target-only retire/production binding/paired attribution, Pi·CC same-id return, source9/Pi7+hidden2/durable8. [Native n=1와 G4 범위](./BASELINE.md#147-native-round-trip-2026-10-22-n1), [공개 checkpoint](https://github.com/junghan0611/entwurf/issues/147#issuecomment-6329217980).
-- [x] **4. #147 main 착륙.** `5db7423`, main push CI39702141189 필수 4 job green.
-- [ ] **5. 0.41.0 출하.** ← CURRENT: prepare 완료(release-prep commit, CHANGELOG `0.41.0 - 2026-10-22`). local `check:full` PASS와 `release-gate --cut` MUST 24/0/0·BEHAVIOR 1/0은 c318f30+release-prep 후보의 증거다. 남은 것: GLG의 make 권한(`/entwurf-release make 0.41.0`) → ordinary push와 그 SHA의 필수 CI 4 job → carrier-bearing이라 native-Windows preview workflow의 보존 candidate → VERIFY 4(installed `doctor-meta-bridge` 새 Claude 세션)·7(agy)·8(Codex caller-seat) → tag·GitHub Release. publish와 Herdr 재pin은 각각 별도 권한이다. 출하 완료 전 agent-config 알림0.
-- [ ] **6. #148 pi 1.4.0 반영·안정화.** Opus2의 선행 검토가 별도 이슈에 있다. #147 diff에 SDK/catalog/DB 업그레이드를 섞지 않는다.
+- [x] **1. core 0.41.0.** `v0.41.0` = `5349392`. GitHub release는 Latest다. exact CI 39718569526(4 job), Windows preview 39719422006, 후보 sha256 `2bd03ba9…7ad`. core 0.41.0은 npm에 게시돼 있다(published 2026-10-22T04:37:02.853Z) — registry로 확인한 사실이고, 누가 실행했는지는 관측하지 않았다. registry tarball은 수용된 후보와 byte-equal이다.
+- [x] **2. registry 증거.** 본검증은 `h1-r1/`이다: carrier 정리(`PI_`·`ENTWURF_`·`CLAUDE`·`CODEX_HOME`·`TMUX`·`HERDR_`)를 보강한 뒤 branch worktree(HEAD `5349392` + 미커밋 5파일)에서 돌렸고, 쓰는 checkout 입력은 불변인 resolver 하나다. 초기 `h1/`(clean HEAD, `TMUX`·비identity `PI_*` 잔존)은 그 한계와 함께 보존하며 본 격리 수용으로 쓰지 않는다. 내용: sandbox `npm install -g`와 installed `check-bridge`(9 tool), `pi install` 뒤 `--list-models entwurf`. model 턴은 없다. C3 runtime swap은 registry-shipped `herdr-runtime.mjs`로 돌렸다. 0.40.0은 그 자신의 committed lock(`036e268`)에서 seed했고, 0.41.0 쪽은 이 branch의 새 npm lock을 썼다. 결과는 22/22다.
+- [ ] **3. snapshot branch `herdr-pin-0.41.0`** ← CURRENT: runtime-lock을 npm 0.41.0 + 측정한 sha512로, manifest를 0.40.0→0.41.0으로 바꾸고 CHANGELOG에 snapshot 절을 넣었다. plugin README의 check-bridge 동사 수(여덟→선언된 집합, 0.41.0부터 아홉)를 고쳤다. focused gate 12개는 초록이다. 조율자 경유 읽기 검토를 기다린다.
+- [ ] **4. frozen FULL → commit → ff main push → exact-SHA CI 4 job → public `main` ref raw install journey(C4) → CalVer tag `v2026.10.22-herdr.0.41.0` + GitHub release `--latest=false`.** GitHub Latest는 core `v0.41.0`으로 남는다. 그 뒤 홈페이지 설치 명령·버전 경계 hunk를 조율자와 맞춘다.
+- [ ] **5. #148 pi 1.4.0 반영·안정화.** Opus2의 선행 검토가 별도 이슈에 있다.
+
+현재 좌표: 1–2 완료 → 3 review 대기 → 4.
 
 # NOW
 
-- **Next:** GLG에게 make 권한을 묻는다. 그 뒤 [#148](https://github.com/junghan0611/entwurf/issues/148)로 복귀한다.
-- **prepare 관측(보존):** `smoke-entwurf-chain-live` world `/tmp/entwurf-chain-vx90gR`(92K, records/mailbox/hook 증거)가 PASS 뒤에도 남았다 — `finally`가 children만 끝내고 world를 지우지 않는다(`smoke-entwurf-chain-live.ts:474–483`). gate 소유 증거/잔여로 보존하며 의도는 미확정, cleanup 추가0. 같은 gate의 hop2 기본값 `openai-codex/gpt-5.6-luna`는 MODELS curated 목록과 어긋난다(Observation, 동결 후 gate 수정0).
-- **팀 책갈피:** 실제 명부는 루트 `team.json`(gitignored), 공개 예시는 `team.json.example`(가짜 ID). 모두 형제이고 `role`은 `coordinating sibling`/`sibling` 호칭일 뿐 임무·권한이 아니다. record가 이기며 생존은 `entwurf peer-facts`로 재관측한다. 런타임 reader나 실행 명령은 없다.
-- **#147 범위:** 실제 새 pi-durable caller가 Pi·native CC를 각1회 퇴근/같은-ID 복귀시켰고 독립 관측과 blind recall을 확인했다. source `a9c9459`의 n=1이지 후속 SHA의 전체 Native/release 수용이나 ACP/Herdr/Windows/flush/descendant 증거가 아니다. 기본 Pi/pi-durable1.3.0에는 내장 per-call 승인 프롬프트가 없으며, 명시적 operator target/action 요청과 agent policy가 필요하다. host 승인 단계는 제공/설정된 곳에서 추가로 적용된다.
-- **Copilot 명시 유보(2026-10-22 GLG):** 구독이 아닌 무료 `auto`, 인사 응답도 1분 이상이라는 GLG 관측상 실검증 불가. 이번 착륙의 Copilot Native 검증은 명시 보류한다. doctor의 10/14 historical runtime RED는 남기고 PASS로 바꾸지 않는다. 5개 on-disk reader의 현재 byte/소유권 반영과 이 runtime 유보를 분리한다. resident 재적재는 미측정, 일반 release floor 면제 아님.
-- **외부 mirror:** agent-config local parser `a5a075be`와 안내 수선 `e007e01`, source/test 및 bounded precheck 문서 독립 검수·163/0, installed owning certification1847accepted/0defect/새3target수용. push는 하지 않았다. 신규 필드 delta 수용이지 전체 Python/TS parser 동등성 주장은 아니다.
-- **문서·proof:** source8 독립 B0/D0, 문서13 두 관점2차 B0/D0. 마지막 coor 보정은 README의 종료 보장처럼 읽히는 표현을 guarded attempt로 바꾸고 load 표에 agy를 추가했다. source 집중99checks/네 type fence green. 최신 두 영향 PARTIAL17+44=61KILLED는 자기 후보 `80a4f8a7…`의 영수증이며 이전109와 누적해 새 SHA kill-power라 하지 않는다.
-- **운영 유보:** 기억 replica 최신화는 index authority가 돌아온 뒤 별도 합의로 진행한다. 노트북A OFF: SSH/메시지/프로브/동기화0. 이번에 memory/model DB를 갱신하지 않았다.
+- **review 대상:** `plugins/herdr/runtime-lock.json`, `plugins/herdr/herdr-plugin.toml`, `plugins/herdr/README.md`(한 문단), `CHANGELOG.md`(`## v2026.10.22-herdr.0.41.0` 절), 이 `NEXT.md`. 근거 경로는 `.tmp-verify/herdr-0.41.0/`이다(본검증 `h1-r1/`, 초기 원장 `h1/`, `c3/`, `focused/`).
+- **범위:** 버전 쌍과 runtime acquisition만 다룬다. Herdr를 통한 retire·resume, 원격 pair, model 인증은 측정하지 않는다.
+- **C4 (push와 CI 뒤):** `LIVE=1 ./run.sh smoke-herdr-raw-install-live --ref main`을 ambient identity carrier를 지운 상태로 돌리고 fp before == after를 확인한다. tag ref install, 실제 relocation, real-kill recovery, model 턴은 주장하지 않는다.
+- **prepare 관측(보존):** `smoke-entwurf-chain-live` world `/tmp/entwurf-chain-vx90gR`가 PASS 뒤에도 남았다 — `finally`가 children만 끝내고 world를 지우지 않는다(`smoke-entwurf-chain-live.ts:474–483`). 같은 gate의 hop2 기본값 `openai-codex/gpt-5.6-luna`는 MODELS curated 목록과 어긋난다. 둘 다 Observation이고 이 snapshot에서 고치지 않는다.
+- **팀 책갈피:** 실제 명부는 루트 `team.json`(gitignored), 공개 예시는 `team.json.example`(가짜 ID). record가 이기며 생존은 `entwurf peer-facts`로 재관측한다.
 
 # GUARDRAILS
 
-- npm publish/dist-tag 변경 금지. main 착륙·tag·GitHub Release는 각각 필요한 gate와 GLG 지시를 따른다. 이번 main 목표를 release 허가·pi1.4 구현 허가로 확대하지 않는다.
-- 0.41.0 prepare에 한해 로컬 FULL과 필수 LIVE `release-gate --cut`이 허가됐다. whole qualification BODY/별도 Herdr build·sandbox/노트북 전환은 여전히0이며 BODY는 필수 release 축이 아니다(#144).
+- npm publish·dist-tag 변경, core 재publish·새 core SemVer는 하지 않는다. operator Herdr install·runtime·pane·daemon·기존 시민, 노트북 pull/install/sync는 건드리지 않는다. pi 1.4/#148 SDK·catalog·DB 변경, whole qualification BODY는 0이다.
 - 모든 pnpm/commit/push hook에 `pnpm_config_verify_deps_before_run=error`. deps 오류면 install/repair/direct-binary 우회 없이 중단. 정상 scanner/hooks/exact staging, unsafe override/force push0.
-- 작업 형제의 자율 종료/자동 retry/hidden fallback0. 승인된 test-owned 왕복과 GLG가 지명한 10:13·10:34 퇴근은 끝났고 추가 cleanup 권한으로 남지 않는다. ACK/exit/flush/recall은 별개다.
-- record/native identity/createdAt/전사/모델 DB/색인/원본 증거·후보·사본 보존. attachIncarnation은 witness이지 identity/liveness/grant가 아니다. 알려진 reader drift는 rollforward, healthy identity freshcut/삭제/수동rewrite0.
-- `.agent-reports/.envrc` 보존(루트 `.envrc`는 GLG가 옮겨 없으며 재생성하지 않는다). 넓은 /tmp 청소/프로세스 sweeper/자동 whole-floor rerun0. host scratch 정리가 필요하면 해당 gate의 재생성 산출물만 소유권을 증명해 수동으로 처리한다.
+- 후보를 freeze한 뒤 worktree나 index가 움직이면 그 receipt는 무효다. core tag, 수용된 후보 원본과 사본, records/native transcript/DB/색인, 증거는 지우지 않는다.
+- `.agent-reports/.envrc` 보존(루트 `.envrc`는 재생성하지 않는다). 넓은 /tmp 청소/프로세스 sweeper/자동 whole-floor rerun0.

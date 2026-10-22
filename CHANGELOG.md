@@ -4,6 +4,88 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+## v2026.10.22-herdr.0.41.0 — Herdr Entwurf plugin 0.41.0
+
+A separate Herdr plugin snapshot, not another core release: core package 0.41.0 and its
+`v0.41.0` tag remain unchanged. Core 0.41.0 is now published to npm; the publication is
+verified from the registry, not from observing who ran it.
+
+**Reading guide (2026-10-22).** The `## 0.41.0` section below and the body of the
+[v0.41.0 GitHub release](https://github.com/junghan0611/entwurf/releases/tag/v0.41.0) are
+prepare-time and make-time text: their npm wording (the Herdr lock's "unpublished candidate",
+"npm publication each need their own approval") predates the publication. The publish is the later registry fact recorded in this section (`latest` 0.41.0,
+published 2026-10-22T04:37:02.853Z, registry bytes equal to the accepted candidate). Neither the
+published tarball's CHANGELOG nor the core release page is amended by this snapshot.
+
+### Herdr plugin
+
+- **Re-pin the published core 0.41.0 and close the checkout window.**
+  `plugins/herdr/runtime-lock.json` returns from the `herdr-checkout` carrier that core 0.41.0
+  rode to production npm source `@junghanacs/entwurf@0.41.0` with the registry's measured
+  sha512 (`sha512-hSf6St0u…fBlvA==`). The plugin manifest moves 0.40.0 → 0.41.0; admission
+  remains Herdr >= 0.9.0 and the one-build/one-pane/Linux shape is unchanged. From the
+  `v2026.10.20-herdr.0.40.0` snapshot to `v0.41.0`, the changes under `plugins/herdr/`,
+  `scripts/herdr-runtime.mjs` and `scripts/fixtures/herdr-supply.json` were that lock's return
+  to `herdr-checkout` and the plugin README's resume/retire wording; the runtime helper and the
+  Herdr supply pin did not change.
+- **What the acquired runtime now carries.** Core 0.41.0's lifecycle verbs ride in the runtime's
+  bytes: its installed bridge lists nine tools, `entwurf_retire_call` among them. Inside Herdr,
+  `entwurf_resume_call` still refuses as `herdr-resume-unsupported`. This snapshot measures no
+  retirement or resume through Herdr.
+- **Pi range unchanged.** The acquired runtime still accepts Pi `>=1.3.0 <1.4`; core 0.41.0
+  keeps the Pi 1.3.0 SDK set.
+- **Upgrade by acquisition source, not just version.** A settled npm-source 0.40.0 installation
+  can rebind under the plugin README's ownership conditions. A host that installed an
+  intervening `herdr-checkout` candidate must explicitly deactivate by its own absolute runtime
+  path before reinstalling the npm-source snapshot. No operator installation or active session
+  is rewired by this release work.
+- **README.** The first-user-path receipt description no longer says the installed
+  `check-bridge` lists an eight-verb set; it names the verb set the installed bridge declares,
+  nine since 0.41.0.
+
+### Source-specific verification
+
+- Registry metadata reports `latest` 0.41.0 and `repair` 0.12.8-repair.1, 642 files, published
+  2026-10-22T04:37:02.853Z. The downloaded registry tarball is byte-equal to the preserved
+  accepted core candidate (SHA256 `2bd03ba900324a7c0882c2738c29593df0a1e4829fb3ae18d22be62186cf67ad`,
+  11399545 bytes); its independently computed sha512 and sha1 equal `dist.integrity` and
+  `dist.shasum`, so core make's Docker consumer of those bytes (`node:24-bookworm`, repoDigest
+  `node@sha256:6dac556d…`) is reused here, not repeated. A sandboxed `pi install` of the
+  registry package resolved its bridge inside the sandbox, recorded the registry URL with that
+  integrity, and listed the curated Claude anchors with `--list-models entwurf`; a sandboxed
+  global npm install of the same package passed its installed `check-bridge` with nine tools.
+  No model turn. The accepted run stripped every `PI_`, `ENTWURF_`, `CLAUDE`, `CODEX_HOME`,
+  `TMUX` and `HERDR_` carrier and ran on the branch worktree, whose only checkout input (the
+  bridge resolver script) is unchanged; an earlier run from the clean tag HEAD left `TMUX` and
+  non-identity `PI_*` variables set and is kept only as a preliminary record.
+- **The npm runtime swap against the real registry**, by the registry-shipped
+  `scripts/herdr-runtime.mjs` (byte-equal to this checkout's) in sandboxed user roots, 22/22
+  checks. The 0.40.0 runtime was seeded from its own committed lock (`036e268`); the swap to
+  0.41.0 took one acquisition, the cached tarball's sha512 equals the lock and its sha256 equals
+  both the ready journal's observed digest and the accepted candidate. The `installing` journal
+  carried the 0.40.0 identity as `previousRuntime` and the `runtime-ready` journal carries
+  `null`; when acquisition began the 0.40.0 tree was still at the active address. A manually
+  seeded torn swap (the active tree moved to the backup address with a half candidate in
+  staging; not a killed process) was restored before acquisition and reported `recovered:
+  torn-swap-with-candidate`. An exact re-request acquired nothing and left journal and tree
+  byte-identical, and the owned removal reclaimed cache, runtime and journal. The helper is a
+  leaf that probes no Pi, so these cells certify neither a Pi upgrade nor Herdr's
+  install/update relocation, harness wiring, the installed CLI's deactivate path, a model turn,
+  or recovery from a real kill.
+- **Focused gates on the branch**, with HEAD, index and work surface unchanged across them:
+  `check-herdr-supply` (11 assertions), `check-herdr-plugin` (49),
+  `check-herdr-plugin-profile` (14), `check-herdr-runtime-bootstrap` (31),
+  `check-herdr-activation` (33), `check-herdr-placement` (25), `check-herdr-fresh-call` (45),
+  `check-herdr-plugin-build` (21, its real-binary cell on herdr 0.9.5), `check-herdr-sandbox`
+  (12, a private herdr 0.9.5 server), `check-dep-versions`, `check-install-surface` and
+  `check-gate-manifests` (1173 committed mutants across 85 lanes validated, none executed).
+- Pending, and not claimed here: the pushed SHA's four-job CI and the public-ref
+  install/use/deactivate journey of this npm pin, on Herdr 0.9.5 (the binary
+  `scripts/fixtures/herdr-supply.json` names) with Pi 1.3.0, from the public `main` ref rather
+  than the tag. Earlier npm or checkout-carrier receipts cannot certify these source-specific
+  axes. Those outcomes are recorded in the snapshot's post-push acceptance ledger, not in this
+  frozen text.
+
 ## 0.41.0 - 2026-10-22
 
 A sibling's garden id is its birthday, and this cut lets it rest and come back under it. A

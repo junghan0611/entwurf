@@ -541,10 +541,11 @@ Code are installed in the image build as scaffolding; the product face under tes
 `herdr integration install pi`.
 
 It does not stop at the install. It then runs what those bytes became — the compiled bridge entry,
-three executable bins, a real `entwurf check-bridge` listing its exact eight-verb set — starts a
-citizen twice with no model turn (once on the wiring as `pi --entwurf-control`, once through the
-shipped `entwurf pi` launcher), drives the status pane against the real `entwurf` and `herdr`
-binaries, and finally tears the whole activation down and reinstalls onto the host it left.
+three executable bins, a real `entwurf check-bridge` listing the exact verb set the installed
+bridge declares (nine since 0.41.0) — starts a citizen twice with no model turn (once on the
+wiring as `pi --entwurf-control`, once through the shipped `entwurf pi` launcher), drives the
+status pane against the real `entwurf` and `herdr` binaries, and finally tears the whole
+activation down and reinstalls onto the host it left.
 
 **Public-remote receipt (2026-09-23):** PASS at `--ref main`, resolved commit
 `113ca5327074b77eb5d81453b1a277afcdf4ddca`, plugin manifest 0.5.0, runtime
