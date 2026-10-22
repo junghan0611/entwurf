@@ -131,8 +131,9 @@ git checkout "$CANDIDATE_REF"   # set it first to the commit you mean to run; a 
 ./run.sh setup /path/to/consumer-project
 ```
 
-`CANDIDATE_REF` is the public ref that carries the commit you mean. This unpublished candidate has
-none yet, so a fresh clone cannot reach it; a checkout that already holds it skips the clone and the
+Set `CANDIDATE_REF` explicitly to a published branch or tag that carries the commit you mean;
+a bare clone selects the default branch, not a promised candidate. A validation branch is not a
+release acceptance. A checkout that already holds the intended commit skips the clone and the
 `git checkout`.
 
 This owns `~/.local/bin/entwurf` as a symlink to that checkout's `run.sh` and fails if the

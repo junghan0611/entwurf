@@ -4,6 +4,108 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+## 0.41.1 — 2026-10-22
+
+**Unpublished validation checkpoint, not completed release preparation.** Remote
+validation and an official CI whole-BODY run precede global-install validation. Main
+promotion is deferred: moving its Herdr checkout lock could change what existing
+main-tracking installations acquire. An explicit validation branch keeps that effect
+separate from this checkpoint's CI. The
+operator's Pi extension registration still points to 0.41.0, so selecting Pi 1.4 on
+PATH alone would mix old extension preflight with the new carrier. The aggregate
+LIVE gate has not run and is not waived. Global installation, operating-session
+migration, tags and publication remain separate decisions. If later prepared bytes
+change, this checkpoint's CI/BODY is not a substitute for that final SHA's evidence.
+
+### Pi 1.4.0 reference shell
+
+- Move the coherent nine-member production SDK set from exact 1.3.0 to exact 1.4.0,
+  keeping Entwurf's owned app/TUI composition and deterministic carrier emission.
+  The SDK owns execution, storage, queues, compaction and recovery; this adds no second
+  engine, supervisor, automatic retry policy or credential surface. The ordinary Pi
+  adapter's supported range becomes `>=1.4.0 <1.5`.
+- Show sleeping tasks in the background-task tally, their local wake time in the task
+  panel, and the SDK's blocked reason verbatim. Keep cancellation distinct from retry;
+  no new retry command or UI is added.
+- Adapt the ACP vendor-rejection test to pi-ai 1.4's bounded HTTP-status matching:
+  digits inside opaque request/tool ids no longer classify as transient. The raw
+  `Internal error` control remains transient. The production non-replay verdict and
+  raw diagnostic preservation are unchanged.
+- Add SDK 1.3 public-API-generated SQL fixtures and independent SQLite conformance
+  tests for the SDK 1.4 schema transition, row/index preservation, constraints,
+  reopening and future-version refusal. These are SDK conformance, not a local
+  mutation claim over the upstream engine. Keep fixture data and its generator out
+  of installed packages, with npm packlist and tarball-floor checks.
+- Separate this unpublished candidate's checkout instructions from public npm
+  0.41.0 / SDK 1.3 instructions. The Herdr lock uses the closed `herdr-checkout`
+  verification carrier; it invents no unpublished npm integrity. No new Herdr
+  snapshot or registry publication is implied.
+
+### Upgrade boundary
+
+Opening each existing durable session with SDK 1.4 migrates its SQLite storage to
+schema 2. SDK 1.3 / Entwurf 0.41.0 refuses that session. Reinstalling the older package
+is not data rollback: restoring a pre-upgrade backup reopens the old data, but omits
+work done after that backup. Even a refused SDK 1.4 open can change the file header
+and sidecars while preserving logical rows (measured on a future-schema copy). Back up the complete target session
+file set before its first new-SDK open.
+
+Close the old owner normally and prove the process has exited before cutover. A
+stale lock is not proof: a bounded, SQLite-free fixture reproduced a stalled but live
+owner losing its lock. This lock behavior already existed in 0.41.0. Use the resume
+picker to select the intended session rather than guessing with `--continue`.
+
+SDK 1.4 counts a task SDK 1.3 left running as an interrupted run at its first open;
+SDK 1.4's own normal close does not add a restart. Repeated interruptions can park a
+task at the restart limit. Inspect outcomes before any resend; cancellation is not
+retry, and recovery of an actual parked model generation remains unmeasured.
+
+### Preparation evidence — not release acceptance
+
+Implementation checkpoint `3ed079b` follows independent source/proof reviews. Its
+earlier working candidate passed the deterministic FULL floor in 885 seconds with
+source/index unchanged, carrier 45 tests, storage conformance 11 tests, and ACP
+vendor rejection 14 tests. The final pre-commit vocabulary sweep then changed one
+harness-table SDK literal into a reference to the pin authority, independently read
+and checked. These are implementation-era observations, not this prepared version's
+FULL, native LIVE, installed artifact, operating-session migration or exact-SHA CI.
+
+Private sandbox observations separately cover old-package refusal, backup restoration
+and loss of later marker work, SDK task replay/parking, candidate shell open/close,
+SDK 1.3-born fixture identity carried into the SDK 1.4 shell, and in-process open
+failure releasing the session lock. Parked non-generation Hold tasks did not block
+root input; conversation abort cancelled only the non-background Hold. None proves
+real model-generation continuity or an operating citizen's actual upgrade.
+
+Kill-power re-measured at this shipped SHA: none (all 1178 committed claims not
+re-proved, #144).
+
+That line records preparation state. For #148, GLG separately requested a whole BODY
+run at this validation checkpoint through official CI `workflow_dispatch qualify=true`.
+Its exact-SHA result must be recorded separately; if a later final candidate changes,
+that final SHA needs its own CI/BODY evidence. No run or verdict is invented here,
+and the request does not change the standing release policy.
+
+Earlier-candidate PARTIAL (operator-attested, not this SHA): head addcb8cd0bac surface
+6a9481bc357c -- `["bash","run.sh","check-dep-versions"]` 4/4 receipt 48d085e06816.
+
+Earlier-candidate PARTIAL (operator-attested, not this SHA): head addcb8cd0bac surface
+6a9481bc357c -- `["bash","run.sh","check-pack-pin-matcher"]` 2/2 receipt 593dd0401502.
+
+Earlier-candidate PARTIAL (operator-attested, not this SHA): head addcb8cd0bac surface
+6a9481bc357c -- `["bash","run.sh","check-pi-durable-carrier"]` 35/35 receipt 258f783406a7.
+
+The versioned 0.41.1 working candidate's FULL completed in 890 seconds, exit 0,
+with source/index unchanged (log SHA256 `757115f291c05f397631f6e8de48a2b77fdfde973d5219edf70e63658c3b8e88`).
+That floor predates this checkpoint's CHANGELOG/NEXT wording and is not this
+checkpoint's committed-SHA CI result. Release-gate MUST/BEHAVIOR, exact-SHA CI,
+carrier-bearing candidate acceptance, global-install verification and operating cutover
+are pending. The installed-extension preflight blocks aggregate LIVE until the real
+candidate installation is selected consistently; no harness wrapper, copied auth or
+operator settings bypass was used.
+No tag, GitHub release, npm publication or operating restart has occurred in this
+preparation. The dated core and Herdr 0.41.0 receipts below remain historical.
+
 ## v2026.10.22-herdr.0.41.0 — Herdr Entwurf plugin 0.41.0
 
 A separate Herdr plugin snapshot, not another core release: core package 0.41.0 and its

@@ -142,10 +142,10 @@ owns flags, refusals and the extension contract.
 herdr plugin install junghan0611/entwurf/plugins/herdr --ref "$CANDIDATE_REF" --yes
 ```
 
-`CANDIDATE_REF` names the public ref that carries the runtime you mean. This unpublished candidate
-has none yet, so the example cannot run for it; the
-[Herdr guide](./plugins/herdr/README.md#from-a-raw-linux-box-in-nine-steps) says which runtime each
-ref installs.
+Set `CANDIDATE_REF` explicitly to a published branch or tag that carries the runtime you mean;
+these examples do not select a candidate from Herdr's default ref. A validation branch is not a
+release acceptance. The [Herdr guide](./plugins/herdr/README.md#from-a-raw-linux-box-in-nine-steps)
+says which runtime each ref installs.
 
 This separate path activates Herdr-integrated **pi and Claude Code** with an
 independently locked runtime and an observation pane; it puts no Entwurf bins on PATH.

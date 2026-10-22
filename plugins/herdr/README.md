@@ -112,8 +112,8 @@ herdr plugin install junghan0611/entwurf/plugins/herdr --ref "$CANDIDATE_REF" --
 pi --entwurf-control          # this pi is now a garden citizen
 ```
 
-`CANDIDATE_REF` is the public named ref that carries the runtime you mean; this unpublished candidate
-has none yet, so the example cannot run for it ([which runtime each ref installs](#from-a-raw-linux-box-in-nine-steps)).
+Set `CANDIDATE_REF` explicitly to a published branch or tag that carries the runtime you mean;
+a validation branch is not a release acceptance ([which runtime each ref installs](#from-a-raw-linux-box-in-nine-steps)).
 
 `--yes` is required whenever stdin is not a terminal; Herdr exits 2 without it, and that exit is
 about the prompt, never about a missing Herdr server. (An install with no server running is fine —
@@ -133,11 +133,12 @@ SDK candidate, so step 1 installs Pi 1.4. They do not install npm `@junghanacs/e
 published runtime, on the Pi 1.3.0 SDK set and Pi 1.3.x, is what the snapshot
 `v2026.10.22-herdr.0.41.0` pins; its own README at that tag carries its Pi step.
 
-Steps 5 and 9 are therefore an example for the day this candidate exists at a public named ref,
-held in a shell variable you set first, `CANDIDATE_REF=<that ref>`: `--ref "$CANDIDATE_REF"` selects
-it. The current candidate has no such ref, so these steps cannot run for it yet. Without `--ref` the
-install takes whatever ref Herdr resolves by default, which this text does not promise is the
-candidate. A candidate that lives only in a local checkout uses the
+Steps 5 and 9 require a public named ref that actually carries this candidate, held in a shell
+variable you set first, `CANDIDATE_REF=<that ref>`: `--ref "$CANDIDATE_REF"` selects it. A validation
+branch is not a release acceptance. Without `--ref` the install takes whatever ref Herdr resolves
+by default, which this text does not promise is the candidate. Moving a ref that existing users
+track can also change their acquired runtime; do not treat ref promotion as an isolated CI action.
+A candidate that lives only in a local checkout uses the
 [developer checkout](#developer-checkout-return-after-an-installed-package-check) route instead, not
 these steps.
 
