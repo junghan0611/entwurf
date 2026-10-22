@@ -237,7 +237,7 @@ present as tools. The pane tells you which ids exist; these do the work:
   owns its own grammar and this plugin validates neither.
 - `entwurf_resume_call {target}` — reopen a dormant **pi** or **Claude Code** citizen under its own id,
   in tmux only: from a session inside Herdr it refuses by name as `herdr-resume-unsupported`.
-- `entwurf_retire_call {target}` (#147 candidate) — attempt retirement of one pi or Claude Code
+- `entwurf_retire_call {target}` (new in 0.41.0) — attempt retirement of one pi or Claude Code
   sibling, and only one the human operator explicitly asked to retire; a wired session seeing the
   tool is not permission, and an unknown result is not a reason to retry.
 

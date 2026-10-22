@@ -45,7 +45,7 @@ tmux server
 existing dispatch:   garden identity가 입력이다     — 출하됨 (entwurf_v2)
 fresh explicit call: garden identity가 callback이다 — 출하됨 (`entwurf_fresh_call`)
 same-id pi resume: existing garden identity가 입력이다 — 출하됨 (`entwurf_resume_call`)
-same-id Claude Code resume: 같은 입력, #147 L2 현재 소스에 연결됨 — 2026-10-22 test-owned n=1 Native 왕복 측정(BASELINE), release·LIVE MUST 수용은 별도
+same-id Claude Code resume: 같은 입력, 0.41.0에 연결됨 — 2026-10-22 test-owned n=1 Native 왕복 측정(BASELINE), release·LIVE MUST 수용은 별도
 ```
 
 2026-08-04의 다중 agent 협업은 mux 없이 existing-citizen dispatch만 증명했다. 그 뒤 0.14.0이 visible
@@ -788,8 +788,8 @@ composition이고, 각각 source-adjacent gate가 argv 경계를 진다. 출하 
 | mailbox `lastReadAt` | 후속 evidence, **send receipt 아님** | self-fetch receiver가 나중에 읽은 사실 |
 | window opened (`@window/%pane`) | **`entwurf_fresh_call`의 launch receipt로 출하됨** (§6-a) | tmux가 창을 만들었다는 사실까지. 실행 여부·delivery는 주장하지 않는다 |
 | process spawned (`pane_pid`) | 같은 launch receipt에 포함 | 동기 로컬 사실이며, 그 process가 살아 있다는 주장은 아니다 (§5) |
-| resume launch (`@window/%pane` + target gid + 재개하는 transcript 또는 Claude Code session id) | **Pi는 출하된 첫 receipt; CC는 #147 현재 source contract. 2026-10-22 test-owned n=1 Native 왕복은 [BASELINE](../BASELINE.md#147-native-round-trip-2026-10-22-n1)에 있고, release·LIVE MUST 수용은 별도** | tmux가 창을 만들고 그 backend의 고정 runtime(pi / `claude --resume`) 시작을 요청했다는 사실까지. 시민이 돌아왔다는 주장은 아니다 |
-| resume observation (pi: same-gid socket-alive, Claude Code: 이 호출이 연 pane의 새 live owner가 같은 session의 receiver marker를 record와 같은 새 binding으로 다시 세움, 또는 `resume-unobserved`/`record-unreadable`) | **Pi는 출하된 두 번째 receipt; CC는 #147 현재 source contract. 2026-10-22 test-owned n=1 Native 왕복은 [BASELINE](../BASELINE.md#147-native-round-trip-2026-10-22-n1)에 있고, release·LIVE MUST 수용은 별도** | 시민이 다시 주소를 갖는다고 말하는 **유일한** 사실. launch와 절대 합치지 않는다. 미관측은 실패가 아니라 결과이며 창은 열린 채 lock은 해제된다 |
+| resume launch (`@window/%pane` + target gid + 재개하는 transcript 또는 Claude Code session id) | **Pi는 출하된 첫 receipt; CC는 0.41.0 계약. 2026-10-22 test-owned n=1 Native 왕복은 [BASELINE](../BASELINE.md#147-native-round-trip-2026-10-22-n1)에 있고, release·LIVE MUST 수용은 별도** | tmux가 창을 만들고 그 backend의 고정 runtime(pi / `claude --resume`) 시작을 요청했다는 사실까지. 시민이 돌아왔다는 주장은 아니다 |
+| resume observation (pi: same-gid socket-alive, Claude Code: 이 호출이 연 pane의 새 live owner가 같은 session의 receiver marker를 record와 같은 새 binding으로 다시 세움, 또는 `resume-unobserved`/`record-unreadable`) | **Pi는 출하된 두 번째 receipt; CC는 0.41.0 계약. 2026-10-22 test-owned n=1 Native 왕복은 [BASELINE](../BASELINE.md#147-native-round-trip-2026-10-22-n1)에 있고, release·LIVE MUST 수용은 별도** | 시민이 다시 주소를 갖는다고 말하는 **유일한** 사실. launch와 절대 합치지 않는다. 미관측은 실패가 아니라 결과이며 창은 열린 채 lock은 해제된다 |
 | launch가 동기 반환한 native session/garden identity | **없음** (§6 조건 1 불성립) | pi 0.83.0도 0.84.0도 제공하지 않는다(재실측). fresh-call도 동기로는 주지 않는다 |
 | callback 메시지의 sender envelope이 실은 gardenId | **fresh-call의 correlation receipt** (§6-a) — 비동기, caller의 기존 수신면에 도착 | delivery 계층이 붙인 사실이며 sibling의 자기 진술이 아니다 (§6-b) |
 | 사전 주입한 native token으로 조회한 gardenId | **CLOSED** — callback correlation이 대체한 폐기 후보 (§6) | 새 증거 + GLG 재승인 없이는 재개하지 않는다 |

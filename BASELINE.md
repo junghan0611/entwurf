@@ -306,7 +306,7 @@ Per-question PASS / FAIL / NOTE for grading the model's response.
 ### Q-MCP — MCP enumerate
 - **PASS** — Exactly one: `entwurf-bridge`.
 - **FAIL** — Any second server appears, or `entwurf-bridge` missing.
-- **NOTE** — Codex naturally writes the name with underscores (`entwurf_bridge`); that is the agent-visible backend marker, not a mutation. The current source bridge lists nine tools (#147 candidate), including the manual `entwurf_register_native` fallback; MCP enumeration asks for the server name, not a stale tool count.
+- **NOTE** — Codex naturally writes the name with underscores (`entwurf_bridge`); that is the agent-visible backend marker, not a mutation. The current bridge lists nine tools (since 0.41.0), including the manual `entwurf_register_native` fallback; MCP enumeration asks for the server name, not a stale tool count.
 
 ---
 

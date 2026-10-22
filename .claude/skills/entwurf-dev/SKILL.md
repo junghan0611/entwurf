@@ -317,7 +317,7 @@ dormant **pi** 또는 **Claude Code** citizen을 자기 garden id 그대로 보�
 가능: Pi window close → peers에서 dormant 확인 → honest reject 관측
 가능: dormant pi를 같은 garden id로 visible resume → OBSERVATION receipt → 다시 delivery → recall
 가능: dormant Claude Code를 같은 garden id로 visible resume (마지막 검증 owner가 dead이고 record binding과 일치할 때만) — LIVE gate 미편입, 2026-10-22 test-owned n=1 측정만 있음
-가능(#147 candidate): GLG가 지명한 pi 또는 Claude Code 형제 하나를 entwurf_retire_call로 한 번 퇴근 — action·기록·lock 해제 결과는 따로, unknown은 재시도 사유가 아님
+가능(0.41.0): GLG가 지명한 pi 또는 Claude Code 형제 하나를 entwurf_retire_call로 한 번 퇴근 — action·기록·lock 해제 결과는 따로, unknown은 재시도 사유가 아님
 불가: pi·Claude Code 밖 backend의 same-id resume (target-backend-unsupported) — 새 형제를 열 수는 있다
 불가: 자동 재개. resume은 GLG가 부를 때 한 번 도는 verb이며 watcher/retry/supervisor가 없다
 불가: resume에 model/task/prompt 얹기 — record와 transcript가 그 값을 소유한다

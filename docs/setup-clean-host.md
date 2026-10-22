@@ -104,7 +104,7 @@ project-local install, or `./run.sh <command>` from a source checkout. Keep that
 same scope when upgrading and checking; native process restarts are separate (§7).
 
 `check-bridge` is auth-free. It proves the installed prebuilt MCP server boots and
-lists the nine garden tools in the #147 candidate; it does not prove a backend model turn, native hook or retirement permission.
+lists the nine garden tools (0.41.0); it does not prove a backend model turn, native hook or retirement permission.
 
 Neither npm form installs a harness runtime. `pi`, Claude Code, Copilot CLI, Codex CLI, agy,
 Cortex, and their authentication remain operator-owned optional prerequisites for the
@@ -240,7 +240,7 @@ A plain `pi` can load the package without becoming a citizen.
 In that session ask for `entwurf_self`, then `entwurf_peers`. Pick an existing
 live garden id and ask for `entwurf_v2` with `intent: "fire-and-forget"` and your
 message. These are harness tools, not shell subcommands; pi exposes them through
-Pi's built-in MCP as `mcp__entwurf_bridge__<verb>`. The #147 candidate bridge has nine tools;
+Pi's built-in MCP as `mcp__entwurf_bridge__<verb>`. The 0.41.0 bridge has nine tools;
 pi hides `entwurf_inbox_read` and `entwurf_register_native`, leaving seven active.
 The added `entwurf_retire_call` is only for one target/action explicitly requested by the
 human operator, never autonomous cleanup. Where a host provides or is configured with an approval

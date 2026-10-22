@@ -27,7 +27,7 @@ Git branches, worktrees, file isolation and internal delegation remain their con
 |---|---|---|---|
 | **Open** a new sibling | `entwurf_fresh_call` | Herdr: a new unfocused tab in the caller's workspace. tmux: a new window in the caller's session, or an existing session named by `placement.tmuxSession`; without an explicit tmux placement, a Codex caller opens beside its own TUI pane | Herdr: pi, Claude Code. tmux: pi, pi-durable, Claude Code, Copilot, OMP, Codex |
 | **Reopen** a dormant sibling | `entwurf_resume_call` | A visible tmux window under the same garden id, with its record selecting the native session (Pi: identity-checked recorded transcript supplies launch metadata; Claude Code: `claude --resume <session id>` at the record cwd); the verb submits no prompt | pi, Claude Code |
-| **Retire** one sibling the human operator explicitly requested (#147 candidate) | `entwurf_retire_call` | One guarded attempt on that target: a Pi shutdown request or Claude Code fd-pinned process termination. Refused/unknown outcomes remain possible; the record stays for guarded same-id return. Not a grant, a roster cleanup or an automatic retry | pi, Claude Code |
+| **Retire** one sibling the human operator explicitly requested (new in 0.41.0) | `entwurf_retire_call` | One guarded attempt on that target: a Pi shutdown request or Claude Code fd-pinned process termination. Refused/unknown outcomes remain possible; the record stays for guarded same-id return. Not a grant, a roster cleanup or an automatic retry | pi, Claude Code |
 | **Message** an existing sibling | `entwurf_v2` | Its own rail: control socket, self-fetch mailbox or native push; delivery starts no process | pi, pi-durable, Claude Code, Copilot, OMP, Antigravity, Codex |
 
 Antigravity is message-only: an existing conversation registers itself, and Entwurf never
@@ -169,7 +169,7 @@ In that **harness session**, ask the agent to:
 ```
 
 These are tools, not shell subcommands. Pi calls
-`mcp__entwurf_bridge__<verb>` through Pi's built-in MCP. The #147 candidate source exposes **nine**
+`mcp__entwurf_bridge__<verb>` through Pi's built-in MCP. The 0.41.0 bridge exposes **nine**
 verbs; a pi citizen has **seven active + two hidden** (`entwurf_inbox_read` and
 `entwurf_register_native`), since it has no mailbox and its own extension births it.
 Those counts describe the source; a running host offers what its already-loaded bridge
@@ -199,9 +199,9 @@ pi / pi-durable / Claude Code / Copilot / OMP / Antigravity / Codex
 | Message, reply or hand off to an existing garden id | `entwurf_v2 {target, intent:"fire-and-forget", message}` | Receiver acceptance boundary, mailbox enqueue or native injection; not completion |
 | Open a new visible sibling | `entwurf_fresh_call {backend, model, task, cwd?}` | Launch receipt only; the sibling's nonce callback envelope supplies its new garden id |
 | Reopen a dormant pi or Claude Code citizen under its own id | `entwurf_resume_call {target}` | Separate LAUNCH and OBSERVATION receipts (pi: same-id socket; Claude Code: a new live receiver marker in the opened pane, bound to the record); the verb submits no prompt |
-| Attempt retirement of one explicitly requested Pi or Claude Code target (#147 candidate) | `entwurf_retire_call {target}` | Separate action, append-only record and lock-release results. Pi ACK is request-only; CC exit is that fd-pinned process only |
+| Attempt retirement of one explicitly requested Pi or Claude Code target (new in 0.41.0) | `entwurf_retire_call {target}` | Separate action, append-only record and lock-release results. Pi ACK is request-only; CC exit is that fd-pinned process only |
 
-**Retirement is never autonomous.** Invoke it only for a target/action the human operator explicitly requested; development, coordinator status and caller identity are not standing permission. Where a host provides or is configured with an approval step, that step applies as well; Pi and pi-durable 1.3.0 have no built-in approval prompt by default. The configured Claude ACP child is likewise [set to run without per-call permission prompts](./docs/acp-backend-rail.md#configured-claude-acp-permissions); ACP retirement remains unmeasured. Tool annotations and the caller's identity are hints and attribution, not permission. No roster expansion, timer or automatic retry of an unknown/cancelled/lost result. The candidate records requested/outcome events under a target-gid sidecar; absence is unknown, not proof of no retirement. Source, compiled fixture, Native/LIVE, rollout and release acceptance remain separate: one dated test-owned [Native round trip per backend](./BASELINE.md#147-native-round-trip-2026-10-22-n1) is recorded, which is neither a release gate nor a rollout claim, and this candidate description is not a 0.40.0 shipment claim.
+**Retirement is never autonomous.** Invoke it only for a target/action the human operator explicitly requested; development, coordinator status and caller identity are not standing permission. Where a host provides or is configured with an approval step, that step applies as well; Pi and pi-durable 1.3.0 have no built-in approval prompt by default. The configured Claude ACP child is likewise [set to run without per-call permission prompts](./docs/acp-backend-rail.md#configured-claude-acp-permissions); ACP retirement remains unmeasured. Tool annotations and the caller's identity are hints and attribution, not permission. No roster expansion, timer or automatic retry of an unknown/cancelled/lost result. The retirement path records requested/outcome events under a target-gid sidecar; absence is unknown, not proof of no retirement. Source, compiled fixture, Native/LIVE, rollout and release acceptance remain separate: one dated test-owned [Native round trip per backend](./BASELINE.md#147-native-round-trip-2026-10-22-n1) is recorded, which is neither a release gate nor a rollout claim.
 
 **Delivery starts no process.** A live pi receives over its record-addressed control
 address (a Unix socket; on the experimental native-Windows Pi preview, a named pipe);
@@ -241,7 +241,7 @@ is a record–receiver witness, not a new identity or an occupancy/permission to
 Claude Code dormancy is read only from attaches the Entwurf hook committed: a process that
 holds the session without one (hooks disabled, a lock timeout or store failure at its start)
 is invisible to that check.
-The Claude Code resume extension is current #147 candidate source. One dated test-owned
+Claude Code same-id resume is new in 0.41.0. One dated test-owned
 [Native round trip](./BASELINE.md#147-native-round-trip-2026-10-22-n1) was measured; its
 release acceptance remains separate from the shipped Pi resume history.
 Exact boundaries: [tmux launch](https://github.com/junghan0611/entwurf/blob/main/docs/mux-launch-rail.md)

@@ -28,7 +28,7 @@ No. [`entwurf_v2`](./README.md#entwurf_v2--canonical-dispatch-verb) only address
 
 ## Can an agent retire a sibling on its own?
 
-No. `entwurf_retire_call` (#147 candidate) attempts retirement of one Pi or Claude Code sibling, and only one the human operator explicitly requested. Seeing the tool, a coordinator role or the caller's identity is not permission; where a host provides an approval step it applies too, and Pi and pi-durable 1.3.0 have none by default. The configured Claude ACP child is also [set to run without per-call permission prompts](./docs/acp-backend-rail.md#configured-claude-acp-permissions); that is source configuration, not measured ACP retirement. The record stays, so `entwurf_resume_call` can reopen the same id, and an unknown result is never a reason to retry.
+No. `entwurf_retire_call` (new in 0.41.0) attempts retirement of one Pi or Claude Code sibling, and only one the human operator explicitly requested. Seeing the tool, a coordinator role or the caller's identity is not permission; where a host provides an approval step it applies too, and Pi and pi-durable 1.3.0 have none by default. The configured Claude ACP child is also [set to run without per-call permission prompts](./docs/acp-backend-rail.md#configured-claude-acp-permissions); that is source configuration, not measured ACP retirement. The record stays, so `entwurf_resume_call` can reopen the same id, and an unknown result is never a reason to retry.
 
 ## Where do visible siblings open?
 
