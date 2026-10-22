@@ -309,6 +309,14 @@ still follow the dist-preservation and `with-dist-lock` rules.
 
 ## P4. Run the deterministic floor
 
+The `--ignore-scripts` sync above builds nothing, and the floor judges the
+compiled bridge: VERIFY's canonical floor requires `pnpm run build-bridge` after
+an `--ignore-scripts` install or a bridge source change, and `check-bridge-delivery`
+refuses a `dist` older than the newest `.ts` source. So before freezing, copy the
+current `mcp/entwurf-bridge/dist` byte for byte with its manifest, run the managed
+build once (`pnpm run build-bridge`, which takes the dist lock), keep its log and
+the after-manifest, and only then freeze the candidate and run the floor.
+
 ```bash
 pnpm run check:full
 ```
