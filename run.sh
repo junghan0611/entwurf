@@ -4220,7 +4220,7 @@ check_pack_pin_matcher() {
 # Cells: L1s (Entwurf alone, $3), L1 (project-local beside an aligned host pi-coding-agent at the
 # pinned SDK version), L2 (an isolated `npm -g --prefix`), each through (a) the INSTALLED verifier
 # (exit 0, prints its own carrier-resolver) and (b) an independent consumer oracle; then the L3
-# NEGATIVE (an override binds pi-durable's pi-ai edge to an older published version: the installed verifier must
+# NEGATIVE (an override binds pi-durable's pi-codemode edge to an older published version: the installed verifier must
 # refuse it by name, while a bare import still succeeds); then (c) the public launch on L1s.
 # The oracle observes RESOLUTIONS (a resolve hook), not every filesystem read; it asserts each
 # resolved product file lies inside THIS consumer's node_modules — a sandbox ancestor is not the
@@ -4315,13 +4315,18 @@ ORACLE
     echo "[check-pack-install] pi-durable $cell: installed verifier PASS; consumer oracle $out"
   done
 
-  printf '%s\n' "{\"name\":\"pd-mismatch\",\"version\":\"1.0.0\",\"private\":true,\"overrides\":{\"@earendil-works/pi-durable\":{\"@earendil-works/pi-ai\":\"1.0.3\"}}}" > "$box/pd-mismatch/package.json"
+  # The wrong edge must still IMPORT, or the control proves a crash rather than a refusal. `[측정 2026-10-22]`
+  # SDK 1.4 pi-durable imports pi-ai's new `utils/identity`, absent from the older pi-ai control versions
+  # checked here (1.0.3 and 1.3.0 both fail to load); pi-telemetry 1.0.3/1.3.0 and chord 1.3.0 lack exports
+  # it imports. pi-codemode 1.3.0 loads, and depends on no SDK member, so this tree carries exactly one
+  # depth-2 mismatch (L4 keeps depth 3).
+  printf '%s\n' "{\"name\":\"pd-mismatch\",\"version\":\"1.0.0\",\"private\":true,\"overrides\":{\"@earendil-works/pi-durable\":{\"@earendil-works/pi-codemode\":\"1.3.0\"}}}" > "$box/pd-mismatch/package.json"
   out=$(cd "$box/pd-mismatch" && npm install "$tgz" --no-audit --no-fund 2>&1) || {
     fail "[check-pack-install] pi-durable L3 (mismatch control) install failed:"; echo "$out" | tail -10 | sed 's/^/    /' >&2; return 1; }
   pkg="$box/pd-mismatch/node_modules/@junghanacs/entwurf"
   rc=0; out=$(cd "$box" && node "$pkg/mcp/entwurf-bridge/dist/pi-extensions/lib/pi-durable-runtime.js" resolve 2>&1) || rc=$?
-  if [ "$rc" -ne 3 ] || ! grep -q "pi-durable-sdk-mismatch: @earendil-works/pi-durable → @earendil-works/pi-ai wants $pin_ver, binds 1.0.3" <<<"$out"; then
-    fail "[QK:PACK-INSTALL-DURABLE-MISMATCH-REFUSED] [check-pack-install] pi-durable L3: an installed tree whose pi-durable binds pi-ai 1.0.3 must be refused by name as pi-durable-sdk-mismatch (rc=$rc): $out"
+  if [ "$rc" -ne 3 ] || ! grep -q "pi-durable-sdk-mismatch: @earendil-works/pi-durable → @earendil-works/pi-codemode wants $pin_ver, binds 1.3.0" <<<"$out"; then
+    fail "[QK:PACK-INSTALL-DURABLE-MISMATCH-REFUSED] [check-pack-install] pi-durable L3: an installed tree whose pi-durable binds pi-codemode 1.3.0 must be refused by name as pi-durable-sdk-mismatch (rc=$rc): $out"
     return 1
   fi
   rc=0; out=$(cd "$box" && node --input-type=module -e "import { pathToFileURL } from 'node:url'; await import('$pkg/pi/pi-durable/carrier-resolver.mjs'); const m = await import(pathToFileURL('$pkg/pi/pi-durable/carrier/runtime.js').href); console.log(typeof m.openDurable);" 2>&1) || rc=$?
