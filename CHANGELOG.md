@@ -4,18 +4,14 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
-## 0.41.1 — 2026-10-22
+## 0.41.1 — 2026-10-23
 
-**Unpublished validation checkpoint, not completed release preparation.** Remote
-validation and an official CI whole-BODY run precede global-install validation. Main
-promotion is deferred: moving its Herdr checkout lock could change what existing
-main-tracking installations acquire. An explicit validation branch keeps that effect
-separate from this checkpoint's CI. The
-operator's Pi extension registration still points to 0.41.0, so selecting Pi 1.4 on
-PATH alone would mix old extension preflight with the new carrier. The aggregate
-LIVE gate has not run and is not waived. Global installation, operating-session
-migration, tags and publication remain separate decisions. If later prepared bytes
-change, this checkpoint's CI/BODY is not a substitute for that final SHA's evidence.
+**Unpublished candidate; release acceptance is not complete.** The actual operator
+transition and Native aggregate below have been measured. Final prepared-SHA CI and
+the requested manual BODY, the exact carrier-bearing artifact, main promotion, tags
+and publication remain separate gates. Main still carries the published 0.41.0 Herdr
+lock: promoting the checkout lock can change what main-tracking installations acquire.
+A validation artifact or an earlier checkpoint's green run is not final acceptance.
 
 ### Pi 1.4.0 reference shell
 
@@ -40,13 +36,23 @@ change, this checkpoint's CI/BODY is not a substitute for that final SHA's evide
   0.41.0 / SDK 1.3 instructions. The Herdr lock uses the closed `herdr-checkout`
   verification carrier; it invents no unpublished npm integrity. No new Herdr
   snapshot or registry publication is implied.
+- Keep the Codex LIVE fixture callback-only on its outbound Pi leg. Asking for an
+  extra ACK created a fourth real tool call while the audit required three. The
+  exact-three, nonce and terminal-turn assertions remain unchanged; only the two
+  matching task strings changed, not production routing or retry behavior.
+- Trim historical platform details, dated labels and duplicated lifecycle prose
+  from the README while retaining operator consent, unknown-outcome handling,
+  platform limits and the published-versus-candidate install distinction.
 
 ### Upgrade boundary
 
 Opening each existing durable session with SDK 1.4 migrates its SQLite storage to
 schema 2. SDK 1.3 / Entwurf 0.41.0 refuses that session. Reinstalling the older package
 is not data rollback: restoring a pre-upgrade backup reopens the old data, but omits
-work done after that backup. Even a refused SDK 1.4 open can change the file header
+work done after that backup. Database restoration does not undo external messages,
+tool/file/network effects, meta records or mailbox read receipts. Preserve the newer
+set and inspect unknown outcomes before considering a restore or resend.
+Even a refused SDK 1.4 open can change the file header
 and sidecars while preserving logical rows (measured on a future-schema copy). Back up the complete target session
 file set before its first new-SDK open.
 
@@ -60,7 +66,7 @@ SDK 1.4's own normal close does not add a restart. Repeated interruptions can pa
 task at the restart limit. Inspect outcomes before any resend; cancellation is not
 retry, and recovery of an actual parked model generation remains unmeasured.
 
-### Preparation evidence — not release acceptance
+### Preparation and operating evidence — not final release acceptance
 
 Implementation checkpoint `3ed079b` follows independent source/proof reviews. Its
 earlier working candidate passed the deterministic FULL floor in 885 seconds with
@@ -80,11 +86,16 @@ real model-generation continuity or an operating citizen's actual upgrade.
 Kill-power re-measured at this shipped SHA: none (all 1178 committed claims not
 re-proved, #144).
 
-That line records preparation state. For #148, GLG separately requested a whole BODY
-run at this validation checkpoint through official CI `workflow_dispatch qualify=true`.
-Its exact-SHA result must be recorded separately; if a later final candidate changes,
-that final SHA needs its own CI/BODY evidence. No run or verdict is invented here,
-and the request does not change the standing release policy.
+That required line records the source's preparation-time measurement state, not a
+prediction of later CI. GLG separately requested manual BODY evidence. The earlier
+validation SHA `ff86c88bd58ba776e15ef48e1e4be566971a3e9a` has a four-job green push run
+[39790950791](https://github.com/junghan0611/entwurf/actions/runs/39790950791) and a
+separate `workflow_dispatch qualify=true` run
+[39792701159](https://github.com/junghan0611/entwurf/actions/runs/39792701159): 85 lanes,
+1178 unique claims KILLED, survived/error/skipped 0. Those are that SHA's receipts,
+not this later prepared SHA's. Its requested exact-SHA CI/BODY results must be recorded
+separately in [#148's live evidence thread](https://github.com/junghan0611/entwurf/issues/148#issuecomment-6348113761);
+no future result is invented here and the standing release policy is unchanged.
 
 Earlier-candidate PARTIAL (operator-attested, not this SHA): head addcb8cd0bac surface
 6a9481bc357c -- `["bash","run.sh","check-dep-versions"]` 4/4 receipt 48d085e06816.
@@ -95,16 +106,55 @@ Earlier-candidate PARTIAL (operator-attested, not this SHA): head addcb8cd0bac s
 Earlier-candidate PARTIAL (operator-attested, not this SHA): head addcb8cd0bac surface
 6a9481bc357c -- `["bash","run.sh","check-pi-durable-carrier"]` 35/35 receipt 258f783406a7.
 
-The versioned 0.41.1 working candidate's FULL completed in 890 seconds, exit 0,
+Earlier-candidate PARTIAL (operator-attested, not this SHA): head ff86c88bd58b surface
+7c75301f53a9 -- `["bash","run.sh","check-release-gate-outcomes"]` 21/21 receipt 251b71584442.
+
+Earlier-candidate PARTIAL (operator-attested, not this SHA): head ff86c88bd58b surface
+7c75301f53a9 -- `["bash","run.sh","check-mux-fresh-call"]` 150/150 receipt 56c3558f9a15.
+
+Both ff86c88 PARTIAL receipts were taken with the Codex fixture correction still
+uncommitted on that head, on the recorded working surface.
+
+The versioned working candidate's earlier FULL completed in 890 seconds, exit 0,
 with source/index unchanged (log SHA256 `757115f291c05f397631f6e8de48a2b77fdfde973d5219edf70e63658c3b8e88`).
-That floor predates this checkpoint's CHANGELOG/NEXT wording and is not this
-checkpoint's committed-SHA CI result. Release-gate MUST/BEHAVIOR, exact-SHA CI,
-carrier-bearing candidate acceptance, global-install verification and operating cutover
-are pending. The installed-extension preflight blocks aggregate LIVE until the real
-candidate installation is selected consistently; no harness wrapper, copied auth or
-operator settings bypass was used.
-No tag, GitHub release, npm publication or operating restart has occurred in this
-preparation. The dated core and Herdr 0.41.0 receipts below remain historical.
+It predates later checkpoint metadata and is not a final committed-SHA CI result.
+
+**Actual operator transition:** after the human closed the original owners and their
+exit was proven with the scheme-aware owner classifier, the complete session file
+set was consistently backed up without opening SQLite. The exact Linux validation
+tarball (`92e5b2722ab8063d2bc50936db358a36a02a5e92e36babc3e1fbf98b399c2f44`)
+was accepted unchanged in a container, separately exercised through an isolated pnpm
+global old-to-new takeover, then installed as the operator's 0.41.1/SDK 1.4 runtime.
+User-scope extension loading and doctors passed. The coordinator resumed the actual
+old conversation: garden/native/createdAt/cwd stayed unchanged, a new owner attached,
+a real model turn recalled the pre-close agreement and used tools, and four
+send/read/reply/read receipts closed a round trip with an existing Claude Code sibling.
+The human-reopened Pi reviewer also confirmed its identity, model, tools and recall.
+No separate live DB query or universal transcript/parked-generation recovery claim is
+made. This addon-less Linux validation tarball is not the carrier-bearing release file.
+
+**Native aggregate:** the first run at `ff86c88` was MUST 23/1/0 and BEHAVIOR 1/0/0:
+the extra requested ACK was a fourth distinct call, not parser duplication. Its raw
+failure is preserved. After the scoped fixture correction, an affected fresh Codex
+run passed 66 assertions with both terminal audits exactly 3/3. The new full run at
+`a9d05847295230ed58f53b0bfd689d9ebd6ac1da` then passed **MUST 24/0/0,
+BEHAVIOR 1/0/0**, including the deterministic FULL; source/index stayed unchanged.
+The operator still used the **ff86c88 validation install**, not an installed a9d0584
+artifact. Its runtime closure (bridge dist, pi-durable carrier, bootstrap and resolver)
+was byte-identical to the checkout before and after the run; README and LIVE fixture
+bytes differ. This is checkout-gate evidence with that installed runtime, not a claim
+that the complete a9d0584 package was installed or accepted.
+Scratch `/tmp/entwurf-release-gate-0.41.1-r2.cl0DDR`, log `release-gate.log`, SHA256
+`020f489bf6fe024447bfc26a12f3499e5b80e844b0dcadf1e474e6adc8b4ae05`.
+P9 was a read-only census: root 4.9 GiB and home 6.9 GiB free, with the existing
+Emacs infrastructure identified rather than killed; current receipts and scratch
+were preserved. Only the explicitly owned test app-server was normally stopped.
+
+The final prepared-SHA push CI/manual BODY and Win32-bearing artifact acceptance
+are still pending. The validation tarball has no Win32 addon; it cannot stand for
+M3w or final macOS/Windows acceptance. No tag, GitHub release, npm publication,
+Herdr re-pin or laptop rollout has occurred. Earlier 0.41.0 receipts below remain
+historical.
 
 ## v2026.10.22-herdr.0.41.0 — Herdr Entwurf plugin 0.41.0
 
