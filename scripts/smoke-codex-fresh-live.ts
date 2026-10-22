@@ -1082,7 +1082,8 @@ async function run(): Promise<void> {
 	const codexWaitToken = `CODEX-WAIT-${Math.random().toString(36).slice(2, 10).toUpperCase()}`;
 	const finalToken = `CODEX-PI-FINAL-${Math.random().toString(36).slice(2, 10).toUpperCase()}`;
 	expectedReportTokens.push(finalToken);
-	const outboundPiTask = "After your automatic callback succeeds, answer ACK and stop. Do not open another sibling.";
+	const outboundPiTask =
+		"Your automatic callback is the whole task and there is no result to send. After it succeeds, end the turn: no message, no report, no further tool call. Do not open another sibling.";
 	const codexTask =
 		`After your required callback receipt, end the turn and wait passively for the addressed instruction containing ${codexWaitToken}. ` +
 		"Do not call shell, sleep, terminal, or any tool to wait.";
