@@ -351,10 +351,12 @@ describe("the owned source's typecheck fence (pi/pi-durable/tsconfig.json)", () 
 });
 
 describe("the package file list (#141): JS-only for the pi-durable app", () => {
-	it("[QK:PI-DURABLE-SOURCE-NOT-SHIPPED] npm's own file list for this package ships the emitted carrier and its LICENSE, never the owned source, its fence or the retired patch", () => {
-		// npm's packlist with no lifecycle script (no prepack, so no pnpm, no install, no build) and a
-		// sandboxed HOME, cache and userconfig: it reads package.json `files` and the tree, and writes
-		// nothing here. check-pack keeps the same tripwire on the floor over the prepacked tarball.
+	/**
+	 * npm's packlist with no lifecycle script (no prepack, so no pnpm, no install, no build) and a sandboxed
+	 * HOME, cache and userconfig: it reads package.json `files` and the tree, and writes nothing here.
+	 * check-pack keeps the same tripwire on the floor over the prepacked tarball.
+	 */
+	function packlist(): string[] {
 		const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), "pi-durable-packlist-"));
 		try {
 			const userconfig = path.join(sandbox, "npmrc");
@@ -377,17 +379,36 @@ describe("the package file list (#141): JS-only for the pi-durable app", () => {
 			expect(run.status, run.stderr).toBe(0);
 			const packed = JSON.parse(run.stdout) as { files: { path: string }[] }[];
 			expect(packed).toHaveLength(1);
-			const files = packed[0].files.map((f) => f.path);
-			const pin = readPin();
-			for (const name of [...pin.carrier.files.map((f) => f.name), "LICENSE"]) {
-				expect(files, name).toContain(`pi/pi-durable/carrier/${name}`);
-			}
-			expect(files).toContain("pi/pi-durable/overlay/upstream-pin.json");
-			const source = /^pi\/pi-durable\/(src\/|tsconfig\.json$|overlay\/runtime-contacts\.patch$)/;
-			expect(files.filter((f) => source.test(f))).toEqual([]);
+			return packed[0].files.map((f) => f.path);
 		} finally {
 			fs.rmSync(sandbox, { recursive: true, force: true });
 		}
+	}
+
+	it("[QK:PI-DURABLE-SOURCE-NOT-SHIPPED] npm's own file list for this package ships the emitted carrier and its LICENSE, never the owned source, its fence or the retired patch", () => {
+		const files = packlist();
+		const pin = readPin();
+		for (const name of [...pin.carrier.files.map((f) => f.name), "LICENSE"]) {
+			expect(files, name).toContain(`pi/pi-durable/carrier/${name}`);
+		}
+		expect(files).toContain("pi/pi-durable/overlay/upstream-pin.json");
+		const source = /^pi\/pi-durable\/(src\/|tsconfig\.json$|overlay\/runtime-contacts\.patch$)/;
+		expect(files.filter((f) => source.test(f))).toEqual([]);
+	});
+
+	it("[QK:PI-DURABLE-TEST-FIXTURES-NOT-SHIPPED] the tree holds test fixtures under pi-extensions/**/fixtures/, and npm's own file list for this package ships none of them while it ships pi-extensions/", () => {
+		const fixtures = fs
+			.globSync("pi-extensions/**/fixtures/**", { cwd: ROOT })
+			.filter((f) => fs.statSync(path.join(ROOT, f)).isFile());
+		expect(fixtures.length, "no fixture in the tree: this check would prove nothing").toBeGreaterThan(0);
+		const files = packlist();
+		expect(
+			files.some((f) => f.startsWith("pi-extensions/")),
+			"pi-extensions/ itself ships",
+		).toBe(true);
+		const shipped = new Set(files);
+		expect(fixtures.filter((f) => shipped.has(f))).toEqual([]);
+		expect(files.filter((f) => /^pi-extensions\/(.+\/)?fixtures\//.test(f))).toEqual([]);
 	});
 });
 
@@ -402,7 +423,7 @@ const { BACKGROUND_CONTEXT: context } = await import("@earendil-works/chord/cont
 const { createRegistry, Harness } = await import("@earendil-works/pi-durable");
 const { openNodeSqliteStorage } = await import("@earendil-works/pi-durable/storage/sqlite/node");
 const carrier = new URL("./pi/pi-durable/carrier/", "file://" + process.cwd() + "/").href;
-const { TaskBadge, durableLayout } = await import(carrier + "tui.js");
+const { TaskBadge, describeTask, durableLayout } = await import(carrier + "tui.js");
 const { openDurable } = await import(carrier + "runtime.js");
 const { Container, ScrollView, Text, TruncatedText, TuiAltScreen, VStack } = await import("@earendil-works/pi-tui");
 const dist = new URL(".", import.meta.resolve("@earendil-works/pi-coding-agent")).href;
@@ -471,6 +492,7 @@ const node = (id, kind, background, state, abortRequested = false) =>
 	({ id: String(id), kind, conversationId: 1, background, abortRequested, state, conversations: [] });
 const graph = (nodes) => ({ tasks: Object.fromEntries(nodes.map((n) => [n.id, n])) });
 const running = { status: "running", phase: "run" };
+const asleep = { status: "sleeping", phase: "backoff", until: Number(process.env.ORACLE_WAKE) };
 const backgrounds = (n) => graph(Array.from({ length: n }, (_, i) => node(i + 1, "kind-" + i, true, running)));
 const cases = {
 	absent: undefined,
@@ -486,6 +508,12 @@ const cases = {
 		node(6, "w.other", true, { status: "pending", phase: "p" }),
 	]),
 	many: backgrounds(12),
+	sleeping: graph([
+		node(1, "pi.generation", false, asleep),
+		node(2, "x.sleeper", true, asleep),
+		node(3, "x.other", true, { status: "waiting", phase: "p", on: ["9"], policy: "allSettled" }),
+		node(4, "y.sleeper", true, asleep, true),
+	]),
 };
 const badge = {};
 for (const [name, value] of Object.entries(cases)) {
@@ -493,6 +521,16 @@ for (const [name, value] of Object.entries(cases)) {
 	b.set(value);
 	badge[name] = { count: b.count, widths: Object.fromEntries([1, 2, 3, 4, 6, 10, 12, 80].map((w) => [w, b.render(w).map(strip)])) };
 }
+// The tasks panel's lines: a sleeping task's wake time on this child's fixed zone, and every reason the SDK gives
+// for a task it cannot run, beside the same task unblocked.
+const parked = node(20, "x.parked", true, { status: "pending", phase: "p" });
+const panel = {
+	sleeping: describeTask(node(8, "pi.generation", false, asleep)),
+	blocked: Object.fromEntries(
+		["missing_task", "task_too_old", "migration_failed", "restart_limit"].map((r) => [r, describeTask({ ...parked, blocked: r })]),
+	),
+	unblocked: describeTask(parked),
+};
 
 const terminal = (dims) => ({
 	start() {}, stop() {}, async drainInput() {}, write() {},
@@ -579,7 +617,7 @@ const resize = [];
 		resize.push({ rows, cols, marked: marked(draw(ui)) });
 	}
 }
-console.log(JSON.stringify({ runtime, badge, cells, transitions, resize }));
+console.log(JSON.stringify({ runtime, badge, panel, cells, transitions, resize }));
 `;
 
 interface NativeView {
@@ -593,10 +631,14 @@ interface FooterReport {
 		native: { databases: number; shown: NativeView; hidden: NativeView };
 	};
 	badge: Record<string, { count: number; widths: Record<string, string[]> }>;
+	panel: { sleeping: string; blocked: Record<string, string>; unblocked: string };
 	cells: { count: number; rows: number; cols: number; marked: boolean; upstream: boolean }[];
 	transitions: { rows: number; cols: number; count: number; marked: boolean; upstream: boolean }[];
 	resize: { rows: number; cols: number; marked: boolean }[];
 }
+
+/** A sleeping task's wake time: 2027-03-04 05:06:07 in Asia/Seoul, the previous day in UTC. */
+const WAKE = 1_804_104_367_000;
 
 describe("the carrier's task footer (#134), observed through the carrier resolver", () => {
 	let report: FooterReport;
@@ -619,6 +661,8 @@ describe("the carrier's task footer (#134), observed through the carrier resolve
 						PI_CODING_AGENT_DIR: path.join(sandbox, "home", ".pi", "agent"),
 						PI_OFFLINE: "1",
 						ORACLE_PROJECT: project,
+						ORACLE_WAKE: String(WAKE),
+						TZ: "Asia/Seoul",
 					},
 				},
 			);
@@ -676,6 +720,46 @@ describe("the carrier's task footer (#134), observed through the carrier resolve
 		});
 		expect(report.badge.many?.widths["2"]).toEqual(["*+"]);
 		expect(report.badge.many?.widths["3"]).toEqual(["*12"]);
+	});
+
+	it("[QK:PI-DURABLE-TASK-SLEEPING-COUNTED] the badge names a sleeping background task as sleeping; an aborting one stays aborting", () => {
+		expect(report.badge.sleeping?.count).toBe(3);
+		expect(report.badge.sleeping?.widths["80"]).toEqual([" ⏳ 3 tasks (1 aborting, 1 waiting, 1 sleeping)"]);
+	});
+
+	it("[QK:PI-DURABLE-TASK-SLEEPING-SHOWN] a sleeping task's panel line says when it wakes, in local wall-clock time", () => {
+		// The child runs on Asia/Seoul; its wall clock is read again here by Intl, never by the carrier's formatter.
+		const wake = new Intl.DateTimeFormat("sv-SE", {
+			timeZone: "Asia/Seoul",
+			year: "numeric",
+			month: "2-digit",
+			day: "2-digit",
+			hour: "2-digit",
+			minute: "2-digit",
+			second: "2-digit",
+			hourCycle: "h23",
+		}).format(WAKE);
+		expect(wake).toBe("2027-03-04 05:06:07");
+		expect(report.panel.sleeping).toBe(`pi.generation #8: sleeping backoff until ${wake}`);
+	});
+
+	it("[QK:PI-DURABLE-TASK-BLOCKED-SHOWN] a task that cannot run is marked blocked on its panel line, for each of the four reasons, and an unblocked one is not", () => {
+		const reasons = ["missing_task", "task_too_old", "migration_failed", "restart_limit"];
+		expect(Object.keys(report.panel.blocked)).toEqual(reasons);
+		for (const reason of reasons)
+			expect(report.panel.blocked[reason], reason).toMatch(
+				/^x\.parked #20: pending p \[background, blocked:[a-z_]+\]$/,
+			);
+		expect(report.panel.unblocked).toBe("x.parked #20: pending p [background]");
+	});
+
+	it("[QK:PI-DURABLE-TASK-BLOCKED-REASON] the blocked mark is the SDK's own reason, verbatim, each one its own", () => {
+		expect(report.panel.blocked).toEqual({
+			missing_task: "x.parked #20: pending p [background, blocked:missing_task]",
+			task_too_old: "x.parked #20: pending p [background, blocked:task_too_old]",
+			migration_failed: "x.parked #20: pending p [background, blocked:migration_failed]",
+			restart_limit: "x.parked #20: pending p [background, blocked:restart_limit]",
+		});
 	});
 
 	it("[QK:PI-DURABLE-FOOTER-BADGE-PROTECTED] with live background tasks the badge is on screen at every positive size, through count changes and resizes", () => {

@@ -24,7 +24,7 @@ takes/helpers/tests are maintainer tooling and are deliberately excluded from th
 
 - Node at the `package.json#engines.node` floor; the checkout's pinned dependencies and
   current compiled bridge. After a source/bootstrap change, build with `pnpm run build-bridge`.
-- Pi at the checkout's supported floor (**current floor 1.3.0**); `entwurf` on PATH must be
+- Pi at the checkout's supported floor (**current floor 1.4.0**); `entwurf` on PATH must be
   the intended source stable-bin. Source evidence is not registry-package acceptance.
 - `herdr` on PATH at exactly `scripts/fixtures/herdr-supply.json#version`; `asciinema` v3.
 - Herdr's existing Pi integration at

@@ -108,9 +108,12 @@ is the correct behaviour for a workbench — persistent identity is not its job.
 ### The short version, if Herdr already integrated your harnesses
 
 ```bash
-herdr plugin install junghan0611/entwurf/plugins/herdr --yes
+herdr plugin install junghan0611/entwurf/plugins/herdr --ref "$CANDIDATE_REF" --yes
 pi --entwurf-control          # this pi is now a garden citizen
 ```
+
+`CANDIDATE_REF` is the public named ref that carries the runtime you mean; this unpublished candidate
+has none yet, so the example cannot run for it ([which runtime each ref installs](#from-a-raw-linux-box-in-nine-steps)).
 
 `--yes` is required whenever stdin is not a terminal; Herdr exits 2 without it, and that exit is
 about the prompt, never about a missing Herdr server. (An install with no server running is fine —
@@ -124,9 +127,23 @@ directory that harness owns, and it will not invent one: `herdr integration inst
 `claude directory not found`. Starting each harness once is what creates those directories. Both
 commands are ordinary invocations — no model turn, no login, no account.
 
+**Which runtime these steps install.** With this candidate's `runtime-lock.json` (`source:
+herdr-checkout`), step 5 builds the runtime from that exact checkout commit: the unpublished Pi 1.4
+SDK candidate, so step 1 installs Pi 1.4. They do not install npm `@junghanacs/entwurf@0.41.0`. That
+published runtime, on the Pi 1.3.0 SDK set and Pi 1.3.x, is what the snapshot
+`v2026.10.22-herdr.0.41.0` pins; its own README at that tag carries its Pi step.
+
+Steps 5 and 9 are therefore an example for the day this candidate exists at a public named ref,
+held in a shell variable you set first, `CANDIDATE_REF=<that ref>`: `--ref "$CANDIDATE_REF"` selects
+it. The current candidate has no such ref, so these steps cannot run for it yet. Without `--ref` the
+install takes whatever ref Herdr resolves by default, which this text does not promise is the
+candidate. A candidate that lives only in a local checkout uses the
+[developer checkout](#developer-checkout-return-after-an-installed-package-check) route instead, not
+these steps.
+
 ```bash
 # 1. pi — the range Entwurf declares as its peer, quoted so the shell keeps it in one word
-npm install -g "@earendil-works/pi-coding-agent@>=1.3.0 <1.4"
+npm install -g "@earendil-works/pi-coding-agent@>=1.4.0 <1.5"
 
 # 2. herdr — see the herdr project for its own install
 herdr --version
@@ -138,7 +155,7 @@ pi --help
 herdr integration install pi
 
 # 5. install this plugin — every install is also the refresh trigger
-herdr plugin install junghan0611/entwurf/plugins/herdr --yes
+herdr plugin install junghan0611/entwurf/plugins/herdr --ref "$CANDIDATE_REF" --yes
 
 # 6. pi is now active. Start it as a citizen:
 pi --entwurf-control
@@ -152,7 +169,7 @@ herdr integration install claude
 
 # 9. reinstall to refresh. The ledger widens to {pi, claude-code}; an ordinary
 #    `claude` now picks up the entwurf tools through MCP.
-herdr plugin install junghan0611/entwurf/plugins/herdr --yes
+herdr plugin install junghan0611/entwurf/plugins/herdr --ref "$CANDIDATE_REF" --yes
 ```
 
 The pi range in step 1 is not a number this file chooses. It is the host range derived from the exact
@@ -464,10 +481,12 @@ read. Every field the provider attached is shown, in sorted key order.
     named red (`herdr-integration-not-current`) until you run `herdr integration install claude`
     again. In the measured 0.9.4-seeded private sandbox, the reinstall changed only the hook's version
     line; the pi extension and the Claude settings stayed byte-identical.
-- **Pi `>=1.3.0 <1.4`** for the runtime this plugin acquires. A host still on Pi 1.2
-  is refused by name (`outside the supported range`) at activation, the same check `entwurf setup`
-  applies, and no Pi settings are written. Upgrade Pi to 1.3 first, then install or reinstall the
-  plugin.
+- **Pi `>=1.4.0 <1.5`** for the runtime this checkout's lock acquires (the unpublished Pi 1.4
+  SDK candidate, through the `herdr-checkout` source). A host still on Pi 1.3 is refused by name
+  (`outside the supported range`) at activation, the same check `entwurf setup` applies, and no Pi
+  settings are written. Upgrade Pi to 1.4 first, then install or reinstall the plugin. The last
+  published snapshot, `v2026.10.22-herdr.0.41.0`, pins npm `@junghanacs/entwurf@0.41.0` on the Pi
+  1.3 SDK and keeps the Pi 1.3.x requirement its own README states.
 - **For the install-time build:** `git`, `node` >= 24, `npm`, and, for an npm lock, network access
   for the locked registry artifact, in an Entwurf-owned XDG npm cache reclaimed by
   `herdr-plugin-deactivate`. You do **not** clone Entwurf or run `npm install`; the build acquires

@@ -4021,6 +4021,10 @@ check_pack() {
   # JS for installed entrypoints. The files array lists pi/pi-durable per FILE, so nothing admits these
   # today; this tripwire is what fails loud the day an allowlist entry would.
   local durable_source_pattern='^pi/pi-durable/(src/|tsconfig\.json$|overlay/runtime-contacts\.patch$)'
+  # #148 S1b: the goldens and generator a beside test reads (pi-extensions/lib/fixtures/) are test input,
+  # not product. `pi-extensions/` ships whole, so the `!pi-extensions/**/fixtures/**` negation is the only
+  # thing keeping them out, and this is its tripwire (same 결합 규칙 as the `.test.ts` pattern above).
+  local test_fixture_pattern='^pi-extensions/(.*/)?fixtures/'
 
   local pass=1 f pat hit
 
@@ -4043,6 +4047,13 @@ check_pack() {
   hit=$(grep -E "$durable_source_pattern" <<<"$file_list" || true)
   if [ -n "$hit" ]; then
     fail "[check-pack] [QK:PI-DURABLE-SOURCE-NOT-SHIPPED] the owned pi-durable source rides the tarball — an installed consumer runs the carrier JS only:"
+    echo "$hit" | sed 's/^/    /' >&2
+    pass=0
+  fi
+
+  hit=$(grep -E "$test_fixture_pattern" <<<"$file_list" || true)
+  if [ -n "$hit" ]; then
+    fail "[check-pack] a beside test's fixtures (pi-extensions/**/fixtures/) ride the tarball — test input is not product; restore the files-array negation:"
     echo "$hit" | sed 's/^/    /' >&2
     pass=0
   fi
@@ -4157,7 +4168,7 @@ check_pack_win32_carrier() {
 #     which is exactly what property (1)'s `(_|$)` absorbs; all three shapes are fixtures
 #     below so a future suffix change cannot pass vacuously.)
 pack_install_leaked_pi() {
-  grep '^@earendil-works+' | grep -Ev '@1\.3\.0(_|$)' || true
+  grep '^@earendil-works+' | grep -Ev '@1\.4\.0(_|$)' || true
 }
 
 # Matcher self-test on SYNTHETIC lookalikes: a healthy install tree cannot exercise either
@@ -4174,18 +4185,18 @@ check_pack_pin_matcher() {
   # Cell 1 — the version boundary. Every measured peer-hash shape is a fixture: the
   # 0.84.4-era `_@modelcontextprotocol+sdk@…`, the `_ws@8.21.3` observed on a real
   # 0.85.1 tree, and `[측정 2026-09-20]` the combined suffix a 0.86.0 install carries.
-  # None may leak; the two lookalikes must — a PREFIX-EXTENDED version (`0.86.0-beta.1`,
+  # None may leak; the two lookalikes must — a PREFIX-EXTENDED version (`1.4.0-beta.1`,
   # the prerelease shape that an unanchored match would bless) and an off-pin version.
   matcher_probe=$(printf '%s\n' \
-    '@earendil-works+pi-ai@1.3.0' \
-    '@earendil-works+pi-ai@1.3.0_@modelcontextprotocol+sdk@1.29.0_zod@4.3.6' \
-    '@earendil-works+pi-ai@1.3.0_ws@8.21.3' \
-    '@earendil-works+pi-ai@1.3.0_@modelcontextprotocol+sdk@1.29.0_zod@4.3.6__ws@8.21.3_zod@4.3.6' \
-    '@earendil-works+pi-ai@1.3.0-beta.1' \
+    '@earendil-works+pi-ai@1.4.0' \
+    '@earendil-works+pi-ai@1.4.0_@modelcontextprotocol+sdk@1.29.0_zod@4.3.6' \
+    '@earendil-works+pi-ai@1.4.0_ws@8.21.3' \
+    '@earendil-works+pi-ai@1.4.0_@modelcontextprotocol+sdk@1.29.0_zod@4.3.6__ws@8.21.3_zod@4.3.6' \
+    '@earendil-works+pi-ai@1.4.0-beta.1' \
     '@earendil-works+pi-agent-core@0.87.1' | pack_install_leaked_pi)
-  if [ "$matcher_probe" != '@earendil-works+pi-ai@1.3.0-beta.1
+  if [ "$matcher_probe" != '@earendil-works+pi-ai@1.4.0-beta.1
 @earendil-works+pi-agent-core@0.87.1' ]; then
-    fail "[QK:PACK-INSTALL-PIN-MATCHER-BOUNDED] the pin-leak matcher must flag the prefix-extended 1.3.0-beta.1 and the off-pin 0.87.1 lookalikes, and pass 1.3.0 bare or with any measured peer-hash — got: ${matcher_probe:-<nothing leaked>}"
+    fail "[QK:PACK-INSTALL-PIN-MATCHER-BOUNDED] the pin-leak matcher must flag the prefix-extended 1.4.0-beta.1 and the off-pin 0.87.1 lookalikes, and pass 1.4.0 bare or with any measured peer-hash — got: ${matcher_probe:-<nothing leaked>}"
     return 1
   fi
 
@@ -4193,9 +4204,9 @@ check_pack_pin_matcher() {
   # (0.85.0 onward, still true at 0.99.1). An off-pin chord MUST leak; the pinned one must not. A matcher narrowed
   # back to `^@earendil-works+pi-` sees nothing here and dies at this signature.
   matcher_probe=$(printf '%s\n' \
-    '@earendil-works+chord@1.3.0' \
+    '@earendil-works+chord@1.4.0' \
     '@earendil-works+chord@0.87.1' \
-    '@earendil-works+pi-ai@1.3.0' | pack_install_leaked_pi)
+    '@earendil-works+pi-ai@1.4.0' | pack_install_leaked_pi)
   if [ "$matcher_probe" != '@earendil-works+chord@0.87.1' ]; then
     fail "[QK:PACK-INSTALL-PIN-MATCHER-COVERS-CLOSURE] the pin-leak matcher must cover every @earendil-works closure member, not just the pi-* families — an off-pin @earendil-works/chord has to leak (it was a runtime dependency of pi-coding-agent, pi-agent-core, pi-client and pi-protocol — `[측정 2026-09-20]` at 0.86.0, re-measured `[측정 2026-09-22]` at 0.87.0, `[측정 2026-09-23]` at 0.87.1 and `[측정 2026-09-30]` at 0.99.1, where pi-coding-agent adds pi-codemode and pi-mcp beside them; `[측정 2026-10-13]` at 1.2.0 pi-durable alone declares it) — got: ${matcher_probe:-<nothing leaked>}"
     return 1
@@ -4835,19 +4846,21 @@ _check_pack_install_impl() {
   # `[측정 2026-10-16]` at 1.3.0 the constellation is unchanged: the installed manifests give the
   # same member edges as at 1.2.0, now every one exact 1.3.0 (upstream #10865), and the consumer
   # oracle walked 10 member edges with 0 mismatches (.tmp-verify/145-stage1/08-pack-install.log).
-  echo "[check-pack-install] pnpm add into $tmp (with the aligned 1.3.x SDK + chord + codemode + mcp + durable + typebox)"
+  # `[측정 2026-10-22]` at 1.4.0 the nine members are again exact 1.4.0 edges (registry manifests; #148 S0),
+  # and pi-tui 1.4.0 adds one third-party dependency (marked-cjk-friendly 0.1.2) outside the closure.
+  echo "[check-pack-install] pnpm add into $tmp (with the aligned 1.4.x SDK + chord + codemode + mcp + durable + typebox)"
   local install_log
   install_log=$(cd "$tmp" && pnpm add \
     "$tgz_path" \
-    "@earendil-works/pi-ai@1.3.0" \
-    "@earendil-works/pi-coding-agent@1.3.0" \
-    "@earendil-works/pi-tui@1.3.0" \
-    "@earendil-works/pi-agent-core@1.3.0" \
-    "@earendil-works/pi-telemetry@1.3.0" \
-    "@earendil-works/chord@1.3.0" \
-    "@earendil-works/pi-codemode@1.3.0" \
-    "@earendil-works/pi-mcp@1.3.0" \
-    "@earendil-works/pi-durable@1.3.0" \
+    "@earendil-works/pi-ai@1.4.0" \
+    "@earendil-works/pi-coding-agent@1.4.0" \
+    "@earendil-works/pi-tui@1.4.0" \
+    "@earendil-works/pi-agent-core@1.4.0" \
+    "@earendil-works/pi-telemetry@1.4.0" \
+    "@earendil-works/chord@1.4.0" \
+    "@earendil-works/pi-codemode@1.4.0" \
+    "@earendil-works/pi-mcp@1.4.0" \
+    "@earendil-works/pi-durable@1.4.0" \
     "typebox@latest" \
     --ignore-workspace --ignore-scripts 2>&1) || {
     fail "[check-pack-install] pnpm add failed:"
@@ -4863,11 +4876,11 @@ _check_pack_install_impl() {
   local leaked_pi
   leaked_pi=$(ls "$tmp/node_modules/.pnpm" 2>/dev/null | pack_install_leaked_pi)
   if [ -n "$leaked_pi" ]; then
-    fail "[check-pack-install] UNVERIFIED pi runtime resolved into the install tree (expected only 1.3.0):"
+    fail "[check-pack-install] UNVERIFIED pi runtime resolved into the install tree (expected only 1.4.0):"
     printf '%s\n' "$leaked_pi" | sed 's/^/    /' >&2
     return 1
   fi
-  echo "[check-pack-install] pi runtime tree pin verified: every @earendil-works package is 1.3.0 (chord and pi-durable included)"
+  echo "[check-pack-install] pi runtime tree pin verified: every @earendil-works package is 1.4.0 (chord and pi-durable included)"
 
   # Resolve the installed package.json and confirm pi.extensions
   # arrived intact. If pi.extensions is empty or missing, the

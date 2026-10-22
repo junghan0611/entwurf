@@ -239,9 +239,11 @@ export interface AcpBackendAdapter {
 
 	/** OPTIONAL capability (#127): recognise a typed vendor rejection of `session/prompt`
 	 *  whose raw text must not become pi's `errorMessage`. pi decides a whole-prompt replay
-	 *  from `errorMessage` alone, and a vendor's "Internal error" — or any digit run in the
-	 *  ids it carries — reads as transient, so a turn whose tools already ran would be resent
-	 *  from a cold session. A recognised rejection returns a fixed, authored verdict for
+	 *  from `errorMessage` alone, and a vendor's "Internal error" reads as transient
+	 *  (pi-ai's `internal.?error` term), so a turn whose tools already ran would be resent
+	 *  from a cold session. Through pi-ai 1.3 a digit run inside the ids it carries (`…8503…`)
+	 *  read as an HTTP status too; pi-ai 1.4 bounds the status terms (upstream #11057), so
+	 *  the ids no longer trigger it — the "Internal error" text alone still does. A recognised rejection returns a fixed, authored verdict for
 	 *  `errorMessage`; backend.ts keeps the raw rejection as a pi diagnostic instead.
 	 *
 	 *  ABSENT means every failure of this backend keeps the verbatim-first `errorMessage`.

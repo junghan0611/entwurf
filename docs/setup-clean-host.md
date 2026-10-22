@@ -23,14 +23,18 @@ evidence split, and its three states must not collapse into "macOS is supported"
 
 ## Requirements
 
+This table is this source candidate's, which moves the Pi SDK set to 1.4.0 and is **not published
+to npm yet**. The newest published package, `@junghanacs/entwurf@0.41.0`, ships the Pi 1.3.0 SDK
+set and requires Pi 1.3.x; the setup guide inside that tarball is its contract.
+
 | Component | Requirement | Needed for |
 |---|---|---|
 | Node | **`>=24.0.0`** | package and bridge runtime |
 | npm/pnpm | npm is bundled with Node; pnpm is required for source setup | package or source installation |
 | Python 3 | required by `setup`/`install` (project-path normalization + settings writers); `--help`/`check-bridge` stay Python-free | pi/Claude/agy/Copilot/Codex wiring writers |
 | entwurf | global/project-local `@junghanacs/entwurf`, or a source checkout | operator command and garden capability |
-| pi | optional-by-presence, `>=1.3.0 <1.4` — absent is an explicit setup SKIP, below-floor is a named FAIL | ACP provider, control sockets |
-| Native durable (`pi-durable`) | supplied by the Entwurf package (#130): Entwurf's owned app carrier plus the exact 1.3.0 pi SDK set as production dependencies — setup PASS when they verify, a named FAIL otherwise (never SKIP) | the `entwurf pi-durable` contact; native birth/LIVE on this supply surface is a separate release proof (§2b) |
+| pi | optional-by-presence, `>=1.4.0 <1.5` — absent is an explicit setup SKIP, below-floor is a named FAIL | ACP provider, control sockets |
+| Native durable (`pi-durable`) | supplied by the Entwurf package (#130): Entwurf's owned app carrier plus the exact 1.4.0 pi SDK set as production dependencies — setup PASS when they verify, a named FAIL otherwise (never SKIP) | the `entwurf pi-durable` contact; native birth/LIVE on this supply surface is a separate release proof (§2b) |
 | Claude Code | optional, **`>=2.1.306`** — the exec-form hook floor | Claude ACP auth/runtime and mailbox-backed native citizen |
 | GitHub Copilot CLI | optional-by-presence, operator-installed and authenticated — absent is an explicit setup SKIP; detected composes all four units (birth/MCP/receiver/footer) | self-fetch citizen and visible fresh |
 | OMP (`omp`) | optional-by-presence, operator-installed — absent is an explicit setup SKIP; detected composes all four units (birth/MCP/`tools.xdev` setting/receiver) | self-fetch citizen and visible fresh (accepted on one host — see §4b) |
@@ -79,11 +83,15 @@ node --version
 npm --version
 ```
 
+The two npm forms below install the **published** package, `0.41.0` (Pi 1.3.x, the Pi 1.3.0 SDK
+set), not this candidate. This candidate (Pi 1.4) installs only from a source checkout of its
+commit, further down this section; it has no npm install command until it is released.
+
 Global install is simplest when native harnesses should find stable bins from every
 working directory:
 
 ```bash
-npm install -g @junghanacs/entwurf
+npm install -g @junghanacs/entwurf@0.41.0
 entwurf --help
 entwurf setup /path/to/your-project
 entwurf check-bridge
@@ -94,7 +102,7 @@ A project-local installation is also supported:
 ```bash
 mkdir -p ~/entwurf-smoke && cd ~/entwurf-smoke
 npm init -y
-npm install --save-dev @junghanacs/entwurf
+npm install --save-dev @junghanacs/entwurf@0.41.0
 npx entwurf setup .
 npx entwurf check-bridge
 ```
@@ -119,8 +127,13 @@ with a nonzero setup result):
 ```bash
 git clone https://github.com/junghan0611/entwurf ~/repos/gh/entwurf
 cd ~/repos/gh/entwurf
+git checkout "$CANDIDATE_REF"   # set it first to the commit you mean to run; a bare clone gives the default branch
 ./run.sh setup /path/to/consumer-project
 ```
+
+`CANDIDATE_REF` is the public ref that carries the commit you mean. This unpublished candidate has
+none yet, so a fresh clone cannot reach it; a checkout that already holds it skips the clone and the
+`git checkout`.
 
 This owns `~/.local/bin/entwurf` as a symlink to that checkout's `run.sh` and fails if the
 link is foreign, outside PATH, or shadowed by another command. It detects and wires
@@ -207,18 +220,21 @@ physical-Darwin receipt. `entwurf install` may write `.pi/settings.json`
 on Darwin; that is wiring, not a rail receipt. If `pi` is on PATH,
 `setup` names the pi row FAIL with the §1 Darwin wording.
 
-Install the exact release floor, then wire the project:
+Install this candidate's exact Pi floor, then wire the project from the candidate's source
+checkout (§1; `entwurf` is the link `./run.sh setup` made to it). The published 0.41.0 instead
+takes the Pi 1.3.x its own setup guide names and the global package root,
+`$(npm root -g)/@junghanacs/entwurf`, in place of the checkout:
 
 ```bash
-npm install -g @earendil-works/pi-coding-agent@1.3.0
+npm install -g @earendil-works/pi-coding-agent@1.4.0
 pi --version
 
 cd ~/entwurf-smoke
 entwurf install .
-pi -e "$(npm root -g)/@junghanacs/entwurf" --list-models entwurf
+pi -e ~/repos/gh/entwurf --list-models entwurf
 ```
 
-The supported range is `>=1.3.0 <1.4`. It is a hard minimum: installing this
+The supported range is `>=1.4.0 <1.5`. It is a hard minimum: installing this
 release onto a 0.83.x pi host upgrades the runtime rather than keeping the older
 minor. A host using only the external MCP bridge can skip pi until it needs a
 control socket; no delivery rail launches a pi process.
@@ -322,7 +338,7 @@ by `entwurf pi` or by registering ordinary Pi's adapter.
 What the Entwurf package supplies:
 
 1. **The pi SDK set** — `@earendil-works/{pi-coding-agent, pi-ai, pi-tui, pi-agent-core,
-   pi-durable, chord, pi-mcp, pi-codemode, pi-telemetry}` at exactly `1.3.0`, plus
+   pi-durable, chord, pi-mcp, pi-codemode, pi-telemetry}` at exactly `1.4.0`, plus
    `proper-lockfile`, as Entwurf's own production dependencies (declared once in
    `pi/pi-durable/overlay/upstream-pin.json` `sdk`). Model data rides the published
    `pi-ai`; there is no catalog copy.
@@ -335,7 +351,7 @@ What the Entwurf package supplies:
    (`pi/pi-durable/carrier-resolver.mjs`), which maps them to the published package's
    own `dist/` as installed — never through a source checkout.
 
-The upstream [library guide](https://github.com/earendil-works/pi/blob/v1.3.0/packages/durable/README.md)
+The upstream [library guide](https://github.com/earendil-works/pi/blob/v1.4.0/packages/durable/README.md)
 and the [experimental app guide](https://github.com/earendil-works/pi/blob/v1.1.0/packages/coding-agent/src/experimental/durable/README.md)
 (last published at v1.1.0) describe what the carrier is. Running the bare upstream app does not attach Entwurf's
 garden contact. Entwurf does not rebuild the controller/model/auth/storage system or
@@ -420,7 +436,7 @@ tree (for example an override that binds pi-durable's `pi-ai` to an older publis
   manifest field; it is a known constraint of supplying both from one package, accepted for 0.32,
   not a claim that every load path is harmless.
 
-The ordinary Pi CLI on PATH is a separate subject (§2, range `>=1.3.0 <1.4`): a host Pi is
+The ordinary Pi CLI on PATH is a separate subject (§2, range `>=1.4.0 <1.5`): a host Pi is
 not needed to run pi-durable, and a host inside the range need not be the same copy as the
 carrier's. Native Pi owns credentials, model settings and durable SQLite sessions; keep them
 in place rather than copying credentials or migrating ordinary Pi transcripts. Native
@@ -430,6 +446,29 @@ Package gates prove the installed carrier's load, its physical edges and the pub
 to the app's own model resolution; the checkout contact/send/receive gates run the same carrier
 with scripted S plus native H; Pi ↔ pi-durable LIVE on this supply surface is a separate release
 proof ([#130](https://github.com/junghan0611/entwurf/issues/130)).
+
+### Moving durable sessions from the Pi 1.3 SDK to 1.4
+
+This candidate is unpublished, and moving a live host onto it is a separate operator decision. When
+you do:
+
+1. **Confirm the old owner is gone.** Close the 0.41 (SDK 1.3) durable session normally and check
+   that its process has exited. A stale session lock alone is not proof.
+2. **Back up first.** Before the first 1.4 open, copy the target session directory whole
+   (`session.sqlite` with any `-wal`/`-shm`) as one consistent set.
+3. **Choose the session by name.** Reopen with the `--resume` picker and pick the entry you mean;
+   do not use `--continue` on a host with more than one session.
+4. **Package downgrade is not data rollback.** The first 1.4 open migrates SQLite storage to
+   schema 2, which SDK 1.3 (Entwurf 0.41) refuses to open. Reinstalling the old package does not
+   undo that. Restoring the backup does, and work done after the 1.4 open is not in the backup.
+5. **Inspect parked work before retrying.** On its first open, 1.4 counts a task that SDK 1.3 left
+   running as one restart, and after repeated cut-offs it parks the task (`restart_limit`). Read
+   what the task already did before you resend anything: recovery of a parked model turn is not
+   measured, and its side effects or outcome may be unknown. The existing conversation abort is
+   cancellation, not retry; it need not affect background tasks.
+
+The measurements behind these points, and what they do not cover, are in the
+[#148 checkpoint](https://github.com/junghan0611/entwurf/issues/148#issuecomment-6339048361).
 
 ### Maintainer: re-emitting the carrier
 
@@ -647,7 +686,7 @@ as a note rather than a fault.
 
 **entwurf sets no OMP version floor in code, and will not grow one on schedule.** Detection is
 presence-only (`command -v "${OMP_BIN:-omp}"`); there is no `entwurf.ompFloor`, no coherence
-gate, and no exact pin — unlike Node (`engines.node`), pi (`>=1.3.0 <1.4`) and Claude Code
+gate, and no exact pin — unlike Node (`engines.node`), pi (`>=1.4.0 <1.5`) and Claude Code
 (`entwurf.claudeCodeFloor`), each of which has an enforcement point. That asymmetry is a
 decision, not an omission. A floor is the answer to a vendor that fails SILENTLY — Claude Code
 earned one because an older binary validates the exec manifest, drops `args` at runtime, and

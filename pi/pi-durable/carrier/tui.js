@@ -219,6 +219,7 @@ export class TaskBadge                      {
 			...tally("aborting", (node) => node.abortRequested),
 			...tally("completing", (node) => !node.abortRequested && node.state.status === "completing"),
 			...tally("waiting", (node) => !node.abortRequested && node.state.status === "waiting"),
+			...tally("sleeping", (node) => !node.abortRequested && node.state.status === "sleeping"),
 			...tally("pending", (node) => !node.abortRequested && node.state.status === "pending"),
 		].join(", ");
 	}
@@ -621,17 +622,31 @@ class DurableTui {
 	}
 }
 
-function describeTask(node               )         {
+/** A task's line in the tasks panel: a sleeping task says when it wakes, a blocked one why it cannot run. */
+export function describeTask(node               )         {
 	const state = node.state;
 	const status =
 		state.status === "waiting"
 			? `waiting on ${state.on.join(", ")}`
 			: state.status === "completing"
 				? `completing (${state.outcome})`
-				: `${state.status} ${state.phase}`;
-	const flags = [node.background ? "background" : "", node.abortRequested ? "aborting" : ""].filter(Boolean);
+				: state.status === "sleeping"
+					? `sleeping ${state.phase} until ${localTime(state.until)}`
+					: `${state.status} ${state.phase}`;
+	const flags = [
+		node.background ? "background" : "",
+		node.abortRequested ? "aborting" : "",
+		node.blocked !== undefined ? `blocked:${node.blocked}` : "",
+	].filter(Boolean);
 	const owned = node.conversations.length > 0 ? ` owns conversation ${node.conversations.join(", ")}` : "";
 	return `${node.kind} #${node.id}: ${status}${flags.length > 0 ? ` [${flags.join(", ")}]` : ""}${owned}`;
+}
+
+/** Epoch milliseconds as local wall-clock time, `YYYY-MM-DD HH:MM:SS`. */
+function localTime(epoch        )         {
+	const at = new Date(epoch);
+	const pad = (n        ) => String(n).padStart(2, "0");
+	return `${at.getFullYear()}-${pad(at.getMonth() + 1)}-${pad(at.getDate())} ${pad(at.getHours())}:${pad(at.getMinutes())}:${pad(at.getSeconds())}`;
 }
 
 function userText(content                        )         {

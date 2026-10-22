@@ -76,8 +76,8 @@
 			{
 				"name": "tui.js",
 				"source": "pi/pi-durable/src/experimental/durable/tui.ts",
-				"blob": "eb5e2ec4e98919cd3ff4f81f166eb52afe6555af",
-				"sha256": "a1b0d9d9358c5b54ac0974de84068b7792669171917ebd7b7351374ed625c9c5"
+				"blob": "405600f6ba1558bf6bf22d144afdcf3f1295c282",
+				"sha256": "d4bf4e2861bde917e1dcdea6f063bdc3e101ab500107a9c5fab0e3ce97fb2c4a"
 			},
 			{
 				"name": "harness-setup.js",
@@ -132,17 +132,17 @@
 		]
 	},
 	"sdk": {
-		"comment": "The published library set the carrier runs against, derived from the 1.3.0 declarations. members: the @earendil-works packages the carrier imports and every @earendil-works package those declare. direct: a third-party package a carrier file imports itself (sessions.ts: proper-lockfile, at the version pi-coding-agent 1.3.0 pins). Each is an exact production dependency in package.json. Since 1.3.0 the members' own edges are exact too (upstream #10865), and the installed physical edges are still what must equal these versions.",
+		"comment": "The published library set the carrier runs against, derived from the 1.4.0 declarations. members: the @earendil-works packages the carrier imports and every @earendil-works package those declare. direct: a third-party package a carrier file imports itself (sessions.ts: proper-lockfile, at the version pi-coding-agent 1.4.0 pins). Each is an exact production dependency in package.json. Since 1.3.0 the members' own edges are exact too (upstream #10865), and the installed physical edges are still what must equal these versions.",
 		"members": {
-			"@earendil-works/chord": "1.3.0",
-			"@earendil-works/pi-agent-core": "1.3.0",
-			"@earendil-works/pi-ai": "1.3.0",
-			"@earendil-works/pi-codemode": "1.3.0",
-			"@earendil-works/pi-coding-agent": "1.3.0",
-			"@earendil-works/pi-durable": "1.3.0",
-			"@earendil-works/pi-mcp": "1.3.0",
-			"@earendil-works/pi-telemetry": "1.3.0",
-			"@earendil-works/pi-tui": "1.3.0"
+			"@earendil-works/chord": "1.4.0",
+			"@earendil-works/pi-agent-core": "1.4.0",
+			"@earendil-works/pi-ai": "1.4.0",
+			"@earendil-works/pi-codemode": "1.4.0",
+			"@earendil-works/pi-coding-agent": "1.4.0",
+			"@earendil-works/pi-durable": "1.4.0",
+			"@earendil-works/pi-mcp": "1.4.0",
+			"@earendil-works/pi-telemetry": "1.4.0",
+			"@earendil-works/pi-tui": "1.4.0"
 		},
 		"direct": {
 			"proper-lockfile": "4.1.2"

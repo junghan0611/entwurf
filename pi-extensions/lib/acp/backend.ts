@@ -668,13 +668,15 @@ async function settleChildEnd(latch: ChildEndLatch, ms: number): Promise<void> {
  * may appear here, or a dead child would put a full cold prompt replay back on
  * the table — with the tool side effects this turn already produced.
  *
- * That pattern is a bare substring alternation (`new RegExp(terms.join("|"), "i")`
- * — NO word boundaries) and its terms enumerate the HTTP statuses "429", "500",
- * "502", "503", "504" and "524". So the settle bound is deliberately NOT interpolated: rendering
- * CHILD_END_SETTLE_MS made this line say "within 500ms", which pi read as an
- * HTTP 500 and classified as transient. Naming the window in prose keeps a later
- * change of that constant from silently re-arming the replay — do not "improve"
- * this by putting the number back; the bound belongs in the code and the gate.
+ * That pattern is a substring alternation (`new RegExp(terms.join("|"), "i")` — NO word
+ * boundaries on its word terms). Through pi-ai 1.3 its HTTP status terms ("429", "500",
+ * "502", "503", "504", "520", "524") were bare substrings too, and rendering
+ * CHILD_END_SETTLE_MS made this line say "within 500ms", which pi read as an HTTP 500 and
+ * classified as transient. pi-ai 1.4 bounds only those status terms (upstream #11057), so
+ * "500ms" no longer matches; the word terms above are still unbounded. The settle bound
+ * stays deliberately NOT interpolated: naming the window in prose keeps a later change of
+ * that constant, or of the classifier, from silently re-arming the replay — do not
+ * "improve" this by putting the number back; the bound belongs in the code and the gate.
  *
  * The three endings are kept DISTINCT on purpose (issue #72 Done-when): an
  * exit code, a signal, and "we waited and it never said" are three different
@@ -1468,8 +1470,9 @@ export function streamAcpTurn(
 		// the turn-scoped full-transcript-replay cause.
 		const hint = aborted ? undefined : actionableAcpBackendHint(full);
 		// #127: pi's retry and overflow classifiers read `errorMessage` ALONE, and a
-		// vendor's "Internal error" or any digit run in its ids/stderr reads as transient
-		// — a replay of a turn whose tools already ran. A rejection the adapter names gets
+		// vendor's "Internal error" reads as transient — a replay of a turn whose tools
+		// already ran. (Through pi-ai 1.3 a digit run in its ids/stderr did too; 1.4 bounds
+		// the status terms, upstream #11057.) A rejection the adapter names gets
 		// its fixed verdict there; every raw part rides one diagnostic, appended after any
 		// existing ones. An abort keeps the abort path.
 		const rejection = aborted ? undefined : adapter?.readPromptRejection?.(err);

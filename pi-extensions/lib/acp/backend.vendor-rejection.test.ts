@@ -6,14 +6,16 @@
  * JSON-RPC -32603 `Internal error: Claude ended the turn without returning results for tool
  * calls: <ids>` and `data: {errorKind: "incomplete_tool_call"}`, after logging the same line
  * (with session and turn ids) to stderr. pi classifies a failed assistant message by its
- * `errorMessage` alone, and both "Internal error" and any digit run such as `503` inside an id
- * read as transient — so the vendor text, or the stderr tail that repeats it, would make pi
- * resend the WHOLE prompt from a cold session after the tools already ran.
+ * `errorMessage` alone, and "Internal error" reads as transient — so the vendor text would make pi
+ * resend the WHOLE prompt from a cold session after the tools already ran. Through pi-ai 1.3 any
+ * digit run such as `503` inside an id read as transient too, so the stderr tail alone was a
+ * trigger; pi-ai 1.4 matches status codes only as standalone numbers (upstream #11057), and the
+ * stderr line alone now reads as non-transient.
  *
  * The subject is the real `streamAcpTurn` pipeline (new and reuse paths) driven through its
  * `AcpTurnDeps` seam with typed fakes. The independent oracle is pi's own classifier pair,
- * `isRetryableAssistantError` and `isContextOverflow`, with positive controls proving that the
- * raw vendor text and the stderr line alone DO classify as transient.
+ * `isRetryableAssistantError` and `isContextOverflow`, with controls proving that the raw vendor
+ * text DOES classify as transient and that, on the pinned pi-ai, the stderr line's opaque ids do not.
  *
  * Module state is sandboxed: backend.ts and its siblings read `homedir()` at load (overlay and
  * session-cache paths), so HOME/XDG/PI_CODING_AGENT_DIR point into a temp dir BEFORE the
@@ -88,8 +90,9 @@ afterAll(() => {
 });
 
 // --- the vendor's exact 0.85.1 shapes (v0.85.1 src/acp-agent.ts:4297-4300, :4332) ----------
-// The ids carry digit runs on purpose: `503` and `524` are terms in pi's transient dictionary,
-// which matches as a bare substring — the stderr line alone is a replay trigger.
+// The ids carry digit runs on purpose: `503` and `524` are terms in pi's transient dictionary. Through
+// pi-ai 1.3 it matched them as bare substrings, so the stderr line alone was a replay trigger; pi-ai 1.4
+// bounds them (`(?<![a-z0-9])(?:429|500|502|503|504|520|524)(?![a-z0-9])`, upstream #11057).
 const TOOL_ID = "toolu_01H8503kQ2vZ";
 const TURN_UUID = "8c1f5240-0d1e-4b2a-9e3f-5a7c9d2b1e04";
 const VENDOR_DETAIL = `Claude ended the turn without returning results for tool calls: ${TOOL_ID}`;
@@ -330,15 +333,16 @@ function assertNoReplay(message: AssistantMessage): void {
 }
 
 describe("vendor incomplete_tool_call rejection (#127, upstream #1212)", () => {
-	it("positive controls: the raw vendor text and the vendor stderr line each classify as transient", () => {
+	it("controls: the raw vendor text classifies as transient, the stderr line's opaque ids no longer do", () => {
 		const probe = (errorMessage: string): AssistantMessage => ({
 			...assistantReply(""),
 			stopReason: "error",
 			errorMessage,
 		});
 		expect(isRetryableAssistantError(probe(VENDOR_TEXT))).toBe(true);
-		// No "Internal error" here: the digit run inside the ids is the trigger.
-		expect(isRetryableAssistantError(probe(stderrLine("S")))).toBe(true);
+		// No "Internal error" here, only the digit runs inside the ids: pi-ai 1.4 reads `…8503…` as part
+		// of an id, not as status 503. The authored verdict below still carries no digits.
+		expect(isRetryableAssistantError(probe(stderrLine("S")))).toBe(false);
 		// The overflow oracle is live too: a known provider overflow shape classifies as one.
 		expect(isContextOverflow(probe(OVERFLOW_NOISE), SONNET.contextWindow)).toBe(true);
 	});

@@ -1,0 +1,57 @@
+{
+	"schemaVersion": 1,
+	"subject": "pi-durable SQLite storage written by SDK 1.3.0 (schema version 1), restored by pi-durable-storage-migration.test.ts and opened by the root SDK",
+	"generator": "generate.mjs (run it with --sdk13-root and --out; see its header)",
+	"sdk": {
+		"package": "@earendil-works/pi-durable",
+		"version": "1.3.0",
+		"siblings": {
+			"@earendil-works/chord": "1.3.0",
+			"@earendil-works/pi-ai": "1.3.0"
+		},
+		"distDigest": {
+			"files": 324,
+			"sha256": "c7f5115c6f96932e934d80b5da11cc1d95b5d89ffa9b8498c18abfb484951ec6"
+		}
+	},
+	"scenarios": {
+		"close": {
+			"file": "sdk13-close.sql",
+			"sha256": "0b490245210eb574a6284721ce8635a1a8750e123d5b0cea05454b5cb795d9c9",
+			"schemaVersion": 1,
+			"tasks": [
+				{
+					"kind": "\"fixture.parent\"",
+					"status": "waiting"
+				},
+				{
+					"kind": "\"fixture.unregistered\"",
+					"status": "pending"
+				},
+				{
+					"kind": "\"fixture.leaf\"",
+					"status": "running"
+				}
+			]
+		},
+		"kill": {
+			"file": "sdk13-kill.sql",
+			"sha256": "b1ff8f961390be2ffd4b6792a4f11fcaa8a1988f6da367df0aa727f122227f49",
+			"schemaVersion": 1,
+			"tasks": [
+				{
+					"kind": "\"fixture.parent\"",
+					"status": "waiting"
+				},
+				{
+					"kind": "\"fixture.unregistered\"",
+					"status": "pending"
+				},
+				{
+					"kind": "\"fixture.leaf\"",
+					"status": "running"
+				}
+			]
+		}
+	}
+}

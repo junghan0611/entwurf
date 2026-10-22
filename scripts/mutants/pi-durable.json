@@ -1208,6 +1208,66 @@
 			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
 		},
 		{
+			"claim": "PI-DURABLE-TASK-SLEEPING-COUNTED",
+			"title": "the badge stops naming sleeping tasks: a background task in its durable backoff is counted but said to be nothing",
+			"subject": "pi/pi-durable/carrier/tui.js",
+			"find": ["\t\t\t...tally(\"sleeping\", (node) => !node.abortRequested && node.state.status === \"sleeping\"),"],
+			"replace": ["\t\t\t// sleeping is not named"],
+			"gate": ["bash", "run.sh", "check-pi-durable-carrier"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PI-DURABLE-TASK-SLEEPING-COUNTED]",
+			"signatureSource": "pi-extensions/lib/pi-durable-carrier.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "PI-DURABLE-TASK-SLEEPING-SHOWN",
+			"title": "a sleeping task's panel line drops its wake time, so nothing on screen says when the sleeping work comes back",
+			"subject": "pi/pi-durable/carrier/tui.js",
+			"find": ["\t\t\t\t\t? `sleeping ${state.phase} until ${localTime(state.until)}`"],
+			"replace": ["\t\t\t\t\t? `sleeping ${state.phase}`"],
+			"gate": ["bash", "run.sh", "check-pi-durable-carrier"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PI-DURABLE-TASK-SLEEPING-SHOWN]",
+			"signatureSource": "pi-extensions/lib/pi-durable-carrier.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "PI-DURABLE-TASK-BLOCKED-SHOWN",
+			"title": "the panel stops marking blocked tasks: a task the SDK will not run reads as ordinary pending work",
+			"subject": "pi/pi-durable/carrier/tui.js",
+			"find": ["\t\tnode.blocked !== undefined ? `blocked:${node.blocked}` : \"\","],
+			"replace": ["\t\t\"\","],
+			"gate": ["bash", "run.sh", "check-pi-durable-carrier"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PI-DURABLE-TASK-BLOCKED-SHOWN]",
+			"signatureSource": "pi-extensions/lib/pi-durable-carrier.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "PI-DURABLE-TASK-BLOCKED-REASON",
+			"title": "every blocked task is said to be parked by the restart limit, whatever reason the SDK gave",
+			"subject": "pi/pi-durable/carrier/tui.js",
+			"find": ["\t\tnode.blocked !== undefined ? `blocked:${node.blocked}` : \"\","],
+			"replace": ["\t\tnode.blocked !== undefined ? `blocked:restart_limit` : \"\","],
+			"gate": ["bash", "run.sh", "check-pi-durable-carrier"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PI-DURABLE-TASK-BLOCKED-REASON]",
+			"signatureSource": "pi-extensions/lib/pi-durable-carrier.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "PI-DURABLE-TEST-FIXTURES-NOT-SHIPPED",
+			"title": "package.json drops its fixture negation, so every published tarball carries the test goldens under pi-extensions/**/fixtures/",
+			"subject": "package.json",
+			"find": ["\t\t\"!pi-extensions/**/*.test.ts\",", "\t\t\"!pi-extensions/**/fixtures/**\""],
+			"replace": ["\t\t\"!pi-extensions/**/*.test.ts\""],
+			"gate": ["bash", "run.sh", "check-pi-durable-carrier"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PI-DURABLE-TEST-FIXTURES-NOT-SHIPPED]",
+			"signatureSource": "pi-extensions/lib/pi-durable-carrier.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
 			"claim": "PI-DURABLE-STREAM-TRANSPORT-WIRE",
 			"title": "the Harness settings stop carrying the transport: the provider never continues a response, so every request of a long session resends the whole conversation",
 			"subject": "pi/pi-durable/carrier/harness-setup.js",

@@ -54,14 +54,25 @@ ownership of the harness.
 
 Prerequisites: **Node >=24.0.0**, Python 3 for `setup`, and any harnesses you choose
 to use, already installed and authenticated. Pi is optional-by-presence, supported
-range `>=1.3.0 <1.4`; Claude Code supported floor `>=2.1.306` is required for its
+range `>=1.4.0 <1.5`; Claude Code supported floor `>=2.1.306` is required for its
 managed exec-hook lifecycle. pnpm is needed only for source-checkout setup.
 
+**Release state.** The Pi range above belongs to this source candidate, which moves the Pi SDK
+set to 1.4.0 and is **not published to npm yet**. The newest published package, `0.41.0`,
+ships the Pi 1.3.0 SDK set and requires Pi 1.3.x; the README inside that tarball and the Herdr
+snapshot `v2026.10.22-herdr.0.41.0` are its contract. Pick the path that matches the Pi you run.
+
+The published package (Pi 1.3.x):
+
 ```bash
-npm install -g @junghanacs/entwurf
+npm install -g @junghanacs/entwurf@0.41.0
 entwurf setup /path/to/your-project
 entwurf check-bridge
 ```
+
+This candidate (Pi 1.4): a source checkout of this commit, set up with `./run.sh setup` as
+[Clean-host setup](./docs/setup-clean-host.md) describes. It has no npm install command until it
+is released.
 
 `setup` composes each harness it finds and reports PASS / SKIP / FAIL. An absent
 harness is an explicit SKIP; a detected incomplete/below-floor integration is a
@@ -95,8 +106,8 @@ harness rails.
 
 ### Native durable (pi-durable)
 
-**The package supplies Entwurf's owned app/TUI carrier and nine exact Pi 1.3.0 SDK
-members.** No separate runtime checkout, patch, build or ordinary Pi CLI is needed.
+**This candidate's package supplies Entwurf's owned app/TUI carrier and nine exact Pi 1.4.0 SDK
+members** (unpublished; the published 0.41.0 supplies the 1.3.0 set). No separate runtime checkout, patch, build or ordinary Pi CLI is needed.
 The launch verifies carrier integrity and every reachable SDK edge's name/version;
 incomplete, drifted or mixed supply refuses by name.
 
@@ -128,8 +139,13 @@ owns flags, refusals and the extension contract.
 ### Herdr workbench
 
 ```bash
-herdr plugin install junghan0611/entwurf/plugins/herdr --yes
+herdr plugin install junghan0611/entwurf/plugins/herdr --ref "$CANDIDATE_REF" --yes
 ```
+
+`CANDIDATE_REF` names the public ref that carries the runtime you mean. This unpublished candidate
+has none yet, so the example cannot run for it; the
+[Herdr guide](./plugins/herdr/README.md#from-a-raw-linux-box-in-nine-steps) says which runtime each
+ref installs.
 
 This separate path activates Herdr-integrated **pi and Claude Code** with an
 independently locked runtime and an observation pane; it puts no Entwurf bins on PATH.
