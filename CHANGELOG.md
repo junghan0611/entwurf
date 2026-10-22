@@ -42,6 +42,13 @@ published tarball's CHANGELOG nor the core release page is amended by this snaps
 - **README.** The first-user-path receipt description no longer says the installed
   `check-bridge` lists an eight-verb set; it names the verb set the installed bridge declares,
   nine since 0.41.0.
+- **Raw-install smoke scaffolding follows the Claude Code floor.** The first public-ref run of
+  `smoke-herdr-raw-install-live` at `cfdae0e` built its container with Claude Code 2.1.278, a
+  hand-kept pin from 2026-09-19, and the acquired 0.41.0 runtime refused to wire Claude below its
+  supported floor `>= 2.1.306` — the product's intended refusal, not a runtime defect. The smoke now
+  derives its exact Claude Code version from `package.json` `entwurf.claudeCodeFloor` instead of
+  retyping it. The product floor, the Pi, Herdr and Node pins and the smoke's end-state oracle are
+  unchanged.
 
 ### Source-specific verification
 

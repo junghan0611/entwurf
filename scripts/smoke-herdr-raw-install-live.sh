@@ -110,9 +110,16 @@ fi
 
 PI_SPEC="$(node -p "require('$REPO/package.json').dependencies['@earendil-works/pi-coding-agent']")"
 # Pinned, not floating: a receipt that cannot say WHICH Claude Code it ran is not
-# reproducible. This is the version measured in the container on 2026-09-19. Claude Code
-# is scaffolding here (Rule 17) — the product face starts at `herdr integration install`.
-CLAUDE_SPEC="2.1.278"
+# reproducible. The exact version is the support floor itself, derived from
+# `package.json` `entwurf.claudeCodeFloor` rather than retyped: a hand-kept pin stayed at
+# 2.1.278 after the floor moved to 2.1.306 and the activation then refused it, as it should.
+# Claude Code is scaffolding here (Rule 17) — the product face starts at `herdr integration install`.
+CLAUDE_FLOOR="$(node -p "require('$REPO/package.json').entwurf.claudeCodeFloor")"
+CLAUDE_SPEC="${CLAUDE_FLOOR#>=}"
+if [[ "$CLAUDE_FLOOR" != ">=$CLAUDE_SPEC" || ! "$CLAUDE_SPEC" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+  echo "[smoke-herdr-raw-install-live] FAIL — package.json entwurf.claudeCodeFloor is '$CLAUDE_FLOOR', not '>=X.Y.Z'." >&2
+  exit 1
+fi
 FLOOR_SPEC="$(node -p "require('$REPO/package.json').engines.node")"
 FLOOR_MAJOR="${FLOOR_SPEC#>=}"; FLOOR_MAJOR="${FLOOR_MAJOR%%.*}"
 HERDR_VERSION="$(node -p "require('$REPO/scripts/fixtures/herdr-supply.json').version")"
