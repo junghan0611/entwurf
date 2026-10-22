@@ -64,11 +64,15 @@ durable file receipt; a control-socket queue is process memory.
 The current checkout's Pi control server also accepts the internal `retire` RPC, so a Pi
 started from that checkout can expose it before a release is cut. It requires matching
 record/native identity, a TUI, idle state and no pending work. Its `shutdown-requested` ACK
-is not socket closure, process exit, flush or model silence. This command is not a public
-MCP/contact retirement verb and is not part of the four send boundaries above. The candidate
+is not socket closure, process exit, flush or model silence. This command is not itself a public
+MCP/contact verb and is not part of the four send boundaries above; the candidate public
+`entwurf_retire_call` reaches a Pi target through it. A Pi whose process started before its
+checkout carried this command does not know it, and its generic error answer is classified as
+`unknown`/`malformed-response`, never as a safe refusal or a reason to replay. The candidate
 CC pidfd helper observes one fd-pinned process, not a conversation, descendants or flush;
 unknown never grants safe replay. Package/source presence, compiled consumer checks and a
-real native lifecycle remain separate evidence axes. Historical delivery receipts below do
+real native lifecycle remain separate evidence axes; the one dated native lifecycle measurement
+is [BASELINE's 2026-10-22 n=1 round trip](./BASELINE.md#147-native-round-trip-2026-10-22-n1). Historical delivery receipts below do
 not certify these candidate components.
 
 ## Levels (D0–D8)

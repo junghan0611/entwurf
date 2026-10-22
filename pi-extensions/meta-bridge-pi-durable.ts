@@ -793,8 +793,10 @@ const TOOL_DESCRIPTIONS: Record<PiDurableToolName, string> = {
 	entwurf_retire_call:
 		"Only when the human operator explicitly requested this particular target/work: make ONE retirement attempt for that request " +
 		"through the bridge (target only, Pi or Claude Code; self retirement refuses). Development work, a role or " +
-		"a record-backed actor is NOT a grant. Existing host harness approval and agent operating policy govern " +
-		"permission; MCP annotations are hints, not approval proof. No autonomous cleanup, timers or automatic " +
+		"a record-backed actor is NOT a grant. Use host approval where provided/configured; " +
+		"Pi and pi-durable have no built-in per-call approval prompt by default. An explicit operator request and " +
+		"agent operating policy are required; attribution and MCP annotations are hints, not grants or proof of approval. " +
+		"No autonomous cleanup, timers or automatic " +
 		"retry of unknown, cancelled or lost results. Do not manually /resume or /clear the target during the request. " +
 		"Pi shutdown-requested is only an ACK, not process exit, flush or model silence. Claude Code exited is that " +
 		"fd-pinned process only, not conversation end, children or flush. The JSON receipt keeps outcome, record and " +

@@ -419,6 +419,10 @@ Otherwise record and defer. Every certification separates declared pins, determi
 evidence, Claude LIVE aggregate evidence, and Cortex direct on-demand evidence (with its CLI
 version). Per-bump measurements live in the ROADMAP **Dep bump(별도 트랙)** ledger.
 
+### Configured Claude ACP permissions
+
+Source configuration, not a retirement LIVE receipt: `pi-extensions/lib/acp/overlay.ts` sets `permissions.defaultMode: "bypassPermissions"`, and `config.ts` includes `mcp__*` in the default `permissionAllow`. The configured Claude ACP child therefore does not supply a per-call permission prompt; these settings do not widen the explicit callable tool surface. `enrichMcpServersWithEnvelope` in `config.ts` injects the host Pi session's `PI_SESSION_ID` and the ACP agent label into the explicit entwurf-bridge stdio entry. If that bridge exposes `entwurf_retire_call`, a promptless call attributed to the host Pi citizen is consequently possible by source inference — ACP retirement through this path is unmeasured, not part of the ordinary Native Pi/Claude Code n=1 round trips. Neither those settings, annotations nor caller attribution is an operator grant: an explicit human request for that target/action and agent operating policy are still required. This describes existing configuration, not a new ACP retirement ban or permission mechanism.
+
 ### Bridge reachability is part of the contract
 
 Explicit entwurf-bridge connectivity inside an ACP turn is core value, so it is measured rather than

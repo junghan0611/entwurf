@@ -507,9 +507,10 @@ async function handleCommand(
 		writeResponse(socket, { type: "response", command: commandName, success, data, error, id });
 	};
 
-	// Internal lifecycle only: attribution is not authorization. The future public core
-	// must enforce its retirement policy before sending this command. No async gap
-	// exists between the receiver's final same-session checks and the SDK void call.
+	// The public core checks caller/self, freshness and target admission, not an operator grant.
+	// Attribution is not authorization: an explicit operator request and agent operating policy
+	// are required; use host approval where provided/configured. No async gap exists between
+	// the receiver's final same-session checks and the SDK void call.
 	if (command.type === "retire") {
 		const result = requestControlRetire(state, serverBinding, residentGardenId, command);
 		endRetireResponse(socket, retireResponseEnvelope(result, id));

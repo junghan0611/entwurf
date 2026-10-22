@@ -210,6 +210,9 @@ record, then copies the binding into the receiver marker. This is not a transact
 files; UserPromptSubmit preserves the binding. Resume requires a fresh record read after the
 dead-owner verdict and a matching non-null marker binding; its observation joins the launched
 pane's new live owner with a different fresh binding matching the current record and birth tuple.
+The dormancy check sees only attaches the hook committed: a process that holds the session
+without one (hooks disabled, a record-arm lock timeout or a store failure at its start) is
+invisible to it — a boundary accepted on 2026-10-21, recorded in AGENTS.md.
 Old null-bound records remain unbound until a trusted same-native-id arm; do not backfill values
 or erase markers to pass the gate. A stale reader that rejects this known V3 key must roll forward,
 not force healthy citizens through a generation cut (see [fresh-cut policy](./fresh-cut-policy.md#upgrade-order)).

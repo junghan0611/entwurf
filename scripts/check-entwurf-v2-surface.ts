@@ -630,6 +630,13 @@ async function main(): Promise<void> {
 				/visible-first/.test(dormantHint) &&
 				/entwurf_resume_call/.test(dormantHint),
 		);
+		ok(
+			"[QK:V2SURF-RESUME-HINT-SCOPE] dormant hint names Pi/Claude Code promptless resume only on explicit operator request, never automatic permission",
+			dormantHint.includes("Only on an explicit operator request") &&
+				dormantHint.includes("entwurf_resume_call {target} for Pi or Claude Code") &&
+				dormantHint.includes("it submits no prompt") &&
+				dormantHint.includes("not permission to resume automatically"),
+		);
 		// The frozen wire id still spells "-no-spawn" although nothing spawns anymore. The id is
 		// deliberately NOT renamed (renaming a public reject is its own contract cut), so the
 		// hint carries the whole correction: probe inconclusive, and nothing ran.

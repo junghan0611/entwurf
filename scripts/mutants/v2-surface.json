@@ -3,6 +3,22 @@
 	"lane": "v2-surface",
 	"mutants": [
 		{
+			"claim": "V2SURF-RESUME-HINT-SCOPE",
+			"title": "the dormant capability hint returns to a Pi-only automatic-resume invitation",
+			"subject": "pi-extensions/lib/entwurf-v2-surface.ts",
+			"find": [
+				"\t\t\t\t\"Only on an explicit operator request, use entwurf_resume_call {target} for Pi or Claude Code; \" +",
+				"\t\t\t\t\"it submits no prompt. This capability hint is not permission to resume automatically.\""
+			],
+			"replace": [
+				"\t\t\t\t\"Reopen the citizen with entwurf_resume_call {target} (pi targets only; it runs no turn), then dispatch again.\""
+			],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-surface"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:V2SURF-RESUME-HINT-SCOPE]",
+			"signatureSource": "scripts/check-entwurf-v2-surface.ts"
+		},
+		{
 			"claim": "V2SURF-MCP-LOCK-DOMAIN",
 			"title": "MCP long description reverts to the false \"socket paths take a per-target lock\" claim",
 			"subject": "mcp/entwurf-bridge/src/index.ts",

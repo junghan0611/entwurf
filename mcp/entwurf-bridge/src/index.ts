@@ -965,8 +965,9 @@ server.tool(
 server.tool(
 	"entwurf_retire_call",
 	"Only when the human operator explicitly requested this particular target/work: make ONE retirement attempt for that request. " +
-		"Development work, a role or a record-backed actor is NOT a grant. Permission belongs to the existing host " +
-		"harness approval surface and agent operating policy; these annotations are hints, not proof of approval. " +
+		"Development work, a role or a record-backed actor is NOT a grant. Use host approval where provided/configured; " +
+		"Pi and pi-durable have no built-in per-call approval prompt by default. An explicit operator request and " +
+		"agent operating policy are required; attribution and MCP annotations are hints, not grants or proof of approval. " +
 		"Never use for autonomous cleanup or timers. Never automatically retry an unknown, cancelled or lost result. " +
 		"Target must be an existing Pi or Claude Code garden id; self retirement refuses. Pi shutdown-requested is " +
 		"only an ACK, not process exit, flush or model silence. Claude Code exited means that fd-pinned process only, " +

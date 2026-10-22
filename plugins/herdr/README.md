@@ -4,7 +4,7 @@
 you already have.**
 
 [Entwurf](../../README.md) opens and messages visible sibling AI sessions, and reopens dormant pi
-siblings in tmux. It gives an already-running agent session a **garden id**, an address that
+or Claude Code siblings in tmux. It gives an already-running agent session a **garden id**, an address that
 outlives the pane it happens to be drawn in, lets it open new siblings — inside Herdr, a pi or
 Claude Code sibling arrives as a new unfocused tab in its own workspace — and carries one official
 delivery verb for reaching them. That capability is independent of Herdr and normally arrives
@@ -94,8 +94,12 @@ is the correct behaviour for a workbench — persistent identity is not its job.
   one outcome — control-socket send, self-fetch mailbox, native-push injection, or a **named
   refusal**. It never types into a pane and never starts a process.
 - **Named lifecycle verbs.** `entwurf_fresh_call` opens a sibling that does not exist yet;
-  `entwurf_resume_call` reopens a dormant **pi** citizen under the same id, taking transcript, model,
-  provider and cwd from the record, running no turn.
+  `entwurf_resume_call` reopens a dormant **pi** or **Claude Code** citizen under the same id in a tmux
+  window, with the record as the sole address authority: Pi uses its identity-checked recorded
+  transcript's session-header cwd and first `model_change` provider/model through the launch resolver
+  (no record/host cwd fallback); Claude Code uses the record session id/cwd without restoring model
+  or permission flags. The call submits no prompt. Called from inside Herdr it refuses as
+  `herdr-resume-unsupported`; there is no Herdr resume rail.
 
 ---
 
@@ -231,7 +235,11 @@ present as tools. The pane tells you which ids exist; these do the work:
   tmux. The model is required and has no default: pi wants a provider-qualified id like
   `openai-codex/gpt-5.6-terra`, Claude Code wants a vendor id like `claude-sonnet-5`. Each runtime
   owns its own grammar and this plugin validates neither.
-- `entwurf_resume_call {target}` — reopen a dormant **pi** citizen under its own id.
+- `entwurf_resume_call {target}` — reopen a dormant **pi** or **Claude Code** citizen under its own id,
+  in tmux only: from a session inside Herdr it refuses by name as `herdr-resume-unsupported`.
+- `entwurf_retire_call {target}` (#147 candidate) — attempt retirement of one pi or Claude Code
+  sibling, and only one the human operator explicitly asked to retire; a wired session seeing the
+  tool is not permission, and an unknown result is not a reason to retry.
 
 Coordinates, refusals and orphan reclaim for the Herdr rail are owned by
 [`docs/herdr-launch-rail.md`](../../docs/herdr-launch-rail.md); the tmux rail by
@@ -337,8 +345,8 @@ shows you which ids exist, and `entwurf_v2` is what reaches them.
 **The address is record-backed, so returning to it costs no rebinding step.** Durable identity that
 outlives a pane exists elsewhere in this ecosystem; the part that differs is what you do when the
 runtime is gone. Where a durable logical identity is re-attached to a new runtime by an explicit
-adopt or rebind, a dormant pi citizen is reopened by `entwurf_resume_call {target}` — the same id is
-the whole input, the record supplies transcript, model, provider and cwd, and no turn is run.
+adopt or rebind, a dormant pi or Claude Code citizen is reopened by `entwurf_resume_call {target}` (in
+tmux) — the same id is the whole input; the record selects Pi's identity-checked native transcript for launch metadata or supplies Claude Code's session id/cwd, and the call submits no prompt.
 
 Where this plugin is genuinely *narrower* than its neighbours: it has no `[[actions]]`, no
 `[[events]]`, and no write surface at all. That is in the manifest with its reason — an action's

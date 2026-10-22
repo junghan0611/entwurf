@@ -30,7 +30,7 @@ outside the experimental preview (rows below).
 |---|---|---|
 | Node 24 Linux package consumer | shape-only | Required `artifact-consumer` CI |
 | Node 24 macOS package consumer (GitHub Actions runner, not a physical Mac) | shape-only · CERTIFIED (CI) | Required `macos-install-surface` CI run 34303884286 @ `70eda03` (`macos-latest`, 65 s, 10/10 steps): pack → clean consumer install → bin links → `entwurf --help` → `check-bridge` (7 tools) → harness-absent `setup` (all SKIP, computed green, zero no-write-axis writes, `auth.json` byte-identical). Certifies no harness rail. |
-| Claude Code exec form (observed at 2.1.217) | **certified** at 2.1.217; the supported floor is now `>=2.1.306` (#147 same-id resume), declared with no LIVE receipt at it yet | Topology + floor gates, doctor oracle; B2 live NixOS session |
+| Claude Code exec form (observed at 2.1.217) | **certified** at 2.1.217; the supported floor is now `>=2.1.306` (#147 same-id resume), declared with no LIVE receipt at 2.1.306 itself; the dated n=1 lifecycle round trip below ran on 2.1.307 | Topology + floor gates, doctor oracle; B2 live NixOS session |
 | Claude Code 2.1.138 | **unsupported** | Launcher refuses empty argv; no shell-form fallback |
 | Maintainer NixOS installed package | **certified** for `0.12.8-repair.1` | 2026-07-25 registry install → doctor exit 0 (HISTORY) |
 | Secondary Ubuntu installed package | **certified** for `0.12.8-repair.1` | 2026-07-25 same artifact, isolated agent dir → doctor exit 0 (HISTORY) |
@@ -67,6 +67,43 @@ injected dispatcher have source/fixture and candidate-local proof, not new nativ
 certification. Pi ACK is not exit/flush; CC fd-process exit is not conversation/children/flush.
 The current `>=2.1.306` floor and a historical B2 delivery receipt do not certify this
 lifecycle. A later CI green also cannot certify the operator's mixed-reader deployment.
+These two paragraphs are the 2026-10-21 state; the next section records what 2026-10-22 measured.
+
+### #147 Native round trip, 2026-10-22 (n=1)
+
+Not a certification row and not a release gate. One Linux host, source `a9c9459` (exact-SHA push
+CI green on its four required jobs), checkout compiled output rebuilt once under the dist lock
+after its previous bytes were preserved. The operator requested this bounded test-owned
+measurement; no working sibling was retired or restarted. Public record:
+[#147 checkpoint comment](https://github.com/junghan0611/entwurf/issues/147#issuecomment-6329217980).
+
+| Axis | Measured |
+|---|---|
+| caller | a fresh pi-durable citizen, identity from its exact nonce callback; its native store (read from an online read-only backup) offered all eight contact tools, the actual model was `openai-codex/gpt-6.1-sol`, and it made exactly four settled lifecycle calls — one retire and one resume per target |
+| ordinary Pi target | fresh, callback-identified. Retire returned `shutdown-requested`; separately, the original pane and control socket were gone, the record unchanged and the paired requested/outcome events present. Dormant `entwurf_v2` rejected. Resume returned separate LAUNCH and OBSERVATION; native session, `createdAt`, cwd and backend kept; transcript byte-identical across the promptless resume; a question omitting the answer recovered the pre-retirement fact |
+| native Claude Code target (CLI 2.1.307) | fresh, callback-identified, bound arm before retirement. Retire returned `exited`; separately, the last bound receiver owner was dead, the original pane gone, the record unchanged and the paired events present. Dormant delivery rejected as an undeliverable mailbox. Resume observed a NEW live owner with a new record-matched arm for the same native session and `createdAt`; transcript byte-identical across the promptless resume; blind recall succeeded |
+
+It does not show: conversation flush, descendant exit or model silence; the `>=2.1.306` floor
+itself (2.1.307 was the measured CLI); ACP-provider Pi, Herdr, pi-durable as a target, Windows or
+macOS; a release artifact; the `smoke-mux-lifecycle-live` MUST; or that any resident process
+reloaded new reader bytes.
+
+**G4 the same day (reader scope closed with Copilot runtime deferral; resident/runtime acceptance separate).** The five stale on-disk reader copies (Codex
+birth, OMP birth and receive, Copilot birth and receive) were preserved and rolled forward with
+their owning installers; their installed meta modules are byte-identical to the current source or
+compiled twin. Codex birth, both OMP units and Copilot receive passed install and doctor. Copilot
+birth passed install and doctor ownership but its doctor runtime axis is RED on a historical
+unrecovered hook error from 2026-10-14; that RED is retained, not cleared or counted as PASS.
+On 2026-10-22 GLG explicitly deferred Copilot Native runtime validation for this landing: Copilot
+is currently a free `auto` account, not a subscription, and GLG reports even a greeting taking over
+a minute to answer, making practical runtime validation unavailable. That latency is an operator
+report, not a benchmark re-measured here. No new Copilot model turn or log-clearing recovery was
+performed. This landing closes the on-disk reader/field-compatibility scope with that explicit
+Copilot runtime deferral; it does not certify Copilot runtime or resident-process reloads.
+The external Python mirror's nullable-field delta has a reviewed local checkpoint (not yet pushed),
+and its owner's one installed schema certification accepted 1,847 records with zero defects — field
+acceptance, not whole-parser equivalence. Resident processes remain unmeasured; broader runtime
+and release acceptance are not silently waived.
 
 Notes the table cannot carry without becoming prose again:
 
@@ -269,7 +306,7 @@ Per-question PASS / FAIL / NOTE for grading the model's response.
 ### Q-MCP — MCP enumerate
 - **PASS** — Exactly one: `entwurf-bridge`.
 - **FAIL** — Any second server appears, or `entwurf-bridge` missing.
-- **NOTE** — Codex naturally writes the name with underscores (`entwurf_bridge`); that is the agent-visible backend marker, not a mutation. The current server exposes eight tools, including the manual `entwurf_register_native` fallback; MCP enumeration asks for the server name, not a stale tool count.
+- **NOTE** — Codex naturally writes the name with underscores (`entwurf_bridge`); that is the agent-visible backend marker, not a mutation. The current source bridge lists nine tools (#147 candidate), including the manual `entwurf_register_native` fallback; MCP enumeration asks for the server name, not a stale tool count.
 
 ---
 

@@ -3516,7 +3516,7 @@ let manifestCount: number;
 		"setup-verdict": 14,
 		"source-install": 2,
 		"typing-call-fence": 1,
-		"v2-surface": 13,
+		"v2-surface": 14,
 		"v2-visible-resume": 40,
 		"win32-preview": 19,
 	};

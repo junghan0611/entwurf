@@ -243,8 +243,12 @@ message. These are harness tools, not shell subcommands; pi exposes them through
 Pi's built-in MCP as `mcp__entwurf_bridge__<verb>`. The #147 candidate bridge has nine tools;
 pi hides `entwurf_inbox_read` and `entwurf_register_native`, leaving seven active.
 The added `entwurf_retire_call` is only for one target/action explicitly requested by the
-human operator, never autonomous cleanup; tool availability and caller identity are not a grant.
-These candidate counts do not claim that an older installed package or running host has rolled forward.
+human operator, never autonomous cleanup. Where a host provides or is configured with an approval
+step, that step applies as well; Pi and pi-durable 1.3.0 have no built-in approval prompt by
+default. The configured Claude ACP child is also [set to run without per-call permission prompts](./acp-backend-rail.md#configured-claude-acp-permissions); ACP retirement remains unmeasured.
+Tool availability, annotations and caller identity are not a grant.
+These candidate counts do not claim that an older installed package or running host has rolled
+forward; see [applying new source to a running host](#applying-new-source-to-a-running-host).
 Tool-call ingress is MCP; delivery to a pi citizen is still its record-addressed
 control address (a Unix socket; a named pipe on the experimental native-Windows Pi
 preview). A boot/listing from `check-bridge` is not a model-turn or
@@ -1161,11 +1165,20 @@ may be missing or stale. Installed mode never bootstraps pnpm in `node_modules`.
 
 ### Applying new source to a running host
 
-New source on disk is not a fresh runtime. A pi-durable host spawns the compiled bridge `mcp/entwurf-bridge/dist/mcp/entwurf-bridge/src/index.js` even from a checkout (the bootstrap's `PACKAGED_BRIDGE_ENTRY`). Ordinary `start.sh` in a checkout runs the TypeScript source instead. An already-running bridge keeps the modules it loaded. So, for a host that has to run new bridge code:
+New source on disk is not a fresh runtime. From a checkout, each surface loads different bytes, and each refreshes differently:
+
+| Surface | Loads | Refreshed by |
+|---|---|---|
+| pi-durable host (contact and bridge) | compiled `mcp/entwurf-bridge/dist/…`, even from a checkout (the bootstrap's `PACKAGED_BRIDGE_ENTRY`) | a build, then a new host process |
+| ordinary Pi's built-in MCP bridge | the same compiled `dist` entry (`entwurfBridgeCompiledEntry`); the Pi extension itself loads from the package source | a build, then a new Pi process |
+| an MCP host registered through `start.sh` (Claude Code, Codex, Copilot, OMP, agy) | the TypeScript source in a checkout (compiled only under `node_modules`) | a new bridge child; no build |
+| installed hook/extension copies (Claude Code meta-bridge, Codex birth, Copilot birth and receive, OMP birth and receive) | their own installed copy, neither `dist` nor the checkout source | that unit's owning installer, then a new vendor session |
+
+An already-running process keeps the modules it loaded, whatever is on disk. So, for a host that has to run new bridge code:
 
 1. Build once from the checkout (`pnpm run build-bridge`, or its body `bash scripts/with-dist-lock.sh bash scripts/build-bridge.sh` when no package lifecycle should run).
 2. Compare the whole compiled output with the accepted candidate's, as a file-set and hash manifest. A hash of the selected entry alone is not enough: the entry can stay identical while a helper it loads differs. Check the pinned SDK set separately, and that the new process started after the build.
-3. Close the visible session and reopen it with its own native same-id resume.
+3. Close the visible session and reopen it with its own native same-id resume. Closing a working sibling is an operator decision for that session, not something an agent does because new bytes landed.
 4. Confirm `entwurf_self` names the same garden id, and that the receiver/owner join points at the new process, whose bridge child started after the build.
 
 A per-component setup PASS or a `git pull` does not show which bytes a running bridge loaded. On 2026-10-20 one host of the #107 pair still selected a pre-feature dist after a pull and a green setup. The cause was not traced. A hash check caught it before the first message, and a manual build and visible resume fixed it. Entwurf adds no auto-build, reload or watcher for this.
