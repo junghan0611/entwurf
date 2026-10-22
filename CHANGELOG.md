@@ -4,6 +4,17 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+## 0.41.0 - 2026-10-22
+
+A sibling's garden id is its birthday, and this cut lets it rest and come back under it. A
+sibling can now be opened, spoken to, retired when the human operator names it, and reopened
+under the same id with its conversation intact. That holds for ordinary Pi and native Claude
+Code. Retirement is a pause in a long session, not cleanup: it is never autonomous, a paired
+requested/outcome record beside the target's record is attempted for every request with any
+recording failure reported on its own axis, and the record and transcript stay.
+A durable pi-durable sibling can drive both verbs. Each was measured once on real sessions, which
+is recorded as dated evidence, not as a release gate.
+
 ### Fresh call
 
 - **A Pi-dialect model names its provider, and never OpenRouter (#76).** The dispatch root both
@@ -47,9 +58,9 @@ All notable changes to this project will be documented here. Format follows [Kee
   QK judges only self, peers and v2; the seven-tool `native-module` cell was not run. A running
   coordinator host offering seven tools, and any operator rollout, remain unmeasured.
 
-### Operator-requested retirement composition (#147 candidate)
+### Operator-requested retirement (#147)
 
-- Candidate `entwurf_retire_call {target}` exposes one explicitly human-requested Pi or Claude Code attempt. Development, coordinator status and record-backed attribution are not standing permission. Where a host provides or is configured with an approval step, that step applies as well; Pi and pi-durable 1.3.0 have no built-in approval prompt by default. MCP annotations and caller identity are hints and attribution, not permission. No autonomous cleanup, roster expansion or automatic replay.
+- `entwurf_retire_call {target}` makes one explicitly human-requested Pi or Claude Code attempt. Development, coordinator status and record-backed attribution are not standing permission. Where a host provides or is configured with an approval step, that step applies as well; Pi and pi-durable 1.3.0 have no built-in approval prompt by default. MCP annotations and caller identity are hints and attribution, not permission. No autonomous cleanup, roster expansion or automatic replay.
 - The per-request production binding captures its directories and cancellation signal. Requested/outcome events share an id in a target-gid append-only sidecar with explicit actor/target fields. Action, record-write failure and lock cleanup stay independent; an append failure cannot turn a possibly effective action into a safe retry. The source bridge lists nine tools, ordinary Pi seven active plus two hidden, and the durable contact eight.
 - Independent review repaired a metadata-test oracle, random-id privacy-test flakiness and snapshot/file-target consistency. A private `node_modules` compiled consumer passed29 assertions over anonymous/self refusal, existing resume refusal, inert Node RPC and two-line attribution. Operator dist hashes stayed unchanged. That consumer is not real Pi/Claude Code retirement, Native/LIVE, G4 rollout or release acceptance; final candidate floors and exact-SHA CI are still owed.
 - 2026-10-22, source `a9c9459`: one operator-requested, test-owned Native round trip per backend — a fresh pi-durable caller (actual offering of all eight contact tools) retired and same-id resumed a fresh ordinary Pi and a native Claude Code 2.1.307 target once each, with dormant delivery refused, identity and transcript preserved across the promptless resume, and blind recall. n=1; not a MUST gate, ACP, Herdr, Windows, release-artifact or flush/descendant claim ([BASELINE](./BASELINE.md#147-native-round-trip-2026-10-22-n1)). The five stale on-disk Codex/Copilot/OMP reader copies were rolled forward with their owning installers; Copilot birth's doctor runtime axis remains RED on a historical hook error. GLG explicitly deferred its Native runtime validation for this landing: the current free `auto` account, not a subscription, is impractical to test (GLG reports a greeting taking over a minute; not re-benchmarked here). On-disk reader compatibility is closed with that named runtime deferral; resident-process reloads and broader runtime/release acceptance remain unmeasured. Earlier component receipts below do not become this candidate's kill-power.
@@ -132,7 +143,8 @@ All notable changes to this project will be documented here. Format follows [Kee
   on 2026-10-21 (records written by a Pi loaded from the development checkout) took the CC hook
   and the pi-durable contact down until the checkout dist and the CC hook bundle were re-deployed.
   Codex birth, the Copilot extension/receiver, the OMP bridge/receiver and the external
-  `entwurf-peek` mirror still carry the old reader there; their roll-forward is a separate step.
+  `entwurf-peek` mirror still carried the old reader there at L2; the on-disk copies were rolled
+  forward on 2026-10-22 (see the retirement section).
   Old dormant Claude Code citizens whose record has no binding stay `target-receiver-unbound` until
   a human reopens them once under a new hook. **Accepted boundary (GLG, 2026-10-21, current live
   Pi/CC cohort scope):** only committed hook attaches are guarded — a process that holds the session
@@ -142,7 +154,8 @@ All notable changes to this project will be documented here. Format follows [Kee
 - **Claude Code floor `>=2.1.306`** (`package.json` `entwurf.claudeCodeFloor`, GLG 2026-10-21):
   same-id resume runs `claude --resume` from the record's last observed cwd, and the vendor CLI
   reference says the session-id search covers other projects only from v2.1.223. 2.1.306 is the
-  version GLG relayed as running here; it is a declared floor with no LIVE receipt at it yet. The
+  version GLG relayed as running here; it is a declared floor with no LIVE receipt at 2.1.306 itself
+  (the 2026-10-22 n=1 round trip ran on 2.1.307). The
   exec-form observations at 2.1.217 stand as observations.
 - Proof: QKs beside the composition (`entwurf-v2-visible-resume.test.ts`), in
   `check-resume-launch-identity`, `check-mux-resume-call`, `check-meta-v3-record`,
@@ -152,10 +165,88 @@ All notable changes to this project will be documented here. Format follows [Kee
   runs the staged compiled hook) and `check-meta-doctor-oracle` (installed binding; lock module
   missing/drifted). Mutants: v2-visible-resume 18 → 40, mux-resume-call 10 → 13,
   resume-launch-identity 7 → 10, meta-hook-session-switch 17 → 25, meta-identity 4 → 9, existing
-  ones re-anchored. The LIVE dormant→resume journey for Claude Code is not measured;
-  `smoke-mux-lifecycle-live`'s Claude Code cell expects the still-live sibling's resume to be
-  refused as `target-live`, and that LIVE cell was not run. Retire (G3) and the caller's four cells
-  are not part of this change.
+  ones re-anchored. At the L2 checkpoint the LIVE dormant→resume journey for Claude Code had not
+  been measured, and `smoke-mux-lifecycle-live`'s Claude Code cell, which expects the still-live
+  sibling's resume to be refused as `target-live`, had not been run. Retire (G3) and the caller's
+  four cells were not part of L2; the later 2026-10-22 n=1 round trip is recorded in the
+  retirement section. The Claude Code dormant leg is still not a release-gate MUST.
+
+### Team bookmarks
+
+- **`team.json.example` shows one way to keep long-lived siblings in view.** It is a fictional,
+  caller-maintained bookmark: each member's name, the descriptive form of address
+  `coordinating sibling` or `sibling`, backend, garden id and native session id. The real
+  `team.json` at a repository root stays ignored. No program loads either file; the record stays
+  the address authority, liveness is re-read from `entwurf peer-facts`, and membership is not
+  permission to send, resume or retire.
+
+### Herdr plugin
+
+- **Back to the checkout carrier for this unpublished candidate.** `plugins/herdr/runtime-lock.json`
+  moves from the published `@junghanacs/entwurf@0.40.0` npm pin to the closed `herdr-checkout`
+  source, as the 0.40.0 preparation did; no npm integrity is invented and the plugin manifest
+  version is not bumped. The npm re-pin follows publication in its own Herdr snapshot. Inside
+  Herdr, `entwurf_resume_call` still refuses as `herdr-resume-unsupported`; retirement from a
+  Herdr pane was not measured.
+
+### Upgrade notes
+
+- A running process keeps the bytes it loaded. Ordinary Pi's built-in MCP bridge and pi-durable
+  load the compiled `dist`, `start.sh` hosts load the source in a checkout, and installed
+  hook/extension copies change only through their owning installers; restart the session after
+  that ([setup](./docs/setup-clean-host.md#applying-new-source-to-a-running-host)). A reader that
+  predates `attachIncarnation` refuses records carrying it, so roll every installed reader forward.
+- Claude Code needs `>=2.1.306` for same-id resume. Its retirement uses a Linux pidfd helper and is
+  refused elsewhere. The native-Windows preview has no resume, and retirement was not
+  measured there. Copilot's Native
+  runtime validation is deferred by GLG's decision on the free `auto` account.
+
+### Evidence boundary
+
+- **One real round trip per backend, at `a9c9459`, not at this release's SHA.** A fresh pi-durable
+  caller retired and same-id resumed a fresh ordinary Pi and a native Claude Code 2.1.307 target
+  once each: dormant delivery refused, native identity and transcript preserved across the
+  promptless resume, blind recall correct. n=1; not a release-gate MUST, ACP, Herdr, Windows,
+  release-artifact or flush/descendant claim
+  ([BASELINE](./BASELINE.md#147-native-round-trip-2026-10-22-n1),
+  [#147](https://github.com/junghan0611/entwurf/issues/147#issuecomment-6329217980)).
+- Kill-power re-measured at this shipped SHA: none (all 1173 committed claims not re-proved,
+  #144).
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head 639f783df2d5 surface
+  d53b8f8d6602 -- `["bash","run.sh","check-entwurf-v2-retire"]` 32/32 receipt fc08567fb8d3
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head 639f783df2d5 surface
+  d53b8f8d6602 -- `["bash","run.sh","check-retirement-event"]` 16/16 receipt 948a9661fdc0
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head 639f783df2d5 surface
+  d53b8f8d6602 -- `["bash","run.sh","check-pi-durable-beside"]` 44/44 receipt 61e5b0552648
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head 639f783df2d5 surface
+  d53b8f8d6602 -- `["bash","run.sh","smoke-agy-install-state"]` 12/12 receipt deccfdbf3990
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head 639f783df2d5 surface
+  d53b8f8d6602 -- `["bash","scripts/smoke-pi-provider-state.sh"]` 5/5 receipt 9de492738ef4
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head a9c945921a7e surface
+  80a4f8a7b942 -- `["bash","run.sh","check-entwurf-v2-surface"]` 17/17 receipt b4c765bd35b7
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head a9c945921a7e surface
+  80a4f8a7b942 -- `["bash","run.sh","check-pi-durable-beside"]` 44/44 receipt b6751a543d7a
+- **Local static and LIVE floor, measured on this preparation's candidate:** head `c318f30` plus
+  the three release-prep files (this evidence line excepted); the HEAD/index/worktree fingerprint
+  and the 94-file compiled `dist` were unchanged before and after each run. `pnpm run check:full`
+  PASS (exit 0, 882 s) with the host herdr at the supply pin 0.9.5, where `check-herdr-sandbox`
+  passed its 12 assertions on a private server and left the operator's panes and Pi trust store
+  untouched. Two earlier local attempts stayed RED and are kept, each at its own head: at
+  `bf24e17`, a `dist` built 35 s before the last `.ts` commit (the managed rebuild then produced
+  byte-identical output); at `c318f30`, the host herdr 0.9.4 against the 0.9.5 pin. `LIVE=1 ./run.sh release-gate <scratch> --cut`:
+  **MUST PASS=24 FAIL=0 SKIP=0, BEHAVIOR PASS=1 FAIL=0, cut OK**, 11:59:15–12:19:05 KST, with the
+  caller identity carriers stripped. The Codex step ran against a test-owned app-server started
+  for this run in its own tmux session (pid named from its own launch, start ticks recorded,
+  stopped by one TERM afterwards) from a different gate session, with the requested tiers
+  `gpt-6-luna` and `openai-codex/gpt-6-luna` — the request, not a billing or model-identity
+  proof. Receipts on the operator host: `.tmp-verify/release-0.41.0/` (`full-r3/full.log`
+  `44332ee7fd78`, `live/release-gate.log` `6f56fffab3da`).
+- **Still owed before the tag.** This prepared SHA's exact push CI (four required jobs). This
+  release is carrier-bearing, so its candidate is the native-Windows preview workflow's pack at
+  the prepared SHA, never a local `npm pack`. The strict `doctor-meta-bridge` on an installed
+  0.41.0 Claude host in a new post-install session, the agy shipped-lane cell and the Codex
+  caller-seat cell (VERIFY release acceptance 4, 7, 8) follow that candidate. Tag, GitHub
+  release and npm publication each need their own approval.
 
 ## v2026.10.20-herdr.0.40.0 — Herdr Entwurf plugin 0.40.0
 
