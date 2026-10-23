@@ -3494,7 +3494,7 @@ let manifestCount: number;
 		"mux-fresh-call": 65,
 		"mux-launcher-fence": 8,
 		"mux-parent-artifact": 3,
-		"pack-install": 5,
+		"pack-install": 9,
 		"pi-package-ownership": 8,
 		"qualification-ledger": 42,
 		"mux-resume-call": 13,

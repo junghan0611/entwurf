@@ -14,6 +14,13 @@ All notable changes to this project will be documented here. Format follows [Kee
   - The remote-pair mutants run through the new narrow coordinate `check-remote-pair-beside`, which is in `check:contracts`.
   - Not measured: a real exchange over the v2 file (T3 must be re-run for the schema change) and a sender and a receiver on different releases.
 
+### Fixed
+
+- **`check-pack-install`'s two dispatcher-verb leak refusals could pass a leak on a SIGPIPE.** The copilot and codex-app-server cells searched the vendor stand-in's argv with `printf '%s' "$op_out" | grep -qF …` under `pipefail` and refused only when that pipeline exited 0. bash's `printf` writes a multi-line value one line at a time, so a `-q` that closes the pipe at the first match can kill the producer with 141 and pass the cell. The defect was latent: no false green was observed in CI, and the product carries no leak. Both cells now return through one verdict, `pack_install_refuse_argv_leak`. It searches a here-string, which has no producer to kill. It passes on a clean search, and refuses with the cell's existing diagnostic on a leak, or by name when the search itself fails.
+  - `check-pack-argv-matcher` is a snapshot-safe gate in `check:package`. Like `check-pack-pin-matcher`, it also runs first inside `check-pack-install`. It drives that same verdict: it must refuse a leak at the front or end of about 260 KB, pass clean output silently, and refuse a failing `grep`. A text check holds both cells to the verdict.
+  - A teeth control first requires the retired pipe shape to miss the front-loaded leak on the host. The mutant that restores that shape dies deterministically only because of this large fixture; on the real small output it would survive.
+  - The other pipe-to-`-q` lines reviewed alongside are unchanged: the pi-provider doctor and dev-only gate fence checks, which the next confirm-type check backstops; the meta-sessions `ls | grep -q .` cell; the `takeover-user-scope` and uninstall notes; and the confirm-type greps.
+
 ## v2026.10.23-herdr.0.41.1 — Herdr Entwurf plugin 0.41.1
 
 A separate Herdr plugin snapshot, not another core release: core package 0.41.1 and its

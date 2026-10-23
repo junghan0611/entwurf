@@ -60,6 +60,52 @@
 			"timeoutSeconds": 120,
 			"signature": "[QK:WIN32-PACK-DIGEST]",
 			"signatureSource": "run.sh"
+		},
+		{
+			"claim": "PACK-INSTALL-ARGV-LEAK-CAUGHT",
+			"title": "the dispatcher-verb refusal goes back to the retired verdict, `printf | grep -qF` under pipefail refusing only when that pipeline exits 0, so a leak ahead of more output SIGPIPEs the producer and the cell passes \u2014 killed deterministically only because the self-test front-loads the leak ahead of ~260 KB, past the default 64 KiB pipe buffer (its teeth control measures that); on the real small stand-in output the same restoration would survive",
+			"subject": "run.sh",
+			"find": ["  grep -qF -- \"$token\" <<<\"$out\" || argv_search_rc=$?"],
+			"replace": ["  printf '%s' \"$out\" | grep -qF -- \"$token\" || argv_search_rc=1"],
+			"gate": ["bash", "run.sh", "check-pack-argv-matcher"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:PACK-INSTALL-ARGV-LEAK-CAUGHT]",
+			"signatureSource": "run.sh"
+		},
+		{
+			"claim": "PACK-INSTALL-ARGV-CLEAN-PASSES",
+			"title": "the dispatcher-verb refusal stops accepting a clean search (grep rc=1), so every installed copilot / codex-app-server launch is refused, silently",
+			"subject": "run.sh",
+			"find": ["    1) return 0 ;;"],
+			"replace": ["    1) ;;"],
+			"gate": ["bash", "run.sh", "check-pack-argv-matcher"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:PACK-INSTALL-ARGV-CLEAN-PASSES]",
+			"signatureSource": "run.sh"
+		},
+		{
+			"claim": "PACK-INSTALL-ARGV-SEARCH-ERROR-REFUSED",
+			"title": "a failed dispatcher-verb search (grep rc=2) is accepted as clean, so a search that never ran lets the leak refusal pass",
+			"subject": "run.sh",
+			"find": [
+				"    *) fail \"[check-pack-install] installed 'entwurf $label': the dispatcher-verb search itself failed (rc=$argv_search_rc) \u2014 refused, never read as no leak\" ;;"
+			],
+			"replace": ["    *) return 0 ;;"],
+			"gate": ["bash", "run.sh", "check-pack-argv-matcher"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:PACK-INSTALL-ARGV-SEARCH-ERROR-REFUSED]",
+			"signatureSource": "run.sh"
+		},
+		{
+			"claim": "PACK-INSTALL-ARGV-CELLS-BOUND",
+			"title": "the copilot leak refusal of check-pack-install goes back to its own `printf | grep -qF` instead of returning through the proved verdict, so the self-test stays green while the heavy cell regains the SIGPIPE window (the codex-app-server call is held by the same text check, with no mutant of its own)",
+			"subject": "run.sh",
+			"find": ["  pack_install_refuse_argv_leak copilot \"$op_out\" 'ARG<copilot>' || return 1"],
+			"replace": ["  if printf '%s' \"$op_out\" | grep -qF 'ARG<copilot>'; then return 1; fi"],
+			"gate": ["bash", "run.sh", "check-pack-argv-matcher"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:PACK-INSTALL-ARGV-CELLS-BOUND]",
+			"signatureSource": "run.sh"
 		}
 	]
 }

@@ -339,6 +339,7 @@ Usage:
   ./run.sh check-node-floor-coherence # binds the Node floor (24+, single axis) across engines.node, run.sh setup preflight, meta-bridge install/doctor judgment logic, clean-host docs, the bridge launcher header, and the CI runner node-version — engines.node is the SSOT, everything else is derived; sweeps tracked contract text for an unregistered declaration
   ./run.sh check-pack                 # publish gate (dry-run): npm pack --dry-run + tarball invariants (runtime-critical present, dev residue absent)
   ./run.sh check-pack-pin-matcher     # pure self-test of check-pack-install's pin-leak matcher against synthetic .pnpm lookalikes, one cell per property: version boundary (a prefix-extended @0.86.0-beta.1 and an off-pin @0.85.1 must leak, @0.86.0 bare or with any measured peer-hash must pass) and closure prefix (an off-pin @earendil-works/chord must leak — it carries no `pi-` prefix); snapshot-safe qualification oracle, also run first inside check-pack-install
+  ./run.sh check-pack-argv-matcher    # pure self-test of check-pack-install's dispatcher-verb leak refusal (the copilot and codex-app-server cells): a front-loaded or trailing leak in ~260 KB is refused where the retired printf | grep -qF shape misses it (teeth control measured each run), clean output passes silently, a failing grep is refused by name, and both cells still return through it; snapshot-safe qualification oracle, also run first inside check-pack-install
   ./run.sh check-pack-consumer-roots  # pure self-test of check-pack-install's consumer sandbox: under a poisoned inherited HOME/XDG/PI_CODING_AGENT_DIR every writable root a consumer subcall sees resolves inside its own consumer home; snapshot-safe qualification oracle, also run first inside check-pack-install
   ./run.sh check-fresh-cut-gate       # SOURCE cell of the generation-boundary proof (IN pnpm run check:full): drives real install/setup/fresh-cut in a sandbox; certification refusal is pre-write, quiescence is fail-closed, archives preserve bytes, and the #54 exit matrix distinguishes complete / no-move / usage / incomplete transition / complete-with-cleanup-residue. No model/network/cost
   ./run.sh check-pack-install         # heavy publish gate (prepublishOnly): actual npm pack + tar -tf + fresh-temp install smoke + the #116 M3-b1 herdr-plugin RUNTIME VERIFIER run against that actual installed tarball (the focused check-herdr-runtime-bootstrap drives a fixture; THIS is where the real package is proven) with the pinned pi SDK (pins derived from the package.json exact production dependency; check-dep-versions binds them) + the npm-installed bridge BOOTS (tools/list) and DELIVERS (tools/call entwurf_v2 → .msg lands) + the installed all-absent and copilot-present (four-unit fake-vendor) `entwurf setup` rows + the INSTALLED generation lifecycle on a seeded previous-generation host (REFUSE before activation writes / zero Claude invocations → installed fresh-cut archives + opens empty → install-meta-bridge PASSES) + the INSTALLED-PACKAGE branch of the Copilot and OMP birth installers actually RUN (compiled entry selected, no raw .ts, and a real birth edge mints a citizen — the half a required-artifact list can never stand in for) + the INSTALLED #129 durable bootstrap (pi/pi-durable/bootstrap.mjs) imported from node_modules: main/openDurableCitizen exported and PACKAGED_BRIDGE_ENTRY = the installed package's own dist entry — import only, no runtime/TUI/birth/bridge started + the #130 pi-durable CARRIER on actual npm consumers (Entwurf-only / aligned host / isolated global): the installed verifier, a consumer-contained resolution oracle with a same-sandbox neighbour control, every physical SDK edge at the pin, a mixed tree refused as pi-durable-sdk-mismatch though it still imports, and the public `entwurf pi-durable` reaching the app's own explicit-model refusal before any birth, also with one explicit `--native-module` (the synthetic fixture, initialized first; a reserved extension name refused before anything opens) (offline, sandbox HOME)
@@ -4224,6 +4225,106 @@ check_pack_pin_matcher() {
   echo "[check-pack-pin-matcher] ok — the pin-leak matcher is version-bounded (lookalikes leak, pinned version passes bare and with either measured peer-hash) and covers the whole @earendil-works closure (chord included)"
 }
 
+# The dispatcher-verb leak refusal of check-pack-install's copilot and codex-app-server cells: the
+# vendor stand-in prints one `ARG<…>` line per argument, and the dispatcher verb among them means it
+# leaked into the vendor's argv. The search it replaces, `printf '%s' "$op_out" | grep -qF …`,
+# refused only when that pipeline exited 0: bash's printf writes a multi-line value a line at a
+# time, `-q` closes the pipe at the first match, and pipefail turned the producer's 141 into a pass
+# (pipefail audit, 2026-10-23: latent, no false green observed in CI). A here-string has no
+# producer to kill, and the verdict reads the search's own rc: 1 (clean) passes, 0 (leaked) and any
+# other rc (the search itself failed) refuse with the cell's diagnostic.
+pack_install_refuse_argv_leak() {
+  local label="$1" out="$2" token="$3" argv_search_rc=0
+  grep -qF -- "$token" <<<"$out" || argv_search_rc=$?
+  case "$argv_search_rc" in
+    1) return 0 ;;
+    0)
+      fail "[check-pack-install] installed 'entwurf $label' leaked the dispatcher verb into the vendor's argv:"
+      echo "$out" | tail -8 | sed 's/^/    /' >&2
+      ;;
+    *) fail "[check-pack-install] installed 'entwurf $label': the dispatcher-verb search itself failed (rc=$argv_search_rc) — refused, never read as no leak" ;;
+  esac
+  return 1
+}
+
+# Self-test of pack_install_refuse_argv_leak — the SAME verdict both cells return through, never a
+# re-typed predicate — on synthetic stand-in output: its pass/refuse result and the diagnostic that
+# names why, one QK per verdict, plus a text check that both cells still return through it.
+# Snapshot-safe like check-pack-pin-matcher, and run first inside check-pack-install. The large
+# fixtures put the leak ahead of ~260 KB, past the default 64 KiB pipe buffer. The teeth control
+# measures, on THIS host, that the retired pipe shape misses it there (grep matched, the pipeline
+# still failed); a fixture that stops biting is a red of its own, not a vacuous green.
+check_pack_argv_matcher() {
+  local cop_leak cop_clean cx_leak cx_clean big_tail big_leak_front big_leak_end big_clean
+  local rc out label fx token missed shim bound_copilot bound_codex red=0 teeth=()
+  cop_leak=$'FLAG=[EXTENSIONS]\nARG<copilot>\nARG<-p>\nARG<hi>\nARG<--model>\nARG<auto>\nARG<--yolo>'
+  cop_clean=$'FLAG=[EXTENSIONS]\nARG<-p>\nARG<hi>\nARG<--model>\nARG<auto>\nARG<--yolo>'
+  cx_leak=$'ARG<codex-app-server>\nARG<app-server>\nARG<--listen>\nARG<unix:///h/.codex/app-server.sock>\nARG<--config>\nARG<probe=1>'
+  cx_clean=$'ARG<app-server>\nARG<--listen>\nARG<unix:///h/.codex/app-server.sock>\nARG<--config>\nARG<probe=1>'
+  big_tail=$(seq 1 24000 | sed 's/^/ARG<x/; s/$/>/')
+  big_leak_front=$'FLAG=[EXTENSIONS]\nARG<copilot>\n'"$big_tail"
+  big_leak_end="$big_tail"$'\nARG<codex-app-server>'
+  big_clean=$'FLAG=[EXTENSIONS]\n'"$big_tail"
+
+  # Teeth control: the defect's own signature — grep matched (its PIPESTATUS is 0) yet the pipeline
+  # failed. A grep error is not teeth, and an exact 141 is not required (an inherited ignored
+  # SIGPIPE still makes the producer fail, and the miss is just as real).
+  { printf '%s' "$big_leak_front" | grep -qF -- 'ARG<copilot>'; teeth=("$?" "${PIPESTATUS[@]}"); } || true
+  if [ "${teeth[0]}" -eq 0 ] || [ "${teeth[2]:-unset}" != 0 ]; then
+    fail "[check-pack-argv-matcher] the planted fixture has no teeth here: the retired printf | grep -qF shape did not miss a leak it matched (pipeline=${teeth[0]} PIPESTATUS=${teeth[*]:1}), so the cells below would prove nothing — enlarge it"
+    return 1
+  fi
+
+  missed=""
+  for fx in "copilot cop_leak ARG<copilot>" "codex-app-server cx_leak ARG<codex-app-server>" "copilot big_leak_front ARG<copilot>" "codex-app-server big_leak_end ARG<codex-app-server>"; do
+    read -r label fx token <<<"$fx"
+    rc=0; out=$(pack_install_refuse_argv_leak "$label" "${!fx}" "$token" 2>&1) || rc=$?
+    { [ "$rc" -eq 1 ] && [[ "$out" == *"leaked the dispatcher verb"* ]]; } || missed+=" $fx(rc=$rc)"
+  done
+  if [ -n "$missed" ]; then
+    fail "[QK:PACK-INSTALL-ARGV-LEAK-CAUGHT] a leaked dispatcher verb must be refused as a leak wherever it sits and however long the output — passed or misnamed:$missed"
+    red=1
+  fi
+
+  missed=""
+  for fx in "copilot cop_clean ARG<copilot>" "codex-app-server cx_clean ARG<codex-app-server>" "copilot big_clean ARG<copilot>"; do
+    read -r label fx token <<<"$fx"
+    rc=0; out=$(pack_install_refuse_argv_leak "$label" "${!fx}" "$token" 2>&1) || rc=$?
+    { [ "$rc" -eq 0 ] && [ -z "$out" ]; } || missed+=" $fx(rc=$rc)"
+  done
+  if [ -n "$missed" ]; then
+    fail "[QK:PACK-INSTALL-ARGV-CLEAN-PASSES] stand-in output without the verb must pass silently, small or large — refused:$missed"
+    red=1
+  fi
+
+  # A search that fails is refused, never read as clean: a `grep` that exits 2 on PATH.
+  shim=$(mktemp -d "${TMPDIR:-/tmp}/entwurf-argv-shim.XXXXXX")
+  printf '#!/bin/sh\n: > "%s/reached"\nexit 2\n' "$shim" > "$shim/grep"
+  chmod +x "$shim/grep"
+  rc=0; out=$(PATH="$shim:$PATH"; pack_install_refuse_argv_leak copilot "$cop_clean" 'ARG<copilot>' 2>&1) || rc=$?
+  if [ ! -e "$shim/reached" ]; then
+    rm -rf "$shim"
+    fail "[check-pack-argv-matcher] the failing grep stand-in was never reached, so the search-error cell would prove nothing"
+    return 1
+  fi
+  rm -rf "$shim"
+  if [ "$rc" -ne 1 ] || [[ "$out" != *"search itself failed (rc=2)"* ]]; then
+    fail "[QK:PACK-INSTALL-ARGV-SEARCH-ERROR-REFUSED] a search that fails (grep rc=2) must refuse the cell and say so, never pass it as clean — got rc=$rc: ${out:-<silent>}"
+    red=1
+  fi
+
+  # Both cells must return through this verdict; a reverted cell would leave the cells above green.
+  bound_copilot=$(grep -cxF "  pack_install_refuse_argv_leak copilot \"\$op_out\" 'ARG<copilot>' || return 1" "$REPO_DIR/run.sh" || true)
+  bound_codex=$(grep -cxF "  pack_install_refuse_argv_leak codex-app-server \"\$op_out\" 'ARG<codex-app-server>' || return 1" "$REPO_DIR/run.sh" || true)
+  if [ "$bound_copilot" != 1 ] || [ "$bound_codex" != 1 ]; then
+    fail "[QK:PACK-INSTALL-ARGV-CELLS-BOUND] the copilot and codex-app-server leak refusals of check-pack-install must each return through pack_install_refuse_argv_leak once (copilot=$bound_copilot codex=$bound_codex)"
+    red=1
+  fi
+
+  [ "$red" -eq 0 ] || return 1
+  echo "[check-pack-argv-matcher] ok — the dispatcher-verb refusal refuses a leak at the front or end of ~260 KB (where the retired pipe shape misses it), passes clean output silently, refuses a failed search by name, and both check-pack-install cells return through it"
+}
+
 # #130 — the pi-durable carrier proved on ACTUAL npm consumers of the candidate tarball.
 # $1 tarball  $2 the gate's npm sandbox  $3 an existing Entwurf-only npm consumer root inside it.
 # Cells: L1s (Entwurf alone, $3), L1 (project-local beside an aligned host pi-coding-agent at the
@@ -4540,6 +4641,7 @@ pack_install_sentinel_untouched() {
 
 _check_pack_install_impl() {
   check_pack_pin_matcher || return 1
+  check_pack_argv_matcher || return 1
   check_pack_consumer_roots || return 1
 
   # Heavy publish gate. Runs the remaining three checks in #13's
@@ -5948,11 +6050,9 @@ JS
       return 1
     fi
   done
-  if printf '%s' "$op_out" | grep -qF 'ARG<copilot>'; then
-    fail "[check-pack-install] installed 'entwurf copilot' leaked the dispatcher verb into the vendor's argv:"
-    echo "$op_out" | tail -8 | sed 's/^/    /' >&2
-    return 1
-  fi
+  # A refusal on a match whose search cannot read a SIGPIPE as "no leak"; the verdict is the
+  # leaf check-pack-argv-matcher drives.
+  pack_install_refuse_argv_leak copilot "$op_out" 'ARG<copilot>' || return 1
   echo "[check-pack-install] installed 'entwurf copilot' reached the vendor with the scan flag and the managed argv"
 
   # #95 — the managed app-server SPELLING, from the INSTALLED package. Same packaging risk as
@@ -5999,11 +6099,7 @@ process.stdout.write(resolveCodexDefaultSocketPath(process.env));
       return 1
     fi
   done
-  if printf '%s' "$op_out" | grep -qF 'ARG<codex-app-server>'; then
-    fail "[check-pack-install] installed 'entwurf codex-app-server' leaked the dispatcher verb into the vendor's argv:"
-    echo "$op_out" | tail -8 | sed 's/^/    /' >&2
-    return 1
-  fi
+  pack_install_refuse_argv_leak codex-app-server "$op_out" 'ARG<codex-app-server>' || return 1
   echo "[check-pack-install] installed 'entwurf codex-app-server' reached the vendor at the INSTALLED resolver's address ($cx_want)"
 
   # The generation verb must reach its verdict from under node_modules. On the
@@ -8734,6 +8830,9 @@ case "$cmd" in
     ;;
   check-pack-pin-matcher)
     check_pack_pin_matcher
+    ;;
+  check-pack-argv-matcher)
+    check_pack_argv_matcher
     ;;
   check-pack-win32-carrier)
     check_pack_win32_carrier
