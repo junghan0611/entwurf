@@ -13,12 +13,15 @@
  * itself. So this gate enters where a caller enters, through a real MCP `tools/call`, and follows
  * one citizen all the way around:
  *
- *   tools/call entwurf_fresh_call   → LAUNCH receipt (tmux coordinates + nonce, nothing else)
+ *   tools/call entwurf_fresh_call   → LAUNCH receipt (tmux coordinates + nonce, nothing else);
+ *                                     the native pi cell names placement.tmuxSession, and the
+ *                                     harness asks tmux itself that the pane sits in that seat
  *   the sibling's own first action  → CALLBACK receipt (its garden id, as the sender envelope of
  *                                     the nonce message — never a lookup, never a self-report)
  *   tools/call entwurf_v2 f-a-f     → LIVE SEND receipt (control-socket, into a running session)
  *   tools/call entwurf_resume_call  → REFUSED while the citizen is live, with no window opened
  *   closeWindow(launch handle)      → dormant: pane gone, socket unconnectable, record preserved
+ *                                     (native cell: a cross-session close; the seat's anchor stands)
  *   tools/call entwurf_v2 f-a-f     → refused honestly, because dormant is unreachable by delivery
  *   tools/call entwurf_resume_call  → RESUME LAUNCH + RESUME OBSERVATION receipts, kept apart
  *   tools/call entwurf_v2 f-a-f     → the resumed citizen recalls the fact from BEFORE the close
@@ -197,6 +200,25 @@ function entrySet(dir: string): string {
 function tmux(socket: string, args: string[], env: NodeJS.ProcessEnv): { status: number | null; stdout: string } {
 	const r = spawnSync("tmux", ["-S", socket, ...args], { env, encoding: "utf8" });
 	return { status: r.status, stdout: (r.stdout ?? "").trim() };
+}
+
+type TmuxAnswer = ReturnType<typeof tmux>;
+
+/** "Unchanged" over two window listings (#108), FAIL-CLOSED: a query that did not answer is never
+ * unchanged, because two failed queries print the same nothing. */
+function windowsUnchanged(before: TmuxAnswer, after: TmuxAnswer): boolean {
+	return before.status === 0 && after.status === 0 && before.stdout === after.stdout;
+}
+
+/** "That window is gone" (#108), FAIL-CLOSED: only an inventory tmux actually answered can prove
+ * an absence — a failed query lists nothing, which would otherwise read as "not listed". */
+function windowAbsent(inventory: TmuxAnswer, windowId: string): boolean {
+	return inventory.status === 0 && !inventory.stdout.split("\n").includes(windowId);
+}
+
+/** The diagnostic line for one listing: which query, and what tmux answered. */
+function listingDetail(query: string, answer: TmuxAnswer): string {
+	return `--- ${query} → status ${answer.status} ---\n${answer.stdout || "(empty)"}`;
 }
 
 function onPath(cmd: string): boolean {
@@ -604,6 +626,7 @@ async function main(): Promise<void> {
 			cell: string,
 			backend: "pi" | "claude-code",
 			roots: CellRoots = NATIVE_ROOTS,
+			seat?: string,
 		): {
 			socket: string;
 			serverPid: string;
@@ -650,6 +673,15 @@ async function main(): Promise<void> {
 			if (tmux(socket, ["new-session", "-d", "-s", "fixture", "-c", scratch, "-n", "anchor"], serverEnv).status !== 0) {
 				throw new Error(`${LABEL}: could not start the private ${cell} tmux server at ${socket}`);
 			}
+			// The optional seat (#108): a SECOND session on this same private server, born with the
+			// same server environment as the caller's, so the only difference a seated launch can
+			// show is the session it lands in. It dies with this server in teardown, on both paths.
+			if (
+				seat !== undefined &&
+				tmux(socket, ["new-session", "-d", "-s", seat, "-c", scratch, "-n", "anchor"], serverEnv).status !== 0
+			) {
+				throw new Error(`${LABEL}: could not create the ${cell} seat session ${seat} on ${socket}`);
+			}
 			const anchorPane = tmux(
 				socket,
 				["display-message", "-p", "-t", "fixture:anchor", "#{pane_id}"],
@@ -681,6 +713,23 @@ async function main(): Promise<void> {
 			return listed.stdout.split("\n").filter((l) => l.trim()).length;
 		}
 
+		/** One session's window ids, by session id — the harness's own tmux question. The status rides
+		 * with the listing so no caller can read a failed query as an empty session. */
+		function sessionWindows(socket: string, sessionId: string, env: NodeJS.ProcessEnv): TmuxAnswer {
+			return tmux(socket, ["list-windows", "-t", sessionId, "-F", "#{window_id}"], env);
+		}
+
+		/** Every pane of the session NAMED exactly (`=name`), as `session_id window_id pane_id` rows.
+		 * The seat oracle (#108) asks by name so its id never comes from the receipt under test. */
+		function namedSessionPanes(socket: string, name: string, env: NodeJS.ProcessEnv): string[] {
+			const listed = tmux(
+				socket,
+				["list-panes", "-s", "-t", `=${name}`, "-F", "#{session_id} #{window_id} #{pane_id}"],
+				env,
+			);
+			return listed.status === 0 ? listed.stdout.split("\n").filter((l) => l.trim()) : [];
+		}
+
 		/** The pane's ACTUAL start directory, asked by stable pane id in a SEPARATE query.
 		 * `pane_start_path` rather than `pane_current_path`: measured 2026-08-06, the row a
 		 * `new-window -P -F` prints is emitted BEFORE the child chdirs, so current-path there
@@ -700,8 +749,14 @@ async function main(): Promise<void> {
 		// ════════════════════════════════════════════════════════════════════
 		// The pi lifecycle, run once per PROVIDER SHAPE
 		// ════════════════════════════════════════════════════════════════════
-		async function runPiCell(cell: string, model: string, full: boolean, roots: CellRoots): Promise<void> {
-			const srv = startPrivateServer(cell, "pi", roots);
+		async function runPiCell(
+			cell: string,
+			model: string,
+			full: boolean,
+			roots: CellRoots,
+			seat: string | null,
+		): Promise<void> {
+			const srv = startPrivateServer(cell, "pi", roots, seat ?? undefined);
 			const bridge = new BridgeClient(srv.env);
 			bridges.push(bridge);
 
@@ -716,6 +771,31 @@ async function main(): Promise<void> {
 				);
 			}
 
+			// ── the seat, asked of tmux BEFORE the launch (#108) ─────────────
+			// Both ids come from the harness's own queries — the seat by its exact name, the caller
+			// by the anchor pane the bridge child sits in — so neither can be borrowed from the
+			// receipt it is about to judge. The anchor row is kept whole: the close below must leave
+			// this exact session, window and pane standing.
+			let seatSid = "";
+			let callerSid = "";
+			let seatAnchor: string[] = [];
+			let callerWindowsBefore: TmuxAnswer = { status: null, stdout: "" };
+			if (seat !== null) {
+				seatAnchor = namedSessionPanes(srv.socket, seat, srv.env);
+				seatSid = (seatAnchor[0] ?? "").split(" ")[0] ?? "";
+				callerSid = tmux(
+					srv.socket,
+					["display-message", "-p", "-t", String(srv.env.TMUX_PANE), "#{session_id}"],
+					srv.env,
+				).stdout;
+				ok(
+					`${cell}: seat — the private server holds a second session named ${seat} with exactly one anchor pane, and it is not the caller's session (both ids asked of tmux by the harness, before any launch)`,
+					seatAnchor.length === 1 && /^\$\d+$/.test(seatSid) && /^\$\d+$/.test(callerSid) && seatSid !== callerSid,
+					`--- seat panes ---\n${seatAnchor.join("\n") || "(none)"}\n--- caller session ---\n${callerSid}`,
+				);
+				callerWindowsBefore = sessionWindows(srv.socket, callerSid, srv.env);
+			}
+
 			// ── receipt 1/4: LAUNCH ─────────────────────────────────────────
 			const launch = await bridge.call("entwurf_fresh_call", {
 				backend: "pi",
@@ -723,6 +803,7 @@ async function main(): Promise<void> {
 				task:
 					`Remember this fact for the rest of this session: the color is ${SCENE_FACT}. ` +
 					"Then reply with the single word ACK and stop. Do not read files.",
+				...(seat === null ? {} : { placement: { tmuxSession: seat } }),
 			});
 			ok(
 				`${cell}: tools/call entwurf_fresh_call returned a launch receipt through the public surface`,
@@ -738,6 +819,37 @@ async function main(): Promise<void> {
 				launch.text.includes(model) && launch.text.includes("LAUNCH receipt") && launch.text.includes("does NOT mean"),
 				`--- receipt ---\n${launch.text}`,
 			);
+			if (seat !== null) {
+				ok(
+					`${cell}: seat — the receipt echoes the REQUESTED seat and resolves it to the seat's own session id, not the caller's`,
+					launch.text.includes(`seat:     ${seat} (requested tmux session, resolved to ${seatSid})`) &&
+						coords.sessionId === seatSid,
+					`--- receipt ---\n${launch.text}\n--- seat session (asked by name) ---\n${seatSid}`,
+				);
+				// The receipt's session id is the target the product CHOSE, not one tmux reported, so
+				// it cannot vouch for where the window went. The pane itself is asked instead.
+				const seatWindows = sessionWindows(srv.socket, seatSid, srv.env);
+				const landed = tmux(
+					srv.socket,
+					["display-message", "-p", "-t", coords.paneId, "#{session_id} #{window_id}"],
+					srv.env,
+				).stdout;
+				ok(
+					`${cell}: seat — tmux agrees: the launched pane sits in the seat session's window, and that window is listed in the seat`,
+					landed === `${seatSid} ${coords.windowId}` &&
+						seatWindows.status === 0 &&
+						seatWindows.stdout.split("\n").includes(coords.windowId),
+					`--- pane ${coords.paneId} reports ---\n${landed}\n--- expected ---\n${seatSid} ${coords.windowId}\n` +
+						listingDetail(`list-windows -t ${seatSid}`, seatWindows),
+				);
+				const callerAfterLaunch = sessionWindows(srv.socket, callerSid, srv.env);
+				ok(
+					`${cell}: seat — the caller's own session holds exactly the windows it held before the launch (both listings answered by tmux)`,
+					windowsUnchanged(callerWindowsBefore, callerAfterLaunch),
+					`${listingDetail(`list-windows -t ${callerSid} (before launch)`, callerWindowsBefore)}\n` +
+						listingDetail(`list-windows -t ${callerSid} (after launch)`, callerAfterLaunch),
+				);
+			}
 
 			// ── receipt 2/4: CALLBACK IDENTITY ──────────────────────────────
 			const gid = await awaitCallbackSender(nonce, CALLBACK_WAIT_MS);
@@ -838,6 +950,24 @@ async function main(): Promise<void> {
 				`${cell}: the pane process is gone`,
 				await waitForPidsGone(new Set([Number(coords.panePid)]), DORMANT_WAIT_MS),
 			);
+			if (seat !== null) {
+				// The close crossed sessions: the handle names the seat, the bridge's env names the
+				// caller. What must be gone is that one window; what must stand is the seat's own
+				// anchor — the same session, window and pane the fixture made — and the caller's set.
+				const anchorAfter = namedSessionPanes(srv.socket, seat, srv.env);
+				const inventoryAfter = tmux(srv.socket, ["list-windows", "-a", "-F", "#{window_id}"], srv.env);
+				const callerAfterClose = sessionWindows(srv.socket, callerSid, srv.env);
+				ok(
+					`${cell}: seat — the cross-session close removed exactly the launched window: tmux no longer lists it, the seat's original anchor session/window/pane are the ones still standing, and the caller's windows are unchanged`,
+					windowAbsent(inventoryAfter, coords.windowId) &&
+						anchorAfter.length === seatAnchor.length &&
+						anchorAfter.every((row, i) => row === seatAnchor[i]) &&
+						windowsUnchanged(callerWindowsBefore, callerAfterClose),
+					`--- seat anchor before ---\n${seatAnchor.join("\n")}\n--- seat panes after ---\n${anchorAfter.join("\n") || "(none)"}\n` +
+						`${listingDetail("list-windows -a", inventoryAfter)}\n` +
+						listingDetail(`list-windows -t ${callerSid} (after close)`, callerAfterClose),
+				);
+			}
 			let dormantState = "";
 			ok(
 				`${cell}: the citizen is DORMANT — its control socket no longer answers, which is the fact the decider reads`,
@@ -1052,8 +1182,10 @@ async function main(): Promise<void> {
 		}
 
 		await runClaudeCell();
-		await runPiCell("pi-native", PI_NATIVE_MODEL, true, NATIVE_ROOTS);
-		await runPiCell("pi-acp", PI_ACP_MODEL, false, ACP_ROOTS);
+		// Only the native cell names a seat (#108): the ACP and Claude Code cells keep the omitted-
+		// placement path, so the default seat stays proven beside the explicit one.
+		await runPiCell("pi-native", PI_NATIVE_MODEL, true, NATIVE_ROOTS, "seat");
+		await runPiCell("pi-acp", PI_ACP_MODEL, false, ACP_ROOTS, null);
 
 		ok(
 			"correlation: all three siblings reported DIFFERENT garden ids and none is the launcher's — asserted after every cell, so it never depends on which one ran first",
