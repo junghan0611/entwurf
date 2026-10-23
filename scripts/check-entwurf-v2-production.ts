@@ -344,45 +344,54 @@ async function main(): Promise<void> {
 		ok("A2: a quarantined target is never lock-acquired", spies.acquire.length === 0);
 	}
 
-	// ── A3: native-push wiring — ONE injected adapter feeds BOTH decider + executor ─
+	// ── A3: antigravity native-push is PAUSED (#152) — the production factory refuses it ─
+	// The agy LS refused entwurf's measured external agentapi calls (missing CSRF token), so the public dispatch
+	// must stop at the decider with the named pre-probe reject: no adapter resolved, nothing
+	// probed or sent, no lock, no mailbox, and no sender envelope asked for. The probe fake is
+	// configured ALIVE on purpose — a regression that reached it would deliver, not hide.
 	{
 		const { deps, spies } = makeSpiedFactory({
 			backend: "antigravity",
 			nativePushProbe: { status: "alive", route: { backend: "antigravity", lsAddress: "127.0.0.1:5599" } },
 		});
 		const result = await runEntwurfV2({ target: GID, intent: "fire-and-forget", message: "hi agy" }, deps);
-		ok("A3: antigravity ff → native-push delivered", result.kind === "executed" && result.transport === "native-push");
-		ok("A3: decider probed the native-push adapter once (decide side)", spies.nativePushProbe.length === 1);
-		ok("A3: executor sent via the native-push adapter once (execute side)", spies.nativePushSend.length === 1);
-		ok("A3: send used the DECIDER-probed route", spies.nativePushSend[0]?.route === "127.0.0.1:5599");
-		ok("A3: send carried the dispatch message", spies.nativePushSend[0]?.content.includes("hi agy") === true);
 		ok(
-			"A3: BOTH hands resolved the SAME adapter (for 'antigravity')",
-			spies.nativePushResolve.length === 2 && spies.nativePushResolve.every((b) => b === "antigravity"),
+			"A3: antigravity ff → rejected native-push-paused (#152), observedLiveness null",
+			result.kind === "rejected" &&
+				result.receipt.reason === "native-push-paused" &&
+				result.receipt.observedLiveness === null,
 		);
-		ok("A3: native-push is LOCK-FREE (no acquire)", spies.acquire.length === 0);
-		ok("A3: native-push did NOT enqueue a mailbox (not the unsupported path)", spies.enqueue.length === 0);
+		ok("A3: paused agy resolved NO native-push adapter (neither hand)", spies.nativePushResolve.length === 0);
+		ok(
+			"A3: paused agy probed and sent nothing",
+			spies.nativePushProbe.length === 0 && spies.nativePushSend.length === 0,
+		);
+		ok("A3: paused agy took no lock and enqueued no mailbox", spies.acquire.length === 0 && spies.enqueue.length === 0);
+		ok("A3: paused agy never asked the sender provider (no execute phase)", spies.senderCalls.length === 0);
 	}
+	// ── A3c: native-push wiring — ONE injected adapter feeds BOTH decider + executor (Codex,
+	// the active native-push backend while agy is paused) ─
 	{
+		const socketPath = "/home/operator/.codex/app-server-control/app-server-control.sock";
 		const { deps, spies } = makeSpiedFactory({
 			backend: "codex",
-			nativePushProbe: {
-				status: "alive",
-				route: { backend: "codex", socketPath: "/home/operator/.codex/app-server-control/app-server-control.sock" },
-			},
+			nativePushProbe: { status: "alive", route: { backend: "codex", socketPath } },
 		});
 		const result = await runEntwurfV2({ target: GID, intent: "fire-and-forget", message: "hi codex" }, deps);
 		ok(
 			"[QK:CODEX-NATIVE-PRODUCTION-WIRING] Codex ff → native-push delivered",
 			result.kind === "executed" && result.transport === "native-push",
 		);
+		ok("A3c: decider probed the native-push adapter once (decide side)", spies.nativePushProbe.length === 1);
+		ok("A3c: executor sent via the native-push adapter once (execute side)", spies.nativePushSend.length === 1);
 		ok(
-			"A3c: both hands resolve the Codex adapter",
-			spies.nativePushResolve.length === 2 && spies.nativePushResolve.every((b) => b === "codex"),
+			"A3c: send used the DECIDER-probed route (the planted Codex UDS)",
+			spies.nativePushSend[0]?.route === socketPath,
 		);
+		ok("A3c: send carried the dispatch message", spies.nativePushSend[0]?.content.includes("hi codex") === true);
 		ok(
-			"A3c: planted Codex UDS reaches the send hand",
-			spies.nativePushSend[0]?.route.endsWith("/app-server-control.sock") === true,
+			"A3c: BOTH hands resolved the SAME adapter (for 'codex')",
+			spies.nativePushResolve.length === 2 && spies.nativePushResolve.every((b) => b === "codex"),
 		);
 		ok(
 			"A3c: Codex native-push remains lock-free and mailbox-free",
@@ -394,16 +403,20 @@ async function main(): Promise<void> {
 	// Codex thread arrived as bare text, so the receiving citizen could not name who called it
 	// and the callback was uncorrelatable. Direct injection has neither the control socket's RPC
 	// framing nor a mailbox file, so the envelope must ride IN the body — the same bytes
-	// `formatMetaMailboxBody` gives the mailbox rail. ONE rail: both native-push backends, no
-	// per-backend branch.
+	// `formatMetaMailboxBody` gives the mailbox rail. ONE rail, no per-backend branch; it is
+	// proven on Codex, the native-push backend public dispatch still reaches while agy is
+	// paused (#152).
 	{
-		const route = { backend: "antigravity", lsAddress: "127.0.0.1:5599" } as const;
+		const route = {
+			backend: "codex",
+			socketPath: "/home/operator/.codex/app-server-control/app-server-control.sock",
+		} as const;
 		const { deps, spies } = makeSpiedFactory({
-			backend: "antigravity",
+			backend: "codex",
 			nativePushProbe: { status: "alive", route },
 		});
 		const { result, executeEvents } = await runInTwoPhases(
-			{ target: GID, intent: "fire-and-forget", message: "hi agy", wantsReply: true },
+			{ target: GID, intent: "fire-and-forget", message: "hi codex", wantsReply: true },
 			deps,
 			spies,
 		);
@@ -417,12 +430,12 @@ async function main(): Promise<void> {
 			result.kind === "executed" && spies.senderCalls.length === 1,
 		);
 		ok(
-			"[QK:NATIVE-PUSH-SENDER-ENVELOPE] agy direct injection carries the mailbox-serialized trusted envelope",
-			spies.nativePushSend[0]?.content === formatMetaMailboxBody(SENDER, "hi agy", true),
+			"[QK:NATIVE-PUSH-SENDER-ENVELOPE] native-push direct injection carries the mailbox-serialized trusted envelope",
+			spies.nativePushSend[0]?.content === formatMetaMailboxBody(SENDER, "hi codex", true),
 		);
 		ok(
 			"A3d: the enveloped body is NOT the raw plan message (an envelope was actually added)",
-			spies.nativePushSend[0]?.content !== "hi agy",
+			spies.nativePushSend[0]?.content !== "hi codex",
 		);
 		ok(
 			"A3d: wants_reply rides the envelope on this rail",
@@ -439,7 +452,7 @@ async function main(): Promise<void> {
 		);
 	}
 	{
-		// Same rail, other backend — codex renders identically. A backend branch would show here.
+		// Same rail, wants_reply=false — the envelope is still rendered, without the reply line.
 		const route = {
 			backend: "codex",
 			socketPath: "/home/operator/.codex/app-server-control/app-server-control.sock",
@@ -447,7 +460,7 @@ async function main(): Promise<void> {
 		const { deps, spies } = makeSpiedFactory({ backend: "codex", nativePushProbe: { status: "alive", route } });
 		const result = await runEntwurfV2({ target: GID, intent: "fire-and-forget", message: "hi codex" }, deps);
 		ok(
-			"A3d: codex direct injection carries the SAME mailbox-serialized envelope (one rail, no backend branch)",
+			"A3d: wants_reply=false direct injection carries the mailbox-serialized envelope for that flag",
 			result.kind === "executed" &&
 				spies.nativePushSend[0]?.content === formatMetaMailboxBody(SENDER, "hi codex", false),
 		);
@@ -503,14 +516,15 @@ async function main(): Promise<void> {
 	}
 
 	{
-		// antigravity + dead probe → reject native-push-target-dead, NO send.
+		// codex + dead probe → reject native-push-target-dead, NO send. (agy never reaches a
+		// probe while paused, #152 — A3.)
 		const { deps, spies } = makeSpiedFactory({
-			backend: "antigravity",
+			backend: "codex",
 			nativePushProbe: { status: "dead", reason: "no host" },
 		});
 		const result = await runEntwurfV2({ target: GID, intent: "fire-and-forget", message: "x" }, deps);
 		ok(
-			"A3b: antigravity ff + dead → rejected native-push-target-dead",
+			"A3b: codex ff + dead → rejected native-push-target-dead",
 			result.kind === "rejected" && result.receipt.reason === "native-push-target-dead",
 		);
 		ok("A3b: no send attempted on a dead target", spies.nativePushSend.length === 0);

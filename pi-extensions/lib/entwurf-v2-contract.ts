@@ -134,6 +134,26 @@ export function nativePushSupported(backend: string): backend is NativePushBacke
 	return (NATIVE_PUSH_BACKENDS as readonly string[]).includes(backend);
 }
 
+// ── Paused native-push backends (#152) ─────────────────────────────────────
+// A native-push backend whose SEND is paused by product policy. On the external send path
+// entwurf measured, Antigravity's language server refused the `agentapi` call with
+// `Unauthenticated: missing CSRF token` (agy 1.2.16 in #128; agy 1.4.6 again for #152).
+// Whether a first-party own-tool shell holds a token entwurf could legitimately present is
+// UNMEASURED, not ruled out. So instead of probing a port that refused on that path and
+// reporting it as an inconclusive liveness, the three public entries that would reach the agy LS —
+// v2 dispatch, a sender's own `replyable`, and `entwurf_register_native` — refuse by name
+// BEFORE any probe. This is a fixed constant, not a flag: no env, config or runtime toggle
+// can lift it. The backend stays in NATIVE_PUSH_BACKENDS, so existing agy records, the V3
+// reader and the peers listing are unchanged; only the native-push traffic stops.
+// The one probe that is NOT behind this guard is the fresh-cut quiescence check
+// (scripts/meta-bridge-fresh-cut.ts), which protects an operator-named archive and must keep
+// failing closed rather than read the pause as a departed host.
+export const NATIVE_PUSH_PAUSED_BACKENDS: readonly NativePushBackend[] = ["antigravity"];
+
+export function nativePushPaused(backend: string): boolean {
+	return (NATIVE_PUSH_PAUSED_BACKENDS as readonly string[]).includes(backend);
+}
+
 // NativePushLiveness = the 3-value liveness the native-push adapter probe yields.
 // The SAME three values as SocketLiveness, reused so there is ONE 3-value liveness
 // vocabulary — but these are NOT socket-bound (봉인 2: "주석만 socket-전용 오독 정정"):
@@ -173,6 +193,7 @@ export const ENTWURF_V2_REJECT_REASONS = [
 	"mailbox-undeliverable", // F-mailbox: fire-and-forget to an unsupported citizen whose mailbox is not deliverable (fail-closed; future pi-backend non-drainable mailbox)
 	"native-push-target-dead", // 봉인 1: fire-and-forget to a native-push (agy) target whose adapter probe found NO live conversation. Post-probe; observedLiveness = dead.
 	"native-push-probe-indeterminate", // 봉인 1: fire-and-forget to a native-push target whose adapter probe was inconclusive (agy alive but no port served the conv, or a probe error). Post-probe; observedLiveness = indeterminate. Never coerced to dead.
+	"native-push-paused", // #152: fire-and-forget to a native-push backend whose send is paused by product policy (NATIVE_PUSH_PAUSED_BACKENDS — antigravity). Pre-probe, observedLiveness = null: nothing was probed, so no liveness is claimed — never coerced to dead or indeterminate.
 	"bad-target", // R2: absent/typo garden-id (no existing citizen); fresh creation out of v2 scope
 	"record-less-socket", // #50 C4: a gid-shaped non-symlink control socket exists but NO meta-record claims it. The record is the sole address authority (목표 ②), so a bare socket is not an addressable citizen — it is a diagnostic state, refused for EVERY intent before any lock/probe (pre-probe, observedLiveness=null). NOT `bad-target`: something real answers to this gid, and mislabeling it absent would hide the very state the reject exists to surface.
 	"target-locked", // R5 pre-claim for bucket B F2 per-gid lockfile conflict
@@ -181,12 +202,13 @@ export const ENTWURF_V2_REJECT_REASONS = [
 export type EntwurfV2RejectReason = (typeof ENTWURF_V2_REJECT_REASONS)[number];
 
 // ── Pre-probe reject reasons (？6 — observedLiveness = null) ────────────────
-// These four rejects are decided BEFORE any liveness probe runs, so there is no
+// These five rejects are decided BEFORE any liveness probe runs, so there is no
 // honest 4-value FactLiveness to stamp: `bad-target` (no citizen/backend),
 // `target-locked` (5a lock conflict, before lstat/connect), `target-address-conflict`
 // (address-subject conflict → probing is forbidden), `record-less-socket` (#50 C4:
 // no record ⇒ not a citizen ⇒ no in-domain probe ever runs — the presence hint is
-// a single lstat, not a liveness measurement). `indeterminate` means an
+// a single lstat, not a liveness measurement), `native-push-paused` (#152: the backend's
+// native-push send is paused by policy, so its adapter is never probed). `indeterminate` means an
 // in-domain probe was inconclusive (≠ "not looked yet"); `unsupported` means the
 // backend has no predicate (≠ "pre-probe"). So a pre-probe reject's
 // observedLiveness is `null`, NOT one of the four values. Every OTHER reject —
@@ -203,6 +225,7 @@ export const PRE_PROBE_REJECT_REASONS = [
 	"target-locked",
 	"target-address-conflict",
 	"record-less-socket",
+	"native-push-paused",
 ] as const satisfies readonly EntwurfV2RejectReason[];
 export type PreProbeRejectReason = (typeof PRE_PROBE_REJECT_REASONS)[number];
 

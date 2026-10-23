@@ -18,6 +18,10 @@
  *   - resolver fail-fast: resolveNativePushAdapter("antigravity") resolves; unknown throws.
  *
  * Pure; no backend, no socket, no real process.
+ *
+ * #152: this is the adapter LEAF only. Public agy delivery, sender replyability and
+ * registration are paused before any adapter is resolved; a green here is not agy
+ * availability and not a live pass.
  */
 
 import assert from "node:assert/strict";

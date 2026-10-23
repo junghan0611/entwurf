@@ -78,7 +78,7 @@ import { resolveMailboxReceiverFacts } from "../../../pi-extensions/lib/entwurf-
 import { listEntwurfFacts } from "../../../pi-extensions/lib/entwurf-fact-provider.ts";
 import { ENTWURF_PEERS_RENDER_LIMIT, renderEntwurfPeers } from "../../../pi-extensions/lib/entwurf-peers-render.ts";
 import { computeSelfAddressability, type MetaDeliveryDomain } from "../../../pi-extensions/lib/entwurf-self-address.ts";
-import { nativePushSupported } from "../../../pi-extensions/lib/entwurf-v2-contract.ts";
+import { nativePushPaused, nativePushSupported } from "../../../pi-extensions/lib/entwurf-v2-contract.ts";
 import { resolveMailboxWakeModeCapability } from "../../../pi-extensions/lib/entwurf-v2-decider.ts";
 import { retireCitizen } from "../../../pi-extensions/lib/entwurf-v2-retire.ts";
 import { makeProductionRetireDeps } from "../../../pi-extensions/lib/entwurf-v2-retire-production.ts";
@@ -313,6 +313,7 @@ async function buildMetaSenderEnvelope(
 					metaDeliveryDomain,
 					recordBacked: true,
 					probeAlive: await probeNativeSenderAlive(identity),
+					nativePushPaused: nativePushPaused(identity.backend),
 				}
 			: metaDeliveryDomain === "self-fetch"
 				? (() => {
@@ -488,7 +489,7 @@ server.tool(
 		"mailbox only while deliverable, native-push direct injection only while its adapter probe is alive, " +
 		"or a THIRD RESULT: rejection when neither holds. An inactive self-fetch citizen is mailbox-undeliverable; " +
 		"native-push has NO mailbox: dead → native-push-target-dead; indeterminate → " +
-		"native-push-probe-indeterminate. " +
+		"native-push-probe-indeterminate; agy (paused, #152) → native-push-paused, no probe. " +
 		"DORMANT IS UNREACHABLE: a socket-domain citizen that is not running gets dormant-fire-forget-unsupported " +
 		"— same receiver rule as the mailbox, no active drainer means no delivery. " +
 		"The intent that used to answer there, owned-outcome, resumed it by launching a hidden background child " +
@@ -505,7 +506,8 @@ server.tool(
 				"fire-and-forget = send/reply/hand-off to a LIVE socket target or to any citizen with no " +
 					"socket liveness — the decider picks its rail, and a rail can also REJECT (self-fetch → " +
 					"mailbox when deliverable, else mailbox-undeliverable; native-push → alive: direct injection, " +
-					"dead: native-push-target-dead, indeterminate: native-push-probe-indeterminate); set " +
+					"dead: native-push-target-dead, indeterminate: native-push-probe-indeterminate; a paused " +
+					"backend — agy, #152 — rejects as native-push-paused before any probe); set " +
 					"wants_reply for an answer. This is the ONLY intent: owned-outcome, which resumed a dormant " +
 					"citizen by launching a hidden background child, was withdrawn under the visible-first rule. " +
 					"It is not selectable, not deprecated-but-tolerated; a dormant citizen is currently " +
@@ -651,7 +653,7 @@ server.tool(
 		"or a REJECT when neither holds: mailbox-undeliverable for a self-fetch citizen whose inbox " +
 		"nobody drains, and on the native-push probe dead → native-push-target-dead vs " +
 		"indeterminate → native-push-probe-indeterminate, kept apart because an unestablished probe " +
-		"is not a departed host. So " +
+		"is not a departed host; an agy target rejects as native-push-paused (#152) without being probed. So " +
 		"`unsupported` does not promise reachability either: a record whose backend has no adapter on " +
 		"this lane resolves to that reject. " +
 		"Note: this is the *active* world and it is facts-only — it creates nothing. Pass an " +
@@ -735,8 +737,9 @@ server.tool(
 		"must be LIVE: it is probed first, and a dead/indeterminate probe is refused (no garden id is " +
 		"minted for a pointer that does not resolve to a real host). Re-registering the same " +
 		"conversation attaches to the SAME garden id and refreshes the cwd. Only 'antigravity' is " +
-		"registerable on this lane. No mailbox receiver marker is written — native-push has no " +
-		"idle-wake watch; the returned garden id is the reply handle.",
+		"registerable on this lane, and antigravity native-push is PAUSED (#152): this verb refuses it by " +
+		"name before any probe and mints no garden id. No mailbox receiver marker is written — native-push " +
+		"has no idle-wake watch; the returned garden id is the reply handle.",
 	{
 		backend: z
 			.enum(["antigravity"])

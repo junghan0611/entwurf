@@ -107,6 +107,9 @@ export function actionableRejectHint(reason: string): string | undefined {
 			// Native host up, but nothing served this conversation/thread — inconclusive, not a
 			// hard dead. Backend-neutral for the same reason as the dead cell above.
 			return "the native host (harness process or app-server) is up, but nothing served this conversation/thread, so the probe is INCONCLUSIVE — not a measured death. Retry once it is loaded, or verify the conversation/thread id.";
+		case "native-push-paused":
+			// #152: a policy refusal, not a liveness verdict — this dispatch probed and sent nothing.
+			return "native-push for this backend is paused (#152): its language server refused entwurf's measured external calls for a missing CSRF token, so this dispatch probed and sent nothing. The citizen and its record are kept; reach it from inside its own harness instead.";
 		case "record-less-socket":
 			// #50 C4: name the true cause AND the fix — a bare socket is a diagnostic
 			// state, not an addressable citizen (the record is the address).

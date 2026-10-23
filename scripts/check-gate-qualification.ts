@@ -3460,6 +3460,7 @@ let manifestCount: number;
 		"control-retire": 9,
 		"control-send-receipt": 19,
 		"codex-native": 87,
+		"native-push-paused": 1,
 		"compaction-send-guard": 7,
 		"control-socket-disconnect": 4,
 		"demo-reproducibility": 12,

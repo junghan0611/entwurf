@@ -48,6 +48,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { SenderEnvelope } from "../pi-extensions/lib/entwurf-control-rpc.ts";
+import { nativePushPaused } from "../pi-extensions/lib/entwurf-v2-contract.ts";
 import { makeProductionEntwurfV2Deps } from "../pi-extensions/lib/entwurf-v2-production.ts";
 import type { EntwurfV2RunResult } from "../pi-extensions/lib/entwurf-v2-runner.ts";
 import { runEntwurfV2 } from "../pi-extensions/lib/entwurf-v2-runner.ts";
@@ -79,6 +80,18 @@ function smokeSender(gardenId: string, cwd: string): SenderEnvelope {
 }
 
 async function main(): Promise<void> {
+	// #152: agy native-push is PAUSED by product policy, so this positive LIVE acceptance cannot
+	// run — every cell below would drive the paused rail. It exits NON-ZERO by name (neither a PASS
+	// nor the protocol SKIP), and touches no agy process, port or conversation. The pause itself is
+	// proven deterministically beside the behavior (pi-extensions/lib/native-push/paused.test.ts).
+	if (nativePushPaused("antigravity")) {
+		console.error(
+			"[entwurf:paused] smoke-agy-native-push-live — agy native-push is paused (#152: its language " +
+				"server refused entwurf's measured external calls for a missing CSRF token). This LIVE acceptance does not run while " +
+				"the pause holds; it is not a PASS.",
+		);
+		process.exit(2);
+	}
 	if (process.env.LIVE !== "1") {
 		skipLive(
 			"smoke-agy-native-push-live",

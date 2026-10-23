@@ -19,10 +19,12 @@
  * deliverability semantics. `check-native-push-register` asserts this file references no
  * receiver-marker writer. (A dedicated register-provenance slot is a future concern.)
  *
- * LEAF-adjacent + pi-free: imports only the native-push adapter (pi-free) and the meta-session
- * upsert (pi-free), so the harness-neutral MCP bridge can reach it at boot.
+ * LEAF-adjacent + pi-free: imports only the native-push adapter (pi-free), the meta-session
+ * upsert (pi-free) and the pure v2 contract's paused-backend policy, so the harness-neutral MCP
+ * bridge can reach it at boot.
  */
 
+import { nativePushPaused } from "../entwurf-v2-contract.ts";
 import { type MetaCitizenBackend, type UpsertAction, upsertMetaSession } from "../meta-session.ts";
 import { type NativePushAdapter, resolveNativePushAdapter } from "./adapter.ts";
 
@@ -62,6 +64,19 @@ export async function registerNativeConversation(
 	input: RegisterNativeConversationInput,
 	deps: RegisterNativeConversationDeps = {},
 ): Promise<RegisterNativeConversationResult> {
+	// #152: a paused native-push backend is refused by name BEFORE any adapter is resolved or
+	// probed — registration would otherwise reach a language server that refused the measured
+	// external calls (missing CSRF token).
+	// Nothing is probed and no record is written.
+	if (nativePushPaused(input.backend)) {
+		throw new Error(
+			`entwurf_register_native: refusing to register ${input.backend} conversation ${JSON.stringify(
+				input.nativeSessionId,
+			)} — native-push for ${input.backend} is paused (#152: its language server refused ` +
+				"entwurf's measured external calls for a missing CSRF token). Nothing was probed and no garden id was minted; " +
+				"existing records stay readable.",
+		);
+	}
 	const resolveAdapter = deps.resolveAdapter ?? resolveNativePushAdapter;
 	const adapter = resolveAdapter(input.backend);
 	const probe = await adapter.probe(input.nativeSessionId);

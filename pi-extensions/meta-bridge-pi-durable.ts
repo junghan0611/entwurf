@@ -192,7 +192,7 @@ export const PI_DURABLE_TOOL_SCHEMAS: Readonly<Record<PiDurableToolName, Readonl
 				type: "string",
 				enum: ["fire-and-forget"],
 				description:
-					"fire-and-forget = send/reply/hand-off to a LIVE socket target or to any citizen with no socket liveness — the decider picks its rail, and a rail can also REJECT (self-fetch → mailbox when deliverable, else mailbox-undeliverable; native-push → alive: direct injection, dead: native-push-target-dead, indeterminate: native-push-probe-indeterminate); set wants_reply for an answer. This is the ONLY intent: owned-outcome, which resumed a dormant citizen by launching a hidden background child, was withdrawn under the visible-first rule. It is not selectable, not deprecated-but-tolerated; a dormant citizen is currently unreachable by this verb and rejects as dormant-fire-forget-unsupported.",
+					"fire-and-forget = send/reply/hand-off to a LIVE socket target or to any citizen with no socket liveness — the decider picks its rail, and a rail can also REJECT (self-fetch → mailbox when deliverable, else mailbox-undeliverable; native-push → alive: direct injection, dead: native-push-target-dead, indeterminate: native-push-probe-indeterminate; a paused backend — agy, #152 — rejects as native-push-paused before any probe); set wants_reply for an answer. This is the ONLY intent: owned-outcome, which resumed a dormant citizen by launching a hidden background child, was withdrawn under the visible-first rule. It is not selectable, not deprecated-but-tolerated; a dormant citizen is currently unreachable by this verb and rejects as dormant-fire-forget-unsupported.",
 			},
 			message: {
 				type: "string",

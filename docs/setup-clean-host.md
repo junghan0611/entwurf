@@ -38,7 +38,7 @@ inside that tarball is its contract.
 | Claude Code | optional, **`>=2.1.306`** — the exec-form hook floor | Claude ACP auth/runtime and mailbox-backed native citizen |
 | GitHub Copilot CLI | optional-by-presence, operator-installed and authenticated — absent is an explicit setup SKIP; detected composes all four units (birth/MCP/receiver/footer) | self-fetch citizen and visible fresh |
 | OMP (`omp`) | optional-by-presence, operator-installed — absent is an explicit setup SKIP; detected composes all four units (birth/MCP/`tools.xdev` setting/receiver) | self-fetch citizen and visible fresh (accepted on one host — see §4b) |
-| Antigravity `agy` | optional, operator-installed and authenticated | native-push citizen |
+| Antigravity `agy` | optional, operator-installed and authenticated | legacy citizen; native push paused (#152) |
 | OpenAI Codex CLI | optional-by-presence, operator-installed and authenticated; detected composes all four operator-owned units (birth/MCP/status-line/terminal-title) and stays non-green until the operator trusts the birth declaration once in a visible Codex; visible fresh also requires the operator-owned app-server, started with `entwurf codex-app-server` in a tmux session of the operator's choosing (#95 D1 retired the fixed `codex` home) | native-push and visible fresh, supported in 0.21.0 |
 | Cortex Code | optional, operator-installed and authenticated | Cortex ACP backend |
 
@@ -953,9 +953,12 @@ mechanism, because both the anchor and the env fallback would answer the same ro
 
 ## 5. Optional Antigravity native citizen
 
-This rail is CERTIFIED on Linux; on macOS it is NOT CERTIFIED — pending
-physical host. The installers may write on Darwin; a green install is
-not a native-push receipt.
+Native-push send on this rail is paused (#152, below). Its Linux certification is
+history: the last live bidirectional round trip was on agy 1.1.0 (2026-07-14), and it
+is not a current certification. What remains is the legacy identity surface — install,
+birth, statusline and sender identity — on Linux; on macOS it is NOT CERTIFIED — pending
+physical host. The installers may write on Darwin; a green install is not a native-push
+receipt.
 
 Install the three independently owned surfaces:
 
@@ -974,9 +977,16 @@ owns its subtree; the hook owns one `PreInvocation` entry. Unrelated settings ar
 preserved. A fresh conversation initially may show `🪛 ? agy`; the first invocation
 births the record by native `conversationId`, after which the garden id appears.
 
-Real native-push acceptance needs an already-running conversation:
+Native push to agy is paused (#152): on the external path entwurf measured, the agy
+language server refused `agentapi` calls for a missing CSRF token (a first-party token
+path is unmeasured), so `entwurf_v2` refuses an agy target as
+`native-push-paused`, `entwurf_self` reports `replyable: false`, and
+`entwurf_register_native` refuses. The citizen keeps its garden id and statusline. While
+the pause holds, the LIVE smoke exits 2 with `[entwurf:paused]` before it reads the
+conversation id, which is not a PASS, and no conversation needs to be opened for it:
 
 ```bash
+# exits 2 [entwurf:paused] while #152 holds — not a PASS, not a SKIP
 LIVE=1 AGY_CONVERSATION_ID=<id> entwurf smoke-agy-native-push-live
 ```
 

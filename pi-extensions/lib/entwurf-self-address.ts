@@ -77,6 +77,8 @@ export interface SelfAddressabilityFacts {
 	watchArmed?: boolean;
 	/** meta-session (native-push): an adapter probe found this citizen's live native conversation. */
 	probeAlive?: boolean;
+	/** meta-session (native-push): #152 — this backend's native-push is paused, so no probe ran. */
+	nativePushPaused?: boolean;
 }
 
 export interface SelfAddressabilityResult {
@@ -118,6 +120,17 @@ export function computeSelfAddressability(facts: SelfAddressabilityFacts): SelfA
 			// default fail-closed row).
 			switch (facts.metaDeliveryDomain) {
 				case "native-push": {
+					// #152 policy, decided BEFORE the pure record+probe predicate and kept out of it:
+					// only a record-backed citizen can be "paused" (a record-less one keeps its own
+					// reason), and no probe was run for this answer, so none is reported.
+					if (facts.recordBacked === true && facts.nativePushPaused === true) {
+						return {
+							replyable: false,
+							socketState: "none",
+							reason:
+								"native-push unreachable — native-push for this backend is paused (#152); no probe ran for this answer",
+						};
+					}
 					const push = nativePushDeliverable({ recordBacked: facts.recordBacked, probeAlive: facts.probeAlive });
 					return {
 						replyable: push.deliverable,

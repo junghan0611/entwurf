@@ -112,7 +112,7 @@ function row(facts: SelfAddressabilityFacts): { replyable: boolean; socketState:
 	ok("meta/self-fetch + record but undefined owner/watch → fail-closed NOT replyable", partial.replyable === false);
 }
 
-// meta-session / NATIVE-PUSH rail (antigravity): a SEPARATE axis — recordBacked ∧ probeAlive.
+// meta-session / NATIVE-PUSH rail (Codex; antigravity is paused, #152): a SEPARATE axis — recordBacked ∧ probeAlive.
 // The two rails must not be able to borrow each other's facts (보정①): a mailbox signal
 // deciding an agy reply, or a probe deciding a Claude reply, is a category error.
 {
@@ -124,8 +124,8 @@ function row(facts: SelfAddressabilityFacts): { replyable: boolean; socketState:
 	const reachable = row(push({ recordBacked: true, probeAlive: true }));
 	ok("meta/native-push + record + probe-alive → replyable", reachable.replyable === true);
 
-	// THE ROW THIS RAIL EXISTS FOR: an agy citizen never arms a mailbox watch. Under the
-	// self-fetch atom it would be un-replyable forever; on its own rail it is reachable.
+	// THE ROW THIS RAIL EXISTS FOR: a native-push citizen never arms a mailbox watch. Under
+	// the self-fetch atom it would be un-replyable forever; on its own rail it is reachable.
 	ok(
 		"meta/native-push + record + probe-alive + watch NEVER armed → STILL replyable (no mailbox axis leak)",
 		row(push({ recordBacked: true, probeAlive: true, watchArmed: false })).replyable === true,
@@ -153,6 +153,37 @@ function row(facts: SelfAddressabilityFacts): { replyable: boolean; socketState:
 	ok(
 		"meta/native-push + owner-alive + watch-armed but probe-dead → NOT replyable (mailbox facts cannot rescue it) [QK:SELFADDR-RAIL-FACT-LEAK]",
 		row(push({ recordBacked: true, ownerAlive: true, watchArmed: true, probeAlive: false })).replyable === false,
+	);
+}
+
+// #152 policy row: a PAUSED native-push backend is decided BEFORE the pure record+probe
+// predicate. Record-backed + paused → not replyable with a reason naming the pause, even if
+// a probe fact says alive (none ran for this answer). The record axis keeps precedence: a
+// record-less citizen keeps its own reason and is never relabelled as paused.
+{
+	const paused = computeSelfAddressability({
+		origin: "meta-session",
+		metaDeliveryDomain: "native-push",
+		recordBacked: true,
+		probeAlive: true,
+		nativePushPaused: true,
+	});
+	ok(
+		"meta/native-push + record + PAUSED (#152) → NOT replyable, socket none",
+		paused.replyable === false && paused.socketState === "none",
+	);
+	ok("meta/native-push + record + PAUSED (#152) → the reason names the pause", /paused \(#152\)/.test(paused.reason));
+	const recordless = computeSelfAddressability({
+		origin: "meta-session",
+		metaDeliveryDomain: "native-push",
+		recordBacked: false,
+		nativePushPaused: true,
+	});
+	ok(
+		"meta/native-push + NO record + paused → the record-less reason wins (pause never masks it)",
+		recordless.replyable === false &&
+			/no backing meta-record/.test(recordless.reason) &&
+			!/paused/.test(recordless.reason),
 	);
 }
 

@@ -126,7 +126,7 @@ physical host. Do not read a D-level cell as a Darwin receipt.
 |---|---|---|---|
 | **pi Entwurf** | shipped | D7; D8 partial | Record-addressed Unix control socket. A record-less socket is diagnostic only and never dispatched. A pi session calls the verbs through Pi's built-in MCP running the compiled `entwurf-bridge` (#125); the receive rail is unchanged. |
 | **Claude Code interactive `>=2.1.306`** | shipped; Linux certified | D6; D7/D8 partial | Per-session mailbox + exec-form `FileChanged`/`asyncRewake`. B2 proved idle wake and same-session continuity on one NixOS host. `>=2.1.306` is the current declared floor; that historical B2 receipt does not certify #147 resume/retire lifecycle on this floor. |
-| **Antigravity / agy** | shipped | D6; D7 partial | Record-backed native-push through LS gRPC `agentapi send-message`; no mailbox or receiver marker. Admitted before the #82 step 9 contract and not re-evaluated under it, so it is legacy citizen evidence, not a step-9 supported harness: `entwurf_fresh_call` cannot open an agy sibling, and nothing here should be read as claiming visible lifecycle parity. |
+| **Antigravity / agy** | shipped, native push paused (#152) | D6; D7 partial | Record-backed native-push through LS gRPC `agentapi send-message` is paused: on the measured external path the agy LS refused `agentapi` calls for a missing CSRF token (#128; a first-party token path is unmeasured), so dispatch refuses an agy target pre-probe as `native-push-paused`. Birth, statusline and sender identity stay; no mailbox or receiver marker. Admitted before the #82 step 9 contract and not re-evaluated under it, so it is legacy citizen evidence, not a step-9 supported harness: `entwurf_fresh_call` cannot open an agy sibling, and nothing here should be read as claiming visible lifecycle parity. |
 | **Codex CLI app-server citizen** | supported in 0.21.0; caller-seat topology ACCEPTED on Linux at 0.153.4, 2026-09-16 (56 assertions, exit 0), and the caller-DIRECTORY axis ACCEPTED the same day on the same host (#95 lane C, 65 assertions, exit 0; the 2026-09-12 explicit-home acceptance is history — #95 D1 retired that room) | D6 accepted; D7 partial; D8 unproven | Vendor-trusted user-scope `SessionStart` birth plus strict per-request metadata join; no shared-pid sender marker. `thread/loaded/list` probes the operator-owned app-server UDS and one-shot `codex queue` delivers with no retry. The operator owns the app-server and seats it wherever they like; Entwurf creates, moves and supervises none of it. Since #95 lane B a Codex CALLER with no explicit placement opens its sibling beside its OWN pane, located by the `thread-id` its `[tui].terminal_title` writes into the pane title; 0 or 2+ matching panes refuse with no fallback, and the title is a placement input only — never an address, liveness or delivery fact. #95 D1 (2026-09-16) retired the fixed `codex` home that omitted-placement Codex TARGETS used to select, so an omitted seat is the caller's own session for every backend. Exact 0.153.4 source still bounds placing a sibling beside a TUI whose thread nobody named as unsupported; the anchor resolves only the pane showing the caller's own thread. |
 | **Codex embedded TUI** | deferred | D0 partial | At the 2026-09-08 Codex 0.153.4 measurement, standalone mode had no `watchPaths`/`FileChanged`/`asyncRewake` analogue or supported idle receive route. This is dated vendor evidence, not a claim that the current candidate lacks records or fresh. |
 | **Copilot CLI first-party extension** | raw transport probe; superseded by the owned product unit | D7 path observed; D3 control receipt incomplete; D8 unproven | CLI-spawned extension over stdio JSON-RPC; `joinSession()` + documented `fs.watch` → `session.send({mode:"enqueue"})`. Idle wake, exact-marker reply, and completion passed on 2026-08-23 (CLI 1.0.80, L4, one Linux host). Two-process isolation was observed but its decisive B log was not preserved. Kept as the transport receipt the owned receive unit was built on; the shipped unit differs deliberately — it announces the inbox instead of injecting the body. |
@@ -156,13 +156,24 @@ coalescing bounds, re-arm gaps, and crash/re-poke behavior are measured. A synth
 container doctor proves package/oracle shape, not a real Claude wake; a claimed host
 needs the installed strict doctor against a new native session.
 
-### Antigravity: native push
+### Antigravity: native push (paused, #152)
 
 `PreInvocation` births or reattaches a citizen by native `conversationId` and writes a
-record-backed sender marker. `entwurf_v2` probes the live conversation and injects
-directly through the native adapter, with one bounded re-probe retry. Replyability is
-`record-backed identity ∧ probe-alive`; mailbox state does not exist on this rail, and no
-rail has resume authority since the visible-first cut.
+record-backed sender marker. Native push is paused: on the external send path entwurf
+measured, the agy language server refused the `agentapi` call with `Unauthenticated: missing
+CSRF token` (#128 on agy 1.2.16, again on agy 1.4.6). Whether a first-party own-tool shell
+holds a token entwurf could legitimately present is unmeasured, not ruled out. One fixed constant,
+`NATIVE_PUSH_PAUSED_BACKENDS` in the v2 contract, drives three refusals before any probe:
+`entwurf_v2` rejects an agy target as `native-push-paused` with `observedLiveness: null`, a
+sender's `replyable` is false with a reason naming the pause, and `entwurf_register_native`
+refuses without minting a garden id. Existing records, the backend enum and the record
+reader are unchanged, so agy citizens stay readable and listed. The fresh-cut quiescence
+probe is deliberately not behind the pause: it protects an operator-named archive and keeps
+failing closed. When the pause lifts, the adapter path below applies again: `entwurf_v2`
+probes the live conversation and injects directly through the native adapter, with one
+bounded re-probe retry, and replyability is `record-backed identity ∧ probe-alive`.
+Mailbox state does not exist on this rail, and no rail has resume authority since the
+visible-first cut.
 
 The owned bridge, statusline, and hook installers own separate configuration atoms.
 Same-pid concurrent model invocation by multiple conversations is not claimed because

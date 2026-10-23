@@ -47,6 +47,7 @@
  * a backend listed there is one whose hook writes a pid marker, and codex birth writes none.
  */
 
+import { nativePushPaused } from "./entwurf-v2-contract.ts";
 import {
 	defaultMetaSessionsDir,
 	describe,
@@ -229,6 +230,9 @@ export async function probeNativeSenderAlive(
 	identity: Pick<MetaIdentity, "backend" | "nativeSessionId">,
 	deps: { resolveAdapter?: (id: string) => Pick<NativePushAdapter, "probe"> } = {},
 ): Promise<boolean> {
+	// #152: a paused native-push backend cannot receive a reply, so its `replyable` is false by
+	// POLICY — no adapter is resolved or probed. This is not a liveness verdict about the citizen.
+	if (nativePushPaused(identity.backend)) return false;
 	const resolveAdapter = deps.resolveAdapter ?? resolveNativePushAdapter;
 	const probe = await resolveAdapter(identity.backend).probe(identity.nativeSessionId);
 	return probe.status === "alive";

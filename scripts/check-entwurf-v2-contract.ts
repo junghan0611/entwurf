@@ -430,9 +430,9 @@ ok(
 // cannot enforce it — these semantic fixtures (the SSOT predicate the 5b decider
 // mints against) do.
 eq(
-	"？6: PRE_PROBE_REJECT_REASONS = bad-target/target-locked/target-address-conflict/record-less-socket",
+	"？6: PRE_PROBE_REJECT_REASONS = bad-target/target-locked/target-address-conflict/record-less-socket/native-push-paused",
 	[...PRE_PROBE_REJECT_REASONS],
-	["bad-target", "target-locked", "target-address-conflict", "record-less-socket"],
+	["bad-target", "target-locked", "target-address-conflict", "record-less-socket", "native-push-paused"],
 );
 // the partition is exhaustive + disjoint: every reject reason is pre-probe XOR not.
 for (const r of ENTWURF_V2_REJECT_REASONS) {
@@ -466,6 +466,28 @@ ok("？6: record-less-socket is pre-probe (#50 C4 — no citizen, no probe)", is
 ok(
 	"taxonomy: record-less-socket is NOT a resolver reason (target-resolution stage, not a table cell)",
 	!(RESOLVER_REJECT_REASONS as readonly string[]).includes("record-less-socket"),
+);
+
+// #152: native-push-paused — a native-push backend paused by policy (antigravity: its LS
+// refused entwurf's measured external agentapi calls for a missing CSRF token). The decider refuses it BEFORE
+// any adapter probe, so it is pre-probe (null liveness), never a resolver table cell and
+// never one of the post-probe native-push outcomes it must not impersonate (dead /
+// indeterminate).
+ok(
+	"taxonomy: native-push-paused is in the enum (#152)",
+	(ENTWURF_V2_REJECT_REASONS as readonly string[]).includes("native-push-paused"),
+);
+ok(
+	"？6: native-push-paused is pre-probe (#152 — refused before any adapter probe)",
+	isPreProbeReject("native-push-paused"),
+);
+ok(
+	"taxonomy: native-push-paused is NOT a resolver reason (#152)",
+	!(RESOLVER_REJECT_REASONS as readonly string[]).includes("native-push-paused"),
+);
+ok(
+	"taxonomy: native-push-paused is NOT a post-probe native-push reject (#152 — not dead, not indeterminate)",
+	!(NATIVE_PUSH_REJECT_REASONS as readonly string[]).includes("native-push-paused"),
 );
 ok(
 	"taxonomy: the retired socket-only-no-resume-authority is GONE from the enum (#50 C4)",

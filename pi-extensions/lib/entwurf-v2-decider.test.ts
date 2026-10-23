@@ -596,15 +596,17 @@ describe("decideDispatch — the frozen invariants (design §5)", () => {
 		ok("invalid-gid: throws BEFORE resolveTarget (no path/lookup built)", !resolveCalled);
 	});
 
-	// ── native-push rail (봉인 4): antigravity is intercepted BEFORE the unsupported ──
+	// ── native-push rail (봉인 4): a native-push backend is intercepted BEFORE the unsupported ──
+	// The live rail is exercised on codex: antigravity is PAUSED (#152) and rejects before any
+	// probe, which its own cell below pins.
 	// mailbox branch, routed by nativePushProbe + the NATIVE_PUSH table, LOCK-FREE.
-	it("native-push rail (봉인 4): antigravity is intercepted BEFORE the unsupported", async () => {
-		const npResolution = { identity: identity("antigravity"), preProbeAddressConflict: false };
+	it("native-push rail (봉인 4): codex is intercepted BEFORE the unsupported", async () => {
+		const npResolution = { identity: identity("codex"), preProbeAddressConflict: false };
 		{
 			// ff × alive → execute native-push send; plan carries route/backend/nativeSessionId; lock null.
 			const t = mkDeps({
 				resolution: npResolution,
-				nativePush: { status: "alive", route: { backend: "antigravity", lsAddress: "127.0.0.1:5599" } },
+				nativePush: { status: "alive", route: { backend: "codex", socketPath: "/tmp/gate-codex.sock" } },
 			});
 			const d = await decideDispatch({ target: GID, intent: "fire-and-forget", message: "yo" }, t.deps);
 			ok("native-push ff+alive: execute", isExecute(d));
@@ -619,9 +621,9 @@ describe("decideDispatch — the frozen invariants (design §5)", () => {
 			if (isExecute(d) && d.plan.transport === "native-push") {
 				ok(
 					"native-push ff+alive: plan route = probed route",
-					d.plan.route.backend === "antigravity" && d.plan.route.lsAddress === "127.0.0.1:5599",
+					d.plan.route.backend === "codex" && d.plan.route.socketPath === "/tmp/gate-codex.sock",
 				);
-				ok("native-push ff+alive: plan backend = antigravity", d.plan.backend === "antigravity");
+				ok("native-push ff+alive: plan backend = codex", d.plan.backend === "codex");
 				ok("native-push ff+alive: plan nativeSessionId from identity", d.plan.nativeSessionId === `native-${GID}`);
 				ok(
 					"native-push ff+alive: plan keyset exact",
@@ -657,6 +659,23 @@ describe("decideDispatch — the frozen invariants (design §5)", () => {
 				d.kind === "reject" && d.receipt.reason === "native-push-probe-indeterminate",
 			);
 		}
+	});
+
+	// ── #152: antigravity native-push is PAUSED — refused before any probe ─────
+	it("native-push paused (#152): antigravity rejects pre-probe with no probe, lock or mailbox", async () => {
+		const t = mkDeps({
+			resolution: { identity: identity("antigravity"), preProbeAddressConflict: false },
+			nativePush: { status: "alive", route: { backend: "antigravity", lsAddress: "127.0.0.1:5599" } },
+		});
+		const d = await decideDispatch({ target: GID, intent: "fire-and-forget", message: "yo" }, t.deps);
+		ok("paused: reject native-push-paused", d.kind === "reject" && d.receipt.reason === "native-push-paused");
+		ok(
+			"paused: observedLiveness null (pre-probe, no liveness claimed)",
+			d.kind === "reject" && d.receipt.observedLiveness === null,
+		);
+		ok("paused: nativePushProbe NOT called", t.nativePushCalls.length === 0);
+		ok("paused: acquireLock NOT called", t.acquireCalls.length === 0);
+		ok("paused: mailbox seam NOT consulted", t.mailboxCalls.length === 0);
 	});
 
 	// ── the wake-mode capability HELPER stays pinned ──────────────────────────

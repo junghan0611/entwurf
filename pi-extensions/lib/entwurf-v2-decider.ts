@@ -52,6 +52,7 @@ import {
 	isLivenessSupported,
 	makeRejectReceipt,
 	type NativePushBackend,
+	nativePushPaused,
 	nativePushSupported,
 	resolveDispatch,
 	resolveNativePushDispatch,
@@ -306,6 +307,12 @@ export async function decideDispatch(input: DispatchInput, deps: DispatchDecider
 	// branch is LOCK-FREE (봉인 4): the pi in-domain lock closes a socket TOCTOU, but a
 	// volatile probe route has no lock meaning (a duplicate-send idempotency is a D8 future).
 	if (nativePushSupported(identity.backend)) {
+		// #152: a paused native-push backend is refused by name BEFORE its adapter is probed —
+		// on the measured external path that language server refused the call (missing CSRF token),
+		// and a refusal must not be reported as a measured liveness. Pre-probe, observedLiveness null.
+		if (nativePushPaused(identity.backend)) {
+			return reject(makeRejectReceipt("native-push-paused", null));
+		}
 		const probe = await deps.nativePushProbe(identity);
 		const receipt = resolveNativePushDispatch(input.intent, probe.status);
 		if (!receipt.ok) return reject(receipt);

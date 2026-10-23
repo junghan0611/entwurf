@@ -1,0 +1,17 @@
+{
+	"schemaVersion": 1,
+	"lane": "native-push-paused",
+	"mutants": [
+		{
+			"claim": "AGY-NATIVE-PUSH-PAUSED",
+			"title": "the paused native-push backend set is emptied, so agy dispatch, sender replyability and register_native reach the agy language server again, whose measured external callers were refused for a missing CSRF token (#128, #152)",
+			"subject": "pi-extensions/lib/entwurf-v2-contract.ts",
+			"find": ["export const NATIVE_PUSH_PAUSED_BACKENDS: readonly NativePushBackend[] = [\"antigravity\"];"],
+			"replace": ["export const NATIVE_PUSH_PAUSED_BACKENDS: readonly NativePushBackend[] = [];"],
+			"gate": ["bash", "run.sh", "check-native-push-paused"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:AGY-NATIVE-PUSH-PAUSED]",
+			"signatureSource": "pi-extensions/lib/native-push/paused.test.ts"
+		}
+	]
+}

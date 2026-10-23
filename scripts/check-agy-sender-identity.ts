@@ -442,7 +442,7 @@ try {
 	}
 
 	ok(
-		"antigravity is a native-push backend → its replyable comes from the adapter probe",
+		"antigravity stays a native-push backend (its reply rail is native-push; while #152 pauses it, that rail answers replyable:false by policy)",
 		nativePushSupported("antigravity"),
 	);
 	ok(
@@ -455,10 +455,12 @@ try {
 	// probe can only be a broken registry or a probe that could not run at all. Folding that into
 	// replyable:false would tell the receiver a lie about this sender AND bury the defect — the
 	// exact Crash-Don't-Warn shape this lane exists to remove. It must propagate.
+	// The mapping is exercised on codex, the native-push backend that is not paused: antigravity is
+	// paused (#152) and answers false by policy without resolving an adapter (paused.test.ts).
 	{
 		const identity: Pick<MetaIdentity, "backend" | "nativeSessionId"> = {
-			backend: "antigravity",
-			nativeSessionId: "conv-x",
+			backend: "codex",
+			nativeSessionId: "thread-x",
 		};
 		const adapterWith = (probe: NativePushAdapter["probe"]) => ({ resolveAdapter: () => ({ probe }) });
 
@@ -466,7 +468,7 @@ try {
 			"probe alive → replyable true",
 			(await probeNativeSenderAlive(
 				identity,
-				adapterWith(async () => ({ status: "alive", route: { backend: "antigravity", lsAddress: "127.0.0.1:1" } })),
+				adapterWith(async () => ({ status: "alive", route: { backend: "codex", socketPath: "/tmp/gate-codex.sock" } })),
 			)) === true,
 		);
 

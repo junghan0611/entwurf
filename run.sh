@@ -222,7 +222,7 @@ Usage:
   ./run.sh check-typing-call-fence    # deterministic gate for the boundary nobody has broken: this product composes ARGUMENTS and LETTERS, never keystrokes. Scans every tracked production source under pi-extensions/ and mcp/ — comments blanked, string literals kept — for tmux send-keys/paste-buffer/load-buffer and herdr's PTY verbs (agent.prompt, agent.send_keys, pane.send_text, pane.input.set). Prose is exempt on purpose: the sentence stating the rule names the very calls it forbids, and a scanner that read prose could be made green by deleting the law. Carries its own oracle — the detector is proven on planted code, proven blind to comments, and the scanned inventory is measured
   ./run.sh check-resume-launch-identity # deterministic gate for resume-launch-identity.ts, the record-authoritative launch-identity leaf preserved through the visible-first cut (spawn-bg and all its callers are gone; this leaf answers "which being is this, and which conversation is theirs"). Temp meta-store fixture: gardenId→record.transcriptPath happy path with header cwd/provider/model; C3 integrity (header id ≠ record.nativeSessionId → refused, never resumed); #52 ADDRESSABLE read (a gid that no longer holds its nativeSessionId alone is refused from EITHER side — the plain targeted read would resume one transcript twice under two locks); cause fidelity per impossible resume incl. the F7 pin (recorded-but-deleted transcript → MISSING, not "no recorded model"); header↔gate SSOT. No spawn/socket/timer
   ./run.sh smoke-entwurf-v2-matrix-live # LIVE sentinel (0.11 Stage 0 step 5d-5, D4-b) — OUT of pnpm check, needs LIVE=1. Drives REAL production runEntwurfV2 deps over REAL OS objects, 4 cells: C1 control-socket (real pi --entwurf-control resident → RPC send → lock acquire→release ×1), C1b record-less socket (#50 C4: live record-less pi → EVERY intent rejected pre-probe record-less-socket, no lock, rendered hint names record authority + fresh-cut), C2 meta-mailbox deliverable (armed self-fetch citizen → real .msg enqueue, lock-free), C3 meta-mailbox guard (no armed receiver → reject, no garbage). Model-in-loop OUT (transport/lock/enqueue gate, GPT Q2); negative/timeout stay deterministic. Model: ENTWURF_LIVE_TARGET=<provider>/<model> (default openai-codex/gpt-5.6-luna). LIVE=1 ./run.sh smoke-entwurf-v2-matrix-live
-  ./run.sh smoke-agy-native-push-live  # 봉인 8 LIVE acceptance for the native-push (agy) rail — OUT of pnpm check, needs LIVE=1 + AGY_CONVERSATION_ID (a live agy conversation). Drives the REAL antigravity adapter + register core + runEntwurfV2 (production deps): doctor-static preflight (dangling→FAIL, the ③ gate), probe route, register create/attach idempotency, fire→native-push delivered, post-send re-probe (D7 partial), bogus-conv→native-push-probe-indeterminate. Meta-store isolated to a temp dir (only the agy round-trip is real; no real-store residue). COST FENCE: open that agy conversation on gemini-3.6-flash (free account) — never a Pro tier; entwurf never selects the agy model and no assertion reads it. LIVE=1 AGY_CONVERSATION_ID=<convId> ./run.sh smoke-agy-native-push-live
+  ./run.sh smoke-agy-native-push-live  # PAUSED (#152): exits 2 with [entwurf:paused] before it reads LIVE or AGY_CONVERSATION_ID — not a PASS and not a SKIP; OUT of pnpm check. Open no agy conversation for it while the pause holds. Its 봉인 8 native-push round trip (real antigravity adapter + register core + runEntwurfV2) runs only after a separate change lifts the pause.
   ./run.sh smoke-codex-native-push-live # on-demand LIVE acceptance for Codex native-push — needs LIVE=1 + CODEX_LIVE_THREAD_ID loaded by a visible TUI attached to the default app-server; probes the real UDS, routes through production runEntwurfV2, queues one exact-token turn without retry, re-probes, and leaves the visible TUI to show the model result
   ./run.sh smoke-codex-fresh-live    # #95 RELEASE MUST: record-backed receipt fixture -> PUBLIC initial Pi fresh/callback in a session S that is NOT the app-server's -> Pi PUBLIC omitted-placement Codex fresh/exact callback, also in S -> Pi-to-Codex addressed native-push v2 -> Codex PUBLIC omitted-placement AND omitted-cwd fresh Pi/exact callback IN S beside its own TUI (lane B claim: the app-server env names another session, so S can only come from the caller's pane title; lane C claim: no cwd was asked for, so the directory can only come from the Codex caller's own record — and the Codex thread's own rollout session_meta.cwd, its pane and its record must all be the requested scratch, not the app-server's repo) -> Codex final v2 evidence. Needs LIVE=1 + ENTWURF_CODEX_APP_SERVER_PID + ENTWURF_CODEX_FRESH_MODEL + ENTWURF_CODEX_FRESH_PI_MODEL, and its ONE stable launch directory answered 'Trust' once in a plain codex -C there: codex records its direct consent per exact directory, so a directory with no answer at all opens a consent screen instead of a first turn. Only THIS gate treats that as a precondition and fails up front as codex-launch-cwd-undecided rather than timing out on a callback — an ordinary entwurf_fresh_call only prints the note and opens the window, because a human can answer the screen. The smoke PRINTS that directory as 'launch-cwd <dir>' and repeats it in the failure as a ready-to-run repair command — do not retype it from memory, and do not write it as \$TMPDIR/... (os.tmpdir() falls back to /tmp when TMPDIR is unset, so that spelling names a different directory in the filesystem root). The PID names the operator-owned app-server, which must sit in a DIFFERENT session from S; the smoke checks/prints all four coordinates, never starts/stops/guesses the app-server/session, never reads screen text, interrupts only its exact still-running Codex turn, and cleans only receipt-named window ids
   ./run.sh smoke-mux-lifecycle-live  # RELEASE MUST integrated LIVE lifecycle acceptance for mux, through the REAL MCP surface — OUT of pnpm check, needs LIVE=1 and spends model turns (two pi siblings: native + recorded-ACP provider, each resumed once; one Claude Code sibling). tools/call fresh_call (the native pi cell names a caller-distinct seat and tmux is asked where the pane landed, #108) -> nonce callback sender envelope -> v2 control send landing in the sibling's own transcript -> resume_call REFUSED while live (window count unchanged) -> stable-handle close (pane gone, socket dead, record kept) -> dormant delivery refused honestly -> public entwurf_resume_call with LAUNCH and OBSERVATION receipts kept apart, same-gid socket alive, zero new citizens, zero lock residue, resumed pane_start_path == RECORD cwd (separate tmux query), transcript byte-identical across the resume -> v2 recall of the pre-close fact. claude-code resume of the still-live sibling refused target-live, no window opened and no lock residue (its dormant same-id resume is deterministic-only, #147 L2). LIVE=1 ./run.sh smoke-mux-lifecycle-live
@@ -241,6 +241,7 @@ Usage:
   ./run.sh check-entwurf-deliverability # deterministic gate (SE-1/SE-2 slice 2c): conversational-mailbox deliverability predicate — computeMetaReceiverActive (recordBacked ∧ ownerAlive ∧ watchArmed) + mailboxConversationalDeliverable (self-fetch AND active); direct-inject pi refused (SE-1), self-fetch dead/unarmed refused (SE-2); self-address shares the same atom
   ./run.sh check-native-push-adapter # deterministic gate (봉인 3/8): native-push adapter leaf (antigravity) via a FAKE runner — FULL pid scan (not head -1), dead vs indeterminate, VOLATILE route re-discovery (no cache), send argv+ANTIGRAVITY_LS_ADDRESS env, non-zero exit throws, NO adapter-level retry (executor-owned), resolveNativePushAdapter fail-fast
   ./run.sh check-native-push-register # deterministic gate (봉인 5): registerNativeConversation (entwurf_register_native core) via fake adapter + isolated mkdtemp store — live probe→CREATE, re-register→ATTACH (same gid, cwd refreshed, no dup), not-live probe→REFUSE (throws, no record), receiver-marker abstinence (보정① source guard)
+  ./run.sh check-native-push-paused  # #152 mutant execution coordinate: run_vitest over paused.test.ts alone — dispatch, sender replyable and entwurf_register_native refuse a paused backend (antigravity) before any probe. Same file check-tests-beside-behavior already runs.
   ./run.sh check-agy-sender-identity # deterministic gate (#46 sender lane): WHO is calling the bridge — real agy hook as a child process writes an antigravity sender marker keyed by its PARENT pid (never on upsert failure), and resolveTrustedMetaSenderIdentity over isolated stores yields 0→null / 1→identity on EITHER backend / two distinct live identities on one owner pid→THROW (never guess, never downgrade to anonymous). This is what turns an agy send from external-mcp/unknown-host into a replyable garden citizen
   ./run.sh check-package-source-routing # deterministic gate (#29): package-source -> install-root mapping + fail-fast routing (local/git/npm/missing/project/no-source × local+remote, self-root, resume), no backend
   ./run.sh new-session-id             # print one fresh garden id from the generateSessionId SSOT (#50 C2: no launcher injection — the record layer is the consumer; pi mints its own session id)
@@ -1402,6 +1403,16 @@ check_entwurf_v2_native_push() {
   # check-release-gate-outcomes: a gate a mutant names must be reachable outside qualification.
   section "native-push send hand (mutant execution coordinate)"
   run_vitest pi-extensions/lib/entwurf-v2-native-push.test.ts
+}
+
+check_native_push_paused() {
+  # MUTANT EXECUTION COORDINATE, not a discovery path — paused.test.ts is found by
+  # check-tests-beside-behavior like every other beside-behaviour lane. This case exists
+  # because the AGY-NATIVE-PUSH-PAUSED mutant (#152) names it as gate argv; the narrow file
+  # filter keeps that mutant from re-running every beside-behaviour test. It stays inside
+  # check:contracts for the same reason as check-entwurf-v2-native-push above.
+  section "native-push pause policy (#152, mutant execution coordinate)"
+  run_vitest pi-extensions/lib/native-push/paused.test.ts
 }
 
 check_entwurf_v2_surface() {
@@ -7709,6 +7720,9 @@ case "$cmd" in
   check-entwurf-v2-native-push)
     check_entwurf_v2_native_push
     ;;
+  check-native-push-paused)
+    check_native_push_paused
+    ;;
   check-entwurf-control-rpc)
     check_entwurf_control_rpc
     ;;
@@ -8112,12 +8126,14 @@ case "$cmd" in
     (cd "$REPO_DIR" && bash scripts/smoke-pi-provider-state.sh)
     ;;
   smoke-agy-native-push-live)
-    # 봉인 8 LIVE acceptance gate for the native-push (agy) delivery rail. Drives the REAL
-    # antigravity adapter + register core + runEntwurfV2 (production deps) against a live agy
-    # conversation (AGY_CONVERSATION_ID): probe route, register create/attach idempotency,
-    # fire→native-push delivered, bogus-conv probe-indeterminate reject.
-    # Meta-store is isolated to a temp dir (only the agy round-trip is real); honest SKIP when
-    # LIVE!=1. doctor-static preflight FAILs before the agy bridge is wired (③).
+    # PAUSED (#152): the script exits 2 [entwurf:paused] before it reads LIVE or
+    # AGY_CONVERSATION_ID — not a PASS and not a SKIP. The body after that exit is the 봉인 8
+    # LIVE acceptance for the native-push (agy) rail and runs only once a separate change lifts
+    # the pause: REAL antigravity adapter + register core + runEntwurfV2 (production deps)
+    # against a live agy conversation (probe route, register create/attach idempotency,
+    # fire→native-push delivered, bogus-conv probe-indeterminate reject), meta-store isolated
+    # to a temp dir, honest SKIP when LIVE!=1, doctor-static preflight FAIL before the agy
+    # bridge is wired (③).
     run_ts scripts/smoke-agy-native-push-live.ts
     ;;
   smoke-codex-native-push-live)

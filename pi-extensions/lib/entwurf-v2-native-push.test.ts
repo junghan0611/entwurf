@@ -6,6 +6,10 @@
  * QK claim is its OWN test title: this lane carries a mutant and `run_vitest` attributes a
  * kill from the failed TEST TITLE (run.sh:104-113).
  *
+ * #152: these cells drive the send hand with a PLANTED plan and a fake retriable adapter
+ * shaped like antigravity's. They are a lower-leaf fixture of the executor, not public agy
+ * delivery: public dispatch refuses agy as `native-push-paused` before any plan exists.
+ *
  * The original header, unchanged — check-entwurf-v2-native-push — deterministic gate for the native-push SEND hand
  * (봉인 3/4), the executor half of the native-push rail. This is where the 1-shot retry
  * lives (moved out of the adapter leaf per the review): the decider planted a fresh route,

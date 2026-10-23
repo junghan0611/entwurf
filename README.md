@@ -28,10 +28,11 @@ Git branches, worktrees, file isolation and internal delegation remain their con
 | **Open** a new sibling | `entwurf_fresh_call` | Herdr: a new unfocused tab in the caller's workspace. tmux: a new window in the caller's session, or an existing session named by `placement.tmuxSession`; without an explicit tmux placement, a Codex caller opens beside its own TUI pane | Herdr: pi, Claude Code. tmux: pi, pi-durable, Claude Code, Copilot, OMP, Codex |
 | **Reopen** a dormant sibling | `entwurf_resume_call` | A visible tmux window under the same garden id, with its record selecting the native session (Pi: identity-checked recorded transcript supplies launch metadata; Claude Code: `claude --resume <session id>` at the record cwd); the verb submits no prompt | pi, Claude Code |
 | **Retire** one sibling the human operator explicitly requested | `entwurf_retire_call` | One guarded attempt on that target: a Pi shutdown request or Claude Code fd-pinned process termination. Refused/unknown outcomes remain possible; the record stays for guarded same-id return. Not a grant, a roster cleanup or an automatic retry | pi, Claude Code |
-| **Message** an existing sibling | `entwurf_v2` | Its own rail: control socket, self-fetch mailbox or native push; delivery starts no process | pi, pi-durable, Claude Code, Copilot, OMP, Antigravity, Codex |
+| **Message** an existing sibling | `entwurf_v2` | Its own rail: control socket, self-fetch mailbox or native push; delivery starts no process | pi, pi-durable, Claude Code, Copilot, OMP, Codex (Antigravity native push is paused, #152) |
 
-Antigravity is message-only: an existing conversation registers itself, and Entwurf never
-launches one. A launch receipt is neither the new sibling's address nor proof that it
+Antigravity is a legacy citizen: an existing conversation registers itself, and Entwurf never
+launches one. Its native push is paused (#152): on the measured external path the agy language server
+refused Entwurf's calls for a missing CSRF token, so a message to it is refused as `native-push-paused`. A launch receipt is neither the new sibling's address nor proof that it
 processed its task; the sibling's own callback envelope supplies its garden id.
 
 The package holds the v2 core, native-harness bridges, a pi adapter and an ACP
@@ -194,7 +195,7 @@ pi / pi-durable / Claude Code / Copilot / OMP / Antigravity / Codex
 
 **Delivery starts no process.** A live pi receives over its record-addressed control
 address, an armed self-fetch citizen (Claude Code, Copilot, OMP, pi-durable) through its
-mailbox, a probe-alive native-push citizen (Antigravity, Codex) through its own
+mailbox, a probe-alive native-push citizen (Codex; Antigravity is paused, #152) through its own
 conversation or thread. Anything else is refused honestly, never launched into. The receipt
 is a receiver acceptance boundary, a durable mailbox file or an injection, never completion;
 `wants_reply` is etiquette, not waiting. [DELIVERY](./DELIVERY.md#control-socket-acceptance-boundaries-120)
