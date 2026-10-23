@@ -275,7 +275,7 @@
 		// Its ctx-free production factory uses the same explicit `.ts` owning imports;
 		// received by the existing scripts/tsconfig.json and mcp/tsconfig.json lib includes.
 		"pi-extensions/lib/entwurf-v2-retire-production.ts",
-		// remote-pair-receive.ts is #107's receiving half for one declared remote pair — a lib→lib
+		// remote-pair-receive.ts is the receiving half of the declared remote pairs (#107, #149) — a lib→lib
 		// VALUE importer (requireGardenId from meta-session.ts) with explicit `.ts` extensions, same
 		// fence. Typechecked by scripts/tsconfig.json via its gate
 		// (pi-extensions/lib/remote-pair-receive.test.ts) and its entry (scripts/remote-pair-receive.ts).

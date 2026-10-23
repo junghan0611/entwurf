@@ -1,15 +1,15 @@
 #!/usr/bin/env node
 /**
- * remote-pair-receive — `entwurf remote-pair-receive --pair <absolute file>` (#107 rail 1).
+ * remote-pair-receive — `entwurf remote-pair-receive --pair <absolute file>` (#107 rail 1, #149).
  *
- * The receiving host's entry for one declared remote pair. The sending host runs it over one
+ * The receiving host's entry for its declared remote pairs. The sending host runs it over one
  * SSH call and writes one JSON claim to stdin. This entry reads the operator-named pair
- * declaration once, applies the pair scope check, and hands a matching claim to the existing
- * v2 dispatch. The scope and trust model are in pi-extensions/lib/remote-pair-receive.ts.
+ * declaration once, selects the one route whose two ends are the claim's, and hands a matching
+ * claim to the existing v2 dispatch. The scope and trust model are in pi-extensions/lib/remote-pair-receive.ts.
  *
  * Scope: `--pair` must name THIS host's own opt-in file (`remotePairOptInPath()`), absolute and
- * normalized-equal; any other path — even a valid declaration — is exit 2. That one file is the pair
- * this host accepts and, because it names the sender's host as its route, the declared route back.
+ * normalized-equal; any other path — even a valid declaration — is exit 2. That one file holds the
+ * pairs this host accepts and, because each route names the sender's host, the declared route back.
  * The sender's declaration carries the path only so the argv shape is explicit; it selects nothing.
  *
  * EXIT CONTRACT (stdout carries a JSON receipt line only where named):
@@ -47,7 +47,7 @@ if (args.length !== 2 || args[0] !== "--pair") {
 }
 const pairFile = args[1];
 
-let decl: RemotePairDeclaration;
+let decls: RemotePairDeclaration[];
 let claim: ReturnType<typeof parseRemoteClaim>;
 try {
 	// The scope is THIS host's own opt-in, never a file the sender picks: `--pair` must name it
@@ -56,17 +56,17 @@ try {
 	if (!path.isAbsolute(pairFile) || path.normalize(pairFile) !== own) {
 		throw new Error(`--pair must be this host's opt-in file ${own} (got ${pairFile})`);
 	}
-	const route = readRemotePairOptIn(own);
-	if (route === null) throw new Error(`this host has no remote pair opt-in (${own} is absent)`);
-	decl = { remoteGardenId: route.remoteGardenId, ssh: route.ssh, localGardenId: route.localGardenId };
+	const optIn = readRemotePairOptIn(own);
+	if (optIn === null) throw new Error(`this host has no remote pair opt-in (${own} is absent)`);
+	decls = optIn.routes.map((r) => ({ remoteGardenId: r.remoteGardenId, ssh: r.ssh, localGardenId: r.localGardenId }));
 	claim = parseRemoteClaim(readFileSync(0, "utf8"));
 } catch (err) {
 	emit({ kind: "invalid", detail: err instanceof Error ? err.message : String(err) }, 2);
 }
 
-const receipt = await receiveRemoteClaim(claim, decl, {
+const receipt = await receiveRemoteClaim(claim, decls, {
 	dispatch: (params, sender) => runAndRenderEntwurfV2FromSurface(params, { senderProvider: () => sender }),
-	// The scope file IS this host's own opt-in, and it names the sender's host as its route: a
+	// The scope file IS this host's own opt-in, and the matched route names the sender's host: a
 	// matching claim always has a declared route back. Declared, not probed.
 	replyRoute: "declared",
 });

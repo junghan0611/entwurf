@@ -1,15 +1,16 @@
 /**
- * remote-pair-receive — the RECEIVING half of #107's one declared remote pair (rail 1).
+ * remote-pair-receive — the RECEIVING half of the declared remote pairs (#107 rail 1, #149 routes).
  *
  * The host that owns the target record runs this once per SSH call. It reads one JSON claim
- * from stdin, checks it against the operator-written pair declaration, and hands a matching
+ * from stdin, checks it against the operator-written pair declarations, and hands a matching
  * claim to the existing v2 dispatch. The record, owner and deliverability checks stay the
  * dispatch's own: nothing here writes a mailbox, resolves a rail, or retries.
  *
  * Trust model (GLG, #107 D3 (a)): the boundary is the same operator's SSH account. The pair
- * check is a SCOPE limit, not authentication: a claim whose `from`/`target` is not the declared
- * pair is refused before any mutation. It does not detect that same account sending the
- * declared gid falsely; nothing here claims to.
+ * check is a SCOPE limit, not authentication: a claim whose `from`/`target` is not one declared
+ * pair is refused before any mutation. Both ends are matched in the SAME route (#149), so a sender
+ * declared in one route cannot address the local citizen of another. It does not detect that same
+ * account sending a declared gid falsely; nothing here claims to.
  *
  * Sender: the stdin claim is the only sender input. Ambient carriers (`PI_SESSION_ID`,
  * `PI_AGENT_ID`, sender markers) in the SSH environment are never consulted, so this module
@@ -29,7 +30,7 @@ import type { EntwurfV2SurfaceRendered, SurfaceEntwurfV2Params } from "./entwurf
 import type { MailboxSenderEnvelope } from "./meta-mailbox-body.ts";
 import { requireGardenId } from "./meta-session.ts";
 
-/** One operator-declared pair, as written on the RECEIVING host. */
+/** One operator-declared pair (one route), as written on the RECEIVING host. */
 export interface RemotePairDeclaration {
 	/** The sender's garden id on the other host. */
 	remoteGardenId: string;
@@ -131,24 +132,31 @@ export function parseRemoteClaim(text: string): RemoteClaim {
 	};
 }
 
-/** The scope check. Null = inside the declared pair. */
-export function checkRemotePair(
+/**
+ * The scope check: the one declared pair whose two ends are the claim's `from` and `target`, or a
+ * refusal. The two reasons are the ones every sender already reads (#107), so a sender on another
+ * release still classifies them: an undeclared `from` is a from-mismatch; a declared `from` with a
+ * target that is not ITS declared local (another route's local included) is a target-mismatch.
+ */
+export function selectRemotePair(
 	claim: RemoteClaim,
-	decl: RemotePairDeclaration,
-): { reason: RemotePairRejectReason; detail: string } | null {
-	if (claim.from !== decl.remoteGardenId) {
+	decls: readonly RemotePairDeclaration[],
+): { decl: RemotePairDeclaration } | { reason: RemotePairRejectReason; detail: string } {
+	const fromRoutes = decls.filter((d) => d.remoteGardenId === claim.from);
+	if (fromRoutes.length === 0) {
 		return {
 			reason: "remote-pair-from-mismatch",
-			detail: `from ${claim.from} is not the declared remote ${decl.remoteGardenId}`,
+			detail: `from ${claim.from} is not a declared remote (${decls.map((d) => d.remoteGardenId).join(", ")})`,
 		};
 	}
-	if (claim.target !== decl.localGardenId) {
+	const decl = fromRoutes.find((d) => d.localGardenId === claim.target);
+	if (!decl) {
 		return {
 			reason: "remote-pair-target-mismatch",
-			detail: `target ${claim.target} is not the declared local ${decl.localGardenId}`,
+			detail: `target ${claim.target} is not a declared local for remote ${claim.from} (${fromRoutes.map((d) => d.localGardenId).join(", ")})`,
 		};
 	}
-	return null;
+	return { decl };
 }
 
 export function buildRemoteSenderEnvelope(
@@ -170,12 +178,12 @@ export function buildRemoteSenderEnvelope(
 
 export async function receiveRemoteClaim(
 	claim: RemoteClaim,
-	decl: RemotePairDeclaration,
+	decls: readonly RemotePairDeclaration[],
 	deps: RemoteReceiveDeps,
 ): Promise<RemoteReceiveReceipt> {
-	const mismatch = checkRemotePair(claim, decl);
-	if (mismatch) return { kind: "rejected", ...mismatch };
-	const sender = buildRemoteSenderEnvelope(claim, decl, (deps.now ?? (() => new Date()))(), deps.replyRoute);
+	const picked = selectRemotePair(claim, decls);
+	if (!("decl" in picked)) return { kind: "rejected", ...picked };
+	const sender = buildRemoteSenderEnvelope(claim, picked.decl, (deps.now ?? (() => new Date()))(), deps.replyRoute);
 	const rendered = await deps.dispatch(
 		{ target: claim.target, intent: "fire-and-forget", message: claim.message, wants_reply: claim.wantsReply },
 		sender,

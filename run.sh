@@ -184,6 +184,7 @@ Usage:
   ./run.sh check-pi-durable-beside    # #129 mutant execution coordinate (VERIFY rule 3): run_vitest over four pi-durable beside tests (adapter, carrier/SDK-set verifier, preflight, owner join) — a pi-durable qualification lane gate argv. Same files check-tests-beside-behavior already runs.
   ./run.sh check-pi-durable-carrier   # #144 mutant execution coordinate (VERIFY rule 3): run_vitest over the carrier test alone (relocation/resolver, owned-source emission and typecheck fence, package file list, task footer, the real bootstrap on the 1.2 SDK, stream transport, skills prompt) — the gate argv of the carrier claims, whose QKs live only in that file. Same file check-tests-beside-behavior already runs.
   ./run.sh check-pi-durable-native-module # #144 mutant execution coordinate (VERIFY rule 3): run_vitest over the bootstrap's native-module file and directory ingress test alone — the gate argv of the ingress claims, whose QKs live only in that file. Same file check-tests-beside-behavior already runs.
+  ./run.sh check-remote-pair-beside   # #149 mutant execution coordinate (VERIFY rule 3): run_vitest over the five remote-pair beside tests (send, receive, roundtrip, transport, mailbox body) — the gate argv of the remote-pair claims. Same files check-tests-beside-behavior already runs.
   ./run.sh check-pi-durable-receive   # #129 L-receive FIRST CELL, CHECKOUT-ONLY. Same input (the bundle must carry the pi-durable-host owner join). The host driver gives the app NO input; a seeded claude-code sender (marker owned by a separate idle child, handed to a gate-owned sending bridge through ENTWURF_META_SENDER_MARKER) enqueues one message, the host's doorbell admits its notice to the ROOT conversation, and the scripted model drains it with entwurf_inbox_read. S withholds response #1 until the ENQUEUE receipt, the .delivered bytes, the signal, the host-owned receiver marker and the notice are captured. Oracles: receiver() admission, native view, raw archive (.delivered.read + lastReadAt), wire (exactly two requests, drain result = view), and after a green reap a forensic read-only SQLite copy (submission row by request id = reported id, root, input, done, placed entry = the notice). V NOT run. Missing inputs → SKIP (97)
   ./run.sh check-copilot-receive-arm  # #82 RAIL 5 gate: the REAL receiver installer + the REAL extension.mjs forked with a stubbed SDK. Arms only after birth, marker owned by the WATCHER pid, self-fetch dispatch answer, doorbell carries the garden id and NOT the body, id-drift/foreign-parent refusals. Hermetic; no Copilot, no model turn
   ./run.sh check-copilot-launch       # #82 RAIL 7 gate: the MANAGED launch `entwurf copilot`, driven through its public address against a FAKE VENDOR on a sandbox PATH. Receiver precondition refusals, EXTENSIONS token + operator token preservation, injected defaults before the `--` terminator, byte-identical argv, the 11 explicit permission/surface policy overrides that suppress `--yolo`, exec (not fork) pid identity, exit passthrough, recursion refusal. Hermetic; no Copilot, no model turn
@@ -1691,6 +1692,14 @@ check_pi_durable_native_module() {
   # kill is attributed from the mutant's own QK, so its mutants run this file alone rather than
   # re-running the carrier and adapter tests once per mutant. Not a discovery path either.
   run_vitest pi-extensions/lib/pi-durable-native-module.test.ts
+}
+
+check_remote_pair_beside() {
+  # #149: the execution coordinate for the declared remote pairs (VERIFY 「Four rules」 rule 3). Not a
+  # discovery path — check-tests-beside-behavior already finds these files. Every remote-pair claim
+  # carries its QK in one of them, and the qualification runner re-invokes a gate argv once per
+  # mutant, so the narrow filter keeps one mutant from re-running every beside test.
+  run_vitest pi-extensions/lib/remote-pair-send.test.ts pi-extensions/lib/remote-pair-receive.test.ts pi-extensions/lib/remote-pair-roundtrip.test.ts pi-extensions/lib/remote-pair-transport.test.ts pi-extensions/lib/meta-mailbox-body.test.ts
 }
 
 smoke_mux_fresh_call_live() {
@@ -7648,6 +7657,9 @@ case "$cmd" in
   check-pi-durable-native-module)
     check_pi_durable_native_module
     ;;
+  check-remote-pair-beside)
+    check_remote_pair_beside
+    ;;
   check-mux-resume-call)
     check_mux_resume_call
     ;;
@@ -8535,8 +8547,8 @@ case "$cmd" in
     run_ts scripts/check-remote-pair-installed.ts "$@"
     ;;
   remote-pair-receive)
-    # #107 rail 1: the receiving host's entry for one declared remote pair. The pair
-    # check runs before the v2 dispatch, so a claim outside the pair mutates nothing;
+    # #107 rail 1 / #149: the receiving host's entry for its declared remote pairs. The pair
+    # check runs before the v2 dispatch, so a claim outside every declared pair mutates nothing;
     # a match reaches the same record/owner/deliverability checks every local send does.
     # Installed, run_ts runs its compiled twin; the sending host's ssh reaches it through the bin.
     shift || true

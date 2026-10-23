@@ -1,5 +1,5 @@
 /**
- * #107 rail 2a: the sending half of one declared remote pair, proven beside the module (T1).
+ * #107 rail 2a / #149: the sending half of the declared remote pairs, proven beside the module (T1).
  *
  * Entry point of every cell: EXECUTOR-IN. The caller's envelope is a fixture handed to
  * `runEntwurfV2WithRemoteRoute` through `senderProvider`. How a sending bridge resolves its own
@@ -27,7 +27,8 @@ import { parseRemoteClaim } from "./remote-pair-receive.ts";
 import {
 	classifyRemoteReceipt,
 	makeLocalTraceFact,
-	parseRemoteRouteDeclaration,
+	parseRemotePairDeclaration,
+	type RemotePairOptIn,
 	type RemoteRouteDeclaration,
 	type RemoteTransportResult,
 	readRemotePairOptIn,
@@ -37,6 +38,8 @@ import {
 const LOCAL = "20261007T132839-0aaaaa";
 const REMOTE = "20261014T212756-0bbbbb";
 const OTHER = "20261014T212756-0ccccc";
+const LOCAL2 = "20261007T132839-0ddddd";
+const REMOTE2 = "20261014T212756-0eeeee";
 
 const ROUTE: RemoteRouteDeclaration = {
 	remoteGardenId: REMOTE,
@@ -44,6 +47,13 @@ const ROUTE: RemoteRouteDeclaration = {
 	localGardenId: LOCAL,
 	remotePairFile: "/home/op/.pi/agent/entwurf-remote-pair.json",
 };
+
+const ONE: RemotePairOptIn = { routes: [ROUTE] };
+
+/** A v2 declaration's text, as an operator writes it. */
+function v2(...routes: RemoteRouteDeclaration[]): string {
+	return JSON.stringify({ version: 2, routes });
+}
 
 const SENDER: SenderEnvelope = {
 	sessionId: LOCAL,
@@ -68,10 +78,10 @@ function harness(result: RemoteTransportResult = ok({ kind: "dispatched", isErro
 		setTrace(v: boolean) {
 			trace = v;
 		},
-		run(params: SurfaceEntwurfV2Params, route: RemoteRouteDeclaration | null, sender: SenderEnvelope | undefined) {
+		run(params: SurfaceEntwurfV2Params, optIn: RemotePairOptIn | null, sender: SenderEnvelope | undefined) {
 			return runEntwurfV2WithRemoteRoute(params, {
 				senderProvider: () => sender,
-				route,
+				optIn,
 				localTrace: async () => trace,
 				transport: {
 					run: async (argv, stdin, timeoutMs) => {
@@ -99,7 +109,7 @@ describe("route selection sits in front of the local decider", () => {
 	it("[QK:REMOTE-ROUTE-UNDECLARED-LOCAL-UNCHANGED] no declaration, or a target it does not name, runs the existing local surface once and never the transport", async () => {
 		const h = harness();
 		expect((await h.run(PARAMS, null, SENDER)).text).toBe("local");
-		expect((await h.run({ ...PARAMS, target: OTHER }, ROUTE, SENDER)).text).toBe("local");
+		expect((await h.run({ ...PARAMS, target: OTHER }, ONE, SENDER)).text).toBe("local");
 		expect(h.local).toEqual([PARAMS, { ...PARAMS, target: OTHER }]);
 		expect(h.calls).toHaveLength(0);
 	});
@@ -107,7 +117,7 @@ describe("route selection sits in front of the local decider", () => {
 	it("[QK:REMOTE-ROUTE-LOCAL-CONFLICT-FAILS-CLOSED] a declared remote gid with any local trace is refused as ambiguous: no transport, no local dispatch", async () => {
 		const h = harness();
 		h.setTrace(true);
-		const r = await h.run(PARAMS, ROUTE, SENDER);
+		const r = await h.run(PARAMS, ONE, SENDER);
 		expect(r.isError).toBe(true);
 		expect(r.text).toMatch(/remote-route-local-conflict/);
 		expect(h.calls).toHaveLength(0);
@@ -117,7 +127,7 @@ describe("route selection sits in front of the local decider", () => {
 	it("[QK:REMOTE-ROUTE-SENDER-MUST-BE-DECLARED] an absent, anonymous, or other sender is refused before transport", async () => {
 		const h = harness();
 		for (const s of [undefined, { ...SENDER, origin: "external-mcp" as const }, { ...SENDER, sessionId: OTHER }]) {
-			const r = await h.run(PARAMS, ROUTE, s);
+			const r = await h.run(PARAMS, ONE, s);
 			expect(r.isError).toBe(true);
 			expect(r.text).toMatch(/remote-sender-not-declared/);
 		}
@@ -127,7 +137,7 @@ describe("route selection sits in front of the local decider", () => {
 
 	it("[QK:REMOTE-ROUTE-EXACT-ARGV-ONCE] a declared route runs exactly one transport call with the fixed argv, and its stdin parses as the receiver's claim", async () => {
 		const h = harness();
-		const r = await h.run(PARAMS, ROUTE, SENDER);
+		const r = await h.run(PARAMS, ONE, SENDER);
 		expect(r.isError, r.text).toBe(false);
 		expect(h.calls).toHaveLength(1);
 		expect(h.calls[0].argv).toEqual([
@@ -155,7 +165,7 @@ describe("route selection sits in front of the local decider", () => {
 
 	it("[QK:REMOTE-ROUTE-NO-RETRY] an indeterminate transport result is reported as such after exactly one call", async () => {
 		const h = harness({ exitCode: 255, signal: null, timedOut: false, stdout: "", stderr: "Connection reset" });
-		const r = await h.run(PARAMS, ROUTE, SENDER);
+		const r = await h.run(PARAMS, ONE, SENDER);
 		expect(r.isError).toBe(true);
 		expect(r.text).toMatch(/indeterminate: exit 255.*not retried/s);
 		expect(h.calls).toHaveLength(1);
@@ -169,7 +179,7 @@ describe("the sender's receipt keeps the other host's facts as the other host's"
 			[{ kind: "dispatched", isError: false, text: bText }, 0],
 			[{ kind: "dispatched", isError: true, text: bText }, 4],
 		] as const) {
-			const r = await harness(ok(stdout, exit)).run(PARAMS, ROUTE, SENDER);
+			const r = await harness(ok(stdout, exit)).run(PARAMS, ONE, SENDER);
 			expect(r.text).toContain("paths below are on the other host");
 			expect(r.text).toContain(bText);
 		}
@@ -210,11 +220,7 @@ describe("an error the other host reports is quoted, not reinterpreted", () => {
 		];
 		for (const lower of lowers) {
 			expect(lower.isError).toBe(true);
-			const r = await harness(ok({ kind: "dispatched", isError: true, text: lower.text }, 4)).run(
-				PARAMS,
-				ROUTE,
-				SENDER,
-			);
+			const r = await harness(ok({ kind: "dispatched", isError: true, text: lower.text }, 4)).run(PARAMS, ONE, SENDER);
 			expect(r.isError).toBe(true);
 			expect(r.text).toContain(lower.text);
 			const header = r.text.split("\n")[0];
@@ -262,8 +268,7 @@ describe("the receipt is decided only when exit and JSON agree", () => {
 
 describe("the declaration is narrow", () => {
 	it("[QK:REMOTE-ROUTE-DECL-NO-QUOTING-NEEDED] the alias and the remote path stay inside a charset ssh's remote shell does not reinterpret", () => {
-		const good = JSON.stringify(ROUTE);
-		expect(parseRemoteRouteDeclaration(good)).toEqual(ROUTE);
+		expect(parseRemotePairDeclaration(v2(ROUTE))).toEqual(ONE);
 		const bad: Partial<Record<keyof RemoteRouteDeclaration, string>>[] = [
 			{ ssh: "-oProxyCommand=x" },
 			{ ssh: "oracle;id" },
@@ -273,11 +278,121 @@ describe("the declaration is narrow", () => {
 			{ remotePairFile: "/home/op/$(id).json" },
 			{ remotePairFile: "/home/op/../etc/pair.json" },
 		];
-		for (const b of bad)
-			expect(() => parseRemoteRouteDeclaration(JSON.stringify({ ...ROUTE, ...b })), JSON.stringify(b)).toThrow();
-		expect(() => parseRemoteRouteDeclaration(JSON.stringify({ ...ROUTE, command: "x" }))).toThrow(
-			/keys must be exactly/,
+		for (const b of bad) expect(() => parseRemotePairDeclaration(v2({ ...ROUTE, ...b })), JSON.stringify(b)).toThrow();
+		expect(() =>
+			parseRemotePairDeclaration(JSON.stringify({ version: 2, routes: [{ ...ROUTE, command: "x" }] })),
+		).toThrow(/routes\[0\]: keys must be exactly/);
+	});
+
+	it("[QK:REMOTE-ROUTES-V2-EXACT-SHAPE] only an object of exactly version 2 and a non-empty routes array is a declaration", () => {
+		const shapes: [unknown, RegExp][] = [
+			[{ version: 1, routes: [ROUTE] }, /"version" must be 2/],
+			[{ version: "2", routes: [ROUTE] }, /"version" must be 2/],
+			[{ version: 2, routes: [] }, /non-empty array; remove the file to switch off/],
+			[{ version: 2, routes: ROUTE }, /non-empty array/],
+			[{ version: 2, routes: [ROUTE], note: "x" }, /keys must be exactly routes, version/],
+			[{ version: 2 }, /keys must be exactly routes, version/],
+			[{ version: 2, routes: [[ROUTE]] }, /routes\[0\]: must be a JSON object/],
+			[[ROUTE], /must be a JSON object/],
+		];
+		for (const [shape, err] of shapes)
+			expect(() => parseRemotePairDeclaration(JSON.stringify(shape)), JSON.stringify(shape)).toThrow(err);
+	});
+
+	it("[QK:REMOTE-ROUTES-LEGACY-NAMED-REFUSAL] the versionless single-pair form is refused by name with the manual rewrite, never read as one route or as off", () => {
+		expect(() => parseRemotePairDeclaration(JSON.stringify(ROUTE))).toThrow(
+			/versionless single-pair form is no longer read\. Rewrite it by hand as \{"version":2,"routes":\[<the four-key object>\]\}/,
 		);
+	});
+});
+
+describe("the route set is decided on the whole file, not by position", () => {
+	const S: RemoteRouteDeclaration = ROUTE;
+	const D: RemoteRouteDeclaration = {
+		remoteGardenId: REMOTE2,
+		ssh: "devbox",
+		localGardenId: LOCAL,
+		remotePairFile: "/home/dev/.pi/agent/entwurf-remote-pair.json",
+	};
+
+	it("[QK:REMOTE-ROUTES-LEGAL-REPEATS-ACCEPTED] one local with several remotes, one remote with several locals, and one alias with several routes are read as written", () => {
+		const routes = [S, D, { ...D, localGardenId: LOCAL2 }, { ...S, remoteGardenId: OTHER }];
+		expect(parseRemotePairDeclaration(v2(...routes))).toEqual({ routes });
+	});
+
+	it("[QK:REMOTE-ROUTES-DUPLICATE-PAIR-REFUSED] the same exact pair twice is refused even when the two entries are identical", () => {
+		expect(() => parseRemotePairDeclaration(v2(S, D, S))).toThrow(
+			new RegExp(`routes\\[2\\]: duplicate-pair: ${LOCAL} -> ${REMOTE}`),
+		);
+	});
+
+	it("[QK:REMOTE-ROUTES-LOCAL-REMOTE-OVERLAP-REFUSED] a gid that is local in one route and remote in another, or a route to itself, is refused", () => {
+		const reversed = { ...S, remoteGardenId: LOCAL, localGardenId: LOCAL2 };
+		for (const routes of [[S, reversed], [reversed, S], [{ ...S, remoteGardenId: LOCAL }]])
+			expect(() => parseRemotePairDeclaration(v2(...routes)), JSON.stringify(routes)).toThrow(
+				new RegExp(`local-remote-overlap: ${LOCAL} is declared remote here`),
+			);
+	});
+
+	it("[QK:REMOTE-ROUTES-REMOTE-HOST-CONFLICT-REFUSED] one remote gid reached through two aliases or two files is refused", () => {
+		const otherAlias = { ...S, localGardenId: LOCAL2, ssh: "oracle-tailnet" };
+		expect(() => parseRemotePairDeclaration(v2(S, otherAlias))).toThrow(
+			/remote-host-conflict: .* via oracle .* and via oracle-tailnet/,
+		);
+		const otherFile = { ...S, localGardenId: LOCAL2, remotePairFile: "/srv/op/entwurf-remote-pair.json" };
+		expect(() => parseRemotePairDeclaration(v2(S, otherFile))).toThrow(/remote-host-conflict/);
+	});
+
+	it("[QK:REMOTE-ROUTES-ALIAS-FILE-CONFLICT-REFUSED] one alias naming two different remote files is refused, since that host accepts only its one canonical file", () => {
+		const sameAliasOtherFile = { ...D, ssh: "oracle" };
+		expect(() => parseRemotePairDeclaration(v2(S, sameAliasOtherFile))).toThrow(
+			/alias-file-conflict: alias oracle names both \/home\/op\/\.pi\/agent\/entwurf-remote-pair\.json and \/home\/dev/,
+		);
+	});
+});
+
+describe("the route is the exact (sender, target) pair", () => {
+	const S: RemoteRouteDeclaration = ROUTE;
+	const D: RemoteRouteDeclaration = {
+		remoteGardenId: REMOTE2,
+		ssh: "devbox",
+		localGardenId: LOCAL,
+		remotePairFile: "/home/dev/.pi/agent/entwurf-remote-pair.json",
+	};
+	const D2: RemoteRouteDeclaration = { ...D, localGardenId: LOCAL2 };
+	const MANY: RemotePairOptIn = { routes: [S, D, D2] };
+
+	it("[QK:REMOTE-ROUTE-SELECT-EXACT-PAIR] each declared pair goes over its own route, and a sender paired only with another remote is refused before transport", async () => {
+		const h = harness();
+		const cases: [string, SenderEnvelope, string][] = [
+			[REMOTE, SENDER, "oracle"],
+			[REMOTE2, SENDER, "devbox"],
+			[REMOTE2, { ...SENDER, sessionId: LOCAL2 }, "devbox"],
+		];
+		for (const [target, sender] of cases) {
+			const r = await h.run({ ...PARAMS, target }, MANY, sender);
+			expect(r.isError, r.text).toBe(false);
+		}
+		expect(h.calls.map((c) => [c.argv[5], parseRemoteClaim(c.stdin).from, parseRemoteClaim(c.stdin).target])).toEqual(
+			cases.map(([target, sender, alias]) => [alias, sender.sessionId, target]),
+		);
+		const refused = await h.run(PARAMS, MANY, { ...SENDER, sessionId: LOCAL2 });
+		expect(refused.isError).toBe(true);
+		expect(refused.text).toMatch(
+			new RegExp(`remote-sender-not-declared: only ${LOCAL} may send to ${REMOTE} via oracle \\(sender: ${LOCAL2}\\)`),
+		);
+		expect(h.calls).toHaveLength(3);
+		expect(h.local).toHaveLength(0);
+	});
+
+	it("[QK:REMOTE-ROUTE-NO-LOCAL-FALLBACK] a target declared remote, with no route for this sender, is neither sent nor handed to the local path", async () => {
+		const h = harness();
+		for (const s of [undefined, { ...SENDER, sessionId: OTHER }, { ...SENDER, sessionId: LOCAL2 }]) {
+			const r = await h.run(PARAMS, MANY, s);
+			expect(r.text).toMatch(/not sent, and not handed to the local path/);
+		}
+		expect(h.calls).toHaveLength(0);
+		expect(h.local).toHaveLength(0);
 	});
 });
 
@@ -331,13 +446,13 @@ describe("the operator opt-in file", () => {
 	it("[QK:REMOTE-PAIR-OPT-IN-ABSENT-IS-OFF] only an absent file is off; a present valid file is read as written", () => {
 		const file = path.join(dir, "entwurf-remote-pair.json");
 		expect(readRemotePairOptIn(file)).toBeNull();
-		fs.writeFileSync(file, JSON.stringify(ROUTE));
-		expect(readRemotePairOptIn(file)).toEqual(ROUTE);
+		fs.writeFileSync(file, v2(ROUTE));
+		expect(readRemotePairOptIn(file)).toEqual(ONE);
 	});
 
 	it("[QK:REMOTE-PAIR-OPT-IN-BROKEN-REFUSED] a symlinked, non-regular or invalid opt-in throws instead of reading as off", () => {
 		const real = path.join(dir, "real.json");
-		fs.writeFileSync(real, JSON.stringify(ROUTE));
+		fs.writeFileSync(real, v2(ROUTE));
 		const link = path.join(dir, "link.json");
 		fs.symlinkSync(real, link);
 		expect(() => readRemotePairOptIn(link)).toThrow(/regular non-symlink/);

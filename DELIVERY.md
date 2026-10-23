@@ -587,39 +587,45 @@ same class of capability through the CLI-owned stdio lifecycle. Absence of Claud
 `FileChanged` / `asyncRewake` / `watchPaths` therefore means only that Claude's hook
 mechanism cannot be copied — it never proved Copilot had no vendor wake surface.
 
-### Remote pair (#107): one declared pair across two hosts
+### Remote pairs (#107, #149): declared pairs across hosts
 
-This is an opt-in route between two existing citizens on two hosts. Why it keeps these boundaries, and which questions it leaves open, is [remote-sibling-principles](./docs/remote-sibling-principles.md); this section owns the mechanism. It is off unless the operator places a file on each host. The operator owns the connection between the hosts (a private network such as Tailscale is recommended, not required) and owns SSH authentication and authorization. Entwurf installs, configures, discovers and retries none of it. It adds no relay, listener, queue or registry. One SSH process runs per send and then exits.
+This is an opt-in route between existing citizens on two hosts. Why it keeps these boundaries, and which questions it leaves open, is [remote-sibling-principles](./docs/remote-sibling-principles.md); this section owns the mechanism. It is off unless the operator places a file on each host. The operator owns the connection between the hosts (a private network such as Tailscale is recommended, not required) and owns SSH authentication and authorization. Entwurf installs, configures, discovers and retries none of it. It adds no relay, listener, queue or registry. One SSH process runs per send and then exits.
 
-- **Declaration.** Each host has at most one `entwurf-remote-pair.json`, beside its meta-record store (`remotePairOptInPath()`: the pi agent dir, unless `ENTWURF_META_SESSIONS_DIR` moves the store and the file with it). It has exactly four keys:
-  - `remoteGardenId`.
+- **Declaration (#149).** Each host has at most one `entwurf-remote-pair.json`, beside its meta-record store (`remotePairOptInPath()`: the pi agent dir, unless `ENTWURF_META_SESSIONS_DIR` moves the store and the file with it). It is exactly `{"version": 2, "routes": [...]}` with a non-empty `routes` array. Each route is one exact pair with exactly four keys:
+  - `localGardenId`: the citizen on this host.
+  - `remoteGardenId`: the citizen on the other host.
   - `ssh`: an existing SSH alias whose characters need no quoting.
-  - `localGardenId`.
   - `remotePairFile`: the other host's canonical absolute path to its own file.
 
-  One file serves both directions. An absent file means off. A symlink, non-regular, unreadable or invalid file is refused. The file is read at every send and receive and never cached. The sending bridge and the SSH-spawned receive entry must resolve the same root; an override set in only one of those environments moves the file.
+  One route serves both directions of its pair. An absent file means off. A symlink, non-regular, unreadable or invalid file is refused, and so is an empty `routes`. The versionless single-pair object of 0.41 and earlier is refused by name with the manual rewrite (`{"version":2,"routes":[<that object>]}`); there is no legacy reader. The file is read at every send and receive and never cached. The sending bridge and the SSH-spawned receive entry must resolve the same root; an override set in only one of those environments moves the file.
+
+  The set of routes is checked as a whole, never by position:
+  - Allowed: one local citizen paired with several remotes, one remote paired with several locals, and several routes over one alias.
+  - Refused: the same exact pair twice; a garden id that is local in one route and remote in another (a route to itself included); one remote garden id with two different aliases or files; one alias with two different `remotePairFile` values, because the receive entry behind that alias accepts only its one canonical file.
+
+  A broken file is refused at every `entwurf_v2` call of that bridge, local targets included, because the bridge reads the file before it can tell a remote target from a local one. That is not a silent fallback, and it is a cost to keep in mind when editing the file.
 - **Send.** The sending host's `entwurf_v2` reads the file and then decides:
-  - A target other than `remoteGardenId` takes the unchanged local path.
+  - A target that no route names as remote takes the unchanged local path.
   - A declared target that also has a local trace on this host (a record in any state, or a control socket) is refused as `remote-route-local-conflict`, with zero SSH.
-  - A sender other than `localGardenId` is refused as `remote-sender-not-declared`, with zero SSH.
-  - Otherwise it spawns one `ssh -o BatchMode=yes -o ConnectTimeout=10 <alias> entwurf remote-pair-receive --pair <remotePairFile>`, with no shell and the claim on stdin.
-- **Receive.** The entry accepts only when `--pair` equals its own canonical file path. Canonical means the normalized expected path, not realpath equivalence: a spelling through a symlinked home alias is refused. That file is the entry's whole scope. It refuses a `from` or `target` outside the declared pair before any mailbox mutation. A match goes to that host's existing local `entwurf_v2` dispatch, so every deliverability rule of the target's rail applies there; the measured pair used the self-fetch mailbox.
+  - Otherwise the route is the one whose two ends are this sender and this target. If there is none, the call is refused as `remote-sender-not-declared`, with zero SSH and no local fallback. That also covers an anonymous sender.
+  - That route spawns one `ssh -o BatchMode=yes -o ConnectTimeout=10 <alias> entwurf remote-pair-receive --pair <remotePairFile>`, with no shell and the claim on stdin.
+- **Receive.** The entry accepts only when `--pair` equals its own canonical file path. Canonical means the normalized expected path, not realpath equivalence: a spelling through a symlinked home alias is refused. That file is the entry's whole scope. It looks for the one route whose remote end is the claim's `from` and whose local end is the claim's `target`, comparing both ends in that same route. A `from` that no route declares is refused as `remote-pair-from-mismatch`. A declared `from` addressing anything but its own declared local, including another route's local, is refused as `remote-pair-target-mismatch`. Both refusals come before any mailbox mutation. A match goes to that host's existing local `entwurf_v2` dispatch, so every deliverability rule of the target's rail applies there; the measured pairs used the self-fetch mailbox.
 - **Outcomes.** The send ends in one of three outcomes:
   - the other host's receipt, quoted verbatim (its paths are on the other host). This is either an acceptance or an error the other host reported while processing (`remote-reported-error`, exit 4). That error can follow a write, for example an enqueue whose later step threw and is reported `retry-safe: false`. The sender's header therefore claims neither non-delivery nor safety to resend; the quoted text is the fact;
   - the other host's named refusal, made before any mutation: a pair mismatch (exit 3) or invalid input (exit 2);
   - `remote-indeterminate`.
 
   A result is decided only when the exit code and the JSON kind agree. There is no retry. An unanswered message stays unconfirmed. Acceptance is not a read or a reply. Neither side learns whether its last message was read unless the other side answers, and there is no third ACK.
-- **Display.** The received envelope names the remote origin and route, marks the sender's cwd as a sender-host path, and carries `replyable=false`, with "reply route declared, not probed" stated separately. Display is proven only for the self-fetch mailbox body; control-socket and native-push rendering are not proven. `entwurf_callback` stays local.
-- **Trust.** The model is same-operator SSH account trust. The receiving host checks the declared pair. It does not cryptographically authenticate a citizen, and the same account could claim either declared id.
+- **Display.** The received envelope names the remote origin and the matched route's alias, marks the sender's cwd as a sender-host path, and carries `replyable=false`, with "reply route declared, not probed" stated separately. Display is proven only for the self-fetch mailbox body; control-socket and native-push rendering are not proven. `entwurf_callback` stays local.
+- **Trust.** The model is same-operator SSH account trust. The receiving host checks the declared pairs. It does not cryptographically authenticate a citizen, and the same account could claim any declared id. With several routes, everything allowed to log in to that account is inside this boundary. That includes the keys of every other host. Separating them is the operator's SSH policy; Entwurf adds no per-route or per-key binding.
 - **Visibility.** For the measured self-fetch pair, delivery requires backing records, live owners and armed watches, so an OFF citizen of that rail is undeliverable. Any other target keeps its own rail-specific local admission. The remote route has no launch, fresh or resume path. The code does not check that the target's screen is open: an owner pid, a TTY or a garden-id label is not visibility. Live use addresses only siblings the user has open, and delivery to an active pi-durable can start a turn at once.
 - **SSH side effects.** The transport adds exactly two options, `BatchMode=yes` and `ConnectTimeout=10`. Host-key checking, known-hosts writes and every other SSH policy remain the operator's, as configured. Their side effects on a real exchange were not measured.
 
 Evidence:
 
-- T1 (executor-in) and T2 (surface-in) are deterministic. T2 drives the real bridge over MCP stdio, and a stand-in `ssh` on PATH runs the other host's real entry under a separate HOME. An installed-tarball gate runs the T2 cells against installed bytes.
+- T1 (executor-in) and T2 (surface-in) are deterministic. T2 drives the real bridge over MCP stdio, and a stand-in `ssh` on PATH runs the other host's real entry under a separate HOME. Since #149 it also runs three hosts, where one host's one file carries three routes: fan-out, a shared remote, both directions, an undeclared sender with zero SSH, and a cross claim refused on the receiving host. An installed-tarball gate runs the T2 cells against installed bytes.
 - One real exchange is recorded in [#107](https://github.com/junghan0611/entwurf/issues/107#issuecomment-6278665895), at branch commit `e632294` on 2026-10-20. A nonce went B→A→B between two already-open pi-durable siblings on two Linux hosts. That is L4: one pair, one run.
-- Unmeasured: an OFF target, negative paths over real SSH, other rails, more than one pair, and non-Linux hosts.
+- Unmeasured: an OFF target, negative paths over real SSH, other rails, more than one pair over real SSH (the #149 schema has no T3 yet, so the #107 exchange does not carry over to it), a sender and a receiver on different releases (the claim, argv, exit codes and receipt are unchanged, so that interoperation is inferred, not measured), and non-Linux hosts.
 
 ## Recording a new claim
 

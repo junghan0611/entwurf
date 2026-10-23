@@ -532,13 +532,13 @@ server.tool(
 			// Resolved ONCE so the dispatch-moment timestamp is fixed and the control RPC sender
 			// + the mailbox body sender share one envelope. No replyability gate (see above).
 			const sender = await buildSendSenderEnvelope({ requestMeta: extra._meta });
-			// #107: the operator's remote-pair opt-in is read per send. Absent = off and the local
-			// surface below runs exactly as before; a declared target goes over that one route.
+			// #107/#149: the operator's remote-pair opt-in is read per send. Absent = off and the local
+			// surface below runs exactly as before; a declared target goes over its one exact route.
 			const rendered = await runEntwurfV2WithRemoteRoute(
 				{ target, intent, message, mode, wants_reply },
 				{
 					senderProvider: () => sender,
-					route: readRemotePairOptIn(remotePairOptInPath()),
+					optIn: readRemotePairOptIn(remotePairOptInPath()),
 					// The decider's canonical socket dir AND this bridge's ENTWURF_DIR: a trace in either is local.
 					localTrace: makeLocalTraceFact({
 						sessionsDir: defaultMetaSessionsDir(),

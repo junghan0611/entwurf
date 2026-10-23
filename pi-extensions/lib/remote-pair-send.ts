@@ -1,15 +1,19 @@
 /**
- * remote-pair-send — the SENDING half of #107's one declared remote pair (rail 2a).
+ * remote-pair-send — the SENDING half of the declared remote pairs (#107 rail 2a, #149 routes).
  *
  * It sits in front of the local v2 decider, at the surface. With no route declaration, or a target
- * the declaration does not name, the local path runs unchanged. When the declaration names the
- * target, any local trace of that gid (a record entry in any state, or anything at its control
- * socket path) fails closed as an ambiguity before transport. Otherwise the call runs over one
- * transport call: no synthetic record, no new backend, no new rail plan, and no retry.
+ * no route names as remote, the local path runs unchanged. When a route names the target, any local
+ * trace of that gid (a record entry in any state, or anything at its control socket path) fails
+ * closed as an ambiguity before transport. Otherwise the call runs over one transport call: no
+ * synthetic record, no new backend, no new rail plan, and no retry.
  *
- * Sender: only the caller's authoritative envelope becomes the claim. It must be the declared local
- * citizen; an anonymous envelope or another gid is refused before transport. The model chooses
- * neither host nor command: both come from the operator's declaration.
+ * Selection (#149): a route is one exact (local sender, remote target) pair. The route used is the
+ * one whose two ends are the caller and the target; a target declared remote for some other sender
+ * is refused, never sent under another route and never handed to the local path.
+ *
+ * Sender: only the caller's authoritative envelope becomes the claim. An anonymous envelope, or a
+ * gid no route pairs with the target, is refused before transport. The model chooses neither host
+ * nor command: both come from the operator's declaration.
  *
  * Remote command: ssh joins the remote words into one shell string. So the alias and the remote
  * declaration path are held to a narrow POSIX-safe charset that needs no quoting, and the command
@@ -29,7 +33,7 @@ import { defaultMetaSessionsDir, metaRecordExistsByGardenId, requireGardenId } f
 import type { RemoteClaim, RemotePairRejectReason } from "./remote-pair-receive.ts";
 import { inspectControlSocketPath } from "./socket-discovery.ts";
 
-/** The SENDING host's declaration of its one remote pair. */
+/** One declared route: an exact pair of a citizen on this host and one on another host. */
 export interface RemoteRouteDeclaration {
 	/** The target's garden id on the other host. */
 	remoteGardenId: string;
@@ -60,6 +64,11 @@ export type RemoteSendOutcome =
 	| { kind: "remote-invalid"; detail: string }
 	| { kind: "remote-indeterminate"; why: string; exitCode: number | null; stderrTail: string };
 
+/** The operator's declaration file, as read: one or more routes. */
+export interface RemotePairOptIn {
+	routes: readonly RemoteRouteDeclaration[];
+}
+
 export class RemoteRouteDeclarationError extends Error {}
 
 const SSH_ALIAS = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
@@ -68,23 +77,26 @@ const CONNECT_TIMEOUT_SECONDS = 10;
 export const REMOTE_SEND_TIMEOUT_MS = 30_000;
 const PAIR_REJECT_REASONS: readonly string[] = ["remote-pair-from-mismatch", "remote-pair-target-mismatch"];
 
-export function parseRemoteRouteDeclaration(text: string): RemoteRouteDeclaration {
-	const what = "remote route declaration";
-	let raw: unknown;
-	try {
-		raw = JSON.parse(text);
-	} catch (err) {
-		throw new RemoteRouteDeclarationError(`${what}: not JSON (${err instanceof Error ? err.message : String(err)})`);
-	}
+/** The one declaration version this reader accepts. The versionless single-pair form is refused. */
+export const REMOTE_PAIR_DECLARATION_VERSION = 2;
+
+function requireObject(raw: unknown, what: string): Record<string, unknown> {
 	if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
 		throw new RemoteRouteDeclarationError(`${what}: must be a JSON object`);
 	}
-	const obj = raw as Record<string, unknown>;
-	const want = ["localGardenId", "remoteGardenId", "remotePairFile", "ssh"];
+	return raw as Record<string, unknown>;
+}
+
+function requireKeys(obj: Record<string, unknown>, want: readonly string[], what: string): void {
 	const got = Object.keys(obj).sort();
 	if (got.length !== want.length || got.some((k, i) => k !== want[i])) {
 		throw new RemoteRouteDeclarationError(`${what}: keys must be exactly ${want.join(", ")} (got ${got.join(", ")})`);
 	}
+}
+
+function parseRoute(raw: unknown, what: string): RemoteRouteDeclaration {
+	const obj = requireObject(raw, what);
+	requireKeys(obj, ["localGardenId", "remoteGardenId", "remotePairFile", "ssh"], what);
 	const { ssh, remotePairFile } = obj;
 	if (typeof ssh !== "string" || !SSH_ALIAS.test(ssh)) {
 		throw new RemoteRouteDeclarationError(`${what}: "ssh" must be an alias matching ${SSH_ALIAS}`);
@@ -104,6 +116,77 @@ export function parseRemoteRouteDeclaration(text: string): RemoteRouteDeclaratio
 		localGardenId: requireGardenId(obj.localGardenId),
 		remotePairFile,
 	};
+}
+
+/**
+ * The set rules, decided on the whole file and independent of route order: nothing is chosen by
+ * position. Legal repeats: one local gid paired with several remotes, one remote gid paired with
+ * several locals, one alias carrying several routes. Refused: the same exact pair twice; a gid that
+ * is local in one route and remote in another (including a route to itself); one remote gid reached
+ * through two different aliases or files; one alias naming two different remote files, since the
+ * receive entry on that host accepts only its one canonical file.
+ */
+function checkRouteSet(routes: readonly RemoteRouteDeclaration[], what: string): void {
+	const locals = new Set(routes.map((r) => r.localGardenId));
+	const pairs = new Set<string>();
+	const remoteHost = new Map<string, RemoteRouteDeclaration>();
+	const aliasFile = new Map<string, string>();
+	routes.forEach((r, i) => {
+		const at = `${what}: routes[${i}]`;
+		const pair = `${r.localGardenId} -> ${r.remoteGardenId}`;
+		if (pairs.has(pair)) {
+			throw new RemoteRouteDeclarationError(`${at}: duplicate-pair: ${pair} is declared more than once`);
+		}
+		pairs.add(pair);
+		if (locals.has(r.remoteGardenId)) {
+			throw new RemoteRouteDeclarationError(
+				`${at}: local-remote-overlap: ${r.remoteGardenId} is declared remote here and local in a route of this file`,
+			);
+		}
+		const host = remoteHost.get(r.remoteGardenId);
+		if (host && (host.ssh !== r.ssh || host.remotePairFile !== r.remotePairFile)) {
+			throw new RemoteRouteDeclarationError(
+				`${at}: remote-host-conflict: ${r.remoteGardenId} is declared via ${host.ssh} ${host.remotePairFile} and via ${r.ssh} ${r.remotePairFile}`,
+			);
+		}
+		remoteHost.set(r.remoteGardenId, host ?? r);
+		const file = aliasFile.get(r.ssh);
+		if (file !== undefined && file !== r.remotePairFile) {
+			throw new RemoteRouteDeclarationError(
+				`${at}: alias-file-conflict: alias ${r.ssh} names both ${file} and ${r.remotePairFile}`,
+			);
+		}
+		aliasFile.set(r.ssh, file ?? r.remotePairFile);
+	});
+}
+
+export function parseRemotePairDeclaration(text: string): RemotePairOptIn {
+	const what = "remote pair declaration";
+	let raw: unknown;
+	try {
+		raw = JSON.parse(text);
+	} catch (err) {
+		throw new RemoteRouteDeclarationError(`${what}: not JSON (${err instanceof Error ? err.message : String(err)})`);
+	}
+	const obj = requireObject(raw, what);
+	if (!Object.hasOwn(obj, "version")) {
+		throw new RemoteRouteDeclarationError(
+			`${what}: no "version" — the versionless single-pair form is no longer read. Rewrite it by hand as ` +
+				`{"version":${REMOTE_PAIR_DECLARATION_VERSION},"routes":[<the four-key object>]} (setup §2c)`,
+		);
+	}
+	requireKeys(obj, ["routes", "version"], what);
+	if (obj.version !== REMOTE_PAIR_DECLARATION_VERSION) {
+		throw new RemoteRouteDeclarationError(
+			`${what}: "version" must be ${REMOTE_PAIR_DECLARATION_VERSION} (got ${JSON.stringify(obj.version)})`,
+		);
+	}
+	if (!Array.isArray(obj.routes) || obj.routes.length === 0) {
+		throw new RemoteRouteDeclarationError(`${what}: "routes" must be a non-empty array; remove the file to switch off`);
+	}
+	const routes = obj.routes.map((r, i) => parseRoute(r, `${what}: routes[${i}]`));
+	checkRouteSet(routes, what);
+	return { routes };
 }
 
 /** The one argv the transport runs. Every word is inside the no-quoting charset above. */
@@ -219,7 +302,7 @@ function refuse(text: string): EntwurfV2SurfaceRendered {
 export interface RemoteRouteOptions {
 	senderProvider: () => SenderEnvelope | undefined;
 	/** The declaration, already read; null = no remote pair on this host. */
-	route: RemoteRouteDeclaration | null;
+	optIn: RemotePairOptIn | null;
 	/** Any local trace of this gid: a record entry in any state, or anything at its socket path. */
 	localTrace: (gardenId: string) => Promise<boolean>;
 	transport: RemoteTransport;
@@ -235,26 +318,30 @@ export async function runEntwurfV2WithRemoteRoute(
 	params: SurfaceEntwurfV2Params,
 	opts: RemoteRouteOptions,
 ): Promise<EntwurfV2SurfaceRendered> {
-	const route = opts.route;
-	if (route === null || params.target !== route.remoteGardenId) {
+	const declared = (opts.optIn?.routes ?? []).filter((r) => r.remoteGardenId === params.target);
+	if (declared.length === 0) {
 		return opts.runLocal(params, { senderProvider: opts.senderProvider });
 	}
-	if (await opts.localTrace(route.remoteGardenId)) {
+	// One remote gid has one alias and file (checkRouteSet), so any declared route names its host.
+	const via = `via ${declared[0].ssh}`;
+	if (await opts.localTrace(params.target)) {
 		return refuse(
-			`remote-route-local-conflict: ${route.remoteGardenId} is declared remote ${`via ${route.ssh}`} but this host also has a local trace of it; not choosing`,
+			`remote-route-local-conflict: ${params.target} is declared remote ${via} but this host also has a local trace of it; not choosing`,
 		);
 	}
 	const sender = opts.senderProvider();
-	if (!sender || sender.origin === "external-mcp" || sender.sessionId !== route.localGardenId) {
+	const route =
+		sender && sender.origin !== "external-mcp" ? declared.find((r) => r.localGardenId === sender.sessionId) : undefined;
+	if (!sender || !route) {
 		return refuse(
-			`remote-sender-not-declared: only ${route.localGardenId} may send over this route (sender: ${sender ? sender.sessionId : "none"})`,
+			`remote-sender-not-declared: only ${declared.map((r) => r.localGardenId).join(", ")} may send to ${params.target} ${via} (sender: ${sender ? sender.sessionId : "none"}); not sent, and not handed to the local path`,
 		);
 	}
 	const claim: RemoteClaim = {
 		from: sender.sessionId,
 		fromAgentId: sender.agentId,
 		fromCwd: sender.cwd,
-		target: route.remoteGardenId,
+		target: params.target,
 		message: params.message,
 		wantsReply: params.wants_reply ?? false,
 	};
@@ -285,7 +372,7 @@ export function makeLocalTraceFact(dirs: { sessionsDir: string; controlSocketDir
 	};
 }
 
-/** The operator's opt-in file name. One per host; it declares that host's one remote pair. */
+/** The operator's opt-in file name. One per host; it declares that host's remote routes. */
 export const REMOTE_PAIR_OPT_IN_FILE = "entwurf-remote-pair.json";
 
 /**
@@ -306,7 +393,7 @@ export function remotePairOptInPath(): string {
  * such as Tailscale, plus SSH authentication and permissions). Entwurf only walks the declared
  * route: it installs, configures, discovers and verifies none of it, and never retries.
  */
-export function readRemotePairOptIn(file: string): RemoteRouteDeclaration | null {
+export function readRemotePairOptIn(file: string): RemotePairOptIn | null {
 	let st: fs.Stats;
 	try {
 		st = fs.lstatSync(file);
@@ -318,7 +405,7 @@ export function readRemotePairOptIn(file: string): RemoteRouteDeclaration | null
 		throw new RemoteRouteDeclarationError(`remote pair opt-in ${file} must be a regular non-symlink file`);
 	}
 	try {
-		return parseRemoteRouteDeclaration(fs.readFileSync(file, "utf8"));
+		return parseRemotePairDeclaration(fs.readFileSync(file, "utf8"));
 	} catch (err) {
 		throw new RemoteRouteDeclarationError(`${file}: ${err instanceof Error ? err.message : String(err)}`);
 	}

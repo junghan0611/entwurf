@@ -1,5 +1,5 @@
 /**
- * #107 rail 1: the receiving half of one declared remote pair, proven beside the module.
+ * #107 rail 1 / #149: the receiving half of the declared remote pairs, proven beside the module.
  *
  * The subject is `receiveRemoteClaim` and its entry `scripts/remote-pair-receive.ts`, driven into
  * the PRODUCTION v2 dispatch on temp roots. The target is a deliverable `pi-durable` citizen whose
@@ -217,9 +217,14 @@ function runEntry(stdin: string, args: string[], extraEnv: Record<string, string
 	});
 }
 
-/** Write a four-key opt-in declaration; by default to this (receiving) host's own opt-in path. */
-function writeDecl(d: RemotePairDeclaration, file = ownOptInPath()): string {
-	fs.writeFileSync(file, JSON.stringify({ ...d, remotePairFile: "/laptop/.pi/agent/entwurf-remote-pair.json" }));
+/** Write a version-2 opt-in declaration of these routes; by default to this (receiving) host's own
+ * opt-in path. Every route reaches its sender's host through that alias's one file. */
+function writeDecl(d: RemotePairDeclaration | RemotePairDeclaration[], file = ownOptInPath()): string {
+	const routes = (Array.isArray(d) ? d : [d]).map((r) => ({
+		...r,
+		remotePairFile: `/${r.ssh}/.pi/agent/entwurf-remote-pair.json`,
+	}));
+	fs.writeFileSync(file, JSON.stringify({ version: 2, routes }));
 	return file;
 }
 
@@ -231,7 +236,7 @@ function ownOptInPath(): string {
 describe("the pair check runs before any mutation", () => {
 	it("[QK:REMOTE-PAIR-FROM-OUTSIDE-NO-MUTATION] a claim from a gid outside the declared pair is refused and the mailbox tree is byte-identical", async () => {
 		const before = mailboxDigest();
-		const receipt = await receiveRemoteClaim(claim({ from: STRANGER }), decl, { dispatch });
+		const receipt = await receiveRemoteClaim(claim({ from: STRANGER }), [decl], { dispatch });
 		expect(receipt.kind).toBe("rejected");
 		expect(receipt.kind === "rejected" && receipt.reason).toBe("remote-pair-from-mismatch");
 		expect(mailboxDigest()).toBe(before);
@@ -240,7 +245,7 @@ describe("the pair check runs before any mutation", () => {
 
 	it("[QK:REMOTE-PAIR-TARGET-OUTSIDE-NO-MUTATION] a claim addressing a deliverable citizen outside the declared pair is refused and nothing is enqueued anywhere", async () => {
 		const before = mailboxDigest();
-		const receipt = await receiveRemoteClaim(claim({ target: other }), decl, { dispatch });
+		const receipt = await receiveRemoteClaim(claim({ target: other }), [decl], { dispatch });
 		expect(receipt.kind === "rejected" && receipt.reason).toBe("remote-pair-target-mismatch");
 		expect(mailboxDigest()).toBe(before);
 		expect(bodies(other)).toEqual([]);
@@ -261,7 +266,7 @@ describe("the pair check runs before any mutation", () => {
 	});
 
 	it("[QK:REMOTE-PAIR-MATCH-DISPATCHES-ONCE] a claim inside the pair reaches the existing dispatch and enqueues exactly one non-replyable body naming the claimed sender", async () => {
-		const receipt = await receiveRemoteClaim(claim(), decl, { dispatch });
+		const receipt = await receiveRemoteClaim(claim(), [decl], { dispatch });
 		expect(receipt.kind).toBe("dispatched");
 		expect(receipt.kind === "dispatched" && receipt.isError, JSON.stringify(receipt)).toBe(false);
 		const got = bodies(local);
@@ -271,6 +276,39 @@ describe("the pair check runs before any mutation", () => {
 		expect(got[0]).not.toContain("reply via entwurf_v2");
 		expect(got[0]).toContain("wants reply: yes");
 		expect(got[0]).toContain("nonce-107");
+	});
+});
+
+describe("both ends are matched in one route (#149)", () => {
+	it("[QK:REMOTE-PAIR-CROSS-PAIR-REFUSED] a sender declared in one route addressing the local citizen of another route is refused, and the mailbox tree is byte-identical", async () => {
+		const decls: RemotePairDeclaration[] = [decl, { remoteGardenId: STRANGER, ssh: "devbox", localGardenId: other }];
+		const before = mailboxDigest();
+		for (const c of [claim({ target: other }), claim({ from: STRANGER, target: local })]) {
+			const receipt = await receiveRemoteClaim(c, decls, { dispatch });
+			expect(receipt.kind === "rejected" && receipt.reason, JSON.stringify(c)).toBe("remote-pair-target-mismatch");
+		}
+		expect(mailboxDigest()).toBe(before);
+		expect(bodies(local)).toEqual([]);
+		expect(bodies(other)).toEqual([]);
+		// Control: each pair, sent as declared, does go through.
+		for (const c of [claim(), claim({ from: STRANGER, target: other })]) {
+			const receipt = await receiveRemoteClaim(c, decls, { dispatch });
+			expect(receipt.kind === "dispatched" && receipt.isError, JSON.stringify(receipt)).toBe(false);
+		}
+		expect(bodies(local)).toHaveLength(1);
+		expect(bodies(other)).toHaveLength(1);
+	});
+
+	it("[QK:REMOTE-PAIR-SELECTED-ROUTE-LABEL] the body names the route of the pair that matched, not the first declared route", () => {
+		const r = runEntry(JSON.stringify(claim({ from: STRANGER, target: other })), [
+			"--pair",
+			writeDecl([decl, { remoteGardenId: STRANGER, ssh: "devbox", localGardenId: other }]),
+		]);
+		expect(r.status, r.stderr).toBe(0);
+		const got = bodies(other);
+		expect(got).toHaveLength(1);
+		expect(got[0]).toContain(`session:     ${STRANGER} (remote via devbox; reply route declared, not probed)`);
+		expect(bodies(local)).toEqual([]);
 	});
 });
 

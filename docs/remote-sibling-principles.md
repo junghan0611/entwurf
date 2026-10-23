@@ -2,7 +2,7 @@
 
 A person laid a bridge between two machines, and a message sent across it to an existing sibling came back. That is where this page starts. One crossing does not settle whether the sender should be trusted, whether the receiver was really in view, or what a sender can know about what happened on the other side.
 
-This page holds the *why*: the boundaries Entwurf keeps when a sibling lives on another host, and the questions that crossing left open. The mechanism belongs elsewhere. [DELIVERY](../DELIVERY.md#remote-pair-107-one-declared-pair-across-two-hosts) owns the declaration, the wire, admission and receipts. [Setup](./setup-clean-host.md#2c-optional-remote-pair-between-two-hosts-107) owns configuration and use. [VERIFY](../VERIFY.md) and [BASELINE](../BASELINE.md) own the evidence. A principle is added here only once it is actually held; what is not known stays a question.
+This page holds the *why*: the boundaries Entwurf keeps when a sibling lives on another host, and the questions that crossing left open. The mechanism belongs elsewhere. [DELIVERY](../DELIVERY.md#remote-pairs-107-149-declared-pairs-across-hosts) owns the declaration, the wire, admission and receipts. [Setup](./setup-clean-host.md#2c-optional-remote-pair-between-two-hosts-107) owns configuration and use. [VERIFY](../VERIFY.md) and [BASELINE](../BASELINE.md) own the evidence. A principle is added here only once it is actually held; what is not known stays a question.
 
 ## Boundaries held today
 
@@ -16,7 +16,7 @@ The route itself never launches, freshly opens or resumes anyone. Whether an ina
 
 ### A connection is not an identity, and neither is trust in content
 
-What makes a remote message acceptable today is that it arrived over the operator's own SSH account and matches a declared pair. That is account trust. It is not cryptographic identity of a citizen: the same account could claim either declared id. And neither the connection nor the declaration says whether the message's content deserves trust; a received message is still untrusted input to the sibling that reads it.
+What makes a remote message acceptable today is that it arrived over the operator's own SSH account and matches a declared pair. That is account trust. It is not cryptographic identity of a citizen: the same account could claim any declared id, and with several pairs, so could any host whose key that account accepts. And neither the connection nor the declaration says whether the message's content deserves trust; a received message is still untrusted input to the sibling that reads it.
 
 ### A record is not a process, and a process is not a screen
 
@@ -39,7 +39,7 @@ Acceptance is not a read, a read is not a reply, and a reply does not tell its s
 
 These are questions to share, not a backlog and not a promise of future features.
 
-- **Reach or trust?** An operator-owned account and one declared pair bound what can be reached. How should the reach of an account be told apart from trusting the sibling that sent a message?
+- **Reach or trust?** An operator-owned account and its declared pairs bound what can be reached. How should the reach of an account be told apart from trusting the sibling that sent a message?
 - **Presence across machines?** The first crossing relied on a person confirming that both sessions were open. Can visible-first be observed and kept across hosts without a hidden turn or a watcher, or does it stay a human act?
 - **What can a sender know?** How should the limits of a sender's knowledge be shown honestly, without a read tracker, automatic retries, or a claim that an error had no effect?
 

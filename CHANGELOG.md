@@ -4,6 +4,16 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+### Remote pairs (#149)
+
+- **One host's declaration now carries several exact pairs.** `entwurf-remote-pair.json` keeps its name and location. Its content is now exactly `{"version": 2, "routes": [...]}`, and each route has the four keys of the #107 file. One local citizen may pair with several remotes, one remote with several locals, and one alias may carry several routes. The file is refused if a pair repeats, a garden id is both local and remote, one remote garden id has two aliases or files, or one alias has two files. A route is selected by the exact (sender, target) pair. A target declared remote with no route for the calling sender is refused with zero SSH and no local fallback. The receiving entry matches both ends of one route at once, so a sender declared in one route cannot reach another route's local. It still refuses with the two existing reasons (`remote-pair-from-mismatch`, `remote-pair-target-mismatch`). The claim, SSH argv, exit codes and receipt are unchanged.
+- **Hard cut, converted by hand.** The versionless single-pair file is refused by name with its manual rewrite; there is no legacy reader. Setup §2c gives the per-host order. While a host's bytes and its file disagree, every `entwurf_v2` call of its bridges is refused, local targets included; a running bridge keeps the code it loaded. Trust stays same-account SSH: every key that account accepts can claim any garden id its file declares.
+- **Evidence.**
+  - T1 cells cover the v2 shape, the legacy refusal, the set rules, exact-pair selection with no local fallback, the cross-pair refusal and the matched-route label.
+  - The T2 surface-in scene adds a third host and a second citizen on one root, giving three routes in one file: fan-out, a shared remote, the reverse, an undeclared sender with zero SSH, and a cross claim refused on the receiving host.
+  - The remote-pair mutants run through the new narrow coordinate `check-remote-pair-beside`, which is in `check:contracts`.
+  - Not measured: a real exchange over the v2 file (T3 must be re-run for the schema change) and a sender and a receiver on different releases.
+
 ## v2026.10.23-herdr.0.41.1 — Herdr Entwurf plugin 0.41.1
 
 A separate Herdr plugin snapshot, not another core release: core package 0.41.1 and its

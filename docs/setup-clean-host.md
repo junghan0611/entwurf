@@ -496,31 +496,45 @@ re-emitted with `--write`, and its generated digest is reviewed like any other c
 
 ## 2c. Optional remote pair between two hosts (#107)
 
-This lets one declared pair of existing citizens on two hosts reach each other over SSH that you already run. [DELIVERY](../DELIVERY.md#remote-pair-107-one-declared-pair-across-two-hosts) owns the contract. The machine boundary is set by a person, and nothing here is automatic.
+This lets declared pairs of existing citizens on two or more hosts reach each other over SSH that you already run. Each pair is one route; one host's file may carry several (#149). [DELIVERY](../DELIVERY.md#remote-pairs-107-149-declared-pairs-across-hosts) owns the contract. The machine boundary is set by a person, and nothing here is automatic.
 
-1. **Connect the hosts yourself.** Use a private network (Tailscale or similar is recommended) and SSH keys and authorization you already trust. From each host, `ssh -o BatchMode=yes <alias> true` must succeed non-interactively, and the other host's non-interactive `command -v entwurf` must resolve to the installation you intend. Entwurf edits no SSH config, key, known-hosts file or network setting. Whatever SSH itself writes under your own policy, such as host-key updates, stays yours.
+1. **Connect the hosts yourself.** Use a private network (Tailscale or similar is recommended) and SSH keys and authorization you already trust. From each host, `ssh -o BatchMode=yes <alias> true` must succeed non-interactively, and the other host's non-interactive `command -v entwurf` must resolve to the installation you intend. Entwurf edits no SSH config, key, known-hosts file or network setting. Whatever SSH itself writes under your own policy, such as host-key updates, stays yours. Everything that can log in to an account is inside that account's trust: if two other hosts' keys reach the same account, either can claim any garden id that account's file declares.
 2. **Run the accepted bytes on both hosts, in the processes that matter.** See [applying new source to a running host](#applying-new-source-to-a-running-host). A pulled checkout or a green setup line does not, by itself, show what a running bridge loaded.
 3. **Write one file on each host,** at `remotePairOptInPath()`. That is the pi agent dir unless `ENTWURF_META_SESSIONS_DIR` moves the meta-record store. Check that the sending bridge's environment and the SSH receive environment resolve the same path. Use mode `0600` and never overwrite a file you did not inspect:
 
    ```json
    {
-     "remoteGardenId": "<the other host's garden id>",
-     "ssh": "<your existing alias for the other host>",
-     "localGardenId": "<this host's garden id that talks to it>",
-     "remotePairFile": "<absolute path of the other host's own file>"
+     "version": 2,
+     "routes": [
+       {
+         "localGardenId": "<this host's garden id that talks to it>",
+         "remoteGardenId": "<the other host's garden id>",
+         "ssh": "<your existing alias for the other host>",
+         "remotePairFile": "<absolute path of the other host's own file>"
+       }
+     ]
    }
    ```
 
-   The two files mirror each other: one host's `remoteGardenId` is the other's `localGardenId`. The other host's `remotePairFile` must spell this path as it is normalized, not through a symlinked alias.
+   Add one route per pair. One local citizen may appear in several routes, and so may one remote citizen or one alias. The file is refused if it repeats a pair, uses one garden id as both local and remote, reaches one remote garden id through two aliases or files, or gives one alias two different files. For each route, the other host's file needs the mirror route: there, this route's `remoteGardenId` is the `localGardenId`. That host's `remotePairFile` must spell this path as it is normalized, not through a symlinked alias.
 
    To check a file, read it with the repository's internal parser from a source checkout. Use the same agent/store-root settings the bridge runs with. This is a read-only dev-clone check: there is no installed operator validation verb, and it performs no send and no model input.
 
    ```bash
-   node --experimental-strip-types -e 'import("./pi-extensions/lib/remote-pair-send.ts").then(m=>console.log(m.readRemotePairOptIn(m.remotePairOptInPath())))'
+   node --experimental-strip-types -e 'import("./pi-extensions/lib/remote-pair-send.ts").then(m=>console.log(JSON.stringify(m.readRemotePairOptIn(m.remotePairOptInPath()),null,2)))'
    ```
 
    Do not validate the configuration by sending a test message.
-4. **Use it only between siblings you have open.** The measured self-fetch pair must be active and armed, and the target rail's own admission still applies. Delivery never starts, resumes or wakes an OFF citizen. To an active, armed one it rings the normal doorbell, which may start a turn at once in the receiving TUI. Remove the file to switch the pair off; there is nothing to stop or reconnect.
+4. **Use it only between siblings you have open.** The measured self-fetch pair must be active and armed, and the target rail's own admission still applies. Delivery never starts, resumes or wakes an OFF citizen. To an active, armed one it rings the normal doorbell, which may start a turn at once in the receiving TUI. Remove the file to switch every route off; there is nothing to stop or reconnect.
+
+**Converting a file from 0.41 or earlier.** The earlier versionless file (the four keys alone) is refused by name. It is not read as one route, and it is not read as off. Convert each host by hand, one host at a time:
+
+1. Inspect the existing file.
+2. Install the new bytes on that host.
+3. Restart the processes whose bridge you use. A bridge that is already running keeps the code it loaded.
+4. Rewrite the file as `{"version":2,"routes":[<the old object>]}`, mode `0600`.
+
+While the bytes and the file disagree, **every** `entwurf_v2` call of that host's bridges is refused, local targets included, because the file is read before the target is classified. That applies either way: new code with the old file, or old code with the new file. Keep that window short, and do not hide it with a fallback. The other host can stay on its own release and file until it converts. The claim, SSH argv, exit codes and receipt did not change, so the two hosts should still interoperate, but that mixed state has not been measured, and neither has any exchange over the new file.
 
 ## 3. Optional Claude Code native citizen
 

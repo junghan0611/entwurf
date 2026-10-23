@@ -1,5 +1,7 @@
 /**
  * #107 rail 2c: T2 — two isolated hosts on one machine, A→B and the reverse dispatch B→A.
+ * #149: a third host D and a second local citizen A2 on A's root, so A's ONE declaration carries
+ * three routes (A↔B, A↔D, A2↔D): fan-out from A, a remote shared by A and A2, and both directions.
  *
  * Entry point of every cell: SURFACE-IN. Each direction spawns the REAL bridge (`entwurf_v2` over
  * MCP stdio) under that host's HOME, with no meta-root overrides, so its sender is resolved by the
@@ -9,6 +11,10 @@
  * starts the other host's REAL `run.sh remote-pair-receive` under `env -i HOME=<that host>`, and
  * logs each call. B's entry then runs the production dispatch into B's real mailbox. The remote
  * PATH is this process's PATH; the real one is U4's to measure.
+ *
+ * A2 is an OMP citizen: its receiver sits outside the durable owner join, and its sender marker is
+ * handed to its bridge through the existing explicit carrier `ENTWURF_META_SENDER_MARKER` (as
+ * check-pi-durable-receive does), so A's pid-keyed marker and A2's never meet in one pid scan.
  *
  * Oracles: each host's mailbox tree read raw, the one body and its provenance header, the sending
  * bridge's receipt text, and the stand-in's call log.
@@ -68,6 +74,9 @@ let bin: string;
 let sshLog: string;
 let a: Host;
 let b: Host;
+let d: Host;
+/** A second citizen on A's root (same HOME, same opt-in file), with its own explicit sender marker. */
+let a2: { gid: string; cwd: string; senderMarker: string };
 
 function makeHost(name: string, nativeSessionId: string): Host {
 	const home = path.join(root, name);
@@ -100,16 +109,58 @@ function makeHost(name: string, nativeSessionId: string): Host {
 }
 
 function declare(self: Host, other: Host, alias: string): void {
+	declareRoutes(self, [[self.gid, other.gid, alias, other.optIn]]);
+}
+
+/** Write `self`'s one version-2 declaration: [localGardenId, remoteGardenId, ssh, remotePairFile]. */
+function declareRoutes(self: Host, routes: [string, string, string, string][]): void {
 	fs.writeFileSync(
 		self.optIn,
-		JSON.stringify({ remoteGardenId: other.gid, ssh: alias, localGardenId: self.gid, remotePairFile: other.optIn }),
+		JSON.stringify({
+			version: 2,
+			routes: routes.map(([localGardenId, remoteGardenId, ssh, remotePairFile]) => ({
+				localGardenId,
+				remoteGardenId,
+				ssh,
+				remotePairFile,
+			})),
+		}),
 	);
+}
+
+function makeOmpCitizen(host: Host, nativeSessionId: string): { gid: string; cwd: string; senderMarker: string } {
+	const cwd = path.join(host.home, "project-2");
+	fs.mkdirSync(cwd, { recursive: true });
+	const gid = upsertMetaSession({
+		input: { backend: "omp", nativeSessionId, cwd, model: null, transcriptPath: null },
+		dir: path.join(host.agent, "meta-sessions"),
+	}).record.gardenId;
+	writeMetaReceiverMarker({
+		gardenId: gid,
+		backend: "omp",
+		nativeSessionId,
+		ownerPid: process.pid,
+		ownerKind: "omp-host",
+		armProvenance: "session-start",
+		receiversDir: path.join(host.agent, "meta-receivers"),
+	});
+	const senderMarker = writeMetaSenderMarker({
+		backend: "omp",
+		gardenId: gid,
+		nativeSessionId,
+		cwd,
+		ownerPid: process.pid,
+		sendersDir: path.join(root, "a2-explicit-sender"),
+	});
+	return { gid, cwd, senderMarker };
 }
 
 beforeEach(() => {
 	root = fs.mkdtempSync(path.join(os.tmpdir(), "remote-pair-roundtrip-"));
 	a = makeHost("host-a", "1759622400000-0b5e2a4c-1f3d-4e8a-9c7b-2d6f8e1a3c5b");
 	b = makeHost("host-b", "1759622499999-6a7b8c9d-0e1f-4a2b-8c3d-4e5f6a7b8c9d");
+	d = makeHost("host-d", "1759622555555-1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d");
+	a2 = makeOmpCitizen(a, "1759622466666-2b3c4d5e-6f7a-4b8c-9d0e-1f2a3b4c5d6e");
 	bin = path.join(root, "bin");
 	fs.mkdirSync(bin);
 	sshLog = path.join(root, "ssh.log");
@@ -125,6 +176,7 @@ beforeEach(() => {
 			'case "$alias" in',
 			`  a-host) H='${a.home}' ;;`,
 			`  b-host) H='${b.home}' ;;`,
+			`  d-host) H='${d.home}' ;;`,
 			'  *) echo "stand-in ssh: unknown alias $alias" >&2; exit 255 ;;',
 			"esac",
 			'{ [ "$#" -gt 0 ] && [ "$1" = entwurf ]; } || { echo "stand-in ssh: unexpected remote command" >&2; exit 255; }',
@@ -171,21 +223,38 @@ function bodies(h: Host): string[] {
 		: [];
 }
 
+/** The bodies a host holds for one of its citizens (the host's first citizen by default). */
+function bodiesOf(h: Host, gid: string): string[] {
+	const dir = path.join(h.agent, "meta-mailbox", gid);
+	return fs.existsSync(dir)
+		? fs
+				.readdirSync(dir)
+				.filter((n) => n.endsWith(".msg"))
+				.map((n) => fs.readFileSync(path.join(dir, n), "utf8"))
+		: [];
+}
+
+/** A2's bridge: A's host, A2's cwd, A2's sender marker handed over explicitly. */
+function sendAsA2(target: string, message: string) {
+	return sendAs(a, target, message, { ENTWURF_META_SENDER_MARKER: a2.senderMarker }, a2.cwd);
+}
+
 function sshCalls(): string[] {
 	return fs.existsSync(sshLog) ? fs.readFileSync(sshLog, "utf8").trim().split("\n").filter(Boolean) : [];
 }
 
-/** One `entwurf_v2` call through the real bridge running as `from`. */
+/** One `entwurf_v2` call through the real bridge running as `from` (on `from`'s host, from `cwd`). */
 async function sendAs(
 	from: Host,
 	target: string,
 	message: string,
 	extraEnv: Record<string, string> = {},
+	cwd: string = from.cwd,
 ): Promise<{ text: string; isError: boolean }> {
 	const transport = new StdioClientTransport({
 		command: BRIDGE_ARGV[0],
 		args: BRIDGE_ARGV.slice(1),
-		cwd: from.cwd,
+		cwd,
 		env: {
 			HOME: from.home,
 			PATH: `${bin}:${path.dirname(process.execPath)}:${process.env.PATH ?? ""}`,
@@ -219,7 +288,7 @@ async function sendAs(
 	}
 }
 
-describe("T2 surface-in: the real bridge over one declared pair", () => {
+describe("T2 surface-in: the real bridge over one pair between two hosts", () => {
 	it("[QK:REMOTE-ROUNDTRIP-A-TO-B] A's bridge sends to B's gid over its declared route: one ssh call, one body in B's mailbox naming A, A's mailbox untouched", async () => {
 		declare(a, b, "b-host");
 		declare(b, a, "a-host");
@@ -268,15 +337,7 @@ describe("T2 surface-in: the real bridge over one declared pair", () => {
 	it("[QK:REMOTE-ROUNDTRIP-OTHER-HOST-REFUSES] a claim B's own pair does not cover is refused on B and reported to A as B's named refusal, with nothing written", async () => {
 		declare(a, b, "b-host");
 		// B pairs with someone else.
-		fs.writeFileSync(
-			b.optIn,
-			JSON.stringify({
-				remoteGardenId: "20261007T132839-0ddddd",
-				ssh: "a-host",
-				localGardenId: b.gid,
-				remotePairFile: a.optIn,
-			}),
-		);
+		declareRoutes(b, [[b.gid, "20261007T132839-0ddddd", "a-host", a.optIn]]);
 		const before = [mailboxDigest(a), mailboxDigest(b)];
 		const r = await sendAs(a, b.gid, "nonce-refused");
 		expect(r.isError).toBe(true);
@@ -303,5 +364,92 @@ describe("T2 surface-in: the real bridge over one declared pair", () => {
 		}
 		expect(sshCalls()).toEqual([]);
 		expect([mailboxDigest(a), mailboxDigest(b)]).toEqual(before);
+	}, 60_000);
+});
+
+describe("T2 surface-in: one declaration, three routes across three hosts (#149)", () => {
+	/** A's root: A↔B, A↔D, A2↔D. B: B↔A. D: D↔A, D↔A2. */
+	function declareAll(): void {
+		declareRoutes(a, [
+			[a.gid, b.gid, "b-host", b.optIn],
+			[a.gid, d.gid, "d-host", d.optIn],
+			[a2.gid, d.gid, "d-host", d.optIn],
+		]);
+		declareRoutes(b, [[b.gid, a.gid, "a-host", a.optIn]]);
+		declareRoutes(d, [
+			[d.gid, a.gid, "a-host", a.optIn],
+			[d.gid, a2.gid, "a-host", a.optIn],
+		]);
+	}
+	const call = (alias: string, h: Host) =>
+		`-o BatchMode=yes -o ConnectTimeout=10 ${alias} entwurf remote-pair-receive --pair ${h.optIn}`;
+
+	it("[QK:REMOTE-ROUNDTRIP-MULTI-INDEPENDENT] A→B, A→D and A2→D each take their own route: one ssh call each, each body naming its own sender, A's root untouched", async () => {
+		declareAll();
+		const aBefore = mailboxDigest(a);
+		for (const [send, nonce] of [
+			[() => sendAs(a, b.gid, "nonce-a2b"), "a2b"],
+			[() => sendAs(a, d.gid, "nonce-a2d"), "a2d"],
+			[() => sendAsA2(d.gid, "nonce-a22d"), "a22d"],
+		] as const) {
+			const r = await send();
+			expect(r.isError, `${nonce}: ${r.text}`).toBe(false);
+		}
+		expect(sshCalls()).toEqual([call("b-host", b), call("d-host", d), call("d-host", d)]);
+		const atB = bodiesOf(b, b.gid);
+		expect(atB).toHaveLength(1);
+		expect(atB[0]).toContain(`session:     ${a.gid} (remote via a-host; reply route declared, not probed)`);
+		expect(atB[0]).toContain("nonce-a2b");
+		const atD = bodiesOf(d, d.gid).sort();
+		expect(atD).toHaveLength(2);
+		expect(atD.find((x) => x.includes("nonce-a2d"))).toContain(`session:     ${a.gid} (remote via a-host;`);
+		expect(atD.find((x) => x.includes("nonce-a22d"))).toContain(`session:     ${a2.gid} (remote via a-host;`);
+		expect(atD.find((x) => x.includes("nonce-a22d"))).toContain(`@ ${a2.cwd} (sender-host path)`);
+		expect(mailboxDigest(a)).toBe(aBefore);
+	}, 120_000);
+
+	it("[QK:REMOTE-ROUNDTRIP-MULTI-REVERSE] B→A, D→A and D→A2 arrive at the exact citizen on A, each labelled with the route it came over", async () => {
+		declareAll();
+		for (const [r, nonce] of [
+			[await sendAs(b, a.gid, "nonce-b2a"), "b2a"],
+			[await sendAs(d, a.gid, "nonce-d2a"), "d2a"],
+			[await sendAs(d, a2.gid, "nonce-d2a2"), "d2a2"],
+		] as const)
+			expect(r.isError, `${nonce}: ${r.text}`).toBe(false);
+		expect(sshCalls()).toEqual([call("a-host", a), call("a-host", a), call("a-host", a)]);
+		const atA = bodiesOf(a, a.gid);
+		expect(atA).toHaveLength(2);
+		expect(atA.find((x) => x.includes("nonce-b2a"))).toContain(`session:     ${b.gid} (remote via b-host;`);
+		expect(atA.find((x) => x.includes("nonce-d2a"))).toContain(`session:     ${d.gid} (remote via d-host;`);
+		const atA2 = bodiesOf(a, a2.gid);
+		expect(atA2).toHaveLength(1);
+		expect(atA2[0]).toContain(`session:     ${d.gid} (remote via d-host; reply route declared, not probed)`);
+		expect(atA2[0]).toContain("nonce-d2a2");
+	}, 120_000);
+
+	it("[QK:REMOTE-ROUNDTRIP-MULTI-UNDECLARED-SENDER-ZERO-SSH] A2 sending to B, which A's file pairs only with A, is refused on A with no ssh and nothing written on any host", async () => {
+		declareAll();
+		const before = [mailboxDigest(a), mailboxDigest(b), mailboxDigest(d)];
+		const r = await sendAsA2(b.gid, "nonce-a22b");
+		expect(r.isError).toBe(true);
+		expect(r.text).toContain(
+			`remote-sender-not-declared: only ${a.gid} may send to ${b.gid} via b-host (sender: ${a2.gid})`,
+		);
+		expect(sshCalls()).toEqual([]);
+		expect([mailboxDigest(a), mailboxDigest(b), mailboxDigest(d)]).toEqual(before);
+	}, 60_000);
+
+	it("[QK:REMOTE-ROUNDTRIP-MULTI-CROSS-CLAIM-REFUSED] B's own file claiming A2 does not widen A's: A refuses B→A2 as a target mismatch and nothing is written", async () => {
+		declareAll();
+		declareRoutes(b, [
+			[b.gid, a.gid, "a-host", a.optIn],
+			[b.gid, a2.gid, "a-host", a.optIn],
+		]);
+		const before = [mailboxDigest(a), mailboxDigest(b), mailboxDigest(d)];
+		const r = await sendAs(b, a2.gid, "nonce-b2a2");
+		expect(r.isError).toBe(true);
+		expect(r.text).toContain("refused by the other host's pair: remote-pair-target-mismatch");
+		expect(sshCalls()).toEqual([call("a-host", a)]);
+		expect([mailboxDigest(a), mailboxDigest(b), mailboxDigest(d)]).toEqual(before);
 	}, 60_000);
 });

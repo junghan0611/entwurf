@@ -10,7 +10,7 @@
 			"replace": [
 				"\tconst remote = !replyable ? (sender.remote ?? { via: \"?\", replyRoute: \"none\" as const }) : undefined;"
 			],
-			"gate": ["bash", "run.sh", "check-tests-beside-behavior"],
+			"gate": ["bash", "run.sh", "check-remote-pair-beside"],
 			"timeoutSeconds": 600,
 			"signature": "[QK:REMOTE-DISPLAY-LOCAL-UNCHANGED]",
 			"signatureSource": "pi-extensions/lib/meta-mailbox-body.test.ts",
@@ -25,7 +25,7 @@
 			"subject": "pi-extensions/lib/meta-mailbox-body.ts",
 			"find": ["\"reply route declared, not probed\""],
 			"replace": ["\"reply via entwurf_v2 to this sessionId\""],
-			"gate": ["bash", "run.sh", "check-tests-beside-behavior"],
+			"gate": ["bash", "run.sh", "check-remote-pair-beside"],
 			"timeoutSeconds": 600,
 			"signature": "[QK:REMOTE-DISPLAY-SESSIONLINE]",
 			"signatureSource": "pi-extensions/lib/meta-mailbox-body.test.ts",
@@ -40,7 +40,7 @@
 			"subject": "pi-extensions/lib/meta-mailbox-body.ts",
 			"find": ["\tconst where = remote ? `${sender.cwd} (sender-host path)` : abbreviateHome(sender.cwd);"],
 			"replace": ["\tconst where = abbreviateHome(sender.cwd);"],
-			"gate": ["bash", "run.sh", "check-tests-beside-behavior"],
+			"gate": ["bash", "run.sh", "check-remote-pair-beside"],
 			"timeoutSeconds": 600,
 			"signature": "[QK:REMOTE-DISPLAY-SENDER-HOST-CWD]",
 			"signatureSource": "pi-extensions/lib/meta-mailbox-body.test.ts",

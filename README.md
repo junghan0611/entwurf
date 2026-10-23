@@ -220,7 +220,7 @@ receipt. `wants_reply` is etiquette, not waiting, polling or ownership; replyabi
 is a live rail fact, not merely a consequence of trusted identity.
 [DELIVERY](./DELIVERY.md#control-socket-acceptance-boundaries-120) owns these distinctions.
 
-**One declared remote pair (opt-in, #107).** The operator places an `entwurf-remote-pair.json` on each of two hosts. Then `entwurf_v2` to the declared remote garden id runs the other host's `entwurf remote-pair-receive` once over the operator's own SSH, and that host checks the pair and dispatches locally. The trust is the same operator's SSH account. It makes one attempt with no retry, and it uses no relay or listener. [DELIVERY](./DELIVERY.md#remote-pair-107-one-declared-pair-across-two-hosts) owns the contract; [setup](./docs/setup-clean-host.md#2c-optional-remote-pair-between-two-hosts-107) covers the operator steps.
+**Declared remote pairs (opt-in, #107, #149).** The operator places an `entwurf-remote-pair.json` on each host, listing exact pairs of citizens as routes. Then `entwurf_v2` from a declared local citizen to its declared remote garden id runs the other host's `entwurf remote-pair-receive` once over the operator's own SSH, and that host checks the pair and dispatches locally. The trust is the same operator's SSH account. It makes one attempt with no retry, and it uses no relay or listener. [DELIVERY](./DELIVERY.md#remote-pairs-107-149-declared-pairs-across-hosts) owns the contract; [setup](./docs/setup-clean-host.md#2c-optional-remote-pair-between-two-hosts-107) covers the operator steps.
 
 **Mux launches; it never delivers.** Fresh uses the caller's Herdr workspace or tmux server,
 within the harness limits in the table above. The model is required; optional `cwd` is a literal

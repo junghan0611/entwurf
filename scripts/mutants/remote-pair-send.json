@@ -6,9 +6,9 @@
 			"claim": "REMOTE-ROUTE-UNDECLARED-LOCAL-UNCHANGED",
 			"title": "a declared route captures every target, so a gid the declaration never named is sent to the other host instead of the local decider",
 			"subject": "pi-extensions/lib/remote-pair-send.ts",
-			"find": ["\tif (route === null || params.target !== route.remoteGardenId) {"],
-			"replace": ["\tif (route === null) {"],
-			"gate": ["bash", "run.sh", "check-tests-beside-behavior"],
+			"find": ["\tconst declared = (opts.optIn?.routes ?? []).filter((r) => r.remoteGardenId === params.target);"],
+			"replace": ["\tconst declared = opts.optIn?.routes ?? [];"],
+			"gate": ["bash", "run.sh", "check-remote-pair-beside"],
 			"timeoutSeconds": 600,
 			"signature": "[QK:REMOTE-ROUTE-UNDECLARED-LOCAL-UNCHANGED]",
 			"signatureSource": "pi-extensions/lib/remote-pair-send.test.ts",
@@ -21,9 +21,9 @@
 			"claim": "REMOTE-ROUTE-LOCAL-CONFLICT-FAILS-CLOSED",
 			"title": "a declared remote gid that this host also answers to is sent away anyway, so two hosts' citizens share one address and the sender silently picks the remote",
 			"subject": "pi-extensions/lib/remote-pair-send.ts",
-			"find": ["\tif (await opts.localTrace(route.remoteGardenId)) {"],
+			"find": ["\tif (await opts.localTrace(params.target)) {"],
 			"replace": ["\tif (Boolean(0)) {"],
-			"gate": ["bash", "run.sh", "check-tests-beside-behavior"],
+			"gate": ["bash", "run.sh", "check-remote-pair-beside"],
 			"timeoutSeconds": 600,
 			"signature": "[QK:REMOTE-ROUTE-LOCAL-CONFLICT-FAILS-CLOSED]",
 			"signatureSource": "pi-extensions/lib/remote-pair-send.test.ts",
@@ -36,9 +36,9 @@
 			"claim": "REMOTE-ROUTE-SENDER-MUST-BE-DECLARED",
 			"title": "any present envelope may use the route, so an anonymous caller or another citizen on this host speaks to the other host as the declared sender",
 			"subject": "pi-extensions/lib/remote-pair-send.ts",
-			"find": ["\tif (!sender || sender.origin === \"external-mcp\" || sender.sessionId !== route.localGardenId) {"],
-			"replace": ["\tif (!sender || Boolean(0)) {"],
-			"gate": ["bash", "run.sh", "check-tests-beside-behavior"],
+			"find": ["\t\tsender && sender.origin !== \"external-mcp\""],
+			"replace": ["\t\tsender"],
+			"gate": ["bash", "run.sh", "check-remote-pair-beside"],
 			"timeoutSeconds": 600,
 			"signature": "[QK:REMOTE-ROUTE-SENDER-MUST-BE-DECLARED]",
 			"signatureSource": "pi-extensions/lib/remote-pair-send.test.ts",
@@ -53,7 +53,7 @@
 			"subject": "pi-extensions/lib/remote-pair-send.ts",
 			"find": ["\t\t\"BatchMode=yes\","],
 			"replace": ["\t\t\"BatchMode=no\","],
-			"gate": ["bash", "run.sh", "check-tests-beside-behavior"],
+			"gate": ["bash", "run.sh", "check-remote-pair-beside"],
 			"timeoutSeconds": 600,
 			"signature": "[QK:REMOTE-ROUTE-EXACT-ARGV-ONCE]",
 			"signatureSource": "pi-extensions/lib/remote-pair-send.test.ts",
@@ -70,7 +70,7 @@
 			"replace": [
 				"\tawait opts.transport.run(remoteReceiveArgv(route), JSON.stringify(claim), 1);\n\tconst result = await opts.transport.run("
 			],
-			"gate": ["bash", "run.sh", "check-tests-beside-behavior"],
+			"gate": ["bash", "run.sh", "check-remote-pair-beside"],
 			"timeoutSeconds": 600,
 			"signature": "[QK:REMOTE-ROUTE-NO-RETRY]",
 			"signatureSource": "pi-extensions/lib/remote-pair-send.test.ts",
@@ -87,7 +87,7 @@
 				"\tif (r.exitCode === 0 && keys === \"isError,kind,text\" && o.kind === \"dispatched\" && o.isError === false) {"
 			],
 			"replace": ["\tif (keys === \"isError,kind,text\" && o.kind === \"dispatched\" && o.isError === false) {"],
-			"gate": ["bash", "run.sh", "check-tests-beside-behavior"],
+			"gate": ["bash", "run.sh", "check-remote-pair-beside"],
 			"timeoutSeconds": 600,
 			"signature": "[QK:REMOTE-RECEIPT-EXIT-AND-KIND-AGREE]",
 			"signatureSource": "pi-extensions/lib/remote-pair-send.test.ts",
@@ -102,7 +102,7 @@
 			"subject": "pi-extensions/lib/remote-pair-send.ts",
 			"find": ["const REMOTE_PATH = /^\\/[A-Za-z0-9._/-]+$/;"],
 			"replace": ["const REMOTE_PATH = /^\\/.+$/;"],
-			"gate": ["bash", "run.sh", "check-tests-beside-behavior"],
+			"gate": ["bash", "run.sh", "check-remote-pair-beside"],
 			"timeoutSeconds": 600,
 			"signature": "[QK:REMOTE-ROUTE-DECL-NO-QUOTING-NEEDED]",
 			"signatureSource": "pi-extensions/lib/remote-pair-send.test.ts",
@@ -117,7 +117,7 @@
 			"subject": "pi-extensions/lib/remote-pair-send.ts",
 			"find": ["\t\t\tif (inspection.kind !== \"absent\") return true;"],
 			"replace": ["\t\t\tif (false) return true;"],
-			"gate": ["bash", "run.sh", "check-tests-beside-behavior"],
+			"gate": ["bash", "run.sh", "check-remote-pair-beside"],
 			"timeoutSeconds": 600,
 			"signature": "[QK:REMOTE-ROUTE-LOCAL-TRACE-ANY-STATE]",
 			"signatureSource": "pi-extensions/lib/remote-pair-send.test.ts",
@@ -132,7 +132,7 @@
 			"subject": "pi-extensions/lib/remote-pair-send.ts",
 			"find": ["read/answer unknown until a reply arrives; paths below are on the other host)"],
 			"replace": ["read/answer unknown until a reply arrives)"],
-			"gate": ["bash", "run.sh", "check-tests-beside-behavior"],
+			"gate": ["bash", "run.sh", "check-remote-pair-beside"],
 			"timeoutSeconds": 600,
 			"signature": "[QK:REMOTE-ROUTE-RECEIPT-PATHS-OTHER-HOST]",
 			"signatureSource": "pi-extensions/lib/remote-pair-send.test.ts",
@@ -147,7 +147,7 @@
 			"subject": "pi-extensions/lib/remote-pair-send.ts",
 			"find": ["\t\tif ((err as NodeJS.ErrnoException).code === \"ENOENT\") return null;"],
 			"replace": ["\t\tif (false) return null;"],
-			"gate": ["bash", "run.sh", "check-tests-beside-behavior"],
+			"gate": ["bash", "run.sh", "check-remote-pair-beside"],
 			"timeoutSeconds": 600,
 			"signature": "[QK:REMOTE-PAIR-OPT-IN-ABSENT-IS-OFF]",
 			"signatureSource": "pi-extensions/lib/remote-pair-send.test.ts",
@@ -162,7 +162,7 @@
 			"subject": "pi-extensions/lib/remote-pair-send.ts",
 			"find": ["\tif (!st.isFile()) {\n\t\tthrow new RemoteRouteDeclarationError(`remote pair opt-in"],
 			"replace": ["\tif (false) {\n\t\tthrow new RemoteRouteDeclarationError(`remote pair opt-in"],
-			"gate": ["bash", "run.sh", "check-tests-beside-behavior"],
+			"gate": ["bash", "run.sh", "check-remote-pair-beside"],
 			"timeoutSeconds": 600,
 			"signature": "[QK:REMOTE-PAIR-OPT-IN-BROKEN-REFUSED]",
 			"signatureSource": "pi-extensions/lib/remote-pair-send.test.ts",
@@ -181,9 +181,148 @@
 			"replace": [
 				"\t\t\t\ttext: `entwurf_v2 remote ${via} → the other host did not deliver (paths below are on the other host)\\n${o.text}`,"
 			],
-			"gate": ["bash", "run.sh", "check-tests-beside-behavior"],
+			"gate": ["bash", "run.sh", "check-remote-pair-beside"],
 			"timeoutSeconds": 600,
 			"signature": "[QK:REMOTE-REPORTED-ERROR-NO-DELIVERY-INFERENCE]",
+			"signatureSource": "pi-extensions/lib/remote-pair-send.test.ts",
+			"build": {
+				"argv": ["bash", "scripts/build-bridge.sh"],
+				"output": "mcp/entwurf-bridge/dist"
+			}
+		},
+		{
+			"claim": "REMOTE-ROUTES-V2-EXACT-SHAPE",
+			"title": "an empty routes array is read as a declaration with no route, so a file meant to switch the pair off silently keeps the bridge reading an opt-in instead of being refused",
+			"subject": "pi-extensions/lib/remote-pair-send.ts",
+			"find": ["\tif (!Array.isArray(obj.routes) || obj.routes.length === 0) {"],
+			"replace": ["\tif (!Array.isArray(obj.routes)) {"],
+			"gate": ["bash", "run.sh", "check-remote-pair-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:REMOTE-ROUTES-V2-EXACT-SHAPE]",
+			"signatureSource": "pi-extensions/lib/remote-pair-send.test.ts",
+			"build": {
+				"argv": ["bash", "scripts/build-bridge.sh"],
+				"output": "mcp/entwurf-bridge/dist"
+			}
+		},
+		{
+			"claim": "REMOTE-ROUTES-LEGACY-NAMED-REFUSAL",
+			"title": "the versionless single-pair file is quietly read as one route, so a host keeps a pre-#149 declaration through the hard cut with no named transition",
+			"subject": "pi-extensions/lib/remote-pair-send.ts",
+			"find": ["\tif (!Object.hasOwn(obj, \"version\")) {"],
+			"replace": [
+				"\tif (!Object.hasOwn(obj, \"version\")) return { routes: [parseRoute(obj, what)] };\n\tif (Boolean(0)) {"
+			],
+			"gate": ["bash", "run.sh", "check-remote-pair-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:REMOTE-ROUTES-LEGACY-NAMED-REFUSAL]",
+			"signatureSource": "pi-extensions/lib/remote-pair-send.test.ts",
+			"build": {
+				"argv": ["bash", "scripts/build-bridge.sh"],
+				"output": "mcp/entwurf-bridge/dist"
+			}
+		},
+		{
+			"claim": "REMOTE-ROUTES-LEGAL-REPEATS-ACCEPTED",
+			"title": "one alias may carry only one route, so a host with two citizens on the same other host cannot declare both pairs",
+			"subject": "pi-extensions/lib/remote-pair-send.ts",
+			"find": ["\t\tif (file !== undefined && file !== r.remotePairFile) {"],
+			"replace": ["\t\tif (file !== undefined) {"],
+			"gate": ["bash", "run.sh", "check-remote-pair-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:REMOTE-ROUTES-LEGAL-REPEATS-ACCEPTED]",
+			"signatureSource": "pi-extensions/lib/remote-pair-send.test.ts",
+			"build": {
+				"argv": ["bash", "scripts/build-bridge.sh"],
+				"output": "mcp/entwurf-bridge/dist"
+			}
+		},
+		{
+			"claim": "REMOTE-ROUTES-DUPLICATE-PAIR-REFUSED",
+			"title": "the same exact pair may be declared twice, so the file carries two entries for one route and the reader keeps whichever it meets first",
+			"subject": "pi-extensions/lib/remote-pair-send.ts",
+			"find": ["\t\tif (pairs.has(pair)) {"],
+			"replace": ["\t\tif (Boolean(0)) {"],
+			"gate": ["bash", "run.sh", "check-remote-pair-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:REMOTE-ROUTES-DUPLICATE-PAIR-REFUSED]",
+			"signatureSource": "pi-extensions/lib/remote-pair-send.test.ts",
+			"build": {
+				"argv": ["bash", "scripts/build-bridge.sh"],
+				"output": "mcp/entwurf-bridge/dist"
+			}
+		},
+		{
+			"claim": "REMOTE-ROUTES-LOCAL-REMOTE-OVERLAP-REFUSED",
+			"title": "a gid may be local in one route and remote in another, so one citizen is claimed to live on this host and on another at once",
+			"subject": "pi-extensions/lib/remote-pair-send.ts",
+			"find": ["\t\tif (locals.has(r.remoteGardenId)) {"],
+			"replace": ["\t\tif (Boolean(0)) {"],
+			"gate": ["bash", "run.sh", "check-remote-pair-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:REMOTE-ROUTES-LOCAL-REMOTE-OVERLAP-REFUSED]",
+			"signatureSource": "pi-extensions/lib/remote-pair-send.test.ts",
+			"build": {
+				"argv": ["bash", "scripts/build-bridge.sh"],
+				"output": "mcp/entwurf-bridge/dist"
+			}
+		},
+		{
+			"claim": "REMOTE-ROUTES-REMOTE-HOST-CONFLICT-REFUSED",
+			"title": "one remote gid may be reached through two aliases, so which host a message to it goes to depends on which sender sends it",
+			"subject": "pi-extensions/lib/remote-pair-send.ts",
+			"find": ["\t\tif (host && (host.ssh !== r.ssh || host.remotePairFile !== r.remotePairFile)) {"],
+			"replace": ["\t\tif (host && host.remotePairFile !== r.remotePairFile) {"],
+			"gate": ["bash", "run.sh", "check-remote-pair-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:REMOTE-ROUTES-REMOTE-HOST-CONFLICT-REFUSED]",
+			"signatureSource": "pi-extensions/lib/remote-pair-send.test.ts",
+			"build": {
+				"argv": ["bash", "scripts/build-bridge.sh"],
+				"output": "mcp/entwurf-bridge/dist"
+			}
+		},
+		{
+			"claim": "REMOTE-ROUTES-ALIAS-FILE-CONFLICT-REFUSED",
+			"title": "one alias may name two remote files, though the host behind it accepts only its one canonical file, so one of those routes can never be received",
+			"subject": "pi-extensions/lib/remote-pair-send.ts",
+			"find": ["\t\tif (file !== undefined && file !== r.remotePairFile) {"],
+			"replace": ["\t\tif (Boolean(0)) {"],
+			"gate": ["bash", "run.sh", "check-remote-pair-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:REMOTE-ROUTES-ALIAS-FILE-CONFLICT-REFUSED]",
+			"signatureSource": "pi-extensions/lib/remote-pair-send.test.ts",
+			"build": {
+				"argv": ["bash", "scripts/build-bridge.sh"],
+				"output": "mcp/entwurf-bridge/dist"
+			}
+		},
+		{
+			"claim": "REMOTE-ROUTE-SELECT-EXACT-PAIR",
+			"title": "the route is chosen by target alone, so a citizen paired with another remote speaks over a route declared for a different sender",
+			"subject": "pi-extensions/lib/remote-pair-send.ts",
+			"find": ["? declared.find((r) => r.localGardenId === sender.sessionId) :"],
+			"replace": ["? declared.find(() => true) :"],
+			"gate": ["bash", "run.sh", "check-remote-pair-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:REMOTE-ROUTE-SELECT-EXACT-PAIR]",
+			"signatureSource": "pi-extensions/lib/remote-pair-send.test.ts",
+			"build": {
+				"argv": ["bash", "scripts/build-bridge.sh"],
+				"output": "mcp/entwurf-bridge/dist"
+			}
+		},
+		{
+			"claim": "REMOTE-ROUTE-NO-LOCAL-FALLBACK",
+			"title": "a declared remote target with no route for this sender falls through to the local path, so a gid the operator said lives elsewhere is resolved on this host",
+			"subject": "pi-extensions/lib/remote-pair-send.ts",
+			"find": ["\tif (!sender || !route) {"],
+			"replace": [
+				"\tif (!sender || !route) return opts.runLocal(params, { senderProvider: opts.senderProvider });\n\tif (!sender || !route) {"
+			],
+			"gate": ["bash", "run.sh", "check-remote-pair-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:REMOTE-ROUTE-NO-LOCAL-FALLBACK]",
 			"signatureSource": "pi-extensions/lib/remote-pair-send.test.ts",
 			"build": {
 				"argv": ["bash", "scripts/build-bridge.sh"],

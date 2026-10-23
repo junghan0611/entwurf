@@ -6,9 +6,9 @@
 			"claim": "REMOTE-ROUNDTRIP-A-TO-B",
 			"title": "the bridge never reads the opt-in, so a declared remote target falls through to the local decider as bad-target",
 			"subject": "mcp/entwurf-bridge/src/index.ts",
-			"find": ["\t\t\t\t\troute: readRemotePairOptIn(remotePairOptInPath()),"],
-			"replace": ["\t\t\t\t\troute: null,"],
-			"gate": ["bash", "run.sh", "check-tests-beside-behavior"],
+			"find": ["\t\t\t\t\toptIn: readRemotePairOptIn(remotePairOptInPath()),"],
+			"replace": ["\t\t\t\t\toptIn: null,"],
+			"gate": ["bash", "run.sh", "check-remote-pair-beside"],
 			"timeoutSeconds": 600,
 			"signature": "[QK:REMOTE-ROUNDTRIP-A-TO-B]",
 			"signatureSource": "pi-extensions/lib/remote-pair-roundtrip.test.ts",
@@ -25,7 +25,7 @@
 			"replace": [
 				"\t\t\t\t\ttransport: { run: async () => ({ exitCode: 1, signal: null, timedOut: false, stdout: \"\", stderr: \"\" }) },"
 			],
-			"gate": ["bash", "run.sh", "check-tests-beside-behavior"],
+			"gate": ["bash", "run.sh", "check-remote-pair-beside"],
 			"timeoutSeconds": 600,
 			"signature": "[QK:REMOTE-ROUNDTRIP-REVERSE-DISPATCH]",
 			"signatureSource": "pi-extensions/lib/remote-pair-roundtrip.test.ts",
@@ -40,7 +40,7 @@
 			"subject": "mcp/entwurf-bridge/src/index.ts",
 			"find": ["\t\t\t\t\trunLocal: (params, opts) => runAndRenderEntwurfV2FromSurface(params, opts),"],
 			"replace": ["\t\t\t\t\trunLocal: async () => ({ isError: false, text: \"local skipped\" }),"],
-			"gate": ["bash", "run.sh", "check-tests-beside-behavior"],
+			"gate": ["bash", "run.sh", "check-remote-pair-beside"],
 			"timeoutSeconds": 600,
 			"signature": "[QK:REMOTE-ROUNDTRIP-OPT-IN-ABSENT-OFF]",
 			"signatureSource": "pi-extensions/lib/remote-pair-roundtrip.test.ts",
@@ -55,7 +55,7 @@
 			"subject": "pi-extensions/lib/remote-pair-send.ts",
 			"find": ["refused by the other host's pair: ${o.reason} (${o.detail})"],
 			"replace": ["failed"],
-			"gate": ["bash", "run.sh", "check-tests-beside-behavior"],
+			"gate": ["bash", "run.sh", "check-remote-pair-beside"],
 			"timeoutSeconds": 600,
 			"signature": "[QK:REMOTE-ROUNDTRIP-OTHER-HOST-REFUSES]",
 			"signatureSource": "pi-extensions/lib/remote-pair-roundtrip.test.ts",
@@ -70,9 +70,69 @@
 			"subject": "mcp/entwurf-bridge/src/index.ts",
 			"find": ["\t\t\t\t\t\tcontrolSocketDirs: [CONTROL_SOCKET_DIR, ENTWURF_DIR],"],
 			"replace": ["\t\t\t\t\t\tcontrolSocketDirs: [ENTWURF_DIR],"],
-			"gate": ["bash", "run.sh", "check-tests-beside-behavior"],
+			"gate": ["bash", "run.sh", "check-remote-pair-beside"],
 			"timeoutSeconds": 600,
 			"signature": "[QK:REMOTE-ROUNDTRIP-LOCAL-TRACE-BOTH-SOCKET-DIRS]",
+			"signatureSource": "pi-extensions/lib/remote-pair-roundtrip.test.ts",
+			"build": {
+				"argv": ["bash", "scripts/build-bridge.sh"],
+				"output": "mcp/entwurf-bridge/dist"
+			}
+		},
+		{
+			"claim": "REMOTE-ROUNDTRIP-MULTI-INDEPENDENT",
+			"title": "the receiving entry reads only the first route of its file, so a second citizen paired with this host is refused as an undeclared sender",
+			"subject": "scripts/remote-pair-receive.ts",
+			"find": ["\tdecls = optIn.routes.map("],
+			"replace": ["\tdecls = optIn.routes.slice(0, 1).map("],
+			"gate": ["bash", "run.sh", "check-remote-pair-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:REMOTE-ROUNDTRIP-MULTI-INDEPENDENT]",
+			"signatureSource": "pi-extensions/lib/remote-pair-roundtrip.test.ts",
+			"build": {
+				"argv": ["bash", "scripts/build-bridge.sh"],
+				"output": "mcp/entwurf-bridge/dist"
+			}
+		},
+		{
+			"claim": "REMOTE-ROUNDTRIP-MULTI-REVERSE",
+			"title": "the receiving side recognizes only the first route's remote as a sender, so a claim from a second host lands on the wrong route or is refused",
+			"subject": "pi-extensions/lib/remote-pair-receive.ts",
+			"find": ["\tconst fromRoutes = decls.filter((d) => d.remoteGardenId === claim.from);"],
+			"replace": ["\tconst fromRoutes = decls.filter((d) => d.remoteGardenId === decls[0].remoteGardenId);"],
+			"gate": ["bash", "run.sh", "check-remote-pair-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:REMOTE-ROUNDTRIP-MULTI-REVERSE]",
+			"signatureSource": "pi-extensions/lib/remote-pair-roundtrip.test.ts",
+			"build": {
+				"argv": ["bash", "scripts/build-bridge.sh"],
+				"output": "mcp/entwurf-bridge/dist"
+			}
+		},
+		{
+			"claim": "REMOTE-ROUNDTRIP-MULTI-UNDECLARED-SENDER-ZERO-SSH",
+			"title": "a sender with no route to a declared remote borrows another sender's route, so ssh runs and the other host is asked to accept a pair nobody declared",
+			"subject": "pi-extensions/lib/remote-pair-send.ts",
+			"find": ["? declared.find((r) => r.localGardenId === sender.sessionId) :"],
+			"replace": ["? (declared.find((r) => r.localGardenId === sender.sessionId) ?? declared[0]) :"],
+			"gate": ["bash", "run.sh", "check-remote-pair-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:REMOTE-ROUNDTRIP-MULTI-UNDECLARED-SENDER-ZERO-SSH]",
+			"signatureSource": "pi-extensions/lib/remote-pair-roundtrip.test.ts",
+			"build": {
+				"argv": ["bash", "scripts/build-bridge.sh"],
+				"output": "mcp/entwurf-bridge/dist"
+			}
+		},
+		{
+			"claim": "REMOTE-ROUNDTRIP-MULTI-CROSS-CLAIM-REFUSED",
+			"title": "the target is matched against every route rather than the sender's own, so a peer that declares an extra pair on its side widens this host's",
+			"subject": "pi-extensions/lib/remote-pair-receive.ts",
+			"find": ["\tconst decl = fromRoutes.find((d) => d.localGardenId === claim.target);"],
+			"replace": ["\tconst decl = decls.find((d) => d.localGardenId === claim.target);"],
+			"gate": ["bash", "run.sh", "check-remote-pair-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:REMOTE-ROUNDTRIP-MULTI-CROSS-CLAIM-REFUSED]",
 			"signatureSource": "pi-extensions/lib/remote-pair-roundtrip.test.ts",
 			"build": {
 				"argv": ["bash", "scripts/build-bridge.sh"],

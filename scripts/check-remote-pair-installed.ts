@@ -190,8 +190,8 @@ try {
 	);
 	const summary = (vitest.stdout.match(/Tests\s+.*$/m) ?? [""])[0].trim();
 	ok(
-		"[QK:RPI-ROUNDTRIP-ON-INSTALL] the T2 cells (A→B, reverse dispatch, opt-in absent off, other host refuses, both socket dirs) pass against the installed bridge and entry",
-		vitest.status === 0 && /^Tests\s+5 passed\b/.test(summary),
+		"[QK:RPI-ROUNDTRIP-ON-INSTALL] the T2 cells (A→B, reverse dispatch, opt-in absent off, other host refuses, both socket dirs, and the #149 three-route cells: independent, reverse, undeclared sender, cross claim) pass against the installed bridge and entry",
+		vitest.status === 0 && /^Tests\s+9 passed\b/.test(summary),
 		`${summary}\n${vitest.stdout
 			.split("\n")
 			.filter((l) => /×|FAIL|Error/.test(l))
