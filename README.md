@@ -129,7 +129,9 @@ runtime each ref installs.
 
 This separate path activates Herdr-integrated **pi and Claude Code** with an
 independently locked runtime and an observation pane; it puts no Entwurf bins on PATH.
-An Entwurf release does not automatically re-pin that runtime.
+An Entwurf release does not automatically re-pin that runtime: while 0.41.2 is an unpublished
+candidate, main's lock rides the `herdr-checkout` verification carrier, and the published 0.41.1
+runtime stays pinned by the Herdr tag `v2026.10.23-herdr.0.41.1`.
 [Herdr guide](./plugins/herdr/README.md) owns install, use, evidence and removal;
 the plugin does not own delivery or the Herdr launch rail.
 
@@ -190,50 +192,61 @@ pi / pi-durable / Claude Code / Copilot / OMP / Antigravity / Codex
       → control-socket | self-fetch mailbox | native-push
 ```
 
-| What you want | Tool | What its receipt means |
-|---|---|---|
-| Message, reply or hand off to an existing garden id | `entwurf_v2 {target, intent:"fire-and-forget", message}` | Receiver acceptance boundary, mailbox enqueue or native injection; not completion |
-| Open a new visible sibling | `entwurf_fresh_call {backend, model, task, cwd?}` | Launch receipt only; the sibling's nonce callback envelope supplies its new garden id |
-| Reopen a dormant pi or Claude Code citizen under its own id | `entwurf_resume_call {target}` | Separate LAUNCH and OBSERVATION receipts (pi: same-id socket; Claude Code: a new live receiver marker in the opened pane, bound to the record); the verb submits no prompt |
-| Attempt retirement of one explicitly requested Pi or Claude Code target | `entwurf_retire_call {target}` | Separate action, append-only record and lock-release results. Pi ACK is request-only; CC exit is that fd-pinned process only |
-
-**Retirement is never autonomous.** It requires the human operator's explicit target/action;
-a role, caller identity or tool annotation grants no permission. Host approval applies where
-provided or configured. No roster expansion, timer or retry of an unknown/cancelled/lost result;
-an absent event is unknown, not proof that no action occurred.
-[DELIVERY](./DELIVERY.md#candidate-lifecycle-commands-are-not-delivery-boundaries-147)
-owns the lifecycle boundaries; [BASELINE](./BASELINE.md#147-native-round-trip-2026-10-22-n1)
-keeps dated native evidence separate from release and rollout acceptance.
-
 **Delivery starts no process.** A live pi receives over its record-addressed control
-address (a Unix socket; on the experimental native-Windows Pi preview, a named pipe);
-an armed self-fetch citizen (Claude Code, Copilot, OMP, pi-durable) through its mailbox; a probe-alive native-push citizen (Antigravity, Codex) through
-its native conversation/thread. Dormant pi, undeliverable mailboxes, dead/indeterminate native
-push and record-less sockets reject honestly. Only control-socket dispatch takes
-the per-target lock; the other rails use their own deliverability/probe evidence.
+address, an armed self-fetch citizen (Claude Code, Copilot, OMP, pi-durable) through its
+mailbox, a probe-alive native-push citizen (Antigravity, Codex) through its own
+conversation or thread. Anything else is refused honestly, never launched into. The receipt
+is a receiver acceptance boundary, a durable mailbox file or an injection, never completion;
+`wants_reply` is etiquette, not waiting. [DELIVERY](./DELIVERY.md#control-socket-acceptance-boundaries-120)
+owns what each boundary means and each rail's admission.
 
-A control-socket `sent` means a turn was triggered, not that the model read the
-text. `queued-steer` and `queued-follow-up` are volatile process queues, with no
-FIFO between them; abort drops them. `accepted-unknown-boundary` is acceptance
-we cannot classify, never a reason to retry. A mailbox enqueue is a durable file
-receipt. `wants_reply` is etiquette, not waiting, polling or ownership; replyability
-is a live rail fact, not merely a consequence of trusted identity.
-[DELIVERY](./DELIVERY.md#control-socket-acceptance-boundaries-120) owns these distinctions.
+The lifecycle verbs in the [table above](#entwurf) return their own receipts, never a delivery
+result: fresh a launch receipt (the sibling's callback envelope supplies its garden id), resume
+separate LAUNCH and OBSERVATION receipts, retire separate action, record and lock results.
+**Retirement is never autonomous:** it needs the human operator's explicit target and action, and
+no role, caller identity or tool annotation grants it ([DELIVERY](./DELIVERY.md#candidate-lifecycle-commands-are-not-delivery-boundaries-147)).
 
-**Declared remote pairs (opt-in, #107, #149).** The operator places an `entwurf-remote-pair.json` on each host, listing exact pairs of citizens as routes. Then `entwurf_v2` from a declared local citizen to its declared remote garden id runs the other host's `entwurf remote-pair-receive` once over the operator's own SSH, and that host checks the pair and dispatches locally. The trust is the same operator's SSH account. It makes one attempt with no retry, and it uses no relay or listener. [DELIVERY](./DELIVERY.md#remote-pairs-107-149-declared-pairs-across-hosts) owns the contract; [setup](./docs/setup-clean-host.md#2c-optional-remote-pair-between-two-hosts-107) covers the operator steps.
+**Mux launches; it never delivers.** Fresh opens in the caller's Herdr workspace or tmux session;
+`placement.tmuxSession` names another existing tmux session and is refused inside Herdr. The model
+is required and `cwd` is a literal absolute directory. Missing or ambiguous context refuses with no
+fallback. Exact argv, identity checks and limits: [tmux launch](./docs/mux-launch-rail.md),
+[Herdr launch](./docs/herdr-launch-rail.md).
 
-**Mux launches; it never delivers.** Fresh uses the caller's Herdr workspace or tmux server,
-within the harness limits in the table above. The model is required; optional `cwd` is a literal
-absolute directory (omitted or empty means caller cwd). `placement.tmuxSession` names an
-existing tmux session, never a new session or a cwd lookup, and is refused inside Herdr.
-Without that override, a Codex caller opens beside its thread-id-matched TUI pane;
-other callers use their own session. Missing or ambiguous context refuses without fallback.
-Resume is tmux-only for pi and Claude Code, selected by the record, with no submitted prompt.
-Claude Code dormancy covers only attaches its hook committed, not every possible session holder;
-[V3 arm binding](./docs/adding-a-harness.md#arm-binding-within-v3) is not occupancy or permission.
-An unobserved window stays visible without retry. Address liveness alone is not conversation recall.
-Exact argv, identity checks and limits belong to [tmux launch](./docs/mux-launch-rail.md)
-and [Herdr launch](./docs/herdr-launch-rail.md).
+### Remote siblings — declared pairs across hosts
+
+Opt-in. The v2 file below is in main and the 0.41.2 candidate; the published 0.41.1 reads the
+earlier single-pair file. On each host, write `~/.pi/agent/entwurf-remote-pair.json` (mode `0600`; a
+moved agent dir or meta store moves it, see [setup §2c](./docs/setup-clean-host.md#2c-optional-remote-pair-between-two-hosts-107)). The ids
+below are fictional; use your own records' garden ids:
+
+```json
+{
+  "version": 2,
+  "routes": [
+    {
+      "localGardenId": "20260101T090000-a1b2c3",
+      "remoteGardenId": "20260101T091500-d4e5f6",
+      "ssh": "host-b",
+      "remotePairFile": "/home/me/.pi/agent/entwurf-remote-pair.json"
+    }
+  ]
+}
+```
+
+The other host carries the mirror route: the two garden ids swapped, its own SSH alias for this
+host, and this file's canonical absolute path. Then send with the ordinary `entwurf_v2` to the
+remote garden id: one SSH attempt over your own account, checked and dispatched by the host that
+holds the record. There is no peer discovery, wake or retry. Why: [remote sibling principles](./docs/remote-sibling-principles.md);
+contract: [DELIVERY](./DELIVERY.md#remote-pairs-107-149-declared-pairs-across-hosts); steps and the
+hand conversion from the earlier file: [setup §2c](./docs/setup-clean-host.md#2c-optional-remote-pair-between-two-hosts-107).
+
+### Team bookmarks — `team.json`
+
+A person's bookmark of the siblings one project works with. Copy [`team.json.example`](./team.json.example)
+to an ignored `team.json` at the project root and fill names, backend, garden id, native session id
+and cwd from Entwurf's record facts; read liveness from `entwurf_peers` when you dispatch. Entwurf
+does not load it as runtime configuration, and it is not configuration for identity, routes, roles, permissions or lifecycle. The
+example's own notes say the rest.
 
 ## Concepts
 

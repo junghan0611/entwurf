@@ -4,6 +4,28 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+## 0.41.2 — 2026-10-24
+
+A bug-fix release for the setup, pack and mux verification surfaces. It also carries #149's remote-pair declaration change, a hard cut: every host that has an `entwurf-remote-pair.json` must convert it by hand (Remote pairs below, setup §2c). The release evidence below separates what was measured while this release was prepared from what the MAKE phase measures on the exact artifact and installed hosts. Herdr is not re-pinned to npm here. An npm lock must name this checkout's exact version, and 0.41.2 had no published bytes when this release was prepared, so `plugins/herdr/runtime-lock.json` returned to the closed `herdr-checkout` verification carrier, as earlier release candidates did. Once this reaches main, a main-tracking Herdr install builds its runtime from the checked-out commit instead of npm, and a host already on the npm 0.41.1 runtime must run `herdr-plugin-deactivate` before it reinstalls. The published 0.41.1 pairing stays pinned by the Herdr tag `v2026.10.23-herdr.0.41.1` (its section below). The Herdr manifest version is unchanged; a separate snapshot re-pins npm after 0.41.2 is published.
+
+### Release evidence
+
+- Kill-power re-measured at this shipped SHA: none (all 1203 committed claims not re-proved, #144).
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head 439b399c64ef surface de3c1bcf6db9 -- ["bash","run.sh","check-remote-pair-beside"] 47/47 receipt 55bd9563fe43
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head 439b399c64ef surface de3c1bcf6db9 -- ["bash","run.sh","check-tests-beside-behavior"] 6/6 receipt aef18acbe804
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head 156bb6231cee surface c883d0df88b5 -- ["bash","run.sh","check-pack-argv-matcher"] 4/4 receipt 11470c62389c
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head e7ed0576ea65 surface 9bff5948bcb3 -- ["bash","run.sh","smoke-agy-install-state"] 18/18 receipt 13b86f54457e
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head e7ed0576ea65 surface 9bff5948bcb3 -- ["bash","run.sh","smoke-setup-verdict"] 4/4 receipt ba3113f9661e
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head 3e2673ba9a1b surface 2b1c5c7c1d52 -- ["bash","run.sh","check-mux-launcher-fence"] 8/8 receipt d27f3ded70ab
+- Not measured for this release: the real two-host exchange (T3) over the v2 remote-pair file. It is opt-in operator evidence, not a release-gate MUST (VERIFY, "Real two-host exchange"), and it was not re-run for this candidate.
+- `LIVE=1 ./run.sh smoke-herdr-plugin-build-live` on Herdr 0.9.5, measured on an earlier working tree (diff `40f12860ffbf`, smoke `15744e13f9bf`), not on this SHA: 635 s, 5 passed, 0 skipped. The Claude cell ran the real vendor CLI. The gap install exited 1 with the registry unchanged and the ledger on the gap commit, and the reconcile then re-bound to HEAD with 0. Log `0a9f293a155c`. A fixture pack is not a release artifact.
+- Prepare-time floor and release gate, measured on the working tree `80c40705809c` (fixture source `15744e13f9bf`, before this record's final wording), not on an exact SHA: managed build 6 s with dist byte-identical, `check:full` 905 s exit 0. `release-gate --cut`: MUST 24/0/0, BEHAVIOR 1/0/0, cut OK, log `8c18f08880d3`. The census afterwards was read-only.
+- Exact prepared-SHA CI, the M3w artifact with its container acceptance, and native acceptance after install (§3.4, §3.7) are MAKE-phase axes; those runs produce their own receipts.
+
+### Docs
+
+- **README's orchestration section is an entrance, not a second manual.** It drops the lifecycle table it repeated from the overview and the acceptance-boundary detail DELIVERY owns, and adds two short entries: a minimal v2 remote-pair file with its mirror rule, linked to the principles page, DELIVERY and setup §2c; and `team.json`, a person's bookmark copied from `team.json.example`, which Entwurf does not load as runtime configuration.
+
 ### Remote pairs (#149)
 
 - **One host's declaration now carries several exact pairs.** `entwurf-remote-pair.json` keeps its name and location. Its content is now exactly `{"version": 2, "routes": [...]}`, and each route has the four keys of the #107 file. One local citizen may pair with several remotes, one remote with several locals, and one alias may carry several routes. The file is refused if a pair repeats, a garden id is both local and remote, one remote garden id has two aliases or files, or one alias has two files. A route is selected by the exact (sender, target) pair. A target declared remote with no route for the calling sender is refused with zero SSH and no local fallback. The receiving entry matches both ends of one route at once, so a sender declared in one route cannot reach another route's local. It still refuses with the two existing reasons (`remote-pair-from-mismatch`, `remote-pair-target-mismatch`). The claim, SSH argv, exit codes and receipt are unchanged.
@@ -26,6 +48,10 @@ All notable changes to this project will be documented here. Format follows [Kee
   - Nothing is removed and no profile is edited. The refusal prints the path, the conditional package-manager removal command and the next `./run.sh setup`. Installed mode is unchanged.
   - A PASS covers only the directories checked: another shell's PATH, another package manager, a running bridge and the other host are outside it.
   - The two setup smokes now drop host PATH entries that carry a package bin name and answer the global-bin queries with fixtures, so the host's own installation cannot reach their verdict.
+- **`smoke-herdr-plugin-build-live` could not go green on the current Herdr and manifest.** Three fixture defects are fixed in the smoke alone; product code is unchanged.
+  - The snapshot and gap-probe clones now install their own frozen, offline, ignore-scripts dependencies before their ordinary commit, which the strict hook needs.
+  - Cell 1 locates the managed checkout from Herdr's own registration: exactly one `plugins.json` entry, whose `plugin_root` must resolve inside the sandbox. It no longer scans a `plugins/github/` layout that Herdr no longer writes.
+  - Cell 4's probe had replaced a `version = "0.1.0"` literal that the manifest stopped carrying at dd84ac0, so it changed nothing. It now derives the change from the version line it reads, and records the runner's code and the written change in a JSON receipt. The smoke accepts the post-build gap only when that receipt shows code 0 and a real change.
 
 ## v2026.10.23-herdr.0.41.1 — Herdr Entwurf plugin 0.41.1
 

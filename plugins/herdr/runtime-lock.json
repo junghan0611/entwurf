@@ -1,8 +1,6 @@
 {
 	"schemaVersion": 2,
-	"comment": "Production npm pin for the separate Herdr 0.41.1 snapshot; core 0.41.1 (Pi 1.4.0 SDK set) is published to npm, verified from the registry. The downloaded registry tarball's independently computed sha512 equals dist.integrity and its sha256 equals the preserved accepted core artifact. This closes the herdr-checkout verification window the Pi 1.4.0 SDK candidate rode; no environment choice or acquisition fallback. Hosts moving from herdr-checkout to npm require explicit deactivate/activate, never inherited activation. Same-source settled npm installations may rebind under the plugin README's ownership conditions.",
-	"source": "npm",
-	"name": "@junghanacs/entwurf",
-	"version": "0.41.1",
-	"integrity": "sha512-GEKfcpFCNQuS8uATPdUdj0tvlzWhhiervH+Kp59laeJz5zj3MTMNkjfui5c4H3KNe/R4LRU0D4RegXSIrtxWqw=="
+	"comment": "Core 0.41.2 is an unpublished prepared candidate: the existing closed herdr-checkout source verifies the checkout commit without fabricating an npm version or integrity. The last published npm pin is @junghanacs/entwurf@0.41.1 (Pi 1.4.0 SDK set) in the separate Herdr snapshot v2026.10.23-herdr.0.41.1; no Herdr manifest version is bumped here. npm remains the production authority class. Re-pin measured registry bytes only after the operator publishes core 0.41.2, in a separate Herdr snapshot. Source switches require explicit deactivate/activate, never inherited activation, an environment choice or fallback.",
+	"source": "herdr-checkout",
+	"repository": "junghan0611/entwurf"
 }
