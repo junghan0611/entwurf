@@ -4,6 +4,117 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+## v2026.10.23-herdr.0.41.1 — Herdr Entwurf plugin 0.41.1
+
+A separate Herdr plugin snapshot, not another core release: core package 0.41.1 and its
+`v0.41.1` tag remain unchanged. Core 0.41.1 is now published to npm; the publication is
+verified from the registry, not from observing who ran it.
+
+**Reading guide (2026-10-23).** The `## 0.41.1` section below is prepare-time text. Its opening
+"Unpublished candidate; release acceptance is not complete", its "Main still carries the
+published 0.41.0 Herdr lock" and its closing "No tag, GitHub release, npm publication, Herdr
+re-pin or laptop rollout has occurred" predate later facts: `v0.41.1` and its GitHub release
+point at `6a88436` and that SHA's main push CI ran its four required jobs green ([#148 make
+record](https://github.com/junghan0611/entwurf/issues/148#issuecomment-6353660427)), and npm
+`latest` is 0.41.1 (published 2026-10-22T23:49:43.983Z), byte-equal to the accepted
+Windows-bearing candidate ([#148 publication
+record](https://github.com/junghan0611/entwurf/issues/148#issuecomment-6354276182)). When main
+moved to `6a88436`, its Herdr lock was the `herdr-checkout` carrier, so until this snapshot
+lands a main-tracking `herdr plugin install` acquires the checkout commit rather than an npm
+artifact. Neither the published tarball's CHANGELOG nor the core release page is amended by
+this snapshot.
+
+### Herdr plugin
+
+- **Re-pin the published core 0.41.1 and close the checkout window.**
+  `plugins/herdr/runtime-lock.json` returns from the `herdr-checkout` carrier that the Pi 1.4.0
+  SDK candidate rode to production npm source `@junghanacs/entwurf@0.41.1` with the registry's
+  measured sha512 (`sha512-GEKfcpFC…xWqw==`). The plugin manifest moves 0.41.0 → 0.41.1;
+  admission remains Herdr >= 0.9.0 and the one-build/one-pane/Linux shape is unchanged. From
+  the `v2026.10.22-herdr.0.41.0` snapshot to `v0.41.1`, the changes under `plugins/herdr/`,
+  `scripts/herdr-runtime.mjs` and `scripts/fixtures/herdr-supply.json` were that lock's return
+  to `herdr-checkout` and the plugin README's candidate wording; the runtime helper and the
+  Herdr supply pin did not change.
+- **Pi 1.4 is now required.** The acquired runtime carries the Pi 1.4.0 SDK set and accepts Pi
+  `>=1.4.0 <1.5`; the previous snapshot's runtime accepted Pi `>=1.3.0 <1.4`. Upgrade Pi to 1.4
+  first, then install or reinstall the plugin: a host still on Pi 1.3 is refused at activation
+  by name (`outside the supported range`), the check `entwurf setup` applies, and no Pi
+  settings are written.
+- **Upgrade by acquisition source, not just version.** A settled npm-source 0.41.0
+  installation can rebind under the plugin README's ownership conditions. A host that
+  installed a `herdr-checkout` candidate — from main at `6a88436` or from a validation branch —
+  must explicitly deactivate by its own absolute runtime path before reinstalling the
+  npm-source snapshot. No operator installation or active session is rewired by this release
+  work.
+- **What the acquired runtime carries, and what this path does not.** The runtime ships core
+  0.41.1's bytes, including its nine-tool bridge and the pi-durable carrier. Herdr wires and
+  opens only `{pi, claude-code}`, so this plugin path launches no pi-durable session and makes
+  no claim about migrating durable-session storage. Inside Herdr, `entwurf_resume_call` still
+  refuses as `herdr-resume-unsupported`.
+- **README.** The quick start and nine steps drop the candidate's `--ref "$CANDIDATE_REF"`
+  instructions and install against the ref Herdr resolves; the Pi step keeps `>=1.4.0 <1.5`,
+  and the runtime paragraph names npm 0.41.1 and points at the previous snapshot for Pi 1.3.x.
+- **Current install docs.** The root README and the clean-host setup guide replace their "not
+  published to npm yet / newest published 0.41.0" install text with the published 0.41.1 and its
+  Pi 1.4.x requirement, and point at the previous 0.41.0 for Pi 1.3.x. Moving a live host onto
+  0.41.1 remains a separate operator decision for each host, with the durable-session backup,
+  owner-exit and no-rollback boundaries unchanged.
+
+### Source-specific verification
+
+- Registry metadata reports `latest` 0.41.1 and `repair` 0.12.8-repair.1, 642 files, published
+  2026-10-22T23:49:43.983Z. The downloaded registry tarball is byte-equal (SHA256 and `cmp`) to
+  the preserved accepted core candidate (SHA256
+  `0172b049edde352d404b1119e330852b92ce235e3f2809e06d1ef0e71c95b95f`, 11406938 bytes); its
+  independently computed sha512 and sha1 equal `dist.integrity` and `dist.shasum`. Core make
+  already ran its container consumer against those same 0.41.1 bytes (repoDigest
+  `node@sha256:6dac556d…`, image ID `sha256:55ab623b…`, both recorded in make's artifact
+  receipt), so that result is reused here, not repeated. The new registry acquisition and
+  dependency resolution are closed separately: a sandboxed global npm install of the registry
+  package passed its installed `check-bridge` with nine tools, and a sandboxed `pi install`
+  resolved its bridge inside the sandbox, recorded the registry URL with that integrity, and
+  printed seven `entwurf` model rows (plus the header) including the curated Claude anchors.
+  The only checkout input of that `pi install` check, the bridge resolver script, is unchanged
+  on this branch. No model turn. The accepted run stripped every `PI_`, `ENTWURF_`, `CLAUDE`,
+  `CODEX_HOME`, `TMUX` and `HERDR_` carrier. These rows do not cover the runtime Herdr acquires
+  in use — its bins, its `check-bridge`, or the installed CLI's deactivate path — which belong
+  to the public-ref journey below. npm 11.16 listed the package's `postinstall` chmod as not
+  yet covered by `allowScripts`; whether that script ran was not checked. The installed
+  `entwurf` of the global install ran and its `check-bridge` exited 0.
+- **The npm runtime swap against the real registry**, by the registry-shipped
+  `scripts/herdr-runtime.mjs` (byte-equal to this checkout's) in sandboxed user roots, 22/22
+  checks. The 0.41.0 runtime was seeded from its own committed lock (`addcb8c`); the swap to
+  0.41.1 took one acquisition, the cached tarball's sha512 equals the lock and its sha256 equals
+  both the ready journal's observed digest and the accepted candidate. The `installing` journal
+  carried the 0.41.0 identity as `previousRuntime` and the `runtime-ready` journal carries
+  `null`; when acquisition began the 0.41.0 tree was still at the active address. A manually
+  seeded torn swap (the active tree moved to the backup address with a half candidate in
+  staging; not a killed process) was restored before acquisition and reported `recovered:
+  torn-swap-with-candidate`. An exact re-request acquired nothing and left journal and tree
+  byte-identical, and the owned removal reclaimed cache, runtime and journal. The helper is a
+  leaf that probes no Pi, so these cells certify neither a Pi upgrade nor Herdr's
+  install/update relocation, harness wiring, the installed CLI's deactivate path, a model turn,
+  or recovery from a real kill.
+- **Focused gates, by surface.** On the pin surface (lock, manifest, plugin README and this
+  section before its later amendments), with HEAD, index and work surface unchanged across them:
+  `check-herdr-supply` (11 assertions), `check-herdr-plugin` (49),
+  `check-herdr-plugin-profile` (14), `check-herdr-runtime-bootstrap` (31),
+  `check-herdr-activation` (33), `check-herdr-placement` (25), `check-herdr-fresh-call` (45),
+  `check-herdr-plugin-build` (21, its real-binary cell on herdr 0.9.5), `check-herdr-sandbox`
+  (12, a private herdr 0.9.5 server), `check-dep-versions` (Pi 1.4.0 coherent),
+  `check-install-surface`, `check-claude-floor-coherence` and `check-gate-manifests` (1178
+  committed mutants across 85 lanes validated, none executed). After the root README, setup
+  guide and NEXT changes, the seven gates those documents affect ran again on that later
+  surface, unchanged across them: `check-dep-versions`, `check-node-floor-coherence`,
+  `check-claude-floor-coherence`, `check-pi-runtime-version`, `check-herdr-plugin` (49),
+  `check-install-surface` and `check-entwurf-v2-surface` (99). Neither set certifies the final
+  amended surface; that is closed by the frozen FULL.
+- Pending, and not claimed here: the pushed SHA's four-job CI and the public-ref
+  install/use/deactivate journey of this npm pin, on Herdr 0.9.5 (the binary
+  `scripts/fixtures/herdr-supply.json` names) with Pi 1.4.0. Earlier npm or checkout-carrier
+  receipts cannot certify these source-specific axes. Those outcomes are recorded in the
+  snapshot's post-push acceptance ledger, not in this frozen text.
+
 ## 0.41.1 — 2026-10-23
 
 **Unpublished candidate; release acceptance is not complete.** The actual operator
