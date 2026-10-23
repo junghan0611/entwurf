@@ -166,10 +166,10 @@
 			"title": "the pi queue oracle's public coordinate is dropped from `check:vitest`, so the file that proves every claim the receipt makes about a receiver's queues is green only when somebody runs `pnpm test` by hand — the discovery door deliberately does not select `test/**`, so nothing else would notice",
 			"subject": "package.json",
 			"find": [
-				"\"check:vitest\": \"./run.sh check-mux-fresh-call && ./run.sh check-acp-sdk-surface && ./run.sh check-pi-queue-oracle && ./run.sh check-tests-beside-behavior && ./run.sh check-remote-pair-installed-audit\""
+				"\"check:vitest\": \"./run.sh check-mux-fresh-call && ./run.sh check-acp-sdk-surface && ./run.sh check-pi-queue-oracle && ./run.sh check-tests-beside-behavior && ./run.sh check-remote-pair-installed-audit && ./run.sh check-chain-terminus-publication\""
 			],
 			"replace": [
-				"\"check:vitest\": \"./run.sh check-mux-fresh-call && ./run.sh check-acp-sdk-surface && ./run.sh check-tests-beside-behavior && ./run.sh check-remote-pair-installed-audit\""
+				"\"check:vitest\": \"./run.sh check-mux-fresh-call && ./run.sh check-acp-sdk-surface && ./run.sh check-tests-beside-behavior && ./run.sh check-remote-pair-installed-audit && ./run.sh check-chain-terminus-publication\""
 			],
 			"gate": ["bash", "run.sh", "check-tests-beside-behavior"],
 			"timeoutSeconds": 600,
