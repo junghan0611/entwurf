@@ -10,7 +10,7 @@ A bug-fix release for the setup, pack and mux verification surfaces. It also car
 
 ### Release evidence
 
-- Kill-power re-measured at this shipped SHA: none (all 1204 committed claims not re-proved, #144).
+- Kill-power re-measured at this shipped SHA: none (all 1205 committed claims not re-proved, #144).
 - Earlier-candidate PARTIAL (operator-attested, not this SHA): head 439b399c64ef surface de3c1bcf6db9 -- ["bash","run.sh","check-remote-pair-beside"] 47/47 receipt 55bd9563fe43
 - Earlier-candidate PARTIAL (operator-attested, not this SHA): head 439b399c64ef surface de3c1bcf6db9 -- ["bash","run.sh","check-tests-beside-behavior"] 6/6 receipt aef18acbe804
 - Earlier-candidate PARTIAL (operator-attested, not this SHA): head 156bb6231cee surface c883d0df88b5 -- ["bash","run.sh","check-pack-argv-matcher"] 4/4 receipt 11470c62389c
@@ -27,6 +27,9 @@ A bug-fix release for the setup, pack and mux verification surfaces. It also car
 - #152 PARTIAL (operator-attested, not this SHA): head 1e664667a663 surface 81cbb2888465 -- ["bash","run.sh","check-entwurf-self-address"] 8/8 receipt 3c223a9034d8
 - Those four groups were measured on an uncommitted working tree with green controls; the other 1189 of 1204 committed mutants were not run for them. They are not shipped-SHA kill-power and do not sum to release coverage.
 - #152 candidate floor, before this record's final doc amendment: `check:full` 900 s exit 0 on the uncommitted working tree with tracked patch `f883ba29c22d` (log `ce9ca5df53eb`), not this SHA.
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head 100f618e2b42 surface 61f6ab3d25c1 -- ["bash","run.sh","check-chain-terminus-publication"] 1/1 receipt 6a8af23eb259
+- That group was measured on an uncommitted working tree over `100f618` with green controls; the other 1204 of 1205 committed mutants were not run for it, and it is not shipped-SHA kill-power.
+- `LIVE=1 ./run.sh smoke-entwurf-chain-live` on the chain-terminus candidate (uncommitted, tracked patch `4df5f793fb04`), not this SHA: 24 assertions, 24 s, exit 0, log `e5115bbeb06d`; every identity and read-receipt check after the doorbell was reached.
 - Exact prepared-SHA CI, the M3w artifact with its container acceptance, and native acceptance after install (§3.4; §3.7 as VERIFY criterion 7's legacy identity and paused proof) belong to the prepared SHA that carries #152; those runs produce their own receipts.
 
 ### Docs
@@ -50,6 +53,7 @@ A bug-fix release for the setup, pack and mux verification surfaces. It also car
 
 ### Fixed
 
+- **`smoke-entwurf-chain-live` could report a false RED while the terminus message was still being published.** `enqueueMetaMessage` writes the `.msg` body first and `inbox.signal` last. The smoke stopped waiting at the first body and checked the signal at once, and in the 0.41.2 release gate on 2026-10-24 the signal landed about 5 ms later. The wait now ends only when the body and the signal are both there, inside the same deadline. A missing body, a missing signal and a duplicate still fail, and the identity and read-receipt checks after it are unchanged. Product mailbox behavior is unchanged. The wait lives in `scripts/lib/chain-terminus-publication.ts` and is proven offline by `test/chain-terminus-publication.test.ts` through the narrow coordinate `check-chain-terminus-publication` (in `check:contracts`), with one mutant that restores the early stop.
 - **The release MUST now drives `entwurf_fresh_call`'s explicit seat over the real MCP wire (#108).** Before this, `placement.tmuxSession` was checked on the bridge only through its schema and a source regex, and the seat was proven only by calling the composition directly. In `smoke-mux-lifecycle-live`, the native pi cell's existing `tools/call` now names a seat session made on the same private tmux server, with no extra model turn. The harness asks tmux itself (not the receipt, whose session id is the target the product chose) that the pane sits in that seat, that the caller's windows are unchanged, and that the stable-handle close removes only that window while the seat's original anchor session, window and pane stand. The ACP and Claude Code cells keep the omitted-placement path. Product code is unchanged.
 - **`check-pack-install`'s two dispatcher-verb leak refusals could pass a leak on a SIGPIPE.** The copilot and codex-app-server cells searched the vendor stand-in's argv with `printf '%s' "$op_out" | grep -qF …` under `pipefail` and refused only when that pipeline exited 0. bash's `printf` writes a multi-line value one line at a time, so a `-q` that closes the pipe at the first match can kill the producer with 141 and pass the cell. The defect was latent: no false green was observed in CI, and the product carries no leak. Both cells now return through one verdict, `pack_install_refuse_argv_leak`. It searches a here-string, which has no producer to kill. It passes on a clean search, and refuses with the cell's existing diagnostic on a leak, or by name when the search itself fails.
   - `check-pack-argv-matcher` is a snapshot-safe gate in `check:package`. Like `check-pack-pin-matcher`, it also runs first inside `check-pack-install`. It drives that same verdict: it must refuse a leak at the front or end of about 260 KB, pass clean output silently, and refuse a failing `grep`. A text check holds both cells to the verdict.

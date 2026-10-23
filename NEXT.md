@@ -6,14 +6,15 @@ core 0.41.2를 v0.41.1 이후 main 변경으로 자른다. 범위는 #149 remote
 
 - [x] **0. 이전 cut 닫힘.** core `v0.41.1` = `6a88436`(GitHub Latest, npm `latest` 0.41.1). Herdr snapshot `v2026.10.23-herdr.0.41.1` = `439b399`. 0.41.1 기록은 CHANGELOG와 [#148](https://github.com/junghan0611/entwurf/issues/148#issuecomment-6353660427)가 SSOT다.
 - [x] **1. 범위 landing + prepare.** `156bb62`(#149), `e7ed057`(pack argv), `3e2673b`(개발자 설치), `1d24a01`(#108), Herdr fixture 수선 `f0de5b7`, prepare `1e66466`(main fast-forward, push CI 4 job green).
-- [x] **2. #152 pause 소스·증명.** agy native-push를 코드로 멈추는 묶음이 `fix/agy-native-push-paused`에 working tree로 있다(미커밋). 설계·코드 리뷰와 단일 amendment가 닫혔고, focused 검사와 PARTIAL 4그룹은 각자의 후보 receipt로 닫혔다. 이것은 FULL이나 출하 SHA의 kill-power가 아니다.
-- [ ] **3. make 재개.** ← CURRENT: working-tree frozen `check:full`은 닫혔다(그 SHA의 floor 아님) → 정상 checkpoint → 깨끗한 checkpoint HEAD에서 새 P5(`release-gate --cut`)와 M0(P5 안의 같은 `check:full` 공유) → 새 prepared SHA push → exact-SHA CI → 그 SHA의 M3w exact artifact → container 수용 → 설치 후 native 수용(§3.4 Claude, §3.7 agy: VERIFY 7의 legacy identity와 paused 증명을 따로) → tag `v0.41.2` + GitHub release. 각 단계는 코디가 따로 GO한다.
+- [x] **2. #152 pause 소스·증명.** agy native-push를 코드로 멈추는 묶음은 `100f618`로 커밋되어 main에 fast-forward됐다(아직 push 전). 설계·코드 리뷰와 단일 amendment가 닫혔고, focused 검사와 PARTIAL 4그룹은 각자의 후보 receipt로 닫혔다. 이것은 FULL이나 출하 SHA의 kill-power가 아니다.
+- [ ] **3. make 재개.** ← CURRENT: `100f618`의 P5′ RED 뒤 종점 수선(`fix/chain-terminus-publication-race`)의 리뷰·검증이 닫혔다 → 그 checkpoint와 최종 main FF → 관리 빌드 1회 → 깨끗한 새 HEAD에서 새 P5(`release-gate --cut`)와 M0(P5 안의 같은 `check:full` 공유) → 새 prepared SHA push → exact-SHA CI → 그 SHA의 M3w exact artifact → container 수용 → 설치 후 native 수용(§3.4 Claude, §3.7 agy: VERIFY 7의 legacy identity와 paused 증명을 따로) → tag `v0.41.2` + GitHub release. 각 단계는 코디가 따로 GO한다.
 - [ ] **4. publish.** ← PAUSED: npm publish는 승인되지 않았다.
 
 # NOW
 
 - **이전 후보는 상속하지 않는다.** `1e66466`의 M0·CI·M3w 후보 `df407c70`·container·Claude 설치 수용은 pause 이전 후보의 증거다. 보존하되 새 SHA의 증거로 쓰지 않는다.
 - **agy 수용의 뜻이 바뀌었다.** 실 agy 송수신 왕복은 이번 cut의 MUST가 아니다. §3.7은 VERIFY criterion 7대로 (a) doctor + fresh-conversation identity(송신 증거 아님)와 (b) 결정적 `[QK:AGY-NATIVE-PUSH-PAUSED]` 셀(대화 불필요)로 나눠 닫는다. pause를 원격으로 다시 살리는 시도는 하지 않는다.
+- **P5′ 우회 (`fix/chain-terminus-publication-race`).** `100f618`의 P5′가 RED였다: static은 checkpoint 뒤 branch 전환으로 생긴 dist mtime staleness, `smoke-entwurf-chain-live`는 `.msg`→`inbox.signal` 두 쓰기 사이를 본 검사 쪽 경쟁. 대기 오라클을 고친 뒤 실제 P3 1회 → 이 그룹 PARTIAL → checkpoint와 최종 FF → 관리 빌드 1회 → 새 clean HEAD에서 P5′로 복귀한다. 원 실패 기록은 `.tmp-verify/release-0.41.2/agy-pause-p5-r1/`에 보존한다.
 - **#152는 0.41.2에 수록한다**(코디 결정). CHANGELOG 0.41.2 절의 "Antigravity native push paused (#152)"에 있고, Release evidence는 이전 후보 receipt와 #152 PARTIAL을 이 SHA의 증거와 분리해 적는다.
 - **kill-power:** 출하 SHA에서 다시 측정하지 않는다(#144). PARTIAL receipt는 합산하지 않는다.
 - **측정하지 않음:** #149 T3(실 두 호스트 교환, opt-in), 서로 다른 release의 sender/receiver, 실행 중인 bridge가 새 dist를 읽었는지.

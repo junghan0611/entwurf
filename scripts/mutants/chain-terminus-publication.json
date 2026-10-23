@@ -1,0 +1,17 @@
+{
+	"schemaVersion": 1,
+	"lane": "chain-terminus-publication",
+	"mutants": [
+		{
+			"claim": "CHAIN-TERMINUS-WAITS-FOR-SIGNAL",
+			"title": "the terminus wait stops at the first body again, so smoke-entwurf-chain-live checks the doorbell while enqueueMetaMessage is still between its .msg write and its inbox.signal write and reports a false RED",
+			"subject": "scripts/lib/chain-terminus-publication.ts",
+			"find": ["\t\tif (msgs.length > 0 && signalled) break;"],
+			"replace": ["\t\tif (msgs.length > 0) break;"],
+			"gate": ["bash", "run.sh", "check-chain-terminus-publication"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:CHAIN-TERMINUS-WAITS-FOR-SIGNAL]",
+			"signatureSource": "test/chain-terminus-publication.test.ts"
+		}
+	]
+}

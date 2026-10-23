@@ -242,6 +242,7 @@ Usage:
   ./run.sh check-native-push-adapter # deterministic gate (봉인 3/8): native-push adapter leaf (antigravity) via a FAKE runner — FULL pid scan (not head -1), dead vs indeterminate, VOLATILE route re-discovery (no cache), send argv+ANTIGRAVITY_LS_ADDRESS env, non-zero exit throws, NO adapter-level retry (executor-owned), resolveNativePushAdapter fail-fast
   ./run.sh check-native-push-register # deterministic gate (봉인 5): registerNativeConversation (entwurf_register_native core) via fake adapter + isolated mkdtemp store — live probe→CREATE, re-register→ATTACH (same gid, cwd refreshed, no dup), not-live probe→REFUSE (throws, no record), receiver-marker abstinence (보정① source guard)
   ./run.sh check-native-push-paused  # #152 mutant execution coordinate: run_vitest over paused.test.ts alone — dispatch, sender replyable and entwurf_register_native refuse a paused backend (antigravity) before any probe. Same file check-tests-beside-behavior already runs.
+  ./run.sh check-chain-terminus-publication  # mutant execution coordinate: run_vitest over test/chain-terminus-publication.test.ts alone — smoke-entwurf-chain-live's terminus wait ends only on a body AND inbox.signal, inside the same deadline.
   ./run.sh check-agy-sender-identity # deterministic gate (#46 sender lane): WHO is calling the bridge — real agy hook as a child process writes an antigravity sender marker keyed by its PARENT pid (never on upsert failure), and resolveTrustedMetaSenderIdentity over isolated stores yields 0→null / 1→identity on EITHER backend / two distinct live identities on one owner pid→THROW (never guess, never downgrade to anonymous). This is what turns an agy send from external-mcp/unknown-host into a replyable garden citizen
   ./run.sh check-package-source-routing # deterministic gate (#29): package-source -> install-root mapping + fail-fast routing (local/git/npm/missing/project/no-source × local+remote, self-root, resume), no backend
   ./run.sh new-session-id             # print one fresh garden id from the generateSessionId SSOT (#50 C2: no launcher injection — the record layer is the consumer; pi mints its own session id)
@@ -1413,6 +1414,16 @@ check_native_push_paused() {
   # check:contracts for the same reason as check-entwurf-v2-native-push above.
   section "native-push pause policy (#152, mutant execution coordinate)"
   run_vitest pi-extensions/lib/native-push/paused.test.ts
+}
+
+check_chain_terminus_publication() {
+  # MUTANT EXECUTION COORDINATE for the CHAIN-TERMINUS-WAITS-FOR-SIGNAL mutant: run_vitest over
+  # test/chain-terminus-publication.test.ts alone — the terminus wait of smoke-entwurf-chain-live
+  # (scripts/lib/chain-terminus-publication.ts) driven offline through the two-write publication
+  # enqueueMetaMessage produces (.msg first, inbox.signal last). It stays inside check:contracts
+  # because a gate a mutant names must be reachable outside qualification.
+  section "chain terminus publication wait (mutant execution coordinate)"
+  run_vitest test/chain-terminus-publication.test.ts
 }
 
 check_entwurf_v2_surface() {
@@ -7722,6 +7733,9 @@ case "$cmd" in
     ;;
   check-native-push-paused)
     check_native_push_paused
+    ;;
+  check-chain-terminus-publication)
+    check_chain_terminus_publication
     ;;
   check-entwurf-control-rpc)
     check_entwurf_control_rpc

@@ -64,6 +64,7 @@ import {
 	writeMetaSenderMarker,
 } from "../pi-extensions/lib/meta-session.ts";
 import { terminateChild } from "./lib/acp-child-cleanup.ts";
+import { awaitTerminusPublication } from "./lib/chain-terminus-publication.ts";
 import { skipLive } from "./lib/live-skip.ts";
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -390,14 +391,11 @@ async function main(): Promise<void> {
 
 		// ── the chain runs on its own from here; wait for the terminus ───────────
 		const boxDir = path.join(mailboxDir, gidD);
-		const until = Date.now() + CHAIN_TIMEOUT_MS;
-		let msgs: string[] = [];
-		while (Date.now() < until) {
-			msgs = (await fsp.readdir(boxDir).catch(() => [] as string[])).filter(
-				(f) => f.endsWith(".msg") || f.endsWith(".msg.delivered"),
-			);
-			if (msgs.length > 0) break;
-			await sleep(POLL_MS);
+		// Body AND doorbell, inside the same deadline: enqueue publishes `.msg` first and
+		// `inbox.signal` last, so a body alone is a publication still in flight (P5 2026-10-24).
+		const { msgs, signalled } = await awaitTerminusPublication(boxDir, Date.now() + CHAIN_TIMEOUT_MS, POLL_MS);
+		if (msgs.length > 0 && !signalled) {
+			console.error(`[smoke-entwurf-chain-live] terminus at timeout: ${msgs.length} body file(s) but no inbox.signal`);
 		}
 		if (msgs.length === 0) {
 			let ownerAlive = false;
@@ -423,7 +421,7 @@ async function main(): Promise<void> {
 			console.error(`[smoke-entwurf-chain-live] C stream tail:\n${streamC.slice(-2000)}`);
 		}
 		ok(`the chain reached the mailbox terminus (${msgs.length} .msg)`, msgs.length === 1);
-		ok("the terminus doorbell was poked", existsSync(path.join(boxDir, "inbox.signal")));
+		ok("the terminus doorbell was poked", signalled);
 
 		const body = await fsp.readFile(path.join(boxDir, msgs[0] as string), "utf8");
 

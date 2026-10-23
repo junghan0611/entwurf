@@ -3461,6 +3461,7 @@ let manifestCount: number;
 		"control-send-receipt": 19,
 		"codex-native": 87,
 		"native-push-paused": 1,
+		"chain-terminus-publication": 1,
 		"compaction-send-guard": 7,
 		"control-socket-disconnect": 4,
 		"demo-reproducibility": 12,
