@@ -34,6 +34,7 @@ A bug-fix release for the setup, pack and mux verification surfaces. It also car
 
 ### Docs
 
+- **remote-sibling-principles now carries #149.** Several relationships coexist, each one exact sender–target edge, never a union of memberships or a local fallback. Record, process, screen and conversational continuity stay separate. Disjoint routes do not narrow SSH account trust. Implementation, switch-over and a real exchange are kept as separate evidence; no version-2 nonce round trip is claimed. The page keeps the why and links the mechanism to DELIVERY and setup.
 - **README's orchestration section is an entrance, not a second manual.** It drops the lifecycle table it repeated from the overview and the acceptance-boundary detail DELIVERY owns, and adds two short entries: a minimal v2 remote-pair file with its mirror rule, linked to the principles page, DELIVERY and setup §2c; and `team.json`, a person's bookmark copied from `team.json.example`, which Entwurf does not load as runtime configuration.
 
 ### Remote pairs (#149)
