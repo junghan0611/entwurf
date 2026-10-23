@@ -6746,7 +6746,11 @@ setup_all() {
   else
     bins_rc=0; expose_dev_bin || bins_rc=$?
     if [ "$bins_rc" -eq 0 ]; then
-      setup_result bins PASS "source operator + helper bins exposed and certified (PATH winner: this checkout)"
+      setup_result bins PASS "source operator + helper bins exposed and certified; no other root in this PATH or the npm/pnpm global bin dir (other shells not covered)"
+    elif [ "$bins_rc" -eq 5 ]; then
+      setup_result bins FAIL "another entwurf root is still selectable (named above; nothing removed) — remove it, then re-run setup"
+    elif [ "$bins_rc" -eq 6 ]; then
+      setup_result bins FAIL "the package manifest or a package manager's global bin dir could not be inspected (named above) — refused, not read as clean"
     elif [ "$bins_rc" -eq 3 ]; then
       setup_result bins FAIL "foreign helper bin(s) refused (named above; every unit was attempted) — repair them, then re-run setup"
     else
@@ -7135,7 +7139,13 @@ expose_dev_bin() {
     return 1
   fi
 
-  [ "$rc" -eq 0 ] && return 0
+  # A certified winner is not yet a developer install: a later PATH entry or a package manager's
+  # global bin dir may still hold another root under the same names, which a shell with another
+  # PATH order (non-interactive SSH) selects. exclusive names it (5) or refuses an uninspectable
+  # package manifest or package manager (6); nothing is removed.
+  local ex_rc=0
+  bash "$REPO_DIR/scripts/dev-bin.sh" exclusive || ex_rc=$?
+  [ "$rc" -eq 0 ] && return "$ex_rc"
   if [ "$rc" -eq 3 ]; then
     echo "[setup] dev-bin: foreign helper bin path(s) refused, never clobbered — the refused names are in the summary above." >&2
     echo "[setup]       Every unit was attempted independently; the source operator itself is certified." >&2

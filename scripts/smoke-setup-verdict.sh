@@ -73,7 +73,21 @@ export XDG_CACHE_HOME="$SB/home/.cache"
 export XDG_CONFIG_HOME="$SB/home/.config"
 export PI_CODING_AGENT_DIR="$SB/home/.pi/agent"
 export ENTWURF_DEV_BIN_DIR="$SB/bin"
-export PATH="$SB/bin:$PATH"
+# Source setup's bins step refuses any other root under a package bin name in PATH or the pnpm/npm
+# global bin dir, so the host's own entrypoints (a real ~/.local/bin/entwurf into some checkout)
+# must not reach the verdict: drop every host PATH dir carrying a package bin name. The fixture
+# package managers below answer the global-bin query with sandbox dirs.
+_hermetic=""
+IFS=':' read -r -a _dirs <<<"$PATH"
+for _d in "${_dirs[@]}"; do
+  [ -n "$_d" ] || continue
+  for _b in $(python3 -c 'import json,sys; print(" ".join(json.load(open(sys.argv[1]))["bin"]))' "$REPO_DIR/package.json"); do
+    { [ -e "$_d/$_b" ] || [ -L "$_d/$_b" ]; } && continue 2
+  done
+  _hermetic="${_hermetic:+$_hermetic:}$_d"
+done
+export PATH="$SB/bin:$_hermetic"
+unset _hermetic _dirs _d _b
 mkdir -p "$HOME" "$PI_CODING_AGENT_DIR" "$SB/bin" "$SB/harness" "$SB/bootstrap-bin"
 cat > "$SB/bootstrap-bin/pnpm" <<'SH'
 #!/bin/sh
@@ -85,10 +99,21 @@ if [ "$#" -eq 2 ] && [ "$1" = run ] && [ "$2" = build-bridge ]; then
   # directly so the production lock wrapper cannot leave its ignored parent dir.
   exec bash scripts/build-bridge.sh
 fi
-echo "fixture pnpm accepts only: install --frozen-lockfile | run build-bridge" >&2
+if [ "$*" = "bin -g" ]; then
+  echo "${SB_PM_ROOT:?}/pnpm-bin"
+  exit 0
+fi
+echo "fixture pnpm accepts only: install --frozen-lockfile | run build-bridge | bin -g" >&2
 exit 64
 SH
 chmod +x "$SB/bootstrap-bin/pnpm"
+cat > "$SB/bootstrap-bin/npm" <<'SH'
+#!/bin/sh
+[ "$*" = "prefix -g" ] || { echo "fixture npm accepts only: prefix -g" >&2; exit 64; }
+echo "${SB_PM_ROOT:?}/npm-prefix"
+SH
+chmod +x "$SB/bootstrap-bin/npm"
+export SB_PM_ROOT="$SB/pm"
 export PATH="$SB/bootstrap-bin:$PATH"
 
 # Presence pins: default every harness to a definitely-absent path; each cell

@@ -34,6 +34,14 @@
 #   remove [name]   honest inverse from state (remove only OUR link; REFUSE if it became foreign).
 #                   no name = all managed bins.
 #   verify <name>   require OUR symlink → target and that exact link as the PATH winner.
+#   exclusive       require that NO other root answers to any package.json bin name — not only
+#                   the PATH winner. A winner check alone let a later PATH entry (an old global
+#                   shim) stay selectable by a shell with another PATH order, e.g. non-interactive
+#                   SSH. Read-only: every entry of this PATH plus the global bin dir that `pnpm bin
+#                   -g` / `npm prefix -g` report. Same resolved target = the same install (allowed);
+#                   anything else is another root, never guessed as ours. exit 0 none / 5 another
+#                   root (named, with a conditional removal hint — nothing is removed) / 6 the
+#                   package manifest or a package manager could not be inspected (fail-closed).
 #
 # Overridable for the isolated smoke:
 #   ENTWURF_DEV_BIN_DIR           link location (default: ~/.local/bin — where agy itself lives)
@@ -42,6 +50,7 @@
 #   ENTWURF_AGY_STATUSLINE_TARGET entwurf-agy-statusline target (default: $REPO/scripts/agy-statusline.sh)
 #   ENTWURF_AGY_IMPRINT_TARGET    entwurf-agy-imprint target (default: $REPO/scripts/agy-imprint.sh)
 #   ENTWURF_COPILOT_STATUSLINE_TARGET entwurf-copilot-statusline target (default: $REPO/scripts/copilot-statusline.sh)
+#   ENTWURF_DEV_BIN_PM_TIMEOUT    seconds one package-manager query may take (default 10)
 #   XDG_DATA_HOME                 state root (states under $XDG_DATA_HOME/entwurf/dev-bin/)
 set -euo pipefail
 
@@ -68,6 +77,9 @@ bin_target() {  # $1 = name → prints target path (env-overridable for smoke)
     *) return 1 ;;
   esac
 }
+# Every name bin_target answers for. Kept apart from MANAGED_BINS (what expose links): whether a
+# name is exposed must not change the target exclusive expects for it.
+TARGET_BINS="entwurf entwurf-bridge entwurf-agy-statusline entwurf-agy-imprint entwurf-copilot-statusline"
 state_file_for() { echo "$STATE_DIR/$1.install-state.json"; }
 
 state_link() {  # $1 = state file → recorded linkPath, or empty
@@ -184,6 +196,104 @@ verify_one() {  # $1 = name
   log "[dev-bin verify] $name → $target (PATH winner: $link)"
 }
 
+do_exclusive() {
+  # Our target per package.json bin name: a managed name through bin_target (smoke-overridable),
+  # every other name at its package.json path in this checkout. The manifest is read INSIDE the
+  # verdict step: a read that fails outside it would reach the verdict as zero names and pass.
+  local -a pairs=()
+  local b
+  for b in $TARGET_BINS; do pairs+=("$b=$(bin_target "$b")"); done
+  python3 - "${ENTWURF_DEV_BIN_PM_TIMEOUT:-10}" "$REPO_DIR" "${pairs[@]}" <<'PY'
+import json, os, shutil, signal, subprocess, sys
+
+timeout = float(sys.argv[1])
+manifest = os.path.join(sys.argv[2], "package.json")
+try:
+    with open(manifest) as f:
+        bins = json.load(f)["bin"]
+    if not (isinstance(bins, dict) and "entwurf" in bins
+            and all(isinstance(k, str) and k and isinstance(v, str) and v for k, v in bins.items())):
+        raise ValueError('"bin" is not a non-empty object of name -> path strings naming entwurf')
+except (OSError, ValueError, KeyError, TypeError) as e:
+    print(f"[dev-bin] FAIL: could not inspect the package manifest {manifest} — {type(e).__name__}: {e}."
+          " Not read as 'no other root'.", file=sys.stderr)
+    print("  nothing was removed, no profile edited, no session stopped.", file=sys.stderr)
+    sys.exit(6)  # an unreadable manifest is never "0 names, no other root"
+managed = dict(pair.split("=", 1) for pair in sys.argv[3:])
+ours = {name: os.path.realpath(managed.get(name, os.path.join(sys.argv[2], rel)))
+        for name, rel in bins.items()}
+
+dirs = {}      # realpath(dir) -> (dir as seen, [where it was seen])
+def add(d, where):
+    key = os.path.realpath(d)
+    dirs.setdefault(key, (d, []))[1].append(where)
+
+for d in os.environ.get("PATH", "").split(":"):
+    add(d or os.getcwd(), "PATH")   # an empty POSIX PATH entry means the cwd
+
+def query(argv):
+    exe = shutil.which(argv[0])
+    if exe is None:
+        return "skip", f"{argv[0]} not on PATH — its global bin dir was not checked"
+    try:
+        p = subprocess.Popen([exe] + argv[1:], cwd="/", stdin=subprocess.DEVNULL,
+                             stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True)
+    except OSError as e:
+        return "error", f"`{' '.join(argv)}` could not start: {e}"
+    try:
+        out, err = p.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        os.killpg(p.pid, signal.SIGKILL)
+        p.communicate()
+        return "error", f"`{' '.join(argv)}` did not answer within {timeout:g}s"
+    if p.returncode != 0:
+        tail = err.decode(errors="replace").strip().splitlines()[-1:] or [""]
+        return "error", f"`{' '.join(argv)}` exited {p.returncode}: {tail[0]}"
+    lines = out.decode(errors="replace").strip().splitlines()
+    if len(lines) != 1 or not os.path.isabs(lines[0]):
+        return "error", f"`{' '.join(argv)}` printed {len(lines)} line(s), not one absolute path"
+    return "ok", lines[0]
+
+checked, skipped, errors = ["PATH"], [], []
+for argv, label, to_bin in ((["pnpm", "bin", "-g"], "pnpm global bin", lambda s: s),
+                            (["npm", "prefix", "-g"], "npm global bin", lambda s: os.path.join(s, "bin"))):
+    state, value = query(argv)
+    if state == "ok":
+        add(to_bin(value), label)
+        checked.append(f"{label} {to_bin(value)}")
+    elif state == "skip":
+        skipped.append(value)
+    else:
+        errors.append(value)
+
+others = []
+for _key, (d, where) in dirs.items():
+    for name, target in ours.items():
+        path = os.path.join(d, name)
+        if os.path.lexists(path) and os.path.realpath(path) != target:
+            others.append((path, os.path.realpath(path), where))
+
+for path, resolved, where in others:
+    print(f"[dev-bin] FAIL: another entwurf root is still selectable: {path} -> {resolved}", file=sys.stderr)
+    print(f"  seen via: {', '.join(where)}", file=sys.stderr)
+    hints = [h for w, h in (("pnpm global bin", "pnpm remove -g @junghanacs/entwurf"),
+                            ("npm global bin", "npm uninstall -g @junghanacs/entwurf")) if w in where]
+    for h in hints:
+        print(f"  if a global @junghanacs/entwurf installed it: {h}", file=sys.stderr)
+    print("  " + ("otherwise " if hints else "") + "remove it through whoever owns it.", file=sys.stderr)
+for e in errors:
+    print(f"[dev-bin] FAIL: could not inspect a package manager — {e}. Not read as 'no other root'.", file=sys.stderr)
+if others or errors:
+    print(f"  this checkout: {ours.get('entwurf', '?')}", file=sys.stderr)
+    print("  nothing was removed, no profile edited, no session stopped. Then re-run: ./run.sh setup <project>", file=sys.stderr)
+    sys.exit(5 if others else 6)
+print(f"[dev-bin exclusive] no other root under the {len(ours)} package bin names in: {'; '.join(checked)}")
+for s in skipped:
+    print(f"  not checked: {s}")
+print("  covers only these directories — another shell's PATH or another package manager is not covered.")
+PY
+}
+
 remove_one() {  # $1 = name
   local name="$1" target link sf recorded
   target="$(bin_target "$name")" || fail "unknown managed bin: $name"
@@ -235,5 +345,6 @@ case "${1:-}" in
   expose) shift; do_expose "${1:-}" ;;
   remove) shift; do_remove "${1:-}" ;;
   verify) shift; [ -n "${1:-}" ] || fail "verify requires one managed bin name"; verify_one "$1" ;;
-  *) echo "usage: dev-bin.sh <expose|remove> [bin-name] | verify <bin-name>" >&2; exit 2 ;;
+  exclusive) do_exclusive ;;
+  *) echo "usage: dev-bin.sh <expose|remove> [bin-name] | verify <bin-name> | exclusive" >&2; exit 2 ;;
 esac

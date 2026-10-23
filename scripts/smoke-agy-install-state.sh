@@ -461,6 +461,126 @@ export ENTWURF_AGY_STATUSLINE_TARGET="$SB/fake-status.sh"
 export ENTWURF_AGY_IMPRINT_TARGET="$SB/fake-aux.sh"
 export ENTWURF_COPILOT_STATUSLINE_TARGET="$SB/fake-aux.sh"
 
+# Hermetic PATH for every dev-bin cell: the host's own entwurf entrypoints (e.g. a real
+# ~/.local/bin/entwurf into some checkout) and its real pnpm/npm global bin dirs must not leak into
+# the exclusivity verdict. Drop every host PATH dir that carries a package bin name, and put fixture
+# package managers first; FAKE_PM_MODE picks their answer. Restored after the dev-bin cells.
+DEVBIN_ORIG_PATH="$PATH"
+PACKAGE_BINS="$(python3 -c 'import json,sys; print(" ".join(json.load(open(sys.argv[1]))["bin"]))' "$REPO_DIR/package.json")"
+HERMETIC_PATH=""
+IFS=':' read -r -a _dirs <<<"$PATH"
+for _d in "${_dirs[@]}"; do
+  [ -n "$_d" ] || continue
+  for _b in $PACKAGE_BINS; do { [ -e "$_d/$_b" ] || [ -L "$_d/$_b" ]; } && continue 2; done
+  HERMETIC_PATH="${HERMETIC_PATH:+$HERMETIC_PATH:}$_d"
+done
+unset _dirs _d _b
+FAKE_PM="$SB/fake-pm"; PM_ROOT="$SB/pm"; mkdir -p "$FAKE_PM"
+for _pm in pnpm npm; do
+  case "$_pm" in pnpm) _q="bin -g"; _a="$PM_ROOT/pnpm-bin" ;; npm) _q="prefix -g"; _a="$PM_ROOT/npm-prefix" ;; esac
+  cat > "$FAKE_PM/$_pm" <<SH
+#!/usr/bin/env bash
+[ "\$*" = "$_q" ] || { echo "fixture $_pm answers only: $_q" >&2; exit 64; }
+case "\${FAKE_PM_MODE:-ok}" in
+  ok) [ "$_pm" = npm ] || case ":\$PATH:" in *":$_a:"*) ;; *) echo "[ERROR] The configured global bin directory \"$_a\" is not in PATH" >&2; exit 1 ;; esac
+      echo "$_a" ;;
+  fail) echo "ERR_FIXTURE_$_pm boom" >&2; exit 1 ;;
+  hang) exec sleep 30 ;;
+esac
+SH
+  chmod +x "$FAKE_PM/$_pm"
+done
+unset _pm _q _a
+mkdir -p "$PM_ROOT/pnpm-bin"   # an existing, empty pnpm global bin dir
+export PATH="$FAKE_PM:$HERMETIC_PATH:$PM_ROOT/pnpm-bin"   # pnpm 11 answers `bin -g` only when that dir is on PATH
+want "dev-bin hermetic PATH: no package bin name resolves, and pnpm/npm are the fixtures" \
+  "! command -v entwurf >/dev/null && [ \"\$(command -v pnpm)\" = '$FAKE_PM/pnpm' ] && [ \"\$(command -v npm)\" = '$FAKE_PM/npm' ]"
+
+# J-X: developer-install exclusivity (dev-bin.sh exclusive). A certified PATH winner alone let an
+# old global shim LATER in PATH stay selectable by a shell with another PATH order (non-interactive
+# SSH picked it). Every cell links by NAME so an operator-set mutant elsewhere cannot reach here.
+bash "$DEVBIN" expose entwurf >/dev/null 2>&1
+bash "$DEVBIN" expose entwurf-bridge >/dev/null 2>&1
+SAME_DIR="$SB/same-root"; mkdir -p "$SAME_DIR"
+ln -s "$SB/fake-entwurf.sh" "$SAME_DIR/entwurf"   # a second link, same target
+ln -s "$DLINK" "$SAME_DIR/entwurf-bridge"         # a chain through our link, same target
+set +e; OUT="$(PATH="$DBIN_DIR:$DBIN_DIR:$SAME_DIR:$PATH" bash "$DEVBIN" exclusive 2>&1)"; RC=$?; set -e
+want "dev-bin exclusive: duplicate PATH entries and links resolving to our target are the same install [QK:SOURCE-SAME-TARGET-PASSES]" \
+  "[ '$RC' -eq 0 ] && printf '%s' \"\$OUT\" | grep -q 'no other root under the 6 package bin names'"
+want "dev-bin exclusive: an existing-but-empty package-manager global bin is checked and clean, and the PASS names its limit" \
+  "printf '%s' \"\$OUT\" | grep -q 'pnpm global bin $PM_ROOT/pnpm-bin' && printf '%s' \"\$OUT\" | grep -q 'another shell.s PATH or another package manager is not covered'"
+TOOLS_ONLY="$SB/tools-only"; mkdir -p "$TOOLS_ONLY"
+for _t in bash python3 dirname env; do ln -s "$(command -v "$_t")" "$TOOLS_ONLY/$_t"; done; unset _t
+set +e; OUT="$(PATH="$TOOLS_ONLY:$DBIN_DIR" bash "$DEVBIN" exclusive 2>&1)"; RC=$?; set -e
+want "dev-bin exclusive: an absent package manager is a named not-checked line, not a failure" \
+  "[ '$RC' -eq 0 ] && printf '%s' \"\$OUT\" | grep -q 'not checked: pnpm not on PATH' && printf '%s' \"\$OUT\" | grep -q 'not checked: npm not on PATH'"
+rm -rf "$SAME_DIR"
+
+OTHER_DIR="$SB/old-global/bin"; mkdir -p "$OTHER_DIR"
+printf '#!/bin/sh\nexec /old/global/entwurf "$@"\n' > "$OTHER_DIR/entwurf"; chmod +x "$OTHER_DIR/entwurf"
+want "dev-bin control: with an old shim LATER in PATH the winner is still ours, so verify alone passes" \
+  "PATH='$DBIN_DIR:$OTHER_DIR':\"\$PATH\" bash '$DEVBIN' verify entwurf >/dev/null 2>&1"
+set +e; OUT="$(PATH="$DBIN_DIR:$OTHER_DIR:$PATH" bash "$DEVBIN" exclusive 2>&1)"; RC=$?; set -e
+want "dev-bin exclusive: an old root LATER in PATH is named and refused, not hidden behind our winner [QK:SOURCE-LATER-ROOT-FAILS]" \
+  "[ '$RC' -eq 5 ] && printf '%s' \"\$OUT\" | grep -qF 'another entwurf root is still selectable: $OTHER_DIR/entwurf'"
+want "dev-bin exclusive: the refusal removes nothing and says so" \
+  "[ \"\$(sed -n 2p '$OTHER_DIR/entwurf')\" = 'exec /old/global/entwurf \"\$@\"' ] && [ -L '$OLINK' ] && printf '%s' \"\$OUT\" | grep -q 'nothing was removed'"
+mkdir -p "$SB/other-checkout/mcp/entwurf-bridge"; printf '#!/bin/sh\n' > "$SB/other-checkout/mcp/entwurf-bridge/start.sh"
+rm -f "$OTHER_DIR/entwurf"; ln -s "$SB/other-checkout/mcp/entwurf-bridge/start.sh" "$OTHER_DIR/entwurf-bridge"
+set +e; OUT="$(PATH="$DBIN_DIR:$OTHER_DIR:$PATH" bash "$DEVBIN" exclusive 2>&1)"; RC=$?; set -e
+want "dev-bin exclusive: a helper name from another checkout is refused like the operator" \
+  "[ '$RC' -eq 5 ] && printf '%s' \"\$OUT\" | grep -qF '$OTHER_DIR/entwurf-bridge -> $SB/other-checkout/mcp/entwurf-bridge/start.sh'"
+rm -rf "$SB/old-global"
+
+mkdir -p "$PM_ROOT/npm-prefix/bin"; printf '#!/bin/sh\n' > "$SB/other-checkout/run.sh"
+ln -s "$SB/other-checkout/run.sh" "$PM_ROOT/npm-prefix/bin/entwurf"   # npm's <prefix>/bin, OFF this PATH
+set +e; OUT="$(PATH="$DBIN_DIR:$PATH" bash "$DEVBIN" exclusive 2>&1)"; RC=$?; set -e
+want "dev-bin exclusive: another root in npm's global bin dir is refused although that dir is not on this PATH [QK:SOURCE-GLOBAL-BIN-OTHER-ROOT]" \
+  "[ '$RC' -eq 5 ] && printf '%s' \"\$OUT\" | grep -qF '$PM_ROOT/npm-prefix/bin/entwurf -> $SB/other-checkout/run.sh' && printf '%s' \"\$OUT\" | grep -qx '  seen via: npm global bin'"
+want "dev-bin exclusive: the removal hint is conditional on the package manager, never asserted" \
+  "printf '%s' \"\$OUT\" | grep -qF 'if a global @junghanacs/entwurf installed it: npm uninstall -g @junghanacs/entwurf' && printf '%s' \"\$OUT\" | grep -q 'otherwise remove it through whoever owns it'"
+rm -rf "$PM_ROOT/npm-prefix"
+
+set +e; OUT="$(FAKE_PM_MODE=fail PATH="$DBIN_DIR:$PATH" bash "$DEVBIN" exclusive 2>&1)"; RC=$?; set -e
+want "dev-bin exclusive: a package manager that cannot answer is refused, not read as clean [QK:SOURCE-GLOBAL-QUERY-REFUSED]" \
+  "[ '$RC' -eq 6 ] && printf '%s' \"\$OUT\" | grep -qF 'could not inspect a package manager — \`pnpm bin -g\` exited 1: ERR_FIXTURE_pnpm boom'"
+set +e; OUT="$(FAKE_PM_MODE=hang ENTWURF_DEV_BIN_PM_TIMEOUT=1 PATH="$DBIN_DIR:$PATH" bash "$DEVBIN" exclusive 2>&1)"; RC=$?; set -e
+want "dev-bin exclusive: a package manager that hangs is bounded and refused" \
+  "[ '$RC' -eq 6 ] && printf '%s' \"\$OUT\" | grep -q 'did not answer within 1s'"
+set +e; OUT="$(PATH="$DBIN_DIR:$FAKE_PM:$HERMETIC_PATH" bash "$DEVBIN" exclusive 2>&1)"; RC=$?; set -e
+want "dev-bin exclusive: pnpm refusing because its global bin dir is off PATH is an inspect failure, not a clean dir" \
+  "[ '$RC' -eq 6 ] && printf '%s' \"\$OUT\" | grep -qF 'is not in PATH'"
+
+# The package manifest is read by the verdict step itself: an unreadable or wrong-shaped one is an
+# inspect failure, never "0 names, no other root". Driven on a copy of THIS dev-bin.sh beside a
+# sandbox package.json, so the repo's own manifest is never touched.
+MANI="$SB/manifest-copy"; mkdir -p "$MANI/scripts"; cp "$DEVBIN" "$MANI/scripts/dev-bin.sh"
+cp "$REPO_DIR/package.json" "$MANI/package.json"
+set +e; OUT="$(PATH="$DBIN_DIR:$PATH" bash "$MANI/scripts/dev-bin.sh" exclusive 2>&1)"; RC=$?; set -e
+want "dev-bin exclusive control: the copied script with the real manifest checks all 6 names and passes" \
+  "[ '$RC' -eq 0 ] && printf '%s' \"\$OUT\" | grep -q 'no other root under the 6 package bin names'"
+printf 'not json{' > "$MANI/package.json"
+set +e; OUT="$(PATH="$DBIN_DIR:$PATH" bash "$MANI/scripts/dev-bin.sh" exclusive 2>&1)"; RC=$?; set -e
+want "dev-bin exclusive: an unreadable package manifest is refused, never read as zero names [QK:SOURCE-MANIFEST-UNREADABLE-REFUSED]" \
+  "[ '$RC' -eq 6 ] && printf '%s' \"\$OUT\" | grep -qF 'could not inspect the package manifest $MANI/package.json' && ! printf '%s' \"\$OUT\" | grep -q '0 package bin names'"
+for _shape in '{"name":"x"}' '{"bin":"./run.sh"}' '{"bin":{}}' '{"bin":{"entwurf-bridge":"./x"}}'; do
+  printf '%s' "$_shape" > "$MANI/package.json"
+  set +e; OUT="$(PATH="$DBIN_DIR:$PATH" bash "$MANI/scripts/dev-bin.sh" exclusive 2>&1)"; RC=$?; set -e
+  want "dev-bin exclusive: manifest $_shape is refused as uninspectable" \
+    "[ '$RC' -eq 6 ] && printf '%s' \"\$OUT\" | grep -qF 'could not inspect the package manifest'"
+done
+unset _shape; rm -rf "$MANI"
+
+OTHER_DIR="$SB/old-global/bin"; mkdir -p "$OTHER_DIR"
+printf '#!/bin/sh\nexec /old/global/entwurf "$@"\n' > "$OTHER_DIR/entwurf"; chmod +x "$OTHER_DIR/entwurf"
+set +e; OUT="$(PATH="$DBIN_DIR:$OTHER_DIR:$PATH" bash "$REPO_DIR/run.sh" expose-dev-bin 2>&1)"; RC=$?; set -e
+want "source setup's bins step fails when another root is still selectable [QK:SOURCE-EXCLUSIVE-WIRED]" \
+  "[ '$RC' -eq 5 ] && printf '%s' \"\$OUT\" | grep -qF 'another entwurf root is still selectable: $OTHER_DIR/entwurf'"
+rm -rf "$SB/old-global" "$SB/other-checkout" "$TOOLS_ONLY"
+bash "$DEVBIN" remove >/dev/null 2>&1   # the helper links expose-dev-bin just made
+bash "$DEVBIN" remove entwurf >/dev/null 2>&1         # by NAME, like the expose above: the
+bash "$DEVBIN" remove entwurf-bridge >/dev/null 2>&1  # managed list itself may be under test
+
 # J-0: the setup wrapper calls no-arg expose. This is the cross-contract cell the #82 regression
 # lacked: an npm consumer gets `entwurf` from package bin linking, and source setup must expose the
 # same operator command without a second global package install.
@@ -578,6 +698,7 @@ ok "dev-bin migrate: foreign legacy refused (linkPath basename != entwurf-bridge
 rm -f "$LEGACY" "$DLINK" "$DSTATE"
 bash "$DEVBIN" remove >/dev/null 2>&1
 unset ENTWURF_DEV_BIN_DIR ENTWURF_OPERATOR_TARGET ENTWURF_BRIDGE_TARGET ENTWURF_AGY_STATUSLINE_TARGET
+export PATH="$DEVBIN_ORIG_PATH"
 unset ENTWURF_AGY_IMPRINT_TARGET ENTWURF_COPILOT_STATUSLINE_TARGET
 
 # ── K: permission grant — the OTHER half of a usable bridge ───────────────────

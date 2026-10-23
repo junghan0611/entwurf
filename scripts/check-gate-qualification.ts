@@ -3514,7 +3514,7 @@ let manifestCount: number;
 		"resume-launch-identity": 10,
 		"self-address": 8,
 		"setup-verdict": 14,
-		"source-install": 2,
+		"source-install": 8,
 		"typing-call-fence": 1,
 		"v2-surface": 14,
 		"v2-visible-resume": 40,

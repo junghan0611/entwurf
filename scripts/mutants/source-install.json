@@ -27,6 +27,72 @@
 			"timeoutSeconds": 300,
 			"signature": "[QK:SOURCE-OPERATOR-FAILS-LOUD]",
 			"signatureSource": "scripts/smoke-agy-install-state.sh"
+		},
+		{
+			"claim": "SOURCE-SAME-TARGET-PASSES",
+			"title": "the exclusivity check compares the unresolved entry path again, so a duplicate PATH entry or a second link to this very checkout reads as another root and blocks a correct developer install",
+			"subject": "scripts/dev-bin.sh",
+			"find": ["        if os.path.lexists(path) and os.path.realpath(path) != target:"],
+			"replace": ["        if os.path.lexists(path) and os.path.abspath(path) != target:"],
+			"gate": ["bash", "run.sh", "smoke-agy-install-state"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:SOURCE-SAME-TARGET-PASSES]",
+			"signatureSource": "scripts/smoke-agy-install-state.sh"
+		},
+		{
+			"claim": "SOURCE-LATER-ROOT-FAILS",
+			"title": "the exclusivity check reads only the head of PATH again, so an old global shim later in PATH stays selectable by a shell with another PATH order while setup reports a developer install",
+			"subject": "scripts/dev-bin.sh",
+			"find": ["for d in os.environ.get(\"PATH\", \"\").split(\":\"):"],
+			"replace": ["for d in os.environ.get(\"PATH\", \"\").split(\":\")[:1]:"],
+			"gate": ["bash", "run.sh", "smoke-agy-install-state"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:SOURCE-LATER-ROOT-FAILS]",
+			"signatureSource": "scripts/smoke-agy-install-state.sh"
+		},
+		{
+			"claim": "SOURCE-GLOBAL-BIN-OTHER-ROOT",
+			"title": "the package manager's reported global bin dir is queried but never searched, so another root there passes whenever that dir is absent from this PATH",
+			"subject": "scripts/dev-bin.sh",
+			"find": ["        add(to_bin(value), label)\n"],
+			"replace": ["        pass\n"],
+			"gate": ["bash", "run.sh", "smoke-agy-install-state"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:SOURCE-GLOBAL-BIN-OTHER-ROOT]",
+			"signatureSource": "scripts/smoke-agy-install-state.sh"
+		},
+		{
+			"claim": "SOURCE-GLOBAL-QUERY-REFUSED",
+			"title": "a package manager that fails or hangs is read as not installed again, so an uninspectable global bin dir yields a clean developer-install verdict",
+			"subject": "scripts/dev-bin.sh",
+			"find": ["        errors.append(value)\n"],
+			"replace": ["        skipped.append(value)\n"],
+			"gate": ["bash", "run.sh", "smoke-agy-install-state"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:SOURCE-GLOBAL-QUERY-REFUSED]",
+			"signatureSource": "scripts/smoke-agy-install-state.sh"
+		},
+		{
+			"claim": "SOURCE-EXCLUSIVE-WIRED",
+			"title": "source setup's bins step drops the exclusivity verdict again and returns its pre-repair success, so another selectable root is reported as a developer install",
+			"subject": "run.sh",
+			"find": ["  [ \"$rc\" -eq 0 ] && return \"$ex_rc\"\n"],
+			"replace": ["  [ \"$rc\" -eq 0 ] && return 0\n"],
+			"gate": ["bash", "run.sh", "smoke-agy-install-state"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:SOURCE-EXCLUSIVE-WIRED]",
+			"signatureSource": "scripts/smoke-agy-install-state.sh"
+		},
+		{
+			"claim": "SOURCE-MANIFEST-UNREADABLE-REFUSED",
+			"title": "an unreadable or wrong-shaped package manifest is read as zero bin names again, so the exclusivity check finds no other root by checking nothing and source setup reports a developer install",
+			"subject": "scripts/dev-bin.sh",
+			"find": ["    sys.exit(6)  # an unreadable manifest is never \"0 names, no other root\"\n"],
+			"replace": ["    bins = {}  # regressed: an unreadable manifest read as zero names\n"],
+			"gate": ["bash", "run.sh", "smoke-agy-install-state"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:SOURCE-MANIFEST-UNREADABLE-REFUSED]",
+			"signatureSource": "scripts/smoke-agy-install-state.sh"
 		}
 	]
 }

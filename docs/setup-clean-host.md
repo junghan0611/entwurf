@@ -136,7 +136,9 @@ release acceptance. A checkout that already holds the intended commit skips the 
 `git checkout`.
 
 This owns `~/.local/bin/entwurf` as a symlink to that checkout's `run.sh` and fails if the
-link is foreign, outside PATH, or shadowed by another command. It detects and wires
+link is foreign, outside PATH, or shadowed by another command, or if another root still answers to
+a package bin name in PATH or in the global bin dir `pnpm bin -g` / `npm prefix -g` report (it
+removes nothing). It detects and wires
 pi/Claude/agy/Copilot/OMP/Codex by presence and prints a computed per-component
 PASS/SKIP/FAIL summary — a detected harness that cannot be completed makes setup exit nonzero.
 A detected `copilot` composes all four native units, and a detected `omp` composes its own four.
