@@ -5,6 +5,8 @@
  * OUT of `pnpm check`. Needs `LIVE=1`, a `herdr` binary, `git`, `npm` — and the NETWORK, because a
  * git-spec pack builds the bridge through `prepare`, which installs devDependencies from the
  * registry. That is the axis `check-herdr-plugin-build` cannot have and why it does not claim it.
+ * The two sandbox commits below also need the host's `pnpm` and its already-populated store: that
+ * pnpm serves only those test clones' ordinary commit hooks, never the product's git-spec `prepare`.
  *
  * WHAT MAKES IT HERMETIC ANYWAY. Two substitutions, and only two. HOME/XDG are a mkdtemp sandbox,
  * so Herdr's registry, its managed checkout, our runtime, our ledger and both harnesses' wiring all
@@ -29,7 +31,7 @@
  * | 1. remote-commit AVAILABLE | real `herdr plugin install` | the Herdr journey: one install, runtime at the stable root keyed by the commit Herdr resolved, Pi wired at the absolute bridge, ledger `active` |
  * | 2. REINSTALL widening | real `herdr plugin install` | the Herdr journey: Pi reconciled JSON-identical, Claude added as exactly ONE counted owner entry (real vendor CLI), OpenCode given zero Entwurf state |
  * | 3. remote-commit UNAVAILABLE | the shipped runtime leaf, called directly with the FIXED product argv | acquisition-leaf evidence only — a remote that cannot serve a commit. Routing it through Herdr would add a second explanation for one red, so it does not, and it does not call itself a journey |
- * | 4. POST-BUILD GAP | real `herdr plugin install` | the Herdr journey: a build that mutates the manifest makes HERDR's own commit fail after our runner already succeeded, so Herdr keeps the previous registration while the runtime and the rebound activation REMAIN, and the next normal install re-binds to HEAD. Nothing here calls that atomic |
+ * | 4. POST-BUILD GAP | real `herdr plugin install` | the Herdr journey: after our runner finished with 0, a test-owned probe leaves one semantic manifest change on disk (its receipt says so); the install then exits non-zero and Herdr's registration does not move, while the runtime and the rebound activation REMAIN, and the next normal install re-binds to HEAD. Nothing here calls that atomic, and the receipt does not name which Herdr check refused |
  */
 
 import assert from "node:assert/strict";
@@ -110,6 +112,38 @@ const configuredHooksPath = (
 	spawnSync("git", ["config", "--global", "--get", "core.hooksPath"], { encoding: "utf8", env: COMMIT_ENV }).stdout ??
 	""
 ).trim();
+
+// ── EACH TEST CLONE GETS ITS OWN FROZEN DEPENDENCIES BEFORE ITS ORDINARY COMMIT ─────────────
+//
+// The operator's hook chain reaches the repo's `.husky/pre-commit`, which runs `pnpm lint` and
+// `pnpm typecheck`, and COMMIT_ENV carries the operator's strict `verify-deps-before-run`. A fresh
+// clone has no `node_modules`, so that strict pnpm refuses (measured: ERR_PNPM_VERIFY_DEPS_BEFORE_RUN
+// at the snapshot commit). The clone installs its OWN dependencies from its own lockfile: frozen,
+// offline (a package missing from the store is a named red, never a network fallback) and
+// ignore-scripts (no `prepare` build here). Never the parent's `node_modules` by symlink or copy,
+// which would inherit another workspace's state, and never a relaxed hook environment.
+const storeQuery = spawnSync("pnpm", ["store", "path"], { encoding: "utf8", env: COMMIT_ENV, cwd: REPO });
+assert.ok(
+	!storeQuery.error && storeQuery.status === 0,
+	`pnpm store path failed (test-clone hooks need pnpm): status=${storeQuery.status} error=${storeQuery.error?.message ?? "none"} stderr=${storeQuery.stderr ?? ""}`,
+);
+const STORE_DIR = (storeQuery.stdout ?? "").trim();
+assert.ok(
+	path.isAbsolute(STORE_DIR),
+	`pnpm store path did not answer an absolute directory: ${JSON.stringify(STORE_DIR)}`,
+);
+
+function prepareCloneDeps(dir: string, tag: string): void {
+	const installed = spawnSync(
+		"pnpm",
+		["install", "--frozen-lockfile", "--offline", "--ignore-scripts", "--store-dir", STORE_DIR],
+		{ encoding: "utf8", env: COMMIT_ENV, cwd: dir, timeout: 900_000 },
+	);
+	assert.ok(
+		!installed.error && installed.status === 0,
+		`${tag} clone dependencies (frozen, offline, ignore-scripts, store ${STORE_DIR}) failed: status=${installed.status} error=${installed.error?.message ?? "none"} ${installed.stderr || installed.stdout}`,
+	);
+}
 
 /**
  * One ordinary commit, with its hook invocation OBSERVED rather than steered: `GIT_TRACE2_EVENT`
@@ -213,6 +247,7 @@ if (candidatePatch.trim().length > 0) {
 	fs.writeFileSync(patchFile, candidatePatch);
 	const applied = run("git", ["-C", SNAPSHOT, "apply", "--index", patchFile], env);
 	assert.equal(applied.status, 0, `the candidate patch did not apply to the snapshot clone: ${applied.stderr}`);
+	prepareCloneDeps(SNAPSHOT, "snapshot");
 	snapshotHook = commitInClone(SNAPSHOT, "candidate snapshot under test", "snapshot").hookTrace;
 	// LOAD-BEARING, before the mirror is made from it: if a hook rewrote a file, or the patch left
 	// anything behind, the mirror would carry bytes the candidate does not have.
@@ -254,14 +289,59 @@ function readJson(file: string): Record<string, unknown> {
 function integrationInstall(atom: string) {
 	return run("herdr", ["integration", "install", atom], env);
 }
-function pluginInstall(ref: string) {
-	return run("herdr", ["plugin", "install", PLUGIN_SPEC, "--ref", ref, "--yes"], env);
+function pluginInstall(ref: string, extraEnv: NodeJS.ProcessEnv = {}) {
+	return run("herdr", ["plugin", "install", PLUGIN_SPEC, "--ref", ref, "--yes"], { ...env, ...extraEnv });
 }
-function managedCheckout(): string | null {
-	const base = path.join(env.XDG_CONFIG_HOME as string, "herdr", "plugins", "github");
-	if (!fs.existsSync(base)) return null;
-	const entry = fs.readdirSync(base).find((e) => e.startsWith(PLUGIN_ID));
-	return entry ? path.join(base, entry) : null;
+/** One git read whose failure is named: a spawn error, a non-zero status or an empty answer. */
+function gitRead(dir: string, argv: string[], what: string): string {
+	const r = run("git", ["-C", dir, ...argv], env);
+	const out = (r.stdout ?? "").trim();
+	assert.ok(
+		!r.error && r.status === 0 && out !== "",
+		`${what} could not be read (git ${argv.join(" ")} in ${dir}): status=${r.status} error=${r.error?.message ?? "none"} ${r.stderr ?? ""}`,
+	);
+	return out;
+}
+
+/**
+ * Herdr's OWN registration names where it checked this plugin out: `plugins.json` in its config
+ * directory holds one entry per installed plugin, and `plugin_root` is the manifest directory
+ * INSIDE that managed checkout. This fixture used to scan `plugins/github/<id>*`; on 0.9.5 that
+ * directory did not exist (observed: `plugins/github-installations/<id>-<hash>/<generation>/checkout`)
+ * and the scan answered "no checkout" with an empty HEAD instead of failing. So the path is READ
+ * from the registration rather than assembled from a layout. That holds only while the registry
+ * sits at `plugins.json` with its `plugin_id` / `plugin_root` fields — neither is re-measured on
+ * every Herdr — and when it stops holding the asserts below name it. Zero or several entries for
+ * this id, a relative root, or a checkout that resolves outside this sandbox's herdr config is red.
+ */
+function managedCheckoutRoot(): string {
+	const herdrConfig = path.join(env.XDG_CONFIG_HOME as string, "herdr");
+	const registry = path.join(herdrConfig, "plugins.json");
+	assert.ok(fs.existsSync(registry), `herdr left no plugin registry at ${registry}`);
+	const entries: unknown = JSON.parse(fs.readFileSync(registry, "utf8"));
+	assert.ok(Array.isArray(entries), `herdr's plugin registry ${registry} is not a list`);
+	const mine = entries.filter((e) => (e as { plugin_id?: unknown } | null)?.plugin_id === PLUGIN_ID);
+	assert.equal(
+		mine.length,
+		1,
+		`herdr's plugin registry ${registry} holds ${mine.length} entries for ${PLUGIN_ID}, not exactly one`,
+	);
+	const pluginRoot = (mine[0] as { plugin_root?: unknown }).plugin_root;
+	assert.ok(
+		typeof pluginRoot === "string" && path.isAbsolute(pluginRoot),
+		`the ${PLUGIN_ID} registration in ${registry} has no absolute plugin_root: ${JSON.stringify(pluginRoot)}`,
+	);
+	const root = gitRead(pluginRoot, ["rev-parse", "--show-toplevel"], "the registered plugin_root's git root");
+	// Compared by REAL path: a lexical check would pass a sandbox-spelled link whose target is the
+	// operator's own repo, and once the candidate lands that repo's HEAD is the HEAD under test.
+	const realConfig = fs.realpathSync(herdrConfig);
+	const realRoot = fs.realpathSync(root);
+	const inside = path.relative(realConfig, realRoot);
+	assert.ok(
+		inside !== "" && inside !== ".." && !inside.startsWith(`..${path.sep}`) && !path.isAbsolute(inside),
+		`the registered checkout ${root} (real ${realRoot}) is not inside this sandbox's herdr config ${realConfig}`,
+	);
+	return root;
 }
 
 try {
@@ -277,17 +357,13 @@ try {
 	const journal = fs.existsSync(journalPath) ? readJson(journalPath) : null;
 	const ledger = fs.existsSync(ledgerPath) ? readJson(ledgerPath) : null;
 	const identity = (journal?.artifactIdentity ?? {}) as Record<string, string>;
-	const checkout = managedCheckout();
-	// The managed checkout's git root is asked for rather than guessed: the manifest root is a
-	// SUBDIRECTORY of the clone, and a hardcoded `<dir>/checkout` would silently answer nothing.
-	const checkoutRoot =
-		checkout === null ? "" : (run("git", ["-C", checkout, "rev-parse", "--show-toplevel"], env).stdout ?? "").trim();
-	const checkoutHead =
-		checkoutRoot === "" ? "" : (run("git", ["-C", checkoutRoot, "rev-parse", "HEAD"], env).stdout ?? "").trim();
-	const shallow =
-		checkoutRoot === ""
-			? "no-checkout"
-			: (run("git", ["-C", checkoutRoot, "rev-parse", "--is-shallow-repository"], env).stdout ?? "").trim();
+	// The install is asserted BEFORE the checkout is located, so a failed install is reported as
+	// itself and not as the missing registration it would leave behind.
+	assert.equal(first.status, 0, `the first herdr plugin install failed: ${first.stderr || first.stdout}`);
+	// The manifest root is a SUBDIRECTORY of the clone, so its git root is asked for, not guessed.
+	const checkoutRoot = managedCheckoutRoot();
+	const checkoutHead = gitRead(checkoutRoot, ["rev-parse", "HEAD"], "the managed checkout's HEAD");
+	const shallow = gitRead(checkoutRoot, ["rev-parse", "--is-shallow-repository"], "the managed checkout's shallowness");
 	const piAfterFirst = readJson(piSettings);
 	const provider = (piAfterFirst.entwurfProvider ?? {}) as Record<string, unknown>;
 	const providerText = JSON.stringify(provider);
@@ -443,35 +519,66 @@ try {
 		const scratch = path.join(ROOT, "scratch");
 		assert.equal(run("git", ["clone", "--quiet", MIRROR, scratch], env).status, 0, "scratch clone");
 		assert.equal(run("git", ["-C", scratch, "checkout", "--quiet", "-b", "gapprobe", HEAD], env).status, 0, "branch");
-		// A build that MUTATES the manifest: herdr reloads it after the build and aborts the install
-		// (measured: `ensure_manifest_unchanged_after_build`). Our runner still ran to completion.
+		// A test-owned probe makes one SEMANTIC manifest change after our runner has finished, and the
+		// cell then asserts the install's exit and Herdr's registration. HISTORY, not this run's
+		// evidence: at the time this cell was written herdr re-read the manifest after the build and
+		// compared the PARSED struct (`ensure_manifest_unchanged_after_build`, read at src/cli/plugin.rs),
+		// so only a semantic change could matter; that is not re-measured on the pinned Herdr and is
+		// not named as the cause here. Until 2026-10-23 the probe replaced the literal
+		// `version = "0.1.0"`, which the manifest stopped carrying at dd84ac0 — so it silently changed
+		// nothing. The new version is now DERIVED at build time from the manifest Herdr checked out.
 		const runnerPath = path.join(scratch, "plugins", "herdr", "lib", "build.mjs");
 		// The mutation has to run BEFORE the runner's process exits, so it is INSERTED INTO the entry
-		// block rather than appended after it. Measured on the previous two runs: appended top-level
-		// code never executed at all (`process.exit(runBuild(...))` ends the process first), and the
-		// earlier `# comment` version of it would not have mattered anyway — herdr compares the PARSED
-		// manifest by full struct equality (`ensure_manifest_unchanged_after_build`, read at
-		// src/cli/plugin.rs), so only a semantic change makes its commit fail. Rewriting the declared
-		// plugin version is exactly that.
+		// block rather than appended after it (measured earlier: appended top-level code never ran,
+		// because `process.exit(runBuild(...))` ends the process first). That block is inside the
+		// runner's own try/catch, so a probe guard that throws there ALSO ends in a non-zero build —
+		// which would look exactly like the expected gap. The receipt below is what tells them apart:
+		// it is written only after the runner's code is known and the rewritten manifest read back.
 		const runnerSource = fs.readFileSync(runnerPath, "utf8");
 		const entry = "\t\tprocess.exit(runBuild(process.env));";
-		assert.ok(runnerSource.includes(entry), "the runner's entry block is not the shape this probe patches");
-		fs.writeFileSync(
-			runnerPath,
-			runnerSource.replace(
-				entry,
-				[
-					"\t\tconst probeCode = runBuild(process.env);",
-					"\t\t// gap probe: herdr re-reads the manifest after the build and aborts its own commit.",
-					'\t\tconst probeManifest = path.join(PLUGIN_DIR, "herdr-plugin.toml");',
-					"\t\tfs.writeFileSync(",
-					"\t\t\tprobeManifest,",
-					'\t\t\tfs.readFileSync(probeManifest, "utf8").replace(\'version = "0.1.0"\', \'version = "0.1.1"\'),',
-					"\t\t);",
-					"\t\tprocess.exit(probeCode);",
-				].join("\n"),
-			),
+		assert.equal(
+			runnerSource.split(entry).length - 1,
+			1,
+			"setup: the runner's entry block is not exactly once the shape this probe patches",
 		);
+		const scratchManifest = fs.readFileSync(path.join(scratch, "plugins", "herdr", "herdr-plugin.toml"), "utf8");
+		assert.equal(
+			(scratchManifest.match(/^version = "\d+\.\d+\.\d+"$/gm) ?? []).length,
+			1,
+			'setup: the manifest does not carry exactly one `version = "X.Y.Z"` line for the probe to rewrite',
+		);
+		const probedSource = runnerSource.replace(
+			entry,
+			[
+				"\t\tconst probeCode = runBuild(process.env);",
+				"\t\t// gap probe (test-owned): one semantic manifest change after a finished runner, then a receipt.",
+				"\t\tconst probeReceipt = process.env.HPBL_GAP_PROBE_RECEIPT;",
+				"\t\tif (!probeReceipt) {",
+				'\t\t\tthrow new Error("gap probe: HPBL_GAP_PROBE_RECEIPT did not reach the build");',
+				"\t\t}",
+				'\t\tconst probeManifest = path.join(PLUGIN_DIR, "herdr-plugin.toml");',
+				'\t\tconst probeBefore = fs.readFileSync(probeManifest, "utf8");',
+				'\t\tconst probeLines = probeBefore.match(/^version = "\\d+\\.\\d+\\.\\d+"$/gm) ?? [];',
+				"\t\tif (probeLines.length !== 1) {",
+				'\t\t\tthrow new Error("gap probe: " + probeLines.length + " version lines, not exactly one");',
+				"\t\t}",
+				"\t\tconst probeFrom = probeLines[0];",
+				"\t\tconst probeTo = probeFrom.replace(/(\\d+)\"$/, (_match, patch) => Number(patch) + 1 + '\"');",
+				'\t\tconst probeAfter = probeBefore.replace(/^version = "\\d+\\.\\d+\\.\\d+"$/m, probeTo);',
+				"\t\tif (probeAfter === probeBefore || probeFrom === probeTo) {",
+				'\t\t\tthrow new Error("gap probe: the version rewrite changed nothing");',
+				"\t\t}",
+				"\t\tfs.writeFileSync(probeManifest, probeAfter);",
+				'\t\tif (fs.readFileSync(probeManifest, "utf8") !== probeAfter) {',
+				'\t\t\tthrow new Error("gap probe: the rewritten manifest did not read back");',
+				"\t\t}",
+				"\t\tfs.writeFileSync(probeReceipt, JSON.stringify({ probeCode, from: probeFrom, to: probeTo }));",
+				"\t\tprocess.exit(probeCode);",
+			].join("\n"),
+		);
+		assert.notEqual(probedSource, runnerSource, "setup: patching the runner's entry block changed nothing");
+		fs.writeFileSync(runnerPath, probedSource);
+		prepareCloneDeps(scratch, "gapprobe");
 		const gapHook = commitInClone(scratch, "gap probe", "gapprobe").hookTrace;
 		assertExactlyClean(scratch, "the gap-probe scratch clone");
 		assert.equal(run("git", ["-C", scratch, "push", "--quiet", MIRROR, "gapprobe"], env).status, 0, "push probe");
@@ -482,8 +589,29 @@ try {
 			activatedBackends: string[];
 			components: { backend: string; state: string }[];
 		};
-		const gapRun = pluginInstall("gapprobe");
+		// The receipt lives in this sandbox ROOT, never in the checkout Herdr may delete, and its path
+		// reaches ONLY this install — with no default, so a build that does not receive it writes none.
+		const receiptPath = path.join(ROOT, "gap-probe-receipt.json");
+		assert.ok(!fs.existsSync(receiptPath), `setup: a gap-probe receipt already exists at ${receiptPath}`);
+		const gapRun = pluginInstall("gapprobe", { HPBL_GAP_PROBE_RECEIPT: receiptPath });
 		const registryAfter = run("herdr", ["plugin", "list"], env).stdout ?? "";
+		const gapTail = JSON.stringify((gapRun.stderr || gapRun.stdout || "").trim().slice(-300));
+		const receiptText = fs.existsSync(receiptPath) ? fs.readFileSync(receiptPath, "utf8") : null;
+		type GapReceipt = { probeCode?: unknown; from?: unknown; to?: unknown };
+		const receipt: GapReceipt | null = receiptText === null ? null : JSON.parse(receiptText);
+		// Checked HERE, before the reconcile: without a completed-mutation receipt a non-zero install is
+		// a probe or setup failure, never the expected gap. One receipt is evidence that ONE attempt
+		// finished the mutation — not that the build ran once, and not which Herdr check refused.
+		assert.ok(
+			receipt !== null &&
+				receipt.probeCode === 0 &&
+				typeof receipt.from === "string" &&
+				typeof receipt.to === "string" &&
+				receipt.from !== receipt.to,
+			`[${LABEL}] POST-BUILD GAP precondition: no receipt of a finished runner (code 0) followed by a real ` +
+				`manifest change, so this install's exit is NOT read as the gap (receipt=${receiptText ?? "absent"} ` +
+				`gap-install=${gapRun.status} herdr-tail=${gapTail})`,
+		);
 		// The gap commit is a DIFFERENT artifact, so the ledger cannot be byte-identical here and
 		// claiming it would be false: our runner ran to completion, which means it legally rebound the
 		// activation to that commit. What Herdr then failed to do is its own registration.
@@ -503,12 +631,13 @@ try {
 		const noDuplicates = (l: { components: { backend: string }[] }) =>
 			new Set(l.components.map((c) => c.backend)).size === l.components.length;
 		ok(
-			`[${LABEL}] POST-BUILD GAP: Herdr commits its checkout and registry only AFTER a build, so a build that makes ` +
-				"that commit fail leaves Herdr's PREVIOUS registration standing while what our runner already did REMAINS " +
-				"— the runtime is the gap commit and the ledger has legally rebound to it, active and retained, because " +
-				"Herdr has no cleanup hook to call. The next normal install re-binds to HEAD's identity and reconciles the " +
-				"same components rather than duplicating them. The gap is NAMED, not atomic, and this cell asserts the " +
-				`actual transition rather than an unchanged-bytes claim that could never be true (gap-commit-hooks=${gapHook} gap-install=${gapRun.status} registry-unchanged=${registryBefore === registryAfter} before=${ledgerBefore.artifactIdentity.commit?.slice(0, 8)} after-gap=${ledgerAfterGap.phase}/${ledgerAfterGap.artifactIdentity.commit?.slice(0, 8)}=${gapCommit.slice(0, 8)} reconcile=${reconcile.status}/${ledgerAfterReconcile.phase}/${ledgerAfterReconcile.artifactIdentity.commit?.slice(0, 8)}=${HEAD.slice(0, 8)} backends=${JSON.stringify(ledgerAfterReconcile.activatedBackends)} no-dupes=${noDuplicates(ledgerAfterGap)}/${noDuplicates(ledgerAfterReconcile)})`,
+			`[${LABEL}] POST-BUILD GAP: after our runner finished with 0 and a test-owned probe left one semantic ` +
+				"manifest change on disk, the install exits non-zero and Herdr's PREVIOUS registration stands while what " +
+				"our runner already did REMAINS — the runtime is the gap commit and the ledger has legally rebound to it, " +
+				"active and retained, because Herdr has no cleanup hook to call. The next normal install re-binds to HEAD's " +
+				"identity and reconciles the same components rather than duplicating them. The gap is NAMED, not atomic; " +
+				"which Herdr check refused is read from its own output below, not claimed (receipt=" +
+				`${receiptText} herdr-tail=${gapTail} gap-commit-hooks=${gapHook} gap-install=${gapRun.status} registry-unchanged=${registryBefore === registryAfter} before=${ledgerBefore.artifactIdentity.commit?.slice(0, 8)} after-gap=${ledgerAfterGap.phase}/${ledgerAfterGap.artifactIdentity.commit?.slice(0, 8)}=${gapCommit.slice(0, 8)} reconcile=${reconcile.status}/${ledgerAfterReconcile.phase}/${ledgerAfterReconcile.artifactIdentity.commit?.slice(0, 8)}=${HEAD.slice(0, 8)} backends=${JSON.stringify(ledgerAfterReconcile.activatedBackends)} no-dupes=${noDuplicates(ledgerAfterGap)}/${noDuplicates(ledgerAfterReconcile)})`,
 			gapRun.status !== 0 &&
 				registryBefore === registryAfter &&
 				ledgerAfterGap.phase === "active" &&
