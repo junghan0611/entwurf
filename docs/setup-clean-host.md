@@ -956,8 +956,10 @@ mechanism, because both the anchor and the env fallback would answer the same ro
 Native-push send on this rail is paused (#152, below). Its Linux certification is
 history: the last live bidirectional round trip was on agy 1.1.0 (2026-07-14), and it
 is not a current certification. What remains is the legacy identity surface — install,
-birth, statusline and sender identity — on Linux; on macOS it is NOT CERTIFIED — pending
-physical host. The installers may write on Darwin; a green install is not a native-push
+birth, statusline and sender identity. While the pause holds, a release accepts agy
+through the deterministic pause cell and the install/sender gates only; checking these
+surfaces in a fresh conversation is an optional diagnostic, not a release certification of
+the installed host. On macOS it is NOT CERTIFIED — pending physical host. The installers may write on Darwin; a green install is not a native-push
 receipt.
 
 Install the three independently owned surfaces:

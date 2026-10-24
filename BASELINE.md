@@ -312,7 +312,9 @@ Per-question PASS / FAIL / NOTE for grading the model's response.
 
 ## Native-citizen baseline — Antigravity / agy (shipped)
 
-This is not an ACP overlay interview. Run it in a **fresh agy conversation** after
+This is not an ACP overlay interview, and while agy native push is paused (#152) it is an
+optional diagnostic run on request, not a release-cut requirement (VERIFY criterion 7).
+Run it in a **fresh agy conversation** after
 `install-agy-bridge`, `install-agy-statusline`, and `install-agy-hooks`, with all
 three doctors green. `PreInvocation` is the earliest lifecycle event, so a brief
 `🪛 ? agy` before the first model invocation is honest; after that first invocation
