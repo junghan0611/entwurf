@@ -70,6 +70,36 @@ export function buildCodexInstruction(input: CodexInstructionInput): string {
 	);
 }
 
+/**
+ * The initial Pi's own fresh-call task: its bootstrap, then a passive wait.
+ *
+ * `[GLG 직접, 2026-10-24]` a fresh sibling may check its caller with the public read-only listing,
+ * then calls back, then works — the same promise the shared framing makes. This task used to say
+ * "Your FIRST tool call must be … callback … and nothing before it" and forbade rechecking
+ * "identity with shell or other tools", which forbade the very check the framing offers. What it
+ * still asks for is narrower and fixture-specific: no shell recheck of what session-info already
+ * says, the zero-argument callback (no target or nonce to copy — the address rides the launch
+ * env), no other tool before it, and no tool used to wait. `[측정 2026-10-24, r3]` a `bash true`
+ * before the callback is still refused by the order audit (`assertBootstrapOrder`).
+ *
+ * THIS ONE LAUNCH TAKES THE OPTION. `[GLG 직접, 2026-10-24]` the shared framing OFFERS the check; the
+ * four impact LIVEs that followed measured it taken zero times, so the positive path had only unit
+ * evidence. This guided task asks the initial Pi to take it — one peers call, its result, then the
+ * callback — and the smoke requires a peers prefix of at least one (`minPeersPrefix`). It is a
+ * fixture's choice of the offered option, not a product rule, and a PASS here is evidence that the
+ * path works end to end, not evidence of any sibling's own judgement.
+ */
+export function buildInitialPiBootstrapTask(initialPiWaitToken: string): string {
+	return (
+		"Session-info already supplies device, time and cwd; do not recheck them with shell. " +
+		"This launch is a guided caller check: first call mcp__entwurf_bridge__entwurf_peers once (read-only, no " +
+		"arguments) to corroborate your caller, and only after its result call mcp__entwurf_bridge__entwurf_callback " +
+		"with no arguments. Use no other tool before the callback. " +
+		`After your required callback receipt, end the turn and wait passively for one addressed message containing ${initialPiWaitToken}. ` +
+		"That message is the only authority to open the Codex sibling. Do not call shell, sleep, terminal, or any tool to wait."
+	);
+}
+
 export interface InitialPiPhaseOneInput {
 	initialPiWaitToken: string;
 	codexWaitToken: string;

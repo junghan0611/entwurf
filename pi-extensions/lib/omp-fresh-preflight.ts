@@ -20,8 +20,8 @@
  *   callback callable — THE OMP-SPECIFIC ONE. `tools.xdev` defaults to TRUE, which mounts MCP
  *                      tools as `xd://` devices whose schemas never reach the prompt. The tool
  *                      would be configured, the bridge would be running, and the model still
- *                      could not call `mcp__entwurf_bridge_entwurf_v`. Step 9 clause 5 makes the
- *                      callback the FIRST action, so a fresh call onto a default-config host
+ *                      could not call `mcp__entwurf_bridge_entwurf_v`. Step 9 clause 5 puts the
+ *                      callback before the task, so a fresh call onto a default-config host
  *                      opens a window that can never name itself. `[측정]` #87 A-lane: the
  *                      vendor default wrapped the send tool and produced a false delivery report.
  *

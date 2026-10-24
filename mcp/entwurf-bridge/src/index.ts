@@ -790,8 +790,8 @@ server.tool(
 		"herdr workspace, pi and claude-code " +
 		"only; everywhere else it opens in the operator's tmux with all six backends (pi, " +
 		"claude-code, copilot, omp, codex, pi-durable). No fallback: an incomplete herdr context is refused by name, " +
-		"never by a tmux window you cannot see from herdr. The sibling's FIRST action " +
-		"is a callback to you carrying a nonce, whose sender envelope is its garden id — that is how you learn the " +
+		"never by a tmux window you cannot see from herdr. If proceeding, the sibling calls back before its task with a nonce; " +
+		"the sender envelope names its garden id — that is how you learn the " +
 		"address of a thing that did not exist a moment ago. This returns a LAUNCH receipt (the owner's " +
 		"coordinates plus that nonce): it does NOT mean the runtime started, the first turn ran, or " +
 		"the task was delivered. Those coordinates are a VIEW, never an address — a herdr tab/pane id can change under " +

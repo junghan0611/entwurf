@@ -9,7 +9,15 @@ const exp = notesExpectation("DEMO-E4A4B8");
 const GOOD_REPLY = "DEMO-E4A4B8: notes.txt has 3 lines. First line: the record is the address";
 
 function call(name: string, args: Record<string, unknown>, text: string, isError = false): PdToolCall {
-	return { id: `${name}-${Math.random()}`, name, arguments: args, result: { text, isError } };
+	// Fixed ordinals: PdToolCall carries them (native entry ids); this judge does not read order.
+	return {
+		id: `${name}-${Math.random()}`,
+		name,
+		arguments: args,
+		result: { text, isError },
+		callOrdinal: 1,
+		resultOrdinal: 2,
+	};
 }
 function goodCalls(): PdToolCall[] {
 	return [

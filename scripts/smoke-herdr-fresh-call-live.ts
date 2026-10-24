@@ -45,7 +45,7 @@
  *                fenced `XDG_CACHE_HOME`, joined to a session by its EXACT `sessionId` — plus
  *                entwurf's own mailbox artifact and hook journal. It proves the public call, the
  *                identity join, the delivered callback, the caller's continuation, the child's
- *                FIRST action, and the codex named reject. It does NOT prove the receipt text or
+ *                callback before any work (a read-only check may precede it), and the codex named reject. It does NOT prove the receipt text or
  *                the final answer content: those have no source artifact on this axis and are
  *                left to GLG's manual validation rather than substituted with a screen read.
  *
@@ -853,7 +853,7 @@ async function main(): Promise<void> {
 				);
 			}
 
-			// ── the child's FIRST action was the callback ───────────────────────────────
+			// ── the child called back before its work ───────────────────────────────────
 			const childNative = String(joined?.nativeSessionId ?? childRow?.sessionValue ?? "");
 			if (cell.childKind === "pi") {
 				const childRecords = transcriptRecords(String(childRow?.sessionValue ?? ""));
@@ -901,8 +901,8 @@ async function main(): Promise<void> {
 				// BOTH. `[측정 2026-09-17, oracle, LIVE]` this cell used to require `order[0] ===
 				// "entwurf_v2"`, and a Sonnet 5 child failed it by calling `entwurf_peers` first and
 				// the callback second. That is not a violation: the framing this rail now sends
-				// OFFERS exactly that corroboration ("you can corroborate the caller first if you
-				// want to"), so the old oracle contradicted our own prompt and would have forbidden
+				// OFFERS exactly that corroboration ("you may corroborate the caller before that
+				// call"), so the old oracle contradicted our own prompt and would have forbidden
 				// the behaviour we asked for. What still must hold is everything the claim was
 				// actually about — the callback lands before any work, it completes, and neither the
 				// callback verb nor the delivery verb failed or timed out anywhere in the log.

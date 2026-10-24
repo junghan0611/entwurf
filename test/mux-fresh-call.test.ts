@@ -317,7 +317,7 @@ describe("argv dialects", () => {
 		expect(FRESH_CALL_CALLBACK_TOOL["pi-durable"]).toBe("entwurf_callback");
 		expect(FRESH_CALL_DELIVERY_TOOL["pi-durable"]).toBe("entwurf_v2");
 		expect(buildFreshCallPrompt({ backend: "pi-durable", task: TASK, callerGardenId: GID, nonce: NONCE })).toContain(
-			"FIRST ACTION, before reading files or anything else: call entwurf_callback with no arguments.",
+			"BEFORE THE TASK, and before reading files or running commands: call entwurf_callback with no arguments.",
 		);
 	});
 
@@ -330,7 +330,7 @@ describe("first-turn framing", () => {
 	const prompt = buildFreshCallPrompt({ backend: "pi", task: TASK, callerGardenId: GID, nonce: NONCE });
 
 	it("[QK:FRESHCALL-CALLBACK-PRECEDES-TASK] the framing puts the callback instruction BEFORE the task, so a sibling that stalls in the task has already named itself", () => {
-		const callbackAt = prompt.indexOf("FIRST ACTION");
+		const callbackAt = prompt.indexOf("BEFORE THE TASK");
 		const taskAt = prompt.indexOf(TASK);
 		expect(callbackAt).toBeGreaterThanOrEqual(0);
 		expect(taskAt).toBeGreaterThan(callbackAt);
@@ -368,10 +368,16 @@ describe("first-turn framing", () => {
 		expect(prompt).toMatch(/reporting your identity here does not reach it/);
 	});
 
-	it("offers corroboration rather than demanding it — a caller missing from a capped listing is not a reason to skip the callback", () => {
-		expect(prompt).toContain("You can corroborate the caller first if you want to");
+	it("offers corroboration rather than demanding it — a capped listing proves no absence, and a check that does not hold up may hold the callback and the task, with the cost stated", () => {
+		expect(prompt).toContain("You may corroborate the caller before that call");
+		// One voice: the framing no longer calls the callback the literal FIRST action while also
+		// offering a check before it (GLG, 2026-10-24 — check the caller, then call back).
+		expect(prompt).not.toContain("FIRST ACTION");
 		expect(prompt).toContain("entwurf_peers");
-		expect(prompt).toMatch(/not a reason to skip the callback/);
+		expect(prompt).toMatch(/does not show the caller is absent/);
+		expect(prompt).toContain("you may say so here and hold the callback and the task; the");
+		expect(prompt).toContain("caller then has no address for you.");
+		expect(prompt).not.toMatch(/not a reason to skip the callback/);
 	});
 });
 

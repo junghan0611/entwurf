@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 
+import { assertBootstrapOrder } from "../scripts/lib/codex-fresh-source-receipts.ts";
 import {
 	type PdNativeRow,
 	type PdNativeSubmissionRow,
 	pdDoorbellSubmission,
 	pdRootView,
+	pdSourceToolReceipts,
 	piExactDeliveryRow,
 } from "../scripts/lib/pi-durable-fresh-live-receipts.ts";
 
@@ -106,6 +108,8 @@ describe("pd side: the root conversation's own entries", () => {
 					name: "entwurf_callback",
 					arguments: {},
 					result: { text: "entwurf_v2 control-socket → sent", isError: false },
+					callOrdinal: 11,
+					resultOrdinal: 14,
 				},
 			],
 		});
@@ -177,5 +181,85 @@ describe("pd side: the doorbell submission for one mailbox message", () => {
 		expect(pdDoorbellSubmission(rows, ROOT, `entwurf-doorbell:${PD}:other.msg`)).toBeNull();
 		expect(pdDoorbellSubmission(rows, CHILD, request)).toBeNull();
 		expect(pdDoorbellSubmission([...rows, submission(ROOT, "done", request)], ROOT, request)).toBeNull();
+	});
+});
+
+/**
+ * pd's bootstrap ORDER, as a hand-written table over native rows. `[GLG 직접, 2026-10-24]` a fresh
+ * sibling may check its caller with the read-only listing, then calls back, then works — so the smoke
+ * no longer asks for a literal first callback. Rows go through the real `pdRootView` and its entry-id
+ * ordinals; every expected verdict is a literal written here, not recomputed by the leaf under test.
+ */
+describe("pd side: the root bootstrap order", () => {
+	const PD_EXPECT = { peersArguments: {}, callback: { toolName: "entwurf_callback", arguments: {} } };
+	const OK = "entwurf_v2 control-socket → sent";
+	let next = 100;
+	/** One assistant row with one call, then its result row. */
+	function step(id: string, name: string, args: Record<string, unknown> = {}, isError = false): PdNativeRow[] {
+		const call = entry(next++, ROOT, "pi.assistant", assistant([{ id, name, arguments: args }]));
+		const res = entry(next++, ROOT, "pi.tool-result", result(id, OK, isError));
+		return [call, res];
+	}
+	const work = (): PdNativeRow[] => step("i", "entwurf_inbox_read", { gardenId: PD });
+	function verdict(rows: PdNativeRow[]): string {
+		try {
+			const rest = assertBootstrapOrder(pdSourceToolReceipts(pdRootView(rows, ROOT).calls), PD_EXPECT, "pd");
+			return `accept rest=${rest.map((r) => r.toolName).join(",")}`;
+		} catch (error) {
+			return (error as Error).message.split("\n")[0] as string;
+		}
+	}
+
+	it("[QK:PD-FRESH-LIVE-BOOTSTRAP-ORDER] zero, one or several successful exact peers checks before ONE successful zero-argument callback are accepted; everything else is refused by name", () => {
+		const table: Record<string, string> = {
+			"callback → work": verdict([...step("c", "entwurf_callback"), ...work()]),
+			"peers → callback → work": verdict([...step("p", "entwurf_peers"), ...step("c", "entwurf_callback"), ...work()]),
+			"peers → peers → callback → work": verdict([
+				...step("p1", "entwurf_peers"),
+				...step("p2", "entwurf_peers"),
+				...step("c", "entwurf_callback"),
+				...work(),
+			]),
+			"callback → peers (late)": verdict([...step("c", "entwurf_callback"), ...step("p", "entwurf_peers"), ...work()]),
+			"failed peers": verdict([...step("p", "entwurf_peers", {}, true), ...step("c", "entwurf_callback"), ...work()]),
+			"peers with arguments": verdict([
+				...step("p", "entwurf_peers", { limit: 5 }),
+				...step("c", "entwurf_callback"),
+				...work(),
+			]),
+			"pending callback": verdict([
+				entry(next++, ROOT, "pi.assistant", assistant([{ id: "c", name: "entwurf_callback", arguments: {} }])),
+			]),
+			"callback with arguments": verdict([...step("c", "entwurf_callback", { target: FIXTURE }), ...work()]),
+			"duplicate callback": verdict([...step("c1", "entwurf_callback"), ...step("c2", "entwurf_callback"), ...work()]),
+			"work before callback": verdict([...work(), ...step("c", "entwurf_callback")]),
+			"peers + callback in one row": verdict([
+				entry(
+					next++,
+					ROOT,
+					"pi.assistant",
+					assistant([
+						{ id: "p", name: "entwurf_peers", arguments: {} },
+						{ id: "c", name: "entwurf_callback", arguments: {} },
+					]),
+				),
+				entry(next++, ROOT, "pi.tool-result", result("p", OK, false)),
+				entry(next++, ROOT, "pi.tool-result", result("c", OK, false)),
+				...work(),
+			]),
+		};
+		expect(table).toEqual({
+			"callback → work": "accept rest=entwurf_inbox_read",
+			"peers → callback → work": "accept rest=entwurf_inbox_read",
+			"peers → peers → callback → work": "accept rest=entwurf_inbox_read",
+			"callback → peers (late)": "pd: entwurf_peers after the callback — the check is offered only before it",
+			"failed peers": "pd: pre-callback entwurf_peers failed",
+			"peers with arguments": "pd: pre-callback entwurf_peers arguments differ",
+			"pending callback": "pd: the callback remained pending",
+			"callback with arguments": `pd: unexpected pre-callback call entwurf_callback {"target":"${FIXTURE}"} — only the read-only entwurf_peers check may precede entwurf_callback {}`,
+			"duplicate callback": "pd: duplicate callback entwurf_callback",
+			"work before callback": `pd: unexpected pre-callback call entwurf_inbox_read {"gardenId":"${PD}"} — only the read-only entwurf_peers check may precede entwurf_callback {}`,
+			"peers + callback in one row": "pd: entwurf_callback was called before the entwurf_peers result was recorded",
+		});
 	});
 });

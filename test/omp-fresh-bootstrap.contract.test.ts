@@ -21,6 +21,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { CALLBACK_TARGET_ENV } from "../pi-extensions/lib/callback-env.ts";
+import { FRESH_CALL_PEERS_TOOL } from "../pi-extensions/lib/fresh-call-composition.ts";
 import {
 	buildOmpBootstrapPayload,
 	FRESH_CALL_CALLBACK_TOOL,
@@ -33,12 +35,15 @@ import entwurfMetaOmp, {
 	createOmpBootstrap,
 	decodeOmpBootstrapPayload,
 	OMP_BOOTSTRAP_CALLBACK_TOOL,
+	OMP_BOOTSTRAP_PEERS_TOOL,
 	OMP_BOOTSTRAP_POLL_MS,
 	OMP_BOOTSTRAP_READY_TIMEOUT_MS,
 	OMP_BOOTSTRAP_TASK_MAX_CHARS,
+	OMP_CALLBACK_TARGET_ENV,
 	ompBootstrapCtxAccepts,
 	ompCallbackToolReady,
 	onBirthEdge,
+	readOmpCallbackTarget,
 	resetOmpBootstrapForTest,
 	startOmpBootstrap,
 	OMP_BOOTSTRAP_FLAG as UNIT_FLAG,
@@ -67,6 +72,11 @@ describe("the launcher and the installed unit spell the contract the same way", 
 		expect(OMP_BOOTSTRAP_CALLBACK_TOOL).toBe(FRESH_CALL_CALLBACK_TOOL.omp);
 		expect(OMP_BOOTSTRAP_CALLBACK_TOOL).toBe(TOOL);
 		expect(OMP_BOOTSTRAP_CALLBACK_TOOL).not.toContain("entwurf_v2");
+	});
+
+	it("[QK:OMP-BOOTSTRAP-CALLER-NAMES-AGREE] the unit reads the launcher's own callback-target env name and offers the launcher's own omp peers spelling — the unit cannot import either, so this cell is what holds the duplicates equal", () => {
+		expect(OMP_CALLBACK_TARGET_ENV).toBe(CALLBACK_TARGET_ENV);
+		expect(OMP_BOOTSTRAP_PEERS_TOOL).toBe(FRESH_CALL_PEERS_TOOL.omp);
 	});
 
 	it("[QK:OMP-BOOTSTRAP-TASK-CEILING-AGREES] the decoder's task ceiling is the launcher's — a unit that admitted less would silently drop tasks the public surface accepted", () => {
@@ -187,6 +197,7 @@ function fixture(payload = { task: TASK }): Fixture {
 
 	const handle = createOmpBootstrap({
 		payload,
+		callerGardenId: GID,
 		pi: {
 			on: () => {},
 			getAllTools: () => tools,
@@ -261,7 +272,6 @@ describe("stage one: the callback-only prompt, and nothing else", () => {
 		const content = args[0] as string;
 		expect(content).toContain(TOOL);
 		expect(content).toContain("with no arguments");
-		expect(content).not.toContain(GID);
 		expect(content).not.toContain(NONCE);
 		expect(content).not.toContain(TASK);
 		// Stage one runs on an idle session, so the omitted-option form starts a turn. An
@@ -269,8 +279,25 @@ describe("stage one: the callback-only prompt, and nothing else", () => {
 		expect(args).toHaveLength(1);
 	});
 
+	it("[QK:OMP-BOOTSTRAP-CALLER-CHECK-OFFERED] stage one names the caller for an OPTIONAL read-only check before the callback, and the callback stays zero-argument — the caller id is shown, never asked for as a parameter", () => {
+		const fx = fixture();
+		arm(fx);
+		fx.handle.start();
+		const content = (fx.sent[0] as unknown[])[0] as string;
+		expect(content).toContain(`${GID} is the one that opened you`);
+		expect(content).toContain(`You may corroborate the caller before that call: ${OMP_BOOTSTRAP_PEERS_TOOL}`);
+		expect(content).toContain(`call ${TOOL} with no arguments`);
+		expect(content).toMatch(/does not show the caller is absent/);
+		// Holding back is the explicit exception to "before answering in prose", not a second rule beside it.
+		expect(content).toContain("you may hold the callback and say why in prose instead; the");
+		expect(content).toContain("caller then has no address for you, and the task is not sent.");
+		expect(content).not.toMatch(/not a reason to skip the callback/);
+		// One voice with the four-backend framing: no "first and only" absolute beside an offered check.
+		expect(content).not.toMatch(/FIRST AND ONLY/);
+	});
+
 	it("the callback-only prompt promises the task as the NEXT message, so the sibling neither asks for it nor guesses", () => {
-		const prompt = buildOmpCallbackOnlyPrompt();
+		const prompt = buildOmpCallbackOnlyPrompt(GID);
 		expect(prompt).toContain("NEXT user message");
 		expect(prompt).not.toContain("ACK");
 		expect(prompt).not.toContain("DONE");
@@ -468,6 +495,7 @@ describe("stage two: the task is released by an exact successful tool RESULT, or
 		const fx = fixture();
 		const handle = createOmpBootstrap({
 			payload: { task: TASK },
+			callerGardenId: GID,
 			pi: {
 				on: () => {},
 				getAllTools: () => [{ name: TOOL, sourceInfo: { source: "mcp" } }],
@@ -613,13 +641,19 @@ function birthFixture() {
 			onBirthEdge(edge, rawCtx, pi);
 		},
 		/** One birth edge, with the ctx the vendor would carry. */
-		birth(edge: string, nativeSessionId = NATIVE, gap: TimerGap = "none") {
+		birth(
+			edge: string,
+			nativeSessionId = NATIVE,
+			gap: TimerGap = "none",
+			env: NodeJS.ProcessEnv = { [OMP_CALLBACK_TARGET_ENV]: GID },
+		) {
 			startOmpBootstrap({
 				pi,
 				ctx: ctx(nativeSessionId, gap),
 				envelope: { nativeSessionId, cwd: "/tmp", transcriptPath: null },
 				edge,
 				log: (level, message) => logs.push(`${level} ${message}`),
+				env,
 			});
 		},
 		/** Fire a wired vendor event, as the runner would, against a session's own ctx. */
@@ -798,9 +832,47 @@ describe("defect 2 — the readiness poll belongs to the creator context, or it 
 			envelope: { nativeSessionId: NATIVE, cwd: "/tmp", transcriptPath: null },
 			edge: "session_start",
 			log: (level, message) => logs.push(`${level} ${message}`),
+			// No callback target either: a manual `omp` must not gain a new env requirement.
+			env: {},
 		});
 		expect(logs).toEqual([]);
 		expect(fx.sent).toEqual([]);
+	});
+
+	it("[QK:OMP-BOOTSTRAP-CALLER-TARGET-REQUIRED] a REQUESTED bootstrap whose caller target is absent or malformed is refused by name: no poll, no prompt, no task — and the launch's one chance is spent, so a later edge with a good target does not arm it", () => {
+		const cases: Array<[string, NodeJS.ProcessEnv]> = [
+			["callback-target-absent", {}],
+			["callback-target-malformed", { [OMP_CALLBACK_TARGET_ENV]: "not-a-garden-id" }],
+			["callback-target-malformed", { [OMP_CALLBACK_TARGET_ENV]: "" }],
+		];
+		for (const [reason, env] of cases) {
+			resetOmpBootstrapForTest();
+			const fx = birthFixture();
+			fx.birth("session_start", NATIVE, "none", env);
+			const log = fx.logs.join("\n");
+			expect({ reason, refused: log.includes(`bootstrap-refused reason=${reason}`) }).toEqual({
+				reason,
+				refused: true,
+			});
+			expect(log).toContain("the task was NOT sent");
+			expect(log).not.toContain("bootstrap-armed");
+			expect(fx.live.size).toBe(0);
+			fx.ready();
+			fx.tick();
+			expect(fx.sent).toEqual([]);
+			fx.birth("session_switch(new)", OTHER_NATIVE);
+			fx.tick();
+			expect(fx.sent).toEqual([]);
+		}
+	});
+
+	it("the caller-target reader admits exactly a garden id and refuses everything else by name", () => {
+		expect(readOmpCallbackTarget({ [OMP_CALLBACK_TARGET_ENV]: GID })).toEqual({ ok: true, target: GID });
+		expect(readOmpCallbackTarget({})).toEqual({ ok: false, reason: "callback-target-absent" });
+		expect(readOmpCallbackTarget({ [OMP_CALLBACK_TARGET_ENV]: `${GID}\n` })).toEqual({
+			ok: false,
+			reason: "callback-target-malformed",
+		});
 	});
 
 	it("[QK:OMP-BOOTSTRAP-LATE-TICK-IS-INERT] a tick that escapes teardown does nothing — the phase is the guard, so even a vendor that ran a cleared timer could not resurrect the send", () => {

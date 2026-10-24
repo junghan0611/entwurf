@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 
 import {
 	buildCodexInstruction,
+	buildInitialPiBootstrapTask,
 	buildInitialPiPhaseOne,
 	buildInitialPiRelay,
 	reportSender,
@@ -10,6 +11,7 @@ import {
 	selectReport,
 } from "../scripts/lib/codex-fresh-live-protocol.ts";
 import {
+	assertBootstrapOrder,
 	assertExactSourceToolCalls,
 	assertSourceCallScopes,
 	codexCallbackSenders,
@@ -121,10 +123,9 @@ describe("codex fresh-live protocol", () => {
 		expect(phaseOne).not.toContain("PI-REPORTS-CODEX-LAUNCH");
 		expect(relay).not.toContain("PI-REPORTS-CODEX-LAUNCH");
 		const source = readFileSync(new URL("../scripts/smoke-codex-fresh-live.ts", import.meta.url), "utf8");
-		expect(source).toContain("Session-info already supplies device and time. Do not recheck time, cwd, or identity");
-		expect(source).toContain(
-			"Your FIRST tool call must be mcp__entwurf_bridge__entwurf_callback with no arguments, and nothing before it.",
-		);
+		// The initial Pi's own task is the protocol builder's (its meaning is pinned separately by
+		// the INITIAL-PI-BOOTSTRAP-TASK cell below); this cell only holds that the smoke sends it.
+		expect(source).toContain("task: buildInitialPiBootstrapTask(initialPiWaitToken),");
 		const injection = source.indexOf('const relayInitialPi = await bridge.call("entwurf_v2"');
 		const recordJoin = source.indexOf('"the callback-derived citizen resolves to a real Codex V3 citizen"');
 		expect(recordJoin).toBeGreaterThanOrEqual(0);
@@ -242,6 +243,8 @@ describe("codex fresh-live protocol", () => {
 				text: RAW_RECEIPT,
 				status: "completed",
 				isError: false,
+				callOrdinal: 0,
+				resultOrdinal: 1,
 			},
 		]);
 		expect(() => piSourceToolReceipts([piCall(), piResult("call-1", false, "entwurf_v2")])).toThrow(
@@ -593,3 +596,298 @@ describe("source-call arguments — schema default, not serialization shape", ()
 		);
 	});
 });
+
+/**
+ * THE BOOTSTRAP ORDER, AS A HAND-WRITTEN TRUTH TABLE. `[GLG 직접, 2026-10-24]` a fresh sibling may
+ * check its caller with the read-only listing the framing offers, then calls back, then works.
+ * Every expected verdict below is a literal written here — none is recomputed through the leaf
+ * under test — and the Pi rows go through the real transcript parser, so the ordinals the leaf
+ * judges are the ones a live run would produce.
+ */
+describe("bootstrap order: successful exact peers prefix → exact callback once → task roles", () => {
+	it("[QK:CODEX-LIVE-INITIAL-PI-BOOTSTRAP-TASK] the task the smoke actually hands the initial Pi is a GUIDED caller check: one no-argument peers call, the zero-argument callback only after its result, then a passive wait — and nothing forbids the check", () => {
+		const token = "INITIAL-PI-WAIT-T0K3N";
+		const task = buildInitialPiBootstrapTask(token);
+		const peersAt = task.indexOf(
+			"This launch is a guided caller check: first call mcp__entwurf_bridge__entwurf_peers once (read-only, no arguments) to corroborate your caller",
+		);
+		const callbackAt = task.indexOf(
+			"and only after its result call mcp__entwurf_bridge__entwurf_callback with no arguments",
+		);
+		const onlyThenAt = task.indexOf("Use no other tool before the callback");
+		const waitAt = task.indexOf(
+			`After your required callback receipt, end the turn and wait passively for one addressed message containing ${token}`,
+		);
+		expect({
+			peersAt: peersAt >= 0,
+			callbackAt: callbackAt > peersAt,
+			onlyThenAt: onlyThenAt > callbackAt,
+			waitAt: waitAt > onlyThenAt,
+		}).toEqual({
+			peersAt: true,
+			callbackAt: true,
+			onlyThenAt: true,
+			waitAt: true,
+		});
+		// The retired forced-first wording, and the blanket identity-recheck ban that forbade the check.
+		expect(task).not.toMatch(/FIRST tool call/i);
+		expect(task).not.toMatch(/nothing before it/);
+		expect(task).not.toMatch(/identity/);
+		// Still fixture-narrow: no shell recheck, no tool to wait, the sibling only on the addressed message.
+		expect(task).toContain("do not recheck them with shell");
+		expect(task).toContain("Do not call shell, sleep, terminal, or any tool to wait.");
+		expect(task).toContain("That message is the only authority to open the Codex sibling.");
+		// Nothing to copy into the callback: no target, no nonce.
+		expect(task).not.toMatch(/target|nonce|mux-fresh-call-/);
+		// And it is what the smoke sends — the inline literal is gone.
+		const smokeSource = readFileSync(new URL("../scripts/smoke-codex-fresh-live.ts", import.meta.url), "utf8");
+		expect(smokeSource).toContain("task: buildInitialPiBootstrapTask(initialPiWaitToken),");
+		expect(smokeSource).not.toContain("Your FIRST tool call must be");
+		// …and the smoke's final audit requires the check the guided task asked for.
+		expect(smokeSource).toContain(
+			'{ peersArguments: {}, callback: { toolName: "entwurf_callback", arguments: {} }, minPeersPrefix: 1 },',
+		);
+	});
+
+	const CB = "mcp__entwurf_bridge__entwurf_callback";
+	const PEERS = "mcp__entwurf_bridge__entwurf_peers";
+	const FRESH = "mcp__entwurf_bridge__entwurf_fresh_call";
+	const V2 = "mcp__entwurf_bridge__entwurf_v2";
+	const FRESH_ARGS = { backend: "codex", model: "m", cwd: "/tmp/x", task: "t" };
+	const V2_ARGS = { target: CODEX_GID, intent: "fire-and-forget", wants_reply: false, message: "relay" };
+	const PI_ROLES = [
+		{ toolName: "entwurf_fresh_call", arguments: FRESH_ARGS },
+		{ toolName: "entwurf_v2", arguments: V2_ARGS },
+	];
+	const PI_EXPECT = { peersArguments: {}, callback: { toolName: "entwurf_callback", arguments: {} } };
+
+	/** One assistant row with one call, then its result row — the sequential shape. */
+	const step = (id: string, name: string, args: Record<string, unknown> = {}, isError = false): unknown[] => [
+		piCall(id, args, name),
+		piResult(id, isError, name),
+	];
+	const piBash = (id: string): unknown[] => step(id, "bash", { command: "true" });
+	const piTask = (): unknown[] => [...step("f", FRESH, FRESH_ARGS), ...step("v", V2, V2_ARGS)];
+
+	/** Run the composed audit (order leaf, then the unchanged exact-once roles) and name the verdict. */
+	function verdict(rows: unknown[]): string {
+		try {
+			assertExactSourceToolCalls(
+				assertBootstrapOrder(piSourceToolReceipts(rows), PI_EXPECT, "pi"),
+				PI_ROLES,
+				"pi roles",
+			);
+			return "accept";
+		} catch (error) {
+			return (error as Error).message.split("\n")[0] as string;
+		}
+	}
+
+	it("[QK:BOOTSTRAP-PEERS-PREFIX-THEN-EXACT-CALLBACK] the legal shapes are accepted and every illegal one is refused by name", () => {
+		const table: Record<string, string> = {
+			"callback → task": verdict([...step("c", CB), ...piTask()]),
+			"peers → callback → task": verdict([...step("p", PEERS), ...step("c", CB), ...piTask()]),
+			"peers → peers → callback → task": verdict([
+				...step("p1", PEERS),
+				...step("p2", PEERS),
+				...step("c", CB),
+				...piTask(),
+			]),
+			"bash true → callback → task (the r3 shape)": verdict([...piBash("b"), ...step("c", CB), ...piTask()]),
+			"peers → bash true → callback → task": verdict([
+				...step("p", PEERS),
+				...piBash("b"),
+				...step("c", CB),
+				...piTask(),
+			]),
+			"task before callback": verdict([...step("f", FRESH, FRESH_ARGS), ...step("c", CB), ...step("v", V2, V2_ARGS)]),
+			"callback twice": verdict([...step("c1", CB), ...step("c2", CB), ...piTask()]),
+			"callback with wants_reply false": verdict([...step("c", CB, { wants_reply: false }), ...piTask()]),
+			"callback with a target": verdict([...step("c", CB, { target: CALLER }), ...piTask()]),
+			"callback pending": verdict([piCall("c", {}, CB)]),
+			"callback failed": verdict([...step("c", CB, {}, true), ...piTask()]),
+			"peers failed": verdict([...step("p", PEERS, {}, true), ...step("c", CB), ...piTask()]),
+			"peers with other arguments": verdict([...step("p", PEERS, { backend: "pi" }), ...step("c", CB), ...piTask()]),
+			"peers only, no callback": verdict([...step("p", PEERS)]),
+			"bash after the callback": verdict([...step("c", CB), ...piBash("b"), ...piTask()]),
+		};
+		expect(table).toEqual({
+			"callback → task": "accept",
+			"peers → callback → task": "accept",
+			"peers → peers → callback → task": "accept",
+			"bash true → callback → task (the r3 shape)":
+				'pi: unexpected pre-callback call bash {"command":"true"} — only the read-only entwurf_peers check may precede entwurf_callback {}',
+			"peers → bash true → callback → task":
+				'pi: unexpected pre-callback call bash {"command":"true"} — only the read-only entwurf_peers check may precede entwurf_callback {}',
+			"task before callback": `pi: unexpected pre-callback call entwurf_fresh_call ${JSON.stringify(FRESH_ARGS)} — only the read-only entwurf_peers check may precede entwurf_callback {}`,
+			"callback twice": "pi: duplicate callback entwurf_callback",
+			"callback with wants_reply false":
+				'pi: unexpected pre-callback call entwurf_callback {"wants_reply":false} — only the read-only entwurf_peers check may precede entwurf_callback {}',
+			"callback with a target": `pi: unexpected pre-callback call entwurf_callback {"target":"${CALLER}"} — only the read-only entwurf_peers check may precede entwurf_callback {}`,
+			"callback pending": "pi: the callback remained pending",
+			"callback failed": "pi: the callback failed",
+			"peers failed": "pi: pre-callback entwurf_peers failed",
+			"peers with other arguments": "pi: pre-callback entwurf_peers arguments differ",
+			"peers only, no callback": "pi: no callback after 1 pre-callback check(s)",
+			"bash after the callback": "pi roles: source call count differs: expected=2 actual=3",
+		});
+	});
+
+	it("[QK:BOOTSTRAP-PEERS-ONLY-AS-PREFIX] a peers check AFTER the callback is refused by name — the check is admitted only as a prefix, never filtered out wherever it appears", () => {
+		expect({
+			"callback → peers → task (late check)": verdict([...step("c", CB), ...step("p", PEERS), ...piTask()]),
+		}).toEqual({
+			"callback → peers → task (late check)":
+				"pi: entwurf_peers after the callback — the check is offered only before it",
+		});
+	});
+
+	it("[QK:BOOTSTRAP-PI-RESULT-BEFORE-TASK-CALL] on Pi a task call recorded before the callback RESULT is refused — call order alone would accept it", () => {
+		// One assistant row carrying BOTH calls, results after: call order is callback-first, but the
+		// fresh call was made before the callback result existed.
+		const parallel = [
+			{
+				type: "message",
+				message: {
+					role: "assistant",
+					content: [
+						{ type: "toolCall", id: "c", name: CB, arguments: {} },
+						{ type: "toolCall", id: "f", name: FRESH, arguments: FRESH_ARGS },
+					],
+				},
+			},
+			piResult("c", false, CB),
+			piResult("f", false, FRESH),
+			...step("v", V2, V2_ARGS),
+		];
+		expect(verdict(parallel)).toBe("pi: entwurf_fresh_call was called before the callback result was recorded");
+	});
+
+	// Codex's callback rail, shared by the two cells below: one entwurf_v2 receipt judged as the callback.
+	const CODEX_NONCE = "mux-fresh-call-abcdef123456";
+	const codexCallback = {
+		toolName: "entwurf_v2",
+		arguments: { target: PI_GID, intent: "fire-and-forget", wants_reply: false, message: CODEX_NONCE },
+	};
+	const codex = (args: Record<string, unknown>, extra: SourceToolReceiptLike[] = []): string => {
+		try {
+			const rest = assertBootstrapOrder(
+				[{ toolName: "entwurf_v2", arguments: args, text: "", status: "completed", isError: false }, ...extra],
+				{ peersArguments: {}, callback: codexCallback },
+				"codex",
+			);
+			return `accept rest=${rest.length}`;
+		} catch (error) {
+			return (error as Error).message.split("\n")[0] as string;
+		}
+	};
+
+	it("[QK:BOOTSTRAP-CODEX-V2-CALLBACK-DEFAULT] Codex's callback IS entwurf_v2, so an omitted wants_reply keeps its schema default (false) and is the exact callback — the 2026-09-16 default-false RED must not come back through the order leaf", () => {
+		expect({
+			"codex v2 wants_reply omitted": codex({ target: PI_GID, intent: "fire-and-forget", message: CODEX_NONCE }),
+		}).toEqual({ "codex v2 wants_reply omitted": "accept rest=0" });
+	});
+
+	it("[QK:BOOTSTRAP-PI-PEERS-RESULT-BEFORE-CALLBACK] on Pi a callback CALLED before the peers result was recorded is refused — the check is a check only if its answer came first; a sequential prefix is still accepted", () => {
+		const sameRow = [
+			{
+				type: "message",
+				message: {
+					role: "assistant",
+					content: [
+						{ type: "toolCall", id: "p", name: PEERS, arguments: {} },
+						{ type: "toolCall", id: "c", name: CB, arguments: {} },
+					],
+				},
+			},
+			piResult("p", false, PEERS),
+			piResult("c", false, CB),
+			...piTask(),
+		];
+		const resultAfterCallbackCall = [
+			piCall("p", {}, PEERS),
+			piCall("c", {}, CB),
+			piResult("p", false, PEERS),
+			piResult("c", false, CB),
+			...piTask(),
+		];
+		expect({
+			"peers + callback in one assistant row": verdict(sameRow),
+			"peers result recorded after the callback call": verdict(resultAfterCallbackCall),
+			"peers → peers → callback, sequential": verdict([
+				...step("p1", PEERS),
+				...step("p2", PEERS),
+				...step("c", CB),
+				...piTask(),
+			]),
+		}).toEqual({
+			"peers + callback in one assistant row":
+				"pi: entwurf_callback was called before the entwurf_peers result was recorded",
+			"peers result recorded after the callback call":
+				"pi: entwurf_callback was called before the entwurf_peers result was recorded",
+			"peers → peers → callback, sequential": "accept",
+		});
+	});
+
+	it("[QK:BOOTSTRAP-GUIDED-PEERS-REQUIRED] a guided launch that asked for the check is not positive evidence with zero checks: minPeersPrefix 1 refuses callback-first and admits peers → callback; without it the check stays optional", () => {
+		const guided = { ...PI_EXPECT, minPeersPrefix: 1 };
+		const run = (rows: unknown[], expected: typeof guided | typeof PI_EXPECT): string => {
+			try {
+				assertBootstrapOrder(piSourceToolReceipts(rows), expected, "pi");
+				return "accept";
+			} catch (error) {
+				return (error as Error).message.split("\n")[0] as string;
+			}
+		};
+		expect({
+			"guided, callback first": run([...step("c", CB), ...piTask()], guided),
+			"guided, peers → callback": run([...step("p", PEERS), ...step("c", CB), ...piTask()], guided),
+			"optional, callback first": run([...step("c", CB), ...piTask()], PI_EXPECT),
+		}).toEqual({
+			"guided, callback first": "pi: the guided caller check was not made (peers prefix=0, required ≥ 1)",
+			"guided, peers → callback": "accept",
+			"optional, callback first": "accept",
+		});
+	});
+
+	it("[QK:BOOTSTRAP-ZERO-ARG-CALLBACK-STRICT] the two rails compare their callbacks by their own contracts: Pi's zero-argument entwurf_callback is byte-exact, Codex's entwurf_v2 is exact on target/intent/message and wants_reply", () => {
+		const nonce = CODEX_NONCE;
+		expect({
+			"codex v2 exact": codex(codexCallback.arguments),
+			"codex v2 nonce drift": codex({ ...codexCallback.arguments, message: `${nonce}x` }),
+			"codex v2 wants_reply true": codex({ ...codexCallback.arguments, wants_reply: true }),
+			"pi callback wants_reply false": verdict([...step("c", CB, { wants_reply: false }), ...piTask()]),
+		}).toEqual({
+			"codex v2 exact": "accept rest=0",
+			"codex v2 nonce drift": `codex: unexpected pre-callback call entwurf_v2 ${JSON.stringify({ ...codexCallback.arguments, message: `${nonce}x` })} — only the read-only entwurf_peers check may precede entwurf_v2 ${JSON.stringify(codexCallback.arguments)}`,
+			"codex v2 wants_reply true": `codex: unexpected pre-callback call entwurf_v2 ${JSON.stringify({ ...codexCallback.arguments, wants_reply: true })} — only the read-only entwurf_peers check may precede entwurf_v2 ${JSON.stringify(codexCallback.arguments)}`,
+			"pi callback wants_reply false":
+				'pi: unexpected pre-callback call entwurf_callback {"wants_reply":false} — only the read-only entwurf_peers check may precede entwurf_callback {}',
+		});
+	});
+
+	it("on Codex the leaf proves call order only: receipts with no ordinals carry no result-before-call claim, so a callback-first item order is accepted as call order (the stronger claim is unverified there)", () => {
+		const callback = {
+			toolName: "entwurf_v2",
+			arguments: { target: PI_GID, intent: "fire-and-forget", wants_reply: false, message: "n" },
+		};
+		const items = codexSourceToolReceipts({
+			turns: [
+				{
+					status: "completed",
+					items: [
+						codexMcp("completed", { id: "p", tool: "entwurf_peers", arguments: {} }),
+						codexMcp("completed", { id: "c", tool: "entwurf_v2", arguments: callback.arguments }),
+						codexMcp("completed", { id: "f" }),
+					],
+				},
+			],
+		});
+		expect(items.every((r) => r.callOrdinal === undefined && r.resultOrdinal === undefined)).toBe(true);
+		expect(assertBootstrapOrder(items, { peersArguments: {}, callback }, "codex").map((r) => r.toolName)).toEqual([
+			"entwurf_fresh_call",
+		]);
+	});
+});
+
+type SourceToolReceiptLike = Parameters<typeof assertBootstrapOrder>[0][number];

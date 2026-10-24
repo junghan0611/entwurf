@@ -140,7 +140,7 @@ async function run(): Promise<boolean> {
 	}
 	await sleep(2500); // let pi render its tool result before the view moves
 	const pdWindow = take.windowOfPane(pdPane);
-	take.show(pdWindow, "pi-durable opens; its first action is the callback");
+	take.show(pdWindow, "pi-durable opens; it calls back before its task");
 
 	// 3. pd's callback lands in pi with the exact nonce; the sender envelope is the address
 	const pdGid = await take.until("pi-durable's callback in pi's transcript", TURN_WAIT_MS, () => {
@@ -241,7 +241,7 @@ async function run(): Promise<boolean> {
 			JSON.stringify(view?.models),
 		);
 		step(
-			"pi-durable native calls: callback first, own inbox read, a native tool, entwurf_v2 back to pi",
+			"pi-durable native calls: callback before the task, own inbox read, a native tool, entwurf_v2 back to pi",
 			!!view &&
 				view.calls[0]?.name === "entwurf_callback" &&
 				view.calls.some((c) => c.name === "entwurf_inbox_read" && c.arguments.gardenId === pdGid) &&

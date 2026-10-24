@@ -453,7 +453,7 @@ async function run(): Promise<boolean> {
 		return false;
 	const ccTabId = (ccTab as NonNullable<typeof ccTab>).tabId;
 	await sleep(2500);
-	if (!focus(ccTabId, "Claude Code opens in its own tab; its first action is the callback")) return false;
+	if (!focus(ccTabId, "Claude Code opens in its own tab; it calls back before its task")) return false;
 
 	// 7. the callback is the address; the sibling is a claude-code record whose transcript its hook named
 	const ccGid = await take.until("the Claude Code callback in the coordinator's transcript", TURN_WAIT_MS, () => {

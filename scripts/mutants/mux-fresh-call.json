@@ -69,7 +69,9 @@
 			"claim": "FRESHCALL-CALLBACK-PRECEDES-TASK",
 			"title": "the task is framed before the callback instruction, so a sibling that stalls in the task never names itself",
 			"subject": "pi-extensions/lib/fresh-call-composition.ts",
-			"find": ["\t\t\t\t\t`FIRST ACTION, before reading files or anything else: call ${birthTool} with no arguments.`"],
+			"find": [
+				"\t\t\t\t\t`BEFORE THE TASK, and before reading files or running commands: call ${birthTool} with no arguments.`"
+			],
 			"replace": ["\t\t\t\t\t`FINAL ACTION, after completing the task: call ${birthTool} with no arguments.`"],
 			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
 			"timeoutSeconds": 120,
@@ -766,6 +768,19 @@
 			"timeoutSeconds": 60,
 			"signature": "[QK:PIIMPORT-CARRIER-FENCE]",
 			"signatureSource": "run.sh"
+		},
+		{
+			"claim": "PD-FRESH-LIVE-BOOTSTRAP-ORDER",
+			"title": "a pd call with no joined result read as COMPLETED instead of pending, so a callback whose result the native store never recorded passes pd's bootstrap order",
+			"subject": "scripts/lib/pi-durable-fresh-live-receipts.ts",
+			"find": ["\t\tstatus: call.result === null ? \"pending\" : call.result.isError ? \"failed\" : \"completed\","],
+			"replace": [
+				"\t\tstatus: call.result === null ? \"completed\" : call.result.isError ? \"failed\" : \"completed\","
+			],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:PD-FRESH-LIVE-BOOTSTRAP-ORDER]",
+			"signatureSource": "test/pi-durable-fresh-live-receipts.test.ts"
 		}
 	]
 }

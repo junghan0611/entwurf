@@ -1066,6 +1066,104 @@
 			"timeoutSeconds": 180,
 			"signature": "[QK:CODEX-SOCKET-LISTEN-ROW-ONLY]",
 			"signatureSource": "test/codex-socket-listener.test.ts"
+		},
+		{
+			"claim": "BOOTSTRAP-PEERS-PREFIX-THEN-EXACT-CALLBACK",
+			"title": "the bootstrap ORDER removed: everything before the first callback is skipped instead of only an exact peers check, so `bash true → callback → task` — the r3 RED — passes again, and a task call made before the callback is no longer refused",
+			"subject": "scripts/lib/codex-fresh-source-receipts.ts",
+			"find": ["\tfor (; at < receipts.length && receipts[at]?.toolName === \"entwurf_peers\"; at++) {"],
+			"replace": [
+				"\tfor (; at < receipts.length && receipts[at]?.toolName !== expected.callback.toolName; at++) {\n\t\tif (receipts[at]?.toolName !== \"entwurf_peers\") continue;"
+			],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:BOOTSTRAP-PEERS-PREFIX-THEN-EXACT-CALLBACK]",
+			"signatureSource": "test/codex-fresh-live-protocol.test.ts"
+		},
+		{
+			"claim": "BOOTSTRAP-PEERS-ONLY-AS-PREFIX",
+			"title": "the peers check filtered out wherever it appears instead of admitted only as a prefix — a check after the callback disappears from the audit, which is the position-independent filter the contract forbids",
+			"subject": "scripts/lib/codex-fresh-source-receipts.ts",
+			"find": ["\tconst rest = receipts.slice(at + 1);"],
+			"replace": ["\tconst rest = receipts.slice(at + 1).filter((r) => r.toolName !== \"entwurf_peers\");"],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:BOOTSTRAP-PEERS-ONLY-AS-PREFIX]",
+			"signatureSource": "test/codex-fresh-live-protocol.test.ts"
+		},
+		{
+			"claim": "BOOTSTRAP-ZERO-ARG-CALLBACK-STRICT",
+			"title": "the v2 wants_reply default stretched over the zero-argument callback: `entwurf_callback {wants_reply:false}` reads as `{}`, so a model supplying a parameter the verb does not have passes as the exact callback",
+			"subject": "scripts/lib/codex-fresh-source-receipts.ts",
+			"find": [
+				"\treturn toolName === \"entwurf_v2\" ? sourceArgumentsMatch(expected, actual) : isDeepStrictEqual(expected, actual);"
+			],
+			"replace": ["\treturn sourceArgumentsMatch(expected, actual);"],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:BOOTSTRAP-ZERO-ARG-CALLBACK-STRICT]",
+			"signatureSource": "test/codex-fresh-live-protocol.test.ts"
+		},
+		{
+			"claim": "BOOTSTRAP-CODEX-V2-CALLBACK-DEFAULT",
+			"title": "deep-strict comparison forced onto Codex's entwurf_v2 callback too — a Codex callback that omits wants_reply (schema default false) is refused, resurrecting the 2026-09-16 default-false RED",
+			"subject": "scripts/lib/codex-fresh-source-receipts.ts",
+			"find": [
+				"\treturn toolName === \"entwurf_v2\" ? sourceArgumentsMatch(expected, actual) : isDeepStrictEqual(expected, actual);"
+			],
+			"replace": ["\treturn isDeepStrictEqual(expected, actual);"],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:BOOTSTRAP-CODEX-V2-CALLBACK-DEFAULT]",
+			"signatureSource": "test/codex-fresh-live-protocol.test.ts"
+		},
+		{
+			"claim": "BOOTSTRAP-PI-RESULT-BEFORE-TASK-CALL",
+			"title": "the Pi result-ordinal check dropped: a task call made in the same assistant row as the callback — before the callback result existed — passes on call order alone",
+			"subject": "scripts/lib/codex-fresh-source-receipts.ts",
+			"find": ["\t\t\tcallback.resultOrdinal !== undefined &&"],
+			"replace": ["\t\t\tfalse &&"],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:BOOTSTRAP-PI-RESULT-BEFORE-TASK-CALL]",
+			"signatureSource": "test/codex-fresh-live-protocol.test.ts"
+		},
+		{
+			"claim": "CODEX-LIVE-INITIAL-PI-BOOTSTRAP-TASK",
+			"title": "the initial Pi's task restored to the retired forced-first wording — `Your FIRST tool call must be … callback … and nothing before it` with a blanket identity-recheck ban — so the LIVE task forbids the read-only caller check the shared framing offers and the order audit admits",
+			"subject": "scripts/lib/codex-fresh-live-protocol.ts",
+			"find": [
+				"\t\t\"This launch is a guided caller check: first call mcp__entwurf_bridge__entwurf_peers once (read-only, no \" +\n\t\t\"arguments) to corroborate your caller, and only after its result call mcp__entwurf_bridge__entwurf_callback \" +\n\t\t\"with no arguments. Use no other tool before the callback. \" +"
+			],
+			"replace": [
+				"\t\t\"Do not recheck identity with other tools. Your FIRST tool call must be mcp__entwurf_bridge__entwurf_callback with no arguments, and nothing before it. \" +"
+			],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:CODEX-LIVE-INITIAL-PI-BOOTSTRAP-TASK]",
+			"signatureSource": "test/codex-fresh-live-protocol.test.ts"
+		},
+		{
+			"claim": "BOOTSTRAP-PI-PEERS-RESULT-BEFORE-CALLBACK",
+			"title": "the peers-result-before-callback ordinal check dropped: a callback made in the same assistant row as the peers check — before its answer existed — passes as if the caller had been checked",
+			"subject": "scripts/lib/codex-fresh-source-receipts.ts",
+			"find": ["\t\t\tcheck.resultOrdinal !== undefined &&"],
+			"replace": ["\t\t\tfalse &&"],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:BOOTSTRAP-PI-PEERS-RESULT-BEFORE-CALLBACK]",
+			"signatureSource": "test/codex-fresh-live-protocol.test.ts"
+		},
+		{
+			"claim": "BOOTSTRAP-GUIDED-PEERS-REQUIRED",
+			"title": "the guided launch's required check ignored: a guided initial Pi that called back without the peers check it was asked for passes, so a zero-check PASS is counted as the positive path",
+			"subject": "scripts/lib/codex-fresh-source-receipts.ts",
+			"find": ["\tif (at < minPeers)"],
+			"replace": ["\tif (false && at < minPeers)"],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:BOOTSTRAP-GUIDED-PEERS-REQUIRED]",
+			"signatureSource": "test/codex-fresh-live-protocol.test.ts"
 		}
 	]
 }

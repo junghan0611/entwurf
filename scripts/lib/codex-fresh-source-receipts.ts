@@ -9,6 +9,11 @@ export interface SourceToolReceipt {
 	text: string;
 	status: SourceToolStatus;
 	isError: boolean;
+	/** Pi only: the transcript row index of this call's assistant message. Rows are appended in
+	 * order, so this is a source fact about WHEN the call was recorded. Codex leaves it unset. */
+	callOrdinal?: number;
+	/** Pi only: the transcript row index of this call's toolResult. Unset while pending and on Codex. */
+	resultOrdinal?: number;
 }
 
 export interface ExpectedSourceToolCall {
@@ -102,6 +107,107 @@ export function assertExactSourceToolCalls(
 		remaining.splice(index, 1);
 	}
 	if (remaining.length > 0) throw new Error(`${label}: missing source calls ${JSON.stringify(remaining)}`);
+}
+
+/** The callback a fresh sibling makes before its task, and the one read-only check it may make first. */
+export interface BootstrapOrderExpectation {
+	/** Exact arguments of the read-only `entwurf_peers` check the framing offers before the callback. */
+	peersArguments: Record<string, unknown>;
+	/** The callback role: zero-argument `entwurf_callback`, or Codex's `entwurf_v2` to the caller. */
+	callback: ExpectedSourceToolCall;
+	/** A GUIDED launch that asked for the check requires at least this many peers checks. Absent = 0:
+	 * the check is optional everywhere else, and a fixture's guided task is not a product rule. */
+	minPeersPrefix?: number;
+}
+
+/**
+ * Bootstrap arguments: `entwurf_v2` keeps its schema default (absent `wants_reply` IS false — see
+ * `normalizeSourceArguments`), because Codex's callback IS that verb and a model that omits the key
+ * has obeyed it. Every other verb compared here is byte-exact: `entwurf_callback` is ZERO-argument,
+ * so `{ wants_reply: false }` is a model supplying a parameter the verb does not have, and the peers
+ * check is held to the exact call the framing offers.
+ */
+function bootstrapArgumentsMatch(toolName: string, expected: Record<string, unknown>, actual: Record<string, unknown>) {
+	return toolName === "entwurf_v2" ? sourceArgumentsMatch(expected, actual) : isDeepStrictEqual(expected, actual);
+}
+
+/**
+ * The bootstrap order of one fresh sibling, judged on its source receipts IN CALL ORDER:
+ * zero or more successful exact `entwurf_peers` checks, then exactly one successful exact callback,
+ * then the rest — which is returned for the existing exact-once role audit. `[GLG 직접, 2026-10-24]`
+ * checking the caller and then calling back is the right order; nothing else may come first.
+ *
+ * Refused: any other call before the callback (a `bash true`, a task role), a peers check with other
+ * arguments or that did not succeed, a missing / pending / failed callback, a callback with drifted
+ * arguments, a peers check or a second exact callback AFTER the callback, and — where the source
+ * records it — a callback CALLED before a peers check's RESULT was recorded, or a later call recorded
+ * before the callback's RESULT.
+ *
+ * WHAT THE ORDER PROVES DEPENDS ON THE SOURCE. Pi rows carry `callOrdinal`/`resultOrdinal`, so on Pi
+ * this proves every peers result was recorded before the callback was called, and the callback's
+ * result before every later call. Codex `thread/read` gives item order and a status read at audit
+ * time, nothing more, so on Codex this proves CALL ORDER and completion-at-audit only; that a peers
+ * result preceded the callback call, and that the callback result preceded the next call, are both
+ * UNVERIFIED there.
+ * The peers check is never filtered out by position: it is admitted only as a prefix.
+ *
+ * SCOPE. This is the audit's condition for the short fixture tasks that call it ("use no other tool
+ * before the callback"), not a universal list of what a fresh sibling may do; a sibling whose own
+ * check does not hold up may also hold the callback, which these fixtures then see as no callback.
+ */
+export function assertBootstrapOrder(
+	receipts: readonly SourceToolReceipt[],
+	expected: BootstrapOrderExpectation,
+	label: string,
+): SourceToolReceipt[] {
+	let at = 0;
+	for (; at < receipts.length && receipts[at]?.toolName === "entwurf_peers"; at++) {
+		const check = receipts[at] as SourceToolReceipt;
+		if (!isDeepStrictEqual(check.arguments, expected.peersArguments))
+			throw new Error(
+				`${label}: pre-callback entwurf_peers arguments differ\nexpected=${JSON.stringify(expected.peersArguments)}\nactual=${JSON.stringify(check.arguments)}`,
+			);
+		if (check.status !== "completed" || check.isError)
+			throw new Error(`${label}: pre-callback entwurf_peers ${check.isError ? "failed" : check.status}`);
+	}
+	const callback = receipts[at];
+	if (callback === undefined) throw new Error(`${label}: no callback after ${at} pre-callback check(s)`);
+	const minPeers = expected.minPeersPrefix ?? 0;
+	if (at < minPeers)
+		throw new Error(`${label}: the guided caller check was not made (peers prefix=${at}, required ≥ ${minPeers})`);
+	const role = expected.callback;
+	if (
+		callback.toolName !== role.toolName ||
+		!bootstrapArgumentsMatch(role.toolName, role.arguments, callback.arguments)
+	)
+		throw new Error(
+			`${label}: unexpected pre-callback call ${callback.toolName} ${JSON.stringify(callback.arguments)} — only the read-only entwurf_peers check may precede ${role.toolName} ${JSON.stringify(role.arguments)}`,
+		);
+	if (callback.status !== "completed" || callback.isError)
+		throw new Error(`${label}: the callback ${callback.isError ? "failed" : `remained ${callback.status}`}`);
+	// A check is a check only if its answer was in hand before the callback was made.
+	for (const check of receipts.slice(0, at)) {
+		if (
+			check.resultOrdinal !== undefined &&
+			callback.callOrdinal !== undefined &&
+			!(check.resultOrdinal < callback.callOrdinal)
+		)
+			throw new Error(`${label}: ${callback.toolName} was called before the entwurf_peers result was recorded`);
+	}
+	const rest = receipts.slice(at + 1);
+	for (const later of rest) {
+		if (later.toolName === "entwurf_peers")
+			throw new Error(`${label}: entwurf_peers after the callback — the check is offered only before it`);
+		if (later.toolName === role.toolName && bootstrapArgumentsMatch(role.toolName, role.arguments, later.arguments))
+			throw new Error(`${label}: duplicate callback ${later.toolName}`);
+		if (
+			callback.resultOrdinal !== undefined &&
+			later.callOrdinal !== undefined &&
+			later.callOrdinal < callback.resultOrdinal
+		)
+			throw new Error(`${label}: ${later.toolName} was called before the callback result was recorded`);
+	}
+	return rest;
 }
 
 /** The only production leaf that turns joined source receipts into cleanup window authority. */
@@ -199,9 +305,9 @@ function piSourceVerb(nativeName: string): string {
 /** Join Pi's own toolCall and toolResult rows by native id, retaining pending calls.
  * Native-name equality is checked before translating the exact current Pi dialect. */
 export function piSourceToolReceipts(entries: readonly unknown[]): SourceToolReceipt[] {
-	const calls = new Map<string, { toolName: string; arguments: Record<string, unknown> }>();
-	const results = new Map<string, { toolName: string; text: string; isError: boolean }>();
-	for (const raw of entries) {
+	const calls = new Map<string, { toolName: string; arguments: Record<string, unknown>; callOrdinal: number }>();
+	const results = new Map<string, { toolName: string; text: string; isError: boolean; resultOrdinal: number }>();
+	for (const [ordinal, raw] of entries.entries()) {
 		if (typeof raw !== "object" || raw === null) continue;
 		const entry = raw as { type?: unknown; message?: unknown };
 		if (entry.type !== "message" || typeof entry.message !== "object" || entry.message === null) continue;
@@ -229,6 +335,7 @@ export function piSourceToolReceipts(entries: readonly unknown[]): SourceToolRec
 				calls.set(block.id, {
 					toolName: block.name,
 					arguments: block.arguments as Record<string, unknown>,
+					callOrdinal: ordinal,
 				});
 			}
 		}
@@ -242,6 +349,7 @@ export function piSourceToolReceipts(entries: readonly unknown[]): SourceToolRec
 				toolName: message.toolName,
 				text: textContent(message.content),
 				isError: message.isError,
+				resultOrdinal: ordinal,
 			});
 		}
 	}
@@ -263,6 +371,7 @@ export function piSourceToolReceipts(entries: readonly unknown[]): SourceToolRec
 			text: result.text,
 			status: result.isError ? "failed" : "completed",
 			isError: result.isError,
+			resultOrdinal: result.resultOrdinal,
 		});
 	}
 	return joined;

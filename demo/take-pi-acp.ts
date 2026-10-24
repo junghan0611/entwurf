@@ -187,10 +187,7 @@ async function run(): Promise<boolean> {
 	if (!take.must("launch receipt carries nonce and pane", !!nonce && !!sibPane, launch.text)) return false;
 	await sleep(2500);
 	const sibWindow = take.windowOfPane(sibPane as string);
-	take.show(
-		sibWindow,
-		"the sibling opens: a pi citizen whose provider is ACP Claude; its first action is the callback",
-	);
+	take.show(sibWindow, "the sibling opens: a pi citizen whose provider is ACP Claude; it calls back before its task");
 
 	// 3. the callback is the address; the sibling is a pi record with the ACP model
 	const sibGid = await take.until("the sibling's callback in the coordinator's transcript", TURN_WAIT_MS, () => {

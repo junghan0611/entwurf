@@ -188,7 +188,7 @@ async function run(): Promise<boolean> {
 	if (!take.must("launch receipt carries nonce and pane", !!nonce && !!ccPane, launch.text)) return false;
 	await sleep(2500);
 	const ccWindow = take.windowOfPane(ccPane as string);
-	take.show(ccWindow, "Claude Code opens in its own TUI; its first action is the callback");
+	take.show(ccWindow, "Claude Code opens in its own TUI; it calls back before its task");
 
 	// 3. the callback is the address; the sibling is a claude-code record whose transcript its hook named
 	const ccGid = await take.until("the Claude Code callback in the coordinator's transcript", TURN_WAIT_MS, () => {

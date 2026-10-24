@@ -15,7 +15,7 @@
  *                 provider spelled out (the bootstrap refuses a model resolved by inference), so
  *                 the model here is `<provider>/<model id>` split at the FIRST `/` — a catalog id
  *                 that itself contains `/` keeps it. A model with no provider part is refused.
- *   first input   the whole framing (callback first, then the task) rides the bootstrap's closed
+ *   first input   the whole framing (callback before the task) rides the bootstrap's closed
  *                 `{v:2,task}` payload, whose decoder caps `task` at 16000 characters. A framed
  *                 task over that cap would open a window whose bootstrap refuses its own argv.
  *

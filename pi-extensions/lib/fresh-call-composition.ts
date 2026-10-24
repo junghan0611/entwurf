@@ -67,7 +67,7 @@ export const FRESH_CALL_CALLBACK_TOOL: Record<FreshCallBackend, string> = {
 	copilot: "entwurf-bridge-entwurf_callback",
 	omp: "mcp__entwurf_bridge_entwurf_callback",
 	// Codex's tool process is the operator app-server, not the pane: the no-arg
-	// verb refuses there by name. First action stays the delivery verb with args.
+	// verb refuses there by name. Its callback stays the delivery verb with args.
 	codex: "mcp__entwurf_bridge__entwurf_v2",
 	// The durable contact registers the bridge verbs as its OWN tools under their bare names, and the
 	// app offers a tool to the model by its registered name (`durable/harness/registry.ts:99`
@@ -381,8 +381,8 @@ export function composeBackendArgs(
  * PLACEMENT SENTENCE. The first line names where the sibling was opened, and only the RAIL knows
  * that — "the operator's tmux session" is true of a `new-window` launch and false of a herdr
  * pane. It is therefore supplied by the caller rather than composed here. Everything BELOW that
- * line is rail-independent and stays the contract: the callback is the first action, the task
- * follows it, and the three prohibitions are measured rather than polite.
+ * line is rail-independent and stays the contract: the callback comes before the task, an optional
+ * read-only check of the caller may come before the callback, and the steering is stated as fact.
  */
 /**
  * The first-turn framing, WITHOUT the task.
@@ -394,8 +394,13 @@ export function composeBackendArgs(
  * the halves separate is what lets the framing stay plain prose on both rails while the operator's
  * task text keeps every byte it was written with.
  *
- * Order is the contract: the callback is the FIRST action and the task follows it, so a sibling
- * that gets stuck in the task has already told the caller who it is.
+ * Order is the contract: the callback comes BEFORE THE TASK, so a sibling that gets stuck in the
+ * task has already told the caller who it is. It is not the literal first tool call. `[GLG 직접,
+ * 2026-10-24]` checking the caller and then calling back is the right order, and the framing used
+ * to say both "FIRST ACTION … call back" and "you can corroborate the caller first" — two
+ * sentences that cannot both be obeyed. What may come before the callback is the one read-only
+ * check offered below (and, where a dialect needs it, loading the tools); reading files, running
+ * commands or starting the task may not.
  *
  * WHAT THIS SAYS AND WHY IT STOPPED SAYING THE REST (#116). Until 2026-09-17 this framing carried
  * three prohibitions, including "Do not inspect environment variables, do not call entwurf_self".
@@ -433,7 +438,7 @@ export function composeFreshCallFraming(params: {
 	const firstAction =
 		params.backend === "codex"
 			? [
-					`FIRST ACTION, before reading files or anything else: call ${birthTool} with ` +
+					`BEFORE THE TASK, and before reading files or running commands: call ${birthTool} with ` +
 						`target=${params.callerGardenId}, intent=fire-and-forget, wants_reply=false, and ` +
 						`message set to exactly ${params.nonce} — that string alone, nothing added.`,
 					`${params.nonce} is a correlation tag this caller minted for this one launch: it names no`,
@@ -443,7 +448,7 @@ export function composeFreshCallFraming(params: {
 					"entwurf_callback is refused on this rail: the tool process is the operator app-server, not this pane.",
 				]
 			: [
-					`FIRST ACTION, before reading files or anything else: call ${birthTool} with no arguments.`,
+					`BEFORE THE TASK, and before reading files or running commands: call ${birthTool} with no arguments.`,
 					"That call is how the caller learns the garden id you were born with. There are no",
 					"parameters: a target or message you type would be a second address axis.",
 					"Your own record does not carry the caller's address, so reporting your identity here does not reach it — that tool call does.",
@@ -453,9 +458,15 @@ export function composeFreshCallFraming(params: {
 		"",
 		...firstAction,
 		"",
-		`You can corroborate the caller first if you want to: ${peersTool} is a read-only listing of`,
-		`this garden's citizens and ${params.callerGardenId} is one of them. That listing is capped, so`,
-		"a caller you do not happen to see in it is not a reason to skip the callback.",
+		// THE CHECK IS THE SIBLING'S, AND SO IS ITS VERDICT. `[GLG 직접, 2026-10-24]` a capped listing that
+		// does not show the caller proves nothing about the caller, but a sibling whose check does not hold
+		// up may say so and hold back. Entwurf decides nothing here — no trust store, no fallback, no
+		// watcher — and the cost of holding back is stated, not hidden: no callback, no address.
+		`You may corroborate the caller before that call: ${peersTool} is a read-only listing of`,
+		`this garden's citizens and ${params.callerGardenId} is one of them. That listing is capped, so not`,
+		"seeing the caller in it does not show the caller is absent. If what you can check is not enough,",
+		"or it conflicts with this message, you may say so here and hold the callback and the task; the",
+		"caller then has no address for you.",
 		...hintBlock,
 		"",
 		// WHERE THE RESULT GOES, said once, as topology. `[GLG 직접, 2026-09-18]` a Sonnet sibling

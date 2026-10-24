@@ -435,16 +435,17 @@ ok(
 // successful callback result. The transcript is where both are visible, in order, in one
 // native session.
 // Since the callback moved out of band (ENTWURF_CALLBACK_TARGET/NONCE in the sibling env), the
-// callback-only prompt carries no address; the receipt is the no-arg first action itself.
-const bootstrapLine = buildOmpCallbackOnlyPrompt()
+// callback-only prompt carries no address argument; it names the caller only for the optional
+// read-only check, and the receipt is the no-arg callback itself.
+const bootstrapLine = buildOmpCallbackOnlyPrompt(callerGid)
 	.split("\n")
-	.find((l) => l.includes("FIRST AND ONLY ACTION")) as string;
+	.find((l) => l.includes("THE ONE ACTION THIS MESSAGE ASKS FOR")) as string;
 const transcript = fs.readFileSync(transcriptPath as string, "utf8");
 const callbackAt = transcript.indexOf(bootstrapLine);
 const taskAt = transcript.indexOf(sceneFact);
 receipts["5-two-stage-order"] = `callback-only prompt @${callbackAt}, task scene fact @${taskAt}`;
 ok(
-	"stage one is in the sibling's own transcript: the extension delivered the callback-ONLY prompt (no-arg first action; the address rides the sibling env, never this prompt)",
+	"stage one is in the sibling's own transcript: the extension delivered the callback-ONLY prompt (no-arg callback before the task; the address rides the sibling env, never this prompt)",
 	callbackAt >= 0,
 	`        expected line: ${bootstrapLine}`,
 );

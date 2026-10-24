@@ -161,7 +161,7 @@ describe("the tmux rail's bytes did not move when the code did", () => {
 		);
 		expect((claude.match(/ToolSearch/g) ?? []).length).toBe(1);
 		// It states a fact and asks for a call. The REGISTER is checked on the hint's own lines, not
-		// on the whole framing — the surrounding prose says "you do not happen to see" and "no other
+		// on the whole framing — the surrounding prose says "does not show the caller is absent" and "no other
 		// way to know", and a file-wide match would be asserting something about sentences this
 		// claim does not own. What this claim owns is that the added line neither forbids nor claims
 		// authority: that is the register the prohibitions came out for (2026-09-17, a Sonnet sibling

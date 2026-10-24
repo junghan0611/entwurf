@@ -26,14 +26,14 @@ VARIETY is expected rather than alarming. Cells summarize facts whose receipts l
 `DELIVERY.md`'s matrix and in this document's worked examples — do not re-derive them, reopen
 them there.
 
-| backend | lineage | receive rail — how a message lands | first-action callback (one tool, per-harness dialect — `FRESH_CALL_CALLBACK_TOOL`) | fresh launch (step 9) |
+| backend | lineage | receive rail — how a message lands | callback before the task (one tool, per-harness dialect — `FRESH_CALL_CALLBACK_TOOL`) | fresh launch (step 9) |
 |---|---|---|---|---|
 | `pi` | the host adapter itself | control socket: record-keyed UDS; a send steers or follows up the live turn | `mcp__entwurf_bridge__entwurf_callback` (Pi built-in MCP since #125; Pi ≥0.99.2 sanitizes the server key's hyphen) | positional prompt + `--entwurf-control --model` |
 | `claude-code` | independent vendor | self-fetch mailbox: exec-form `FileChanged` doorbell + `asyncRewake`; the model drains with `entwurf_inbox_read`. The watch owner is the CLI process itself, which can switch sessions in place, so the receiver marker is only live while that pid's sender marker still names the same garden (#101) | `mcp__entwurf-bridge__entwurf_callback` | positional prompt + `--allowedTools=…` + `--model=` |
 | `copilot` | independent vendor | self-fetch mailbox: the watch lives in a FORKED first-party extension child; the receiver marker names the extension pid | `entwurf-bridge-entwurf_callback` | managed verb `entwurf copilot`, `--interactive … --model … --yolo` |
 | `agy` | independent vendor | native-push: record + probe-alive gRPC `send-message`; no mailbox, no receiver marker | n/a — push rail | not openable; the declared pre-#82 legacy exception |
 | `omp` | **a pi fork** — inherits pi's env vocabulary (step 1(6)) | self-fetch mailbox: Claude's SHAPE, but the watch runs IN-PROCESS in the operator's TUI; announce-only doorbell via the vendor's own `sendUserMessage` | `mcp__entwurf_bridge_entwurf_callback` | bare `omp`, NO positional prompt: the two-stage `--entwurf-bootstrap` payload |
-| `codex` | independent vendor | native-push: `thread/loaded/list` probe on the operator-owned app-server UDS, then one-shot `codex queue`; no mailbox, no receiver marker, no retry | `mcp__entwurf_bridge__entwurf_v2` — the one exception: the no-arg callback refuses in the app-server's tool process, so the first action stays the delivery verb with arguments; strict request metadata is the sender join | supported in 0.21.0: `--remote unix://<default-socket> --model <model> --dangerously-bypass-approvals-and-sandbox <prompt>`. Birth is a trust-gated USER `SessionStart` declaration in `$CODEX_HOME/hooks.json` with its closure under `$XDG_DATA_HOME/entwurf/codex-birth` — no root, and the operator answers the vendor prompt once. Parser, env-boundary, setup, preflight and clause-7 composition landed, and acceptance closed them: installed doctors green, `check:full` exit 0, and `release-gate --cut` at MUST 24/0/0 with `check-gate-qualification` 475/475. With placement omitted the seat follows the CALLER: a Codex CALLER opens its sibling beside its own TUI pane, matched by the `thread-id` in that pane's terminal title (0 or 2+ matching panes reject, no fallback); every other caller opens in its own seat. (0.21.0 shipped a fixed operator-owned `codex` home for omitted-placement Codex TARGETS; #95 D1 retired it on 2026-09-16.) Still bounded: no request→arbitrary-attached-TUI seat join, no resume lane, and macOS NOT CERTIFIED — pending physical host |
+| `codex` | independent vendor | native-push: `thread/loaded/list` probe on the operator-owned app-server UDS, then one-shot `codex queue`; no mailbox, no receiver marker, no retry | `mcp__entwurf_bridge__entwurf_v2` — the one exception: the no-arg callback refuses in the app-server's tool process, so its callback stays the delivery verb with arguments; strict request metadata is the sender join | supported in 0.21.0: `--remote unix://<default-socket> --model <model> --dangerously-bypass-approvals-and-sandbox <prompt>`. Birth is a trust-gated USER `SessionStart` declaration in `$CODEX_HOME/hooks.json` with its closure under `$XDG_DATA_HOME/entwurf/codex-birth` — no root, and the operator answers the vendor prompt once. Parser, env-boundary, setup, preflight and clause-7 composition landed, and acceptance closed them: installed doctors green, `check:full` exit 0, and `release-gate --cut` at MUST 24/0/0 with `check-gate-qualification` 475/475. With placement omitted the seat follows the CALLER: a Codex CALLER opens its sibling beside its own TUI pane, matched by the `thread-id` in that pane's terminal title (0 or 2+ matching panes reject, no fallback); every other caller opens in its own seat. (0.21.0 shipped a fixed operator-owned `codex` home for omitted-placement Codex TARGETS; #95 D1 retired it on 2026-09-16.) Still bounded: no request→arbitrary-attached-TUI seat join, no resume lane, and macOS NOT CERTIFIED — pending physical host |
 | `pi-durable` | upstream's experimental app/TUI, which upstream omits from its npm distribution; Entwurf supplies it as a carrier emitted from its owned source (`pi/pi-durable/src` → `pi/pi-durable/carrier/`, #130/#141; SDK set pinned by `pi/pi-durable/overlay/upstream-pin.json`). The 0.31 operator-XDG source route is retired, with no fallback | self-fetch mailbox: the receiver runs IN the durable host; an announce-only doorbell submits a root notice through the native submission API, and the model drains with `entwurf_inbox_read` | `entwurf_callback` (since 0.41.0 the contact registers eight tools by their plain names, including operator-requested `entwurf_retire_call`; this is not a new LIVE receipt) | managed verb `entwurf pi-durable --provider … --model … --width task-wide --entwurf-bootstrap <{v,task}>`; LIVE MUST `smoke-pi-durable-fresh-live` (first green 2026-10-06 on the **0.31 operator source-runtime route**, see DELIVERY — not the 0.32 carrier receipt; frozen b220's carrier aggregate LIVE was accepted 2026-10-08 in #130, separate from prepared-SHA and versioned-artifact proof) |
 
 
@@ -633,7 +633,9 @@ and must not be described as supported until it is re-evaluated here.
    **effective configuration** the vendor will read, not entwurf's ownership receipt, and not a
    LIVE render: those are three different proofs. A receipt may contradict; its absence alone
    does not;
-5. callback as the first action, using that harness's measured tool name;
+5. callback before the task, using that harness's measured tool name — an optional read-only
+   check of the caller (`entwurf_peers`) may come before it (and, where the dialect needs it, loading
+   the callback tool); nothing else the task needs may;
 6. exact nonce correlation from the callback sender envelope, with launch and callback receipts
    kept separate;
 7. one real visible LIVE receipt through callback and addressed receive.
@@ -653,7 +655,7 @@ creation API, or reconstruction of native runtime/auth/storage/recovery. `--cont
 with fresh-only model/width/bootstrap arguments must refuse before opening; it selects newest-cwd,
 not a record-targeted session. Model resolution failure must prevent citizen birth, but may leave
 native allocation whose cleanup remains upstream-owned. All four preflight capabilities, compiled
-consumer proof, first-action callback, exact nonce, visible LIVE and release stops remain binding.
+consumer proof, callback before the task, exact nonce, visible LIVE and release stops remain binding.
 Since #130 the same mapping and the same narrow boundary run on the installed carrier (owned source since #141, SDK set 1.3.0), whose
 pin authority is `pi/pi-durable/overlay/upstream-pin.json`. The mapping alone is not admission and
 not a waiver: 0.31.0 shipped pi-durable's admission on the operator source-runtime route, and the
@@ -740,7 +742,7 @@ edge — and if the answer is neither, that edge is where the next release will 
 Read this for the SHAPE of the evidence, not to copy its strings; every one of them is a measured
 vendor fact with an expiry date at the next CLI upgrade. Clause 5 is the admission-day contract
 (2026-08-25, before `entwurf_callback` existed): the first action was the delivery verb, so the
-measured name is `entwurf_v2`'s. Today's first action is the source map's table above.
+measured name is `entwurf_v2`'s. Today's callback verb is the source map's table above.
 
 | clause | what it turned out to be | where the fact came from |
 |---|---|---|
@@ -772,7 +774,7 @@ Three lessons generalise past Copilot:
 Read it against Copilot's, because the instructive part is where the two DIVERGE. Every clause is
 the same; not one of its answers is. Clause 5 and the readiness `[측정 2026-08-30]` note below are
 likewise the admission-day contract, measured on the delivery verb before `entwurf_callback`
-(0.24.0); the current first action is in the source map above, and the digit lesson still holds
+(0.24.0); the current callback verb is in the source map above, and the digit lesson still holds
 for delivery.
 
 | clause | OMP's answer | why it differs from Copilot's |

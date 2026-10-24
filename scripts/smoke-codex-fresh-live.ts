@@ -75,12 +75,14 @@ import {
 } from "../pi-extensions/lib/native-push/codex-ws-client.ts";
 import {
 	buildCodexInstruction,
+	buildInitialPiBootstrapTask,
 	buildInitialPiPhaseOne,
 	buildInitialPiRelay,
 	runCleanupStages,
 	selectReport,
 } from "./lib/codex-fresh-live-protocol.ts";
 import {
+	assertBootstrapOrder,
 	assertExactSourceToolCalls,
 	assertSourceCallScopes,
 	codexCallbackSenders,
@@ -978,11 +980,7 @@ async function run(): Promise<void> {
 		backend: "pi",
 		model: piModel,
 		cwd: scratch,
-		task:
-			"Session-info already supplies device and time. Do not recheck time, cwd, or identity with shell or other tools. " +
-			"Your FIRST tool call must be mcp__entwurf_bridge__entwurf_callback with no arguments, and nothing before it. " +
-			`After your required callback receipt, end the turn and wait passively for one addressed message containing ${initialPiWaitToken}. ` +
-			"That message is the only authority to open the Codex sibling. Do not call shell, sleep, terminal, or any tool to wait.",
+		task: buildInitialPiBootstrapTask(initialPiWaitToken),
 	});
 	receipts["2-initial-pi-launch"] = initialPiLaunch.text;
 	ok(
@@ -1440,25 +1438,33 @@ async function run(): Promise<void> {
 		const observed = await readCodexThread(codexSocketPath, codexThreadId, true);
 		return codexThreadIsTerminal(observed) ? observed : null;
 	});
+	// THE BOOTSTRAP ORDER, THEN THE ROLES — two leaves, composed. `[GLG 직접, 2026-10-24]` a fresh
+	// sibling may check its caller with the read-only listing the framing offers, then calls back,
+	// then works. `assertBootstrapOrder` admits only that prefix (successful exact `entwurf_peers`
+	// checks), requires the exact callback once and successfully, and hands the rest to the
+	// unchanged exact-once role audit — so `bash true` before the callback (the r3 RED) is still
+	// refused, by the order leaf now rather than by a count. On Pi the receipts carry transcript
+	// ordinals, so this also proves every peers RESULT was recorded before the callback was called,
+	// and the callback RESULT before every task call.
+	//
+	// The callback is the ZERO-ARGUMENT eighth verb and `{}` is compared byte-exactly: a target, a
+	// message or a `wants_reply` typed here is a parameter the verb does not have. Nothing is
+	// weakened by the nonce not being in THIS expectation: the correlation is proven earlier and from
+	// the delivered body — `the initial Pi callback carries the exact launch nonce` reads the
+	// fixture's own mailbox, requires exactly one exact match and refuses duplicates, and the two
+	// cells beside it bind that callback's sender envelope to a real pi V3 citizen.
+	const initialPiSources = piSourceToolReceipts(readInitialPiEntries());
+	const initialPiTaskCalls = assertBootstrapOrder(
+		initialPiSources,
+		// The guided task asked this Pi to take the offered check, so a zero-check PASS is not positive evidence.
+		{ peersArguments: {}, callback: { toolName: "entwurf_callback", arguments: {} }, minPeersPrefix: 1 },
+		"initial Pi bootstrap order",
+	);
+	// The verified prefix count: the order leaf admitted exactly these many leading peers checks.
+	const piPeersPrefix = initialPiSources.length - initialPiTaskCalls.length - 1;
 	assertExactSourceToolCalls(
-		piSourceToolReceipts(readInitialPiEntries()),
+		initialPiTaskCalls,
 		[
-			// 0.24.0 moved a pi sibling's first action to the ZERO-ARGUMENT eighth verb, and this
-			// smoke's own launch receipt says so in the same run: "its first action is the
-			// zero-argument callback verb (codex is the one arm that still sends the nonce as
-			// arguments)". The Codex audit below therefore keeps its `entwurf_v2` shape, and only
-			// this one moves. `{}` is matched by deep-strict equality, so it pins the verb's actual
-			// contract — a target or message typed here would be a second address axis and the verb
-			// refuses it by name.
-			//
-			// Nothing is weakened by dropping the nonce from THIS expectation: the correlation is
-			// proven earlier and from the delivered body, which is where a nonce can actually be
-			// corrupted — `the initial Pi callback carries the exact launch nonce` (:970-973) reads
-			// the fixture's own mailbox, requires exactly one exact match and refuses duplicates,
-			// and the two cells beside it bind that callback's sender envelope to a real pi V3
-			// citizen. This audit's job is the different one its name says: exactly these calls,
-			// once each, and nothing else.
-			{ toolName: "entwurf_callback", arguments: {} },
 			{
 				toolName: "entwurf_fresh_call",
 				arguments: {
@@ -1480,10 +1486,18 @@ async function run(): Promise<void> {
 		],
 		"initial Pi final exact-once audit",
 	);
-	assertExactSourceToolCalls(
-		codexSourceToolReceipts(codexThread),
-		[
-			{
+	// Codex: the same composition over the Entwurf MCP calls `thread/read` reports (this smoke's
+	// Codex scope — no vendor-native action taxonomy). Its callback is `entwurf_v2` to the initial Pi
+	// with the nonce, so `wants_reply` keeps its schema default there. `thread/read` gives item order
+	// and a status at audit time only: on Codex this proves CALL ORDER and completion-at-audit; that a
+	// peers result preceded the callback call, and that the callback result preceded the next call,
+	// are both UNVERIFIED.
+	const codexFinalSources = codexSourceToolReceipts(codexThread);
+	const codexTaskCalls = assertBootstrapOrder(
+		codexFinalSources,
+		{
+			peersArguments: {},
+			callback: {
 				toolName: "entwurf_v2",
 				arguments: {
 					target: initialPiGid,
@@ -1492,6 +1506,13 @@ async function run(): Promise<void> {
 					message: codexNonce,
 				},
 			},
+		},
+		"Codex bootstrap order",
+	);
+	const codexPeersPrefix = codexFinalSources.length - codexTaskCalls.length - 1;
+	assertExactSourceToolCalls(
+		codexTaskCalls,
+		[
 			{
 				toolName: "entwurf_fresh_call",
 				arguments: { backend: "pi", model: piModel, task: outboundPiTask },
@@ -1508,7 +1529,9 @@ async function run(): Promise<void> {
 		],
 		"Codex final exact-once audit",
 	);
-	receipts["16-source-final-audit"] = "initial-pi=3/3 completed exact\ncodex=3/3 completed exact";
+	receipts["16-source-final-audit"] =
+		`initial-pi=bootstrap order (peers prefix=${piPeersPrefix} → callback, results-before-next-call by transcript ordinal) + 2/2 task roles exact\n` +
+		`codex=bootstrap order (peers prefix=${codexPeersPrefix} → callback, call order only) + 2/2 task roles exact`;
 }
 
 let failure: unknown = null;

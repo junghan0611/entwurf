@@ -55,10 +55,10 @@ task만** JSON 리터럴로 인코드하고, 그 리터럴은 **줄바꿈을 싣
 tool 지시를 디코드하거나 바꾸라는 요구가 **아니다**. 정본은 `composeFreshCallFraming()`과
 `HERDR_TASK_LITERAL_INSTRUCTION`이다.
 
-claude-code 대상의 예시다 — pi 대상이면 첫 행동의 도구 이름만 `mcp__entwurf_bridge__entwurf_callback`(Pi 0.99.2 철자)으로 바뀐다. 인자 없는 callback이 두 파일럿의 첫 행동이다; target·nonce를 싣는 `entwurf_v2` 모양은 codex 전용이다.
+claude-code 대상의 예시다 — pi 대상이면 callback 도구 이름만 `mcp__entwurf_bridge__entwurf_callback`(Pi 0.99.2 철자)으로 바뀐다. 인자 없는 callback이 두 파일럿의 작업 전 행동이다(그 앞에는 읽기 전용 caller 확인만 올 수 있다); target·nonce를 싣는 `entwurf_v2` 모양은 codex 전용이다.
 
 ```text
-You are a fresh visible citizen that entwurf opened in a new herdr tab. FIRST ACTION, before reading files or anything else: call mcp__entwurf-bridge__entwurf_callback with no arguments. That call is how the caller learns the garden id you were born with. … After the tool receipt, carry out this task: "<operator task as a JSON string literal>"
+You are a fresh visible citizen that entwurf opened in a new herdr tab. BEFORE THE TASK, and before reading files or running commands: call mcp__entwurf-bridge__entwurf_callback with no arguments. That call is how the caller learns the garden id you were born with. … After the tool receipt, carry out this task: "<operator task as a JSON string literal>"
 ```
 
 **이전 모양이 왜 은퇴했는지 — 이 자리에 기록한다.** 한때 프레이밍 **전체**를 JSON 리터럴로 감싸고
@@ -79,7 +79,7 @@ single-quote하므로 shell 안전은 이미 서 있었고, `src/app/agents.rs:1
   송신은 없다(Hard Rule 16).
 - `[측정 oracle 2026-09-18, LIVE run sCzzE0]` 평문 프레이밍 아래에서 Sonnet 5 자식이 `entwurf_peers`를
   부르고 그다음 `entwurf_v2`를 불러 **콜백을 먼저** 보낸 뒤 과제에 답했다. 읽기 전용 corroboration이
-  콜백 앞에 오는 것은 **프레이밍이 권하는 바로 그것**이고, "콜백이 첫 행동"이라는 계약을 삼키지 않았다.
+  콜백 앞에 오는 것은 **프레이밍이 열어 둔 바로 그것**이고, "콜백이 작업보다 먼저"라는 계약을 삼키지 않았다.
 
 ## 4. identity — 무엇이 무엇을 증명하는가
 
@@ -89,7 +89,7 @@ single-quote하므로 shell 안전은 이미 서 있었고, `src/app/agents.rs:1
 |---|---|---|
 | herdr `agent_started`의 direct witness | 호출자 | 무엇이 어디에 기동됐는가 (**launch 증거**) |
 | exact-one V3 레코드 | 레코드 저장소 | 그 native session의 **주소** |
-| nonce 콜백의 sender envelope | 형제 | 형제가 **첫 모델 행동**을 했다 |
+| nonce 콜백의 sender envelope | 형제 | 형제가 **callback을 보냈다** — nonce 상관과 발신 identity이며, 첫 모델 행동의 증거는 아니다 |
 
 `[측정 2026-09-14]` 표본 둘에서 direct witness는 `agent start` 응답이 돌아오기 **전에** 이미 레코드가
 존재하는 시점에 왔다(claude 레코드 09:41:47 < 응답 09:41:48, pi 09:42:09 < 09:42:16).

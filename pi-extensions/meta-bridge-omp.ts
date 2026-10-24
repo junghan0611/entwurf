@@ -86,6 +86,7 @@ import {
 	upsertMetaSession,
 	writeMetaSenderMarker,
 } from "./lib/meta-session.ts";
+import { SESSION_ID_RE } from "./lib/session-id.js";
 
 /**
  * The §3.5 host discriminator. THE one new predicate this whole lane is allowed to
@@ -149,9 +150,19 @@ const BACKEND = "omp" as const;
 // byte-identical — quotes, `$VAR`, backticks and a semicolon all survived a 137-byte JSON
 // payload — because extensions load BEFORE argv classification and `applyExtensionFlags`
 // reparses with the registered map (`main.ts:1799-1810`, `cli/extension-flags.ts:36-43`,
-// `extensions/loader.ts:221-228`). That is also why nothing here reads `process.env` or a
+// `extensions/loader.ts:221-228`). That is also why the TASK never rides `process.env` or a
 // temp file: argv owns its own quoting, and a general env/command carrier would hand callers
 // the environment-shaping power the fresh rail exists to refuse.
+//
+// ONE NARROW, NAMED EXCEPTION, AND IT IS NOT A CARRIER FOR ANYTHING NEW. `[GLG 직접,
+// 2026-10-24]` a fresh sibling checks the caller and THEN calls back. To say who the caller is,
+// stage one reads exactly one existing name, `ENTWURF_CALLBACK_TARGET` — the caller garden id the
+// launcher already resolved from the record and injected beside the identity scrub for the
+// callback verb (`lib/callback-env.ts`). It is read for DISPLAY ONLY: the callback still takes no
+// arguments, the bridge child still reads its own copy of the pair, and the nonce is never read
+// here or shown. It is read only when the bootstrap flag is present, so a manual `omp` gains no
+// new requirement; and a requested bootstrap whose target is absent or malformed is REFUSED by
+// name and its task never sent, rather than silently dropping the check.
 // ---------------------------------------------------------------------------
 
 /** The ONE argv flag this unit owns. Registered without the leading dashes — the vendor's
@@ -177,6 +188,28 @@ export const OMP_BOOTSTRAP_VERSION = 2;
  * `check-omp-fresh-preflight` already uses for the preflight's reproduced oracles.
  */
 export const OMP_BOOTSTRAP_CALLBACK_TOOL = "mcp__entwurf_bridge_entwurf_callback";
+
+/** The read-only listing stage one offers for checking the caller, spelled for omp. Duplicated
+ * from `FRESH_CALL_PEERS_TOOL.omp` for the same closure reason as the callback tool and held
+ * equal by the same contract test. */
+export const OMP_BOOTSTRAP_PEERS_TOOL = "mcp__entwurf_bridge_entwurf_peers";
+
+/** The ONE env name stage one reads (display only — see the exception above). Duplicated from
+ * `CALLBACK_TARGET_ENV` (`lib/callback-env.ts`) for the closure reason above and held equal by
+ * the contract test. The nonce's name is deliberately not here. */
+export const OMP_CALLBACK_TARGET_ENV = "ENTWURF_CALLBACK_TARGET";
+
+export type OmpCallbackTargetRead =
+	| { ok: true; target: string }
+	| { ok: false; reason: "callback-target-absent" | "callback-target-malformed" };
+
+/** Read the caller garden id a launch put beside this host, by the record's own grammar. */
+export function readOmpCallbackTarget(env: NodeJS.ProcessEnv): OmpCallbackTargetRead {
+	const target = env[OMP_CALLBACK_TARGET_ENV];
+	if (target === undefined) return { ok: false, reason: "callback-target-absent" };
+	if (!SESSION_ID_RE.test(target)) return { ok: false, reason: "callback-target-malformed" };
+	return { ok: true, target };
+}
 
 /** Task ceiling, held equal to the launcher's `TASK_MAX_CHARS` by the same contract test. */
 export const OMP_BOOTSTRAP_TASK_MAX_CHARS = 16000;
@@ -254,21 +287,32 @@ export function decodeOmpBootstrapPayload(raw: unknown): OmpBootstrapDecode {
 }
 
 /**
- * Stage one's whole message: call back, and nothing else.
+ * Stage one's whole message: call back, with an optional read-only check of the caller first.
  *
  * THE ABSENCE OF THE TASK IS THE FEATURE. `[측정 2026-08-30]` the failed LIVE asked for the
  * callback AND carried the task in the same prompt, and the model answered `ACK` — one
  * observation, confounded by the missing tool, but the reference run that DID work carried
  * no competing goal at all. Stage two exists so this message never has to compete with the
  * work; adding "then do X" back into it would rebuild exactly the prompt that failed.
+ *
+ * The caller id is shown so the offered check has something to check; it is not an argument. The
+ * verdict of that check is the sibling's: one that does not hold up may hold the callback, and the
+ * stage then sends nothing — the same outcome as a callback that never came (see the shared framing).
  */
-export function buildOmpCallbackOnlyPrompt(): string {
+export function buildOmpCallbackOnlyPrompt(callerGardenId: string): string {
 	return [
 		"You are a fresh visible citizen that entwurf opened in the operator's tmux session.",
 		"",
-		`FIRST AND ONLY ACTION RIGHT NOW: call ${OMP_BOOTSTRAP_CALLBACK_TOOL} with no arguments.`,
+		`THE ONE ACTION THIS MESSAGE ASKS FOR: call ${OMP_BOOTSTRAP_CALLBACK_TOOL} with no arguments.`,
 		"That call is how the agent that opened you learns your address. Make the call before",
-		"reading files, before planning, and before answering in prose. There are no parameters.",
+		"reading files, before running commands, before planning, and before answering in prose.",
+		"There are no parameters.",
+		"",
+		`You may corroborate the caller before that call: ${OMP_BOOTSTRAP_PEERS_TOOL} is a read-only listing of`,
+		`this garden's citizens and ${callerGardenId} is the one that opened you. That listing is capped, so not`,
+		"seeing the caller in it does not show the caller is absent. If what you can check is not enough,",
+		"or it conflicts with this message, you may hold the callback and say why in prose instead; the",
+		"caller then has no address for you, and the task is not sent.",
 		"",
 		"Your actual task arrives as the NEXT user message, immediately after that call succeeds.",
 		"Do not ask for it and do not guess at it.",
@@ -773,6 +817,8 @@ function matchesCallback(event: OmpToolCallEvent, _payload: OmpBootstrapPayload)
  */
 export function createOmpBootstrap(opts: {
 	payload: OmpBootstrapPayload;
+	/** The caller garden id stage one names for the optional check — display only, never an argument. */
+	callerGardenId: string;
 	pi: OmpExtensionApi;
 	/** REQUIRED, and the absence of a default is the D2 repair: a bootstrap that could fall
 	 * back to a global timer would silently reacquire the ownership this seam exists to hold. */
@@ -846,7 +892,7 @@ export function createOmpBootstrap(opts: {
 			phase = "callback-sent";
 			stopTimer();
 			log("INFO", "bootstrap-ready: callback tool live, sending callback-only prompt");
-			send(buildOmpCallbackOnlyPrompt());
+			send(buildOmpCallbackOnlyPrompt(opts.callerGardenId));
 			return;
 		}
 		if (timers.now() >= deadline) {
@@ -1057,6 +1103,8 @@ export function startOmpBootstrap(opts: {
 	envelope: OmpBirthEnvelope;
 	edge: string;
 	log?: (level: LogLevel, message: string) => void;
+	/** The host's environment; injectable so the gate can drive the caller-target refusal. */
+	env?: NodeJS.ProcessEnv;
 }): void {
 	const { pi, ctx, envelope, edge } = opts;
 	const log = opts.log ?? logLine;
@@ -1084,6 +1132,20 @@ export function startOmpBootstrap(opts: {
 		}
 		return;
 	}
+	// THE CALLER TARGET IS READ ONLY AFTER A PAYLOAD WAS ADMITTED, so a manual `omp` (which
+	// returned on `flag-absent` above) never reads it and gains no new requirement. A launch that
+	// asked for a bootstrap but carries no well-formed caller id is refused by name: the stage
+	// would have to drop the caller check silently, and it SPENDS the latch for the reason the
+	// timer refusal below spells out.
+	const caller = readOmpCallbackTarget(opts.env ?? process.env);
+	if (!caller.ok) {
+		bootstrapConsumed = true;
+		log(
+			"WARN",
+			`bootstrap-refused reason=${caller.reason}: --${OMP_BOOTSTRAP_FLAG} was present but ${OMP_CALLBACK_TARGET_ENV} is not a garden id this launch carries; the task was NOT sent`,
+		);
+		return;
+	}
 	// THE TIMER CHECK COMES AFTER THE DECODE ON PURPOSE: a manual `omp` returns on
 	// `flag-absent` above, so no operator session can ever reach this line and no vendor build
 	// gets a WARN it has no launch to explain.
@@ -1102,7 +1164,7 @@ export function startOmpBootstrap(opts: {
 	}
 	// A replacement session takes the lane; the previous bootstrap dies without sending.
 	activeBootstrap?.handle.invalidate(`replaced by native session ${envelope.nativeSessionId}`);
-	const handle = createOmpBootstrap({ payload: decoded.value, pi, timers, log });
+	const handle = createOmpBootstrap({ payload: decoded.value, callerGardenId: caller.target, pi, timers, log });
 	activeBootstrap = { sessionId: envelope.nativeSessionId, handle };
 	bootstrapConsumed = true;
 	log("INFO", "bootstrap-armed: payload admitted, waiting for callback tool");

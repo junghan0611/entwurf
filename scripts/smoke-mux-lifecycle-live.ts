@@ -16,7 +16,7 @@
  *   tools/call entwurf_fresh_call   → LAUNCH receipt (tmux coordinates + nonce, nothing else);
  *                                     the native pi cell names placement.tmuxSession, and the
  *                                     harness asks tmux itself that the pane sits in that seat
- *   the sibling's own first action  → CALLBACK receipt (its garden id, as the sender envelope of
+ *   the sibling's pre-task callback → CALLBACK receipt (its garden id, as the sender envelope of
  *                                     the nonce message — never a lookup, never a self-report)
  *   tools/call entwurf_v2 f-a-f     → LIVE SEND receipt (control-socket, into a running session)
  *   tools/call entwurf_resume_call  → REFUSED while the citizen is live, with no window opened
@@ -238,8 +238,8 @@ function pidIsAlive(pid: number): boolean {
 /**
  * What the launched window actually shows, read at the moment a nonce callback never arrived.
  *
- * The launch receipt says so itself — "if it never comes, the window is visible and can be read
- * directly" — but on a headless release-gate run nobody is there to look, and the window is torn
+ * The launch receipt says so itself — "if it never comes — not started, stuck, or held back after its
+ * check; this receipt cannot tell which — the window is visible and can be read directly" — but on a headless release-gate run nobody is there to look, and the window is torn
  * down in teardown seconds later. So the harness looks for the operator: is the pane process even
  * alive, and what is painted in it. That separates the three states a bare timeout collapses into
  * one — the runtime never started (or died), it started and is sitting on an error or a prompt, or

@@ -169,8 +169,8 @@
 			"claim": "OMP-BOOTSTRAP-CALLBACK-ONLY",
 			"title": "the task folded back into the stage-one prompt, so the sibling is asked to call back AND to work in one message. This is the prompt the failed LIVE actually ran, minus the missing tool: a competing goal beside the callback is what the two-stage split exists to remove, and nothing about argv or readiness would notice it coming back",
 			"subject": "pi-extensions/meta-bridge-omp.ts",
-			"find": ["\t\t\tsend(buildOmpCallbackOnlyPrompt());"],
-			"replace": ["\t\t\tsend(`${buildOmpCallbackOnlyPrompt()}\\n\\n${payload.task}`);"],
+			"find": ["\t\t\tsend(buildOmpCallbackOnlyPrompt(opts.callerGardenId));"],
+			"replace": ["\t\t\tsend(`${buildOmpCallbackOnlyPrompt(opts.callerGardenId)}\\n\\n${payload.task}`);"],
 			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
 			"timeoutSeconds": 300,
 			"signature": "[QK:OMP-BOOTSTRAP-CALLBACK-ONLY]",
@@ -294,6 +294,17 @@
 			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
 			"timeoutSeconds": 300,
 			"signature": "[QK:OMP-BOOTSTRAP-EPOCH-ENDS-BEFORE-ENVELOPE]",
+			"signatureSource": "test/omp-fresh-bootstrap.contract.test.ts"
+		},
+		{
+			"claim": "OMP-BOOTSTRAP-CALLER-TARGET-REQUIRED",
+			"title": "a requested omp bootstrap with no well-formed caller target proceeds anyway — the stage silently drops the caller check (or names `undefined` as the caller) and the task is still released, instead of a named refusal",
+			"subject": "pi-extensions/meta-bridge-omp.ts",
+			"find": ["\tif (!caller.ok) {"],
+			"replace": ["\tif (false && !caller.ok) {"],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:OMP-BOOTSTRAP-CALLER-TARGET-REQUIRED]",
 			"signatureSource": "test/omp-fresh-bootstrap.contract.test.ts"
 		}
 	]

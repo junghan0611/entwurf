@@ -398,8 +398,9 @@ caller가 fresh token N을 민팅
 
 그래서 fresh-call은 lookup을 만들지 않는다. launch argv에 first task와 함께 **callback 지시**를 싣고,
 caller garden id와 nonce는 **argv가 아니라 launch env**(`ENTWURF_CALLBACK_TARGET` /
-`ENTWURF_CALLBACK_NONCE`, `callback-env.ts`)로 간다. 새 citizen의 첫 행동은 **인자 없는
-`entwurf_callback`**이고 — codex만 예외로 여전히 인자 형태의 `entwurf_v2`를 쓴다(그 rail의 tool
+`ENTWURF_CALLBACK_NONCE`, `callback-env.ts`)로 간다. 새 citizen은 작업 전에 **인자 없는
+`entwurf_callback`**을 부르고(그 앞에는 framing이 허용하는 읽기 전용 caller 확인만 올 수 있고, 확인이
+충분하지 않으면 형제가 callback을 보류할 수 있다 — 그러면 caller는 주소를 모른다) — codex만 예외로 여전히 인자 형태의 `entwurf_v2`를 쓴다(그 rail의 tool
 프로세스는 pane이 아니라 operator app-server다) — 그 verb가 자기 프로세스에서 쌍을 읽어 기존 v2
 runner로 되돌린다. **그 메시지의 sender envelope이 곧 exact garden id**다 — 우리가 조회한 것이
 아니라 delivery 계층이 스스로 붙인 것이다. `[2026-09-20 ff09522]` 그 전까지는 이 두 값이 **프롬프트

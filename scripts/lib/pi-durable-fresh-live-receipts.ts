@@ -11,8 +11,12 @@
  * its entry kinds — `pi.system` (tool offering, applied as toolsAdded/toolsRemoved in order),
  * `pi.assistant` (the model that answered, and the tool calls in order) and `pi.tool-result` (each
  * call's settled result, joined by toolCallId).
+ *
+ * Each call also carries the native ENTRY ids of its call and of its result (`callOrdinal` /
+ * `resultOrdinal`). Entries are read in id order, so the ids order what the store recorded — the same
+ * fact Pi's transcript row index gives the bootstrap-order leaf (`assertBootstrapOrder`).
  */
-import { piCallbackSenders } from "./codex-fresh-source-receipts.ts";
+import { piCallbackSenders, type SourceToolReceipt } from "./codex-fresh-source-receipts.ts";
 
 /** The one Pi transcript row whose exact payload arrived from `expectedSender`, or null. */
 export function piExactDeliveryRow(
@@ -43,6 +47,10 @@ export interface PdToolCall {
 	name: string;
 	arguments: Record<string, unknown>;
 	result: { text: string; isError: boolean } | null;
+	/** Native entry id of the assistant row that made this call. */
+	callOrdinal: number;
+	/** Native entry id of the tool-result row joined to it, or null while none is recorded. */
+	resultOrdinal: number | null;
 }
 export interface PdRootView {
 	offering: string[];
@@ -98,6 +106,8 @@ export function pdRootView(entries: readonly PdNativeRow[], rootConversationId: 
 						name: b.name,
 						arguments: (b.arguments ?? {}) as Record<string, unknown>,
 						result: null,
+						callOrdinal: row.id,
+						resultOrdinal: null,
 					};
 					calls.push(call);
 					byId.set(b.id, call);
@@ -115,10 +125,28 @@ export function pdRootView(entries: readonly PdNativeRow[], rootConversationId: 
 					)
 					.join("");
 				call.result = { text, isError: message.isError === true };
+				call.resultOrdinal = row.id;
 			}
 		}
 	}
 	return { offering, models: [...models], calls };
+}
+
+/**
+ * The root calls as source receipts, in call order, for the bootstrap-order leaf: a call with no joined
+ * result is PENDING, an errored result is FAILED. pd's verbs are its own bare tool names, so no
+ * dialect translation happens here.
+ */
+export function pdSourceToolReceipts(calls: readonly PdToolCall[]): SourceToolReceipt[] {
+	return calls.map((call) => ({
+		toolName: call.name,
+		arguments: call.arguments,
+		text: call.result?.text ?? "",
+		status: call.result === null ? "pending" : call.result.isError ? "failed" : "completed",
+		isError: call.result?.isError ?? false,
+		callOrdinal: call.callOrdinal,
+		...(call.resultOrdinal === null ? {} : { resultOrdinal: call.resultOrdinal }),
+	}));
 }
 
 /** The doorbell submission for exactly this mailbox message, on the root conversation. */

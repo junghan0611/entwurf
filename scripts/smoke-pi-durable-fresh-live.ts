@@ -10,9 +10,9 @@
  *
  *   fixture  a record-backed self-fetch COLLECTOR (claude-code backend, armed mailbox, sender marker).
  *            It only launches and collects; it never stands in for the existing citizen.
- *   1. fixture → `entwurf_fresh_call(pi)` → a real visible Pi; Pi's first action calls back (nonce A).
+ *   1. fixture → `entwurf_fresh_call(pi)` → a real visible Pi; before its task Pi calls back (nonce A).
  *   2. Pi's live turn → `entwurf_fresh_call(pi-durable, <model>)` → the managed `entwurf pi-durable`
- *      verb opens the durable host; ITS first action calls back into Pi (nonce B, read from Pi's
+ *      verb opens the durable host; before ITS task it calls back into Pi (nonce B, read from Pi's
  *      own transcript). Clauses 1, 2, 5 and 6 through the product surface; no raw tmux launch.
  *   3. fixture → Pi (one instruction). Pi's live turn → `entwurf_v2` → pd: receipt 1, existing → new.
  *      pd's doorbell admits the notice; pd's live turn drains it with `entwurf_inbox_read` (addressed
@@ -50,6 +50,7 @@ import { FRESH_CALL_BACKENDS } from "../pi-extensions/lib/mux-fresh-call.ts";
 import { splitPiDurableModel } from "../pi-extensions/lib/pi-durable-fresh-preflight.ts";
 import { checkPiDurableRuntime, piDurablePackageLayout } from "../pi-extensions/lib/pi-durable-runtime.ts";
 import {
+	assertBootstrapOrder,
 	mailboxCallbacks,
 	parseJsonLines,
 	parseMetaMailboxBody,
@@ -63,6 +64,7 @@ import {
 	type PdNativeSubmissionRow,
 	pdDoorbellSubmission,
 	pdRootView,
+	pdSourceToolReceipts,
 	piExactDeliveryRow,
 } from "./lib/pi-durable-fresh-live-receipts.ts";
 
@@ -412,7 +414,7 @@ const piEntries = (): unknown[] => {
 };
 const piTools = (): SourceToolReceipt[] => piSourceToolReceipts(piEntries());
 
-// ── 5. hop 2: Pi's live turn opens pi-durable; pd's first action calls back into Pi ──
+// ── 5. hop 2: Pi's live turn opens pi-durable; before its task pd calls back into Pi ──
 const pdLaunch = await until("Pi's own entwurf_fresh_call(pi-durable) result", TURN_WAIT_MS, () =>
 	piTools().find(
 		(t) => t.toolName === "entwurf_fresh_call" && t.arguments.backend === "pi-durable" && t.status !== "pending",
@@ -434,7 +436,7 @@ const pdGid = await until("pi-durable's callback into Pi (Pi's own transcript)",
 	return senders.length === 1 ? senders[0] : null;
 });
 ok(
-	"pi-durable's FIRST action called back into Pi with the exact nonce; the sender envelope names its garden id",
+	"pi-durable called back into Pi with the exact nonce; the sender envelope names its garden id (correlation and sender identity — the bootstrap ORDER is judged on pd's own root rows below)",
 	GARDEN_ID.test(pdGid),
 );
 ok("the address came from the callback, not the launch receipt", !pdLaunch.text.includes(pdGid));
@@ -597,10 +599,30 @@ ok(
 	receipts["6-native-model"],
 );
 receipts["6-native-tool-calls"] = JSON.stringify(view.calls);
+// THE BOOTSTRAP ORDER, on pd's own root rows. `[GLG 직접, 2026-10-24]` a fresh sibling may check its
+// caller with the read-only listing the framing offers, then calls back, then works — so the literal
+// "first root call is the callback" rule refused the legal `peers → callback`. The order leaf admits
+// only successful exact `entwurf_peers` checks as a prefix (each answered before the callback was
+// called, by native entry id), then requires the zero-argument callback exactly once and successfully,
+// recorded before every later call. The verified prefix count is the receipt, not a guess.
+let pdBootstrap = "";
+let pdTaskCalls: SourceToolReceipt[] = [];
+try {
+	const pdSources = pdSourceToolReceipts(view.calls);
+	pdTaskCalls = assertBootstrapOrder(
+		pdSources,
+		{ peersArguments: {}, callback: { toolName: "entwurf_callback", arguments: {} } },
+		"pd bootstrap order",
+	);
+	pdBootstrap = `peers prefix=${pdSources.length - pdTaskCalls.length - 1} → entwurf_callback {} (native entry-id order)`;
+} catch (error) {
+	pdBootstrap = `REFUSED: ${error instanceof Error ? error.message : String(error)}`;
+}
+receipts["6-pd-bootstrap-order"] = pdBootstrap;
 ok(
-	"pd's FIRST root tool call is entwurf_callback, and it is the only one",
-	view.calls[0]?.name === "entwurf_callback" && view.calls.filter((c) => c.name === "entwurf_callback").length === 1,
-	receipts["6-native-tool-calls"],
+	"pd's root bootstrap order: only successful exact entwurf_peers checks before ONE successful zero-argument entwurf_callback; peers results before callback; callback result before task calls",
+	!pdBootstrap.startsWith("REFUSED") && pdBootstrap !== "",
+	`${pdBootstrap}\n${receipts["6-native-tool-calls"]}`,
 );
 ok(
 	"pd's root entwurf_inbox_read is for its OWN garden id and settled without error",
