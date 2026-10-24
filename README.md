@@ -58,12 +58,12 @@ to use, already installed and authenticated. Pi is optional-by-presence, support
 range `>=1.4.0 <1.5`; Claude Code supported floor `>=2.1.306` is required for its
 managed exec-hook lifecycle. pnpm is needed only for source-checkout setup.
 
-**Release state.** The Pi range above belongs to the published 0.41.1, which ships the Pi
-1.4.0 SDK set. The previous `0.41.0` ships the Pi 1.3.0 set and requires Pi 1.3.x; the README
+**Release state.** The Pi range above belongs to the published 0.41.2, which ships the Pi
+1.4.0 SDK set, as 0.41.1 did. The previous `0.41.0` ships the Pi 1.3.0 set and requires Pi 1.3.x; the README
 inside that tarball and the Herdr snapshot `v2026.10.22-herdr.0.41.0` are its contract.
 
 ```bash
-npm install -g @junghanacs/entwurf@0.41.1
+npm install -g @junghanacs/entwurf@0.41.2
 entwurf setup /path/to/your-project
 entwurf check-bridge
 ```
@@ -130,9 +130,9 @@ runtime each ref installs.
 
 This separate path activates Herdr-integrated **pi and Claude Code** with an
 independently locked runtime and an observation pane; it puts no Entwurf bins on PATH.
-An Entwurf release does not automatically re-pin that runtime: while 0.41.2 is an unpublished
-candidate, main's lock rides the `herdr-checkout` verification carrier, and the published 0.41.1
-runtime stays pinned by the Herdr tag `v2026.10.23-herdr.0.41.1`.
+An Entwurf release does not automatically re-pin that runtime. The Herdr snapshot
+`v2026.10.24-herdr.0.41.2` pins the published npm 0.41.2; the earlier 0.41.1 runtime stays pinned
+by the Herdr tag `v2026.10.23-herdr.0.41.1`.
 [Herdr guide](./plugins/herdr/README.md) owns install, use, evidence and removal;
 the plugin does not own delivery or the Herdr launch rail.
 
@@ -215,7 +215,7 @@ fallback. Exact argv, identity checks and limits: [tmux launch](./docs/mux-launc
 
 ### Remote siblings — declared pairs across hosts
 
-Opt-in. The v2 file below is in main and the 0.41.2 candidate; the published 0.41.1 reads the
+Opt-in. The v2 file below is read by the published 0.41.2; 0.41.1 and earlier read the
 earlier single-pair file. On each host, write `~/.pi/agent/entwurf-remote-pair.json` (mode `0600`; a
 moved agent dir or meta store moves it, see [setup §2c](./docs/setup-clean-host.md#2c-optional-remote-pair-between-two-hosts-107)). The ids
 below are fictional; use your own records' garden ids:

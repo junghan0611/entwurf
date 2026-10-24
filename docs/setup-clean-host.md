@@ -23,7 +23,7 @@ evidence split, and its three states must not collapse into "macOS is supported"
 
 ## Requirements
 
-This table is the published `@junghanacs/entwurf@0.41.1`'s, which ships the Pi 1.4.0 SDK set.
+This table is the published `@junghanacs/entwurf@0.41.2`'s, which ships the Pi 1.4.0 SDK set.
 The previous package, `0.41.0`, ships the Pi 1.3.0 SDK set and requires Pi 1.3.x; the setup guide
 inside that tarball is its contract.
 
@@ -83,14 +83,14 @@ node --version
 npm --version
 ```
 
-The two npm forms below install the **published** package, `0.41.1` (Pi 1.4.x, the Pi 1.4.0 SDK
+The two npm forms below install the **published** package, `0.41.2` (Pi 1.4.x, the Pi 1.4.0 SDK
 set).
 
 Global install is simplest when native harnesses should find stable bins from every
 working directory:
 
 ```bash
-npm install -g @junghanacs/entwurf@0.41.1
+npm install -g @junghanacs/entwurf@0.41.2
 entwurf --help
 entwurf setup /path/to/your-project
 entwurf check-bridge
@@ -101,7 +101,7 @@ A project-local installation is also supported:
 ```bash
 mkdir -p ~/entwurf-smoke && cd ~/entwurf-smoke
 npm init -y
-npm install --save-dev @junghanacs/entwurf@0.41.1
+npm install --save-dev @junghanacs/entwurf@0.41.2
 npx entwurf setup .
 npx entwurf check-bridge
 ```
@@ -111,7 +111,7 @@ project-local install, or `./run.sh <command>` from a source checkout. Keep that
 same scope when upgrading and checking; native process restarts are separate (§7).
 
 `check-bridge` is auth-free. It proves the installed prebuilt MCP server boots and
-lists the nine garden tools (0.41.1); it does not prove a backend model turn, native hook or retirement permission.
+lists the nine garden tools (0.41.2); it does not prove a backend model turn, native hook or retirement permission.
 
 Neither npm form installs a harness runtime. `pi`, Claude Code, Copilot CLI, Codex CLI, agy,
 Cortex, and their authentication remain operator-owned optional prerequisites for the
@@ -257,7 +257,7 @@ A plain `pi` can load the package without becoming a citizen.
 In that session ask for `entwurf_self`, then `entwurf_peers`. Pick an existing
 live garden id and ask for `entwurf_v2` with `intent: "fire-and-forget"` and your
 message. These are harness tools, not shell subcommands; pi exposes them through
-Pi's built-in MCP as `mcp__entwurf_bridge__<verb>`. The 0.41.1 bridge has nine tools;
+Pi's built-in MCP as `mcp__entwurf_bridge__<verb>`. The 0.41.2 bridge has nine tools;
 pi hides `entwurf_inbox_read` and `entwurf_register_native`, leaving seven active.
 The added `entwurf_retire_call` is only for one target/action explicitly requested by the
 human operator, never autonomous cleanup. Where a host provides or is configured with an approval
@@ -450,8 +450,8 @@ proof ([#130](https://github.com/junghan0611/entwurf/issues/130)).
 
 ### Moving durable sessions from the Pi 1.3 SDK to 1.4
 
-0.41.1 is published; moving a live host onto it remains a separate operator decision for each
-host. When you do:
+0.41.1 and 0.41.2 are published on the 1.4.0 SDK set; moving a live host onto either remains a
+separate operator decision for each host. When you do:
 
 1. **Confirm the old owner is gone.** Close the 0.41 (SDK 1.3) durable session normally and check
    that its process has exited. A stale session lock alone is not proof.

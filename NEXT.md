@@ -1,14 +1,15 @@
-# NEXT — 0.41.2 버그픽스 릴리즈 (make)
+# NEXT — 0.41.2 버그픽스 릴리즈 (Herdr snapshot)
 
-core 0.41.2를 v0.41.1 이후 main 변경으로 자른다. 범위는 #149 remote pair 복수 route(하드 컷), pack argv 판정의 SIGPIPE 수선, 개발자 설치 배타성, #108 placement MCP wire 검증이다. 여기에 make 도중 열린 [#152](https://github.com/junghan0611/entwurf/issues/152) agy native-push pause가 더해진다. npm 재pin과 Herdr manifest bump는 없고, Herdr lock은 기존 `herdr-checkout` 검증 carrier로 전환한다. 원장은 `.tmp-verify/release-0.41.2/`(ignored, 조율 포인터 `COORDINATION.md`)와 각 이슈 thread다.
+core 0.41.2를 v0.41.1 이후 main 변경으로 자른다. 범위는 #149 remote pair 복수 route(하드 컷), pack argv 판정의 SIGPIPE 수선, 개발자 설치 배타성, #108 placement MCP wire 검증이다. 여기에 make 도중 열린 [#152](https://github.com/junghan0611/entwurf/issues/152) agy native-push pause가 더해진다. core cut 동안에는 npm 재pin과 Herdr manifest bump 없이 기존 `herdr-checkout` 검증 carrier를 썼다. publish 뒤 별도 Herdr snapshot(RAIL 5)이 npm 0.41.2로 재pin하고 manifest를 0.41.2로 올린다. 원장은 `.tmp-verify/release-0.41.2/`(ignored, 조율 포인터 `COORDINATION.md`)와 각 이슈 thread다.
 
 # RAIL — 현재 좌표
 
 - [x] **0. 이전 cut 닫힘.** core `v0.41.1` = `6a88436`(GitHub Latest, npm `latest` 0.41.1). Herdr snapshot `v2026.10.23-herdr.0.41.1` = `439b399`. 0.41.1 기록은 CHANGELOG와 [#148](https://github.com/junghan0611/entwurf/issues/148#issuecomment-6353660427)가 SSOT다.
 - [x] **1. 범위 landing + prepare.** `156bb62`(#149), `e7ed057`(pack argv), `3e2673b`(개발자 설치), `1d24a01`(#108), Herdr fixture 수선 `f0de5b7`, prepare `1e66466`(main fast-forward, push CI 4 job green).
 - [x] **2. #152 pause 소스·증명.** agy native-push를 코드로 멈추는 묶음은 `100f618`로 커밋되어 main에 fast-forward됐고, `4f14a4d`와 함께 push됐다. 설계·코드 리뷰와 단일 amendment가 닫혔고, focused 검사와 PARTIAL 4그룹은 각자의 후보 receipt로 닫혔다. 이것은 FULL이나 출하 SHA의 kill-power가 아니다.
-- [ ] **3. make 재개.** ← CURRENT: 종점 수선과 bootstrap 수선이 `4f14a4d`로 main에 push됐다(P5, M0, exact-SHA CI, M3w `37b46708`, container, Claude 설치 수용 PASS). 그 뒤 GLG가 agy 출하 범위를 바꿨다 → docs-only `fix/agy-paused-release-scope` 리뷰·checkpoint → main FF → 관리 빌드 1회 → M0 → push → exact-SHA CI → 새 M3w artifact → container 수용 → 최종 artifact와 `37b46708`의 byte 비교(허용 차이는 docs 4개) → tag `v0.41.2` + GitHub release. §3.4 Claude 수용은 `4f14a4d` receipt로, §3.7 agy는 VERIFY 7의 결정적 pause 셀과 `check:full` gate로 닫는다(legacy identity는 요청 시 선택 진단). 각 단계는 코디가 따로 GO한다.
-- [ ] **4. publish.** ← PAUSED: npm publish는 승인되지 않았다.
+- [x] **3. make.** 종점 수선·bootstrap 수선(`4f14a4d`)과 GLG의 agy 출하 범위 변경(docs-only `a2980d6`)이 main에 push됐다. `a2980d6`에서 M0, exact-SHA CI, M3w `fad4cfe7`, container 수용, `37b46708` 대비 payload 비교(docs 4개만 다름)가 닫혔고, §3.4 Claude 수용은 `4f14a4d` receipt로 쓴다. tag `v0.41.2` = `a2980d6`, GitHub release 공개.
+- [x] **4. publish.** npm `latest` 0.41.2. registry tarball은 accepted 후보 `fad4cfe7`와 byte 동일이고 sha512/sha1이 `dist.integrity`/`dist.shasum`과 같다.
+- [ ] **5. Herdr snapshot `v2026.10.24-herdr.0.41.2`.** ← CURRENT: `release/herdr-0.41.2`에서 lock을 npm 0.41.2(측정 sha512)로, manifest를 0.41.2로 맞추고 docs를 정합한다 → focused → 리뷰 → checkpoint → npm-source 재증거·public-ref journey → push CI → tag/GitHub release. 각 단계는 코디가 따로 GO한다. 그 뒤 누적 tmux·임시 파일 정리는 별도 명명.
 
 # NOW
 

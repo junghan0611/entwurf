@@ -4,6 +4,88 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+## v2026.10.24-herdr.0.41.2 — Herdr Entwurf plugin 0.41.2
+
+A separate Herdr plugin snapshot, not another core release: core package 0.41.2 and its
+`v0.41.2` tag remain unchanged. Core 0.41.2 is now published to npm; the publication is
+verified from the registry, not from observing who ran it.
+
+**Reading guide (2026-10-24).** The `## 0.41.2` section below is the text that shipped inside
+the 0.41.2 tarball. Its statements that the Herdr lock rides the `herdr-checkout` carrier
+while 0.41.2 is unpublished predate later facts: `v0.41.2` and its GitHub release point at
+`a2980d6`, that SHA's push CI ran its four required jobs green, and npm `latest` is 0.41.2,
+byte-equal to the accepted Windows-bearing candidate. Until this snapshot lands, a
+main-tracking `herdr plugin install` acquires the checkout commit rather than an npm artifact.
+Neither the published tarball's CHANGELOG nor the core release page is amended by this
+snapshot.
+
+### Herdr plugin
+
+- **Re-pin the published core 0.41.2 and close the checkout window.**
+  `plugins/herdr/runtime-lock.json` returns from the `herdr-checkout` carrier that the 0.41.2
+  candidate rode to production npm source `@junghanacs/entwurf@0.41.2` with the registry's
+  measured sha512 (`sha512-vONpYfVw…D5Et+A==`). The plugin manifest moves 0.41.1 → 0.41.2;
+  admission remains Herdr >= 0.9.0 and the one-build/one-pane/Linux shape is unchanged. From
+  the `v2026.10.23-herdr.0.41.1` snapshot to `v0.41.2`, the changes under `plugins/herdr/`,
+  `scripts/herdr-runtime.mjs` and `scripts/fixtures/herdr-supply.json` were that lock's return
+  to `herdr-checkout` and the plugin README's candidate wording; the runtime helper and the
+  Herdr supply pin did not change.
+- **Pi stays at 1.4.** The acquired runtime carries the Pi 1.4.0 SDK set and accepts Pi
+  `>=1.4.0 <1.5`, the same range as the previous snapshot's 0.41.1.
+- **Upgrade by acquisition source, not just version.** A settled npm-source 0.41.1
+  installation can rebind under the plugin README's ownership conditions. A host that
+  installed the 0.41.2 `herdr-checkout` candidate from main must explicitly deactivate by its
+  own absolute runtime path before reinstalling the npm-source snapshot. No operator
+  installation or active session is rewired by this release work.
+- **What the acquired runtime carries, and what this path does not.** The runtime ships core
+  0.41.2's bytes, including its nine-tool bridge, the pi-durable carrier and the paused agy
+  native push. Herdr wires and opens only `{pi, claude-code}`, so this plugin path launches no
+  pi-durable or agy session. Inside Herdr, `entwurf_resume_call` still refuses as
+  `herdr-resume-unsupported`.
+- **README.** The runtime paragraph and the Pi requirement name npm 0.41.2 and point at the
+  previous snapshot's 0.41.1 on the same Pi 1.4.0 SDK set.
+- **Current install docs.** The root README and the clean-host setup guide name the published
+  0.41.2 in their install commands and tool counts, and the root README names this snapshot as
+  the Herdr pin. Moving a live host onto 0.41.2 remains a separate operator decision for each
+  host.
+
+### Source-specific verification
+
+- Registry metadata reports `latest` 0.41.2 and `repair` 0.12.8-repair.1, 645 files. The
+  downloaded registry tarball is byte-equal (SHA256 and `cmp`) to the preserved accepted core
+  candidate (SHA256 `fad4cfe7e903e1d1f4cacb0e926814b32f3d73358d446b433f63ba6e13a2cafc`,
+  11452583 bytes); its independently computed sha512 and sha1 equal `dist.integrity` and
+  `dist.shasum`.
+- **Package consumer, reused.** Core make already ran its container consumer against those
+  same 0.41.2 bytes (acceptance log `5fd18a4d294e`, repoDigest `node@sha256:6dac556d…`, image
+  ID `sha256:55ab623b…`, recorded in make's artifact receipt), so that result is reused here,
+  not repeated.
+- **Not re-measured for this pin:** the separate sandboxed global `npm install -g` form of the
+  registry package. The axes that form touched for Herdr (npm acquisition and integrity, the
+  installed runtime with its compiled entry, three bins and `check-bridge`, and the installed
+  CLI's deactivate path) belong to the public-ref journey below, which acquires through Herdr
+  itself.
+- **The npm runtime swap against the real registry**, by the registry-shipped
+  `scripts/herdr-runtime.mjs` (byte-equal to this checkout's) in sandboxed user roots, 22/22
+  checks. The 0.41.1 runtime was seeded from its own committed lock (`439b399`); the swap to
+  0.41.2 took one acquisition, the cached tarball's sha512 equals the lock and its sha256 equals
+  the accepted candidate. A manually seeded torn swap (not a killed process) was restored before
+  acquisition and reported `recovered: torn-swap-with-candidate`; an exact re-request acquired
+  nothing, and the owned removal reclaimed cache, runtime and journal. The helper probes no Pi,
+  so these cells certify neither a Pi upgrade nor Herdr's install/update relocation, harness
+  wiring, the installed CLI's deactivate path, a model turn, or recovery from a real kill.
+- **Registry-installed package (Pi).** A sandboxed `pi install npm:@junghanacs/entwurf@0.41.2`
+  (Pi 1.4.0) resolved its bridge to the installed root inside the sandbox; the lock records the
+  registry tarball URL, version 0.41.2 and the integrity above; the installed compiled bridge
+  entry equals the accepted tarball's member; `--list-models entwurf` printed seven `entwurf`
+  rows including the curated Claude anchors, with no unknown-provider error. No model turn. The
+  run stripped every `PI_`, `ENTWURF_`, `CLAUDE`, `CODEX_HOME`, `TMUX`, `HERDR_` and npm
+  carrier. npm 11.16 listed the package's install scripts as not yet covered by `allowScripts`.
+- Pending, and not claimed here: the pushed SHA's four-job CI and the public-ref
+  install/use/deactivate journey. That journey is a main-ref receipt for the SHA it resolved,
+  not a tag-ref install claim. Earlier npm or checkout-carrier receipts cannot certify these
+  axes.
+
 ## 0.41.2 — 2026-10-24
 
 A bug-fix release for the setup, pack and mux verification surfaces. It also carries #149's remote-pair declaration change, a hard cut: every host that has an `entwurf-remote-pair.json` must convert it by hand (Remote pairs below, setup §2c). It also pauses agy native push (#152, Antigravity below), a scope added while this release was being made. The release evidence below separates what was measured while this release was prepared from what the MAKE phase measures on the exact artifact and installed hosts. Herdr is not re-pinned to npm here. An npm lock must name this checkout's exact version, and 0.41.2 had no published bytes when this release was prepared, so `plugins/herdr/runtime-lock.json` returned to the closed `herdr-checkout` verification carrier, as earlier release candidates did. Since the prepare commit `1e66466` reached main, a main-tracking Herdr install builds its runtime from the checked-out commit instead of npm, and a host already on the npm 0.41.1 runtime must run `herdr-plugin-deactivate` before it reinstalls. The published 0.41.1 pairing stays pinned by the Herdr tag `v2026.10.23-herdr.0.41.1` (its section below). The Herdr manifest version is unchanged; a separate snapshot re-pins npm after 0.41.2 is published.
