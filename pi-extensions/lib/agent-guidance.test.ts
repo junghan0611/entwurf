@@ -1,4 +1,4 @@
-/** #154 preservation oracles: expectations are verbatim C0 originals, never this JSON. */
+/** #154 current oracles: frozen C0 objects + independently reviewed literal amendments, never product output. */
 import { spawnSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as os from "node:os";
@@ -24,43 +24,110 @@ const original = JSON.parse(
 	durable: OriginalTool[];
 	schemas: Record<string, unknown>;
 };
-const originalRuntime: unknown = JSON.parse(
+interface ToolSchema {
+	properties: Record<string, { description: string }>;
+}
+interface RuntimeTool {
+	name: OriginalTool["name"];
+	description: string;
+	inputSchema: ToolSchema;
+}
+const originalRuntime: RuntimeTool[] = JSON.parse(
 	fs.readFileSync(new URL("./fixtures/agent-guidance/mcp-tools-before-94d0594.json", import.meta.url), "utf8"),
 );
 
-describe("root product guidance — independent preservation", () => {
-	it("[QK:GUIDANCE-ORIGINAL-DECODED-BYTES] every extracted original string is byte-identical without trim/reflow/source normalization", () => {
+const reviewed = JSON.parse(
+	fs.readFileSync(new URL("./fixtures/agent-guidance/amendments-revision-2.json", import.meta.url), "utf8"),
+) as {
+	revision: number;
+	amendments: {
+		key: ["tools", OriginalTool["name"], "descriptions" | "parameters", string];
+		old: string;
+		new: string;
+	}[];
+};
+
+// Only description leaves may change. Full schemas/annotations/order come from immutable C0,
+// while reviewed literals were selected independently before the product JSON was amended.
+function currentExpectations() {
+	const metadata = structuredClone(original);
+	const runtime = structuredClone(originalRuntime);
+	expect(reviewed.revision).toBe(2);
+	expect(reviewed.amendments).toHaveLength(13);
+	expect(new Set(reviewed.amendments.map((a) => a.key.join("."))).size).toBe(13);
+	for (const amendment of reviewed.amendments) {
+		const [root, name, family, field] = amendment.key;
+		expect(root).toBe("tools");
+		expect(amendment.new).not.toBe(amendment.old);
+		const mcp = runtime.find((tool) => tool.name === name)!;
+		if (family === "descriptions") {
+			expect(["mcp", "durable"]).toContain(field);
+			const expected = metadata[field as "mcp" | "durable"].find((tool) => tool.name === name)!;
+			expect(expected.description).toBe(amendment.old);
+			expected.description = amendment.new;
+			if (field === "mcp") {
+				expect(mcp.description).toBe(amendment.old);
+				mcp.description = amendment.new;
+			}
+		} else {
+			expect(family).toBe("parameters");
+			expect(name).toBe("entwurf_v2");
+			for (const rail of ["mcp", "durable"] as const) {
+				const parameter = metadata[rail].find((tool) => tool.name === name)!.parameters.find((p) => p.field === field)!;
+				expect(parameter.text).toBe(amendment.old);
+				parameter.text = amendment.new;
+			}
+			const schema = metadata.schemas[name] as ToolSchema;
+			for (const expected of [mcp.inputSchema, schema]) {
+				expect(expected.properties[field].description).toBe(amendment.old);
+				expected.properties[field].description = amendment.new;
+			}
+		}
+	}
+	return { metadata, runtime };
+}
+
+describe("root product guidance — frozen originals plus reviewed current amendments", () => {
+	it("[QK:GUIDANCE-CURRENT-DECODED-BYTES] every current string is exact and only declared amendments differ from originals", () => {
 		expect(original.sourceSha).toBe("94d0594182cbd9cf0a5c90f4d299cda40d870b8f");
+		const { metadata } = currentExpectations();
+		const changed = new Set<string>();
 		for (const rail of ["mcp", "durable"] as const) {
 			for (const tool of original[rail]) {
+				const expected = metadata[rail].find((entry) => entry.name === tool.name)!;
 				const actual = ENTWURF_TOOL_GUIDANCE[tool.name];
 				const description = (actual.descriptions as Readonly<Record<string, string>>)[rail];
-				expect(Buffer.from(description)).toEqual(Buffer.from(tool.description));
+				expect(Buffer.from(description)).toEqual(Buffer.from(expected.description));
+				if (description !== tool.description) changed.add(`tools.${tool.name}.descriptions.${rail}`);
 				for (const p of tool.parameters) {
-					expect(Buffer.from((actual.parameters as Readonly<Record<string, string>>)[p.field])).toEqual(
-						Buffer.from(p.text),
+					const text = (actual.parameters as Readonly<Record<string, string>>)[p.field];
+					expect(Buffer.from(text)).toEqual(
+						Buffer.from(expected.parameters.find((entry) => entry.field === p.field)!.text),
 					);
+					if (text !== p.text) changed.add(`tools.${tool.name}.parameters.${p.field}`);
 				}
 			}
 		}
+		expect([...changed].sort()).toEqual(reviewed.amendments.map((a) => a.key.join(".")).sort());
 	});
 
-	it("[QK:GUIDANCE-RUNTIME-ORIGINAL-FIELDS] actual tools/list preserves complete pre-extraction fields/schema/annotations and emits no metadata", async () => {
+	it("[QK:GUIDANCE-RUNTIME-REVIEWED-FIELDS] actual tools/list matches reviewed descriptions with original full structures/schema/annotations and no metadata", async () => {
 		const actual = await bootBridgeAndListTools();
-		expect(actual).toEqual(originalRuntime);
+		expect(actual).toEqual(currentExpectations().runtime);
 		const serialized = JSON.stringify(actual);
 		for (const metadata of Object.values(parseEntwurfGuidance(SOURCE)._about))
 			expect(serialized).not.toContain(metadata);
 	});
 
-	it("[QK:GUIDANCE-DURABLE-ORIGINAL-FIELDS] actual native contact tool descriptions and complete schemas preserve their independent originals", async () => {
+	it("[QK:GUIDANCE-DURABLE-REVIEWED-FIELDS] actual native contact has reviewed descriptions and original full schemas except declared description leaves", async () => {
+		const { metadata } = currentExpectations();
 		const contact = createPiDurableContact({ bridgeEntry: path.join(os.tmpdir(), "entwurf-guidance-no-attach.js") });
-		for (const expected of original.durable) {
+		for (const expected of metadata.durable) {
 			const actual = contact.extension.tools.find((tool) => tool.name === expected.name);
 			expect(actual?.description).toBe(expected.description);
-			expect(actual?.parameters).toEqual(original.schemas[expected.name]);
+			expect(actual?.parameters).toEqual(metadata.schemas[expected.name]);
 		}
-		expect(PI_DURABLE_TOOL_SCHEMAS).toEqual(original.schemas);
+		expect(PI_DURABLE_TOOL_SCHEMAS).toEqual(metadata.schemas);
 		await contact.close();
 	});
 });
@@ -77,10 +144,12 @@ describe("strict fixed-source guidance reader", () => {
 	});
 
 	it("[QK:GUIDANCE-STRICT-SHAPE] malformed/unknown/missing data fail closed and values are never whitespace-normalized", () => {
+		const invalidRevision = JSON.parse(SOURCE);
+		invalidRevision.revision = 0;
 		for (const source of [
 			SOURCE + " trailing",
 			SOURCE.replace('"schemaVersion": 1', '"schemaVersion": 2'),
-			SOURCE.replace('"revision": 1', '"revision": 0'),
+			JSON.stringify(invalidRevision),
 		]) {
 			expect(() => parseEntwurfGuidance(source)).toThrow();
 		}

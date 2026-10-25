@@ -3,36 +3,36 @@
 	"lane": "agent-guidance",
 	"mutants": [
 		{
-			"claim": "GUIDANCE-ORIGINAL-DECODED-BYTES",
-			"title": "a valid authored parameter gains one space, so normalized/shared-constant comparisons would hide a preservation break",
+			"claim": "GUIDANCE-CURRENT-DECODED-BYTES",
+			"title": "a valid authored parameter gains one space, so normalized/shared-constant comparisons would hide a reviewed-current byte break",
 			"subject": "ENTWURF.json",
 			"find": ["Target garden id (use entwurf_peers to discover)"],
 			"replace": ["Target  garden id (use entwurf_peers to discover)"],
 			"gate": ["bash", "run.sh", "check-agent-guidance-beside"],
 			"timeoutSeconds": 120,
-			"signature": "[QK:GUIDANCE-ORIGINAL-DECODED-BYTES]",
+			"signature": "[QK:GUIDANCE-CURRENT-DECODED-BYTES]",
 			"signatureSource": "pi-extensions/lib/agent-guidance.test.ts"
 		},
 		{
-			"claim": "GUIDANCE-RUNTIME-ORIGINAL-FIELDS",
-			"title": "valid callback prose changes in the real JSON and reaches source tools/list, whose independent original must disagree",
+			"claim": "GUIDANCE-RUNTIME-REVIEWED-FIELDS",
+			"title": "valid callback prose changes in the real JSON and reaches source tools/list, whose C0 plus reviewed-delta expectation must disagree",
 			"subject": "ENTWURF.json",
 			"find": ["No arguments, no fallback to a model-supplied target."],
 			"replace": ["No arguments, automatic fallback to a model-supplied target."],
 			"gate": ["bash", "run.sh", "check-agent-guidance-beside"],
 			"timeoutSeconds": 120,
-			"signature": "[QK:GUIDANCE-RUNTIME-ORIGINAL-FIELDS]",
+			"signature": "[QK:GUIDANCE-RUNTIME-REVIEWED-FIELDS]",
 			"signatureSource": "pi-extensions/lib/agent-guidance.test.ts"
 		},
 		{
-			"claim": "GUIDANCE-DURABLE-ORIGINAL-FIELDS",
-			"title": "the actual durable short variant changes without touching the independently frozen contact expectation",
+			"claim": "GUIDANCE-DURABLE-REVIEWED-FIELDS",
+			"title": "the actual durable short variant changes without touching the independent C0 plus reviewed-delta contact expectation",
 			"subject": "ENTWURF.json",
 			"find": ["Return this durable host's garden identity envelope"],
 			"replace": ["Return this durable host's alternate identity envelope"],
 			"gate": ["bash", "run.sh", "check-agent-guidance-beside"],
 			"timeoutSeconds": 120,
-			"signature": "[QK:GUIDANCE-DURABLE-ORIGINAL-FIELDS]",
+			"signature": "[QK:GUIDANCE-DURABLE-REVIEWED-FIELDS]",
 			"signatureSource": "pi-extensions/lib/agent-guidance.test.ts"
 		},
 		{

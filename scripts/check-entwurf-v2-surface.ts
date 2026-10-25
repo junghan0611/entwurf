@@ -132,7 +132,7 @@ function assertRailSemantics(tag: string, longDescRaw: string, intentDescRaw: st
  * DORMANT HONESTY — the model-facing replacement for the retired `V2SURF-MERGED-REJECT` claim,
  * whose subject (two distinct OWNED rejects) left with the `owned-outcome` intent.
  *
- * After the visible-first cut a dormant socket-domain citizen is unreachable by every verb, and
+ * After the visible-first cut a dormant socket-domain citizen rejects delivery by v2, and
  * these four strings are the only place a caller learns that BEFORE spending a dispatch. So each
  * one must, on its own:
  *   - name the reason it will actually get back (`dormant-fire-forget-unsupported`);
@@ -169,18 +169,23 @@ function assertDormantHonesty(tag: string, rawText: string): void {
  * PEERS DEAD-ROW HONESTY. `entwurf_peers` is a FACT surface and stays one: this claim must never
  * be satisfiable by adding a per-row action/routing field, which is why it is asserted on the
  * DESCRIPTION and paired with a negative that forbids the row-level fix. What the description owes
- * a caller is that `dead` is a reported fact carrying no invitation — the citizen is dormant and,
- * since the visible-first cut, reachable by no verb at all.
+ * a caller is that `dead` is a reported fact carrying no delivery invitation. A separately
+ * requested, proven-dormant Pi/Claude lifecycle can reopen the same id without submitting a prompt.
  */
 function assertPeersDeadRowHonesty(tag: string, rawBlock: string): void {
 	const text = rawBlock;
 	ok(
-		`${tag} — entwurf_peers says a dead/dormant row is a REPORTED FACT that grants no action [QK:V2SURF-PEERS-DEAD-ROW]`,
-		/REPORTED FACT/.test(text) && /grants no action/.test(text) && /not an invitation to dispatch/.test(text),
+		`${tag} — entwurf_peers reports dead delivery unavailable, no action grant, and separate explicit-operator promptless resume [QK:V2SURF-PEERS-DEAD-ROW]`,
+		/REPORTED FACT/.test(text) &&
+			/grants no action/.test(text) &&
+			/not an invitation to dispatch/.test(text) &&
+			/no entwurf_v2 delivery is available while it is dormant/.test(text) &&
+			/Only on an explicit operator request, the separate entwurf_resume_call/.test(text) &&
+			/proven-dormant Pi or Claude Code citizen under the same id, submitting no prompt/.test(text),
 	);
 	ok(
-		`${tag} — entwurf_peers calls a dead row currently unreachable by any verb`,
-		/dormant/.test(text) && /unreachable by any verb/.test(text),
+		`${tag} — entwurf_peers does not turn delivery dormancy into a ban on every lifecycle verb`,
+		/dormant/.test(text) && !/unreachable by any verb/.test(text),
 	);
 	// The forbidden repair: teaching the row itself to carry a verb. The facts-only rule is what
 	// keeps this surface from becoming a second dispatch table, so a description that promised a
@@ -208,7 +213,7 @@ function assertPeersDeadRowHonesty(tag: string, rawBlock: string): void {
  * source; none of them can see that the host threw half of it away. This one can.
  *
  * Judged on the decoded JSON string, with no source scaffolding or whitespace normalization.
- * Exact preservation is checked separately against the frozen original runtime/source fixture.
+ * Exact current fields are checked separately against frozen originals plus reviewed literal amendments.
  */
 const HOST_DESCRIPTION_CAP = 2048;
 
@@ -758,8 +763,10 @@ async function main(): Promise<void> {
 		}
 		ok("5: MCP — long description denies native-push a mailbox", /NO mailbox/.test(mcpLongDesc));
 		ok(
-			"5: MCP — long description steers live/alive peer → fire-and-forget",
-			/liveness=alive/.test(mcpLongDesc) && /fire-and-forget/.test(mcpLongDesc),
+			"5: MCP — long description says a live socket can receive fire-and-forget, and unsupported is not reachability",
+			/A live socket can receive fire-and-forget/.test(mcpLongDesc) &&
+				/not reachability/.test(mcpLongDesc) &&
+				!/liveness=alive\s*→\s*fire-and-forget/.test(mcpLongDesc),
 		);
 		assertLongDescExcludesParams("5: MCP", mcpLongDesc, ["target: z", "intent: z", "mode: z", "wants_reply: z"]);
 		const mcpModeDesc = ENTWURF_TOOL_GUIDANCE.entwurf_v2.parameters.mode;

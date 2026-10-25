@@ -226,8 +226,12 @@
 			"claim": "SEND-OUTCOME-LIST-NAMES-EVERY-RAIL",
 			"title": "the caller-facing outcome list drops the native-push rail, so a caller reading the one blurb it reads before dispatching is told the control rail's vocabulary covers a rail that answers with a direct injection instead",
 			"subject": "ENTWURF.json",
-			"find": ["native-push INJECTION, a rejection, or lock-dirty. EXISTING targets only; discover with "],
-			"replace": ["a rejection, or lock-dirty. EXISTING targets only; discover with "],
+			"find": [
+				"native-push INJECTION, a rejection, or lock-dirty. This receipt is not the colleague's reply or evidence of reading. EXISTING targets only; discover with "
+			],
+			"replace": [
+				"a rejection, or lock-dirty. This receipt is not the colleague's reply or evidence of reading. EXISTING targets only; discover with "
+			],
 			"gate": ["bash", "run.sh", "check-entwurf-v2-surface"],
 			"timeoutSeconds": 300,
 			"signature": "[QK:SEND-OUTCOME-LIST-NAMES-EVERY-RAIL]",

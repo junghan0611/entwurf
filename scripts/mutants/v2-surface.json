@@ -82,7 +82,7 @@
 			"title": "MCP long description advertises owned-outcome as a selectable dormant verb again and drops the reason a dormant target actually returns",
 			"subject": "ENTWURF.json",
 			"find": [
-				"DORMANT IS UNREACHABLE: a socket-domain citizen that is not running gets dormant-fire-forget-unsupported — same receiver rule as the mailbox, no active drainer means no delivery. The intent that used to answer there, owned-outcome, resumed it by launching a hidden background child and was withdrawn under the visible-first rule — re-open the session yourself, then dispatch again. "
+				"A dormant socket rejects this delivery verb as dormant-fire-forget-unsupported. owned-outcome was withdrawn. Only on an explicit operator request, entwurf_resume_call may visibly reopen a proven-dormant Pi or Claude Code citizen under the same id, submitting no prompt; that lifecycle is separate from delivery. "
 			],
 			"replace": [
 				"owned-outcome wakes a DORMANT socket-domain citizen by spawn-bg resume ONLY and is never auto-converted. "
@@ -129,7 +129,7 @@
 			"title": "entwurf_peers drops the dead-row sentence, so a dormant citizen is listed with nothing saying it is unreachable",
 			"subject": "ENTWURF.json",
 			"find": [
-				"row. A `dead` row is a REPORTED FACT and nothing more: that citizen is dormant and is currently unreachable by any verb, so listing it grants no action — appearing here is not an invitation to dispatch. In particular"
+				"row. A `dead` socket row is a REPORTED FACT: no entwurf_v2 delivery is available while it is dormant. Listing it grants no action and is not an invitation to dispatch. Only on an explicit operator request, the separate entwurf_resume_call may visibly reopen a proven-dormant Pi or Claude Code citizen under the same id, submitting no prompt. In particular"
 			],
 			"replace": ["row. In particular"],
 			"gate": ["bash", "run.sh", "check-entwurf-v2-surface"],
