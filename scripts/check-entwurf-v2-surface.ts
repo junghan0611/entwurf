@@ -21,6 +21,7 @@ import assert from "node:assert/strict";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
+import { ENTWURF_TOOL_GUIDANCE } from "../pi-extensions/lib/agent-guidance.ts";
 import type { EntwurfV2RunResult } from "../pi-extensions/lib/entwurf-v2-runner.ts";
 import {
 	actionableRejectHint,
@@ -29,33 +30,11 @@ import {
 	toDispatchInput,
 } from "../pi-extensions/lib/entwurf-v2-surface.ts";
 
-/** Cut ONE model-facing string out of a registration block so two descriptions in the same
- * block cannot satisfy an assertion for each other (round-4 masking, 2026-07-27). Returns ""
- * when either marker is missing, which the callers' `length > 120` guard turns into a loud
- * failure rather than a silent pass. */
-function sliceDescription(block: string, startMarker: string, endMarker: string): string {
-	const s = block.indexOf(startMarker);
-	if (s === -1) return "";
-	const e = block.indexOf(endMarker, s + startMarker.length);
-	return e === -1 ? "" : block.slice(s, e);
-}
-
 let passed = 0;
 function ok(label: string, cond: boolean): void {
 	assert.ok(cond, label);
 	console.log(`  ok    ${label}`);
 	passed++;
-}
-
-/**
- * Collapse a model-facing string's SOURCE form into the text the model actually reads:
- * drop TS string-concat glue between adjacent literals and normalize whitespace.
- */
-function modelText(slice: string): string {
-	return slice
-		.replace(/["']\s*\+\s*["']/g, "")
-		.replace(/\s+/g, " ")
-		.trim();
 }
 
 /**
@@ -77,13 +56,11 @@ function modelText(slice: string): string {
  * Applied to BOTH surfaces from one predicate so they cannot drift apart again.
  */
 function assertRailSemantics(tag: string, longDescRaw: string, intentDescRaw: string, modeDescRaw: string): void {
-	// Compare the text the MODEL reads, not the shape the author happened to type. pi-native
-	// wraps inside one template literal; the MCP surface wraps by `+`-concatenating literals.
-	// Without this normalization the same sentence matches on one surface and not the other,
-	// and the assertion silently measures line-wrapping instead of meaning.
-	const longDesc = modelText(longDescRaw);
-	const intentDesc = modelText(intentDescRaw);
-	const modeDesc = modelText(modeDescRaw);
+	// Inputs are decoded product strings, not TS scaffolding. Keep these semantic predicates
+	// separate from the exact, unnormalized pre-extraction byte oracle beside the reader.
+	const longDesc = longDescRaw;
+	const intentDesc = intentDescRaw;
+	const modeDesc = modeDescRaw;
 	ok(
 		`${tag} — long description scopes the per-target lock to the control-socket DOMAIN [QK:V2SURF-MCP-LOCK-DOMAIN]`,
 		/control-socket-DOMAIN\s+dispatch/.test(longDesc) && /lock-free/.test(longDesc),
@@ -175,7 +152,7 @@ function assertRailSemantics(tag: string, longDescRaw: string, intentDescRaw: st
  * run unlabelled behind it — still real assertions, just not this claim's signature.
  */
 function assertDormantHonesty(tag: string, rawText: string): void {
-	const text = modelText(rawText);
+	const text = rawText;
 	const at = text.indexOf("owned-outcome");
 	ok(
 		`${tag} — names the withdrawn intent owned-outcome and says "withdrawn" beside it (not as an offer) [QK:V2SURF-DORMANT-HONESTY]`,
@@ -196,7 +173,7 @@ function assertDormantHonesty(tag: string, rawText: string): void {
  * since the visible-first cut, reachable by no verb at all.
  */
 function assertPeersDeadRowHonesty(tag: string, rawBlock: string): void {
-	const text = modelText(rawBlock);
+	const text = rawBlock;
 	ok(
 		`${tag} — entwurf_peers says a dead/dormant row is a REPORTED FACT that grants no action [QK:V2SURF-PEERS-DEAD-ROW]`,
 		/REPORTED FACT/.test(text) && /grants no action/.test(text) && /not an invitation to dispatch/.test(text),
@@ -230,30 +207,12 @@ function assertPeersDeadRowHonesty(tag: string, rawBlock: string): void {
  * to choose an intent. Every other assertion in this file checks that a sentence is PRESENT in
  * source; none of them can see that the host threw half of it away. This one can.
  *
- * Judged on `modelText` (the rendered string), not the source slice: pi-native wraps inside one
- * template literal and the MCP surface `+`-concatenates, so only the normalized text has the
- * length the host actually measures.
+ * Judged on the decoded JSON string, with no source scaffolding or whitespace normalization.
+ * Exact preservation is checked separately against the frozen original runtime/source fixture.
  */
 const HOST_DESCRIPTION_CAP = 2048;
 
-/**
- * The string the HOST measures, recovered from either surface's source scaffolding: drop the
- * `description:` key and the outer template-literal / string-literal fence, and unescape `\"`.
- * Counting the raw slice instead would charge the text for punctuation the model never sees —
- * and the two surfaces carry DIFFERENT punctuation, so the cap would mean two different things.
- */
-function renderedDescription(raw: string): string {
-	const flat = modelText(raw);
-	// Anchor on the description's own first word rather than on scaffolding: the two surfaces put
-	// DIFFERENT preludes in front of it (the MCP slice starts at the tool name), and counting those
-	// would report a number the host never measures — a cap gate that cites the wrong length gets
-	// quoted as if it were the real one.
-	const from = flat.indexOf("CANONICAL");
-	return (from >= 0 ? flat.slice(from) : flat).replace(/[`"],?$/, "").replace(/\\"/g, '"');
-}
-
-function assertDescriptionFitsHostCap(tag: string, longDescRaw: string): void {
-	const rendered = renderedDescription(longDescRaw);
+function assertDescriptionFitsHostCap(tag: string, rendered: string): void {
 	ok(
 		`${tag} — long description fits the host's ${HOST_DESCRIPTION_CAP}-char cap (${rendered.length}) ` +
 			"[QK:V2SURF-DESC-FITS-HOST-CAP]",
@@ -780,8 +739,8 @@ async function main(): Promise<void> {
 		// nearly the whole block and sail past the length guard, so assert the boundary first.
 		const mcpSchemaStart = v2Block.indexOf("\t{");
 		ok("5: MCP — schema boundary marker is present (slice cannot silently widen)", mcpSchemaStart > 0);
-		const mcpLongDesc = v2Block.slice(0, mcpSchemaStart);
-		const mcpIntentDesc = sliceDescription(v2Block, "intent: z", "message: z");
+		const mcpLongDesc = ENTWURF_TOOL_GUIDANCE.entwurf_v2.descriptions.mcp;
+		const mcpIntentDesc = ENTWURF_TOOL_GUIDANCE.entwurf_v2.parameters.intent;
 		ok(
 			"5: MCP — long/intent slices are disjoint (neither can satisfy the other's claim)",
 			mcpLongDesc.length > 0 &&
@@ -803,7 +762,7 @@ async function main(): Promise<void> {
 			/liveness=alive/.test(mcpLongDesc) && /fire-and-forget/.test(mcpLongDesc),
 		);
 		assertLongDescExcludesParams("5: MCP", mcpLongDesc, ["target: z", "intent: z", "mode: z", "wants_reply: z"]);
-		const mcpModeDesc = sliceDescription(v2Block, "mode: z", "wants_reply: z");
+		const mcpModeDesc = ENTWURF_TOOL_GUIDANCE.entwurf_v2.parameters.mode;
 		assertRailSemantics("5: MCP", mcpLongDesc, mcpIntentDesc, mcpModeDesc);
 		assertDescriptionFitsHostCap("5: MCP", mcpLongDesc);
 
@@ -818,20 +777,21 @@ async function main(): Promise<void> {
 			peersStart !== -1 && peersAfter > peersStart,
 		);
 		const peersBlock = src.slice(peersStart, peersAfter);
+		const peersText = ENTWURF_TOOL_GUIDANCE.entwurf_peers.descriptions.mcp;
 		ok("5: MCP — entwurf_peers block is isolated (non-vacuous)", peersBlock.length > 200);
 		ok(
 			"5: MCP — entwurf_peers names the THIRD answer (a reject), not just the two allow rails",
-			/mailbox-undeliverable/.test(peersBlock) && /native-push-target-dead/.test(peersBlock),
+			/mailbox-undeliverable/.test(peersText) && /native-push-target-dead/.test(peersText),
 		);
 		ok(
 			"5: MCP — entwurf_peers no longer claims `unsupported` does NOT mean unreachable",
-			!/does NOT mean unreachable/.test(peersBlock),
+			!/does NOT mean unreachable/.test(peersText),
 		);
 		// Visible-first cut, operator-surface half: a dormant citizen still gets a row here, and a
 		// caller who reads "it is in the list" as "I can dispatch to it" spends a dispatch to find
 		// out otherwise. The FACT stays a fact — no per-row action field, no routing verb, which is
 		// the rule this surface exists under — so the correction has to live in the description.
-		assertPeersDeadRowHonesty("5: MCP", peersBlock);
+		assertPeersDeadRowHonesty("5: MCP", peersText);
 
 		// F-7: entwurf_inbox_read described itself as draining "your own" inbox while the handler
 		// passes the CALLER-SUPPLIED gardenId straight to readMetaInbox with no comparison against
@@ -845,7 +805,7 @@ async function main(): Promise<void> {
 			inboxStart !== -1 && inboxAfter > inboxStart,
 		);
 		const inboxBlock = src.slice(inboxStart, inboxAfter);
-		const inboxText = modelText(inboxBlock);
+		const inboxText = ENTWURF_TOOL_GUIDANCE.entwurf_inbox_read.descriptions.mcp;
 		ok("5: MCP — entwurf_inbox_read block is isolated (non-vacuous)", inboxText.length > 200);
 		ok(
 			"5: MCP — entwurf_inbox_read states the garden id is CALLER-SUPPLIED and unverified [QK:V2SURF-INBOX-SCOPE-HONESTY]",
@@ -974,10 +934,14 @@ async function main(): Promise<void> {
 	// queues. Missing either rail is red — the earlier draft listed `mailbox-enqueued` beside the
 	// four and left native-push out entirely, and nothing noticed.
 	{
-		const outcomeSites = ["mcp/entwurf-bridge/src/index.ts"];
+		const outcomeSites = [
+			{
+				rel: "ENTWURF.json tools.entwurf_v2.descriptions.mcp",
+				text: ENTWURF_TOOL_GUIDANCE.entwurf_v2.descriptions.mcp,
+			},
+		];
 		const missing: string[] = [];
-		for (const rel of outcomeSites) {
-			const text = await fs.readFile(path.join(REPO, rel), "utf8");
+		for (const { rel, text } of outcomeSites) {
 			const at = text.indexOf("reports ONE");
 			const blurb = at < 0 ? "" : text.slice(at, at + 900);
 			if (!/acceptance boundary/i.test(blurb)) missing.push(`${rel}: control receiver acceptance boundary`);
@@ -1029,7 +993,10 @@ async function main(): Promise<void> {
 		];
 		const gaps: string[] = [];
 		for (const rel of sites) {
-			const text = await fs.readFile(path.join(REPO, rel), "utf8");
+			const text =
+				rel === "mcp/entwurf-bridge/src/index.ts"
+					? ENTWURF_TOOL_GUIDANCE.entwurf_v2.parameters.mode
+					: await fs.readFile(path.join(REPO, rel), "utf8");
 			for (const axis of axes) if (!axis.holds(text)) gaps.push(`${rel}: ${axis.name}`);
 			if (/steer \((?:interrupt|immediate)|interrupt the current turn|steer = interrupt/i.test(text)) {
 				gaps.push(`${rel}: still claims steer interrupts`);

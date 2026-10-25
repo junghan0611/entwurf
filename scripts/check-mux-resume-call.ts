@@ -36,6 +36,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { ENTWURF_TOOL_GUIDANCE } from "../pi-extensions/lib/agent-guidance.ts";
 import { classifyTmuxCwd } from "../pi-extensions/lib/classify-tmux-cwd.ts";
 import type { Placement } from "../pi-extensions/lib/mux-placement.ts";
 import {
@@ -273,7 +274,7 @@ function main(): void {
 
 		// ── the description contract ────────────────────────────────────────────────
 		// Not prose parity — three claims an operator acts on, plus the host's own cap.
-		const MCP_DESC = (MCP_SURFACE.split('"entwurf_resume_call",')[1] ?? "").split("{")[0];
+		const MCP_DESC = ENTWURF_TOOL_GUIDANCE.entwurf_resume_call.descriptions.mcp;
 		const statesTheContract = (text: string): boolean =>
 			/dormant/i.test(text) && /submits NO prompt/i.test(text) && /observation/i.test(text) && /launch/i.test(text);
 

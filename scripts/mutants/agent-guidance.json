@@ -1,0 +1,83 @@
+{
+	"schemaVersion": 1,
+	"lane": "agent-guidance",
+	"mutants": [
+		{
+			"claim": "GUIDANCE-ORIGINAL-DECODED-BYTES",
+			"title": "a valid authored parameter gains one space, so normalized/shared-constant comparisons would hide a preservation break",
+			"subject": "ENTWURF.json",
+			"find": ["Target garden id (use entwurf_peers to discover)"],
+			"replace": ["Target  garden id (use entwurf_peers to discover)"],
+			"gate": ["bash", "run.sh", "check-agent-guidance-beside"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:GUIDANCE-ORIGINAL-DECODED-BYTES]",
+			"signatureSource": "pi-extensions/lib/agent-guidance.test.ts"
+		},
+		{
+			"claim": "GUIDANCE-RUNTIME-ORIGINAL-FIELDS",
+			"title": "valid callback prose changes in the real JSON and reaches source tools/list, whose independent original must disagree",
+			"subject": "ENTWURF.json",
+			"find": ["No arguments, no fallback to a model-supplied target."],
+			"replace": ["No arguments, automatic fallback to a model-supplied target."],
+			"gate": ["bash", "run.sh", "check-agent-guidance-beside"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:GUIDANCE-RUNTIME-ORIGINAL-FIELDS]",
+			"signatureSource": "pi-extensions/lib/agent-guidance.test.ts"
+		},
+		{
+			"claim": "GUIDANCE-DURABLE-ORIGINAL-FIELDS",
+			"title": "the actual durable short variant changes without touching the independently frozen contact expectation",
+			"subject": "ENTWURF.json",
+			"find": ["Return this durable host's garden identity envelope"],
+			"replace": ["Return this durable host's alternate identity envelope"],
+			"gate": ["bash", "run.sh", "check-agent-guidance-beside"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:GUIDANCE-DURABLE-ORIGINAL-FIELDS]",
+			"signatureSource": "pi-extensions/lib/agent-guidance.test.ts"
+		},
+		{
+			"claim": "GUIDANCE-DUPLICATE-DECODED-KEYS",
+			"title": "grammar-only parsing skips the original token walk and accepts last-key-wins data",
+			"subject": "pi-extensions/lib/agent-guidance.ts",
+			"find": ["rejectDuplicateKeys(source);"],
+			"replace": ["// duplicate-key check removed by data-integrity mutant"],
+			"gate": ["bash", "run.sh", "check-agent-guidance-beside"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:GUIDANCE-DUPLICATE-DECODED-KEYS]",
+			"signatureSource": "pi-extensions/lib/agent-guidance.test.ts"
+		},
+		{
+			"claim": "GUIDANCE-STRICT-SHAPE",
+			"title": "the shape reader no longer rejects missing or unknown members",
+			"subject": "pi-extensions/lib/agent-guidance.ts",
+			"find": ["actual.length !== wanted.length || actual.some((key, i) => key !== wanted[i])"],
+			"replace": ["false"],
+			"gate": ["bash", "run.sh", "check-agent-guidance-beside"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:GUIDANCE-STRICT-SHAPE]",
+			"signatureSource": "pi-extensions/lib/agent-guidance.test.ts"
+		},
+		{
+			"claim": "GUIDANCE-INDEPENDENT-REVISION",
+			"title": "history length becomes payload revision, so history-only annotation silently changes it",
+			"subject": "pi-extensions/lib/agent-guidance.ts",
+			"find": ["freeze(data);"],
+			"replace": ["data.revision = data.history.length;\n\tfreeze(data);"],
+			"gate": ["bash", "run.sh", "check-agent-guidance-beside"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:GUIDANCE-INDEPENDENT-REVISION]",
+			"signatureSource": "pi-extensions/lib/agent-guidance.test.ts"
+		},
+		{
+			"claim": "GUIDANCE-FIXED-MODULE-ROOT",
+			"title": "an ambient path selects replacement guidance instead of the module's fixed packaged source",
+			"subject": "pi-extensions/lib/agent-guidance.ts",
+			"find": ["new URL(\"../../ENTWURF.json\", import.meta.url)"],
+			"replace": ["process.env.ENTWURF_GUIDANCE_PATH ?? new URL(\"../../ENTWURF.json\", import.meta.url)"],
+			"gate": ["bash", "run.sh", "check-agent-guidance-beside"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:GUIDANCE-FIXED-MODULE-ROOT]",
+			"signatureSource": "pi-extensions/lib/agent-guidance.test.ts"
+		}
+	]
+}

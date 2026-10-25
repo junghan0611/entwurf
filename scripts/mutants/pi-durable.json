@@ -3,6 +3,20 @@
 	"lane": "pi-durable",
 	"mutants": [
 		{
+			"claim": "PI-DURABLE-DESCRIPTION-DRIFT-REFUSED",
+			"title": "schema comparison ignores description-only drift while still comparing structural schema fields",
+			"subject": "pi-extensions/meta-bridge-pi-durable.ts",
+			"find": ["canonicalJson(found.inputSchema) !== canonicalJson(PI_DURABLE_TOOL_SCHEMAS[name])"],
+			"replace": [
+				"canonicalJson(JSON.parse(JSON.stringify(found.inputSchema, (key, value) => key === \"description\" ? undefined : value))) !== canonicalJson(JSON.parse(JSON.stringify(PI_DURABLE_TOOL_SCHEMAS[name], (key, value) => key === \"description\" ? undefined : value)))"
+			],
+			"gate": ["bash", "run.sh", "check-pi-durable-beside"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PI-DURABLE-DESCRIPTION-DRIFT-REFUSED]",
+			"signatureSource": "pi-extensions/meta-bridge-pi-durable.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
 			"claim": "PI-DURABLE-RETIRE-CALL",
 			"title": "retirement alone drops the actual request cancellation signal",
 			"subject": "pi-extensions/meta-bridge-pi-durable.ts",
@@ -24,13 +38,11 @@
 		{
 			"claim": "PI-DURABLE-RETIRE-POLICY",
 			"title": "the native retirement description treats actor identity as a standing grant",
-			"subject": "pi-extensions/meta-bridge-pi-durable.ts",
+			"subject": "ENTWURF.json",
 			"find": [
-				"\t\t\"Only when the human operator explicitly requested this particular target/work: make ONE retirement attempt for that request \" +"
+				"Only when the human operator explicitly requested this particular target/work: make ONE retirement attempt for that request "
 			],
-			"replace": [
-				"\t\t\"A caller record alone authorizes this target/work: make ONE retirement attempt for that request \" +"
-			],
+			"replace": ["A caller record alone authorizes this target/work: make ONE retirement attempt for that request "],
 			"gate": ["bash", "run.sh", "check-pi-durable-beside"],
 			"timeoutSeconds": 300,
 			"signature": "[QK:PI-DURABLE-RETIRE-POLICY]",

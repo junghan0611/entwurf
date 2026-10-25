@@ -16,6 +16,7 @@ Ask: does this follow capability rather than a surface name; record backend asym
 
 ## Architecture
 
+- **Product guidance:** root [ENTWURF.json](./ENTWURF.json) is the sole editable source for its extracted English payload families, initially MCP metadata and durable short variants only (#154 C1-A). Compiled copies are deterministic transport, never another authority. Keep decoded bytes and independent pre-extraction oracles intact during preservation; semantic changes are a separate amendment. Payload revision is independent of releases/history-only edits. Metadata is not delivered to models; existing engraving/user-config contracts remain unchanged. Bootstrap, notices, hints and ACP text are not yet centralized.
 - **entwurf-core (v2):** garden-id addressing, record facts, rail liveness, dispatch decisions, and delivery evidence.
 - **Record authority:** every citizen uses V3 `MetaIdentity`; `backend` selects rail capability, never identity rank.
 - **pi adapter:** attaches its native session to a record, hosts the record-keyed control socket, and registers the compiled `entwurf-bridge` with Pi’s built-in MCP under that record’s identity.

@@ -995,6 +995,28 @@ describe("pi-durable contact — the bridge's schema is the truth", () => {
 		}
 	});
 
+	it("[QK:PI-DURABLE-DESCRIPTION-DRIFT-REFUSED] a description-only change in the LISTED schema refuses birth independently of structural drift", async () => {
+		const drifted = canonical();
+		const v2 = drifted.find((t) => t.name === "entwurf_v2") as unknown as {
+			inputSchema: { properties: { message: { description: string } } };
+		};
+		v2.inputSchema.properties.message.description = "LISTED description was independently perturbed";
+		const bridge = listingBridge(drifted);
+		const c = createPiDurableContact({
+			bridgeEntry: BRIDGE_ENTRY,
+			sessionsDir,
+			sendersDir,
+			env: {},
+			connect: bridge.connect,
+		});
+		const waiting = self(c).execute({}, undefined, {});
+		await expect(c.attach(session())).rejects.toThrow(
+			"entwurf-bridge tool schema drift: entwurf_v2 inputSchema differs",
+		);
+		await expect(waiting).rejects.toBeInstanceOf(PiDurableIdentityNotReady);
+		expect(bridge.record).toEqual({ closed: 1, calls: 0 });
+	});
+
 	it("[QK:PI-DURABLE-SCHEMA-DRIFT-CLEANUP-KEPT] when closing the refused bridge fails too, the drift stays the cause and the close failure rides beside it", async () => {
 		const drifted = canonical().map((t) => (t.name === "entwurf_self" ? { ...t, inputSchema: { type: "object" } } : t));
 		const bridge = listingBridge(drifted, new Error("close boom"));

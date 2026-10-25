@@ -1687,6 +1687,12 @@ check_mux_fresh_call() {
   run_vitest test/mux-fresh-call.test.ts test/fresh-call-composition.contract.test.ts test/copilot-fresh-preflight.test.ts test/codex-fresh-preflight.test.ts test/fresh-call-surfaces.contract.test.ts test/fresh-call-provider.contract.test.ts test/omp-fresh-bootstrap.contract.test.ts test/tmux-coordinate-row.test.ts test/codex-fresh-live-protocol.test.ts test/codex-caller-seat.test.ts test/pi-durable-fresh-live-receipts.test.ts test/codex-socket-listener.test.ts
 }
 
+check_agent_guidance_beside() {
+  # #154: mutation execution coordinate only; the beside-behavior glob already discovers it.
+  # Keep the existing run_vitest reporter/attribution, without a build or package lifecycle.
+  run_vitest pi-extensions/lib/agent-guidance.test.ts
+}
+
 check_pi_durable_beside() {
   # #129: the pi-durable qualification lane's execution coordinate (VERIFY 「Four rules」 rule 3). It is
   # not a discovery path — check-tests-beside-behavior already finds these files. It exists because the
@@ -7781,6 +7787,9 @@ case "$cmd" in
     ;;
   check-mux-fresh-call)
     check_mux_fresh_call
+    ;;
+  check-agent-guidance-beside)
+    check_agent_guidance_beside
     ;;
   check-pi-durable-beside)
     check_pi_durable_beside

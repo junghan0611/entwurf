@@ -19,6 +19,16 @@ TSC="$REPO_DIR/node_modules/.bin/tsc"
 [ -x "$TSC" ] || TSC=tsc
 "$TSC" -p "$REPO_DIR/mcp/entwurf-bridge/tsconfig.build.json"
 
+# One authored product-guidance source (#154). The fixed module-relative reader resolves
+# ../../ENTWURF.json from dist/pi-extensions/lib/, so its deterministic exact copy belongs at
+# the DIST ROOT, not beside the capability registry. This is transport, never another source.
+GUIDANCE_SOURCE="$REPO_DIR/ENTWURF.json"
+if [ ! -f "$GUIDANCE_SOURCE" ] || [ -L "$GUIDANCE_SOURCE" ]; then
+  echo "build-bridge: $GUIDANCE_SOURCE is missing or not a regular file" >&2
+  exit 1
+fi
+cp "$GUIDANCE_SOURCE" "$REPO_DIR/mcp/entwurf-bridge/dist/ENTWURF.json"
+
 # The capability registry must TRAVEL WITH the bundle.
 #
 # `metaCapabilitiesFilePath()` computes its path from the module's own location.

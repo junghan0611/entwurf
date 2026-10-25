@@ -86,6 +86,10 @@
 		// root config can't allow .ts extensions — scripts/tsconfig.json (which already
 		// globs pi-extensions/lib/**/*.ts) typechecks it. Same fence as meta-bridge-hook.
 		"pi-extensions/lib/project-trust-handler.ts",
+		// The product guidance reader is consumed with explicit .ts imports by the MCP/contact
+		// graph. Receiving includes: mcp/tsconfig.json and scripts/tsconfig.json both already
+		// include ../pi-extensions/lib/**/*.ts; its beside tests take scripts' existing test fence.
+		"pi-extensions/lib/agent-guidance.ts",
 		// entwurf-facts.ts is the fact-provider's pure core (step 4 slice 1) — a
 		// lib→lib VALUE importer (factLivenessOf from entwurf-v2-contract.ts), same
 		// `.ts`-extension fence as project-trust-handler. Typechecked by

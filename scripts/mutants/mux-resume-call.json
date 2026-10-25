@@ -98,12 +98,12 @@
 		{
 			"claim": "MUXRESUME-DESC-CONTRACT-MCP",
 			"title": "the MCP description drops the dormant-only scope, inviting callers to aim the verb at live citizens it will refuse",
-			"subject": "mcp/entwurf-bridge/src/index.ts",
+			"subject": "ENTWURF.json",
 			"find": [
-				"\t\"Reopen ONE DORMANT pi or Claude Code citizen under its OWN garden id, in a visible window in the operator's \" +"
+				"Reopen ONE DORMANT pi or Claude Code citizen under its OWN garden id, in a visible window in the operator's "
 			],
 			"replace": [
-				"\t\"Reopen ONE pi or Claude Code citizen under its OWN garden id, in a visible window in the operator's \" +"
+				"Reopen ONE pi or Claude Code citizen under its OWN garden id, in a visible window in the operator's "
 			],
 			"gate": ["bash", "run.sh", "check-mux-resume-call"],
 			"timeoutSeconds": 60,

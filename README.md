@@ -23,6 +23,11 @@ receipts and named lifecycle verbs; the operator and native harnesses keep steer
 Git branches, worktrees, file isolation and internal delegation remain their concern.
 [Short answers: FAQ](./FAQ.md).
 
+[ENTWURF.json](./ENTWURF.json) is the sole editable source for the product-owned tool metadata
+currently extracted there: MCP descriptions/parameters and durable short variants. It is not a
+user prompt override; its payload revision is independent of package releases. Bootstrap, notices,
+hints and ACP guidance still have their existing owners. Operator engraving/configuration is unchanged.
+
 | Verb | Tool | Where it lands | Harnesses |
 |---|---|---|---|
 | **Open** a new sibling | `entwurf_fresh_call` | Herdr: a new unfocused tab in the caller's workspace. tmux: a new window in the caller's session, or an existing session named by `placement.tmuxSession`; without an explicit tmux placement, a Codex caller opens beside its own TUI pane | Herdr: pi, Claude Code. tmux: pi, pi-durable, Claude Code, Copilot, OMP, Codex |

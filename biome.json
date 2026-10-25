@@ -36,6 +36,10 @@
 	},
 	"overrides": [
 		{
+			"includes": ["pi-extensions/lib/fixtures/agent-guidance/*.json"],
+			"formatter": { "enabled": false }
+		},
+		{
 			"includes": ["pi/pi-durable/src/**"],
 			"formatter": { "indentWidth": 3 }
 		}
