@@ -7,19 +7,19 @@
 			"title": "entwurf_self reverts to an empty self-fetch guard + unconditional mailbox render (ordering-not-containment)",
 			"subject": "mcp/entwurf-bridge/src/index.ts",
 			"find": [
-				"\t\t\t\tif (rail === \"self-fetch\") {",
-				"\t\t\t\t\tconst mailboxPath = path.join(defaultMetaMailboxDir(), sender.sessionId);",
-				"\t\t\t\t\textra.mailboxPath = mailboxPath;",
-				"\t\t\t\t\tlines.push(`mailboxPath: ${mailboxPath}`);",
-				"\t\t\t\t} else if (rail === \"native-push\") {"
-			],
-			"replace": [
-				"\t\t\t\tif (rail === \"self-fetch\") {",
-				"\t\t\t\t}",
+				"\t\t\tif (rail === \"self-fetch\") {",
 				"\t\t\t\tconst mailboxPath = path.join(defaultMetaMailboxDir(), sender.sessionId);",
 				"\t\t\t\textra.mailboxPath = mailboxPath;",
 				"\t\t\t\tlines.push(`mailboxPath: ${mailboxPath}`);",
-				"\t\t\t\tif (rail === \"native-push\") {"
+				"\t\t\t} else if (rail === \"native-push\") {"
+			],
+			"replace": [
+				"\t\t\tif (rail === \"self-fetch\") {",
+				"\t\t\t}",
+				"\t\t\tconst mailboxPath = path.join(defaultMetaMailboxDir(), sender.sessionId);",
+				"\t\t\textra.mailboxPath = mailboxPath;",
+				"\t\t\tlines.push(`mailboxPath: ${mailboxPath}`);",
+				"\t\t\tif (rail === \"native-push\") {"
 			],
 			"gate": ["bash", "run.sh", "check-entwurf-self-address"],
 			"timeoutSeconds": 60,

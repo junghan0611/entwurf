@@ -253,9 +253,9 @@ function functionBody(name: string): string {
 
 /** Extract a `server.tool("NAME", ...)` call region by brace-counting from its open paren. */
 function toolRegion(name: string): string {
-	const sig = `server.tool(\n\t"${name}"`;
-	const at = src.indexOf(sig);
-	assert.ok(at >= 0, `server.tool("${name}") present`);
+	const matches = [...src.matchAll(/server\.tool\(\s*"entwurf_self"\s*,/g)];
+	assert.equal(matches.length, 1, `server.tool("${name}") present exactly once`);
+	const at = matches[0].index;
 	const open = src.indexOf("(", at);
 	let depth = 0;
 	for (let i = open; i < src.length; i++) {
