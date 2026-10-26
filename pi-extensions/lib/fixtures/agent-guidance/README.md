@@ -8,4 +8,8 @@ These two JSON files are immutable evidence fixtures, not editable product guida
 
 The root ENTWURF.json did not exist when these expectations were captured. Never regenerate them from the new JSON, reader or compiled carrier alongside actual output. Preserve decoded strings and actual runtime fields without trim/reflow/normalization. A later explicit semantic amendment must distinguish its intended expectation changes from preservation.
 
+`amendments-revision-2.json` is the immutable, independently reviewed C2 layer: thirteen literal leaf amendments against those C0 objects. `amendments-revision-3.json` is the separately reviewed one-leaf correction against revision 2, whose exact full old/new intent literal was compared with the independent review note before the product JSON was edited. Never replace either layer with values generated from the current product or carrier.
+
+Current expectations apply C0 → revision 2 → revision 3 in order, checking each exact old value and each layer's unique keys. The revision 3 intent key was already changed by revision 2: the union is still thirteen changed leaves and twenty-one preserved leaves, not fourteen changed leaves. The loaded payload revision is bound to the reviewed current revision by a separate test; history-only independence remains a different contract.
+
 The canonical payload authority and independent revision/history are in root ENTWURF.json. These fixtures have no runtime consumer and are excluded from the npm package by the existing `!pi-extensions/**/fixtures/**` rule.

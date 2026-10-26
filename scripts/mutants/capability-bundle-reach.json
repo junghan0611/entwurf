@@ -1,0 +1,21 @@
+{
+	"schemaVersion": 1,
+	"lane": "capability-bundle-reach",
+	"mutants": [
+		{
+			"claim": "BUNDLE-REACH-GUIDANCE-CARRIER",
+			"title": "the private build appends one LF to the emitted guidance carrier: valid JSON and all decoded exports stay identical, but canonical raw-byte parity must fail before the reader import",
+			"subject": "scripts/build-bridge.sh",
+			"find": ["cp \"$GUIDANCE_SOURCE\" \"$REPO_DIR/mcp/entwurf-bridge/dist/ENTWURF.json\""],
+			"replace": [
+				"cp \"$GUIDANCE_SOURCE\" \"$REPO_DIR/mcp/entwurf-bridge/dist/ENTWURF.json\"",
+				"printf '\\n' >> \"$REPO_DIR/mcp/entwurf-bridge/dist/ENTWURF.json\""
+			],
+			"gate": ["bash", "run.sh", "check-capability-bundle-reach"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:BUNDLE-REACH-GUIDANCE-CARRIER]",
+			"signatureSource": "scripts/check-capability-bundle-reach.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		}
+	]
+}

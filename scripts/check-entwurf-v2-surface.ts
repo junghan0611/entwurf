@@ -197,14 +197,6 @@ function assertPeersDeadRowHonesty(tag: string, rawBlock: string): void {
 }
 
 /**
- * Containment-disjointness is NOT enough to prove a description slice is tight. Round 5
- * (2026-07-27) shipped a "long description" slice of 4,468 chars that SPANNED the parameter
- * entries because a bare `description:` marker matched the `target` param first — and two
- * over-wide slices can still be mutually non-containing. So pin the ABSENCE of every
- * parameter marker in the long-description slice: if the slice ever swallows the schema
- * again, this fails instead of silently satisfying the schema's own text.
- */
-/**
  * HOST TRUNCATION CAP. Measured 2026-07-30 on both Claude ACP and stock Claude Code: a tool
  * description longer than this is cut mid-sentence and the tail is replaced with `… [truncated]`.
  * The shipped entwurf_v2 text was 4,022 chars, so everything from the INTENT contract onward —
@@ -223,12 +215,6 @@ function assertDescriptionFitsHostCap(tag: string, rendered: string): void {
 			"[QK:V2SURF-DESC-FITS-HOST-CAP]",
 		rendered.length <= HOST_DESCRIPTION_CAP,
 	);
-}
-
-function assertLongDescExcludesParams(tag: string, longDesc: string, markers: readonly string[]): void {
-	for (const marker of markers) {
-		ok(`${tag} — long description slice excludes the \`${marker}\` parameter marker`, !longDesc.includes(marker));
-	}
 }
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -740,14 +726,10 @@ async function main(): Promise<void> {
 		// Same shipped-rail completeness rule as the pi-native surface (4), and split the SAME
 		// two ways: the long tool description and the `intent` param description must EACH be
 		// true on their own (see the round-4 masking note in block 4).
-		// Same fail-loud rule as block 4: a missing marker would make `slice(0, -1)` return
-		// nearly the whole block and sail past the length guard, so assert the boundary first.
-		const mcpSchemaStart = v2Block.indexOf("\t{");
-		ok("5: MCP — schema boundary marker is present (slice cannot silently widen)", mcpSchemaStart > 0);
 		const mcpLongDesc = ENTWURF_TOOL_GUIDANCE.entwurf_v2.descriptions.mcp;
 		const mcpIntentDesc = ENTWURF_TOOL_GUIDANCE.entwurf_v2.parameters.intent;
 		ok(
-			"5: MCP — long/intent slices are disjoint (neither can satisfy the other's claim)",
+			"5: MCP — long/intent strings are disjoint (neither can satisfy the other's claim)",
 			mcpLongDesc.length > 0 &&
 				mcpIntentDesc.length > 0 &&
 				!mcpLongDesc.includes(mcpIntentDesc) &&
@@ -768,7 +750,6 @@ async function main(): Promise<void> {
 				/not reachability/.test(mcpLongDesc) &&
 				!/liveness=alive\s*→\s*fire-and-forget/.test(mcpLongDesc),
 		);
-		assertLongDescExcludesParams("5: MCP", mcpLongDesc, ["target: z", "intent: z", "mode: z", "wants_reply: z"]);
 		const mcpModeDesc = ENTWURF_TOOL_GUIDANCE.entwurf_v2.parameters.mode;
 		assertRailSemantics("5: MCP", mcpLongDesc, mcpIntentDesc, mcpModeDesc);
 		assertDescriptionFitsHostCap("5: MCP", mcpLongDesc);
@@ -783,9 +764,7 @@ async function main(): Promise<void> {
 			"5: MCP — entwurf_peers block has a REAL end boundary (next server.tool present)",
 			peersStart !== -1 && peersAfter > peersStart,
 		);
-		const peersBlock = src.slice(peersStart, peersAfter);
 		const peersText = ENTWURF_TOOL_GUIDANCE.entwurf_peers.descriptions.mcp;
-		ok("5: MCP — entwurf_peers block is isolated (non-vacuous)", peersBlock.length > 200);
 		ok(
 			"5: MCP — entwurf_peers names the THIRD answer (a reject), not just the two allow rails",
 			/mailbox-undeliverable/.test(peersText) && /native-push-target-dead/.test(peersText),

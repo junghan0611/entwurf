@@ -36,70 +36,93 @@ const originalRuntime: RuntimeTool[] = JSON.parse(
 	fs.readFileSync(new URL("./fixtures/agent-guidance/mcp-tools-before-94d0594.json", import.meta.url), "utf8"),
 );
 
-const reviewed = JSON.parse(
-	fs.readFileSync(new URL("./fixtures/agent-guidance/amendments-revision-2.json", import.meta.url), "utf8"),
-) as {
+interface ReviewedAmendmentLayer {
 	revision: number;
 	amendments: {
 		key: ["tools", OriginalTool["name"], "descriptions" | "parameters", string];
 		old: string;
 		new: string;
 	}[];
-};
+}
+const reviewedR2 = JSON.parse(
+	fs.readFileSync(new URL("./fixtures/agent-guidance/amendments-revision-2.json", import.meta.url), "utf8"),
+) as ReviewedAmendmentLayer;
+const reviewedR3 = JSON.parse(
+	fs.readFileSync(new URL("./fixtures/agent-guidance/amendments-revision-3.json", import.meta.url), "utf8"),
+) as ReviewedAmendmentLayer & { previousRevision: number };
 
 // Only description leaves may change. Full schemas/annotations/order come from immutable C0,
 // while reviewed literals were selected independently before the product JSON was amended.
 function currentExpectations() {
 	const metadata = structuredClone(original);
 	const runtime = structuredClone(originalRuntime);
-	expect(reviewed.revision).toBe(2);
-	expect(reviewed.amendments).toHaveLength(13);
-	expect(new Set(reviewed.amendments.map((a) => a.key.join("."))).size).toBe(13);
-	for (const amendment of reviewed.amendments) {
-		const [root, name, family, field] = amendment.key;
-		expect(root).toBe("tools");
-		expect(amendment.new).not.toBe(amendment.old);
-		const mcp = runtime.find((tool) => tool.name === name)!;
-		if (family === "descriptions") {
-			expect(["mcp", "durable"]).toContain(field);
-			const expected = metadata[field as "mcp" | "durable"].find((tool) => tool.name === name)!;
-			expect(expected.description).toBe(amendment.old);
-			expected.description = amendment.new;
-			if (field === "mcp") {
-				expect(mcp.description).toBe(amendment.old);
-				mcp.description = amendment.new;
-			}
-		} else {
-			expect(family).toBe("parameters");
-			expect(name).toBe("entwurf_v2");
-			for (const rail of ["mcp", "durable"] as const) {
-				const parameter = metadata[rail].find((tool) => tool.name === name)!.parameters.find((p) => p.field === field)!;
-				expect(parameter.text).toBe(amendment.old);
-				parameter.text = amendment.new;
-			}
-			const schema = metadata.schemas[name] as ToolSchema;
-			for (const expected of [mcp.inputSchema, schema]) {
-				expect(expected.properties[field].description).toBe(amendment.old);
-				expected.properties[field].description = amendment.new;
+	expect(reviewedR2.revision).toBe(2);
+	expect(reviewedR2.amendments).toHaveLength(13);
+	expect(reviewedR3.previousRevision).toBe(reviewedR2.revision);
+	expect(reviewedR3.revision).toBe(3);
+	expect(reviewedR3.amendments).toHaveLength(1);
+	expect(reviewedR3.amendments[0].key).toEqual(["tools", "entwurf_v2", "parameters", "intent"]);
+	const declaredKeys = new Set<string>();
+	for (const layer of [reviewedR2, reviewedR3]) {
+		expect(new Set(layer.amendments.map((a) => a.key.join("."))).size).toBe(layer.amendments.length);
+		for (const amendment of layer.amendments) {
+			const [root, name, family, field] = amendment.key;
+			expect(root).toBe("tools");
+			expect(amendment.new).not.toBe(amendment.old);
+			declaredKeys.add(amendment.key.join("."));
+			const mcp = runtime.find((tool) => tool.name === name)!;
+			if (family === "descriptions") {
+				expect(["mcp", "durable"]).toContain(field);
+				const expected = metadata[field as "mcp" | "durable"].find((tool) => tool.name === name)!;
+				expect(expected.description).toBe(amendment.old);
+				expected.description = amendment.new;
+				if (field === "mcp") {
+					expect(mcp.description).toBe(amendment.old);
+					mcp.description = amendment.new;
+				}
+			} else {
+				expect(family).toBe("parameters");
+				expect(name).toBe("entwurf_v2");
+				for (const rail of ["mcp", "durable"] as const) {
+					const parameter = metadata[rail]
+						.find((tool) => tool.name === name)!
+						.parameters.find((p) => p.field === field)!;
+					expect(parameter.text).toBe(amendment.old);
+					parameter.text = amendment.new;
+				}
+				const schema = metadata.schemas[name] as ToolSchema;
+				for (const expected of [mcp.inputSchema, schema]) {
+					expect(expected.properties[field].description).toBe(amendment.old);
+					expected.properties[field].description = amendment.new;
+				}
 			}
 		}
 	}
-	return { metadata, runtime };
+	expect(declaredKeys.size).toBe(13);
+	return { metadata, runtime, declaredKeys };
 }
 
 describe("root product guidance — frozen originals plus reviewed current amendments", () => {
+	it("[QK:GUIDANCE-REVIEWED-REVISION] the actual loaded payload revision equals the independently reviewed revision", () => {
+		expect(reviewedR3.revision).toBe(3);
+		expect(ENTWURF_GUIDANCE_VERSION.revision).toBe(reviewedR3.revision);
+	});
+
 	it("[QK:GUIDANCE-CURRENT-DECODED-BYTES] every current string is exact and only declared amendments differ from originals", () => {
 		expect(original.sourceSha).toBe("94d0594182cbd9cf0a5c90f4d299cda40d870b8f");
-		const { metadata } = currentExpectations();
+		const { metadata, declaredKeys } = currentExpectations();
 		const changed = new Set<string>();
+		const allKeys = new Set<string>();
 		for (const rail of ["mcp", "durable"] as const) {
 			for (const tool of original[rail]) {
 				const expected = metadata[rail].find((entry) => entry.name === tool.name)!;
 				const actual = ENTWURF_TOOL_GUIDANCE[tool.name];
 				const description = (actual.descriptions as Readonly<Record<string, string>>)[rail];
+				allKeys.add(`tools.${tool.name}.descriptions.${rail}`);
 				expect(Buffer.from(description)).toEqual(Buffer.from(expected.description));
 				if (description !== tool.description) changed.add(`tools.${tool.name}.descriptions.${rail}`);
 				for (const p of tool.parameters) {
+					allKeys.add(`tools.${tool.name}.parameters.${p.field}`);
 					const text = (actual.parameters as Readonly<Record<string, string>>)[p.field];
 					expect(Buffer.from(text)).toEqual(
 						Buffer.from(expected.parameters.find((entry) => entry.field === p.field)!.text),
@@ -108,7 +131,10 @@ describe("root product guidance — frozen originals plus reviewed current amend
 				}
 			}
 		}
-		expect([...changed].sort()).toEqual(reviewed.amendments.map((a) => a.key.join(".")).sort());
+		expect([...changed].sort()).toEqual([...declaredKeys].sort());
+		expect(allKeys.size).toBe(34);
+		expect(changed.size).toBe(13);
+		expect([...allKeys].filter((key) => !changed.has(key))).toHaveLength(21);
 	});
 
 	it("[QK:GUIDANCE-RUNTIME-REVIEWED-FIELDS] actual tools/list matches reviewed descriptions with original full structures/schema/annotations and no metadata", async () => {

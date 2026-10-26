@@ -6,8 +6,14 @@
 		"editing": "Preserve decoded strings exactly unless an explicit semantic amendment is intended. Review related consumers and independent oracles atomically. Accepted payload changes advance revision; history-only edits, routine releases and unrelated code changes do not. schemaVersion tracks reader/structural compatibility. Metadata is not delivered to models."
 	},
 	"schemaVersion": 1,
-	"revision": 2,
+	"revision": 3,
 	"history": [
+		{
+			"revision": 3,
+			"source": "149fe24da00632e7fc54fd197ad257db68db041a",
+			"issue": "https://github.com/junghan0611/entwurf/issues/154",
+			"change": "Scope the intent parameter's dormant-fire-forget-unsupported rejection to socket citizens only. Independently reviewed revision 3 literal layer; revision 2 and pre-extraction expectations remain historical evidence."
+		},
 		{
 			"revision": 2,
 			"source": "1657eca85e8133649cee957e30f078cc92754271",
@@ -28,7 +34,7 @@
 				"durable": "Send a message to an existing garden citizen by garden id through the entwurf-bridge (intent fire-and-forget). Returns the bridge's delivery receipt, or fails with its named rejection. This receipt is not the colleague's reply."
 			},
 			"parameters": {
-				"intent": "fire-and-forget = send/reply/hand-off to an existing target after a current rail check. unsupported is not a reachability verdict; the decider picks a rail or REJECTS (self-fetch → mailbox when deliverable, else mailbox-undeliverable; native-push → alive: direct injection, dead: native-push-target-dead, indeterminate: native-push-probe-indeterminate; a paused backend — agy, #152 — rejects as native-push-paused before any probe); set wants_reply to request an answer, not to wait for one. This is the ONLY intent: owned-outcome, which resumed a dormant citizen by launching a hidden background child, was withdrawn under the visible-first rule. It is not selectable, not deprecated-but-tolerated; a dormant citizen is currently unreachable by this verb and rejects as dormant-fire-forget-unsupported.",
+				"intent": "fire-and-forget = send/reply/hand-off to an existing target after a current rail check. unsupported is not a reachability verdict; the decider picks a rail or REJECTS (self-fetch → mailbox when deliverable, else mailbox-undeliverable; native-push → alive: direct injection, dead: native-push-target-dead, indeterminate: native-push-probe-indeterminate; a paused backend — agy, #152 — rejects as native-push-paused before any probe); set wants_reply to request an answer, not to wait for one. This is the ONLY intent: owned-outcome, which resumed a dormant citizen by launching a hidden background child, was withdrawn under the visible-first rule. It is not selectable, not deprecated-but-tolerated; a dormant socket citizen is currently unreachable by this verb and rejects as dormant-fire-forget-unsupported.",
 				"message": "Message / prompt to the colleague. In familiar language and natural sentences, convey what matters now and the context they need. Keep identifiers and evidence exact; trim repetition, not meaning. Hard cap 16000 chars; for larger payloads send a file/artifact path plus digest.",
 				"mode": "Injection style for a CONTROL-SOCKET send only: steer (ask the receiver's steering queue) or follow_up (ask its follow-up queue). NEITHER is an interrupt: a busy receiver drains steering after each turn and follow-ups only when its inner loop ends, so a later steer overtakes every earlier follow_up and there is no order between the two. Both queues are volatile process memory — an abort drops what is in them. The receipt names which queue accepted the message (`queued-steer` / `queued-follow-up`); an idle receiver answers `sent`, meaning the turn was TRIGGERED, not that the model has seen the text. The mailbox and native-push plans carry no mode, so it has no effect on those rails.",
 				"target": "Target garden id (use entwurf_peers to discover)",

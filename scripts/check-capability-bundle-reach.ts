@@ -32,6 +32,8 @@
  *         the installer copies, and the hook staged with only that closure runs.
  *   - D (#147 G3): the compiled Claude Code retire adapter resolves its helper beside itself,
  *         byte-identical to pi-extensions/lib/cc-retire-pidfd.py.
+ *   - F (#154): the fixed guidance carrier has the canonical Root bytes, and its emitted
+ *         reader exports that Root's version/tools (plain JSON expected data, not a source reader).
  *
  * Deterministic: filesystem, import, and ONE shipped-hook child process (C2) that writes a
  * record into its own private store under a private HOME and XDG roots. No backend, vendor
@@ -48,6 +50,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import { isDeepStrictEqual } from "node:util";
 import { hookImportClosure, installerCopiedLibFiles, stageMetaHookBundle } from "./lib/meta-hook-bundle.ts";
 import { reclaimOnExit } from "./lib/reclaim-on-exit.ts";
 
@@ -257,6 +260,34 @@ for (const copy of copies) {
 		accepted.boundary === "shutdown-requested" &&
 			rejected.boundary === "unknown" &&
 			rejected.reason === "malformed-response",
+	);
+}
+
+// F — one guidance carrier/current-reader contract, rooted in canonical authored bytes (#154).
+// Presence/type are preconditions. A stale carrier skips the reader import, so byte divergence
+// fails the intended assertion rather than being hidden by parsing or an incidental import error.
+{
+	const carrier = path.join(BRIDGE_DIST, "ENTWURF.json");
+	const reader = path.join(BRIDGE_DIST, "pi-extensions", "lib", "agent-guidance.js");
+	for (const file of [carrier, reader]) {
+		const stat = fs.lstatSync(file, { throwIfNoEntry: false });
+		ok(
+			`F0: the compiled guidance file is regular and non-symlink: ${rel(file)}`,
+			stat !== undefined && stat.isFile() && !stat.isSymbolicLink(),
+		);
+	}
+	const rootBytes = fs.readFileSync(path.join(REPO, "ENTWURF.json"));
+	const root = JSON.parse(rootBytes.toString("utf8"));
+	const sameBytes = fs.readFileSync(carrier).equals(rootBytes);
+	const loaded = sameBytes ? await import(pathToFileURL(reader).href) : undefined;
+	ok(
+		"F1: the fixed guidance carrier has canonical Root bytes and its reader exports the current version/tools [QK:BUNDLE-REACH-GUIDANCE-CARRIER]",
+		sameBytes &&
+			isDeepStrictEqual(loaded?.ENTWURF_GUIDANCE_VERSION, {
+				schemaVersion: root.schemaVersion,
+				revision: root.revision,
+			}) &&
+			isDeepStrictEqual(loaded?.ENTWURF_TOOL_GUIDANCE, root.tools),
 	);
 }
 

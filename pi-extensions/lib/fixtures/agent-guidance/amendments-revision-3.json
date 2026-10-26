@@ -1,0 +1,14 @@
+{
+	"previousRevision": 2,
+	"revision": 3,
+	"sourceCheckpoint": "149fe24da00632e7fc54fd197ad257db68db041a",
+	"independentExpectedLiteralSha256": "8f489ddbaaeac18209396c7b973ef4751c545bd2c0f940e2e0f27d62ff40c5db",
+	"selection": "IMPLEMENT-R3-1 coordinator grant, 2026-10-26; independently reviewed Opus1 full literal, socket-domain correction in the intent tail only; not derived from amended product output",
+	"amendments": [
+		{
+			"key": ["tools", "entwurf_v2", "parameters", "intent"],
+			"old": "fire-and-forget = send/reply/hand-off to an existing target after a current rail check. unsupported is not a reachability verdict; the decider picks a rail or REJECTS (self-fetch → mailbox when deliverable, else mailbox-undeliverable; native-push → alive: direct injection, dead: native-push-target-dead, indeterminate: native-push-probe-indeterminate; a paused backend — agy, #152 — rejects as native-push-paused before any probe); set wants_reply to request an answer, not to wait for one. This is the ONLY intent: owned-outcome, which resumed a dormant citizen by launching a hidden background child, was withdrawn under the visible-first rule. It is not selectable, not deprecated-but-tolerated; a dormant citizen is currently unreachable by this verb and rejects as dormant-fire-forget-unsupported.",
+			"new": "fire-and-forget = send/reply/hand-off to an existing target after a current rail check. unsupported is not a reachability verdict; the decider picks a rail or REJECTS (self-fetch → mailbox when deliverable, else mailbox-undeliverable; native-push → alive: direct injection, dead: native-push-target-dead, indeterminate: native-push-probe-indeterminate; a paused backend — agy, #152 — rejects as native-push-paused before any probe); set wants_reply to request an answer, not to wait for one. This is the ONLY intent: owned-outcome, which resumed a dormant citizen by launching a hidden background child, was withdrawn under the visible-first rule. It is not selectable, not deprecated-but-tolerated; a dormant socket citizen is currently unreachable by this verb and rejects as dormant-fire-forget-unsupported."
+		}
+	]
+}
