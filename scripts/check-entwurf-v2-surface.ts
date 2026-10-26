@@ -957,7 +957,9 @@ async function main(): Promise<void> {
 	// rail's four boundaries are the ONLY receiver-acceptance values; a mailbox answers with an
 	// ENQUEUE receipt and native-push with an INJECTION, and folding those into the boundary union
 	// would tell a caller that `mailbox-enqueued` is something a receiver observed about its own
-	// queues. Missing either rail is red — the earlier draft listed `mailbox-enqueued` beside the
+	// queues. The socket dispatch may re-resolve to a mailbox leg and report mailbox-enqueued;
+	// that exception must name the leg, not silently invent a fifth receiver queue boundary.
+	// Missing either rail is red — the earlier draft listed `mailbox-enqueued` beside the
 	// four and left native-push out entirely, and nothing noticed.
 	{
 		const outcomeSites = [
@@ -974,7 +976,8 @@ async function main(): Promise<void> {
 			for (const b of ["sent", "queued-steer", "queued-follow-up", "accepted-unknown-boundary"]) {
 				if (!blurb.includes(b)) missing.push(`${rel}: boundary ${b}`);
 			}
-			if (!/those four only/i.test(blurb)) missing.push(`${rel}: the four-only scope of the boundary union`);
+			if (!blurb.includes("those four, or `mailbox-enqueued` on a re-resolved mailbox leg"))
+				missing.push(`${rel}: the four receiver boundaries and the explicitly re-resolved mailbox leg`);
 			if (!/mailbox ENQUEUE/i.test(blurb)) missing.push(`${rel}: mailbox enqueue receipt`);
 			if (!/native-push INJECTION/i.test(blurb)) missing.push(`${rel}: native-push injection`);
 			if (!/rejection|rejected/i.test(blurb)) missing.push(`${rel}: rejection`);
@@ -984,7 +987,7 @@ async function main(): Promise<void> {
 			}
 		}
 		ok(
-			`[QK:SEND-OUTCOME-LIST-NAMES-EVERY-RAIL] the tool description names each rail's own result — the control receiver's four acceptance boundaries (and that those four are the whole union), the mailbox ENQUEUE receipt, the native-push INJECTION, a rejection, and accepted-but-lock-dirty — so a caller is never told that one rail's vocabulary describes another's (missing: ${JSON.stringify(missing)})`,
+			`[QK:SEND-OUTCOME-LIST-NAMES-EVERY-RAIL] the tool description names each rail's own result — the control receiver's four acceptance boundaries (or mailbox-enqueued on an explicitly re-resolved mailbox leg), the mailbox ENQUEUE receipt, the native-push INJECTION, a rejection, and accepted-but-lock-dirty — so a caller is never told that one rail's vocabulary describes another's (missing: ${JSON.stringify(missing)})`,
 			missing.length === 0,
 		);
 	}
