@@ -1,0 +1,21 @@
+{
+	"sourceSha": "94d0594182cbd9cf0a5c90f4d299cda40d870b8f",
+	"sourceBlobSha256": "548bffae03df02d959367503a8e47a39f8691f848e756f778fd5a13ece56eee4",
+	"previousRevision": 3,
+	"introducedRevision": 4,
+	"selection": "C1-B byte-preserving extraction of the five static entwurf_v2 reject hints; decoded text copied from the C0 pre-extraction inventory of sourceSha, never from the product JSON; record-less-socket keeps its code-owned FRESH_CUT_PRESCRIPTION slot",
+	"coordinates": {
+		"dormant-fire-forget-unsupported": "pi-extensions/lib/entwurf-v2-surface.ts:77:3899",
+		"indeterminate-no-spawn": "pi-extensions/lib/entwurf-v2-surface.ts:94:5164",
+		"native-push-target-dead": "pi-extensions/lib/entwurf-v2-surface.ts:105:5949",
+		"native-push-probe-indeterminate": "pi-extensions/lib/entwurf-v2-surface.ts:109:6391",
+		"native-push-paused": "pi-extensions/lib/entwurf-v2-surface.ts:112:6743"
+	},
+	"hints": {
+		"dormant-fire-forget-unsupported": "this citizen's record is intact but its session is not running, and delivery has no way to wake it. The resume that used to answer here launched a hidden background child and was withdrawn under the visible-first rule; the visible same-id resume is the separate lifecycle verb entwurf_resume_call. Only on an explicit operator request, use entwurf_resume_call {target} for Pi or Claude Code; it submits no prompt. This capability hint is not permission to resume automatically.",
+		"indeterminate-no-spawn": "the control-socket probe was inconclusive, so the target's liveness is UNKNOWN — this is not a measured death. NOTHING was delivered and NO process was started (the reason id keeps its frozen '-no-spawn' wire spelling from an era when one could be; entwurf_v2 starts nothing on any rail). Re-run entwurf_peers to re-probe; if it stays indeterminate, check for a stale socket file left at that garden id by a session that died without cleaning up.",
+		"native-push-target-dead": "the native-push conversation/thread is not live — no native host (harness process or app-server) answered the probe for it. Re-open that conversation/thread in its own harness, then retry; there is nothing to inject into.",
+		"native-push-probe-indeterminate": "the native host (harness process or app-server) is up, but nothing served this conversation/thread, so the probe is INCONCLUSIVE — not a measured death. Retry once it is loaded, or verify the conversation/thread id.",
+		"native-push-paused": "native-push for this backend is paused (#152): its language server refused entwurf's measured external calls for a missing CSRF token, so this dispatch probed and sent nothing. The citizen and its record are kept; reach it from inside its own harness instead."
+	}
+}

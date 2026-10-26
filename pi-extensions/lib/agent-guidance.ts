@@ -21,6 +21,17 @@ const TOOL_SPEC = {
 	entwurf_callback: { durable: true, parameters: [] },
 } as const;
 
+/** Frozen entwurf_v2 reject wire ids whose static next-step hint text lives in the root file. */
+const REJECT_HINT_REASONS = [
+	"dormant-fire-forget-unsupported",
+	"indeterminate-no-spawn",
+	"native-push-target-dead",
+	"native-push-probe-indeterminate",
+	"native-push-paused",
+] as const;
+
+export type RejectHintReason = (typeof REJECT_HINT_REASONS)[number];
+
 type ToolName = keyof typeof TOOL_SPEC;
 type ToolGuidance<K extends ToolName> = {
 	readonly descriptions: (typeof TOOL_SPEC)[K]["durable"] extends true
@@ -31,7 +42,7 @@ type ToolGuidance<K extends ToolName> = {
 
 export interface EntwurfGuidance {
 	readonly _about: Readonly<Record<"purpose" | "ownership" | "scope" | "editing", string>>;
-	readonly schemaVersion: 1;
+	readonly schemaVersion: 2;
 	readonly revision: number;
 	readonly history: readonly {
 		readonly revision: number;
@@ -40,6 +51,7 @@ export interface EntwurfGuidance {
 		readonly change: string;
 	}[];
 	readonly tools: { readonly [K in ToolName]: ToolGuidance<K> };
+	readonly rejectHints: Readonly<Record<RejectHintReason, string>>;
 }
 
 function record(value: unknown, at: string): asserts value is Record<string, unknown> {
@@ -134,8 +146,8 @@ export function parseEntwurfGuidance(source: string): EntwurfGuidance {
 	const data: unknown = JSON.parse(source);
 	rejectDuplicateKeys(source);
 	record(data, "root");
-	keys(data, ["_about", "schemaVersion", "revision", "history", "tools"], "root");
-	if (data.schemaVersion !== 1) throw new Error("ENTWURF.json: unsupported schemaVersion");
+	if (data.schemaVersion !== 2) throw new Error("ENTWURF.json: unsupported schemaVersion");
+	keys(data, ["_about", "schemaVersion", "revision", "history", "tools", "rejectHints"], "root");
 	if (!Number.isSafeInteger(data.revision) || (data.revision as number) < 1) {
 		throw new Error("ENTWURF.json: revision must be a positive safe integer");
 	}
@@ -170,6 +182,9 @@ export function parseEntwurfGuidance(source: string): EntwurfGuidance {
 		keys(tool.parameters, TOOL_SPEC[name].parameters, `${name}.parameters`);
 		for (const [field, value] of Object.entries(tool.parameters)) text(value, `${name}.parameters.${field}`);
 	}
+	record(data.rejectHints, "rejectHints");
+	keys(data.rejectHints, REJECT_HINT_REASONS, "rejectHints");
+	for (const [reason, value] of Object.entries(data.rejectHints)) text(value, `rejectHints.${reason}`);
 	freeze(data);
 	return data as unknown as EntwurfGuidance;
 }
@@ -178,6 +193,8 @@ const guidance = parseEntwurfGuidance(readFileSync(new URL("../../ENTWURF.json",
 
 /** Only these exact payload strings enter tool schemas; _about/history never do. */
 export const ENTWURF_TOOL_GUIDANCE = guidance.tools;
+/** Static next-step text appended to these entwurf_v2 rejections; the decider and wire ids stay code-owned. */
+export const ENTWURF_REJECT_HINTS = guidance.rejectHints;
 export const ENTWURF_GUIDANCE_VERSION = Object.freeze({
 	schemaVersion: guidance.schemaVersion,
 	revision: guidance.revision,

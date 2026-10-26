@@ -2,12 +2,18 @@
 	"_about": {
 		"purpose": "Precise English natural-language product logic for Entwurf agents, not a user-editable prompt collection.",
 		"ownership": "This root file is the sole editable source of the payload families present here. Installed and compiled copies are deterministic transport, never separate authorities. Existing engraving and user-configuration contracts are unchanged.",
-		"scope": "Current metadata families: MCP tool/parameter descriptions and durable short variants. Bootstrap, notices, envelope explanations, hints and ACP guidance remain in their current owners; this is not complete guidance centralization.",
+		"scope": "Current families: MCP tool/parameter descriptions, durable short variants, and the static entwurf_v2 reject hints. Bootstrap, notices, envelope explanations, other hints (including the slot-bearing record-less-socket hint) and ACP guidance remain in their current owners; this is not complete guidance centralization.",
 		"editing": "Preserve decoded strings exactly unless an explicit semantic amendment is intended. Review related consumers and independent oracles atomically. Accepted payload changes advance revision; history-only edits, routine releases and unrelated code changes do not. schemaVersion tracks reader/structural compatibility. Metadata is not delivered to models."
 	},
-	"schemaVersion": 1,
-	"revision": 3,
+	"schemaVersion": 2,
+	"revision": 4,
 	"history": [
+		{
+			"revision": 4,
+			"source": "a3f2abc26ed985389f226aae7988cdb9c791d1f0",
+			"issue": "https://github.com/junghan0611/entwurf/issues/154",
+			"change": "Byte-preserving extraction of the five static entwurf_v2 reject hints from 94d0594; schemaVersion 2 adds the rejectHints family. The record-less-socket hint stays code-owned because it carries a shared command slot."
+		},
 		{
 			"revision": 3,
 			"source": "149fe24da00632e7fc54fd197ad257db68db041a",
@@ -113,5 +119,12 @@
 			},
 			"parameters": {}
 		}
+	},
+	"rejectHints": {
+		"dormant-fire-forget-unsupported": "this citizen's record is intact but its session is not running, and delivery has no way to wake it. The resume that used to answer here launched a hidden background child and was withdrawn under the visible-first rule; the visible same-id resume is the separate lifecycle verb entwurf_resume_call. Only on an explicit operator request, use entwurf_resume_call {target} for Pi or Claude Code; it submits no prompt. This capability hint is not permission to resume automatically.",
+		"indeterminate-no-spawn": "the control-socket probe was inconclusive, so the target's liveness is UNKNOWN — this is not a measured death. NOTHING was delivered and NO process was started (the reason id keeps its frozen '-no-spawn' wire spelling from an era when one could be; entwurf_v2 starts nothing on any rail). Re-run entwurf_peers to re-probe; if it stays indeterminate, check for a stale socket file left at that garden id by a session that died without cleaning up.",
+		"native-push-target-dead": "the native-push conversation/thread is not live — no native host (harness process or app-server) answered the probe for it. Re-open that conversation/thread in its own harness, then retry; there is nothing to inject into.",
+		"native-push-probe-indeterminate": "the native host (harness process or app-server) is up, but nothing served this conversation/thread, so the probe is INCONCLUSIVE — not a measured death. Retry once it is loaded, or verify the conversation/thread id.",
+		"native-push-paused": "native-push for this backend is paused (#152): its language server refused entwurf's measured external calls for a missing CSRF token, so this dispatch probed and sent nothing. The citizen and its record are kept; reach it from inside its own harness instead."
 	}
 }

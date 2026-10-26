@@ -21,7 +21,7 @@ import assert from "node:assert/strict";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
-import { ENTWURF_TOOL_GUIDANCE } from "../pi-extensions/lib/agent-guidance.ts";
+import { ENTWURF_REJECT_HINTS, ENTWURF_TOOL_GUIDANCE } from "../pi-extensions/lib/agent-guidance.ts";
 import type { EntwurfV2RunResult } from "../pi-extensions/lib/entwurf-v2-runner.ts";
 import {
 	actionableRejectHint,
@@ -632,6 +632,17 @@ async function main(): Promise<void> {
 				rls.includes("sole address authority") &&
 				rls.includes("restart it under the current runtime") &&
 				rls.includes("meta-bridge-fresh-cut"),
+		);
+		// #154 C1-B: the five static hints are authored in root ENTWURF.json. This is the WIRING
+		// claim — what the surface returns is the Root value for every declared reason — compared
+		// against the loaded Root, never a fixture, so a Root prose mutant still dies at its own
+		// semantic QK above. The C0 byte oracle lives beside the reader (GUIDANCE-REJECT-HINTS-ORIGINAL).
+		const unwired = Object.entries(ENTWURF_REJECT_HINTS)
+			.filter(([reason, text]) => actionableRejectHint(reason) !== text)
+			.map(([reason]) => reason);
+		ok(
+			`2D: every static reject hint the surface renders is the root ENTWURF.json value [QK:V2SURF-REJECT-HINTS-FROM-ROOT] (unwired: ${JSON.stringify(unwired)})`,
+			Object.keys(ENTWURF_REJECT_HINTS).length === 5 && unwired.length === 0,
 		);
 	}
 

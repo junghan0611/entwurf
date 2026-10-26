@@ -12,4 +12,6 @@ The root ENTWURF.json did not exist when these expectations were captured. Never
 
 Current expectations apply C0 → revision 2 → revision 3 in order, checking each exact old value and each layer's unique keys. The revision 3 intent key was already changed by revision 2: the union is still thirteen changed leaves and twenty-one preserved leaves, not fourteen changed leaves. The loaded payload revision is bound to the reviewed current revision by a separate test; history-only independence remains a different contract.
 
+`reject-hints-before-94d0594.json` is the C1-B preservation oracle for revision 4's new `rejectHints` family: the five static entwurf_v2 reject hints' decoded text, copied from the C0 pre-extraction inventory of the same source SHA (its `sourceBlobSha256` is that SHA's `entwurf-v2-surface.ts`) and compared with two independently derived expected files before the product JSON was edited. It is not an amendment layer; the slot-bearing record-less-socket hint is deliberately absent because it stays code-owned.
+
 The canonical payload authority and independent revision/history are in root ENTWURF.json. These fixtures have no runtime consumer and are excluded from the npm package by the existing `!pi-extensions/**/fixtures/**` rule.

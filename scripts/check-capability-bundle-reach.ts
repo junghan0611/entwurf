@@ -289,6 +289,12 @@ for (const copy of copies) {
 			}) &&
 			isDeepStrictEqual(loaded?.ENTWURF_TOOL_GUIDANCE, root.tools),
 	);
+	// F2 — the second authored family reaches the compiled reader too. Separate from F1 so a reader
+	// that mis-exports only the hints fails here while the carrier and tool payload stay green.
+	ok(
+		"F2: the compiled reader exports the canonical Root static reject hints [QK:BUNDLE-REACH-REJECT-HINTS]",
+		sameBytes && isDeepStrictEqual(loaded?.ENTWURF_REJECT_HINTS, root.rejectHints),
+	);
 }
 
 console.log(`\ncheck-capability-bundle-reach: PASS (${passed} assertions)`);

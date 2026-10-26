@@ -5,13 +5,12 @@
 		{
 			"claim": "V2SURF-RESUME-HINT-SCOPE",
 			"title": "the dormant capability hint returns to a Pi-only automatic-resume invitation",
-			"subject": "pi-extensions/lib/entwurf-v2-surface.ts",
+			"subject": "ENTWURF.json",
 			"find": [
-				"\t\t\t\t\"Only on an explicit operator request, use entwurf_resume_call {target} for Pi or Claude Code; \" +",
-				"\t\t\t\t\"it submits no prompt. This capability hint is not permission to resume automatically.\""
+				"Only on an explicit operator request, use entwurf_resume_call {target} for Pi or Claude Code; it submits no prompt. This capability hint is not permission to resume automatically."
 			],
 			"replace": [
-				"\t\t\t\t\"Reopen the citizen with entwurf_resume_call {target} (pi targets only; it runs no turn), then dispatch again.\""
+				"Reopen the citizen with entwurf_resume_call {target} (pi targets only; it runs no turn), then dispatch again."
 			],
 			"gate": ["bash", "run.sh", "check-entwurf-v2-surface"],
 			"timeoutSeconds": 60,
@@ -95,33 +94,25 @@
 		{
 			"claim": "V2SURF-INDETERMINATE-NO-START",
 			"title": "the indeterminate hint reverts to a socket that \"answered\" and drops the no-start facts — overclaiming a reply that a permission-refused or timed-out probe never got",
-			"subject": "pi-extensions/lib/entwurf-v2-surface.ts",
+			"subject": "ENTWURF.json",
 			"find": [
-				"\t\tcase \"indeterminate-no-spawn\":",
-				"\t\t\t// The socket probe did not settle, so liveness is UNKNOWN — an unestablished probe",
-				"\t\t\t// is not a measured death, and dispatching into it could double-deliver. Say",
-				"\t\t\t// \"the PROBE was inconclusive\", never \"the socket answered inconclusively\":",
-				"\t\t\t// `indeterminate` also covers a probe that got no answer at all, was refused by",
-				"\t\t\t// permissions, or timed out, and \"answered\" claims a reply that may never have",
-				"\t\t\t// existed. The wire id is FROZEN and still spells \"-no-spawn\"; it names the rule",
-				"\t\t\t// (never dispatch into an indeterminate target), not a capability that still",
-				"\t\t\t// exists. So the hint's job is to say plainly what did NOT happen: nothing",
-				"\t\t\t// delivered, nothing started.",
-				"\t\t\treturn (",
-				"\t\t\t\t\"the control-socket probe was inconclusive, so the target's liveness is UNKNOWN — this is not a \" +",
-				"\t\t\t\t\"measured death. NOTHING was delivered and NO process was started (the reason id keeps its frozen \" +",
-				"\t\t\t\t\"'-no-spawn' wire spelling from an era when one could be; entwurf_v2 starts nothing on any rail). \" +",
-				"\t\t\t\t\"Re-run entwurf_peers to re-probe; if it stays indeterminate, check for a stale socket file left at \" +",
-				"\t\t\t\t\"that garden id by a session that died without cleaning up.\"",
-				"\t\t\t);"
+				"the control-socket probe was inconclusive, so the target's liveness is UNKNOWN — this is not a measured death. NOTHING was delivered and NO process was started (the reason id keeps its frozen '-no-spawn' wire spelling from an era when one could be; entwurf_v2 starts nothing on any rail). Re-run entwurf_peers to re-probe; if it stays indeterminate, check for a stale socket file left at that garden id by a session that died without cleaning up."
 			],
-			"replace": [
-				"\t\tcase \"indeterminate-no-spawn\":",
-				"\t\t\treturn \"the target's control socket answered inconclusively; retry.\";"
-			],
+			"replace": ["the target's control socket answered inconclusively; retry."],
 			"gate": ["bash", "run.sh", "check-entwurf-v2-surface"],
 			"timeoutSeconds": 60,
 			"signature": "[QK:V2SURF-INDETERMINATE-NO-START]",
+			"signatureSource": "scripts/check-entwurf-v2-surface.ts"
+		},
+		{
+			"claim": "V2SURF-REJECT-HINTS-FROM-ROOT",
+			"title": "the surface stops returning the Root hint for one declared reason, so a native-push caller loses its next step while the Root text itself still looks perfect",
+			"subject": "pi-extensions/lib/entwurf-v2-surface.ts",
+			"find": ["\t\t\treturn ENTWURF_REJECT_HINTS[\"native-push-probe-indeterminate\"];"],
+			"replace": ["\t\t\treturn undefined;"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-surface"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:V2SURF-REJECT-HINTS-FROM-ROOT]",
 			"signatureSource": "scripts/check-entwurf-v2-surface.ts"
 		},
 		{

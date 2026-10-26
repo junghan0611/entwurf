@@ -7,7 +7,12 @@ import { pathToFileURL } from "node:url";
 import { describe, expect, it } from "vitest";
 import { bootBridgeAndListTools } from "../../test/helpers/fresh-call-fixtures.ts";
 import { createPiDurableContact, PI_DURABLE_TOOL_SCHEMAS } from "../meta-bridge-pi-durable.ts";
-import { ENTWURF_GUIDANCE_VERSION, ENTWURF_TOOL_GUIDANCE, parseEntwurfGuidance } from "./agent-guidance.ts";
+import {
+	ENTWURF_GUIDANCE_VERSION,
+	ENTWURF_REJECT_HINTS,
+	ENTWURF_TOOL_GUIDANCE,
+	parseEntwurfGuidance,
+} from "./agent-guidance.ts";
 
 const ROOT = path.resolve(import.meta.dirname, "../..");
 const SOURCE = fs.readFileSync(path.join(ROOT, "ENTWURF.json"), "utf8");
@@ -50,6 +55,10 @@ const reviewedR2 = JSON.parse(
 const reviewedR3 = JSON.parse(
 	fs.readFileSync(new URL("./fixtures/agent-guidance/amendments-revision-3.json", import.meta.url), "utf8"),
 ) as ReviewedAmendmentLayer & { previousRevision: number };
+// Revision 4 adds a family rather than amending a tools leaf: its C0 hint text is its own oracle.
+const originalRejectHints = JSON.parse(
+	fs.readFileSync(new URL("./fixtures/agent-guidance/reject-hints-before-94d0594.json", import.meta.url), "utf8"),
+) as { sourceSha: string; previousRevision: number; introducedRevision: number; hints: Record<string, string> };
 
 // Only description leaves may change. Full schemas/annotations/order come from immutable C0,
 // while reviewed literals were selected independently before the product JSON was amended.
@@ -105,7 +114,19 @@ function currentExpectations() {
 describe("root product guidance — frozen originals plus reviewed current amendments", () => {
 	it("[QK:GUIDANCE-REVIEWED-REVISION] the actual loaded payload revision equals the independently reviewed revision", () => {
 		expect(reviewedR3.revision).toBe(3);
-		expect(ENTWURF_GUIDANCE_VERSION.revision).toBe(reviewedR3.revision);
+		expect(originalRejectHints.previousRevision).toBe(reviewedR3.revision);
+		expect(originalRejectHints.introducedRevision).toBe(4);
+		expect(ENTWURF_GUIDANCE_VERSION.revision).toBe(originalRejectHints.introducedRevision);
+	});
+
+	it("[QK:GUIDANCE-REJECT-HINTS-ORIGINAL] every static reject hint is the exact pre-extraction C0 string for exactly the declared reasons", () => {
+		expect(originalRejectHints.sourceSha).toBe("94d0594182cbd9cf0a5c90f4d299cda40d870b8f");
+		expect(Object.keys(ENTWURF_REJECT_HINTS).sort()).toEqual(Object.keys(originalRejectHints.hints).sort());
+		for (const [reason, text] of Object.entries(originalRejectHints.hints)) {
+			const actual = (ENTWURF_REJECT_HINTS as Readonly<Record<string, string>>)[reason];
+			expect(Buffer.from(actual)).toEqual(Buffer.from(text));
+		}
+		expect(Object.isFrozen(ENTWURF_REJECT_HINTS)).toBe(true);
 	});
 
 	it("[QK:GUIDANCE-CURRENT-DECODED-BYTES] every current string is exact and only declared amendments differ from originals", () => {
@@ -164,7 +185,7 @@ describe("strict fixed-source guidance reader", () => {
 			'{"revision":1,"revision":2}',
 			'{"revision":1,"\\u0072evision":2}',
 			'{"outer":[{"x":"first","x":"last"}]}',
-			SOURCE.replace('"schemaVersion": 1', '"schemaVersion": 1, "schemaVersion": 1'),
+			SOURCE.replace('"schemaVersion": 2', '"schemaVersion": 2, "schemaVersion": 2'),
 		])
 			expect(() => parseEntwurfGuidance(source)).toThrow(/duplicate object key/);
 	});
@@ -172,13 +193,28 @@ describe("strict fixed-source guidance reader", () => {
 	it("[QK:GUIDANCE-STRICT-SHAPE] malformed/unknown/missing data fail closed and values are never whitespace-normalized", () => {
 		const invalidRevision = JSON.parse(SOURCE);
 		invalidRevision.revision = 0;
-		for (const source of [
-			SOURCE + " trailing",
-			SOURCE.replace('"schemaVersion": 1', '"schemaVersion": 2'),
-			JSON.stringify(invalidRevision),
-		]) {
+		for (const source of [SOURCE + " trailing", JSON.stringify(invalidRevision)]) {
 			expect(() => parseEntwurfGuidance(source)).toThrow();
 		}
+		for (const version of ["1", "3"]) {
+			const source = SOURCE.replace('"schemaVersion": 2', `"schemaVersion": ${version}`);
+			expect(source).not.toBe(SOURCE);
+			expect(() => parseEntwurfGuidance(source)).toThrow(/unsupported schemaVersion/);
+		}
+		const noHints = JSON.parse(SOURCE);
+		delete noHints.rejectHints;
+		const missingHint = JSON.parse(SOURCE);
+		delete missingHint.rejectHints["native-push-paused"];
+		const unknownHint = JSON.parse(SOURCE);
+		unknownHint.rejectHints["record-less-socket"] = "slot-bearing text stays code-owned";
+		for (const data of [noHints, missingHint, unknownHint])
+			expect(() => parseEntwurfGuidance(JSON.stringify(data))).toThrow(/keys must be exactly/);
+		const emptyHint = JSON.parse(SOURCE);
+		emptyHint.rejectHints["native-push-paused"] = "";
+		expect(() => parseEntwurfGuidance(JSON.stringify(emptyHint))).toThrow(/non-empty string/);
+		const arrayHints = JSON.parse(SOURCE);
+		arrayHints.rejectHints = Object.values(arrayHints.rejectHints);
+		expect(() => parseEntwurfGuidance(JSON.stringify(arrayHints))).toThrow(/expected an object/);
 		const missing = JSON.parse(SOURCE);
 		delete missing.tools.entwurf_v2.parameters.mode;
 		expect(() => parseEntwurfGuidance(JSON.stringify(missing))).toThrow(/keys must be exactly/);
@@ -197,7 +233,7 @@ describe("strict fixed-source guidance reader", () => {
 		const changed = JSON.parse(SOURCE);
 		changed.history.unshift({ ...changed.history[0], change: "History-only clarification" });
 		expect(parseEntwurfGuidance(JSON.stringify(changed)).revision).toBe(ENTWURF_GUIDANCE_VERSION.revision);
-		expect(ENTWURF_GUIDANCE_VERSION.schemaVersion).toBe(1);
+		expect(ENTWURF_GUIDANCE_VERSION.schemaVersion).toBe(2);
 	});
 
 	it("[QK:GUIDANCE-FIXED-MODULE-ROOT] cwd/HOME/env decoys cannot replace the module's packaged source, whose loaded payload is immutable", () => {

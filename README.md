@@ -23,10 +23,10 @@ receipts and named lifecycle verbs; the operator and native harnesses keep steer
 Git branches, worktrees, file isolation and internal delegation remain their concern.
 [Short answers: FAQ](./FAQ.md).
 
-[ENTWURF.json](./ENTWURF.json) is the sole editable source for the product-owned tool metadata
-currently extracted there: MCP descriptions/parameters and durable short variants. It is not a
-user prompt override; its payload revision is independent of package releases. Bootstrap, notices,
-hints and ACP guidance still have their existing owners. Operator engraving/configuration is unchanged.
+[ENTWURF.json](./ENTWURF.json) is the sole editable source for the product-owned guidance
+currently extracted there: MCP descriptions/parameters, durable short variants and the static
+entwurf_v2 reject hints. It is not a user prompt override; its payload revision is independent of
+package releases. Bootstrap, notices, other hints and ACP guidance still have their existing owners. Operator engraving/configuration is unchanged.
 
 | Verb | Tool | Where it lands | Harnesses |
 |---|---|---|---|

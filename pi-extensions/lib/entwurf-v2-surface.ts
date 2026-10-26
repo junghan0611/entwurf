@@ -18,6 +18,7 @@
  */
 
 import { basename } from "node:path";
+import { ENTWURF_REJECT_HINTS } from "./agent-guidance.ts";
 import type { SenderEnvelope } from "./entwurf-control-rpc.ts";
 import type { DispatchInput, EntwurfV2Mode } from "./entwurf-v2-decider.ts";
 import { makeProductionEntwurfV2Deps, type ProductionEntwurfV2Opts } from "./entwurf-v2-production.ts";
@@ -65,7 +66,8 @@ export function toDispatchInput(params: SurfaceEntwurfV2Params): DispatchInput {
  * Detour B (B-a) — actionable rendering of an honest reject. The decider is UNCHANGED:
  * a reject stays a reject (Hard Rule 3). This only appends a one-line "what to do instead"
  * to the reject TEXT, so an honest reject stops reading as "delivery impossible". Returns
- * undefined for rejects with no useful next step.
+ * undefined for rejects with no useful next step. Static hint English is authored in root
+ * ENTWURF.json (#154); the reason switch and the slot-bearing record-less-socket text stay here.
  */
 export function actionableRejectHint(reason: string): string | undefined {
 	switch (reason) {
@@ -74,13 +76,7 @@ export function actionableRejectHint(reason: string): string | undefined {
 			// state — the citizen exists and is not running — matters more than ever now that
 			// there is no verb behind it: a caller that reads "reject" as "wrong id" goes
 			// looking in the wrong place.
-			return (
-				"this citizen's record is intact but its session is not running, and delivery has no way to wake it. " +
-				"The resume that used to answer here launched a hidden background child and was withdrawn under the " +
-				"visible-first rule; the visible same-id resume is the separate lifecycle verb entwurf_resume_call. " +
-				"Only on an explicit operator request, use entwurf_resume_call {target} for Pi or Claude Code; " +
-				"it submits no prompt. This capability hint is not permission to resume automatically."
-			);
+			return ENTWURF_REJECT_HINTS["dormant-fire-forget-unsupported"];
 		case "indeterminate-no-spawn":
 			// The socket probe did not settle, so liveness is UNKNOWN — an unestablished probe
 			// is not a measured death, and dispatching into it could double-deliver. Say
@@ -91,25 +87,19 @@ export function actionableRejectHint(reason: string): string | undefined {
 			// (never dispatch into an indeterminate target), not a capability that still
 			// exists. So the hint's job is to say plainly what did NOT happen: nothing
 			// delivered, nothing started.
-			return (
-				"the control-socket probe was inconclusive, so the target's liveness is UNKNOWN — this is not a " +
-				"measured death. NOTHING was delivered and NO process was started (the reason id keeps its frozen " +
-				"'-no-spawn' wire spelling from an era when one could be; entwurf_v2 starts nothing on any rail). " +
-				"Re-run entwurf_peers to re-probe; if it stays indeterminate, check for a stale socket file left at " +
-				"that garden id by a session that died without cleaning up."
-			);
+			return ENTWURF_REJECT_HINTS["indeterminate-no-spawn"];
 		case "native-push-target-dead":
 			// The adapter probe found no live native host serving this conversation/thread. Stays
 			// backend-neutral: agy speaks conversations over an LS port, Codex threads over an
 			// app-server socket, and this hint is read by callers of both.
-			return "the native-push conversation/thread is not live — no native host (harness process or app-server) answered the probe for it. Re-open that conversation/thread in its own harness, then retry; there is nothing to inject into.";
+			return ENTWURF_REJECT_HINTS["native-push-target-dead"];
 		case "native-push-probe-indeterminate":
 			// Native host up, but nothing served this conversation/thread — inconclusive, not a
 			// hard dead. Backend-neutral for the same reason as the dead cell above.
-			return "the native host (harness process or app-server) is up, but nothing served this conversation/thread, so the probe is INCONCLUSIVE — not a measured death. Retry once it is loaded, or verify the conversation/thread id.";
+			return ENTWURF_REJECT_HINTS["native-push-probe-indeterminate"];
 		case "native-push-paused":
 			// #152: a policy refusal, not a liveness verdict — this dispatch probed and sent nothing.
-			return "native-push for this backend is paused (#152): its language server refused entwurf's measured external calls for a missing CSRF token, so this dispatch probed and sent nothing. The citizen and its record are kept; reach it from inside its own harness instead.";
+			return ENTWURF_REJECT_HINTS["native-push-paused"];
 		case "record-less-socket":
 			// #50 C4: name the true cause AND the fix — a bare socket is a diagnostic
 			// state, not an addressable citizen (the record is the address).

@@ -6,8 +6,8 @@
 			"claim": "GUIDANCE-REVIEWED-REVISION",
 			"title": "a valid Root revision advances beyond the independently reviewed payload revision while every history entry and decoded tool string remains valid",
 			"subject": "ENTWURF.json",
-			"find": ["\t\"revision\": 3,", "\t\"history\": ["],
-			"replace": ["\t\"revision\": 4,", "\t\"history\": ["],
+			"find": ["\t\"revision\": 4,", "\t\"history\": ["],
+			"replace": ["\t\"revision\": 5,", "\t\"history\": ["],
 			"gate": ["bash", "run.sh", "check-agent-guidance-beside"],
 			"timeoutSeconds": 120,
 			"signature": "[QK:GUIDANCE-REVIEWED-REVISION]",
@@ -22,6 +22,17 @@
 			"gate": ["bash", "run.sh", "check-agent-guidance-beside"],
 			"timeoutSeconds": 120,
 			"signature": "[QK:GUIDANCE-CURRENT-DECODED-BYTES]",
+			"signatureSource": "pi-extensions/lib/agent-guidance.test.ts"
+		},
+		{
+			"claim": "GUIDANCE-REJECT-HINTS-ORIGINAL",
+			"title": "a valid static reject hint gains one space in the real JSON, which the reader and the surface wiring both carry faithfully, so only the C0 byte oracle can disagree",
+			"subject": "ENTWURF.json",
+			"find": ["native-push for this backend is paused (#152):"],
+			"replace": ["native-push for this backend is  paused (#152):"],
+			"gate": ["bash", "run.sh", "check-agent-guidance-beside"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:GUIDANCE-REJECT-HINTS-ORIGINAL]",
 			"signatureSource": "pi-extensions/lib/agent-guidance.test.ts"
 		},
 		{
