@@ -2,12 +2,18 @@
 	"_about": {
 		"purpose": "Precise English natural-language product logic for Entwurf agents, not a user-editable prompt collection.",
 		"ownership": "This root file is the sole editable source of the payload families present here. Installed and compiled copies are deterministic transport, never separate authorities. Existing engraving and user-configuration contracts are unchanged.",
-		"scope": "Current families: MCP tool/parameter descriptions, durable short variants, the static entwurf_v2 reject hints, the static visible-resume (record/liveness) reject hints of entwurf_resume_call, and the static tmux launch-stage reject hints of entwurf_fresh_call and entwurf_resume_call. Bootstrap, notices, envelope explanations, other hints (including the slot-bearing record-less-socket, model-invalid and task-too-long hints, the shared ACP model hint, the preflight repair text kept beside its predicates, and every herdr rail hint) and ACP guidance remain in their current owners; this is not complete guidance centralization.",
+		"scope": "Current families: MCP tool/parameter descriptions, durable short variants, the static entwurf_v2 reject hints, the static visible-resume (record/liveness) reject hints of entwurf_resume_call, the static tmux launch-stage reject hints of entwurf_fresh_call and entwurf_resume_call, and five static delivery-result clauses of the entwurf_v2 dirty-lock and remote-pair receipts. Bootstrap, notices, the protocol-bearing mailbox envelope, receipt syntax and its annotations, other hints (including the slot-bearing record-less-socket, model-invalid and task-too-long hints, the shared ACP model hint, the preflight repair text kept beside its predicates, and every herdr rail hint) and ACP guidance remain in their current owners; this is not complete guidance centralization.",
 		"editing": "Preserve decoded strings exactly unless an explicit semantic amendment is intended. Review related consumers and independent oracles atomically. Accepted payload changes advance revision; history-only edits, routine releases and unrelated code changes do not. schemaVersion tracks reader/structural compatibility. Metadata is not delivered to models."
 	},
-	"schemaVersion": 4,
-	"revision": 7,
+	"schemaVersion": 5,
+	"revision": 8,
 	"history": [
+		{
+			"revision": 8,
+			"source": "08242648863b43b1f265080792eacdce3ff73ef3",
+			"issue": "https://github.com/junghan0611/entwurf/issues/154",
+			"change": "Byte-preserving extraction of five static delivery-result clauses from 94d0594: the finalized-rejected and dirty-lock clauses of the entwurf_v2 surface and the accepted, reported-error and indeterminate clauses of the remote-pair sender; schemaVersion 5 adds the deliveryResultClauses family. Receipt syntax, branch conditions, slots, punctuation and the protocol-bearing mailbox envelope stay code-owned."
+		},
 		{
 			"revision": 7,
 			"source": "d174fef0b9433ec8c24e0c616ed6c864e0fbb178",
@@ -195,5 +201,12 @@
 		"runtime-missing": "nothing exists at the resolved runtime path",
 		"runtime-not-regular-file": "the resolved runtime path is not a regular file",
 		"runtime-not-executable": "the resolved runtime path is not executable"
+	},
+	"deliveryResultClauses": {
+		"finalized-rejected": "the receiver refused it; nothing was accepted",
+		"dirty-lock": "the lock is DIRTY (release failed) — do NOT retry, a re-send would double-deliver. Clear the lock by hand.",
+		"remote-accepted": "accepted by the other host (its fact; read/answer unknown until a reply arrives; paths below are on the other host)",
+		"remote-reported-error": "the other host reported an error while processing; read its receipt below, delivery is not inferred from this line; not retried (paths below are on the other host)",
+		"remote-indeterminate": "The other host may or may not have enqueued; not retried."
 	}
 }

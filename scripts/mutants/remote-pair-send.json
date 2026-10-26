@@ -129,12 +129,31 @@
 		{
 			"claim": "REMOTE-ROUTE-RECEIPT-PATHS-OTHER-HOST",
 			"title": "the accepted receipt drops the note that its paths are on the other host, so the other host's messagePath reads as a file the sender could open",
-			"subject": "pi-extensions/lib/remote-pair-send.ts",
+			"subject": "ENTWURF.json",
 			"find": ["read/answer unknown until a reply arrives; paths below are on the other host)"],
 			"replace": ["read/answer unknown until a reply arrives)"],
 			"gate": ["bash", "run.sh", "check-remote-pair-beside"],
 			"timeoutSeconds": 600,
 			"signature": "[QK:REMOTE-ROUTE-RECEIPT-PATHS-OTHER-HOST]",
+			"signatureSource": "pi-extensions/lib/remote-pair-send.test.ts",
+			"build": {
+				"argv": ["bash", "scripts/build-bridge.sh"],
+				"output": "mcp/entwurf-bridge/dist"
+			}
+		},
+		{
+			"claim": "REMOTE-DELIVERY-RESULT-CLAUSES-FROM-ROOT",
+			"title": "the accepted receipt reads a hand-kept copy of its clause, one byte off the Root text, instead of the Root lookup: it still names acceptance and still says its paths are on the other host, so only the byte comparison against Root can see the drift",
+			"subject": "pi-extensions/lib/remote-pair-send.ts",
+			"find": [
+				"\t\t\t\ttext: `entwurf_v2 remote ${via} → ${ENTWURF_DELIVERY_RESULT_CLAUSES[\"remote-accepted\"]}\\n${o.text}`,"
+			],
+			"replace": [
+				"\t\t\t\ttext: `entwurf_v2 remote ${via} → accepted by the other host (its  fact; read/answer unknown until a reply arrives; paths below are on the other host)\\n${o.text}`,"
+			],
+			"gate": ["bash", "run.sh", "check-remote-pair-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:REMOTE-DELIVERY-RESULT-CLAUSES-FROM-ROOT]",
 			"signatureSource": "pi-extensions/lib/remote-pair-send.test.ts",
 			"build": {
 				"argv": ["bash", "scripts/build-bridge.sh"],
@@ -176,7 +195,7 @@
 			"title": "an error the other host reports after a possible write is headed as a non-delivery, inviting a resend that would deliver twice",
 			"subject": "pi-extensions/lib/remote-pair-send.ts",
 			"find": [
-				"\t\t\t\ttext: `entwurf_v2 remote ${via} → the other host reported an error while processing; read its receipt below, delivery is not inferred from this line; not retried (paths below are on the other host)\\n${o.text}`,"
+				"\t\t\t\ttext: `entwurf_v2 remote ${via} → ${ENTWURF_DELIVERY_RESULT_CLAUSES[\"remote-reported-error\"]}\\n${o.text}`,"
 			],
 			"replace": [
 				"\t\t\t\ttext: `entwurf_v2 remote ${via} → the other host did not deliver (paths below are on the other host)\\n${o.text}`,"

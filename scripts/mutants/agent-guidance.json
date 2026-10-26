@@ -6,8 +6,8 @@
 			"claim": "GUIDANCE-REVIEWED-REVISION",
 			"title": "a valid Root revision advances beyond the independently reviewed payload revision while every history entry and decoded tool string remains valid",
 			"subject": "ENTWURF.json",
-			"find": ["\t\"revision\": 7,", "\t\"history\": ["],
-			"replace": ["\t\"revision\": 8,", "\t\"history\": ["],
+			"find": ["\t\"revision\": 8,", "\t\"history\": ["],
+			"replace": ["\t\"revision\": 9,", "\t\"history\": ["],
 			"gate": ["bash", "run.sh", "check-agent-guidance-beside"],
 			"timeoutSeconds": 120,
 			"signature": "[QK:GUIDANCE-REVIEWED-REVISION]",
@@ -121,6 +121,17 @@
 			"gate": ["bash", "run.sh", "check-agent-guidance-beside"],
 			"timeoutSeconds": 120,
 			"signature": "[QK:GUIDANCE-LAUNCH-REJECT-HINTS-ORIGINAL]",
+			"signatureSource": "pi-extensions/lib/agent-guidance.test.ts"
+		},
+		{
+			"claim": "GUIDANCE-DELIVERY-RESULT-CLAUSES-ORIGINAL",
+			"title": "a valid static delivery-result clause gains one space in the real JSON, which the reader, the v2-surface and remote-pair renderers and the compiled reader all carry faithfully, so only the 94d0594 byte oracle can disagree",
+			"subject": "ENTWURF.json",
+			"find": ["the receiver refused it; nothing was accepted"],
+			"replace": ["the receiver  refused it; nothing was accepted"],
+			"gate": ["bash", "run.sh", "check-agent-guidance-beside"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:GUIDANCE-DELIVERY-RESULT-CLAUSES-ORIGINAL]",
 			"signatureSource": "pi-extensions/lib/agent-guidance.test.ts"
 		},
 		{

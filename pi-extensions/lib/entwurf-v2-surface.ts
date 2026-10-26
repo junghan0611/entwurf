@@ -18,7 +18,7 @@
  */
 
 import { basename } from "node:path";
-import { ENTWURF_REJECT_HINTS } from "./agent-guidance.ts";
+import { ENTWURF_DELIVERY_RESULT_CLAUSES, ENTWURF_REJECT_HINTS } from "./agent-guidance.ts";
 import type { SenderEnvelope } from "./entwurf-control-rpc.ts";
 import type { DispatchInput, EntwurfV2Mode } from "./entwurf-v2-decider.ts";
 import { makeProductionEntwurfV2Deps, type ProductionEntwurfV2Opts } from "./entwurf-v2-production.ts";
@@ -211,17 +211,18 @@ export function renderEntwurfV2Result(result: EntwurfV2RunResult): EntwurfV2Surf
 				// the same acceptance vocabulary the ordinary receipt uses is named here too — a
 				// dirty lock is a reason to be MORE precise about what happened, not less, because
 				// the operator is about to decide by hand whether anything needs re-sending.
+				// The two static clauses are authored in root ENTWURF.json (#154 E1a); this receipt's
+				// syntax, branches and slots stay here.
 				const what =
 					result.finalizedOutcome === "rejected"
-						? `rejected${result.finalizedRejectReason ? ` (${result.finalizedRejectReason})` : ""} — the receiver refused it; nothing was accepted`
+						? `rejected${result.finalizedRejectReason ? ` (${result.finalizedRejectReason})` : ""} — ${ENTWURF_DELIVERY_RESULT_CLAUSES["finalized-rejected"]}`
 						: `${result.finalizedBoundary ?? "mailbox-enqueued"}${
 								result.finalizedMessagePath ? ` (enqueued ${basename(result.finalizedMessagePath)})` : ""
 							}`;
 				return {
 					text:
-						`entwurf_v2 ${result.transport} finalized as ${what}, and the lock is DIRTY ` +
-						`(release failed) — do NOT retry, a re-send would double-deliver. Clear the lock by hand.` +
-						`\n  error: ${result.error}`,
+						`entwurf_v2 ${result.transport} finalized as ${what}, and ` +
+						`${ENTWURF_DELIVERY_RESULT_CLAUSES["dirty-lock"]}\n  error: ${result.error}`,
 					isError: true,
 				};
 			}

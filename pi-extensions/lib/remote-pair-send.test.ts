@@ -15,6 +15,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { ENTWURF_DELIVERY_RESULT_CLAUSES } from "./agent-guidance.ts";
 import type { SenderEnvelope } from "./entwurf-control-rpc.ts";
 import type { SuccessReceipt } from "./entwurf-v2-decider.ts";
 import {
@@ -183,6 +184,24 @@ describe("the sender's receipt keeps the other host's facts as the other host's"
 			expect(r.text).toContain("paths below are on the other host");
 			expect(r.text).toContain(bText);
 		}
+	});
+});
+
+describe("the sender's receipt clauses come from root ENTWURF.json", () => {
+	it("[QK:REMOTE-DELIVERY-RESULT-CLAUSES-FROM-ROOT] the accepted, reported-error and indeterminate receipts render the root clause for their own outcome, byte for byte, inside the code-owned receipt syntax", async () => {
+		const head = (stdout: unknown, exit: number) =>
+			harness(ok(stdout, exit))
+				.run(PARAMS, ONE, SENDER)
+				.then((r) => r.text.split("\n")[0]);
+		expect(await head({ kind: "dispatched", isError: false, text: "t" }, 0)).toBe(
+			`entwurf_v2 remote via oracle → ${ENTWURF_DELIVERY_RESULT_CLAUSES["remote-accepted"]}`,
+		);
+		expect(await head({ kind: "dispatched", isError: true, text: "t" }, 4)).toBe(
+			`entwurf_v2 remote via oracle → ${ENTWURF_DELIVERY_RESULT_CLAUSES["remote-reported-error"]}`,
+		);
+		const indeterminate = await head({ kind: "dispatched", isError: false, text: "t" }, 3);
+		expect(indeterminate.startsWith("entwurf_v2 remote via oracle → indeterminate: ")).toBe(true);
+		expect(indeterminate.endsWith(`. ${ENTWURF_DELIVERY_RESULT_CLAUSES["remote-indeterminate"]}`)).toBe(true);
 	});
 });
 

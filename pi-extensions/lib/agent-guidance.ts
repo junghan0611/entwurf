@@ -95,6 +95,18 @@ const RESUME_LAUNCH_REJECT_HINT_REASONS = [
 
 export type ResumeLaunchRejectHintReason = (typeof RESUME_LAUNCH_REJECT_HINT_REASONS)[number];
 
+/** Frozen keys of the static delivery-result clauses whose text lives in the root file; the
+ * receipts around them (syntax, branch conditions, slots, punctuation) stay code-owned. */
+const DELIVERY_RESULT_CLAUSE_KEYS = [
+	"finalized-rejected",
+	"dirty-lock",
+	"remote-accepted",
+	"remote-reported-error",
+	"remote-indeterminate",
+] as const;
+
+export type DeliveryResultClauseKey = (typeof DELIVERY_RESULT_CLAUSE_KEYS)[number];
+
 type ToolName = keyof typeof TOOL_SPEC;
 type ToolGuidance<K extends ToolName> = {
 	readonly descriptions: (typeof TOOL_SPEC)[K]["durable"] extends true
@@ -105,7 +117,7 @@ type ToolGuidance<K extends ToolName> = {
 
 export interface EntwurfGuidance {
 	readonly _about: Readonly<Record<"purpose" | "ownership" | "scope" | "editing", string>>;
-	readonly schemaVersion: 4;
+	readonly schemaVersion: 5;
 	readonly revision: number;
 	readonly history: readonly {
 		readonly revision: number;
@@ -118,6 +130,7 @@ export interface EntwurfGuidance {
 	readonly resumeRejectHints: Readonly<Record<ResumeRejectHintReason, string>>;
 	readonly freshLaunchRejectHints: Readonly<Record<FreshLaunchRejectHintReason, string>>;
 	readonly resumeLaunchRejectHints: Readonly<Record<ResumeLaunchRejectHintReason, string>>;
+	readonly deliveryResultClauses: Readonly<Record<DeliveryResultClauseKey, string>>;
 }
 
 function record(value: unknown, at: string): asserts value is Record<string, unknown> {
@@ -212,7 +225,7 @@ export function parseEntwurfGuidance(source: string): EntwurfGuidance {
 	const data: unknown = JSON.parse(source);
 	rejectDuplicateKeys(source);
 	record(data, "root");
-	if (data.schemaVersion !== 4) throw new Error("ENTWURF.json: unsupported schemaVersion");
+	if (data.schemaVersion !== 5) throw new Error("ENTWURF.json: unsupported schemaVersion");
 	keys(
 		data,
 		[
@@ -225,6 +238,7 @@ export function parseEntwurfGuidance(source: string): EntwurfGuidance {
 			"resumeRejectHints",
 			"freshLaunchRejectHints",
 			"resumeLaunchRejectHints",
+			"deliveryResultClauses",
 		],
 		"root",
 	);
@@ -276,6 +290,9 @@ export function parseEntwurfGuidance(source: string): EntwurfGuidance {
 	keys(data.resumeLaunchRejectHints, RESUME_LAUNCH_REJECT_HINT_REASONS, "resumeLaunchRejectHints");
 	for (const [reason, value] of Object.entries(data.resumeLaunchRejectHints))
 		text(value, `resumeLaunchRejectHints.${reason}`);
+	record(data.deliveryResultClauses, "deliveryResultClauses");
+	keys(data.deliveryResultClauses, DELIVERY_RESULT_CLAUSE_KEYS, "deliveryResultClauses");
+	for (const [key, value] of Object.entries(data.deliveryResultClauses)) text(value, `deliveryResultClauses.${key}`);
 	freeze(data);
 	return data as unknown as EntwurfGuidance;
 }
@@ -292,6 +309,8 @@ export const ENTWURF_RESUME_REJECT_HINTS = guidance.resumeRejectHints;
 export const ENTWURF_FRESH_LAUNCH_REJECT_HINTS = guidance.freshLaunchRejectHints;
 /** Static tmux launch-stage hints of entwurf_resume_call, kept apart from the fresh verb even where the text matches. */
 export const ENTWURF_RESUME_LAUNCH_REJECT_HINTS = guidance.resumeLaunchRejectHints;
+/** Static delivery-result clauses of the entwurf_v2 dirty-lock and remote-pair receipts; the receipt syntax around them stays code-owned. */
+export const ENTWURF_DELIVERY_RESULT_CLAUSES = guidance.deliveryResultClauses;
 export const ENTWURF_GUIDANCE_VERSION = Object.freeze({
 	schemaVersion: guidance.schemaVersion,
 	revision: guidance.revision,

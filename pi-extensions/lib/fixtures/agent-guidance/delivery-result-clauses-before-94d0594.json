@@ -1,0 +1,24 @@
+{
+	"sourceSha": "94d0594182cbd9cf0a5c90f4d299cda40d870b8f",
+	"sourceBlobSha256": {
+		"entwurf-v2-surface.ts": "548bffae03df02d959367503a8e47a39f8691f848e756f778fd5a13ece56eee4",
+		"remote-pair-send.ts": "4d877b5a4f62826d926abceefc383637d07d0478d1b816d5dcdb3067aac6537f"
+	},
+	"previousRevision": 7,
+	"introducedRevision": 8,
+	"selection": "E1a byte-preserving extraction of five static delivery-result clauses (two in entwurf-v2-surface.ts, three in remote-pair-send.ts); the C0 inventory does not cover these modules, so each clause was extracted from the sourceSha blob by two independently written expected files that agreed byte-for-byte before the product JSON was edited; branch conditions, receipt prefixes/suffixes, slots and punctuation stay code-owned",
+	"coordinates": {
+		"finalized-rejected": "pi-extensions/lib/entwurf-v2-surface.ts:226",
+		"dirty-lock": "pi-extensions/lib/entwurf-v2-surface.ts:232-233",
+		"remote-accepted": "pi-extensions/lib/remote-pair-send.ts:271",
+		"remote-reported-error": "pi-extensions/lib/remote-pair-send.ts:279",
+		"remote-indeterminate": "pi-extensions/lib/remote-pair-send.ts:292-293"
+	},
+	"clauses": {
+		"finalized-rejected": "the receiver refused it; nothing was accepted",
+		"dirty-lock": "the lock is DIRTY (release failed) — do NOT retry, a re-send would double-deliver. Clear the lock by hand.",
+		"remote-accepted": "accepted by the other host (its fact; read/answer unknown until a reply arrives; paths below are on the other host)",
+		"remote-reported-error": "the other host reported an error while processing; read its receipt below, delivery is not inferred from this line; not retried (paths below are on the other host)",
+		"remote-indeterminate": "The other host may or may not have enqueued; not retried."
+	}
+}

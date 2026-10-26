@@ -21,7 +21,11 @@ import assert from "node:assert/strict";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
-import { ENTWURF_REJECT_HINTS, ENTWURF_TOOL_GUIDANCE } from "../pi-extensions/lib/agent-guidance.ts";
+import {
+	ENTWURF_DELIVERY_RESULT_CLAUSES,
+	ENTWURF_REJECT_HINTS,
+	ENTWURF_TOOL_GUIDANCE,
+} from "../pi-extensions/lib/agent-guidance.ts";
 import type { EntwurfV2RunResult } from "../pi-extensions/lib/entwurf-v2-runner.ts";
 import {
 	actionableRejectHint,
@@ -539,6 +543,16 @@ async function main(): Promise<void> {
 				[dirtyBusy, dirtyMailbox, dirtyRefused].every(
 					(r) => r.isError && r.text.includes("DIRTY") && r.text.includes("do NOT retry"),
 				),
+		);
+		// #154 E1a: the two static clauses of this receipt are authored in root ENTWURF.json; the
+		// syntax around them stays here, so the whole rendered line is compared, not a fragment.
+		const dirtyClause = ENTWURF_DELIVERY_RESULT_CLAUSES["dirty-lock"];
+		ok(
+			"[QK:V2SURF-DELIVERY-RESULT-CLAUSES-FROM-ROOT] the dirty-lock receipt renders the root finalized-rejected and dirty-lock clauses byte for byte inside its code-owned syntax",
+			dirtyBusy.text ===
+				`entwurf_v2 control-socket finalized as queued-steer, and ${dirtyClause}\n  error: release boom` &&
+				dirtyRefused.text ===
+					`entwurf_v2 control-socket finalized as rejected (compacting) — ${ENTWURF_DELIVERY_RESULT_CLAUSES["finalized-rejected"]}, and ${dirtyClause}\n  error: release boom`,
 		);
 
 		// plain execution-failed → error

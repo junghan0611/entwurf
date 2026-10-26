@@ -26,6 +26,7 @@
 
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { ENTWURF_DELIVERY_RESULT_CLAUSES } from "./agent-guidance.ts";
 import { controlSocketPathIn } from "./control-socket-path.js";
 import type { SenderEnvelope } from "./entwurf-control-rpc.ts";
 import type { EntwurfV2SurfaceRendered, SurfaceEntwurfV2Params } from "./entwurf-v2-surface.ts";
@@ -262,13 +263,15 @@ export function classifyRemoteReceipt(r: RemoteTransportResult): RemoteSendOutco
 	return indeterminate(`exit ${r.exitCode} disagrees with its receipt`);
 }
 
+// The three static explanatory clauses are authored in root ENTWURF.json (#154 E1a); the receipt
+// syntax, the route label, the slots and the refused/invalid lines stay here.
 function render(route: RemoteRouteDeclaration, o: RemoteSendOutcome): EntwurfV2SurfaceRendered {
 	const via = `via ${route.ssh}`;
 	switch (o.kind) {
 		case "remote-accepted":
 			return {
 				isError: false,
-				text: `entwurf_v2 remote ${via} → accepted by the other host (its fact; read/answer unknown until a reply arrives; paths below are on the other host)\n${o.text}`,
+				text: `entwurf_v2 remote ${via} → ${ENTWURF_DELIVERY_RESULT_CLAUSES["remote-accepted"]}\n${o.text}`,
 			};
 		case "remote-reported-error":
 			// The other host's dispatch returned isError. That can follow a write (an enqueue whose
@@ -276,7 +279,7 @@ function render(route: RemoteRouteDeclaration, o: RemoteSendOutcome): EntwurfV2S
 			// non-delivery nor safety to resend: the other host's own text below is the fact.
 			return {
 				isError: true,
-				text: `entwurf_v2 remote ${via} → the other host reported an error while processing; read its receipt below, delivery is not inferred from this line; not retried (paths below are on the other host)\n${o.text}`,
+				text: `entwurf_v2 remote ${via} → ${ENTWURF_DELIVERY_RESULT_CLAUSES["remote-reported-error"]}\n${o.text}`,
 			};
 		case "remote-pair-refused":
 			return {
@@ -289,8 +292,8 @@ function render(route: RemoteRouteDeclaration, o: RemoteSendOutcome): EntwurfV2S
 			return {
 				isError: true,
 				text:
-					`entwurf_v2 remote ${via} → indeterminate: ${o.why}. The other host may or may not have enqueued; ` +
-					`not retried.${o.stderrTail ? `\n${o.stderrTail}` : ""}`,
+					`entwurf_v2 remote ${via} → indeterminate: ${o.why}. ` +
+					`${ENTWURF_DELIVERY_RESULT_CLAUSES["remote-indeterminate"]}${o.stderrTail ? `\n${o.stderrTail}` : ""}`,
 			};
 	}
 }

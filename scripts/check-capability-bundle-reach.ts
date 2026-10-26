@@ -311,6 +311,12 @@ for (const copy of copies) {
 			isDeepStrictEqual(loaded?.ENTWURF_FRESH_LAUNCH_REJECT_HINTS, root.freshLaunchRejectHints) &&
 			isDeepStrictEqual(loaded?.ENTWURF_RESUME_LAUNCH_REJECT_HINTS, root.resumeLaunchRejectHints),
 	);
+	// F5 — the delivery-result clauses (#154 E1a), separate for the same reason as F2; this proves the
+	// compiled reader's export, not the compiled receipt renderers that read it.
+	ok(
+		"F5: the compiled reader exports the canonical Root delivery-result clauses [QK:BUNDLE-REACH-DELIVERY-RESULT-CLAUSES]",
+		sameBytes && isDeepStrictEqual(loaded?.ENTWURF_DELIVERY_RESULT_CLAUSES, root.deliveryResultClauses),
+	);
 }
 
 console.log(`\ncheck-capability-bundle-reach: PASS (${passed} assertions)`);

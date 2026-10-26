@@ -153,12 +153,25 @@
 			"title": "the dirty-lock line goes back to `DELIVERED (<route>)` for all three shapes that reach it — a refusal that delivered nothing, a message lying in a volatile queue, and a durable mailbox file all read as one word, at the exact moment an operator is deciding BY HAND whether anything still needs sending",
 			"subject": "pi-extensions/lib/entwurf-v2-surface.ts",
 			"find": [
-				"\t\t\t\t\t\t? `rejected${result.finalizedRejectReason ? ` (${result.finalizedRejectReason})` : \"\"} — the receiver refused it; nothing was accepted`"
+				"\t\t\t\t\t\t? `rejected${result.finalizedRejectReason ? ` (${result.finalizedRejectReason})` : \"\"} — ${ENTWURF_DELIVERY_RESULT_CLAUSES[\"finalized-rejected\"]}`"
 			],
 			"replace": ["\t\t\t\t\t\t? `DELIVERED (${result.finalizedOutcome})`"],
 			"gate": ["bash", "run.sh", "check-entwurf-v2-surface"],
 			"timeoutSeconds": 300,
 			"signature": "[QK:SEND-DIRTY-LOCK-NAMES-ACCEPTANCE]",
+			"signatureSource": "scripts/check-entwurf-v2-surface.ts"
+		},
+		{
+			"claim": "V2SURF-DELIVERY-RESULT-CLAUSES-FROM-ROOT",
+			"title": "the dirty-lock receipt reads a hand-kept copy of its clause, one byte off the Root text, instead of the Root lookup: DIRTY and do NOT retry still read on every shape, so only the whole-line comparison against Root can see the drift",
+			"subject": "pi-extensions/lib/entwurf-v2-surface.ts",
+			"find": ["\t\t\t\t\t\t`${ENTWURF_DELIVERY_RESULT_CLAUSES[\"dirty-lock\"]}\\n  error: ${result.error}`,"],
+			"replace": [
+				"\t\t\t\t\t\t`the lock is DIRTY (release failed) — do NOT retry, a re-send would double-deliver. Clear the lock by  hand.\\n  error: ${result.error}`,"
+			],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-surface"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:V2SURF-DELIVERY-RESULT-CLAUSES-FROM-ROOT]",
 			"signatureSource": "scripts/check-entwurf-v2-surface.ts"
 		},
 		{
