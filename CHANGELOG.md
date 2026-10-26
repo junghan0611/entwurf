@@ -4,6 +4,87 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+## v2026.10.27-herdr.0.45.0 — Herdr Entwurf plugin 0.45.0
+
+A separate Herdr plugin snapshot, not another core release: core package 0.45.0 and its
+`v0.45.0` tag remain unchanged. Core 0.45.0 is now published to npm; the publication is
+verified from the registry, not from observing who ran it.
+
+**Reading guide (2026-10-27).** The `## 0.45.0` section below is the text that shipped inside
+the 0.45.0 tarball. Its statement that the Herdr lock rides the `herdr-checkout` carrier while
+0.45.0 is unpublished predates later facts: `v0.45.0` and its GitHub release point at
+`191e425`, that SHA's push CI ran its four required jobs green, and npm `latest` is 0.45.0,
+byte-equal to the accepted Windows-bearing candidate. Until this snapshot lands, a
+main-tracking `herdr plugin install` acquires the checkout commit rather than an npm artifact.
+Neither the published tarball's CHANGELOG nor the core release page is amended by this
+snapshot.
+
+### Herdr plugin
+
+- **Re-pin the published core 0.45.0 and close the checkout window.**
+  `plugins/herdr/runtime-lock.json` returns from the `herdr-checkout` carrier that the 0.45.0
+  candidate rode to production npm source `@junghanacs/entwurf@0.45.0` with the registry's
+  measured sha512 (`sha512-/Uu7rLyS…59tbQ==`). The plugin manifest moves 0.41.2 → 0.45.0;
+  admission remains Herdr >= 0.9.0 and the one-build/one-pane/Linux shape is unchanged. From
+  the `v2026.10.24-herdr.0.41.2` snapshot to `v0.45.0`, the changes under `plugins/herdr/`,
+  `scripts/herdr-runtime.mjs` and `scripts/fixtures/herdr-supply.json` were that lock's return
+  to `herdr-checkout` and the plugin README's candidate wording; the runtime helper and the
+  Herdr supply pin did not change.
+- **Pi stays at 1.4.** The acquired runtime carries the Pi 1.4.0 SDK set and accepts Pi
+  `>=1.4.0 <1.5`, the same range as the previous snapshot's 0.41.2.
+- **Upgrade by acquisition source, not just version.** A settled npm-source 0.41.2
+  installation can rebind under the plugin README's ownership conditions. A host that
+  installed the 0.45.0 `herdr-checkout` candidate from main must explicitly deactivate by its
+  own absolute runtime path before reinstalling the npm-source snapshot. No operator
+  installation or active session is rewired by this release work, and a harness already
+  running keeps the runtime it started with.
+- **What the acquired runtime carries, and what this path does not.** The runtime ships core
+  0.45.0's bytes, including its nine-tool bridge, root `ENTWURF.json`, the pi-durable carrier
+  and the paused agy native push. Herdr wires and opens only `{pi, claude-code}`, so this
+  plugin path launches no pi-durable or agy session. Inside Herdr, `entwurf_resume_call` still
+  refuses as `herdr-resume-unsupported`.
+- **README.** The runtime paragraph and the Pi requirement name npm 0.45.0 and point at the
+  previous snapshots' 0.41.2 and 0.41.1 on the same Pi 1.4.0 SDK set.
+- **Current install docs.** The root README and the clean-host setup guide name the published
+  0.45.0 in their install commands and tool counts, and the root README names this snapshot as
+  the Herdr pin. Moving a live host onto 0.45.0 remains a separate operator decision for each
+  host.
+
+### Source-specific verification
+
+- Registry metadata reports `latest` 0.45.0 and `repair` 0.12.8-repair.1, 651 files. The
+  downloaded registry tarball is byte-equal (SHA256 and `cmp`) to the preserved accepted core
+  candidate (SHA256 `584fca5d623cce8e91c2ef0901ed54824e7b1d03042035e5e7547e854291c408`,
+  11473584 bytes); its independently computed sha512 and sha1 equal `dist.integrity` and
+  `dist.shasum`. No dist-tag snapshot was taken immediately before the operator's manual
+  publish, so `repair` is observed unchanged only against an earlier dated reading.
+- **Package consumer, reused.** Core make already ran its container consumer against those
+  same 0.45.0 bytes (acceptance log `4ccd048bcf79`, repoDigest `node@sha256:6dac556d…`, image
+  ID `sha256:55ab623b…`), so that result is reused here, not repeated.
+- **Registry-installed package (Pi).** A sandboxed `pi install npm:@junghanacs/entwurf@0.45.0`
+  (Pi 1.4.0) resolved its bridge to the installed root inside the sandbox; the installed
+  compiled bridge entry and `ENTWURF.json` equal the accepted tarball's members;
+  `--list-models entwurf` printed seven `entwurf` rows including the curated Claude anchors,
+  with no unknown-provider error. No model turn. The run started from an empty environment
+  (`env -i`, PATH only) with sandboxed HOME, XDG and agent roots. npm 11.16 listed the
+  package's install scripts as not yet covered by `allowScripts` and did not run them; the
+  tarball's executables already carry mode 0755.
+- **The npm runtime swap against the real registry**, by the registry-shipped
+  `scripts/herdr-runtime.mjs` (byte-equal to this checkout's) in sandboxed user roots, 22/22
+  checks. The 0.41.2 runtime was seeded from its own committed lock (`94d0594`); the swap to
+  0.45.0 took one acquisition, the cached tarball's sha512 equals the lock and its sha256 equals
+  the accepted candidate. A manually seeded torn swap (not a killed process) was restored before
+  acquisition and reported `recovered: torn-swap-with-candidate`; an exact re-request acquired
+  nothing, and the owned removal reclaimed cache, runtime and journal. The helper probes no Pi,
+  so these cells certify neither a Pi upgrade nor Herdr's install/update relocation, harness
+  wiring, the installed CLI's deactivate path, a model turn, or recovery from a real kill.
+- **Affected deterministic gates** on this tree: lint and the sixteen Herdr, version-floor,
+  install-surface, v2-surface and gate-manifest checks the previous snapshot ran, each exit 0.
+- Pending, and not claimed here: the pushed SHA's four-job CI and the public-ref
+  install/use/deactivate journey. That journey is a main-ref receipt for the SHA it resolved,
+  not a tag-ref install claim. Earlier npm or checkout-carrier receipts cannot certify these
+  axes.
+
 ## 0.45.0 — 2026-10-26
 
 The text Entwurf hands to models is product code. A model chooses whether to resume, retry, wait or ask a person from the words in a tool description or a reject hint, so that wording is part of the contract, not decoration. Before this release those words lived as string literals scattered through the delivery, resume and launch modules, with no single place that said which text was current or which change had been reviewed. 0.45.0 gives the extracted text one versioned source, root `ENTWURF.json`, read by one strict reader and carried unchanged into the source, compiled and installed package, with the original pre-extraction text kept as an oracle and every semantic change recorded as a separate, reviewed amendment layer. The version moves from 0.41.2 straight to 0.45.0 to mark that milestone; there are no 0.42–0.44 releases.

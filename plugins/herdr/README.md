@@ -125,14 +125,13 @@ directory that harness owns, and it will not invent one: `herdr integration inst
 commands are ordinary invocations — no model turn, no login, no account.
 
 **Which runtime these steps install.** The `runtime-lock.json` at the ref Herdr resolves names
-what step 5 acquires. With this candidate's lock (`source: herdr-checkout`), step 5 builds the
-runtime from the exact checkout commit Herdr resolved: the unpublished 0.45.0 candidate, on the
-same Pi 1.4.0 SDK set, so step 1 installs Pi 1.4. The snapshot `v2026.10.24-herdr.0.41.2` pins the
-published npm `@junghanacs/entwurf@0.41.2` with its sha512; the previous snapshot
-`v2026.10.23-herdr.0.41.1` pins `@junghanacs/entwurf@0.41.1` on the same Pi 1.4.0 SDK set. The
-earlier snapshot `v2026.10.22-herdr.0.41.0` pins `@junghanacs/entwurf@0.41.0` on the Pi 1.3.0 SDK
-set, and its own README at that tag carries its Pi 1.3.x step. A host already on an npm runtime
-switches source: deactivate first
+what step 5 acquires. This snapshot pins npm `@junghanacs/entwurf@0.45.0` with its published
+sha512; that runtime carries the Pi 1.4.0 SDK set, so step 1 installs Pi 1.4. The previous snapshot
+`v2026.10.24-herdr.0.41.2` pins `@junghanacs/entwurf@0.41.2`, and `v2026.10.23-herdr.0.41.1` pins
+`@junghanacs/entwurf@0.41.1`, both on the same Pi 1.4.0 SDK set. The earlier snapshot
+`v2026.10.22-herdr.0.41.0` pins `@junghanacs/entwurf@0.41.0` on the Pi 1.3.0 SDK set, and its own
+README at that tag carries its Pi 1.3.x step. A host whose plugin installation rode the 0.45.0
+candidate's `herdr-checkout` source switches source: deactivate first
 ([the two sources](#the-runtime-and-the-two-sources-it-may-come-from)).
 
 ```bash
@@ -475,9 +474,8 @@ read. Every field the provider attached is shown, in sorted key order.
     named red (`herdr-integration-not-current`) until you run `herdr integration install claude`
     again. In the measured 0.9.4-seeded private sandbox, the reinstall changed only the hook's version
     line; the pi extension and the Claude settings stayed byte-identical.
-- **Pi `>=1.4.0 <1.5`** for the runtime this checkout's lock acquires (the unpublished 0.45.0
-  candidate through the `herdr-checkout` source; the published 0.41.2 that snapshot
-  `v2026.10.24-herdr.0.41.2` pins carries the same Pi 1.4.0 SDK set).
+- **Pi `>=1.4.0 <1.5`** for the runtime this plugin acquires (npm `@junghanacs/entwurf@0.45.0`,
+  the Pi 1.4.0 SDK set, the same set as the 0.41.2 that snapshot `v2026.10.24-herdr.0.41.2` pins).
   A host still on Pi 1.3 is refused by name (`outside the supported
   range`) at activation, the same check `entwurf setup` applies, and no Pi settings are written.
   Upgrade Pi to 1.4 first, then install or reinstall the plugin. The previous snapshot,
