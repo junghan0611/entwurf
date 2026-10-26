@@ -25,7 +25,7 @@ Git branches, worktrees, file isolation and internal delegation remain their con
 
 [ENTWURF.json](./ENTWURF.json) is the sole editable source for the product-owned guidance
 currently extracted there: MCP descriptions/parameters, durable short variants, the static
-entwurf_v2 reject hints, the static visible-resume reject hints of entwurf_resume_call, the static tmux launch-stage reject hints of entwurf_fresh_call and entwurf_resume_call (herdr rail hints stay in code) and five static delivery-result clauses of the entwurf_v2 dirty-lock and remote-pair receipts (receipt syntax and the mailbox envelope stay in code). It is not a user prompt override; its payload revision is independent of
+entwurf_v2 reject hints, the static visible-resume reject hints of entwurf_resume_call, the static tmux launch-stage reject hints of entwurf_fresh_call and entwurf_resume_call (herdr rail hints stay in code), five static delivery-result clauses of the entwurf_v2 dirty-lock and remote-pair receipts (receipt syntax and the mailbox envelope stay in code) and the record-less-socket reject hint's text around its fix command (the command itself stays in code). It is not a user prompt override; its payload revision is independent of
 package releases. Bootstrap, notices, other hints and ACP guidance still have their existing owners. Operator engraving/configuration is unchanged.
 
 | Verb | Tool | Where it lands | Harnesses |

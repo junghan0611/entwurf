@@ -1,0 +1,22 @@
+{
+	"previousRevision": 9,
+	"revision": 10,
+	"source": "Operator-authorized pre-release semantic amendment; inherited diagnosis from notebook/Astra, checked against each production owner. Fable wording review follows the checkpoint.",
+	"amendments": [
+		{
+			"key": ["rejectHints", "native-push-probe-indeterminate"],
+			"old": "the native host (harness process or app-server) is up, but nothing served this conversation/thread, so the probe is INCONCLUSIVE — not a measured death. Retry once it is loaded, or verify the conversation/thread id.",
+			"new": "the adapter could not establish a live route to this conversation/thread, so its liveness is UNKNOWN — not a measured death. Inspect the probe reason and verify the target in its own native harness; the host itself may or may not be running."
+		},
+		{
+			"key": ["resumeRejectHints", "target-invalid"],
+			"old": "no citizen has that id; discover targets with entwurf_peers",
+			"new": "the target is not a valid garden id; use entwurf_peers to discover valid targets"
+		},
+		{
+			"key": ["deliveryResultClauses", "dirty-lock"],
+			"old": "the lock is DIRTY (release failed) — do NOT retry, a re-send would double-deliver. Clear the lock by hand.",
+			"new": "the lock is DIRTY (release failed) — do NOT retry automatically. Inspect the reported acceptance and have the operator resolve the lock before deciding whether to resend."
+		}
+	]
+}

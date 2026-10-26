@@ -1,0 +1,21 @@
+{
+	"sourceSha": "94d0594182cbd9cf0a5c90f4d299cda40d870b8f",
+	"sourceBlobSha256": {
+		"entwurf-v2-surface.ts": "548bffae03df02d959367503a8e47a39f8691f848e756f778fd5a13ece56eee4"
+	},
+	"c0Item": "pi-extensions/lib/entwurf-v2-surface.ts:116:7192",
+	"previousRevision": 8,
+	"introducedRevision": 9,
+	"selection": "E1b byte-preserving extraction of the record-less-socket reject hint's authored English around its one code-owned slot; the two segments are the C0 pre-extraction inventory item's text segments joined on either side of the slot, compared byte-for-byte with two independently written expected files before the product JSON was edited; the slot value (FRESH_CUT_PRESCRIPTION, owned by meta-session.ts), the reason branch and the wire id stay code-owned",
+	"coordinates": {
+		"record-less-socket": "pi-extensions/lib/entwurf-v2-surface.ts:117-121"
+	},
+	"slot": "FRESH_CUT_PRESCRIPTION",
+	"template": "a control socket exists at this garden id but NO meta-record claims it — the record is the sole address authority, so a bare socket is not an addressable citizen. If a pre-record-era resident owns that socket, restart it under the current runtime (session_start births its record); if the store predates the current generation, quiesce and archive it with ${FRESH_CUT_PRESCRIPTION}. A stale/forged socket should be removed.",
+	"segments": {
+		"record-less-socket": {
+			"beforeFreshCutPrescription": "a control socket exists at this garden id but NO meta-record claims it — the record is the sole address authority, so a bare socket is not an addressable citizen. If a pre-record-era resident owns that socket, restart it under the current runtime (session_start births its record); if the store predates the current generation, quiesce and archive it with ",
+			"afterFreshCutPrescription": ". A stale/forged socket should be removed."
+		}
+	}
+}

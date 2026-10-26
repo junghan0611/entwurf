@@ -194,6 +194,21 @@
 			"timeoutSeconds": 120,
 			"signature": "[QK:NATIVE-PUSH-RETRY-BYTE-IDENTITY]",
 			"signatureSource": "pi-extensions/lib/entwurf-v2-native-push.test.ts"
+		},
+		{
+			"claim": "V2SURF-RECORD-LESS-SOCKET-HINT-FROM-ROOT",
+			"title": "the record-less-socket hint returns a hand-kept copy of its text, one byte off the Root segments, instead of composing them with the owner's command: every phrase the 2C cell checks still reads, so only the whole-string comparison against Root can see the drift",
+			"subject": "pi-extensions/lib/entwurf-v2-surface.ts",
+			"find": [
+				"\t\t\treturn `${hint.beforeFreshCutPrescription}${FRESH_CUT_PRESCRIPTION}${hint.afterFreshCutPrescription}`;"
+			],
+			"replace": [
+				"\t\t\treturn `a control socket exists at this garden id but NO meta-record claims it — the record is the sole address authority, so a bare socket is not an addressable citizen. If a pre-record-era resident owns that socket, restart it under the current runtime (session_start births its record); if the store predates the current generation, quiesce and archive it with ${FRESH_CUT_PRESCRIPTION}. A stale/forged socket should be  removed.`;"
+			],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-surface"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:V2SURF-RECORD-LESS-SOCKET-HINT-FROM-ROOT]",
+			"signatureSource": "scripts/check-entwurf-v2-surface.ts"
 		}
 	]
 }

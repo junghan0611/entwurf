@@ -51,6 +51,7 @@ import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { isDeepStrictEqual } from "node:util";
+import { FRESH_CUT_PRESCRIPTION } from "../pi-extensions/lib/meta-session.ts";
 import { hookImportClosure, installerCopiedLibFiles, stageMetaHookBundle } from "./lib/meta-hook-bundle.ts";
 import { reclaimOnExit } from "./lib/reclaim-on-exit.ts";
 
@@ -316,6 +317,32 @@ for (const copy of copies) {
 	ok(
 		"F5: the compiled reader exports the canonical Root delivery-result clauses [QK:BUNDLE-REACH-DELIVERY-RESULT-CLAUSES]",
 		sameBytes && isDeepStrictEqual(loaded?.ENTWURF_DELIVERY_RESULT_CLAUSES, root.deliveryResultClauses),
+	);
+	// F6 — the slotted reject-hint segments (#154 E1b), separate for the same reason as F2; this proves the
+	// compiled reader's export, not the compiled surface that composes them with the code-owned slot.
+	ok(
+		"F6: the compiled reader exports the canonical Root slotted reject-hint segments [QK:BUNDLE-REACH-SLOTTED-REJECT-HINTS]",
+		sameBytes && isDeepStrictEqual(loaded?.ENTWURF_SLOTTED_REJECT_HINTS, root.slottedRejectHints),
+	);
+	// F7 — the first COMPILED CONSUMER proof (#154 E1b): the compiled surface, not only the reader, renders
+	// the record-less-socket hint from the Root segments around the compiled owner's fix command, and that
+	// command is the source owner's value (an emptied or drifted slot cannot pass by composing with itself).
+	// Imported only when the carrier matches, for the same reason as the reader import above.
+	const surface = sameBytes
+		? await import(pathToFileURL(path.join(BRIDGE_DIST, "pi-extensions", "lib", "entwurf-v2-surface.js")).href)
+		: undefined;
+	const metaSession = sameBytes
+		? await import(pathToFileURL(path.join(BRIDGE_DIST, "pi-extensions", "lib", "meta-session.js")).href)
+		: undefined;
+	const rls = root.slottedRejectHints["record-less-socket"];
+	ok(
+		"F7: the compiled surface renders the record-less-socket hint as the Root text around the compiled owner's fix command, which equals the source owner's [QK:BUNDLE-REACH-RECORD-LESS-SOCKET-CONSUMER]",
+		sameBytes &&
+			typeof metaSession?.FRESH_CUT_PRESCRIPTION === "string" &&
+			metaSession.FRESH_CUT_PRESCRIPTION.length > 0 &&
+			metaSession.FRESH_CUT_PRESCRIPTION === FRESH_CUT_PRESCRIPTION &&
+			surface?.actionableRejectHint("record-less-socket") ===
+				`${rls.beforeFreshCutPrescription}${FRESH_CUT_PRESCRIPTION}${rls.afterFreshCutPrescription}`,
 	);
 }
 

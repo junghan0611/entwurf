@@ -1,4 +1,4 @@
-/** #154 current oracles: frozen C0 objects + independently reviewed literal amendments, never product output. */
+/** #154 current oracles: frozen C0 objects + explicit literal amendments (review provenance per layer), never product output. */
 import { spawnSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as os from "node:os";
@@ -14,6 +14,7 @@ import {
 	ENTWURF_REJECT_HINTS,
 	ENTWURF_RESUME_LAUNCH_REJECT_HINTS,
 	ENTWURF_RESUME_REJECT_HINTS,
+	ENTWURF_SLOTTED_REJECT_HINTS,
 	ENTWURF_TOOL_GUIDANCE,
 	parseEntwurfGuidance,
 } from "./agent-guidance.ts";
@@ -105,6 +106,54 @@ const originalDeliveryResultClauses = JSON.parse(
 	introducedRevision: number;
 	clauses: Record<string, string>;
 };
+// Revision 9 adds the record-less-socket hint's text on either side of its one code-owned slot; the
+// C0 item records it as segments around that slot, so the oracle is those segments joined plus the
+// C0 template, agreed byte-for-byte by two independent extractions before the product JSON was edited.
+const originalSlottedRejectHints = JSON.parse(
+	fs.readFileSync(
+		new URL("./fixtures/agent-guidance/record-less-socket-hint-before-94d0594.json", import.meta.url),
+		"utf8",
+	),
+) as {
+	sourceSha: string;
+	sourceBlobSha256: Record<string, string>;
+	c0Item: string;
+	previousRevision: number;
+	introducedRevision: number;
+	slot: string;
+	template: string;
+	segments: Record<string, Record<string, string>>;
+};
+
+const amendmentsR10 = JSON.parse(
+	fs.readFileSync(new URL("./fixtures/agent-guidance/amendments-revision-10.json", import.meta.url), "utf8"),
+) as {
+	previousRevision: number;
+	revision: number;
+	amendments: {
+		key: ["rejectHints" | "resumeRejectHints" | "deliveryResultClauses", string];
+		old: string;
+		new: string;
+	}[];
+};
+
+// Operator-authorized pre-release literals, recorded before Root edits. Fable review follows the
+// checkpoint; do not represent this layer as an already completed independent wording review.
+function applyR10(family: string, expected: Record<string, string>): void {
+	expect(amendmentsR10.amendments).toHaveLength(3);
+	expect(amendmentsR10.amendments.map((a) => a.key.join(".")).sort()).toEqual([
+		"deliveryResultClauses.dirty-lock",
+		"rejectHints.native-push-probe-indeterminate",
+		"resumeRejectHints.target-invalid",
+	]);
+	for (const amendment of amendmentsR10.amendments) {
+		if (amendment.key[0] !== family) continue;
+		const key = amendment.key[1];
+		expect(expected[key]).toBe(amendment.old);
+		expect(amendment.new).not.toBe(amendment.old);
+		expected[key] = amendment.new;
+	}
+}
 
 // Only description leaves may change. Full schemas/annotations/order come from immutable C0,
 // while reviewed literals were selected independently before the product JSON was amended.
@@ -170,10 +219,14 @@ describe("root product guidance — frozen originals plus reviewed current amend
 		expect(originalLaunchRejectHints.introducedRevision).toBe(7);
 		expect(originalDeliveryResultClauses.previousRevision).toBe(originalLaunchRejectHints.introducedRevision);
 		expect(originalDeliveryResultClauses.introducedRevision).toBe(8);
-		expect(ENTWURF_GUIDANCE_VERSION.revision).toBe(originalDeliveryResultClauses.introducedRevision);
+		expect(originalSlottedRejectHints.previousRevision).toBe(originalDeliveryResultClauses.introducedRevision);
+		expect(originalSlottedRejectHints.introducedRevision).toBe(9);
+		expect(amendmentsR10.previousRevision).toBe(originalSlottedRejectHints.introducedRevision);
+		expect(amendmentsR10.revision).toBe(10);
+		expect(ENTWURF_GUIDANCE_VERSION.revision).toBe(amendmentsR10.revision);
 	});
 
-	it("[QK:GUIDANCE-REJECT-HINTS-ORIGINAL] every static reject hint is the exact pre-extraction C0 string, except the one independently reviewed revision-6 leaf", () => {
+	it("[QK:GUIDANCE-REJECT-HINTS-ORIGINAL] every static reject hint matches C0 plus the declared revision-6 and pre-release revision-10 amendments", () => {
 		expect(originalRejectHints.sourceSha).toBe("94d0594182cbd9cf0a5c90f4d299cda40d870b8f");
 		const expected = structuredClone(originalRejectHints.hints);
 		expect(reviewedR6.amendments).toHaveLength(1);
@@ -185,23 +238,24 @@ describe("root product guidance — frozen originals plus reviewed current amend
 			expect(amendment.new).not.toBe(amendment.old);
 			expected[reason] = amendment.new;
 		}
+		applyR10("rejectHints", expected);
 		expect(Object.keys(ENTWURF_REJECT_HINTS).sort()).toEqual(Object.keys(expected).sort());
 		for (const [reason, text] of Object.entries(expected)) {
 			const actual = (ENTWURF_REJECT_HINTS as Readonly<Record<string, string>>)[reason];
 			expect(Buffer.from(actual)).toEqual(Buffer.from(text));
 		}
 		const changed = Object.keys(expected).filter((reason) => expected[reason] !== originalRejectHints.hints[reason]);
-		expect(changed).toEqual(["native-push-paused"]);
-		expect(Object.keys(expected).filter((reason) => !changed.includes(reason))).toHaveLength(4);
+		expect(changed).toEqual(["native-push-probe-indeterminate", "native-push-paused"]);
+		expect(Object.keys(expected).filter((reason) => !changed.includes(reason))).toHaveLength(3);
 		expect(Object.isFrozen(ENTWURF_REJECT_HINTS)).toBe(true);
 	});
 
-	it("[QK:GUIDANCE-RESUME-REJECT-HINTS-ORIGINAL] every static visible-resume reject hint is the exact pre-extraction C0 string for exactly the declared reasons", () => {
+	it("[QK:GUIDANCE-RESUME-REJECT-HINTS-ORIGINAL] every static visible-resume reject hint matches C0 plus the declared pre-release revision-10 amendment", () => {
 		expect(originalResumeRejectHints.sourceSha).toBe("94d0594182cbd9cf0a5c90f4d299cda40d870b8f");
-		expect(Object.keys(ENTWURF_RESUME_REJECT_HINTS).sort()).toEqual(
-			Object.keys(originalResumeRejectHints.hints).sort(),
-		);
-		for (const [reason, text] of Object.entries(originalResumeRejectHints.hints)) {
+		const expected = structuredClone(originalResumeRejectHints.hints);
+		applyR10("resumeRejectHints", expected);
+		expect(Object.keys(ENTWURF_RESUME_REJECT_HINTS).sort()).toEqual(Object.keys(expected).sort());
+		for (const [reason, text] of Object.entries(expected)) {
 			const actual = (ENTWURF_RESUME_REJECT_HINTS as Readonly<Record<string, string>>)[reason];
 			expect(Buffer.from(actual)).toEqual(Buffer.from(text));
 		}
@@ -232,20 +286,40 @@ describe("root product guidance — frozen originals plus reviewed current amend
 		expect(ENTWURF_FRESH_LAUNCH_REJECT_HINTS).not.toBe(ENTWURF_RESUME_LAUNCH_REJECT_HINTS);
 	});
 
-	it("[QK:GUIDANCE-DELIVERY-RESULT-CLAUSES-ORIGINAL] every static delivery-result clause is the exact string of the 94d0594 source blob for exactly the declared keys", () => {
+	it("[QK:GUIDANCE-DELIVERY-RESULT-CLAUSES-ORIGINAL] every static delivery-result clause matches the 94d0594 source blob plus the declared pre-release revision-10 amendment", () => {
 		expect(originalDeliveryResultClauses.sourceSha).toBe("94d0594182cbd9cf0a5c90f4d299cda40d870b8f");
 		expect(Object.keys(originalDeliveryResultClauses.sourceBlobSha256).sort()).toEqual([
 			"entwurf-v2-surface.ts",
 			"remote-pair-send.ts",
 		]);
-		expect(Object.keys(ENTWURF_DELIVERY_RESULT_CLAUSES).sort()).toEqual(
-			Object.keys(originalDeliveryResultClauses.clauses).sort(),
-		);
-		for (const [key, text] of Object.entries(originalDeliveryResultClauses.clauses)) {
+		const expected = structuredClone(originalDeliveryResultClauses.clauses);
+		applyR10("deliveryResultClauses", expected);
+		expect(Object.keys(ENTWURF_DELIVERY_RESULT_CLAUSES).sort()).toEqual(Object.keys(expected).sort());
+		for (const [key, text] of Object.entries(expected)) {
 			const actual = (ENTWURF_DELIVERY_RESULT_CLAUSES as Readonly<Record<string, string>>)[key];
 			expect(Buffer.from(actual)).toEqual(Buffer.from(text));
 		}
 		expect(Object.isFrozen(ENTWURF_DELIVERY_RESULT_CLAUSES)).toBe(true);
+	});
+
+	it("[QK:GUIDANCE-SLOTTED-REJECT-HINTS-ORIGINAL] the record-less-socket hint's text on either side of its slot is the exact C0 segment text of 94d0594, and rejoined around the slot it is the C0 template", () => {
+		expect(originalSlottedRejectHints.sourceSha).toBe("94d0594182cbd9cf0a5c90f4d299cda40d870b8f");
+		expect(Object.keys(originalSlottedRejectHints.sourceBlobSha256)).toEqual(["entwurf-v2-surface.ts"]);
+		expect(originalSlottedRejectHints.c0Item).toBe("pi-extensions/lib/entwurf-v2-surface.ts:116:7192");
+		expect(originalSlottedRejectHints.slot).toBe("FRESH_CUT_PRESCRIPTION");
+		const slotted: Readonly<Record<string, Readonly<Record<string, string>>>> = ENTWURF_SLOTTED_REJECT_HINTS;
+		expect(Object.keys(slotted)).toEqual(Object.keys(originalSlottedRejectHints.segments));
+		for (const [reason, segments] of Object.entries(originalSlottedRejectHints.segments)) {
+			expect(Object.keys(slotted[reason])).toEqual(Object.keys(segments));
+			for (const [key, text] of Object.entries(segments)) {
+				expect(Buffer.from(slotted[reason][key])).toEqual(Buffer.from(text));
+			}
+			expect(Object.isFrozen(slotted[reason])).toBe(true);
+		}
+		const h = ENTWURF_SLOTTED_REJECT_HINTS["record-less-socket"];
+		const rejoined = `${h.beforeFreshCutPrescription}\${${originalSlottedRejectHints.slot}}${h.afterFreshCutPrescription}`;
+		expect(Buffer.from(rejoined)).toEqual(Buffer.from(originalSlottedRejectHints.template));
+		expect(Object.isFrozen(ENTWURF_SLOTTED_REJECT_HINTS)).toBe(true);
 	});
 
 	it("[QK:GUIDANCE-READER-LEAF-IMPORTS] the reader is a node:fs-only leaf in every static and dynamic import form, so the launch compositions that read it gain no entwurf/mux dependency", () => {
@@ -314,7 +388,7 @@ describe("strict fixed-source guidance reader", () => {
 			'{"revision":1,"revision":2}',
 			'{"revision":1,"\\u0072evision":2}',
 			'{"outer":[{"x":"first","x":"last"}]}',
-			SOURCE.replace('"schemaVersion": 5', '"schemaVersion": 5, "schemaVersion": 5'),
+			SOURCE.replace('"schemaVersion": 6', '"schemaVersion": 6, "schemaVersion": 6'),
 		])
 			expect(() => parseEntwurfGuidance(source)).toThrow(/duplicate object key/);
 	});
@@ -325,8 +399,8 @@ describe("strict fixed-source guidance reader", () => {
 		for (const source of [SOURCE + " trailing", JSON.stringify(invalidRevision)]) {
 			expect(() => parseEntwurfGuidance(source)).toThrow();
 		}
-		for (const version of ["4", "6"]) {
-			const source = SOURCE.replace('"schemaVersion": 5', `"schemaVersion": ${version}`);
+		for (const version of ["5", "7"]) {
+			const source = SOURCE.replace('"schemaVersion": 6', `"schemaVersion": ${version}`);
 			expect(source).not.toBe(SOURCE);
 			expect(() => parseEntwurfGuidance(source)).toThrow(/unsupported schemaVersion/);
 		}
@@ -382,6 +456,24 @@ describe("strict fixed-source guidance reader", () => {
 		const emptyClause = JSON.parse(SOURCE);
 		emptyClause.deliveryResultClauses["dirty-lock"] = "";
 		expect(() => parseEntwurfGuidance(JSON.stringify(emptyClause))).toThrow(/non-empty string/);
+		const noSlotted = JSON.parse(SOURCE);
+		delete noSlotted.slottedRejectHints;
+		const missingSlottedReason = JSON.parse(SOURCE);
+		delete missingSlottedReason.slottedRejectHints["record-less-socket"];
+		const extraSlottedReason = JSON.parse(SOURCE);
+		extraSlottedReason.slottedRejectHints["model-invalid"] = "slot-bearing text stays code-owned";
+		const missingSegment = JSON.parse(SOURCE);
+		delete missingSegment.slottedRejectHints["record-less-socket"].afterFreshCutPrescription;
+		const thirdSegment = JSON.parse(SOURCE);
+		thirdSegment.slottedRejectHints["record-less-socket"].betweenFreshCutPrescription = "undeclared";
+		for (const data of [noSlotted, missingSlottedReason, extraSlottedReason, missingSegment, thirdSegment])
+			expect(() => parseEntwurfGuidance(JSON.stringify(data))).toThrow(/keys must be exactly/);
+		const emptySegment = JSON.parse(SOURCE);
+		emptySegment.slottedRejectHints["record-less-socket"].beforeFreshCutPrescription = "";
+		expect(() => parseEntwurfGuidance(JSON.stringify(emptySegment))).toThrow(/non-empty string/);
+		const stringSlotted = JSON.parse(SOURCE);
+		stringSlotted.slottedRejectHints["record-less-socket"] = "a joined string with the slot spelled inside";
+		expect(() => parseEntwurfGuidance(JSON.stringify(stringSlotted))).toThrow(/expected an object/);
 		const missing = JSON.parse(SOURCE);
 		delete missing.tools.entwurf_v2.parameters.mode;
 		expect(() => parseEntwurfGuidance(JSON.stringify(missing))).toThrow(/keys must be exactly/);
@@ -400,7 +492,7 @@ describe("strict fixed-source guidance reader", () => {
 		const changed = JSON.parse(SOURCE);
 		changed.history.unshift({ ...changed.history[0], change: "History-only clarification" });
 		expect(parseEntwurfGuidance(JSON.stringify(changed)).revision).toBe(ENTWURF_GUIDANCE_VERSION.revision);
-		expect(ENTWURF_GUIDANCE_VERSION.schemaVersion).toBe(5);
+		expect(ENTWURF_GUIDANCE_VERSION.schemaVersion).toBe(6);
 	});
 
 	it("[QK:GUIDANCE-FIXED-MODULE-ROOT] cwd/HOME/env decoys cannot replace the module's packaged source, whose loaded payload is immutable", () => {

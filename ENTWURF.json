@@ -2,12 +2,24 @@
 	"_about": {
 		"purpose": "Precise English natural-language product logic for Entwurf agents, not a user-editable prompt collection.",
 		"ownership": "This root file is the sole editable source of the payload families present here. Installed and compiled copies are deterministic transport, never separate authorities. Existing engraving and user-configuration contracts are unchanged.",
-		"scope": "Current families: MCP tool/parameter descriptions, durable short variants, the static entwurf_v2 reject hints, the static visible-resume (record/liveness) reject hints of entwurf_resume_call, the static tmux launch-stage reject hints of entwurf_fresh_call and entwurf_resume_call, and five static delivery-result clauses of the entwurf_v2 dirty-lock and remote-pair receipts. Bootstrap, notices, the protocol-bearing mailbox envelope, receipt syntax and its annotations, other hints (including the slot-bearing record-less-socket, model-invalid and task-too-long hints, the shared ACP model hint, the preflight repair text kept beside its predicates, and every herdr rail hint) and ACP guidance remain in their current owners; this is not complete guidance centralization.",
-		"editing": "Preserve decoded strings exactly unless an explicit semantic amendment is intended. Review related consumers and independent oracles atomically. Accepted payload changes advance revision; history-only edits, routine releases and unrelated code changes do not. schemaVersion tracks reader/structural compatibility. Metadata is not delivered to models."
+		"scope": "Current families: MCP tool/parameter descriptions, durable short variants, the static entwurf_v2 reject hints, the static visible-resume (record/liveness) reject hints of entwurf_resume_call, the static tmux launch-stage reject hints of entwurf_fresh_call and entwurf_resume_call, five static delivery-result clauses of the entwurf_v2 dirty-lock and remote-pair receipts, and the authored text on either side of the one code-owned slot in the entwurf_v2 record-less-socket reject hint. Bootstrap, notices, the protocol-bearing mailbox envelope, receipt syntax and its annotations, other hints (including the slot-bearing model-invalid and task-too-long hints, the peers record-less-socket diagnostics, the shared ACP model hint, the preflight repair text kept beside its predicates, and every herdr rail hint) and ACP guidance remain in their current owners; this is not complete guidance centralization.",
+		"editing": "Preserve decoded strings exactly unless an explicit semantic amendment is intended. Review related consumers and independent oracles atomically. Accepted payload changes advance revision; history-only edits, routine releases and unrelated code changes do not. schemaVersion tracks reader/structural compatibility. A slotted hint holds only the text around its slot: the slot value (for record-less-socket, the fresh-cut command in both invocation forms) is supplied by its code owner and never copied here. Metadata is not delivered to models."
 	},
-	"schemaVersion": 5,
-	"revision": 8,
+	"schemaVersion": 6,
+	"revision": 10,
 	"history": [
+		{
+			"revision": 10,
+			"source": "3e8ade22b1c28e7c6a11fdda584bb3f44c68654c",
+			"issue": "https://github.com/junghan0611/entwurf/issues/154",
+			"change": "Pre-release semantic amendment of three inherited hints: dirty-lock guidance does not infer prior acceptance or certain duplication; target-invalid names address syntax rather than record absence; an indeterminate native probe does not assert that the host is running. Original fixtures and the revision-9 preservation evidence remain unchanged. Fable wording review follows this checkpoint."
+		},
+		{
+			"revision": 9,
+			"source": "3e8ade22b1c28e7c6a11fdda584bb3f44c68654c",
+			"issue": "https://github.com/junghan0611/entwurf/issues/154",
+			"change": "Byte-preserving extraction of the record-less-socket reject hint's authored text from 94d0594: the two segments on either side of its one slot; schemaVersion 6 adds the slottedRejectHints family. The slot value (FRESH_CUT_PRESCRIPTION, owned by meta-session.ts), the reason branch, the wire id and the concatenation stay code-owned."
+		},
 		{
 			"revision": 8,
 			"source": "08242648863b43b1f265080792eacdce3ff73ef3",
@@ -148,11 +160,11 @@
 		"dormant-fire-forget-unsupported": "this citizen's record is intact but its session is not running, and delivery has no way to wake it. The resume that used to answer here launched a hidden background child and was withdrawn under the visible-first rule; the visible same-id resume is the separate lifecycle verb entwurf_resume_call. Only on an explicit operator request, use entwurf_resume_call {target} for Pi or Claude Code; it submits no prompt. This capability hint is not permission to resume automatically.",
 		"indeterminate-no-spawn": "the control-socket probe was inconclusive, so the target's liveness is UNKNOWN — this is not a measured death. NOTHING was delivered and NO process was started (the reason id keeps its frozen '-no-spawn' wire spelling from an era when one could be; entwurf_v2 starts nothing on any rail). Re-run entwurf_peers to re-probe; if it stays indeterminate, check for a stale socket file left at that garden id by a session that died without cleaning up.",
 		"native-push-target-dead": "the native-push conversation/thread is not live — no native host (harness process or app-server) answered the probe for it. Re-open that conversation/thread in its own harness, then retry; there is nothing to inject into.",
-		"native-push-probe-indeterminate": "the native host (harness process or app-server) is up, but nothing served this conversation/thread, so the probe is INCONCLUSIVE — not a measured death. Retry once it is loaded, or verify the conversation/thread id.",
+		"native-push-probe-indeterminate": "the adapter could not establish a live route to this conversation/thread, so its liveness is UNKNOWN — not a measured death. Inspect the probe reason and verify the target in its own native harness; the host itself may or may not be running.",
 		"native-push-paused": "native-push for this backend is paused (#152): its language server refused entwurf's measured external calls for a missing CSRF token, so this dispatch probed nothing and sent nothing. The citizen and its record are kept; reach it from inside its own harness instead."
 	},
 	"resumeRejectHints": {
-		"target-invalid": "no citizen has that id; discover targets with entwurf_peers",
+		"target-invalid": "the target is not a valid garden id; use entwurf_peers to discover valid targets",
 		"target-backend-unsupported": "that citizen's backend has no same-id resume (only pi and Claude Code do) — reach it with entwurf_v2, or open a fresh sibling",
 		"target-locked": "another resume or dispatch holds this citizen's lock right now",
 		"target-live": "that citizen is already running — this verb only reopens dormant ones",
@@ -204,9 +216,15 @@
 	},
 	"deliveryResultClauses": {
 		"finalized-rejected": "the receiver refused it; nothing was accepted",
-		"dirty-lock": "the lock is DIRTY (release failed) — do NOT retry, a re-send would double-deliver. Clear the lock by hand.",
+		"dirty-lock": "the lock is DIRTY (release failed) — do NOT retry automatically. Inspect the reported acceptance and have the operator resolve the lock before deciding whether to resend.",
 		"remote-accepted": "accepted by the other host (its fact; read/answer unknown until a reply arrives; paths below are on the other host)",
 		"remote-reported-error": "the other host reported an error while processing; read its receipt below, delivery is not inferred from this line; not retried (paths below are on the other host)",
 		"remote-indeterminate": "The other host may or may not have enqueued; not retried."
+	},
+	"slottedRejectHints": {
+		"record-less-socket": {
+			"beforeFreshCutPrescription": "a control socket exists at this garden id but NO meta-record claims it — the record is the sole address authority, so a bare socket is not an addressable citizen. If a pre-record-era resident owns that socket, restart it under the current runtime (session_start births its record); if the store predates the current generation, quiesce and archive it with ",
+			"afterFreshCutPrescription": ". A stale/forged socket should be removed."
+		}
 	}
 }

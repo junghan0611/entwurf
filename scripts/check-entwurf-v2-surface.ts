@@ -24,6 +24,7 @@ import { fileURLToPath } from "node:url";
 import {
 	ENTWURF_DELIVERY_RESULT_CLAUSES,
 	ENTWURF_REJECT_HINTS,
+	ENTWURF_SLOTTED_REJECT_HINTS,
 	ENTWURF_TOOL_GUIDANCE,
 } from "../pi-extensions/lib/agent-guidance.ts";
 import type { EntwurfV2RunResult } from "../pi-extensions/lib/entwurf-v2-runner.ts";
@@ -33,6 +34,7 @@ import {
 	type SurfaceEntwurfV2Params,
 	toDispatchInput,
 } from "../pi-extensions/lib/entwurf-v2-surface.ts";
+import { FRESH_CUT_PRESCRIPTION } from "../pi-extensions/lib/meta-session.ts";
 
 let passed = 0;
 function ok(label: string, cond: boolean): void {
@@ -541,7 +543,12 @@ async function main(): Promise<void> {
 				!/DELIVERED|\bdelivered\b/.test(dirtyRefused.text) &&
 				// and every one of them keeps the thing the operator must act on
 				[dirtyBusy, dirtyMailbox, dirtyRefused].every(
-					(r) => r.isError && r.text.includes("DIRTY") && r.text.includes("do NOT retry"),
+					(r) =>
+						r.isError &&
+						r.text.includes("DIRTY") &&
+						r.text.includes("do NOT retry automatically") &&
+						r.text.includes("operator resolve the lock") &&
+						!r.text.includes("would double-deliver"),
 				),
 		);
 		// #154 E1a: the two static clauses of this receipt are authored in root ENTWURF.json; the
@@ -646,6 +653,14 @@ async function main(): Promise<void> {
 				rls.includes("sole address authority") &&
 				rls.includes("restart it under the current runtime") &&
 				rls.includes("meta-bridge-fresh-cut"),
+		);
+		// #154 E1b: the text on either side of the fix command is authored in root ENTWURF.json and the
+		// command comes from its owner, so the WHOLE hint is compared against that composition — the
+		// phrase checks above stay, and a hand-kept copy of the text that still carries them dies here.
+		const rlsRoot = ENTWURF_SLOTTED_REJECT_HINTS["record-less-socket"];
+		ok(
+			"[QK:V2SURF-RECORD-LESS-SOCKET-HINT-FROM-ROOT] the record-less-socket hint is exactly the root text before the fix command, the command from its meta-session owner, and the root text after it",
+			rls === `${rlsRoot.beforeFreshCutPrescription}${FRESH_CUT_PRESCRIPTION}${rlsRoot.afterFreshCutPrescription}`,
 		);
 		// #154 C1-B: the five static hints are authored in root ENTWURF.json. This is the WIRING
 		// claim — what the surface returns is the Root value for every declared reason — compared

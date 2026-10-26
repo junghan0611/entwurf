@@ -107,6 +107,18 @@ const DELIVERY_RESULT_CLAUSE_KEYS = [
 
 export type DeliveryResultClauseKey = (typeof DELIVERY_RESULT_CLAUSE_KEYS)[number];
 
+/** Frozen wire ids of the reject hints whose authored text sits on either side of ONE code-owned
+ * slot, and each one's exact segment keys. The slot value, the reason branch and the
+ * concatenation stay code-owned; the root file holds only the text around the slot. */
+const SLOTTED_REJECT_HINT_SEGMENTS = {
+	"record-less-socket": ["beforeFreshCutPrescription", "afterFreshCutPrescription"],
+} as const;
+
+export type SlottedRejectHintReason = keyof typeof SLOTTED_REJECT_HINT_SEGMENTS;
+type SlottedRejectHints = {
+	readonly [R in SlottedRejectHintReason]: Readonly<Record<(typeof SLOTTED_REJECT_HINT_SEGMENTS)[R][number], string>>;
+};
+
 type ToolName = keyof typeof TOOL_SPEC;
 type ToolGuidance<K extends ToolName> = {
 	readonly descriptions: (typeof TOOL_SPEC)[K]["durable"] extends true
@@ -117,7 +129,7 @@ type ToolGuidance<K extends ToolName> = {
 
 export interface EntwurfGuidance {
 	readonly _about: Readonly<Record<"purpose" | "ownership" | "scope" | "editing", string>>;
-	readonly schemaVersion: 5;
+	readonly schemaVersion: 6;
 	readonly revision: number;
 	readonly history: readonly {
 		readonly revision: number;
@@ -131,6 +143,7 @@ export interface EntwurfGuidance {
 	readonly freshLaunchRejectHints: Readonly<Record<FreshLaunchRejectHintReason, string>>;
 	readonly resumeLaunchRejectHints: Readonly<Record<ResumeLaunchRejectHintReason, string>>;
 	readonly deliveryResultClauses: Readonly<Record<DeliveryResultClauseKey, string>>;
+	readonly slottedRejectHints: SlottedRejectHints;
 }
 
 function record(value: unknown, at: string): asserts value is Record<string, unknown> {
@@ -225,7 +238,7 @@ export function parseEntwurfGuidance(source: string): EntwurfGuidance {
 	const data: unknown = JSON.parse(source);
 	rejectDuplicateKeys(source);
 	record(data, "root");
-	if (data.schemaVersion !== 5) throw new Error("ENTWURF.json: unsupported schemaVersion");
+	if (data.schemaVersion !== 6) throw new Error("ENTWURF.json: unsupported schemaVersion");
 	keys(
 		data,
 		[
@@ -239,6 +252,7 @@ export function parseEntwurfGuidance(source: string): EntwurfGuidance {
 			"freshLaunchRejectHints",
 			"resumeLaunchRejectHints",
 			"deliveryResultClauses",
+			"slottedRejectHints",
 		],
 		"root",
 	);
@@ -293,6 +307,14 @@ export function parseEntwurfGuidance(source: string): EntwurfGuidance {
 	record(data.deliveryResultClauses, "deliveryResultClauses");
 	keys(data.deliveryResultClauses, DELIVERY_RESULT_CLAUSE_KEYS, "deliveryResultClauses");
 	for (const [key, value] of Object.entries(data.deliveryResultClauses)) text(value, `deliveryResultClauses.${key}`);
+	record(data.slottedRejectHints, "slottedRejectHints");
+	keys(data.slottedRejectHints, Object.keys(SLOTTED_REJECT_HINT_SEGMENTS), "slottedRejectHints");
+	for (const reason of Object.keys(SLOTTED_REJECT_HINT_SEGMENTS) as SlottedRejectHintReason[]) {
+		const segments = data.slottedRejectHints[reason];
+		record(segments, `slottedRejectHints.${reason}`);
+		keys(segments, SLOTTED_REJECT_HINT_SEGMENTS[reason], `slottedRejectHints.${reason}`);
+		for (const [key, value] of Object.entries(segments)) text(value, `slottedRejectHints.${reason}.${key}`);
+	}
 	freeze(data);
 	return data as unknown as EntwurfGuidance;
 }
@@ -311,6 +333,8 @@ export const ENTWURF_FRESH_LAUNCH_REJECT_HINTS = guidance.freshLaunchRejectHints
 export const ENTWURF_RESUME_LAUNCH_REJECT_HINTS = guidance.resumeLaunchRejectHints;
 /** Static delivery-result clauses of the entwurf_v2 dirty-lock and remote-pair receipts; the receipt syntax around them stays code-owned. */
 export const ENTWURF_DELIVERY_RESULT_CLAUSES = guidance.deliveryResultClauses;
+/** Text on either side of one code-owned slot per reject reason; the slot value and the concatenation stay with the consumer. */
+export const ENTWURF_SLOTTED_REJECT_HINTS = guidance.slottedRejectHints;
 export const ENTWURF_GUIDANCE_VERSION = Object.freeze({
 	schemaVersion: guidance.schemaVersion,
 	revision: guidance.revision,

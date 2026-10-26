@@ -167,7 +167,7 @@
 			"subject": "pi-extensions/lib/entwurf-v2-surface.ts",
 			"find": ["\t\t\t\t\t\t`${ENTWURF_DELIVERY_RESULT_CLAUSES[\"dirty-lock\"]}\\n  error: ${result.error}`,"],
 			"replace": [
-				"\t\t\t\t\t\t`the lock is DIRTY (release failed) — do NOT retry, a re-send would double-deliver. Clear the lock by  hand.\\n  error: ${result.error}`,"
+				"\t\t\t\t\t\t`the lock is DIRTY (release failed) — do NOT retry automatically. Inspect the reported acceptance and have the operator resolve the lock before  deciding whether to resend.\\n  error: ${result.error}`,"
 			],
 			"gate": ["bash", "run.sh", "check-entwurf-v2-surface"],
 			"timeoutSeconds": 300,

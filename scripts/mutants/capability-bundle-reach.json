@@ -84,6 +84,41 @@
 			"signature": "[QK:BUNDLE-REACH-DELIVERY-RESULT-CLAUSES]",
 			"signatureSource": "scripts/check-capability-bundle-reach.ts",
 			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "BUNDLE-REACH-SLOTTED-REJECT-HINTS",
+			"title": "the compiled reader exports one slotted reject-hint segment with a trailing space while the carrier keeps canonical Root bytes and every earlier export stays identical, so only the compiled slotted-family reach can fail",
+			"subject": "pi-extensions/lib/agent-guidance.ts",
+			"find": ["export const ENTWURF_SLOTTED_REJECT_HINTS = guidance.slottedRejectHints;"],
+			"replace": [
+				"export const ENTWURF_SLOTTED_REJECT_HINTS: typeof guidance.slottedRejectHints = Object.freeze({",
+				"\t\"record-less-socket\": Object.freeze({",
+				"\t\t...guidance.slottedRejectHints[\"record-less-socket\"],",
+				"\t\tafterFreshCutPrescription: `${guidance.slottedRejectHints[\"record-less-socket\"].afterFreshCutPrescription} `,",
+				"\t}),",
+				"});"
+			],
+			"gate": ["bash", "run.sh", "check-capability-bundle-reach"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:BUNDLE-REACH-SLOTTED-REJECT-HINTS]",
+			"signatureSource": "scripts/check-capability-bundle-reach.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "BUNDLE-REACH-RECORD-LESS-SOCKET-CONSUMER",
+			"title": "the surface source returns a hand-kept copy of the record-less-socket hint, one byte off the Root segments, instead of composing them with the owner's fix command; the build carries it into the compiled surface while the carrier and every reader export stay canonical, so only the compiled consumer cell can fail",
+			"subject": "pi-extensions/lib/entwurf-v2-surface.ts",
+			"find": [
+				"\t\t\treturn `${hint.beforeFreshCutPrescription}${FRESH_CUT_PRESCRIPTION}${hint.afterFreshCutPrescription}`;"
+			],
+			"replace": [
+				"\t\t\treturn `a control socket exists at this garden id but NO meta-record claims it — the record is the sole address authority, so a bare socket is not an addressable citizen. If a pre-record-era resident owns that socket, restart it under the current runtime (session_start births its record); if the store predates the current generation, quiesce and archive it with ${FRESH_CUT_PRESCRIPTION}. A stale/forged  socket should be removed.`;"
+			],
+			"gate": ["bash", "run.sh", "check-capability-bundle-reach"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:BUNDLE-REACH-RECORD-LESS-SOCKET-CONSUMER]",
+			"signatureSource": "scripts/check-capability-bundle-reach.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
 		}
 	]
 }

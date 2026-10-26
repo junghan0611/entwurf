@@ -18,7 +18,11 @@
  */
 
 import { basename } from "node:path";
-import { ENTWURF_DELIVERY_RESULT_CLAUSES, ENTWURF_REJECT_HINTS } from "./agent-guidance.ts";
+import {
+	ENTWURF_DELIVERY_RESULT_CLAUSES,
+	ENTWURF_REJECT_HINTS,
+	ENTWURF_SLOTTED_REJECT_HINTS,
+} from "./agent-guidance.ts";
 import type { SenderEnvelope } from "./entwurf-control-rpc.ts";
 import type { DispatchInput, EntwurfV2Mode } from "./entwurf-v2-decider.ts";
 import { makeProductionEntwurfV2Deps, type ProductionEntwurfV2Opts } from "./entwurf-v2-production.ts";
@@ -66,8 +70,9 @@ export function toDispatchInput(params: SurfaceEntwurfV2Params): DispatchInput {
  * Detour B (B-a) — actionable rendering of an honest reject. The decider is UNCHANGED:
  * a reject stays a reject (Hard Rule 3). This only appends a one-line "what to do instead"
  * to the reject TEXT, so an honest reject stops reading as "delivery impossible". Returns
- * undefined for rejects with no useful next step. Static hint English is authored in root
- * ENTWURF.json (#154); the reason switch and the slot-bearing record-less-socket text stay here.
+ * undefined for rejects with no useful next step. Hint English is authored in root ENTWURF.json
+ * (#154); the reason switch stays here, and so do the record-less-socket slot value and its
+ * concatenation (#154 E1b).
  */
 export function actionableRejectHint(reason: string): string | undefined {
 	switch (reason) {
@@ -100,16 +105,14 @@ export function actionableRejectHint(reason: string): string | undefined {
 		case "native-push-paused":
 			// #152: a policy refusal, not a liveness verdict — this dispatch probed and sent nothing.
 			return ENTWURF_REJECT_HINTS["native-push-paused"];
-		case "record-less-socket":
+		case "record-less-socket": {
 			// #50 C4: name the true cause AND the fix — a bare socket is a diagnostic
-			// state, not an addressable citizen (the record is the address).
-			return (
-				"a control socket exists at this garden id but NO meta-record claims it — the record is the " +
-				"sole address authority, so a bare socket is not an addressable citizen. If a pre-record-era " +
-				"resident owns that socket, restart it under the current runtime (session_start births its " +
-				`record); if the store predates the current generation, quiesce and archive it with ` +
-				`${FRESH_CUT_PRESCRIPTION}. A stale/forged socket should be removed.`
-			);
+			// state, not an addressable citizen (the record is the address). The text on either
+			// side of the fix command is authored in root ENTWURF.json; the command itself stays
+			// with its owner (meta-session.ts), so the root file never copies it.
+			const hint = ENTWURF_SLOTTED_REJECT_HINTS["record-less-socket"];
+			return `${hint.beforeFreshCutPrescription}${FRESH_CUT_PRESCRIPTION}${hint.afterFreshCutPrescription}`;
+		}
 		default:
 			return undefined;
 	}
