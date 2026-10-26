@@ -135,9 +135,9 @@ runtime each ref installs.
 
 This separate path activates Herdr-integrated **pi and Claude Code** with an
 independently locked runtime and an observation pane; it puts no Entwurf bins on PATH.
-An Entwurf release does not automatically re-pin that runtime. The Herdr snapshot
-`v2026.10.24-herdr.0.41.2` pins the published npm 0.41.2; the earlier 0.41.1 runtime stays pinned
-by the Herdr tag `v2026.10.23-herdr.0.41.1`.
+An Entwurf release does not automatically re-pin that runtime: while 0.45.0 is an unpublished
+candidate, main's lock rides the `herdr-checkout` verification carrier, and the published 0.41.2
+runtime stays pinned by the Herdr tag `v2026.10.24-herdr.0.41.2`.
 [Herdr guide](./plugins/herdr/README.md) owns install, use, evidence and removal;
 the plugin does not own delivery or the Herdr launch rail.
 

@@ -4,6 +4,83 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+## 0.45.0 — 2026-10-26
+
+The text Entwurf hands to models is product code. A model chooses whether to resume, retry, wait or ask a person from the words in a tool description or a reject hint, so that wording is part of the contract, not decoration. Before this release those words lived as string literals scattered through the delivery, resume and launch modules, with no single place that said which text was current or which change had been reviewed. 0.45.0 gives the extracted text one versioned source, root `ENTWURF.json`, read by one strict reader and carried unchanged into the source, compiled and installed package, with the original pre-extraction text kept as an oracle and every semantic change recorded as a separate, reviewed amendment layer. The version moves from 0.41.2 straight to 0.45.0 to mark that milestone; there are no 0.42–0.44 releases.
+
+What this release is not: it adds no wire value, algorithm, tool or permission, and changes no routing or authority decision. It does not centralize every authored string — bootstrap, notices, the protocol-bearing mailbox envelope, receipt syntax, the slot-bearing model-invalid and task-too-long hints and ACP text stay in code (listed below). It makes no claim that any model now behaves differently in practice; it fixes what the text says and where it is owned.
+
+Herdr is not re-pinned to npm here. An npm lock must name a published version, and 0.45.0 has no published bytes while it is prepared, so `plugins/herdr/runtime-lock.json` returns to the closed `herdr-checkout` verification carrier, as earlier release candidates did. From the moment the prepare commit reaches main, a main-tracking Herdr install builds its runtime from the checked-out commit instead of npm, and a host already on the npm 0.41.2 runtime must run `herdr-plugin-deactivate` before it reinstalls. The published 0.41.2 pairing stays pinned by the Herdr tag `v2026.10.24-herdr.0.41.2`. The Herdr manifest version is unchanged; a separate snapshot re-pins npm after 0.45.0 is published.
+
+### Agent guidance has one source (#154)
+
+- **Root `ENTWURF.json`** (schemaVersion 6, payload revision 11) is the sole editable source for these families: the MCP tool descriptions and their durable short variants; the five static `entwurf_v2` reject hints; the eleven static visible-resume (record/liveness) reject hints of `entwurf_resume_call`; the static tmux launch-stage reject hints of `entwurf_fresh_call` (19) and `entwurf_resume_call` (15), kept as two records because shared text between the verbs is a coincidence, not a contract; five delivery-result clauses of the `entwurf_v2` dirty-lock and remote-pair receipts; and the text on either side of the record-less-socket hint's one code-owned slot (the fresh-cut command stays owned by `meta-session.ts`).
+- **One strict reader.** `pi-extensions/lib/agent-guidance.ts` imports only `node:fs`, checks every key in order and the schema version, and exports deep-frozen values. A missing, extra or empty key, or a wrong schema version, throws at load: invalid guidance crashes rather than falling back to an inline string.
+- **The same bytes in every projection.** The package `files` array ships `ENTWURF.json`; `build-bridge` copies it byte for byte to the compiled bridge root, as transport, never as a second source. `check-capability-bundle-reach` proves the compiled reader exports the Root families and that the compiled delivery surface renders the slotted hint from the Root text around the compiled owner's command.
+- **Payload revision is its own counter.** Each accepted payload change appends a history entry and advances `revision`; releases and history-only edits do not. `schemaVersion` tracks reader compatibility.
+- **Originals stay as oracles.** Each extraction was compared byte for byte with an independently recorded inventory of `94d0594` before the product JSON was edited; those originals live in `pi-extensions/lib/fixtures/agent-guidance/` and are never regenerated. Current text is checked as original plus the explicitly reviewed amendment layers, each checking its exact old value. `check-agent-guidance-beside` joins `check:contracts`.
+
+### Agent-facing wording corrected
+
+Each change below is a reviewed semantic amendment layer over the preserved original; wire reason ids, branch conditions and slots are unchanged.
+
+- **Delivery, lifecycle and receipt are separate (revision 2).** The tool descriptions separate delivery, lifecycle and receipt authority, qualify what a resume or callback outcome does and does not show, and add short guidance for colleague-to-colleague messages.
+- **Dormant socket wording is scoped (revision 3).** The intent parameter's `dormant-fire-forget-unsupported` rejection is stated for socket citizens only.
+- **A paused dispatch probed nothing and sent nothing (revision 6).** `native-push-paused` now says so, because the decider refuses before any probe.
+- **Uncertain outcomes are not stated as facts (revision 10).** A dirty lock no longer implies prior acceptance or a certain duplicate; `target-invalid` names address syntax, not a missing record; an indeterminate native probe no longer asserts that the host is running.
+- **Recovery hints name the human operator (revision 11).** `target-receiver-absent`, `target-receiver-unbound` and `native-push-target-dead` say that reopening a window or conversation is the operator's act, not something the calling verb does; `entwurf_register_native` points to `entwurf_fresh_call` instead of calling a supported capability deferred; the `entwurf_v2` description names `mailbox-enqueued` on a re-resolved mailbox leg instead of claiming the four receiver boundaries are the whole union.
+
+### Still code-owned
+
+Bootstrap and notices, the protocol-bearing mailbox envelope, receipt syntax and its annotations, the slot-bearing model-invalid and task-too-long hints, the peers record-less-socket diagnostics, the shared ACP model hint, the preflight repair text kept beside its predicates, every herdr rail hint, and ACP text. Moving any of them is later work, not implied by this release.
+
+### Upgrade
+
+Nothing to convert. An installed package carries `ENTWURF.json`; a checkout-run operator reads it from the tree. Herdr hosts follow the source-switch note above.
+
+### Release evidence
+
+- Kill-power re-measured at this shipped SHA: none (all 1245 committed claims not re-proved, #144).
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head 149fe24da006 surface 514b6f14eaa0 -- ["bash","run.sh","check-agent-guidance-beside"] 7/7 receipt d5a3342fd8f0
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head 149fe24da006 surface 514b6f14eaa0 -- ["bash","run.sh","check-entwurf-bridge-boot"] 5/5 receipt 2b18b407508b
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head 149fe24da006 surface 514b6f14eaa0 -- ["bash","run.sh","check-entwurf-self-address"] 8/8 receipt dc031f386bf5
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head 149fe24da006 surface 514b6f14eaa0 -- ["bash","run.sh","check-entwurf-v2-surface"] 17/17 receipt 7249f97714b1
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head 149fe24da006 surface 514b6f14eaa0 -- ["bash","run.sh","check-mux-fresh-call"] 160/160 receipt a44b36b8b7f3
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head 149fe24da006 surface 514b6f14eaa0 -- ["bash","run.sh","check-mux-resume-call"] 13/13 receipt d5e923601730
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head 149fe24da006 surface 514b6f14eaa0 -- ["bash","run.sh","check-pi-durable-beside"] 45/45 receipt f83b1385d9cf
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head 149fe24da006 surface 43b183b15789 -- ["bash","run.sh","check-agent-guidance-beside"] 8/8 receipt ab8eb9dc4248
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head 149fe24da006 surface 43b183b15789 -- ["bash","run.sh","check-capability-bundle-reach"] 1/1 receipt 279757fa6ef6
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head 149fe24da006 surface 43b183b15789 -- ["bash","run.sh","check-entwurf-v2-surface"] 17/17 receipt e695187eae31
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head a3f2abc26ed9 surface adea41b8f979 -- ["bash","run.sh","check-agent-guidance-beside"] 9/9 receipt 833b2055df1c
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head a3f2abc26ed9 surface adea41b8f979 -- ["bash","run.sh","check-capability-bundle-reach"] 2/2 receipt faddb8eb7995
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head a3f2abc26ed9 surface adea41b8f979 -- ["bash","run.sh","check-entwurf-v2-surface"] 18/18 receipt d1da0cff8802
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head 4a50aba502dd surface 563ff466619b -- ["bash","run.sh","check-agent-guidance-beside"] 10/10 receipt 9a9ffe7c4252
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head 4a50aba502dd surface 563ff466619b -- ["bash","run.sh","check-capability-bundle-reach"] 3/3 receipt 9fc14648c19e
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head 4a50aba502dd surface 563ff466619b -- ["bash","run.sh","check-entwurf-v2-visible-resume"] 41/41 receipt c194610cae09
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head 297ff9ea63fe surface 6e05a69e4c6d -- ["bash","run.sh","check-agent-guidance-beside"] 10/10 receipt 6f4149456809
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head d174fef0b943 surface a39c5f90d434 -- ["bash","run.sh","check-agent-guidance-beside"] 12/12 receipt 2ecc8270ebc5
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head d174fef0b943 surface a39c5f90d434 -- ["bash","run.sh","check-capability-bundle-reach"] 4/4 receipt 8bac9d11fa92
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head d174fef0b943 surface a39c5f90d434 -- ["bash","run.sh","check-mux-fresh-call"] 161/161 receipt 14d498185caf
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head d174fef0b943 surface a39c5f90d434 -- ["bash","run.sh","check-mux-resume-call"] 15/15 receipt a1c4efe73741
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head 08242648863b surface 6571de821ed1 -- ["bash","run.sh","check-agent-guidance-beside"] 13/13 receipt daaf09c7c9ae
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head 08242648863b surface 6571de821ed1 -- ["bash","run.sh","check-capability-bundle-reach"] 5/5 receipt 1bf305912814
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head 08242648863b surface 6571de821ed1 -- ["bash","run.sh","check-entwurf-v2-surface"] 19/19 receipt 696ec4d6e85c
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head 08242648863b surface 6571de821ed1 -- ["bash","run.sh","check-remote-pair-beside"] 48/48 receipt 90824d56e3a6
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head 3e8ade22b1c2 surface cdd2bf224af8 -- ["bash","run.sh","check-agent-guidance-beside"] 14/14 receipt 92182844e8df
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head 3e8ade22b1c2 surface cdd2bf224af8 -- ["bash","run.sh","check-capability-bundle-reach"] 7/7 receipt 9476e8787d6d
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head 3e8ade22b1c2 surface cdd2bf224af8 -- ["bash","run.sh","check-entwurf-v2-surface"] 20/20 receipt 6d1b40c6713f
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head 3e8ade22b1c2 surface 2d64d05cd9b9 -- ["bash","run.sh","check-agent-guidance-beside"] 14/14 receipt be9f054e160e
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head 3e8ade22b1c2 surface 2d64d05cd9b9 -- ["bash","run.sh","check-capability-bundle-reach"] 7/7 receipt a7d0564d8398
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head 3e8ade22b1c2 surface 2d64d05cd9b9 -- ["bash","run.sh","check-entwurf-v2-surface"] 20/20 receipt e619be0f0e3b
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head d3963c2d16a9 surface 8a3ad98f6cf1 -- ["bash","run.sh","check-agent-guidance-beside"] 14/14 receipt 8c108523fc45
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head d3963c2d16a9 surface 8a3ad98f6cf1 -- ["bash","run.sh","check-entwurf-v2-surface"] 20/20 receipt b2e06e3122d1
+- Those groups were measured on uncommitted working trees with green controls, each on its own candidate; groups repeat across candidates and do not sum to release coverage.
+- A stopped run at `7b24e5b` (first group non-zero) is not a passing receipt; its groups were re-measured at `149fe24` above. No group receipt is recorded for the first extraction commit `1657eca`.
+- Pre-version landing: main `a4bea2d`, exact-SHA push CI run 40296075141, `check`, `install-surface`, `artifact-consumer` and `macos-install-surface` all success. That run belongs to the pre-version SHA, not this prepared SHA.
+- Prepare-time floor, measured on the working tree over `a4bea2d` (tracked patch `7a8d5581fd82`, source manifest `f2dd32bb4fee`, before this record's final wording), not on an exact SHA: in an isolated copy, managed build 6 s and `check:full` 918 s exit 0; in the checkout, one managed build of 6 s produced a compiled tree byte-identical to that copy's.
+- `release-gate --cut` on that same tree in the checkout: `check:full` 918 s exit 0, MUST 24/0/0, BEHAVIOR 1/0/0, cut OK, log `9b0bf7bbee8a`. Earlier attempts on this tree stopped for harness reasons — one RED run in a copy that had no compiled tree, one launcher stop before the gate began — and are not counted. The census afterwards was read-only.
+- Exact prepared-SHA CI, the M3w artifact with its container acceptance, the installed remote-pair check on that same artifact, and native installed-host acceptance belong to the make phase and produce their own receipts.
+
 ## v2026.10.24-herdr.0.41.2 — Herdr Entwurf plugin 0.41.2
 
 A separate Herdr plugin snapshot, not another core release: core package 0.41.2 and its
