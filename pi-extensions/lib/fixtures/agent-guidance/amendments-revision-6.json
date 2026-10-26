@@ -1,0 +1,14 @@
+{
+	"previousRevision": 5,
+	"revision": 6,
+	"sourceCheckpoint": "297ff9ea63fef8a10aa069195e818f5463a13ac1",
+	"independentExpectedLiteralSha256": "6ed413b1f5871838463aefddc60113b2968850532e0b3230fe17b7ca8a4f7d71",
+	"selection": "Paused-hint semantic amendment under coordinator conditional GO fe0ed9, 2026-10-26; Opus2 independent full literal adopted over the differing Opus1 draft; one substitution stating the dispatch probed nothing; not derived from amended product output",
+	"amendments": [
+		{
+			"key": ["rejectHints", "native-push-paused"],
+			"old": "native-push for this backend is paused (#152): its language server refused entwurf's measured external calls for a missing CSRF token, so this dispatch probed and sent nothing. The citizen and its record are kept; reach it from inside its own harness instead.",
+			"new": "native-push for this backend is paused (#152): its language server refused entwurf's measured external calls for a missing CSRF token, so this dispatch probed nothing and sent nothing. The citizen and its record are kept; reach it from inside its own harness instead."
+		}
+	]
+}

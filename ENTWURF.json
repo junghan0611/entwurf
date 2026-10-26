@@ -6,8 +6,14 @@
 		"editing": "Preserve decoded strings exactly unless an explicit semantic amendment is intended. Review related consumers and independent oracles atomically. Accepted payload changes advance revision; history-only edits, routine releases and unrelated code changes do not. schemaVersion tracks reader/structural compatibility. Metadata is not delivered to models."
 	},
 	"schemaVersion": 3,
-	"revision": 5,
+	"revision": 6,
 	"history": [
+		{
+			"revision": 6,
+			"source": "297ff9ea63fef8a10aa069195e818f5463a13ac1",
+			"issue": "https://github.com/junghan0611/entwurf/issues/154",
+			"change": "Explicit semantic amendment of the native-push-paused reject hint: the dispatch probed nothing and sent nothing, because the decider refuses before any probe. Independently reviewed revision 6 literal layer; the pre-extraction reject-hint oracle remains historical evidence."
+		},
 		{
 			"revision": 5,
 			"source": "4a50aba502dd68b30543e472969361626308d296",
@@ -131,7 +137,7 @@
 		"indeterminate-no-spawn": "the control-socket probe was inconclusive, so the target's liveness is UNKNOWN — this is not a measured death. NOTHING was delivered and NO process was started (the reason id keeps its frozen '-no-spawn' wire spelling from an era when one could be; entwurf_v2 starts nothing on any rail). Re-run entwurf_peers to re-probe; if it stays indeterminate, check for a stale socket file left at that garden id by a session that died without cleaning up.",
 		"native-push-target-dead": "the native-push conversation/thread is not live — no native host (harness process or app-server) answered the probe for it. Re-open that conversation/thread in its own harness, then retry; there is nothing to inject into.",
 		"native-push-probe-indeterminate": "the native host (harness process or app-server) is up, but nothing served this conversation/thread, so the probe is INCONCLUSIVE — not a measured death. Retry once it is loaded, or verify the conversation/thread id.",
-		"native-push-paused": "native-push for this backend is paused (#152): its language server refused entwurf's measured external calls for a missing CSRF token, so this dispatch probed and sent nothing. The citizen and its record are kept; reach it from inside its own harness instead."
+		"native-push-paused": "native-push for this backend is paused (#152): its language server refused entwurf's measured external calls for a missing CSRF token, so this dispatch probed nothing and sent nothing. The citizen and its record are kept; reach it from inside its own harness instead."
 	},
 	"resumeRejectHints": {
 		"target-invalid": "no citizen has that id; discover targets with entwurf_peers",

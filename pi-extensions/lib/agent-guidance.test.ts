@@ -67,6 +67,14 @@ const originalResumeRejectHints = JSON.parse(
 		"utf8",
 	),
 ) as { sourceSha: string; previousRevision: number; introducedRevision: number; hints: Record<string, string> };
+// Revision 6 is the first reviewed literal layer on a reject-hint leaf, typed apart from the tools layers.
+const reviewedR6 = JSON.parse(
+	fs.readFileSync(new URL("./fixtures/agent-guidance/amendments-revision-6.json", import.meta.url), "utf8"),
+) as {
+	previousRevision: number;
+	revision: number;
+	amendments: { key: ["rejectHints", string]; old: string; new: string }[];
+};
 
 // Only description leaves may change. Full schemas/annotations/order come from immutable C0,
 // while reviewed literals were selected independently before the product JSON was amended.
@@ -126,16 +134,31 @@ describe("root product guidance — frozen originals plus reviewed current amend
 		expect(originalRejectHints.introducedRevision).toBe(4);
 		expect(originalResumeRejectHints.previousRevision).toBe(originalRejectHints.introducedRevision);
 		expect(originalResumeRejectHints.introducedRevision).toBe(5);
-		expect(ENTWURF_GUIDANCE_VERSION.revision).toBe(originalResumeRejectHints.introducedRevision);
+		expect(reviewedR6.previousRevision).toBe(originalResumeRejectHints.introducedRevision);
+		expect(reviewedR6.revision).toBe(6);
+		expect(ENTWURF_GUIDANCE_VERSION.revision).toBe(reviewedR6.revision);
 	});
 
-	it("[QK:GUIDANCE-REJECT-HINTS-ORIGINAL] every static reject hint is the exact pre-extraction C0 string for exactly the declared reasons", () => {
+	it("[QK:GUIDANCE-REJECT-HINTS-ORIGINAL] every static reject hint is the exact pre-extraction C0 string, except the one independently reviewed revision-6 leaf", () => {
 		expect(originalRejectHints.sourceSha).toBe("94d0594182cbd9cf0a5c90f4d299cda40d870b8f");
-		expect(Object.keys(ENTWURF_REJECT_HINTS).sort()).toEqual(Object.keys(originalRejectHints.hints).sort());
-		for (const [reason, text] of Object.entries(originalRejectHints.hints)) {
+		const expected = structuredClone(originalRejectHints.hints);
+		expect(reviewedR6.amendments).toHaveLength(1);
+		for (const amendment of reviewedR6.amendments) {
+			const [family, reason] = amendment.key;
+			expect(family).toBe("rejectHints");
+			expect(Object.keys(originalRejectHints.hints)).toContain(reason);
+			expect(amendment.old).toBe(originalRejectHints.hints[reason]);
+			expect(amendment.new).not.toBe(amendment.old);
+			expected[reason] = amendment.new;
+		}
+		expect(Object.keys(ENTWURF_REJECT_HINTS).sort()).toEqual(Object.keys(expected).sort());
+		for (const [reason, text] of Object.entries(expected)) {
 			const actual = (ENTWURF_REJECT_HINTS as Readonly<Record<string, string>>)[reason];
 			expect(Buffer.from(actual)).toEqual(Buffer.from(text));
 		}
+		const changed = Object.keys(expected).filter((reason) => expected[reason] !== originalRejectHints.hints[reason]);
+		expect(changed).toEqual(["native-push-paused"]);
+		expect(Object.keys(expected).filter((reason) => !changed.includes(reason))).toHaveLength(4);
 		expect(Object.isFrozen(ENTWURF_REJECT_HINTS)).toBe(true);
 	});
 
