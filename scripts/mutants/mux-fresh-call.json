@@ -781,6 +781,17 @@
 			"timeoutSeconds": 120,
 			"signature": "[QK:PD-FRESH-LIVE-BOOTSTRAP-ORDER]",
 			"signatureSource": "test/pi-durable-fresh-live-receipts.test.ts"
+		},
+		{
+			"claim": "FRESHCALL-LAUNCH-REJECT-HINTS-FROM-ROOT",
+			"title": "one static tmux launch-stage hint is inlined as a literal one byte away from the Root text, so the reader and its byte oracle stay green and only the rendered refusal can disagree with Root",
+			"subject": "pi-extensions/lib/mux-fresh-call.ts",
+			"find": ["\t\"anchor-malformed\": ENTWURF_FRESH_LAUNCH_REJECT_HINTS[\"anchor-malformed\"],"],
+			"replace": ["\t\"anchor-malformed\": \"TMUX_PANE is not a native  pane id\","],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:FRESHCALL-LAUNCH-REJECT-HINTS-FROM-ROOT]",
+			"signatureSource": "test/mux-fresh-call.test.ts"
 		}
 	]
 }

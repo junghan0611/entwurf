@@ -87,6 +87,7 @@
  */
 
 import { ACP_MODEL_NOT_CURATED_HINT } from "./acp/model-ids.js";
+import { ENTWURF_FRESH_LAUNCH_REJECT_HINTS } from "./agent-guidance.ts";
 import { callbackEnvAssignments } from "./callback-env.ts";
 import { classifyTmuxCwd, type TmuxCwdRejectReason } from "./classify-tmux-cwd.ts";
 import {
@@ -629,7 +630,9 @@ export function freshCall(
 }
 
 /** Why each refusal happened, in the caller's terms. A reason a caller cannot act on is a reason
- * they will guess about. */
+ * they will guess about. The static tmux launch-stage text is authored in root
+ * ENTWURF.json (#154 C1-D) and bound key by key, never spread, so a duplicate or missing reason
+ * still fails typecheck; slot-bearing, ACP and preflight-leaf hints stay code-owned. */
 const REJECT_HINT: Record<FreshCallRejectReason, string> = {
 	// The Copilot capability reasons keep their repair text on the leaf that decides them, so
 	// the sentence an operator reads cannot drift away from the predicate that produced it.
@@ -641,34 +644,28 @@ const REJECT_HINT: Record<FreshCallRejectReason, string> = {
 	...CODEX_CALLER_PREFLIGHT_HINT,
 	...CODEX_CALLER_SEAT_HINT,
 	...FRESH_CALL_PROVIDER_HINT,
-	"no-tmux-context": "this agent is not running inside tmux, so there is no session to open a sibling beside",
-	"anchor-malformed": "TMUX_PANE is not a native pane id",
-	"anchor-unresolved": "tmux resolved no pane for this agent's anchor",
-	"anchor-mismatch": "tmux answered about a different pane than the one asked about",
-	"caller-identity-unavailable":
-		"this surface has no record-backed garden id for the caller, so the sibling would have no address to call back to",
-	"cwd-not-absolute":
-		"the requested cwd is not an absolute path (the value is taken literally — nothing trims or resolves it)",
-	"cwd-format-token":
-		"the requested cwd contains '#', which tmux expands as a format inside -c — it would silently rewrite the path or run a command",
-	"cwd-missing":
-		"the requested cwd does not exist; tmux would not report this, it would open the window in $HOME and look successful",
-	"cwd-not-directory": "the requested cwd exists but is not a directory",
-	"tmux-session-name-invalid":
-		"the requested tmux session name is outside the shape this rail addresses (start with a letter or digit, then letters, digits, '_' or '-') — some other shapes tmux cannot resolve at all ('#' is expanded when the name is stored; '.' and ':' are its own pane/window separators inside a target; a name like '$0' loses to the session id '$0'), and the rest are declined to keep one narrow grammar, so rename the session or open one whose name fits",
-	"tmux-session-missing":
-		"no session with that exact name answers on this agent's tmux server (or that server stopped answering) — nothing was created, so open the session yourself and call again",
-	"model-empty": "model is empty after trimming; fresh calls require an explicit model",
+	"no-tmux-context": ENTWURF_FRESH_LAUNCH_REJECT_HINTS["no-tmux-context"],
+	"anchor-malformed": ENTWURF_FRESH_LAUNCH_REJECT_HINTS["anchor-malformed"],
+	"anchor-unresolved": ENTWURF_FRESH_LAUNCH_REJECT_HINTS["anchor-unresolved"],
+	"anchor-mismatch": ENTWURF_FRESH_LAUNCH_REJECT_HINTS["anchor-mismatch"],
+	"caller-identity-unavailable": ENTWURF_FRESH_LAUNCH_REJECT_HINTS["caller-identity-unavailable"],
+	"cwd-not-absolute": ENTWURF_FRESH_LAUNCH_REJECT_HINTS["cwd-not-absolute"],
+	"cwd-format-token": ENTWURF_FRESH_LAUNCH_REJECT_HINTS["cwd-format-token"],
+	"cwd-missing": ENTWURF_FRESH_LAUNCH_REJECT_HINTS["cwd-missing"],
+	"cwd-not-directory": ENTWURF_FRESH_LAUNCH_REJECT_HINTS["cwd-not-directory"],
+	"tmux-session-name-invalid": ENTWURF_FRESH_LAUNCH_REJECT_HINTS["tmux-session-name-invalid"],
+	"tmux-session-missing": ENTWURF_FRESH_LAUNCH_REJECT_HINTS["tmux-session-missing"],
+	"model-empty": ENTWURF_FRESH_LAUNCH_REJECT_HINTS["model-empty"],
 	"model-invalid": `model must be one ${MODEL_MAX_CHARS}-character argv-safe id/alias without whitespace or tmux syntax`,
 	"acp-model-not-curated": ACP_MODEL_NOT_CURATED_HINT,
-	"task-empty": "task is empty after trimming",
+	"task-empty": ENTWURF_FRESH_LAUNCH_REJECT_HINTS["task-empty"],
 	"task-too-long": `task exceeds ${TASK_MAX_CHARS} characters`,
-	"runtime-unresolved": "the backend's runtime is not installed on PATH",
-	"runtime-not-absolute": "the resolved runtime path is not absolute",
-	"runtime-path-whitespace": "the resolved runtime path contains whitespace, which tmux would re-split",
-	"runtime-missing": "nothing exists at the resolved runtime path",
-	"runtime-not-regular-file": "the resolved runtime path is not a regular file",
-	"runtime-not-executable": "the resolved runtime path is not executable",
+	"runtime-unresolved": ENTWURF_FRESH_LAUNCH_REJECT_HINTS["runtime-unresolved"],
+	"runtime-not-absolute": ENTWURF_FRESH_LAUNCH_REJECT_HINTS["runtime-not-absolute"],
+	"runtime-path-whitespace": ENTWURF_FRESH_LAUNCH_REJECT_HINTS["runtime-path-whitespace"],
+	"runtime-missing": ENTWURF_FRESH_LAUNCH_REJECT_HINTS["runtime-missing"],
+	"runtime-not-regular-file": ENTWURF_FRESH_LAUNCH_REJECT_HINTS["runtime-not-regular-file"],
+	"runtime-not-executable": ENTWURF_FRESH_LAUNCH_REJECT_HINTS["runtime-not-executable"],
 };
 
 /**

@@ -50,6 +50,23 @@
 			"signature": "[QK:BUNDLE-REACH-RESUME-REJECT-HINTS]",
 			"signatureSource": "scripts/check-capability-bundle-reach.ts",
 			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "BUNDLE-REACH-LAUNCH-REJECT-HINTS",
+			"title": "the compiled reader exports one fresh launch-stage hint with a trailing space while the carrier keeps canonical Root bytes and every earlier export stays identical, so only the compiled launch-family reach can fail",
+			"subject": "pi-extensions/lib/agent-guidance.ts",
+			"find": ["export const ENTWURF_FRESH_LAUNCH_REJECT_HINTS = guidance.freshLaunchRejectHints;"],
+			"replace": [
+				"export const ENTWURF_FRESH_LAUNCH_REJECT_HINTS: typeof guidance.freshLaunchRejectHints = Object.freeze({",
+				"\t...guidance.freshLaunchRejectHints,",
+				"\t\"runtime-missing\": `${guidance.freshLaunchRejectHints[\"runtime-missing\"]} `,",
+				"});"
+			],
+			"gate": ["bash", "run.sh", "check-capability-bundle-reach"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:BUNDLE-REACH-LAUNCH-REJECT-HINTS]",
+			"signatureSource": "scripts/check-capability-bundle-reach.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
 		}
 	]
 }

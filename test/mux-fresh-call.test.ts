@@ -19,6 +19,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { ENTWURF_FRESH_LAUNCH_REJECT_HINTS } from "../pi-extensions/lib/agent-guidance.ts";
 import { CODEX_CALLER_SEAT_HINT } from "../pi-extensions/lib/codex-caller-seat.ts";
 import { CODEX_CALLER_PREFLIGHT_HINT } from "../pi-extensions/lib/codex-fresh-preflight.ts";
 import { FRESH_CALL_PEERS_TOOL } from "../pi-extensions/lib/fresh-call-composition.ts";
@@ -459,6 +460,20 @@ describe("refusals, before any mutation", () => {
 		expect(isError).toBe(true);
 		expect(text).toContain(reason);
 		expect(text).toContain("No window was opened");
+	});
+
+	it("[QK:FRESHCALL-LAUNCH-REJECT-HINTS-FROM-ROOT] every static tmux launch-stage refusal renders the root ENTWURF.json hint for its own reason, byte for byte", () => {
+		const reasons = Object.keys(
+			ENTWURF_FRESH_LAUNCH_REJECT_HINTS,
+		) as (keyof typeof ENTWURF_FRESH_LAUNCH_REJECT_HINTS)[];
+		expect(reasons).toHaveLength(19);
+		for (const reason of reasons) {
+			const { text, isError } = renderFreshCall({ ok: false, reason });
+			expect(isError).toBe(true);
+			expect(text).toBe(
+				`entwurf_fresh_call rejected: ${reason} — ${ENTWURF_FRESH_LAUNCH_REJECT_HINTS[reason]}. No window was opened.`,
+			);
+		}
 	});
 });
 

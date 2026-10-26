@@ -36,7 +36,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { ENTWURF_TOOL_GUIDANCE } from "../pi-extensions/lib/agent-guidance.ts";
+import { ENTWURF_RESUME_LAUNCH_REJECT_HINTS, ENTWURF_TOOL_GUIDANCE } from "../pi-extensions/lib/agent-guidance.ts";
 import { classifyTmuxCwd } from "../pi-extensions/lib/classify-tmux-cwd.ts";
 import type { Placement } from "../pi-extensions/lib/mux-placement.ts";
 import {
@@ -218,6 +218,12 @@ function main(): void {
 			reasons.every((r) => typeof RESUME_CALL_REJECT_HINT[r] === "string" && RESUME_CALL_REJECT_HINT[r].length > 0),
 		);
 		ok(
+			"[QK:MUXRESUME-LAUNCH-REJECT-HINTS-FROM-ROOT] every launch-stage resume hint is the root ENTWURF.json text for its own reason, and the table names exactly the verb's reasons",
+			reasons.every((r) => RESUME_CALL_REJECT_HINT[r] === ENTWURF_RESUME_LAUNCH_REJECT_HINTS[r]) &&
+				JSON.stringify(Object.keys(RESUME_CALL_REJECT_HINT).sort()) === JSON.stringify([...reasons].sort()) &&
+				JSON.stringify(Object.keys(ENTWURF_RESUME_LAUNCH_REJECT_HINTS).sort()) === JSON.stringify([...reasons].sort()),
+		);
+		ok(
 			"[QK:MUXRESUME-RUNTIME-TABLE] the runtime is a closed per-backend table, pi → pi and claude-code → claude — never a command a caller supplies",
 			JSON.stringify(RESUME_CALL_RUNTIME) === JSON.stringify({ pi: "pi", "claude-code": "claude" }),
 		);
@@ -228,9 +234,19 @@ function main(): void {
 			"[QK:MUXRESUME-NO-IDENTITY] the module never mentions a garden id, a record, a lock or a transcript — it opens a place at a directory and knows nothing about whose citizen it is",
 			!/gardenId|readAddressableMetaIdentity|acquireLock|transcriptPath/.test(SRC),
 		);
+		// Every static form (from / bare / export-from) is parsed and dynamic loading is refused, so a
+		// fourth lane cannot enter through a shape the parser does not see. The one non-mux member is the
+		// node:fs-only guidance reader (#154 C1-D), whose own leaf-ness is GUIDANCE-READER-LEAF-IMPORTS.
+		const resumeImports = [
+			...SRC.matchAll(/^\s*(?:import|export)\s[^;]*?\sfrom\s+["']([^"']+)["']/gm),
+			...SRC.matchAll(/^\s*import\s+["']([^"']+)["']/gm),
+		].map((m) => m[1]);
 		ok(
-			"it imports only the mux lane — no entwurf core, no delivery",
-			!/from "\.\/entwurf-/.test(SRC) && !/meta-session/.test(SRC),
+			"[QK:MUXRESUME-IMPORT-SET] it imports exactly the mux lane plus the guidance reader — no entwurf core, no delivery, no dynamic import",
+			JSON.stringify([...resumeImports].sort()) ===
+				JSON.stringify(["./agent-guidance.ts", "./classify-tmux-cwd.ts", "./mux-launch.ts", "./mux-placement.ts"]) &&
+				!/\bimport\s*\(|\brequire\s*\(/.test(SRC) &&
+				!/meta-session/.test(SRC),
 		);
 		ok(
 			"it uses the SHARED APPEND_FORMAT rather than adding a start-path field: `-P -F` prints its row BEFORE the child chdirs (measured — pane_current_path there still reports the CALLER's cwd), so a path field would be both free-form in a `|`-joined row and racy",

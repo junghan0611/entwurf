@@ -756,9 +756,10 @@ mux-launch                                     -X-> entwurf core
 mux-placement                                  -X-> mux-launch        (leaf는 혼자 삭제 가능해야 한다)
 mux-launch                                      -> mux-placement
 mux-fresh-call                                  -> mux-launch + mux-placement + classify-tmux-cwd + resolve-tmux-session + copilot-fresh-preflight + omp-fresh-preflight + codex-fresh-preflight(hint/type)
-mux-resume-call                                 -> mux-launch + mux-placement + classify-tmux-cwd
+mux-resume-call                                 -> mux-launch + mux-placement + classify-tmux-cwd + agent-guidance  (정확한 집합; #154 C1-D가 연 유일한 mux 밖 import)
 classify-tmux-cwd                              -X-> 모든 mux/entwurf 모듈   (공유 분류 leaf; node 표준만 본다)
 resolve-tmux-session                           -X-> 모든 mux/entwurf 모듈   (세션 lookup leaf; import 0, runner 주입)
+agent-guidance                                 -X-> 모든 mux/entwurf 모듈   (Root guidance reader leaf; node:fs만 본다)
 copilot-fresh-preflight                        -X-> 모든 mux/entwurf 모듈   (좁은 backend leaf; node 표준만 본다)
 codex-fresh-preflight                           -> codex-ws-client + smol-toml  (좁은 backend leaf; system/user config + socket 사실만 본다)
 entwurf-v2-visible-resume                      -X-> mux-*            (launch는 표면이 주입하는 seam)

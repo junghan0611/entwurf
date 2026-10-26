@@ -6,8 +6,8 @@
 			"claim": "GUIDANCE-REVIEWED-REVISION",
 			"title": "a valid Root revision advances beyond the independently reviewed payload revision while every history entry and decoded tool string remains valid",
 			"subject": "ENTWURF.json",
-			"find": ["\t\"revision\": 6,", "\t\"history\": ["],
-			"replace": ["\t\"revision\": 7,", "\t\"history\": ["],
+			"find": ["\t\"revision\": 7,", "\t\"history\": ["],
+			"replace": ["\t\"revision\": 8,", "\t\"history\": ["],
 			"gate": ["bash", "run.sh", "check-agent-guidance-beside"],
 			"timeoutSeconds": 120,
 			"signature": "[QK:GUIDANCE-REVIEWED-REVISION]",
@@ -110,6 +110,28 @@
 			"gate": ["bash", "run.sh", "check-agent-guidance-beside"],
 			"timeoutSeconds": 120,
 			"signature": "[QK:GUIDANCE-FIXED-MODULE-ROOT]",
+			"signatureSource": "pi-extensions/lib/agent-guidance.test.ts"
+		},
+		{
+			"claim": "GUIDANCE-LAUNCH-REJECT-HINTS-ORIGINAL",
+			"title": "a valid static tmux launch-stage hint gains one space in the real JSON, which the reader, the fresh renderer and the compiled reader all carry faithfully, so only the C0 per-verb byte oracle can disagree",
+			"subject": "ENTWURF.json",
+			"find": ["the requested tmux session name is outside the shape"],
+			"replace": ["the requested tmux  session name is outside the shape"],
+			"gate": ["bash", "run.sh", "check-agent-guidance-beside"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:GUIDANCE-LAUNCH-REJECT-HINTS-ORIGINAL]",
+			"signatureSource": "pi-extensions/lib/agent-guidance.test.ts"
+		},
+		{
+			"claim": "GUIDANCE-READER-LEAF-IMPORTS",
+			"title": "the reader gains a bare side-effect import, the weakest static form, which loads and runs fine, so only the leaf import-set parser can see the new dependency",
+			"subject": "pi-extensions/lib/agent-guidance.ts",
+			"find": ["import { readFileSync } from \"node:fs\";"],
+			"replace": ["import { readFileSync } from \"node:fs\";", "import \"node:path\";"],
+			"gate": ["bash", "run.sh", "check-agent-guidance-beside"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:GUIDANCE-READER-LEAF-IMPORTS]",
 			"signatureSource": "pi-extensions/lib/agent-guidance.test.ts"
 		}
 	]

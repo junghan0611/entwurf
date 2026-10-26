@@ -49,6 +49,7 @@
  * to acceptance, not to the product's launch receipt.
  */
 
+import { ENTWURF_RESUME_LAUNCH_REJECT_HINTS } from "./agent-guidance.ts";
 import { classifyTmuxCwd, type TmuxCwdRejectReason } from "./classify-tmux-cwd.ts";
 import {
 	assertLaunchTarget,
@@ -187,24 +188,22 @@ export function resumeCall(
 }
 
 /** Why each refusal happened, in the caller's terms. A reason a caller cannot act on is a reason
- * they will guess about. */
+ * they will guess about. The text is authored in root ENTWURF.json (#154 C1-D); each
+ * key is bound explicitly so the reason union stays exhaustive here. */
 export const RESUME_CALL_REJECT_HINT: Record<ResumeCallRejectReason, string> = {
-	"no-tmux-context": "this agent is not running inside tmux, so there is no session to reopen the citizen in",
-	"anchor-malformed": "TMUX_PANE is not a native pane id",
-	"anchor-unresolved": "tmux resolved no pane for this agent's anchor",
-	"anchor-mismatch": "tmux answered about a different pane than the one asked about",
-	"cwd-not-absolute": "the recorded cwd is not an absolute path",
-	"cwd-format-token":
-		"the recorded cwd contains '#', which tmux expands as a format inside -c — it would silently rewrite the path or run a command",
-	"cwd-missing":
-		"the recorded cwd no longer exists; tmux would not report this, it would open the window in $HOME and look successful",
-	"cwd-not-directory": "the recorded cwd exists but is not a directory",
-	"herdr-resume-unsupported":
-		"this agent runs inside herdr, and same-id resume has only a tmux rail — nothing was opened in any ambient tmux session",
-	"runtime-unresolved": "the citizen's runtime (pi or claude) is not installed on PATH",
-	"runtime-not-absolute": "the resolved runtime path is not absolute",
-	"runtime-path-whitespace": "the resolved runtime path contains whitespace, which tmux would re-split",
-	"runtime-missing": "nothing exists at the resolved runtime path",
-	"runtime-not-regular-file": "the resolved runtime path is not a regular file",
-	"runtime-not-executable": "the resolved runtime path is not executable",
+	"no-tmux-context": ENTWURF_RESUME_LAUNCH_REJECT_HINTS["no-tmux-context"],
+	"anchor-malformed": ENTWURF_RESUME_LAUNCH_REJECT_HINTS["anchor-malformed"],
+	"anchor-unresolved": ENTWURF_RESUME_LAUNCH_REJECT_HINTS["anchor-unresolved"],
+	"anchor-mismatch": ENTWURF_RESUME_LAUNCH_REJECT_HINTS["anchor-mismatch"],
+	"cwd-not-absolute": ENTWURF_RESUME_LAUNCH_REJECT_HINTS["cwd-not-absolute"],
+	"cwd-format-token": ENTWURF_RESUME_LAUNCH_REJECT_HINTS["cwd-format-token"],
+	"cwd-missing": ENTWURF_RESUME_LAUNCH_REJECT_HINTS["cwd-missing"],
+	"cwd-not-directory": ENTWURF_RESUME_LAUNCH_REJECT_HINTS["cwd-not-directory"],
+	"herdr-resume-unsupported": ENTWURF_RESUME_LAUNCH_REJECT_HINTS["herdr-resume-unsupported"],
+	"runtime-unresolved": ENTWURF_RESUME_LAUNCH_REJECT_HINTS["runtime-unresolved"],
+	"runtime-not-absolute": ENTWURF_RESUME_LAUNCH_REJECT_HINTS["runtime-not-absolute"],
+	"runtime-path-whitespace": ENTWURF_RESUME_LAUNCH_REJECT_HINTS["runtime-path-whitespace"],
+	"runtime-missing": ENTWURF_RESUME_LAUNCH_REJECT_HINTS["runtime-missing"],
+	"runtime-not-regular-file": ENTWURF_RESUME_LAUNCH_REJECT_HINTS["runtime-not-regular-file"],
+	"runtime-not-executable": ENTWURF_RESUME_LAUNCH_REJECT_HINTS["runtime-not-executable"],
 };

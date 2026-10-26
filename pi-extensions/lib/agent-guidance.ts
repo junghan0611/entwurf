@@ -49,6 +49,52 @@ const RESUME_REJECT_HINT_REASONS = [
 
 export type ResumeRejectHintReason = (typeof RESUME_REJECT_HINT_REASONS)[number];
 
+/** Frozen entwurf_fresh_call tmux launch-stage reject wire ids whose static hint text lives in the root file. */
+const FRESH_LAUNCH_REJECT_HINT_REASONS = [
+	"no-tmux-context",
+	"anchor-malformed",
+	"anchor-unresolved",
+	"anchor-mismatch",
+	"caller-identity-unavailable",
+	"cwd-not-absolute",
+	"cwd-format-token",
+	"cwd-missing",
+	"cwd-not-directory",
+	"tmux-session-name-invalid",
+	"tmux-session-missing",
+	"model-empty",
+	"task-empty",
+	"runtime-unresolved",
+	"runtime-not-absolute",
+	"runtime-path-whitespace",
+	"runtime-missing",
+	"runtime-not-regular-file",
+	"runtime-not-executable",
+] as const;
+
+export type FreshLaunchRejectHintReason = (typeof FRESH_LAUNCH_REJECT_HINT_REASONS)[number];
+
+/** Frozen entwurf_resume_call tmux launch-stage reject wire ids whose static hint text lives in the root file. */
+const RESUME_LAUNCH_REJECT_HINT_REASONS = [
+	"no-tmux-context",
+	"anchor-malformed",
+	"anchor-unresolved",
+	"anchor-mismatch",
+	"cwd-not-absolute",
+	"cwd-format-token",
+	"cwd-missing",
+	"cwd-not-directory",
+	"herdr-resume-unsupported",
+	"runtime-unresolved",
+	"runtime-not-absolute",
+	"runtime-path-whitespace",
+	"runtime-missing",
+	"runtime-not-regular-file",
+	"runtime-not-executable",
+] as const;
+
+export type ResumeLaunchRejectHintReason = (typeof RESUME_LAUNCH_REJECT_HINT_REASONS)[number];
+
 type ToolName = keyof typeof TOOL_SPEC;
 type ToolGuidance<K extends ToolName> = {
 	readonly descriptions: (typeof TOOL_SPEC)[K]["durable"] extends true
@@ -59,7 +105,7 @@ type ToolGuidance<K extends ToolName> = {
 
 export interface EntwurfGuidance {
 	readonly _about: Readonly<Record<"purpose" | "ownership" | "scope" | "editing", string>>;
-	readonly schemaVersion: 3;
+	readonly schemaVersion: 4;
 	readonly revision: number;
 	readonly history: readonly {
 		readonly revision: number;
@@ -70,6 +116,8 @@ export interface EntwurfGuidance {
 	readonly tools: { readonly [K in ToolName]: ToolGuidance<K> };
 	readonly rejectHints: Readonly<Record<RejectHintReason, string>>;
 	readonly resumeRejectHints: Readonly<Record<ResumeRejectHintReason, string>>;
+	readonly freshLaunchRejectHints: Readonly<Record<FreshLaunchRejectHintReason, string>>;
+	readonly resumeLaunchRejectHints: Readonly<Record<ResumeLaunchRejectHintReason, string>>;
 }
 
 function record(value: unknown, at: string): asserts value is Record<string, unknown> {
@@ -164,8 +212,22 @@ export function parseEntwurfGuidance(source: string): EntwurfGuidance {
 	const data: unknown = JSON.parse(source);
 	rejectDuplicateKeys(source);
 	record(data, "root");
-	if (data.schemaVersion !== 3) throw new Error("ENTWURF.json: unsupported schemaVersion");
-	keys(data, ["_about", "schemaVersion", "revision", "history", "tools", "rejectHints", "resumeRejectHints"], "root");
+	if (data.schemaVersion !== 4) throw new Error("ENTWURF.json: unsupported schemaVersion");
+	keys(
+		data,
+		[
+			"_about",
+			"schemaVersion",
+			"revision",
+			"history",
+			"tools",
+			"rejectHints",
+			"resumeRejectHints",
+			"freshLaunchRejectHints",
+			"resumeLaunchRejectHints",
+		],
+		"root",
+	);
 	if (!Number.isSafeInteger(data.revision) || (data.revision as number) < 1) {
 		throw new Error("ENTWURF.json: revision must be a positive safe integer");
 	}
@@ -206,6 +268,14 @@ export function parseEntwurfGuidance(source: string): EntwurfGuidance {
 	record(data.resumeRejectHints, "resumeRejectHints");
 	keys(data.resumeRejectHints, RESUME_REJECT_HINT_REASONS, "resumeRejectHints");
 	for (const [reason, value] of Object.entries(data.resumeRejectHints)) text(value, `resumeRejectHints.${reason}`);
+	record(data.freshLaunchRejectHints, "freshLaunchRejectHints");
+	keys(data.freshLaunchRejectHints, FRESH_LAUNCH_REJECT_HINT_REASONS, "freshLaunchRejectHints");
+	for (const [reason, value] of Object.entries(data.freshLaunchRejectHints))
+		text(value, `freshLaunchRejectHints.${reason}`);
+	record(data.resumeLaunchRejectHints, "resumeLaunchRejectHints");
+	keys(data.resumeLaunchRejectHints, RESUME_LAUNCH_REJECT_HINT_REASONS, "resumeLaunchRejectHints");
+	for (const [reason, value] of Object.entries(data.resumeLaunchRejectHints))
+		text(value, `resumeLaunchRejectHints.${reason}`);
 	freeze(data);
 	return data as unknown as EntwurfGuidance;
 }
@@ -216,8 +286,12 @@ const guidance = parseEntwurfGuidance(readFileSync(new URL("../../ENTWURF.json",
 export const ENTWURF_TOOL_GUIDANCE = guidance.tools;
 /** Static next-step text appended to these entwurf_v2 rejections; the decider and wire ids stay code-owned. */
 export const ENTWURF_REJECT_HINTS = guidance.rejectHints;
-/** Static next-step text in these entwurf_resume_call rejections; the verb, the launch-stage mux hints and the shared ACP model hint stay code-owned. */
+/** Static next-step text in these entwurf_resume_call record/liveness rejections; the verb and the shared ACP model hint stay code-owned. */
 export const ENTWURF_RESUME_REJECT_HINTS = guidance.resumeRejectHints;
+/** Static tmux launch-stage hints of entwurf_fresh_call; slot-bearing, ACP and preflight-leaf hints stay code-owned. */
+export const ENTWURF_FRESH_LAUNCH_REJECT_HINTS = guidance.freshLaunchRejectHints;
+/** Static tmux launch-stage hints of entwurf_resume_call, kept apart from the fresh verb even where the text matches. */
+export const ENTWURF_RESUME_LAUNCH_REJECT_HINTS = guidance.resumeLaunchRejectHints;
 export const ENTWURF_GUIDANCE_VERSION = Object.freeze({
 	schemaVersion: guidance.schemaVersion,
 	revision: guidance.revision,

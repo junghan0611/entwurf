@@ -303,6 +303,14 @@ for (const copy of copies) {
 		"F3: the compiled reader exports the canonical Root visible-resume reject hints [QK:BUNDLE-REACH-RESUME-REJECT-HINTS]",
 		sameBytes && isDeepStrictEqual(loaded?.ENTWURF_RESUME_REJECT_HINTS, root.resumeRejectHints),
 	);
+	// F4 — the two tmux launch-stage families (#154 C1-D), one assertion because they enter together;
+	// this proves the compiled reader's exports, not the compiled mux renderers that read them.
+	ok(
+		"F4: the compiled reader exports the canonical Root fresh and resume launch-stage reject hints [QK:BUNDLE-REACH-LAUNCH-REJECT-HINTS]",
+		sameBytes &&
+			isDeepStrictEqual(loaded?.ENTWURF_FRESH_LAUNCH_REJECT_HINTS, root.freshLaunchRejectHints) &&
+			isDeepStrictEqual(loaded?.ENTWURF_RESUME_LAUNCH_REJECT_HINTS, root.resumeLaunchRejectHints),
+	);
 }
 
 console.log(`\ncheck-capability-bundle-reach: PASS (${passed} assertions)`);

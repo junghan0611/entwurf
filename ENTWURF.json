@@ -2,12 +2,18 @@
 	"_about": {
 		"purpose": "Precise English natural-language product logic for Entwurf agents, not a user-editable prompt collection.",
 		"ownership": "This root file is the sole editable source of the payload families present here. Installed and compiled copies are deterministic transport, never separate authorities. Existing engraving and user-configuration contracts are unchanged.",
-		"scope": "Current families: MCP tool/parameter descriptions, durable short variants, the static entwurf_v2 reject hints, and the static visible-resume (record/liveness) reject hints of entwurf_resume_call. Bootstrap, notices, envelope explanations, other hints (including the slot-bearing record-less-socket hint, the launch-stage mux resume hints and the shared ACP model hint) and ACP guidance remain in their current owners; this is not complete guidance centralization.",
+		"scope": "Current families: MCP tool/parameter descriptions, durable short variants, the static entwurf_v2 reject hints, the static visible-resume (record/liveness) reject hints of entwurf_resume_call, and the static tmux launch-stage reject hints of entwurf_fresh_call and entwurf_resume_call. Bootstrap, notices, envelope explanations, other hints (including the slot-bearing record-less-socket, model-invalid and task-too-long hints, the shared ACP model hint, the preflight repair text kept beside its predicates, and every herdr rail hint) and ACP guidance remain in their current owners; this is not complete guidance centralization.",
 		"editing": "Preserve decoded strings exactly unless an explicit semantic amendment is intended. Review related consumers and independent oracles atomically. Accepted payload changes advance revision; history-only edits, routine releases and unrelated code changes do not. schemaVersion tracks reader/structural compatibility. Metadata is not delivered to models."
 	},
-	"schemaVersion": 3,
-	"revision": 6,
+	"schemaVersion": 4,
+	"revision": 7,
 	"history": [
+		{
+			"revision": 7,
+			"source": "d174fef0b9433ec8c24e0c616ed6c864e0fbb178",
+			"issue": "https://github.com/junghan0611/entwurf/issues/154",
+			"change": "Byte-preserving extraction of the static tmux launch-stage reject hints of entwurf_fresh_call (19) and entwurf_resume_call (15) from 94d0594; schemaVersion 4 adds the freshLaunchRejectHints and resumeLaunchRejectHints families, kept separate per verb. Slot-bearing hints, the shared ACP model hint, the preflight leaf repair text and the herdr rail hints stay code-owned."
+		},
 		{
 			"revision": 6,
 			"source": "297ff9ea63fef8a10aa069195e818f5463a13ac1",
@@ -151,5 +157,43 @@
 		"target-receiver-unbound": "the dead receiver owner is not bound to the record's last arm (none observed, a later attach, or the record moved), so a Claude Code process may still hold the session — if its window is closed, reopen it yourself",
 		"target-address-conflict": "that citizen's control-socket path is corrupt",
 		"launch-refused": "tmux was never asked to open a window"
+	},
+	"freshLaunchRejectHints": {
+		"no-tmux-context": "this agent is not running inside tmux, so there is no session to open a sibling beside",
+		"anchor-malformed": "TMUX_PANE is not a native pane id",
+		"anchor-unresolved": "tmux resolved no pane for this agent's anchor",
+		"anchor-mismatch": "tmux answered about a different pane than the one asked about",
+		"caller-identity-unavailable": "this surface has no record-backed garden id for the caller, so the sibling would have no address to call back to",
+		"cwd-not-absolute": "the requested cwd is not an absolute path (the value is taken literally — nothing trims or resolves it)",
+		"cwd-format-token": "the requested cwd contains '#', which tmux expands as a format inside -c — it would silently rewrite the path or run a command",
+		"cwd-missing": "the requested cwd does not exist; tmux would not report this, it would open the window in $HOME and look successful",
+		"cwd-not-directory": "the requested cwd exists but is not a directory",
+		"tmux-session-name-invalid": "the requested tmux session name is outside the shape this rail addresses (start with a letter or digit, then letters, digits, '_' or '-') — some other shapes tmux cannot resolve at all ('#' is expanded when the name is stored; '.' and ':' are its own pane/window separators inside a target; a name like '$0' loses to the session id '$0'), and the rest are declined to keep one narrow grammar, so rename the session or open one whose name fits",
+		"tmux-session-missing": "no session with that exact name answers on this agent's tmux server (or that server stopped answering) — nothing was created, so open the session yourself and call again",
+		"model-empty": "model is empty after trimming; fresh calls require an explicit model",
+		"task-empty": "task is empty after trimming",
+		"runtime-unresolved": "the backend's runtime is not installed on PATH",
+		"runtime-not-absolute": "the resolved runtime path is not absolute",
+		"runtime-path-whitespace": "the resolved runtime path contains whitespace, which tmux would re-split",
+		"runtime-missing": "nothing exists at the resolved runtime path",
+		"runtime-not-regular-file": "the resolved runtime path is not a regular file",
+		"runtime-not-executable": "the resolved runtime path is not executable"
+	},
+	"resumeLaunchRejectHints": {
+		"no-tmux-context": "this agent is not running inside tmux, so there is no session to reopen the citizen in",
+		"anchor-malformed": "TMUX_PANE is not a native pane id",
+		"anchor-unresolved": "tmux resolved no pane for this agent's anchor",
+		"anchor-mismatch": "tmux answered about a different pane than the one asked about",
+		"cwd-not-absolute": "the recorded cwd is not an absolute path",
+		"cwd-format-token": "the recorded cwd contains '#', which tmux expands as a format inside -c — it would silently rewrite the path or run a command",
+		"cwd-missing": "the recorded cwd no longer exists; tmux would not report this, it would open the window in $HOME and look successful",
+		"cwd-not-directory": "the recorded cwd exists but is not a directory",
+		"herdr-resume-unsupported": "this agent runs inside herdr, and same-id resume has only a tmux rail — nothing was opened in any ambient tmux session",
+		"runtime-unresolved": "the citizen's runtime (pi or claude) is not installed on PATH",
+		"runtime-not-absolute": "the resolved runtime path is not absolute",
+		"runtime-path-whitespace": "the resolved runtime path contains whitespace, which tmux would re-split",
+		"runtime-missing": "nothing exists at the resolved runtime path",
+		"runtime-not-regular-file": "the resolved runtime path is not a regular file",
+		"runtime-not-executable": "the resolved runtime path is not executable"
 	}
 }
