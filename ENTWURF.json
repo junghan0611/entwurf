@@ -2,12 +2,18 @@
 	"_about": {
 		"purpose": "Precise English natural-language product logic for Entwurf agents, not a user-editable prompt collection.",
 		"ownership": "This root file is the sole editable source of the payload families present here. Installed and compiled copies are deterministic transport, never separate authorities. Existing engraving and user-configuration contracts are unchanged.",
-		"scope": "Current families: MCP tool/parameter descriptions, durable short variants, and the static entwurf_v2 reject hints. Bootstrap, notices, envelope explanations, other hints (including the slot-bearing record-less-socket hint) and ACP guidance remain in their current owners; this is not complete guidance centralization.",
+		"scope": "Current families: MCP tool/parameter descriptions, durable short variants, the static entwurf_v2 reject hints, and the static visible-resume (record/liveness) reject hints of entwurf_resume_call. Bootstrap, notices, envelope explanations, other hints (including the slot-bearing record-less-socket hint, the launch-stage mux resume hints and the shared ACP model hint) and ACP guidance remain in their current owners; this is not complete guidance centralization.",
 		"editing": "Preserve decoded strings exactly unless an explicit semantic amendment is intended. Review related consumers and independent oracles atomically. Accepted payload changes advance revision; history-only edits, routine releases and unrelated code changes do not. schemaVersion tracks reader/structural compatibility. Metadata is not delivered to models."
 	},
-	"schemaVersion": 2,
-	"revision": 4,
+	"schemaVersion": 3,
+	"revision": 5,
 	"history": [
+		{
+			"revision": 5,
+			"source": "4a50aba502dd68b30543e472969361626308d296",
+			"issue": "https://github.com/junghan0611/entwurf/issues/154",
+			"change": "Byte-preserving extraction of the eleven static visible-resume (record/liveness) reject hints of entwurf_resume_call from 94d0594; schemaVersion 3 adds the resumeRejectHints family. The shared ACP model hint and the launch-stage mux resume hints stay code-owned."
+		},
 		{
 			"revision": 4,
 			"source": "a3f2abc26ed985389f226aae7988cdb9c791d1f0",
@@ -126,5 +132,18 @@
 		"native-push-target-dead": "the native-push conversation/thread is not live — no native host (harness process or app-server) answered the probe for it. Re-open that conversation/thread in its own harness, then retry; there is nothing to inject into.",
 		"native-push-probe-indeterminate": "the native host (harness process or app-server) is up, but nothing served this conversation/thread, so the probe is INCONCLUSIVE — not a measured death. Retry once it is loaded, or verify the conversation/thread id.",
 		"native-push-paused": "native-push for this backend is paused (#152): its language server refused entwurf's measured external calls for a missing CSRF token, so this dispatch probed and sent nothing. The citizen and its record are kept; reach it from inside its own harness instead."
+	},
+	"resumeRejectHints": {
+		"target-invalid": "no citizen has that id; discover targets with entwurf_peers",
+		"target-backend-unsupported": "that citizen's backend has no same-id resume (only pi and Claude Code do) — reach it with entwurf_v2, or open a fresh sibling",
+		"target-locked": "another resume or dispatch holds this citizen's lock right now",
+		"target-live": "that citizen is already running — this verb only reopens dormant ones",
+		"target-indeterminate": "the citizen could not be proven dormant (an inconclusive socket probe or receiver owner), so nothing was started",
+		"target-receiver-absent": "a Claude Code citizen is proven dormant only by its receiver marker, and it has none — if its window is closed, reopen it yourself",
+		"target-receiver-corrupt": "the citizen's receiver marker cannot be read as a marker, so its owner cannot be judged",
+		"target-receiver-mismatch": "the receiver marker under this garden id names another backend or native session than the record — look at the store before anything reopens",
+		"target-receiver-unbound": "the dead receiver owner is not bound to the record's last arm (none observed, a later attach, or the record moved), so a Claude Code process may still hold the session — if its window is closed, reopen it yourself",
+		"target-address-conflict": "that citizen's control-socket path is corrupt",
+		"launch-refused": "tmux was never asked to open a window"
 	}
 }

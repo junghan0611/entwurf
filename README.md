@@ -24,8 +24,8 @@ Git branches, worktrees, file isolation and internal delegation remain their con
 [Short answers: FAQ](./FAQ.md).
 
 [ENTWURF.json](./ENTWURF.json) is the sole editable source for the product-owned guidance
-currently extracted there: MCP descriptions/parameters, durable short variants and the static
-entwurf_v2 reject hints. It is not a user prompt override; its payload revision is independent of
+currently extracted there: MCP descriptions/parameters, durable short variants, the static
+entwurf_v2 reject hints and the static visible-resume reject hints of entwurf_resume_call. It is not a user prompt override; its payload revision is independent of
 package releases. Bootstrap, notices, other hints and ACP guidance still have their existing owners. Operator engraving/configuration is unchanged.
 
 | Verb | Tool | Where it lands | Harnesses |

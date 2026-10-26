@@ -10,6 +10,7 @@ import { createPiDurableContact, PI_DURABLE_TOOL_SCHEMAS } from "../meta-bridge-
 import {
 	ENTWURF_GUIDANCE_VERSION,
 	ENTWURF_REJECT_HINTS,
+	ENTWURF_RESUME_REJECT_HINTS,
 	ENTWURF_TOOL_GUIDANCE,
 	parseEntwurfGuidance,
 } from "./agent-guidance.ts";
@@ -58,6 +59,13 @@ const reviewedR3 = JSON.parse(
 // Revision 4 adds a family rather than amending a tools leaf: its C0 hint text is its own oracle.
 const originalRejectHints = JSON.parse(
 	fs.readFileSync(new URL("./fixtures/agent-guidance/reject-hints-before-94d0594.json", import.meta.url), "utf8"),
+) as { sourceSha: string; previousRevision: number; introducedRevision: number; hints: Record<string, string> };
+// Revision 5 adds the visible-resume family the same way; its C0 hint text is its own oracle too.
+const originalResumeRejectHints = JSON.parse(
+	fs.readFileSync(
+		new URL("./fixtures/agent-guidance/resume-reject-hints-before-94d0594.json", import.meta.url),
+		"utf8",
+	),
 ) as { sourceSha: string; previousRevision: number; introducedRevision: number; hints: Record<string, string> };
 
 // Only description leaves may change. Full schemas/annotations/order come from immutable C0,
@@ -116,7 +124,9 @@ describe("root product guidance — frozen originals plus reviewed current amend
 		expect(reviewedR3.revision).toBe(3);
 		expect(originalRejectHints.previousRevision).toBe(reviewedR3.revision);
 		expect(originalRejectHints.introducedRevision).toBe(4);
-		expect(ENTWURF_GUIDANCE_VERSION.revision).toBe(originalRejectHints.introducedRevision);
+		expect(originalResumeRejectHints.previousRevision).toBe(originalRejectHints.introducedRevision);
+		expect(originalResumeRejectHints.introducedRevision).toBe(5);
+		expect(ENTWURF_GUIDANCE_VERSION.revision).toBe(originalResumeRejectHints.introducedRevision);
 	});
 
 	it("[QK:GUIDANCE-REJECT-HINTS-ORIGINAL] every static reject hint is the exact pre-extraction C0 string for exactly the declared reasons", () => {
@@ -127,6 +137,18 @@ describe("root product guidance — frozen originals plus reviewed current amend
 			expect(Buffer.from(actual)).toEqual(Buffer.from(text));
 		}
 		expect(Object.isFrozen(ENTWURF_REJECT_HINTS)).toBe(true);
+	});
+
+	it("[QK:GUIDANCE-RESUME-REJECT-HINTS-ORIGINAL] every static visible-resume reject hint is the exact pre-extraction C0 string for exactly the declared reasons", () => {
+		expect(originalResumeRejectHints.sourceSha).toBe("94d0594182cbd9cf0a5c90f4d299cda40d870b8f");
+		expect(Object.keys(ENTWURF_RESUME_REJECT_HINTS).sort()).toEqual(
+			Object.keys(originalResumeRejectHints.hints).sort(),
+		);
+		for (const [reason, text] of Object.entries(originalResumeRejectHints.hints)) {
+			const actual = (ENTWURF_RESUME_REJECT_HINTS as Readonly<Record<string, string>>)[reason];
+			expect(Buffer.from(actual)).toEqual(Buffer.from(text));
+		}
+		expect(Object.isFrozen(ENTWURF_RESUME_REJECT_HINTS)).toBe(true);
 	});
 
 	it("[QK:GUIDANCE-CURRENT-DECODED-BYTES] every current string is exact and only declared amendments differ from originals", () => {
@@ -185,7 +207,7 @@ describe("strict fixed-source guidance reader", () => {
 			'{"revision":1,"revision":2}',
 			'{"revision":1,"\\u0072evision":2}',
 			'{"outer":[{"x":"first","x":"last"}]}',
-			SOURCE.replace('"schemaVersion": 2', '"schemaVersion": 2, "schemaVersion": 2'),
+			SOURCE.replace('"schemaVersion": 3', '"schemaVersion": 3, "schemaVersion": 3'),
 		])
 			expect(() => parseEntwurfGuidance(source)).toThrow(/duplicate object key/);
 	});
@@ -196,8 +218,8 @@ describe("strict fixed-source guidance reader", () => {
 		for (const source of [SOURCE + " trailing", JSON.stringify(invalidRevision)]) {
 			expect(() => parseEntwurfGuidance(source)).toThrow();
 		}
-		for (const version of ["1", "3"]) {
-			const source = SOURCE.replace('"schemaVersion": 2', `"schemaVersion": ${version}`);
+		for (const version of ["2", "4"]) {
+			const source = SOURCE.replace('"schemaVersion": 3', `"schemaVersion": ${version}`);
 			expect(source).not.toBe(SOURCE);
 			expect(() => parseEntwurfGuidance(source)).toThrow(/unsupported schemaVersion/);
 		}
@@ -215,6 +237,20 @@ describe("strict fixed-source guidance reader", () => {
 		const arrayHints = JSON.parse(SOURCE);
 		arrayHints.rejectHints = Object.values(arrayHints.rejectHints);
 		expect(() => parseEntwurfGuidance(JSON.stringify(arrayHints))).toThrow(/expected an object/);
+		const noResumeHints = JSON.parse(SOURCE);
+		delete noResumeHints.resumeRejectHints;
+		const missingResumeHint = JSON.parse(SOURCE);
+		delete missingResumeHint.resumeRejectHints["launch-refused"];
+		const unknownResumeHint = JSON.parse(SOURCE);
+		unknownResumeHint.resumeRejectHints["acp-model-not-curated"] = "the shared ACP hint stays code-owned";
+		for (const data of [noResumeHints, missingResumeHint, unknownResumeHint])
+			expect(() => parseEntwurfGuidance(JSON.stringify(data))).toThrow(/keys must be exactly/);
+		const emptyResumeHint = JSON.parse(SOURCE);
+		emptyResumeHint.resumeRejectHints["launch-refused"] = "";
+		expect(() => parseEntwurfGuidance(JSON.stringify(emptyResumeHint))).toThrow(/non-empty string/);
+		const arrayResumeHints = JSON.parse(SOURCE);
+		arrayResumeHints.resumeRejectHints = Object.values(arrayResumeHints.resumeRejectHints);
+		expect(() => parseEntwurfGuidance(JSON.stringify(arrayResumeHints))).toThrow(/expected an object/);
 		const missing = JSON.parse(SOURCE);
 		delete missing.tools.entwurf_v2.parameters.mode;
 		expect(() => parseEntwurfGuidance(JSON.stringify(missing))).toThrow(/keys must be exactly/);
@@ -233,7 +269,7 @@ describe("strict fixed-source guidance reader", () => {
 		const changed = JSON.parse(SOURCE);
 		changed.history.unshift({ ...changed.history[0], change: "History-only clarification" });
 		expect(parseEntwurfGuidance(JSON.stringify(changed)).revision).toBe(ENTWURF_GUIDANCE_VERSION.revision);
-		expect(ENTWURF_GUIDANCE_VERSION.schemaVersion).toBe(2);
+		expect(ENTWURF_GUIDANCE_VERSION.schemaVersion).toBe(3);
 	});
 
 	it("[QK:GUIDANCE-FIXED-MODULE-ROOT] cwd/HOME/env decoys cannot replace the module's packaged source, whose loaded payload is immutable", () => {

@@ -33,6 +33,23 @@
 			"signature": "[QK:BUNDLE-REACH-REJECT-HINTS]",
 			"signatureSource": "scripts/check-capability-bundle-reach.ts",
 			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "BUNDLE-REACH-RESUME-REJECT-HINTS",
+			"title": "the compiled reader exports one static visible-resume reject hint with a trailing space while the carrier keeps canonical Root bytes and the version/tools/reject-hint exports stay identical, so only the compiled resume-hint-family reach can fail",
+			"subject": "pi-extensions/lib/agent-guidance.ts",
+			"find": ["export const ENTWURF_RESUME_REJECT_HINTS = guidance.resumeRejectHints;"],
+			"replace": [
+				"export const ENTWURF_RESUME_REJECT_HINTS: typeof guidance.resumeRejectHints = Object.freeze({",
+				"\t...guidance.resumeRejectHints,",
+				"\t\"launch-refused\": `${guidance.resumeRejectHints[\"launch-refused\"]} `,",
+				"});"
+			],
+			"gate": ["bash", "run.sh", "check-capability-bundle-reach"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:BUNDLE-REACH-RESUME-REJECT-HINTS]",
+			"signatureSource": "scripts/check-capability-bundle-reach.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
 		}
 	]
 }

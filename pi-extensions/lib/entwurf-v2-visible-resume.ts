@@ -74,6 +74,7 @@
  */
 
 import { ACP_MODEL_NOT_CURATED_HINT, AcpModelNotCuratedError } from "./acp/model-ids.js";
+import { ENTWURF_RESUME_REJECT_HINTS } from "./agent-guidance.ts";
 import { buildResumePiArgs } from "./entwurf-resume-args.ts";
 import {
 	type AcquireLockResult,
@@ -633,24 +634,22 @@ export async function observeSameGidSocket(
 	}
 }
 
+// The static record/liveness hint text is authored in root ENTWURF.json (#154 C1-C); the reasons,
+// this total table and the renderer stay here. acp-model-not-curated keeps the shared ACP constant,
+// and the launch-stage mux hints folded into `detail` stay behind the mux import fence.
 const REJECT_HINT: Record<VisibleResumeRejectReason, string> = {
-	"target-invalid": "no citizen has that id; discover targets with entwurf_peers",
-	"target-backend-unsupported":
-		"that citizen's backend has no same-id resume (only pi and Claude Code do) — reach it with entwurf_v2, or open a fresh sibling",
+	"target-invalid": ENTWURF_RESUME_REJECT_HINTS["target-invalid"],
+	"target-backend-unsupported": ENTWURF_RESUME_REJECT_HINTS["target-backend-unsupported"],
 	"acp-model-not-curated": ACP_MODEL_NOT_CURATED_HINT,
-	"target-locked": "another resume or dispatch holds this citizen's lock right now",
-	"target-live": "that citizen is already running — this verb only reopens dormant ones",
-	"target-indeterminate":
-		"the citizen could not be proven dormant (an inconclusive socket probe or receiver owner), so nothing was started",
-	"target-receiver-absent":
-		"a Claude Code citizen is proven dormant only by its receiver marker, and it has none — if its window is closed, reopen it yourself",
-	"target-receiver-corrupt": "the citizen's receiver marker cannot be read as a marker, so its owner cannot be judged",
-	"target-receiver-mismatch":
-		"the receiver marker under this garden id names another backend or native session than the record — look at the store before anything reopens",
-	"target-receiver-unbound":
-		"the dead receiver owner is not bound to the record's last arm (none observed, a later attach, or the record moved), so a Claude Code process may still hold the session — if its window is closed, reopen it yourself",
-	"target-address-conflict": "that citizen's control-socket path is corrupt",
-	"launch-refused": "tmux was never asked to open a window",
+	"target-locked": ENTWURF_RESUME_REJECT_HINTS["target-locked"],
+	"target-live": ENTWURF_RESUME_REJECT_HINTS["target-live"],
+	"target-indeterminate": ENTWURF_RESUME_REJECT_HINTS["target-indeterminate"],
+	"target-receiver-absent": ENTWURF_RESUME_REJECT_HINTS["target-receiver-absent"],
+	"target-receiver-corrupt": ENTWURF_RESUME_REJECT_HINTS["target-receiver-corrupt"],
+	"target-receiver-mismatch": ENTWURF_RESUME_REJECT_HINTS["target-receiver-mismatch"],
+	"target-receiver-unbound": ENTWURF_RESUME_REJECT_HINTS["target-receiver-unbound"],
+	"target-address-conflict": ENTWURF_RESUME_REJECT_HINTS["target-address-conflict"],
+	"launch-refused": ENTWURF_RESUME_REJECT_HINTS["launch-refused"],
 };
 
 /**

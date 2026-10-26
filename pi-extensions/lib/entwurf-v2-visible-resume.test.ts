@@ -43,6 +43,8 @@
  *   V2RESUME-BACKEND-UNSUPPORTED-REFUSED  an out-of-domain backend is a NAMED refusal, not an error
  *   V2RESUME-BACKEND-UNSUPPORTED-BY-FIELD …matched on the error's reason FIELD, backend quoted from it
  *   V2RESUME-SHARED-ID-GRAMMAR       the address grammar is the session-id SSOT, not a local copy
+ *   V2RESUME-REJECT-HINTS-FROM-ROOT  each static record/liveness rejection renders the root ENTWURF.json hint
+ *                                    (#154 C1-C); the shared ACP hint is not taken from it
  *
  * #147 L2 adds the Claude Code half (`V2RESUME-CC-*`, its own describe block below): dormancy only
  * from a DEAD receiver-marker owner, every other marker state a named refusal, the fixed
@@ -54,7 +56,8 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { AcpModelNotCuratedError } from "./acp/model-ids.js";
+import { ACP_MODEL_NOT_CURATED_HINT, AcpModelNotCuratedError } from "./acp/model-ids.js";
+import { ENTWURF_RESUME_REJECT_HINTS } from "./agent-guidance.ts";
 import type { AcquireLockResult, LockClaim, ReleaseResult } from "./entwurf-v2-lock.ts";
 import {
 	inspectReceiverMarker,
@@ -1404,5 +1407,27 @@ describe("the receiver marker binding, on real files", () => {
 		} finally {
 			fs.rmSync(dir, { recursive: true, force: true });
 		}
+	});
+});
+
+// ── #154 C1-C: the static rejection hints come from the root file ─────────────────
+describe("the visible-resume rejection hints", () => {
+	it("[QK:V2RESUME-REJECT-HINTS-FROM-ROOT] each static record/liveness rejection renders exactly its root ENTWURF.json hint, and the shared ACP hint is not taken from the root file", () => {
+		const reasons = Object.keys(ENTWURF_RESUME_REJECT_HINTS) as (keyof typeof ENTWURF_RESUME_REJECT_HINTS)[];
+		const unwired = reasons.filter((reason) => {
+			const text = renderVisibleResume({ ok: false, reason, detail: "DETAIL" }).text;
+			return (
+				text !==
+				`entwurf_resume_call rejected: ${reason} — ${ENTWURF_RESUME_REJECT_HINTS[reason]}. DETAIL. No window was opened.`
+			);
+		});
+		const acp = renderVisibleResume({ ok: false, reason: "acp-model-not-curated", detail: "DETAIL" }).text;
+		ok(
+			`all ${reasons.length} static reasons render their root hint (unwired: ${unwired.join(", ") || "none"}); acp-model-not-curated keeps the shared constant`,
+			reasons.length === 11 &&
+				unwired.length === 0 &&
+				!reasons.includes("acp-model-not-curated" as never) &&
+				acp.includes(`— ${ACP_MODEL_NOT_CURATED_HINT}. DETAIL.`),
+		);
 	});
 });

@@ -264,8 +264,11 @@ for (const copy of copies) {
 }
 
 // F — one guidance carrier/current-reader contract, rooted in canonical authored bytes (#154).
-// Presence/type are preconditions. A stale carrier skips the reader import, so byte divergence
-// fails the intended assertion rather than being hidden by parsing or an incidental import error.
+// Presence/type are preconditions. The reader is NOT first loaded here: since #154 C1-C the compiled
+// retire adapter that D imports reaches it through entwurf-v2-visible-resume, so the module is
+// already evaluated and cached. A carrier that still parses and validates (a byte divergence) loaded
+// fine there and fails the intended F1 byte assertion; a carrier the reader refuses already threw at
+// D's import, unlabelled. The import below is skipped on divergence so F1 stays the reported cause.
 {
 	const carrier = path.join(BRIDGE_DIST, "ENTWURF.json");
 	const reader = path.join(BRIDGE_DIST, "pi-extensions", "lib", "agent-guidance.js");
@@ -294,6 +297,11 @@ for (const copy of copies) {
 	ok(
 		"F2: the compiled reader exports the canonical Root static reject hints [QK:BUNDLE-REACH-REJECT-HINTS]",
 		sameBytes && isDeepStrictEqual(loaded?.ENTWURF_REJECT_HINTS, root.rejectHints),
+	);
+	// F3 — the third family (#154 C1-C), separate for the same reason as F2.
+	ok(
+		"F3: the compiled reader exports the canonical Root visible-resume reject hints [QK:BUNDLE-REACH-RESUME-REJECT-HINTS]",
+		sameBytes && isDeepStrictEqual(loaded?.ENTWURF_RESUME_REJECT_HINTS, root.resumeRejectHints),
 	);
 }
 

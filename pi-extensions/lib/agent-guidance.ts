@@ -32,6 +32,23 @@ const REJECT_HINT_REASONS = [
 
 export type RejectHintReason = (typeof REJECT_HINT_REASONS)[number];
 
+/** Frozen entwurf_resume_call record/liveness reject wire ids whose static hint text lives in the root file. */
+const RESUME_REJECT_HINT_REASONS = [
+	"target-invalid",
+	"target-backend-unsupported",
+	"target-locked",
+	"target-live",
+	"target-indeterminate",
+	"target-receiver-absent",
+	"target-receiver-corrupt",
+	"target-receiver-mismatch",
+	"target-receiver-unbound",
+	"target-address-conflict",
+	"launch-refused",
+] as const;
+
+export type ResumeRejectHintReason = (typeof RESUME_REJECT_HINT_REASONS)[number];
+
 type ToolName = keyof typeof TOOL_SPEC;
 type ToolGuidance<K extends ToolName> = {
 	readonly descriptions: (typeof TOOL_SPEC)[K]["durable"] extends true
@@ -42,7 +59,7 @@ type ToolGuidance<K extends ToolName> = {
 
 export interface EntwurfGuidance {
 	readonly _about: Readonly<Record<"purpose" | "ownership" | "scope" | "editing", string>>;
-	readonly schemaVersion: 2;
+	readonly schemaVersion: 3;
 	readonly revision: number;
 	readonly history: readonly {
 		readonly revision: number;
@@ -52,6 +69,7 @@ export interface EntwurfGuidance {
 	}[];
 	readonly tools: { readonly [K in ToolName]: ToolGuidance<K> };
 	readonly rejectHints: Readonly<Record<RejectHintReason, string>>;
+	readonly resumeRejectHints: Readonly<Record<ResumeRejectHintReason, string>>;
 }
 
 function record(value: unknown, at: string): asserts value is Record<string, unknown> {
@@ -146,8 +164,8 @@ export function parseEntwurfGuidance(source: string): EntwurfGuidance {
 	const data: unknown = JSON.parse(source);
 	rejectDuplicateKeys(source);
 	record(data, "root");
-	if (data.schemaVersion !== 2) throw new Error("ENTWURF.json: unsupported schemaVersion");
-	keys(data, ["_about", "schemaVersion", "revision", "history", "tools", "rejectHints"], "root");
+	if (data.schemaVersion !== 3) throw new Error("ENTWURF.json: unsupported schemaVersion");
+	keys(data, ["_about", "schemaVersion", "revision", "history", "tools", "rejectHints", "resumeRejectHints"], "root");
 	if (!Number.isSafeInteger(data.revision) || (data.revision as number) < 1) {
 		throw new Error("ENTWURF.json: revision must be a positive safe integer");
 	}
@@ -185,6 +203,9 @@ export function parseEntwurfGuidance(source: string): EntwurfGuidance {
 	record(data.rejectHints, "rejectHints");
 	keys(data.rejectHints, REJECT_HINT_REASONS, "rejectHints");
 	for (const [reason, value] of Object.entries(data.rejectHints)) text(value, `rejectHints.${reason}`);
+	record(data.resumeRejectHints, "resumeRejectHints");
+	keys(data.resumeRejectHints, RESUME_REJECT_HINT_REASONS, "resumeRejectHints");
+	for (const [reason, value] of Object.entries(data.resumeRejectHints)) text(value, `resumeRejectHints.${reason}`);
 	freeze(data);
 	return data as unknown as EntwurfGuidance;
 }
@@ -195,6 +216,8 @@ const guidance = parseEntwurfGuidance(readFileSync(new URL("../../ENTWURF.json",
 export const ENTWURF_TOOL_GUIDANCE = guidance.tools;
 /** Static next-step text appended to these entwurf_v2 rejections; the decider and wire ids stay code-owned. */
 export const ENTWURF_REJECT_HINTS = guidance.rejectHints;
+/** Static next-step text in these entwurf_resume_call rejections; the verb, the launch-stage mux hints and the shared ACP model hint stay code-owned. */
+export const ENTWURF_RESUME_REJECT_HINTS = guidance.resumeRejectHints;
 export const ENTWURF_GUIDANCE_VERSION = Object.freeze({
 	schemaVersion: guidance.schemaVersion,
 	revision: guidance.revision,

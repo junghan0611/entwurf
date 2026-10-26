@@ -491,6 +491,17 @@
 			"timeoutSeconds": 60,
 			"signature": "[QK:V2RESUME-CC-MARKER-BINDING-READ]",
 			"signatureSource": "pi-extensions/lib/entwurf-v2-visible-resume.test.ts"
+		},
+		{
+			"claim": "V2RESUME-REJECT-HINTS-FROM-ROOT",
+			"title": "one static rejection hint is re-authored as a code literal instead of the root ENTWURF.json text, so the reader stays exact while the rendered rejection no longer carries it",
+			"subject": "pi-extensions/lib/entwurf-v2-visible-resume.ts",
+			"find": ["\t\"target-locked\": ENTWURF_RESUME_REJECT_HINTS[\"target-locked\"],"],
+			"replace": ["\t\"target-locked\": \"another resume or dispatch holds this citizen's lock\","],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:V2RESUME-REJECT-HINTS-FROM-ROOT]",
+			"signatureSource": "pi-extensions/lib/entwurf-v2-visible-resume.test.ts"
 		}
 	]
 }

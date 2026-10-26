@@ -3446,7 +3446,7 @@ let manifestCount: number;
 		"acp-stream-hooks": 10,
 		"acp-usage-accounting": 12,
 		"acp-vendor-rejection": 4,
-		"agent-guidance": 9,
+		"agent-guidance": 10,
 		"agy-permission": 6,
 		"bridge-boot-resume": 5,
 		"bridge-command-boot": 12,
@@ -3454,7 +3454,7 @@ let manifestCount: number;
 		"cc-retire-request": 15,
 		"entwurf-v2-retire": 32,
 		"capability-cache": 3,
-		"capability-bundle-reach": 2,
+		"capability-bundle-reach": 3,
 		"codex-app-server-launch": 10,
 		"codex-caller-seat": 28,
 		"pi-retire-request": 6,
@@ -3521,7 +3521,7 @@ let manifestCount: number;
 		"source-install": 8,
 		"typing-call-fence": 1,
 		"v2-surface": 15,
-		"v2-visible-resume": 40,
+		"v2-visible-resume": 41,
 		"win32-preview": 19,
 	};
 	const laneTally: Record<string, number> = {};
