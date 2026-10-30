@@ -3467,6 +3467,7 @@ let manifestCount: number;
 		"compaction-send-guard": 7,
 		"control-socket-disconnect": 4,
 		"demo-reproducibility": 12,
+		"dev-gate-dispatch": 9,
 		"copilot-birth": 19,
 		"copilot-launch": 14,
 		"pi-launch": 9,

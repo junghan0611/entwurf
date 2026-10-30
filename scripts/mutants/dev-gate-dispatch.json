@@ -1,0 +1,109 @@
+{
+	"schemaVersion": 1,
+	"lane": "dev-gate-dispatch",
+	"mutants": [
+		{
+			"claim": "BY-NAME-GATE-PREFIX",
+			"title": "the default arm drops its gate-prefix guard, so every function run.sh defines answers as a command by name — `entwurf usage` runs usage at rc 0, and the install writers are one spelling away",
+			"subject": "run.sh",
+			"find": ["    if [[ $cmd =~ ^(check|smoke)-[a-z0-9-]+$ ]] \\"],
+			"replace": ["    if true \\"],
+			"gate": ["bash", "run.sh", "check-install-surface"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:BY-NAME-GATE-PREFIX]",
+			"signatureSource": "scripts/check-install-surface.ts"
+		},
+		{
+			"claim": "BY-NAME-GATE-DEFINED",
+			"title": "the default arm stops asking whether the gate function exists, so a misspelled gate dies as a bash command-not-found (rc 127) instead of the Unknown command it always was",
+			"subject": "run.sh",
+			"find": [
+				"      && gate_decl=$(shopt -s extdebug; declare -F \"$gate_fn\") \\\n      && [[ ${gate_decl#\"$gate_fn \"} =~ ^[1-9][0-9]*\\ (.*)$ ]] \\\n      && [ \"${BASH_REMATCH[1]}\" = \"${BASH_SOURCE[0]}\" ]; then"
+			],
+			"replace": ["      ; then"],
+			"gate": ["bash", "run.sh", "check-install-surface"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:BY-NAME-GATE-DEFINED]",
+			"signatureSource": "scripts/check-install-surface.ts"
+		},
+		{
+			"claim": "BY-NAME-GATE-DEFINED-HERE",
+			"title": "the default arm admits any function bash can see, so an exported BASH_FUNC_check_* in the caller's environment becomes an entwurf command that run.sh never defined",
+			"subject": "run.sh",
+			"find": [
+				"      && [[ ${gate_decl#\"$gate_fn \"} =~ ^[1-9][0-9]*\\ (.*)$ ]] \\\n      && [ \"${BASH_REMATCH[1]}\" = \"${BASH_SOURCE[0]}\" ]; then"
+			],
+			"replace": ["      ; then"],
+			"gate": ["bash", "run.sh", "check-install-surface"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:BY-NAME-GATE-DEFINED-HERE]",
+			"signatureSource": "scripts/check-install-surface.ts"
+		},
+		{
+			"claim": "BY-NAME-GATE-RUNS",
+			"title": "the admitted gate is never called: every by-name gate reports success with no output, and the whole dev floor goes green without running",
+			"subject": "run.sh",
+			"find": ["      \"$gate_fn\""],
+			"replace": ["      :"],
+			"gate": ["bash", "run.sh", "check-install-surface"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:BY-NAME-GATE-RUNS]",
+			"signatureSource": "scripts/check-install-surface.ts"
+		},
+		{
+			"claim": "BY-NAME-GATE-NO-ARGV",
+			"title": "the by-name gate is handed run.sh's whole argv, its own name included, where the explicit arm it replaced called it with none",
+			"subject": "run.sh",
+			"find": ["      \"$gate_fn\""],
+			"replace": ["      \"$gate_fn\" \"$@\""],
+			"gate": ["bash", "run.sh", "check-install-surface"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:BY-NAME-GATE-NO-ARGV]",
+			"signatureSource": "scripts/check-install-surface.ts"
+		},
+		{
+			"claim": "BY-NAME-GATE-STOPS",
+			"title": "the gate is called under `|| exit $?`, which reads like status propagation but switches errexit off inside it: a gate runs on past its first failure and returns the status of whatever ran last",
+			"subject": "run.sh",
+			"find": ["      \"$gate_fn\""],
+			"replace": ["      \"$gate_fn\" || exit $?"],
+			"gate": ["bash", "run.sh", "check-install-surface"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:BY-NAME-GATE-STOPS]",
+			"signatureSource": "scripts/check-install-surface.ts"
+		},
+		{
+			"claim": "DEV-GATE-BY-NAME-NOT-EMITTED",
+			"title": "a gate reached only by name is added to the bridge build include, and a case-label reader no longer sees it: the tarball ships a dev gate leaf while S4 stays green",
+			"subject": "mcp/entwurf-bridge/tsconfig.build.json",
+			"find": ["\t\t\"../../scripts/peer-facts.ts\","],
+			"replace": ["\t\t\"../../scripts/peer-facts.ts\",\n\t\t\"../../scripts/check-peer-facts.ts\","],
+			"gate": ["bash", "run.sh", "check-install-surface"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:DEV-GATE-BY-NAME-NOT-EMITTED]",
+			"signatureSource": "scripts/check-install-surface.ts"
+		},
+		{
+			"claim": "DEV-GATE-BY-NAME-READ",
+			"title": "the by-name reader narrows to check_ functions, so every smoke gate leaves S4's view and the bloat check passes on the rows it still sees",
+			"subject": "scripts/check-install-surface.ts",
+			"find": ["\tif (/^(?:check|smoke)_[a-z0-9_]+$/.test(fn) && !targets.has(cmd)) byNameGates.set(cmd, ts);"],
+			"replace": ["\tif (/^check_[a-z0-9_]+$/.test(fn) && !targets.has(cmd)) byNameGates.set(cmd, ts);"],
+			"gate": ["bash", "run.sh", "check-install-surface"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:DEV-GATE-BY-NAME-READ]",
+			"signatureSource": "scripts/check-install-surface.ts"
+		},
+		{
+			"claim": "DEV-GATE-BY-NAME-LEAVES",
+			"title": "the by-name reader keeps every gate name but drops the leaves they run, so the bloat check passes on empty rows and a gate leaf can ride into the tarball",
+			"subject": "scripts/check-install-surface.ts",
+			"find": ["\tif (/^(?:check|smoke)_[a-z0-9_]+$/.test(fn) && !targets.has(cmd)) byNameGates.set(cmd, ts);"],
+			"replace": ["\tif (/^(?:check|smoke)_[a-z0-9_]+$/.test(fn) && !targets.has(cmd)) byNameGates.set(cmd, []);"],
+			"gate": ["bash", "run.sh", "check-install-surface"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:DEV-GATE-BY-NAME-LEAVES]",
+			"signatureSource": "scripts/check-install-surface.ts"
+		}
+	]
+}

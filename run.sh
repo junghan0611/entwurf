@@ -7573,15 +7573,6 @@ case "$cmd" in
     shift || true
     release_gate "$@"
     ;;
-  check-bridge)
-    check_bridge
-    ;;
-  check-model-lock)
-    check_model_lock
-    ;;
-  check-shell-quote)
-    check_shell_quote
-    ;;
   check-install-surface)
     # structural half of the node_modules strip-types fence: run_ts is the only crossing,
     # every operator subcommand has a compiled twin, bin wrappers branch, dev gates stay out
@@ -7590,60 +7581,6 @@ case "$cmd" in
     # shared release skill, the stable bridge bin, and NO packages key (#110).
     # check-pack-install owns the dynamic half (it drives the installed commands).
     run_ts scripts/check-install-surface.ts
-    ;;
-  check-entwurf-session-identity)
-    check_entwurf_session_identity
-    ;;
-  check-meta-session)
-    check_meta_session
-    ;;
-  check-meta-v3-record)
-    check_meta_v3_record
-    ;;
-  check-mailbox-receipt-state)
-    check_mailbox_receipt_state
-    ;;
-  check-entwurf-capabilities)
-    check_entwurf_capabilities
-    ;;
-  check-harness-admission-parity)
-    check_harness_admission_parity
-    ;;
-  check-omp-fresh-preflight)
-    check_omp_fresh_preflight
-    ;;
-  smoke-omp-fresh-live)
-    smoke_omp_fresh_live
-    ;;
-  smoke-pi-durable-fresh-live)
-    smoke_pi_durable_fresh_live
-    ;;
-  check-capability-bundle-reach)
-    check_capability_bundle_reach
-    ;;
-  check-bridge-delivery)
-    check_bridge_delivery
-    ;;
-  smoke-pi-attach)
-    smoke_pi_attach
-    ;;
-  check-meta-mailbox-state-write)
-    check_meta_mailbox_state_write
-    ;;
-  check-meta-receiver-marker)
-    check_meta_receiver_marker
-    ;;
-  check-meta-hook-session-switch)
-    check_meta_hook_session_switch
-    ;;
-  check-meta-identity-consumers)
-    check_meta_identity_consumers
-    ;;
-  check-hook-launch-topology)
-    check_hook_launch_topology
-    ;;
-  check-copilot-birth-hook)
-    check_copilot_birth_hook
     ;;
   check-omp-birth-hook)
     # #87 gate: the OMP BIRTH path without omp. Drives the real assembler into a temp dir,
@@ -7677,186 +7614,6 @@ case "$cmd" in
     # Inputs as check-pi-durable-contact; absent → SKIP 97.
     run_ts scripts/check-pi-durable-receive.ts
     ;;
-  check-copilot-statusline)
-    check_copilot_statusline
-    ;;
-  check-codex-app-server-launch)
-    check_codex_app_server_launch
-    ;;
-  check-copilot-launch)
-    check_copilot_launch
-    ;;
-  check-pi-launch)
-    check_pi_launch
-    ;;
-  check-copilot-receive-arm)
-    check_copilot_receive_arm
-    ;;
-  check-meta-capability-source)
-    check_meta_capability_source
-    ;;
-  check-socket-probe)
-    check_socket_probe
-    ;;
-  check-project-trust-handler)
-    check_project_trust_handler
-    ;;
-  check-entwurf-v2-contract)
-    check_entwurf_v2_contract
-    ;;
-  check-entwurf-v2-send)
-    check_entwurf_v2_send
-    ;;
-  check-entwurf-v2-runner)
-    check_entwurf_v2_runner
-    ;;
-  check-control-send-receipt)
-    check_control_send_receipt
-    ;;
-  check-control-retire)
-    check_control_retire
-    ;;
-  check-pi-retire-request)
-    check_pi_retire_request
-    ;;
-  check-cc-retire-pidfd)
-    check_cc_retire_pidfd
-    ;;
-  check-cc-retire-request)
-    check_cc_retire_request
-    ;;
-  check-retirement-event)
-    check_retirement_event
-    ;;
-  check-entwurf-v2-retire)
-    check_entwurf_v2_retire
-    ;;
-  check-win32-preview)
-    check_win32_preview
-    ;;
-  check-entwurf-v2-native-push)
-    check_entwurf_v2_native_push
-    ;;
-  check-native-push-paused)
-    check_native_push_paused
-    ;;
-  check-chain-terminus-publication)
-    check_chain_terminus_publication
-    ;;
-  check-entwurf-control-rpc)
-    check_entwurf_control_rpc
-    ;;
-  check-compaction-send-guard)
-    check_compaction_send_guard
-    ;;
-  check-entwurf-v2-production)
-    check_entwurf_v2_production
-    ;;
-  check-entwurf-v2-surface)
-    check_entwurf_v2_surface
-    ;;
-  check-entwurf-bridge-boot)
-    check_entwurf_bridge_boot
-    ;;
-  check-entwurf-bridge-pi-free)
-    check_entwurf_bridge_pi_free
-    ;;
-  check-entwurf-resume-args)
-    check_entwurf_resume_args
-    ;;
-  check-acp-foreground-only)
-    check_acp_foreground_only
-    ;;
-  check-fresh-call-provider)
-    check_fresh_call_provider
-    ;;
-  check-acp-set-model-readback)
-    check_acp_set_model_readback
-    ;;
-  check-resume-launch-identity)
-    check_resume_launch_identity
-    ;;
-  check-mux-placement)
-    check_mux_placement
-    ;;
-  check-mux-placement-tmux)
-    check_mux_placement_tmux
-    ;;
-  check-mux-launch)
-    check_mux_launch
-    ;;
-  check-mux-fresh-call)
-    check_mux_fresh_call
-    ;;
-  check-agent-guidance-beside)
-    check_agent_guidance_beside
-    ;;
-  check-pi-durable-beside)
-    check_pi_durable_beside
-    ;;
-  check-pi-durable-carrier)
-    check_pi_durable_carrier
-    ;;
-  check-pi-durable-native-module)
-    check_pi_durable_native_module
-    ;;
-  check-remote-pair-beside)
-    check_remote_pair_beside
-    ;;
-  check-mux-resume-call)
-    check_mux_resume_call
-    ;;
-  check-mux-parent-artifact)
-    check_mux_parent_artifact
-    ;;
-  check-mux-launcher-fence)
-    check_mux_launcher_fence
-    ;;
-  check-typing-call-fence)
-    check_typing_call_fence
-    ;;
-  check-entwurf-v2-visible-resume)
-    check_entwurf_v2_visible_resume
-    ;;
-  smoke-mux-fresh-call-live)
-    smoke_mux_fresh_call_live
-    ;;
-  smoke-mux-lifecycle-live)
-    smoke_mux_lifecycle_live
-    ;;
-  check-mux-launch-tmux)
-    check_mux_launch_tmux
-    ;;
-  smoke-entwurf-v2-matrix-live)
-    smoke_entwurf_v2_matrix_live
-    ;;
-  smoke-acp-raw-turn-live)
-    smoke_acp_raw_turn_live
-    ;;
-  smoke-acp-overlay-live)
-    smoke_acp_overlay_live
-    ;;
-  smoke-acp-memory-containment-live)
-    smoke_acp_memory_containment_live
-    ;;
-  smoke-acp-provider-live)
-    smoke_acp_provider_live
-    ;;
-  smoke-acp-long-turn-live)
-    smoke_acp_long_turn_live
-    ;;
-  smoke-acp-session-reuse-live)
-    smoke_acp_session_reuse_live
-    ;;
-  smoke-acp-mcp-live)
-    smoke_acp_mcp_live
-    ;;
-  smoke-acp-skill-live)
-    smoke_acp_skill_live
-    ;;
-  smoke-acp-bundled-mcp-live)
-    smoke_acp_bundled_mcp_live
-    ;;
   smoke-omp-receive-live)
     # #87 bundle B — the acceptance that makes omp's one-way garden executable.
     # Reads the capability registry and reports its own PASS/SKIP/FAIL; see the
@@ -7872,45 +7629,6 @@ case "$cmd" in
     #   LIVE=1 ./run.sh smoke-entwurf-chain-live
     run_ts scripts/smoke-entwurf-chain-live.ts
     ;;
-  smoke-acp-v2-send-live)
-    smoke_acp_v2_send_live
-    ;;
-  smoke-acp-carrier-augment-live)
-    smoke_acp_carrier_augment_live
-    ;;
-  smoke-acp-rgg-live)
-    smoke_acp_rgg_live
-    ;;
-  smoke-acp-cortex-live)
-    smoke_acp_cortex_live
-    ;;
-  smoke-acp-socket-citizen-live)
-    smoke_acp_socket_citizen_live
-    ;;
-  check-control-socket-path)
-    check_control_socket_path
-    ;;
-  check-meta-listing)
-    check_meta_listing
-    ;;
-  check-meta-facts)
-    check_meta_facts
-    ;;
-  check-herdr-activation)
-    check_herdr_activation
-    ;;
-  check-herdr-runtime-bootstrap)
-    check_herdr_runtime_bootstrap
-    ;;
-  check-herdr-plugin-profile)
-    check_herdr_plugin_profile
-    ;;
-  check-herdr-plugin-build)
-    check_herdr_plugin_build
-    ;;
-  smoke-herdr-plugin-build-live)
-    smoke_herdr_plugin_build_live
-    ;;
   smoke-herdr-raw-install-live)
     # #118 홉 1: the FIRST USER PATH. Every other herdr gate proves the plugin against a
     # source we control — a stub, or the product remote redirected by git insteadOf to a
@@ -7924,51 +7642,6 @@ case "$cmd" in
     # forwards arguments drops it for itself. Without it `--ref` arrives behind the gate name.
     shift
     (cd "$REPO_DIR" && bash scripts/smoke-herdr-raw-install-live.sh "$@")
-    ;;
-  check-peer-facts)
-    check_peer_facts
-    ;;
-  check-herdr-plugin)
-    check_herdr_plugin
-    ;;
-  check-entwurf-fact-provider)
-    check_entwurf_fact_provider
-    ;;
-  check-herdr-placement)
-    check_herdr_placement
-    ;;
-  check-herdr-fresh-call)
-    check_herdr_fresh_call
-    ;;
-  check-herdr-sandbox)
-    check_herdr_sandbox
-    ;;
-  check-herdr-supply)
-    check_herdr_supply
-    ;;
-  check-fresh-call-dispatch)
-    check_fresh_call_dispatch
-    ;;
-  smoke-herdr-fresh-call-live)
-    smoke_herdr_fresh_call_live
-    ;;
-  check-entwurf-peers-surface)
-    check_entwurf_peers_surface
-    ;;
-  check-entwurf-self-address)
-    check_entwurf_self_address
-    ;;
-  check-entwurf-deliverability)
-    check_entwurf_deliverability
-    ;;
-  check-native-push-adapter)
-    check_native_push_adapter
-    ;;
-  check-native-push-register)
-    check_native_push_register
-    ;;
-  check-agy-sender-identity)
-    check_agy_sender_identity
     ;;
   new-session-id)
     # Print one fresh garden sessionId (SSOT: generateSessionId). #50 C2 retired
@@ -8729,104 +8402,8 @@ case "$cmd" in
     shift || true
     (cd "$REPO_DIR" && python3 scripts/check-keyset-overlap.py "$@")
     ;;
-  check-package-source-routing)
-    check_package_source_routing
-    ;;
-  check-dep-versions)
-    check_dep_versions
-    ;;
-  check-node-floor-coherence)
-    check_node_floor_coherence
-    ;;
-  check-claude-floor-coherence)
-    check_claude_floor_coherence
-    ;;
-  check-install-preflight)
-    check_install_preflight
-    ;;
-  check-pi-import-surface)
-    check_pi_import_surface
-    ;;
-  check-env-namespace)
-    check_env_namespace
-    ;;
-  check-pi-runtime-version)
-    check_pi_runtime_version
-    ;;
-  check-pi-preflight)
-    check_pi_preflight
-    ;;
-  check-auth-boundary)
-    check_auth_boundary
-    ;;
-  check-acp-provider-surface)
-    check_acp_provider_surface
-    ;;
-  check-acp-sdk-surface)
-    check_acp_sdk_surface
-    ;;
-  check-pi-queue-oracle)
-    check_pi_queue_oracle
-    ;;
-  check-remote-pair-installed-audit)
-    check_remote_pair_installed_audit
-    ;;
-  check-demo-reproducibility)
-    check_demo_reproducibility
-    ;;
-  check-tests-beside-behavior)
-    check_tests_beside_behavior
-    ;;
-  check-acp-overlay)
-    check_acp_overlay
-    ;;
-  check-acp-tool-surface)
-    check_acp_tool_surface
-    ;;
-  check-acp-event-mapper)
-    check_acp_event_mapper
-    ;;
-  check-acp-usage-accounting)
-    check_acp_usage_accounting
-    ;;
-  check-acp-stop-reason)
-    check_acp_stop_reason
-    ;;
-  check-acp-prompt-lifecycle)
-    check_acp_prompt_lifecycle
-    ;;
-  check-acp-vendor-rejection)
-    check_acp_vendor_rejection
-    ;;
-  check-acp-launch-namespace)
-    check_acp_launch_namespace
-    ;;
-  check-acp-stream-hooks)
-    check_acp_stream_hooks
-    ;;
-  check-acp-prompt-builder)
-    check_acp_prompt_builder
-    ;;
-  check-acp-config)
-    check_acp_config
-    ;;
-  check-acp-session-store)
-    check_acp_session_store
-    ;;
-  check-acp-backend-preflight)
-    check_acp_backend_preflight
-    ;;
-  check-acp-session-reuse)
-    check_acp_session_reuse
-    ;;
   check-release-gate-outcomes)
     run_ts scripts/check-release-gate-outcomes.ts
-    ;;
-  check-acp-carrier-augment)
-    check_acp_carrier_augment
-    ;;
-  check-acp-cortex)
-    check_acp_cortex
     ;;
   check-fresh-cut-gate)
     # SOURCE cell of the generation-boundary proof: a host whose store the live
@@ -8846,9 +8423,6 @@ case "$cmd" in
   check-pi-bridge-sender)
     shift || true
     run_ts scripts/check-pi-bridge-sender.ts "$@"
-    ;;
-  check-pi-mcp-register)
-    check_pi_mcp_register
     ;;
   check-pi-mcp-bridge)
     shift || true
@@ -8873,24 +8447,6 @@ case "$cmd" in
   smoke-codex-birth)
     shift || true
     (cd "$REPO_DIR" && bash scripts/smoke-codex-birth.sh "$@")
-    ;;
-  check-pack)
-    check_pack
-    ;;
-  check-pack-pin-matcher)
-    check_pack_pin_matcher
-    ;;
-  check-pack-argv-matcher)
-    check_pack_argv_matcher
-    ;;
-  check-pack-win32-carrier)
-    check_pack_win32_carrier
-    ;;
-  check-pack-consumer-roots)
-    check_pack_consumer_roots
-    ;;
-  check-pack-install)
-    check_pack_install
     ;;
   check-install-container)
     # 0.12.8 (#51 gate C): the Linux artifact-CONSUMER lane. check-pack-install is
@@ -8941,8 +8497,23 @@ case "$cmd" in
     usage
     ;;
   *)
-    echo "Unknown command: $cmd" >&2
-    usage
-    exit 1
+    # A dev gate with nothing to say beyond its own name is dispatched by that name: `check-x` runs
+    # `check_x`, the convention check_tests_beside_behavior already reads back — so a top-level
+    # check_/smoke_ function in this file IS a public dev command. The prefix guard keeps every
+    # other function (usage, run_ts, the install writers) from answering as one; the provenance
+    # test admits only a function THIS file defined (extdebug reports `<line> <source>`, and an
+    # imported BASH_FUNC_* reads `0 environment`), switched on inside the lookup's own subshell.
+    # An explicit arm above always wins; anything else stays the Unknown command it always was.
+    gate_fn=${cmd//-/_} gate_decl=
+    if [[ $cmd =~ ^(check|smoke)-[a-z0-9-]+$ ]] \
+      && gate_decl=$(shopt -s extdebug; declare -F "$gate_fn") \
+      && [[ ${gate_decl#"$gate_fn "} =~ ^[1-9][0-9]*\ (.*)$ ]] \
+      && [ "${BASH_REMATCH[1]}" = "${BASH_SOURCE[0]}" ]; then
+      "$gate_fn"
+    else
+      echo "Unknown command: $cmd" >&2
+      usage
+      exit 1
+    fi
     ;;
 esac

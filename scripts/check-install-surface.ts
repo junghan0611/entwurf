@@ -17,7 +17,10 @@
  *        compiled twin declared in tsconfig.build.json. The exact miss that killed the three.
  *   S3a  no npm bin points at a raw .ts at all; S3b every .sh bin that execs one branches.
  *   S4   dev-only gates are NOT emitted — the tarball ships operator surfaces, not 70+ gate
- *        leaves (a build bloat regression is as real as a missing artifact).
+ *        leaves (a build bloat regression is as real as a missing artifact). A gate with no
+ *        explicit arm is dispatched by its own name (`check-x` → `check_x`, run.sh's default
+ *        arm), so S4 reads those from the function definitions; a case-label reader alone would
+ *        lose every one of them and stay green on what it no longer sees.
  *   S5   no offline smoke carries an obvious write to the operator's real $HOME, and any
  *        smoke that swaps HOME into a sandbox swaps XDG_DATA_HOME with it — moving HOME
  *        alone still writes real install-state below the inherited XDG root, which is
@@ -39,6 +42,11 @@
  *        absent. S7c also pins that the tracked settings carry NO packages key — entwurf's own
  *        checkout self-registers through user scope alone (#110).
  *   S6   tracked first-party text sources are NUL-free (a stray NUL makes git show nothing).
+ *   S8   the by-name dispatch answers only for a gate function run.sh itself defined: a run.sh
+ *        function that is not a gate (`usage`), a gate name nothing defines, one only an
+ *        exported BASH_FUNC_* defines, and one only a comment/heredoc spells all stay the
+ *        Unknown command; an admitted gate runs once, with no argv, its streams and exact exit
+ *        status intact, and stops at its first failure.
  *
  * HONEST SCOPE — what a green run does and does not mean. S1-S4 are structural: they read the
  * dispatch graph and the build manifest, so they hold for any entrypoint written in this repo's
@@ -50,11 +58,16 @@
  * and not claimed here. Every S was mutation-checked, including bypasses found in
  * review — do not add an S without proving it fails on the bug it names.
  *
- * Read-only: parses sources, spawns nothing.
+ * Read-only for the repo: parses sources; spawns git, and S8's bounded bash probes — the
+ * checkout's run.sh on the Unknown path, a byte copy of run.sh in a tmp dir with one fixture gate
+ * defined ahead of the unchanged dispatch, and `bash -c` witnesses that an exported function
+ * really imports. Each probe gets PATH plus at most the BASH_FUNC_* its cell names, never the
+ * host environment.
  */
 
-import { execFileSync } from "node:child_process";
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { execFileSync, spawnSync } from "node:child_process";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -171,6 +184,13 @@ function subcommandTargets(): Map<string, string[]> {
 
 const targets = subcommandTargets();
 const isDevGate = (cmd: string): boolean => cmd.startsWith("check-") || cmd.startsWith("smoke-");
+
+/** Gates no explicit arm claims: run.sh's default arm reaches them by name, check-x → check_x. */
+const byNameGates = new Map<string, string[]>();
+for (const [fn, ts] of functionTargets()) {
+	const cmd = fn.replace(/_/g, "-");
+	if (/^(?:check|smoke)_[a-z0-9_]+$/.test(fn) && !targets.has(cmd)) byNameGates.set(cmd, ts);
+}
 const operatorCmds = [...targets].filter(([cmd, ts]) => !isDevGate(cmd) && ts.length > 0);
 
 {
@@ -188,14 +208,153 @@ const operatorCmds = [...targets].filter(([cmd, ts]) => !isDevGate(cmd) && ts.le
 			.join("\n\n"),
 	);
 
-	const bloat = [...targets].flatMap(([cmd, tss]) =>
+	// Counted from the raw text, not through functionTargets, so a reader that stopped seeing gate
+	// functions shrinks this set against an independent number instead of passing on fewer rows.
+	const gateFnDefs = [...RUN_SH.matchAll(/^((?:check|smoke)_[a-z0-9_]+)\(\)\s*\{/gm)].map((m) => m[1] as string);
+	const unaccounted = gateFnDefs.filter((fn) => {
+		const cmd = fn.replace(/_/g, "-");
+		return !targets.has(cmd) && !byNameGates.has(cmd);
+	});
+	ok(
+		`[QK:DEV-GATE-BY-NAME-READ] S4 reads every gate function: ${byNameGates.size} dispatched by name + the rest under an explicit arm`,
+		byNameGates.size > 0 && unaccounted.length === 0,
+		unaccounted.length ? `gate functions S4 cannot see: ${unaccounted.join(", ")}` : "no gate is dispatched by name",
+	);
+
+	// Names alone are not coverage: a reader that kept every name but lost its leaves would pass
+	// the bloat check on empty rows. Two gates the by-name arm reaches, with the leaf each one's
+	// run.sh function runs (read off run.sh by hand, not off this reader).
+	const knownLeaves: [cmd: string, leaf: string][] = [
+		["check-peer-facts", "check-peer-facts"],
+		["smoke-herdr-plugin-build-live", "smoke-herdr-plugin-build-live"],
+	];
+	const lostLeaves = knownLeaves.filter(([cmd, leaf]) => !(byNameGates.get(cmd) ?? []).includes(leaf));
+	ok(
+		"[QK:DEV-GATE-BY-NAME-LEAVES] S4 reads the run_ts leaf of a by-name gate, not only its name",
+		lostLeaves.length === 0,
+		lostLeaves.map(([cmd, leaf]) => `'${cmd}' should reach scripts/${leaf}.ts`).join("\n"),
+	);
+
+	const bloat = [...targets, ...byNameGates].flatMap(([cmd, tss]) =>
 		isDevGate(cmd) ? tss.filter((ts) => emitted.has(ts)).map((ts) => [cmd, ts]) : [],
 	);
 	ok(
-		"S4: dev-only gates are not emitted into the tarball",
+		"[QK:DEV-GATE-BY-NAME-NOT-EMITTED] S4: dev-only gates are not emitted into the tarball (explicit arms and by-name gates)",
 		bloat.length === 0,
 		bloat.map(([cmd, ts]) => `'${cmd}' is a dev gate but scripts/${ts}.ts is in the build include`).join("\n"),
 	);
+}
+
+// ─── S8 — the by-name dispatch answers only for a defined gate function ──────────────
+{
+	// Only PATH crosses: the probes end on the Unknown path, and no host identity or secret has a
+	// reason to reach them.
+	const probe = (cmd: string) =>
+		spawnSync("bash", [path.join(REPO, "run.sh"), cmd], {
+			cwd: REPO,
+			encoding: "utf8",
+			env: { PATH: process.env.PATH ?? "/usr/bin:/bin" },
+		});
+	const isUnknown = (cmd: string): boolean => {
+		const r = probe(cmd);
+		return r.status === 1 && r.stderr === `Unknown command: ${cmd}\n` && r.stdout.startsWith("Usage:\n");
+	};
+	ok(
+		"[QK:BY-NAME-GATE-PREFIX] S8a a run.sh function that is not a gate (`usage`) is still the Unknown command, never run by name",
+		isUnknown("usage"),
+	);
+	ok(
+		"[QK:BY-NAME-GATE-DEFINED] S8b a gate name no function defines is still the Unknown command (rc 1 + usage), never a bash command-not-found",
+		isUnknown("check-no-such-gate"),
+	);
+
+	// A byte copy of run.sh with one fixture gate defined ahead of the dispatch, which stays
+	// exactly the production text. The gate fails at its third line, so a dispatcher that loses
+	// errexit runs the marker after it; a comment and a heredoc spell two more gate names that
+	// nothing defines.
+	const dir = mkdtempSync(path.join(os.tmpdir(), "entwurf-by-name-"));
+	try {
+		// Bash parameter expansion, escaped so the string holds the literal `${1:-}` run.sh carries.
+		const DISPATCH = `\ncmd=\${1:-}\n`;
+		if (RUN_SH.split(DISPATCH).length !== 2)
+			throw new Error(`S8: run.sh no longer has exactly one \`cmd=\${1:-}\` line`);
+		const fixture = [
+			"check_dispatch_probe() {",
+			"  printf 'argc=%s\\n' \"$#\"",
+			"  echo probe-stderr >&2",
+			"  (exit 7)",
+			"  echo MARK-AFTER-FAILURE",
+			"}",
+			"# check_comment_only() { :; }",
+			": <<'TEXT_ONLY'",
+			"check_heredoc_only() { :; }",
+			"TEXT_ONLY",
+		].join("\n");
+		const copy = path.join(dir, "run.sh");
+		writeFileSync(copy, RUN_SH.replace(DISPATCH, `\n${fixture}${DISPATCH}`));
+		const run = (argv: string[], extraEnv: Record<string, string> = {}) =>
+			spawnSync("bash", [copy, ...argv], {
+				cwd: dir,
+				encoding: "utf8",
+				env: { PATH: process.env.PATH ?? "/usr/bin:/bin", ...extraEnv },
+			});
+		const unknownIn = (cmd: string, extraEnv: Record<string, string> = {}): boolean => {
+			const r = run([cmd], extraEnv);
+			return r.status === 1 && r.stderr === `Unknown command: ${cmd}\n` && r.stdout.startsWith("Usage:\n");
+		};
+		const probe = run(["check-dispatch-probe", "extra-a", "extra-b"]);
+		ok(
+			"[QK:BY-NAME-GATE-RUNS] S8c an admitted gate runs exactly once: its stdout/stderr pass through and its exact nonzero status (7) is run.sh's",
+			probe.status === 7 && probe.stdout.split("argc=").length === 2 && probe.stderr === "probe-stderr\n",
+			`rc=${probe.status} stdout=${JSON.stringify(probe.stdout)} stderr=${JSON.stringify(probe.stderr)}`,
+		);
+		ok(
+			"[QK:BY-NAME-GATE-NO-ARGV] S8d the gate is called with no arguments, as the explicit arm it replaced did",
+			probe.stdout.startsWith("argc=0\n"),
+			`stdout=${JSON.stringify(probe.stdout)}`,
+		);
+		ok(
+			"[QK:BY-NAME-GATE-STOPS] S8e the gate stops at its first failure: the line after it never runs",
+			!probe.stdout.includes("MARK-AFTER-FAILURE") && probe.status === 7,
+			`rc=${probe.status} stdout=${JSON.stringify(probe.stdout)}`,
+		);
+		// An exported function for `fn`, plus the witness that bash really imports that spelling —
+		// without it, a malformed variable would leave no function to refuse and a cell would pass
+		// on nothing.
+		const exportFn = (fn: string): { env: Record<string, string>; imported: boolean } => {
+			const env = { [`BASH_FUNC_${fn}%%`]: "() {  echo env-function-ran\n}" };
+			const w = spawnSync("bash", ["-c", fn], {
+				encoding: "utf8",
+				env: { PATH: process.env.PATH ?? "/usr/bin:/bin", ...env },
+			});
+			return { env, imported: w.stdout === "env-function-ran\n" };
+		};
+		const envOnly = exportFn("check_env_only");
+		ok(
+			"[QK:BY-NAME-GATE-DEFINED-HERE] S8f a gate only an exported environment function defines is the Unknown command",
+			envOnly.imported && unknownIn("check-env-only", envOnly.env),
+			`import witness: ${envOnly.imported}`,
+		);
+		// The same refusal for a name run.sh spells only in a comment or a heredoc, with a real
+		// exported function of that name present — the text must not vouch for it.
+		const textOnly = ["check_comment_only", "check_heredoc_only"].map((fn) => {
+			const e = exportFn(fn);
+			return { fn, imported: e.imported, unknown: unknownIn(fn.replace(/_/g, "-"), e.env) };
+		});
+		ok(
+			"S8g an exported function whose name run.sh spells only in a comment or a heredoc is the Unknown command",
+			textOnly.every((c) => c.imported && c.unknown),
+			JSON.stringify(textOnly),
+		);
+		const shadowed = run(["check-dispatch-probe"], { "BASH_FUNC_check_dispatch_probe%%": "() {  exit 0\n}" });
+		ok(
+			"S8h an environment function with the name of a gate run.sh defines does not replace it",
+			shadowed.status === 7 && shadowed.stdout === "argc=0\n",
+			`rc=${shadowed.status} stdout=${JSON.stringify(shadowed.stdout)}`,
+		);
+	} finally {
+		rmSync(dir, { recursive: true, force: true });
+	}
 }
 
 // ─── S3 — no npm bin can reach a raw .ts when installed ──────────────────────────────
