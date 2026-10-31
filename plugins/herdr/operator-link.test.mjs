@@ -276,6 +276,28 @@ describe("herdr operator link (#153)", () => {
 		expect(snapshot(h)).toEqual(before);
 	});
 
+	it("[QK:OPL-LEDGER-ACTIVE-ONLY] a certified but unsettled ledger (activating, pi pending) refuses expose before any write", async () => {
+		const h = await host();
+		const layout = h.mods.activation.resolveActivationLayout(h.env);
+		h.mods.activation.writeLedger(
+			layout,
+			2,
+			h.mods.activation.ledgerBody({
+				phase: "activating",
+				runtimeRoot: h.activeDir,
+				artifactIdentity: IDENTITY,
+				roots: h.mods.activation.resolveComponentRoots(h.env),
+				states: { pi: "pending" },
+			}),
+		);
+		// The premise: the ledger reader certifies this phase, so only the settled-phase judgement refuses it.
+		expect(h.mods.activation.readCertifiedLedger(layout).phase).toBe("activating");
+		const before = snapshot(h);
+		expect(refusal(() => expose(h))).toBe("operator-link-activation-not-settled");
+		expect(snapshot(h)).toEqual(before);
+		expect(ledgerVersion(h)).toBe(2);
+	});
+
 	it("[QK:OPL-BIN-DIR-CANONICAL] a bin dir reached through an aliased PARENT is not its own realpath and is refused", async () => {
 		const h = await host();
 		const realParent = path.join(h.dir, "real-parent");
@@ -329,6 +351,20 @@ describe("herdr operator link (#153)", () => {
 			expect(fs.existsSync(cwdRan)).toBe(false);
 			expect(snapshot(c)).toEqual(cBefore);
 		}
+	});
+
+	it("[QK:OPL-BIN-DIR-ON-PATH] a real bin dir that is not on PATH at all is refused, never linked where nothing runs it", async () => {
+		const h = await host();
+		const only = path.join(h.dir, "path-only-empty");
+		fs.mkdirSync(only);
+		h.env.PATH = only;
+		// The premise: B is a real directory and the one PATH entry holds no entwurf that could shadow it.
+		expect(fs.realpathSync(h.B)).toBe(h.B);
+		expect(fs.readdirSync(only)).toEqual([]);
+		const before = snapshot(h);
+		expect(refusal(() => expose(h))).toBe("operator-link-bin-dir-off-path");
+		expect(snapshot(h)).toEqual(before);
+		expect(ledgerVersion(h)).toBe(2);
 	});
 
 	it("[QK:OPL-FOREIGN-REFUSED] a link with no receipt is someone else's — even one aimed at the same target", async () => {

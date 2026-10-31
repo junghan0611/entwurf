@@ -3488,7 +3488,7 @@ let manifestCount: number;
 		"herdr-activation": 42,
 		"herdr-plugin-build": 25,
 		"herdr-dev-checkout": 4,
-		"herdr-operator-link": 17,
+		"herdr-operator-link": 19,
 		"herdr-runtime-bootstrap": 35,
 		"herdr-fresh-call": 38,
 		"herdr-supply": 11,

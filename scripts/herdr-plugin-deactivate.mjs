@@ -13,8 +13,10 @@
  * ledger unretired, and nothing left to run the rest. So nothing here is loaded late, and the gate
  * asserts there is no dynamic import to defer.
  *
- * PREFLIGHT EVERY AUTHORITY, THEN MUTATE. The ledger, the resolved roots, and BOTH component
- * inverses are asked read-only first. Only when all of them are green does the first byte change.
+ * PREFLIGHT, THEN MUTATE. The ledger, the resolved roots, the operator link and the inverse of every
+ * component still left to undo are asked read-only first; only when all of them are green does the
+ * first byte change. Runtime ownership is not part of that preflight: `removeOwnedRuntime` judges it
+ * at its own step, after the components, and a refusal there stops the run with the ledger kept.
  * A component that then fails stops the run with the runtime and the ledger intact, because the
  * ledger is the retry authority and a teardown that deletes its own record of what is left is one
  * nobody can resume.
@@ -111,7 +113,7 @@ export function deactivate(env) {
 	const states = componentStates(ledger);
 	const piState = piStatePaths(env);
 
-	// ── PREFLIGHT: every remaining authority, zero writes ────────────────────
+	// ── PREFLIGHT: every remaining component inverse, zero writes ────────────
 	const preflights = [];
 	if (steps.includes("claude-code")) {
 		preflights.push([

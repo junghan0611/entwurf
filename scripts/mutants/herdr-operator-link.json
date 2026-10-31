@@ -281,6 +281,38 @@
 				"argv": ["bash", "scripts/build-bridge.sh"],
 				"output": "mcp/entwurf-bridge/dist"
 			}
+		},
+		{
+			"claim": "OPL-LEDGER-ACTIVE-ONLY",
+			"title": "an activating ledger with a component still pending is linked over, so the floor rises and a receipt names a runtime whose activation never settled",
+			"subject": "scripts/herdr-operator-link.mjs",
+			"find": ["\tif (ledger === null || ledger.phase !== \"active\") {"],
+			"replace": ["\tif (ledger === null) {"],
+			"gate": ["bash", "run.sh", "check-tests-beside-behavior"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:OPL-LEDGER-ACTIVE-ONLY]",
+			"signatureSource": "plugins/herdr/operator-link.test.mjs",
+			"build": {
+				"argv": ["bash", "scripts/build-bridge.sh"],
+				"output": "mcp/entwurf-bridge/dist"
+			}
+		},
+		{
+			"claim": "OPL-BIN-DIR-ON-PATH",
+			"title": "a real bin dir that is not on PATH is linked into, so the receipt records a link no bare `entwurf` ever reaches",
+			"subject": "scripts/herdr-operator-link.mjs",
+			"find": [
+				"\tif (!selection.onPath) refuse(\"operator-link-bin-dir-off-path\", `${binDir} is not an entry of the current PATH`);"
+			],
+			"replace": ["\t// (mutant) on-PATH not required"],
+			"gate": ["bash", "run.sh", "check-tests-beside-behavior"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:OPL-BIN-DIR-ON-PATH]",
+			"signatureSource": "plugins/herdr/operator-link.test.mjs",
+			"build": {
+				"argv": ["bash", "scripts/build-bridge.sh"],
+				"output": "mcp/entwurf-bridge/dist"
+			}
 		}
 	]
 }

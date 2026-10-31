@@ -275,8 +275,11 @@ This plugin puts nothing on `PATH`, so that absolute path is the command. A bare
 `entwurf herdr-plugin-deactivate` works only where a direct install has put `entwurf` on `PATH`, or
 where you asked for the one operator link below — deactivate removes that link first.
 
-It establishes every deletion authority before the first deletion, and removes the operator link →
-components → runtime → ledger, so the record outlives what it authorised.
+Before its first write it checks, read-only, the activation ledger, the resolved roots, the operator
+link and every component still left to undo; then it removes the operator link → components → runtime
+→ ledger, so the record outlives what it authorised. Whether the runtime is ours is judged at its own
+step, after the components: a runtime no certified journal proves ours stops the run there, with the
+ledger kept.
 
 **With no activation ledger it removes nothing (#135).** An install that stopped before its activation
 was recorded can leave a journal, a runtime or the plugin's npm cache behind. Without a ledger nothing
@@ -715,6 +718,15 @@ carry the `entwurf pi` launcher — that is where
 `<runtime>/node_modules/.bin/entwurf pi` becomes a garden citizen with no model turn — but that bin is
 reachable only by its absolute path under the runtime root, unless you asked for the operator link above. The command this README tells you to type
 is therefore still `pi --entwurf-control`.
+
+The link has rules of its own. `--bin-dir` takes the directory exactly as its own realpath spells it:
+a trailing `/`, a `/./` or a symlinked parent is refused, never normalised for you. The first expose
+raises the activation ledger to schema 3 before its receipt names the link; withdraw leaves it at 3, so
+a schema-2-only activation reader continues to refuse that ledger. A full
+`herdr-plugin-deactivate` removes the ledger last, and a fresh install of an older runtime after that
+is a separate operation. Deactivate removes the link before the components, so if a component then
+fails the managed operator link is already gone and a bare `entwurf` may now select another install
+later on `PATH`: retry by the active runtime's absolute path under [Remove it](#remove-it).
 
 **Nothing at that address is moved without proof, and nothing is created before the judgement.** A
 certified journal — exact keys, exact schema, a phase whose digest matches the writer state it
