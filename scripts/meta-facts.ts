@@ -39,7 +39,7 @@ const arg = process.argv[2];
 // A dash argv is a flag this command does not have, not a store directory — treating
 // it as a path would answer `--help` with "empty store, exit 0", a silent wrong fact.
 if (process.argv.length > 3 || (arg !== undefined && arg.startsWith("-"))) {
-	console.error("usage: entwurf meta-facts [meta-sessions-dir]");
+	console.error("meta-facts: see `entwurf help meta-facts` (from that checkout's root: `./run.sh help meta-facts`)");
 	process.exit(2);
 }
 

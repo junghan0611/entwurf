@@ -93,6 +93,21 @@
 			"timeoutSeconds": 120,
 			"signature": "[QK:PF-USAGE]",
 			"signatureSource": "scripts/check-peer-facts.ts"
+		},
+		{
+			"claim": "PF-HELP-POINTER",
+			"title": "the dash refusal points at another command's description, so an agent that followed it reads help for the wrong verb (#153)",
+			"subject": "scripts/peer-facts.ts",
+			"find": [
+				"\tconsole.error(\"peer-facts: see `entwurf help peer-facts` (from that checkout's root: `./run.sh help peer-facts`)\");"
+			],
+			"replace": [
+				"\tconsole.error(\"peer-facts: see `entwurf help meta-facts` (from that checkout's root: `./run.sh help meta-facts`)\");"
+			],
+			"gate": ["bash", "run.sh", "check-peer-facts"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:PF-HELP-POINTER]",
+			"signatureSource": "scripts/check-peer-facts.ts"
 		}
 	]
 }

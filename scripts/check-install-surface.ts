@@ -47,6 +47,26 @@
  *        exported BASH_FUNC_* defines, and one only a comment/heredoc spells all stay the
  *        Unknown command; an admitted gate runs once, with no argv, its streams and exact exit
  *        status intact, and stops at its first failure.
+ *   S9   `entwurf --help` and `entwurf help <command>` render root ENTWURF-CLI.json through
+ *        scripts/cli-help.mjs. The root forms and the Unknown path print the ce92dc7 usage bytes (a
+ *        fixture outside the tarball, pinned) with explicit amendments only — the `entwurf` prefix and
+ *        the tool count EXPECTED_TOOLS holds. The source is read beside the renderer; of the PATH tools
+ *        it watches, a help run starts only node on that renderer (a PATH watch, not an exec audit —
+ *        the renderer's node:fs-only reach is read directly); a missing or malformed source fails by
+ *        name with no fallback text, exit 1 on every form, apart from a refused help request's 2; an
+ *        early-closed reader ends the page quietly, both pipe sides 0 under pipefail; the committed
+ *        bytes are canonical — the only guard against a duplicated JSON property, which JSON.parse
+ *        accepts. A help preflight between `cmd=${1:-}`
+ *        and the dispatch case answers `help <command>` and `<command> -h|--help` before any arm: on a
+ *        byte copy that stops at the case, every command run.sh has is asked — described ones print
+ *        their page, undescribed ones are refused (exit 2) and never run, the four vendor launchers
+ *        pass through — and extra argv, the `--help <command>` alias and odd names are refused on one
+ *        line. fresh-cut's longer text matches its ce92dc7 source literal minus the old invocation.
+ *        Coverage reads owners independently of the data: operator commands are the labels of a case
+ *        byte-pinned to the reviewed ce92dc7 one (evidence for this change, not a ban on later work),
+ *        gate commands are the functions bash itself defines from run.sh — so a definition left only
+ *        as heredoc text is no command — and every description names one of them while the
+ *        undescribed are exactly the ce92dc7 debt.
  *
  * HONEST SCOPE — what a green run does and does not mean. S1-S4 are structural: they read the
  * dispatch graph and the build manifest, so they hold for any entrypoint written in this repo's
@@ -61,15 +81,31 @@
  * Read-only for the repo: parses sources; spawns git, and S8's bounded bash probes — the
  * checkout's run.sh on the Unknown path, a byte copy of run.sh in a tmp dir with one fixture gate
  * defined ahead of the unchanged dispatch, and `bash -c` witnesses that an exported function
- * really imports. Each probe gets PATH plus at most the BASH_FUNC_* its cell names, never the
- * host environment.
+ * really imports; S9's root-help runs of the checkout's run.sh and of tmp copies carrying a broken
+ * help source, under a PATH whose leading shims record what a help run starts, byte copies that
+ * stop before the dispatch to list the functions bash defined (scratch HOME/XDG, the same refusing
+ * shims), and a byte copy whose dispatch case is preceded by a sentinel exit, on which every command
+ * is asked for its help without any arm being reachable. Each probe gets PATH plus at most the BASH_FUNC_* or scratch HOME/XDG its cell names,
+ * never the host environment.
  */
 
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import {
+	copyFileSync,
+	existsSync,
+	mkdirSync,
+	mkdtempSync,
+	readdirSync,
+	readFileSync,
+	rmSync,
+	writeFileSync,
+} from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { FRESH_CUT_EXIT } from "../pi-extensions/lib/meta-session.ts";
+import { EXPECTED_TOOLS } from "./probe-bridge-command.ts";
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const RUN_SH = readFileSync(path.join(REPO, "run.sh"), "utf8");
@@ -77,6 +113,18 @@ const BUILD_TSCONFIG = readFileSync(path.join(REPO, "mcp/entwurf-bridge/tsconfig
 const PACKAGE_JSON = JSON.parse(readFileSync(path.join(REPO, "package.json"), "utf8")) as {
 	bin?: Record<string, string>;
 };
+// Bash parameter expansion, escaped so the string holds the literal `${1:-}` run.sh carries: the
+// line the top-level dispatch starts at.
+const DISPATCH = `\ncmd=\${1:-}\n`;
+const CLI_JSON = "ENTWURF-CLI.json";
+const CLI_RENDERER = "scripts/cli-help.mjs";
+
+/** Copy the help source and its renderer beside a fixture run.sh, where its usage() reads them. */
+function stageHelp(dir: string, json: string = readFileSync(path.join(REPO, CLI_JSON), "utf8")): void {
+	mkdirSync(path.join(dir, "scripts"), { recursive: true });
+	copyFileSync(path.join(REPO, CLI_RENDERER), path.join(dir, CLI_RENDERER));
+	writeFileSync(path.join(dir, CLI_JSON), json);
+}
 
 let failed = 0;
 function ok(label: string, cond: boolean, detail?: string): void {
@@ -274,8 +322,6 @@ const operatorCmds = [...targets].filter(([cmd, ts]) => !isDevGate(cmd) && ts.le
 	// nothing defines.
 	const dir = mkdtempSync(path.join(os.tmpdir(), "entwurf-by-name-"));
 	try {
-		// Bash parameter expansion, escaped so the string holds the literal `${1:-}` run.sh carries.
-		const DISPATCH = `\ncmd=\${1:-}\n`;
 		if (RUN_SH.split(DISPATCH).length !== 2)
 			throw new Error(`S8: run.sh no longer has exactly one \`cmd=\${1:-}\` line`);
 		const fixture = [
@@ -292,6 +338,7 @@ const operatorCmds = [...targets].filter(([cmd, ts]) => !isDevGate(cmd) && ts.le
 		].join("\n");
 		const copy = path.join(dir, "run.sh");
 		writeFileSync(copy, RUN_SH.replace(DISPATCH, `\n${fixture}${DISPATCH}`));
+		stageHelp(dir); // the Unknown path renders the usage, which reads beside run.sh
 		const run = (argv: string[], extraEnv: Record<string, string> = {}) =>
 			spawnSync("bash", [copy, ...argv], {
 				cwd: dir,
@@ -355,6 +402,713 @@ const operatorCmds = [...targets].filter(([cmd, ts]) => !isDevGate(cmd) && ts.le
 	} finally {
 		rmSync(dir, { recursive: true, force: true });
 	}
+}
+
+// ─── S9 — `entwurf --help` renders ENTWURF-CLI.json, which describes only real commands ─
+{
+	// The independent oracle is what ce92dc7's usage() heredoc actually printed, kept byte for byte
+	// outside the tarball; the pin fences the fixture itself so neither can drift alone. It is the
+	// CONTENT oracle of the root page, and no expected root text or inventory is derived from the new
+	// description data. The command pages further down are checked against a page built from the
+	// data entry — a routing and format oracle; their content is bound by this root fixture (every
+	// synopsis and summary also prints on the root page) and by fresh-cut's own fixture (details).
+	const OLD_USAGE_FIXTURE = "test/fixtures/cli-help/usage-ce92dc7.txt";
+	const OLD_USAGE_SHA256 = "e67f1cb97e5022b865f525d8fb37e3cd0fd0adac927323efd2f27beb9c9e23e6";
+	const oldUsage = readFileSync(path.join(REPO, OLD_USAGE_FIXTURE), "utf8");
+	const sha256 = (s: string): string => createHash("sha256").update(s).digest("hex");
+	if (sha256(oldUsage) !== OLD_USAGE_SHA256) throw new Error(`S9: ${OLD_USAGE_FIXTURE} is not the ce92dc7 usage`);
+
+	// The root page today is that fixture with exactly these explicit amendments applied, each naming
+	// the source that justifies it — never a text regenerated from the new data. The prefix: a command
+	// line names the product, not the checkout's script; columns are absolute, so the character the
+	// prefix loses becomes one more space before `#`. The literals: an old phrase that is no longer
+	// true, replaced where it stands.
+	const respell = (l: string): string =>
+		l.replace(/^ {2}\.\/run\.sh (\S.*?)( +)# /, (_m, syn, gap) => `  entwurf ${syn}${gap} # `);
+	const toolCountWord = ({ 9: "nine" } as Record<number, string>)[EXPECTED_TOOLS.length];
+	const literalAmendments: { old: string; next: string; receipt: string }[] = [
+		{
+			old: "EXACTLY the eight shipped garden verbs",
+			next: `EXACTLY the ${toolCountWord} shipped garden verbs`,
+			receipt:
+				"scripts/probe-bridge-command.ts EXPECTED_TOOLS; check-entwurf-bridge-boot G1f checks the live tools/list",
+		},
+	];
+	const respelled = oldUsage.split("\n").filter((l) => respell(l) !== l).length;
+	let expectedRoot = oldUsage.split("\n").map(respell).join("\n");
+	const amendmentProblems: string[] = [];
+	if (toolCountWord === undefined)
+		amendmentProblems.push(`EXPECTED_TOOLS has ${EXPECTED_TOOLS.length} tools, no reviewed word`);
+	for (const a of literalAmendments) {
+		if (expectedRoot.split(a.old).length !== 2) amendmentProblems.push(`not exactly once in the fixture: ${a.old}`);
+		expectedRoot = expectedRoot.replace(a.old, a.next);
+	}
+	// A line the old usage never had: a debt name described since, inserted right after the fixture
+	// line it belongs beside. The text is a reviewed literal whose receipt is the arm it describes.
+	const insertedLines: { after: string; line: string; receipt: string }[] = [
+		{
+			after: "  entwurf pi-durable [args...]        # ",
+			line: "  entwurf pi [args...]                # #118: the MANAGED pi launch. exec()s the pi that `type -P` finds on PATH (a file, never a shell function or alias) in THIS terminal, with --entwurf-control added ahead of your argv, which passes through untouched. Refuses by name when ENTWURF_PI_LAUNCH_ACTIVE is non-empty (it exports that to the pi it starts), when no pi is on PATH (it launches the pi coding agent, it does not install one), or when that path is not an executable regular file",
+			receipt:
+				"run.sh `pi)` arm: type -P pi, the non-empty ENTWURF_PI_LAUNCH_ACTIVE refusal, the missing and non-regular refusals, exec with --entwurf-control",
+		},
+	];
+	for (const ins of insertedLines) {
+		const rows = expectedRoot.split("\n");
+		const at = rows.flatMap((l, i) => (l.startsWith(ins.after) ? [i] : []));
+		if (at.length !== 1) amendmentProblems.push(`insertion anchor not exactly once: ${ins.after}`);
+		else rows.splice(at[0] + 1, 0, ins.line);
+		expectedRoot = rows.join("\n");
+	}
+
+	const helpEnv = { PATH: process.env.PATH ?? "/usr/bin:/bin" };
+	const runHelp = (runSh: string, argv: string[], cwd: string, env: Record<string, string> = helpEnv) =>
+		spawnSync("bash", [runSh, ...argv], { cwd, encoding: "utf8", env });
+	const rootForms: string[][] = [[], ["-h"], ["--help"], ["help"]];
+	/** Recording shims for the tools a help run must not start; `node` gets `nodeTail` instead. */
+	const makeShims = (dir: string, nodeTail: string): { bin: string; trace: string } => {
+		const bin = path.join(dir, "shims");
+		const trace = path.join(dir, "trace");
+		mkdirSync(bin);
+		writeFileSync(trace, "");
+		const watched = [
+			"python3",
+			"pnpm",
+			"npm",
+			"git",
+			"tmux",
+			"herdr",
+			"pi",
+			"claude",
+			"codex",
+			"copilot",
+			"ssh",
+			"curl",
+		];
+		for (const name of ["node", ...watched]) {
+			writeFileSync(
+				path.join(bin, name),
+				`#!/bin/sh\nprintf '%s' "${name}" >>'${trace}'; printf ' %s' "$@" >>'${trace}'; echo >>'${trace}'\n${name === "node" ? nodeTail : "exit 99"}\n`,
+				{ mode: 0o755 },
+			);
+		}
+		return { bin, trace };
+	};
+	const rendersRoot = (runSh: string, cwd: string): string[] => {
+		const bad: string[] = [];
+		for (const argv of rootForms) {
+			const r = runHelp(runSh, argv, cwd);
+			if (r.status !== 0 || r.stderr !== "" || r.stdout !== expectedRoot) {
+				bad.push(`${JSON.stringify(argv)}: rc=${r.status} stdout-sha=${sha256(r.stdout)} stderr=${r.stderr.trim()}`);
+			}
+		}
+		const u = runHelp(runSh, ["no-such-command"], cwd);
+		if (u.status !== 1 || u.stderr !== "Unknown command: no-such-command\n" || u.stdout !== expectedRoot) {
+			bad.push(`unknown: rc=${u.status} stdout-sha=${sha256(u.stdout)} stderr=${u.stderr.trim()}`);
+		}
+		return bad;
+	};
+	const rootBad = rendersRoot(path.join(REPO, "run.sh"), REPO);
+	ok(
+		"[QK:CLI-HELP-ROOT-BYTES] S9a the root help (no argv, -h, --help, help) and the Unknown path print exactly the ce92dc7 usage bytes with the reviewed amendments",
+		rootBad.length === 0,
+		rootBad.join("\n"),
+	);
+	const rootNow = runHelp(path.join(REPO, "run.sh"), ["--help"], REPO).stdout;
+	ok(
+		"[QK:CLI-HELP-AMENDMENTS] S9a' each amendment is exact: every command line is spelled `entwurf`, the tool count is the one EXPECTED_TOOLS holds, and no replaced phrase survives",
+		amendmentProblems.length === 0 &&
+			respelled === 189 &&
+			!/^ {2}\.\/run\.sh /m.test(rootNow) &&
+			literalAmendments.every((a) => rootNow.split(a.next).length === 2 && !rootNow.includes(a.old)),
+		[...amendmentProblems, `respelled lines: ${respelled}`].join("\n"),
+	);
+	// pi left the description debt: its root line is the reviewed literal, once, beside pi-durable,
+	// and `entwurf help pi` prints that same summary as its page.
+	const piRows = rootNow.split("\n");
+	const piLine = insertedLines[0].line;
+	const piAt = piRows.flatMap((l, i) => (l === piLine ? [i] : []));
+	const piPage = runHelp(path.join(REPO, "run.sh"), ["help", "pi"], REPO);
+	const piSummary = piLine.slice(piLine.indexOf("# ") + 2);
+	ok(
+		"[QK:CLI-HELP-PI-DESCRIBED] S9a'' `pi` is described by the reviewed literal: one root line, right after pi-durable's, and `entwurf help pi` prints that summary",
+		piAt.length === 1 &&
+			piRows[piAt[0] - 1].startsWith(insertedLines[0].after) &&
+			piPage.status === 0 &&
+			piPage.stderr === "" &&
+			piPage.stdout === `Usage: entwurf pi [args...]\n\n${piSummary}\n`,
+		JSON.stringify({ lines: piAt.length, rc: piPage.status, stderr: piPage.stderr, page: piPage.stdout.slice(0, 200) }),
+	);
+
+	const scratch = mkdtempSync(path.join(os.tmpdir(), "entwurf-cli-help-"));
+	try {
+		// A decoy source in the caller's cwd and HOME: the renderer must read the bytes beside itself.
+		const decoy = path.join(scratch, "decoy");
+		mkdirSync(path.join(decoy, "scripts"), { recursive: true });
+		writeFileSync(path.join(decoy, CLI_JSON), "{");
+		const r = runHelp(path.join(REPO, "run.sh"), ["--help"], decoy, { ...helpEnv, HOME: decoy });
+		ok(
+			"[QK:CLI-HELP-MODULE-RELATIVE] S9b the help source is read beside the renderer, never from the caller's cwd or HOME",
+			r.status === 0 && r.stdout === expectedRoot,
+			`rc=${r.status} stderr=${r.stderr.trim()}`,
+		);
+
+		// Production run.sh under a PATH whose first entries record what a help run starts, among the
+		// tools shimmed here: node is wrapped and then really runs, the rest refuse. This is a PATH
+		// watch, not a full exec audit — an absolute-path exec or a module node imports is not seen. The
+		// renderer's own reach is read directly: it imports node:fs alone and reads one module-relative
+		// file. Within that scope a help run starts one thing: node on the shipped renderer, no argument.
+		const { bin: shims, trace } = makeShims(scratch, `exec '${process.execPath}' "$@"`);
+		const traced = { PATH: `${shims}:${helpEnv.PATH}` };
+		for (const argv of [...rootForms, ["no-such-command"]]) runHelp(path.join(REPO, "run.sh"), argv, REPO, traced);
+		const want = `node ${path.join(REPO, CLI_RENDERER)}\n`.repeat(rootForms.length + 1);
+		const got = readFileSync(trace, "utf8");
+		ok(
+			"[QK:CLI-HELP-ONLY-RENDERER] S9c of the PATH tools watched (node, python3, pnpm, npm, git, tmux, herdr, pi, claude, codex, copilot, ssh, curl), a help run starts only node on scripts/cli-help.mjs",
+			got === want,
+			`trace:\n${got}`,
+		);
+
+		// A fixture copy whose description source is missing or malformed. Each must fail by name with
+		// nothing on stdout — the root forms and the Unknown path alike, no older text behind them.
+		// These are the RUNTIME refusals. A duplicated JSON property is not one of them: JSON.parse
+		// keeps the last value silently, so only S9g's check-time canonical comparison sees it.
+		const good = JSON.parse(readFileSync(path.join(REPO, CLI_JSON), "utf8")) as {
+			schemaVersion: number;
+			usage: { commandGroups: Record<string, unknown>[][] };
+		};
+		const variant = (edit: (d: typeof good) => void): string => {
+			const d = structuredClone(good);
+			edit(d);
+			return JSON.stringify(d);
+		};
+		const first = good.usage.commandGroups[0]?.[0];
+		const broken: [label: string, json: string | null][] = [
+			["missing", null],
+			["not JSON", "{"],
+			[
+				"unsupported schemaVersion",
+				variant((d) => {
+					d.schemaVersion = 1;
+				}),
+			],
+			[
+				"an entry with a field the schema does not know",
+				variant((d) => {
+					d.usage.commandGroups[0]![0]!.run = "x";
+				}),
+			],
+			[
+				"one command described twice",
+				variant((d) => {
+					d.usage.commandGroups[1]!.push({ ...first });
+				}),
+			],
+			[
+				"details that start on an empty line",
+				variant((d) => {
+					d.usage.commandGroups[0]![0]!.details = ["", "text"];
+				}),
+			],
+			[
+				"details that are not single-line strings",
+				variant((d) => {
+					d.usage.commandGroups[0]![0]!.details = ["one\ntwo"];
+				}),
+			],
+		];
+		const failures: string[] = [];
+		const strictness: Record<string, boolean> = {};
+		for (const [label, json] of broken) {
+			const dir = path.join(scratch, `broken-${Object.keys(strictness).length}`);
+			mkdirSync(dir);
+			writeFileSync(path.join(dir, "run.sh"), RUN_SH);
+			stageHelp(dir, json ?? "");
+			if (json === null) rmSync(path.join(dir, CLI_JSON));
+			let refused = true;
+			// The root forms, the Unknown path and a command help: each must be the metadata failure —
+			// exactly 1, never the help refusal's 2 — with nothing on stdout.
+			for (const argv of [["--help"], ["no-such-command"], ["peer-facts", "--help"]]) {
+				const b = runHelp(path.join(dir, "run.sh"), argv, dir);
+				if (b.status !== 1 || b.stdout !== "" || !b.stderr.includes(`entwurf: ${CLI_JSON} `)) {
+					refused = false;
+					failures.push(
+						`${label} ${JSON.stringify(argv)}: rc=${b.status} stdout=${b.stdout.length}B stderr=${b.stderr.trim()}`,
+					);
+				}
+			}
+			strictness[label] = refused;
+		}
+		ok(
+			"[QK:CLI-HELP-FAIL-LOUD] S9d a missing or unparseable help source fails help by name, with no stdout and no fallback text",
+			strictness.missing === true && strictness["not JSON"] === true,
+			failures.join("\n"),
+		);
+		ok(
+			"[QK:CLI-HELP-STRICT-FIELDS] S9e the renderer refuses the old schemaVersion, a field the schema does not know, and details that start empty or span lines",
+			strictness["unsupported schemaVersion"] === true &&
+				strictness["an entry with a field the schema does not know"] === true &&
+				strictness["details that start on an empty line"] === true &&
+				strictness["details that are not single-line strings"] === true,
+			failures.join("\n"),
+		);
+		ok(
+			"[QK:CLI-HELP-UNIQUE] S9f the renderer refuses a command described twice",
+			strictness["one command described twice"] === true,
+			failures.join("\n"),
+		);
+		// The two failure kinds stay apart: a broken source is exit 1 on every form above, while the
+		// same command-help shape against an intact source, naming nothing it describes, is the help
+		// refusal's exit 2.
+		const intactRefusal = runHelp(path.join(REPO, "run.sh"), ["help", "no-such-command"], REPO);
+		ok(
+			"[QK:CLI-HELP-METADATA-EXIT] S9f' a missing or malformed source is exit 1 on root, Unknown and command help alike — distinct from the exit 2 of a refused help request",
+			Object.keys(strictness).length === broken.length &&
+				Object.values(strictness).every(Boolean) &&
+				intactRefusal.status === 2 &&
+				intactRefusal.stdout === "" &&
+				intactRefusal.stderr.startsWith("entwurf: no help for "),
+			[...failures, `intact refusal: rc=${intactRefusal.status} stderr=${intactRefusal.stderr.trim()}`].join("\n"),
+		);
+	} finally {
+		rmSync(scratch, { recursive: true, force: true });
+	}
+
+	// Check time only: the committed bytes are the canonical serialisation of what they parse to.
+	// This is what catches a duplicated JSON property (JSON.parse keeps the last one silently, so it
+	// would change the rendering without failing), and it pins one format so a review reads one
+	// shape. It says nothing about a file someone edits after install.
+	const cliBytes = readFileSync(path.join(REPO, CLI_JSON), "utf8");
+	ok(
+		"[QK:CLI-HELP-CANONICAL] S9g ENTWURF-CLI.json is its own canonical serialisation (no duplicated property survives the commit)",
+		cliBytes === `${JSON.stringify(JSON.parse(cliBytes), null, "\t")}\n`,
+		'rewrite it with JSON.stringify(data, null, "\\t") + "\\n"',
+	);
+
+	// Coverage, read independently of the data. Operator commands are the case labels of the
+	// top-level dispatch: the `case "$cmd" in` after the `cmd=${1:-}` line, to the column-0 `esac`
+	// that closes it. That is a text read, so it is bound to the reviewed ce92dc7 case by a byte pin
+	// — evidence for this change, not a ban on later dispatch work: a change to the case re-reviews
+	// its labels and moves the pin in the same change. The labels are not claimed to be
+	// runtime-proven. Gate commands are the check_/smoke_ functions bash itself defines when it reads
+	// run.sh — a definition spelled only in a heredoc or a comment defines nothing, and an
+	// environment function is not run.sh's.
+	const CASE_LINE = 'case "$cmd" in\n';
+	const start = RUN_SH.indexOf(DISPATCH);
+	const caseAt = RUN_SH.indexOf(`\n${CASE_LINE}`, start) + 1;
+	const end = RUN_SH.indexOf("\nesac\n", caseAt) + "\nesac\n".length;
+	const REVIEWED_CASE_SHA256 = "8c925ec8b27ada74bd90d343a9b60623fae9cfee48cccc63bae2c954724e4867";
+	ok(
+		"[QK:CLI-HELP-DISPATCH-REVIEWED] S9h the case the operator labels are read from is the reviewed ce92dc7 case, byte for byte",
+		start > 0 && caseAt > start && sha256(RUN_SH.slice(caseAt, end)) === REVIEWED_CASE_SHA256,
+		"the top-level case changed: re-review its labels against ENTWURF-CLI.json and the debt below, then move the pin",
+	);
+	// The help preflight sits between `cmd=${1:-}` and that case, and nowhere else: the only case is
+	// the pinned one, and the preflight's code opens no case, esac or heredoc that could hide a
+	// second dispatch or move the pinned one.
+	const preflightCode = RUN_SH.slice(start + DISPATCH.length, caseAt)
+		.split("\n")
+		.filter((l) => !/^\s*#/.test(l))
+		.join("\n");
+	ok(
+		"[QK:CLI-HELP-PREFLIGHT-PLACEMENT] S9h' the help preflight is plain if/elif code between the dispatch's `cmd=` line and the one pinned case",
+		RUN_SH.split(CASE_LINE).length === 2 &&
+			/\bexec node "\$REPO_DIR\/scripts\/cli-help\.mjs" --command\b/.test(preflightCode) &&
+			!/\bcase\b|\besac\b|<</.test(preflightCode),
+		preflightCode,
+	);
+	const labels = [...RUN_SH.slice(caseAt, end).matchAll(/^ {2}([a-z][a-z0-9-]*)\)$/gm)].map((m) => m[1] as string);
+
+	// A byte copy that stops right before the dispatch and lists what bash defined while reading it.
+	// Everything above the dispatch runs — assignments and definitions — so the probe gets a scratch
+	// HOME/XDG and the same recording shims as S9c (node included, refusing): nothing may start and
+	// nothing may be written.
+	const bashDefinedGates = (text: string): { names: Set<string>; problems: string[] } => {
+		const dir = mkdtempSync(path.join(os.tmpdir(), "entwurf-gate-fns-"));
+		try {
+			if (text.split(DISPATCH).length !== 2) throw new Error("S9: the copy has no single dispatch line");
+			const home = path.join(dir, "home");
+			mkdirSync(home);
+			const { bin, trace } = makeShims(dir, "exit 99");
+			const copy = path.join(dir, "run.sh");
+			const probe = 'shopt -s extdebug\nfor __f in $(compgen -A function); do declare -F "$__f"; done\nexit 0';
+			writeFileSync(copy, text.replace(DISPATCH, `\n${probe}${DISPATCH}`));
+			const r = spawnSync("bash", [copy], {
+				cwd: dir,
+				encoding: "utf8",
+				env: {
+					PATH: `${bin}:${helpEnv.PATH}`,
+					HOME: home,
+					XDG_CONFIG_HOME: path.join(home, ".config"),
+					XDG_DATA_HOME: path.join(home, ".local/share"),
+					XDG_STATE_HOME: path.join(home, ".local/state"),
+					XDG_CACHE_HOME: path.join(home, ".cache"),
+				},
+			});
+			const problems: string[] = [];
+			if (r.status !== 0 || r.stderr !== "") problems.push(`probe rc=${r.status} stderr=${r.stderr.trim()}`);
+			const started = readFileSync(trace, "utf8");
+			if (started !== "") problems.push(`the probe started:\n${started}`);
+			if (readdirSync(home, { recursive: true }).length > 0) problems.push("the probe wrote below its HOME");
+			const names = new Set<string>();
+			for (const line of r.stdout.split("\n")) {
+				const m = line.match(/^((?:check|smoke)_[a-z0-9_]+) [1-9][0-9]* (.*)$/);
+				if (m && m[2] === copy) names.add((m[1] as string).replace(/_/g, "-"));
+			}
+			return { names, problems };
+		} finally {
+			rmSync(dir, { recursive: true, force: true });
+		}
+	};
+	const defined = bashDefinedGates(RUN_SH);
+	const inventory = new Set([...labels, ...defined.names]);
+	const described = (
+		JSON.parse(cliBytes) as { usage: { commandGroups: { synopsis: string }[][] } }
+	).usage.commandGroups.flatMap((g) => g.map((e) => e.synopsis.split(" ", 1)[0] as string));
+	const orphansOf = (inv: Set<string>): string[] => described.filter((n) => !inv.has(n));
+	const orphans = orphansOf(inventory);
+	ok(
+		`[QK:CLI-HELP-NO-ORPHAN] S9i every described command is a reviewed dispatch label or a gate function bash defines from run.sh (${described.length} described, ${labels.length} labels + ${defined.names.size} gate functions)`,
+		labels.length > 0 && defined.names.size > 0 && defined.problems.length === 0 && orphans.length === 0,
+		[...defined.problems, orphans.length ? `described but not reachable: ${orphans.join(", ")}` : ""]
+			.filter(Boolean)
+			.join("\n"),
+	);
+
+	// The negative that makes the owner read worth having: a real, described gate whose definition
+	// survives only as heredoc text. A text reader still finds `check_peer_facts() {` there; bash
+	// defines nothing, so the name leaves the inventory and its description becomes an orphan.
+	const ownerAt = RUN_SH.indexOf("\ncheck_peer_facts() {\n");
+	const ownerEnd = RUN_SH.indexOf("\n}\n", ownerAt) + "\n}".length;
+	if (ownerAt < 0 || ownerEnd <= ownerAt) throw new Error("S9: run.sh no longer defines check_peer_facts");
+	const textOnlyOwner = bashDefinedGates(
+		`${RUN_SH.slice(0, ownerAt)}\n: <<'TEXT_ONLY'${RUN_SH.slice(ownerAt, ownerEnd)}\nTEXT_ONLY${RUN_SH.slice(ownerEnd)}`,
+	);
+	ok(
+		"[QK:CLI-HELP-REAL-OWNER] S9j a described gate whose definition is left only as heredoc text is not a command: it leaves the inventory and its description is an orphan",
+		defined.names.has("check-peer-facts") &&
+			textOnlyOwner.problems.length === 0 &&
+			!textOnlyOwner.names.has("check-peer-facts") &&
+			orphansOf(new Set([...labels, ...textOnlyOwner.names])).includes("check-peer-facts"),
+		JSON.stringify({ problems: textOnlyOwner.problems, stillDefined: textOnlyOwner.names.has("check-peer-facts") }),
+	);
+
+	// The commands that had no line in the ce92dc7 usage, computed from that commit's run.sh with
+	// the reader above. The set only shrinks: a new command arrives with its description, and a
+	// described debt name leaves this list in the same change.
+	const DESCRIPTION_DEBT = new Set([
+		"check-acp-backend-preflight",
+		"check-acp-carrier-augment",
+		"check-acp-config",
+		"check-acp-cortex",
+		"check-acp-event-mapper",
+		"check-acp-foreground-only",
+		"check-acp-launch-namespace",
+		"check-acp-overlay",
+		"check-acp-prompt-builder",
+		"check-acp-prompt-lifecycle",
+		"check-acp-provider-surface",
+		"check-acp-sdk-surface",
+		"check-acp-session-reuse",
+		"check-acp-session-store",
+		"check-acp-set-model-readback",
+		"check-acp-stop-reason",
+		"check-acp-stream-hooks",
+		"check-acp-tool-surface",
+		"check-acp-usage-accounting",
+		"check-acp-vendor-rejection",
+		"check-agent-guidance-beside",
+		"check-auth-boundary",
+		"check-cc-retire-pidfd",
+		"check-cc-retire-request",
+		"check-claude-floor-coherence",
+		"check-control-retire",
+		"check-control-send-receipt",
+		"check-control-socket-path",
+		"check-entwurf-control-rpc",
+		"check-entwurf-resume-args",
+		"check-entwurf-v2-native-push",
+		"check-entwurf-v2-production",
+		"check-entwurf-v2-retire",
+		"check-entwurf-v2-runner",
+		"check-entwurf-v2-send",
+		"check-entwurf-v2-surface",
+		"check-entwurf-v2-visible-resume",
+		"check-env-namespace",
+		"check-fresh-call-dispatch",
+		"check-fresh-call-provider",
+		"check-herdr-fresh-call",
+		"check-herdr-sandbox",
+		"check-herdr-supply",
+		"check-install-preflight",
+		"check-install-surface",
+		"check-mux-fresh-call",
+		"check-mux-launch",
+		"check-mux-launch-tmux",
+		"check-mux-placement",
+		"check-mux-placement-tmux",
+		"check-omp-receive-arm",
+		"check-pack-win32-carrier",
+		"check-pi-import-surface",
+		"check-pi-launch",
+		"check-pi-preflight",
+		"check-pi-queue-oracle",
+		"check-pi-retire-request",
+		"check-pi-runtime-version",
+		"check-probe-bridge-command",
+		"check-retirement-event",
+		"check-tests-beside-behavior",
+		"check-win32-preview",
+		"doctor-pi-provider",
+		"expose-dev-bin",
+		"remove-dev-bin",
+		"smoke-acp-bundled-mcp-live",
+		"smoke-acp-carrier-augment-live",
+		"smoke-acp-cortex-live",
+		"smoke-acp-long-turn-live",
+		"smoke-acp-mcp-live",
+		"smoke-acp-memory-containment-live",
+		"smoke-acp-ordering-probe-live",
+		"smoke-acp-overlay-live",
+		"smoke-acp-provider-live",
+		"smoke-acp-raw-turn-live",
+		"smoke-acp-rgg-live",
+		"smoke-acp-session-reuse-live",
+		"smoke-acp-skill-live",
+		"smoke-acp-socket-citizen-live",
+		"smoke-acp-v2-send-live",
+		"smoke-herdr-fresh-call-live",
+		"smoke-herdr-plugin-build-live",
+		"smoke-herdr-raw-install-live",
+		"smoke-mux-fresh-call-live",
+		"smoke-omp-receive-state",
+		"smoke-pi-provider-state",
+		"wire-agy-bridge",
+		"wire-agy-hooks",
+		"wire-agy-statusline",
+	]);
+	const undescribed = [...inventory].filter((n) => !described.includes(n));
+	const newDebt = undescribed.filter((n) => !DESCRIPTION_DEBT.has(n));
+	const paid = [...DESCRIPTION_DEBT].filter((n) => !undescribed.includes(n));
+	ok(
+		`[QK:CLI-HELP-DEBT-EXACT] S9k the commands with no description are exactly the ${DESCRIPTION_DEBT.size} the ce92dc7 usage already lacked`,
+		newDebt.length === 0 && paid.length === 0,
+		[
+			newDebt.length ? `no description in ${CLI_JSON}: ${newDebt.join(", ")}` : "",
+			paid.length ? `described or removed — drop from DESCRIPTION_DEBT: ${paid.join(", ")}` : "",
+		]
+			.filter(Boolean)
+			.join("\n"),
+	);
+	// ── the help preflight, proven on a copy that cannot dispatch ─────────────────────────
+	// A byte copy of run.sh with one line added right before the unchanged case: whatever gets past
+	// the preflight stops there (stderr DISPATCHED, exit 97) instead of entering an arm, so every
+	// command can be asked safely. The bare root forms and the Unknown path go through that case and
+	// are S9a's, on the real file. Expected pages are built from the entry the data holds; what is
+	// compared is the output of the whole run.sh path — routing and format, not content, which the
+	// root and fresh-cut fixtures bind.
+	const VENDORS = ["pi", "pi-durable", "copilot", "codex-app-server"];
+	type Entry = { synopsis: string; summary: string; details?: string[] };
+	const entryOf = new Map<string, Entry>();
+	for (const g of (JSON.parse(cliBytes) as { usage: { commandGroups: Entry[][] } }).usage.commandGroups)
+		for (const e of g) entryOf.set(e.synopsis.split(" ", 1)[0] as string, e);
+	const page = (e: Entry): string =>
+		`${[`Usage: entwurf ${e.synopsis}`, "", e.summary, ...(e.details ? ["", ...e.details] : [])].join("\n")}\n`;
+	const gated = mkdtempSync(path.join(os.tmpdir(), "entwurf-help-preflight-"));
+	try {
+		const copy = path.join(gated, "run.sh");
+		writeFileSync(copy, RUN_SH.replace(`\n${CASE_LINE}`, `\necho DISPATCHED >&2; exit 97\n${CASE_LINE}`));
+		stageHelp(gated);
+		const run = (argv: string[], env: Record<string, string> = helpEnv) =>
+			spawnSync("bash", [copy, ...argv], { cwd: gated, encoding: "utf8", env });
+		type R = ReturnType<typeof run>;
+		const dispatched = (r: R): boolean => r.status === 97 && r.stderr === "DISPATCHED\n" && r.stdout === "";
+		const refused = (r: R): boolean =>
+			r.status === 2 && r.stdout === "" && /^entwurf: [^\n]*\n$/.test(r.stderr) && !r.stderr.includes("DISPATCHED");
+		const answers =
+			(name: string) =>
+			(r: R): boolean => {
+				const e = entryOf.get(name);
+				return e !== undefined && r.status === 0 && r.stderr === "" && r.stdout === page(e);
+			};
+		const show = (argv: string[], r: R): string =>
+			`${JSON.stringify(argv)}: rc=${r.status} stdout=${r.stdout.length}B stderr=${JSON.stringify(r.stderr.slice(0, 160))}`;
+
+		// Axis 1 — every command run.sh has, asked `--help`, one run each, in order.
+		const t0 = Date.now();
+		const bad = { described: [] as string[], undescribed: [] as string[], vendor: [] as string[] };
+		const count = { described: 0, undescribed: 0, vendor: 0 };
+		for (const name of [...inventory].sort()) {
+			const argv = [name, "--help"];
+			const r = run(argv);
+			if (VENDORS.includes(name)) {
+				count.vendor++;
+				if (!dispatched(r)) bad.vendor.push(show(argv, r));
+			} else if (entryOf.has(name)) {
+				count.described++;
+				if (!answers(name)(r)) bad.described.push(show(argv, r));
+			} else {
+				count.undescribed++;
+				if (!(refused(r) && r.stderr.includes(JSON.stringify(name)))) bad.undescribed.push(show(argv, r));
+			}
+		}
+		const axisSeconds = ((Date.now() - t0) / 1000).toFixed(1);
+		ok(
+			`[QK:CLI-HELP-COMMAND] S9l every described command answers \`<command> --help\` with its own page on stdout, exit 0, nothing on stderr, and no arm entered (${count.described} commands, axis ${axisSeconds}s)`,
+			count.described > 0 && bad.described.length === 0,
+			bad.described.join("\n"),
+		);
+		ok(
+			`[QK:CLI-HELP-NO-DISPATCH] S9m every undescribed command asked \`--help\` is refused (one stderr line naming it, exit 2) and never run (${count.undescribed} commands)`,
+			count.undescribed > 0 && bad.undescribed.length === 0,
+			bad.undescribed.join("\n"),
+		);
+
+		// Axis 2 — the other shapes, on a few representative names.
+		const debtGate = [...DESCRIPTION_DEBT].find((n) => defined.names.has(n) && !VENDORS.includes(n)) as string;
+		const shapes = (cells: [string[], (r: R) => boolean][]): string[] =>
+			cells.flatMap(([argv, judge]) => {
+				const r = run(argv);
+				return judge(r) ? [] : [show(argv, r)];
+			});
+		const formsBad = shapes([
+			[["peer-facts", "-h"], answers("peer-facts")],
+			[["help", "peer-facts"], answers("peer-facts")],
+			[["help", "meta-bridge-fresh-cut"], answers("meta-bridge-fresh-cut")],
+			[["help", "copilot"], answers("copilot")],
+			[["help", debtGate], refused],
+			[["help", "pi"], answers("pi")],
+			[["help", "no-such-command"], refused],
+			[["no-such-command", "--help"], refused],
+		]);
+		ok(
+			"[QK:CLI-HELP-FORMS] S9n `help <command>` and `<command> -h` answer like `--help`; a vendor launcher's own entry answers `help`; an undescribed or unknown name is refused",
+			formsBad.length === 0,
+			formsBad.join("\n"),
+		);
+		const extraBad = shapes([
+			[["peer-facts", "--help", "x"], refused],
+			[["peer-facts", "-h", "x"], refused],
+			[["help", "peer-facts", "x"], refused],
+			[["help", "copilot", "x"], refused],
+			[["help", "pi", "x"], refused],
+			[[debtGate, "--help", "x"], refused],
+		]);
+		ok(
+			"[QK:CLI-HELP-EXTRA-REFUSED] S9o a help form with more argv after it is refused, exit 2, and runs nothing",
+			extraBad.length === 0,
+			extraBad.join("\n"),
+		);
+		const aliasBad = shapes([
+			[["--help", "peer-facts"], refused],
+			[["-h", "peer-facts"], refused],
+		]);
+		ok(
+			"[QK:CLI-HELP-ALIAS-REFUSED] S9p `--help <command>` / `-h <command>` are refused, not read as `help <command>`",
+			aliasBad.length === 0,
+			aliasBad.join("\n"),
+		);
+		const vendorBad = [
+			...bad.vendor,
+			...shapes([
+				[["copilot", "--help", "x"], dispatched],
+				[["pi", "-h", "x"], dispatched],
+			]),
+		];
+		ok(
+			`[QK:CLI-HELP-VENDOR-PASSTHROUGH] S9q the four vendor launchers keep every argv, help flags included: each reaches its arm (${count.vendor} of ${VENDORS.length})`,
+			count.vendor === VENDORS.length && vendorBad.length === 0,
+			vendorBad.join("\n"),
+		);
+		const positionBad = shapes([
+			[["peer-facts", "x", "--help"], dispatched],
+			[["peer-facts", "--", "--help"], dispatched],
+		]);
+		ok(
+			"[QK:CLI-HELP-NOT-HELP-POSITION] S9r a help flag anywhere but right after the command, or after `--`, is not a help request: it reaches the dispatch as before",
+			positionBad.length === 0,
+			positionBad.join("\n"),
+		);
+		const odd = "bad\nname\u0007";
+		const oddRun = run(["help", odd]);
+		ok(
+			"[QK:CLI-HELP-ONE-LINE] S9s an unknown name with a newline and a control character is quoted onto one stderr line",
+			refused(oddRun) && oddRun.stderr.includes(JSON.stringify(odd)),
+			show(["help", odd], oddRun),
+		);
+
+		// What a command help starts, among the watched PATH tools: node on the renderer, asked for that
+		// one command, and nothing else.
+		const { bin, trace } = makeShims(gated, `exec '${process.execPath}' "$@"`);
+		for (const argv of [
+			["peer-facts", "--help"],
+			["help", "peer-facts"],
+		])
+			run(argv, { PATH: `${bin}:${helpEnv.PATH}` });
+		const traced = readFileSync(trace, "utf8");
+		ok(
+			"[QK:CLI-HELP-COMMAND-TRACE] S9t observed on peer-facts in both forms (`--help`, `help`): of the watched PATH tools, only node on scripts/cli-help.mjs --command peer-facts starts",
+			traced === `node ${path.join(gated, CLI_RENDERER)} --command peer-facts\n`.repeat(2),
+			`trace:\n${traced}`,
+		);
+	} finally {
+		rmSync(gated, { recursive: true, force: true });
+	}
+
+	// fresh-cut's longer text: kept whole as the ce92dc7 source literal of its usage() (the template
+	// slots filled with the constants it named) — read from the source, not captured from a run. The
+	// details carry it with one explicit amendment: the two lines that named the old `node
+	// --experimental-strip-types` invocation and the blank line after them, which the synopsis
+	// `entwurf meta-bridge-fresh-cut` replaces. Nothing else is trimmed. The exit numbers are checked
+	// against the constant the verb itself returns, here in the gate only.
+	const FC_FIXTURE = "test/fixtures/cli-help/fresh-cut-usage-ce92dc7.source-literal.txt";
+	const FC_SHA256 = "f31c766a64fc99705ce81cc413bc4eadc40edd8e031127551d92fa68a8ac35a2";
+	const fcText = readFileSync(path.join(REPO, FC_FIXTURE), "utf8");
+	if (sha256(fcText) !== FC_SHA256) throw new Error(`S9: ${FC_FIXTURE} is not the ce92dc7 source literal`);
+	const fcLines = fcText.slice(0, -1).split("\n"); // the file's final LF is framing, not a line
+	const invocationDropped =
+		fcLines[0]?.startsWith("usage: node --experimental-strip-types ") === true &&
+		fcLines[1]?.trimStart().startsWith("(dev clone:") === true &&
+		fcLines[2] === "";
+	const fcDetails = entryOf.get("meta-bridge-fresh-cut")?.details ?? [];
+	const exitMarks: [keyof typeof FRESH_CUT_EXIT, string][] = [
+		["COMPLETE", "cut complete:"],
+		["NO_MOVE", "NOTHING MOVED:"],
+		["USAGE", "usage."],
+		["HALF_CUT", "CUT TRANSITION INCOMPLETE:"],
+		["CLEANUP_INCOMPLETE", "CUT COMPLETE, CLEANUP INCOMPLETE:"],
+	];
+	const exitsAgree = exitMarks.every(
+		([k, mark]) => fcDetails.filter((l) => l.startsWith(`  ${FRESH_CUT_EXIT[k]}  ${mark}`)).length === 1,
+	);
+	ok(
+		"[QK:CLI-HELP-DETAILS-ORACLE] S9u fresh-cut's details are its ce92dc7 usage text minus only the old invocation lines, and every exit number is the one FRESH_CUT_EXIT returns",
+		invocationDropped && JSON.stringify(fcDetails) === JSON.stringify(fcLines.slice(3)) && exitsAgree,
+		`details=${fcDetails.length} lines, oracle=${fcLines.length - 3} lines, exits agree=${exitsAgree}`,
+	);
+
+	// A reader that stops early (`entwurf --help | head`) closes the pipe. Adopted as a UX amendment:
+	// that ends the page quietly with exit 0 — a stated choice, not a claim about what the old `cat`
+	// returned. pipefail is on and both sides' statuses are read back, so the producer's 0 is seen,
+	// not hidden behind head's.
+	const piped = spawnSync(
+		"bash",
+		[
+			"-c",
+			`set -o pipefail; bash '${path.join(REPO, "run.sh")}' --help | head -c 1 >/dev/null; echo "\${PIPESTATUS[0]} \${PIPESTATUS[1]}"`,
+		],
+		{ cwd: REPO, encoding: "utf8", env: helpEnv },
+	);
+	ok(
+		"[QK:CLI-HELP-EPIPE-QUIET] S9v `entwurf --help | head` ends without an error on stderr",
+		piped.stderr === "",
+		`stderr=${piped.stderr.slice(0, 200)}`,
+	);
+	ok(
+		"[QK:CLI-HELP-EPIPE-EXIT] S9v' under pipefail, the help producer and head both end 0 when the reader stops early",
+		piped.status === 0 && piped.stdout === "0 0\n",
+		`rc=${piped.status} statuses=${JSON.stringify(piped.stdout)}`,
+	);
 }
 
 // ─── S3 — no npm bin can reach a raw .ts when installed ──────────────────────────────

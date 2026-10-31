@@ -31,7 +31,7 @@ function shellQuote(s: string): string {
 
 function usage(code: number): never {
 	console.error(
-		"usage: node --experimental-strip-types scripts/meta-bridge-prune.ts [meta-sessions-dir] [--ttl-days N]",
+		"meta-bridge-prune: see `entwurf help meta-bridge-prune` (from that checkout's root: `./run.sh help meta-bridge-prune`)",
 	);
 	process.exit(code);
 }

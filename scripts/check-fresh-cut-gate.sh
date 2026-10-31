@@ -63,6 +63,7 @@ export HOME="$SANDBOX/home"
 export XDG_DATA_HOME="$SANDBOX/home/.local/share"
 export XDG_STATE_HOME="$SANDBOX/home/.local/state"
 export XDG_CACHE_HOME="$SANDBOX/home/.cache"
+export XDG_CONFIG_HOME="$SANDBOX/home/.config"
 export PI_CODING_AGENT_DIR="$SANDBOX/home/.pi/agent"
 export ENTWURF_META_SESSIONS_DIR="$SANDBOX/store"
 export ENTWURF_META_MAILBOX_DIR="$SANDBOX/mailbox"
@@ -1460,6 +1461,11 @@ fake_pkg="$SANDBOX/nm/node_modules/@junghanacs/entwurf"
 mkdir -p "$fake_pkg/scripts"
 cp "$REPO/run.sh" "$fake_pkg/run.sh"
 cp "$REPO/scripts/meta-bridge-store-doctor.ts" "$fake_pkg/scripts/"
+# Sourcing run.sh with no argv still walks its dispatch to the root usage, which renders
+# ENTWURF-CLI.json through scripts/cli-help.mjs (#153). Without those two files that render fails
+# first, under run.sh's own errexit, and the doctor branch below is never reached.
+cp "$REPO/ENTWURF-CLI.json" "$fake_pkg/ENTWURF-CLI.json"
+cp "$REPO/scripts/cli-help.mjs" "$fake_pkg/scripts/"
 set +e
 out="$(RUNSH="$fake_pkg/run.sh" bash -c 'set --; source "$RUNSH" >/dev/null; preflight_v3_store install' 2>&1)"; rc=$?
 set -e
@@ -1485,19 +1491,27 @@ rm -rf "$SANDBOX/nm"
 # names — the point is not that failures are nonzero, it is that a caller can BRANCH.
 echo "[check-fresh-cut-gate] J. exit contract"
 
-# J1/J2 — the two states that need no host at all.
+# J1/J2 — the two states that need no host at all. Streams are kept apart: the leaf's own
+# usage line is now only the address of the description (#153), and the contract text itself —
+# exit numbers included — is the public page `entwurf meta-bridge-fresh-cut --help` prints, which
+# check-install-surface S9u holds against this verb's ce92dc7 text and FRESH_CUT_EXIT.
+fc_pointer='meta-bridge-fresh-cut: see `entwurf help meta-bridge-fresh-cut` (from that checkout'"'"'s root: `./run.sh help meta-bridge-fresh-cut`)'
 set +e
-help_out="$(node --experimental-strip-types "${FRESH_CUT[@]}" --help 2>&1)"; rc=$?
+node --experimental-strip-types "${FRESH_CUT[@]}" --help >"$SANDBOX/j1.out" 2>"$SANDBOX/j1.err"; rc=$?
 set -e
-if [ "$rc" = 0 ]; then ok "J1 --help exits 0"; else bad "J1 --help exited $rc" "$help_out"; fi
-case "$help_out" in
-  *"EXIT CONTRACT"*) ok "J1b --help PRINTS the contract (an operator can read it where they hit it)" ;;
-  *) bad "J1b --help never printed the exit contract" "$help_out" ;;
-esac
+if [ "$rc" = 0 ]; then ok "J1 --help exits 0"; else bad "J1 --help exited $rc" "$(cat "$SANDBOX/j1.err")"; fi
 set +e
-bad_out="$(node --experimental-strip-types "${FRESH_CUT[@]}" --wat 2>&1)"; rc=$?
+node --experimental-strip-types "${FRESH_CUT[@]}" --wat >"$SANDBOX/j2.out" 2>"$SANDBOX/j2.err"; rc2=$?
 set -e
-if [ "$rc" = 2 ]; then ok "J2 an unknown argument is USAGE (exit 2), never a store verdict"; else bad "J2 unknown arg exited $rc, want 2" "$bad_out"; fi
+if [ "$rc2" = 2 ]; then ok "J2 an unknown argument is USAGE (exit 2), never a store verdict"; else bad "J2 unknown arg exited $rc2, want 2" "$(cat "$SANDBOX/j2.err")"; fi
+if [ "$rc" = 0 ] && [ "$rc2" = 2 ] && [ ! -s "$SANDBOX/j1.out" ] && [ ! -s "$SANDBOX/j2.out" ] \
+  && [ "$(cat "$SANDBOX/j1.err")" = "$fc_pointer" ] && [ "$(wc -l <"$SANDBOX/j1.err")" = 1 ] \
+  && cmp -s "$SANDBOX/j1.err" "$SANDBOX/j2.err"; then
+  ok "J1b --help (exit 0) and an unknown argument (exit 2) print nothing on stdout and one stderr line pointing at \`entwurf help meta-bridge-fresh-cut\`"
+else
+  bad "[QK:FRESHCUT-HELP-POINTER] J1b the leaf's usage is not exactly the one pointer line on stderr with an empty stdout" \
+    "help rc=$rc stdout=$(head -c 200 "$SANDBOX/j1.out") stderr=$(head -c 400 "$SANDBOX/j1.err") | wat rc=$rc2 stdout=$(head -c 200 "$SANDBOX/j2.out") stderr=$(head -c 400 "$SANDBOX/j2.err")"
+fi
 
 # J3 — the success state, distinct from every failure below.
 reset_world prevgen

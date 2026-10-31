@@ -166,6 +166,29 @@ OUT3="$(node --experimental-strip-types "$PRUNE" "$STORE" --ttl-days 100 2>&1)"
 set -e
 echo "$OUT3" | grep -q "STALE recordUpdatedAt>100d (0):" && echo "$OUT3" | grep -q "KEEP (live/recent): 2 record" && ok "--ttl-days widens keep window" || bad "--ttl-days did not move stale boundary"
 
+# the leaf's usage is now only the address of the description (#153): --help keeps exit 0 and an
+# unknown flag keeps exit 2 with its cause line, both with nothing on stdout. These two children get
+# their own scratch HOME, XDG roots, PI dir and store under $TMP, never the operator's.
+PRUNE_HOME="$TMP/help-home"
+prune_env=(HOME="$PRUNE_HOME" XDG_DATA_HOME="$PRUNE_HOME/.local/share" XDG_STATE_HOME="$PRUNE_HOME/.local/state"
+  XDG_CACHE_HOME="$PRUNE_HOME/.cache" XDG_CONFIG_HOME="$PRUNE_HOME/.config" PI_CODING_AGENT_DIR="$PRUNE_HOME/.pi/agent"
+  ENTWURF_META_SESSIONS_DIR="$PRUNE_HOME/store")
+PRUNE_POINTER='meta-bridge-prune: see `entwurf help meta-bridge-prune` (from that checkout'"'"'s root: `./run.sh help meta-bridge-prune`)'
+set +e
+env "${prune_env[@]}" node --experimental-strip-types "$PRUNE" --help >"$TMP/help.out" 2>"$TMP/help.err"
+HELP_CODE=$?
+env "${prune_env[@]}" node --experimental-strip-types "$PRUNE" --bogus >"$TMP/bogus.out" 2>"$TMP/bogus.err"
+BOGUS_CODE=$?
+set -e
+if [ "$HELP_CODE" = "0" ] && [ ! -s "$TMP/help.out" ] && [ "$(cat "$TMP/help.err")" = "$PRUNE_POINTER" ] \
+  && [ "$(wc -l <"$TMP/help.err")" = 1 ] \
+  && [ "$BOGUS_CODE" = "2" ] && [ ! -s "$TMP/bogus.out" ] \
+  && [ "$(cat "$TMP/bogus.err")" = "unknown flag: --bogus"$'\n'"$PRUNE_POINTER" ] && [ "$(wc -l <"$TMP/bogus.err")" = 2 ]; then
+  ok "--help (exit 0) and --bogus (exit 2, after its cause line) print nothing on stdout and point at \`entwurf help meta-bridge-prune\`"
+else
+  bad "[QK:PRUNE-HELP-POINTER] the leaf's usage is not exactly the pointer line: help rc=$HELP_CODE stderr=$(head -c 300 "$TMP/help.err") stdout=$(head -c 200 "$TMP/help.out") | bogus rc=$BOGUS_CODE stderr=$(head -c 300 "$TMP/bogus.err") stdout=$(head -c 200 "$TMP/bogus.out")"
+fi
+
 if [ "$fail" = "0" ]; then
   echo "smoke-meta-prune PASS"
 else

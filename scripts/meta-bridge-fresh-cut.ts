@@ -127,33 +127,7 @@ import { probeSocketLiveness } from "../pi-extensions/lib/socket-probe.ts";
 
 function usage(code: number): never {
 	console.error(
-		[
-			"usage: node --experimental-strip-types scripts/meta-bridge-fresh-cut.ts",
-			"       (dev clone: `./run.sh meta-bridge-fresh-cut` · installed package: `entwurf meta-bridge-fresh-cut`)",
-			"",
-			"  Open a fresh meta-bridge generation: quiesce-check every live surface, then",
-			"  archive meta-sessions/ + meta-mailbox/ to `<dir>.archive-<timestamp>` siblings,",
-			"  clear dead sender/receiver markers and dead control sockets, and open empty",
-			"  live dirs. No migration, no restore: the archive is forensic bytes only.",
-			"",
-			"store   = ENTWURF_META_SESSIONS_DIR || <PI_CODING_AGENT_DIR|~/.pi/agent>/meta-sessions",
-			"mailbox = ENTWURF_META_MAILBOX_DIR  || <PI_CODING_AGENT_DIR|~/.pi/agent>/meta-mailbox",
-			"sockets = ENTWURF_DIR               || ~/.pi/entwurf-control",
-			"",
-			"EXIT CONTRACT (#54) — what already moved, not how bad it was:",
-			`  ${FRESH_CUT_EXIT.COMPLETE}  cut complete: generation archived (or none existed), fresh v3 store open,`,
-			"     residue cleared. `&& setup` is correct here.",
-			`  ${FRESH_CUT_EXIT.NO_MOVE}  NOTHING MOVED: a live/unprovable surface, an occupied archive destination,`,
-			"     an unreadable surface, or a first rename that failed. The host is unchanged —",
-			"     fix the named cause and re-run. Do NOT run setup: the store it refused is still there.",
-			`  ${FRESH_CUT_EXIT.USAGE}  usage.`,
-			`  ${FRESH_CUT_EXIT.HALF_CUT}  CUT TRANSITION INCOMPLETE: at least one archive move happened,`,
-			"     but the fresh generation is not confirmed open. Inspect, or re-run to finish under a new stamp.",
-			`  ${FRESH_CUT_EXIT.CLEANUP_INCOMPLETE}  CUT COMPLETE, CLEANUP INCOMPLETE: the generation IS archived and the fresh`,
-			"     generation IS open — install and citizen birth are unblocked, so setup may run —",
-			"     but marker/socket residue survived. Prefer fixing it and re-running BEFORE setup; after new citizen birth,",
-			"     remove the named residue manually instead of archiving the new generation with another cut.",
-		].join("\n"),
+		"meta-bridge-fresh-cut: see `entwurf help meta-bridge-fresh-cut` (from that checkout's root: `./run.sh help meta-bridge-fresh-cut`)",
 	);
 	process.exit(code);
 }

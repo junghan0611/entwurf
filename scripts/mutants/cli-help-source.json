@@ -1,0 +1,332 @@
+{
+	"schemaVersion": 1,
+	"lane": "cli-help-source",
+	"mutants": [
+		{
+			"claim": "CLI-HELP-ROOT-BYTES",
+			"title": "the renderer drops the blank line before Notes, so `entwurf --help` no longer prints the usage it replaced",
+			"subject": "scripts/cli-help.mjs",
+			"find": ["out.push(\"\", line(notes.title, \"usage.notes.title\"));"],
+			"replace": ["out.push(line(notes.title, \"usage.notes.title\"));"],
+			"gate": ["bash", "run.sh", "check-install-surface"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:CLI-HELP-ROOT-BYTES]",
+			"signatureSource": "scripts/check-install-surface.ts"
+		},
+		{
+			"claim": "CLI-HELP-MODULE-RELATIVE",
+			"title": "the renderer reads the help source from the caller's cwd, so whatever ENTWURF-CLI.json sits where `entwurf` was run describes the CLI",
+			"subject": "scripts/cli-help.mjs",
+			"find": ["const SOURCE = new URL(\"../ENTWURF-CLI.json\", import.meta.url);"],
+			"replace": ["const SOURCE = `${process.cwd()}/ENTWURF-CLI.json`;"],
+			"gate": ["bash", "run.sh", "check-install-surface"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:CLI-HELP-MODULE-RELATIVE]",
+			"signatureSource": "scripts/check-install-surface.ts"
+		},
+		{
+			"claim": "CLI-HELP-ONLY-RENDERER",
+			"title": "usage() asks git for the checkout state before rendering, so reading the help starts a tool the description never needed",
+			"subject": "run.sh",
+			"find": ["  node \"$REPO_DIR/scripts/cli-help.mjs\"\n}"],
+			"replace": [
+				"  git -C \"$REPO_DIR\" rev-parse HEAD >/dev/null 2>&1 || true\n  node \"$REPO_DIR/scripts/cli-help.mjs\"\n}"
+			],
+			"gate": ["bash", "run.sh", "check-install-surface"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:CLI-HELP-ONLY-RENDERER]",
+			"signatureSource": "scripts/check-install-surface.ts"
+		},
+		{
+			"claim": "CLI-HELP-FAIL-LOUD",
+			"title": "usage() swallows the renderer's failure, so a missing or broken help source answers `entwurf --help` with exit 0 and an empty page",
+			"subject": "run.sh",
+			"find": ["  node \"$REPO_DIR/scripts/cli-help.mjs\"\n}"],
+			"replace": ["  node \"$REPO_DIR/scripts/cli-help.mjs\" || true\n}"],
+			"gate": ["bash", "run.sh", "check-install-surface"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:CLI-HELP-FAIL-LOUD]",
+			"signatureSource": "scripts/check-install-surface.ts"
+		},
+		{
+			"claim": "CLI-HELP-STRICT-FIELDS",
+			"title": "the renderer stops checking key sets, so an entry can carry a field nobody reviewed — a handler, an argv, a command to run — and still render",
+			"subject": "scripts/cli-help.mjs",
+			"find": ["\tif (got.length !== want.length || got.some((k, i) => k !== want[i])) {"],
+			"replace": ["\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-install-surface"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:CLI-HELP-STRICT-FIELDS]",
+			"signatureSource": "scripts/check-install-surface.ts"
+		},
+		{
+			"claim": "CLI-HELP-UNIQUE",
+			"title": "the renderer stops refusing a command described twice, so two descriptions of one command both print and neither owns it",
+			"subject": "scripts/cli-help.mjs",
+			"find": ["\t\tif (entries.has(name)) fail("],
+			"replace": ["\t\tif (false) fail("],
+			"gate": ["bash", "run.sh", "check-install-surface"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:CLI-HELP-UNIQUE]",
+			"signatureSource": "scripts/check-install-surface.ts"
+		},
+		{
+			"claim": "CLI-HELP-CANONICAL",
+			"title": "a duplicated JSON property rides into the committed help source; JSON.parse keeps the later value and every runtime check stays green",
+			"subject": "ENTWURF-CLI.json",
+			"find": ["\t\"schemaVersion\": 2,"],
+			"replace": ["\t\"schemaVersion\": 2,\n\t\"schemaVersion\": 2,"],
+			"gate": ["bash", "run.sh", "check-install-surface"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:CLI-HELP-CANONICAL]",
+			"signatureSource": "scripts/check-install-surface.ts"
+		},
+		{
+			"claim": "CLI-HELP-NO-ORPHAN",
+			"title": "the help describes a command that no dispatch arm or gate function provides — `entwurf --help` advertises something that does not exist",
+			"subject": "ENTWURF-CLI.json",
+			"find": ["\t\t\t\t\t\"synopsis\": \"menu\","],
+			"replace": ["\t\t\t\t\t\"synopsis\": \"menu-retired\","],
+			"gate": ["bash", "run.sh", "check-install-surface"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:CLI-HELP-NO-ORPHAN]",
+			"signatureSource": "scripts/check-install-surface.ts"
+		},
+		{
+			"claim": "CLI-HELP-DEBT-EXACT",
+			"title": "a new dispatch arm lands with no description, and the help silently stops covering a command run.sh answers",
+			"subject": "run.sh",
+			"find": ["  -h|--help|help|\"\")"],
+			"replace": ["  zz-undescribed)\n    :\n    ;;\n  -h|--help|help|\"\")"],
+			"gate": ["bash", "run.sh", "check-install-surface"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:CLI-HELP-DEBT-EXACT]",
+			"signatureSource": "scripts/check-install-surface.ts"
+		},
+		{
+			"claim": "CLI-HELP-DISPATCH-REVIEWED",
+			"title": "the dispatch changes after its labels were reviewed, and the help coverage keeps trusting labels nobody re-read",
+			"subject": "run.sh",
+			"find": ["  -h|--help|help|\"\")"],
+			"replace": ["  # an unreviewed edit inside the dispatch\n  -h|--help|help|\"\")"],
+			"gate": ["bash", "run.sh", "check-install-surface"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:CLI-HELP-DISPATCH-REVIEWED]",
+			"signatureSource": "scripts/check-install-surface.ts"
+		},
+		{
+			"claim": "CLI-HELP-REAL-OWNER",
+			"title": "the gate inventory goes back to reading definition-shaped text, so a gate deleted from run.sh but left in a heredoc still counts as a command and keeps its description",
+			"subject": "scripts/check-install-surface.ts",
+			"find": ["\t\t\tconst names = new Set<string>();"],
+			"replace": [
+				"\t\t\tconst names = new Set<string>(\n\t\t\t\t[...text.matchAll(/^((?:check|smoke)_[a-z0-9_]+)\\(\\)\\s*\\{/gm)].map((m) => (m[1] as string).replace(/_/g, \"-\")),\n\t\t\t);"
+			],
+			"gate": ["bash", "run.sh", "check-install-surface"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:CLI-HELP-REAL-OWNER]",
+			"signatureSource": "scripts/check-install-surface.ts"
+		},
+		{
+			"claim": "CLI-HELP-AMENDMENTS",
+			"title": "the tool count goes back to eight, a number the bridge has not shipped since entwurf_callback joined",
+			"subject": "ENTWURF-CLI.json",
+			"find": ["EXACTLY the nine shipped garden verbs"],
+			"replace": ["EXACTLY the eight shipped garden verbs"],
+			"gate": ["bash", "run.sh", "check-install-surface"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:CLI-HELP-AMENDMENTS]",
+			"signatureSource": "scripts/check-install-surface.ts"
+		},
+		{
+			"claim": "CLI-HELP-PREFLIGHT-PLACEMENT",
+			"title": "a heredoc lands between the help preflight and the dispatch case, where the text pin no longer watches",
+			"subject": "run.sh",
+			"find": ["  exec node \"$REPO_DIR/scripts/cli-help.mjs\" --command \"$cmd\"\nfi\n"],
+			"replace": ["  exec node \"$REPO_DIR/scripts/cli-help.mjs\" --command \"$cmd\"\nfi\n: <<'NOTE'\nNOTE\n"],
+			"gate": ["bash", "run.sh", "check-install-surface"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:CLI-HELP-PREFLIGHT-PLACEMENT]",
+			"signatureSource": "scripts/check-install-surface.ts"
+		},
+		{
+			"claim": "CLI-HELP-COMMAND",
+			"title": "`<command> --help` prints the whole root page instead of that command's own help",
+			"subject": "run.sh",
+			"find": ["  exec node \"$REPO_DIR/scripts/cli-help.mjs\" --command \"$cmd\""],
+			"replace": ["  exec node \"$REPO_DIR/scripts/cli-help.mjs\""],
+			"gate": ["bash", "run.sh", "check-install-surface"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:CLI-HELP-COMMAND]",
+			"signatureSource": "scripts/check-install-surface.ts"
+		},
+		{
+			"claim": "CLI-HELP-NO-DISPATCH",
+			"title": "the preflight stops catching `<command> --help`, so asking an argv-ignoring command for help runs it",
+			"subject": "run.sh",
+			"find": ["elif [ \"$#\" -ge 2 ] && { [ \"$2\" = -h ] || [ \"$2\" = --help ]; } \\"],
+			"replace": ["elif false \\"],
+			"gate": ["bash", "run.sh", "check-install-surface"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:CLI-HELP-NO-DISPATCH]",
+			"signatureSource": "scripts/check-install-surface.ts"
+		},
+		{
+			"claim": "CLI-HELP-FORMS",
+			"title": "`entwurf help <command>` looks up the word help instead of the command it names",
+			"subject": "run.sh",
+			"find": ["--command \"$2\""],
+			"replace": ["--command \"$cmd\""],
+			"gate": ["bash", "run.sh", "check-install-surface"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:CLI-HELP-FORMS]",
+			"signatureSource": "scripts/check-install-surface.ts"
+		},
+		{
+			"claim": "CLI-HELP-EXTRA-REFUSED",
+			"title": "a help flag followed by more argv is answered as help, guessing past what was typed",
+			"subject": "run.sh",
+			"find": [
+				"  if [ \"$#\" -gt 2 ]; then\n    echo 'entwurf: a help request takes nothing after -h/--help; nothing was run' >&2"
+			],
+			"replace": [
+				"  if false; then\n    echo 'entwurf: a help request takes nothing after -h/--help; nothing was run' >&2"
+			],
+			"gate": ["bash", "run.sh", "check-install-surface"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:CLI-HELP-EXTRA-REFUSED]",
+			"signatureSource": "scripts/check-install-surface.ts"
+		},
+		{
+			"claim": "CLI-HELP-ALIAS-REFUSED",
+			"title": "`--help <command>` stops being refused and falls through to the dispatch",
+			"subject": "run.sh",
+			"find": ["elif { [ \"$cmd\" = -h ] || [ \"$cmd\" = --help ]; } && [ \"$#\" -ge 2 ]; then"],
+			"replace": ["elif false; then"],
+			"gate": ["bash", "run.sh", "check-install-surface"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:CLI-HELP-ALIAS-REFUSED]",
+			"signatureSource": "scripts/check-install-surface.ts"
+		},
+		{
+			"claim": "CLI-HELP-VENDOR-PASSTHROUGH",
+			"title": "the preflight intercepts `entwurf pi --help`, so pi's own help is replaced by a refusal",
+			"subject": "run.sh",
+			"find": ["[ \"$cmd\" != pi ] && "],
+			"replace": [""],
+			"gate": ["bash", "run.sh", "check-install-surface"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:CLI-HELP-VENDOR-PASSTHROUGH]",
+			"signatureSource": "scripts/check-install-surface.ts"
+		},
+		{
+			"claim": "CLI-HELP-NOT-HELP-POSITION",
+			"title": "the preflight treats --help anywhere in argv as a help request, rewriting commands whose own argv carries it",
+			"subject": "run.sh",
+			"find": ["{ [ \"$2\" = -h ] || [ \"$2\" = --help ]; }"],
+			"replace": ["[[ \" ${*:2} \" == *\" --help \"* ]]"],
+			"gate": ["bash", "run.sh", "check-install-surface"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:CLI-HELP-NOT-HELP-POSITION]",
+			"signatureSource": "scripts/check-install-surface.ts"
+		},
+		{
+			"claim": "CLI-HELP-ONE-LINE",
+			"title": "an unknown name is printed raw, so a newline in it splits the one-line refusal",
+			"subject": "scripts/cli-help.mjs",
+			"find": ["no help for ${JSON.stringify(wanted)}"],
+			"replace": ["no help for ${wanted}"],
+			"gate": ["bash", "run.sh", "check-install-surface"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:CLI-HELP-ONE-LINE]",
+			"signatureSource": "scripts/check-install-surface.ts"
+		},
+		{
+			"claim": "CLI-HELP-COMMAND-TRACE",
+			"title": "a command help asks git for checkout state before answering, starting a tool the description never needed",
+			"subject": "run.sh",
+			"find": ["  exec node \"$REPO_DIR/scripts/cli-help.mjs\" --command \"$cmd\""],
+			"replace": [
+				"  git -C \"$REPO_DIR\" rev-parse HEAD >/dev/null 2>&1 || true\n  exec node \"$REPO_DIR/scripts/cli-help.mjs\" --command \"$cmd\""
+			],
+			"gate": ["bash", "run.sh", "check-install-surface"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:CLI-HELP-COMMAND-TRACE]",
+			"signatureSource": "scripts/check-install-surface.ts"
+		},
+		{
+			"claim": "CLI-HELP-DETAILS-ORACLE",
+			"title": "fresh-cut's longer help is reworded in the data and silently drifts from the text the verb shipped",
+			"subject": "ENTWURF-CLI.json",
+			"find": ["  live dirs. No migration, no restore: the archive is forensic bytes only."],
+			"replace": ["  live dirs. No migration, no restore: the archive is forensic only."],
+			"gate": ["bash", "run.sh", "check-install-surface"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:CLI-HELP-DETAILS-ORACLE]",
+			"signatureSource": "scripts/check-install-surface.ts"
+		},
+		{
+			"claim": "CLI-HELP-EPIPE-QUIET",
+			"title": "a reader that stops early (`entwurf --help | head`) gets a node EPIPE stack trace on stderr",
+			"subject": "scripts/cli-help.mjs",
+			"find": ["\tif (err.code === \"EPIPE\") process.exit(0);"],
+			"replace": ["\tif (false) process.exit(0);"],
+			"gate": ["bash", "run.sh", "check-install-surface"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:CLI-HELP-EPIPE-QUIET]",
+			"signatureSource": "scripts/check-install-surface.ts"
+		},
+		{
+			"claim": "CLI-HELP-METADATA-EXIT",
+			"title": "a broken help source exits 2, the same status as a refused help request, so a caller can no longer tell a damaged install from a typo",
+			"subject": "scripts/cli-help.mjs",
+			"find": ["\tprocess.exit(1);"],
+			"replace": ["\tprocess.exit(2);"],
+			"gate": ["bash", "run.sh", "check-install-surface"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:CLI-HELP-METADATA-EXIT]",
+			"signatureSource": "scripts/check-install-surface.ts"
+		},
+		{
+			"claim": "CLI-HELP-EPIPE-EXIT",
+			"title": "the early-closed pipe is reported as a failure exit, so `set -o pipefail; entwurf --help | head` fails a script that only wanted the first lines",
+			"subject": "scripts/cli-help.mjs",
+			"find": ["\tif (err.code === \"EPIPE\") process.exit(0);"],
+			"replace": ["\tif (err.code === \"EPIPE\") process.exit(1);"],
+			"gate": ["bash", "run.sh", "check-install-surface"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:CLI-HELP-EPIPE-EXIT]",
+			"signatureSource": "scripts/check-install-surface.ts"
+		},
+		{
+			"claim": "PRUNE-HELP-POINTER",
+			"title": "the prune leaf's --help and unknown-flag refusal point at another command's description, so an operator who followed them reads help for the wrong verb (#153)",
+			"subject": "scripts/meta-bridge-prune.ts",
+			"find": [
+				"\t\t\"meta-bridge-prune: see `entwurf help meta-bridge-prune` (from that checkout's root: `./run.sh help meta-bridge-prune`)\","
+			],
+			"replace": [
+				"\t\t\"meta-bridge-prune: see `entwurf help meta-bridge-fresh-cut` (from that checkout's root: `./run.sh help meta-bridge-fresh-cut`)\","
+			],
+			"gate": ["bash", "run.sh", "smoke-meta-prune"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:PRUNE-HELP-POINTER]",
+			"signatureSource": "scripts/smoke-meta-prune.sh"
+		},
+		{
+			"claim": "CLI-HELP-PI-DESCRIBED",
+			"title": "pi's description drops the flag the launch adds, so `entwurf help pi` no longer says what the arm execs",
+			"subject": "ENTWURF-CLI.json",
+			"find": [
+				"\t\t\t\t\t\"summary\": \"#118: the MANAGED pi launch. exec()s the pi that `type -P` finds on PATH (a file, never a shell function or alias) in THIS terminal, with --entwurf-control added ahead of your argv, which passes through untouched. Refuses by name when ENTWURF_PI_LAUNCH_ACTIVE is non-empty (it exports that to the pi it starts), when no pi is on PATH (it launches the pi coding agent, it does not install one), or when that path is not an executable regular file\""
+			],
+			"replace": [
+				"\t\t\t\t\t\"summary\": \"#118: the MANAGED pi launch. exec()s the pi that `type -P` finds on PATH (a file, never a shell function or alias) in THIS terminal, with your argv, which passes through untouched. Refuses by name when ENTWURF_PI_LAUNCH_ACTIVE is non-empty (it exports that to the pi it starts), when no pi is on PATH (it launches the pi coding agent, it does not install one), or when that path is not an executable regular file\""
+			],
+			"gate": ["bash", "run.sh", "check-install-surface"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:CLI-HELP-PI-DESCRIBED]",
+			"signatureSource": "scripts/check-install-surface.ts"
+		}
+	]
+}

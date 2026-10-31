@@ -236,7 +236,26 @@ function parseProjection(run: CliRun, label: string): Projection {
 // ── usage ───────────────────────────────────────────────────────────────────
 {
 	ok("[QK:MF-USAGE] two positional args are a usage error (exit 2)", cli(["/a", "/b"]).status === 2);
-	ok("a dash argv is a usage error, not a store directory", cli(["--help"]).status === 2);
+	// The dash refusal's one line is now only the address of the description (#153). This child gets
+	// its own scratch HOME, XDG roots, PI dir and store, so nothing it prints leans on the operator's.
+	const usageHome = reclaimOnExit(fs.mkdtempSync(path.join(os.tmpdir(), "entwurf-meta-facts-usage-")));
+	const dash = cli(["--help"], {
+		HOME: usageHome,
+		XDG_DATA_HOME: path.join(usageHome, ".local", "share"),
+		XDG_STATE_HOME: path.join(usageHome, ".local", "state"),
+		XDG_CACHE_HOME: path.join(usageHome, ".cache"),
+		XDG_CONFIG_HOME: path.join(usageHome, ".config"),
+		PI_CODING_AGENT_DIR: path.join(usageHome, ".pi", "agent"),
+		ENTWURF_META_SESSIONS_DIR: path.join(usageHome, "store"),
+	});
+	ok("a dash argv is a usage error, not a store directory", dash.status === 2);
+	ok(
+		"[QK:MF-HELP-POINTER] the dash refusal keeps exit 2 and an empty stdout, and its one stderr line points at `entwurf help meta-facts`",
+		dash.status === 2 &&
+			dash.stdout === "" &&
+			dash.stderr ===
+				"meta-facts: see `entwurf help meta-facts` (from that checkout's root: `./run.sh help meta-facts`)\n",
+	);
 }
 
 // ── reachability: dispatch + compiled twin ──────────────────────────────────

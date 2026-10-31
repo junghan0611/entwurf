@@ -300,13 +300,33 @@ function parseProjection(run: CliRun, label: string): Projection {
 	console.log("  ok    an unreadable store is exit 3 with no JSON");
 	passed++;
 
-	const flag = cli(["--help"]);
+	// This child gets its own scratch HOME, XDG roots, PI dir and store on top of cli()'s, so the
+	// refusal it prints leans on nothing of the operator's.
+	const usageHome = tmp("usage");
+	const flag = cli(["--help"], {
+		HOME: usageHome,
+		XDG_DATA_HOME: path.join(usageHome, ".local", "share"),
+		XDG_STATE_HOME: path.join(usageHome, ".local", "state"),
+		XDG_CACHE_HOME: path.join(usageHome, ".cache"),
+		XDG_CONFIG_HOME: path.join(usageHome, ".config"),
+		PI_CODING_AGENT_DIR: path.join(usageHome, ".pi", "agent"),
+		ENTWURF_META_SESSIONS_DIR: path.join(usageHome, "store"),
+	});
 	assert.ok(
 		flag.status === 2 && flag.stdout === "",
 		"[QK:PF-USAGE] a dash argv is a flag this command does not have — reading it as a store directory would answer `--help` with `empty store, exit 0`, a silent wrong fact",
 	);
 	console.log("  ok    a dash argv is a usage error, not a store directory");
 	passed++;
+	// The leaf's one stderr line is now only the address of the description (#153); the description
+	// itself is ENTWURF-CLI.json's, which `entwurf peer-facts --help` answers before this leaf runs.
+	ok(
+		"[QK:PF-HELP-POINTER] the dash refusal keeps exit 2 and an empty stdout, and its one stderr line points at `entwurf help peer-facts`",
+		flag.status === 2 &&
+			flag.stdout === "" &&
+			flag.stderr ===
+				"peer-facts: see `entwurf help peer-facts` (from that checkout's root: `./run.sh help peer-facts`)\n",
+	);
 	ok("a second positional is a usage error", cli(["/a", "/b"]).status === 2);
 }
 
@@ -317,7 +337,24 @@ function parseProjection(run: CliRun, label: string): Projection {
 		"run.sh dispatches peer-facts through the single run_ts fence",
 		/\n {2}peer-facts\)\n(?:.*\n)*?\s*run_ts scripts\/peer-facts\.ts "\$@"\n/.test(runSh),
 	);
-	ok("run.sh documents peer-facts in its usage block", runSh.includes("./run.sh peer-facts "));
+	// The description is owned by ENTWURF-CLI.json now, so ask the public surface rather than any
+	// file: what the root help actually prints. Only PATH crosses; the root help runs no command.
+	const rootHelp = spawnSync("bash", [path.join(REPO, "run.sh"), "--help"], {
+		encoding: "utf8",
+		env: { PATH: process.env.PATH ?? "/usr/bin:/bin" },
+	});
+	ok("the root help describes peer-facts", rootHelp.status === 0 && /^ {2}entwurf peer-facts /m.test(rootHelp.stdout));
+	// The scene that opened #153's help work: an agent with no briefing asks `entwurf peer-facts
+	// --help`. run.sh answers it from the description before dispatch, so the store is never read and
+	// the leaf's own dash refusal (PF-USAGE, exit 2) is not what the operator meets.
+	const askHelp = spawnSync("bash", [path.join(REPO, "run.sh"), "peer-facts", "--help"], {
+		encoding: "utf8",
+		env: { PATH: process.env.PATH ?? "/usr/bin:/bin" },
+	});
+	ok(
+		"`entwurf peer-facts --help` is that command's help on stdout, exit 0",
+		askHelp.status === 0 && askHelp.stderr === "" && askHelp.stdout.startsWith("Usage: entwurf peer-facts\n"),
+	);
 	const build = fs.readFileSync(path.join(REPO, "mcp/entwurf-bridge/tsconfig.build.json"), "utf8");
 	ok(
 		"the bridge build emits the compiled twin (installed hosts cannot strip-types)",

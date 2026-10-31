@@ -38,6 +38,21 @@
 			"timeoutSeconds": 180,
 			"signature": "[QK:FRESHCUT-PREFLIGHT-CUT-DETECTED]",
 			"signatureSource": "scripts/check-fresh-cut-gate.sh"
+		},
+		{
+			"claim": "FRESHCUT-HELP-POINTER",
+			"title": "the leaf's --help and usage refusal point at another command's description, so an operator who followed them reads the wrong exit contract (#153)",
+			"subject": "scripts/meta-bridge-fresh-cut.ts",
+			"find": [
+				"\t\t\"meta-bridge-fresh-cut: see `entwurf help meta-bridge-fresh-cut` (from that checkout's root: `./run.sh help meta-bridge-fresh-cut`)\","
+			],
+			"replace": [
+				"\t\t\"meta-bridge-fresh-cut: see `entwurf help meta-bridge-prune` (from that checkout's root: `./run.sh help meta-bridge-prune`)\","
+			],
+			"gate": ["bash", "run.sh", "check-fresh-cut-gate"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:FRESHCUT-HELP-POINTER]",
+			"signatureSource": "scripts/check-fresh-cut-gate.sh"
 		}
 	]
 }
