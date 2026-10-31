@@ -1,0 +1,45 @@
+entwurf - native harness entrypoints and garden facts
+
+Usage:
+  entwurf <command> [args...]
+  entwurf help [<command>]            this overview, or one command's full description
+  entwurf help all                    all documented commands, developer gates included
+  entwurf -h                          this overview (--help works too)
+
+Launch native runtimes:
+  entwurf pi [args...]                pi with Entwurf control; args go to pi
+  entwurf pi-durable [args...]        the packaged durable pi launcher
+  entwurf copilot [args...]           Copilot with its Entwurf extension enabled
+  entwurf codex-app-server [args...]  Codex's app-server on the socket Entwurf reads
+
+Set up and check this host:
+  entwurf setup [project-dir]         wire detected harnesses; report PASS/SKIP/FAIL each
+  entwurf doctor-meta-bridge          check the Claude Code wiring
+  entwurf doctor-pi-package           inspect ownership of the global pi registration
+
+Look at the garden (read-only JSON):
+  entwurf peer-facts                  siblings and their live-rail facts
+  entwurf meta-facts                  garden records and store diagnostics
+
+Remove wiring:
+  entwurf remove [project-dir]        remove this project's pi registration
+  entwurf remove-user-scope           remove the global pi registration
+  entwurf uninstall-meta-bridge       restore what the Claude Code install recorded
+
+Herdr plugin (from its active runtime):
+  entwurf herdr-plugin-expose-operator --bin-dir <abs>  create the one operator link
+  entwurf herdr-plugin-withdraw-operator                remove the owned link
+  entwurf herdr-plugin-deactivate                       undo plugin wiring and runtime
+
+Examples:
+  # Start pi in the current project
+  entwurf pi
+
+  # Read a command before changing this host
+  entwurf help setup
+
+  # See who is in the garden
+  entwurf peer-facts
+
+Fresh call, send, resume and retire are entwurf-bridge MCP tools inside a session,
+not commands here. Advanced maintenance and development gates: entwurf help all

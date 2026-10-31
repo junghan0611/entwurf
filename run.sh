@@ -5254,20 +5254,23 @@ _check_pack_install_impl() {
 
   # #153 — the installed bin describes itself from the description data and renderer the tarball
   # carries (cli-help.mjs reads only module-relative bytes). Streams stay apart and are compared as
-  # bytes: the consumer's `entwurf --help` must be exactly what the checkout renders, on stdout, with
-  # an empty stderr. Two negatives on this consumer's own installed files then show the answer comes
-  # from THOSE files, not from the checkout still visible on this host: a changed installed title
-  # shows up in the installed help, and a removed installed renderer fails it with nothing on
-  # stdout. Both files are restored and compared back before anything is judged.
+  # bytes: the consumer's `entwurf --help` (the short root page) and `entwurf help all` (the full
+  # catalog) must each be exactly what the checkout renders, on stdout, with an empty stderr. Two
+  # negatives on this consumer's own installed files then show the answer comes from THOSE files,
+  # not from the checkout still visible on this host: a changed installed root title shows up in the
+  # installed help, and a removed installed renderer fails it with nothing on stdout. Both files are
+  # restored and compared back before anything is judged.
   local help_dir="$npm_tmp/cli-help" help_bin="$npmroot/node_modules/.bin/entwurf"
   local help_json="$npm_pkg/ENTWURF-CLI.json" help_mjs="$npm_pkg/scripts/cli-help.mjs"
-  local help_rc help_co_rc help_title_rc help_gone_rc help_restored=1
+  local help_rc help_co_rc help_all_rc help_all_co_rc help_title_rc help_gone_rc help_restored=1
   mkdir -p "$help_dir"
   if env "${consumer_env[@]}" bash "$REPO_DIR/run.sh" --help >"$help_dir/checkout.out" 2>"$help_dir/checkout.err"; then help_co_rc=0; else help_co_rc=$?; fi
   if (cd "$npmproj" && env "${consumer_env[@]}" "$help_bin" --help) >"$help_dir/installed.out" 2>"$help_dir/installed.err"; then help_rc=0; else help_rc=$?; fi
+  if env "${consumer_env[@]}" bash "$REPO_DIR/run.sh" help all >"$help_dir/checkout-all.out" 2>"$help_dir/checkout-all.err"; then help_all_co_rc=0; else help_all_co_rc=$?; fi
+  if (cd "$npmproj" && env "${consumer_env[@]}" "$help_bin" help all) >"$help_dir/installed-all.out" 2>"$help_dir/installed-all.err"; then help_all_rc=0; else help_all_rc=$?; fi
 
   cp -p "$help_json" "$help_dir/ENTWURF-CLI.json.orig"
-  sed -i 's/^\t\t"title": "Usage:",$/\t\t"title": "Usage (installed copy):",/' "$help_json"
+  sed -i 's/^\t\t"title": "entwurf - native harness entrypoints and garden facts",$/\t\t"title": "entwurf (installed copy)",/' "$help_json"
   if (cd "$npmproj" && env "${consumer_env[@]}" "$help_bin" --help) >"$help_dir/title.out" 2>"$help_dir/title.err"; then help_title_rc=0; else help_title_rc=$?; fi
   cp -p "$help_dir/ENTWURF-CLI.json.orig" "$help_json"
 
@@ -5288,7 +5291,15 @@ _check_pack_install_impl() {
     fail "[check-pack-install] installed \`entwurf --help\` rc=$help_rc is not the checkout's stdout bytes with an empty stderr (stderr: $(head -c 300 "$help_dir/installed.err"))"
     return 1
   fi
-  if [ "$help_title_rc" -ne 0 ] || [ "$(head -n 1 "$help_dir/title.out")" != "Usage (installed copy):" ]; then
+  if [ "$help_all_co_rc" -ne 0 ] || [ -s "$help_dir/checkout-all.err" ]; then
+    fail "[check-pack-install] checkout \`run.sh help all\` rc=$help_all_co_rc (stderr: $(head -c 300 "$help_dir/checkout-all.err"))"
+    return 1
+  fi
+  if [ "$help_all_rc" -ne 0 ] || [ -s "$help_dir/installed-all.err" ] || ! cmp -s "$help_dir/installed-all.out" "$help_dir/checkout-all.out"; then
+    fail "[check-pack-install] installed \`entwurf help all\` rc=$help_all_rc is not the checkout's stdout bytes with an empty stderr (stderr: $(head -c 300 "$help_dir/installed-all.err"))"
+    return 1
+  fi
+  if [ "$help_title_rc" -ne 0 ] || [ "$(head -n 1 "$help_dir/title.out")" != "entwurf (installed copy)" ]; then
     fail "[check-pack-install] a changed INSTALLED ENTWURF-CLI.json did not change the installed help (rc=$help_title_rc) — it answered from somewhere else"
     return 1
   fi
@@ -5296,7 +5307,7 @@ _check_pack_install_impl() {
     fail "[check-pack-install] with the INSTALLED renderer removed, installed \`entwurf --help\` still answered (rc=$help_gone_rc) — it fell back to something else"
     return 1
   fi
-  echo "[check-pack-install] installed entwurf --help renders from the shipped ENTWURF-CLI.json + scripts/cli-help.mjs (byte-equal, and follows/fails with the installed copies)"
+  echo "[check-pack-install] installed entwurf --help and help all render from the shipped ENTWURF-CLI.json + scripts/cli-help.mjs (byte-equal, and follows/fails with the installed copies)"
 
   # #153 — the operator entrance through this npm consumer's installed bins (helper above).
   pack_install_operator_cells "$npm_tmp" "$npmroot" "$help_dir" || return 1
@@ -7586,9 +7597,12 @@ cmd=${1:-}
 # help form with more argv after it is refused the same way rather than guessed at, and so is
 # `--help <command>`. The four launchers below hand every argv to a vendor binary that owns its
 # own --help, so they pass through untouched. Only these exact shapes are help: a flag in another
-# position, or after `--`, reaches the dispatch as before. The bare root forms fall through to
-# the unchanged case below.
-if [ "$cmd" = help ] && [ "$#" -ge 2 ]; then
+# position, or after `--`, reaches the dispatch as before. `entwurf help all` — exactly those two
+# words — prints the full catalog, every described command, which the short root page leaves out.
+# The bare root forms fall through to the unchanged case below.
+if [ "$cmd" = help ] && [ "$#" -eq 2 ] && [ "$2" = all ]; then
+  exec node "$REPO_DIR/scripts/cli-help.mjs" --all
+elif [ "$cmd" = help ] && [ "$#" -ge 2 ]; then
   if [ "$#" -gt 2 ]; then
     echo 'entwurf: `entwurf help` takes one command name' >&2
     exit 2

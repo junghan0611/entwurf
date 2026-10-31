@@ -47,10 +47,14 @@
  *        exported BASH_FUNC_* defines, and one only a comment/heredoc spells all stay the
  *        Unknown command; an admitted gate runs once, with no argv, its streams and exact exit
  *        status intact, and stops at its first failure.
- *   S9   `entwurf --help` and `entwurf help <command>` render root ENTWURF-CLI.json through
- *        scripts/cli-help.mjs. The root forms and the Unknown path print the ce92dc7 usage bytes (a
- *        fixture outside the tarball, pinned) with explicit amendments only — the `entwurf` prefix and
- *        the tool count EXPECTED_TOOLS holds. The source is read beside the renderer; of the PATH tools
+ *   S9   `entwurf --help`, `entwurf help all` and `entwurf help <command>` render root ENTWURF-CLI.json
+ *        through scripts/cli-help.mjs. The root forms and the Unknown path print the short root page,
+ *        byte for byte a reviewed literal fixture (pinned, written before the data and never generated
+ *        from it); `entwurf help all` prints the full catalog — the ce92dc7 usage bytes (a fixture
+ *        outside the tarball, pinned) with explicit amendments only, the `entwurf` prefix and the tool
+ *        count EXPECTED_TOOLS holds — and starts only node on the renderer with `--all`. Every command
+ *        the root page names is described, dispatchable and outside the debt, and an example naming
+ *        anything else fails the source by name. The source is read beside the renderer; of the PATH tools
  *        it watches, a help run starts only node on that renderer (a PATH watch, not an exec audit —
  *        the renderer's node:fs-only reach is read directly); a missing or malformed source fails by
  *        name with no fallback text, exit 1 on every form, apart from a refused help request's 2; an
@@ -303,9 +307,12 @@ const operatorCmds = [...targets].filter(([cmd, ts]) => !isDevGate(cmd) && ts.le
 			encoding: "utf8",
 			env: { PATH: process.env.PATH ?? "/usr/bin:/bin" },
 		});
+	// The Unknown path prints the root page: its first line, with its LF, read from the reviewed
+	// literal (S9 owns the whole-page comparison), marks that page here.
+	const UNKNOWN_PAGE_START = `${readFileSync(path.join(REPO, "test/fixtures/cli-help/root-compact-153.txt"), "utf8").split("\n", 1)[0]}\n`;
 	const isUnknown = (cmd: string): boolean => {
 		const r = probe(cmd);
-		return r.status === 1 && r.stderr === `Unknown command: ${cmd}\n` && r.stdout.startsWith("Usage:\n");
+		return r.status === 1 && r.stderr === `Unknown command: ${cmd}\n` && r.stdout.startsWith(UNKNOWN_PAGE_START);
 	};
 	ok(
 		"[QK:BY-NAME-GATE-PREFIX] S8a a run.sh function that is not a gate (`usage`) is still the Unknown command, never run by name",
@@ -347,7 +354,7 @@ const operatorCmds = [...targets].filter(([cmd, ts]) => !isDevGate(cmd) && ts.le
 			});
 		const unknownIn = (cmd: string, extraEnv: Record<string, string> = {}): boolean => {
 			const r = run([cmd], extraEnv);
-			return r.status === 1 && r.stderr === `Unknown command: ${cmd}\n` && r.stdout.startsWith("Usage:\n");
+			return r.status === 1 && r.stderr === `Unknown command: ${cmd}\n` && r.stdout.startsWith(UNKNOWN_PAGE_START);
 		};
 		const probe = run(["check-dispatch-probe", "extra-a", "extra-b"]);
 		ok(
@@ -408,17 +415,27 @@ const operatorCmds = [...targets].filter(([cmd, ts]) => !isDevGate(cmd) && ts.le
 {
 	// The independent oracle is what ce92dc7's usage() heredoc actually printed, kept byte for byte
 	// outside the tarball; the pin fences the fixture itself so neither can drift alone. It is the
-	// CONTENT oracle of the root page, and no expected root text or inventory is derived from the new
-	// description data. The command pages further down are checked against a page built from the
-	// data entry — a routing and format oracle; their content is bound by this root fixture (every
-	// synopsis and summary also prints on the root page) and by fresh-cut's own fixture (details).
+	// CONTENT oracle of the full catalog — the page `entwurf help all` prints, which was the root page
+	// until the root became the short page below — and no expected catalog text or inventory is
+	// derived from the description data. The command pages further down are checked against a page
+	// built from the data entry — a routing and format oracle; their content is bound by this catalog
+	// fixture (every synopsis and summary also prints in the catalog) and by fresh-cut's own fixture.
 	const OLD_USAGE_FIXTURE = "test/fixtures/cli-help/usage-ce92dc7.txt";
 	const OLD_USAGE_SHA256 = "e67f1cb97e5022b865f525d8fb37e3cd0fd0adac927323efd2f27beb9c9e23e6";
 	const oldUsage = readFileSync(path.join(REPO, OLD_USAGE_FIXTURE), "utf8");
 	const sha256 = (s: string): string => createHash("sha256").update(s).digest("hex");
 	if (sha256(oldUsage) !== OLD_USAGE_SHA256) throw new Error(`S9: ${OLD_USAGE_FIXTURE} is not the ce92dc7 usage`);
+	// The root page's own oracle: a reviewed literal, pinned, written before the data that renders it
+	// and never generated from it. Moving the root forms from the catalog bytes to these is the
+	// intended change; the catalog keeps its own oracle above, observed through `help all`.
+	const COMPACT_FIXTURE = "test/fixtures/cli-help/root-compact-153.txt";
+	const COMPACT_SHA256 = "30176fa0a2e8598a2ffca98c0e2c4ac773f57dc3428042e15286c87e2b8832ae";
+	const expectedCompact = readFileSync(path.join(REPO, COMPACT_FIXTURE), "utf8");
+	if (sha256(expectedCompact) !== COMPACT_SHA256) {
+		throw new Error(`S9: ${COMPACT_FIXTURE} is not the reviewed root page`);
+	}
 
-	// The root page today is that fixture with exactly these explicit amendments applied, each naming
+	// The catalog today is that ce92dc7 fixture with exactly these explicit amendments applied, each naming
 	// the source that justifies it — never a text regenerated from the new data. The prefix: a command
 	// line names the product, not the checkout's script; columns are absolute, so the character the
 	// prefix loses becomes one more space before `#`. The literals: an old phrase that is no longer
@@ -441,13 +458,13 @@ const operatorCmds = [...targets].filter(([cmd, ts]) => !isDevGate(cmd) && ts.le
 		},
 	];
 	const respelled = oldUsage.split("\n").filter((l) => respell(l) !== l).length;
-	let expectedRoot = oldUsage.split("\n").map(respell).join("\n");
+	let expectedCatalog = oldUsage.split("\n").map(respell).join("\n");
 	const amendmentProblems: string[] = [];
 	if (toolCountWord === undefined)
 		amendmentProblems.push(`EXPECTED_TOOLS has ${EXPECTED_TOOLS.length} tools, no reviewed word`);
 	for (const a of literalAmendments) {
-		if (expectedRoot.split(a.old).length !== 2) amendmentProblems.push(`not exactly once in the fixture: ${a.old}`);
-		expectedRoot = expectedRoot.replace(a.old, a.next);
+		if (expectedCatalog.split(a.old).length !== 2) amendmentProblems.push(`not exactly once in the fixture: ${a.old}`);
+		expectedCatalog = expectedCatalog.replace(a.old, a.next);
 	}
 	// A line the old usage never had: a debt name described since, inserted right after the fixture
 	// line it belongs beside. The text is a reviewed literal whose receipt is the arm it describes.
@@ -470,11 +487,11 @@ const operatorCmds = [...targets].filter(([cmd, ts]) => !isDevGate(cmd) && ts.le
 		},
 	];
 	for (const ins of insertedLines) {
-		const rows = expectedRoot.split("\n");
+		const rows = expectedCatalog.split("\n");
 		const at = rows.flatMap((l, i) => (l.startsWith(ins.after) ? [i] : []));
 		if (at.length !== 1) amendmentProblems.push(`insertion anchor not exactly once: ${ins.after}`);
 		else rows.splice(at[0] + 1, 0, ins.line);
-		expectedRoot = rows.join("\n");
+		expectedCatalog = rows.join("\n");
 	}
 
 	const helpEnv = { PATH: process.env.PATH ?? "/usr/bin:/bin" };
@@ -514,40 +531,47 @@ const operatorCmds = [...targets].filter(([cmd, ts]) => !isDevGate(cmd) && ts.le
 		const bad: string[] = [];
 		for (const argv of rootForms) {
 			const r = runHelp(runSh, argv, cwd);
-			if (r.status !== 0 || r.stderr !== "" || r.stdout !== expectedRoot) {
+			if (r.status !== 0 || r.stderr !== "" || r.stdout !== expectedCompact) {
 				bad.push(`${JSON.stringify(argv)}: rc=${r.status} stdout-sha=${sha256(r.stdout)} stderr=${r.stderr.trim()}`);
 			}
 		}
 		const u = runHelp(runSh, ["no-such-command"], cwd);
-		if (u.status !== 1 || u.stderr !== "Unknown command: no-such-command\n" || u.stdout !== expectedRoot) {
+		if (u.status !== 1 || u.stderr !== "Unknown command: no-such-command\n" || u.stdout !== expectedCompact) {
 			bad.push(`unknown: rc=${u.status} stdout-sha=${sha256(u.stdout)} stderr=${u.stderr.trim()}`);
 		}
 		return bad;
 	};
 	const rootBad = rendersRoot(path.join(REPO, "run.sh"), REPO);
 	ok(
-		"[QK:CLI-HELP-ROOT-BYTES] S9a the root help (no argv, -h, --help, help) and the Unknown path print exactly the ce92dc7 usage bytes with the reviewed amendments",
+		`[QK:CLI-HELP-ROOT-COMPACT] S9a the root help (no argv, -h, --help, help) and the Unknown path print exactly the reviewed root page (${COMPACT_FIXTURE})`,
 		rootBad.length === 0,
 		rootBad.join("\n"),
 	);
-	const rootNow = runHelp(path.join(REPO, "run.sh"), ["--help"], REPO).stdout;
+	// The catalog the root page used to be: `entwurf help all`, against the ce92dc7 oracle.
+	const allPage = runHelp(path.join(REPO, "run.sh"), ["help", "all"], REPO);
 	ok(
-		"[QK:CLI-HELP-AMENDMENTS] S9a' each amendment is exact: every command line is spelled `entwurf`, the tool count is the one EXPECTED_TOOLS holds, and no replaced phrase survives",
+		"[QK:CLI-HELP-ALL-BYTES] S9a* `entwurf help all` prints exactly the ce92dc7 usage bytes with the reviewed amendments, on stdout, exit 0, nothing on stderr",
+		allPage.status === 0 && allPage.stderr === "" && allPage.stdout === expectedCatalog,
+		`rc=${allPage.status} stdout-sha=${sha256(allPage.stdout)} stderr=${allPage.stderr.trim()}`,
+	);
+	const catalogNow = allPage.stdout;
+	ok(
+		"[QK:CLI-HELP-AMENDMENTS] S9a' each amendment is exact in the catalog `help all` prints: every command line is spelled `entwurf`, the tool count is the one EXPECTED_TOOLS holds, and no replaced phrase survives",
 		amendmentProblems.length === 0 &&
 			respelled === 189 &&
-			!/^ {2}\.\/run\.sh /m.test(rootNow) &&
-			literalAmendments.every((a) => rootNow.split(a.next).length === 2 && !rootNow.includes(a.old)),
+			!/^ {2}\.\/run\.sh /m.test(catalogNow) &&
+			literalAmendments.every((a) => catalogNow.split(a.next).length === 2 && !catalogNow.includes(a.old)),
 		[...amendmentProblems, `respelled lines: ${respelled}`].join("\n"),
 	);
-	// pi left the description debt: its root line is the reviewed literal, once, beside pi-durable,
-	// and `entwurf help pi` prints that same summary as its page.
-	const piRows = rootNow.split("\n");
+	// pi left the description debt: its catalog line is the reviewed literal, once, beside
+	// pi-durable's, and `entwurf help pi` prints that same summary as its page.
+	const piRows = catalogNow.split("\n");
 	const piLine = insertedLines[0].line;
 	const piAt = piRows.flatMap((l, i) => (l === piLine ? [i] : []));
 	const piPage = runHelp(path.join(REPO, "run.sh"), ["help", "pi"], REPO);
 	const piSummary = piLine.slice(piLine.indexOf("# ") + 2);
 	ok(
-		"[QK:CLI-HELP-PI-DESCRIBED] S9a'' `pi` is described by the reviewed literal: one root line, right after pi-durable's, and `entwurf help pi` prints that summary",
+		"[QK:CLI-HELP-PI-DESCRIBED] S9a'' `pi` is described by the reviewed literal: one catalog line, right after pi-durable's, and `entwurf help pi` prints that summary",
 		piAt.length === 1 &&
 			piRows[piAt[0] - 1].startsWith(insertedLines[0].after) &&
 			piPage.status === 0 &&
@@ -563,10 +587,11 @@ const operatorCmds = [...targets].filter(([cmd, ts]) => !isDevGate(cmd) && ts.le
 		mkdirSync(path.join(decoy, "scripts"), { recursive: true });
 		writeFileSync(path.join(decoy, CLI_JSON), "{");
 		const r = runHelp(path.join(REPO, "run.sh"), ["--help"], decoy, { ...helpEnv, HOME: decoy });
+		const rAll = runHelp(path.join(REPO, "run.sh"), ["help", "all"], decoy, { ...helpEnv, HOME: decoy });
 		ok(
 			"[QK:CLI-HELP-MODULE-RELATIVE] S9b the help source is read beside the renderer, never from the caller's cwd or HOME",
-			r.status === 0 && r.stdout === expectedRoot,
-			`rc=${r.status} stderr=${r.stderr.trim()}`,
+			r.status === 0 && r.stdout === expectedCompact && rAll.status === 0 && rAll.stdout === expectedCatalog,
+			`root rc=${r.status} stderr=${r.stderr.trim()}; help all rc=${rAll.status} stderr=${rAll.stderr.trim()}`,
 		);
 
 		// Production run.sh under a PATH whose first entries record what a help run starts, among the
@@ -584,6 +609,18 @@ const operatorCmds = [...targets].filter(([cmd, ts]) => !isDevGate(cmd) && ts.le
 			got === want,
 			`trace:\n${got}`,
 		);
+		// The catalog's own route, watched the same way: `help all` starts node on the renderer with
+		// `--all`, the one argv that selects the catalog, and nothing else.
+		const allRouteDir = path.join(scratch, "all-route");
+		mkdirSync(allRouteDir);
+		const allShims = makeShims(allRouteDir, `exec '${process.execPath}' "$@"`);
+		runHelp(path.join(REPO, "run.sh"), ["help", "all"], REPO, { PATH: `${allShims.bin}:${helpEnv.PATH}` });
+		const allTrace = readFileSync(allShims.trace, "utf8");
+		ok(
+			"[QK:CLI-HELP-ALL-ROUTE] S9c' of the same watched PATH tools, `entwurf help all` starts exactly node on scripts/cli-help.mjs --all",
+			allTrace === `node ${path.join(REPO, CLI_RENDERER)} --all\n`,
+			`trace:\n${allTrace}`,
+		);
 
 		// A fixture copy whose description source is missing or malformed. Each must fail by name with
 		// nothing on stdout — the root forms and the Unknown path alike, no older text behind them.
@@ -591,6 +628,7 @@ const operatorCmds = [...targets].filter(([cmd, ts]) => !isDevGate(cmd) && ts.le
 		// keeps the last value silently, so only S9g's check-time canonical comparison sees it.
 		const good = JSON.parse(readFileSync(path.join(REPO, CLI_JSON), "utf8")) as {
 			schemaVersion: number;
+			root: Record<string, unknown>;
 			usage: { commandGroups: Record<string, unknown>[][] };
 		};
 		const variant = (edit: (d: typeof good) => void): string => {
@@ -606,6 +644,18 @@ const operatorCmds = [...targets].filter(([cmd, ts]) => !isDevGate(cmd) && ts.le
 				"unsupported schemaVersion",
 				variant((d) => {
 					d.schemaVersion = 1;
+				}),
+			],
+			[
+				"the previous schemaVersion (2, before the root page)",
+				variant((d) => {
+					d.schemaVersion = 2;
+				}),
+			],
+			[
+				"a root page with a field the schema does not know",
+				variant((d) => {
+					d.root.run = "x";
 				}),
 			],
 			[
@@ -642,9 +692,9 @@ const operatorCmds = [...targets].filter(([cmd, ts]) => !isDevGate(cmd) && ts.le
 			stageHelp(dir, json ?? "");
 			if (json === null) rmSync(path.join(dir, CLI_JSON));
 			let refused = true;
-			// The root forms, the Unknown path and a command help: each must be the metadata failure —
-			// exactly 1, never the help refusal's 2 — with nothing on stdout.
-			for (const argv of [["--help"], ["no-such-command"], ["peer-facts", "--help"]]) {
+			// The root forms, the Unknown path, the catalog and a command help: each must be the metadata
+			// failure — exactly 1, never the help refusal's 2 — with nothing on stdout.
+			for (const argv of [["--help"], ["no-such-command"], ["help", "all"], ["peer-facts", "--help"]]) {
 				const b = runHelp(path.join(dir, "run.sh"), argv, dir);
 				if (b.status !== 1 || b.stdout !== "" || !b.stderr.includes(`entwurf: ${CLI_JSON} `)) {
 					refused = false;
@@ -661,9 +711,11 @@ const operatorCmds = [...targets].filter(([cmd, ts]) => !isDevGate(cmd) && ts.le
 			failures.join("\n"),
 		);
 		ok(
-			"[QK:CLI-HELP-STRICT-FIELDS] S9e the renderer refuses the old schemaVersion, a field the schema does not know, and details that start empty or span lines",
+			"[QK:CLI-HELP-STRICT-FIELDS] S9e the renderer refuses an old schemaVersion (2 included), a field the schema does not know in an entry or the root page, and details that start empty or span lines",
 			strictness["unsupported schemaVersion"] === true &&
+				strictness["the previous schemaVersion (2, before the root page)"] === true &&
 				strictness["an entry with a field the schema does not know"] === true &&
+				strictness["a root page with a field the schema does not know"] === true &&
 				strictness["details that start on an empty line"] === true &&
 				strictness["details that are not single-line strings"] === true,
 			failures.join("\n"),
@@ -918,13 +970,52 @@ const operatorCmds = [...targets].filter(([cmd, ts]) => !isDevGate(cmd) && ts.le
 			.filter(Boolean)
 			.join("\n"),
 	);
+
+	// The root page names only real, described commands. Read from the reviewed literal itself — not
+	// from the data — every `entwurf <name>` it shows (rows and examples; `help` is the help verb) must
+	// be a described entry, in the inventory, and outside the debt. Then the guard that keeps the data
+	// honest: one example in an otherwise valid source names an undescribed command, and the source
+	// fails by name at that example — an example prints verbatim, so without the guard it would be
+	// advertised, not crash.
+	const rootNamed = [
+		...new Set([...expectedCompact.matchAll(/^ {2}entwurf ([a-z][a-z0-9-]*)/gm)].map((m) => m[1] as string)),
+	].filter((n) => n !== "help");
+	const unreal = rootNamed.filter((n) => !described.includes(n) || !inventory.has(n) || DESCRIPTION_DEBT.has(n));
+	const BAD_NAME = "zz-undescribed";
+	const badExampleDir = mkdtempSync(path.join(os.tmpdir(), "entwurf-root-names-"));
+	let badExample: ReturnType<typeof runHelp>;
+	try {
+		const data = JSON.parse(cliBytes) as { root: { examples: { items: { command: string }[] } } };
+		data.root.examples.items[1]!.command = `entwurf ${BAD_NAME}`;
+		writeFileSync(path.join(badExampleDir, "run.sh"), RUN_SH);
+		stageHelp(badExampleDir, JSON.stringify(data));
+		badExample = runHelp(path.join(badExampleDir, "run.sh"), ["--help"], badExampleDir);
+	} finally {
+		rmSync(badExampleDir, { recursive: true, force: true });
+	}
+	ok(
+		`[QK:CLI-HELP-ROOT-NAMES-REAL] S9k' every command the root page names is described, dispatchable and outside the debt (${rootNamed.length} names), and an example naming an undescribed command fails the source by name at that example`,
+		rootNamed.length > 0 &&
+			unreal.length === 0 &&
+			!inventory.has(BAD_NAME) &&
+			badExample.status === 1 &&
+			badExample.stdout === "" &&
+			badExample.stderr ===
+				`entwurf: ${CLI_JSON} root.examples.items[1].command: ${JSON.stringify(BAD_NAME)} is not a command the catalog describes\n`,
+		JSON.stringify({
+			unreal,
+			rc: badExample.status,
+			stdout: badExample.stdout.slice(0, 120),
+			stderr: badExample.stderr,
+		}),
+	);
 	// ── the help preflight, proven on a copy that cannot dispatch ─────────────────────────
 	// A byte copy of run.sh with one line added right before the unchanged case: whatever gets past
 	// the preflight stops there (stderr DISPATCHED, exit 97) instead of entering an arm, so every
 	// command can be asked safely. The bare root forms and the Unknown path go through that case and
 	// are S9a's, on the real file. Expected pages are built from the entry the data holds; what is
 	// compared is the output of the whole run.sh path — routing and format, not content, which the
-	// root and fresh-cut fixtures bind.
+	// catalog and fresh-cut fixtures bind.
 	const VENDORS = ["pi", "pi-durable", "copilot", "codex-app-server"];
 	type Entry = { synopsis: string; summary: string; details?: string[] };
 	const entryOf = new Map<string, Entry>();
@@ -1010,6 +1101,7 @@ const operatorCmds = [...targets].filter(([cmd, ts]) => !isDevGate(cmd) && ts.le
 			[["help", "peer-facts", "x"], refused],
 			[["help", "copilot", "x"], refused],
 			[["help", "pi", "x"], refused],
+			[["help", "all", "x"], refused],
 			[[debtGate, "--help", "x"], refused],
 		]);
 		ok(
@@ -1108,23 +1200,26 @@ const operatorCmds = [...targets].filter(([cmd, ts]) => !isDevGate(cmd) && ts.le
 	// A reader that stops early (`entwurf --help | head`) closes the pipe. Adopted as a UX amendment:
 	// that ends the page quietly with exit 0 — a stated choice, not a claim about what the old `cat`
 	// returned. pipefail is on and both sides' statuses are read back, so the producer's 0 is seen,
-	// not hidden behind head's.
+	// not hidden behind head's. Both pages are read: the short root page can fit the pipe buffer
+	// before the reader closes, so the long catalog (`help all`) is where an early close really bites.
+	const runSh = path.join(REPO, "run.sh");
 	const piped = spawnSync(
 		"bash",
 		[
 			"-c",
-			`set -o pipefail; bash '${path.join(REPO, "run.sh")}' --help | head -c 1 >/dev/null; echo "\${PIPESTATUS[0]} \${PIPESTATUS[1]}"`,
+			`set -o pipefail; bash '${runSh}' --help | head -c 1 >/dev/null; root="\${PIPESTATUS[0]} \${PIPESTATUS[1]}"; ` +
+				`bash '${runSh}' help all | head -c 1 >/dev/null; echo "$root \${PIPESTATUS[0]} \${PIPESTATUS[1]}"`,
 		],
 		{ cwd: REPO, encoding: "utf8", env: helpEnv },
 	);
 	ok(
-		"[QK:CLI-HELP-EPIPE-QUIET] S9v `entwurf --help | head` ends without an error on stderr",
+		"[QK:CLI-HELP-EPIPE-QUIET] S9v `entwurf --help | head` and `entwurf help all | head` end without an error on stderr",
 		piped.stderr === "",
 		`stderr=${piped.stderr.slice(0, 200)}`,
 	);
 	ok(
-		"[QK:CLI-HELP-EPIPE-EXIT] S9v' under pipefail, the help producer and head both end 0 when the reader stops early",
-		piped.status === 0 && piped.stdout === "0 0\n",
+		"[QK:CLI-HELP-EPIPE-EXIT] S9v' under pipefail, the help producer and head both end 0 when the reader stops early, on the root page and on the catalog",
+		piped.status === 0 && piped.stdout === "0 0 0 0\n",
 		`rc=${piped.status} statuses=${JSON.stringify(piped.stdout)}`,
 	);
 }

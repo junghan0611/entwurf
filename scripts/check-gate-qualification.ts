@@ -3468,7 +3468,7 @@ let manifestCount: number;
 		"control-socket-disconnect": 4,
 		"demo-reproducibility": 12,
 		"dev-gate-dispatch": 9,
-		"cli-help-source": 28,
+		"cli-help-source": 31,
 		"copilot-birth": 19,
 		"copilot-launch": 14,
 		"pi-launch": 9,

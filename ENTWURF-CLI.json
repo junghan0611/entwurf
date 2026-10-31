@@ -1,9 +1,146 @@
 {
 	"_about": {
-		"purpose": "The description of the entwurf command line: the root page `entwurf --help` prints, and each command's page — its synopsis, summary and optional longer details — that `entwurf help <command>` prints. It describes commands; it never selects, registers or runs one.",
+		"purpose": "The description of the entwurf command line: the short root page `entwurf --help` prints, the full catalog `entwurf help all` prints, and each command's page — its synopsis, summary and optional longer details — that `entwurf help <command>` prints. The root page names catalog entries and takes their synopses from the catalog. It describes commands; it never selects, registers or runs one.",
 		"ownership": "This root file is the sole editable source of that text. run.sh dispatch and its source-defined gate functions own execution; check-install-surface compares the two independently."
 	},
-	"schemaVersion": 2,
+	"schemaVersion": 3,
+	"root": {
+		"title": "entwurf - native harness entrypoints and garden facts",
+		"usage": {
+			"title": "Usage:",
+			"column": 38,
+			"rows": [
+				{
+					"form": "<command> [args...]"
+				},
+				{
+					"form": "help [<command>]",
+					"text": "this overview, or one command's full description"
+				},
+				{
+					"form": "help all",
+					"text": "all documented commands, developer gates included"
+				},
+				{
+					"form": "-h",
+					"text": "this overview (--help works too)"
+				}
+			]
+		},
+		"sections": [
+			{
+				"title": "Launch native runtimes:",
+				"column": 38,
+				"rows": [
+					{
+						"name": "pi",
+						"text": "pi with Entwurf control; args go to pi"
+					},
+					{
+						"name": "pi-durable",
+						"text": "the packaged durable pi launcher"
+					},
+					{
+						"name": "copilot",
+						"text": "Copilot with its Entwurf extension enabled"
+					},
+					{
+						"name": "codex-app-server",
+						"text": "Codex's app-server on the socket Entwurf reads"
+					}
+				]
+			},
+			{
+				"title": "Set up and check this host:",
+				"column": 38,
+				"rows": [
+					{
+						"name": "setup",
+						"text": "wire detected harnesses; report PASS/SKIP/FAIL each"
+					},
+					{
+						"name": "doctor-meta-bridge",
+						"text": "check the Claude Code wiring"
+					},
+					{
+						"name": "doctor-pi-package",
+						"text": "inspect ownership of the global pi registration"
+					}
+				]
+			},
+			{
+				"title": "Look at the garden (read-only JSON):",
+				"column": 38,
+				"rows": [
+					{
+						"name": "peer-facts",
+						"text": "siblings and their live-rail facts"
+					},
+					{
+						"name": "meta-facts",
+						"text": "garden records and store diagnostics"
+					}
+				]
+			},
+			{
+				"title": "Remove wiring:",
+				"column": 38,
+				"rows": [
+					{
+						"name": "remove",
+						"text": "remove this project's pi registration"
+					},
+					{
+						"name": "remove-user-scope",
+						"text": "remove the global pi registration"
+					},
+					{
+						"name": "uninstall-meta-bridge",
+						"text": "restore what the Claude Code install recorded"
+					}
+				]
+			},
+			{
+				"title": "Herdr plugin (from its active runtime):",
+				"column": 56,
+				"rows": [
+					{
+						"name": "herdr-plugin-expose-operator",
+						"text": "create the one operator link"
+					},
+					{
+						"name": "herdr-plugin-withdraw-operator",
+						"text": "remove the owned link"
+					},
+					{
+						"name": "herdr-plugin-deactivate",
+						"text": "undo plugin wiring and runtime"
+					}
+				]
+			}
+		],
+		"examples": {
+			"title": "Examples:",
+			"items": [
+				{
+					"comment": "Start pi in the current project",
+					"command": "entwurf pi"
+				},
+				{
+					"comment": "Read a command before changing this host",
+					"command": "entwurf help setup"
+				},
+				{
+					"comment": "See who is in the garden",
+					"command": "entwurf peer-facts"
+				}
+			]
+		},
+		"footer": [
+			"Fresh call, send, resume and retire are entwurf-bridge MCP tools inside a session,",
+			"not commands here. Advanced maintenance and development gates: entwurf help all"
+		]
+	},
 	"usage": {
 		"title": "Usage:",
 		"commandGroups": [

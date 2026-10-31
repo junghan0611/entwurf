@@ -3,14 +3,14 @@
 	"lane": "cli-help-source",
 	"mutants": [
 		{
-			"claim": "CLI-HELP-ROOT-BYTES",
-			"title": "the renderer drops the blank line before Notes, so `entwurf --help` no longer prints the usage it replaced",
+			"claim": "CLI-HELP-ALL-BYTES",
+			"title": "the renderer drops the blank line before Notes, so `entwurf help all` no longer prints the usage it replaced",
 			"subject": "scripts/cli-help.mjs",
 			"find": ["out.push(\"\", line(notes.title, \"usage.notes.title\"));"],
 			"replace": ["out.push(line(notes.title, \"usage.notes.title\"));"],
 			"gate": ["bash", "run.sh", "check-install-surface"],
 			"timeoutSeconds": 120,
-			"signature": "[QK:CLI-HELP-ROOT-BYTES]",
+			"signature": "[QK:CLI-HELP-ALL-BYTES]",
 			"signatureSource": "scripts/check-install-surface.ts"
 		},
 		{
@@ -74,8 +74,8 @@
 			"claim": "CLI-HELP-CANONICAL",
 			"title": "a duplicated JSON property rides into the committed help source; JSON.parse keeps the later value and every runtime check stays green",
 			"subject": "ENTWURF-CLI.json",
-			"find": ["\t\"schemaVersion\": 2,"],
-			"replace": ["\t\"schemaVersion\": 2,\n\t\"schemaVersion\": 2,"],
+			"find": ["\t\"schemaVersion\": 3,"],
+			"replace": ["\t\"schemaVersion\": 3,\n\t\"schemaVersion\": 3,"],
 			"gate": ["bash", "run.sh", "check-install-surface"],
 			"timeoutSeconds": 120,
 			"signature": "[QK:CLI-HELP-CANONICAL]",
@@ -326,6 +326,39 @@
 			"gate": ["bash", "run.sh", "check-install-surface"],
 			"timeoutSeconds": 120,
 			"signature": "[QK:CLI-HELP-PI-DESCRIBED]",
+			"signatureSource": "scripts/check-install-surface.ts"
+		},
+		{
+			"claim": "CLI-HELP-ROOT-COMPACT",
+			"title": "the root page prints the whole catalog again, so a bare `entwurf` buries the few commands an operator needs under every gate",
+			"subject": "scripts/cli-help.mjs",
+			"find": ["\tprocess.stdout.write(`${(all ? out : compact).join(\"\\n\")}\\n`);"],
+			"replace": ["\tprocess.stdout.write(`${out.join(\"\\n\")}\\n`);"],
+			"gate": ["bash", "run.sh", "check-install-surface"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:CLI-HELP-ROOT-COMPACT]",
+			"signatureSource": "scripts/check-install-surface.ts"
+		},
+		{
+			"claim": "CLI-HELP-ALL-ROUTE",
+			"title": "`entwurf help all` no longer reaches the catalog: it is read as help for a command named `all` and refused, so the full list has no door",
+			"subject": "run.sh",
+			"find": ["if [ \"$cmd\" = help ] && [ \"$#\" -eq 2 ] && [ \"$2\" = all ]; then"],
+			"replace": ["if false; then"],
+			"gate": ["bash", "run.sh", "check-install-surface"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:CLI-HELP-ALL-ROUTE]",
+			"signatureSource": "scripts/check-install-surface.ts"
+		},
+		{
+			"claim": "CLI-HELP-ROOT-NAMES-REAL",
+			"title": "the renderer stops checking that an example names a described command, so the root page advertises a command that does not exist",
+			"subject": "scripts/cli-help.mjs",
+			"find": ["\tif (!helpItself && !entries.has(named))"],
+			"replace": ["\tif (false)"],
+			"gate": ["bash", "run.sh", "check-install-surface"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:CLI-HELP-ROOT-NAMES-REAL]",
 			"signatureSource": "scripts/check-install-surface.ts"
 		}
 	]
