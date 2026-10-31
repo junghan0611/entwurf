@@ -66,6 +66,12 @@
  *        their page, undescribed ones are refused (exit 2) and never run, the four vendor launchers
  *        pass through — and extra argv, the `--help <command>` alias and odd names are refused on one
  *        line. fresh-cut's longer text matches its ce92dc7 source literal minus the old invocation.
+ *        The root page is the #153 literal with two explicit #157 amendments (pinned). `entwurf help
+ *        team` / `help remote-pair` print guide topics byte for byte reviewed literal fixtures (pinned,
+ *        written before the data; remote-pair with one explicit review amendment, pinned too); only
+ *        `help <name>` reaches them, through node on the renderer with
+ *        `--name`; asked as a command (`team --help`) they are refused, their names are no command's,
+ *        `all` or each other's, and the package files they name are shipped by exact files entries.
  *        Coverage reads owners independently of the data: operator commands are the labels of a case
  *        byte-pinned to the reviewed ce92dc7 one (evidence for this change, not a ban on later work),
  *        gate commands are the functions bash itself defines from run.sh — so a definition left only
@@ -430,10 +436,69 @@ const operatorCmds = [...targets].filter(([cmd, ts]) => !isDevGate(cmd) && ts.le
 	// intended change; the catalog keeps its own oracle above, observed through `help all`.
 	const COMPACT_FIXTURE = "test/fixtures/cli-help/root-compact-153.txt";
 	const COMPACT_SHA256 = "30176fa0a2e8598a2ffca98c0e2c4ac773f57dc3428042e15286c87e2b8832ae";
-	const expectedCompact = readFileSync(path.join(REPO, COMPACT_FIXTURE), "utf8");
-	if (sha256(expectedCompact) !== COMPACT_SHA256) {
+	const compact153 = readFileSync(path.join(REPO, COMPACT_FIXTURE), "utf8");
+	if (sha256(compact153) !== COMPACT_SHA256) {
 		throw new Error(`S9: ${COMPACT_FIXTURE} is not the reviewed root page`);
 	}
+	// #157 (main 0922fd, approved for GLG): the help row names a command or a topic, and one footer
+	// line points at the two guides. Exactly these two literal edits of the #153 page, each exactly
+	// once, and the result pinned too — the sha below was taken before the data changed.
+	const ROOT_AMENDMENTS_157: { old: string; next: string }[] = [
+		{
+			old: "  entwurf help [<command>]            this overview, or one command's full description\n",
+			next: "  entwurf help [<name>]               this overview, or command/topic help\n",
+		},
+		{
+			old: "not commands here. Advanced maintenance and development gates: entwurf help all\n",
+			next: "not commands here. Advanced maintenance and development gates: entwurf help all\nGuides: entwurf help team | entwurf help remote-pair\n",
+		},
+	];
+	let expectedCompact = compact153;
+	for (const a of ROOT_AMENDMENTS_157) {
+		if (expectedCompact.split(a.old).length !== 2) throw new Error(`S9: root amendment not exactly once: ${a.old}`);
+		expectedCompact = expectedCompact.replace(a.old, a.next);
+	}
+	if (sha256(expectedCompact) !== "005593215287d156792356ecaa7a84a6dc5767b791f64825d6a5fb433b0028f4") {
+		throw new Error("S9: the amended root page is not the reviewed #157 page");
+	}
+	// The guide topics' oracles: reviewed literals, pinned, written before the data and never
+	// generated from it. Each names the package files it sends the reader to (S9w checks they ship).
+	const TOPIC_FIXTURES: { name: string; file: string; sha: string; ships: string[] }[] = [
+		{
+			name: "team",
+			file: "test/fixtures/cli-help/topic-team-157.txt",
+			sha: "c5691a0db1cb2dcccac0042fb1cf0439dd472e87623ea6af8419825062b2f672",
+			ships: ["team.json.example"],
+		},
+		{
+			name: "remote-pair",
+			file: "test/fixtures/cli-help/topic-remote-pair-157.txt",
+			sha: "eb60224e5b588b9c6cfed1cd43d816ec0f9a0d10abc2c6da8decc6f3e0808052",
+			ships: ["docs/setup-clean-host.md"],
+		},
+	];
+	const topicPage = new Map<string, string>();
+	for (const t of TOPIC_FIXTURES) {
+		const text = readFileSync(path.join(REPO, t.file), "utf8");
+		if (sha256(text) !== t.sha) throw new Error(`S9: ${t.file} is not the reviewed ${t.name} guide`);
+		topicPage.set(t.name, text);
+	}
+	// #157 review amendment (H1-AMEND-A1): the remote-pair guide's path rule is per host. Exactly this
+	// one literal edit of its baseline fixture, exactly once, and the result pinned — the sha below
+	// was taken by the coordinator before the data changed. The baseline fixture itself is unchanged.
+	const REMOTE_PAIR_AMENDMENT = {
+		old: "  moves the store; the file follows the store. The sending bridge and the\n  SSH receive side must resolve the same path.\n",
+		next: "  moves the store; the file follows the store. On each host, its bridge and\n  its incoming SSH receive process must resolve the same local opt-in path.\n  The paths on the two hosts need not be identical.\n",
+	};
+	const remoteBaseline = topicPage.get("remote-pair") ?? "";
+	if (remoteBaseline.split(REMOTE_PAIR_AMENDMENT.old).length !== 2) {
+		throw new Error("S9: the remote-pair amendment is not exactly once in its baseline fixture");
+	}
+	const remoteAmended = remoteBaseline.replace(REMOTE_PAIR_AMENDMENT.old, REMOTE_PAIR_AMENDMENT.next);
+	if (sha256(remoteAmended) !== "2c53d9050a3c76fdc73c43ac1339b82808dc0f45548ef73903b7e105a7b6780e") {
+		throw new Error("S9: the amended remote-pair guide is not the reviewed #157 page");
+	}
+	topicPage.set("remote-pair", remoteAmended);
 
 	// The catalog today is that ce92dc7 fixture with exactly these explicit amendments applied, each naming
 	// the source that justifies it — never a text regenerated from the new data. The prefix: a command
@@ -543,7 +608,7 @@ const operatorCmds = [...targets].filter(([cmd, ts]) => !isDevGate(cmd) && ts.le
 	};
 	const rootBad = rendersRoot(path.join(REPO, "run.sh"), REPO);
 	ok(
-		`[QK:CLI-HELP-ROOT-COMPACT] S9a the root help (no argv, -h, --help, help) and the Unknown path print exactly the reviewed root page (${COMPACT_FIXTURE})`,
+		`[QK:CLI-HELP-ROOT-COMPACT] S9a the root help (no argv, -h, --help, help) and the Unknown path print exactly the reviewed root page (${COMPACT_FIXTURE} with the two #157 amendments)`,
 		rootBad.length === 0,
 		rootBad.join("\n"),
 	);
@@ -578,6 +643,35 @@ const operatorCmds = [...targets].filter(([cmd, ts]) => !isDevGate(cmd) && ts.le
 			piPage.stderr === "" &&
 			piPage.stdout === `Usage: entwurf pi [args...]\n\n${piSummary}\n`,
 		JSON.stringify({ lines: piAt.length, rc: piPage.status, stderr: piPage.stderr, page: piPage.stdout.slice(0, 200) }),
+	);
+	// #157 — each guide topic, asked `entwurf help <name>` on the real run.sh, prints its reviewed
+	// literal: stdout only, exit 0, nothing on stderr.
+	const topicBad = TOPIC_FIXTURES.flatMap((t) => {
+		const r = runHelp(path.join(REPO, "run.sh"), ["help", t.name], REPO);
+		return r.status === 0 && r.stderr === "" && r.stdout === topicPage.get(t.name)
+			? []
+			: [`help ${t.name}: rc=${r.status} stdout-sha=${sha256(r.stdout)} stderr=${r.stderr.trim()}`];
+	});
+	ok(
+		`[QK:CLI-HELP-TOPIC-BYTES] S9a''' \`entwurf help team\` and \`entwurf help remote-pair\` print exactly their reviewed guide pages (team: its fixture; remote-pair: its fixture with the one pinned review amendment), on stdout, exit 0, nothing on stderr`,
+		topicBad.length === 0,
+		topicBad.join("\n"),
+	);
+	// The files a guide sends its reader to must reach every install: each is an EXACT entry of the
+	// package.json files array (no glob reading here — the tarball proof is check-pack's), exists in
+	// this checkout, and is named by its guide's reviewed literal.
+	const packageFiles = (JSON.parse(readFileSync(path.join(REPO, "package.json"), "utf8")) as { files: string[] }).files;
+	const unshipped = TOPIC_FIXTURES.flatMap((t) =>
+		t.ships.flatMap((f) =>
+			packageFiles.includes(f) && existsSync(path.join(REPO, f)) && (topicPage.get(t.name) ?? "").includes(f)
+				? []
+				: [`${t.name} -> ${f}: files entry=${packageFiles.includes(f)} exists=${existsSync(path.join(REPO, f))}`],
+		),
+	);
+	ok(
+		"[QK:CLI-HELP-TOPIC-SHIPPED] S9w every package file a guide topic names (team.json.example, docs/setup-clean-host.md) is an exact package.json files entry, exists, and is named by that guide",
+		unshipped.length === 0,
+		unshipped.join("\n"),
 	);
 
 	const scratch = mkdtempSync(path.join(os.tmpdir(), "entwurf-cli-help-"));
@@ -621,6 +715,19 @@ const operatorCmds = [...targets].filter(([cmd, ts]) => !isDevGate(cmd) && ts.le
 			allTrace === `node ${path.join(REPO, CLI_RENDERER)} --all\n`,
 			`trace:\n${allTrace}`,
 		);
+		// A guide's own route, watched the same way: `help <topic>` starts node on the renderer with
+		// `--name <topic>` — the one mode that may answer with a topic — and nothing else.
+		const topicRouteDir = path.join(scratch, "topic-route");
+		mkdirSync(topicRouteDir);
+		const topicShims = makeShims(topicRouteDir, `exec '${process.execPath}' "$@"`);
+		for (const t of TOPIC_FIXTURES)
+			runHelp(path.join(REPO, "run.sh"), ["help", t.name], REPO, { PATH: `${topicShims.bin}:${helpEnv.PATH}` });
+		const topicTrace = readFileSync(topicShims.trace, "utf8");
+		ok(
+			"[QK:CLI-HELP-TOPIC-ROUTE] S9c'' of the same watched PATH tools, `entwurf help <topic>` starts exactly node on scripts/cli-help.mjs --name <topic>",
+			topicTrace === TOPIC_FIXTURES.map((t) => `node ${path.join(REPO, CLI_RENDERER)} --name ${t.name}\n`).join(""),
+			`trace:\n${topicTrace}`,
+		);
 
 		// A fixture copy whose description source is missing or malformed. Each must fail by name with
 		// nothing on stdout — the root forms and the Unknown path alike, no older text behind them.
@@ -629,6 +736,7 @@ const operatorCmds = [...targets].filter(([cmd, ts]) => !isDevGate(cmd) && ts.le
 		const good = JSON.parse(readFileSync(path.join(REPO, CLI_JSON), "utf8")) as {
 			schemaVersion: number;
 			root: Record<string, unknown>;
+			topics: Record<string, unknown>[];
 			usage: { commandGroups: Record<string, unknown>[][] };
 		};
 		const variant = (edit: (d: typeof good) => void): string => {
@@ -650,6 +758,36 @@ const operatorCmds = [...targets].filter(([cmd, ts]) => !isDevGate(cmd) && ts.le
 				"the previous schemaVersion (2, before the root page)",
 				variant((d) => {
 					d.schemaVersion = 2;
+				}),
+			],
+			[
+				"the previous schemaVersion (3, before the guide topics)",
+				variant((d) => {
+					d.schemaVersion = 3;
+				}),
+			],
+			[
+				"a topic with a field the schema does not know",
+				variant((d) => {
+					d.topics[0]!.run = "x";
+				}),
+			],
+			[
+				"a topic named like a described command",
+				variant((d) => {
+					d.topics[0]!.name = "setup";
+				}),
+			],
+			[
+				"a topic named all",
+				variant((d) => {
+					d.topics[0]!.name = "all";
+				}),
+			],
+			[
+				"one topic name twice",
+				variant((d) => {
+					d.topics[1]!.name = d.topics[0]!.name;
 				}),
 			],
 			[
@@ -694,7 +832,13 @@ const operatorCmds = [...targets].filter(([cmd, ts]) => !isDevGate(cmd) && ts.le
 			let refused = true;
 			// The root forms, the Unknown path, the catalog and a command help: each must be the metadata
 			// failure — exactly 1, never the help refusal's 2 — with nothing on stdout.
-			for (const argv of [["--help"], ["no-such-command"], ["help", "all"], ["peer-facts", "--help"]]) {
+			for (const argv of [
+				["--help"],
+				["no-such-command"],
+				["help", "all"],
+				["peer-facts", "--help"],
+				["help", "team"],
+			]) {
 				const b = runHelp(path.join(dir, "run.sh"), argv, dir);
 				if (b.status !== 1 || b.stdout !== "" || !b.stderr.includes(`entwurf: ${CLI_JSON} `)) {
 					refused = false;
@@ -711,11 +855,13 @@ const operatorCmds = [...targets].filter(([cmd, ts]) => !isDevGate(cmd) && ts.le
 			failures.join("\n"),
 		);
 		ok(
-			"[QK:CLI-HELP-STRICT-FIELDS] S9e the renderer refuses an old schemaVersion (2 included), a field the schema does not know in an entry or the root page, and details that start empty or span lines",
+			"[QK:CLI-HELP-STRICT-FIELDS] S9e the renderer refuses an old schemaVersion (2 and 3 included), a field the schema does not know in an entry, the root page or a topic, and details that start empty or span lines",
 			strictness["unsupported schemaVersion"] === true &&
 				strictness["the previous schemaVersion (2, before the root page)"] === true &&
+				strictness["the previous schemaVersion (3, before the guide topics)"] === true &&
 				strictness["an entry with a field the schema does not know"] === true &&
 				strictness["a root page with a field the schema does not know"] === true &&
+				strictness["a topic with a field the schema does not know"] === true &&
 				strictness["details that start on an empty line"] === true &&
 				strictness["details that are not single-line strings"] === true,
 			failures.join("\n"),
@@ -723,6 +869,13 @@ const operatorCmds = [...targets].filter(([cmd, ts]) => !isDevGate(cmd) && ts.le
 		ok(
 			"[QK:CLI-HELP-UNIQUE] S9f the renderer refuses a command described twice",
 			strictness["one command described twice"] === true,
+			failures.join("\n"),
+		);
+		ok(
+			"[QK:CLI-HELP-TOPIC-DISJOINT] S9f'' the renderer refuses a topic that takes a described command's name, `all`, or another topic's name — one word, one page",
+			strictness["a topic named like a described command"] === true &&
+				strictness["a topic named all"] === true &&
+				strictness["one topic name twice"] === true,
 			failures.join("\n"),
 		);
 		// The two failure kinds stay apart: a broken source is exit 1 on every form above, while the
@@ -1095,6 +1248,26 @@ const operatorCmds = [...targets].filter(([cmd, ts]) => !isDevGate(cmd) && ts.le
 			formsBad.length === 0,
 			formsBad.join("\n"),
 		);
+		// #157 — a guide is not a command. Its name is no case label, gate function or described entry;
+		// asked the way one asks about something to run (`<topic> --help` / `-h`) it is refused like any
+		// undescribed name, one stderr line naming it, exit 2, nothing run; `help <topic>` still answers.
+		const named = (name: string) => (r: R) => refused(r) && r.stderr.includes(JSON.stringify(name));
+		const notCommandBad = [
+			...TOPIC_FIXTURES.filter((t) => inventory.has(t.name) || entryOf.has(t.name)).map(
+				(t) => `${t.name} is also a command`,
+			),
+			...shapes([
+				[["team", "--help"], named("team")],
+				[["team", "-h"], named("team")],
+				[["remote-pair", "--help"], named("remote-pair")],
+				[["help", "team"], (r) => r.status === 0 && r.stderr === "" && r.stdout === topicPage.get("team")],
+			]),
+		];
+		ok(
+			"[QK:CLI-HELP-TOPIC-NOT-COMMAND] S9n' a guide topic is not a command: its name is no dispatch label, gate or described entry, and `<topic> --help` / `-h` is refused like an undescribed name while `help <topic>` answers",
+			notCommandBad.length === 0,
+			notCommandBad.join("\n"),
+		);
 		const extraBad = shapes([
 			[["peer-facts", "--help", "x"], refused],
 			[["peer-facts", "-h", "x"], refused],
@@ -1102,6 +1275,7 @@ const operatorCmds = [...targets].filter(([cmd, ts]) => !isDevGate(cmd) && ts.le
 			[["help", "copilot", "x"], refused],
 			[["help", "pi", "x"], refused],
 			[["help", "all", "x"], refused],
+			[["help", "team", "x"], refused],
 			[[debtGate, "--help", "x"], refused],
 		]);
 		ok(
@@ -1148,7 +1322,8 @@ const operatorCmds = [...targets].filter(([cmd, ts]) => !isDevGate(cmd) && ts.le
 		);
 
 		// What a command help starts, among the watched PATH tools: node on the renderer, asked for that
-		// one command, and nothing else.
+		// one command, and nothing else. #157 amendment: the `help` form asks with `--name`, the mode
+		// that may also answer with a guide topic; the `--help` form keeps `--command`, which may not.
 		const { bin, trace } = makeShims(gated, `exec '${process.execPath}' "$@"`);
 		for (const argv of [
 			["peer-facts", "--help"],
@@ -1157,8 +1332,9 @@ const operatorCmds = [...targets].filter(([cmd, ts]) => !isDevGate(cmd) && ts.le
 			run(argv, { PATH: `${bin}:${helpEnv.PATH}` });
 		const traced = readFileSync(trace, "utf8");
 		ok(
-			"[QK:CLI-HELP-COMMAND-TRACE] S9t observed on peer-facts in both forms (`--help`, `help`): of the watched PATH tools, only node on scripts/cli-help.mjs --command peer-facts starts",
-			traced === `node ${path.join(gated, CLI_RENDERER)} --command peer-facts\n`.repeat(2),
+			"[QK:CLI-HELP-COMMAND-TRACE] S9t observed on peer-facts in both forms: of the watched PATH tools, only node on scripts/cli-help.mjs starts — `--command peer-facts` for `--help`, `--name peer-facts` for `help`",
+			traced ===
+				`node ${path.join(gated, CLI_RENDERER)} --command peer-facts\nnode ${path.join(gated, CLI_RENDERER)} --name peer-facts\n`,
 			`trace:\n${traced}`,
 		);
 	} finally {
@@ -1208,18 +1384,19 @@ const operatorCmds = [...targets].filter(([cmd, ts]) => !isDevGate(cmd) && ts.le
 		[
 			"-c",
 			`set -o pipefail; bash '${runSh}' --help | head -c 1 >/dev/null; root="\${PIPESTATUS[0]} \${PIPESTATUS[1]}"; ` +
-				`bash '${runSh}' help all | head -c 1 >/dev/null; echo "$root \${PIPESTATUS[0]} \${PIPESTATUS[1]}"`,
+				`bash '${runSh}' help all | head -c 1 >/dev/null; all="\${PIPESTATUS[0]} \${PIPESTATUS[1]}"; ` +
+				`bash '${runSh}' help team | head -c 1 >/dev/null; echo "$root $all \${PIPESTATUS[0]} \${PIPESTATUS[1]}"`,
 		],
 		{ cwd: REPO, encoding: "utf8", env: helpEnv },
 	);
 	ok(
-		"[QK:CLI-HELP-EPIPE-QUIET] S9v `entwurf --help | head` and `entwurf help all | head` end without an error on stderr",
+		"[QK:CLI-HELP-EPIPE-QUIET] S9v `entwurf --help | head`, `entwurf help all | head` and `entwurf help team | head` end without an error on stderr",
 		piped.stderr === "",
 		`stderr=${piped.stderr.slice(0, 200)}`,
 	);
 	ok(
-		"[QK:CLI-HELP-EPIPE-EXIT] S9v' under pipefail, the help producer and head both end 0 when the reader stops early, on the root page and on the catalog",
-		piped.status === 0 && piped.stdout === "0 0 0 0\n",
+		"[QK:CLI-HELP-EPIPE-EXIT] S9v' under pipefail, the help producer and head both end 0 when the reader stops early, on the root page, the catalog and a guide topic",
+		piped.status === 0 && piped.stdout === "0 0 0 0 0 0\n",
 		`rc=${piped.status} statuses=${JSON.stringify(piped.stdout)}`,
 	);
 }

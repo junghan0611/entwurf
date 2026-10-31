@@ -41,6 +41,7 @@
 	"files": [
 		"ENTWURF.json",
 		"ENTWURF-CLI.json",
+		"team.json.example",
 		"protocol.js",
 		"pi-extensions/",
 		"native/win32-x64/",

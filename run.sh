@@ -3700,6 +3700,8 @@ check_pack() {
     # #153 — `entwurf --help` renders from these two at run time and run.sh keeps no copy of the
     # text to fall back to: without either one the installed CLI cannot describe itself.
     "ENTWURF-CLI.json" "scripts/cli-help.mjs"
+    # #157 — the files the shipped guide topics point at (`entwurf help team` / `help remote-pair`).
+    "team.json.example" "docs/setup-clean-host.md"
     "pi-extensions/acp-provider.ts"
     "pi-extensions/lib/acp/models.ts" "pi-extensions/lib/acp/model-ids.js" "pi-extensions/lib/acp/backend.ts"
     "pi-extensions/lib/acp/overlay.ts" "pi-extensions/lib/acp/tool-surface.ts"
@@ -4730,6 +4732,7 @@ _check_pack_install_impl() {
     "package.json" "README.md" "LICENSE" "CHANGELOG.md"
     "protocol.js" "run.sh"
     "ENTWURF-CLI.json" "scripts/cli-help.mjs"
+    "team.json.example" "docs/setup-clean-host.md"
     "pi-extensions/acp-provider.ts"
     "pi-extensions/lib/acp/models.ts" "pi-extensions/lib/acp/model-ids.js" "pi-extensions/lib/acp/backend.ts"
     "pi-extensions/lib/acp/overlay.ts" "pi-extensions/lib/acp/tool-surface.ts"
@@ -5252,22 +5255,43 @@ _check_pack_install_impl() {
   fi
   echo "[check-pack-install] npm-managed install regression pass (hoisted-dep run.sh install wrote settings)"
 
-  # #153 — the installed bin describes itself from the description data and renderer the tarball
-  # carries (cli-help.mjs reads only module-relative bytes). Streams stay apart and are compared as
-  # bytes: the consumer's `entwurf --help` (the short root page) and `entwurf help all` (the full
-  # catalog) must each be exactly what the checkout renders, on stdout, with an empty stderr. Two
-  # negatives on this consumer's own installed files then show the answer comes from THOSE files,
-  # not from the checkout still visible on this host: a changed installed root title shows up in the
-  # installed help, and a removed installed renderer fails it with nothing on stdout. Both files are
-  # restored and compared back before anything is judged.
+  # #153/#157 — the installed bin describes itself from the description data and renderer the
+  # tarball carries (cli-help.mjs reads only module-relative bytes). Three separate facts:
+  #   1. Byte parity, root/catalog/topics: the consumer's `entwurf --help` (the short root page),
+  #      `entwurf help all` (the full catalog) and `entwurf help team` / `help remote-pair` (the two
+  #      guide topics) must each be exactly what the checkout renders, on stdout, with an empty
+  #      stderr. Streams stay apart and are compared as bytes.
+  #   2. Installed-copy negatives, on root `--help` only: a changed installed root title shows up in
+  #      the installed help, and a removed installed renderer fails it with nothing on stdout, so the
+  #      answer comes from THIS consumer's installed files, not from the checkout still visible on
+  #      this host. Both files are restored and compared back before anything is judged.
+  #   3. Packaged guide references present: team.json.example (byte-equal to the checkout) and
+  #      docs/setup-clean-host.md with its section 2c. The user files a guide describes (a project's
+  #      team.json, a host's entwurf-remote-pair.json) are the operator's own; nothing installs them.
   local help_dir="$npm_tmp/cli-help" help_bin="$npmroot/node_modules/.bin/entwurf"
   local help_json="$npm_pkg/ENTWURF-CLI.json" help_mjs="$npm_pkg/scripts/cli-help.mjs"
   local help_rc help_co_rc help_all_rc help_all_co_rc help_title_rc help_gone_rc help_restored=1
+  local help_topic help_topic_rc help_topic_co_rc
   mkdir -p "$help_dir"
   if env "${consumer_env[@]}" bash "$REPO_DIR/run.sh" --help >"$help_dir/checkout.out" 2>"$help_dir/checkout.err"; then help_co_rc=0; else help_co_rc=$?; fi
   if (cd "$npmproj" && env "${consumer_env[@]}" "$help_bin" --help) >"$help_dir/installed.out" 2>"$help_dir/installed.err"; then help_rc=0; else help_rc=$?; fi
   if env "${consumer_env[@]}" bash "$REPO_DIR/run.sh" help all >"$help_dir/checkout-all.out" 2>"$help_dir/checkout-all.err"; then help_all_co_rc=0; else help_all_co_rc=$?; fi
   if (cd "$npmproj" && env "${consumer_env[@]}" "$help_bin" help all) >"$help_dir/installed-all.out" 2>"$help_dir/installed-all.err"; then help_all_rc=0; else help_all_rc=$?; fi
+  for help_topic in team remote-pair; do
+    if env "${consumer_env[@]}" bash "$REPO_DIR/run.sh" help "$help_topic" >"$help_dir/checkout-$help_topic.out" 2>"$help_dir/checkout-$help_topic.err"; then help_topic_co_rc=0; else help_topic_co_rc=$?; fi
+    if (cd "$npmproj" && env "${consumer_env[@]}" "$help_bin" help "$help_topic") >"$help_dir/installed-$help_topic.out" 2>"$help_dir/installed-$help_topic.err"; then help_topic_rc=0; else help_topic_rc=$?; fi
+    if [ "$help_topic_co_rc" -ne 0 ] || [ -s "$help_dir/checkout-$help_topic.err" ] \
+      || [ "$help_topic_rc" -ne 0 ] || [ -s "$help_dir/installed-$help_topic.err" ] \
+      || ! cmp -s "$help_dir/installed-$help_topic.out" "$help_dir/checkout-$help_topic.out"; then
+      fail "[check-pack-install] installed \`entwurf help $help_topic\` rc=$help_topic_rc (checkout rc=$help_topic_co_rc) is not the checkout's stdout bytes with an empty stderr (stderr: $(head -c 300 "$help_dir/installed-$help_topic.err"))"
+      return 1
+    fi
+  done
+  if [ ! -f "$npm_pkg/team.json.example" ] || ! cmp -s "$npm_pkg/team.json.example" "$REPO_DIR/team.json.example" \
+    || ! grep -q '^## 2c\. ' "$npm_pkg/docs/setup-clean-host.md"; then
+    fail "[check-pack-install] a guide topic points at a file this installed package lacks: team.json.example (byte-equal to the checkout) and docs/setup-clean-host.md with its section 2c"
+    return 1
+  fi
 
   cp -p "$help_json" "$help_dir/ENTWURF-CLI.json.orig"
   sed -i 's/^\t\t"title": "entwurf - native harness entrypoints and garden facts",$/\t\t"title": "entwurf (installed copy)",/' "$help_json"
@@ -5307,7 +5331,7 @@ _check_pack_install_impl() {
     fail "[check-pack-install] with the INSTALLED renderer removed, installed \`entwurf --help\` still answered (rc=$help_gone_rc) — it fell back to something else"
     return 1
   fi
-  echo "[check-pack-install] installed entwurf --help and help all render from the shipped ENTWURF-CLI.json + scripts/cli-help.mjs (byte-equal, and follows/fails with the installed copies)"
+  echo "[check-pack-install] installed help from the shipped ENTWURF-CLI.json + scripts/cli-help.mjs: root/catalog/topics byte parity (--help, help all, help team, help remote-pair); installed-copy title/removal negatives on root --help only; packaged guide references present (team.json.example byte-equal, setup-clean-host.md section 2c)"
 
   # #153 — the operator entrance through this npm consumer's installed bins (helper above).
   pack_install_operator_cells "$npm_tmp" "$npmroot" "$help_dir" || return 1
@@ -7599,15 +7623,17 @@ cmd=${1:-}
 # own --help, so they pass through untouched. Only these exact shapes are help: a flag in another
 # position, or after `--`, reaches the dispatch as before. `entwurf help all` — exactly those two
 # words — prints the full catalog, every described command, which the short root page leaves out.
+# `entwurf help <name>` alone may also print a guide topic (team, remote-pair): static text the
+# same file holds, never a command, so `<topic> --help` stays the refusal of an undescribed name.
 # The bare root forms fall through to the unchanged case below.
 if [ "$cmd" = help ] && [ "$#" -eq 2 ] && [ "$2" = all ]; then
   exec node "$REPO_DIR/scripts/cli-help.mjs" --all
 elif [ "$cmd" = help ] && [ "$#" -ge 2 ]; then
   if [ "$#" -gt 2 ]; then
-    echo 'entwurf: `entwurf help` takes one command name' >&2
+    echo 'entwurf: `entwurf help` takes one command or topic name' >&2
     exit 2
   fi
-  exec node "$REPO_DIR/scripts/cli-help.mjs" --command "$2"
+  exec node "$REPO_DIR/scripts/cli-help.mjs" --name "$2"
 elif { [ "$cmd" = -h ] || [ "$cmd" = --help ]; } && [ "$#" -ge 2 ]; then
   echo 'entwurf: -h/--help takes nothing after it; for one command use `entwurf help <command>`' >&2
   exit 2

@@ -1,15 +1,17 @@
 /**
  * Renders the entwurf command line's own description from root ENTWURF-CLI.json, its one editable
- * source: the short root page (`entwurf --help`), the full catalog (`entwurf help all`) and one
- * command's page. Plain `node` in every mode (no strip-types, no compiled twin): it imports node
- * builtins only and reads one module-relative file, never cwd/HOME/env, so a checkout and an
- * installed package answer from the bytes they carry. The whole file is checked before the first
- * write in every mode; a missing or malformed source is a named failure (exit 1) on stderr with
- * nothing on stdout — there is no older text to fall back to.
+ * source: the short root page (`entwurf --help`), the full catalog (`entwurf help all`), one
+ * command's page, and one guide topic's page. Plain `node` in every mode (no strip-types, no
+ * compiled twin): it imports node builtins only and reads one module-relative file, never
+ * cwd/HOME/env, so a checkout and an installed package answer from the bytes they carry. The whole
+ * file is checked before the first write in every mode; a missing or malformed source is a named
+ * failure (exit 1) on stderr with nothing on stdout — there is no older text to fall back to.
  *
- * argv is exactly one of: nothing (the root page), `--all` (the catalog), or `--command <name>`
- * (that command's page; a name the catalog does not describe is exit 2 with one stderr line).
- * Anything else is exit 2.
+ * argv is exactly one of: nothing (the root page), `--all` (the catalog), `--command <name>` (that
+ * command's page — what `<command> --help` asks), or `--name <name>` (what `entwurf help <name>`
+ * asks: a command's page, else a guide topic's page). A name neither describes is exit 2 with one
+ * stderr line. Anything else is exit 2. A topic is static text: it reads none of the settings it
+ * talks about, and it is never a command, so `<topic> --help` is refused like any undescribed name.
  *
  * The root page names catalog entries and prints their synopses from the catalog, so a command it
  * shows is always one the catalog describes. A command name in the data owns a description, not a
@@ -68,8 +70,12 @@ function aligned(head, column, body, at) {
 
 const argv = process.argv.slice(2);
 const all = argv.length === 1 && argv[0] === "--all";
-const wanted = argv.length === 2 && argv[0] === "--command" ? argv[1] : undefined;
-if (argv.length !== 0 && !all && wanted === undefined) refuse("cli-help.mjs takes nothing, --all, or --command <name>");
+const wanted = argv.length === 2 && (argv[0] === "--command" || argv[0] === "--name") ? argv[1] : undefined;
+// Only `entwurf help <name>` may reach a guide; `<command> --help` asks about something to run.
+const topicsToo = argv[0] === "--name";
+if (argv.length !== 0 && !all && wanted === undefined) {
+	refuse("cli-help.mjs takes nothing, --all, --command <name> or --name <name>");
+}
 
 let raw;
 try {
@@ -84,11 +90,11 @@ try {
 	fail(`is not JSON: ${err.message}`);
 }
 
-object(data, "root", ["_about", "schemaVersion", "root", "usage"]);
+object(data, "root", ["_about", "schemaVersion", "root", "topics", "usage"]);
 object(data._about, "_about", ["purpose", "ownership"]);
 line(data._about.purpose, "_about.purpose");
 line(data._about.ownership, "_about.ownership");
-if (data.schemaVersion !== 3) fail("schemaVersion: unsupported");
+if (data.schemaVersion !== 4) fail("schemaVersion: unsupported");
 
 // ── the catalog: every described command, the page `entwurf help all` prints ──
 const usage = object(data.usage, "usage", ["title", "commandGroups", "notes"]);
@@ -173,6 +179,24 @@ array(examples.items, "root.examples.items").forEach((item, i) => {
 compact.push("");
 for (const [f, footer] of array(root.footer, "root.footer").entries()) compact.push(line(footer, `root.footer[${f}]`));
 
+// ── guide topics: read-only pages `entwurf help <name>` prints; never commands ──
+const topics = new Map();
+array(data.topics, "topics").forEach((topic, t) => {
+	const at = `topics[${t}]`;
+	object(topic, at, ["name", "title", "lines"]);
+	const name = line(topic.name, `${at}.name`);
+	if (!/^[a-z][a-z0-9-]*$/.test(name)) fail(`${at}.name: ${JSON.stringify(name)} is not a topic name`);
+	// A topic shares `entwurf help <name>` with the commands, so one word must answer with one page:
+	// no command's name, not `all`, and no other topic's.
+	if (name === "all" || entries.has(name) || topics.has(name))
+		fail(`${at}.name: ${JSON.stringify(name)} is already a command, \`all\` or another topic`);
+	const title = line(topic.title, `${at}.title`);
+	// Blank lines separate a page's parts, so they may be empty, but the page neither starts nor ends on one.
+	const lines = array(topic.lines, `${at}.lines`).map((l, i) => text(l, `${at}.lines[${i}]`, { empty: true }));
+	if (lines[0] === "" || lines.at(-1) === "") fail(`${at}.lines: must not start or end with an empty line`);
+	topics.set(name, { title, lines });
+});
+
 // A reader that stops early (`entwurf help all | head`) closes the pipe: that ends the page, it is
 // not a failure to report.
 process.stdout.on("error", (err) => {
@@ -183,9 +207,16 @@ if (wanted === undefined) {
 	process.stdout.write(`${(all ? out : compact).join("\n")}\n`);
 } else {
 	const entry = entries.get(wanted);
+	const topic = topicsToo ? topics.get(wanted) : undefined;
 	// JSON quoting keeps any control character in the name on this one line.
-	if (!entry) refuse(`no help for ${JSON.stringify(wanted)} — \`entwurf help all\` lists the described commands`);
-	const page = [`Usage: entwurf ${entry.synopsis}`, "", entry.summary];
-	if (entry.details.length > 0) page.push("", ...entry.details);
-	process.stdout.write(`${page.join("\n")}\n`);
+	if (!entry && !topic) {
+		refuse(`no help for ${JSON.stringify(wanted)} — \`entwurf help all\` lists the described commands`);
+	}
+	if (entry) {
+		const page = [`Usage: entwurf ${entry.synopsis}`, "", entry.summary];
+		if (entry.details.length > 0) page.push("", ...entry.details);
+		process.stdout.write(`${page.join("\n")}\n`);
+	} else {
+		process.stdout.write(`${[topic.title, "", ...topic.lines].join("\n")}\n`);
+	}
 }

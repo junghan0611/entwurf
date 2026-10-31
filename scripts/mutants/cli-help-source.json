@@ -74,8 +74,8 @@
 			"claim": "CLI-HELP-CANONICAL",
 			"title": "a duplicated JSON property rides into the committed help source; JSON.parse keeps the later value and every runtime check stays green",
 			"subject": "ENTWURF-CLI.json",
-			"find": ["\t\"schemaVersion\": 3,"],
-			"replace": ["\t\"schemaVersion\": 3,\n\t\"schemaVersion\": 3,"],
+			"find": ["\t\"schemaVersion\": 4,"],
+			"replace": ["\t\"schemaVersion\": 4,\n\t\"schemaVersion\": 4,"],
 			"gate": ["bash", "run.sh", "check-install-surface"],
 			"timeoutSeconds": 120,
 			"signature": "[QK:CLI-HELP-CANONICAL]",
@@ -175,8 +175,8 @@
 			"claim": "CLI-HELP-FORMS",
 			"title": "`entwurf help <command>` looks up the word help instead of the command it names",
 			"subject": "run.sh",
-			"find": ["--command \"$2\""],
-			"replace": ["--command \"$cmd\""],
+			"find": ["--name \"$2\""],
+			"replace": ["--name \"$cmd\""],
 			"gate": ["bash", "run.sh", "check-install-surface"],
 			"timeoutSeconds": 120,
 			"signature": "[QK:CLI-HELP-FORMS]",
@@ -359,6 +359,61 @@
 			"gate": ["bash", "run.sh", "check-install-surface"],
 			"timeoutSeconds": 120,
 			"signature": "[QK:CLI-HELP-ROOT-NAMES-REAL]",
+			"signatureSource": "scripts/check-install-surface.ts"
+		},
+		{
+			"claim": "CLI-HELP-TOPIC-BYTES",
+			"title": "a guide topic loses the blank line under its title, so `entwurf help team` no longer prints the reviewed page",
+			"subject": "scripts/cli-help.mjs",
+			"find": ["\t\tprocess.stdout.write(`${[topic.title, \"\", ...topic.lines].join(\"\\n\")}\\n`);"],
+			"replace": ["\t\tprocess.stdout.write(`${[topic.title, ...topic.lines].join(\"\\n\")}\\n`);"],
+			"gate": ["bash", "run.sh", "check-install-surface"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:CLI-HELP-TOPIC-BYTES]",
+			"signatureSource": "scripts/check-install-surface.ts"
+		},
+		{
+			"claim": "CLI-HELP-TOPIC-ROUTE",
+			"title": "`entwurf help <name>` asks the renderer in the commands-only mode, so the guides have no door and `help team` is refused",
+			"subject": "run.sh",
+			"find": ["--name \"$2\""],
+			"replace": ["--command \"$2\""],
+			"gate": ["bash", "run.sh", "check-install-surface"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:CLI-HELP-TOPIC-ROUTE]",
+			"signatureSource": "scripts/check-install-surface.ts"
+		},
+		{
+			"claim": "CLI-HELP-TOPIC-NOT-COMMAND",
+			"title": "a guide topic answers `<topic> --help` as if it were a command, so asking about running `team` prints a page instead of the refusal",
+			"subject": "scripts/cli-help.mjs",
+			"find": ["const topicsToo = argv[0] === \"--name\";"],
+			"replace": ["const topicsToo = true;"],
+			"gate": ["bash", "run.sh", "check-install-surface"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:CLI-HELP-TOPIC-NOT-COMMAND]",
+			"signatureSource": "scripts/check-install-surface.ts"
+		},
+		{
+			"claim": "CLI-HELP-TOPIC-DISJOINT",
+			"title": "the renderer stops checking topic names, so a guide can take a command's name, `all` or another guide's and one word answers with two pages",
+			"subject": "scripts/cli-help.mjs",
+			"find": ["\tif (name === \"all\" || entries.has(name) || topics.has(name))"],
+			"replace": ["\tif (false)"],
+			"gate": ["bash", "run.sh", "check-install-surface"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:CLI-HELP-TOPIC-DISJOINT]",
+			"signatureSource": "scripts/check-install-surface.ts"
+		},
+		{
+			"claim": "CLI-HELP-TOPIC-SHIPPED",
+			"title": "team.json.example leaves the package files, so `entwurf help team` sends an installed reader to a file the install does not have",
+			"subject": "package.json",
+			"find": ["\t\t\"ENTWURF-CLI.json\",", "\t\t\"team.json.example\","],
+			"replace": ["\t\t\"ENTWURF-CLI.json\","],
+			"gate": ["bash", "run.sh", "check-install-surface"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:CLI-HELP-TOPIC-SHIPPED]",
 			"signatureSource": "scripts/check-install-surface.ts"
 		}
 	]

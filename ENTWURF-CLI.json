@@ -1,9 +1,9 @@
 {
 	"_about": {
-		"purpose": "The description of the entwurf command line: the short root page `entwurf --help` prints, the full catalog `entwurf help all` prints, and each command's page — its synopsis, summary and optional longer details — that `entwurf help <command>` prints. The root page names catalog entries and takes their synopses from the catalog. It describes commands; it never selects, registers or runs one.",
+		"purpose": "The description of the entwurf command line: the short root page `entwurf --help` prints, the full catalog `entwurf help all` prints, each command's page — its synopsis, summary and optional longer details — that `entwurf help <command>` prints, and the few guide topics `entwurf help <topic>` prints. The root page names catalog entries and takes their synopses from the catalog. A topic is read-only text whose name no command and no other topic takes, and `all` neither. It describes commands and guides; it never selects, registers or runs one.",
 		"ownership": "This root file is the sole editable source of that text. run.sh dispatch and its source-defined gate functions own execution; check-install-surface compares the two independently."
 	},
-	"schemaVersion": 3,
+	"schemaVersion": 4,
 	"root": {
 		"title": "entwurf - native harness entrypoints and garden facts",
 		"usage": {
@@ -14,8 +14,8 @@
 					"form": "<command> [args...]"
 				},
 				{
-					"form": "help [<command>]",
-					"text": "this overview, or one command's full description"
+					"form": "help [<name>]",
+					"text": "this overview, or command/topic help"
 				},
 				{
 					"form": "help all",
@@ -138,9 +138,78 @@
 		},
 		"footer": [
 			"Fresh call, send, resume and retire are entwurf-bridge MCP tools inside a session,",
-			"not commands here. Advanced maintenance and development gates: entwurf help all"
+			"not commands here. Advanced maintenance and development gates: entwurf help all",
+			"Guides: entwurf help team | entwurf help remote-pair"
 		]
 	},
+	"topics": [
+		{
+			"name": "team",
+			"title": "Guide: team - bookmarks of the siblings a project works with (team.json)",
+			"lines": [
+				"A person's own bookmark: who the siblings are, on which backend, at which",
+				"garden id. Entwurf never loads it, and it is not configuration for identity,",
+				"routes, roles, permissions or lifecycle.",
+				"",
+				"Where it lives:",
+				"  team.json at the project root, kept out of git (add /team.json to",
+				"  .gitignore). Start from team.json.example, shipped at the root of this",
+				"  entwurf package; its notes give the rules in full.",
+				"",
+				"What it holds:",
+				"  version, project, cwd   the bookmark's shape, its project and shared cwd",
+				"  notes                   free text for the people who read it",
+				"  members[]               one entry per sibling:",
+				"    name, role            how you address it; a role assigns no task or right",
+				"    backend               pi, pi-durable, claude-code, ...",
+				"    garden_id             its address: entwurf_v2 sends to this id",
+				"    native_session_id     that harness's own conversation id",
+				"",
+				"Where the facts come from:",
+				"  Copy ids, backend and cwd from the records (entwurf meta-facts); never",
+				"  guess them. If the bookmark and a record disagree, the record wins: fix",
+				"  the bookmark, never the record. Liveness is not kept here; read it when",
+				"  you send (entwurf_peers in a session, or entwurf peer-facts). Keep a",
+				"  member after it retires; membership grants no send, resume or retire."
+			]
+		},
+		{
+			"name": "remote-pair",
+			"title": "Guide: remote-pair - sibling pairs across two hosts (entwurf-remote-pair.json)",
+			"lines": [
+				"Opt-in, one file per host. Each route pairs a garden id here with one on",
+				"another host, so entwurf_v2 to the remote id makes one SSH attempt over your",
+				"own account. There is no discovery, wake or retry, and Entwurf sets up no",
+				"SSH, key or network.",
+				"",
+				"Where it lives (the rule; this page reads none of your settings):",
+				"  entwurf-remote-pair.json, in the directory that holds the garden record",
+				"  store. By default the store is the pi agent dir's meta-sessions, so:",
+				"    ~/.pi/agent/entwurf-remote-pair.json",
+				"  PI_CODING_AGENT_DIR moves the agent dir and ENTWURF_META_SESSIONS_DIR",
+				"  moves the store; the file follows the store. On each host, its bridge and",
+				"  its incoming SSH receive process must resolve the same local opt-in path.",
+				"  The paths on the two hosts need not be identical.",
+				"",
+				"What it holds:",
+				"  version                 2",
+				"  routes[]                one object per pair:",
+				"    localGardenId         this host's garden id in the pair",
+				"    remoteGardenId        the other host's garden id",
+				"    ssh                   your existing SSH alias for the other host",
+				"    remotePairFile        the absolute path of the other host's own file",
+				"",
+				"Write it with mode 0600, and never over a file you have not inspected. The",
+				"other host's file carries the mirror route: the two garden ids swapped, its",
+				"own SSH alias for this host, and this file's absolute path. No file means",
+				"off; a symlink, a non-regular file or an invalid declaration is refused, not",
+				"read as off. Delivery never starts, resumes or wakes a sibling that is off.",
+				"",
+				"Steps, checks and converting an older file: section 2c of",
+				"docs/setup-clean-host.md, shipped in this entwurf package."
+			]
+		}
+	],
 	"usage": {
 		"title": "Usage:",
 		"commandGroups": [

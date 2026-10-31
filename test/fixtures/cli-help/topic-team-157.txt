@@ -1,0 +1,26 @@
+Guide: team - bookmarks of the siblings a project works with (team.json)
+
+A person's own bookmark: who the siblings are, on which backend, at which
+garden id. Entwurf never loads it, and it is not configuration for identity,
+routes, roles, permissions or lifecycle.
+
+Where it lives:
+  team.json at the project root, kept out of git (add /team.json to
+  .gitignore). Start from team.json.example, shipped at the root of this
+  entwurf package; its notes give the rules in full.
+
+What it holds:
+  version, project, cwd   the bookmark's shape, its project and shared cwd
+  notes                   free text for the people who read it
+  members[]               one entry per sibling:
+    name, role            how you address it; a role assigns no task or right
+    backend               pi, pi-durable, claude-code, ...
+    garden_id             its address: entwurf_v2 sends to this id
+    native_session_id     that harness's own conversation id
+
+Where the facts come from:
+  Copy ids, backend and cwd from the records (entwurf meta-facts); never
+  guess them. If the bookmark and a record disagree, the record wins: fix
+  the bookmark, never the record. Liveness is not kept here; read it when
+  you send (entwurf_peers in a session, or entwurf peer-facts). Keep a
+  member after it retires; membership grants no send, resume or retire.
