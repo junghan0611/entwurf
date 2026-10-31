@@ -1,0 +1,286 @@
+{
+	"schemaVersion": 1,
+	"lane": "herdr-operator-link",
+	"mutants": [
+		{
+			"claim": "OPL-FORWARD-ONE-LINK",
+			"title": "a second expose over our settled link republishes the receipt and calls itself resumed instead of answering `already linked` with zero writes",
+			"subject": "scripts/herdr-operator-link.mjs",
+			"find": ["\t\treturn `already linked ${linkPath} -> ${target}`;"],
+			"replace": ["\t\t// (mutant) no idempotent answer"],
+			"gate": ["bash", "run.sh", "check-tests-beside-behavior"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:OPL-FORWARD-ONE-LINK]",
+			"signatureSource": "plugins/herdr/operator-link.test.mjs",
+			"build": {
+				"argv": ["bash", "scripts/build-bridge.sh"],
+				"output": "mcp/entwurf-bridge/dist"
+			}
+		},
+		{
+			"claim": "OPL-FLOOR-BEFORE-RECEIPT",
+			"title": "the receipt says linking while the ledger is still schema 2, so an old 2-only reader can tear down a runtime a receipt already names",
+			"subject": "scripts/herdr-operator-link.mjs",
+			"find": [
+				"\t\tif (schemaVersion !== LEDGER_FLOOR_VERSION) writeLedger(activation, LEDGER_FLOOR_VERSION, entry);",
+				"\t\twriteOperatorLink(layout, body(\"linking\"));"
+			],
+			"replace": [
+				"\t\twriteOperatorLink(layout, body(\"linking\"));",
+				"\t\tif (schemaVersion !== LEDGER_FLOOR_VERSION) writeLedger(activation, LEDGER_FLOOR_VERSION, entry);"
+			],
+			"gate": ["bash", "run.sh", "check-tests-beside-behavior"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:OPL-FLOOR-BEFORE-RECEIPT]",
+			"signatureSource": "plugins/herdr/operator-link.test.mjs",
+			"build": {
+				"argv": ["bash", "scripts/build-bridge.sh"],
+				"output": "mcp/entwurf-bridge/dist"
+			}
+		},
+		{
+			"claim": "OPL-RECEIPT-BEFORE-LINK",
+			"title": "the symlink is made before any receipt names it, so a run stopped there leaves a link no inverse will ever claim",
+			"subject": "scripts/herdr-operator-link.mjs",
+			"find": ["\t\twriteOperatorLink(layout, body(\"linking\"));", "\t\tfs.symlinkSync(target, linkPath);"],
+			"replace": ["\t\tfs.symlinkSync(target, linkPath);", "\t\twriteOperatorLink(layout, body(\"linking\"));"],
+			"gate": ["bash", "run.sh", "check-tests-beside-behavior"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:OPL-RECEIPT-BEFORE-LINK]",
+			"signatureSource": "plugins/herdr/operator-link.test.mjs",
+			"build": {
+				"argv": ["bash", "scripts/build-bridge.sh"],
+				"output": "mcp/entwurf-bridge/dist"
+			}
+		},
+		{
+			"claim": "OPL-LINKED-AFTER-LINK",
+			"title": "the receipt says linked before the link stands, so a run stopped there is later named drift instead of resumed",
+			"subject": "scripts/herdr-operator-link.mjs",
+			"find": ["\t\tfs.symlinkSync(target, linkPath);", "\t\twriteOperatorLink(layout, body(\"linked\"));"],
+			"replace": ["\t\twriteOperatorLink(layout, body(\"linked\"));", "\t\tfs.symlinkSync(target, linkPath);"],
+			"gate": ["bash", "run.sh", "check-tests-beside-behavior"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:OPL-LINKED-AFTER-LINK]",
+			"signatureSource": "plugins/herdr/operator-link.test.mjs",
+			"build": {
+				"argv": ["bash", "scripts/build-bridge.sh"],
+				"output": "mcp/entwurf-bridge/dist"
+			}
+		},
+		{
+			"claim": "OPL-SELF-IS-ACTIVE",
+			"title": "expose runs from any copy of the package, so a checkout or another npm root links the operator to a runtime it is not part of",
+			"subject": "scripts/herdr-operator-link.mjs",
+			"find": ["\tadmitSelf(runtime, \"expose\");"],
+			"replace": ["\tvoid admitSelf;"],
+			"gate": ["bash", "run.sh", "check-tests-beside-behavior"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:OPL-SELF-IS-ACTIVE]",
+			"signatureSource": "plugins/herdr/operator-link.test.mjs",
+			"build": {
+				"argv": ["bash", "scripts/build-bridge.sh"],
+				"output": "mcp/entwurf-bridge/dist"
+			}
+		},
+		{
+			"claim": "OPL-WITHDRAW-SELF",
+			"title": "withdraw runs from any copy of the package, so a checkout or another root takes back a link the active runtime owns",
+			"subject": "scripts/herdr-operator-link.mjs",
+			"find": ["\tadmitSelf(runtime, \"withdraw\");"],
+			"replace": ["\tvoid admitSelf;"],
+			"gate": ["bash", "run.sh", "check-tests-beside-behavior"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:OPL-WITHDRAW-SELF]",
+			"signatureSource": "plugins/herdr/operator-link.test.mjs",
+			"build": {
+				"argv": ["bash", "scripts/build-bridge.sh"],
+				"output": "mcp/entwurf-bridge/dist"
+			}
+		},
+		{
+			"claim": "OPL-SETTLED-ONLY",
+			"title": "a backed-up runtime beside the active one no longer stops expose, so the link is made over an install that is still mid-recovery",
+			"subject": "scripts/herdr-operator-link.mjs",
+			"find": [
+				"\t\tfs.lstatSync(runtime.stagingDir, { throwIfNoEntry: false }) ||",
+				"\t\tfs.lstatSync(runtime.previousDir, { throwIfNoEntry: false })"
+			],
+			"replace": ["\t\tfs.lstatSync(runtime.stagingDir, { throwIfNoEntry: false })"],
+			"gate": ["bash", "run.sh", "check-tests-beside-behavior"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:OPL-SETTLED-ONLY]",
+			"signatureSource": "plugins/herdr/operator-link.test.mjs",
+			"build": {
+				"argv": ["bash", "scripts/build-bridge.sh"],
+				"output": "mcp/entwurf-bridge/dist"
+			}
+		},
+		{
+			"claim": "OPL-BIN-DIR-CANONICAL",
+			"title": "a bin dir reached through an aliased parent is accepted, so the receipt records a path that is not its own realpath and the link moves with the alias",
+			"subject": "scripts/herdr-operator-link.mjs",
+			"find": ["\tif (fs.realpathSync(binDir) !== binDir) return \"alias\";"],
+			"replace": ["\t// (mutant) realpath not compared"],
+			"gate": ["bash", "run.sh", "check-tests-beside-behavior"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:OPL-BIN-DIR-CANONICAL]",
+			"signatureSource": "plugins/herdr/operator-link.test.mjs",
+			"build": {
+				"argv": ["bash", "scripts/build-bridge.sh"],
+				"output": "mcp/entwurf-bridge/dist"
+			}
+		},
+		{
+			"claim": "OPL-PATH-NOT-SHADOWED",
+			"title": "an executable entwurf in an earlier PATH entry is ignored, so the link is made where it will never be the one that runs",
+			"subject": "scripts/herdr-operator-link.mjs",
+			"find": ["\t\tif (isExecutableFile(candidate)) return { onPath: false, shadowedBy: candidate };"],
+			"replace": ["\t\tvoid candidate;"],
+			"gate": ["bash", "run.sh", "check-tests-beside-behavior"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:OPL-PATH-NOT-SHADOWED]",
+			"signatureSource": "plugins/herdr/operator-link.test.mjs",
+			"build": {
+				"argv": ["bash", "scripts/build-bridge.sh"],
+				"output": "mcp/entwurf-bridge/dist"
+			}
+		},
+		{
+			"claim": "OPL-FOREIGN-REFUSED",
+			"title": "a link with no receipt is not refused before the first write, so expose raises the floor and records a receipt over someone else's link",
+			"subject": "scripts/herdr-operator-link.mjs",
+			"find": [
+				"\t\tif (link !== \"absent\")",
+				"\t\t\trefuse(\"operator-link-foreign\", `${linkPath} exists and no receipt says it is ours; remove it yourself if it is`);"
+			],
+			"replace": ["\t\tvoid link;"],
+			"gate": ["bash", "run.sh", "check-tests-beside-behavior"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:OPL-FOREIGN-REFUSED]",
+			"signatureSource": "plugins/herdr/operator-link.test.mjs",
+			"build": {
+				"argv": ["bash", "scripts/build-bridge.sh"],
+				"output": "mcp/entwurf-bridge/dist"
+			}
+		},
+		{
+			"claim": "OPL-RECEIPT-NEEDS-FLOOR",
+			"title": "a receipt beside a schema-2 ledger is adopted, so a 2-only reader can deactivate under a link it does not know",
+			"subject": "scripts/herdr-operator-link.mjs",
+			"find": [
+				"\tif (ledger.schemaVersion !== LEDGER_FLOOR_VERSION)",
+				"\t\trefuse(\"operator-link-floor-mismatch\", `the ledger is schema ${ledger.schemaVersion}, not ${LEDGER_FLOOR_VERSION}`);"
+			],
+			"replace": ["\t// (mutant) any ledger version carries a receipt"],
+			"gate": ["bash", "run.sh", "check-tests-beside-behavior"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:OPL-RECEIPT-NEEDS-FLOOR]",
+			"signatureSource": "plugins/herdr/operator-link.test.mjs",
+			"build": {
+				"argv": ["bash", "scripts/build-bridge.sh"],
+				"output": "mcp/entwurf-bridge/dist"
+			}
+		},
+		{
+			"claim": "OPL-LINKED-MISSING-DRIFT",
+			"title": "a linked receipt whose link is gone silently re-creates it instead of naming the drift",
+			"subject": "scripts/herdr-operator-link.mjs",
+			"find": [
+				"\t\tif (link === \"absent\")",
+				"\t\t\trefuse(\"operator-link-drift\", `the receipt says ${linkPath} is linked but it is gone; withdraw, then ask again`);"
+			],
+			"replace": ["\t\tif (link === \"absent\") fs.symlinkSync(target, linkPath);"],
+			"gate": ["bash", "run.sh", "check-tests-beside-behavior"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:OPL-LINKED-MISSING-DRIFT]",
+			"signatureSource": "plugins/herdr/operator-link.test.mjs",
+			"build": {
+				"argv": ["bash", "scripts/build-bridge.sh"],
+				"output": "mcp/entwurf-bridge/dist"
+			}
+		},
+		{
+			"claim": "OPL-LINKING-PUBLISH-ONLY",
+			"title": "a linking resume makes the link again even when our exact link already stands, so the run that stopped after the symlink can never finish",
+			"subject": "scripts/herdr-operator-link.mjs",
+			"find": ["\tif (link === \"absent\") fs.symlinkSync(target, linkPath);"],
+			"replace": ["\tfs.symlinkSync(target, linkPath);"],
+			"gate": ["bash", "run.sh", "check-tests-beside-behavior"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:OPL-LINKING-PUBLISH-ONLY]",
+			"signatureSource": "plugins/herdr/operator-link.test.mjs",
+			"build": {
+				"argv": ["bash", "scripts/build-bridge.sh"],
+				"output": "mcp/entwurf-bridge/dist"
+			}
+		},
+		{
+			"claim": "OPL-WITHDRAW-ONLY-OURS",
+			"title": "withdraw over a foreign link drops the receipt and reports success, so the only record of what was ours is gone and the foreign link stands",
+			"subject": "scripts/herdr-operator-link.mjs",
+			"find": [
+				"\tif (link === \"foreign\")",
+				"\t\trefuse(\"operator-link-foreign\", `${receipt.linkPath} is not the link the receipt names; nothing was removed`);"
+			],
+			"replace": ["\tvoid refuse;"],
+			"gate": ["bash", "run.sh", "check-tests-beside-behavior"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:OPL-WITHDRAW-ONLY-OURS]",
+			"signatureSource": "plugins/herdr/operator-link.test.mjs",
+			"build": {
+				"argv": ["bash", "scripts/build-bridge.sh"],
+				"output": "mcp/entwurf-bridge/dist"
+			}
+		},
+		{
+			"claim": "OPL-WITHDRAW-ORPHAN-REFUSED",
+			"title": "a receipt with no ledger is treated as bound, so withdraw calls an orphan done instead of naming it",
+			"subject": "scripts/herdr-operator-link.mjs",
+			"find": [
+				"\tif (ledger === null) refuse(\"operator-link-orphan\", \"an operator-link receipt stands with no activation ledger\");"
+			],
+			"replace": ["\tif (ledger === null) return;"],
+			"gate": ["bash", "run.sh", "check-tests-beside-behavior"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:OPL-WITHDRAW-ORPHAN-REFUSED]",
+			"signatureSource": "plugins/herdr/operator-link.test.mjs",
+			"build": {
+				"argv": ["bash", "scripts/build-bridge.sh"],
+				"output": "mcp/entwurf-bridge/dist"
+			}
+		},
+		{
+			"claim": "OPL-STRICT-ARGV",
+			"title": "expose accepts tokens after --bin-dir <abs>, so a mistyped command links instead of exiting 2",
+			"subject": "scripts/herdr-operator-link.mjs",
+			"find": ["\tif (argv.length !== 2 || argv[0] !== \"--bin-dir\")"],
+			"replace": ["\tif (argv[0] !== \"--bin-dir\")"],
+			"gate": ["bash", "run.sh", "check-tests-beside-behavior"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:OPL-STRICT-ARGV]",
+			"signatureSource": "plugins/herdr/operator-link.test.mjs",
+			"build": {
+				"argv": ["bash", "scripts/build-bridge.sh"],
+				"output": "mcp/entwurf-bridge/dist"
+			}
+		},
+		{
+			"claim": "OPL-RECEIPT-TARGET-EXACT",
+			"title": "a receipt naming a target outside this runtime is certified, so withdraw removes a foreign link and its receipt on that receipt's word alone",
+			"subject": "scripts/herdr-operator-link.mjs",
+			"find": [
+				"\tif (parsed.target !== operatorLinkTarget(activeDir)) uncertified(`target is not ${operatorLinkTarget(activeDir)}`);"
+			],
+			"replace": ["\t// (mutant) target not derived from this runtime"],
+			"gate": ["bash", "run.sh", "check-tests-beside-behavior"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:OPL-RECEIPT-TARGET-EXACT]",
+			"signatureSource": "plugins/herdr/operator-link.test.mjs",
+			"build": {
+				"argv": ["bash", "scripts/build-bridge.sh"],
+				"output": "mcp/entwurf-bridge/dist"
+			}
+		}
+	]
+}

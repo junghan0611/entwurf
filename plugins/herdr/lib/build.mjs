@@ -144,6 +144,77 @@ export function certifyActivationCapability(entry, env, { spawn = spawnSync, nod
 }
 
 /**
+ * The ledger floor (#153): a 3-ledger is refused by every reader that admits only 2, before its first
+ * write. The raise to it is made by the operator-link expose writer (`scripts/herdr-operator-link.mjs`),
+ * only from a settled `active` ledger with no staging and no previous runtime beside the active one;
+ * this file never raises it.
+ */
+const LEDGER_FLOOR_VERSION = 3;
+
+/**
+ * What the probe child runs: the CANDIDATE's own reader, on the exact ledger path this build already
+ * certified. A fixed string; nothing a caller says reaches it except the three paths after it.
+ */
+const FLOOR_PROBE_SOURCE =
+	'import { pathToFileURL } from "node:url"; const [r, s, l] = process.argv.slice(-3); ' +
+	"const m = await import(pathToFileURL(r).href); " +
+	"process.stdout.write(JSON.stringify(m.readCertifiedLedger({ stateRoot: s, ledgerPath: l })));";
+
+/** JSON with every object's keys sorted, so two readings of one value compare equal. */
+function canonicalJson(value) {
+	return JSON.stringify(value, (_key, v) =>
+		v !== null && typeof v === "object" && !Array.isArray(v)
+			? Object.fromEntries(
+					Object.keys(v)
+						.sort()
+						.map((k) => [k, v[k]]),
+				)
+			: v,
+	);
+}
+
+/**
+ * Admit a staged candidate onto a floor host only if ITS OWN reader reads this host's ledger and
+ * answers exactly what this build certified: a child exiting 0, silent on stderr, whose stdout is
+ * the same certified value. Anything else — an older reader that refuses the floor, a null, another
+ * value, noise — is a named refusal, raised inside the runtime's staging transaction so the
+ * candidate is reclaimed and the active runtime stays. This observes the reader; it does not certify
+ * the candidate's whole validation or its inverse, which the product and package gates own.
+ */
+export function certifyCandidateReadsFloor(
+	packageRoot,
+	{ ledger, layout, env, spawn = spawnSync, nodeBin = process.execPath },
+) {
+	const reader = path.join(packageRoot, "scripts", "herdr-activation.mjs");
+	const probe = spawn(
+		nodeBin,
+		["--input-type=module", "-e", FLOOR_PROBE_SOURCE, reader, layout.stateRoot, layout.ledgerPath],
+		{ encoding: "utf8", env, stdio: ["ignore", "pipe", "pipe"], timeout: 30_000 },
+	);
+	const said = `stdout=${JSON.stringify((probe.stdout ?? "").slice(0, 200))} stderr=${JSON.stringify((probe.stderr ?? "").trim().slice(0, 200))}`;
+	const refuse = (why) => {
+		throw new HerdrBuildError("herdr-build-candidate-floor-refused", `${reader}: ${why} (${said})`);
+	};
+	if (probe.error || probe.status !== 0) {
+		refuse(
+			`the candidate's reader exited ${probe.status}${probe.signal ? ` on ${probe.signal}` : ""}${probe.error ? ` (${probe.error.message})` : ""}`,
+		);
+	}
+	if ((probe.stderr ?? "") !== "") refuse("the candidate's reader wrote to stderr");
+	let read;
+	try {
+		read = JSON.parse(probe.stdout ?? "");
+	} catch {
+		refuse("the candidate's reader printed something that is not one JSON value");
+	}
+	if (canonicalJson(read) !== canonicalJson(ledger)) {
+		refuse(
+			`the candidate's reader answered a different ledger than this build certified (schemaVersion ${read?.schemaVersion})`,
+		);
+	}
+}
+
+/**
  * What the long step is actually reaching for, in the operator's words. The `kind` discriminant
  * is the same one the acquisition dispatches on, so this cannot describe a source we would not use.
  */
@@ -357,6 +428,14 @@ function runBuildReported(env, deps, progress) {
 	const bootstrapArgs = { env, lock, checkoutRoot: CHECKOUT_ROOT };
 	if (deps.acquire !== undefined) bootstrapArgs.acquire = deps.acquire;
 	if (deps.resolveCommit !== undefined) bootstrapArgs.resolveCommit = deps.resolveCommit;
+	// A floor host admits only a candidate whose own reader reads this ledger (#153). Supplied here and
+	// nowhere else: no dependency, flag or environment chooses it. A 2-ledger or no ledger is the
+	// existing path, unobserved.
+	if (plan.ledger !== null && plan.ledger.schemaVersion === LEDGER_FLOOR_VERSION) {
+		const activation = resolveActivationLayout(env);
+		bootstrapArgs.admitCandidate = (packageRoot) =>
+			certifyCandidateReadsFloor(packageRoot, { ledger: plan.ledger, layout: activation, env, spawn, nodeBin });
+	}
 	const result = bootstrapRuntime(bootstrapArgs);
 	const layout = resolveRuntimeLayout(env);
 

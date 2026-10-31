@@ -99,7 +99,11 @@ interface Profile {
 }
 
 const activation = (await import(pathToFileURL(path.join(REPO, "scripts", "herdr-activation.mjs")).href)) as {
-	writeLedger: (layout: { stateRoot: string; ledgerPath: string }, entry: Record<string, unknown>) => void;
+	writeLedger: (
+		layout: { stateRoot: string; ledgerPath: string },
+		version: number,
+		entry: Record<string, unknown>,
+	) => void;
 	ledgerBody: (args: Record<string, unknown>) => Record<string, unknown>;
 	resolveActivationLayout: (env: NodeJS.ProcessEnv) => { stateRoot: string; ledgerPath: string };
 	resolveComponentRoots: (env: NodeJS.ProcessEnv) => Record<string, { path: string; source: string }>;
@@ -192,6 +196,8 @@ function fixtureAcquire(opts: {
 	log?: string;
 	fail?: boolean;
 	name?: string;
+	/** Extra package files, relative to the package root — e.g. the candidate's own ledger reader. */
+	files?: Record<string, string>;
 }) {
 	const name = opts.name ?? PACKAGE;
 	return ({ identity, prefix }: AcquireArgs) => {
@@ -199,6 +205,10 @@ function fixtureAcquire(opts: {
 		const root = path.join(prefix, "node_modules", name);
 		fs.mkdirSync(path.join(root, path.dirname(COMPILED_ENTRY)), { recursive: true });
 		fs.writeFileSync(path.join(root, "package.json"), `${JSON.stringify({ name, version })}\n`);
+		for (const [rel, body] of Object.entries(opts.files ?? {})) {
+			fs.mkdirSync(path.dirname(path.join(root, rel)), { recursive: true });
+			fs.writeFileSync(path.join(root, rel), body);
+		}
 		fs.writeFileSync(path.join(root, COMPILED_ENTRY), "// compiled entry fixture\n");
 		const bin = path.join(prefix, "node_modules", ".bin");
 		fs.mkdirSync(bin, { recursive: true });
@@ -564,6 +574,7 @@ function drive(
 		).artifactIdentity;
 		activation.writeLedger(
 			activation.resolveActivationLayout(env),
+			2,
 			activation.ledgerBody({
 				phase: "active",
 				runtimeRoot: activeDirOf(env),
@@ -1174,6 +1185,167 @@ function countingSentinel(): { acquire: () => never; calls: () => number } {
 			blind.live === false &&
 			blindMirror.length === 1 &&
 			blindMirror[0] === "[entwurf 1/5] one\n",
+	);
+}
+
+// ── 12. a floor host admits only a candidate whose OWN reader reads its ledger (#153) ─
+{
+	const PI = listing({ pi: "current (v8) (/home/u/.pi)" });
+	const READER = "scripts/herdr-activation.mjs";
+	// The current checkout's reader and the one module it imports: a candidate that knows the floor.
+	const CHECKOUT_READER = {
+		[READER]: fs.readFileSync(path.join(REPO, READER), "utf8"),
+		"scripts/herdr-runtime.mjs": fs.readFileSync(path.join(REPO, "scripts", "herdr-runtime.mjs"), "utf8"),
+	};
+	// Minimal synthetic readers. RAW answers the file's own value, so each variant differs from an
+	// exact answer in ONE respect only.
+	const RAW = 'import fs from "node:fs";\nconst raw = (l) => JSON.parse(fs.readFileSync(l.ledgerPath, "utf8"));\n';
+	const reader = (body: string) => ({ [READER]: body });
+	const THROWS = reader(
+		'export function readCertifiedLedger() {\n\tconst e = new Error("activation-ledger-uncertified: schemaVersion 3");\n\te.code = "activation-ledger-uncertified";\n\tthrow e;\n}\n',
+	);
+	/** A settled pi host on FIXTURE_NPM_LOCK, its ledger written at `version` — or no ledger at all. */
+	const host = (tag: string, version: number | null) => {
+		const env = world(tag);
+		const log = path.join(env.HOME as string, "argv.log");
+		drive(env, PI, { acquire: fixtureAcquire({ activate: "recorder", log }), resolveCommit: () => COMMIT_A });
+		if (version !== null) {
+			const artifactIdentity = (
+				JSON.parse(fs.readFileSync(journalPathOf(env), "utf8")) as { artifactIdentity: Record<string, unknown> }
+			).artifactIdentity;
+			activation.writeLedger(
+				activation.resolveActivationLayout(env),
+				version,
+				activation.ledgerBody({
+					phase: "active",
+					runtimeRoot: activeDirOf(env),
+					artifactIdentity,
+					roots: activation.resolveComponentRoots(env),
+					states: { pi: "active" },
+				}),
+			);
+		}
+		return { env, log };
+	};
+	const ledgerText = (env: NodeJS.ProcessEnv): string => {
+		const p = activation.resolveActivationLayout(env).ledgerPath;
+		return fs.existsSync(p) ? fs.readFileSync(p, "utf8") : "<absent>";
+	};
+	const journalOf = (env: NodeJS.ProcessEnv) =>
+		JSON.parse(fs.readFileSync(journalPathOf(env), "utf8")) as {
+			phase: string;
+			artifactIdentity: Record<string, unknown>;
+			previousRuntime: Record<string, unknown> | null;
+		};
+	/** Rebuild onto ANOTHER integrity — a real candidate to stage — and record every non-herdr spawn. */
+	const rebuild = (h: { env: NodeJS.ProcessEnv; log: string }, files: Record<string, string>) => {
+		const before = {
+			runtime: treeDigest(activeDirOf(h.env)),
+			ledger: ledgerText(h.env),
+			activations: fs.readFileSync(h.log, "utf8"),
+			ready: journalOf(h.env).artifactIdentity,
+		};
+		const calls: string[][] = [];
+		const spawn = (bin: string, argv: string[], opts: unknown): SpawnResult => {
+			if (bin === HERDR_STUB) return { status: 0, stdout: PI, stderr: "" };
+			calls.push([bin, ...argv]);
+			return spawnSync(bin, argv, opts as Record<string, never>) as unknown as SpawnResult;
+		};
+		const run = drive(h.env, PI, {
+			spawn,
+			acquire: fixtureAcquire({ activate: "recorder", log: h.log, files }),
+			readRuntimeLock: () => ({ ...FIXTURE_NPM_LOCK, integrity: FIXTURE_OTHER_INTEGRITY }),
+			resolveCommit: () => COMMIT_B,
+		});
+		const probes = calls.filter((c) => c.includes("--input-type=module"));
+		const runtimeDir = path.dirname(activeDirOf(h.env));
+		const journal = journalOf(h.env);
+		// A refusal of the candidate: the runtime the wiring names, the ledger and the activation log
+		// are byte-identical, nothing is staged or backed up, and the journal is the `installing` retry
+		// authority still carrying the runtime it replaced — not a zero-write rollback.
+		const retained =
+			run.refusal === "herdr-build-candidate-floor-refused" &&
+			treeDigest(activeDirOf(h.env)) === before.runtime &&
+			ledgerText(h.env) === before.ledger &&
+			fs.readFileSync(h.log, "utf8") === before.activations &&
+			!fs.existsSync(path.join(runtimeDir, "staging")) &&
+			!fs.existsSync(path.join(runtimeDir, "previous")) &&
+			journal.phase === "installing" &&
+			JSON.stringify(journal.previousRuntime) === JSON.stringify(before.ready);
+		return {
+			run,
+			probes,
+			retained,
+			stagingReader: probes[0]?.includes(path.join(runtimeDir, "staging", "node_modules", PACKAGE, READER)),
+		};
+	};
+	const show = (r: ReturnType<typeof rebuild>) =>
+		`${r.run.code ?? r.run.refusal}/probes=${r.probes.length}/retained=${r.retained}`;
+
+	const supplied = rebuild(host("floor-supplied", 3), CHECKOUT_READER);
+	ok(
+		"[QK:HPB-FLOOR-PROBE-SUPPLIED] on a 3-ledger host the official build ITSELF supplies the admission: the " +
+			"candidate's own reader is run once, from staging, against this host's ledger, and a candidate whose reader " +
+			"answers exactly the certified ledger is installed and activated. This observes the reader; it does not " +
+			`certify the candidate's whole lifecycle (${show(supplied)} staging-reader=${supplied.stagingReader})`,
+		supplied.run.code === 0 && supplied.probes.length === 1 && supplied.stagingReader === true,
+	);
+
+	const legacy2 = rebuild(host("floor-legacy-2", 2), THROWS);
+	const legacyNone = rebuild(host("floor-legacy-none", null), THROWS);
+	ok(
+		"[QK:HPB-FLOOR-PROBE-LEGACY-UNPROBED] a 2-ledger host and a host with no ledger take the existing path: no " +
+			"probe runs, so even a candidate whose reader would refuse everything is installed — the floor is what " +
+			`turns the observation on, nothing else (two=${show(legacy2)} none=${show(legacyNone)})`,
+		legacy2.run.code === 0 &&
+			legacy2.probes.length === 0 &&
+			legacyNone.run.code === 0 &&
+			legacyNone.probes.length === 0,
+	);
+
+	const exit7 = rebuild(
+		host("floor-exit7", 3),
+		reader(`${RAW}process.exitCode = 7;\nexport const readCertifiedLedger = raw;\n`),
+	);
+	const throws = rebuild(host("floor-throws", 3), THROWS);
+	const absent = rebuild(host("floor-absent", 3), {});
+	ok(
+		"[QK:HPB-FLOOR-PROBE-EXIT-STATUS] the candidate's reader must EXIT 0: one that prints the exact ledger and then " +
+			"exits 7 is refused for its exit alone, and an older reader that refuses the floor, or a candidate with no " +
+			"reader at all, is refused too — each with the active runtime, ledger and activation log byte-identical " +
+			`(exit7=${show(exit7)}/named=${exit7.run.detail.includes("exited 7")} throws=${show(throws)} absent=${show(absent)})`,
+		exit7.retained && exit7.run.detail.includes("exited 7") && throws.retained && absent.retained,
+	);
+
+	const noisy = rebuild(
+		host("floor-stderr", 3),
+		reader(`${RAW}process.stderr.write("noise\\n");\nexport const readCertifiedLedger = raw;\n`),
+	);
+	ok(
+		"[QK:HPB-FLOOR-PROBE-STDERR-SILENT] a reader that answers the exact ledger and exits 0 but writes to stderr is " +
+			"refused: an unexpected word from the candidate is not consent " +
+			`(${show(noisy)} named=${noisy.run.detail.includes("stderr")})`,
+		noisy.retained && noisy.run.detail.includes("stderr"),
+	);
+
+	const nulled = rebuild(host("floor-null", 3), reader("export function readCertifiedLedger() {\n\treturn null;\n}\n"));
+	const lowered = rebuild(
+		host("floor-lowered", 3),
+		reader(`${RAW}export const readCertifiedLedger = (l) => ({ ...raw(l), schemaVersion: 2 });\n`),
+	);
+	const otherPhase = rebuild(
+		host("floor-other-value", 3),
+		reader(`${RAW}export const readCertifiedLedger = (l) => ({ ...raw(l), phase: "activating" });\n`),
+	);
+	const malformed = rebuild(
+		host("floor-malformed", 3),
+		reader(`${RAW}process.stdout.write("noise\\n");\nexport const readCertifiedLedger = raw;\n`),
+	);
+	ok(
+		"[QK:HPB-FLOOR-PROBE-VALUE-EXACT] the reader's answer must be exactly the ledger this build certified, as one " +
+			"JSON value: null, the same ledger lowered to 2, a different phase, and output that is not one JSON value " +
+			`are each refused (null=${show(nulled)} lowered=${show(lowered)} other=${show(otherPhase)} malformed=${show(malformed)})`,
+		nulled.retained && lowered.retained && otherPhase.retained && malformed.retained,
 	);
 }
 

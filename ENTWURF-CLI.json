@@ -967,7 +967,17 @@
 				{
 					"synopsis": "herdr-plugin-deactivate",
 					"column": 37,
-					"summary": "#116 M3-b2 public teardown of a Herdr-plugin activation. Herdr's `plugin uninstall` deletes its checkout and calls NO cleanup hook, so the harness wiring and the stable runtime are retained, not cleaned — this is the shipped verb that takes them back. Certifies the activation ledger, the resolved Pi/Claude roots and BOTH component inverses read-only first; mutates only when every preflight is green; then Claude -> Pi user scope -> runtime -> ledger LAST. A component failure stops with the runtime and ledger intact as retry authority. With NO ledger it removes nothing: a clean host exits 0, and anything found at the plugin's journal/runtime/cache addresses is named with a non-zero exit (#135). Static imports only: the process deletes the runtime it is running from, and a lazy import after that fails"
+					"summary": "#116 M3-b2 public teardown of a Herdr-plugin activation. Herdr's `plugin uninstall` deletes its checkout and calls NO cleanup hook, so the harness wiring and the stable runtime are retained, not cleaned — this is the shipped verb that takes them back. Certifies the activation ledger, the resolved Pi/Claude roots, BOTH component inverses and the operator link (#153) read-only first; mutates only when every preflight is green; then the operator link -> Claude -> Pi user scope -> runtime -> ledger LAST. A component failure stops with the runtime and ledger intact as retry authority. With NO ledger it removes nothing: a clean host exits 0, and anything found at the plugin's journal/runtime/cache addresses or its operator-link receipt is named with a non-zero exit (#135). Static imports only: the process deletes the runtime it is running from, and a lazy import after that fails"
+				},
+				{
+					"synopsis": "herdr-plugin-expose-operator --bin-dir <abs>",
+					"column": 56,
+					"summary": "#153 the ONE explicit operator link: creates exactly <abs>/entwurf -> the Herdr runtime's own node_modules/.bin/entwurf, recorded by a receipt beside the activation ledger (raised to schema 3 first, so an artifact that cannot undo the link refuses the host). Runs only as the active runtime's package, only from a settled runtime with an active ledger, only into a physical directory that is an entry of the caller's PATH with no earlier entwurf on it; an existing file there without a receipt is someone else's and is refused. Never edits a profile or picks a directory"
+				},
+				{
+					"synopsis": "herdr-plugin-withdraw-operator",
+					"column": 42,
+					"summary": "#153 the opt-out of herdr-plugin-expose-operator: removes exactly the receipt's link — only while it is still that link — and then the receipt; the ledger stays at schema 3. Runs only as the active runtime's package. herdr-plugin-deactivate removes the same link first, before any component"
 				},
 				{
 					"synopsis": "remove-user-scope",

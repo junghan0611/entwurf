@@ -15,6 +15,14 @@
 #   entwurf-agy-imprint     -> scripts/agy-imprint.sh         (agy PreInvocation birth hook)
 #   entwurf-copilot-statusline -> scripts/copilot-statusline.sh (copilot settings.statusLine command)
 #
+# SOURCE CHECKOUTS ONLY (#153). expose and remove refuse, exit 4, before their first write —
+# legacy migration included — when THIS script belongs to an installed package: its own physical
+# location (symlinks resolved, as run.sh resolves its own) under */node_modules/*, the same seam
+# run.sh's setup_mode/run_ts branch on. Never cwd, never a target override. An installed package's
+# commands come from its package manager's bin linking; the moved-checkout rule below is a
+# developer's authority over its own checkouts and is not inherited by an installed root.
+# verify and exclusive only read, so they stay available everywhere.
+#
 # Ownership discipline (mirrors the agy adopt/refuse rule, 봉인 7), applied PER BIN:
 #   - create/refresh ONLY a link that is OURS — absent, or a symlink into our target, or the
 #     exact link our state recorded (target may have moved checkouts).
@@ -27,11 +35,13 @@
 # guess). New name appears first (atomic rename), old name is gone after. A re-appearing legacy
 # name on a later expose is re-reported (drift visibility).
 #
-#   expose [name]   create/refresh managed link(s) (idempotent; REFUSE foreign → exit 3).
+#   expose [name]   create/refresh managed link(s) (idempotent; REFUSE foreign → exit 3;
+#                   from an installed package → exit 4, nothing written).
 #                   no name = all managed bins, each attempted INDEPENDENTLY (#86 C1): one
 #                   foreign refusal no longer aborts the loop, the trailing summary reports
 #                   attempted/ok/refused truthfully, and any refusal still exits 3.
-#   remove [name]   honest inverse from state (remove only OUR link; REFUSE if it became foreign).
+#   remove [name]   honest inverse from state (remove only OUR link; REFUSE if it became foreign;
+#                   from an installed package → exit 4, nothing removed).
 #                   no name = all managed bins.
 #   verify <name>   require OUR symlink → target and that exact link as the PATH winner.
 #   exclusive       require that NO other root answers to any package.json bin name — not only
@@ -108,6 +118,31 @@ link_is_ours() {
     return 1                                                    # foreign symlink
   fi
   return 1                                                      # regular file / dir → foreign
+}
+
+# The package root this script belongs to, by its own physical location: a symlinked script or a
+# directory alias still answers with the tree it actually lives in.
+own_package_root() {
+  local src="${BASH_SOURCE[0]}" dir
+  while [ -L "$src" ]; do
+    dir="$(cd -P -- "$(dirname -- "$src")" && pwd)"
+    src="$(readlink "$src")"
+    case "$src" in /*) ;; *) src="$dir/$src" ;; esac
+  done
+  cd -P -- "$(dirname -- "$src")/.." && pwd
+}
+
+refuse_installed_mutation() {  # $1 = verb; exits 4 when this script lives in an installed package
+  local root
+  root="$(own_package_root)"
+  case "$root" in
+    */node_modules/*)
+      warn "[dev-bin] REFUSE $1: this dev-bin.sh belongs to an installed package ($root)."
+      warn "  dev-bin manages a SOURCE checkout's links only; an installed package's commands come from its package manager's bin linking."
+      warn "  nothing was written or removed (no link, no state, no legacy migration)."
+      exit 4
+      ;;
+  esac
 }
 
 path_has_bindir() { case ":$PATH:" in *":$BIN_DIR:"*) return 0 ;; *) return 1 ;; esac; }
@@ -317,6 +352,7 @@ remove_one() {  # $1 = name
 }
 
 do_expose() {  # $1 = optional bin name
+  refuse_installed_mutation expose
   migrate_legacy
   if [ -n "${1:-}" ]; then expose_one "$1"; return $?; fi
   # No-arg = the setup composition. Attempt EVERY unit independently (#86 C1):
@@ -338,6 +374,7 @@ do_expose() {  # $1 = optional bin name
   log "[dev-bin expose] summary: attempted=$attempted ok=$exposed refused=0"
 }
 do_remove() {  # $1 = optional bin name
+  refuse_installed_mutation remove
   if [ -n "${1:-}" ]; then remove_one "$1"; else for b in $MANAGED_BINS; do remove_one "$b"; done; fi
 }
 

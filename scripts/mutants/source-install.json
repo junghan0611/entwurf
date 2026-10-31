@@ -93,6 +93,41 @@
 			"timeoutSeconds": 300,
 			"signature": "[QK:SOURCE-MANIFEST-UNREADABLE-REFUSED]",
 			"signatureSource": "scripts/smoke-agy-install-state.sh"
+		},
+		{
+			"claim": "INSTALLED-DEVBIN-MUTATION-REFUSED",
+			"title": "the installed-package test never matches, so an installed root's dev-bin expose/remove again takes over a developer's links and state (#153, measured before the guard)",
+			"subject": "scripts/dev-bin.sh",
+			"find": ["    */node_modules/*)"],
+			"replace": ["    */node_modules/*/never-an-install/*)"],
+			"gate": ["bash", "run.sh", "smoke-agy-install-state"],
+			"timeoutSeconds": 300,
+			"signatureSource": "scripts/smoke-agy-install-state.sh",
+			"signature": "[QK:INSTALLED-DEVBIN-MUTATION-REFUSED]"
+		},
+		{
+			"claim": "INSTALLED-DEVBIN-PUBLIC-STOPS",
+			"title": "the public expose-dev-bin ignores the helper's installed-package refusal and goes on to verify, exclusive and the package-manager queries",
+			"subject": "run.sh",
+			"find": ["  [ \"$rc\" -eq 4 ] && return 4"],
+			"replace": ["  : # the installed-package refusal no longer stops the wrapper"],
+			"gate": ["bash", "run.sh", "smoke-agy-install-state"],
+			"timeoutSeconds": 300,
+			"signatureSource": "scripts/smoke-agy-install-state.sh",
+			"signature": "[QK:INSTALLED-DEVBIN-PUBLIC-STOPS]"
+		},
+		{
+			"claim": "SOURCE-DEVBIN-MOVED-CHECKOUT",
+			"title": "the moved-checkout rule is dropped while closing the installed path, so a developer's link no longer follows its own checkout to another one",
+			"subject": "scripts/dev-bin.sh",
+			"find": [
+				"    [ \"$(state_link \"$sf\")\" = \"$link\" ] && [ \"$cur\" = \"$(state_target \"$sf\")\" ] && return 0"
+			],
+			"replace": ["    :"],
+			"gate": ["bash", "run.sh", "smoke-agy-install-state"],
+			"timeoutSeconds": 300,
+			"signatureSource": "scripts/smoke-agy-install-state.sh",
+			"signature": "[QK:SOURCE-DEVBIN-MOVED-CHECKOUT]"
 		}
 	]
 }

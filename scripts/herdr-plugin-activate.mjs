@@ -32,6 +32,7 @@ import {
 	certifyPhaseForForward,
 	certifyRootsAgainstLedger,
 	componentStates,
+	FRESH_ACTIVATION_SCHEMA_VERSION,
 	ledgerBody,
 	piStatePaths,
 	planActivation,
@@ -248,9 +249,13 @@ export function activate(env, requested) {
 	for (const backend of selected) {
 		if (disposition === "rebind" || states[backend] !== "active") states[backend] = "pending";
 	}
+	// The floor this host already carries is kept; only a ledger that does not exist yet is born at
+	// the fresh version. Activation neither raises nor lowers it.
+	const version = ledger?.schemaVersion ?? FRESH_ACTIVATION_SCHEMA_VERSION;
 	const checkpoint = (phase) =>
 		writeLedger(
 			activation,
+			version,
 			ledgerBody({ phase, runtimeRoot: runtime.activeDir, artifactIdentity: current, roots, states }),
 		);
 	checkpoint("activating");

@@ -697,6 +697,72 @@ if bash "$DEVBIN" expose entwurf-bridge >/dev/null 2>&1; then die "dev-bin migra
 ok "dev-bin migrate: foreign legacy refused (linkPath basename != entwurf-bridge)"
 rm -f "$LEGACY" "$DLINK" "$DSTATE"
 bash "$DEVBIN" remove >/dev/null 2>&1
+# J-6 (#153): dev-bin mutation is a SOURCE checkout's authority. The moved-checkout rule lets a
+# developer's link follow its own checkout (D1 → D2); an INSTALLED package must not inherit it —
+# measured before this guard: a node_modules-shaped root's public expose-dev-bin retargeted every
+# managed link and state a dev checkout had made. The installed root is judged by where dev-bin.sh
+# itself lives (symlinks and directory aliases resolved), never by cwd or a target override. The
+# copies below carry THIS checkout's run.sh/dev-bin.sh/package.json bytes, so the cells test them.
+OVERRIDES=(-u ENTWURF_OPERATOR_TARGET -u ENTWURF_BRIDGE_TARGET -u ENTWURF_AGY_STATUSLINE_TARGET -u ENTWURF_AGY_IMPRINT_TARGET -u ENTWURF_COPILOT_STATUSLINE_TARGET)
+make_root() {  # $1 = root dir: the three real files plus no-op helper targets
+  mkdir -p "$1/scripts" "$1/mcp/entwurf-bridge"
+  cp "$REPO_DIR/run.sh" "$1/run.sh"; cp "$DEVBIN" "$1/scripts/dev-bin.sh"; cp "$REPO_DIR/package.json" "$1/package.json"
+  for _t in mcp/entwurf-bridge/start.sh scripts/agy-statusline.sh scripts/agy-imprint.sh scripts/copilot-statusline.sh; do
+    printf '#!/bin/sh\nexit 0\n' > "$1/$_t"; chmod +x "$1/$_t"
+  done
+  chmod +x "$1/run.sh" "$1/scripts/dev-bin.sh"; unset _t
+}
+devbin_world() {  # every link in the bin dir, every dev-bin state body, and the profile bytes
+  { for _f in "$DBIN_DIR"/* "$XDG_DATA_HOME"/entwurf/dev-bin/*; do
+      [ -e "$_f" ] || [ -L "$_f" ] || continue
+      if [ -L "$_f" ]; then printf 'L %s -> %s\n' "$_f" "$(readlink "$_f")"; else printf 'F %s %s\n' "$_f" "$(sha256sum < "$_f")"; fi
+    done
+    printf 'P %s\n' "$(sha256sum < "$HOME/.profile")"; } 2>/dev/null; unset _f
+}
+D1="$SB/src-d1"; D2="$SB/src-d2"; INST="$SB/inst/node_modules/@junghanacs/entwurf"
+make_root "$D1"; make_root "$D2"; make_root "$INST"
+printf '# smoke profile seed\n' > "$HOME/.profile"
+env "${OVERRIDES[@]}" bash "$D1/scripts/dev-bin.sh" expose >/dev/null 2>&1   # a dev checkout's five links + states
+printf '{"schemaVersion":1,"linkPath":"%s","target":"%s","detectMode":"created-new","stampedAt":"x"}\n' \
+  "$DBIN_DIR/entwurf-bridge" "$D1/mcp/entwurf-bridge/start.sh" > "$XDG_DATA_HOME/entwurf/dev-bin/install-state.json"   # a legacy state migration would act on
+ln -s "$INST" "$SB/inst-alias"; ln -s "$INST/scripts/dev-bin.sh" "$SB/dev-bin-link.sh"
+WORLD_BEFORE="$(devbin_world)"
+set +e
+bash "$INST/scripts/dev-bin.sh" expose >"$SB/j6-direct.out" 2>&1; RC_DIRECT=$?   # target overrides still set
+env "${OVERRIDES[@]}" bash "$SB/inst-alias/scripts/dev-bin.sh" expose entwurf >/dev/null 2>&1; RC_ALIAS=$?
+env "${OVERRIDES[@]}" bash "$SB/dev-bin-link.sh" expose entwurf >/dev/null 2>&1; RC_LINK=$?
+set -e
+WORLD_AFTER_EXPOSE="$(devbin_world)"
+# an installed-root link and state that DO match the installed target: remove still refuses
+rm -f "$OLINK"; ln -s "$INST/run.sh" "$OLINK"
+printf '{"schemaVersion":1,"linkPath":"%s","target":"%s","detectMode":"created-new","stampedAt":"x"}\n' "$OLINK" "$INST/run.sh" > "$OSTATE"
+WORLD_BEFORE_REMOVE="$(devbin_world)"
+set +e; env "${OVERRIDES[@]}" bash "$INST/scripts/dev-bin.sh" remove entwurf >/dev/null 2>&1; RC_REMOVE=$?; set -e
+want "installed dev-bin: expose (direct, alias, symlinked script) and remove refuse with 4 before any write — no link, state, legacy migration or profile change, even for a link the installed root's own target matches [QK:INSTALLED-DEVBIN-MUTATION-REFUSED]" \
+  "[ '$RC_DIRECT' -eq 4 ] && [ '$RC_ALIAS' -eq 4 ] && [ '$RC_LINK' -eq 4 ] && [ '$RC_REMOVE' -eq 4 ] && grep -qF 'REFUSE expose: this dev-bin.sh belongs to an installed package' '$SB/j6-direct.out' && [ \"\$WORLD_BEFORE\" = \"\$WORLD_AFTER_EXPOSE\" ] && [ \"\$WORLD_BEFORE_REMOVE\" = \"\$(devbin_world)\" ] && [ -f '$XDG_DATA_HOME/entwurf/dev-bin/install-state.json' ]"
+rm -f "$OLINK"; ln -s "$D1/run.sh" "$OLINK"
+printf '{"schemaVersion":1,"linkPath":"%s","target":"%s","detectMode":"created-new","stampedAt":"x"}\n' "$OLINK" "$D1/run.sh" > "$OSTATE"
+rm -f "$XDG_DATA_HOME/entwurf/dev-bin/install-state.json"
+# the public verbs: the refusal propagates, and nothing after it runs — no verify, no exclusive,
+# no package-manager query (a recording pnpm/npm in front of the fixture ones).
+PM_TRACE="$SB/j6-pm.trace"; : > "$PM_TRACE"; PM_REC="$SB/j6-pm"; mkdir -p "$PM_REC"
+for _pm in pnpm npm; do printf '#!/usr/bin/env bash\necho "%s $*" >> "%s"\nexec "%s/%s" "$@"\n' "$_pm" "$PM_TRACE" "$FAKE_PM" "$_pm" > "$PM_REC/$_pm"; chmod +x "$PM_REC/$_pm"; done; unset _pm
+WORLD_BEFORE="$(devbin_world)"
+set +e
+OUT="$(env "${OVERRIDES[@]}" PATH="$PM_REC:$DBIN_DIR:$PATH" bash "$INST/run.sh" expose-dev-bin 2>&1)"; RC=$?
+env "${OVERRIDES[@]}" PATH="$PM_REC:$DBIN_DIR:$PATH" bash "$INST/run.sh" remove-dev-bin >/dev/null 2>&1; RC_PREMOVE=$?
+set -e
+want "installed public expose-dev-bin/remove-dev-bin exit 4 with the named refusal, and nothing follows it: no verify, no exclusive, no package-manager query, no change [QK:INSTALLED-DEVBIN-PUBLIC-STOPS]" \
+  "[ '$RC' -eq 4 ] && [ '$RC_PREMOVE' -eq 4 ] && printf '%s' \"\$OUT\" | grep -qF 'REFUSE expose: this dev-bin.sh belongs to an installed package' && ! printf '%s' \"\$OUT\" | grep -qE 'dev-bin verify|dev-bin exclusive|PATH winner' && [ ! -s '$PM_TRACE' ] && [ \"\$WORLD_BEFORE\" = \"\$(devbin_world)\" ]"
+# the developer's own authority is kept: a link a source checkout made follows it to another one
+set +e; env "${OVERRIDES[@]}" bash "$D2/scripts/dev-bin.sh" expose entwurf >"$SB/j6-d2.out" 2>&1; RC=$?; set -e
+want "source dev-bin keeps the moved-checkout rule: the D1 link and state move to D2 as refresh-ours [QK:SOURCE-DEVBIN-MOVED-CHECKOUT]" \
+  "[ '$RC' -eq 0 ] && [ \"\$(readlink '$OLINK')\" = '$D2/run.sh' ] && grep -q 'refresh-ours' '$SB/j6-d2.out' && python3 -c 'import json,sys; sys.exit(0 if json.load(open(sys.argv[1]))[\"target\"]==sys.argv[2] else 1)' '$OSTATE' '$D2/run.sh'"
+env "${OVERRIDES[@]}" bash "$D2/scripts/dev-bin.sh" remove entwurf >/dev/null 2>&1
+env "${OVERRIDES[@]}" bash "$D1/scripts/dev-bin.sh" remove >/dev/null 2>&1
+rm -rf "$D1" "$D2" "$SB/inst" "$SB/inst-alias" "$SB/dev-bin-link.sh" "$PM_REC" "$PM_TRACE" "$HOME/.profile"
+want "installed dev-bin cells leave no managed link or state behind" "[ -z \"\$(ls -A '$DBIN_DIR' 2>/dev/null)\" ] && [ ! -d '$XDG_DATA_HOME/entwurf/dev-bin' ]"
+
 unset ENTWURF_DEV_BIN_DIR ENTWURF_OPERATOR_TARGET ENTWURF_BRIDGE_TARGET ENTWURF_AGY_STATUSLINE_TARGET
 export PATH="$DEVBIN_ORIG_PATH"
 unset ENTWURF_AGY_IMPRINT_TARGET ENTWURF_COPILOT_STATUSLINE_TARGET

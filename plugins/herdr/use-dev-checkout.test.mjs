@@ -92,6 +92,7 @@ if name == "herdr" and args[:2] == ["plugin", "list"]:
 		const layout = resolveActivationLayout(env);
 		writeLedger(
 			layout,
+			2,
 			ledgerBody({
 				phase: "active",
 				runtimeRoot: runtime.activeDir,

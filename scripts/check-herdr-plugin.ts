@@ -409,7 +409,7 @@ const PEERS = JSON.stringify({
 	const code = src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
 	// The checkout's activation module may answer WHERE, and only where. The BODY is certified by
 	// the installed runtime's own copy, because the pane and the writer are two artifacts that can
-	// ship two `ACTIVATION_SCHEMA_VERSION`s and a checkout-side parser would report a newer
+	// ship two sets of admitted ledger versions and a checkout-side parser would report a newer
 	// runtime's ledger as uncertified on a perfectly healthy host. Location is not schema-versioned;
 	// certification is. So: the checkout module is reached for `resolveActivationLayout` and for
 	// nothing else.

@@ -767,7 +767,7 @@ import { pathToFileURL } from "node:url";
 const [modPath, active, backends] = process.argv.slice(2);
 const m = await import(pathToFileURL(modPath).href);
 const states = Object.fromEntries(backends.split(",").map((b) => [b, "active"]));
-m.writeLedger(m.resolveActivationLayout(process.env), m.ledgerBody({
+m.writeLedger(m.resolveActivationLayout(process.env), 2, m.ledgerBody({
 	phase: "active",
 	runtimeRoot: active,
 	artifactIdentity: { kind: "npm", name: "@junghanacs/entwurf", version: "0.34.1", expectedIntegrity: "sha512-fixture", observedDigest: `sha256-${"c".repeat(64)}` },

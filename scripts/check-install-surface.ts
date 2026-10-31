@@ -433,6 +433,12 @@ const operatorCmds = [...targets].filter(([cmd, ts]) => !isDevGate(cmd) && ts.le
 			receipt:
 				"scripts/probe-bridge-command.ts EXPECTED_TOOLS; check-entwurf-bridge-boot G1f checks the live tools/list",
 		},
+		{
+			old: "roots and BOTH component inverses read-only first; mutates only when every preflight is green; then Claude -> Pi user scope -> runtime -> ledger LAST. A component failure stops with the runtime and ledger intact as retry authority. With NO ledger it removes nothing: a clean host exits 0, and anything found at the plugin's journal/runtime/cache addresses is named",
+			next: "roots, BOTH component inverses and the operator link (#153) read-only first; mutates only when every preflight is green; then the operator link -> Claude -> Pi user scope -> runtime -> ledger LAST. A component failure stops with the runtime and ledger intact as retry authority. With NO ledger it removes nothing: a clean host exits 0, and anything found at the plugin's journal/runtime/cache addresses or its operator-link receipt is named",
+			receipt:
+				"scripts/herdr-plugin-deactivate.mjs: preflightOperatorLink beside the component preflights, removeOperatorLink before the components, operatorLinkLeftovers with no ledger (#153)",
+		},
 	];
 	const respelled = oldUsage.split("\n").filter((l) => respell(l) !== l).length;
 	let expectedRoot = oldUsage.split("\n").map(respell).join("\n");
@@ -451,6 +457,16 @@ const operatorCmds = [...targets].filter(([cmd, ts]) => !isDevGate(cmd) && ts.le
 			line: "  entwurf pi [args...]                # #118: the MANAGED pi launch. exec()s the pi that `type -P` finds on PATH (a file, never a shell function or alias) in THIS terminal, with --entwurf-control added ahead of your argv, which passes through untouched. Refuses by name when ENTWURF_PI_LAUNCH_ACTIVE is non-empty (it exports that to the pi it starts), when no pi is on PATH (it launches the pi coding agent, it does not install one), or when that path is not an executable regular file",
 			receipt:
 				"run.sh `pi)` arm: type -P pi, the non-empty ENTWURF_PI_LAUNCH_ACTIVE refusal, the missing and non-regular refusals, exec with --entwurf-control",
+		},
+		{
+			after: "  entwurf herdr-plugin-deactivate    # ",
+			line: "  entwurf herdr-plugin-expose-operator --bin-dir <abs>  # #153 the ONE explicit operator link: creates exactly <abs>/entwurf -> the Herdr runtime's own node_modules/.bin/entwurf, recorded by a receipt beside the activation ledger (raised to schema 3 first, so an artifact that cannot undo the link refuses the host). Runs only as the active runtime's package, only from a settled runtime with an active ledger, only into a physical directory that is an entry of the caller's PATH with no earlier entwurf on it; an existing file there without a receipt is someone else's and is refused. Never edits a profile or picks a directory",
+			receipt: "run.sh `herdr-plugin-expose-operator)` arm -> scripts/herdr-operator-link.mjs expose (#153)",
+		},
+		{
+			after: "  entwurf herdr-plugin-expose-operator --bin-dir <abs>  # ",
+			line: "  entwurf herdr-plugin-withdraw-operator  # #153 the opt-out of herdr-plugin-expose-operator: removes exactly the receipt's link — only while it is still that link — and then the receipt; the ledger stays at schema 3. Runs only as the active runtime's package. herdr-plugin-deactivate removes the same link first, before any component",
+			receipt: "run.sh `herdr-plugin-withdraw-operator)` arm -> scripts/herdr-operator-link.mjs withdraw (#153)",
 		},
 	];
 	for (const ins of insertedLines) {
@@ -687,7 +703,8 @@ const operatorCmds = [...targets].filter(([cmd, ts]) => !isDevGate(cmd) && ts.le
 
 	// Coverage, read independently of the data. Operator commands are the case labels of the
 	// top-level dispatch: the `case "$cmd" in` after the `cmd=${1:-}` line, to the column-0 `esac`
-	// that closes it. That is a text read, so it is bound to the reviewed ce92dc7 case by a byte pin
+	// that closes it. That is a text read, so it is bound to the reviewed ce92dc7 case (plus its reviewed
+	// #153 two-arm amendment) by a byte pin
 	// — evidence for this change, not a ban on later dispatch work: a change to the case re-reviews
 	// its labels and moves the pin in the same change. The labels are not claimed to be
 	// runtime-proven. Gate commands are the check_/smoke_ functions bash itself defines when it reads
@@ -697,9 +714,10 @@ const operatorCmds = [...targets].filter(([cmd, ts]) => !isDevGate(cmd) && ts.le
 	const start = RUN_SH.indexOf(DISPATCH);
 	const caseAt = RUN_SH.indexOf(`\n${CASE_LINE}`, start) + 1;
 	const end = RUN_SH.indexOf("\nesac\n", caseAt) + "\nesac\n".length;
-	const REVIEWED_CASE_SHA256 = "8c925ec8b27ada74bd90d343a9b60623fae9cfee48cccc63bae2c954724e4867";
+	// Moved for #153: two operator-link arms (herdr-plugin-expose-operator / -withdraw-operator), re-reviewed.
+	const REVIEWED_CASE_SHA256 = "33a3af3671da176400229ca59858ed1643fec75f0f740a506a13cd9c4260dfeb";
 	ok(
-		"[QK:CLI-HELP-DISPATCH-REVIEWED] S9h the case the operator labels are read from is the reviewed ce92dc7 case, byte for byte",
+		"[QK:CLI-HELP-DISPATCH-REVIEWED] S9h the case the operator labels are read from is the reviewed ce92dc7 case plus the reviewed #153 two-arm amendment, byte for byte",
 		start > 0 && caseAt > start && sha256(RUN_SH.slice(caseAt, end)) === REVIEWED_CASE_SHA256,
 		"the top-level case changed: re-review its labels against ENTWURF-CLI.json and the debt below, then move the pin",
 	);

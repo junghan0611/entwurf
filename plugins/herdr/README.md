@@ -37,7 +37,7 @@ Entwurf has two installation routes and they are not competitors either. Pick by
 | command | `herdr plugin install junghan0611/entwurf/plugins/herdr` | `npm install -g @junghanacs/entwurf` then `entwurf setup <project>` |
 | where | inside a Herdr session | any shell, tmux, CI, a bare box |
 | harnesses wired | pi and Claude Code, **and only if Herdr has integrated them** | every harness found on the host: pi, Claude Code, Codex, Copilot, Antigravity, OMP, the ACP rail — each reported PASS / SKIP / FAIL |
-| puts `entwurf` on `PATH` | **no** | yes (six bins) |
+| puts `entwurf` on `PATH` | **no** — one `entwurf` link only if you ask for it (`herdr-plugin-expose-operator`) | yes (six bins) |
 | platform | `linux` (`platforms` in the manifest) | the npm package has no `os` restriction |
 | gives you the status overlay | yes | no — that pane is this plugin |
 
@@ -272,10 +272,11 @@ DATA_ROOT="${XDG_DATA_HOME:-$HOME/.local/share}"
 ```
 
 This plugin puts nothing on `PATH`, so that absolute path is the command. A bare
-`entwurf herdr-plugin-deactivate` works only where a direct install has put `entwurf` on `PATH`.
+`entwurf herdr-plugin-deactivate` works only where a direct install has put `entwurf` on `PATH`, or
+where you asked for the one operator link below — deactivate removes that link first.
 
-It establishes every deletion authority before the first deletion, and removes components → runtime →
-ledger, so the record outlives what it authorised.
+It establishes every deletion authority before the first deletion, and removes the operator link →
+components → runtime → ledger, so the record outlives what it authorised.
 
 **With no activation ledger it removes nothing (#135).** An install that stopped before its activation
 was recorded can leave a journal, a runtime or the plugin's npm cache behind. Without a ledger nothing
@@ -311,8 +312,8 @@ a wider host wants the direct route (`npm install -g @junghanacs/entwurf`, then 
 | ACP rail (`pi --model entwurf/<claude model>`) | ✅ — the pi user-scope wiring registers the provider too | ✅ |
 | `entwurf_fresh_call` backends | `pi`, `claude-code` | `pi`, `claude-code`, `copilot`, `omp`, `codex`, `pi-durable` |
 | launch seat | a new tab in the caller's Herdr workspace | a visible tmux window, with an optional `placement.tmuxSession` expert seat |
-| `entwurf`, `entwurf-bridge`, statusline/hook bins on `PATH` | ❌ | ✅ six bins |
-| `entwurf setup <project>`, `entwurf doctor-*` repair surfaces | reachable only by absolute path under the runtime root | ✅ |
+| `entwurf`, `entwurf-bridge`, statusline/hook bins on `PATH` | ❌ (one explicit `entwurf` link on request) | ✅ six bins |
+| `entwurf setup <project>`, `entwurf doctor-*` repair surfaces | by absolute path under the runtime root — or as bare `entwurf` once you asked for the operator link | ✅ |
 | platform | `linux` | no `os` restriction in the package |
 
 The direct route is the **wider bench**: its tmux rail carries six fresh-call backends
@@ -702,13 +703,17 @@ ledger, with every component active and every activated backend still requested 
 atomic ledger write. A version is never an identity here: two commits can both call themselves
 `<version>`, which is exactly why the ledger binds the COMMIT.
 
-**It puts nothing on `PATH`.** An earlier cut exposed bare `entwurf` / `entwurf-bridge` through an
+**It puts nothing on `PATH` — unless you ask for exactly one link (#153).**
+`<runtime>/node_modules/.bin/entwurf herdr-plugin-expose-operator --bin-dir <dir>` creates `<dir>/entwurf`
+pointing at that runtime bin, only into a physical directory already on your `PATH` with no earlier
+`entwurf` on it, and records it in a receipt beside the activation ledger;
+`herdr-plugin-withdraw-operator` (or `herdr-plugin-deactivate`) removes exactly that link. An earlier cut exposed bare `entwurf` / `entwurf-bridge` through an
 owned bin directory; that was load-bearing on a condition nothing here can establish — there is no
 reason a fresh `$XDG_DATA_HOME/…/bin` is on a clean host's PATH, and this plugin may not edit a shell
 profile or write into a bin directory it does not own. The npm artifact the receipt above measured **does**
 carry the `entwurf pi` launcher — that is where
 `<runtime>/node_modules/.bin/entwurf pi` becomes a garden citizen with no model turn — but that bin is
-reachable only by its absolute path under the runtime root. The command this README tells you to type
+reachable only by its absolute path under the runtime root, unless you asked for the operator link above. The command this README tells you to type
 is therefore still `pi --entwurf-control`.
 
 **Nothing at that address is moved without proof, and nothing is created before the judgement.** A

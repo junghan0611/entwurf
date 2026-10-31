@@ -406,6 +406,54 @@
 			"timeoutSeconds": 300,
 			"signature": "[QK:HRB-PREPARE-STDOUT-CLEAN]",
 			"signatureSource": "scripts/check-herdr-runtime-bootstrap.ts"
+		},
+		{
+			"claim": "HRB-ADMISSION-BEFORE-SWAP",
+			"title": "the runtime never asks the caller's admission, so a floor host swaps in a candidate whose reader nobody observed (#153)",
+			"subject": "scripts/herdr-runtime.mjs",
+			"find": ["\t\tif (admitCandidate !== undefined) {"],
+			"replace": ["\t\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-herdr-runtime-bootstrap"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:HRB-ADMISSION-BEFORE-SWAP]",
+			"signatureSource": "scripts/check-herdr-runtime-bootstrap.ts"
+		},
+		{
+			"claim": "HRB-ADMISSION-REFUSAL-RETAINS",
+			"title": "the admission runs after the try that reclaims a failed candidate, so a refused candidate leaves its staging tree and our cache behind for the next run to trip over (#153)",
+			"subject": "scripts/herdr-runtime.mjs",
+			"find": [
+				"\t\tif (admitCandidate !== undefined) {\n\t\t\tconst verdict = admitCandidate(\n\t\t\t\tpath.join(layout.stagingDir, \"node_modules\", completenessOf(requested, acquired).name),\n\t\t\t);\n\t\t\tif (verdict !== undefined) {\n\t\t\t\tthrow new RuntimeBootstrapError(\n\t\t\t\t\t\"runtime-candidate-admission-invalid\",\n\t\t\t\t\t`admitCandidate returned ${typeof verdict}; admission is synchronous: return nothing to admit, throw to refuse`,\n\t\t\t\t);\n\t\t\t}\n\t\t}\n\t} catch (err) {\n\t\tremoveTree(layout.stagingDir);\n\t\t// A half-fetched tarball left in the cache is the thing a retry would trip over: npm's own\n\t\t// cache entry may be incomplete, and OUR cache is the only place this transaction wrote.\n\t\tremoveTree(layout.cacheDir);\n\t\tthrow err;\n\t}\n\n\tlet backedUp = false;"
+			],
+			"replace": [
+				"\t} catch (err) {\n\t\tremoveTree(layout.stagingDir);\n\t\t// A half-fetched tarball left in the cache is the thing a retry would trip over: npm's own\n\t\t// cache entry may be incomplete, and OUR cache is the only place this transaction wrote.\n\t\tremoveTree(layout.cacheDir);\n\t\tthrow err;\n\t}\n\n\tif (admitCandidate !== undefined) {\n\t\tconst verdict = admitCandidate(\n\t\t\tpath.join(layout.stagingDir, \"node_modules\", completenessOf(requested, acquired).name),\n\t\t);\n\t\tif (verdict !== undefined) {\n\t\t\tthrow new RuntimeBootstrapError(\n\t\t\t\t\"runtime-candidate-admission-invalid\",\n\t\t\t\t`admitCandidate returned ${typeof verdict}; admission is synchronous: return nothing to admit, throw to refuse`,\n\t\t\t);\n\t\t}\n\t}\n\tlet backedUp = false;"
+			],
+			"gate": ["bash", "run.sh", "check-herdr-runtime-bootstrap"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:HRB-ADMISSION-REFUSAL-RETAINS]",
+			"signatureSource": "scripts/check-herdr-runtime-bootstrap.ts"
+		},
+		{
+			"claim": "HRB-ADMISSION-VOID-ONLY",
+			"title": "a value returned by the admission is read as consent, so a Promise whose refusal arrives later lets the swap happen first (#153)",
+			"subject": "scripts/herdr-runtime.mjs",
+			"find": ["\t\t\tif (verdict !== undefined) {"],
+			"replace": ["\t\t\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-herdr-runtime-bootstrap"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:HRB-ADMISSION-VOID-ONLY]",
+			"signatureSource": "scripts/check-herdr-runtime-bootstrap.ts"
+		},
+		{
+			"claim": "HRB-ADMISSION-CALLBACK-SHAPE",
+			"title": "an admission that cannot be called is discovered as a TypeError after the journal already says installing, instead of a named refusal before the first byte (#153)",
+			"subject": "scripts/herdr-runtime.mjs",
+			"find": ["\tif (admitCandidate !== undefined && typeof admitCandidate !== \"function\") {"],
+			"replace": ["\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-herdr-runtime-bootstrap"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:HRB-ADMISSION-CALLBACK-SHAPE]",
+			"signatureSource": "scripts/check-herdr-runtime-bootstrap.ts"
 		}
 	]
 }

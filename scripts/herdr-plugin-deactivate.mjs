@@ -37,6 +37,7 @@ import {
 	resolveComponentRoots,
 	writeLedger,
 } from "./herdr-activation.mjs";
+import { operatorLinkLeftovers, preflightOperatorLink, removeOperatorLink } from "./herdr-operator-link.mjs";
 import { removeOwnedRuntime, resolveRuntimeLayout } from "./herdr-runtime.mjs";
 
 const PACKAGE_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -86,7 +87,7 @@ export function deactivate(env) {
 		// recorded leaves a journal, a runtime or a cache behind, and saying "nothing to undo" over them
 		// was a false success. Without a ledger nothing proves what they belong to or that no harness
 		// wiring names them, so this verb removes nothing: it names what it found and exits non-zero.
-		const leftovers = leftoversAtPluginAddresses(runtime);
+		const leftovers = [...leftoversAtPluginAddresses(runtime), ...operatorLinkLeftovers(env)];
 		if (leftovers.length === 0) {
 			process.stdout.write("[herdr-plugin-deactivate] no certified activation ledger — nothing to undo\n");
 			return 0;
@@ -100,6 +101,9 @@ export function deactivate(env) {
 	}
 	certifyRootsAgainstLedger(ledger, roots, runtime.activeDir);
 	certifyPhaseForInverse(ledger);
+	// The operator link (#153) is judged with everything else, before the first write: a link that is
+	// no longer the receipt's, or a receipt this ledger does not carry, stops the whole teardown here.
+	const operatorReceipt = preflightOperatorLink(env, ledger, roots, runtime.activeDir);
 	// On a RETRY the plan is what is LEFT: a component already recorded `removed` is skipped, because
 	// its inverse has no ownership state to be admitted by any more and re-running it is a permanent
 	// refusal — which is exactly how a half-finished teardown used to become unfinishable.
@@ -176,6 +180,7 @@ export function deactivate(env) {
 	const checkpoint = () =>
 		writeLedger(
 			activation,
+			ledger.schemaVersion,
 			ledgerBody({
 				phase: "deactivating",
 				runtimeRoot: runtime.activeDir,
@@ -187,6 +192,12 @@ export function deactivate(env) {
 	checkpoint();
 
 	const done = [];
+	// The link goes FIRST: it names the runtime, so it must be gone before the thing it names. Its
+	// receipt is its own retry authority, so the ledger records nothing new for it.
+	if (operatorReceipt !== null) {
+		removeOperatorLink(env, operatorReceipt);
+		done.push("operator-link");
+	}
 	for (const step of steps) {
 		if (step === "claude-code" || step === "pi") {
 			const verb = step === "pi" ? "remove-user-scope" : "uninstall-meta-bridge";
@@ -195,7 +206,7 @@ export function deactivate(env) {
 				process.stderr.write(`${(r.stderr || r.stdout || "").trim()}\n`);
 				fail(
 					"deactivate-component-failed",
-					`${step} inverse failed — runtime and ledger preserved as retry authority (${done.length} component(s) already removed and recorded)`,
+					`${step} inverse failed — runtime and ledger preserved as retry authority (${done.filter((s) => s === "pi" || s === "claude-code").length} component(s) already removed and recorded)`,
 				);
 			}
 			states[step] = "removed";

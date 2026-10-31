@@ -998,7 +998,18 @@ export function bootstrapRuntime({
 	checkoutRoot = defaultCheckoutRoot(),
 	acquire = acquireArtifact,
 	resolveCommit = resolveCheckoutCommit,
+	admitCandidate,
 }) {
+	// ADMISSION (#153) is an optional, SYNCHRONOUS observation of the verified candidate, made before
+	// the first rename: return nothing to admit it, throw to refuse it. This module never decides what
+	// is asked — the caller that owns the question supplies it — so it imports nothing to ask it with.
+	// A value that cannot be called is refused here, before the first byte.
+	if (admitCandidate !== undefined && typeof admitCandidate !== "function") {
+		throw new RuntimeBootstrapError(
+			"runtime-candidate-admission-invalid",
+			`admitCandidate is ${typeof admitCandidate}; it is a synchronous function or absent`,
+		);
+	}
 	const requested = requestedArtifactIdentity({ lock, checkoutRoot, resolveCommit });
 	const layout = resolveRuntimeLayout(env);
 
@@ -1114,6 +1125,22 @@ export function bootstrapRuntime({
 		fs.mkdirSync(layout.stagingDir, { recursive: true });
 		acquired = acquire({ identity: requested, prefix: layout.stagingDir, cacheDir: layout.cacheDir, env });
 		verifyInstalledRuntime(layout.stagingDir, completenessOf(requested, acquired));
+		// Inside this try, so a refused candidate is reclaimed exactly like a failed one: staging and
+		// cache go, the active runtime and the `installing` journal (with its carried provenance) stay.
+		// The same-artifact early return above never reaches this line, so it runs no probe. A
+		// recovery's own move (restoring or discarding a tree) happens before it and is not observed;
+		// a new candidate staged afterwards reaches this line like any other.
+		if (admitCandidate !== undefined) {
+			const verdict = admitCandidate(
+				path.join(layout.stagingDir, "node_modules", completenessOf(requested, acquired).name),
+			);
+			if (verdict !== undefined) {
+				throw new RuntimeBootstrapError(
+					"runtime-candidate-admission-invalid",
+					`admitCandidate returned ${typeof verdict}; admission is synchronous: return nothing to admit, throw to refuse`,
+				);
+			}
+		}
 	} catch (err) {
 		removeTree(layout.stagingDir);
 		// A half-fetched tarball left in the cache is the thing a retry would trip over: npm's own

@@ -30,6 +30,7 @@ import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { reclaimOnExit } from "./lib/reclaim-on-exit.ts";
+import { treeDigest as contentDigest } from "./lib/tree-digest.ts";
 
 let passed = 0;
 function ok(label: string, cond: boolean): void {
@@ -159,6 +160,7 @@ interface Leaf {
 		checkoutRoot?: string;
 		acquire?: unknown;
 		resolveCommit?: (root: string) => string;
+		admitCandidate?: unknown;
 	}) => BootstrapResult;
 	removeOwnedRuntime: (args: { env: NodeJS.ProcessEnv }) => { removed: string[]; reason: string | null };
 }
@@ -1258,6 +1260,140 @@ function install(
 			"left the one stream that mattered wide open (measured 2026-09-17 against the real GitHub remote). Diagnostics " +
 			`still reach the operator — they go to stderr, which npm does not parse (prepare=${JSON.stringify(prepare)} polluting=${JSON.stringify(polluting)})`,
 		commands.length > 0 && polluting.length === 0,
+	);
+}
+
+// ── 29. a candidate may be ADMITTED by its caller, synchronously, before the swap (#153) ─
+// Byte claims in this section use the shared content + mode + topology digest; this file's own
+// `treeDigest` (paths and sizes) cannot tell a same-length 0.21.0 → 0.22.0 swap from no swap.
+{
+	/** Everything a refusal must have left, captured as VALUES immediately — before any later run. */
+	const capture = (layout: Layout) => ({
+		active: contentDigest(layout.activeDir),
+		staging: fs.existsSync(layout.stagingDir),
+		previous: fs.existsSync(layout.previousDir),
+		cache: fs.existsSync(layout.cacheDir),
+		journal: fs.readFileSync(layout.journalPath, "utf8"),
+	});
+	/** One bootstrap of LOCK_B over a finished LOCK_A runtime, with an acquire that also fills OUR cache. */
+	const over = (tag: string, admitCandidate: unknown) => {
+		const env = world(tag);
+		const layout = resolveRuntimeLayout(env);
+		install(env);
+		const acquire = (args: AcquireArgs): AcquireResult => {
+			fs.mkdirSync(args.cacheDir, { recursive: true });
+			fs.writeFileSync(path.join(args.cacheDir, "fetched.tgz"), "fixture\n");
+			return fixtureAcquire()(args);
+		};
+		const before = capture(layout);
+		const code = refusal(() =>
+			bootstrapRuntime({
+				env,
+				lock: LOCK_B,
+				checkoutRoot: fixtureCheckout(LOCK_B),
+				acquire,
+				resolveCommit: () => COMMIT_A,
+				admitCandidate,
+			}),
+		);
+		const after = capture(layout);
+		return { env, layout, before, after, code };
+	};
+
+	// (a) the call: once, with the staged package root, while the active runtime is still the old one.
+	const seen: { arg: string; stagedManifest: boolean; activeAtCall: string; previousAtCall: boolean }[] = [];
+	const env = world("admit-order");
+	const layoutA = resolveRuntimeLayout(env);
+	install(env);
+	const activeBefore = contentDigest(layoutA.activeDir);
+	const result = bootstrapRuntime({
+		env,
+		lock: LOCK_B,
+		checkoutRoot: fixtureCheckout(LOCK_B),
+		acquire: fixtureAcquire(),
+		resolveCommit: () => COMMIT_A,
+		admitCandidate: (arg: string) => {
+			seen.push({
+				arg,
+				stagedManifest: fs.existsSync(path.join(arg, "package.json")),
+				activeAtCall: contentDigest(layoutA.activeDir),
+				previousAtCall: fs.existsSync(layoutA.previousDir),
+			});
+		},
+	});
+	const activeAfter = contentDigest(layoutA.activeDir);
+	const expectedArg = path.join(layoutA.stagingDir, "node_modules", PACKAGE);
+	ok(
+		"[QK:HRB-ADMISSION-BEFORE-SWAP] a caller's admission is asked exactly once, about the VERIFIED staged package " +
+			"root, while the active runtime is still byte-for-byte the one it replaces and no backup exists yet — and an " +
+			`admission that returns nothing lets the swap finish (calls=${seen.length} arg=${seen[0]?.arg === expectedArg} staged=${seen[0]?.stagedManifest} active-at-call-unchanged=${seen[0]?.activeAtCall === activeBefore} previous=${seen[0]?.previousAtCall} result=${result.phase}/${result.changed}/${result.journal.artifactIdentity.version} active-replaced=${activeAfter !== activeBefore})`,
+		seen.length === 1 &&
+			seen[0].arg === expectedArg &&
+			seen[0].stagedManifest &&
+			seen[0].activeAtCall === activeBefore &&
+			!seen[0].previousAtCall &&
+			result.phase === "runtime-ready" &&
+			result.changed &&
+			result.journal.artifactIdentity.version === LOCK_B.version &&
+			activeAfter !== activeBefore,
+	);
+
+	// (b) a refusal is reclaimed like a failed candidate. The state is judged from the values captured
+	// right after the refusal; the retry is a SEPARATE run, judged on its own afterwards.
+	class Refused extends Error {
+		code = "fixture-candidate-refused";
+	}
+	const refused = over("admit-refused", () => {
+		throw new Refused("no");
+	});
+	const torn = JSON.parse(refused.after.journal) as Journal;
+	const refusalState =
+		refused.code === "fixture-candidate-refused" &&
+		refused.after.active === refused.before.active &&
+		!refused.after.staging &&
+		!refused.after.previous &&
+		!refused.after.cache &&
+		torn.phase === "installing" &&
+		torn.artifactIdentity.version === LOCK_B.version &&
+		torn.previousRuntime?.version === LOCK_A.version;
+	const retry = refusal(() => install(refused.env, LOCK_B));
+	const retried = readCertifiedJournal(refused.layout);
+	const retryState =
+		retry === null && retried?.phase === "runtime-ready" && retried.artifactIdentity.version === LOCK_B.version;
+	ok(
+		"[QK:HRB-ADMISSION-REFUSAL-RETAINS] a refused admission propagates the caller's own error and is reclaimed " +
+			"exactly like a candidate that failed verification: the active runtime is byte-identical, staging, backup " +
+			"and our cache are gone, and the journal is the `installing` retry authority still carrying the finished " +
+			"runtime's provenance — not a zero-write rollback. Judged on values captured BEFORE any retry; the retry " +
+			"without the refusal is a separate later run that goes green " +
+			`(after-refusal: code=${refused.code} active-identical=${refused.after.active === refused.before.active} staging=${refused.after.staging} previous=${refused.after.previous} cache=${refused.after.cache} journal=${torn.phase}/${torn.artifactIdentity.version}/prev=${torn.previousRuntime?.version} | then-retry: ${retry ?? "ok"}/${retried?.phase}/${retried?.artifactIdentity.version})`,
+		refusalState && retryState,
+	);
+
+	// (c) admission is synchronous and says nothing: any returned value — a truthy one or a Promise — is refused.
+	const truthy = over("admit-truthy", () => true);
+	const promised = over("admit-promise", () => Promise.resolve());
+	ok(
+		"[QK:HRB-ADMISSION-VOID-ONLY] an admission that RETURNS anything is refused by name instead of being read as " +
+			"consent — a Promise would otherwise let an asynchronous refusal arrive after the swap it was meant to stop " +
+			`(truthy=${truthy.code}/kept=${truthy.after.active === truthy.before.active} promise=${promised.code}/kept=${promised.after.active === promised.before.active})`,
+		truthy.code === "runtime-candidate-admission-invalid" &&
+			truthy.after.active === truthy.before.active &&
+			promised.code === "runtime-candidate-admission-invalid" &&
+			promised.after.active === promised.before.active,
+	);
+
+	// (d) something that cannot be called is refused before the first byte, journal included.
+	const shaped = over("admit-shape", {});
+	ok(
+		"[QK:HRB-ADMISSION-CALLBACK-SHAPE] an admission that is not a function is refused by name before the first " +
+			"byte — the journal is not even moved to `installing` — instead of failing as a TypeError half-way through " +
+			`the transaction (code=${shaped.code} journal-unchanged=${shaped.after.journal === shaped.before.journal} active-unchanged=${shaped.after.active === shaped.before.active} staging=${shaped.after.staging} cache=${shaped.after.cache})`,
+		shaped.code === "runtime-candidate-admission-invalid" &&
+			shaped.after.journal === shaped.before.journal &&
+			shaped.after.active === shaped.before.active &&
+			!shaped.after.staging &&
+			!shaped.after.cache,
 	);
 }
 

@@ -228,6 +228,61 @@
 			"timeoutSeconds": 300,
 			"signature": "[QK:HPB-PLANNED-ROOT-TIE]",
 			"signatureSource": "scripts/check-herdr-plugin-build.ts"
+		},
+		{
+			"claim": "HPB-FLOOR-PROBE-SUPPLIED",
+			"title": "the official build never supplies the admission, so a floor host installs a candidate whose own reader may refuse the ledger it is about to act on (#153)",
+			"subject": "plugins/herdr/lib/build.mjs",
+			"find": ["\tif (plan.ledger !== null && plan.ledger.schemaVersion === LEDGER_FLOOR_VERSION) {"],
+			"replace": ["\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-herdr-plugin-build"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:HPB-FLOOR-PROBE-SUPPLIED]",
+			"signatureSource": "scripts/check-herdr-plugin-build.ts"
+		},
+		{
+			"claim": "HPB-FLOOR-PROBE-LEGACY-UNPROBED",
+			"title": "the probe runs on every ledger, so a legacy 2-ledger host refuses candidates the floor was never raised against (#153)",
+			"subject": "plugins/herdr/lib/build.mjs",
+			"find": ["\tif (plan.ledger !== null && plan.ledger.schemaVersion === LEDGER_FLOOR_VERSION) {"],
+			"replace": ["\tif (plan.ledger !== null) {"],
+			"gate": ["bash", "run.sh", "check-herdr-plugin-build"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:HPB-FLOOR-PROBE-LEGACY-UNPROBED]",
+			"signatureSource": "scripts/check-herdr-plugin-build.ts"
+		},
+		{
+			"claim": "HPB-FLOOR-PROBE-EXIT-STATUS",
+			"title": "the probe ignores the reader's exit, so a reader that failed after printing is admitted (#153)",
+			"subject": "plugins/herdr/lib/build.mjs",
+			"find": ["\tif (probe.error || probe.status !== 0) {"],
+			"replace": ["\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-herdr-plugin-build"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:HPB-FLOOR-PROBE-EXIT-STATUS]",
+			"signatureSource": "scripts/check-herdr-plugin-build.ts"
+		},
+		{
+			"claim": "HPB-FLOOR-PROBE-STDERR-SILENT",
+			"title": "the probe ignores what the reader said on stderr, so a reader warning about the ledger is admitted (#153)",
+			"subject": "plugins/herdr/lib/build.mjs",
+			"find": ["\tif ((probe.stderr ?? \"\") !== \"\") refuse(\"the candidate's reader wrote to stderr\");"],
+			"replace": ["\tvoid 0;"],
+			"gate": ["bash", "run.sh", "check-herdr-plugin-build"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:HPB-FLOOR-PROBE-STDERR-SILENT]",
+			"signatureSource": "scripts/check-herdr-plugin-build.ts"
+		},
+		{
+			"claim": "HPB-FLOOR-PROBE-VALUE-EXACT",
+			"title": "the probe accepts any answer from the reader, so a null, a lowered or a different ledger is admitted as if it were the one this build certified (#153)",
+			"subject": "plugins/herdr/lib/build.mjs",
+			"find": ["\tif (canonicalJson(read) !== canonicalJson(ledger)) {"],
+			"replace": ["\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-herdr-plugin-build"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:HPB-FLOOR-PROBE-VALUE-EXACT]",
+			"signatureSource": "scripts/check-herdr-plugin-build.ts"
 		}
 	]
 }

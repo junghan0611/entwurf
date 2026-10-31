@@ -30,8 +30,16 @@ import fs from "node:fs";
 import path from "node:path";
 import { artifactStage, certifyArtifactIdentity, resolveRuntimeLayout, sameArtifactRequest } from "./herdr-runtime.mjs";
 
-/** Ledger format. Bump only with a reader that understands both. */
-export const ACTIVATION_SCHEMA_VERSION = 2;
+/**
+ * Ledger formats this reader admits (#153). The key set is the same for both; 3 is a FLOOR, not a new
+ * shape: a reader that admits only 2 refuses a 3-ledger before its first write, which is how an older
+ * artifact is kept from acting on a host it no longer understands. Add a version only together with a
+ * reader that understands every version already in this set.
+ */
+export const ACTIVATION_SCHEMA_VERSIONS = Object.freeze([2, 3]);
+
+/** The version a ledger is born with. Every later write carries the version it read — never this. */
+export const FRESH_ACTIVATION_SCHEMA_VERSION = 2;
 
 /** Set P, frozen. The ledger may never name anything else. */
 export const ACTIVATABLE_BACKENDS = Object.freeze(["pi", "claude-code"]);
@@ -140,10 +148,24 @@ function certifyRoot(where, value) {
 	}
 }
 
-/** Ledgers are replaced, never patched: write beside, then rename. */
-export function writeLedger(layout, entry) {
+/**
+ * Ledgers are replaced, never patched: write beside, then rename. The version is an explicit
+ * argument and the only one: an entry carrying its own `schemaVersion` is refused rather than
+ * merged, so no spread order can let a body silently raise or lower the floor. Both refusals come
+ * before the first byte.
+ */
+export function writeLedger(layout, version, entry) {
+	if (!ACTIVATION_SCHEMA_VERSIONS.includes(version)) {
+		throw new ActivationError("activation-ledger-version-invalid", `schemaVersion ${JSON.stringify(version)}`);
+	}
+	if (Object.hasOwn(entry, "schemaVersion")) {
+		throw new ActivationError(
+			"activation-ledger-version-invalid",
+			"the entry carries its own schemaVersion; the version is the explicit argument alone",
+		);
+	}
 	fs.mkdirSync(layout.stateRoot, { recursive: true });
-	const body = `${JSON.stringify({ schemaVersion: ACTIVATION_SCHEMA_VERSION, ...entry }, null, 2)}\n`;
+	const body = `${JSON.stringify({ schemaVersion: version, ...entry }, null, 2)}\n`;
 	const tmp = `${layout.ledgerPath}.tmp`;
 	fs.writeFileSync(tmp, body);
 	fs.renameSync(tmp, layout.ledgerPath);
@@ -190,7 +212,7 @@ export function readCertifiedLedger(layout) {
 	if (Object.keys(parsed).sort().join(",") !== [...LEDGER_KEYS].sort().join(",")) {
 		throw new ActivationError("activation-ledger-uncertified", `key set: ${Object.keys(parsed).sort()}`);
 	}
-	if (parsed.schemaVersion !== ACTIVATION_SCHEMA_VERSION) {
+	if (!ACTIVATION_SCHEMA_VERSIONS.includes(parsed.schemaVersion)) {
 		throw new ActivationError("activation-ledger-uncertified", `schemaVersion ${parsed.schemaVersion}`);
 	}
 	if (typeof parsed.runtimeRoot !== "string" || !path.isAbsolute(parsed.runtimeRoot)) {

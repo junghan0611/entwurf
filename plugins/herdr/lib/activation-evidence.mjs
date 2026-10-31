@@ -13,7 +13,7 @@
  * on uninstall". So the ledger's WRITER is the installed runtime's copy of
  * `scripts/herdr-activation.mjs`. `[측정]` `package.json` `files` ships `scripts/` and NOT
  * `plugins/`, so the pane and the writer are two different artifacts that can carry two different
- * `ACTIVATION_SCHEMA_VERSION`s. A checkout-side parser would therefore report a NEWER installed
+ * sets of admitted ledger versions. A checkout-side parser would therefore report a NEWER installed
  * runtime's ledger as `activation-ledger-uncertified` on a perfectly healthy host — a false red of
  * exactly the family this pane exists to stop telling. So the reader we call is the writer's own.
  *

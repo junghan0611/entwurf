@@ -4236,9 +4236,9 @@ process.exit(ok ? 0 : 1);
 ORACLE
 
   mkdir -p "$box/pd-aligned" "$box/pd-global" "$box/pd-mismatch"
-  out=$(cd "$box/pd-aligned" && npm install "$tgz" "${host_specs[@]}" --no-audit --no-fund 2>&1) || {
+  out=$(cd "$box/pd-aligned" && npm install "$tgz" "${host_specs[@]}" --ignore-scripts --no-audit --no-fund 2>&1) || {
     fail "[check-pack-install] pi-durable L1 (aligned host) install failed:"; echo "$out" | tail -10 | sed 's/^/    /' >&2; return 1; }
-  out=$(cd "$box" && npm install -g --prefix "$box/pd-global" "$tgz" --no-audit --no-fund 2>&1) || {
+  out=$(cd "$box" && npm install -g --prefix "$box/pd-global" "$tgz" --ignore-scripts --no-audit --no-fund 2>&1) || {
     fail "[check-pack-install] pi-durable L2 (isolated global) install failed:"; echo "$out" | tail -10 | sed 's/^/    /' >&2; return 1; }
 
   for cell in L1s L1 L2; do
@@ -4267,7 +4267,7 @@ ORACLE
   # it imports. pi-codemode 1.3.0 loads, and depends on no SDK member, so this tree carries exactly one
   # depth-2 mismatch (L4 keeps depth 3).
   printf '%s\n' "{\"name\":\"pd-mismatch\",\"version\":\"1.0.0\",\"private\":true,\"overrides\":{\"@earendil-works/pi-durable\":{\"@earendil-works/pi-codemode\":\"1.3.0\"}}}" > "$box/pd-mismatch/package.json"
-  out=$(cd "$box/pd-mismatch" && npm install "$tgz" --no-audit --no-fund 2>&1) || {
+  out=$(cd "$box/pd-mismatch" && npm install "$tgz" --ignore-scripts --no-audit --no-fund 2>&1) || {
     fail "[check-pack-install] pi-durable L3 (mismatch control) install failed:"; echo "$out" | tail -10 | sed 's/^/    /' >&2; return 1; }
   pkg="$box/pd-mismatch/node_modules/@junghanacs/entwurf"
   rc=0; out=$(cd "$box" && node "$pkg/mcp/entwurf-bridge/dist/pi-extensions/lib/pi-durable-runtime.js" resolve 2>&1) || rc=$?
@@ -4396,7 +4396,7 @@ ORACLE
   local pin_ceiling="${pin_ver%%.*}.$((pin_minor + 1))"
   mkdir -p "$host_old"
   for spec in "${host_specs[@]}"; do host_old_specs+=("${spec%@*}@$host_old_ver"); done
-  out=$(cd "$host_old" && npm install "${host_old_specs[@]}" --no-audit --no-fund 2>&1) || {
+  out=$(cd "$host_old" && npm install "${host_old_specs[@]}" --ignore-scripts --no-audit --no-fund 2>&1) || {
     fail "[check-pack-install] could not install the previous-host pi fixture ($host_old_ver):"; echo "$out" | tail -10 | sed 's/^/    /' >&2; return 1; }
   for cell in old aligned; do
     host_home="$box/pd-host-$cell-home"; host_proj="$box/pd-host-$cell-proj"
@@ -4430,6 +4430,163 @@ ORACLE
 # outside the sandbox (#125, measured 2026-10-01: an inherited agent dir received the npm
 # consumer's settings.json while the gate looked under the temp HOME). Every root is named here,
 # none is left to the caller's environment. One NAME=value per line; read with mapfile.
+# #153 — the operator entrance on the actual npm consumer. The pnpm self-delete cell calls the
+# deactivate script by absolute node path; this one goes the operator's way: the INSTALLED runtime's
+# own bin exposes one `entwurf` into a bin dir first on PATH, that bare name answers help and
+# withdraw, and the bare deactivate takes the link back with the runtime and the ledger. Journal,
+# ledger and roots are seeded fixture history: no Pi wiring is made or measured, component teardown
+# stays the source HAC gate's evidence, and no cache is seeded, so nothing here measures cache removal.
+# Every call — the seeding and fact-reading node included — runs under env -i with the six consumer
+# roots, a sandbox cwd and PATH = that bin dir then ten named tools (what run.sh, start.sh and the
+# bridge's test.sh call), so no identity carrier, NODE_OPTIONS/NODE_PATH or host `entwurf` can answer
+# instead. The whole helper runs under `||`, where errexit is off, so every write and read below
+# fails by name. Step files under $o/steps last only until the parent's RETURN trap cleans up; a
+# failing step prints its raw files, uncut, to the gate log before returning.
+pack_install_operator_run() {  # dynamic scope: o B T s A R L J opl_env of pack_install_operator_cells
+  (cd "$o/cwd" && env -i "PATH=$B:$T" "${opl_env[@]}" "$@")
+}
+
+pack_install_operator_facts() {
+  pack_install_operator_run "$T/node" -e '
+    const fs = require("fs");
+    const [link, R, L, J, root] = process.argv.slice(1);
+    const st = (p) => fs.lstatSync(p, { throwIfNoEntry: false });
+    const read = (p) => (st(p) ? JSON.parse(fs.readFileSync(p, "utf8")) : null);
+    const r = read(R), l = read(L), k = st(link);
+    console.log([
+      "link=" + (k ? (k.isSymbolicLink() ? fs.readlinkSync(link) : "not-a-symlink") : "absent"),
+      "receipt=" + (r ? [Object.keys(r).sort().join(","), r.schemaVersion, r.phase, r.binDir, r.linkPath, r.target, r.runtimeRoot].join("|") : "absent"),
+      "ledger=" + (l ? [l.schemaVersion, l.phase, l.components.map((c) => c.backend + ":" + c.state).join(",")].join("|") : "absent"),
+      "journal=" + (st(J) ? "present" : "absent"),
+      "runtime=" + (st(root) ? "present" : "absent"),
+    ].join("\n"));' "$B/entwurf" "$R" "$L" "$J" "${A%/active}"
+}
+
+pack_install_operator_dump() {  # $1=step
+  local f
+  for f in "$s/$1".{want,rc,out,err,facts}; do
+    [ -e "$f" ] || continue
+    echo "    --- ${f##*/}"
+    cat "$f"
+  done >&2
+}
+
+pack_install_operator_step() {  # $1=step, rest=argv; the argv's own rc is data, recording it is not
+  local name="$1" rc=0
+  shift
+  if ! { : >"$s/$name.out" && : >"$s/$name.err"; }; then
+    fail "[check-pack-install] #153 operator entrance step $name: cannot open its stream files"
+    return 1
+  fi
+  pack_install_operator_run "$@" >"$s/$name.out" 2>"$s/$name.err" || rc=$?
+  if ! { echo "$rc" >"$s/$name.rc" && pack_install_operator_facts >"$s/$name.facts"; }; then
+    fail "[check-pack-install] #153 operator entrance step $name: recording its rc or facts failed (rc=$rc)"
+    pack_install_operator_dump "$name"
+    return 1
+  fi
+}
+
+pack_install_operator_expect() {  # $1=step $2=rc $3=facts [$4=stdout lines, else $s/$1.want]; rc 0 wants empty stderr
+  if [ $# -ge 4 ] && ! printf '%s\n' "$4" >"$s/$1.want"; then
+    fail "[check-pack-install] #153 operator entrance step $1: cannot write its expected stdout"
+    pack_install_operator_dump "$1"
+    return 1
+  fi
+  if [ "$(cat "$s/$1.rc")" = "$2" ] && cmp -s "$s/$1.want" "$s/$1.out" && [ "$(cat "$s/$1.facts")" = "$3" ] \
+    && { [ "$2" != 0 ] || [ ! -s "$s/$1.err" ]; }; then
+    return 0
+  fi
+  fail "[check-pack-install] #153 operator entrance step $1 — want rc=$2, stdout = $1.want, and facts:"
+  sed 's/^/      /' <<<"$3" >&2
+  pack_install_operator_dump "$1"
+  return 1
+}
+
+pack_install_operator_cells() {
+  local npm_tmp="$1" npmroot="$2" help_dir="$3"
+  local o="$npm_tmp/operator" B T s A R L J linked receipt facts_linked facts_gone before after
+  T="$o/tools" s="$o/steps"
+  A="$o/.local/share/entwurf/herdr-plugin/runtime/active" J="$o/.local/share/entwurf/herdr-plugin/journal.json"
+  R="$o/.local/state/entwurf/herdr-plugin/operator-link.json" L="$o/.local/state/entwurf/herdr-plugin/activation.json"
+  local opl_env=()
+  mapfile -t opl_env < <(pack_install_consumer_env "$o")
+  if ! { [ "${#opl_env[@]}" -eq 6 ] && mkdir -p "$o/bin" "$T" "$s" "$o/cwd" "$A" "${L%/*}" && B=$(cd -P "$o/bin" && pwd) \
+    && (for tool in bash node dirname readlink mktemp env grep tail python3 rm; do
+      p=$(command -v "$tool") && ln -s "$p" "$T/$tool" || exit 1
+    done) \
+    && cp -R "$npmroot/node_modules" "$A/node_modules" \
+    && pack_install_operator_run "$T/node" -e 'const fs=require("fs"),path=require("path");const [home,active,journal,ledger]=process.argv.slice(1);const version=JSON.parse(fs.readFileSync(path.join(active,"node_modules","@junghanacs","entwurf","package.json"),"utf8")).version;const artifactIdentity={kind:"herdr-checkout",repository:"junghan0611/entwurf",commit:"c".repeat(40),packageName:"@junghanacs/entwurf",packageVersion:version,observedDigest:"sha256-"+"a".repeat(64)};fs.writeFileSync(journal,JSON.stringify({schemaVersion:2,phase:"runtime-ready",runtimeRoot:active,artifactIdentity,previousRuntime:null}));fs.writeFileSync(ledger,JSON.stringify({schemaVersion:2,phase:"active",runtimeRoot:active,artifactIdentity,piAgentDir:{path:path.join(home,".pi","agent"),source:"PI_CODING_AGENT_DIR"},claudeConfigDir:{path:path.join(home,".claude"),source:"default"},claudeUserConfig:{path:path.join(home,".claude.json"),source:"HOME"},activatedBackends:["pi"],components:[{backend:"pi",state:"active"}]}));' "$o" "$A" "$J" "$L"; }; then
+    fail "[check-pack-install] #153 operator entrance setup (sandbox, ten tools, runtime copy, seeded history) failed"
+    return 1
+  fi
+
+  linked="$A/node_modules/.bin/entwurf"
+  receipt="binDir,linkPath,phase,runtimeRoot,schemaVersion,target|1|linked|$B|$B/entwurf|$linked|$A"
+  facts_linked=$(printf 'link=%s\nreceipt=%s\nledger=3|active|pi:active\njournal=present\nruntime=present' "$linked" "$receipt")
+  facts_gone=$'link=absent\nreceipt=absent\nledger=3|active|pi:active\njournal=present\nruntime=present'
+
+  pack_install_operator_step 01-expose "$linked" herdr-plugin-expose-operator --bin-dir "$B" || return 1
+  pack_install_operator_expect 01-expose 0 "$facts_linked" "[herdr-operator-link] linked $B/entwurf -> $linked" || return 1
+  pack_install_operator_step 02-help entwurf --help || return 1
+  if ! cp "$help_dir/checkout.out" "$s/02-help.want"; then
+    fail "[check-pack-install] #153 operator entrance step 02-help: cannot copy the checkout's help bytes"
+    pack_install_operator_dump 02-help
+    return 1
+  fi
+  pack_install_operator_expect 02-help 0 "$facts_linked" || return 1
+  pack_install_operator_step 03-checkout-command-help bash "$REPO_DIR/run.sh" help herdr-plugin-expose-operator || return 1
+  if [ "$(cat "$s/03-checkout-command-help.rc")" != 0 ] || [ ! -s "$s/03-checkout-command-help.out" ]; then
+    fail "[check-pack-install] #153 checkout \`run.sh help herdr-plugin-expose-operator\` gave no reference bytes"
+    pack_install_operator_dump 03-checkout-command-help
+    return 1
+  fi
+  pack_install_operator_step 03-command-help entwurf help herdr-plugin-expose-operator || return 1
+  if ! cp "$s/03-checkout-command-help.out" "$s/03-command-help.want"; then
+    fail "[check-pack-install] #153 operator entrance step 03-command-help: cannot copy the checkout's command help"
+    pack_install_operator_dump 03-command-help
+    return 1
+  fi
+  pack_install_operator_expect 03-command-help 0 "$facts_linked" || return 1
+  pack_install_operator_step 04-withdraw entwurf herdr-plugin-withdraw-operator || return 1
+  pack_install_operator_expect 04-withdraw 0 "$facts_gone" "[herdr-operator-link] withdrew $B/entwurf" || return 1
+  pack_install_operator_step 05-expose-again "$linked" herdr-plugin-expose-operator --bin-dir "$B" || return 1
+  pack_install_operator_expect 05-expose-again 0 "$facts_linked" "[herdr-operator-link] linked $B/entwurf -> $linked" || return 1
+
+  # Fixture transition: the components are recorded removed, as a finished component teardown leaves them.
+  if ! pack_install_operator_run "$T/node" -e 'const fs=require("fs");const p=process.argv[1];const l=JSON.parse(fs.readFileSync(p,"utf8"));l.phase="deactivating";l.components=[{backend:"pi",state:"removed"}];fs.writeFileSync(p,JSON.stringify(l));' "$L"; then
+    fail "[check-pack-install] #153 operator entrance: the fixture transition to deactivating/pi:removed failed"
+    return 1
+  fi
+  pack_install_operator_step 06-deactivate entwurf herdr-plugin-deactivate || return 1
+  pack_install_operator_expect 06-deactivate 0 $'link=absent\nreceipt=absent\nledger=absent\njournal=absent\nruntime=absent' \
+    $'[herdr-plugin-deactivate] preflight-all ok (nothing left to undo)\n[herdr-plugin-deactivate] done: operator-link -> runtime -> ledger' || return 1
+
+  # No ledger: a certified receipt and its (now dangling) link are named leftovers, by the SURVIVING
+  # original install — the bin that exposed them deleted itself above — and nothing is removed.
+  if ! { mkdir -p "${R%/*}" \
+    && printf '{"schemaVersion":1,"phase":"linked","binDir":"%s","linkPath":"%s/entwurf","target":"%s","runtimeRoot":"%s"}\n' "$B" "$B" "$linked" "$A" >"$R" \
+    && ln -s "$linked" "$B/entwurf" \
+    && before=$(pack_install_operator_facts && sha256sum "$R" && ls -A "$B" "${R%/*}"); }; then
+    fail "[check-pack-install] #153 operator entrance: seeding the no-ledger receipt/link or its before-snapshot failed"
+    return 1
+  fi
+  pack_install_operator_step 07-orphan "$npmroot/node_modules/.bin/entwurf" herdr-plugin-deactivate || return 1
+  if ! after=$(pack_install_operator_facts && sha256sum "$R" && ls -A "$B" "${R%/*}"); then
+    fail "[check-pack-install] #153 operator entrance: the no-ledger after-snapshot failed"
+    pack_install_operator_dump 07-orphan
+    return 1
+  fi
+  if [ "$(cat "$s/07-orphan.rc")" != 1 ] || [ "$before" != "$after" ] \
+    || ! grep -qF "deactivate-unattributed-leftovers" "$s/07-orphan.err" || ! grep -qF "operator-link-receipt ($R)" "$s/07-orphan.err" \
+    || ! grep -qF "operator-link ($B/entwurf)" "$s/07-orphan.err"; then
+    fail "[check-pack-install] #153 no-ledger operator leftovers were not a named exit 1 with nothing removed:"
+    { echo "    --- before"; echo "$before"; echo "    --- after"; echo "$after"; } >&2
+    pack_install_operator_dump 07-orphan
+    return 1
+  fi
+  echo "[check-pack-install] #153 operator entrance on the npm consumer: installed expose -> bare help/withdraw -> expose -> bare deactivate took link, runtime and ledger back; no-ledger leftovers named by the surviving install"
+}
+
 pack_install_consumer_env() {
   local h="$1"
   printf '%s\n' \
@@ -5055,14 +5212,14 @@ _check_pack_install_impl() {
   fi
   local npmroot="$npm_tmp/npmroot" npmhome="$npm_tmp/npmhome" npmproj="$npm_tmp/npmproj" npm_log npm_pkg wire_log
   mkdir -p "$npmroot" "$npmhome" "$npmproj"
-  npm_log=$(cd "$npmroot" && npm install "$tgz_path" --no-audit --no-fund 2>&1) || {
+  npm_log=$(cd "$npmroot" && npm install "$tgz_path" --ignore-scripts --no-audit --no-fund 2>&1) || {
     fail "[check-pack-install] npm-managed neutral install failed:"
     echo "$npm_log" | tail -10 | sed 's/^/    /' >&2
     return 1
   }
   npm_pkg="$npmroot/node_modules/@junghanacs/entwurf"
   if [ ! -x "$npm_pkg/run.sh" ]; then
-    fail "[check-pack-install] npm-managed layout missing executable run.sh (postinstall-chmod did not run?) at $npm_pkg"
+    fail "[check-pack-install] npm-managed layout installed with --ignore-scripts: executable run.sh is missing at $npm_pkg"
     return 1
   fi
   if [ ! -x "$npmroot/node_modules/.bin/entwurf" ] || [ ! -x "$npmroot/node_modules/.bin/entwurf-bridge" ] || [ ! -x "$npmroot/node_modules/.bin/entwurf-statusline" ] || [ ! -x "$npmroot/node_modules/.bin/entwurf-agy-statusline" ] || [ ! -x "$npmroot/node_modules/.bin/entwurf-agy-imprint" ]; then
@@ -5141,6 +5298,9 @@ _check_pack_install_impl() {
   fi
   echo "[check-pack-install] installed entwurf --help renders from the shipped ENTWURF-CLI.json + scripts/cli-help.mjs (byte-equal, and follows/fails with the installed copies)"
 
+  # #153 — the operator entrance through this npm consumer's installed bins (helper above).
+  pack_install_operator_cells "$npm_tmp" "$npmroot" "$help_dir" || return 1
+
   # THE 2026-07-03 regression gate: removing `pi install` from setup dropped
   # user-scope citizen registration, so `--entwurf-control` was Unknown in a
   # foreign cwd. Prove the npm consumer path closes it end-to-end: run.sh install
@@ -5188,7 +5348,7 @@ sys.exit(0 if any(isinstance(s,str) and s.endswith('/node_modules/@junghanacs/en
   # operator-explicit takeover is what moves the shared entry, old→new reported.
   local npmroot2="$npm_tmp/npmroot2" npmproj2="$npm_tmp/npmproj2" npm2_log two_root_out two_root_rc npm2_pkg
   mkdir -p "$npmroot2" "$npmproj2"
-  npm2_log=$(cd "$npmroot2" && npm install "$tgz_path" --no-audit --no-fund 2>&1) || {
+  npm2_log=$(cd "$npmroot2" && npm install "$tgz_path" --ignore-scripts --no-audit --no-fund 2>&1) || {
     fail "[check-pack-install] second npm root install failed:"
     echo "$npm2_log" | tail -10 | sed 's/^/    /' >&2
     return 1
@@ -7017,6 +7177,9 @@ expose_dev_bin() {
   bash "$REPO_DIR/scripts/dev-bin.sh" expose
   rc=$?
   set -e
+  # 4 = dev-bin refused because this is an installed package (#153): nothing was exposed, so there
+  # is nothing to certify — no verify, no exclusive, no package-manager query.
+  [ "$rc" -eq 4 ] && return 4
 
   if ! bash "$REPO_DIR/scripts/dev-bin.sh" verify entwurf; then
     return 1
@@ -8355,6 +8518,18 @@ case "$cmd" in
     # #116 M3-b2 public verb. Plain `node` in BOTH modes on purpose: this is shipped .mjs, not TS,
     # because it has to run from an installed package after Herdr deleted the plugin checkout.
     (cd "$REPO_DIR" && node "$REPO_DIR/scripts/herdr-plugin-deactivate.mjs" "$@")
+    ;;
+  herdr-plugin-expose-operator)
+    # #153: the operator's ONE explicit link to the Herdr runtime's `entwurf`, owned by a receipt
+    # beside the activation ledger and undone by herdr-plugin-withdraw-operator or deactivate. No cd:
+    # the caller's cwd is part of what its PATH means, and this verb judges that PATH.
+    shift
+    node "$REPO_DIR/scripts/herdr-operator-link.mjs" expose "$@"
+    ;;
+  herdr-plugin-withdraw-operator)
+    # #153: the opt-out — removes exactly the receipt's link and the receipt; the ledger floor stays.
+    shift
+    node "$REPO_DIR/scripts/herdr-operator-link.mjs" withdraw "$@"
     ;;
   install-user-scope)
     shift

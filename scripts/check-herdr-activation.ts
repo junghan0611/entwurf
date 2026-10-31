@@ -160,7 +160,7 @@ interface Mod {
 		claudeUserConfig: Root;
 	};
 	readCertifiedLedger: (layout: Layout) => Ledger | null;
-	writeLedger: (layout: Layout, entry: Record<string, unknown>) => void;
+	writeLedger: (layout: Layout, version: number, entry: Record<string, unknown>) => void;
 	certifyRootsAgainstLedger: (ledger: Ledger | null, roots: unknown, runtimeRoot: string) => void;
 	planActivation: (args: { ledger: Ledger | null; requested: string[] }) => {
 		reconcile: string[];
@@ -590,7 +590,7 @@ function ledgerWith(
 {
 	const env = world("ledger");
 	const layout = resolveActivationLayout(env);
-	writeLedger(layout, ledgerFor(env, ["pi"]));
+	writeLedger(layout, 2, ledgerFor(env, ["pi"]));
 	const good = readCertifiedLedger(layout) as Ledger;
 	const write = (body: unknown): string | null => {
 		fs.writeFileSync(layout.ledgerPath, `${JSON.stringify(body)}\n`);
@@ -628,7 +628,7 @@ function ledgerWith(
 {
 	const env = world("state-machine");
 	const layout = resolveActivationLayout(env);
-	writeLedger(layout, ledgerWith(env, "deactivating", { pi: "active", "claude-code": "removed" }));
+	writeLedger(layout, 2, ledgerWith(env, "deactivating", { pi: "active", "claude-code": "removed" }));
 	const mid = readCertifiedLedger(layout) as Ledger;
 	const write = (body: unknown): string | null => {
 		fs.writeFileSync(layout.ledgerPath, `${JSON.stringify(body)}\n`);
@@ -678,7 +678,7 @@ function ledgerWith(
 {
 	const env = world("add-only");
 	const layout = resolveActivationLayout(env);
-	writeLedger(layout, ledgerFor(env, ["pi"]));
+	writeLedger(layout, 2, ledgerFor(env, ["pi"]));
 	const ledger = readCertifiedLedger(layout);
 	const grow = planActivation({ ledger, requested: ["pi", "claude-code"] });
 	const shrink = planActivation({ ledger: readCertifiedLedger(layout), requested: [] });
@@ -702,7 +702,7 @@ function ledgerWith(
 {
 	const env = world("roots");
 	const layout = resolveActivationLayout(env);
-	writeLedger(layout, ledgerFor(env, ["pi"]));
+	writeLedger(layout, 2, ledgerFor(env, ["pi"]));
 	const ledger = readCertifiedLedger(layout);
 	const moved = { ...env, PI_CODING_AGENT_DIR: path.join(env.HOME as string, "somewhere-else") };
 	const drifted = refusal(() => certifyRootsAgainstLedger(ledger, resolveComponentRoots(moved), runtimeRootOf(env)));
@@ -720,7 +720,7 @@ function ledgerWith(
 {
 	const env = world("order");
 	const layout = resolveActivationLayout(env);
-	writeLedger(layout, ledgerFor(env, ["pi", "claude-code"]));
+	writeLedger(layout, 2, ledgerFor(env, ["pi", "claude-code"]));
 	const steps = planDeactivation(readCertifiedLedger(layout));
 	const absent = refusal(() => planDeactivation(null));
 	ok(
@@ -894,7 +894,7 @@ function ledgerWith(
 	const agentSettings = path.join(env.PI_CODING_AGENT_DIR as string, "settings.json");
 	fs.writeFileSync(agentSettings, '{"theme":"dark"}\n');
 	sh(env, ["install-user-scope", "--plugin-runtime", runtimeRootOf(env)]);
-	writeLedger(layout, ledgerFor(env, ["pi", "claude-code"]));
+	writeLedger(layout, 2, ledgerFor(env, ["pi", "claude-code"]));
 	// claude-code is in the ledger but was never installed, so its preflight must refuse.
 	const settingsBefore = fs.readFileSync(agentSettings, "utf8");
 	const stateBefore = fs
@@ -960,7 +960,7 @@ function ledgerWith(
 	// Pi's has not. A retry must NOT re-run Claude — its state file is gone, so its preflight would
 	// refuse forever — and must pick up at Pi.
 	spawnSync("bash", [path.join(REPO, "run.sh"), "uninstall-meta-bridge"], { encoding: "utf8", env: runEnv });
-	writeLedger(layout, ledgerWith(env, "deactivating", { pi: "active", "claude-code": "removed" }));
+	writeLedger(layout, 2, ledgerWith(env, "deactivating", { pi: "active", "claude-code": "removed" }));
 	const resumed = spawnSync("node", [DEACTIVATE], { encoding: "utf8", env: runEnv });
 	const afterResume = JSON.parse(fs.readFileSync(agentSettings, "utf8")) as Record<string, unknown>;
 
@@ -968,7 +968,7 @@ function ledgerWith(
 	const env2 = world("retry-ledger");
 	const layout2 = resolveActivationLayout(env2);
 	fs.mkdirSync(path.join(env2.XDG_DATA_HOME as string, "entwurf", "herdr-plugin"), { recursive: true });
-	writeLedger(layout2, ledgerWith(env2, "deactivating", { pi: "removed", "claude-code": "removed" }));
+	writeLedger(layout2, 2, ledgerWith(env2, "deactivating", { pi: "removed", "claude-code": "removed" }));
 	const finished = spawnSync("node", [DEACTIVATE], { encoding: "utf8", env: env2 });
 
 	ok(
@@ -1009,7 +1009,7 @@ function ledgerWith(
 			previousRuntime: null,
 		})}\n`,
 	);
-	writeLedger(layout, ledgerFor(env, ["pi"]));
+	writeLedger(layout, 2, ledgerFor(env, ["pi"]));
 
 	const run = spawnSync("node", [DEACTIVATE], { encoding: "utf8", env });
 	const after = readJson(agentSettings) as Record<string, unknown>;
@@ -1042,7 +1042,12 @@ function ledgerWith(
 
 // ── 17. nothing is imported after the runtime is deleted ───────────────────────
 {
-	const sources = [DEACTIVATE, ACTIVATION, path.join(REPO, "scripts", "herdr-runtime.mjs")];
+	const sources = [
+		DEACTIVATE,
+		ACTIVATION,
+		path.join(REPO, "scripts", "herdr-runtime.mjs"),
+		path.join(REPO, "scripts", "herdr-operator-link.mjs"),
+	];
 	// Comments are stripped first: these files DOCUMENT the hazard, and a scan that cannot tell a
 	// warning about `import()` from a call to it would be satisfied by deleting the explanation.
 	const strip = (body: string): string => body.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
@@ -1075,13 +1080,13 @@ function ledgerWith(
 	fs.writeFileSync(path.join(env.PI_CODING_AGENT_DIR as string, "settings.json"), '{"theme":"dark"}\n');
 
 	// forward over a teardown-in-progress: refused, and not one byte written.
-	writeLedger(layout, ledgerWith(env, "deactivating", { pi: "active" }));
+	writeLedger(layout, 2, ledgerWith(env, "deactivating", { pi: "active" }));
 	const midTeardown = fs.readFileSync(layout.ledgerPath, "utf8");
 	const piBefore = fs.readFileSync(path.join(env.PI_CODING_AGENT_DIR as string, "settings.json"), "utf8");
 	const overTeardown = spawnSync("node", [ACTIVATE, "pi"], { encoding: "utf8", env: runEnv });
 
 	// inverse over an activation-in-progress: refused, told to repair the activation first.
-	writeLedger(layout, ledgerWith(env, "activating", { pi: "active", "claude-code": "pending" }));
+	writeLedger(layout, 2, ledgerWith(env, "activating", { pi: "active", "claude-code": "pending" }));
 	const overActivating = spawnSync("node", [DEACTIVATE], { encoding: "utf8", env: runEnv });
 
 	// forward retry of the SAME set over `activating`: allowed, that is what the phase is for.
@@ -1111,7 +1116,7 @@ function ledgerWith(
 	const env = world("claude-roots");
 	const roots = resolveComponentRoots(env);
 	const layout = resolveActivationLayout(env);
-	writeLedger(layout, ledgerFor(env, ["claude-code"]));
+	writeLedger(layout, 2, ledgerFor(env, ["claude-code"]));
 	const ledger = readCertifiedLedger(layout) as Ledger;
 	// Same XDG, same CLAUDE_CONFIG_DIR, HOME moved: the settings half still resolves under the
 	// override, but `$HOME/.claude.json` — where the user-scope MCP entry lives — has moved with it.
@@ -1218,7 +1223,7 @@ function ledgerWith(
 {
 	const env = world("ledger-identity");
 	const layout = resolveActivationLayout(env);
-	writeLedger(layout, ledgerFor(env, ["pi"]));
+	writeLedger(layout, 2, ledgerFor(env, ["pi"]));
 	const good = readCertifiedLedger(layout) as Ledger;
 	const write = (body: unknown): string | null => {
 		fs.writeFileSync(layout.ledgerPath, `${JSON.stringify(body)}\n`);
@@ -1253,7 +1258,7 @@ function ledgerWith(
 	const env = world("rebind-legality");
 	const layout = resolveActivationLayout(env);
 	const ledgerA = () => {
-		writeLedger(layout, ledgerFor(env, ["pi", "claude-code"]));
+		writeLedger(layout, 2, ledgerFor(env, ["pi", "claude-code"]));
 		return readCertifiedLedger(layout) as Ledger;
 	};
 	const sourceDrift = refusal(() => certifyArtifactForForward(ledgerA(), IDENTITY_NPM, ["pi", "claude-code"]));
@@ -1261,11 +1266,11 @@ function ledgerWith(
 	const legal = certifyArtifactForForward(ledgerA(), IDENTITY_B, ["pi", "claude-code", "pi"]);
 	const fresh = certifyArtifactForForward(null, IDENTITY_B, ["pi"]);
 	const dropped = refusal(() => certifyArtifactForForward(ledgerA(), IDENTITY_B, ["pi"]));
-	writeLedger(layout, ledgerWith(env, "activating", { pi: "pending" }));
+	writeLedger(layout, 2, ledgerWith(env, "activating", { pi: "pending" }));
 	const midActivation = refusal(() =>
 		certifyArtifactForForward(readCertifiedLedger(layout) as Ledger, IDENTITY_B, ["pi"]),
 	);
-	writeLedger(layout, ledgerWith(env, "deactivating", { pi: "removed" }));
+	writeLedger(layout, 2, ledgerWith(env, "deactivating", { pi: "removed" }));
 	const midTeardown = refusal(() =>
 		certifyArtifactForForward(readCertifiedLedger(layout) as Ledger, IDENTITY_B, ["pi"]),
 	);
@@ -1505,7 +1510,7 @@ function ledgerWith(
 	};
 	// D2 — no ledger: a doctor running from the runtime package is simply not in plugin mode.
 	const absent = mode({ repo: runtimeRepo });
-	writeLedger(layout, ledgerFor(env, ["pi", "claude-code"]));
+	writeLedger(layout, 2, ledgerFor(env, ["pi", "claude-code"]));
 	// D1 — runtime package + an active ledger that activated claude-code at THIS stable root.
 	const derived = mode({ repo: runtimeRepo });
 	ok(
@@ -1536,11 +1541,11 @@ function ledgerWith(
 	// D4 — the admission clauses on a reading path, each on a CERTIFIED ledger so only the clause can
 	// refuse: a phase other than active, a ledger that never activated claude-code, and a runtimeRoot
 	// that is not this host's stable root. Each is refused by name, never read as 'not plugin mode'.
-	writeLedger(layout, ledgerWith(env, "activating", { pi: "active", "claude-code": "pending" }));
+	writeLedger(layout, 2, ledgerWith(env, "activating", { pi: "active", "claude-code": "pending" }));
 	const notActive = mode({ repo: runtimeRepo });
-	writeLedger(layout, ledgerFor(env, ["pi"]));
+	writeLedger(layout, 2, ledgerFor(env, ["pi"]));
 	const piOnly = mode({ repo: runtimeRepo });
-	writeLedger(layout, {
+	writeLedger(layout, 2, {
 		...ledgerFor(env, ["pi", "claude-code"]),
 		runtimeRoot: path.join(env.HOME as string, "another-runtime", "active"),
 	});
@@ -1554,13 +1559,286 @@ function ledgerWith(
 			foreignRoot === "refused:doctor-plugin-runtime-unadmitted",
 	);
 	// D6 — the override must agree with the ledger's root; agreeing, it is admitted from a checkout.
-	writeLedger(layout, ledgerFor(env, ["pi", "claude-code"]));
+	writeLedger(layout, 2, ledgerFor(env, ["pi", "claude-code"]));
 	const elsewhere = mode({ repo: REPO, override: path.join(env.HOME as string, "elsewhere") });
 	const agreeing = mode({ repo: REPO, override: active });
 	ok(
 		"[QK:DOCTOR-MODE-OVERRIDE-AGREES] an explicit --plugin-runtime is admitted only when it names the ledger's own " +
 			`stable root (elsewhere=${elsewhere} agreeing=${agreeing})`,
 		elsewhere === "refused:doctor-plugin-runtime-unadmitted" && agreeing === active,
+	);
+}
+
+// ── 30. the ledger floor: 2 and 3 are read, and a write keeps the version it found (#153) ─
+{
+	const versionOf = (layout: Layout): string => {
+		try {
+			const ledger = readCertifiedLedger(layout) as Ledger | null;
+			return ledger === null ? "absent" : String(ledger.schemaVersion);
+		} catch (err) {
+			return `refused:${(err as { code?: string }).code ?? String(err)}`;
+		}
+	};
+	const env = world("ledger-version");
+	const layout = resolveActivationLayout(env);
+	const body = ledgerFor(env, ["pi"]);
+	const raw = (version: unknown): string => {
+		fs.mkdirSync(layout.stateRoot, { recursive: true });
+		fs.writeFileSync(layout.ledgerPath, `${JSON.stringify({ schemaVersion: version, ...body }, null, 2)}\n`);
+		return versionOf(layout);
+	};
+	const cells: Record<string, string> = {
+		v2: raw(2),
+		v3: raw(3),
+		v1: raw(1),
+		v4: raw(4),
+		"string-3": raw("3"),
+		null: raw(null),
+	};
+	ok(
+		"[QK:HAC-LEDGER-VERSION-ADMITTED] the reader admits schema 2 AND schema 3 under the same exact key set and " +
+			"hands back the version it read, and nothing else: 3 is the floor an older reader refuses before its first " +
+			"write, so a reader that admits only 2 is exactly the artifact the floor exists to stop " +
+			`(${Object.entries(cells)
+				.map(([k, v]) => `${k}=${v}`)
+				.join(" ")})`,
+		cells.v2 === "2" &&
+			cells.v3 === "3" &&
+			cells.v1 === "refused:activation-ledger-uncertified" &&
+			cells.v4 === "refused:activation-ledger-uncertified" &&
+			cells["string-3"] === "refused:activation-ledger-uncertified" &&
+			cells.null === "refused:activation-ledger-uncertified",
+	);
+
+	const fresh = world("ledger-writer");
+	const freshLayout = resolveActivationLayout(fresh);
+	const freshBody = ledgerFor(fresh, ["pi"]);
+	const invalid = {
+		v4: refusal(() => writeLedger(freshLayout, 4, freshBody)),
+		v1: refusal(() => writeLedger(freshLayout, 1, freshBody)),
+		undefined: refusal(() => writeLedger(freshLayout, undefined as unknown as number, freshBody)),
+	};
+	const absentAfterInvalid = !fs.existsSync(freshLayout.ledgerPath);
+	ok(
+		"[QK:HAC-LEDGER-WRITER-VERSION-CHECKED] the writer takes the version as an explicit argument and refuses one " +
+			"outside the admitted set before the first byte — a ledger the reader would refuse must never be written " +
+			`(${Object.entries(invalid)
+				.map(([k, v]) => `${k}=${v}`)
+				.join(" ")} absent=${absentAfterInvalid})`,
+		Object.values(invalid).every((v) => v === "activation-ledger-version-invalid") && absentAfterInvalid,
+	);
+
+	writeLedger(freshLayout, 3, freshBody);
+	const bytes3 = fs.readFileSync(freshLayout.ledgerPath, "utf8");
+	const embedded = {
+		lower: refusal(() => writeLedger(freshLayout, 3, { ...freshBody, schemaVersion: 2 })),
+		raise: refusal(() => writeLedger(freshLayout, 2, { ...freshBody, schemaVersion: 3 })),
+	};
+	const unchanged = fs.readFileSync(freshLayout.ledgerPath, "utf8") === bytes3;
+	ok(
+		"[QK:HAC-LEDGER-WRITER-NO-EMBEDDED-VERSION] an entry carrying its own `schemaVersion` is refused rather than " +
+			"merged, so no spread order lets a body silently lower or raise the floor the caller named, and the ledger " +
+			`already there is byte-identical (lower=${embedded.lower} raise=${embedded.raise} unchanged=${unchanged})`,
+		embedded.lower === "activation-ledger-version-invalid" &&
+			embedded.raise === "activation-ledger-version-invalid" &&
+			unchanged &&
+			versionOf(freshLayout) === "3",
+	);
+
+	// activate: a host with no ledger is born at 2; a host already at 3 stays at 3 through a forward run.
+	const act = world("ledger-version-activate");
+	const actLayout = resolveActivationLayout(act);
+	const actEnv = {
+		...act,
+		PATH: `${fakeClaude(act)}${path.delimiter}${act.PATH}`,
+		FAKE_CLAUDE_LOG: path.join(act.HOME as string, "claude.log"),
+	};
+	fs.writeFileSync(path.join(act.PI_CODING_AGENT_DIR as string, "settings.json"), '{"theme":"dark"}\n');
+	seedRuntime(act);
+	const born = spawnSync("node", [ACTIVATE, "pi"], { encoding: "utf8", env: actEnv });
+	const bornVersion = versionOf(actLayout);
+	writeLedger(actLayout, 3, ledgerFor(act, ["pi"]));
+	const kept = spawnSync("node", [ACTIVATE, "pi", "claude-code"], { encoding: "utf8", env: actEnv });
+	const keptVersion = versionOf(actLayout);
+	const keptLedger = keptVersion === "3" ? (readCertifiedLedger(actLayout) as Ledger) : null;
+	ok(
+		"[QK:HAC-LEDGER-VERSION-KEPT-BY-ACTIVATE] activation neither raises nor lowers the floor: a fresh host's " +
+			"ledger is born at 2, and a forward run over a 3-ledger checkpoints and settles at 3 — a blanket rewrite to " +
+			"the fresh version would hand the host back to every older reader " +
+			`(born=${born.status}/${bornVersion} kept=${kept.status}/${keptVersion}/${keptLedger?.phase}/${JSON.stringify(keptLedger?.activatedBackends)})`,
+		born.status === 0 &&
+			bornVersion === "2" &&
+			kept.status === 0 &&
+			keptVersion === "3" &&
+			keptLedger?.phase === "active" &&
+			keptLedger.activatedBackends.join(",") === "pi,claude-code",
+	);
+
+	// deactivate: its checkpoint is written before the first step, so a step refused after it leaves that
+	// checkpoint on disk. Residue under the runtime root with no journal behind it is refused by the
+	// runtime inverse, which runs right after the checkpoint here because both components are already
+	// recorded removed. The seeded ledger is compact JSON, so a rewrite is visible in its bytes.
+	const de = world("ledger-version-deactivate");
+	const deLayout = resolveActivationLayout(de);
+	fs.mkdirSync(deLayout.stateRoot, { recursive: true });
+	const compact = `${JSON.stringify({ schemaVersion: 3, ...ledgerWith(de, "deactivating", { pi: "removed", "claude-code": "removed" }) })}\n`;
+	fs.writeFileSync(deLayout.ledgerPath, compact);
+	fs.mkdirSync(runtimeRootOf(de), { recursive: true });
+	fs.writeFileSync(path.join(runtimeRootOf(de), "residue"), "not ours\n");
+	const stopped = spawnSync("node", [DEACTIVATE], { encoding: "utf8", env: de });
+	const rewritten = fs.existsSync(deLayout.ledgerPath) && fs.readFileSync(deLayout.ledgerPath, "utf8") !== compact;
+	const deVersion = versionOf(deLayout);
+	ok(
+		"[QK:HAC-LEDGER-VERSION-KEPT-BY-DEACTIVATE] the teardown checkpoint carries the version it read: a 3-ledger " +
+			"rewritten mid-teardown is still 3, so a teardown stopped halfway is resumed only by a reader that knows the " +
+			`floor (exit=${stopped.status} refusal=${(stopped.stderr || "").includes("runtime-inverse-foreign-refused")} rewritten=${rewritten} version=${deVersion})`,
+		stopped.status !== 0 &&
+			(stopped.stderr || "").includes("runtime-inverse-foreign-refused") &&
+			rewritten &&
+			deVersion === "3",
+	);
+}
+
+// ── 31. deactivate takes the operator link back FIRST, and judges it before the first write (#153) ─
+{
+	/** A receipt-owned operator link in a physical bin dir, written raw — independent of the writer. */
+	const linked = (env: NodeJS.ProcessEnv, link: "ours" | "foreign") => {
+		const B = path.join(env.HOME as string, "bin-B");
+		fs.mkdirSync(B, { recursive: true });
+		const target = path.join(runtimeRootOf(env), "node_modules", ".bin", "entwurf");
+		const linkPath = path.join(B, "entwurf");
+		fs.symlinkSync(link === "ours" ? target : path.join(env.HOME as string, "someone-else"), linkPath);
+		const layout = resolveActivationLayout(env);
+		fs.mkdirSync(layout.stateRoot, { recursive: true });
+		const receiptPath = path.join(layout.stateRoot, "operator-link.json");
+		fs.writeFileSync(
+			receiptPath,
+			`${JSON.stringify({ schemaVersion: 1, phase: "linked", binDir: B, linkPath, target, runtimeRoot: runtimeRootOf(env) }, null, 2)}\n`,
+		);
+		return { linkPath, receiptPath };
+	};
+	const linkState = (p: string) => {
+		const kind = fs.lstatSync(p, { throwIfNoEntry: false });
+		return kind === undefined ? "<absent>" : kind.isSymbolicLink() ? `-> ${fs.readlinkSync(p)}` : "<other>";
+	};
+	/** A 3-ledger mid-teardown with both components already removed, written compact. */
+	const floorLedger = (env: NodeJS.ProcessEnv): string => {
+		const layout = resolveActivationLayout(env);
+		fs.mkdirSync(layout.stateRoot, { recursive: true });
+		const text = `${JSON.stringify({ schemaVersion: 3, ...ledgerWith(env, "deactivating", { pi: "removed", "claude-code": "removed" }) })}\n`;
+		fs.writeFileSync(layout.ledgerPath, text);
+		return text;
+	};
+
+	// (a) ORDER: the runtime step is refused (residue with no journal), so the run stops there — by
+	// then the link and its receipt must already be gone, and the ledger kept as the retry authority.
+	const first = world("operator-link-first");
+	floorLedger(first);
+	fs.mkdirSync(runtimeRootOf(first), { recursive: true });
+	fs.writeFileSync(path.join(runtimeRootOf(first), "residue"), "not ours\n");
+	const firstLink = linked(first, "ours");
+	const stopped = spawnSync("node", [DEACTIVATE], { encoding: "utf8", env: first });
+	const kept = refusal(() => readCertifiedLedger(resolveActivationLayout(first))) ?? "certified";
+
+	// (a') ...and BEFORE the components: a real pi + Claude activation whose preflights are all green, raised
+	// to 3, whose FIRST component inverse (Claude's) is stopped at its own platform fence by a sandbox
+	// `uname` shim. No preflight reads uname, so the stop lands after the checkpoint and before any
+	// component is removed; by then the link and its receipt must be gone, the ledger deactivating at 3.
+	const comp = world("operator-link-before-components");
+	const compEnv = {
+		...comp,
+		PATH: `${fakeClaude(comp)}${path.delimiter}${comp.PATH}`,
+		FAKE_CLAUDE_LOG: path.join(comp.HOME as string, "claude.log"),
+	};
+	seedRuntime(comp);
+	fs.writeFileSync(path.join(comp.PI_CODING_AGENT_DIR as string, "settings.json"), '{"theme":"dark"}\n');
+	const compActivated = spawnSync("node", [ACTIVATE, "pi", "claude-code"], { encoding: "utf8", env: compEnv });
+	const compLayout = resolveActivationLayout(comp);
+	const born = readCertifiedLedger(compLayout);
+	if (born !== null) {
+		writeLedger(compLayout, 3, Object.fromEntries(Object.entries(born).filter(([k]) => k !== "schemaVersion")));
+	}
+	const compLink = linked(comp, "ours");
+	const unameShim = path.join(comp.HOME as string, "uname-shim");
+	fs.mkdirSync(unameShim, { recursive: true });
+	fs.writeFileSync(path.join(unameShim, "uname"), "#!/bin/sh\necho Plan9\n", { mode: 0o755 });
+	const compRun = spawnSync("node", [DEACTIVATE], {
+		encoding: "utf8",
+		env: { ...compEnv, PATH: `${unameShim}${path.delimiter}${compEnv.PATH}` },
+	});
+	let compLedger: Ledger | null = null;
+	try {
+		compLedger = readCertifiedLedger(compLayout);
+	} catch {
+		// Bounded probe: an uncertifiable ledger is reported below as null.
+		compLedger = null;
+	}
+	const compStates = (compLedger?.components ?? []).map((c) => `${c.backend}:${c.state}`).join(",");
+	ok(
+		"[QK:HAC-DEACTIVATE-LINK-FIRST] the operator link is removed BEFORE every component and the runtime — it names " +
+			"the runtime, so a teardown that stops later must not leave it pointing at what it is about to delete " +
+			`(exit=${stopped.status} runtime-refused=${(stopped.stderr || "").includes("runtime-inverse-foreign-refused")} link=${linkState(firstLink.linkPath)} receipt=${fs.existsSync(firstLink.receiptPath)} ledger=${kept}; ` +
+			`first-component: activated=${compActivated.status} exit=${compRun.status} claude-refused=${(compRun.stderr || "").includes("claude-code inverse failed")} link=${linkState(compLink.linkPath)} receipt=${fs.existsSync(compLink.receiptPath)} ledger=${compLedger?.schemaVersion}/${compLedger?.phase}/${compStates})`,
+		stopped.status !== 0 &&
+			(stopped.stderr || "").includes("runtime-inverse-foreign-refused") &&
+			linkState(firstLink.linkPath) === "<absent>" &&
+			!fs.existsSync(firstLink.receiptPath) &&
+			kept === "certified" &&
+			compActivated.status === 0 &&
+			compRun.status !== 0 &&
+			(compRun.stderr || "").includes("deactivate-component-failed") &&
+			(compRun.stderr || "").includes(
+				"claude-code inverse failed — runtime and ledger preserved as retry authority (0 component(s) already removed and recorded)",
+			) &&
+			linkState(compLink.linkPath) === "<absent>" &&
+			!fs.existsSync(compLink.receiptPath) &&
+			compLedger?.schemaVersion === 3 &&
+			compLedger.phase === "deactivating" &&
+			compStates === "pi:active,claude-code:active",
+	);
+
+	// (b) a link that is no longer the receipt's refuses the WHOLE teardown before the checkpoint: the
+	// compact ledger would be rewritten by it, so byte-identity proves the refusal came first.
+	const foreign = world("operator-link-foreign");
+	const foreignLedger = floorLedger(foreign);
+	const foreignLink = linked(foreign, "foreign");
+	const receiptBefore = fs.readFileSync(foreignLink.receiptPath, "utf8");
+	const linkBefore = linkState(foreignLink.linkPath);
+	const refusedRun = spawnSync("node", [DEACTIVATE], { encoding: "utf8", env: foreign });
+	ok(
+		"[QK:HAC-DEACTIVATE-FOREIGN-LINK-REFUSES] a link that is not the receipt's stops the whole teardown before its " +
+			"first write — the ledger, the receipt and that link are byte-identical — instead of being found later by " +
+			`the removal after the ledger already moved (exit=${refusedRun.status} named=${(refusedRun.stderr || "").includes("operator-link-foreign")} ledger-unchanged=${fs.readFileSync(resolveActivationLayout(foreign).ledgerPath, "utf8") === foreignLedger})`,
+		refusedRun.status !== 0 &&
+			(refusedRun.stderr || "").includes("operator-link-foreign") &&
+			fs.readFileSync(resolveActivationLayout(foreign).ledgerPath, "utf8") === foreignLedger &&
+			fs.readFileSync(foreignLink.receiptPath, "utf8") === receiptBefore &&
+			linkState(foreignLink.linkPath) === linkBefore,
+	);
+
+	// (c) no ledger: the receipt address is a named leftover; its link is named only from a certified
+	// receipt, and a damaged receipt names nothing beyond its own address. Nothing is removed.
+	const orphan = world("operator-link-orphan");
+	const orphanLink = linked(orphan, "ours");
+	const orphanRun = spawnSync("node", [DEACTIVATE], { encoding: "utf8", env: orphan });
+	const damaged = world("operator-link-damaged");
+	const damagedLink = linked(damaged, "ours");
+	fs.writeFileSync(damagedLink.receiptPath, "{broken");
+	const damagedRun = spawnSync("node", [DEACTIVATE], { encoding: "utf8", env: damaged });
+	ok(
+		"[QK:HAC-NO-LEDGER-OPERATOR-LEFTOVERS] with no ledger an operator-link receipt is a named leftover with a " +
+			"non-zero exit and nothing removed; its link is named only when the receipt is certified, never searched " +
+			`for (orphan=${orphanRun.status}/receipt-named=${(orphanRun.stderr || "").includes(orphanLink.receiptPath)}/link-named=${(orphanRun.stderr || "").includes(`operator-link (${orphanLink.linkPath})`)} damaged=${damagedRun.status}/link-named=${(damagedRun.stderr || "").includes(`operator-link (${damagedLink.linkPath})`)})`,
+		orphanRun.status !== 0 &&
+			(orphanRun.stderr || "").includes("deactivate-unattributed-leftovers") &&
+			(orphanRun.stderr || "").includes(orphanLink.receiptPath) &&
+			(orphanRun.stderr || "").includes(`operator-link (${orphanLink.linkPath})`) &&
+			linkState(orphanLink.linkPath) !== "<absent>" &&
+			fs.existsSync(orphanLink.receiptPath) &&
+			damagedRun.status !== 0 &&
+			(damagedRun.stderr || "").includes(damagedLink.receiptPath) &&
+			!(damagedRun.stderr || "").includes(`operator-link (${damagedLink.linkPath})`) &&
+			fs.readFileSync(damagedLink.receiptPath, "utf8") === "{broken",
 	);
 }
 
