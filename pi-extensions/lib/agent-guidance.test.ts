@@ -165,6 +165,34 @@ const reviewedToolsR12: ReviewedAmendmentLayer = {
 	revision: reviewedR12.revision,
 	amendments: reviewedR12.amendments.filter((a): a is ToolAmendment => a.key[0] === "tools"),
 };
+// Revision 13 (#157 A-L1) amends three entwurf_fresh_call leaves for pi-durable's herdr layout launch.
+// Unlike revision 12, its complete literals were written and independently approved BEFORE the
+// producer edit; the README paragraph owns that provenance.
+const reviewedR13 = JSON.parse(
+	fs.readFileSync(new URL("./fixtures/agent-guidance/amendments-revision-13.json", import.meta.url), "utf8"),
+) as ReviewedAmendmentLayer & { previousRevision: number };
+/** The ONE parameter leaf outside entwurf_v2 that a reviewed layer may amend, and only in revision 13. */
+const R13_PARAMETER_KEY = "tools.entwurf_fresh_call.parameters.backend";
+// Revision 14 (#157 A-L1 host-cap recovery) rewrites only revision 13's MCP description, which exceeded
+// the 2048-character host cap. Its complete literal was approved before the producer edit, like revision
+// 13's; the README paragraph owns that provenance.
+const reviewedR14 = JSON.parse(
+	fs.readFileSync(new URL("./fixtures/agent-guidance/amendments-revision-14.json", import.meta.url), "utf8"),
+) as ReviewedAmendmentLayer & { previousRevision: number };
+// Revision 15 (#157 A-L1 host-cap recovery, second literal) rewrites that same MCP description again,
+// restoring four contract phrases revision 14 dropped. Its complete literal was approved before the
+// producer edit; the README paragraph owns that provenance.
+const reviewedR15 = JSON.parse(
+	fs.readFileSync(new URL("./fixtures/agent-guidance/amendments-revision-15.json", import.meta.url), "utf8"),
+) as ReviewedAmendmentLayer & { previousRevision: number };
+// Revision 16 (#157 checkpoint amendment A1 D3) amends the entwurf_fresh_call cwd parameter's last sentence.
+// Its old value was fixed in this layer before the producer edit; its new literal was written in the same
+// pass and is reviewed afterwards, like revision 12's. The README paragraph owns that provenance.
+const reviewedR16 = JSON.parse(
+	fs.readFileSync(new URL("./fixtures/agent-guidance/amendments-revision-16.json", import.meta.url), "utf8"),
+) as ReviewedAmendmentLayer & { previousRevision: number };
+/** The second parameter leaf outside entwurf_v2 that a reviewed layer may amend, and only in revision 16. */
+const R16_PARAMETER_KEY = "tools.entwurf_fresh_call.parameters.cwd";
 
 // Revision 10 was recorded before the Fable wording discussion. Its old values and provenance
 // remain intact; revision 11 applies that discussion's separate five-leaf amendment afterward.
@@ -223,7 +251,9 @@ function applyR12(family: string, expected: Record<string, string>): void {
 // literal layers do NOT share one provenance, so none is asserted for all of them here: each layer's
 // paragraph in fixtures/agent-guidance/README.md records how its literals were chosen. In particular
 // the R12 literals were written in the same pass as the Root edit and only then reviewed
-// independently — they are not oracles chosen before the product JSON was amended.
+// independently — they are not oracles chosen before the product JSON was amended. The R13, R14 and
+// R15 literals were approved before it. The R16 layer fixed its old value before the Root edit, but its
+// new literal was written in the same pass and reviewed afterwards, as R12's were.
 function currentExpectations() {
 	const metadata = structuredClone(original);
 	const runtime = structuredClone(originalRuntime);
@@ -236,7 +266,24 @@ function currentExpectations() {
 	const declaredKeys = new Set<string>();
 	expect(reviewedToolsR11.amendments).toHaveLength(2);
 	expect(reviewedToolsR12.amendments).toHaveLength(2);
-	for (const layer of [reviewedR2, reviewedR3, reviewedToolsR11, reviewedToolsR12]) {
+	expect(reviewedR13.amendments.map((a) => a.key.join(".")).sort()).toEqual([
+		"tools.entwurf_fresh_call.descriptions.durable",
+		"tools.entwurf_fresh_call.descriptions.mcp",
+		R13_PARAMETER_KEY,
+	]);
+	expect(reviewedR14.amendments.map((a) => a.key.join("."))).toEqual(["tools.entwurf_fresh_call.descriptions.mcp"]);
+	expect(reviewedR15.amendments.map((a) => a.key.join("."))).toEqual(["tools.entwurf_fresh_call.descriptions.mcp"]);
+	expect(reviewedR16.amendments.map((a) => a.key.join("."))).toEqual([R16_PARAMETER_KEY]);
+	for (const layer of [
+		reviewedR2,
+		reviewedR3,
+		reviewedToolsR11,
+		reviewedToolsR12,
+		reviewedR13,
+		reviewedR14,
+		reviewedR15,
+		reviewedR16,
+	]) {
 		expect(new Set(layer.amendments.map((a) => a.key.join("."))).size).toBe(layer.amendments.length);
 		for (const amendment of layer.amendments) {
 			const [root, name, family, field] = amendment.key;
@@ -255,7 +302,11 @@ function currentExpectations() {
 				}
 			} else {
 				expect(family).toBe("parameters");
-				expect(name).toBe("entwurf_v2");
+				expect(
+					name === "entwurf_v2" ||
+						(layer === reviewedR13 && amendment.key.join(".") === R13_PARAMETER_KEY) ||
+						(layer === reviewedR16 && amendment.key.join(".") === R16_PARAMETER_KEY),
+				).toBe(true);
 				for (const rail of ["mcp", "durable"] as const) {
 					const parameter = metadata[rail]
 						.find((tool) => tool.name === name)!
@@ -271,7 +322,10 @@ function currentExpectations() {
 			}
 		}
 	}
-	expect(declaredKeys.size).toBe(13);
+	// Revision 13's mcp description was already in the union (revision 2); its durable description and
+	// backend parameter add two keys. Revisions 14 and 15 amend that same mcp key again and add none.
+	// Revision 16's cwd parameter is a new key.
+	expect(declaredKeys.size).toBe(16);
 	return { metadata, runtime, declaredKeys };
 }
 
@@ -296,7 +350,15 @@ describe("root product guidance — frozen originals plus reviewed current amend
 		expect(reviewedR11.revision).toBe(11);
 		expect(reviewedR12.previousRevision).toBe(reviewedR11.revision);
 		expect(reviewedR12.revision).toBe(12);
-		expect(ENTWURF_GUIDANCE_VERSION.revision).toBe(reviewedR12.revision);
+		expect(reviewedR13.previousRevision).toBe(reviewedR12.revision);
+		expect(reviewedR13.revision).toBe(13);
+		expect(reviewedR14.previousRevision).toBe(reviewedR13.revision);
+		expect(reviewedR14.revision).toBe(14);
+		expect(reviewedR15.previousRevision).toBe(reviewedR14.revision);
+		expect(reviewedR15.revision).toBe(15);
+		expect(reviewedR16.previousRevision).toBe(reviewedR15.revision);
+		expect(reviewedR16.revision).toBe(16);
+		expect(ENTWURF_GUIDANCE_VERSION.revision).toBe(reviewedR16.revision);
 	});
 
 	it("[QK:GUIDANCE-REJECT-HINTS-ORIGINAL] every static reject hint matches C0 plus the declared revision-6, revision-10 and reviewed revision-11 amendments", () => {
@@ -437,8 +499,8 @@ describe("root product guidance — frozen originals plus reviewed current amend
 		}
 		expect([...changed].sort()).toEqual([...declaredKeys].sort());
 		expect(allKeys.size).toBe(34);
-		expect(changed.size).toBe(13);
-		expect([...allKeys].filter((key) => !changed.has(key))).toHaveLength(21);
+		expect(changed.size).toBe(16);
+		expect([...allKeys].filter((key) => !changed.has(key))).toHaveLength(18);
 	});
 
 	it("[QK:GUIDANCE-RUNTIME-REVIEWED-FIELDS] actual tools/list matches reviewed descriptions with original full structures/schema/annotations and no metadata", async () => {

@@ -153,6 +153,11 @@
 	// standalone compiled adapter consumer proof. Its helper is not TS: the
 	// build script byte-copies pi-extensions/lib/cc-retire-pidfd.py beside the emitted adapter.
 	// Its repo imports (meta-session, entwurf-v2-visible-resume) are ALREADY emitted for the bridge.
+	// WHY pi-durable-owner-fence rides THIS build (#157 B3): the packaged durable bootstrap builds the owner
+	// fence from THIS closure and hands it to every owned open, so an installed Entwurf never imports checkout
+	// TypeScript. Nothing in the bridge graph imports it, so it needs its own entry. Its only repo import is
+	// meta-session.ts, ALREADY emitted for the bridge: ONE leaf JS, ZERO new deps. It is never in index.ts's boot
+	// closure.
 	"include": [
 		"./src/index.ts",
 		"../../protocol.js",
@@ -177,6 +182,7 @@
 		"../../pi-extensions/meta-bridge-pi-durable.ts",
 		"../../pi-extensions/lib/cc-retire-request.ts",
 		// Keep the standalone Pi adapter consumer entry; the public factory also reaches it now.
-		"../../pi-extensions/lib/pi-retire-request.ts"
+		"../../pi-extensions/lib/pi-retire-request.ts",
+		"../../pi-extensions/lib/pi-durable-owner-fence.ts"
 	]
 }

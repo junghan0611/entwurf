@@ -61,6 +61,9 @@ export interface PiDurablePackageLayout {
 	readonly bridgeEntry: string;
 	/** The compiled sender/receiver owner join the bridge decides deliverability with. */
 	readonly deliverability: string;
+	/** The compiled owner fence the packaged bootstrap imports. A fixed unit of this package that only the
+	 * fresh preflight asks for; the carrier/SDK verifier below does not read it. */
+	readonly ownerFence: string;
 }
 
 /** The layout rooted at `root`, as plain paths. */
@@ -77,6 +80,7 @@ export function piDurableLayoutAt(root: string): PiDurablePackageLayout {
 		adapter: path.join(dist, "pi-extensions", "meta-bridge-pi-durable.js"),
 		bridgeEntry: path.join(dist, "mcp", "entwurf-bridge", "src", "index.js"),
 		deliverability: path.join(dist, "pi-extensions", "lib", "entwurf-deliverability.js"),
+		ownerFence: path.join(dist, "pi-extensions", "lib", "pi-durable-owner-fence.js"),
 	};
 }
 

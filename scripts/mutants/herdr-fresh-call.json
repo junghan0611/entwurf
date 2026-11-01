@@ -15,10 +15,10 @@
 		},
 		{
 			"claim": "HFC-PILOT-CLOSED",
-			"title": "a backend nobody measured on herdr is admitted to the pilot, so a caller gets a pane running something this rail never proved it can open (#116 A7: the tuple moved to the shared rails leaf, so the mutant follows its subject — widening the pilot set is still the mutation, it is simply written in one place now)",
+			"title": "a backend nobody measured on herdr is admitted to the agent-start set, so a caller gets a pane running something this rail never proved it can open (#116 A7: the tuple moved to the shared rails leaf; #157 A-L1 split it into the agent-start and layout sets, so the mutant follows the agent-start set that keys the herdr kind map — widening it is still the mutation)",
 			"subject": "scripts/herdr-rails.mjs",
-			"find": ["export const HERDR_FRESH_CALL_BACKENDS = Object.freeze([\"pi\", \"claude-code\"]);"],
-			"replace": ["export const HERDR_FRESH_CALL_BACKENDS = Object.freeze([\"pi\", \"claude-code\", \"codex\"]);"],
+			"find": ["export const HERDR_AGENT_START_BACKENDS = Object.freeze([\"pi\", \"claude-code\"]);"],
+			"replace": ["export const HERDR_AGENT_START_BACKENDS = Object.freeze([\"pi\", \"claude-code\", \"codex\"]);"],
 			"gate": ["bash", "run.sh", "check-herdr-fresh-call"],
 			"timeoutSeconds": 120,
 			"signature": "[QK:HFC-PILOT-CLOSED]",
@@ -97,13 +97,24 @@
 			"signatureSource": "scripts/check-herdr-fresh-call.ts"
 		},
 		{
+			"claim": "HFC-CODEX-CWD-NO-FALLBACK",
+			"title": "the shared cwd chooser lets a known Codex caller with no record cwd fall back to this process's directory, which is the app-server's, so an agent-start sibling opens somewhere the caller never was (#157 A-L1x)",
+			"subject": "pi-extensions/lib/herdr-fresh-call.ts",
+			"find": ["\t\t\t? { ok: false, reason: \"codex-caller-cwd-unavailable\" }"],
+			"replace": ["\t\t\t? { ok: true, cwd: input.callerProcessCwd(), source: \"caller-process\" }"],
+			"gate": ["bash", "run.sh", "check-herdr-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:HFC-CODEX-CWD-NO-FALLBACK]",
+			"signatureSource": "scripts/check-herdr-fresh-call.ts"
+		},
+		{
 			"claim": "HFC-PREMUTATION-ONLY",
 			"title": "a pre-mutation input refusal is dropped, so a call that should have refused instead splits a pane in the operator's workspace first",
 			"subject": "pi-extensions/lib/herdr-fresh-call.ts",
 			"find": [
-				"\t\tconst badCwd = classifyHerdrCwd(cwd);\n\t\tif (badCwd !== null) return { ok: false, reason: badCwd };"
+				"\tconst badCwd = classifyHerdrCwd(chosenCwd.cwd);\n\tif (badCwd !== null) return { ok: false, reason: badCwd };"
 			],
-			"replace": ["\t\tvoid classifyHerdrCwd(cwd);"],
+			"replace": ["\tvoid classifyHerdrCwd(chosenCwd.cwd);"],
 			"gate": ["bash", "run.sh", "check-herdr-fresh-call"],
 			"timeoutSeconds": 120,
 			"signature": "[QK:HFC-PREMUTATION-ONLY]",
@@ -269,6 +280,19 @@
 			"gate": ["bash", "run.sh", "check-herdr-fresh-call"],
 			"timeoutSeconds": 120,
 			"signature": "[QK:HFC-CWD-EMPTY-IS-OMITTED]",
+			"signatureSource": "scripts/check-herdr-fresh-call.ts"
+		},
+		{
+			"claim": "HFC-CWD-CALLER-DEFAULT",
+			"title": "the agent-start tab create sends --cwd only for a requested directory again, so an omitted cwd opens the sibling in herdr's own default instead of where the caller is while the receipt still names the caller's directory (#157 A-L1x)",
+			"subject": "pi-extensions/lib/herdr-fresh-call.ts",
+			"find": ["\t\t\tworkspaceId: callerPane.workspaceId,\n\t\t\tcwd: chosenCwd.cwd,"],
+			"replace": [
+				"\t\t\tworkspaceId: callerPane.workspaceId,\n\t\t\t...(chosenCwd.source === \"requested\" ? { cwd: chosenCwd.cwd } : {}),"
+			],
+			"gate": ["bash", "run.sh", "check-herdr-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:HFC-CWD-CALLER-DEFAULT]",
 			"signatureSource": "scripts/check-herdr-fresh-call.ts"
 		},
 		{
@@ -454,6 +478,255 @@
 			"timeoutSeconds": 120,
 			"signature": "[QK:HFC-CALLBACK-ENV]",
 			"signatureSource": "scripts/check-herdr-fresh-call.ts"
+		},
+		{
+			"claim": "HLFC-SAME-ENDPOINT",
+			"title": "the caller-pane read is sent to a second endpoint instead of the one the layout write uses, so the workspace that names the new tab can come from a different herdr server answering with the same w1/p1 strings",
+			"subject": "pi-extensions/lib/herdr-fresh-call.ts",
+			"find": ["\t\tawait call(buildHerdrPaneGetPacket(readId, context.callerPaneId)),"],
+			"replace": [
+				"\t\tawait deps.socket(`${socketPath}.read`)(buildHerdrPaneGetPacket(readId, context.callerPaneId)),"
+			],
+			"gate": ["bash", "run.sh", "check-herdr-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:HLFC-SAME-ENDPOINT]",
+			"signatureSource": "pi-extensions/lib/herdr-layout-fresh-call.test.ts"
+		},
+		{
+			"claim": "HLFC-READ-FAILURE-NO-WRITE",
+			"title": "a failed caller-pane read no longer stops the branch, so a layout write goes out with a workspace nobody read",
+			"subject": "pi-extensions/lib/herdr-fresh-call.ts",
+			"find": ["\tif (!read.ok) return { ok: false, reason: read.reason, reported: read.reported };"],
+			"replace": ["\tif (read.ok === undefined) return { ok: false, reason: read.reason, reported: read.reported };"],
+			"gate": ["bash", "run.sh", "check-herdr-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:HLFC-READ-FAILURE-NO-WRITE]",
+			"signatureSource": "pi-extensions/lib/herdr-layout-fresh-call.test.ts"
+		},
+		{
+			"claim": "HLFC-ENVELOPE-BEFORE-CERTAINTY",
+			"title": "a reply carrying BOTH a result and an error is read as its result arm, so a malformed envelope can be believed as a launch or a pre-create refusal",
+			"subject": "pi-extensions/lib/herdr-fresh-call.ts",
+			"find": ["\tif (hasResult === Object.hasOwn(parsed, \"error\")) return null;"],
+			"replace": ["\tif (!hasResult && !Object.hasOwn(parsed, \"error\")) return null;"],
+			"gate": ["bash", "run.sh", "check-herdr-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:HLFC-ENVELOPE-BEFORE-CERTAINTY]",
+			"signatureSource": "pi-extensions/lib/herdr-layout-fresh-call.test.ts"
+		},
+		{
+			"claim": "HLFC-NONE-CODES-ONLY",
+			"title": "layout_apply_failed joins the pre-create codes, so a request herdr may already have turned into a tab is reported as having created nothing",
+			"subject": "pi-extensions/lib/herdr-fresh-call.ts",
+			"find": ["\t\"invalid_env\","],
+			"replace": ["\t\"invalid_env\",", "\t\"layout_apply_failed\","],
+			"gate": ["bash", "run.sh", "check-herdr-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:HLFC-NONE-CODES-ONLY]",
+			"signatureSource": "pi-extensions/lib/herdr-layout-fresh-call.test.ts"
+		},
+		{
+			"claim": "HLFC-POST-WRITE-UNKNOWN",
+			"title": "an I/O error after the connection existed is reported as none, so a layout request that may have reached herdr is said to have created nothing and its nonce is dropped",
+			"subject": "pi-extensions/lib/herdr-fresh-call.ts",
+			"find": [
+				"\t\t\treturn layoutFailure(\"herdr-layout-transport-failed\", \"unknown\", {",
+				"\t\t\t\ttransport: boundHerdrDiagnostic(`io-failed: ${outcome.code}`),"
+			],
+			"replace": [
+				"\t\t\treturn layoutFailure(\"herdr-layout-transport-failed\", \"none\", {",
+				"\t\t\t\ttransport: boundHerdrDiagnostic(`io-failed: ${outcome.code}`),"
+			],
+			"gate": ["bash", "run.sh", "check-herdr-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:HLFC-POST-WRITE-UNKNOWN]",
+			"signatureSource": "pi-extensions/lib/herdr-layout-fresh-call.test.ts"
+		},
+		{
+			"claim": "HLFC-SUCCESS-PROVES-LAUNCH",
+			"title": "the echoed argv is no longer compared, so a success reply describing some other command is accepted as this launch's receipt",
+			"subject": "pi-extensions/lib/herdr-fresh-call.ts",
+			"find": ["\t\t!sameArgv(root.command, expect.command)"],
+			"replace": ["\t\tfalse"],
+			"gate": ["bash", "run.sh", "check-herdr-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:HLFC-SUCCESS-PROVES-LAUNCH]",
+			"signatureSource": "pi-extensions/lib/herdr-layout-fresh-call.test.ts"
+		},
+		{
+			"claim": "HLFC-PAYLOAD-ROUNDTRIP",
+			"title": "the bootstrap payload is no longer escaped at its own layer, so a task carrying DEL or C1 cannot be launched faithfully and the call throws instead of opening the sibling",
+			"subject": "pi-extensions/lib/herdr-fresh-call.ts",
+			"find": ["\tconst payload = escapeRemainingControlChars(raw);"],
+			"replace": ["\tconst payload = raw;"],
+			"gate": ["bash", "run.sh", "check-herdr-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:HLFC-PAYLOAD-ROUNDTRIP]",
+			"signatureSource": "pi-extensions/lib/herdr-layout-fresh-call.test.ts"
+		},
+		{
+			"claim": "HLFC-CWD-NO-FALLBACK",
+			"title": "the layout branch drops the caller's Codex fact before choosing a start directory, so a pi-durable sibling for a Codex caller with no record cwd opens in this process's directory, which is the app-server's, and a Codex caller's record directory is passed over for it",
+			"subject": "pi-extensions/lib/herdr-fresh-call.ts",
+			"find": [
+				"\tconst chosen = chooseHerdrLayoutCwd({\n\t\t...(requestedCwd === undefined ? {} : { requestedCwd }),\n\t\tcallerIsCodex: params.callerIsCodex === true,"
+			],
+			"replace": [
+				"\tconst chosen = chooseHerdrLayoutCwd({\n\t\t...(requestedCwd === undefined ? {} : { requestedCwd }),\n\t\tcallerIsCodex: false,"
+			],
+			"gate": ["bash", "run.sh", "check-herdr-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:HLFC-CWD-NO-FALLBACK]",
+			"signatureSource": "pi-extensions/lib/herdr-layout-fresh-call.test.ts"
+		},
+		{
+			"claim": "HLFC-SOCKET-PATH-EXPLICIT",
+			"title": "a relative HERDR_SOCKET_PATH is accepted, so the endpoint becomes whatever that name resolves to in this process's directory",
+			"subject": "pi-extensions/lib/herdr-fresh-call.ts",
+			"find": ["\treturn typeof value === \"string\" && value.length > 0 && path.isAbsolute(value) ? value : null;"],
+			"replace": ["\treturn typeof value === \"string\" && value.length > 0 ? value : null;"],
+			"gate": ["bash", "run.sh", "check-herdr-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:HLFC-SOCKET-PATH-EXPLICIT]",
+			"signatureSource": "pi-extensions/lib/herdr-layout-fresh-call.test.ts"
+		},
+		{
+			"claim": "HLFC-PREFLIGHT-BEFORE-SOCKET",
+			"title": "the carrier/SDK verdict is no longer handed to the pi-durable preflight, so a drifted carrier or mismatched SDK set is launched into a herdr tab",
+			"subject": "pi-extensions/lib/herdr-fresh-call.ts",
+			"find": ["\t\truntime: packageLayout === null ? null : deps.runtimeVerdict(packageLayout),"],
+			"replace": ["\t\truntime: null,"],
+			"gate": ["bash", "run.sh", "check-herdr-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:HLFC-PREFLIGHT-BEFORE-SOCKET]",
+			"signatureSource": "pi-extensions/lib/herdr-layout-fresh-call.test.ts"
+		},
+		{
+			"claim": "HLFC-VERIFIED-LAUNCHER",
+			"title": "the package's run.sh is no longer checked as an executable regular file, so herdr is asked to exec a launcher that is missing, plain or a directory",
+			"subject": "pi-extensions/lib/herdr-fresh-call.ts",
+			"find": [
+				"\tif (!isExecutableRegularFile(runtime)) return { ok: false, reason: \"pi-durable-launcher-missing\" };"
+			],
+			"replace": ["\tif (runtime === \"\") return { ok: false, reason: \"pi-durable-launcher-missing\" };"],
+			"gate": ["bash", "run.sh", "check-herdr-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:HLFC-VERIFIED-LAUNCHER]",
+			"signatureSource": "pi-extensions/lib/herdr-layout-fresh-call.test.ts"
+		},
+		{
+			"claim": "HLFC-SETS-AND-MAPS",
+			"title": "pi-durable is given a herdr agent kind, so a layout-launched backend could be started as herdr's pi program under its name",
+			"subject": "pi-extensions/lib/herdr-fresh-call.ts",
+			"find": ["export const HERDR_AGENT_KIND: Record<HerdrAgentStartBackend, string> = {"],
+			"replace": ["export const HERDR_AGENT_KIND: Record<HerdrAgentStartBackend, string> = { \"pi-durable\": \"pi\","],
+			"gate": ["bash", "run.sh", "check-herdr-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:HLFC-SETS-AND-MAPS]",
+			"signatureSource": "pi-extensions/lib/herdr-layout-fresh-call.test.ts"
+		},
+		{
+			"claim": "HLFC-RENDER-CERTAINTY",
+			"title": "every transport failure renders as the none text, so an operator is told nothing was created after a layout request that may have landed",
+			"subject": "pi-extensions/lib/herdr-fresh-call.ts",
+			"find": ["\tif (result.recovery.outcome === \"none\") {"],
+			"replace": [
+				"\tif (result.recovery.outcome === \"none\" || result.reason === \"herdr-layout-transport-failed\") {"
+			],
+			"gate": ["bash", "run.sh", "check-herdr-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:HLFC-RENDER-CERTAINTY]",
+			"signatureSource": "pi-extensions/lib/herdr-layout-fresh-call.test.ts"
+		},
+		{
+			"claim": "HLFC-DIAGNOSTIC-BOUND",
+			"title": "the display cut is lifted, so a herdr-reported string of any length is copied whole into the operator's text",
+			"subject": "pi-extensions/lib/herdr-fresh-call.ts",
+			"find": ["export const HERDR_DIAGNOSTIC_MAX_CHARS = 256;"],
+			"replace": ["export const HERDR_DIAGNOSTIC_MAX_CHARS = 4096;"],
+			"gate": ["bash", "run.sh", "check-herdr-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:HLFC-DIAGNOSTIC-BOUND]",
+			"signatureSource": "pi-extensions/lib/herdr-layout-fresh-call.test.ts"
+		},
+		{
+			"claim": "HLFC-TRANSPORT-FRAMING",
+			"title": "the reply decode leaf decodes chunk by chunk, so a multi-byte character split between reads is corrupted into replacement characters",
+			"subject": "pi-extensions/lib/herdr-fresh-call.ts",
+			"find": ["\treturn Buffer.concat(chunks).toString(\"utf8\");"],
+			"replace": ["\treturn chunks.map((chunk) => chunk.toString(\"utf8\")).join(\"\");"],
+			"gate": ["bash", "run.sh", "check-herdr-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:HLFC-TRANSPORT-FRAMING]",
+			"signatureSource": "pi-extensions/lib/herdr-layout-fresh-call.test.ts"
+		},
+		{
+			"claim": "HLFC-TRANSPORT-OVERSIZE",
+			"title": "the reply byte bound is effectively lifted, so an oversized reply is buffered until timeout instead of being refused at the bound",
+			"subject": "pi-extensions/lib/herdr-fresh-call.ts",
+			"find": ["\t\t\t\tif (lineBytes > bounds.maxReplyBytes) {"],
+			"replace": ["\t\t\t\tif (lineBytes > bounds.maxReplyBytes * 1000) {"],
+			"gate": ["bash", "run.sh", "check-herdr-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:HLFC-TRANSPORT-OVERSIZE]",
+			"signatureSource": "pi-extensions/lib/herdr-layout-fresh-call.test.ts"
+		},
+		{
+			"claim": "HLFC-TRANSPORT-EOF",
+			"title": "a close before the reply's newline is reported as a connect failure, so a request herdr received is said to have never been written",
+			"subject": "pi-extensions/lib/herdr-fresh-call.ts",
+			"find": ["\t\t\tsocket.on(\"close\", () => settle({ kind: \"eof-before-newline\" }));"],
+			"replace": ["\t\t\tsocket.on(\"close\", () => settle({ kind: \"connect-failed\", code: \"closed\" }));"],
+			"gate": ["bash", "run.sh", "check-herdr-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:HLFC-TRANSPORT-EOF]",
+			"signatureSource": "pi-extensions/lib/herdr-layout-fresh-call.test.ts"
+		},
+		{
+			"claim": "HLFC-TRANSPORT-CONNECT-FAIL",
+			"title": "a connection that never existed is reported as a post-connect I/O failure, so the one certain no-write outcome is lost",
+			"subject": "pi-extensions/lib/herdr-fresh-call.ts",
+			"find": ["\t\t\t\tsettle(connected ? { kind: \"io-failed\", code } : { kind: \"connect-failed\", code });"],
+			"replace": ["\t\t\t\tsettle({ kind: \"io-failed\", code });"],
+			"gate": ["bash", "run.sh", "check-herdr-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:HLFC-TRANSPORT-CONNECT-FAIL]",
+			"signatureSource": "pi-extensions/lib/herdr-layout-fresh-call.test.ts"
+		},
+		{
+			"claim": "HLFC-TRANSPORT-TIMEOUT",
+			"title": "a bound expiring after the connection exists is reported as a connect failure, so a request herdr may hold is said to have never been written",
+			"subject": "pi-extensions/lib/herdr-fresh-call.ts",
+			"find": [
+				"\t\t\t\t() => settle(connected ? { kind: \"timeout\" } : { kind: \"connect-failed\", code: \"timeout-before-connect\" }),"
+			],
+			"replace": ["\t\t\t\t() => settle({ kind: \"connect-failed\", code: \"timeout-before-connect\" }),"],
+			"gate": ["bash", "run.sh", "check-herdr-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:HLFC-TRANSPORT-TIMEOUT]",
+			"signatureSource": "pi-extensions/lib/herdr-layout-fresh-call.test.ts"
+		},
+		{
+			"claim": "HLFC-PACKET-LITERAL",
+			"title": "the layout env drops the PI_SESSION_ID/PI_AGENT_ID scrub, so a pi-durable sibling started by herdr can inherit an identity carrier it does not own",
+			"subject": "pi-extensions/lib/herdr-fresh-call.ts",
+			"find": ["\tconst env: Record<string, string> = { PI_SESSION_ID: \"\", PI_AGENT_ID: \"\" };"],
+			"replace": ["\tconst env: Record<string, string> = {};"],
+			"gate": ["bash", "run.sh", "check-herdr-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:HLFC-PACKET-LITERAL]",
+			"signatureSource": "pi-extensions/lib/herdr-layout-fresh-call.test.ts"
+		},
+		{
+			"claim": "HLFC-READ-DIAGNOSTICS",
+			"title": "a failed caller-pane read drops herdr's reported cause, so the operator is refused without the transport outcome or herdr error that explains why",
+			"subject": "pi-extensions/lib/herdr-fresh-call.ts",
+			"find": ["\tif (!read.ok) return { ok: false, reason: read.reason, reported: read.reported };"],
+			"replace": ["\tif (!read.ok) return { ok: false, reason: read.reason, reported: {} };"],
+			"gate": ["bash", "run.sh", "check-herdr-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:HLFC-READ-DIAGNOSTICS]",
+			"signatureSource": "pi-extensions/lib/herdr-layout-fresh-call.test.ts"
 		}
 	]
 }

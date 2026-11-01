@@ -18,6 +18,11 @@
  *   FCD-NO-RAIL-PARAMETER     no caller-facing input can choose a rail
  *   FCD-NO-FALLBACK           an incomplete herdr context refuses by its herdr reason
  *   FCD-HERDR-BACKEND-FIRST   a non-pilot backend refuses before any preflight and any mutation
+ *   FCD-HERDR-PI-DURABLE-LAYOUT  inside herdr pi-durable reaches the layout branch, which is told
+ *                             only WHETHER the caller is a Codex citizen and never falls back from
+ *                             its missing record cwd to this process's own (#157 A-L1)
+ *   FCD-HERDR-NO-THREAD-ID    the herdr branch builds its request from an explicit field list in
+ *                             which the Codex thread id appears only as that boolean (#157 A-L1 D5)
  *   FCD-CODEX-PREFLIGHT-TMUX  the Codex preflight still gates the tmux rail, and only that rail
  *   FCD-ONE-NONCE             one nonce is minted per call and reaches the selected rail
  *   FCD-SURFACE-ROOT-ONLY     the one public surface (the bridge; pi reaches it through Pi's
@@ -183,23 +188,43 @@ async function main(): Promise<void> {
 			!herdrBranch.includes("codexCallerFreshPreflight"),
 	);
 
-	// #129: pi-durable joined the tmux fresh set, NOT the herdr pilot set (GLG, 2026-10-06: no herdr
-	// pi-durable support in 0.31). Same axis as the codex cell: refused by the herdr reason, nothing
-	// spawned, no tmux fallback, and its installed-carrier preflight is never asked on this branch.
+	// #157 A-L1 (main 0a6f9b relaying GLG's #157 grant; supersedes the #129 "not in herdr" cell):
+	// inside herdr pi-durable reaches the herdr LAYOUT branch, which never runs the herdr CLI. The
+	// root hands that branch one boolean — the caller IS a record-backed Codex citizen — and the
+	// branch, not this root, owns the pi-durable preflight. Both calls below are refused before any
+	// socket is opened (this env names none), so nothing here can reach a herdr server.
 	const durable = recordingSpawn();
-	const durableRefused = await dispatchFreshCall(
-		{ ...REQUEST, backend: "pi-durable", model: "loopback/scripted" },
+	const durableRequest = { ...REQUEST, backend: "pi-durable", model: "loopback/scripted" };
+	const durablePlain = await dispatchFreshCall(durableRequest, HERDR_ENV, durable.spawn);
+	const durableCodexCaller = await dispatchFreshCall(
+		{ ...durableRequest, callerNativeSessionId: "019a0000-0000-7000-8000-000000000000" },
 		HERDR_ENV,
 		durable.spawn,
 	);
 	ok(
-		"[QK:FCD-HERDR-PI-DURABLE-UNSUPPORTED] inside herdr pi-durable is not a pilot backend: it refuses by the herdr reason with nothing spawned, never falls back to a tmux window, and its runtime preflight is never consulted there",
-		durableRefused.rail === "herdr" &&
-			!durableRefused.result.ok &&
-			durableRefused.result.reason === "herdr-backend-unsupported" &&
+		"[QK:FCD-HERDR-PI-DURABLE-LAYOUT] inside herdr pi-durable is no longer refused as unsupported: with the caller's own process cwd it reaches the layout branch's socket-path refusal, while a known Codex caller with no record cwd is refused as codex-caller-cwd-unavailable instead of falling back to this process's cwd — the root passes Codex-ness as a boolean, nothing spawns the herdr CLI, no tmux fallback, and the root's herdr branch names no pi-durable preflight",
+		durablePlain.rail === "herdr" &&
+			!durablePlain.result.ok &&
+			durablePlain.result.reason === "herdr-socket-path-missing" &&
+			durableCodexCaller.rail === "herdr" &&
+			!durableCodexCaller.result.ok &&
+			durableCodexCaller.result.reason === "codex-caller-cwd-unavailable" &&
 			durable.calls.length === 0 &&
 			herdrBranchLocated &&
 			!herdrBranch.includes("piDurable"),
+	);
+
+	// #157 A-L1 D5: the Codex thread id is a tmux seat input and STOPS at this root. The herdr branch
+	// therefore spells its request field by field — a spread of the whole request would carry the id
+	// along even if no herdr code read it today — and names the id once, inside the boolean.
+	const threadIdMentions = herdrBranch.split("callerNativeSessionId").length - 1;
+	ok(
+		"[QK:FCD-HERDR-NO-THREAD-ID] the herdr branch hands its rail an explicit field list, not a spread of the request, and the Codex thread id appears in it exactly once — as `callerIsCodex: request.callerNativeSessionId !== undefined` — so only a boolean and the record cwd cross to herdr while the tmux request stays whole",
+		herdrBranchLocated &&
+			!/\.\.\.request\b/.test(herdrBranch) &&
+			threadIdMentions === 1 &&
+			herdrBranch.includes("callerIsCodex: request.callerNativeSessionId !== undefined,") &&
+			herdrBranch.includes("callerCwd: request.callerCwd"),
 	);
 
 	// ── the tmux rail keeps its pre-existing ordering ────────────────────────────────────
@@ -295,6 +320,8 @@ async function main(): Promise<void> {
 			backend: "pi",
 			requestedKind: "pi",
 			model: "m/1",
+			cwd: "/repo/dir",
+			cwdSource: "caller-process",
 			herdrAgentName: "entwurf-abc",
 			herdrWorkspaceId: "w7",
 			herdrTabId: "w7:t3",

@@ -1,7 +1,7 @@
 /**
  * pi-durable-fresh-preflight (#129 W, L6) — the pre-mutation decision, beside the leaf.
  *
- * The four units are real files in a fixture package closure this file builds; the receive unit is
+ * The five units are real files in a fixture package closure this file builds; the receive unit is
  * the compiled owner-join TEXT, read the way the bridge's emitted module carries it. The runtime
  * verdict is an input here (its own leaf has its own tests), so these cells only decide ordering and
  * the unit predicates. The bootstrap decoder's cap is read from its own module.
@@ -23,7 +23,7 @@ let layout: PiDurablePackageLayout;
 beforeEach(() => {
 	root = fs.mkdtempSync(path.join(os.tmpdir(), "pi-durable-preflight-"));
 	layout = piDurableLayoutAt(root);
-	for (const file of [layout.adapter, layout.bridgeEntry, layout.bootstrap]) {
+	for (const file of [layout.adapter, layout.bridgeEntry, layout.bootstrap, layout.ownerFence]) {
 		fs.mkdirSync(path.dirname(file), { recursive: true });
 		fs.writeFileSync(file, "// unit\n");
 	}
@@ -93,6 +93,18 @@ describe("pi-durable fresh preflight", () => {
 		fs.rmSync(layout.bootstrap);
 		expect(decide()).toBe("pi-durable-visible-identity-missing");
 		fs.writeFileSync(layout.bootstrap, "// unit\n");
+		expect(decide()).toBeNull();
+	});
+
+	it("[QK:PI-DURABLE-PREFLIGHT-OWNER-FENCE-UNIT] with the model, first input, carrier verdict and the four units all valid, an absent compiled owner fence alone refuses under its own name; present again, the launch may proceed", () => {
+		// The fixed path, spelled out here rather than read back from the layout constructor.
+		expect(layout.ownerFence).toBe(
+			path.join(root, "mcp", "entwurf-bridge", "dist", "pi-extensions", "lib", "pi-durable-owner-fence.js"),
+		);
+		expect(decide()).toBeNull();
+		fs.rmSync(layout.ownerFence);
+		expect(decide()).toBe("pi-durable-owner-fence-missing");
+		fs.writeFileSync(layout.ownerFence, "// unit\n");
 		expect(decide()).toBeNull();
 	});
 

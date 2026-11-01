@@ -182,14 +182,27 @@ export function activationBlock(evidence) {
  * Nothing here is measured and nothing here is a promise about this host: a backend appears
  * because this package supports the rail, not because the host can reach it. The model string is
  * a SYNTAX example, and the block says so in the same breath so it cannot be read as a catalogue.
+ *
+ * Two launch domains, shown as two groups (#157 A-L2): the backends herdr starts through
+ * `agent start --kind`, and the ones opened through one `layout.apply` request because herdr has no
+ * agent kind for them. The per-backend line is rendered ONCE over both, then split, so the two
+ * groups cannot drift into two dialects of the same sentence.
  */
-export function railsBlock({ backends, modelSyntaxExample, railEntryNote }) {
-	const lines = backends.map(
+export function railsBlock({ agentStartBackends, layoutBackends, modelSyntaxExample, railEntryNote }) {
+	const lines = [...agentStartBackends, ...layoutBackends].map(
 		(backend) =>
 			`  ${backend}: ${railEntryNote[backend]}\n    model string syntax, one example only: \`${modelSyntaxExample[backend]}\``,
 	);
-	return block("rails", reported(`${backends.length} rail(s) declared`), [
-		...lines,
+	const total = agentStartBackends.length + layoutBackends.length;
+	// The block's outcome detail is structural and never rendered, so the same summary is also the
+	// first visible line: the operator reads 3 = 2 + 1, not only the two groups.
+	const summary = `${total} fresh-call backend(s): ${agentStartBackends.length} through herdr agent start, ${layoutBackends.length} through one layout request`;
+	return block("rails", reported(summary), [
+		`  ${summary}`,
+		"  through tab create + agent start --kind:",
+		...lines.slice(0, agentStartBackends.length),
+		"  through ONE layout.apply request (no herdr agent kind):",
+		...lines.slice(agentStartBackends.length),
 		"  (examples show the SHAPE of a model string. Entwurf keeps no model list and validates none.)",
 	]);
 }

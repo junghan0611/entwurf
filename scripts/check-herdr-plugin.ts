@@ -831,7 +831,33 @@ const PEERS = JSON.stringify({
 	console.log("  ok    no aggregate verdict token over the four blocks");
 	passed++;
 
-	// RAILS come from the shared declaration leaf, not from prose in this pane.
+	// The two launch domains stay two (#157 A-L2): pi and claude-code are started by herdr as agents,
+	// pi-durable only gets a tab through one layout request. Literal on purpose, and placed BEFORE the
+	// shared-source claim: a pane that moved pi-durable into the agent-start group would still render
+	// every backend and every example, so only this claim can name that defect.
+	{
+		const rails = r.stdout.slice(r.stdout.indexOf("[3] RAILS"), r.stdout.indexOf("[4] CITIZENS"));
+		const agentStartLabel = rails.indexOf("  through tab create + agent start --kind:");
+		const layoutLabel = rails.indexOf("  through ONE layout.apply request (no herdr agent kind):");
+		const at = (backend: string) => rails.indexOf(`  ${backend}: `);
+		const durableLine = rails.slice(at("pi-durable")).split("\n")[0];
+		assert.ok(
+			rails.includes("3 fresh-call backend(s): 2 through herdr agent start, 1 through one layout request") &&
+				agentStartLabel !== -1 &&
+				agentStartLabel < at("pi") &&
+				at("pi") < at("claude-code") &&
+				at("claude-code") < layoutLabel &&
+				layoutLabel < at("pi-durable") &&
+				durableLine.includes("neither detected nor associated with a session") &&
+				!rails.includes("--kind pi-durable"),
+			`[QK:HPL-RAILS-DOMAINS-DISTINCT] the RAILS block shows the public fresh-call aggregate of three as two launch domains — pi and claude-code under herdr agent start, pi-durable alone under one layout request — and never presents pi-durable as a herdr agent kind or as detected/session-associated (rails block: ${JSON.stringify(rails)})`,
+		);
+		console.log("  ok    rails show agent start (pi, claude-code) and one layout request (pi-durable) as two domains");
+		passed++;
+	}
+
+	// RAILS come from the shared declaration leaf, not from prose in this pane: every backend of the
+	// public fresh-call aggregate, each with its one model SYNTAX example.
 	assert.ok(
 		HERDR_RAILS.HERDR_FRESH_CALL_BACKENDS.every(
 			(b) => r.stdout.includes(`  ${b}: `) && r.stdout.includes(HERDR_RAILS.MODEL_SYNTAX_EXAMPLE[b]),

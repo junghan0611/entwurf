@@ -65,8 +65,11 @@ export interface FreshCallRequest {
 	 * carrying that citizen's `nativeSessionId`. TMUX-RAIL INPUT ONLY: it exists to find the
 	 * caller's own pane by its terminal title (#95 lane B), and a herdr tab has no such pane. */
 	readonly callerNativeSessionId?: string;
-	/** The SAME codex citizen's record cwd, under the same condition (#95 lane C). Also tmux-only,
-	 * and consulted only when the call requested no cwd of its own. */
+	/** The SAME codex citizen's record cwd, under the same condition (#95 lane C), consulted only
+	 * when the call requested no cwd of its own: by the tmux rail, and inside herdr by BOTH branches —
+	 * the layout branch (pi-durable, #157 A-L1) and the agent-start branch (pi/claude-code, #157
+	 * A-L1x) — which refuse rather than fall back to their own process cwd when a known Codex caller
+	 * has none. */
 	readonly callerCwd?: string;
 }
 
@@ -131,12 +134,13 @@ export function isUncuratedEntwurfPiModel(backend: string, model: string): boole
  * backend there, so running a Codex preflight would ask an irrelevant question and could fail for
  * a reason that has nothing to do with why the call is impossible.
  *
- * THE TWO CODEX CALLER INPUTS ARE TMUX-RAIL FACTS and stop at this boundary. #95 lane B/C measured
- * both against a tmux pane and an app-server-hosted bridge: a pane title is what carries the
- * caller's thread-id, and a record cwd exists as an input because THAT process's directory is the
- * app-server's. Inside herdr the tab is created by herdr, there is no pane title to anchor to, and
- * neither fact has been measured — so the herdr rail is handed the request without consulting
- * them rather than inheriting a rule from a topology it does not share.
+ * THE CODEX CALLER'S THREAD ID IS A TMUX-RAIL FACT and stops at this boundary. #95 lane B measured
+ * it against a tmux pane: a pane title is what carries the caller's thread-id, and inside herdr the
+ * tab is created by herdr, with no pane title to anchor to. The herdr rail therefore receives only a
+ * boolean saying the caller IS a record-backed Codex citizen, plus that citizen's record cwd (#95
+ * lane C: an app-server-hosted bridge's own directory is the app-server's). Both herdr branches read
+ * them (layout since #157 A-L1, agent start since A-L1x), to choose a cwd without falling back to
+ * this process's; this is not a Codex-in-herdr placement certification.
  */
 export async function dispatchFreshCall(
 	request: FreshCallRequest,
@@ -165,7 +169,20 @@ export async function dispatchFreshCall(
 			return { rail: "herdr", result: { ok: false, reason: context.reason } };
 		}
 		const run: HerdrRun = createHerdrRunner(context.context.bin, env, spawn ?? (spawnChildProcess as SpawnFn));
-		return { rail: "herdr", result: await herdrFreshCall(request, run, env, nonce) };
+		// #157 A-L1: an explicit field list, not `...request`, so the Codex thread id STOPS here — it is
+		// a tmux seat input. The herdr rail learns only WHETHER the caller is a record-backed Codex
+		// citizen (one boolean) and that citizen's record cwd; the tmux request below is untouched.
+		const herdrRequest = {
+			backend: request.backend,
+			model: request.model,
+			task: request.task,
+			...(request.cwd === undefined ? {} : { cwd: request.cwd }),
+			...(request.placement === undefined ? {} : { placement: request.placement }),
+			callerGardenId: request.callerGardenId,
+			...(request.callerCwd === undefined ? {} : { callerCwd: request.callerCwd }),
+			callerIsCodex: request.callerNativeSessionId !== undefined,
+		};
+		return { rail: "herdr", result: await herdrFreshCall(herdrRequest, run, env, nonce) };
 	}
 	// TWO capability axes, in this order, both pre-mutation and neither standing in for the
 	// other. The TARGET axis first — "entwurf cannot open a Codex sibling here at all" is the

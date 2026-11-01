@@ -2024,7 +2024,15 @@ check_herdr_fresh_call() {
   # reason check-mux-placement refuses a fake tmux. Payload literals are verbatim herdr
   # 0.9.0 output (pane/tab replies 2026-09-15, agent_started 2026-09-14); the real-binary
   # half is an isolated private server (c2).
-  run_ts scripts/check-herdr-fresh-call.ts
+  #
+  # #157 A-L1: pi-durable's herdr LAYOUT branch (one layout.apply on the caller's own socket) is
+  # proven beside its module, and its mutants name THIS coordinate rather than a new gate verb —
+  # a new run.sh command would be one more undescribed name for check-install-surface S9. The
+  # legacy script runs FIRST and returns on its own failure, so its mutants keep the failure-line
+  # attribution; only when it passes does the beside file run, whose kills are attributed from
+  # its JSON test titles (run.sh:104-113). One named file, no glob.
+  run_ts scripts/check-herdr-fresh-call.ts || return $?
+  run_vitest pi-extensions/lib/herdr-layout-fresh-call.test.ts
 }
 
 check_herdr_sandbox() {

@@ -26,6 +26,8 @@
  *   HFC-ENCODE-NO-CONTROL       the encoded argv carries zero Unicode Cc — including the C1
  *                               block and DEL, which JSON.stringify leaves literal
  *   HFC-ENCODE-MAX-TASK         a maximum public task encodes and stays Cc-free
+ *   HFC-CODEX-CWD-NO-FALLBACK   a known Codex caller with no record cwd is refused on the agent-start
+ *                               branch — its process directory is never read, no herdr call is made
  *   HFC-PREMUTATION-ONLY        every refusal happens before the first herdr call
  *   HFC-CALLER-WORKSPACE        the caller's workspace comes from herdr's own answer about the
  *                               caller's own pane, never from parsing a pane id, and an
@@ -51,7 +53,9 @@
  *                               anybody has reported that agent's session id
  *   HFC-ORPHAN-NAMED            every failed reclaim names its reason instead of going quiet
  *   HFC-INPUT-PARITY            the caller-facing input contract is the SHARED one, word for word
- *   HFC-CWD-EMPTY-IS-OMITTED    `cwd: ""` means "no cwd", as it does on the other rail
+ *   HFC-CWD-CALLER-DEFAULT      an omitted cwd is sent as the CALLER's directory (process dir, or a
+ *                               known Codex caller's record dir), never left to herdr's default
+ *   HFC-CWD-EMPTY-IS-OMITTED    `cwd: ""` means "no cwd requested", as it does on the other rail
  *   HFC-CWD-HASH-IS-DATA        a `#` in the start directory is DATA here — the tmux rail's
  *                               format-token refusal is not imported, because its reason is
  *                               false on a rail with no format expansion
@@ -98,9 +102,11 @@ import {
 	encodeBirthPrompt,
 	HERDR_AGENT_SESSION_POLL_MS,
 	HERDR_AGENT_SESSION_SETTLE_MS,
+	HERDR_AGENT_START_BACKENDS,
 	HERDR_CLI_TIMEOUT_MS,
 	HERDR_FRESH_CALL_BACKENDS,
 	HERDR_FRESH_CALL_OPENING_LINE,
+	HERDR_LAYOUT_LAUNCH_BACKENDS,
 	HERDR_MAX_OUTPUT_BYTES,
 	HERDR_START_READY_MS,
 	HERDR_START_TIMEOUT_MS,
@@ -121,6 +127,8 @@ import {
 const REPO_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MODULE = "pi-extensions/lib/herdr-fresh-call.ts";
 const MODULE_SRC = fs.readFileSync(path.join(REPO_DIR, MODULE), "utf8");
+/** #157 A-L1: the two pi-durable leaves the herdr layout branch imports, by their import specifier. */
+const PI_DURABLE_LEAVES: readonly string[] = ["./pi-durable-fresh-preflight.ts", "./pi-durable-runtime.ts"];
 
 let passed = 0;
 function ok(label: string, cond: boolean): void {
@@ -344,7 +352,7 @@ async function main(): Promise<void> {
 	const code = MODULE_SRC.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:])\/\/.*$/gm, "$1");
 	const specifiers = [...MODULE_SRC.matchAll(/^import\s[^;]*?from\s+"([^"]+)";$/gm)].map((m) => m[1]);
 	ok(
-		"[QK:HFC-RAIL-IMPORT-FENCE] the herdr rail imports only node builtins, the neutral composition leaf, the callback-env pair, and the dependency-free rails DECLARATION leaf — one mux or entwurf import here would re-couple the two rails and make either one undeletable",
+		"[QK:HFC-RAIL-IMPORT-FENCE] the herdr rail imports only node builtins, the neutral composition leaf, the callback-env pair, the dependency-free rails DECLARATION leaf, and the two pi-durable preflight/runtime leaves whose own imports are node builtins or each other — one mux or entwurf import here would re-couple the two rails and make either one undeletable",
 		specifiers.length > 0 &&
 			specifiers.every(
 				(s) =>
@@ -355,7 +363,18 @@ async function main(): Promise<void> {
 					// example are written, shared with the status pane and the install narration.
 					// It imports nothing itself, so admitting it couples this rail to a constant
 					// rather than to another rail; the mux/entwurf ban below is untouched.
-					s === "../../scripts/herdr-rails.mjs",
+					s === "../../scripts/herdr-rails.mjs" ||
+					// #157 A-L1 — the herdr layout branch runs pi-durable's own unit/carrier/SDK
+					// preflight and package-layout probe. Admitted as LEAVES only: their own imports
+					// are checked below, so neither can carry a mux or entwurf import in transitively.
+					PI_DURABLE_LEAVES.includes(s),
+			) &&
+			PI_DURABLE_LEAVES.every((leaf) =>
+				[
+					...fs
+						.readFileSync(path.join(REPO_DIR, "pi-extensions/lib", leaf), "utf8")
+						.matchAll(/^import\s[^;]*?from\s+"([^"]+)";$/gm),
+				].every((m) => m[1].startsWith("node:") || PI_DURABLE_LEAVES.includes(m[1])),
 			) &&
 			!/from\s+"\.\/(mux-|entwurf-)/.test(code),
 	);
@@ -371,10 +390,13 @@ async function main(): Promise<void> {
 		.split("\n")
 		.filter((line) => /tmux/i.test(line));
 	ok(
-		"[QK:HFC-PILOT-CLOSED] the pilot set is exactly pi + claude-code, and tmux appears in this module ONLY as the refusal of a tmux seat — never as a fallback launch",
-		HERDR_FRESH_CALL_BACKENDS.length === 2 &&
-			HERDR_FRESH_CALL_BACKENDS.includes("pi") &&
-			HERDR_FRESH_CALL_BACKENDS.includes("claude-code") &&
+		"[QK:HFC-PILOT-CLOSED] the agent-start set is exactly pi + claude-code, the layout set exactly pi-durable (#157 A-L1), and the admitted aggregate exactly their union in that order — and tmux appears in this module ONLY as the refusal of a tmux seat, never as a fallback launch",
+		HERDR_AGENT_START_BACKENDS.length === 2 &&
+			HERDR_AGENT_START_BACKENDS.includes("pi") &&
+			HERDR_AGENT_START_BACKENDS.includes("claude-code") &&
+			HERDR_LAYOUT_LAUNCH_BACKENDS.length === 1 &&
+			HERDR_LAYOUT_LAUNCH_BACKENDS[0] === "pi-durable" &&
+			JSON.stringify(HERDR_FRESH_CALL_BACKENDS) === JSON.stringify(["pi", "claude-code", "pi-durable"]) &&
 			tmuxLines.length > 0 &&
 			tmuxLines.every((line) => /tmux-rejected|tmuxSession|rejectTmuxPlacementInHerdrContext|tmuxPlacement/.test(line)),
 	);
@@ -531,12 +553,46 @@ async function main(): Promise<void> {
 			rejectTmuxPlacementInHerdrContext(undefined) === null,
 	);
 	const base = { backend: "pi", model: "openai-codex/gpt-5.6-sol", task: "do it", callerGardenId: CALLER } as const;
+	// #157 A-L1x: placed BEFORE the pre-mutation loop on purpose — `ok` throws at the first failure, and
+	// a fallback in the shared cwd chooser must be named by THIS claim. The loop's own Codex row below is
+	// kept; without this cell it would see the same defect first, as a herdr call.
+	ok(
+		"[QK:HFC-CODEX-CWD-NO-FALLBACK] an agent-start call from a known Codex caller whose record carries no cwd — absent or empty — and with no cwd requested is refused as `codex-caller-cwd-unavailable` with this process's directory (the app-server's) never read and the herdr CLI never invoked, never opened wherever this process happens to be",
+		await (async () => {
+			const processDir = fs.mkdtempSync(path.join(os.tmpdir(), "entwurf-herdr-codex."));
+			let processCwdReads = 0;
+			const callerProcessCwd = (): string => {
+				processCwdReads += 1;
+				return processDir;
+			};
+			const variants: Parameters<typeof herdrFreshCall>[0][] = [
+				{ ...base, callerIsCodex: true },
+				{ ...base, callerIsCodex: true, callerCwd: "" },
+			];
+			try {
+				for (const params of variants) {
+					const { run, calls } = neverRun();
+					const result = await herdrFreshCall(params, run, HERDR_ENV, NONCE, undefined, { callerProcessCwd });
+					if (result.ok || result.reason !== "codex-caller-cwd-unavailable" || calls.length !== 0) return false;
+				}
+				return processCwdReads === 0;
+			} catch {
+				// A throw here must still end the gate on THIS claim's token, never before it.
+				return false;
+			} finally {
+				fs.rmSync(processDir, { recursive: true, force: true });
+			}
+		})(),
+	);
 	const refusals: [string, Parameters<typeof herdrFreshCall>[0], NodeJS.ProcessEnv, string][] = [
 		["herdr-context-missing", { ...base }, {}, "herdr-context-missing"],
 		["caller pane", { ...base }, { HERDR_ENV: "1", HERDR_BIN_PATH: "/x/herdr" }, "herdr-caller-pane-missing"],
 		["backend", { ...base, backend: "codex" }, HERDR_ENV, "herdr-backend-unsupported"],
 		["tmux seat", { ...base, placement: { tmuxSession: "org" } }, HERDR_ENV, "herdr-placement-tmux-rejected"],
 		["cwd", { ...base, cwd: "relative/dir" }, HERDR_ENV, "cwd-not-absolute"],
+		// #157 A-L1x: an agent-start call with no cwd from a known Codex caller whose record has none —
+		// refused before any herdr call, never sent to this process's (the app-server's) directory.
+		["codex caller, no record cwd", { ...base, callerIsCodex: true }, HERDR_ENV, "codex-caller-cwd-unavailable"],
 	];
 	// The five INPUT reasons are owned by HFC-INPUT-PARITY below, which asserts both their
 	// words and that they too reach no CLI. Splitting them keeps each mutant attributable: a
@@ -548,7 +604,7 @@ async function main(): Promise<void> {
 		if (result.ok || result.reason !== expected || calls.length !== 0) everyRefusalPreMutation = false;
 	}
 	ok(
-		"[QK:HFC-PREMUTATION-ONLY] the rail-shaped refusals — context, caller pane, backend, tmux seat, cwd — are decided with the herdr CLI never invoked, so a refused call leaves no tab behind",
+		"[QK:HFC-PREMUTATION-ONLY] the rail-shaped refusals — context, caller pane, backend, tmux seat, cwd, a Codex caller with no record cwd — are decided with the herdr CLI never invoked, so a refused call leaves no tab behind",
 		everyRefusalPreMutation,
 	);
 
@@ -930,16 +986,96 @@ async function main(): Promise<void> {
 			}
 		})(),
 	);
+	// Placed BEFORE the empty-cwd cell on purpose: `ok` throws at the first failure, and a tab create
+	// that drops the caller default must be named by THIS claim, not by the older one below.
 	ok(
-		"[QK:HFC-CWD-EMPTY-IS-OMITTED] an empty cwd means OMITTED, exactly as the public verb has always meant it — reading it as a path made a documented no-op into an invalid-directory refusal",
+		"[QK:HFC-CWD-CALLER-DEFAULT] an agent-start call with no cwd starts the sibling where the CALLER is, sent explicitly as `--cwd` (#157 A-L1x) — this process's own directory for an ordinary caller, a known Codex caller's RECORD directory with its process directory (the app-server's) never read, and a requested directory exactly as given — never herdr's own default, which is not a fact about the caller",
 		await (async () => {
-			const { run, calls } = scriptedRun([
-				{ status: 0, stdout: CALLER_PANE_OK },
-				{ status: 0, stdout: TAB_OK },
-				startReplyEchoingArgv(START_OK),
-			]);
-			const result = await herdrFreshCall({ ...base, backend: "claude-code", cwd: "" }, run, HERDR_ENV, NONCE);
-			return result.ok && !calls[1].includes("--cwd") && !("cwd" in result.receipt);
+			const root = fs.mkdtempSync(path.join(os.tmpdir(), "entwurf-herdr-cwd."));
+			const processDir = path.join(root, "process");
+			const recordDir = path.join(root, "record");
+			const requestedDir = path.join(root, "requested");
+			for (const dir of [processDir, recordDir, requestedDir]) fs.mkdirSync(dir);
+			const neverRead = (): string => {
+				throw new Error("a Codex caller's process directory was read");
+			};
+			const rows: [Parameters<typeof herdrFreshCall>[0], () => string, string, string, string][] = [
+				[
+					{ ...base, backend: "claude-code" },
+					() => processDir,
+					processDir,
+					"caller-process",
+					"this agent's own process directory",
+				],
+				[
+					{ ...base, backend: "claude-code", callerIsCodex: true, callerCwd: recordDir },
+					neverRead,
+					recordDir,
+					"codex-caller-record",
+					"this Codex caller's own record directory",
+				],
+				[
+					{ ...base, backend: "claude-code", cwd: requestedDir },
+					() => processDir,
+					requestedDir,
+					"requested",
+					"the requested start directory",
+				],
+			];
+			try {
+				for (const [params, callerProcessCwd, dir, source, sourceText] of rows) {
+					const { run, calls } = scriptedRun([
+						{ status: 0, stdout: CALLER_PANE_OK },
+						{ status: 0, stdout: TAB_OK },
+						startReplyEchoingArgv(START_OK),
+					]);
+					const result = await herdrFreshCall(params, run, HERDR_ENV, NONCE, undefined, { callerProcessCwd });
+					if (!result.ok) return false;
+					const at = calls[1].indexOf("--cwd");
+					if (at === -1 || calls[1][at + 1] !== dir) return false;
+					if (result.receipt.cwd !== dir || result.receipt.cwdSource !== source) return false;
+					const text = renderHerdrFreshCall(result).text;
+					if (!text.includes(`  cwd:      ${dir} (${sourceText}, sent explicitly — not an observation)\n`))
+						return false;
+				}
+				return true;
+			} finally {
+				fs.rmSync(root, { recursive: true, force: true });
+			}
+		})(),
+	);
+	ok(
+		'[QK:HFC-CWD-EMPTY-IS-OMITTED] an empty cwd means OMITTED, exactly as the public verb has always meant it — reading it as a path made a documented no-op into an invalid-directory refusal; since #157 A-L1x omitted means the caller\'s own directory, sent explicitly, so `""` and no cwd produce the same tab create',
+		await (async () => {
+			const processDir = fs.mkdtempSync(path.join(os.tmpdir(), "entwurf-herdr-empty."));
+			try {
+				const variants: Parameters<typeof herdrFreshCall>[0][] = [
+					{ ...base, backend: "claude-code", cwd: "" },
+					{ ...base, backend: "claude-code" },
+				];
+				const tabCreates: string[][] = [];
+				for (const params of variants) {
+					const { run, calls } = scriptedRun([
+						{ status: 0, stdout: CALLER_PANE_OK },
+						{ status: 0, stdout: TAB_OK },
+						startReplyEchoingArgv(START_OK),
+					]);
+					const result = await herdrFreshCall(params, run, HERDR_ENV, NONCE, undefined, {
+						callerProcessCwd: () => processDir,
+					});
+					if (!result.ok || result.receipt.cwd !== processDir || result.receipt.cwdSource !== "caller-process")
+						return false;
+					tabCreates.push(calls[1]);
+				}
+				const at = tabCreates[0].indexOf("--cwd");
+				return (
+					JSON.stringify(tabCreates[0]) === JSON.stringify(tabCreates[1]) &&
+					at !== -1 &&
+					tabCreates[0][at + 1] === processDir
+				);
+			} finally {
+				fs.rmSync(processDir, { recursive: true, force: true });
+			}
 		})(),
 	);
 	ok(
@@ -1012,9 +1148,9 @@ async function main(): Promise<void> {
 			const reads = calls.filter((call) => call[0] === "agent" && call[1] === "get");
 			return (
 				result.ok &&
-				result.receipt.witness.state === "reported" &&
-				result.receipt.witness.reads === 2 &&
-				result.receipt.witness.settleMs === 2 * HERDR_AGENT_SESSION_POLL_MS &&
+				result.receipt.witness?.state === "reported" &&
+				result.receipt.witness?.reads === 2 &&
+				result.receipt.witness?.settleMs === 2 * HERDR_AGENT_SESSION_POLL_MS &&
 				reads.length === 2 &&
 				// EXACT NAME, both times. A listing would make us pick "the one that looks like
 				// ours" out of every agent on the server — the guess this rail refuses.
@@ -1040,9 +1176,9 @@ async function main(): Promise<void> {
 			const expectedReads = HERDR_AGENT_SESSION_SETTLE_MS / HERDR_AGENT_SESSION_POLL_MS;
 			return (
 				result.ok &&
-				result.receipt.witness.state === "unavailable" &&
-				result.receipt.witness.settleMs === HERDR_AGENT_SESSION_SETTLE_MS &&
-				result.receipt.witness.reads === expectedReads &&
+				result.receipt.witness?.state === "unavailable" &&
+				result.receipt.witness?.settleMs === HERDR_AGENT_SESSION_SETTLE_MS &&
+				result.receipt.witness?.reads === expectedReads &&
 				// The whole point: nothing was closed, and the window is bounded rather than open.
 				!calls.some((call) => call[0] === "pane" && call[1] === "close") &&
 				clock.elapsed() === HERDR_AGENT_SESSION_SETTLE_MS &&
@@ -1067,8 +1203,8 @@ async function main(): Promise<void> {
 			if (!result.ok) return false;
 			const text = renderHerdrFreshCall(result).text;
 			return (
-				result.receipt.witness.state === "unobserved" &&
-				result.receipt.witness.settleMs === HERDR_AGENT_SESSION_SETTLE_MS &&
+				result.receipt.witness?.state === "unobserved" &&
+				result.receipt.witness?.settleMs === HERDR_AGENT_SESSION_SETTLE_MS &&
 				text.includes("unobserved after") &&
 				text.includes("says nothing about whether the sibling is running") &&
 				// THE DEFECT THIS CELL OWNS: a receipt that never got a readable answer used to
@@ -1092,7 +1228,7 @@ async function main(): Promise<void> {
 			const result = await herdrFreshCall({ ...base, backend: "claude-code" }, run, HERDR_ENV, NONCE, clock);
 			return (
 				result.ok &&
-				result.receipt.witness.state === "unobserved" &&
+				result.receipt.witness?.state === "unobserved" &&
 				!calls.some((call) => call[0] === "pane" && call[1] === "close")
 			);
 		})(),

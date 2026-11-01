@@ -171,6 +171,23 @@
 			"signatureSource": "scripts/check-herdr-plugin.ts"
 		},
 		{
+			"claim": "HPL-RAILS-DOMAINS-DISTINCT",
+			"title": "the status pane hands pi-durable to the RAILS block as an agent-start backend, so the pane still lists all three fresh-call backends but presents pi-durable as something herdr starts as an agent, with an empty layout group (#157 A-L2)",
+			"subject": "plugins/herdr/lib/status.mjs",
+			"find": [
+				"\t\t\tagentStartBackends: HERDR_AGENT_START_BACKENDS,",
+				"\t\t\tlayoutBackends: HERDR_LAYOUT_LAUNCH_BACKENDS,"
+			],
+			"replace": [
+				"\t\t\tagentStartBackends: [...HERDR_AGENT_START_BACKENDS, ...HERDR_LAYOUT_LAUNCH_BACKENDS],",
+				"\t\t\tlayoutBackends: [],"
+			],
+			"gate": ["bash", "run.sh", "check-herdr-plugin"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:HPL-RAILS-DOMAINS-DISTINCT]",
+			"signatureSource": "scripts/check-herdr-plugin.ts"
+		},
+		{
 			"claim": "HPL-LEDGER-FALLBACK-READS-CITIZENS",
 			"title": "the D3=C fallback is removed, so a correct plugin install — which puts nothing on PATH — closes its own first screen with entwurf-not-found again, and the operator is back to setting ENTWURF_BIN by hand",
 			"subject": "plugins/herdr/lib/status.mjs",

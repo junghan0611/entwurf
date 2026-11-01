@@ -16,6 +16,10 @@
  * model and the SDK's own storage failing on demand: tool output the model reads, a Session that fails
  * and closes itself, the receiver that retires with it, and a failed compaction kept on screen.
  *
+ * The owner fence (#157 B3) is observed in its own child that opens the carrier's runtime directly and through the
+ * real bootstrap, with the SDK's storage, the provider runtime and the env cleanup failing on demand: admission before
+ * the native lease on every owned path, and the end each failure leaves in the claim.
+ *
  * The stream transport and the reference compaction policy (#143) are observed in a third child that drives the
  * real bootstrap against a loopback WebSocket server through the published Codex Responses provider: the frames that
  * server receives decide.
@@ -425,6 +429,9 @@ const { openNodeSqliteStorage } = await import("@earendil-works/pi-durable/stora
 const carrier = new URL("./pi/pi-durable/carrier/", "file://" + process.cwd() + "/").href;
 const { TaskBadge, describeTask, durableLayout } = await import(carrier + "tui.js");
 const { openDurable } = await import(carrier + "runtime.js");
+// Every owned open takes the owner fence (#157 B3); this one is the compiled twin the packaged bootstrap builds.
+const { createPiDurableOwnerFence } = await import(new URL("./mcp/entwurf-bridge/dist/pi-extensions/lib/pi-durable-owner-fence.js", "file://" + process.cwd() + "/").href);
+const fence = createPiDurableOwnerFence();
 const { Container, ScrollView, Text, TruncatedText, TuiAltScreen, VStack } = await import("@earendil-works/pi-tui");
 const dist = new URL(".", import.meta.resolve("@earendil-works/pi-coding-agent")).href;
 (await import(dist + "modes/interactive/theme/theme.js")).initTheme();
@@ -451,7 +458,7 @@ const Hold = {
 };
 const extension = { name: "footer-oracle", tasks: [Hold] };
 
-const fresh = await openDurable({ cwd: project, extensions: [extension] });
+const fresh = await openDurable({ cwd: project, extensions: [extension], fence });
 const seen = (d) => ({ observed: d.view.current().tasks !== undefined, panel: d.view.current().tasksPanel });
 const runtime = { opened: seen(fresh) };
 await fresh.controller.toggleTasks();
@@ -469,10 +476,12 @@ const sessions = (dir) => readdirSync(dir).flatMap((name) => {
 const databases = sessions(process.env.PI_CODING_AGENT_DIR);
 const registry = createRegistry();
 registry.install(extension);
+// A NON-PARTICIPANT fixture: this direct SDK open takes neither the owner fence nor the native lease, so the fence
+// cannot see it (G-unleased); it only seeds the task the continued open below reads.
 const seeding = await Harness.open(await openNodeSqliteStorage(databases[0]), { models: await ModelRuntime.create(), registry }, context);
 await (await seeding.root(context, {})).commit((tx) => tx.createTask(Hold, {}, { ownership: { kind: "conversation" }, background: true }), context);
 await seeding.close(context);
-const continued = await openDurable({ cwd: project, continueSession: true, extensions: [extension] });
+const continued = await openDurable({ cwd: project, continueSession: true, extensions: [extension], fence });
 const live = () => {
 	const view = continued.view.current();
 	const badge = new TaskBadge();
@@ -1536,7 +1545,7 @@ describe("the carrier on the 1.2 SDK, driven through the real bootstrap (#141)",
 		expect(chosen.reason).toBe("returned");
 		expect(chosen.opened).toEqual([
 			{
-				keys: ["continueSession", "cwd", "extensions", "session"],
+				keys: ["continueSession", "cwd", "extensions", "fence", "session"],
 				session: older.id,
 				continueSession: false,
 				extensions: ["entwurf"],
@@ -1558,7 +1567,7 @@ describe("the carrier on the 1.2 SDK, driven through the real bootstrap (#141)",
 	it("on the real carrier, --session with an explicit --native-module file or --native-module-dir evaluates the operator's modules before the TUI loads, hands them to the open after the contact, and still reopens exactly the named session as saved; naming both is refused before any operator module is evaluated", () => {
 		const { older, before, withFile, withDir, withBoth } = report.session;
 		const named = (extensions: string[]) => ({
-			keys: ["continueSession", "cwd", "extensions", "session"],
+			keys: ["continueSession", "cwd", "extensions", "fence", "session"],
 			session: older.id,
 			continueSession: false,
 			extensions,
@@ -1662,6 +1671,8 @@ const launch = async (argv) => {
 				extensions: options.extensions.map((extension) => extension.name),
 				packagePrepared: process.env.PI_PACKAGE_DIR === probePackage,
 			});
+			// The owned selectSession hands the contact an existing directory; this fake open does too.
+			fs.mkdirSync(path.join(sandbox, "durable"), { recursive: true });
 			return {
 				view: { current: () => ({ session: { id: options.session, directory: path.join(sandbox, "durable"), cwd: options.cwd } }) },
 				controller: {},
@@ -1782,7 +1793,7 @@ describe("--session ahead of the operator's environment preparation (#157 G3 B-L
 		const grammar = fs.readFileSync(path.join(DURABLE, "carrier", "session-name.js"), "utf8");
 		expect(grammar).not.toMatch(/\b(?:from|import)\s*["'(]|\brequire\s*\(/);
 		const named = (extensions: string[]) => ({
-			keys: ["continueSession", "cwd", "extensions", "session"],
+			keys: ["continueSession", "cwd", "extensions", "fence", "session"],
 			session: "1759622400000-0b5e2a4c-1f3d-4e8a-9c7b-2d6f8e1a3c5b",
 			continueSession: false,
 			extensions,
@@ -1809,6 +1820,522 @@ describe("--session ahead of the operator's environment preparation (#157 G3 B-L
 			]);
 			expect(report?.config, mode).toEqual({ name: "session-order-probe", version: "0.0.0-session-order-probe" });
 		}
+	});
+});
+
+/**
+ * #157 B3, the owner fence through the owned runtime: ONE child opens the committed carrier's `openDurable` directly
+ * (with the compiled fence the packaged bootstrap builds) and through the real bootstrap (`main --resume` and
+ * `openDurableCitizen`, whose own fence is observed through the open seam). The SDK's own storage fails on demand —
+ * its close, or a commit — and so do the SDK's `Harness.open`, the provider runtime the app creates before any
+ * storage open, and the carrier's env cleanup; every storage close is logged with how it settled. The claim is read back as raw JSON from the session directory, and `${D}.lock` is looked at
+ * directly; nothing else about the fence is asked of the subject.
+ */
+const FENCE_ORACLE = `
+const fs = await import("node:fs");
+const path = await import("node:path");
+const { createHash } = await import("node:crypto");
+const { fauxProvider } = await import("@earendil-works/pi-ai");
+const { openNodeSqliteStorage } = await import("@earendil-works/pi-durable/storage/sqlite/node");
+const { BACKGROUND_CONTEXT: context } = await import("@earendil-works/chord/context");
+const repo = "file://" + process.cwd() + "/";
+const { openDurable } = await import(new URL("./pi/pi-durable/carrier/runtime.js", repo).href);
+const { ExecutionEnvs } = await import(new URL("./pi/pi-durable/carrier/harness-setup.js", repo).href);
+const { main, openDurableCitizen } = await import(new URL("./pi/pi-durable/bootstrap.mjs", repo).href);
+const { createPiDurableOwnerFence } = await import(new URL("./mcp/entwurf-bridge/dist/pi-extensions/lib/pi-durable-owner-fence.js", repo).href);
+const { PI_DURABLE_TOOL_SCHEMAS } = await import(new URL("./mcp/entwurf-bridge/dist/pi-extensions/meta-bridge-pi-durable.js", repo).href);
+const dist = new URL(".", import.meta.resolve("@earendil-works/pi-coding-agent")).href;
+const { ModelRuntime } = await import(dist + "core/model-runtime.js");
+const sandbox = process.env.ORACLE_SANDBOX;
+const agentDir = process.env.PI_CODING_AGENT_DIR;
+const report = { waits: {} };
+
+// The provider runtime is the first thing the app creates after the lease, before any storage open.
+const faux = fauxProvider({ provider: "faux", models: [{ id: "scripted" }] });
+let failModelRuntime = false;
+const create = ModelRuntime.create.bind(ModelRuntime);
+ModelRuntime.create = async (...args) => {
+	if (failModelRuntime) {
+		failModelRuntime = false;
+		throw new Error("FENCE-INJECTED-BEFORE-STORAGE");
+	}
+	const runtime = await create(...args);
+	runtime.registerNativeProvider(faux.provider);
+	return runtime;
+};
+
+// The SDK's Harness.open rejects once when armed, before it uses the storage it is handed.
+const { Harness } = await import("@earendil-works/pi-durable");
+const harnessOpen = Harness.open;
+let failHarnessOpen;
+Harness.open = function (...args) {
+	if (failHarnessOpen !== undefined) {
+		const error = failHarnessOpen;
+		failHarnessOpen = undefined;
+		return Promise.reject(error);
+	}
+	return harnessOpen.apply(this, args);
+};
+
+// The SDK's own SqliteStorage: its close and its commit reject once when armed.
+const probe = await openNodeSqliteStorage(path.join(sandbox, "probe.sqlite"));
+const storageProto = Object.getPrototypeOf(probe);
+for (const method of ["commit", "close"]) {
+	if (storageProto === Object.prototype || !Object.hasOwn(storageProto, method)) throw new Error("storage " + method + " is not a class method");
+}
+await probe.close(context);
+const commit = storageProto.commit;
+const close = storageProto.close;
+let failCommit = false;
+let failClose;
+storageProto.commit = function (...args) {
+	if (failCommit) {
+		failCommit = false;
+		return Promise.reject(new Error("FENCE-INJECTED-COMMIT-FAILURE"));
+	}
+	return commit.apply(this, args);
+};
+// Every storage close is logged with how it settled.
+const closeLog = [];
+storageProto.close = function (...args) {
+	if (failClose !== undefined) {
+		const error = failClose;
+		failClose = undefined;
+		closeLog.push("rejected");
+		return Promise.reject(error);
+	}
+	const at = closeLog.push("pending") - 1;
+	return close.apply(this, args).then(
+		(value) => {
+			closeLog[at] = "resolved";
+			return value;
+		},
+		(error) => {
+			closeLog[at] = "rejected";
+			throw error;
+		},
+	);
+};
+// The carrier's env cleanup, the step after a resolved storage close.
+if (!Object.hasOwn(ExecutionEnvs.prototype, "cleanup")) throw new Error("env cleanup is not a class method");
+const cleanup = ExecutionEnvs.prototype.cleanup;
+let failEnv;
+ExecutionEnvs.prototype.cleanup = function (...args) {
+	if (failEnv !== undefined) {
+		const error = failEnv;
+		failEnv = undefined;
+		return Promise.reject(error);
+	}
+	return cleanup.apply(this, args);
+};
+
+const roots = (name) => {
+	const base = path.join(sandbox, "meta-" + name);
+	const dirs = { sessionsDir: path.join(base, "sessions"), sendersDir: path.join(base, "senders"), mailboxDir: path.join(base, "mailbox"), receiversDir: path.join(base, "receivers") };
+	for (const dir of Object.values(dirs)) fs.mkdirSync(dir, { recursive: true });
+	return { ...dirs, env: {}, connect: async () => ({
+		pid: 4242,
+		listTools: async () => Object.entries(PI_DURABLE_TOOL_SCHEMAS).map(([name, inputSchema]) => ({ name, inputSchema })),
+		callTool: async (name) => ({ text: name + " ok", isError: false }),
+		close: async () => {},
+	}) };
+};
+const project = (name) => {
+	const dir = path.join(sandbox, "project-" + name);
+	fs.mkdirSync(dir, { recursive: true });
+	return dir;
+};
+const rootOf = (cwd) => path.join(agentDir, "experimental", "durable-sessions", createHash("sha256").update(fs.realpathSync(cwd)).digest("hex").slice(0, 24));
+const claimOf = (directory) => {
+	if (directory === undefined) return null;
+	try {
+		return JSON.parse(fs.readFileSync(path.join(directory, "entwurf-owner.json"), "utf8"));
+	} catch (error) {
+		return error.code === "ENOENT" ? null : { unreadable: String(error) };
+	}
+};
+const leaseOf = (directory) => directory !== undefined && fs.existsSync(directory + ".lock");
+const message = (error) => (error === undefined || error === null ? null : String(error.message ?? error));
+const settle = (promise) => promise.then(() => ({ resolved: true }), (error) => ({ resolved: false, error }));
+const until = async (what, predicate, ms = 5000) => {
+	const end = Date.now() + ms;
+	while (!predicate()) {
+		if (Date.now() > end) {
+			report.waits[what] = "timed out";
+			return false;
+		}
+		await new Promise((resolve) => setTimeout(resolve, 10));
+	}
+	report.waits[what] = "met";
+	return true;
+};
+// A fence that tells which directory it admitted and whether its lease existed at that moment, then admits.
+const spy = (fence, seen, label) => ({
+	admit: async (request) => {
+		seen.push({ label, lockAtAdmit: fs.existsSync(request.directory + ".lock"), created: request.created, directory: request.directory });
+		return fence.admit(request);
+	},
+});
+const fence = createPiDurableOwnerFence();
+const opened = async (name, options = {}) => {
+	const seen = [];
+	const durable = await openDurable({ cwd: project(name), ...options, fence: spy(fence, seen, name) });
+	return { durable, directory: seen[0].directory };
+};
+
+// 1. A JS caller without a fence: refused before the session root exists.
+{
+	const cwd = project("required");
+	const result = await settle(openDurable({ cwd }));
+	report.required = { resolved: result.resolved, error: message(result.error), rootExists: fs.existsSync(rootOf(cwd)) };
+}
+
+// 2. Admission before the lease on every owned path: fresh, exact, continue, the --resume picker and
+//    openDurableCitizen — the last two through the bootstrap's own fence, wrapped at the open seam.
+{
+	const cwd = project("admit");
+	const seen = [];
+	const handed = [];
+	const step = async (label, run) => {
+		const result = await settle(run());
+		if (!result.resolved) report.admitErrors = { ...(report.admitErrors ?? {}), [label]: message(result.error) };
+	};
+	let id;
+	await step("fresh", async () => {
+		const durable = await openDurable({ cwd, fence: spy(fence, seen, "fresh") });
+		id = durable.view.current().session.id;
+		await durable.close();
+	});
+	await step("exact", async () => (await openDurable({ cwd, session: id, fence: spy(fence, seen, "exact") })).close());
+	await step("continue", async () => (await openDurable({ cwd, continueSession: true, fence: spy(fence, seen, "continue") })).close());
+	const wrap = (label) => async (options) => {
+		handed.push({ label, admit: typeof options.fence?.admit });
+		return openDurable({ ...options, fence: spy(options.fence, seen, label) });
+	};
+	const contact = roots("admit");
+	const here = process.cwd();
+	process.chdir(cwd);
+	try {
+		await step("picker", () => main(["--resume"], { loadTui: async () => ({ runDurableTui: async () => {} }), contact, pick: async () => id, open: wrap("picker") }));
+	} finally {
+		process.chdir(here);
+	}
+	await step("citizen", async () => (await openDurableCitizen({ cwd, contact, model: { provider: "faux", model: "scripted" }, open: wrap("citizen") })).close());
+	report.admit = { seen: seen.map(({ directory, ...rest }) => rest), handed };
+}
+
+// 3. An init failure before the storage open is called, the lease released: the never-opened, released row.
+{
+	failModelRuntime = true;
+	const seen = [];
+	const result = await settle(openDurable({ cwd: project("never-opened"), fence: spy(fence, seen, "never-opened") }));
+	const directory = seen[0]?.directory;
+	report.neverOpened = { resolved: result.resolved, error: message(result.error), claim: claimOf(directory), lease: leaseOf(directory) };
+}
+
+// 4. An init failure once the storage open was attempted: an open that rejects with no handle (the database path is
+//    a directory), and a Harness that opened and then failed (a model the catalog does not hold).
+{
+	const cwd = project("attempted");
+	const name = "0000000000005-00000000-0000-0000-0000-000000000005";
+	const directory = path.join(rootOf(cwd), name);
+	fs.mkdirSync(path.join(directory, "session.sqlite"), { recursive: true });
+	const rejected = await settle(openDurable({ cwd, session: name, fence }));
+	const seen = [];
+	const harnessFailed = await settle(openDurable({ cwd: project("attempted-harness"), model: { provider: "faux", model: "not-in-the-catalog" }, fence: spy(fence, seen, "harness") }));
+	report.attempted = {
+		rejected: { resolved: rejected.resolved, error: message(rejected.error), claim: claimOf(directory), lease: leaseOf(directory) },
+		harness: { resolved: harnessFailed.resolved, error: message(harnessFailed.error), claim: claimOf(seen[0]?.directory), lease: leaseOf(seen[0]?.directory) },
+	};
+}
+
+// 5. The first storage close fails: the claim, a second caller close() and the lease.
+{
+	const { durable, directory } = await opened("close-fails");
+	const injected = new Error("FENCE-INJECTED-CLOSE-FAILURE");
+	failClose = injected;
+	const first = await settle(durable.close());
+	const claimAfterFirst = claimOf(directory);
+	const leaseAfterFirst = leaseOf(directory);
+	const second = await settle(durable.close());
+	report.closeFails = {
+		first: { resolved: first.resolved, error: message(first.error), injected: first.error === injected },
+		second: { resolved: second.resolved, same: !first.resolved && first.error === second.error },
+		armedLeft: failClose !== undefined,
+		claimAfterFirst,
+		claimAfterSecond: claimOf(directory),
+		leaseAfterFirst,
+		leaseAfterSecond: leaseOf(directory),
+	};
+}
+
+// 6. A Session that failed and closed itself: its close() resolves, and the end is still no verified close.
+{
+	const { durable, directory } = await opened("self-closed", { model: { provider: "faux", model: "scripted" } });
+	failCommit = true;
+	await durable.controller.submit("go", "steer");
+	await until("self-close", () => durable.view.current().failure !== undefined);
+	const result = await settle(durable.close());
+	report.selfClosed = { armedLeft: failCommit, resolved: result.resolved, error: message(result.error), claim: claimOf(directory), lease: leaseOf(directory) };
+}
+
+// 7. The env cleanup after a verified storage close and release: success, then failure.
+{
+	const ok = await opened("env-ok");
+	const okResult = await settle(ok.durable.close());
+	const bad = await opened("env-failure");
+	const envError = new Error("FENCE-INJECTED-ENV-CLEANUP-FAILURE");
+	failEnv = envError;
+	const badResult = await settle(bad.durable.close());
+	report.env = {
+		success: { resolved: okResult.resolved, error: message(okResult.error), claim: claimOf(ok.directory), lease: leaseOf(ok.directory) },
+		failure: { resolved: badResult.resolved, same: badResult.error === envError, error: message(badResult.error), claim: claimOf(bad.directory), lease: leaseOf(bad.directory) },
+	};
+}
+
+// 8. Harness.open itself rejects after the storage resolved, before any model is resolved: the handle it was handed
+//    is closed through the storage's own close — once that close resolves, once it rejects.
+{
+	report.harnessOpen = {};
+	for (const [cell, closeError] of [["closeResolves", undefined], ["closeRejects", new Error("FENCE-INJECTED-HANDLE-CLOSE-FAILURE")]]) {
+		const seen = [];
+		const openError = new Error("FENCE-INJECTED-HARNESS-OPEN");
+		closeLog.length = 0;
+		failHarnessOpen = openError;
+		failClose = closeError;
+		const result = await settle(openDurable({ cwd: project("harness-open-" + cell), fence: spy(fence, seen, cell) }));
+		const directory = seen[0]?.directory;
+		report.harnessOpen[cell] = {
+			armedLeft: failHarnessOpen !== undefined || failClose !== undefined,
+			resolved: result.resolved,
+			thrownIsOpenError: result.error === openError,
+			aggregate: result.error instanceof AggregateError ? { first: result.error.errors[0] === openError, second: result.error.errors[1] === closeError, count: result.error.errors.length } : null,
+			closes: [...closeLog],
+			claim: claimOf(directory),
+			lease: leaseOf(directory),
+		};
+		failHarnessOpen = undefined;
+		failClose = undefined;
+	}
+}
+
+console.log(JSON.stringify(report));
+// Bounded: a lease or handle a defect leaves behind must not hold the child until the parent's timeout.
+process.exit(0);
+`;
+
+interface FenceClaimView {
+	state: string;
+	lease: string;
+	generation: string;
+	end?: { storage: string; lease: string; envCleanup?: string; cause?: string };
+	unreadable?: string;
+}
+
+interface FenceReport {
+	waits: Record<string, "met" | "timed out">;
+	required: { resolved: boolean; error: string | null; rootExists: boolean };
+	admitErrors?: Record<string, string | null>;
+	admit: {
+		seen: { label: string; lockAtAdmit: boolean; created: boolean }[];
+		handed: { label: string; admit: string }[];
+	};
+	neverOpened: { resolved: boolean; error: string | null; claim: FenceClaimView | null; lease: boolean };
+	attempted: Record<
+		"rejected" | "harness",
+		{ resolved: boolean; error: string | null; claim: FenceClaimView | null; lease: boolean }
+	>;
+	closeFails: {
+		first: { resolved: boolean; error: string | null; injected: boolean };
+		second: { resolved: boolean; same: boolean };
+		armedLeft: boolean;
+		claimAfterFirst: FenceClaimView | null;
+		claimAfterSecond: FenceClaimView | null;
+		leaseAfterFirst: boolean;
+		leaseAfterSecond: boolean;
+	};
+	selfClosed: {
+		armedLeft: boolean;
+		resolved: boolean;
+		error: string | null;
+		claim: FenceClaimView | null;
+		lease: boolean;
+	};
+	env: Record<
+		"success" | "failure",
+		{ resolved: boolean; same?: boolean; error: string | null; claim: FenceClaimView | null; lease: boolean }
+	>;
+	harnessOpen: Record<
+		"closeResolves" | "closeRejects",
+		{
+			armedLeft: boolean;
+			resolved: boolean;
+			thrownIsOpenError: boolean;
+			aggregate: { first: boolean; second: boolean; count: number } | null;
+			closes: string[];
+			claim: FenceClaimView | null;
+			lease: boolean;
+		}
+	>;
+}
+
+describe("the owner fence through the owned runtime (#157 B3, clean child)", () => {
+	let report: FenceReport;
+
+	beforeAll(() => {
+		const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), "pi-durable-fence-"));
+		try {
+			const agent = path.join(sandbox, "home", ".pi", "agent");
+			fs.mkdirSync(agent, { recursive: true });
+			const run = spawnSync(
+				process.execPath,
+				["--import", path.join(DURABLE, "carrier-resolver.mjs"), "--input-type=module", "-e", FENCE_ORACLE],
+				{
+					cwd: ROOT,
+					encoding: "utf8",
+					timeout: 120_000,
+					env: {
+						PATH: process.env.PATH ?? "",
+						HOME: path.join(sandbox, "home"),
+						PI_CODING_AGENT_DIR: agent,
+						PI_OFFLINE: "1",
+						ORACLE_SANDBOX: sandbox,
+					},
+				},
+			);
+			expect(run.status, run.stderr).toBe(0);
+			report = JSON.parse(run.stdout.trim().split("\n").at(-1) ?? "");
+		} finally {
+			fs.rmSync(sandbox, { recursive: true, force: true });
+		}
+	}, 150_000);
+
+	it("[QK:PDF-ADMIT-BEFORE-LEASE] every owned open — fresh, exact, continue, the --resume picker and openDurableCitizen — is admitted while its lease does not exist yet, the last two by the fence the bootstrap itself hands the open", () => {
+		expect(report.admitErrors).toBeUndefined();
+		expect(report.admit.seen.map((s) => s.label)).toEqual(["fresh", "exact", "continue", "picker", "citizen"]);
+		expect(report.admit.seen.map((s) => s.lockAtAdmit)).toEqual([false, false, false, false, false]);
+		expect(report.admit.seen.map((s) => s.created)).toEqual([true, false, false, false, true]);
+		expect(report.admit.handed).toEqual([
+			{ label: "picker", admit: "function" },
+			{ label: "citizen", admit: "function" },
+		]);
+	});
+
+	it("[QK:PDF-INIT-NEVER-OPENED-CLOSED] an init failure before the storage open is called, with the lease released, ends closed as never-opened", () => {
+		const { resolved, error, claim, lease } = report.neverOpened;
+		expect(resolved).toBe(false);
+		expect(error).toBe("FENCE-INJECTED-BEFORE-STORAGE");
+		expect([claim?.state, claim?.lease, claim?.end?.storage, claim?.end?.lease]).toEqual([
+			"closed",
+			"released",
+			"never-opened",
+			"released",
+		]);
+		expect(claim?.end?.cause).toBe("FENCE-INJECTED-BEFORE-STORAGE");
+		expect(lease).toBe(false);
+	});
+
+	it("[QK:PDF-INIT-ATTEMPTED-NOT-CLOSED] once the storage open was attempted, an open that rejected with no handle and a Harness that failed after opening end close-failed, not closed, though the lease was released", () => {
+		for (const [cell, outcome] of Object.entries(report.attempted)) {
+			expect(outcome.resolved, cell).toBe(false);
+			expect(outcome.claim?.state, cell).toBe("close-failed");
+			expect(outcome.claim?.lease, cell).toBe("released");
+			expect(["unknown", "failed"], cell).toContain(outcome.claim?.end?.storage);
+			expect(outcome.claim?.end?.lease, cell).toBe("released");
+			expect(outcome.claim?.end?.cause, cell).toBe(outcome.error?.slice(0, 512));
+			expect(outcome.lease, cell).toBe(false);
+		}
+		expect(report.attempted.rejected.claim?.end?.storage).toBe("unknown");
+		expect(report.attempted.rejected.error).toContain("unable to open database file");
+	});
+
+	it("[QK:PDF-INIT-HARNESS-OPEN-CLOSES-HANDLE] when Harness.open itself rejects after the storage resolved, the handle it was handed is closed once through its own close: a resolved close is still no verified one (close-failed, storage unknown, the open error thrown as is), and a rejected close is a failed storage with both errors thrown, the open error first", () => {
+		const { closeResolves: ok, closeRejects: bad } = report.harnessOpen;
+		expect([ok.armedLeft, bad.armedLeft]).toEqual([false, false]);
+		expect(ok.closes).toEqual(["resolved"]);
+		expect([ok.resolved, ok.thrownIsOpenError, ok.aggregate]).toEqual([false, true, null]);
+		expect([ok.claim?.state, ok.claim?.lease, ok.claim?.end?.storage, ok.claim?.end?.lease]).toEqual([
+			"close-failed",
+			"released",
+			"unknown",
+			"released",
+		]);
+		expect(ok.claim?.end?.cause).toBe("FENCE-INJECTED-HARNESS-OPEN");
+		expect(bad.closes).toEqual(["rejected"]);
+		expect([bad.resolved, bad.thrownIsOpenError, bad.aggregate]).toEqual([
+			false,
+			false,
+			{ first: true, second: true, count: 2 },
+		]);
+		expect([bad.claim?.state, bad.claim?.lease, bad.claim?.end?.storage, bad.claim?.end?.lease]).toEqual([
+			"close-failed",
+			"released",
+			"failed",
+			"released",
+		]);
+		expect(bad.claim?.end?.cause).toBe("FENCE-INJECTED-HARNESS-OPEN; FENCE-INJECTED-HANDLE-CLOSE-FAILURE");
+		expect([ok.lease, bad.lease]).toEqual([false, false]);
+	});
+
+	it("[QK:PDF-FIRST-CLOSE-FAILURE-STICKY] a failed first storage close is close-failed with storage failed; a second close() returns that same rejection and runs nothing again: the lease was released once and the claim's generation does not move", () => {
+		const r = report.closeFails;
+		expect(r.armedLeft).toBe(false);
+		expect(r.first.resolved).toBe(false);
+		expect(r.first.error).toContain("FENCE-INJECTED-CLOSE-FAILURE");
+		expect(r.second).toEqual({ resolved: false, same: true });
+		expect([r.claimAfterFirst?.state, r.claimAfterFirst?.end?.storage]).toEqual(["close-failed", "failed"]);
+		expect(r.claimAfterSecond).toEqual(r.claimAfterFirst);
+		expect([r.leaseAfterFirst, r.leaseAfterSecond]).toEqual([false, false]);
+	});
+
+	it("[QK:PDF-CLOSE-FAIL-KEEPS-CLAIM] a storage close failure, and a Session that failed and closed itself, end close-failed: the lease is released and the claim is kept", () => {
+		const failed = report.closeFails.claimAfterFirst;
+		expect([failed?.state, failed?.lease, failed?.end?.storage, failed?.end?.lease]).toEqual([
+			"close-failed",
+			"released",
+			"failed",
+			"released",
+		]);
+		expect(report.closeFails.leaseAfterFirst).toBe(false);
+		const self = report.selfClosed;
+		expect(report.waits["self-close"]).toBe("met");
+		expect(self.armedLeft).toBe(false);
+		expect(self.resolved).toBe(true);
+		expect([self.claim?.state, self.claim?.lease, self.claim?.end?.storage, self.claim?.end?.lease]).toEqual([
+			"close-failed",
+			"released",
+			"failed",
+			"released",
+		]);
+		expect(self.lease).toBe(false);
+	});
+
+	it("[QK:PDF-ENV-CLEANUP-SEPARATE] with the storage closed and the lease released, the env cleanup decides only the caller's result: success resolves, failure rejects with that error, and both persist the same closed end", () => {
+		const { success, failure } = report.env;
+		expect(success.resolved).toBe(true);
+		expect([
+			success.claim?.state,
+			success.claim?.lease,
+			success.claim?.end?.storage,
+			success.claim?.end?.lease,
+		]).toEqual(["closed", "released", "closed", "released"]);
+		expect(success.claim?.end?.envCleanup).toBeUndefined();
+		expect(failure.resolved).toBe(false);
+		expect(failure.same).toBe(true);
+		expect([
+			failure.claim?.state,
+			failure.claim?.lease,
+			failure.claim?.end?.storage,
+			failure.claim?.end?.lease,
+		]).toEqual(["closed", "released", "closed", "released"]);
+		expect(failure.claim?.end?.envCleanup).toBe("failed");
+		expect([success.lease, failure.lease]).toEqual([false, false]);
+	});
+
+	it("[QK:PDF-FENCE-REQUIRED] an open without a fence is refused as fence-required before the session root is created", () => {
+		expect(report.required.resolved).toBe(false);
+		expect(report.required.error).toMatch(/^fence-required: /);
+		expect(report.required.rootExists).toBe(false);
 	});
 });
 

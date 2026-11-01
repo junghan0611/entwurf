@@ -14,7 +14,9 @@
 //   fails and closes itself retires that doorbell at once;
 // - a launcher's first input, when given, is admitted to the root ONCE, after that birth;
 // - the TUI is handed the native view with the garden id on every conversation label
-//   (`withGardenIdentity`).
+//   (`withGardenIdentity`);
+// - every open takes the owner fence (#157 B3) — built once here from the compiled closure — inside
+//   the session directory before its native lease; a refusal opens nothing.
 // Nothing of the native registry, controller or TUI is rebuilt here.
 //
 // The durable app itself is this package's CARRIER (./carrier/, emitted from Entwurf's owned source
@@ -83,6 +85,7 @@
 import { readdirSync, realpathSync, statSync } from "node:fs";
 import { isAbsolute, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { createPiDurableOwnerFence } from "../../mcp/entwurf-bridge/dist/pi-extensions/lib/pi-durable-owner-fence.js";
 import { decodeOmpBootstrapPayload } from "../../mcp/entwurf-bridge/dist/pi-extensions/meta-bridge-omp.js";
 import {
 	closeAll,
@@ -99,6 +102,9 @@ const TUI = "./carrier/tui.js";
 const SESSIONS = "./carrier/sessions.js";
 /** The session-name grammar alone: no imports and no I/O, so reading it loads nothing an operator module may prepare. */
 const SESSION_NAME = "./carrier/session-name.js";
+
+/** The owner fence every open of this process hands the runtime (#157 B3). Building it reads and writes nothing. */
+const OWNER_FENCE = createPiDurableOwnerFence();
 
 /** The entwurf-bridge of THIS package closure: the one the contact spawns as its MCP hand. */
 export const PACKAGED_BRIDGE_ENTRY = fileURLToPath(
@@ -314,7 +320,7 @@ async function loadNativeModules(files) {
  *   firstInput?: string,
  *   extensions?: readonly object[],
  *   contact?: Record<string, unknown>,
- *   open?: (options: { cwd: string, continueSession: boolean, session?: string, extensions: readonly object[], model?: { provider: string, model: string } }) => Promise<any>,
+ *   open?: (options: { cwd: string, continueSession: boolean, session?: string, extensions: readonly object[], model?: { provider: string, model: string }, fence: object }) => Promise<any>,
  * }} options
  * @returns {Promise<{ durable: any, contact: any, attachment: { gardenId: string } & Record<string, any>, firstInput?: any, close(): Promise<void> }>}
  *   (stated, because the compiled closure carries no declarations: a cleanup path that rethrows
@@ -359,6 +365,7 @@ export async function openDurableCitizen({
 			...(session === undefined ? {} : { session }),
 			extensions: [contact.extension, ...extensions],
 			...(model === undefined ? {} : { model }),
+			fence: OWNER_FENCE,
 		});
 	} catch (error) {
 		contact.fail(error);

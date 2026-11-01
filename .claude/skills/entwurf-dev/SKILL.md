@@ -39,8 +39,10 @@ transcript를 가진 garden citizen이다.
 
 호출된 tool schema가 worktree 문서보다 우선한다. 이 스킬은 현재 S1 계약에 맞는다.
 
-- **레일은 이 프로세스가 어디에 있느냐로 정해진다(#116 C3).** `HERDR_ENV=1`이면 herdr pane에서 열리고
-  backend는 `pi | claude-code` 둘뿐이며, `placement`는 이름 붙여 거절된다. 그 밖에서는 지금까지대로
+- **레일은 이 프로세스가 어디에 있느냐로 정해진다(#116 C3).** `HERDR_ENV=1`이면 herdr에서 새 탭으로 열리고
+  backend는 셋이다: `pi | claude-code`는 herdr agent start로, `pi-durable`은 caller 자신의 herdr socket에
+  ONE `layout.apply`로(#157 A-L1 — `--kind`로 위장하지 않고, herdr agent 감지는 없다). `placement`는 이름
+  붙여 거절된다. 그 밖에서는 지금까지대로
   tmux에서 여섯 backend가 열린다. **둘 사이 fallback은 없다** — herdr 안인데 herdr context가 불완전하면
   herdr 이유로 거절하지, tmux 창을 대신 열지 않는다(그 창은 herdr 안에서 보이지 않는다). 호출자가 레일을
   고르는 파라미터는 없다. herdr receipt의 pane 좌표는 **view**이고 주소가 아니다 — 형제가 움직이면 바뀔 수
@@ -53,7 +55,13 @@ transcript를 가진 garden citizen이다.
   아니라 app-server의 것이기 때문이다. receipt는 고른 규칙을 이름으로 말한다(`requested` /
   `the Codex caller's own record directory`). cross-repo fresh 절 참조.
   `#`는 **tmux 레일에서만** 거절된다(tmux가 시작 디렉터리를 format 확장한다) — herdr 안에서는 평범한
-  경로 문자다. 빈 문자열·생략이 "caller cwd"인 것은 두 레일 공통이다.
+  경로 문자다. 빈 문자열·생략은 tmux 레일과 herdr 두 branch 모두에서 "caller cwd"다. herdr는
+  언제나 `cwd`를 명시로 보낸다(layout은 `root.cwd`, agent start는 `tab create --cwd`): 준 `cwd`가
+  먼저이고, 생략하면 일반 caller는 브리지 프로세스 자신의 cwd, 알려진 Codex caller는 자기 record
+  cwd이며, 그 record에 cwd가 없으면 process cwd로 대신하지 않고 `codex-caller-cwd-unavailable`로
+  거절한다(source: `chooseHerdrLayoutCwd`). 측정 범위: layout의 일반 caller는 #157 A-L1 R13 공개 n=1,
+  agent start의 일반 Pi caller는 A-L1x R2 공개 n=1(BASELINE)이다. Claude Code와 Codex의 경로는
+  source 계약이며 LIVE 미측정이고, 이전 n=1을 현재 B3 합성 후보의 Native LIVE로 승계하지 않는다.
   **심링크를 주면 두 문자열이 보이는데 정상이다**: entwurf는 경로를 해석하지 않고 tmux에 그대로
   넘기므로 receipt의 `cwd:`는 요청한 문자열 그대로이고, record·transcript 경로·callback envelope·
   `pane_current_path`는 OS가 해석한 실제 경로다(측정: `~/org` 요청 → record `/home/junghan/sync/org`).

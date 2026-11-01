@@ -6,6 +6,49 @@ import lockfile from "proper-lockfile";
 import { getAgentDir } from "../../config.ts";
 import { isSessionName } from "./session-name.ts";
 
+/**
+ * An owner's end as the opener observed it (#157 B3): the storage outcome of the first actual close, and the
+ * lease outcome of its release.
+ */
+export interface FenceEnd {
+	readonly storage: "closed" | "never-opened" | "failed" | "unknown";
+	readonly lease: "never-held" | "released" | "failed" | "unknown";
+	readonly envCleanup?: "failed";
+	readonly cause?: string;
+}
+
+/** One admitted owner of a session directory, from before its native lease through its end. */
+export interface FenceTicket {
+	/** Set immediately before the storage open is called; an end that says `never-opened` needs it unset. */
+	storageOpenAttempted: boolean;
+	/** The native lease was acquired. */
+	leased(): Promise<void>;
+	/** The storage open and the Harness open both resolved. */
+	storageOpened(): Promise<void>;
+	closed(end: FenceEnd): Promise<void>;
+	closeFailed(end: FenceEnd): Promise<void>;
+	/** The native lease was not acquired: nothing was opened and no lease was observed. */
+	endUnleased(): Promise<void>;
+}
+
+/** What an owned open hands the fence once its directory is chosen, before its native lease. */
+export interface FenceAdmission {
+	/** The directory exactly as selected; its lease is `${directory}.lock`. */
+	readonly directory: string;
+	/** The session id the directory was selected by. */
+	readonly selectedN: string;
+	/** This call's own `mkdir` created the directory. */
+	readonly created: boolean;
+}
+
+/**
+ * The owner fence every owned open takes before its native lease (#157 B3). Supplied by the host, never imported
+ * here; it admits this opener or refuses, and a refusal opens nothing.
+ */
+export interface SessionFence {
+	admit(request: FenceAdmission): Promise<FenceTicket>;
+}
+
 /** One session directory holding `session.sqlite`, locked by this process. */
 export interface SessionLocation {
 	id: string;
@@ -14,6 +57,8 @@ export interface SessionLocation {
 	cwd: string;
 	created: boolean;
 	release(): Promise<void>;
+	/** The fence's admission of this owner, admitted before the lease. */
+	ticket: FenceTicket;
 }
 
 /** One session of a directory as its files show it (#143): nothing in it is opened. */
@@ -79,8 +124,12 @@ export async function listSessions(cwdInput: string): Promise<SessionEntry[]> {
 	return sessions.sort((a, b) => (b.lastWriteAt ?? b.createdAt) - (a.lastWriteAt ?? a.createdAt));
 }
 
-/** A new session for `cwd`, its newest one with `continueSession`, or the existing one named by `sessionId`. */
+/**
+ * A new session for `cwd`, its newest one with `continueSession`, or the existing one named by `sessionId`, admitted
+ * by `fence` before its native lease is taken.
+ */
 export async function selectSession(
+	fence: SessionFence,
 	cwdInput: string,
 	continueSession: boolean,
 	sessionId?: string,
@@ -111,15 +160,36 @@ export async function selectSession(
 		created = true;
 	}
 
-	let release: () => Promise<void>;
-	try {
-		// A lock left by a crashed process goes stale after 10 s; wait that long before giving up.
-		release = await lockfile.lock(directory, {
-			realpath: false,
-			retries: { retries: 12, minTimeout: 1000, maxTimeout: 1000 },
+	// The owner fence admits this opener BEFORE the native lease, or refuses with nothing taken (#157 B3).
+	const ticket = await fence.admit({ directory, selectedN: basename(directory), created });
+	// A lock left by a crashed process goes stale after 10 s; wait that long before giving up.
+	const lease = lockfile.lock(directory, {
+		realpath: false,
+		retries: { retries: 12, minTimeout: 1000, maxTimeout: 1000 },
+	});
+	const release = await lease.catch(async (error) => {
+		const refused = new Error(`Session is already open in another process: ${directory}`, { cause: error });
+		// No acquisition was observed: this owner ends with nothing opened and no lease held.
+		await ticket.endUnleased().catch((fenceError) => {
+			throw new AggregateError([refused, fenceError], `${refused.message}; its owner end was not recorded`);
 		});
-	} catch (error) {
-		throw new Error(`Session is already open in another process: ${directory}`, { cause: error });
-	}
-	return { id: basename(directory), directory, database: join(directory, "session.sqlite"), cwd, created, release };
+		throw refused;
+	});
+	// Apart from the lease's own failure: the lease IS held here, so a failed checkpoint is never recorded as an
+	// acquire failure. The open fails and releases the lease; the claim stays fenced under this live owner.
+	await ticket.leased().catch(async (error) => {
+		await release().catch((releaseError) => {
+			throw new AggregateError([error, releaseError], `lease checkpoint and release both failed: ${directory}`);
+		});
+		throw error;
+	});
+	return {
+		id: basename(directory),
+		directory,
+		database: join(directory, "session.sqlite"),
+		cwd,
+		created,
+		release,
+		ticket,
+	};
 }

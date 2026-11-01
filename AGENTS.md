@@ -123,7 +123,7 @@ implement → affected focused gates → independent review → one amendment bu
 - [ROADMAP.md](./ROADMAP.md) — direction and deferred work.
 - [docs/adding-a-harness.md](./docs/adding-a-harness.md) — entry route for a new harness.
 - [docs/mux-launch-rail.md](./docs/mux-launch-rail.md) — mux ownership and launch contracts.
-- [docs/herdr-launch-rail.md](./docs/herdr-launch-rail.md) — herdr launch rail (#116): two-step placement, the one-line birth argv, and within-generation reclaim. `entwurf_fresh_call` selects it from process context (`HERDR_ENV=1`, pilot `pi | claude-code`), never from a caller parameter and never as a fallback either direction; `entwurf_resume_call` selects its pi-only herdr launch by the same predicate (§15, #157 G1a).
+- [docs/herdr-launch-rail.md](./docs/herdr-launch-rail.md) — herdr launch rail (#116): two-step placement, the one-line birth argv, and within-generation reclaim. `entwurf_fresh_call` selects it from process context (`HERDR_ENV=1`; agent-start `pi | claude-code`, one `layout.apply` for `pi-durable` — §16, #157 A-L1), never from a caller parameter and never as a fallback either direction; `entwurf_resume_call` selects its pi-only herdr launch by the same predicate (§15, #157 G1a).
 - [docs/acp-backend-rail.md](./docs/acp-backend-rail.md) — ACP adapter contract.
 - [DELIVERY.md](./DELIVERY.md), [VERIFY.md](./VERIFY.md), [BASELINE.md](./BASELINE.md) — delivery coordinates, verification protocol, and evidence.
 - [README.md](./README.md) — operator-facing package contract.

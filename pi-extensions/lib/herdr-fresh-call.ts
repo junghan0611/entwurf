@@ -42,44 +42,72 @@
  */
 
 import { createHash } from "node:crypto";
-import { statSync } from "node:fs";
+import { accessSync, constants as fsConstants, statSync } from "node:fs";
+import { createConnection } from "node:net";
 import path from "node:path";
-import { HERDR_FRESH_CALL_BACKENDS } from "../../scripts/herdr-rails.mjs";
+import {
+	HERDR_AGENT_START_BACKENDS,
+	HERDR_FRESH_CALL_BACKENDS,
+	HERDR_LAYOUT_LAUNCH_BACKENDS,
+} from "../../scripts/herdr-rails.mjs";
 import { callbackEnvAssignments } from "./callback-env.ts";
 import {
 	buildOmpBootstrapPayload,
 	composeBackendArgs,
 	composeFreshCallFraming,
+	composeFreshCallPrompt,
 	FRESH_CALL_PROVIDER_HINT,
 	type FreshCallComposition,
 	type FreshCallInputRejectReason,
 	type FreshCallProviderRejectReason,
 	normalizeFreshCallInputs,
+	OMP_BOOTSTRAP_VERSION,
 	TASK_MAX_CHARS,
 } from "./fresh-call-composition.ts";
+import {
+	PI_DURABLE_PREFLIGHT_HINT,
+	type PiDurablePreflightRejectReason,
+	piDurableFreshPreflight,
+} from "./pi-durable-fresh-preflight.ts";
+import {
+	checkPiDurableRuntime,
+	PI_DURABLE_RUNTIME_HINT,
+	type PiDurablePackageLayout,
+	type PiDurableRuntimeRejectReason,
+	piDurablePackageLayout,
+} from "./pi-durable-runtime.ts";
 
 /**
- * The pilot set, closed. `[#116 decision]` herdr's own `--kind` enum is much larger, and that is
- * NOT evidence of support: every other backend is a pre-mutation named reject here, and there is
- * no fallback to the tmux rail — a caller inside herdr who asks for codex gets a refusal, not a
- * window somewhere else.
+ * Three closed sets, one leaf. `[#116 decision]` herdr's own `--kind` enum is much larger, and that
+ * is NOT evidence of support. Since #157 A-L1 the rail has two launch domains — the agent-start set
+ * (pi, claude-code: `tab create` + `agent start --kind`) and the layout set (pi-durable: one
+ * `layout.apply`) — and admits exactly their union: every backend outside it is a pre-mutation
+ * named reject, with no fallback to the tmux rail — a caller inside herdr who asks for codex gets a
+ * refusal, not a window somewhere else.
  *
- * The VALUE now lives in `scripts/herdr-rails.mjs`, the one leaf the status pane and the install
- * narration also read (#116 A7), so a fourth backend cannot appear in prose on one surface while
- * this rail still refuses it. The re-export keeps this module's public name unchanged. The TYPE
- * still has to be a tuple: a `.mjs` leaf infers `readonly string[]` without the JSDoc cast there,
- * and `HerdrFreshCallBackend` would silently widen to `string` while every runtime check still
- * passed. A gate pins that.
+ * The VALUES live in `scripts/herdr-rails.mjs` (#116 A7). The status pane's RAILS block renders
+ * the agent-start and layout sets as two groups (#157 A-L2); the install narration covers only the
+ * integrations it activated, which pi-durable never is. The re-export keeps this module's
+ * public names. The TYPES still have to be tuples: a `.mjs` leaf infers `readonly string[]` without
+ * the JSDoc cast there, and these types would silently widen to `string` while every runtime check
+ * still passed. A gate pins that.
  */
-export { HERDR_FRESH_CALL_BACKENDS };
+export { HERDR_AGENT_START_BACKENDS, HERDR_FRESH_CALL_BACKENDS, HERDR_LAYOUT_LAUNCH_BACKENDS };
+/** Everything this rail admits (#157 A-L1: the union of the two launch domains below). */
 export type HerdrFreshCallBackend = (typeof HERDR_FRESH_CALL_BACKENDS)[number];
+/** The `tab create` + `agent start --kind` domain. The kind maps are keyed by THIS type only. */
+export type HerdrAgentStartBackend = (typeof HERDR_AGENT_START_BACKENDS)[number];
+/** The one-`layout.apply` domain: no herdr kind exists for these, so none is ever requested. */
+export type HerdrLayoutLaunchBackend = (typeof HERDR_LAYOUT_LAUNCH_BACKENDS)[number];
 
 /** Our backend name → the `--kind` token herdr accepts. `[측정 2026-09-14]` both round-tripped with
  * the vendor executable echoed back in `argv`. This is a REQUESTED kind: `[file:line @ c77af189]`
  * `src/app/agents.rs:197-199` turns it into a bare executable name and writes it into the pane's
  * shell, so nothing here has proven the binary exists, is on PATH, or will start. Runtime failure
- * is a post-mutation outcome on this rail, named as such, never a precondition we can claim. */
-export const HERDR_AGENT_KIND: Record<HerdrFreshCallBackend, string> = {
+ * is a post-mutation outcome on this rail, named as such, never a precondition we can claim.
+ * Keyed by the agent-start domain ONLY: a layout-launched backend has no kind, and inventing one
+ * would start herdr's program for that kind under another backend's name. */
+export const HERDR_AGENT_KIND: Record<HerdrAgentStartBackend, string> = {
 	pi: "pi",
 	"claude-code": "claude",
 };
@@ -141,7 +169,17 @@ export type HerdrFreshCallRejectReason =
 	| "herdr-argv-control-character"
 	| "cwd-not-absolute"
 	| "cwd-missing"
-	| "cwd-not-directory";
+	| "cwd-not-directory"
+	// #157 A-L1 — the layout branch's own pre-mutation refusals.
+	/** `HERDR_SOCKET_PATH` is absent, empty or relative. Read ONLY on the layout branch: the
+	 * agent-start backends never need it and are never refused for its absence. */
+	| "herdr-socket-path-missing"
+	/** The verified package's own `run.sh` is not an executable regular file. */
+	| "pi-durable-launcher-missing"
+	/** The caller is a record-backed Codex citizen, asked for no cwd, and its record carries none.
+	 * Its process directory is the app-server's, so it is NOT a fallback (#95 lane C). */
+	| "codex-caller-cwd-unavailable"
+	| PiDurablePreflightRejectReason;
 
 /** Why a launch that had ALREADY created a tab failed. These are separate from the refusals above
  * because the operator's next question is different: something exists and may need reclaiming. */
@@ -163,6 +201,25 @@ export type HerdrLaunchFailureReason =
 	| "herdr-agent-start-vanished"
 	/** The echoed argv is not the canonical executable plus exactly what we passed after `--`. */
 	| "herdr-agent-start-argv-drift";
+
+/**
+ * #157 A-L1 — why the ONE layout mutation write did not yield a launch receipt. A separate type
+ * from the agent-start failures above because these do NOT all mean a tab exists: each carries a
+ * `none` or `unknown` recovery, and only the connect-before-write case or a well-formed pre-create
+ * herdr error is `none`. The same-id resume reuses the agent-start set and never sees these.
+ */
+export type HerdrLayoutFailureReason =
+	/** The socket exchange itself failed: before the write (`none`) or after it (`unknown`). */
+	| "herdr-layout-transport-failed"
+	/** A well-formed herdr error whose code the pinned handler returns before any creation. */
+	| "herdr-layout-apply-refused"
+	/** A well-formed herdr error with any other code, `layout_apply_failed` included — it is also
+	 * returned after a tab was created or a rollback attempted, so it proves nothing about creation. */
+	| "herdr-layout-apply-failed"
+	/** The reply line is not one well-formed, id-correlated envelope with exactly one arm. */
+	| "herdr-layout-reply-unparsable"
+	/** A success envelope that does not prove THIS launch: wrong arm, workspace, shape or echo. */
+	| "herdr-layout-reply-drift";
 
 /** Why an orphan pane could NOT be reclaimed. `[측정 2026-09-14, isolated sandbox server]` a herdr
  * server restart brought the SAME pane ids back bound to entirely different terminals
@@ -222,11 +279,13 @@ export type HerdrRecovery =
  * whether herdr had been told a session id by the time we stopped asking, and carries no id.
  */
 export interface HerdrFreshCallReceipt {
-	readonly backend: HerdrFreshCallBackend;
+	readonly backend: HerdrAgentStartBackend;
 	/** The kind herdr was ASKED for. Not proof that the runtime exists — see `HERDR_AGENT_KIND`. */
 	readonly requestedKind: string;
 	readonly model: string;
-	readonly cwd?: string;
+	/** The explicit start directory sent as `--cwd` — always present since #157 A-L1x. */
+	readonly cwd: string;
+	readonly cwdSource: HerdrLayoutCwdSource;
 	readonly herdrAgentName: string;
 	readonly herdrWorkspaceId: string;
 	readonly herdrTabId: string;
@@ -268,15 +327,77 @@ export interface HerdrWitness {
 	readonly settleMs: number;
 }
 
+/**
+ * The pi-durable LAYOUT launch receipt (#157 A-L1): what was requested and the coordinates herdr's
+ * own `layout_apply` reply named. Read it as "herdr accepted one layout request and named this tab".
+ *
+ * ABSENT BY CONTRACT, typed `never` so no reader can mistake one for present: no herdr kind (none
+ * exists for pi-durable and none was requested), no agent name, no terminal id (the layout reply
+ * carries none, so this branch has no create-receipt terminal and therefore no close authority),
+ * and no witness (no detection was requested). Like the agent-start receipt it carries no garden id
+ * or native session id: the address arrives only in the sibling's callback envelope.
+ *
+ * `focus:false` is what we REQUESTED. herdr's `focused_pane_id` is focus INSIDE the new tab, so this
+ * receipt does not certify that the tab is unfocused; the actual view is a separate observation.
+ */
+export interface HerdrLayoutFreshCallReceipt {
+	readonly backend: HerdrLayoutLaunchBackend;
+	readonly launch: "layout-apply";
+	readonly model: string;
+	/** The explicit start directory sent as `root.cwd` — always present on this branch. */
+	readonly cwd: string;
+	readonly cwdSource: HerdrLayoutCwdSource;
+	/** The verified package's own launcher, the first element of the requested argv vector. */
+	readonly runtime: string;
+	readonly herdrWorkspaceId: string;
+	readonly herdrTabId: string;
+	readonly herdrPaneId: string;
+	readonly nonce: string;
+	readonly requestedKind?: never;
+	readonly herdrAgentName?: never;
+	readonly herdrTerminalId?: never;
+	readonly witness?: never;
+}
+
+/** Where the layout branch's explicit cwd came from. `caller-process` is THIS process's directory —
+ * the same inherited fact the tmux rail's omitted cwd rests on — and is never used for a Codex
+ * caller, whose process directory is the app-server's. */
+export type HerdrLayoutCwdSource = "requested" | "codex-caller-record" | "caller-process";
+
+/**
+ * Display-only diagnostics a layout failure carries: what herdr or the transport REPORTED. Every
+ * value is cut to `HERDR_DIAGNOSTIC_MAX_CHARS` and is rendered quoted. All decisions were made on the
+ * complete original values before this object was built, and nothing here is a receipt, a
+ * placement or authority to close anything.
+ */
+export interface HerdrReportedDiagnostics {
+	readonly transport?: string;
+	readonly errorCode?: string;
+	readonly errorMessage?: string;
+	readonly workspaceId?: string;
+	readonly tabId?: string;
+	readonly paneId?: string;
+}
+
 export type HerdrFreshCallResult =
-	| { readonly ok: true; readonly receipt: HerdrFreshCallReceipt }
-	| { readonly ok: false; readonly reason: HerdrFreshCallRejectReason }
+	| { readonly ok: true; readonly receipt: HerdrFreshCallReceipt | HerdrLayoutFreshCallReceipt }
 	| {
 			readonly ok: false;
-			readonly reason: HerdrLaunchFailureReason;
+			readonly reason: HerdrFreshCallRejectReason;
+			/** Layout branch caller-pane read only: herdr's bounded, display-only cause (A-L1 D4). */
+			readonly reported?: HerdrReportedDiagnostics;
+	  }
+	| {
+			readonly ok: false;
+			readonly reason: HerdrLaunchFailureReason | HerdrLayoutFailureReason;
 			/** herdr's own error code when it gave one (`{"error":{"code":…}}`) — quoted, never retyped. */
 			readonly herdrErrorCode?: string;
 			readonly recovery: HerdrRecovery;
+			/** Layout branch only: bounded, display-only reported values (see the type). */
+			readonly reported?: HerdrReportedDiagnostics;
+			/** Layout branch, POST-WRITE `unknown` only: the launch nonce a sibling that did start
+			 * would still carry in its callback, so the caller can correlate one if it arrives. */
+			readonly nonce?: string;
 	  };
 
 /** One invocation of the herdr CLI, injected. Production supplies `execFileSync`; tests supply a
@@ -652,7 +773,7 @@ export function parseHerdrAgentStartResponse(stdout: string): HerdrStartFacts | 
 /** The canonical executable herdr writes for a requested kind, measured twice today (`["claude"]`
  * and `["pi","--entwurf-control"]`) and pinned upstream at `src/detect/mod.rs:155-156 @ c77af189`.
  * We only assert it for the two pilot kinds we have actually seen. */
-export const HERDR_CANONICAL_EXECUTABLE: Record<HerdrFreshCallBackend, string> = {
+export const HERDR_CANONICAL_EXECUTABLE: Record<HerdrAgentStartBackend, string> = {
 	pi: "pi",
 	"claude-code": "claude",
 };
@@ -662,7 +783,7 @@ export const HERDR_CANONICAL_EXECUTABLE: Record<HerdrFreshCallBackend, string> =
  * reveal. */
 export function argvMatchesRequest(
 	echoed: readonly string[] | null,
-	backend: HerdrFreshCallBackend,
+	backend: HerdrAgentStartBackend,
 	backendArgs: readonly string[],
 ): boolean {
 	if (echoed === null) return false;
@@ -786,11 +907,18 @@ export async function herdrFreshCall(
 		readonly cwd?: string;
 		readonly placement?: { readonly tmuxSession?: string };
 		readonly callerGardenId: string | null;
+		/** Both herdr branches (layout #157 A-L1, agent start A-L1x): the record-backed Codex caller's
+		 * own record cwd, consulted only when no cwd was requested. */
+		readonly callerCwd?: string;
+		/** Both herdr branches: whether the caller is a record-backed Codex citizen. A boolean on
+		 * purpose — no thread id, pane title or seat reaches this rail. */
+		readonly callerIsCodex?: boolean;
 	},
 	run: HerdrRun,
 	env: NodeJS.ProcessEnv,
 	nonce: string,
 	clock: HerdrClock = HERDR_REAL_CLOCK,
+	layoutDeps: Partial<HerdrLayoutDeps> = {},
 ): Promise<HerdrFreshCallResult> {
 	const context = resolveHerdrContext(env);
 	if (!context.ok) return { ok: false, reason: context.reason };
@@ -803,19 +931,34 @@ export async function herdrFreshCall(
 		// worse than a refusal they can read.
 		return { ok: false, reason: "herdr-backend-unsupported" };
 	}
-	const backend = params.backend as HerdrFreshCallBackend;
+	if ((HERDR_LAYOUT_LAUNCH_BACKENDS as readonly string[]).includes(params.backend)) {
+		// #157 A-L1: a backend herdr has no kind for. It never reaches `tab create`/`agent start`
+		// below and never runs the herdr CLI; its own branch owns its whole order.
+		return herdrLayoutFreshCall(params, context.context, env, nonce, {
+			...HERDR_LAYOUT_PRODUCTION_DEPS,
+			...layoutDeps,
+		});
+	}
+	const backend = params.backend as HerdrAgentStartBackend;
 
 	// The caller's inputs are judged by the SHARED contract — same order, same trimming, same
 	// five words — so a caller cannot learn a different vocabulary by being inside herdr. The
-	// cwd omission rule comes with it: `undefined` and `""` both mean "no cwd", which this rail
-	// previously mistook for an invalid path.
+	// cwd omission rule comes with it: `undefined` and `""` both mean "no cwd requested", which this
+	// rail once mistook for an invalid path. An omitted cwd means the CALLER's directory, chosen by
+	// the same helper the layout branch uses (#157 A-L1x), and is always sent explicitly: herdr's own
+	// default for an omitted `--cwd` is herdr's, not a fact about the caller.
 	const normalized = normalizeFreshCallInputs(params);
 	if (!normalized.ok) return { ok: false, reason: normalized.reason };
-	const { callerGardenId, model, task, cwd } = normalized.inputs;
-	if (cwd !== undefined) {
-		const badCwd = classifyHerdrCwd(cwd);
-		if (badCwd !== null) return { ok: false, reason: badCwd };
-	}
+	const { callerGardenId, model, task, cwd: requestedCwd } = normalized.inputs;
+	const chosenCwd = chooseHerdrLayoutCwd({
+		...(requestedCwd === undefined ? {} : { requestedCwd }),
+		callerIsCodex: params.callerIsCodex === true,
+		...(params.callerCwd === undefined ? {} : { callerCwd: params.callerCwd }),
+		callerProcessCwd: layoutDeps.callerProcessCwd ?? HERDR_LAYOUT_PRODUCTION_DEPS.callerProcessCwd,
+	});
+	if (!chosenCwd.ok) return { ok: false, reason: chosenCwd.reason };
+	const badCwd = classifyHerdrCwd(chosenCwd.cwd);
+	if (badCwd !== null) return { ok: false, reason: badCwd };
 
 	const framing = composeFreshCallFraming({
 		backend,
@@ -868,7 +1011,7 @@ export async function herdrFreshCall(
 	const tabRun = await run(
 		buildHerdrTabCreateArgs({
 			workspaceId: callerPane.workspaceId,
-			...(cwd === undefined ? {} : { cwd }),
+			cwd: chosenCwd.cwd,
 			callback: { target: callerGardenId, nonce },
 		}),
 	);
@@ -964,7 +1107,8 @@ export async function herdrFreshCall(
 			backend,
 			requestedKind: HERDR_AGENT_KIND[backend],
 			model,
-			...(cwd === undefined ? {} : { cwd }),
+			cwd: chosenCwd.cwd,
+			cwdSource: chosenCwd.source,
 			herdrAgentName: agentName,
 			// The tab coordinates come from the reply that CREATED them, not from the start's
 			// echo: the create receipt is what the reclaim above is bound to, so the receipt an
@@ -1103,12 +1247,618 @@ export async function reclaim(pane: HerdrPaneFacts, run: HerdrRun): Promise<Herd
 	return { outcome: "closed", paneId: pane.paneId, terminalId: pane.terminalId };
 }
 
+// ── #157 A-L1: pi-durable through ONE layout.apply on the caller's own herdr socket ──────────────
+//
+// WHY A SOCKET AND NOT THE CLI. The documented herdr CLI exposes no layout mutation, and
+// `layout.apply` is the only herdr surface that execs an argv VECTOR in a new tab — no `--kind`, no
+// shell, no PTY keystrokes (`[blob 2ecf19a9]` app-api-layouts.rs:117-140, pane.rs:2456-2500). So this
+// branch sends one fixed JSON line per connection and reads one reply line: the framing herdr's own
+// pi integration uses, and the one measured on the pinned 0.9.5 server (G2/G3).
+//
+// ONE ENDPOINT FOR THE READ AND THE WRITE. The caller-pane read that names the workspace and the
+// mutation that uses it go to the SAME explicit endpoint, `HERDR_SOCKET_PATH` — never the CLI for one
+// and the socket for the other, which could each reach a different server where `w1` names a
+// different workspace. Two connections do NOT establish server-generation invariance across a
+// restart or rebind: a valid inherited env pair (`HERDR_PANE_ID`, `HERDR_SOCKET_PATH`) and endpoint
+// continuity during this call are ASSUMPTIONS, named here rather than proven, and no generation or
+// liveness manager is added for them. The read is also a physical socket write; "exactly one" below
+// always means exactly one LAYOUT MUTATION write.
+//
+// WHAT THE PARSERS ARE. An authority-bearing REDUCTION of herdr's replies, not a vendor-schema
+// validator: they check the envelope this launch relies on and the id/echo fields it needs, against
+// the binary-bundled schema (protocol 22) and recorded replies, and nothing else. `agent_status` is
+// checked for presence only and is never interpreted. `result` XOR `error` is Entwurf's own strict
+// acceptance policy — the schema does not forbid extra properties.
+
+/** Each reported diagnostic string is cut to this many characters for DISPLAY, and rendered quoted.
+ * Every decision is taken on the complete original value before it is cut. */
+export const HERDR_DIAGNOSTIC_MAX_CHARS = 256;
+
+/**
+ * The error codes that prove NOTHING was created, for exactly this request shape (a `workspace_id`,
+ * no `tab_id`, one pane). `[blob 2ecf19a9]` the pinned `handle_layout_apply` returns these only
+ * before its first creation call: `workspace_not_found` at app-api-layouts.rs:56/66/114,
+ * `invalid_layout` at :69/:97/:109, and `invalid_env` at :105 (app-api-env.rs:3-32 yields no other
+ * code). `tab_not_found`/`invalid_target` need a `tab_id`, which this branch never sends, so they are
+ * NOT here — and `layout_apply_failed` is returned at :143/:158/:196 and after the creation events,
+ * so it never proves anything about creation.
+ */
+export const HERDR_LAYOUT_NONE_CODES: readonly string[] = Object.freeze([
+	"workspace_not_found",
+	"invalid_layout",
+	"invalid_env",
+]);
+
+/** What one request on the socket came back as. `connect-failed` is the ONLY outcome in which the
+ * request line was certainly never written. */
+export type HerdrSocketOutcome =
+	| { readonly kind: "connect-failed"; readonly code: string }
+	| { readonly kind: "reply"; readonly line: string }
+	| { readonly kind: "io-failed"; readonly code: string }
+	| { readonly kind: "timeout" }
+	| { readonly kind: "oversize" }
+	| { readonly kind: "eof-before-newline" };
+
+/** One request, one connection, one reply line. No retry, no reconnect, no resend. */
+export type HerdrSocketCall = (requestLine: string) => Promise<HerdrSocketOutcome>;
+/** Bound to ONE endpoint: both of this branch's requests go through the call it returns. */
+export type HerdrSocketCallFactory = (socketPath: string) => HerdrSocketCall;
+
+export interface HerdrSocketBounds {
+	readonly timeoutMs: number;
+	/** The whole reply LINE (bytes before its newline). Larger is `oversize`, never truncated. */
+	readonly maxReplyBytes: number;
+}
+
+/**
+ * The production socket client. The reply is collected as BYTES and decoded once, after its newline,
+ * so a multi-byte character split across chunks is never decoded in halves. A bound that expires
+ * before the connection exists is a connect failure (nothing written); after it, a timeout (the
+ * request may have been written). Exactly one settle: connect, data, error, close and the timer race.
+ */
+export function createHerdrSocketCall(
+	socketPath: string,
+	bounds: HerdrSocketBounds = { timeoutMs: HERDR_CLI_TIMEOUT_MS, maxReplyBytes: HERDR_MAX_OUTPUT_BYTES },
+): HerdrSocketCall {
+	return (requestLine) =>
+		new Promise((resolve) => {
+			let settled = false;
+			let connected = false;
+			let lineBytes = 0;
+			const chunks: Buffer[] = [];
+			const socket = createConnection({ path: socketPath });
+			const settle = (outcome: HerdrSocketOutcome) => {
+				if (settled) return;
+				settled = true;
+				clearTimeout(timer);
+				socket.destroy();
+				resolve(outcome);
+			};
+			const timer = setTimeout(
+				() => settle(connected ? { kind: "timeout" } : { kind: "connect-failed", code: "timeout-before-connect" }),
+				bounds.timeoutMs,
+			);
+			timer.unref?.();
+			socket.on("connect", () => {
+				connected = true;
+				socket.write(requestLine);
+			});
+			socket.on("data", (chunk: Buffer) => {
+				const newline = chunk.indexOf(0x0a);
+				const part = newline === -1 ? chunk : chunk.subarray(0, newline);
+				lineBytes += part.length;
+				if (lineBytes > bounds.maxReplyBytes) {
+					settle({ kind: "oversize" });
+					return;
+				}
+				chunks.push(part);
+				if (newline !== -1) settle({ kind: "reply", line: decodeHerdrReplyBytes(chunks) });
+			});
+			socket.on("error", (error: NodeJS.ErrnoException) => {
+				const code = error.code ?? error.message;
+				settle(connected ? { kind: "io-failed", code } : { kind: "connect-failed", code });
+			});
+			socket.on("close", () => settle({ kind: "eof-before-newline" }));
+		});
+}
+
+/** The reply line's ONE decode: every collected chunk concatenated, then UTF-8 — never chunk by
+ * chunk, so a multi-byte character split between reads is decoded whole. */
+export function decodeHerdrReplyBytes(chunks: readonly Buffer[]): string {
+	return Buffer.concat(chunks).toString("utf8");
+}
+
+/** The fixed caller-pane read. Product function, not an RPC surface: method and shape are literal. */
+export function buildHerdrPaneGetPacket(id: string, paneId: string): string {
+	return `${JSON.stringify({ id, method: "pane.get", params: { pane_id: paneId } })}\n`;
+}
+
+/** The fixed layout mutation: one unfocused pane tab in a named workspace, an explicit cwd, an argv
+ * vector and an env map. No `tab_id`, `tab_label`, split, label or ratio can be expressed through it. */
+export function buildHerdrLayoutApplyPacket(
+	id: string,
+	params: {
+		readonly workspaceId: string;
+		readonly cwd: string;
+		readonly command: readonly string[];
+		readonly env: Readonly<Record<string, string>>;
+	},
+): string {
+	return `${JSON.stringify({
+		id,
+		method: "layout.apply",
+		params: {
+			workspace_id: params.workspaceId,
+			focus: false,
+			root: { type: "pane", cwd: params.cwd, command: [...params.command], env: { ...params.env } },
+		},
+	})}\n`;
+}
+
+/** The launch env: the identity scrub the other launches use, plus the callback pair from its one
+ * validating formatter (which throws rather than inject a pair the callback verb would refuse). */
+export function buildHerdrLayoutLaunchEnv(callback: { target: string; nonce: string }): Record<string, string> {
+	const env: Record<string, string> = { PI_SESSION_ID: "", PI_AGENT_ID: "" };
+	for (const assignment of callbackEnvAssignments(callback)) {
+		const at = assignment.indexOf("=");
+		env[assignment.slice(0, at)] = assignment.slice(at + 1);
+	}
+	return env;
+}
+
+/**
+ * The argv vector: the verified package's own launcher, then the SHARED pi-durable composition, with
+ * the bootstrap payload made Cc-free at ITS OWN layer. `JSON.stringify` escapes C0, `"` and `\` but
+ * leaves DEL and C1 literal; escaping only the outer request would be undone by herdr's own decode,
+ * so the reversible `\uXXXX` escape is applied to the payload element itself. The bootstrap decoder
+ * is `JSON.parse` (meta-bridge-omp.ts `decodeOmpBootstrapPayload`), so the task comes back byte-exact
+ * — asserted here, and a failure is OUR bug, so it throws rather than launch a task we cannot
+ * reproduce. No blanket control-character refusal: this exec path has no Cc rule of its own.
+ */
+export function composeHerdrPiDurableCommand(params: {
+	readonly runtime: string;
+	readonly prompt: string;
+	readonly model: string;
+	readonly callerGardenId: string;
+	readonly nonce: string;
+	readonly task: string;
+}): string[] {
+	const args = composeBackendArgs(
+		"pi-durable",
+		{
+			prompt: params.prompt,
+			bootstrapPayload: buildOmpBootstrapPayload({
+				callerGardenId: params.callerGardenId,
+				nonce: params.nonce,
+				task: params.task,
+			}),
+		},
+		params.model,
+		() => {
+			throw new Error("herdr-fresh-call: codex is not a herdr backend");
+		},
+		() => {
+			throw new Error("herdr-fresh-call: codex is not a herdr backend");
+		},
+	);
+	const raw = args.at(-1);
+	if (args.at(-2) !== "--entwurf-bootstrap" || raw === undefined) {
+		throw new Error("herdr-fresh-call: the pi-durable composition no longer ends with its bootstrap payload");
+	}
+	const payload = escapeRemainingControlChars(raw);
+	const decoded: unknown = JSON.parse(payload);
+	const intact =
+		typeof decoded === "object" &&
+		decoded !== null &&
+		(decoded as Record<string, unknown>).v === OMP_BOOTSTRAP_VERSION &&
+		(decoded as Record<string, unknown>).task === params.prompt &&
+		!containsControlChar(payload);
+	if (!intact) {
+		throw new Error(
+			"herdr-fresh-call: the pi-durable bootstrap payload did not decode back to the framed prompt — refusing to launch a sibling with a task we cannot reproduce",
+		);
+	}
+	return [params.runtime, ...args.slice(0, -1), payload];
+}
+
+/** `HERDR_SOCKET_PATH`, read only here and only as given: non-empty and absolute, or `null`. */
+export function resolveHerdrSocketPath(env: NodeJS.ProcessEnv): string | null {
+	const value = env.HERDR_SOCKET_PATH;
+	return typeof value === "string" && value.length > 0 && path.isAbsolute(value) ? value : null;
+}
+
+/**
+ * The explicit start directory. herdr's own default for an omitted `root.cwd` is the FOCUSED pane's
+ * cwd in the target workspace (`[blob 2ecf19a9]` app-api-layouts.rs:343-365) — unrelated to the
+ * caller — so this branch always sends one. Requested first; then a known Codex caller's RECORD
+ * cwd, with NO fallback when it has none (its process directory is the app-server's, #95 lane C);
+ * then, for every other caller, this process's own directory — the inherited fact the tmux rail's
+ * omitted cwd rests on. Never herdr's own `cwd`/`foreground_cwd` for the caller's pane: that is a view.
+ * The agent-start branch reuses this same choice for its `tab create --cwd` (#157 A-L1x), so both
+ * herdr branches start an omitted cwd where the caller is; the name stays layout-first only by history.
+ */
+export function chooseHerdrLayoutCwd(input: {
+	readonly requestedCwd?: string;
+	readonly callerIsCodex: boolean;
+	readonly callerCwd?: string;
+	readonly callerProcessCwd: () => string;
+}):
+	| { readonly ok: true; readonly cwd: string; readonly source: HerdrLayoutCwdSource }
+	| { readonly ok: false; readonly reason: "codex-caller-cwd-unavailable" } {
+	if (input.requestedCwd !== undefined) return { ok: true, cwd: input.requestedCwd, source: "requested" };
+	if (input.callerIsCodex) {
+		const record = input.callerCwd === undefined || input.callerCwd === "" ? undefined : input.callerCwd;
+		return record === undefined
+			? { ok: false, reason: "codex-caller-cwd-unavailable" }
+			: { ok: true, cwd: record, source: "codex-caller-record" };
+	}
+	return { ok: true, cwd: input.callerProcessCwd(), source: "caller-process" };
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+	return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isNonEmptyString(value: unknown): value is string {
+	return typeof value === "string" && value.length > 0;
+}
+
+/** Cut for display, never for comparison. A lone high surrogate is not left at the cut. */
+export function boundHerdrDiagnostic(value: string): string {
+	if (value.length <= HERDR_DIAGNOSTIC_MAX_CHARS) return value;
+	let cut = HERDR_DIAGNOSTIC_MAX_CHARS - 1;
+	const last = value.charCodeAt(cut - 1);
+	if (last >= 0xd800 && last <= 0xdbff) cut -= 1;
+	return `${value.slice(0, cut)}…`;
+}
+
+/**
+ * The envelope, before any certainty is decided: a JSON object (not an array, not null), the exact
+ * id we sent, and EXACTLY ONE of `result`/`error`, whose value is itself a non-null, non-array
+ * object. An error arm also needs a non-empty string `code` and a string `message` (both required
+ * by the bundled schema). Anything else is `null`: unreadable, never a partially believed answer.
+ */
+export function readHerdrEnvelope(
+	line: string,
+	id: string,
+):
+	| { readonly arm: "result"; readonly result: Record<string, unknown> }
+	| { readonly arm: "error"; readonly code: string; readonly message: string }
+	| null {
+	let parsed: unknown;
+	try {
+		parsed = JSON.parse(line);
+	} catch {
+		return null;
+	}
+	if (!isPlainObject(parsed)) return null;
+	if (typeof parsed.id !== "string" || parsed.id !== id) return null;
+	const hasResult = Object.hasOwn(parsed, "result");
+	if (hasResult === Object.hasOwn(parsed, "error")) return null;
+	if (hasResult) return isPlainObject(parsed.result) ? { arm: "result", result: parsed.result } : null;
+	const error = parsed.error;
+	if (!isPlainObject(error)) return null;
+	if (!isNonEmptyString(error.code) || typeof error.message !== "string") return null;
+	return { arm: "error", code: error.code, message: error.message };
+}
+
+/** The transport cause of a read that got no reply line, cut for display. */
+function readTransportCause(outcome: Exclude<HerdrSocketOutcome, { readonly kind: "reply" }>): string {
+	return boundHerdrDiagnostic("code" in outcome ? `${outcome.kind}: ${outcome.code}` : outcome.kind);
+}
+
+/** The caller-pane read, reduced. Every failure is a REFUSAL: nothing has been mutated yet. A
+ * transport cause or a well-formed herdr error travels with it as bounded, display-only report. */
+export function classifyHerdrLayoutPaneRead(
+	outcome: HerdrSocketOutcome,
+	id: string,
+	callerPaneId: string,
+):
+	| { readonly ok: true; readonly workspaceId: string }
+	| {
+			readonly ok: false;
+			readonly reason:
+				| "herdr-caller-pane-get-failed"
+				| "herdr-caller-pane-unparsable"
+				| "herdr-caller-pane-drift"
+				| "herdr-caller-workspace-missing";
+			readonly reported: HerdrReportedDiagnostics;
+	  } {
+	if (outcome.kind !== "reply") {
+		return { ok: false, reason: "herdr-caller-pane-get-failed", reported: { transport: readTransportCause(outcome) } };
+	}
+	const envelope = readHerdrEnvelope(outcome.line, id);
+	if (envelope === null) return { ok: false, reason: "herdr-caller-pane-unparsable", reported: {} };
+	if (envelope.arm === "error") {
+		return {
+			ok: false,
+			reason: "herdr-caller-pane-get-failed",
+			reported: {
+				errorCode: boundHerdrDiagnostic(envelope.code),
+				errorMessage: boundHerdrDiagnostic(envelope.message),
+			},
+		};
+	}
+	if (envelope.result.type !== "pane_info") return { ok: false, reason: "herdr-caller-pane-unparsable", reported: {} };
+	const pane = envelope.result.pane;
+	if (
+		!isPlainObject(pane) ||
+		!isNonEmptyString(pane.pane_id) ||
+		!isNonEmptyString(pane.terminal_id) ||
+		!isNonEmptyString(pane.tab_id) ||
+		typeof pane.focused !== "boolean" ||
+		typeof pane.revision !== "number" ||
+		!Number.isSafeInteger(pane.revision) ||
+		pane.revision < 0 ||
+		!Object.hasOwn(pane, "agent_status")
+	) {
+		return { ok: false, reason: "herdr-caller-pane-unparsable", reported: {} };
+	}
+	if (pane.pane_id !== callerPaneId) return { ok: false, reason: "herdr-caller-pane-drift", reported: {} };
+	if (!isNonEmptyString(pane.workspace_id)) {
+		return { ok: false, reason: "herdr-caller-workspace-missing", reported: {} };
+	}
+	return { ok: true, workspaceId: pane.workspace_id };
+}
+
+/** What a layout-branch failure carries: reason, certainty, and bounded display-only reports. */
+export interface HerdrLayoutFailure {
+	readonly ok: false;
+	readonly reason: HerdrLayoutFailureReason;
+	readonly herdrErrorCode?: string;
+	readonly recovery: { readonly outcome: "none" } | { readonly outcome: "unknown" };
+	readonly reported: HerdrReportedDiagnostics;
+}
+
+function layoutFailure(
+	reason: HerdrLayoutFailureReason,
+	outcome: "none" | "unknown",
+	reported: HerdrReportedDiagnostics,
+	herdrErrorCode?: string,
+): HerdrLayoutFailure {
+	return {
+		ok: false,
+		reason,
+		...(herdrErrorCode === undefined ? {} : { herdrErrorCode }),
+		recovery: { outcome },
+		reported,
+	};
+}
+
+/** The coordinates a drifted success reply named — strings only, cut for display. Never a receipt. */
+function reportedCoordinates(
+	layout: Record<string, unknown> | undefined,
+	root: Record<string, unknown> | undefined,
+): HerdrReportedDiagnostics {
+	return {
+		...(typeof layout?.workspace_id === "string" ? { workspaceId: boundHerdrDiagnostic(layout.workspace_id) } : {}),
+		...(typeof layout?.tab_id === "string" ? { tabId: boundHerdrDiagnostic(layout.tab_id) } : {}),
+		...(typeof root?.pane_id === "string" ? { paneId: boundHerdrDiagnostic(root.pane_id) } : {}),
+	};
+}
+
+function sameArgv(echoed: unknown, sent: readonly string[]): boolean {
+	return (
+		Array.isArray(echoed) &&
+		echoed.length === sent.length &&
+		echoed.every((token, index) => typeof token === "string" && token === sent[index])
+	);
+}
+
+/**
+ * The ONE layout mutation write's outcome. Envelope first (`readHerdrEnvelope`), certainty second:
+ * `none` only when the request was never written or herdr answered a well-formed matching error
+ * with a pre-create code; EVERY other non-success is `unknown` — a tab may exist, nothing is closed
+ * and nothing is resent. A success must prove THIS launch: the arm, the workspace we asked for, a
+ * tab, a single-pane root whose pane is the tab's focus, and the cwd and argv we sent echoed back
+ * (an echo, not an execution witness; schema-nullable `pane_id`/`cwd`/`command` that come back null
+ * cannot prove it, so they are `unknown` too).
+ */
+export function classifyHerdrLayoutApplyReply(
+	outcome: HerdrSocketOutcome,
+	expect: {
+		readonly id: string;
+		readonly workspaceId: string;
+		readonly cwd: string;
+		readonly command: readonly string[];
+	},
+):
+	| { readonly ok: true; readonly workspaceId: string; readonly tabId: string; readonly paneId: string }
+	| HerdrLayoutFailure {
+	switch (outcome.kind) {
+		case "connect-failed":
+			return layoutFailure("herdr-layout-transport-failed", "none", {
+				transport: boundHerdrDiagnostic(`connect-failed: ${outcome.code}`),
+			});
+		case "io-failed":
+			return layoutFailure("herdr-layout-transport-failed", "unknown", {
+				transport: boundHerdrDiagnostic(`io-failed: ${outcome.code}`),
+			});
+		case "timeout":
+		case "oversize":
+		case "eof-before-newline":
+			return layoutFailure("herdr-layout-transport-failed", "unknown", { transport: outcome.kind });
+		default:
+			break;
+	}
+	const envelope = readHerdrEnvelope(outcome.line, expect.id);
+	if (envelope === null) return layoutFailure("herdr-layout-reply-unparsable", "unknown", {});
+	if (envelope.arm === "error") {
+		const reported = {
+			errorCode: boundHerdrDiagnostic(envelope.code),
+			errorMessage: boundHerdrDiagnostic(envelope.message),
+		};
+		return HERDR_LAYOUT_NONE_CODES.includes(envelope.code)
+			? layoutFailure("herdr-layout-apply-refused", "none", reported, envelope.code)
+			: layoutFailure("herdr-layout-apply-failed", "unknown", reported, envelope.code);
+	}
+	const layout = isPlainObject(envelope.result.layout) ? envelope.result.layout : undefined;
+	const root = isPlainObject(layout?.root) ? layout.root : undefined;
+	if (
+		envelope.result.type !== "layout_apply" ||
+		layout === undefined ||
+		root === undefined ||
+		layout.workspace_id !== expect.workspaceId ||
+		!isNonEmptyString(layout.tab_id) ||
+		typeof layout.zoomed !== "boolean" ||
+		!isNonEmptyString(layout.focused_pane_id) ||
+		root.type !== "pane" ||
+		!isNonEmptyString(root.pane_id) ||
+		layout.focused_pane_id !== root.pane_id ||
+		root.cwd !== expect.cwd ||
+		!sameArgv(root.command, expect.command)
+	) {
+		return layoutFailure("herdr-layout-reply-drift", "unknown", reportedCoordinates(layout, root));
+	}
+	return { ok: true, workspaceId: expect.workspaceId, tabId: layout.tab_id, paneId: root.pane_id };
+}
+
+/** What the layout branch needs from its surroundings, injectable so a gate can drive the whole
+ * branch without a herdr server, a package closure or this process's directory. */
+export interface HerdrLayoutDeps {
+	readonly socket: HerdrSocketCallFactory;
+	readonly callerProcessCwd: () => string;
+	readonly packageLayout: () => PiDurablePackageLayout | null;
+	readonly runtimeVerdict: (layout: PiDurablePackageLayout) => PiDurableRuntimeRejectReason | null;
+}
+
+export const HERDR_LAYOUT_PRODUCTION_DEPS: HerdrLayoutDeps = {
+	socket: (socketPath) => createHerdrSocketCall(socketPath),
+	callerProcessCwd: () => process.cwd(),
+	packageLayout: () => piDurablePackageLayout(),
+	runtimeVerdict: (layout) => {
+		const verdict = checkPiDurableRuntime(layout);
+		return verdict.ok ? null : verdict.reason;
+	},
+};
+
+/** A bounded environment probe: is the verified package's own launcher an executable regular file? */
+function isExecutableRegularFile(file: string): boolean {
+	try {
+		if (!statSync(file).isFile()) return false;
+		accessSync(file, fsConstants.X_OK);
+		return true;
+	} catch {
+		return false;
+	}
+}
+
+/**
+ * Open a pi-durable sibling in a new herdr tab. ORDER IS THE ARGUMENT: everything decidable without
+ * herdr — inputs, the explicit cwd, the endpoint, the pi-durable preflight (provider split, first
+ * input cap, package, carrier and SDK set, units), the launcher and the argv — is decided before
+ * the first socket request. The caller-pane read comes next and mutates nothing, so any failure of
+ * it refuses with zero layout writes. Then the ONE layout mutation write, never resent, and no
+ * reclaim: herdr's layout reply names no terminal id, so this branch holds no create-receipt
+ * terminal and therefore no authority to close what it opened.
+ */
+async function herdrLayoutFreshCall(
+	params: {
+		readonly backend: string;
+		readonly model: string;
+		readonly task: string;
+		readonly cwd?: string;
+		readonly callerGardenId: string | null;
+		readonly callerCwd?: string;
+		readonly callerIsCodex?: boolean;
+	},
+	context: HerdrContext,
+	env: NodeJS.ProcessEnv,
+	nonce: string,
+	deps: HerdrLayoutDeps,
+): Promise<HerdrFreshCallResult> {
+	const normalized = normalizeFreshCallInputs(params);
+	if (!normalized.ok) return { ok: false, reason: normalized.reason };
+	const { callerGardenId, model, task, cwd: requestedCwd } = normalized.inputs;
+
+	const chosen = chooseHerdrLayoutCwd({
+		...(requestedCwd === undefined ? {} : { requestedCwd }),
+		callerIsCodex: params.callerIsCodex === true,
+		...(params.callerCwd === undefined ? {} : { callerCwd: params.callerCwd }),
+		callerProcessCwd: deps.callerProcessCwd,
+	});
+	if (!chosen.ok) return { ok: false, reason: chosen.reason };
+	const badCwd = classifyHerdrCwd(chosen.cwd);
+	if (badCwd !== null) return { ok: false, reason: badCwd };
+
+	const socketPath = resolveHerdrSocketPath(env);
+	if (socketPath === null) return { ok: false, reason: "herdr-socket-path-missing" };
+
+	const prompt = composeFreshCallPrompt({
+		backend: "pi-durable",
+		task,
+		callerGardenId,
+		nonce,
+		openingLine: HERDR_FRESH_CALL_OPENING_LINE,
+	});
+	const packageLayout = deps.packageLayout();
+	const missing = piDurableFreshPreflight({
+		model,
+		firstInput: prompt,
+		layout: packageLayout,
+		runtime: packageLayout === null ? null : deps.runtimeVerdict(packageLayout),
+	});
+	if (missing !== null) return { ok: false, reason: missing };
+	if (packageLayout === null) throw new Error("herdr-fresh-call: the pi-durable preflight passed without a package");
+
+	const runtime = path.join(packageLayout.root, "run.sh");
+	if (!isExecutableRegularFile(runtime)) return { ok: false, reason: "pi-durable-launcher-missing" };
+	const command = composeHerdrPiDurableCommand({ runtime, prompt, model, callerGardenId, nonce, task });
+	const launchEnv = buildHerdrLayoutLaunchEnv({ target: callerGardenId, nonce });
+
+	const call = deps.socket(socketPath);
+	const base = herdrAgentNameFromNonce(nonce);
+	const readId = `${base}:pane.get`;
+	const read = classifyHerdrLayoutPaneRead(
+		await call(buildHerdrPaneGetPacket(readId, context.callerPaneId)),
+		readId,
+		context.callerPaneId,
+	);
+	if (!read.ok) return { ok: false, reason: read.reason, reported: read.reported };
+
+	// ── everything above this line leaves nothing behind; the ONE layout mutation write follows ──
+	const writeId = `${base}:layout.apply`;
+	const applied = classifyHerdrLayoutApplyReply(
+		await call(
+			buildHerdrLayoutApplyPacket(writeId, {
+				workspaceId: read.workspaceId,
+				cwd: chosen.cwd,
+				command,
+				env: launchEnv,
+			}),
+		),
+		{ id: writeId, workspaceId: read.workspaceId, cwd: chosen.cwd, command },
+	);
+	if (!applied.ok) return { ...applied, ...(applied.recovery.outcome === "unknown" ? { nonce } : {}) };
+	return {
+		ok: true,
+		receipt: {
+			backend: "pi-durable",
+			launch: "layout-apply",
+			model,
+			cwd: chosen.cwd,
+			cwdSource: chosen.source,
+			runtime,
+			herdrWorkspaceId: applied.workspaceId,
+			herdrTabId: applied.tabId,
+			herdrPaneId: applied.paneId,
+			nonce,
+		},
+	};
+}
+
 /** Why each refusal happened, in the caller's terms. A reason a caller cannot act on is a reason
  * they will guess about. The five shared input reasons keep the wording the public verb has always
  * used; the rest are this rail's own. */
-const HERDR_REJECT_HINT: Record<HerdrFreshCallRejectReason | HerdrLaunchFailureReason, string> = {
+const HERDR_REJECT_HINT: Record<
+	HerdrFreshCallRejectReason | HerdrLaunchFailureReason | HerdrLayoutFailureReason,
+	string
+> = {
 	// #76: decided at the dispatch root, worded once in the shared composition leaf.
 	...FRESH_CALL_PROVIDER_HINT,
+	// #157 A-L1: the pi-durable preflight's repair text stays beside its predicates, as on tmux.
+	...PI_DURABLE_PREFLIGHT_HINT,
+	...PI_DURABLE_RUNTIME_HINT,
 	"caller-identity-unavailable":
 		"this surface has no record-backed identity, so a sibling would have nowhere to call home",
 	"model-empty": "pass the model you want the sibling opened with — it is never inherited from this process",
@@ -1124,13 +1874,29 @@ const HERDR_REJECT_HINT: Record<HerdrFreshCallRejectReason | HerdrLaunchFailureR
 	"herdr-caller-pane-missing":
 		"herdr did not give this process a HERDR_PANE_ID, so there is no way to ask herdr which workspace this caller is in",
 	"herdr-caller-pane-get-failed":
-		"herdr would not report this process's own pane — run `herdr pane get $HERDR_PANE_ID` to see what it says",
+		"herdr would not report this process's own pane — for pi and claude-code run `herdr pane get $HERDR_PANE_ID` to see what it says; pi-durable asked through one `pane.get` on HERDR_SOCKET_PATH instead, and any cause herdr reported is quoted below",
 	"herdr-caller-pane-unparsable": "herdr's reply about this process's own pane could not be read",
 	"herdr-caller-pane-drift":
 		"herdr answered about a different pane than HERDR_PANE_ID names, so its workspace says nothing about where this caller is",
 	"herdr-caller-workspace-missing":
 		"herdr reported this process's pane with no workspace, and guessing one would open the sibling wherever the operator is looking",
-	"herdr-backend-unsupported": "this rail opens pi and claude-code only; nothing is opened elsewhere instead",
+	"herdr-backend-unsupported":
+		"this rail opens pi and claude-code through herdr agent start, and pi-durable through one layout.apply tab; nothing is opened elsewhere instead",
+	"herdr-socket-path-missing":
+		"HERDR_SOCKET_PATH is absent, empty or not absolute, so there is no herdr endpoint for pi-durable's one layout request — this rail does not guess or scan for one",
+	"pi-durable-launcher-missing":
+		"this Entwurf package's own run.sh is missing or not executable, so the verified package has no launcher to put in the layout command — reinstall Entwurf",
+	"codex-caller-cwd-unavailable":
+		"this Codex caller's record carries no directory, and its process directory is the app-server's, not its own — pass cwd explicitly",
+	"herdr-layout-transport-failed":
+		"the one exchange with herdr's socket did not complete — read the recovery line for whether the request can have reached herdr",
+	"herdr-layout-apply-refused":
+		"herdr declined the layout request with a code its handler returns before creating anything",
+	"herdr-layout-apply-failed":
+		"herdr answered the layout request with an error that does not prove nothing was created",
+	"herdr-layout-reply-unparsable": "herdr's reply was not one well-formed answer to this exact request",
+	"herdr-layout-reply-drift":
+		"herdr's success reply does not describe the tab this request asked for, so its coordinates were not accepted",
 	"herdr-placement-tmux-rejected":
 		"`placement` names a tmux session, which does not exist inside herdr — drop it rather than have the sibling silently placed somewhere else",
 	"herdr-argv-control-character":
@@ -1199,6 +1965,96 @@ function renderFailureHeader(recovery: HerdrRecovery): string {
 	}
 }
 
+const HERDR_LAYOUT_FAILURE_REASONS: ReadonlySet<string> = new Set<HerdrLayoutFailureReason>([
+	"herdr-layout-transport-failed",
+	"herdr-layout-apply-refused",
+	"herdr-layout-apply-failed",
+	"herdr-layout-reply-unparsable",
+	"herdr-layout-reply-drift",
+]);
+
+/** The reported diagnostics, each already cut, rendered QUOTED so a value cannot pose as prose. */
+function renderReported(reported: HerdrReportedDiagnostics | undefined): string {
+	if (reported === undefined) return "";
+	const all: ReadonlyArray<readonly [string, string | undefined]> = [
+		["transport", reported.transport],
+		["code", reported.errorCode],
+		["message", reported.errorMessage],
+		["workspace", reported.workspaceId],
+		["tab", reported.tabId],
+		["pane", reported.paneId],
+	];
+	const fields = all.filter((field): field is readonly [string, string] => field[1] !== undefined);
+	if (fields.length === 0) return "";
+	return `  reported (display only, unverified, each value cut at ${HERDR_DIAGNOSTIC_MAX_CHARS} chars — not a receipt, a placement or anything to close): ${fields.map(([name, value]) => `${name} ${JSON.stringify(value)}`).join(", ")}\n`;
+}
+
+/** A layout-branch failure. The certainty line says only what the outcome licenses: `none` never
+ * says a sibling may exist, and only a POST-WRITE `unknown` mentions a possible callback. */
+function renderLayoutFailure(
+	result: {
+		readonly reason: HerdrLaunchFailureReason | HerdrLayoutFailureReason;
+		readonly herdrErrorCode?: string;
+		readonly recovery: HerdrRecovery;
+		readonly reported?: HerdrReportedDiagnostics;
+		readonly nonce?: string;
+	},
+	hint: string,
+): string {
+	const code =
+		result.herdrErrorCode === undefined
+			? ""
+			: ` [herdr: ${JSON.stringify(boundHerdrDiagnostic(result.herdrErrorCode))}]`;
+	if (result.recovery.outcome === "none") {
+		const why =
+			result.reason === "herdr-layout-transport-failed"
+				? "the request was never written to herdr"
+				: "herdr declined by name before creating anything";
+		return (
+			`entwurf_fresh_call failed at the herdr layout.apply step: ${result.reason}${code} — ${hint}.\n` +
+			`  recovery: none — ${why}, so nothing was created\n` +
+			renderReported(result.reported)
+		);
+	}
+	const nonce = result.nonce === undefined ? "this call's launch nonce" : `nonce ${result.nonce}`;
+	return (
+		`entwurf_fresh_call failed at the herdr layout.apply step with an UNKNOWN outcome: ${result.reason}${code} — ${hint}.\n` +
+		`  recovery: UNKNOWN — the layout write was attempted and may have reached herdr, so a pi-durable tab MAY exist and its sibling may still call back under ${nonce}; that callback's sender envelope is the only address. Nothing was closed and nothing will be retried — check herdr\n` +
+		renderReported(result.reported)
+	);
+}
+
+const HERDR_LAYOUT_CWD_SOURCE_TEXT: Record<HerdrLayoutCwdSource, string> = {
+	requested: "the requested start directory",
+	"codex-caller-record": "this Codex caller's own record directory",
+	"caller-process": "this agent's own process directory",
+};
+
+function renderLayoutReceipt(r: HerdrLayoutFreshCallReceipt): string {
+	return (
+		`[entwurf fresh call → herdr]\n` +
+		`  backend:  ${r.backend} (ONE layout.apply request — herdr has no agent kind for it, and none was requested)\n` +
+		`  model:    ${r.model} (requested on the runtime CLI)\n` +
+		`  cwd:      ${r.cwd} (${HERDR_LAYOUT_CWD_SOURCE_TEXT[r.cwdSource]}, sent explicitly — not an observation)\n` +
+		`  runtime:  ${r.runtime} (this package's verified launcher, the first element of the requested argv)\n` +
+		`  tab:      ${r.herdrTabId} in workspace ${r.herdrWorkspaceId} — a NEW tab beside the caller's, REQUESTED unfocused; whether it is actually unfocused is not observed here\n` +
+		`  pane:     ${r.herdrPaneId} — the tab's root pane; herdr VIEW coordinates, not an address (herdr's layout reply names no terminal)\n` +
+		`  nonce:    ${r.nonce}\n` +
+		`  detection: none requested — pi-durable has no herdr agent integration, so herdr is not told its session and its peers placement column reads unobserved\n` +
+		`\n` +
+		`This is a LAUNCH receipt: herdr accepted one layout request and named the tab above. It does NOT ` +
+		`mean the sibling is running, that its first turn ran, or that the task was delivered. The tab and pane ` +
+		`coordinates are a view and can change under the sibling — they are not an address and nothing may be ` +
+		`dispatched to them.\n` +
+		`The sibling's garden id arrives separately — before its task it calls the zero-argument callback verb ` +
+		`(a read-only look at the caller may come first), and ` +
+		`the sender envelope of THAT message is the address. The nonce above is the correlation tag it carries; ` +
+		`the sibling reads it from its own launch env, never from this receipt. Nothing is polling for it; if it ` +
+		`never comes — not started, stuck, or held back after its check; this receipt cannot tell which — the ` +
+		`pane is visible and can be read directly.`
+	);
+}
+
 /**
  * Three outcomes, and an operator must be able to tell them apart at a glance: a refusal that
  * created nothing, a failure that may have left a tab behind, and a launch.
@@ -1208,9 +2064,16 @@ export function renderHerdrFreshCall(result: HerdrFreshCallResult): { text: stri
 		const hint = HERDR_REJECT_HINT[result.reason];
 		if (!("recovery" in result)) {
 			return {
-				text: `entwurf_fresh_call rejected: ${result.reason} — ${hint}. No tab and no pane were created.`,
+				text:
+					`entwurf_fresh_call rejected: ${result.reason} — ${hint}. No tab and no pane were created.` +
+					("reported" in result && renderReported(result.reported) !== ""
+						? `\n${renderReported(result.reported).trimEnd()}`
+						: ""),
 				isError: true,
 			};
+		}
+		if (HERDR_LAYOUT_FAILURE_REASONS.has(result.reason)) {
+			return { text: renderLayoutFailure(result, hint), isError: true };
 		}
 		const code = result.herdrErrorCode === undefined ? "" : ` [herdr: ${result.herdrErrorCode}]`;
 		return {
@@ -1220,13 +2083,14 @@ export function renderHerdrFreshCall(result: HerdrFreshCallResult): { text: stri
 			isError: true,
 		};
 	}
+	if (result.receipt.backend === "pi-durable") return { text: renderLayoutReceipt(result.receipt), isError: false };
 	const r = result.receipt;
 	return {
 		text:
 			`[entwurf fresh call → herdr]\n` +
 			`  backend:  ${r.backend} (requested kind ${r.requestedKind} — herdr resolves the executable, we did not)\n` +
 			`  model:    ${r.model} (requested on the runtime CLI)\n` +
-			(r.cwd === undefined ? "" : `  cwd:      ${r.cwd} (requested start directory — not an observation)\n`) +
+			`  cwd:      ${r.cwd} (${HERDR_LAYOUT_CWD_SOURCE_TEXT[r.cwdSource]}, sent explicitly — not an observation)\n` +
 			`  agent:    ${r.herdrAgentName} (herdr's name for it, derived from the nonce)\n` +
 			`  tab:      ${r.herdrTabId} in workspace ${r.herdrWorkspaceId} — a NEW tab beside the caller's, opened without taking focus\n` +
 			`  pane:     ${r.herdrPaneId} terminal ${r.herdrTerminalId} — the tab's initial pane; herdr VIEW coordinates, not an address\n` +

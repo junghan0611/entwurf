@@ -298,6 +298,16 @@
 		// type from remote-pair-send.ts with an explicit `.ts` extension, same fence. Typechecked by
 		// scripts/tsconfig.json via its gate (pi-extensions/lib/remote-pair-transport.test.ts) and by
 		// mcp/tsconfig.json through the bridge entry.
-		"pi-extensions/lib/remote-pair-transport.ts"
+		"pi-extensions/lib/remote-pair-transport.ts",
+		// pi-durable-location.ts is the #157 B3 C4 location-evidence leaf — a lib→lib VALUE importer
+		// (meta-session.ts, entwurf-v2-lock.ts) with explicit `.ts` extensions, same fence. Received by
+		// scripts/tsconfig.json and mcp/tsconfig.json through their existing ../pi-extensions/lib/**/*.ts
+		// includes; its beside test takes the existing test fence.
+		"pi-extensions/lib/pi-durable-location.ts",
+		// pi-durable-owner-fence.ts is the #157 B3 pre-release owner fence — a lib→lib VALUE importer
+		// (meta-session.ts) with an explicit `.ts` extension, same fence. Received by scripts/tsconfig.json
+		// and mcp/tsconfig.json through their existing ../pi-extensions/lib/**/*.ts includes; its beside
+		// test takes the existing test fence.
+		"pi-extensions/lib/pi-durable-owner-fence.ts"
 	]
 }

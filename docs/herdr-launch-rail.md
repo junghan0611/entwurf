@@ -1,6 +1,6 @@
 # herdr launch rail
 
-> 이 문서는 **herdr 안에서 형제를 새로 여는 레일**과, #157 G1a부터 그 위에서 **잠든 pi 시민을 같은 garden id로 다시 여는 launch**(§15, `herdr-resume-call.ts`, 2026-11-01 native Pi test-owned LIVE n=1 관측)를 소유한다. herdr 안의 Claude Code resume은 아무것도 만들기 전에 `herdr-resume-backend-unsupported`로 거절하고, tmux leaf의 `herdr-resume-unsupported`는 그 leaf를 직접 부른 경우에만 남는다. 숨은 tmux fallback은 어느 쪽에도 없다. tmux 레일은 [`mux-launch-rail.md`](./mux-launch-rail.md)가 그대로 소유하고, 두 문서는 합쳐지지 않는다 — 좌표도 실패 모양도 다르기 때문이다.
+> 이 문서는 **herdr 안에서 형제를 새로 여는 레일**과, #157 G1a부터 그 위에서 **잠든 pi 시민을 같은 garden id로 다시 여는 launch**(§15, `herdr-resume-call.ts`, 2026-11-01 native Pi test-owned LIVE n=1 관측)를 소유한다. herdr 안의 Claude Code resume은 아무것도 만들기 전에 `herdr-resume-backend-unsupported`로 거절하고, tmux leaf의 `herdr-resume-unsupported`는 그 leaf를 직접 부른 경우에만 남는다. 숨은 tmux fallback은 어느 쪽에도 없다. tmux 레일은 [`mux-launch-rail.md`](./mux-launch-rail.md)가 그대로 소유하고, 두 문서는 합쳐지지 않는다 — 좌표도 실패 모양도 다르기 때문이다. #157 A-L1부터 herdr agent kind가 없는 **pi-durable은 같은 fresh 레일 안의 별도 branch**(caller 자기 herdr socket 위 `layout.apply` 한 번)로 열리며, 그 branch는 §16이 소유한다.
 > 대상: `pi-extensions/lib/herdr-fresh-call.ts` (#116 S2-c1). 측정 환경: herdr 0.9.0 / socket protocol 22, oracle — 2026-09-14, 배치 정책 교체분은 2026-09-15. herdr 소스 인용은 전부 `@ c77af189` 고정본이다.
 > `[재측정 2026-09-17, oracle, herdr 0.9.1]` 공급 핀이 0.9.1로 올라갔다(`scripts/fixtures/herdr-supply.json`). 이 문서의 payload 리터럴은 **재기록하지 않았다** — 0.9.1에서 바뀐 관측은 셋뿐이고 전부 이 레일 밖이거나 무해하다: `herdr status client`의 `protocol: 22` 그대로, `check-herdr-sandbox` 11 assertions green(같은 argv·같은 응답 모양), `integration status`가 행 하나를 더한다(17→18, 추가분은 `letta (experimental)` 하나뿐이고 나머지 17행은 바이트 동일). 0.9.1 바이너리는 digest로 받아 temp에서 실행했고 오퍼레이터 설치본은 건드리지 않았다.
 > `[재측정 2026-10-03, oracle aarch64, herdr 0.9.3, #126]` 공급 핀이 0.9.3으로 올라갔다. payload 리터럴은 이번에도 **재기록하지 않았다** — 이 레일이 소비하는 면에서 바뀐 관측은 없다: `status client`의 `protocol: 22` 그대로, `check-herdr-sandbox` 12 assertions green(같은 argv·같은 응답 모양), `integration status` 18행이 샌드박스 root 경로를 정규화한 뒤 0.9.1과 동일, 0.9.1이 설치한 pi(v9)·claude(v10) integration을 0.9.3이 `current`로 읽는다. 소스상 0.9.2의 변화는 응답의 **추가** 필드(`completion_seq`, `resume_argv`)와 새 pane env 스크럽(#4461 — 외부 `CLAUDECODE`/`CLAUDE_CODE_SESSION_ID` 등을 지우고 명시 `--env`는 허용)이며, 우리 파서는 필드 단위로 읽고 우리 `PI_*` 스크럽은 그대로 필요하다. 0.9.3은 키 입력 hotfix다. 바이너리는 snapshot의 provisional manifest로 `install-herdr-ci.sh`가 digest 검증해 temp에 받았고, 오퍼레이터 설치본(0.9.1)은 건드리지 않았다.
@@ -46,7 +46,7 @@ if params.args.iter().any(|arg| arg.chars().any(char::is_control)) { InvalidArgu
 
 - **메일함 배달**(빈 형제를 먼저 띄우고 프레이밍을 배달): `[측정]` claude 형제가 읽고 수신 확인까지 남긴 뒤 **거부**했다. 출생 주장·nonce·검증금지 문구를 전부 걷어낸 정중한 요청으로 다시 재도 **또 거부**했고, 이유는 문구가 아니라 **권한**이었다 — 방금 빈 채로 태어난 세션에는 검증할 맥락이 없다. 이 거부는 고칠 버그가 아니라 지킬 성질이다.
 - **키 입력**(`agent prompt`): 터미널 입력이다. 이 제품은 형제를 키 입력으로 열지 않는다. `[측정 2026-09-18]` 그 verb가 실제로 무엇을 쓰는지는 §14가 벤더 소스로 잰다 — 2단계 기동 제안이 그 측정으로 닫혔다. **이 문장은 이제 게이트가 진다**: `check-typing-call-fence`가 `pi-extensions/`·`mcp/`의 프로덕션 소스를 코드만 남기고 훑어 타이핑 호출 이름을 찾는다 — 이 레일은 인자와 편지를 짓지 키 입력을 짓지 않으며, **타이핑 호출이 생긴 모듈은 이름으로 거절된다**. 산문은 면제다(규칙을 적은 문장이 곧 그 이름을 담으므로, 산문까지 읽는 스캐너는 자기 법을 지우게 만든다).
-- **벤더 확장 디코더**: omp에는 선례가 있지만 claude-code에는 없다. 파일럿은 `pi | claude-code`다.
+- **벤더 확장 디코더**: omp에는 선례가 있지만 claude-code에는 없다. agent-start 파일럿은 `pi | claude-code`다(`pi-durable`은 agent start가 아니라 §16의 layout 레일로 연다).
 
 ### 채택한 모양
 
@@ -110,7 +110,7 @@ claude의 `agent_session`은 **자식 자신의 one-shot 훅**이 되쏘는 값�
 
 ```text
 pane get <HERDR_PANE_ID>                        # 읽기. 아무것도 만들지 않는다
-tab create --workspace <그 응답의 workspace_id> --no-focus [--cwd <literal>] --env PI_SESSION_ID= --env PI_AGENT_ID=
+tab create --workspace <그 응답의 workspace_id> --no-focus --cwd <선택된 cwd> --env PI_SESSION_ID= --env PI_AGENT_ID=
 ```
 
 `[결정 GLG direct 2026-09-15]` 새 형제는 **caller와 같은 workspace의 새 tab**으로 연다. 이전 정책은 caller pane을 아래로 split하는 것이었고, `[GLG 직접 관측 2026-09-15]` 그것도 실제로 동작했지만 쓰기에는 새 tab이 편했다. 바뀐 것은 배치 한 줄이고, `--no-focus`도 경계도 그대로다.
@@ -200,7 +200,7 @@ tab 좌표는 **그것을 만든 응답**에서 온다(`agent start`의 echo가 
 
 ## 10. 거절 어휘
 
-**공유 입력 계약**(tmux 레일과 **같은 낱말**, 같은 순서, 같은 trim): `caller-identity-unavailable` · `model-empty` · `model-invalid` · `task-empty` · `task-too-long`. 이 다섯은 공개 verb의 caller-facing 계약이라 herdr 안이라고 다른 단어를 배우면 안 된다. `cwd`의 생략 규칙도 같이 온다 — **`undefined`와 정확히 빈 문자열만** "cwd 없음"이고, 나머지는 리터럴 경로다(untrimmed).
+**공유 입력 계약**(tmux 레일과 **같은 낱말**, 같은 순서, 같은 trim): `caller-identity-unavailable` · `model-empty` · `model-invalid` · `task-empty` · `task-too-long`. 이 다섯은 공개 verb의 caller-facing 계약이라 herdr 안이라고 다른 단어를 배우면 안 된다. `cwd`의 생략 규칙도 같이 온다 — **`undefined`와 정확히 빈 문자열만** "cwd 없음"이고, 나머지는 리터럴 경로다(untrimmed). "cwd 없음"은 caller의 디렉터리를 뜻하고 `--cwd`로 명시해 보낸다(#157 A-L1x, §16과 같은 선택): 일반 caller는 이 프로세스 cwd, 알려진 Codex caller는 record cwd이며, 그 record에 cwd가 없으면 아무것도 만들기 전에 `codex-caller-cwd-unavailable`로 거절한다.
 
 **dispatch root**(두 레일 공통, 레일에 묻기 전 · 아무것도 생기지 않음): `model-openrouter-forbidden` · `pi-model-not-provider-qualified`(#76) · `acp-model-not-curated`(#128). 레일이 정하지 않으므로 herdr 안에서도 tmux와 같은 낱말이다. 문구는 공유 composition leaf에 한 번 있다.
 
@@ -209,6 +209,8 @@ tab 좌표는 **그것을 만든 응답**에서 온다(`agent start`의 echo가 
 **post-create** (회수 결과를 함께 낸다): `herdr-tab-create-failed` · `herdr-tab-create-unparsable` · `herdr-tab-root-pane-occupied` · `herdr-agent-start-failed` · `herdr-agent-start-unparsable` · `herdr-agent-start-pane-drift` · `herdr-agent-start-vanished` · `herdr-agent-start-argv-drift`
 
 뒤의 셋은 **읽을 수 있는데 어긋난** 응답이라 `unparsable`로 뭉개지 않는다 — 오퍼레이터가 할 일이 각각 다르다. `pane-drift`는 우리가 연 pane·terminal·**tab**이 아닌 곳에서 뭔가 떴다는 뜻이고(회수는 **tab create 영수증**에서 시작한다), `agent-start-vanished`는 herdr가 시작했다고 한 그 agent를 **읽을 수 있게** 다시 물었더니 우리 pane의 agent가 아니라고 답했다는 뜻이며, `argv-drift`는 우리가 구성하지 않은 프레이밍으로 형제가 떴다는 뜻이다. `[정정 2026-09-18, sol 재검]` 이 자리에 있던 `witness-missing`은 **퇴역했다** — 읽히지 않는 응답은 형제가 없다는 증거가 아니므로 더 이상 거절이 아니고, 만료는 성공 영수증의 두 낱말로 끝난다: 읽을 수 있는 응답이 우리 pane의 agent를 한 번이라도 다시 묶었으면 **`unavailable`**(세션 id만 못 들었다), 한 번도 못 묶었으면 **`unobserved`**(아무 말도 하지 않는다). 어느 쪽도 회수하지 않는다. `[file:line @ c77af189]` `src/app/agents.rs:197-199`가 echo되는 argv를 **canonical executable + 우리 args**로 정의하므로 이 대조는 추측이 아니다.
+
+**pi-durable layout branch**(§16): pre-mutation `herdr-socket-path-missing` · `codex-caller-cwd-unavailable` · `pi-durable-launcher-missing`과 tmux와 같은 pi-durable preflight 낱말, caller-pane 읽기 실패는 위 `herdr-caller-pane-*` 그대로(단 CLI가 아니라 socket `pane.get`이고, 전송 원인이나 herdr의 well-formed error code/message를 bounded 진단으로 인용해 함께 낸다. `herdr-caller-pane-get-failed`의 수리 문구는 pi/claude-code의 `herdr pane get` CLI 읽기와 pi-durable의 `HERDR_SOCKET_PATH` 읽기를 구분해 말한다), 그리고 layout write 이후의 `herdr-layout-transport-failed` · `herdr-layout-apply-refused` · `herdr-layout-apply-failed` · `herdr-layout-reply-unparsable` · `herdr-layout-reply-drift`. `herdr-backend-unsupported`는 이제 합집합(`HERDR_FRESH_CALL_BACKENDS`) 밖의 backend만 뜻한다.
 
 `placement`는 **정의되어 있기만 하면** 거절한다 — `{}`도 `{tmuxSession:""}`도. 멤버를 읽으면, seat를 요청했다가 오타를 낸 caller가 초록 영수증과 함께 기본 위치의 형제를 받는다.
 
@@ -379,3 +381,35 @@ XDG 루트 어디에도 없다 — **도구를 두 번 성공시킨 자식조차
 - **argv.** `tab create --workspace <caller workspace> --no-focus --cwd <record cwd> --env PI_SESSION_ID= --env PI_AGENT_ID=` 다음 `agent start entwurf-resume-<16hex> --kind pi --pane <root pane> --timeout 240000 -- <record runtime argv>`. agent 이름은 호출마다 무작위이고 주소가 아니다.
 - **결과 셋.** 생성 전 거절은 v2의 `launch-refused`(아무것도 없다). tab create 이후 실패는 v2의 `launch-failed`로, herdr 코드·recovery(`none` / `unknown` / `closed` / `orphan-unreclaimed`)·읽힌 경우의 생성 좌표를 원형 그대로 운반하며 "No window was opened"라고 말하지 않고 관측도 시작하지 않는다. launch 성공 뒤에만 독립 관측(same-gid socket)이 돈다. herdr의 ready와 `agent_session`은 garden 주소 가능성이 아니므로 기다리지 않는다. 관측 timeout이면 tab은 남고 lock은 풀리며 재시도·kill은 없다.
 - **증거 등급.** 결정론 증명은 `pi-extensions/lib/herdr-resume-call.test.ts`(herdr 응답 표, 바이너리 없음), `entwurf-v2-visible-resume.test.ts`의 herdr describe 블록, 공통 root의 resume rail 선택을 재는 `check-fresh-call-dispatch`의 `FCD-RESUME-RAIL-SHARED`, bridge 위임을 재는 `check-mux-resume-call`의 `MUXRESUME-HERDR-COMPOSED`다. 실 Herdr 0.9.5/aarch64와 native Pi 1.4.0 설치 provenance의 n=1은 위 BASELINE에 별도 기록했다. product socket observation은 connect 수락이고, 그 런의 별도 owner `get_info` 응답·무턴 byte 비교·recall은 서로 다른 추가 증거다. 후속 post-stop root snapshot과 절차 예외를 보존하며, 이 관측은 영구 smoke gate나 release acceptance를 뜻하지 않는다.
+
+## 16. pi-durable — `layout.apply` 한 번, #157 A-L1
+
+> **상태: source 계약과 후보별 증거를 구분한다.** 이 절은 beside test와 기존 게이트가 재는 계약이다. 이전 A-L1 R13의 공개 pi-durable fresh n=1과 A-L1x R2의 공개 Pi caller-cwd n=1은 [BASELINE](../BASELINE.md)의 날짜·subject·한계로 별도 기록했다. 후속 B3 owner-fence/supply가 합성된 현재 후보의 Native LIVE나 stage3 acceptance로 승계하지 않는다. G2/G3 raw 관측(herdr 0.9.5 aarch64, `[blob 2ecf19a9]` 고정본 소스, 바이너리 번들 schema protocol 22)은 설계 근거다. vendor encoder(`responses.rs`)와 Layout schema 원천 파일은 읽지 않았다.
+
+- **왜 다른 길인가.** herdr에는 pi-durable agent kind가 없다. `--kind pi`로 위장하면 herdr가 pi 프로그램을 그 이름으로 띄운다. 문서화된 CLI에는 layout mutation이 없고, argv **벡터**를 새 tab에서 exec하는 herdr 면은 `layout.apply`뿐이다(app-api-layouts.rs:117-140, pane.rs:2456-2500 — shell도 PTY 키 입력도 없다). 그래서 이 branch는 herdr CLI를 한 번도 부르지 않는다.
+- **세 집합, 한 곳.** `scripts/herdr-rails.mjs`가 `HERDR_AGENT_START_BACKENDS`(pi, claude-code — `HERDR_AGENT_KIND`·`HERDR_CANONICAL_EXECUTABLE`의 key는 이것뿐), `HERDR_LAYOUT_LAUNCH_BACKENDS`(pi-durable), 그 합집합 `HERDR_FRESH_CALL_BACKENDS`(admission·거절 hint·metadata가 읽는다)를 따로 적는다. 두 launch 집합은 서로소다.
+- **순서가 논증이다.** 공유 입력 계약 → cwd 선택과 분류 → `HERDR_SOCKET_PATH`(비어 있지 않은 절대경로, 아니면 `herdr-socket-path-missing` — 추측·탐색·기본값 없음) → 프레이밍 → tmux와 같은 pi-durable preflight(provider 분리 · 첫 입력 상한 · package · carrier/SDK verdict · unit) → 이 패키지 자신의 `run.sh`가 실행 가능한 regular file인지(`pi-durable-launcher-missing`, PATH 조회로 대체하지 않는다) → argv와 env 구성 → 같은 endpoint로 `pane.get` 한 번 → `layout.apply` 한 번. auth·login probe는 없다.
+- **한 endpoint.** caller-pane 읽기와 mutation은 같은 명시 endpoint `HERDR_SOCKET_PATH`로 간다 — CLI로 읽고 socket으로 쓰면 각각 다른 서버에 닿을 수 있고, 거기서 `w1`은 다른 workspace다. 두 연결은 restart/rebind를 가로지르는 server-generation 불변을 **세우지 않는다**: 상속된 env 쌍(`HERDR_PANE_ID`, `HERDR_SOCKET_PATH`)의 유효성과 이 호출 동안의 endpoint 연속성은 이름 붙인 **가정**이고, generation·liveness manager는 더하지 않는다. `pane.get`도 물리적으로는 socket write이므로, 아래의 "정확히 하나"는 언제나 layout **mutation** write 하나를 뜻한다.
+- **요청.** `{workspace_id: <읽은 workspace>, focus: false, root: {type: "pane", cwd: <명시>, command: [<pkg>/run.sh, "pi-durable", "--provider", …, "--entwurf-bootstrap", <payload>], env: {PI_SESSION_ID: "", PI_AGENT_ID: "", <callback 쌍>}}}`. 고정 packet builder 둘뿐이고 `tab_id`·label·split·ratio는 표현할 수 없다. 범용 RPC method·env·argv 공개면은 없다.
+- **payload의 제어문자는 거절이 아니다.** 이 exec 경로에는 자기 Cc 규칙이 없다(pinned `layout_command`는 빈 벡터만 거부). 그래서 기존 `escapeRemainingControlChars`를 bootstrap payload 원소 **자기 층**에 적용해 DEL·C1까지 ASCII `\uXXXX`로 싣고, 기존 decoder(`meta-bridge-omp.ts` `decodeOmpBootstrapPayload`)가 원 프레이밍을 바이트 그대로 돌려받는다. 바깥 request JSON만 이스케이프하면 herdr의 decode가 그것을 다시 literal로 되돌린다. task 안의 NUL도 JSON escape로 전달되며, 실제 exec argv의 NUL과 다르다.
+- **cwd는 항상 명시한다.** herdr의 생략 기본값은 대상 workspace의 **focused pane** cwd(app-api-layouts.rs:343-365)라 caller와 무관하다. 요청 cwd → 알려진 Codex caller의 **record** cwd → (Codex가 아닌 caller만) 이 프로세스 cwd. Codex caller에게 record cwd가 없으면 `codex-caller-cwd-unavailable`이고 프로세스 cwd로 조용히 넘어가지 않는다 — 그 프로세스의 디렉터리는 app-server의 것이다(#95 lane C). herdr의 `cwd`/`foreground_cwd`는 view라 쓰지 않는다. dispatch root는 herdr 쪽 요청을 `...request`가 아니라 **명시 field 목록**으로 만들어 thread id를 넘기지 않고, "record-backed Codex 시민인가"라는 boolean과 그 record cwd만 넘긴다(thread id는 tmux seat 입력으로 남고 tmux 요청은 그대로다). 이것은 Codex-in-herdr placement 인증이 아니다.
+- **파서는 authority-bearing reduction이다**, vendor-schema validator가 아니다. envelope 먼저: top-level non-array object, 정확한 id, `result` XOR `error`(schema가 아니라 Entwurf 자체의 strict acceptance 정책), error arm은 비어 있지 않은 `code` 문자열과 `message` 문자열. `pane_info`는 `pane_id`·`terminal_id`·`tab_id` 비어 있지 않은 문자열, `focused` boolean, `revision` 0 이상 안전 정수, `agent_status`는 **존재만** 확인하고 해석·인증하지 않으며, `pane_id`가 caller와 같고 `workspace_id`가 비어 있지 않아야 한다. pane·layout·root는 non-null non-array object여야 하고, 아니면 거절 또는 unknown이다.
+
+| layout 결과 | recovery | nonce |
+|---|---|---|
+| `pane.get` 실패(전송 · error arm · 파싱 · drift · workspace 없음) | 거절 — layout write 0 | 없음 |
+| layout 연결 자체가 생기지 않음(`connect-failed`) | none · `herdr-layout-transport-failed` | 없음 |
+| well-formed 일치 error, code ∈ {`workspace_not_found`, `invalid_layout`, `invalid_env`} — pinned handler가 첫 생성 전에만 내는 코드 | none · `herdr-layout-apply-refused` | 없음 |
+| 그 밖의 code(`layout_apply_failed` 포함 — :143/:158/:196 및 생성 이후) | unknown · `herdr-layout-apply-failed` | 있음 |
+| 연결 뒤 I/O 오류 · timeout · oversize · 개행 전 EOF | unknown · `herdr-layout-transport-failed` | 있음 |
+| envelope 불량(양 arm · code/message 누락·타입 · null/array arm · 다른 id · JSON 아님) | unknown · `herdr-layout-reply-unparsable` | 있음 |
+| success인데 이 launch의 echo가 아님 | unknown · `herdr-layout-reply-drift` | 있음 |
+| `layout_apply` · 요청한 workspace · tab · boolean `zoomed` · root pane = `focused_pane_id` · cwd와 argv 정확한 echo | launch receipt | receipt |
+
+  unknown은 **재전송 0, 닫기 0**이다. 연결 뒤의 unknown이 아는 것은 layout write가 **시도되었고** herdr에 닿았을 **수 있다**는 것뿐이고 — I/O 실패는 전체 전달 전에 일어날 수 있다 — 전달되었다고 말하지 않는다. 그런 unknown만 "형제가 아직 nonce로 콜백할 수 있다"고 말한다. 회수는 없다: layout 응답은 terminal id를 주지 않으므로 이 branch에는 create-receipt terminal이 없고, 따라서 연 것을 닫을 권한도 없다. echo는 실행 증거가 아니다.
+- **진단은 표시용으로만 자른다.** 보고된 문자열(전송 원인 · code · message · workspace · tab · pane — caller-pane 읽기 거절에도 실린다)은 각각 256자에서 자르고(surrogate 쌍을 쪼개지 않는다) JSON 인용으로 렌더한다. 원시 응답 줄 전체에는 `HERDR_MAX_OUTPUT_BYTES` 바이트 상한이 있고, 넘으면 잘라 읽지 않고 `oversize`다. 그 줄의 바이트는 한 decode leaf(`decodeHerdrReplyBytes`)에서 모두 이어 붙인 뒤 한 번만 UTF-8로 읽는다. 모든 비교는 자르기 전의 완전한 원값으로 한다. 잘렸거나 미검증인 보고 값이 launch receipt·placement·close 권한으로 승격되는 경로는 없다.
+- **receipt.** `launch: "layout-apply"`, model, cwd와 그 출처(`requested` / `codex-caller-record` / `caller-process`), runtime(`run.sh`), workspace·tab·pane(view), nonce. `focus: false`는 **요청값**이고 layout의 `focused_pane_id`는 tab 내부 focus라 tab이 실제로 unfocused라는 증명이 아니다 — receipt는 "requested unfocused + returned coordinates"까지이고 실제 view는 별도 LIVE의 몫이다. herdr에 agent kind가 없으니 herdr detection도 없고, peers placement 열은 unobserved로 읽힌다. 주소는 언제나 콜백 sender envelope이다.
+- **두 후속 leaf.**
+  - **A-L2 — RAILS 두 도메인.** status pane의 RAILS block은 공개 fresh-call 집합 셋을 두 그룹으로 보인다: agent start(`pi`, `claude-code`)와 layout 요청 하나(`pi-durable`). 각 backend 줄은 `RAIL_ENTRY_NOTE`와 `MODEL_SYNTAX_EXAMPLE` 한 줄씩이며, pi-durable 줄은 이 plugin이 activate하는 integration이 아니고 herdr agent kind가 없어 감지도 session 연결도 없다고 말한다. install narration은 이번 설치가 activate한 integration만 말하므로 agent-start 쪽만 다룬다.
+  - **A-L1x — agent start의 caller cwd.** pi/claude-code의 `tab create`도 이제 항상 `--cwd`를 보낸다. 선택은 layout과 같은 `chooseHerdrLayoutCwd`다: 요청 cwd → 알려진 Codex caller의 record cwd(없으면 `codex-caller-cwd-unavailable`, 프로세스 cwd fallback 없음) → 그 밖의 caller는 이 프로세스 cwd. receipt는 cwd와 그 출처를 항상 싣는다. agent start argv·kind·model·identity·reclaim은 바뀌지 않았다. 일반 Pi caller의 생략 cwd는 A-L1x R2 n=1로 BASELINE에 별도 기록했다. Claude Code와 Codex caller의 경로는 source 계약이며 LIVE 미측정이고, 현재 B3 합성 후보의 Native LIVE를 뜻하지 않는다.
+- **증거 등급.** 결정론: `pi-extensions/lib/herdr-layout-fresh-call.test.ts`(HLFC-*, 주입 endpoint 표와 실제 unix socket 위 production client, 이 coordinate는 `check-herdr-fresh-call`), `check-herdr-fresh-call`의 `HFC-PILOT-CLOSED`·`HFC-RAIL-IMPORT-FENCE`, `check-fresh-call-dispatch`의 `FCD-HERDR-PI-DURABLE-LAYOUT`·`FCD-HERDR-NO-THREAD-ID`. 이전 후보의 실 Herdr pi-durable 기동·콜백과 Pi caller-cwd 관측은 위 BASELINE의 R13/R2 범위만 인정하며, 현재 B3 합성 후보의 Native LIVE는 미측정이다.

@@ -242,7 +242,9 @@ present as tools. The pane tells you which ids exist; these do the work:
 - `entwurf_v2 {target, intent:"fire-and-forget", message}` — deliver to a garden id. One outcome, or
   a named refusal.
 - `entwurf_fresh_call {backend, model, task}` — open a sibling that does not exist yet. Inside Herdr
-  it opens a **new unfocused tab in your own workspace** and admits `pi` and `claude-code` only;
+  it opens a **new unfocused tab in your own workspace** and admits `pi` and `claude-code` through
+  Herdr's agent start, plus `pi-durable` through one layout request that this plugin does not wire
+  (see "`pi-durable` reaches the Herdr rail through Entwurf itself" below);
   a `placement` argument is refused by name rather than quietly ignored, and there is no fallback to
   tmux. The model is required and has no default: pi wants a provider-qualified id like
   `openai-codex/gpt-5.6-terra`, Claude Code wants a vendor id like `claude-sonnet-5`. Each runtime
@@ -331,12 +333,19 @@ mostly outside Herdr, install directly and treat this plugin as optional — and
 directly does **not** cost you the Herdr rail, because the rail is selected from the caller's process
 context, not from how Entwurf got onto the machine.
 
-`pi-durable` is on that list only through the direct route: the tmux rail opens it as the managed
-`entwurf pi-durable` launcher, and this plugin neither wires it nor launches it. The Herdr rail's
-set stays `{pi, claude-code}` (`HERDR_FRESH_CALL_BACKENDS`, `scripts/herdr-rails.mjs:44`) and does
-not widen when the core list does; Herdr's `--kind` is a bare executable token that cannot carry
-`entwurf pi-durable …`. So no Herdr support for `pi-durable` is claimed here. Whether to add it is
-#132 C, which is paused and unmeasured.
+`pi-durable` reaches the Herdr rail through Entwurf itself, not through this plugin: the tmux rail
+opens it as the managed `entwurf pi-durable` launcher, and since #157 A-L1 the Herdr rail opens it
+in a new tab with ONE `layout.apply` request on the caller's own Herdr socket, running the package's
+own `run.sh pi-durable …` — Herdr's `--kind` is a bare executable token that cannot carry it, so it is
+never disguised as `--kind pi`. The Herdr rail's backend sets live in `scripts/herdr-rails.mjs`: the
+agent-start set `{pi, claude-code}` (`HERDR_AGENT_START_BACKENDS`), the layout set `{pi-durable}`
+(`HERDR_LAYOUT_LAUNCH_BACKENDS`) and their union (`HERDR_FRESH_CALL_BACKENDS`); none widens when the
+core list does. This plugin neither wires nor launches `pi-durable`. Its status pane's RAILS block
+shows the three fresh-call backends as two groups — `pi` and `claude-code` through agent start,
+`pi-durable` through one layout request with no Herdr agent kind, detection or session association —
+while the install narration names only the integrations it activated (#157 A-L2). Contract and
+evidence level:
+[`docs/herdr-launch-rail.md` §16](../../docs/herdr-launch-rail.md).
 
 ---
 

@@ -10,7 +10,8 @@
  *   createPiDurableContact({ bridgeEntry })
  *     .extension          tools-only durable Extension, handed to the overlay's
  *                         `openDurable({ extensions })` BEFORE the Harness opens
- *     .attach(session)    once `openDurable` returns: upsert the record, name this process as
+ *     .attach(session)    once `openDurable` returns: commit the record's binding and its
+ *                         location evidence (`lib/pi-durable-location.ts`), name this process as
  *                         sender, spawn the compiled entwurf-bridge as a DIRECT child, then
  *                         release the tools
  *
@@ -93,17 +94,21 @@
  * refusal.
  *
  * CALLER FRESH (the sixth tool). `entwurf_fresh_call` lets this durable citizen open a sibling, under the
- * bridge's own schema (pinned below, including the `pi-durable` backend itself). The bridge places it
- * beside the tmux pane this host was launched in, which a fresh-opened durable host inherits; an
- * operator host started outside tmux gets the bridge's named `no-tmux-context` refusal. Exposing the
- * tool is not a caller LIVE proof.
+ * bridge's own schema (pinned below, including the `pi-durable` backend itself). Outside herdr, the bridge
+ * places it beside the tmux pane this host was launched in, which a fresh-opened durable host inherits,
+ * and an operator host started outside tmux gets the bridge's named `no-tmux-context` refusal. Inside
+ * herdr (`HERDR_ENV=1`, which the bridge child inherits from this host) it requests a new herdr tab
+ * instead, for pi, claude-code or pi-durable only; the other backends are refused by name, and nothing
+ * falls back to tmux. Exposing the tool is not a caller LIVE proof.
  *
  * CALLER RESUME (the seventh tool, #147 L1). `entwurf_resume_call` lets this durable citizen reopen a
  * DORMANT pi or Claude Code citizen under its own garden id (#147 L2), under the bridge's own
  * single-`target` schema (pinned below). The bridge decides everything else from the target's record,
  * exactly as for any other caller: other backends have no same-id resume, a live target is refused,
- * and the window opens in the tmux session this host was launched in. Exposing the tool names no new authority and is not a caller LIVE
- * proof; it never resumes this durable host itself.
+ * and outside herdr the window opens in the tmux session this host was launched in. Inside herdr only
+ * a pi target reopens, in a new herdr tab; a Claude Code target is refused by name before anything is
+ * created. Exposing the tool names no new authority and is not a caller LIVE proof; it never resumes
+ * this durable host itself.
  *
  * NOT HERE: crash-safe receive. `entwurf_inbox_read` archives a body before the durable tool
  * result commits, so a crash between the two loses that body to the model; recovery settles the
@@ -126,10 +131,10 @@ import {
 	readMetaReceiverMarker,
 	readMetaSenderMarker,
 	requireGardenId,
-	upsertMetaSession,
 	writeMetaReceiverMarker,
 	writeMetaSenderMarker,
 } from "./lib/meta-session.ts";
+import { commitPiDurableBirth } from "./lib/pi-durable-location.ts";
 
 /** The backend id this contact mints under. */
 export const PI_DURABLE_BACKEND = "pi-durable" as const;
@@ -1159,9 +1164,18 @@ export function createPiDurableContact(options: PiDurableContactOptions): PiDura
 				}
 				const ownerPid = options.ownerPid ?? process.pid;
 				const sendersDir = path.resolve(options.sendersDir ?? defaultMetaSendersDir());
-				const upsert = upsertMetaSession({
-					input: { backend: PI_DURABLE_BACKEND, nativeSessionId: id, cwd, model: null, transcriptPath: null },
-					dir: options.sessionsDir ?? defaultMetaSessionsDir(),
+				const receiversDir = path.resolve(options.receiversDir ?? defaultMetaReceiversDir());
+				// The record and its location evidence, bound by one minted attachIncarnation under the
+				// record-arm lock of the receivers root this birth uses. A refusal here fails the birth;
+				// there is no unbound fallback. The pair is not one atomic commit: see the leaf's
+				// FAILURE STATES for what each failure leaves behind.
+				const upsert = commitPiDurableBirth({
+					nativeSessionId: id,
+					cwd,
+					sessionDirectory: session.directory,
+					ownerPid,
+					sessionsDir: options.sessionsDir ?? defaultMetaSessionsDir(),
+					receiversDir,
 				});
 				const gardenId = upsert.record.gardenId;
 				const markerPath = writeMetaSenderMarker({
@@ -1176,7 +1190,7 @@ export function createPiDurableContact(options: PiDurableContactOptions): PiDura
 					sessionsDir: upsert.dir,
 					sendersDir,
 					mailboxDir: path.resolve(options.mailboxDir ?? defaultMetaMailboxDir()),
-					receiversDir: path.resolve(options.receiversDir ?? defaultMetaReceiversDir()),
+					receiversDir,
 				};
 				const client = await connect({
 					command: process.execPath,

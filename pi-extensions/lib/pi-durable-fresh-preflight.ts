@@ -19,7 +19,7 @@
  *                 `{v:2,task}` payload, whose decoder caps `task` at 16000 characters. A framed
  *                 task over that cap would open a window whose bootstrap refuses its own argv.
  *
- * ── Then the carrier, then the four units ──
+ * ── Then the carrier, then the five units ──
  *
  *   carrier          the package's own pi-durable carrier and its declared SDK set, verified
  *                    (`pi-durable-runtime.ts`); passed in as that check's verdict.
@@ -29,6 +29,9 @@
  *                    it every dispatch to the citizen is the honest `mailbox-undeliverable`.
  *   visible identity the packaged bootstrap — the one that hands the TUI the view whose conversation
  *                    labels carry the garden id.
+ *   owner fence      the compiled owner fence in the same closure — the packaged bootstrap imports it,
+ *                    so without it the bootstrap cannot load. Asked here as a file this package must
+ *                    ship, nothing more; the carrier verdict above does not cover it.
  *
  * ── What this deliberately does NOT claim ──
  *
@@ -52,7 +55,8 @@ export type PiDurablePreflightRejectReason =
 	| "pi-durable-birth-unit-missing"
 	| "pi-durable-mcp-hand-missing"
 	| "pi-durable-receive-unit-missing"
-	| "pi-durable-visible-identity-missing";
+	| "pi-durable-visible-identity-missing"
+	| "pi-durable-owner-fence-missing";
 
 /** `<provider>/<model id>` at the FIRST `/`, or `null` when either side is empty. */
 export function splitPiDurableModel(model: string): { provider: string; model: string } | null {
@@ -89,6 +93,7 @@ export function piDurableFreshPreflight(params: {
 	if (!existsSync(layout.bridgeEntry)) return "pi-durable-mcp-hand-missing";
 	if (!ownerJoinAdmitsDurableHost(layout.deliverability)) return "pi-durable-receive-unit-missing";
 	if (!existsSync(layout.bootstrap)) return "pi-durable-visible-identity-missing";
+	if (!existsSync(layout.ownerFence)) return "pi-durable-owner-fence-missing";
 	return null;
 }
 
@@ -110,4 +115,6 @@ export const PI_DURABLE_PREFLIGHT_HINT: Record<
 		"this Entwurf package's compiled owner join does not admit pi-durable-host, so nothing could ever be delivered to the sibling — reinstall or rebuild Entwurf",
 	"pi-durable-visible-identity-missing":
 		"this Entwurf package has no packaged pi-durable bootstrap (pi/pi-durable/bootstrap.mjs), so no TUI would carry the garden id — reinstall Entwurf",
+	"pi-durable-owner-fence-missing":
+		"this Entwurf package has no compiled pi-durable owner fence (mcp/entwurf-bridge/dist/pi-extensions/lib/pi-durable-owner-fence.js), which its packaged bootstrap imports — reinstall or rebuild Entwurf",
 };

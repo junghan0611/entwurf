@@ -28,12 +28,14 @@
 # only external program named, and Entwurf is itself a Node package, so a host that
 # has Entwurf has Node (see README).
 #
-# WHICH HARNESSES THIS PLUGIN WIRES AND OPENS: P = {pi, claude-code}, and the Herdr fresh-call
-# pilot is that same pair (HERDR_FRESH_CALL_BACKENDS, scripts/herdr-rails.mjs). The core fresh-call
-# list is wider: copilot, omp, codex and pi-durable ride the direct route's tmux rail
-# (FRESH_CALL_BACKENDS, pi-extensions/lib/fresh-call-composition.ts). This pair does NOT widen
-# with it. A new core backend is not Herdr support until it is wired, measured and added here on
-# purpose (#132 C).
+# WHICH HARNESSES THIS PLUGIN WIRES AND OPENS: P = {pi, claude-code}, and Herdr's agent-start set
+# is that same pair (HERDR_AGENT_START_BACKENDS, scripts/herdr-rails.mjs). The public Herdr
+# fresh-call set (HERDR_FRESH_CALL_BACKENDS) has one more member, pi-durable, which Entwurf opens
+# through one layout request (HERDR_LAYOUT_LAUNCH_BACKENDS, #157 A-L1): it is not an integration
+# this plugin activates, and Herdr has no agent kind for it. The core fresh-call list is wider
+# still: copilot, omp and codex ride only the direct route's tmux rail (FRESH_CALL_BACKENDS,
+# pi-extensions/lib/fresh-call-composition.ts). This pair does NOT widen with it: each backend's
+# own native contract has to be measured before Herdr opens it (#132 C).
 id = "junghan0611.entwurf"
 name = "Herdr Entwurf"
 version = "0.45.0"

@@ -118,6 +118,8 @@ async function runMain(
 			trace.markAt.open = process.env.MOCK_NATIVE_MARK;
 			trace.cwdAtOpen = process.cwd();
 			trace.opened.push(options);
+			// The owned selectSession hands the contact an existing directory; this fake open does too.
+			fs.mkdirSync(path.join(root, "durable"), { recursive: true });
 			return {
 				view: {
 					current: () => ({ session: { id: SESSION_ID, directory: path.join(root, "durable"), cwd: options.cwd } }),

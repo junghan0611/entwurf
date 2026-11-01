@@ -69,7 +69,12 @@ import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import * as activationModule from "../../../scripts/herdr-activation.mjs";
-import { HERDR_FRESH_CALL_BACKENDS, MODEL_SYNTAX_EXAMPLE, RAIL_ENTRY_NOTE } from "../../../scripts/herdr-rails.mjs";
+import {
+	HERDR_AGENT_START_BACKENDS,
+	HERDR_LAYOUT_LAUNCH_BACKENDS,
+	MODEL_SYNTAX_EXAMPLE,
+	RAIL_ENTRY_NOTE,
+} from "../../../scripts/herdr-rails.mjs";
 import * as runtimeModule from "../../../scripts/herdr-runtime.mjs";
 import { gatherActivationEvidence } from "./activation-evidence.mjs";
 import { activationBlock, citizensBlock, integrationBlock, railsBlock, renderReport } from "./capability-report.mjs";
@@ -364,8 +369,11 @@ if (herdrBin === undefined || herdrBin === "") {
 	const blocks = [
 		integrationBlock(readIntegration(herdrBin)),
 		activationBlock(evidence),
+		// The two launch domains are passed separately, never as their union, so the block can show
+		// which backends herdr starts as an agent and which it only opens a tab for (#157 A-L2).
 		railsBlock({
-			backends: HERDR_FRESH_CALL_BACKENDS,
+			agentStartBackends: HERDR_AGENT_START_BACKENDS,
+			layoutBackends: HERDR_LAYOUT_LAUNCH_BACKENDS,
 			modelSyntaxExample: MODEL_SYNTAX_EXAMPLE,
 			railEntryNote: RAIL_ENTRY_NOTE,
 		}),

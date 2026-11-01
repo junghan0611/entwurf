@@ -46,8 +46,10 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { main, openDurableCitizen, PACKAGED_BRIDGE_ENTRY } from "../plugins/pi-durable/bootstrap.mjs";
+import { acquireLock, releaseLock } from "./lib/entwurf-v2-lock.ts";
 import { FRESH_CALL_BACKENDS } from "./lib/fresh-call-composition.ts";
 import { enqueueMetaMessage, readMetaInbox, upsertMetaSession, writeMetaReceiverMarker } from "./lib/meta-session.ts";
+import { verifyPiDurableLocation } from "./lib/pi-durable-location.ts";
 import {
 	type BridgeCallResult,
 	type BridgeClient,
@@ -130,8 +132,11 @@ function stubBridge(answer = (name: string) => `${name} ok`): StubBridge {
 	return stub;
 }
 
+/** The native session directory exists, as the durable runtime's own selection guarantees (#157 B3 C4). */
 function session(id = SESSION_ID) {
-	return { id, directory: path.join(root, "durable-sessions", id), cwd };
+	const directory = path.join(root, "durable-sessions", id);
+	fs.mkdirSync(directory, { recursive: true });
+	return { id, directory, cwd };
 }
 
 function contact(stub: StubBridge, env: NodeJS.ProcessEnv = {}) {
@@ -214,6 +219,87 @@ describe("pi-durable contact — birth", () => {
 			/one-time birth/,
 		);
 		expect(records()).toHaveLength(1);
+	});
+
+	// #157 B3 C4: the birth's record binding and its location evidence. Literal oracles: the carrier path is
+	// typed here, records and carriers are read raw, the start key comes from /proc here.
+	const carrierOf = (gid: string) =>
+		JSON.parse(fs.readFileSync(path.join(root, "meta-pi-durable-locations", `${gid}.location.json`), "utf8")) as Record<
+			string,
+			unknown
+		>;
+	const located = (gid: string) => verifyPiDurableLocation({ gardenId: gid, sessionsDir, receiversDir });
+
+	it("[QK:PI-DURABLE-BIRTH-LOCATION-BOUND] every birth mints the record's attachIncarnation under the record-arm lock and writes the same value, the realpath session directory and this owner into the location evidence", async () => {
+		const first = await contact(stubBridge()).attach(session());
+		const inc1 = (records()[0] as Record<string, unknown>).attachIncarnation;
+		expect(inc1).toMatch(/^[0-9a-f]{32}$/);
+		expect(carrierOf(first.gardenId)).toMatchObject({
+			gardenId: first.gardenId,
+			backend: "pi-durable",
+			nativeSessionId: SESSION_ID,
+			cwd,
+			nativeDirectory: path.join(fs.realpathSync(root), "durable-sessions", SESSION_ID),
+			ownerPid: process.pid,
+			ownerStartKey: `linux:${procStartTime(process.pid)}`,
+			attachIncarnation: inc1,
+		});
+		expect(located(first.gardenId)).toMatchObject({ ok: true });
+
+		const second = await contact(stubBridge()).attach(session());
+		const inc2 = (records()[0] as Record<string, unknown>).attachIncarnation;
+		expect(inc2).toMatch(/^[0-9a-f]{32}$/);
+		expect(inc2).not.toBe(inc1);
+		expect(carrierOf(second.gardenId).attachIncarnation).toBe(inc2);
+		expect(located(second.gardenId)).toMatchObject({ ok: true });
+	});
+
+	it("[QK:PI-DURABLE-BIRTH-LOCATION-FAILURE-FAILS-BIRTH] a binding the birth cannot commit fails the birth by name before the bridge — a missing session directory writes nothing, (a) a busy arm lock keeps the older matching pair, (b) an unwritable carrier leaves record ≠ carrier; and (c) a pair committed before a failed bridge still fails the birth", async () => {
+		const gone = { id: SESSION_ID, directory: path.join(root, "durable-sessions", "absent"), cwd };
+		const missingStub = stubBridge();
+		const missing = contact(missingStub);
+		const missingWait = self(missing).execute({}, undefined, {});
+		await expect(missing.attach(gone)).rejects.toThrow(/native-directory-invalid/);
+		await expect(missingWait).rejects.toBeInstanceOf(PiDurableIdentityNotReady);
+		expect(fs.existsSync(sessionsDir)).toBe(false);
+		expect(missingStub.specs).toHaveLength(0);
+
+		const { gardenId: gid } = await contact(stubBridge()).attach(session());
+		const before = (records()[0] as Record<string, unknown>).attachIncarnation;
+		const lockDir = path.join(root, "meta-record-arm-locks");
+		const held = acquireLock(gid, { dir: lockDir });
+		expect(held.ok).toBe(true);
+		const busyStub = stubBridge();
+		const busy = contact(busyStub);
+		const busyWait = self(busy).execute({}, undefined, {});
+		await expect(busy.attach(session())).rejects.toThrow(/record-arm-lock-busy/);
+		await expect(busyWait).rejects.toBeInstanceOf(PiDurableIdentityNotReady);
+		expect(busyStub.specs).toHaveLength(0);
+		expect((records()[0] as Record<string, unknown>).attachIncarnation).toBe(before);
+		expect(located(gid)).toMatchObject({ ok: true });
+		if (held.ok) releaseLock(held.claim, { dir: lockDir });
+
+		if (process.getuid?.() !== 0) {
+			const locations = path.join(root, "meta-pi-durable-locations");
+			fs.chmodSync(locations, 0o500);
+			const unwritableStub = stubBridge();
+			try {
+				await expect(contact(unwritableStub).attach(session())).rejects.toThrow(/carrier-write-failed/);
+			} finally {
+				fs.chmodSync(locations, 0o700);
+			}
+			expect(unwritableStub.specs).toHaveLength(0);
+			expect((records()[0] as Record<string, unknown>).attachIncarnation).not.toBe(before);
+			expect(located(gid)).toMatchObject({ ok: false, reason: "binding-mismatch" });
+		}
+
+		const boom = stubBridge();
+		boom.connect = async () => {
+			throw new Error("bridge spawn boom");
+		};
+		await expect(contact(boom).attach(session())).rejects.toThrow("bridge spawn boom");
+		expect(carrierOf(gid).attachIncarnation).toBe((records()[0] as Record<string, unknown>).attachIncarnation);
+		expect(located(gid)).toMatchObject({ ok: true });
 	});
 
 	it("[QK:PI-DURABLE-BRIDGE-DIRECT-SCRUBBED] the bridge is this node on the given entry, no shell, without the inherited identity carriers", async () => {
@@ -1676,6 +1762,17 @@ describe("pi-durable contact — the doorbell", () => {
 		expect(other.record.closed).toBe(1);
 	});
 
+	it("[QK:PI-DURABLE-CLOSE-RETAINS-LOCATION] close retires the doorbell and leaves the location evidence untouched: the pair still matches, which says nothing about liveness", async () => {
+		const c = doorbellContact(stubBridge(), fakeWatch());
+		const { gardenId: gid } = await c.attach(session(), rootAdmission().admission);
+		const carrier = path.join(root, "meta-pi-durable-locations", `${gid}.location.json`);
+		const bytes = fs.readFileSync(carrier, "utf8");
+		await c.close();
+		expect(fs.existsSync(markerFile(gid))).toBe(false);
+		expect(fs.readFileSync(carrier, "utf8")).toBe(bytes);
+		expect(verifyPiDurableLocation({ gardenId: gid, sessionsDir, receiversDir })).toMatchObject({ ok: true });
+	});
+
 	it("[QK:PI-DURABLE-INBOX-READ-PASS-THROUGH] entwurf_inbox_read hands the bridge exactly its gardenId argument", async () => {
 		const stub = stubBridge();
 		const c = contact(stub);
@@ -2290,7 +2387,7 @@ describe("pi-durable bootstrap — explicit fresh arguments (stub runtime, unit 
 		expect(options.model).toEqual({ provider: "loopback", model: "scripted" });
 		expect(options.continueSession).toBe(false);
 		// task-wide is the absence of a filter: no tools/width key reaches the native open.
-		expect(Object.keys(options).sort()).toEqual(["continueSession", "cwd", "extensions", "model"]);
+		expect(Object.keys(options).sort()).toEqual(["continueSession", "cwd", "extensions", "fence", "model"]);
 
 		const direct = fakeFresh();
 		const citizen = await openDurableCitizen({
@@ -2595,6 +2692,7 @@ describe("pi-durable bootstrap — the packaged compiled closure (needs a built 
 			(m) => m[1] as string,
 		);
 		expect(specifiers.filter((sp) => sp.startsWith("."))).toEqual([
+			"../../mcp/entwurf-bridge/dist/pi-extensions/lib/pi-durable-owner-fence.js",
 			"../../mcp/entwurf-bridge/dist/pi-extensions/meta-bridge-omp.js",
 			"../../mcp/entwurf-bridge/dist/pi-extensions/meta-bridge-pi-durable.js",
 		]);

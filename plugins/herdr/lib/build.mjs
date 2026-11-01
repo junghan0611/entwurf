@@ -53,7 +53,7 @@ import {
 	runtimeIdentityOnDisk,
 } from "../../../scripts/herdr-activation.mjs";
 import { describeRefusedComponents, preflightSelectedComponents } from "../../../scripts/herdr-plugin-activate.mjs";
-import { HERDR_FRESH_CALL_BACKENDS, MODEL_SYNTAX_EXAMPLE, RAIL_ENTRY_NOTE } from "../../../scripts/herdr-rails.mjs";
+import { HERDR_AGENT_START_BACKENDS, MODEL_SYNTAX_EXAMPLE, RAIL_ENTRY_NOTE } from "../../../scripts/herdr-rails.mjs";
 import {
 	artifactCompleteness,
 	bootstrapRuntime,
@@ -344,7 +344,10 @@ function usageNotes(activated) {
 	// Both sentences come from `scripts/herdr-rails.mjs`, which is also what the status pane's
 	// RAILS block renders. One source, so an operator cannot be told two different things about
 	// one backend by the installer and by the pane.
-	for (const backend of HERDR_FRESH_CALL_BACKENDS) {
+	// This narrates what THIS install activated, so it walks the agent-start set only: pi-durable is
+	// never activated by this plugin (herdr has no agent kind for it). Its layout launch is shown by
+	// the status pane's RAILS block, beside the agent-start group (#157 A-L2).
+	for (const backend of HERDR_AGENT_START_BACKENDS) {
 		if (!activated.includes(backend)) continue;
 		notes.push(`${backend}: ${RAIL_ENTRY_NOTE[backend]}.`);
 		notes.push(`${backend}: a model string looks like \`${MODEL_SYNTAX_EXAMPLE[backend]}\` — one example, not a list.`);

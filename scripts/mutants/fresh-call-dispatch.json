@@ -67,8 +67,8 @@
 			"claim": "FCD-ONE-NONCE",
 			"title": "the rail mints its own second nonce, so the sibling calls back with a tag the caller never recorded",
 			"subject": "pi-extensions/lib/fresh-call-dispatch.ts",
-			"find": ["\t\treturn { rail: \"herdr\", result: await herdrFreshCall(request, run, env, nonce) };"],
-			"replace": ["\t\treturn { rail: \"herdr\", result: await herdrFreshCall(request, run, env, mintNonce()) };"],
+			"find": ["\t\treturn { rail: \"herdr\", result: await herdrFreshCall(herdrRequest, run, env, nonce) };"],
+			"replace": ["\t\treturn { rail: \"herdr\", result: await herdrFreshCall(herdrRequest, run, env, mintNonce()) };"],
 			"gate": ["bash", "run.sh", "check-fresh-call-dispatch"],
 			"timeoutSeconds": 120,
 			"signature": "[QK:FCD-ONE-NONCE]",
@@ -196,6 +196,31 @@
 			"gate": ["bash", "run.sh", "check-fresh-call-dispatch"],
 			"timeoutSeconds": 120,
 			"signature": "[QK:FCD-RESUME-RAIL-SHARED]",
+			"signatureSource": "scripts/check-fresh-call-dispatch.ts"
+		},
+		{
+			"claim": "FCD-HERDR-PI-DURABLE-LAYOUT",
+			"title": "the root stops telling the herdr layout branch that the caller is a record-backed Codex citizen, so a Codex caller with no record cwd silently opens pi-durable in the bridge process's own directory",
+			"subject": "pi-extensions/lib/fresh-call-dispatch.ts",
+			"find": ["\t\t\tcallerIsCodex: request.callerNativeSessionId !== undefined,"],
+			"replace": ["\t\t\tcallerIsCodex: false,"],
+			"gate": ["bash", "run.sh", "check-fresh-call-dispatch"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:FCD-HERDR-PI-DURABLE-LAYOUT]",
+			"signatureSource": "scripts/check-fresh-call-dispatch.ts"
+		},
+		{
+			"claim": "FCD-HERDR-NO-THREAD-ID",
+			"title": "the herdr request carries the Codex thread id across the root again, so a tmux seat input reaches a rail that has no pane title to anchor it to and can start treating it as placement",
+			"subject": "pi-extensions/lib/fresh-call-dispatch.ts",
+			"find": ["\t\t\tcallerIsCodex: request.callerNativeSessionId !== undefined,"],
+			"replace": [
+				"\t\t\tcallerIsCodex: request.callerNativeSessionId !== undefined,",
+				"\t\t\tcallerNativeSessionId: request.callerNativeSessionId,"
+			],
+			"gate": ["bash", "run.sh", "check-fresh-call-dispatch"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:FCD-HERDR-NO-THREAD-ID]",
 			"signatureSource": "scripts/check-fresh-call-dispatch.ts"
 		}
 	]

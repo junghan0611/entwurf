@@ -360,9 +360,12 @@ export interface MetaIdentity {
 	 * arm-capable event and writes in the SAME atomic upsert as that attach, then copies into
 	 * the receiver marker it writes under the record-arm lock. A dead marker carrying the
 	 * value the record still carries is evidence that no later arm-capable attach happened;
-	 * one that does not carry it is not. `null` means no binding was ever observed — every
-	 * other backend, a record no arm has touched since this field existed, a create — and
-	 * is never filled by inference. Every writer that does not mint PRESERVES it.
+	 * one that does not carry it is not. The pi-durable birth (#157 B3 C4) mints it the same way
+	 * under the same lock and copies it into its location evidence (`pi-durable-location.ts`)
+	 * instead of a marker; there it binds a location, never a dormancy verdict. `null` means no
+	 * binding was ever observed — every other backend, a pi-durable record no birth has bound,
+	 * a record no arm has touched since this field existed, a create — and is never filled by
+	 * inference. Every writer that does not mint PRESERVES it.
 	 */
 	attachIncarnation: string | null;
 }
@@ -614,10 +617,10 @@ export interface MetaIdentityMintInput {
 	model?: string | null;
 	transcriptPath?: string | null;
 	/**
-	 * The arm binding to commit with this write. ONLY the Claude Code hook passes it, and
-	 * only on an arm-capable event under the record-arm lock; `undefined` (every other
-	 * writer, every UserPromptSubmit) keeps the existing value, and a create without it is
-	 * `null`.
+	 * The arm binding to commit with this write. ONLY the Claude Code hook (on an arm-capable
+	 * event) and the pi-durable birth (#157 B3 C4) pass it, each under the record-arm lock;
+	 * `undefined` (every other writer, every UserPromptSubmit) keeps the existing value, and a
+	 * create without it is `null`.
 	 */
 	attachIncarnation?: string;
 }
@@ -1471,7 +1474,9 @@ export function defaultMetaReceiversDir(): string {
  * sandboxed receivers root sandboxes it too and no new environment carrier exists. It is
  * deliberately NOT the v2 dispatch lock dir — visible resume holds that per-gid lock across
  * its whole launch + observation window, and the relaunched session's own arm must not wait
- * on it. Only the Claude Code hook takes this lock; nothing else reads or writes here.
+ * on it. The Claude Code hook and the pi-durable birth (`pi-durable-location.ts`, #157 B3 C4)
+ * take this lock, each around the upsert that mints `attachIncarnation`; nothing else reads or
+ * writes here.
  */
 export function defaultMetaRecordArmLocksDir(receiversDir: string = defaultMetaReceiversDir()): string {
 	return path.join(path.dirname(receiversDir), "meta-record-arm-locks");

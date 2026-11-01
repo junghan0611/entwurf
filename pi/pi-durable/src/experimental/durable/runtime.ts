@@ -26,7 +26,7 @@ import {
 	ExecutionEnvs,
 	findInitialAgentModel,
 } from "./harness-setup.ts";
-import { selectSession } from "./sessions.ts";
+import { type FenceEnd, type SessionFence, selectSession } from "./sessions.ts";
 import { Subagent } from "./subagent.ts";
 
 const context = BACKGROUND_CONTEXT;
@@ -96,6 +96,8 @@ export interface OpenDurableOptions {
 	readonly extensions?: readonly Extension[];
 	/** A new session's explicit model, resolved as pi's `--provider`/`--model`; unresolved, the open fails. */
 	readonly model?: { readonly provider: string; readonly model: string };
+	/** The owner fence taken before the native lease (#157 B3); every owned open has one. */
+	readonly fence: SessionFence;
 }
 
 export interface OpenDurableResult {
@@ -144,7 +146,16 @@ function titleOf(entry: EntryRecord | undefined): { title?: string } {
 	return { title: text.replace(/\s+/g, " ").trim() };
 }
 
-export async function openDurable(options: OpenDurableOptions = {}): Promise<OpenDurableResult> {
+/** What failed, for an owner end's `cause`. */
+function causeOf(error: unknown): string {
+	return error instanceof Error ? error.message : String(error);
+}
+
+export async function openDurable(options: OpenDurableOptions): Promise<OpenDurableResult> {
+	// The type requires it; a JS caller is refused here, before the session root is created.
+	if (options.fence === undefined) {
+		throw new Error("fence-required: an owned durable open takes the owner fence before its native lease");
+	}
 	if (options.model !== undefined && (options.continueSession || options.session !== undefined)) {
 		throw new Error("An explicit model applies only to a new session, not to a continued one");
 	}
@@ -152,12 +163,16 @@ export async function openDurable(options: OpenDurableOptions = {}): Promise<Ope
 		throw new Error("A chosen session and the newest one are two different sessions; name one");
 	}
 	const location = await selectSession(
+		options.fence,
 		options.cwd ?? process.cwd(),
 		options.continueSession ?? false,
 		options.session,
 	);
+	const ticket = location.ticket;
 	const envs = new ExecutionEnvs(location.cwd);
 	let harness: Harness | undefined;
+	// The storage handle Harness.open is handed: if Harness.open itself rejects, this is what was opened.
+	let backendHandle: Awaited<ReturnType<typeof openNodeSqliteStorage>> | undefined;
 	try {
 		const modelRuntime = await ModelRuntime.create();
 		const settingsManager = SettingsManager.create(location.cwd);
@@ -169,8 +184,12 @@ export async function openDurable(options: OpenDurableOptions = {}): Promise<Ope
 
 		const pendingReports: unknown[] = [];
 		let report: (error: unknown) => void = (error) => pendingReports.push(error);
+		// Recorded BEFORE the call: once the open is attempted, no later outcome proves that nothing was opened.
+		ticket.storageOpenAttempted = true;
+		const backend = await openNodeSqliteStorage(location.database);
+		backendHandle = backend;
 		harness = await Harness.open(
-			await openNodeSqliteStorage(location.database),
+			backend,
 			{
 				models: modelRuntime,
 				registry,
@@ -180,6 +199,7 @@ export async function openDurable(options: OpenDurableOptions = {}): Promise<Ope
 			},
 			context,
 		);
+		await ticket.storageOpened();
 		const initial = location.created
 			? await findInitialAgentModel(settingsManager, modelRuntime, options.model)
 			: undefined;
@@ -439,20 +459,85 @@ export async function openDurable(options: OpenDurableOptions = {}): Promise<Ope
 					unsubscribeCommits();
 					conversation.dispose();
 					closeTasks();
+					// The resource end the fence records (#157 B3). Storage is `closed` only when the first actual close
+					// resolved, no failure was seen before it, and the Session's own terminal result is not `failed`.
+					const failures: unknown[] = [];
+					let storage: FenceEnd["storage"] = "failed";
+					let envCleanup: FenceEnd["envCleanup"];
+					let lease: FenceEnd["lease"] = "released";
 					try {
 						// Close writes no outcome: a running turn resumes with --continue.
 						await opened.close(context);
-						await envs.cleanup(context);
+						const ended = await opened.closed;
+						if (state.failure === undefined && ended.reason !== "failed") storage = "closed";
+						try {
+							await envs.cleanup(context);
+						} catch (error) {
+							envCleanup = "failed";
+							failures.push(error);
+						}
+					} catch (error) {
+						failures.push(error);
 					} finally {
-						await location.release();
+						try {
+							await location.release();
+						} catch (error) {
+							lease = "failed";
+							failures.push(error);
+						}
 					}
+					const failure = failures[0] ?? (storage === "closed" ? undefined : "the session failed before close");
+					const record: FenceEnd = {
+						storage,
+						lease,
+						...(envCleanup === undefined ? {} : { envCleanup }),
+						...(failure === undefined ? {} : { cause: causeOf(failure) }),
+					};
+					// An env cleanup failure is the caller's error, not the resource's: the end stays `closed`.
+					try {
+						if (storage === "closed" && lease === "released") await ticket.closed(record);
+						else await ticket.closeFailed(record);
+					} catch (error) {
+						failures.push(error);
+					}
+					if (failures.length === 1) throw failures[0];
+					if (failures.length > 1) throw new AggregateError(failures, "The durable session did not close cleanly");
 				})();
 				return closing;
 			},
 		};
 	} catch (error) {
-		await harness?.close(context).catch(() => {});
-		await location.release().catch(() => {});
-		throw error;
+		// An init failure (#157 B3). Only a storage open that was never attempted, with the lease verifiably released,
+		// ends `closed`; once attempted, neither a settled Harness close nor a released lease proves the resource ended.
+		let storage: FenceEnd["storage"] = ticket.storageOpenAttempted ? "unknown" : "never-opened";
+		// The init error first, then every cleanup failure: none is dropped.
+		const failures: unknown[] = [error];
+		// The first close of what was opened: the Harness once it opened, else the storage handle Harness.open was
+		// handed and rejected. A close that settles is no verified close here; one that rejects is a failed storage.
+		const closable = harness ?? backendHandle;
+		if (closable !== undefined) {
+			try {
+				await closable.close(context);
+			} catch (closeError) {
+				storage = "failed";
+				failures.push(closeError);
+			}
+		}
+		let lease: FenceEnd["lease"] = "released";
+		try {
+			await location.release();
+		} catch (releaseError) {
+			lease = "failed";
+			failures.push(releaseError);
+		}
+		const ending: FenceEnd = { storage, lease, cause: failures.map(causeOf).join("; ") };
+		try {
+			if (storage === "never-opened" && lease === "released") await ticket.closed(ending);
+			else await ticket.closeFailed(ending);
+		} catch (fenceError) {
+			failures.push(fenceError);
+		}
+		if (failures.length === 1) throw error;
+		throw new AggregateError(failures, `${causeOf(error)}; its cleanup or owner end failed too`);
 	}
 }

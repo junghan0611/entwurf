@@ -525,7 +525,7 @@
 			"claim": "PI-DURABLE-CARRIER-PIN-MATCHES",
 			"title": "the pin records a digest the committed carrier file does not carry, so a carrier edited after emission would still be the declared one",
 			"subject": "pi/pi-durable/overlay/upstream-pin.json",
-			"find": ["\"sha256\": \"725757156580ad2a2d170c790440763371bb8035052a0c6caae6af5159d4718f\""],
+			"find": ["\"sha256\": \"37fe7bc4d66232032bb59afe18931ce25f6286bcd9747f2fbcf09d45044a1790\""],
 			"replace": ["\"sha256\": \"0000000000000000000000000000000000000000000000000000000000000000\""],
 			"gate": ["bash", "run.sh", "check-pi-durable-carrier"],
 			"timeoutSeconds": 300,
@@ -1433,6 +1433,528 @@
 			"timeoutSeconds": 300,
 			"signature": "[QK:PI-DURABLE-RESUME-CALL-REACHES-BRIDGE]",
 			"signatureSource": "pi-extensions/meta-bridge-pi-durable.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "PDL-COMMIT-BINDS-PAIR",
+			"title": "the birth stops minting the record's binding: the carrier names an incarnation the record never carried",
+			"subject": "pi-extensions/lib/pi-durable-location.ts",
+			"find": ["input: { ...input, attachIncarnation },"],
+			"replace": ["input: { ...input },"],
+			"gate": ["bash", "run.sh", "check-tests-beside-behavior"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:PDL-COMMIT-BINDS-PAIR]",
+			"signatureSource": "pi-extensions/lib/pi-durable-location.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "PDL-NATIVE-DIRECTORY-REALPATH",
+			"title": "the birth records the session directory as spelled, so an alias is written where the directory itself belongs",
+			"subject": "pi-extensions/lib/pi-durable-location.ts",
+			"find": ["nativeDirectory = fs.realpathSync(opts.sessionDirectory);"],
+			"replace": ["nativeDirectory = path.resolve(opts.sessionDirectory);"],
+			"gate": ["bash", "run.sh", "check-tests-beside-behavior"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:PDL-NATIVE-DIRECTORY-REALPATH]",
+			"signatureSource": "pi-extensions/lib/pi-durable-location.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "PDL-ROOT-ISOLATION",
+			"title": "the location directory moves inside the receivers root, where fresh-cut walks every entry as a marker",
+			"subject": "pi-extensions/lib/pi-durable-location.ts",
+			"find": ["return path.join(path.dirname(receiversDir), PI_DURABLE_LOCATION_DIRNAME);"],
+			"replace": ["return path.join(receiversDir, PI_DURABLE_LOCATION_DIRNAME);"],
+			"gate": ["bash", "run.sh", "check-tests-beside-behavior"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:PDL-ROOT-ISOLATION]",
+			"signatureSource": "pi-extensions/lib/pi-durable-location.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "PDL-REFUSES-BEFORE-WRITE",
+			"title": "the birth stops checking that the session directory is a directory, and writes a record and a carrier naming a file",
+			"subject": "pi-extensions/lib/pi-durable-location.ts",
+			"find": ["if (!fs.statSync(nativeDirectory).isDirectory()) throw new Error(\"not a directory\");"],
+			"replace": ["void nativeDirectory;"],
+			"gate": ["bash", "run.sh", "check-tests-beside-behavior"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:PDL-REFUSES-BEFORE-WRITE]",
+			"signatureSource": "pi-extensions/lib/pi-durable-location.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "PDL-ARM-LOCK-BUSY-KEEPS-OLD-PAIR",
+			"title": "the birth takes the record-arm lock under another valid garden id, so a lock held on its own garden no longer stops the minted write",
+			"subject": "pi-extensions/lib/pi-durable-location.ts",
+			"find": ["const acquired = acquireLock(existing.gardenId, { dir: lockDir });"],
+			"replace": ["const acquired = acquireLock(\"20000101T000000-000000\", { dir: lockDir });"],
+			"gate": ["bash", "run.sh", "check-tests-beside-behavior"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:PDL-ARM-LOCK-BUSY-KEEPS-OLD-PAIR]",
+			"signatureSource": "pi-extensions/lib/pi-durable-location.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "PDL-CARRIER-WRITE-FAILS-MISMATCH",
+			"title": "a failed carrier write leaves its tmp beside the final name",
+			"subject": "pi-extensions/lib/pi-durable-location.ts",
+			"find": ["fs.rmSync(tmp, { force: true });"],
+			"replace": ["void tmp;"],
+			"gate": ["bash", "run.sh", "check-tests-beside-behavior"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:PDL-CARRIER-WRITE-FAILS-MISMATCH]",
+			"signatureSource": "pi-extensions/lib/pi-durable-location.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "PDL-VERIFY-CARRIER-REFUSALS",
+			"title": "the read stops comparing attachIncarnation, so a carrier from an older binding passes",
+			"subject": "pi-extensions/lib/pi-durable-location.ts",
+			"find": ["([\"nativeSessionId\", \"cwd\", \"attachIncarnation\"] as const)"],
+			"replace": ["([\"nativeSessionId\", \"cwd\"] as const)"],
+			"gate": ["bash", "run.sh", "check-tests-beside-behavior"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:PDL-VERIFY-CARRIER-REFUSALS]",
+			"signatureSource": "pi-extensions/lib/pi-durable-location.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "PDL-VERIFY-ENTRY-REFUSALS",
+			"title": "the read follows a symlink and opens any entry at the carrier's name",
+			"subject": "pi-extensions/lib/pi-durable-location.ts",
+			"find": ["text = readStoreRecordFile(file);"],
+			"replace": ["text = fs.readFileSync(file, \"utf8\");"],
+			"gate": ["bash", "run.sh", "check-tests-beside-behavior"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:PDL-VERIFY-ENTRY-REFUSALS]",
+			"signatureSource": "pi-extensions/lib/pi-durable-location.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "PDL-READ-RETAINS",
+			"title": "the read starts clearing a carrier whose record is gone",
+			"subject": "pi-extensions/lib/pi-durable-location.ts",
+			"find": ["\t\treturn {\n\t\t\tok: false,\n\t\t\treason: \"record-unaddressable\","],
+			"replace": [
+				"\t\tfs.rmSync(piDurableLocationPath(opts.gardenId, opts.receiversDir), { force: true });\n\t\treturn {\n\t\t\tok: false,\n\t\t\treason: \"record-unaddressable\","
+			],
+			"gate": ["bash", "run.sh", "check-tests-beside-behavior"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:PDL-READ-RETAINS]",
+			"signatureSource": "pi-extensions/lib/pi-durable-location.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "PI-DURABLE-BIRTH-LOCATION-BOUND",
+			"title": "the contact hands the binding its cwd instead of the durable session directory",
+			"subject": "pi-extensions/meta-bridge-pi-durable.ts",
+			"find": ["sessionDirectory: session.directory,"],
+			"replace": ["sessionDirectory: cwd,"],
+			"gate": ["bash", "run.sh", "check-pi-durable-beside"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PI-DURABLE-BIRTH-LOCATION-BOUND]",
+			"signatureSource": "pi-extensions/meta-bridge-pi-durable.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "PI-DURABLE-BIRTH-LOCATION-FAILURE-FAILS-BIRTH",
+			"title": "the contact falls back to binding under a lock nobody holds when the birth's own binding cannot commit, and the bridge starts",
+			"subject": "pi-extensions/meta-bridge-pi-durable.ts",
+			"find": ["const upsert = commitPiDurableBirth({"],
+			"replace": [
+				"const upsert = ((o: Parameters<typeof commitPiDurableBirth>[0]) => { try { return commitPiDurableBirth(o); } catch { return commitPiDurableBirth({ ...o, receiversDir: path.join(o.receiversDir, \"unbound-fallback\") }); } })({"
+			],
+			"gate": ["bash", "run.sh", "check-pi-durable-beside"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PI-DURABLE-BIRTH-LOCATION-FAILURE-FAILS-BIRTH]",
+			"signatureSource": "pi-extensions/meta-bridge-pi-durable.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "PI-DURABLE-CLOSE-RETAINS-LOCATION",
+			"title": "closing the contact removes the location evidence along with the doorbell",
+			"subject": "pi-extensions/meta-bridge-pi-durable.ts",
+			"find": ["const problems = retire(\"closed\", \"the contact closed\");"],
+			"replace": [
+				"if (options.receiversDir !== undefined) fs.rmSync(path.join(path.dirname(path.resolve(options.receiversDir)), \"meta-pi-durable-locations\"), { recursive: true, force: true }); const problems = retire(\"closed\", \"the contact closed\");"
+			],
+			"gate": ["bash", "run.sh", "check-pi-durable-beside"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PI-DURABLE-CLOSE-RETAINS-LOCATION]",
+			"signatureSource": "pi-extensions/meta-bridge-pi-durable.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "PDL-REFUSES-IMPLAUSIBLE-OWNER-PID",
+			"title": "the writer checks only that the owner pid is an integer, so pid 1 is written into a carrier the parser refuses",
+			"subject": "pi-extensions/lib/pi-durable-location.ts",
+			"find": ["if (!isPlausibleOwnerPid(opts.ownerPid)) {"],
+			"replace": ["if (!Number.isSafeInteger(opts.ownerPid)) {"],
+			"gate": ["bash", "run.sh", "check-tests-beside-behavior"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:PDL-REFUSES-IMPLAUSIBLE-OWNER-PID]",
+			"signatureSource": "pi-extensions/lib/pi-durable-location.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "PDL-REFUSES-RELATIVE-CWD",
+			"title": "the writer stops requiring an absolute cwd, so a relative cwd reaches the record write",
+			"subject": "pi-extensions/lib/pi-durable-location.ts",
+			"find": ["if (typeof opts.cwd !== \"string\" || !path.isAbsolute(opts.cwd)) {"],
+			"replace": ["if (typeof opts.cwd !== \"string\") {"],
+			"gate": ["bash", "run.sh", "check-tests-beside-behavior"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:PDL-REFUSES-RELATIVE-CWD]",
+			"signatureSource": "pi-extensions/lib/pi-durable-location.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "PDF-ADMIT-FRESH",
+			"title": "a D this call created is recorded as unarmed-existing participation, so a fresh enrollment reads like a takeover of an old directory",
+			"subject": "pi-extensions/lib/pi-durable-owner-fence.ts",
+			"find": ["\t\t\tconst from = created ? \"fresh\" : \"unarmed-existing\";"],
+			"replace": ["\t\t\tconst from = created ? \"unarmed-existing\" : \"unarmed-existing\";"],
+			"gate": ["bash", "run.sh", "check-tests-beside-behavior"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:PDF-ADMIT-FRESH]",
+			"signatureSource": "pi-extensions/lib/pi-durable-owner-fence.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "PDF-ADMIT-UNARMED",
+			"title": "an existing D without a claim is recorded as a fresh participation, so an unarmed directory reads as one this fence created",
+			"subject": "pi-extensions/lib/pi-durable-owner-fence.ts",
+			"find": ["\t\t\tconst from = created ? \"fresh\" : \"unarmed-existing\";"],
+			"replace": ["\t\t\tconst from = created ? \"fresh\" : \"fresh\";"],
+			"gate": ["bash", "run.sh", "check-tests-beside-behavior"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:PDF-ADMIT-UNARMED]",
+			"signatureSource": "pi-extensions/lib/pi-durable-owner-fence.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "PDF-UNARMED-LEGACY-LEASE",
+			"title": "the lease presence test is negated: an unarmed D whose lease a legacy opener holds is admitted, and the library's stale takeover runs on it",
+			"subject": "pi-extensions/lib/pi-durable-owner-fence.ts",
+			"find": ["\t\t\tif ((claim !== undefined || !created) && leasePresent(directory)) {"],
+			"replace": ["\t\t\tif ((claim !== undefined || !created) && !leasePresent(directory)) {"],
+			"gate": ["bash", "run.sh", "check-tests-beside-behavior"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:PDF-UNARMED-LEGACY-LEASE]",
+			"signatureSource": "pi-extensions/lib/pi-durable-owner-fence.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "PDF-LIVE-NO-SELF-REENTRY",
+			"title": "a claim this very process owns is let through as if it were dead, so a process re-enters its own open or close-failed directory",
+			"subject": "pi-extensions/lib/pi-durable-owner-fence.ts",
+			"find": ["\t\tif (!proven) {"],
+			"replace": ["\t\tif (!proven && claim.owner.pid !== process.pid) {"],
+			"gate": ["bash", "run.sh", "check-tests-beside-behavior"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:PDF-LIVE-NO-SELF-REENTRY]",
+			"signatureSource": "pi-extensions/lib/pi-durable-owner-fence.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "PDF-UNKNOWN-FAILS-CLOSED",
+			"title": "an owner that is only not proven live is treated as dead, so an uncertain owner's directory is reclaimed",
+			"subject": "pi-extensions/lib/pi-durable-owner-fence.ts",
+			"find": ["\t\tconst proven = verdict === \"dead\";"],
+			"replace": ["\t\tconst proven = verdict !== \"live\";"],
+			"gate": ["bash", "run.sh", "check-tests-beside-behavior"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:PDF-UNKNOWN-FAILS-CLOSED]",
+			"signatureSource": "pi-extensions/lib/pi-durable-owner-fence.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "PDF-DEAD-RECLAIM",
+			"title": "a reclaim no longer records what it took over: the claim says fenced with no trace of the dead owner or its lease",
+			"subject": "pi-extensions/lib/pi-durable-owner-fence.ts",
+			"find": ["\t\t\t...(reclaimedFrom === undefined ? {} : { reclaimedFrom }),"],
+			"replace": ["\t\t\t...(reclaimedFrom === undefined ? {} : {}),"],
+			"gate": ["bash", "run.sh", "check-tests-beside-behavior"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:PDF-DEAD-RECLAIM]",
+			"signatureSource": "pi-extensions/lib/pi-durable-owner-fence.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "PDF-DEAD-LEASE-UNATTRIBUTED",
+			"title": "a failed release counts as an attributed lease, so a present lease after a dead owner's failed release is taken over without proof it was that owner's",
+			"subject": "pi-extensions/lib/pi-durable-owner-fence.ts",
+			"find": ["\t\tconst attributed = claim.lease === \"held\" || claim.lease === \"unknown\";"],
+			"replace": [
+				"\t\tconst attributed = claim.lease === \"held\" || claim.lease === \"unknown\" || claim.lease === \"failed\";"
+			],
+			"gate": ["bash", "run.sh", "check-tests-beside-behavior"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:PDF-DEAD-LEASE-UNATTRIBUTED]",
+			"signatureSource": "pi-extensions/lib/pi-durable-owner-fence.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "PDF-ALIAS-NOT-ABSENT",
+			"title": "a claim selected under another session id is read as absent, so an alias of a live owner's D is admitted over it",
+			"subject": "pi-extensions/lib/pi-durable-owner-fence.ts",
+			"find": ["\t\tif (claim === undefined || claim.state === \"closed\") {"],
+			"replace": ["\t\tif (claim === undefined || claim.selected.n !== selectedN || claim.state === \"closed\") {"],
+			"gate": ["bash", "run.sh", "check-tests-beside-behavior"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:PDF-ALIAS-NOT-ABSENT]",
+			"signatureSource": "pi-extensions/lib/pi-durable-owner-fence.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "PDF-RESOURCE-MISMATCH-REFUSED",
+			"title": "a claim naming another resource falls through to the absent row, so a copied D's claim is overwritten instead of refused",
+			"subject": "pi-extensions/lib/pi-durable-owner-fence.ts",
+			"find": [
+				"\t\tif (read !== undefined && read.resource !== resource) {",
+				"\t\t\tthrow refuse(\"claim-resource-mismatch\", `the claim in ${directory} names ${read.resource}, not ${resource}`);",
+				"\t\t}",
+				"\t\t// Only a claim for THIS resource is judged below; a mismatched one was refused above, never read as absent.",
+				"\t\tconst claim = read;"
+			],
+			"replace": ["\t\tconst claim = read?.resource === resource ? read : undefined;"],
+			"gate": ["bash", "run.sh", "check-tests-beside-behavior"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:PDF-RESOURCE-MISMATCH-REFUSED]",
+			"signatureSource": "pi-extensions/lib/pi-durable-owner-fence.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "PDF-GENERATION-EXACT",
+			"title": "the generation comparison is inverted: a stale ticket transitions over a claim another write already replaced",
+			"subject": "pi-extensions/lib/pi-durable-owner-fence.ts",
+			"find": ["\t\t\tif (current.generation !== last.generation) {"],
+			"replace": ["\t\t\tif (current.generation === last.generation) {"],
+			"gate": ["bash", "run.sh", "check-tests-beside-behavior"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:PDF-GENERATION-EXACT]",
+			"signatureSource": "pi-extensions/lib/pi-durable-owner-fence.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "PDF-TX-OWN-RELEASED",
+			"title": "the holder no longer unlinks its own transaction file, so every later claim write in that D waits out the bound and refuses",
+			"subject": "pi-extensions/lib/pi-durable-owner-fence.ts",
+			"find": ["\t\tleaveTx(tx, held, stepError);"],
+			"replace": ["\t\tvoid [held, stepError];"],
+			"gate": ["bash", "run.sh", "check-tests-beside-behavior"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:PDF-TX-OWN-RELEASED]",
+			"signatureSource": "pi-extensions/lib/pi-durable-owner-fence.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "PDF-TX-RESIDUE-FAILS-CLOSED",
+			"title": "the busy path removes a transaction file it did not create, taking over another holder's or a crash's S_D",
+			"subject": "pi-extensions/lib/pi-durable-owner-fence.ts",
+			"find": ["\t\tif (attempt >= TX_ATTEMPTS) {"],
+			"replace": ["\t\tif (attempt >= TX_ATTEMPTS) {", "\t\t\tfs.rmSync(tx, { force: true });"],
+			"gate": ["bash", "run.sh", "check-tests-beside-behavior"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:PDF-TX-RESIDUE-FAILS-CLOSED]",
+			"signatureSource": "pi-extensions/lib/pi-durable-owner-fence.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "PDF-CLOSED-RECEIPT-KEPT",
+			"title": "the close transition unlinks the claim, so a clean end leaves no receipt and the next opener reads the directory as never armed",
+			"subject": "pi-extensions/lib/pi-durable-owner-fence.ts",
+			"find": ["\t\tawait this.#end([\"leased\", \"storage-open\"], \"closed\", checked);"],
+			"replace": [
+				"\t\tawait this.#end([\"leased\", \"storage-open\"], \"closed\", checked);",
+				"\t\tfs.rmSync(path.join(this.#resource, PI_DURABLE_OWNER_CLAIM));"
+			],
+			"gate": ["bash", "run.sh", "check-tests-beside-behavior"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:PDF-CLOSED-RECEIPT-KEPT]",
+			"signatureSource": "pi-extensions/lib/pi-durable-owner-fence.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "PDF-TMP-INERT",
+			"title": "the reader takes the newest atomic temp for the claim, so a crash's leftover temp decides admission",
+			"subject": "pi-extensions/lib/pi-durable-owner-fence.ts",
+			"find": ["\tconst file = path.join(resource, PI_DURABLE_OWNER_CLAIM);"],
+			"replace": [
+				"\tconst file = path.join(resource, fs.readdirSync(resource).filter((name) => name.startsWith(PI_DURABLE_OWNER_TMP_PREFIX)).sort().at(-1) ?? PI_DURABLE_OWNER_CLAIM);"
+			],
+			"gate": ["bash", "run.sh", "check-tests-beside-behavior"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:PDF-TMP-INERT]",
+			"signatureSource": "pi-extensions/lib/pi-durable-owner-fence.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "PDF-SQLITE-NAMESPACE",
+			"title": "the atomic temp moves under the SDK's session.sqlite prefix, where its files and the fence's would share one namespace",
+			"subject": "pi-extensions/lib/pi-durable-owner-fence.ts",
+			"find": ["export const PI_DURABLE_OWNER_TMP_PREFIX = `${PI_DURABLE_OWNER_CLAIM}.tmp-`;"],
+			"replace": ["export const PI_DURABLE_OWNER_TMP_PREFIX = \"session.sqlite-entwurf.tmp-\";"],
+			"gate": ["bash", "run.sh", "check-tests-beside-behavior"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:PDF-SQLITE-NAMESPACE]",
+			"signatureSource": "pi-extensions/lib/pi-durable-owner-fence.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "PDF-ADMIT-BEFORE-LEASE",
+			"title": "the fence is asked only after the native lease is taken, so the lease it is meant to precede already exists at admission",
+			"subject": "pi/pi-durable/carrier/sessions.js",
+			"find": [
+				"\tconst ticket = await fence.admit({ directory, selectedN: basename(directory), created });",
+				"\t// A lock left by a crashed process goes stale after 10 s; wait that long before giving up.",
+				"\tconst lease = lockfile.lock(directory, {",
+				"\t\trealpath: false,",
+				"\t\tretries: { retries: 12, minTimeout: 1000, maxTimeout: 1000 },",
+				"\t});"
+			],
+			"replace": [
+				"\t// A lock left by a crashed process goes stale after 10 s; wait that long before giving up.",
+				"\tconst lease = lockfile.lock(directory, {",
+				"\t\trealpath: false,",
+				"\t\tretries: { retries: 12, minTimeout: 1000, maxTimeout: 1000 },",
+				"\t});",
+				"\tawait lease.catch(() => {});",
+				"\tconst ticket = await fence.admit({ directory, selectedN: basename(directory), created });"
+			],
+			"gate": ["bash", "run.sh", "check-pi-durable-carrier"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PDF-ADMIT-BEFORE-LEASE]",
+			"signatureSource": "pi-extensions/lib/pi-durable-carrier.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "PDF-INIT-NEVER-OPENED-CLOSED",
+			"title": "an init failure before any storage open is recorded with an unknown storage, so a clean never-opened end becomes close-failed",
+			"subject": "pi/pi-durable/carrier/runtime.js",
+			"find": ["\t\tlet storage                      = ticket.storageOpenAttempted ? \"unknown\" : \"never-opened\";"],
+			"replace": ["\t\tlet storage                      = ticket.storageOpenAttempted ? \"unknown\" : \"unknown\";"],
+			"gate": ["bash", "run.sh", "check-pi-durable-carrier"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PDF-INIT-NEVER-OPENED-CLOSED]",
+			"signatureSource": "pi-extensions/lib/pi-durable-carrier.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "PDF-INIT-ATTEMPTED-NOT-CLOSED",
+			"title": "the attempt is recorded only after the storage open resolves, so a rejected open reads as never attempted and ends closed",
+			"subject": "pi/pi-durable/carrier/runtime.js",
+			"find": [
+				"\t\tticket.storageOpenAttempted = true;",
+				"\t\tconst backend = await openNodeSqliteStorage(location.database);"
+			],
+			"replace": [
+				"\t\tconst backend = await openNodeSqliteStorage(location.database);",
+				"\t\tticket.storageOpenAttempted = true;"
+			],
+			"gate": ["bash", "run.sh", "check-pi-durable-carrier"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PDF-INIT-ATTEMPTED-NOT-CLOSED]",
+			"signatureSource": "pi-extensions/lib/pi-durable-carrier.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "PDF-FIRST-CLOSE-FAILURE-STICKY",
+			"title": "close() is no longer memoized: a second call runs the close again, releasing and recording a second time over the first failure",
+			"subject": "pi/pi-durable/carrier/runtime.js",
+			"find": ["\t\t\t\tclosing ??= (async () => {"],
+			"replace": ["\t\t\t\tclosing = (async () => {"],
+			"gate": ["bash", "run.sh", "check-pi-durable-carrier"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PDF-FIRST-CLOSE-FAILURE-STICKY]",
+			"signatureSource": "pi-extensions/lib/pi-durable-carrier.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "PDF-CLOSE-FAIL-KEEPS-CLAIM",
+			"title": "the close-failed write is skipped: a failed close leaves the claim at storage-open under an owner that has released its lease",
+			"subject": "pi/pi-durable/carrier/runtime.js",
+			"find": ["\t\t\t\t\t\telse await ticket.closeFailed(record);"],
+			"replace": ["\t\t\t\t\t\telse void record;"],
+			"gate": ["bash", "run.sh", "check-pi-durable-carrier"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PDF-CLOSE-FAIL-KEEPS-CLAIM]",
+			"signatureSource": "pi-extensions/lib/pi-durable-carrier.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "PDF-ENV-CLEANUP-SEPARATE",
+			"title": "an env cleanup failure is taken for a resource failure: a verified storage close and release is recorded as close-failed",
+			"subject": "pi/pi-durable/carrier/runtime.js",
+			"find": ["\t\t\t\t\t\tif (storage === \"closed\" && lease === \"released\") await ticket.closed(record);"],
+			"replace": [
+				"\t\t\t\t\t\tif (storage === \"closed\" && lease === \"released\" && envCleanup === undefined) await ticket.closed(record);"
+			],
+			"gate": ["bash", "run.sh", "check-pi-durable-carrier"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PDF-ENV-CLEANUP-SEPARATE]",
+			"signatureSource": "pi-extensions/lib/pi-durable-carrier.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "PDF-FENCE-REQUIRED",
+			"title": "a JS caller without a fence is no longer refused: the session root is created and the open fails later, unnamed",
+			"subject": "pi/pi-durable/carrier/runtime.js",
+			"find": ["\tif (options.fence === undefined) {"],
+			"replace": ["\tif (options.fence === null) {"],
+			"gate": ["bash", "run.sh", "check-pi-durable-carrier"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PDF-FENCE-REQUIRED]",
+			"signatureSource": "pi-extensions/lib/pi-durable-carrier.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "PDF-TMP-COLLISION-NOT-OURS",
+			"title": "the failed write removes its temp path whether or not it created it, so a file already holding that name is deleted",
+			"subject": "pi-extensions/lib/pi-durable-owner-fence.ts",
+			"find": ["\t\tif (created) fs.rmSync(tmp, { force: true });"],
+			"replace": ["\t\tfs.rmSync(tmp, { force: true });"],
+			"gate": ["bash", "run.sh", "check-tests-beside-behavior"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:PDF-TMP-COLLISION-NOT-OURS]",
+			"signatureSource": "pi-extensions/lib/pi-durable-owner-fence.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "PDF-INIT-HARNESS-OPEN-CLOSES-HANDLE",
+			"title": "an init failure closes only a Harness that opened, so the storage handle a rejecting Harness.open was handed is never closed and its close outcome never observed",
+			"subject": "pi/pi-durable/carrier/runtime.js",
+			"find": ["\t\tconst closable = harness ?? backendHandle;"],
+			"replace": ["\t\tconst closable = harness;"],
+			"gate": ["bash", "run.sh", "check-pi-durable-carrier"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PDF-INIT-HARNESS-OPEN-CLOSES-HANDLE]",
+			"signatureSource": "pi-extensions/lib/pi-durable-carrier.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "PI-DURABLE-PREFLIGHT-OWNER-FENCE-UNIT",
+			"title": "the preflight stops asking for the compiled owner fence, so a package without the unit its bootstrap imports passes as ready and opens a window that cannot load",
+			"subject": "pi-extensions/lib/pi-durable-fresh-preflight.ts",
+			"find": ["\tif (!existsSync(layout.ownerFence)) return \"pi-durable-owner-fence-missing\";\n"],
+			"replace": [""],
+			"gate": ["bash", "run.sh", "check-pi-durable-beside"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PI-DURABLE-PREFLIGHT-OWNER-FENCE-UNIT]",
+			"signatureSource": "pi-extensions/lib/pi-durable-fresh-preflight.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "PDL-TMP-COLLISION-NOT-OURS",
+			"title": "a failed carrier write removes its tmp name whether or not it created it, so an entry already holding that name is deleted",
+			"subject": "pi-extensions/lib/pi-durable-location.ts",
+			"find": ["\t\t\tif (created) fs.rmSync(tmp, { force: true });"],
+			"replace": ["\t\t\tfs.rmSync(tmp, { force: true });"],
+			"gate": ["bash", "run.sh", "check-tests-beside-behavior"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:PDL-TMP-COLLISION-NOT-OURS]",
+			"signatureSource": "pi-extensions/lib/pi-durable-location.test.ts",
 			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
 		}
 	]

@@ -1,0 +1,17 @@
+{
+	"previousRevision": 15,
+	"revision": 16,
+	"source": "#157 checkpoint amendment A1 D3 (main 810bca, independent source confirmation a4fd01): the entwurf_fresh_call cwd parameter's last sentence listed where an echoed directory comes from as only the REQUESTED path or the caller record, omitting the caller's own process directory that the same text's default clause already names. Provenance, in this order and not blended with revisions 13-15's: Opus 915040 recorded this layer, with the old value copied from the d6129139 worktree Root text, before any producer edit, and wrote the new literal in the same pass under main's GO; it was NOT approved before the producer edit, and its independent review is Astra's A1 delta review, which follows. The old value is the pre-extraction C0 text, never amended before.",
+	"amendments": [
+		{
+			"key": [
+				"tools",
+				"entwurf_fresh_call",
+				"parameters",
+				"cwd"
+			],
+			"old": "Optional literal ABSOLUTE path of an existing directory to start the sibling in (cross-repo fresh). Omit or pass \"\" to start where the CALLER is — this agent's own cwd on BOTH rails, or for a Codex caller its own record directory, because this bridge is the app-server's child and that process's directory is not the caller's. Taken exactly as given: no trim, no realpath, no project-name resolution. '#' is refused on the tmux rail only, because tmux format-expands a start directory; inside herdr it is an ordinary path character. The receipt echoes the directory that was REQUESTED or the caller record it came from, never an observation of where the pane landed.",
+			"new": "Optional literal ABSOLUTE path of an existing directory to start the sibling in (cross-repo fresh). Omit or pass \"\" to start where the CALLER is — this agent's own cwd on BOTH rails, or for a Codex caller its own record directory, because this bridge is the app-server's child and that process's directory is not the caller's. Taken exactly as given: no trim, no realpath, no project-name resolution. '#' is refused on the tmux rail only, because tmux format-expands a start directory; inside herdr it is an ordinary path character. The receipt echoes the directory that was REQUESTED, a Codex caller's record directory, or another caller's own process directory, never an observation of where the pane landed."
+		}
+	]
+}
