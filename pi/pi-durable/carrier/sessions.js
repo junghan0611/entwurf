@@ -4,6 +4,7 @@ import { mkdir, readdir, realpath, stat } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
 import lockfile from "proper-lockfile";
 import { getAgentDir } from "entwurf-pi-dist:config.js";
+import { isSessionName } from "./session-name.js";
 
 /** One session directory holding `session.sqlite`, locked by this process. */
                                   
@@ -26,8 +27,6 @@ import { getAgentDir } from "entwurf-pi-dist:config.js";
 	                                                
 	                       
  
-
-const SESSION_NAME = /^\d{13}-[0-9a-f-]{36}$/u;
 
 /** A path's stat, or undefined when nothing is there; any other failure is thrown, never read as absence. */
 async function statIfPresent(path        )                             {
@@ -62,7 +61,7 @@ export async function listSessions(cwdInput        )                          {
 	}
 	const sessions                 = [];
 	for (const entry of entries) {
-		if (!entry.isDirectory() || !SESSION_NAME.test(entry.name)) continue;
+		if (!entry.isDirectory() || !isSessionName(entry.name)) continue;
 		const directory = join(root, entry.name);
 		let lastWriteAt                    ;
 		for (const file of ["session.sqlite", "session.sqlite-wal"]) {
@@ -92,7 +91,7 @@ export async function selectSession(
 	let directory        ;
 	let created = false;
 	if (sessionId !== undefined) {
-		const chosen = SESSION_NAME.test(sessionId) ? join(root, sessionId) : undefined;
+		const chosen = isSessionName(sessionId) ? join(root, sessionId) : undefined;
 		if (chosen === undefined || !(await statIfPresent(chosen))?.isDirectory()) {
 			throw new Error(`No durable session ${sessionId} exists for ${cwd}`);
 		}
@@ -100,7 +99,7 @@ export async function selectSession(
 	} else if (continueSession) {
 		const entries = await readdir(root, { withFileTypes: true });
 		const newest = entries
-			.filter((entry) => entry.isDirectory() && SESSION_NAME.test(entry.name))
+			.filter((entry) => entry.isDirectory() && isSessionName(entry.name))
 			.map((entry) => entry.name)
 			.sort()
 			.at(-1);

@@ -105,11 +105,17 @@ incomplete, drifted or mixed supply refuses by name.
 entwurf pi-durable --provider <provider> --model <model-id> --width task-wide
 entwurf pi-durable --continue
 entwurf pi-durable --resume
+entwurf pi-durable --session <native id>
 ```
 
 `--continue` opens this directory's latest-created durable session. `--resume` lists its
 sessions, most recently written first, by creation time, garden id and last write, and
 reopens the one you choose as it was saved; a cancelled choice opens nothing.
+`--session <native id>` reopens exactly that session of this directory as it was saved, with
+no list or picker: the native session id (`<13-digit ms>-<uuid>`, as `--resume` lists it), not
+a garden id. The three selectors are mutually exclusive and take no `--provider`, `--model`,
+`--width` or `--entwurf-bootstrap`. `--session` is a native CLI selector, not an address:
+`entwurf_resume_call` still admits only pi and Claude Code targets.
 
 The contact adds garden identity and two-way mailbox communication. Entwurf owns the
 thin app/TUI composition (shipped as an emitted JS carrier); execution, models/auth, queues,

@@ -385,15 +385,23 @@ tree (for example an override that binds pi-durable's `pi-ai` to an older publis
   entwurf pi-durable --provider <provider> --model <exact catalog id> --width task-wide
   entwurf pi-durable --continue    # this directory's newest durable session
   entwurf pi-durable --resume      # choose one of this directory's durable sessions
+  entwurf pi-durable --session <native id>   # reopen exactly that session of this directory
   ```
+
+  `--continue`, `--resume` and `--session` reopen a session as it was saved: they take no
+  `--provider`, `--model`, `--width` or `--entwurf-bootstrap` and are mutually exclusive.
+  `--session` takes the native session id (`<13-digit ms>-<uuid>`, as `--resume` lists it), not a
+  garden id, with no interactive session picker or picker-specific TTY check (the normal TUI still
+  runs); a value of any other shape is refused as `session-id-malformed` before your module is
+  evaluated, the TUI loads or the app opens.
 
   The bootstrap imports only the compiled closure shipped beside it
   (`mcp/entwurf-bridge/dist/…`); a source checkout needs a built bridge
   (`pnpm run build-bridge`) and its development dependencies installed first.
   `plugins/pi-durable/bootstrap.mjs` is only the checkout path that re-exports it.
 
-- **One explicit native module (optional).** Add `--native-module <absolute file>` to either
-  launch to load ONE module of your own. It is an ordinary ES module: its top-level code (top-level
+- **One explicit native module (optional).** Add `--native-module <absolute file>` to any of these
+  launches to load ONE module of your own. It is an ordinary ES module: its top-level code (top-level
   await included) runs first, before the TUI and the durable runtime load, so it can prepare the
   environment the provider runtime and tool children will read; its default export is a native
   durable `Extension` (`{ name, tools?, sections?, hooks?, … }`, the upstream durable API, not

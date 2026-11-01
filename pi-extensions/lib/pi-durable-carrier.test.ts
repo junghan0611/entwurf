@@ -331,7 +331,7 @@ describe("the owned source's typecheck fence (pi/pi-durable/tsconfig.json)", () 
 		fence = { status: run.status, output, roots: [...new Set(roots)].sort(), resolutions };
 	}, 150_000);
 
-	it("[QK:PI-DURABLE-SOURCE-FENCE-RESOLVES] the fence's roots are exactly the six owned files, and every ../../ internal they import is the INSTALLED pi-coding-agent's published declaration for a declared distTarget", () => {
+	it("[QK:PI-DURABLE-SOURCE-FENCE-RESOLVES] the fence's roots are exactly the owned files the pin declares, and every ../../ internal they import is the INSTALLED pi-coding-agent's published declaration for a declared distTarget", () => {
 		const pin = readPin();
 		expect(fence.status, fence.output.slice(-4000)).toBe(0);
 		expect(fence.roots).toEqual(pin.carrier.files.map((f) => f.source).sort());
@@ -1155,6 +1155,115 @@ const fresh = { model: { provider: "faux", model: "scripted" } };
 		}
 	}
 	report.resume = resume;
+
+	// --session (#157 G3 B-L1): the OLDER of the same two sessions, named exactly — no list, no picker, no new
+	//    session, no model, no input. The open seam wraps the carrier's own openDurable, so the options main hands
+	//    it are read literally and the session is still the app's. A malformed name is refused before operator-native
+	//    module evaluation, TUI load, open or birth; a well-formed id this directory does not hold (absent, or another
+	//    directory's) is the runtime's refusal after the TUI module loads, and nothing runs or opens. The runtime's
+	//    existing creation of an (empty) session root for the foreign cwd is allowed and only recorded (rootExists).
+	{
+		const { createHash } = await import("node:crypto");
+		const { openDurable } = await import(new URL("./pi/pi-durable/carrier/runtime.js", repo).href);
+		const opened = [];
+		const submitted = [];
+		// The operator modules below push their own evaluation here, beside the TUI load and the open.
+		const events = (globalThis.sessionEvents = []);
+		const open = async (options) => {
+			events.push("open");
+			opened.push({
+				keys: Object.keys(options).sort(),
+				session: options.session,
+				continueSession: options.continueSession,
+				extensions: options.extensions.map((extension) => extension.name),
+			});
+			const durable = await openDurable(options);
+			const submit = durable.submitToRoot;
+			durable.submitToRoot = (draft) => {
+				submitted.push(draft);
+				return submit(draft);
+			};
+			return durable;
+		};
+		const picked = [];
+		const pick = async (title) => {
+			picked.push(title);
+			return newer.id;
+		};
+		let tuiLoads = 0;
+		const views = [];
+		const loadTui = async () => {
+			tuiLoads++;
+			events.push("loadTui");
+			return {
+				runDurableTui: async (source) => {
+					const view = source.current();
+					views.push({
+						id: view.session.id,
+						labels: view.conversations.map((summary) => summary.label),
+						users: view.conversation.entries.filter((entry) => entry.kind === "pi.user").map((entry) => textOf(entry.model?.[0])),
+						model: view.conversation.docs["pi.agent"]?.model ?? null,
+					});
+				},
+			};
+		};
+		const take = () => {
+			const taken = { tuiLoads, events: events.splice(0), opened: opened.splice(0), submitted: submitted.splice(0).length, picked: picked.splice(0).length, views: views.splice(0) };
+			tuiLoads = 0;
+			return taken;
+		};
+		const run = (argv) => reasonOf(() => main(argv, { loadTui, open, contact, pick }));
+		// Evaluated only if a refusal came too late: it counts, and is a valid module in every other respect.
+		const probeModule = path.join(sandbox, "session-probe.extension.mjs");
+		fs.writeFileSync(probeModule, 'globalThis.sessionProbeEvaluations = (globalThis.sessionProbeEvaluations ?? 0) + 1;\nexport default { name: "session-probe" };\n');
+		const absent = "0000000000003-00000000-0000-0000-0000-000000000003";
+		const session = { older, newer, absent, modelCalls: faux.state.callCount };
+		process.chdir(cwd);
+		try {
+			session.before = state();
+			session.chosen = { reason: await run(["--session", older.id]), ...take(), after: state(), held: await lockfile.check(path.join(root, older.id), { realpath: false }) };
+			// Operator-native modules beside --session: the explicit file, then the explicit directory (two modules,
+			// written out of byte order), then both together. Every module is a fresh file, evaluated at most once.
+			const moduleText = (name, tool) =>
+				'globalThis.sessionEvents.push("eval:' + name + '");\nexport default { name: "' + name + '", tools: [{ name: "' + tool + '", description: "echo", parameters: { type: "object", properties: {} }, execute: async () => ({ output: [{ type: "text", text: "' + name + '" }] }) }] };\n';
+			const fileModule = path.join(sandbox, "session-file.extension.mjs");
+			fs.writeFileSync(fileModule, moduleText("session-file", "session_file_echo"));
+			const moduleDir = path.join(sandbox, "session-modules");
+			fs.mkdirSync(moduleDir);
+			fs.writeFileSync(path.join(moduleDir, "10-b.extension.mjs"), moduleText("session-dir-10", "session_dir_10_echo"));
+			fs.writeFileSync(path.join(moduleDir, "00-a.extension.mjs"), moduleText("session-dir-00", "session_dir_00_echo"));
+			const bothFile = path.join(sandbox, "session-both.extension.mjs");
+			fs.writeFileSync(bothFile, moduleText("session-both-file", "session_both_file_echo"));
+			const bothDir = path.join(sandbox, "session-both-modules");
+			fs.mkdirSync(bothDir);
+			fs.writeFileSync(path.join(bothDir, "00-c.extension.mjs"), moduleText("session-both-dir", "session_both_dir_echo"));
+			session.withFile = { reason: await run(["--session", older.id, "--native-module", fileModule]), ...take(), after: state() };
+			session.withDir = { reason: await run(["--session", older.id, "--native-module-dir", moduleDir]), ...take(), after: state() };
+			session.withBoth = { reason: await run(["--session", older.id, "--native-module", bothFile, "--native-module-dir", bothDir]), ...take(), after: state() };
+			session.malformed = [];
+			for (const id of ["../" + older.id, older.id + "/", older.id + "\n", path.join(root, older.id), older.gardenId, "0000000000004-AAAAAAAA-0000-0000-0000-000000000004", " "]) {
+				session.malformed.push({ id, reason: await run(["--session", id, "--native-module", probeModule]), ...take() });
+			}
+			session.missing = { reason: await run(["--session", absent]), ...take() };
+			session.after = state();
+		} finally {
+			process.chdir(here);
+		}
+		const foreign = project("session-foreign");
+		const foreignRoot = path.join(sessionsRoot, createHash("sha256").update(fs.realpathSync(foreign)).digest("hex").slice(0, 24));
+		process.chdir(foreign);
+		try {
+			session.foreign = { cwd: fs.realpathSync(foreign), reason: await run(["--session", older.id]), ...take() };
+		} finally {
+			process.chdir(here);
+		}
+		session.foreign.rootExists = fs.existsSync(foreignRoot);
+		session.foreign.sessions = session.foreign.rootExists ? fs.readdirSync(foreignRoot) : [];
+		session.afterForeign = state();
+		session.evaluations = globalThis.sessionProbeEvaluations ?? 0;
+		session.modelCalls = faux.state.callCount - session.modelCalls;
+		report.session = session;
+	}
 }
 
 console.log(JSON.stringify(report));
@@ -1220,6 +1329,35 @@ interface AppReport {
 		empty: string;
 		unreadable: { list: string; open: string; seen: ResumeSeen[] };
 	};
+	session: {
+		older: { id: string; gardenId: string };
+		newer: { id: string; gardenId: string };
+		absent: string;
+		modelCalls: number;
+		before: ResumeState;
+		chosen: SessionRun & { after: ResumeState; held: boolean };
+		withFile: SessionRun & { after: ResumeState };
+		withDir: SessionRun & { after: ResumeState };
+		withBoth: SessionRun & { after: ResumeState };
+		malformed: (SessionRun & { id: string })[];
+		missing: SessionRun;
+		after: ResumeState;
+		foreign: SessionRun & { cwd: string; rootExists: boolean; sessions: string[] };
+		afterForeign: ResumeState;
+		evaluations: number;
+	};
+}
+
+/** One `--session` launch through the real bootstrap: its outcome and what each seam saw. */
+interface SessionRun {
+	reason: string;
+	tuiLoads: number;
+	/** Operator module evaluations (`eval:<name>`), the TUI load and the open, in the order they happened. */
+	events: string[];
+	opened: { keys: string[]; session?: string; continueSession?: boolean; extensions: string[] }[];
+	submitted: number;
+	picked: number;
+	views: (ResumeSeen & { model: unknown })[];
 }
 
 describe("the carrier on the 1.2 SDK, driven through the real bootstrap (#141)", () => {
@@ -1391,6 +1529,286 @@ describe("the carrier on the 1.2 SDK, driven through the real bootstrap (#141)",
 		expect(unreadable.list).toContain("ELOOP");
 		expect(unreadable.open).toContain("ELOOP");
 		expect(unreadable.seen).toEqual([]);
+	});
+
+	it("[QK:PI-DURABLE-SESSION-OPENS-NAMED] --session <id> reopens exactly that session of this directory as it was saved, under its own garden id: not the newest, no list or picker, no new session or record, no model, no input, its lock released", () => {
+		const { older, before, chosen, afterForeign, modelCalls } = report.session;
+		expect(chosen.reason).toBe("returned");
+		expect(chosen.opened).toEqual([
+			{
+				keys: ["continueSession", "cwd", "extensions", "session"],
+				session: older.id,
+				continueSession: false,
+				extensions: ["entwurf"],
+			},
+		]);
+		expect(chosen.events).toEqual(["loadTui", "open"]);
+		expect([chosen.tuiLoads, chosen.picked, chosen.submitted]).toEqual([1, 0, 0]);
+		expect(chosen.views).toHaveLength(1);
+		expect(chosen.views[0]?.id).toBe(older.id);
+		expect(chosen.views[0]?.users).toEqual(["OLDER-MARK"]);
+		expect(chosen.views[0]?.labels[0]).toContain(older.gardenId);
+		expect(chosen.views[0]?.model).toEqual({ provider: "faux", modelId: "scripted" });
+		expect(chosen.after).toEqual(before);
+		expect(chosen.held).toBe(false);
+		expect(afterForeign).toEqual(before);
+		expect(modelCalls).toBe(0);
+	});
+
+	it("on the real carrier, --session with an explicit --native-module file or --native-module-dir evaluates the operator's modules before the TUI loads, hands them to the open after the contact, and still reopens exactly the named session as saved; naming both is refused before any operator module is evaluated", () => {
+		const { older, before, withFile, withDir, withBoth } = report.session;
+		const named = (extensions: string[]) => ({
+			keys: ["continueSession", "cwd", "extensions", "session"],
+			session: older.id,
+			continueSession: false,
+			extensions,
+		});
+		expect(withFile.reason).toBe("returned");
+		expect(withFile.events).toEqual(["eval:session-file", "loadTui", "open"]);
+		expect(withFile.opened).toEqual([named(["entwurf", "session-file"])]);
+		expect(withDir.reason).toBe("returned");
+		expect(withDir.events).toEqual(["eval:session-dir-00", "eval:session-dir-10", "loadTui", "open"]);
+		expect(withDir.opened).toEqual([named(["entwurf", "session-dir-00", "session-dir-10"])]);
+		for (const run of [withFile, withDir]) {
+			expect([run.tuiLoads, run.picked, run.submitted]).toEqual([1, 0, 0]);
+			expect(run.views).toHaveLength(1);
+			expect(run.views[0]?.id).toBe(older.id);
+			expect(run.views[0]?.users).toEqual(["OLDER-MARK"]);
+			expect(run.views[0]?.labels[0]).toContain(older.gardenId);
+			expect(run.views[0]?.model).toEqual({ provider: "faux", modelId: "scripted" });
+			expect(run.after).toEqual(before);
+		}
+		expect(withBoth.reason).toBe("native-module-ingress-exclusive");
+		expect([withBoth.events, withBoth.tuiLoads, withBoth.opened, withBoth.views]).toEqual([[], 0, [], []]);
+		expect(withBoth.after).toEqual(before);
+	});
+
+	it("[QK:PI-DURABLE-SESSION-ID-MALFORMED-REFUSED] a --session value that is not a session id — a traversal, a trailing separator or newline, a path, a garden id, upper-case hex, a blank — is refused by name before operator-native module evaluation, TUI load, open or birth", () => {
+		const { older, before, malformed, after, evaluations } = report.session;
+		expect(malformed).toHaveLength(7);
+		expect(malformed[0]?.id).toBe("../" + older.id);
+		for (const m of malformed) {
+			expect(m.reason).toBe("session-id-malformed");
+			expect([m.tuiLoads, m.opened, m.submitted, m.picked, m.views]).toEqual([0, [], 0, 0, []]);
+		}
+		expect(evaluations).toBe(0);
+		expect(after).toEqual(before);
+	});
+
+	it("[QK:PI-DURABLE-SESSION-NOT-HERE-REFUSED] a well-formed --session id this directory does not hold — absent, or another directory's — is the runtime's own refusal: the TUI module may already be loaded, but no TUI runs, no native session opens, no record is born and no other session is chosen", () => {
+		const { older, absent, before, missing, foreign, after, afterForeign } = report.session;
+		expect(missing.reason).toMatch(new RegExp(`^Error: No durable session ${absent} exists for /`));
+		expect(missing.opened.map((o) => o.session)).toEqual([absent]);
+		expect([missing.views, missing.submitted, missing.picked]).toEqual([[], 0, 0]);
+		expect(foreign.reason).toBe(`Error: No durable session ${older.id} exists for ${foreign.cwd}`);
+		expect(foreign.opened.map((o) => o.session)).toEqual([older.id]);
+		expect([foreign.views, foreign.submitted, foreign.picked]).toEqual([[], 0, 0]);
+		expect(foreign.sessions).toEqual([]);
+		expect(after).toEqual(before);
+		expect(afterForeign).toEqual(before);
+	});
+});
+
+/**
+ * #157 G3 B-L1, the import order behind `--session`: a CLEAN child per ingress form — nothing of the app loaded
+ * before main — with stub TUI, open and picker, and an operator module that prepares PI_PACKAGE_DIR, which the SDK's
+ * config.js reads once, at its own import (published dist/config.js `getPackageDir` → `VERSION`). After main the
+ * child imports that config.js itself: it reads the operator's package only if nothing main loaded before the
+ * module — the session grammar included — had imported it already. The APP oracle above cannot see this: it
+ * loaded the runtime and its config while creating the sessions it reopens.
+ */
+const SESSION_ORDER_ORACLE = String.raw`
+const fs = await import("node:fs");
+const path = await import("node:path");
+const { pathToFileURL } = await import("node:url");
+const repo = "file://" + process.cwd() + "/";
+const { main } = await import(new URL("./pi/pi-durable/bootstrap.mjs", repo).href);
+const { PI_DURABLE_TOOL_SCHEMAS } = await import(new URL("./mcp/entwurf-bridge/dist/pi-extensions/meta-bridge-pi-durable.js", repo).href);
+const sandbox = process.env.ORACLE_SANDBOX;
+const mode = process.env.ORACLE_MODE;
+const session = "1759622400000-0b5e2a4c-1f3d-4e8a-9c7b-2d6f8e1a3c5b";
+const probePackage = path.join(sandbox, "probe-package");
+const events = (globalThis.orderEvents = []);
+const meta = path.join(sandbox, "meta");
+const contact = {
+	sessionsDir: path.join(meta, "sessions"),
+	sendersDir: path.join(meta, "senders"),
+	mailboxDir: path.join(meta, "mailbox"),
+	receiversDir: path.join(meta, "receivers"),
+	env: {},
+	connect: async () => ({
+		pid: 4242,
+		listTools: async () => Object.entries(PI_DURABLE_TOOL_SCHEMAS).map(([name, inputSchema]) => ({ name, inputSchema })),
+		callTool: async (name) => ({ text: name + " ok", isError: false }),
+		close: async () => {},
+	}),
+};
+for (const dir of [contact.sessionsDir, contact.sendersDir, contact.mailboxDir, contact.receiversDir]) fs.mkdirSync(dir, { recursive: true });
+let handed = [];
+const launch = async (argv) => {
+	const run = { opened: [], submitted: 0, picked: 0 };
+	const seams = {
+		loadTui: async () => {
+			events.push("loadTui");
+			return { runDurableTui: async () => { events.push("tui"); } };
+		},
+		open: async (options) => {
+			events.push("open");
+			handed = options.extensions;
+			run.opened.push({
+				keys: Object.keys(options).sort(),
+				session: options.session,
+				continueSession: options.continueSession,
+				extensions: options.extensions.map((extension) => extension.name),
+				packagePrepared: process.env.PI_PACKAGE_DIR === probePackage,
+			});
+			return {
+				view: { current: () => ({ session: { id: options.session, directory: path.join(sandbox, "durable"), cwd: options.cwd } }) },
+				controller: {},
+				settings: {},
+				submitToRoot: async () => {
+					run.submitted++;
+					return { id: 1 };
+				},
+				onFailed: () => () => {},
+				close: async () => {},
+			};
+		},
+		contact,
+		pick: async () => {
+			run.picked++;
+			return undefined;
+		},
+	};
+	try {
+		await main(argv, seams);
+		run.reason = "returned";
+	} catch (error) {
+		run.reason = error.reason ?? String(error);
+	}
+	run.events = events.splice(0);
+	return run;
+};
+const moduleText = (name, preparesPackage) =>
+	(preparesPackage ? "process.env.PI_PACKAGE_DIR = " + JSON.stringify(probePackage) + ";\n" : "") +
+	'globalThis.orderEvents.push("eval:' + name + '");\nexport default { name: "' + name + '" };\n';
+const report = { mode };
+// Both ingress forms at once, first, with modules of their own: refused before either is evaluated.
+const bothFile = path.join(sandbox, "both.extension.mjs");
+fs.writeFileSync(bothFile, moduleText("both-file", false));
+const bothDir = path.join(sandbox, "both-modules");
+fs.mkdirSync(bothDir);
+fs.writeFileSync(path.join(bothDir, "00-both.extension.mjs"), moduleText("both-dir", false));
+report.exclusive = await launch(["--session", session, "--native-module", bothFile, "--native-module-dir", bothDir]);
+let ingress;
+let files;
+if (mode === "file") {
+	const file = path.join(sandbox, "order.extension.mjs");
+	fs.writeFileSync(file, moduleText("order-file", true));
+	ingress = ["--native-module", file];
+	files = [file];
+} else {
+	const dir = path.join(sandbox, "order-modules");
+	fs.mkdirSync(dir);
+	fs.writeFileSync(path.join(dir, "10-mark.extension.mjs"), moduleText("order-dir-10", false));
+	fs.writeFileSync(path.join(dir, "00-env.extension.mjs"), moduleText("order-dir-00", true));
+	ingress = ["--native-module-dir", dir];
+	files = [path.join(dir, "00-env.extension.mjs"), path.join(dir, "10-mark.extension.mjs")];
+}
+report.positive = await launch(["--session", session, ...ingress]);
+const defaults = [];
+for (const file of files) defaults.push((await import(pathToFileURL(fs.realpathSync(file)).href)).default);
+report.positive.byReference = handed.length === defaults.length + 1 && defaults.every((extension, i) => handed[i + 1] === extension);
+const config = await import(new URL("config.js", new URL(".", import.meta.resolve("@earendil-works/pi-coding-agent"))).href);
+report.config = { name: config.PACKAGE_NAME, version: config.VERSION };
+console.log(JSON.stringify(report));
+`;
+
+interface SessionOrderRun {
+	reason: string;
+	events: string[];
+	opened: {
+		keys: string[];
+		session: string;
+		continueSession: boolean;
+		extensions: string[];
+		packagePrepared: boolean;
+	}[];
+	submitted: number;
+	picked: number;
+	byReference?: boolean;
+}
+
+describe("--session ahead of the operator's environment preparation (#157 G3 B-L1, clean child)", () => {
+	const reports = new Map<string, { exclusive: SessionOrderRun; positive: SessionOrderRun; config: unknown }>();
+
+	beforeAll(() => {
+		for (const mode of ["file", "dir"]) {
+			const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), "pi-durable-session-order-"));
+			try {
+				fs.mkdirSync(path.join(sandbox, "probe-package"));
+				fs.writeFileSync(
+					path.join(sandbox, "probe-package", "package.json"),
+					`${JSON.stringify({ name: "session-order-probe", version: "0.0.0-session-order-probe" })}\n`,
+				);
+				const agent = path.join(sandbox, "home", ".pi", "agent");
+				fs.mkdirSync(agent, { recursive: true });
+				const run = spawnSync(
+					process.execPath,
+					["--import", path.join(DURABLE, "carrier-resolver.mjs"), "--input-type=module", "-e", SESSION_ORDER_ORACLE],
+					{
+						cwd: ROOT,
+						encoding: "utf8",
+						timeout: 60_000,
+						env: {
+							PATH: process.env.PATH ?? "",
+							HOME: path.join(sandbox, "home"),
+							PI_CODING_AGENT_DIR: agent,
+							PI_OFFLINE: "1",
+							ORACLE_SANDBOX: sandbox,
+							ORACLE_MODE: mode,
+						},
+					},
+				);
+				expect(run.status, run.stderr).toBe(0);
+				reports.set(mode, JSON.parse(run.stdout.trim().split("\n").at(-1) ?? ""));
+			} finally {
+				fs.rmSync(sandbox, { recursive: true, force: true });
+			}
+		}
+	}, 150_000);
+
+	it("[QK:PI-DURABLE-SESSION-BEFORE-OPERATOR-ENV] with --session, an explicit --native-module file or --native-module-dir initializes before the TUI loads and the app opens, reads an environment no grammar check consumed first (the SDK config imported afterwards sees the operator's package), and is handed to the open by reference after the contact for exactly the named session; naming both forms is refused before either is evaluated", () => {
+		const grammar = fs.readFileSync(path.join(DURABLE, "carrier", "session-name.js"), "utf8");
+		expect(grammar).not.toMatch(/\b(?:from|import)\s*["'(]|\brequire\s*\(/);
+		const named = (extensions: string[]) => ({
+			keys: ["continueSession", "cwd", "extensions", "session"],
+			session: "1759622400000-0b5e2a4c-1f3d-4e8a-9c7b-2d6f8e1a3c5b",
+			continueSession: false,
+			extensions,
+			packagePrepared: true,
+		});
+		const want = {
+			file: { evaluated: ["eval:order-file"], extensions: ["entwurf", "order-file"] },
+			dir: {
+				evaluated: ["eval:order-dir-00", "eval:order-dir-10"],
+				extensions: ["entwurf", "order-dir-00", "order-dir-10"],
+			},
+		};
+		for (const [mode, expected] of Object.entries(want)) {
+			const report = reports.get(mode);
+			expect(report?.exclusive.reason, mode).toBe("native-module-ingress-exclusive");
+			expect([report?.exclusive.events, report?.exclusive.opened], mode).toEqual([[], []]);
+			expect(report?.positive.reason, mode).toBe("returned");
+			expect(report?.positive.events, mode).toEqual([...expected.evaluated, "loadTui", "open", "tui"]);
+			expect(report?.positive.opened, mode).toEqual([named(expected.extensions)]);
+			expect([report?.positive.byReference, report?.positive.picked, report?.positive.submitted], mode).toEqual([
+				true,
+				0,
+				0,
+			]);
+			expect(report?.config, mode).toEqual({ name: "session-order-probe", version: "0.0.0-session-order-probe" });
+		}
 	});
 });
 

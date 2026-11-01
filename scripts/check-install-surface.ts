@@ -521,6 +521,12 @@ const operatorCmds = [...targets].filter(([cmd, ts]) => !isDevGate(cmd) && ts.le
 			receipt:
 				"scripts/herdr-plugin-deactivate.mjs: preflightOperatorLink beside the component preflights, removeOperatorLink before the components, operatorLinkLeftovers with no ledger (#153)",
 		},
+		{
+			old: "--continue (this directory's newest session) and --resume (choose one of its sessions) take none of them.",
+			next: "--continue (this directory's newest session), --resume (choose one of its sessions), and --session <native id> (reopen exactly that session of this directory) take none of them and are mutually exclusive.",
+			receipt:
+				"pi/pi-durable/bootstrap.mjs parseArgs: --session in VALUE_FLAGS; session-continue-exclusive, session-resume-exclusive and fresh-only-argument-with-session beside resume-continue-exclusive and the --resume/--continue fresh-only refusals (#157 G3 B-L1)",
+		},
 	];
 	const respelled = oldUsage.split("\n").filter((l) => respell(l) !== l).length;
 	let expectedCatalog = oldUsage.split("\n").map(respell).join("\n");

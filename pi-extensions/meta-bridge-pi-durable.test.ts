@@ -2384,6 +2384,41 @@ describe("pi-durable bootstrap — explicit fresh arguments (stub runtime, unit 
 		}
 	});
 
+	it("[QK:PI-DURABLE-SESSION-ARGUMENT-REFUSED] --session beside --continue/-c, --resume or any fresh-only flag, and a missing, empty, dash-led or repeated value, is refused by name before operator-native module evaluation, TUI load, open or birth", async () => {
+		const probe = path.join(root, "session-probe.mjs");
+		fs.writeFileSync(
+			probe,
+			'process.env.SESSION_PROBE_MARK = "evaluated";\nexport default { name: "session-probe" };\n',
+		);
+		const cases: [string[], RegExp][] = [
+			[["--session", SESSION_ID, "--continue"], /^session-continue-exclusive: /],
+			[["-c", "--session", SESSION_ID], /^session-continue-exclusive: /],
+			[["--session", SESSION_ID, "--resume"], /^session-resume-exclusive: /],
+			[["--resume", "--session", SESSION_ID, "--native-module", probe], /^session-resume-exclusive: /],
+			[["--session"], /^argument-value-missing: --session /],
+			[["--session", ""], /^argument-value-missing: --session /],
+			[["--session", "-c"], /^argument-value-missing: --session /],
+			[["--session", SESSION_ID, "--session", SESSION_ID], /^argument-repeated: --session /],
+		];
+		for (const [flag, value] of [
+			["--provider", "loopback"],
+			["--model", "scripted"],
+			["--width", "task-wide"],
+			["--entwurf-bootstrap", PAYLOAD],
+		]) {
+			cases.push([
+				["--session", SESSION_ID, flag, value, "--native-module", probe],
+				new RegExp(`^fresh-only-argument-with-session: ${flag} `),
+			]);
+		}
+		for (const [argv, reason] of cases) {
+			const r = await refused(argv);
+			expect(r.error?.message, argv.join(" ")).toMatch(reason);
+			expect([r.loads, r.opened, r.minted], argv.join(" ")).toEqual([0, 0, false]);
+		}
+		expect(process.env.SESSION_PROBE_MARK).toBeUndefined();
+	});
+
 	it("[QK:PI-DURABLE-FIRST-INPUT-ONCE] the launcher's task is admitted to the root exactly once, after the birth and before the TUI runs; without a payload nothing is submitted", async () => {
 		const durable = fakeFresh();
 		const t = tui(durable.record);

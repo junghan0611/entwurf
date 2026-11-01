@@ -27,6 +27,8 @@
 //        <entwurf>/pi/pi-durable/bootstrap.mjs \
 //        --provider <provider> --model <model id> --width task-wide [--entwurf-bootstrap <json>]
 //   ... bootstrap.mjs --continue
+//   ... bootstrap.mjs --resume
+//   ... bootstrap.mjs --session <native id>
 //
 // Explicit means the native API, not a vendor argv: upstream's durable main takes only
 // `--continue`, so `--provider`/`--model` reach pi's own `findInitialAgentModel` through the
@@ -45,9 +47,17 @@
 // address rides the process env only.
 // `--continue` opens the newest session for this directory as upstream does (not a chosen
 // record), so every flag that only a new session can honour is refused beside it by name.
+// `--session <native id>` (#157 G3 B-L1) reopens exactly that native session of this directory as it
+// was saved, through the owned runtime's `session` option, with no interactive session picker or
+// picker-specific TTY check; the normal TUI still runs. The id is the native session directory name, never a garden id: a native CLI selector, not an address. It is
+// held to the owned `isSessionName` grammar before operator-native module evaluation, TUI load, open
+// or birth; that scope is lexical (the selection stays under this cwd's session root by name), not
+// physical symlink confinement. A well-formed id this directory does not hold is the runtime's own
+// refusal, after the TUI module loads and before any TUI runs. `--continue`, `--resume` and
+// `--session` are mutually exclusive, and every new-session flag is refused beside each of them.
 //
-// `--native-module <absolute file>` (#130 P2) names ONE operator module, for a new or a continued
-// session. It is an ordinary ES module: its own top-level evaluation (top-level await included) is
+// `--native-module <absolute file>` (#130 P2) names ONE operator module, for a new, a continued, a
+// resumed or a named session. It is an ordinary ES module: its own top-level evaluation (top-level await included) is
 // its initialization, and its default export is a native durable Extension, handed to `openDurable`
 // by reference after the contact. Initialization runs before the TUI or the runtime is imported —
 // the runtime creates the provider runtime before it installs any extension (carrier/runtime.js
@@ -87,6 +97,8 @@ import {
 const RUNTIME = "./carrier/runtime.js";
 const TUI = "./carrier/tui.js";
 const SESSIONS = "./carrier/sessions.js";
+/** The session-name grammar alone: no imports and no I/O, so reading it loads nothing an operator module may prepare. */
+const SESSION_NAME = "./carrier/session-name.js";
 
 /** The entwurf-bridge of THIS package closure: the one the contact spawns as its MCP hand. */
 export const PACKAGED_BRIDGE_ENTRY = fileURLToPath(
@@ -102,6 +114,7 @@ const VALUE_FLAGS = [
 	"--entwurf-bootstrap",
 	"--native-module",
 	"--native-module-dir",
+	"--session",
 ];
 /** Flags only a NEW session can honour. */
 const FRESH_ONLY_FLAGS = ["--provider", "--model", "--width", "--entwurf-bootstrap"];
@@ -426,7 +439,26 @@ function parseArgs(argv) {
 			"--resume chooses a session and --continue opens the newest one; give one of them",
 		);
 	}
+	const session = values.get("--session");
+	if (session !== undefined && continueSession) {
+		throw refuse(
+			"session-continue-exclusive",
+			"--session names the session to reopen and --continue opens the newest one; give one of them",
+		);
+	}
+	if (session !== undefined && resume) {
+		throw refuse(
+			"session-resume-exclusive",
+			"--session names the session to reopen and --resume chooses one from a list; give one of them",
+		);
+	}
 	const fresh = FRESH_ONLY_FLAGS.filter((flag) => values.has(flag));
+	if (session !== undefined && fresh.length > 0) {
+		throw refuse(
+			"fresh-only-argument-with-session",
+			`${fresh.join(", ")} apply only to a new session; --session reopens the named session as it was saved`,
+		);
+	}
 	if (resume && fresh.length > 0) {
 		throw refuse(
 			"fresh-only-argument-with-resume",
@@ -455,6 +487,7 @@ function parseArgs(argv) {
 				: {};
 	if (continueSession) return { continueSession, ...nativeModule };
 	if (resume) return { resume, ...nativeModule };
+	if (session !== undefined) return { session, ...nativeModule };
 	const provider = values.get("--provider");
 	if (provider === undefined) {
 		throw refuse(
@@ -543,8 +576,23 @@ async function chooseSession(cwd, sessionsDir, pick) {
  * }} [seams]
  */
 export async function main(argv, { loadTui = () => import(TUI), open, contact, bridgeEntry, pick } = {}) {
-	// Every argument refusal is decided here, before any module, the TUI or the app loads.
+	// Every argument refusal but the `--session` grammar is decided here, before any module, the TUI or
+	// the app loads.
 	const { nativeModules = [], resume = false, ...args } = parseArgs(argv);
+	// `--session` is held to the owned session-name grammar the runtime selects by, before operator-native
+	// module evaluation, TUI load, open or birth. Only the import-free grammar file is read for it — never
+	// the session store, whose SDK config import fixes package state from the environment an operator
+	// module may still prepare. The shape is lexical — it names a directory under this cwd's session root
+	// by name only, which is not physical symlink confinement.
+	if (args.session !== undefined) {
+		const { isSessionName } = await import(SESSION_NAME);
+		if (!isSessionName(args.session)) {
+			throw refuse(
+				"session-id-malformed",
+				`${JSON.stringify(args.session)} is not a durable session id (<13-digit ms>-<uuid>)`,
+			);
+		}
+	}
 	// The caller's directory, fixed before any operator code runs and handed to the app explicitly.
 	const cwd = process.cwd();
 	const extensions = await loadNativeModules(nativeModules);

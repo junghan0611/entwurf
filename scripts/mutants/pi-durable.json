@@ -1352,6 +1352,66 @@
 			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
 		},
 		{
+			"claim": "PI-DURABLE-SESSION-ARGUMENT-REFUSED",
+			"title": "a fresh-only flag beside --session is no longer refused: the named session is reopened with an argument it silently drops",
+			"subject": "pi/pi-durable/bootstrap.mjs",
+			"find": ["\tif (session !== undefined && fresh.length > 0) {"],
+			"replace": ["\tif (session !== undefined && fresh.length > FRESH_ONLY_FLAGS.length) {"],
+			"gate": ["bash", "run.sh", "check-pi-durable-beside"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PI-DURABLE-SESSION-ARGUMENT-REFUSED]",
+			"signatureSource": "pi-extensions/meta-bridge-pi-durable.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "PI-DURABLE-SESSION-ID-MALFORMED-REFUSED",
+			"title": "a separator check stands in for the session grammar: a malformed --session name reaches the operator's module, the TUI and the app",
+			"subject": "pi/pi-durable/bootstrap.mjs",
+			"find": ["\t\tif (!isSessionName(args.session)) {"],
+			"replace": ["\t\tif (args.session.includes(\"/\")) {"],
+			"gate": ["bash", "run.sh", "check-pi-durable-carrier"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PI-DURABLE-SESSION-ID-MALFORMED-REFUSED]",
+			"signatureSource": "pi-extensions/lib/pi-durable-carrier.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "PI-DURABLE-SESSION-OPENS-NAMED",
+			"title": "--session opens this directory's newest session instead of the one it names",
+			"subject": "pi/pi-durable/bootstrap.mjs",
+			"find": ["\tif (session !== undefined) return { session, ...nativeModule };"],
+			"replace": ["\tif (session !== undefined) return { continueSession: true, ...nativeModule };"],
+			"gate": ["bash", "run.sh", "check-pi-durable-carrier"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PI-DURABLE-SESSION-OPENS-NAMED]",
+			"signatureSource": "pi-extensions/lib/pi-durable-carrier.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "PI-DURABLE-SESSION-NOT-HERE-REFUSED",
+			"title": "a well-formed session id is trusted without its directory: an id this directory does not hold is opened anyway",
+			"subject": "pi/pi-durable/carrier/sessions.js",
+			"find": ["\t\tif (chosen === undefined || !(await statIfPresent(chosen))?.isDirectory()) {"],
+			"replace": ["\t\tif (chosen === undefined) {"],
+			"gate": ["bash", "run.sh", "check-pi-durable-carrier"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PI-DURABLE-SESSION-NOT-HERE-REFUSED]",
+			"signatureSource": "pi-extensions/lib/pi-durable-carrier.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "PI-DURABLE-SESSION-BEFORE-OPERATOR-ENV",
+			"title": "the bootstrap loads the session store before reading the --session grammar, and the store's SDK config import fixes package state before the operator module prepares the environment",
+			"subject": "pi/pi-durable/bootstrap.mjs",
+			"find": ["\t\tconst { isSessionName } = await import(SESSION_NAME);"],
+			"replace": ["\t\tconst { isSessionName } = await import(SESSIONS).then(() => import(SESSION_NAME));"],
+			"gate": ["bash", "run.sh", "check-pi-durable-carrier"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PI-DURABLE-SESSION-BEFORE-OPERATOR-ENV]",
+			"signatureSource": "pi-extensions/lib/pi-durable-carrier.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
 			"claim": "PI-DURABLE-RESUME-CALL-EXPOSED",
 			"title": "entwurf_resume_call drops out of the durable contact's tools, so the coordinator citizen cannot reopen a dormant pi sibling",
 			"subject": "pi-extensions/meta-bridge-pi-durable.ts",

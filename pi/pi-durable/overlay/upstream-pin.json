@@ -55,7 +55,7 @@
 		}
 	},
 	"carrier": {
-		"comment": "files: the six app files bootstrap.mjs needs (main.ts is replaced by the bootstrap), each emitted from its owned `source`. distTargets: every pi-coding-agent internal the stripped files import, as paths under the published dist/; the emitter refuses a set that differs and the resolver answers no other.",
+		"comment": "files: the six app files bootstrap.mjs needs (main.ts is replaced by the bootstrap) and the import-free session-name grammar Entwurf owns beside them (#157 G3 B-L1, no upstream origin), each emitted from its owned `source`. distTargets: every pi-coding-agent internal the stripped files import, as paths under the published dist/; the emitter refuses a set that differs and the resolver answers no other.",
 		"emitter": {
 			"tool": "node:module.stripTypeScriptTypes",
 			"mode": "strip",
@@ -94,14 +94,20 @@
 			{
 				"name": "sessions.js",
 				"source": "pi/pi-durable/src/experimental/durable/sessions.ts",
-				"blob": "eed4b3ca51c6f5a3bab8106adaf0062f3f7d5b56",
-				"sha256": "668373feadabcf13bd4dd7431e5429b7d7376c47c367e4b15353c57cb8711892"
+				"blob": "22835d363b6beb9193e306f5bf5a967213b9ec27",
+				"sha256": "a45960984ad72edacd2f1d3007aa057bccd4807831df8fb9b644ff27b5c1f252"
 			},
 			{
 				"name": "subagent.js",
 				"source": "pi/pi-durable/src/experimental/durable/subagent.ts",
 				"blob": "3fa9aebbe93e82cfff436e7b9d4c9877e0ed0e27",
 				"sha256": "1cb2390b673a0d914117bc07708c39b004fb10e48b31436bf9d9d2b953a64220"
+			},
+			{
+				"name": "session-name.js",
+				"source": "pi/pi-durable/src/experimental/durable/session-name.ts",
+				"blob": "c57c760ca3c14363f195ac9d9c2add984e4118d5",
+				"sha256": "9eadecfe9a48bba0d221370f4a236286e0d6f10d663b15ff4cb5975adee67018"
 			}
 		],
 		"distTargets": [
