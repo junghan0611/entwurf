@@ -99,7 +99,7 @@ is the correct behaviour for a workbench — persistent identity is not its job.
   transcript's session-header cwd and first `model_change` provider/model through the launch resolver
   (no record/host cwd fallback); Claude Code uses the record session id/cwd without restoring model
   or permission flags. The call submits no prompt. Called from inside Herdr it reopens a **pi**
-  citizen in a new Herdr tab beside the caller (#157 G1a, pending its LIVE proof) and refuses a
+  citizen in a new Herdr tab beside the caller (#157 G1a, dated native-Pi n=1 in [BASELINE](../../BASELINE.md), not release acceptance) and refuses a
   Claude Code citizen as `herdr-resume-backend-unsupported` before anything is created; it never
   falls back to tmux.
 

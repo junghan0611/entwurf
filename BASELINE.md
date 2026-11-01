@@ -105,7 +105,24 @@ and its owner's one installed schema certification accepted 1,847 records with z
 acceptance, not whole-parser equivalence. Resident processes remain unmeasured; broader runtime
 and release acceptance are not silently waived.
 
-Notes the table cannot carry without becoming prose again:
+### #157 Herdr Pi native round trip, 2026-11-01 (n=1)
+
+Not a certification row, release gate or other-backend acceptance. One private Linux aarch64 Herdr 0.9.5 server, source `c2032093f71b2dfc92bc49e9e85d96178a34b89a`, installed Pi 1.4.0 provenance and Node 24.18.1. Native Claude Code citizen915040 measured it; Astra567753 reviewed saved raw/records/transcripts and independently checked saved hashes/prefix/fact occurrence without another runtime probe. Main read the receipts and protocol/hash artifacts. Portable decisive evidence: [#157 runtime receipt](https://github.com/junghan0611/entwurf/issues/157#issuecomment-6553792285).
+
+| Axis | Measured |
+|---|---|
+| fixture | Private HOME/XDG/meta/control/lock/socket, empty target/caller cwds, existing real Pi agent-dir config/auth reference. Nix shell initialization overwrote PATH; a NEW fixture `.bashrc` prepended the existing pnpm bin. This is a PATH-supplemented fixture, not a pristine-HOME result; no operator profile/SDK was changed. |
+| seed/dormancy | Terminal seed ACK and a completed absolute transcript are bound by the V3 record to gardenId `20261101T135933-80116c`; the transcript header matches nativeSessionId `01a1957a-23ee-7314-a6d6-fca90682712e` and cwd, and its first model_change matches the canonical model. One test-owned pane close removed the original runtime/socket, preserving the record/transcript. No glob or manual record repair. |
+| actual public caller | Native Pi in private Herdr w1:p3 made exactly one resume toolCall with the target gid; its matching toolResult was non-error and carried separate LAUNCH/OBSERVATION for new tab w1:t2/pane w1:p4. Target gid/native/path kept; the returned pane joins the private server and target listener process. |
+| protocol/no-turn | One owner `get_info` RPC returned the same gid/cwd/model and idle=true. Stop-complete baseline and resume-complete/pre-recall transcript are both 65,049 B with SHA256 `aa7903edf56d6577466e42b59fa4ce86f5d3e3d85cfa04b70aff28e2f3188e29`; final 66,541 B keeps that exact prefix. |
+| recall/record set | One separately counted synthetic fixture sender used public `entwurf_v2`: control-socket sent, then the target recalled the unique seed value. The answer was absent from caller/recall/helper inputs. Records are exactly target/caller/sender, target identity preserved, locks empty. |
+| cleanup | One official private stop; saved raw supports the 12 tracked PID absences and four listener-path absences. 13 R4 visibility-helper rows remain, earlier helpers untouched. This is not total-descendant-zero. |
+
+A post-stop bookkeeping line failed to parse (unescaped find parentheses, exit2); it is retained. Separately authorized read-only recovery found no T/C/S gid entries in six real roots and matching before/after entry sets. This later snapshot proves neither a live-interval no-leak invariant nor unchanged file contents. Recovery also violated sequential-only scheduling with a seven-call batch: its racing first count was discarded and completed-producer sequential reads were used. These exceptions remain; review accepted the saved functional evidence, not a procedural-floor pass.
+
+Three logical user turns are not a measured provider-request count. Provider/billing, OAuth/vendor other writes, the null-to-filled transcriptPath transition and the MCP-timeout/cancellation boundary were not measured; the complete resume-ready seed transcript was observed, and the resume tool result returned in about 3 s. Confirmed real-agent-dir writes are two new transcripts and the target recall append. No pi-durable/Claude Code Herdr resume, registry artifact, aggregate MUST or release acceptance follows. Host artifacts: `/tmp/e157h/g1a-resume-r4/{RECEIPT.md,A10-READ-ADDENDUM.md}` and `raw/`.
+
+Notes on the release-host certification table above:
 
 - **shape-only is not a live proof.** The `artifact-consumer` job verifies a read-only
   candidate `.tgz`, checkout-invisible non-root global install, PATH shims, a frozen
