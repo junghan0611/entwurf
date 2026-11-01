@@ -114,8 +114,8 @@
 			"claim": "V2RESUME-ARGV-FROM-RECORD",
 			"title": "the launcher is handed the caller's own directory instead of the record's, so the citizen returns in the wrong project",
 			"subject": "pi-extensions/lib/entwurf-v2-visible-resume.ts",
-			"find": ["\t\tconst launched = deps.launch({ backend: \"pi\", cwd: identity.cwd, runtimeArgs });"],
-			"replace": ["\t\tconst launched = deps.launch({ backend: \"pi\", cwd: process.cwd(), runtimeArgs });"],
+			"find": ["\t\tconst launched = await deps.launch({ backend: \"pi\", cwd: identity.cwd, runtimeArgs });"],
+			"replace": ["\t\tconst launched = await deps.launch({ backend: \"pi\", cwd: process.cwd(), runtimeArgs });"],
 			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
 			"timeoutSeconds": 60,
 			"signature": "[QK:V2RESUME-ARGV-FROM-RECORD]",
@@ -338,10 +338,10 @@
 			"claim": "V2RESUME-PI-NEVER-READS-RECEIVER",
 			"title": "the pi path consults a Claude Code receiver marker, mixing the two backends' dormancy proofs",
 			"subject": "pi-extensions/lib/entwurf-v2-visible-resume.ts",
-			"find": ["\t\tconst launched = deps.launch({ backend: \"pi\", cwd: identity.cwd, runtimeArgs });"],
+			"find": ["\t\tconst launched = await deps.launch({ backend: \"pi\", cwd: identity.cwd, runtimeArgs });"],
 			"replace": [
 				"\t\tdeps.inspectReceiver(targetGardenId);",
-				"\t\tconst launched = deps.launch({ backend: \"pi\", cwd: identity.cwd, runtimeArgs });"
+				"\t\tconst launched = await deps.launch({ backend: \"pi\", cwd: identity.cwd, runtimeArgs });"
 			],
 			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
 			"timeoutSeconds": 60,
@@ -501,6 +501,63 @@
 			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
 			"timeoutSeconds": 60,
 			"signature": "[QK:V2RESUME-REJECT-HINTS-FROM-ROOT]",
+			"signatureSource": "pi-extensions/lib/entwurf-v2-visible-resume.test.ts"
+		},
+		{
+			"claim": "V2RESUME-LAUNCH-AWAITED",
+			"title": "the pi launch stops being awaited, so a herdr launch that answers through a promise reads as a refusal with no reason while the tab it opened is on screen",
+			"subject": "pi-extensions/lib/entwurf-v2-visible-resume.ts",
+			"find": ["\t\tconst launched = await deps.launch({ backend: \"pi\", cwd: identity.cwd, runtimeArgs });"],
+			"replace": [
+				"\t\tconst launched = deps.launch({ backend: \"pi\", cwd: identity.cwd, runtimeArgs }) as VisibleResumeLaunchOutcome;"
+			],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:V2RESUME-LAUNCH-AWAITED]",
+			"signatureSource": "pi-extensions/lib/entwurf-v2-visible-resume.test.ts"
+		},
+		{
+			"claim": "V2RESUME-HERDR-RENDER",
+			"title": "the herdr branch of the renderer is dropped, so a herdr launch is printed as a tmux window with undefined runtime, window and pane pid",
+			"subject": "pi-extensions/lib/entwurf-v2-visible-resume.ts",
+			"find": ["\tif (h.rail === \"herdr\") return renderHerdrPiResume(result, h, actor);"],
+			"replace": [""],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:V2RESUME-HERDR-RENDER]",
+			"signatureSource": "pi-extensions/lib/entwurf-v2-visible-resume.test.ts"
+		},
+		{
+			"claim": "V2RESUME-POST-CREATE-FAILURE-NAMED",
+			"title": "a launch failure after the tab create is folded into launch-refused, so the operator is told no window was opened over a tab that may be holding the citizen",
+			"subject": "pi-extensions/lib/entwurf-v2-visible-resume.ts",
+			"find": ["\treturn \"failure\" in launched"],
+			"replace": ["\treturn \"failureNever\" in launched"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:V2RESUME-POST-CREATE-FAILURE-NAMED]",
+			"signatureSource": "pi-extensions/lib/entwurf-v2-visible-resume.test.ts"
+		},
+		{
+			"claim": "V2RESUME-LAUNCH-FAILED-HEADER-HONEST",
+			"title": "the header of a tab create herdr declined by name claims the tab was created, sending the operator to look for a tab that never existed",
+			"subject": "pi-extensions/lib/entwurf-v2-visible-resume.ts",
+			"find": ["\t\t\t? \"entwurf_resume_call failed at the herdr tab create step\""],
+			"replace": ["\t\t\t? \"entwurf_resume_call failed after the herdr tab was created\""],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:V2RESUME-LAUNCH-FAILED-HEADER-HONEST]",
+			"signatureSource": "pi-extensions/lib/entwurf-v2-visible-resume.test.ts"
+		},
+		{
+			"claim": "V2RESUME-CC-TMUX-ONLY",
+			"title": "the tmux-only guard on a Claude Code launch handle is disabled, so a non-tmux handle is watched for a pane pid it does not carry and the defect ends as a quiet resume-unobserved",
+			"subject": "pi-extensions/lib/entwurf-v2-visible-resume.ts",
+			"find": ["\tif (launched.handle.rail !== \"tmux\") {"],
+			"replace": ["\tif (launched.handle.rail !== \"tmux\" && false) {"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:V2RESUME-CC-TMUX-ONLY]",
 			"signatureSource": "pi-extensions/lib/entwurf-v2-visible-resume.test.ts"
 		}
 	]

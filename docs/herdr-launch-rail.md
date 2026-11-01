@@ -1,6 +1,6 @@
 # herdr launch rail
 
-> 이 문서는 **herdr 안에서 형제를 새로 여는 레일**을 소유한다. same-id `entwurf_resume_call`은 이 레일에 없고 `herdr-resume-unsupported`로 거절한다. 숨은 tmux fallback도 없다. tmux 레일은 [`mux-launch-rail.md`](./mux-launch-rail.md)가 그대로 소유하고, 두 문서는 합쳐지지 않는다 — 좌표도 실패 모양도 다르기 때문이다.
+> 이 문서는 **herdr 안에서 형제를 새로 여는 레일**과, #157 G1a부터 그 위에서 **잠든 pi 시민을 같은 garden id로 다시 여는 launch**(§15, `herdr-resume-call.ts`, test-owned LIVE 전 후보)를 소유한다. herdr 안의 Claude Code resume은 아무것도 만들기 전에 `herdr-resume-backend-unsupported`로 거절하고, tmux leaf의 `herdr-resume-unsupported`는 그 leaf를 직접 부른 경우에만 남는다. 숨은 tmux fallback은 어느 쪽에도 없다. tmux 레일은 [`mux-launch-rail.md`](./mux-launch-rail.md)가 그대로 소유하고, 두 문서는 합쳐지지 않는다 — 좌표도 실패 모양도 다르기 때문이다.
 > 대상: `pi-extensions/lib/herdr-fresh-call.ts` (#116 S2-c1). 측정 환경: herdr 0.9.0 / socket protocol 22, oracle — 2026-09-14, 배치 정책 교체분은 2026-09-15. herdr 소스 인용은 전부 `@ c77af189` 고정본이다.
 > `[재측정 2026-09-17, oracle, herdr 0.9.1]` 공급 핀이 0.9.1로 올라갔다(`scripts/fixtures/herdr-supply.json`). 이 문서의 payload 리터럴은 **재기록하지 않았다** — 0.9.1에서 바뀐 관측은 셋뿐이고 전부 이 레일 밖이거나 무해하다: `herdr status client`의 `protocol: 22` 그대로, `check-herdr-sandbox` 11 assertions green(같은 argv·같은 응답 모양), `integration status`가 행 하나를 더한다(17→18, 추가분은 `letta (experimental)` 하나뿐이고 나머지 17행은 바이트 동일). 0.9.1 바이너리는 digest로 받아 temp에서 실행했고 오퍼레이터 설치본은 건드리지 않았다.
 > `[재측정 2026-10-03, oracle aarch64, herdr 0.9.3, #126]` 공급 핀이 0.9.3으로 올라갔다. payload 리터럴은 이번에도 **재기록하지 않았다** — 이 레일이 소비하는 면에서 바뀐 관측은 없다: `status client`의 `protocol: 22` 그대로, `check-herdr-sandbox` 12 assertions green(같은 argv·같은 응답 모양), `integration status` 18행이 샌드박스 root 경로를 정규화한 뒤 0.9.1과 동일, 0.9.1이 설치한 pi(v9)·claude(v10) integration을 0.9.3이 `current`로 읽는다. 소스상 0.9.2의 변화는 응답의 **추가** 필드(`completion_seq`, `resume_argv`)와 새 pane env 스크럽(#4461 — 외부 `CLAUDECODE`/`CLAUDE_CODE_SESSION_ID` 등을 지우고 명시 `--env`는 허용)이며, 우리 파서는 필드 단위로 읽고 우리 `PI_*` 스크럽은 그대로 필요하다. 0.9.3은 키 입력 hotfix다. 바이너리는 snapshot의 provisional manifest로 `install-herdr-ci.sh`가 digest 검증해 temp에 받았고, 오퍼레이터 설치본(0.9.1)은 건드리지 않았다.
@@ -368,3 +368,14 @@ XDG 루트 어디에도 없다 — **도구를 두 번 성공시킨 자식조차
 부작용이 아니다. 따라서 이 레일의 증거 표면은 **herdr agent status + entwurf 자신의 hook 저널 둘뿐**이고,
 `ab5c860` 이후 LIVE 셀은 매 런 그 둘을 receipts에 적는다. 자식이 무엇을 생각했는지 묻는 가설은 이 레일에서
 검증할 수 없다 — 물을 수 있는 것은 자식이 무엇을 **했는지**다.
+
+## 15. same-id pi resume — #157 G1a
+
+> **상태: source 후보, test-owned LIVE 전.** 아래는 코드가 하도록 쓰인 일이지, herdr 위에서 관측한 결과가 아니다.
+
+- **소유.** record·per-gid lock·dormancy 증명·same-gid control socket observation은 그대로 `entwurf-v2-visible-resume.ts`의 것이다. 이 레일의 `herdr-resume-call.ts`는 launch만 한다. rail은 fresh와 **같은** 공통 rail root `fresh-call-dispatch.ts`가 같은 정확한 `HERDR_ENV=1` 술어(`selectFreshCallRail`)로 고르되, fresh와 분리된 resume 진입점 `dispatchResumeLaunch`에서 고른다. bridge(`mcp/entwurf-bridge/src/index.ts`)는 고정 tmux launch 매핑을 그 진입점에 넘길 뿐 rail 사실도 herdr 모듈도 직접 알지 않는다. v2는 herdr 모듈을 import하지 않고, 어느 레일이 돌았는지는 launch handle의 `rail`로만 안다.
+- **pi만.** Claude Code resume의 observation은 receiver marker owner pid를 tmux pane pid와 조인하는데, herdr 좌표에서 그 pid를 잰 적이 없다. 그래서 herdr 안의 Claude Code target은 아무것도 만들기 전에 `herdr-resume-backend-unsupported`로 거절되고 tmux로 가지 않는다. v2도 Claude Code launch handle을 tmux로 좁히며, 다른 handle이 오면 관측하지 않고 이름 붙여 throw한다.
+- **재사용과 비재사용.** context, cwd 분류, caller `pane get`, tab create 응답 파서, `agent start` argv와 응답 파서, argv echo 대조, herdr 오류 코드, 조건부 회수(`reclaim` → `decideConditionalClose`)는 §5–§7의 것을 그대로 쓴다. fresh의 tab create **builder**는 callback env를 계약으로 싣기 때문에 쓰지 않는다. resume에는 callback·nonce·task·prompt·model override가 없고, runtime argv는 v2가 record에서 만든 그대로다. birth framing과 settle witness도 없다.
+- **argv.** `tab create --workspace <caller workspace> --no-focus --cwd <record cwd> --env PI_SESSION_ID= --env PI_AGENT_ID=` 다음 `agent start entwurf-resume-<16hex> --kind pi --pane <root pane> --timeout 240000 -- <record runtime argv>`. agent 이름은 호출마다 무작위이고 주소가 아니다.
+- **결과 셋.** 생성 전 거절은 v2의 `launch-refused`(아무것도 없다). tab create 이후 실패는 v2의 `launch-failed`로, herdr 코드·recovery(`none` / `unknown` / `closed` / `orphan-unreclaimed`)·읽힌 경우의 생성 좌표를 원형 그대로 운반하며 "No window was opened"라고 말하지 않고 관측도 시작하지 않는다. launch 성공 뒤에만 독립 관측(same-gid socket)이 돈다. herdr의 ready와 `agent_session`은 garden 주소 가능성이 아니므로 기다리지 않는다. 관측 timeout이면 tab은 남고 lock은 풀리며 재시도·kill은 없다.
+- **증거 등급.** 결정론 증명은 `pi-extensions/lib/herdr-resume-call.test.ts`(herdr 응답 표, 바이너리 없음), `entwurf-v2-visible-resume.test.ts`의 herdr describe 블록, 공통 root의 resume rail 선택을 재는 `check-fresh-call-dispatch`의 `FCD-RESUME-RAIL-SHARED`, bridge 위임을 재는 `check-mux-resume-call`의 `MUXRESUME-HERDR-COMPOSED`다. 실 herdr 바이너리와 실 pi로 잰 관측은 아직 없고, 그것이 G1a의 다음 test-owned LIVE다.

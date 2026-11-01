@@ -6,8 +6,14 @@
 		"editing": "Preserve decoded strings exactly unless an explicit semantic amendment is intended. Review related consumers and independent oracles atomically. Accepted payload changes advance revision; history-only edits, routine releases and unrelated code changes do not. schemaVersion tracks reader/structural compatibility. A slotted hint holds only the text around its slot: the slot value (for record-less-socket, the fresh-cut command in both invocation forms) is supplied by its code owner and never copied here. Metadata is not delivered to models."
 	},
 	"schemaVersion": 6,
-	"revision": 11,
+	"revision": 12,
 	"history": [
+		{
+			"revision": 12,
+			"source": "0e04bf6e728aa14320decc056ec91e74727a8f2b",
+			"issue": "https://github.com/junghan0611/entwurf/issues/157",
+			"change": "Pi same-id visible resume gains a herdr rail (G1a): both entwurf_resume_call descriptions name the pi-only herdr tab and the Claude Code refusal there, the launch-refused hint no longer says only tmux was not asked, and the tmux leaf's herdr guard hint is narrowed to that leaf. No wire value, schema or reason identifier changes."
+		},
 		{
 			"revision": 11,
 			"source": "d3963c2d16a93453baf7a318ad9395c57990531d",
@@ -138,8 +144,8 @@
 		},
 		"entwurf_resume_call": {
 			"descriptions": {
-				"mcp": "Only on an explicit operator request, reopen ONE DORMANT pi or Claude Code citizen under its OWN garden id, in a visible window in the operator's own tmux session. The record supplies everything — which session, which cwd, and for pi which transcript, model and provider — so the only input is the target id: there is no model override, no task, and no prompt, and a Claude Code session comes back as `claude --resume <its session id>` with none of the model or permission flags it was once started with. This verb submits NO prompt; what the runtime itself does after it comes back (for Claude Code, its hook re-arms the doorbell and unread mail may then wake a turn) is not measured, and talking to it is still entwurf_v2 fire-and-forget. You get TWO receipts and they mean different things: a LAUNCH receipt (tmux made a window and was asked to start the runtime) and an OBSERVATION receipt (pi: the control socket answered under the same id; Claude Code: a NEW live process in the window this call opened re-armed its receiver marker for the same session with a fresh arm binding the record also carries; or resume-unobserved; or record-unreadable with its cause). Unobserved is a real outcome, not an error to retry — the window is visible, so read it. A citizen that is already LIVE is refused: address it with entwurf_v2 instead. A Claude Code citizen is reopened only when the last validated owner the Entwurf hook armed for its session is proven gone AND that arm is still the record's last one; no marker, an unreadable or mismatched one, an inconclusive owner or an unbound one is refused, and a process holding the session without a committed hook attach is invisible to that proof. Other backends have no same-id resume. Requires that this agent itself runs inside tmux (inside herdr it is refused).",
-				"durable": "Only on an explicit operator request, reopen ONE dormant pi or Claude Code citizen under its own garden id in a visible tmux window through the entwurf-bridge (target required; the record supplies the session and cwd — no task or prompt is submitted). Returns the bridge's LAUNCH and OBSERVATION receipts or its named refusal: a live target, another backend, or a Claude Code citizen not proven dormant is refused by name, and opening the window needs the tmux session this host itself was launched in. Existing unread mail may still wake the resumed runtime; neither receipt proves what it did."
+				"mcp": "Only on an explicit operator request, reopen ONE DORMANT pi or Claude Code citizen under its OWN garden id, in a visible window in the operator's own tmux session — or, for pi inside herdr, a new herdr tab. The record supplies everything — which session, which cwd, and for pi which transcript, model and provider — so the only input is the target id: there is no model override, no task, and no prompt, and a Claude Code session comes back as `claude --resume <its session id>` with none of the model or permission flags it was once started with. This verb submits NO prompt; what the runtime itself does after it comes back (for Claude Code, its hook re-arms the doorbell and unread mail may then wake a turn) is not measured, and talking to it is still entwurf_v2 fire-and-forget. You get TWO receipts and they mean different things: a LAUNCH receipt (tmux made a window, or herdr a tab, and was asked to start the runtime) and an OBSERVATION receipt (pi: the control socket answered under the same id; Claude Code: a NEW live process in the window this call opened re-armed its receiver marker for the same session with a fresh arm binding the record also carries; or resume-unobserved; or record-unreadable with its cause). Unobserved is a real outcome, not an error to retry — the window is visible, so read it. A citizen that is already LIVE is refused: address it with entwurf_v2 instead. A Claude Code citizen is reopened only when the last validated owner the Entwurf hook armed for its session is proven gone AND that arm is still the record's last one; no marker, an unreadable or mismatched one, an inconclusive owner or an unbound one is refused, and a process holding the session without a committed hook attach is invisible to that proof. Other backends have no same-id resume. Requires that this agent itself runs inside tmux, or inside herdr for a pi target only (a Claude Code target is refused there, never sent to tmux).",
+				"durable": "Only on an explicit operator request, reopen ONE dormant pi or Claude Code citizen under its own garden id in a visible tmux window — or, for pi inside herdr, a new herdr tab — through the entwurf-bridge (target required; the record supplies the session and cwd — no task or prompt is submitted). Returns the bridge's LAUNCH and OBSERVATION receipts or its named refusal: a live target, another backend, or a Claude Code citizen not proven dormant is refused by name, and opening it needs the tmux session — or, for pi only, the herdr pane — this host itself was launched in; a Claude Code target inside herdr is refused, never sent to tmux. Existing unread mail may still wake the resumed runtime; neither receipt proves what it did."
 			},
 			"parameters": {
 				"target": "Garden id of the DORMANT pi or Claude Code citizen to reopen (discover with entwurf_peers)."
@@ -180,7 +186,7 @@
 		"target-receiver-mismatch": "the receiver marker under this garden id names another backend or native session than the record — look at the store before anything reopens",
 		"target-receiver-unbound": "the dead receiver owner is not bound to the record's last arm (none observed, a later attach, or the record moved), so a Claude Code process may still hold the session and this verb opens nothing. Ask the human operator whether its window is still open; reopening it is the operator's act, not this verb's",
 		"target-address-conflict": "that citizen's control-socket path is corrupt",
-		"launch-refused": "tmux was never asked to open a window"
+		"launch-refused": "the launcher refused before creating anything — no tmux window and no herdr tab was opened"
 	},
 	"freshLaunchRejectHints": {
 		"no-tmux-context": "this agent is not running inside tmux, so there is no session to open a sibling beside",
@@ -212,7 +218,7 @@
 		"cwd-format-token": "the recorded cwd contains '#', which tmux expands as a format inside -c — it would silently rewrite the path or run a command",
 		"cwd-missing": "the recorded cwd no longer exists; tmux would not report this, it would open the window in $HOME and look successful",
 		"cwd-not-directory": "the recorded cwd exists but is not a directory",
-		"herdr-resume-unsupported": "this agent runs inside herdr, and same-id resume has only a tmux rail — nothing was opened in any ambient tmux session",
+		"herdr-resume-unsupported": "this agent runs inside herdr, where this tmux resume leaf does not open anything — nothing was opened in any ambient tmux session (from inside herdr, entwurf_resume_call reopens pi through its herdr rail instead)",
 		"runtime-unresolved": "the citizen's runtime (pi or claude) is not installed on PATH",
 		"runtime-not-absolute": "the resolved runtime path is not absolute",
 		"runtime-path-whitespace": "the resolved runtime path contains whitespace, which tmux would re-split",

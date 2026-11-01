@@ -149,6 +149,22 @@ const reviewedToolsR11: ReviewedAmendmentLayer = {
 	revision: reviewedR11.revision,
 	amendments: reviewedR11.amendments.filter((a): a is ToolAmendment => a.key[0] === "tools"),
 };
+// Revision 12 (#157 G1a) is the first layer on a launch-stage family: the pi-only herdr resume rail
+// amends both resume descriptions, one visible-resume hint and the tmux leaf's herdr guard hint.
+const reviewedR12 = JSON.parse(
+	fs.readFileSync(new URL("./fixtures/agent-guidance/amendments-revision-12.json", import.meta.url), "utf8"),
+) as {
+	previousRevision: number;
+	revision: number;
+	amendments: (
+		| ToolAmendment
+		| { key: ["resumeRejectHints" | "resumeLaunchRejectHints", string]; old: string; new: string }
+	)[];
+};
+const reviewedToolsR12: ReviewedAmendmentLayer = {
+	revision: reviewedR12.revision,
+	amendments: reviewedR12.amendments.filter((a): a is ToolAmendment => a.key[0] === "tools"),
+};
 
 // Revision 10 was recorded before the Fable wording discussion. Its old values and provenance
 // remain intact; revision 11 applies that discussion's separate five-leaf amendment afterward.
@@ -186,8 +202,28 @@ function applyR11(family: string, expected: Record<string, string>): void {
 	}
 }
 
-// Only description leaves may change. Full schemas/annotations/order come from immutable C0,
-// while reviewed literals were selected independently before the product JSON was amended.
+function applyR12(family: string, expected: Record<string, string>): void {
+	expect(reviewedR12.amendments).toHaveLength(4);
+	expect(reviewedR12.amendments.map((a) => a.key.join(".")).sort()).toEqual([
+		"resumeLaunchRejectHints.herdr-resume-unsupported",
+		"resumeRejectHints.launch-refused",
+		"tools.entwurf_resume_call.descriptions.durable",
+		"tools.entwurf_resume_call.descriptions.mcp",
+	]);
+	for (const amendment of reviewedR12.amendments) {
+		if (amendment.key[0] === "tools" || amendment.key[0] !== family) continue;
+		const key = amendment.key[1];
+		expect(expected[key]).toBe(amendment.old);
+		expect(amendment.new).not.toBe(amendment.old);
+		expected[key] = amendment.new;
+	}
+}
+
+// Only description leaves may change. Full schemas/annotations/order come from immutable C0. The
+// literal layers do NOT share one provenance, so none is asserted for all of them here: each layer's
+// paragraph in fixtures/agent-guidance/README.md records how its literals were chosen. In particular
+// the R12 literals were written in the same pass as the Root edit and only then reviewed
+// independently — they are not oracles chosen before the product JSON was amended.
 function currentExpectations() {
 	const metadata = structuredClone(original);
 	const runtime = structuredClone(originalRuntime);
@@ -199,7 +235,8 @@ function currentExpectations() {
 	expect(reviewedR3.amendments[0].key).toEqual(["tools", "entwurf_v2", "parameters", "intent"]);
 	const declaredKeys = new Set<string>();
 	expect(reviewedToolsR11.amendments).toHaveLength(2);
-	for (const layer of [reviewedR2, reviewedR3, reviewedToolsR11]) {
+	expect(reviewedToolsR12.amendments).toHaveLength(2);
+	for (const layer of [reviewedR2, reviewedR3, reviewedToolsR11, reviewedToolsR12]) {
 		expect(new Set(layer.amendments.map((a) => a.key.join("."))).size).toBe(layer.amendments.length);
 		for (const amendment of layer.amendments) {
 			const [root, name, family, field] = amendment.key;
@@ -257,7 +294,9 @@ describe("root product guidance — frozen originals plus reviewed current amend
 		expect(amendmentsR10.revision).toBe(10);
 		expect(reviewedR11.previousRevision).toBe(amendmentsR10.revision);
 		expect(reviewedR11.revision).toBe(11);
-		expect(ENTWURF_GUIDANCE_VERSION.revision).toBe(reviewedR11.revision);
+		expect(reviewedR12.previousRevision).toBe(reviewedR11.revision);
+		expect(reviewedR12.revision).toBe(12);
+		expect(ENTWURF_GUIDANCE_VERSION.revision).toBe(reviewedR12.revision);
 	});
 
 	it("[QK:GUIDANCE-REJECT-HINTS-ORIGINAL] every static reject hint matches C0 plus the declared revision-6, revision-10 and reviewed revision-11 amendments", () => {
@@ -285,11 +324,12 @@ describe("root product guidance — frozen originals plus reviewed current amend
 		expect(Object.isFrozen(ENTWURF_REJECT_HINTS)).toBe(true);
 	});
 
-	it("[QK:GUIDANCE-RESUME-REJECT-HINTS-ORIGINAL] every static visible-resume reject hint matches C0 plus the declared revision-10 and reviewed revision-11 amendments", () => {
+	it("[QK:GUIDANCE-RESUME-REJECT-HINTS-ORIGINAL] every static visible-resume reject hint matches C0 plus the declared revision-10, reviewed revision-11 and declared revision-12 amendments", () => {
 		expect(originalResumeRejectHints.sourceSha).toBe("94d0594182cbd9cf0a5c90f4d299cda40d870b8f");
 		const expected = structuredClone(originalResumeRejectHints.hints);
 		applyR10("resumeRejectHints", expected);
 		applyR11("resumeRejectHints", expected);
+		applyR12("resumeRejectHints", expected);
 		expect(Object.keys(ENTWURF_RESUME_REJECT_HINTS).sort()).toEqual(Object.keys(expected).sort());
 		for (const [reason, text] of Object.entries(expected)) {
 			const actual = (ENTWURF_RESUME_REJECT_HINTS as Readonly<Record<string, string>>)[reason];
@@ -298,11 +338,15 @@ describe("root product guidance — frozen originals plus reviewed current amend
 		expect(Object.isFrozen(ENTWURF_RESUME_REJECT_HINTS)).toBe(true);
 	});
 
-	it("[QK:GUIDANCE-LAUNCH-REJECT-HINTS-ORIGINAL] every static tmux launch-stage hint is the exact pre-extraction C0 string, per verb, with no cross-verb dedupe", () => {
+	it("[QK:GUIDANCE-LAUNCH-REJECT-HINTS-ORIGINAL] every static tmux launch-stage hint is the exact pre-extraction C0 string plus the declared revision-12 amendment, per verb, with no cross-verb dedupe", () => {
 		expect(originalLaunchRejectHints.sourceSha).toBe("94d0594182cbd9cf0a5c90f4d299cda40d870b8f");
+		// The fresh family has no amendment layer; the resume family's one is revision 12's narrowing of
+		// the tmux leaf's herdr guard (#157 G1a), applied against its exact C0 old value.
+		const expectedResume = structuredClone(originalLaunchRejectHints.resume);
+		applyR12("resumeLaunchRejectHints", expectedResume);
 		for (const [actualFamily, expected] of [
 			[ENTWURF_FRESH_LAUNCH_REJECT_HINTS, originalLaunchRejectHints.fresh],
-			[ENTWURF_RESUME_LAUNCH_REJECT_HINTS, originalLaunchRejectHints.resume],
+			[ENTWURF_RESUME_LAUNCH_REJECT_HINTS, expectedResume],
 		] as const) {
 			expect(Object.keys(actualFamily).sort()).toEqual(Object.keys(expected).sort());
 			for (const [reason, text] of Object.entries(expected)) {

@@ -1,6 +1,8 @@
 /**
  * fresh-call-dispatch — the ONE place that decides which rail opens a sibling, and the only module
- * allowed to know that there are two.
+ * allowed to know that there are two. Since #157 G1a that rail choice is shared by the two visible
+ * lifecycle verbs, fresh call and same-id visible resume, through two separate entry points; each
+ * verb keeps its own lifecycle policy, and only the rail choice is common.
  *
  * WHY A COMPOSITION ROOT AND NOT A BRANCH IN EACH SURFACE. Two surfaces once registered
  * `entwurf_fresh_call`: pi's own extension and the MCP bridge. Before this file each of them
@@ -21,8 +23,9 @@
  * somewhere the operator cannot see from where they are standing, and the receipt would look fine.
  *
  * WHAT THIS MODULE DOES NOT DO: it never reads the record store, never resolves a garden id, and
- * never turns the direct herdr witness into a second public address. The nonce callback remains
- * the one address path, on both rails.
+ * never turns the direct herdr witness into a second public address. For a FRESH call the nonce
+ * callback remains the one address path, on both rails. A visible resume has no nonce: its address
+ * is the record the v2 composition already resolved, and this module only picks where it reopens.
  */
 
 import { spawn as spawnChildProcess } from "node:child_process";
@@ -38,6 +41,7 @@ import {
 	resolveHerdrContext,
 	type SpawnFn,
 } from "./herdr-fresh-call.ts";
+import { type HerdrResumeLaunchOutcome, launchHerdrResume } from "./herdr-resume-call.ts";
 import { type FreshCallResult, freshCall, renderFreshCall } from "./mux-fresh-call.ts";
 import { splitPiDurableModel } from "./pi-durable-fresh-preflight.ts";
 
@@ -204,4 +208,35 @@ export async function dispatchFreshCall(
  * starts claiming every call uses tmux. */
 export function renderDispatchedFreshCall(dispatched: DispatchedFreshCall): { text: string; isError: boolean } {
 	return dispatched.rail === "herdr" ? renderHerdrFreshCall(dispatched.result) : renderFreshCall(dispatched.result);
+}
+
+/** The record-derived launch input the v2 visible-resume seam hands its launcher. */
+export interface ResumeLaunchInput {
+	readonly backend: string;
+	readonly cwd: string;
+	readonly runtimeArgs: readonly string[];
+}
+
+/**
+ * #157 G1a: pick the rail a same-id visible resume reopens on — the SAME capability fact fresh
+ * call reads, through the same `selectFreshCallRail`, never a parameter and never a fallback either
+ * way. This entry point owns that choice and nothing else:
+ *
+ *   the v2 composition   record, dormancy proof, lock, identity, observation — it calls the surface's
+ *                        launcher and never learns that there are rails
+ *   the surface          supplies the fixed tmux launch mapping as `tmuxLaunch`; it reads no rail fact
+ *   herdr-resume-call    owns the herdr behaviour, including refusing a non-pi target before anything
+ *                        is created
+ *
+ * Inside herdr the tmux mapping is never called, so a refused or failed herdr launch stays a herdr
+ * answer. Outside herdr the tmux mapping keeps its own herdr guard for any direct caller.
+ */
+export function dispatchResumeLaunch<I extends ResumeLaunchInput, T>(
+	input: I,
+	tmuxLaunch: (input: I) => T,
+	env: NodeJS.ProcessEnv = process.env,
+	spawn?: SpawnFn,
+): T | Promise<HerdrResumeLaunchOutcome> {
+	if (selectFreshCallRail(env) !== "herdr") return tmuxLaunch(input);
+	return launchHerdrResume(input, env, spawn ?? (spawnChildProcess as SpawnFn));
 }

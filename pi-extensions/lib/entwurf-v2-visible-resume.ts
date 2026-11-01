@@ -28,12 +28,18 @@
  *
  *   surface (entwurf-control.ts · mcp bridge index.ts)   composition root: supplies `launch`
  *     └─ entwurf-v2-visible-resume  (this file)          v2 leaves ONLY: lock, record, socket
- *          └─ deps.launch(argv, cwd)  ── INJECTED SEAM ──→ mux-resume-call → placement leaf
+ *          └─ deps.launch(argv, cwd)  ── INJECTED SEAM ──→ fresh-call-dispatch (shared rail choice)
+ *                                                         ├→ mux-resume-call → placement leaf
+ *                                                         └→ herdr-resume-call (inside herdr, pi only)
  *
  * The seam is what keeps `docs/mux-launch-rail.md` §11 intact in both directions: v2 never
  * imports mux, mux never imports entwurf core. This module cannot open a window; it can only
  * ask whoever wired it to. That is deliberate — it means the delivery fence stays exactly where
- * `check-mux-launch` scans for it.
+ * `check-mux-launch` scans for it. The herdr rail (#157 G1a) reaches it through the same seam and
+ * the same fence: this module imports no herdr module either, and learns which rail ran only from
+ * the `rail` its launch handle carries. A herdr launch is two mutations (tab create, then agent
+ * start), so the seam may also answer with a failure AFTER something was created; that is its own
+ * result, never a refusal that says no window was opened.
  *
  * ── Why a resume is structurally SMALLER than a fresh call on identity, and LARGER on the lock ──
  *
@@ -63,7 +69,8 @@
  *
  * ── Two receipts, never merged ──
  *
- * `launch` says tmux made a window and was asked to start the runtime. `observation` says whether
+ * `launch` says tmux made a window (or, for pi inside herdr, herdr made a tab) and was asked to start
+ * the runtime. `observation` says whether
  * the citizen came back under the same id (pi: its socket; Claude Code: its receiver marker).
  * Neither says the resumed citizen did anything. This verb submits no prompt. For pi a resume ran
  * no turn (measured 2026-08-06, pi only — the transcript stayed byte-identical); for Claude Code
@@ -144,9 +151,10 @@ export type VisibleResumeRejectReason =
 	| "target-address-conflict"
 	| "launch-refused";
 
-/** What the injected launcher gives back. Structural on purpose: naming mux's types here would
- * be the import this split exists to avoid. */
-export interface VisibleResumeLaunchHandle {
+/** What the injected launcher gives back. Structural on purpose: naming mux's or herdr's types here
+ * would be the import this split exists to avoid. `rail` says which one ran. */
+export interface VisibleResumeTmuxLaunchHandle {
+	rail: "tmux";
 	serverPid: string;
 	sessionId: string;
 	windowId: string;
@@ -157,16 +165,56 @@ export interface VisibleResumeLaunchHandle {
 	cwd: string;
 }
 
+/** The herdr rail's handle (#157 G1a): what herdr was ASKED to start, the requested directory, and
+ * herdr's VIEW coordinates. No tmux field is invented for it — it has no server pid, window or
+ * resolved runtime path, and the pane pid the Claude Code observation joins on does not exist here. */
+export interface VisibleResumeHerdrLaunchHandle {
+	rail: "herdr";
+	requestedKind: string;
+	cwd: string;
+	herdrAgentName: string;
+	herdrWorkspaceId: string;
+	herdrTabId: string;
+	herdrPaneId: string;
+	herdrTerminalId: string;
+}
+
+export type VisibleResumeLaunchHandle = VisibleResumeTmuxLaunchHandle | VisibleResumeHerdrLaunchHandle;
+
+/** A launch that failed AFTER it created something (on herdr: after the tab create). The vendor's
+ * own code when it gave one, what is out there now, and the created coordinates when the create reply
+ * was read. Recovery is structural for the same reason the handles are. Only the herdr rail can fail
+ * after a mutation today (tmux opens its window in one step), and `rail` says so rather than leaving
+ * the renderer to assume it. */
+export interface VisibleResumeLaunchFailure {
+	rail: "herdr";
+	vendorCode?: string;
+	recovery:
+		| { outcome: "none" }
+		| { outcome: "unknown" }
+		| { outcome: "closed"; paneId: string; terminalId: string }
+		| { outcome: "orphan-unreclaimed"; paneId: string; reason: string };
+	created?: { herdrWorkspaceId: string; herdrTabId: string; herdrPaneId: string; herdrTerminalId: string };
+}
+
 export type VisibleResumeLaunchOutcome =
 	| { ok: true; handle: VisibleResumeLaunchHandle }
-	| { ok: false; reason: string; hint: string };
+	/** Refused before anything was created. */
+	| { ok: false; reason: string; hint: string }
+	| { ok: false; reason: string; hint: string; failure: VisibleResumeLaunchFailure };
 
-/** Fact 1: tmux created a window and was asked to start the citizen's runtime there. `cwd` is the
- * REQUESTED start directory (what tmux was told), the same kind of fact as `runtimePath` — not an
- * observation of where the pane landed. */
+/** Fact 1: tmux created a window — or, for pi inside herdr, herdr created a tab — and was asked to
+ * start the citizen's runtime there. `cwd` is the REQUESTED start directory (what the placement owner
+ * was told), the same kind of fact as `runtimePath` — not an observation of where the pane landed.
+ * The Claude Code receipt is tmux-only: its observation joins the tmux pane pid. */
 export type ResumeLaunchReceipt =
 	| { backend: "pi"; targetGardenId: string; sessionFile: string; handle: VisibleResumeLaunchHandle }
-	| { backend: "claude-code"; targetGardenId: string; nativeSessionId: string; handle: VisibleResumeLaunchHandle };
+	| {
+			backend: "claude-code";
+			targetGardenId: string;
+			nativeSessionId: string;
+			handle: VisibleResumeTmuxLaunchHandle;
+	  };
 
 /** Fact 2: the citizen's control socket came back under the SAME garden id, or it did not. This
  * is the only fact in this module that says a citizen is back. */
@@ -209,7 +257,10 @@ export type ReceiverInspection =
 
 export type VisibleResumeResult =
 	| { ok: true; launch: ResumeLaunchReceipt; observation: ResumeObservationReceipt | ReceiverObservationReceipt }
-	| { ok: false; reason: VisibleResumeRejectReason; detail: string };
+	| { ok: false; reason: VisibleResumeRejectReason; detail: string }
+	/** The launch failed after it created something. Not a refusal: something may be open, so this is
+	 * never rendered as "No window was opened". No observation runs after it. */
+	| { ok: false; reason: "launch-failed"; detail: string; failure: VisibleResumeLaunchFailure };
 
 export interface VisibleResumeDeps {
 	acquireLock: (gardenId: string) => AcquireLockResult;
@@ -219,12 +270,13 @@ export interface VisibleResumeDeps {
 	probeSocket: (socketPath: string) => Promise<SocketLiveness>;
 	/** The Claude Code dormancy proof and observation read this; pi never does. */
 	inspectReceiver: (gardenId: string) => ReceiverInspection;
-	/** The ONLY way this module reaches tmux. The surface supplies it. */
+	/** The ONLY way this module reaches tmux or herdr. The surface supplies it; the herdr rail is
+	 * asynchronous (its CLI runner must not block the caller's event loop), so this is awaited. */
 	launch: (input: {
 		backend: ResumeBackend;
 		cwd: string;
 		runtimeArgs: readonly string[];
-	}) => VisibleResumeLaunchOutcome;
+	}) => VisibleResumeLaunchOutcome | Promise<VisibleResumeLaunchOutcome>;
 	sleep: (ms: number) => Promise<void>;
 	now: () => number;
 }
@@ -412,10 +464,8 @@ export async function visibleResume(targetGardenId: string, deps: VisibleResumeD
 			provider: identity.provider,
 			model: identity.model,
 		});
-		const launched = deps.launch({ backend: "pi", cwd: identity.cwd, runtimeArgs });
-		if (!launched.ok) {
-			return { ok: false, reason: "launch-refused", detail: `${launched.reason} — ${launched.hint}` };
-		}
+		const launched = await deps.launch({ backend: "pi", cwd: identity.cwd, runtimeArgs });
+		if (!launched.ok) return launchNotLaunched(launched);
 
 		const observation = await observeSameGidSocket(targetGardenId, mapped.socketPath, deps);
 		return {
@@ -426,6 +476,20 @@ export async function visibleResume(targetGardenId: string, deps: VisibleResumeD
 	} finally {
 		release();
 	}
+}
+
+/**
+ * A launch that did not become a launch, kept in its own shape. A refusal created nothing and is
+ * `launch-refused`. A failure that carries what it created (herdr: after the tab create) is
+ * `launch-failed`, with the vendor code, recovery and coordinates passed through untouched — folding
+ * it into a refusal is what would print "No window was opened" over a tab that may be on screen.
+ * Neither is retried, and neither is followed by an observation.
+ */
+function launchNotLaunched(launched: Extract<VisibleResumeLaunchOutcome, { ok: false }>): VisibleResumeResult {
+	const detail = `${launched.reason} — ${launched.hint}`;
+	return "failure" in launched
+		? { ok: false, reason: "launch-failed", detail, failure: launched.failure }
+		: { ok: false, reason: "launch-refused", detail };
 }
 
 /**
@@ -523,13 +587,21 @@ async function resumeClaudeCode(
 		};
 	}
 
-	const launched = deps.launch({
+	const launched = await deps.launch({
 		backend: "claude-code",
 		cwd: current.cwd,
 		runtimeArgs: ["--resume", current.nativeSessionId],
 	});
-	if (!launched.ok) {
-		return { ok: false, reason: "launch-refused", detail: `${launched.reason} — ${launched.hint}` };
+	if (!launched.ok) return launchNotLaunched(launched);
+	// The observation below joins the receiver marker's owner to the TMUX pane pid. The composition
+	// refuses a Claude Code resume on every other rail before it creates anything, so a non-tmux handle
+	// here is a wiring defect, not an outcome: it fails loud rather than watching for a pid that does
+	// not exist. Whatever that launcher opened is left as it is; the lock is still released.
+	if (launched.handle.rail !== "tmux") {
+		throw new Error(
+			`entwurf-v2-visible-resume: the launcher handed a Claude Code resume of ${targetGardenId} a ${launched.handle.rail} ` +
+				`handle — its observation joins a tmux pane pid, which no other rail carries. Nothing was observed or closed.`,
+		);
 	}
 	const observation = await observeReceiverReattached(
 		targetGardenId,
@@ -666,6 +738,7 @@ export function renderVisibleResume(
 	attribution: { actor: string | null } = { actor: null },
 ): { text: string; isError: boolean } {
 	if (!result.ok) {
+		if (result.reason === "launch-failed") return renderLaunchFailed(result);
 		return {
 			text:
 				`entwurf_resume_call rejected: ${result.reason} — ${REJECT_HINT[result.reason]}. ` +
@@ -680,6 +753,8 @@ export function renderVisibleResume(
 		attribution.actor === null
 			? `  actor:    unattributed (the caller has no record-backed garden identity)\n`
 			: `  actor:    ${attribution.actor} (record-backed caller; attribution, not authority)\n`;
+	// The herdr rail has its own coordinates and its own words; the tmux text below stays as it was.
+	if (h.rail === "herdr") return renderHerdrPiResume(result, h, actor);
 	const window =
 		`  runtime:  ${h.runtimePath} (requested start cwd ${h.cwd})\n` +
 		`  window:   ${h.windowId} (index ${h.windowIndex}) in session ${h.sessionId}\n` +
@@ -731,5 +806,88 @@ export function renderVisibleResume(
 					`${observation.waitedMs}ms. The window is open and visible; read it directly. The lock was ` +
 					`released, nothing was retried, and nothing was killed.`),
 		isError: false,
+	};
+}
+
+/**
+ * The pi resume on the herdr rail (#157 G1a). Same two receipts, kept apart the same way; the
+ * coordinates are herdr's VIEW of a tab, and herdr's own readiness or session report is not consulted
+ * — the same-gid control socket is the observation on both rails.
+ */
+function renderHerdrPiResume(
+	result: Extract<VisibleResumeResult, { ok: true }>,
+	h: VisibleResumeHerdrLaunchHandle,
+	actor: string,
+): { text: string; isError: boolean } {
+	if (result.launch.backend !== "pi") {
+		throw new Error(
+			"entwurf-v2-visible-resume: a herdr launch handle arrived on a non-pi resume — only pi has a herdr resume rail",
+		);
+	}
+	const observation = result.observation as ResumeObservationReceipt;
+	const observed = observation.kind === "socket-alive";
+	return {
+		text:
+			`[entwurf resume call ↻ herdr]\n` +
+			`  target:   ${result.launch.targetGardenId}\n` +
+			`  session:  ${result.launch.sessionFile}\n` +
+			`  runtime:  requested kind ${h.requestedKind} — herdr resolves the executable, we did not (requested start cwd ${h.cwd})\n` +
+			`  tab:      ${h.herdrTabId} in workspace ${h.herdrWorkspaceId} — a NEW tab beside the caller's, opened without taking focus\n` +
+			`  pane:     ${h.herdrPaneId} terminal ${h.herdrTerminalId} — herdr VIEW coordinates, not an address\n` +
+			`  agent:    ${h.herdrAgentName} (herdr's name for this launch, random per call)\n` +
+			actor +
+			`\n` +
+			`LAUNCH receipt: herdr created that tab and was asked to start pi on the transcript above.\n` +
+			(observed
+				? `OBSERVATION receipt: the control socket for ${result.launch.targetGardenId} answered after ` +
+					`${observation.waitedMs}ms — that citizen is addressable again, and entwurf_v2 fire-and-forget ` +
+					`now reaches it. No turn was run by this call. herdr's own agent status was not consulted.`
+				: `OBSERVATION receipt: resume-unobserved — the control socket did not answer within ` +
+					`${observation.waitedMs}ms. The tab is open and visible; read it directly. The lock was ` +
+					`released, nothing was retried, and nothing was closed.`),
+		isError: false,
+	};
+}
+
+/**
+ * A launch that failed after it created something. The header claims no more than the recovery
+ * knows — the fresh herdr rail learned that the hard way: `none` means herdr declined by name before
+ * making anything, `unknown` means no answer we can act on so a tab MAY exist, and anything else means
+ * the tab was created and the recovery says whether its pane was closed. No observation ran, so this
+ * says nothing about whether the citizen came back.
+ */
+function renderLaunchFailed(result: Extract<VisibleResumeResult, { reason: "launch-failed" }>): {
+	text: string;
+	isError: boolean;
+} {
+	const f = result.failure;
+	const header =
+		f.recovery.outcome === "none"
+			? "entwurf_resume_call failed at the herdr tab create step"
+			: f.recovery.outcome === "unknown"
+				? "entwurf_resume_call failed at the herdr tab create step with an UNKNOWN outcome"
+				: "entwurf_resume_call failed after the herdr tab was created";
+	const code = f.vendorCode === undefined ? "" : ` [herdr: ${f.vendorCode}]`;
+	const created =
+		f.created === undefined
+			? ""
+			: `  created:  tab ${f.created.herdrTabId} in workspace ${f.created.herdrWorkspaceId}, pane ${f.created.herdrPaneId} ` +
+				`terminal ${f.created.herdrTerminalId} — herdr VIEW coordinates, not an address\n`;
+	const recovery =
+		f.recovery.outcome === "none"
+			? "  recovery: none — herdr declined by name before making anything, so there is nothing to go look at\n"
+			: f.recovery.outcome === "unknown"
+				? "  recovery: UNKNOWN — we never got an answer we can act on, so a tab MAY exist that this call cannot name. Nothing was closed; check herdr\n"
+				: f.recovery.outcome === "closed"
+					? `  recovery: closed ${f.recovery.paneId} (its terminal still matched the create receipt; the new tab went with it unless something else had joined it)\n`
+					: `  recovery: orphan-unreclaimed:${f.recovery.reason} (${f.recovery.paneId}) — this pane was NOT closed, on purpose\n`;
+	return {
+		text:
+			`${header}: ${result.detail}.${code}\n` +
+			created +
+			recovery +
+			`No observation was attempted, so this says nothing about whether the citizen came back — entwurf_peers ` +
+			`shows whether its control socket answers. The lock was released and nothing was retried.`,
+		isError: true,
 	};
 }

@@ -180,6 +180,34 @@
 			"timeoutSeconds": 60,
 			"signature": "[QK:MUXRESUME-IMPORT-SET]",
 			"signatureSource": "scripts/check-mux-resume-call.ts"
+		},
+		{
+			"claim": "MUXRESUME-V2-NO-HERDR-IMPORT",
+			"title": "the v2 composition imports a herdr module directly, so the herdr CLI rail enters entwurf core instead of arriving through the injected seam",
+			"subject": "pi-extensions/lib/entwurf-v2-visible-resume.ts",
+			"find": ["import { buildResumePiArgs } from \"./entwurf-resume-args.ts\";"],
+			"replace": [
+				"import { buildResumePiArgs } from \"./entwurf-resume-args.ts\";\nimport { HERDR_AGENT_KIND } from \"./herdr-fresh-call.ts\";\nvoid HERDR_AGENT_KIND;"
+			],
+			"gate": ["bash", "run.sh", "check-mux-resume-call"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:MUXRESUME-V2-NO-HERDR-IMPORT]",
+			"signatureSource": "scripts/check-mux-resume-call.ts"
+		},
+		{
+			"claim": "MUXRESUME-HERDR-COMPOSED",
+			"title": "the bridge bypasses the shared rail root and calls the tmux leaf directly, so every resume inside herdr is refused by the tmux leaf",
+			"subject": "mcp/entwurf-bridge/src/index.ts",
+			"find": [
+				"const visibleResumeLaunch: VisibleResumeDeps[\"launch\"] = (input) => dispatchResumeLaunch(input, tmuxResumeLaunch);"
+			],
+			"replace": [
+				"const visibleResumeLaunch: VisibleResumeDeps[\"launch\"] = (input) => tmuxResumeLaunch(input);\nvoid dispatchResumeLaunch;"
+			],
+			"gate": ["bash", "run.sh", "check-mux-resume-call"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:MUXRESUME-HERDR-COMPOSED]",
+			"signatureSource": "scripts/check-mux-resume-call.ts"
 		}
 	]
 }

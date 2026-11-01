@@ -251,6 +251,12 @@
 		// two rails stay separately deletable. Typechecked by scripts/tsconfig.json via its
 		// gate (check-herdr-fresh-call.ts).
 		"pi-extensions/lib/herdr-fresh-call.ts",
+		// herdr-resume-call.ts is the #157 G1a herdr launch for a same-id pi resume — a lib→lib VALUE
+		// importer of herdr-fresh-call.ts with an explicit `.ts` extension, same fence. Like it, it
+		// imports no mux and no entwurf module. Received by scripts/tsconfig.json and mcp/tsconfig.json
+		// through their existing ../pi-extensions/lib/**/*.ts includes; its beside test takes the
+		// existing test fence.
+		"pi-extensions/lib/herdr-resume-call.ts",
 		// fresh-call-dispatch.ts is the #116 C3 composition root — the ONE module that may know
 		// both rails. A lib→lib VALUE importer of both plus the codex preflight with explicit
 		// `.ts` extensions, same fence. Its consumers reach it the two ways their own fences

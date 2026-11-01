@@ -49,6 +49,13 @@
  * #147 L2 adds the Claude Code half (`V2RESUME-CC-*`, its own describe block below): dormancy only
  * from a DEAD receiver-marker owner, every other marker state a named refusal, the fixed
  * `--resume <id>` argv, and an observation that needs a NEW live owner plus the same record.
+ *
+ * #157 G1a puts the herdr rail behind the same seam (its own describe block): the launch is awaited
+ * (V2RESUME-LAUNCH-AWAITED), a herdr handle renders herdr's view and no tmux field
+ * (V2RESUME-HERDR-RENDER), a failure after the tab create is its own result
+ * (V2RESUME-POST-CREATE-FAILURE-NAMED) whose header claims no more than its recovery
+ * (V2RESUME-LAUNCH-FAILED-HEADER-HONEST), and a Claude Code resume never observes on a non-tmux
+ * handle (V2RESUME-CC-TMUX-ONLY).
  */
 
 import fs from "node:fs";
@@ -69,6 +76,8 @@ import {
 	type ReceiverInspection,
 	renderVisibleResume,
 	type VisibleResumeDeps,
+	type VisibleResumeLaunchFailure,
+	type VisibleResumeLaunchOutcome,
 	type VisibleResumeResult,
 	visibleResume,
 } from "./entwurf-v2-visible-resume.ts";
@@ -130,6 +139,8 @@ function harness(opts: {
 	launchOk?: boolean;
 	/** The receiver marker each inspection reads, in order (the last one repeats). Claude Code only. */
 	receiverSequence?: ReceiverInspection[];
+	/** Replaces the tmux handle / refusal with any launch outcome, sync or awaited (#157 G1a). */
+	launchResult?: (cwd: string) => VisibleResumeLaunchOutcome | Promise<VisibleResumeLaunchOutcome>;
 }): Harness {
 	const trace: string[] = [];
 	let clock = 0;
@@ -177,11 +188,13 @@ function harness(opts: {
 			launches++;
 			trace.push(`launch-backend:${input.backend}`);
 			trace.push(`launch:${input.cwd}:${input.runtimeArgs.join(" ")}`);
+			if (opts.launchResult !== undefined) return opts.launchResult(input.cwd);
 			return opts.launchOk === false
 				? { ok: false, reason: "cwd-missing", hint: "the recorded cwd no longer exists" }
 				: {
 						ok: true,
 						handle: {
+							rail: "tmux",
 							serverPid: "1",
 							sessionId: "$0",
 							windowId: "@9",
@@ -714,6 +727,7 @@ describe("THE HAPPY PATH", () => {
 			ok(
 				"launch and observation are two separate objects: the launch receipt carries the window handle and the transcript and says nothing about liveness, and only the observation says the citizen answered",
 				result.ok &&
+					result.launch.handle.rail === "tmux" &&
 					result.launch.handle.windowId === "@9" &&
 					result.launch.backend === "pi" &&
 					result.launch.sessionFile === IDENTITY.sessionFile &&
@@ -757,6 +771,7 @@ describe("THE HAPPY PATH", () => {
 			ok(
 				"launch and observation are two separate objects: the launch receipt carries the window handle and the transcript and says nothing about liveness, and only the observation says the citizen answered",
 				result.ok &&
+					result.launch.handle.rail === "tmux" &&
 					result.launch.handle.windowId === "@9" &&
 					result.launch.backend === "pi" &&
 					result.launch.sessionFile === IDENTITY.sessionFile &&
@@ -893,6 +908,127 @@ describe("THE OBSERVATION HELPER, DRIVEN DIRECTLY", () => {
 				receipt.kind === "socket-alive" && receipt.waitedMs === 2000,
 			);
 		}
+	});
+});
+
+// ══ THE HERDR RAIL (#157 G1a) ═══════════════════════════════════════════════════
+// The same composition behind a launcher that answers the herdr way: asynchronously, with a handle
+// that carries herdr's VIEW coordinates and no tmux field, or with a failure AFTER its tab create.
+// The launcher is a stub on purpose — the herdr protocol itself is herdr-resume-call.test.ts's.
+describe("the herdr rail (#157 G1a)", () => {
+	const herdrHandle = (cwd: string): VisibleResumeLaunchOutcome => ({
+		ok: true,
+		handle: {
+			rail: "herdr",
+			requestedKind: "pi",
+			cwd,
+			herdrAgentName: "entwurf-resume-0123456789abcdef",
+			herdrWorkspaceId: "w3",
+			herdrTabId: "w3:t7",
+			herdrPaneId: "w3:p9",
+			herdrTerminalId: "term_9",
+		},
+	});
+	const CREATED_FAILURE: VisibleResumeLaunchFailure = {
+		rail: "herdr",
+		vendorCode: "timeout",
+		recovery: { outcome: "orphan-unreclaimed", paneId: "w3:p9", reason: "agent-present" },
+		created: { herdrWorkspaceId: "w3", herdrTabId: "w3:t7", herdrPaneId: "w3:p9", herdrTerminalId: "term_9" },
+	};
+
+	it("[QK:V2RESUME-LAUNCH-AWAITED] an ASYNCHRONOUS launcher is awaited: a herdr handle that arrives through a promise becomes the launch receipt, and only then does the same-gid socket observation run", async () => {
+		const h = harness({ livenessSequence: ["dead", "dead", "alive"], launchResult: async (cwd) => herdrHandle(cwd) });
+		const result = await visibleResume(GID, h.deps);
+		ok(
+			"the awaited herdr handle is the pi launch receipt, unchanged, and the observation is the socket answering under the same id",
+			result.ok &&
+				result.launch.backend === "pi" &&
+				result.launch.handle.rail === "herdr" &&
+				result.launch.handle.herdrTabId === "w3:t7" &&
+				result.launch.handle.cwd === IDENTITY.cwd &&
+				result.observation.kind === "socket-alive" &&
+				h.launches === 1 &&
+				h.trace.filter((t) => t === "releaseLock").length === 1,
+		);
+	});
+
+	it("[QK:V2RESUME-HERDR-RENDER] a herdr launch renders herdr's tab and pane VIEW and says herdr created that tab — no tmux window, runtime path or pane pid is invented for it, and the two receipts stay apart", async () => {
+		const h = harness({ livenessSequence: ["dead", "dead", "alive"], launchResult: async (cwd) => herdrHandle(cwd) });
+		const rendered = renderVisibleResume(await visibleResume(GID, h.deps));
+		ok(
+			"the herdr receipt names the tab, the pane and the requested kind, keeps LAUNCH and OBSERVATION apart, and carries nothing tmux-shaped",
+			rendered.text.includes(
+				"LAUNCH receipt: herdr created that tab and was asked to start pi on the transcript above.",
+			) &&
+				rendered.text.includes("tab:      w3:t7 in workspace w3") &&
+				rendered.text.includes("pane:     w3:p9 terminal term_9") &&
+				rendered.text.includes("requested kind pi") &&
+				rendered.text.includes("OBSERVATION receipt: the control socket for") &&
+				!/window:|tmux created|undefined/.test(rendered.text) &&
+				!rendered.isError,
+		);
+	});
+
+	it("[QK:V2RESUME-POST-CREATE-FAILURE-NAMED] a launch that failed AFTER its tab create is launch-failed, never launch-refused: herdr's code, the recovery and the created tab pass through, nothing is observed, and the text never says no window was opened", async () => {
+		const h = harness({
+			livenessSequence: ["dead"],
+			launchResult: async () => ({
+				ok: false,
+				reason: "herdr-agent-start-failed",
+				hint: "herdr did not report pi as started in the tab that was just created",
+				failure: CREATED_FAILURE,
+			}),
+		});
+		const result = await visibleResume(GID, h.deps);
+		const rendered = renderVisibleResume(result);
+		ok(
+			"the result is launch-failed with the failure passed through untouched, after exactly one launch and no observation",
+			!result.ok &&
+				result.reason === "launch-failed" &&
+				"failure" in result &&
+				JSON.stringify(result.failure) === JSON.stringify(CREATED_FAILURE) &&
+				h.launches === 1 &&
+				h.trace.filter((t) => t === "inspectSocket").length === 1 &&
+				h.trace.includes("releaseLock"),
+		);
+		ok(
+			"the text names the created tab, herdr's own code and the unreclaimed pane, and refuses to say nothing was opened",
+			rendered.isError &&
+				rendered.text.startsWith(
+					"entwurf_resume_call failed after the herdr tab was created: herdr-agent-start-failed",
+				) &&
+				rendered.text.includes("[herdr: timeout]") &&
+				rendered.text.includes("created:  tab w3:t7 in workspace w3, pane w3:p9") &&
+				rendered.text.includes("recovery: orphan-unreclaimed:agent-present (w3:p9)") &&
+				rendered.text.includes("No observation was attempted") &&
+				!rendered.text.includes("No window was opened"),
+		);
+	});
+
+	it("[QK:V2RESUME-LAUNCH-FAILED-HEADER-HONEST] the failure header claims no more than its recovery knows: herdr declining by name before anything existed is the tab create step with recovery none, and an answer we could not act on is UNKNOWN — neither says a tab was created", async () => {
+		const render = async (failure: VisibleResumeLaunchFailure): Promise<string> => {
+			const h = harness({
+				livenessSequence: ["dead"],
+				launchResult: () => ({
+					ok: false,
+					reason: "herdr-tab-create-failed",
+					hint: "the tab create did not succeed",
+					failure,
+				}),
+			});
+			return renderVisibleResume(await visibleResume(GID, h.deps)).text;
+		};
+		const none = await render({ rail: "herdr", vendorCode: "workspace_not_found", recovery: { outcome: "none" } });
+		const unknown = await render({ rail: "herdr", recovery: { outcome: "unknown" } });
+		ok(
+			"recovery none → the tab create step with nothing to look at; recovery unknown → UNKNOWN, a tab MAY exist; neither claims the tab was created",
+			none.startsWith("entwurf_resume_call failed at the herdr tab create step: herdr-tab-create-failed") &&
+				none.includes("[herdr: workspace_not_found]") &&
+				none.includes("recovery: none") &&
+				unknown.startsWith("entwurf_resume_call failed at the herdr tab create step with an UNKNOWN outcome") &&
+				unknown.includes("a tab MAY exist") &&
+				![none, unknown].some((t) => /after the herdr tab was created|created: {2}tab/.test(t)),
+		);
 	});
 });
 
@@ -1315,6 +1451,39 @@ describe("a Claude Code citizen", () => {
 		ok(
 			"the previous owner read as live is never success, and the wait ends at the deadline",
 			seen.kind === "resume-unobserved" && seen.waitedMs >= 2_000,
+		);
+	});
+
+	it("[QK:V2RESUME-CC-TMUX-ONLY] a Claude Code resume handed a non-tmux launch handle fails LOUD instead of watching for a tmux pane pid that does not exist: no observation runs and the lock is still released", async () => {
+		const h = harness({
+			livenessSequence: ["dead"],
+			receiverSequence: [marker("dead"), reattached],
+			resolveIdentity: records(CC)(),
+			launchResult: (cwd) => ({
+				ok: true,
+				handle: {
+					rail: "herdr",
+					requestedKind: "claude",
+					cwd,
+					herdrAgentName: "entwurf-resume-0123456789abcdef",
+					herdrWorkspaceId: "w1",
+					herdrTabId: "w1:t1",
+					herdrPaneId: "w1:p1",
+					herdrTerminalId: "term_1",
+				},
+			}),
+		});
+		let thrown: Error | null = null;
+		await visibleResume(GID, h.deps).catch((err) => {
+			thrown = err as Error;
+		});
+		ok(
+			"one launch, then the wiring defect throws by name before any receiver observation, and the lock is released",
+			thrown !== null &&
+				/tmux pane pid/.test(String(thrown)) &&
+				h.launches === 1 &&
+				h.trace.filter((t) => t.startsWith("inspectReceiver")).length === 1 &&
+				h.trace.includes("releaseLock"),
 		);
 	});
 });

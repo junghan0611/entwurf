@@ -90,7 +90,11 @@ import {
 	type VisibleResumeDeps,
 	visibleResume,
 } from "../../../pi-extensions/lib/entwurf-v2-visible-resume.ts";
-import { dispatchFreshCall, renderDispatchedFreshCall } from "../../../pi-extensions/lib/fresh-call-dispatch.ts";
+import {
+	dispatchFreshCall,
+	dispatchResumeLaunch,
+	renderDispatchedFreshCall,
+} from "../../../pi-extensions/lib/fresh-call-dispatch.ts";
 import {
 	type CodexRequestSender,
 	probeNativeSenderAlive,
@@ -750,12 +754,17 @@ server.tool(
 // halves, so it is where the mux launcher is handed to the v2 composition. `entwurf-v2-visible-
 // resume` cannot open a window on its own and `mux-resume-call` cannot read a record — that is
 // the import fence in docs/mux-launch-rail.md §11, expressed as a function argument.
-const visibleResumeLaunch: VisibleResumeDeps["launch"] = (input) => {
+//
+// #157 G1a: this surface does NOT choose the rail. It hands the fixed tmux mapping below to the
+// shared rail root (`fresh-call-dispatch`), which reads the same capability fact fresh_call reads
+// and, inside herdr, launches the herdr resume instead — never calling this mapping there.
+const tmuxResumeLaunch: VisibleResumeDeps["launch"] = (input) => {
 	const launched = resumeCall({ backend: input.backend, cwd: input.cwd, runtimeArgs: input.runtimeArgs });
 	return launched.ok
-		? { ok: true, handle: launched.receipt }
+		? { ok: true, handle: { rail: "tmux", ...launched.receipt } }
 		: { ok: false, reason: launched.reason, hint: RESUME_CALL_REJECT_HINT[launched.reason] };
 };
+const visibleResumeLaunch: VisibleResumeDeps["launch"] = (input) => dispatchResumeLaunch(input, tmuxResumeLaunch);
 
 server.tool(
 	"entwurf_resume_call",

@@ -23,7 +23,11 @@
  * This is the tmux rail. A caller inside herdr (`HERDR_ENV=1`, herdr's own marker, read for its
  * exact value as `fresh-call-dispatch` does) is refused by name before anything else: herdr owns
  * placement there, and an ambient `TMUX` that happens to be set would otherwise put the window in
- * a session the operator is not looking at. There is no herdr resume rail yet and no fallback.
+ * a session the operator is not looking at. Since #157 G1a the shared rail root (`fresh-call-dispatch`)
+ * hands a resume inside herdr to the separate herdr rail (`herdr-resume-call.ts`) and never reaches
+ * this leaf there;
+ * this guard stays so that a direct caller still cannot open a tmux window from inside herdr. No
+ * fallback in either direction.
  *
  * ── The cwd is the whole reason this module owns its own tmux argv ──
  *

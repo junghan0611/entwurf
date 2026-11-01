@@ -186,6 +186,17 @@
 			"timeoutSeconds": 120,
 			"signature": "[QK:FCD-PROVIDER-OTHER-BACKENDS-UNJUDGED]",
 			"signatureSource": "pi-extensions/lib/fresh-call-dispatch.test.ts"
+		},
+		{
+			"claim": "FCD-RESUME-RAIL-SHARED",
+			"title": "the resume entry point reads the herdr marker loosely instead of through the shared exact predicate, so a process carrying HERDR_ENV=0 reopens its resume through a herdr launch",
+			"subject": "pi-extensions/lib/fresh-call-dispatch.ts",
+			"find": ["\tif (selectFreshCallRail(env) !== \"herdr\") return tmuxLaunch(input);"],
+			"replace": ["\tif (env.HERDR_ENV === undefined) return tmuxLaunch(input);"],
+			"gate": ["bash", "run.sh", "check-fresh-call-dispatch"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:FCD-RESUME-RAIL-SHARED]",
+			"signatureSource": "scripts/check-fresh-call-dispatch.ts"
 		}
 	]
 }

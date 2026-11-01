@@ -98,8 +98,10 @@ is the correct behaviour for a workbench — persistent identity is not its job.
   window, with the record as the sole address authority: Pi uses its identity-checked recorded
   transcript's session-header cwd and first `model_change` provider/model through the launch resolver
   (no record/host cwd fallback); Claude Code uses the record session id/cwd without restoring model
-  or permission flags. The call submits no prompt. Called from inside Herdr it refuses as
-  `herdr-resume-unsupported`; there is no Herdr resume rail.
+  or permission flags. The call submits no prompt. Called from inside Herdr it reopens a **pi**
+  citizen in a new Herdr tab beside the caller (#157 G1a, pending its LIVE proof) and refuses a
+  Claude Code citizen as `herdr-resume-backend-unsupported` before anything is created; it never
+  falls back to tmux.
 
 ---
 
@@ -245,8 +247,11 @@ present as tools. The pane tells you which ids exist; these do the work:
   tmux. The model is required and has no default: pi wants a provider-qualified id like
   `openai-codex/gpt-5.6-terra`, Claude Code wants a vendor id like `claude-sonnet-5`. Each runtime
   owns its own grammar and this plugin validates neither.
-- `entwurf_resume_call {target}` — reopen a dormant **pi** or **Claude Code** citizen under its own id,
-  in tmux only: from a session inside Herdr it refuses by name as `herdr-resume-unsupported`.
+- `entwurf_resume_call {target}` — reopen a dormant **pi** or **Claude Code** citizen under its own id.
+  From a session inside Herdr only a pi citizen is reopened, in a new Herdr tab (#157 G1a, pending
+  its LIVE proof); a Claude Code citizen is refused there as `herdr-resume-backend-unsupported`, with
+  no tmux fallback. A launch that fails after its tab exists reports what it created and whether it
+  closed it.
 - `entwurf_retire_call {target}` (new in 0.41.0) — attempt retirement of one pi or Claude Code
   sibling, and only one the human operator explicitly asked to retire; a wired session seeing the
   tool is not permission, and an unknown result is not a reason to retry.

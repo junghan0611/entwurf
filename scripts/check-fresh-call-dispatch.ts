@@ -28,6 +28,8 @@
  *   FCD-RECOVERY-VISIBLE      a post-split failure shows closed vs orphan-unreclaimed:reason
  *   FCD-ACP-MODEL-EXACT       a pi `entwurf/<id>` that is not an exact curated ACP id refuses on
  *                             either rail before anything runs (#128)
+ *   FCD-RESUME-RAIL-SHARED    a same-id visible resume reaches the same exact rail choice through
+ *                             its own entry point, with no fallback in either direction (#157 G1a)
  */
 
 import assert from "node:assert/strict";
@@ -36,6 +38,7 @@ import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
 	dispatchFreshCall,
+	dispatchResumeLaunch,
 	renderDispatchedFreshCall,
 	selectFreshCallRail,
 } from "../pi-extensions/lib/fresh-call-dispatch.ts";
@@ -353,6 +356,37 @@ async function main(): Promise<void> {
 			unknown.text.includes("UNKNOWN") &&
 			!unknown.text.includes("orphan-unreclaimed"),
 	);
+
+	// ── #157 G1a: a visible resume reaches the SAME rail choice ──────────────────────────
+	// The root's second entry point owns only the rail choice for a same-id visible resume. Its tmux
+	// half is whatever the surface hands in, so a recording stub stands for it; its herdr half is the
+	// real herdr resume launch, driven with an incomplete herdr context so it refuses before any
+	// runner exists. No existing cell exercises this entry point: a resume entry that read the marker
+	// loosely, or fell back to the surface's tmux mapping, would leave every cell above green.
+	{
+		const RESUME_INPUT = { backend: "pi", cwd: "/x/project", runtimeArgs: ["--session", "/x/s.jsonl"] } as const;
+		const tmuxCalls: unknown[] = [];
+		const tmuxLaunch = (input: typeof RESUME_INPUT) => {
+			tmuxCalls.push(input);
+			return { ok: false as const, reason: "tmux-stub" };
+		};
+		const resumeSpawn = recordingSpawn();
+		const inHerdr = await dispatchResumeLaunch(RESUME_INPUT, tmuxLaunch, { HERDR_ENV: "1" }, resumeSpawn.spawn);
+		const tmuxCallsInHerdr = tmuxCalls.length;
+		const elsewhere = [{ HERDR_ENV: "0" }, { HERDR_ENV: "true" }, { HERDR_ENV: "" }, { HERDR_ENV: " 1" }, {}].map(
+			(env) => dispatchResumeLaunch(RESUME_INPUT, tmuxLaunch, env, resumeSpawn.spawn),
+		);
+		ok(
+			"[QK:FCD-RESUME-RAIL-SHARED] a same-id visible resume reaches the SAME rail choice fresh call does, through its own entry point: exactly `HERDR_ENV=1` goes to the herdr resume launch and, with that herdr context incomplete, refuses by the herdr reason without ever calling the surface's tmux mapping; every other value, and an absent variable, goes to that tmux mapping with the record-derived input unchanged — a second, looser predicate or a fallback either way would reopen a citizen where the operator is not looking",
+			!inHerdr.ok &&
+				inHerdr.reason === "herdr-context-missing" &&
+				tmuxCallsInHerdr === 0 &&
+				resumeSpawn.calls.length === 0 &&
+				elsewhere.every((r) => !("then" in r) && r.reason === "tmux-stub") &&
+				tmuxCalls.length === elsewhere.length &&
+				tmuxCalls.every((input) => input === RESUME_INPUT),
+		);
+	}
 
 	console.log(`\n[check-fresh-call-dispatch] ${passed} assertions ok`);
 }

@@ -1,0 +1,189 @@
+{
+	"schemaVersion": 1,
+	"lane": "herdr-resume-call",
+	"mutants": [
+		{
+			"claim": "HRESUME-CONTEXT-NO-FALLBACK",
+			"title": "the herdr context refusal is skipped, so a process with no herdr binary or no caller pane goes on to build a runner from coordinates it does not have",
+			"subject": "pi-extensions/lib/herdr-resume-call.ts",
+			"find": ["\tif (!context.ok) {"],
+			"replace": ["\tif (context.ok === undefined) {"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:HRESUME-CONTEXT-NO-FALLBACK]",
+			"signatureSource": "pi-extensions/lib/herdr-resume-call.test.ts"
+		},
+		{
+			"claim": "HRESUME-PI-ONLY",
+			"title": "the pi-only refusal narrows to codex, so a Claude Code resume inside herdr opens a tab whose return no observation can ever join",
+			"subject": "pi-extensions/lib/herdr-resume-call.ts",
+			"find": ["\tif (params.backend !== \"pi\") return { ok: false, reason: \"herdr-resume-backend-unsupported\" };"],
+			"replace": [
+				"\tif (params.backend === \"codex\") return { ok: false, reason: \"herdr-resume-backend-unsupported\" };"
+			],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:HRESUME-PI-ONLY]",
+			"signatureSource": "pi-extensions/lib/herdr-resume-call.test.ts"
+		},
+		{
+			"claim": "HRESUME-ARGV-CONTROL-REFUSED",
+			"title": "the pre-create control-character check is dropped, so herdr refuses the argv only after the tab already exists",
+			"subject": "pi-extensions/lib/herdr-resume-call.ts",
+			"find": [
+				"\tif (params.runtimeArgs.some(containsControlChar)) return { ok: false, reason: \"herdr-argv-control-character\" };"
+			],
+			"replace": ["\tif (false) return { ok: false, reason: \"herdr-argv-control-character\" };"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:HRESUME-ARGV-CONTROL-REFUSED]",
+			"signatureSource": "pi-extensions/lib/herdr-resume-call.test.ts"
+		},
+		{
+			"claim": "HRESUME-CALLER-WORKSPACE",
+			"title": "a caller-pane reply about another pane is believed, so the citizen reopens in a workspace the caller never named",
+			"subject": "pi-extensions/lib/herdr-resume-call.ts",
+			"find": [
+				"\tif (callerPane.paneId !== context.context.callerPaneId) return { ok: false, reason: \"herdr-caller-pane-drift\" };"
+			],
+			"replace": [""],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:HRESUME-CALLER-WORKSPACE]",
+			"signatureSource": "pi-extensions/lib/herdr-resume-call.test.ts"
+		},
+		{
+			"claim": "HRESUME-TAB-ARGV-NO-CALLBACK",
+			"title": "the resume tab stops emptying the inherited PI_SESSION_ID, so the reopened pi can attach as whatever citizen the herdr server's environment names",
+			"subject": "pi-extensions/lib/herdr-resume-call.ts",
+			"find": ["\t\t\"--env\",", "\t\t\"PI_SESSION_ID=\","],
+			"replace": [""],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:HRESUME-TAB-ARGV-NO-CALLBACK]",
+			"signatureSource": "pi-extensions/lib/herdr-resume-call.test.ts"
+		},
+		{
+			"claim": "HRESUME-START-ARGV-IS-RECORD",
+			"title": "pi is started with no runtime argv, so a bare pi opens in the tab instead of the record's transcript, provider and model",
+			"subject": "pi-extensions/lib/herdr-resume-call.ts",
+			"find": ["\t\t\tbackendArgs: params.runtimeArgs,"],
+			"replace": ["\t\t\tbackendArgs: [],"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:HRESUME-START-ARGV-IS-RECORD]",
+			"signatureSource": "pi-extensions/lib/herdr-resume-call.test.ts"
+		},
+		{
+			"claim": "HRESUME-SUCCESS-RECEIPT",
+			"title": "the receipt names a freshly minted agent instead of the one herdr was asked to start, so the operator is pointed at an agent that does not exist",
+			"subject": "pi-extensions/lib/herdr-resume-call.ts",
+			"find": [
+				"\t\treceipt: { ...created, requestedKind: HERDR_AGENT_KIND.pi, cwd: params.cwd, herdrAgentName: agentName },"
+			],
+			"replace": [
+				"\t\treceipt: { ...created, requestedKind: HERDR_AGENT_KIND.pi, cwd: params.cwd, herdrAgentName: mintHerdrResumeAgentName() },"
+			],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:HRESUME-SUCCESS-RECEIPT]",
+			"signatureSource": "pi-extensions/lib/herdr-resume-call.test.ts"
+		},
+		{
+			"claim": "HRESUME-POST-CREATE-RECOVERY",
+			"title": "a tab create our own runner cut off is reported as declined by herdr, telling the operator nothing exists when a tab may be on screen",
+			"subject": "pi-extensions/lib/herdr-resume-call.ts",
+			"find": ["\t\t\trecovery: code === undefined ? { outcome: \"unknown\" } : { outcome: \"none\" },"],
+			"replace": ["\t\t\trecovery: { outcome: \"none\" },"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:HRESUME-POST-CREATE-RECOVERY]",
+			"signatureSource": "pi-extensions/lib/herdr-resume-call.test.ts"
+		},
+		{
+			"claim": "HRESUME-CREATED-WORKSPACE",
+			"title": "the created tab's workspace is no longer compared with the caller's one the call asked for, so a self-consistent create reply about another workspace starts pi where the operator is not looking",
+			"subject": "pi-extensions/lib/herdr-resume-call.ts",
+			"find": ["\tif (tab.workspaceId !== callerPane.workspaceId) {"],
+			"replace": ["\tif (tab.workspaceId !== tab.workspaceId) {"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:HRESUME-CREATED-WORKSPACE]",
+			"signatureSource": "pi-extensions/lib/herdr-resume-call.test.ts"
+		},
+		{
+			"claim": "HRESUME-ROOT-PANE-OCCUPIED",
+			"title": "the pre-start occupancy check falls back to the session fact alone, so pi is started into a created pane where herdr already names an agent whose session was not reported yet",
+			"subject": "pi-extensions/lib/herdr-resume-call.ts",
+			"find": ["\tif (pane.agent !== undefined || pane.hasAgentSession) {"],
+			"replace": ["\tif (pane.hasAgentSession) {"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:HRESUME-ROOT-PANE-OCCUPIED]",
+			"signatureSource": "pi-extensions/lib/herdr-resume-call.test.ts"
+		},
+		{
+			"claim": "HRESUME-START-FAILURE-RECLAIMS",
+			"title": "a start failure skips the conditional reclaim and reports an unknown outcome, so an empty created pane is left behind and an occupied one is never named",
+			"subject": "pi-extensions/lib/herdr-resume-call.ts",
+			"find": [
+				"\t\t\treason: \"herdr-agent-start-failed\",",
+				"\t\t\t...(code === undefined ? {} : { herdrErrorCode: code }),",
+				"\t\t\trecovery: await reclaim(pane, run),"
+			],
+			"replace": [
+				"\t\t\treason: \"herdr-agent-start-failed\",",
+				"\t\t\t...(code === undefined ? {} : { herdrErrorCode: code }),",
+				"\t\t\trecovery: { outcome: \"unknown\" },"
+			],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:HRESUME-START-FAILURE-RECLAIMS]",
+			"signatureSource": "pi-extensions/lib/herdr-resume-call.test.ts"
+		},
+		{
+			"claim": "HRESUME-PANE-DRIFT-NAMED",
+			"title": "a start reporting another pane id is accepted, so the receipt points at a pane that never held the reopened citizen",
+			"subject": "pi-extensions/lib/herdr-resume-call.ts",
+			"find": ["\t\tstarted.pane.paneId !== pane.paneId ||"],
+			"replace": ["\t\tfalse ||"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:HRESUME-PANE-DRIFT-NAMED]",
+			"signatureSource": "pi-extensions/lib/herdr-resume-call.test.ts"
+		},
+		{
+			"claim": "HRESUME-ARGV-DRIFT-NAMED",
+			"title": "the echoed-argv check is dropped, so a pi started on something other than the record's transcript reads as a successful launch",
+			"subject": "pi-extensions/lib/herdr-resume-call.ts",
+			"find": ["\tif (!argvMatchesRequest(started.argv, \"pi\", params.runtimeArgs)) {"],
+			"replace": ["\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:HRESUME-ARGV-DRIFT-NAMED]",
+			"signatureSource": "pi-extensions/lib/herdr-resume-call.test.ts"
+		},
+		{
+			"claim": "HRESUME-OUTCOME-MAPPING",
+			"title": "every herdr failure reaches the v2 seam as a bare refusal, so a failure after the tab create loses its recovery and created tab",
+			"subject": "pi-extensions/lib/herdr-resume-call.ts",
+			"find": ["\tif (!(\"recovery\" in result)) return { ok: false, reason: result.reason, hint };"],
+			"replace": ["\tif (true) return { ok: false, reason: result.reason, hint };"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:HRESUME-OUTCOME-MAPPING]",
+			"signatureSource": "pi-extensions/lib/herdr-resume-call.test.ts"
+		},
+		{
+			"claim": "HRESUME-IMPORT-FENCE",
+			"title": "the herdr resume launch gains a bare side-effect import, the weakest static form, which loads and runs fine, so only the exact import-set parser can see the new dependency",
+			"subject": "pi-extensions/lib/herdr-resume-call.ts",
+			"find": ["import { randomBytes } from \"node:crypto\";"],
+			"replace": ["import { randomBytes } from \"node:crypto\";", "import \"node:path\";"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:HRESUME-IMPORT-FENCE]",
+			"signatureSource": "pi-extensions/lib/herdr-resume-call.test.ts"
+		}
+	]
+}

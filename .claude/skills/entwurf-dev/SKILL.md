@@ -226,7 +226,7 @@ callback이 없거나 nonce가 다르면 target을 추측하지 않는다.
 
 ### `resume <target>` / “아까 그 형제 다시 불러줘”
 
-dormant **pi** 또는 **Claude Code** citizen을 자기 garden id 그대로 보이는 tmux 창에 되세운다(herdr 안에서는 `herdr-resume-unsupported`로 거절된다). 새 형제를 만드는 것이
+dormant **pi** 또는 **Claude Code** citizen을 자기 garden id 그대로 보이는 tmux 창에 되세운다(herdr 안에서는 pi만 새 herdr tab으로 — #157 G1a, LIVE 증명 전 후보 — 되세우고, Claude Code는 아무것도 만들기 전에 `herdr-resume-backend-unsupported`로 거절된다; tmux fallback 없음). 새 형제를 만드는 것이
 아니므로 새 id도, nonce도, callback도 없다 — 주소는 이미 알고 있다.
 
 1. target을 추측하지 않는다. GLG가 지목했거나, 이 대화에서 방금 닫힌 형제가 정확히

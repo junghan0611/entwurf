@@ -1084,8 +1084,13 @@ export async function settleAgentWitness(params: {
 	}
 }
 
-/** Reclaim the pane we opened — conditionally, or not at all. */
-async function reclaim(pane: HerdrPaneFacts, run: HerdrRun): Promise<HerdrRecovery> {
+/** Reclaim the pane we opened — conditionally, or not at all.
+ *
+ * Exported for the ONE other herdr launch that creates a tab and can fail after it: the same-id pi
+ * resume (`herdr-resume-call.ts`, #157 G1a). It is the existing within-generation witness
+ * (`decideConditionalClose`) plus the one pane close, reused rather than copied, so the two herdr
+ * launches cannot drift into different ideas of what may be closed. */
+export async function reclaim(pane: HerdrPaneFacts, run: HerdrRun): Promise<HerdrRecovery> {
 	const getRun = await run(buildHerdrPaneGetArgs(pane.paneId));
 	const decision = decideConditionalClose(
 		pane,
