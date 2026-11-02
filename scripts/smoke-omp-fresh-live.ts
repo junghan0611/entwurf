@@ -221,8 +221,12 @@ ok("the caller is a record-backed citizen with an armed mailbox and a sender mar
 
 const citizensBefore = new Set(
 	(
-		JSON.parse(execFileSync("bash", [path.join(REPO, "run.sh"), "meta-facts"], { encoding: "utf8" }))
-			.citizens as Array<{
+		JSON.parse(
+			execFileSync("bash", [path.join(REPO, "run.sh"), "meta-facts"], {
+				encoding: "utf8",
+				maxBuffer: 64 * 1024 * 1024,
+			}),
+		).citizens as Array<{
 			gardenId: string;
 		}>
 	).map((c) => c.gardenId),
@@ -356,7 +360,12 @@ ok(
 );
 
 // ── 7. that id is a real omp citizen, and the ONLY one this step minted ──────
-const facts = JSON.parse(execFileSync("bash", [path.join(REPO, "run.sh"), "meta-facts"], { encoding: "utf8" }));
+const facts = JSON.parse(
+	execFileSync("bash", [path.join(REPO, "run.sh"), "meta-facts"], {
+		encoding: "utf8",
+		maxBuffer: 64 * 1024 * 1024,
+	}),
+);
 const citizen = (facts.citizens as Array<Record<string, unknown>>).find((c) => c.gardenId === siblingGid);
 ok(
 	"the callback id resolves to a V3 record whose backend is omp",

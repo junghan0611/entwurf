@@ -279,7 +279,13 @@ ok(
 // This closes a real gap rather than a cosmetic one. `entwurf_inbox_read` takes a
 // CALLER-SUPPLIED garden id and does not verify it against the caller's identity, so
 // `lastReadAt` alone proves a read happened — not that THIS session performed it.
-const record = JSON.parse(sh("bash", [path.join(REPO, "run.sh"), "meta-facts"]));
+const record = JSON.parse(
+	execFileSync("bash", [path.join(REPO, "run.sh"), "meta-facts"], {
+		encoding: "utf8",
+		stdio: ["ignore", "pipe", "pipe"],
+		maxBuffer: 64 * 1024 * 1024,
+	}),
+);
 const citizen = (record.citizens as Array<Record<string, unknown>>).find((c) => c.gardenId === gardenId);
 ok("the citizen's V3 record names a transcript for this session", typeof citizen?.transcriptPath === "string");
 const transcriptPath = citizen?.transcriptPath as string;

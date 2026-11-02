@@ -258,7 +258,12 @@ receipts["1-fixture"] = `gardenId=${fixtureGid} backend=claude-code (collector o
 
 const citizensBefore = new Set(
 	(
-		JSON.parse(execFileSync("bash", [path.join(REPO, "run.sh"), "meta-facts"], { encoding: "utf8" })) as {
+		JSON.parse(
+			execFileSync("bash", [path.join(REPO, "run.sh"), "meta-facts"], {
+				encoding: "utf8",
+				maxBuffer: 64 * 1024 * 1024,
+			}),
+		) as {
 			citizens: Array<{ gardenId: string }>;
 		}
 	).citizens.map((c) => c.gardenId),
@@ -453,7 +458,12 @@ ok(
 	JSON.stringify(pdMarker),
 );
 
-const facts = JSON.parse(execFileSync("bash", [path.join(REPO, "run.sh"), "meta-facts"], { encoding: "utf8" })) as {
+const facts = JSON.parse(
+	execFileSync("bash", [path.join(REPO, "run.sh"), "meta-facts"], {
+		encoding: "utf8",
+		maxBuffer: 64 * 1024 * 1024,
+	}),
+) as {
 	citizens: Array<{ gardenId: string }>;
 };
 // Other siblings may mint citizens in the operator's garden meanwhile; this step's are the ones in its scratch cwd.

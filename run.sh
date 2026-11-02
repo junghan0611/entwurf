@@ -2693,7 +2693,7 @@ const SITES = [
   ['pi/meta-bridge/entwurf-meta-receive/scripts/hook-launch.sh', /Claude Code >= (\d+\.\d+\.\d+)/g, 1, 'launcher refusal message'],
   ['scripts/meta-bridge-claude-floor.sh', /THE FLOOR IS (\d+\.\d+\.\d+)/g, 1, 'floor helper rationale header'],
   ['docs/setup-clean-host.md', /`>=(\d+\.\d+\.\d+)`\*\* — the exec-form hook floor/g, 1, 'clean-host pin matrix'],
-  ['README.md', /supported floor `>=(\d+\.\d+\.\d+)`/g, 1, 'README doctor description'],
+  ['docs/setup-clean-host.md', /supported floor `>=(\d+\.\d+\.\d+)`/g, 1, 'clean-host doctor description'],
   ['scripts/check-hook-launch-topology.ts', /\/(\d+)\\\.(\d+)\\\.(\d+)\//g, 1, 'topology gate floor assertion'],
 ];
 let bound = 0;
