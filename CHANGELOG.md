@@ -4,6 +4,14 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+### Herdr plugin
+
+- Pinned the published npm `@junghanacs/entwurf@0.50.0` with its measured registry sha512 and align the plugin manifest to 0.50.0. The downloaded registry tarball is byte-identical to the accepted Windows-carrier core artifact (SHA-256 `64ca198067d8ad5265f89a903efdaa3e7946bfe7ba3a83dd27009a878631afba`). This closes the prepare-time `herdr-checkout` window described below; the core tag, npm bytes and historical 0.50.0 release section are unchanged.
+- Kept the Pi 1.4.0 SDK set and host range `>=1.4.0 <1.5`. The owning install guides name 0.50.0; the root README's unpinned entrance is unchanged. A checkout-source installation must explicitly deactivate before reinstalling this npm-source pin; a settled npm-source host follows the existing rebind/ownership rules. No operator installation or working session is automatically changed.
+- Source-specific verification: registry metadata reports `latest=0.50.0`, `repair=0.12.8-repair.1` and 668 files. The downloaded registry tarball's SHA-512 and SHA-1 equal `dist.integrity` and `dist.shasum`; SHA-256 and `cmp` match the accepted core artifact. No immediate pre-publish dist-tag snapshot was collected by the agent, so `repair` preservation is observed against the earlier dated reading, not claimed as a measured publication delta. The unchanged tarball's Windows and Linux package-consumer acceptance is explicitly reused, not re-run.
+- A private registry-installed Pi 1.4.0 consumer resolved the bridge inside its own installed root and listed seven `entwurf` model rows without a model turn. Its registry-shipped `herdr-runtime.mjs` is byte-equal to this checkout's. That helper acquired real npm 0.45.0, swapped to 0.50.0, restored the previous runtime before acquiring again in a manually seeded `torn-swap-with-candidate` state, skipped acquisition on an exact re-request, and removed its owned sandbox runtime/cache/journal. This is not recovery from an actual kill or a harness activation proof.
+- The public-ref install/use/activation/deactivation journey and pushed-SHA CI receive their own post-push receipts; prior checkout-carrier or older npm receipts are not those measurements. No plugin snapshot tag is claimed by this commit.
+
 ## 0.50.0 — 2026-11-02
 
 Same-id resume now reaches every resumable backend on both launch rails. A dormant pi, pi-durable or Claude Code citizen reopens under its own garden id in a visible tmux window or, inside Herdr, a new Herdr tab, with no fallback from one rail to the other (#157). The CLI gains one description source, safe help and a thin `entwurf claude` entry (#153, continued in #157).

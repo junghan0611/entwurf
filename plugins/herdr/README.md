@@ -132,15 +132,14 @@ directory that harness owns, and it will not invent one: `herdr integration inst
 commands are ordinary invocations — no model turn, no login, no account.
 
 **Which runtime these steps install.** The `runtime-lock.json` at the ref Herdr resolves names
-what step 5 acquires. With this candidate's lock (`source: herdr-checkout`), step 5 builds the
-runtime from the exact checkout commit Herdr resolved: the unpublished 0.50.0 candidate, on the
-same Pi 1.4.0 SDK set, so step 1 installs Pi 1.4. The snapshot `v2026.10.27-herdr.0.45.0` pins the
-published npm `@junghanacs/entwurf@0.45.0` with its sha512; the previous snapshots
+what step 5 acquires. This lock pins the published npm `@junghanacs/entwurf@0.50.0` and its
+measured sha512, on the Pi 1.4.0 SDK set, so step 1 still installs Pi 1.4. The previous snapshot
+`v2026.10.27-herdr.0.45.0` pins npm `@junghanacs/entwurf@0.45.0`; earlier snapshots
 `v2026.10.24-herdr.0.41.2` and `v2026.10.23-herdr.0.41.1` pin `@junghanacs/entwurf@0.41.2` and
 `@junghanacs/entwurf@0.41.1` on the same Pi 1.4.0 SDK set. The earlier snapshot
 `v2026.10.22-herdr.0.41.0` pins `@junghanacs/entwurf@0.41.0` on the Pi 1.3.0 SDK set, and its own
-README at that tag carries its Pi 1.3.x step. A host already on an npm runtime switches source:
-deactivate first
+README at that tag carries its Pi 1.3.x step. A host that installed the 0.50.0 checkout candidate switches source and must
+deactivate first; a settled npm-source host follows the same-source rebind conditions
 ([the two sources](#the-runtime-and-the-two-sources-it-may-come-from)).
 
 ```bash
@@ -501,12 +500,12 @@ read. Every field the provider attached is shown, in sorted key order.
     named red (`herdr-integration-not-current`) until you run `herdr integration install claude`
     again. In the measured 0.9.4-seeded private sandbox, the reinstall changed only the hook's version
     line; the pi extension and the Claude settings stayed byte-identical.
-- **Pi `>=1.4.0 <1.5`** for the runtime this checkout's lock acquires (the unpublished 0.50.0
-  candidate through the `herdr-checkout` source; the published 0.45.0 that snapshot
-  `v2026.10.27-herdr.0.45.0` pins carries the same Pi 1.4.0 SDK set).
+- **Pi `>=1.4.0 <1.5`** for the published npm 0.50.0 runtime this lock acquires. It carries the
+  same Pi 1.4.0 SDK set as the previous `v2026.10.27-herdr.0.45.0` snapshot. Pi 1.5 support is
+  separate work, not part of this pin.
   A host still on Pi 1.3 is refused by name (`outside the supported
   range`) at activation, the same check `entwurf setup` applies, and no Pi settings are written.
-  Upgrade Pi to 1.4 first, then install or reinstall the plugin. The previous snapshot,
+  Upgrade Pi to 1.4 first, then install or reinstall the plugin. The last Pi 1.3 snapshot,
   `v2026.10.22-herdr.0.41.0`, pins `@junghanacs/entwurf@0.41.0` on the Pi 1.3 SDK and keeps the
   Pi 1.3.x requirement its own README states.
 - **For the install-time build:** `git`, `node` >= 24, `npm`, and, for an npm lock, network access
