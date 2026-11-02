@@ -1,25 +1,22 @@
-# NEXT — Herdr 0.50.0 npm pin → public-ref 수용 → 운영 반영
+# NEXT — 0.50.0 개발자 전환 완료 → Oracle의 #155
 
 # RAIL — 현재 좌표
 
-- [x] **1. Core 0.50.0 cut.** tag/main source1cbf50f, exact push CI41466846260 required4PASS, Windows41469153131·동일 TGZ Linux 수용, GitHub Release·도장 완료. npm은 에이전트가 실행하지 않았다.
-- [x] **2. GLG npm 게시·registry byte 확인.** GLG가 등록 완료를 알림. registry TGZ SHA25664ca1980…31afba가 accepted core artifact와 cmp0, independently computed sha512/sha1도 registry metadata와 같다. latest0.50.0/repair0.12.8-repair.1 관측.
-- [x] **3. Herdr pin·한정 검수·최종 floor.** manifest0.50.0/npm0.50.0 measured integrity·owner docs 갱신. focused10개/registry-installed/실npm swap·복구 모두exit0, 독립 검수B0/D1 한 보정 완료. 동결 FULL981초/0, HEAD/index/tree/dist 전후동일. core tag/npm bytes/SDK는 바꾸지 않는다.
-- [ ] **4. commit·main push·공개 ref 수용.** ← CURRENT: 정상 훅 commit/main FF·일반 push/도장, 그 exact SHA의4CI와 기존 raw-install LIVE의 main-ref install/use/activation/deactivation을 측정한다. 공개 ref가 있어야 하는 후자는 push 전 실행했다고 쓰지 않는다. 새 core/plugin tag는 요청되지 않았다.
-- [ ] **5. 운영 반영·재시작.** ← PAUSED: GLG의 실제 대상/개별 종료·재개 권한과 새 loaded reader 증거. 자동 Herdr 업데이트/working 시민 restart/retire는 하지 않는다.
+- [x] **1. thinkpad main 동기화·개발자 설치.** `2917917` → `f45a95ad`; 공식 check/apply와 compiled carrier/SDK·CLI 검증 exit0/17초.
+- [x] **2. 동일 대화 재시작.** 사용자가 재시작 완료를 알렸고, 2026-11-03 08:32 KST `entwurf_self`로 같은 garden/cwd와 replyable self-fetch를 직접 확인했다.
+- [ ] **3. Oracle의 Pi1.5.0 대응.** ← CURRENT: 사용자 직접 지시에 따라 Oracle 코디가 이 인계를 pull하고 [#155](https://github.com/junghan0611/entwurf/issues/155)에서 오늘 작업을 개시한다. thinkpad는 개발·검수에 착수하지 않고 사용자의 업무를 우선한다.
 
 # NOW
 
-- **다음 한 걸음:** 원exit/log로 focused10개·registry설치·실npm helper swap/torn복구/역상과 동결 FULL981초/0을 수용했다. D1은 혼동된 previous snapshot을 last Pi1.3 snapshot으로 명확히 했다. commit·main push 뒤 정확 SHA의CI/public-ref 영수증을 읽는다. 이미 완료됐으면 같은 push/검사를 다시 실행하지 않고 단계5의 대상 승인을 기다린다. 이 NEXT 진행 기록은 FULL 종료 뒤 갱신했으며 floor 원subject는 `pre-full.snap`/`full.stdout`(SHA f0362c5c…)로 보존했다. 구현·SDK·검증기 개발을 다시 열지 않는다.
-- **직접 지시:** GLG “npm 등록 완료 …/0.50.0, herdr 플러그인 버전 맞추어 커밋 푸시”. 새 태그·npm 재출판·운영 설치 권한을 추가로 만들지 않는다. 현재 branch `chore/herdr-0.50.0`, base core1cbf50f. root README에 published-version 대시보드를 다시 넣지 않는다.
-- **pin:** `plugins/herdr/runtime-lock.json` schema2/npm/@junghanacs/entwurf/0.50.0, SRI `sha512-ATV2abFt+/JKRmUj61mwPK0X2IVLqMYAjnIV8QI0N6sqoVieEW13TYk9rHU5M3fT3OzwbWBvChHFPVWoVXLCqw==`. manifest0.45→0.50, Pi SDK1.4.0/host>=1.4.0<1.5 그대로. Pi1.5/#155는 별도 준비다.
-- **증거:** `/home/junghan/.local/state/entwurf-releases/herdr-0.50.0-repin/`의 registry metadata/download, focused/registry-installed/npm-runtime 로그와 exit. core artifact는 `~/.local/state/entwurf-releases/0.50.0-1cbf50fe545c/candidate.SHnHCd/`, SHA256 `64ca198067d8ad5265f89a903efdaa3e7946bfe7ba3a83dd27009a878631afba`. 동일 파일의 기존 package consumer 수용은 명시적 재사용이며 새로 실행했다고 하지 않는다.
-- **source-specific re-proof:** unchanged registry-installed `scripts/herdr-runtime.mjs`를 sandbox에서 실제 npm0.45→0.50 swap, 수동 seeded torn-swap-with-candidate 복구(실제 kill 아님), exact re-request 무acquire, owned inverse로 관측한다. operator runtime/ledger/캐시는 만지지 않는다. 공개 remote 첫 사용자 여정은 기존 `LIVE=1 ENTWURF_REQUIRE_DOCKER=1 ./run.sh smoke-herdr-raw-install-live --ref <공개 branch>`로 실행하고 resolved SHA를 기록한다. branch가 바뀌면 옛 결과를 새 SHA로 승계하지 않는다.
-- **registry-installed Pi:** private HOME/PI/XDG에서 공식 npm 설치·bridge root 확인·7 entwurf model rows·helper byte equality, 모델 turn0. 첫 CLI의 프로젝트 trust 질문에는 Ctrl-C를 보냈지만 그 CLI는 설치를 계속해 exit0으로 끝났다. exit130/중단이나 재실행 성공을 지어내지 않는다. npm audit 경고4개(3moderate/1high)는 이 install의 출력이며 관련성/악용 여부 미분류, 임의 dependency/audit-fix 없음.
+- **역할 경계:** Oracle 팀이 #155를 맡는다. thinkpad는 이번 설치 인계만 commit/push·전달하고 대기한다. 새 형제 생성·구현·추가 matrix·SDK 업그레이드·운영 재설치를 시작하지 않는다. Oracle의 후속 변경이 나와도 이 host를 자동 pull/build/restart하지 않는다.
+- **현재 운영판:** checkout `f45a95ad`, Entwurf0.50.0, Pi SDK1.4.0. #155의 Pi1.5.0 준비와 별개다. 상류 core/npm·Herdr pin 경위는 `CHANGELOG.md`와 `git show f45a95ad:NEXT.md`에 남아 있다. 이번 노트북 설치를 출하 CI/Windows artifact/public-ref LIVE의 재측정이라고 쓰지 않는다.
+- **직접 확인한 신원:** garden `20261007T132839-b22677`, native session `1791347319499-fb202da9-3971-46de-b378-4d8afad4cfde`, cwd `~/repos/gh/entwurf`. 재시작 뒤 self 신원 확인은 모든 participating reader의 byte/PID 검증이나 다른 host의 rollout 증명이 아니다.
+- **Do not touch:** 모델/provider 변경, 기록·NativeDB·lock 수선/삭제, 타인 retirement, 광역 cleanup, 새 tag/npm publish. 사용자 업무 중에는 #155 지원을 임의로 재개하지 않는다.
 
-# 운영·보존
+# RECENT / 직접 측정한 설치 근거
 
-- checkout carrier를 실제 설치한 host는 npm source로 바꾸기 전에 자기 runtime 절대경로로 deactivate가 필요하다. settled npm-source host는 기존 rebind/ownership 조건을 따른다. plugin activation은 Pi/CC, caller-context Herdr launch는 Pi/CC/PD로 서로 다른 축이다.
-- 실제 Oracle CC installed writer는 core make에서 기존 installer로6a03에 맞췄고 새 post-install test citizen6e8f48/strict doctor PASS를 측정했다. Source/Pi compiled output·copied hooks·npm/Herdr pin·already-loaded modules는 서로 다르다. 모든 참여 reader의 새 PID/ownerjoin/전체 dist+SDK 확인 전 전체 rollout으로 쓰지 않는다.
-- core 이전 RED, x02, 옛312 소실과 Codex0.162원인 UNKNOWN은 보존. core 원근거/현재 수용 한계는 [make완료6580910928](https://github.com/junghan0611/entwurf/issues/157#issuecomment-6580910928), [v0.50.0](https://github.com/junghan0611/entwurf/releases/tag/v0.50.0), CHANGELOG.
-- 정상 hooks/scanner, env-i/privateHOME·PI·XDG5/verifydeps2error/noCI, managed dist 보존. FULL 중 HEAD/index/tree/dist 동결. whole qualification/root74·새 gate/matrix/helper framework·별도 OMP/Codex 재현 없음. SQL/NativeDB전수scan/record삭제/lockrepair/광역cleanup/임의pkill·workingretire 금지. Astra567753/PiOpus150a5e 연락·resume·retire 금지. 기존 receipts/백업/Native memory와 idle Sol2b69db·Native6e8f48 보존.
+- **준비 상태 오류와 복구:** 첫 공식 apply는 `ERR_PNPM_VERIFY_DEPS_BEFORE_RUN: The workspace structure has changed since last install`로 prepare-checkout에서 exit1. build/deactivate/wiring 전 중단했다. 사용자 named recovery 승인 뒤 `pnpm install --frozen-lockfile --ignore-scripts`가 exit0/609ms(Already up to date); lockfile·dependency upgrade 없이 준비 상태를 맞췄다. `pnpm_config_verify_deps_before_run=error`는 유지했다. 첫 실패를 성공으로 덮어쓰지 않았다.
+- **공식 전환:** `plugins/herdr/use-dev-checkout.sh --check` → `--apply`와 후속 확인 exit0/17초. 기존 activation ledger 없음(no-op deactivate), checkout command links, Pi user/project ownership, Claude user-scope assembled plugin/MCP 갱신, enabled local Herdr0.50 link를 확인했다.
+- **결정적 출력:** `pi-provider doctor: ok`; 실제 invocation과 direct MCP smoke 모두9 tools; `[use-dev-checkout] Herdr local checkout link verified`; explicit/actual Pi Entwurf model rows7개 일치; `[thinkpad-upgrade] durable carrier/SDK PASS; 22 resolved edges`(SDK1.4.0 set); package0.50.0; root/claude/team/remote-pair 정적 help PASS; `[thinkpad-upgrade] HEAD/source/index/status unchanged`; `finished exit=0`.
+- **범위:** 설치 과정에서 모델 turn·새 세션·release FULL·SDK upgrade 없음. 설치 전후 source/index가 같음을 확인한 뒤 이 NEXT만 갱신했다. 재시작 완료는 사용자 보고, 동일 garden/cwd는 재시작 뒤 직접 self 응답이다.
+- **thinkpad-local 원자료:** `~/.local/share/entwurf/receipts/thinkpad-main-upgrade-20261103T082155/`에 첫 exit1·이전 NEXT/patch/dist, `thinkpad-main-upgrade-20261103T082815-recovery/`에 승인·준비 설치 로그·`upgrade.sh`·`output.log`·`result.exit`(0)·`durable-runtime.json`·전후 snapshots/이전 dist를 보존했다. 이 경로는 다른 host에서 읽힌다고 가정하지 않고 결정적 출력을 위에 함께 실었다. 이 작업의 종료된 전용 tmux 두 개만 정리했고 다른 세션·기록은 건드리지 않았다.
