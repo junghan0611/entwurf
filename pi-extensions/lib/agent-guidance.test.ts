@@ -193,6 +193,23 @@ const reviewedR16 = JSON.parse(
 ) as ReviewedAmendmentLayer & { previousRevision: number };
 /** The second parameter leaf outside entwurf_v2 that a reviewed layer may amend, and only in revision 16. */
 const R16_PARAMETER_KEY = "tools.entwurf_fresh_call.parameters.cwd";
+// Revision 17 (#157 B3) names pi-durable in same-id resume: both entwurf_resume_call descriptions, its target
+// parameter and one visible-resume hint. Its old values were fixed in this layer before the producer edit;
+// its new literals were written in the same pass and are reviewed afterwards, like revisions 12 and 16's.
+// The README paragraph owns that provenance.
+const reviewedR17 = JSON.parse(
+	fs.readFileSync(new URL("./fixtures/agent-guidance/amendments-revision-17.json", import.meta.url), "utf8"),
+) as {
+	previousRevision: number;
+	revision: number;
+	amendments: (ToolAmendment | { key: ["resumeRejectHints", string]; old: string; new: string })[];
+};
+const reviewedToolsR17: ReviewedAmendmentLayer = {
+	revision: reviewedR17.revision,
+	amendments: reviewedR17.amendments.filter((a): a is ToolAmendment => a.key[0] === "tools"),
+};
+/** The third parameter leaf outside entwurf_v2 that a reviewed layer may amend, and only in revision 17. */
+const R17_PARAMETER_KEY = "tools.entwurf_resume_call.parameters.target";
 
 // Revision 10 was recorded before the Fable wording discussion. Its old values and provenance
 // remain intact; revision 11 applies that discussion's separate five-leaf amendment afterward.
@@ -247,13 +264,30 @@ function applyR12(family: string, expected: Record<string, string>): void {
 	}
 }
 
+function applyR17(family: string, expected: Record<string, string>): void {
+	expect(reviewedR17.amendments).toHaveLength(4);
+	expect(reviewedR17.amendments.map((a) => a.key.join(".")).sort()).toEqual([
+		"resumeRejectHints.target-backend-unsupported",
+		"tools.entwurf_resume_call.descriptions.durable",
+		"tools.entwurf_resume_call.descriptions.mcp",
+		R17_PARAMETER_KEY,
+	]);
+	for (const amendment of reviewedR17.amendments) {
+		if (amendment.key[0] === "tools" || amendment.key[0] !== family) continue;
+		const key = amendment.key[1];
+		expect(expected[key]).toBe(amendment.old);
+		expect(amendment.new).not.toBe(amendment.old);
+		expected[key] = amendment.new;
+	}
+}
+
 // Only description leaves may change. Full schemas/annotations/order come from immutable C0. The
 // literal layers do NOT share one provenance, so none is asserted for all of them here: each layer's
 // paragraph in fixtures/agent-guidance/README.md records how its literals were chosen. In particular
 // the R12 literals were written in the same pass as the Root edit and only then reviewed
 // independently — they are not oracles chosen before the product JSON was amended. The R13, R14 and
 // R15 literals were approved before it. The R16 layer fixed its old value before the Root edit, but its
-// new literal was written in the same pass and reviewed afterwards, as R12's were.
+// new literal was written in the same pass and reviewed afterwards, as R12's were; so were R17's.
 function currentExpectations() {
 	const metadata = structuredClone(original);
 	const runtime = structuredClone(originalRuntime);
@@ -274,6 +308,11 @@ function currentExpectations() {
 	expect(reviewedR14.amendments.map((a) => a.key.join("."))).toEqual(["tools.entwurf_fresh_call.descriptions.mcp"]);
 	expect(reviewedR15.amendments.map((a) => a.key.join("."))).toEqual(["tools.entwurf_fresh_call.descriptions.mcp"]);
 	expect(reviewedR16.amendments.map((a) => a.key.join("."))).toEqual([R16_PARAMETER_KEY]);
+	expect(reviewedToolsR17.amendments.map((a) => a.key.join(".")).sort()).toEqual([
+		"tools.entwurf_resume_call.descriptions.durable",
+		"tools.entwurf_resume_call.descriptions.mcp",
+		R17_PARAMETER_KEY,
+	]);
 	for (const layer of [
 		reviewedR2,
 		reviewedR3,
@@ -283,6 +322,7 @@ function currentExpectations() {
 		reviewedR14,
 		reviewedR15,
 		reviewedR16,
+		reviewedToolsR17,
 	]) {
 		expect(new Set(layer.amendments.map((a) => a.key.join("."))).size).toBe(layer.amendments.length);
 		for (const amendment of layer.amendments) {
@@ -305,7 +345,8 @@ function currentExpectations() {
 				expect(
 					name === "entwurf_v2" ||
 						(layer === reviewedR13 && amendment.key.join(".") === R13_PARAMETER_KEY) ||
-						(layer === reviewedR16 && amendment.key.join(".") === R16_PARAMETER_KEY),
+						(layer === reviewedR16 && amendment.key.join(".") === R16_PARAMETER_KEY) ||
+						(layer === reviewedToolsR17 && amendment.key.join(".") === R17_PARAMETER_KEY),
 				).toBe(true);
 				for (const rail of ["mcp", "durable"] as const) {
 					const parameter = metadata[rail]
@@ -324,8 +365,9 @@ function currentExpectations() {
 	}
 	// Revision 13's mcp description was already in the union (revision 2); its durable description and
 	// backend parameter add two keys. Revisions 14 and 15 amend that same mcp key again and add none.
-	// Revision 16's cwd parameter is a new key.
-	expect(declaredKeys.size).toBe(16);
+	// Revision 16's cwd parameter is a new key. Revision 17's two resume descriptions were already in the union
+	// (revision 12); its resume target parameter is a new key.
+	expect(declaredKeys.size).toBe(17);
 	return { metadata, runtime, declaredKeys };
 }
 
@@ -358,7 +400,9 @@ describe("root product guidance — frozen originals plus reviewed current amend
 		expect(reviewedR15.revision).toBe(15);
 		expect(reviewedR16.previousRevision).toBe(reviewedR15.revision);
 		expect(reviewedR16.revision).toBe(16);
-		expect(ENTWURF_GUIDANCE_VERSION.revision).toBe(reviewedR16.revision);
+		expect(reviewedR17.previousRevision).toBe(reviewedR16.revision);
+		expect(reviewedR17.revision).toBe(17);
+		expect(ENTWURF_GUIDANCE_VERSION.revision).toBe(reviewedR17.revision);
 	});
 
 	it("[QK:GUIDANCE-REJECT-HINTS-ORIGINAL] every static reject hint matches C0 plus the declared revision-6, revision-10 and reviewed revision-11 amendments", () => {
@@ -386,12 +430,13 @@ describe("root product guidance — frozen originals plus reviewed current amend
 		expect(Object.isFrozen(ENTWURF_REJECT_HINTS)).toBe(true);
 	});
 
-	it("[QK:GUIDANCE-RESUME-REJECT-HINTS-ORIGINAL] every static visible-resume reject hint matches C0 plus the declared revision-10, reviewed revision-11 and declared revision-12 amendments", () => {
+	it("[QK:GUIDANCE-RESUME-REJECT-HINTS-ORIGINAL] every static visible-resume reject hint matches C0 plus the declared revision-10, reviewed revision-11 and declared revision-12 and revision-17 amendments", () => {
 		expect(originalResumeRejectHints.sourceSha).toBe("94d0594182cbd9cf0a5c90f4d299cda40d870b8f");
 		const expected = structuredClone(originalResumeRejectHints.hints);
 		applyR10("resumeRejectHints", expected);
 		applyR11("resumeRejectHints", expected);
 		applyR12("resumeRejectHints", expected);
+		applyR17("resumeRejectHints", expected);
 		expect(Object.keys(ENTWURF_RESUME_REJECT_HINTS).sort()).toEqual(Object.keys(expected).sort());
 		for (const [reason, text] of Object.entries(expected)) {
 			const actual = (ENTWURF_RESUME_REJECT_HINTS as Readonly<Record<string, string>>)[reason];
@@ -499,8 +544,8 @@ describe("root product guidance — frozen originals plus reviewed current amend
 		}
 		expect([...changed].sort()).toEqual([...declaredKeys].sort());
 		expect(allKeys.size).toBe(34);
-		expect(changed.size).toBe(16);
-		expect([...allKeys].filter((key) => !changed.has(key))).toHaveLength(18);
+		expect(changed.size).toBe(17);
+		expect([...allKeys].filter((key) => !changed.has(key))).toHaveLength(17);
 	});
 
 	it("[QK:GUIDANCE-RUNTIME-REVIEWED-FIELDS] actual tools/list matches reviewed descriptions with original full structures/schema/annotations and no metadata", async () => {

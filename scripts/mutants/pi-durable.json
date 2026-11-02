@@ -525,7 +525,7 @@
 			"claim": "PI-DURABLE-CARRIER-PIN-MATCHES",
 			"title": "the pin records a digest the committed carrier file does not carry, so a carrier edited after emission would still be the declared one",
 			"subject": "pi/pi-durable/overlay/upstream-pin.json",
-			"find": ["\"sha256\": \"37fe7bc4d66232032bb59afe18931ce25f6286bcd9747f2fbcf09d45044a1790\""],
+			"find": ["\"sha256\": \"437834997b9870ab0383aea7d86ff7880ef7e2ebbbfe4c6360f67d8d36f777ec\""],
 			"replace": ["\"sha256\": \"0000000000000000000000000000000000000000000000000000000000000000\""],
 			"gate": ["bash", "run.sh", "check-pi-durable-carrier"],
 			"timeoutSeconds": 300,
@@ -1807,7 +1807,7 @@
 			"title": "the fence is asked only after the native lease is taken, so the lease it is meant to precede already exists at admission",
 			"subject": "pi/pi-durable/carrier/sessions.js",
 			"find": [
-				"\tconst ticket = await fence.admit({ directory, selectedN: basename(directory), created });",
+				"\tconst ticket = await fence.admit({ directory, selectedN: basename(directory), created, profile });",
 				"\t// A lock left by a crashed process goes stale after 10 s; wait that long before giving up.",
 				"\tconst lease = lockfile.lock(directory, {",
 				"\t\trealpath: false,",
@@ -1821,7 +1821,7 @@
 				"\t\tretries: { retries: 12, minTimeout: 1000, maxTimeout: 1000 },",
 				"\t});",
 				"\tawait lease.catch(() => {});",
-				"\tconst ticket = await fence.admit({ directory, selectedN: basename(directory), created });"
+				"\tconst ticket = await fence.admit({ directory, selectedN: basename(directory), created, profile });"
 			],
 			"gate": ["bash", "run.sh", "check-pi-durable-carrier"],
 			"timeoutSeconds": 300,
@@ -1955,6 +1955,343 @@
 			"timeoutSeconds": 600,
 			"signature": "[QK:PDL-TMP-COLLISION-NOT-OURS]",
 			"signatureSource": "pi-extensions/lib/pi-durable-location.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "PDR-RAW-PROFILE-CAPTURED",
+			"title": "the open hands its fence the resolved spelling of the agent directory, so the claim records a normalized profile instead of the value its directory was joined from",
+			"subject": "pi/pi-durable/carrier/sessions.js",
+			"find": ["\treturn { cwd, root, profile: agentDir };"],
+			"replace": ["\treturn { cwd, root, profile: resolve(agentDir) };"],
+			"gate": ["bash", "run.sh", "check-pi-durable-carrier"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PDR-RAW-PROFILE-CAPTURED]",
+			"signatureSource": "pi-extensions/lib/pi-durable-carrier.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "PDR-V2-READER-STRICT",
+			"title": "the schema 2 reader compares the joined directory with itself, so a claim whose directory was not joined from its profile reads as valid",
+			"subject": "pi-extensions/lib/pi-durable-owner-fence.ts",
+			"find": [
+				"\t\tif (joined !== directory) throw bad(\"selected.directory is not joined from selected.profile and selected.n\");"
+			],
+			"replace": [
+				"\t\tif (joined !== joined) throw bad(\"selected.directory is not joined from selected.profile and selected.n\");"
+			],
+			"gate": ["bash", "run.sh", "check-tests-beside-behavior"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:PDR-V2-READER-STRICT]",
+			"signatureSource": "pi-extensions/lib/pi-durable-owner-fence.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "PDR-V1-UNATTRIBUTED",
+			"title": "the reserve guesses a schema 1 donor's profile from four dirnames of its directory, so the guess passes the P-rules and the named profile-unattributed refusal is lost; the writer then refuses the schema 1 selection as transition-invalid, so nothing is reserved either way",
+			"subject": "pi-extensions/lib/pi-durable-owner-fence.ts",
+			"find": ["\tconst recorded = selected.profile;"],
+			"replace": [
+				"\tconst recorded = selected.profile ?? path.dirname(path.dirname(path.dirname(path.dirname(selected.directory))));"
+			],
+			"gate": ["bash", "run.sh", "check-tests-beside-behavior"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:PDR-V1-UNATTRIBUTED]",
+			"signatureSource": "pi-extensions/lib/pi-durable-reservation.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "PDR-ADOPT-BINDING-CHANGED",
+			"title": "the adoption compares the reservation's binding with itself, so a child adopts a reservation whose record was bound again after it was taken",
+			"subject": "pi-extensions/lib/pi-durable-owner-fence.ts",
+			"find": ["\t\tif (record.attachIncarnation !== reservation.attachIncarnation) {"],
+			"replace": ["\t\tif (reservation.attachIncarnation !== reservation.attachIncarnation) {"],
+			"gate": ["bash", "run.sh", "check-tests-beside-behavior"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:PDR-ADOPT-BINDING-CHANGED]",
+			"signatureSource": "pi-extensions/lib/pi-durable-reservation.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "PDR-ARM-BEFORE-SD",
+			"title": "the reserve runs its S_D decision and write before it takes the record-arm lock, so a busy arm refuses only after the claim was already rewritten",
+			"subject": "pi-extensions/lib/pi-durable-owner-fence.ts",
+			"find": [
+				"\tconst arm = takeRecordArm(gardenId, roots);",
+				"\tlet reserved: PiDurableReservation;",
+				"\ttry {",
+				"\t\treserved = await reserveInPair(gardenId, roots, metaRoot, owner);"
+			],
+			"replace": [
+				"\tlet reserved: PiDurableReservation;",
+				"\treserved = await reserveInPair(gardenId, roots, metaRoot, owner);",
+				"\tconst arm = takeRecordArm(gardenId, roots);",
+				"\ttry {"
+			],
+			"gate": ["bash", "run.sh", "check-tests-beside-behavior"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:PDR-ARM-BEFORE-SD]",
+			"signatureSource": "pi-extensions/lib/pi-durable-reservation.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "PDR-ROW-ORDER",
+			"title": "the reserve judges the P-rules before the holder row, so a live holder is refused by a profile rule instead of as owner-live",
+			"subject": "pi-extensions/lib/pi-durable-owner-fence.ts",
+			"find": ["\t\tif (claim.state !== \"closed\") requireHolderGone(claim, resource, owner.hostname);"],
+			"replace": [
+				"\t\trequireProfile(donorOf(claim), pair, resource);",
+				"\t\tif (claim.state !== \"closed\") requireHolderGone(claim, resource, owner.hostname);"
+			],
+			"gate": ["bash", "run.sh", "check-tests-beside-behavior"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:PDR-ROW-ORDER]",
+			"signatureSource": "pi-extensions/lib/pi-durable-reservation.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "PDR-HOST-BEFORE-LIVENESS",
+			"title": "the reserve probes a holder's pid on this host before its host, so another host's holder is refused by this host's liveness of a pid that is not its own",
+			"subject": "pi-extensions/lib/pi-durable-owner-fence.ts",
+			"find": ["\tconst verdict = otherHost ? \"other-host\" : holderVerdict(claim.owner);"],
+			"replace": [
+				"\tconst verdict = holderVerdict(claim.owner) === \"dead\" && otherHost ? \"other-host\" : holderVerdict(claim.owner);"
+			],
+			"gate": ["bash", "run.sh", "check-tests-beside-behavior"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:PDR-HOST-BEFORE-LIVENESS]",
+			"signatureSource": "pi-extensions/lib/pi-durable-reservation.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "PDR-DONOR-ATTRIBUTION",
+			"title": "the reserve attributes a dead reservation's donor to its current holder, so a parent's reservation is judged as if the parent had been the native owner",
+			"subject": "pi-extensions/lib/pi-durable-owner-fence.ts",
+			"find": ["\t\tconst profile = requireProfile(donor, pair, resource);"],
+			"replace": ["\t\tconst profile = requireProfile({ ...donor, owner: claim.owner }, pair, resource);"],
+			"gate": ["bash", "run.sh", "check-tests-beside-behavior"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:PDR-DONOR-ATTRIBUTION]",
+			"signatureSource": "pi-extensions/lib/pi-durable-reservation.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "PDR-LEASE-SNAPSHOT",
+			"title": "the adoption reads the donor's own lease instead of the reservation's snapshot, so a lease that appeared after a reservation saw none is adopted when the donor once held one",
+			"subject": "pi-extensions/lib/pi-durable-owner-fence.ts",
+			"find": ["\t\tif (reservation.nativeLease === \"absent\" && leasePresent(directory)) {"],
+			"replace": ["\t\tif (reservation.from.lease !== \"held\" && leasePresent(directory)) {"],
+			"gate": ["bash", "run.sh", "check-tests-beside-behavior"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:PDR-LEASE-SNAPSHOT]",
+			"signatureSource": "pi-extensions/lib/pi-durable-reservation.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "PDR-LEASE-NO-LAUNDER",
+			"title": "a re-reserve retakes the snapshot from the donor's lease, so a lease that appeared after a reservation saw none is laundered into an attributed one",
+			"subject": "pi-extensions/lib/pi-durable-owner-fence.ts",
+			"find": ["\t\t\tif (before === \"absent\" && sidecar) {"],
+			"replace": ["\t\t\tif (!leaseAttributed(donor.lease) && sidecar) {"],
+			"gate": ["bash", "run.sh", "check-tests-beside-behavior"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:PDR-LEASE-NO-LAUNDER]",
+			"signatureSource": "pi-extensions/lib/pi-durable-reservation.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "PDR-LEASE-SIDECAR-SELECTION",
+			"title": "the reserve takes its lease snapshot beside the physical directory instead of the donor's selection, so under an alias it sees a lock nobody's SDK takes and misses the one it does",
+			"subject": "pi-extensions/lib/pi-durable-owner-fence.ts",
+			"find": ["\t\tconst sidecar = leasePresent(donor.selected.directory);"],
+			"replace": ["\t\tconst sidecar = leasePresent(resource);"],
+			"gate": ["bash", "run.sh", "check-tests-beside-behavior"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:PDR-LEASE-SIDECAR-SELECTION]",
+			"signatureSource": "pi-extensions/lib/pi-durable-reservation.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "PDR-SNAPSHOT-ATTRIBUTION-READER",
+			"title": "the reader accepts a present-attributed snapshot for any donor, so a reservation attributes a lease to a donor that released it or never held one",
+			"subject": "pi-extensions/lib/pi-durable-owner-fence.ts",
+			"find": ["\tconst attributable = leaseAttributed(donor.lease);"],
+			"replace": ["\tconst attributable = true;"],
+			"gate": ["bash", "run.sh", "check-tests-beside-behavior"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:PDR-SNAPSHOT-ATTRIBUTION-READER]",
+			"signatureSource": "pi-extensions/lib/pi-durable-reservation.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "PDR-RESERVE-CLEAN-ONLY",
+			"title": "the clean test on a closed donor fires only for a storage failure no closed row can carry, so a closed row whose storage never opened is reserved as if it had closed clean",
+			"subject": "pi-extensions/lib/pi-durable-owner-fence.ts",
+			"find": ["\t\tif (claim.state === \"closed\" && claim.end?.storage !== \"closed\") {"],
+			"replace": ["\t\tif (claim.state === \"closed\" && claim.end?.storage === \"failed\") {"],
+			"gate": ["bash", "run.sh", "check-tests-beside-behavior"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:PDR-RESERVE-CLEAN-ONLY]",
+			"signatureSource": "pi-extensions/lib/pi-durable-reservation.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "PDR-RESERVED-ROW",
+			"title": "the reader refuses only a reservation on another state, so a reserved claim that carries no reservation reads as valid",
+			"subject": "pi-extensions/lib/pi-durable-owner-fence.ts",
+			"find": ["\tif ((claim.state === \"reserved\") !== (value.reservation !== undefined)) {"],
+			"replace": [
+				"\tif ((claim.state === \"reserved\") !== (value.reservation !== undefined) && value.reservation !== undefined) {"
+			],
+			"gate": ["bash", "run.sh", "check-tests-beside-behavior"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:PDR-RESERVED-ROW]",
+			"signatureSource": "pi-extensions/lib/pi-durable-reservation.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "PDR-ADOPT-EXACT",
+			"title": "the adoption compares the claim's generation with itself, so a child adopts a reservation at a generation it was not launched for",
+			"subject": "pi-extensions/lib/pi-durable-owner-fence.ts",
+			"find": ["\t\tif (claim.generation !== adoption.sourceGeneration) {"],
+			"replace": ["\t\tif (claim.generation !== claim.generation) {"],
+			"gate": ["bash", "run.sh", "check-tests-beside-behavior"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:PDR-ADOPT-EXACT]",
+			"signatureSource": "pi-extensions/lib/pi-durable-reservation.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "PDR-ADOPT-NOT-RESERVED",
+			"title": "the adoption refuses only a missing claim, so a claim no longer reserved is not refused as adopt-not-reserved",
+			"subject": "pi-extensions/lib/pi-durable-owner-fence.ts",
+			"find": ["\t\tif (claim === undefined || claim.state !== \"reserved\") {"],
+			"replace": ["\t\tif (claim === undefined) {"],
+			"gate": ["bash", "run.sh", "check-tests-beside-behavior"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:PDR-ADOPT-NOT-RESERVED]",
+			"signatureSource": "pi-extensions/lib/pi-durable-reservation.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "PDR-WITHDRAW-PROJECTION",
+			"title": "the withdrawal restores the donor's row under the parent's owner, so a schema-valid claim names the withdrawing parent as the native owner it never was",
+			"subject": "pi-extensions/lib/pi-durable-owner-fence.ts",
+			"find": ["\t\t\towner: donor.owner,"],
+			"replace": ["\t\t\towner: claim.owner,"],
+			"gate": ["bash", "run.sh", "check-tests-beside-behavior"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:PDR-WITHDRAW-PROJECTION]",
+			"signatureSource": "pi-extensions/lib/pi-durable-reservation.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "PDR-WITHDRAW-OWN-GEN",
+			"title": "the withdrawal compares this owner with itself, so a process withdraws another owner's reservation",
+			"subject": "pi-extensions/lib/pi-durable-owner-fence.ts",
+			"find": ["\t\tif (!sameOwner(claim.owner, owner)) {"],
+			"replace": ["\t\tif (!sameOwner(owner, owner)) {"],
+			"gate": ["bash", "run.sh", "check-tests-beside-behavior"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:PDR-WITHDRAW-OWN-GEN]",
+			"signatureSource": "pi-extensions/lib/pi-durable-reservation.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "PDR-ADOPTED-EVIDENCE-KEPT",
+			"title": "an adopted owner's next transition drops its adoptedFrom, so the adoption evidence is lost before the owner ends",
+			"subject": "pi-extensions/lib/pi-durable-owner-fence.ts",
+			"find": ["\t\t\t\t...(last.adoptedFrom === undefined ? {} : { adoptedFrom: last.adoptedFrom }),"],
+			"replace": ["\t\t\t\t...(last.adoptedFrom === undefined ? {} : {}),"],
+			"gate": ["bash", "run.sh", "check-tests-beside-behavior"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:PDR-ADOPTED-EVIDENCE-KEPT]",
+			"signatureSource": "pi-extensions/lib/pi-durable-reservation.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "PDR-OBSERVATION-CLASSES",
+			"title": "an observation classifies a claim the strict reader refused as lost, so an unreadable claim is reported as a lost reservation instead of unobserved",
+			"subject": "pi-extensions/lib/pi-durable-owner-fence.ts",
+			"find": ["\t\t\treturn { class: \"unobserved\", reason: error.reason, detail: error.message };"],
+			"replace": ["\t\t\treturn { class: \"lost\" };"],
+			"gate": ["bash", "run.sh", "check-tests-beside-behavior"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:PDR-OBSERVATION-CLASSES]",
+			"signatureSource": "pi-extensions/lib/pi-durable-reservation.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "PDR-ADOPT-PATH-FRESH",
+			"title": "the adoption compares the reservation with the resource the pair named instead of its directory resolved in the hold, so an alias retargeted after the hold was entered is adopted",
+			"subject": "pi-extensions/lib/pi-durable-owner-fence.ts",
+			"find": ["\t\t\treal = fs.realpathSync(directory);"],
+			"replace": ["\t\t\treal = resource;"],
+			"gate": ["bash", "run.sh", "check-tests-beside-behavior"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:PDR-ADOPT-PATH-FRESH]",
+			"signatureSource": "pi-extensions/lib/pi-durable-reservation.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "PDR-ORDINARY-RESERVED-ATTRIBUTION",
+			"title": "an ordinary admission attributes a dead reservation's present-attributed snapshot to any spelling of D, so a lease beside another alias is taken over as the donor's",
+			"subject": "pi-extensions/lib/pi-durable-owner-fence.ts",
+			"find": [
+				"\t\t\tsnapshot?.nativeLease === \"present-attributed\" && snapshot.from.selected.directory === directory;"
+			],
+			"replace": ["\t\t\tsnapshot?.nativeLease === \"present-attributed\";"],
+			"gate": ["bash", "run.sh", "check-tests-beside-behavior"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:PDR-ORDINARY-RESERVED-ATTRIBUTION]",
+			"signatureSource": "pi-extensions/lib/pi-durable-reservation.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "PDR-CONTEXT-CLOSED",
+			"title": "the adopt context's key test asks only for the four keys, so a context carrying any other key (a session, cwd, model, profile, prompt, module, env, nonce or callback) is decoded",
+			"subject": "pi/pi-durable/bootstrap.mjs",
+			"find": ["\t\tObject.keys(value).sort().join(\",\") !== ADOPT_KEYS.join(\",\")"],
+			"replace": ["\t\t!ADOPT_KEYS.every((key) => Object.hasOwn(value, key))"],
+			"gate": ["bash", "run.sh", "check-pi-durable-beside"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PDR-CONTEXT-CLOSED]",
+			"signatureSource": "pi-extensions/meta-bridge-pi-durable.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "PDR-ADOPT-ROOTS",
+			"title": "the received-root check compares the mismatch count with itself, so an adoption opens under meta roots this process received from elsewhere",
+			"subject": "pi/pi-durable/bootstrap.mjs",
+			"find": ["\tif (mismatched.length > 0) {"],
+			"replace": ["\tif (mismatched.length > mismatched.length) {"],
+			"gate": ["bash", "run.sh", "check-pi-durable-carrier"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PDR-ADOPT-ROOTS]",
+			"signatureSource": "pi-extensions/lib/pi-durable-carrier.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "PDR-ADOPT-BEFORE-LEASE",
+			"title": "adopt mode hands the open the ordinary owner fence instead of the adoption's, so the reservation is read as a live parent's claim and the matching adoption never reaches its lease",
+			"subject": "pi/pi-durable/bootstrap.mjs",
+			"find": ["\tconst fence = adopt === undefined ? OWNER_FENCE : adopt.fence;"],
+			"replace": ["\tconst fence = adopt === undefined ? OWNER_FENCE : OWNER_FENCE;"],
+			"gate": ["bash", "run.sh", "check-pi-durable-carrier"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PDR-ADOPT-BEFORE-LEASE]",
+			"signatureSource": "pi-extensions/lib/pi-durable-carrier.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "PDF-CLOSE-RELEASES-PROVIDER-SOCKETS",
+			"title": "the owned close no longer releases the provider session resources, so a closed host keeps its Codex WebSocket and idle timer and stays alive after a normal close",
+			"subject": "pi/pi-durable/carrier/runtime.js",
+			"find": ["\t\t\t\t\t\t\tcleanupSessionResources();"],
+			"replace": ["\t\t\t\t\t\t\tvoid cleanupSessionResources;"],
+			"gate": ["bash", "run.sh", "check-pi-durable-carrier"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PDF-CLOSE-RELEASES-PROVIDER-SOCKETS]",
+			"signatureSource": "pi-extensions/lib/pi-durable-carrier.test.ts",
 			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
 		}
 	]

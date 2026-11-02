@@ -31,9 +31,10 @@
  *                       seat, #105; nothing is ever created), optionally at ONE literal requested
  *                       cwd (cross-repo fresh, #73); returns a LAUNCH receipt only, and the new
  *                       address arrives later as the sender envelope of the sibling's nonce callback.
- *   - entwurf_resume_call — reopen ONE DORMANT pi or Claude Code citizen under its OWN garden id
- *                       in a visible window; target-only, submits no prompt, LAUNCH and OBSERVATION
- *                       receipts stay apart, the caller is attributed but grants nothing.
+ *   - entwurf_resume_call — reopen ONE DORMANT pi, pi-durable or Claude Code citizen under its OWN
+ *                       garden id in a visible window or herdr tab; target-only, submits no prompt,
+ *                       LAUNCH and OBSERVATION receipts stay apart, the caller is attributed but
+ *                       grants nothing.
  *   - entwurf_retire_call — one operator-requested target, one retirement attempt; actor is not
  *                       permission, and action / append-record / lock-release receipts stay separate.
  *   - entwurf_callback — ZERO-ARGUMENT fresh-sibling callback. Reads ENTWURF_CALLBACK_TARGET +
@@ -115,7 +116,11 @@ import {
 	readMetaSenderMarker,
 	requireBackend,
 } from "../../../pi-extensions/lib/meta-session.ts";
-import { RESUME_CALL_REJECT_HINT, resumeCall } from "../../../pi-extensions/lib/mux-resume-call.ts";
+import {
+	RESUME_CALL_REJECT_HINT,
+	resumeCall,
+	resumePiDurableCall,
+} from "../../../pi-extensions/lib/mux-resume-call.ts";
 import { registerNativeConversation } from "../../../pi-extensions/lib/native-push/register.ts";
 import {
 	makeLocalTraceFact,
@@ -758,8 +763,14 @@ server.tool(
 // #157 G1a: this surface does NOT choose the rail. It hands the fixed tmux mapping below to the
 // shared rail root (`fresh-call-dispatch`), which reads the same capability fact fresh_call reads
 // and, inside herdr, launches the herdr resume instead — never calling this mapping there.
+//
+// #157 B3: a pi-durable resume is the same leaf's second entry, which also carries the fixed adopt
+// projection the v2 side built from its reservation; no other backend can hand it one.
 const tmuxResumeLaunch: VisibleResumeDeps["launch"] = (input) => {
-	const launched = resumeCall({ backend: input.backend, cwd: input.cwd, runtimeArgs: input.runtimeArgs });
+	const launched =
+		input.backend === "pi-durable"
+			? resumePiDurableCall({ cwd: input.cwd, runtimeArgs: input.runtimeArgs, adoptEnv: input.piDurableAdoptEnv })
+			: resumeCall({ backend: input.backend, cwd: input.cwd, runtimeArgs: input.runtimeArgs });
 	return launched.ok
 		? { ok: true, handle: { rail: "tmux", ...launched.receipt } }
 		: { ok: false, reason: launched.reason, hint: RESUME_CALL_REJECT_HINT[launched.reason] };

@@ -10,13 +10,15 @@
  * must equal `record.nativeSessionId`, an addressable read (#52) rather than a plain targeted one,
  * a recorded ACP provider must resolve its bridge.
  *
- * The domain is pi and claude-code (#147 L2). Both own their transcript and re-attach to the same
- * record when their native session reopens; this leaf only names that session. For pi it reads
- * the transcript header (the launch needs its provider/model/cwd). For claude-code it reads no
- * transcript at all — the vendor owns it, and `claude --resume <id>` needs nothing from it — and
- * checks only that the recorded path is an absolute file that still exists. Every other backend
- * is a named refusal: native-push citizens have no resume authority (AGENTS Hard Rule 10), and a
- * durable host is not reopened through Entwurf.
+ * The domain is pi and claude-code (#147 L2), and pi-durable (#157 B3). Each owns its transcript
+ * and re-attaches to the same record when its native session reopens; this leaf only names that
+ * session. For pi it reads the transcript header (the launch needs its provider/model/cwd). For
+ * claude-code it reads no transcript at all — the vendor owns it, and `claude --resume <id>` needs
+ * nothing from it — and checks only that the recorded path is an absolute file that still exists.
+ * For pi-durable it reads nothing beyond the record: the parent's reservation re-reads the record
+ * and its location inside its own holds, and the launched child selects its session from the record
+ * itself, so this leaf only says WHICH backend the address names. Every other backend is a named
+ * refusal: native-push citizens have no resume authority (AGENTS Hard Rule 10).
  *
  * It takes a bare garden id, not a plan: the plan type it used to destructure belonged to
  * the removed transport, and the identity question never needed the rest of it.
@@ -29,7 +31,7 @@ import { getEntwurfExplicitExtensions, readSessionIdentity } from "./entwurf-cor
 import { readAddressableMetaIdentity } from "./meta-session.ts";
 
 /** The backends with a visible same-id resume. A closed set: nothing outside it is reopened. */
-export const RESUME_BACKENDS = ["pi", "claude-code"] as const;
+export const RESUME_BACKENDS = ["pi", "claude-code", "pi-durable"] as const;
 export type ResumeBackend = (typeof RESUME_BACKENDS)[number];
 
 /**
@@ -42,8 +44,7 @@ export type ResumeBackend = (typeof RESUME_BACKENDS)[number];
  * except by looking. A Claude Code or agy garden id is different in kind: nothing is broken,
  * the operator simply asked a capability boundary to do something it does not cover, and the
  * honest answer is a named refusal rather than an error report about a store that is fine. Since
- * #147 L2 the boundary is `RESUME_BACKENDS`; a Codex, agy, Copilot, OMP or pi-durable garden id is
- * this refusal.
+ * #147 L2 the boundary is `RESUME_BACKENDS`; a Codex, agy, Copilot or OMP garden id is this refusal.
  *
  * It carries a `reason` so the caller matches on a FIELD. Parsing the message string would make
  * the wording load-bearing, and re-reading the record to ask "was it pi?" would read an address
@@ -55,7 +56,7 @@ export class ResumeBackendUnsupportedError extends Error {
 	constructor(gardenId: string, backend: string) {
 		super(
 			`resume-launch-identity: ${gardenId} is a ${backend} citizen — same-id resume is a host-adapter relaunch ` +
-				`capability, and its domain is ${RESUME_BACKENDS.join(" and ")}. ` +
+				`capability, and its domain is ${RESUME_BACKENDS.join(", ")}. ` +
 				`This is a capability boundary, not citizen rank.`,
 		);
 		this.name = "ResumeBackendUnsupportedError";
@@ -91,7 +92,19 @@ export interface ClaudeCodeLaunchIdentity {
 	attachIncarnation: string | null;
 }
 
-export type LaunchIdentity = PiLaunchIdentity | ClaudeCodeLaunchIdentity;
+/**
+ * A pi-durable citizen's facts, from the record only (#157 B3). Not launch inputs: the parent's
+ * reservation re-reads the record and its C4 location inside its own record-arm then S_D holds, and
+ * its launch takes the cwd from THAT pair. They are here so the backend the address names is read
+ * once, by the same addressable reader as every other backend.
+ */
+export interface PiDurableLaunchIdentity {
+	backend: "pi-durable";
+	nativeSessionId: string;
+	cwd: string;
+}
+
+export type LaunchIdentity = PiLaunchIdentity | ClaudeCodeLaunchIdentity | PiDurableLaunchIdentity;
 
 /**
  * Claude Code's session id grammar: a lowercase UUID. The value becomes an argv token after
@@ -180,6 +193,12 @@ function resolveClaudeCodeLaunchIdentity(
 export function resolveResumeLaunchIdentity(gardenId: string): LaunchIdentity {
 	const record = readAddressableMetaIdentity(gardenId);
 	if (record.backend === "claude-code") return resolveClaudeCodeLaunchIdentity(gardenId, record);
+	if (record.backend === "pi-durable") {
+		if (!path.isAbsolute(record.cwd)) {
+			throw new Error(`resume-launch-identity: ${gardenId} records a relative cwd ${JSON.stringify(record.cwd)}.`);
+		}
+		return { backend: "pi-durable", nativeSessionId: record.nativeSessionId, cwd: record.cwd };
+	}
 	if (record.backend !== "pi") {
 		throw new ResumeBackendUnsupportedError(gardenId, record.backend);
 	}

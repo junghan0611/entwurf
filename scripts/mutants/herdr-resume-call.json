@@ -184,6 +184,72 @@
 			"timeoutSeconds": 60,
 			"signature": "[QK:HRESUME-IMPORT-FENCE]",
 			"signatureSource": "pi-extensions/lib/herdr-resume-call.test.ts"
+		},
+		{
+			"claim": "HRESUME-PD-ROUTED",
+			"title": "a pi-durable resume inside herdr falls through to the pi-only agent-start path and is refused as an unsupported backend",
+			"subject": "pi-extensions/lib/herdr-resume-call.ts",
+			"find": ["\tif (input.backend === \"pi-durable\") {"],
+			"replace": ["\tif (input.backend === \"pi_durable\") {"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:HRESUME-PD-ROUTED]",
+			"signatureSource": "pi-extensions/lib/herdr-resume-call.test.ts"
+		},
+		{
+			"claim": "HRESUME-PD-PRE-WRITE-REFUSALS",
+			"title": "a control character in the adopt env is no longer refused before the socket, so it reaches herdr",
+			"subject": "pi-extensions/lib/herdr-resume-call.ts",
+			"find": ["\tif (command.some(containsControlChar) || Object.values(launchEnv).some(containsControlChar)) {"],
+			"replace": ["\tif (command.some(containsControlChar)) {"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:HRESUME-PD-PRE-WRITE-REFUSALS]",
+			"signatureSource": "pi-extensions/lib/herdr-resume-call.test.ts"
+		},
+		{
+			"claim": "HRESUME-PD-LAYOUT-PACKET",
+			"title": "the layout env carries the sessions root under the receivers name, so the child refuses adopt-root-mismatch",
+			"subject": "pi-extensions/lib/herdr-resume-call.ts",
+			"find": ["\t\tENTWURF_META_RECEIVERS_DIR: params.adoptEnv.ENTWURF_META_RECEIVERS_DIR,"],
+			"replace": ["\t\tENTWURF_META_RECEIVERS_DIR: params.adoptEnv.ENTWURF_META_SESSIONS_DIR,"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:HRESUME-PD-LAYOUT-PACKET]",
+			"signatureSource": "pi-extensions/lib/herdr-resume-call.test.ts"
+		},
+		{
+			"claim": "HRESUME-PD-SUCCESS-RECEIPT",
+			"title": "the receipt names the pane id as the tab id",
+			"subject": "pi-extensions/lib/herdr-resume-call.ts",
+			"find": ["\t\t\therdrTabId: applied.tabId,"],
+			"replace": ["\t\t\therdrTabId: applied.paneId,"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:HRESUME-PD-SUCCESS-RECEIPT]",
+			"signatureSource": "pi-extensions/lib/herdr-resume-call.test.ts"
+		},
+		{
+			"claim": "HRESUME-PD-WRITE-CERTAINTY",
+			"title": "every layout failure reaches the v2 seam as unknown, so a request herdr never received keeps the reservation forever",
+			"subject": "pi-extensions/lib/herdr-resume-call.ts",
+			"find": ["\t\t\t\trecovery: result.recovery,\n\t\t\t},"],
+			"replace": ["\t\t\t\trecovery: { outcome: \"unknown\" },\n\t\t\t},"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:HRESUME-PD-WRITE-CERTAINTY]",
+			"signatureSource": "pi-extensions/lib/herdr-resume-call.test.ts"
+		},
+		{
+			"claim": "HRESUME-PD-FAILURE-RAIL",
+			"title": "a pi-durable layout failure reaches the v2 seam tagged as the pi rail's herdr tab, so its receipt names a tab create step that never ran",
+			"subject": "pi-extensions/lib/herdr-resume-call.ts",
+			"find": ["\t\t\t\trail: \"herdr-layout\","],
+			"replace": ["\t\t\t\trail: \"herdr\","],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:HRESUME-PD-FAILURE-RAIL]",
+			"signatureSource": "pi-extensions/lib/herdr-resume-call.test.ts"
 		}
 	]
 }

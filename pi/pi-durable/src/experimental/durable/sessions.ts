@@ -39,6 +39,11 @@ export interface FenceAdmission {
 	readonly selectedN: string;
 	/** This call's own `mkdir` created the directory. */
 	readonly created: boolean;
+	/**
+	 * The agent directory exactly as `getAgentDir()` returned it to this open: the one value `directory` was joined
+	 * from, never resolved, normalized or read a second time (#157 B3).
+	 */
+	readonly profile: string;
 }
 
 /**
@@ -83,15 +88,17 @@ async function statIfPresent(path: string): Promise<Stats | undefined> {
 	}
 }
 
-async function sessionRoot(cwdInput: string): Promise<{ cwd: string; root: string }> {
+async function sessionRoot(cwdInput: string): Promise<{ cwd: string; root: string; profile: string }> {
 	const cwd = await realpath(resolve(cwdInput));
+	// Read once: the root is joined from this value, and the fence is handed this same value as it came (#157 B3).
+	const agentDir = getAgentDir();
 	const root = join(
-		getAgentDir(),
+		agentDir,
 		"experimental",
 		"durable-sessions",
 		createHash("sha256").update(cwd).digest("hex").slice(0, 24),
 	);
-	return { cwd, root };
+	return { cwd, root, profile: agentDir };
 }
 
 /** The sessions of `cwd`, most recently written first. Reads names, file times and locks; creates nothing. */
@@ -134,7 +141,7 @@ export async function selectSession(
 	continueSession: boolean,
 	sessionId?: string,
 ): Promise<SessionLocation> {
-	const { cwd, root } = await sessionRoot(cwdInput);
+	const { cwd, root, profile } = await sessionRoot(cwdInput);
 	await mkdir(root, { recursive: true });
 
 	let directory: string;
@@ -161,7 +168,7 @@ export async function selectSession(
 	}
 
 	// The owner fence admits this opener BEFORE the native lease, or refuses with nothing taken (#157 B3).
-	const ticket = await fence.admit({ directory, selectedN: basename(directory), created });
+	const ticket = await fence.admit({ directory, selectedN: basename(directory), created, profile });
 	// A lock left by a crashed process goes stale after 10 s; wait that long before giving up.
 	const lease = lockfile.lock(directory, {
 		realpath: false,

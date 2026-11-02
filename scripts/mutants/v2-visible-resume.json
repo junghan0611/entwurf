@@ -201,10 +201,10 @@
 			"title": "the backend is re-derived instead of taken from the typed error, which is the second read this rail refuses",
 			"subject": "pi-extensions/lib/entwurf-v2-visible-resume.ts",
 			"find": [
-				"\t\t\t\t\t\t`${targetGardenId} is a ${err.backend} citizen; only pi and Claude Code citizens can be reopened ` +"
+				"\t\t\t\t\t\t`${targetGardenId} is a ${err.backend} citizen; only pi, pi-durable and Claude Code citizens can be reopened ` +"
 			],
 			"replace": [
-				"\t\t\t\t\t\t`${targetGardenId} is a citizen of another backend; only pi and Claude Code citizens can be reopened ` +"
+				"\t\t\t\t\t\t`${targetGardenId} is a citizen of another backend; only pi, pi-durable and Claude Code citizens can be reopened ` +"
 			],
 			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
 			"timeoutSeconds": 60,
@@ -558,6 +558,128 @@
 			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
 			"timeoutSeconds": 60,
 			"signature": "[QK:V2RESUME-CC-TMUX-ONLY]",
+			"signatureSource": "pi-extensions/lib/entwurf-v2-visible-resume.test.ts"
+		},
+		{
+			"claim": "V2RESUME-PD-ADOPT-LAUNCH",
+			"title": "the adopt launch normalizes the reservation's raw profile, so the child's SDK reads another profile string than the one its reservation recorded and adopt row 5 refuses every resume",
+			"subject": "pi-extensions/lib/entwurf-v2-visible-resume.ts",
+			"find": ["\t\t\tPI_CODING_AGENT_DIR: reservation.profile,"],
+			"replace": ["\t\t\tPI_CODING_AGENT_DIR: path.resolve(reservation.profile),"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:V2RESUME-PD-ADOPT-LAUNCH]",
+			"signatureSource": "pi-extensions/lib/entwurf-v2-visible-resume.test.ts"
+		},
+		{
+			"claim": "V2RESUME-PD-WITHDRAW-NONE-CREATED",
+			"title": "a launch failure whose recovery is none no longer withdraws, so a herdr decline that created nothing leaves the citizen reserved by a live bridge",
+			"subject": "pi-extensions/lib/entwurf-v2-visible-resume.ts",
+			"find": ["\t\tconst noneCreated = !(\"failure\" in launched) || launched.failure.recovery.outcome === \"none\";"],
+			"replace": ["\t\tconst noneCreated = !(\"failure\" in launched);"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:V2RESUME-PD-WITHDRAW-NONE-CREATED]",
+			"signatureSource": "pi-extensions/lib/entwurf-v2-visible-resume.test.ts"
+		},
+		{
+			"claim": "V2RESUME-PD-KEEP-POSSIBLY-CREATED",
+			"title": "an unknown or orphaned launch outcome is read as none-created and the reservation is withdrawn while a child may still adopt it",
+			"subject": "pi-extensions/lib/entwurf-v2-visible-resume.ts",
+			"find": ["\t\tconst noneCreated = !(\"failure\" in launched) || launched.failure.recovery.outcome === \"none\";"],
+			"replace": [
+				"\t\tconst noneCreated = !(\"failure\" in launched) || launched.failure.recovery.outcome !== \"closed\";"
+			],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:V2RESUME-PD-KEEP-POSSIBLY-CREATED]",
+			"signatureSource": "pi-extensions/lib/entwurf-v2-visible-resume.test.ts"
+		},
+		{
+			"claim": "V2RESUME-PD-THROW-KEEPS",
+			"title": "a launcher that threw withdraws the reservation, though a window may exist whose child can still adopt it",
+			"subject": "pi-extensions/lib/entwurf-v2-visible-resume.ts",
+			"find": [
+				"\t\t\t`entwurf-v2-visible-resume: the pi-durable launch of ${targetGardenId} threw: ${messageOf(err)}${kept}`,"
+			],
+			"replace": [
+				"\t\t\t`entwurf-v2-visible-resume: the pi-durable launch of ${targetGardenId} threw: ${messageOf(err)}${await withdraw()}`,"
+			],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:V2RESUME-PD-THROW-KEEPS]",
+			"signatureSource": "pi-extensions/lib/entwurf-v2-visible-resume.test.ts"
+		},
+		{
+			"claim": "V2RESUME-PD-WITHDRAW-FAILURE-REPORTED",
+			"title": "a failed withdrawal is silently retried, so the answer stops being the outcome of the one withdrawal this call made",
+			"subject": "pi-extensions/lib/entwurf-v2-visible-resume.ts",
+			"find": ["\t\t\tawait deps.withdrawPiDurable(reservation);"],
+			"replace": ["\t\t\tawait deps.withdrawPiDurable(reservation).catch(() => deps.withdrawPiDurable(reservation));"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:V2RESUME-PD-WITHDRAW-FAILURE-REPORTED]",
+			"signatureSource": "pi-extensions/lib/entwurf-v2-visible-resume.test.ts"
+		},
+		{
+			"claim": "V2RESUME-PD-RESERVE-LIVE-REFUSED",
+			"title": "a live holder's reserve refusal is no longer named target-live and surfaces as a raw fence error",
+			"subject": "pi-extensions/lib/entwurf-v2-visible-resume.ts",
+			"find": ["\tif (err.reason === \"owner-live\") {"],
+			"replace": ["\tif (err.reason === \"withdraw-not-own\") {"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:V2RESUME-PD-RESERVE-LIVE-REFUSED]",
+			"signatureSource": "pi-extensions/lib/entwurf-v2-visible-resume.test.ts"
+		},
+		{
+			"claim": "V2RESUME-PD-OBSERVE-BOUNDED-WAIT",
+			"title": "the adoption observation reads once and gives up, so a child that adopts a second later is reported not-yet-adopted",
+			"subject": "pi-extensions/lib/entwurf-v2-visible-resume.ts",
+			"find": [
+				"\t\tif (deps.now() - started >= timeoutMs) return { kind: \"not-yet-adopted\", waitedMs: deps.now() - started };"
+			],
+			"replace": [
+				"\t\tif (deps.now() - started >= 0) return { kind: \"not-yet-adopted\", waitedMs: deps.now() - started };"
+			],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:V2RESUME-PD-OBSERVE-BOUNDED-WAIT]",
+			"signatureSource": "pi-extensions/lib/entwurf-v2-visible-resume.test.ts"
+		},
+		{
+			"claim": "V2RESUME-PD-OBSERVE-CLASSES",
+			"title": "an unreadable D claim is reported as reservation-lost instead of unobserved with its cause",
+			"subject": "pi-extensions/lib/entwurf-v2-visible-resume.ts",
+			"find": [
+				"\t\t\treturn { kind: \"unobserved\", reason: seen.reason, detail: seen.detail, waitedMs: deps.now() - started };"
+			],
+			"replace": ["\t\t\treturn { kind: \"reservation-lost\", waitedMs: deps.now() - started };"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:V2RESUME-PD-OBSERVE-CLASSES]",
+			"signatureSource": "pi-extensions/lib/entwurf-v2-visible-resume.test.ts"
+		},
+		{
+			"claim": "V2RESUME-PD-RENDER",
+			"title": "the adopted receipt stops saying an adoption is not readiness, so it reads as the citizen being back",
+			"subject": "pi-extensions/lib/entwurf-v2-visible-resume.ts",
+			"find": ["adoption of this reservation. That is not ` +"],
+			"replace": ["adoption of this reservation. That is ` +"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:V2RESUME-PD-RENDER]",
+			"signatureSource": "pi-extensions/lib/entwurf-v2-visible-resume.test.ts"
+		},
+		{
+			"claim": "V2RESUME-PD-LAUNCH-FAILED-STEP",
+			"title": "a pi-durable layout.apply failure is rendered as the pi rail's tab create failure, sending the operator to a tab create step that never ran and to a control socket pi-durable does not have",
+			"subject": "pi-extensions/lib/entwurf-v2-visible-resume.ts",
+			"find": ["\tconst layout = f.rail === \"herdr-layout\";"],
+			"replace": ["\tconst layout = false && f.rail === \"herdr-layout\";"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:V2RESUME-PD-LAUNCH-FAILED-STEP]",
 			"signatureSource": "pi-extensions/lib/entwurf-v2-visible-resume.test.ts"
 		}
 	]

@@ -1,6 +1,11 @@
 import type { AttachedReplicatedState } from "@earendil-works/chord";
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
-import { clampThinkingLevel, getSupportedThinkingLevels, type ModelThinkingLevel } from "@earendil-works/pi-ai";
+import {
+	clampThinkingLevel,
+	cleanupSessionResources,
+	getSupportedThinkingLevels,
+	type ModelThinkingLevel,
+} from "@earendil-works/pi-ai";
 import {
 	type AgentState,
 	type Conversation,
@@ -479,6 +484,15 @@ export async function openDurable(options: OpenDurableOptions): Promise<OpenDura
 					} catch (error) {
 						failures.push(error);
 					} finally {
+						// The provider connections the turns left open for reuse: pi-ai keeps a Codex WebSocket per provider
+						// session on a five-minute idle timer, and pi's AgentSession releases them on dispose. Without the same
+						// release here a closed host stays alive until that timer (#157 S3 LIVE-R1). No id: the provider session
+						// ids are docs of the storage this process alone opened, and a host process holds this one Session.
+						try {
+							cleanupSessionResources();
+						} catch (error) {
+							failures.push(error);
+						}
 						try {
 							await location.release();
 						} catch (error) {

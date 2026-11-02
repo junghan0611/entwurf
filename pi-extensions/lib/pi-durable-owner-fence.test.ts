@@ -9,6 +9,13 @@
  * from are literals written here as raw JSON; claims are read back as raw JSON; an owner's start key is read from
  * `/proc` here, and a proven-dead owner is a real child process that has exited. The one local mock is node:crypto's
  * `randomBytes`, passed through except where a cell needs a temp name it can occupy first.
+ *
+ * Every D is joined from a plain agent directory the way the owned open joins it, and an admission's own claim (schema
+ * 2) records the profile its caller handed in. Schema 1, the pre-profile build's claim, is covered only where a cell
+ * seeds it as a raw literal: the uncertain, other-host, malformed, dead-reclaim, unattributed-lease, resource-mismatch
+ * and closed-with-lease rows, the closed receipt an admission takes over, and the reader cells. The lifetime, re-entry,
+ * generation and transaction cells run on schema 2 claims this fence wrote itself, and the temp-inert cell's schema 1
+ * body is never read as a claim. This is not a schema × state matrix of schema 1.
  */
 import { spawn } from "node:child_process";
 import * as fs from "node:fs";
@@ -35,6 +42,7 @@ const CLAIM = "entwurf-owner.json";
 const TX = "entwurf-owner.tx";
 const N = "1759622400000-0b5e2a4c-1f3d-4e8a-9c7b-2d6f8e1a3c5b";
 const OTHER_N = "1759622499999-6a7b8c9d-0e1f-4a2b-8c3d-4e5f6a7b8c9d";
+const THIRD_N = "1759622455555-1c2d3e4f-5a6b-4c7d-8e9f-0a1b2c3d4e5f";
 const HEX32 = /^[0-9a-f]{32}$/;
 const KEYS = [
 	"schemaVersion",
@@ -47,6 +55,8 @@ const KEYS = [
 	"lease",
 	"writtenAt",
 ];
+/** A cwd hash segment of the layout; the fence never recomputes it. */
+const CWD_HASH = "0123456789abcdef01234567";
 const GEN_A = "a".repeat(32);
 const GEN_B = "b".repeat(32);
 const AT = "2026-11-02T00:00:00.000Z";
@@ -83,6 +93,7 @@ async function deadOwner(): Promise<Owner> {
 }
 
 let tmp: string;
+let profile: string;
 let root: string;
 let dead: Owner;
 
@@ -94,8 +105,9 @@ beforeEach(() => {
 	entropy.randomBytes.mockReset();
 	entropy.randomBytes.mockImplementation(realCrypto.randomBytes as never);
 	tmp = fs.mkdtempSync(path.join(os.tmpdir(), "pdf-"));
-	root = path.join(tmp, "root");
-	fs.mkdirSync(root);
+	profile = path.join(tmp, "agent");
+	root = path.join(profile, "experimental", "durable-sessions", CWD_HASH);
+	fs.mkdirSync(root, { recursive: true });
 });
 
 afterEach(() => {
@@ -137,7 +149,7 @@ function writeRaw(d: string, body: unknown): void {
 }
 
 const admit = (d: string, created: boolean, selectedN = N) =>
-	createPiDurableOwnerFence().admit({ directory: d, selectedN, created });
+	createPiDurableOwnerFence().admit({ directory: d, selectedN, created, profile });
 
 async function reasonOf(run: () => Promise<unknown>): Promise<string | undefined> {
 	try {
@@ -154,9 +166,9 @@ describe("admission of an absent claim", () => {
 		await admit(d, true);
 		const claim = readRaw(d);
 		expect(Object.keys(claim).sort()).toEqual([...KEYS].sort());
-		expect(claim.schemaVersion).toBe(1);
+		expect(claim.schemaVersion).toBe(2);
 		expect(claim.resource).toBe(fs.realpathSync(d));
-		expect(claim.selected).toEqual({ n: N, directory: d });
+		expect(claim.selected).toEqual({ n: N, directory: d, profile });
 		expect([claim.state, claim.lease]).toEqual(["fenced", "never-held"]);
 		expect(claim.owner).toEqual(self());
 		expect(claim.generation).toMatch(HEX32);
@@ -290,6 +302,51 @@ describe("owners that are not proven dead", () => {
 			expect(await reasonOf(() => admit(d, false, path.basename(d))), cell.name).toBe(cell.reason);
 			expect(listing(d), cell.name).toEqual(before);
 			if (claimBefore !== undefined) expect(bytes(claimPath(d)), cell.name).toEqual(claimBefore);
+		}
+	});
+});
+
+describe("the claim's two schemas (#157 B3 I-1)", () => {
+	it("[QK:PDR-V2-READER-STRICT] a schema 2 claim whose directory is not joined from its profile, whose profile is missing or relative, or whose selected holds a stray key, a schema 1 claim carrying a profile, and an unknown schema are unreadable; a valid schema 2 and a valid schema 1 claim are read and judged; nothing is written", async () => {
+		const body = (d: string, schemaVersion: number, selected: Record<string, unknown>) => ({
+			...rawClaim(d, { state: "leased", lease: "held", owner: self(), n: path.basename(d) }),
+			schemaVersion,
+			selected,
+		});
+		const cells: { name: string; reason: string; claim: (d: string, n: string) => unknown }[] = [
+			{ name: "v2", reason: "owner-live", claim: (d, n) => body(d, 2, { n, directory: d, profile }) },
+			{ name: "v1", reason: "owner-live", claim: (d, n) => body(d, 1, { n, directory: d }) },
+			{
+				name: "v2-not-joined",
+				reason: "claim-unreadable",
+				claim: (d, n) => body(d, 2, { n, directory: d, profile: path.join(tmp, "another-agent") }),
+			},
+			{ name: "v2-no-profile", reason: "claim-unreadable", claim: (d, n) => body(d, 2, { n, directory: d }) },
+			{
+				name: "v2-relative-profile",
+				reason: "claim-unreadable",
+				claim: (d, n) => body(d, 2, { n, directory: d, profile: "agent" }),
+			},
+			{
+				name: "v2-stray-selected-key",
+				reason: "claim-unreadable",
+				claim: (d, n) => body(d, 2, { n, directory: d, profile, stray: true }),
+			},
+			{
+				name: "v1-with-profile",
+				reason: "claim-unreadable",
+				claim: (d, n) => body(d, 1, { n, directory: d, profile }),
+			},
+			{ name: "unknown-schema", reason: "claim-unreadable", claim: (d, n) => body(d, 3, { n, directory: d, profile }) },
+		];
+		for (const [index, cell] of cells.entries()) {
+			const n = `${String(index).padStart(13, "0")}-00000000-0000-0000-0000-000000000003`;
+			const d = makeD(n);
+			writeRaw(d, cell.claim(d, n));
+			const before = bytes(claimPath(d));
+			expect(await reasonOf(() => admit(d, false, n)), cell.name).toBe(cell.reason);
+			expect(bytes(claimPath(d)), cell.name).toEqual(before);
+			expect(listing(d), cell.name).toEqual([CLAIM]);
 		}
 	});
 });
@@ -459,6 +516,38 @@ describe("what the fence leaves in D", () => {
 			"never-opened",
 			"never-held",
 		]);
+
+		// A schema 1 receipt, seeded as raw JSON: closed, released, its storage closed, no lease present. The next
+		// admission reads it and writes its own schema 2 claim with the profile ITS caller read, here spelled with a
+		// trailing separator: the same join, other bytes, and nothing the old claim could have supplied.
+		const legacy = makeD(THIRD_N);
+		writeRaw(
+			legacy,
+			rawClaim(legacy, {
+				state: "closed",
+				lease: "released",
+				owner: dead,
+				n: THIRD_N,
+				end: { at: AT, storage: "closed", lease: "released" },
+			}),
+		);
+		const callerProfile = `${profile}/`;
+		await createPiDurableOwnerFence().admit({
+			directory: legacy,
+			selectedN: THIRD_N,
+			created: false,
+			profile: callerProfile,
+		});
+		const taken = readRaw(legacy);
+		expect(Object.keys(taken).sort()).toEqual([...KEYS].sort());
+		expect(taken.schemaVersion).toBe(2);
+		expect(taken.selected).toEqual({ n: THIRD_N, directory: legacy, profile: callerProfile });
+		expect([taken.state, taken.lease]).toEqual(["fenced", "never-held"]);
+		expect(taken.owner).toEqual(self());
+		expect(taken.generation).toMatch(HEX32);
+		expect(taken.generation).not.toBe(GEN_A);
+		expect(taken.firstParticipation).toEqual({ at: AT, generation: GEN_A, from: "fresh" });
+		expect(listing(legacy)).toEqual([CLAIM]);
 	});
 
 	it("[QK:PDF-TMP-INERT] a leftover atomic temp holding a valid-looking claim is never read as the claim, and stays as it was", async () => {

@@ -2516,6 +2516,69 @@ describe("pi-durable bootstrap — explicit fresh arguments (stub runtime, unit 
 		expect(process.env.SESSION_PROBE_MARK).toBeUndefined();
 	});
 
+	it("[QK:PDR-CONTEXT-CLOSED] --entwurf-adopt takes exactly {v:1, gardenId, metaRoot, sourceGeneration}: not JSON, not one object, a missing or extra key (a session, cwd, model, profile, prompt, module, env, nonce or callback included), another version, a null, a malformed garden id or generation and a relative root are refused as adopt-context-invalid, and --continue/-c, --resume, --session or any fresh-only flag beside it as adopt-exclusive, by name before operator-native module evaluation, TUI load, open or birth", async () => {
+		const probe = path.join(root, "adopt-probe.mjs");
+		fs.writeFileSync(probe, 'process.env.ADOPT_PROBE_MARK = "evaluated";\nexport default { name: "adopt-probe" };\n');
+		const valid = { v: 1, gardenId: "20261102T080000-a1b2c3", metaRoot: root, sourceGeneration: "c".repeat(32) };
+		const adopt = (context: unknown) => [
+			"--entwurf-adopt",
+			typeof context === "string" ? context : JSON.stringify(context),
+			"--native-module",
+			probe,
+		];
+		const invalid = /^adopt-context-invalid: /;
+		const cases: [string[], RegExp][] = [
+			[adopt("not json"), invalid],
+			[adopt([valid]), invalid],
+			[adopt(null), invalid],
+			[adopt({ ...valid, v: 2 }), invalid],
+			[adopt({ ...valid, v: "1" }), invalid],
+			[adopt({ ...valid, gardenId: null }), invalid],
+			[adopt({ ...valid, gardenId: "not-a-garden-id" }), invalid],
+			[adopt({ ...valid, sourceGeneration: "c".repeat(31) }), invalid],
+			[adopt({ ...valid, sourceGeneration: "C".repeat(32) }), invalid],
+			[adopt({ ...valid, metaRoot: "relative/meta" }), invalid],
+		];
+		for (const key of ["v", "gardenId", "metaRoot", "sourceGeneration"]) {
+			cases.push([adopt(Object.fromEntries(Object.entries(valid).filter(([name]) => name !== key))), invalid]);
+		}
+		for (const key of [
+			"session",
+			"n",
+			"cwd",
+			"model",
+			"profile",
+			"prompt",
+			"task",
+			"module",
+			"env",
+			"nonce",
+			"callback",
+		]) {
+			cases.push([adopt({ ...valid, [key]: "x" }), invalid]);
+		}
+		for (const beside of [
+			["--continue"],
+			["-c"],
+			["--resume"],
+			["--session", SESSION_ID],
+			["--provider", "loopback"],
+			["--model", "scripted"],
+			["--width", "task-wide"],
+			["--entwurf-bootstrap", PAYLOAD],
+		]) {
+			// `-c` is named by its long form, as the refusal of --session names it.
+			const named = beside[0] === "-c" ? "--continue" : beside[0];
+			cases.push([[...adopt(valid), ...beside], new RegExp(`^adopt-exclusive: ${named} `)]);
+		}
+		for (const [argv, reason] of cases) {
+			const r = await refused(argv);
+			expect(r.error?.message, argv.join(" ")).toMatch(reason);
+			expect([r.loads, r.opened, r.minted], argv.join(" ")).toEqual([0, 0, false]);
+		}
+		expect(process.env.ADOPT_PROBE_MARK).toBeUndefined();
+	});
+
 	it("[QK:PI-DURABLE-FIRST-INPUT-ONCE] the launcher's task is admitted to the root exactly once, after the birth and before the TUI runs; without a payload nothing is submitted", async () => {
 		const durable = fakeFresh();
 		const t = tui(durable.record);
@@ -2692,6 +2755,7 @@ describe("pi-durable bootstrap — the packaged compiled closure (needs a built 
 			(m) => m[1] as string,
 		);
 		expect(specifiers.filter((sp) => sp.startsWith("."))).toEqual([
+			"../../mcp/entwurf-bridge/dist/pi-extensions/lib/meta-session.js",
 			"../../mcp/entwurf-bridge/dist/pi-extensions/lib/pi-durable-owner-fence.js",
 			"../../mcp/entwurf-bridge/dist/pi-extensions/meta-bridge-omp.js",
 			"../../mcp/entwurf-bridge/dist/pi-extensions/meta-bridge-pi-durable.js",

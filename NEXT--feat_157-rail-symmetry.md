@@ -2,41 +2,37 @@
 
 # RAIL — 현재 좌표
 
-- [x] **1. Foundation/H1/G1a.** main2917917, feature0e04bf6/c203209 push와 exact-SHA CI.
-- [x] **2. Herdr Pi same-id 복귀 n=1.** 실제 no-new-prompt/recall 관측, docs2aaf856.
-- [ ] **3. pi-durable × Herdr.** ← CURRENT: 닫힌 fresh/cwd/status·locator·lifetime-fence/supply의 **미푸시 체크포인트**. 이후 reservation/adoption·public same-id 복귀로 돌아간다.
-- [ ] **4. 3번 전체 검증·최종 commit/feature push → notebook 자문·구멍 보완 → Claude Code 대칭/통합 CLI.** ← PAUSED: 안전한 public PD resume 미완. main/release 별도 승인.
+- [x] **1. Foundation/H1/G1a.** main2917917; feature0e04bf6/c203209 push와 exact-SHA CI.
+- [x] **2. Herdr Pi same-id 복귀 n=1.** no-new-prompt/recall 관측, docs2aaf856.
+- [x] **3. pi-durable × Herdr 개발·로컬 검증 묶음.** public same-id 채택·Terra 회상 n1, 종료 정리·R17·귀속 하네스 보정, 마지막 FULL/package green. 릴리즈/운영 갱신 수용과는 구분한다.
+- [ ] **4. 요청한 로컬 커밋 → 기존 형제 합동 검수·보정 → Claude Code 대칭·entwurf 커맨드 통합.** ← CURRENT. 목표 **0.50.0**, push/version/tag/release/운영판 업데이트는 별도 지시.
 
 # NOW
 
-- **GLG 최신 승인:** “중간 체크퍼인트를 하자”(2026-11-02). 완료 묶음의 로컬 커밋만 먼저 허용했다. main이 범위/검수/정상 hooks·scanner/commit을 소유하며 **이번 checkpoint는 push·agenda·3번 완료·최종 후보 수용이 아니다.** HEAD d612913에서 시작, 스테이징과 커밋은 수행 후 증거로 남긴다.
-- **Next:** A1 source/literal 수용(b6d618) 뒤 새53-path 후보를 봉인 → managed build와 영향 focused/manifest → notebook의 D1–D4 폐쇄 → 정상 hooks/checkpoint commit. main67b624로 다른 쓰기를 다시 동결했다. 이 파일이 checkpoint 커밋에 들어간 상태로 복귀하면 git log/issue 최신 영수증을 확인하고 아래 Return으로 간다. 새 형제 생성/임의 resume/push는 없다.
-- **Checkpoint 경계:** fresh A-L1/A-L1x/A-L2, metadata 개정13–16, C4 locator, native pre-lease fence와 필수 compiled-unit preflight만. reservation/adoption/public PD resume 코드는 없고 현재 public resume은 계속 refuse한다. 기존 source/focused 검수는 아래와 같지만 새 SHA의 PARTIAL kill-power/FULL/package/Native LIVE/CI는 미측정이다. 최종 landing 전 관련 PARTIAL/FULL/native floor는 그대로 남는다.
-- **Return:** checkpoint가 닫히면 이미 도착한 reservation/adoption **L2 계약 문서** `/tmp/e157h/B3-RESERVATION-ADOPTION-CONTRACT-L2.md`(324e66c38eb7210aba6980e3dee909a86b48efb418a9807003731f63bb757256,309줄)를 읽고 Astra567753에 재검수한다. main8cc78a는 외부 문서 보정+명명된 root-consumer source 확인만 승인했다. 코드/test/build/emission/Native 쓰기 GO는 아직 아니다.
+- **사용자 최신 요청:** 현재 미커밋 전체 검수 → 커밋 → 합동 검수. main은32파일(29tracked+3untracked)을직접검수했다. blocking없고 **P2두건을고치지않고공개한로컬checkpoint**로남긴다. 검증된productionbytes는변경안함. 이NEXT는완료한floor뒤handoff좌표만갱신했다. 루트NEXT/ROADMAP/CHANGELOG는변경하지않는다.
+- **다음:** 로컬커밋완료를git log/status로확인 → notebook코디b22677·기존Terra·기존구현/검수형제들에게같은SHA로유한source/doc검수. 수정전발견사항을main에모아 **한보정bundle**로결정,새모델/운영probe/장시간gate를각자돌리지않음. 기존Terra의owner-facts관측: **20261101T123618-a20739**,exactcwd=이repo,backendpi/alive/modelopenai-codex/gpt-6.1-terra(13시대현재관측). 임의resume/fresh대체없음.
+- **열린P2(커밋의knownnonblocking후속):** (1) entwurf-v2-visible-resume.ts824–826 철회실패catch가무조건‘예약유지’를단정. donorprojectioncommit뒤tx-release-failed면실제claim은이미복원될수있다. unknown상태를단정하지않는오류안내/한정회귀가필요. (2) 지원domain확장뒤README118/docs-durable-native-support67/AGENTS74·126 등live문서가pi·Claude-only로남음. 합동문서보정으로닫되역사oracle/이전실측은수정하지않음. **이둘은해결됐다고말하지않으며출하/운영갱신전열린사항**.
+- **주검수 근거:** `/tmp/e157h/s3-carrier-a1/main-review-before-commit.md`(32파일/current source 직접판독,상속실측구분). root74를다시돌리거나sourcefix를몰래추가한것없음. userrequestednative review 도구는이대화검수준비일뿐독립reviewer/자동fixloop아님.
 
-## 복귀할 계약 — L1을 구현하지 않는다
+# 완료 증거 — 후보를 합치지 않는다
 
-- L1 `/tmp/e157h/B3-RESERVATION-ADOPTION-CONTRACT-L1.md`, SHA **1fd7a74f340b7f21d5f7dfc128ee15e773ffc4961767eb8246714cbca6792770**. main 전체 판독, Astra714323에서 새 binding serialization Blocker B1과 Defect D1–D5. 기존 guard/supply closure를 뒤집는 검수가 아니다.
-- **B1:** parent per-target → record-arm → S_D, child record-arm → S_D. 같은 hold의 현재 record/C4 pair와 reservation.attachIncarnation을 정확히 비교하고, launch/native lease/storage/attach 전에 내부 lock을 푼다. child per-target 대기/역순/launch 중 arm 보유 금지.
-- **D1/D2:** 현재 예약자 liveness와 flattened last-native donor의 profile 귀속을 분리한다. absent/live 행이 profile precheck에 가려지면 안 된다. reserve의 lease absent/present-attributed snapshot을 보존하고, 재예약이 새 present를 baseline으로 세탁하지 않는다. presence로 ABA/비참여 전체를 증명하지 않는다.
-- **D3:** sessionRoot가 이미 부르는 **getAgentDir() 반환값을 한 번 잡아** root와 FenceAdmission/selected에 동일하게 보존하는 방향을 채택했다. dirname4(selectedD)는 layout 검산이지 원 SDK 입력 복원이 아니다(dirname3는 폐기). old claim의 원값 부재는 추정 없이 profile-unattributed/public refuse, 기존 lifetime exclusion은 보존한다. MetaV3/C4/credential 내용은 바꾸지 않는다. owned source·정규 emitter/pin/compiled proof는 미래 별도 GO다.
-- **D4/D5:** donor body 전체 복사가 아닌 bounded state projection의 출처/유지·폐기 표, 새 generation/writtenAt, 비재귀 from을 명시한다. adoptedFrom은 필요한 일반 전이와 종료까지 보존하며 adopted-ended/failed와 lost를 구분한다. 채택 증거는 ready/alive/task 성공이 아니다.
-- **확정한 기술 선택:** 검증된 resource closed/released라면 env cleanup 실패도 eligible, 옛 unarmed-existing history를 영구 veto로 쓰지 않음. fixed closed-JSON argv, callback pair 재사용 금지. definite-none-created의 own reserved+self+exact-gen donor-state 복원, unknown은 보존. 새 일반 env bag/registry/TTL/복구 verb 없음.
-- **Root gate:** 표준 single metaRoot만, split은 reserve 전 거절. contact의 explicit4roots뿐 아니라 host/SDK tool child와 module-scope cached default의 도달 집합을 확인해야 한다. SDK profile과 metadata 주소 root는 별개다. 필요 fixed launch env도 닫힌 필드 계약으로만 제안한다.
+- **마지막 FULL(lead915040 8aee9e/main원receipt전문+exit/tail직접판독):** [portable6568776991](https://github.com/junghan0611/entwurf/issues/157#issuecomment-6568776991), DM883. `/tmp/e157h/s3-carrier-a1/RECEIPT.md`d3c34dbe…。candidate **fd795676**(HEAD46c7c776+미커밋productiondiff,noNEXT). full-r1 12:45:32→13:01:52KST/**978s exit0**,core(lint/4types/vitest/root922/contracts)+hermetic+package/check-pack **664files/invariants pass**. qualification body가아니다.
+- **최종 carrier PARTIAL:** candidatefd795676에**51/51 KILLED**,controls green,1643s. receipt d15d3d5e…。SELF-CLOSE mutant는이제ownQK로실패. unmutatedcontrol carrier62/type/lint/manifest1471 통과. 단일mutantdiag복원741files동일/Fablea743ce B0/D0/O2. 이전report전abort→QKskip은APP_ORACLEchosen reason기록+returned재단언한leaf로수선했고원가드/원SELF-CLOSE assert는그대로.
+- **원0b0c728e의별도PARTIAL:** agent-guidance14/mux-resume17/v2-visible-resume80/PD-beside51/root74 green,carrier50/51 RED(WRONG-REASON). root **8424s/140분**은한번만실행,최종후보의kill로재명명안함. carrier하네스만달라root74의ownsubject/signature/oracle불변,새FULL에서rootunmutatedcontrol922를확인하는범위로main995784수용. root의너무넓은922테스트×74변이좌표는향후별도좁힘대상이지현재전체재실행이유아님.
+- **FULL 원red/복구:** full/287s는coregreen뒤hermetic freshness red/package未실행. test.ts수정뒤managedbuild누락이원인. main6bc155로정상build1회후dist全99files/108entries의keyset/mode/bytes동일+새mtime검증→새frozen FULL green. 원실패raw보존. 성공floor의check-pack도declaredprepackbuild를실행해distmtime108개가13:01:48로변경됐지만source/index/Next/pin과distbytes는동일. **mtime불변인것처럼말하지않음**.
+- **종료 잔류/API0:** `/tmp/e157h/s3-linger-r1/RECEIPT.md`b23bcc11…。pi-ai1.4 Codexsocket의ref'd5분idlecache,loopback/fake-token/vendor0/profile0에서cleanup전20s timeout124→정상cleanup후0.44s/handles[]。ownedruntime close finally `cleanupSessionResources()`/canonical emission·pin/WIRE_ORACLE연결종료QK로수선,강제exit/kill/새종료manager없음. R17문구도reviewedliteral층/Fablefcc4d1 B0/D0/O6,원oracle재생성안함.
+- **실 Herdr public n1는이전82b5ec36후보:** [portable6566126053](https://github.com/junghan0611/entwurf/issues/157#issuecomment-6566126053)/DM872, `/tmp/e157h/s3-pd-live-r1/RECEIPT.md`71c21b37…。T **20261102T091526-fdad9c**,N **1793578526845-ff5d0b8a-774c-4608-ae85-19fa17ea3bbd**. publicfresh→ACK→SDKclosed/released→target-onlypublicresume→ONE layout.apply/newtab→1503msadopted/newbinding+childowner→fact없는질문에 **scene-ember-0aa81435** 회상. resume새prompt없음,seed1+recall1/callers는합성fixture·모델turn0。10pids/2socketsgone/기록보존。종료수선전vendorLIVE를최종후보재실측으로바꾸지않는다.
+- **LIVE허가:** 지정model **openai-codex/gpt-6.1-terra**,기존인가SDKprofile정상사용+새testcwdhash **72ded2f1571884c1945f79dd** 아래N1개만;인증과session이같은profile인제약을설명하고직접승인받았다. credential복사/symlink/proxy없음。HOME/XDG/meta/control/locks/socket/Herdr는private,운영설치/기존시민안건드림。SDK정상tokenrefresh가능고지/OAuth실제쓰기未測。운영업데이트·직접사용은사용자가나중에한다.
 
-# RECENT — 닫힌 증거는 후보별로만
+# 계약·남은 출하 경계
 
-- **Checkpoint review/A1:** 원 ac1013cd52-path 후보는 focused10groups0 뒤 notebook 검수에서 C4 wx실패 후 foreign temp 삭제 경로가 발견돼 커밋하지 않았다. 원후보·raw를 보존했다. A1은 exclusive open 성공 직후 ownership 표시/fd write·close/자기tmp만cleanup, 실제collision의 bytes/dev+ino 보존 QK+mutant(PD140), temp residue 문구 구분, R16 cwd출처 literal와 stale bridge 주석을 수선했다. Astra b6d618의 source/literal 수용이며 실행 결과가 아니다. R16 new literal은 producer 편집 후 독립 검토했음을 명시했고, 옛13–15/original/1748은 보존했다. 새후보의 build/focused 영수증은 `/tmp/e157h/checkpoint-r2/`와 issue의 후속 보고를 따른다. 원1bad revision pointer는 a82251의 named allowlist 보정 뒤 static0bad/1426unique일 뿐 kill은 미측정이다.
+- 원계약 `/tmp/e157h/B3-RESERVATION-ADOPTION-CONTRACT-L2.md` + `...-L3-A1.md` **9166b9ff3d57fc8be2ab6ef407ffdf19c5f0cb365b0a0b1f7e58a279a54cb15b**. 실제fullfilename사용. record단독주소;parentper-target→arm→S_D/childarm→S_D/lease전내부lock해제;Rphysicalclaim/tx와Slogicalsidecar분리;rawprofile1+표준metaRoot파생4 fixed5;closed`--entwurf-adopt {v:1,gardenId,metaRoot,sourceGeneration}`。definite-nonecreated에만ownreserved철회,unknown유지;adopted는ready/turn성공이아님,readfailureunobserved。
+- **未測/비승계:** finalcandidate의tmuxactual/실OAuthwrite/SQLite내용/G-abandon/운영readerrollout/exact-SHA CI·registry/releaseacceptance。QK4는cache/precheck자체가없어행동subject없는구조GAP。ownerclaim schema2/필수profile로구reader는새claim거절,롤아웃정합성필요。로컬FULL을실제배포/운영업데이트승인으로말하지않음.
+- sourcecheckpoint부모HEAD **46c7c776c7fed9001be4498ea024cfd214f4347f**,branch **feat/157-rail-symmetry**. 이전I2 [6565190492](https://github.com/junghan0611/entwurf/issues/157#issuecomment-6565190492)/DM869,I1 [6564439775](https://github.com/junghan0611/entwurf/issues/157#issuecomment-6564439775)。로컬커밋요청만있고이번push/agenda/version/tag없음.
 
-- **B3 source/focused:** [portable6561973609](https://github.com/junghan0611/entwurf/issues/157#issuecomment-6561973609), `BASELINE.md`의2026-11-02 항목. C4 sourcee5ddd5/compiledc67cb1, fence amendment574475, supplyff250b를 구분한다. supply의14 groups는0(root48files874/PD110/carrier58/native14/HFC47+21/MUX343/4 type fences/lint/install/cap37/bridge19). 139 durable/1425 unique claims는 정적 inventory지 kill 결과가 아니다.
-- **Artifacts:** SDK/chord1.4.0 및 origin 유지. emitted runtime SHA **37fe7bc4d66232032bb59afe18931ce25f6286bcd9747f2fbcf09d45044a1790**. supply leaf는 emitter 없이 compiled verifier/preflight2개만 byte 변경;99files/108entries의 새 mtime subject에서 postbuild/postgate seal 동일. 후속 docs 승격은 다른 surface다.
-- **A-L1x/A-L2:** [6559408491](https://github.com/junghan0611/entwurf/issues/157#issuecomment-6559408491), DM863. 실제 일반 Pi caller-cwd/status n=1, 해당 subject PARTIAL153/package660. **A-L1 PD fresh R13:** [6557466848](https://github.com/junghan0611/entwurf/issues/157#issuecomment-6557466848), DM862, 별도 subject PARTIAL165/package660. 현재 guard 후보에 승계하지 않는다.
-- **B1/Stage2/birth:** local d612913의 native --session 동일 ID n=1과 PARTIAL181은 [6555677872](https://github.com/junghan0611/entwurf/issues/157#issuecomment-6555677872). Pi same-id [6553792285](https://github.com/junghan0611/entwurf/issues/157#issuecomment-6553792285), PD no-input birth/arm [6554100558](https://github.com/junghan0611/entwurf/issues/157#issuecomment-6554100558). birth는 watch/delivery 증명이 아니다.
+# 역할·안전
 
-# 안전·증거·역할
-
-- **승인 범위:** GLG의 “ok 해보자 dm 보고 왔어”는 [6560478307](https://github.com/junghan0611/entwurf/issues/157#issuecomment-6560478307)의 in-D app owner/tx/temp metadata와 crash residue fail-closed 비용에 대한 동의다. DB/credential 읽기·수선·복사·profile 설치 변경, working 시민 lifecycle, public/LIVE/push의 포괄 권한이 아니다.
-- **절차:** 첫 예상 밖 command/read/preparation 오류는 원자료+실제 exit(도구 오류에는 발명 금지)를 보존하고 STOP, main named recovery 전 재시도/수선 없음. 정상 hooks/shared scanner, 두 verify_deps_before_run=error, scripts-off fixture install. 이 checkout/브랜치만 개발, 개발 clone/worktree 금지. 긴 명령은 default-socket tmux+raw+remain-on-exit, 인계까지 view 보존.
-- **원 STOP 보존:** checkpoint scp1→정확 archive named recovery, notebook peer의 git128/누락stderr·Perl오탐후재계수·postSTOP판독도 보존한다. b22677의 별도 sealed-source 확인과 A1검수로 원판독을 소급 clean이라 하지 않는다. formatter1 뒤 무허가 write/greens, compiled oracle STOP, old97 byte backup 부재·R1 tmux 조기 제거, A-L1x argv-tail R1, read-glob/ENOENT7292f3와574475 recovery. 후속 green으로 clean procedure를 소급 주장하지 않는다. 원 scoped raw/receipt는 `/tmp/e157h/`, 핵심 교차호스트 근거는 위 portable에 있다. `g3-pd-birth-r1/raw/s06-ss-all.tmp`는 미열람/미공유 격리 유지.
-- **금지:** Entwurf 소유 SQLite open/read/copy/hydration/전수 scan/latest 선택·lock 수선, operator SDK/auth/login/PATH/profile/install/SSH/model rail 변경, watcher/TTL takeover, root NEXT/ROADMAP/CHANGELOG/Org 변경. native SDK의 허가된 fixture 정상 동작만 허용한다.
-- **역할:** main68bd94=routing/NEXT/commit/DM, Opus915040=구현·관측, Astra567753=독립검수, notebookb22677(+기존9fc008)=후보별 유한 검수/최종 push 후 자문. **Pi Opus150a5e 연락/resume/retire 금지.** branch NEXT는 durable 승격 후 merge 전에 삭제한다.
+- main **20261014T212756-68bd94** 전체coord/NEXT/commit/DM,lead **20261030T190810-915040**,public·launch/doc **20261102T081752-169dd1**,독립검수 **20261102T063827-dff8a1**. 둘직접협업/lead↔Fable라우팅명시허용. 합동검수도한coordinator로모은다. notebook **20261007T132839-b22677**에게원portable/실측범위remoteFYI완료,별도implementationlane은열지않음.
+- **Astra567753 추가호출금지**, **PiOpus150a5e 연락/resume/retire금지**. 이미켜진Terra만현재alive근거로확인,임의잠든기록/새모델로대체없음. 운영시민종료·프로필/SDK/PATH/설치·SSH/자격증명조작없음. SQL직접읽기·복사·수선/전수scan/lockrepair·TTLwatcher없음. rootNEXT/ROADMAP/CHANGELOG/Org변경금지.
+- offline env-i/privateHOME·PI·XDG5/두verify_deps_before_run=error/**CI추가금지**. 정상hooks/scanner우회없음,이checkout/branch만개발。긴검증전구획·실측기반예상·재실행이유를먼저알림。실제hash/build/type/test/IO오류는raw/actualexit로STOP,단순nomatch와구분/정확주소한번교정허용。과거read/formatter/assert/사후계속/역재구성실패와모든원red는receipt·portable에보존,나중green으로소급clean주장안함。
+- `g3-pd-birth-r1/raw/s06-ss-all.tmp` 격리유지。branchNEXT는durable승격후merge전에삭제。

@@ -81,6 +81,49 @@ import {
 export const RESUME_CALL_RUNTIME = { pi: "pi", "claude-code": "claude" } as const;
 export type ResumeCallBackend = keyof typeof RESUME_CALL_RUNTIME;
 
+/**
+ * #157 B3: a pi-durable resume reopens through the MANAGED verb, exactly as its fresh call does —
+ * `entwurf pi-durable` verifies this package's carrier and its SDK set before anything runs, and the
+ * durable app is never started bare. It is its own entry (`resumePiDurableCall`) rather than a row of
+ * the table above, because it is the one resume whose launch also carries an environment.
+ */
+export const RESUME_CALL_PI_DURABLE_RUNTIME = "entwurf";
+
+/**
+ * The pi-durable adopt launch projection (#157 B3, L3-A1 §1): EXACTLY these five names, each read by
+ * name and emitted in this order — the SDK's own profile input, and the standard children of ONE meta
+ * root. It is a fixed projection of two coordinates the caller derived, not an environment dictionary:
+ * no other name can be expressed through it. The launched child checks the four roots it actually
+ * received against its closed adopt context, and its raw profile against the reservation, before
+ * anything opens, so a value this module mangled would refuse there rather than open something else.
+ */
+export interface ResumeCallPiDurableAdoptEnv {
+	readonly PI_CODING_AGENT_DIR: string;
+	readonly ENTWURF_META_SESSIONS_DIR: string;
+	readonly ENTWURF_META_MAILBOX_DIR: string;
+	readonly ENTWURF_META_SENDERS_DIR: string;
+	readonly ENTWURF_META_RECEIVERS_DIR: string;
+}
+
+/** The five `NAME=value` assignments, in the fixed order, or none. Every value must be an absolute
+ * path: a relative one would resolve against whatever directory the child starts in. */
+function adoptEnvAssignments(adoptEnv: ResumeCallPiDurableAdoptEnv | undefined): string[] {
+	if (adoptEnv === undefined) return [];
+	const pairs: readonly (readonly [string, string])[] = [
+		["PI_CODING_AGENT_DIR", adoptEnv.PI_CODING_AGENT_DIR],
+		["ENTWURF_META_SESSIONS_DIR", adoptEnv.ENTWURF_META_SESSIONS_DIR],
+		["ENTWURF_META_MAILBOX_DIR", adoptEnv.ENTWURF_META_MAILBOX_DIR],
+		["ENTWURF_META_SENDERS_DIR", adoptEnv.ENTWURF_META_SENDERS_DIR],
+		["ENTWURF_META_RECEIVERS_DIR", adoptEnv.ENTWURF_META_RECEIVERS_DIR],
+	];
+	for (const [name, value] of pairs) {
+		if (typeof value !== "string" || !value.startsWith("/")) {
+			throw new Error(`mux-resume-call: refusing to build argv with a non-absolute ${name}: ${JSON.stringify(value)}`);
+		}
+	}
+	return pairs.map(([name, value]) => `${name}=${value}`);
+}
+
 /** Why a resume window could not be opened. Every value is a NAMED refusal; this module has no
  * fallback launch and no fallback directory. The cwd members come from the shared classification
  * leaf and their string values are stable contract. */
@@ -101,7 +144,8 @@ export type ResumeCallResult = { ok: true; receipt: ResumeCallReceipt } | { ok: 
 
 /**
  * Launch argv: the leaf's detached-append shape, the fixed identity scrub (`SCRUBBED_INHERITED_ENV`,
- * the same two assignments every fresh window carries), `-c`, the runtime, then the caller's flags.
+ * the same two assignments every fresh window carries), for a pi-durable adoption the five fixed
+ * projection assignments after it (#157 B3), `-c`, the runtime, then the caller's flags.
  * `--` is what keeps tmux from reading the runtime or its flags as tmux options. The scrub is not a
  * carrier: it only empties identity a tmux server may have inherited, and a resumed Claude Code
  * (which, unlike pi, never re-exports its own) would otherwise present a stale one to its bridge.
@@ -111,16 +155,19 @@ export function buildResumeCallArgs(
 	cwd: string,
 	runtimePath: string,
 	runtimeArgs: readonly string[],
+	adoptEnv?: ResumeCallPiDurableAdoptEnv,
 ): string[] {
 	assertSelector("session", placement.sessionId);
 	assertLaunchTarget(runtimePath);
 	const bad = classifyTmuxCwd(cwd);
 	if (bad) throw new Error(`mux-resume-call: refusing to build argv with an unusable cwd (${bad}): ${cwd}`);
+	const adoptAssignments = adoptEnvAssignments(adoptEnv);
 	return [
 		"new-window",
 		"-d",
 		"-a",
 		...SCRUBBED_INHERITED_ENV.flatMap((assignment) => ["-e", assignment]),
+		...adoptAssignments.flatMap((assignment) => ["-e", assignment]),
 		"-t",
 		`${placement.sessionId}:{end}`,
 		"-c",
@@ -145,13 +192,35 @@ export function resumeCall(
 	params: { backend: ResumeCallBackend; cwd: string; runtimeArgs: readonly string[] },
 	env: NodeJS.ProcessEnv = process.env,
 ): ResumeCallResult {
+	return openResumeWindow(RESUME_CALL_RUNTIME[params.backend], params, undefined, env);
+}
+
+/**
+ * #157 B3: the pi-durable resume window. The same order, refusals and receipt as `resumeCall` — the
+ * runtime is the managed `entwurf`, and the window additionally carries the fixed adopt projection.
+ * `runtimeArgs` (the managed verb and its closed adopt context) is passed through untouched; this
+ * module never decodes it.
+ */
+export function resumePiDurableCall(
+	params: { cwd: string; runtimeArgs: readonly string[]; adoptEnv: ResumeCallPiDurableAdoptEnv },
+	env: NodeJS.ProcessEnv = process.env,
+): ResumeCallResult {
+	return openResumeWindow(RESUME_CALL_PI_DURABLE_RUNTIME, params, params.adoptEnv, env);
+}
+
+function openResumeWindow(
+	runtime: string,
+	params: { cwd: string; runtimeArgs: readonly string[] },
+	adoptEnv: ResumeCallPiDurableAdoptEnv | undefined,
+	env: NodeJS.ProcessEnv,
+): ResumeCallResult {
 	if (env.HERDR_ENV === "1") return { ok: false, reason: "herdr-resume-unsupported" };
 	const badCwd = classifyTmuxCwd(params.cwd);
 	if (badCwd) return { ok: false, reason: badCwd };
 
 	let runtimePath: string;
 	try {
-		runtimePath = resolveRuntimeOnPath(RESUME_CALL_RUNTIME[params.backend], env);
+		runtimePath = resolveRuntimeOnPath(runtime, env);
 	} catch (err) {
 		if (err instanceof LaunchPreconditionError) return { ok: false, reason: err.reason };
 		throw err;
@@ -162,7 +231,7 @@ export function resumeCall(
 	const placement = inspected.placement;
 	requireSameContext("resumeCall", placement, env);
 
-	const run = runTmux(buildResumeCallArgs(placement, params.cwd, runtimePath, params.runtimeArgs), env);
+	const run = runTmux(buildResumeCallArgs(placement, params.cwd, runtimePath, params.runtimeArgs, adoptEnv), env);
 	assertTmuxOk("new-window", run);
 
 	let fields: ReturnType<typeof parseWindowFields>;

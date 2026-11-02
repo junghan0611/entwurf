@@ -1,6 +1,6 @@
 /**
- * entwurf-v2-visible-resume — stand a dormant pi or Claude Code citizen back up in a window the
- * operator can see, under the same garden id, and say only what was actually observed.
+ * entwurf-v2-visible-resume — stand a dormant pi, pi-durable or Claude Code citizen back up in a window
+ * (or herdr tab) the operator can see, under the same garden id, and say only what was actually observed.
  *
  * ── Two backends, one shape (#147 L2) ──
  *
@@ -20,6 +20,14 @@
  *                proof. Back = a NEW live owner, in the pane this call opened, re-armed the marker
  *                for the same session with a fresh binding the current record also carries (same
  *                createdAt). The old marker read again is never success.
+ *
+ *   pi-durable   dormant = THIS process could reserve the session's directory D (#157 B3): the
+ *                owner-fence claim's holder is proven dead, or it closed clean, and the record and
+ *                its C4 location agree — decided by `reservePiDurableSession` inside its own
+ *                record-arm then S_D holds, under the per-target lock this module already holds as
+ *                the outer scope. The launched child adopts that one reservation from its closed
+ *                context. Back = its adoption write: the claim carries this reservation's generation
+ *                as its `adoptedFrom` — an adoption, never readiness, liveness or a turn.
  *
  * Every other backend is the leaf's named refusal. The argv is a fixed table per backend; the caller
  * supplies only the target.
@@ -69,9 +77,9 @@
  *
  * ── Two receipts, never merged ──
  *
- * `launch` says tmux made a window (or, for pi inside herdr, herdr made a tab) and was asked to start
- * the runtime. `observation` says whether
- * the citizen came back under the same id (pi: its socket; Claude Code: its receiver marker).
+ * `launch` says tmux made a window (or, for pi or pi-durable inside herdr, herdr made a tab) and was
+ * asked to start the runtime. `observation` says whether the citizen came back under the same id (pi:
+ * its socket; pi-durable: a child's adoption of the reservation; Claude Code: its receiver marker).
  * Neither says the resumed citizen did anything. This verb submits no prompt. For pi a resume ran
  * no turn (measured 2026-08-06, pi only — the transcript stayed byte-identical); for Claude Code
  * the runtime's own activity after resume (its SessionStart hook re-arms the doorbell, and unread
@@ -80,6 +88,7 @@
  * half reads the receiver marker and the record instead.
  */
 
+import path from "node:path";
 import { ACP_MODEL_NOT_CURATED_HINT, AcpModelNotCuratedError } from "./acp/model-ids.js";
 import { ENTWURF_RESUME_REJECT_HINTS } from "./agent-guidance.ts";
 import { buildResumePiArgs } from "./entwurf-resume-args.ts";
@@ -93,6 +102,10 @@ import {
 } from "./entwurf-v2-lock.ts";
 import {
 	classifyMarkerOwner,
+	defaultMetaMailboxDir,
+	defaultMetaReceiversDir,
+	defaultMetaSendersDir,
+	defaultMetaSessionsDir,
 	type MarkerOwnerVerdict,
 	metaReceiverMarkerPath,
 	parseMetaReceiverMarker,
@@ -101,9 +114,16 @@ import {
 	readStoreRecordFile,
 } from "./meta-session.ts";
 import {
+	observePiDurableReservation,
+	PiDurableOwnerFenceError,
+	type PiDurableReservation,
+	type PiDurableReservationObservation,
+	reservePiDurableSession,
+	withdrawPiDurableReservation,
+} from "./pi-durable-owner-fence.ts";
+import {
 	type ClaudeCodeLaunchIdentity,
 	type LaunchIdentity,
-	type ResumeBackend,
 	ResumeBackendUnsupportedError,
 	resolveResumeLaunchIdentity,
 } from "./resume-launch-identity.ts";
@@ -133,7 +153,7 @@ export const RESUME_OBSERVE_INTERVAL_MS = 500;
  * `target-backend-unsupported` IS in here, and the line between it and those throws is worth
  * stating: asking to resume a Codex or agy citizen is not a defect at all. Nothing is corrupt, the
  * record is exactly right, and the operator has simply reached past a capability boundary — only
- * pi and Claude Code have a same-id resume. That deserves a named refusal a caller can act on, not
+ * pi, pi-durable and Claude Code have a same-id resume. That deserves a named refusal a caller can act on, not
  * an error report about a store that is fine. The four `target-receiver-*` reasons are the Claude
  * Code dormancy proof failing: nothing on disk proves the citizen is not running.
  */
@@ -181,13 +201,46 @@ export interface VisibleResumeHerdrLaunchHandle {
 
 export type VisibleResumeLaunchHandle = VisibleResumeTmuxLaunchHandle | VisibleResumeHerdrLaunchHandle;
 
+/** #157 B3: the herdr rail's pi-durable resume — ONE layout.apply, so herdr's layout reply is the whole
+ * receipt: the launcher asked for, the requested directory and herdr's VIEW coordinates. No agent name
+ * and no terminal id exist for it, which is why it carries its own rail tag: a pi resume handed one
+ * fails loud rather than rendering fields it never had. */
+export interface VisibleResumeHerdrLayoutLaunchHandle {
+	rail: "herdr-layout";
+	runtime: string;
+	cwd: string;
+	herdrWorkspaceId: string;
+	herdrTabId: string;
+	herdrPaneId: string;
+}
+
+/**
+ * #157 B3: the pi-durable adopt launch projection (L3-A1 §1) — EXACTLY five names: the SDK's own
+ * profile input carrying the reservation's raw profile, and the standard children of the
+ * reservation's ONE meta root. A fixed projection of those two coordinates, never an env dictionary.
+ */
+export interface PiDurableAdoptEnv {
+	PI_CODING_AGENT_DIR: string;
+	ENTWURF_META_SESSIONS_DIR: string;
+	ENTWURF_META_MAILBOX_DIR: string;
+	ENTWURF_META_SENDERS_DIR: string;
+	ENTWURF_META_RECEIVERS_DIR: string;
+}
+
+/** What the launch seam is asked to open. pi and Claude Code carry the record's argv only; a
+ * pi-durable adoption also carries its fixed projection, and nothing else can. */
+export type VisibleResumeLaunchInput =
+	| { backend: "pi" | "claude-code"; cwd: string; runtimeArgs: readonly string[] }
+	| { backend: "pi-durable"; cwd: string; runtimeArgs: readonly string[]; piDurableAdoptEnv: PiDurableAdoptEnv };
+
 /** A launch that failed AFTER it created something (on herdr: after the tab create). The vendor's
  * own code when it gave one, what is out there now, and the created coordinates when the create reply
  * was read. Recovery is structural for the same reason the handles are. Only the herdr rail can fail
  * after a mutation today (tmux opens its window in one step), and `rail` says so rather than leaving
- * the renderer to assume it. */
+ * the renderer to assume it: `herdr-layout` is the pi-durable rail's ONE layout.apply (#157 B3), whose
+ * classifier answers only none or unknown and which has no tab create step of its own. */
 export interface VisibleResumeLaunchFailure {
-	rail: "herdr";
+	rail: "herdr" | "herdr-layout";
 	vendorCode?: string;
 	recovery:
 		| { outcome: "none" }
@@ -198,13 +251,13 @@ export interface VisibleResumeLaunchFailure {
 }
 
 export type VisibleResumeLaunchOutcome =
-	| { ok: true; handle: VisibleResumeLaunchHandle }
+	| { ok: true; handle: VisibleResumeLaunchHandle | VisibleResumeHerdrLayoutLaunchHandle }
 	/** Refused before anything was created. */
 	| { ok: false; reason: string; hint: string }
 	| { ok: false; reason: string; hint: string; failure: VisibleResumeLaunchFailure };
 
-/** Fact 1: tmux created a window — or, for pi inside herdr, herdr created a tab — and was asked to
- * start the citizen's runtime there. `cwd` is the REQUESTED start directory (what the placement owner
+/** Fact 1: tmux created a window — or, for pi or pi-durable inside herdr, herdr created a tab — and
+ * was asked to start the citizen's runtime there. `cwd` is the REQUESTED start directory (what the placement owner
  * was told), the same kind of fact as `runtimePath` — not an observation of where the pane landed.
  * The Claude Code receipt is tmux-only: its observation joins the tmux pane pid. */
 export type ResumeLaunchReceipt =
@@ -214,6 +267,14 @@ export type ResumeLaunchReceipt =
 			targetGardenId: string;
 			nativeSessionId: string;
 			handle: VisibleResumeTmuxLaunchHandle;
+	  }
+	/** #157 B3: the reservation is part of the launch fact — the window or tab was opened FOR it. */
+	| {
+			backend: "pi-durable";
+			targetGardenId: string;
+			cwd: string;
+			reservation: { generation: string; resource: string; ownerPid: number };
+			handle: VisibleResumeTmuxLaunchHandle | VisibleResumeHerdrLayoutLaunchHandle;
 	  };
 
 /** Fact 2: the citizen's control socket came back under the SAME garden id, or it did not. This
@@ -255,8 +316,25 @@ export type ReceiverInspection =
 			owner: MarkerOwnerVerdict;
 	  };
 
+/**
+ * Fact 2 for pi-durable (#157 B3): what the reservation's D claim says, read by ONE bounded operation.
+ * `adopted` is an adoption WRITE by some child (the claim carries this reservation's generation as its
+ * `adoptedFrom`), not readiness, liveness, an attach or a turn; `not-yet-adopted` is still this
+ * reservation when the wait ended; `reservation-lost` is any other claim the strict reader accepted;
+ * `unobserved` is a claim that could not be read, with its named cause — never folded into lost.
+ */
+export type PiDurableAdoptionObservationReceipt =
+	| { kind: "adopted"; waitedMs: number }
+	| { kind: "not-yet-adopted"; waitedMs: number }
+	| { kind: "reservation-lost"; waitedMs: number }
+	| { kind: "unobserved"; reason: string; detail: string; waitedMs: number };
+
 export type VisibleResumeResult =
-	| { ok: true; launch: ResumeLaunchReceipt; observation: ResumeObservationReceipt | ReceiverObservationReceipt }
+	| {
+			ok: true;
+			launch: ResumeLaunchReceipt;
+			observation: ResumeObservationReceipt | ReceiverObservationReceipt | PiDurableAdoptionObservationReceipt;
+	  }
 	| { ok: false; reason: VisibleResumeRejectReason; detail: string }
 	/** The launch failed after it created something. Not a refusal: something may be open, so this is
 	 * never rendered as "No window was opened". No observation runs after it. */
@@ -272,11 +350,14 @@ export interface VisibleResumeDeps {
 	inspectReceiver: (gardenId: string) => ReceiverInspection;
 	/** The ONLY way this module reaches tmux or herdr. The surface supplies it; the herdr rail is
 	 * asynchronous (its CLI runner must not block the caller's event loop), so this is awaited. */
-	launch: (input: {
-		backend: ResumeBackend;
-		cwd: string;
-		runtimeArgs: readonly string[];
-	}) => VisibleResumeLaunchOutcome | Promise<VisibleResumeLaunchOutcome>;
+	launch: (input: VisibleResumeLaunchInput) => VisibleResumeLaunchOutcome | Promise<VisibleResumeLaunchOutcome>;
+	/** #157 B3, pi-durable only: reserve D for one child, record-arm then S_D, both released before
+	 * this returns. The per-target lock this module holds stays the outer scope and is never retaken. */
+	reservePiDurable: (gardenId: string) => Promise<PiDurableReservation>;
+	/** Withdraw THIS process's own reservation, only once its launch is definitely none-created. */
+	withdrawPiDurable: (reservation: PiDurableReservation) => Promise<void>;
+	/** What the reservation's D claim says now: a read, never a watch. */
+	observePiDurable: (reservation: PiDurableReservation) => PiDurableReservationObservation;
 	sleep: (ms: number) => Promise<void>;
 	now: () => number;
 }
@@ -295,6 +376,20 @@ export function makeVisibleResumeDeps(
 		probeSocket: (socketPath) => probeSocketLiveness(socketPath),
 		inspectReceiver: (gid) => inspectReceiverMarker(gid),
 		launch,
+		// The four roots THIS process resolves now, handed to the reserve as given: a split shape is
+		// the reserve's own named refusal, never merged here.
+		reservePiDurable: (gid) =>
+			reservePiDurableSession({
+				gardenId: gid,
+				roots: {
+					sessionsDir: defaultMetaSessionsDir(),
+					mailboxDir: defaultMetaMailboxDir(),
+					sendersDir: defaultMetaSendersDir(),
+					receiversDir: defaultMetaReceiversDir(),
+				},
+			}),
+		withdrawPiDurable: (reservation) => withdrawPiDurableReservation(reservation),
+		observePiDurable: (reservation) => observePiDurableReservation(reservation),
 		sleep: (ms) => new Promise<void>((resolve) => setTimeout(resolve, ms)),
 		now: () => Date.now(),
 		...overrides,
@@ -418,7 +513,7 @@ export async function visibleResume(targetGardenId: string, deps: VisibleResumeD
 					ok: false,
 					reason: err.reason,
 					detail:
-						`${targetGardenId} is a ${err.backend} citizen; only pi and Claude Code citizens can be reopened ` +
+						`${targetGardenId} is a ${err.backend} citizen; only pi, pi-durable and Claude Code citizens can be reopened ` +
 						`under the same garden id`,
 				};
 			}
@@ -426,6 +521,7 @@ export async function visibleResume(targetGardenId: string, deps: VisibleResumeD
 		}
 
 		if (identity.backend === "claude-code") return await resumeClaudeCode(targetGardenId, identity, deps);
+		if (identity.backend === "pi-durable") return await resumePiDurable(targetGardenId, deps);
 
 		// Liveness preflight, still under the lock. A live citizen is addressed with
 		// `entwurf_v2 fire-and-forget`, not reopened — and refusing here is also what stops two
@@ -466,6 +562,14 @@ export async function visibleResume(targetGardenId: string, deps: VisibleResumeD
 		});
 		const launched = await deps.launch({ backend: "pi", cwd: identity.cwd, runtimeArgs });
 		if (!launched.ok) return launchNotLaunched(launched);
+		// Only a pi-durable launch carries a layout handle (#157 B3). Handed to a pi resume, it is a
+		// wiring defect, not an outcome: whatever was opened stays as it is and the lock is released.
+		if (launched.handle.rail === "herdr-layout") {
+			throw new Error(
+				`entwurf-v2-visible-resume: the launcher handed a pi resume of ${targetGardenId} a herdr-layout handle — ` +
+					`only a pi-durable resume launches through layout.apply. Nothing was observed or closed.`,
+			);
+		}
 
 		const observation = await observeSameGidSocket(targetGardenId, mapped.socketPath, deps);
 		return {
@@ -485,8 +589,11 @@ export async function visibleResume(targetGardenId: string, deps: VisibleResumeD
  * it into a refusal is what would print "No window was opened" over a tab that may be on screen.
  * Neither is retried, and neither is followed by an observation.
  */
-function launchNotLaunched(launched: Extract<VisibleResumeLaunchOutcome, { ok: false }>): VisibleResumeResult {
-	const detail = `${launched.reason} — ${launched.hint}`;
+function launchNotLaunched(
+	launched: Extract<VisibleResumeLaunchOutcome, { ok: false }>,
+	note = "",
+): VisibleResumeResult {
+	const detail = `${launched.reason} — ${launched.hint}${note}`;
 	return "failure" in launched
 		? { ok: false, reason: "launch-failed", detail, failure: launched.failure }
 		: { ok: false, reason: "launch-refused", detail };
@@ -623,6 +730,183 @@ async function resumeClaudeCode(
 }
 
 /**
+ * #157 B3: the adopt launch for ONE reservation — the managed verb with its closed context
+ * `{v:1, gardenId, metaRoot, sourceGeneration}` (no session, cwd, profile, model, prompt, module,
+ * nonce or callback rides it), the reservation's cwd, and the fixed five-name projection of its raw
+ * profile and its meta root. Pure: it reads nothing and writes nothing.
+ */
+export function buildPiDurableAdoptLaunch(
+	reservation: Pick<PiDurableReservation, "gardenId" | "metaRoot" | "generation" | "profile" | "cwd">,
+): Extract<VisibleResumeLaunchInput, { backend: "pi-durable" }> {
+	const { metaRoot } = reservation;
+	const context = {
+		v: 1,
+		gardenId: reservation.gardenId,
+		metaRoot,
+		sourceGeneration: reservation.generation,
+	};
+	return {
+		backend: "pi-durable",
+		cwd: reservation.cwd,
+		runtimeArgs: ["pi-durable", "--entwurf-adopt", JSON.stringify(context)],
+		piDurableAdoptEnv: {
+			PI_CODING_AGENT_DIR: reservation.profile,
+			ENTWURF_META_SESSIONS_DIR: path.join(metaRoot, "meta-sessions"),
+			ENTWURF_META_MAILBOX_DIR: path.join(metaRoot, "meta-mailbox"),
+			ENTWURF_META_SENDERS_DIR: path.join(metaRoot, "meta-senders"),
+			ENTWURF_META_RECEIVERS_DIR: path.join(metaRoot, "meta-receivers"),
+		},
+	};
+}
+
+/** A reserve refusal this verb answers by name; every other fence refusal keeps its own cause. */
+function piDurableReserveRefusal(targetGardenId: string, err: PiDurableOwnerFenceError): VisibleResumeResult | null {
+	if (err.reason === "owner-live") {
+		return {
+			ok: false,
+			reason: "target-live",
+			detail: `${targetGardenId}'s pi-durable session is held by a live process (${err.message}) — send to it with entwurf_v2 fire-and-forget instead`,
+		};
+	}
+	if (err.reason === "owner-uncertain" || err.reason === "owner-other-host") {
+		return {
+			ok: false,
+			reason: "target-indeterminate",
+			detail:
+				`the holder of ${targetGardenId}'s pi-durable session could not be proven gone on this host (${err.message}), ` +
+				`and resuming a session that is still open would put two processes on one transcript`,
+		};
+	}
+	return null;
+}
+
+const messageOf = (err: unknown): string => (err instanceof Error ? err.message : String(err));
+
+/**
+ * The pi-durable half (#157 B3), still under the caller's per-target lock, which stays the outer
+ * scope: the reserve takes record-arm then S_D itself and releases both before it returns, so before
+ * any launch. Every reserve refusal writes nothing and opens nothing.
+ *
+ * From the reservation on, this process holds D for one child, and what happens to that hold is
+ * decided by the launch outcome alone (L3-A1 §6), never by a guess:
+ *
+ *   no launch request was made                         definitely none created → withdraw
+ *   the seam refused (`ok:false`, no `failure`)        the seam's contract: refused before anything was
+ *                                                      created (tmux: one of its named reasons; herdr:
+ *                                                      decided before the layout write) → withdraw
+ *   a failure whose recovery is `none`                 that rail's own none-created certainty → withdraw
+ *   a failure whose recovery is anything else          something MAY exist → the reservation is KEPT
+ *   the launcher threw                                 unknown, whatever its position → KEPT
+ *   a launch                                           a child may adopt it → KEPT, then observed once
+ *
+ * A withdrawal that fails is reported with the refusal it followed and is never retried. A kept
+ * reservation is said so in the answer: until a child adopts it or this process ends, a later resume
+ * of the same id refuses, because its holder — this process — is alive.
+ */
+async function resumePiDurable(targetGardenId: string, deps: VisibleResumeDeps): Promise<VisibleResumeResult> {
+	let reservation: PiDurableReservation;
+	try {
+		reservation = await deps.reservePiDurable(targetGardenId);
+	} catch (err) {
+		if (err instanceof PiDurableOwnerFenceError) {
+			const refused = piDurableReserveRefusal(targetGardenId, err);
+			if (refused !== null) return refused;
+		}
+		throw err;
+	}
+	const held = `${targetGardenId}'s reservation of ${reservation.resource} at generation ${reservation.generation}`;
+	const withdraw = async (): Promise<string> => {
+		try {
+			await deps.withdrawPiDurable(reservation);
+			return ` — ${held} was withdrawn, since nothing was created`;
+		} catch (err) {
+			return (
+				` — withdrawing ${held} FAILED (${messageOf(err)}); it stays reserved by this process (pid ` +
+				`${reservation.owner.pid}) until it ends, and a resume of ${targetGardenId} refuses while it does`
+			);
+		}
+	};
+	const kept =
+		` — ${held} was KEPT, because something may exist that can still adopt it; it is held by this ` +
+		`process (pid ${reservation.owner.pid}) until a child adopts it or this process ends, and a resume of ` +
+		`${targetGardenId} refuses until then`;
+
+	let input: ReturnType<typeof buildPiDurableAdoptLaunch>;
+	try {
+		input = buildPiDurableAdoptLaunch(reservation);
+	} catch (err) {
+		throw new Error(`entwurf-v2-visible-resume: ${messageOf(err)}${await withdraw()}`);
+	}
+	let launched: VisibleResumeLaunchOutcome;
+	try {
+		launched = await deps.launch(input);
+	} catch (err) {
+		throw new Error(
+			`entwurf-v2-visible-resume: the pi-durable launch of ${targetGardenId} threw: ${messageOf(err)}${kept}`,
+		);
+	}
+	if (!launched.ok) {
+		const noneCreated = !("failure" in launched) || launched.failure.recovery.outcome === "none";
+		return launchNotLaunched(launched, noneCreated ? await withdraw() : kept);
+	}
+	// A herdr agent-start handle belongs to the pi rail only: a pi-durable resume launches through
+	// tmux or ONE layout.apply. Handed one, it is a wiring defect; what was opened stays as it is.
+	if (launched.handle.rail === "herdr") {
+		throw new Error(
+			`entwurf-v2-visible-resume: the launcher handed a pi-durable resume of ${targetGardenId} a herdr agent-start ` +
+				`handle — nothing was observed or closed${kept}`,
+		);
+	}
+	const observation = await observePiDurableAdoption(reservation, deps);
+	return {
+		ok: true,
+		launch: {
+			backend: "pi-durable",
+			targetGardenId,
+			cwd: reservation.cwd,
+			reservation: {
+				generation: reservation.generation,
+				resource: reservation.resource,
+				ownerPid: reservation.owner.pid,
+			},
+			handle: launched.handle,
+		},
+		observation,
+	};
+}
+
+/**
+ * ONE bounded operation, the pi-durable twin of `observeSameGidSocket` (#157 B3): read the
+ * reservation's D claim until a child's adoption write carries its generation, the claim is lost or
+ * unreadable, or the same fixed wait ends. Every read is the fence's strict reader; nothing here
+ * writes, withdraws, retries or watches past the deadline. A read that throws past that reader stops
+ * the wait as `unobserved` with its cause: the window is open, and the launch receipt must survive.
+ */
+export async function observePiDurableAdoption(
+	reservation: PiDurableReservation,
+	deps: Pick<VisibleResumeDeps, "observePiDurable" | "sleep" | "now">,
+	timeoutMs: number = RESUME_OBSERVE_TIMEOUT_MS,
+	intervalMs: number = RESUME_OBSERVE_INTERVAL_MS,
+): Promise<PiDurableAdoptionObservationReceipt> {
+	const started = deps.now();
+	for (;;) {
+		let seen: PiDurableReservationObservation;
+		try {
+			seen = deps.observePiDurable(reservation);
+		} catch (err) {
+			return { kind: "unobserved", reason: "observe-threw", detail: messageOf(err), waitedMs: deps.now() - started };
+		}
+		if (seen.class === "adopted") return { kind: "adopted", waitedMs: deps.now() - started };
+		if (seen.class === "lost") return { kind: "reservation-lost", waitedMs: deps.now() - started };
+		if (seen.class === "unobserved") {
+			return { kind: "unobserved", reason: seen.reason, detail: seen.detail, waitedMs: deps.now() - started };
+		}
+		if (deps.now() - started >= timeoutMs) return { kind: "not-yet-adopted", waitedMs: deps.now() - started };
+		await deps.sleep(intervalMs);
+	}
+}
+
+/**
  * ONE bounded operation, the Claude Code twin of `observeSameGidSocket`: wait for a NEW live owner
  * — in the pane this call opened (`panePid`), a join, not an address — to re-arm this garden id's
  * receiver marker for the same native session with a fresh binding the current record carries
@@ -746,13 +1030,17 @@ export function renderVisibleResume(
 			isError: true,
 		};
 	}
-	const h = result.launch.handle;
 	// Who asked is recorded, and it is not authority: the verb decides from the target's record and
 	// live rail facts alone, whoever the caller is.
 	const actor =
 		attribution.actor === null
 			? `  actor:    unattributed (the caller has no record-backed garden identity)\n`
 			: `  actor:    ${attribution.actor} (record-backed caller; attribution, not authority)\n`;
+	// #157 B3: pi-durable has its own receipts (a reservation, an adoption), on either rail.
+	if (result.launch.backend === "pi-durable") {
+		return renderPiDurableResume(result.launch, result.observation as PiDurableAdoptionObservationReceipt, actor);
+	}
+	const h = result.launch.handle;
 	// The herdr rail has its own coordinates and its own words; the tmux text below stays as it was.
 	if (h.rail === "herdr") return renderHerdrPiResume(result, h, actor);
 	const window =
@@ -810,6 +1098,65 @@ export function renderVisibleResume(
 }
 
 /**
+ * The pi-durable resume (#157 B3), on tmux or on herdr's one layout.apply. Three facts kept apart: the
+ * reservation this process holds, the LAUNCH that was asked to adopt it, and what the D claim said
+ * after one bounded read. `adopted` says a child wrote its adoption — not that it is ready, alive,
+ * attached, addressable or that anything was recalled; entwurf_peers is where its rail is read.
+ */
+function renderPiDurableResume(
+	launch: Extract<ResumeLaunchReceipt, { backend: "pi-durable" }>,
+	observation: PiDurableAdoptionObservationReceipt,
+	actor: string,
+): { text: string; isError: boolean } {
+	const h = launch.handle;
+	const place = h.rail === "tmux" ? "window" : "tab";
+	const where =
+		h.rail === "tmux"
+			? `  runtime:  ${h.runtimePath} pi-durable --entwurf-adopt (requested start cwd ${h.cwd})\n` +
+				`  window:   ${h.windowId} (index ${h.windowIndex}) in session ${h.sessionId}\n` +
+				`  pane:     ${h.paneId} pid ${h.panePid}\n`
+			: `  runtime:  ${h.runtime} pi-durable --entwurf-adopt (requested start cwd ${h.cwd})\n` +
+				`  tab:      ${h.herdrTabId} in workspace ${h.herdrWorkspaceId} — a NEW tab from ONE layout.apply, opened without taking focus\n` +
+				`  pane:     ${h.herdrPaneId} — herdr VIEW coordinates, not an address\n`;
+	const r = launch.reservation;
+	const heldBy = `this process (pid ${r.ownerPid})`;
+	const observed =
+		observation.kind === "adopted"
+			? `OBSERVATION receipt: adopted — after ${observation.waitedMs}ms the claim of ${r.resource} carries generation ` +
+				`${r.generation} as its adoptedFrom: a child process wrote its adoption of this reservation. That is not ` +
+				`readiness, liveness, an attach, a turn or a recall — entwurf_peers shows whether its rail answers. This ` +
+				`call submitted no prompt.`
+			: observation.kind === "not-yet-adopted"
+				? `OBSERVATION receipt: not-yet-adopted — after ${observation.waitedMs}ms the claim of ${r.resource} was still ` +
+					`this reservation. The ${place} is open and visible; read it directly. The reservation stays held by ` +
+					`${heldBy}: a child there can still adopt it, and a resume of ${launch.targetGardenId} refuses until ` +
+					`it does or this process ends. Nothing was retried, withdrawn or killed.`
+				: observation.kind === "reservation-lost"
+					? `OBSERVATION receipt: reservation-lost — after ${observation.waitedMs}ms the claim of ${r.resource} ` +
+						`names neither this reservation nor an adoption of it (another owner, a reclaim or a withdrawal ` +
+						`replaced it). The ${place} is open; read it directly. Nothing was retried or killed.`
+					: `OBSERVATION receipt: unobserved — the claim of ${r.resource} could not be read after ` +
+						`${observation.waitedMs}ms (${observation.reason}: ${observation.detail}). The ${place} is open and ` +
+						`visible; nothing was retried, withdrawn or killed.`;
+	return {
+		text:
+			`[entwurf resume call ↻${h.rail === "tmux" ? "" : " herdr"}]\n` +
+			`  target:   ${launch.targetGardenId}\n` +
+			`  backend:  pi-durable\n` +
+			`  reserved: ${r.resource} at generation ${r.generation}, held by ${heldBy} for one child to adopt\n` +
+			where +
+			actor +
+			`\n` +
+			`LAUNCH receipt: ${h.rail === "tmux" ? "tmux created that window" : "herdr created that tab"} and was asked to ` +
+			`start the managed entwurf pi-durable with the closed adopt context of the reservation above, its raw ` +
+			`profile as PI_CODING_AGENT_DIR and its meta root's four ENTWURF_META_*_DIR children as its launch env, ` +
+			`in the record's cwd.\n` +
+			observed,
+		isError: false,
+	};
+}
+
+/**
  * The pi resume on the herdr rail (#157 G1a). Same two receipts, kept apart the same way; the
  * coordinates are herdr's VIEW of a tab, and herdr's own readiness or session report is not consulted
  * — the same-gid control socket is the observation on both rails.
@@ -861,12 +1208,18 @@ function renderLaunchFailed(result: Extract<VisibleResumeResult, { reason: "laun
 	isError: boolean;
 } {
 	const f = result.failure;
-	const header =
+	const tabHeader =
 		f.recovery.outcome === "none"
 			? "entwurf_resume_call failed at the herdr tab create step"
 			: f.recovery.outcome === "unknown"
 				? "entwurf_resume_call failed at the herdr tab create step with an UNKNOWN outcome"
 				: "entwurf_resume_call failed after the herdr tab was created";
+	// #157 B3: the pi-durable rail asks herdr for ONE layout.apply. Its classifier answers only none or
+	// unknown, so anything but none is UNKNOWN, and there is no tab create step to name.
+	const layout = f.rail === "herdr-layout";
+	const header = layout
+		? `entwurf_resume_call failed at the herdr layout.apply step${f.recovery.outcome === "none" ? "" : " with an UNKNOWN outcome"}`
+		: tabHeader;
 	const code = f.vendorCode === undefined ? "" : ` [herdr: ${f.vendorCode}]`;
 	const created =
 		f.created === undefined
@@ -875,7 +1228,9 @@ function renderLaunchFailed(result: Extract<VisibleResumeResult, { reason: "laun
 				`terminal ${f.created.herdrTerminalId} — herdr VIEW coordinates, not an address\n`;
 	const recovery =
 		f.recovery.outcome === "none"
-			? "  recovery: none — herdr declined by name before making anything, so there is nothing to go look at\n"
+			? layout
+				? "  recovery: none — the layout request was never written, or herdr declined it by name before making anything, so there is nothing to go look at\n"
+				: "  recovery: none — herdr declined by name before making anything, so there is nothing to go look at\n"
 			: f.recovery.outcome === "unknown"
 				? "  recovery: UNKNOWN — we never got an answer we can act on, so a tab MAY exist that this call cannot name. Nothing was closed; check herdr\n"
 				: f.recovery.outcome === "closed"
@@ -887,7 +1242,7 @@ function renderLaunchFailed(result: Extract<VisibleResumeResult, { reason: "laun
 			created +
 			recovery +
 			`No observation was attempted, so this says nothing about whether the citizen came back — entwurf_peers ` +
-			`shows whether its control socket answers. The lock was released and nothing was retried.`,
+			`shows whether its ${layout ? "rail" : "control socket"} answers. The lock was released and nothing was retried.`,
 		isError: true,
 	};
 }

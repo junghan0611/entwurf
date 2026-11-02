@@ -1744,6 +1744,16 @@ function isExecutableRegularFile(file: string): boolean {
 }
 
 /**
+ * #157 B3: the verified package's own launcher for a layout command, or `null` when it is missing or
+ * not executable — the same path and probe the fresh layout branch puts first in its argv vector. The
+ * pi-durable same-id resume (`herdr-resume-call.ts`) asks it through this export.
+ */
+export function resolvePiDurableLauncher(layout: PiDurablePackageLayout): string | null {
+	const runtime = path.join(layout.root, "run.sh");
+	return isExecutableRegularFile(runtime) ? runtime : null;
+}
+
+/**
  * Open a pi-durable sibling in a new herdr tab. ORDER IS THE ARGUMENT: everything decidable without
  * herdr — inputs, the explicit cwd, the endpoint, the pi-durable preflight (provider split, first
  * input cap, package, carrier and SDK set, units), the launcher and the argv — is decided before
@@ -1850,7 +1860,7 @@ async function herdrLayoutFreshCall(
 /** Why each refusal happened, in the caller's terms. A reason a caller cannot act on is a reason
  * they will guess about. The five shared input reasons keep the wording the public verb has always
  * used; the rest are this rail's own. */
-const HERDR_REJECT_HINT: Record<
+export const HERDR_REJECT_HINT: Record<
 	HerdrFreshCallRejectReason | HerdrLaunchFailureReason | HerdrLayoutFailureReason,
 	string
 > = {

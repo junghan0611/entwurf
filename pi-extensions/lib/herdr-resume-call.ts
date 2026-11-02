@@ -35,6 +35,12 @@
  * start pi on that transcript there. herdr's readiness and its `agent_session` are herdr's view of
  * the pane, not garden addressability, so this module does not wait for either. The same-gid control
  * socket the v2 side waits for afterwards is the only observation that says the citizen is back.
+ *
+ * PI-DURABLE IS A SECOND, SEPARATE LAUNCH (#157 B3). herdr has no agent kind for the durable app, so
+ * its same-id resume reuses the fresh rail's ONE `layout.apply` on the caller's own herdr socket
+ * (`herdrPiDurableResumeCall` below) rather than `tab create` + `agent start`. The pi path above is
+ * untouched and still refuses every non-pi backend; `launchHerdrResume` is the one place that tells
+ * the two apart, by the backend the v2 side resolved from the record.
  */
 
 import { spawn as spawnChildProcess } from "node:child_process";
@@ -42,14 +48,24 @@ import { randomBytes } from "node:crypto";
 import {
 	argvMatchesRequest,
 	buildHerdrAgentStartArgs,
+	buildHerdrLayoutApplyPacket,
 	buildHerdrPaneGetArgs,
+	buildHerdrPaneGetPacket,
 	classifyHerdrCwd,
+	classifyHerdrLayoutApplyReply,
+	classifyHerdrLayoutPaneRead,
 	containsControlChar,
 	createHerdrRunner,
 	HERDR_AGENT_KIND,
+	HERDR_LAYOUT_PRODUCTION_DEPS,
+	HERDR_REJECT_HINT,
 	type HerdrFreshCallRejectReason,
 	type HerdrLaunchFailureReason,
+	type HerdrLayoutDeps,
+	type HerdrLayoutFailure,
+	type HerdrLayoutFailureReason,
 	type HerdrRecovery,
+	type HerdrReportedDiagnostics,
 	type HerdrRun,
 	parseHerdrAgentStartResponse,
 	parseHerdrPaneGetResponse,
@@ -57,6 +73,8 @@ import {
 	readHerdrErrorCode,
 	reclaim,
 	resolveHerdrContext,
+	resolveHerdrSocketPath,
+	resolvePiDurableLauncher,
 	type SpawnFn,
 } from "./herdr-fresh-call.ts";
 
@@ -316,17 +334,21 @@ export const HERDR_RESUME_HINT: Readonly<Record<HerdrResumeRejectReason | HerdrR
  *
  *   ok        a herdr handle — `rail: "herdr"` plus the receipt, nothing tmux-shaped invented
  *   reject    reason + hint, and nothing was created
- *   failure   reason + hint + what is out there: the rail, herdr's code, the recovery, the created tab
+ *   failure   reason + hint + what is out there: the rail, herdr's code, the recovery, the created tab;
+ *             the pi-durable layout failure tags its rail `herdr-layout`, so no tab create step is named
  */
 export type HerdrResumeLaunchOutcome =
 	| { readonly ok: true; readonly handle: { readonly rail: "herdr" } & HerdrResumeReceipt }
+	/** #157 B3: the pi-durable layout launch — its own rail tag, because it carries no agent name and no
+	 * terminal id (herdr's layout reply names neither), and a pi resume must never read one as its own. */
+	| { readonly ok: true; readonly handle: { readonly rail: "herdr-layout" } & HerdrPiDurableResumeReceipt }
 	| { readonly ok: false; readonly reason: string; readonly hint: string }
 	| {
 			readonly ok: false;
 			readonly reason: string;
 			readonly hint: string;
 			readonly failure: {
-				readonly rail: "herdr";
+				readonly rail: "herdr" | "herdr-layout";
 				readonly vendorCode?: string;
 				readonly recovery: HerdrRecovery;
 				readonly created?: HerdrResumeCreated;
@@ -351,11 +373,243 @@ export function herdrResumeLaunchOutcome(result: HerdrResumeCallResult): HerdrRe
 }
 
 /** The production herdr launch the shared rail root (`dispatchResumeLaunch`) returns to the v2 seam
- * when this process is inside herdr. */
+ * when this process is inside herdr. A pi-durable resume (#157 B3) is the layout launch below; every
+ * other backend goes to the pi path, which refuses all but pi. */
 export async function launchHerdrResume(
-	input: { readonly backend: string; readonly cwd: string; readonly runtimeArgs: readonly string[] },
+	input: {
+		readonly backend: string;
+		readonly cwd: string;
+		readonly runtimeArgs: readonly string[];
+		readonly piDurableAdoptEnv?: HerdrPiDurableAdoptEnv;
+	},
 	env: NodeJS.ProcessEnv,
 	spawn: SpawnFn = spawnChildProcess as SpawnFn,
 ): Promise<HerdrResumeLaunchOutcome> {
+	if (input.backend === "pi-durable") {
+		if (input.piDurableAdoptEnv === undefined) {
+			throw new Error("herdr-resume-call: a pi-durable resume reached the herdr rail without its adopt projection");
+		}
+		return herdrPiDurableResumeLaunchOutcome(
+			await herdrPiDurableResumeCall(
+				{ cwd: input.cwd, runtimeArgs: input.runtimeArgs, adoptEnv: input.piDurableAdoptEnv },
+				env,
+			),
+		);
+	}
 	return herdrResumeLaunchOutcome(await herdrResumeCall(input, (bin) => createHerdrRunner(bin, env, spawn), env));
+}
+
+// ── #157 B3: the pi-durable same-id resume through ONE layout.apply ─────────────────────────────────
+//
+// The fresh rail's layout branch, minus everything a resume does not have: no nonce, no callback env,
+// no task, no model and no preflight of a first input. What it keeps is its order and its certainty
+// rules — every decidable refusal before the first socket request, the caller-pane read (a write on
+// the socket that mutates nothing) before the ONE layout mutation write, never resent, and no reclaim
+// (herdr's layout reply names no terminal id, so this branch holds no authority to close what it
+// opened). What it adds is the adopt launch projection as the layout's env map.
+//
+// WHAT "NOTHING WAS CREATED" MEANS HERE, NAMED FOR THIS LEAF (L3-A1 §6: no rail's mapping is borrowed
+// for another). A refusal (`ok:false` with no `recovery`) is decided before the layout write, so
+// nothing was asked of herdr. After the write, `recovery.outcome === "none"` is the shared layout
+// classifier's own certainty — the request was never written (a connect failure) or herdr answered a
+// well-formed error with a code its pinned handler returns before any creation — and every other
+// outcome is `unknown`. The v2 side withdraws its reservation for the first two and keeps it otherwise.
+
+/** The adopt launch projection, read by name: the same five names the tmux leaf emits. */
+export interface HerdrPiDurableAdoptEnv {
+	readonly PI_CODING_AGENT_DIR: string;
+	readonly ENTWURF_META_SESSIONS_DIR: string;
+	readonly ENTWURF_META_MAILBOX_DIR: string;
+	readonly ENTWURF_META_SENDERS_DIR: string;
+	readonly ENTWURF_META_RECEIVERS_DIR: string;
+}
+
+/** Why a pi-durable herdr resume was refused BEFORE the layout write. One word per herdr fact, the
+ * fresh layout branch's own. */
+export type HerdrPiDurableResumeRejectReason = Extract<
+	HerdrFreshCallRejectReason,
+	| "herdr-context-missing"
+	| "herdr-caller-pane-missing"
+	| "cwd-not-absolute"
+	| "cwd-missing"
+	| "cwd-not-directory"
+	| "herdr-socket-path-missing"
+	| "pi-durable-package-incomplete"
+	| "pi-durable-carrier-drift"
+	| "pi-durable-sdk-absent"
+	| "pi-durable-sdk-mismatch"
+	| "pi-durable-launcher-missing"
+	| "herdr-argv-control-character"
+	| "herdr-caller-pane-get-failed"
+	| "herdr-caller-pane-unparsable"
+	| "herdr-caller-pane-drift"
+	| "herdr-caller-workspace-missing"
+>;
+
+/** What herdr's layout reply proved for THIS launch: the launcher and directory asked for, and the
+ * view coordinates. No agent name, no terminal id, no garden or native session id. */
+export interface HerdrPiDurableResumeReceipt {
+	/** The verified package's launcher, first in the layout's argv vector. */
+	readonly runtime: string;
+	/** The REQUESTED start directory, the reservation's — not an observation of where the pane landed. */
+	readonly cwd: string;
+	readonly herdrWorkspaceId: string;
+	readonly herdrTabId: string;
+	readonly herdrPaneId: string;
+}
+
+export type HerdrPiDurableResumeResult =
+	| { readonly ok: true; readonly receipt: HerdrPiDurableResumeReceipt }
+	| {
+			readonly ok: false;
+			readonly reason: HerdrPiDurableResumeRejectReason;
+			readonly reported?: HerdrReportedDiagnostics;
+	  }
+	| HerdrLayoutFailure;
+
+/**
+ * Open the reserved pi-durable session in a new herdr tab: the verified launcher, the record-derived
+ * argv (the managed verb and its closed adopt context, built on the v2 side and passed through
+ * untouched), the reservation's cwd, and an env map of exactly the identity scrub plus the five adopt
+ * names. `deps` is the fresh layout branch's own seam; `requestBase` names this call's two request ids.
+ */
+export async function herdrPiDurableResumeCall(
+	params: { readonly cwd: string; readonly runtimeArgs: readonly string[]; readonly adoptEnv: HerdrPiDurableAdoptEnv },
+	env: NodeJS.ProcessEnv,
+	deps: HerdrLayoutDeps = HERDR_LAYOUT_PRODUCTION_DEPS,
+	requestBase: string = mintHerdrResumeAgentName(),
+): Promise<HerdrPiDurableResumeResult> {
+	const herdr = resolveHerdrContext(env);
+	if (!herdr.ok) {
+		if (herdr.reason === "herdr-context-missing" || herdr.reason === "herdr-caller-pane-missing") {
+			return { ok: false, reason: herdr.reason };
+		}
+		throw new Error(`herdr-resume-call: the herdr context refused as ${herdr.reason}, which this rail does not name`);
+	}
+	const badCwd = classifyHerdrCwd(params.cwd);
+	if (badCwd !== null) return { ok: false, reason: badCwd };
+	const socketPath = resolveHerdrSocketPath(env);
+	if (socketPath === null) return { ok: false, reason: "herdr-socket-path-missing" };
+	const layout = deps.packageLayout();
+	if (layout === null) return { ok: false, reason: "pi-durable-package-incomplete" };
+	const runtimeRefusal = deps.runtimeVerdict(layout);
+	if (runtimeRefusal !== null) return { ok: false, reason: runtimeRefusal };
+	const runtime = resolvePiDurableLauncher(layout);
+	if (runtime === null) return { ok: false, reason: "pi-durable-launcher-missing" };
+
+	const command = [runtime, ...params.runtimeArgs];
+	const launchEnv: Record<string, string> = {
+		PI_SESSION_ID: "",
+		PI_AGENT_ID: "",
+		PI_CODING_AGENT_DIR: params.adoptEnv.PI_CODING_AGENT_DIR,
+		ENTWURF_META_SESSIONS_DIR: params.adoptEnv.ENTWURF_META_SESSIONS_DIR,
+		ENTWURF_META_MAILBOX_DIR: params.adoptEnv.ENTWURF_META_MAILBOX_DIR,
+		ENTWURF_META_SENDERS_DIR: params.adoptEnv.ENTWURF_META_SENDERS_DIR,
+		ENTWURF_META_RECEIVERS_DIR: params.adoptEnv.ENTWURF_META_RECEIVERS_DIR,
+	};
+	// A control character anywhere in the vector or the env map is refused while it is still free:
+	// this exec path has no Cc rule of its own, and herdr's env check would answer only after the write.
+	if (command.some(containsControlChar) || Object.values(launchEnv).some(containsControlChar)) {
+		return { ok: false, reason: "herdr-argv-control-character" };
+	}
+
+	const call = deps.socket(socketPath);
+	const readId = `${requestBase}:pane.get`;
+	const read = classifyHerdrLayoutPaneRead(
+		await call(buildHerdrPaneGetPacket(readId, herdr.context.callerPaneId)),
+		readId,
+		herdr.context.callerPaneId,
+	);
+	if (!read.ok) return { ok: false, reason: read.reason, reported: read.reported };
+
+	// ── everything above this line leaves nothing behind; the ONE layout mutation write follows ──
+	const writeId = `${requestBase}:layout.apply`;
+	const applied = classifyHerdrLayoutApplyReply(
+		await call(
+			buildHerdrLayoutApplyPacket(writeId, {
+				workspaceId: read.workspaceId,
+				cwd: params.cwd,
+				command,
+				env: launchEnv,
+			}),
+		),
+		{ id: writeId, workspaceId: read.workspaceId, cwd: params.cwd, command },
+	);
+	if (!applied.ok) return applied;
+	return {
+		ok: true,
+		receipt: {
+			runtime,
+			cwd: params.cwd,
+			herdrWorkspaceId: applied.workspaceId,
+			herdrTabId: applied.tabId,
+			herdrPaneId: applied.paneId,
+		},
+	};
+}
+
+/** Why each pi-durable outcome happened. The context and caller-pane words are this verb's own (the
+ * pi resume table); the package, launcher, endpoint and layout words are the fresh layout branch's. */
+export const HERDR_PI_DURABLE_RESUME_HINT: Readonly<
+	Record<HerdrPiDurableResumeRejectReason | HerdrLayoutFailureReason, string>
+> = {
+	"herdr-context-missing": HERDR_RESUME_HINT["herdr-context-missing"],
+	"herdr-caller-pane-missing": HERDR_RESUME_HINT["herdr-caller-pane-missing"],
+	"cwd-not-absolute": HERDR_RESUME_HINT["cwd-not-absolute"],
+	"cwd-missing": HERDR_RESUME_HINT["cwd-missing"],
+	"cwd-not-directory": HERDR_RESUME_HINT["cwd-not-directory"],
+	"herdr-socket-path-missing": HERDR_REJECT_HINT["herdr-socket-path-missing"],
+	"pi-durable-package-incomplete": HERDR_REJECT_HINT["pi-durable-package-incomplete"],
+	"pi-durable-carrier-drift": HERDR_REJECT_HINT["pi-durable-carrier-drift"],
+	"pi-durable-sdk-absent": HERDR_REJECT_HINT["pi-durable-sdk-absent"],
+	"pi-durable-sdk-mismatch": HERDR_REJECT_HINT["pi-durable-sdk-mismatch"],
+	"pi-durable-launcher-missing": HERDR_REJECT_HINT["pi-durable-launcher-missing"],
+	"herdr-argv-control-character":
+		"the reservation's launch argv or adopt env holds a control character, which this rail refuses before asking herdr anything",
+	"herdr-caller-pane-get-failed":
+		"herdr would not report this process's own pane through one `pane.get` on HERDR_SOCKET_PATH; any cause herdr reported is quoted",
+	"herdr-caller-pane-unparsable": HERDR_RESUME_HINT["herdr-caller-pane-unparsable"],
+	"herdr-caller-pane-drift": HERDR_RESUME_HINT["herdr-caller-pane-drift"],
+	"herdr-caller-workspace-missing": HERDR_RESUME_HINT["herdr-caller-workspace-missing"],
+	"herdr-layout-transport-failed": HERDR_REJECT_HINT["herdr-layout-transport-failed"],
+	"herdr-layout-apply-refused": HERDR_REJECT_HINT["herdr-layout-apply-refused"],
+	"herdr-layout-apply-failed": HERDR_REJECT_HINT["herdr-layout-apply-failed"],
+	"herdr-layout-reply-unparsable": HERDR_REJECT_HINT["herdr-layout-reply-unparsable"],
+	"herdr-layout-reply-drift": HERDR_REJECT_HINT["herdr-layout-reply-drift"],
+};
+
+/** The reported diagnostics, already cut, quoted onto the hint so a value cannot pose as prose. */
+function reportedSuffix(reported: HerdrReportedDiagnostics | undefined): string {
+	if (reported === undefined) return "";
+	const all: ReadonlyArray<readonly [string, string | undefined]> = [
+		["transport", reported.transport],
+		["code", reported.errorCode],
+		["message", reported.errorMessage],
+		["workspace", reported.workspaceId],
+		["tab", reported.tabId],
+		["pane", reported.paneId],
+	];
+	const fields = all.filter((field): field is readonly [string, string] => field[1] !== undefined);
+	if (fields.length === 0) return "";
+	return ` (reported, display only and unverified: ${fields.map(([name, value]) => `${name} ${JSON.stringify(value)}`).join(", ")})`;
+}
+
+/** The pi-durable layout result as the v2 seam reads it: a `herdr-layout` handle, a refusal, or a
+ * failure carrying the layout's own `none | unknown` certainty — no created coordinates, none known. */
+export function herdrPiDurableResumeLaunchOutcome(result: HerdrPiDurableResumeResult): HerdrResumeLaunchOutcome {
+	if (result.ok) return { ok: true, handle: { rail: "herdr-layout", ...result.receipt } };
+	const hint = `${HERDR_PI_DURABLE_RESUME_HINT[result.reason]}${reportedSuffix(result.reported)}`;
+	if ("recovery" in result) {
+		return {
+			ok: false,
+			reason: result.reason,
+			hint,
+			failure: {
+				rail: "herdr-layout",
+				...(result.herdrErrorCode === undefined ? {} : { vendorCode: result.herdrErrorCode }),
+				recovery: result.recovery,
+			},
+		};
+	}
+	return { ok: false, reason: result.reason, hint };
 }

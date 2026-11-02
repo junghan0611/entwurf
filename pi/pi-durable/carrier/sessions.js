@@ -39,6 +39,11 @@ import { isSessionName } from "./session-name.js";
 	                           
 	                                                     
 	                          
+	   
+	                                                                                                                
+	                                                                    
+	   
+	                         
  
 
 /**
@@ -83,15 +88,17 @@ async function statIfPresent(path        )                             {
 	}
 }
 
-async function sessionRoot(cwdInput        )                                         {
+async function sessionRoot(cwdInput        )                                                          {
 	const cwd = await realpath(resolve(cwdInput));
+	// Read once: the root is joined from this value, and the fence is handed this same value as it came (#157 B3).
+	const agentDir = getAgentDir();
 	const root = join(
-		getAgentDir(),
+		agentDir,
 		"experimental",
 		"durable-sessions",
 		createHash("sha256").update(cwd).digest("hex").slice(0, 24),
 	);
-	return { cwd, root };
+	return { cwd, root, profile: agentDir };
 }
 
 /** The sessions of `cwd`, most recently written first. Reads names, file times and locks; creates nothing. */
@@ -134,7 +141,7 @@ export async function selectSession(
 	continueSession         ,
 	sessionId         ,
 )                           {
-	const { cwd, root } = await sessionRoot(cwdInput);
+	const { cwd, root, profile } = await sessionRoot(cwdInput);
 	await mkdir(root, { recursive: true });
 
 	let directory        ;
@@ -161,7 +168,7 @@ export async function selectSession(
 	}
 
 	// The owner fence admits this opener BEFORE the native lease, or refuses with nothing taken (#157 B3).
-	const ticket = await fence.admit({ directory, selectedN: basename(directory), created });
+	const ticket = await fence.admit({ directory, selectedN: basename(directory), created, profile });
 	// A lock left by a crashed process goes stale after 10 s; wait that long before giving up.
 	const lease = lockfile.lock(directory, {
 		realpath: false,

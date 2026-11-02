@@ -80,17 +80,28 @@
 // REPLACE the first extension or keep both tools. A refusal at module k leaves modules before it
 // evaluated: nothing is rolled back. No watch, no recursion, nothing persisted.
 //
+// `--entwurf-adopt <json>` (#157 B3 I-3) opens the one native session a parent reserved for this process. The
+// payload is closed: exactly `{v:1, gardenId, metaRoot, sourceGeneration}`, and any other key or value is refused. It
+// is exclusive with `--continue`, `--resume`, `--session` and every new-session flag. The garden record under
+// `metaRoot` is the address. Its native session id is the session, held to the same grammar as `--session`.
+// Before anything loads, the four `ENTWURF_META_*_DIR` values this process actually received must be `metaRoot`'s
+// standard children (the launch's fixed projection). The contact's roots are those four, whatever a seam passes.
+// The open takes the adoption fence of that context, which re-reads the record and its location inside its own
+// holds. The selection read here is never handed to the fence as evidence.
+//
 // Without that resolver the carrier's first pi-coding-agent internal import fails by name (an
 // unsupported entwurf-pi-dist: URL scheme), and that failure is the honest one.
 import { readdirSync, realpathSync, statSync } from "node:fs";
 import { isAbsolute, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { readAddressableMetaIdentity } from "../../mcp/entwurf-bridge/dist/pi-extensions/lib/meta-session.js";
 import { createPiDurableOwnerFence } from "../../mcp/entwurf-bridge/dist/pi-extensions/lib/pi-durable-owner-fence.js";
 import { decodeOmpBootstrapPayload } from "../../mcp/entwurf-bridge/dist/pi-extensions/meta-bridge-omp.js";
 import {
 	closeAll,
 	createPiDurableContact,
 	failAfterCleanup,
+	PI_DURABLE_BACKEND,
 	PI_DURABLE_EXTENSION_NAME,
 	PI_DURABLE_TOOL_NAMES,
 	piDurableGardenIds,
@@ -103,7 +114,10 @@ const SESSIONS = "./carrier/sessions.js";
 /** The session-name grammar alone: no imports and no I/O, so reading it loads nothing an operator module may prepare. */
 const SESSION_NAME = "./carrier/session-name.js";
 
-/** The owner fence every open of this process hands the runtime (#157 B3). Building it reads and writes nothing. */
+/**
+ * The owner fence every ordinary open of this process hands the runtime (#157 B3); an adoption hands its own (below).
+ * Building it reads and writes nothing.
+ */
 const OWNER_FENCE = createPiDurableOwnerFence();
 
 /** The entwurf-bridge of THIS package closure: the one the contact spawns as its MCP hand. */
@@ -121,9 +135,19 @@ const VALUE_FLAGS = [
 	"--native-module",
 	"--native-module-dir",
 	"--session",
+	"--entwurf-adopt",
 ];
 /** Flags only a NEW session can honour. */
 const FRESH_ONLY_FLAGS = ["--provider", "--model", "--width", "--entwurf-bootstrap"];
+/** The closed adopt context's keys, sorted: nothing else rides it (#157 B3 I-3). */
+const ADOPT_KEYS = ["gardenId", "metaRoot", "sourceGeneration", "v"];
+/** Each contact root of an adoption: the env name its launch carries it in, and its standard child of `metaRoot`. */
+const ADOPT_ROOTS = {
+	sessionsDir: ["ENTWURF_META_SESSIONS_DIR", "meta-sessions"],
+	mailboxDir: ["ENTWURF_META_MAILBOX_DIR", "meta-mailbox"],
+	sendersDir: ["ENTWURF_META_SENDERS_DIR", "meta-senders"],
+	receiversDir: ["ENTWURF_META_RECEIVERS_DIR", "meta-receivers"],
+};
 
 /**
  * Extension names the durable app installs itself — the contact, then the carrier's own
@@ -142,6 +166,68 @@ function refuse(reason, detail) {
 }
 
 const nonEmpty = (value) => typeof value === "string" && value.trim().length > 0;
+
+const messageOf = (error) => (error instanceof Error ? error.message : String(error));
+
+/**
+ * `--entwurf-adopt`'s closed context, decoded before anything loads. The key set and `v` are this grammar's own.
+ * The garden id, the generation and the absolute root are the adoption fence's checks, run here by building the
+ * fence, which reads and writes nothing.
+ */
+function decodeAdoptContext(text) {
+	let value;
+	try {
+		value = JSON.parse(text);
+	} catch (error) {
+		throw Object.assign(refuse("adopt-context-invalid", "--entwurf-adopt is not JSON"), { cause: error });
+	}
+	if (
+		typeof value !== "object" ||
+		value === null ||
+		Array.isArray(value) ||
+		Object.keys(value).sort().join(",") !== ADOPT_KEYS.join(",")
+	) {
+		throw refuse("adopt-context-invalid", "--entwurf-adopt is exactly {v, gardenId, metaRoot, sourceGeneration}");
+	}
+	if (value.v !== 1) throw refuse("adopt-context-invalid", "--entwurf-adopt is version 1");
+	const { gardenId, metaRoot, sourceGeneration } = value;
+	let fence;
+	try {
+		fence = createPiDurableOwnerFence({ adoption: { gardenId, metaRoot, sourceGeneration } });
+	} catch (error) {
+		throw Object.assign(refuse("adopt-context-invalid", messageOf(error)), { cause: error });
+	}
+	return { gardenId, metaRoot, sourceGeneration, fence };
+}
+
+/** An adoption's contact roots: the standard children of its `metaRoot`, the shape the parent's reserve required. */
+function adoptRoots(metaRoot) {
+	return Object.fromEntries(Object.entries(ADOPT_ROOTS).map(([key, [, child]]) => [key, join(metaRoot, child)]));
+}
+
+/** The four meta roots this process actually received must be the context's; no ambient root stands in for them. */
+function requireAdoptRootEnv(metaRoot) {
+	const mismatched = Object.values(ADOPT_ROOTS)
+		.filter(([name, child]) => process.env[name] !== join(metaRoot, child))
+		.map(([name]) => name);
+	if (mismatched.length > 0) {
+		throw refuse("adopt-root-mismatch", `${mismatched.join(", ")} must be the standard children of ${metaRoot}`);
+	}
+}
+
+/** The native session the garden record names. The record is the address, read through the addressable reader. */
+function adoptedSession({ gardenId, metaRoot }) {
+	let record;
+	try {
+		record = readAddressableMetaIdentity(gardenId, join(metaRoot, ADOPT_ROOTS.sessionsDir[1]));
+	} catch (error) {
+		throw Object.assign(refuse("adopt-record-unaddressable", `${gardenId}: ${messageOf(error)}`), { cause: error });
+	}
+	if (record.backend !== PI_DURABLE_BACKEND) {
+		throw refuse("adopt-record-not-pi-durable", `${gardenId} is a ${record.backend} record`);
+	}
+	return record.nativeSessionId;
+}
 
 /** The identity carriers present now: names and values, compared in memory and never printed. */
 function identitySnapshot() {
@@ -310,6 +396,8 @@ async function loadNativeModules(files) {
  * checkout-only gates, which drive a private bundle) passes another one — never the launch argv.
  * `extensions` are the operator's native extensions (`--native-module` or `--native-module-dir`),
  * installed after the contact, by reference.
+ * `adopt` is a decoded `--entwurf-adopt` context (#157 B3 I-3). Its fence admits the open, in place of the ordinary
+ * one, and its `metaRoot`'s four standard roots are the contact's, spread last so no seam replaces them.
  *
  * @param {{
  *   bridgeEntry?: string,
@@ -320,6 +408,7 @@ async function loadNativeModules(files) {
  *   firstInput?: string,
  *   extensions?: readonly object[],
  *   contact?: Record<string, unknown>,
+ *   adopt?: { gardenId: string, metaRoot: string, sourceGeneration: string, fence: object },
  *   open?: (options: { cwd: string, continueSession: boolean, session?: string, extensions: readonly object[], model?: { provider: string, model: string }, fence: object }) => Promise<any>,
  * }} options
  * @returns {Promise<{ durable: any, contact: any, attachment: { gardenId: string } & Record<string, any>, firstInput?: any, close(): Promise<void> }>}
@@ -335,6 +424,7 @@ export async function openDurableCitizen({
 	firstInput,
 	extensions = [],
 	contact: contactOptions = {},
+	adopt,
 	open,
 }) {
 	if (continueSession && (model !== undefined || firstInput !== undefined)) {
@@ -356,7 +446,12 @@ export async function openDurableCitizen({
 		throw refuse("first-input-empty", "a first input is a non-empty task");
 	}
 	const openDurable = open ?? (await import(RUNTIME)).openDurable;
-	const contact = createPiDurableContact({ ...contactOptions, bridgeEntry });
+	const fence = adopt === undefined ? OWNER_FENCE : adopt.fence;
+	const contact = createPiDurableContact({
+		...contactOptions,
+		bridgeEntry,
+		...(adopt === undefined ? {} : adoptRoots(adopt.metaRoot)),
+	});
 	let durable;
 	try {
 		durable = await openDurable({
@@ -365,7 +460,7 @@ export async function openDurableCitizen({
 			...(session === undefined ? {} : { session }),
 			extensions: [contact.extension, ...extensions],
 			...(model === undefined ? {} : { model }),
-			fence: OWNER_FENCE,
+			fence,
 		});
 	} catch (error) {
 		contact.fail(error);
@@ -460,6 +555,22 @@ function parseArgs(argv) {
 		);
 	}
 	const fresh = FRESH_ONLY_FLAGS.filter((flag) => values.has(flag));
+	const adoptArg = values.get("--entwurf-adopt");
+	if (adoptArg !== undefined) {
+		const others = [
+			...(continueSession ? ["--continue"] : []),
+			...(resume ? ["--resume"] : []),
+			...(session === undefined ? [] : ["--session"]),
+			...fresh,
+		];
+		if (others.length > 0) {
+			throw refuse(
+				"adopt-exclusive",
+				`${others.join(", ")} cannot be given with --entwurf-adopt: an adoption opens exactly the reserved session`,
+			);
+		}
+	}
+	const adopt = adoptArg === undefined ? undefined : decodeAdoptContext(adoptArg);
 	if (session !== undefined && fresh.length > 0) {
 		throw refuse(
 			"fresh-only-argument-with-session",
@@ -495,6 +606,7 @@ function parseArgs(argv) {
 	if (continueSession) return { continueSession, ...nativeModule };
 	if (resume) return { resume, ...nativeModule };
 	if (session !== undefined) return { session, ...nativeModule };
+	if (adopt !== undefined) return { adopt, ...nativeModule };
 	const provider = values.get("--provider");
 	if (provider === undefined) {
 		throw refuse(
@@ -586,6 +698,12 @@ export async function main(argv, { loadTui = () => import(TUI), open, contact, b
 	// Every argument refusal but the `--session` grammar is decided here, before any module, the TUI or
 	// the app loads.
 	const { nativeModules = [], resume = false, ...args } = parseArgs(argv);
+	// `--entwurf-adopt` (#157 B3 I-3): the roots this process received are checked against the context before
+	// anything else is read. The session is the one the garden record names, under the `--session` grammar below.
+	if (args.adopt !== undefined) {
+		requireAdoptRootEnv(args.adopt.metaRoot);
+		args.session = adoptedSession(args.adopt);
+	}
 	// `--session` is held to the owned session-name grammar the runtime selects by, before operator-native
 	// module evaluation, TUI load, open or birth. Only the import-free grammar file is read for it — never
 	// the session store, whose SDK config import fixes package state from the environment an operator

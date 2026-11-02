@@ -1421,9 +1421,10 @@ check_entwurf_v2_visible_resume() {
   #
   # #157 G1a: the herdr launch of a pi resume (herdr-resume-call.ts) is the other half of this
   # seam, and its mutants name THIS coordinate rather than a new gate verb — a new run.sh command
-  # would be one more undescribed name for check-install-surface S9. Two named files, still no glob.
-  section "visible same-id resume + its herdr launch (mutant execution coordinate)"
-  run_vitest pi-extensions/lib/entwurf-v2-visible-resume.test.ts pi-extensions/lib/herdr-resume-call.test.ts
+  # would be one more undescribed name for check-install-surface S9. #157 B3: the tmux leaf's
+  # pi-durable window (mux-resume-call.test.ts) joins it for the same reason. Named files, no glob.
+  section "visible same-id resume + its herdr and tmux launches (mutant execution coordinate)"
+  run_vitest pi-extensions/lib/entwurf-v2-visible-resume.test.ts pi-extensions/lib/herdr-resume-call.test.ts pi-extensions/lib/mux-resume-call.test.ts
 }
 
 check_resume_launch_identity() {

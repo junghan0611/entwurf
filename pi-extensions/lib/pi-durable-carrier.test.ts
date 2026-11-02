@@ -25,7 +25,7 @@
  * server receives decide.
  */
 
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import * as fs from "node:fs";
 import * as os from "node:os";
@@ -46,6 +46,8 @@ import {
 	readPin,
 	readSourceObject,
 } from "../../scripts/emit-pi-durable-carrier.ts";
+import { commitPiDurableBirth, verifyPiDurableLocation } from "./pi-durable-location.ts";
+import { type PiDurableOwner, reservePiDurableSession } from "./pi-durable-owner-fence.ts";
 
 const ROOT = path.resolve(import.meta.dirname, "..", "..");
 const DURABLE = path.join(ROOT, "pi", "pi-durable");
@@ -1096,15 +1098,17 @@ const fresh = { model: { provider: "faux", model: "scripted" } };
 	process.chdir(cwd);
 	try {
 		resume.before = state();
-		await main(["--resume"], {
-			loadTui: fakeTui,
-			contact,
-			pick: async (title, items) => {
-				resume.offered = { title, items };
-				return older.id;
-			},
-		});
-		resume.chosen = { seen: seen.splice(0), after: state() };
+		const chosenReason = await reasonOf(() =>
+			main(["--resume"], {
+				loadTui: fakeTui,
+				contact,
+				pick: async (title, items) => {
+					resume.offered = { title, items };
+					return older.id;
+				},
+			}),
+		);
+		resume.chosen = { reason: chosenReason, seen: seen.splice(0), after: state() };
 		resume.cancelled = {
 			reason: await reasonOf(() => main(["--resume"], { loadTui: fakeTui, contact, pick: async () => undefined })),
 			seen: seen.splice(0),
@@ -1328,7 +1332,7 @@ interface AppReport {
 		newer: { id: string; gardenId: string };
 		before: ResumeState;
 		offered?: { title: string; items: { value: string; label: string; description: string }[] };
-		chosen: { seen: ResumeSeen[]; after: ResumeState };
+		chosen: { reason: string; seen: ResumeSeen[]; after: ResumeState };
 		cancelled: { reason: string; seen: ResumeSeen[]; after: ResumeState };
 		elsewhere: { reason: string; marked?: string; seen: ResumeSeen[] };
 		noTerminal: { reason: string; seen: ResumeSeen[] };
@@ -1507,6 +1511,7 @@ describe("the carrier on the 1.2 SDK, driven through the real bootstrap (#141)",
 
 	it("[QK:PI-DURABLE-RESUME-OPENS-CHOSEN] --resume reopens the chosen session as it was saved, under its own garden id: not the newest, not a new one", () => {
 		const { older, before, chosen } = report.resume;
+		expect(chosen.reason).toBe("returned");
 		expect(chosen.seen).toHaveLength(1);
 		expect(chosen.seen[0]?.id).toBe(older.id);
 		expect(chosen.seen[0]?.users).toEqual(["OLDER-MARK"]);
@@ -2119,12 +2124,133 @@ const opened = async (name, options = {}) => {
 	}
 }
 
+// 9. The raw profile (#157 B3 I-1): an agent directory set with an inner ".." and a trailing separator, as an operator
+//    may set it, is what the open hands its fence and what the claim records, byte for byte. Only this open sees it.
+{
+	const via = path.join(path.dirname(agentDir), "via");
+	fs.mkdirSync(via, { recursive: true });
+	const raw = via + "/../" + path.basename(agentDir) + "/";
+	const cwd = project("raw-profile");
+	const handed = [];
+	const previous = process.env.PI_CODING_AGENT_DIR;
+	process.env.PI_CODING_AGENT_DIR = raw;
+	let result;
+	try {
+		result = await settle(openDurable({ cwd, fence: { admit: async (request) => {
+			handed.push({ profile: request.profile, directory: request.directory });
+			return fence.admit(request);
+		} } }).then((durable) => durable.close()));
+	} finally {
+		process.env.PI_CODING_AGENT_DIR = previous;
+	}
+	report.rawProfile = { raw, cwd: fs.realpathSync(cwd), resolved: result.resolved, error: message(result.error), handed: handed.map((h) => h.profile), claim: claimOf(handed[0]?.directory) };
+}
+
+// 10. The adoption (#157 B3 I-3): the bootstrap's --entwurf-adopt through the real carrier open, for the reservations
+//     the test parent took before this child started (ORACLE_ADOPT). The four meta roots this process receives are set
+//     for one run and restored after it. While a tested open runs, every lease the carrier asks proper-lockfile for is
+//     logged in that open's own ordered log, beside its admission; nothing from another open is mixed in.
+{
+	const adopt = JSON.parse(process.env.ORACLE_ADOPT);
+	const lockfile = (await import("proper-lockfile")).default;
+	let events;
+	const lock = lockfile.lock;
+	lockfile.lock = function (file, ...rest) {
+		events?.push({ event: "lock-called", file });
+		return lock.call(this, file, ...rest);
+	};
+	const rootEnv = (r) => ({
+		ENTWURF_META_SESSIONS_DIR: r.sessionsDir,
+		ENTWURF_META_MAILBOX_DIR: r.mailboxDir,
+		ENTWURF_META_SENDERS_DIR: r.sendersDir,
+		ENTWURF_META_RECEIVERS_DIR: r.receiversDir,
+	});
+	const names = Object.keys(rootEnv(adopt.roots));
+	// The seam's own roots, which the adoption must never use.
+	const decoy = roots("adopt-decoy");
+	const listing = (dir) => fs.readdirSync(dir).sort();
+	const tested = async (garden, context, env) => {
+		const previous = Object.fromEntries(names.map((name) => [name, process.env[name]]));
+		const before = claimOf(garden.directory);
+		const opens = [];
+		const connects = [];
+		let whileOpen = null;
+		const here = process.cwd();
+		events = [];
+		Object.assign(process.env, env);
+		process.chdir(garden.project);
+		let result;
+		try {
+			result = await settle(main(["--entwurf-adopt", JSON.stringify(context)], {
+				loadTui: async () => ({
+					runDurableTui: async () => {
+						whileOpen = {
+							senders: listing(adopt.roots.sendersDir),
+							receivers: listing(adopt.roots.receiversDir),
+							decoy: [decoy.sessionsDir, decoy.sendersDir, decoy.mailboxDir, decoy.receiversDir].map(listing),
+						};
+					},
+				}),
+				contact: { ...decoy, connect: async (spec) => {
+					connects.push(Object.fromEntries(names.map((name) => [name, spec.env?.[name] ?? null])));
+					return decoy.connect(spec);
+				} },
+				open: async (options) => {
+					opens.push(options.session ?? null);
+					const admitting = options.fence;
+					return openDurable({ ...options, fence: { admit: async (request) => {
+						events.push({ event: "admit-called", directory: request.directory });
+						let ticket;
+						try {
+							ticket = await admitting.admit(request);
+						} catch (error) {
+							events.push({ event: "admit-refused", reason: error?.reason ?? null });
+							throw error;
+						}
+						events.push({ event: "admit-returned", claim: claimOf(request.directory) });
+						return ticket;
+					} } });
+				},
+			}));
+		} finally {
+			process.chdir(here);
+			for (const [name, value] of Object.entries(previous)) {
+				if (value === undefined) delete process.env[name];
+				else process.env[name] = value;
+			}
+		}
+		const log = events;
+		events = undefined;
+		return {
+			resolved: result.resolved,
+			reason: result.error?.reason ?? null,
+			error: message(result.error),
+			opens,
+			log,
+			connects,
+			whileOpen,
+			claimUnchanged: JSON.stringify(before) === JSON.stringify(claimOf(garden.directory)),
+		};
+	};
+	const contextOf = (garden, sourceGeneration) => ({ v: 1, gardenId: garden.gardenId, metaRoot: adopt.metaRoot, sourceGeneration });
+	report.adopt = {
+		pid: process.pid,
+		// One received root is not the context's: refused before the record is read or anything opens.
+		rootMismatch: await tested(adopt.matching, contextOf(adopt.matching, adopt.matching.generation), { ...rootEnv(adopt.roots), ENTWURF_META_SENDERS_DIR: decoy.sendersDir }),
+		matching: await tested(adopt.matching, contextOf(adopt.matching, adopt.matching.generation), rootEnv(adopt.roots)),
+		// Every received root is right, and the generation is not the reservation's.
+		stale: await tested(adopt.stale, contextOf(adopt.stale, "f".repeat(32)), rootEnv(adopt.roots)),
+	};
+}
+
 console.log(JSON.stringify(report));
 // Bounded: a lease or handle a defect leaves behind must not hold the child until the parent's timeout.
 process.exit(0);
 `;
 
 interface FenceClaimView {
+	schemaVersion?: number;
+	selected?: { n: string; directory: string; profile?: string };
 	state: string;
 	lease: string;
 	generation: string;
@@ -2177,16 +2303,166 @@ interface FenceReport {
 			lease: boolean;
 		}
 	>;
+	rawProfile: {
+		raw: string;
+		cwd: string;
+		resolved: boolean;
+		error: string | null;
+		handed: string[];
+		claim: FenceClaimView | null;
+	};
+	adopt: { pid: number } & Record<"rootMismatch" | "matching" | "stale", AdoptRun>;
+}
+
+interface AdoptRun {
+	resolved: boolean;
+	reason: string | null;
+	error: string | null;
+	opens: (string | null)[];
+	log: (
+		| { event: "admit-called"; directory: string }
+		| { event: "admit-refused"; reason: string | null }
+		| { event: "admit-returned"; claim: Record<string, any> | null }
+		| { event: "lock-called"; file: string }
+	)[];
+	connects: Record<string, string | null>[];
+	whileOpen: { senders: string[]; receivers: string[]; decoy: string[][] } | null;
+	claimUnchanged: boolean;
+}
+
+const ADOPT_AT = "2026-11-02T00:00:00.000Z";
+
+/** /proc/<pid>/stat field 22 as the kernel reports it, read here and never through the subject. */
+function startKeyOf(pid: number): string {
+	const stat = fs.readFileSync(`/proc/${pid}/stat`, "utf8");
+	return `linux:${
+		stat
+			.slice(stat.lastIndexOf(")") + 1)
+			.trim()
+			.split(/\s+/)[19]
+	}`;
+}
+
+/**
+ * #157 B3 I-3: the parent's half of an adoption, taken by this test process through the Entwurf source lib before the
+ * FENCE_ORACLE child starts. Each garden gets:
+ * - a native session directory S under the child's agent directory;
+ * - a record and C4 location, born for a fixture child that is then ended;
+ * - a literal closed claim in S's physical directory;
+ * - a reservation this process takes, so its pid owns g_r.
+ * Every root is a literal child of one private meta root apart from the profile.
+ */
+async function reservedFixture(sandbox: string, agent: string) {
+	const metaRoot = path.join(sandbox, "adopt-meta");
+	const roots = {
+		sessionsDir: path.join(metaRoot, "meta-sessions"),
+		mailboxDir: path.join(metaRoot, "meta-mailbox"),
+		sendersDir: path.join(metaRoot, "meta-senders"),
+		receiversDir: path.join(metaRoot, "meta-receivers"),
+	};
+	for (const dir of Object.values(roots)) fs.mkdirSync(dir, { recursive: true });
+	const garden = async (name: string, n: string) => {
+		const project = path.join(sandbox, `adopt-project-${name}`);
+		fs.mkdirSync(project);
+		const cwd = fs.realpathSync(project);
+		const hash = createHash("sha256").update(cwd).digest("hex").slice(0, 24);
+		const directory = path.join(agent, "experimental", "durable-sessions", hash, n);
+		fs.mkdirSync(directory, { recursive: true });
+		const child = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], { stdio: "ignore" });
+		const exited = new Promise((resolve) => child.once("exit", resolve));
+		const born = await (async () => {
+			try {
+				const pid = child.pid;
+				if (pid === undefined) throw new Error("the fixture child did not start");
+				await new Promise((resolve) => setTimeout(resolve, 50));
+				const donor: PiDurableOwner = { pid, startKey: startKeyOf(pid), hostname: os.hostname() };
+				const birth = commitPiDurableBirth({
+					nativeSessionId: n,
+					cwd,
+					sessionDirectory: directory,
+					ownerPid: pid,
+					sessionsDir: roots.sessionsDir,
+					receiversDir: roots.receiversDir,
+				});
+				return { donor, record: birth.record };
+			} finally {
+				child.kill("SIGKILL");
+				await exited;
+			}
+		})();
+		const resource = fs.realpathSync(directory);
+		const claim = {
+			schemaVersion: 2,
+			resource,
+			selected: { n, directory, profile: agent },
+			state: "closed",
+			owner: born.donor,
+			generation: "a".repeat(32),
+			firstParticipation: { at: ADOPT_AT, generation: "a".repeat(32), from: "fresh" },
+			lease: "released",
+			end: { at: ADOPT_AT, storage: "closed", lease: "released" },
+			writtenAt: ADOPT_AT,
+		};
+		fs.writeFileSync(path.join(resource, "entwurf-owner.json"), `${JSON.stringify(claim)}\n`);
+		const reservation = await reservePiDurableSession({ gardenId: born.record.gardenId, roots });
+		return {
+			project,
+			n,
+			directory,
+			resource,
+			gardenId: born.record.gardenId,
+			attachIncarnation: born.record.attachIncarnation,
+			generation: reservation.generation,
+			parent: reservation.owner,
+			reserved: fs.readFileSync(path.join(resource, "entwurf-owner.json"), "utf8"),
+		};
+	};
+	return {
+		profile: agent,
+		metaRoot,
+		roots,
+		matching: await garden("matching", "1759622400000-0b5e2a4c-1f3d-4e8a-9c7b-2d6f8e1a3c5b"),
+		stale: await garden("stale", "1759622400001-1c6f3b5d-2e4f-4a9b-8d1c-3e7a9f2b4d6c"),
+	};
+}
+
+type AdoptFixture = Awaited<ReturnType<typeof reservedFixture>>;
+
+/** What the parent reads back after the child: the record/C4 pair through the source verifier, and the raw claim. */
+function afterAdoption(fixture: AdoptFixture) {
+	const view = (garden: AdoptFixture["matching"]) => {
+		const verdict = verifyPiDurableLocation({
+			gardenId: garden.gardenId,
+			sessionsDir: fixture.roots.sessionsDir,
+			receiversDir: fixture.roots.receiversDir,
+		});
+		return {
+			verdict: verdict.ok
+				? {
+						gardenId: verdict.record.gardenId,
+						nativeSessionId: verdict.record.nativeSessionId,
+						recordIncarnation: verdict.record.attachIncarnation,
+						locationIncarnation: verdict.location.attachIncarnation,
+						ownerPid: verdict.location.ownerPid,
+					}
+				: { refused: verdict.reason },
+			claimText: fs.readFileSync(path.join(garden.resource, "entwurf-owner.json"), "utf8"),
+		};
+	};
+	return { matching: view(fixture.matching), stale: view(fixture.stale) };
 }
 
 describe("the owner fence through the owned runtime (#157 B3, clean child)", () => {
 	let report: FenceReport;
+	let adoptFixture: AdoptFixture;
+	let adoptAfter: ReturnType<typeof afterAdoption>;
 
-	beforeAll(() => {
+	beforeAll(async () => {
 		const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), "pi-durable-fence-"));
 		try {
 			const agent = path.join(sandbox, "home", ".pi", "agent");
 			fs.mkdirSync(agent, { recursive: true });
+			adoptFixture = await reservedFixture(sandbox, agent);
 			const run = spawnSync(
 				process.execPath,
 				["--import", path.join(DURABLE, "carrier-resolver.mjs"), "--input-type=module", "-e", FENCE_ORACLE],
@@ -2200,11 +2476,13 @@ describe("the owner fence through the owned runtime (#157 B3, clean child)", () 
 						PI_CODING_AGENT_DIR: agent,
 						PI_OFFLINE: "1",
 						ORACLE_SANDBOX: sandbox,
+						ORACLE_ADOPT: JSON.stringify(adoptFixture),
 					},
 				},
 			);
 			expect(run.status, run.stderr).toBe(0);
 			report = JSON.parse(run.stdout.trim().split("\n").at(-1) ?? "");
+			adoptAfter = afterAdoption(adoptFixture);
 		} finally {
 			fs.rmSync(sandbox, { recursive: true, force: true });
 		}
@@ -2219,6 +2497,64 @@ describe("the owner fence through the owned runtime (#157 B3, clean child)", () 
 			{ label: "picker", admit: "function" },
 			{ label: "citizen", admit: "function" },
 		]);
+	});
+
+	it("[QK:PDR-ADOPT-ROOTS] an adoption's meta roots are its context's: with the profile apart from the meta root, a received root that disagrees is refused as adopt-root-mismatch before anything opens, and in the matching open the contact's markers, its C4 location and its bridge connector's env name the literal private roots while the seam's own roots stay empty", () => {
+		const roots = adoptFixture.roots;
+		expect(path.relative(adoptFixture.metaRoot, adoptFixture.profile).startsWith("..")).toBe(true);
+		const { rootMismatch, matching } = report.adopt;
+		expect([rootMismatch.resolved, rootMismatch.reason, rootMismatch.opens, rootMismatch.log]).toEqual([
+			false,
+			"adopt-root-mismatch",
+			[],
+			[],
+		]);
+		expect(rootMismatch.claimUnchanged).toBe(true);
+		expect(matching.error).toBeNull();
+		expect(matching.connects).toEqual([
+			{
+				ENTWURF_META_SESSIONS_DIR: roots.sessionsDir,
+				ENTWURF_META_MAILBOX_DIR: roots.mailboxDir,
+				ENTWURF_META_SENDERS_DIR: roots.sendersDir,
+				ENTWURF_META_RECEIVERS_DIR: roots.receiversDir,
+			},
+		]);
+		expect(matching.whileOpen?.senders.length).toBeGreaterThan(0);
+		expect(matching.whileOpen?.receivers.filter((name) => name !== "meta-pi-durable-locations").length).toBeGreaterThan(
+			0,
+		);
+		expect(matching.whileOpen?.decoy).toEqual([[], [], [], []]);
+		// The C4 location read back from the literal receivers root is the child's own binding.
+		expect(adoptAfter.matching.verdict).toMatchObject({ ownerPid: report.adopt.pid });
+	});
+
+	it("[QK:PDR-ADOPT-BEFORE-LEASE] an adopt-mode open is admitted by the adoption before its native lease: when admit returns the claim is fenced under the adoption of g_r, then the carrier asks proper-lockfile for S's lease, the positive control that this child's interceptor sees the carrier's calls; afterwards the record and its C4 location agree on a newly minted binding owned by this child's pid, as the claim's owner is. A stale generation is refused inside admit, its open's log holds no lease call, and its claim keeps its bytes", () => {
+		const { pid, matching, stale } = report.adopt;
+		const m = adoptFixture.matching;
+		expect(matching.error).toBeNull();
+		expect(matching.opens).toEqual([m.n]);
+		const own = matching.log.filter((entry) => entry.event !== "lock-called" || entry.file === m.directory);
+		expect(own.map((entry) => entry.event)).toEqual(["admit-called", "admit-returned", "lock-called"]);
+		expect(own[0]).toEqual({ event: "admit-called", directory: m.directory });
+		const admitted = own[1]?.event === "admit-returned" ? own[1].claim : null;
+		expect([admitted?.state, admitted?.lease, admitted?.owner?.pid]).toEqual(["fenced", "never-held", pid]);
+		expect(admitted?.adoptedFrom).toEqual({ generation: m.generation, owner: m.parent });
+		expect(own[2]).toEqual({ event: "lock-called", file: m.directory });
+		const after = adoptAfter.matching.verdict as Record<string, unknown>;
+		expect([after.gardenId, after.nativeSessionId, after.ownerPid]).toEqual([m.gardenId, m.n, pid]);
+		expect(after.locationIncarnation).toBe(after.recordIncarnation);
+		expect(after.recordIncarnation).not.toBe(m.attachIncarnation);
+		const claim = JSON.parse(adoptAfter.matching.claimText);
+		expect(claim.owner.pid).toBe(pid);
+		expect(claim.adoptedFrom).toEqual({ generation: m.generation, owner: m.parent });
+
+		const s = adoptFixture.stale;
+		expect([stale.resolved, stale.reason, stale.opens]).toEqual([false, "adopt-generation-mismatch", [s.n]]);
+		expect(stale.log).toEqual([
+			{ event: "admit-called", directory: s.directory },
+			{ event: "admit-refused", reason: "adopt-generation-mismatch" },
+		]);
+		expect(adoptAfter.stale.claimText).toBe(s.reserved);
 	});
 
 	it("[QK:PDF-INIT-NEVER-OPENED-CLOSED] an init failure before the storage open is called, with the lease released, ends closed as never-opened", () => {
@@ -2336,6 +2672,23 @@ describe("the owner fence through the owned runtime (#157 B3, clean child)", () 
 		expect(report.required.resolved).toBe(false);
 		expect(report.required.error).toMatch(/^fence-required: /);
 		expect(report.required.rootExists).toBe(false);
+	});
+
+	it("[QK:PDR-RAW-PROFILE-CAPTURED] an agent directory set with an inner .. and a trailing separator reaches the fence and the schema 2 claim byte for byte, and the claim's directory is that same value joined", () => {
+		const { raw, cwd, resolved, error, handed, claim } = report.rawProfile;
+		// The literal is what this cell means it to be: not already the resolved spelling.
+		expect(raw.endsWith("/")).toBe(true);
+		expect(raw).toContain("/../");
+		expect(path.resolve(raw)).not.toBe(raw);
+		expect([resolved, error]).toEqual([true, null]);
+		expect(handed).toEqual([raw]);
+		expect(claim?.schemaVersion).toBe(2);
+		expect(claim?.selected?.profile).toBe(raw);
+		// Joined here, independently: the raw value, the layout and the hash of the real cwd.
+		const hash = createHash("sha256").update(cwd).digest("hex").slice(0, 24);
+		expect(claim?.selected?.directory).toBe(
+			path.join(raw, "experimental", "durable-sessions", hash, claim?.selected?.n ?? ""),
+		);
 	});
 });
 
@@ -2586,6 +2939,13 @@ try {
 	} finally {
 		await control.close();
 	}
+	// The closed citizen takes its provider connections with it (#157 S3 LIVE-R1): once close() resolved, the server
+	// itself observes the client close every connection it accepted for this citizen. Bounded; never observed is a red.
+	const ownConns = [...new Set(report.frames.filter((frame) => frame.phase === "websocket").map((frame) => frame.conn))];
+	report.closedWithCitizen = {
+		conns: ownConns,
+		observed: await until("websocket: provider connections end with the citizen", () => ownConns.length > 0 && ownConns.every((conn) => report.closes.includes(conn)), 5000),
+	};
 
 	// 5. The SDK's own compaction policy (#146), on a 60000-token window with pi's default reserve (blocking above 43616
 	//    tokens; the SDK's default background policy starts 32768 below that). The SDK estimates a context from the
@@ -2674,6 +3034,7 @@ interface WireReport {
 	};
 	frames: WireFrame[];
 	closes: number[];
+	closedWithCitizen?: { conns: number[]; observed: boolean };
 	unexpected: string[];
 	errors: string[];
 	compactionPlaced?: boolean;
@@ -2810,6 +3171,11 @@ describe("the stream transport on the wire, through the real bootstrap (#143)", 
 		expect(delta?.prev).toBe(full?.response);
 		expect(delta?.input).toHaveLength(1);
 		expect(userTextOf(delta?.input[0])).toContain("AFTER-RECONNECT-TWO");
+	});
+
+	it("[QK:PDF-CLOSE-RELEASES-PROVIDER-SOCKETS] a closed citizen takes its provider connections with it: once close() resolved, the server observed the client close every connection it accepted for that citizen, so the closed host holds no socket or idle timer that keeps it alive", () => {
+		expect(report?.closedWithCitizen?.conns.length ?? 0).toBeGreaterThan(0);
+		expect(report?.closedWithCitizen?.observed).toBe(true);
 	});
 
 	it("the owned Harness compaction settings are pi's own, with no background policy of the app's, read again at every use", () => {

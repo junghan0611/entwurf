@@ -32,15 +32,20 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import type { HerdrRun } from "./herdr-fresh-call.ts";
+import type { HerdrLayoutDeps, HerdrRun, HerdrSocketOutcome, SpawnFn } from "./herdr-fresh-call.ts";
 import {
 	buildHerdrResumeTabCreateArgs,
+	HERDR_PI_DURABLE_RESUME_HINT,
 	HERDR_RESUME_HINT,
 	type HerdrResumeCallResult,
+	herdrPiDurableResumeCall,
+	herdrPiDurableResumeLaunchOutcome,
 	herdrResumeCall,
 	herdrResumeLaunchOutcome,
+	launchHerdrResume,
 	mintHerdrResumeAgentName,
 } from "./herdr-resume-call.ts";
+import type { PiDurablePackageLayout } from "./pi-durable-runtime.ts";
 
 // The label is the contract, so it travels as expect's message.
 function ok(label: string, cond: boolean): void {
@@ -588,6 +593,311 @@ describe("the v2 seam and the fence", () => {
 			"exactly ./herdr-fresh-call.ts, node:child_process and node:crypto",
 			same([...specifiers].sort(), ["./herdr-fresh-call.ts", "node:child_process", "node:crypto"]) &&
 				!/\bimport\s*\(|\brequire\s*\(/.test(src),
+		);
+	});
+});
+
+// ══ #157 B3: the pi-durable same-id resume, ONE layout.apply ═══════════════════════
+// herdr is a scripted socket here, in request order, and an unscripted request throws — the same
+// discipline as the CLI table above. Replies are built from the request they answer, in the shapes the
+// fresh layout branch's own gate records (scripts/check-herdr-fresh-call.ts).
+describe("the pi-durable layout resume (#157 B3)", () => {
+	const ENV_PD: NodeJS.ProcessEnv = { ...ENV, HERDR_SOCKET_PATH: "/run/herdr/herdr.sock" };
+	const BASE = "entwurf-resume-fedcba9876543210";
+	const ADOPT_ENV = {
+		PI_CODING_AGENT_DIR: "/home/op/profiles/../profiles/pd/",
+		ENTWURF_META_SESSIONS_DIR: "/home/op/meta/meta-sessions",
+		ENTWURF_META_MAILBOX_DIR: "/home/op/meta/meta-mailbox",
+		ENTWURF_META_SENDERS_DIR: "/home/op/meta/meta-senders",
+		ENTWURF_META_RECEIVERS_DIR: "/home/op/meta/meta-receivers",
+	} as const;
+	const PD_ARGS = [
+		"pi-durable",
+		"--entwurf-adopt",
+		JSON.stringify({
+			v: 1,
+			gardenId: "20261102T000000-abcdef",
+			metaRoot: "/home/op/meta",
+			sourceGeneration: "a".repeat(32),
+		}),
+	];
+	const PD = { cwd: CWD, runtimeArgs: PD_ARGS, adoptEnv: ADOPT_ENV };
+	const PKG = fs.mkdtempSync(path.join(os.tmpdir(), "herdr-resume-pd-pkg-"));
+	const LAUNCHER = path.join(PKG, "run.sh");
+	fs.writeFileSync(LAUNCHER, "#!/bin/sh\nexit 0\n", { mode: 0o755 });
+	const NO_LAUNCHER = fs.mkdtempSync(path.join(os.tmpdir(), "herdr-resume-pd-nolauncher-"));
+	const layoutAt = (root: string) => ({ root }) as unknown as PiDurablePackageLayout;
+
+	type Responder = (requestLine: string) => HerdrSocketOutcome;
+	function socketScript(replies: readonly Responder[]) {
+		const requests: Record<string, unknown>[] = [];
+		const paths: string[] = [];
+		let next = 0;
+		const factory = (socketPath: string) => {
+			paths.push(socketPath);
+			return async (line: string): Promise<HerdrSocketOutcome> => {
+				requests.push(JSON.parse(line));
+				const reply = replies[next++];
+				if (reply === undefined) throw new Error(`unscripted herdr socket request #${next}: ${line}`);
+				return reply(line);
+			};
+		};
+		return { factory, requests, paths };
+	}
+	const idOf = (line: string): string => (JSON.parse(line) as { id: string }).id;
+	const paneGetOk: Responder = (line) => ({
+		kind: "reply",
+		line: JSON.stringify({
+			id: idOf(line),
+			result: {
+				type: "pane_info",
+				pane: {
+					pane_id: "w7:p1",
+					terminal_id: "term_caller",
+					tab_id: "w7:t0",
+					focused: true,
+					revision: 3,
+					agent_status: "unknown",
+					workspace_id: "w7",
+				},
+			},
+		}),
+	});
+	const errorReply =
+		(code: string): Responder =>
+		(line) => ({ kind: "reply", line: JSON.stringify({ id: idOf(line), error: { code, message: code } }) });
+	const layoutOk: Responder = (line) => {
+		const request = JSON.parse(line) as {
+			id: string;
+			params: { workspace_id: string; root: { cwd: string; command: string[] } };
+		};
+		return {
+			kind: "reply",
+			line: JSON.stringify({
+				id: request.id,
+				result: {
+					type: "layout_apply",
+					layout: {
+						workspace_id: request.params.workspace_id,
+						tab_id: "w7:t9",
+						zoomed: false,
+						focused_pane_id: "w7:p9",
+						root: {
+							type: "pane",
+							pane_id: "w7:p9",
+							cwd: request.params.root.cwd,
+							command: request.params.root.command,
+						},
+					},
+				},
+			}),
+		};
+	};
+	const deps = (factory: HerdrLayoutDeps["socket"], over: Partial<HerdrLayoutDeps> = {}): HerdrLayoutDeps => ({
+		socket: factory,
+		callerProcessCwd: () => {
+			throw new Error("a resume never reads the caller's process cwd — its directory is the reservation's");
+		},
+		packageLayout: () => layoutAt(PKG),
+		runtimeVerdict: () => null,
+		...over,
+	});
+	const noSpawn = (() => {
+		throw new Error("the pi-durable resume never spawns the herdr CLI");
+	}) as unknown as SpawnFn;
+
+	it("[QK:HRESUME-PD-ROUTED] inside herdr a pi-durable resume goes to the layout launch — refused here for the absent socket endpoint the pi path never asks for — while every other backend still reaches the pi-only path; a pi-durable input without its projection is a wiring defect", async () => {
+		const routed = await launchHerdrResume(
+			{ backend: "pi-durable", cwd: CWD, runtimeArgs: PD_ARGS, piDurableAdoptEnv: ADOPT_ENV },
+			ENV,
+			noSpawn,
+		);
+		const claude = await launchHerdrResume({ backend: "claude-code", cwd: CWD, runtimeArgs: [] }, ENV, noSpawn);
+		let unprojected: unknown = null;
+		try {
+			await launchHerdrResume({ backend: "pi-durable", cwd: CWD, runtimeArgs: PD_ARGS }, ENV_PD, noSpawn);
+		} catch (err) {
+			unprojected = err;
+		}
+		ok(
+			"pi-durable → herdr-socket-path-missing; claude-code → the pi-only refusal; no projection → throws",
+			!routed.ok &&
+				routed.reason === "herdr-socket-path-missing" &&
+				!claude.ok &&
+				claude.reason === "herdr-resume-backend-unsupported" &&
+				unprojected instanceof Error &&
+				/without its adopt projection/.test(unprojected.message),
+		);
+	});
+
+	it("[QK:HRESUME-PD-PRE-WRITE-REFUSALS] every refusal is decided before the layout write: context, cwd, endpoint, package, runtime, launcher and a control character with no socket request at all, and a failed caller-pane read with that one read only", async () => {
+		const zero = socketScript([]);
+		const cases = [
+			await herdrPiDurableResumeCall(PD, { HERDR_ENV: "1" }, deps(zero.factory), BASE),
+			await herdrPiDurableResumeCall({ ...PD, cwd: path.join(CWD, "gone") }, ENV_PD, deps(zero.factory), BASE),
+			await herdrPiDurableResumeCall(PD, ENV, deps(zero.factory), BASE),
+			await herdrPiDurableResumeCall(PD, ENV_PD, deps(zero.factory, { packageLayout: () => null }), BASE),
+			await herdrPiDurableResumeCall(
+				PD,
+				ENV_PD,
+				deps(zero.factory, { runtimeVerdict: () => "pi-durable-carrier-drift" }),
+				BASE,
+			),
+			await herdrPiDurableResumeCall(
+				PD,
+				ENV_PD,
+				deps(zero.factory, { packageLayout: () => layoutAt(NO_LAUNCHER) }),
+				BASE,
+			),
+			await herdrPiDurableResumeCall(
+				{ ...PD, adoptEnv: { ...ADOPT_ENV, PI_CODING_AGENT_DIR: "/home/op/pd\u0085" } },
+				ENV_PD,
+				deps(zero.factory),
+				BASE,
+			),
+		];
+		ok(
+			"seven named refusals, no socket opened, nothing written",
+			same(
+				cases.map((c) => (c.ok ? "ok" : c.reason)),
+				[
+					"herdr-context-missing",
+					"cwd-missing",
+					"herdr-socket-path-missing",
+					"pi-durable-package-incomplete",
+					"pi-durable-carrier-drift",
+					"pi-durable-launcher-missing",
+					"herdr-argv-control-character",
+				],
+			) &&
+				cases.every((c) => !c.ok && !("recovery" in c)) &&
+				zero.paths.length === 0 &&
+				zero.requests.length === 0,
+		);
+		const paneFailed = socketScript([errorReply("pane_not_found")]);
+		const refused = await herdrPiDurableResumeCall(PD, ENV_PD, deps(paneFailed.factory), BASE);
+		ok(
+			"a caller-pane read herdr declined is a refusal with herdr's code reported, after that read alone",
+			!refused.ok &&
+				refused.reason === "herdr-caller-pane-get-failed" &&
+				!("recovery" in refused) &&
+				refused.reported?.errorCode === "pane_not_found" &&
+				paneFailed.requests.length === 1 &&
+				paneFailed.requests[0]?.method === "pane.get",
+		);
+	});
+
+	it("[QK:HRESUME-PD-LAYOUT-PACKET] the ONE layout write opens an unfocused pane tab in the caller's own workspace at the reservation's cwd, runs the verified launcher with the record-derived argv untouched, and carries an env map of exactly the identity scrub plus the five adopt names", async () => {
+		const script = socketScript([paneGetOk, layoutOk]);
+		await herdrPiDurableResumeCall(PD, ENV_PD, deps(script.factory), BASE);
+		const write = script.requests[1] as {
+			id: string;
+			method: string;
+			params: { workspace_id: string; focus: boolean; root: Record<string, unknown> };
+		};
+		ok(
+			"one endpoint, a read then the write, ids from this call's base",
+			same(script.paths, ["/run/herdr/herdr.sock"]) &&
+				script.requests.length === 2 &&
+				script.requests[0]?.method === "pane.get" &&
+				script.requests[0]?.id === `${BASE}:pane.get` &&
+				write.method === "layout.apply" &&
+				write.id === `${BASE}:layout.apply`,
+		);
+		ok(
+			"workspace w7, no focus, the reservation's cwd, [launcher, ...argv] and the exact env map",
+			write.params.workspace_id === "w7" &&
+				write.params.focus === false &&
+				write.params.root.type === "pane" &&
+				write.params.root.cwd === CWD &&
+				same(write.params.root.command as unknown[], [LAUNCHER, ...PD_ARGS]) &&
+				JSON.stringify(write.params.root.env) === JSON.stringify({ PI_SESSION_ID: "", PI_AGENT_ID: "", ...ADOPT_ENV }),
+		);
+	});
+
+	it("[QK:HRESUME-PD-SUCCESS-RECEIPT] a layout reply that proves THIS launch is the receipt — launcher, requested cwd and herdr's view coordinates, no agent name or terminal — and the v2 seam gets a herdr-layout handle", async () => {
+		const result = await herdrPiDurableResumeCall(PD, ENV_PD, deps(socketScript([paneGetOk, layoutOk]).factory), BASE);
+		const seam = herdrPiDurableResumeLaunchOutcome(result);
+		ok(
+			"receipt and handle",
+			result.ok &&
+				JSON.stringify(result.receipt) ===
+					JSON.stringify({
+						runtime: LAUNCHER,
+						cwd: CWD,
+						herdrWorkspaceId: "w7",
+						herdrTabId: "w7:t9",
+						herdrPaneId: "w7:p9",
+					}) &&
+				seam.ok &&
+				seam.handle.rail === "herdr-layout" &&
+				!("herdrAgentName" in seam.handle) &&
+				!("herdrTerminalId" in seam.handle),
+		);
+	});
+
+	it("[QK:HRESUME-PD-WRITE-CERTAINTY] after the write, nothing-created is only the layout classifier's own none — a request never written, or a pre-create herdr code — and every other answer is unknown; the v2 seam receives that recovery unchanged with herdr's code", async () => {
+		const afterWrite = async (reply: Responder) => {
+			const result = await herdrPiDurableResumeCall(PD, ENV_PD, deps(socketScript([paneGetOk, reply]).factory), BASE);
+			return { result, seam: herdrPiDurableResumeLaunchOutcome(result) };
+		};
+		const neverWritten = await afterWrite(() => ({ kind: "connect-failed", code: "ECONNREFUSED" }));
+		const declined = await afterWrite(errorReply("workspace_not_found"));
+		const applyFailed = await afterWrite(errorReply("layout_apply_failed"));
+		const timedOut = await afterWrite(() => ({ kind: "timeout" }));
+		const drifted = await afterWrite((line) => {
+			const base = layoutOk(line);
+			return base.kind === "reply"
+				? { kind: "reply", line: base.line.replace('"workspace_id":"w7"', '"workspace_id":"w8"') }
+				: base;
+		});
+		const outcome = (x: Awaited<ReturnType<typeof afterWrite>>) =>
+			!x.seam.ok && "failure" in x.seam ? x.seam.failure.recovery.outcome : "not-a-failure";
+		ok(
+			"none / none / unknown / unknown / unknown, each a seam failure carrying it",
+			same([neverWritten, declined, applyFailed, timedOut, drifted].map(outcome), [
+				"none",
+				"none",
+				"unknown",
+				"unknown",
+				"unknown",
+			]),
+		);
+		ok(
+			"herdr's own code travels as the vendor code",
+			!declined.seam.ok &&
+				"failure" in declined.seam &&
+				declined.seam.failure.vendorCode === "workspace_not_found" &&
+				!applyFailed.seam.ok &&
+				"failure" in applyFailed.seam &&
+				applyFailed.seam.failure.vendorCode === "layout_apply_failed",
+		);
+		ok(
+			"every pi-durable reason this rail can answer with has a non-empty hint",
+			Object.values(HERDR_PI_DURABLE_RESUME_HINT).length === 21 &&
+				Object.values(HERDR_PI_DURABLE_RESUME_HINT).every((hint) => typeof hint === "string" && hint.length > 0),
+		);
+	});
+
+	it("[QK:HRESUME-PD-FAILURE-RAIL] a pi-durable layout failure reaches the v2 seam tagged `herdr-layout`, never the pi rail's `herdr`, so its receipt names the layout.apply step and no tab create", async () => {
+		const declined = await herdrPiDurableResumeCall(
+			PD,
+			ENV_PD,
+			deps(socketScript([paneGetOk, errorReply("workspace_not_found")]).factory),
+			BASE,
+		);
+		const timedOut = await herdrPiDurableResumeCall(
+			PD,
+			ENV_PD,
+			deps(socketScript([paneGetOk, () => ({ kind: "timeout" })]).factory),
+			BASE,
+		);
+		ok(
+			"a none and an unknown failure, each tagged herdr-layout",
+			[declined, timedOut].every((result) => {
+				const seam = herdrPiDurableResumeLaunchOutcome(result);
+				return !seam.ok && "failure" in seam && seam.failure.rail === "herdr-layout";
+			}),
 		);
 	});
 });

@@ -67,8 +67,10 @@ import { ACP_MODEL_NOT_CURATED_HINT, AcpModelNotCuratedError } from "./acp/model
 import { ENTWURF_RESUME_REJECT_HINTS } from "./agent-guidance.ts";
 import type { AcquireLockResult, LockClaim, ReleaseResult } from "./entwurf-v2-lock.ts";
 import {
+	buildPiDurableAdoptLaunch,
 	inspectReceiverMarker,
 	makeVisibleResumeDeps,
+	observePiDurableAdoption,
 	observeReceiverReattached,
 	observeSameGidSocket,
 	RESUME_OBSERVE_INTERVAL_MS,
@@ -77,14 +79,21 @@ import {
 	renderVisibleResume,
 	type VisibleResumeDeps,
 	type VisibleResumeLaunchFailure,
+	type VisibleResumeLaunchInput,
 	type VisibleResumeLaunchOutcome,
 	type VisibleResumeResult,
 	visibleResume,
 } from "./entwurf-v2-visible-resume.ts";
 import { processStartKey } from "./meta-session.ts";
 import {
+	PiDurableOwnerFenceError,
+	type PiDurableReservation,
+	type PiDurableReservationObservation,
+} from "./pi-durable-owner-fence.ts";
+import {
 	type ClaudeCodeLaunchIdentity,
 	type LaunchIdentity,
+	type PiDurableLaunchIdentity,
 	type PiLaunchIdentity,
 	ResumeBackendUnsupportedError,
 } from "./resume-launch-identity.ts";
@@ -127,6 +136,8 @@ interface Harness {
 	deps: VisibleResumeDeps;
 	trace: string[];
 	readonly launches: number;
+	/** Every input the launch seam was handed, whole (#157 B3 reads the adopt projection from it). */
+	inputs: VisibleResumeLaunchInput[];
 }
 
 /** Records the ORDER of every seam, which is where most of this contract lives. */
@@ -141,11 +152,18 @@ function harness(opts: {
 	receiverSequence?: ReceiverInspection[];
 	/** Replaces the tmux handle / refusal with any launch outcome, sync or awaited (#157 G1a). */
 	launchResult?: (cwd: string) => VisibleResumeLaunchOutcome | Promise<VisibleResumeLaunchOutcome>;
+	/** #157 B3, the pi-durable seams. Unset, each one throws: no other backend may reach them. */
+	reserve?: () => Promise<PiDurableReservation>;
+	withdraw?: (reservation: PiDurableReservation) => Promise<void>;
+	/** What each D-claim read says, in order (the last one repeats). */
+	observeSequence?: (PiDurableReservationObservation | Error)[];
 }): Harness {
 	const trace: string[] = [];
+	const inputs: VisibleResumeLaunchInput[] = [];
 	let clock = 0;
 	let probeIdx = 0;
 	let receiverIdx = 0;
+	let observeIdx = 0;
 	let launches = 0;
 	const kind = opts.inspectionKind ?? "socket-file";
 	const deps: VisibleResumeDeps = {
@@ -186,6 +204,7 @@ function harness(opts: {
 		},
 		launch: (input) => {
 			launches++;
+			inputs.push(input);
 			trace.push(`launch-backend:${input.backend}`);
 			trace.push(`launch:${input.cwd}:${input.runtimeArgs.join(" ")}`);
 			if (opts.launchResult !== undefined) return opts.launchResult(input.cwd);
@@ -206,6 +225,25 @@ function harness(opts: {
 						},
 					};
 		},
+		reservePiDurable: async (gid) => {
+			trace.push(`reservePiDurable:${gid}`);
+			if (opts.reserve === undefined) throw new Error("reservePiDurable reached outside a pi-durable resume");
+			return opts.reserve();
+		},
+		withdrawPiDurable: async (reservation) => {
+			trace.push(`withdrawPiDurable:${reservation.generation}`);
+			if (opts.withdraw === undefined) throw new Error("withdrawPiDurable reached outside a pi-durable resume");
+			return opts.withdraw(reservation);
+		},
+		observePiDurable: () => {
+			const seq = opts.observeSequence;
+			if (seq === undefined) throw new Error("observePiDurable reached outside a pi-durable resume");
+			const value = seq[Math.min(observeIdx, seq.length - 1)] as PiDurableReservationObservation | Error;
+			observeIdx++;
+			trace.push(`observePiDurable:${value instanceof Error ? "throw" : value.class}`);
+			if (value instanceof Error) throw value;
+			return value;
+		},
 		sleep: async (ms) => {
 			trace.push(`sleep:${ms}`);
 			clock += ms;
@@ -215,6 +253,7 @@ function harness(opts: {
 	return {
 		deps,
 		trace,
+		inputs,
 		get launches() {
 			return launches;
 		},
@@ -438,7 +477,7 @@ describe("a recorded entwurf model that is not an exact curated ACP id", () => {
 
 // ── a citizen of a backend that has no same-id resume ────────────────────────────
 describe("a citizen of a backend that has no same-id resume", () => {
-	it("[QK:V2RESUME-BACKEND-UNSUPPORTED-REFUSED] a codex / agy target is a NAMED refusal, not an error report: nothing is corrupt, the record is right, and the operator simply reached past a capability boundary — only pi and Claude Code have a same-id resume", async () => {
+	it("[QK:V2RESUME-BACKEND-UNSUPPORTED-REFUSED] a codex / agy target is a NAMED refusal, not an error report: nothing is corrupt, the record is right, and the operator simply reached past a capability boundary — only pi, pi-durable and Claude Code have a same-id resume", async () => {
 		{
 			const h = harness({
 				livenessSequence: ["dead"],
@@ -457,7 +496,7 @@ describe("a citizen of a backend that has no same-id resume", () => {
 				}),
 			);
 			ok(
-				"a codex / agy target is a NAMED refusal, not an error report: nothing is corrupt, the record is right, and the operator simply reached past a capability boundary — only pi and Claude Code have a same-id resume",
+				"a codex / agy target is a NAMED refusal, not an error report: nothing is corrupt, the record is right, and the operator simply reached past a capability boundary — only pi, pi-durable and Claude Code have a same-id resume",
 				!result.ok && result.reason === "target-backend-unsupported" && h.launches === 0,
 			);
 		}
@@ -482,7 +521,7 @@ describe("a citizen of a backend that has no same-id resume", () => {
 				}),
 			);
 			ok(
-				"a codex / agy target is a NAMED refusal, not an error report: nothing is corrupt, the record is right, and the operator simply reached past a capability boundary — only pi and Claude Code have a same-id resume",
+				"a codex / agy target is a NAMED refusal, not an error report: nothing is corrupt, the record is right, and the operator simply reached past a capability boundary — only pi, pi-durable and Claude Code have a same-id resume",
 				!result.ok && result.reason === "target-backend-unsupported" && h.launches === 0,
 			);
 			ok(
@@ -513,7 +552,7 @@ describe("a citizen of a backend that has no same-id resume", () => {
 				}),
 			);
 			ok(
-				"a codex / agy target is a NAMED refusal, not an error report: nothing is corrupt, the record is right, and the operator simply reached past a capability boundary — only pi and Claude Code have a same-id resume",
+				"a codex / agy target is a NAMED refusal, not an error report: nothing is corrupt, the record is right, and the operator simply reached past a capability boundary — only pi, pi-durable and Claude Code have a same-id resume",
 				!result.ok && result.reason === "target-backend-unsupported" && h.launches === 0,
 			);
 			ok(
@@ -1576,6 +1615,395 @@ describe("the receiver marker binding, on real files", () => {
 		} finally {
 			fs.rmSync(dir, { recursive: true, force: true });
 		}
+	});
+});
+
+// ══ PI-DURABLE (#157 B3) ════════════════════════════════════════════════════════
+// Dormancy is THIS process's reservation of D, taken by the fence lib inside its own record-arm then
+// S_D holds while this module's per-target lock stays the outer scope. From the reservation on, the
+// launch outcome alone decides what happens to it: withdrawn only when nothing was created, kept
+// otherwise. The observation is one bounded read of the D claim, and `adopted` is an adoption write.
+describe("a pi-durable citizen (#157 B3)", () => {
+	const PD_IDENTITY: PiDurableLaunchIdentity = {
+		backend: "pi-durable",
+		nativeSessionId: "1730000000000-0b5e2a4c-1f3d-4e8a-9c7b-2d6f8e1a3c5d",
+		cwd: "/home/op/pd-project",
+	};
+	const G_R = "a".repeat(32);
+	// A raw profile with a trailing `/` and an inner `..`: the launch must carry it byte for byte.
+	const RAW_PROFILE = "/home/op/profiles/../profiles/pd/";
+	const RESERVATION: PiDurableReservation = {
+		gardenId: GID,
+		metaRoot: "/home/op/meta",
+		resource: "/home/op/.pi/agent/experimental/durable-sessions/0123456789abcdef01234567/N",
+		generation: G_R,
+		profile: RAW_PROFILE,
+		cwd: "/home/op/pd-project",
+		owner: { pid: 4242, startKey: "linux:1", hostname: "h" },
+	};
+	const ADOPTED: PiDurableReservationObservation = { class: "adopted" };
+	const NOT_YET: PiDurableReservationObservation = { class: "not-yet-adopted" };
+	const pd = (opts: Partial<Parameters<typeof harness>[0]> = {}) =>
+		harness({
+			livenessSequence: ["dead"],
+			resolveIdentity: () => PD_IDENTITY,
+			reserve: async () => RESERVATION,
+			withdraw: async () => {},
+			observeSequence: [ADOPTED],
+			...opts,
+		});
+	const failure = (outcome: "none" | "unknown" | "closed" | "orphan-unreclaimed"): VisibleResumeLaunchOutcome => ({
+		ok: false,
+		reason: "herdr-layout-transport-failed",
+		hint: "HINT",
+		failure: {
+			rail: "herdr-layout",
+			recovery:
+				outcome === "closed"
+					? { outcome, paneId: "w7:p7", terminalId: "term_x" }
+					: outcome === "orphan-unreclaimed"
+						? { outcome, paneId: "w7:p7", reason: "terminal-id-mismatch" }
+						: { outcome },
+		},
+	});
+	const layoutHandle = (cwd: string): VisibleResumeLaunchOutcome => ({
+		ok: true,
+		handle: {
+			rail: "herdr-layout",
+			runtime: "/opt/entwurf/run.sh",
+			cwd,
+			herdrWorkspaceId: "w7",
+			herdrTabId: "w7:t1",
+			herdrPaneId: "w7:p7",
+		},
+	});
+
+	it("pi-durable: the reservation is taken under the per-target lock, after the record names a pi-durable citizen and before the one launch; no control socket or receiver marker is asked, and the lock is released after the observation", async () => {
+		const h = pd();
+		const result = await visibleResume(GID, h.deps);
+		const order = h.trace.filter((t) => !t.startsWith("launch:") && !t.startsWith("sleep"));
+		ok(
+			"lock → identity → reserve → launch → observe → release, and nothing else",
+			result.ok &&
+				JSON.stringify(order) ===
+					JSON.stringify([
+						`acquireLock:${GID}`,
+						`resolveIdentity:${GID}`,
+						`reservePiDurable:${GID}`,
+						"launch-backend:pi-durable",
+						"observePiDurable:adopted",
+						"releaseLock",
+					]),
+		);
+	});
+
+	it("[QK:V2RESUME-PD-ADOPT-LAUNCH] the launch is the managed verb with the closed adopt context, the reservation's cwd, and EXACTLY the five-name projection of its raw profile and meta root", async () => {
+		const h = pd();
+		await visibleResume(GID, h.deps);
+		const input = h.inputs[0];
+		const context = input?.backend === "pi-durable" ? JSON.parse(input.runtimeArgs[2] ?? "null") : null;
+		ok(
+			"pi-durable, the reservation's cwd, `pi-durable --entwurf-adopt <json>` and nothing after it",
+			h.inputs.length === 1 &&
+				input?.backend === "pi-durable" &&
+				input.cwd === RESERVATION.cwd &&
+				input.runtimeArgs.length === 3 &&
+				input.runtimeArgs[0] === "pi-durable" &&
+				input.runtimeArgs[1] === "--entwurf-adopt",
+		);
+		ok(
+			"the context is exactly {v:1, gardenId, metaRoot, sourceGeneration} — no session, cwd, profile, model, prompt or callback",
+			JSON.stringify(Object.keys(context ?? {}).sort()) ===
+				JSON.stringify(["gardenId", "metaRoot", "sourceGeneration", "v"]) &&
+				context.v === 1 &&
+				context.gardenId === GID &&
+				context.metaRoot === RESERVATION.metaRoot &&
+				context.sourceGeneration === G_R,
+		);
+		ok(
+			"the projection is the five names, the raw profile byte for byte, and the meta root's standard children",
+			input?.backend === "pi-durable" &&
+				JSON.stringify(input.piDurableAdoptEnv) ===
+					JSON.stringify({
+						PI_CODING_AGENT_DIR: RAW_PROFILE,
+						ENTWURF_META_SESSIONS_DIR: "/home/op/meta/meta-sessions",
+						ENTWURF_META_MAILBOX_DIR: "/home/op/meta/meta-mailbox",
+						ENTWURF_META_SENDERS_DIR: "/home/op/meta/meta-senders",
+						ENTWURF_META_RECEIVERS_DIR: "/home/op/meta/meta-receivers",
+					}) &&
+				JSON.stringify(buildPiDurableAdoptLaunch(RESERVATION)) === JSON.stringify(input),
+		);
+	});
+
+	it("[QK:V2RESUME-PD-WITHDRAW-NONE-CREATED] a launch that created nothing withdraws THIS reservation exactly once — the seam's refusal, and a failure whose recovery is none — and says so", async () => {
+		const withdrawn: string[] = [];
+		const refused = pd({
+			launchOk: false,
+			withdraw: async (r) => {
+				withdrawn.push(r.generation);
+			},
+		});
+		const r1 = await visibleResume(GID, refused.deps);
+		const none = pd({
+			launchResult: () => failure("none"),
+			withdraw: async (r) => {
+				withdrawn.push(r.generation);
+			},
+		});
+		const r2 = await visibleResume(GID, none.deps);
+		ok(
+			"two withdrawals of g_r, a launch-refused and a launch-failed, each naming the withdrawal, no observation, lock released",
+			JSON.stringify(withdrawn) === JSON.stringify([G_R, G_R]) &&
+				!r1.ok &&
+				r1.reason === "launch-refused" &&
+				/was withdrawn/.test(r1.detail) &&
+				!r2.ok &&
+				r2.reason === "launch-failed" &&
+				/was withdrawn/.test(r2.detail) &&
+				![...refused.trace, ...none.trace].some((t) => t.startsWith("observePiDurable")) &&
+				refused.trace.at(-1) === "releaseLock" &&
+				none.trace.at(-1) === "releaseLock",
+		);
+		ok("the refusal still renders as nothing opened", /No window was opened/.test(renderVisibleResume(r1).text));
+	});
+
+	it("[QK:V2RESUME-PD-KEEP-POSSIBLY-CREATED] a failure whose recovery is unknown, closed or orphan-unreclaimed KEEPS the reservation — something may exist that can still adopt it — and says who holds it", async () => {
+		for (const outcome of ["unknown", "closed", "orphan-unreclaimed"] as const) {
+			const h = pd({ launchResult: () => failure(outcome) });
+			const result = await visibleResume(GID, h.deps);
+			ok(
+				`${outcome}: launch-failed, no withdrawal, the detail says KEPT and names this process`,
+				!result.ok &&
+					result.reason === "launch-failed" &&
+					/was KEPT/.test(result.detail) &&
+					result.detail.includes(`pid ${RESERVATION.owner.pid}`) &&
+					!h.trace.some((t) => t.startsWith("withdrawPiDurable")) &&
+					h.trace.at(-1) === "releaseLock",
+			);
+		}
+	});
+
+	it("[QK:V2RESUME-PD-THROW-KEEPS] a launcher that throws is unknown whatever its position: the reservation is kept, the error says so, and the lock is released", async () => {
+		const h = pd({
+			launchResult: () => {
+				throw new Error("tmux new-window: server exited");
+			},
+		});
+		let thrown: unknown = null;
+		try {
+			await visibleResume(GID, h.deps);
+		} catch (err) {
+			thrown = err;
+		}
+		ok(
+			"the throw carries its cause and KEPT, nothing was withdrawn or observed, the lock released",
+			thrown instanceof Error &&
+				/server exited/.test(thrown.message) &&
+				/was KEPT/.test(thrown.message) &&
+				!h.trace.some((t) => t.startsWith("withdrawPiDurable") || t.startsWith("observePiDurable")) &&
+				h.trace.at(-1) === "releaseLock",
+		);
+	});
+
+	it("[QK:V2RESUME-PD-WITHDRAW-FAILURE-REPORTED] a withdrawal that fails is reported with the refusal it followed and is never retried", async () => {
+		let calls = 0;
+		const h = pd({
+			launchOk: false,
+			withdraw: async () => {
+				calls++;
+				throw new Error("tx-held: S_D busy");
+			},
+		});
+		const result = await visibleResume(GID, h.deps);
+		ok(
+			"one attempt, launch-refused, the detail names the failure and that the reservation stays",
+			calls === 1 &&
+				!result.ok &&
+				result.reason === "launch-refused" &&
+				/FAILED \(tx-held: S_D busy\)/.test(result.detail) &&
+				/stays reserved by this process/.test(result.detail),
+		);
+	});
+
+	it("[QK:V2RESUME-PD-RESERVE-LIVE-REFUSED] a reserve refused because the holder is alive is target-live, an unprovable holder is target-indeterminate, and every other fence refusal keeps its own cause — none of them launches or withdraws", async () => {
+		const refusedBy = async (reason: ConstructorParameters<typeof PiDurableOwnerFenceError>[0]) => {
+			const h = pd({
+				reserve: async () => {
+					throw new PiDurableOwnerFenceError(reason, "D is storage-open under pid 77 on h");
+				},
+			});
+			let thrown: unknown = null;
+			let result: VisibleResumeResult | null = null;
+			try {
+				result = await visibleResume(GID, h.deps);
+			} catch (err) {
+				thrown = err;
+			}
+			return { h, result, thrown };
+		};
+		const live = await refusedBy("owner-live");
+		const uncertain = await refusedBy("owner-uncertain");
+		const otherHost = await refusedBy("owner-other-host");
+		const unarmed = await refusedBy("reserve-unarmed");
+		const all = [live, uncertain, otherHost, unarmed];
+		const reasonOf = (result: VisibleResumeResult | null): string | null =>
+			result !== null && !result.ok ? result.reason : null;
+		ok(
+			"live → target-live; uncertain / other-host → target-indeterminate; reserve-unarmed throws its own cause",
+			reasonOf(live.result) === "target-live" &&
+				reasonOf(uncertain.result) === "target-indeterminate" &&
+				reasonOf(otherHost.result) === "target-indeterminate" &&
+				unarmed.thrown instanceof PiDurableOwnerFenceError &&
+				unarmed.thrown.reason === "reserve-unarmed",
+		);
+		ok(
+			"no launch, no withdrawal, every lock released",
+			all.every(
+				({ h }) =>
+					h.launches === 0 &&
+					!h.trace.some((t) => t.startsWith("withdrawPiDurable")) &&
+					h.trace.at(-1) === "releaseLock",
+			),
+		);
+	});
+
+	it("[QK:V2RESUME-PD-OBSERVE-BOUNDED-WAIT] the observation waits: an adoption written after two reads is reported as adopted, and a reservation never adopted ends at the fixed deadline as not-yet-adopted — kept, not withdrawn, nothing retried", async () => {
+		const later = pd({ observeSequence: [NOT_YET, NOT_YET, ADOPTED] });
+		const r1 = await visibleResume(GID, later.deps);
+		const never = pd({ observeSequence: [NOT_YET] });
+		const r2 = await visibleResume(GID, never.deps);
+		ok(
+			"adopted after two intervals",
+			r1.ok &&
+				r1.observation.kind === "adopted" &&
+				later.trace.filter((t) => t === `sleep:${RESUME_OBSERVE_INTERVAL_MS}`).length === 2,
+		);
+		ok(
+			"not-yet-adopted at the deadline, one launch, no withdrawal, lock released",
+			r2.ok &&
+				r2.observation.kind === "not-yet-adopted" &&
+				r2.observation.waitedMs >= RESUME_OBSERVE_TIMEOUT_MS &&
+				never.launches === 1 &&
+				!never.trace.some((t) => t.startsWith("withdrawPiDurable")) &&
+				never.trace.at(-1) === "releaseLock",
+		);
+	});
+
+	it("[QK:V2RESUME-PD-OBSERVE-CLASSES] a lost claim, an unreadable one and a read that throws each stop the wait at once by their own name — an unreadable claim is never read as lost, and the launch receipt survives", async () => {
+		const lost = await observePiDurableAdoption(RESERVATION, pd({ observeSequence: [{ class: "lost" }] }).deps);
+		const unreadable = await observePiDurableAdoption(
+			RESERVATION,
+			pd({ observeSequence: [{ class: "unobserved", reason: "claim-unreadable", detail: "bad schema" }] }).deps,
+		);
+		const threw = await observePiDurableAdoption(RESERVATION, pd({ observeSequence: [new Error("EACCES")] }).deps);
+		ok(
+			"reservation-lost / unobserved(claim-unreadable) / unobserved(observe-threw), each at 0ms",
+			lost.kind === "reservation-lost" &&
+				lost.waitedMs === 0 &&
+				unreadable.kind === "unobserved" &&
+				unreadable.reason === "claim-unreadable" &&
+				unreadable.waitedMs === 0 &&
+				threw.kind === "unobserved" &&
+				threw.reason === "observe-threw" &&
+				/EACCES/.test(threw.detail),
+		);
+	});
+
+	it("pi-durable: a pi-durable launch handed a herdr agent-start handle, or a pi launch handed a layout handle, fails loud as wiring: no observation, the reservation kept, the lock released", async () => {
+		const pdAgent = pd({
+			launchResult: (cwd) => ({
+				ok: true,
+				handle: {
+					rail: "herdr",
+					requestedKind: "pi",
+					cwd,
+					herdrAgentName: "entwurf-resume-0",
+					herdrWorkspaceId: "w7",
+					herdrTabId: "w7:t1",
+					herdrPaneId: "w7:p7",
+					herdrTerminalId: "term_x",
+				},
+			}),
+		});
+		const piLayout = harness({ livenessSequence: ["dead"], launchResult: layoutHandle });
+		const thrownOf = async (h: Harness) => {
+			try {
+				await visibleResume(GID, h.deps);
+				return null;
+			} catch (err) {
+				return err;
+			}
+		};
+		const a = await thrownOf(pdAgent);
+		const b = await thrownOf(piLayout);
+		ok(
+			"both throw by name, nothing observed, nothing withdrawn, both locks released",
+			a instanceof Error &&
+				/herdr agent-start handle/.test(a.message) &&
+				/was KEPT/.test(a.message) &&
+				b instanceof Error &&
+				/herdr-layout handle/.test(b.message) &&
+				!pdAgent.trace.some((t) => t.startsWith("observePiDurable") || t.startsWith("withdrawPiDurable")) &&
+				piLayout.trace.filter((t) => t === "inspectSocket").length === 1 &&
+				pdAgent.trace.at(-1) === "releaseLock" &&
+				piLayout.trace.at(-1) === "releaseLock",
+		);
+	});
+
+	it("[QK:V2RESUME-PD-RENDER] the receipt keeps the reservation, the LAUNCH and the OBSERVATION apart, and says an adoption is not readiness — on tmux and on herdr's layout tab", async () => {
+		const tmux = await visibleResume(GID, pd().deps);
+		const herdr = await visibleResume(GID, pd({ launchResult: layoutHandle }).deps);
+		const waiting = await visibleResume(GID, pd({ observeSequence: [NOT_YET] }).deps);
+		const t = renderVisibleResume(tmux, { actor: "20261102T000000-abcdef" });
+		const hd = renderVisibleResume(herdr);
+		const w = renderVisibleResume(waiting);
+		ok(
+			"tmux: backend, reservation, window, both receipts, adoption is not readiness, no prompt",
+			!t.isError &&
+				t.text.startsWith("[entwurf resume call ↻]\n") &&
+				t.text.includes("  backend:  pi-durable\n") &&
+				t.text.includes(`at generation ${G_R}`) &&
+				t.text.includes("  window:   @9") &&
+				t.text.includes("LAUNCH receipt: tmux created that window") &&
+				t.text.includes("OBSERVATION receipt: adopted") &&
+				t.text.includes("That is not readiness") &&
+				t.text.includes("This call submitted no prompt") &&
+				t.text.includes("attribution, not authority") &&
+				!t.text.includes("No window was opened"),
+		);
+		ok(
+			"herdr: the layout tab and pane as views, no agent name or terminal",
+			!hd.isError &&
+				hd.text.startsWith("[entwurf resume call ↻ herdr]\n") &&
+				hd.text.includes("  tab:      w7:t1 in workspace w7") &&
+				hd.text.includes("LAUNCH receipt: herdr created that tab") &&
+				!hd.text.includes("agent:") &&
+				!hd.text.includes("terminal"),
+		);
+		ok(
+			"not-yet-adopted names who holds the reservation and that nothing was withdrawn",
+			w.text.includes("OBSERVATION receipt: not-yet-adopted") &&
+				w.text.includes(`pid ${RESERVATION.owner.pid}`) &&
+				w.text.includes("Nothing was retried, withdrawn or killed"),
+		);
+	});
+
+	it("[QK:V2RESUME-PD-LAUNCH-FAILED-STEP] a pi-durable layout.apply failure names that step, never a tab create, says a request that made nothing may never have been written, and points entwurf_peers at its rail rather than a control socket", async () => {
+		const none = renderVisibleResume(await visibleResume(GID, pd({ launchResult: () => failure("none") }).deps));
+		const unknown = renderVisibleResume(await visibleResume(GID, pd({ launchResult: () => failure("unknown") }).deps));
+		ok(
+			"none → the layout.apply step, nothing to look at; unknown → UNKNOWN, a tab MAY exist; neither names a tab create step or a control socket",
+			none.isError &&
+				none.text.startsWith(
+					"entwurf_resume_call failed at the herdr layout.apply step: herdr-layout-transport-failed",
+				) &&
+				none.text.includes("the layout request was never written") &&
+				unknown.isError &&
+				unknown.text.startsWith("entwurf_resume_call failed at the herdr layout.apply step with an UNKNOWN outcome") &&
+				unknown.text.includes("a tab MAY exist") &&
+				[none, unknown].every((r) => r.text.includes("entwurf_peers shows whether its rail answers")) &&
+				![none, unknown].some((r) => /tab create step|control socket/.test(r.text)),
+		);
 	});
 });
 

@@ -100,10 +100,10 @@
 			"title": "the MCP description drops the dormant-only scope, inviting callers to aim the verb at live citizens it will refuse",
 			"subject": "ENTWURF.json",
 			"find": [
-				"Only on an explicit operator request, reopen ONE DORMANT pi or Claude Code citizen under its OWN garden id, in a visible window in the operator's "
+				"Only on an explicit operator request, reopen ONE DORMANT pi, pi-durable or Claude Code citizen under its OWN garden id, in a visible window in the operator's "
 			],
 			"replace": [
-				"Only on an explicit operator request, reopen ONE pi or Claude Code citizen under its OWN garden id, in a visible window in the operator's "
+				"Only on an explicit operator request, reopen ONE pi, pi-durable or Claude Code citizen under its OWN garden id, in a visible window in the operator's "
 			],
 			"gate": ["bash", "run.sh", "check-mux-resume-call"],
 			"timeoutSeconds": 60,
@@ -208,6 +208,39 @@
 			"timeoutSeconds": 60,
 			"signature": "[QK:MUXRESUME-HERDR-COMPOSED]",
 			"signatureSource": "scripts/check-mux-resume-call.ts"
+		},
+		{
+			"claim": "MUXRESUME-PD-ADOPT-ENV",
+			"title": "the tmux window drops the profile assignment, so the child's SDK reads the tmux server's profile",
+			"subject": "pi-extensions/lib/mux-resume-call.ts",
+			"find": ["\t\t...adoptAssignments.flatMap((assignment) => [\"-e\", assignment]),"],
+			"replace": ["\t\t...adoptAssignments.slice(1).flatMap((assignment) => [\"-e\", assignment]),"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:MUXRESUME-PD-ADOPT-ENV]",
+			"signatureSource": "pi-extensions/lib/mux-resume-call.test.ts"
+		},
+		{
+			"claim": "MUXRESUME-PD-ADOPT-ABSOLUTE",
+			"title": "a relative projection value reaches tmux",
+			"subject": "pi-extensions/lib/mux-resume-call.ts",
+			"find": ["\t\tif (typeof value !== \"string\" || !value.startsWith(\"/\")) {"],
+			"replace": ["\t\tif (typeof value !== \"string\") {"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:MUXRESUME-PD-ADOPT-ABSOLUTE]",
+			"signatureSource": "pi-extensions/lib/mux-resume-call.test.ts"
+		},
+		{
+			"claim": "MUXRESUME-PD-MANAGED-RUNTIME",
+			"title": "the pi-durable window starts bare pi instead of the managed entwurf verb",
+			"subject": "pi-extensions/lib/mux-resume-call.ts",
+			"find": ["\treturn openResumeWindow(RESUME_CALL_PI_DURABLE_RUNTIME, params, params.adoptEnv, env);"],
+			"replace": ["\treturn openResumeWindow(RESUME_CALL_RUNTIME.pi, params, params.adoptEnv, env);"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:MUXRESUME-PD-MANAGED-RUNTIME]",
+			"signatureSource": "pi-extensions/lib/mux-resume-call.test.ts"
 		}
 	]
 }
