@@ -84,7 +84,9 @@ npm --version
 ```
 
 The two npm forms below install the **published** package, `0.45.0` (Pi 1.4.x, the Pi 1.4.0 SDK
-set).
+set). The [product entry](../README.md#install)'s unpinned `npm install -g @junghanacs/entwurf`
+takes whichever version npm's `latest` dist-tag names; pin `@<version>` as below when you mean the
+exact artifact the [Requirements](#requirements) table describes.
 
 Global install is simplest when native harnesses should find stable bins from every
 working directory:
@@ -270,6 +272,10 @@ Tool-call ingress is MCP; delivery to a pi citizen is still its record-addressed
 control address (a Unix socket; a named pipe on the experimental native-Windows Pi
 preview). A boot/listing from `check-bridge` is not a model-turn or
 native-rail acceptance.
+The server key stays `entwurf-bridge`. An operator/trusted-project MCP entry with
+that normalized namespace can replace the registration by Pi's own precedence;
+`/mcp` shows it, and Entwurf does not scan or fight that choice.
+Codemode is harness-internal, not another garden citizen.
 
 To inspect the ACP provider from a project-local package instead of a global one:
 
@@ -566,7 +572,7 @@ entwurf install-meta-bridge
 entwurf doctor-meta-bridge
 ```
 
-The supported floor `>=2.1.306` is enforced by package metadata through installer
+The Claude Code supported floor `>=2.1.306` is enforced by package metadata through installer
 and doctor gates. Older Claude versions validate an exec-form hook but silently drop
 its `args` at runtime, so there is no shell-form fallback.
 

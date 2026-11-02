@@ -325,5 +325,5 @@ MCP registration gives the external harness the tools; the host still needs work
 
 For the maintained multi-harness setup and skill/command packaging details, see
 [agent-config](https://github.com/junghan0611/agent-config). See also the
-[concept primer](../README.md#concept-primer), the sender-envelope contract in
-[AGENTS.md](../AGENTS.md), and [custom skills](../README.md#custom-skills).
+[concepts](../README.md#concepts), the sender-envelope contract in
+[AGENTS.md](../AGENTS.md), and [custom skills](./setup-clean-host.md#custom-skills).

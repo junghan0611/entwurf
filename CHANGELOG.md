@@ -4,6 +4,94 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+## 0.50.0 — 2026-11-02
+
+Same-id resume now reaches every resumable backend on both launch rails. A dormant pi, pi-durable or Claude Code citizen reopens under its own garden id in a visible tmux window or, inside Herdr, a new Herdr tab, with no fallback from one rail to the other (#157). The CLI gains one description source, safe help and a thin `entwurf claude` entry (#153, continued in #157).
+
+What this release is not: it adds no MCP tool (the nine tools of 0.45.0 are unchanged) and no new authority. No resume submits a prompt. A Claude Code resume restores no model or permission flag. A pi resume still launches with the provider/model the transcript's first `model_change` records. Delivery still never starts a process. Herdr is not re-pinned to npm here. An npm lock must name a published version, and 0.50.0 has no published bytes while it is prepared, so `plugins/herdr/runtime-lock.json` returns to the closed `herdr-checkout` verification carrier, as earlier release candidates did. From the moment the prepare commit reaches main, a main-tracking Herdr install builds its runtime from the checked-out commit instead of npm, and a host already on the npm 0.45.0 runtime must run `herdr-plugin-deactivate` before it reinstalls. The published 0.45.0 pairing stays pinned by the Herdr tag `v2026.10.27-herdr.0.45.0`. The Herdr manifest version is unchanged; a separate snapshot re-pins npm after 0.50.0 is published.
+
+### Same-id resume across rails (#157)
+
+- **Pi inside Herdr.** `entwurf_resume_call` reopens a dormant pi citizen in a new Herdr tab through agent start. The rail is selected by the same `HERDR_ENV=1` predicate fresh call reads. Workspace drift and agent occupancy refuse before start, and a failure after the tab exists reports its recovery rather than "nothing opened".
+- **pi-durable, on tmux and Herdr.** A dormant pi-durable citizen reopens through an owner-fence reservation and `entwurf pi-durable --entwurf-adopt` with a closed bootstrap context; Herdr uses one `layout.apply`. The observation is adoption (`adopted`, `not-yet-adopted`, `reservation-lost`, `unobserved`), not readiness or recall. A reservation awaiting adoption under a live holder refuses a second resume and is never cleared automatically.
+- **pi-durable session handling.** It adds exact native session selection for the current cwd (no picker, no model override) and Herdr fresh through one layout request with lifetime fencing. Known reserve/withdraw writes survive release failures, and reservation holders are kept distinct from addressable citizens.
+- **Claude Code inside Herdr.** The target opens through ONE `layout.apply` running `claude --resume <session>`. ONE `pane.process_info` then reads the pane's direct child, and that child is joined by equality to the receiver marker's owner, under the same dormancy, startKey, fresh-binding and record checks as tmux. If the child cannot be read, the observation is `pane-process-unread`: it does not wait, close or retry. On the resume path only pi uses agent start, because agent start types into the pane's shell; a fresh Claude Code sibling inside Herdr still opens through agent start.
+
+### CLI (#153, #157)
+
+- **One description source.** `ENTWURF-CLI.json` is the description source. Exact help forms (`entwurf --help`, `help all`, `help <command>`, `<command> --help`) are answered before dispatch, and an undescribed name is refused. The root page is task-oriented and the documented catalog lives under `help all`. The guide topics `help team` and `help remote-pair` ship with `team.json.example`.
+- **`entwurf claude [args…]`** (#157 stage 4) execs the `claude` on PATH with argv, cwd, exit status and signals unchanged. It removes an inherited `PI_SESSION_ID`/`PI_AGENT_ID` and exports only `ENTWURF_CLAUDE_LAUNCH_ACTIVE=1`. Two recursion fences refuse a re-entry. Citizenship still comes from the hooks `install-meta-bridge` installed.
+- **Maintainer-facing.** Development gate dispatch is deduplicated with operator commands, help and exit behavior preserved.
+
+### Herdr plugin
+
+- **One receipt-owned operator link.** An explicit, PATH-qualified expose/withdraw pair carries a schema-3 activation floor, staged candidate admission and a link teardown that preflights everything first. Installed dev-bin mutations stay source-only.
+
+### Agent guidance
+
+- `ENTWURF.json` payload revision 11 → 19 (schemaVersion 6). It adds the Herdr pi resume rail (12), pi-durable inside Herdr (13), the 2048-character host-cap rewrite of the `entwurf_fresh_call` description and its restored contract phrases (14–15), the fresh-call cwd parameter's echo sources (16), pi-durable same-id resume (17–18) and Claude Code resume inside Herdr (19). Each is a reviewed amendment layer over preserved originals.
+
+### Upgrade
+
+- **Checkout-run hosts** refresh the bytes each surface actually loads. Ordinary Pi and pi-durable require `pnpm run build-bridge`, accepted output/SDK verification, then a new host process; copied hook/extension units require their owning installer. Follow [Applying new source to a running host](docs/setup-clean-host.md#applying-new-source-to-a-running-host) before restarting sessions. An already-running bridge keeps the modules it loaded.
+- **Claude Code hosts** re-run `entwurf install-meta-bridge`, which re-assembles the plugin copy, then restart open Claude Code sessions in the operator's own order, one by one. No working session is stopped automatically. A rollout is complete only once each participating reader is verified on the new bytes.
+- **npm consumers** re-run `entwurf setup` in the same scope, then `check-bridge`.
+- **Herdr plugin hosts** that already installed the npm 0.45.0 runtime keep running it until they reinstall; that pairing stays pinned by the Herdr tag `v2026.10.27-herdr.0.45.0`. An install that tracks main after this prepare builds its runtime from the checked-out commit through `herdr-checkout`, and a host switching from npm runs `herdr-plugin-deactivate` first. A separate snapshot re-pins npm 0.50.0 once it is published.
+
+### Dated native observations (BASELINE; not floors)
+
+- Herdr native Pi same-id resume n=1 (2026-11-01).
+- pi-durable Herdr public resume n=1 on a pre-final candidate.
+- Claude Code Herdr resume, n=1 ×2 (2026-11-02). Recall was unmeasured in the first run and measured blind in the second.
+- **Operator impact recorded with those runs.** The launcher relink was restored with approval. Claude Code 2.1.312 was lost from the shared vendor store; the writer pid was not measured and harmlessness is not established.
+- No named LIVE or release gate covers same-id resume inside Herdr or pi-durable same-id resume. Herdr fresh call has its own on-demand LIVE (`smoke-herdr-fresh-call-live`).
+
+### Release evidence
+
+- Pre-version landing: `6f4dc72`, exact-SHA push CI run 41427433295, all four required jobs successful. This is the landing SHA's evidence, not the prepared SHA's CI.
+- Prepare-time floor and LIVE gate: working tree over `6f4dc72`, patch `020a024c978cd5700f5e76fb60d59af55eb8c00bd1cd59357b9ed4f75042293a`, before the final evidence/upgrade wording. `release-gate --cut` ran once from 22:37:28 to 22:59:33 KST (1325 s), with `check:full` 1008 s exit 0, MUST PASS=24 FAIL=0 SKIP=0, BEHAVIOR PASS=1 FAIL=0 SKIP=0, cut OK. Scratch/log: `/tmp/entwurf-release-gate-0.50.0-r3.CMLPOf/release-gate.log`, SHA-256 `c66729b4bf26a36091e43697d1a9056b56dc2b659c472fb222d6e449accba086`; 99-file compiled manifest `69c4cafa8c80c1927853f71e2cfa473cdb292c79e1f86ade008c2070fd41a8c4`. [Shared receipt](https://github.com/junghan0611/entwurf/issues/157#issuecomment-6579130897). Codex CLI 0.166.0 used a test-owned app-server with models `gpt-6-luna` / `openai-codex/gpt-6.1-terra`.
+- Earlier prepare candidates remain RED: the first FULL failed on the npm lock/package mismatch; the first LIVE gate returned MUST 20/4/0 (stale OMP writer, two 1 MiB capture overflows, Codex 0.162.1 callback timeout); the second returned MUST 23/1/0 (the moved README floor declaration). The Codex timeout's cause remains unknown: queue acceptance is not a model-read receipt. No older LIVE/static results were combined into the final aggregate.
+- Operator-side changes outside the package: OMP birth/receive units were reinstalled through ownership-matched installers and their doctors passed; GLG updated Codex to 0.166.0. Claude Code launcher and 2.1.314/2.1.316 file fields/hashes matched before/after the final gate. This does not prove whole-HOME invariance, erase the earlier 2.1.312 loss, or prove every already-loaded reader was refreshed. The x02 unintended vendor invocations were stopped; other HOME writes/request usage remain unmeasured.
+- The gate validated the manifest's 1497 claims across 94 lanes without executing the qualification body (#144). Exact prepared-SHA CI, the mandatory M3w Windows carrier tarball and unchanged-file Linux acceptance, installed-host acceptance and operating rollout/restart need their own receipts. The local floor is not those proofs. npm publication is GLG's own action.
+- Kill-power re-measured at this shipped SHA: none (all 1497 committed claims not re-proved, #144).
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head 674887de2ffb surface 3410eb4abb62 -- ["bash","run.sh","check-install-surface"] 39/39 receipt 96e54476fdea
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head 29179171d2a5 surface 416486bb2dd7 -- ["bash","run.sh","check-install-surface"] 44/44 receipt 4c3aa18d303a
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head 0e04bf6e728a surface 06589a4717ad -- ["bash","run.sh","check-agent-guidance-beside"] 14/14 receipt 85f3fd0d966f
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head 0e04bf6e728a surface 06589a4717ad -- ["bash","run.sh","check-entwurf-v2-visible-resume"] 61/61 receipt 720cd58c7ade
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head 0e04bf6e728a surface 06589a4717ad -- ["bash","run.sh","check-fresh-call-dispatch"] 13/13 receipt 5b95fbbb0909
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head 0e04bf6e728a surface 06589a4717ad -- ["bash","run.sh","check-fresh-call-provider"] 3/3 receipt 2106ba968015
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head 0e04bf6e728a surface 06589a4717ad -- ["bash","run.sh","check-mux-resume-call"] 17/17 receipt 862a41c278d7
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head 0e04bf6e728a surface e67f76c5feb6 -- ["bash","run.sh","check-entwurf-v2-visible-resume"] 61/61 receipt 6342ca495393
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head 2aaf8562497a surface e07908ea5d6a -- ["bash","run.sh","check-pi-durable-carrier"] 39/39 receipt 685a8c6dfa7d
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head 2aaf8562497a surface e07908ea5d6a -- ["bash","run.sh","check-pi-durable-beside"] 46/46 receipt c3817aba8552
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head 2aaf8562497a surface e07908ea5d6a -- ["bash","run.sh","check-install-surface"] 44/44 receipt baa8ddb8c3d2
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head 2aaf8562497a surface e07908ea5d6a -- ["bash","run.sh","check-gate-manifests"] 52/52 receipt fbd7c0a7f297
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head d6129139ad97 surface 1acef734a2be -- ["bash","run.sh","check-herdr-fresh-call"] 59/59 receipt 593e9193286d
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head d6129139ad97 surface 1acef734a2be -- ["bash","run.sh","check-fresh-call-dispatch"] 15/15 receipt 07b0b36dadca
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head d6129139ad97 surface 1acef734a2be -- ["bash","run.sh","check-agent-guidance-beside"] 14/14 receipt 8a186fd0790c
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head d6129139ad97 surface 1acef734a2be -- ["bash","run.sh","check-herdr-plugin"] 25/25 receipt a3f9c21cca50
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head d6129139ad97 surface 1acef734a2be -- ["bash","run.sh","check-gate-manifests"] 52/52 receipt f9c17068de14
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head d6129139ad97 surface 8d3a7b826d00 -- ["bash","run.sh","check-herdr-fresh-call"] 61/61 receipt 1be9d472a202
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head d6129139ad97 surface 8d3a7b826d00 -- ["bash","run.sh","check-herdr-plugin"] 26/26 receipt 3124d7184d34
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head d6129139ad97 surface 8d3a7b826d00 -- ["bash","run.sh","check-agent-guidance-beside"] 14/14 receipt 0e84ba092a95
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head d6129139ad97 surface 8d3a7b826d00 -- ["bash","run.sh","check-gate-manifests"] 52/52 receipt 22b2be63719d
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head 46c7c776c7fe surface 88e73a89ebac -- ["bash","run.sh","check-agent-guidance-beside"] 14/14 receipt 96604c251769
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head 46c7c776c7fe surface 88e73a89ebac -- ["bash","run.sh","check-tests-beside-behavior"] 74/74 receipt de7bd99c0627
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head 46c7c776c7fe surface 88e73a89ebac -- ["bash","run.sh","check-mux-resume-call"] 17/17 receipt bda6d08af94f
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head 46c7c776c7fe surface 88e73a89ebac -- ["bash","run.sh","check-entwurf-v2-visible-resume"] 80/80 receipt 930c572bd121
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head 46c7c776c7fe surface 88e73a89ebac -- ["bash","run.sh","check-pi-durable-beside"] 51/51 receipt 29b846b0ead9
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head 46c7c776c7fe surface 783f01aa8b0c -- ["bash","run.sh","check-pi-durable-carrier"] 51/51 receipt 709e9f7bb632
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head 43594eba588a surface eede92f3dc48 -- ["bash","run.sh","check-entwurf-v2-visible-resume"] 88/88 receipt 3634eaeb7043
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head 43594eba588a surface eede92f3dc48 -- ["bash","run.sh","check-agent-guidance-beside"] 14/14 receipt 997eb11e3be3
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head 43594eba588a surface eede92f3dc48 -- ["bash","run.sh","check-entwurf-v2-surface"] 20/20 receipt d63c171fe084
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head 43594eba588a surface eede92f3dc48 -- ["bash","run.sh","check-mux-resume-call"] 17/17 receipt 65daf45dfff2
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head 2734f524bfec surface 1075a5c8fc15 -- ["bash","run.sh","check-entwurf-v2-visible-resume"] 94/94 receipt 19b759779c6a
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head 2734f524bfec surface 1075a5c8fc15 -- ["bash","run.sh","check-agent-guidance-beside"] 14/14 receipt e07f2130adb5
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head 2734f524bfec surface 1075a5c8fc15 -- ["bash","run.sh","check-claude-launch"] 12/12 receipt 3c218eb802e6
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head 2734f524bfec surface 1075a5c8fc15 -- ["bash","run.sh","check-install-surface"] 44/44 receipt 47c25cef1581
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head 2734f524bfec surface 1075a5c8fc15 -- ["bash","run.sh","check-mux-resume-call"] 17/17 receipt c12e1151be55
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head 2734f524bfec surface 1075a5c8fc15 -- ["bash","run.sh","check-entwurf-v2-surface"] 20/20 receipt ec08a9060e91
+
 ## v2026.10.27-herdr.0.45.0 — Herdr Entwurf plugin 0.45.0
 
 A separate Herdr plugin snapshot, not another core release: core package 0.45.0 and its

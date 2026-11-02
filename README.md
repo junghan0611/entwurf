@@ -1,10 +1,9 @@
 # entwurf
 
-`entwurf` connects independent agent harnesses as visible siblings: open a new session,
-reopen a supported dormant sibling in tmux, or reach an existing sibling by **garden id**. Fresh
-sessions open in the caller's Herdr workspace or tmux session by default; explicit tmux
-placement can name another existing session. Each harness keeps its own runtime,
-authentication, tools and transcript.
+`entwurf` connects independent agent harnesses as visible siblings. Open a fresh sibling, or reopen
+or message an existing one by its **garden id**. Every harness keeps its own runtime,
+authentication, tools and transcript; Entwurf adds identity, delivery, receipts and named
+lifecycle verbs.
 
 ![entwurf — a forged screwdriver for visible sibling sessions](docs/assets/entwurf-hero.jpg)
 
@@ -17,89 +16,68 @@ A recorded source-checkout demo: callback → task → native Bash → reply.
 
 [![npm](https://img.shields.io/npm/v/@junghanacs/entwurf?logo=npm)](https://www.npmjs.com/package/@junghanacs/entwurf) · maintained by [junghanacs.com](https://junghanacs.com/)
 
-A sibling is a visible session with its own runtime boundary, not a disposable
-worker or a subagent of a new central harness. Entwurf supplies identity, delivery,
-receipts and named lifecycle verbs; the operator and native harnesses keep steering.
-Git branches, worktrees, file isolation and internal delegation remain their concern.
+## Why
+
+- **Siblings, not workers.** A sibling is a visible session with its own runtime boundary, not a
+  disposable worker or a subagent of a new central harness. You and the native harnesses keep
+  steering; branches, worktrees, file isolation and internal delegation stay their concern.
+- **Native harnesses stay native.** Claude Code keeps its hooks and tools, Codex its own threads and
+  delegation, pi its extensions. Entwurf reconstructs no prompt, hydrates no transcript and mediates
+  no credential.
+- **One address.** A garden id names a record-backed citizen. A pane, socket, native session id or
+  model is a carrier or an observation, never a second address.
+- **The same verbs on both screens.** In an ordinary tmux session or inside a Herdr workspace, a
+  sibling opens and reopens beside you through the same tools. The rail follows where the caller
+  runs, with no fallback from one to the other.
+
 [Short answers: FAQ](./FAQ.md).
 
-[ENTWURF.json](./ENTWURF.json) is the sole editable source for the product-owned guidance
-currently extracted there: MCP descriptions/parameters, durable short variants, the static
-entwurf_v2 reject hints, the static visible-resume reject hints of entwurf_resume_call, the static tmux launch-stage reject hints of entwurf_fresh_call and entwurf_resume_call (herdr rail hints stay in code), five static delivery-result clauses of the entwurf_v2 dirty-lock and remote-pair receipts (receipt syntax and the mailbox envelope stay in code) and the record-less-socket reject hint's text around its fix command (the command itself stays in code). It is not a user prompt override; its payload revision is independent of
-package releases. Bootstrap, notices, other hints and ACP guidance still have their existing owners. Operator engraving/configuration is unchanged.
+## The four verbs
 
-| Verb | Tool | Where it lands | Harnesses |
+| Verb | Tool | What it does | Harnesses |
 |---|---|---|---|
-| **Open** a new sibling | `entwurf_fresh_call` | Herdr: a new unfocused tab in the caller's workspace. tmux: a new window in the caller's session, or an existing session named by `placement.tmuxSession`; without an explicit tmux placement, a Codex caller opens beside its own TUI pane | Herdr: pi, Claude Code (agent start), pi-durable (one layout request). tmux: pi, pi-durable, Claude Code, Copilot, OMP, Codex |
-| **Reopen** a dormant sibling | `entwurf_resume_call` | A visible tmux window (or, inside herdr, a new herdr tab — pi through agent start, pi-durable and Claude Code through one layout request; #157 G1a native-Pi n=1 and #157 B3 pi-durable n=1 on a pre-final candidate are recorded in [BASELINE](./BASELINE.md), #157 stage 4's two Claude Code n=1 runs on pre-final candidates (recall unmeasured in the first, a blind recall in the second) are recorded there with the operator vendor-data changes seen in their windows, and none is a release gate; no tmux fallback) under the same garden id, with its record selecting the native session (Pi: identity-checked recorded transcript supplies launch metadata; pi-durable: the record's native session, reserved for one launched child to adopt; Claude Code: `claude --resume <session id>` at the record cwd); the verb submits no prompt | pi, pi-durable, Claude Code |
-| **Retire** one sibling the human operator explicitly requested | `entwurf_retire_call` | One guarded attempt on that target: a Pi shutdown request or Claude Code fd-pinned process termination. Refused/unknown outcomes remain possible; the record stays for guarded same-id return. Not a grant, a roster cleanup or an automatic retry | pi, Claude Code |
-| **Message** an existing sibling | `entwurf_v2` | Its own rail: control socket, self-fetch mailbox or native push; delivery starts no process | pi, pi-durable, Claude Code, Copilot, OMP, Codex (Antigravity native push is paused, #152) |
+| **Open** | `entwurf_fresh_call` | Opens a new visible sibling beside the caller — a new Herdr tab, or a tmux window — and hands it a first task. The sibling's own callback supplies its garden id | tmux: pi, pi-durable, Claude Code, Copilot, OMP, Codex. Herdr: pi, pi-durable, Claude Code |
+| **Reopen** | `entwurf_resume_call` | Reopens a dormant sibling under the same garden id, its record selecting the native session. Submits no prompt | pi, pi-durable, Claude Code |
+| **Message** | `entwurf_v2` | Delivers to an existing sibling over its own rail. Starts no process | pi, pi-durable, Claude Code, Copilot, OMP, Codex |
+| **Retire** | `entwurf_retire_call` | One guarded attempt on one sibling the human operator explicitly named. The record stays for a later same-id return | pi, Claude Code |
 
-Antigravity is a legacy citizen: an existing conversation registers itself, and Entwurf never
-launches one. Its native push is paused (#152): on the measured external path the agy language server
-refused Entwurf's calls for a missing CSRF token, so a message to it is refused as `native-push-paused`. A launch receipt is neither the new sibling's address nor proof that it
-processed its task; the sibling's own callback envelope supplies its garden id.
+Every verb returns a receipt, not the sibling's turn result. Capabilities differ by rail, so a
+shipped citizen is not a promise of every lifecycle operation; [DELIVERY](./DELIVERY.md) owns each
+rail's admission. Antigravity is a legacy citizen: it registers an existing conversation, Entwurf
+never launches one, and its native push is paused (#152).
 
-The package holds the v2 core, native-harness bridges, a pi adapter and an ACP
-plugin. ACP is one ingress, not the boundary; pi is one adapter, not the center.
-Claude and Cortex Code are ACP backends. Codex and Antigravity stay native so they
-retain their own tools and work context. Capabilities differ by rail: a shipped
-citizen is not a promise of every lifecycle operation.
-
-[Releases](https://github.com/junghan0611/entwurf/releases) contain each cut's notes and acceptance
-receipts; [CHANGELOG](./CHANGELOG.md) records source history.
+Capabilities here describe this source and ref; an installed release can differ — see its
+[release notes](https://github.com/junghan0611/entwurf/releases) and
+[package-specific setup](./docs/setup-clean-host.md#requirements).
 
 ## Install
 
-**Choose by where you work. Bring your own harnesses, subscriptions and login.**
-The native durable route below additionally supplies an app/TUI, Entwurf's own thin composition of
-the durable app upstream omits from its npm release; it does not supply credentials or take
-ownership of the harness.
+Bring your own harnesses, subscriptions and logins. Entwurf installs its own bytes and composes the
+harnesses it finds; it needs Node 24 or newer, Python 3 for `setup`, and whichever harnesses you
+use, already installed and signed in.
 
 ### Direct — ordinary shell or tmux
 
-Prerequisites: **Node >=24.0.0**, Python 3 for `setup`, and any harnesses you choose
-to use, already installed and authenticated. Pi is optional-by-presence, supported
-range `>=1.4.0 <1.5`; Claude Code supported floor `>=2.1.306` is required for its
-managed exec-hook lifecycle. pnpm is needed only for source-checkout setup.
-
-**Release state.** The Pi range above belongs to the published 0.45.0, which ships the Pi
-1.4.0 SDK set, as 0.41.1 and 0.41.2 did. The previous `0.41.0` ships the Pi 1.3.0 set and requires Pi 1.3.x; the README
-inside that tarball and the Herdr snapshot `v2026.10.22-herdr.0.41.0` are its contract.
-
 ```bash
-npm install -g @junghanacs/entwurf@0.45.0
+npm install -g @junghanacs/entwurf
 entwurf setup /path/to/your-project
 entwurf check-bridge
 ```
 
-`setup` composes each harness it finds and reports PASS / SKIP / FAIL. An absent
-harness is an explicit SKIP; a detected incomplete/below-floor integration is a
-named FAIL with nonzero exit, not a false green. `check-bridge` proves the installed
-MCP bytes boot and list tools without backend auth; it does **not** certify a real
-model turn or native receive rail.
+`setup` composes each harness it finds and reports PASS / SKIP / FAIL. An absent harness is an
+explicit SKIP; a detected incomplete or below-floor integration is a named FAIL with a nonzero exit,
+not a false green. `check-bridge` proves the installed MCP bytes boot and list their tools without
+backend auth; it does **not** certify a model turn or a receive rail.
 
-[Clean-host setup](./docs/setup-clean-host.md) owns project-local/source installs,
-config paths, optional backends, doctors, upgrade/repair and uninstall.
-Codex also needs your own hook-trust decision, app-server and exact-directory
-consent: [the operator steps](./docs/setup-clean-host.md#three-operator-decisions-before-fresh).
-Plain MCP registration alone does not make a garden citizen.
-
-**Platform bounds:** Linux is the certified harness-rail axis. macOS Entwurf-only
-installation is **CERTIFIED (CI)**; native harness rails, ACP and mux remain
-**NOT CERTIFIED — pending physical host**, so detected wiring can still leave setup non-green.
-WSL2 and native Windows have **experimental CI previews**, not general or physical-host support.
-The native-Windows preview covers Pi citizens and offline scripted delivery, not vendor turns,
-other harnesses, shell entrypoints, fresh/resume, mux, Herdr or ACP.
-[BASELINE](./BASELINE.md#release-host-baseline) owns the version-specific receipts and gaps;
-an npm package without an `os` restriction is not an all-platform certification.
+[Clean-host setup](./docs/setup-clean-host.md) owns the supported harness versions, installing a
+chosen package version, project-local and source installs, the per-harness steps (Codex needs
+[your own trust decision and app-server](./docs/setup-clean-host.md#three-operator-decisions-before-fresh)),
+doctors, upgrade, repair and uninstall. Plain MCP registration alone does not make a garden citizen.
+Linux is the certified harness-rail axis; [BASELINE](./BASELINE.md#release-host-baseline) owns the
+macOS, WSL2 and native-Windows evidence split, and an npm package without an `os` restriction is not
+an all-platform certification.
 
 ### Native durable (pi-durable)
-
-**The package supplies Entwurf's owned app/TUI carrier and nine exact Pi 1.4.0 SDK
-members** (the previous 0.41.0 supplies the 1.3.0 set). No separate runtime checkout, patch, build or ordinary Pi CLI is needed.
-The launch verifies carrier integrity and every reachable SDK edge's name/version;
-incomplete, drifted or mixed supply refuses by name.
 
 ```bash
 entwurf pi-durable --provider <provider> --model <model-id> --width task-wide
@@ -108,29 +86,13 @@ entwurf pi-durable --resume
 entwurf pi-durable --session <native id>
 ```
 
-`--continue` opens this directory's latest-created durable session. `--resume` lists its
-sessions, most recently written first, by creation time, garden id and last write, and
-reopens the one you choose as it was saved; a cancelled choice opens nothing.
-`--session <native id>` reopens exactly that session of this directory as it was saved, with
-no list or picker: the native session id (`<13-digit ms>-<uuid>`, as `--resume` lists it), not
-a garden id. The three selectors are mutually exclusive and take no `--provider`, `--model`,
-`--width` or `--entwurf-bootstrap`. `--session` is a native CLI selector, not an address:
-same-id resume by garden id is `entwurf_resume_call`'s, which starts
-`entwurf pi-durable --entwurf-adopt` with a closed internal context — a bridge-only launch, not
-an operator selector.
-
-The contact adds garden identity and two-way mailbox communication. Entwurf owns the
-thin app/TUI composition (shipped as an emitted JS carrier); execution, models/auth, queues,
-SQLite, transcripts and recovery remain the upstream SDK's:
-[Hard Rule 17](./AGENTS.md#hard-rules), **supply the missing surface; do not become the harness**.
-
-Optional `--native-module <absolute file>` initializes trusted ESM before runtime/TUI
-imports, then installs its default native Extension after the contact.
-`--native-module-dir <absolute directory>` loads that named directory's top-level
-`*.extension.mjs` files in byte-wise order instead. No automatic module discovery or
-classic Pi API shim; guards are not a sandbox or rollback.
-[Native setup](./docs/setup-clean-host.md#2b-optional-native-durable-pi-durable)
-owns flags, refusals and the extension contract.
+The package supplies Entwurf's thin app/TUI carrier and the exact pi SDK set it declares; the launch
+verifies both and refuses incomplete, drifted or mixed supply by name. No separate runtime checkout,
+patch, build or ordinary Pi CLI is needed. The contact adds garden identity and two-way mailbox
+communication; execution, models, auth, queues, storage and recovery stay the upstream SDK's
+([Hard Rule 17](./AGENTS.md#hard-rules): **supply the missing surface; do not become the harness**).
+Selectors, native modules and refusals:
+[setup §2b](./docs/setup-clean-host.md#2b-optional-native-durable-pi-durable).
 
 ### Herdr workbench
 
@@ -138,47 +100,36 @@ owns flags, refusals and the extension contract.
 herdr plugin install junghan0611/entwurf/plugins/herdr --yes
 ```
 
-The [Herdr guide](./plugins/herdr/README.md#from-a-raw-linux-box-in-nine-steps) says which
-runtime each ref installs.
+This separate path activates Herdr-integrated **pi and Claude Code** with its own locked runtime
+and an observation pane. By default it puts no Entwurf bins on PATH; a runtime that carries
+`herdr-plugin-expose-operator` makes exactly one `entwurf` link, and only when you ask for it.
+An Entwurf release does not re-pin that runtime by itself; the
+[Herdr guide](./plugins/herdr/README.md#from-a-raw-linux-box-in-nine-steps) says which runtime each
+ref installs and owns install, use, evidence and removal. The plugin owns neither delivery nor the
+Herdr launch rail.
 
-This separate path activates Herdr-integrated **pi and Claude Code** with an
-independently locked runtime and an observation pane. By default it puts no Entwurf bins on PATH;
-a runtime whose package carries `herdr-plugin-expose-operator` (#153) makes exactly one `entwurf`
-link, and only when you ask for it.
-An Entwurf release does not automatically re-pin that runtime. The Herdr snapshot
-`v2026.10.27-herdr.0.45.0` pins the published npm 0.45.0; the earlier 0.41.2 runtime stays pinned
-by the Herdr tag `v2026.10.24-herdr.0.41.2`.
-[Herdr guide](./plugins/herdr/README.md) owns install, use, evidence and removal;
-the plugin does not own delivery or the Herdr launch rail.
+## First steps
 
-### Garden launcher
-
-After direct setup, start a pi citizen in your project:
+Start a citizen in your project:
 
 ```bash
 cd /path/to/your-project
 entwurf pi
-# equivalent when the package is registered (also the Herdr plugin's spelling):
-pi --entwurf-control
 ```
 
-`entwurf pi` execs your own pi with the control flag. A plain pi may load the
-package without becoming a citizen. The record mints the garden id; do not inject
-a session id. Native harness launch and manual Herdr argv instructions live in
-[setup §2–§5](./docs/setup-clean-host.md#2-optional-pi-adapter--acp-plugin).
+`entwurf pi` execs your own pi with the control flag (`pi --entwurf-control` is equivalent once the
+package is registered); the record mints the garden id, so do not inject a session id.
+`entwurf claude [args…]` execs the `claude` on your PATH with its arguments unchanged; a Claude Code
+session is a citizen through the hooks `entwurf install-meta-bridge` installed
+([setup §3](./docs/setup-clean-host.md#3-optional-claude-code-native-citizen)), however it started.
+`entwurf pi-durable` is the durable contact above. `entwurf --help` is the quick overview of the
+other entries and `entwurf help all` the full catalog; `entwurf help team` and
+`entwurf help remote-pair` are the two guides.
 
-`entwurf claude [args…]` is the same kind of entry for Claude Code: it execs the `claude` on
-your PATH with the arguments unchanged (`--help` included), after removing an inherited
-`PI_SESSION_ID`/`PI_AGENT_ID` and adding only its recursion sentinel. It checks no setup and
-mediates no auth, model or permission. A Claude Code session is a citizen through the hooks
-`entwurf install-meta-bridge` installed
-([setup §3](./docs/setup-clean-host.md#3-optional-claude-code-native-citizen)), whether it
-started this way or as plain `claude`.
+In that harness session, ask the agent to:
 
-In that **harness session**, ask the agent to:
-
-1. Call `entwurf_self` to confirm its authoritative identity.
-2. Call `entwurf_peers` to discover existing citizens and their liveness facts.
+1. Call `entwurf_self` to confirm its identity.
+2. Call `entwurf_peers` to see existing siblings and their liveness facts.
 3. Pick a live garden id and call `entwurf_v2` with a message, for example:
 
 ```json
@@ -190,22 +141,12 @@ In that **harness session**, ask the agent to:
 }
 ```
 
-These are tools, not shell subcommands. Pi calls
-`mcp__entwurf_bridge__<verb>` through Pi's built-in MCP. The bridge exposes **nine**
-verbs; a pi citizen has **seven active + two hidden** (`entwurf_inbox_read` and
-`entwurf_register_native`), since it has no mailbox and its own extension births it.
-Those counts describe the source; a running host offers what its already-loaded bridge
-listed, so see [applying new source to a running host](./docs/setup-clean-host.md#applying-new-source-to-a-running-host).
-The server key stays `entwurf-bridge`. An operator/trusted-project MCP entry with
-that normalized namespace can replace the registration by Pi's own precedence;
-`/mcp` shows it, and Entwurf does not scan or fight that choice.
+These are MCP tools inside a session, not shell commands; pi reaches them as
+`mcp__entwurf_bridge__<verb>` through its built-in MCP. A running host offers what its
+already-loaded bridge listed:
+[applying new source to a running host](./docs/setup-clean-host.md#applying-new-source-to-a-running-host).
 
-## Entwurf orchestration
-
-One narrow dispatch capability connects independent siblings, not an agent factory.
-The record is the **sole address authority**. A pane, socket, native transcript id,
-model or process marker is a carrier or observation, never a second address axis.
-Liveness is read at dispatch time; an id's shape does not tell you its transport.
+## How delivery works
 
 ### `entwurf_v2` — canonical dispatch verb
 
@@ -216,75 +157,50 @@ pi / pi-durable / Claude Code / Copilot / OMP / Antigravity / Codex
       → control-socket | self-fetch mailbox | native-push
 ```
 
-**Delivery starts no process.** A live pi receives over its record-addressed control
-address, an armed self-fetch citizen (Claude Code, Copilot, OMP, pi-durable) through its
-mailbox, a probe-alive native-push citizen (Codex; Antigravity is paused, #152) through its own
-conversation or thread. Anything else is refused honestly, never launched into. The receipt
-is a receiver acceptance boundary, a durable mailbox file or an injection, never completion;
-`wants_reply` is etiquette, not waiting. [DELIVERY](./DELIVERY.md#control-socket-acceptance-boundaries-120)
-owns what each boundary means and each rail's admission.
+**Delivery starts no process.** The record is the sole address authority, and liveness is read at
+dispatch time: a live pi receives over its control address, an armed self-fetch citizen through its
+mailbox, a probe-alive native-push citizen in its own conversation. Anything else is refused, never
+launched into. The receipt is the receiver's acceptance boundary, a durable mailbox file or an
+injection — never the sibling's turn result; `wants_reply` is etiquette, not waiting.
+[DELIVERY](./DELIVERY.md#control-socket-acceptance-boundaries-120) owns what each boundary means.
 
-The lifecycle verbs in the [table above](#entwurf) return their own receipts, never a delivery
-result: fresh a launch receipt (the sibling's callback envelope supplies its garden id), resume
-separate LAUNCH and OBSERVATION receipts, retire separate action, record and lock results.
-**Retirement is never autonomous:** it needs the human operator's explicit target and action, and
-no role, caller identity or tool annotation grants it ([DELIVERY](./DELIVERY.md#candidate-lifecycle-commands-are-not-delivery-boundaries-147)).
+**Lifecycle verbs keep their own receipts.** Open returns a launch receipt, not an address; reopen
+separates its launch from its observation; retire reports action, record and lock separately.
+**Retirement is never autonomous:** it needs the human operator's explicit target and action, and no
+role, caller identity or tool annotation grants it
+([DELIVERY](./DELIVERY.md#candidate-lifecycle-commands-are-not-delivery-boundaries-147)).
 
-**Mux launches; it never delivers.** Fresh opens in the caller's Herdr workspace or tmux session;
-`placement.tmuxSession` names another existing tmux session and is refused inside Herdr. The model
-is required and `cwd` is a literal absolute directory. Missing or ambiguous context refuses with no
-fallback. Exact argv, identity checks and limits: [tmux launch](./docs/mux-launch-rail.md),
-[Herdr launch](./docs/herdr-launch-rail.md).
+**Lifecycle launch is separate from `entwurf_v2` delivery.** Open and reopen place a sibling in the
+caller's Herdr workspace or tmux session; `placement.tmuxSession` names another existing tmux session and is refused inside Herdr.
+Missing or ambiguous context refuses with no fallback:
+[tmux launch](./docs/mux-launch-rail.md) · [Herdr launch](./docs/herdr-launch-rail.md).
 
-### Remote siblings — declared pairs across hosts
+### Remote siblings and team bookmarks
 
-Opt-in. The v2 file below is read by the published 0.41.2 and 0.45.0; 0.41.1 and earlier read the
-earlier single-pair file. On each host, write `~/.pi/agent/entwurf-remote-pair.json` (mode `0600`; a
-moved agent dir or meta store moves it, see [setup §2c](./docs/setup-clean-host.md#2c-optional-remote-pair-between-two-hosts-107)). The ids
-below are fictional; use your own records' garden ids:
+**Remote pairs** are opt-in. Each host declares the pair in its own file, and `entwurf_v2` to the
+remote garden id makes one SSH attempt over your own account, checked and dispatched by the host that
+holds the record — no discovery, wake or retry. `entwurf help remote-pair`, the steps in
+[setup §2c](./docs/setup-clean-host.md#2c-optional-remote-pair-between-two-hosts-107), the
+[principles](./docs/remote-sibling-principles.md) and the
+[contract](./DELIVERY.md#remote-pairs-107-149-declared-pairs-across-hosts).
 
-```json
-{
-  "version": 2,
-  "routes": [
-    {
-      "localGardenId": "20260101T090000-a1b2c3",
-      "remoteGardenId": "20260101T091500-d4e5f6",
-      "ssh": "host-b",
-      "remotePairFile": "/home/me/.pi/agent/entwurf-remote-pair.json"
-    }
-  ]
-}
-```
-
-The other host carries the mirror route: the two garden ids swapped, its own SSH alias for this
-host, and this file's canonical absolute path. Then send with the ordinary `entwurf_v2` to the
-remote garden id: one SSH attempt over your own account, checked and dispatched by the host that
-holds the record. There is no peer discovery, wake or retry. Why: [remote sibling principles](./docs/remote-sibling-principles.md);
-contract: [DELIVERY](./DELIVERY.md#remote-pairs-107-149-declared-pairs-across-hosts); steps and the
-hand conversion from the earlier file: [setup §2c](./docs/setup-clean-host.md#2c-optional-remote-pair-between-two-hosts-107).
-
-### Team bookmarks — `team.json`
-
-A person's bookmark of the siblings one project works with. Copy [`team.json.example`](./team.json.example)
-to an ignored `team.json` at the project root and fill names, backend, garden id, native session id
-and cwd from Entwurf's record facts; read liveness from `entwurf_peers` when you dispatch. Entwurf
-does not load it as runtime configuration, and it is not configuration for identity, routes, roles, permissions or lifecycle. The
-example's own notes say the rest.
+**Team bookmarks:** [`team.json.example`](./team.json.example) is a person's note of the siblings one
+project works with, copied to an ignored `team.json`. Entwurf never loads it as configuration for
+identity, routes, roles, permissions or lifecycle. `entwurf help team`.
 
 ## Concepts
 
-**Entwurf** (기투, projection-of-self) connects independent visible siblings;
-**garden id** names a record-backed citizen, not its pane or native transcript.
-[FAQ](./FAQ.md) explains ACP, MCP and context carriers.
+**Entwurf** (기투, projection-of-self) connects independent visible siblings; a **garden id** names
+a record-backed citizen, not its pane or native transcript. The package holds the v2 core, the
+native-harness bridges, a pi adapter and an ACP plugin. ACP is one ingress, not the boundary; pi is
+one adapter, not the center. Claude and Cortex Code are ACP backends; Codex and Antigravity stay
+native so they keep their own tools and work context. The pi adapter registers the compiled bridge
+with Pi's built-in MCP after record birth, while pi's own receive stays its record-addressed control
+address. [FAQ](./FAQ.md) explains ACP, MCP and context carriers.
 
-## Pi integration
-
-The pi adapter registers the compiled bridge with Pi's built-in MCP after record
-birth; Pi supervises the MCP child. **MCP is ingress; pi receive remains the
-record-addressed control address (a Unix socket, or the native-Windows preview's named
-pipe).** Garden identity and dispatch stay Entwurf's.
-Codemode is harness-internal, not another garden citizen.
+Product guidance and CLI help each have one editable source: [ENTWURF.json](./ENTWURF.json) for
+the MCP tool descriptions and the hints extracted there, [ENTWURF-CLI.json](./ENTWURF-CLI.json) for
+`entwurf --help`. [AGENTS](./AGENTS.md#architecture) lists exactly what each carries.
 
 ## Operation guides
 
@@ -310,6 +226,8 @@ credential mediation, subscription bypass, pane-typing delivery or hidden orches
 
 Installation, a doctor, a fixture and an exact release candidate prove different things;
 none is interchangeable with the others or an all-host/long-haul guarantee.
+[Releases](https://github.com/junghan0611/entwurf/releases) carry each cut's notes and acceptance
+receipts; [CHANGELOG](./CHANGELOG.md) records source history.
 
 ## References
 
