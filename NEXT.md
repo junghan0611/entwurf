@@ -1,35 +1,32 @@
-# NEXT — #153/#157 landing → 0.50.0 → 운영 반영·재시작
+# NEXT — 0.50.0 make → GLG npm publish → 운영 반영
 
 # RAIL — 현재 좌표
 
-- [x] **1. #153 입구·#157 대칭성 구현/문서 checkpoint.** d189ff3, 요청한 push·도장·exact-SHA CI41423914510 required4jobs PASS.
-- [ ] **2. main landing.** ← CURRENT: GLG 직접 승인. branch NEXT를 없앤 handoff commit → main FF·일반 push → 새 HEAD의 exact-SHA CI.
-- [ ] **3. 0.50.0 prepare.** 오푸스 → Terra 순서로 준비·근거 대조, 그 뒤 Fable 검수. 버전/기록·최종 FULL/필수 LIVE는 자기 후보에서 측정한다.
-- [ ] **4. 배포·운영 반영·재시작·관측.** ← PAUSED: prepare 수용과 make/publish 권한·정확한 설치 대상/안전조건이 먼저. 소스만 바뀌었다고 완료가 아니다.
-- [ ] **5. 새 Pi Sol의 문서/목적 감수.** ← PAUSED: 앞 단계 뒤 GLG가 마무리됐다고 할 때 fresh. 구현 요약/코드 검수가 아니라 #153/#157의 인간 고민이 제품 설명에 표현됐는가를 본다.
+- [x] **1. #153 통합 입구·#157 대칭성 구현/문서.** d189ff3 checkpoint·요청 push·exact CI 완료.
+- [x] **2. main landing.** 6f4dc72, exact push CI41427433295 required4jobs 성공.
+- [x] **3. 0.50.0 prepare·독립 검수.** dcdfb05 수선 / 07d0ec0 준비, 정상 훅·clean. Fable와 notebook 각각 한 보정까지 종결. 원 P5-R3 MUST24/0/0·BEHAVIOR1/0/0·FULL1008초.
+- [ ] **4. make·정확 배포물·태그·운영.** ← CURRENT: GLG가 push/태그/GitHub Release 승인, npm publish만 직접 한다. Sol 문서 보정과 handoff commit → main FF → 해당 최종 SHA의 M0 FULL → 일반 push/도장·exact4CI → M3w Windows tarball·동일 파일 Linux 수용 → 태그/GitHub Release → GLG 게시 좌표.
+- [x] **5. fresh Pi Sol 목적 감수.** 20261102T232934-2b69db가 인간 원문을 직접 읽음. root README는 목적 전달 적합, Herdr 안내의 설치/placement 혼합 표 한 보정. 새 기능·코드 검수로 바꾸지 않았다.
 
 # NOW
 
-- **직접 승인:** GLG “main으로 올리고 0.50.0 준비하자. 운영본에 반영후 재시작하는것이 중요하다…동시에 던지지말고 오푸스랑 terra랑 릴리즈 준비하고, fable한테 검수 받고 나서…pi sol을 새로…153 157에서 내가 고민한것들이 표현되었는가”. 노트북은 꺼져 있으므로 연락/SSH/재개하지 않는다.
-- **다음:** 정상 훅의 작은 handoff commit으로 이 root NEXT를 최신화하고 branch NEXT를 제거, main에 FF한다. source d189ff3와 달라지는 부분은 handoff뿐이지만 새 SHA CI를 받는다. main에서도 개발은 새 release branch에서만 한다.
-- **역할/순서:** main68bd94 coord/landing/commit·push·증거. Opus915040에게 먼저 release·운영 대상 점검204e5a를 보냈다. 그 checkpoint 뒤 기존 live Terra a20739가 교차 준비, 이어 Fable dff8a1가 검수한다. 한꺼번에 뿌리거나 형제가 독자 새 형제를 만들지 않는다. Sol은 지금 생성하지 않는다. 169dd1는 이전 CLI/docs 작업 완료 상태.
-- **권한:** 현재 GO는 main 반영과 prepare0.50.0이다. `.claude/skills/entwurf-release/SKILL.md`의 land/prepare/make/publish는 각기 별도 권한. tag/GitHubRelease/npm/운영 설치를 prepare라는 이름으로 미리 실행하지 않는다. 준비된 정확한 artifact와 운영 대상·재시작/회복선을 제시해 다음 GO를 받는다.
-- **안전:** 실제 LIVE는 일반 prepare의 필수 축이지만 기존 운영 data 변이 제한을 면제하지 않는다. Opus가 기존 gate의 실 HOME/vendor 영향과 예산·전제부터 명시한다. 안전조건 미해결이면 그 축에서 STOP; MUST SKIP/FAIL을 PASS로 바꾸지 않는다. scripts-off version-sync 예외는 release skill P3 그대로, SDK/auth/PATH/로그인/설치 수선은 임의 확장하지 않는다.
+- **다음 한 걸음:** Sol 단일 문구 보정 폐쇄 확인 후 작은 handoff commit으로 branch NEXT를 승격·삭제하고 main에 FF한다. Opus915040가 준비한 `/tmp/e157h/release-050/m0/full.sh <최종40자리SHA>`를 **main/clean/동결 후보에서 한 번** 실행한다. 최종 FULL 이전에는 push/태그하지 않는다. make 권한은 있으나 실패한 증거 축을 넘어가지 않는다.
+- **최신 직접 승인:** GLG “다음진행해 푸시태그까지하고 npm publish 좌표 남겨줘.” npm publish는 에이전트 금지. `.claude/skills/entwurf-release/SKILL.md`의 make 절차와 mandatory M3w를 따른다. 최종 tarball은 Windows preview run에서 받아야 하며 Linux에서 새로 pack하지 않는다.
+- **Sol 근거:** #153 인간 직접 댓글6391806564(“힣 직접씀”), #157의 GLG 인용은 에이전트가 옮긴 인용으로 구별. `plugins/herdr/README.md`에서 plugin 활성화 Pi/CC와 caller-context rail(Herdr Pi/CC/PD, tmux6)을 분리하고 서문의 tmux-only 설명을 고쳤다. 그 외 root README 방향·SDK·기능·검사 범위 변화 없음. callback nonce `mux-fresh-call-f43874521da1b44833f26751`과 sender로 fresh 주소를 확인했다.
+- **역할:** main68bd94가 commit/push/CI/artifact/tag/GHRelease/인계, 기존 Opus915040가 정확 SHA의 M0 FULL 실행. Terra a20739/Fable dff8a1/notebook b22677 검수 완료. Sol2b69db는 마지막 인간 목적 감수와 그 단일 문구 폐쇄만. 새 worker/리뷰어/병렬 조율 lane 없음.
+- **읽을 원근거:** [준비 종결6579522838](https://github.com/junghan0611/entwurf/issues/157#issuecomment-6579522838), [최종 로컬 floor6579130897](https://github.com/junghan0611/entwurf/issues/157#issuecomment-6579130897), [당시 exact working patch6578835045](https://github.com/junghan0611/entwurf/issues/157#issuecomment-6578835045). [#153](https://github.com/junghan0611/entwurf/issues/153)/[#157](https://github.com/junghan0611/entwurf/issues/157) thread가 live contract다.
+- **로컬 고유 receipt 보존:** gitignored `.probe-artifacts/release-0.50.0-handoff/`에 선택된 text 약1MiB와 SHA manifest, raw R3 log·snapshot·99file dist SHA·vendor 전후·review/commit 기록. `/tmp/e157h/release-050/`도 보존. 이 hostlocal 경로를 원격 읽기 근거로 대신 쓰지 않는다.
 
-# 읽을 곳 — 요약보다 원천
+# 출하 판정과 분리할 것
 
-- [#153](https://github.com/junghan0611/entwurf/issues/153), [#157](https://github.com/junghan0611/entwurf/issues/157): thread가 live contract. 통합 `entwurf` 입구, Pi/Claude Code/pi-durable × tmux/Herdr 기본 사용 대칭, install route와 placement의 분리, skill/팀/remote 안내, 존재의 동등성과 좁은 드라이버라는 GLG의 목적을 Sol에게 원문으로 읽힌다. 작업 완료 목록을 정답 틀로 주지 않는다.
-- [4번 구현/검증6573387199](https://github.com/junghan0611/entwurf/issues/157#issuecomment-6573387199), [5번 문서6573733842](https://github.com/junghan0611/entwurf/issues/157#issuecomment-6573733842), [d189exact-CI6574387591](https://github.com/junghan0611/entwurf/issues/157#issuecomment-6574387591). BASELINE/VERIFY와 release skill이 실제 수용 경계를 소유한다.
-- `/tmp/e157h/release-050/`는 새 lane 근거. 이전 `/tmp/e157h/stage4/`, `/tmp/e157h/s4-cli-169/stage5/`와 private Native 기록은 보존한다. 이후 operating source/npm/plugin pin/loaded process를 구분하고 모든 참여 reader의 coherence를 측정해야 rollout 완료다.
-
-# 운영 사건·미측정 — green으로 지우지 않기
-
-- H2 운영 Claude launcher가 fixture의2.1.316을 가리킨 사고는 GLG 승인 후 main이 원래 `~/.local/share/claude/versions/2.1.316`으로만 복구, link/realpath/SHA55cd 확인했다. N2 창 안에서 공유 vendor store의 옛2.1.312가 사라졌다(312/314/316→314/316). active316은 정상이나 writerPID/무해함/312의 실제 사용유무는 미측정; 이 작업에 복구 사본·옛SHA가 없다. 임의 다운로드/복구/fixture 삭제 없음.
-- #67 launcher fence는 whole mutable vendor store를 보호하지 않는다. N1/N2 각 새1시민·2제출턴 승인은 소진됐다. 새 LIVE의 명명된 범위/안전조건 없이 같은 실험을 반복하지 않는다. working 시민/자기 coordinator/기존 app-server를 임의 종료하거나 전체 Herdr 서버 재시작으로 형제를 끊지 않는다.
-- stage4 workSurface1075a5c8… PARTIAL94/14/12/44/17/20와 FULL1016초는 당시 snapshot의 증거; 후속 문서/릴리즈 후보에 승계하지 않는다. d189의 push CI4PASS는 별도 최신 source/package 증거이며 Native/LIVE/registry/운영 수용이 아니다. whole qualification/root74·검증기 개발 재개 없음.
-- 과거3번 991초/XDG5와old978초/XDG4, 중단/실패 probe·unknown exit는 원기록 보존. PD 실제n1은82b5ec36, 최신candidate LIVE가 아니다. fixture 기록/Native database/metadata를 삭제·SQL 직접 열기·전수scan·lock repair하지 않는다.
+- R3는 HEAD6f4dc72+working patch020a024c의 1325초 aggregate 원 PASS다. 마지막 evidence/upgrade/Sol 문구 이전의 subject이며 최종 prepared SHA CI나 Windows artifact로 승계하지 않는다. 최종 make SHA의 M0와 exact push CI는 이제 측정한다. kill-power body는 실행하지 않았다(1497/94 manifest검증만); 앞선37 PARTIAL은 각 후보 기록이다.
+- P4 npm lock 불일치 RED / P5 20/4/0 / P5-R2 23/1/0 / prose7 vacuity RED / x02 우발 실행을 지우지 않는다. Codex0.162.1 queue수락/turn 미노출 원인 UNKNOWN은 0.166 성공으로 확정하지 않는다. H2 launcher는 승인 복구했고 옛 Claude312 소실의 writer/무해함/실사용은 미측정이다.
+- 운영 업데이트는 source/compiled99file output·SDK / copied hook·CC assembled plugin / npm / Herdr pin / 이미 loaded reader를 구분한다. 일반 Pi/PD는 build→accepted output/SDK→새 process, copied unit은 owning installer→새 vendor session. 동작 중 형제의 종료/동일id reopen은 그 대상에 대한 운영자 결정이고 자동으로 하지 않는다. 이번 참여 reader의 새 PID·bridgechild시작시각·ownerjoin·garden id·file-set/SHA를 확인해야 rollout 완료다.
+- OMP birth/receive의 소유 매칭 재설치/doctor/실제 LIVE는 완료됐으나 기존 loaded 시민 전원 갱신은 증명하지 않았다. 새 배포물·registry·운영 재시작은 이 green에 포함되지 않는다. npm 게시 후 별도 Herdr npm0.50 pin snapshot/소스별 재증명도 남는다.
+- P9는 prefix-blind 읽기 전용 census 두 번, 누적 sandbox4prefix545/396/396/396·17MiB 관측(이번 단독 누수량 아님), R3 world92K/log596K/ignoredCodex476K 보존·삭제0. `/tmp/agent-emacs-init`1개는 운영/editor 범위라 종료하지 않았다. unsupported 관측만으로 born11 전부 종료를 주장하지 않는다. 원 R3 test-owned appserver3643415/defaultsocket 부재는 main이 확인했다.
 
 # 금지선
 
-- 이 checkout의 branch만; 개발 worktree/clone 금지. Offline env-i/privateHOME·PI·XDG5/verifydeps-error2/noCI, managed build·정상 hooks/scanner. 긴 명령은 scope/time/이유를 먼저 고지한다. 실제 오류는 raw·관측 exit로 STOP, 자동 수선/맹목 retry 없음.
-- **Astra567753 연락 금지 / PiOpus150a5e 연락·resume·retire 금지.** notebook b22677 오프라인, 연락 금지. working 시민의 retirement는 개별 직접 요청 없이는 금지. `g3-pd-birth-r1/raw/s06-ss-all.tmp` 격리 유지. Sol은 나중 승인 신호까지 만들지 않는다.
+- Pi1.5.0/#155는 별도 Opus에게 **준비만** 맡긴 일이다. 이번 Pi1.4 SDK source/package/support 범위에 섞지 않는다. notebook은 GLG의 최신 검수 지시로 온라인 확인/검수 종결, 임의 새 실험/SSH 재개는 하지 않는다.
+- 이 checkout의 branch에서만 개발, worktree/개발 clone 금지. 정상 hooks/scanner, offline env-i/private HOME·PI·XDG5/verifydeps2error/noCI, managed dist build/보존. M0 동안 HEAD/index/tree/dist 동결. whole qualification/root74·새 검증기·matrix·watcher 없음.
+- 실패는 raw/관측 exit로 STOP. SQL/NativeDB전수scan/lock repair/기록·memory삭제/광역/tmpcleanup/임의 pkill/working시민retire 금지. 기존백업314/316은 `/tmp/e157h/release-050/vendor-backup/bin/`에 보존하고 tmp-clearing 재부팅 전 명시적으로 보호한다. quarantine `g3-pd-birth-r1/raw/s06-ss-all.tmp`는 읽지 않는다. Astra567753/PiOpus150a5e 연락·resume·retire 금지.

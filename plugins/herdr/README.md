@@ -3,10 +3,11 @@
 **This plugin does not rebuild the Herdr workbench. It turns on the Entwurf driver inside the one
 you already have.**
 
-[Entwurf](../../README.md) opens and messages visible sibling AI sessions, and reopens dormant pi
-or Claude Code siblings in tmux. It gives an already-running agent session a **garden id**, an address that
-outlives the pane it happens to be drawn in, lets it open new siblings — inside Herdr, a pi or
-Claude Code sibling arrives as a new unfocused tab in its own workspace — and carries one official
+[Entwurf](../../README.md) opens and messages visible sibling AI sessions, and reopens supported dormant
+pi, pi-durable or Claude Code siblings under the same garden id in Herdr or tmux. It gives an
+already-running agent session a **garden id**, an address that outlives the pane it happens to be drawn
+in, lets it open new siblings — inside Herdr, a pi, Claude Code or pi-durable sibling arrives as a new
+unfocused tab in its own workspace — and carries one official
 delivery verb for reaching them. That capability is independent of Herdr and normally arrives
 through an ordinary npm install. The cost of that route is the entry: you have to know the package
 exists, install it, and run `entwurf setup` before anything is visible.
@@ -22,7 +23,7 @@ things and deliberately not a third:
 | **not** | a second workbench, a second address space, or a delivery surface — the pane sends nothing and the plugin competes with nothing |
 
 Herdr owns the workbench. Entwurf owns the screwdriver — garden identity, the named lifecycle verbs
-that open siblings (and reopen pi siblings in tmux), official delivery, receipts, named refusals. This manifest is the smallest useful place those two meet: one `[[build]]`
+that open siblings (and reopen supported dormant siblings in Herdr or tmux), official delivery, receipts, named refusals. This manifest is the smallest useful place those two meet: one `[[build]]`
 and one `[[panes]]`, and no `[[startup]]`, `[[events]]`, `[[actions]]` or `[[link_handlers]]`
 (`herdr-plugin.toml`).
 
@@ -328,8 +329,8 @@ a wider host wants the direct route (`npm install -g @junghanacs/entwurf`, then 
 | Claude Code (self-fetch mailbox) | ✅ MCP registration | ✅ |
 | Codex, Copilot, OMP, Antigravity rails | ❌ | ✅ where the harness is present |
 | ACP rail (`pi --model entwurf/<claude model>`) | ✅ — the pi user-scope wiring registers the provider too | ✅ |
-| `entwurf_fresh_call` backends | `pi`, `claude-code` | `pi`, `claude-code`, `copilot`, `omp`, `codex`, `pi-durable` |
-| launch seat | a new tab in the caller's Herdr workspace | a visible tmux window, with an optional `placement.tmuxSession` expert seat |
+| plugin-activated integrations | `pi`, `claude-code` — only where Herdr integrated them | not plugin activation; `setup` wires the detected harnesses above |
+| launch rail (independent of install route) | caller context: Herdr has `pi`, `claude-code`, `pi-durable`; tmux has six backends, subject to native prerequisites | the same caller-context rule; tmux also accepts the optional `placement.tmuxSession` expert seat |
 | `entwurf`, `entwurf-bridge`, statusline/hook bins on `PATH` | ❌ (one explicit `entwurf` link on request) | ✅ six bins |
 | `entwurf setup <project>`, `entwurf doctor-*` repair surfaces | by absolute path under the runtime root — or as bare `entwurf` once you asked for the operator link | ✅ |
 | platform | `linux` | no `os` restriction in the package |
