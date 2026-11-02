@@ -681,6 +681,41 @@
 			"timeoutSeconds": 60,
 			"signature": "[QK:V2RESUME-PD-LAUNCH-FAILED-STEP]",
 			"signatureSource": "pi-extensions/lib/entwurf-v2-visible-resume.test.ts"
+		},
+		{
+			"claim": "V2RESUME-PD-RESERVED-HOLDER-NOT-ADDRESS",
+			"title": "a reservation's live parent is answered as a running holder, so the caller is pointed at a process entwurf_v2 cannot reach",
+			"subject": "pi-extensions/lib/entwurf-v2-visible-resume.ts",
+			"find": ["\t\tif (err.holderState === \"reserved\") {"],
+			"replace": ["\t\tif (err.holderState === \"closed\") {"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:V2RESUME-PD-RESERVED-HOLDER-NOT-ADDRESS]",
+			"signatureSource": "pi-extensions/lib/entwurf-v2-visible-resume.test.ts"
+		},
+		{
+			"claim": "V2RESUME-PD-RESERVE-WRITTEN-THEN-FAILED",
+			"title": "a reserve that wrote its reservation and then failed a lock release surfaces as a bare release error that names no reservation",
+			"subject": "pi-extensions/lib/entwurf-v2-visible-resume.ts",
+			"find": [
+				"\t\t\tif (err.written !== undefined) throw new Error(piDurableReservedThenFailed(targetGardenId, err, err.written));"
+			],
+			"replace": ["\t\t\tvoid piDurableReservedThenFailed;"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:V2RESUME-PD-RESERVE-WRITTEN-THEN-FAILED]",
+			"signatureSource": "pi-extensions/lib/entwurf-v2-visible-resume.test.ts"
+		},
+		{
+			"claim": "V2RESUME-PD-WITHDRAW-PARTIAL-STATE",
+			"title": "a withdrawal that wrote the donor's row and then left its transaction file is reported as if it had written nothing",
+			"subject": "pi-extensions/lib/entwurf-v2-visible-resume.ts",
+			"find": ["\tif (err instanceof PiDurableOwnerFenceError && err.written !== undefined) {"],
+			"replace": ["\tif (err instanceof PiDurableOwnerFenceError && err.written === null) {"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:V2RESUME-PD-WITHDRAW-PARTIAL-STATE]",
+			"signatureSource": "pi-extensions/lib/entwurf-v2-visible-resume.test.ts"
 		}
 	]
 }

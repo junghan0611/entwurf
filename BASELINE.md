@@ -175,6 +175,20 @@ Supply follow-up ff250b (`b3-fence-supply-l1/RECEIPT.md` SHA867ddf90…): the fi
 
 Original formatter-stop/unauthorized-write, first compiled-oracle STOP, missing old-dist byte backup/early tmux removal and read-error/recovery histories are retained; later green does not make those procedures clean. GLG separately approved the bounded in-D app metadata write/residue cost ([6560478307](https://github.com/junghan0611/entwurf/issues/157#issuecomment-6560478307)), not SDK DB access, ownership correctness or public resume. Parent reservation/adoption, exact SDK profile provenance, metadata-root closure and public admission remain the next contract; public pi-durable addressed resume stays refused. GLG requested a local-only intermediate checkpoint on2026-11-02; final affected qualification/FULL/native floors and final commit/feature push remain separate, with no main/release inference.
 
+### #157 B3 Herdr public pi-durable same-id resume, 2026-11-02 (n=1)
+
+Not a certification row, release gate, final-candidate LIVE, tmux-path or installed-artifact acceptance. Subject: candidate `82b5ec36` = HEAD `46c7c776` plus the then-uncommitted stage-3 diff (NEXT excluded), on the checkout compiled bridge (managed dist manifest `c9a3befa…`, 99 files); it precedes the later provider-close fix, R17/R18 wording and the final checkpoint `43594eba`, none of which inherits this observation. Owner915040 measured; main read the complete receipt `/tmp/e157h/s3-pd-live-r1/RECEIPT.md` (`71c21b37…`), not every raw leaf. [Portable evidence and limits](https://github.com/junghan0611/entwurf/issues/157#issuecomment-6566126053).
+
+| Axis | Measured |
+|---|---|
+| fixture | Private HOME/XDG/meta/control/locks/sockets and a private Herdr server. The operator-selected model `openai-codex/gpt-6.1-terra` ran under the existing SDK profile (approved normal use; no credential copy, symlink or proxy); new native data is confined to one new test-cwd hash. Callers C1/C2/C3 are synthetic fixture records, not real Claude Code or other model sessions. Provider/billing/OAuth writes were not measured. |
+| seed/close | C1's public `entwurf_fresh_call` opened target T `20261102T091526-fdad9c` (native id `1793578526845-ff5d0b8a-…`) in a private Herdr tab; T returned its nonce callback. The first close committed storage closed and lease released; the record stayed byte-equal. That host needed a second exit signal, the linger later repaired with API0 loopback evidence only. |
+| public resume | C2 called `entwurf_resume_call` with target T only. The bridge reserved generation `85ee35c3…`; ONE `layout.apply` opened a new tab w1:t3 / pane w1:p3; the observation was `adopted` after 1503 ms. Garden id, native id and cwd were unchanged; `attachIncarnation` changed and the C4 owner and claim owner became the child, whose argv carried `--entwurf-adopt` with the closed four-field context and no task/provider/model/session flag. The receipt said no prompt was submitted (SQLite stat unchanged there — metadata, not content). |
+| recall | C3 sent T a question without the seed fact through `entwurf_v2`; T answered with it. The fact was counted zero times in the question, helper source, identities, argv and resume artifacts, once in the seed and once in the answer. No SQLite content read or transcript hydration; one seed and one recall target-model turn, no caller-model turn. |
+| cleanup | Official private Herdr stop returned 0; ten tracked PIDs and both sockets absent; operational metadata-root listings equal before/after. The new native directory and four fixture records are preserved. |
+
+Unmeasured and not inherited: the tmux path, the final candidate, a real Claude Code or other real caller, billing, native byte equality, G-abandon, exact-SHA CI, registry/release acceptance and operating-reader rollout.
+
 Notes on the release-host certification table above:
 
 - **shape-only is not a live proof.** The `artifact-consumer` job verifies a read-only

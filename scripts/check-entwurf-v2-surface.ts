@@ -176,7 +176,7 @@ function assertDormantHonesty(tag: string, rawText: string): void {
  * be satisfiable by adding a per-row action/routing field, which is why it is asserted on the
  * DESCRIPTION and paired with a negative that forbids the row-level fix. What the description owes
  * a caller is that `dead` is a reported fact carrying no delivery invitation. A separately
- * requested, proven-dormant Pi/Claude lifecycle can reopen the same id without submitting a prompt.
+ * requested, proven-dormant Pi/pi-durable/Claude lifecycle can reopen the same id without submitting a prompt.
  */
 function assertPeersDeadRowHonesty(tag: string, rawBlock: string): void {
 	const text = rawBlock;
@@ -187,7 +187,7 @@ function assertPeersDeadRowHonesty(tag: string, rawBlock: string): void {
 			/not an invitation to dispatch/.test(text) &&
 			/no entwurf_v2 delivery is available while it is dormant/.test(text) &&
 			/Only on an explicit operator request, the separate entwurf_resume_call/.test(text) &&
-			/proven-dormant Pi or Claude Code citizen under the same id, submitting no prompt/.test(text),
+			/proven-dormant Pi, pi-durable or Claude Code citizen under the same id, submitting no prompt/.test(text),
 	);
 	ok(
 		`${tag} — entwurf_peers does not turn delivery dormancy into a ban on every lifecycle verb`,

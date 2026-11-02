@@ -225,17 +225,65 @@ export type PiDurableOwnerFenceReason =
 	| "adopt-lease-appeared"
 	| "withdraw-not-own";
 
+/**
+ * The decision write a call had COMMITTED before one of its lock releases failed (#157 S3 joint review D1/D3): the
+ * claim it wrote, as it wrote it, captured right after that write returned. Only `tx-release-failed` and
+ * `record-arm-release-failed` carry one, and only from a reserve or a withdrawal. It is what this call wrote, not what
+ * the claim holds now. Its absence records no write; it is not evidence that none was made.
+ */
+export interface PiDurableWrittenClaim {
+	readonly resource: string;
+	readonly state: PiDurableOwnerState;
+	readonly generation: string;
+	readonly ownerPid: number;
+}
+
+/** Structured facts a refusal carries beside its reason, so no caller reads them out of the message. */
+export interface PiDurableOwnerFenceErrorContext {
+	/** A reserve's holder refusal (owner-live / owner-uncertain / owner-other-host): the refused claim's state. */
+	readonly holderState?: PiDurableOwnerState;
+	readonly written?: PiDurableWrittenClaim;
+}
+
 export class PiDurableOwnerFenceError extends Error {
 	readonly reason: PiDurableOwnerFenceReason;
-	constructor(reason: PiDurableOwnerFenceReason, message: string) {
+	readonly holderState?: PiDurableOwnerState;
+	readonly written?: PiDurableWrittenClaim;
+	constructor(reason: PiDurableOwnerFenceReason, message: string, context: PiDurableOwnerFenceErrorContext = {}) {
 		super(`${reason}: ${message}`);
 		this.name = "PiDurableOwnerFenceError";
 		this.reason = reason;
+		if (context.holderState !== undefined) this.holderState = context.holderState;
+		if (context.written !== undefined) this.written = context.written;
 	}
 }
 
-function refuse(reason: PiDurableOwnerFenceReason, message: string): PiDurableOwnerFenceError {
-	return new PiDurableOwnerFenceError(reason, message);
+function refuse(
+	reason: PiDurableOwnerFenceReason,
+	message: string,
+	context?: PiDurableOwnerFenceErrorContext,
+): PiDurableOwnerFenceError {
+	return new PiDurableOwnerFenceError(reason, message, context);
+}
+
+/**
+ * A release failure that came AFTER this call's own decision write committed keeps its reason, message and cause; it
+ * only gains what was written. Any other error, or one that already names a write, is returned as it is.
+ */
+function afterWrite(error: unknown, written: PiDurableWrittenClaim | undefined): unknown {
+	if (
+		written !== undefined &&
+		error instanceof PiDurableOwnerFenceError &&
+		error.written === undefined &&
+		(error.reason === "tx-release-failed" || error.reason === "record-arm-release-failed")
+	) {
+		Object.assign(error, { written });
+	}
+	return error;
+}
+
+function writtenOf(claim: PiDurableOwnerClaim): PiDurableWrittenClaim {
+	return { resource: claim.resource, state: claim.state, generation: claim.generation, ownerPid: claim.owner.pid };
 }
 
 function messageOf(error: unknown): string {
@@ -624,7 +672,10 @@ async function enterTx(tx: string): Promise<TxHold> {
 	}
 }
 
-/** Unlink the tx this actor created, and only that one; a failure is reported and leaves residue that fails closed. */
+/**
+ * Unlink the tx this actor created, and only that one. A failure is reported; it does not prove the file remains (it
+ * may be gone, or another actor's), so the report says what a remaining file does rather than that one remains.
+ */
 function leaveTx(tx: string, held: TxHold, during: unknown): void {
 	try {
 		const now = fs.lstatSync(tx);
@@ -635,7 +686,7 @@ function leaveTx(tx: string, held: TxHold, during: unknown): void {
 	} catch (error) {
 		throw refuse(
 			"tx-release-failed",
-			`${tx}: ${messageOf(error)}${during === undefined ? "" : `; the step had already failed: ${messageOf(during)}`}; the residue fails closed until an operator removes it`,
+			`${tx}: ${messageOf(error)}${during === undefined ? "" : `; the step had already failed: ${messageOf(during)}`}; if that transaction file remains, it fails closed until an operator removes it`,
 		);
 	}
 }
@@ -1001,7 +1052,8 @@ function takeRecordArm(gardenId: string, roots: PiDurableMetaRoots): LockClaim {
 
 /**
  * Releases the record-arm lock, after S_D. Returns what the caller throws: the step's own error when the release
- * answered `released`, else a named release failure carrying it. A clean step whose release answered returns undefined.
+ * answered `released`, else a named release failure carrying it, and the write that step had committed if it names
+ * one. A clean step whose release answered returns undefined.
  */
 function leaveRecordArm(arm: LockClaim, during: unknown): unknown {
 	let released: string;
@@ -1012,7 +1064,12 @@ function leaveRecordArm(arm: LockClaim, during: unknown): unknown {
 	}
 	if (released === "released") return during;
 	const failed = during === undefined ? "" : `; the step had already failed: ${messageOf(during)}`;
-	return refuse("record-arm-release-failed", `the record-arm lock of ${arm.gardenId} answered ${released}${failed}`);
+	const written = during instanceof PiDurableOwnerFenceError ? during.written : undefined;
+	return refuse(
+		"record-arm-release-failed",
+		`the record-arm lock of ${arm.gardenId} answered ${released}${failed}`,
+		written === undefined ? undefined : { written },
+	);
 }
 
 type Pair = { readonly record: MetaIdentity; readonly location: PiDurableLocation };
@@ -1041,8 +1098,12 @@ function requireHolderGone(claim: PiDurableOwnerClaim, resource: string, hostnam
 	const where = `${resource} is ${claim.state} under pid ${claim.owner.pid} on ${claim.owner.hostname}`;
 	const otherHost = claim.owner.hostname !== hostname;
 	const verdict = otherHost ? "other-host" : holderVerdict(claim.owner);
-	if (verdict === "other-host") throw refuse("owner-other-host", where);
-	if (verdict !== "dead") throw refuse(verdict === "live" ? "owner-live" : "owner-uncertain", `${where}: ${verdict}`);
+	// The holder's state rides beside the reason: a live reservation parent is not a running citizen (S3 joint review D4).
+	const context = { holderState: claim.state };
+	if (verdict === "other-host") throw refuse("owner-other-host", where, context);
+	if (verdict !== "dead") {
+		throw refuse(verdict === "live" ? "owner-live" : "owner-uncertain", `${where}: ${verdict}`, context);
+	}
 }
 
 /** The reservation a `reserved` claim carries; the reader guarantees one. */
@@ -1126,8 +1187,10 @@ export interface PiDurableReservation {
 /**
  * A parent's reservation of one pi-durable citizen's D for one child (#157 B3): record-arm(gid), then S_D(R), on the
  * record and C4 pair read inside the arm hold. Both are released before this returns, so before any launch; the
- * caller's own per-target lock, if it holds one, stays its outer scope and is never taken here. A refusal writes
- * nothing. A write followed by a failed release is reported, and its caller must not launch.
+ * caller's own per-target lock, if it holds one, stays its outer scope and is never taken here. An eligibility
+ * refusal writes nothing. A release that fails AFTER the reservation was written is a different failure: the
+ * reservation exists, and the error names it in `written` (its reason and message stay the release's own). Either
+ * way its caller must not launch, and nothing here withdraws, retries or repairs.
  */
 export async function reservePiDurableSession(request: PiDurableReserveRequest): Promise<PiDurableReservation> {
 	if (!isObject(request)) throw refuse("reservation-invalid", "a reserve names a garden id and four meta roots");
@@ -1143,7 +1206,10 @@ export async function reservePiDurableSession(request: PiDurableReserveRequest):
 		throw leaveRecordArm(arm, error);
 	}
 	const failure = leaveRecordArm(arm, undefined);
-	if (failure !== undefined) throw failure;
+	if (failure !== undefined) {
+		const { resource, generation } = reserved;
+		throw afterWrite(failure, { resource, state: "reserved", generation, ownerPid: owner.pid });
+	}
 	return reserved;
 }
 
@@ -1157,6 +1223,8 @@ async function reserveInPair(
 	const pair = freshPair(gardenId, roots);
 	const { record, location } = pair;
 	const resource = location.nativeDirectory;
+	// Set once the write returned: a release failing after it must name the reservation it left (joint review D3).
+	let committed: PiDurableWrittenClaim | undefined;
 	const written = await withTx(resource, () => {
 		const claim = readClaim(resource);
 		if (claim === undefined) throw refuse("reserve-unarmed", `${resource} holds no claim; a reserve never enrolls`);
@@ -1209,7 +1277,10 @@ async function reserveInPair(
 			writtenAt: new Date().toISOString(),
 		};
 		writeClaim(resource, body);
+		committed = writtenOf(body);
 		return body;
+	}).catch((error: unknown) => {
+		throw afterWrite(error, committed);
 	});
 	return {
 		gardenId: record.gardenId,
@@ -1321,11 +1392,14 @@ function sameOwner(a: PiDurableOwner, b: PiDurableOwner): boolean {
  * The parent's withdrawal of its OWN reservation, once its launch is definitely none-created (its caller's judgement
  * from the rail's own outcome). One S_D hold and no record or C4 read: only `reserved` + this owner + exactly g_r is
  * withdrawn, back to the donor's own row under a new generation. Nothing of the reservation, the reserve's reclaim or
- * any earlier history is carried; anything else writes nothing and refuses `withdraw-not-own`.
+ * any earlier history is carried; anything else writes nothing and refuses `withdraw-not-own`. A release that fails
+ * after the donor's row was written names that row in `written` (joint review D1): the reservation is gone then, and
+ * only the release's residue is left.
  */
 export async function withdrawPiDurableReservation(reservation: PiDurableReservation): Promise<void> {
 	const owner = thisOwner();
 	const resource = reservation.resource;
+	let committed: PiDurableWrittenClaim | undefined;
 	await withTx(resource, () => {
 		const claim = readClaim(resource);
 		if (claim?.state !== "reserved") throw refuse("withdraw-not-own", `${resource} is not reserved`);
@@ -1349,6 +1423,9 @@ export async function withdrawPiDurableReservation(reservation: PiDurableReserva
 			writtenAt: new Date().toISOString(),
 		};
 		writeClaim(resource, body);
+		committed = writtenOf(body);
+	}).catch((error: unknown) => {
+		throw afterWrite(error, committed);
 	});
 }
 

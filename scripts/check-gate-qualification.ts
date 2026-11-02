@@ -3476,7 +3476,7 @@ let manifestCount: number;
 		"pi-bridge-sender": 4,
 		"pi-mcp-bridge": 2,
 		"pi-mcp-register": 3,
-		"pi-durable": 166,
+		"pi-durable": 171,
 		"copilot-receive": 20,
 		"entwurf-peers": 1,
 		"fresh-call-dispatch": 18,
@@ -3525,7 +3525,7 @@ let manifestCount: number;
 		"source-install": 11,
 		"typing-call-fence": 1,
 		"v2-surface": 16,
-		"v2-visible-resume": 56,
+		"v2-visible-resume": 59,
 		"win32-preview": 19,
 	};
 	const laneTally: Record<string, number> = {};

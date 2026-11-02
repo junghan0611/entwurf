@@ -31,7 +31,7 @@ package releases. Bootstrap, notices, other hints and ACP guidance still have th
 | Verb | Tool | Where it lands | Harnesses |
 |---|---|---|---|
 | **Open** a new sibling | `entwurf_fresh_call` | Herdr: a new unfocused tab in the caller's workspace. tmux: a new window in the caller's session, or an existing session named by `placement.tmuxSession`; without an explicit tmux placement, a Codex caller opens beside its own TUI pane | Herdr: pi, Claude Code (agent start), pi-durable (one layout request). tmux: pi, pi-durable, Claude Code, Copilot, OMP, Codex |
-| **Reopen** a dormant sibling | `entwurf_resume_call` | A visible tmux window (or, for pi inside herdr, a new herdr tab — #157 G1a, native-Pi n=1 recorded in [BASELINE](./BASELINE.md), not a release gate; Claude Code is refused inside herdr) under the same garden id, with its record selecting the native session (Pi: identity-checked recorded transcript supplies launch metadata; Claude Code: `claude --resume <session id>` at the record cwd); the verb submits no prompt | pi, Claude Code |
+| **Reopen** a dormant sibling | `entwurf_resume_call` | A visible tmux window (or, inside herdr, a new herdr tab for pi or pi-durable — #157 G1a native-Pi n=1 and #157 B3 pi-durable n=1 on a pre-final candidate, recorded in [BASELINE](./BASELINE.md), not release gates; Claude Code is refused inside herdr) under the same garden id, with its record selecting the native session (Pi: identity-checked recorded transcript supplies launch metadata; pi-durable: the record's native session, reserved for one launched child to adopt; Claude Code: `claude --resume <session id>` at the record cwd); the verb submits no prompt | pi, pi-durable, Claude Code |
 | **Retire** one sibling the human operator explicitly requested | `entwurf_retire_call` | One guarded attempt on that target: a Pi shutdown request or Claude Code fd-pinned process termination. Refused/unknown outcomes remain possible; the record stays for guarded same-id return. Not a grant, a roster cleanup or an automatic retry | pi, Claude Code |
 | **Message** an existing sibling | `entwurf_v2` | Its own rail: control socket, self-fetch mailbox or native push; delivery starts no process | pi, pi-durable, Claude Code, Copilot, OMP, Codex (Antigravity native push is paused, #152) |
 
@@ -115,7 +115,9 @@ reopens the one you choose as it was saved; a cancelled choice opens nothing.
 no list or picker: the native session id (`<13-digit ms>-<uuid>`, as `--resume` lists it), not
 a garden id. The three selectors are mutually exclusive and take no `--provider`, `--model`,
 `--width` or `--entwurf-bootstrap`. `--session` is a native CLI selector, not an address:
-`entwurf_resume_call` still admits only pi and Claude Code targets.
+same-id resume by garden id is `entwurf_resume_call`'s, which starts
+`entwurf pi-durable --entwurf-adopt` with a closed internal context — a bridge-only launch, not
+an operator selector.
 
 The contact adds garden identity and two-way mailbox communication. Entwurf owns the
 thin app/TUI composition (shipped as an emitted JS carrier); execution, models/auth, queues,

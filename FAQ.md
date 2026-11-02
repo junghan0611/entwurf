@@ -8,7 +8,7 @@ No. Entwurf is closer to a workshop than a factory: it connects independently ow
 
 ## What does Entwurf do?
 
-It opens, reopens and messages visible sibling sessions across independent harnesses, each under a stable **garden id**. `entwurf_fresh_call` opens a new sibling in the caller's Herdr workspace or tmux session by default, `entwurf_resume_call` reopens a dormant pi or Claude Code sibling under the same id, and `entwurf_v2` delivers a message, reply or hand-off to an existing one through the rail it actually supports. It does not reconstruct prompts, hydrate transcripts, manage credentials, or emulate another harness.
+It opens, reopens and messages visible sibling sessions across independent harnesses, each under a stable **garden id**. `entwurf_fresh_call` opens a new sibling in the caller's Herdr workspace or tmux session by default, `entwurf_resume_call` reopens a dormant pi, pi-durable or Claude Code sibling under the same id, and `entwurf_v2` delivers a message, reply or hand-off to an existing one through the rail it actually supports. It does not reconstruct prompts, hydrate transcripts, manage credentials, or emulate another harness.
 
 ## What is a garden id?
 
@@ -24,7 +24,7 @@ The visible top-level session is the garden principal. Internal children remain 
 
 ## Does sending a message start a process?
 
-No. [`entwurf_v2`](./README.md#entwurf_v2--canonical-dispatch-verb) only addresses an existing garden citizen and selects its supported delivery rail. `entwurf_fresh_call` opens a new visible sibling; `entwurf_resume_call` reopens a dormant pi or Claude Code citizen under the same id.
+No. [`entwurf_v2`](./README.md#entwurf_v2--canonical-dispatch-verb) only addresses an existing garden citizen and selects its supported delivery rail. `entwurf_fresh_call` opens a new visible sibling; `entwurf_resume_call` reopens a dormant pi, pi-durable or Claude Code citizen under the same id.
 
 ## Can an agent retire a sibling on its own?
 
@@ -36,7 +36,7 @@ Inside Herdr, Entwurf opens a new unfocused tab in the caller's workspace and cu
 
 ## Does Entwurf replace Herdr or tmux?
 
-No. Herdr and tmux provide visible seats. Entwurf opens siblings into them, reopens dormant pi or Claude Code siblings, and carries identity, delivery, and receipts across independent harness sessions. A pane or tmux session is a location for a sibling, never its address or liveness proof.
+No. Herdr and tmux provide visible seats. Entwurf opens siblings into them, reopens dormant pi, pi-durable or Claude Code siblings, and carries identity, delivery, and receipts across independent harness sessions. A pane or tmux session is a location for a sibling, never its address or liveness proof.
 
 ## How do I install it?
 

@@ -94,14 +94,16 @@ is the correct behaviour for a workbench — persistent identity is not its job.
   one outcome — control-socket send, self-fetch mailbox, native-push injection, or a **named
   refusal**. It never types into a pane and never starts a process.
 - **Named lifecycle verbs.** `entwurf_fresh_call` opens a sibling that does not exist yet;
-  `entwurf_resume_call` reopens a dormant **pi** or **Claude Code** citizen under the same id in a tmux
-  window, with the record as the sole address authority: Pi uses its identity-checked recorded
+  `entwurf_resume_call` reopens a dormant **pi**, **pi-durable** or **Claude Code** citizen under the
+  same id in a tmux window, with the record as the sole address authority: Pi uses its identity-checked recorded
   transcript's session-header cwd and first `model_change` provider/model through the launch resolver
-  (no record/host cwd fallback); Claude Code uses the record session id/cwd without restoring model
-  or permission flags. The call submits no prompt. Called from inside Herdr it reopens a **pi**
-  citizen in a new Herdr tab beside the caller (#157 G1a, dated native-Pi n=1 in [BASELINE](../../BASELINE.md), not release acceptance) and refuses a
-  Claude Code citizen as `herdr-resume-backend-unsupported` before anything is created; it never
-  falls back to tmux.
+  (no record/host cwd fallback); pi-durable's native session is reserved for one launched child to
+  adopt (#157 B3); Claude Code uses the record session id/cwd without restoring model or permission
+  flags. The call submits no prompt. Called from inside Herdr it reopens a **pi** citizen in a new
+  Herdr tab beside the caller (#157 G1a, dated native-Pi n=1 in [BASELINE](../../BASELINE.md), not
+  release acceptance) and a **pi-durable** one through one layout request (#157 B3, n=1 on a
+  pre-final candidate, not release acceptance), and refuses a Claude Code citizen as
+  `herdr-resume-backend-unsupported` before anything is created; it never falls back to tmux.
 
 ---
 
@@ -249,9 +251,10 @@ present as tools. The pane tells you which ids exist; these do the work:
   tmux. The model is required and has no default: pi wants a provider-qualified id like
   `openai-codex/gpt-5.6-terra`, Claude Code wants a vendor id like `claude-sonnet-5`. Each runtime
   owns its own grammar and this plugin validates neither.
-- `entwurf_resume_call {target}` — reopen a dormant **pi** or **Claude Code** citizen under its own id.
-  From a session inside Herdr only a pi citizen is reopened, in a new Herdr tab (#157 G1a, pending
-  its LIVE proof); a Claude Code citizen is refused there as `herdr-resume-backend-unsupported`, with
+- `entwurf_resume_call {target}` — reopen a dormant **pi**, **pi-durable** or **Claude Code** citizen under
+  its own id. From a session inside Herdr a pi citizen is reopened in a new Herdr tab (#157 G1a,
+  dated native-Pi n=1 in BASELINE) and a pi-durable one through one layout request (#157 B3, n=1 on a
+  pre-final candidate); a Claude Code citizen is refused there as `herdr-resume-backend-unsupported`, with
   no tmux fallback. A launch that fails after its tab exists reports what it created and whether it
   closed it.
 - `entwurf_retire_call {target}` (new in 0.41.0) — attempt retirement of one pi or Claude Code
@@ -373,8 +376,8 @@ shows you which ids exist, and `entwurf_v2` is what reaches them.
 **The address is record-backed, so returning to it costs no rebinding step.** Durable identity that
 outlives a pane exists elsewhere in this ecosystem; the part that differs is what you do when the
 runtime is gone. Where a durable logical identity is re-attached to a new runtime by an explicit
-adopt or rebind, a dormant pi or Claude Code citizen is reopened by `entwurf_resume_call {target}` (in
-tmux) — the same id is the whole input; the record selects Pi's identity-checked native transcript for launch metadata or supplies Claude Code's session id/cwd, and the call submits no prompt.
+adopt or rebind, a dormant pi, pi-durable or Claude Code citizen is reopened by `entwurf_resume_call {target}`
+(in tmux, or in a herdr tab for pi or pi-durable) — the same id is the whole input; the record selects Pi's identity-checked native transcript for launch metadata, reserves pi-durable's native session for one launched child to adopt, or supplies Claude Code's session id/cwd, and the call submits no prompt.
 
 Where this plugin is genuinely *narrower* than its neighbours: it has no `[[actions]]`, no
 `[[events]]`, and no write surface at all. That is in the manifest with its reason — an action's

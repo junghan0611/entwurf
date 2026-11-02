@@ -2293,6 +2293,65 @@
 			"signature": "[QK:PDF-CLOSE-RELEASES-PROVIDER-SOCKETS]",
 			"signatureSource": "pi-extensions/lib/pi-durable-carrier.test.ts",
 			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "PDR-HOLDER-STATE-NAMED",
+			"title": "a reserve's live-holder refusal no longer names the refused claim's state, so a reservation's live parent cannot be told from a running native owner",
+			"subject": "pi-extensions/lib/pi-durable-owner-fence.ts",
+			"find": ["\tconst context = { holderState: claim.state };"],
+			"replace": ["\tconst context = {};"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:PDR-HOLDER-STATE-NAMED]",
+			"signatureSource": "pi-extensions/lib/pi-durable-release-failure.test.ts"
+		},
+		{
+			"claim": "PDR-RESERVE-TX-RELEASE-NAMES-WRITE",
+			"title": "the reserve forgets the reservation it wrote, so an S_D release failing after the write reads as a refusal that reserved nothing",
+			"subject": "pi-extensions/lib/pi-durable-owner-fence.ts",
+			"find": ["\t\twriteClaim(resource, body);", "\t\tcommitted = writtenOf(body);", "\t\treturn body;"],
+			"replace": ["\t\twriteClaim(resource, body);", "\t\treturn body;"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:PDR-RESERVE-TX-RELEASE-NAMES-WRITE]",
+			"signatureSource": "pi-extensions/lib/pi-durable-release-failure.test.ts"
+		},
+		{
+			"claim": "PDR-RESERVE-ARM-RELEASE-NAMES-WRITE",
+			"title": "a record-arm release failing after a clean reserve is thrown bare, without the reservation it left",
+			"subject": "pi-extensions/lib/pi-durable-owner-fence.ts",
+			"find": ["\t\tthrow afterWrite(failure, { resource, state: \"reserved\", generation, ownerPid: owner.pid });"],
+			"replace": ["\t\tthrow failure;"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:PDR-RESERVE-ARM-RELEASE-NAMES-WRITE]",
+			"signatureSource": "pi-extensions/lib/pi-durable-release-failure.test.ts"
+		},
+		{
+			"claim": "PDR-ARM-RELEASE-KEEPS-STEP-WRITE",
+			"title": "a record-arm failure wrapping an S_D failure keeps its words but drops the write that failure named",
+			"subject": "pi-extensions/lib/pi-durable-owner-fence.ts",
+			"find": ["\tconst written = during instanceof PiDurableOwnerFenceError ? during.written : undefined;"],
+			"replace": ["\tconst written = undefined;"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:PDR-ARM-RELEASE-KEEPS-STEP-WRITE]",
+			"signatureSource": "pi-extensions/lib/pi-durable-release-failure.test.ts"
+		},
+		{
+			"claim": "PDR-WITHDRAW-TX-RELEASE-NAMES-WRITE",
+			"title": "the withdrawal forgets the donor row it restored, so an S_D release failing after it reads as a withdrawal that wrote nothing",
+			"subject": "pi-extensions/lib/pi-durable-owner-fence.ts",
+			"find": [
+				"\t\twriteClaim(resource, body);",
+				"\t\tcommitted = writtenOf(body);",
+				"\t}).catch((error: unknown) => {"
+			],
+			"replace": ["\t\twriteClaim(resource, body);", "\t}).catch((error: unknown) => {"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:PDR-WITHDRAW-TX-RELEASE-NAMES-WRITE]",
+			"signatureSource": "pi-extensions/lib/pi-durable-release-failure.test.ts"
 		}
 	]
 }

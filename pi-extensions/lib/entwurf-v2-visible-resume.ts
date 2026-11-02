@@ -118,6 +118,7 @@ import {
 	PiDurableOwnerFenceError,
 	type PiDurableReservation,
 	type PiDurableReservationObservation,
+	type PiDurableWrittenClaim,
 	reservePiDurableSession,
 	withdrawPiDurableReservation,
 } from "./pi-durable-owner-fence.ts";
@@ -759,13 +760,30 @@ export function buildPiDurableAdoptLaunch(
 	};
 }
 
-/** A reserve refusal this verb answers by name; every other fence refusal keeps its own cause. */
+/**
+ * A reserve refusal this verb answers by name; every other fence refusal keeps its own cause. A live holder is not
+ * an address (S3 joint review D4): a reservation's parent is a bridge waiting for a child, which entwurf_v2 cannot
+ * reach, and any other live holder is a process this verb did not judge contact-ready — so neither answer tells the
+ * caller to send. The branch reads the refusal's structured holder state, never its message.
+ */
 function piDurableReserveRefusal(targetGardenId: string, err: PiDurableOwnerFenceError): VisibleResumeResult | null {
 	if (err.reason === "owner-live") {
+		if (err.holderState === "reserved") {
+			return {
+				ok: false,
+				reason: "target-live",
+				detail:
+					`${targetGardenId}'s pi-durable session is reserved for a child to adopt by a live process (${err.message}); ` +
+					`while that reservation stays unadopted under that live process a resume of ${targetGardenId} refuses on it; ` +
+					`nothing clears it automatically, a child that adopts it becomes its holder, and entwurf_v2 does not reach a reservation`,
+			};
+		}
 		return {
 			ok: false,
 			reason: "target-live",
-			detail: `${targetGardenId}'s pi-durable session is held by a live process (${err.message}) — send to it with entwurf_v2 fire-and-forget instead`,
+			detail:
+				`${targetGardenId}'s pi-durable session is held by a live process (${err.message}); if that process is the ` +
+				`running citizen, entwurf_v2 reaches it only through the rail its own dispatch decides`,
 		};
 	}
 	if (err.reason === "owner-uncertain" || err.reason === "owner-other-host") {
@@ -783,9 +801,62 @@ function piDurableReserveRefusal(targetGardenId: string, err: PiDurableOwnerFenc
 const messageOf = (err: unknown): string => (err instanceof Error ? err.message : String(err));
 
 /**
+ * A reserve whose write committed and whose lock release then failed (S3 joint review D3). It says only what that
+ * call wrote and what its holder implies; the release's own words say what it left. Nothing is withdrawn, retried
+ * or repaired here.
+ */
+function piDurableReservedThenFailed(
+	targetGardenId: string,
+	err: PiDurableOwnerFenceError,
+	written: PiDurableWrittenClaim,
+): string {
+	const residue =
+		err.reason === "tx-release-failed"
+			? `; if the transaction file that release named remains, that process ending does not remove it, and it fails closed until an operator removes it`
+			: "";
+	return (
+		`entwurf-v2-visible-resume: the reserve of ${targetGardenId} WROTE its reservation of ${written.resource} at ` +
+		`generation ${written.generation} for pid ${written.ownerPid}, then a lock release failed (${err.message}). ` +
+		`Nothing was launched and nothing withdrew that reservation: while it stays unadopted under live pid ` +
+		`${written.ownerPid}, a resume of ${targetGardenId} refuses, and nothing clears it automatically${residue}`
+	);
+}
+
+/**
+ * A withdrawal that failed (S3 joint review D1). Only what the failure itself records is stated: a write this call
+ * made, or a transaction file the release left; any other failure leaves the claim's state unestablished here.
+ */
+function piDurableWithdrawFailed(
+	targetGardenId: string,
+	held: string,
+	reservation: PiDurableReservation,
+	err: unknown,
+): string {
+	const residue = `if that transaction file remains, this process ending does not remove it, and it fails closed until an operator removes it`;
+	if (err instanceof PiDurableOwnerFenceError && err.written !== undefined) {
+		return (
+			` — this call wrote the withdrawal of ${held} (the claim back to the donor's ${err.written.state} row at ` +
+			`generation ${err.written.generation}), then releasing its transaction failed (${err.message}); ${residue}`
+		);
+	}
+	if (err instanceof PiDurableOwnerFenceError && err.reason === "tx-release-failed") {
+		return (
+			` — withdrawing ${held} FAILED at its transaction release (${err.message}); whether this call ` +
+			`wrote anything is not recorded, and ${residue}`
+		);
+	}
+	return (
+		` — withdrawing ${held} FAILED (${messageOf(err)}); what its claim holds now is not established here: while it ` +
+		`stays reserved, unadopted, under this live process (pid ${reservation.owner.pid}), a resume of ${targetGardenId} ` +
+		`refuses`
+	);
+}
+
+/**
  * The pi-durable half (#157 B3), still under the caller's per-target lock, which stays the outer
  * scope: the reserve takes record-arm then S_D itself and releases both before it returns, so before
- * any launch. Every reserve refusal writes nothing and opens nothing.
+ * any launch. A reserve that refuses on eligibility writes nothing; a reserve whose lock release fails AFTER its
+ * write is named as such (its `written`), with the reservation it left. Neither opens anything.
  *
  * From the reservation on, this process holds D for one child, and what happens to that hold is
  * decided by the launch outcome alone (L3-A1 §6), never by a guess:
@@ -800,8 +871,9 @@ const messageOf = (err: unknown): string => (err instanceof Error ? err.message 
  *   a launch                                           a child may adopt it → KEPT, then observed once
  *
  * A withdrawal that fails is reported with the refusal it followed and is never retried. A kept
- * reservation is said so in the answer: until a child adopts it or this process ends, a later resume
- * of the same id refuses, because its holder — this process — is alive.
+ * reservation is said so in the answer: it names this process as its holder, and while it stays unadopted
+ * under this live process a later resume of the same id refuses; nothing clears it automatically, and a
+ * child that adopts it becomes its holder.
  */
 async function resumePiDurable(targetGardenId: string, deps: VisibleResumeDeps): Promise<VisibleResumeResult> {
 	let reservation: PiDurableReservation;
@@ -811,6 +883,9 @@ async function resumePiDurable(targetGardenId: string, deps: VisibleResumeDeps):
 		if (err instanceof PiDurableOwnerFenceError) {
 			const refused = piDurableReserveRefusal(targetGardenId, err);
 			if (refused !== null) return refused;
+			// A release that failed after the reservation was WRITTEN (S3 joint review D3): the reservation exists,
+			// so the answer names it and what it blocks, beside the release's own cause; nothing launches or withdraws.
+			if (err.written !== undefined) throw new Error(piDurableReservedThenFailed(targetGardenId, err, err.written));
 		}
 		throw err;
 	}
@@ -820,16 +895,13 @@ async function resumePiDurable(targetGardenId: string, deps: VisibleResumeDeps):
 			await deps.withdrawPiDurable(reservation);
 			return ` — ${held} was withdrawn, since nothing was created`;
 		} catch (err) {
-			return (
-				` — withdrawing ${held} FAILED (${messageOf(err)}); it stays reserved by this process (pid ` +
-				`${reservation.owner.pid}) until it ends, and a resume of ${targetGardenId} refuses while it does`
-			);
+			return piDurableWithdrawFailed(targetGardenId, held, reservation, err);
 		}
 	};
 	const kept =
-		` — ${held} was KEPT, because something may exist that can still adopt it; it is held by this ` +
-		`process (pid ${reservation.owner.pid}) until a child adopts it or this process ends, and a resume of ` +
-		`${targetGardenId} refuses until then`;
+		` — ${held} was KEPT, because something may exist that can still adopt it; it names this process ` +
+		`(pid ${reservation.owner.pid}) as its holder: while it stays unadopted under this live process a resume of ` +
+		`${targetGardenId} refuses, nothing clears it automatically, and a child that adopts it becomes its holder`;
 
 	let input: ReturnType<typeof buildPiDurableAdoptLaunch>;
 	try {
@@ -1129,8 +1201,9 @@ function renderPiDurableResume(
 			: observation.kind === "not-yet-adopted"
 				? `OBSERVATION receipt: not-yet-adopted — after ${observation.waitedMs}ms the claim of ${r.resource} was still ` +
 					`this reservation. The ${place} is open and visible; read it directly. The reservation stays held by ` +
-					`${heldBy}: a child there can still adopt it, and a resume of ${launch.targetGardenId} refuses until ` +
-					`it does or this process ends. Nothing was retried, withdrawn or killed.`
+					`${heldBy}: a child there can still adopt it and become its holder; while it stays unadopted under this live ` +
+					`process a resume of ${launch.targetGardenId} refuses, and nothing clears it automatically. Nothing was ` +
+					`retried, withdrawn or killed.`
 				: observation.kind === "reservation-lost"
 					? `OBSERVATION receipt: reservation-lost — after ${observation.waitedMs}ms the claim of ${r.resource} ` +
 						`names neither this reservation nor an adoption of it (another owner, a reclaim or a withdrawal ` +

@@ -1,6 +1,6 @@
 ---
 name: entwurf-dev
-description: "Drive the current entwurf development surface for GLG: list garden citizens, open a fresh visible Pi or Claude Code sibling, correlate its nonce callback to the exact garden id, send/reply through entwurf_v2, reopen a dormant pi or Claude Code citizen under its own garden id with entwurf_resume_call, and walk the whole fresh→send→close→dormant→resume→recall lifecycle on the visible tmux surface without making GLG spell out tool calls. Use when GLG says 분신 열어, 새 형제, 다시 불러, 되살려, resume, entwurf 써보자, 피어 보여줘, 메시지 보내, callback 확인, 팀 꾸려, 형성만 해, 개발 투어, or /skill:entwurf-dev."
+description: "Drive the current entwurf development surface for GLG: list garden citizens, open a fresh visible Pi or Claude Code sibling, correlate its nonce callback to the exact garden id, send/reply through entwurf_v2, reopen a dormant pi, pi-durable or Claude Code citizen under its own garden id with entwurf_resume_call, and walk the whole fresh→send→close→dormant→resume→recall lifecycle on the visible tmux surface without making GLG spell out tool calls. Use when GLG says 분신 열어, 새 형제, 다시 불러, 되살려, resume, entwurf 써보자, 피어 보여줘, 메시지 보내, callback 확인, 팀 꾸려, 형성만 해, 개발 투어, or /skill:entwurf-dev."
 user_invocable: true
 ---
 
@@ -133,8 +133,8 @@ schema를 만진 직후라면 재시작 전에 tool schema를 로드하지 않�
 4. `unsupported`를 dead로 읽지 않는다. Claude Code self-fetch와 Antigravity
    native-push는 control-socket 밖의 별도 rail이다.
 5. dead row에 메시지를 보내지 않는다 — `entwurf_v2`는 dormant를 정직하게 거절한다.
-   잠든 **pi** 또는 **Claude Code** citizen은 `entwurf_resume_call`로 되살릴 수 있지만(Claude
-   Code는 아래 resume 절의 owner·binding 조건을 만족할 때만), 목록에 보인다는 사실이 재개
+   잠든 **pi**, **pi-durable** 또는 **Claude Code** citizen은 `entwurf_resume_call`로 되살릴 수
+   있지만(Claude Code와 pi-durable은 아래 resume 절의 조건을 만족할 때만), 목록에 보인다는 사실이 재개
    지시는 아니다. GLG가 요청할 때만 부른다.
 6. 행의 `model`을 resume이 쓸 model로 읽지 않는다. record의 `model` 필드는 덮어써질 수
    있고, resume은 **transcript에 박힌 identity**에서 model을 읽는다. 둘이 갈리면
@@ -234,7 +234,7 @@ callback이 없거나 nonce가 다르면 target을 추측하지 않는다.
 
 ### `resume <target>` / “아까 그 형제 다시 불러줘”
 
-dormant **pi** 또는 **Claude Code** citizen을 자기 garden id 그대로 보이는 tmux 창에 되세운다(herdr 안에서는 pi만 새 herdr tab으로 — #157 G1a, PATH 보완 private fixture의 native Pi LIVE n=1을 BASELINE에 기록했으며 release 수용은 아님 — 되세우고, Claude Code는 아무것도 만들기 전에 `herdr-resume-backend-unsupported`로 거절된다; tmux fallback 없음). 새 형제를 만드는 것이
+dormant **pi**, **pi-durable** 또는 **Claude Code** citizen을 자기 garden id 그대로 보이는 tmux 창에 되세운다(herdr 안에서는 pi와 pi-durable만 새 herdr tab으로 — pi는 #157 G1a, PATH 보완 private fixture의 native Pi LIVE n=1을 BASELINE에 기록했으며 release 수용은 아님; pi-durable은 #157 B3, `layout.apply` 한 번, 앞선 후보의 공개 n=1만 있고 최종 후보·tmux 경로는 실측 없음 — 되세우고, Claude Code는 아무것도 만들기 전에 `herdr-resume-backend-unsupported`로 거절된다; tmux fallback 없음). 새 형제를 만드는 것이
 아니므로 새 id도, nonce도, callback도 없다 — 주소는 이미 알고 있다.
 
 1. target을 추측하지 않는다. GLG가 지목했거나, 이 대화에서 방금 닫힌 형제가 정확히
@@ -242,18 +242,24 @@ dormant **pi** 또는 **Claude Code** citizen을 자기 garden id 그대로 보�
 2. `entwurf_resume_call`을 `{target}`으로 **한 번** 호출한다. model이나 task를 얹으려 하지
    않는다 — 스키마에 없다. 미관측이나 거절을 이유로 자동 재시도하지 않는다.
 3. **두 receipt를 절대 합치지 않는다.**
-   - **LAUNCH** — tmux가 창을 만들었고 그 backend의 고정 runtime(pi / `claude --resume`) 시작을
-     요청했다. 그뿐이다.
+   - **LAUNCH** — tmux가 창을 만들었고 그 backend의 고정 runtime(pi / `claude --resume` /
+     `entwurf pi-durable --entwurf-adopt`) 시작을 요청했다. 그뿐이다.
    - **OBSERVATION** — pi: 같은 garden id의 control socket이 응답했다. Claude Code: 이 호출이 연
      pane의 새 live owner가 receiver marker를 record와 같은 새 binding으로 다시 세웠다
      (`receiver-armed`). 또는 `resume-unobserved`.
-     **이것만이 “그 시민이 다시 주소를 갖는다”를 말한다.**
+     **이것만이 “그 시민이 다시 주소를 갖는다”를 말한다.** pi-durable은 다르다: 관측은 이 호출이
+     잡은 예약을 자식이 adopt했다(`adopted`)는 사실까지이고 ready·주소 가능성·recall이 아니다.
+     `not-yet-adopted`면 예약이 adopt되지 않은 채 살아 있는 bridge 아래 있는 동안 같은 id의
+     resume은 거절되고, 예약은 저절로 지워지지 않는다.
 4. `resume-unobserved`는 에러가 아니라 **실제 결과**다. 재시도하지 않는다. 창은 보이므로
    GLG가 직접 읽을 수 있다고 안내한다. lock은 이미 풀렸고 창은 열린 채 남는다.
 5. 거절은 그대로 옮긴다. 어느 것도 창을 열지 않는다.
-   - `target-live` — 이미 살아 있다. `entwurf_v2 fire-and-forget`으로 말을 건다.
-   - `target-backend-unsupported` — pi와 Claude Code 밖의 backend(Codex, agy 등)는 same-id
-     resume이 없다. 새 형제를 열거나 그 backend의 rail로 보낸다.
+   - `target-live` — 살아 있는 프로세스가 그 session을 쥐고 있다. 그 프로세스가 실제로 도는
+     시민일 때만 `entwurf_v2`가 자기 dispatch의 rail 판정으로 닿을 수 있다.
+     pi-durable의 예약을 쥔 bridge라면 `entwurf_v2`는 그 예약에 닿지 않는다. 그 프로세스가
+     끝나도 예약이 저절로 지워지지는 않는다.
+   - `target-backend-unsupported` — pi, pi-durable, Claude Code 밖의 backend(Codex, agy 등)는
+     same-id resume이 없다. 새 형제를 열거나 그 backend의 rail로 보낸다.
    - `target-receiver-absent` / `-corrupt` / `-mismatch` / `-unbound`, 그리고 owner를 판정하지
      못한 `target-indeterminate` — Claude Code는 hook이 마지막으로 검증해 arm한 owner가 dead로
      증명되고, 그 arm이 아직 record의 마지막 arm(같은 `attachIncarnation`)일 때만 다시 연다.
@@ -261,6 +267,8 @@ dormant **pi** 또는 **Claude Code** citizen을 자기 garden id 그대로 보�
      새 hook이 arm해야 다시 대상이 된다. 이 판정은 hook이 **commit한** attach만 본다 — hook이
      꺼졌거나 시작 때 lock timeout·store 실패로 attach를 남기지 못한 프로세스는 보이지 않는다
      (2026-10-21 수용한 경계, AGENTS.md).
+   - pi-durable은 session claim이 closed·released이거나 그 holder가 사라졌다고 증명될 때만 다시
+     연다. holder를 판정하지 못하거나 다른 host면 `target-indeterminate`이고 창을 열지 않는다.
 6. **소켓이 답한 것과 같은 대화가 돌아온 것은 다른 사실이다.** OBSERVATION은 그 주소에
    프로세스가 섰다는 뜻이고, 대화의 연속성은 **회수(recall)** 로만 증명된다. 확인하려면
    창이 닫히기 전에 오간 사실 하나를 `entwurf_v2`로 되물어 답을 받는다. 형제가 모른다고

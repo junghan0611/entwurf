@@ -1816,12 +1816,60 @@ describe("a pi-durable citizen (#157 B3)", () => {
 		});
 		const result = await visibleResume(GID, h.deps);
 		ok(
-			"one attempt, launch-refused, the detail names the failure and that the reservation stays",
+			"one attempt, launch-refused, the detail names the failure and claims no state the failure did not record",
 			calls === 1 &&
 				!result.ok &&
 				result.reason === "launch-refused" &&
 				/FAILED \(tx-held: S_D busy\)/.test(result.detail) &&
-				/stays reserved by this process/.test(result.detail),
+				/what its claim holds now is not established here/.test(result.detail) &&
+				!/until it ends/.test(result.detail),
+		);
+	});
+
+	it("[QK:V2RESUME-PD-WITHDRAW-PARTIAL-STATE] a failed withdrawal says only what its failure records: a write this call made and the transaction file left (which this process ending does not clear), a left file with no write recorded, or — for any other failure — no state at all beyond the conditional hold", async () => {
+		const withdrawThrowing = async (err: unknown) => {
+			const h = pd({
+				launchOk: false,
+				withdraw: async () => {
+					throw err;
+				},
+			});
+			const result = await visibleResume(GID, h.deps);
+			return !result.ok && result.reason === "launch-refused" ? result.detail : "";
+		};
+		const residue =
+			"if that transaction file remains, this process ending does not remove it, and it fails closed until an operator removes it";
+		const written = await withdrawThrowing(
+			new PiDurableOwnerFenceError("tx-release-failed", "the tx could not be unlinked", {
+				written: { resource: RESERVATION.resource, state: "closed", generation: "d".repeat(32), ownerPid: 77 },
+			}),
+		);
+		const unwritten = await withdrawThrowing(
+			new PiDurableOwnerFenceError("tx-release-failed", "the tx could not be unlinked; the step had already failed"),
+		);
+		const generic = await withdrawThrowing(new Error("EIO: the disk went away"));
+		ok(
+			"written: the write this call made, at its generation, then the release's own words and the residue",
+			written.includes(`this call wrote the withdrawal of ${GID}'s reservation`) &&
+				written.includes(`the donor's closed row at generation ${"d".repeat(32)}`) &&
+				written.includes("tx-release-failed: the tx could not be unlinked") &&
+				written.includes(residue) &&
+				!written.includes("FAILED"),
+		);
+		ok(
+			"left file, no write recorded: not presented as a write, and the residue named",
+			unwritten.includes("FAILED at its transaction release") &&
+				unwritten.includes("whether this call wrote anything is not recorded") &&
+				unwritten.includes(residue) &&
+				!unwritten.includes("this call wrote the withdrawal"),
+		);
+		ok(
+			"any other failure: no write, no residue, no certainty — only the conditional hold by this process",
+			generic.includes("FAILED (EIO: the disk went away)") &&
+				generic.includes("what its claim holds now is not established here") &&
+				generic.includes(`stays reserved, unadopted, under this live process (pid ${RESERVATION.owner.pid})`) &&
+				!generic.includes("transaction file") &&
+				!generic.includes("this call wrote"),
 		);
 	});
 
@@ -1859,6 +1907,126 @@ describe("a pi-durable citizen (#157 B3)", () => {
 		ok(
 			"no launch, no withdrawal, every lock released",
 			all.every(
+				({ h }) =>
+					h.launches === 0 &&
+					!h.trace.some((t) => t.startsWith("withdrawPiDurable")) &&
+					h.trace.at(-1) === "releaseLock",
+			),
+		);
+	});
+
+	it("[QK:V2RESUME-PD-RESERVED-HOLDER-NOT-ADDRESS] a live holder is not an address: a reservation's live parent is named as a reservation that refuses a resume while that process lives and that entwurf_v2 does not reach, and any other live holder gets only a conditional pointer — neither answer tells the caller to send", async () => {
+		const liveHolder = async (holderState?: "reserved" | "storage-open") => {
+			const h = pd({
+				reserve: async () => {
+					throw new PiDurableOwnerFenceError("owner-live", "D is held under pid 77 on h: live", { holderState });
+				},
+			});
+			const result = await visibleResume(GID, h.deps);
+			return { h, result };
+		};
+		const reserved = await liveHolder("reserved");
+		const running = await liveHolder("storage-open");
+		const unnamed = await liveHolder(undefined);
+		const detailOf = (result: VisibleResumeResult): string => (!result.ok ? result.detail : "");
+		ok(
+			"every live holder stays target-live, opens nothing, withdraws nothing and releases the lock",
+			[reserved, running, unnamed].every(
+				({ h, result }) =>
+					!result.ok &&
+					result.reason === "target-live" &&
+					h.launches === 0 &&
+					!h.trace.some((t) => t.startsWith("withdrawPiDurable")) &&
+					h.trace.at(-1) === "releaseLock",
+			),
+		);
+		const r = detailOf(reserved.result);
+		ok(
+			"a reservation's parent: reserved for a child to adopt, refused while that process lives (no release claimed), and not reachable by entwurf_v2",
+			r.includes(
+				"is reserved for a child to adopt by a live process (owner-live: D is held under pid 77 on h: live)",
+			) &&
+				r.includes(`while that reservation stays unadopted under that live process a resume of ${GID} refuses on it`) &&
+				r.includes("nothing clears it automatically, a child that adopts it becomes its holder") &&
+				!r.includes("clears when") &&
+				r.includes("entwurf_v2 does not reach a reservation"),
+		);
+		ok(
+			"any other live holder: held by a live process, and only a conditional pointer at the rail",
+			[running, unnamed].every(({ result }) => {
+				const d = detailOf(result);
+				return (
+					d.includes("is held by a live process") &&
+					d.includes(
+						"if that process is the running citizen, entwurf_v2 reaches it only through the rail its own dispatch decides",
+					) &&
+					!d.includes("entwurf_peers") &&
+					!d.includes("reserved for a child")
+				);
+			}),
+		);
+		ok(
+			"no answer tells the caller to send",
+			[reserved, running, unnamed].every(({ result }) => !/send to it/.test(detailOf(result))),
+		);
+	});
+
+	it("[QK:V2RESUME-PD-RESERVE-WRITTEN-THEN-FAILED] a reserve whose lock release failed after its write is not an eligibility refusal: the error names the reservation it wrote, keeps the release's own words, says nothing launched or withdrew it and that a resume refuses while its holder lives — a release failure that names no write passes through as it was", async () => {
+		const reserveThrowing = async (err: PiDurableOwnerFenceError) => {
+			const h = pd({
+				reserve: async () => {
+					throw err;
+				},
+			});
+			let thrown: unknown = null;
+			try {
+				await visibleResume(GID, h.deps);
+			} catch (caught) {
+				thrown = caught;
+			}
+			return { h, thrown };
+		};
+		const written = {
+			resource: RESERVATION.resource,
+			state: "reserved" as const,
+			generation: "e".repeat(32),
+			ownerPid: 4242,
+		};
+		const tx = await reserveThrowing(
+			new PiDurableOwnerFenceError("tx-release-failed", "the tx could not be unlinked", { written }),
+		);
+		const arm = await reserveThrowing(
+			new PiDurableOwnerFenceError("record-arm-release-failed", "the record-arm lock answered not-owned", { written }),
+		);
+		const bare = new PiDurableOwnerFenceError("tx-release-failed", "the tx could not be unlinked");
+		const unnamed = await reserveThrowing(bare);
+		const messageOf = (thrown: unknown): string => (thrown instanceof Error ? thrown.message : "");
+		ok(
+			"named: the reservation it wrote, the release's own words, nothing launched or withdrawn, refused while its holder lives",
+			[tx, arm].every(({ thrown }) => {
+				const m = messageOf(thrown);
+				return (
+					!(thrown instanceof PiDurableOwnerFenceError) &&
+					m.includes(
+						`the reserve of ${GID} WROTE its reservation of ${RESERVATION.resource} at generation ${"e".repeat(32)} for pid 4242`,
+					) &&
+					m.includes("Nothing was launched and nothing withdrew that reservation") &&
+					m.includes(`while it stays unadopted under live pid 4242, a resume of ${GID} refuses`)
+				);
+			}) &&
+				messageOf(tx.thrown).includes("(tx-release-failed: the tx could not be unlinked)") &&
+				messageOf(arm.thrown).includes("(record-arm-release-failed: the record-arm lock answered not-owned)"),
+		);
+		ok(
+			"only the S_D residue is said to outlive that process; the record-arm answer is left to its own words",
+			messageOf(tx.thrown).includes(
+				"if the transaction file that release named remains, that process ending does not remove it",
+			) && !messageOf(arm.thrown).includes("transaction file"),
+		);
+		ok("a release failure that names no write is rethrown as it was", unnamed.thrown === bare);
+		ok(
+			"no launch, no withdrawal, every lock released",
+			[tx, arm, unnamed].every(
 				({ h }) =>
 					h.launches === 0 &&
 					!h.trace.some((t) => t.startsWith("withdrawPiDurable")) &&
