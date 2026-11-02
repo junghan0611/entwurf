@@ -41,6 +41,10 @@
 						"text": "the packaged durable pi launcher"
 					},
 					{
+						"name": "claude",
+						"text": "Claude Code itself; args go to claude unchanged"
+					},
+					{
 						"name": "copilot",
 						"text": "Copilot with its Entwurf extension enabled"
 					},
@@ -338,6 +342,11 @@
 					"synopsis": "check-codex-app-server-launch",
 					"column": 41,
 					"summary": "#95 gate: the MANAGED app-server launch `entwurf codex-app-server`, driven through its public address against a FAKE VENDOR on a sandbox PATH. The injected `app-server --listen unix://<socket>` required to equal the product's own resolveCodexDefaultSocketPath over an env matrix that includes the inputs a bash transcription was MEASURED to diverge on (BOM-only CODEX_HOME, trailing slash, `..`), non-absolute and control-character addresses refused before any write, byte-identical operator argv, exec (not fork) parent identity, exit passthrough, live-socket and indeterminate-socket and second---listen and recursion refusals, dead-socket launch-over, the tmux fact line, and both identity carriers stripped. Hermetic; no Codex, no app-server, no model turn"
+				},
+				{
+					"synopsis": "check-claude-launch",
+					"column": 38,
+					"summary": "#157 stage 4 gate: the Claude Code launch `entwurf claude`, driven through its public address against a FAKE VENDOR on a sandbox PATH. The verb dropped, the argv byte-identical with nothing injected, --help/-h reaching the vendor, the caller's cwd, the sentinel exported, an inherited PI_SESSION_ID/PI_AGENT_ID pair removed and no other environment change, the exit status, pid (exec) and signal passed through, and named refusals for an absent vendor, a non-regular PATH hit, the sentinel and a PATH claude that resolves to run.sh. Hermetic: no real Claude Code, no network, no model turn"
 				},
 				{
 					"synopsis": "check-copilot-statusline",
@@ -790,6 +799,11 @@
 					"synopsis": "pi [args...]",
 					"column": 38,
 					"summary": "#118: the MANAGED pi launch. exec()s the pi that `type -P` finds on PATH (a file, never a shell function or alias) in THIS terminal, with --entwurf-control added ahead of your argv, which passes through untouched. Refuses by name when ENTWURF_PI_LAUNCH_ACTIVE is non-empty (it exports that to the pi it starts), when no pi is on PATH (it launches the pi coding agent, it does not install one), or when that path is not an executable regular file"
+				},
+				{
+					"synopsis": "claude [args...]",
+					"column": 38,
+					"summary": "#157: the Claude Code launch. exec()s the claude that `type -P` finds on PATH (a file, never a shell function or alias) in THIS terminal and directory; your argv, --help included, reaches it untouched with nothing added, and its exit status and signals are its own. It sets ENTWURF_CLAUDE_LAUNCH_ACTIVE and removes an inherited PI_SESSION_ID/PI_AGENT_ID pair (another citizen's identity); no other variable is decided here. A garden citizen comes from the meta-bridge plugin and hooks setup installed, which this launch neither checks nor supplies: without them it is plain Claude Code. Refuses by name when ENTWURF_CLAUDE_LAUNCH_ACTIVE is non-empty, when no claude is on PATH (it launches Claude Code, it does not install one), when that path is not an executable regular file, or when it resolves to this run.sh"
 				},
 				{
 					"synopsis": "install-copilot-bridge",

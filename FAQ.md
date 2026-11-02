@@ -32,7 +32,7 @@ No. `entwurf_retire_call` (new in 0.41.0) attempts retirement of one Pi or Claud
 
 ## Where do visible siblings open?
 
-Inside Herdr, Entwurf opens a new unfocused tab in the caller's workspace and currently admits pi and Claude Code through Herdr's agent start, and pi-durable through one layout request. Outside Herdr, it opens one of the fixed pi, pi-durable, Claude Code, Copilot, OMP, or Codex runtimes in a new window of the caller's tmux session, or of an existing session the caller names; without an explicit tmux placement, a Codex caller opens beside its own TUI pane. A dormant pi or Claude Code sibling reopens under the same id in a visible tmux window; inside Herdr, only a pi sibling reopens, in a new Herdr tab, while a Claude Code target is refused there before anything is created. pi-durable is not a same-id resume target. The runtime keeps its own model, tools, authentication, and transcript.
+Inside Herdr, Entwurf opens a new unfocused tab in the caller's workspace and currently admits pi and Claude Code through Herdr's agent start, and pi-durable through one layout request. Outside Herdr, it opens one of the fixed pi, pi-durable, Claude Code, Copilot, OMP, or Codex runtimes in a new window of the caller's tmux session, or of an existing session the caller names; without an explicit tmux placement, a Codex caller opens beside its own TUI pane. A dormant pi, pi-durable or Claude Code sibling reopens under the same id in a visible tmux window, or inside Herdr in a new Herdr tab (pi through agent start, pi-durable and Claude Code through one layout request); nothing falls back to tmux. The runtime keeps its own model, tools, authentication, and transcript.
 
 ## Does Entwurf replace Herdr or tmux?
 

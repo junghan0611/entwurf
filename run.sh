@@ -1026,6 +1026,14 @@ check_pi_launch() {
   run_ts scripts/check-pi-launch.ts
 }
 
+check_claude_launch() {
+  # #157 stage 4. The same fake-vendor oracle as check-pi-launch: a real executable named `claude`
+  # on a sandbox PATH reports the argv, cwd, env and pid it was handed, driven through the public
+  # `run.sh claude`. A process replacement has no beside-test home — its subject is this
+  # dispatcher's arm, which the vitest globs do not reach — so it is a spawning gate here.
+  run_ts scripts/check-claude-launch.ts
+}
+
 check_codex_app_server_launch() {
   # #95: the managed app-server SPELLING, proved against a fake vendor. There is no second
   # spelling of the address to compare any more — the launcher asks `codex-socket-path` — so
@@ -7636,7 +7644,7 @@ cmd=${1:-}
 # command's entry from ENTWURF-CLI.json (or refuses, exit 2, when it has none) and exits — no arm
 # is entered, so a command that ignores its argv can no longer be started by asking about it. A
 # help form with more argv after it is refused the same way rather than guessed at, and so is
-# `--help <command>`. The four launchers below hand every argv to a vendor binary that owns its
+# `--help <command>`. The five launchers below hand every argv to a vendor binary that owns its
 # own --help, so they pass through untouched. Only these exact shapes are help: a flag in another
 # position, or after `--`, reaches the dispatch as before. `entwurf help all` — exactly those two
 # words — prints the full catalog, every described command, which the short root page leaves out.
@@ -7655,7 +7663,7 @@ elif { [ "$cmd" = -h ] || [ "$cmd" = --help ]; } && [ "$#" -ge 2 ]; then
   echo 'entwurf: -h/--help takes nothing after it; for one command use `entwurf help <command>`' >&2
   exit 2
 elif [ "$#" -ge 2 ] && { [ "$2" = -h ] || [ "$2" = --help ]; } \
-  && [ "$cmd" != pi ] && [ "$cmd" != pi-durable ] && [ "$cmd" != copilot ] && [ "$cmd" != codex-app-server ]; then
+  && [ "$cmd" != pi ] && [ "$cmd" != pi-durable ] && [ "$cmd" != claude ] && [ "$cmd" != copilot ] && [ "$cmd" != codex-app-server ]; then
   if [ "$#" -gt 2 ]; then
     echo 'entwurf: a help request takes nothing after -h/--help; nothing was run' >&2
     exit 2
@@ -8286,6 +8294,68 @@ case "$cmd" in
     fi
     export ENTWURF_PI_LAUNCH_ACTIVE=1
     exec "$entwurf_pi_bin" --entwurf-control "$@"
+    ;;
+  claude)
+    # #157 stage 4: the Claude Code launch. The same posture as `pi` above — `exec`, no subshell
+    # and no cd (Claude Code owns this terminal, the caller's cwd, this pid and its exit status),
+    # `shift` so the verb never reaches the vendor argv, `type -P` so only a PATH file is exec'd,
+    # never a function or alias — but its precondition and its fence count are its own.
+    #
+    # NOTHING IS ADDED TO THE ARGV AND NOTHING IS CHECKED FIRST. A Claude Code session becomes a
+    # garden citizen through the meta-bridge plugin and hooks `setup` installed in its own user
+    # scope, and through nothing this launch could add: on a host without them it is plain Claude
+    # Code, exactly as `claude` would be, and the help says so rather than promising a citizen.
+    # Checking for them here would be a second doctor (`doctor-meta-bridge` owns that) and a
+    # promise this spelling cannot keep. Auth, model, permission and settings stay Claude Code's
+    # (Hard Rule 9); `--help` reaches it because the help preflight above lets this verb through.
+    #
+    # TWO RECURSION FENCES, NOT PI'S ONE, because pi's reason for one does not hold here. pi
+    # injects --entwurf-control ahead of the operator argv, so a PATH `pi` symlinked to run.sh
+    # re-enters as an unknown verb. This launch injects nothing: a PATH `claude` that resolves to
+    # run.sh would re-enter with the OPERATOR's argv as the verb, and `entwurf claude setup` would
+    # run setup. So, as `scripts/copilot-launch.sh` does, the exported sentinel closes the
+    # wrapper-script loop and the resolved path refuses this run.sh even when the sentinel was
+    # stripped. The vendor is exec'd by the path `type -P` returned, not the resolved one, so
+    # argv[0] is what a shell would have given it.
+    #
+    # ONE environment change besides the sentinel, and it is a removal. A complete
+    # PI_SESSION_ID/PI_AGENT_ID pair is trusted ahead of a native sender marker, so inherited from
+    # a pi citizen's shell it is another citizen's identity; both go, as in copilot-launch.sh and
+    # codex-app-server-launch.sh. Nothing is substituted: this session's identity is its own hooks'.
+    shift || true
+    if [ -n "${ENTWURF_CLAUDE_LAUNCH_ACTIVE:-}" ]; then
+      echo "entwurf: recursive managed launch detected (ENTWURF_CLAUDE_LAUNCH_ACTIVE is already set)." >&2
+      echo "         Something on PATH named 'claude' resolves back to this launcher. Fix PATH so" >&2
+      echo "         'claude' is Claude Code, or run the vendor binary by its full path." >&2
+      exit 1
+    fi
+    entwurf_claude_bin="$(type -P claude 2>/dev/null || true)"
+    if [ -z "$entwurf_claude_bin" ]; then
+      echo "entwurf: no 'claude' executable found on PATH." >&2
+      echo "         'entwurf claude' launches Claude Code; it does not install one." >&2
+      exit 1
+    fi
+    if [ ! -f "$entwurf_claude_bin" ] || [ ! -x "$entwurf_claude_bin" ]; then
+      echo "entwurf: '$entwurf_claude_bin' is not an executable regular file — refusing to exec it." >&2
+      exit 1
+    fi
+    entwurf_claude_real="$entwurf_claude_bin"
+    while [ -L "$entwurf_claude_real" ]; do
+      entwurf_claude_dir="$(cd -P -- "$(dirname -- "$entwurf_claude_real")" && pwd)"
+      entwurf_claude_link="$(readlink -- "$entwurf_claude_real")"
+      case "$entwurf_claude_link" in
+        /*) entwurf_claude_real="$entwurf_claude_link" ;;
+        *) entwurf_claude_real="$entwurf_claude_dir/$entwurf_claude_link" ;;
+      esac
+    done
+    entwurf_claude_real="$(cd -P -- "$(dirname -- "$entwurf_claude_real")" && pwd)/$(basename -- "$entwurf_claude_real")"
+    if [ "$entwurf_claude_real" = "$REPO_DIR/run.sh" ]; then
+      echo "entwurf: 'claude' on PATH resolves to entwurf's own '$entwurf_claude_real' — that is a launch loop, not Claude Code." >&2
+      exit 1
+    fi
+    unset PI_SESSION_ID PI_AGENT_ID
+    export ENTWURF_CLAUDE_LAUNCH_ACTIVE=1
+    exec "$entwurf_claude_bin" "$@"
     ;;
   install-copilot-receive)
     # #82 RAIL 5: install the RECEIVER extension into the Copilot USER extensions dir.

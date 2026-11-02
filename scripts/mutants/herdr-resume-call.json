@@ -250,6 +250,39 @@
 			"timeoutSeconds": 60,
 			"signature": "[QK:HRESUME-PD-FAILURE-RAIL]",
 			"signatureSource": "pi-extensions/lib/herdr-resume-call.test.ts"
+		},
+		{
+			"claim": "HRESUME-CC-LAYOUT-VECTOR",
+			"title": "the Claude Code layout vector drops the record's argv, so herdr starts a bare claude that opens a NEW session instead of resuming this one",
+			"subject": "pi-extensions/lib/herdr-resume-call.ts",
+			"find": ["\tconst command = [HERDR_CLAUDE_CODE_RESUME_RUNTIME, ...params.runtimeArgs];"],
+			"replace": ["\tconst command = [HERDR_CLAUDE_CODE_RESUME_RUNTIME];"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:HRESUME-CC-LAYOUT-VECTOR]",
+			"signatureSource": "pi-extensions/lib/herdr-resume-call.test.ts"
+		},
+		{
+			"claim": "HRESUME-CC-PANE-CHILD",
+			"title": "the process read no longer checks that herdr described THIS pane, so another pane's child becomes the pid the observation joins",
+			"subject": "pi-extensions/lib/herdr-resume-call.ts",
+			"find": ["\tif (envelope.result.type !== \"pane_process_info\" || !isRecord(info) || info.pane_id !== paneId) {"],
+			"replace": ["\tif (envelope.result.type !== \"pane_process_info\" || !isRecord(info)) {"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:HRESUME-CC-PANE-CHILD]",
+			"signatureSource": "pi-extensions/lib/herdr-resume-call.test.ts"
+		},
+		{
+			"claim": "HRESUME-CC-FAILURE-SHARED",
+			"title": "the Claude Code launch takes the shared pi-durable hint for a missing herdr endpoint, so its refusal names pi-durable — the wrong backend — instead of Claude Code",
+			"subject": "pi-extensions/lib/herdr-resume-call.ts",
+			"find": ["\treturn { ...shared, hint: HERDR_CLAUDE_CODE_SOCKET_PATH_HINT };"],
+			"replace": ["\treturn shared;"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:HRESUME-CC-FAILURE-SHARED]",
+			"signatureSource": "pi-extensions/lib/herdr-resume-call.test.ts"
 		}
 	]
 }

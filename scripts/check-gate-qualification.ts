@@ -3469,6 +3469,7 @@ let manifestCount: number;
 		"demo-reproducibility": 12,
 		"dev-gate-dispatch": 9,
 		"cli-help-source": 36,
+		"claude-launch": 12,
 		"copilot-birth": 19,
 		"copilot-launch": 14,
 		"pi-launch": 9,
@@ -3491,7 +3492,7 @@ let manifestCount: number;
 		"herdr-operator-link": 19,
 		"herdr-runtime-bootstrap": 35,
 		"herdr-fresh-call": 61,
-		"herdr-resume-call": 21,
+		"herdr-resume-call": 24,
 		"herdr-supply": 11,
 		"meta-facts": 5,
 		"peer-facts": 9,
@@ -3525,7 +3526,7 @@ let manifestCount: number;
 		"source-install": 11,
 		"typing-call-fence": 1,
 		"v2-surface": 16,
-		"v2-visible-resume": 59,
+		"v2-visible-resume": 62,
 		"win32-preview": 19,
 	};
 	const laneTally: Record<string, number> = {};

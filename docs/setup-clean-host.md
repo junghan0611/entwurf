@@ -576,6 +576,17 @@ validation, or hand-inspected marker cannot replace a new real session. If the l
 form is unsupported, reinstall; if ownership is correct but the live join is absent,
 restart the affected session.
 
+Start a session as plain `claude` or as `entwurf claude [args…]`. The second execs the
+`claude` on PATH in this terminal — same cwd, pid and exit status, signals reaching it directly,
+arguments and `--help` unchanged — after removing an inherited `PI_SESSION_ID`/`PI_AGENT_ID` and
+exporting only `ENTWURF_CLAUDE_LAUNCH_ACTIVE=1`. Unlike `entwurf copilot` it checks no Entwurf setup
+or citizen precondition before launch — only that `claude` resolves to an executable file that
+is not this launcher — and sets no feature flag: either spelling is a citizen through the hooks above,
+and plain Claude Code without them. A launch whose environment already carries that sentinel
+(inherited from an earlier `entwurf claude` up its process tree), or whose `claude` resolves to
+Entwurf's own `run.sh`, refuses as a recursive managed launch instead of looping; its message
+currently names only the PATH cause. Run plain `claude` there.
+
 The Darwin install fence is open (`Linux | Darwin`); python3 is the
 refusal, not the platform name. A completed Darwin install is still not
 a rail receipt: this rail is NOT CERTIFIED — pending physical host. The

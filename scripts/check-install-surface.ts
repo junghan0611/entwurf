@@ -63,10 +63,10 @@
  *        accepts. A help preflight between `cmd=${1:-}`
  *        and the dispatch case answers `help <command>` and `<command> -h|--help` before any arm: on a
  *        byte copy that stops at the case, every command run.sh has is asked — described ones print
- *        their page, undescribed ones are refused (exit 2) and never run, the four vendor launchers
+ *        their page, undescribed ones are refused (exit 2) and never run, the five vendor launchers
  *        pass through — and extra argv, the `--help <command>` alias and odd names are refused on one
  *        line. fresh-cut's longer text matches its ce92dc7 source literal minus the old invocation.
- *        The root page is the #153 literal with two explicit #157 amendments (pinned). `entwurf help
+ *        The root page is the #153 literal with three explicit #157 amendments (pinned). `entwurf help
  *        team` / `help remote-pair` print guide topics byte for byte reviewed literal fixtures (pinned,
  *        written before the data; remote-pair with one explicit review amendment, pinned too); only
  *        `help <name>` reaches them, through node on the renderer with
@@ -441,8 +441,9 @@ const operatorCmds = [...targets].filter(([cmd, ts]) => !isDevGate(cmd) && ts.le
 		throw new Error(`S9: ${COMPACT_FIXTURE} is not the reviewed root page`);
 	}
 	// #157 (main 0922fd, approved for GLG): the help row names a command or a topic, and one footer
-	// line points at the two guides. Exactly these two literal edits of the #153 page, each exactly
-	// once, and the result pinned too — the sha below was taken before the data changed.
+	// line points at the two guides; #157 stage 4 adds the Claude Code launch row. Exactly these three
+	// literal edits of the #153 page, each exactly once, and the result pinned too — the sha below was
+	// taken from the amended literal before the data changed.
 	const ROOT_AMENDMENTS_157: { old: string; next: string }[] = [
 		{
 			old: "  entwurf help [<command>]            this overview, or one command's full description\n",
@@ -452,13 +453,19 @@ const operatorCmds = [...targets].filter(([cmd, ts]) => !isDevGate(cmd) && ts.le
 			old: "not commands here. Advanced maintenance and development gates: entwurf help all\n",
 			next: "not commands here. Advanced maintenance and development gates: entwurf help all\nGuides: entwurf help team | entwurf help remote-pair\n",
 		},
+		// #157 stage 4 (GLG, relayed by main 07697d): the Claude Code launch row, right after
+		// pi-durable's — receipt: the run.sh `claude)` arm. Pinned below with the other two.
+		{
+			old: "  entwurf pi-durable [args...]        the packaged durable pi launcher\n",
+			next: "  entwurf pi-durable [args...]        the packaged durable pi launcher\n  entwurf claude [args...]            Claude Code itself; args go to claude unchanged\n",
+		},
 	];
 	let expectedCompact = compact153;
 	for (const a of ROOT_AMENDMENTS_157) {
 		if (expectedCompact.split(a.old).length !== 2) throw new Error(`S9: root amendment not exactly once: ${a.old}`);
 		expectedCompact = expectedCompact.replace(a.old, a.next);
 	}
-	if (sha256(expectedCompact) !== "005593215287d156792356ecaa7a84a6dc5767b791f64825d6a5fb433b0028f4") {
+	if (sha256(expectedCompact) !== "24d41fb481b910d2c60a9c14d92dc75f200b7d1214c104b6f26e61a85a8b0949") {
 		throw new Error("S9: the amended root page is not the reviewed #157 page");
 	}
 	// The guide topics' oracles: reviewed literals, pinned, written before the data and never
@@ -547,6 +554,17 @@ const operatorCmds = [...targets].filter(([cmd, ts]) => !isDevGate(cmd) && ts.le
 				"run.sh `pi)` arm: type -P pi, the non-empty ENTWURF_PI_LAUNCH_ACTIVE refusal, the missing and non-regular refusals, exec with --entwurf-control",
 		},
 		{
+			after: "  entwurf pi [args...]                # ",
+			line: "  entwurf claude [args...]            # #157: the Claude Code launch. exec()s the claude that `type -P` finds on PATH (a file, never a shell function or alias) in THIS terminal and directory; your argv, --help included, reaches it untouched with nothing added, and its exit status and signals are its own. It sets ENTWURF_CLAUDE_LAUNCH_ACTIVE and removes an inherited PI_SESSION_ID/PI_AGENT_ID pair (another citizen's identity); no other variable is decided here. A garden citizen comes from the meta-bridge plugin and hooks setup installed, which this launch neither checks nor supplies: without them it is plain Claude Code. Refuses by name when ENTWURF_CLAUDE_LAUNCH_ACTIVE is non-empty, when no claude is on PATH (it launches Claude Code, it does not install one), when that path is not an executable regular file, or when it resolves to this run.sh",
+			receipt:
+				"run.sh `claude)` arm: type -P claude, the non-empty ENTWURF_CLAUDE_LAUNCH_ACTIVE refusal, the missing, non-regular and resolves-to-run.sh refusals, unset PI_SESSION_ID PI_AGENT_ID, export of the sentinel, exec with the operator argv alone (#157 stage 4)",
+		},
+		{
+			after: "  entwurf check-codex-app-server-launch  # ",
+			line: "  entwurf check-claude-launch         # #157 stage 4 gate: the Claude Code launch `entwurf claude`, driven through its public address against a FAKE VENDOR on a sandbox PATH. The verb dropped, the argv byte-identical with nothing injected, --help/-h reaching the vendor, the caller's cwd, the sentinel exported, an inherited PI_SESSION_ID/PI_AGENT_ID pair removed and no other environment change, the exit status, pid (exec) and signal passed through, and named refusals for an absent vendor, a non-regular PATH hit, the sentinel and a PATH claude that resolves to run.sh. Hermetic: no real Claude Code, no network, no model turn",
+			receipt: "run.sh check_claude_launch -> scripts/check-claude-launch.ts (#157 stage 4)",
+		},
+		{
 			after: "  entwurf herdr-plugin-deactivate    # ",
 			line: "  entwurf herdr-plugin-expose-operator --bin-dir <abs>  # #153 the ONE explicit operator link: creates exactly <abs>/entwurf -> the Herdr runtime's own node_modules/.bin/entwurf, recorded by a receipt beside the activation ledger (raised to schema 3 first, so an artifact that cannot undo the link refuses the host). Runs only as the active runtime's package, only from a settled runtime with an active ledger, only into a physical directory that is an entry of the caller's PATH with no earlier entwurf on it; an existing file there without a receipt is someone else's and is refused. Never edits a profile or picks a directory",
 			receipt: "run.sh `herdr-plugin-expose-operator)` arm -> scripts/herdr-operator-link.mjs expose (#153)",
@@ -614,7 +632,7 @@ const operatorCmds = [...targets].filter(([cmd, ts]) => !isDevGate(cmd) && ts.le
 	};
 	const rootBad = rendersRoot(path.join(REPO, "run.sh"), REPO);
 	ok(
-		`[QK:CLI-HELP-ROOT-COMPACT] S9a the root help (no argv, -h, --help, help) and the Unknown path print exactly the reviewed root page (${COMPACT_FIXTURE} with the two #157 amendments)`,
+		`[QK:CLI-HELP-ROOT-COMPACT] S9a the root help (no argv, -h, --help, help) and the Unknown path print exactly the reviewed root page (${COMPACT_FIXTURE} with the three #157 amendments)`,
 		rootBad.length === 0,
 		rootBad.join("\n"),
 	);
@@ -926,7 +944,9 @@ const operatorCmds = [...targets].filter(([cmd, ts]) => !isDevGate(cmd) && ts.le
 	const caseAt = RUN_SH.indexOf(`\n${CASE_LINE}`, start) + 1;
 	const end = RUN_SH.indexOf("\nesac\n", caseAt) + "\nesac\n".length;
 	// Moved for #153: two operator-link arms (herdr-plugin-expose-operator / -withdraw-operator), re-reviewed.
-	const REVIEWED_CASE_SHA256 = "33a3af3671da176400229ca59858ed1643fec75f0f740a506a13cd9c4260dfeb";
+	// Moved for #157 stage 4: one `claude)` arm, nothing removed (133 -> 134 labels, re-reviewed: `claude`
+	// is a described entry and outside the debt).
+	const REVIEWED_CASE_SHA256 = "bfdafcfad8645ea3651905dd08d73808a724c67e42f89f9721c917f3a494bef9";
 	ok(
 		"[QK:CLI-HELP-DISPATCH-REVIEWED] S9h the case the operator labels are read from is the reviewed ce92dc7 case plus the reviewed #153 two-arm amendment, byte for byte",
 		start > 0 && caseAt > start && sha256(RUN_SH.slice(caseAt, end)) === REVIEWED_CASE_SHA256,
@@ -1175,7 +1195,7 @@ const operatorCmds = [...targets].filter(([cmd, ts]) => !isDevGate(cmd) && ts.le
 	// are S9a's, on the real file. Expected pages are built from the entry the data holds; what is
 	// compared is the output of the whole run.sh path — routing and format, not content, which the
 	// catalog and fresh-cut fixtures bind.
-	const VENDORS = ["pi", "pi-durable", "copilot", "codex-app-server"];
+	const VENDORS = ["pi", "pi-durable", "claude", "copilot", "codex-app-server"];
 	type Entry = { synopsis: string; summary: string; details?: string[] };
 	const entryOf = new Map<string, Entry>();
 	for (const g of (JSON.parse(cliBytes) as { usage: { commandGroups: Entry[][] } }).usage.commandGroups)
@@ -1246,6 +1266,7 @@ const operatorCmds = [...targets].filter(([cmd, ts]) => !isDevGate(cmd) && ts.le
 			[["help", "copilot"], answers("copilot")],
 			[["help", debtGate], refused],
 			[["help", "pi"], answers("pi")],
+			[["help", "claude"], answers("claude")],
 			[["help", "no-such-command"], refused],
 			[["no-such-command", "--help"], refused],
 		]);
@@ -1306,7 +1327,7 @@ const operatorCmds = [...targets].filter(([cmd, ts]) => !isDevGate(cmd) && ts.le
 			]),
 		];
 		ok(
-			`[QK:CLI-HELP-VENDOR-PASSTHROUGH] S9q the four vendor launchers keep every argv, help flags included: each reaches its arm (${count.vendor} of ${VENDORS.length})`,
+			`[QK:CLI-HELP-VENDOR-PASSTHROUGH] S9q the five vendor launchers keep every argv, help flags included: each reaches its arm (${count.vendor} of ${VENDORS.length})`,
 			count.vendor === VENDORS.length && vendorBad.length === 0,
 			vendorBad.join("\n"),
 		);

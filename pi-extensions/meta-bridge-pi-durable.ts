@@ -106,8 +106,8 @@
  * #157 B3), under the bridge's own single-`target` schema (pinned below). The bridge decides everything
  * else from the target's record, exactly as for any other caller: other backends have no same-id
  * resume, a session a live process holds is refused, and outside herdr the window opens in the tmux
- * session this host was launched in. Inside herdr a pi or pi-durable target reopens, in a new herdr
- * tab; a Claude Code target is refused by name before anything is created. Exposing the tool names no new authority and is not a caller LIVE proof; it never resumes
+ * session this host was launched in. Inside herdr a pi, pi-durable or Claude Code target reopens, in a
+ * new herdr tab (Claude Code since #157 stage 4). Exposing the tool names no new authority and is not a caller LIVE proof; it never resumes
  * this durable host itself.
  *
  * NOT HERE: crash-safe receive. `entwurf_inbox_read` archives a body before the durable tool

@@ -11,10 +11,12 @@
  * here — so this file never sees an address, never reads a record and never decides whether the
  * citizen came back.
  *
- * PI ONLY. A Claude Code resume proves its return by joining the receiver marker's owner pid to the
- * tmux pane pid it opened, and no herdr coordinate has been measured to carry that pid. So a Claude
- * Code target is a named pre-mutation refusal here and, like every refusal on a herdr rail, it never
- * falls back to tmux: a window somewhere the operator is not looking is worse than a refusal.
+ * PI ONLY ON THIS PATH. A Claude Code resume proves its return by joining the receiver marker's owner
+ * pid to the pid of the process its launch started, and `agent start` types the command into the
+ * pane's interactive shell, so the pane's direct child is that shell, not Claude Code. A Claude Code
+ * target therefore launches through ONE layout.apply instead (`herdrClaudeCodeResumeCall` below), and
+ * like every herdr refusal nothing here falls back to tmux: a window somewhere the operator is not
+ * looking is worse than a refusal.
  *
  * WHAT IS REUSED AND WHAT IS NOT. Every herdr protocol primitive comes from `herdr-fresh-call.ts`:
  * the context, the cwd classification, the caller-pane read, the tab-create reply parser, the start
@@ -40,13 +42,18 @@
  * its same-id resume reuses the fresh rail's ONE `layout.apply` on the caller's own herdr socket
  * (`herdrPiDurableResumeCall` below) rather than `tab create` + `agent start`. The pi path above is
  * untouched and still refuses every non-pi backend; `launchHerdrResume` is the one place that tells
- * the two apart, by the backend the v2 side resolved from the record.
+ * the three apart, by the backend the v2 side resolved from the record.
+ *
+ * CLAUDE CODE IS A THIRD, SEPARATE LAUNCH (#157 stage 4): the same ONE layout.apply, then ONE
+ * `pane.process_info` read on the pane it created, so the v2 side can join the receiver marker's owner
+ * to that pane's direct child exactly as it joins the tmux pane pid.
  */
 
 import { spawn as spawnChildProcess } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import {
 	argvMatchesRequest,
+	boundHerdrDiagnostic,
 	buildHerdrAgentStartArgs,
 	buildHerdrLayoutApplyPacket,
 	buildHerdrPaneGetArgs,
@@ -67,9 +74,11 @@ import {
 	type HerdrRecovery,
 	type HerdrReportedDiagnostics,
 	type HerdrRun,
+	type HerdrSocketOutcome,
 	parseHerdrAgentStartResponse,
 	parseHerdrPaneGetResponse,
 	parseHerdrTabCreateResponse,
+	readHerdrEnvelope,
 	readHerdrErrorCode,
 	reclaim,
 	resolveHerdrContext,
@@ -95,7 +104,7 @@ export type HerdrResumeRejectReason =
 			| "cwd-not-directory"
 	  >
 	/** Not the fresh rail's `herdr-backend-unsupported`: that word's hint promises pi AND claude-code,
-	 * and on this verb the herdr rail opens pi only. */
+	 * and on this verb the herdr agent-start path opens pi only (pi-durable and Claude Code take their own layout branches). */
 	| "herdr-resume-backend-unsupported";
 
 /** Why a launch that had already reached the tab create failed. The fresh rail's words, minus
@@ -311,7 +320,7 @@ export const HERDR_RESUME_HINT: Readonly<Record<HerdrResumeRejectReason | HerdrR
 	"herdr-caller-workspace-missing":
 		"herdr reported this process's pane with no workspace, and guessing one would reopen the citizen wherever the operator is looking",
 	"herdr-resume-backend-unsupported":
-		"inside herdr, same-id resume reopens pi only — a Claude Code resume proves its return through a tmux pane pid this rail does not have; nothing was sent to tmux instead",
+		"inside herdr, same-id resume reopens pi, pi-durable and Claude Code; this agent-start path carries pi alone, and nothing was sent to tmux instead",
 	"herdr-argv-control-character":
 		"the recorded runtime argv holds a control character, which herdr refuses in an agent argument",
 	"cwd-not-absolute": "the recorded start directory is not an absolute path",
@@ -342,6 +351,9 @@ export type HerdrResumeLaunchOutcome =
 	/** #157 B3: the pi-durable layout launch — its own rail tag, because it carries no agent name and no
 	 * terminal id (herdr's layout reply names neither), and a pi resume must never read one as its own. */
 	| { readonly ok: true; readonly handle: { readonly rail: "herdr-layout" } & HerdrPiDurableResumeReceipt }
+	/** #157 stage 4: the Claude Code layout launch — its own rail tag, because it alone carries the pane's
+	 * direct-child pid its observation joins, and neither other resume may read one as its own. */
+	| { readonly ok: true; readonly handle: { readonly rail: "herdr-layout-claude" } & HerdrClaudeCodeResumeReceipt }
 	| { readonly ok: false; readonly reason: string; readonly hint: string }
 	| {
 			readonly ok: false;
@@ -373,8 +385,9 @@ export function herdrResumeLaunchOutcome(result: HerdrResumeCallResult): HerdrRe
 }
 
 /** The production herdr launch the shared rail root (`dispatchResumeLaunch`) returns to the v2 seam
- * when this process is inside herdr. A pi-durable resume (#157 B3) is the layout launch below; every
- * other backend goes to the pi path, which refuses all but pi. */
+ * when this process is inside herdr. A pi-durable resume (#157 B3) and a Claude Code resume (#157
+ * stage 4) are the layout launches below; every other backend goes to the pi path, which refuses all
+ * but pi. */
 export async function launchHerdrResume(
 	input: {
 		readonly backend: string;
@@ -394,6 +407,11 @@ export async function launchHerdrResume(
 				{ cwd: input.cwd, runtimeArgs: input.runtimeArgs, adoptEnv: input.piDurableAdoptEnv },
 				env,
 			),
+		);
+	}
+	if (input.backend === "claude-code") {
+		return herdrClaudeCodeResumeLaunchOutcome(
+			await herdrClaudeCodeResumeCall({ cwd: input.cwd, runtimeArgs: input.runtimeArgs }, env),
 		);
 	}
 	return herdrResumeLaunchOutcome(await herdrResumeCall(input, (bin) => createHerdrRunner(bin, env, spawn), env));
@@ -612,4 +630,181 @@ export function herdrPiDurableResumeLaunchOutcome(result: HerdrPiDurableResumeRe
 		};
 	}
 	return { ok: false, reason: result.reason, hint };
+}
+
+// ── #157 stage 4: the Claude Code same-id resume through ONE layout.apply ───────────────────────────
+//
+// A Claude Code resume is observed by joining the receiver marker its Entwurf hook re-arms to the
+// process this launch started: the hook names its parent, the Claude Code process, as the marker's
+// owner. `agent start` types the command into the pane's interactive shell, so that process is the
+// shell's child and no herdr coordinate names it. A layout argv pane spawns the vector's program as
+// the pane's direct child (`[측정 S4-CC-A H1, 2026-11-02, herdr 0.9.5 at the pinned aarch64 digest]`:
+// a program's self-reported pid, written before one exec, equalled `pane.process_info` `shell_pid`
+// and its foreground pid, at the same kernel start time, with the herdr server as its parent). So
+// this branch is the pi-durable layout launch with the record's argv and no adopt env, followed by ONE
+// read of that report for the pane it created. The read mutates nothing; whatever it says, the tab
+// stays as it is — this branch closes nothing, as the pi-durable one closes nothing.
+//
+// The runtime is the bare name `claude`, resolved by herdr exactly as its `agent start` resolves the
+// fresh Claude Code launch: this module imports no tmux leaf, so it carries no PATH resolver, and the
+// receipt says herdr resolved it. Which binary ran is not what the observation proves; the join does.
+
+/** What herdr is asked to run first in a Claude Code resume's layout vector. */
+export const HERDR_CLAUDE_CODE_RESUME_RUNTIME = "claude";
+
+/** Why a Claude Code herdr resume was refused BEFORE the layout write — the pi-durable layout words
+ * that do not name its package. */
+export type HerdrClaudeCodeResumeRejectReason = Extract<
+	HerdrPiDurableResumeRejectReason,
+	| "herdr-context-missing"
+	| "herdr-caller-pane-missing"
+	| "cwd-not-absolute"
+	| "cwd-missing"
+	| "cwd-not-directory"
+	| "herdr-socket-path-missing"
+	| "herdr-argv-control-character"
+	| "herdr-caller-pane-get-failed"
+	| "herdr-caller-pane-unparsable"
+	| "herdr-caller-pane-drift"
+	| "herdr-caller-workspace-missing"
+>;
+
+/** The pane's direct child as herdr reported it right after the layout created the pane, or why no
+ * pid came back. A pid is a JOIN for the v2 observation, never an address. */
+export type HerdrPaneChild = { readonly pid: string } | { readonly unread: string };
+
+/** What the layout reply and the one process read proved for THIS launch. No agent name, no terminal
+ * id, no garden or native session id. */
+export interface HerdrClaudeCodeResumeReceipt {
+	/** What herdr was asked to run first — a name herdr resolved, not a path this module checked. */
+	readonly runtime: string;
+	/** The REQUESTED start directory, the record's — not an observation of where the pane landed. */
+	readonly cwd: string;
+	readonly herdrWorkspaceId: string;
+	readonly herdrTabId: string;
+	readonly herdrPaneId: string;
+	readonly paneChild: HerdrPaneChild;
+}
+
+export type HerdrClaudeCodeResumeResult =
+	| { readonly ok: true; readonly receipt: HerdrClaudeCodeResumeReceipt }
+	| {
+			readonly ok: false;
+			readonly reason: HerdrClaudeCodeResumeRejectReason;
+			readonly reported?: HerdrReportedDiagnostics;
+	  }
+	| HerdrLayoutFailure;
+
+/** The fixed process read. Product function, not an RPC surface: method and shape are literal. */
+export function buildHerdrPaneProcessInfoPacket(id: string, paneId: string): string {
+	return `${JSON.stringify({ id, method: "pane.process_info", params: { pane_id: paneId } })}\n`;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+	return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/**
+ * The process read, reduced to the pane's direct-child pid. A success must name THIS pane and carry
+ * `shell_pid` (herdr's name for the pane runtime's direct child, `integer | null` in its bundled
+ * schema) as an integer above 1; anything else is `unread` with its cause — a pane whose process
+ * already exited reports null, and that is not a pid to join.
+ */
+export function classifyHerdrPaneProcessInfo(outcome: HerdrSocketOutcome, id: string, paneId: string): HerdrPaneChild {
+	if (outcome.kind !== "reply") {
+		return { unread: boundHerdrDiagnostic("code" in outcome ? `${outcome.kind}: ${outcome.code}` : outcome.kind) };
+	}
+	const envelope = readHerdrEnvelope(outcome.line, id);
+	if (envelope === null) return { unread: "herdr's process reply could not be read" };
+	if (envelope.arm === "error")
+		return { unread: boundHerdrDiagnostic(`herdr error ${envelope.code}: ${envelope.message}`) };
+	const info = envelope.result.process_info;
+	if (envelope.result.type !== "pane_process_info" || !isRecord(info) || info.pane_id !== paneId) {
+		return { unread: "herdr's process reply does not describe the pane this call created" };
+	}
+	const pid = info.shell_pid;
+	if (typeof pid !== "number" || !Number.isSafeInteger(pid) || pid <= 1) {
+		return { unread: `herdr reported no live direct child for the pane (shell_pid ${JSON.stringify(pid ?? null)})` };
+	}
+	return { pid: String(pid) };
+}
+
+/**
+ * Open the dormant Claude Code session in a new herdr tab: `claude` plus the record-derived argv
+ * (`--resume <session id>`, built on the v2 side and passed through untouched), the record's cwd, and
+ * the identity scrub as the env map — then read which process the new pane runs.
+ */
+export async function herdrClaudeCodeResumeCall(
+	params: { readonly cwd: string; readonly runtimeArgs: readonly string[] },
+	env: NodeJS.ProcessEnv,
+	deps: Pick<HerdrLayoutDeps, "socket"> = HERDR_LAYOUT_PRODUCTION_DEPS,
+	requestBase: string = mintHerdrResumeAgentName(),
+): Promise<HerdrClaudeCodeResumeResult> {
+	const herdr = resolveHerdrContext(env);
+	if (!herdr.ok) {
+		if (herdr.reason === "herdr-context-missing" || herdr.reason === "herdr-caller-pane-missing") {
+			return { ok: false, reason: herdr.reason };
+		}
+		throw new Error(`herdr-resume-call: the herdr context refused as ${herdr.reason}, which this rail does not name`);
+	}
+	const badCwd = classifyHerdrCwd(params.cwd);
+	if (badCwd !== null) return { ok: false, reason: badCwd };
+	const socketPath = resolveHerdrSocketPath(env);
+	if (socketPath === null) return { ok: false, reason: "herdr-socket-path-missing" };
+
+	const command = [HERDR_CLAUDE_CODE_RESUME_RUNTIME, ...params.runtimeArgs];
+	const launchEnv: Record<string, string> = { PI_SESSION_ID: "", PI_AGENT_ID: "" };
+	if (command.some(containsControlChar)) return { ok: false, reason: "herdr-argv-control-character" };
+
+	const call = deps.socket(socketPath);
+	const readId = `${requestBase}:pane.get`;
+	const read = classifyHerdrLayoutPaneRead(
+		await call(buildHerdrPaneGetPacket(readId, herdr.context.callerPaneId)),
+		readId,
+		herdr.context.callerPaneId,
+	);
+	if (!read.ok) return { ok: false, reason: read.reason, reported: read.reported };
+
+	// ── everything above this line leaves nothing behind; the ONE layout mutation write follows ──
+	const writeId = `${requestBase}:layout.apply`;
+	const applied = classifyHerdrLayoutApplyReply(
+		await call(
+			buildHerdrLayoutApplyPacket(writeId, { workspaceId: read.workspaceId, cwd: params.cwd, command, env: launchEnv }),
+		),
+		{ id: writeId, workspaceId: read.workspaceId, cwd: params.cwd, command },
+	);
+	if (!applied.ok) return applied;
+	// The tab exists from here on. ONE read of what the pane this call created is running; whatever it
+	// says is reported, and nothing is closed or retried.
+	const { workspaceId, tabId, paneId } = applied;
+	const processId = `${requestBase}:pane.process_info`;
+	const paneChild = classifyHerdrPaneProcessInfo(
+		await call(buildHerdrPaneProcessInfoPacket(processId, paneId)),
+		processId,
+		paneId,
+	);
+	const receipt: HerdrClaudeCodeResumeReceipt = {
+		runtime: HERDR_CLAUDE_CODE_RESUME_RUNTIME,
+		cwd: params.cwd,
+		herdrWorkspaceId: workspaceId,
+		herdrTabId: tabId,
+		herdrPaneId: paneId,
+		paneChild,
+	};
+	return { ok: true, receipt };
+}
+
+/** The one shared word whose fresh-rail hint names pi-durable: for this launch it names Claude Code. */
+export const HERDR_CLAUDE_CODE_SOCKET_PATH_HINT =
+	"HERDR_SOCKET_PATH is absent, empty or not absolute, so there is no herdr endpoint for Claude Code's one layout request — this rail does not guess or scan for one, and nothing was sent to tmux instead";
+
+/** The Claude Code layout result as the v2 seam reads it: a `herdr-layout-claude` handle, or — every
+ * refusal and layout failure being one the pi-durable layout branch also names — that branch's own
+ * mapping, so the two layout launches cannot classify one herdr fact two ways. The one word whose hint
+ * names pi-durable is reworded for Claude Code; every other hint names no backend. */
+export function herdrClaudeCodeResumeLaunchOutcome(result: HerdrClaudeCodeResumeResult): HerdrResumeLaunchOutcome {
+	if (result.ok) return { ok: true, handle: { rail: "herdr-layout-claude", ...result.receipt } };
+	const shared = herdrPiDurableResumeLaunchOutcome(result);
+	if (shared.ok || result.reason !== "herdr-socket-path-missing") return shared;
+	return { ...shared, hint: HERDR_CLAUDE_CODE_SOCKET_PATH_HINT };
 }

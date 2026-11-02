@@ -102,8 +102,10 @@ is the correct behaviour for a workbench — persistent identity is not its job.
   flags. The call submits no prompt. Called from inside Herdr it reopens a **pi** citizen in a new
   Herdr tab beside the caller (#157 G1a, dated native-Pi n=1 in [BASELINE](../../BASELINE.md), not
   release acceptance) and a **pi-durable** one through one layout request (#157 B3, n=1 on a
-  pre-final candidate, not release acceptance), and refuses a Claude Code citizen as
-  `herdr-resume-backend-unsupported` before anything is created; it never falls back to tmux.
+  pre-final candidate, not release acceptance), and a **Claude Code** one through one layout request
+  (#157 stage 4, two n=1 runs on pre-final candidates, recall measured only in the second, not release acceptance); it never
+  falls back to tmux. This describes this checkout's source; what an installed plugin runs is the
+  runtime its `runtime-lock.json` pins ("Which runtime these steps install" below), a separate subject.
 
 ---
 
@@ -254,8 +256,9 @@ present as tools. The pane tells you which ids exist; these do the work:
 - `entwurf_resume_call {target}` — reopen a dormant **pi**, **pi-durable** or **Claude Code** citizen under
   its own id. From a session inside Herdr a pi citizen is reopened in a new Herdr tab (#157 G1a,
   dated native-Pi n=1 in BASELINE) and a pi-durable one through one layout request (#157 B3, n=1 on a
-  pre-final candidate); a Claude Code citizen is refused there as `herdr-resume-backend-unsupported`, with
-  no tmux fallback. A launch that fails after its tab exists reports what it created and whether it
+  pre-final candidate), and a Claude Code one through one layout request plus a pane process read (#157
+  stage 4, two n=1 runs on pre-final candidates, recall measured only in the second), with no tmux fallback. That is this
+  checkout's source; the installed runtime is the one `runtime-lock.json` pins. A launch that fails after its tab exists reports what it created and whether it
   closed it.
 - `entwurf_retire_call {target}` (new in 0.41.0) — attempt retirement of one pi or Claude Code
   sibling, and only one the human operator explicitly asked to retire; a wired session seeing the
@@ -377,7 +380,7 @@ shows you which ids exist, and `entwurf_v2` is what reaches them.
 outlives a pane exists elsewhere in this ecosystem; the part that differs is what you do when the
 runtime is gone. Where a durable logical identity is re-attached to a new runtime by an explicit
 adopt or rebind, a dormant pi, pi-durable or Claude Code citizen is reopened by `entwurf_resume_call {target}`
-(in tmux, or in a herdr tab for pi or pi-durable) — the same id is the whole input; the record selects Pi's identity-checked native transcript for launch metadata, reserves pi-durable's native session for one launched child to adopt, or supplies Claude Code's session id/cwd, and the call submits no prompt.
+(in tmux, or in a herdr tab) — the same id is the whole input; the record selects Pi's identity-checked native transcript for launch metadata, reserves pi-durable's native session for one launched child to adopt, or supplies Claude Code's session id/cwd, and the call submits no prompt.
 
 Where this plugin is genuinely *narrower* than its neighbours: it has no `[[actions]]`, no
 `[[events]]`, and no write surface at all. That is in the manifest with its reason — an action's

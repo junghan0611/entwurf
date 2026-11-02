@@ -234,7 +234,7 @@ callback이 없거나 nonce가 다르면 target을 추측하지 않는다.
 
 ### `resume <target>` / “아까 그 형제 다시 불러줘”
 
-dormant **pi**, **pi-durable** 또는 **Claude Code** citizen을 자기 garden id 그대로 보이는 tmux 창에 되세운다(herdr 안에서는 pi와 pi-durable만 새 herdr tab으로 — pi는 #157 G1a, PATH 보완 private fixture의 native Pi LIVE n=1을 BASELINE에 기록했으며 release 수용은 아님; pi-durable은 #157 B3, `layout.apply` 한 번, 앞선 후보의 공개 n=1만 있고 최종 후보·tmux 경로는 실측 없음 — 되세우고, Claude Code는 아무것도 만들기 전에 `herdr-resume-backend-unsupported`로 거절된다; tmux fallback 없음). 새 형제를 만드는 것이
+dormant **pi**, **pi-durable** 또는 **Claude Code** citizen을 자기 garden id 그대로 보이는 tmux 창에 되세운다(herdr 안에서는 세 backend 모두 새 herdr tab으로 — pi는 #157 G1a, agent start, PATH 보완 private fixture의 native Pi LIVE n=1을 BASELINE에 기록했으며 release 수용은 아님; pi-durable은 #157 B3, `layout.apply` 한 번, 앞선 후보의 공개 n=1만 있고 최종 후보·tmux 경로는 실측 없음; Claude Code는 #157 stage 4, `layout.apply` 한 번이고 관측은 herdr가 보고한 pane 직계 자식과 receiver marker의 join이며 2026-11-02 n=1 두 건(첫 런 recall 미측정, 둘째 런 blind recall 측정, BASELINE) — 되세운다; tmux fallback 없음). 새 형제를 만드는 것이
 아니므로 새 id도, nonce도, callback도 없다 — 주소는 이미 알고 있다.
 
 1. target을 추측하지 않는다. GLG가 지목했거나, 이 대화에서 방금 닫힌 형제가 정확히
@@ -242,11 +242,12 @@ dormant **pi**, **pi-durable** 또는 **Claude Code** citizen을 자기 garden i
 2. `entwurf_resume_call`을 `{target}`으로 **한 번** 호출한다. model이나 task를 얹으려 하지
    않는다 — 스키마에 없다. 미관측이나 거절을 이유로 자동 재시도하지 않는다.
 3. **두 receipt를 절대 합치지 않는다.**
-   - **LAUNCH** — tmux가 창을 만들었고 그 backend의 고정 runtime(pi / `claude --resume` /
+   - **LAUNCH** — tmux가 창을(herdr 안에서는 herdr가 tab을) 만들었고 그 backend의 고정 runtime(pi / `claude --resume` /
      `entwurf pi-durable --entwurf-adopt`) 시작을 요청했다. 그뿐이다.
    - **OBSERVATION** — pi: 같은 garden id의 control socket이 응답했다. Claude Code: 이 호출이 연
      pane의 새 live owner가 receiver marker를 record와 같은 새 binding으로 다시 세웠다
-     (`receiver-armed`). 또는 `resume-unobserved`.
+     (`receiver-armed`). 또는 `resume-unobserved`, herdr 안에서 그 pane의 직계 자식을 herdr가
+     보고하지 못했으면 `pane-process-unread`(기다리지도 닫지도 않는다).
      **이것만이 “그 시민이 다시 주소를 갖는다”를 말한다.** pi-durable은 다르다: 관측은 이 호출이
      잡은 예약을 자식이 adopt했다(`adopted`)는 사실까지이고 ready·주소 가능성·recall이 아니다.
      `not-yet-adopted`면 예약이 adopt되지 않은 채 살아 있는 bridge 아래 있는 동안 같은 id의
@@ -319,7 +320,8 @@ dormant **pi**, **pi-durable** 또는 **Claude Code** citizen을 자기 garden i
    LAUNCH는 `claude --resume <session id>`를 요청했다는 사실이고, OBSERVATION은 새 live
    process가 이 호출이 연 pane에서 같은 session의 receiver marker를 새 binding으로 다시
    세웠는지(`receiver-armed`)다. 이 verb는 prompt를 보내지 않는다. 그 뒤 runtime이 스스로 하는
-   일(안 읽은 mail이 turn을 깨우는지)은 미측정이다. model과
+   일은 gate가 재지 않는다. herdr 안 n=1 두 건(2026-11-02, BASELINE)에서 doorbell은 두 번 모두
+   turn을 한 번 깨웠고, 한 번은 model이 seed 지시를 들어 mail을 읽지 않았고 한 번은 읽고 답했다(화면 판독과 transcript request 시각). model과
    권한 옵션은 복원되지 않는다고 말해 준다. 이 dormant→resume 여정은 이름 붙은 LIVE gate에는
    아직 없다(#147 L2는 deterministic 증명). test-owned retire→resume 왕복 1회(n=1)가
    2026-10-22에 측정되어 `BASELINE.md`에 날짜와 함께 있다 — gate 수용이 아니다.
@@ -330,11 +332,12 @@ dormant **pi**, **pi-durable** 또는 **Claude Code** citizen을 자기 garden i
 
 ```text
 가능: explicit model로 visible fresh Pi/Claude Code/Copilot → exact callback garden id → live delivery
+가능: operator가 손으로 Claude Code 시민 시작 — `entwurf claude [args]` 또는 plain `claude`. 시민권은 둘 다 install-meta-bridge의 hook에서 온다(`entwurf claude`는 상속된 PI_SESSION_ID/PI_AGENT_ID 제거와 재귀 sentinel뿐)
 가능: Pi window close → peers에서 dormant 확인 → honest reject 관측
 가능: dormant pi를 같은 garden id로 visible resume → OBSERVATION receipt → 다시 delivery → recall
-가능: dormant Claude Code를 같은 garden id로 visible resume (마지막 검증 owner가 dead이고 record binding과 일치할 때만) — LIVE gate 미편입, 2026-10-22 test-owned n=1 측정만 있음
+가능: dormant Claude Code를 같은 garden id로 visible resume (마지막 검증 owner가 dead이고 record binding과 일치할 때만) — LIVE gate 미편입. tmux는 2026-10-22, herdr 안 layout 경로는 2026-11-02 test-owned n=1 두 건(그중 recall 측정 1건)만 있음
 가능(0.41.0): GLG가 지명한 pi 또는 Claude Code 형제 하나를 entwurf_retire_call로 한 번 퇴근 — action·기록·lock 해제 결과는 따로, unknown은 재시도 사유가 아님
-불가: pi·Claude Code 밖 backend의 same-id resume (target-backend-unsupported) — 새 형제를 열 수는 있다
+불가: pi·pi-durable·Claude Code 밖 backend의 same-id resume (target-backend-unsupported) — 새 형제를 열 수는 있다
 불가: 자동 재개. resume은 GLG가 부를 때 한 번 도는 verb이며 watcher/retry/supervisor가 없다
 불가: resume에 model/task/prompt 얹기 — record와 transcript가 그 값을 소유한다
 금지: hidden/background fallback, owned-outcome, transcript/peer 추측 correlation

@@ -550,14 +550,14 @@
 			"signatureSource": "pi-extensions/lib/entwurf-v2-visible-resume.test.ts"
 		},
 		{
-			"claim": "V2RESUME-CC-TMUX-ONLY",
-			"title": "the tmux-only guard on a Claude Code launch handle is disabled, so a non-tmux handle is watched for a pane pid it does not carry and the defect ends as a quiet resume-unobserved",
+			"claim": "V2RESUME-CC-JOIN-HANDLE-ONLY",
+			"title": "the guard that admits only a handle carrying the opened pane's direct child is disabled, so a herdr agent-start or pi-durable layout handle reaches the join with no pid and the wiring defect no longer fails by name",
 			"subject": "pi-extensions/lib/entwurf-v2-visible-resume.ts",
-			"find": ["\tif (launched.handle.rail !== \"tmux\") {"],
-			"replace": ["\tif (launched.handle.rail !== \"tmux\" && false) {"],
+			"find": ["\tif (handle.rail !== \"tmux\" && handle.rail !== \"herdr-layout-claude\") {"],
+			"replace": ["\tif (handle.rail !== \"tmux\" && handle.rail !== \"herdr-layout-claude\" && false) {"],
 			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
 			"timeoutSeconds": 60,
-			"signature": "[QK:V2RESUME-CC-TMUX-ONLY]",
+			"signature": "[QK:V2RESUME-CC-JOIN-HANDLE-ONLY]",
 			"signatureSource": "pi-extensions/lib/entwurf-v2-visible-resume.test.ts"
 		},
 		{
@@ -715,6 +715,41 @@
 			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
 			"timeoutSeconds": 60,
 			"signature": "[QK:V2RESUME-PD-WITHDRAW-PARTIAL-STATE]",
+			"signatureSource": "pi-extensions/lib/entwurf-v2-visible-resume.test.ts"
+		},
+		{
+			"claim": "V2RESUME-CC-HERDR-JOIN",
+			"title": "the herdr Claude Code observation joins the marker owner to herdr's pane VIEW id instead of the pane's direct-child pid, so a real return is never seen",
+			"subject": "pi-extensions/lib/entwurf-v2-visible-resume.ts",
+			"find": [
+				"\tconst panePid = handle.rail === \"tmux\" ? handle.panePid : (handle.paneChild as { pid: string }).pid;"
+			],
+			"replace": ["\tconst panePid = handle.rail === \"tmux\" ? handle.panePid : handle.herdrPaneId;"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:V2RESUME-CC-HERDR-JOIN]",
+			"signatureSource": "pi-extensions/lib/entwurf-v2-visible-resume.test.ts"
+		},
+		{
+			"claim": "V2RESUME-CC-HERDR-PROCESS-UNREAD",
+			"title": "a herdr launch whose pane child herdr did not report goes on to wait for a marker joined to no pid, and ends as a quiet resume-unobserved instead of naming herdr's cause",
+			"subject": "pi-extensions/lib/entwurf-v2-visible-resume.ts",
+			"find": ["\tif (handle.rail === \"herdr-layout-claude\" && \"unread\" in handle.paneChild) {"],
+			"replace": ["\tif (handle.rail === \"herdr-layout-claude\" && \"unread\" in handle.paneChild && false) {"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:V2RESUME-CC-HERDR-PROCESS-UNREAD]",
+			"signatureSource": "pi-extensions/lib/entwurf-v2-visible-resume.test.ts"
+		},
+		{
+			"claim": "V2RESUME-CC-HERDR-RENDER",
+			"title": "the herdr Claude Code receipt drops the pane child pid it joined, so the operator cannot tell which process the observation was about",
+			"subject": "pi-extensions/lib/entwurf-v2-visible-resume.ts",
+			"find": ["\t\t\t`  child:    ${child}\\n` +"],
+			"replace": ["\t\t\t\"\" +"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:V2RESUME-CC-HERDR-RENDER]",
 			"signatureSource": "pi-extensions/lib/entwurf-v2-visible-resume.test.ts"
 		}
 	]

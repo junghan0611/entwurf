@@ -1,0 +1,142 @@
+{
+	"schemaVersion": 1,
+	"lane": "claude-launch",
+	"mutants": [
+		{
+			"claim": "CLAUDELAUNCH-VERB-DROPPED",
+			"title": "without the shift the dispatcher verb stays in the forwarded argv and `claude` arrives at Claude Code as a prompt argument",
+			"subject": "run.sh",
+			"find": ["    shift || true\n    if [ -n \"${ENTWURF_CLAUDE_LAUNCH_ACTIVE:-}\" ]; then"],
+			"replace": ["    if [ -n \"${ENTWURF_CLAUDE_LAUNCH_ACTIVE:-}\" ]; then"],
+			"gate": ["bash", "run.sh", "check-claude-launch"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:CLAUDELAUNCH-VERB-DROPPED]",
+			"signatureSource": "scripts/check-claude-launch.ts"
+		},
+		{
+			"claim": "CLAUDELAUNCH-ARGV-UNTOUCHED",
+			"title": "a launcher that adds an argument of its own stops being a spelling and starts deciding the session (Rule 9)",
+			"subject": "run.sh",
+			"find": ["    exec \"$entwurf_claude_bin\" \"$@\""],
+			"replace": ["    exec \"$entwurf_claude_bin\" --verbose \"$@\""],
+			"gate": ["bash", "run.sh", "check-claude-launch"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:CLAUDELAUNCH-ARGV-UNTOUCHED]",
+			"signatureSource": "scripts/check-claude-launch.ts"
+		},
+		{
+			"claim": "CLAUDELAUNCH-VENDOR-HELP",
+			"title": "the help preflight intercepts `entwurf claude --help`, so Claude Code's own help is replaced by an Entwurf page",
+			"subject": "run.sh",
+			"find": ["[ \"$cmd\" != claude ] && "],
+			"replace": [""],
+			"gate": ["bash", "run.sh", "check-claude-launch"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:CLAUDELAUNCH-VENDOR-HELP]",
+			"signatureSource": "scripts/check-claude-launch.ts"
+		},
+		{
+			"claim": "CLAUDELAUNCH-CWD-KEPT",
+			"title": "a launch that moves to the package directory opens Claude Code in the wrong project and session scope",
+			"subject": "run.sh",
+			"find": ["    exec \"$entwurf_claude_bin\" \"$@\""],
+			"replace": ["    cd \"$REPO_DIR\"; exec \"$entwurf_claude_bin\" \"$@\""],
+			"gate": ["bash", "run.sh", "check-claude-launch"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:CLAUDELAUNCH-CWD-KEPT]",
+			"signatureSource": "scripts/check-claude-launch.ts"
+		},
+		{
+			"claim": "CLAUDELAUNCH-SENTINEL-EXPORTED",
+			"title": "an unexported sentinel is invisible to a PATH `claude` that shells back here, so the wrapper loop spins",
+			"subject": "run.sh",
+			"find": ["    export ENTWURF_CLAUDE_LAUNCH_ACTIVE=1"],
+			"replace": ["    ENTWURF_CLAUDE_LAUNCH_ACTIVE=1"],
+			"gate": ["bash", "run.sh", "check-claude-launch"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:CLAUDELAUNCH-SENTINEL-EXPORTED]",
+			"signatureSource": "scripts/check-claude-launch.ts"
+		},
+		{
+			"claim": "CLAUDELAUNCH-CARRIERS-SCRUBBED",
+			"title": "clearing only half of an inherited pi identity pair leaves another citizen's carrier for a partial reader",
+			"subject": "run.sh",
+			"find": ["    unset PI_SESSION_ID PI_AGENT_ID"],
+			"replace": ["    unset PI_AGENT_ID"],
+			"gate": ["bash", "run.sh", "check-claude-launch"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:CLAUDELAUNCH-CARRIERS-SCRUBBED]",
+			"signatureSource": "scripts/check-claude-launch.ts"
+		},
+		{
+			"claim": "CLAUDELAUNCH-ENV-EXACT",
+			"title": "a launcher that sets a variable of its own decides something Claude Code owns",
+			"subject": "run.sh",
+			"find": ["    export ENTWURF_CLAUDE_LAUNCH_ACTIVE=1"],
+			"replace": ["    export ENTWURF_CLAUDE_LAUNCH_ACTIVE=1 ENTWURF_CLAUDE_EXTRA=1"],
+			"gate": ["bash", "run.sh", "check-claude-launch"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:CLAUDELAUNCH-ENV-EXACT]",
+			"signatureSource": "scripts/check-claude-launch.ts"
+		},
+		{
+			"claim": "CLAUDELAUNCH-EXEC-KEEPS-PID",
+			"title": "without exec run.sh stays as a parent between Claude Code and the terminal, owning nothing",
+			"subject": "run.sh",
+			"find": ["    exec \"$entwurf_claude_bin\" \"$@\""],
+			"replace": ["    \"$entwurf_claude_bin\" \"$@\""],
+			"gate": ["bash", "run.sh", "check-claude-launch"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:CLAUDELAUNCH-EXEC-KEEPS-PID]",
+			"signatureSource": "scripts/check-claude-launch.ts"
+		},
+		{
+			"claim": "CLAUDELAUNCH-VENDOR-ABSENT",
+			"title": "with the absent-vendor refusal gone an empty PATH hit falls through to a refusal that names the wrong cause",
+			"subject": "run.sh",
+			"find": ["    if [ -z \"$entwurf_claude_bin\" ]; then"],
+			"replace": ["    if false; then"],
+			"gate": ["bash", "run.sh", "check-claude-launch"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:CLAUDELAUNCH-VENDOR-ABSENT]",
+			"signatureSource": "scripts/check-claude-launch.ts"
+		},
+		{
+			"claim": "CLAUDELAUNCH-NOT-REGULAR",
+			"title": "a non-regular PATH hit is handed to exec, which fails with the shell's own error instead of a named refusal",
+			"subject": "run.sh",
+			"find": ["    if [ ! -f \"$entwurf_claude_bin\" ] || [ ! -x \"$entwurf_claude_bin\" ]; then"],
+			"replace": ["    if false; then"],
+			"gate": ["bash", "run.sh", "check-claude-launch"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:CLAUDELAUNCH-NOT-REGULAR]",
+			"signatureSource": "scripts/check-claude-launch.ts"
+		},
+		{
+			"claim": "CLAUDELAUNCH-RECURSION-FENCE",
+			"title": "with the sentinel fence removed a PATH `claude` that shells back here spins forever behind a hung terminal",
+			"subject": "run.sh",
+			"find": [
+				"    if [ -n \"${ENTWURF_CLAUDE_LAUNCH_ACTIVE:-}\" ]; then\n      echo \"entwurf: recursive managed launch detected (ENTWURF_CLAUDE_LAUNCH_ACTIVE is already set).\" >&2"
+			],
+			"replace": [
+				"    if false; then\n      echo \"entwurf: recursive managed launch detected (ENTWURF_CLAUDE_LAUNCH_ACTIVE is already set).\" >&2"
+			],
+			"gate": ["bash", "run.sh", "check-claude-launch"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:CLAUDELAUNCH-RECURSION-FENCE]",
+			"signatureSource": "scripts/check-claude-launch.ts"
+		},
+		{
+			"claim": "CLAUDELAUNCH-SELF-EXEC-FENCE",
+			"title": "with the resolved-path fence removed a PATH `claude` that is run.sh re-enters with the operator's argv as an entwurf verb",
+			"subject": "run.sh",
+			"find": ["    if [ \"$entwurf_claude_real\" = \"$REPO_DIR/run.sh\" ]; then"],
+			"replace": ["    if false; then"],
+			"gate": ["bash", "run.sh", "check-claude-launch"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:CLAUDELAUNCH-SELF-EXEC-FENCE]",
+			"signatureSource": "scripts/check-claude-launch.ts"
+		}
+	]
+}

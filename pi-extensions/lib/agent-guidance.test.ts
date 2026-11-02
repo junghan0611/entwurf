@@ -225,6 +225,21 @@ const reviewedToolsR18: ReviewedAmendmentLayer = {
 	revision: reviewedR18.revision,
 	amendments: reviewedR18.amendments.filter((a): a is ToolAmendment => a.key[0] === "tools"),
 };
+// Revision 19 (#157 stage 4) puts Claude Code with pi and pi-durable inside herdr in both resume descriptions,
+// names herdr's pane-process-unread observation, and corrects the tmux leaf's herdr guard hint, stale since B3.
+// Its old values were fixed in this layer before the producer edit; its new literals were written in the same
+// pass and are reviewed afterwards. The README paragraph owns that provenance.
+const reviewedR19 = JSON.parse(
+	fs.readFileSync(new URL("./fixtures/agent-guidance/amendments-revision-19.json", import.meta.url), "utf8"),
+) as {
+	previousRevision: number;
+	revision: number;
+	amendments: (ToolAmendment | { key: ["resumeLaunchRejectHints", string]; old: string; new: string })[];
+};
+const reviewedToolsR19: ReviewedAmendmentLayer = {
+	revision: reviewedR19.revision,
+	amendments: reviewedR19.amendments.filter((a): a is ToolAmendment => a.key[0] === "tools"),
+};
 
 // Revision 10 was recorded before the Fable wording discussion. Its old values and provenance
 // remain intact; revision 11 applies that discussion's separate five-leaf amendment afterward.
@@ -315,13 +330,29 @@ function applyR18(family: string, expected: Record<string, string>): void {
 	}
 }
 
+function applyR19(family: string, expected: Record<string, string>): void {
+	expect(reviewedR19.amendments).toHaveLength(3);
+	expect(reviewedR19.amendments.map((a) => a.key.join(".")).sort()).toEqual([
+		"resumeLaunchRejectHints.herdr-resume-unsupported",
+		"tools.entwurf_resume_call.descriptions.durable",
+		"tools.entwurf_resume_call.descriptions.mcp",
+	]);
+	for (const amendment of reviewedR19.amendments) {
+		if (amendment.key[0] === "tools" || amendment.key[0] !== family) continue;
+		const key = amendment.key[1];
+		expect(expected[key]).toBe(amendment.old);
+		expect(amendment.new).not.toBe(amendment.old);
+		expected[key] = amendment.new;
+	}
+}
+
 // Only description leaves may change. Full schemas/annotations/order come from immutable C0. The
 // literal layers do NOT share one provenance, so none is asserted for all of them here: each layer's
 // paragraph in fixtures/agent-guidance/README.md records how its literals were chosen. In particular
 // the R12 literals were written in the same pass as the Root edit and only then reviewed
 // independently — they are not oracles chosen before the product JSON was amended. The R13, R14 and
 // R15 literals were approved before it. The R16 layer fixed its old value before the Root edit, but its
-// new literal was written in the same pass and reviewed afterwards, as R12's were; so were R17's and R18's.
+// new literal was written in the same pass and reviewed afterwards, as R12's were; so were R17's, R18's and R19's.
 function currentExpectations() {
 	const metadata = structuredClone(original);
 	const runtime = structuredClone(originalRuntime);
@@ -353,6 +384,10 @@ function currentExpectations() {
 		"tools.entwurf_resume_call.descriptions.mcp",
 		"tools.entwurf_v2.descriptions.mcp",
 	]);
+	expect(reviewedToolsR19.amendments.map((a) => a.key.join(".")).sort()).toEqual([
+		"tools.entwurf_resume_call.descriptions.durable",
+		"tools.entwurf_resume_call.descriptions.mcp",
+	]);
 	for (const layer of [
 		reviewedR2,
 		reviewedR3,
@@ -364,6 +399,7 @@ function currentExpectations() {
 		reviewedR16,
 		reviewedToolsR17,
 		reviewedToolsR18,
+		reviewedToolsR19,
 	]) {
 		expect(new Set(layer.amendments.map((a) => a.key.join("."))).size).toBe(layer.amendments.length);
 		for (const amendment of layer.amendments) {
@@ -408,7 +444,7 @@ function currentExpectations() {
 	// backend parameter add two keys. Revisions 14 and 15 amend that same mcp key again and add none.
 	// Revision 16's cwd parameter is a new key. Revision 17's two resume descriptions were already in the union
 	// (revision 12); its resume target parameter is a new key. Revision 18's four descriptions were all already in
-	// the union, so it adds none.
+	// the union, so it adds none. Revision 19's two resume descriptions were too, so it adds none either.
 	expect(declaredKeys.size).toBe(17);
 	return { metadata, runtime, declaredKeys };
 }
@@ -446,7 +482,9 @@ describe("root product guidance — frozen originals plus reviewed current amend
 		expect(reviewedR17.revision).toBe(17);
 		expect(reviewedR18.previousRevision).toBe(reviewedR17.revision);
 		expect(reviewedR18.revision).toBe(18);
-		expect(ENTWURF_GUIDANCE_VERSION.revision).toBe(reviewedR18.revision);
+		expect(reviewedR19.previousRevision).toBe(reviewedR18.revision);
+		expect(reviewedR19.revision).toBe(19);
+		expect(ENTWURF_GUIDANCE_VERSION.revision).toBe(reviewedR19.revision);
 	});
 
 	it("[QK:GUIDANCE-REJECT-HINTS-ORIGINAL] every static reject hint matches C0 plus the declared revision-6, revision-10 and reviewed revision-11 amendments", () => {
@@ -490,12 +528,14 @@ describe("root product guidance — frozen originals plus reviewed current amend
 		expect(Object.isFrozen(ENTWURF_RESUME_REJECT_HINTS)).toBe(true);
 	});
 
-	it("[QK:GUIDANCE-LAUNCH-REJECT-HINTS-ORIGINAL] every static tmux launch-stage hint is the exact pre-extraction C0 string plus the declared revision-12 amendment, per verb, with no cross-verb dedupe", () => {
+	it("[QK:GUIDANCE-LAUNCH-REJECT-HINTS-ORIGINAL] every static tmux launch-stage hint is the exact pre-extraction C0 string plus the declared revision-12 and revision-19 amendments, per verb, with no cross-verb dedupe", () => {
 		expect(originalLaunchRejectHints.sourceSha).toBe("94d0594182cbd9cf0a5c90f4d299cda40d870b8f");
-		// The fresh family has no amendment layer; the resume family's one is revision 12's narrowing of
-		// the tmux leaf's herdr guard (#157 G1a), applied against its exact C0 old value.
+		// The fresh family has no amendment layer; the resume family's are revision 12's narrowing of the
+		// tmux leaf's herdr guard (#157 G1a) and revision 19's correction of its herdr-rail clause (#157
+		// stage 4), each applied against its exact old value.
 		const expectedResume = structuredClone(originalLaunchRejectHints.resume);
 		applyR12("resumeLaunchRejectHints", expectedResume);
+		applyR19("resumeLaunchRejectHints", expectedResume);
 		for (const [actualFamily, expected] of [
 			[ENTWURF_FRESH_LAUNCH_REJECT_HINTS, originalLaunchRejectHints.fresh],
 			[ENTWURF_RESUME_LAUNCH_REJECT_HINTS, expectedResume],

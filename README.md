@@ -31,7 +31,7 @@ package releases. Bootstrap, notices, other hints and ACP guidance still have th
 | Verb | Tool | Where it lands | Harnesses |
 |---|---|---|---|
 | **Open** a new sibling | `entwurf_fresh_call` | Herdr: a new unfocused tab in the caller's workspace. tmux: a new window in the caller's session, or an existing session named by `placement.tmuxSession`; without an explicit tmux placement, a Codex caller opens beside its own TUI pane | Herdr: pi, Claude Code (agent start), pi-durable (one layout request). tmux: pi, pi-durable, Claude Code, Copilot, OMP, Codex |
-| **Reopen** a dormant sibling | `entwurf_resume_call` | A visible tmux window (or, inside herdr, a new herdr tab for pi or pi-durable — #157 G1a native-Pi n=1 and #157 B3 pi-durable n=1 on a pre-final candidate, recorded in [BASELINE](./BASELINE.md), not release gates; Claude Code is refused inside herdr) under the same garden id, with its record selecting the native session (Pi: identity-checked recorded transcript supplies launch metadata; pi-durable: the record's native session, reserved for one launched child to adopt; Claude Code: `claude --resume <session id>` at the record cwd); the verb submits no prompt | pi, pi-durable, Claude Code |
+| **Reopen** a dormant sibling | `entwurf_resume_call` | A visible tmux window (or, inside herdr, a new herdr tab — pi through agent start, pi-durable and Claude Code through one layout request; #157 G1a native-Pi n=1 and #157 B3 pi-durable n=1 on a pre-final candidate are recorded in [BASELINE](./BASELINE.md), #157 stage 4's two Claude Code n=1 runs on pre-final candidates (recall unmeasured in the first, a blind recall in the second) are recorded there with the operator vendor-data changes seen in their windows, and none is a release gate; no tmux fallback) under the same garden id, with its record selecting the native session (Pi: identity-checked recorded transcript supplies launch metadata; pi-durable: the record's native session, reserved for one launched child to adopt; Claude Code: `claude --resume <session id>` at the record cwd); the verb submits no prompt | pi, pi-durable, Claude Code |
 | **Retire** one sibling the human operator explicitly requested | `entwurf_retire_call` | One guarded attempt on that target: a Pi shutdown request or Claude Code fd-pinned process termination. Refused/unknown outcomes remain possible; the record stays for guarded same-id return. Not a grant, a roster cleanup or an automatic retry | pi, Claude Code |
 | **Message** an existing sibling | `entwurf_v2` | Its own rail: control socket, self-fetch mailbox or native push; delivery starts no process | pi, pi-durable, Claude Code, Copilot, OMP, Codex (Antigravity native push is paused, #152) |
 
@@ -166,6 +166,14 @@ pi --entwurf-control
 package without becoming a citizen. The record mints the garden id; do not inject
 a session id. Native harness launch and manual Herdr argv instructions live in
 [setup §2–§5](./docs/setup-clean-host.md#2-optional-pi-adapter--acp-plugin).
+
+`entwurf claude [args…]` is the same kind of entry for Claude Code: it execs the `claude` on
+your PATH with the arguments unchanged (`--help` included), after removing an inherited
+`PI_SESSION_ID`/`PI_AGENT_ID` and adding only its recursion sentinel. It checks no setup and
+mediates no auth, model or permission. A Claude Code session is a citizen through the hooks
+`entwurf install-meta-bridge` installed
+([setup §3](./docs/setup-clean-host.md#3-optional-claude-code-native-citizen)), whether it
+started this way or as plain `claude`.
 
 In that **harness session**, ask the agent to:
 

@@ -19,7 +19,9 @@
  *                timeout, a store write failure, a launch after the re-read) is invisible to this
  *                proof. Back = a NEW live owner, in the pane this call opened, re-armed the marker
  *                for the same session with a fresh binding the current record also carries (same
- *                createdAt). The old marker read again is never success.
+ *                createdAt). The old marker read again is never success. "In the pane" is the owner
+ *                pid equal to that pane's direct child: tmux's pane pid, or on herdr (#157 stage 4)
+ *                the `pane.process_info` report of the pane ONE layout.apply created.
  *
  *   pi-durable   dormant = THIS process could reserve the session's directory D (#157 B3): the
  *                owner-fence claim's holder is proven dead, or it closed clean, and the record and
@@ -38,7 +40,9 @@
  *     └─ entwurf-v2-visible-resume  (this file)          v2 leaves ONLY: lock, record, socket
  *          └─ deps.launch(argv, cwd)  ── INJECTED SEAM ──→ fresh-call-dispatch (shared rail choice)
  *                                                         ├→ mux-resume-call → placement leaf
- *                                                         └→ herdr-resume-call (inside herdr, pi only)
+ *                                                         └→ herdr-resume-call (inside herdr: pi via agent
+ *                                                            start; pi-durable and Claude Code via ONE
+ *                                                            layout.apply)
  *
  * The seam is what keeps `docs/mux-launch-rail.md` §11 intact in both directions: v2 never
  * imports mux, mux never imports entwurf core. This module cannot open a window; it can only
@@ -77,7 +81,7 @@
  *
  * ── Two receipts, never merged ──
  *
- * `launch` says tmux made a window (or, for pi or pi-durable inside herdr, herdr made a tab) and was
+ * `launch` says tmux made a window (or, inside herdr, herdr made a tab) and was
  * asked to start the runtime. `observation` says whether the citizen came back under the same id (pi:
  * its socket; pi-durable: a child's adoption of the reservation; Claude Code: its receiver marker).
  * Neither says the resumed citizen did anything. This verb submits no prompt. For pi a resume ran
@@ -251,23 +255,44 @@ export interface VisibleResumeLaunchFailure {
 	created?: { herdrWorkspaceId: string; herdrTabId: string; herdrPaneId: string; herdrTerminalId: string };
 }
 
+/**
+ * #157 stage 4: the herdr rail's Claude Code resume — ONE layout.apply, then ONE `pane.process_info`
+ * read of the pane it created. `paneChild` is herdr's report of that pane's DIRECT child (a layout
+ * argv pane spawns its program with no shell between, measured S4-CC-A H1), the twin of tmux's pane
+ * pid: a join for the observation, never an address. `runtime` is the name herdr was asked to run —
+ * herdr resolved it, we did not. Its own rail tag, so neither other resume can read it as its own.
+ */
+export interface VisibleResumeHerdrClaudeLaunchHandle {
+	rail: "herdr-layout-claude";
+	runtime: string;
+	cwd: string;
+	herdrWorkspaceId: string;
+	herdrTabId: string;
+	herdrPaneId: string;
+	paneChild: { pid: string } | { unread: string };
+}
+
 export type VisibleResumeLaunchOutcome =
-	| { ok: true; handle: VisibleResumeLaunchHandle | VisibleResumeHerdrLayoutLaunchHandle }
+	| {
+			ok: true;
+			handle: VisibleResumeLaunchHandle | VisibleResumeHerdrLayoutLaunchHandle | VisibleResumeHerdrClaudeLaunchHandle;
+	  }
 	/** Refused before anything was created. */
 	| { ok: false; reason: string; hint: string }
 	| { ok: false; reason: string; hint: string; failure: VisibleResumeLaunchFailure };
 
-/** Fact 1: tmux created a window — or, for pi or pi-durable inside herdr, herdr created a tab — and
+/** Fact 1: tmux created a window — or, inside herdr, herdr created a tab — and
  * was asked to start the citizen's runtime there. `cwd` is the REQUESTED start directory (what the placement owner
  * was told), the same kind of fact as `runtimePath` — not an observation of where the pane landed.
- * The Claude Code receipt is tmux-only: its observation joins the tmux pane pid. */
+ * The Claude Code receipt is tmux's window or herdr's layout tab: its observation joins that pane's
+ * direct child. */
 export type ResumeLaunchReceipt =
 	| { backend: "pi"; targetGardenId: string; sessionFile: string; handle: VisibleResumeLaunchHandle }
 	| {
 			backend: "claude-code";
 			targetGardenId: string;
 			nativeSessionId: string;
-			handle: VisibleResumeTmuxLaunchHandle;
+			handle: VisibleResumeTmuxLaunchHandle | VisibleResumeHerdrClaudeLaunchHandle;
 	  }
 	/** #157 B3: the reservation is part of the launch fact — the window or tab was opened FOR it. */
 	| {
@@ -294,7 +319,10 @@ export interface ResumeObservationReceipt {
 export type ReceiverObservationReceipt =
 	| { kind: "receiver-armed"; ownerPid: number; waitedMs: number }
 	| { kind: "resume-unobserved"; waitedMs: number }
-	| { kind: "record-unreadable"; cause: string; waitedMs: number };
+	| { kind: "record-unreadable"; cause: string; waitedMs: number }
+	/** #157 stage 4, herdr only: herdr did not report the created pane's direct child, so there was no
+	 * pid to join a marker to and no wait ran. The tab exists; nothing is closed. */
+	| { kind: "pane-process-unread"; cause: string; waitedMs: number };
 
 /** What the receiver marker under a garden id says, read raw and judged by the shared owner rule. */
 export type ReceiverInspection =
@@ -565,10 +593,10 @@ export async function visibleResume(targetGardenId: string, deps: VisibleResumeD
 		if (!launched.ok) return launchNotLaunched(launched);
 		// Only a pi-durable launch carries a layout handle (#157 B3). Handed to a pi resume, it is a
 		// wiring defect, not an outcome: whatever was opened stays as it is and the lock is released.
-		if (launched.handle.rail === "herdr-layout") {
+		if (launched.handle.rail === "herdr-layout" || launched.handle.rail === "herdr-layout-claude") {
 			throw new Error(
-				`entwurf-v2-visible-resume: the launcher handed a pi resume of ${targetGardenId} a herdr-layout handle — ` +
-					`only a pi-durable resume launches through layout.apply. Nothing was observed or closed.`,
+				`entwurf-v2-visible-resume: the launcher handed a pi resume of ${targetGardenId} a ${launched.handle.rail} handle — ` +
+					`only a pi-durable or Claude Code resume launches through layout.apply. Nothing was observed or closed.`,
 			);
 		}
 
@@ -701,33 +729,38 @@ async function resumeClaudeCode(
 		runtimeArgs: ["--resume", current.nativeSessionId],
 	});
 	if (!launched.ok) return launchNotLaunched(launched);
-	// The observation below joins the receiver marker's owner to the TMUX pane pid. The composition
-	// refuses a Claude Code resume on every other rail before it creates anything, so a non-tmux handle
-	// here is a wiring defect, not an outcome: it fails loud rather than watching for a pid that does
-	// not exist. Whatever that launcher opened is left as it is; the lock is still released.
-	if (launched.handle.rail !== "tmux") {
+	// The observation below joins the receiver marker's owner to the pane's DIRECT child: tmux's pane
+	// pid, or herdr's process report for the layout pane (#157 stage 4). A handle of any other rail
+	// carries no such pid, so it is a wiring defect, not an outcome: it fails loud rather than watching
+	// for a pid that does not exist. Whatever that launcher opened is left as it is; the lock is still
+	// released.
+	const handle = launched.handle;
+	if (handle.rail !== "tmux" && handle.rail !== "herdr-layout-claude") {
 		throw new Error(
-			`entwurf-v2-visible-resume: the launcher handed a Claude Code resume of ${targetGardenId} a ${launched.handle.rail} ` +
-				`handle — its observation joins a tmux pane pid, which no other rail carries. Nothing was observed or closed.`,
+			`entwurf-v2-visible-resume: the launcher handed a Claude Code resume of ${targetGardenId} a ${handle.rail} ` +
+				`handle — its observation joins the opened pane's direct child, which that rail does not carry. Nothing was ` +
+				`observed or closed.`,
 		);
 	}
+	const launch = { backend: "claude-code" as const, targetGardenId, nativeSessionId: current.nativeSessionId, handle };
+	// herdr did not name the new pane's direct child: there is nothing to join, so no wait runs. The tab
+	// is open; nothing is retried or closed.
+	if (handle.rail === "herdr-layout-claude" && "unread" in handle.paneChild) {
+		return {
+			ok: true,
+			launch,
+			observation: { kind: "pane-process-unread", cause: handle.paneChild.unread, waitedMs: 0 },
+		};
+	}
+	const panePid = handle.rail === "tmux" ? handle.panePid : (handle.paneChild as { pid: string }).pid;
 	const observation = await observeReceiverReattached(
 		targetGardenId,
 		current,
 		{ ownerPid: marker.ownerPid, ownerStartKey: marker.ownerStartKey, attachIncarnation: current.attachIncarnation },
-		launched.handle.panePid,
+		panePid,
 		deps,
 	);
-	return {
-		ok: true,
-		launch: {
-			backend: "claude-code",
-			targetGardenId,
-			nativeSessionId: current.nativeSessionId,
-			handle: launched.handle,
-		},
-		observation,
-	};
+	return { ok: true, launch, observation };
 }
 
 /**
@@ -923,10 +956,10 @@ async function resumePiDurable(targetGardenId: string, deps: VisibleResumeDeps):
 	}
 	// A herdr agent-start handle belongs to the pi rail only: a pi-durable resume launches through
 	// tmux or ONE layout.apply. Handed one, it is a wiring defect; what was opened stays as it is.
-	if (launched.handle.rail === "herdr") {
+	if (launched.handle.rail === "herdr" || launched.handle.rail === "herdr-layout-claude") {
 		throw new Error(
-			`entwurf-v2-visible-resume: the launcher handed a pi-durable resume of ${targetGardenId} a herdr agent-start ` +
-				`handle — nothing was observed or closed${kept}`,
+			`entwurf-v2-visible-resume: the launcher handed a pi-durable resume of ${targetGardenId} a ` +
+				`${launched.handle.rail === "herdr" ? "herdr agent-start" : launched.handle.rail} handle — nothing was observed or closed${kept}`,
 		);
 	}
 	const observation = await observePiDurableAdoption(reservation, deps);
@@ -1115,6 +1148,7 @@ export function renderVisibleResume(
 	const h = result.launch.handle;
 	// The herdr rail has its own coordinates and its own words; the tmux text below stays as it was.
 	if (h.rail === "herdr") return renderHerdrPiResume(result, h, actor);
+	if (h.rail === "herdr-layout-claude") return renderHerdrClaudeResume(result, h, actor);
 	const window =
 		`  runtime:  ${h.runtimePath} (requested start cwd ${h.cwd})\n` +
 		`  window:   ${h.windowId} (index ${h.windowIndex}) in session ${h.sessionId}\n` +
@@ -1241,7 +1275,7 @@ function renderHerdrPiResume(
 ): { text: string; isError: boolean } {
 	if (result.launch.backend !== "pi") {
 		throw new Error(
-			"entwurf-v2-visible-resume: a herdr launch handle arrived on a non-pi resume — only pi has a herdr resume rail",
+			"entwurf-v2-visible-resume: a herdr launch handle arrived on a non-pi resume — only a pi resume renders through the herdr agent-start view",
 		);
 	}
 	const observation = result.observation as ResumeObservationReceipt;
@@ -1265,6 +1299,58 @@ function renderHerdrPiResume(
 				: `OBSERVATION receipt: resume-unobserved — the control socket did not answer within ` +
 					`${observation.waitedMs}ms. The tab is open and visible; read it directly. The lock was ` +
 					`released, nothing was retried, and nothing was closed.`),
+		isError: false,
+	};
+}
+
+/**
+ * The Claude Code resume on the herdr rail (#157 stage 4). The same two receipts as on tmux, kept
+ * apart the same way. The tab and pane are herdr's VIEW; the pane's direct child is herdr's process
+ * report for the pane this call created — the pid the observation joins, never an address.
+ */
+function renderHerdrClaudeResume(
+	result: Extract<VisibleResumeResult, { ok: true }>,
+	h: VisibleResumeHerdrClaudeLaunchHandle,
+	actor: string,
+): { text: string; isError: boolean } {
+	if (result.launch.backend !== "claude-code") {
+		throw new Error("entwurf-v2-visible-resume: a herdr Claude Code launch handle arrived on a non-Claude Code resume");
+	}
+	const target = result.launch.targetGardenId;
+	const observation = result.observation as ReceiverObservationReceipt;
+	const child =
+		"pid" in h.paneChild
+			? `pid ${h.paneChild.pid} (herdr's process report for that pane; a join, not an address)`
+			: `unread — ${h.paneChild.unread}`;
+	const left =
+		"The tab is open and visible; read it directly. The lock was released, nothing was retried, and nothing was closed.";
+	return {
+		text:
+			`[entwurf resume call ↻ herdr]\n` +
+			`  target:   ${target}\n` +
+			`  backend:  claude-code\n` +
+			`  session:  ${result.launch.nativeSessionId}\n` +
+			`  runtime:  ${h.runtime} --resume — herdr resolved the executable, we did not (requested start cwd ${h.cwd})\n` +
+			`  tab:      ${h.herdrTabId} in workspace ${h.herdrWorkspaceId} — a NEW tab from ONE layout.apply, opened without taking focus\n` +
+			`  pane:     ${h.herdrPaneId} — herdr VIEW coordinates, not an address\n` +
+			`  child:    ${child}\n` +
+			actor +
+			`\n` +
+			`LAUNCH receipt: herdr created that tab and was asked to start claude --resume on the session above.\n` +
+			(observation.kind === "receiver-armed"
+				? `OBSERVATION receipt: receiver-armed — a NEW live Claude Code process, the direct child of the pane this ` +
+					`call opened (pid ${observation.ownerPid}), re-armed the receiver marker of ${target} for the same session ` +
+					`after ${observation.waitedMs}ms, with a fresh arm binding the record also carries (same createdAt). ` +
+					`entwurf_v2 fire-and-forget now reaches its mailbox. This call submitted no prompt; the runtime's own ` +
+					`activity after resume (e.g. a doorbell on unread mail) is unmeasured.`
+				: observation.kind === "pane-process-unread"
+					? `OBSERVATION receipt: pane-process-unread — herdr did not report the direct child of the pane this ` +
+						`call opened (${observation.cause}), so no receiver marker could be joined to it and no wait ran. ${left}`
+					: observation.kind === "record-unreadable"
+						? `OBSERVATION receipt: record-unreadable — the record of ${target} could not be read after ` +
+							`${observation.waitedMs}ms: ${observation.cause}. ${left}`
+						: `OBSERVATION receipt: resume-unobserved — no new live receiver marker from the direct child of the pane ` +
+							`this call opened, bound to the record, appeared within ${observation.waitedMs}ms. ${left}`),
 		isError: false,
 	};
 }

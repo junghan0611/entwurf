@@ -35,9 +35,12 @@ import { describe, expect, it } from "vitest";
 import type { HerdrLayoutDeps, HerdrRun, HerdrSocketOutcome, SpawnFn } from "./herdr-fresh-call.ts";
 import {
 	buildHerdrResumeTabCreateArgs,
+	HERDR_CLAUDE_CODE_SOCKET_PATH_HINT,
 	HERDR_PI_DURABLE_RESUME_HINT,
 	HERDR_RESUME_HINT,
 	type HerdrResumeCallResult,
+	herdrClaudeCodeResumeCall,
+	herdrClaudeCodeResumeLaunchOutcome,
 	herdrPiDurableResumeCall,
 	herdrPiDurableResumeLaunchOutcome,
 	herdrResumeCall,
@@ -217,7 +220,7 @@ describe("pre-mutation refusals", () => {
 		);
 	});
 
-	it("[QK:HRESUME-PI-ONLY] a Claude Code target — or any non-pi one — is refused as herdr-resume-backend-unsupported before any herdr call: its observation needs a tmux pane pid this rail does not have", async () => {
+	it("[QK:HRESUME-PI-ONLY] on the agent-start path a Claude Code target — or any non-pi one — is refused as herdr-resume-backend-unsupported before any herdr call: agent start types into the pane's shell, so the pane's direct child would not be the runtime its observation joins", async () => {
 		const claude = scripted([]);
 		const codex = scripted([]);
 		const cc = await herdrResumeCall({ ...PI, backend: "claude-code" }, claude.makeRun, ENV, NAME);
@@ -232,8 +235,9 @@ describe("pre-mutation refusals", () => {
 				claude.bins.length + codex.bins.length === 0,
 		);
 		ok(
-			"its hint says pi only and that nothing went to tmux instead",
-			/pi only/.test(HERDR_RESUME_HINT["herdr-resume-backend-unsupported"]) &&
+			"its hint names the three backends herdr reopens, this path's pi alone, and that nothing went to tmux instead",
+			/reopens pi, pi-durable and Claude Code;/.test(HERDR_RESUME_HINT["herdr-resume-backend-unsupported"]) &&
+				/agent-start path carries pi alone/.test(HERDR_RESUME_HINT["herdr-resume-backend-unsupported"]) &&
 				/nothing was sent to tmux/.test(HERDR_RESUME_HINT["herdr-resume-backend-unsupported"]),
 		);
 	});
@@ -706,13 +710,13 @@ describe("the pi-durable layout resume (#157 B3)", () => {
 		throw new Error("the pi-durable resume never spawns the herdr CLI");
 	}) as unknown as SpawnFn;
 
-	it("[QK:HRESUME-PD-ROUTED] inside herdr a pi-durable resume goes to the layout launch — refused here for the absent socket endpoint the pi path never asks for — while every other backend still reaches the pi-only path; a pi-durable input without its projection is a wiring defect", async () => {
+	it("[QK:HRESUME-PD-ROUTED] inside herdr a pi-durable resume goes to the layout launch — refused here for the absent socket endpoint the pi path never asks for — while a backend herdr does not reopen still reaches the pi-only path; a pi-durable input without its projection is a wiring defect", async () => {
 		const routed = await launchHerdrResume(
 			{ backend: "pi-durable", cwd: CWD, runtimeArgs: PD_ARGS, piDurableAdoptEnv: ADOPT_ENV },
 			ENV,
 			noSpawn,
 		);
-		const claude = await launchHerdrResume({ backend: "claude-code", cwd: CWD, runtimeArgs: [] }, ENV, noSpawn);
+		const claude = await launchHerdrResume({ backend: "codex", cwd: CWD, runtimeArgs: [] }, ENV, noSpawn);
 		let unprojected: unknown = null;
 		try {
 			await launchHerdrResume({ backend: "pi-durable", cwd: CWD, runtimeArgs: PD_ARGS }, ENV_PD, noSpawn);
@@ -720,7 +724,7 @@ describe("the pi-durable layout resume (#157 B3)", () => {
 			unprojected = err;
 		}
 		ok(
-			"pi-durable → herdr-socket-path-missing; claude-code → the pi-only refusal; no projection → throws",
+			"pi-durable → herdr-socket-path-missing; codex → the pi-only refusal; no projection → throws",
 			!routed.ok &&
 				routed.reason === "herdr-socket-path-missing" &&
 				!claude.ok &&
@@ -899,5 +903,148 @@ describe("the pi-durable layout resume (#157 B3)", () => {
 				return !seam.ok && "failure" in seam && seam.failure.rail === "herdr-layout";
 			}),
 		);
+	});
+
+	// ── #157 stage 4: the Claude Code same-id resume, ONE layout.apply + ONE pane.process_info ──
+	describe("the Claude Code layout resume (#157 stage 4)", () => {
+		const CC_ARGS = ["--resume", "0b5e2a4c-1f3d-4e8a-9c7b-2d6f8e1a3c5d"];
+		const CC = { cwd: CWD, runtimeArgs: CC_ARGS };
+		const processInfo =
+			(over: { paneId?: string; shellPid?: unknown; type?: string } = {}): Responder =>
+			(line) => ({
+				kind: "reply",
+				line: JSON.stringify({
+					id: idOf(line),
+					result: {
+						type: over.type ?? "pane_process_info",
+						process_info: {
+							pane_id: over.paneId ?? "w7:p9",
+							shell_pid: "shellPid" in over ? over.shellPid : 424242,
+							foreground_process_group_id: 424242,
+							foreground_processes: [],
+						},
+					},
+				}),
+			});
+
+		it("[QK:HRESUME-CC-LAYOUT-VECTOR] inside herdr a Claude Code resume is routed to ONE layout.apply running `claude` plus the record's argv untouched, at the record's cwd, with exactly the identity scrub as its env — a read before it, ONE process read of the pane it created after it, and nothing else", async () => {
+			const script = socketScript([paneGetOk, layoutOk, processInfo()]);
+			await herdrClaudeCodeResumeCall(CC, ENV_PD, { socket: script.factory }, BASE);
+			const write = script.requests[1] as {
+				method: string;
+				params: { workspace_id: string; focus: boolean; root: Record<string, unknown> };
+			};
+			const read = script.requests[2] as { id: string; method: string; params: { pane_id: string } };
+			ok(
+				"pane.get, layout.apply, pane.process_info on the created pane — three requests on one endpoint",
+				same(script.paths, ["/run/herdr/herdr.sock"]) &&
+					same(
+						script.requests.map((r) => r.method),
+						["pane.get", "layout.apply", "pane.process_info"],
+					) &&
+					read.id === `${BASE}:pane.process_info` &&
+					read.params.pane_id === "w7:p9",
+			);
+			ok(
+				"workspace w7, no focus, the record's cwd, [claude, ...argv] and the scrub alone",
+				write.params.workspace_id === "w7" &&
+					write.params.focus === false &&
+					write.params.root.cwd === CWD &&
+					same(write.params.root.command as unknown[], ["claude", ...CC_ARGS]) &&
+					JSON.stringify(write.params.root.env) === JSON.stringify({ PI_SESSION_ID: "", PI_AGENT_ID: "" }),
+			);
+			const routed = await launchHerdrResume({ backend: "claude-code", cwd: CWD, runtimeArgs: CC_ARGS }, ENV, noSpawn);
+			ok(
+				"the production router sends claude-code to the layout launch (refused here for the absent endpoint), not the pi-only path",
+				!routed.ok && routed.reason === "herdr-socket-path-missing",
+			);
+		});
+
+		it("[QK:HRESUME-CC-PANE-CHILD] the process read yields a join pid only when herdr describes THIS pane with a direct child above 1; another pane, a null child, an error or a lost reply is `unread` with its cause — and the launch is still a receipt, because the tab exists", async () => {
+			const run = async (reply: Responder) =>
+				herdrClaudeCodeResumeCall(CC, ENV_PD, { socket: socketScript([paneGetOk, layoutOk, reply]).factory }, BASE);
+			const good = await run(processInfo());
+			const otherPane = await run(processInfo({ paneId: "w7:p1" }));
+			const exited = await run(processInfo({ shellPid: null }));
+			const failed = await run(errorReply("pane_not_found"));
+			const lost = await run(() => ({ kind: "timeout" }));
+			const child = (r: Awaited<ReturnType<typeof run>>) => (r.ok ? r.receipt.paneChild : null);
+			ok(
+				"pid 424242 from the created pane",
+				good.ok &&
+					JSON.stringify(good.receipt) ===
+						JSON.stringify({
+							runtime: "claude",
+							cwd: CWD,
+							herdrWorkspaceId: "w7",
+							herdrTabId: "w7:t9",
+							herdrPaneId: "w7:p9",
+							paneChild: { pid: "424242" },
+						}),
+			);
+			ok(
+				"four receipts whose paneChild is unread, each with a cause",
+				[otherPane, exited, failed, lost].every((r) => {
+					const c = child(r);
+					return c !== null && "unread" in c && c.unread.length > 0;
+				}) &&
+					/does not describe the pane/.test(JSON.stringify(child(otherPane))) &&
+					/shell_pid null/.test(JSON.stringify(child(exited))) &&
+					/pane_not_found/.test(JSON.stringify(child(failed))) &&
+					/timeout/.test(JSON.stringify(child(lost))),
+			);
+			const seam = herdrClaudeCodeResumeLaunchOutcome(good);
+			ok(
+				"the v2 seam gets its own herdr-layout-claude handle carrying the pid",
+				seam.ok && seam.handle.rail === "herdr-layout-claude" && JSON.stringify(seam.handle).includes('"pid":"424242"'),
+			);
+		});
+
+		it("[QK:HRESUME-CC-FAILURE-SHARED] a refusal or layout failure of the Claude Code launch is the pi-durable layout branch's own word and certainty — a refusal before the write sends nothing, after the write the seam gets the layout's none or unknown, never a process read, and the one shared hint that names a backend names Claude Code", async () => {
+			const zero = socketScript([]);
+			const refused = await herdrClaudeCodeResumeCall(
+				{ ...CC, cwd: "relative" },
+				ENV_PD,
+				{ socket: zero.factory },
+				BASE,
+			);
+			const controlChar = await herdrClaudeCodeResumeCall(
+				{ ...CC, runtimeArgs: ["--resume", "x\u0085"] },
+				ENV_PD,
+				{ socket: zero.factory },
+				BASE,
+			);
+			const noEndpoint = herdrClaudeCodeResumeLaunchOutcome(
+				await herdrClaudeCodeResumeCall(CC, ENV, { socket: zero.factory }, BASE),
+			);
+			const declined = socketScript([paneGetOk, errorReply("workspace_not_found")]);
+			const declinedResult = await herdrClaudeCodeResumeCall(CC, ENV_PD, { socket: declined.factory }, BASE);
+			const seam = herdrClaudeCodeResumeLaunchOutcome(declinedResult);
+			ok(
+				"cwd-not-absolute and herdr-argv-control-character with no socket request",
+				!refused.ok &&
+					refused.reason === "cwd-not-absolute" &&
+					!controlChar.ok &&
+					controlChar.reason === "herdr-argv-control-character" &&
+					zero.requests.length === 0,
+			);
+			ok(
+				"a declined write is the layout's none, tagged herdr-layout, worded as the pi-durable table words it, and no process read follows",
+				!seam.ok &&
+					"failure" in seam &&
+					seam.failure.rail === "herdr-layout" &&
+					seam.failure.recovery.outcome === "none" &&
+					seam.hint.startsWith(HERDR_PI_DURABLE_RESUME_HINT["herdr-layout-apply-refused"]) &&
+					declined.requests.length === 2,
+			);
+			ok(
+				"the one shared word whose hint names a backend names Claude Code here, never pi-durable",
+				!noEndpoint.ok &&
+					noEndpoint.reason === "herdr-socket-path-missing" &&
+					noEndpoint.hint === HERDR_CLAUDE_CODE_SOCKET_PATH_HINT &&
+					/Claude Code's one layout request/.test(noEndpoint.hint) &&
+					!/pi-durable/.test(noEndpoint.hint),
+			);
+		});
 	});
 });

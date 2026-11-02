@@ -54,8 +54,10 @@
  * (V2RESUME-LAUNCH-AWAITED), a herdr handle renders herdr's view and no tmux field
  * (V2RESUME-HERDR-RENDER), a failure after the tab create is its own result
  * (V2RESUME-POST-CREATE-FAILURE-NAMED) whose header claims no more than its recovery
- * (V2RESUME-LAUNCH-FAILED-HEADER-HONEST), and a Claude Code resume never observes on a non-tmux
- * handle (V2RESUME-CC-TMUX-ONLY).
+ * (V2RESUME-LAUNCH-FAILED-HEADER-HONEST), and a Claude Code resume never observes on a handle that
+ * carries no pane direct child (V2RESUME-CC-JOIN-HANDLE-ONLY). #157 stage 4 adds the herdr layout
+ * handle that does carry one: the same join (V2RESUME-CC-HERDR-JOIN), no wait without a pid
+ * (V2RESUME-CC-HERDR-PROCESS-UNREAD), and herdr's own words (V2RESUME-CC-HERDR-RENDER).
  */
 
 import fs from "node:fs";
@@ -76,9 +78,12 @@ import {
 	RESUME_OBSERVE_INTERVAL_MS,
 	RESUME_OBSERVE_TIMEOUT_MS,
 	type ReceiverInspection,
+	type ReceiverObservationReceipt,
 	renderVisibleResume,
 	type VisibleResumeDeps,
+	type VisibleResumeHerdrLayoutLaunchHandle,
 	type VisibleResumeLaunchFailure,
+	type VisibleResumeLaunchHandle,
 	type VisibleResumeLaunchInput,
 	type VisibleResumeLaunchOutcome,
 	type VisibleResumeResult,
@@ -1493,36 +1498,147 @@ describe("a Claude Code citizen", () => {
 		);
 	});
 
-	it("[QK:V2RESUME-CC-TMUX-ONLY] a Claude Code resume handed a non-tmux launch handle fails LOUD instead of watching for a tmux pane pid that does not exist: no observation runs and the lock is still released", async () => {
-		const h = harness({
-			livenessSequence: ["dead"],
-			receiverSequence: [marker("dead"), reattached],
-			resolveIdentity: records(CC)(),
-			launchResult: (cwd) => ({
-				ok: true,
-				handle: {
-					rail: "herdr",
-					requestedKind: "claude",
-					cwd,
-					herdrAgentName: "entwurf-resume-0123456789abcdef",
-					herdrWorkspaceId: "w1",
-					herdrTabId: "w1:t1",
-					herdrPaneId: "w1:p1",
-					herdrTerminalId: "term_1",
-				},
-			}),
+	it("[QK:V2RESUME-CC-JOIN-HANDLE-ONLY] a Claude Code resume handed a launch handle that carries no pane direct child — herdr's agent-start handle, or the pi-durable layout handle — fails LOUD instead of watching for a pid that does not exist: no observation runs and the lock is still released", async () => {
+		const handed = async (handle: VisibleResumeLaunchHandle | VisibleResumeHerdrLayoutLaunchHandle) => {
+			const h = harness({
+				livenessSequence: ["dead"],
+				receiverSequence: [marker("dead"), reattached],
+				resolveIdentity: records(CC)(),
+				launchResult: () => ({ ok: true, handle }),
+			});
+			let thrown: Error | null = null;
+			await visibleResume(GID, h.deps).catch((err) => {
+				thrown = err as Error;
+			});
+			return { h, thrown: thrown as Error | null };
+		};
+		const agentStart = await handed({
+			rail: "herdr",
+			requestedKind: "claude",
+			cwd: CC.cwd,
+			herdrAgentName: "entwurf-resume-0123456789abcdef",
+			herdrWorkspaceId: "w1",
+			herdrTabId: "w1:t1",
+			herdrPaneId: "w1:p1",
+			herdrTerminalId: "term_1",
 		});
-		let thrown: Error | null = null;
-		await visibleResume(GID, h.deps).catch((err) => {
-			thrown = err as Error;
+		const layout = await handed({
+			rail: "herdr-layout",
+			runtime: "/opt/entwurf/run.sh",
+			cwd: CC.cwd,
+			herdrWorkspaceId: "w1",
+			herdrTabId: "w1:t2",
+			herdrPaneId: "w1:p2",
 		});
 		ok(
-			"one launch, then the wiring defect throws by name before any receiver observation, and the lock is released",
-			thrown !== null &&
-				/tmux pane pid/.test(String(thrown)) &&
-				h.launches === 1 &&
+			"each: one launch, then the wiring defect throws by name before any receiver observation, and the lock is released",
+			[agentStart, layout].every(
+				({ h, thrown }) =>
+					thrown !== null &&
+					/the opened pane's direct child/.test(String(thrown)) &&
+					h.launches === 1 &&
+					h.trace.filter((t) => t.startsWith("inspectReceiver")).length === 1 &&
+					h.trace.includes("releaseLock"),
+			),
+		);
+	});
+
+	/** #157 stage 4: herdr's layout handle for a Claude Code resume, reporting `paneChild`. */
+	const herdrClaude =
+		(paneChild: { pid: string } | { unread: string }) =>
+		(cwd: string): VisibleResumeLaunchOutcome => ({
+			ok: true,
+			handle: {
+				rail: "herdr-layout-claude",
+				runtime: "claude",
+				cwd,
+				herdrWorkspaceId: "w7",
+				herdrTabId: "w7:t9",
+				herdrPaneId: "w7:p9",
+				paneChild,
+			},
+		});
+	const HERDR_CHILD = 4242;
+	const herdrReattached = marker("live", HERDR_CHILD, { attachIncarnation: BIND_B });
+
+	it("[QK:V2RESUME-CC-HERDR-JOIN] on herdr the observation is the SAME join as on tmux, against the pane's direct child herdr reported: a new live owner with that pid and a fresh binding the record carries is receiver-armed, and the same marker against another pane's child is never success", async () => {
+		const run = async (pid: string) => {
+			const h = harness({
+				livenessSequence: ["dead"],
+				receiverSequence: [marker("dead"), herdrReattached],
+				resolveIdentity: records(CC)(),
+				launchResult: herdrClaude({ pid }),
+			});
+			return { h, result: await visibleResume(GID, h.deps) };
+		};
+		const joined = await run(String(HERDR_CHILD));
+		const elsewhere = await run(String(PANE_PID));
+		ok(
+			"the herdr child pid joins the new owner → receiver-armed with that pid, launched as claude --resume at the record's cwd",
+			joined.result.ok &&
+				(joined.result.observation as ReceiverObservationReceipt).kind === "receiver-armed" &&
+				(joined.result.observation as { ownerPid: number }).ownerPid === HERDR_CHILD &&
+				joined.h.trace.includes(`launch:${CC.cwd}:--resume ${NATIVE}`),
+		);
+		ok(
+			"a pid that is not the new owner's ends resume-unobserved, released, nothing relaunched",
+			elsewhere.result.ok &&
+				(elsewhere.result.observation as ReceiverObservationReceipt).kind === "resume-unobserved" &&
+				elsewhere.h.launches === 1 &&
+				elsewhere.h.trace.includes("releaseLock"),
+		);
+	});
+
+	it("[QK:V2RESUME-CC-HERDR-PROCESS-UNREAD] when herdr did not report the opened pane's direct child there is nothing to join: the observation is pane-process-unread with herdr's cause at once — no receiver wait, no retry — and the receipt says the tab is open and nothing was closed", async () => {
+		const h = harness({
+			livenessSequence: ["dead"],
+			receiverSequence: [marker("dead"), herdrReattached],
+			resolveIdentity: records(CC)(),
+			launchResult: herdrClaude({ unread: "herdr reported no live direct child for the pane (shell_pid null)" }),
+		});
+		const result = await visibleResume(GID, h.deps);
+		const text = renderVisibleResume(result).text;
+		ok(
+			"pane-process-unread with the cause, zero wait, one receiver read (the dormancy proof), no sleep, lock released",
+			result.ok &&
+				(result.observation as ReceiverObservationReceipt).kind === "pane-process-unread" &&
+				(result.observation as { cause: string }).cause.includes("shell_pid null") &&
+				(result.observation as { waitedMs: number }).waitedMs === 0 &&
 				h.trace.filter((t) => t.startsWith("inspectReceiver")).length === 1 &&
+				!h.trace.some((t) => t.startsWith("sleep")) &&
 				h.trace.includes("releaseLock"),
+		);
+		ok(
+			"rendered: the cause, the open tab, nothing closed",
+			text.includes("OBSERVATION receipt: pane-process-unread") &&
+				text.includes("shell_pid null") &&
+				text.includes("The tab is open and visible") &&
+				text.includes("nothing was closed"),
+		);
+	});
+
+	it("[QK:V2RESUME-CC-HERDR-RENDER] the herdr Claude Code receipt says herdr made a NEW tab with ONE layout.apply, that herdr resolved claude, and which pid it joined — herdr's view coordinates and no tmux window, pane id or runtime path", async () => {
+		const h = harness({
+			livenessSequence: ["dead"],
+			receiverSequence: [marker("dead"), herdrReattached],
+			resolveIdentity: records(CC)(),
+			launchResult: herdrClaude({ pid: String(HERDR_CHILD) }),
+		});
+		const text = renderVisibleResume(await visibleResume(GID, h.deps), { actor: "20261014T212756-68bd94" }).text;
+		ok(
+			"the herdr Claude Code receipt",
+			text.startsWith("[entwurf resume call ↻ herdr]\n") &&
+				text.includes("  backend:  claude-code\n") &&
+				text.includes("herdr resolved the executable, we did not") &&
+				text.includes("w7:t9 in workspace w7 — a NEW tab from ONE layout.apply") &&
+				text.includes(
+					`  child:    pid ${HERDR_CHILD} (herdr's process report for that pane; a join, not an address)`,
+				) &&
+				text.includes("LAUNCH receipt: herdr created that tab and was asked to start claude --resume") &&
+				text.includes(`the direct child of the pane this call opened (pid ${HERDR_CHILD})`) &&
+				/submitted no prompt/.test(text) &&
+				!text.includes("window:") &&
+				!text.includes("%9"),
 		);
 	});
 });
@@ -2077,7 +2193,7 @@ describe("a pi-durable citizen (#157 B3)", () => {
 		);
 	});
 
-	it("pi-durable: a pi-durable launch handed a herdr agent-start handle, or a pi launch handed a layout handle, fails loud as wiring: no observation, the reservation kept, the lock released", async () => {
+	it("pi-durable: a pi-durable launch handed a herdr agent-start or Claude Code layout handle, or a pi launch handed either layout handle, fails loud as wiring: no observation, the reservation kept, the lock released", async () => {
 		const pdAgent = pd({
 			launchResult: (cwd) => ({
 				ok: true,
@@ -2094,6 +2210,21 @@ describe("a pi-durable citizen (#157 B3)", () => {
 			}),
 		});
 		const piLayout = harness({ livenessSequence: ["dead"], launchResult: layoutHandle });
+		// #157 stage 4: the Claude Code layout handle carries a pane child pid neither other resume joins.
+		const claudeLayout = (cwd: string): VisibleResumeLaunchOutcome => ({
+			ok: true,
+			handle: {
+				rail: "herdr-layout-claude",
+				runtime: "claude",
+				cwd,
+				herdrWorkspaceId: "w7",
+				herdrTabId: "w7:t9",
+				herdrPaneId: "w7:p9",
+				paneChild: { pid: "4242" },
+			},
+		});
+		const pdClaude = pd({ launchResult: claudeLayout });
+		const piClaude = harness({ livenessSequence: ["dead"], launchResult: claudeLayout });
 		const thrownOf = async (h: Harness) => {
 			try {
 				await visibleResume(GID, h.deps);
@@ -2104,6 +2235,8 @@ describe("a pi-durable citizen (#157 B3)", () => {
 		};
 		const a = await thrownOf(pdAgent);
 		const b = await thrownOf(piLayout);
+		const c = await thrownOf(pdClaude);
+		const d = await thrownOf(piClaude);
 		ok(
 			"both throw by name, nothing observed, nothing withdrawn, both locks released",
 			a instanceof Error &&
@@ -2115,6 +2248,17 @@ describe("a pi-durable citizen (#157 B3)", () => {
 				piLayout.trace.filter((t) => t === "inspectSocket").length === 1 &&
 				pdAgent.trace.at(-1) === "releaseLock" &&
 				piLayout.trace.at(-1) === "releaseLock",
+		);
+		ok(
+			"the Claude Code layout handle is refused the same way on both: named, the reservation kept, nothing observed, locks released",
+			c instanceof Error &&
+				/herdr-layout-claude handle/.test(c.message) &&
+				/was KEPT/.test(c.message) &&
+				d instanceof Error &&
+				/herdr-layout-claude handle/.test(d.message) &&
+				!pdClaude.trace.some((t) => t.startsWith("observePiDurable") || t.startsWith("withdrawPiDurable")) &&
+				pdClaude.trace.at(-1) === "releaseLock" &&
+				piClaude.trace.at(-1) === "releaseLock",
 		);
 	});
 
