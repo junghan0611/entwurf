@@ -44,12 +44,10 @@
 			"title": "a published-scope region in an operator doc names a package the frozen published manifest does not record, so the 1.4 instructions inside it would be held to a pairing no artifact ships — the doc can no longer prove which published package its install steps belong to",
 			"subject": "docs/setup-clean-host.md",
 			"find": [
-				"<!-- entwurf:published @junghanacs/entwurf@0.50.0 pi 1.4.0 -->",
-				"| Component | Requirement | Needed for |"
+				"The previous package, `0.50.0`, ships the Pi 1.4.0 SDK set and requires Pi <!-- entwurf:published @junghanacs/entwurf@0.50.0 pi 1.4.0 -->"
 			],
 			"replace": [
-				"<!-- entwurf:published @junghanacs/entwurf@0.49.0 pi 1.4.0 -->",
-				"| Component | Requirement | Needed for |"
+				"The previous package, `0.50.0`, ships the Pi 1.4.0 SDK set and requires Pi <!-- entwurf:published @junghanacs/entwurf@0.49.0 pi 1.4.0 -->"
 			],
 			"gate": ["bash", "run.sh", "check-dep-versions"],
 			"timeoutSeconds": 300,

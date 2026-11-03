@@ -1,9 +1,9 @@
 # entwurf
 
-`entwurf` connects independent agent harnesses as visible siblings. Open a fresh sibling, or reopen
-or message an existing one by its **garden id**. Every harness keeps its own runtime,
-authentication, tools and transcript; Entwurf adds identity, delivery, receipts and named
-lifecycle verbs.
+`entwurf` connects independent agent harnesses as visible siblings. Open a fresh sibling, or reopen,
+message or retire an existing one by its **garden id**—retirement only on your explicit request.
+Every harness keeps its own runtime, authentication, tools and transcript; Entwurf adds identity,
+delivery, receipts and named lifecycle verbs.
 
 ![entwurf — a forged screwdriver for visible sibling sessions](docs/assets/entwurf-hero.jpg)
 

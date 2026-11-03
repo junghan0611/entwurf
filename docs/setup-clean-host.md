@@ -23,26 +23,23 @@ evidence split, and its three states must not collapse into "macOS is supported"
 
 ## Requirements
 
-This table and the 1.4-specific install examples below describe the published `@junghanacs/entwurf@0.50.0`, which ships the Pi 1.4.0 SDK set. The #155 0.51.0 preparation at `434874ef6d6e399a0ae6813c850d01c5232eb1d9` pins SDK 1.5.0; its separate validation TGZ was installed in the approved operating window, but is not the still-unpublished final shipping artifact. npm publication requires its own authority. See the [SDK 1.5 boundary](#sdk-15-development-boundary-155) below; these 0.50 instructions do not select or prove 0.51 bytes.
-The previous package, `0.41.0`, ships the Pi 1.3.0 SDK set and requires Pi 1.3.x; the setup guide
-inside that tarball is its contract.
+This table and the install examples below describe the published `@junghanacs/entwurf@0.51.0`, which ships the Pi 1.5.0 SDK set. The validation TGZ installed in #155's operating window before the D1 display repair is an earlier, separate artifact, not the published one; see the [SDK 1.5 boundary](#sdk-15-development-boundary-155) below.
+The previous package, `0.50.0`, ships the Pi 1.4.0 SDK set and requires Pi <!-- entwurf:published @junghanacs/entwurf@0.50.0 pi 1.4.0 -->`>=1.4.0 <1.5`<!-- /entwurf:published -->; the setup guide inside that tarball is its contract.
 
-<!-- entwurf:published @junghanacs/entwurf@0.50.0 pi 1.4.0 -->
 | Component | Requirement | Needed for |
 |---|---|---|
 | Node | **`>=24.0.0`** | package and bridge runtime |
 | npm/pnpm | npm is bundled with Node; pnpm is required for source setup | package or source installation |
 | Python 3 | required by `setup`/`install` (project-path normalization + settings writers); `--help`/`check-bridge` stay Python-free | pi/Claude/agy/Copilot/Codex wiring writers |
 | entwurf | global/project-local `@junghanacs/entwurf`, or a source checkout | operator command and garden capability |
-| pi | optional-by-presence, `>=1.4.0 <1.5` — absent is an explicit setup SKIP, below-floor is a named FAIL | ACP provider, control sockets |
-| Native durable (`pi-durable`) | supplied by the Entwurf package (#130): Entwurf's owned app carrier plus the exact 1.4.0 pi SDK set as production dependencies — setup PASS when they verify, a named FAIL otherwise (never SKIP) | the `entwurf pi-durable` contact; native birth/LIVE on this supply surface is a separate release proof (§2b) |
+| pi | optional-by-presence, `>=1.5.0 <1.6` — absent is an explicit setup SKIP, below-floor is a named FAIL | ACP provider, control sockets |
+| Native durable (`pi-durable`) | supplied by the Entwurf package (#130): Entwurf's owned app carrier plus the exact 1.5.0 pi SDK set as production dependencies — setup PASS when they verify, a named FAIL otherwise (never SKIP) | the `entwurf pi-durable` contact; native birth/LIVE on this supply surface is a separate release proof (§2b) |
 | Claude Code | optional, **`>=2.1.306`** — the exec-form hook floor | Claude ACP auth/runtime and mailbox-backed native citizen |
 | GitHub Copilot CLI | optional-by-presence, operator-installed and authenticated — absent is an explicit setup SKIP; detected composes all four units (birth/MCP/receiver/footer) | self-fetch citizen and visible fresh |
 | OMP (`omp`) | optional-by-presence, operator-installed — absent is an explicit setup SKIP; detected composes all four units (birth/MCP/`tools.xdev` setting/receiver) | self-fetch citizen and visible fresh (accepted on one host — see §4b) |
 | Antigravity `agy` | optional, operator-installed and authenticated | legacy citizen; native push paused (#152) |
 | OpenAI Codex CLI | optional-by-presence, operator-installed and authenticated; detected composes all four operator-owned units (birth/MCP/status-line/terminal-title) and stays non-green until the operator trusts the birth declaration once in a visible Codex; visible fresh also requires the operator-owned app-server, started with `entwurf codex-app-server` in a tmux session of the operator's choosing (#95 D1 retired the fixed `codex` home) | native-push and visible fresh, supported in 0.21.0 |
 | Cortex Code | optional, operator-installed and authenticated | Cortex ACP backend |
-<!-- /entwurf:published -->
 
 Claude Code >=2.1.306 is required for the managed exec-hook lifecycle and same-id resume. The package
 never supplies or proxies backend credentials.
@@ -85,7 +82,7 @@ node --version
 npm --version
 ```
 
-The two npm forms below install the **published** package, `0.50.0` (Pi 1.4.x, the Pi 1.4.0 SDK
+The two npm forms below install the **published** package, `0.51.0` (Pi 1.5.x, the Pi 1.5.0 SDK
 set). The [product entry](../README.md#install)'s unpinned `npm install -g @junghanacs/entwurf`
 takes whichever version npm's `latest` dist-tag names; pin `@<version>` as below when you mean the
 exact artifact the [Requirements](#requirements) table describes.
@@ -94,7 +91,7 @@ Global install is simplest when native harnesses should find stable bins from ev
 working directory:
 
 ```bash
-npm install -g @junghanacs/entwurf@0.50.0
+npm install -g @junghanacs/entwurf@0.51.0
 entwurf --help
 entwurf setup /path/to/your-project
 entwurf check-bridge
@@ -105,7 +102,7 @@ A project-local installation is also supported:
 ```bash
 mkdir -p ~/entwurf-smoke && cd ~/entwurf-smoke
 npm init -y
-npm install --save-dev @junghanacs/entwurf@0.50.0
+npm install --save-dev @junghanacs/entwurf@0.51.0
 npx entwurf setup .
 npx entwurf check-bridge
 ```
@@ -115,7 +112,7 @@ project-local install, or `./run.sh <command>` from a source checkout. Keep that
 same scope when upgrading and checking; native process restarts are separate (§7).
 
 `check-bridge` is auth-free. It proves the installed prebuilt MCP server boots and
-lists the nine garden tools (0.50.0); it does not prove a backend model turn, native hook or retirement permission.
+lists the nine garden tools (0.51.0); it does not prove a backend model turn, native hook or retirement permission.
 
 Neither npm form installs a harness runtime. `pi`, Claude Code, Copilot CLI, Codex CLI, agy,
 Cortex, and their authentication remain operator-owned optional prerequisites for the
@@ -226,13 +223,12 @@ physical-Darwin receipt. `entwurf install` may write `.pi/settings.json`
 on Darwin; that is wiring, not a rail receipt. If `pi` is on PATH,
 `setup` names the pi row FAIL with the §1 Darwin wording.
 
-Install the exact release floor, then wire the project. The previous 0.41.0 instead takes the
-Pi 1.3.x its own setup guide names. A source checkout passes its checkout path to `-e` in place of
+Install the exact release floor, then wire the project. The previous 0.50.0 instead takes the
+Pi 1.4.x its own setup guide names. A source checkout passes its checkout path to `-e` in place of
 the global package root:
 
-<!-- entwurf:published @junghanacs/entwurf@0.50.0 pi 1.4.0 -->
 ```bash
-npm install -g @earendil-works/pi-coding-agent@1.4.0
+npm install -g @earendil-works/pi-coding-agent@1.5.0
 pi --version
 
 cd ~/entwurf-smoke
@@ -240,11 +236,10 @@ entwurf install .
 pi -e "$(npm root -g)/@junghanacs/entwurf" --list-models entwurf
 ```
 
-The supported range is `>=1.4.0 <1.5`. It is a hard minimum: installing this
+The supported range is `>=1.5.0 <1.6`. It is a hard minimum: installing this
 release onto a 0.83.x pi host upgrades the runtime rather than keeping the older
 minor. A host using only the external MCP bridge can skip pi until it needs a
 control socket; no delivery rail launches a pi process.
-<!-- /entwurf:published -->
 
 For daily garden-native pi sessions:
 
@@ -263,7 +258,7 @@ A plain `pi` can load the package without becoming a citizen.
 In that session ask for `entwurf_self`, then `entwurf_peers`. Pick an existing
 live garden id and ask for `entwurf_v2` with `intent: "fire-and-forget"` and your
 message. These are harness tools, not shell subcommands; pi exposes them through
-Pi's built-in MCP as `mcp__entwurf_bridge__<verb>`. The 0.50.0 bridge has nine tools;
+Pi's built-in MCP as `mcp__entwurf_bridge__<verb>`. The 0.51.0 bridge has nine tools;
 pi hides `entwurf_inbox_read` and `entwurf_register_native`, leaving seven active.
 The added `entwurf_retire_call` is only for one target/action explicitly requested by the
 human operator, never autonomous cleanup. Where a host provides or is configured with an approval
@@ -348,11 +343,11 @@ by `entwurf pi` or by registering ordinary Pi's adapter.
 
 What the Entwurf package supplies:
 
-1. **The pi SDK set** — in the 0.51.0 prepared checkout, `@earendil-works/{pi-coding-agent, pi-ai, pi-tui, pi-agent-core,
+1. **The pi SDK set** — in 0.51.0, `@earendil-works/{pi-coding-agent, pi-ai, pi-tui, pi-agent-core,
    pi-durable, chord, pi-mcp, pi-codemode, pi-telemetry, pi-schema}` at exactly `1.5.0`, plus
    `proper-lockfile`, as Entwurf's own production dependencies. The authoritative current set is
    the [SDK pin](../pi/pi-durable/overlay/upstream-pin.json) and [package manifest](../package.json);
-   for this candidate, model data rides `@earendil-works/pi-ai@1.5.0`, not a catalog copy.
+   model data rides `@earendil-works/pi-ai@1.5.0`, not a catalog copy.
 2. **The native app/TUI carrier** — upstream does not publish the experimental durable
    app (`pi-coding-agent` excludes `dist/experimental`; `pi-durable` on npm is the
    library). Entwurf owns the six app files as canonical source (`pi/pi-durable/src`,
@@ -377,7 +372,7 @@ carrier file, the license, the resolver and its relocation grammar are present
 (`pi-durable-carrier-drift`); every declared SDK package resolves from the carrier
 (`pi-durable-sdk-absent`); and every reachable physical edge — from the carrier to each package,
 and from every package copy it reaches, at any depth, to its own `@earendil-works` dependencies —
-lands on a package of the declared name at exactly the pinned version (`pi-durable-sdk-mismatch`). The members' declarations are exact in the prepared 1.5.0 set; even so, the physical package each import binds must be checked. Sharing
+lands on a package of the declared name at exactly the pinned version (`pi-durable-sdk-mismatch`). The members' declarations are exact in the 1.5.0 set; even so, the physical package each import binds must be checked. Sharing
 one copy with an aligned host install of the same version is an ordinary layout. A mixed
 tree (for example an override that binds pi-durable's `pi-ai` to an older published version) still
 *imports* — which is why the edge check exists — and is refused by name.
@@ -459,7 +454,7 @@ tree (for example an override that binds pi-durable's `pi-ai` to an older publis
   manifest field; it is a known constraint of supplying both from one package, accepted for 0.32,
   not a claim that every load path is harmless.
 
-The ordinary Pi CLI on PATH is a separate subject (§2, range <!-- entwurf:published @junghanacs/entwurf@0.50.0 pi 1.4.0 -->`>=1.4.0 <1.5`<!-- /entwurf:published -->): a host Pi is
+The ordinary Pi CLI on PATH is a separate subject (§2, range `>=1.5.0 <1.6`): a host Pi is
 not needed to run pi-durable, and a host inside the range need not be the same copy as the
 carrier's. Native Pi owns credentials, model settings and durable SQLite sessions; keep them
 in place rather than copying credentials or migrating ordinary Pi transcripts. Native
@@ -472,11 +467,11 @@ proof ([#130](https://github.com/junghan0611/entwurf/issues/130)).
 
 ### SDK 1.5 development boundary (#155)
 
-The published 0.50.0 / SDK 1.4.0 instructions above and the #155 SDK 1.5 development
-candidates are distinct subjects. Synthetic migration and downgrade-refusal fixtures on `0408a66`
-did not authorize an operating first write. A separately approved 1.5 operating window and Native
-LIVE were later measured as described below; neither makes the validation TGZ the final release
-artifact. Installing an older package is not a data rollback. Follow the current evidence in
+The instructions above describe the published 0.51.0, which ships the SDK 1.5.0 set; the #155 SDK
+1.5 development candidates that preceded it were distinct subjects. Synthetic migration and
+downgrade-refusal fixtures on `0408a66` did not authorize an operating first write. A separately
+approved 1.5 operating window and Native LIVE were later measured as described below; neither made
+the validation TGZ the published artifact. Installing an older package is not a data rollback. Follow the current evidence in
 [#155](https://github.com/junghan0611/entwurf/issues/155), not the 1.3→1.4 receipt below.
 
 ### Default radius for a requested Pi SDK upgrade
@@ -773,7 +768,7 @@ as a note rather than a fault.
 
 **entwurf sets no OMP version floor in code, and will not grow one on schedule.** Detection is
 presence-only (`command -v "${OMP_BIN:-omp}"`); there is no `entwurf.ompFloor`, no coherence
-gate, and no exact pin — unlike Node (`engines.node`), pi (<!-- entwurf:published @junghanacs/entwurf@0.50.0 pi 1.4.0 -->`>=1.4.0 <1.5`<!-- /entwurf:published --> for published 0.50.0) and Claude Code
+gate, and no exact pin — unlike Node (`engines.node`), pi (`>=1.5.0 <1.6`) and Claude Code
 (`entwurf.claudeCodeFloor`), each of which has an enforcement point. That asymmetry is a
 decision, not an omission. A floor is the answer to a vendor that fails SILENTLY — Claude Code
 earned one because an older binary validates the exec manifest, drops `args` at runtime, and
