@@ -476,6 +476,20 @@ installing an older package is not a data rollback. Follow the current evidence 
 conditions in [#155](https://github.com/junghan0611/entwurf/issues/155), not the 1.3→1.4
 receipt below as proof of a 1.5 migration.
 
+### Default radius for a requested Pi SDK upgrade
+
+**[Decision, 2026-11-03 (#155)](https://github.com/junghan0611/entwurf/issues/155#issuecomment-6595580400): reuse existing native authentication; do not make a fresh login or credential copy the default upgrade prerequisite.** An upgrade request selects this method without another authentication-strategy questionnaire. It does not authorize an immediate operating cutover, autonomous retirement, or publication.
+
+The measured precedent is [#148's pre-cutover hold](https://github.com/junghan0611/entwurf/issues/148#issuecomment-6342034678) and [its actual Pi 1.4 operating reattachment](https://github.com/junghan0611/entwurf/issues/148#issuecomment-6348113761): isolated package/SDK checks first; no authentication-copy or mixed host/extension workaround; then normal owner exit, a consistent complete durable-session file-set backup, coherent candidate installation/takeover, same-identity reattachment and actual turns/round trips. Native aggregate acceptance followed the coherent installation. These are historical receipts, not evidence for the next SDK.
+
+- **Proceed within the requested upgrade:** inspect upstream changes; isolate the development checkout from stable operating runtimes; pin the coherent SDK set; run private, authentication-free fixtures, focused checks, review and the required floors. Prepare the exact candidate, shutdown/reopen commands and backup manifest before the operating window.
+- **Reuse at the coherent operating boundary:** the native harness uses its existing account/subscription authentication in its ordinary location. Its normal same-account token refresh is not a reason to demand another login. Entwurf does not extract, print, copy, transplant or proxy credentials, and does not introduce an auth-path shim. Keep the selected subscription/provider rail; no account, endpoint, scope or billing-rail substitution is implied.
+- **Still coordinate the human-owned lifecycle window:** identify the exact operating owners and obtain the requested normal shutdown; prove old-owner exit and preserve the complete session directory consistently, including WAL/SHM, before the newer SDK opens operating data. Verify candidate, host, extension, bridge and SDK coherence, then reopen the same identities and measure actual model/tool/round-trip behavior. Authentication reuse is the default method, not permission to skip these gates or to force-close a working citizen.
+- **Do not invent a pre-cutover exception:** if a real-model test cannot use the approved isolated surface without touching operating auth/data, defer it to that operating window. A separate private login or operating-agent-directory experiment is optional and needs a specific request; neither is a recurring prerequisite. Record the missing model/TUI evidence rather than claiming scripted S/H proves it.
+- **Stop and report a real exception:** expired/revoked authentication needing login, changed account/permissions/endpoint or an unmeasured new external transfer, ownership conflict, inconsistent backup, unexpected write, or unknown result. No blind retry or automatic data rollback; downgrading the package does not undo a newer document write.
+
+Push, release/tag/npm publication and retirement of any other citizen retain their separate authorization boundaries. This decision fixes the repeatable method; it does not pre-authorize those actions.
+
 ### Moving durable sessions from the Pi 1.3 SDK to 1.4
 
 0.41.1, 0.41.2, 0.45.0 and 0.50.0 are published on the 1.4.0 SDK set; moving a live host onto any of them
