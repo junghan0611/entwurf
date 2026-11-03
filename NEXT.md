@@ -1,28 +1,23 @@
-# NEXT — 0.51.0 core 출하 / Herdr npm 정합 검증 완료
+# NEXT — #155 종결 / 0.51.0 출하와 설치 인계 교훈
 
 # RAIL — 현재 좌표
 
-- [x] **1. Core 출하.** `v0.51.0` = `32c31ea`; exact-SHA CI4, Windows carrier TGZ·동일 파일 Linux 수용, GitHub Release 및 인간 npm 게시 완료.
-- [x] **2. Registry 수용.** 원 U0 기준 latest0.51.0/repair0.12.8-repair.1 보존. registry TGZ=accepted TGZ, private consumer668files/curated7models 확인.
-- [x] **3. Herdr source 정합.** npm runtime pin/SRI·manifest0.51.0·Pi1.5 안내·README retire, 독립 검수와 affected5 PARTIAL/FULL 수용. GitHub description도 수정했다.
-- [ ] **4. 후속 측정/운영 선택.** ← CURRENT: 현재 main의 exact-SHA push CI4를 확인한다. public-ref Herdr journey·plugin snapshot/tag/Release·운영 설치/재시작은 별도 요청이며 미실행이다.
+- [x] **1. Core 출하.** `v0.51.0`=32c31ea, Windows-carrier TGZ·동일 파일 Linux 수용·인간 npm 게시·registry consumer 확인 완료.
+- [x] **2. Herdr source 정합.** ce5a720에 npm0.51.0 pin/SRI·manifest·Pi1.5 안내·README retire 반영, exact-push CI4 성공.
+- [x] **3. #155 종결/교훈 기록.** 이슈의 최신 판정·§5 교훈을 채워 닫았다. ThinkPad의 승인 대기/미설치 인계와 별도 승인 후 동일 ID 복귀는 CHANGELOG 및 설치 문서에 기록했다.
+- [ ] **4. 다음 요청.** ← CURRENT: 새 구현 작업 없음. public-ref Herdr journey·plugin snapshot/tag·Oracle 운영 설치/재시작은 별도 요청이다.
 
 # NOW
 
-- **다음 한 행동:** 현재 main SHA의 push CI4를 읽어 source landing 상태를 확인한다. public-ref 수용을 요청받으면 `VERIFY.md`와 plugin README의 named `smoke-herdr-raw-install-live --ref main` 계약부터 읽는다. private build-runner proof를 public-ref 설치 성공으로 승격하지 않는다.
-- **Source owner:** npm runtime/플러그인 버전은 `plugins/herdr/{runtime-lock.json,herdr-plugin.toml}`, 설치/동일-source rebind/explicit source-switch는 plugin README가 소유한다. unversioned install은 실행 시 ref의 lock을 따른다. core tag/TGZ/npm 바이트는 이 후속 작업으로 바뀌지 않는다.
-- **운영 경계:** 기존 GR208e는 D1 이전 validation TGZ다. source/npm 출하가 기존 시민의 loaded bytes를 바꾸지 않는다. 운영 설치·deactivate/activate·정상 종료/동일-id 재개는 별도 인간 결정이다. 임의 retirement/kill/NativeDB open·lock 수선/새 login·credential 복사0.
+- **다음 한 행동:** 새 작업을 시작하기 전에 현재 main과 exact-SHA CI를 읽는다. 운영 전환을 요청받으면 [SDK upgrade radius](docs/setup-clean-host.md#default-radius-for-a-requested-pi-sdk-upgrade)의 owner 종료·일관 전체 백업·설치 결과·SDK 정합·동일 ID 재개 조건부터 확인한다. 설치 창 준비나 소스 pull을 설치 완료로 읽지 않는다.
+- **설치 인계:** 승인 대기 여부를 인계 맨 앞에 쓴다. 준비한 스크립트/재개 명령의 존재는 실행 증거가 아니다. 설치 exit0와 carrier/SDK 정합 확인 후에만 재개를 준비 완료로 안내한다. 자동 Enter·설치·takeover로 인간의 승인 창을 건너뛰지 않는다.
+- **호스트 분리:** ThinkPad coordinator의 result.exit0/41파일 일관 백업/SDK1.5 물리edge27/같은 garden·native ID 복귀는 그 호스트가 전달한 측정이다. Oracle GR208e는 D1 이전 validation 설치인 채로다. Source/npm 출하가 기존 시민의 loaded bytes를 바꾸지 않는다. ThinkPad에서도 50개 초과 active 표시/conversation-switch UI는 별도 재측정하지 않았다.
 
-# RECENT — 2026-11-04 receipts
+# 원자료 / 정리 원칙
 
-- **출하:** [core Release](https://github.com/junghan0611/entwurf/releases/tag/v0.51.0), [exact32c31ea CI4](https://github.com/junghan0611/entwurf/actions/runs/41704213407), [Windows producer](https://github.com/junghan0611/entwurf/actions/runs/41706422290). Accepted TGZ SHA256 `04fcce26d0a6dec8b8bb9a7f14a843eee0defb313aedafa34080600853d36e4d`,11710142B; registry 실물과 byte-identical. 원 U0 pre-latest0.50.0/pre-repair0.12.8-repair.1에서 post-latest0.51.0/repair동일을 측정했다.
-- **Herdr private n=1:** registry-installed helper로 realnpm0.50→0.51 swap/compiled bridge/3 executable bins/9verbs/668files/idempotence/inverse. 별도 root의 seeded torn-state 복구(실kill 아님), private build-runner activation/inverse(Herdr plugin registry/public-ref journey 아님)를 확인했다. U3consumer는 동일 registry bytes의 기존 receipt를 인용했다.
-- **검수:** Fable→README amendment→Astra→코디, 각 scope에서0Blocker/0Defect. old0.50/SDK1.4 frozen oracle와 gate/SDK/helper source는 불변이며 mutant find만 자연스러운 역사 문장으로 re-point했다.
-- **최종6파일 후보:** HEAD32c31ea+binary diff `847f63356b93dbaaf07d8a5d5f820885169a5ed367fc75d3bd89b3cb780d6b74`. fresh focused, exact argv `["bash","run.sh","check-dep-versions"]` PARTIAL5/5 KILLED/ownQK/controlsok/originpure(나머지1508 미실행), frozen FULL963s rc0/tee0. FULL logSHA `ac5bf3e850422c362b16547790ae676a4c3c5d7855b512bca9234bc45a723835`, 전후 seal 동일. **이 NEXT는 FULL 후 handoff bookkeeping이며, 7파일/새 commit SHA에서 FULL을 재실행했다고 주장하지 않는다.**
-- **원 RED 보존:** postpublish seal 후 마지막203B를 append한 wrapper 순서 문제는27OK/1FAIL로 남겼다. prefix hash 일치와 별도 correction `394becc3371c384fa96554b53e82c5a50cda8721424f54b21cedd2cd276d51cd`/7277B/31hash로 결속했다. 원 manifest/log/exit는 덮지 않았고 재U2U3/재설치/재게시0이다.
-
-# 읽을 곳 / 가드
-
-- `plugins/herdr/README.md`, `VERIFY.md:108–112`, `CHANGELOG.md`0.51.0, [#155](https://github.com/junghan0611/entwurf/issues/155). 원 실행은 `/tmp/i155/make-051/{herdr-proof,herdr-focused5,herdr-floor,review}/`; registry 원자료는 `~/.local/state/entwurf-releases/0.51.0-32c31ea16487/postpublish.oSdxz1/`. host-local receipt를 다른 host에서 읽을 수 있다고 가정하지 않고 위 hash와 범위를 함께 전달한다.
-- private 복귀점은 `~/.local/state/entwurf-preparations/155/RESTART.md`와 A의MAKE-STATUS. 옛 main NEXT는 git 이력(32c31ea)과 같은 private dir에, 미커밋 branch NEXT는 private `NEXT-herdr-branch-final-20261104.md`에만 보존했다.
-- Offline는 private HOME/PI/XDG/runtime, TMPDIR=/tmp, pnpm/npm verify-deps=error, noCI. 첫 예상 밖 RED는 원 exit/log/seal 보존 STOP, blind retry/unsafe hook bypass/whole qualification BODY0. P9는read-only, records/transcripts/DB/receipt/fixture의 일괄 삭제0.
+- [#155 closed](https://github.com/junghan0611/entwurf/issues/155), [core Release](https://github.com/junghan0611/entwurf/releases/tag/v0.51.0), [core32 CI4](https://github.com/junghan0611/entwurf/actions/runs/41704213407), [Windows producer](https://github.com/junghan0611/entwurf/actions/runs/41706422290), [Herdr ce5 CI4](https://github.com/junghan0611/entwurf/actions/runs/41728277499). 출하 TGZ SHA256 `04fcce26d0a6dec8b8bb9a7f14a843eee0defb313aedafa34080600853d36e4d`,11710142B이며 registry 실물과 동일하다. Core tag/npm 바이트는 마감 문서 갱신으로 바뀌지 않는다.
+- 재사용 가능한 기술·출하·후속 Herdr·설치 인계 기록은 `CHANGELOG.md`0.51.0 및 `docs/setup-clean-host.md`가 소유한다. 앞선6파일 후보의 local FULL963s/affected PARTIAL5/5와 뒤의 문서 bookkeeping/각 push CI를 구분한다. Whole qualification BODY를 재실행하거나 이전 후보 receipt를 새 SHA 수용으로 승계하지 않는다.
+- Host-local 원본은 `~/.local/state/entwurf-releases/`와 `~/.local/state/entwurf-preparations/155/`에 보존한다. 청소·archive 검증·퇴근의 실제 경계/원실패/후속 보정은 후자의 `closeout/` 원영수증에서 읽는다. `/tmp/i155` 원 경로의 존재를 전제하지 않는다. 증거를 건넬 때 핵심 hash와 판정을 함께 붙인다.
+- 기존 대화/records/native DB/일관 백업과 유일 accepted TGZ/U0는 삭제하지 않는다. 의존성 payload나 test scratch도 명시한 소유 목록과 holder를 확인하고, 기억을 포함하면 검증된 archive를 먼저 둔다. tar가 담지 못하는 죽은 UNIX socket의 정확한 metadata 예외는 별도 sidecar에 남기며 regular-file bytes를 제외하지 않는다. 보존 대상 readonly 증거의 권한은 바꾸지 않는다. 검증된 archive에 bytes와 원 mode를 보존한 뒤 회수하기로 명시한 test scratch는, 승인된 정확한 디렉터리에 한해 unlink에 필요한 owner-write를 허용한다. 이는 canonical 산물·운영 자료·archive의 권한 변경 허가가 아니다.
+- `team.json`은 gitignored 인간용 책갈피다. 퇴근 후에도 항목을 남기며 garden/native ID·backend·cwd는 현재 owner facts가 우선한다. 명부에 생존 상태나 전송/재개/퇴근 권한을 저장하지 않는다. 이번 다섯 target의 사용자 요청과 단일 retire-call 결과는 private closeout 기록으로 보존한다.
+- Offline는 private HOME/PI/XDG/runtime·TMPDIR=/tmp·verify-deps 두 설정error·noCI. 첫 예상 밖 실패는 원문 보존 STOP. blind retry/unsafe hook bypass/타 리포·운영 tmux·DB·credential 수선·임의 kill0. Quarantine 등 별도 보호 자료는 열거나 청소하지 않는다.
