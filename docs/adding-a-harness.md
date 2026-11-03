@@ -656,13 +656,12 @@ with fresh-only model/width/bootstrap arguments must refuse before opening; it s
 not a record-targeted session. Model resolution failure must prevent citizen birth, but may leave
 native allocation whose cleanup remains upstream-owned. All four preflight capabilities, compiled
 consumer proof, callback before the task, exact nonce, visible LIVE and release stops remain binding.
-Since #130 the same mapping and the same narrow boundary run on the installed carrier (owned source since #141, SDK set 1.3.0), whose
-pin authority is `pi/pi-durable/overlay/upstream-pin.json`. The mapping alone is not admission and
+Since #130 the same mapping and the same narrow boundary run on the installed carrier (owned source since #141), whose
+SDK pin authority is `pi/pi-durable/overlay/upstream-pin.json`. The mapping alone is not admission and
 not a waiver: 0.31.0 shipped pi-durable's admission on the operator source-runtime route, and the
 0.32 carrier's own frozen b220 supply floor (FULL, qualification, required aggregate vendor LIVE)
 was accepted 2026-10-08 ([#130 receipt](https://github.com/junghan0611/entwurf/issues/130#issuecomment-6043744944)).
-Prepared-SHA CI and preserved versioned-artifact acceptance remain separate. No carrier green is
-inherited from 0.31.
+The prepared-SHA CI and preserved versioned-artifact acceptance were separate from that candidate receipt; the 0.32.0 release record owns their results. No carrier green is inherited from 0.31.
 
 A backend the composition can open must appear as the same fixed set on every public surface
 that offers `entwurf_fresh_call` — the MCP bridge (which a pi session also reaches, through Pi's

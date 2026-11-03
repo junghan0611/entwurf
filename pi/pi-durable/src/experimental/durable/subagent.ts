@@ -1,5 +1,5 @@
 import type { Context } from "@earendil-works/chord";
-import { type AssistantMessage, Type } from "@earendil-works/pi-ai";
+import type { AssistantMessage } from "@earendil-works/pi-ai";
 import {
 	AssistantEntry,
 	configure,
@@ -10,6 +10,7 @@ import {
 	type ToolExecutionApi,
 	type ToolExecutionResult,
 } from "@earendil-works/pi-durable";
+import { obj, str } from "@earendil-works/pi-schema";
 
 async function answerText(api: ToolExecutionApi, answer: EntryId, context: Context): Promise<string> {
 	const entry = await api.commit((tx) => tx.entry(AssistantEntry, answer), context);
@@ -29,7 +30,9 @@ export const Subagent: Extension = defineExtension({
 			name: "subagent",
 			description:
 				"Delegate a self-contained task to a subagent with the same tools and get its answer back. Give it everything it needs to know; it does not see this conversation.",
-			parameters: Type.Object({ task: Type.String({ description: "What the subagent should do" }) }),
+			// pi-ai 1.5 no longer exports TypeBox's `Type`; pi-schema builds the same JSON Schema. `open` keeps the input
+			// as open as the TypeBox object was, since `obj()` alone closes it (SDK 1.5's own tools do the same, #155).
+			parameters: obj({ task: str({ description: "What the subagent should do" }) }, { open: true }),
 			// A rerun after a crash finds the child it created and the submission it made.
 			replay: "safe",
 			execute: async (args, api, context) => {

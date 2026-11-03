@@ -25,7 +25,7 @@
  *   - R5: taxonomy covers the table reasons + pre-claims bad-target /
  *     target-locked (so bucket B F2 won't reopen it), and
  *     is PRE-DISPATCH only (no send-fail-fallback member).
- *   - schema ↔ types drift guard: the TypeBox input/receipt property keysets and
+ *   - schema ↔ types drift guard: the pi-schema input/receipt property keysets and
  *     the StringEnum members match the hand-written contract constants.
  */
 
@@ -82,7 +82,7 @@ function eq(label: string, actual: unknown, expected: unknown): void {
 }
 
 // Pull the literal members out of a StringEnum / Optional(StringEnum) schema,
-// whichever shape typebox emits — so the schema↔const drift guard is real.
+// whichever shape the schema builder emits — so the schema↔const drift guard is real.
 function enumValues(schema: unknown): string[] {
 	const s = schema as { enum?: unknown[]; anyOf?: { const?: unknown }[] };
 	if (Array.isArray(s?.enum)) return s.enum.map(String);
@@ -626,8 +626,8 @@ ok(
 	!("action" in rej) && !("transport" in rej) && !("ownership" in rej),
 );
 eq("receipt.reject.reason enum === ENTWURF_V2_REJECT_REASONS", enumValues(rej.reason), [...ENTWURF_V2_REJECT_REASONS]);
-// ？6: reject.observedLiveness is a required-nullable union — Type.Union([StringEnum
-// (FACT_LIVENESSES), Type.Null()]) — NOT Optional and NOT a bare StringEnum. The
+// ？6: reject.observedLiveness is a required-nullable union — union([StringEnum
+// (FACT_LIVENESSES), nul()]) — NOT Optional and NOT a bare StringEnum. The
 // key is always present (required), the value may be a 4-value liveness OR null.
 const rejLiveness = rej.observedLiveness as { anyOf?: { type?: string }[] };
 eq("？6: receipt.reject.observedLiveness is a 2-branch union (liveness | null)", rejLiveness.anyOf?.length, 2);

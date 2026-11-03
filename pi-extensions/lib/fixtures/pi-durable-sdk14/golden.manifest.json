@@ -1,0 +1,311 @@
+{
+	"schemaVersion": 1,
+	"subject": "pi-durable SQLite storage written by SDK 1.4.0 mid-run (pi.live version 1, pi.generation version 1, pi.tool version 2), restored by pi-durable-sdk14-migration.test.ts and opened by the root SDK 1.5",
+	"generator": "generate.mjs (run it with --sdk14-root, --sdk15-root and --out; see its header)",
+	"sdk": {
+		"package": "@earendil-works/pi-durable",
+		"version": "1.4.0",
+		"siblings": {
+			"@earendil-works/chord": "1.4.0",
+			"@earendil-works/pi-ai": "1.4.0"
+		},
+		"distDigest": {
+			"files": 336,
+			"sha256": "1317a7d5a36b3278bd036b0657e0203c8a537c92adb6cd7a34b0d59ea7cc29c9"
+		}
+	},
+	"rollbackSdk": {
+		"package": "@earendil-works/pi-durable",
+		"version": "1.5.0",
+		"siblings": {
+			"@earendil-works/chord": "1.5.0",
+			"@earendil-works/pi-ai": "1.5.0"
+		},
+		"distDigest": {
+			"files": 384,
+			"sha256": "a3b1ef77394e788a3b72cfa8836bdcd7f3408b716bcc56e4f8ea8e14f2824784"
+		}
+	},
+	"scenarios": {
+		"close": {
+			"file": "sdk14-close.sql",
+			"sha256": "5350b9c1537a960a2c0bb2636900071725efd47d1f2a7826fef0479d7d62e4fb",
+			"stored": {
+				"schemaVersion": 2,
+				"documents": {
+					"pi.agent": [1],
+					"pi.inbox": [1],
+					"pi.live": [1],
+					"pi.provider": [1],
+					"pi.usage": [1]
+				},
+				"tasks": [
+					{
+						"kind": "pi.generation",
+						"version": 1,
+						"status": "terminal"
+					},
+					{
+						"kind": "pi.compaction",
+						"version": 1,
+						"status": "terminal"
+					},
+					{
+						"kind": "pi.generation",
+						"version": 1,
+						"status": "waiting"
+					},
+					{
+						"kind": "pi.tool",
+						"version": 2,
+						"status": "pending"
+					},
+					{
+						"kind": "pi.compaction",
+						"version": 1,
+						"status": "pending"
+					}
+				]
+			},
+			"live14": {
+				"compactionFailure": {
+					"taskId": 12,
+					"reason": "manual",
+					"error": "Summarization failed: SDK14-COMPACTION-REFUSED"
+				},
+				"run": {
+					"taskId": 15,
+					"inputs": [14]
+				},
+				"tools": [
+					{
+						"callId": "sdk14-call",
+						"name": "sdk14_hold",
+						"taskId": 17,
+						"status": "running"
+					}
+				],
+				"compactions": [
+					{
+						"taskId": 18,
+						"reason": "manual",
+						"blocking": false,
+						"attempt": 1
+					}
+				]
+			},
+			"tasks14": [
+				{
+					"kind": "pi.tool",
+					"version": 2,
+					"state": "ready",
+					"migrates": false
+				},
+				{
+					"kind": "pi.compaction",
+					"version": 1,
+					"state": "ready",
+					"migrates": false
+				},
+				{
+					"kind": "pi.generation",
+					"version": 1,
+					"state": "waiting"
+				}
+			],
+			"rollback": {
+				"readOnly15": {
+					"changedTables": [],
+					"reopenedBy14": true
+				},
+				"write15": {
+					"action": "abort",
+					"storedAfter": {
+						"schemaVersion": 2,
+						"documents": {
+							"pi.agent": [1],
+							"pi.inbox": [1],
+							"pi.live": [3],
+							"pi.provider": [1],
+							"pi.usage": [1]
+						},
+						"tasks": [
+							{
+								"kind": "pi.generation",
+								"version": 1,
+								"status": "terminal"
+							},
+							{
+								"kind": "pi.compaction",
+								"version": 1,
+								"status": "terminal"
+							},
+							{
+								"kind": "pi.generation",
+								"version": 2,
+								"status": "terminal"
+							},
+							{
+								"kind": "pi.tool",
+								"version": 3,
+								"status": "terminal"
+							},
+							{
+								"kind": "pi.compaction",
+								"version": 1,
+								"status": "terminal"
+							}
+						]
+					},
+					"reopenedBy14": {
+						"step": "snapshot",
+						"error": "Document 2 (pi.live) has newer version 3 than 1"
+					}
+				},
+				"pristineReopenedBy14": {
+					"changedTables": []
+				}
+			}
+		},
+		"kill": {
+			"file": "sdk14-kill.sql",
+			"sha256": "99ceb0752cb36973ae662d647814c6b8684ba7d299c911b9d46aed8e41b4bf0d",
+			"stored": {
+				"schemaVersion": 2,
+				"documents": {
+					"pi.agent": [1],
+					"pi.inbox": [1],
+					"pi.live": [1],
+					"pi.provider": [1],
+					"pi.usage": [1]
+				},
+				"tasks": [
+					{
+						"kind": "pi.generation",
+						"version": 1,
+						"status": "terminal"
+					},
+					{
+						"kind": "pi.compaction",
+						"version": 1,
+						"status": "terminal"
+					},
+					{
+						"kind": "pi.generation",
+						"version": 1,
+						"status": "waiting"
+					},
+					{
+						"kind": "pi.tool",
+						"version": 2,
+						"status": "running"
+					},
+					{
+						"kind": "pi.compaction",
+						"version": 1,
+						"status": "running"
+					}
+				]
+			},
+			"live14": {
+				"compactionFailure": {
+					"taskId": 12,
+					"reason": "manual",
+					"error": "Summarization failed: SDK14-COMPACTION-REFUSED"
+				},
+				"run": {
+					"taskId": 15,
+					"inputs": [14]
+				},
+				"tools": [
+					{
+						"callId": "sdk14-call",
+						"name": "sdk14_hold",
+						"taskId": 17,
+						"status": "running"
+					}
+				],
+				"compactions": [
+					{
+						"taskId": 18,
+						"reason": "manual",
+						"blocking": false,
+						"attempt": 1
+					}
+				]
+			},
+			"tasks14": [
+				{
+					"kind": "pi.tool",
+					"version": 2,
+					"state": "ready",
+					"migrates": false
+				},
+				{
+					"kind": "pi.compaction",
+					"version": 1,
+					"state": "ready",
+					"migrates": false
+				},
+				{
+					"kind": "pi.generation",
+					"version": 1,
+					"state": "waiting"
+				}
+			],
+			"rollback": {
+				"readOnly15": {
+					"changedTables": ["durable_metadata", "tasks"],
+					"reopenedBy14": true
+				},
+				"write15": {
+					"action": "abort",
+					"storedAfter": {
+						"schemaVersion": 2,
+						"documents": {
+							"pi.agent": [1],
+							"pi.inbox": [1],
+							"pi.live": [3],
+							"pi.provider": [1],
+							"pi.usage": [1]
+						},
+						"tasks": [
+							{
+								"kind": "pi.generation",
+								"version": 1,
+								"status": "terminal"
+							},
+							{
+								"kind": "pi.compaction",
+								"version": 1,
+								"status": "terminal"
+							},
+							{
+								"kind": "pi.generation",
+								"version": 2,
+								"status": "terminal"
+							},
+							{
+								"kind": "pi.tool",
+								"version": 3,
+								"status": "terminal"
+							},
+							{
+								"kind": "pi.compaction",
+								"version": 1,
+								"status": "terminal"
+							}
+						]
+					},
+					"reopenedBy14": {
+						"step": "snapshot",
+						"error": "Document 2 (pi.live) has newer version 3 than 1"
+					}
+				},
+				"pristineReopenedBy14": {
+					"changedTables": ["durable_metadata", "tasks"]
+				}
+			}
+		}
+	}
+}

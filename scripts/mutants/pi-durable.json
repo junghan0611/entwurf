@@ -525,7 +525,7 @@
 			"claim": "PI-DURABLE-CARRIER-PIN-MATCHES",
 			"title": "the pin records a digest the committed carrier file does not carry, so a carrier edited after emission would still be the declared one",
 			"subject": "pi/pi-durable/overlay/upstream-pin.json",
-			"find": ["\"sha256\": \"437834997b9870ab0383aea7d86ff7880ef7e2ebbbfe4c6360f67d8d36f777ec\""],
+			"find": ["\"sha256\": \"3b724ae01374b768193ff6b17aaff945314309546086541305b48f5abeadc0d9\""],
 			"replace": ["\"sha256\": \"0000000000000000000000000000000000000000000000000000000000000000\""],
 			"gate": ["bash", "run.sh", "check-pi-durable-carrier"],
 			"timeoutSeconds": 300,
@@ -1257,13 +1257,115 @@
 		},
 		{
 			"claim": "PI-DURABLE-TASK-BLOCKED-REASON",
-			"title": "every blocked task is said to be parked by the restart limit, whatever reason the SDK gave",
+			"title": "every blocked task is said to lack its definition, whatever reason the SDK gave",
 			"subject": "pi/pi-durable/carrier/tui.js",
 			"find": ["\t\tnode.blocked !== undefined ? `blocked:${node.blocked}` : \"\","],
-			"replace": ["\t\tnode.blocked !== undefined ? `blocked:restart_limit` : \"\","],
+			"replace": ["\t\tnode.blocked !== undefined ? `blocked:missing_task` : \"\","],
 			"gate": ["bash", "run.sh", "check-pi-durable-carrier"],
 			"timeoutSeconds": 300,
 			"signature": "[QK:PI-DURABLE-TASK-BLOCKED-REASON]",
+			"signatureSource": "pi-extensions/lib/pi-durable-carrier.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "PDF-CLOSE-SESSION-END-KIND",
+			"title": "the owned close reads the Session's end by pi 1.4's `reason`, absent on SDK 1.5, so a failed end whose close resolved is recorded as a verified close",
+			"subject": "pi/pi-durable/carrier/runtime.js",
+			"find": ["\t\t\t\t\t\tif (state.failure === undefined && end.kind !== \"failed\") storage = \"closed\";"],
+			"replace": ["\t\t\t\t\t\tif (state.failure === undefined && end.reason !== \"failed\") storage = \"closed\";"],
+			"gate": ["bash", "run.sh", "check-pi-durable-carrier"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PDF-CLOSE-SESSION-END-KIND]",
+			"signatureSource": "pi-extensions/lib/pi-durable-carrier.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "PI-DURABLE-REPORT-ERROR-TEXT",
+			"title": "a reported error is shown as the SDK 1.5 Report object itself, so every notice reads [object Object] instead of what failed",
+			"subject": "pi/pi-durable/carrier/runtime.js",
+			"find": ["\t\t\tconst message = causeOf(reported.error);"],
+			"replace": ["\t\t\tconst message = causeOf(reported);"],
+			"gate": ["bash", "run.sh", "check-pi-durable-carrier"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PI-DURABLE-REPORT-ERROR-TEXT]",
+			"signatureSource": "pi-extensions/lib/pi-durable-carrier.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "PI-DURABLE-TRANSCRIPT-WINDOW",
+			"title": "each window value starts a new transcript, so the screen holds only the SDK's window and loses every entry the window drops",
+			"subject": "pi/pi-durable/carrier/runtime.js",
+			"find": ["\t\t\t\tconst transcript = shown.merge(call.value);"],
+			"replace": ["\t\t\t\tconst transcript = transcriptOf(current).merge(call.value);"],
+			"gate": ["bash", "run.sh", "check-pi-durable-carrier"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PI-DURABLE-TRANSCRIPT-WINDOW]",
+			"signatureSource": "pi-extensions/lib/pi-durable-carrier.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "PI-DURABLE-RUN-FAILURE-ONCE",
+			"title": "the input a failed run settled also raises its own notice, so the same missing answer is said twice",
+			"subject": "pi/pi-durable/carrier/runtime.js",
+			"find": ["\t\t\t\t\tif (live?.runFailure?.inputs.includes(submission.id)) return;"],
+			"replace": ["\t\t\t\t\tvoid live;"],
+			"gate": ["bash", "run.sh", "check-pi-durable-carrier"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PI-DURABLE-RUN-FAILURE-ONCE]",
+			"signatureSource": "pi-extensions/lib/pi-durable-carrier.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "PI-DURABLE-COMPACTION-TRIGGER-SHOWN",
+			"title": "a retained compaction failure is named by pi 1.4's `reason`, absent on SDK 1.5, so the line says (undefined) instead of what started it",
+			"subject": "pi/pi-durable/carrier/tui.js",
+			"find": [
+				"\t\tlines.push({ level: \"error\", message: `Compaction failed (${compaction.trigger}): ${compaction.error}` });"
+			],
+			"replace": [
+				"\t\tlines.push({ level: \"error\", message: `Compaction failed (${compaction.reason}): ${compaction.error}` });"
+			],
+			"gate": ["bash", "run.sh", "check-pi-durable-carrier"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PI-DURABLE-COMPACTION-TRIGGER-SHOWN]",
+			"signatureSource": "pi-extensions/lib/pi-durable-carrier.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "PI-DURABLE-RUN-FAILURE-SHOWN",
+			"title": "the run failure line is drawn only for an aborted run, so a run that ended without an answer leaves no lasting line while the user's own stop gets one",
+			"subject": "pi/pi-durable/carrier/tui.js",
+			"find": ["\tif (run !== undefined && run.reason !== \"aborted\") {"],
+			"replace": ["\tif (run !== undefined && run.reason === \"aborted\") {"],
+			"gate": ["bash", "run.sh", "check-pi-durable-carrier"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PI-DURABLE-RUN-FAILURE-SHOWN]",
+			"signatureSource": "pi-extensions/lib/pi-durable-carrier.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "PI-DURABLE-WATCH-STALL-SHOWN",
+			"title": "a watch that stopped updating draws no line, so a frozen conversation or task panel looks healthy",
+			"subject": "pi/pi-durable/carrier/tui.js",
+			"find": ["\tfor (const [part, error] of Object.entries(view.stalled ?? {})) {"],
+			"replace": ["\tfor (const [part, error] of Object.entries({})) {"],
+			"gate": ["bash", "run.sh", "check-pi-durable-carrier"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PI-DURABLE-WATCH-STALL-SHOWN]",
+			"signatureSource": "pi-extensions/lib/pi-durable-carrier.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "PI-DURABLE-SUBAGENT-SCHEMA-OPEN",
+			"title": "the subagent schema takes pi-schema's closed-object default, so the model sees a stricter input than the TypeBox object it replaced",
+			"subject": "pi/pi-durable/carrier/subagent.js",
+			"find": [
+				"\t\t\tparameters: obj({ task: str({ description: \"What the subagent should do\" }) }, { open: true }),"
+			],
+			"replace": ["\t\t\tparameters: obj({ task: str({ description: \"What the subagent should do\" }) }),"],
+			"gate": ["bash", "run.sh", "check-pi-durable-carrier"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PI-DURABLE-SUBAGENT-SCHEMA-OPEN]",
 			"signatureSource": "pi-extensions/lib/pi-durable-carrier.test.ts",
 			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
 		},

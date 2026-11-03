@@ -1,4 +1,3 @@
-                                                                     
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import {
 	clampThinkingLevel,
@@ -10,16 +9,24 @@ import {
 	                
 	                  
 	                    
+	ConversationTranscript,
 	                      
+	                       
 	            
 	                 
 	               
 	Harness,
 	                          
+	LiveDoc,
 	              
+	            
 	ROOT_CONVERSATION_ID,
 	                
 	               
+	                    
+	                    
+	                    
+	              
 } from "@earendil-works/pi-durable";
 import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node";
 import { ModelRuntime } from "entwurf-pi-dist:core/model-runtime.js";
@@ -58,8 +65,18 @@ const context = BACKGROUND_CONTEXT;
 /** Everything the TUI renders. Plain values; no Harness objects cross this boundary. */
                               
 	                                                                                            
-	                                            
+	   
+	                                                                                                                 
+	                                                                                                          
+	                                                                                          
+	   
 	                                        
+	   
+	                                                                                                          
+	                                                                                                              
+	                                                                                                
+	   
+	                                    
 	                                                       
 	                                         
 	                                    
@@ -72,6 +89,11 @@ const context = BACKGROUND_CONTEXT;
 	                                                                                             
 	   
 	                                               
+	   
+	                                                                                                                  
+	                                                                                                 
+	   
+	                                                                               
  
 
                                     
@@ -187,8 +209,9 @@ export async function openDurable(options                    )                  
 		registry.install(Subagent);
 		for (const extension of options.extensions ?? []) registry.install(extension);
 
-		const pendingReports            = [];
-		let report                           = (error) => pendingReports.push(error);
+		// SDK 1.5 hands one tagged `Report` (what happened by `kind`, plus its `error`), not pi 1.4's (error, info).
+		const pendingReports           = [];
+		let report                             = (reported) => pendingReports.push(reported);
 		// Recorded BEFORE the call: once the open is attempted, no later outcome proves that nothing was opened.
 		ticket.storageOpenAttempted = true;
 		const backend = await openNodeSqliteStorage(location.database);
@@ -200,7 +223,7 @@ export async function openDurable(options                    )                  
 				registry,
 				settings,
 				env: envs.env,
-				onReport: (error) => report(error),
+				onReport: (reported) => report(reported),
 			},
 			context,
 		);
@@ -245,7 +268,11 @@ export async function openDurable(options                    )                  
 			cursor = page.next;
 		} while (cursor !== undefined);
 		let current               = root;
-		let conversation                                            = await root.viewState(context);
+		// The shown conversation's watch (SDK 1.5 replaced `viewState()`) and the transcript merged from its windows.
+		const transcriptOf = (conversation              )                         =>
+			new ConversationTranscript((query, limit, loading) => conversation.entries(query, limit, undefined, loading));
+		let watch                    = await root.watch(context);
+		let history = transcriptOf(root);
 		const models = ()                 =>
 			modelRuntime.getAvailableSnapshot().map((model) => ({
 				provider: model.provider,
@@ -256,7 +283,8 @@ export async function openDurable(options                    )                  
 
 		let state              = {
 			session: { id: location.id, directory: location.directory, cwd: location.cwd },
-			conversation: conversation.value,
+			conversation: watch.value,
+			transcript: history.merge(watch.value),
 			conversations: summaries,
 			models: models(),
 			notices: [],
@@ -279,13 +307,16 @@ export async function openDurable(options                    )                  
 			update({ notices: [...state.notices, { id: nextNotice++, level, message }].slice(-20) });
 		};
 		const fail = (error         )       => notice("error", error instanceof Error ? error.message : String(error));
-		report = (error) => {
-			const message = error instanceof Error ? error.message : String(error);
-			// A failing Session runs its close listeners first and reports the cause right after: that report names it.
-			if (state.failure !== undefined && state.failure.error === undefined) update({ failure: { error: message } });
-			else notice("warning", message);
+		report = (reported) => {
+			// The error the SDK reported, never the Report itself: that would read `[object Object]`.
+			const message = causeOf(reported.error);
+			// A failing Session runs its close listeners first and reports the cause right after, as `storage_failed`:
+			// that report names the failure the close listener recorded.
+			if (reported.kind === "storage_failed" && state.failure !== undefined && state.failure.error === undefined) {
+				update({ failure: { error: message } });
+			} else notice(reported.kind === "storage_failed" ? "error" : "warning", `${reported.kind}: ${message}`);
 		};
-		for (const error of pendingReports) report(error);
+		for (const reported of pendingReports) report(reported);
 		const failedListeners = new Set            ();
 		// The Session closes itself when its Storage fails. Its `closed` settles only after every running task returned,
 		// which a task ignoring its abort can delay without end, so the failure is shown from the close listener itself.
@@ -300,29 +331,81 @@ export async function openDurable(options                    )                  
 				}
 			}
 		});
-		let unsubscribe = conversation.subscribe((value) => update({ conversation: value }));
-		// Subagents appear as their conversations are created. A commit listener only records; it calls no Session API.
-		const unsubscribeCommits = harness.subscribeCommits((publication) => {
-			let conversations = state.conversations;
-			for (const change of publication.changes) {
-				if (change.type === "conversation") {
-					conversations = [...conversations, { id: change.value.id, label: label(change.value.id) }];
-				} else if (change.type === "entry" && change.value.kind === "pi.user") {
-					const id = change.value.conversationId;
-					conversations = conversations.map((summary) =>
-						summary.id === id && summary.title === undefined ? { ...summary, ...titleOf(change.value) } : summary,
-					);
+		let closing                           ;
+		// A watch that ends by itself while the Session runs leaves its part of the screen frozen: say so rather than look
+		// healthy (#155). Ending at close, at a failure the Session already shows, or by being replaced, is no news.
+		const ended = (part                          , end          )       => {
+			if (closing !== undefined || state.failure !== undefined) return;
+			if (end.kind !== "failed" && end.kind !== "listener_error") return;
+			update({ stalled: { ...state.stalled, [part]: causeOf(end.error) } });
+		};
+		const gapFills = new WeakSet                        ();
+		// A window that skipped entries (frames folded while the listener was busy) leaves a gap in the transcript. The
+		// SDK's own `fillGap()` pages it in, one page per call, until none is left; nothing else loads history.
+		const fillGaps = (shown                        , view                )       => {
+			const gap = view.items.find((item)                                                   => item.kind === "gap");
+			if (gap === undefined || gapFills.has(shown)) return;
+			gapFills.add(shown);
+			void shown.fillGap(gap, context).then(
+				() => {
+					gapFills.delete(shown);
+					if (shown !== history) return;
+					// The newest window merged again is a no-op that returns everything held now, the page included.
+					const filled = shown.merge(state.conversation);
+					update({ transcript: filled });
+					// A page that added nothing ends the fill; a later window starts it again.
+					if (filled.items !== view.items) fillGaps(shown, filled);
+				},
+				(error) => {
+					gapFills.delete(shown);
+					fail(error);
+				},
+			);
+		};
+		// Every value of the shown conversation's window joins its transcript; a replaced watch's late frames are dropped.
+		const follow = (handle                   , shown                        )       => {
+			handle.start(async (call) => {
+				if (handle !== watch) return;
+				if (call.kind === "failed") {
+					notice("warning", `The conversation view could not update: ${causeOf(call.error)}`);
+					return;
 				}
-			}
-			if (conversations !== state.conversations) update({ conversations });
+				const transcript = shown.merge(call.value);
+				update({ conversation: call.value, transcript });
+				fillGaps(shown, transcript);
+			});
+			void handle.closed.then((end) => {
+				if (handle === watch) ended("conversation", end);
+			});
+		};
+		follow(watch, history);
+		// Subagents appear as their conversations are created. A commit observer only records; it calls no Session API.
+		// Its end decides nothing: SDK 1.5 ends it `failed` ("session closed") at a normal close as well (#155).
+		const commits = harness.observeCommits({
+			advance: (publication) => {
+				let conversations = state.conversations;
+				for (const change of publication.changes) {
+					if (change.type === "conversation") {
+						conversations = [...conversations, { id: change.value.id, label: label(change.value.id) }];
+					} else if (change.type === "entry" && change.value.kind === "pi.user") {
+						const id = change.value.conversationId;
+						conversations = conversations.map((summary) =>
+							summary.id === id && summary.title === undefined
+								? { ...summary, ...titleOf(change.value) }
+								: summary,
+						);
+					}
+				}
+				if (conversations !== state.conversations) update({ conversations });
+			},
+			end: () => {},
 		});
 
-		let tasks                                                ;
-		let unsubscribeTasks = ()       => {};
+		let tasks                            ;
 		const closeTasks = ()       => {
-			unsubscribeTasks();
-			tasks?.dispose();
+			const graph = tasks;
 			tasks = undefined;
+			void graph?.stop();
 		};
 
 		let queue = Promise.resolve();
@@ -331,15 +414,21 @@ export async function openDurable(options                    )                  
 			queue = queue.then(operation).catch(fail);
 			return queue;
 		};
-		const watchAnswer = (submission            )       => {
-			void submission.wait(context).then((settled) => {
-				if (settled.status === "unanswered" && settled.reason !== "aborted") {
+		// A run that ended without an answer stays on screen as its conversation's `pi.live.runFailure` (SDK 1.5), so an
+		// input that run settled adds no notice of its own; one settled without such a run (stale, say) still does.
+		const watchAnswer = (submission            , conversation              )       => {
+			void submission
+				.wait(context)
+				.then(async (settled) => {
+					if (settled.status !== "unanswered" || settled.reason === "aborted") return;
+					const live = await opened.snapshot(LiveDoc, conversation.id, context);
+					if (live?.runFailure?.inputs.includes(submission.id)) return;
 					notice(
 						"error",
 						`No answer: ${settled.reason}${settled.detail === undefined ? "" : ` ${JSON.stringify(settled.detail)}`}`,
 					);
-				}
-			}, fail);
+				})
+				.catch(fail);
 		};
 		const agentModel = () => {
 			const ref = agentOf(state.conversation).model;
@@ -354,7 +443,8 @@ export async function openDurable(options                    )                  
 					if (state.failure !== undefined) {
 						throw new Error("The session failed and takes no input. Close it, then reopen it with --continue.");
 					}
-					watchAnswer(await current.submit({ type: "input", content: text, whenBusy }, context));
+					const target = current;
+					watchAnswer(await target.submit({ type: "input", content: text, whenBusy }, context), target);
 				}),
 			compact: (instructions) =>
 				command(async () => {
@@ -408,12 +498,16 @@ export async function openDurable(options                    )                  
 				command(async () => {
 					const next = await opened.conversation(id, context);
 					if (next === undefined) throw new Error(`Conversation ${id} does not exist`);
-					const nextState = await next.viewState(context);
-					unsubscribe();
-					conversation.dispose();
+					const nextWatch = await next.watch(context);
+					const previous = watch;
 					current = next;
-					conversation = nextState;
-					unsubscribe = nextState.subscribe((value) => update({ conversation: value }));
+					watch = nextWatch;
+					history = transcriptOf(next);
+					void previous.stop();
+					// A new watch replaces a stalled one; the task graph's state is its own.
+					const stalled = state.stalled?.tasks === undefined ? undefined : { tasks: state.stalled.tasks };
+					update({ conversation: nextWatch.value, transcript: history.merge(nextWatch.value), stalled });
+					follow(nextWatch, history);
 				}),
 		};
 
@@ -424,14 +518,17 @@ export async function openDurable(options                    )                  
 		}
 		if (initial?.fallbackMessage !== undefined) notice("info", initial.fallbackMessage);
 		// The task graph is observed until close; its panel starts open and /tasks hides it.
-		const graph = await opened.taskGraph(context);
+		const graph = await opened.watchTaskGraph(context);
 		tasks = graph;
 		update({ tasks: graph.value });
-		unsubscribeTasks = graph.subscribe((value) => update({ tasks: value }));
+		graph.start(async (call) => {
+			if (call.kind === "value") update({ tasks: call.value });
+			else notice("warning", `The task graph could not update: ${causeOf(call.error)}`);
+		});
+		void graph.closed.then((end) => ended("tasks", end));
 		// Recovered work from an interrupted turn continues now.
 		harness.resume();
 
-		let closing                           ;
 		return {
 			view: {
 				current: () => state,
@@ -460,9 +557,8 @@ export async function openDurable(options                    )                  
 				closing ??= (async () => {
 					// First: the Session runs its close listeners inside its own close call.
 					unsubscribeClose();
-					unsubscribe();
-					unsubscribeCommits();
-					conversation.dispose();
+					void watch.stop();
+					commits.detach();
 					closeTasks();
 					// The resource end the fence records (#157 B3). Storage is `closed` only when the first actual close
 					// resolved, no failure was seen before it, and the Session's own terminal result is not `failed`.
@@ -473,8 +569,10 @@ export async function openDurable(options                    )                  
 					try {
 						// Close writes no outcome: a running turn resumes with --continue.
 						await opened.close(context);
-						const ended = await opened.closed;
-						if (state.failure === undefined && ended.reason !== "failed") storage = "closed";
+						// SDK 1.5 tells the end by `kind`; pi 1.4's `reason` is absent there, and a type-stripped carrier would
+						// read it as undefined and call every end closed (#155).
+						const end = await opened.closed;
+						if (state.failure === undefined && end.kind !== "failed") storage = "closed";
 						try {
 							await envs.cleanup(context);
 						} catch (error) {

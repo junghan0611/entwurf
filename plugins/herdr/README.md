@@ -142,8 +142,9 @@ README at that tag carries its Pi 1.3.x step. A host that installed the 0.50.0 c
 deactivate first; a settled npm-source host follows the same-source rebind conditions
 ([the two sources](#the-runtime-and-the-two-sources-it-may-come-from)).
 
+<!-- entwurf:published @junghanacs/entwurf@0.50.0 pi 1.4.0 -->
 ```bash
-# 1. pi — the range Entwurf declares as its peer, quoted so the shell keeps it in one word
+# 1. pi — the published runtime's host range, quoted so the shell keeps it in one word
 npm install -g "@earendil-works/pi-coding-agent@>=1.4.0 <1.5"
 
 # 2. herdr — see the herdr project for its own install
@@ -172,10 +173,11 @@ herdr integration install claude
 #    `claude` now picks up the entwurf tools through MCP.
 herdr plugin install junghan0611/entwurf/plugins/herdr --yes
 ```
+<!-- /entwurf:published -->
 
 The pi range in step 1 is not a number this file chooses. It is the host range derived from the exact
-`dependencies` pin Entwurf publishes for `@earendil-works/pi-coding-agent` (`package.json`), and
-`check-dep-versions` fails if this file and that pin disagree. The activation door enforces it too: `run.sh install-user-scope`
+`dependencies` pin of the runtime the lock selects (`package.json`), and
+`check-dep-versions` checks the published 0.50.0 recipe separately from the development checkout's pin. The activation door enforces it too: `run.sh install-user-scope`
 refuses an out-of-range pi by name and writes nothing — the same verdict `entwurf setup` gives — so
 an unpinned `npm install -g` here would only move the failure to step 5.
 
@@ -500,7 +502,7 @@ read. Every field the provider attached is shown, in sorted key order.
     named red (`herdr-integration-not-current`) until you run `herdr integration install claude`
     again. In the measured 0.9.4-seeded private sandbox, the reinstall changed only the hook's version
     line; the pi extension and the Claude settings stayed byte-identical.
-- **Pi `>=1.4.0 <1.5`** for the published npm 0.50.0 runtime this lock acquires. It carries the
+- **Pi <!-- entwurf:published @junghanacs/entwurf@0.50.0 pi 1.4.0 -->`>=1.4.0 <1.5`<!-- /entwurf:published -->** for the published npm 0.50.0 runtime this lock acquires. It carries the
   same Pi 1.4.0 SDK set as the previous `v2026.10.27-herdr.0.45.0` snapshot. Pi 1.5 support is
   separate work, not part of this pin.
   A host still on Pi 1.3 is refused by name (`outside the supported

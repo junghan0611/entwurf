@@ -3,7 +3,7 @@
  * verb (0.11 Stage 0 step 4-pre / 동결결정 10). PURE pi-FREE core: the
  * intent×liveness decision table + the reject taxonomy + a pure resolver.
  * NO runtime dispatch, NO spawn/send, NO I/O — step 5 wires this to transports.
- * The pi-ai TypeBox REPRESENTATION of this contract lives in the separate
+ * The pi-schema REPRESENTATION of this contract lives in the separate
  * `entwurf-v2-contract-schema.ts` (0.12.1 B-1) so this module — which the
  * harness-neutral MCP bridge reaches at boot — carries no pi dependency.
  *
@@ -516,9 +516,9 @@ export function resolveNativePushDispatch(intent: EntwurfIntent, liveness: Nativ
 	};
 }
 
-// ── TypeBox schemas ────────────────────────────────────────────────────────
-// MOVED to `entwurf-v2-contract-schema.ts` (0.12.1 B-1): the pi-ai TypeBox
-// builders (StringEnum/Type) are a pi-lane dependency, so they cannot live in
+// ── JSON schemas ───────────────────────────────────────────────────────────
+// MOVED to `entwurf-v2-contract-schema.ts` (0.12.1 B-1): the pi schema
+// builders (pi-ai StringEnum, pi-schema since #155) are a pi-lane dependency, so they cannot live in
 // this pi-free core — the MCP bridge reaches this module at boot and must stay
 // harness-neutral (check-entwurf-bridge-pi-free). The schemas import the
 // constants/types above; pi-side consumers import the schemas from there.

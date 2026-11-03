@@ -1120,7 +1120,7 @@ check_entwurf_v2_contract() {
   # visible-first cut, single verdict per cell, 1 allow / 2 reject. N1
   # indeterminate never dispatches, and nothing on any cell starts a process.
   # R5 taxonomy covers table reasons + pre-claims bad-target/target-locked. Plus
-  # a schema↔types drift guard on the TypeBox input/receipt. Pure, no API.
+  # a schema↔types drift guard on the pi-schema input/receipt. Pure, no API.
   run_ts scripts/check-entwurf-v2-contract.ts
 }
 
@@ -2340,21 +2340,64 @@ function stripBumpLedger(file, text) {
   return kept.join('\n');
 }
 
-let rangeDecls = 0, exactDecls = 0;
+// PUBLISHED-SCOPE REGIONS (#155). Between an SDK bump in this checkout and the release that ships it,
+// an operator doc must keep telling a reader how to install the package that IS on npm — whose Pi
+// range is the previous floor — while the checkout's own sentences already name the new one. Those
+// are two different subjects in one file, so the doc marks the published one explicitly:
+//   <!-- entwurf:published @junghanacs/entwurf@<version> pi <sdk> -->  …  <!-- /entwurf:published -->
+// Inside a region every scan below binds to <sdk>, outside it to the pinned floor. The region is not
+// a skip: it is scanned, it must hold at least one declaration, and after the four-surface assertion
+// below the published-scope claim holds its pair to PUBLISHED_ARTIFACT — a published package's own
+// manifest, frozen here. It is deliberately NOT derived from this checkout (package.json's version,
+// the workspace closure): a published package's contract stays true when the checkout moves on, so a
+// release preparation must not falsify it. `[측정 2026-11-03]` the source-only qualification snapshot
+// has no .git, so a release tag cannot be that oracle either.
+const PUBLISHED_OPEN = /<!-- entwurf:published @junghanacs\/entwurf@(\d+\.\d+\.\d+) pi (\d+\.\d+\.\d+) -->/g;
+const PUBLISHED_CLOSE = '<!-- /entwurf:published -->';
+function publishedRegions(text) {
+  const regions = [], problems = [];
+  let from = 0;
+  for (const open of text.matchAll(PUBLISHED_OPEN)) {
+    if (open.index < from) { problems.push(`a region opens inside the previous one at offset ${open.index}`); continue; }
+    const end = text.indexOf(PUBLISHED_CLOSE, open.index);
+    const next = text.slice(open.index + open[0].length).search(/<!-- entwurf:published /);
+    if (end < 0 || (next >= 0 && open.index + open[0].length + next < end)) { problems.push(`the region opened by "${open[0]}" is not closed before the next one`); continue; }
+    regions.push({ start: open.index, end, version: open[1], sdk: open[2], body: text.slice(open.index, end) });
+    from = end + PUBLISHED_CLOSE.length;
+  }
+  const opens = [...text.matchAll(/<!-- entwurf:published /g)].length;
+  const closes = text.split(PUBLISHED_CLOSE).length - 1;
+  if (opens !== regions.length + problems.length) problems.push(`${opens - regions.length} published marker(s) do not have the exact opening shape`);
+  if (closes !== regions.length) problems.push(`${closes} closing marker(s) for ${regions.length} region(s)`);
+  return { regions, problems };
+}
+const floorAt = (regions, index) => regions.find((r) => index > r.start && index < r.end)?.sdk ?? piAi;
+const nextMinor = (v) => { const [a, b] = v.split('.').map(Number); return `${a}.${b + 1}`; };
+
+let rangeDecls = 0, exactDecls = 0, sourceRangeDecls = 0;
 for (const file of BASELINE_DOCS) {
   const text = stripBumpLedger(file, readFileSync(file, 'utf8'));
+  const { regions } = publishedRegions(text);
   // Closed-range declarations: `>=<floor> <<major>.<ceiling>` (spaces optional).
-  for (const [decl, floor, ceilMajor, ceilMinor] of text.matchAll(/>=\s?(\d+\.\d+\.\d+)\s?<\s?(\d+)\.(\d+)/g)) {
+  for (const m of text.matchAll(/>=\s?(\d+\.\d+\.\d+)\s?<\s?(\d+)\.(\d+)/g)) {
+    const [decl, floor, ceilMajor, ceilMinor] = m;
+    const want = floorAt(regions, m.index);
     rangeDecls++;
-    assert.equal(floor, piAi,
-      `${file}: declared pi floor in "${decl}" is ${floor}, but the pinned SDK is ${piAi} — a baseline doc may not advertise a version no gate drives`);
-    assert.equal(`${ceilMajor}.${ceilMinor}`, `${piMaj}.${piMin + 1}`,
-      `${file}: declared pi ceiling in "${decl}" must be the next minor (${piMaj}.${piMin + 1})`);
+    if (want === piAi) sourceRangeDecls++;
+    assert.equal(floor, want, want === piAi
+      ? `${file}: declared pi floor in "${decl}" is ${floor}, but the pinned SDK is ${piAi} — a baseline doc may not advertise a version no gate drives`
+      : `${file}: declared pi floor in "${decl}" is ${floor}, but its published-scope region names pi ${want}`);
+    assert.equal(`${ceilMajor}.${ceilMinor}`, nextMinor(want),
+      `${file}: declared pi ceiling in "${decl}" must be the next minor (${nextMinor(want)})`);
   }
   // Exact install pins: `@earendil-works/pi-<pkg>@<version>`.
-  for (const [decl, ver] of text.matchAll(/@earendil-works\/pi-(?:ai|coding-agent|tui)@(\d+\.\d+\.\d+)/g)) {
+  for (const m of text.matchAll(/@earendil-works\/pi-(?:ai|coding-agent|tui)@(\d+\.\d+\.\d+)/g)) {
+    const [decl, ver] = m;
+    const want = floorAt(regions, m.index);
     exactDecls++;
-    assert.equal(ver, piAi, `${file}: install example "${decl}" pins ${ver}, but the pinned SDK is ${piAi}`);
+    assert.equal(ver, want, want === piAi
+      ? `${file}: install example "${decl}" pins ${ver}, but the pinned SDK is ${piAi}`
+      : `${file}: install example "${decl}" pins ${ver}, but its published-scope region names pi ${want}`);
   }
 }
 // Prose declarations carry the pin in sentences the two patterns above cannot
@@ -2366,9 +2409,11 @@ const PROSE_DECLS = [
   ['ROADMAP.md', /floor = \*\*(\d+\.\d+\.\d+)\*\*/, 'floor = **<version>**'],
 ];
 for (const [file, re, shape] of PROSE_DECLS) {
-  const m = readFileSync(file, 'utf8').match(re);
+  const text = readFileSync(file, 'utf8');
+  const m = text.match(re);
   assert.ok(m, `${file}: the baseline sentence "${shape}" is gone — restore it or update check-dep-versions; a doc reword must not silently drop the pin from the gate`);
-  assert.equal(m[1], piAi, `${file}: "${shape}" declares ${m[1]}, but the pinned SDK is ${piAi}`);
+  const want = floorAt(publishedRegions(text).regions, m.index);
+  assert.equal(m[1], want, `${file}: "${shape}" declares ${m[1]}, but the ${want === piAi ? 'pinned SDK' : 'published-scope region'} is ${want}`);
 }
 // ── #120 P4: ONE FLOOR, FOUR MECHANICAL SURFACES ──────────────────────────
 // The bump is mostly a number substitution, and that is exactly how a bump goes
@@ -2390,6 +2435,8 @@ const PI_CONSTELLATION = [
   '@earendil-works/pi-codemode', '@earendil-works/pi-mcp',
   // #130: the durable library the pi-durable carrier imports — a production dependency since 0.32.
   '@earendil-works/pi-durable',
+  // `[측정 2026-11-03]` 1.5.0 (#155): pi-schema joins — declared by chord, pi-agent-core, pi-ai and pi-durable.
+  '@earendil-works/pi-schema',
 ];
 const sameSet = (got, want, where) => {
   const missing = want.filter((n) => !got.includes(n));
@@ -2404,7 +2451,7 @@ for (const [, name, ver] of runSh.matchAll(/"(@earendil-works\/[a-z-]+)@(\d+\.\d
   if (ver !== piAi) floorGaps.push(`run.sh install constellation: ${name}@${ver} is not the floor ${piAi}`);
 }
 sameSet(installed, PI_CONSTELLATION, 'run.sh install constellation');
-// pnpm-workspace.yaml minimumReleaseAgeExclude: the same eight, each ADMITTING the
+// pnpm-workspace.yaml minimumReleaseAgeExclude: the same constellation, each ADMITTING the
 // current floor. History stays (`0.85.0 || 0.85.1 || …`) — only the newest term is
 // the contract, because that is what an install resolves against.
 const closure = [...readFileSync('pnpm-workspace.yaml', 'utf8').matchAll(/^\s*-\s*'(@earendil-works\/[a-z-]+)@([^']+)'/gm)];
@@ -2437,22 +2484,64 @@ const CURRENT_CONTRACT_DECLS = [
   ['docs/acp-backend-rail.md', /SDK exact `(\d+\.\d+\.\d+)`, host `(>=[\d.]+ <\d+\.\d+)`/, "the ACP support row's exact+range pair"],
 ];
 for (const [file, re, shape] of CURRENT_CONTRACT_DECLS) {
-  const m = readFileSync(file, 'utf8').match(re);
+  const text = readFileSync(file, 'utf8');
+  const m = text.match(re);
   if (!m) { floorGaps.push(`${file}: ${shape} is gone — a reworded current-contract sentence must fail loud, not drop out silently`); continue; }
+  // A sentence inside a published-scope region states the published package's contract; it is
+  // held to that region's pi here and the region itself to its oracles below.
+  const floor = floorAt(publishedRegions(text).regions, m.index);
+  const range = `>=${floor} <${nextMinor(floor)}`;
   for (const captured of m.slice(1)) {
-    const expected = captured.startsWith('>=') ? nextFloorRange : piAi;
-    if (captured !== expected) floorGaps.push(`${file}: ${shape} declares "${captured}", but the floor is ${piAi} (${nextFloorRange})`);
+    const expected = captured.startsWith('>=') ? range : floor;
+    if (captured !== expected) floorGaps.push(`${file}: ${shape} declares "${captured}", but the ${floor === piAi ? 'floor' : 'published-scope region'} is ${floor} (${range})`);
   }
 }
 assert.deepEqual(floorGaps, [],
   `[QK:PI-FLOOR-SINGLE-SOURCE] the pi floor is declared on four mechanical surfaces — the durable pin's SDK set with package.json's exact production dependencies, run.sh's install constellation, the pnpm workspace closure, and the current-contract sentences in the docs — and every one of them must name the SAME floor. A bump that moves three of the four is the ordinary way this breaks, and the surface left behind is the one nothing else reads`);
+
+// The published-scope regions' own oracle (see PUBLISHED-SCOPE REGIONS above). Checked after the
+// four surfaces so a stranded closure row is still attributed to the claim above.
+// PUBLISHED_ARTIFACT is the one published pair a region may name, copied from the artifact, not from
+// this checkout. `[측정 2026-11-03]` the global install of @junghanacs/entwurf@0.50.0 whose bytes #155
+// HOP1 accepted against the registry tarball declares exactly these nine @earendil-works dependencies
+// in its package.json (sha256 20c572534fcfc03e8f89890a0853a25048166f7c998e433945289a5d20ee1234).
+const PUBLISHED_ARTIFACT = {
+  version: '0.50.0',
+  dependencies: {
+    '@earendil-works/chord': '1.4.0', '@earendil-works/pi-agent-core': '1.4.0', '@earendil-works/pi-ai': '1.4.0',
+    '@earendil-works/pi-codemode': '1.4.0', '@earendil-works/pi-coding-agent': '1.4.0', '@earendil-works/pi-durable': '1.4.0',
+    '@earendil-works/pi-mcp': '1.4.0', '@earendil-works/pi-telemetry': '1.4.0', '@earendil-works/pi-tui': '1.4.0',
+  },
+};
+const publishedSdk = [...new Set(Object.values(PUBLISHED_ARTIFACT.dependencies))];
+const publishedGaps = [];
+if (publishedSdk.length !== 1) publishedGaps.push(`PUBLISHED_ARTIFACT ${PUBLISHED_ARTIFACT.version} carries no single SDK generation (${publishedSdk.join(', ')})`);
+let publishedRegionCount = 0;
+const PUBLISHED_REGION_MAX_LINES = 40;
+for (const file of [...new Set([...BASELINE_DOCS, ...CURRENT_CONTRACT_DECLS.map(([f]) => f)])]) {
+  const { regions, problems } = publishedRegions(readFileSync(file, 'utf8'));
+  for (const p of problems) publishedGaps.push(`${file}: ${p}`);
+  for (const r of regions) {
+    publishedRegionCount++;
+    const where = `${file}: region "@junghanacs/entwurf@${r.version} pi ${r.sdk}"`;
+    if (r.version !== PUBLISHED_ARTIFACT.version) publishedGaps.push(`${where} names a package no frozen published manifest records (only @junghanacs/entwurf@${PUBLISHED_ARTIFACT.version})`);
+    else if (publishedSdk.length !== 1 || r.sdk !== publishedSdk[0]) publishedGaps.push(`${where} names pi ${r.sdk}, but the published ${r.version} manifest ships pi ${publishedSdk.join(' | ')}`);
+    const decls = [...r.body.matchAll(/>=\s?\d+\.\d+\.\d+\s?<\s?\d+\.\d+|@earendil-works\/pi-(?:ai|coding-agent|tui)@\d+\.\d+\.\d+/g)].length;
+    if (decls === 0) publishedGaps.push(`${where} holds no pi declaration — an empty region only hides prose from the scan`);
+    const lines = r.body.split('\n').length;
+    if (lines > PUBLISHED_REGION_MAX_LINES) publishedGaps.push(`${where} spans ${lines} lines (max ${PUBLISHED_REGION_MAX_LINES}) — mark the table, example or sentence, not the section around it`);
+  }
+}
+if (publishedRegionCount > 0 && sourceRangeDecls < 2) publishedGaps.push(`only ${sourceRangeDecls} range declaration(s) remain outside published-scope regions — the checkout's own floor must still be declared where this gate reads it`);
+assert.deepEqual(publishedGaps, [],
+  `[QK:PI-FLOOR-PUBLISHED-SCOPE] a published-scope region in a baseline doc names a published package and the SDK its frozen manifest ships (PUBLISHED_ARTIFACT, independent of this checkout's version and closure), holds at least one declaration, stays narrow, and leaves the checkout's floor declared outside it`);
 
 // Guard the guard: if the patterns ever stop matching, the loops above pass
 // vacuously and the docs fall back OUT of the gate without a word.
 assert.ok(rangeDecls >= 5, `expected at least 5 pi range declarations across the baseline docs, found ${rangeDecls} — the doc scan matched (almost) nothing and would pass vacuously`);
 assert.ok(exactDecls >= 1, `expected at least 1 exact pi install pin in the baseline docs, found ${exactDecls}`);
 
-console.log(`[check-dep-versions] ok — pi ${piAi} is coherent across the durable pin's SDK set, package.json (exact production dependencies, no dev/peer duplicate), run.sh (install pins), and ${BASELINE_DOCS.length} baseline docs (${rangeDecls} range + ${exactDecls} exact + ${PROSE_DECLS.length} prose declarations)`);
+console.log(`[check-dep-versions] ok — pi ${piAi} is coherent across the durable pin's SDK set, package.json (exact production dependencies, no dev/peer duplicate), run.sh (install pins), and ${BASELINE_DOCS.length} baseline docs (${rangeDecls} range + ${exactDecls} exact + ${PROSE_DECLS.length} prose declarations; ${publishedRegionCount} published-scope region(s))`);
 EOF
   )
 }
@@ -4040,7 +4129,7 @@ check_pack_win32_carrier() {
 #     which is exactly what property (1)'s `(_|$)` absorbs; all three shapes are fixtures
 #     below so a future suffix change cannot pass vacuously.)
 pack_install_leaked_pi() {
-  grep '^@earendil-works+' | grep -Ev '@1\.4\.0(_|$)' || true
+  grep '^@earendil-works+' | grep -Ev '@1\.5\.0(_|$)' || true
 }
 
 # Matcher self-test on SYNTHETIC lookalikes: a healthy install tree cannot exercise either
@@ -4057,18 +4146,18 @@ check_pack_pin_matcher() {
   # Cell 1 — the version boundary. Every measured peer-hash shape is a fixture: the
   # 0.84.4-era `_@modelcontextprotocol+sdk@…`, the `_ws@8.21.3` observed on a real
   # 0.85.1 tree, and `[측정 2026-09-20]` the combined suffix a 0.86.0 install carries.
-  # None may leak; the two lookalikes must — a PREFIX-EXTENDED version (`1.4.0-beta.1`,
+  # None may leak; the two lookalikes must — a PREFIX-EXTENDED version (`1.5.0-beta.1`,
   # the prerelease shape that an unanchored match would bless) and an off-pin version.
   matcher_probe=$(printf '%s\n' \
-    '@earendil-works+pi-ai@1.4.0' \
-    '@earendil-works+pi-ai@1.4.0_@modelcontextprotocol+sdk@1.29.0_zod@4.3.6' \
-    '@earendil-works+pi-ai@1.4.0_ws@8.21.3' \
-    '@earendil-works+pi-ai@1.4.0_@modelcontextprotocol+sdk@1.29.0_zod@4.3.6__ws@8.21.3_zod@4.3.6' \
-    '@earendil-works+pi-ai@1.4.0-beta.1' \
+    '@earendil-works+pi-ai@1.5.0' \
+    '@earendil-works+pi-ai@1.5.0_@modelcontextprotocol+sdk@1.29.0_zod@4.3.6' \
+    '@earendil-works+pi-ai@1.5.0_ws@8.21.3' \
+    '@earendil-works+pi-ai@1.5.0_@modelcontextprotocol+sdk@1.29.0_zod@4.3.6__ws@8.21.3_zod@4.3.6' \
+    '@earendil-works+pi-ai@1.5.0-beta.1' \
     '@earendil-works+pi-agent-core@0.87.1' | pack_install_leaked_pi)
-  if [ "$matcher_probe" != '@earendil-works+pi-ai@1.4.0-beta.1
+  if [ "$matcher_probe" != '@earendil-works+pi-ai@1.5.0-beta.1
 @earendil-works+pi-agent-core@0.87.1' ]; then
-    fail "[QK:PACK-INSTALL-PIN-MATCHER-BOUNDED] the pin-leak matcher must flag the prefix-extended 1.4.0-beta.1 and the off-pin 0.87.1 lookalikes, and pass 1.4.0 bare or with any measured peer-hash — got: ${matcher_probe:-<nothing leaked>}"
+    fail "[QK:PACK-INSTALL-PIN-MATCHER-BOUNDED] the pin-leak matcher must flag the prefix-extended 1.5.0-beta.1 and the off-pin 0.87.1 lookalikes, and pass 1.5.0 bare or with any measured peer-hash — got: ${matcher_probe:-<nothing leaked>}"
     return 1
   fi
 
@@ -4076,9 +4165,9 @@ check_pack_pin_matcher() {
   # (0.85.0 onward, still true at 0.99.1). An off-pin chord MUST leak; the pinned one must not. A matcher narrowed
   # back to `^@earendil-works+pi-` sees nothing here and dies at this signature.
   matcher_probe=$(printf '%s\n' \
-    '@earendil-works+chord@1.4.0' \
+    '@earendil-works+chord@1.5.0' \
     '@earendil-works+chord@0.87.1' \
-    '@earendil-works+pi-ai@1.4.0' | pack_install_leaked_pi)
+    '@earendil-works+pi-ai@1.5.0' | pack_install_leaked_pi)
   if [ "$matcher_probe" != '@earendil-works+chord@0.87.1' ]; then
     fail "[QK:PACK-INSTALL-PIN-MATCHER-COVERS-CLOSURE] the pin-leak matcher must cover every @earendil-works closure member, not just the pi-* families — an off-pin @earendil-works/chord has to leak (it was a runtime dependency of pi-coding-agent, pi-agent-core, pi-client and pi-protocol — `[측정 2026-09-20]` at 0.86.0, re-measured `[측정 2026-09-22]` at 0.87.0, `[측정 2026-09-23]` at 0.87.1 and `[측정 2026-09-30]` at 0.99.1, where pi-coding-agent adds pi-codemode and pi-mcp beside them; `[측정 2026-10-13]` at 1.2.0 pi-durable alone declares it) — got: ${matcher_probe:-<nothing leaked>}"
     return 1
@@ -4291,7 +4380,9 @@ ORACLE
   # SDK 1.4 pi-durable imports pi-ai's new `utils/identity`, absent from the older pi-ai control versions
   # checked here (1.0.3 and 1.3.0 both fail to load); pi-telemetry 1.0.3/1.3.0 and chord 1.3.0 lack exports
   # it imports. pi-codemode 1.3.0 loads, and depends on no SDK member, so this tree carries exactly one
-  # depth-2 mismatch (L4 keeps depth 3).
+  # depth-2 mismatch (L4 keeps depth 3). `[측정 2026-11-03]` SDK 1.5.0 pi-durable still loads beside
+  # pi-codemode 1.3.0 (registry tarball, integrity-matched) and 1.4.0 (#155 import probe; its codemode
+  # imports are the root, /portable, /source and /declarations entries), so the control version holds.
   printf '%s\n' "{\"name\":\"pd-mismatch\",\"version\":\"1.0.0\",\"private\":true,\"overrides\":{\"@earendil-works/pi-durable\":{\"@earendil-works/pi-codemode\":\"1.3.0\"}}}" > "$box/pd-mismatch/package.json"
   out=$(cd "$box/pd-mismatch" && npm install "$tgz" --ignore-scripts --no-audit --no-fund 2>&1) || {
     fail "[check-pack-install] pi-durable L3 (mismatch control) install failed:"; echo "$out" | tail -10 | sed 's/^/    /' >&2; return 1; }
@@ -4421,7 +4512,13 @@ ORACLE
   local pin_minor="${pin_ver#*.}"; pin_minor="${pin_minor%%.*}"
   local pin_ceiling="${pin_ver%%.*}.$((pin_minor + 1))"
   mkdir -p "$host_old"
-  for spec in "${host_specs[@]}"; do host_old_specs+=("${spec%@*}@$host_old_ver"); done
+  # The old-host fixture installs the members its own generation had. `[측정 2026-11-03]` pi-schema's
+  # registry versions are 0.0.0-stage, 0.0.0 and 1.5.0 (#155: born with the 1.5 SDK), so it has no
+  # release at the fixed old version — the only member skipped here; the pinned/aligned cells keep all ten.
+  for spec in "${host_specs[@]}"; do
+    [ "${spec%@*}" = '@earendil-works/pi-schema' ] && continue
+    host_old_specs+=("${spec%@*}@$host_old_ver")
+  done
   out=$(cd "$host_old" && npm install "${host_old_specs[@]}" --ignore-scripts --no-audit --no-fund 2>&1) || {
     fail "[check-pack-install] could not install the previous-host pi fixture ($host_old_ver):"; echo "$out" | tail -10 | sed 's/^/    /' >&2; return 1; }
   for cell in old aligned; do
@@ -4986,20 +5083,22 @@ _check_pack_install_impl() {
   # oracle walked 10 member edges with 0 mismatches (.tmp-verify/145-stage1/08-pack-install.log).
   # `[측정 2026-10-22]` at 1.4.0 the nine members are again exact 1.4.0 edges (registry manifests; #148 S0),
   # and pi-tui 1.4.0 adds one third-party dependency (marked-cjk-friendly 0.1.2) outside the closure.
-  echo "[check-pack-install] pnpm add into $tmp (with the aligned 1.4.x SDK + chord + codemode + mcp + durable + typebox)"
+  # `[측정 2026-11-03]` at 1.5.0 the set grows to ten: pi-schema 1.5.0 is new and declared by chord,
+  # pi-agent-core, pi-ai and pi-durable; every member edge is exact 1.5.0 (registry manifests; #155).
+  echo "[check-pack-install] pnpm add into $tmp (with the aligned 1.5.x SDK + chord + codemode + mcp + durable + schema)"
   local install_log
   install_log=$(cd "$tmp" && pnpm add \
     "$tgz_path" \
-    "@earendil-works/pi-ai@1.4.0" \
-    "@earendil-works/pi-coding-agent@1.4.0" \
-    "@earendil-works/pi-tui@1.4.0" \
-    "@earendil-works/pi-agent-core@1.4.0" \
-    "@earendil-works/pi-telemetry@1.4.0" \
-    "@earendil-works/chord@1.4.0" \
-    "@earendil-works/pi-codemode@1.4.0" \
-    "@earendil-works/pi-mcp@1.4.0" \
-    "@earendil-works/pi-durable@1.4.0" \
-    "typebox@latest" \
+    "@earendil-works/pi-ai@1.5.0" \
+    "@earendil-works/pi-coding-agent@1.5.0" \
+    "@earendil-works/pi-tui@1.5.0" \
+    "@earendil-works/pi-agent-core@1.5.0" \
+    "@earendil-works/pi-telemetry@1.5.0" \
+    "@earendil-works/chord@1.5.0" \
+    "@earendil-works/pi-codemode@1.5.0" \
+    "@earendil-works/pi-mcp@1.5.0" \
+    "@earendil-works/pi-durable@1.5.0" \
+    "@earendil-works/pi-schema@1.5.0" \
     --ignore-workspace --ignore-scripts 2>&1) || {
     fail "[check-pack-install] pnpm add failed:"
     echo "$install_log" | tail -10 | sed 's/^/    /' >&2
@@ -5014,11 +5113,11 @@ _check_pack_install_impl() {
   local leaked_pi
   leaked_pi=$(ls "$tmp/node_modules/.pnpm" 2>/dev/null | pack_install_leaked_pi)
   if [ -n "$leaked_pi" ]; then
-    fail "[check-pack-install] UNVERIFIED pi runtime resolved into the install tree (expected only 1.4.0):"
+    fail "[check-pack-install] UNVERIFIED pi runtime resolved into the install tree (expected only 1.5.0):"
     printf '%s\n' "$leaked_pi" | sed 's/^/    /' >&2
     return 1
   fi
-  echo "[check-pack-install] pi runtime tree pin verified: every @earendil-works package is 1.4.0 (chord and pi-durable included)"
+  echo "[check-pack-install] pi runtime tree pin verified: every @earendil-works package is 1.5.0 (chord, pi-durable and pi-schema included)"
 
   # Resolve the installed package.json and confirm pi.extensions
   # arrived intact. If pi.extensions is empty or missing, the

@@ -429,7 +429,7 @@ const { BACKGROUND_CONTEXT: context } = await import("@earendil-works/chord/cont
 const { createRegistry, Harness } = await import("@earendil-works/pi-durable");
 const { openNodeSqliteStorage } = await import("@earendil-works/pi-durable/storage/sqlite/node");
 const carrier = new URL("./pi/pi-durable/carrier/", "file://" + process.cwd() + "/").href;
-const { TaskBadge, describeTask, durableLayout } = await import(carrier + "tui.js");
+const { TaskBadge, describeTask, durableLayout, durableNotices } = await import(carrier + "tui.js");
 const { openDurable } = await import(carrier + "runtime.js");
 // Every owned open takes the owner fence (#157 B3); this one is the compiled twin the packaged bootstrap builds.
 const { createPiDurableOwnerFence } = await import(new URL("./mcp/entwurf-bridge/dist/pi-extensions/lib/pi-durable-owner-fence.js", "file://" + process.cwd() + "/").href);
@@ -538,9 +538,23 @@ const parked = node(20, "x.parked", true, { status: "pending", phase: "p" });
 const panel = {
 	sleeping: describeTask(node(8, "pi.generation", false, asleep)),
 	blocked: Object.fromEntries(
-		["missing_task", "task_too_old", "migration_failed", "restart_limit"].map((r) => [r, describeTask({ ...parked, blocked: r })]),
+		// SDK 1.5's BlockedReason: the restart limit no longer parks a task, it ends it (#155).
+		["missing_task", "task_too_old", "migration_failed"].map((r) => [r, describeTask({ ...parked, blocked: r })]),
 	),
 	unblocked: describeTask(parked),
+};
+
+// The lines that stay above the editor (#155): SDK 1.5's compaction trigger, the run that ended without an answer
+// (an aborted run is the user's own stop), and a watch that stopped updating; a healthy view has none.
+const viewOf = (live, stalled) => ({ conversation: { docs: { "pi.live": live } }, notices: [], ...(stalled === undefined ? {} : { stalled }) });
+const noticeLines = (view) => durableNotices(view).map((line) => line.level + ": " + line.message);
+const notices = {
+	compaction: noticeLines(viewOf({ compactionFailure: { taskId: 1, trigger: "threshold", error: "E-COMPACT" } })),
+	runFailed: noticeLines(viewOf({ runFailure: { taskId: 2, inputs: [3], reason: "model_error", detail: "E-MODEL" } })),
+	runPlain: noticeLines(viewOf({ runFailure: { taskId: 2, inputs: [], reason: "no_model" } })),
+	runAborted: noticeLines(viewOf({ runFailure: { taskId: 2, inputs: [3], reason: "aborted" } })),
+	stalled: noticeLines(viewOf({}, { conversation: "E-VIEW", tasks: "E-GRAPH" })),
+	healthy: noticeLines(viewOf({})),
 };
 
 const terminal = (dims) => ({
@@ -628,7 +642,7 @@ const resize = [];
 		resize.push({ rows, cols, marked: marked(draw(ui)) });
 	}
 }
-console.log(JSON.stringify({ runtime, badge, panel, cells, transitions, resize }));
+console.log(JSON.stringify({ runtime, badge, panel, notices, cells, transitions, resize }));
 `;
 
 interface NativeView {
@@ -643,6 +657,7 @@ interface FooterReport {
 	};
 	badge: Record<string, { count: number; widths: Record<string, string[]> }>;
 	panel: { sleeping: string; blocked: Record<string, string>; unblocked: string };
+	notices: Record<"compaction" | "runFailed" | "runPlain" | "runAborted" | "stalled" | "healthy", string[]>;
 	cells: { count: number; rows: number; cols: number; marked: boolean; upstream: boolean }[];
 	transitions: { rows: number; cols: number; count: number; marked: boolean; upstream: boolean }[];
 	resize: { rows: number; cols: number; marked: boolean }[];
@@ -754,8 +769,8 @@ describe("the carrier's task footer (#134), observed through the carrier resolve
 		expect(report.panel.sleeping).toBe(`pi.generation #8: sleeping backoff until ${wake}`);
 	});
 
-	it("[QK:PI-DURABLE-TASK-BLOCKED-SHOWN] a task that cannot run is marked blocked on its panel line, for each of the four reasons, and an unblocked one is not", () => {
-		const reasons = ["missing_task", "task_too_old", "migration_failed", "restart_limit"];
+	it("[QK:PI-DURABLE-TASK-BLOCKED-SHOWN] a task that cannot run is marked blocked on its panel line, for each of the SDK's three reasons, and an unblocked one is not", () => {
+		const reasons = ["missing_task", "task_too_old", "migration_failed"];
 		expect(Object.keys(report.panel.blocked)).toEqual(reasons);
 		for (const reason of reasons)
 			expect(report.panel.blocked[reason], reason).toMatch(
@@ -769,8 +784,25 @@ describe("the carrier's task footer (#134), observed through the carrier resolve
 			missing_task: "x.parked #20: pending p [background, blocked:missing_task]",
 			task_too_old: "x.parked #20: pending p [background, blocked:task_too_old]",
 			migration_failed: "x.parked #20: pending p [background, blocked:migration_failed]",
-			restart_limit: "x.parked #20: pending p [background, blocked:restart_limit]",
 		});
+	});
+
+	it("[QK:PI-DURABLE-COMPACTION-TRIGGER-SHOWN] a retained compaction failure names what started it by SDK 1.5's `trigger`, never an absent field", () => {
+		expect(report.notices.compaction).toEqual(["error: Compaction failed (threshold): E-COMPACT"]);
+		expect(report.notices.healthy).toEqual([]);
+	});
+
+	it("[QK:PI-DURABLE-RUN-FAILURE-SHOWN] the run that ended without an answer stays above the editor by its reason and detail; an aborted run, the user's own stop, adds no line", () => {
+		expect(report.notices.runFailed).toEqual(["error: No answer: model_error (E-MODEL)"]);
+		expect(report.notices.runPlain).toEqual(["error: No answer: no_model"]);
+		expect(report.notices.runAborted).toEqual([]);
+	});
+
+	it("[QK:PI-DURABLE-WATCH-STALL-SHOWN] a conversation or task-graph watch that stopped updating says so, each by its own cause, instead of leaving a frozen screen that looks healthy", () => {
+		expect(report.notices.stalled).toEqual([
+			"error: The conversation stopped updating: E-VIEW",
+			"error: The task panel stopped updating: E-GRAPH",
+		]);
 	});
 
 	it("[QK:PI-DURABLE-FOOTER-BADGE-PROTECTED] with live background tasks the badge is on screen at every positive size, through count changes and resizes", () => {
@@ -789,6 +821,179 @@ describe("the carrier's task footer (#134), observed through the carrier resolve
 		const left = report.transitions.filter((t) => t.count === 0);
 		expect(left).toHaveLength(16);
 		expect(left.filter((t) => !t.upstream)).toEqual([]);
+	});
+});
+
+/**
+ * #155, the carrier's view on SDK 1.5: ONE child, the committed carrier through its resolver, the SDK's own storage,
+ * no model and no network. A session holding 60 history entries and one background task of the oracle's extension
+ * is seeded through the SDK's public API (a non-participant open, as the footer oracle does), then continued by the
+ * carrier: the task reports one error through the Harness and appends 130 more entries, past the window's 100.
+ */
+const VIEW_ORACLE = `
+const { readdirSync, statSync } = await import("node:fs");
+const { join } = await import("node:path");
+const { BACKGROUND_CONTEXT: context } = await import("@earendil-works/chord/context");
+const { createRegistry, Harness } = await import("@earendil-works/pi-durable");
+const { openNodeSqliteStorage } = await import("@earendil-works/pi-durable/storage/sqlite/node");
+const carrier = new URL("./pi/pi-durable/carrier/", "file://" + process.cwd() + "/").href;
+const { openDurable } = await import(carrier + "runtime.js");
+const { durableNotices } = await import(carrier + "tui.js");
+const { Subagent } = await import(carrier + "subagent.js");
+const { createPiDurableOwnerFence } = await import(new URL("./mcp/entwurf-bridge/dist/pi-extensions/lib/pi-durable-owner-fence.js", "file://" + process.cwd() + "/").href);
+const fence = createPiDurableOwnerFence();
+const dist = new URL(".", import.meta.resolve("@earendil-works/pi-coding-agent")).href;
+const { ModelRuntime } = await import(dist + "core/model-runtime.js");
+const project = process.env.ORACLE_PROJECT;
+const SEEDED = 60;
+const APPENDED = 130;
+const note = (n) => ({ kind: "view-oracle.note", data: { n } });
+
+// Reports one error through the Harness, then appends its notes one commit each, so the window drops while it runs.
+const Writer = {
+	definition: {
+		name: "view-oracle.writer",
+		version: 1,
+		initial: () => ({ phase: "write" }),
+		phases: {
+			async write(_task, runtime, ctx) {
+				runtime.report(new Error("VIEW-ORACLE-REPORTED"));
+				for (let n = 0; n < APPENDED; n++) {
+					await runtime.commit(async (tx) => {
+						await tx.appendEntry(runtime.conversationId, note(SEEDED + n));
+					}, ctx);
+				}
+				await runtime.commit(() => ({ status: "terminal", outcome: { status: "completed", result: null } }), ctx);
+			},
+		},
+	},
+};
+const extension = { name: "view-oracle", tasks: [Writer] };
+
+const fresh = await openDurable({ cwd: project, extensions: [extension], fence });
+await fresh.close();
+const sessions = (dir) => readdirSync(dir).flatMap((name) => {
+	const at = join(dir, name);
+	return statSync(at).isDirectory() ? sessions(at) : name === "session.sqlite" ? [at] : [];
+});
+const databases = sessions(process.env.PI_CODING_AGENT_DIR);
+const registry = createRegistry();
+registry.install(extension);
+// A NON-PARTICIPANT fixture: this direct SDK open takes neither the owner fence nor the native lease.
+const seeding = await Harness.open(await openNodeSqliteStorage(databases[0]), { models: await ModelRuntime.create(), registry }, context);
+const seededRoot = await seeding.root(context, {});
+await seededRoot.commit(async (tx) => {
+	for (let n = 0; n < SEEDED; n++) await tx.appendEntry(seededRoot.id, note(n));
+	await tx.createTask(Writer, {}, { ownership: { kind: "conversation" }, background: true });
+}, context);
+await seeding.close(context);
+
+const continued = await openDurable({ cwd: project, continueSession: true, extensions: [extension], fence });
+const notes = (entries) => entries.filter((entry) => entry.kind === "view-oracle.note").map((entry) => entry.data.n);
+const shape = () => {
+	const view = continued.view.current();
+	return {
+		window: notes(view.conversation.entries),
+		kinds: view.transcript.items.map((item) => item.kind),
+		transcript: notes(view.transcript.items.flatMap((item) => (item.kind === "entry" ? [item.entry] : []))),
+	};
+};
+const opened = shape();
+const deadline = Date.now() + 30000;
+let met = false;
+while (Date.now() < deadline) {
+	const now = continued.view.current();
+	const seen = shape();
+	const done =
+		Object.keys(now.tasks?.tasks ?? {}).length === 0 &&
+		seen.transcript.at(-1) === SEEDED + APPENDED - 1 &&
+		seen.kinds.every((kind) => kind !== "gap");
+	if (done) {
+		met = true;
+		break;
+	}
+	await new Promise((resolve) => setTimeout(resolve, 20));
+}
+// One more turn of the event loop, so a listener update queued behind the last commit lands.
+await new Promise((resolve) => setTimeout(resolve, 50));
+const last = continued.view.current();
+const ended = { met, ...shape(), lines: durableNotices(last).map((line) => line.level + ": " + line.message) };
+await continued.close();
+console.log(JSON.stringify({ databases: databases.length, opened, ended, subagentSchema: Subagent.tools[0].parameters }));
+`;
+
+interface ViewShape {
+	window: number[];
+	kinds: string[];
+	transcript: number[];
+}
+
+interface ViewReport {
+	databases: number;
+	opened: ViewShape;
+	ended: ViewShape & { met: boolean; lines: string[] };
+	subagentSchema: unknown;
+}
+
+describe("the carrier's view on SDK 1.5 (#155), observed through the carrier resolver", () => {
+	let report: ViewReport;
+
+	beforeAll(() => {
+		const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), "pi-durable-view-"));
+		try {
+			const project = path.join(sandbox, "project");
+			fs.mkdirSync(project);
+			const run = spawnSync(
+				process.execPath,
+				["--import", path.join(DURABLE, "carrier-resolver.mjs"), "--input-type=module", "-e", VIEW_ORACLE],
+				{
+					cwd: ROOT,
+					encoding: "utf8",
+					timeout: 60_000,
+					env: {
+						PATH: process.env.PATH ?? "",
+						HOME: path.join(sandbox, "home"),
+						PI_CODING_AGENT_DIR: path.join(sandbox, "home", ".pi", "agent"),
+						PI_OFFLINE: "1",
+						ORACLE_PROJECT: project,
+					},
+				},
+			);
+			expect(run.status, run.stderr).toBe(0);
+			report = JSON.parse(run.stdout.trim().split("\n").at(-1) ?? "");
+		} finally {
+			fs.rmSync(sandbox, { recursive: true, force: true });
+		}
+	}, 90_000);
+
+	const range = (from: number, to: number) => Array.from({ length: to - from }, (_, i) => from + i);
+
+	it("[QK:PI-DURABLE-TRANSCRIPT-WINDOW] the window is the SDK's newest entries while the transcript the TUI renders keeps every entry it was shown: an earlier marker before an unloaded start, and nothing lost or repeated when the window drops past 100", () => {
+		expect(report.databases).toBe(1);
+		// Opened over 60 entries: the SDK's first window is the newest 50, and the history before it is marked, not loaded.
+		expect(report.opened.window).toEqual(range(10, 60));
+		expect(report.opened.kinds[0]).toBe("earlier");
+		expect(report.opened.transcript).toEqual(range(10, 60));
+		expect(report.ended.met).toBe(true);
+		// 130 appends later the window holds at most 100 of the newest, and the transcript every one since the open.
+		expect(report.ended.window.length).toBeGreaterThanOrEqual(50);
+		expect(report.ended.window.length).toBeLessThanOrEqual(100);
+		expect(report.ended.window).toEqual(range(190 - report.ended.window.length, 190));
+		expect(report.ended.transcript).toEqual(range(10, 190));
+		expect(report.ended.kinds.filter((kind) => kind !== "entry")).toEqual(["earlier"]);
+	});
+
+	it("[QK:PI-DURABLE-REPORT-ERROR-TEXT] an error the Harness reports is a notice of its kind and its own message, never the Report object's text", () => {
+		expect(report.ended.lines).toContain("warning: task_error: VIEW-ORACLE-REPORTED");
+		expect(report.ended.lines.filter((line) => line.includes("[object Object]"))).toEqual([]);
+	});
+
+	it("[QK:PI-DURABLE-SUBAGENT-SCHEMA-OPEN] the subagent tool's input schema is the TypeBox object's JSON Schema built by pi-schema: one required string task, with no closed-object rule added", () => {
+		expect(report.subagentSchema).toEqual({
+			type: "object",
+			properties: { task: { type: "string", description: "What the subagent should do" } },
+			required: ["task"],
+		});
 	});
 });
 
@@ -1040,7 +1245,7 @@ const fresh = { model: { provider: "faux", model: "scripted" } };
 		await until("threshold compaction failure", () => idle(view.current()) && failure() !== undefined, 5000);
 		const threshold = { failure: failure() ?? null, lines: lines(view.current()), notices: notices(), modelCalls: faux.state.callCount - calls };
 		await controller.compact(undefined);
-		await until("manual compaction failure", () => failure()?.reason === "manual", 5000);
+		await until("manual compaction failure", () => failure()?.trigger === "manual", 5000);
 		await until("manual compaction notice", () => view.current().notices.some((n) => n.message.startsWith("Compaction ")), 5000);
 		report.compaction = { threshold, manual: { failure: failure() ?? null, lines: lines(view.current()) } };
 	} finally {
@@ -1320,12 +1525,12 @@ interface AppReport {
 	normal: { failure: unknown; failedCalls: number; receiver: string };
 	compaction: {
 		threshold: {
-			failure: { reason: string; error: string } | null;
+			failure: { trigger: string; error: string } | null;
 			lines: string[];
 			notices: string[];
 			modelCalls: number;
 		};
-		manual: { failure: { reason: string; error: string } | null; lines: string[] };
+		manual: { failure: { trigger: string; error: string } | null; lines: string[] };
 	};
 	resume: {
 		older: { id: string; gardenId: string };
@@ -1466,30 +1671,36 @@ describe("the carrier on the 1.2 SDK, driven through the real bootstrap (#141)",
 		expect(report.normal).toEqual({ failure: null, failedCalls: 0, receiver: "closed" });
 	});
 
-	it("[QK:PI-DURABLE-COMPACTION-FAILURE-SHOWN] a failed compaction stays on screen by reason and error, kept as the conversation keeps it: the SDK's own threshold compaction a turn waited for, and the manual one beside its own notice", () => {
+	it("[QK:PI-DURABLE-COMPACTION-FAILURE-SHOWN] a failed compaction stays on screen by trigger and error, kept as the conversation keeps it: the SDK's own threshold compaction a turn waited for, and the manual one beside its own notice", () => {
 		expect(report.waits["threshold compaction failure"]).toBe("met");
 		expect(report.compaction.threshold.failure).toMatchObject({
-			reason: "threshold",
+			trigger: "threshold",
 			error: "Summarization failed: S1B3-COMPACTION-REFUSED",
 		});
 		expect(report.compaction.threshold.modelCalls).toBe(1);
-		// The turn that waited reports its own missing answer; the compaction's failure is the conversation's to show.
-		expect(report.compaction.threshold.notices).toEqual([
-			'error: No answer: model_error "Compaction failed: Summarization failed: S1B3-COMPACTION-REFUSED"',
-		]);
+		// The turn that waited ends without an answer, which SDK 1.5 keeps as the conversation's run failure: that line,
+		// beside the compaction's, says it once, and the input it settled adds no notice of its own (#155).
+		expect(report.compaction.threshold.notices).toEqual([]);
 		expect(report.compaction.threshold.lines).toEqual([
 			"error: Compaction failed (threshold): Summarization failed: S1B3-COMPACTION-REFUSED",
-			'error: No answer: model_error "Compaction failed: Summarization failed: S1B3-COMPACTION-REFUSED"',
+			"error: No answer: model_error (Compaction failed: Summarization failed: S1B3-COMPACTION-REFUSED)",
 		]);
 		expect(report.compaction.manual.failure).toMatchObject({
-			reason: "manual",
+			trigger: "manual",
 			error: "Summarization failed: S1B3-COMPACTION-REFUSED",
 		});
-		// The conversation keeps one compaction failure, now the manual one; the notices keep the earlier turn's.
+		// The conversation keeps one compaction failure, now the manual one; no run started, so the run failure stays.
 		expect(report.compaction.manual.lines).toEqual([
 			"error: Compaction failed (manual): Summarization failed: S1B3-COMPACTION-REFUSED",
-			'error: No answer: model_error "Compaction failed: Summarization failed: S1B3-COMPACTION-REFUSED"',
+			"error: No answer: model_error (Compaction failed: Summarization failed: S1B3-COMPACTION-REFUSED)",
 			"error: Compaction failed: Summarization failed: S1B3-COMPACTION-REFUSED",
+		]);
+	});
+
+	it("[QK:PI-DURABLE-RUN-FAILURE-ONCE] a run that ended without an answer is said once, by the conversation's run failure: the input it settled adds no notice, however late its wait settles", () => {
+		const said = report.compaction.manual.lines.filter((line) => line.startsWith("error: No answer"));
+		expect(said).toEqual([
+			"error: No answer: model_error (Compaction failed: Summarization failed: S1B3-COMPACTION-REFUSED)",
 		]);
 	});
 
@@ -1873,13 +2084,24 @@ ModelRuntime.create = async (...args) => {
 const { Harness } = await import("@earendil-works/pi-durable");
 const harnessOpen = Harness.open;
 let failHarnessOpen;
+// The Session's terminal result reads failed once when armed, while its close() still resolves: an end only
+// SessionEnd.kind tells apart (#155). The instance getter wraps the SDK's own, read with the Harness as receiver.
+let failEnd;
 Harness.open = function (...args) {
 	if (failHarnessOpen !== undefined) {
 		const error = failHarnessOpen;
 		failHarnessOpen = undefined;
 		return Promise.reject(error);
 	}
-	return harnessOpen.apply(this, args);
+	return harnessOpen.apply(this, args).then((harness) => {
+		if (failEnd !== undefined) {
+			const error = failEnd;
+			failEnd = undefined;
+			const real = () => Reflect.get(Object.getPrototypeOf(harness), "closed", harness);
+			Object.defineProperty(harness, "closed", { get: () => real().then(() => ({ kind: "failed", error })) });
+		}
+		return harness;
+	});
 };
 
 // The SDK's own SqliteStorage: its close and its commit reject once when armed.
@@ -2084,6 +2306,14 @@ const opened = async (name, options = {}) => {
 	report.selfClosed = { armedLeft: failCommit, resolved: result.resolved, error: message(result.error), claim: claimOf(directory), lease: leaseOf(directory) };
 }
 
+// 6b. The first close resolves and no failure reached the view, but the Session's own end is failed (#155).
+{
+	failEnd = new Error("FENCE-INJECTED-SESSION-END-FAILED");
+	const { durable, directory } = await opened("end-failed");
+	const result = await settle(durable.close());
+	report.endFailed = { armedLeft: failEnd !== undefined, resolved: result.resolved, error: message(result.error), failure: durable.view.current().failure ?? null, claim: claimOf(directory), lease: leaseOf(directory) };
+}
+
 // 7. The env cleanup after a verified storage close and release: success, then failure.
 {
 	const ok = await opened("env-ok");
@@ -2284,6 +2514,14 @@ interface FenceReport {
 		armedLeft: boolean;
 		resolved: boolean;
 		error: string | null;
+		claim: FenceClaimView | null;
+		lease: boolean;
+	};
+	endFailed: {
+		armedLeft: boolean;
+		resolved: boolean;
+		error: string | null;
+		failure: { error?: string } | null;
 		claim: FenceClaimView | null;
 		lease: boolean;
 	};
@@ -2646,6 +2884,18 @@ describe("the owner fence through the owned runtime (#157 B3, clean child)", () 
 		expect(self.lease).toBe(false);
 	});
 
+	it("[QK:PDF-CLOSE-SESSION-END-KIND] a first close that resolves, with no failure in the view, is still no verified close when the Session's own end is failed: the SDK 1.5 end is read by its kind, close-failed with the storage failed and the lease released", () => {
+		const r = report.endFailed;
+		expect([r.armedLeft, r.resolved, r.error, r.failure]).toEqual([false, true, null, null]);
+		expect([r.claim?.state, r.claim?.lease, r.claim?.end?.storage, r.claim?.end?.lease]).toEqual([
+			"close-failed",
+			"released",
+			"failed",
+			"released",
+		]);
+		expect(r.lease).toBe(false);
+	});
+
 	it("[QK:PDF-ENV-CLEANUP-SEPARATE] with the storage closed and the lease released, the env cleanup decides only the caller's result: success resolves, failure rejects with that error, and both persist the same closed end", () => {
 		const { success, failure } = report.env;
 		expect(success.resolved).toBe(true);
@@ -2973,7 +3223,7 @@ try {
 			// Observed after the turn's answer and before the held summary is answered.
 			report.policy.answered = {
 				held: typeof heldSummary === "function",
-				running: (live().compactions ?? []).map((status) => ({ reason: status.reason, blocking: status.blocking })),
+				running: (live().compactions ?? []).map((status) => ({ trigger: status.trigger, blocking: status.blocking })),
 				compactions: compactions(),
 			};
 		}
@@ -3040,7 +3290,7 @@ interface WireReport {
 	compactionPlaced?: boolean;
 	policy: {
 		seed?: { users: number; assistants: number };
-		answered?: { held: boolean; running: { reason: string; blocking: boolean }[]; compactions: (string | null)[] };
+		answered?: { held: boolean; running: { trigger: string; blocking: boolean }[]; compactions: (string | null)[] };
 		below?: { summaries: number; compactions: (string | null)[]; running: unknown; failure: unknown };
 		blocking?: { compactions: (string | null)[] };
 		overflow?: { compactions: (string | null)[] };
@@ -3200,7 +3450,7 @@ describe("the stream transport on the wire, through the real bootstrap (#143)", 
 		expect(userTextOf(asked[0]?.input.at(-1))).toContain("BELOW-BLOCKING");
 		expect(report?.policy.answered).toEqual({
 			held: true,
-			running: [{ reason: "threshold", blocking: false }],
+			running: [{ trigger: "threshold", blocking: false }],
 			compactions: [],
 		});
 		// Released, the SDK places that summary.
@@ -3209,7 +3459,8 @@ describe("the stream transport on the wire, through the real bootstrap (#143)", 
 		expect(blocking.map((f) => f.summary)).toEqual([true, false]);
 		expect(blocking[1]?.input.some((item) => userTextOf(item).includes("WIRE-SUMMARY"))).toBe(true);
 		expect(userTextOf(blocking[1]?.input.at(-1))).toContain("PAST-BLOCKING");
-		expect(report?.policy.blocking?.compactions).toEqual(["threshold"]);
+		// SDK 1.5's view is history, not the active transcript: the earlier summary stays where it was written (#155).
+		expect(report?.policy.blocking?.compactions).toEqual(["threshold", "threshold"]);
 	});
 
 	it("a refused context overflow is compacted by the SDK and the turn is asked again with the summary", () => {
@@ -3220,8 +3471,8 @@ describe("the stream transport on the wire, through the real bootstrap (#143)", 
 			"asked",
 		]);
 		expect(overflow[2]?.input.some((item) => userTextOf(item).includes("WIRE-SUMMARY"))).toBe(true);
-		// The view starts at the latest summary, so the placed overflow compaction is the one it shows.
-		expect(report?.policy.overflow?.compactions).toEqual(["overflow"]);
+		// The view keeps every summary in its window, in the order written; the placed overflow compaction is the newest.
+		expect(report?.policy.overflow?.compactions).toEqual(["threshold", "threshold", "overflow"]);
 	});
 });
 

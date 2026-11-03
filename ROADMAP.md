@@ -152,7 +152,7 @@ ACP는 중심이 아니라 v2 core 위에 provider/model로 들어오는 **plugi
 | v2 live Antigravity → native-push direct injection | native-push adapter/register/decider gates + `smoke-agy-native-push-live` |
 | agy automatic citizen birth + sender/reply identity | hooks/statusline/install/sender gates + three doctors + fresh live round trip |
 | v2 honest reject (false-delivered/`.msg` garbage 0) | matrix-live C3 + deliverability/native-push reject gates |
-| pi 1.4.0 fence | `pnpm check` + release-gate MUST |
+| pi 1.5.0 fence | `pnpm check` + release-gate MUST |
 
 ### Historical — 0.12.0 cutover close checklist
 
@@ -364,7 +364,7 @@ v2 필드 `parentGardenId`/`isEntwurf`는 **stray key로 거부된다** — 되�
 ## 검증 원장 (measured, 재탐색 불필요)
 
 - **pi 0.80 public export:** `hasProjectTrustInputs`/`ProjectTrustStore`/`getAgentDir`/`VERSION` 모두 index
-  public export → TS 직접 import(재구현 불필요). floor = **1.4.0** (`>=1.4.0 <1.5`, next-minor 상한).
+  public export → TS 직접 import(재구현 불필요). floor = **1.5.0** (`>=1.5.0 <1.6`, next-minor 상한; #155 개발 checkout의 선언이며 0.50.0 운영 수용과 별개).
 - **pi trust(0.79.1+):** `pi -p`는 trust에서 안 멈춤(비대화 미결정→`false` degraded). `--approve`(`-a`)=
   project 파일 로드, `--no-approve`(`-na`)=무시·degraded. `ProjectTrustStore.get`은 nearest-ancestor
   walk-up(조상 cwd 결정을 자식이 상속). `AGENTS.md`/`CLAUDE.md`는 0.79.1에서 trust input에서 제거(항상
@@ -559,6 +559,7 @@ v2 필드 `parentGardenId`/`isEntwurf`는 **stray key로 거부된다** — 되�
   cutover에서 제거되며 같이 사라졌다.
 - **Dep bump(별도 트랙):** claude-agent-acp / ACP SDK bump는 `check-acp-sdk-surface`와 raw LIVE로 잠근다.
   ~~준비선 0.61.0 / 1.3.0~~ → **랜딩 완료(2026-07-24 `5f5a18d`, pi 0.82.0은 `dfa3967`)** — 다음 bump부터 이 트랙 절차 재사용. model forcing은 `session/set_config_option(configId="model")`.
+  - **2026-11-03 bump — pi 1.4.0 → 1.5.0 (#155 개발 중).** 개발 checkout의 exact SDK는 pi-schema를 포함한 10종이며 host floor는 다음 minor 상한으로 이동한다. 기존 운영은 출하된 0.50.0 / SDK 1.4.0으로 분리했다. 구현·검수·이관 fixture·FULL·LIVE·출하는 아직 각각의 증거가 필요하며 이전 0.50 영수증을 승계하지 않는다.
   - **2026-07-27 bump — claude-agent-acp 0.61.0 → 0.62.0 (ACP SDK는 1.3.0 유지).** 이 트랙 절차대로 잠갔다:
     ⑴ `check-acp-sdk-surface`를 0.62.0 / claude-agent-sdk 0.3.219로 이동(핀·lock peer-resolution·runtime probe)
     후 PASS, ⑵ `LIVE=1 ./run.sh smoke-acp-raw-turn-live` **2026-07-27 10:49:15 KST 실행 → PASS**

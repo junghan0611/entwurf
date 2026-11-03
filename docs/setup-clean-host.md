@@ -23,10 +23,11 @@ evidence split, and its three states must not collapse into "macOS is supported"
 
 ## Requirements
 
-This table is the published `@junghanacs/entwurf@0.50.0`'s, which ships the Pi 1.4.0 SDK set.
+This table and the 1.4-specific install examples below describe the published `@junghanacs/entwurf@0.50.0`, which ships the Pi 1.4.0 SDK set. The #155 development checkout is migrating to the 1.5.0 SDK set; its source, generated carrier and verification may be at different stages, and these published-package instructions are not evidence of a 1.5 release or operating rollout.
 The previous package, `0.41.0`, ships the Pi 1.3.0 SDK set and requires Pi 1.3.x; the setup guide
 inside that tarball is its contract.
 
+<!-- entwurf:published @junghanacs/entwurf@0.50.0 pi 1.4.0 -->
 | Component | Requirement | Needed for |
 |---|---|---|
 | Node | **`>=24.0.0`** | package and bridge runtime |
@@ -41,6 +42,7 @@ inside that tarball is its contract.
 | Antigravity `agy` | optional, operator-installed and authenticated | legacy citizen; native push paused (#152) |
 | OpenAI Codex CLI | optional-by-presence, operator-installed and authenticated; detected composes all four operator-owned units (birth/MCP/status-line/terminal-title) and stays non-green until the operator trusts the birth declaration once in a visible Codex; visible fresh also requires the operator-owned app-server, started with `entwurf codex-app-server` in a tmux session of the operator's choosing (#95 D1 retired the fixed `codex` home) | native-push and visible fresh, supported in 0.21.0 |
 | Cortex Code | optional, operator-installed and authenticated | Cortex ACP backend |
+<!-- /entwurf:published -->
 
 Claude Code >=2.1.306 is required for the managed exec-hook lifecycle and same-id resume. The package
 never supplies or proxies backend credentials.
@@ -228,6 +230,7 @@ Install the exact release floor, then wire the project. The previous 0.41.0 inst
 Pi 1.3.x its own setup guide names. A source checkout passes its checkout path to `-e` in place of
 the global package root:
 
+<!-- entwurf:published @junghanacs/entwurf@0.50.0 pi 1.4.0 -->
 ```bash
 npm install -g @earendil-works/pi-coding-agent@1.4.0
 pi --version
@@ -241,6 +244,7 @@ The supported range is `>=1.4.0 <1.5`. It is a hard minimum: installing this
 release onto a 0.83.x pi host upgrades the runtime rather than keeping the older
 minor. A host using only the external MCP bridge can skip pi until it needs a
 control socket; no delivery rail launches a pi process.
+<!-- /entwurf:published -->
 
 For daily garden-native pi sessions:
 
@@ -373,8 +377,7 @@ carrier file, the license, the resolver and its relocation grammar are present
 (`pi-durable-carrier-drift`); every declared SDK package resolves from the carrier
 (`pi-durable-sdk-absent`); and every reachable physical edge — from the carrier to each package,
 and from every package copy it reaches, at any depth, to its own `@earendil-works` dependencies —
-lands on a package of the declared name at exactly the pinned version (`pi-durable-sdk-mismatch`). The members declare one another with caret
-ranges, so semver satisfaction is not the contract; the bytes an import binds are. Sharing
+lands on a package of the declared name at exactly the pinned version (`pi-durable-sdk-mismatch`). The members' declarations are exact in the 1.4.0 set; even so, the physical package each import binds must be checked. Sharing
 one copy with an aligned host install of the same version is an ordinary layout. A mixed
 tree (for example an override that binds pi-durable's `pi-ai` to an older published version) still
 *imports* — which is why the edge check exists — and is refused by name.
@@ -451,7 +454,7 @@ tree (for example an override that binds pi-durable's `pi-ai` to an older publis
   manifest field; it is a known constraint of supplying both from one package, accepted for 0.32,
   not a claim that every load path is harmless.
 
-The ordinary Pi CLI on PATH is a separate subject (§2, range `>=1.4.0 <1.5`): a host Pi is
+The ordinary Pi CLI on PATH is a separate subject (§2, range <!-- entwurf:published @junghanacs/entwurf@0.50.0 pi 1.4.0 -->`>=1.4.0 <1.5`<!-- /entwurf:published -->): a host Pi is
 not needed to run pi-durable, and a host inside the range need not be the same copy as the
 carrier's. Native Pi owns credentials, model settings and durable SQLite sessions; keep them
 in place rather than copying credentials or migrating ordinary Pi transcripts. Native
@@ -461,6 +464,17 @@ Package gates prove the installed carrier's load, its physical edges and the pub
 to the app's own model resolution; the checkout contact/send/receive gates run the same carrier
 with scripted S plus native H; Pi ↔ pi-durable LIVE on this supply surface is a separate release
 proof ([#130](https://github.com/junghan0611/entwurf/issues/130)).
+
+### SDK 1.5 development boundary (#155)
+
+The 1.5.0 SDK set in the development checkout is a separate, unaccepted subject from the
+published 0.50.0 / SDK 1.4.0 instructions above. Do not open an operating session with the
+new SDK as a development test. Before any operator-approved cutover, prove the old owner has
+exited and preserve a consistent copy of the complete session directory, including any WAL/SHM.
+The #155 migration and downgrade-refusal fixtures and their acceptance are still separate work;
+installing an older package is not a data rollback. Follow the current evidence and cutover
+conditions in [#155](https://github.com/junghan0611/entwurf/issues/155), not the 1.3→1.4
+receipt below as proof of a 1.5 migration.
 
 ### Moving durable sessions from the Pi 1.3 SDK to 1.4
 
@@ -726,7 +740,7 @@ as a note rather than a fault.
 
 **entwurf sets no OMP version floor in code, and will not grow one on schedule.** Detection is
 presence-only (`command -v "${OMP_BIN:-omp}"`); there is no `entwurf.ompFloor`, no coherence
-gate, and no exact pin — unlike Node (`engines.node`), pi (`>=1.4.0 <1.5`) and Claude Code
+gate, and no exact pin — unlike Node (`engines.node`), pi (<!-- entwurf:published @junghanacs/entwurf@0.50.0 pi 1.4.0 -->`>=1.4.0 <1.5`<!-- /entwurf:published --> for published 0.50.0) and Claude Code
 (`entwurf.claudeCodeFloor`), each of which has an enforcement point. That asymmetry is a
 decision, not an omission. A floor is the answer to a vendor that fails SILENTLY — Claude Code
 earned one because an older binary validates the exec manifest, drops `args` at runtime, and

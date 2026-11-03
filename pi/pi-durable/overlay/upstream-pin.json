@@ -70,14 +70,14 @@
 			{
 				"name": "runtime.js",
 				"source": "pi/pi-durable/src/experimental/durable/runtime.ts",
-				"blob": "bb5715ab143945e9f2c067ff71d890fe29875d09",
-				"sha256": "437834997b9870ab0383aea7d86ff7880ef7e2ebbbfe4c6360f67d8d36f777ec"
+				"blob": "4febd6ab9c7357771f472a8342c1001289e62350",
+				"sha256": "3b724ae01374b768193ff6b17aaff945314309546086541305b48f5abeadc0d9"
 			},
 			{
 				"name": "tui.js",
 				"source": "pi/pi-durable/src/experimental/durable/tui.ts",
-				"blob": "405600f6ba1558bf6bf22d144afdcf3f1295c282",
-				"sha256": "d4bf4e2861bde917e1dcdea6f063bdc3e101ab500107a9c5fab0e3ce97fb2c4a"
+				"blob": "407b4290f4a4cf97c2d5ef303060506a04eae3a2",
+				"sha256": "279ec0b1e347a83984202397cf010b3b758a72e18d4c32b934ef9a61931a7172"
 			},
 			{
 				"name": "harness-setup.js",
@@ -100,8 +100,8 @@
 			{
 				"name": "subagent.js",
 				"source": "pi/pi-durable/src/experimental/durable/subagent.ts",
-				"blob": "3fa9aebbe93e82cfff436e7b9d4c9877e0ed0e27",
-				"sha256": "1cb2390b673a0d914117bc07708c39b004fb10e48b31436bf9d9d2b953a64220"
+				"blob": "e842d8a6b8dc55825d0381d803b6d6496b205c19",
+				"sha256": "c9931fabd60f5fbf75220e896a57e5c8b131b4936887bf6f9660d50d01709f3a"
 			},
 			{
 				"name": "session-name.js",
@@ -138,17 +138,18 @@
 		]
 	},
 	"sdk": {
-		"comment": "The published library set the carrier runs against, derived from the 1.4.0 declarations. members: the @earendil-works packages the carrier imports and every @earendil-works package those declare. direct: a third-party package a carrier file imports itself (sessions.ts: proper-lockfile, at the version pi-coding-agent 1.4.0 pins). Each is an exact production dependency in package.json. Since 1.3.0 the members' own edges are exact too (upstream #10865), and the installed physical edges are still what must equal these versions.",
+		"comment": "The published library set the carrier runs against, derived from the 1.5.0 declarations. members: the @earendil-works packages the carrier imports and every @earendil-works package those declare (1.5.0 adds pi-schema, declared by chord, pi-agent-core, pi-ai and pi-durable). direct: a third-party package a carrier file imports itself (sessions.ts: proper-lockfile, at the version pi-coding-agent 1.5.0 pins). Each is an exact production dependency in package.json. Since 1.3.0 the members' own edges are exact too (upstream #10865), and the installed physical edges are still what must equal these versions.",
 		"members": {
-			"@earendil-works/chord": "1.4.0",
-			"@earendil-works/pi-agent-core": "1.4.0",
-			"@earendil-works/pi-ai": "1.4.0",
-			"@earendil-works/pi-codemode": "1.4.0",
-			"@earendil-works/pi-coding-agent": "1.4.0",
-			"@earendil-works/pi-durable": "1.4.0",
-			"@earendil-works/pi-mcp": "1.4.0",
-			"@earendil-works/pi-telemetry": "1.4.0",
-			"@earendil-works/pi-tui": "1.4.0"
+			"@earendil-works/chord": "1.5.0",
+			"@earendil-works/pi-agent-core": "1.5.0",
+			"@earendil-works/pi-ai": "1.5.0",
+			"@earendil-works/pi-codemode": "1.5.0",
+			"@earendil-works/pi-coding-agent": "1.5.0",
+			"@earendil-works/pi-durable": "1.5.0",
+			"@earendil-works/pi-mcp": "1.5.0",
+			"@earendil-works/pi-schema": "1.5.0",
+			"@earendil-works/pi-telemetry": "1.5.0",
+			"@earendil-works/pi-tui": "1.5.0"
 		},
 		"direct": {
 			"proper-lockfile": "4.1.2"

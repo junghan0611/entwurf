@@ -4,6 +4,8 @@ Author: gpt-6.1-sol (pi-durable/session20261008T113104-801621, 2026-10-13) — c
 
 > **Status, 2026-10-13.** `86d4b65` is the GLG-requested branch checkpoint of S0 and S1 in this checkout: the four-fence `pnpm typecheck` passed in its commit hook and the SDK set is 1.2.0. That is scoped completion, not frozen acceptance — the frozen FULL floor, native LIVE, the prepared exact-SHA CI body and the release modes are still owed. The numbered steps below are the settled contract that work followed, not remaining work; the R0 RED and "stay 1.1.0" lines are historical. The no-new-sibling rule stands, with one dated exception: GLG requested the read-only Grok review of `86d4b65` on 2026-10-13.
 
+> **Historical scope.** This document records the #141 / 0.36.0 execution and its then-authorized workflow, roles and evidence. It is not a current operating or migration instruction. For the active SDK migration and its operating separation, see [#155](https://github.com/junghan0611/entwurf/issues/155) and the current branch handoff; general rules remain in [AGENTS.md](../AGENTS.md).
+
 ## Decisions and roles
 
 - [#141](https://github.com/junghan0611/entwurf/issues/141) is priority00; target0.36.0. Entwurf maintains its thin application/TUI composition using Pi TUI. Upstream SDK owns execution, scheduler, queues, storage/transcript, compaction, cancellation/recovery, providers and auth. Ownership is decided, not a Rule17 veto to revisit.

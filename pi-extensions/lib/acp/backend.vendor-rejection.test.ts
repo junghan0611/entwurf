@@ -36,9 +36,9 @@ import {
 	type Model,
 	normalizeContext,
 	type TranscriptContext,
-	Type,
 	type Usage,
 } from "@earendil-works/pi-ai";
+import { obj } from "@earendil-works/pi-schema";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { AcpClientHandlers, AcpConnectionLike, AcpPromptResponse } from "./acp-client.ts";
 import type { AcpChildLike, AcpTurnDeps } from "./backend.ts";
@@ -125,7 +125,7 @@ const SONNET: Model<Api> = {
 const PI_TOOLS = ["read", "bash", "edit", "write"].map((name) => ({
 	name,
 	description: "",
-	parameters: Type.Object({}),
+	parameters: obj({}, { open: true }),
 }));
 
 const ZERO_USAGE: Usage = {

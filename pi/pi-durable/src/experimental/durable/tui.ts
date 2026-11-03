@@ -6,6 +6,7 @@ import type {
 	LiveState,
 	TaskGraph,
 	TaskGraphNode,
+	TranscriptItem,
 	UsageState,
 } from "@earendil-works/pi-durable";
 import {
@@ -176,8 +177,9 @@ interface Handlers {
 }
 
 /**
- * The lines above the editor: first what stays true for as long as it is true, the session's failure and the
- * compaction failure a conversation keeps until a compaction produces a summary, then the latest notices.
+ * The lines above the editor: first what stays true for as long as it is true, the session's failure, the
+ * compaction failure a conversation keeps until a compaction produces a summary, the run that ended without an
+ * answer until another run starts, and a view that stopped updating; then the latest notices.
  */
 export function durableNotices(view: DurableView): readonly Pick<Notice, "level" | "message">[] {
 	const lines: Pick<Notice, "level" | "message">[] = [];
@@ -188,9 +190,22 @@ export function durableNotices(view: DurableView): readonly Pick<Notice, "level"
 			message: `Session failed${cause}. It takes no more input, and a tool still running may take a while to stop. Close this session, then reopen it with --continue.`,
 		});
 	}
-	const compaction = ((view.conversation.docs["pi.live"] ?? {}) as LiveState).compactionFailure;
+	const live = (view.conversation.docs["pi.live"] ?? {}) as LiveState;
+	const compaction = live.compactionFailure;
 	if (compaction !== undefined) {
-		lines.push({ level: "error", message: `Compaction failed (${compaction.reason}): ${compaction.error}` });
+		lines.push({ level: "error", message: `Compaction failed (${compaction.trigger}): ${compaction.error}` });
+	}
+	// SDK 1.5 keeps why the newest run ended without an answer. An aborted run is the user's own stop, as before:
+	// the answer it cut off already says so.
+	const run = live.runFailure;
+	if (run !== undefined && run.reason !== "aborted") {
+		const detail = run.detail === undefined ? "" : ` (${run.detail})`;
+		lines.push({ level: "error", message: `No answer: ${run.reason}${detail}` });
+	}
+	for (const [part, error] of Object.entries(view.stalled ?? {})) {
+		if (error === undefined) continue;
+		const what = part === "tasks" ? "The task panel" : "The conversation";
+		lines.push({ level: "error", message: `${what} stopped updating: ${error}` });
 	}
 	return [...lines, ...view.notices.slice(-4)];
 }
@@ -289,7 +304,8 @@ class DurableTui {
 	readonly #summaries: CompactionComponent[] = [];
 	/** Tool output and summaries shown in full; toggled like pi. */
 	#expanded = false;
-	#renderedEntryIds: number[] = [];
+	/** One key per transcript item on screen, in order (`keyOf`). */
+	#renderedKeys: string[] = [];
 	#streaming: AssistantMessageComponent | undefined;
 	#indicator: StatusIndicator | undefined;
 	#statusText = "";
@@ -391,10 +407,11 @@ class DurableTui {
 
 	apply(view: DurableView): void {
 		const live = (view.conversation.docs["pi.live"] ?? {}) as LiveState;
-		this.#syncTranscript(view.conversation.entries);
+		// The merged transcript, not the window: entries the window drops stay on screen (#155).
+		this.#syncTranscript(view.transcript.items);
 		const message = live.generation?.message as AssistantMessage | undefined;
 		// A partial without its entry was dropped, for example by a retry: render the transcript again.
-		if (message === undefined && this.#streaming !== undefined) this.#rebuild(view.conversation.entries);
+		if (message === undefined && this.#streaming !== undefined) this.#rebuild(view.transcript.items);
 		if (message !== undefined) this.#syncStreaming(message);
 		for (const slot of live.tools ?? []) {
 			if (slot.status === "pending") continue;
@@ -476,8 +493,8 @@ class DurableTui {
 		} else if (generation?.deferred !== undefined) text = "Waiting for deferred response...";
 		else if (compaction !== undefined) {
 			text = compaction.retry
-				? `Retrying ${compaction.reason} compaction (attempt ${compaction.attempt + 1})...`
-				: `Compacting (${compaction.reason})...`;
+				? `Retrying ${compaction.trigger} compaction (attempt ${compaction.attempt + 1})...`
+				: `Compacting (${compaction.trigger})...`;
 		} else if (runningTool !== undefined) text = `Running ${runningTool.name}... (esc to abort)`;
 		else if (live.run !== undefined) text = "Working... (esc to abort)";
 		if (text === this.#statusText) return;
@@ -502,7 +519,7 @@ class DurableTui {
 			view.models.find((model) => model.provider === agent.model?.provider && model.modelId === agent.model.modelId)
 				?.contextWindow ?? 0;
 		if (contextWindow > 0) {
-			const tokens = contextTokens(view.conversation.entries);
+			const tokens = contextTokens(entriesOf(view.transcript.items));
 			const percent = tokens === undefined ? undefined : (tokens / contextWindow) * 100;
 			const text = `${percent === undefined ? "?" : percent.toFixed(1)}%/${formatTokens(contextWindow)}`;
 			stats.push(percent !== undefined && percent > 90 ? theme.fg("error", text) : text);
@@ -519,26 +536,35 @@ class DurableTui {
 		);
 	}
 
-	#syncTranscript(entries: readonly EntryRecord[]): void {
-		// Compaction and resets replace the head of the active transcript.
-		if (this.#renderedEntryIds.some((id, index) => entries[index]?.id !== id)) this.#rebuild(entries);
-		for (const entry of entries.slice(this.#renderedEntryIds.length)) {
-			this.#addEntry(entry);
-			this.#renderedEntryIds.push(entry.id);
+	#syncTranscript(items: readonly TranscriptItem[]): void {
+		// The transcript grows at its end; only a filled gap changes what came before. SDK 1.5 history keeps what a
+		// compaction or reset left behind, so neither replaces the head any more.
+		const keys = items.map(keyOf);
+		if (this.#renderedKeys.some((key, index) => keys[index] !== key)) this.#rebuild(items);
+		for (const item of items.slice(this.#renderedKeys.length)) {
+			this.#addItem(item);
+			this.#renderedKeys.push(keyOf(item));
 		}
 	}
 
-	#rebuild(entries: readonly EntryRecord[]): void {
+	#rebuild(items: readonly TranscriptItem[]): void {
 		this.#chat.clear();
 		this.#discardTools();
 		this.#summaries.length = 0;
 		this.#rebuilt = true;
-		this.#renderedEntryIds = [];
+		this.#renderedKeys = [];
 		this.#streaming = undefined;
-		for (const entry of entries) {
-			this.#addEntry(entry);
-			this.#renderedEntryIds.push(entry.id);
+		for (const item of items) {
+			this.#addItem(item);
+			this.#renderedKeys.push(keyOf(item));
 		}
+	}
+
+	#addItem(item: TranscriptItem): void {
+		if (item.kind === "entry") this.#addEntry(item.entry);
+		// History before the first window is not loaded: marked, never paged in here (#156 owns any load-more input).
+		else if (item.kind === "earlier") this.#addText("[earlier entries not shown]");
+		else this.#addText("[missing entries, loading...]");
 	}
 
 	#addEntry(entry: EntryRecord): void {
@@ -676,9 +702,20 @@ function totalUsage(state: UsageState): Usage {
 	return total;
 }
 
+/** The entries of transcript items, in ID order. */
+function entriesOf(items: readonly TranscriptItem[]): EntryRecord[] {
+	return items.flatMap((item) => (item.kind === "entry" ? [item.entry] : []));
+}
+
+/** What was rendered for an item stays valid while the same key stays in the same place. */
+function keyOf(item: TranscriptItem): string {
+	if (item.kind === "entry") return `entry:${item.entry.id}`;
+	return item.kind === "gap" ? `gap:${item.after}:${item.upTo}` : "earlier";
+}
+
 /** Context size from the newest successful answer after the newest compaction; unknown before one. */
 function contextTokens(entries: readonly EntryRecord[]): number | undefined {
-	// Kept entries follow the summary in the view but are older than it; only later answers measure the new context.
+	// Entries a summary keeps and those it replaced are older than it; only later answers measure the new context.
 	const compacted = Math.max(0, ...entries.filter((entry) => entry.kind === "pi.compaction").map((entry) => entry.id));
 	for (const entry of [...entries].reverse()) {
 		const message = entry.model?.[0];
