@@ -86,13 +86,21 @@ entwurf pi-durable --resume
 entwurf pi-durable --session <native id>
 ```
 
-The package supplies Entwurf's thin app/TUI carrier and the exact pi SDK set it declares; the launch
-verifies both and refuses incomplete, drifted or mixed supply by name. No separate runtime checkout,
+The package supplies Entwurf's thin app/TUI carrier, emitted from its own canonical production
+source, and the exact pi SDK set it declares; the launch verifies both and refuses incomplete,
+drifted or mixed supply by name. No separate runtime checkout,
 patch, build or ordinary Pi CLI is needed. The contact adds garden identity and two-way mailbox
 communication; execution, models, auth, queues, storage and recovery stay the upstream SDK's
 ([Hard Rule 17](./AGENTS.md#hard-rules): **supply the missing surface; do not become the harness**).
-Selectors, native modules and refusals:
-[setup §2b](./docs/setup-clean-host.md#2b-optional-native-durable-pi-durable).
+On a CLI reopen, name the original `--native-module <absolute file>` or
+`--native-module-dir <absolute directory>` again if needed. Public garden-id
+`entwurf_resume_call` is bridge-only: it restores neither those modules nor the old seat. To retain
+them, use the explicit CLI in the terminal you choose, after confirming the old owner has exited.
+For an SDK upgrade, normally close the owner and back up the complete SQLite session file set,
+including WAL/SHM, before the first write; verify the exact version and artifact, then reopen the
+same identity. [Setup §2b](./docs/setup-clean-host.md#2b-optional-native-durable-pi-durable) owns
+selectors and refusals; the [SDK upgrade boundary](./docs/setup-clean-host.md#default-radius-for-a-requested-pi-sdk-upgrade)
+owns the operating and publication gates.
 
 ### Herdr workbench
 

@@ -9,10 +9,10 @@ import {
 	                
 	                  
 	                    
-	ConversationTranscript,
 	                      
 	                       
 	            
+	             
 	                 
 	               
 	Harness,
@@ -23,7 +23,6 @@ import {
 	ROOT_CONVERSATION_ID,
 	                
 	               
-	                    
 	                    
 	                    
 	              
@@ -66,15 +65,16 @@ const context = BACKGROUND_CONTEXT;
                               
 	                                                                                            
 	   
-	                                                                                                                 
-	                                                                                                          
-	                                                                                          
+	                                                                                                                  
+	                                                                                                                     
+	                                                                 
 	   
 	                                        
 	   
 	                                                                                                          
-	                                                                                                              
-	                                                                                                
+	                                                                                                               
+	                                                                                                                 
+	        
 	   
 	                                    
 	                                                       
@@ -178,6 +178,32 @@ function causeOf(error         )         {
 	return error instanceof Error ? error.message : String(error);
 }
 
+/** The shown conversation's active transcript and the newest entry ID in it. */
+                 
+	                                         
+	                        
+ 
+
+/** A read's active transcript and the watch attached right after the read. */
+                  
+	                                  
+	                      
+ 
+
+/** The newest entry ID of `entries`; a head marker comes first, so the last entry need not be the newest. */
+function newestOf(entries                        )         {
+	return entries.reduce((newest, entry) => Math.max(newest, entry.id), Number.NEGATIVE_INFINITY);
+}
+
+/** What the TUI renders: the watched documents with the active transcript as items. */
+function transcriptOf(view                  , entries                        )                 {
+	return {
+		conversation: view.conversation,
+		docs: view.docs,
+		items: entries.map((entry) => ({ kind: "entry"         , entry })),
+	};
+}
+
 export async function openDurable(options                    )                             {
 	// The type requires it; a JS caller is refused here, before the session root is created.
 	if (options.fence === undefined) {
@@ -268,11 +294,23 @@ export async function openDurable(options                    )                  
 			cursor = page.next;
 		} while (cursor !== undefined);
 		let current               = root;
-		// The shown conversation's watch (SDK 1.5 replaced `viewState()`) and the transcript merged from its windows.
-		const transcriptOf = (conversation              )                         =>
-			new ConversationTranscript((query, limit, loading) => conversation.entries(query, limit, undefined, loading));
-		let watch                    = await root.watch(context);
-		let history = transcriptOf(root);
+		// The shown conversation's transcript is pi 1.4's active one (#155 D1). One official read gives the active range
+		// (`Conversation.context().entries`); the watch attached right after it starts at the next entry ID, so what is
+		// committed between the two is its first value. Nothing here derives an active range: when one changes, it is
+		// read again.
+		const seed = async (conversation              )                  => {
+			const read = await conversation.context(context);
+			const newest = newestOf(read.entries);
+			const attached = await conversation.watch(
+				context,
+				Number.isFinite(newest) ? { from: (newest + 1)            } : undefined,
+			);
+			return { watch: attached, shown: { entries: read.entries, newest } };
+		};
+		const first = await seed(root);
+		// The shown watch: the first one until `install` makes it so, then each one a switch or a new read installs.
+		let watch                               ;
+		let shown        = first.shown;
 		const models = ()                 =>
 			modelRuntime.getAvailableSnapshot().map((model) => ({
 				provider: model.provider,
@@ -283,8 +321,8 @@ export async function openDurable(options                    )                  
 
 		let state              = {
 			session: { id: location.id, directory: location.directory, cwd: location.cwd },
-			conversation: watch.value,
-			transcript: history.merge(watch.value),
+			conversation: first.watch.value,
+			transcript: transcriptOf(first.watch.value, shown.entries),
 			conversations: summaries,
 			models: models(),
 			notices: [],
@@ -339,46 +377,89 @@ export async function openDurable(options                    )                  
 			if (end.kind !== "failed" && end.kind !== "listener_error") return;
 			update({ stalled: { ...state.stalled, [part]: causeOf(end.error) } });
 		};
-		const gapFills = new WeakSet                        ();
-		// A window that skipped entries (frames folded while the listener was busy) leaves a gap in the transcript. The
-		// SDK's own `fillGap()` pages it in, one page per call, until none is left; nothing else loads history.
-		const fillGaps = (shown                        , view                )       => {
-			const gap = view.items.find((item)                                                   => item.kind === "gap");
-			if (gap === undefined || gapFills.has(shown)) return;
-			gapFills.add(shown);
-			void shown.fillGap(gap, context).then(
-				() => {
-					gapFills.delete(shown);
-					if (shown !== history) return;
-					// The newest window merged again is a no-op that returns everything held now, the page included.
-					const filled = shown.merge(state.conversation);
-					update({ transcript: filled });
-					// A page that added nothing ends the fill; a later window starts it again.
-					if (filled.items !== view.items) fillGaps(shown, filled);
+		// The watch whose entries wait: its conversation is being read again, or that read failed. A failed read holds
+		// the transcript where it was, said on screen, until a switch installs a new watch; there is no retry.
+		let held                               ;
+		// The shown conversation read again, one read at a time. It is installed only while `trigger` is still the shown
+		// watch: a switch made meanwhile wins, and the late read is dropped (#155 D1).
+		const reseed = (trigger                               )       => {
+			held = trigger;
+			const conversation = current;
+			void seed(conversation).then(
+				(next) => {
+					if (watch !== trigger) {
+						void next.watch.stop();
+						return;
+					}
+					install(conversation, next);
 				},
 				(error) => {
-					gapFills.delete(shown);
-					fail(error);
+					// A read refused by the close or the Session's own failure is no news, as `ended` has it.
+					if (watch !== trigger || closing !== undefined || state.failure !== undefined) return;
+					update({ stalled: { ...state.stalled, conversation: causeOf(error) } });
 				},
 			);
 		};
-		// Every value of the shown conversation's window joins its transcript; a replaced watch's late frames are dropped.
-		const follow = (handle                   , shown                        )       => {
+		// One value of the shown watch. Entries past the newest one shown join the transcript in ID order. A head marker
+		// among them (a compaction or a reset) or a window starting past the newest one shown (it dropped entries the
+		// transcript lacks) is a new active range: read again, nothing appended until it lands.
+		const advance = (view                  )       => {
+			if (held !== undefined && held === watch) {
+				update({ conversation: view });
+				return;
+			}
+			const fresh = view.entries.filter((entry) => entry.id > shown.newest);
+			const restarts = fresh.some((entry) => entry.head !== undefined);
+			const skipped = view.before !== undefined && view.before > shown.newest;
+			if (restarts || skipped) {
+				update({ conversation: view });
+				reseed(watch);
+				return;
+			}
+			// A value without new entries (a document change, such as a streaming answer's progress) leaves the
+			// transcript as it is.
+			if (fresh.length === 0) {
+				update({ conversation: view });
+				return;
+			}
+			shown = { entries: [...shown.entries, ...fresh], newest: newestOf(fresh) };
+			update({ conversation: view, transcript: transcriptOf(view, shown.entries) });
+		};
+		// Every later value of the shown watch; a replaced watch's late frames are dropped.
+		const follow = (handle                   )       => {
 			handle.start(async (call) => {
 				if (handle !== watch) return;
 				if (call.kind === "failed") {
 					notice("warning", `The conversation view could not update: ${causeOf(call.error)}`);
 					return;
 				}
-				const transcript = shown.merge(call.value);
-				update({ conversation: call.value, transcript });
-				fillGaps(shown, transcript);
+				advance(call.value);
 			});
 			void handle.closed.then((end) => {
 				if (handle === watch) ended("conversation", end);
 			});
 		};
-		follow(watch, history);
+		// Show `conversation` from a read: its active entries, then the watch's first value, which holds what was
+		// committed between the read and the attach and is taken exactly once here, then the watch's later values.
+		const install = (conversation              , next        )       => {
+			// The close and the Session's own failure end what is shown, as a switch does: a read landing after either
+			// is let go, its watch stopped (the Session may already have ended it), and nothing is patched or started.
+			if (closing !== undefined || state.failure !== undefined) {
+				void next.watch.stop();
+				return;
+			}
+			const previous = watch;
+			current = conversation;
+			watch = next.watch;
+			shown = next.shown;
+			void previous?.stop();
+			// A new watch replaces a stalled one; the task graph's state is its own.
+			const stalled = state.stalled?.tasks === undefined ? undefined : { tasks: state.stalled.tasks };
+			update({ conversation: next.watch.value, transcript: transcriptOf(next.watch.value, shown.entries), stalled });
+			advance(next.watch.value);
+			follow(next.watch);
+		};
+		install(root, first);
 		// Subagents appear as their conversations are created. A commit observer only records; it calls no Session API.
 		// Its end decides nothing: SDK 1.5 ends it `failed` ("session closed") at a normal close as well (#155).
 		const commits = harness.observeCommits({
@@ -498,16 +579,8 @@ export async function openDurable(options                    )                  
 				command(async () => {
 					const next = await opened.conversation(id, context);
 					if (next === undefined) throw new Error(`Conversation ${id} does not exist`);
-					const nextWatch = await next.watch(context);
-					const previous = watch;
-					current = next;
-					watch = nextWatch;
-					history = transcriptOf(next);
-					void previous.stop();
-					// A new watch replaces a stalled one; the task graph's state is its own.
-					const stalled = state.stalled?.tasks === undefined ? undefined : { tasks: state.stalled.tasks };
-					update({ conversation: nextWatch.value, transcript: history.merge(nextWatch.value), stalled });
-					follow(nextWatch, history);
+					// The same read as the open: the whole active transcript, whatever this process showed of it before.
+					install(next, await seed(next));
 				}),
 		};
 
@@ -557,7 +630,7 @@ export async function openDurable(options                    )                  
 				closing ??= (async () => {
 					// First: the Session runs its close listeners inside its own close call.
 					unsubscribeClose();
-					void watch.stop();
+					void watch?.stop();
 					commits.detach();
 					closeTasks();
 					// The resource end the fence records (#157 B3). Storage is `closed` only when the first actual close

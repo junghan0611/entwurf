@@ -825,10 +825,17 @@ describe("the carrier's task footer (#134), observed through the carrier resolve
 });
 
 /**
- * #155, the carrier's view on SDK 1.5: ONE child, the committed carrier through its resolver, the SDK's own storage,
- * no model and no network. A session holding 60 history entries and one background task of the oracle's extension
- * is seeded through the SDK's public API (a non-participant open, as the footer oracle does), then continued by the
- * carrier: the task reports one error through the Harness and appends 130 more entries, past the window's 100.
+ * #155 D1, the carrier's transcript on SDK 1.5 is pi 1.4's active transcript: ONE child, the committed carrier
+ * through its resolver, the SDK's own storage, no model and no network. A session holding 60 entries, one gated
+ * background task of the oracle's extension and a second conversation of 5 is seeded through the SDK's public API (a
+ * non-participant open, as the footer oracle does), then continued by the carrier through one sequence: an open with a
+ * commit between its read and its watch, the task's 130 appends, one commit of 150 (past the window's 100), a switch
+ * away and back, a compaction-like head marker, a reset whose read is held across a switch, and a read refused.
+ *
+ * Two oracles, neither the carrier's: (1) the IDs the SDK returned for every entry the oracle wrote, from which each
+ * expected transcript is computed here; (2) after close, a non-participant open's `Conversation.context().entries`.
+ * The SDK boundary the carrier reads through (the Conversation prototype the oracle and carrier share) is observed and
+ * steered at one point each, test-only: a commit before an attach, a read held, a read refused, frames counted.
  */
 const VIEW_ORACLE = `
 const { readdirSync, statSync } = await import("node:fs");
@@ -847,7 +854,13 @@ const { ModelRuntime } = await import(dist + "core/model-runtime.js");
 const project = process.env.ORACLE_PROJECT;
 const SEEDED = 60;
 const APPENDED = 130;
+const BATCH = 150;
 const note = (n) => ({ kind: "view-oracle.note", data: { n } });
+const ids = (entries) => entries.map((entry) => entry.id);
+// Oracle 1: the ID the SDK returned for every entry this oracle writes.
+const known = { writer: [] };
+// The task waits for the oracle, so the open is measured with no commit after it.
+const writerGate = Promise.withResolvers();
 
 // Reports one error through the Harness, then appends its notes one commit each, so the window drops while it runs.
 const Writer = {
@@ -857,10 +870,11 @@ const Writer = {
 		initial: () => ({ phase: "write" }),
 		phases: {
 			async write(_task, runtime, ctx) {
+				await writerGate.promise;
 				runtime.report(new Error("VIEW-ORACLE-REPORTED"));
 				for (let n = 0; n < APPENDED; n++) {
 					await runtime.commit(async (tx) => {
-						await tx.appendEntry(runtime.conversationId, note(SEEDED + n));
+						known.writer.push((await tx.appendEntry(runtime.conversationId, note(SEEDED + n))).id);
 					}, ctx);
 				}
 				await runtime.commit(() => ({ status: "terminal", outcome: { status: "completed", result: null } }), ctx);
@@ -869,6 +883,77 @@ const Writer = {
 	},
 };
 const extension = { name: "view-oracle", tasks: [Writer] };
+
+// Test-only steering at the SDK boundary, armed one phase at a time: a commit before a conversation's next attach, its
+// next read held until released, its next read refused, its next attached watch held before it is handed back. Every
+// read and attach is recorded, every frame counted.
+const steer = { attach: undefined, hold: undefined, refuse: undefined, late: undefined };
+const seen = { reads: [], attaches: [], conversations: new Map() };
+const armBoundary = (prototype) => {
+	const read = prototype.context;
+	const watch = prototype.watch;
+	prototype.context = async function (ctx, options) {
+		seen.conversations.set(this.id, this);
+		seen.reads.push(this.id);
+		const refuse = steer.refuse;
+		if (refuse !== undefined && refuse.id === this.id) {
+			steer.refuse = undefined;
+			refuse.done.resolve(true);
+			throw new Error(refuse.message);
+		}
+		const view = await read.call(this, ctx, options);
+		const hold = steer.hold;
+		if (hold !== undefined && hold.id === this.id) {
+			steer.hold = undefined;
+			hold.reached.resolve(true);
+			await hold.release.promise;
+		}
+		return view;
+	};
+	prototype.watch = async function (ctx, window) {
+		seen.conversations.set(this.id, this);
+		const step = steer.attach;
+		if (step !== undefined && step.id === this.id) {
+			steer.attach = undefined;
+			await step.before(this);
+		}
+		const handle = await watch.call(this, ctx, window);
+		const record = { id: this.id, from: window?.from ?? null, frames: 0 };
+		seen.attaches.push(record);
+		const start = handle.start.bind(handle);
+		handle.start = (listener) =>
+			start(async (call, frame) => {
+				try {
+					await listener(call, frame);
+				} finally {
+					record.frames++;
+				}
+			});
+		const late = steer.late;
+		if (late !== undefined && late.id === this.id) {
+			steer.late = undefined;
+			void handle.closed.then((end) => {
+				late.end = end.kind;
+			});
+			late.reached.resolve(true);
+			await late.release.promise;
+		}
+		return handle;
+	};
+	return () => {
+		prototype.context = read;
+		prototype.watch = watch;
+	};
+};
+const turn = () => new Promise((resolve) => setImmediate(resolve));
+const within = (promise, ms) => Promise.race([promise, new Promise((resolve) => setTimeout(() => resolve(false), ms))]);
+// Bounded: a state that never comes is recorded as not met, and the claims say which.
+const until = async (done, ms) => {
+	const end = Date.now() + ms;
+	while (!done() && Date.now() < end) await new Promise((resolve) => setTimeout(resolve, 5));
+	return done();
+};
+const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 
 const fresh = await openDurable({ cwd: project, extensions: [extension], fence });
 await fresh.close();
@@ -882,56 +967,197 @@ registry.install(extension);
 // A NON-PARTICIPANT fixture: this direct SDK open takes neither the owner fence nor the native lease.
 const seeding = await Harness.open(await openNodeSqliteStorage(databases[0]), { models: await ModelRuntime.create(), registry }, context);
 const seededRoot = await seeding.root(context, {});
+known.base = ids((await seededRoot.context(context)).entries);
+known.seeded = [];
 await seededRoot.commit(async (tx) => {
-	for (let n = 0; n < SEEDED; n++) await tx.appendEntry(seededRoot.id, note(n));
+	for (let n = 0; n < SEEDED; n++) known.seeded.push((await tx.appendEntry(seededRoot.id, note(n))).id);
 	await tx.createTask(Writer, {}, { ownership: { kind: "conversation" }, background: true });
 }, context);
+const seededSub = await seeding.createConversation({ ownership: { kind: "ownerless" } }, context);
+known.subBase = ids((await seededSub.context(context)).entries);
+known.sub = await seededSub.commit(async (tx) => {
+	const out = [];
+	for (let n = 0; n < 5; n++) out.push((await tx.appendEntry(seededSub.id, note(1000 + n))).id);
+	return out;
+}, context);
+const root = seededRoot.id;
+const sub = seededSub.id;
+const disarm = armBoundary(Object.getPrototypeOf(seededRoot));
 await seeding.close(context);
 
-const continued = await openDurable({ cwd: project, continueSession: true, extensions: [extension], fence });
-const notes = (entries) => entries.filter((entry) => entry.kind === "view-oracle.note").map((entry) => entry.data.n);
-const shape = () => {
-	const view = continued.view.current();
-	return {
-		window: notes(view.conversation.entries),
-		kinds: view.transcript.items.map((item) => item.kind),
-		transcript: notes(view.transcript.items.flatMap((item) => (item.kind === "entry" ? [item.entry] : []))),
-	};
+// Open: one commit lands between the carrier's read and its attach, and nothing is committed after it.
+steer.attach = {
+	id: root,
+	before: async (conversation) => {
+		known.between = await conversation.commit(async (tx) => (await tx.appendEntry(root, note(2000))).id, context);
+	},
 };
-const opened = shape();
-const deadline = Date.now() + 30000;
-let met = false;
-while (Date.now() < deadline) {
-	const now = continued.view.current();
-	const seen = shape();
-	const done =
-		Object.keys(now.tasks?.tasks ?? {}).length === 0 &&
-		seen.transcript.at(-1) === SEEDED + APPENDED - 1 &&
-		seen.kinds.every((kind) => kind !== "gap");
-	if (done) {
-		met = true;
-		break;
-	}
-	await new Promise((resolve) => setTimeout(resolve, 20));
-}
-// One more turn of the event loop, so a listener update queued behind the last commit lands.
-await new Promise((resolve) => setTimeout(resolve, 50));
-const last = continued.view.current();
-const ended = { met, ...shape(), lines: durableNotices(last).map((line) => line.level + ": " + line.message) };
+const continued = await openDurable({ cwd: project, continueSession: true, extensions: [extension], fence });
+const shownIds = () => continued.view.current().transcript.items.map((item) => (item.kind === "entry" ? item.entry.id : item.kind));
+const lines = () => durableNotices(continued.view.current()).map((line) => line.level + ": " + line.message);
+const reads = () => seen.reads.filter((id) => id === root).length;
+const firstAttach = seen.attaches.find((record) => record.id === root);
+const opened = { ids: shownIds(), frames: firstAttach?.frames ?? null, from: firstAttach?.from ?? null };
+const main = seen.conversations.get(root);
+const commitTo = (id, entries) =>
+	main.commit(async (tx) => {
+		const out = [];
+		for (const entry of entries) out.push((await tx.appendEntry(id, entry)).id);
+		return out;
+	}, context);
+
+// Live: the task's 130 appends, one commit each.
+writerGate.resolve();
+const writerDone = await until(() => Object.keys(continued.view.current().tasks?.tasks ?? {}).length === 0 && known.writer.length === APPENDED, 30000);
+const liveExpected = [...known.base, ...known.seeded, known.between, ...known.writer];
+const live = { met: writerDone && (await until(() => same(shownIds(), liveExpected), 3000)), ids: shownIds(), lines: lines(), reads: reads() };
+
+// Gap: one commit of 150, past the window's 100.
+known.batch = await commitTo(root, Array.from({ length: BATCH }, (_, n) => note(3000 + n)));
+const gapExpected = [...liveExpected, ...known.batch];
+const gap = { met: await until(() => same(shownIds(), gapExpected), 3000), ids: shownIds(), reads: reads() };
+
+// Switch away, commits to main while away, switch back.
+await continued.controller.switchConversation(sub);
+const subShown = { ids: shownIds() };
+known.away = await commitTo(root, [note(4000), note(4001)]);
+await turn();
+await turn();
+const subAfter = { ids: shownIds() };
+await continued.controller.switchConversation(root);
+const back = { ids: shownIds() };
+
+// A compaction-like head marker inside the active range.
+known.cut = known.seeded[30];
+[known.head] = await commitTo(root, [{ kind: "view-oracle.summary", head: known.cut }]);
+const headExpected = [known.head, ...[...gapExpected, ...known.away].filter((id) => id >= known.cut)];
+const head = { met: await until(() => same(shownIds(), headExpected), 3000), ids: shownIds() };
+
+// A reset whose new read is held until a switch away has landed, then released.
+const reached = Promise.withResolvers();
+const release = Promise.withResolvers();
+steer.hold = { id: root, reached, release };
+[known.reset] = await commitTo(root, [{ kind: "view-oracle.reset", head: "self" }]);
+const held = await within(reached.promise, 3000);
+await continued.controller.switchConversation(sub);
+const attachesAtRelease = seen.attaches.length;
+release.resolve();
+const lateAttached = await until(() => seen.attaches.slice(attachesAtRelease).some((record) => record.id === root), 3000);
+await turn();
+await turn();
+const fenced = { held, lateAttached, ids: shownIds() };
+await continued.controller.switchConversation(root);
+const reset = { ids: shownIds() };
+known.after = await commitTo(root, [note(5000), note(5001), note(5002)]);
+const afterReset = { met: await until(() => same(shownIds(), [known.reset, ...known.after]), 3000), ids: shownIds() };
+
+// A new active range whose read is refused: the transcript holds, says so, and appends nothing over the hole.
+const refused = Promise.withResolvers();
+steer.refuse = { id: root, message: "VIEW-ORACLE-REREAD-REFUSED", done: refused };
+[known.summary] = await commitTo(root, [{ kind: "view-oracle.summary", head: known.after[0] }]);
+const refusedSeen = await within(refused.promise, 3000);
+await turn();
+await turn();
+const stalled = { refused: refusedSeen, ids: shownIds(), lines: lines() };
+const shownAttach = seen.attaches.findLast((record) => record.id === root);
+const framesBefore = shownAttach.frames;
+[known.late] = await commitTo(root, [note(6000)]);
+const delivered = await until(() => shownAttach.frames > framesBefore, 3000);
+await turn();
+const heldAfter = { delivered, ids: shownIds(), lines: lines() };
+await continued.controller.switchConversation(root);
+const recovered = { ids: shownIds(), lines: lines() };
+
+// The close: a new read's watch is attached, the session closes before it is handed back, then it is handed back.
+const unhandled = [];
+process.on("unhandledRejection", (error) => unhandled.push(error instanceof Error ? error.message : String(error)));
+const late = { id: root, reached: Promise.withResolvers(), release: Promise.withResolvers(), end: null };
+steer.late = late;
+[known.closing] = await commitTo(root, [{ kind: "view-oracle.summary", head: known.after[0] }]);
+const lateHeld = await within(late.reached.promise, 3000);
 await continued.close();
-console.log(JSON.stringify({ databases: databases.length, opened, ended, subagentSchema: Subagent.tools[0].parameters }));
+const atClose = continued.view.current();
+const endAtRelease = late.end;
+late.release.resolve();
+await turn();
+await turn();
+await turn();
+const closed = { held: lateHeld, endAtRelease, unchanged: continued.view.current() === atClose, unhandled };
+disarm();
+
+// Oracle 2: a non-participant open's own active transcripts after close.
+const reading = await Harness.open(await openNodeSqliteStorage(databases[0]), { models: await ModelRuntime.create(), registry }, context);
+const final = {
+	root: ids((await (await reading.root(context, {})).context(context)).entries),
+	sub: ids((await (await reading.conversation(sub, context)).context(context)).entries),
+};
+await reading.close(context);
+console.log(JSON.stringify({
+	databases: databases.length,
+	known,
+	opened,
+	live,
+	gap,
+	subShown,
+	subAfter,
+	back,
+	head,
+	fenced,
+	reset,
+	afterReset,
+	stalled,
+	heldAfter,
+	recovered,
+	closed,
+	final,
+	// The task's reported error, as the notices showed it once its appends were done.
+	ended: { lines: live.lines },
+	subagentSchema: Subagent.tools[0].parameters,
+}));
 `;
 
-interface ViewShape {
-	window: number[];
-	kinds: string[];
-	transcript: number[];
+/** Shown transcript item IDs (an item that is not an entry shows as its kind) at one point of the sequence. */
+interface Shot {
+	ids: (number | string)[];
+	met?: boolean;
+	lines?: string[];
 }
 
 interface ViewReport {
 	databases: number;
-	opened: ViewShape;
-	ended: ViewShape & { met: boolean; lines: string[] };
+	known: {
+		base: number[];
+		seeded: number[];
+		between: number;
+		writer: number[];
+		batch: number[];
+		subBase: number[];
+		sub: number[];
+		away: number[];
+		cut: number;
+		head: number;
+		reset: number;
+		after: number[];
+		summary: number;
+		late: number;
+		closing: number;
+	};
+	opened: Shot & { frames: number | null; from: number | null };
+	live: Shot & { reads: number; lines: string[] };
+	gap: Shot & { reads: number };
+	subShown: Shot;
+	subAfter: Shot;
+	back: Shot;
+	head: Shot;
+	fenced: Shot & { held: boolean; lateAttached: boolean };
+	reset: Shot;
+	afterReset: Shot;
+	stalled: Shot & { refused: boolean; lines: string[] };
+	heldAfter: Shot & { delivered: boolean; lines: string[] };
+	recovered: Shot & { lines: string[] };
+	closed: { held: boolean; endAtRelease: string | null; unchanged: boolean; unhandled: string[] };
+	final: { root: number[]; sub: number[] };
+	ended: { lines: string[] };
 	subagentSchema: unknown;
 }
 
@@ -966,21 +1192,83 @@ describe("the carrier's view on SDK 1.5 (#155), observed through the carrier res
 		}
 	}, 90_000);
 
-	const range = (from: number, to: number) => Array.from({ length: to - from }, (_, i) => from + i);
+	// Oracle 1: every expected transcript is computed here from the IDs the SDK returned for what the oracle wrote, in
+	// write order, which is ID order. Oracle 2 (`final`) is a non-participant open's own `context().entries`.
+	const opened = () => [...report.known.base, ...report.known.seeded, report.known.between];
+	const live = () => [...opened(), ...report.known.writer];
+	const gap = () => [...live(), ...report.known.batch];
+	const sub = () => [...report.known.subBase, ...report.known.sub];
+	const back = () => [...gap(), ...report.known.away];
 
-	it("[QK:PI-DURABLE-TRANSCRIPT-WINDOW] the window is the SDK's newest entries while the transcript the TUI renders keeps every entry it was shown: an earlier marker before an unloaded start, and nothing lost or repeated when the window drops past 100", () => {
+	it("[QK:PI-DURABLE-ACTIVE-SEED] the transcript the TUI renders is the whole active range read from the SDK, not its 50-entry window: at the open, and on a switch away and back in the same process", () => {
 		expect(report.databases).toBe(1);
-		// Opened over 60 entries: the SDK's first window is the newest 50, and the history before it is marked, not loaded.
-		expect(report.opened.window).toEqual(range(10, 60));
-		expect(report.opened.kinds[0]).toBe("earlier");
-		expect(report.opened.transcript).toEqual(range(10, 60));
-		expect(report.ended.met).toBe(true);
-		// 130 appends later the window holds at most 100 of the newest, and the transcript every one since the open.
-		expect(report.ended.window.length).toBeGreaterThanOrEqual(50);
-		expect(report.ended.window.length).toBeLessThanOrEqual(100);
-		expect(report.ended.window).toEqual(range(190 - report.ended.window.length, 190));
-		expect(report.ended.transcript).toEqual(range(10, 190));
-		expect(report.ended.kinds.filter((kind) => kind !== "entry")).toEqual(["earlier"]);
+		expect(report.known.seeded).toHaveLength(60);
+		expect(report.opened.ids).toEqual(opened());
+		expect(report.subShown.ids).toEqual(sub());
+		expect(report.back.ids).toEqual(back());
+		expect(report.back.ids.length).toBeGreaterThan(100);
+		expect(report.final.sub).toEqual(sub());
+	});
+
+	it("[QK:PI-DURABLE-ACTIVE-ATTACH] an entry committed between the read and the attach is shown once from the watch's first value, with no later value delivered", () => {
+		// The commit fell between the two: the watch starts right after the read's newest entry, at or before it.
+		expect(report.opened.from).toBe(Math.max(...report.known.base, ...report.known.seeded) + 1);
+		expect(report.known.between).toBeGreaterThanOrEqual(report.opened.from ?? Number.POSITIVE_INFINITY);
+		expect(report.opened.frames).toBe(0);
+		expect(report.opened.ids.at(-1)).toBe(report.known.between);
+		expect(report.opened.ids.filter((id) => id === report.known.between)).toHaveLength(1);
+	});
+
+	it("[QK:PI-DURABLE-ACTIVE-ONCE] appends join the transcript once each, in ID order, across the window's own drops", () => {
+		expect(report.known.writer).toHaveLength(130);
+		expect(report.live.met).toBe(true);
+		expect(report.live.ids).toEqual(live());
+		expect(new Set(report.live.ids).size).toBe(report.live.ids.length);
+	});
+
+	it("[QK:PI-DURABLE-ACTIVE-GAP] one commit past the window's 100 is read again from the SDK: nothing skipped, nothing twice", () => {
+		expect(report.known.batch).toHaveLength(150);
+		expect(report.gap.reads).toBeGreaterThan(report.live.reads);
+		expect(report.gap.met).toBe(true);
+		expect(report.gap.ids).toEqual(gap());
+	});
+
+	it("[QK:PI-DURABLE-ACTIVE-HEAD] a head marker starts a new active range, shown head first without what it left behind: a compaction-like cut, a reset, and a cut after the reset", () => {
+		const cut = report.known.cut;
+		expect(report.head.ids).toEqual([report.known.head, ...back().filter((id) => id >= cut)]);
+		expect(report.reset.ids).toEqual([report.known.reset]);
+		expect(report.afterReset.ids).toEqual([report.known.reset, ...report.known.after]);
+		expect(report.recovered.ids).toEqual([report.known.summary, ...report.known.after, report.known.late]);
+		// The last head marker, written before the close, cut at the same entry.
+		expect(report.final.root).toEqual([report.known.closing, ...report.known.after, report.known.late]);
+	});
+
+	it("[QK:PI-DURABLE-ACTIVE-FENCE] a read of the shown conversation that lands after a switch away is dropped, never shown", () => {
+		expect(report.fenced.held).toBe(true);
+		expect(report.fenced.lateAttached).toBe(true);
+		expect(report.fenced.ids).toEqual(sub());
+		// A switched-away conversation's commits never reach the shown one either.
+		expect(report.subAfter.ids).toEqual(sub());
+	});
+
+	it("[QK:PI-DURABLE-ACTIVE-STALL] a new active range whose read fails is said on screen; the transcript stays as it was, takes no append over the hole, and a switch reads it again", () => {
+		const stopped = "error: The conversation stopped updating: VIEW-ORACLE-REREAD-REFUSED";
+		const before = [report.known.reset, ...report.known.after];
+		expect(report.stalled.refused).toBe(true);
+		expect(report.stalled.lines).toContain(stopped);
+		expect(report.stalled.ids).toEqual(before);
+		expect(report.heldAfter.delivered).toBe(true);
+		expect(report.heldAfter.ids).toEqual(before);
+		expect(report.heldAfter.lines).toContain(stopped);
+		expect(report.recovered.lines).not.toContain(stopped);
+	});
+
+	it("[QK:PI-DURABLE-ACTIVE-CLOSED] a new read whose watch the session's close ended before it was handed back is let go: nothing on screen changes after the close, and nothing is left to reject unhandled", () => {
+		expect(report.closed.held).toBe(true);
+		// The reproduction: the close ended the attached watch before the carrier got it.
+		expect(report.closed.endAtRelease).not.toBeNull();
+		expect(report.closed.unchanged).toBe(true);
+		expect(report.closed.unhandled).toEqual([]);
 	});
 
 	it("[QK:PI-DURABLE-REPORT-ERROR-TEXT] an error the Harness reports is a notice of its kind and its own message, never the Report object's text", () => {
@@ -998,7 +1286,7 @@ describe("the carrier's view on SDK 1.5 (#155), observed through the carrier res
 });
 
 /**
- * #141 S1-B3, the application on the 1.2 SDK: ONE child drives the real bootstrap (`main` and
+ * #141 S1-B3, the application on the pinned SDK: ONE child drives the real bootstrap (`main` and
  * `openDurableCitizen`), the committed carrier through its resolver, the compiled contact, the SDK's own
  * node:sqlite storage and a faux model, with a sandboxed HOME and agent directory and a stub bridge — no
  * network, no vendor turn, no host store. The faux provider is registered on every `ModelRuntime` the
@@ -1073,7 +1361,9 @@ const until = async (what, predicate, ms = 15000) => {
 };
 const textOf = (message) => (Array.isArray(message?.content) ? message.content.map((block) => block.text ?? "").join("") : message?.content);
 const idle = (view) => (view.conversation.docs["pi.live"] ?? {}).run === undefined;
-const answered = (view, text) => idle(view) && view.conversation.entries.some((entry) => entry.kind === "pi.assistant" && textOf(entry.model?.[0]) === text);
+// The entries the screen shows: the active transcript's items (#155 D1), never the SDK watch's window.
+const shown = (view) => view.transcript.items.flatMap((item) => (item.kind === "entry" ? [item.entry] : []));
+const answered = (view, text) => idle(view) && shown(view).some((entry) => entry.kind === "pi.assistant" && textOf(entry.model?.[0]) === text);
 const lines = (view) => durableNotices(view).map((line) => line.level + ": " + line.message);
 const fresh = { model: { provider: "faux", model: "scripted" } };
 
@@ -1096,7 +1386,7 @@ const fresh = { model: { provider: "faux", model: "scripted" } };
 				runDurableTui: async (source, controller) => {
 					await controller.submit("delegate, then echo", "steer");
 					await until("output turn", () => answered(source.current(), "ALL-DONE-S1B3"));
-					report.output = source.current().conversation.entries
+					report.output = shown(source.current())
 						.filter((entry) => entry.kind === "pi.tool-result")
 						.map((entry) => ({ tool: entry.model?.[0]?.toolName, text: textOf(entry.model?.[0]) }));
 				},
@@ -1286,7 +1576,7 @@ const fresh = { model: { provider: "faux", model: "scripted" } };
 			seen.push({
 				id: view.session.id,
 				labels: view.conversations.map((summary) => summary.label),
-				users: view.conversation.entries.filter((entry) => entry.kind === "pi.user").map((entry) => textOf(entry.model?.[0])),
+				users: shown(view).filter((entry) => entry.kind === "pi.user").map((entry) => textOf(entry.model?.[0])),
 			});
 		},
 	});
@@ -1419,7 +1709,7 @@ const fresh = { model: { provider: "faux", model: "scripted" } };
 					views.push({
 						id: view.session.id,
 						labels: view.conversations.map((summary) => summary.label),
-						users: view.conversation.entries.filter((entry) => entry.kind === "pi.user").map((entry) => textOf(entry.model?.[0])),
+						users: shown(view).filter((entry) => entry.kind === "pi.user").map((entry) => textOf(entry.model?.[0])),
 						model: view.conversation.docs["pi.agent"]?.model ?? null,
 					});
 				},
@@ -1578,7 +1868,7 @@ interface SessionRun {
 	views: (ResumeSeen & { model: unknown })[];
 }
 
-describe("the carrier on the 1.2 SDK, driven through the real bootstrap (#141)", () => {
+describe("the carrier on the pinned SDK, driven through the real bootstrap (#141)", () => {
 	let report: AppReport;
 
 	beforeAll(() => {
@@ -3142,7 +3432,14 @@ const until = async (what, predicate, ms = 15000) => {
 };
 const assistantText = (message) => (Array.isArray(message?.content) ? message.content.map((block) => block.text ?? "").join("") : message?.content);
 const idle = (view) => (view.conversation.docs["pi.live"] ?? {}).run === undefined;
-const answered = (view, text) => idle(view) && view.conversation.entries.some((entry) => entry.kind === "pi.assistant" && assistantText(entry.model?.[0]) === text);
+// The entries the screen shows: the active transcript's items (#155 D1), never the SDK watch's window.
+const shown = (view) => view.transcript.items.flatMap((item) => (item.kind === "entry" ? [item.entry] : []));
+// The summary in effect: the active transcript's head when it is a compaction, by reason and entry ID.
+const inEffect = (view) => {
+	const head = shown(view)[0];
+	return head?.kind === "pi.compaction" ? { reason: head.data?.reason ?? null, id: head.id } : null;
+};
+const answered = (view, text) => idle(view) && shown(view).some((entry) => entry.kind === "pi.assistant" && assistantText(entry.model?.[0]) === text);
 const model = { provider: "wire-codex", model: "wire" };
 const turn = async (citizen, what, text, expected) => {
 	await citizen.durable.controller.submit(text, "steer");
@@ -3160,7 +3457,8 @@ try {
 		}
 		phase = "compaction";
 		await controller.compact(undefined);
-		const placed = await until("compaction placed", () => idle(view.current()) && view.current().conversation.entries.some((entry) => entry.kind === "pi.compaction"));
+		// Placed: a compaction heads what the screen shows.
+		const placed = await until("compaction placed", () => idle(view.current()) && inEffect(view.current()) !== null);
 		report.compactionPlaced = placed;
 		phase = "after-compaction";
 		if (await turn(citizen, "after compaction: first turn", "AFTER-COMPACTION-ONE", "ACK AFTER-COMPACTION-ONE")) {
@@ -3205,12 +3503,14 @@ try {
 		const { view } = small.durable;
 		const live = () => view.current().conversation.docs["pi.live"] ?? {};
 		const summaries = () => report.frames.filter((frame) => frame.summary && frame.phase.startsWith("policy-")).length;
-		const compactions = () => view.current().conversation.entries.filter((entry) => entry.kind === "pi.compaction").map((entry) => entry.data?.reason ?? null);
+		// The screen holds only the summary in effect (#155 D1): each phase records it, so three placements read as three
+		// fresh entries in order, not as a window still holding the ones before.
+		const compaction = () => inEffect(view.current());
 		// A finished turn first: the SDK compacts only when a prefix before the kept tail exists (selectCut), so without
 		// one the next turn would ask for no summary whatever the background policy.
 		phase = "policy-warmup";
 		const warmed = await turn(small, "policy: warmup turn", "TURN-TWO", "ACK TURN-TWO");
-		const kinds = view.current().conversation.entries.map((entry) => entry.kind);
+		const kinds = shown(view.current()).map((entry) => entry.kind);
 		report.policy.seed = { users: kinds.filter((kind) => kind === "pi.user").length, assistants: kinds.filter((kind) => kind === "pi.assistant").length };
 		phase = "policy-below";
 		if (warmed && (await turn(small, "policy: past background, below blocking", "BELOW-BLOCKING " + "b".repeat(80000), "ACK BELOW-BLOCKING"))) {
@@ -3224,23 +3524,23 @@ try {
 			report.policy.answered = {
 				held: typeof heldSummary === "function",
 				running: (live().compactions ?? []).map((status) => ({ trigger: status.trigger, blocking: status.blocking })),
-				compactions: compactions(),
+				compaction: compaction(),
 			};
 		}
 		heldSummary?.();
 		heldSummary = undefined;
 		// Fixture settling only, before the next phase: let the SDK place the released summary.
 		if (report.policy.answered?.held) {
-			await until("policy: background placed", () => live().compactions === undefined && compactions().length > 0);
-			report.policy.below = { summaries: summaries(), compactions: compactions(), running: live().compactions ?? null, failure: live().compactionFailure ?? null };
+			await until("policy: background placed", () => live().compactions === undefined && compaction() !== null);
+			report.policy.below = { summaries: summaries(), compaction: compaction(), running: live().compactions ?? null, failure: live().compactionFailure ?? null };
 		}
 		phase = "policy-blocking";
 		if (await turn(small, "policy: past blocking", "PAST-BLOCKING " + "c".repeat(200000), "ACK PAST-BLOCKING")) {
-			report.policy.blocking = { compactions: compactions() };
+			report.policy.blocking = { compaction: compaction() };
 		}
 		phase = "policy-overflow";
 		if (await turn(small, "policy: refused overflow", "OVERFLOW-ONCE", "ACK OVERFLOW-ONCE")) {
-			report.policy.overflow = { compactions: compactions() };
+			report.policy.overflow = { compaction: compaction() };
 		}
 	} finally {
 		await small.close();
@@ -3268,6 +3568,12 @@ interface WireFrame {
 	response: string;
 }
 
+/** The summary in effect: the shown active transcript's head compaction, by reason and entry ID. */
+interface InEffect {
+	reason: string | null;
+	id: number;
+}
+
 interface WireReport {
 	waits: Record<string, "met" | "timed out">;
 	forwarded: {
@@ -3290,10 +3596,10 @@ interface WireReport {
 	compactionPlaced?: boolean;
 	policy: {
 		seed?: { users: number; assistants: number };
-		answered?: { held: boolean; running: { trigger: string; blocking: boolean }[]; compactions: (string | null)[] };
-		below?: { summaries: number; compactions: (string | null)[]; running: unknown; failure: unknown };
-		blocking?: { compactions: (string | null)[] };
-		overflow?: { compactions: (string | null)[] };
+		answered?: { held: boolean; running: { trigger: string; blocking: boolean }[]; compaction: InEffect | null };
+		below?: { summaries: number; compaction: InEffect | null; running: unknown; failure: unknown };
+		blocking?: { compaction: InEffect | null };
+		overflow?: { compaction: InEffect | null };
 	};
 	nonce: string;
 	callId: string;
@@ -3451,16 +3757,24 @@ describe("the stream transport on the wire, through the real bootstrap (#143)", 
 		expect(report?.policy.answered).toEqual({
 			held: true,
 			running: [{ trigger: "threshold", blocking: false }],
-			compactions: [],
+			compaction: null,
 		});
-		// Released, the SDK places that summary.
-		expect(report?.policy.below).toEqual({ summaries: 1, compactions: ["threshold"], running: null, failure: null });
+		// Released, the SDK places that summary, and it heads what the screen shows.
+		expect(report?.policy.below).toEqual({
+			summaries: 1,
+			compaction: { reason: "threshold", id: expect.any(Number) },
+			running: null,
+			failure: null,
+		});
 		const blocking = (report?.frames ?? []).filter((f) => f.phase === "policy-blocking");
 		expect(blocking.map((f) => f.summary)).toEqual([true, false]);
 		expect(blocking[1]?.input.some((item) => userTextOf(item).includes("WIRE-SUMMARY"))).toBe(true);
 		expect(userTextOf(blocking[1]?.input.at(-1))).toContain("PAST-BLOCKING");
-		// SDK 1.5's view is history, not the active transcript: the earlier summary stays where it was written (#155).
-		expect(report?.policy.blocking?.compactions).toEqual(["threshold", "threshold"]);
+		// The screen shows the active transcript (#155 D1): the blocking summary now heads it, a new entry after the first.
+		expect(report?.policy.blocking?.compaction?.reason).toBe("threshold");
+		expect(report?.policy.blocking?.compaction?.id).toBeGreaterThan(
+			report?.policy.below?.compaction?.id ?? Number.POSITIVE_INFINITY,
+		);
 	});
 
 	it("a refused context overflow is compacted by the SDK and the turn is asked again with the summary", () => {
@@ -3471,8 +3785,13 @@ describe("the stream transport on the wire, through the real bootstrap (#143)", 
 			"asked",
 		]);
 		expect(overflow[2]?.input.some((item) => userTextOf(item).includes("WIRE-SUMMARY"))).toBe(true);
-		// The view keeps every summary in its window, in the order written; the placed overflow compaction is the newest.
-		expect(report?.policy.overflow?.compactions).toEqual(["threshold", "threshold", "overflow"]);
+		// Each phase's summary in effect: three placements in the order written, each a fresh entry heading the screen.
+		const placed = [report?.policy.below, report?.policy.blocking, report?.policy.overflow].map(
+			(phase) => phase?.compaction,
+		);
+		expect(placed.map((compaction) => compaction?.reason)).toEqual(["threshold", "threshold", "overflow"]);
+		const ids = placed.map((compaction) => compaction?.id ?? Number.NaN);
+		expect(ids.every((id, index) => index === 0 || id > (ids[index - 1] ?? Number.POSITIVE_INFINITY))).toBe(true);
 	});
 });
 

@@ -407,7 +407,7 @@ class DurableTui {
 
 	apply(view: DurableView): void {
 		const live = (view.conversation.docs["pi.live"] ?? {}) as LiveState;
-		// The merged transcript, not the window: entries the window drops stay on screen (#155).
+		// The active transcript, not the window: every entry of the active range, head marker first (#155 D1).
 		this.#syncTranscript(view.transcript.items);
 		const message = live.generation?.message as AssistantMessage | undefined;
 		// A partial without its entry was dropped, for example by a retry: render the transcript again.
@@ -537,8 +537,8 @@ class DurableTui {
 	}
 
 	#syncTranscript(items: readonly TranscriptItem[]): void {
-		// The transcript grows at its end; only a filled gap changes what came before. SDK 1.5 history keeps what a
-		// compaction or reset left behind, so neither replaces the head any more.
+		// The transcript grows at its end. A compaction or reset starts a new active range, its head marker first,
+		// which replaces what came before (#155 D1).
 		const keys = items.map(keyOf);
 		if (this.#renderedKeys.some((key, index) => keys[index] !== key)) this.#rebuild(items);
 		for (const item of items.slice(this.#renderedKeys.length)) {
@@ -562,7 +562,8 @@ class DurableTui {
 
 	#addItem(item: TranscriptItem): void {
 		if (item.kind === "entry") this.#addEntry(item.entry);
-		// History before the first window is not loaded: marked, never paged in here (#156 owns any load-more input).
+		// The runtime's active transcript holds entries only; these two placeholders are the SDK item type's other kinds
+		// (#156 owns any load-more input).
 		else if (item.kind === "earlier") this.#addText("[earlier entries not shown]");
 		else this.#addText("[missing entries, loading...]");
 	}

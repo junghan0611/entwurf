@@ -70,14 +70,14 @@
 			{
 				"name": "runtime.js",
 				"source": "pi/pi-durable/src/experimental/durable/runtime.ts",
-				"blob": "4febd6ab9c7357771f472a8342c1001289e62350",
-				"sha256": "3b724ae01374b768193ff6b17aaff945314309546086541305b48f5abeadc0d9"
+				"blob": "00646b1b1fbd7e935fb3e66b7578a2befc01f3c8",
+				"sha256": "b47113364b7525abd3bf9286ecb0069f78ac96688b8a271bdbca3a54b9d864c5"
 			},
 			{
 				"name": "tui.js",
 				"source": "pi/pi-durable/src/experimental/durable/tui.ts",
-				"blob": "407b4290f4a4cf97c2d5ef303060506a04eae3a2",
-				"sha256": "279ec0b1e347a83984202397cf010b3b758a72e18d4c32b934ef9a61931a7172"
+				"blob": "4b5dd1876ceac8f51910bb11ed5f0024003f4f34",
+				"sha256": "7fefe490d9d462e6a91621901b82b767546926f4a9f4e88d585fe74b727a02c1"
 			},
 			{
 				"name": "harness-setup.js",

@@ -23,7 +23,7 @@ evidence split, and its three states must not collapse into "macOS is supported"
 
 ## Requirements
 
-This table and the 1.4-specific install examples below describe the published `@junghanacs/entwurf@0.50.0`, which ships the Pi 1.4.0 SDK set. The #155 development checkout is migrating to the 1.5.0 SDK set; its source, generated carrier and verification may be at different stages, and these published-package instructions are not evidence of a 1.5 release or operating rollout.
+This table and the 1.4-specific install examples below describe the published `@junghanacs/entwurf@0.50.0`, which ships the Pi 1.4.0 SDK set. The #155 0.51.0 preparation at `434874ef6d6e399a0ae6813c850d01c5232eb1d9` pins SDK 1.5.0; its separate validation TGZ was installed in the approved operating window, but is not the still-unpublished final shipping artifact. npm publication requires its own authority. See the [SDK 1.5 boundary](#sdk-15-development-boundary-155) below; these 0.50 instructions do not select or prove 0.51 bytes.
 The previous package, `0.41.0`, ships the Pi 1.3.0 SDK set and requires Pi 1.3.x; the setup guide
 inside that tarball is its contract.
 
@@ -348,11 +348,11 @@ by `entwurf pi` or by registering ordinary Pi's adapter.
 
 What the Entwurf package supplies:
 
-1. **The pi SDK set** — `@earendil-works/{pi-coding-agent, pi-ai, pi-tui, pi-agent-core,
-   pi-durable, chord, pi-mcp, pi-codemode, pi-telemetry}` at exactly `1.4.0`, plus
-   `proper-lockfile`, as Entwurf's own production dependencies (declared once in
-   `pi/pi-durable/overlay/upstream-pin.json` `sdk`). Model data rides the published
-   `pi-ai`; there is no catalog copy.
+1. **The pi SDK set** — in the 0.51.0 prepared checkout, `@earendil-works/{pi-coding-agent, pi-ai, pi-tui, pi-agent-core,
+   pi-durable, chord, pi-mcp, pi-codemode, pi-telemetry, pi-schema}` at exactly `1.5.0`, plus
+   `proper-lockfile`, as Entwurf's own production dependencies. The authoritative current set is
+   the [SDK pin](../pi/pi-durable/overlay/upstream-pin.json) and [package manifest](../package.json);
+   for this candidate, model data rides `@earendil-works/pi-ai@1.5.0`, not a catalog copy.
 2. **The native app/TUI carrier** — upstream does not publish the experimental durable
    app (`pi-coding-agent` excludes `dist/experimental`; `pi-durable` on npm is the
    library). Entwurf owns the six app files as canonical source (`pi/pi-durable/src`,
@@ -362,7 +362,7 @@ What the Entwurf package supplies:
    (`pi/pi-durable/carrier-resolver.mjs`), which maps them to the published package's
    own `dist/` as installed — never through a source checkout.
 
-The upstream [library guide](https://github.com/earendil-works/pi/blob/v1.4.0/packages/durable/README.md)
+The upstream [library guide](https://github.com/earendil-works/pi/blob/v1.5.0/packages/durable/README.md)
 and the [experimental app guide](https://github.com/earendil-works/pi/blob/v1.1.0/packages/coding-agent/src/experimental/durable/README.md)
 (last published at v1.1.0) describe what the carrier is. Running the bare upstream app does not attach Entwurf's
 garden contact. Entwurf does not rebuild the controller/model/auth/storage system or
@@ -377,7 +377,7 @@ carrier file, the license, the resolver and its relocation grammar are present
 (`pi-durable-carrier-drift`); every declared SDK package resolves from the carrier
 (`pi-durable-sdk-absent`); and every reachable physical edge — from the carrier to each package,
 and from every package copy it reaches, at any depth, to its own `@earendil-works` dependencies —
-lands on a package of the declared name at exactly the pinned version (`pi-durable-sdk-mismatch`). The members' declarations are exact in the 1.4.0 set; even so, the physical package each import binds must be checked. Sharing
+lands on a package of the declared name at exactly the pinned version (`pi-durable-sdk-mismatch`). The members' declarations are exact in the prepared 1.5.0 set; even so, the physical package each import binds must be checked. Sharing
 one copy with an aligned host install of the same version is an ordinary layout. A mixed
 tree (for example an override that binds pi-durable's `pi-ai` to an older published version) still
 *imports* — which is why the edge check exists — and is refused by name.
@@ -402,7 +402,12 @@ tree (for example an override that binds pi-durable's `pi-ai` to an older publis
   `--session` takes the native session id (`<13-digit ms>-<uuid>`, as `--resume` lists it), not a
   garden id, with no interactive session picker or picker-specific TTY check (the normal TUI still
   runs); a value of any other shape is refused as `session-id-malformed` before your module is
-  evaluated, the TUI loads or the app opens.
+  evaluated, the TUI loads or the app opens. To retain an operator module on a CLI reopen, pass
+  its original explicit `--native-module <absolute file>` or `--native-module-dir <absolute directory>`
+  again; garden-id `entwurf_resume_call` is bridge-only and does not restore either ingress or
+  the prior seat. It opens on the caller's launch rail; check for an existing owner before opening
+  another instance. Close the old owner normally and prove its exit before reopening; for an SDK transition, back up
+  the complete durable SQLite file set before the first write ([upgrade boundary](#default-radius-for-a-requested-pi-sdk-upgrade)). Ordinary Pi transcripts are separate JSONL files.
 
   The bootstrap imports only the compiled closure shipped beside it
   (`mcp/entwurf-bridge/dist/…`); a source checkout needs a built bridge
@@ -467,13 +472,12 @@ proof ([#130](https://github.com/junghan0611/entwurf/issues/130)).
 
 ### SDK 1.5 development boundary (#155)
 
-The 1.5.0 SDK set in the development checkout is a separate, unaccepted subject from the
-published 0.50.0 / SDK 1.4.0 instructions above. Do not open an operating session with the
-new SDK as a development test. Before any operator-approved cutover, prove the old owner has
-exited and preserve a consistent copy of the complete session directory, including any WAL/SHM.
-The #155 synthetic migration and downgrade-refusal fixtures were exercised on the `0408a66` candidate; that evidence does not accept a first write to operating data, real-model/TUI behavior or Native LIVE. Installing an older package is not a data rollback. Follow the current evidence and cutover
-conditions in [#155](https://github.com/junghan0611/entwurf/issues/155), not the 1.3→1.4
-receipt below as proof of a 1.5 migration.
+The published 0.50.0 / SDK 1.4.0 instructions above and the #155 SDK 1.5 development
+candidates are distinct subjects. Synthetic migration and downgrade-refusal fixtures on `0408a66`
+did not authorize an operating first write. A separately approved 1.5 operating window and Native
+LIVE were later measured as described below; neither makes the validation TGZ the final release
+artifact. Installing an older package is not a data rollback. Follow the current evidence in
+[#155](https://github.com/junghan0611/entwurf/issues/155), not the 1.3→1.4 receipt below.
 
 ### Default radius for a requested Pi SDK upgrade
 
@@ -491,7 +495,17 @@ Push, release/tag/npm publication and retirement of any other citizen retain the
 
 **Recurring SDK rail.** At task start, agree the exact SDK and the scope of development, review and verification once; do not repeatedly ask for the existing-auth strategy. Inspect the published SDK set and upstream changes, isolate the development checkout from operating runtimes, and implement against the coherent pinned set in private HOME, PI and writable XDG roots. Use the gate's own temporary-directory constraints: the #155 FULL's deeper scratch produced 117/109-byte socket paths and EINVAL; run3 used `TMPDIR=/tmp` with each gate creating its own private scratch and passed. Preserve both `pnpm_config_verify_deps_before_run=error` and `npm_config_verify_deps_before_run=error`, managed builds and candidate seals; do not run offline gates under ambient CI.
 
-Freeze for sequential independent review, then the affected PARTIAL groups, frozen FULL and the applicable scripted/native-H carrier cells. Those receipts name their own candidates, not a later release. After the operator chooses the named operating window, follow the owner-exit, consistent-backup and coherent-install boundary above; reopen the same identities, observe real turns and round trips with existing native auth, then run the required Native LIVE floor. The pre-cutover validation candidate is not the final Windows-bearing release TGZ. Re-measure current owners, loaded bytes, version/integrity, backup and exact-candidate evidence on each upgrade; do not inherit a prior cut's green.
+The owned canonical app/TUI source is production responsibility; the SDK owns the execution engine. In independent upgrade review, compare old and new app-visible payload semantics against known fixtures and a separate official SDK oracle: more than 50 active entries on reopen and same-process conversation switch, head/reset and background-compaction retention, and the distinction from model memory. API names, typechecks or a QK that only fixes the new SDK's window can all be green while older display compatibility regresses. When official emission changes a generated digest, check its pin-linked mutant find literal and the existing manifest inventory together; this is not a new gate.
+
+Freeze for sequential independent review, then affected PARTIAL groups, frozen FULL and applicable scripted/native-H carrier cells. Accept the **same reviewed validation TGZ** in the Linux container and rehearse ownership refusal/takeover in isolation. Measure SDK publication age early to plan the window, then recheck it fresh before installation; never automatically exempt the global policy.
+
+In the named operating window, identify owners, obtain their normal exit and prove it, then take a consistent complete session backup including WAL/SHM before the first new-SDK write. Install a coherent host and validation TGZ, verify installed global root (GR), runtime and ownership independently, and perform only the approved takeover. Reopen the same identities with their original explicitly named native modules and existing auth; observe real turns and round trips before the Native LIVE floor. Public pi-durable `entwurf_resume_call` is bridge-only: it does not save or restore operator native modules. If one is needed, use the original explicit CLI entry; do not infer a profile or kill a citizen automatically. One approval can cover the named scope, sibling roles and fixture work, but not bypass normal exit, the first-write decision, or separate push/npm authority.
+
+For each named Native fixture, record the runtime root and SDK actually selected separately from the operator installation: a private PATH can select the genuine source CLI while an ordinary Pi extension still comes from an older installed GR. Do not substitute a wrapper or rewire the operating host to make the evidence agree. A planned source-CLI Native run is not a completed receipt.
+
+**#155 measured example (2026-11-03; before the D1 display repair):** at 20:47 KST host Pi 1.5.0 and the unpublished, addon-less 0.51.0 validation TGZ (SHA-256 `199e5f41d20e5b2665125868b7e3e27740e5985f7a25ac61902126b7ed638bf5`) were installed, not the final publication artifact. Four owners exited normally; the 171-file durable backup's source-before/backup/source-after manifests matched (`5c08bed1968fd1e26baa58112f0ce5c36874e147ccc5e9b4c69ec1a0d9070a46`); two Pi transcripts were also backed up. All ten SDK members were freshly measured at 24.70–24.84 hours old, without a policy exception. The P5 Native LIVE cut recorded MUST 24/0/0 and BEHAVIOR 1/0/0 (pass/fail/skip) on its own sealed candidate, not the prepared SHA. Native-host criterion 4 separately measured a fresh Claude Code fixture's actual installed 0.51 MCP child and strict doctor; existing pre-cutover Claude sessions retained their loaded 0.50 bridge. Neither the 20:47 installation nor P5 proves that the later D1 display repair is operating: the D1-bearing artifact must first be installed, and the human must then restart the process; restarting against the earlier artifact still loads the old app. See [0.51.0 release evidence](../CHANGELOG.md#release-evidence) for scopes and receipts.
+
+The Windows-bearing release TGZ, its Linux acceptance, exact prepared-SHA CI, installed-host acceptance and publication/registry proof are separate later evidence. Re-measure owners, loaded bytes, version/integrity, backup and candidate evidence on every upgrade; this ordering does not guarantee success for a future SDK.
 
 For the separate land, prepare, make and publish authorities and the one accepted artifact, follow [entwurf-release](../.claude/skills/entwurf-release/SKILL.md). Push, tag, human-owned npm publication and the subsequent Herdr re-pin remain independently coordinated decisions. The current SDK-specific decisions and receipts belong to the active issue and handoff, not this reusable ordering.
 

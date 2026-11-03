@@ -239,12 +239,19 @@ holds that node and the badge counts it, `pending` while recovered), and the car
 `durableLayout` drawn by the published pi-tui renderer on a fake terminal across rows 1–8 × cols
 1–12, count changes and resizes, against the pinned upstream screen for the zero-task case. Its
 editor is a fixed stand-in: the real `CustomEditor`, overlays, emoji width and a consumer's own task
-are the visible-terminal and consumer subjects. The 1.2 bootstrap child also observes `--resume`
-reopening the chosen session and cancelling to nothing (#143). Two more sandboxed children reach the
-reference app's settings and prompt mapping: one drives the real bootstrap against a loopback
-WebSocket Responses endpoint, whose received frames decide the forwarded transport and its
-continuation and the reference compaction policy (the SDK's background summary beside the turn, held on the
-wire while the turn answers; blocking and overflow kept, #146); the other renders the carrier prompt's skills section with no model, against a fixture
+are the visible-terminal and consumer subjects. Another sandboxed child holds the active transcript the
+TUI renders (#155 D1): the carrier runtime over a session seeded through the SDK's public API, through
+an open with a commit between its read and its watch, appends, one commit past the window's 100, a
+switch away and back, compaction-like and reset head markers, a read held across a switch, a refused
+read and the close. Its oracles are the entry IDs the SDK returned and, after close, a non-participant
+open's `Conversation.context().entries`; the SDK boundary is steered test-only at the Conversation
+prototype the child and carrier share. The bootstrap child on the pinned set also observes `--resume`
+reopening the chosen session, by what its screen shows, and cancelling to nothing (#143). Two more
+sandboxed children reach the owned app's settings and prompt mapping: one drives the real bootstrap
+against a loopback WebSocket Responses endpoint, whose received frames decide the forwarded transport
+and its continuation and the SDK's compaction policy under those settings (the SDK's background summary beside the turn, held on the
+wire while the turn answers; blocking and overflow kept, #146), each placed summary, manual ones
+included, heading the screen's active transcript; the other renders the carrier prompt's skills section with no model, against a fixture
 of both settings scopes, an absolute entry, a same-name pair and a wrong-base decoy.
 `check-pi-runtime-version` asks the
 same installed verifier (`check-pi-durable-beside`) whether this checkout resolves exactly the pinned SDK set (the native set; the PATH
@@ -269,8 +276,8 @@ constructed depth-3 mismatch refused by the verifier and seen by the oracle, the
 app's own model refusal before any birth — also with one installed `--native-module` initialized
 first, a reserved extension name refused before anything opens, one installed `--native-module-dir`
 initializing only its top-level `*.extension.mjs` (#134) and a directory without a module refused
-before anything opens — and the HOST kept a separate subject — a real pi 1.1.0
-binary (the previous generation) beside the pinned native set is a named pi FAIL with zero Pi wiring while pi-durable still
+before anything opens — and the HOST kept a separate subject — a real pi 1.2.0
+binary (below the supported range; a fixture version, not the pinned set's previous generation) beside the pinned native set is a named pi FAIL with zero Pi wiring while pi-durable still
 PASSes — not native admission. The carrier's rebuild
 equality is the owned source's emission (#141): the carrier claim `PI-DURABLE-CARRIER-EMIT-SOURCE-EQUAL`
 on every floor, `emit-pi-durable-carrier --check` as its CLI. The emitter's exact Node is red in the CI
