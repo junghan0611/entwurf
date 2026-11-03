@@ -2,15 +2,16 @@
 
 # RAIL — 현재 좌표
 
-- [ ] **HOP 0 · 좌표/승인/역할 고정.** ← CURRENT: 이 브랜치 NEXT를 기존 Opus와 검토 → coordinator review → 정상 hooks의 첫 local commit → 기존 형제 same-id 복귀·역할 확인. SDK/source/dist/운영 배선은 아직 바꾸지 않는다.
-- [ ] **HOP 1 · 개발과 운영의 안전한 분리.** 검증된 npm0.50.0을 pnpm global에 설치하고 owning 전환·시민별 재시작·새 runtime/owner 증거를 수용한다. 이후에만 SDK 설치/emit/build를 시작한다.
+- [x] **HOP 0 · 좌표/승인/역할 고정.** 첫 local commit `9d424a3` 완료(normal hooks/tee exit0, clean, push 없음). Opus 공동 검토와 coordinator review로 운영 전환 보정을 정리했다. SDK/source/dist/운영 배선은 아직 바꾸지 않았다.
+- [ ] **HOP 1 · 개발과 운영의 안전한 분리.** ← CURRENT: Opus169dd1이 추가 실행자의 canonical owner를 확정하고, 검증된 npm0.50.0을 pnpm global에 설치·owning 전환·시민별 재시작·새 runtime/owner 증거를 수용한다. 이후에만 SDK 설치/emit/build를 시작하고 기존 실무·문서 담당을 stable root에서 되부른다.
 - [ ] **HOP 2 · 실제 SDK1.5.x 설치와 구현.** SDK 집합·carrier API/fence·schema·host 경계를 Opus들이 이관한다. 처음 typecheck RED는 진단이며 checkpoint가 아니다. normal hooks/affected focused가 green인 일관된 subject에서만 홉을 닫는다. 규모가 크면 완료 가능한 sub-hop으로 나누고 각각 review/commit한다.
 - [ ] **HOP 3 · 독립 검수·이관/rollback proof·최종 floor.** 실무 freeze → Fable 검수/종료 → 필요 보정 → 다시 freeze → Astra 검수/종료 → amendment 수용·affected PARTIAL → frozen FULL·필수 Native/LIVE/artifact. 최종 floor 중 source/index/dist 이동 없음.
 - [ ] **HOP 4 · 0.51.0 출하 수용과 게시 인계.** 정상 landing/정확 SHA CI·Windows carrier/동일 TGZ Linux 수용·운영 cutover/registry/Herdr 후속을 owning release 절차대로 구분한다. push/Make/npm 게시 시점은 GLG와 조율하고 자동 실행하지 않는다.
 
 # NOW
 
-- **다음 한 행동:** HOP0 문서만 공동 검토하고 local commit한다. 그 뒤 기존 Opus915040와 Terraa20739를 우선 되부르고 역할을 확인한다. Fabledff8a1/Astra567753는 중요한 검수 창 직전에만 되불러 맥락을 공유하고 순차 검수한다. 초기 복귀 때 불필요한 검수 턴을 병렬로 쓰지 않는다. 새 형제를 임의 생성하지 않는다.
+- **다음 한 행동:** 첫commit 이후 순서는 HOP1/R1의 안정 runtime·G4 수용 → 기존 Opus915040/Terraa20739 same-id 복귀·역할 확인으로 조정한다. GLG의 commit 후 복귀 순서는 지키되 checkout에서 되불렀다가 다시 옮기는 중복 재기동을 피한다. 현재 Opus169dd1이 R1을 전담하고, 그 자신도 안정 runtime으로 재기동된 뒤에 HOP2를 시작한다. Fabledff8a1/Astra567753는 중요 검수 창 직전에만 순차 되부른다. 새 형제를 임의 생성하지 않는다.
+- **운영 식별 중:** Opus의09:02 `/proc` 관측은 checkout runtime host2/compiled bridge2/source-TS bridge2다. main 외 durable 관측 PID4189268과 다른 CC source-bridge의 canonical garden/native/cwd/owner 결합을 Opus가 owning reader로 확인 중이다. PID를 주소로 삼거나 임의 접촉·종료하지 않는다. 확인된 모든 runtime의 전환/종료 계획을 수용하기 전 SDK/source 변경은 보류한다. `argv`의 무관한 cwd/reference 문자열까지0을 요구하지 않고 실제 executable/module/SDK 공급 경로를 판정한다.
 - **base:** main `1e4c2204f47efa3a5ac0220e73f498588c33825f`(f45a95ad 대비 NEXT.md만 변경). immutable core0.50 tag `1cbf50fe`는 출하 비교점이다. reference `~/repos/3rd/pi/pi-mono`는 v1.5.0 `f9a26365568127461c47a07a37dcb42c140a3ac5`, clean으로 main도 직접 확인했다.
 - **정본:** [#155 본문](https://github.com/junghan0611/entwurf/issues/155)의 SDK bump runbook과 최신 thread. 본문과 최신 결정이 다르면 최신 결정의 근거로 본문을 정정한다. 이 NEXT는 지금의 홉·승인·역할을 가리키며 runbook을 복제하지 않는다. `.tmp-verify/archives/cold-evidence-20261027.tar.zst`의 #148/#145 원근거를 Opus가 회수한 [runbook 이력](https://github.com/junghan0611/entwurf/issues/155#issuecomment-6591273358), [V3/PATH 정정](https://github.com/junghan0611/entwurf/issues/155#issuecomment-6591303789)을 읽는다.
 - **오늘의 좌표:** 준비안만 쓰고 밤까지 기다리는 것이 아니다. 운영 분리 뒤 **실제 SDK를 오늘 설치해 개발·타입/실행 검증**을 한다. 목표 core0.51.0의 npm 게시 시점은 내일을 예상하지만 확정 약속이나 오늘 publish 권한이 아니다.
@@ -29,9 +30,9 @@ GLG는 “오늘 작업이 시작되어야 하니까, 여기에 필요한 모든
 | 담당 | garden id | 범위와 checkpoint |
 |---|---|---|
 | coordinator | 20261014T212756-68bd94 | 홉/승인/파일 경계·증거 대조·겹침 조정. 초기 NEXT와 첫commit writer. 각 홉 말 review extension으로 직접 읽고 local checkpoint를 정리. 세부 구현을 가져오거나 미시 승인 루프를 만들지 않음. |
-| Opus A (현재 live, 모델 자기보고5.5) | 20261102T081752-169dd1 | #155/runbook·#148 경험, R1 운영 분리, SDK exact 집합/공급/pnpm·host floor·adapter/schema·패키지 proof를 맡을 제안. 실제 writer 구획은 복귀한 Opus와 함께 확정. 홉 종료/Blocker/contract 변경만 코디로 보고. |
+| Opus A (현재 live, 모델 자기보고5.5) | 20261102T081752-169dd1 | #155/runbook·#148 경험, R1 운영 분리, SDK exact 집합/공급/pnpm·host floor·adapter/schema·패키지 proof를 맡을 제안. optional `peerDependencies.typebox`의 유지/제거는 published 표면 변경으로 별도 audit/proof를 남기며, generated carrier는 수동 편집하지 않음. 실제 writer 구획은 복귀한 Opus와 함께 확정. 홉 종료/Blocker/contract 변경만 코디로 보고. |
 | Opus B (same-id 복귀 후 모델 확인) | 20261030T190810-915040 | carrier runtime/TUI·ConversationTranscript·SessionEnd/fence·이관 fixture를 맡을 제안. 서브모듈별 ownership을 A와 중복 없이 확정하며, shared package/pin/emit 최종 writer는 하나로 둠. |
-| Terra | 20261101T123618-a20739 | 문서 수준 정합성을 지속 점검. README뿐 아니라 docs/의 live 계약·오래된 안내·폐기 후보를 실제 source/receipt와 연결해 제안. 구현과 동떨어진 선행 문구나 무관한 문서 삭제는 하지 않음. docs writer 범위를 코디와 합의, code/package/pin은 수정하지 않음. |
+| Terra | 20261101T123618-a20739 | 문서 수준 정합성을 지속 점검. README뿐 아니라 docs/의 live 계약·오래된 안내·폐기 후보를 실제 source/receipt와 연결해 제안. 구현과 동떨어진 선행 문구나 무관한 문서 삭제는 하지 않음. docs writer 범위를 코디와 합의하고 AGENTS.md의 Type Boundaries 문장도 실제1.5 schema import 결정과 맞춤. code/package/pin은 수정하지 않음. |
 | Fable | 20261102T063827-dff8a1 | 중요한 frozen checkpoint의 독립 검수. 보고는 상태 변화/Blocker·Defect·Observation/파일 근거로. 검수 중 모든 실무자·문서 writer 정지. 종료/한정 보정 뒤 Astra로 넘김. |
 | Astra | 20261030T185730-567753 | Fable과 겹치지 않는 다음 검수 창의 독립 검수. GLG가 이번 역할을 명시했으므로 이전 Astra 연락 금지는 이 요청 범위에서 갱신됨. 현재 모델/같은 id 확인 뒤 검수. |
 
