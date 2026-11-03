@@ -322,7 +322,10 @@ pnpm run check:full
 ```
 
 The FULL tier is the candidate floor; the everyday `pnpm check` core alone is
-never release evidence. Do not summarize the aggregate as a fixed number of
+never release evidence. The carrier's separate checkout contact/send/receive S/H gates,
+real terminal and installed-consumer evidence remain distinct where applicable; see
+[durable native support](../../../docs/durable-native-support.md#134-paired-ingress-and-task-footer)
+and [VERIFY](../../../VERIFY.md#release-acceptance-axes). Do not inherit them from an earlier candidate. Do not summarize the aggregate as a fixed number of
 gates. The current `package.json` check:* scripts are the SSOT. If any check
 fails, stop at that axis, fix it, and rerun the complete aggregate.
 
@@ -658,11 +661,21 @@ its candidate from M3w, then continues here from `SHA256_BEFORE=` with the same
 `check-install-container` acceptance.
 
 ```bash
-ARTIFACT_DIR=$(mktemp -d "/tmp/entwurf-release-candidate-${VERSION}.XXXXXX")
+STATE_BASE="${XDG_STATE_HOME:-$HOME/.local/state}"
+case "$STATE_BASE" in /*) ;; *) echo "ABORT: state root must be absolute" >&2; exit 1 ;; esac
+RELEASE_DIR="$STATE_BASE/entwurf-releases/${VERSION}-${SHA:0:12}"
+mkdir -p "$RELEASE_DIR"
+if [ -L "$RELEASE_DIR" ] || [ ! -O "$RELEASE_DIR" ]; then
+  echo "ABORT: release directory is a symlink or not owned by this user" >&2; exit 1
+fi
+chmod 700 "$RELEASE_DIR"
+ARTIFACT_DIR=$(mktemp -d "$RELEASE_DIR/candidate.XXXXXX")
+ARTIFACT_DIR=$(realpath "$ARTIFACT_DIR")
 LOG="$ARTIFACT_DIR/acceptance.log"
 bash scripts/with-dist-lock.sh npm pack --dry-run=false --pack-destination "$ARTIFACT_DIR"
 CANDIDATE=$(realpath "$ARTIFACT_DIR/junghanacs-entwurf-${VERSION}.tgz")
 test -f "$CANDIDATE"
+chmod 0644 "$CANDIDATE"  # producer prepares the file before acceptance, even under umask 077
 SHA256_BEFORE=$(sha256sum "$CANDIDATE" | cut -d' ' -f1)
 set -o pipefail
 ENTWURF_REQUIRE_DOCKER=1 ENTWURF_CANDIDATE_TGZ="$CANDIDATE" \
@@ -684,7 +697,7 @@ The handoff must preserve:
 - repository digest
 - exact prepared commit SHA
 
-The accepted file is now the only file eligible for `publish`. Never repack it.
+The accepted file is now the only file eligible for `publish`. Never repack or relocate it. Keep failed candidate directories and receipts too; never silently select another candidate, create a `current` alias, or let P9 reclaim them. Both M3 and M3w create the unique private candidate directory at its final persistent location before acceptance.
 
 ### M3w. Carrier-bearing candidate: retrieve, never pack
 
@@ -719,7 +732,16 @@ for j in build-addon pack preview; do
   test "$(gh run view "$RUN" --json jobs --jq ".jobs[]|select(.name==\"$j\").conclusion")" = success
 done
 
-ARTIFACT_DIR=$(mktemp -d "/tmp/entwurf-release-candidate-${VERSION}.XXXXXX")
+STATE_BASE="${XDG_STATE_HOME:-$HOME/.local/state}"
+case "$STATE_BASE" in /*) ;; *) echo "ABORT: state root must be absolute" >&2; exit 1 ;; esac
+RELEASE_DIR="$STATE_BASE/entwurf-releases/${VERSION}-${SHA:0:12}"
+mkdir -p "$RELEASE_DIR"
+if [ -L "$RELEASE_DIR" ] || [ ! -O "$RELEASE_DIR" ]; then
+  echo "ABORT: release directory is a symlink or not owned by this user" >&2; exit 1
+fi
+chmod 700 "$RELEASE_DIR"
+ARTIFACT_DIR=$(mktemp -d "$RELEASE_DIR/candidate.XXXXXX")
+ARTIFACT_DIR=$(realpath "$ARTIFACT_DIR")
 LOG="$ARTIFACT_DIR/acceptance.log"
 gh api "repos/{owner}/{repo}/actions/runs/$RUN" \
   --jq '{id,event,path,head_sha,head_branch,conclusion,html_url}' > "$ARTIFACT_DIR/run-meta.json"
@@ -753,7 +775,15 @@ digest of the artifact archive, not of the tarball). The candidate's
 `win32-preview-tgz` digest must be present; a `null` stops make and is never filled
 in from the download.
 
-Then continue at M3's `SHA256_BEFORE=` line with this `$CANDIDATE` and `$LOG`.
+Prepare the downloaded producer-owned TGZ for the non-root container **before** acceptance,
+then continue at M3's `SHA256_BEFORE=` line with this `$CANDIDATE` and `$LOG`:
+
+```bash
+chmod 0644 "$CANDIDATE"
+```
+
+The caller-preserved acceptance gate never changes file mode; after acceptance neither the file
+nor its mode is changed. The private 0700 candidate directory remains in place.
 One file now carries three equal hashes: the pack job's `SHA256SUMS`, the hash the
 Windows `preview` job printed for the tarball it installed, and the downloaded
 file's own hash (the `installed candidate` line, printed only after `npm install`
@@ -892,13 +922,26 @@ ${REPO_URL}/releases/tag/v${VERSION}"
 A notification failure does not undo an existing release, but it must be
 reported exactly.
 
-Report the release URL plus the preserved candidate path, SHA-256, acceptance
-log, image ID, and repository digest. End with the exact publish command but do
-not execute it:
+Report the release URL plus the preserved canonical candidate path, SHA-256, acceptance
+log, prepared SHA, image ID, and repository digest.
 
-```text
-/entwurf-release publish <version> <absolute-candidate.tgz> <dist-tag>
+**Human-only publication:** run all U0 checks and preserve the U0 receipt before handing over
+exactly one literal, copyable line. Generate it with Bash shell quoting so an absolute path with
+spaces or shell metacharacters stays one argv; the displayed line contains no unevaluated variable:
+
+```bash
+printf 'cd ~/repos/gh/entwurf && npm publish %q --tag %q\n' "$CANDIDATE" "$DIST_TAG"
 ```
+
+This line is an instruction to GLG, never agent authority to publish. Name the U0 receipt and
+wait for GLG's publication report; U2/U3 are separately authorized follow-up. Immediately before
+any delayed publication re-check both dist-tags against the recorded pre-U1 snapshot; if either
+changed, stop and complete a fresh U0 with a new receipt, without overwriting the previous one.
+Do not offer a second publish command in the human-only handoff.
+
+**Agent publication:** only when GLG explicitly authorizes the agent to publish, hand off or
+invoke `/entwurf-release publish <version> <absolute-candidate.tgz> <latest|repair>` instead.
+That mode runs the same U0 before U1; do not also offer the human npm line as another U1.
 
 ---
 
@@ -913,11 +956,10 @@ A publish invocation requires:
 2. absolute candidate path
 3. explicit dist-tag
 
-For example:
-
-```text
-/entwurf-release publish 0.12.8-repair.1 /tmp/entwurf-release-candidate-0.12.8-repair.1.X/junghanacs-entwurf-0.12.8-repair.1.tgz repair
-```
+For human-only publication, M7 generates the one shell-quoted npm line from the accepted
+canonical path and chosen tag after U0. For an explicitly authorized agent publication, invoke
+`entwurf-release publish <version> <absolute-candidate.tgz> <latest|repair>` instead. Both use
+the same U0 checks; the two handoffs are not alternatives to execute together.
 
 ## U0. Verify release and candidate identity
 
@@ -925,11 +967,13 @@ For example:
 CANDIDATE="<absolute candidate argument>"
 DIST_TAG="<dist-tag argument>"
 case "$CANDIDATE" in /*) ;; *) echo "ABORT: candidate path must be absolute"; exit 1 ;; esac
-case "$DIST_TAG" in ""|*[!0-9A-Za-z._-]*) echo "ABORT: invalid or missing dist-tag"; exit 1 ;; esac
+case "$DIST_TAG" in latest|repair) ;; *) echo "ABORT: supported dist-tag is latest or repair" >&2; exit 1 ;; esac
 # Every publication must prove it did not move the lane it does not own. Capture
 # both dist-tags before U1 and assert the untouched lane against its own captured
 # value; a version literal kept by hand in this file rots at the next cut. An
 # absent tag reads as the empty string, and preserving absence is a valid result.
+# Capture immediately before publication; if the human handoff is delayed, recheck both
+# tags against this snapshot before the human runs the line, or stop and renew U0.
 PRE_PUBLISH_LATEST=$(npm view @junghanacs/entwurf dist-tags.latest)
 PRE_PUBLISH_REPAIR=$(npm view @junghanacs/entwurf dist-tags.repair)
 export PRE_PUBLISH_LATEST PRE_PUBLISH_REPAIR
@@ -970,6 +1014,32 @@ grep -F "repoDigest=" "$ACCEPTANCE_LOG"
 
 If any evidence is missing, stop. Do not repack or regenerate the candidate.
 
+After all U0 checks pass, preserve a **new, named** pre-publication receipt beside the accepted
+candidate. Record the prepared SHA, version, chosen tag, canonical path, candidate SHA-256, UTC
+capture time and both pre-U1 dist-tags, including empty values. `mktemp` gives every U0 its own
+name; never overwrite a prior receipt. This is plain shell data from this trusted invocation,
+not a new runner or a second artifact authority:
+
+```bash
+U0_RECEIPT=$(mktemp "$(dirname "$CANDIDATE")/publish-u0.XXXXXX")
+U0_CAPTURED_AT=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
+{
+  printf 'U0_VERSION=%q\n' "$VERSION"
+  printf 'U0_PREPARED_SHA=%q\n' "$(git rev-parse HEAD)"
+  printf 'U0_CANDIDATE=%q\n' "$CANDIDATE"
+  printf 'U0_CANDIDATE_SHA256=%q\n' "$CANDIDATE_SHA256"
+  printf 'U0_DIST_TAG=%q\n' "$DIST_TAG"
+  printf 'U0_CAPTURED_AT=%q\n' "$U0_CAPTURED_AT"
+  printf 'PRE_PUBLISH_LATEST=%q\n' "$PRE_PUBLISH_LATEST"
+  printf 'PRE_PUBLISH_REPAIR=%q\n' "$PRE_PUBLISH_REPAIR"
+} > "$U0_RECEIPT"
+printf 'U0 receipt: %s\n' "$U0_RECEIPT"
+```
+
+Include this path and its contents in the handoff. A delayed recheck compares both current tags
+with this pre-U1 record, without replacing it; a fresh U0 creates another named receipt. Do not
+reconstruct a before snapshot from the registry after publication.
+
 ## U1. Publish the accepted bytes
 
 ```bash
@@ -978,6 +1048,26 @@ test "$(sha256sum "$CANDIDATE" | cut -d' ' -f1)" = "$CANDIDATE_SHA256"
 ```
 
 ## U2. Verify dist-tags
+
+In a later authorized shell after GLG reports publication, read the named U0 receipt from the
+handoff, inspect it as trusted release-owned shell data, and restore its values rather than asking
+the post-publish registry for a baseline. Require its path, version, tag, prepared SHA, canonical
+candidate and current candidate SHA-256 to match the accepted release before using it:
+
+```bash
+U0_RECEIPT="<exact receipt path from handoff>"
+case "$U0_RECEIPT" in /*) ;; *) echo "ABORT: absolute U0 receipt required" >&2; exit 1 ;; esac
+test -f "$U0_RECEIPT" && test ! -L "$U0_RECEIPT"
+test "$(dirname "$(realpath "$U0_RECEIPT")")" = "$(dirname "$(realpath "$CANDIDATE")")"
+# Inspect the named receipt before sourcing it; never source untrusted or substituted shell data.
+source "$U0_RECEIPT"
+test "$U0_VERSION" = "$VERSION"
+test "$U0_DIST_TAG" = "$DIST_TAG"
+test "$U0_PREPARED_SHA" = "$(git rev-parse HEAD)"
+test "$U0_CANDIDATE" = "$(realpath "$CANDIDATE")"
+test "$U0_CANDIDATE_SHA256" = "$(sha256sum "$CANDIDATE" | cut -d' ' -f1)"
+export PRE_PUBLISH_LATEST PRE_PUBLISH_REPAIR
+```
 
 Apply the lane-specific dist-tag contract. The published lane must equal this
 version, and the lane this publication did not touch must still hold the exact

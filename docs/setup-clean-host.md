@@ -471,8 +471,7 @@ The 1.5.0 SDK set in the development checkout is a separate, unaccepted subject 
 published 0.50.0 / SDK 1.4.0 instructions above. Do not open an operating session with the
 new SDK as a development test. Before any operator-approved cutover, prove the old owner has
 exited and preserve a consistent copy of the complete session directory, including any WAL/SHM.
-The #155 migration and downgrade-refusal fixtures and their acceptance are still separate work;
-installing an older package is not a data rollback. Follow the current evidence and cutover
+The #155 synthetic migration and downgrade-refusal fixtures were exercised on the `0408a66` candidate; that evidence does not accept a first write to operating data, real-model/TUI behavior or Native LIVE. Installing an older package is not a data rollback. Follow the current evidence and cutover
 conditions in [#155](https://github.com/junghan0611/entwurf/issues/155), not the 1.3→1.4
 receipt below as proof of a 1.5 migration.
 
@@ -489,6 +488,12 @@ The measured precedent is [#148's pre-cutover hold](https://github.com/junghan06
 - **Stop and report a real exception:** expired/revoked authentication needing login, changed account/permissions/endpoint or an unmeasured new external transfer, ownership conflict, inconsistent backup, unexpected write, or unknown result. No blind retry or automatic data rollback; downgrading the package does not undo a newer document write.
 
 Push, release/tag/npm publication and retirement of any other citizen retain their separate authorization boundaries. This decision fixes the repeatable method; it does not pre-authorize those actions.
+
+**Recurring SDK rail.** At task start, agree the exact SDK and the scope of development, review and verification once; do not repeatedly ask for the existing-auth strategy. Inspect the published SDK set and upstream changes, isolate the development checkout from operating runtimes, and implement against the coherent pinned set in private HOME, PI and writable XDG roots. Use the gate's own temporary-directory constraints: the #155 FULL's deeper scratch produced 117/109-byte socket paths and EINVAL; run3 used `TMPDIR=/tmp` with each gate creating its own private scratch and passed. Preserve both `pnpm_config_verify_deps_before_run=error` and `npm_config_verify_deps_before_run=error`, managed builds and candidate seals; do not run offline gates under ambient CI.
+
+Freeze for sequential independent review, then the affected PARTIAL groups, frozen FULL and the applicable scripted/native-H carrier cells. Those receipts name their own candidates, not a later release. After the operator chooses the named operating window, follow the owner-exit, consistent-backup and coherent-install boundary above; reopen the same identities, observe real turns and round trips with existing native auth, then run the required Native LIVE floor. The pre-cutover validation candidate is not the final Windows-bearing release TGZ. Re-measure current owners, loaded bytes, version/integrity, backup and exact-candidate evidence on each upgrade; do not inherit a prior cut's green.
+
+For the separate land, prepare, make and publish authorities and the one accepted artifact, follow [entwurf-release](../.claude/skills/entwurf-release/SKILL.md). Push, tag, human-owned npm publication and the subsequent Herdr re-pin remain independently coordinated decisions. The current SDK-specific decisions and receipts belong to the active issue and handoff, not this reusable ordering.
 
 ### Moving durable sessions from the Pi 1.3 SDK to 1.4
 
