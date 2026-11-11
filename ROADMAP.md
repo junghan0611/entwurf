@@ -152,7 +152,7 @@ ACP는 중심이 아니라 v2 core 위에 provider/model로 들어오는 **plugi
 | v2 live Antigravity → native-push direct injection | native-push adapter/register/decider gates + `smoke-agy-native-push-live` |
 | agy automatic citizen birth + sender/reply identity | hooks/statusline/install/sender gates + three doctors + fresh live round trip |
 | v2 honest reject (false-delivered/`.msg` garbage 0) | matrix-live C3 + deliverability/native-push reject gates |
-| pi 1.5.0 fence | `pnpm check` + release-gate MUST |
+| pi 1.5.2 fence | `pnpm check` + release-gate MUST |
 
 ### Historical — 0.12.0 cutover close checklist
 
@@ -364,7 +364,7 @@ v2 필드 `parentGardenId`/`isEntwurf`는 **stray key로 거부된다** — 되�
 ## 검증 원장 (measured, 재탐색 불필요)
 
 - **pi 0.80 public export:** `hasProjectTrustInputs`/`ProjectTrustStore`/`getAgentDir`/`VERSION` 모두 index
-  public export → TS 직접 import(재구현 불필요). floor = **1.5.0** (`>=1.5.0 <1.6`, next-minor 상한; #155 개발 checkout의 선언이며 0.50.0 운영 수용과 별개).
+  public export → TS 직접 import(재구현 불필요). floor = **1.5.2** (`>=1.5.2 <1.6`, next-minor 상한; #158 개발 checkout의 선언이며 출하된 0.51.0(SDK 1.5.0)·운영 수용과 별개).
 - **pi trust(0.79.1+):** `pi -p`는 trust에서 안 멈춤(비대화 미결정→`false` degraded). `--approve`(`-a`)=
   project 파일 로드, `--no-approve`(`-na`)=무시·degraded. `ProjectTrustStore.get`은 nearest-ancestor
   walk-up(조상 cwd 결정을 자식이 상속). `AGENTS.md`/`CLAUDE.md`는 0.79.1에서 trust input에서 제거(항상
@@ -559,6 +559,7 @@ v2 필드 `parentGardenId`/`isEntwurf`는 **stray key로 거부된다** — 되�
   cutover에서 제거되며 같이 사라졌다.
 - **Dep bump(별도 트랙):** claude-agent-acp / ACP SDK bump는 `check-acp-sdk-surface`와 raw LIVE로 잠근다.
   ~~준비선 0.61.0 / 1.3.0~~ → **랜딩 완료(2026-07-24 `5f5a18d`, pi 0.82.0은 `dfa3967`)** — 다음 bump부터 이 트랙 절차 재사용. model forcing은 `session/set_config_option(configId="model")`.
+  - **2026-11-11 bump — pi 1.5.0 → 1.5.2 (#158 개발 중).** 개발 checkout의 exact SDK 10종과 host floor(`>=1.5.2 <1.6`)가 1.5.2로 이동한다. 출하된 0.51.0은 SDK 1.5.0 그대로이며 공개 설치 문서·Herdr 락은 그 공개물을 가리킨다(좁은 published 영역). 새 버전 번호는 정하지 않았다. 측정한 것: registry tarball 10종 sha512·sha1 일치와 member edge 16개 exact 1.5.2(R0), 1.5.0 대비 비-member 의존성 변경 둘(`pi-coding-agent`의 `grok-mermaid` 0.2.3 → `lovely-mermaid` 0.3.3, `chord` optional peer `react` 19.3.0 추가), carrier `distTargets` 24개 존재(파일 존재만, export 시그니처 호환 아님), 격리 6-member scheduler 비교(upstream repro 1.5.0 stuck 10/10 → 1.5.2 settle 10/10, 공개 API만 쓴 variant는 양쪽 settle), native SQLite 1.5.0↔1.5.2 reopen·append·compaction fixture, SDK 소비 symbol 118개 존재 정적 확인. 측정하지 않은 것: 설치 패키지 consumer 증명, 전체 floor, 운영 규모·중단·동시 접근 세션, 실제 vendor 모델, 운영 host. release-age는 GLG가 2026-11-11 정확 버전 예외를 명시 결정했다(10종 member만, 광역·정책 비활성화 아님). 이전 1.5.0 영수증을 승계하지 않는다.
   - **2026-11-03 bump — pi 1.4.0 → 1.5.0 (#155 개발 중).** 개발 checkout의 exact SDK는 pi-schema를 포함한 10종이며 host floor는 다음 minor 상한으로 이동한다. 기존 운영은 출하된 0.50.0 / SDK 1.4.0으로 분리했다. 구현·검수·이관 fixture·FULL·LIVE·출하는 아직 각각의 증거가 필요하며 이전 0.50 영수증을 승계하지 않는다.
   - **2026-07-27 bump — claude-agent-acp 0.61.0 → 0.62.0 (ACP SDK는 1.3.0 유지).** 이 트랙 절차대로 잠갔다:
     ⑴ `check-acp-sdk-surface`를 0.62.0 / claude-agent-sdk 0.3.219로 이동(핀·lock peer-resolution·runtime probe)

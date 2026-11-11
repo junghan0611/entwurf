@@ -82,8 +82,8 @@
 			{
 				"name": "harness-setup.js",
 				"source": "pi/pi-durable/src/experimental/durable/harness-setup.ts",
-				"blob": "e8561809321ce8833a13e3757c172f4e38faabcc",
-				"sha256": "eb1158030a8ab95187a4fdd5e7b90816a7995e5f446d09a8184d4f5007e7ac5f"
+				"blob": "5a799bfbfbbedbec229761b26f639fbe2702b623",
+				"sha256": "70b50044ab14c1293a2ace53b375dc48ad940ea9eeacc131d498ccb1ce040617"
 			},
 			{
 				"name": "prompt.js",
@@ -100,8 +100,8 @@
 			{
 				"name": "subagent.js",
 				"source": "pi/pi-durable/src/experimental/durable/subagent.ts",
-				"blob": "e842d8a6b8dc55825d0381d803b6d6496b205c19",
-				"sha256": "c9931fabd60f5fbf75220e896a57e5c8b131b4936887bf6f9660d50d01709f3a"
+				"blob": "8c18e24a030f0b701167f15a33579195303f5ac5",
+				"sha256": "208618441e8e81813de2f44fa9ad5d5bdcdbb78a754679bb7a93d82480e7bece"
 			},
 			{
 				"name": "session-name.js",
@@ -138,18 +138,18 @@
 		]
 	},
 	"sdk": {
-		"comment": "The published library set the carrier runs against, derived from the 1.5.0 declarations. members: the @earendil-works packages the carrier imports and every @earendil-works package those declare (1.5.0 adds pi-schema, declared by chord, pi-agent-core, pi-ai and pi-durable). direct: a third-party package a carrier file imports itself (sessions.ts: proper-lockfile, at the version pi-coding-agent 1.5.0 pins). Each is an exact production dependency in package.json. Since 1.3.0 the members' own edges are exact too (upstream #10865), and the installed physical edges are still what must equal these versions.",
+		"comment": "The published library set the carrier runs against, derived from the 1.5.2 declarations. members: the @earendil-works packages the carrier imports and every @earendil-works package those declare (1.5.0 adds pi-schema, declared by chord, pi-agent-core, pi-ai and pi-durable). direct: a third-party package a carrier file imports itself (sessions.ts: proper-lockfile, at the version pi-coding-agent 1.5.2 pins). Each is an exact production dependency in package.json. Since 1.3.0 the members' own edges are exact too (upstream #10865), and the installed physical edges are still what must equal these versions.",
 		"members": {
-			"@earendil-works/chord": "1.5.0",
-			"@earendil-works/pi-agent-core": "1.5.0",
-			"@earendil-works/pi-ai": "1.5.0",
-			"@earendil-works/pi-codemode": "1.5.0",
-			"@earendil-works/pi-coding-agent": "1.5.0",
-			"@earendil-works/pi-durable": "1.5.0",
-			"@earendil-works/pi-mcp": "1.5.0",
-			"@earendil-works/pi-schema": "1.5.0",
-			"@earendil-works/pi-telemetry": "1.5.0",
-			"@earendil-works/pi-tui": "1.5.0"
+			"@earendil-works/chord": "1.5.2",
+			"@earendil-works/pi-agent-core": "1.5.2",
+			"@earendil-works/pi-ai": "1.5.2",
+			"@earendil-works/pi-codemode": "1.5.2",
+			"@earendil-works/pi-coding-agent": "1.5.2",
+			"@earendil-works/pi-durable": "1.5.2",
+			"@earendil-works/pi-mcp": "1.5.2",
+			"@earendil-works/pi-schema": "1.5.2",
+			"@earendil-works/pi-telemetry": "1.5.2",
+			"@earendil-works/pi-tui": "1.5.2"
 		},
 		"direct": {
 			"proper-lockfile": "4.1.2"

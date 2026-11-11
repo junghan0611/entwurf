@@ -139,7 +139,7 @@ commands are ordinary invocations — no model turn, no login, no account.
 **Which runtime these steps install.** The `runtime-lock.json` at the ref Herdr resolves names
 what step 5 acquires. This document's lock pins the published npm `@junghanacs/entwurf@0.51.0` and
 its measured sha512, on the Pi 1.5.0 SDK set, so step 1 installs Pi 1.5. This is a source
-contract, not evidence of a successful Herdr acquisition, installed consumer or LIVE run.
+contract, not evidence of a successful Herdr acquisition, installed consumer or LIVE run. The #158 source candidate's SDK 1.5.2 does not change this lock; re-pinning Herdr follows a publication and is separate work.
 
 The previous npm pin, `@junghanacs/entwurf@0.50.0`, uses its measured sha512 and the Pi 1.4.0
 SDK set; its main pin is preserved in the 0.50.0 history. The previous snapshot
@@ -154,6 +154,7 @@ shutdown is automatic. A settled npm-source
 host follows the same-source rebind conditions
 ([the two sources](#the-runtime-and-the-two-sources-it-may-come-from)).
 
+<!-- entwurf:published @junghanacs/entwurf@0.51.0 pi 1.5.0 -->
 The following nine-step block is the **published 0.51.0 / Pi 1.5 pairing** this document's lock
 names. Its unversioned plugin command follows the remote ref when executed, so it is an exact 0.51.0
 recipe only while that ref's lock names 0.51.0; inspect the resolved ref and its lock instead of
@@ -189,10 +190,12 @@ herdr integration install claude
 #    `claude` now picks up the entwurf tools through MCP.
 herdr plugin install junghan0611/entwurf/plugins/herdr --yes
 ```
+<!-- /entwurf:published -->
 
 The pi range in step 1 is not a number this file chooses. It is the host range derived from the exact
-`dependencies` pin of the runtime the lock selects (`package.json`), and
-`check-dep-versions` fails if this file and that pin disagree. The activation door enforces it too: `run.sh install-user-scope`
+`dependencies` pin of the published runtime the lock selects (0.51.0, SDK 1.5.0), and
+`check-dep-versions` binds the marked region to that frozen published manifest, not to this checkout's
+`package.json`, so the #158 source pin does not move it. The activation door enforces it too: `run.sh install-user-scope`
 refuses an out-of-range pi by name and writes nothing — the same verdict `entwurf setup` gives — so
 an unpinned `npm install -g` here would only move the failure to step 5.
 
@@ -517,7 +520,7 @@ read. Every field the provider attached is shown, in sorted key order.
     named red (`herdr-integration-not-current`) until you run `herdr integration install claude`
     again. In the measured 0.9.4-seeded private sandbox, the reinstall changed only the hook's version
     line; the pi extension and the Claude settings stayed byte-identical.
-- **Pi `>=1.5.0 <1.6`** for the published npm 0.51.0 runtime this lock acquires, on the Pi 1.5.0
+- **Pi <!-- entwurf:published @junghanacs/entwurf@0.51.0 pi 1.5.0 -->`>=1.5.0 <1.6`<!-- /entwurf:published -->** for the published npm 0.51.0 runtime this lock acquires, on the Pi 1.5.0
   SDK set. The previous npm pin, 0.50.0, and the `v2026.10.27-herdr.0.45.0` snapshot carry the
   Pi 1.4.0 SDK set and its Pi 1.4 requirement.
   A host still on Pi 1.4 or older is refused by name (`outside the supported

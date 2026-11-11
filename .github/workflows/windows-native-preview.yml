@@ -199,8 +199,8 @@ jobs:
       - name: install the pinned Pi CLI into its own prefix (tarball checked against the pinned SRI)
         shell: pwsh
         env:
-          PI_VERSION: 1.5.0
-          PI_INTEGRITY: sha512-xNDZ5kqowO6Z03FS2gwAkPEGk1ssxVcYKQ6qZId84mFEvwACvvyc2l0vAMOS+c5zvxLRMLBE9r4y44IGYkMJaQ==
+          PI_VERSION: 1.5.2
+          PI_INTEGRITY: sha512-mUWI04rqF1Vd/m1q+Ps1XeWsTXEVvRUnsmRa83I3Dzua0Tx5bYS93imeqtIfrXf7PkkaR6ERz+AuQhIJlom5yA==
         run: |
           $pack = Join-Path $env:SANDBOX 'pi-pack'
           $prefix = Join-Path $env:SANDBOX 'pi-prefix'

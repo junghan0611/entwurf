@@ -2502,15 +2502,16 @@ assert.deepEqual(floorGaps, [],
 // The published-scope regions' own oracle (see PUBLISHED-SCOPE REGIONS above). Checked after the
 // four surfaces so a stranded closure row is still attributed to the claim above.
 // PUBLISHED_ARTIFACT is the one published pair a region may name, copied from the artifact, not from
-// this checkout. `[측정 2026-11-03]` the global install of @junghanacs/entwurf@0.50.0 whose bytes #155
-// HOP1 accepted against the registry tarball declares exactly these nine @earendil-works dependencies
-// in its package.json (sha256 20c572534fcfc03e8f89890a0853a25048166f7c998e433945289a5d20ee1234).
+// this checkout. Read 2026-11-11 from package/package.json in the preserved registry-accepted
+// 0.51.0 release TGZ (TGZ SHA256 04fcce26d0a6dec8b8bb9a7f14a843eee0defb313aedafa34080600853d36e4d;
+// raw manifest SHA256 b5043ba8edde6f2b9d13052a98c3cd808a3b30f1023da41b22ee022470a96120).
+// Its ten @earendil-works production dependencies are exact 1.5.0, independent of this checkout.
 const PUBLISHED_ARTIFACT = {
-  version: '0.50.0',
+  version: '0.51.0',
   dependencies: {
-    '@earendil-works/chord': '1.4.0', '@earendil-works/pi-agent-core': '1.4.0', '@earendil-works/pi-ai': '1.4.0',
-    '@earendil-works/pi-codemode': '1.4.0', '@earendil-works/pi-coding-agent': '1.4.0', '@earendil-works/pi-durable': '1.4.0',
-    '@earendil-works/pi-mcp': '1.4.0', '@earendil-works/pi-telemetry': '1.4.0', '@earendil-works/pi-tui': '1.4.0',
+    '@earendil-works/chord': '1.5.0', '@earendil-works/pi-agent-core': '1.5.0', '@earendil-works/pi-ai': '1.5.0',
+    '@earendil-works/pi-codemode': '1.5.0', '@earendil-works/pi-coding-agent': '1.5.0', '@earendil-works/pi-durable': '1.5.0',
+    '@earendil-works/pi-mcp': '1.5.0', '@earendil-works/pi-schema': '1.5.0', '@earendil-works/pi-telemetry': '1.5.0', '@earendil-works/pi-tui': '1.5.0',
   },
 };
 const publishedSdk = [...new Set(Object.values(PUBLISHED_ARTIFACT.dependencies))];
@@ -4129,7 +4130,7 @@ check_pack_win32_carrier() {
 #     which is exactly what property (1)'s `(_|$)` absorbs; all three shapes are fixtures
 #     below so a future suffix change cannot pass vacuously.)
 pack_install_leaked_pi() {
-  grep '^@earendil-works+' | grep -Ev '@1\.5\.0(_|$)' || true
+  grep '^@earendil-works+' | grep -Ev '@1\.5\.2(_|$)' || true
 }
 
 # Matcher self-test on SYNTHETIC lookalikes: a healthy install tree cannot exercise either
@@ -4146,18 +4147,18 @@ check_pack_pin_matcher() {
   # Cell 1 — the version boundary. Every measured peer-hash shape is a fixture: the
   # 0.84.4-era `_@modelcontextprotocol+sdk@…`, the `_ws@8.21.3` observed on a real
   # 0.85.1 tree, and `[측정 2026-09-20]` the combined suffix a 0.86.0 install carries.
-  # None may leak; the two lookalikes must — a PREFIX-EXTENDED version (`1.5.0-beta.1`,
+  # None may leak; the two lookalikes must — a PREFIX-EXTENDED version (`1.5.2-beta.1`,
   # the prerelease shape that an unanchored match would bless) and an off-pin version.
   matcher_probe=$(printf '%s\n' \
-    '@earendil-works+pi-ai@1.5.0' \
-    '@earendil-works+pi-ai@1.5.0_@modelcontextprotocol+sdk@1.29.0_zod@4.3.6' \
-    '@earendil-works+pi-ai@1.5.0_ws@8.21.3' \
-    '@earendil-works+pi-ai@1.5.0_@modelcontextprotocol+sdk@1.29.0_zod@4.3.6__ws@8.21.3_zod@4.3.6' \
-    '@earendil-works+pi-ai@1.5.0-beta.1' \
+    '@earendil-works+pi-ai@1.5.2' \
+    '@earendil-works+pi-ai@1.5.2_@modelcontextprotocol+sdk@1.29.0_zod@4.3.6' \
+    '@earendil-works+pi-ai@1.5.2_ws@8.21.3' \
+    '@earendil-works+pi-ai@1.5.2_@modelcontextprotocol+sdk@1.29.0_zod@4.3.6__ws@8.21.3_zod@4.3.6' \
+    '@earendil-works+pi-ai@1.5.2-beta.1' \
     '@earendil-works+pi-agent-core@0.87.1' | pack_install_leaked_pi)
-  if [ "$matcher_probe" != '@earendil-works+pi-ai@1.5.0-beta.1
+  if [ "$matcher_probe" != '@earendil-works+pi-ai@1.5.2-beta.1
 @earendil-works+pi-agent-core@0.87.1' ]; then
-    fail "[QK:PACK-INSTALL-PIN-MATCHER-BOUNDED] the pin-leak matcher must flag the prefix-extended 1.5.0-beta.1 and the off-pin 0.87.1 lookalikes, and pass 1.5.0 bare or with any measured peer-hash — got: ${matcher_probe:-<nothing leaked>}"
+    fail "[QK:PACK-INSTALL-PIN-MATCHER-BOUNDED] the pin-leak matcher must flag the prefix-extended 1.5.2-beta.1 and the off-pin 0.87.1 lookalikes, and pass 1.5.2 bare or with any measured peer-hash — got: ${matcher_probe:-<nothing leaked>}"
     return 1
   fi
 
@@ -4165,9 +4166,9 @@ check_pack_pin_matcher() {
   # (0.85.0 onward, still true at 0.99.1). An off-pin chord MUST leak; the pinned one must not. A matcher narrowed
   # back to `^@earendil-works+pi-` sees nothing here and dies at this signature.
   matcher_probe=$(printf '%s\n' \
-    '@earendil-works+chord@1.5.0' \
+    '@earendil-works+chord@1.5.2' \
     '@earendil-works+chord@0.87.1' \
-    '@earendil-works+pi-ai@1.5.0' | pack_install_leaked_pi)
+    '@earendil-works+pi-ai@1.5.2' | pack_install_leaked_pi)
   if [ "$matcher_probe" != '@earendil-works+chord@0.87.1' ]; then
     fail "[QK:PACK-INSTALL-PIN-MATCHER-COVERS-CLOSURE] the pin-leak matcher must cover every @earendil-works closure member, not just the pi-* families — an off-pin @earendil-works/chord has to leak (it was a runtime dependency of pi-coding-agent, pi-agent-core, pi-client and pi-protocol — `[측정 2026-09-20]` at 0.86.0, re-measured `[측정 2026-09-22]` at 0.87.0, `[측정 2026-09-23]` at 0.87.1 and `[측정 2026-09-30]` at 0.99.1, where pi-coding-agent adds pi-codemode and pi-mcp beside them; `[측정 2026-10-13]` at 1.2.0 pi-durable alone declares it) — got: ${matcher_probe:-<nothing leaked>}"
     return 1
@@ -5089,16 +5090,16 @@ _check_pack_install_impl() {
   local install_log
   install_log=$(cd "$tmp" && pnpm add \
     "$tgz_path" \
-    "@earendil-works/pi-ai@1.5.0" \
-    "@earendil-works/pi-coding-agent@1.5.0" \
-    "@earendil-works/pi-tui@1.5.0" \
-    "@earendil-works/pi-agent-core@1.5.0" \
-    "@earendil-works/pi-telemetry@1.5.0" \
-    "@earendil-works/chord@1.5.0" \
-    "@earendil-works/pi-codemode@1.5.0" \
-    "@earendil-works/pi-mcp@1.5.0" \
-    "@earendil-works/pi-durable@1.5.0" \
-    "@earendil-works/pi-schema@1.5.0" \
+    "@earendil-works/pi-ai@1.5.2" \
+    "@earendil-works/pi-coding-agent@1.5.2" \
+    "@earendil-works/pi-tui@1.5.2" \
+    "@earendil-works/pi-agent-core@1.5.2" \
+    "@earendil-works/pi-telemetry@1.5.2" \
+    "@earendil-works/chord@1.5.2" \
+    "@earendil-works/pi-codemode@1.5.2" \
+    "@earendil-works/pi-mcp@1.5.2" \
+    "@earendil-works/pi-durable@1.5.2" \
+    "@earendil-works/pi-schema@1.5.2" \
     --ignore-workspace --ignore-scripts 2>&1) || {
     fail "[check-pack-install] pnpm add failed:"
     echo "$install_log" | tail -10 | sed 's/^/    /' >&2
@@ -5107,17 +5108,17 @@ _check_pack_install_impl() {
 
   # A pin is a wish until the resolved tree is read back. Assert it: EVERY
   # @earendil-works package present — direct or transitive, top level or nested,
-  # chord included — must be the pinned 0.86.0. Anything else means an unpinned caret
+  # chord included — must be the pinned 1.5.2. Anything else means an unpinned caret
   # floated and the rest of this gate would be exercising a runtime nobody verified,
-  # while still printing "pinned pi 0.86.0". Fail loud instead of proving the wrong floor.
+  # while still printing a pinned runtime. Fail loud instead of proving the wrong floor.
   local leaked_pi
   leaked_pi=$(ls "$tmp/node_modules/.pnpm" 2>/dev/null | pack_install_leaked_pi)
   if [ -n "$leaked_pi" ]; then
-    fail "[check-pack-install] UNVERIFIED pi runtime resolved into the install tree (expected only 1.5.0):"
+    fail "[check-pack-install] UNVERIFIED pi runtime resolved into the install tree (expected only 1.5.2):"
     printf '%s\n' "$leaked_pi" | sed 's/^/    /' >&2
     return 1
   fi
-  echo "[check-pack-install] pi runtime tree pin verified: every @earendil-works package is 1.5.0 (chord, pi-durable and pi-schema included)"
+  echo "[check-pack-install] pi runtime tree pin verified: every @earendil-works package is 1.5.2 (chord, pi-durable and pi-schema included)"
 
   # Resolve the installed package.json and confirm pi.extensions
   # arrived intact. If pi.extensions is empty or missing, the

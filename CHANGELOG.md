@@ -4,6 +4,18 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+### Pi SDK 1.5.2 source candidate (#158)
+
+The source checkout now pins the Pi 1.5.2 SDK set and declares host Pi `>=1.5.2 <1.6`. No new package version is chosen here. The published 0.51.0 still ships the 1.5.0 set, and its install guide and the Herdr runtime lock keep describing it. This is a candidate: none of the receipts below is an operating-host or release acceptance, and the #155 receipts are not inherited.
+
+- **Exact SDK set.** All ten `@earendil-works/*` members move from 1.5.0 to exactly 1.5.2, with the lockfile, the carrier's SDK manifest, the `run.sh` pin and probes, and the mutant pin literals. Measured on the registry tarballs: SHA-512 and SHA-1 match for all ten, and every one of the 16 member-to-member production edges is exactly 1.5.2. Two non-member dependency changes against 1.5.0: `pi-coding-agent` drops `grok-mermaid` 0.2.3 for `lovely-mermaid` 0.3.3, and `chord` adds an optional peer `react` 19.3.0. Whether either reaches an Entwurf consumer is not measured.
+- **Release-age exception.** The operator explicitly approved on 2026-11-11 an exception for exactly the ten SDK members at 1.5.2, added to `minimumReleaseAgeExclude`. The global release-age policy and the release-age treatment of other dependencies are unchanged.
+- **Maintainer: Chord `Context`.** The two owned type imports move from `@earendil-works/chord` to `@earendil-works/chord/context` for Chord's new root export; the carrier is regenerated with the official emitter, not edited by hand. Typecheck and consumer results belong to this candidate's own receipts.
+- **Scheduler.** SDK 1.5.2 carries the 1.5.1 scheduler notification fix. In an isolated six-member comparison using a faux provider, with no vendor-model calls or authentication, the unchanged upstream repro stayed stuck in 10 of 10 SDK 1.5.0 runs and settled in 10 of 10 SDK 1.5.2 runs. The public-API-only variants settled on both versions and did not reproduce the old race. This is bounded fixture evidence, not Entwurf carrier, operating-session, native SQLite or load-sweep acceptance.
+- **Native SQLite.** In an isolated cross-version fixture, 1.5.2 reopened a 1.5.0-written database without changing its bytes, appended 60 parallel tool calls and compacted, and a close and reopen stayed consistent; the schema version stayed 2. Operating-scale sessions, an interrupted write, a non-checkpointed WAL and concurrent access are not measured. A package downgrade is still not a data rollback.
+- **Documentation.** The install guide and Herdr README retain narrow published-scope regions for npm 0.51.0 (SDK 1.5.0), while the ACP row explicitly labels the source candidate's SDK 1.5.2 declaration. The durable guide gains a short candidate boundary covering ordinary Pi cache warming and the durable edit path, which this candidate does not change. The guide's `unreadable generation` advice now distinguishes reader-version skew from a genuinely unreadable generation.
+- **Not measured.** The installed-package consumer proof, the full floors, a real vendor model, operating-scale or interrupted sessions, and an operating host.
+
 ## 0.51.0 — 2026-11-04
 
 Entwurf now runs on the Pi 1.5.0 SDK set (#155). The exact SDK closure grows from nine to ten members, the supported host Pi range moves to `>=1.5.0 <1.6`, and the pi-durable carrier follows the 1.5 durable API. An operating host moves to this version only through a planned cutover, because SDK 1.5's first write to a durable session is not readable by SDK 1.4.
