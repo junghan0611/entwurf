@@ -52,6 +52,8 @@ interface HarnessOut {
 	order: Array<{ what: string; envAtRegister?: string | null }>;
 	errors: string[];
 	execPath: string;
+	deliveries: Array<{ message: { customType: string; content: string }; options: { triggerTurn: boolean } }>;
+	sendResults: Array<{ success: boolean }>;
 }
 
 const roots: string[] = [];
@@ -122,6 +124,32 @@ describe("entwurf-control registers the compiled bridge with the born identity",
 		expect(config?.exposure).toBe("direct");
 		expect(config?.toolExposure).toEqual({ entwurf_inbox_read: "hidden", entwurf_register_native: "hidden" });
 		expect(config && "cwd" in config).toBe(false);
+	});
+
+	it("[QK:PI-RECEIVED-REPLY-GUIDANCE] the real socket delivers the original body and per-message sender with conditional reply guidance", () => {
+		expect(ok.sendResults.map((result) => result.success)).toEqual([true, true, true, true]);
+		const guidance =
+			"\n\n[entwurf: When a reply is requested, send the result via entwurf_v2 to the requested recipient (default: sender_info.sessionId); a local final is not delivery. Honor routing and no-send instructions; an absent or false wants_reply does not cancel a request. A replyable address alone needs no acknowledgment.]";
+		const sender = {
+			sessionId: "20260101T000000-aaaaaa",
+			agentId: "gate/sender",
+			cwd: "/w",
+			timestamp: "2026-01-01T00:00:00Z",
+			origin: "pi-session",
+			replyable: true,
+		};
+		const block = (value: object) => `\n\n<sender_info>${JSON.stringify(value)}</sender_info>`;
+		expect(ok.deliveries.map((delivery) => delivery.message.content)).toEqual([
+			`Please report the result.${guidance}${block(sender)}`,
+			`Do not send now.${guidance}${block({ ...sender, sessionId: "20260101T000001-bbbbbb", wants_reply: true })}`,
+			`FYI${block({ ...sender, replyable: false })}`,
+			"anonymous",
+		]);
+		expect(
+			ok.deliveries.every(
+				(delivery) => delivery.message.customType === "entwurf-message" && delivery.options.triggerTurn,
+			),
+		).toBe(true);
 	});
 
 	it("shutdown leaves the registration to Pi — the built-in MCP owns the child's lifecycle, so there is no unregister to race it", () => {

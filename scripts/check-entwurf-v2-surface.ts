@@ -92,7 +92,7 @@ function assertRailSemantics(tag: string, longDescRaw: string, intentDescRaw: st
 	);
 	ok(
 		`${tag} — long description names the THIRD result for an unsupported citizen`,
-		/mailbox-undeliverable/.test(longDesc) && /THIRD RESULT/.test(longDesc),
+		/mailbox-undeliverable/.test(longDesc) && /target without a live socket, the THIRD RESULT/.test(longDesc),
 	);
 	ok(
 		`${tag} — intent param names a rail's reject, not only its allow cell`,
@@ -139,30 +139,16 @@ function assertRailSemantics(tag: string, longDescRaw: string, intentDescRaw: st
  * whose subject (two distinct OWNED rejects) left with the `owned-outcome` intent.
  *
  * After the visible-first cut a dormant socket-domain citizen rejects delivery by v2, and
- * these four strings are the only place a caller learns that BEFORE spending a dispatch. So each
- * one must, on its own:
- *   - name the reason it will actually get back (`dormant-fire-forget-unsupported`);
- *   - name the intent that used to answer there (`owned-outcome`) — silently deleting it leaves
- *     an operator who read last week's docs with no way to find out what happened;
- *   - say it was `withdrawn`, ADJACENTLY to that name. Presence alone is not enough: naming a
- *     retired intent without the retirement verb beside it reads as an offer, which is exactly
- *     the "advertised as selectable" failure this claim exists to forbid;
- *   - carry NEITHER retired advertisement form (`owned-outcome = …` enum styling, or the old
- *     "DORMANT socket-domain citizen … never auto-converted" sentence that described picking it).
- *
- * ORDER IS LOAD-BEARING, and not for readability. `ok` throws on the FIRST failure, and the kill
- * signature is read off the failing line — so the `[QK:…]` label must sit on the assertion this
- * claim's mutant reaches FIRST. That mutant drops the reason AND the withdrawal in one edit; with
- * the reason check leading, an UNLABELLED line would throw first and the kill would read as
- * WRONG-REASON. The adjacency check therefore goes first and carries the only token; the other two
- * run unlabelled behind it — still real assertions, just not this claim's signature.
+ * both caller-facing strings must independently name the actual dormant rejection and say that
+ * delivery never launches or resumes a process. Neither may advertise the retired offer. History
+ * belongs in the issue and literal amendment, not in the current caller contract. The labelled
+ * assertion comes first because qualification reads the first failing line as the kill signature.
  */
 function assertDormantHonesty(tag: string, rawText: string): void {
 	const text = rawText;
-	const at = text.indexOf("owned-outcome");
 	ok(
-		`${tag} — names the withdrawn intent owned-outcome and says "withdrawn" beside it (not as an offer) [QK:V2SURF-DORMANT-HONESTY]`,
-		at >= 0 && /withdrawn/.test(text.slice(at, at + 200)),
+		`${tag} — delivery never launches or resumes a process and names the dormant rejection [QK:V2SURF-DORMANT-HONESTY]`,
+		/This delivery verb never launches or resumes a process/.test(text) && /dormant-fire-forget-unsupported/.test(text),
 	);
 	ok(`${tag} — names the reason a dormant target actually returns`, /dormant-fire-forget-unsupported/.test(text));
 	ok(

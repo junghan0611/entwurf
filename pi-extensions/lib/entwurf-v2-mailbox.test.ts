@@ -110,6 +110,18 @@ it("1. sender present + wantsReply=true → rendered body, enqueue once", () => 
 	}
 });
 
+it("[QK:MAILBOX-RECEIVED-REPLY-GUIDANCE] enqueues the sender-bound reply guidance without changing the payload or marker", () => {
+	const enq = recordingEnqueue();
+	const message = "Please report the result.\nDo not send now.";
+	executeMetaMailboxSend(mailboxPlan({ message }), SENDER, { enqueue: enq.fn });
+	const body = enq.calls[0].body;
+	expect(body.split("\n").find((line) => line.startsWith("  session:"))).toBe(
+		`  session:     ${SENDER.sessionId} (replyable — when a reply is requested, send the result via entwurf_v2 (intent=fire-and-forget) to the requested recipient, defaulting to this sessionId; a local final is not delivery. Honor routing and no-send instructions; an absent or false wants_reply does not cancel a request. A replyable address alone needs no acknowledgment)`,
+	);
+	expect(body).toContain("  wants reply: no\n");
+	expect(body.endsWith(`────────────────────────────────────────\n${message}\n`)).toBe(true);
+});
+
 // ── 2. sender present + wantsReply=false → 'wants reply: no' ──────────────────
 it("2. sender present + wantsReply=false → 'wants reply: no'", () => {
 	{

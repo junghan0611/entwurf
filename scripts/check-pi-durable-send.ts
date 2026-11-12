@@ -900,7 +900,10 @@ async function cell(): Promise<void> {
 			hostReceiver.ownerKind === "pi-durable-host";
 		ok(
 			`[QK:${QK}-SENDER-REPLYABILITY] the host's receiver marker is armed and owned by the spawned host, and the landed body says what that predicts: replyable (armed ${hostArmed})`,
-			hostArmed && body.includes(`session:     ${hostGid} (meta-session, replyable — reply via entwurf_v2`),
+			hostArmed &&
+				body.includes(
+					`session:     ${hostGid} (meta-session, replyable — when a reply is requested, send the result via entwurf_v2`,
+				),
 		);
 		const hostRecords = fs
 			.readdirSync(dirs.sessions)

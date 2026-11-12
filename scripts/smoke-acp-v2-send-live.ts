@@ -345,7 +345,7 @@ async function main(): Promise<void> {
 		ok(
 			"the landed sender session IS the resident's own garden id, replyable (anchored envelope line)",
 			new RegExp(
-				`^ {2}session: {5}${rx(senderGid)} \\(replyable — reply via entwurf_v2 to this sessionId, intent=fire-and-forget\\)$`,
+				`^ {2}session: {5}${rx(senderGid)} ${rx("(replyable — when a reply is requested, send the result via entwurf_v2 (intent=fire-and-forget) to the requested recipient, defaulting to this sessionId; a local final is not delivery. Honor routing and no-send instructions; an absent or false wants_reply does not cancel a request. A replyable address alone needs no acknowledgment)")}$`,
 				"m",
 			).test(header),
 		);

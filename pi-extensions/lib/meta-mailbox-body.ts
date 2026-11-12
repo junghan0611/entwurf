@@ -79,7 +79,7 @@ export function formatMetaMailboxBody(sender: MailboxSenderEnvelope, message: st
 	// SENDING host, so it is neither abbreviated against this host's HOME nor shown as a local path.
 	const remote = !replyable ? sender.remote : undefined;
 	const sessionLine = replyable
-		? `${sender.sessionId} (${kind}replyable — reply via entwurf_v2 to this sessionId, intent=fire-and-forget)`
+		? `${sender.sessionId} (${kind}replyable — when a reply is requested, send the result via entwurf_v2 (intent=fire-and-forget) to the requested recipient, defaulting to this sessionId; a local final is not delivery. Honor routing and no-send instructions; an absent or false wants_reply does not cancel a request. A replyable address alone needs no acknowledgment)`
 		: remote
 			? `${sender.sessionId} (remote via ${remote.via}; ${remote.replyRoute === "declared" ? "reply route declared, not probed" : "no reply route declared"})`
 			: isMeta

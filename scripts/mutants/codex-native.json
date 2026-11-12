@@ -715,9 +715,9 @@
 			"claim": "CODEX-LIVE-RAW-CALLBACK-REQUIRED",
 			"title": "a Pi callback with arbitrary bytes after its sender envelope is accepted as exact",
 			"subject": "scripts/lib/codex-fresh-source-receipts.ts",
-			"find": ["\tif (!text.startsWith(prefix) || !text.endsWith(suffix)) return null;"],
+			"find": ["\tconst suffix = \"</sender_info>\";"],
 			"replace": [
-				"\tif (!text.startsWith(prefix)) return null;\n\tconst suffixAt = text.indexOf(suffix, prefix.length);\n\tif (suffixAt < 0) return null;\n\ttext = text.slice(0, suffixAt + suffix.length);  // mutant: discard callback suffix"
+				"\tconst suffix = \"</sender_info>\";\n\tconst suffixAt = text.indexOf(suffix);\n\tif (suffixAt >= 0) text = text.slice(0, suffixAt + suffix.length);  // mutant: discard callback suffix"
 			],
 			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
 			"timeoutSeconds": 180,

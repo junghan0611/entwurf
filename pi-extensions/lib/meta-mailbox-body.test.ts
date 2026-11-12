@@ -32,7 +32,7 @@ describe("the remote branch leaves every local header unchanged", () => {
 		expect(header({ ...base, origin: "pi-session", replyable: true })).toBe(
 			"[entwurf received ⟵]\n" +
 				"  from:        agent/x @ ~/repos/entwurf\n" +
-				`  session:     ${GID} (replyable — reply via entwurf_v2 to this sessionId, intent=fire-and-forget)\n` +
+				`  session:     ${GID} (replyable — when a reply is requested, send the result via entwurf_v2 (intent=fire-and-forget) to the requested recipient, defaulting to this sessionId; a local final is not delivery. Honor routing and no-send instructions; an absent or false wants_reply does not cancel a request. A replyable address alone needs no acknowledgment)\n` +
 				"  at:          2026-10-19 09:00:00 KST\n" +
 				"  wants reply: no\n",
 		);

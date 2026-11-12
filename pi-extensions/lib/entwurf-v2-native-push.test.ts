@@ -204,6 +204,34 @@ describe("the native-push send hand", () => {
 		}
 	});
 
+	it("[QK:NATIVE-PUSH-RECEIVED-REPLY-GUIDANCE] the adapter receives sender-bound guidance and the unchanged payload", async () => {
+		const plan: NativePushPlan = {
+			transport: "native-push",
+			action: "send",
+			targetGardenId: "20260704T000000-abcdef",
+			backend: "antigravity",
+			nativeSessionId: CONV,
+			route: PLANTED,
+			wantsReply: false,
+			message: "Please report the result.",
+		};
+		const { adapter, sends } = makeFakeAdapter({ probes: [] });
+		const sender = {
+			sessionId: "20260101T000000-aaaaaa",
+			agentId: "gate/sender",
+			cwd: "/w",
+			timestamp: "2026-01-01T00:00:00Z",
+			origin: "pi-session" as const,
+			replyable: true,
+		};
+		await makeNativePushSend({ resolveAdapter: () => adapter, senderProvider: () => sender })(plan, null);
+		expect(sends).toHaveLength(1);
+		expect(sends[0]?.content.split("\n").find((line) => line.startsWith("  session:"))).toBe(
+			`  session:     ${sender.sessionId} (replyable — when a reply is requested, send the result via entwurf_v2 (intent=fire-and-forget) to the requested recipient, defaulting to this sessionId; a local final is not delivery. Honor routing and no-send instructions; an absent or false wants_reply does not cancel a request. A replyable address alone needs no acknowledgment)`,
+		);
+		expect(sends[0]?.content.endsWith(`────────────────────────────────────────\n${plan.message}\n`)).toBe(true);
+	});
+
 	// ── makeNativePushSend: resolves adapter from plan.backend, ignores lock ─────
 	it("makeNativePushSend: resolves adapter from plan.backend, ignores lock", async () => {
 		{

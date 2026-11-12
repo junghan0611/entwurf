@@ -11,7 +11,8 @@
 			"gate": ["bash", "run.sh", "check-control-send-receipt"],
 			"timeoutSeconds": 600,
 			"signature": "[QK:SEND-RECEIPT-IDLE-IS-SENT]",
-			"signatureSource": "pi-extensions/lib/control-send-receipt.test.ts"
+			"signatureSource": "pi-extensions/lib/control-send-receipt.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
 		},
 		{
 			"claim": "SEND-RECEIPT-BUSY-STEER-IS-QUEUED",
@@ -22,7 +23,8 @@
 			"gate": ["bash", "run.sh", "check-control-send-receipt"],
 			"timeoutSeconds": 600,
 			"signature": "[QK:SEND-RECEIPT-BUSY-STEER-IS-QUEUED]",
-			"signatureSource": "pi-extensions/lib/control-send-receipt.test.ts"
+			"signatureSource": "pi-extensions/lib/control-send-receipt.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
 		},
 		{
 			"claim": "SEND-RECEIPT-BUSY-FOLLOWUP-IS-QUEUED",
@@ -33,7 +35,8 @@
 			"gate": ["bash", "run.sh", "check-control-send-receipt"],
 			"timeoutSeconds": 600,
 			"signature": "[QK:SEND-RECEIPT-BUSY-FOLLOWUP-IS-QUEUED]",
-			"signatureSource": "pi-extensions/lib/control-send-receipt.test.ts"
+			"signatureSource": "pi-extensions/lib/control-send-receipt.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
 		},
 		{
 			"claim": "SEND-RECEIPT-UNKNOWN-IS-ACCEPTED-NOT-SENT",
@@ -44,7 +47,8 @@
 			"gate": ["bash", "run.sh", "check-control-send-receipt"],
 			"timeoutSeconds": 600,
 			"signature": "[QK:SEND-RECEIPT-UNKNOWN-IS-ACCEPTED-NOT-SENT]",
-			"signatureSource": "pi-extensions/lib/control-send-receipt.test.ts"
+			"signatureSource": "pi-extensions/lib/control-send-receipt.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
 		},
 		{
 			"claim": "SEND-BOUNDARY-CARRIED",
@@ -240,15 +244,51 @@
 			"title": "the caller-facing outcome list drops the native-push rail, so a caller reading the one blurb it reads before dispatching is told the control rail's vocabulary covers a rail that answers with a direct injection instead",
 			"subject": "ENTWURF.json",
 			"find": [
-				"native-push INJECTION, a rejection, or lock-dirty. This receipt is not the colleague's reply or evidence of reading. EXISTING targets only; discover with "
+				"native-push INJECTION, a rejection, or lock-dirty. A receipt is not a reply or proof of reading. A local final is not delivery:"
 			],
 			"replace": [
-				"a rejection, or lock-dirty. This receipt is not the colleague's reply or evidence of reading. EXISTING targets only; discover with "
+				"a rejection, or lock-dirty. A receipt is not a reply or proof of reading. A local final is not delivery:"
 			],
 			"gate": ["bash", "run.sh", "check-entwurf-v2-surface"],
 			"timeoutSeconds": 300,
 			"signature": "[QK:SEND-OUTCOME-LIST-NAMES-EVERY-RAIL]",
 			"signatureSource": "scripts/check-entwurf-v2-surface.ts"
+		},
+		{
+			"claim": "PI-RECEIVED-REPLY-GUIDANCE",
+			"title": "the Pi receiver omits guidance for a replyable sender, so a local final can be mistaken for a reply",
+			"subject": "pi-extensions/lib/entwurf-control-rpc.ts",
+			"find": ["sender.replyable === true"],
+			"replace": ["sender.replyable === false"],
+			"gate": ["bash", "run.sh", "check-control-send-receipt"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PI-RECEIVED-REPLY-GUIDANCE]",
+			"signatureSource": "pi-extensions/entwurf-control.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "MAILBOX-RECEIVED-REPLY-GUIDANCE",
+			"title": "the mailbox receiver's guidance drops the local-final boundary",
+			"subject": "pi-extensions/lib/meta-mailbox-body.ts",
+			"find": ["a local final is not delivery."],
+			"replace": ["a local final is delivery."],
+			"gate": ["bash", "run.sh", "check-control-send-receipt"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:MAILBOX-RECEIVED-REPLY-GUIDANCE]",
+			"signatureSource": "pi-extensions/lib/entwurf-v2-mailbox.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
+		},
+		{
+			"claim": "NATIVE-PUSH-RECEIVED-REPLY-GUIDANCE",
+			"title": "the native-push receiver's guidance drops the no-send boundary",
+			"subject": "pi-extensions/lib/meta-mailbox-body.ts",
+			"find": ["Honor routing and no-send instructions;"],
+			"replace": ["Ignore routing and no-send instructions;"],
+			"gate": ["bash", "run.sh", "check-control-send-receipt"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:NATIVE-PUSH-RECEIVED-REPLY-GUIDANCE]",
+			"signatureSource": "pi-extensions/lib/entwurf-v2-native-push.test.ts",
+			"build": { "argv": ["bash", "scripts/build-bridge.sh"], "output": "mcp/entwurf-bridge/dist" }
 		}
 	]
 }

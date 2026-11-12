@@ -240,6 +240,10 @@ const reviewedToolsR19: ReviewedAmendmentLayer = {
 	revision: reviewedR19.revision,
 	amendments: reviewedR19.amendments.filter((a): a is ToolAmendment => a.key[0] === "tools"),
 };
+// #159: full old/new literals are recorded separately and reviewed against the whole product text.
+const reviewedR20 = JSON.parse(
+	fs.readFileSync(new URL("./fixtures/agent-guidance/amendments-revision-20.json", import.meta.url), "utf8"),
+) as ReviewedAmendmentLayer & { previousRevision: number };
 
 // Revision 10 was recorded before the Fable wording discussion. Its old values and provenance
 // remain intact; revision 11 applies that discussion's separate five-leaf amendment afterward.
@@ -388,6 +392,11 @@ function currentExpectations() {
 		"tools.entwurf_resume_call.descriptions.durable",
 		"tools.entwurf_resume_call.descriptions.mcp",
 	]);
+	expect(reviewedR20.amendments.map((a) => a.key.join(".")).sort()).toEqual([
+		"tools.entwurf_v2.descriptions.durable",
+		"tools.entwurf_v2.descriptions.mcp",
+		"tools.entwurf_v2.parameters.intent",
+	]);
 	for (const layer of [
 		reviewedR2,
 		reviewedR3,
@@ -400,6 +409,7 @@ function currentExpectations() {
 		reviewedToolsR17,
 		reviewedToolsR18,
 		reviewedToolsR19,
+		reviewedR20,
 	]) {
 		expect(new Set(layer.amendments.map((a) => a.key.join("."))).size).toBe(layer.amendments.length);
 		for (const amendment of layer.amendments) {
@@ -484,7 +494,9 @@ describe("root product guidance — frozen originals plus reviewed current amend
 		expect(reviewedR18.revision).toBe(18);
 		expect(reviewedR19.previousRevision).toBe(reviewedR18.revision);
 		expect(reviewedR19.revision).toBe(19);
-		expect(ENTWURF_GUIDANCE_VERSION.revision).toBe(reviewedR19.revision);
+		expect(reviewedR20.previousRevision).toBe(reviewedR19.revision);
+		expect(reviewedR20.revision).toBe(20);
+		expect(ENTWURF_GUIDANCE_VERSION.revision).toBe(reviewedR20.revision);
 	});
 
 	it("[QK:GUIDANCE-REJECT-HINTS-ORIGINAL] every static reject hint matches C0 plus the declared revision-6, revision-10 and reviewed revision-11 amendments", () => {

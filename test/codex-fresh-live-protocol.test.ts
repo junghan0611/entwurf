@@ -330,14 +330,29 @@ describe("codex fresh-live protocol", () => {
 
 	it("[QK:CODEX-LIVE-RAW-CALLBACK-REQUIRED] requires one terminal Pi sender envelope", () => {
 		const nonce = "mux-fresh-call-abcdef123456";
+		const guidance =
+			"[entwurf: When a reply is requested, send the result via entwurf_v2 to the requested recipient (default: sender_info.sessionId); a local final is not delivery. Honor routing and no-send instructions; an absent or false wants_reply does not cancel a request. A replyable address alone needs no acknowledgment.]";
+		const envelope = `<sender_info>${JSON.stringify({ sessionId: CODEX_GID, origin: "meta-session", replyable: true })}</sender_info>`;
 		const callback = {
 			type: "custom_message",
 			customType: "entwurf-message",
-			content: `${nonce}\n\n${senderInfo(CODEX_GID)}`,
+			content: `${nonce}\n\n${guidance}\n\n${envelope}`,
 		};
 		expect(piCallbackSenders([callback], nonce)).toEqual([CODEX_GID]);
-		expect(piCallbackSenders([{ ...callback, content: `${callback.content}suffix` }], nonce)).toEqual([]);
-		expect(piCallbackSenders([{ ...callback, content: `${nonce}x\n\n${senderInfo(CODEX_GID)}` }], nonce)).toEqual([]);
+		const bare = (sender: object) => `${nonce}\n\n<sender_info>${JSON.stringify(sender)}</sender_info>`;
+		for (const sender of [{ sessionId: CODEX_GID, replyable: false }, { sessionId: CODEX_GID }])
+			expect(piCallbackSenders([{ ...callback, content: bare(sender) }], nonce)).toEqual([CODEX_GID]);
+		for (const content of [
+			`prefix${callback.content}`,
+			`${callback.content}suffix`,
+			`${nonce}x\n\n${guidance}\n\n${envelope}`,
+			`${nonce}\n\n${envelope}`,
+			`${nonce}\n\n${guidance}x\n\n${envelope}`,
+			`${callback.content}\n\n${envelope}`,
+			`${nonce}\n\n${guidance}\n\n<sender_info>{bad}</sender_info>`,
+			`${nonce}\n\n${guidance}\n\n<sender_info>{"sessionId":"${CODEX_GID}","replyable":false}</sender_info>`,
+		])
+			expect(piCallbackSenders([{ ...callback, content }], nonce)).toEqual([]);
 	});
 
 	it("[QK:CODEX-LIVE-OUTER-FRAME-EXACT] preserves every mailbox payload byte under one anchored frame", () => {

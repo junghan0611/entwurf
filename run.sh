@@ -1156,8 +1156,10 @@ check_control_send_receipt() {
   # test titles `run_vitest` emits. Narrow file filter, same reason as check-entwurf-v2-send.
   # It stays inside check:contracts even though the discovery door also runs this file — see
   # check-release-gate-outcomes: a gate a mutant names must be reachable outside qualification.
-  section "control-socket acceptance boundary (mutant execution coordinate)"
-  run_vitest pi-extensions/lib/control-send-receipt.test.ts
+  # #159 adds the three delivery-input seams here as a shared mutant coordinate; discovery remains
+  # the beside glob. This reuses the existing gate instead of adding a second help/catalog surface.
+  section "control-socket acceptance and received guidance (mutant execution coordinate)"
+  run_vitest pi-extensions/lib/control-send-receipt.test.ts pi-extensions/entwurf-control.test.ts pi-extensions/lib/entwurf-v2-mailbox.test.ts pi-extensions/lib/entwurf-v2-native-push.test.ts
 }
 
 check_control_retire() {

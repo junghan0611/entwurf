@@ -3460,7 +3460,7 @@ let manifestCount: number;
 		"pi-retire-request": 6,
 		"retirement-event": 16,
 		"control-retire": 9,
-		"control-send-receipt": 20,
+		"control-send-receipt": 23,
 		"codex-native": 95,
 		"native-push-paused": 1,
 		"chain-terminus-publication": 1,

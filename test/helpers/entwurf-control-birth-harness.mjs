@@ -12,6 +12,7 @@
 //
 // Usage: node entwurf-control-birth-harness.mjs <extensionPath> <cwd> <ui: ok|throws>
 import { readdirSync, readFileSync } from "node:fs";
+import { createConnection } from "node:net";
 import { join } from "node:path";
 import { discoverAndLoadExtensions } from "@earendil-works/pi-coding-agent";
 
@@ -88,6 +89,46 @@ out.records = readdirSync(sessionsDir)
 	.map((f) => JSON.parse(readFileSync(join(sessionsDir, f), "utf8")))
 	.filter((r) => r.nativeSessionId === nativeSessionId)
 	.map((r) => ({ gardenId: r.gardenId, backend: r.backend }));
+
+// Drive the real socket handler and capture the exact custom message handed to Pi.
+out.deliveries = [];
+runtime.sendMessage = (message, options) => out.deliveries.push({ message, options });
+const socketPath = join(process.env.HOME, ".pi", "entwurf-control", `${out.records[0].gardenId}.sock`);
+const send = (command) =>
+	new Promise((resolve, reject) => {
+		const socket = createConnection(socketPath);
+		let text = "";
+		socket.on("connect", () => socket.write(`${JSON.stringify(command)}\n`));
+		socket.on("data", (chunk) => {
+			text += chunk.toString();
+			if (text.includes("\n")) {
+				socket.end();
+				resolve(JSON.parse(text.split("\n")[0]));
+			}
+		});
+		socket.on("error", reject);
+	});
+const sender = {
+	sessionId: "20260101T000000-aaaaaa",
+	agentId: "gate/sender",
+	cwd: "/w",
+	timestamp: "2026-01-01T00:00:00Z",
+	origin: "pi-session",
+	replyable: true,
+};
+out.sendResults = [];
+for (const command of [
+	{ type: "send", message: "Please report the result.", sender },
+	{
+		type: "send",
+		message: "Do not send now.",
+		sender: { ...sender, sessionId: "20260101T000001-bbbbbb" },
+		wants_reply: true,
+	},
+	{ type: "send", message: "FYI", sender: { ...sender, replyable: false } },
+	{ type: "send", message: "anonymous" },
+])
+	out.sendResults.push(await send(command));
 
 for (const handler of extension.handlers.get("session_shutdown") ?? []) {
 	try {

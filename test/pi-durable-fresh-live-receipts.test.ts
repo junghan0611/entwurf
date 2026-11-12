@@ -16,6 +16,9 @@ import {
 const PD = "20261006T223720-ba0c08";
 const FIXTURE = "20261006T223708-99edfb";
 const TOKEN = "PD-T2-N7ZXT9";
+// Reviewed #159 framing amendment: the payload and terminal envelope remain exact.
+const GUIDANCE =
+	"[entwurf: When a reply is requested, send the result via entwurf_v2 to the requested recipient (default: sender_info.sessionId); a local final is not delivery. Honor routing and no-send instructions; an absent or false wants_reply does not cancel a request. A replyable address alone needs no acknowledgment.]";
 
 function senderInfo(sessionId: string, agent: string): string {
 	return `<sender_info>${JSON.stringify({
@@ -30,10 +33,10 @@ function senderInfo(sessionId: string, agent: string): string {
 function piRow(content: string): unknown {
 	return { type: "custom_message", customType: "entwurf-message", content, display: true };
 }
-const delivery = piRow(`${TOKEN}\n\n${senderInfo(PD, "pi-durable")}`);
+const delivery = piRow(`${TOKEN}\n\n${GUIDANCE}\n\n${senderInfo(PD, "pi-durable")}`);
 // The fixture's own instruction names both the token and pd's id — the row the first oracle took.
 const instruction = piRow(
-	`Call entwurf_v2 exactly once with target "${PD}", intent "fire-and-forget", message "${TOKEN}".\n\n${senderInfo(FIXTURE, "claude-code")}`,
+	`Call entwurf_v2 exactly once with target "${PD}", intent "fire-and-forget", message "${TOKEN}".\n\n${GUIDANCE}\n\n${senderInfo(FIXTURE, "claude-code")}`,
 );
 
 describe("Pi side: one exact delivery row", () => {
@@ -44,16 +47,20 @@ describe("Pi side: one exact delivery row", () => {
 	});
 
 	it("[QK:PD-FRESH-LIVE-FOREIGN-SENDER-REFUSED] the same exact payload from another sender is no delivery", () => {
-		const foreign = piRow(`${TOKEN}\n\n${senderInfo(FIXTURE, "claude-code")}`);
+		const foreign = piRow(`${TOKEN}\n\n${GUIDANCE}\n\n${senderInfo(FIXTURE, "claude-code")}`);
 		expect(piExactDeliveryRow([foreign], TOKEN, PD)).toBeNull();
 		expect(piExactDeliveryRow([foreign, delivery], TOKEN, PD)).toEqual({ row: delivery, index: 1 });
 	});
 
 	it("[QK:PD-FRESH-LIVE-PAYLOAD-DRIFT-REFUSED] a payload that only contains the token, or a second envelope, is refused", () => {
-		const drift = piRow(`${TOKEN} extra\n\n${senderInfo(PD, "pi-durable")}`);
-		const suffixed = piRow(`${TOKEN}\n\n${senderInfo(PD, "pi-durable")}\n`);
-		const nested = piRow(`${TOKEN}\n\n${senderInfo(FIXTURE, "claude-code")}\n\n${senderInfo(PD, "pi-durable")}`);
-		for (const row of [drift, suffixed, nested]) expect(piExactDeliveryRow([row], TOKEN, PD)).toBeNull();
+		const drift = piRow(`${TOKEN} extra\n\n${GUIDANCE}\n\n${senderInfo(PD, "pi-durable")}`);
+		const suffixed = piRow(`${TOKEN}\n\n${GUIDANCE}\n\n${senderInfo(PD, "pi-durable")}\n`);
+		const nested = piRow(
+			`${TOKEN}\n\n${GUIDANCE}\n\n${senderInfo(FIXTURE, "claude-code")}\n\n${senderInfo(PD, "pi-durable")}`,
+		);
+		const missingGuidance = piRow(`${TOKEN}\n\n${senderInfo(PD, "pi-durable")}`);
+		for (const row of [drift, suffixed, nested, missingGuidance])
+			expect(piExactDeliveryRow([row], TOKEN, PD)).toBeNull();
 	});
 
 	it("[QK:PD-FRESH-LIVE-DUPLICATE-REFUSED] two exact rows are not one delivery", () => {

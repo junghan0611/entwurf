@@ -452,14 +452,20 @@ export function codexSourceToolReceipts(thread: unknown): SourceToolReceipt[] {
 }
 
 function exactSenderInfoSuffix(text: string, nonce: string): string | null {
-	const prefix = `${nonce}\n\n<sender_info>`;
+	// Independent expected frame: never import the producer's guidance as the receipt oracle.
+	const guidance =
+		"\n\n[entwurf: When a reply is requested, send the result via entwurf_v2 to the requested recipient (default: sender_info.sessionId); a local final is not delivery. Honor routing and no-send instructions; an absent or false wants_reply does not cancel a request. A replyable address alone needs no acknowledgment.]";
+	const open = "<sender_info>";
 	const suffix = "</sender_info>";
-	if (!text.startsWith(prefix) || !text.endsWith(suffix)) return null;
-	const json = text.slice(prefix.length, -suffix.length);
-	if (json.includes("\n") || json.includes("<sender_info>")) return null;
+	const at = text.lastIndexOf(open);
+	if (at < 0 || !text.endsWith(suffix)) return null;
+	const json = text.slice(at + open.length, -suffix.length);
+	if (json.includes("\n") || json.includes(open)) return null;
 	try {
-		const sender = JSON.parse(json) as { sessionId?: unknown };
-		return typeof sender.sessionId === "string" ? sender.sessionId : null;
+		const sender = JSON.parse(json) as { sessionId?: unknown; replyable?: unknown };
+		const prefix = `${nonce}${sender.replyable === true ? guidance : ""}\n\n${open}`;
+		if (!text.startsWith(prefix) || !text.endsWith(suffix)) return null;
+		return at === prefix.length - open.length && typeof sender.sessionId === "string" ? sender.sessionId : null;
 	} catch {
 		return null;
 	}

@@ -22,7 +22,7 @@
 			"title": "MCP long description reverts to the false \"socket paths take a per-target lock\" claim",
 			"subject": "ENTWURF.json",
 			"find": [
-				"LOCK: taken for a control-socket-DOMAIN dispatch. The mailbox and native-push rails are lock-free — deliverability and the adapter probe guard them. mode "
+				"A control-socket-DOMAIN dispatch takes a target lock; mailbox and native-push rails are lock-free. mode "
 			],
 			"replace": ["LOCK POLICY: socket paths take a per-target lock; the mailbox path does not. mode "],
 			"gate": ["bash", "run.sh", "check-entwurf-v2-surface"],
@@ -81,7 +81,7 @@
 			"title": "MCP long description advertises owned-outcome as a selectable dormant verb again and drops the reason a dormant target actually returns",
 			"subject": "ENTWURF.json",
 			"find": [
-				"A dormant socket rejects this delivery verb as dormant-fire-forget-unsupported. owned-outcome was withdrawn. Only on an explicit operator request, entwurf_resume_call may visibly reopen a proven-dormant Pi, pi-durable or Claude Code citizen under the same id, submitting no prompt; that lifecycle is separate from delivery. "
+				"A dormant socket rejects this delivery verb as dormant-fire-forget-unsupported. This delivery verb never launches or resumes a process. Only on an explicit operator request, entwurf_resume_call may visibly reopen a proven-dormant Pi, pi-durable or Claude Code citizen under the same id, submitting no prompt; that lifecycle is separate from delivery. "
 			],
 			"replace": [
 				"owned-outcome wakes a DORMANT socket-domain citizen by spawn-bg resume ONLY and is never auto-converted. "
@@ -132,11 +132,9 @@
 			"claim": "V2SURF-DESC-FITS-HOST-CAP",
 			"title": "the v2 tool description grows back past the host's 2048-char cap — the INTENT contract is silently cut off before the model that must choose an intent ever reads it",
 			"subject": "ENTWURF.json",
-			"find": [
-				"CANONICAL DELIVERY SURFACE for garden ids: message, reply, or hand off to whoever an id names. The id "
-			],
+			"find": ["Send, reply or hand off to an existing garden id; the decider selects the live rail "],
 			"replace": [
-				"CANONICAL DELIVERY SURFACE for garden ids: message, reply, or hand off to whoever an id names. The id PADDING PADDING PADDING PADDING PADDING PADDING PADDING PADDING PADDING PADDING PADDING PADDING PADDING PADDING PADDING PADDING PADDING PADDING PADDING PADDING "
+				"Send, reply or hand off to an existing garden id; the decider selects the live rail PADDING PADDING PADDING PADDING PADDING PADDING PADDING PADDING PADDING PADDING PADDING PADDING PADDING PADDING PADDING PADDING PADDING PADDING PADDING PADDING "
 			],
 			"gate": ["bash", "run.sh", "check-entwurf-v2-surface"],
 			"timeoutSeconds": 60,

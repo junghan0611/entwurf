@@ -50,7 +50,11 @@ export interface SenderEnvelope {
  * renders nothing (etiquette marker, not transport contract).
  */
 export function formatSenderInfoBlock(sender: SenderEnvelope, wantsReply = false): string {
-	return `\n\n<sender_info>${JSON.stringify({
+	const replyGuidance =
+		sender.replyable === true
+			? "\n\n[entwurf: When a reply is requested, send the result via entwurf_v2 to the requested recipient (default: sender_info.sessionId); a local final is not delivery. Honor routing and no-send instructions; an absent or false wants_reply does not cancel a request. A replyable address alone needs no acknowledgment.]"
+			: "";
+	return `${replyGuidance}\n\n<sender_info>${JSON.stringify({
 		sessionId: sender.sessionId,
 		agentId: sender.agentId,
 		cwd: sender.cwd,
