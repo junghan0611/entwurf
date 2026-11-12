@@ -28,6 +28,7 @@ export const SUPPORTED_ANTHROPIC_MODEL_IDS = /** @type {const} */ ([
 	"claude-sonnet-5-5",
 	"claude-opus-5-5",
 	"claude-fable-5-1",
+	"claude-fable-5-2",
 ]);
 
 /** The anchor model whose absence is a hard registry regression, not a soft skip. */

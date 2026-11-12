@@ -130,15 +130,17 @@ equal the published 0.36.1–0.37.1 manifests (`claude-agent-acp 0.90.0`, `@agen
 1.8.0`); 0.31.0–0.36.0 shipped `0.85.1` / `1.6.0` and 0.30.0 shipped `0.79.0` / `1.4.0`
 (`[측정 2026-10-16]` `git show <tag>:package.json`). The transitive Claude Agent SDK `0.3.296`
 row has no direct manifest entry; its bump is recorded in CHANGELOG 0.36.1 (#128) and the ROADMAP
-Dep bump ledger. 0.38.0 (#145) changes only the pi SDK set; the ACP rows are unchanged from 0.37.1.
+Dep bump ledger. 0.38.0 (#145) changes only the pi SDK set; the ACP rows are unchanged from 0.37.1
+through the published 0.52.0. The `0.106.0` / `2.6.0` / `0.3.322` rows below are the #142 branch
+candidate (`feat/142-acp-0106-effort`), not a shipped manifest.
 
 | Surface | Declaration | Class | What a green actually says |
 |---|---|---|---|
 | Entwurf package | `package.json` `version` | checkout declaration, not a release receipt | names the package label these rows sit beside; whether that label shipped, and with which rows, is CHANGELOG's record |
 | pi runtime | SDK exact `1.5.2`, host `>=1.5.2 <1.6` | **exact** oracle + **closed range** | the #158 source candidate's declared SDK set and derived host range (the published 0.51.0 shipped SDK 1.5.0, #155), not a release or operating-host acceptance; an ordinary Pi host inside the range is accepted by the source's version predicate, and the ceiling moves only on measurement. The published 0.36.0 through 0.37.1 shipped the 1.2.0 set (#141); 0.38.0 (#145) is the first to carry 1.3.0. Historical: the published 0.33.0 through 0.35.1 ship SDK exact 1.1.0, 0.32.0 ships SDK exact 1.0.4 with the next-minor ceiling (ROADMAP's 2026-10-07 bump entry), and 0.31.0 declared the earlier peer floor 1.0.2 |
-| ACP wire SDK | `@agentclientprotocol/sdk 1.8.0` | **exact** | the shared wire oracle both adapters speak |
-| Claude ACP adapter | `@agentclientprotocol/claude-agent-acp 0.90.0` | **exact**, bundled | shipped since 0.36.1; resolved before any PATH fallback; declaration is not compatibility evidence |
-| Claude Agent SDK | `0.3.296` (transitive) | **exact** oracle | the runtime risk surface behind the adapter |
+| ACP wire SDK | `@agentclientprotocol/sdk 2.6.0` | **exact** | the shared wire oracle both adapters speak (protocol v1; the experimental `Usage` type now comes from the `./unstable` entry) |
+| Claude ACP adapter | `@agentclientprotocol/claude-agent-acp 0.106.0` | **exact**, bundled | #142 candidate (0.90.0 shipped 0.36.1–0.52.0); resolved before any PATH fallback; declaration is not compatibility evidence |
+| Claude Agent SDK | `0.3.322` (transitive) | **exact** oracle | the runtime risk surface behind the adapter |
 | Anthropic SDK | `0.100.1` | **exact**, peer-resolution only | satisfies the Agent SDK peer floor (0.93.0+); never an API client here (gate L4) |
 | Claude Code runtime | `>=2.1.306` (`entwurf.claudeCodeFloor`) | **floor** | below it, hook args are silently dropped; entwurf enforces this itself |
 | Node | `>=24` (`engines.node`) | **floor** | single axis, derived everywhere else |
@@ -201,6 +203,9 @@ different reasons, and collapsing them would hide a real risk**:
   the effort selector that ride it are unreachable for a second, independent reason as well:
   `[측정 2026-09-10]` `git grep -c configOptions pi-extensions/lib/acp/` is **0**, and entwurf
   has never set `EFFORT_CONFIG_ID`, which is the other gate on the SDK-side `applyFlagSettings`.
+  That second reason no longer holds from #142: entwurf now sets the `effort` config option on every
+  Claude session (§Claude effort). `recommendedValue` itself stays unreachable through the empty
+  `clientCapabilities`.
   The rest of 0.76.0 is one refactor: `resolveModelPreference` moved into a new
   `dist/session-model.*` (diff is comments and formatting), `dist/session-effort.*` is new, and
   `setSessionConfigOption` — our only model-forcing wire call — is byte-identical across
@@ -210,6 +215,9 @@ different reasons, and collapsing them would hide a real risk**:
   `resolvedProvider` and up onto the unconditional `session/new` path. entwurf passes `settings`
   as an OBJECT (`tool-surface.ts:153`), so the branch is never taken. That makes "entwurf never
   hands `settings` as a path" a contract rather than an accident; it is stated at that call site.
+- **Advertised but never called — 0.106.0 adds `session/options`** (#1592) and setup-request
+  `configOptions`. entwurf calls neither; effort goes through `session/set_config_option` and its
+  readback, because upstream skips a refused setup entry silently.
 - **0.77.0's BREAKING change does not reach us, twice over.** `claudeCode.options.agent` is no
   longer forwarded — the adapter now shallow-copies the options object and `delete`s `agent` on
   the unconditional `session/new` path (`[측정 2026-09-18, 0.79.0 dist/acp-agent.js:5934-5941 직독]`).
@@ -396,6 +404,49 @@ different reasons, and collapsing them would hide a real risk**:
     the agent (#1218); a new session's first prompt carries our augment ahead of the user text,
     a reuse turn does not.
 
+- **0.90.0 → 0.106.0 (#142) moves the wire SDK a major and changes what reaches us as follows.**
+  `[측정 2026-11-13, oracle aarch64, private candidate install, no session/prompt]` receipts are
+  host-local under `.tmp-verify/acp106-readback-20261113/` (stage1 no-auth; stage2–4 authenticated
+  through the production `ensureClaudeConfigOverlay(realDir, overlayDir)` whitelist into a sandbox
+  overlay; account email redacted).
+  - **Wire and launch.** The adapter depends on `@agentclientprotocol/sdk` 2.6.0 (major since 0.94);
+    the client moves with it so the L2c shared-wire contract holds. Protocol stays v1: `initialize`
+    answered `protocolVersion: 1`, `loadSession: true` and session capabilities `additionalDirectories,
+    close, delete, fork, list, options, resume, status, systemPrompt, title`, plus
+    `_meta.steering.supported`. 0.103.0 narrowed `exports` to `.` and `./package.json`; the production
+    launcher anchors on `package.json` and imports the bin by file URL, so it booted 0.106.0 unchanged.
+    Two LIVE probe scripts that deep-imported `dist/` were repointed the same way.
+  - **Production `_meta` passes 0.100's request validation.** Three `session/new` calls carrying
+    `model/tools/settingSources/settings/disallowedTools/extraArgs` and the shipped carrier succeeded.
+  - **Initial config options** (0.106 #1592) arrive on `session/new`: `mode` = `bypassPermissions`
+    (the overlay `defaultMode` still beats 0.101's built-in Auto default), `model`, `effort`
+    (category `thought_level`, values `default, low, medium, high, xhigh, max`), `fast`, `ultracode`,
+    and on a later session `agent`. `session/options` and setup-request `configOptions` are
+    advertised but never called here; a refused setup entry is skipped silently upstream, so effort is
+    set by `session/set_config_option` and read back instead.
+  - **Model rows (authenticated).** `claude-opus-5-5` → `opus`/"Opus 5.5", `claude-sonnet-5-5` →
+    `sonnet`/"Sonnet 5.5", `claude-fable-5-1` → its own row "Fable 5.1", `claude-fable-5-2` → its own
+    row "Fable 5.2" (the alias `fable` also names Fable 5.2). Unauthenticated, setting a non-alias id
+    fails `-32603` "Could not resolve authentication method", which is an auth fact, not support.
+    The offered list is not stable inside one adapter process: 5 rows on the first sessions, 14 on a
+    later one, and a later session listed `claude-fable-5-1[1m]` beside `claude-fable-5-2`. Only the
+    set-model answers above are measured support; an offered row is not.
+  - **Effort on a live session.** On one session `high → low → max` each read back exactly with the
+    model unchanged; `minimal` was refused `-32602 Invalid params` and the session stayed usable.
+    Readback is the adapter's acceptance, not evidence of applied reasoning depth.
+  - **Idle compaction** (0.101 #1522) can send the adapter's own `/compact` prompt on an idle session
+    (1h cache TTL, ≥100k–200k context, ~54 min idle). 0.106 #1555 makes the inline `settings`
+    `idleCompaction` key win when no managed tier sets it. Our retained-session callbacks drop
+    notifications that arrive with no active turn, so such a turn would be invisible to pi. Our
+    inline `idleCompaction: false` is held only as a `_meta` shape (`ACP-CLAUDE-NO-IDLE-COMPACTION`);
+    its runtime effect on an idle session is unmeasured, and a managed tier would win over it.
+  - **Inert for us:** #1430 replays pre-compaction history on `session/load` (a client-view replay,
+    not a prompt re-dispatch; we never call `session/load`); #1589 concerns the bun single-file
+    release executable, not the npm dist we import; auth-status/account description changes are
+    notifications we ignore. `bypassPermissions` also shadows `canUseTool`
+    (`CLAUDE_SDK_CAN_USE_TOOL_SHADOWED` on stderr), so the permission callback is not a gate for
+    ordinary tool calls; the declared `tools`/`disallowedTools` surface is.
+
 - **The one 0.73.0 → 0.75.1 change that DOES reach us:** context compaction is now surfaced as a
   synthetic ACP tool lifecycle (0.75.0, #991) — a `tool_call` with `kind: "think"`, title
   `Compact conversation`, and `_meta.contextCompaction` schema v1 — where it used to arrive as
@@ -446,9 +497,10 @@ operator's repair named.
 
 | Seam | Claude | Cortex Code |
 |---|---|---|
-| Model ids | unprefixed `claude-sonnet-5-5`, `claude-opus-5-5`, `claude-fable-5-1` | `cortex-auto`, `cortex-claude-opus-5`, `cortex-claude-sonnet-5`, `cortex-openai-gpt-5.4`; prefix stripped before set-model |
+| Model ids | unprefixed `claude-sonnet-5-5`, `claude-opus-5-5`, `claude-fable-5-1`, `claude-fable-5-2` | `cortex-auto`, `cortex-claude-opus-5`, `cortex-claude-sonnet-5`, `cortex-openai-gpt-5.4`; prefix stripped before set-model |
 | Launch | bundled `claude-agent-acp`; `CLAUDE_AGENT_ACP_COMMAND` override | `cortex acp serve`; optional connection; `CORTEX_ACP_COMMAND` override; never a launch-time `-m` |
 | Model authority | per-turn ACP set-model, its answer read back before the prompt | per-turn ACP set-model; an unavailable curated id fails before prompt; the answer is not read back |
+| Thinking level | pi's level → `effort`, set and read back before the prompt (§Claude effort) | not declared: no `thinkingLevelMap`, `reasoning` is not carried |
 | Carrier | engraving in `_meta.systemPrompt` | no system-prompt carrier; engraving rides the first-user augment |
 | Overlay | `CLAUDE_CONFIG_DIR` whitelist, configured-empty hooks, native memory hidden | session-scoped isolated HOME + `SNOWFLAKE_HOME`, private `cortex/mcp.json`, measured-minimum auth passthrough |
 | MCP | explicit wire `mcpServers` | explicit declarations projected to private `mcp.json` because Cortex ignores the wire field |
@@ -473,8 +525,8 @@ The adapter reads its set-model answer back before the prompt. The driver resolv
 requested id onto one of the rows it offers and answers with that row's `value` as the
 model option's `currentValue` (0.85.1 `dist/acp-agent.js:5459-5499`). Measured on
 2026-10-12 against 0.85.1, and again unchanged on 2026-10-14 against 0.90.0 (the second
-time also with the production session meta), with no prompt sent: `claude-fable-5-1`
-answers its own row,
+time also with the production session meta), and on 2026-11-13 against 0.106.0 authenticated
+(#142), with no prompt sent: `claude-fable-5-1` and `claude-fable-5-2` each answer their own row,
 while `claude-sonnet-5-5` and `claude-opus-5-5` answer the alias rows `sonnet` and
 `opus`, named `Sonnet 5.5` and `Opus 5.5`. The id an alias row resolves to is not on the
 ACP wire, so `CLAUDE_SET_MODEL_ALIAS_ROWS` (`backend-adapter.ts`) declares, for each
@@ -484,6 +536,38 @@ the prompt, with text pi does not classify as transient. A curated id added late
 its own measured answer before it ships. `check-acp-set-model-readback` holds the
 contract offline; it does not certify the installed driver's runtime, and no 5.5 prompt
 turn is claimed by this measurement.
+
+#### Claude effort (#142)
+
+Pi's thinking level is carried as the adapter's `effort` session config option. Each curated
+Claude row registers a `thinkingLevelMap` (`claudeAcpThinkingLevelMap`, `models.ts`): `low`,
+`medium`, `high`, `xhigh` and `max` map to the effort value of the same name, `off` and `minimal`
+are `null`. So pi's own selector offers only `low..max`, and pi's normal clamp moves a saved `off`
+or `minimal` to `low` before any turn. The registry still decides which levels a model has: a
+level it marks `null` stays unsupported, and `xhigh`/`max` appear only where it maps them. The
+effort value `default` is the vendor's own choice; no pi level maps to it.
+
+At turn entry the adapter resolves the level before any process or session is touched. A turn
+that arrives with no level, an unsupported level, or a map value outside the effort set refuses as
+`acp-thinking-level-unsupported`, with nothing spawned. "No level" covers two cases pi does not
+distinguish on the wire: the agent sends no `reasoning` for `off`, and none when no level is set.
+Pi's own turn and compaction paths always carry a level for these rows after the clamp; the
+refusal is for callers outside that path, and it says so rather than run at a depth nobody chose.
+
+A new session sets effort right after set-model; a reused session sets it again only when the
+level changed since the value it last read back. The level is not part of the reuse signature, so
+changing it keeps the live conversation. The answer must read the value back as the `effort`
+option's `currentValue`; a refused set (`-32602` for an unoffered value), a missing option or
+another value fails the turn before the prompt, and a reused session is dropped, so the next turn
+opens a new session and resends the transcript. The text we author reads as neither transient nor
+overflow to pi; the sealed message still appends the session's stderr tail like any other
+pre-prompt failure, and a bootstrap timeout keeps its `timed out` wording, so either can classify as
+transient. A replay of that turn re-dispatches no prompt that ran. Each accepted set shows the operator a lifecycle notice `[acp: effort <value> read back]` (a new
+session always, a reused one only when the value changed; a refused set shows none). Like the other
+lifecycle notices it is excluded from the transcript a later turn sends and from the reuse signature.
+Readback is the adapter's acceptance of the value, not evidence of the
+reasoning depth applied or of turn speed. `check-acp-set-model-readback` holds the contract
+offline (`backend.thinking.test.ts`, five effort mutants).
 
 The bundled adapter resolves before any PATH fallback. Its overlay retains only the
 auth/runtime state required by the Claude Agent SDK and hides operator memory, hooks,

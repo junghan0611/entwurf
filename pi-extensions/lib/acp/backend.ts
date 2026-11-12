@@ -310,6 +310,9 @@ interface BridgeSession {
 	acpSessionId: string;
 	bridgeConfigSignature: string;
 	contextMessageSignatures: string[];
+	/** The backend thinking value the driver last read back on this session (#142); a fact about the
+	 *  live session, never part of the reuse signature. Undefined until one is set. */
+	thinkingValue?: string;
 	alive: boolean;
 	busy: boolean;
 	/** Mutable per-turn router — see the CRITICAL note in the file header. */
@@ -1586,6 +1589,24 @@ export function streamAcpTurn(
 			finishError(err, false);
 			return;
 		}
+		// #142: pi's thinking level → the backend's own value, resolved BEFORE any process or session is
+		// touched, so an unsupported level refuses with nothing to unwind. A backend without the
+		// capability (cortex) resolves nothing and keeps its old behaviour. The value is deliberately NOT
+		// in the reuse signature: changing it must not trade the live Claude conversation for a new one,
+		// so it is set on the live session before the prompt instead (runNewTurn / runReuseTurn).
+		let thinkingValue: string | undefined;
+		if (adapter.resolveThinking) {
+			try {
+				thinkingValue = adapter.resolveThinking({
+					modelId: model.id,
+					reasoning: opts?.reasoning,
+					thinkingLevelMap: model.thinkingLevelMap,
+				});
+			} catch (err) {
+				finishError(err, false);
+				return;
+			}
+		}
 		// S2g: the signature folds the FULL resolved config (mcpServersHash + tool
 		// surface + skillPlugins + flags) so any operator config change invalidates
 		// a reused session; the per-session envelope is excluded (runtime, not config).
@@ -1666,9 +1687,9 @@ export function streamAcpTurn(
 		inFlightKeys.add(sessionKey);
 		try {
 			if (decision.path === "reuse" && existing) {
-				await runReuseTurn(existing, ctxSigs, adapter);
+				await runReuseTurn(existing, ctxSigs, adapter, thinkingValue);
 			} else {
-				await runNewTurn(params, ctxSigs, engraving, config, adapter, nativeModelId);
+				await runNewTurn(params, ctxSigs, engraving, config, adapter, nativeModelId, thinkingValue);
 			}
 		} finally {
 			inFlightKeys.delete(sessionKey);
@@ -1683,6 +1704,7 @@ export function streamAcpTurn(
 		config: ResolvedAcpConfig,
 		adapter: AcpBackendAdapter,
 		nativeModelId: string,
+		thinkingValue: string | undefined,
 	): Promise<void> {
 		let child: AcpChildLike | undefined;
 		let session: BridgeSession | undefined;
@@ -1845,6 +1867,18 @@ export function streamAcpTurn(
 				adapter.enforceModel({ connection, acpSessionId, modelId: model.id, nativeModelId }),
 				SET_MODEL_TIMEOUT_MS,
 			);
+			// #142: the requested thinking level, set and read back before the prompt. The session keeps
+			// the value the driver confirmed, so a reuse turn sets it again only when it changes.
+			if (thinkingValue !== undefined && adapter.enforceThinking) {
+				await withTimeout(
+					"enforceThinking",
+					adapter.enforceThinking({ connection, acpSessionId, modelId: model.id, value: thinkingValue }),
+					SET_MODEL_TIMEOUT_MS,
+				);
+				session.thinkingValue = thinkingValue;
+				// Visible like the model lock: the operator sees the effort the driver read back.
+				pushAcpLifecycleNotice(state, `effort ${thinkingValue} read back`);
+			}
 
 			// S2f visibility: the session is live and model-locked — the next gap is
 			// the prompt round-trip to the first token.
@@ -1969,7 +2003,12 @@ export function streamAcpTurn(
 	}
 
 	// --- reuse: send only the latest user delta to the live ACP session
-	async function runReuseTurn(session: BridgeSession, ctxSigs: string[], adapter: AcpBackendAdapter): Promise<void> {
+	async function runReuseTurn(
+		session: BridgeSession,
+		ctxSigs: string[],
+		adapter: AcpBackendAdapter,
+		thinkingValue: string | undefined,
+	): Promise<void> {
 		/** Same phase discipline as a new turn — reuse just has no bootstrap to lose. */
 		let phase: "pre-prompt" | "prompt" = "pre-prompt";
 		try {
@@ -1980,6 +2019,24 @@ export function streamAcpTurn(
 			pushAcpLifecycleNotice(state, "reusing live session");
 			session.busy = true;
 			session.activePromptHandler = makePromptHandler(session);
+
+			// #142: a changed thinking level is set on THIS live session, before the delta is sent; the
+			// conversation is kept. A refused or mismatched answer fails the turn before the prompt and
+			// the session is dropped by the catch below, like any other pre-prompt failure on reuse.
+			if (thinkingValue !== undefined && adapter.enforceThinking && session.thinkingValue !== thinkingValue) {
+				await withTimeout(
+					"enforceThinking",
+					adapter.enforceThinking({
+						connection: session.connection,
+						acpSessionId: session.acpSessionId,
+						modelId: model.id,
+						value: thinkingValue,
+					}),
+					SET_MODEL_TIMEOUT_MS,
+				);
+				session.thinkingValue = thinkingValue;
+				pushAcpLifecycleNotice(state, `effort ${thinkingValue} read back`);
+			}
 
 			// The live ACP session already remembers the prior turns → send only the
 			// latest user delta (re-sending the transcript would duplicate history).

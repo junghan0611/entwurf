@@ -1344,9 +1344,10 @@ check_fresh_call_provider() {
 check_acp_set_model_readback() {
   # NOT a discovery path — check-tests-beside-behavior finds the test by glob. This case is the
   # MUTANT EXECUTION COORDINATE for scripts/mutants/acp-set-model-readback.json (#128): the claude
-  # adapter refuses a set-model answer that does not name the requested model, before the prompt.
-  section "claude ACP set-model readback (mutant execution coordinate)"
-  run_vitest pi-extensions/lib/acp/backend-adapter.test.ts
+  # adapter refuses a set-model answer that does not name the requested model, before the prompt;
+  # and (#142) pi's thinking level reaches Claude effort, set and read back before the prompt.
+  section "claude ACP set-model + effort readback (mutant execution coordinate)"
+  run_vitest pi-extensions/lib/acp/backend-adapter.test.ts pi-extensions/lib/acp/backend.thinking.test.ts
 }
 
 check_acp_vendor_rejection() {
@@ -3376,7 +3377,7 @@ check_acp_provider_surface() {
   # provider lib modules AND compiles + drives the REAL entry against a fake pi,
   # asserting: one surface name, the no-auth sentinel shape, full
   # ProviderModelConfig rows on the curated claude anchor, the EXACT curated model
-  # set both adapters contribute (claude 3 + cortex 4 —
+  # set both adapters contribute (claude 4 + cortex 4 —
   # [QK:CORTEX-PROVIDER-EXACT-ROW-SURFACE], the claim that catches an entry which
   # silently drops a whole backend), and that streamSimple is the real
   # streamShellAcp backend (checked BY NAME, never invoked — invoking spawns an
@@ -5302,6 +5303,7 @@ _check_pack_install_impl() {
   loader_ids=$(awk '$1 == "entwurf" { print $2 }' <<<"$loader_out" | LC_ALL=C sort)
   loader_expected=$(printf '%s\n' \
     claude-fable-5-1 \
+    claude-fable-5-2 \
     claude-opus-5-5 \
     claude-sonnet-5-5 \
     cortex-auto \
@@ -5309,7 +5311,7 @@ _check_pack_install_impl() {
     cortex-claude-sonnet-5 \
     cortex-openai-gpt-5.4 | LC_ALL=C sort)
   if [ "$loader_ids" != "$loader_expected" ]; then
-    fail "[check-pack-install] installed provider model set drifted — expected exactly 7 curated ids (claude 3 + cortex 4):"
+    fail "[check-pack-install] installed provider model set drifted — expected exactly 8 curated ids (claude 4 + cortex 4):"
     echo "  expected:" >&2
     echo "$loader_expected" | sed 's/^/    /' >&2
     echo "  actual (entwurf rows):" >&2
@@ -5321,7 +5323,7 @@ _check_pack_install_impl() {
   # Name the set on SUCCESS too, not only in the failure branch — same principle as
   # the pinned-pi version assert above: a gate that cannot name what it proved has
   # proved nothing, and a row COUNT without the ids cannot be audited from a CI log.
-  echo "[check-pack-install] pi loader smoke pass (entwurf registered; exact curated set: claude 3 + cortex 4):"
+  echo "[check-pack-install] pi loader smoke pass (entwurf registered; exact curated set: claude 4 + cortex 4):"
   echo "$loader_ids" | sed 's/^/    /'
 
   # npm-managed neutral install regression — the README's PRIMARY install path is

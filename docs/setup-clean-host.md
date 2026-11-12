@@ -1105,8 +1105,8 @@ operator-installed Claude runtime. Resolution order:
 2. `require.resolve(...)` against the bundled `@agentclientprotocol/claude-agent-acp`.
 3. `PATH:claude-agent-acp` fallback if package resolution fails.
 
-The curated Claude ids are `claude-opus-5-5`, `claude-sonnet-5-5`, and
-`claude-fable-5-1`. Cortex exposes `cortex-auto`, `cortex-claude-opus-5`,
+The curated Claude ids are `claude-opus-5-5`, `claude-sonnet-5-5`,
+`claude-fable-5-1`, and `claude-fable-5-2`. Cortex exposes `cortex-auto`, `cortex-claude-opus-5`,
 `cortex-claude-sonnet-5`, and `cortex-openai-gpt-5.4`.
 `entwurfProvider.cortexConnection` or `ENTWURF_ACP_CORTEX_CONNECTION` selects
 an authenticated connection; the env override wins. Codex and Antigravity are

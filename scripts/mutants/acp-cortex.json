@@ -27,7 +27,7 @@
 			"signatureSource": "scripts/check-acp-cortex.ts"
 		},
 		{
-			"claim": "CLAUDE-CURATED-THREE-ROWS",
+			"claim": "CLAUDE-CURATED-FOUR-ROWS",
 			"title": "dropping a curated CLAUDE row shrinks the operator's model list while the exact-set comparison stays green — expected derives from the same constant, so only the independent count catches it",
 			"subject": "pi-extensions/lib/acp/model-ids.js",
 			"find": [
@@ -35,17 +35,19 @@
 				"\t\"claude-sonnet-5-5\",",
 				"\t\"claude-opus-5-5\",",
 				"\t\"claude-fable-5-1\",",
+				"\t\"claude-fable-5-2\",",
 				"]);"
 			],
 			"replace": [
 				"export const SUPPORTED_ANTHROPIC_MODEL_IDS = /** @type {const} */ ([",
 				"\t\"claude-sonnet-5-5\",",
 				"\t\"claude-opus-5-5\",",
+				"\t\"claude-fable-5-1\",",
 				"]);"
 			],
 			"gate": ["bash", "run.sh", "check-acp-provider-surface"],
 			"timeoutSeconds": 300,
-			"signature": "[QK:CLAUDE-CURATED-THREE-ROWS]",
+			"signature": "[QK:CLAUDE-CURATED-FOUR-ROWS]",
 			"signatureSource": "scripts/check-acp-provider-surface.ts"
 		},
 		{

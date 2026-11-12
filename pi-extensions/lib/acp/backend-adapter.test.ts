@@ -32,6 +32,26 @@ describe("ACP launch env — claude foreground-only", () => {
 	});
 });
 
+describe("ACP session settings — claude idle compaction", () => {
+	it("[QK:ACP-CLAUDE-NO-IDLE-COMPACTION] claude session settings turn off only the adapter's idle compaction, never in-prompt compaction", () => {
+		const config = {
+			tools: ["Read"],
+			permissionAllow: ["Read(*)"],
+			disallowedTools: [],
+			settingSources: [],
+			strictMcpConfig: true,
+			skillPlugins: [],
+		} as never;
+		const meta = claudeAdapter.buildSessionMeta(
+			{ modelId: "claude-opus-5-5", nativeModelId: "claude-opus-5-5", config },
+			null,
+		) as { claudeCode: { options: { settings: Record<string, unknown> } } };
+		const settings = meta.claudeCode.options.settings;
+		expect(settings.idleCompaction).toBe(false);
+		expect("autoCompactEnabled" in settings).toBe(false);
+	});
+});
+
 describe("ACP prompt rejection — claude-only capability", () => {
 	it("[QK:ACP-PROMPT-REJECTION-CLAUDE-ONLY] only claude reads a vendor prompt rejection, and only the typed incomplete_tool_call one", () => {
 		const data = { errorKind: "incomplete_tool_call" };
@@ -100,7 +120,18 @@ describe("ACP set-model readback — claude", () => {
 		expect(await enforce("claude-fable-5-1", answer("claude-fable-5-1"))).toEqual([
 			{ sessionId: "S", configId: "model", value: "claude-fable-5-1" },
 		]);
+		// 0.106.0 (#142, authenticated, no prompt): `claude-fable-5-2` answers its own row "Fable 5.2",
+		// which then replaces the alias row `fable` in the offered list.
+		const fable52Rows = [...MEASURED_ROWS, { value: "claude-fable-5-2", name: "Fable 5.2", description: "" }];
+		expect(await enforce("claude-fable-5-2", answer("claude-fable-5-2", fable52Rows))).toEqual([
+			{ sessionId: "S", configId: "model", value: "claude-fable-5-2" },
+		]);
 		const refused: Array<[string, unknown]> = [
+			// The alias `fable` also names Fable 5.2, but no alias row is declared for 5.2 and 5.1 must
+			// never be answered by it: either is a different id answering under the requested one.
+			["claude-fable-5-2", answer("fable", [...MEASURED_ROWS, { value: "fable", name: "Fable 5.2" }])],
+			["claude-fable-5-1", answer("fable", [...MEASURED_ROWS, { value: "fable", name: "Fable 5.2" }])],
+			["claude-fable-5-2", answer("claude-fable-5-1")],
 			["claude-fable-5-1", {}],
 			["claude-fable-5-1", undefined],
 			["claude-fable-5-1", { configOptions: [{ id: "effort", currentValue: "claude-fable-5-1" }] }],

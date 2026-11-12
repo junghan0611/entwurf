@@ -27,6 +27,7 @@ import type { AcpConnectionLike } from "./acp-client.js";
 import { enrichMcpServersWithEnvelope, type ResolvedAcpConfig } from "./config.js";
 import { loadEngraving } from "./engraving.js";
 import {
+	CLAUDE_ACP_EFFORT_VALUES,
 	CORTEX_MODEL_PREFIX,
 	curatedClaudeModels,
 	curatedCortexModels,
@@ -57,7 +58,10 @@ export interface AcpLaunchSpec {
 }
 
 /** A curated provider model row (the shape pi.registerProvider({ models }) takes). */
-export type AcpModelRow = ReturnType<typeof curatedClaudeModels>[number];
+/** `thinkingLevelMap` is optional: Claude rows declare the effort levels its driver can set (#142);
+ *  cortex rows declare none and keep pi's default thinking handling. */
+type ClaudeModelRow = ReturnType<typeof curatedClaudeModels>[number];
+export type AcpModelRow = Omit<ClaudeModelRow, "thinkingLevelMap"> & Partial<Pick<ClaudeModelRow, "thinkingLevelMap">>;
 
 /** routeModel result — the backend-native model id with the curation prefix stripped. */
 export interface AcpRoutedModel {
@@ -110,6 +114,23 @@ export interface AcpEnforceModelParams {
 	acpSessionId: string;
 	modelId: string;
 	nativeModelId: string;
+}
+
+/** resolveThinking input — pi's requested level and the registered row's level map. `reasoning`
+ *  is `undefined` both when the pi thinking level is `off` and when none was given: pi-agent-core
+ *  sends `thinkingLevel === "off" ? undefined : level`, so the provider cannot tell them apart. */
+export interface AcpResolveThinkingParams {
+	modelId: string;
+	reasoning: string | undefined;
+	thinkingLevelMap: Readonly<Record<string, string | null | undefined>> | undefined;
+}
+
+/** enforceThinking input — the live connection + acp session + the resolved backend value. */
+export interface AcpEnforceThinkingParams {
+	connection: AcpConnectionLike;
+	acpSessionId: string;
+	modelId: string;
+	value: string;
 }
 
 /** ensureOverlay result — env overrides backend.ts merges into the spawn env. */
@@ -210,6 +231,15 @@ export interface AcpBackendAdapter {
 	 *  the per-backend difference (claude: per-turn session/set_config_option; a
 	 *  launch-pinned backend: no-op here). backend.ts wraps the call in withTimeout. */
 	enforceModel(params: AcpEnforceModelParams): Promise<void>;
+
+	/** OPTIONAL capability (#142): carry pi's thinking level to the backend. Both or neither.
+	 *  `resolveThinking` is PURE — it maps the requested level to the backend value through the
+	 *  registered row's `thinkingLevelMap` and throws a named refusal when there is none, before
+	 *  any process or session is touched. `enforceThinking` sets that value on the live session
+	 *  and refuses unless the answer reads it back. ABSENT (cortex) keeps the old behaviour: the
+	 *  level is not carried, and nothing claims it is. */
+	resolveThinking?(params: AcpResolveThinkingParams): string;
+	enforceThinking?(params: AcpEnforceThinkingParams): Promise<void>;
 
 	/** Backend-specific fields folded into bridgeConfigSignature (reuse invalidation):
 	 *  connection/profile/env-derived STABLE ids only — never raw env values / secrets.
@@ -345,7 +375,7 @@ export const CLAUDE_FOREGROUND_ONLY_ENV = { CLAUDE_CODE_DISABLE_BACKGROUND_TASKS
  * The set-model answer is read back before the prompt (#128). claude-agent-acp resolves the
  * requested id onto one of the rows it offers and answers with that row's `value` as the model
  * option's `currentValue` (0.85.1 `dist/acp-agent.js:5459-5499`). `[측정 2026-10-12]` 0.85.1, no
- * prompt: `claude-fable-5-1` answers its own row, while `claude-sonnet-5-5` and `claude-opus-5-5`
+ * prompt: `claude-fable-5-1` answers its own row (and, at 0.106.0 #142, so does `claude-fable-5-2`), while `claude-sonnet-5-5` and `claude-opus-5-5`
  * answer the alias rows `sonnet` and `opus`, named `Sonnet 5.5` and `Opus 5.5`. The id an alias row
  * resolves to (`ModelInfo.resolvedModel`) is not on the ACP wire, so an alias answer is accepted
  * only as the exact measured row, value AND name, declared here for the requested id. No other
@@ -382,6 +412,61 @@ export function confirmClaudeSetModelAnswer(response: unknown, nativeModelId: st
 		`entwurf: claude-agent-acp answered set-model ${JSON.stringify(nativeModelId)} with ${answered}, which does not ` +
 			`name the requested model. Refusing before the prompt so a different model cannot answer under this id; ` +
 			`the installed driver and the curated id disagree, and repeating the turn cannot change that.`,
+	);
+}
+
+const CLAUDE_EFFORT_VALUE_SET: ReadonlySet<string> = new Set(CLAUDE_ACP_EFFORT_VALUES);
+
+/** The named refusal for a thinking level ACP Claude cannot carry (#142). The text is fixed and
+ *  must read as NON-transient to pi's retry and overflow classifiers: replaying the turn cannot
+ *  change the level that was asked for. */
+export const ACP_THINKING_LEVEL_UNSUPPORTED = "acp-thinking-level-unsupported";
+
+/**
+ * Map pi's requested level to the claude-agent-acp effort value, or refuse by name (#142).
+ * The value is the registered row's `thinkingLevelMap` entry for that level — the documented pi
+ * meaning of the map — and must be one of the measured effort values. `undefined` (pi off, or no
+ * level) is refused rather than left at the vendor `default`: that would let the turn run at a
+ * depth nobody chose while the operator believes a level was applied.
+ */
+export function resolveClaudeEffort(
+	modelId: string,
+	reasoning: string | undefined,
+	thinkingLevelMap: Readonly<Record<string, string | null | undefined>> | undefined,
+): string {
+	const value = reasoning === undefined ? undefined : thinkingLevelMap?.[reasoning];
+	if (typeof value === "string" && CLAUDE_EFFORT_VALUE_SET.has(value)) return value;
+	const asked =
+		reasoning === undefined
+			? "no thinking level (pi sends none for `off`, and none when no level is set; the two are indistinguishable here)"
+			: `thinking level ${JSON.stringify(reasoning)}`;
+	throw new Error(
+		`entwurf: ${ACP_THINKING_LEVEL_UNSUPPORTED} — ${modelId} over Claude ACP carries effort ` +
+			`${CLAUDE_ACP_EFFORT_VALUES.join("/")} only, and was asked for ${asked}. Choose one of those levels; ` +
+			`the turn was not sent, and repeating it at the same level cannot change that.`,
+	);
+}
+
+function claudeEffortRefusal(modelId: string, value: string, what: string, cause?: unknown): Error {
+	const error = new Error(
+		`entwurf: claude-agent-acp ${what} for effort ${JSON.stringify(value)} on ${modelId}. Refusing before the prompt ` +
+			`so the turn cannot run at an effort nobody chose; repeating the turn cannot change the driver's answer.`,
+	);
+	if (cause !== undefined) (error as Error & { cause?: unknown }).cause = cause;
+	return error;
+}
+
+/** Refuse unless the set-effort answer reads back the requested value. */
+export function confirmClaudeEffortAnswer(response: unknown, modelId: string, value: string): void {
+	const configOptions = (response as { configOptions?: unknown } | null | undefined)?.configOptions;
+	const effort = Array.isArray(configOptions)
+		? (configOptions as Array<Record<string, unknown> | null>).find((option) => option?.id === "effort")
+		: undefined;
+	if (effort?.currentValue === value) return;
+	throw claudeEffortRefusal(
+		modelId,
+		value,
+		effort == null ? "answered with no effort option" : `answered effort ${jsonText(effort.currentValue)}`,
 	);
 }
 
@@ -454,6 +539,24 @@ export const claudeAdapter: AcpBackendAdapter = {
 			value: nativeModelId,
 		});
 		confirmClaudeSetModelAnswer(answer, nativeModelId);
+	},
+
+	resolveThinking({ modelId, reasoning, thinkingLevelMap }) {
+		return resolveClaudeEffort(modelId, reasoning, thinkingLevelMap);
+	},
+
+	async enforceThinking({ connection, acpSessionId, modelId, value }) {
+		const setConfig = connection.setSessionConfigOption;
+		if (typeof setConfig !== "function") {
+			throw new Error(`setSessionConfigOption unsupported — cannot set effort for ${modelId}`);
+		}
+		let answer: unknown;
+		try {
+			answer = await setConfig.call(connection, { sessionId: acpSessionId, configId: "effort", value });
+		} catch (err) {
+			throw claudeEffortRefusal(modelId, value, "refused the set", err);
+		}
+		confirmClaudeEffortAnswer(answer, modelId, value);
 	},
 
 	configSignatureFields(_adapterSettings) {

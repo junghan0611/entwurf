@@ -137,6 +137,35 @@ export function curatedCortexModels() {
 }
 
 /**
+ * The effort values claude-agent-acp offers on its `effort` config option (category
+ * `thought_level`). `[측정 2026-11-13]` 0.106.0, authenticated, no prompt (#142): the option lists
+ * `default, low, medium, high, xhigh, max`; `high → low → max` each read back on one live session and
+ * `minimal` was refused `-32602`. `default` is the vendor's own choice, so no pi level maps to it.
+ */
+export const CLAUDE_ACP_EFFORT_VALUES = ["low", "medium", "high", "xhigh", "max"] as const;
+
+type ThinkingLevelMap = NonNullable<RegistryModel["thinkingLevelMap"]>;
+
+/**
+ * The pi `thinkingLevelMap` an ACP Claude row registers (#142). pi's documented model seam: the
+ * value is what the provider sends for each pi level, `null` marks a level unsupported, and xhigh/max
+ * appear only when mapped (`getSupportedThinkingLevels`). Each supported pi level maps to the effort
+ * value of the same name. `off` and `minimal` have no effort value, so they are `null` and never
+ * offered; a level the registry already marks unsupported for this model stays unsupported, and
+ * xhigh/max stay hidden where the registry does not map them. Nothing here is a model catalog: the
+ * registry decides which levels the model has, this decides which of them ACP can carry.
+ */
+export function claudeAcpThinkingLevelMap(registry: RegistryModel["thinkingLevelMap"]): ThinkingLevelMap {
+	const map: ThinkingLevelMap = { off: null, minimal: null };
+	for (const level of CLAUDE_ACP_EFFORT_VALUES) {
+		const declared = registry?.[level];
+		const unmapped = declared === undefined && (level === "xhigh" || level === "max");
+		map[level] = declared === null || unmapped ? null : level;
+	}
+	return map;
+}
+
+/**
  * The curated Claude model rows handed to `pi.registerProvider({ models })`.
  * Fail-loud if the anchor is absent from the pi-ai registry.
  */
@@ -147,6 +176,7 @@ export function curatedClaudeModels() {
 		id: m.id,
 		name: m.name,
 		reasoning: m.reasoning,
+		thinkingLevelMap: claudeAcpThinkingLevelMap(m.thinkingLevelMap),
 		input: m.input,
 		cost: m.cost,
 		contextWindow: claudeContextWindow(m),

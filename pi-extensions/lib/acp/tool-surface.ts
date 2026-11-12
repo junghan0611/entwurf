@@ -174,6 +174,14 @@ export function buildClaudeSessionMeta(
 			// the carrier's "doesn't-know" — keeping both means a future preset/SDK
 			// change cannot silently re-open memory through a channel the strip misses.
 			autoMemoryEnabled: false,
+			// No turn of the adapter's own (#142). claude-agent-acp 0.101.0 compacts an idle session
+			// before its 1h prompt cache expires by sending `/compact` as a prompt nobody here issued;
+			// a retained session's callbacks drop updates that arrive with no active turn, so that
+			// model turn would spend quota and replace context invisibly to pi. 0.106.0 (#1555) reads
+			// this inline key when no managed tier sets one. Only the IDLE trigger is off:
+			// `autoCompactEnabled` stays untouched, so Claude Code's own compaction inside a prompt
+			// we sent keeps working.
+			idleCompaction: false,
 		},
 	};
 	if (params.skillPlugins.length > 0) {

@@ -23,6 +23,80 @@
 			"timeoutSeconds": 60,
 			"signature": "[QK:ACP-CLAUDE-SET-MODEL-ALIAS-EXACT]",
 			"signatureSource": "pi-extensions/lib/acp/backend-adapter.test.ts"
+		},
+		{
+			"claim": "ACP-CLAUDE-THINKING-MENU",
+			"title": "the curated Claude rows register no thinkingLevelMap — pi's menu offers off/minimal the driver cannot carry and hides xhigh/max it can",
+			"subject": "pi-extensions/lib/acp/models.ts",
+			"find": ["\t\tthinkingLevelMap: claudeAcpThinkingLevelMap(m.thinkingLevelMap),"],
+			"replace": [""],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-CLAUDE-THINKING-MENU]",
+			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
+		},
+		{
+			"claim": "ACP-CLAUDE-THINKING-REFUSE-UNMAPPED",
+			"title": "any mapped string passes as an effort — a map value the driver does not offer reaches the wire instead of a named refusal",
+			"subject": "pi-extensions/lib/acp/backend-adapter.ts",
+			"find": ["\tif (typeof value === \"string\" && CLAUDE_EFFORT_VALUE_SET.has(value)) return value;"],
+			"replace": ["\tif (typeof value === \"string\") return value;"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-CLAUDE-THINKING-REFUSE-UNMAPPED]",
+			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
+		},
+		{
+			"claim": "ACP-CLAUDE-EFFORT-READBACK",
+			"title": "the set-effort answer is no longer read back — the turn runs at whatever effort the driver kept while pi shows the requested level",
+			"subject": "pi-extensions/lib/acp/backend-adapter.ts",
+			"find": ["\t\tconfirmClaudeEffortAnswer(answer, modelId, value);"],
+			"replace": ["\t\tvoid answer;"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-CLAUDE-EFFORT-READBACK]",
+			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
+		},
+		{
+			"claim": "ACP-THINKING-NEW-SET",
+			"title": "a new session never sets effort — the first turn runs at the vendor default whatever level pi selected",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": [
+				"\t\t\t\t\tadapter.enforceThinking({ connection, acpSessionId, modelId: model.id, value: thinkingValue }),"
+			],
+			"replace": ["\t\t\t\t\tPromise.resolve(),"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-THINKING-NEW-SET]",
+			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
+		},
+		{
+			"claim": "ACP-THINKING-REUSE-SET",
+			"title": "a reused session never re-sets a changed level — the operator's new level is shown but the live conversation keeps the old effort",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": [
+				"\t\t\tif (thinkingValue !== undefined && adapter.enforceThinking && session.thinkingValue !== thinkingValue) {"
+			],
+			"replace": [
+				"\t\t\tif (thinkingValue !== undefined && adapter.enforceThinking && session.thinkingValue === undefined) {"
+			],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-THINKING-REUSE-SET]",
+			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
+		},
+		{
+			"claim": "ACP-THINKING-READBACK-NOTICE",
+			"title": "a new session sets effort without telling the operator — the read-back level is invisible in pi, so a changed menu level and the driver's answer cannot be compared",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": [
+				"\t\t\t\tsession.thinkingValue = thinkingValue;\n\t\t\t\t// Visible like the model lock: the operator sees the effort the driver read back.\n\t\t\t\tpushAcpLifecycleNotice(state, `effort ${thinkingValue} read back`);"
+			],
+			"replace": ["\t\t\t\tsession.thinkingValue = thinkingValue;"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-THINKING-READBACK-NOTICE]",
+			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
 		}
 	]
 }

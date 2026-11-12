@@ -36,7 +36,21 @@ import type { Api, AssistantMessageEvent, Message, Model, TranscriptContext } fr
 import { normalizeContext } from "@earendil-works/pi-ai";
 import { assertOverlayInSandbox, sandboxAcpGateHome } from "./lib/acp-gate-home.ts";
 
-const sonnet = { id: "claude-sonnet-5-5" } as unknown as Model<Api>;
+// #142: a Claude turn carries pi's thinking level, which the backend sets as effort and reads back
+// before the prompt. This fixture runs every turn at one fixed level on rows carrying the curated
+// level map, and its fake driver reads back whatever config option it was asked to set. The effort
+// contract itself is certified in pi-extensions/lib/acp/backend.thinking.test.ts.
+const FIXTURE_THINKING_LEVEL = "medium";
+const FIXTURE_THINKING_LEVEL_MAP = {
+	off: null,
+	minimal: null,
+	low: "low",
+	medium: "medium",
+	high: "high",
+	xhigh: "xhigh",
+	max: "max",
+};
+const sonnet = { id: "claude-sonnet-5-5", thinkingLevelMap: FIXTURE_THINKING_LEVEL_MAP } as unknown as Model<Api>;
 
 type Stream = AsyncIterable<AssistantMessageEvent>;
 
@@ -94,7 +108,7 @@ function makeHarness(recordDir: string) {
 	const makeConnection = (_handlers: any) => ({
 		initialize: async () => ({ agentCapabilities: {} }),
 		newSession: async () => ({ sessionId: "ACP-1" }),
-		setSessionConfigOption: async (p: any) => ({ configOptions: [{ id: "model", currentValue: p.value }] }),
+		setSessionConfigOption: async (p: any) => ({ configOptions: [{ id: p.configId, currentValue: p.value }] }),
 		prompt: async (params: any) => {
 			// Deep-cloned: the capture must be the bytes that crossed the seam, not a
 			// live reference a later mutation could rewrite.
@@ -195,7 +209,14 @@ try {
 	const promptsOut = resolve(TMP_EMIT, "pi-extensions/lib/acp/prompts");
 	mkdirSync(promptsOut, { recursive: true });
 	copyFileSync("pi-extensions/lib/acp/prompts/engraving.md", resolve(promptsOut, "engraving.md"));
-	const backend = (await import(pathToFileURL(resolve(TMP_EMIT, "pi-extensions/lib/acp/backend.js")).href)) as any;
+	const backendModule = (await import(
+		pathToFileURL(resolve(TMP_EMIT, "pi-extensions/lib/acp/backend.js")).href
+	)) as any;
+	const backend = {
+		...backendModule,
+		streamAcpTurn: (model: unknown, context: unknown, options: Record<string, unknown> | undefined, deps: unknown) =>
+			backendModule.streamAcpTurn(model, context, { reasoning: FIXTURE_THINKING_LEVEL, ...options }, deps),
+	};
 	await assertOverlayInSandbox(TMP_EMIT, gateHome);
 
 	// ----------------------------------------------------------------------

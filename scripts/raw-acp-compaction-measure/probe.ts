@@ -18,10 +18,11 @@
 // It asserts nothing and blocks nothing. The receipt goes in README.md next to it.
 
 import { type ChildProcessByStdio, spawn } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { Readable, Writable } from "node:stream";
 import { ndJsonStream, PROTOCOL_VERSION } from "@agentclientprotocol/sdk";
 import { connectAcpClient } from "../../pi-extensions/lib/acp/acp-client.ts";
@@ -47,7 +48,12 @@ function withTimeout<T>(label: string, p: Promise<T>, ms: number): Promise<T> {
 }
 
 const require = createRequire(import.meta.url);
-const bin = require.resolve("@agentclientprotocol/claude-agent-acp/dist/index.js");
+// 0.103.0 exports only `.` and `./package.json`; take the bin path from the manifest.
+const acpPkgJson = require.resolve("@agentclientprotocol/claude-agent-acp/package.json");
+const bin = join(
+	dirname(acpPkgJson),
+	(JSON.parse(readFileSync(acpPkgJson, "utf8")) as { bin: Record<string, string> }).bin["claude-agent-acp"],
+);
 
 const scratch = await mkdtemp(join(tmpdir(), "raw-acp-compaction-"));
 const child: ChildProcessByStdio<Writable, Readable, Readable> = spawn(process.execPath, [bin], {
