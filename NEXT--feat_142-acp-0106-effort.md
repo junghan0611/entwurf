@@ -6,19 +6,22 @@
 
 - [x] **1. 구현 C1–C4 + focused gate** — 0.106/SDK 2.6, fable-5-2, idle compaction 차단, effort set+readback·notice
 - [x] **2. 독립 검수 + amendment** — b3fc7c 검수 1–3·봉인 확인, Blocker 0, 남은 Defect 0
-- [x] **3. 영향 PARTIAL r3 + LIVE 3+1 turn** — ACP 15그룹 87/87, LIVE receipt 2건
-- [ ] **4. 최종 봉인 → frozen FULL 1회** ← CURRENT: 코디(68bd94)의 정확 SHA FULL GO 대기
-- [ ] **5. commit / push / release** ← PAUSED: GLG 별도 승인 전
+- [x] **3. 영향 PARTIAL r3/r4 + LIVE 3+1 turn** — r3 87/87(포맷 전 후보), r4 60/60(최종 후보), LIVE receipt 2건
+- [x] **4. frozen FULL** — `f54844a2…` rc=0(check:full 979s / runner 980s), 동결 6항목 동일
+- [x] **5. branch checkpoint** — `90b5168` push, exact-SHA CI 4 job success; #142 본문·진행·ESC 댓글
+- [ ] **6. 다음 계약 후보 결정** ← CURRENT: GLG 판단 대기(코디 68bd94 경유)
+- [ ] **7. main 병합 / release / 운영 설치** ← PAUSED: 각각 GLG 별도 승인
 
-현재 좌표: 3 완료 → 4 GO 대기 → 5 보류
+현재 좌표: 5 완료 → 6 대기 → 7 보류
 
 # NOW
 
-- Current: 미커밋 워킹트리를 봉인했고 FULL GO를 기다린다. 봉인 위치 `~/.cache/entwurf-qual/acp106-candidate-<ts>/`(최신 디렉터리, INDEX.md).
-- Next: (1) GO 받은 정확 diff sha와 워킹트리 재대조 → (2) 동결한 채 `pnpm run check:full` 1회 → (3) 종료 후 diff sha 재대조, 결과를 코디에 보고. 워킹트리를 건드리면 receipt 무효.
-- Blocker: FULL GO(코디), commit·push(GLG).
-- Read: PARTIAL r3 `~/.cache/entwurf-qual/acp106-partial-20261113-r3/summary.txt`; LIVE `.tmp-verify/acp142-live/run-20261113T063204/RECEIPT.md`, `.tmp-verify/acp142-live/fable-20261113T063707/RECEIPT.md`; no-prompt readback `.tmp-verify/acp106-readback-20261113/` (모두 oracle host-local).
-- Do not touch: credential 값을 agent가 읽기·복사·로그하기, 새 로그인, env key 우회(vendor 정상 경로 재사용인 auth A — production overlay 함수가 허용 목록만 sandbox overlay로 링크 — 는 허용된 기존 동작); 운영 overlay/설정/hook 변경; worktree; `--no-verify`; 전역 pnpm 정책 완화; GO 전 FULL; whole BODY(코디 결정 0).
+- Current: checkpoint `90b5168`이 브랜치에 있다. ESC n=1(재사용 turn, Bash 도중 RPC abort) 관측 완료. #142가 외부 자문용으로 정리돼 있다.
+- Next 후보(미승인): 첫 턴 ESC(대화 버림)와 재사용 ESC(live 세션 보존)의 비대칭을 운영자에게 notice로 드러내기. 착수 전 GLG 승인.
+- Blocker: 다음 계약·병합·release·설치는 모두 GLG 결정.
+- Read: #142 본문, [진행](https://github.com/junghan0611/entwurf/issues/142#issuecomment-6838220924), [ESC](https://github.com/junghan0611/entwurf/issues/142#issuecomment-6838283088). host-local: FULL `~/.cache/entwurf-qual/acp106-full-20261113T073220/`, ESC `.tmp-verify/acp142-live/esc-20261113T075632/RECEIPT.md`.
+- Do not touch: credential 값을 agent가 읽기·복사·로그하기, 새 로그인, env key 우회(auth A는 허용된 기존 동작); 운영 overlay/설정/hook 변경; worktree; `--no-verify`; 전역 pnpm 정책 완화; 승인 없는 실 모델 턴; whole BODY(코디 결정 0).
+- 증거 범위: ESC n=1은 같은 공개 acpSessionId의 live 세션 재사용까지만 관측했다. private Claude 정본 계보와 wire cancel 프레임은 확인하지 않았다. 첫 턴 ESC, 텍스트 스트리밍 중 ESC, Edit/Write 효과는 측정하지 않았다.
 
 ## 릴리즈 후 — 실사용 목표 (GLG 2026-11-13)
 
@@ -41,6 +44,8 @@ pi에서 ACP Claude를 주력으로 고를 수 있는 최소 동작: 얇은 Pi �
 - GPT·다른 형제 소환/resume 금지. 유일한 예외: GLG가 직접 재초빙한 SOL `20261003T164401-a30dda` — 의미·사용 경험 논의 역할만, 코드 작성·검수·테스트·LIVE 권한 없음, 구현 질문은 ff08d4 통로로.
 
 # RECENT
+
+- [2026-11-13] FULL #3 GREEN → checkpoint `90b5168` push, CI 4/4 success. ESC LIVE n=1: abort 25ms 뒤 aborted, T3가 같은 acpSessionId를 reuse, count.log `start`만(30s 창, end 없음, 중복 없음).
 
 - [2026-11-13] C1–C4: adapter 0.106.0 · wire SDK 2.6.0 · agent-sdk 0.3.322(`Usage` → `@agentclientprotocol/sdk/unstable`, 0.103 exports 축소 대응); `claude-fable-5-2` 큐레이션(5-1 유지); `settings.idleCompaction:false`; thinkingLevelMap low..max + effort set+readback(새 세션 set-model 직후, reuse는 변경 시만, signature 불포함), 레벨 없음/미지원 → `acp-thinking-level-unsupported`, notice `[acp: effort <v> read back]`.
 - [2026-11-13] LIVE: opus high 새 세션(실 Read·MCP entwurf_self) → 같은 세션 low reuse(회상·실 Bash, input 6) → 같은 세션 medium(계획한 fable 전환은 model-lock이 되돌림); 별도 프로세스 fable-5-2 medium 새 세션.
