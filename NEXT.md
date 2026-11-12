@@ -1,17 +1,17 @@
-# NEXT — #155 종결 / 0.51.0 출하와 설치 인계 교훈
+# NEXT — Herdr 0.52.0 npm snapshot
 
 # RAIL — 현재 좌표
 
-- [x] **1. Core 출하.** `v0.51.0`=32c31ea, Windows-carrier TGZ·동일 파일 Linux 수용·인간 npm 게시·registry consumer 확인 완료.
-- [x] **2. Herdr source 정합.** ce5a720에 npm0.51.0 pin/SRI·manifest·Pi1.5 안내·README retire 반영, exact-push CI4 성공.
-- [x] **3. #155 종결/교훈 기록.** 이슈의 최신 판정·§5 교훈을 채워 닫았다. ThinkPad의 승인 대기/미설치 인계와 별도 승인 후 동일 ID 복귀는 CHANGELOG 및 설치 문서에 기록했다.
-- [ ] **4. 다음 요청.** ← CURRENT: 새 구현 작업 없음. public-ref Herdr journey·plugin snapshot/tag·Oracle 운영 설치/재시작은 별도 요청이다.
+- [x] **1. Core 0.52.0.** `v0.52.0`=c015477, Windows-carrier artifact·동일 파일 Linux 수용·인간 npm 게시와 registry consumer 확인.
+- [x] **2. Herdr npm source.** 실 registry bytes/SRI, 격리 npm swap·수동 torn-state 복구와 fixture-listing build activation/deactivation 확인.
+- [ ] **3. Snapshot 후보.** ← CURRENT: 최종 candidate seal·frozen FULL 확인 후 코디의 source/evidence 판정.
+- [ ] **4. 공개.** ← PAUSED: main push·exact-SHA CI·public-ref proof·plugin tag/GitHub Release는 앞선 판정 뒤 진행.
 
 # NOW
 
-- **다음 한 행동:** 새 작업을 시작하기 전에 현재 main과 exact-SHA CI를 읽는다. 운영 전환을 요청받으면 [SDK upgrade radius](docs/setup-clean-host.md#default-radius-for-a-requested-pi-sdk-upgrade)의 owner 종료·일관 전체 백업·설치 결과·SDK 정합·동일 ID 재개 조건부터 확인한다. 설치 창 준비나 소스 pull을 설치 완료로 읽지 않는다.
+- **다음 한 행동:** 후보 전체 diff와 evidence 범위를 확인하고 frozen FULL의 동일 seal 결과를 받는다. 이후 코디의 승인 아래 exact-SHA CI와 public-ref proof를 각각 수집한다. 운영 host 설치·재시작은 별도 승인이다.
 - **설치 인계:** 승인 대기 여부를 인계 맨 앞에 쓴다. 준비한 스크립트/재개 명령의 존재는 실행 증거가 아니다. 설치 exit0와 carrier/SDK 정합 확인 후에만 재개를 준비 완료로 안내한다. 자동 Enter·설치·takeover로 인간의 승인 창을 건너뛰지 않는다.
-- **호스트 분리:** ThinkPad coordinator의 result.exit0/41파일 일관 백업/SDK1.5 물리edge27/같은 garden·native ID 복귀는 그 호스트가 전달한 측정이다. Oracle GR208e는 D1 이전 validation 설치인 채로다. Source/npm 출하가 기존 시민의 loaded bytes를 바꾸지 않는다. ThinkPad에서도 50개 초과 active 표시/conversation-switch UI는 별도 재측정하지 않았다.
+- **호스트 분리:** Oracle은 승인된 창에서 Pi SDK 1.5.2와 addon-less 0.52 validation TGZ `d72afb…`로 전환했고, 새 GR `be87bcf…`에서 운영 코디가 같은 ID로 복귀했다. 최종 공개 TGZ `d053860c…`로는 운영 재설치·재시작하지 않았다. ThinkPad의 0.52 전환은 미측정이다. #155의 당시 호스트 영수증은 `CHANGELOG.md`와 `docs/setup-clean-host.md`에 보존한다.
 
 # 원자료 / 정리 원칙
 

@@ -44,10 +44,10 @@
 			"title": "a published-scope region in an operator doc names a package the frozen published manifest does not record, so the 1.5.0 instructions inside it would be held to a pairing no artifact ships — the doc can no longer prove which published package its install steps belong to",
 			"subject": "docs/setup-clean-host.md",
 			"find": [
-				"| pi | optional-by-presence — published 0.51.0: <!-- entwurf:published @junghanacs/entwurf@0.51.0 pi 1.5.0 -->"
+				"| pi | optional-by-presence — current 0.52.0: `>=1.5.2 <1.6`; historical 0.51.0: <!-- entwurf:published @junghanacs/entwurf@0.51.0 pi 1.5.0 -->"
 			],
 			"replace": [
-				"| pi | optional-by-presence — published 0.51.0: <!-- entwurf:published @junghanacs/entwurf@0.50.0 pi 1.5.0 -->"
+				"| pi | optional-by-presence — current 0.52.0: `>=1.5.2 <1.6`; historical 0.51.0: <!-- entwurf:published @junghanacs/entwurf@0.50.0 pi 1.5.0 -->"
 			],
 			"gate": ["bash", "run.sh", "check-dep-versions"],
 			"timeoutSeconds": 300,

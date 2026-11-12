@@ -23,11 +23,11 @@ evidence split, and its three states must not collapse into "macOS is supported"
 
 ## Requirements
 
-The requirements table and pinned npm examples describe published Entwurf 0.51.0, whose exact SDK set is 1.5.0. The unpublished 0.52.0 source candidate (#158) instead pins SDK 1.5.2 and declares host Pi `>=1.5.2 <1.6`. Source validation, publication and a running host's loaded bytes are separate evidence; an addon-less validation tarball has been installed on one operating host, with same-identity return observed for the operating coordinator; that bounded observation is not full release or all-rail acceptance (see the [#158 candidate boundary](#sdk-152-candidate-boundary-158)).
+The current published Entwurf 0.52.0 uses the exact Pi 1.5.2 SDK set and host Pi `>=1.5.2 <1.6`. The marked 0.51.0 / SDK 1.5.0 examples below are historical and remain bound to their own published manifest. Source validation, publication and a running host's loaded bytes are separate evidence; the earlier addon-less validation tarball installed on one operating host is not the published artifact (see the [#158 boundary](#sdk-152-candidate-boundary-158)).
 
 The validation TGZ installed in #155's operating window before the D1 display repair is an earlier, separate artifact, not the published one; see the [SDK 1.5 boundary](#sdk-15-development-boundary-155) below.
 
-The previous package, `0.50.0`, ships the Pi 1.4.0 SDK set and requires a Pi 1.4.x host; the setup guide inside that tarball is its contract.
+The older package, `0.50.0`, ships the Pi 1.4.0 SDK set and requires a Pi 1.4.x host; the setup guide inside that tarball is its contract.
 
 | Component | Requirement | Needed for |
 |---|---|---|
@@ -35,8 +35,8 @@ The previous package, `0.50.0`, ships the Pi 1.4.0 SDK set and requires a Pi 1.4
 | npm/pnpm | npm is bundled with Node; pnpm is required for source setup | package or source installation |
 | Python 3 | required by `setup`/`install` (project-path normalization + settings writers); `--help`/`check-bridge` stay Python-free | pi/Claude/agy/Copilot/Codex wiring writers |
 | entwurf | global/project-local `@junghanacs/entwurf`, or a source checkout | operator command and garden capability |
-| pi | optional-by-presence — published 0.51.0: <!-- entwurf:published @junghanacs/entwurf@0.51.0 pi 1.5.0 -->`>=1.5.0 <1.6`<!-- /entwurf:published -->; #158 source candidate: `>=1.5.2 <1.6`. Absent is an explicit setup SKIP, below-floor is a named FAIL | ACP provider, control sockets |
-| Native durable (`pi-durable`) | supplied by the Entwurf package (#130): Entwurf's owned app carrier plus its exact pi SDK set (1.5.0 in published 0.51.0; 1.5.2 in the #158 source candidate) as production dependencies — setup PASS when they verify, a named FAIL otherwise (never SKIP) | the `entwurf pi-durable` contact; native birth/LIVE on this supply surface is a separate release proof (§2b) |
+| pi | optional-by-presence — current 0.52.0: `>=1.5.2 <1.6`; historical 0.51.0: <!-- entwurf:published @junghanacs/entwurf@0.51.0 pi 1.5.0 -->`>=1.5.0 <1.6`<!-- /entwurf:published -->. Absent is an explicit setup SKIP, below-floor is a named FAIL | ACP provider, control sockets |
+| Native durable (`pi-durable`) | supplied by the Entwurf package (#130): Entwurf's owned app carrier plus its exact pi SDK set (1.5.2 in published 0.52.0; 1.5.0 in historical 0.51.0) as production dependencies — setup PASS when they verify, a named FAIL otherwise (never SKIP) | the `entwurf pi-durable` contact; native birth/LIVE on this supply surface is a separate release proof (§2b) |
 | Claude Code | optional, **`>=2.1.306`** — the exec-form hook floor | Claude ACP auth/runtime and mailbox-backed native citizen |
 | GitHub Copilot CLI | optional-by-presence, operator-installed and authenticated — absent is an explicit setup SKIP; detected composes all four units (birth/MCP/receiver/footer) | self-fetch citizen and visible fresh |
 | OMP (`omp`) | optional-by-presence, operator-installed — absent is an explicit setup SKIP; detected composes all four units (birth/MCP/`tools.xdev` setting/receiver) | self-fetch citizen and visible fresh (accepted on one host — see §4b) |
@@ -85,8 +85,8 @@ node --version
 npm --version
 ```
 
-The two npm forms below install the **published** package, `0.51.0` (Pi 1.5.x, the Pi 1.5.0 SDK
-set); they do not install the #158 source candidate (SDK 1.5.2), which is not published — a developer runs that from a source checkout (below). The [product entry](../README.md#install)'s unpinned `npm install -g @junghanacs/entwurf`
+The two npm forms below install the **published** package, `0.52.0` (Pi 1.5.x, the Pi 1.5.2 SDK
+set). The [product entry](../README.md#install)'s unpinned `npm install -g @junghanacs/entwurf`
 takes whichever version npm's `latest` dist-tag names; pin `@<version>` as below when you mean the
 exact artifact the [Requirements](#requirements) table describes.
 
@@ -94,7 +94,7 @@ Global install is simplest when native harnesses should find stable bins from ev
 working directory:
 
 ```bash
-npm install -g @junghanacs/entwurf@0.51.0
+npm install -g @junghanacs/entwurf@0.52.0
 entwurf --help
 entwurf setup /path/to/your-project
 entwurf check-bridge
@@ -105,7 +105,7 @@ A project-local installation is also supported:
 ```bash
 mkdir -p ~/entwurf-smoke && cd ~/entwurf-smoke
 npm init -y
-npm install --save-dev @junghanacs/entwurf@0.51.0
+npm install --save-dev @junghanacs/entwurf@0.52.0
 npx entwurf setup .
 npx entwurf check-bridge
 ```
@@ -115,7 +115,7 @@ project-local install, or `./run.sh <command>` from a source checkout. Keep that
 same scope when upgrading and checking; native process restarts are separate (§7).
 
 `check-bridge` is auth-free. It proves the installed prebuilt MCP server boots and
-lists the nine garden tools (0.51.0); it does not prove a backend model turn, native hook or retirement permission.
+lists the nine garden tools (0.52.0); it does not prove a backend model turn, native hook or retirement permission.
 
 Neither npm form installs a harness runtime. `pi`, Claude Code, Copilot CLI, Codex CLI, agy,
 Cortex, and their authentication remain operator-owned optional prerequisites for the
@@ -226,12 +226,11 @@ physical-Darwin receipt. `entwurf install` may write `.pi/settings.json`
 on Darwin; that is wiring, not a rail receipt. If `pi` is on PATH,
 `setup` names the pi row FAIL with the §1 Darwin wording.
 
-<!-- entwurf:published @junghanacs/entwurf@0.51.0 pi 1.5.0 -->
-For published Entwurf 0.51.0, install its exact host Pi floor and wire the project as shown below.
-The previous 0.50.0 uses the Pi 1.4.x host named in its own setup guide:
+For published Entwurf 0.52.0, install its exact host Pi floor and wire the project as shown below.
+The previous 0.51.0 uses the Pi 1.5.0 floor named in its own setup guide:
 
 ```bash
-npm install -g @earendil-works/pi-coding-agent@1.5.0
+npm install -g @earendil-works/pi-coding-agent@1.5.2
 pi --version
 
 cd ~/entwurf-smoke
@@ -239,13 +238,12 @@ entwurf install .
 pi -e "$(npm root -g)/@junghanacs/entwurf" --list-models entwurf
 ```
 
-The supported host Pi range for published Entwurf 0.51.0 is `>=1.5.0 <1.6`.
+The supported host Pi range for published Entwurf 0.52.0 is `>=1.5.2 <1.6`.
 A detected host outside that range is refused for Pi wiring; Entwurf does not upgrade it.
 Align the host explicitly, for example with the exact npm command above, before wiring Pi. A host using only the external MCP bridge can skip pi until it needs a
 control socket; no delivery rail launches a pi process.
-<!-- /entwurf:published -->
 
-The #158 source candidate instead requires host Pi `>=1.5.2 <1.6`; checkout `setup` reports a detected older host as FAIL. Prepare host Pi 1.5.2 before wiring this checkout, and use the checkout path rather than the global npm package for a direct `pi -e` invocation. Host Pi 1.5.2 also falls within published 0.51.0's declared range, but #158 has not measured that pairing; range eligibility does not replace installation, validation or operating approval. Ordinary Pi 1.5.2 defaults its global `cacheWarming` setting to `idle`, which may send additional provider requests; pi-durable does not map that setting. See the [#158 durable boundary](./durable-native-support.md#sdk-152-candidate-boundary-158).
+Published 0.52.0 requires host Pi `>=1.5.2 <1.6`; `setup` reports a detected older host as FAIL. Prepare host Pi 1.5.2 before wiring, and use the checkout path rather than the global npm package when running a checkout directly. Range eligibility does not replace installation, validation or operating approval. Ordinary Pi 1.5.2 defaults its global `cacheWarming` setting to `idle`, which may send additional provider requests; pi-durable does not map that setting. See the [#158 durable boundary](./durable-native-support.md#sdk-152-candidate-boundary-158).
 
 For daily garden-native pi sessions:
 
@@ -264,7 +262,7 @@ A plain `pi` can load the package without becoming a citizen.
 In that session ask for `entwurf_self`, then `entwurf_peers`. Pick an existing
 live garden id and ask for `entwurf_v2` with `intent: "fire-and-forget"` and your
 message. These are harness tools, not shell subcommands; pi exposes them through
-Pi's built-in MCP as `mcp__entwurf_bridge__<verb>`. The 0.51.0 bridge has nine tools;
+Pi's built-in MCP as `mcp__entwurf_bridge__<verb>`. The bridge has nine tools;
 pi hides `entwurf_inbox_read` and `entwurf_register_native`, leaving seven active.
 The added `entwurf_retire_call` is only for one target/action explicitly requested by the
 human operator, never autonomous cleanup. Where a host provides or is configured with an approval
@@ -349,12 +347,12 @@ by `entwurf pi` or by registering ordinary Pi's adapter.
 
 What the Entwurf package supplies:
 
-1. **The pi SDK set** — published 0.51.0 supplies `@earendil-works/{pi-coding-agent, pi-ai, pi-tui, pi-agent-core,
-   pi-durable, chord, pi-mcp, pi-codemode, pi-telemetry, pi-schema}` at exactly `1.5.0`, plus
-   `proper-lockfile`, as Entwurf's own production dependencies; its model data rides <!-- entwurf:published @junghanacs/entwurf@0.51.0 pi 1.5.0 -->`@earendil-works/pi-ai@1.5.0`<!-- /entwurf:published -->, not a catalog copy.
-   The #158 source candidate supplies the same ten-member set at exactly `1.5.2` (its model data rides the 1.5.2 pi-ai). The
-   [SDK pin](../pi/pi-durable/overlay/upstream-pin.json) and [package manifest](../package.json) are the authority
-   for the checkout you hold: they describe the source candidate, not the immutable published 0.51.0 bytes.
+1. **The pi SDK set** — published 0.52.0 supplies `@earendil-works/{pi-coding-agent, pi-ai, pi-tui, pi-agent-core,
+   pi-durable, chord, pi-mcp, pi-codemode, pi-telemetry, pi-schema}` at exactly `1.5.2`, plus
+   `proper-lockfile`, as production dependencies. Model data rides `pi-ai@1.5.2`, not a catalog copy.
+   Historical 0.51.0 used <!-- entwurf:published @junghanacs/entwurf@0.51.0 pi 1.5.0 -->`@earendil-works/pi-ai@1.5.0`<!-- /entwurf:published -->.
+   The [SDK pin](../pi/pi-durable/overlay/upstream-pin.json) and [package manifest](../package.json)
+   describe the checkout you hold, not immutable published bytes.
 2. **The native app/TUI carrier** — upstream does not publish the experimental durable
    app (`pi-coding-agent` excludes `dist/experimental`; `pi-durable` on npm is the
    library). Entwurf owns the six app files as canonical source (`pi/pi-durable/src`,
@@ -364,7 +362,7 @@ What the Entwurf package supplies:
    (`pi/pi-durable/carrier-resolver.mjs`), which maps them to the published package's
    own `dist/` as installed — never through a source checkout.
 
-The upstream library guide for the published 0.51.0 pairing is [v1.5.0](https://github.com/earendil-works/pi/blob/v1.5.0/packages/durable/README.md); for the #158 candidate's SDK APIs use [v1.5.2](https://github.com/earendil-works/pi/blob/v1.5.2/packages/durable/README.md).
+The upstream library guide for the published 0.51.0 pairing is [v1.5.0](https://github.com/earendil-works/pi/blob/v1.5.0/packages/durable/README.md); for the published 0.52.0 SDK APIs use [v1.5.2](https://github.com/earendil-works/pi/blob/v1.5.2/packages/durable/README.md).
 The [experimental app guide](https://github.com/earendil-works/pi/blob/v1.1.0/packages/coding-agent/src/experimental/durable/README.md)
 (last published at v1.1.0) records the app's origin: Entwurf's maintained app source, not a newer upstream app, is the current composition authority. Both guides describe what the carrier is. Running the bare upstream app does not attach Entwurf's
 garden contact. Entwurf does not rebuild the controller/model/auth/storage system or
@@ -379,7 +377,7 @@ carrier file, the license, the resolver and its relocation grammar are present
 (`pi-durable-carrier-drift`); every declared SDK package resolves from the carrier
 (`pi-durable-sdk-absent`); and every reachable physical edge — from the carrier to each package,
 and from every package copy it reaches, at any depth, to its own `@earendil-works` dependencies —
-lands on a package of the declared name at exactly the pinned version (`pi-durable-sdk-mismatch`). The members' declarations are exact in the published 1.5.0 set and, measured on the registry tarballs (#158), in the 1.5.2 candidate set; even so, the physical package each import binds must be checked. Sharing
+lands on a package of the declared name at exactly the pinned version (`pi-durable-sdk-mismatch`). The members' declarations are exact in the published 1.5.0 set and, measured on the registry tarballs (#158), in the 1.5.2 set; even so, the physical package each import binds must be checked. Sharing
 one copy with an aligned host install of the same version is an ordinary layout. A mixed
 tree (for example an override that binds pi-durable's `pi-ai` to an older published version) still
 *imports* — which is why the edge check exists — and is refused by name.
@@ -461,7 +459,7 @@ tree (for example an override that binds pi-durable's `pi-ai` to an older publis
   manifest field; it is a known constraint of supplying both from one package, accepted for 0.32,
   not a claim that every load path is harmless.
 
-The ordinary Pi CLI on PATH is a separate subject (§2; published 0.51.0 range <!-- entwurf:published @junghanacs/entwurf@0.51.0 pi 1.5.0 -->`>=1.5.0 <1.6`<!-- /entwurf:published -->, #158 source candidate range `>=1.5.2 <1.6`): a host Pi is
+The ordinary Pi CLI on PATH is a separate subject (§2; historical 0.51.0 range <!-- entwurf:published @junghanacs/entwurf@0.51.0 pi 1.5.0 -->`>=1.5.0 <1.6`<!-- /entwurf:published -->, current 0.52.0 range `>=1.5.2 <1.6`): a host Pi is
 not needed to run pi-durable, and a host inside the range need not be the same copy as the
 carrier's. The native harnesses own credentials, model settings and their respective session stores — ordinary Pi JSONL and pi-durable SQLite; keep them
 in place rather than copying credentials or migrating ordinary Pi transcripts. Native
@@ -474,7 +472,7 @@ proof ([#130](https://github.com/junghan0611/entwurf/issues/130)).
 
 ### SDK 1.5 development boundary (#155)
 
-The published-0.51.0 instructions above describe the SDK 1.5.0 set that #155 shipped; the #155 SDK
+The historical 0.51.0 instructions describe the SDK 1.5.0 set that #155 shipped; the #155 SDK
 1.5 development candidates that preceded it were distinct subjects. Synthetic migration and
 downgrade-refusal fixtures on `0408a66` did not authorize an operating first write. A separately
 approved 1.5 operating window and Native LIVE were later measured as described below; neither made
@@ -483,7 +481,7 @@ the validation TGZ the published artifact. Installing an older package is not a 
 
 ### SDK 1.5.2 candidate boundary (#158)
 
-The 0.52.0 source candidate (#158) pins the Pi SDK at exactly 1.5.2 (ten members) and declares host Pi `>=1.5.2 <1.6`. Assigning that version does not publish or install it: the published instructions above still describe 0.51.0 / SDK 1.5.0, and an operating move requires its own installation and same-identity return receipts. The #155 receipts above prove their own subject only; none is inherited by 1.5.2.
+The published 0.52.0 package (#158) pins the Pi SDK at exactly 1.5.2 (ten members) and declares host Pi `>=1.5.2 <1.6`. Publication does not install it on an operating host; an operating move requires its own installation and same-identity return receipts. The #155 receipts above prove their own subject only; none is inherited by 1.5.2.
 
 What #158 measured so far and what it did not is recorded in [the durable-native boundary](./durable-native-support.md#sdk-152-candidate-boundary-158) and in the #158 thread: registry tarball integrity and member edges, an isolated six-member scheduler comparison and a native SQLite cross-version read/append check. The pre-version checkpoint's frozen FULL belongs to its own recorded worktree. The earlier validation candidate has its own floor and installation receipts; later source edits and the final carrier-bearing artifact require their own acceptance. Operating-scale and interrupted sessions are not certified by the bounded fixtures. An operating move follows the default radius below, each step with its own receipt.
 

@@ -4,6 +4,17 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+## v2026.11.12-herdr.0.52.0 — Herdr npm runtime snapshot
+
+This Herdr plugin snapshot pins the published `@junghanacs/entwurf@0.52.0` runtime and its measured npm sha512; it is not a new core release. The plugin manifest version remains independent of the runtime. A host switching from the checkout carrier to npm must explicitly deactivate before reinstalling; a settled npm-source host follows the existing rebind conditions. No operating host is switched automatically.
+
+### Evidence and boundaries
+
+- The registry tarball SHA-256 `d053860c66ddd8b97ce4fdd49ac2a38605c2886ff62002a16582a36ac70bc5dd` matches the accepted core artifact byte for byte; independently computed sha512 matches the npm integrity and this lock. Core `v0.52.0`, its accepted artifact and npm bytes are unchanged.
+- In a private sandbox, the registry-installed helper acquired npm 0.51.0, swapped to 0.52.0, and restored 0.51.0 before reacquiring 0.52.0 from a manually seeded torn-swap state. A repeat request acquired nothing; the owned runtime, cache and journal were removed. This was not recovery from an actual process kill.
+- A separate private build-runner rehearsal acquired the real npm 0.52.0 runtime and activated Pi and Claude Code through its installed writers; the installed deactivate command completed. Only the integration status listing was a fixture. This is not a real Herdr registration, public-ref installation, vendor model turn or operating-host upgrade.
+- On the earlier five-file candidate over `c015477a2f07`, diff `745f414d4f9d9cd1bbbc8d88562c8402d2a66454d4a14f58811ba7a9ffbc7b18`, the affected `check-dep-versions` PARTIAL killed 5/5 with both controls green; it is not kill-power measured on the eventual snapshot SHA. Public-ref installation and exact pushed-SHA CI require their own receipts.
+
 ## 0.52.0 — 2026-11-12
 
 ### Pi SDK 1.5.2 (#158)
