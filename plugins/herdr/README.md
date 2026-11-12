@@ -137,9 +137,13 @@ directory that harness owns, and it will not invent one: `herdr integration inst
 commands are ordinary invocations — no model turn, no login, no account.
 
 **Which runtime these steps install.** The `runtime-lock.json` at the ref Herdr resolves names
-what step 5 acquires. This document's lock pins the published npm `@junghanacs/entwurf@0.51.0` and
-its measured sha512, on the Pi 1.5.0 SDK set, so step 1 installs Pi 1.5. This is a source
-contract, not evidence of a successful Herdr acquisition, installed consumer or LIVE run. The #158 source candidate's SDK 1.5.2 does not change this lock; re-pinning Herdr follows a publication and is separate work.
+what step 5 acquires. This checkout's unpublished 0.52.0 preparation uses the closed
+`herdr-checkout` verification carrier: the exact commit Herdr checked out, with SDK 1.5.2
+and host Pi `>=1.5.2 <1.6`. It is not an npm 0.52.0 pin or evidence of acquisition, activation or LIVE.
+The last published npm pairing remains Entwurf 0.51.0 / SDK 1.5.0. An unversioned install reaches
+this candidate only after the commit carrying it reaches the ref Herdr resolves; inspect that ref
+and its lock. The plugin manifest version is unchanged. Moving an npm-activated host to this
+checkout source requires explicit deactivate first; a later npm re-pin is separate post-publication work.
 
 The previous npm pin, `@junghanacs/entwurf@0.50.0`, uses its measured sha512 and the Pi 1.4.0
 SDK set; its main pin is preserved in the 0.50.0 history. The previous snapshot
@@ -155,10 +159,10 @@ host follows the same-source rebind conditions
 ([the two sources](#the-runtime-and-the-two-sources-it-may-come-from)).
 
 <!-- entwurf:published @junghanacs/entwurf@0.51.0 pi 1.5.0 -->
-The following nine-step block is the **published 0.51.0 / Pi 1.5 pairing** this document's lock
-names. Its unversioned plugin command follows the remote ref when executed, so it is an exact 0.51.0
-recipe only while that ref's lock names 0.51.0; inspect the resolved ref and its lock instead of
-assuming those bytes.
+The following nine-step block records the **published 0.51.0 / Pi 1.5 pairing**.
+Its unversioned plugin command is an exact 0.51.0 recipe only while the resolved ref's lock
+names 0.51.0. This preparation instead uses the checkout verification carrier;
+inspect the ref and its lock rather than assuming npm bytes.
 
 ```bash
 # 1. pi — the published runtime's host range, quoted so the shell keeps it in one word
@@ -520,14 +524,16 @@ read. Every field the provider attached is shown, in sorted key order.
     named red (`herdr-integration-not-current`) until you run `herdr integration install claude`
     again. In the measured 0.9.4-seeded private sandbox, the reinstall changed only the hook's version
     line; the pi extension and the Claude settings stayed byte-identical.
-- **Pi <!-- entwurf:published @junghanacs/entwurf@0.51.0 pi 1.5.0 -->`>=1.5.0 <1.6`<!-- /entwurf:published -->** for the published npm 0.51.0 runtime this lock acquires, on the Pi 1.5.0
+- **Pi <!-- entwurf:published @junghanacs/entwurf@0.51.0 pi 1.5.0 -->`>=1.5.0 <1.6`<!-- /entwurf:published -->** for the published npm 0.51.0 pairing, on the Pi 1.5.0
   SDK set. The previous npm pin, 0.50.0, and the `v2026.10.27-herdr.0.45.0` snapshot carry the
   Pi 1.4.0 SDK set and its Pi 1.4 requirement.
   A host still on Pi 1.4 or older is refused by name (`outside the supported
   range`) at activation, the same check `entwurf setup` applies, and no Pi settings are written.
-  Upgrade Pi to 1.5 first, then install or reinstall the plugin. The last Pi 1.3 snapshot,
+  For that published pairing, align Pi within the stated range before installing or reinstalling the plugin. The last Pi 1.3 snapshot,
   `v2026.10.22-herdr.0.41.0`, pins `@junghanacs/entwurf@0.41.0` on the Pi 1.3 SDK and keeps the
   Pi 1.3.x requirement its own README states.
+
+  The unpublished 0.52.0 checkout candidate instead declares host Pi `>=1.5.2 <1.6`; prepare host Pi 1.5.2 before selecting that source. This declaration and an allowed version range are not an installed-consumer or operating-host acceptance.
 - **For the install-time build:** `git`, `node` >= 24, `npm`, and, for an npm lock, network access
   for the locked registry artifact, in an Entwurf-owned XDG npm cache reclaimed by
   `herdr-plugin-deactivate`. You do **not** clone Entwurf or run `npm install`; the build acquires
