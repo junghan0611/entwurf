@@ -5,23 +5,25 @@
 # RAIL — 현재 좌표
 
 - [x] **1. 구현 C1–C4 + focused gate** — 0.106/SDK 2.6, fable-5-2, idle compaction 차단, effort set+readback·notice
-- [x] **2. 독립 검수 + amendment** — b3fc7c 검수 1–3·봉인 확인, Blocker 0, 남은 Defect 0
-- [x] **3. 영향 PARTIAL r3/r4 + LIVE 3+1 turn** — r3 87/87(포맷 전 후보), r4 60/60(최종 후보), LIVE receipt 2건
-- [x] **4. frozen FULL** — `f54844a2…` rc=0(check:full 979s / runner 980s), 동결 6항목 동일
-- [x] **5. branch checkpoint** — `90b5168` push, exact-SHA CI 4 job success; #142 본문·진행·ESC 댓글
-- [ ] **6. 다음 계약 후보 결정** ← CURRENT: GLG 판단 대기(코디 68bd94 경유)
-- [ ] **7. main 병합 / release / 운영 설치** ← PAUSED: 각각 GLG 별도 승인
+- [x] **2. 독립 검수 + amendment** — b3fc7c, Blocker 0
+- [x] **3. PARTIAL + LIVE 3+1** — r3 87/87, r4 60/60
+- [x] **4. frozen FULL + checkpoint `90b5168`** — CI 4/4
+- [x] **5. ESC 경계: C/E/F + checkpoint `ac087af`** — r5 65/65, FULL rc=0, LIVE n=1 per source, CI 4/4; 검수 D-C1/D-F1/O-F1 닫힘
+- [x] **6. 상류 0.106 계약 대응표** — `docs/acp-backend-rail.md` §Upstream 0.106.0 cancel and effort contracts (docs-only)
+- [ ] **7. 다음 범위 결정** ← CURRENT: 코디 68bd94가 대응표를 읽고 정리
+- [ ] **8. main 병합 / release / 운영 설치** ← PAUSED: 각각 GLG 별도 승인
 
-현재 좌표: 5 완료 → 6 대기 → 7 보류
+현재 좌표: 6 완료 → 7 대기 → 8 보류
 
 # NOW
 
-- Current: checkpoint `90b5168`이 브랜치에 있다. ESC n=1(재사용 turn, Bash 도중 RPC abort) 관측 완료. #142가 외부 자문용으로 정리돼 있다.
-- Next 후보(미승인): 첫 턴 ESC(대화 버림)와 재사용 ESC(live 세션 보존)의 비대칭을 운영자에게 notice로 드러내기. 착수 전 GLG 승인.
-- Blocker: 다음 계약·병합·release·설치는 모두 GLG 결정.
-- Read: #142 본문, [진행](https://github.com/junghan0611/entwurf/issues/142#issuecomment-6838220924), [ESC](https://github.com/junghan0611/entwurf/issues/142#issuecomment-6838283088). host-local: FULL `~/.cache/entwurf-qual/acp106-full-20261113T073220/`, ESC `.tmp-verify/acp142-live/esc-20261113T075632/RECEIPT.md`.
-- Do not touch: credential 값을 agent가 읽기·복사·로그하기, 새 로그인, env key 우회(auth A는 허용된 기존 동작); 운영 overlay/설정/hook 변경; worktree; `--no-verify`; 전역 pnpm 정책 완화; 승인 없는 실 모델 턴; whole BODY(코디 결정 0).
-- 증거 범위: ESC n=1은 같은 공개 acpSessionId의 live 세션 재사용까지만 관측했다. private Claude 정본 계보와 wire cancel 프레임은 확인하지 않았다. 첫 턴 ESC, 텍스트 스트리밍 중 ESC, Edit/Write 효과는 측정하지 않았다.
+- Current: checkpoint `ac087af`(코드)와 docs-only 대응표가 브랜치에 있다. #142 본문과 [C/D/E/F 기록](https://github.com/junghan0611/entwurf/issues/142#issuecomment-6840052021)이 외부 자문용으로 정리돼 있다.
+- 대응표의 열린 칸(우리 접점에서 도달 가능하지만 미측정): KEPT 세션에서 취소된 턴의 늦은 update가 다음 턴 스트림에 섞이지 않는지(우리 라우팅은 turn을 구분하지 않음 — 상류 adapter의 post-response drop에 기대며 미측정, QK 없음), 취소와 동시에 끝난 도구. 노출하지 않음(backlog 아님): background subagent, SDK 큐, 영속 resume/load.
+- 미측정: 텍스트 스트리밍 중 ESC, Edit/Write 효과, 실제 키 입력, wire cancel 프레임, n>1, 재시작 뒤 정본.
+- Blocker: 다음 범위·병합·release·설치는 GLG 결정(코디 경유). #160(OpenClaw/AGY ACP)은 이 후보와 별도 경계 설계; AGY native-push pause(#152) 유지.
+- Read: #142, 대응표, receipts(oracle host-local) `.tmp-verify/acp142-live/{esc-20261113T075632,esc1-20261113T083800,esc1-20261113T084854,esc1-20261113T092603}/RECEIPT.md`, `~/.cache/entwurf-qual/acp106-partial-20261113-r5/summary.txt`, `~/.cache/entwurf-qual/acp106-full-20261113T090903/`.
+- Do not touch: credential 값을 agent가 읽기·복사·로그하기, 새 로그인, env key 우회(auth A는 허용된 기존 동작); 운영 overlay/설정/hook; worktree; `--no-verify`; 전역 pnpm 정책 완화; whole BODY(코디 결정 0); 영속 resume·정본 복구 manager.
+- 역할: ff08d4 = ACP 담당(team.json, GLG 지정), 유일한 구현 작성자. b3fc7c = 독립 검수. 68bd94 = 운영 코디·DM 단독. SOL a30dda = 뜻·사용 경험 의견만.
 
 ## 릴리즈 후 — 실사용 목표 (GLG 2026-11-13)
 
@@ -44,6 +46,8 @@ pi에서 ACP Claude를 주력으로 고를 수 있는 최소 동작: 얇은 Pi �
 - GPT·다른 형제 소환/resume 금지. 유일한 예외: GLG가 직접 재초빙한 SOL `20261003T164401-a30dda` — 의미·사용 경험 논의 역할만, 코드 작성·검수·테스트·LIVE 권한 없음, 구현 질문은 ff08d4 통로로.
 
 # RECENT
+
+- [2026-11-13] `ac087af`: reuse effort 대기 중 ESC 30001ms → 즉시 정착(prompt 미전송, 세션 drop); 취소 결과 notice(KEPT/CLOSED); 재구성 transcript에 원인 중립 aborted 상태 줄. 첫 턴 ESC 실측 n=1: F 전 '실행 안 됨' 오판 → 최종 문구에서 '일부 실행됐을 수 있다'. 재사용 ESC private 계보: 단일 JSONL parentUuid 연속(n=1).
 
 - [2026-11-13] FULL #3 GREEN → checkpoint `90b5168` push, CI 4/4 success. ESC LIVE n=1: abort 25ms 뒤 aborted, T3가 같은 acpSessionId를 reuse, count.log `start`만(30s 창, end 없음, 중복 없음).
 
