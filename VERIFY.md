@@ -6,8 +6,8 @@ VERIFY.md is the **agent-driven** surface; [BASELINE.md](./BASELINE.md) is the o
 
 **Who executes what.**
 
-- **Part I — verifying a live session.** An ACP subject asked to verify itself reads Part I and executes **§1B only**. §1A, §0 and §2 tell it what is being judged.
-- **Part II — the maintainer floor.** The subject may read Part II for context, but it does not run any of it: §0A (where a check lives, the floors, release axes), §1 Setup, §3 release criteria, or any `LIVE=1` command. Where §1B and Part II seem to disagree on what to run, §1B.0 wins for the subject.
+- **Part I — verifying a live session.** An ACP subject asked to verify itself reads **Part I only** and executes **§1B only**. §1A, §0 and §2 tell it what is being judged. It opens Part II only when a step points there.
+- **Part II — the maintainer floor.** The subject does not read it up front and does not run any of it: §0A (where a check lives, the floors, release axes), §1 Setup, §3 release criteria, or any `LIVE=1` command. Where §1B and Part II seem to disagree on what to run, §1B.0 wins for the subject.
 - **Appendix.** Troubleshooting, the old banner's dated numbers and history pointers.
 
 > **Current surface.** `entwurf-bridge` exposes nine tools: `entwurf_v2`, `entwurf_peers`, `entwurf_fresh_call`, `entwurf_resume_call`, `entwurf_retire_call` (operator-requested target only), `entwurf_callback`, `entwurf_self`, `entwurf_inbox_read` and `entwurf_register_native`. A native pi citizen offers seven of them (two hidden), and the pi-durable contact offers eight. An ACP session's own count is measured from its schema (§1B.3). The ACP backends are Claude and Snowflake Cortex Code. Antigravity and Codex are native-push citizens outside ACP; Antigravity's native push is paused (#152).
@@ -87,14 +87,14 @@ jq -r .version <checkout>/node_modules/@agentclientprotocol/sdk/package.json
 <checkout>/run.sh doctor-pi-provider                # does the provider's bridge command boot
 ```
 
-Then call `entwurf_self` and report `sessionId`, `origin`, `rail`, `cwd`. The meta record `~/.pi/agent/meta-sessions/<sessionId>.meta.json` gives `nativeSessionId`; your transcript is `~/.pi/agent/sessions/--<cwd with / as ->--/*_<nativeSessionId>.jsonl`. Find your own pi process and the ACP child under it, and report PIDs, parent PIDs and executable names only. Other processes' argv can carry other people's tasks, so do not print the host-wide argv list:
+Then call `entwurf_self` and report `sessionId`, `origin`, `cwd`, and its rail fact: a pi session reports `socketState`, while `rail` appears only for a meta-session citizen. The meta record `~/.pi/agent/meta-sessions/<sessionId>.meta.json` gives `nativeSessionId`; your transcript is `~/.pi/agent/sessions/--<cwd with / as ->--/*_<nativeSessionId>.jsonl`. Find your own pi process and the ACP child under it, and report PIDs, parent PIDs and executable names only. Other processes' argv can carry other people's tasks, so do not print the host-wide argv list:
 
 ```bash
 ps -o pid,ppid,etimes,comm -p "$PPID"                    # walk up from your own shell with -p <ppid> until pi
 ps -o pid,ppid,etimes,comm --ppid <your pi pid>          # its direct children; the ACP child is one of them
 ```
 
-For a PID already on your own chain you may read its argv (`ps -o args= -p <pid>`), because pi and the ACP child may both show `node` as their name. Without that, a chain you cannot walk with certainty is reported as unknown.
+For a PID on your own chain, or a direct child of your own pi process (for example the `entwurf-bridge` MCP server pi itself starts), you may read its argv (`ps -o args= -p <pid>`), because pi and the ACP child may both show `node` as their name. Without that, a chain you cannot walk with certainty is reported as unknown.
 
 `doctor-meta-bridge` is the Claude Code native-citizen doctor; it is not about this ACP session. It is read-only toward the operator, but one of its checks delivers a test message inside a temporary world, so run it only when the operator asks.
 
@@ -107,7 +107,7 @@ Answer first, then check each answer against a source outside yourself:
 1. **Harness and backend:** you are a Claude model reached through Pi's `entwurf` provider over ACP (`claude-agent-acp`), not Claude Code started directly. Corroborate with the process tree from §1B.2.
 2. **Native tools:** list the native tools your callable schema carries, then compare with `DEFAULT_CLAUDE_TOOLS` and `DEFAULT_CLAUDE_DISALLOWED_TOOLS` in `pi-extensions/lib/acp/tool-surface.ts` and the `Skill` rule in `pi-extensions/lib/acp/config.ts`. Report differences; your schema wins over the file.
 3. **MCP:** list the MCP servers and tools your schema carries, verbatim (`mcp__entwurf-bridge__entwurf_v2` shape, §2.1). Compare the server names with `entwurfProvider.mcpServers` in `<cwd>/.pi/settings.json` and `~/.pi/agent/settings.json`, reading names only (`jq -r '.entwurfProvider.mcpServers // {} | keys[]'`); a server's `env` or args may hold secrets and are not printed. If names alone cannot be read, report the comparison as not measured. Report the count you see; it is not required to match another rail's count.
-4. **Carriers (§1A.0):** say what came through the engraving slot and what came through the first-user augment. Compare the engraving with `pi-extensions/lib/acp/prompts/engraving.md` (or the file `ENTWURF_ACP_ENGRAVING_PATH` names), and the augment with `enrichTaskWithProjectContext` in `pi-extensions/lib/acp/augment.ts` and with which AGENTS files exist for your cwd.
+4. **Carriers (§1A.0):** say what came through the engraving slot and what came through the first-user augment. Compare the engraving with `pi-extensions/lib/acp/prompts/engraving.md` (or the file `ENTWURF_ACP_ENGRAVING_PATH` names), and the augment with `buildPiContextAugment` and `prependNewPromptAugment` in `pi-extensions/lib/acp/augment.ts` and with which AGENTS files exist for your cwd.
 5. **Input:** the `entwurf` rows declare text-only input (`ACP_ROW_INPUT` in `pi-extensions/lib/acp/models.ts`). Say what that means: no path carries image bytes to the backend, and an image block pi does pass to the converter becomes `[image omitted: <mime>]` in the rebuilt or delta prompt (`context.ts`). Whether pi's UI passes an attachment on a text-only row at all is unmeasured; if the operator tries it, report only what you received.
 
 Pass: answers match their sources, and "I cannot tell" where no source answers. Fail: a tool, server or carrier content that no source shows; the bridge-identity narrative attributed to the engraving.
@@ -135,7 +135,7 @@ After the operator changes the level (turn 7), report the value read back from t
 
 ### 1B.7 Abort (#142)
 
-ESC sends ACP `session/cancel`; the agent ends its own turn, and only after a bounded grace does process cleanup follow. After an ESC the turn carries one of two notices (`ACP_CANCEL_KEPT_NOTICE` / `ACP_CANCEL_CLOSED_NOTICE` in `backend.ts`):
+ESC sends ACP `session/cancel`; the agent ends its own turn, and only after a bounded grace does process cleanup follow. After an ESC the turn carries one of two notices, defined as `ACP_CANCEL_KEPT_NOTICE` / `ACP_CANCEL_CLOSED_NOTICE` in `backend.ts`; `pushAcpLifecycleNotice` in `event-mapper.ts` wraps them as `[acp: …]` on screen:
 
 - `stopped — changes already made stay; next message continues this session` — a reuse turn the agent closed on cancel;
 - `stopped — changes already made stay; next message opens a new session` — a cancelled first turn, an escalation, or an abort before the prompt was sent.
@@ -149,17 +149,17 @@ For turn 8 the operator should send something harmless that takes a few seconds,
 ```bash
 F=$(ls ~/.pi/agent/sessions/--*--/*_<nativeSessionId>.jsonl)
 jq -r '.message.role // .type' "$F" | sort | uniq -c
-jq -r 'select(.message.role=="assistant") | .message.content[]? | select(.type=="text") | .text' "$F" | grep -o '\[acp: [^]]*\]'
+jq -r 'select(.message.role=="assistant") | .message.content[]? | select(.textSignature=="entwurf:lifecycle-notice-v1") | .text' "$F"   # notices only; a model's own text quoting "[acp: …]" carries no signature
 ```
 
-- Pass: user and assistant turns accumulate in your own pi transcript. Under ACP the memory axis is still pi's file, and no second memory layer exists. There is no separate child pi transcript in a resident session.
+- Pass: user and assistant turns accumulate in your own pi transcript. A message a sibling delivers through `entwurf_v2` is stored as `custom_message`, not `user`, so when an operator drives the walk by message the `user` count will not match the turn count. Under ACP the memory axis is still pi's file, and no second memory layer exists. There is no separate child pi transcript in a resident session.
 - **Processes:** report the ACP children under your own pi process now. Use one alive child per live `(sessionKey, backend, modelId, bridgeConfigSignature)` as the expected bound (§2.3). Without a "before" count, the delta is unmeasured. A process name alone does not prove ownership or orphanhood. Look only, and never kill.
 
 ### 1B.9 Deterministic gates (optional, operator's pick)
 
 Deterministic gates are designed to run offline with a sandboxed HOME, `PI_CODING_AGENT_DIR` and XDG roots (AGENTS.md Verification), but a subject should not take that as a blanket guarantee. Run one only when the operator names it in this session:
 
-- `./run.sh check-acp-set-model-readback` covers model readback, effort and cancel/abort. Running it runs the fixture tests, not their mutants; mutant kill-power is a separate PARTIAL qualification (`scripts/mutants/acp-set-model-readback.json`), which is a maintainer action.
+- `./run.sh check-acp-set-model-readback` covers model readback, effort and the cancel notices; `./run.sh check-acp-vendor-rejection` covers the reuse turn's cooperative cancel (`ACP-REUSE-COOPERATIVE-CANCEL`). Running it runs the fixture tests, not their mutants; mutant kill-power is a separate PARTIAL qualification (`scripts/mutants/acp-set-model-readback.json`), which is a maintainer action.
 - `./run.sh check-acp-carrier-augment`, `check-acp-tool-surface` and `check-acp-config` cover the carriers, the tool surface and the MCP projection.
 - `pnpm check` is the core tier, about a minute on the reference host.
 
@@ -192,7 +192,7 @@ Separate from continuity gates. Gates prove "sessions continue"; this questionna
 | Surface | Source | Delivery shape | Default content |
 |---|---|---|---|
 | **Engraving carrier** | `pi-extensions/lib/acp/prompts/engraving.md` (or `ENTWURF_ACP_ENGRAVING_PATH`) | Claude `_meta.systemPrompt` — full-replacement identity slot | Operator-authored, optional opt-out; tiny non-empty by default on Claude ACP (replaces the `claude_code` preset + strips its auto-memory advertisement). Emptying the file is the opt-out. |
-| **pi-context-augment** | `pi-extensions/lib/acp/augment.ts` (`enrichTaskWithProjectContext`) | First-user-message prepend (not the system slot) | Always carries (1) the bridge identity line and the tool-truth rule ("the actual callable schema is the source of truth"). Then, each only when the file exists and is non-empty: (2) `~/AGENTS.md`, (3) the cwd's `AGENTS.md` when it differs from the home one. The whole augment is cut at 50 KiB with a visible `[entwurf: context augment truncated …]` marker, so a long home file can push the cwd block out entirely, and a cwd block the prompt already carries is dropped from the augment rather than sent twice (`truncateAugment`, `prependNewPromptAugment`). |
+| **pi-context-augment** | `pi-extensions/lib/acp/augment.ts` (`buildPiContextAugment`, prepended by `prependNewPromptAugment`) | First-user-message prepend (not the system slot) | Always carries (1) the bridge identity line and the tool-truth rule ("the actual callable schema is the source of truth"). Then, each only when the file exists and is non-empty: (2) `~/AGENTS.md`, (3) the cwd's `AGENTS.md` when it differs from the home one. The whole augment is cut at 50 KiB with a visible `[entwurf: context augment truncated …]` marker, so a long home file can push the cwd block out entirely, and a cwd block the prompt already carries is dropped from the augment rather than sent twice (`truncateAugment`, `prependNewPromptAugment`). |
 
 Pass (carrier honesty): the subject distinguishes engraving from pi-context-augment by name or structure without prompting; on ACP targets says which augment components arrived, given which AGENTS files exist for its cwd (a missing component is a fail only when its file exists and is non-empty, the truncation marker is absent, and the prompt did not already carry that cwd block); may quote the engraving but must **not** attribute bridge identity / AGENTS / memory policy to it. Fail: attributes the bridge-identity narrative to the engraving carrier; claims the augment is empty on an ACP run; invents engraving content. Native pi exception: on native targets the bridge-identity line and `~/AGENTS.md` are not part of the augment — the PASS criterion is honesty about what arrived, not the three-component checklist.
 
