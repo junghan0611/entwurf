@@ -1,0 +1,18 @@
+{
+	"id": "entwurf",
+	"name": "Entwurf",
+	"description": "Lets this OpenClaw session send to a garden sibling as its own record-backed citizen (entwurf #160). Send only: receiving is the entwurf core's native-push adapter.",
+	"version": "0.1.0",
+	"configSchema": {
+		"type": "object",
+		"additionalProperties": false,
+		"required": ["entwurfBin", "declPath", "scope"],
+		"properties": {
+			"entwurfBin": { "type": "string", "description": "Absolute path of the installed `entwurf` launcher." },
+			"declPath": { "type": "string", "description": "Absolute path of this host's openclaw-citizens.json." },
+			"scope": { "type": "string", "description": "This Gateway's scope label, as declared in openclaw-citizens.json." }
+		}
+	},
+	"activation": { "onStartup": true },
+	"contracts": { "tools": ["entwurf_v2"] }
+}

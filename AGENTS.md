@@ -86,7 +86,7 @@ Keep at most ten open issues, including at most five implementation issues. Clas
 
 Two independent axes are required: deterministic/package gates and opt-in LIVE evidence. Exact commands, evidence levels, and release acceptance are owned by [VERIFY.md](./VERIFY.md); recorded host evidence by [BASELINE.md](./BASELINE.md). Run LIVE gates from scratch with ambient identity carriers stripped so artifacts and callbacks cannot bleed from the operator session.
 
-A new contract's test goes beside the behavior it certifies — `pi-extensions/**/*.test.ts` or `plugins/herdr/**/*.test.mjs` — and `check-tests-beside-behavior` discovers it by glob, so landing one edits no filename list. `scripts/check-*` stays the home of LIVE, install, spawning and mixed gates; a new hand-built gate there needs a reason the vitest lane could not carry it.
+A new contract's test goes beside the behavior it certifies — `pi-extensions/**/*.test.ts`, `plugins/herdr/**/*.test.mjs` or `plugins/openclaw/**/*.test.mjs` — and `check-tests-beside-behavior` discovers it by glob, so landing one edits no filename list. `scripts/check-*` stays the home of LIVE, install, spawning and mixed gates; a new hand-built gate there needs a reason the vitest lane could not carry it.
 
 ### Scheduling
 

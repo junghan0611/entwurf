@@ -308,6 +308,15 @@
 		// (meta-session.ts) with an explicit `.ts` extension, same fence. Received by scripts/tsconfig.json
 		// and mcp/tsconfig.json through their existing ../pi-extensions/lib/**/*.ts includes; its beside
 		// test takes the existing test fence.
-		"pi-extensions/lib/pi-durable-owner-fence.ts"
+		"pi-extensions/lib/pi-durable-owner-fence.ts",
+		// #160 OpenClaw citizen lib: the scope declaration, the send claim entry's decision half, the
+		// birth writer and the native-push Gateway adapter — lib→lib VALUE importers with explicit `.ts`
+		// extensions, same fence. Received by scripts/tsconfig.json and mcp/tsconfig.json through their
+		// existing ../pi-extensions/lib/**/*.ts includes; their beside tests take the existing test fence.
+		"pi-extensions/lib/openclaw-citizens.ts",
+		"pi-extensions/lib/openclaw-send.ts",
+		"pi-extensions/lib/openclaw-birth.ts",
+		"pi-extensions/lib/native-push/openclaw-gateway.ts",
+		"pi-extensions/lib/openclaw-fresh.ts"
 	]
 }

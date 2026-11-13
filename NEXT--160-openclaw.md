@@ -13,12 +13,15 @@
 - [x] **S2. 결정 카드.** 4184c5가 작성했고 9fc008이 영수증을 확인했다. GLG가 7절 1–5를 권고대로 승인했고, 6은 oracle 측정으로 닫았다(2026-11-13).
 - [ ] **S3. 구현.** ← CURRENT: 별도 Opus 구현 형제. 결정 카드 6절의 코어 diff 7항목과 `plugins/openclaw`, 그리고 바로 옆 테스트.
 - [ ] **S4. LIVE.** 11.3 하나에서 nonce 왕복 → 자기 정체성으로 답신 → 재접속, 그리고 fresh 후보 (a)–(d).
-- [ ] **S5. 오라클 Docker.** 별도 단계로, 운영을 11.3으로 맞추는 일과 함께 한다. S4 전에는 손대지 않는다(운영 10.9 / 8b18b55). 수신 CLI는 `docker exec openclaw-gateway openclaw …` 후보다.
+- [ ] **S5. 오라클 Docker.** 별도 단계로, 운영을 11.3으로 맞추는 일과 함께 한다. S4 전에는 손대지 않는다(운영 10.9 / 8b18b55). 수신 CLI는 `docker exec openclaw-gateway openclaw …` 후보다. **경로 축 [파일 openclaw-config/docker-compose.yml:89,103,111]:** 컨테이너 안의 절대경로(`/home/node/.openclaw/workspace`, `/home/node/repos/gh`)는 host의 경로(`~/openclaw/config`, `~/repos/gh`)와 다르다. birth의 cwd는 "운영자 명시값 또는 OpenClaw 응답값 그대로, 추측·fallback 없음"으로 한다(GLG 2026-11-13). S5에서는 (1) 안팎 경로를 같게 마운트할지, (2) record에 컨테이너 경로임을 표시할지를 측정한 뒤 정한다.
 
 # NOW
 
 - **다음 한 행동:** S3 Opus 구현 형제를 열어 결정 카드대로 구현한다. 커밋은 GLG가 정한다.
-- **역할:** 실무 코디 = `20261015T085719-9fc008`(Claude Code). 운영 코디 = `20261007T132839-b22677`(pi-durable, 단계 전환마다 짧게 보고). S1 Sonnet 2 — 10.10 = `20261113T120646-e9a750`, 11.3 = `20261113T120652-6cc29a`(콜백 nonce 일치). S3 구현은 별도 Opus 형제가 맡는다(GLG: 실무 코디는 구현하지 않는다). S2 설계 Opus = `20261113T143538-4184c5`(콜백 nonce 일치). 커밋·push는 GLG.
+- **역할:** 실무 코디 = `20261015T085719-9fc008`(Claude Code). 운영 코디 = `20261007T132839-b22677`(pi-durable, 단계 전환마다 짧게 보고). S1 Sonnet 2 — 10.10 = `20261113T120646-e9a750`, 11.3 = `20261113T120652-6cc29a`(콜백 nonce 일치). S3 구현은 별도 Opus 형제가 맡는다(GLG: 실무 코디는 구현하지 않는다). S2 설계 Opus = `20261113T143538-4184c5`(콜백 nonce 일치, S3 교차 리뷰 예정). S3 구현 Opus = `20261113T145250-0c9e3a`(콜백 nonce 일치). 10.10 Sonnet은 종료됐다. 커밋·push는 GLG.
+- **flip 경계 [측정 0c9e3a, meta-session.ts:772-777,808-812,850-851]:** 이 체크아웃의 소스로 직접 도는 bridge가 여럿이다(운영 코디와 실무 코디 포함). registry는 호출할 때마다 다시 읽고 backend 집합과 정확히 같아야 하므로, `META_CITIZEN_BACKENDS`나 `pi/entwurf-capabilities.json`을 편집하는 순간 그 bridge들의 entwurf_v2가 전부 거절된다(adding-a-harness.md:177-184의 omp 사건과 같은 모양). 그래서 이 편집은 마지막 flip 한 번으로 묶고, FRESH_CALL_BACKENDS 편입과 같은 묶음으로 만들어 parity RED 구간을 없앤다. flip은 GLG가 재시작 창을 정한 뒤에 한다. 카드와 다르게 승인한 것: wakeMode `direct-inject`, deliveryLevel `D0`, 송신 입구 이름 `openclaw-send`.
+- **release stop [4184c5 O5]:** flip에서 `FRESH_CALL_BACKENDS += openclaw`가 되면 parity 게이트는 green이 된다. 하지만 fresh preflight가 (a)로 닫혀 있는 동안에는 "열리지 않는 backend가 표면에 광고되는" 상태다(#87 모양, adding-a-harness.md:728-732). parity green을 admission으로 읽지 않는다. S4 (a)–(d)가 닫히기 전에는 release·main 병합을 하지 않는다.
+- **S3 리뷰 (4184c5, 15:14):** Blocker 0, Defect 3(D1 TUI Gateway 바인딩, D2 플러그인 timeout < entry 최악 경로, D3 fresh key 부재 미실행), Observation 9. D1–D3과 O2·O6·O7·O8·O9를 0c9e3a의 amendment 한 묶음에 넣었다. O3(session:null과 visibility 숨김 구분, archived)은 S4 측정 항목이다.
 - **보고 경로:** 형제 → 9fc008만 사용. 운영 코디와 #142 lane에 직접 보내지 않는다.
 
 # 결정 (GLG 2026-11-13)
@@ -49,8 +52,8 @@
 - record 쪽 계약: `nativeSessionId`는 store 전체에서 유일하고 writer는 store 전체를 certify한 뒤 쓴다 [AGENTS.md:37, `meta-session.ts:914-979`]. upsert는 nativeSessionId로 멱등이다 [`docs/adding-a-harness.md:223-224`].
 
 설계
-- **Gateway scope:** 운영자가 선언 파일에 Gateway마다 고정 라벨 `scope`(예: `thinkpad-lab113`, `oracle`)를 적는다. 유일성 범위 = 그 scope 하나(= 한 Gateway state 루트). 라벨은 주소가 아니라 nativeSessionId의 namespace 성분일 뿐이다.
-- **nativeSessionId = `openclaw:<scope>:<sessionKey>`** (예: `openclaw:thinkpad-lab113:agent:main:s1m1`). 이 합성은 birth writer 한 곳에서만 하고, 송신 join과 수신 probe는 record에서 역으로 읽는다(record에서 sessionKey를 꺼내 쓰지, 선언에서 꺼내지 않는다).
+- **Gateway scope:** 운영자가 선언 파일에 Gateway마다 고정 라벨 `scope`(예: `lab-a`, `oracle`)를 적는다. 유일성 범위 = 그 scope 하나(= 한 Gateway state 루트). 라벨은 주소가 아니라 nativeSessionId의 namespace 성분일 뿐이다.
+- **nativeSessionId = `openclaw:<scope>:<sessionKey>`** (예: `openclaw:lab-a:agent:main:s1m1`). 이 합성은 birth writer 한 곳에서만 하고, 송신 join과 수신 probe는 record에서 역으로 읽는다(record에서 sessionKey를 꺼내 쓰지, 선언에서 꺼내지 않는다).
 - **단일 birth writer:** 코어 함수 하나 `birthOpenclawCitizen(decl, scope, sessionKey)`와 그것을 감싸는 entry 하나 `entwurf openclaw-birth --decl <abs> --scope <s> --session-key <k>`. 순서: 선언 범위 대조 → 해당 Gateway에 `sessions.describe {key}`로 존재 확인(`session:null`이면 거절) → `upsertMetaSession({backend:"openclaw", nativeSessionId, cwd: describe의 sessionRoot})`. 호출자는 둘뿐이다: 기존 고정 세션에 대한 운영자 실행, 그리고 fresh composition(2절). 플러그인·송신 entry는 record를 쓰지 않는다(첫 발화 시 lazy birth 없음 — 수신 대상이 되려면 말하기 전에 record가 있어야 한다).
 - **재등록 멱등성:** 같은 (scope, sessionKey)를 다시 birth하면 upsert가 기존 garden id에 attach한다 [`meta-session.ts:1317-1348` 3-value merge]. 다른 garden id를 새로 찍지 않는다.
 - **선언 파일의 지위:** `openclaw-citizens.json`(record store 옆, 0600, remote-pair처럼 매 호출 다시 읽고 캐시하지 않음). 내용은 `{version:1, gateways:[{scope, url, configPath?}], allow:[{scope, agentId, sessionKey}], freshKeyPrefix?: {scope, agentId, prefix}}`. **gardenId를 담지 않는다.** 선언은 "이 key는 시민이 될 수 있다"까지만 말하고, "이 key의 시민은 누구다"는 record만 말한다. 선언에서 빠진 key의 기존 record는 송신·수신 모두 범위 거절(데이터는 보존, Hard Rule 8).

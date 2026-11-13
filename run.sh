@@ -3424,7 +3424,7 @@ check_pi_queue_oracle() {
 
 check_tests_beside_behavior() {
   # The DISCOVERY door (issue #119 V2). A `.test.ts` beside a pi extension or a
-  # `.test.mjs` beside the herdr plugin lib is run by public `pnpm check` without
+  # `.test.mjs` beside the herdr or openclaw plugin is run by public `pnpm check` without
   # anyone adding its filename anywhere. That is the whole contract: the other two
   # vitest shims list their files, and a door that also listed files would shut
   # again the first time someone forgot.
@@ -3445,7 +3445,7 @@ check_tests_beside_behavior() {
   # steady state is "the door is open and unused", and it must not be spelled as a run.
   section "tests beside behavior (discovery, not a filename list)"
   local cfg="$REPO_DIR/vitest.config.ts" glob
-  for glob in 'pi-extensions/**/*.test.ts' 'plugins/herdr/**/*.test.mjs'; do
+  for glob in 'pi-extensions/**/*.test.ts' 'plugins/herdr/**/*.test.mjs' 'plugins/openclaw/**/*.test.mjs'; do
     if ! grep -qF "\"$glob\"" "$cfg"; then
       fail "[check-tests-beside-behavior] vitest.config.ts no longer includes $glob — the discovery door is shut, and an expansion that found nothing would still pass"
       return 1
@@ -3497,18 +3497,19 @@ check_tests_beside_behavior() {
   done < <(cd "$REPO_DIR" && {
     find pi-extensions -name node_modules -prune -o -type f -name '*.test.ts' -print
     find plugins/herdr -name node_modules -prune -o -type f -name '*.test.mjs' -print
+    find plugins/openclaw -name node_modules -prune -o -type f -name '*.test.mjs' -print
   } 2>/dev/null | LC_ALL=C sort)
 
   # Independent of HOW the expansion was produced: every selected path must be under one of
-  # the two declared locations, and none may come from test/. The second clause is the one
+  # the declared locations, and none may come from test/. The second clause is the one
   # that names the defect above, so it is asserted rather than left implied by the first.
   for f in "${selected[@]}"; do
     case "$f" in
       test/*)
-        fail "[check-tests-beside-behavior] selected $f — this gate covers the two behavior-adjacent locations, never test/**"
+        fail "[check-tests-beside-behavior] selected $f — this gate covers the behavior-adjacent locations, never test/**"
         return 1
         ;;
-      pi-extensions/*.test.ts | plugins/herdr/*.test.mjs) ;;
+      pi-extensions/*.test.ts | plugins/herdr/*.test.mjs | plugins/openclaw/*.test.mjs) ;;
       *)
         fail "[check-tests-beside-behavior] selected $f, which matches neither declared glob"
         return 1

@@ -1,0 +1,14 @@
+{
+	"name": "openclaw-plugin-entwurf",
+	"version": "0.1.0",
+	"type": "module",
+	"private": true,
+	"openclaw": {
+		"extensions": [
+			"./dist/index.js"
+		],
+		"compat": {
+			"pluginApi": ">=2026.11.3"
+		}
+	}
+}

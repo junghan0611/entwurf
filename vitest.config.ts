@@ -6,7 +6,7 @@ import { defineConfig } from "vitest/config";
  * `test/**` is the migration lane: gates move here one at a time, each behind its
  * `run.sh` transition shim, and each shim NAMES the files it runs.
  *
- * The two behavior-adjacent globs are issue #119 V2 — a test written beside the code
+ * The behavior-adjacent globs are issue #119 V2 (plugins/openclaw joined for #160) — a test written beside the code
  * it certifies. Nothing names those files. `check-tests-beside-behavior` filters this
  * same include down to them positionally, so a new `.test.ts` next to a pi extension
  * is run by public `pnpm check` the moment it exists. One include, because the two
@@ -20,7 +20,12 @@ import { defineConfig } from "vitest/config";
  */
 export default defineConfig({
 	test: {
-		include: ["test/**/*.test.ts", "pi-extensions/**/*.test.ts", "plugins/herdr/**/*.test.mjs"],
+		include: [
+			"test/**/*.test.ts",
+			"pi-extensions/**/*.test.ts",
+			"plugins/herdr/**/*.test.mjs",
+			"plugins/openclaw/**/*.test.mjs",
+		],
 		fileParallelism: false,
 		// A hung bridge boot must fail the gate, not hang qualification's outer
 		// timeout: the boot helper's own 10s timer stays the primary bound.
