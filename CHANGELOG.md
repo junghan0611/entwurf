@@ -4,6 +4,47 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+## 0.53.0 — 2026-11-13
+
+### Claude ACP 0.106 (#142)
+
+Entwurf 0.53.0 moves the Claude ACP rail to driver `@agentclientprotocol/claude-agent-acp` 0.106.0 and wire SDK `@agentclientprotocol/sdk` 2.6.0 (from 0.90.0 / 1.8.0), with `claude-agent-sdk` 0.3.322 as one coherent set. The 0.52.0 Pi SDK 1.5.2 set is unchanged.
+
+- **Curated rows.** `entwurf/claude-fable-5-2` joins the curated Claude ids; the set-model readback confirms it answers its own row. The curated Claude and Cortex rows now declare text-only input, because the rail sends an image only as an `[image omitted]` marker and has no path for image bytes.
+- **No compaction behind pi.** The driver's 0.101 idle compaction is disabled through inline `settings.idleCompaction: false`, so context never changes behind pi. A pi compaction still rebuilds the ACP session from pi's summary and recent messages; it is not a continuation of the vendor transcript.
+- **Thinking as effort.** Pi thinking levels map to ACP effort (low..max; off and minimal are not offered). A new session sets effort after the set-model readback and confirms the driver's answer; a reused session re-sets only on change, and the operator sees `[acp: effort <v> read back]`. No level or an unmapped one rejects as `acp-thinking-level-unsupported`. A readback is not evidence of speed or depth.
+- **Cancel.** An abort while a reused session waits for a changed effort's answer now settles at once, sends no prompt and drops the session (previously it waited up to the 30 s bootstrap bound). After a cancelled turn settles, the operator sees whether the ACP session continues or the next message opens a new one. A rebuilt transcript that follows an aborted assistant turn carries one cause-neutral status line: the turn was cut, actions may already have taken effect, and cancellation is not rollback.
+- **Late updates.** A reused session installs its turn's update handler only when its own prompt goes out, so a late update from the previous, cancelled turn is no longer sealed as the new turn's answer. Inside the prompt window `session/update` carries no turn id, so that part still rests on the adapter.
+- **Not measured.** An ESC during text streaming, Edit/Write effects of a cancelled turn, a real keypress or wire cancel frame, n>1 cancel trials, and canonical resume after a restart.
+
+### Fresh-call tool names on ACP Claude (D1)
+
+A pi sibling opened by `entwurf_fresh_call` on a curated ACP Claude model (`entwurf/claude-*`) runs its turns inside the Claude Agent SDK and sees the bridge as `mcp__entwurf-bridge__*`, but its first-turn framing named Pi's `mcp__entwurf_bridge__*` spelling. The framing now takes the launch model and names the Claude spelling for exactly those ids; the load hint stays absent. Thinking-suffixed or fuzzy ACP ids are already refused at the dispatch root (#128). Cortex rows keep the Pi spelling because their spelling is unmeasured on this host. Found in the ACP Sonnet interview of the VERIFY walk; a LIVE fresh call on `entwurf/claude-sonnet-5-5` (n=1) called back through `mcp__entwurf-bridge__entwurf_callback`, and its first user message carried only the Claude spelling.
+
+### Verification documents
+
+- `VERIFY.md` opens with Part I, the self-run walk an ACP session executes on itself (closed allow list, turn map, examiner re-measure list), ahead of the release floors in Part II and history in the appendix. Its first run (ACP Opus 5.5, n=1) passed every measured turn with no blocker; effort, ESC and gate turns were not measured.
+- `BASELINE.md` opens with the core interview (Q-B0 and Q-B0-CARRIER) and its grading; dated #147/#157 host receipts moved to `docs/baseline-receipts.md`.
+- The reuse documentation says that only a resident pi (`entwurf pi`, `--entwurf-control`) reuses an ACP session; plain `pi` and `pi -p` are turn-scoped.
+
+### Herdr preparation
+
+An npm lock must name the checkout's own package version, so while 0.53.0 is unpublished `runtime-lock.json` returns to the closed `herdr-checkout` verification carrier, as in the 0.52.0 preparation. No npm 0.53.0 bytes or integrity are invented and the plugin manifest version is unchanged. The last published npm pin is 0.52.0; a re-pin to measured npm 0.53.0 bytes is separate work after publication. Moving an npm-activated host to the checkout source requires explicit deactivate first.
+
+### Release evidence
+
+- Pre-version checkpoint: `234a92a`, push run 43390591770, all four required jobs success (`check`, `install-surface`, `artifact-consumer`, `macos-install-surface`).
+- #142 branch checkpoints carry their own frozen FULL and affected PARTIAL results in their commit bodies (`90b5168`, `ac087af`, `6059fe6`, `28f1dd8`); those bind their own trees, not this SHA.
+- P4 (deterministic floor): the candidate (HEAD `234a92a` plus the release edits and the reuse-smoke fix later committed as `1950815`, seal `d05cafb932a2d12b`) took `pnpm run check:full` r3, 971s, exit 0, seal unchanged. r1 was RED at `check-herdr-plugin-build` (`runtime-lock-incoherent`: the Herdr lock still pinned npm 0.52.0 against package 0.53.0) and was repaired by the Herdr preparation above; r2 passed before the smoke fix moved the tree. The managed bridge rebuild produced a byte-identical dist.
+- P5 (LIVE `release-gate --cut`), r2 on the same seal, 2026-11-13: MUST 22 PASS / 1 FAIL / 1 SKIP, BEHAVIOR 1 PASS / 0 FAIL / 0 SKIP; `cut: BLOCKED`. Log SHA-256 `e3666d1eb9529c602c031c9584b2e4f3aa4055452d96007b92cd6bc6024ec64d`.
+  - FAIL `smoke-mux-lifecycle-live`: the Claude Code sibling it opened showed `API Error: 403 Attention Required! | Cloudflare` on its first turn and never called back; a vendor-side refusal, not an Entwurf defect. Re-measured standalone on the same seal: 86 checks passed, including the pi-on-ACP lane (exact callback, live send, live-resume refusal, same-id visible resume and recall). Log SHA-256 `e8b8b2b356096e7b4aae80204925139011bcf08d9f62075015d93eb2682d13b5`.
+  - SKIP `smoke-codex-fresh-live`: GLG chose not to supply the operator-owned Codex app-server pid and models for this cut, so the Codex fresh-call MUST step is unmeasured for 0.53.0. `--cut` reads that skip as a blocker; this release proceeds on GLG's decision and claims no Codex LIVE acceptance.
+  - r1 (earlier seal, 2026-11-13) was MUST 21 PASS / 2 FAIL / 1 SKIP. `smoke-acp-session-reuse-live` failed because the smoke called the backend with no thinking level and no registered `thinkingLevelMap`, which #142 refuses by design; fixed in `1950815` and passed in r2. `smoke-entwurf-chain-live` failed because its GPT hop (`openai-codex/gpt-5.6-luna`) transcribed the next citizen's garden id with one character missing and the decider refused it; no code changed, and it passed in r2. Gates that make a model copy a garden id by hand will occasionally go red this way. r1 log SHA-256 `0e18ea65404cda23de28f97a34f78f6db84820ce828313688766e80b5048af69`.
+- P9 after P5: five `check-probe-ordering` roots reclaimed (176K). One reparented `/tmp` process, a pre-existing Emacs daemon from November 9. About 64 roots each of `mux-resume-call-pd`, `herdr-resume-pd-*` and `herdr-resume-call` remain; they come from the beside-behaviour `*resume-call.test.ts` files, outside the P9 owned-prefix scan. They are recorded, not deleted.
+- Windows carrier and final artifact: produced and accepted in make (M3w) after green exact prepared-SHA CI.
+- Kill-power re-measured at this shipped SHA: none (all 1532 committed claims not re-proved, #144).
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head 7efa53565a4e surface 65eb09de0814 -- ["bash","run.sh","check-mux-fresh-call"] 162/162 receipt db6a288bf8b0
+
 ## v2026.11.12-herdr.0.52.0 — Herdr npm runtime snapshot
 
 This Herdr plugin snapshot pins the published `@junghanacs/entwurf@0.52.0` runtime and its measured npm sha512; it is not a new core release. The plugin manifest version remains independent of the runtime. A host switching from the checkout carrier to npm must explicitly deactivate before reinstalling; a settled npm-source host follows the existing rebind conditions. No operating host is switched automatically.
