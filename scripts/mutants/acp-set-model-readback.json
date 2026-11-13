@@ -171,6 +171,19 @@
 			"timeoutSeconds": 60,
 			"signature": "[QK:ACP-REBUILD-ABORTED-EMPTY]",
 			"signatureSource": "pi-extensions/lib/acp/context.test.ts"
+		},
+		{
+			"claim": "ACP-REUSE-LATE-UPDATE-PRE-PROMPT",
+			"title": "a reuse turn routes the live session's updates to its stream before its own prompt is sent — a late update of the previous, cancelled turn arriving during the effort set is shown and sealed as this turn's answer",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": ["\t\t\tpushAcpLifecycleNotice(state, \"reusing live session\");\n\t\t\tsession.busy = true;"],
+			"replace": [
+				"\t\t\tpushAcpLifecycleNotice(state, \"reusing live session\");\n\t\t\tsession.busy = true;\n\t\t\tsession.activePromptHandler = makePromptHandler(session);"
+			],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-REUSE-LATE-UPDATE-PRE-PROMPT]",
+			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
 		}
 	]
 }

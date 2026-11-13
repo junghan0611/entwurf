@@ -342,51 +342,61 @@ function makeFakeChild(): AcpChildLike {
 /** One backend world. `log` records every wire call in order: `set:<configId>=<value>` and `prompt`. */
 function makeWorld(
 	effortAnswer: (value: string) => string = (value) => value,
-	effortGate?: { hold: boolean; waiting?: () => void },
+	effortGate?: { hold: boolean; waiting?: () => void; release?: () => void },
 	promptGate?: { hold: boolean; waiting?: () => void },
 ) {
 	const sessionDir = mkdtempSync(join(SANDBOX, "records-"));
 	const children: AcpChildLike[] = [];
 	const log: string[] = [];
 	let pendingPrompt: (() => void) | undefined;
+	// The connection handlers the backend registered — the producer side of session/update.
+	let handlers: Parameters<AcpTurnDeps["createConnection"]>[1] | undefined;
+	const hooks: { onPrompt?: () => void } = {};
 	const deps: AcpTurnDeps = {
 		spawnChild: () => {
 			const child = makeFakeChild();
 			children.push(child);
 			return child;
 		},
-		createConnection: () => ({
-			initialize: async () => ({}),
-			newSession: async () => ({ sessionId: `ACP-${children.length}` }),
-			setSessionConfigOption: async (p: any) => {
-				log.push(`set:${p.configId}=${p.value}`);
-				// A driver that never answers the effort set — the window an abort can land in.
-				if (p.configId === "effort" && effortGate?.hold) {
-					effortGate.waiting?.();
-					return new Promise(() => {});
-				}
-				return p.configId === "effort"
-					? { configOptions: [{ id: "effort", currentValue: effortAnswer(p.value) }] }
-					: { configOptions: [{ id: "model", currentValue: p.value }] };
-			},
-			prompt: async (): Promise<AcpPromptResponse> => {
-				log.push("prompt");
-				if (promptGate?.hold) {
-					// A running turn that the agent ends itself once it receives session/cancel.
-					return new Promise((resolve) => {
-						pendingPrompt = () => resolve({ stopReason: "cancelled" });
-						promptGate.waiting?.();
-					});
-				}
-				return { stopReason: "end_turn" };
-			},
-			cancel: () => {
-				log.push("cancel");
-				pendingPrompt?.();
-				pendingPrompt = undefined;
-			},
-			close: () => {},
-		}),
+		createConnection: (_child, registered) => {
+			handlers = registered;
+			return {
+				initialize: async () => ({}),
+				newSession: async () => ({ sessionId: `ACP-${children.length}` }),
+				setSessionConfigOption: async (p: any) => {
+					log.push(`set:${p.configId}=${p.value}`);
+					// A driver that never answers the effort set — the window an abort can land in.
+					if (p.configId === "effort" && effortGate?.hold) {
+						// Unanswered unless the test releases it; the answer then echoes the requested value.
+						return new Promise((resolve) => {
+							effortGate.release = () => resolve({ configOptions: [{ id: "effort", currentValue: p.value }] });
+							effortGate.waiting?.();
+						});
+					}
+					return p.configId === "effort"
+						? { configOptions: [{ id: "effort", currentValue: effortAnswer(p.value) }] }
+						: { configOptions: [{ id: "model", currentValue: p.value }] };
+				},
+				prompt: async (): Promise<AcpPromptResponse> => {
+					log.push("prompt");
+					if (promptGate?.hold) {
+						// A running turn that the agent ends itself once it receives session/cancel.
+						return new Promise((resolve) => {
+							pendingPrompt = () => resolve({ stopReason: "cancelled" });
+							promptGate.waiting?.();
+						});
+					}
+					hooks.onPrompt?.();
+					return { stopReason: "end_turn" };
+				},
+				cancel: () => {
+					log.push("cancel");
+					pendingPrompt?.();
+					pendingPrompt = undefined;
+				},
+				close: () => {},
+			};
+		},
 		lifecyclePolicy: () => "process-scoped",
 		loadConfig: (cwd, modelId, adapter) =>
 			config.resolveProviderConfig({
@@ -400,7 +410,10 @@ function makeWorld(
 		sessionDir,
 		abortGraceMs: 40,
 	};
-	return { deps, children, log };
+	/** The agent speaks on the live session, whoever the backend currently routes that to. */
+	const agentSays = (update: Record<string, unknown>) =>
+		void handlers?.sessionUpdate({ sessionId: `ACP-${children.length}`, update } as never);
+	return { deps, children, log, agentSays, hooks };
 }
 
 async function runTurn(
@@ -615,5 +628,65 @@ describe("streamAcpTurn — what a cancel leaves, told to the operator (#142)", 
 			expect(text).not.toContain(backend.ACP_CANCEL_KEPT_NOTICE);
 			expect(text).not.toContain(backend.ACP_CANCEL_CLOSED_NOTICE);
 		}
+	});
+});
+
+describe("streamAcpTurn — a reuse turn's stream opens with its own prompt (#142)", () => {
+	const lateChunk = { sessionUpdate: "agent_message_chunk", content: { type: "text", text: "LATE-A" } };
+	const lateUsage = { sessionUpdate: "usage_update", used: 777_777, size: 1_000_000 };
+
+	async function turnB(world: ReturnType<typeof makeWorld>, sessionId: string) {
+		let shown = "";
+		const sealed: AssistantMessageEvent[] = [];
+		const opts = { sessionId, reasoning: "low" } as Parameters<typeof backend.streamAcpTurn>[2];
+		for await (const event of backend.streamAcpTurn(
+			sonnet(),
+			transcript("first", "second", "third"),
+			opts,
+			world.deps,
+		)) {
+			if (event.type === "text_delta") shown += event.delta;
+			if (event.type === "done" || event.type === "error") sealed.push(event);
+		}
+		expect(sealed).toHaveLength(1);
+		if (sealed[0].type !== "done") throw new Error(`turn B did not complete: ${errorText(sealed[0])}`);
+		return { shown, message: sealed[0].message };
+	}
+
+	it("[QK:ACP-REUSE-LATE-UPDATE-PRE-PROMPT] an update arriving while turn B sets effort, before B's prompt is sent, is never shown or sealed as B's", async () => {
+		const effortGate: { hold: boolean; waiting?: () => void; release?: () => void } = { hold: false };
+		const promptGate: { hold: boolean; waiting?: () => void } = { hold: false };
+		const world = makeWorld(undefined, effortGate, promptGate);
+		await runTurn(world, transcript("first"), "late-pre", "high");
+		const { shown: a } = await abortedTurn(world, promptGate, transcript("first", "second"), "late-pre");
+		expect(a).toContain(backend.ACP_CANCEL_KEPT_NOTICE);
+		// A producer that keeps speaking for the cancelled turn A after answering it — here while B waits on its effort set.
+		effortGate.hold = true;
+		effortGate.waiting = () => {
+			world.agentSays(lateChunk);
+			world.agentSays(lateUsage);
+			queueMicrotask(() => effortGate.release?.());
+		};
+		const { shown, message } = await turnB(world, "late-pre");
+		expect(world.log.slice(-2)).toEqual(["set:effort=low", "prompt"]);
+		expect(shown).not.toContain("LATE-A");
+		expect(JSON.stringify(message.content)).not.toContain("LATE-A");
+		expect(message.usage.totalTokens).not.toBe(777_777);
+		expect(world.children).toHaveLength(1);
+	});
+
+	it("turn B's own output, once its prompt is out, still reaches its stream and its seal", async () => {
+		const effortGate: { hold: boolean; waiting?: () => void; release?: () => void } = { hold: false };
+		const world = makeWorld(undefined, effortGate);
+		await runTurn(world, transcript("first", "second"), "late-own", "high");
+		world.hooks.onPrompt = () => {
+			world.agentSays({ sessionUpdate: "agent_message_chunk", content: { type: "text", text: "B-OWN" } });
+			world.agentSays(lateUsage);
+		};
+		const { shown, message } = await turnB(world, "late-own");
+		expect(shown).toContain("B-OWN");
+		// Reached the seal at all; the occupancy rule itself is check-acp-usage-accounting's.
+		expect(message.usage.totalTokens).toBeGreaterThan(0);
+		expect(world.children).toHaveLength(1);
 	});
 });

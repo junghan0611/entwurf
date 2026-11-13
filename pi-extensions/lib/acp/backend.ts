@@ -2047,7 +2047,6 @@ export function streamAcpTurn(
 			// resident turn looks identical to a cold start that stalled.
 			pushAcpLifecycleNotice(state, "reusing live session");
 			session.busy = true;
-			session.activePromptHandler = makePromptHandler(session);
 
 			// #142: a changed thinking level is set on THIS live session, before the delta is sent; the
 			// conversation is kept. A refused or mismatched answer fails the turn before the prompt and
@@ -2082,6 +2081,12 @@ export function streamAcpTurn(
 			// ahead of the wire write; the prompt driver then owns the abort surface.
 			const wireParams = await applyProviderPayloadHook(options, { sessionId: session.acpSessionId, prompt }, model);
 			if (signal?.aborted) throw new Error("aborted during payload hook");
+			// #142: this turn's stream receives updates only from the moment its own prompt goes out.
+			// Before that, nothing on this live session can be this turn's output — a late update of
+			// the previous (cancelled) turn arriving during the effort set would otherwise be shown as
+			// this turn's answer. Inside the prompt window the wire carries no turn id; that part
+			// rests on the agent not speaking for a turn it already answered.
+			session.activePromptHandler = makePromptHandler(session);
 			phase = "prompt";
 			const promptResult = await awaitAcpPromptTurn(session, wireParams, {
 				signal,
