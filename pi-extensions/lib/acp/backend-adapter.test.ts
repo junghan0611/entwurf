@@ -27,8 +27,8 @@ describe("ACP launch env — claude foreground-only", () => {
 		});
 	});
 
-	it("cortex launches with no such switch — the claude contract does not leak into another backend", () => {
-		expect(cortexAdapter.launchEnvDefaults()).toEqual({});
+	it("the disabled Cortex adapter refuses its launch environment", () => {
+		expect(() => cortexAdapter.launchEnvDefaults()).toThrow(/cortex-acp-disabled/);
 	});
 });
 
@@ -84,8 +84,7 @@ describe("ACP prompt rejection — claude-only capability", () => {
 			expect(named?.verdict).toBe(INCOMPLETE_TOOL_CALL_VERDICT);
 		}
 
-		// Structural only: cortex declares no reader, so backend.ts keeps its old path for every
-		// cortex failure. No cortex runtime or LIVE behaviour is certified here.
+		// The disabled Cortex stub declares no vendor-rejection reader.
 		expect("readPromptRejection" in cortexAdapter).toBe(false);
 	});
 });

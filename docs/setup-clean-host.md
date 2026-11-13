@@ -42,7 +42,6 @@ The older package, `0.50.0`, ships the Pi 1.4.0 SDK set and requires a Pi 1.4.x 
 | OMP (`omp`) | optional-by-presence, operator-installed — absent is an explicit setup SKIP; detected composes all four units (birth/MCP/`tools.xdev` setting/receiver) | self-fetch citizen and visible fresh (accepted on one host — see §4b) |
 | Antigravity `agy` | optional, operator-installed and authenticated | legacy citizen; native push paused (#152) |
 | OpenAI Codex CLI | optional-by-presence, operator-installed and authenticated; detected composes all four operator-owned units (birth/MCP/status-line/terminal-title) and stays non-green until the operator trusts the birth declaration once in a visible Codex; visible fresh also requires the operator-owned app-server, started with `entwurf codex-app-server` in a tmux session of the operator's choosing (#95 D1 retired the fixed `codex` home) | native-push and visible fresh, supported in 0.21.0 |
-| Cortex Code | optional, operator-installed and authenticated | Cortex ACP backend |
 
 Claude Code >=2.1.306 is required for the managed exec-hook lifecycle and same-id resume. The package
 never supplies or proxies backend credentials.
@@ -118,7 +117,7 @@ same scope when upgrading and checking; native process restarts are separate (§
 lists the nine garden tools (0.52.0); it does not prove a backend model turn, native hook or retirement permission.
 
 Neither npm form installs a harness runtime. `pi`, Claude Code, Copilot CLI, Codex CLI, agy,
-Cortex, and their authentication remain operator-owned optional prerequisites for the
+and their authentication remain operator-owned optional prerequisites for the
 integrations that use them; all may be absent on an Entwurf-only host. A source checkout's
 pinned Pi development packages are for building and testing this repo, not a transitive product installation promise.
 
@@ -1076,7 +1075,7 @@ LIVE=1 AGY_CONVERSATION_ID=<id> entwurf smoke-agy-native-push-live
 
 ACP turns are CERTIFIED on Linux; on macOS they are NOT CERTIFIED —
 pending physical host. Mux (visible fresh / resume) is the same state.
-A CI runner has no Claude or Cortex login.
+A CI runner has no Claude login.
 
 Claude uses the operator's existing local Claude authentication:
 
@@ -1084,16 +1083,10 @@ Claude uses the operator's existing local Claude authentication:
 LIVE=1 entwurf smoke-acp-provider-live
 ```
 
-Cortex requires an authenticated `cortex` CLI and an explicit connection. Keep
-`CORTEX_HOME` unset; the adapter refuses its presence because it bypasses containment.
-
-```bash
-LIVE=1 ENTWURF_ACP_CORTEX_CONNECTION=<conn> \
-  entwurf smoke-acp-cortex-live
-```
-
-The aggregate release gate is Claude-backed and does not run Cortex automatically.
-Its silence is not a Cortex PASS.
+Cortex ACP is disabled. Existing Cortex configuration and credentials are not modified.
+Entwurf fresh/resume exact admission refuses retired Cortex ids; the ACP adapter also
+refuses a Cortex id that reaches it, without a Claude fallback. Pi's own direct `--model`
+fuzzy selection precedes that adapter; its result for a typed retired id is unmeasured here.
 
 ### Backend prerequisites and resolver
 
@@ -1106,11 +1099,9 @@ operator-installed Claude runtime. Resolution order:
 3. `PATH:claude-agent-acp` fallback if package resolution fails.
 
 The curated Claude ids are `claude-opus-5-5`, `claude-sonnet-5-5`,
-`claude-fable-5-1`, and `claude-fable-5-2`. Cortex exposes `cortex-auto`, `cortex-claude-opus-5`,
-`cortex-claude-sonnet-5`, and `cortex-openai-gpt-5.4`.
-`entwurfProvider.cortexConnection` or `ENTWURF_ACP_CORTEX_CONNECTION` selects
-an authenticated connection; the env override wins. Codex and Antigravity are
-native-push citizens (§4c/§5), not ACP backends.
+`claude-fable-5-1`, and `claude-fable-5-2`. Cortex ACP is disabled; a legacy
+`entwurfProvider.cortexConnection` does not select a backend or block Claude.
+Codex and Antigravity are native-push citizens (§4c/§5), not ACP backends.
 
 ### Settings reference and backend-specific keys
 
@@ -1145,15 +1136,11 @@ retired bundled `session-bridge` entry. It is not a general MCP catalog.
 user augment. Large Claude `_meta.systemPrompt` carriers can route OAuth sessions
 to metered “extra usage” billing.
 
-`entwurfProvider` is one block, not a promise that every key shapes both backends.
 `tools`, `permissionAllow`, `disallowedTools`, `settingSources`, `skillPlugins`
-and `appendSystemPrompt` are Claude's declaration surface, not Cortex's native
-tool surface. They still enter the config signature (and `tools` the common
-exclude-tools preflight), so editing them forces a fresh Cortex session.
-`cortexConnection` is Cortex-only; `mcpServers` reaches both through their own
-transports. `compaction` is a **top-level pi key**, not a backend knob. Unknown
-and retired keys are ignored; a wrong-backend key can fail silently, so check
-which backend consumes it before diagnosing bridge failure.
+and `appendSystemPrompt` are Claude's declaration surface. `mcpServers` carries
+explicit servers. `compaction` is a **top-level pi key**, not a backend knob.
+The retired `cortexConnection` key is not consumed by Claude and does not enable
+Cortex ACP; unknown and retired keys are ignored.
 
 ### Backend operation and containment
 
@@ -1168,12 +1155,8 @@ Read/Bash/Edit/Write; `Skill` is added for non-empty `skillPlugins`.
 The launch env sets `CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1`: vendor-managed
 background work is off, not arbitrary processes a command detaches itself.
 
-Cortex uses its native tools, session-private HOME / `SNOWFLAKE_HOME`, and private
-`cortex/mcp.json` projection because it ignores wire `mcpServers`. Only the bridge
-receives the real operator HOME needed for the garden store; `CORTEX_HOME` is
-refused, including an empty value, because it bypasses containment.
 [ACP backend rail — Shipped adapters](./acp-backend-rail.md#shipped-adapters)
-owns the exact overlay/carrier/backend mechanics and audit limits.
+owns the exact Claude overlay/carrier mechanics and audit limits.
 
 Entwurf owns no memory layer or memory DB, and no backend is another's memory
 authority. Operator semantic-memory / Denote tools remain host-native skills,
@@ -1234,8 +1217,7 @@ Bridge identity, pi context, `~/AGENTS.md`, cwd AGENTS and date/cwd ride a one-s
 first-user prepend (`pi-context-augment.ts`), not the system carrier. It removes
 duplicate cwd AGENTS already in `<project-context ...>`. Its descriptions do not
 grant tools: the actual callable schema is truth (`read` / `Read` / `exec_command`,
-MCP only when schema-visible). Cortex engraving rides this augment because it
-has no system-prompt carrier; Claude uses `_meta.systemPrompt`.
+MCP only when schema-visible). Claude uses `_meta.systemPrompt` for its engraving.
 
 ### Session reuse and compaction
 

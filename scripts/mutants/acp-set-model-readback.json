@@ -195,6 +195,63 @@
 			"timeoutSeconds": 60,
 			"signature": "[QK:ACP-ROWS-TEXT-ONLY-INPUT]",
 			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
+		},
+		{
+			"claim": "ACP-CORTEX-DISABLED",
+			"title": "a retired Cortex model loses its named refusal at the turn resolver",
+			"subject": "pi-extensions/lib/acp/backend-adapter.ts",
+			"find": ["if (modelId.toLowerCase().startsWith(CORTEX_MODEL_PREFIX)) {"],
+			"replace": ["if (false && modelId.toLowerCase().startsWith(CORTEX_MODEL_PREFIX)) {"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-CORTEX-DISABLED]",
+			"signatureSource": "pi-extensions/lib/acp/cortex-admission.test.ts"
+		},
+		{
+			"claim": "ACP-CORTEX-LEGACY-NOT-CURATED",
+			"title": "retired Cortex ids become accepted by the exact launch admission again",
+			"subject": "pi-extensions/lib/acp/model-ids.js",
+			"find": ["const CURATED_ACP_MODEL_IDS = new Set(SUPPORTED_ANTHROPIC_MODEL_IDS);"],
+			"replace": [
+				"const CURATED_ACP_MODEL_IDS = new Set([...SUPPORTED_ANTHROPIC_MODEL_IDS, ...LEGACY_CORTEX_MODEL_IDS]);"
+			],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-CORTEX-LEGACY-NOT-CURATED]",
+			"signatureSource": "pi-extensions/lib/acp/cortex-admission.test.ts"
+		},
+		{
+			"claim": "ACP-CORTEX-DIRECT-DISABLED",
+			"title": "the exported retired adapter can launch Cortex again",
+			"subject": "pi-extensions/lib/acp/backend-adapter.ts",
+			"find": ["\tresolveLaunch: cortexDisabled,"],
+			"replace": ["\tresolveLaunch: retiredCortexAdapter.resolveLaunch,"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-CORTEX-DIRECT-DISABLED]",
+			"signatureSource": "pi-extensions/lib/acp/cortex-admission.test.ts"
+		},
+		{
+			"claim": "ACP-CORTEX-CONFIG-DISABLED",
+			"title": "an explicit Cortex backend selection reaches Claude instead of the named disabled refusal",
+			"subject": "pi-extensions/lib/acp/backend-adapter.ts",
+			"find": ["if (backend?.toLowerCase() === \"cortex\") cortexDisabled();"],
+			"replace": ["if (false && backend?.toLowerCase() === \"cortex\") cortexDisabled();"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-CORTEX-CONFIG-DISABLED]",
+			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
+		},
+		{
+			"claim": "ACP-CORTEX-TURN-DISABLED",
+			"title": "the production turn resolver falls back to Claude instead of refusing a Cortex model",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": ["({ adapter, nativeModelId } = resolveAcpBackendAdapter(model.id));"],
+			"replace": ["({ adapter, nativeModelId } = resolveAcpBackendAdapter(\"claude-opus-5-5\"));"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-CORTEX-TURN-DISABLED]",
+			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
 		}
 	]
 }

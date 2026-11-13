@@ -12,12 +12,9 @@
 // would need a `.ts` specifier the root config cannot allow.
 //
 // WHY THE LAUNCH SEAMS ASK AT ALL. Pi's `--model` resolver falls back to a
-// case-insensitive substring match among the provider's rows and prefers the
-// lexically later id. Under one `entwurf` provider a retired `claude-sonnet-5`
-// is a substring of `cortex-claude-sonnet-5`, so a launch Entwurf builds would
-// silently open on the Snowflake Cortex rail instead of the Claude subscription.
-// An exact match against this list is the only admission; nothing is aliased,
-// substituted or rewritten.
+// case-insensitive substring match among provider rows. The old multi-backend
+// surface could silently match a retired Claude id to a Cortex row. Cortex is
+// now disabled; exact membership remains the admission, with no substitution.
 
 /** The single ACP provider id under which every curated row is registered. */
 export const PROVIDER_ID = "entwurf";
@@ -34,10 +31,10 @@ export const SUPPORTED_ANTHROPIC_MODEL_IDS = /** @type {const} */ ([
 /** The anchor model whose absence is a hard registry regression, not a soft skip. */
 export const CURATED_ANCHOR_MODEL_ID = "claude-opus-5-5";
 
-// Cortex ids carry the reserved `cortex-` prefix; the rest of each id is the
-// Snowflake-native model name, which is why Cortex still says `claude-opus-5`.
+// These former IDs are retained only as historical refusal inputs. The prefix
+// is reserved so a disabled Cortex request never falls through to Claude.
 export const CORTEX_MODEL_PREFIX = "cortex-";
-export const SUPPORTED_CORTEX_MODEL_IDS = /** @type {const} */ ([
+export const LEGACY_CORTEX_MODEL_IDS = /** @type {const} */ ([
 	"cortex-auto",
 	"cortex-claude-opus-5",
 	"cortex-claude-sonnet-5",
@@ -45,7 +42,7 @@ export const SUPPORTED_CORTEX_MODEL_IDS = /** @type {const} */ ([
 ]);
 
 /** @type {ReadonlySet<string>} */
-const CURATED_ACP_MODEL_IDS = new Set([...SUPPORTED_ANTHROPIC_MODEL_IDS, ...SUPPORTED_CORTEX_MODEL_IDS]);
+const CURATED_ACP_MODEL_IDS = new Set(SUPPORTED_ANTHROPIC_MODEL_IDS);
 
 /**
  * Exact membership only — no trim, no case folding, no prefix.
@@ -61,8 +58,7 @@ export const ACP_MODEL_NOT_CURATED = /** @type {const} */ ("acp-model-not-curate
 
 export const ACP_MODEL_NOT_CURATED_HINT =
 	`an ${PROVIDER_ID} model must be one exact curated ACP id (${[...CURATED_ACP_MODEL_IDS].join(", ")}); ` +
-	"Pi would otherwise pick another row by substring — a retired claude-sonnet-5 lands on cortex-claude-sonnet-5 — " +
-	"so nothing was opened, and nothing is aliased or rewritten";
+	"Cortex ACP is disabled; Pi may otherwise pick another row by substring, so nothing was opened and nothing is aliased or rewritten";
 
 /** Carries `reason` so callers match a FIELD, never the wording. */
 export class AcpModelNotCuratedError extends Error {

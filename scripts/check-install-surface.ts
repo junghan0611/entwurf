@@ -517,6 +517,12 @@ const operatorCmds = [...targets].filter(([cmd, ts]) => !isDevGate(cmd) && ts.le
 	const toolCountWord = ({ 9: "nine" } as Record<number, string>)[EXPECTED_TOOLS.length];
 	const literalAmendments: { old: string; next: string; receipt: string }[] = [
 		{
+			old: "claude-native-resume; Cortex stays a documented on-demand direct call",
+			next: "claude-native-resume; Cortex ACP is disabled",
+			receipt:
+				"run.sh smoke_acp_cortex_live refuses with cortex-acp-disabled before a probe; the other MUST axes are unchanged",
+		},
+		{
 			old: "EXACTLY the eight shipped garden verbs",
 			next: `EXACTLY the ${toolCountWord} shipped garden verbs`,
 			receipt:

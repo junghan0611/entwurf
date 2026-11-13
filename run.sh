@@ -1348,7 +1348,7 @@ check_acp_set_model_readback() {
   # and (#142) pi's thinking level reaches Claude effort, set and read back before the prompt;
   # and (#142) what a cancel leaves: the operator notice and the aborted-turn status in a rebuild.
   section "claude ACP set-model + effort readback (mutant execution coordinate)"
-  run_vitest pi-extensions/lib/acp/backend-adapter.test.ts pi-extensions/lib/acp/backend.thinking.test.ts pi-extensions/lib/acp/context.test.ts
+  run_vitest pi-extensions/lib/acp/backend-adapter.test.ts pi-extensions/lib/acp/backend.thinking.test.ts pi-extensions/lib/acp/context.test.ts pi-extensions/lib/acp/cortex-admission.test.ts
 }
 
 check_acp_vendor_rejection() {
@@ -1800,38 +1800,8 @@ smoke_acp_rgg_live() {
 }
 
 smoke_acp_cortex_live() {
-  # On-demand LIVE smoke for the Cortex (Snowflake Cortex Code) ACP backend — the
-  # first NON-claude adapter on the rail (docs/acp-backend-rail.md, Cortex audit). OUT of
-  # `pnpm check` AND OUTSIDE the claude-only aggregate LIVE floor (capability
-  # dignity, invariant #7): a host with no cortex install / no Snowflake auth must
-  # not redden a release for a backend it does not run, so this is deliberately
-  # absent from release-gate's 11-smoke ACP acceptance floor. That is a WIRING
-  # decision, not a lower evidence bar — a cut that SHIPS cortex still owes a
-  # deliberate run of this smoke, and the aggregate gate's silence is not a pass
-  # (ACP rail Cortex verification boundary). Drives one real
-  # cortex ACP turn through the entwurf provider path (outbound entwurf_v2 +
-  # dual-HOME overlay facts + process-group reclaim — CP2).
-  # HONEST-SKIP (protocol exit 97, never 0) when LIVE!=1 OR `cortex` is not on PATH OR no
-  # connection is pinned — the live turn needs `cortex` installed with the
-  # operator's own web-login auth already present (there is no `cortex auth`
-  # subcommand — CP0 D6), reached through the overlay's narrow credential
-  # symlinks — narrow in WHICH paths are reachable (D5), not read-only: a symlink
-  # carries no write protection (AGENTS §ACP Plugin Boundary: entwurf never
-  # provides/proxies the Snowflake credential). The connection must ride the adapter seam
-  # (ENTWURF_ACP_CORTEX_CONNECTION) because the dual-HOME overlay denies the
-  # operator settings.json where a default would live. PR #40 called this
-  # `smoke-cortex`; the canonical family name is smoke-acp-cortex-live.
-  #   LIVE=1 ENTWURF_ACP_CORTEX_CONNECTION=<conn> ./run.sh smoke-acp-cortex-live
-  entwurf_require_step_outcome
-  if [ "${LIVE:-}" != "1" ]; then
-    echo "[entwurf:skip] smoke-acp-cortex-live — set LIVE=1 (+ ENTWURF_ACP_CORTEX_CONNECTION) to run."
-    return "$ENTWURF_STEP_SKIP_EXIT"
-  fi
-  if ! command -v cortex >/dev/null 2>&1; then
-    echo "[entwurf:skip] smoke-acp-cortex-live — cortex not on PATH (install Snowflake Cortex Code and complete its own login flow)."
-    return "$ENTWURF_STEP_SKIP_EXIT"
-  fi
-  run_ts scripts/smoke-acp-cortex-live.ts
+  echo "[entwurf:cortex-acp-disabled] Cortex ACP is not supported; no live probe was started." >&2
+  return 2
 }
 
 smoke_entwurf_v2_matrix_live() {
@@ -3377,13 +3347,11 @@ check_acp_provider_surface() {
   # Deterministic gate for the ACP provider registration surface. Loads the REAL
   # provider lib modules AND compiles + drives the REAL entry against a fake pi,
   # asserting: one surface name, the no-auth sentinel shape, full
-  # ProviderModelConfig rows on the curated claude anchor, the EXACT curated model
-  # set both adapters contribute (claude 4 + cortex 4 —
-  # [QK:CORTEX-PROVIDER-EXACT-ROW-SURFACE], the claim that catches an entry which
-  # silently drops a whole backend), and that streamSimple is the real
+  # ProviderModelConfig rows on the curated Claude anchor, the exact Claude-only
+  # set [QK:ACP-PROVIDER-CLAUDE-ONLY], and that streamSimple is the real
   # streamShellAcp backend (checked BY NAME, never invoked — invoking spawns an
   # ACP child). Pure, no pi runtime, no API.
-  section "ACP provider surface (registration + both-adapter model set)"
+  section "ACP provider surface (registration + Claude-only model set)"
   run_ts scripts/check-acp-provider-surface.ts
 }
 
@@ -3711,30 +3679,10 @@ check_acp_carrier_augment() {
 }
 
 check_acp_cortex() {
-  # Deterministic gate for the Cortex (Snowflake Cortex Code) ACP backend — the
-  # first non-claude adapter on the rail, landed 0.13.0 on the CP0-measured
-  # contract (docs/acp-backend-rail.md, Cortex audit D1–D10). The cortex source is one
-  # `cortexAdapter` object (backend-adapter.ts) + its curated surface (models.ts)
-  # + the dual-HOME overlay (overlay.ts); the 결합 규칙 requires the gate to land
-  # WITH it, extending the check-acp-* family, so cortex's whole
-  # deterministic axis lives here. Locks (each Cortex-audit D-pinned): the GLG-decided
-  # 4-row curation rides real registry bases and the `cortex-` prefix routes to
-  # cortexAdapter; launch is `cortex acp serve` with NO -m — the model is
-  # enforced per turn via session/set_config_option with the native id (E);
-  # CORTEX_HOME presence (empty included) refuses the spawn (D3); the dual-HOME
-  # overlay isolates HOME+SNOWFLAKE_HOME per session key (P0-1: scope =
-  # backend-passed resolveSessionKey, never ambient), passes through only
-  # connections.toml / optional config.toml / credential_cache (D5/F — never the
-  # whole cache, never skills; symlink-through, no copies — AGENTS §ACP Plugin
-  # Boundary), authors autoUpdate:false (D4), and projects envelope-enriched
-  # explicit servers into cortex/mcp.json with the real HOME restored on
-  # entwurf-bridge alone (D9/D10), non-stdio failing loud; the
-  # CORTEX_ACP_COMMAND override single-quotes shell-metachar connection tokens.
-  # The gate self-manages the tsc-emit layer for the .js-suffixed backend-adapter
-  # imports; no auth, no spawn, no live cortex needed. Kill-qualified via the
-  # `acp-cortex` mutant lane under check-gate-qualification.
-  section "ACP cortex backend (Snowflake Cortex Code — 1st non-claude adapter)"
-  run_ts scripts/check-acp-cortex.ts
+  # The old positive Cortex adapter contract is retired. Exercise the production
+  # admission and direct adapter refusal without launching a vendor process.
+  section "ACP Cortex disabled admission"
+  run_vitest pi-extensions/lib/acp/cortex-admission.test.ts
 }
 
 check_pack() {
@@ -5285,17 +5233,9 @@ _check_pack_install_impl() {
     echo "$loader_out" | tail -10 | sed 's/^/    /' >&2
     return 1
   fi
-  # Verify the EXACT curated surface the installed package registers — both
-  # backends (claude 2 rows + cortex 4 rows = 6), as a SET, not as anchors.
-  #
-  # Why exact-set and not `grep -q <id>`: the cortex ids CONTAIN the claude ids
-  # as substrings (`cortex-claude-sonnet-5` matches a bare `claude-sonnet-5`
-  # grep), so a substring probe could go green on a surface that dropped every
-  # unprefixed Claude row. And an anchor-only probe cannot see a MISSING cortex
-  # row at all — that is exactly the installed-consumer gap this assertion
-  # closes: the source-side sets are pinned by check-acp-cortex /
-  # check-acp-provider-surface, but only THIS gate proves the ids survive the
-  # pack → install → pi-loader path into a real consumer's model list.
+  # Verify the EXACT supported surface the installed package registers: four
+  # Claude rows, no retired Cortex row. A substring probe cannot prove absence.
+  # This gate joins the source admission to pack → install → real Pi loader.
   #
   # Parse rows whose FIRST field is the provider `entwurf` (pi prints a
   # `provider model context …` table; the header row's first field is
@@ -5306,13 +5246,9 @@ _check_pack_install_impl() {
     claude-fable-5-1 \
     claude-fable-5-2 \
     claude-opus-5-5 \
-    claude-sonnet-5-5 \
-    cortex-auto \
-    cortex-claude-opus-5 \
-    cortex-claude-sonnet-5 \
-    cortex-openai-gpt-5.4 | LC_ALL=C sort)
+    claude-sonnet-5-5 | LC_ALL=C sort)
   if [ "$loader_ids" != "$loader_expected" ]; then
-    fail "[check-pack-install] installed provider model set drifted — expected exactly 8 curated ids (claude 4 + cortex 4):"
+    fail "[check-pack-install] installed provider model set drifted — expected exactly 4 Claude ids and no Cortex ids:"
     echo "  expected:" >&2
     echo "$loader_expected" | sed 's/^/    /' >&2
     echo "  actual (entwurf rows):" >&2
@@ -5324,7 +5260,7 @@ _check_pack_install_impl() {
   # Name the set on SUCCESS too, not only in the failure branch — same principle as
   # the pinned-pi version assert above: a gate that cannot name what it proved has
   # proved nothing, and a row COUNT without the ids cannot be audited from a CI log.
-  echo "[check-pack-install] pi loader smoke pass (entwurf registered; exact curated set: claude 4 + cortex 4):"
+  echo "[check-pack-install] pi loader smoke pass (entwurf registered; exact curated set: 4 Claude ids, no Cortex):"
   echo "$loader_ids" | sed 's/^/    /'
 
   # npm-managed neutral install regression — the README's PRIMARY install path is
@@ -7635,10 +7571,8 @@ release_gate() {
   #     green cut said nothing about them. Under the P1 outcome protocol wiring
   #     them costs nothing on a host that cannot run them — they SKIP honestly and
   #     `--cut` names the missing prerequisite — while a host that CAN run them now
-  #     must. Cortex is deliberately NOT here: its rail needs an external Snowflake
-  #     connection the HOST owns, so wiring it would block every cut taken without
-  #     that account; it stays a required DIRECT call for a Cortex-rail cut instead
-  #     (VERIFY 「Cortex is an on-demand axis」). Same for `smoke-acp-long-turn-live`,
+  #     must. Cortex ACP is disabled; its former direct smoke now refuses without
+  #     starting a probe. The excluded `smoke-acp-long-turn-live`,
   #     `smoke-agy-native-push-live` and `smoke-acp-ordering-probe-live`: >12min by
   #     construction, no aggregate-owned agy conversation id, and an opt-in instrument
   #     rather than acceptance. check-release-gate-outcomes pins that every LIVE smoke

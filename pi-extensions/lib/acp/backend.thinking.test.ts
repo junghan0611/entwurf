@@ -19,7 +19,7 @@
  * point into a temp dir BEFORE the dynamic import.
  */
 
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { RequestError } from "@agentclientprotocol/sdk";
@@ -272,12 +272,10 @@ describe("level → effort resolution and readback (#142)", () => {
 		assertNoReplay(err.message);
 	});
 
-	it("cortex declares no thinking capability, so its turns keep their old behaviour", () => {
+	it("disabled Cortex exposes no models or thinking capability", () => {
 		expect(adapters.cortexAdapter.resolveThinking).toBeUndefined();
 		expect(adapters.cortexAdapter.enforceThinking).toBeUndefined();
-		for (const row of models.curatedCortexModels()) {
-			expect((row as { thinkingLevelMap?: unknown }).thinkingLevelMap, row.id).toBeUndefined();
-		}
+		expect(models.curatedCortexModels()).toEqual([]);
 	});
 });
 
@@ -483,6 +481,45 @@ async function reuseAbortDuringEffort(sessionId: string, deferAbort: boolean): P
 	expect(world.children).toHaveLength(2);
 	expect(world.log.slice(4)).toEqual(["set:model=claude-sonnet-5-5", "set:effort=low", "prompt"]);
 }
+
+describe("streamAcpTurn — disabled Cortex configuration", () => {
+	it("[QK:ACP-CORTEX-TURN-DISABLED] refuses a retired model before spawning a child", async () => {
+		const world = makeWorld();
+		const events: AssistantMessageEvent[] = [];
+		const retired = { ...sonnet(), id: "cortex-auto" };
+		for await (const event of backend.streamAcpTurn(
+			retired,
+			transcript("hello"),
+			{ sessionId: "retired", reasoning: "low" },
+			world.deps,
+		))
+			events.push(event);
+		const sealed = events.find((event) => event.type === "error");
+		expect(sealed && errorText(sealed)).toContain("cortex-acp-disabled");
+		expect(world.children).toHaveLength(0);
+	});
+
+	it("[QK:ACP-CORTEX-CONFIG-DISABLED] rejects an explicitly selected Cortex backend before spawn while an inert legacy connection leaves Claude usable", async () => {
+		const path = join(SANDBOX, "legacy-cortex-settings.json");
+		const world = makeWorld();
+		world.deps.loadConfig = (cwd, modelId, adapter) =>
+			config.resolveProviderConfig({
+				cwd,
+				modelId,
+				adapter,
+				globalSettingsPath: path,
+				projectSettingsPath: join(SANDBOX, "absent-cortex-project.json"),
+			});
+		writeFileSync(path, JSON.stringify({ entwurfProvider: { backend: "cortex", cortexConnection: "fixture" } }));
+		const refused = await runTurn(world, transcript("hello"), "config-refused", "low");
+		expect(errorText(refused)).toContain("cortex-acp-disabled");
+		expect(world.children).toHaveLength(0);
+		writeFileSync(path, JSON.stringify({ entwurfProvider: { cortexConnection: "fixture" } }));
+		const accepted = await runTurn(world, transcript("hello"), "config-claude", "low");
+		expect(accepted.type).toBe("done");
+		expect(world.children).toHaveLength(1);
+	});
+});
 
 describe("streamAcpTurn — effort on the live session (#142)", () => {
 	it("[QK:ACP-THINKING-NEW-SET] a new session sets the model, then the effort, then prompts", async () => {
@@ -692,7 +729,7 @@ describe("streamAcpTurn — a reuse turn's stream opens with its own prompt (#14
 });
 
 describe("ACP rows declare only the input the rail delivers (#142 landing review)", () => {
-	it("[QK:ACP-ROWS-TEXT-ONLY-INPUT] every curated ACP row, Claude and Cortex, declares text input only — an image reaches the backend as a marker, never as bytes", () => {
+	it("[QK:ACP-ROWS-TEXT-ONLY-INPUT] every supported ACP row declares text input only — an image block becomes a marker, never raw bytes", () => {
 		const rows = adapters.allCuratedModels();
 		expect(rows.length).toBeGreaterThan(0);
 		for (const row of rows) expect(row.input, row.id).toEqual(["text"]);

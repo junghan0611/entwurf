@@ -16,15 +16,10 @@
 //
 // The COMMON keys parsed here are Claude-SHAPED by origin (tools / permissionAllow /
 // disallowedTools / settingSources / skillPlugins are claude-agent-acp's surface).
-// What varies per backend is whether they are PROJECTED ONTO THE BACKEND SESSION —
-// not whether they are read at all. Cortex runs native tools and reaches MCP through
-// its own overlay mcp.json projection, so none of those keys shape a cortex session;
-// they nonetheless stay live on the common path, where backend.ts reads `tools` for
-// the backend-invariant exclude-tools preflight and folds every one of them into
-// `bridgeConfigSignature` (so changing one still invalidates a reused cortex
-// session). Backend-OWNED settings never land here: they ride the opaque
-// `adapterSettings` seam (rail “Adapter contract”), which is what keeps a backend-named key like
-// `cortexConnection` off this common shape.
+// The common path reads `tools` for the backend-invariant exclude-tools preflight
+// and folds these keys into `bridgeConfigSignature`. Backend-owned settings ride
+// the opaque `adapterSettings` seam. A dormant `cortexConnection` does not select
+// or enable Cortex ACP, which is disabled.
 //
 // PURITY / SIGNATURE contract (NEXT oracle C / 핀1 / GPT `…2f9325` boost):
 //   - `normalizeMcpServers` is pure: a SORTED, validated server list + a sha256

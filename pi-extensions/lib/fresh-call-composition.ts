@@ -166,10 +166,9 @@ export const FRESH_CALL_TOOL_LOAD_HINT: Record<FreshCallBackend, readonly string
  *
  * Only an exact curated Anthropic id switches. A thinking suffix (`:high`) or fuzzy alias never
  * reaches here through the public verb: the dispatch root refuses any `entwurf/` id that is not
- * exactly curated (`isUncuratedEntwurfPiModel`, #128), and the test pins that alignment. A Cortex
- * row (`entwurf/cortex-*`) keeps the pi table: VERIFY §2.1 records the Claude-shaped identifier for
- * Cortex too, but this host cannot run Cortex and that spelling is unmeasured here, so this change
- * does not move it. The ACP id list arrives from `acp/model-ids.js`, an import-free module.
+ * exactly curated (`isUncuratedEntwurfPiModel`, #128), and the test pins that alignment. Retired
+ * Cortex ids are refused at the dispatch root before framing. The ACP id list arrives from
+ * `acp/model-ids.js`, an import-free module.
  */
 export function freshCallToolDialect(backend: FreshCallBackend, model: string): FreshCallBackend {
 	if (backend !== "pi") return backend;

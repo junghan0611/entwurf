@@ -31,8 +31,8 @@ import {
 	CORTEX_MODEL_PREFIX,
 	curatedClaudeModels,
 	curatedCortexModels,
+	LEGACY_CORTEX_MODEL_IDS,
 	SUPPORTED_ANTHROPIC_MODEL_IDS,
-	SUPPORTED_CORTEX_MODEL_IDS,
 } from "./models.js";
 import { claudeLaunchEnvDefaults, ensureClaudeConfigOverlay, ensureCortexDualHomeOverlay } from "./overlay.js";
 import { buildClaudeSessionMeta } from "./tool-surface.js";
@@ -583,17 +583,11 @@ export const claudeAdapter: AcpBackendAdapter = {
 // Registry — modelId → adapter
 // ---------------------------------------------------------------------------
 
-/** Registered adapters. Order carries NO routing authority — routeModel decides.
- *  claude (unprefixed ids) + cortex (the `cortex-` prefix). A further backend
- *  appends here with its own reserved prefix; the fail-fast below proves no two
- *  adapters claim one id. */
-// ---------------------------------------------------------------------------
-// cortex adapter — Snowflake Cortex Code, the first non-claude backend on the
-// rail (docs/acp-backend-rail.md, “Shipped adapters”). It adds ZERO to the common layer:
-// everything cortex-specific lives here + models.ts + overlay.ts + the gates.
-// ---------------------------------------------------------------------------
+// The former Cortex implementation is retained privately for historical source
+// continuity only. The exported adapter below denies every side-effecting entry,
+// and the production registry does not contain this implementation.
 
-const SUPPORTED_CORTEX_IDS: ReadonlySet<string> = new Set(SUPPORTED_CORTEX_MODEL_IDS);
+const SUPPORTED_CORTEX_IDS: ReadonlySet<string> = new Set(LEGACY_CORTEX_MODEL_IDS);
 
 /** Cortex's OWN settings: a Snowflake connection name, or null. Opaque to
  *  config.ts / backend.ts — only cortexAdapter reads it (casting back). */
@@ -606,7 +600,7 @@ export interface CortexAdapterSettings {
  *  ENTWURF_ACP_* convention (PR #40's legacy PI_SHELL_ACP* cortex-connection var renamed). */
 export const CORTEX_CONNECTION_ENV = "ENTWURF_ACP_CORTEX_CONNECTION";
 
-export const cortexAdapter: AcpBackendAdapter = {
+const retiredCortexAdapter: AcpBackendAdapter = {
 	backend: "cortex",
 
 	// Cortex owns the reserved `cortex-` prefix (rail “Adapter contract”). routeModel strips it to the
@@ -752,7 +746,31 @@ export const cortexAdapter: AcpBackendAdapter = {
 	// errorMessage. Borrowing claude's `incomplete_tool_call` reader would be a guess.
 };
 
-const ADAPTERS: readonly AcpBackendAdapter[] = [claudeAdapter, cortexAdapter];
+const cortexDisabled = (): never => {
+	throw new Error("entwurf: cortex-acp-disabled: Cortex ACP is not supported");
+};
+
+/** Retained exported shape refuses the retired adapter before a launch or overlay can be made. */
+export const cortexAdapter: AcpBackendAdapter = {
+	...retiredCortexAdapter,
+	routeModel: () => undefined,
+	curatedModels: () => [],
+	resolveAdapterSettings: cortexDisabled,
+	resolveLaunch: cortexDisabled,
+	launchEnvDefaults: cortexDisabled,
+	ensureOverlay: cortexDisabled,
+	loadCarrier: cortexDisabled,
+	buildSessionMeta: cortexDisabled,
+	enforceModel: cortexDisabled,
+	configSignatureFields: cortexDisabled,
+};
+
+const ADAPTERS: readonly AcpBackendAdapter[] = [claudeAdapter];
+
+/** A declared backend is only a guard, never a replacement routing authority. */
+export function assertSupportedDeclaredBackend(backend: string | undefined): void {
+	if (backend?.toLowerCase() === "cortex") cortexDisabled();
+}
 
 /**
  * Resolve the backend adapter that owns `modelId`.
@@ -765,6 +783,9 @@ const ADAPTERS: readonly AcpBackendAdapter[] = [claudeAdapter, cortexAdapter];
  * so callers get `{ adapter, nativeModelId }` and never re-parse the id string.
  */
 export function resolveAcpBackendAdapter(modelId: string): { adapter: AcpBackendAdapter; nativeModelId: string } {
+	if (modelId.toLowerCase().startsWith(CORTEX_MODEL_PREFIX)) {
+		throw new Error(`entwurf: cortex-acp-disabled: ${JSON.stringify(modelId)} is not supported`);
+	}
 	const matches: Array<{ adapter: AcpBackendAdapter; nativeModelId: string }> = [];
 	for (const adapter of ADAPTERS) {
 		const routed = adapter.routeModel(modelId);

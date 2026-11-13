@@ -5,9 +5,11 @@ It is not a second harness and does not create another citizen or socket layer. 
 host pi session already owns the record-backed citizen identity; each backend owns
 its own process, auth, transcript, and native tool surface.
 
-Claude is the reference adapter. Snowflake Cortex Code is the second shipped adapter.
-Implementation history and audit chronology live in CHANGELOG, issues, and git; this
-document keeps the current contract and its open evidence boundary.
+Claude is the supported adapter. Cortex Code ACP is disabled: its retired model ids
+are not registered and a direct selection refuses before launch, without a Claude fallback.
+Existing Cortex settings, credentials and native citizen records are not removed.
+Dated Cortex observations below are historical, not a current support claim.
+Implementation history and audit chronology live in CHANGELOG, issues, and git.
 
 ## Boundary
 
@@ -70,7 +72,7 @@ transcript, not a replay: user text, assistant text and tool results become `Use
 `Assistant:` / `Tool result (…)` / `Tool error (…)` lines; assistant thinking, structured tool calls, the system
 prompt and lifecycle notices are left out; an image becomes the marker `[image omitted: <mime>]`
 on both the rebuild and the reuse delta. Because no path carries image bytes to the backend, every
-curated ACP row — Claude and Cortex — declares `input: ["text"]` (`ACP_ROW_INPUT` in `models.ts`,
+curated Claude ACP row declares `input: ["text"]` (`ACP_ROW_INPUT` in `models.ts`,
 `[QK:ACP-ROWS-TEXT-ONLY-INPUT]`), although pi's catalog lists the Anthropic models as
 `["text", "image"]`: that is the model behind the API, not this transport. What pi does with an
 attachment offered to a text-only row is pi's behaviour and is unmeasured here. Real image
@@ -201,23 +203,21 @@ main; no release carries them yet, so they are not a shipped manifest.
 |---|---|---|---|
 | Entwurf package | `package.json` `version` | checkout declaration, not a release receipt | names the package label these rows sit beside; whether that label shipped, and with which rows, is CHANGELOG's record |
 | pi runtime | SDK exact `1.5.2`, host `>=1.5.2 <1.6` | **exact** oracle + **closed range** | the SDK set the published 0.52.0 ships (#158) and its derived host range (0.51.0 shipped SDK 1.5.0, #155), not an operating-host acceptance; an ordinary Pi host inside the range is accepted by the source's version predicate, and the ceiling moves only on measurement. The published 0.36.0 through 0.37.1 shipped the 1.2.0 set (#141); 0.38.0 (#145) is the first to carry 1.3.0. Historical: the published 0.33.0 through 0.35.1 ship SDK exact 1.1.0, 0.32.0 ships SDK exact 1.0.4 with the next-minor ceiling (ROADMAP's 2026-10-07 bump entry), and 0.31.0 declared the earlier peer floor 1.0.2 |
-| ACP wire SDK | `@agentclientprotocol/sdk 2.6.0` | **exact** | the shared wire oracle both adapters speak (protocol v1; the experimental `Usage` type now comes from the `./unstable` entry) |
+| ACP wire SDK | `@agentclientprotocol/sdk 2.6.0` | **exact** | the Claude wire oracle (protocol v1; the experimental `Usage` type comes from the `./unstable` entry) |
 | Claude ACP adapter | `@agentclientprotocol/claude-agent-acp 0.106.0` | **exact**, bundled | landed on main by #142, unshipped (0.90.0 shipped 0.36.1–0.52.0); resolved before any PATH fallback; declaration is not compatibility evidence |
 | Claude Agent SDK | `0.3.322` (transitive) | **exact** oracle | the runtime risk surface behind the adapter |
 | Anthropic SDK | `0.100.1` | **exact**, peer-resolution only | satisfies the Agent SDK peer floor (0.93.0+); never an API client here (gate L4) |
 | Claude Code runtime | `>=2.1.306` (`entwurf.claudeCodeFloor`) | **floor** | below it, hook args are silently dropped; entwurf enforces this itself |
 | Node | `>=24` (`engines.node`) | **floor** | single axis, derived everywhere else |
-| Cortex Code | operator-installed CLI | **on-demand**, external | NOT a pinned dependency. Each LIVE record must name the exact CLI version it measured |
+| Cortex Code | operator-installed CLI | **disabled** | No supported Cortex ACP model or turn; old host receipts remain historical. |
 
-Current Cortex host reading: **`Cortex Code v1.1.52`, observed on the reference host `oracle`
-(2026-08-19)**. This is an OBSERVATION of what happens to be installed, not a pin, not a range, and
-not a direct LIVE certification — no Cortex evidence record is created by writing it down. It is
-recorded here only so the on-demand row names a concrete number instead of an abstraction.
+Historical host observation: **`Cortex Code v1.1.52` on `oracle` (2026-08-19)**.
+It is not a current installation, support or LIVE certification claim.
 
 Reading rules that do not bend:
 
-- **Claude PASS never certifies Cortex, and a Cortex SKIP never becomes a PASS.** They are separate
-  evidence axes with separate records; Cortex stays outside the Claude release floor.
+- **Claude PASS never certifies Cortex, and an old Cortex SKIP never becomes a PASS.**
+  Cortex ACP is now disabled; historical receipts remain bound to their own subjects.
 - **Exact** means one measured build. **Range** means a closed accepted interval. **Floor** means a
   minimum entwurf enforces itself. **On-demand** means the operator supplies the runtime and the
   evidence names its version — presence of an adapter certifies no external release.
@@ -530,8 +530,8 @@ contract. An optional upstream feature is not a core-value gap.
 - accumulated inactive minors are best folded into the next meaningful certification.
 
 Otherwise record and defer. Every certification separates declared pins, deterministic/package
-evidence, Claude LIVE aggregate evidence, and Cortex direct on-demand evidence (with its CLI
-version). Per-bump measurements live in the ROADMAP **Dep bump(별도 트랙)** ledger.
+evidence and Claude LIVE aggregate evidence. Cortex ACP is disabled; its old LIVE observations
+remain historical. Per-bump measurements live in the ROADMAP **Dep bump(별도 트랙)** ledger.
 
 ### Configured Claude ACP permissions
 
@@ -558,7 +558,10 @@ operator's repair named.
 
 ## Shipped adapters
 
-| Seam | Claude | Cortex Code |
+Claude alone is supported. The former Cortex column below is a historical comparison,
+not an executable route; Cortex model admission and direct adapter use now refuse.
+
+| Seam | Claude | Former Cortex Code (historical) |
 |---|---|---|
 | Model ids | unprefixed `claude-sonnet-5-5`, `claude-opus-5-5`, `claude-fable-5-1`, `claude-fable-5-2` | `cortex-auto`, `cortex-claude-opus-5`, `cortex-claude-sonnet-5`, `cortex-openai-gpt-5.4`; prefix stripped before set-model |
 | Launch | bundled `claude-agent-acp`; `CLAUDE_AGENT_ACP_COMMAND` override | `cortex acp serve`; optional connection; `CORTEX_ACP_COMMAND` override; never a launch-time `-m` |
@@ -574,11 +577,10 @@ operator's repair named.
 
 The unprefixed Claude curation uses exact Opus/Sonnet 5.5 ids; the ACP adapter does
 not route the retired exact ids `claude-opus-5` or `claude-sonnet-5`, alias them to
-a newer model, or rewrite existing session records. Cortex retains its separate
-native 5 ids. Pi owns fuzzy CLI model selection before the adapter: with this
-seven-row set, its 1.1.0 resolver matches the old bare 5 patterns to the Cortex rows
-instead of refusing them (measured with the pure upstream resolver and synthetic rows,
-not a vendor turn). So the launches Entwurf builds admit only an EXACT curated id
+a newer model, or rewrite existing session records. Pi owns fuzzy CLI model selection
+before the adapter: an older seven-row fixture matched old bare 5 patterns to Cortex
+rows (measured with the pure upstream resolver, not a vendor turn). Cortex rows are
+now disabled. The launches Entwurf builds admit only an EXACT curated id
 (`pi-extensions/lib/acp/model-ids.js`): `entwurf_fresh_call` with backend `pi` and an
 `entwurf/<id>` model, and `entwurf_resume_call` of a session whose emitted provider is
 `entwurf`, refuse anything else as `acp-model-not-curated` before a pane opens. A human
@@ -650,6 +652,9 @@ subagent transcripts are therefore not requested. Enabling either is a separate
 rendering contract, not a capability bit flip.
 
 ### Cortex Code audit (D1–D10)
+
+**Historical:** this audit describes the former Cortex ACP adapter, not a supported
+route. The current product refuses Cortex selection before launch.
 
 The original audit labels remain useful coordinates for source comments and gates:
 
@@ -785,15 +790,11 @@ Live axes:
 
 ```bash
 LIVE=1 ./run.sh release-gate /path/to/scratch --cut
-LIVE=1 ENTWURF_ACP_CORTEX_CONNECTION=<conn> \
-  ./run.sh smoke-acp-cortex-live
 ```
 
-The aggregate release gate is Claude-backed so a host without Cortex/Snowflake auth
-can run the package floor. That means Cortex is **on demand**, not optional evidence:
-a cut that changes or ships the Cortex rail must run and read its dedicated smoke.
-Per-cut counts, digests, versions, and host observations belong in BASELINE/CHANGELOG,
-not this standing contract.
+Cortex ACP is disabled; its former direct LIVE smoke refuses without probing a vendor.
+This does not waive the aggregate's Claude, Codex or native-citizen axes. Per-cut
+counts, digests, versions, and host observations belong in BASELINE/CHANGELOG.
 
 ## 11-8. Compaction is a tool lifecycle (0.75.0 onward)
 
@@ -869,5 +870,4 @@ Entwurf must replicate vendor internals. The reason to stay put is the five cont
 ## Open work
 
 - causal MCP-readiness diagnosis and, only with proof, a backend-invariant fence;
-- broader installed-host and cross-machine Cortex evidence;
 - persisted ACP resume/load, which is not implemented by today's in-memory reuse.

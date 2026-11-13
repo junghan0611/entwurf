@@ -1878,7 +1878,7 @@ export const HERDR_REJECT_HINT: Record<
 	// #128: decided at the dispatch root (`fresh-call-dispatch.ts`), worded here because this rail's
 	// import fence admits no ACP module. The curated list itself lives in `acp/model-ids.js`.
 	"acp-model-not-curated":
-		"an entwurf model must be one exact curated ACP id — Pi would otherwise pick another row by substring (a retired claude-sonnet-5 lands on cortex-claude-sonnet-5), so nothing was opened and nothing was aliased",
+		"an entwurf model must be one exact curated ACP id; Cortex ACP is disabled. Pi may otherwise pick another row by substring, so nothing was opened or aliased",
 	"task-empty": "a sibling opened with nothing to do is a window nobody asked for",
 	"task-too-long": `the task is over the ${TASK_MAX_CHARS}-character interface bound this verb shares with entwurf_v2`,
 	"herdr-context-missing":

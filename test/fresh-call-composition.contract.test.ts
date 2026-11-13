@@ -134,7 +134,8 @@ describe("the tmux rail's bytes did not move when the code did", () => {
 			expect(text).not.toContain("mcp__entwurf_bridge__");
 			expect(text).not.toContain("ToolSearch");
 		}
-		// Native pi models, an uncurated or Cortex ACP id, and a bare alias keep the pi table.
+		// Native pi models, uncurated IDs and bare aliases keep the pi table at this pure seam.
+		// The retired Cortex ID is separately refused by admission before this framing can launch.
 		for (const model of [
 			"openai-codex/gpt-5.6",
 			"anthropic/claude-opus-5-5",
@@ -145,6 +146,7 @@ describe("the tmux rail's bytes did not move when the code did", () => {
 			expect(freshCallToolDialect("pi", model)).toBe("pi");
 			expect(framing("pi", model)).toContain(FRESH_CALL_CALLBACK_TOOL.pi);
 		}
+		expect(isUncuratedEntwurfPiModel("pi", "entwurf/cortex-claude-opus-5")).toBe(true);
 		// Suffixed or fuzzy ACP ids keep the pi table here AND are refused at the dispatch root (#128),
 		// so no launch can reach this leaf with an ACP Claude child it would misname.
 		for (const model of ["entwurf/claude-opus-5-5:high", "entwurf/opus"]) {

@@ -12,13 +12,10 @@
 //
 // The module's TWO jobs have different backend scopes — do not collapse them:
 //   - `buildClaudeSessionMeta` is claude-only by CONSTRUCTION, with exactly one
-//     caller (`claudeAdapter.buildSessionMeta`). Cortex exposes no
-//     `_meta.systemPrompt` and no tools/permission declaration surface (native
-//     tools + its own overlay mcp.json projection), so its adapter returns
-//     `undefined` and that function is never reached for a cortex turn.
+//     caller (`claudeAdapter.buildSessionMeta`).
 //   - `assertExcludeToolsHonored` is BACKEND-INVARIANT: backend.ts runs it for
-//     every adapter before any spawn, passing `backend: adapter.backend` and the
-//     resolved `config.tools`. A cortex turn DOES enter this module through it.
+//     every admitted adapter before any spawn, passing `backend: adapter.backend`
+//     and the resolved `config.tools`. Cortex ACP is disabled.
 // That split is why the `backend` field exists: the honest-divergence logic stays
 // explicit and the matrix gate can exercise both the "claude narrows via tools"
 // and "native always exposes" branches.

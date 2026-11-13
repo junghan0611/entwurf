@@ -3435,13 +3435,13 @@ let manifestCount: number;
 	// Extend this inventory and the manifests TOGETHER, never silently.
 	const EXPECTED_LANE_MUTANTS: Record<string, number> = {
 		"acp-backend-preflight": 1,
-		"acp-augment": 10,
-		"acp-cortex": 14,
+		"acp-augment": 8,
+		"acp-cortex": 3,
 		"acp-foreground-only": 2,
 		"acp-launch-namespace": 2,
 		"acp-overlay": 1,
 		"acp-prompt-lifecycle": 15,
-		"acp-set-model-readback": 16,
+		"acp-set-model-readback": 21,
 		"acp-stop-reason": 7,
 		"acp-stream-hooks": 10,
 		"acp-usage-accounting": 12,

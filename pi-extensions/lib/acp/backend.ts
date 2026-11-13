@@ -61,6 +61,7 @@ import { prependNewPromptAugment } from "./augment.js";
 import {
 	ACP_PROMPT_REJECTION_DIAGNOSTIC,
 	type AcpBackendAdapter,
+	assertSupportedDeclaredBackend,
 	resolveAcpBackendAdapter,
 } from "./backend-adapter.js";
 import {
@@ -1552,6 +1553,12 @@ export function streamAcpTurn(
 		// agree, else fail loud — a mismatch means the settings and the requested model
 		// disagree about which backend runs, and silently trusting the model id would
 		// hide an operator typo. Routing authority stays single (the model id).
+		try {
+			assertSupportedDeclaredBackend(config.backend);
+		} catch (err) {
+			finishError(err, false);
+			return;
+		}
 		if (config.backend !== undefined && config.backend !== adapter.backend) {
 			finishError(
 				new Error(

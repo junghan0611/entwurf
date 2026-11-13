@@ -123,6 +123,9 @@ v1 entwurf verbs(`entwurf`/`entwurf_resume`/`entwurf_send`)는 끝났고 사라�
 
 ### Current shipped / probe matrix
 
+> 이 표는 위 0.22.0 시점의 역사다. Cortex ACP는 이후 비활성화됐으며,
+> 현재 지원/검증 계약은 `docs/acp-backend-rail.md`와 `VERIFY.md`가 소유한다.
+
 | Harness / rail | status | 이 repo에서의 정체 | Evidence |
 |---|---|---|---|
 | **pi** | shipped | control-socket adapter. ACP plugin도 pi provider/model로 들어온다. delivery 안의 relaunch transport는 visible-first cut으로 회수됐고, 그 자리는 별도 verb `entwurf_resume_call`이 visible same-id resume으로 채웠다. | `pnpm check`, v2 matrix LIVE, release-gate MUST |
@@ -131,7 +134,7 @@ v1 entwurf verbs(`entwurf`/`entwurf_resume`/`entwurf_send`)는 끝났고 사라�
 | **Codex** | **supported since 0.21.0 (#95); #95 D1 retired the fixed home 2026-09-16 and the caller-seat LIVE was ACCEPTED the same day (56 + 65 assertions)** | Operator-owned app-server-backed citizen: trust-gated user-scope `SessionStart` birth in `$CODEX_HOME/hooks.json` (no root; the operator answers the vendor prompt once), strict request `_meta` identity, `thread/loaded/list` probe, one-shot `codex queue`, and `entwurf_fresh_call`. Supported placement follows the CALLER: a Codex citizen opens beside its own TUI pane via the `thread-id` in that pane's title (0/2+ reject). Entwurf never owns the app-server lifecycle, and there is no ACP or resume lane. | Two axes, kept apart, both under the retired home topology: pre-amendment first-admission four-coordinate `Pi outside → Codex home → Pi home`, exact callbacks/addressed delivery — green, 57 assertions, qualification 460/460, frozen full floor green; observer-amended standalone LIVE — green, 48 assertions, source audit 3/3 both sides, windows reclaimed by source receipt only (`DELIVERY.md` owns both). Current acceptance: 475/475 qualification, release gate MUST 24/0/0, `cut: OK`. Arbitrary attached-TUI seat inference remains unsupported. |
 | **Copilot CLI** | shipped (0.15.0); D3 pending / D8 unproven | 첫 프롬프트에 `backend:"copilot"` V3 record. receive는 포크된 first-party extension + mailbox rail. visible fresh는 `entwurf_fresh_call {backend:"copilot"}` → owned `entwurf copilot` invocation, 4축 preflight, exact-nonce callback. `--ui-server`/`ws.*`는 거절. D3 pending / D8 unproven. Copilot visible-fresh LIVE는 operator-metered이며 release MUST가 아니다. | DELIVERY.md matrix row (LIVE receipts 2026-08-23 / 2026-08-25) + issue #82 thread |
 | **Antigravity (`agy`)** | shipped | `PreInvocation` auto-birth + record-backed sender + native LS gRPC push; managed MCP/permission, statusline, hook adapters. | agy deterministic gates + doctors + 2026-07-13 live round trip |
-| **Cortex / governed ACP** | **landed (0.13.0)** — hvkiefer's PR #40 adapter transplanted with the CP0-audit revisions (dual-HOME overlay, mcp.json projection, per-turn set-model, 4-row curation) | current D1–D10 contract is `docs/acp-backend-rail.md` “Cortex Code audit”; deterministic gate `check-acp-cortex` + mutant lane `acp-cortex`; CP2 live smoke `smoke-acp-cortex-live` stays outside the claude-only release floor | PR #40 / #48 / `docs/acp-backend-rail.md` |
+| **Cortex / governed ACP** | **landed (0.13.0)** — hvkiefer's PR #40 adapter transplanted with the CP0-audit revisions (dual-HOME overlay, mcp.json projection, per-turn set-model, 4-row curation) | then-current D1–D10 contract was `docs/acp-backend-rail.md` “Cortex Code audit”; deterministic gate `check-acp-cortex` + mutant lane `acp-cortex`; CP2 live smoke `smoke-acp-cortex-live` stays outside the claude-only release floor | PR #40 / #48 / `docs/acp-backend-rail.md` |
 | **Gemini CLI** | deprecated path | replaced by Antigravity direction for current Google individual tiers. | README migration note |
 
 ### ACP plugin boundary

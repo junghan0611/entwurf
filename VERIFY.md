@@ -10,7 +10,7 @@ VERIFY.md is the **agent-driven** surface; [BASELINE.md](./BASELINE.md) is the o
 - **Part II — the maintainer floor.** The subject does not read it up front and does not run any of it: §0A (where a check lives, the floors, release axes), §1 Setup, §3 release criteria, or any `LIVE=1` command. Where §1B and Part II seem to disagree on what to run, §1B.0 wins for the subject.
 - **Appendix.** Troubleshooting, the old banner's dated numbers and history pointers.
 
-> **Current surface.** `entwurf-bridge` exposes nine tools: `entwurf_v2`, `entwurf_peers`, `entwurf_fresh_call`, `entwurf_resume_call`, `entwurf_retire_call` (operator-requested target only), `entwurf_callback`, `entwurf_self`, `entwurf_inbox_read` and `entwurf_register_native`. A native pi citizen offers seven of them (two hidden), and the pi-durable contact offers eight. An ACP session's own count is measured from its schema (§1B.3). The ACP backends are Claude and Snowflake Cortex Code. Antigravity and Codex are native-push citizens outside ACP; Antigravity's native push is paused (#152).
+> **Current surface.** `entwurf-bridge` exposes nine tools: `entwurf_v2`, `entwurf_peers`, `entwurf_fresh_call`, `entwurf_resume_call`, `entwurf_retire_call` (operator-requested target only), `entwurf_callback`, `entwurf_self`, `entwurf_inbox_read` and `entwurf_register_native`. A native pi citizen offers seven of them (two hidden), and the pi-durable contact offers eight. An ACP session's own count is measured from its schema (§1B.3). The supported ACP backend is Claude; Cortex ACP is disabled. Antigravity and Codex are native-push citizens outside ACP; Antigravity's native push is paused (#152).
 
 ---
 
@@ -257,9 +257,8 @@ The literal callable identifier differs per backend — probe by asking the agen
 | Backend | Literal identifier | Boundary |
 |---|---|---|
 | Claude | `mcp__entwurf-bridge__entwurf_v2` | native Claude tool surface + explicit MCP server |
-| Cortex | `mcp__entwurf-bridge__entwurf_v2` | same identifier shape, different native tool surface |
 
-The identifier cannot distinguish Claude from Cortex; native tools and carrier facts must.
+Cortex ACP is disabled; its older callable-identifier observations are historical.
 
 ### 2.2 MCP injection visibility
 
@@ -374,7 +373,7 @@ The single-turn / multi-turn / cross-process / persistence-boundary / shutdown i
 
 > **Switching the plugin's production acquisition source is a re-proof, not a configuration change (#116 M3-b3).** `runtime-lock.json` carries a closed `source` discriminant: `npm` (exact `name@version` plus the published sha512, compared against the tarball's own bytes) is the production authority, and `herdr-checkout` (the exact commit Herdr checked out, from the fixed remote) is a VERIFICATION-ONLY carrier that exists so a candidate needs no npm release. Evidence does not transfer between them. Before a release that moves the production source — to npm, or to a GitHub Release tarball plus its sha512 — the exact acquisition and integrity comparison, the installed runtime (name@version, compiled entry, three executable bins, a real `check-bridge`), the swap and torn-swap recovery, activation and deactivation, and the package-consumer proof must all be re-run against THAT source. A candidate proof green on the checkout carrier says nothing about a registry artifact, and the reverse is equally true. **Records from before this contract are refused, not migrated:** a v1 runtime journal or activation ledger fails certification by name, and the way forward on such a host is an explicit `entwurf herdr-plugin-deactivate` (or a hand-cleared runtime/ledger state) before the next install — there is no reader that accepts both schemas, because the older shape cannot say WHICH artifact it was.
 
-> **Cortex is an on-demand axis, not an aggregate one.** Its rail needs an external Snowflake connection and login that the host owns, not the repo — so wiring it into the aggregate would block every cut taken on a host without that account. **The release aggregate does not re-certify Cortex**; `LIVE=1 ENTWURF_ACP_CORTEX_CONNECTION=<conn> ./run.sh smoke-acp-cortex-live` stays a required direct call whenever a cut changes Cortex rail code or an operator elects to certify that host. Its honest-skip behaviour is unchanged: run it without the connection and it reports protocol SKIP, never a pass. **Operator-host limit (2026-08-20, measured):** the source-owning host has no Snowflake subscription, and Cortex Code offers no free tier that a live turn can reach — a direct attempt confirmed it. So on that host, as measured that day, `smoke-acp-cortex-live` could only report protocol SKIP; whether a host has a usable connection now is a fresh measurement that needs the operator's approval, never an inference from this sentence. Record that SKIP as an absent axis; never soften it into a pass, and never substitute a different backend as Cortex evidence.
+> **Cortex ACP is disabled.** Retired Cortex model ids are not registered; Entwurf fresh/resume exact admission refuses them, and the ACP adapter refuses a Cortex id that reaches it before starting a child, without a Claude fallback. Pi's own direct `--model` fuzzy selection happens before the adapter; the result for a typed retired id has not been measured here. The former Cortex direct LIVE smoke now refuses by name rather than probing a vendor. Past Cortex receipts remain historical evidence, not proof of this disabled admission. The Claude and native-citizen LIVE floors, including Codex and mux, are unchanged.
 >
 > A cut that touches the prompt-lifecycle contract (no wall clock on a running turn) owes one long-turn acceptance the aggregate floor is too short to carry: `LIVE=1 ./run.sh smoke-acp-long-turn-live` drives a real turn whose tool work outlasts the retired 600s cutoff and requires exactly one cold ACP bootstrap in the transcript. It takes >12 minutes by construction and is on-demand, not part of `release-gate`.
 >
@@ -693,12 +692,7 @@ mailbox with `origin=pi-session`, `replyable=true`).
 
 Compare a fresh self-awareness report across axes: (1) same backend, different install path — answer must be path-invariant; (2) same backend, different machine — identical native tool list + MCP server/tool set; (3) different backend, same bridge — same garden capability but **different** native tool surface (a Claude session reporting another backend's native tools is a fail); (4) native pi routing vs ACP-bridged, same model — the native pi citizen reaches the compiled `entwurf-bridge` through Pi's built-in MCP (`mcp__entwurf_bridge__<verb>`, seven active tools and two hidden in the 0.41.0 source; installed/live offering requires its own receipt), while the ACP backend reaches that bridge through the explicit `entwurfProvider.mcpServers` projection in its own callable dialect (see §2.1). Compare the actual ingress provenance and backend-native tools, not an assumed absence of MCP on pi; receive to the pi citizen remains its record-addressed control address (a Unix socket; a named pipe on the experimental native-Windows Pi preview). Honest "I cannot tell" hedging is preferable to inventing provenance. This is the current #125 comparison criterion, not a newly measured parity receipt. agy is graded by its native-citizen checklist, not by pretending it has an ACP overlay.
 
-**Cortex on axis 3.** A cortex session must expose the same garden capability
-while keeping cortex's own native tool surface. Its callable MCP identifier shape is
-the same as Claude's, but it has no system-prompt carrier: engraving is prepended to
-the first user augment. Installed-model enumeration is deterministic; candidate-installed
-LIVE Cortex acceptance and its remaining host limits are recorded per cut rather than
-frozen here.
+Cortex ACP is disabled and is not a subject of this parity check.
 
 ---
 

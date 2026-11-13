@@ -62,14 +62,14 @@
 		},
 		{
 			"claim": "WRAPPER-SKIP-IS-PROTOCOL-EXIT",
-			"title": "a run.sh smoke wrapper returns 0 on a missing prerequisite — the second skip surface, where cortex/matrix/spawn decline before their .ts is ever reached",
+			"title": "the matrix smoke wrapper returns 0 on a missing prerequisite before its .ts is reached",
 			"subject": "run.sh",
 			"find": [
-				"    echo \"[entwurf:skip] smoke-acp-cortex-live — set LIVE=1 (+ ENTWURF_ACP_CORTEX_CONNECTION) to run.\"",
+				"    echo \"[entwurf:skip] smoke-entwurf-v2-matrix-live — set LIVE=1 to run (spawns a real pi --entwurf-control + opens a real socket).\"",
 				"    return \"$ENTWURF_STEP_SKIP_EXIT\""
 			],
 			"replace": [
-				"    echo \"[entwurf:skip] smoke-acp-cortex-live — set LIVE=1 (+ ENTWURF_ACP_CORTEX_CONNECTION) to run.\"",
+				"    echo \"[entwurf:skip] smoke-entwurf-v2-matrix-live — set LIVE=1 to run (spawns a real pi --entwurf-control + opens a real socket).\"",
 				"    return 0"
 			],
 			"gate": ["bash", "run.sh", "check-release-gate-outcomes"],

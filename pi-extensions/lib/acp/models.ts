@@ -1,18 +1,12 @@
-// ACP plugin — curated model surface (S0 loader/fence slice; cortex rows added
-// in 0.13).
+// ACP plugin — curated Claude model surface. Cortex ACP is disabled.
 //
 // entwurf is an ACP *plugin* on the v2 core, NOT a general-purpose
 // Anthropic provider. It deliberately does not expose the full pi-ai model
 // registry — the surface is curated to the ids the plugin commits to driving
 // through a real ACP backend.
 //
-// Two curated sets live here, one per adapter on the rail
-// (backend-adapter.ts): the unprefixed Claude ids (the reference backend) and
-// the `cortex-` prefixed Snowflake Cortex Code ids (the second backend, landed
-// 0.13.0 — docs/acp-backend-rail.md “Cortex Code audit”). Codex has native
-// delivery-probe evidence but no managed citizen lane; neither it nor Gemini is an ACP backend here.
-// A third governed backend EXTENDS this file the same way — it does not change
-// the pattern.
+// Only the unprefixed Claude IDs are registered. Historical Cortex IDs are
+// reserved refusal inputs; native citizens are independent of this provider.
 
 // pi 0.80 migration: the standalone root `getModels()` moved to the deprecated
 // `@earendil-works/pi-ai/compat` entrypoint (the global-API churn). We import it
@@ -41,9 +35,9 @@ import { CURATED_ANCHOR_MODEL_ID, SUPPORTED_ANTHROPIC_MODEL_IDS } from "./model-
 export {
 	CORTEX_MODEL_PREFIX,
 	CURATED_ANCHOR_MODEL_ID,
+	LEGACY_CORTEX_MODEL_IDS,
 	PROVIDER_ID,
 	SUPPORTED_ANTHROPIC_MODEL_IDS,
-	SUPPORTED_CORTEX_MODEL_IDS,
 } from "./model-ids.js";
 
 // #26 auth-boundary sentinel. `pi.registerProvider` requires an apiKey when a
@@ -84,29 +78,7 @@ function claudeContextWindow(model: { id: string; contextWindow: number }): numb
 	return Math.min(model.contextWindow, CLAUDE_CONTEXT_DEFAULT);
 }
 
-// ── Cortex (Snowflake Cortex Code) curated surface ──────────────────────────
-//
-// entwurf's ACP rail is backend-extensible: Cortex is the first NON-claude
-// backend to land through it (docs/acp-backend-rail.md, “Shipped adapters”). pi-ai carries no
-// snowflake/cortex model source, so this surface is HAND-CURATED. Every id
-// carries the reserved `cortex-` prefix: the prefix is the SINGLE routing
-// authority (backend-adapter.ts `routeModel`) and keeps the ids off the Claude
-// native ids Cortex routes to (`cortex-claude-sonnet-5` vs the unprefixed
-// `claude-sonnet-5-5` the claude adapter owns). `routeModel` strips the prefix to
-// recover the native id, which is enforced per-turn via
-// session/set_config_option — never a launch `-m` pin (CP0-M).
-//
-// The 4-row set is the GLG-decided curation (2026-07-29) — a subset of the 11
-// native ids cortex v1.1.52 exposed live when authenticated. A curated id that
-// the running cortex no longer serves fails LOUD at set-model, before the
-// prompt (measured: `Unsupported model: …` names the live set). Adding an id
-// here is the same verify-both-axes commitment as the Claude set — do not
-// extend casually. The prefix and the four ids are declared in model-ids.js.
-
-// Hand-set conservative context window. Cortex reports the LIVE window via its
-// own ACP session config, not this curated metadata — this is a floor for the
-// registry surface, deliberately not inflated to the Claude 1M.
-const CORTEX_CONTEXT_DEFAULT = 200_000;
+// Cortex ACP is disabled; its former IDs are refusal inputs, not model rows.
 
 /**
  * What an ACP row declares it can take as input: text only. The rail delivers pi's transcript as
@@ -118,32 +90,9 @@ const CORTEX_CONTEXT_DEFAULT = 200_000;
  */
 const ACP_ROW_INPUT: ("text" | "image")[] = ["text"];
 
-/**
- * The curated Cortex model rows handed to the single `entwurf` provider via
- * `allCuratedModels()`. The two Claude rows ride their OWN registry base
- * (opus-5 / sonnet-5); `auto` (default family Claude) and the GPT row (no pi-ai
- * source) ride the sonnet-5 base as a metadata floor. id / name / contextWindow
- * are overridden; the `cortex-` prefix keeps them from colliding with the
- * Claude curated ids. Same row shape as `curatedClaudeModels()` (AcpModelRow).
- */
-export function curatedCortexModels() {
-	const sonnetBase = requireRegistryModel(ANTHROPIC_MODELS_ALL, "claude-sonnet-5");
-	const opusBase = requireRegistryModel(ANTHROPIC_MODELS_ALL, "claude-opus-5");
-	const row = (id: string, name: string, base: RegistryModel) => ({
-		id,
-		name,
-		reasoning: base.reasoning,
-		input: [...ACP_ROW_INPUT],
-		cost: base.cost,
-		contextWindow: CORTEX_CONTEXT_DEFAULT,
-		maxTokens: base.maxTokens,
-	});
-	return [
-		row("cortex-auto", "Cortex · Auto", sonnetBase),
-		row("cortex-claude-opus-5", "Cortex · Claude Opus 5", opusBase),
-		row("cortex-claude-sonnet-5", "Cortex · Claude Sonnet 5", sonnetBase),
-		row("cortex-openai-gpt-5.4", "Cortex · OpenAI GPT-5.4", sonnetBase),
-	];
+/** The retired Cortex adapter contributes no supported model rows. */
+export function curatedCortexModels(): [] {
+	return [];
 }
 
 /**

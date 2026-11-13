@@ -27,7 +27,7 @@
 //   totalTokens is CONTEXT OCCUPANCY, not a turn total, and is never overwritten
 //             with the turn aggregate — pi reads that field as the context gauge.
 //   a backend with no measured semantics (no sealsTurnAccounting) is sealed NOT AT
-//             ALL: cortex's emitted usage must be byte-identical to pre-#93.
+//             ALL: the no-capability fixture preserves the mapper's output.
 //
 // ORACLES, each independent of the subject:
 //   - the cost sum: THIS FILE constructs the cumulative series and asserts the
@@ -77,7 +77,6 @@ const FIXTURE_THINKING_LEVEL_MAP = {
 	max: "max",
 };
 const claude = { id: "claude-sonnet-5-5", thinkingLevelMap: FIXTURE_THINKING_LEVEL_MAP } as unknown as Model<Api>;
-const cortex = { id: "cortex-auto" } as unknown as Model<Api>;
 
 type Stream = AsyncIterable<AssistantMessageEvent>;
 
@@ -936,13 +935,10 @@ try {
 	// ----------------------------------------------------------------------
 	// CELL 5 — a backend with no MEASURED semantics is sealed NOT AT ALL.
 	//
-	// backend.ts / event-mapper.ts are COMMON layer: cortex drives the same turn
-	// loop and the same mapper. Nobody has measured what cortex's ACP `usage`
-	// means (turn delta or session total? against which price table?), and ACP's
-	// own type is self-contradictory about it — the outer comment says "for this
-	// turn", the field comments say "across all turns/session". So cortex must
-	// keep exactly its pre-#93 output: the coarse mapper assignment, and no token
-	// projection, no baseline, no diff.
+	// The common loop must not invent accounting semantics for an adapter that
+	// declares none. Cortex is disabled, so this isolated fixture temporarily
+	// removes the capability from the compiled Claude adapter; it changes no
+	// production routing and restores the capability before the next cell.
 	// ----------------------------------------------------------------------
 	// TWO turns, and the second one is what carries the claim: on turn ONE a
 	// diff-against-an-empty-baseline and the raw cumulative are the SAME number, so
@@ -967,18 +963,30 @@ try {
 				occupancyTokens: 140_000,
 			},
 		]);
-		await collect(backend.streamAcpTurn(cortex, userCtx("cortex NONCE-1"), { sessionId: "usage-E" }, h.deps) as Stream);
-		const msg = sealedMessage(
-			await collect(
-				backend.streamAcpTurn(
-					cortex,
-					reuseCtx("cortex NONCE-1", "cortex NONCE-2"),
-					{ sessionId: "usage-E" },
-					h.deps,
-				) as Stream,
-			),
+		const { claudeAdapter } = await import(
+			pathToFileURL(resolve(TMP_EMIT, "pi-extensions/lib/acp/backend-adapter.js")).href
 		);
-		assert.equal(h.children.length, 1, "both cortex turns ran on ONE reused child");
+		const oldCapability = claudeAdapter.sealsTurnAccounting;
+		claudeAdapter.sealsTurnAccounting = false;
+		let msg: AssistantMessage;
+		try {
+			await collect(
+				backend.streamAcpTurn(claude, userCtx("fixture NONCE-1"), { sessionId: "usage-E" }, h.deps) as Stream,
+			);
+			msg = sealedMessage(
+				await collect(
+					backend.streamAcpTurn(
+						claude,
+						reuseCtx("fixture NONCE-1", "fixture NONCE-2"),
+						{ sessionId: "usage-E" },
+						h.deps,
+					) as Stream,
+				),
+			);
+		} finally {
+			claudeAdapter.sealsTurnAccounting = oldCapability;
+		}
+		assert.equal(h.children.length, 1, "both synthetic no-accounting turns ran on ONE reused child");
 		assert.deepEqual(
 			{
 				input: msg.usage.input,
@@ -1115,7 +1123,7 @@ console.log(
 		"a reused session; a turn with no cost notification attributes $0 while HOLDING the baseline so the session sum " +
 		"reproduces the backend's own cumulative ESTIMATE exactly (agreement with that carrier, never with a bill); a DECREASING total rebaselines, attributes $0 and says so to the operator with both numbers; " +
 		"totalTokens stays CONTEXT OCCUPANCY (verified through pi's own calculateContextTokens) and is carried forward " +
-		"when a turn reports none; a backend that declares no measured semantics — cortex — is sealed not at all; and a next turn " +
+		"when a turn reports none; an injected no-accounting capability fixture is sealed not at all; and a next turn " +
 		"started from INSIDE the previous turn's terminal event still reuses the one session, so the cost baseline " +
 		"survives the turn boundary",
 );

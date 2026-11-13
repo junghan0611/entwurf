@@ -35,7 +35,6 @@ import {
 	ENTWURF_ACP_NO_AUTH_SENTINEL,
 	PROVIDER_ID,
 	SUPPORTED_ANTHROPIC_MODEL_IDS,
-	SUPPORTED_CORTEX_MODEL_IDS,
 } from "../pi-extensions/lib/acp/models.ts";
 
 // ---------------------------------------------------------------------------
@@ -127,33 +126,18 @@ try {
 		assert.ok(capIds.includes(want), `entry model surface missing ${want} (got: ${capIds.join(", ") || "none"})`);
 	}
 
-	// The REAL entry must register the curated rows of EVERY adapter on the rail —
-	// claude's 2 unprefixed ids AND cortex's 4 `cortex-` ids. This is the JOIN
-	// claim, distinct from the per-backend data claims: check-acp-cortex pins the
-	// 4-row cortex curation in models.ts, but nothing there proves those rows
-	// actually reach `pi.registerProvider`. An entry that filtered `cortex-` out
-	// of `allCuratedModels()` would leave models.ts and check-acp-cortex fully
-	// green while the operator's model list silently lost the whole backend.
-	//
-	// Set comparison (sorted, exact) — not `includes`: a substring/anchor probe
-	// cannot see a row that VANISHED, and the cortex ids contain the claude ids as
-	// substrings. Expected is derived from the two source id constants so there is
-	// one SSOT; the literal 8 below is the independent floor that catches a
-	// curation list that SHRANK — expected derives from the same constants, so a
-	// dropped row moves expected and captured together and the set comparison
-	// stays green. That is why the count is asserted separately and carries its
-	// own claim: the cortex list has `CORTEX-CURATED-FOUR-ROWS` for exactly this
-	// failure, and the claude list needs its own oracle rather than borrowing it.
-	const expectedIds = [...SUPPORTED_ANTHROPIC_MODEL_IDS, ...SUPPORTED_CORTEX_MODEL_IDS].slice().sort();
-	assert.equal(
-		expectedIds.length,
-		8,
-		`[QK:CLAUDE-CURATED-FOUR-ROWS] curated id constants must total 8 rows (claude 4 + cortex 4) — got ${expectedIds.length}: ${expectedIds.join(", ")}`,
+	// Independent literal oracle: the compiled provider exposes the four Claude
+	// rows and no retired Cortex row, even if a source list drifts with the SUT.
+	const expectedIds = ["claude-fable-5-1", "claude-fable-5-2", "claude-opus-5-5", "claude-sonnet-5-5"];
+	assert.deepEqual(
+		[...SUPPORTED_ANTHROPIC_MODEL_IDS].sort(),
+		expectedIds,
+		"[QK:CLAUDE-CURATED-FOUR-ROWS] the four Claude IDs are an independent literal oracle",
 	);
 	assert.deepEqual(
 		capIds.slice().sort(),
 		expectedIds,
-		`[QK:CORTEX-PROVIDER-EXACT-ROW-SURFACE] compiled entry must register the EXACT curated set of both adapters (claude 4 + cortex 4) — got: ${capIds.join(", ") || "none"}`,
+		`[QK:ACP-PROVIDER-CLAUDE-ONLY] compiled provider must expose exactly the four Claude rows — got: ${capIds.join(", ") || "none"}`,
 	);
 	assert.equal(typeof cap.cfg.streamSimple, "function", "entry streamSimple must be a function");
 	// Regression guard: the entry must wire the REAL backend (streamShellAcp),
@@ -200,7 +184,7 @@ assert.ok(!/backend-stub/.test(entrySrc), "entry must not import the removed S0 
 
 console.log(
 	`[check-acp-provider-surface] ok — compiled entry registers ${PROVIDER_ID} once (idempotent) with the no-auth ` +
-		`sentinel + the EXACT curated set of both adapters (claude ${SUPPORTED_ANTHROPIC_MODEL_IDS.length} incl. ` +
-		`${CURATED_ANCHOR_MODEL_ID} + cortex ${SUPPORTED_CORTEX_MODEL_IDS.length}) + real streamShellAcp backend (S2c); ` +
+		`sentinel + the EXACT Claude-only curated set (${SUPPORTED_ANTHROPIC_MODEL_IDS.length} incl. ` +
+		`${CURATED_ANCHOR_MODEL_ID}) + real streamShellAcp backend (S2c); ` +
 		`claude lib surface verified live (${models.length} model(s))`,
 );

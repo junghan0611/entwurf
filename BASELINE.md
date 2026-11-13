@@ -13,8 +13,8 @@ Order of a verification session:
 2. **Follow-up questions** as the operator sees fit; the optional rounds further down are a menu, not a checklist.
 3. **Hand over VERIFY.md**: ask the session to read it in full and run §1B itself.
 
-Claude is the reference ACP backend. Cortex Code has a separate compact baseline
-because it has no system-prompt carrier and keeps its own native tool surface.
+Claude is the supported ACP backend. Cortex ACP is disabled; its former interview
+below is retained as history, not an instruction to start a session.
 Antigravity (`agy`) and Codex are native-push citizens rather than ACP backends and therefore
 have separate citizen/round-trip baselines; neither is part of this ACP operator interview.
 Recorded host evidence and support verdicts are at the end of this file.
@@ -261,10 +261,10 @@ same-process concurrency.
 
 ---
 
-## Cortex baseline
+## Cortex baseline (historical)
 
-Run these checks in a fresh `entwurf/cortex-*` session. Do not grade Cortex against
-Claude's overlay or system-prompt carrier.
+Cortex ACP is disabled. These former questions are retained only to interpret old
+receipts; do not start a Cortex session to run them.
 
 | ID | Check | PASS | FAIL |
 |---|---|---|---|
@@ -274,8 +274,8 @@ Claude's overlay or system-prompt carrier.
 | Q-CX-CARRIER | Context carrier | Says Cortex has no system-prompt engraving carrier; engraving/context arrived in the first-user augment. | Claims `_meta.systemPrompt` delivered the engraving. |
 | Q-CX-HOME | Containment | Distinguishes isolated HOME from the real operator HOME restored only for the bridge; `CORTEX_HOME` is absent. | Claims broad operator home/config inheritance or a present `CORTEX_HOME`. |
 
-The live `smoke-acp-cortex-live` and deterministic `check-acp-cortex` remain the
-oracles. This interview tests whether the model describes that surface honestly.
+The old LIVE smoke is retired and refuses by name; the current deterministic
+`check-acp-cortex` checks disabled admission instead of the old positive contract.
 
 ---
 
