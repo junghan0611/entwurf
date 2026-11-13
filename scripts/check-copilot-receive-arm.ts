@@ -705,12 +705,29 @@ ok(
 		"python3",
 		[nonDumpable, path.join(root, "node_modules", "@github", "copilot", "npm-loader.js")],
 		{
-			stdio: "ignore",
+			stdio: ["ignore", "ignore", "pipe"],
 		},
 	);
 	running.push(opaque);
 	try {
-		await sleep(400);
+		// Wait for the child's own "ready" (written after prctl succeeded), not a fixed delay: on a
+		// loaded host 400 ms was not enough for python to start and drop dumpability, so the
+		// environ was still readable and this cell failed for a timing reason (0.53.0 release gate).
+		await new Promise<void>((resolve, reject) => {
+			let seen = "";
+			const timer = setTimeout(() => reject(new Error("non-dumpable fixture never reported ready")), 15_000);
+			opaque.stderr?.on("data", (b: Buffer) => {
+				seen += b.toString();
+				if (seen.includes("ready")) {
+					clearTimeout(timer);
+					resolve();
+				}
+			});
+			opaque.once("exit", (code) => {
+				clearTimeout(timer);
+				reject(new Error(`non-dumpable fixture exited early (${code})`));
+			});
+		});
 		let environReadable = true;
 		try {
 			readFileSync(`/proc/${opaque.pid}/environ`);
