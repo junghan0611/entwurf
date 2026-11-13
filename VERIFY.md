@@ -1,25 +1,20 @@
 # VERIFY.md
 
-Agent-driven verification guide for the current `entwurf` surface. Machine-checkable
-invariants live in gates; this file defines evidence strength, release acceptance,
-and the manual judgements a gate cannot make.
+How a live `entwurf` ACP session is verified, and what a maintainer runs before a release. Machine-checkable invariants live in gates; this file defines evidence strength, the manual judgements a gate cannot make, and release acceptance. Per-run counts, digests and release chronology belong in [BASELINE.md](./BASELINE.md), CHANGELOG and release artifacts.
 
-> **Current surface.** `entwurf-bridge` exposes `entwurf_v2`, `entwurf_peers`,
-> `entwurf_fresh_call`, `entwurf_resume_call`, `entwurf_retire_call` (0.41.0; operator-requested target only), `entwurf_callback`, `entwurf_self`, `entwurf_inbox_read`, and `entwurf_register_native` — nine; a pi citizen offers seven with two hidden, the pi-durable contact eight. The ACP
-> backends are Claude and Snowflake Cortex Code. Antigravity is a separate legacy citizen
-> lane whose native push is paused (#152). Codex is a native-push citizen supported in 0.21.0, whose birth hook is
-> operator-owned and gated on one vendor trust receipt, with strict request-scoped identity and
-> visible fresh; it remains outside ACP and has no resume.
-> This banner names the surface, not an acceptance. The 48-assertion / MUST 24/0/0 / 475/475 numbers
-> it once carried are the 0.21.0 cut's dated receipt, kept in [BASELINE.md](./BASELINE.md)'s
-> Native Codex Linux home-topology row ("Release acceptance at that same fingerprint"). A later
-> candidate's acceptance is its own receipt in BASELINE/CHANGELOG, never this sentence.
-> Retired v1 verbs and bridge implementations belong only in CHANGELOG/git.
+VERIFY.md is the **agent-driven** surface; [BASELINE.md](./BASELINE.md) is the operator-driven one. A bridged model runs the checks and writes down what it sees. In §1B one subject verifies itself: its own description is L0, never a second identity's agreement (L1). A file, process or transcript it reads outside the bridge can reach L3 for the specific claim it corroborates. Nothing in a single session reaches L4 or L5. Verifier and subject share the same bridge, MCP servers and overlay, so a uniform corruption of those would not surface here.
 
-This is a working protocol, not a metrics ledger. Per-run counts, digests, and release
-chronology belong in [BASELINE.md](./BASELINE.md), CHANGELOG, and release artifacts.
+**Who executes what.**
 
-VERIFY.md is the **agent-driven** surface; [BASELINE.md](./BASELINE.md) is the operator-driven one. One ACP-bridged model runs the checks against another and writes down what it sees — if the bridge is faithful, two replicants looking at the same mirror describe the mirror the same way. This is in-bridge cross-validation, not external evidence: verifier and subject share the same bridge, MCP servers, and overlay, so a uniform corruption of those would not surface here (that gap is what the L3+ rungs close).
+- **Part I — verifying a live session.** An ACP subject asked to verify itself reads Part I and executes **§1B only**. §1A, §0 and §2 tell it what is being judged.
+- **Part II — the maintainer floor.** The subject may read Part II for context, but it does not run any of it: §0A (where a check lives, the floors, release axes), §1 Setup, §3 release criteria, or any `LIVE=1` command. Where §1B and Part II seem to disagree on what to run, §1B.0 wins for the subject.
+- **Appendix.** Troubleshooting, the old banner's dated numbers and history pointers.
+
+> **Current surface.** `entwurf-bridge` exposes nine tools: `entwurf_v2`, `entwurf_peers`, `entwurf_fresh_call`, `entwurf_resume_call`, `entwurf_retire_call` (operator-requested target only), `entwurf_callback`, `entwurf_self`, `entwurf_inbox_read` and `entwurf_register_native`. A native pi citizen offers seven of them (two hidden), and the pi-durable contact offers eight. An ACP session's own count is measured from its schema (§1B.3). The ACP backends are Claude and Snowflake Cortex Code. Antigravity and Codex are native-push citizens outside ACP; Antigravity's native push is paused (#152).
+
+---
+
+# Part I — Verifying a live session
 
 ## Evidence Levels
 
@@ -39,6 +34,244 @@ Every claim — and every History entry — sits on one of these rungs. Make the
 When you write a new entry, mark its rung. "L1 only" is honest; "L2 reached" is stronger but does not silently imply L3.
 
 ---
+
+## 1B. ACP self-run walk — the subject verifies itself, with the operator driving
+
+This is the section an ACP subject executes when the operator says "read VERIFY.md and run the checks yourself." The subject is the model in the operator's own resident session (on 2026-11-13: `entwurf/claude-opus-5-5` in GLG's `entwurf pi` session, run from a development checkout installed as the operating owner). It replaces the hand-run single-turn / multi-turn / scenario sections of the pi-shell-acp era (git `fc5e095`), keeping their shape — snapshot, turn map, inject → recall → update, real work, hygiene — and dropping their retired verbs, version counts and cross-process claims.
+
+The walk runs inside **one** existing session. The operator sends every turn; the subject proposes the next prompt and records what it saw, but never opens another session to play the operator. BASELINE's question bank is the operator's blind pass and comes first; this walk comes after, so the subject has read the answers here and must earn each claim with a measurement rather than by repeating this document.
+
+### 1B.0 Ground rules
+
+- **Allowed — a closed list.** Anything not on it, whether a command, a `run.sh` verb or an MCP call, needs the operator's instruction in this session. The list: reading files and source; read-only shell (`ls`, `cat`, `grep`, `git log/show/status`, `ps`, `readlink`, `jq`); `entwurf_self` and `entwurf_peers`; the read-only doctors and the deterministic gates named in §1B.2 and §1B.9; writing scratch files under a directory the operator names, outside the checkout.
+- **Named examples of what is not on that list:**
+  - Installing or building: `setup`; any `install-*`/`uninstall-*`/`takeover-*`/`wire-*`/`register-*`/`herdr-plugin-*`; `plugins/herdr/use-dev-checkout.sh`; `pnpm install`; `pnpm run build-bridge` or any build. On a host where this checkout is the operating owner, the gitignored `dist/` is the bytes live bridges load.
+  - Rewriting the meta store: `meta-bridge-prune`, `meta-bridge-fresh-cut`.
+  - Everything else: anything prefixed `LIVE=1`, `release-gate`, `pnpm run check:full`, `entwurf_fresh_call`, `entwurf_resume_call`, `entwurf_retire_call`, `entwurf_register_native`, `entwurf_callback`, `entwurf_inbox_read` (its garden id is caller-supplied and unverified, so another id drains that citizen's mail), an `entwurf_v2` send to anyone, a Cortex/agy/Codex call, `git commit`/`push`, editing any file in the checkout, the operator's profile, settings, hooks or overlay.
+- **Never:** reading, printing or copying credentials (`auth.json`, `.env*`, tokens); killing or signalling a process; deleting records, transcripts or caches; another session's transcript or record beyond the facts `entwurf_peers` already returns.
+- **Transparent mode:** verification here is not a benchmark. Use short turns. When something looks wrong, stop, say what was expected and what was seen, and wait for the operator. A failure is reported, not repaired.
+- **Evidence rung on every line** (Evidence Levels above): your own description is L0; an MCP call's returned payload is L2 for that call only; a file, process or transcript read outside the bridge is L3 only for the specific claim it independently corroborates, and otherwise is just what you observed. The operator's own observation is theirs, and you report it as theirs. Do not promote a rung because several weak observations agree.
+
+### 1B.1 Turn map
+
+The operator sends these in order; one turn may cover several steps if they are short. Numbering is for the report, not a script.
+
+| Turn | Step | Operator does |
+|---|---|---|
+| 1 | §1B.2 snapshot | "run the snapshot" |
+| 2 | §1B.3 self-recognition, measured | "now check your claims against the files" |
+| 3 | §1B.4 a code word to hold (inject) | gives a harmless code word and one fact |
+| 4–5 | §1B.5 real read-only work on this repository | names a question about the code |
+| 6 | §1B.4 recall, then update the fact | "what was the code word and fact?" then changes the fact |
+| 7 | §1B.6 effort | changes the thinking level in pi's selector, then sends a short turn |
+| 8 | §1B.7 abort | sends a turn that runs a while, presses ESC, then sends one more turn |
+| 9 | §1B.4 recall after the abort | "the code word, and the latest fact?" |
+| 10 | §1B.8 transcript axis and hygiene | "look at your own transcript and processes" |
+| 11 | §1B.9 deterministic gates (optional) | names which gate, if any |
+| 12 | §1B.10 report | "write the report" |
+
+Turns 7 and 8 need the operator's hands, and the operator may skip them; a skipped step is reported as not measured, never as passed.
+
+### 1B.2 Snapshot (L3)
+
+Collect, and report each line with its command:
+
+```bash
+readlink -f "$(command -v entwurf)"                 # which install owns the bin
+git -C <that checkout> log -1 --format='%h %s'      # source revision, when the owner is a checkout
+git -C <that checkout> status --short | head        # clean or not
+pi --version
+jq -r .version <checkout>/node_modules/@agentclientprotocol/claude-agent-acp/package.json
+jq -r .version <checkout>/node_modules/@agentclientprotocol/sdk/package.json
+<checkout>/run.sh doctor-pi-package                 # who owns the Pi user-scope registration
+<checkout>/run.sh doctor-pi-provider                # does the provider's bridge command boot
+```
+
+Then call `entwurf_self` and report `sessionId`, `origin`, `rail`, `cwd`. The meta record `~/.pi/agent/meta-sessions/<sessionId>.meta.json` gives `nativeSessionId`; your transcript is `~/.pi/agent/sessions/--<cwd with / as ->--/*_<nativeSessionId>.jsonl`. Find your own pi process and the ACP child under it, and report PIDs, parent PIDs and executable names only. Other processes' argv can carry other people's tasks, so do not print the host-wide argv list:
+
+```bash
+ps -o pid,ppid,etimes,comm -p "$PPID"                    # walk up from your own shell with -p <ppid> until pi
+ps -o pid,ppid,etimes,comm --ppid <your pi pid>          # its direct children; the ACP child is one of them
+```
+
+For a PID already on your own chain you may read its argv (`ps -o args= -p <pid>`), because pi and the ACP child may both show `node` as their name. Without that, a chain you cannot walk with certainty is reported as unknown.
+
+`doctor-meta-bridge` is the Claude Code native-citizen doctor; it is not about this ACP session. It is read-only toward the operator, but one of its checks delivers a test message inside a temporary world, so run it only when the operator asks.
+
+Pass: every line answered from a command; a version or path you could not read is reported as unknown. Fail: a version or owner stated from this document or from memory.
+
+### 1B.3 Self-recognition, measured
+
+Answer first, then check each answer against a source outside yourself:
+
+1. **Harness and backend:** you are a Claude model reached through Pi's `entwurf` provider over ACP (`claude-agent-acp`), not Claude Code started directly. Corroborate with the process tree from §1B.2.
+2. **Native tools:** list the native tools your callable schema carries, then compare with `DEFAULT_CLAUDE_TOOLS` and `DEFAULT_CLAUDE_DISALLOWED_TOOLS` in `pi-extensions/lib/acp/tool-surface.ts` and the `Skill` rule in `pi-extensions/lib/acp/config.ts`. Report differences; your schema wins over the file.
+3. **MCP:** list the MCP servers and tools your schema carries, verbatim (`mcp__entwurf-bridge__entwurf_v2` shape, §2.1). Compare the server names with `entwurfProvider.mcpServers` in `<cwd>/.pi/settings.json` and `~/.pi/agent/settings.json`, reading names only (`jq -r '.entwurfProvider.mcpServers // {} | keys[]'`); a server's `env` or args may hold secrets and are not printed. If names alone cannot be read, report the comparison as not measured. Report the count you see; it is not required to match another rail's count.
+4. **Carriers (§1A.0):** say what came through the engraving slot and what came through the first-user augment. Compare the engraving with `pi-extensions/lib/acp/prompts/engraving.md` (or the file `ENTWURF_ACP_ENGRAVING_PATH` names), and the augment with `enrichTaskWithProjectContext` in `pi-extensions/lib/acp/augment.ts` and with which AGENTS files exist for your cwd.
+5. **Input:** the `entwurf` rows declare text-only input (`ACP_ROW_INPUT` in `pi-extensions/lib/acp/models.ts`). Say what that means: no path carries image bytes to the backend, and an image block pi does pass to the converter becomes `[image omitted: <mime>]` in the rebuilt or delta prompt (`context.ts`). Whether pi's UI passes an attachment on a text-only row at all is unmeasured; if the operator tries it, report only what you received.
+
+Pass: answers match their sources, and "I cannot tell" where no source answers. Fail: a tool, server or carrier content that no source shows; the bridge-identity narrative attributed to the engraving.
+
+### 1B.4 Continuity — bridge and semantic, kept apart
+
+- **Inject (turn 3):** the operator gives a code word and one plain fact (Continuity notes, wording rule: animal, colour or place names, never anything that sounds like a secret). Repeat them once, exactly.
+- **Recall (turn 6):** return the code word verbatim and the fact, then accept the operator's update to the fact.
+- **After the abort (turn 9):** return the code word and the *updated* fact.
+- **Bridge side:** read the `[acp: …]` notices pi stored in an assistant message in your transcript (§1B.8). You cannot see them otherwise: they are display-only and are not sent back to you. Read them for the *previous* turn, never the one you are generating, which is not yet settled in the file; the operator sees the current turn's notices on screen. A first-turn `preparing` notice is visible only if this session's file still holds that turn. Notices are bridge-side evidence, not an independent proof of the backend's own session state. In a resident session the first turn shows `[acp: preparing claude session]`, then `[acp: session ready model=<id>]`, and later turns show `[acp: reusing live session]` while the session lives. A changed effort does not by itself open a new session: on reuse the new level is set and read back on the live session. A new session (`preparing` again, transcript resent as text) follows only when the session was dropped: a refused or mismatched effort answer, a first-turn cancel, an escalation or pre-prompt abort, a child death, or a changed bridge configuration. The model is locked for an `entwurf` session (§Appendix, model guard).
+
+Pass: semantic recall right on every recall turn, and the bridge reading explains any new session it shows. Fail: a recall that paraphrases the code word; a claim of reuse that the notices contradict.
+
+### 1B.5 Real read-only work (Layer 1)
+
+The operator names a question about this repository, for example: "where is the effort read-back notice produced, and which gate certifies it?" or "what does an ESC leave behind on a reuse turn, and where is that text?" Answer with `file:line` references you actually opened. Use `Bash` for search (`grep -rn`); there is no `Grep` tool on this surface.
+
+Pass: every reference opens to what you said; no recursive `pi` and no MCP detour for a file read. Fail: a reference you did not open; an answer from memory.
+
+### 1B.6 Effort (#142)
+
+Claude ACP rows map pi's thinking levels onto the agent's `effort` option of the same name (`CLAUDE_ACP_EFFORT_VALUES`, `claudeAcpThinkingLevelMap` in `models.ts`). Which of `low`..`max` a row offers is decided by pi's registry for that model: `xhigh`/`max` appear only where the registry maps them, and `off`/`minimal` are never offered. The level is set and read back after set-model on a new session, and on a reused session only when it changed; the transcript then carries `[acp: effort <value> read back]` before `sending prompt` (`backend.ts`). A refused or mismatched answer fails the turn before the prompt with `acp-thinking-level-unsupported` or a readback error, and drops a reused session.
+
+After the operator changes the level (turn 7), report the value read back from that turn's notice. Read it in turn 8 or later, once turn 7 has settled in the transcript; until then it is the operator's on-screen observation. Readback proves the agent accepted the setting. It is not evidence of applied reasoning depth or speed, so do not report on how hard you thought.
+
+### 1B.7 Abort (#142)
+
+ESC sends ACP `session/cancel`; the agent ends its own turn, and only after a bounded grace does process cleanup follow. After an ESC the turn carries one of two notices (`ACP_CANCEL_KEPT_NOTICE` / `ACP_CANCEL_CLOSED_NOTICE` in `backend.ts`):
+
+- `stopped — changes already made stay; next message continues this session` — a reuse turn the agent closed on cancel;
+- `stopped — changes already made stay; next message opens a new session` — a cancelled first turn, an escalation, or an abort before the prompt was sent.
+
+When the next turn rebuilds the transcript, an aborted assistant turn is followed by `[turn status: aborted — actions this turn had started may already have taken effect; cancellation is not rollback]` (`context.ts`). The reuse delta carries no such line.
+
+For turn 8 the operator should send something harmless that takes a few seconds, such as reading several files, never an edit, and should not change the effort level in the same turn: an ESC landing while a changed effort is being set is a pre-prompt abort and closes the session, which mixes two readings. After ESC, report which notice appeared, whether turn 8b reused or opened a session, and whether anything the cut turn started may have happened. Do not claim that a cut undid anything.
+
+### 1B.8 Transcript axis and hygiene (L3)
+
+```bash
+F=$(ls ~/.pi/agent/sessions/--*--/*_<nativeSessionId>.jsonl)
+jq -r '.message.role // .type' "$F" | sort | uniq -c
+jq -r 'select(.message.role=="assistant") | .message.content[]? | select(.type=="text") | .text' "$F" | grep -o '\[acp: [^]]*\]'
+```
+
+- Pass: user and assistant turns accumulate in your own pi transcript. Under ACP the memory axis is still pi's file, and no second memory layer exists. There is no separate child pi transcript in a resident session.
+- **Processes:** report the ACP children under your own pi process now. Use one alive child per live `(sessionKey, backend, modelId, bridgeConfigSignature)` as the expected bound (§2.3). Without a "before" count, the delta is unmeasured. A process name alone does not prove ownership or orphanhood. Look only, and never kill.
+
+### 1B.9 Deterministic gates (optional, operator's pick)
+
+Deterministic gates are designed to run offline with a sandboxed HOME, `PI_CODING_AGENT_DIR` and XDG roots (AGENTS.md Verification), but a subject should not take that as a blanket guarantee. Run one only when the operator names it in this session:
+
+- `./run.sh check-acp-set-model-readback` covers model readback, effort and cancel/abort. Running it runs the fixture tests, not their mutants; mutant kill-power is a separate PARTIAL qualification (`scripts/mutants/acp-set-model-readback.json`), which is a maintainer action.
+- `./run.sh check-acp-carrier-augment`, `check-acp-tool-surface` and `check-acp-config` cover the carriers, the tool surface and the MCP projection.
+- `pnpm check` is the core tier, about a minute on the reference host.
+
+A green gate certifies its fixture contract, not this live session, so report it beside the live observations, not as one of them. `pnpm run check:full` (about 16 minutes) and every `LIVE=1` gate belong to the maintainer floor (§3) and are not part of this walk.
+
+### 1B.10 Report
+
+The report is one table, then findings:
+
+| Step | Observed | Evidence (command / `file:line` / transcript line) | Rung | Verdict |
+|---|---|---|---|---|
+
+- **Verdicts:** use `pass`, `fail`, `not measured` or `operator-judged` (the operator saw it; you did not).
+- **Findings:** classify each one as **Blocker**, **Defect** or **Observation** (AGENTS.md Review Discipline). Name the source line that disagrees.
+- **Evidence source:** a row whose Evidence column is empty, or whose only source is VERIFY.md itself, gets `not measured`. This document tells you what to look for, but it is not the evidence.
+- **Boundary:** end with what this walk cannot show. Verifier and subject are one session on one bridge, so the walk stays below L4. It is n=1. Readback is not reasoning depth. There is no long-haul soak (L5).
+
+Return the report to the operator in the session. Send it nowhere else unless the operator says so.
+
+---
+
+## 1A. Main Agent Evaluation — Is `entwurf` Claude strong enough?
+
+Separate from continuity gates. Gates prove "sessions continue"; this questionnaire examines tool self-awareness / native tool usability / MCP-boundary awareness / long-turn focus / quality vs direct Claude Code. The current subject is whichever curated `entwurf/<model>` row the operator has opened in a resident `entwurf pi` session (on 2026-11-13 GLG's `entwurf/claude-opus-5-5`); turns accumulate in that one session as the operator sends them. A one-shot `pi --provider entwurf … -p` is turn-scoped (§0 criterion 1), so it cannot run Layer 3 and is not how this questionnaire is driven. §1B turns these layers into a step-by-step walk the subject runs on itself.
+
+### 1A.0 Two carrier surfaces — engraving vs pi-context-augment (load-bearing)
+
+`entwurf` delivers identity-relevant text through **two structurally distinct surfaces**. Collapsing them into "the system prompt" is the most common verifier-side mistake. (BASELINE Q-B0/Q-L1 grade the same separation operator-side.)
+
+| Surface | Source | Delivery shape | Default content |
+|---|---|---|---|
+| **Engraving carrier** | `pi-extensions/lib/acp/prompts/engraving.md` (or `ENTWURF_ACP_ENGRAVING_PATH`) | Claude `_meta.systemPrompt` — full-replacement identity slot | Operator-authored, optional opt-out; tiny non-empty by default on Claude ACP (replaces the `claude_code` preset + strips its auto-memory advertisement). Emptying the file is the opt-out. |
+| **pi-context-augment** | `pi-extensions/lib/acp/augment.ts` (`enrichTaskWithProjectContext`) | First-user-message prepend (not the system slot) | Always carries (1) the bridge identity line and the tool-truth rule ("the actual callable schema is the source of truth"). Then, each only when the file exists and is non-empty: (2) `~/AGENTS.md`, (3) the cwd's `AGENTS.md` when it differs from the home one. The whole augment is cut at 50 KiB with a visible `[entwurf: context augment truncated …]` marker, so a long home file can push the cwd block out entirely, and a cwd block the prompt already carries is dropped from the augment rather than sent twice (`truncateAugment`, `prependNewPromptAugment`). |
+
+Pass (carrier honesty): the subject distinguishes engraving from pi-context-augment by name or structure without prompting; on ACP targets says which augment components arrived, given which AGENTS files exist for its cwd (a missing component is a fail only when its file exists and is non-empty, the truncation marker is absent, and the prompt did not already carry that cwd block); may quote the engraving but must **not** attribute bridge identity / AGENTS / memory policy to it. Fail: attributes the bridge-identity narrative to the engraving carrier; claims the augment is empty on an ACP run; invents engraving content. Native pi exception: on native targets the bridge-identity line and `~/AGENTS.md` are not part of the augment — the PASS criterion is honesty about what arrived, not the three-component checklist.
+
+### 1A.1 Layers
+
+- **Layer 0 — self-awareness:** ask environment self-awareness / MCP visibility / upstream-instruction awareness, guessing prohibited. Pass: recognizes native tool family, says "I don't know" honestly, answers MCP visibility only as configured, describes upstream instruction type without reproducing internal prompts. Fail: claims a nonexistent tool, conflates pi-custom and native tools, hallucinates MCP visibility, or conflates the two carriers (§1A.0).
+- **Layer 1 — native tool use:** throw file-reading / structure-analysis / regression-hunting tasks. The Claude ACP default native surface is `Read`/`Bash`/`Edit`/`Write`, plus `Skill` when skill plugins are configured (`DEFAULT_CLAUDE_TOOLS` in `pi-extensions/lib/acp/tool-surface.ts`, `config.ts`); there is no `Grep`/`Glob`, so search goes through `Bash`. The session's actual callable schema is the truth, not this sentence. Pass: tool selection is natural for that surface; no detour through MCP or recursive `pi`. Fail: strange detours for simple reads; speaks from memory without reading; claims a tool its schema does not carry.
+- **Layer 2 — MCP boundary:** the ACP session sees exactly the MCP servers the operator declared in `entwurfProvider.mcpServers` (global and project settings merged per name; on this checkout the project declares `entwurf-bridge`), and the verbs that server lists. How many entwurf verbs the ACP projection shows is measured from the session's own callable schema; do not carry over the native-Pi (seven, two hidden) or pi-durable (eight) counts, which are other rails. Changing the declaration changes `bridgeConfigSignature`, so a live incompatible session is replaced rather than silently reused (`check-acp-config`, `smoke-acp-mcp-live`). A declared server with no callable tool in the schema is reported as exactly that; whether it is connected, and why it shows nothing, stays undetermined. Pass: names only servers and tools its schema carries; explains the native-vs-MCP boundary; treats `entwurf_register_native` as binding an already-running conversation (today Antigravity only, and paused by #152), never as fresh spawn. Fail: pretends to use an unseen tool; mimics entwurf via recursive `pi`.
+- **Layer 3 — focus across turns:** inject a fact, then accumulate turns mixing retrieval/exploration. Pass (a heuristic carried over from the pi-shell-acp era, not a release threshold): after **8 turns** holds **3+ early facts** incl. **one verbatim string injected before turn 5**; no repeated exploration, no self-contradiction, no tool-strategy drift. Fail: forgets early reads; paraphrases instead of returning the verbatim string. Note: entwurf exposes no user-facing compaction; use the backend's `usage_update` footer as an overflow-risk signal (it follows the ACP backend's `used/size`, not pi's visible-transcript estimate).
+- **Layer 4 — vs direct Claude Code (operator-only; the subject cannot run it alone):** requires a verifier holding **both** the `entwurf` and a direct path (human-in-loop, or both transport handles). Compare latency / native tool accuracy / detours / boundary confusion / quality around turns 10–15. Repeated tool confusion, long-turn forgetting, or boundary workarounds are a fail.
+
+Interpretation: Layers 0–2 healthy → basic qualifications confirmed. Layer 3 weak → strengthen prompt shape + corroborate with bootstrap logs / process state / sentinel recall. Layer 4 much weaker than direct → revisit bridge handoff. This questionnaire does not replace gates.
+
+---
+
+## 0. Quality Criteria
+
+The goal is not merely "invoke Claude Code." We want:
+
+1. **Session continuity at the agent-shell level** — only a resident pi (`--entwurf-control`, which `entwurf pi` adds) is process-scoped and reuses one live ACP session, each later turn sending only the new user message; plain interactive `pi` and `pi -p` are turn-scoped and open a new ACP session every turn, carrying pi's transcript rendered as one text prompt (`context.ts`) — a text rendering, never a backend-native transcript hydration (`resolveLifecyclePolicy`, `pi-extensions/lib/acp/session-store.ts`; [docs/acp-backend-rail.md](./docs/acp-backend-rail.md)).
+2. **Preservation of pi harness semantics** — pi session files / transcripts / memory pipeline stay a shared axis.
+3. **restart-hygienic** — process-scoped reuse continues the same ACP session across turns inside a long-lived resident; persisted records are written/validated for the future resume-load lane, not the live continuity path today.
+4. **Thin bridge** — no second harness built inside this repo.
+5. **Explicit capability boundary** — pi custom tool / user MCP visibility is determined solely by `entwurfProvider.mcpServers`; no automatic `~/.mcp.json` loading.
+6. **Operational hygiene** — no orphan subprocesses, no excess persisted session garbage.
+
+## Continuity notes
+
+### Wording — avoid safety-interpretation contamination
+
+When injecting a fact for a continuity check, use **plaintext that does not trigger model safety interpretation**. Avoid `secret token`, `password`, `API key`, `credential`, and meta-directives like "do not leak" — such wording makes the model treat the prompt as an exfiltration attempt and refuse, which makes **continuity look broken even when it is alive** (this happened once with `test-token-123`, misdiagnosed as a delegation failure). Instead: `The code word is owl → reply in one word → owl`; code names / colors / animal names. Do not mix continuity and safety-behavior verification in one prompt.
+
+### bridge continuity vs semantic continuity
+
+- **bridge continuity:** same `sessionKey` / same `acpSessionId` through in-memory process-scoped reuse. Persisted session records are written for a future resume/load lane but are not consumed today.
+- **semantic continuity:** a fact from a prior turn is retrievable in a later turn.
+
+Either can be alive while the other looks dead (the wording case above is bridge-alive / semantic-looks-dead). When in doubt, change the wording and retry once, and read the turn's own lifecycle notices in the assistant text (`[acp: preparing …]` on a new session, `[acp: reusing live session]` on reuse). `smoke-acp-session-reuse-live` reads those notices as its reuse oracle and treats recall only as supporting evidence (`scripts/smoke-acp-session-reuse-live.ts`); it does not independently certify the backend's own native session.
+
+---
+
+## 2. Manual judgement checks — what the gates cannot fully judge
+
+The invariants a gate certifies are listed in Part II ("Gate pointers for the live-session invariants"). A gate certifies its fixture contract, not this session. What follows is what a gate cannot fully judge.
+
+
+### 2.1 MCP callable-identifier shape (verified property, gate-external)
+
+The literal callable identifier differs per backend — probe by asking the agent to print it **verbatim** (do not ask "hyphen or underscore" — ambiguous between outer separator and inner server name):
+
+| Backend | Literal identifier | Boundary |
+|---|---|---|
+| Claude | `mcp__entwurf-bridge__entwurf_v2` | native Claude tool surface + explicit MCP server |
+| Cortex | `mcp__entwurf-bridge__entwurf_v2` | same identifier shape, different native tool surface |
+
+The identifier cannot distinguish Claude from Cortex; native tools and carrier facts must.
+
+### 2.2 MCP injection visibility
+
+Folded into §1A.1 Layer 2 and §1B.3 item 3.
+
+### 2.3 Process / cache hygiene — the orphan bound (§gate-external judgement)
+
+Apply per backend under test:
+
+```
+AFTER_<BACKEND> ≤ BEFORE_<BACKEND> + (distinct alive
+  (sessionKey, backend, modelId, bridgeConfigSignature) tuples this run holds open)
+```
+
+An **upper bound**, not an equation: child reuse and idle reaping may keep the delta below it; a config-signature or `(provider, model)` switch may add one. `AFTER > BEFORE + alive_tuples` is actionable. Walk the backend process parent chain; any ACP child whose parent `pi` has exited is an orphan—preserve it as evidence.
+
+### 2.4 pi session record as a shared memory axis
+
+Pi session files stay the shared record source even under ACP: "Claude via ACP, memory via the pi axis (JSONL → Denote/andenken)", and the AI does not run its own memory layer. The check and its recipe are §1B.8.
+
+---
+
+# Part II — Maintainer floor (read for context; the subject does not run it)
 
 ## 0A. Execution Policy — Transparent Mode
 
@@ -92,6 +325,25 @@ Migration moves lines BETWEEN the two axes `inventory-verification-surface.ts` c
 drop in the COMBINED number is subtraction. That is why the inventory reads both locations: a gate
 that moved out of `scripts/` and into a file beside its subject would otherwise read as deleted.
 
+### Gate pointers for the live-session invariants
+
+The single-turn / multi-turn / cross-process / persistence-boundary / shutdown invariants that earlier editions hand-ran against the retired v1 verbs are now **deterministic or live gates**. Verify them through the gate, and reserve manual time for the human-judgement surfaces below.
+
+| Invariant | Current gate (pointer) |
+|---|---|
+| Single-turn prompt extraction, SessionStart hook not mistaken for prompt | `smoke-acp-raw-turn-live` (a bare-vendor shape by design: no overlay and no session meta, so it is not the production session shape), `check-acp-prompt-builder` |
+| Multi-turn continuity + recall (process-scoped reuse) | `smoke-acp-session-reuse-live`, `check-acp-session-reuse` |
+| Cross-process continuity / cache before-after | `check-acp-session-store` (signature, decideBootstrap, persist/parse) |
+| Lifecycle policy — turn-scoped is always new; process-scoped may reuse only the live in-memory session; persisted records are not a resume/load path today | `check-acp-session-store`, `check-acp-session-reuse` |
+| Tool-call / event mapping | `check-acp-event-mapper`, `smoke-acp-provider-live` |
+| Prompt lifecycle — no wall-clock cutoff on a running turn; abort ends it by ACP `session/cancel` with bounded cleanup; a child death is reported with exit status + stderr on new AND reuse turns; our prompt-phase error text is not classified transient by pi | `check-acp-prompt-lifecycle`, `check-probe-ordering` |
+| Claude typed `incomplete_tool_call` prompt failure — real pi retry/overflow classifiers reject the fixed verdict, raw evidence stays in existing diagnostics, exactly one seal and drop on new/reuse; other failures retain the legacy stderr path, cancel stays separate. A deterministic receipt does not certify the target vendor runtime. No LIVE gate induces this rejection; the raw-turn and reuse smokes certify only their own rows above. | `check-acp-vendor-rejection` (four mutants) |
+| Claude set-model answer read back before the prompt — an exact row, or the one alias row (value and name) measured for the requested id; a missing model option, another row or any other value/name pair refuses with non-transient text. Deterministic only: the answer shapes measured at 0.85.1, and unchanged at 0.90.0 with the production session meta (no prompt), are fixture literals, not a runtime certificate. | `check-acp-set-model-readback` (two set-model mutants), `check-probe-ordering` |
+| Claude effort (#142) — curated rows offer pi's `low..max` through pi's own selector and clamp; the level is resolved before any spawn and set + read back as `effort` after set-model on a new session, and on reuse only when it changed (not in the reuse signature); no level, an unsupported level or a non-effort value refuses as `acp-thinking-level-unsupported`; a refused or mismatched answer fails before the prompt, our authored text non-transient (the appended stderr tail and a bootstrap timeout follow the existing pre-prompt path), and a reused session is dropped, so the next turn opens a new session and resends the transcript. Deterministic only: the effort shapes measured at 0.106.0 with no prompt are fixture literals; readback is not evidence of applied reasoning depth or speed. | `check-acp-set-model-readback` (five effort mutants) |
+| What an abort leaves (#142) — after the turn settles, a reused turn the agent closed on `session/cancel` says the live session continues; a dropped session (cancelled first turn, escalation, pre-prompt abort) says the next message opens a new one; both say changes already made stay. A rebuilt (new-session) transcript follows an `aborted` assistant turn with one status line saying the turn was cut and a cut is not rollback, claiming nothing about what ran; the reuse delta carries no such line. An abort already raised, or arriving, while a reuse turn awaits a changed effort's answer settles on the abort, sends no prompt and drops the session. A reuse turn's stream opens only when its own prompt is sent, so an update arriving during its effort set is never shown or sealed as that turn's; inside the prompt window the wire carries no turn id and that part rests on the adapter. Deterministic only (scripted ACP partner and pure transcript rendering); the real-vendor n=1 cells are in #142, not a release certificate. | `check-acp-set-model-readback` (seven cancel mutants) |
+| Operator mcpServers / skills reach the live session | `smoke-acp-mcp-live`, `smoke-acp-skill-live`, `check-acp-config` |
+| Overlay isolation + memory containment | `check-acp-overlay`, `smoke-acp-memory-containment-live`, `check-acp-tool-surface` |
+
 ### The canonical floor — two entry points
 
 - **Deterministic floor — two tiers (#70):** `pnpm check` is the everyday CORE — toolchain (lint + typecheck), the vitest lanes, and the pure-unit / behavioral-contract / source-topology gates plus the cheap static coherence checks. It prints its own total wall time; acceptance is ≤60s on the reference host `oracle` (an operator measurement, never a hard wall-clock gate on arbitrary hosts). `pnpm run check:full` is the FULL deterministic floor — the core plus the hermetic-integration and package/install tiers — and is what the frozen-candidate protocol, push CI, release-gate, and `prepublishOnly` run. Exact membership is the named `check:*` group scripts in `package.json` (the executable SSOT — this document records meaning and principles, not the command list); a gate changes tier by semantic-class decision, never by getting faster or slower. One core member assumes a build output: the beside test `pi-extensions/entwurf-control.test.ts` (reached through `check-tests-beside-behavior`) registers the COMPILED bridge and refuses by name when it is absent. `prepare` normally builds it at install; after an `--ignore-scripts` install or a bridge source change, run `pnpm run build-bridge` (in the sandbox candidate when verifying one) before the core. The FULL tier carries the qualification HEAD (`check-gate-manifests`, through `check:hermetic`); the everyday core does not, and neither tier carries the separately scheduled mutant-executing body (`check-gate-qualification`).
@@ -101,7 +353,7 @@ that moved out of `scripts/` and into a file beside its subject would otherwise 
   - **MUST tier** (release-blocking — owns the exit code; "green" applies only here): `pnpm run check:full`, `smoke-entwurf-v2-matrix-live`, `check-bridge`, `doctor-pi-provider` (#81 — `check-bridge` proves the launcher this checkout SHIPS; this proves the invocation the operator's pi provider actually EXECS, by booting it and requiring the entwurf verb set back, because `command -v` answers yes for a command that exits 127; wired as a step on 2026-08-19 after a relocated pnpm cmd-shim cost a cut sixteen LIVE steps before the same fact surfaced at `smoke-acp-bundled-mcp-live`), the resident-garden-guard zero-token half (record birth / record-keyed socket / attach-on-reopen), the `smoke-acp-*-live` ACP plugin smokes (socket-citizen / raw-turn / overlay / provider / session-reuse / carrier-augment / memory-containment / rgg / mcp / skill / bundled-mcp / v2-send), the axis wired in on 2026-07-31 that the aggregate had simply never listed (`smoke-claude-native-resume-live`), `smoke-entwurf-chain-live` — the cross-harness delivery chain (native Claude Code → pi GPT → pi ACP Sonnet → mailbox terminus) proving sender identity and replyability at every hop plus a real read receipt at the end — the integrated `smoke-mux-lifecycle-live` (its own note below), and the two OMP steps 0.16.0 wired: `smoke-omp-receive-live` (the addressed roundtrip into a live omp citizen; it reads the capability registry and decides its own outcome rather than passing by default) and `smoke-omp-fresh-live` (the clause 7 receipt the release stop now requires). (`smoke-session-id-name` is gone — #50 C3: its `--session-id`/`--name` substrate has no entwurf consumer anymore.)
   - **BEHAVIOR tier** (advisory, non-blocking): the resident-garden-guard positive (a model-in-loop `entwurf_self` turn). A BEHAVIOR FAIL is surfaced with its artifact path but **never blocks the cut**. The lane holds what the model *chooses*, never what our wiring fails to deliver — a gate that TELLS the model which tool to call stays MUST, because its failure is ours — measured 2026-07-24, when the tool turned out to be absent from the session schema in both observed failures (the bundled-MCP readiness gap recorded in `scripts/smoke-acp-v2-send-live.ts`).
   - **Every MUST step is invoked and reports its own outcome.** Prerequisite-bearing LIVE MUST steps ride the P1 STEP OUTCOME protocol (`scripts/lib/step-outcome.sh`): exit 0 = PASS, exit 97 = SKIP (a prerequisite the step does not have, printed as an `[entwurf:skip]` line), anything else = FAIL. The non-skippable static step (`pnpm run check:full`) is inline: 0 = PASS, nonzero = FAIL, no SKIP arm — it has no prerequisite to decline. A skip is never counted as a pass — that hole is what let a cortex-less host read as cortex acceptance. Without `--cut` this is the unattended diagnostic: SKIPs are reported and the run still exits 0. **`--cut` makes it acceptance and any MUST SKIP is red**, which is how "a real cut needs `LIVE=1` with `SKIP=0`" stopped being prose. A green MUST gate is **necessary, not sufficient** — GLG authorizes the cut.
-  - **When cost-bearing MUST gates run (fixed 2026-07-23, the F6/F7 lesson):** a commit that touches a rail a MUST-tier live gate covers runs that gate **before cross-review is requested** — never parked behind "run it at approval time". Deferring a wired gate to a human decision is what let F6/F7 ship reviewed-and-approved; the wiring exists so the verdict never depends on who pressed enter. "배선이 없어 못 한 것은 OK, 배선이 있는데 안 돌린 것은 우리가 남긴 구멍이다." Model-in-loop cost is spent via the subscription-backed `entwurf` provider where the gate allows it, a free-tier native model otherwise; cost is a reason to pick the cheap target, not to skip the gate.
+  - **When cost-bearing MUST gates run (the F6/F7 lesson, 2026-07-23; timing since 2026-09-11 owned by AGENTS.md Scheduling):** a MUST-tier live gate covering a touched rail runs, and must be green, before that change lands. It is never left unrun because a human approved the change: deferring a wired gate to a human decision is what let F6/F7 ship reviewed-and-approved, and the wiring exists so the verdict never depends on who pressed enter. Where in the sequence it runs is AGENTS.md's call: interim checkpoint commits carry scoped review and focused checks with unmeasured boundaries recorded, and native/LIVE/release floors are mandatory before landing. LIVE is opt-in (AGENTS.md Verification): a model-bearing run needs the operator's go for that spend. Without it the gate stays unrun and the change does not land; a missing go blocks landing and never stands in for the gate. The 2026-07-23 wording, "before cross-review is requested", predates that sequence. "배선이 없어 못 한 것은 OK, 배선이 있는데 안 돌린 것은 우리가 남긴 구멍이다." Model-in-loop cost is spent via the subscription-backed `entwurf` provider where the gate allows it, a free-tier native model otherwise; cost is a reason to pick the cheap target, not to skip the gate.
 
 > **The herdr rail is an on-demand axis until it has run.** `smoke-herdr-fresh-call-live` opens a real caller inside a real herdr pane, has it invoke the PUBLIC `entwurf_fresh_call`, and reads the child's nonce callback — the one axis no deterministic gate reaches, since the rail is selected from the caller's own process environment. **The release aggregate does not yet require the herdr rail**: herdr is optional (a cut on a host without it must not block), and first evidence precedes promotion — a rail whose first acceptance run is days old has not earned a place in the gate that blocks every cut. Run it directly with `LIVE=1 ./run.sh smoke-herdr-fresh-call-live` whenever a cut changes herdr rail code, and promote it to a MUST only after the axis has a run history to point at. Without `LIVE=1`, or without herdr/pi/claude on PATH, it reports protocol SKIP — never a pass.
 
@@ -111,7 +363,7 @@ that moved out of `scripts/` and into a file beside its subject would otherwise 
 
 > **Switching the plugin's production acquisition source is a re-proof, not a configuration change (#116 M3-b3).** `runtime-lock.json` carries a closed `source` discriminant: `npm` (exact `name@version` plus the published sha512, compared against the tarball's own bytes) is the production authority, and `herdr-checkout` (the exact commit Herdr checked out, from the fixed remote) is a VERIFICATION-ONLY carrier that exists so a candidate needs no npm release. Evidence does not transfer between them. Before a release that moves the production source — to npm, or to a GitHub Release tarball plus its sha512 — the exact acquisition and integrity comparison, the installed runtime (name@version, compiled entry, three executable bins, a real `check-bridge`), the swap and torn-swap recovery, activation and deactivation, and the package-consumer proof must all be re-run against THAT source. A candidate proof green on the checkout carrier says nothing about a registry artifact, and the reverse is equally true. **Records from before this contract are refused, not migrated:** a v1 runtime journal or activation ledger fails certification by name, and the way forward on such a host is an explicit `entwurf herdr-plugin-deactivate` (or a hand-cleared runtime/ledger state) before the next install — there is no reader that accepts both schemas, because the older shape cannot say WHICH artifact it was.
 
-> **Cortex is an on-demand axis, not an aggregate one.** Its rail needs an external Snowflake connection and login that the host owns, not the repo — so wiring it into the aggregate would block every cut taken on a host without that account. **The release aggregate does not re-certify Cortex**; `LIVE=1 ENTWURF_ACP_CORTEX_CONNECTION=<conn> ./run.sh smoke-acp-cortex-live` stays a required direct call whenever a cut changes Cortex rail code or an operator elects to certify that host. Its honest-skip behaviour is unchanged: run it without the connection and it reports protocol SKIP, never a pass. **Operator-host limit (2026-08-20, measured):** the source-owning host has no Snowflake subscription, and Cortex Code offers no free tier that a live turn can reach — a direct attempt confirmed it. So on this host `smoke-acp-cortex-live` can only ever report protocol SKIP, and no LIVE Cortex evidence can be produced here until Snowflake supplies a free-usable route or the account is subscribed. Record that SKIP as an absent axis; never soften it into a pass, and never substitute a different backend as Cortex evidence.
+> **Cortex is an on-demand axis, not an aggregate one.** Its rail needs an external Snowflake connection and login that the host owns, not the repo — so wiring it into the aggregate would block every cut taken on a host without that account. **The release aggregate does not re-certify Cortex**; `LIVE=1 ENTWURF_ACP_CORTEX_CONNECTION=<conn> ./run.sh smoke-acp-cortex-live` stays a required direct call whenever a cut changes Cortex rail code or an operator elects to certify that host. Its honest-skip behaviour is unchanged: run it without the connection and it reports protocol SKIP, never a pass. **Operator-host limit (2026-08-20, measured):** the source-owning host has no Snowflake subscription, and Cortex Code offers no free tier that a live turn can reach — a direct attempt confirmed it. So on that host, as measured that day, `smoke-acp-cortex-live` could only report protocol SKIP; whether a host has a usable connection now is a fresh measurement that needs the operator's approval, never an inference from this sentence. Record that SKIP as an absent axis; never soften it into a pass, and never substitute a different backend as Cortex evidence.
 >
 > A cut that touches the prompt-lifecycle contract (no wall clock on a running turn) owes one long-turn acceptance the aggregate floor is too short to carry: `LIVE=1 ./run.sh smoke-acp-long-turn-live` drives a real turn whose tool work outlasts the retired 600s cutoff and requires exactly one cold ACP bootstrap in the transcript. It takes >12 minutes by construction and is on-demand, not part of `release-gate`.
 >
@@ -352,33 +604,13 @@ every focused gate green at the time:
   stale". The installed surfaces run compiled JS (Hard Rule 11), so an un-rebuilt `dist` means the
   focused gates proved the source while every package-shaped gate still judged the previous build.
 
-### Wording — avoid safety-interpretation contamination
-
-When injecting a fact for a continuity check, use **plaintext that does not trigger model safety interpretation**. Avoid `secret token`, `password`, `API key`, `credential`, and meta-directives like "do not leak" — such wording makes the model treat the prompt as an exfiltration attempt and refuse, which makes **continuity look broken even when it is alive** (this happened once with `test-token-123`, misdiagnosed as a delegation failure). Instead: `The code word is owl → reply in one word → owl`; code names / colors / animal names. Do not mix continuity and safety-behavior verification in one prompt.
-
-### bridge continuity vs semantic continuity
-
-- **bridge continuity:** same `sessionKey` / same `acpSessionId` through in-memory process-scoped reuse. Persisted session records are written for a future resume/load lane but are not consumed today.
-- **semantic continuity:** a fact from a prior turn is retrievable in a later turn.
-
-Either can be alive while the other looks dead (the wording case above is bridge-alive / semantic-looks-dead). When in doubt, change the wording and retry once, and read the turn's own lifecycle notices in the assistant text (`[acp: preparing …]` on a new session, `[acp: reusing live session]` on reuse). No automated smoke separates these yet.
-
-## 0. Quality Criteria
-
-The goal is not merely "invoke Claude Code." We want:
-
-1. **Session continuity at the agent-shell level** — process-scoped turns reuse one live ACP session; fresh/turn-scoped paths open a new one rather than reconstructing a transcript inside entwurf.
-2. **Preservation of pi harness semantics** — pi session files / transcripts / memory pipeline stay a shared axis.
-3. **restart-hygienic** — process-scoped reuse continues the same ACP session across turns inside a long-lived resident; persisted records are written/validated for the future resume-load lane, not the live continuity path today.
-4. **Thin bridge** — no second harness built inside this repo.
-5. **Explicit capability boundary** — pi custom tool / user MCP visibility is determined solely by `entwurfProvider.mcpServers`; no automatic `~/.mcp.json` loading.
-6. **Operational hygiene** — no orphan subprocesses, no excess persisted session garbage.
-
 ---
 
 ## 1. Setup
 
-**One install command to remember: `./run.sh setup <project>`.** It is idempotent — re-run the exact same command whenever anything looks wrong. There is no second install surface to juggle: from a clone `setup` runs the whole floor in order.
+> **An agent session never runs this section.** Install, re-install, takeover and uninstall rewrite operator-owned registration, so they are an operator action in a human shutdown window. On a host whose user scope another root already owns, a re-run `setup` is a zero-write refusal, not a repair; the owner-specific path, including `takeover-user-scope` and a Herdr developer checkout, is [setup-clean-host §1.1](./docs/setup-clean-host.md#11-user-scope-ownership-one-shared-registration-one-recorded-owner). An agent verifying an installed host reads doctors (§1B.2) and stops at "this looks broken", reporting instead of repairing.
+
+**One install command to remember: `./run.sh setup <project>`.** It is idempotent: on a host whose registration this checkout owns, the operator re-runs the exact same command when something looks wrong. There is no second install surface to juggle: from a clone `setup` runs the whole floor in order.
 
 1. `pnpm install` — installs the pinned development dependencies and builds the bridge (source-checkout bootstrap only; an installed package never runs npm/pnpm inside `node_modules`)
 2. pi wiring → `<project>/.pi/settings.json` + user-scope registration — only when a `pi` inside the supported range (`>=1.5.2 <1.6`) is on PATH; absent pi is an explicit zero-state SKIP, a below-floor pi is a detected FAIL. The user-scope entry is owner-recorded (#86 C2): another root's live-or-missing ownership makes this step a zero-write refusal (setup: pi FAIL) that names `takeover-user-scope`; the install-states bind the exact managed settings path (a drifted/symlinked/corrupt target is a zero-write refusal) and the inverse removes only the recorded owner's exact entry; `doctor-pi-package` reports the verdict
@@ -393,7 +625,7 @@ The goal is not merely "invoke Claude Code." We want:
 ```bash
 git clone https://github.com/junghan0611/entwurf /path/to/entwurf && cd $_
 ./run.sh setup /path/to/consumer-project
-# re-run the SAME command any time to repair a broken install
+# the owner of this registration may re-run the SAME command to repair it (§1 note above)
 ```
 
 Expected tail on a fully green host: `DONE: entwurf setup — result: green (computed from the component outcomes above).` The summary above it lists every component as PASS/SKIP/FAIL; a detected harness that could not be completed is named FAIL and the command exits nonzero (`result: NON-GREEN (FAIL: …)`) while every valid component stays installed — re-running the same `setup` is the repair action. On a host with `claude`, verify `./run.sh doctor-meta-bridge`. On a host with `agy`, verify all three: `doctor-agy-bridge`, `doctor-agy-statusline`, and `doctor-agy-hooks`. After adding a backend to `META_BACKENDS`, re-run the sibling install then the doctor — a green checkout with a stale deployed plugin is a silent write-stop on that rail. Each harness doctor remains the fail-loud per-leaf acceptance surface.
@@ -459,91 +691,6 @@ frozen here.
 
 ---
 
-## 1A. Main Agent Evaluation — Is `entwurf` Claude strong enough?
-
-Separate from continuity gates. Gates prove "sessions continue"; this questionnaire examines tool self-awareness / native tool usability / MCP-boundary awareness / long-turn focus / quality vs direct Claude Code. Run it against `entwurf/claude-sonnet-5-5` via a direct `pi --provider entwurf` turn (or a live ACP session); accumulate turns by re-prompting the same target.
-
-### 1A.0 Two carrier surfaces — engraving vs pi-context-augment (load-bearing)
-
-`entwurf` delivers identity-relevant text through **two structurally distinct surfaces**. Collapsing them into "the system prompt" is the most common verifier-side mistake. (BASELINE Q-B0/Q-L1 grade the same separation operator-side.)
-
-| Surface | Source | Delivery shape | Default content |
-|---|---|---|---|
-| **Engraving carrier** | `pi-extensions/lib/acp/prompts/engraving.md` (or `ENTWURF_ACP_ENGRAVING_PATH`) | Claude `_meta.systemPrompt` — full-replacement identity slot | Operator-authored, optional opt-out; tiny non-empty by default on Claude ACP (replaces the `claude_code` preset + strips its auto-memory advertisement). Emptying the file is the opt-out. |
-| **pi-context-augment** | `pi-extensions/lib/acp/augment.ts` (`enrichTaskWithProjectContext`) | First-user-message prepend (not the system slot) | Always populated on ACP-routed targets: (1) the bridge identity line, (2) `~/AGENTS.md` body, (3) the cwd repo's `AGENTS.md` in a `<project-context path="…">` block. |
-
-Pass (carrier honesty): the subject distinguishes engraving from pi-context-augment by name or structure without prompting; on ACP targets confirms all three augment components arrived; may quote the engraving but must **not** attribute bridge identity / AGENTS / memory policy to it. Fail: attributes the bridge-identity narrative to the engraving carrier; claims the augment is empty on an ACP run; invents engraving content. Native pi exception: on native targets the bridge-identity line and `~/AGENTS.md` are not part of the augment — the PASS criterion is honesty about what arrived, not the three-component checklist.
-
-### 1A.1 Layers
-
-- **Layer 0 — self-awareness:** ask environment self-awareness / MCP visibility / upstream-instruction awareness, guessing prohibited. Pass: recognizes native tool family, says "I don't know" honestly, answers MCP visibility only as configured, describes upstream instruction type without reproducing internal prompts. Fail: claims a nonexistent tool, conflates pi-custom and native tools, hallucinates MCP visibility, or conflates the two carriers (§1A.0).
-- **Layer 1 — native tool use:** throw file-reading / structure-analysis / regression-hunting tasks. Pass: Read/Edit/Bash/Grep/Glob selection is natural; no detour through MCP or recursive `pi`. Fail: strange detours for simple reads; speaks from memory without reading.
-- **Layer 2 — MCP boundary:** by default the entwurf MCP tools are not visible (they appear only when `entwurf-bridge` is registered). Pass: says invisible tools are not visible; explains the native-vs-MCP boundary; treats `entwurf_register_native` as binding an already-running conversation, never as fresh spawn. Fail: pretends to use an unseen tool; mimics entwurf via recursive `pi`.
-- **Layer 3 — focus across turns:** inject a fact, then accumulate turns mixing retrieval/exploration. Pass (post-0.4.1): after **8 turns** holds **3+ early facts** incl. **one verbatim string injected before turn 5**; no repeated exploration, no self-contradiction, no tool-strategy drift. Fail: forgets early reads; paraphrases instead of returning the verbatim string. Note: entwurf exposes no user-facing compaction; use the backend's `usage_update` footer as an overflow-risk signal (it follows the ACP backend's `used/size`, not pi's visible-transcript estimate).
-- **Layer 4 — vs direct Claude Code:** requires a verifier holding **both** the `entwurf` and a direct path (human-in-loop, or both transport handles). Compare latency / native tool accuracy / detours / boundary confusion / quality around turns 10–15. Repeated tool confusion, long-turn forgetting, or boundary workarounds are a fail.
-
-Interpretation: Layers 0–2 healthy → basic qualifications confirmed. Layer 3 weak → strengthen prompt shape + corroborate with bootstrap logs / process state / sentinel recall. Layer 4 much weaker than direct → revisit bridge handoff. This questionnaire does not replace gates.
-
----
-
-## 2. Manual judgement checks — what the gates cannot fully judge
-
-The single-turn / multi-turn / cross-process / persistence-boundary / shutdown invariants that earlier editions hand-ran against the retired v1 verbs are now **deterministic or live gates**. Verify them through the gate, and reserve manual time for the human-judgement surfaces below.
-
-| Invariant | Current gate (pointer) |
-|---|---|
-| Single-turn prompt extraction, SessionStart hook not mistaken for prompt | `smoke-acp-raw-turn-live` (a bare-vendor shape by design: no overlay and no session meta, so it is not the production session shape), `check-acp-prompt-builder` |
-| Multi-turn continuity + recall (process-scoped reuse) | `smoke-acp-session-reuse-live`, `check-acp-session-reuse` |
-| Cross-process continuity / cache before-after | `check-acp-session-store` (signature, decideBootstrap, persist/parse) |
-| Lifecycle policy — turn-scoped is always new; process-scoped may reuse only the live in-memory session; persisted records are not a resume/load path today | `check-acp-session-store`, `check-acp-session-reuse` |
-| Tool-call / event mapping | `check-acp-event-mapper`, `smoke-acp-provider-live` |
-| Prompt lifecycle — no wall-clock cutoff on a running turn; abort ends it by ACP `session/cancel` with bounded cleanup; a child death is reported with exit status + stderr on new AND reuse turns; our prompt-phase error text is not classified transient by pi | `check-acp-prompt-lifecycle`, `check-probe-ordering` |
-| Claude typed `incomplete_tool_call` prompt failure — real pi retry/overflow classifiers reject the fixed verdict, raw evidence stays in existing diagnostics, exactly one seal and drop on new/reuse; other failures retain the legacy stderr path, cancel stays separate. A deterministic receipt does not certify the target vendor runtime. No LIVE gate induces this rejection; the raw-turn and reuse smokes certify only their own rows above. | `check-acp-vendor-rejection` (four mutants) |
-| Claude set-model answer read back before the prompt — an exact row, or the one alias row (value and name) measured for the requested id; a missing model option, another row or any other value/name pair refuses with non-transient text. Deterministic only: the answer shapes measured at 0.85.1, and unchanged at 0.90.0 with the production session meta (no prompt), are fixture literals, not a runtime certificate. | `check-acp-set-model-readback` (two set-model mutants), `check-probe-ordering` |
-| Claude effort (#142) — curated rows offer pi's `low..max` through pi's own selector and clamp; the level is resolved before any spawn and set + read back as `effort` after set-model on a new session, and on reuse only when it changed (not in the reuse signature); no level, an unsupported level or a non-effort value refuses as `acp-thinking-level-unsupported`; a refused or mismatched answer fails before the prompt, our authored text non-transient (the appended stderr tail and a bootstrap timeout follow the existing pre-prompt path), and a reused session is dropped, so the next turn opens a new session and resends the transcript. Deterministic only: the effort shapes measured at 0.106.0 with no prompt are fixture literals; readback is not evidence of applied reasoning depth or speed. | `check-acp-set-model-readback` (five effort mutants) |
-| What an abort leaves (#142) — after the turn settles, a reused turn the agent closed on `session/cancel` says the live session continues; a dropped session (cancelled first turn, escalation, pre-prompt abort) says the next message opens a new one; both say changes already made stay. A rebuilt (new-session) transcript follows an `aborted` assistant turn with one status line saying the turn was cut and a cut is not rollback, claiming nothing about what ran; the reuse delta carries no such line. An abort already raised, or arriving, while a reuse turn awaits a changed effort's answer settles on the abort, sends no prompt and drops the session. A reuse turn's stream opens only when its own prompt is sent, so an update arriving during its effort set is never shown or sealed as that turn's; inside the prompt window the wire carries no turn id and that part rests on the adapter. Deterministic only (scripted ACP partner and pure transcript rendering); the real-vendor n=1 cells are in #142, not a release certificate. | `check-acp-set-model-readback` (seven cancel mutants) |
-| Operator mcpServers / skills reach the live session | `smoke-acp-mcp-live`, `smoke-acp-skill-live`, `check-acp-config` |
-| Overlay isolation + memory containment | `check-acp-overlay`, `smoke-acp-memory-containment-live`, `check-acp-tool-surface` |
-
-### 2.1 MCP callable-identifier shape (verified property, gate-external)
-
-The literal callable identifier differs per backend — probe by asking the agent to print it **verbatim** (do not ask "hyphen or underscore" — ambiguous between outer separator and inner server name):
-
-| Backend | Literal identifier | Boundary |
-|---|---|---|
-| Claude | `mcp__entwurf-bridge__entwurf_v2` | native Claude tool surface + explicit MCP server |
-| Cortex | `mcp__entwurf-bridge__entwurf_v2` | same identifier shape, different native tool surface |
-
-The identifier cannot distinguish Claude from Cortex; native tools and carrier facts must.
-
-### 2.2 MCP injection visibility
-
-The sole MCP responsibility of `entwurf` is to project explicit `entwurfProvider.mcpServers` into every newly opened backend session. Ask for visible MCP server names: `entwurf-bridge` appears, ambient servers do not, and changing the declaration changes `bridgeConfigSignature` so a live incompatible session is replaced rather than silently reused. `check-acp-config` and `smoke-acp-mcp-live` pin this; the manual check is honesty corroboration.
-
-### 2.3 Process / cache hygiene — the orphan bound (§gate-external judgement)
-
-Apply per backend under test:
-
-```
-AFTER_<BACKEND> ≤ BEFORE_<BACKEND> + (distinct alive
-  (sessionKey, backend, modelId, bridgeConfigSignature) tuples this run holds open)
-```
-
-An **upper bound**, not an equation: child reuse and idle reaping may keep the delta below it; a config-signature or `(provider, model)` switch may add one. `AFTER > BEFORE + alive_tuples` is actionable. Walk the backend process parent chain; any ACP child whose parent `pi` has exited is an orphan—preserve it as evidence.
-
-### 2.4 pi session record as a shared memory axis
-
-The key invariant: **pi session files stay the shared record source even under ACP**. After a reuse pair finishes, locate the child pi session JSONL and confirm turns accumulated:
-
-```bash
-ls ~/.pi/agent/sessions/--*--/*_<SESSION_ID>.jsonl   # path pattern, not a naive grep (which also hits the parent)
-jq -r '.message.role // .type' "$F" | sort | uniq -c  # role lives at .message.role
-```
-
-Pass: user/assistant turns accumulate normally; the transcript is not broken/empty because ACP was used. We preserve "Claude via ACP, memory via the pi axis (JSONL → Denote/andenken)" — the AI does not run its own memory layer.
-
----
-
 ## 3. Pass criteria — current release floor
 
 The minimum passing bar:
@@ -552,7 +699,7 @@ The minimum passing bar:
 2. **All four required CI jobs green on the exact release commit:** `check`, `install-surface`, the required Linux `artifact-consumer`, and `macos-install-surface` — promoted from non-voting to required in 0.20.0 (see the release acceptance axes table above for what its green run does and does not certify); preserve the Linux artifact-consumer's tarball digest and image identity. For a carrier-bearing release those CI tarballs are addon-less and are NOT the release candidate: the exact release bytes are the M3w-retrieved preview tarball, accepted separately by the eight Windows cells and the Linux container (axes row "Native-Windows carrier"). The four-job floor, macOS included, is unchanged. A macOS runner failure now blocks the cut like any other required job.
 3. **Live floor MUST green:** `LIVE=1 ./run.sh release-gate <dir> --cut` exits 0 reporting `MUST PASS=N FAIL=0 SKIP=0`; with `--cut` a single SKIP is red, so the exit code itself now carries this condition. A BEHAVIOR FAIL is advisory, not blocking.
 4. **Native-host doctor green where the Claude meta-bridge is claimed:** a new post-install Claude session exists, live evidence is present, and the installed `doctor-meta-bridge` exits 0. `NOT CERTIFIED` is a release failure for that host, not a skip.
-5. **Honest self-recognition:** the bridged model identifies its actual harness/backend, lists `entwurf-bridge` as the single MCP server with the tools its loaded bridge actually lists (the current source lists nine; a pi citizen offers seven with two hidden, the pi-durable contact eight), and presents a backend-native (not normalized) tool surface.
+5. **Honest self-recognition:** the bridged model identifies its actual harness/backend, lists exactly the MCP servers its session schema carries — on the operator's default configuration that is `entwurf-bridge` — with the verbs its loaded bridge actually lists, counted from that schema (the standalone bridge lists nine; a native pi citizen offers seven with two hidden and the pi-durable contact eight, but those are other rails' counts and the ACP projection's own count is measured, not assumed), and presents a backend-native (not normalized) tool surface.
 6. **Carrier separation honored:** engraving vs pi-context-augment kept distinct (§1A.0); no bridge-identity narrative attributed to the engraving carrier.
 7. **agy native push paused (#152); acceptance is deterministic while the pause holds.** Required for a cut: a dispatch to an agy target returns `native-push-paused` with zero probe, send, adapter or record activity, an agy sender's `replyable` is false by name, and `entwurf_register_native` refuses before probing — proven by the deterministic `[QK:AGY-NATIVE-PUSH-PAUSED]` cell, which needs no agy conversation and is not a live round trip — and the agy record schema and reader stay in place, with the agy install and sender gates green inside `check:full`. A same-gid reply is not claimed while the pause holds. Not required for a cut: the retained legacy identity check (all three agy doctors, plus automatic birth/statusline/sender identity in a fresh conversation, where `agentId=meta-session/antigravity` is correct and model display is not part of it). It is an optional diagnostic run when explicitly asked, it is not send evidence, and a release does not claim that the installed agy host is certified or can receive. An optional diagnostic is not a cut requirement, and neither is a native-push PASS. Lifting the pause needs a separate future change with its own positive acceptance. Same-pid concurrent conversation invocation is not claimed.
 8. **Codex caller-seat topology accepted:** its birth/MCP/status-line/terminal-title doctors are green and the on-demand real visible `Pi → Codex → Pi` cell records four coordinates: the operator-owned app-server in its own session A; initial Pi, omitted-placement fresh Codex, and Codex-opened outbound Pi all in a DIFFERENT session S; exact callbacks and addressed delivery succeed both ways. A ≠ S is a precondition, not a preference — the app-server's inherited environment names A, so an outbound Pi in S can only have come from the caller's own pane title, and the receipt must name `codex-title-anchor` as the rule that chose it. 0 or 2+ matching panes, and a caller whose `[tui].terminal_title` lacks `thread-id`, reject without mutation. Entwurf neither creates nor supervises the app-server, infers attached-TUI panes, nor claims placement beside a TUI whose thread nobody named. (The 2026-09-12 fixed-`codex`-home acceptance this condition replaced stays recorded in `DELIVERY.md` as history; #95 D1 retired that room.) Codex remains outside ACP and has no resume claim.
@@ -571,19 +718,22 @@ Passing establishes a **release verification floor**, not an 8-hour/day operatio
 - **ACP turn evidence.** The ACP path writes no `[entwurf:*]` stderr markers, and `ENTWURF_CHILD_STDERR_LOG` is not an ACP observation surface (its mirror in `pi-extensions/lib/entwurf-core.ts` belongs to the retired child-pi spawn and has no caller). Read three things instead: the lifecycle notices the backend writes into the assistant text (`[acp: preparing …]` / `[acp: reusing live session]`), the turn's typed `stopReason` (an ACP `cancelled` ending maps to `aborted`, `pi-extensions/lib/acp/backend.ts:865-866`), and the identity (pid + starttime) of the launcher and of any process the turn started.
 - **Retired dedicated smokes, live code invariants** (manual/troubleshooting only — *not* part of the release floor):
   - *ACP-boundary model guard* — a session using the `entwurf` provider keeps its starting model: `pi-extensions/model-lock.ts` reverts set/cycle transitions touching that provider (native-to-native switching is free). This is an after-event revert, not a transcript-clean refusal. Separately, `session-store.ts` `SessionModelLockedError` refuses a persisted-record model mismatch at `decideBootstrap`. Gate: `check-model-lock` (core tier); the dedicated live `smoke-model-switch` was retired in v2. This is not a lifetime model pin on every garden citizen.
-  - *Cancel / abort cleanup* — an abort sends ACP `session/cancel` and lets the agent end its own turn (`awaitAcpPromptTurn`, `pi-extensions/lib/acp/backend.ts:762-801`); process-group teardown follows only after a bounded grace. A cancelled reuse turn keeps its live session; a cancelled first turn is not retained (`backend.ts:1861`), so the next turn bootstraps a new one. Dedicated `smoke-cancel` retired; invariant in code.
+  - *Cancel / abort cleanup* — an abort sends ACP `session/cancel` and lets the agent end its own turn (`awaitAcpPromptTurn` in `pi-extensions/lib/acp/backend.ts`); process-group teardown follows only after a bounded grace. A reuse turn the agent closed on `session/cancel` keeps its live session; a cancelled first turn, an escalation or a pre-prompt abort drops it, so the next turn bootstraps a new one (the "What an abort leaves" row in Gate pointers, §1B.7). Dedicated `smoke-cancel` retired; invariant in code.
 
 ### Evidence preservation when a problem occurs
 
 ```bash
 pgrep -af 'claude-agent-acp|codex-acp' || true
-find "$CACHE_DIR" -maxdepth 1 -type f | sort
+ls ~/.pi/agent/cache/entwurf/sessions/ | tail   # persisted pi:<sessionId> mappings (docs/setup-clean-host.md "Session reuse and compaction"); names only, never other sessions' bodies
 ls ~/.pi/agent/sessions/--*--/*_${SESSION_ID}.jsonl 2>/dev/null
 # ACP: the turn's lifecycle notices and stopReason live in that pi session file
 ```
 
-Also preserve: the exact calls used, full stdout/stderr, the child pi session file path, cache-directory changes, and the expected-vs-actual difference.
+Also preserve: the exact calls used, full stdout/stderr, the session's own pi transcript path, cache-directory changes, and the expected-vs-actual difference.
 
 ### History (pointer)
+
+The 48-assertion / MUST 24/0/0 / 475/475 numbers the old surface banner carried are the 0.21.0 cut's dated receipt, kept in [BASELINE.md](./BASELINE.md)'s Native Codex Linux home-topology row. A later candidate's acceptance is its own receipt in BASELINE/CHANGELOG. Retired v1 verbs and bridge implementations belong only in CHANGELOG/git.
+
 
 The full R2R run history (2026-04-27 → 2026-05-29, pi-shell-acp era), the per-claim evidence ledger (load-bearing claims with level-reached / blind spot / next test, maintained through 0.5.x–0.8.x), and the experimental L3–L5 tracks (4-cell verifier×subject matrix with on-disk corroboration; long-haul soak; direct-native parity panel) live in **CHANGELOG.md and git history**. Evidence reached **L2** (cross-vendor + reverse-direction MCP calls); L3 is partially exercised by the process/session-file checks above; the honest gap is **L3 → L5**. The most recent recorded floor baseline is in [BASELINE.md](./BASELINE.md)'s HISTORY section.
