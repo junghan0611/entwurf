@@ -20,7 +20,8 @@
 - **증거:** walk 기록은 `.agent-reports/verify-1b-walk-20261113.md`(host-local)에 있고, #161 댓글에 요약했다.
 - **열린 후속:**
   - O6: 0.106.0에서 system prompt가 어떻게 조립되는지 재측정하지 않았다. GLG 판단은 "홈 AGENTS를 봤다고 했으니 하지 않는다"이다.
-  - 형제 메시지(`custom_message` / tool result)가 임베딩에서 빠진다. agent-config(`6f5c09`)와 GLG가 다루며, entwurf는 바꾸지 않는다.
+  - 형제 메시지(`custom_message` / tool result)는 임베딩에서 빠진다. GLG 판단은 "제외가 맞다"이고, agent-config가 `docs/memory-and-sessions.md`에 기록했다. entwurf는 바꾸지 않는다.
+  - **코드 결함 D1(소넷 인터뷰에서 발견, ff08d4가 소스로 확인):** `pi-extensions/lib/fresh-call-composition.ts:65,81,104`는 backend=pi 형제에게 pi-native 표기 `mcp__entwurf_bridge__…`를 준다. 그런데 ACP 모델(`entwurf/*`)로 열린 pi 형제의 실제 스키마는 Claude 표기 `mcp__entwurf-bridge__…`다. 이번 소넷은 스키마를 따라가서 무사했다. 수정 여부는 GLG가 정한다.
   - autocompact 500k 문의를 agent-config에 보냈다. pi `compaction.reserveTokens`는 전역 설정이라 모델마다 다른 임계값을 둘 방법이 필요하다.
 - **역할:**
   - ff08d4: ACP 담당, 단일 writer, 실무 코디.

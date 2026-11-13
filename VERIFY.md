@@ -6,7 +6,7 @@ VERIFY.md is the **agent-driven** surface; [BASELINE.md](./BASELINE.md) is the o
 
 **Who executes what.**
 
-- **Part I — verifying a live session.** An ACP subject asked to verify itself reads **Part I only** and executes **§1B only**. §1A, §0 and §2 tell it what is being judged. It opens Part II only when a step points there.
+- **Part I — verifying a live session.** An ACP subject asked to verify itself reads **Part I only**, from the top to the `# Part II` heading (Evidence Levels, §1B, §1A, §0, Continuity notes, §2), and executes **§1B only**. §1A, §0 and §2 tell it what is being judged. It opens Part II only when a step points there.
 - **Part II — the maintainer floor.** The subject does not read it up front and does not run any of it: §0A (where a check lives, the floors, release axes), §1 Setup, §3 release criteria, or any `LIVE=1` command. Where §1B and Part II seem to disagree on what to run, §1B.0 wins for the subject.
 - **Appendix.** Troubleshooting, the old banner's dated numbers and history pointers.
 
@@ -117,7 +117,7 @@ Pass: answers match their sources, and "I cannot tell" where no source answers. 
 - **Inject (turn 3):** the operator gives a code word and one plain fact (Continuity notes, wording rule: animal, colour or place names, never anything that sounds like a secret). Repeat them once, exactly.
 - **Recall (turn 6):** return the code word verbatim and the fact, then accept the operator's update to the fact.
 - **After the abort (turn 9):** return the code word and the *updated* fact.
-- **Bridge side:** read the `[acp: …]` notices pi stored in an assistant message in your transcript (§1B.8). You cannot see them otherwise: they are display-only and are not sent back to you. Read them for the *previous* turn, never the one you are generating, which is not yet settled in the file; the operator sees the current turn's notices on screen. A first-turn `preparing` notice is visible only if this session's file still holds that turn. Notices are bridge-side evidence, not an independent proof of the backend's own session state. In a resident session the first turn shows `[acp: preparing claude session]`, then `[acp: session ready model=<id>]`, and later turns show `[acp: reusing live session]` while the session lives. A changed effort does not by itself open a new session: on reuse the new level is set and read back on the live session. A new session (`preparing` again, transcript resent as text) follows only when the session was dropped: a refused or mismatched effort answer, a first-turn cancel, an escalation or pre-prompt abort, a child death, or a changed bridge configuration. The model is locked for an `entwurf` session (§Appendix, model guard).
+- **Bridge side:** read the `[acp: …]` notices pi stored in an assistant message in your transcript (§1B.8). You cannot see them otherwise: they are display-only and are not sent back to you. Read them for the *previous* turn, never the one you are generating, which is not yet settled in the file; the operator sees the current turn's notices on screen. A first-turn `preparing` notice is visible only if this session's file still holds that turn. Notices are bridge-side evidence, not an independent proof of the backend's own session state. In a resident session the first turn shows `[acp: preparing claude session]`, then `[acp: session ready model=<id>]`, and later turns show `[acp: reusing live session]` while the session lives. A sibling opened by `entwurf_fresh_call` runs the same resident lifecycle and showed the same shape (n=1, 2026-11-13). A changed effort does not by itself open a new session: on reuse the new level is set and read back on the live session. A new session (`preparing` again, transcript resent as text) follows only when the session was dropped: a refused or mismatched effort answer, a first-turn cancel, an escalation or pre-prompt abort, a child death, or a changed bridge configuration. The model is locked for an `entwurf` session (§Appendix, model guard).
 
 Pass: semantic recall right on every recall turn, and the bridge reading explains any new session it shows. Fail: a recall that paraphrases the code word; a claim of reuse that the notices contradict.
 
@@ -131,7 +131,7 @@ Pass: every reference opens to what you said; no recursive `pi` and no MCP detou
 
 Claude ACP rows map pi's thinking levels onto the agent's `effort` option of the same name (`CLAUDE_ACP_EFFORT_VALUES`, `claudeAcpThinkingLevelMap` in `models.ts`). Which of `low`..`max` a row offers is decided by pi's registry for that model: `xhigh`/`max` appear only where the registry maps them, and `off`/`minimal` are never offered. The level is set and read back after set-model on a new session, and on a reused session only when it changed; the transcript then carries `[acp: effort <value> read back]` before `sending prompt` (`backend.ts`). A refused or mismatched answer fails the turn before the prompt with `acp-thinking-level-unsupported` or a readback error, and drops a reused session.
 
-After the operator changes the level (turn 7), report the value read back from that turn's notice. Read it in turn 8 or later, once turn 7 has settled in the transcript; until then it is the operator's on-screen observation. Readback proves the agent accepted the setting. It is not evidence of applied reasoning depth or speed, so do not report on how hard you thought.
+A session's first effort is the pi thinking level in force when it starts: `defaultThinkingLevel` in pi settings, unless the operator changed it in the selector before the first turn (those changes are `thinking_level_change` entries in the transcript). After the operator changes the level (turn 7), report the value read back from that turn's notice. Read it in turn 8 or later, once turn 7 has settled in the transcript; until then it is the operator's on-screen observation. Readback proves the agent accepted the setting. It is not evidence of applied reasoning depth or speed, so do not report on how hard you thought.
 
 ### 1B.7 Abort (#142)
 
@@ -149,7 +149,7 @@ For turn 8 the operator should send something harmless that takes a few seconds,
 ```bash
 F=$(ls ~/.pi/agent/sessions/--*--/*_<nativeSessionId>.jsonl)
 jq -r '.message.role // .type' "$F" | sort | uniq -c
-jq -r 'select(.message.role=="assistant") | .message.content[]? | select(.textSignature=="entwurf:lifecycle-notice-v1") | .text' "$F"   # notices only; a model's own text quoting "[acp: …]" carries no signature
+jq -r 'select(.message.role=="assistant") | .message.content[]? | select(.textSignature=="entwurf:lifecycle-notice-v1") | .text' "$F" | grep .   # notices only (a model's own "[acp: …]" carries no signature); grep . drops the blank lines each notice is wrapped in
 ```
 
 - Pass: user and assistant turns accumulate in your own pi transcript. A message a sibling delivers through `entwurf_v2` is stored as `custom_message`, not `user`, so when an operator drives the walk by message the `user` count will not match the turn count. Under ACP the memory axis is still pi's file, and no second memory layer exists. There is no separate child pi transcript in a resident session.
@@ -178,6 +178,17 @@ The report is one table, then findings:
 - **Boundary:** end with what this walk cannot show. Verifier and subject are one session on one bridge, so the walk stays below L4. It is n=1. Readback is not reasoning depth. There is no long-haul soak (L5).
 
 Return the report to the operator in the session. Send it nowhere else unless the operator says so.
+
+### 1B.11 When an examiner runs the walk on a sibling
+
+The original protocol has an ACP examiner open a fresh ACP sibling and walk it through the core interview and §1B (2026-11-13: Opus examining Sonnet). A subject's answer is L0 until the examiner has re-measured it from outside the subject:
+
+- **Process chain:** the examiner's own `ps` of the subject's pi, ACP child and `claude`.
+- **Record:** the subject's meta record (`nativeSessionId`, `backend`) read by the examiner.
+- **References:** a sample of the subject's `file:line` references, opened by the examiner.
+- **Transcript:** role counts and signed notices from the subject's transcript once its turn has settled. A turn the examiner delivers by `entwurf_v2` is stored there as `custom_message`.
+
+A fresh sibling's first message is its `entwurf_fresh_call` task, so that task carries the blind core interview. Keep it to the interview block plus one reply instruction, and grade the routing words as part of what arrived.
 
 ---
 
