@@ -10,15 +10,17 @@
 - [x] **4. frozen FULL + checkpoint `90b5168`** — CI 4/4
 - [x] **5. ESC 경계: C/E/F + checkpoint `ac087af`** — r5 65/65, FULL rc=0, LIVE n=1 per source, CI 4/4; 검수 D-C1/D-F1/O-F1 닫힘
 - [x] **6. 상류 0.106 계약 대응표** — `docs/acp-backend-rail.md` §Upstream 0.106.0 cancel and effort contracts (docs-only)
+- [x] **6b. 열린 칸 (1) P3 수선 + checkpoint `6059fe6`** — reuse handler를 prompt 송신 직전으로; PARTIAL 15/15, FULL rc=0
 - [ ] **7. 다음 범위 결정** ← CURRENT: 코디 68bd94가 대응표를 읽고 정리
 - [ ] **8. main 병합 / release / 운영 설치** ← PAUSED: 각각 GLG 별도 승인
 
-현재 좌표: 6 완료 → 7 대기 → 8 보류
+현재 좌표: 6b 완료 → 7 대기 → 8 보류
 
 # NOW
 
 - Current: checkpoint `ac087af`(코드)와 docs-only 대응표가 브랜치에 있다. #142 본문과 [C/D/E/F 기록](https://github.com/junghan0611/entwurf/issues/142#issuecomment-6840052021)이 외부 자문용으로 정리돼 있다.
-- 대응표의 열린 칸(우리 접점에서 도달 가능하지만 미측정): KEPT 세션에서 취소된 턴의 늦은 update가 다음 턴 스트림에 섞이지 않는지(우리 라우팅은 turn을 구분하지 않음 — 상류 adapter의 post-response drop에 기대며 미측정, QK 없음), 취소와 동시에 끝난 도구. 노출하지 않음(backlog 아님): background subagent, SDK 큐, 영속 resume/load.
+- 대응표 늦은 update 칸(fake probe n=1/cell, `.tmp-verify/acp142-late/`): P1(A 봉인 뒤·B 시작 전) 버려짐 — 측정만, QK 없음; P3(B effort 설정 중, B prompt 송신 전) `6059fe6`에서 닫힘 `[QK:ACP-REUSE-LATE-UPDATE-PRE-PROMPT]`; P2(B prompt 창 안) session/update에 turn id가 없어 상류 adapter 계약 의존·열림 — local counter로는 귀속 복원 불가, counter/ledger 추가하지 않음. 남은 열린 칸: 취소와 동시에 끝난 도구.
+- 관측 O-L1(작업 아님): new 경로는 handler를 payload hook 앞(:1912)에 둔다 — newSession 직후 agent 선발 update는 new에서 보이고 reuse에서는 버려지는 비대칭; 현재 사용자 가시 영향 없음(b3 판독). 노출하지 않음(backlog 아님): background subagent, SDK 큐, 영속 resume/load.
 - 미측정: 텍스트 스트리밍 중 ESC, Edit/Write 효과, 실제 키 입력, wire cancel 프레임, n>1, 재시작 뒤 정본.
 - Blocker: 다음 범위·병합·release·설치는 GLG 결정(코디 경유). #160(OpenClaw/AGY ACP)은 이 후보와 별도 경계 설계; AGY native-push pause(#152) 유지.
 - Read: #142, 대응표, receipts(oracle host-local) `.tmp-verify/acp142-live/{esc-20261113T075632,esc1-20261113T083800,esc1-20261113T084854,esc1-20261113T092603}/RECEIPT.md`, `~/.cache/entwurf-qual/acp106-partial-20261113-r5/summary.txt`, `~/.cache/entwurf-qual/acp106-full-20261113T090903/`.
@@ -46,6 +48,8 @@ pi에서 ACP Claude를 주력으로 고를 수 있는 최소 동작: 얇은 Pi �
 - GPT·다른 형제 소환/resume 금지. 유일한 예외: GLG가 직접 재초빙한 SOL `20261003T164401-a30dda` — 의미·사용 경험 논의 역할만, 코드 작성·검수·테스트·LIVE 권한 없음, 구현 질문은 ff08d4 통로로.
 
 # RECENT
+
+- [2026-11-13] `6059fe6`: reuse 턴은 자기 prompt 송신 직전에야 update를 받는다(effort 대기 중 들어온 이전 취소 턴의 늦은 update가 B 답으로 보이거나 봉인되던 창을 닫음). b3 검수 Blocker 0, D-L1(P1 'covered' 과장) 문구 하향. receipts: PARTIAL `~/.cache/entwurf-qual/acp142-late-partial-20261113T095519/`, FULL `~/.cache/entwurf-qual/acp142-late-full-20261113T095847/` (974s, log sha 0ac0a219576f). docs `e0898d6` CI 43339592216 4/4 success.
 
 - [2026-11-13] `ac087af`: reuse effort 대기 중 ESC 30001ms → 즉시 정착(prompt 미전송, 세션 drop); 취소 결과 notice(KEPT/CLOSED); 재구성 transcript에 원인 중립 aborted 상태 줄. 첫 턴 ESC 실측 n=1: F 전 '실행 안 됨' 오판 → 최종 문구에서 '일부 실행됐을 수 있다'. 재사용 ESC private 계보: 단일 JSONL parentUuid 연속(n=1).
 
