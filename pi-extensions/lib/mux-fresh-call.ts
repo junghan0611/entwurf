@@ -214,6 +214,7 @@ export function buildBackendArgs(
 /** The first turn for THIS rail: the neutral framing under this rail's placement sentence. */
 export function buildFreshCallPrompt(params: {
 	backend: FreshCallBackend;
+	model: string;
 	task: string;
 	callerGardenId: string;
 	nonce: string;
@@ -510,7 +511,7 @@ export function freshCall(
 		const runtime = layout === null ? null : checkPiDurableRuntime(layout);
 		const missing = piDurableFreshPreflight({
 			model,
-			firstInput: buildFreshCallPrompt({ backend: params.backend, task, callerGardenId, nonce }),
+			firstInput: buildFreshCallPrompt({ backend: params.backend, model, task, callerGardenId, nonce }),
 			layout,
 			runtime: runtime === null || runtime.ok ? null : runtime.reason,
 		});
@@ -549,6 +550,7 @@ export function freshCall(
 	const composition: FreshCallComposition = {
 		prompt: buildFreshCallPrompt({
 			backend: params.backend,
+			model,
 			task,
 			callerGardenId,
 			nonce,

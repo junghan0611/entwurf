@@ -700,6 +700,7 @@ describe("herdr layout fresh call (#157 A-L1)", () => {
 			'C0 \u0001\u0002 tab\tnl\ncr\r NUL\u0000 DEL\u007f C1\u0085\u009b quote" backslash\\ \u{1F600}\u{1D11E} 한글 끝';
 		const prompt = composeFreshCallPrompt({
 			backend: "pi-durable",
+			model: "m",
 			task,
 			callerGardenId: CALLER,
 			nonce: NONCE,

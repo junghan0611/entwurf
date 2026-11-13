@@ -23,6 +23,7 @@
  */
 
 import { randomBytes } from "node:crypto";
+import { PROVIDER_ID, SUPPORTED_ANTHROPIC_MODEL_IDS } from "./acp/model-ids.js";
 
 /** The backends this rail can open. Fixed set, not a profile — a further one is a decision,
  * not a config entry. `copilot` was added by #82 RAIL 9, `omp` by #87 Bundle C, `codex`
@@ -149,6 +150,35 @@ export const FRESH_CALL_TOOL_LOAD_HINT: Record<FreshCallBackend, readonly string
 	codex: [],
 	"pi-durable": [],
 };
+
+/**
+ * Which dialect table spells the bridge tools for THIS launch. The backend picks the runtime; the
+ * model can pick a different tool surface underneath it.
+ *
+ * `[측정 2026-11-13, D1]` a pi sibling opened on an ACP Claude model (`entwurf/claude-*`) does not
+ * see Pi's MCP names: its turns run inside the Claude Agent SDK, which mints the bridge tools as
+ * `mcp__entwurf-bridge__*` (the ACP Sonnet interview of 2026-11-13, n=1, called them by the schema
+ * it was given, not by the pi spelling its framing named). So the NAMES follow the claude-code
+ * table. The load hint stays the pi row (none): in that n=1 the bridge tools were directly callable
+ * without loading. Whether ToolSearch exists on this surface, or deferral can occur with more
+ * declared servers (`acp/tool-surface.ts` names the SDK's deferred tools), is unmeasured — not a
+ * claim that it cannot.
+ *
+ * Only an exact curated Anthropic id switches. A thinking suffix (`:high`) or fuzzy alias never
+ * reaches here through the public verb: the dispatch root refuses any `entwurf/` id that is not
+ * exactly curated (`isUncuratedEntwurfPiModel`, #128), and the test pins that alignment. A Cortex
+ * row (`entwurf/cortex-*`) keeps the pi table: VERIFY §2.1 records the Claude-shaped identifier for
+ * Cortex too, but this host cannot run Cortex and that spelling is unmeasured here, so this change
+ * does not move it. The ACP id list arrives from `acp/model-ids.js`, an import-free module.
+ */
+export function freshCallToolDialect(backend: FreshCallBackend, model: string): FreshCallBackend {
+	if (backend !== "pi") return backend;
+	const trimmed = model.trim();
+	const slash = trimmed.indexOf("/");
+	if (slash < 0 || trimmed.slice(0, slash) !== PROVIDER_ID) return backend;
+	const id = trimmed.slice(slash + 1);
+	return (SUPPORTED_ANTHROPIC_MODEL_IDS as readonly string[]).includes(id) ? "claude-code" : backend;
+}
 
 /**
  * What a launch has to say, in the two shapes the six backends need. pi, claude-code, copilot
@@ -413,15 +443,19 @@ export function composeBackendArgs(
  */
 export function composeFreshCallFraming(params: {
 	backend: FreshCallBackend;
+	/** The launch model, as the caller wrote it. It chooses the tool-name dialect
+	 * (`freshCallToolDialect`) and is never echoed into the framing. */
+	model: string;
 	callerGardenId: string;
 	nonce: string;
 	/** The rail's own first sentence — see `PLACEMENT SENTENCE` above. Empty is a crash, not a
 	 * default: a sibling told nothing about where it is would be told something false by silence. */
 	openingLine: string;
 }): string[] {
-	const birthTool = FRESH_CALL_CALLBACK_TOOL[params.backend];
-	const deliveryTool = FRESH_CALL_DELIVERY_TOOL[params.backend];
-	const peersTool = FRESH_CALL_PEERS_TOOL[params.backend];
+	const dialect = freshCallToolDialect(params.backend, params.model);
+	const birthTool = FRESH_CALL_CALLBACK_TOOL[dialect];
+	const deliveryTool = FRESH_CALL_DELIVERY_TOOL[dialect];
+	const peersTool = FRESH_CALL_PEERS_TOOL[dialect];
 	// The hint is a per-backend TEMPLATE so the two tool dialects stay the single source of their
 	// own spelling here too — a hint that hard-coded Claude's name would go stale the day a dialect
 	// moves, and it would go stale silently, in the one sentence a stuck child depends on.
@@ -490,6 +524,7 @@ export function composeFreshCallFraming(params: {
  */
 export function composeFreshCallPrompt(params: {
 	backend: FreshCallBackend;
+	model: string;
 	task: string;
 	callerGardenId: string;
 	nonce: string;

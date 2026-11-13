@@ -413,6 +413,7 @@ async function main(): Promise<void> {
 	// bytes somebody wrote — while the framing gets its own claim about surviving the fold verbatim.
 	const FRAMING = composeFreshCallFraming({
 		backend: "claude-code",
+		model: "claude-sonnet-5-5",
 		callerGardenId: "20260101T010101-aaaaaa",
 		nonce: "mux-fresh-call-deadbeefdeadbeefdeadbeef",
 		openingLine: HERDR_FRESH_CALL_OPENING_LINE,

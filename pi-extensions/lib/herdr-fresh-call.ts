@@ -962,6 +962,7 @@ export async function herdrFreshCall(
 
 	const framing = composeFreshCallFraming({
 		backend,
+		model,
 		callerGardenId,
 		nonce,
 		openingLine: HERDR_FRESH_CALL_OPENING_LINE,
@@ -1796,6 +1797,7 @@ async function herdrLayoutFreshCall(
 
 	const prompt = composeFreshCallPrompt({
 		backend: "pi-durable",
+		model,
 		task,
 		callerGardenId,
 		nonce,

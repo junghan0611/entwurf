@@ -659,11 +659,22 @@
 			"claim": "FRESHCOMP-PEERS-TOOL-DIALECT",
 			"title": "the corroboration the framing offers goes back to one bare spelling, so four of the five backends are offered a tool name their own session does not expose",
 			"subject": "pi-extensions/lib/fresh-call-composition.ts",
-			"find": ["\tconst peersTool = FRESH_CALL_PEERS_TOOL[params.backend];"],
+			"find": ["\tconst peersTool = FRESH_CALL_PEERS_TOOL[dialect];"],
 			"replace": ["\tconst peersTool = \"entwurf_peers\";"],
 			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
 			"timeoutSeconds": 120,
 			"signature": "[QK:FRESHCOMP-PEERS-TOOL-DIALECT]",
+			"signatureSource": "test/fresh-call-composition.contract.test.ts"
+		},
+		{
+			"claim": "FRESHCOMP-ACP-CLAUDE-TOOL-DIALECT",
+			"title": "the framing goes back to keying tool names on the backend alone, so a pi sibling opened on an ACP Claude model is told Pi's underscore spelling its Claude tool surface does not expose",
+			"subject": "pi-extensions/lib/fresh-call-composition.ts",
+			"find": ["\tconst dialect = freshCallToolDialect(params.backend, params.model);"],
+			"replace": ["\tconst dialect = params.backend;"],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:FRESHCOMP-ACP-CLAUDE-TOOL-DIALECT]",
 			"signatureSource": "test/fresh-call-composition.contract.test.ts"
 		},
 		{

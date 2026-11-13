@@ -28,7 +28,9 @@ import {
 	FRESH_CALL_PEERS_TOOL,
 	FRESH_CALL_TOOL_LOAD_HINT,
 	type FreshCallComposition,
+	freshCallToolDialect,
 } from "../pi-extensions/lib/fresh-call-composition.ts";
+import { isUncuratedEntwurfPiModel } from "../pi-extensions/lib/fresh-call-dispatch.ts";
 import {
 	buildBackendArgs,
 	buildFreshCallPrompt,
@@ -48,9 +50,14 @@ describe("the leaf's import fence", () => {
 	/** Every `from "…"` in the file, in source order. */
 	const specifiers = [...LEAF_SRC.matchAll(/^import\s[^;]*?from\s+"([^"]+)";$/gm)].map((m) => m[1]);
 
-	it("[QK:FRESHCOMP-NODE-ONLY-IMPORTS] the leaf imports only the node standard library — a repo-local import here is how the tmux rail would creep back in", () => {
+	it("[QK:FRESHCOMP-NODE-ONLY-IMPORTS] the leaf imports only the node standard library and the import-free ACP model-id constants — any other repo-local import here is how the tmux rail would creep back in", () => {
 		expect(specifiers.length).toBeGreaterThan(0);
-		for (const spec of specifiers) expect(spec.startsWith("node:")).toBe(true);
+		for (const spec of specifiers) expect(spec.startsWith("node:") || spec === "./acp/model-ids.js").toBe(true);
+		// D1 admits the curated ACP ids from an import-free module, not a module graph: that file must
+		// itself import nothing, or this exception would carry whatever it imports into both rails.
+		const modelIds = fs.readFileSync(path.join(REPO_DIR, "pi-extensions/lib/acp/model-ids.js"), "utf8");
+		expect(modelIds).not.toMatch(/^\s*import\s/m);
+		expect(modelIds).not.toMatch(/\brequire\(/);
 	});
 
 	it("[QK:FRESHCOMP-NO-RAIL-IMPORT] the leaf names no mux, entwurf or native-push module at all, in import or in type position", () => {
@@ -73,11 +80,12 @@ describe("the tmux rail's bytes did not move when the code did", () => {
 	});
 
 	it("[QK:FRESHCOMP-TMUX-PROMPT-UNCHANGED] the rail wrapper still emits its opening sentence first, then the neutral framing", () => {
-		const prompt = buildFreshCallPrompt({ backend: "pi", task: TASK, callerGardenId: GID, nonce: NONCE });
+		const prompt = buildFreshCallPrompt({ backend: "pi", model: "m", task: TASK, callerGardenId: GID, nonce: NONCE });
 		expect(prompt.split("\n")[0]).toBe(TMUX_FRESH_CALL_OPENING_LINE);
 		expect(prompt).toBe(
 			composeFreshCallPrompt({
 				backend: "pi",
+				model: "m",
 				task: TASK,
 				callerGardenId: GID,
 				nonce: NONCE,
@@ -91,6 +99,7 @@ describe("the tmux rail's bytes did not move when the code did", () => {
 		for (const backend of FRESH_CALL_BACKENDS) {
 			const framing = composeFreshCallFraming({
 				backend,
+				model: "m",
 				callerGardenId: GID,
 				nonce: NONCE,
 				openingLine: TMUX_FRESH_CALL_OPENING_LINE,
@@ -111,6 +120,54 @@ describe("the tmux rail's bytes did not move when the code did", () => {
 		expect(FRESH_CALL_PEERS_TOOL.omp).toBe("mcp__entwurf_bridge_entwurf_peers");
 	});
 
+	it("[QK:FRESHCOMP-ACP-CLAUDE-TOOL-DIALECT] a pi sibling opened on a curated ACP Claude model is told the Claude MCP spelling its tool surface exposes, with no ToolSearch hint; every other model keeps its backend's dialect", () => {
+		// [측정 2026-11-13, D1] the ACP Sonnet interview: the child's schema carried
+		// `mcp__entwurf-bridge__*` while its framing named Pi's `mcp__entwurf_bridge__*`.
+		const framing = (backend: (typeof FRESH_CALL_BACKENDS)[number], model: string) =>
+			composeFreshCallFraming({ backend, model, callerGardenId: GID, nonce: NONCE, openingLine: "X" }).join("\n");
+		for (const model of ["entwurf/claude-opus-5-5", "entwurf/claude-sonnet-5-5", " entwurf/claude-fable-5-2 "]) {
+			expect(freshCallToolDialect("pi", model)).toBe("claude-code");
+			const text = framing("pi", model);
+			expect(text).toContain(FRESH_CALL_CALLBACK_TOOL["claude-code"]);
+			expect(text).toContain(FRESH_CALL_DELIVERY_TOOL["claude-code"]);
+			expect(text).toContain(FRESH_CALL_PEERS_TOOL["claude-code"]);
+			expect(text).not.toContain("mcp__entwurf_bridge__");
+			expect(text).not.toContain("ToolSearch");
+		}
+		// Native pi models, an uncurated or Cortex ACP id, and a bare alias keep the pi table.
+		for (const model of [
+			"openai-codex/gpt-5.6",
+			"anthropic/claude-opus-5-5",
+			"entwurf/cortex-claude-opus-5",
+			"entwurf/claude-opus-5",
+			"claude-opus-5-5",
+		]) {
+			expect(freshCallToolDialect("pi", model)).toBe("pi");
+			expect(framing("pi", model)).toContain(FRESH_CALL_CALLBACK_TOOL.pi);
+		}
+		// Suffixed or fuzzy ACP ids keep the pi table here AND are refused at the dispatch root (#128),
+		// so no launch can reach this leaf with an ACP Claude child it would misname.
+		for (const model of ["entwurf/claude-opus-5-5:high", "entwurf/opus"]) {
+			expect(freshCallToolDialect("pi", model)).toBe("pi");
+			expect(isUncuratedEntwurfPiModel("pi", model)).toBe(true);
+		}
+		// The tmux rail wrapper passes the launch model through, not some other string.
+		expect(
+			buildFreshCallPrompt({
+				backend: "pi",
+				model: "entwurf/claude-opus-5-5",
+				task: TASK,
+				callerGardenId: GID,
+				nonce: NONCE,
+			}),
+		).toContain(FRESH_CALL_CALLBACK_TOOL["claude-code"]);
+		// The model never moves another backend's dialect.
+		for (const backend of FRESH_CALL_BACKENDS) {
+			if (backend === "pi") continue;
+			expect(freshCallToolDialect(backend, "entwurf/claude-opus-5-5")).toBe(backend);
+		}
+	});
+
 	it("[QK:FRESHCOMP-RESULT-GOES-TO-CALLER] the first turn names WHERE the result goes, in the same dialect as the callback and identically on both rails — a sibling with a visible window has no way to know its window is not the delivery", () => {
 		for (const backend of FRESH_CALL_BACKENDS) {
 			const tool = FRESH_CALL_DELIVERY_TOOL[backend];
@@ -124,7 +181,13 @@ describe("the tmux rail's bytes did not move when the code did", () => {
 				TMUX_FRESH_CALL_OPENING_LINE,
 				"You are a fresh visible citizen that entwurf opened in a new herdr tab.",
 			]) {
-				const framing = composeFreshCallFraming({ backend, callerGardenId: GID, nonce: NONCE, openingLine });
+				const framing = composeFreshCallFraming({
+					backend,
+					model: "m",
+					callerGardenId: GID,
+					nonce: NONCE,
+					openingLine,
+				});
 				// Same two lines, same order, LAST — the rail supplies only the first sentence, so a
 				// rail that grew its own version of this one would be composing a second contract.
 				expect(framing.slice(-2)).toEqual(expected);
@@ -147,6 +210,7 @@ describe("the tmux rail's bytes did not move when the code did", () => {
 		// 3/3, including a child 782 ms in, which is slower than every silent run.
 		const claude = composeFreshCallFraming({
 			backend: "claude-code",
+			model: "m",
 			callerGardenId: GID,
 			nonce: NONCE,
 			openingLine: TMUX_FRESH_CALL_OPENING_LINE,
@@ -171,6 +235,7 @@ describe("the tmux rail's bytes did not move when the code did", () => {
 		for (const backend of FRESH_CALL_BACKENDS) {
 			const framing = composeFreshCallFraming({
 				backend,
+				model: "m",
 				callerGardenId: GID,
 				nonce: NONCE,
 				openingLine: TMUX_FRESH_CALL_OPENING_LINE,
@@ -192,7 +257,14 @@ describe("the tmux rail's bytes did not move when the code did", () => {
 
 	it("[QK:FRESHCOMP-RAIL-OWNS-PLACEMENT-SENTENCE] a rail supplies that sentence — the leaf refuses an empty one instead of inventing a default that would be false somewhere", () => {
 		expect(() =>
-			composeFreshCallPrompt({ backend: "pi", task: TASK, callerGardenId: GID, nonce: NONCE, openingLine: "" }),
+			composeFreshCallPrompt({
+				backend: "pi",
+				model: "m",
+				task: TASK,
+				callerGardenId: GID,
+				nonce: NONCE,
+				openingLine: "",
+			}),
 		).toThrow(/openingLine is empty/);
 	});
 
