@@ -55,6 +55,16 @@ backend-specific keys; `adapterSettings` remains opaque until handed back to its
 A connection, model, carrier, MCP declaration, or overlay-relevant setting change must
 change the reuse signature rather than mutate a live incompatible session.
 
+**Session reuse needs a resident pi.** Reuse — the live ACP session kept across turns, each
+later turn sending only the new user message — exists only in a pi process started with
+`--entwurf-control` (`entwurf pi` adds it). Every other pi process, plain interactive `pi`
+and `pi -p` included, is turn-scoped: each turn opens a new ACP session, sends the whole pi
+transcript rebuilt as one prompt, and tears the child down when the turn ends
+(`resolveLifecyclePolicy`, `pi-extensions/lib/acp/session-store.ts`). This boundary is as
+old as reuse itself (S2c, hang-safe one-shot exit); it is stated here so that "reuse without
+resending the transcript" is not read as a property of every pi process. Nothing in a pi
+profile or AGENTS file changes it.
+
 A streaming message begins with `stopReason: "pending"`. ACP's terminal set is mapped
 explicitly: `end_turn → stop`, `max_tokens → length`, `cancelled → aborted`; refusal,
 exhausted turn budget, unknown, and absent reasons end as errors. The original ACP
