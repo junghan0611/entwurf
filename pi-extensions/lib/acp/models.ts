@@ -109,6 +109,16 @@ function claudeContextWindow(model: { id: string; contextWindow: number }): numb
 const CORTEX_CONTEXT_DEFAULT = 200_000;
 
 /**
+ * What an ACP row declares it can take as input: text only. The rail delivers pi's transcript as
+ * ACP text blocks; an image becomes the marker `[image omitted: <mime>]` (`context.ts`), and no
+ * other path carries image bytes to the backend. pi's catalog lists the Anthropic models as
+ * `["text", "image"]` — true of the model behind the API, not of this transport — so copying it
+ * would advertise a capability the rail does not deliver (#142 landing review). A backend gains
+ * `image` here only together with a real image path and its proof.
+ */
+const ACP_ROW_INPUT: ("text" | "image")[] = ["text"];
+
+/**
  * The curated Cortex model rows handed to the single `entwurf` provider via
  * `allCuratedModels()`. The two Claude rows ride their OWN registry base
  * (opus-5 / sonnet-5); `auto` (default family Claude) and the GPT row (no pi-ai
@@ -123,7 +133,7 @@ export function curatedCortexModels() {
 		id,
 		name,
 		reasoning: base.reasoning,
-		input: base.input,
+		input: [...ACP_ROW_INPUT],
 		cost: base.cost,
 		contextWindow: CORTEX_CONTEXT_DEFAULT,
 		maxTokens: base.maxTokens,
@@ -177,7 +187,7 @@ export function curatedClaudeModels() {
 		name: m.name,
 		reasoning: m.reasoning,
 		thinkingLevelMap: claudeAcpThinkingLevelMap(m.thinkingLevelMap),
-		input: m.input,
+		input: [...ACP_ROW_INPUT],
 		cost: m.cost,
 		contextWindow: claudeContextWindow(m),
 		maxTokens: m.maxTokens,

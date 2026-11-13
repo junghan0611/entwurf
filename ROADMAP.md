@@ -19,6 +19,8 @@
 
 ## 방향 (2026-10-09 기록) — #132: B는 0.34.0~0.37.0 Herdr snapshot으로 착지, C 보류
 
+> **역사 기록.** 아래 "현재"·"진행 중"은 2026-10-09 시점이다. Herdr 위 pi-durable fresh/resume의 현행 계약은 #157(`docs/herdr-launch-rail.md` §16·§17, README)이 소유하고, 그 n=1 관측은 BASELINE의 날짜 행이다(전체 rail 인증 아님).
+
 현재: 0.34.0이 npm에 실제 publish되어(`latest=0.34.0`, registry SRI = 수락 아티팩트) [#132](https://github.com/junghan0611/entwurf/issues/132)가 다시 열렸고, GLG의 Herdr 컷 요청으로 B를 검증 중이다. C는 B와 분리되어 보류 상태다.
 
 - **B — plugin 정렬, 진행 중(#132 재개, 2026-10-09):** 0.34.0이 npm에 실제 publish된 뒤(registry SRI = 수락 아티팩트) `runtime-lock.json`을 npm `@junghanacs/entwurf@0.34.0` + 실측 sha512로, `herdr-plugin.toml` version을 0.34.0으로 re-pin한다. 0.31–0.33은 plugin에 한 번도 pin되지 않았다. source별 proof(public-ref raw-install, 실제 npm swap/torn-swap)는 #132 thread에 기록하며, plugin 컷 태그 `v2026.10.9-herdr.0.34.0`이 붙기 전까지 B는 완료가 아니다.

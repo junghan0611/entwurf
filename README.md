@@ -22,8 +22,9 @@ A recorded source-checkout demo: callback → task → native Bash → reply.
   disposable worker or a subagent of a new central harness. You and the native harnesses keep
   steering; branches, worktrees, file isolation and internal delegation stay their concern.
 - **Native harnesses stay native.** Claude Code keeps its hooks and tools, Codex its own threads and
-  delegation, pi its extensions. Entwurf reconstructs no prompt, hydrates no transcript and mediates
-  no credential.
+  delegation, pi its extensions. Entwurf hydrates no native transcript and mediates no credential.
+  The one prompt it composes is the ACP plugin's: a new ACP session receives pi's own transcript
+  rendered as text ([rail](./docs/acp-backend-rail.md#adapter-contract)).
 - **One address.** A garden id names a record-backed citizen. A pane, socket, native session id or
   model is a carrier or an observation, never a second address.
 - **The same verbs on both screens.** In an ordinary tmux session or inside a Herdr workspace, a
@@ -222,7 +223,7 @@ the MCP tool descriptions and the hints extracted there, [ENTWURF-CLI.json](./EN
 
 Owns: garden identity, live-fact dispatch and receipts, native bridge integrations,
 visible lifecycle launch seams, the pi adapter and isolated ACP plugin lifecycle.
-Does not: a second harness, memory DB, prompt reconstruction, transcript hydration,
+Does not: a second harness, memory DB, native-transcript hydration or replay,
 credential mediation, subscription bypass, pane-typing delivery or hidden orchestration.
 [AGENTS](./AGENTS.md) owns these invariants and exact capability boundaries.
 

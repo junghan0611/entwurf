@@ -1251,7 +1251,11 @@ owns the reuse policy and distinguishes live mapping from semantic recall.
 **Entwurf does not implement compaction.** A backend's native compaction preserves
 the pi session/mapping; configure its policy through that backend's own interface,
 not a pi-side JSONL summary. The bridge exposes no backend-specific compaction
-knobs. The ACP footer uses `usage_update.used / size` (backend prompt/tools/cache/
+knobs. One fixed exception on the Claude ACP rail: its adapter's idle `/compact` (an autonomous
+turn on an idle session) is turned off inline (`settings.idleCompaction: false`), because pi would
+not see that turn; in-prompt auto-compaction stays the backend's, and a managed settings tier would
+still win over the inline value ([rail §Capability posture](./acp-backend-rail.md#capability-posture)).
+The ACP footer uses `usage_update.used / size` (backend prompt/tools/cache/
 session included) with `[entwurf:usage]` diagnostics. Near limit choose a visible
 action: clear, open a new session with a different model, or let the backend
 compact natively.

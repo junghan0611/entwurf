@@ -690,3 +690,11 @@ describe("streamAcpTurn — a reuse turn's stream opens with its own prompt (#14
 		expect(world.children).toHaveLength(1);
 	});
 });
+
+describe("ACP rows declare only the input the rail delivers (#142 landing review)", () => {
+	it("[QK:ACP-ROWS-TEXT-ONLY-INPUT] every curated ACP row, Claude and Cortex, declares text input only — an image reaches the backend as a marker, never as bytes", () => {
+		const rows = adapters.allCuratedModels();
+		expect(rows.length).toBeGreaterThan(0);
+		for (const row of rows) expect(row.input, row.id).toEqual(["text"]);
+	});
+});

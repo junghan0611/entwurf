@@ -58,12 +58,25 @@ change the reuse signature rather than mutate a live incompatible session.
 **Session reuse needs a resident pi.** Reuse — the live ACP session kept across turns, each
 later turn sending only the new user message — exists only in a pi process started with
 `--entwurf-control` (`entwurf pi` adds it). Every other pi process, plain interactive `pi`
-and `pi -p` included, is turn-scoped: each turn opens a new ACP session, sends the whole pi
-transcript rebuilt as one prompt, and tears the child down when the turn ends
+and `pi -p` included, is turn-scoped: each turn opens a new ACP session, sends the pi
+transcript rendered as one text prompt, and tears the child down when the turn ends
 (`resolveLifecyclePolicy`, `pi-extensions/lib/acp/session-store.ts`). This boundary is as
 old as reuse itself (S2c, hang-safe one-shot exit); it is stated here so that "reuse without
 resending the transcript" is not read as a property of every pi process. Nothing in a pi
 profile or AGENTS file changes it.
+
+**What a rebuilt prompt carries (`context.ts`).** The rebuild is a TEXT rendering of pi's own
+transcript, not a replay: user text, assistant text and tool results become `User:` /
+`Assistant:` / `Tool result (…)` / `Tool error (…)` lines; assistant thinking, structured tool calls, the system
+prompt and lifecycle notices are left out; an image becomes the marker `[image omitted: <mime>]`
+on both the rebuild and the reuse delta. Because no path carries image bytes to the backend, every
+curated ACP row — Claude and Cortex — declares `input: ["text"]` (`ACP_ROW_INPUT` in `models.ts`,
+`[QK:ACP-ROWS-TEXT-ONLY-INPUT]`), although pi's catalog lists the Anthropic models as
+`["text", "image"]`: that is the model behind the API, not this transport. What pi does with an
+attachment offered to a text-only row is pi's behaviour and is unmeasured here. Real image
+passthrough is a separate decision ([#161](https://github.com/junghan0611/entwurf/issues/161)); a
+row gains `image` only together with that path and its proof. A backend's own file tools (Claude's
+Read on an image file) are a different surface and are not affected.
 
 A streaming message begins with `stopReason: "pending"`. ACP's terminal set is mapped
 explicitly: `end_turn → stop`, `max_tokens → length`, `cancelled → aborted`; refusal,
@@ -187,7 +200,7 @@ main; no release carries them yet, so they are not a shipped manifest.
 | Surface | Declaration | Class | What a green actually says |
 |---|---|---|---|
 | Entwurf package | `package.json` `version` | checkout declaration, not a release receipt | names the package label these rows sit beside; whether that label shipped, and with which rows, is CHANGELOG's record |
-| pi runtime | SDK exact `1.5.2`, host `>=1.5.2 <1.6` | **exact** oracle + **closed range** | the #158 source candidate's declared SDK set and derived host range (the published 0.51.0 shipped SDK 1.5.0, #155), not a release or operating-host acceptance; an ordinary Pi host inside the range is accepted by the source's version predicate, and the ceiling moves only on measurement. The published 0.36.0 through 0.37.1 shipped the 1.2.0 set (#141); 0.38.0 (#145) is the first to carry 1.3.0. Historical: the published 0.33.0 through 0.35.1 ship SDK exact 1.1.0, 0.32.0 ships SDK exact 1.0.4 with the next-minor ceiling (ROADMAP's 2026-10-07 bump entry), and 0.31.0 declared the earlier peer floor 1.0.2 |
+| pi runtime | SDK exact `1.5.2`, host `>=1.5.2 <1.6` | **exact** oracle + **closed range** | the SDK set the published 0.52.0 ships (#158) and its derived host range (0.51.0 shipped SDK 1.5.0, #155), not an operating-host acceptance; an ordinary Pi host inside the range is accepted by the source's version predicate, and the ceiling moves only on measurement. The published 0.36.0 through 0.37.1 shipped the 1.2.0 set (#141); 0.38.0 (#145) is the first to carry 1.3.0. Historical: the published 0.33.0 through 0.35.1 ship SDK exact 1.1.0, 0.32.0 ships SDK exact 1.0.4 with the next-minor ceiling (ROADMAP's 2026-10-07 bump entry), and 0.31.0 declared the earlier peer floor 1.0.2 |
 | ACP wire SDK | `@agentclientprotocol/sdk 2.6.0` | **exact** | the shared wire oracle both adapters speak (protocol v1; the experimental `Usage` type now comes from the `./unstable` entry) |
 | Claude ACP adapter | `@agentclientprotocol/claude-agent-acp 0.106.0` | **exact**, bundled | landed on main by #142, unshipped (0.90.0 shipped 0.36.1–0.52.0); resolved before any PATH fallback; declaration is not compatibility evidence |
 | Claude Agent SDK | `0.3.322` (transitive) | **exact** oracle | the runtime risk surface behind the adapter |

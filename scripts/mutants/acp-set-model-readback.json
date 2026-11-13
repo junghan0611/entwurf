@@ -184,6 +184,17 @@
 			"timeoutSeconds": 60,
 			"signature": "[QK:ACP-REUSE-LATE-UPDATE-PRE-PROMPT]",
 			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
+		},
+		{
+			"claim": "ACP-ROWS-TEXT-ONLY-INPUT",
+			"title": "the ACP rows advertise image input again — pi accepts an attachment the rail only ever sends as an `[image omitted]` marker",
+			"subject": "pi-extensions/lib/acp/models.ts",
+			"find": ["const ACP_ROW_INPUT: (\"text\" | \"image\")[] = [\"text\"];"],
+			"replace": ["const ACP_ROW_INPUT: (\"text\" | \"image\")[] = [\"text\", \"image\"];"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-ROWS-TEXT-ONLY-INPUT]",
+			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
 		}
 	]
 }
