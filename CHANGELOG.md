@@ -35,6 +35,10 @@ An npm lock must name the checkout's own package version, so while 0.53.0 is unp
 
 The `entwurf` ACP provider is Claude-only. Retired `cortex-*` ids are not registered; exact fresh/resume admission refuses them, and the ACP adapter refuses a Cortex id or a settings `backend: cortex` as `cortex-acp-disabled` before any child or overlay starts, with no Claude fallback. A dormant `cortexConnection` alone does not block Claude. The Cortex LIVE smoke and its gate are removed. Pi's own fuzzy `--model` selection outside Entwurf's launch seams is not governed by this change.
 
+### A long ACP tool shows that it is still running (#162)
+
+A long Bash in an ACP Claude sibling used to show only `[tool:start] Terminal` and a spinner until it finished; one real run sat that way for over seven minutes. claude-agent-acp 0.106.0 sends a running tool's elapsed time every 30 seconds with no client capability required, and the mapper dropped it. Each beat now renders as `[tool:running] <command> — 30s` (then `1m`, `1m30s`, …). The line is display-only: it stays out of transcript replay and the reuse-compat signature, and it is hidden with the other tool notices. It carries no partial output, because the adapter sends a foreground command's stdout only with its completion, even to a client that declares `_meta.terminal_output`. Both facts were measured on raw ACP frames on 2026-11-13. A steer to a busy ACP sibling still waits for the whole ACP turn (#163); that is separate work.
+
 ### Release evidence
 
 This candidate is `93eb879` (Cortex ACP disabled) on top of the earlier preparation `1e487f7`, plus these release-record edits.

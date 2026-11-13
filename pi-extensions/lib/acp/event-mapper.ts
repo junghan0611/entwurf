@@ -229,6 +229,24 @@ function titleForTool(update: Record<string, unknown>, previousTitle?: string): 
 	return String(update?.title ?? previousTitle ?? meta?.claudeCode?.toolName ?? update?.toolCallId ?? "Tool");
 }
 
+function isTerminalToolStatus(status: string | undefined): boolean {
+	return status === "completed" || status === "failed" || status === "cancelled";
+}
+
+/** The adapter's progress-beat elapsed seconds, or undefined when this update is not a beat. */
+function elapsedSecondsOf(update: Record<string, unknown>): number | undefined {
+	const meta = update?._meta as { claudeCode?: { toolResponse?: { elapsedTimeSeconds?: unknown } } } | undefined;
+	const value = meta?.claudeCode?.toolResponse?.elapsedTimeSeconds;
+	return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : undefined;
+}
+
+function formatElapsed(seconds: number): string {
+	const whole = Math.floor(seconds);
+	if (whole < 60) return `${whole}s`;
+	const rest = whole % 60;
+	return rest === 0 ? `${Math.floor(whole / 60)}m` : `${Math.floor(whole / 60)}m${rest}s`;
+}
+
 /**
  * Render an ACP tool_call / tool_call_update as a text notice (NEVER a
  * structured toolcall — the ACP child already executed it).
@@ -248,14 +266,24 @@ function renderToolUpdate(state: AcpPiStreamState, update: Record<string, unknow
 		return;
 	}
 
-	// tool_call_update. There is deliberately no mid-flight `[tool:running]`
-	// notice: it would have to be driven by the adapter's `_meta.terminal_output`,
-	// and that meta is gated upstream on `clientCapabilities._meta.terminal_output
-	// === true` while backend.ts initializes with `clientCapabilities: {}`. So the
-	// branch could never fire for any backend we ship — it claimed a transcript
-	// line the operator was never going to see. Declaring the terminal capability
-	// is a separate axis, not a one-line re-enable: the adapter would then send
-	// terminal widgets/metas this mapper cannot render honestly into a transcript.
+	// tool_call_update. A running tool's only mid-flight signal is the SDK's
+	// `tool_progress` beat, which the adapter forwards WITHOUT any client
+	// capability as `_meta.claudeCode.toolResponse.elapsedTimeSeconds` (#162,
+	// measured 2026-11-13 on claude-agent-acp 0.106.0 with `clientCapabilities: {}`:
+	// a 120 s foreground Bash produced beats at 30/60/90 s, the first one also
+	// carrying `status: "in_progress"`). It carries no stdout: the adapter sends a
+	// foreground command's output only with its completion, even to a client that
+	// declares `_meta.terminal_output` (measured the same day). So the honest
+	// mid-flight line is liveness plus elapsed time, never partial output. It is
+	// display-only, like a lifecycle notice: elapsed beats depend on wall time, so
+	// they stay out of transcript replay and the reuse-compat signature.
+	const elapsed = elapsedSecondsOf(update);
+	if (elapsed !== undefined && !isTerminalToolStatus(status) && !isTerminalToolStatus(previous?.status)) {
+		pushDisplayOnlyNotice(
+			state,
+			`\n[tool:running] ${sanitizeNoticeFragment(title, NOTICE_TITLE_MAX)} — ${formatElapsed(elapsed)}\n`,
+		);
+	}
 	if (status && status !== previous?.status) {
 		const summary = firstTextContent(update?.rawOutput) ?? firstTextContent(updateContent);
 		const suffix = summary ? ` — ${sanitizeNoticeFragment(summary, NOTICE_SUMMARY_MAX)}` : "";
@@ -285,6 +313,22 @@ export function pushPermissionNotice(state: AcpPiStreamState, title: string, dec
  * present or absent. Without the marker the "output-side only" claim is L0 hope.
  */
 export const LIFECYCLE_NOTICE_SIGNATURE = "entwurf:lifecycle-notice-v1";
+
+/**
+ * A tool notice that is display-only: suppressed with the tool stream
+ * (`showToolNotifications`), and stamped with LIFECYCLE_NOTICE_SIGNATURE so it
+ * never replays into an ACP prompt nor perturbs the reuse-compat signature.
+ */
+function pushDisplayOnlyNotice(state: AcpPiStreamState, text: string): void {
+	if (!state.showToolNotifications) return;
+	closeThinkingBlock(state);
+	closeTextBlock(state);
+	const index = state.output.content.length;
+	state.output.content.push({ type: "text", text, textSignature: LIFECYCLE_NOTICE_SIGNATURE });
+	state.stream.push({ type: "text_start", contentIndex: index, partial: state.output });
+	state.stream.push({ type: "text_delta", contentIndex: index, delta: text, partial: state.output });
+	state.stream.push({ type: "text_end", contentIndex: index, content: text, partial: state.output });
+}
 
 /**
  * Push a one-line ACP turn-lifecycle progress notice (`[acp: …]`) as its own
