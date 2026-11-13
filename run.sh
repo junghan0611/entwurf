@@ -3861,6 +3861,14 @@ check_pack() {
     "mcp/entwurf-bridge/dist/pi-extensions/lib/remote-pair-receive.js"
     "mcp/entwurf-bridge/dist/pi-extensions/lib/remote-pair-send.js"
     "mcp/entwurf-bridge/dist/pi-extensions/lib/remote-pair-transport.js"
+    # #160 — the OpenClaw send entry the plugin tool runs and the birth verb (run_ts twins), plus
+    # their two leaf libs and the OpenClaw libs the native-push adapter imports.
+    "mcp/entwurf-bridge/dist/scripts/openclaw-send.js"
+    "mcp/entwurf-bridge/dist/scripts/openclaw-birth.js"
+    "mcp/entwurf-bridge/dist/pi-extensions/lib/openclaw-send.js"
+    "mcp/entwurf-bridge/dist/pi-extensions/lib/openclaw-birth.js"
+    "mcp/entwurf-bridge/dist/pi-extensions/lib/openclaw-citizens.js"
+    "mcp/entwurf-bridge/dist/pi-extensions/lib/native-push/openclaw-gateway.js"
     # #87 Bundle B — omp-receive-doctor drives this operator projection through
     # run.sh, so installed node_modules must have the compiled twin too.
     "mcp/entwurf-bridge/dist/scripts/omp-receive-facts.js"
@@ -4893,6 +4901,14 @@ _check_pack_install_impl() {
     "mcp/entwurf-bridge/dist/pi-extensions/lib/remote-pair-receive.js"
     "mcp/entwurf-bridge/dist/pi-extensions/lib/remote-pair-send.js"
     "mcp/entwurf-bridge/dist/pi-extensions/lib/remote-pair-transport.js"
+    # #160 — the OpenClaw send entry the plugin tool runs and the birth verb (run_ts twins), plus
+    # their two leaf libs and the OpenClaw libs the native-push adapter imports.
+    "mcp/entwurf-bridge/dist/scripts/openclaw-send.js"
+    "mcp/entwurf-bridge/dist/scripts/openclaw-birth.js"
+    "mcp/entwurf-bridge/dist/pi-extensions/lib/openclaw-send.js"
+    "mcp/entwurf-bridge/dist/pi-extensions/lib/openclaw-birth.js"
+    "mcp/entwurf-bridge/dist/pi-extensions/lib/openclaw-citizens.js"
+    "mcp/entwurf-bridge/dist/pi-extensions/lib/native-push/openclaw-gateway.js"
     # #87 Bundle B — omp-receive-doctor reaches this through the installed dispatcher.
     "mcp/entwurf-bridge/dist/scripts/omp-receive-facts.js"
     # 0.12.5 — node_modules-safe plugin hook + lib (see check-pack). The installed

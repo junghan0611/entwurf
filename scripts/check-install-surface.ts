@@ -574,6 +574,20 @@ const operatorCmds = [...targets].filter(([cmd, ts]) => !isDevGate(cmd) && ts.le
 			line: "  entwurf herdr-plugin-withdraw-operator  # #153 the opt-out of herdr-plugin-expose-operator: removes exactly the receipt's link — only while it is still that link — and then the receipt; the ledger stays at schema 3. Runs only as the active runtime's package. herdr-plugin-deactivate removes the same link first, before any component",
 			receipt: "run.sh `herdr-plugin-withdraw-operator)` arm -> scripts/herdr-operator-link.mjs withdraw (#153)",
 		},
+		// #160 (relayed by 9fc008, GLG approval 2026-11-13): the OpenClaw send entry and birth verb, right after
+		// remote-pair-receive — receipts: the run.sh `openclaw-send)` / `openclaw-birth)` arms.
+		{
+			after: "  entwurf remote-pair-receive         # ",
+			line: "  entwurf openclaw-send               # #160, BRANCH candidate: the claim entry an OpenClaw plugin send tool runs once per call. Reads ONE JSON claim {v,scope,agentId,sessionKey,target,message,wantsReply} on stdin, refuses a (scope, key) outside this host's openclaw-citizens.json or a claim no single `openclaw` record carries before any mutation (a scope limit under the same-OS-account trust model, not authentication), then hands the record-backed sender to the existing v2 dispatch. Ambient sender carriers are never read. EXIT: 0 dispatched / 4 dispatched, the dispatch reported an error / 3 scope or record refused / 2 --decl is not this host's declaration, the declaration is absent or broken, or the claim is invalid (JSON receipt), or wrong argv (usage on stderr, no receipt) / 1 uncaught dispatch or store throw (no receipt; the plugin reads it as indeterminate) (--decl <absolute openclaw-citizens.json>)",
+			receipt:
+				"run.sh `openclaw-send)` arm -> scripts/openclaw-send.ts: --decl must equal openclawCitizensPath(), absent/broken declaration or invalid claim -> invalid receipt exit 2, wrong argv exit 2 with usage, receiveOpenclawClaim scope + record join -> rejected exit 3, runAndRenderEntwurfV2FromSurface -> dispatched exit 0/4 (openclawSendExitCode), uncaught -> 1 (#160)",
+		},
+		{
+			after: "  entwurf openclaw-send               # ",
+			line: "  entwurf openclaw-birth              # #160, BRANCH candidate: the one writer of `openclaw` records. Checks the key against this host's openclaw-citizens.json, requires the declared Gateway's sessions.describe to answer alive, then upserts openclaw:<scope>:<sessionKey> idempotently (a re-birth attaches to the same garden id). --cwd is explicit: no OpenClaw read RPC returns a session root. Prints one JSON line {action,gardenId,nativeSessionId,cwd}; any refusal throws (exit 1); wrong argv exit 2 (--scope <s> --session-key <agent:<id>:<key>> --cwd <absolute dir>)",
+			receipt:
+				"run.sh `openclaw-birth)` arm -> scripts/openclaw-birth.ts: exactly --scope/--session-key/--cwd else usage exit 2; birthOpenclawCitizen declaration -> adapter probe alive -> upsert, refusals throw (exit 1); prints {action,gardenId,nativeSessionId,cwd} (#160)",
+		},
 	];
 	for (const ins of insertedLines) {
 		const rows = expectedCatalog.split("\n");
@@ -946,7 +960,10 @@ const operatorCmds = [...targets].filter(([cmd, ts]) => !isDevGate(cmd) && ts.le
 	// Moved for #153: two operator-link arms (herdr-plugin-expose-operator / -withdraw-operator), re-reviewed.
 	// Moved for #157 stage 4: one `claude)` arm, nothing removed (133 -> 134 labels, re-reviewed: `claude`
 	// is a described entry and outside the debt).
-	const REVIEWED_CASE_SHA256 = "bfdafcfad8645ea3651905dd08d73808a724c67e42f89f9721c917f3a494bef9";
+	// Moved for #160: two arms `openclaw-send)` and `openclaw-birth)` after `remote-pair-receive)`, nothing
+	// else changed (134 -> 136 labels, re-reviewed: both are described entries and outside the debt). The
+	// diff against the bfdafcfa… case is exactly those 13 added lines.
+	const REVIEWED_CASE_SHA256 = "6ca06d6809320e2879e8bf0eed8a9b93e1e525c3c77997cc70741b48299f70b0";
 	ok(
 		"[QK:CLI-HELP-DISPATCH-REVIEWED] S9h the case the operator labels are read from is the reviewed ce92dc7 case plus the reviewed #153 two-arm amendment, byte for byte",
 		start > 0 && caseAt > start && sha256(RUN_SH.slice(caseAt, end)) === REVIEWED_CASE_SHA256,

@@ -147,6 +147,12 @@
 	// remote-pair-send, entwurf-v2-surface, meta-session) are ALREADY emitted for the bridge's own
 	// entwurf_v2 handler, so this adds ONE leaf JS and ZERO new deps. It is never in index.ts's boot
 	// closure.
+	// WHY openclaw-send and openclaw-birth ride THIS build (#160): the OpenClaw plugin's send tool runs
+	// `entwurf openclaw-send` and the operator runs `entwurf openclaw-birth`; on an installed host run.sh
+	// lives under node_modules, where run_ts needs a compiled twin. Their repo imports beyond the bridge's
+	// own graph (native-push adapter, openclaw-gateway, openclaw-citizens, entwurf-v2-surface, meta-session
+	// are ALREADY emitted) are the two leaf libs openclaw-send and openclaw-birth. Never in index.ts's boot
+	// closure.
 	// WHY cc-retire-request rides THIS build (#147 G3): the core-side Claude Code retire adapter
 	// must run from the compiled bridge as well as from source. It was first supplied as a private
 	// entry; the #147 public retirement factory now reaches it too. Keep the named entry for the
@@ -174,6 +180,8 @@
 		"../../scripts/codex-socket-path.ts",
 		"../../scripts/codex-socket-classify.ts",
 		"../../scripts/remote-pair-receive.ts",
+		"../../scripts/openclaw-send.ts",
+		"../../scripts/openclaw-birth.ts",
 		"../../pi-extensions/meta-bridge-hook.ts",
 		"../../pi-extensions/meta-bridge-hook-copilot.ts",
 		"../../pi-extensions/meta-bridge-hook-codex.ts",
