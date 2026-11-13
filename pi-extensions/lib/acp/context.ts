@@ -74,6 +74,19 @@ function textFromAssistantContent(content: AssistantMessage["content"]): string 
 	);
 }
 
+/**
+ * The harness fact pi already holds about an assistant turn that was cut
+ * (`stopReason: "aborted"` — an operator abort, or a vendor `cancelled` mapped to it; the line
+ * names no cause), stated so a NEW session's transcript does not read a
+ * cancelled turn as a clean refusal (#142: a fresh session concluded a command had
+ * not run when its first effect was on disk). It adds no claim about what did or
+ * did not happen — only that the turn was cut and that a cut is not a rollback.
+ * Only the full transcript carries it: a reused session already holds its own
+ * record of the interruption and receives just the latest user delta.
+ */
+export const ABORTED_TURN_STATUS =
+	"[turn status: aborted — actions this turn had started may already have taken effect; cancellation is not rollback]";
+
 /** Render one pi message as a transcript line, or undefined to skip it. */
 function renderMessage(message: Message): string | undefined {
 	switch (message.role) {
@@ -83,6 +96,10 @@ function renderMessage(message: Message): string | undefined {
 		}
 		case "assistant": {
 			const text = textFromAssistantContent(message.content).trim();
+			if (message.stopReason === "aborted") {
+				// Kept even when the cut turn left no text: the cut itself is the fact.
+				return text ? `Assistant: ${text}\n${ABORTED_TURN_STATUS}` : `Assistant: ${ABORTED_TURN_STATUS}`;
+			}
 			return text ? `Assistant: ${text}` : undefined;
 		}
 		case "toolResult": {

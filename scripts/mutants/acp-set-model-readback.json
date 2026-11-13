@@ -97,6 +97,80 @@
 			"timeoutSeconds": 60,
 			"signature": "[QK:ACP-THINKING-READBACK-NOTICE]",
 			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
+		},
+		{
+			"claim": "ACP-THINKING-REUSE-ABORT",
+			"title": "an abort while a reuse turn waits for the effort answer is not heard — ESC settles only when the driver answers or the 30s bootstrap timeout fires",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": ["\tif (!signal) return p;"],
+			"replace": ["\treturn p;"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:ACP-THINKING-REUSE-ABORT]",
+			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
+		},
+		{
+			"claim": "ACP-CANCEL-NOTICE-REUSE-KEPT",
+			"title": "a reuse turn the agent cancelled keeps its live session without telling the operator — they cannot tell whether to continue or start over",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": ["\t\t\t\tpushAcpLifecycleNotice(state, ACP_CANCEL_KEPT_NOTICE);"],
+			"replace": [""],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-CANCEL-NOTICE-REUSE-KEPT]",
+			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
+		},
+		{
+			"claim": "ACP-CANCEL-NOTICE-NEW-CLOSED",
+			"title": "a cancelled first turn claims the live session was kept although it was closed — the next message silently opens a new conversation",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": ["\t\t\t\tpushAcpLifecycleNotice(state, retain ? ACP_CANCEL_KEPT_NOTICE : ACP_CANCEL_CLOSED_NOTICE);"],
+			"replace": ["\t\t\t\tpushAcpLifecycleNotice(state, ACP_CANCEL_KEPT_NOTICE);"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-CANCEL-NOTICE-NEW-CLOSED]",
+			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
+		},
+		{
+			"claim": "ACP-THINKING-REUSE-ABORT-LATE",
+			"title": "an abort that arrives while a reuse turn waits for the effort answer is never heard — only an abort raised before the wait is honoured, so a real ESC waits for the driver or the 30s bound",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": [
+				"\t\tonAbort = () => reject(new Error(\"entwurf: aborted by the operator before the prompt was sent\"));\n\t\tif (signal.aborted) onAbort();\n\t\telse signal.addEventListener(\"abort\", onAbort, { once: true });"
+			],
+			"replace": [
+				"\t\tonAbort = () => reject(new Error(\"entwurf: aborted by the operator before the prompt was sent\"));\n\t\tif (signal.aborted) onAbort();\n\t\telse void signal;"
+			],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 90,
+			"signature": "[QK:ACP-THINKING-REUSE-ABORT-LATE]",
+			"signatureSource": "pi-extensions/lib/acp/backend.thinking.test.ts"
+		},
+		{
+			"claim": "ACP-REBUILD-ABORTED-STATUS",
+			"title": "a rebuilt session reads an aborted turn that left text as a finished one — the vendor's rejection text alone makes a started command look like it never ran",
+			"subject": "pi-extensions/lib/acp/context.ts",
+			"find": [
+				"\t\t\t\treturn text ? `Assistant: ${text}\\n${ABORTED_TURN_STATUS}` : `Assistant: ${ABORTED_TURN_STATUS}`;"
+			],
+			"replace": ["\t\t\t\treturn text ? `Assistant: ${text}` : `Assistant: ${ABORTED_TURN_STATUS}`;"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-REBUILD-ABORTED-STATUS]",
+			"signatureSource": "pi-extensions/lib/acp/context.test.ts"
+		},
+		{
+			"claim": "ACP-REBUILD-ABORTED-EMPTY",
+			"title": "an aborted turn that left no text vanishes from the rebuilt transcript — the new session never learns a turn was cut",
+			"subject": "pi-extensions/lib/acp/context.ts",
+			"find": [
+				"\t\t\t\treturn text ? `Assistant: ${text}\\n${ABORTED_TURN_STATUS}` : `Assistant: ${ABORTED_TURN_STATUS}`;"
+			],
+			"replace": ["\t\t\t\treturn text ? `Assistant: ${text}\\n${ABORTED_TURN_STATUS}` : undefined;"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-REBUILD-ABORTED-EMPTY]",
+			"signatureSource": "pi-extensions/lib/acp/context.test.ts"
 		}
 	]
 }

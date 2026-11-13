@@ -73,6 +73,25 @@ none.** A turn ends only on a lifecycle event:
 | the operator aborts | ACP `session/cancel` first — the agent closes its own turn (`cancelled → aborted`); process-group teardown only after a bounded grace, so an abort always returns |
 | the child dies / stdio ends | the turn fails naming the exit status and the session-scoped stderr tail — or an honest bounded absence when transport EOF wins the race — on both the new and the reuse path |
 
+**What an abort leaves (#142).** After the turn has settled, the operator is told one of two
+things: `[acp: stopped — changes already made stay; next message continues this session]` when
+the agent closed a reused turn on `session/cancel` (or ended a new turn `cancelled` with no
+operator abort, so the session was retained), so the live ACP session stays and the next
+message is a delta; or `[acp: stopped — changes already made stay; next message opens a new
+session]` when the session was dropped — a cancelled first turn (only a live, un-aborted
+session is retained), escalation teardown, or an abort before the prompt was sent — so the next
+message rebuilds from the pi transcript. That rebuild states the cut to the new session: an
+assistant turn pi recorded as `aborted` is followed by one harness line, `[turn status: aborted —
+actions this turn had started may already have taken effect; cancellation is
+not rollback]`, and claims nothing about what ran (`context.ts` `ABORTED_TURN_STATUS`; a reused
+session gets the user delta only). Neither notice rolls anything back, and neither speaks
+for the private Claude transcript behind the live session. An abort while a reuse turn waits
+for a changed effort's answer settles on the abort, not on the answer or the 30s bound; no
+prompt is sent and the session is dropped, since the effort the driver holds is unknown. Gates:
+`check-acp-set-model-readback` (`backend.thinking.test.ts`, QKs `ACP-THINKING-REUSE-ABORT`,
+`ACP-CANCEL-NOTICE-REUSE-KEPT`, `ACP-CANCEL-NOTICE-NEW-CLOSED`, `ACP-THINKING-REUSE-ABORT-LATE`;
+`context.test.ts`, QKs `ACP-REBUILD-ABORTED-STATUS`, `ACP-REBUILD-ABORTED-EMPTY`).
+
 Elapsed time is not evidence of failure, and a silent turn is not a failed turn: tool
 use, reasoning, and provider queueing all legitimately outrun any number we could pick.
 Suspected stalls are handled by exposing progress, never by a killing timer.

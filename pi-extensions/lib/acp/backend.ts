@@ -760,6 +760,31 @@ function withTimeout<T>(label: string, p: Promise<T>, ms: number): Promise<T> {
 	});
 }
 
+// Reject as soon as the operator aborts, so a pre-prompt step on a LIVE session
+// (reuse has no bootstrap child to tear down) settles on the abort instead of on
+// the driver's answer or the bootstrap timeout. The step itself is abandoned, not
+// cancelled: the caller drops the session, since what the driver now holds is
+// unknown (#142, Dot review of the reuse effort set).
+function untilAborted<T>(p: Promise<T>, signal: AbortSignal | undefined): Promise<T> {
+	if (!signal) return p;
+	let onAbort: (() => void) | undefined;
+	const aborted = new Promise<never>((_, reject) => {
+		onAbort = () => reject(new Error("entwurf: aborted by the operator before the prompt was sent"));
+		if (signal.aborted) onAbort();
+		else signal.addEventListener("abort", onAbort, { once: true });
+	});
+	return Promise.race([p, aborted]).finally(() => {
+		if (onAbort) signal.removeEventListener("abort", onAbort);
+	});
+}
+
+// What an operator who pressed ESC needs before speaking again (#142): the turn
+// has stopped, nothing already done was undone, and whether the next message
+// continues this live ACP session or opens a new one. Said only after the turn
+// settled, and only about the live session — not about any private transcript.
+export const ACP_CANCEL_KEPT_NOTICE = "stopped — changes already made stay; next message continues this session";
+export const ACP_CANCEL_CLOSED_NOTICE = "stopped — changes already made stay; next message opens a new session";
+
 /**
  * Await ONE ACP prompt with NO wall-clock deadline — the turn ends on lifecycle
  * events only. Shared by the new and the reuse turn so both close the same way.
@@ -1954,6 +1979,9 @@ export function streamAcpTurn(
 				unrefRetainedChild(spawned);
 			}
 
+			if (signal?.aborted || mapPromptStopReason(promptResult?.stopReason).stopReason === "aborted") {
+				pushAcpLifecycleNotice(state, retain ? ACP_CANCEL_KEPT_NOTICE : ACP_CANCEL_CLOSED_NOTICE);
+			}
 			finishSuccess(adapter, session, promptResult);
 
 			if (retain) {
@@ -1981,6 +2009,7 @@ export function streamAcpTurn(
 			// own SIGTERM; the tail collected by then is sealed before our cleanup
 			// touches the stderr pipe.
 			const lifecycle = await diagnoseTransportClosure({ err, session, phase, aborted });
+			if (aborted) pushAcpLifecycleNotice(state, ACP_CANCEL_CLOSED_NOTICE);
 			finishError(
 				err,
 				aborted,
@@ -2026,12 +2055,15 @@ export function streamAcpTurn(
 			if (thinkingValue !== undefined && adapter.enforceThinking && session.thinkingValue !== thinkingValue) {
 				await withTimeout(
 					"enforceThinking",
-					adapter.enforceThinking({
-						connection: session.connection,
-						acpSessionId: session.acpSessionId,
-						modelId: model.id,
-						value: thinkingValue,
-					}),
+					untilAborted(
+						adapter.enforceThinking({
+							connection: session.connection,
+							acpSessionId: session.acpSessionId,
+							modelId: model.id,
+							value: thinkingValue,
+						}),
+						signal,
+					),
 					SET_MODEL_TIMEOUT_MS,
 				);
 				session.thinkingValue = thinkingValue;
@@ -2062,6 +2094,10 @@ export function streamAcpTurn(
 			// prefix-compat check sees the full prior history (GPT ④: store the
 			// ctxSigs from the START of this call, only after the turn succeeds).
 			session.contextMessageSignatures = ctxSigs;
+			// A cancel the agent answered itself leaves this live session in place (no drop below).
+			if (signal?.aborted || mapPromptStopReason(promptResult?.stopReason).stopReason === "aborted") {
+				pushAcpLifecycleNotice(state, ACP_CANCEL_KEPT_NOTICE);
+			}
 			finishSuccess(adapter, session, promptResult);
 			persistRecord(session, deps);
 		} catch (err) {
@@ -2075,6 +2111,7 @@ export function streamAcpTurn(
 			// ordering matters most here: teardown first would have overwritten the
 			// child's own exit status with our SIGTERM.
 			const lifecycle = await diagnoseTransportClosure({ err, session, phase, aborted });
+			if (aborted) pushAcpLifecycleNotice(state, ACP_CANCEL_CLOSED_NOTICE);
 			// Without the session-scoped tail a mid-turn child death on a resident
 			// session surfaced as a bare "ACP connection closed" with nothing to read
 			// it by.

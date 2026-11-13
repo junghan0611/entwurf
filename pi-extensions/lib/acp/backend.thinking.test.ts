@@ -340,10 +340,15 @@ function makeFakeChild(): AcpChildLike {
 }
 
 /** One backend world. `log` records every wire call in order: `set:<configId>=<value>` and `prompt`. */
-function makeWorld(effortAnswer: (value: string) => string = (value) => value) {
+function makeWorld(
+	effortAnswer: (value: string) => string = (value) => value,
+	effortGate?: { hold: boolean; waiting?: () => void },
+	promptGate?: { hold: boolean; waiting?: () => void },
+) {
 	const sessionDir = mkdtempSync(join(SANDBOX, "records-"));
 	const children: AcpChildLike[] = [];
 	const log: string[] = [];
+	let pendingPrompt: (() => void) | undefined;
 	const deps: AcpTurnDeps = {
 		spawnChild: () => {
 			const child = makeFakeChild();
@@ -355,15 +360,31 @@ function makeWorld(effortAnswer: (value: string) => string = (value) => value) {
 			newSession: async () => ({ sessionId: `ACP-${children.length}` }),
 			setSessionConfigOption: async (p: any) => {
 				log.push(`set:${p.configId}=${p.value}`);
+				// A driver that never answers the effort set — the window an abort can land in.
+				if (p.configId === "effort" && effortGate?.hold) {
+					effortGate.waiting?.();
+					return new Promise(() => {});
+				}
 				return p.configId === "effort"
 					? { configOptions: [{ id: "effort", currentValue: effortAnswer(p.value) }] }
 					: { configOptions: [{ id: "model", currentValue: p.value }] };
 			},
 			prompt: async (): Promise<AcpPromptResponse> => {
 				log.push("prompt");
+				if (promptGate?.hold) {
+					// A running turn that the agent ends itself once it receives session/cancel.
+					return new Promise((resolve) => {
+						pendingPrompt = () => resolve({ stopReason: "cancelled" });
+						promptGate.waiting?.();
+					});
+				}
 				return { stopReason: "end_turn" };
 			},
-			cancel: () => {},
+			cancel: () => {
+				log.push("cancel");
+				pendingPrompt?.();
+				pendingPrompt = undefined;
+			},
 			close: () => {},
 		}),
 		lifecyclePolicy: () => "process-scoped",
@@ -414,6 +435,40 @@ async function noticesOf(
 function errorText(event: AssistantMessageEvent): string {
 	if (event.type !== "error") throw new Error(`expected an error seal, got ${event.type}`);
 	return event.error.errorMessage ?? "";
+}
+
+async function reuseAbortDuringEffort(sessionId: string, deferAbort: boolean): Promise<void> {
+	const gate: { hold: boolean; waiting?: () => void } = { hold: false };
+	const world = makeWorld(undefined, gate);
+	await runTurn(world, transcript("first"), sessionId, "high");
+	const controller = new AbortController();
+	gate.hold = true;
+	// The operator presses ESC while the driver has not answered the effort set yet.
+	// Already aborted when the effort wait begins, or (deferred) an abort that arrives while it waits.
+	gate.waiting = deferAbort ? () => void setTimeout(() => controller.abort(), 0) : () => controller.abort();
+	const started = Date.now();
+	const events: AssistantMessageEvent[] = [];
+	const opts = { sessionId: sessionId, reasoning: "low", signal: controller.signal } as Parameters<
+		typeof backend.streamAcpTurn
+	>[2];
+	let shown = "";
+	for await (const event of backend.streamAcpTurn(sonnet(), transcript("first", "second"), opts, world.deps)) {
+		events.push(event);
+		if (event.type === "text_delta") shown += event.delta;
+	}
+	const settledMs = Date.now() - started;
+	expect(shown).toContain(`[acp: ${backend.ACP_CANCEL_CLOSED_NOTICE}]`);
+	const sealed = events.filter((e) => e.type === "done" || e.type === "error");
+	expect(sealed).toHaveLength(1);
+	expect(sealed[0].type === "error" && sealed[0].reason).toBe("aborted");
+	// Bounded by the abort, not by the 30s bootstrap timeout.
+	expect(settledMs).toBeLessThan(2_000);
+	expect(world.log).toEqual(["set:model=claude-sonnet-5-5", "set:effort=high", "prompt", "set:effort=low"]);
+	// The effort the driver holds is unknown, so the session is not reused.
+	gate.hold = false;
+	await runTurn(world, transcript("first", "second", "third"), sessionId, "low");
+	expect(world.children).toHaveLength(2);
+	expect(world.log.slice(4)).toEqual(["set:model=claude-sonnet-5-5", "set:effort=low", "prompt"]);
 }
 
 describe("streamAcpTurn — effort on the live session (#142)", () => {
@@ -478,6 +533,14 @@ describe("streamAcpTurn — effort on the live session (#142)", () => {
 		expect(world.children).toHaveLength(2);
 	});
 
+	it("[QK:ACP-THINKING-REUSE-ABORT] an abort already raised when a reuse turn starts waiting for a changed effort settles at once, sends no prompt, and the next turn opens a new session", async () => {
+		await reuseAbortDuringEffort("th-reuse-abort", false);
+	}, 40_000);
+
+	it("[QK:ACP-THINKING-REUSE-ABORT-LATE] an abort that arrives while a reuse turn is waiting for a changed effort settles at once, sends no prompt, and the next turn opens a new session", async () => {
+		await reuseAbortDuringEffort("th-reuse-abort-late", true);
+	}, 40_000);
+
 	it("no thinking level refuses by name before any process starts", async () => {
 		const world = makeWorld();
 		const sealed = await runTurn(world, transcript("go"), "th-none", undefined);
@@ -485,5 +548,72 @@ describe("streamAcpTurn — effort on the live session (#142)", () => {
 		expect(world.log).toEqual([]);
 		expect(errorText(sealed)).toContain(adapters.ACP_THINKING_LEVEL_UNSUPPORTED);
 		assertNoReplay(errorText(sealed));
+	});
+});
+
+/** Run one turn that the operator aborts once its prompt is on the wire; returns the seal and what was shown. */
+async function abortedTurn(
+	world: ReturnType<typeof makeWorld>,
+	gate: { hold: boolean; waiting?: () => void },
+	context: TranscriptContext,
+	sessionId: string,
+): Promise<{ sealed: AssistantMessageEvent; shown: string }> {
+	const controller = new AbortController();
+	gate.hold = true;
+	gate.waiting = () => controller.abort();
+	const opts = { sessionId, reasoning: "high", signal: controller.signal } as Parameters<
+		typeof backend.streamAcpTurn
+	>[2];
+	let shown = "";
+	const sealed: AssistantMessageEvent[] = [];
+	for await (const event of backend.streamAcpTurn(sonnet(), context, opts, world.deps)) {
+		if (event.type === "text_delta") shown += event.delta;
+		if (event.type === "done" || event.type === "error") sealed.push(event);
+	}
+	gate.hold = false;
+	expect(sealed).toHaveLength(1);
+	return { sealed: sealed[0], shown };
+}
+
+describe("streamAcpTurn — what a cancel leaves, told to the operator (#142)", () => {
+	it("[QK:ACP-CANCEL-NOTICE-REUSE-KEPT] a reuse turn the agent ends on session/cancel keeps the live session, and says so", async () => {
+		const gate: { hold: boolean; waiting?: () => void } = { hold: false };
+		const world = makeWorld(undefined, undefined, gate);
+		await runTurn(world, transcript("first"), "cx-reuse", "high");
+		const { sealed, shown } = await abortedTurn(world, gate, transcript("first", "second"), "cx-reuse");
+		expect(sealed.type === "error" && sealed.reason).toBe("aborted");
+		expect(shown).toContain(`[acp: ${backend.ACP_CANCEL_KEPT_NOTICE}]`);
+		expect(shown).not.toContain(backend.ACP_CANCEL_CLOSED_NOTICE);
+		await runTurn(world, transcript("first", "second", "third"), "cx-reuse", "high");
+		expect(world.children).toHaveLength(1);
+		expect(world.log).toEqual([
+			"set:model=claude-sonnet-5-5",
+			"set:effort=high",
+			"prompt",
+			"prompt",
+			"cancel",
+			"prompt",
+		]);
+	});
+
+	it("[QK:ACP-CANCEL-NOTICE-NEW-CLOSED] a cancelled first turn closes its session, says the next message opens a new one, and the next message does", async () => {
+		const gate: { hold: boolean; waiting?: () => void } = { hold: false };
+		const world = makeWorld(undefined, undefined, gate);
+		const { sealed, shown } = await abortedTurn(world, gate, transcript("first"), "cx-new");
+		expect(sealed.type === "error" && sealed.reason).toBe("aborted");
+		expect(shown).toContain(`[acp: ${backend.ACP_CANCEL_CLOSED_NOTICE}]`);
+		expect(shown).not.toContain(backend.ACP_CANCEL_KEPT_NOTICE);
+		await runTurn(world, transcript("first", "second"), "cx-new", "high");
+		expect(world.children).toHaveLength(2);
+	});
+
+	it("a turn nobody cancelled shows neither notice", async () => {
+		const world = makeWorld();
+		const first = await noticesOf(world, transcript("first"), "cx-none", "high");
+		const second = await noticesOf(world, transcript("first", "second"), "cx-none", "high");
+		for (const text of [first, second]) {
+			expect(text).not.toContain(backend.ACP_CANCEL_KEPT_NOTICE);
+			expect(text).not.toContain(backend.ACP_CANCEL_CLOSED_NOTICE);
+		}
 	});
 });

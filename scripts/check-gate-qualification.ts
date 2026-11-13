@@ -3441,7 +3441,7 @@ let manifestCount: number;
 		"acp-launch-namespace": 2,
 		"acp-overlay": 1,
 		"acp-prompt-lifecycle": 15,
-		"acp-set-model-readback": 8,
+		"acp-set-model-readback": 14,
 		"acp-stop-reason": 7,
 		"acp-stream-hooks": 10,
 		"acp-usage-accounting": 12,
