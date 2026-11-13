@@ -307,7 +307,12 @@ function makeSpiedFactory(over: {
 						return over.nativePushProbe ?? { status: "dead", reason: "fake: no native-push probe configured" };
 					},
 					async send(route, conv, content) {
-						const routeLabel = route.backend === "antigravity" ? route.lsAddress : route.socketPath;
+						const routeLabel =
+							route.backend === "antigravity"
+								? route.lsAddress
+								: route.backend === "codex"
+									? route.socketPath
+									: `${route.url} ${route.sessionKey}`;
 						spies.nativePushSend.push({ route: routeLabel, conv, content });
 						spies.events.push("send");
 					},

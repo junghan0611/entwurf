@@ -420,7 +420,9 @@ async function inspectNativePushCitizens(storeDir: string): Promise<QuiesceViola
 				probe.status === "alive"
 					? probe.route.backend === "antigravity"
 						? `route ${probe.route.lsAddress}`
-						: `socket ${probe.route.socketPath}`
+						: probe.route.backend === "codex"
+							? `socket ${probe.route.socketPath}`
+							: `gateway ${probe.route.url} key ${probe.route.sessionKey}`
 					: probe.reason;
 		} catch (err) {
 			// A probe that cannot run is not a dead conversation.

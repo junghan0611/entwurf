@@ -5,9 +5,12 @@
  * /resolveAcpBackendAdapter): one interface, one registry, a fail-fast resolver.
  *
  * Purity contract (봉인 3):
- *  - LEAF: this file imports NO entwurf-core / no decider / no meta-session — only node
- *    builtins + type-only contract types. So the pi-free MCP bridge (entwurf_register_native)
- *    can reach it at boot without re-coupling to pi, and the decider stays pure.
+ *  - LEAF: this file imports NO entwurf-core / no decider — only node builtins, type-only
+ *    contract types and the per-backend adapters. One adapter reaches meta-session, and only
+ *    for a path: the OpenClaw adapter reads the operator's scope declaration beside the record
+ *    store (`openclaw-citizens.ts` → `defaultMetaSessionsDir`, #160). meta-session is pi-free,
+ *    so the pi-free MCP bridge (entwurf_register_native) still reaches this at boot, and the
+ *    decider stays pure.
  *  - injectable runner: every process call goes through the injected `NativePushRunner`,
  *    so `check-native-push-adapter` drives probe/send with a fake — no real agy needed.
  *  - VOLATILE route: a probe's `route` (the live LS address serving the conversation) is
@@ -26,7 +29,9 @@ import * as os from "node:os";
 import * as path from "node:path";
 
 import type { NativePushBackend } from "../entwurf-v2-contract.ts";
+import { openclawCitizensPath, readOpenclawCitizens } from "../openclaw-citizens.ts";
 import { codexNativePushAdapter } from "./codex-ws-client.ts";
+import { createOpenclawGatewayAdapter, type OpenclawRoute } from "./openclaw-gateway.ts";
 
 // ── runner seam (injectable process exec) ───────────────────────────────────
 
@@ -92,7 +97,8 @@ export const realNativePushRunner: NativePushRunner = {
  */
 export type NativePushRoute =
 	| { readonly backend: "antigravity"; readonly lsAddress: string }
-	| { readonly backend: "codex"; readonly socketPath: string };
+	| { readonly backend: "codex"; readonly socketPath: string }
+	| OpenclawRoute;
 
 /**
  * A probe outcome. `alive` carries the volatile route; `dead`/`indeterminate` carry a
@@ -270,7 +276,13 @@ export const antigravityAdapter: NativePushAdapter = createAntigravityAdapter({ 
 
 // ── registry + fail-fast resolver (mirror resolveAcpBackendAdapter) ──────────
 
-const ADAPTERS: readonly NativePushAdapter[] = [antigravityAdapter, codexNativePushAdapter];
+/** #160: the declaration is read per probe (never cached), from THIS host's canonical path. */
+export const openclawNativePushAdapter: NativePushAdapter = createOpenclawGatewayAdapter({
+	runner: realNativePushRunner,
+	readDeclaration: () => readOpenclawCitizens(openclawCitizensPath()),
+});
+
+const ADAPTERS: readonly NativePushAdapter[] = [antigravityAdapter, codexNativePushAdapter, openclawNativePushAdapter];
 
 /**
  * Resolve the native-push adapter that owns backend `id`. Fail-fast, like

@@ -82,7 +82,15 @@ export class MetaRecordError extends Error {
  * every write, including its own. `./run.sh doctor-meta-bridge` already flags a
  * stale deployed writer — run it after the change.
  */
-export const META_BACKENDS = ["claude-code", "antigravity", "codex", "copilot", "omp", "pi-durable"] as const;
+export const META_BACKENDS = [
+	"claude-code",
+	"antigravity",
+	"codex",
+	"copilot",
+	"omp",
+	"pi-durable",
+	"openclaw",
+] as const;
 export type MetaBackend = (typeof META_BACKENDS)[number];
 
 /**
@@ -241,6 +249,20 @@ export const META_BACKEND_DESCRIPTORS: Record<MetaBackend, MetaBackendDescriptor
 		deliveryLevel: "D2",
 		nativeIdLabel: "sessionId",
 	},
+	// OpenClaw Gateway sessions (#160). A BRANCH candidate: no LIVE receipt yet, so D0.
+	//   direct-inject  the native-push adapter (`native-push/openclaw-gateway.ts`) injects the
+	//                  rendered body with the vendor CLI `gateway call chat.send queueMode:"steer"`;
+	//                  there is no mailbox and no receiver marker (Hard Rule 10).
+	//   D0             the grade moves with a receipt, not with this code (adding-a-harness step 8).
+	//   scope:sessionKey  the record's nativeSessionId is `openclaw:<scope>:<sessionKey>`: a session
+	//                  key is unique only inside one Gateway state root, so the operator's scope
+	//                  label namespaces it (`openclaw-citizens.ts`). Composed by the one birth writer.
+	openclaw: {
+		backend: "openclaw",
+		wakeMode: "direct-inject",
+		deliveryLevel: "D0",
+		nativeIdLabel: "scope:sessionKey",
+	},
 };
 
 // ---------------------------------------------------------------------------
@@ -331,6 +353,7 @@ export const META_CITIZEN_BACKENDS = [
 	"copilot",
 	"omp",
 	"pi-durable",
+	"openclaw",
 	"pi",
 ] as const;
 export type MetaCitizenBackend = (typeof META_CITIZEN_BACKENDS)[number];

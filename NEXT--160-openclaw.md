@@ -11,17 +11,37 @@
   - M5: 첫 ack는 messageSeq를 포함하고, dedupe ack는 `status:"ok"`에 messageSeq가 없다. conflict는 `chat-request-conflict`다.
   - 제약: `mcp set`은 Gateway가 오프라인일 때만 가능하다. 기본 codex 런타임은 사용할 수 없다. 플러그인 설치에는 2단 동의 게이트가 있다.
 - [x] **S2. 결정 카드.** 4184c5가 작성했고 9fc008이 영수증을 확인했다. GLG가 7절 1–5를 권고대로 승인했고, 6은 oracle 측정으로 닫았다(2026-11-13).
-- [ ] **S3. 구현.** ← CURRENT: 별도 Opus 구현 형제. 결정 카드 6절의 코어 diff 7항목과 `plugins/openclaw`, 그리고 바로 옆 테스트.
-- [ ] **S4. LIVE.** 11.3 하나에서 nonce 왕복 → 자기 정체성으로 답신 → 재접속, 그리고 fresh 후보 (a)–(d).
+- [x] **S3. 구현.** 0c9e3a가 구현했다(0b74e38 flip 이전 + flip 커밋). 4184c5 교차 리뷰 Blocker 0, Defect 3은 반영했다.
+- [~] **S4. LIVE.** ← CURRENT (부분 완료): 왕복, busy steer, reset 뒤 같은 garden id, fresh (c)(d)는 측정했다. 남은 것: (a) 표시면 확정, (b) `--width agent-policy`, TUI 바인딩 증명(vendor가 목적지를 읽어 주는 명령).
 - [ ] **S5. 오라클 Docker.** 별도 단계로, 운영을 11.3으로 맞추는 일과 함께 한다. S4 전에는 손대지 않는다(운영 10.9 / 8b18b55). 수신 CLI는 `docker exec openclaw-gateway openclaw …` 후보다. **경로 축 [파일 openclaw-config/docker-compose.yml:89,103,111]:** 컨테이너 안의 절대경로(`/home/node/.openclaw/workspace`, `/home/node/repos/gh`)는 host의 경로(`~/openclaw/config`, `~/repos/gh`)와 다르다. birth의 cwd는 "운영자 명시값 또는 OpenClaw 응답값 그대로, 추측·fallback 없음"으로 한다(GLG 2026-11-13). S5에서는 (1) 안팎 경로를 같게 마운트할지, (2) record에 컨테이너 경로임을 표시할지를 측정한 뒤 정한다.
 
 # NOW
 
-- **다음 한 행동:** S3 Opus 구현 형제를 열어 결정 카드대로 구현한다. 커밋은 GLG가 정한다.
+- **브랜치 상태 — 아직 완성된 브랜치가 아니다 (GLG 2026-11-13).** origin `160-openclaw`에 push했지만 main 병합·release 후보가 아니다. 병합 전에 닫아야 할 것:
+  1. **fresh 미완:** (a) garden-id 표시면, (b) agent-policy 폭, TUI Gateway 바인딩 증명. 이것이 닫히기 전에는 fresh preflight가 production에서 계속 거절한다.
+  2. **이름 붙은 RED 3개:** `check-harness-admission-parity`(openclaw가 FRESH_CALL 밖), `check-install-surface` S2(openclaw-send·birth의 build emit·check-pack 목록), S9a*/S9b/S9h(help-all 바이트·reviewed case 고정 — 리뷰된 amendment 층이 필요).
+  3. **패키징:** tsconfig.build.json emit과 check-pack 목록. 지금 S4는 checkout run_ts로만 검증했다.
+  4. **qualification PARTIAL 미실행:** check-tests-beside-behavior 그룹(herdr-dev-checkout, herdr-operator-link, control-send-receipt, pi-durable), codex-native mutant, check-entwurf-v2-contract, check-native-push-adapter, archived assertion의 QK/mutant. 리뷰·amendment 뒤 한 번 실행한다.
+  5. **frozen FULL과 exact-SHA CI**는 그다음이다(AGENTS Scheduling).
+  6. **S5 오라클 Docker**(11.3 정렬, 컨테이너 경로 축, `docker exec` shim)는 별도 단계다.
+- **다음 한 행동:** fresh (a)(b)와 TUI 바인딩을 측정하는 짧은 lab 라운드를 진행한 뒤, 패키징·help 고정·parity를 닫는 리뷰 번들로 간다. 구현은 별도 Opus가 맡고 리뷰는 4184c5가 한다. 커밋·push는 GLG가 정한다.
+- **보존 중인 LIVE 산물:** `~/.pi/agent/openclaw-citizens.json`(0600, scope `lab-a`)과 record `20261113T164129-222657`. host PATH에 `openclaw`가 없으므로 지금 이 시민으로 보내면 probe가 indeterminate다. 정리할지는 GLG가 정한다.
 - **역할:** 실무 코디 = `20261015T085719-9fc008`(Claude Code). 운영 코디 = `20261007T132839-b22677`(pi-durable, 단계 전환마다 짧게 보고). S1 Sonnet 2 — 10.10 = `20261113T120646-e9a750`, 11.3 = `20261113T120652-6cc29a`(콜백 nonce 일치). S3 구현은 별도 Opus 형제가 맡는다(GLG: 실무 코디는 구현하지 않는다). S2 설계 Opus = `20261113T143538-4184c5`(콜백 nonce 일치, S3 교차 리뷰 예정). S3 구현 Opus = `20261113T145250-0c9e3a`(콜백 nonce 일치). 10.10 Sonnet은 종료됐다. 커밋·push는 GLG.
 - **flip 경계 [측정 0c9e3a, meta-session.ts:772-777,808-812,850-851]:** 이 체크아웃의 소스로 직접 도는 bridge가 여럿이다(운영 코디와 실무 코디 포함). registry는 호출할 때마다 다시 읽고 backend 집합과 정확히 같아야 하므로, `META_CITIZEN_BACKENDS`나 `pi/entwurf-capabilities.json`을 편집하는 순간 그 bridge들의 entwurf_v2가 전부 거절된다(adding-a-harness.md:177-184의 omp 사건과 같은 모양). 그래서 이 편집은 마지막 flip 한 번으로 묶고, FRESH_CALL_BACKENDS 편입과 같은 묶음으로 만들어 parity RED 구간을 없앤다. flip은 GLG가 재시작 창을 정한 뒤에 한다. 카드와 다르게 승인한 것: wakeMode `direct-inject`, deliveryLevel `D0`, 송신 입구 이름 `openclaw-send`.
 - **release stop [4184c5 O5]:** flip에서 `FRESH_CALL_BACKENDS += openclaw`가 되면 parity 게이트는 green이 된다. 하지만 fresh preflight가 (a)로 닫혀 있는 동안에는 "열리지 않는 backend가 표면에 광고되는" 상태다(#87 모양, adding-a-harness.md:728-732). parity green을 admission으로 읽지 않는다. S4 (a)–(d)가 닫히기 전에는 release·main 병합을 하지 않는다.
 - **S3 리뷰 (4184c5, 15:14):** Blocker 0, Defect 3(D1 TUI Gateway 바인딩, D2 플러그인 timeout < entry 최악 경로, D3 fresh key 부재 미실행), Observation 9. D1–D3과 O2·O6·O7·O8·O9를 0c9e3a의 amendment 한 묶음에 넣었다. O3(session:null과 visibility 숨김 구분, archived)은 S4 측정 항목이다.
+- **flip 적용 (2026-11-13 16:32, 0c9e3a, 미커밋):** `s3-flip.patch`(f08506cc…)를 0b74e38 위에 적용했고, 창 안에서 두 가지를 고쳤다(birth 포맷, roundtrip fixture의 sender marker). 보고서 원문: `~/.local/share/entwurf-lab/160/flip-report.md`, raw는 `flip-raw/`.
+  - green: tsc 4펜스, biome, check-meta-session, entwurf-capabilities, meta-capability-source, native-push-adapter, v2-contract, v2-production, fresh-call-surfaces, tests-beside-behavior(1135), roundtrip 4/4.
+  - **이름 붙은 브랜치 RED (S4까지 유지, merge 전 패키징+리뷰 번들에서 닫는다):** ① `check-harness-admission-parity` openclaw(GLG: 그냥 둠). ② `check-install-surface` S2: openclaw-send·birth가 build emit·check-pack 목록에 없음. ③ 같은 게이트 S9a*/S9b/S9h: help-all 바이트 고정과 reviewed case 고정을 옮기는 일은 리뷰가 필요한 amendment다. ④ `check-capability-bundle-reach` B3: build-bridge를 하지 않아 dist registry가 이전 값이다.
+  - build-bridge·하네스 재설치·PARTIAL은 하지 않았다. S4는 checkout의 소스 bridge와 run_ts로 진행한다.
+- **S4 LIVE (2026-11-13 16:42–16:49, 0c9e3a + 9fc008, 11.3 lab, named LIVE: 실제 store·mailbox) — 왕복 성공.** raw: `~/.local/share/entwurf-lab/160/s4-raw/`.
+  - 준비: S4-0 roll-forward를 green으로 마쳤다(build-bridge로 B3가 닫혔고, Claude Code·copilot·omp×2·codex-birth를 재설치했으며 doctor는 PASS). 측정 동안 임시 shim `~/.local/bin/openclaw`(sha `cda65ef6…`)를 두었다가 제거했다(`which` exit 1). 선언 `~/.pi/agent/openclaw-citizens.json`(scope `lab-a`)과 record `20261113T164129-222657`(`openclaw:lab-a:agent:main:s4live`)은 보존했다. birth는 create 뒤 attach로 멱등이었다.
+  - ①② 9fc008 → openclaw: `native-push → delivered`. openclaw → 9fc008: inbox에 `from: meta-session/openclaw`, `session 20261113T164129-222657 (replyable)`, `S4-ACK N160-7f3a91`가 들어왔다. 수신 행은 provenance `external_user`, client `cli`였고, idle이었으므로 새 턴이 시작됐다. 플러그인 도구는 code-mode catalog(`exec`)를 거쳐 호출됐다.
+  - busy steer: 진행 중인 run `s4-busy-essay-1` 안에서 소비됐다(같은 runId의 tool call). `S4-BUSY-ACK`가 도착했다.
+  - reset: sessionId는 그대로이고 lifecycleRevision만 바뀌었다. 같은 garden id로 `S4-RESET-ACK`가 도착했고, store 수는 변하지 않았다.
+  - O3: 존재하지 않는 세션과 삭제된 세션이 모두 `session:null`이라 구분할 수 없다(경계). draft는 alive다. **archived는 describe가 alive를 주지만 chat.send에서 거절된다 → `classifyOpenclawDescribe`가 `archived:true`를 indeterminate(사유에 archived)로 분류하도록 고쳤다(9fc008 결정, 0c9e3a 2026-11-13, 미커밋). 바로 옆 테스트 `openclaw-gateway.test.ts`.**
+  - fresh: (c)는 측정했다(`tui --message`가 그 key의 첫 메시지가 됨). (d)는 측정했다(`/new`는 새 key로 전환하고 label이 사라짐). (a)는 부분 측정이다(`sessions.patch label`이 다음 턴 뒤 footer에 표시됨, 헤더에는 없음 — 후보). (b)는 측정하지 않았다. D1 n=1: 선언된 configPath로 lab Gateway에 붙었고, 잘못된 config는 연결을 거절했다. 다만 TUI에는 `--expect-url`이 없어서 `tuiBinding`은 unproven으로 둔다. 다음에 잴 것은 vendor CLI가 해석한 목적지를 읽는 명령이다(entwurf가 config 파일을 직접 읽는 방식은 기각, Rule 9).
+  - 사고: 정지에 쓴 `pkill -f`가 측정자 셸까지 죽였다(Gateway는 정상 종료). 앞으로는 pid 파일로 정지한다.
 - **보고 경로:** 형제 → 9fc008만 사용. 운영 코디와 #142 lane에 직접 보내지 않는다.
 
 # 결정 (GLG 2026-11-13)

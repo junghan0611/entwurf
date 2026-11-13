@@ -34,9 +34,8 @@
  * Visibility is not delivery: the session lives in the Gateway whether or not a TUI shows it, so a
  * send may start a turn nobody watches. This adapter does not look at screens.
  *
- * S3 flip boundary: `openclaw` is not yet a member of `NativePushBackend`, so this module carries
- * its own route type and adapter shape. At the flip the route joins `NativePushRoute`, the adapter
- * joins `ADAPTERS` in `adapter.ts`, and `id` becomes the union member.
+ * Registration: `OpenclawRoute` is one member of `NativePushRoute`, and the production instance
+ * (`openclawNativePushAdapter`) is in `adapter.ts`'s ADAPTERS, reading THIS host's declaration.
  */
 
 import * as crypto from "node:crypto";
@@ -46,7 +45,7 @@ import {
 	parseOpenclawNativeSessionId,
 	selectOpenclawScope,
 } from "../openclaw-citizens.ts";
-import type { NativePushRunner } from "./adapter.ts";
+import type { NativePushAdapter, NativePushRunner } from "./adapter.ts";
 
 export const OPENCLAW_PROBE_TIMEOUT_MS = 15_000;
 export const OPENCLAW_SEND_TIMEOUT_MS = 30_000;
@@ -66,17 +65,6 @@ export interface OpenclawRoute {
 	readonly url: string;
 	readonly configPath?: string;
 	readonly sessionKey: string;
-}
-
-export type OpenclawProbeResult =
-	| { status: "alive"; route: OpenclawRoute }
-	| { status: "dead" | "indeterminate"; reason: string };
-
-export interface OpenclawGatewayAdapter {
-	readonly id: string;
-	readonly retriable: false;
-	probe(nativeSessionId: string): Promise<OpenclawProbeResult>;
-	send(route: OpenclawRoute, nativeSessionId: string, content: string): Promise<void>;
 }
 
 export interface OpenclawGatewayAdapterDeps {
@@ -162,6 +150,16 @@ export function classifyOpenclawDescribe(
 		const key = typeof s === "object" && !Array.isArray(s) ? (s as Record<string, unknown>).key : undefined;
 		return { status: "indeterminate", reason: `sessions.describe answered for another key (${JSON.stringify(key)})` };
 	}
+	// An archived session still describes as an object, but the Gateway refuses new work on it
+	// ([측정] S4 `s4-raw/o3.txt`: describe `archived:true`; `chat.send queueMode:"steer"` → "Session … is
+	// archived. Restore it before starting new work.", retryable false). Alive would make the sender
+	// falsely replyable; dead would read as "provably departed" to the fresh-cut gate. Indeterminate.
+	if ((s as Record<string, unknown>).archived === true) {
+		return {
+			status: "indeterminate",
+			reason: `openclaw session ${sessionKey} is archived; the Gateway refuses new work on it`,
+		};
+	}
 	return "alive";
 }
 
@@ -174,7 +172,7 @@ export function assertOpenclawChatSendAccepted(code: number, stdout: string, std
 	);
 }
 
-export function createOpenclawGatewayAdapter(deps: OpenclawGatewayAdapterDeps): OpenclawGatewayAdapter {
+export function createOpenclawGatewayAdapter(deps: OpenclawGatewayAdapterDeps): NativePushAdapter {
 	const binary = deps.binary ?? OPENCLAW_BINARY;
 	const newKey = deps.newIdempotencyKey ?? (() => `entwurf-${crypto.randomUUID()}`);
 	return {

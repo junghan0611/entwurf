@@ -8646,6 +8646,19 @@ case "$cmd" in
     shift || true
     run_ts scripts/remote-pair-receive.ts "$@"
     ;;
+  openclaw-send)
+    # #160: the claim entry an OpenClaw plugin tool runs once per send. Scope check against this
+    # host's openclaw-citizens.json, then a join to exactly one `openclaw` record, then the same v2
+    # dispatch every local send uses. Exit contract in scripts/openclaw-send.ts (0/4/3/2/1).
+    shift || true
+    run_ts scripts/openclaw-send.ts "$@"
+    ;;
+  openclaw-birth)
+    # #160: the ONE writer of `openclaw` records — declared scope, then the receive adapter's own
+    # sessions.describe must answer alive, then an idempotent upsert. Explicit --cwd, never inferred.
+    shift || true
+    run_ts scripts/openclaw-birth.ts "$@"
+    ;;
   peer-facts)
     # #116 M2-a READ-ONLY projection of the OBSERVED peer listing: one provider
     # (`listEntwurfFacts`) through one renderer (`renderEntwurfPeers().payload`), so

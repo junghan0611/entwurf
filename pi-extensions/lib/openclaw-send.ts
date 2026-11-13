@@ -18,15 +18,14 @@
  * who-sent ≠ replyable (adding-a-harness.md step 6(c)): the envelope names the record's garden id;
  * `replyable` is the receive rail's own probe answer for that record, supplied by the caller.
  *
- * Backend literal boundary (S3 flip): the record backend `openclaw` is not yet a member of
- * `MetaCitizenBackend`. {@link OPENCLAW_BACKEND} is therefore typed `string` and the record view
- * below is structural. At the flip it becomes `"openclaw" satisfies MetaCitizenBackend`.
+ * The record view below is structural (a `MetaIdentity` is assignable to it), so the join is
+ * pure over whatever the certified store listing returns.
  */
 
 import type { SenderEnvelope } from "./entwurf-control-rpc.ts";
 import type { EntwurfV2SurfaceRendered, SurfaceEntwurfV2Params } from "./entwurf-v2-surface.ts";
 import type { MailboxSenderEnvelope } from "./meta-mailbox-body.ts";
-import { requireGardenId } from "./meta-session.ts";
+import { type MetaCitizenBackend, requireGardenId } from "./meta-session.ts";
 import {
 	composeOpenclawNativeSessionId,
 	type OpenclawCitizensDeclaration,
@@ -36,8 +35,7 @@ import {
 	selectOpenclawScope,
 } from "./openclaw-citizens.ts";
 
-/** S3 flip boundary: becomes `"openclaw" satisfies MetaCitizenBackend`. */
-export const OPENCLAW_BACKEND: string = "openclaw";
+export const OPENCLAW_BACKEND = "openclaw" satisfies MetaCitizenBackend;
 
 export const OPENCLAW_CLAIM_VERSION = 1;
 const MESSAGE_CAP = 16000;

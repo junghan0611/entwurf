@@ -290,7 +290,7 @@ eq(
 	false,
 );
 eq("native-push domain: Codex supported", nativePushSupported("codex"), true);
-eq("native-push domain: NATIVE_PUSH_BACKENDS exact", [...NATIVE_PUSH_BACKENDS], ["antigravity", "codex"]);
+eq("native-push domain: NATIVE_PUSH_BACKENDS exact", [...NATIVE_PUSH_BACKENDS], ["antigravity", "codex", "openclaw"]);
 ok(
 	"native-push ∩ pi-socket liveness domain = ∅ (separate rails)",
 	!NATIVE_PUSH_BACKENDS.some((b) => (LIVENESS_DOMAIN_BACKENDS as readonly string[]).includes(b)),

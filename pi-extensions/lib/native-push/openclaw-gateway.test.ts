@@ -97,6 +97,16 @@ describe("probe", () => {
 		expect((await adapter(runner(answer)).probe(ID)).status).toBe("indeterminate");
 	});
 
+	it("an archived session is indeterminate, naming archived — the Gateway refuses new work on it (S4 o3.txt)", async () => {
+		const archived = JSON.stringify({
+			session: { key: "agent:main:s1m1", visibility: "shared", archived: true, archivedAt: 1794555974305 },
+		});
+		const r = await adapter(runner({ code: 0, stdout: archived, stderr: "" })).probe(ID);
+		expect(r).toMatchObject({ status: "indeterminate", reason: expect.stringMatching(/archived/) });
+		const live = JSON.stringify({ session: { key: "agent:main:s1m1", archived: false } });
+		expect((await adapter(runner({ code: 0, stdout: live, stderr: "" })).probe(ID)).status).toBe("alive");
+	});
+
 	it.each([
 		["absent declaration", () => null],
 		[

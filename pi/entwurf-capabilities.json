@@ -7,6 +7,7 @@
 		"copilot": { "wakeMode": "self-fetch", "deliveryLevel": "D6", "nativeIdLabel": "sessionId" },
 		"omp": { "wakeMode": "self-fetch", "deliveryLevel": "D6", "nativeIdLabel": "sessionId" },
 		"pi-durable": { "wakeMode": "self-fetch", "deliveryLevel": "D2", "nativeIdLabel": "sessionId" },
+		"openclaw": { "wakeMode": "direct-inject", "deliveryLevel": "D0", "nativeIdLabel": "scope:sessionKey" },
 		"pi": { "wakeMode": "direct-inject", "deliveryLevel": "D6", "nativeIdLabel": "sessionId" }
 	}
 }

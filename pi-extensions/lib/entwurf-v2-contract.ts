@@ -127,7 +127,7 @@ export function isLivenessSupported(backend: string): boolean {
 // the socket FACT axis (entwurf_peers) yet independently measured on the native-push
 // axis. The two are separate rails on purpose — pi-extensions/lib/entwurf-facts.test.ts pins both sets
 // and asserts their intersection is ∅ (a backend can never be in both domains).
-export const NATIVE_PUSH_BACKENDS = ["antigravity", "codex"] as const;
+export const NATIVE_PUSH_BACKENDS = ["antigravity", "codex", "openclaw"] as const;
 export type NativePushBackend = (typeof NATIVE_PUSH_BACKENDS)[number];
 
 export function nativePushSupported(backend: string): backend is NativePushBackend {

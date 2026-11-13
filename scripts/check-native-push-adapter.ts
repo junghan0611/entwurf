@@ -344,6 +344,8 @@ eq("adapter id: antigravityAdapter.id === antigravity", antigravityAdapter.id, "
 eq("resolve: codex → the Codex adapter", resolveNativePushAdapter("codex").id, "codex");
 eq("retry policy: Antigravity may retry", resolveNativePushAdapter("antigravity").retriable, true);
 eq("retry policy: Codex never retries", resolveNativePushAdapter("codex").retriable, false);
+eq("resolve: openclaw → the OpenClaw Gateway adapter (#160)", resolveNativePushAdapter("openclaw").id, "openclaw");
+eq("retry policy: OpenClaw never retries", resolveNativePushAdapter("openclaw").retriable, false);
 {
 	let threw = false;
 	try {
@@ -361,7 +363,12 @@ eq("retry policy: Codex never retries", resolveNativePushAdapter("codex").retria
 {
 	const libDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "pi-extensions", "lib");
 	const FORBIDDEN = ["computeMetaReceiverActive", "readMetaReceiverMarker", "mailboxConversationalDeliverable"];
-	for (const rel of ["native-push/adapter.ts", "entwurf-v2-native-push.ts", "native-push/register.ts"]) {
+	for (const rel of [
+		"native-push/adapter.ts",
+		"entwurf-v2-native-push.ts",
+		"native-push/register.ts",
+		"native-push/openclaw-gateway.ts",
+	]) {
 		const src = readFileSync(path.join(libDir, rel), "utf8");
 		for (const atom of FORBIDDEN) {
 			ok(`axis-guard: ${rel} does NOT reference the mailbox atom ${atom} (보정①)`, !src.includes(atom));

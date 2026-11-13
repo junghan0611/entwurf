@@ -1510,6 +1510,8 @@ v2 필드 `parentGardenId`/`isEntwurf`는 **stray key로 거부된다** — 되�
 - **OpenClaw track(2026-06-10 종료):** `plugins/openclaw` deprecated & unmaintained. Claude/Gemini가 ACP
   네이티브 지원 → wrapper 존재 이유 소멸. npm `@junghan0611/openclaw-pi-shell-acp@0.0.1` deprecate 마킹,
   소스 reference 동결.
+  이 닫힌 트랙은 #160과 다른 것이다: #160은 래퍼가 아니라 OpenClaw Gateway 세션을 V3 record-backed
+  native-push 시민으로 세우는 새 브랜치 후보이며, 새 `plugins/openclaw`는 send 도구 하나만 갖는다.
 - **Gemini CLI(2026-06-18 deprecated):** Google AI Pro/Ultra·무료 tier 대상 종료 → Antigravity CLI 이관.
   repo는 Gemini 어댑터 코드를 **호환성용 잔존**, README는 더 이상 추천 setup 경로로 제시 안 함.
 - **Long-term/separate coordinates:** #11 remote SSH resume cwd(원격 entwurf identity는 의도적 fail-fast),
