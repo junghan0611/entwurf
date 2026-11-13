@@ -72,7 +72,7 @@ checkout carried this command does not know it, and its generic error answer is 
 CC pidfd helper observes one fd-pinned process, not a conversation, descendants or flush;
 unknown never grants safe replay. Package/source presence, compiled consumer checks and a
 real native lifecycle remain separate evidence axes; the one dated native lifecycle measurement
-is [BASELINE's 2026-10-22 n=1 round trip](./BASELINE.md#147-native-round-trip-2026-10-22-n1). Historical delivery receipts below do
+is [BASELINE's 2026-10-22 n=1 round trip](./docs/baseline-receipts.md#147-native-round-trip-2026-10-22-n1). Historical delivery receipts below do
 not certify these candidate components.
 
 ## Levels (D0–D8)
