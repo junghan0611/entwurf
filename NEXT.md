@@ -8,14 +8,15 @@
 - [x] **5. GLG baseline과 VERIFY 담금질.** baseline PASS, VERIFY·BASELINE 개정, §1B walk(n=1, Blocker 0), 소넷 인터뷰 PASS. 인터뷰에서 나온 D1을 `4ca9bb0`에서 고쳤고, LIVE n=1로 확인했다.
 - [ ] **6. 릴리즈 0.53.0.** ← CURRENT
   - [x] land `234a92a` CI 4/4. prepare `1e487f7`에 이어 Cortex ACP 비활성화 `93eb879`를 넣었다. GLG가 make를 멈추고 Terra에게 맡겼고, 이어 ff08d4가 인계받았다.
-  - [x] 새 후보: P4 green(974s). P5는 MUST 23/1/0이고, 실패는 Codex 하나다. vendor managed daemon의 seat를 해석하지 못했다. GLG가 이 실패 하나를 명시적으로 수용했다("2 그냥 넘어가자"). 근거는 CHANGELOG 0.53.0 Release evidence에 있다.
+  - [x] 후보 `9c5fc2b`: #162 진행 표시 수정과 gate 경합 수정 `6402c6a`가 들어 있다. P4 green(998s), P5 r5는 MUST 24/0/0으로 `cut: OK`. Codex는 이번 cut을 위해 띄운 app-server(pid 3803464, `gpt-6.1-terra`)로 통과했다. 예외는 쓰지 않았다. 근거는 CHANGELOG 0.53.0 Release evidence에 있다.
   - [ ] **다음 한 행동:** make. M0 FULL을 돌리고 push한 뒤 exact-SHA CI, M3w Windows carrier, container acceptance를 거친다. 그다음 tag, GitHub release 순이다. publish 명령 한 줄은 GLG에게 넘긴다.
   - [ ] publish 후: Herdr에 npm 0.53.0을 re-pin하고 스냅샷 태그를 만든다. #161에 종결 댓글을 달고 닫는다.
-- Codex LIVE: vendor managed daemon(`--managed-daemon`)이 기본 소켓을 쥐고 있고, 물려받은 seat pane이 죽어 있으면 `smoke-codex-fresh-live`가 A 좌표를 해석하지 못한다. 다음 cut 전에 정식 app-server 경로를 정해야 한다(GLG 결정).
+- Codex LIVE: vendor managed daemon(`--managed-daemon`)은 seat pane이 죽어 있으면 `smoke-codex-fresh-live`에서 A 좌표를 해석하지 못한다. 0.53.0 cut에서는 daemon을 멈추고 `entwurf codex-app-server`를 전용 tmux 세션에서 띄워 측정했다. daemon 복원은 `codex app-server daemon start`로 하고, GLG가 결정한다.
+- #163 다음 작업: 바쁜 ACP 형제에게 보낸 steer를 상류 `_session/steering`으로 실행 중인 턴에 주입한다. raw probe에서 약 1초 만에 닿는 것을 측정했다. 0.53.0을 출하한 뒤 별도 브랜치로 한다(GLG "162만넣자").
 - 관찰(이번 cut 밖): `check-acp-backend-preflight`는 thinking level 없이 backend를 부른다. 지금은 검사 순서 덕에 green이다(b3 O1). `*resume-call.test.ts`가 `/tmp` 디렉터리를 남긴다(P9).
 - **PAUSED:** #160 Oracle 실행(노트북 lane이 검수), durable ACP 통합.
 
-현재 좌표: 1–5 완료 → 6 릴리즈 0.53.0 (Cortex 비활성화 후보 검증 완료 → make)
+현재 좌표: 1–5 완료 → 6 릴리즈 0.53.0 (후보 `9c5fc2b` P4/P5 green → make)
 
 # NOW
 
