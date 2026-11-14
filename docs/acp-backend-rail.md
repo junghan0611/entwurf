@@ -881,15 +881,18 @@ summary on a Claude ACP model.
   surface and `cacheRetention === "none"`. An ordinary turn with every tool excluded keeps the
   refusal. Pi's prompt text and session id are not read; Pi fills the id with a fresh `uuidv7()`.
 - **The turn.** A new child under the turn-scoped policy, closed after its one prompt whatever the
-  process policy says. `tools`, `mcpServers`, skill plugins and the permission allow list are all
-  empty. The operator's engraving carrier stays, rendered with an empty MCP list. No first-message
+  process policy says. `tools`, `mcpServers`, skill plugins, the permission allow list and
+  `settingSources` are all empty, so no CLAUDE.md, hook or plugin is read from disk. The operator's engraving carrier stays, rendered with an empty MCP list. No first-message
   augment. Pi's summarization instructions arrive as a system message, which the transcript
   flattening drops, so their text (`getCurrentSystemPrompt`) is sent as the first prompt block.
   No notice of any kind: the summary Pi stores is exactly the model's text, and the session file
-  is the embedding source.
+  is the embedding source. Pi keeps an `aborted` summary (it refuses only `error` and `length`,
+  pi-coding-agent 1.5.2 `compaction.js:454-462`), so a `cancelled` stop that Pi did not abort is
+  sealed as a non-transient error instead.
 - **After compaction.** `acp-provider.ts` subscribes to `session_compact` and closes that Pi
-  session's retained child at once (GLG 2026-11-14), unless a turn is in flight. The next turn
-  opens a new child from the compacted transcript.
+  session's retained child at once (GLG 2026-11-14), unless a turn is in flight. A session is busy
+  only inside its key's in-flight claim, so the in-flight check covers both. The next turn opens a
+  new child from the compacted transcript.
 
 Proof: `pi-extensions/lib/acp/backend.summary-turn.test.ts` drives Pi's own `generateSummary` and
 `generateBranchSummary` through `streamAcpTurn`, so the request shape is Pi's, not a fixture's. A Pi

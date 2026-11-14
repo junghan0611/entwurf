@@ -6,7 +6,7 @@
 
 - [x] **1. claude-agent-acp 0.106.0 → 0.107.0.** C0 dist 비교, C1 bump, focused 게이트 rc=0. 영수증은 ROADMAP Dep bump ledger 2026-11-14 항목에 있다.
 - [x] **2. 정확한 manual `/compact`.** 코드·QK 6개·mutant 6개(로컬 6/6 KILLED)·문서(rail §11-10, VERIFY 행) 완료. LIVE `/compact` n=1은 RAIL 4에서 한다.
-- [ ] **3. Pi처럼 보이게 (#162 확장).** ← CURRENT: M1~M3 설계안을 andenken 문법 대조표와 함께 ff08d4에게 먼저 보낸다. 승인 후 구현한다.
+- [ ] **3. Pi처럼 보이게 (#162 확장).** ← CURRENT: 승인 대기. 대조표(andenken `e5165ecc` 기준)를 ff08d4에게 보냈다. 추천안은 M1 서명 `[tool:running] <확정 title>`, M2 서명 `[tool:output]` 5줄·400B, M3 `[acp: compaction …]`이다. 그동안 02055a가 C2(`5b7f7c24`)를 독립 리뷰하고, 결함이 있으면 C3 전에 한 묶음으로 정정한다.
 - [ ] **4. 후보 검증과 착지.** 영향받는 PARTIAL → frozen FULL → 관련 LIVE n=1 → GLG의 commit/push 결정.
 
 범위 제외 (GLG 2026-11-14): `_session/steering` 주입, 정지 동사 노출. steer 쪽 결론은 "queued steer는 인터럽트가 아니다"라는 기존 계약을 유지하는 것이고, 정지 수단은 로컬 ESC다.
@@ -17,7 +17,17 @@
 
 - **운영 (GLG 2026-11-14):** (A)로 진행한다. 이 체크아웃이 운영 pi의 원본이고, 작업하는 동안 pi ACP Claude는 GLG가 부르지 않는다. 앞으로 ff08d4가 요청하는 일은 진행한다.
 - **다음 (C3):** event-mapper notice 문법을 andenken `session-selection.ts:83-99` 문법과 표로 대조한다. M1은 기존 `[tool:start]` 문법 안에서 표시하는 쪽을 먼저 검토한다. 문법을 바꿔야 하면 구현 전에 ff08d4에게 올린다. 재료는 아래 §3에 있다.
-- **C2 메모:** 내 abandon 리팩터 때문에 기존 mutant `acp-prompt-lifecycle/IDLE-DEATH-ANNOUNCED`의 find를 고쳤다(로컬 KILLED 확인). 이 lane도 RAIL 4 PARTIAL에 넣는다. PARTIAL 대상 lane: `acp-set-model-readback`(새 6개), `acp-prompt-lifecycle`(find 수정 1개), SDK-surface 오라클.
+- **C2 정정 (02055a 리뷰 → ff08d4 채택, 2026-11-14):** D1, O1, O2, O4를 반영하고 mutant 4개를 더했다(lane 31개, 로컬 10/10 KILLED).
+  - D1: in-flight 세션은 닫지 않는다. `busy`는 in-flight 구간 안에서만 켜지므로(`backend.ts` claim 구간, `busy: true` 두 곳) 조건 하나만 지우는 mutant는 동등 mutant다. 그래서 두 조건을 함께 지우는 mutant로 증명했다.
+  - O1: 요약 턴에서 pi가 abort하지 않았는데 `cancelled`가 오면 error로 봉인한다.
+  - O2: 요약 자식의 `settingSources`를 []로 둔다.
+  - O4: 판별자의 "도구 없음" 조건을 증명하는 mutant를 추가했다.
+- **Observation (기록만, 작업 아님):**
+  - O3: 오라클은 pi `sdk`/`modelRuntime` 구간(`agent.streamFunction`이 provider로 가는 길)을 덮지 않는다. streamFn을 직접 꽂는다.
+  - O5: `/new`나 fork 뒤에 `session_compact`의 sessionId 키가 어긋날 때 무해한 no-op인지는 확인하지 않았다.
+  - M2b: done/failed summary의 `[fence]console …` 꼴은 replay 텍스트라 이번에 바꾸지 않는다(ff08d4 2026-11-14).
+- **C2 메모:** 내 abandon 리팩터 때문에 기존 mutant `acp-prompt-lifecycle/IDLE-DEATH-ANNOUNCED`의 find를 고쳤다(로컬 KILLED 확인). 이 lane도 RAIL 4 PARTIAL에 넣는다. PARTIAL 대상 lane: `acp-set-model-readback`(새 10개), `acp-prompt-lifecycle`(find 수정 1개), SDK-surface 오라클.
+- **LIVE `/compact` n=1 측정 항목 (RAIL 4):** summary가 저장되는지, summary에 notice가 0인지, compact 직후 기존 자식이 닫히는지, 다음 턴이 새 자식을 여는지. 그리고 O6: `_meta.claudeCode.options.tools: []`가 실제로 도구 0으로 해석되는지(요약 자식이 도구를 부를 수 없는지).
 - **C1 메모:** 남은 `0.106.0` 언급은 날짜가 붙은 측정 기록이라 그대로 둔다(`backend-adapter.ts:378`, `tool-surface.ts:177`, `probe-cli-target.ts:96`; 해당 dist 파일은 0.107에서 diff가 없다). PARTIAL은 RAIL 4에서 한 번에 돈다. 그때 바뀐 SDK-surface 오라클도 포함한다.
 - **역할:**
   - b3fc7c: 이 체크아웃의 단일 작성자. GLG가 2026-11-14 이 세션에서 직접 승인했다.

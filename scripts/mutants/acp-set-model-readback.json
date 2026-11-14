@@ -318,6 +318,50 @@
 			"timeoutSeconds": 60,
 			"signature": "[QK:ACP-COMPACT-CLOSES-CHILD]",
 			"signatureSource": "pi-extensions/lib/acp/backend.summary-turn.test.ts"
+		},
+		{
+			"claim": "ACP-SUMMARY-TURN-NO-SETTING-SOURCES",
+			"title": "the summary child inherits the operator's settingSources — CLAUDE.md, hooks and plugins from disk reach a turn that should carry only the carrier and Pi's instructions",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": ["\t\t\tsettingSources: [],"],
+			"replace": ["\t\t\tsettingSources: config.settingSources,"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-SUMMARY-TURN-NO-SETTING-SOURCES]",
+			"signatureSource": "pi-extensions/lib/acp/backend.summary-turn.test.ts"
+		},
+		{
+			"claim": "ACP-SUMMARY-VENDOR-CANCEL-NOT-KEPT",
+			"title": "a summary the backend cancelled without an abort from Pi is sealed as aborted — Pi keeps aborted text, so an incomplete summary becomes the session's checkpoint",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": ["if (summaryTurnActive && verdict.stopReason === \"aborted\" && !signal?.aborted) {"],
+			"replace": ["if (false) {"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-SUMMARY-VENDOR-CANCEL-NOT-KEPT]",
+			"signatureSource": "pi-extensions/lib/acp/backend.summary-turn.test.ts"
+		},
+		{
+			"claim": "ACP-SUMMARY-REQUIRES-EMPTY-SURFACE",
+			"title": "cacheRetention none alone admits the summary path — a request that declares tools loses its tools, MCP and augment and runs as a tool-less one-shot",
+			"subject": "pi-extensions/lib/acp/tool-surface.ts",
+			"find": ["return activeToolNames.length === 0 && cacheRetention === \"none\";"],
+			"replace": ["return cacheRetention === \"none\";"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-SUMMARY-REQUIRES-EMPTY-SURFACE]",
+			"signatureSource": "pi-extensions/lib/acp/backend.summary-turn.test.ts"
+		},
+		{
+			"claim": "ACP-COMPACT-SPARES-TURN-IN-FLIGHT",
+			"title": "a compaction closes a session whose turn is still running — the reused child is killed under the prompt it is answering",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": ["\tif (!session || session.busy || inFlightKeys.has(key)) return false;"],
+			"replace": ["\tif (!session) return false;"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-COMPACT-SPARES-TURN-IN-FLIGHT]",
+			"signatureSource": "pi-extensions/lib/acp/backend.summary-turn.test.ts"
 		}
 	]
 }

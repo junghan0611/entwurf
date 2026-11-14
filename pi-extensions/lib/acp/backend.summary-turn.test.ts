@@ -142,6 +142,8 @@ function makeWorld(
 	const children: AcpChildLike[] = [];
 	const killed = new Set<AcpChildLike>();
 	const wire: WireCall[] = [];
+	/** What the next prompt does: its stop reason, and a gate it waits on (with a signal that it got there). */
+	const control: { stopReason: string; hold?: Promise<void>; entered?: () => void } = { stopReason: "end_turn" };
 	let handlers: Parameters<AcpTurnDeps["createConnection"]>[1] | undefined;
 	const deps: AcpTurnDeps = {
 		spawnChild: () => {
@@ -178,8 +180,10 @@ function makeWorld(
 				},
 				prompt: async (params: unknown): Promise<AcpPromptResponse> => {
 					wire.push({ method: "prompt", params });
+					control.entered?.();
+					if (control.hold) await control.hold;
 					agentOutput((update) => void handlers?.sessionUpdate({ sessionId: acpSessionId, update } as never));
-					return { stopReason: "end_turn" };
+					return { stopReason: control.stopReason } as AcpPromptResponse;
 				},
 				cancel: () => {},
 				close: () => {},
@@ -201,7 +205,25 @@ function makeWorld(
 		abortGraceMs: 40,
 	};
 	const calls = (method: string) => wire.filter((c) => c.method === method).map((c) => c.params as any);
-	return { deps, children, killed, wire, calls };
+	/** Hold the next prompts at the wire until the returned release is called. */
+	const hold = () => {
+		let release!: () => void;
+		control.hold = new Promise<void>((resolve) => {
+			release = resolve;
+		});
+		const entered = new Promise<void>((resolve) => {
+			control.entered = resolve;
+		});
+		return {
+			entered,
+			release: () => {
+				control.hold = undefined;
+				control.entered = undefined;
+				release();
+			},
+		};
+	};
+	return { deps, children, killed, wire, calls, control, hold };
 }
 
 /** The agent writes a summary and, around it, everything that would otherwise become a notice. */
@@ -222,6 +244,7 @@ function operatorSurface(resolved: ReturnType<AcpTurnDeps["loadConfig"]>): Retur
 		...resolved,
 		mcpServers: [{ name: "operator-probe", command: "/bin/true", args: [], env: [] }],
 		skillPlugins: [join(SANDBOX, "operator-skill-plugin")],
+		settingSources: ["user", "project"],
 	};
 }
 
@@ -380,6 +403,56 @@ describe("Pi's summary request through the ACP turn driver (#163)", () => {
 		expect(world.children).toHaveLength(0);
 	});
 
+	it("[QK:ACP-SUMMARY-TURN-NO-SETTING-SOURCES] the summary child reads none of the operator's Claude settings — no CLAUDE.md, hooks or plugins from disk", async () => {
+		const world = makeWorld(summarizerSays, operatorSurface);
+		await ordinaryTurn(world, transcript("hello"), "S-ordinary");
+		expect(world.calls("newSession")[0]._meta.claudeCode.options.settingSources).toEqual(["user", "project"]);
+		await generateSummary(
+			conversation("first"),
+			sonnet(),
+			undefined,
+			undefined,
+			undefined,
+			undefined,
+			undefined,
+			undefined,
+			"medium",
+			piStreamFn(world, {}),
+		);
+		expect(world.calls("newSession").at(-1)._meta.claudeCode.options.settingSources).toEqual([]);
+	});
+
+	it("[QK:ACP-SUMMARY-VENDOR-CANCEL-NOT-KEPT] a summary the backend cancelled while Pi did not abort is refused by Pi, never stored as a checkpoint", async () => {
+		const world = makeWorld(summarizerSays);
+		world.control.stopReason = "cancelled";
+		await expect(
+			generateSummary(
+				conversation("first"),
+				sonnet(),
+				undefined,
+				undefined,
+				undefined,
+				undefined,
+				undefined,
+				undefined,
+				"medium",
+				piStreamFn(world, {}),
+			),
+		).rejects.toThrow(backend.ACP_SUMMARY_CANCELLED_MESSAGE);
+	});
+
+	it("[QK:ACP-SUMMARY-REQUIRES-EMPTY-SURFACE] a request that declares tools stays an ordinary turn even with cacheRetention none", async () => {
+		const world = makeWorld();
+		const opts = { sessionId: "S-tools-none", reasoning: "medium", cacheRetention: "none" } as Parameters<
+			typeof backend.streamAcpTurn
+		>[2];
+		for await (const _ of backend.streamAcpTurn(sonnet(), transcript("hello"), opts, world.deps)) {
+		}
+		const [created] = world.calls("newSession");
+		expect(created._meta.claudeCode.options.tools.length).toBeGreaterThan(0);
+		expect(JSON.stringify(world.calls("prompt")[0].prompt)).toContain("AGENTS.md");
+	});
+
 	it("Pi's /tree branch summary takes the same tool-less path", async () => {
 		const world = makeWorld(summarizerSays);
 		const seen: { context?: TranscriptContext; options?: any } = {};
@@ -450,6 +523,34 @@ describe("a compaction closes the conversation's Claude child (#163, GLG 2026-11
 		expect(world.children).toHaveLength(2);
 		const prompts = world.calls("prompt");
 		expect(JSON.stringify(prompts.at(-1).prompt)).toContain("Keep the summary exactly as the model wrote it.");
+	});
+
+	it("[QK:ACP-COMPACT-SPARES-TURN-IN-FLIGHT] a session whose turn is still running is not closed — neither a reused turn nor a first one", async () => {
+		const compacted = await compactHandler();
+
+		// A reused turn in flight: the retained session is busy and its key claimed.
+		const world = makeWorld();
+		await ordinaryTurn(world, transcript("one"), "S-reuse-busy");
+		const reuse = world.hold();
+		const running = ordinaryTurn(world, transcript("one", "two"), "S-reuse-busy");
+		await reuse.entered;
+		compacted("S-reuse-busy");
+		expect(backend.closeRetainedAcpSession("S-reuse-busy")).toBe(false);
+		expect(world.killed.has(world.children[0])).toBe(false);
+		reuse.release();
+		expect((await running).type).toBe("done");
+		await ordinaryTurn(world, transcript("one", "two", "three"), "S-reuse-busy");
+		expect(world.children).toHaveLength(1);
+
+		// A first turn in flight: nothing is retained yet, so there is nothing to close.
+		const fresh = makeWorld();
+		const first = fresh.hold();
+		const opening = ordinaryTurn(fresh, transcript("one"), "S-first-busy");
+		await first.entered;
+		compacted("S-first-busy");
+		expect(fresh.killed.size).toBe(0);
+		first.release();
+		expect((await opening).type).toBe("done");
 	});
 
 	it("closes nothing for a session that holds no ACP child", async () => {

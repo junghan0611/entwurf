@@ -820,6 +820,9 @@ function untilAborted<T>(p: Promise<T>, signal: AbortSignal | undefined): Promis
 // settled, and only about the live session — not about any private transcript.
 export const ACP_CANCEL_KEPT_NOTICE = "stopped — changes already made stay; next message continues this session";
 export const ACP_CANCEL_CLOSED_NOTICE = "stopped — changes already made stay; next message opens a new session";
+/** #163: Pi's summary turn ended as `cancelled` with no abort from Pi. Kept non-transient for pi's retry classifier. */
+export const ACP_SUMMARY_CANCELLED_MESSAGE =
+	"ACP backend ended the summary turn as cancelled although Pi did not abort it; the summary is incomplete and is not kept";
 
 /**
  * Await ONE ACP prompt with NO wall-clock deadline — the turn ends on lifecycle
@@ -1215,6 +1218,8 @@ export function streamAcpTurn(
 		| undefined;
 	const cwd = opts?.cwd ?? process.cwd();
 	const signal = opts?.signal;
+	/** #163: this turn is Pi's one-shot summary request (set by runSummaryTurn). */
+	let summaryTurnActive = false;
 
 	stream.push({ type: "start", partial: state.output });
 
@@ -1484,7 +1489,17 @@ export function streamAcpTurn(
 	function finishSuccess(adapter: AcpBackendAdapter, session: BridgeSession, promptResult: AcpPromptResponse): void {
 		sealTurnUsage(adapter, session, promptResult);
 		finalizeAcpStreamState(state);
-		const verdict = mapPromptStopReason(promptResult?.stopReason);
+		let verdict = mapPromptStopReason(promptResult?.stopReason);
+		// #163: Pi keeps an `aborted` summary as a checkpoint — only `error` and `length` are refused
+		// (pi-coding-agent 1.5.2 `compaction.js:454-462`). A summary the backend cancelled while
+		// nobody aborted it is incomplete text, so it is sealed as an error, never stored.
+		if (summaryTurnActive && verdict.stopReason === "aborted" && !signal?.aborted) {
+			verdict = {
+				stopReason: "error",
+				rawStopReason: verdict.rawStopReason,
+				errorMessage: ACP_SUMMARY_CANCELLED_MESSAGE,
+			};
+		}
 		if (verdict.rawStopReason !== undefined) state.output.rawStopReason = verdict.rawStopReason;
 		if (signal?.aborted || verdict.stopReason === "aborted") {
 			state.output.stopReason = "aborted";
@@ -1791,12 +1806,16 @@ export function streamAcpTurn(
 		nativeModelId: string,
 	): Promise<void> {
 		state.quiet = true;
+		summaryTurnActive = true;
 		const summaryConfig: ResolvedAcpConfig = {
 			...config,
 			tools: [],
 			mcpServers: [],
 			skillPlugins: [],
 			permissionAllow: [],
+			// Filesystem isolation: no CLAUDE.md, hooks or plugins from the operator's Claude settings —
+			// the summarizer gets the carrier and Pi's instructions, nothing else (config.ts:413-420).
+			settingSources: [],
 		};
 		let engraving: string | null;
 		let thinkingValue: string | undefined;
