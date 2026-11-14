@@ -52,6 +52,13 @@ export interface OpenclawGateway {
 	url: string;
 	/** Optional absolute OpenClaw config path for that one vendor invocation. */
 	configPath?: string;
+	/**
+	 * Optional absolute path of the program the receive adapter runs in place of `openclaw` on PATH
+	 * (#160 S5 decision 1b, GLG 2026-11-14) — e.g. an operator shim that reaches a Gateway inside a
+	 * container. Never searched for, never defaulted from anything else. Mutually exclusive with
+	 * `configPath`: an env overlay reaches only this program's own process, not one it launches.
+	 */
+	bin?: string;
 }
 
 export interface OpenclawAllowedKey {
@@ -157,12 +164,22 @@ function requireAbsolutePath(value: unknown, what: string): string {
 
 function parseGateway(raw: unknown, what: string): OpenclawGateway {
 	const obj = requireObject(raw, what);
-	requireKeys(obj, ["scope", "url"], ["configPath"], what);
+	requireKeys(obj, ["scope", "url"], ["bin", "configPath"], what);
+	// `bin` owns its vendor configuration (#160 S5 §R3). A declared `configPath` rides as an env
+	// overlay on the ONE process the adapter starts; behind a `bin` (a container shim) it would stop
+	// at that shim and be dropped silently, so the pair is refused rather than half-honoured.
+	if (Object.hasOwn(obj, "bin") && Object.hasOwn(obj, "configPath")) {
+		fail(
+			what,
+			"declares both bin and configPath; a bin owns its vendor configuration (an env overlay reaches only the bin's own process), so declare one",
+		);
+	}
 	const gw: OpenclawGateway = {
 		scope: requireOpenclawScope(obj.scope, `${what}.scope`),
 		url: requireGatewayUrl(obj.url, `${what}.url`),
 	};
 	if (Object.hasOwn(obj, "configPath")) gw.configPath = requireAbsolutePath(obj.configPath, `${what}.configPath`);
+	if (Object.hasOwn(obj, "bin")) gw.bin = requireAbsolutePath(obj.bin, `${what}.bin`);
 	return gw;
 }
 

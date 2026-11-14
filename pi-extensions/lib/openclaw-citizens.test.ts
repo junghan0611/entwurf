@@ -35,6 +35,9 @@ describe("parseOpenclawCitizensDeclaration", () => {
 		);
 		expect(full.gateways[0].configPath).toBe("/srv/oc/openclaw.json");
 		expect(full.freshKeyPrefix).toEqual(PREFIX);
+		// #160 S5 1b: an absolute program path instead of `openclaw` on PATH.
+		const withBin = parseOpenclawCitizensDeclaration(decl({ gateways: [{ ...GW, bin: "/opt/oc/openclaw-shim" }] }));
+		expect(withBin.gateways[0]).toEqual({ ...GW, bin: "/opt/oc/openclaw-shim" });
 		// Prefix only, no fixed key.
 		expect(parseOpenclawCitizensDeclaration(decl({ allow: [], freshKeyPrefix: PREFIX })).allow).toEqual([]);
 	});
@@ -60,6 +63,14 @@ describe("parseOpenclawCitizensDeclaration", () => {
 		["token in query", decl({ gateways: [{ ...GW, url: "ws://127.0.0.1:1/?token=x" }] }), /query or fragment/],
 		["relative configPath", decl({ gateways: [{ ...GW, configPath: "oc.json" }] }), /absolute, normalized/],
 		["unnormalized configPath", decl({ gateways: [{ ...GW, configPath: "/a/../b" }] }), /absolute, normalized/],
+		["relative bin", decl({ gateways: [{ ...GW, bin: "openclaw" }] }), /bin: must be an absolute, normalized/],
+		["unnormalized bin", decl({ gateways: [{ ...GW, bin: "/a/./oc" }] }), /bin: must be an absolute, normalized/],
+		["whitespace in bin", decl({ gateways: [{ ...GW, bin: "/a/o c" }] }), /bin: must not contain whitespace/],
+		[
+			"bin with configPath",
+			decl({ gateways: [{ ...GW, bin: "/opt/oc/openclaw-shim", configPath: "/srv/oc/openclaw.json" }] }),
+			/declares both bin and configPath/,
+		],
 		["key of another agent", decl({ allow: [{ ...KEY, sessionKey: "agent:ops:s1" }] }), /must start with/],
 		["bare agent head", decl({ allow: [{ ...KEY, sessionKey: "agent:main:" }] }), /must start with/],
 		["whitespace in key", decl({ allow: [{ ...KEY, sessionKey: "agent:main:a b" }] }), /whitespace/],

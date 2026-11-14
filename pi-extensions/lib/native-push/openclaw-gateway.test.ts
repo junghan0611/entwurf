@@ -157,6 +157,54 @@ describe("probe", () => {
 	});
 });
 
+describe("declared bin (#160 S5 1b)", () => {
+	const SHIM = "/opt/oc/openclaw-shim";
+	const withBin = parseOpenclawCitizensDeclaration(
+		JSON.stringify({
+			version: 1,
+			gateways: [{ scope: "lab", url: "ws://127.0.0.1:18811", bin: SHIM }],
+			allow: [{ scope: "lab", agentId: "main", sessionKey: "agent:main:s1m1" }],
+		}),
+	);
+
+	it("probe runs the declared bin as argv0, no env overlay, and stamps it on the route", async () => {
+		const r = runner({ code: 0, stdout: ALIVE, stderr: "" });
+		const probe = await adapter(r, () => withBin).probe(ID);
+		expect(probe).toEqual({
+			status: "alive",
+			route: { backend: "openclaw", url: "ws://127.0.0.1:18811", bin: SHIM, sessionKey: "agent:main:s1m1" },
+		});
+		expect(r.calls).toHaveLength(1);
+		expect(r.calls[0].argv[0]).toBe(SHIM);
+		expect(r.calls[0].argv.slice(1, 4)).toEqual(["gateway", "call", "sessions.describe"]);
+		expect(r.calls[0].opts?.env).toBeUndefined();
+	});
+
+	it("send runs the bin the probe confirmed, without re-reading the declaration", async () => {
+		const r = runner({ code: 0, stdout: '{"runId":"entwurf-k1","status":"started","messageSeq":1}', stderr: "" });
+		let reads = 0;
+		const a = adapter(r, () => {
+			reads += 1;
+			return withBin;
+		});
+		await a.send(
+			{ backend: "openclaw", url: "ws://127.0.0.1:18811", bin: SHIM, sessionKey: "agent:main:s1m1" },
+			ID,
+			"b",
+		);
+		expect(reads).toBe(0);
+		expect(r.calls[0].argv[0]).toBe(SHIM);
+		expect(r.calls[0].argv.slice(1, 4)).toEqual(["gateway", "call", "chat.send"]);
+		expect(r.calls[0].opts?.env).toBeUndefined();
+	});
+
+	it("a route without bin keeps the bare vendor name", async () => {
+		const r = runner({ code: 0, stdout: '{"runId":"entwurf-k1","status":"started","messageSeq":1}', stderr: "" });
+		await adapter(r).send(ROUTE, ID, "b");
+		expect(r.calls[0].argv[0]).toBe("openclaw");
+	});
+});
+
 describe("send", () => {
 	it("chat.send steer with an entwurf idempotency key; is not retriable", async () => {
 		const r = runner({ code: 0, stdout: '{"runId":"entwurf-k1","status":"started","messageSeq":1}', stderr: "" });

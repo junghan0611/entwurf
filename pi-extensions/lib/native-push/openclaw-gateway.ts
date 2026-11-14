@@ -21,6 +21,10 @@
  * ([측정] S3 `R/s3-probe-shape.txt`: mismatched url → exit 1, "Gateway destination changed").
  * A declared `configPath` is passed as `OPENCLAW_CONFIG_PATH` to that one invocation only.
  *
+ * Program: the declared gateway's `bin` (absolute; #160 S5 decision 1b) when present, else the
+ * bare `openclaw` on PATH. The probe stamps the chosen program onto the route, so the send runs the
+ * same program the probe confirmed — no second read of the declaration between them.
+ *
  * Address: the record's `nativeSessionId` (`openclaw:<scope>:<sessionKey>`) is parsed back, and the
  * Gateway url comes from the operator's scope declaration, re-read per probe. A record whose key
  * has left the declaration is NOT delivered to; it reports `indeterminate` (never `dead`: dead is
@@ -64,6 +68,8 @@ export interface OpenclawRoute {
 	readonly backend: "openclaw";
 	readonly url: string;
 	readonly configPath?: string;
+	/** The declared absolute `bin`; absent → the adapter's default program. */
+	readonly bin?: string;
 	readonly sessionKey: string;
 }
 
@@ -173,7 +179,8 @@ export function assertOpenclawChatSendAccepted(code: number, stdout: string, std
 }
 
 export function createOpenclawGatewayAdapter(deps: OpenclawGatewayAdapterDeps): NativePushAdapter {
-	const binary = deps.binary ?? OPENCLAW_BINARY;
+	const defaultBinary = deps.binary ?? OPENCLAW_BINARY;
+	const programOf = (route: { bin?: string }) => route.bin ?? defaultBinary;
 	const newKey = deps.newIdempotencyKey ?? (() => `entwurf-${crypto.randomUUID()}`);
 	return {
 		id: "openclaw",
@@ -205,9 +212,10 @@ export function createOpenclawGatewayAdapter(deps: OpenclawGatewayAdapterDeps): 
 				backend: "openclaw",
 				url: picked.gateway.url,
 				...(picked.gateway.configPath ? { configPath: picked.gateway.configPath } : {}),
+				...(picked.gateway.bin ? { bin: picked.gateway.bin } : {}),
 				sessionKey: id.sessionKey,
 			};
-			const r = await deps.runner.exec(openclawDescribeArgv(binary, route), {
+			const r = await deps.runner.exec(openclawDescribeArgv(programOf(route), route), {
 				env: invocationEnv(route),
 				timeoutMs: OPENCLAW_PROBE_TIMEOUT_MS,
 			});
@@ -220,7 +228,7 @@ export function createOpenclawGatewayAdapter(deps: OpenclawGatewayAdapterDeps): 
 			if (parseOpenclawNativeSessionId(nativeSessionId).sessionKey !== route.sessionKey) {
 				throw new Error(`openclaw adapter: route key ${route.sessionKey} is not ${nativeSessionId}`);
 			}
-			const r = await deps.runner.exec(openclawChatSendArgv(binary, route, content, newKey()), {
+			const r = await deps.runner.exec(openclawChatSendArgv(programOf(route), route, content, newKey()), {
 				env: invocationEnv(route),
 				timeoutMs: OPENCLAW_SEND_TIMEOUT_MS,
 			});

@@ -3,6 +3,46 @@
 # RAIL — 현재 좌표
 
 - [x] **S0. 레일.** 브랜치·이 문서·팀 구성. GLG 결정 2026-11-13 thinkpad.
+- [x] **S1. 측정 (11.3 lab).** M0–M5 완료, 9fc008 샘플 검수. 요지는 아래 "기록 — S1" 참조.
+- [x] **S2. 결정 카드.** 4184c5 작성, GLG 7절 1–5 승인, 6은 oracle 측정으로 닫음(2026-11-13).
+- [x] **S3. 구현.** 0c9e3a(flip 포함), 4184c5 리뷰 Blocker 0, Defect 3 반영.
+- [~] **S4. LIVE (lab).** 왕복, busy steer, reset 뒤 같은 garden id, fresh (c)(d) 측정. 남은 것: fresh (a) 표시면, (b) agent-policy 폭, TUI 바인딩 증명. release stop 유지.
+- [~] **S5. oracle 운영 Docker 봇 연결.** ← CURRENT. 설계 카드와 GLG 결정은 끝났다(아래 "S5 결정"). 구현 단계:
+  - [x] **S5.0 merge·RED.** main `0c058cea` 37커밋 merge → `51ed755a`(충돌 0, ff08d4 승인 2026-11-14). 이름 붙은 RED 두 개: ① `check-harness-admission-parity` openclaw(GLG: 그냥 둠, flip 묶음에서만 닫힘) ② `check-capability-bundle-reach` B3(dist 미빌드, build-bridge 창에서 닫힘). 영수증 `/tmp/ff08d4-next/impl-status.md`(oracle 로컬).
+  - [x] **S5.1 1b: 선언별 `bin` 절대경로.** gateway 항목에 optional `bin`(absolute + normalized). 수신 어댑터 probe가 그 경로를 argv0로 쓰고 route에 찍어, send는 선언을 다시 읽지 않고 같은 program을 쓴다. `bin`+`configPath`는 파서가 이름 붙은 오류로 거절. DELIVERY.md OpenClaw 행 갱신. V3 불변. 옆 테스트 +8(파서 4, 어댑터 3, 수용 1), 손 mutant 2개 kill(거절 제거 → 1 fail, route.bin 무시 → 2 fail). focused gate green: lint, typecheck, tests-beside-behavior 1204, native-push-adapter, v2-contract, v2-production, meta-session, install-surface.
+    - 경계: fresh의 `openclawTuiLaunch`는 `bin`을 읽지 않는다(production 호출자 0, fresh preflight가 거절 중). 컨테이너 TUI는 docker exec `-it`가 필요해 별도 설계 — fresh 단계에서 다룬다.
+  - [ ] **S5.2 wrapper invalid 계약.** ← NEXT. 컨테이너 배치의 `entwurfBin`은 SSH wrapper이고 `declPath`는 아무것도 고르지 않는다. wrapper 거절은 `{"kind":"invalid","detail":…}` 한 줄 + exit 2(그래야 플러그인이 indeterminate가 아니라 invalid로 분류, `plugins/openclaw/dist/core.js:111-112`). 플러그인 쪽 계약 테스트와 manifest 문구.
+  - [ ] **S5.3 merge 전 문구 묶음.** "#160, BRANCH candidate" 4곳, O1–O3, manifest `entwurfBin`/`declPath` 문구, NEXT 정리.
+  - [ ] **S5.4 리뷰** (독립 리뷰어, ff08d4 배치) → amendment 한 묶음.
+  - [ ] **S5.5 PARTIAL** (변경된 gate/mutant/matrix 그룹만, archived 단언 QK 포함) — **build 필요 지점: 여기서 멈추고 ff08d4에 보고.**
+  - [ ] **S5.6 frozen FULL** → **S5.7 exact-SHA CI.** build-bridge/check-pack/check:full/prepack은 GLG가 정한 재시작 창 안에서만.
+  - [ ] **S5.8 oracle 적용** (GLG 승인 단계별): host shim(PATH 밖) + 선언 → SSH 키·forced command(8216f4 계획) → 플러그인 `--link` → 책상 열기(birth). oracle birth는 main 병합·flip·reader 재시작 뒤에만.
+
+# NOW
+
+- **현재 HEAD:** `51ed755a` (160-openclaw, main `0c058cea` merge 체크포인트, push 안 함). 이 checkout은 oracle 운영 설치이기도 하다.
+- **금지 (GLG가 창을 정하기 전까지):** `pnpm run build-bridge`, `check-pack`, `check:full`, prepack을 일으키는 모든 것 — pi-durable 68bd94·145c2f가 dist로 돌고 있다. oracle store에 openclaw birth 금지. push 금지. `META_CITIZEN_BACKENDS`·`pi/entwurf-capabilities.json` 편집은 checkout src로 도는 bridge 전부를 throw시킨다(flip 경계, 아래 기록).
+- **운영 전제 정정:** 옛 "운영 10.9 / 8b18b55" 전제는 낡았다. 운영 버전 SSOT는 nixos-config `ORACLE.md`의 LIVE 줄 하나다 [read ORACLE.md:140, 2026-11-14]: OpenClaw **2026.11.3** · `847611d` · image `openclaw-custom:11.3-candidate-20261113`. 컨테이너 node v24.22.1 / sqlite 3.53.4 [상속: 8216f4 s5-ops-facts]. 따라서 "운영을 11.3으로 맞추는 일"은 이미 끝났다.
+- **경로 축 정정:** 옛 S5 줄의 "컨테이너 경로와 host 경로가 다르다"는 부분만 맞다. `~/repos/gh`, `~/.pi/agent`, `~/org`는 host와 같은 절대경로로도 마운트되어 있다 [측정 `docker inspect openclaw-gateway` Mounts, 2026-11-14]. 다른 것은 봇 workspace의 컨테이너 경로뿐이고, birth `--cwd`는 운영자 명시값(host 절대경로)으로 둔다. record cwd는 send envelope 표시에만 쓰인다.
+- **Tier 1/2 측정 (8216f4, 운영 컨테이너, 읽기 전용):** 컨테이너 CLI에 `--expect-url` 있음. 선언 url `ws://127.0.0.1:18789`로 `sessions.describe` 없는 key → `{"session":null}` rc0 1.56s, 틀린 url → rc1 "Gateway destination changed", state 쓰기 0 [상속: `/tmp/ff08d4-next/s5-f0-tier2.md` sha a6f5853c…, oracle 로컬]. A1(수신 = docker exec shim) 성립.
+- **다음 한 행동:** S5.2 wrapper invalid 계약(플러그인 쪽 분류 테스트 + manifest 문구). focused gate만.
+- **역할 (2026-11-14):** 코디 = `20261113T043350-ff08d4`(Claude Code, oracle). 구현 = `20261114T193422-ee14c7`(이 문서의 writer). 운영 실행 = nixos-config 운영 담당(garden id는 코디가 앎). 운영 코디 68bd94, thinkpad 코디 b22677, thinkpad 검수 9fc008. 보고는 모두 ff08d4로. 커밋은 commit 스킬, push는 GLG.
+
+# S5 결정 (GLG 2026-11-14, ff08d4 중계) — 공개 정책: #160 issuecomment-6876392683
+
+- **책상 모델:** 봇당 명시 key 책상 하나(첫 책상은 agent `main`), pin, compaction·`/reset` 뒤에도 같은 garden. 삭제한 책상 이름은 재사용하지 않는다. 책상 열기·닫기는 운영자 행위 하나씩, 자동 birth 없음. 확장(다른 봇, 다중 책상, 채널 key)은 보류. GLG 원문: "어차피 workspace-xxx가 봇의 집이기 때문에 누가 답변하든 상관없다." garden id는 대화 주소(책상)이고 답하는 주체는 봇의 집 전체다.
+- **수신 1b:** 선언의 gateway 항목에 `bin` 절대경로, 그 경로는 PATH 밖의 docker exec shim(nixos-config home-manager 소유). bare `openclaw` shim은 두지 않는다(host에서 `which openclaw` 실패가 안전장치).
+- **송신 2a:** 컨테이너 → host SSH, forced command + restrict, 새 키페어(GLG: "오가는 길은 닦아놓자"). 신뢰: A(기존 rw mount)와 B(새 키: host user로 고정 entry와 decider 실행, native-push·pi socket·mailbox를 움직임, 임의 shell 아님)를 나눠 적는다. stdin claim의 sender는 scope 안 자기 신고다. 계획은 운영 측(8216f4) 소유.
+- **플러그인 3a:** 병합 뒤 미러 경로를 `--link`. hot reload는 미측정(lab `--link`는 "Saved for the next Gateway start").
+- **`~/.pi/agent` rw 유지 (4a).** 컨테이너는 meta-store writer가 아니다(store 쓰기는 모두 host entry). 컨테이너가 mailbox·record에 직접 쓰는 안은 Rule 7 위반으로 금지.
+- **F0:** Tier 1·2 완료(위 NOW).
+- 카드 원문(oracle 로컬): `/tmp/ff08d4-next/s5-card.md`, `/tmp/ff08d4-next/s5-identity-card.md`.
+
+# 기록 — S1–S4 RAIL 원문과 thinkpad NOW (2026-11-13, 보존)
+
+## 옛 RAIL
+
+- [x] **S0. 레일.** 브랜치·이 문서·팀 구성. GLG 결정 2026-11-13 thinkpad.
 - [x] **S1. 측정 (11.3).** M0–M5를 완료하고 9fc008이 영수증을 샘플 검수했다. 10.10은 M0와 무로그인 범위까지만 재고 일시정지했다. 원 영수증: `~/.local/share/entwurf-lab/160/openclaw-2026.11.3/receipts/`(51개).
   - M1: 플러그인 도구 ctx가 팩토리와 execute 모두에서 agentId·sessionKey·sessionId를 받는다. 따라서 sender join은 (agentId, sessionKey)로 할 수 있다.
   - M4: stdio `mcp.servers`에는 `_meta`·세션 식별자·OPENCLAW env가 0이고, 런마다 새 프로세스가 뜬다. MCP 경로로는 sender join이 불가하다.
@@ -15,7 +55,7 @@
 - [~] **S4. LIVE.** ← CURRENT (부분 완료): 왕복, busy steer, reset 뒤 같은 garden id, fresh (c)(d)는 측정했다. 남은 것: (a) 표시면 확정, (b) `--width agent-policy`, TUI 바인딩 증명(vendor가 목적지를 읽어 주는 명령).
 - [ ] **S5. 오라클 Docker.** 별도 단계로, 운영을 11.3으로 맞추는 일과 함께 한다. S4 전에는 손대지 않는다(운영 10.9 / 8b18b55). 수신 CLI는 `docker exec openclaw-gateway openclaw …` 후보다. **경로 축 [파일 openclaw-config/docker-compose.yml:89,103,111]:** 컨테이너 안의 절대경로(`/home/node/.openclaw/workspace`, `/home/node/repos/gh`)는 host의 경로(`~/openclaw/config`, `~/repos/gh`)와 다르다. birth의 cwd는 "운영자 명시값 또는 OpenClaw 응답값 그대로, 추측·fallback 없음"으로 한다(GLG 2026-11-13). S5에서는 (1) 안팎 경로를 같게 마운트할지, (2) record에 컨테이너 경로임을 표시할지를 측정한 뒤 정한다.
 
-# NOW
+## 옛 NOW
 
 - **Oracle 인계 (2026-11-13):** 이 브랜치 체크포인트는 미완성이며 main 병합·출하 승인이 아니다. Oracle에서 #160 최신 댓글과 이 문서를 읽고, 먼저 11.3 격리 lab에서 fresh의 TUI Gateway 바인딩·지속 garden-id 표시·model/agent-policy 폭을 증명할 최소 측정을 설계한다. 운영 Docker/봇 S5, 운영 설정·자격증명, LIVE 및 발송은 별도 승인 전 건드리지 않는다. 동일 key에 TUI만 붙이는 것은 fresh가 아니다.
 - **검증 영수증 (thinkpad 이전 후보, HEAD 5ff91bd + 미커밋 diff):** PARTIAL 네 그룹 `check-tests-beside-behavior`, `check-entwurf-v2-production`, `check-entwurf-v2-contract`, `check-install-surface` exit 0 (`~/.local/share/entwurf-lab/160/partial/`; 각 receipt의 candidate가 권위). FULL `pnpm run check:full`은 96초 exit 1: `check-harness-admission-parity`의 `Unaccounted: openclaw`에서 중단; 뒤 contract 71개·hermetic 64개·package 10개는 그 FULL에서 미실행이다. start/end diff SHA256 `fc440e7296c7465f30c99694e1dfca7d09eb520286c4a77b9845355025619e9a` 일치는 양 끝 관측이지 실행 중 불변 전체의 증명은 아니다. 원본 `~/.local/share/entwurf-lab/160/full/`은 thinkpad 로컬이며 Oracle에 자동 전달되지 않는다. PARTIAL은 FULL 통과가 아니다. 최종 후보에서 리뷰·해당 PARTIAL·frozen FULL·LIVE 및 exact-SHA CI를 별도로 닫는다.
