@@ -54,13 +54,23 @@ import type { NativePushAdapter, NativePushRunner } from "./adapter.ts";
 export const OPENCLAW_PROBE_TIMEOUT_MS = 15_000;
 export const OPENCLAW_SEND_TIMEOUT_MS = 30_000;
 /**
+ * How far one timed-out runner call may overrun its timeout: the runner's SIGTERM→SIGKILL grace
+ * plus its settle wait (#160 S5 SOL D1). It equals `NATIVE_PUSH_TIMEOUT_OVERRUN_MS` in `adapter.ts`
+ * but is not imported from there — `adapter.ts` imports this module, and this value is used at
+ * module load. `adapter.test.ts` binds the two.
+ */
+export const OPENCLAW_RUNNER_OVERRUN_MS = 1_500;
+/**
  * The send entry's worst path, which the plugin's process timeout must exceed (review D2): the
- * sender's replyable probe, the decider's target probe and one send, plus the entry's own startup
- * and store read. `plugins/openclaw/core.test.mjs` binds the plugin constant to this value.
+ * sender's replyable probe, the decider's target probe and one send — each with the runner's
+ * overrun — plus the entry's own startup and store read. `plugins/openclaw/core.test.mjs` binds
+ * the plugin constant to this value.
  */
 export const OPENCLAW_ENTRY_STARTUP_MARGIN_MS = 15_000;
 export const OPENCLAW_SEND_ENTRY_WORST_MS =
-	2 * OPENCLAW_PROBE_TIMEOUT_MS + OPENCLAW_SEND_TIMEOUT_MS + OPENCLAW_ENTRY_STARTUP_MARGIN_MS;
+	2 * (OPENCLAW_PROBE_TIMEOUT_MS + OPENCLAW_RUNNER_OVERRUN_MS) +
+	(OPENCLAW_SEND_TIMEOUT_MS + OPENCLAW_RUNNER_OVERRUN_MS) +
+	OPENCLAW_ENTRY_STARTUP_MARGIN_MS;
 /** The vendor CLI, by its bare name on PATH (AGENTS.md tooling SSOT). */
 export const OPENCLAW_BINARY = "openclaw";
 

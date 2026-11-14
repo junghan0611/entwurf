@@ -1564,6 +1564,13 @@ check_openclaw_beside() {
   run_vitest pi-extensions/lib/openclaw-citizens.test.ts pi-extensions/lib/native-push/openclaw-gateway.test.ts pi-extensions/lib/openclaw-fresh.test.ts plugins/openclaw/core.test.mjs
 }
 
+check_native_push_runner() {
+  # #160 S5 SOL D1: the execution coordinate for the production native-push runner's deadline
+  # (VERIFY 「Four rules」 rule 3). Not a discovery path — check-tests-beside-behavior already finds the
+  # file; one runner mutant re-runs this file alone.
+  run_vitest pi-extensions/lib/native-push/adapter.test.ts
+}
+
 smoke_mux_fresh_call_live() {
   # LIVE acceptance for entwurf_fresh_call — OUT of pnpm check, needs LIVE=1, spends two model
   # turns. The one axis no deterministic gate reaches: a real window, a real runtime, a real first

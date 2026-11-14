@@ -595,6 +595,13 @@ const operatorCmds = [...targets].filter(([cmd, ts]) => !isDevGate(cmd) && ts.le
 			receipt:
 				"run.sh check_openclaw_beside -> run_vitest over openclaw-citizens, native-push/openclaw-gateway, openclaw-fresh and plugins/openclaw/core tests (#160 S5.4)",
 		},
+		// #160 S5 SOL D1: the native-push runner's mutant execution coordinate, right after the openclaw one.
+		{
+			after: "  entwurf check-openclaw-beside       # ",
+			line: "  entwurf check-native-push-runner    # #160 mutant execution coordinate (VERIFY rule 3): run_vitest over the native-push runner beside test alone — the gate argv of the runner's hard-deadline claim (a child ignoring SIGTERM is reported 124 within timeoutMs + grace + settle). Same file check-tests-beside-behavior already runs.",
+			receipt:
+				"run.sh check_native_push_runner -> run_vitest over pi-extensions/lib/native-push/adapter.test.ts (#160 S5 SOL D1)",
+		},
 		{
 			after: "  entwurf openclaw-send               # ",
 			line: "  entwurf openclaw-birth              # #160, BRANCH candidate: the one writer of `openclaw` records. Checks the key against this host's openclaw-citizens.json, requires the declared Gateway's sessions.describe to answer alive, then upserts openclaw:<scope>:<sessionKey> idempotently (a re-birth attaches to the same garden id). --cwd is explicit, absolute and normalized; the directory's existence is not checked (no OpenClaw read RPC returns a session root). Prints one JSON line {action,gardenId,nativeSessionId,cwd}; any refusal throws (exit 1); wrong argv exit 2 (--scope <s> --session-key <agent:<id>:<key>> --cwd <absolute normalized path>)",

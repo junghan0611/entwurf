@@ -63,27 +63,88 @@ export interface NativePushRunner {
 export const AGY_METADATA_TIMEOUT_MS = 8000;
 export const AGY_SEND_TIMEOUT_MS = 8000;
 
-/** The production runner — `execFile` (no shell), env overlay, bounded, output captured. */
+/**
+ * Grace between the deadline's SIGTERM and the SIGKILL that follows it. The vendor CLIs behind
+ * this runner (`agy agentapi`, `openclaw gateway call`, an operator shim that `exec`s one) are
+ * short-lived RPC clients; a second is enough for a cooperative one to exit on SIGTERM, and a
+ * longer wait buys nothing because a remote action already admitted is not undone by it.
+ */
+export const NATIVE_PUSH_KILL_GRACE_MS = 1000;
+/**
+ * After SIGKILL the runner closes its ends of the child's pipes and waits this long for the
+ * exit to be reported, then settles anyway. A pipe the killed child handed to a process of its
+ * own is not ours to kill, and it must not hold a dispatch open (#160 S5 SOL D1).
+ */
+export const NATIVE_PUSH_KILL_SETTLE_MS = 500;
+/** The most a timed-out call can overrun its `timeoutMs`: grace + settle. Callers' budgets add it. */
+export const NATIVE_PUSH_TIMEOUT_OVERRUN_MS = NATIVE_PUSH_KILL_GRACE_MS + NATIVE_PUSH_KILL_SETTLE_MS;
+
+/**
+ * The production runner — `execFile` (no shell), env overlay, bounded, output captured.
+ *
+ * The bound is the runner's own (#160 S5 SOL D1). `execFile`'s `timeout` only SENDS SIGTERM, and a
+ * child that ignores it exits whenever it likes — measured: a child ignoring SIGTERM for 1s under a
+ * 200ms timeout came back after 1051ms as code 0, so a probe read alive and a send read accepted.
+ * So the deadline is remembered as a state: once it passes, the result is 124 whatever exit code
+ * arrives later, SIGTERM goes out, SIGKILL follows after {@link NATIVE_PUSH_KILL_GRACE_MS}, and the
+ * call settles at the latest {@link NATIVE_PUSH_TIMEOUT_OVERRUN_MS} after the deadline. This bounds
+ * the local child only; it says nothing about work a remote Gateway already accepted.
+ */
 export const realNativePushRunner: NativePushRunner = {
 	exec(argv, opts) {
 		return new Promise((resolve) => {
 			const [cmd, ...args] = argv;
-			execFile(
+			const timeoutMs = opts?.timeoutMs && opts.timeoutMs > 0 ? opts.timeoutMs : 0;
+			let timedOut = false;
+			let settled = false;
+			const timers: NodeJS.Timeout[] = [];
+			const settle = (r: NativePushExecResult) => {
+				if (settled) return;
+				settled = true;
+				for (const t of timers) clearTimeout(t);
+				resolve(r);
+			};
+			let out = "";
+			let err = "";
+			const child = execFile(
 				cmd ?? "",
 				args,
 				{
 					env: opts?.env ? { ...process.env, ...opts.env } : process.env,
 					maxBuffer: 8 * 1024 * 1024,
-					timeout: opts?.timeoutMs && opts.timeoutMs > 0 ? opts.timeoutMs : 0,
 				},
-				(err, stdout, stderr) => {
-					const e = err as (NodeJS.ErrnoException & { killed?: boolean }) | null;
-					// A timeout kill surfaces as `killed` — map it to 124 (timeout convention) so
-					// probe reads it as "no serve" (→ indeterminate) and send reads it as failure.
-					const code = e == null ? 0 : e.killed ? 124 : typeof e.code === "number" ? (e.code as number) : 127;
-					resolve({ code, stdout: stdout ?? "", stderr: stderr ?? "" });
+				(error, stdout, stderr) => {
+					const e = error as NodeJS.ErrnoException | null;
+					// Past the deadline the answer is 124 (the timeout(1) convention) even if the child
+					// exited 0 afterwards: probe reads it as "no serve" (→ indeterminate), send as failure.
+					const code = timedOut ? 124 : e == null ? 0 : typeof e.code === "number" ? (e.code as number) : 127;
+					settle({ code, stdout: stdout ?? out, stderr: stderr ?? err });
 				},
 			);
+			child.stdout?.on("data", (d) => {
+				out += d;
+			});
+			child.stderr?.on("data", (d) => {
+				err += d;
+			});
+			if (timeoutMs > 0) {
+				timers.push(
+					setTimeout(() => {
+						timedOut = true;
+						child.kill("SIGTERM");
+						timers.push(
+							setTimeout(() => {
+								child.kill("SIGKILL");
+								child.stdout?.destroy();
+								child.stderr?.destroy();
+								timers.push(
+									setTimeout(() => settle({ code: 124, stdout: out, stderr: err }), NATIVE_PUSH_KILL_SETTLE_MS),
+								);
+							}, NATIVE_PUSH_KILL_GRACE_MS),
+						);
+					}, timeoutMs),
+				);
+			}
 		});
 	},
 };

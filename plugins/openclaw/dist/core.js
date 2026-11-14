@@ -31,7 +31,8 @@
  * so it reads as `invalid` (not sent); a bare exit 2 with no line is `indeterminate`, as is any
  * transport failure (ssh 255, a remote 1), because nothing here can tell those apart from a send
  * that was admitted before its receipt was lost. The wrapper's own overhead must fit inside
- * SEND_TIMEOUT_MS − OPENCLAW_SEND_ENTRY_WORST_MS (15s); otherwise the result is indeterminate.
+ * SEND_TIMEOUT_MS − OPENCLAW_SEND_ENTRY_WORST_MS (10.5s, the entry worst path counting the
+ * runner's timeout overrun); otherwise the result is indeterminate.
  */
 
 import * as path from "node:path";
@@ -39,7 +40,7 @@ import * as path from "node:path";
 export const TOOL_NAME = "entwurf_v2";
 export const CLAIM_VERSION = 1;
 export const MESSAGE_CAP = 16000;
-/** Exceeds the entry's worst path (`OPENCLAW_SEND_ENTRY_WORST_MS`, 75s); the beside test binds them. */
+/** Exceeds the entry's worst path (`OPENCLAW_SEND_ENTRY_WORST_MS`, 79.5s); the beside test binds them. */
 export const SEND_TIMEOUT_MS = 90_000;
 const GARDEN_ID = /^\d{8}T\d{6}-[0-9a-f]{6}$/;
 

@@ -1,0 +1,19 @@
+{
+	"schemaVersion": 1,
+	"lane": "native-push-runner",
+	"mutants": [
+		{
+			"claim": "NATIVE-PUSH-RUNNER-HARD-DEADLINE",
+			"title": "the native-push runner forgets that its deadline passed and maps the late exit as if on time, so a child that ignores SIGTERM and exits 0 later reads as alive or accepted",
+			"subject": "pi-extensions/lib/native-push/adapter.ts",
+			"find": [
+				"const code = timedOut ? 124 : e == null ? 0 : typeof e.code === \"number\" ? (e.code as number) : 127;"
+			],
+			"replace": ["const code = e == null ? 0 : typeof e.code === \"number\" ? (e.code as number) : 127;"],
+			"gate": ["bash", "run.sh", "check-native-push-runner"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:NATIVE-PUSH-RUNNER-HARD-DEADLINE]",
+			"signatureSource": "pi-extensions/lib/native-push/adapter.test.ts"
+		}
+	]
+}
