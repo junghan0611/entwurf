@@ -102,7 +102,7 @@
 		"claudeCodeFloor": ">=2.1.306"
 	},
 	"dependencies": {
-		"@agentclientprotocol/claude-agent-acp": "0.106.0",
+		"@agentclientprotocol/claude-agent-acp": "0.107.0",
 		"@agentclientprotocol/sdk": "2.6.0",
 		"@anthropic-ai/sdk": "0.100.1",
 		"@earendil-works/chord": "1.5.2",
