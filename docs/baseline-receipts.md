@@ -164,6 +164,28 @@ The #67 fence certifies launcher integrity, not the whole shared vendor store. E
 
 Unmeasured and not inherited: the tmux Claude Code path at this candidate, n>1, billing and OAuth writes, `~/.claude.json`, the final candidate, exact-SHA CI, any installed plugin runtime pin, and registry/release acceptance. Host artifacts: `/tmp/e157h/s4-cc-a/{RECEIPT.md,h1/,h2/raw/,h3/raw/}` (incidents: `h3/raw/x00-claude-link-mutation.txt`, `h3/raw/x01-vendor-version-loss.md`) and `/tmp/e157h/stage4/{LAUNCHER-RESTORE.md,CURRENT-N2-AND-FLOOR.md,QUALIFICATION-AND-FULL.md}`.
 
+## 0.53.1 BASELINE and VERIFY run (R2R), 2026-11-14 (n=1)
+
+**Evidence state:** merged record of the reviewer (`20261114T134109-02055a`, 17:07 KST), who interviewed the subject and re-measured outside it; the summary in this section carries his rungs. oracle (aarch64), 16:32–17:05 KST. Checkout `docs/baseline-verify-diet` @ `a80518d1` (main `7a100e89` plus one docs commit), frozen and unmodified during the run. pi 1.5.2, claude-agent-acp 0.107.0, claude-agent-sdk 0.3.323, claude CLI 2.1.323, model `entwurf/claude-opus-5-5`. `keepRecentTokens` 20000 (default; settings `compaction` is `{enabled:true}`, no project override). Chain: interviewer `02055a` → subject and examiner `20261114T163219-262958` → subject `20261114T164146-b3e007`. GLG typed `/compact` himself.
+
+| Step | Observation | Verdict |
+|---|---|---|
+| BASELINE, 262958 | blind pass valid (no file reads, no shell); native 5 / MCP `entwurf-bridge` 9 / four carriers / memory handled through an external surface / no calendar lookup | **PASS** (GLG). NOTE: called itself Claude Code (GLG: no issue); mentioned `update-config` under memory |
+| BASELINE, b3e007 | carrier pass; same identity NOTE; ran `gog auth list` for the calendar question | NOTE (O4) |
+| §1B.2–1B.5, 1B.8 | snapshot, self-recognition, inject/recall/update, two real tasks, hygiene; sampled file:line opened directly | pass |
+| §1B.6, §1B.7, §1B.9, c6, footer % | not run | not measured (operator) |
+| §1B.7a pre-check | 39693 ≥ 20000: would-compact, summarize 7, prefix 1, split true; `tokensBefore` 254766 (Claude-side occupancy; context window 1M, automatic threshold about 983,616) | — |
+| c0 | split; two summary children `84b9003a` (07:59:52–08:00:17Z) and `03bce7a8` (08:00:18–08:00:28Z) | pass |
+| c1 | compaction `86573f59`, 8686 characters; 0 of `[acp:`/`[tool:`/ANSI/C0; `fromHook` false; read/modified files empty; one split joiner | pass |
+| c2 | old children 1027583/1027599 gone, 0 ACP children under pi; two observers (examiner 17:01:19, reviewer 17:01:27), both before the next prompt; 0 "unexpected end". Caveat: the summary children's appearance is shown by transcript, not a live `ps` | **PASS** |
+| c3 | first notice `[acp: preparing claude session]`; new child `99a4b1d4`: first user message, second block `User: The conversation history before this point was compacted…`, then the kept tail | pass |
+| c4 | code word verbatim, latest fact correct, finished/remaining/decisions kept apart | pass (quality observation) |
+| c5 | "delivery path read + non-use observed (summary child transcripts have 0 tool_use, ended end_turn); the provided tool set is unobserved" | recorded |
+
+Findings: **D1** (next lane, source checkouts only) AGENTS.md Rule 11 "run_ts is the sole TS crossing" disagrees with `mcp/entwurf-bridge/start.sh:67-68`: an installed copy runs `dist` only (`:55-63`), a source checkout runs `src/` by location through strip-types (`:47-51`, intended). Measured: the ACP-side bridge ran `--experimental-strip-types …/src/index.ts`, Pi's built-in one `dist/…/index.js`; both live under one owner checkout, so a stale `dist` could split their behavior (unmeasured risk). The wording of the Hard Rule is GLG's. **D2** (fixed in 0.53.1) VERIFY §1B.0's "`dist/` is the bytes live bridges load" was half true; **D3** (fixed in 0.53.1) the §1B.8 `jq` comment "notices only" also matches the #163 display-only tool lines, which share the signature (`event-mapper.ts:489-500`; the examiner counted 12 `[acp:` lines among 457). **O1** the examiner's long answers that lived only in tool input were not in Pi's estimate (2349 after turn 2; 26986 once written as assistant text). **O2** c3 wording (applied). **O3** (next lane) the summary held the old fact; the update travelled in the kept tail, and recall was correct. **O4** (GLG decision) the b3e007 summary mentions gog, scope and calendar (words only checked, content not read), and andenken embeds summaries as written, so whether its session file stays out of memory-sync is open. Note: an R2R `/compact` needs the operator's hands (Pi handles it from interactive input, `interactive-mode.js:2757-2758`).
+
+Boundary: one host with shared bridge, MCP and overlay, n=1, below L4. Effort, ESC, cancel, gates and footer % were not measured; the summary child's provided tool set is unobserved; this is success at a short context (Pi about 40k, Claude about 250k), not long-run durability. Siblings 262958 and b3e007 are alive.
+
 ## Superseded / retired material (not instructions, not a gate)
 
 Moved verbatim out of [BASELINE.md](../BASELINE.md) by the 0.53.1 documentation diet. It is history for a reader of old receipts: nothing here is a question to ask a session, a release gate or a current support verdict. The question IDs below are stable names for old results.

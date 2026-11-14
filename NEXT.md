@@ -7,10 +7,10 @@
 - [x] **1. 0.53.0 cut.** tag `v0.53.0`(`72975b0`)과 GitHub release(2026-11-13)까지 했다. npm에는 게시하지 않는다(GLG 결정). 2026-11-14 측정으로 npm `latest`는 0.52.0이다.
 - [x] **2. #163 브랜치 `fix/163-acp-control`.** claude-agent-acp 0.107.0 `7c98f8b4`, 정확한 manual `/compact` `5b7f7c24`·`7eb200a9`, Pi 같은 가시성 `e96403ec`·`f25c78de`. PARTIAL green(`f25c78de`), frozen FULL green(`17244d48`, rc=0, 1011s).
 - [x] **3. land.** main=origin/main=`7a100e89`, exact-SHA CI run 43570025312 의 4개 job 모두 success, 브랜치 `fix/163-acp-control` 삭제(b3fc7c 보고, ff08d4 전달).
-- [ ] **4. 전역 설치 → ACP Opus 5.5로 BASELINE·VERIFY 검수.** 수동 `/compact` 셀과 가시성을 본다. 하지 못한 셀은 UNMEASURED로 명시한다. ← CURRENT (문서 커밋 BASELINE/VERIFY 다이어트 + WHY + /compact 셀 이후 02055a R2R).
-- [ ] **5. prepare → make.** 문서·WHY 절·VERIFY compact 셀·CHANGELOG·버전 0.53.1. 작성자 바통은 Sonnet `20261114T155010-f17cd8`이 받는다. make의 M0 FULL이 prepared HEAD를 다시 덮는다. npm publish는 GLG가 직접 한다.
+- [x] **4. 전역 설치 → ACP Opus 5.5로 BASELINE·VERIFY 검수 (R2R, 2026-11-14).** BASELINE 블라인드 PASS(정체성 "Claude Code"는 GLG가 문제없음으로 판정), §1B.2~5 pass, §1B.6/7 not measured, §1B.7a는 c0·c1·c3 pass, c2 PASS 또는 PARTIAL, c4 정답, c5 non-use observed·provided set unobserved, c6·footer % not measured. 기록은 docs/baseline-receipts.md "0.53.1 BASELINE and VERIFY run".
+- [ ] **5. prepare → make.** 문서·WHY 절·VERIFY compact 셀·CHANGELOG·버전 0.53.1. 작성자 바통은 Sonnet `20261114T155010-f17cd8`이 받는다. make의 M0 FULL이 prepared HEAD를 다시 덮는다. npm publish는 GLG가 직접 한다. ← CURRENT: prepare 편집(CHANGELOG 0.53.1, package 0.53.1, herdr lock/README) 완료 후 P4 FULL·P5 LIVE는 b3fc7c가 동결 트리에서.
 
-현재 좌표: 1·2·3 완료 → 4 실사용 검수(CURRENT) → 5 prepare/make
+현재 좌표: 1~4 완료 → 5 prepare(CURRENT: 기록 편집 끝, floor 대기) → make
 
 # NOW
 
@@ -67,3 +67,10 @@
 
 - #163 thread, #161, `docs/acp-backend-rail.md`, VERIFY.md Part I, BASELINE.md core interview, `docs/baseline-receipts.md`.
 - 0.53.0 증거는 `CHANGELOG.md` 0.53.0 Release evidence와 `.agent-reports/verify-1b-walk-20261113.md`(host-local)에 있다. 0.52.0 출하 영수증은 Herdr tag `v2026.11.12-herdr.0.52.0`, `docs/setup-clean-host.md`, `~/.local/state/entwurf-releases/`에 있다.
+
+# 이월 (post-publish 및 결정 대기)
+
+- **post-publish로 이월 (ff08d4 2026-11-14):** docs/setup-clean-host.md의 "published 0.52.0" 14곳, docs/acp-backend-rail.md:199-209의 "No npm release carries"/"unshipped", ROADMAP.md:14·575-576의 미출하 문구, Herdr re-pin. GLG가 publish한 뒤 U2/U3와 함께 사실대로 바꾼다. plugins/herdr README의 "unpublished"는 이번에 0.53.1로 맞췄고 게시 뒤 "published"로 바뀐다.
+- **R2R 발견 (02055a 합본):** D2(VERIFY.md:56 dist/src 문장)·D3(§1B.8 jq 주석)·O1·O2·"operator 손 필요"는 이번 커밋에서 VERIFY에 반영했다(바이트 순감 유지: 120927→120815). **D1(다음 레일):** AGENTS.md Rule 11 "run_ts is the sole TS crossing"과 mcp/entwurf-bridge/start.sh:47-68(소스 체크아웃은 src를 strip-types로 실행)이 어긋난다. 문안은 GLG가 정한다. 같은 owner 체크아웃에서 ACP 쪽 bridge는 src, Pi 내장은 dist라 dist가 낡으면 갈라질 수 있다(미측정). **O3(다음 레일):** summary에는 옛 사실만 있고 갱신은 kept tail이 운반했다. 다음 VERIFY 다이어트 후보는 §1A Layers 1–4.
+- **run.sh:7787 주석** 의 "VERIFY.md:61"은 낡았지만 check-install-surface S9h가 검토된 dispatch case를 바이트로 비교하므로 S9h의 reviewed 바이트와 함께 고쳐야 한다.
+- **GLG 결정 대기:** #161 판단, 형제 262958과 b3e007 처리, **O4:** b3e007 summary에 gog·scope·calendar 단어가 있고 andenken이 summary를 그대로 임베딩하므로 그 세션 파일을 memory-sync에서 뺄지.

@@ -4,6 +4,64 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+## 0.53.1 — 2026-11-14
+
+### What an npm user gets
+
+0.53.0 exists as a tag and a GitHub release only; it was never published to npm. For a user who installs from npm, 0.53.1 is the next version after 0.52.0, so everything under 0.53.0 below ships with it for the first time: the Claude ACP 0.106 set (#142), Cortex ACP disabled, the long-tool progress line (#162), and the verification documents. This section lists only what 0.53.1 adds on top.
+
+### Claude ACP 0.107 and a working manual `/compact` (#163)
+
+- **Driver 0.107.0.** `@agentclientprotocol/claude-agent-acp` 0.106.0 → 0.107.0 and the transitive `claude-agent-sdk` 0.3.322 → 0.3.323; the ACP wire SDK stays 2.6.0 and the Pi 1.5.2 set is unchanged (`7c98f8b4`). Static reading of both tarballs found `steer()` moved to its own module and no compaction diff; the new surfaces are retracted tool calls and `rate_limit` `resetsAt`.
+- **Manual `/compact` no longer refuses.** Every Pi-side summary on a Claude ACP model (`/compact`, the threshold, overflow recovery, `/tree` branch summaries) used to be refused by the tool-surface preflight, which read Pi's tool-less summary request as "read/bash/edit/write excluded"; this held since v0.24.0. A request with an empty replayed tool surface and `cacheRetention: "none"` is now Pi's summary request and runs as a one-shot turn on a new child with no tools, MCP servers, plugins, pre-approvals or setting sources, no augment and no notice, so the stored summary is exactly the model's text. An ordinary turn with every tool excluded still refuses. A `cancelled` stop that Pi did not abort is sealed as an error so Pi never keeps the partial text. After a compaction the session's retained Claude child is closed at once, and the next turn opens a new child from the compacted transcript (`5b7f7c24`, review corrections `7eb200a9`). Contract: `docs/acp-backend-rail.md` §11-10.
+- **The automatic threshold is not changed**, and the compaction inside a prompt the backend itself runs stays the backend's.
+
+### ACP tool visibility closer to Pi (#163, extends #162)
+
+- **M1 — running command.** The `[tool:running]` line names the command instead of "Terminal" once the title arrives; a beat in the same update prints alone.
+- **M2 — output preview.** A finished call previews at most 5 lines and 400 bytes of its output: head on success, tail on failure, nothing when the one-line summary already holds it, indentation kept.
+- **M3 — backend compaction.** The backend's own compaction shows trigger, tokens before and after, duration and failure on one `[acp: compaction …]` line, once.
+- **Control codes.** Every notice and preview line is cleaned the way Pi cleans tool output (ANSI/OSC and C0 controls removed), plus DEL and C1; the mapper's expression is compared against Pi's installed functions in a test (`e96403ec`, `f25c78de`). Contract: §11-11.
+- All new lines are signed, so they stay out of transcript replay, the reuse signature and andenken `control-v1` embedding. They are display-only.
+- Frames follow 0.107.0 as read, not a live capture.
+
+### Verification documents (0.53.1)
+
+- `BASELINE.md` and `VERIFY.md` each open with "Why this exists" (GLG's account: why the interview checks a pi-sized Claude, and why a session that passes becomes the examiner in the replicant-to-replicant walk).
+- `VERIFY.md` §1B.7a adds the manual `/compact` cell: Pi's own cut threshold (a transcript estimate of `keepRecentTokens`, default 20000, after the first user message; not Claude's occupancy), seven observations c0–c6, and `UNMEASURED` recording when compaction cannot be reached.
+- Both files shrink: BASELINE.md 38211 → 18318 bytes, VERIFY.md 120927 → 120815 bytes. The retired optional rounds, question IDs, answer guide, paused agy and Cortex baselines and the long release-host rows moved verbatim to `docs/baseline-receipts.md` ("Superseded / retired material"), which is read on GitHub and is not in the npm package.
+
+### Verification run on this candidate (R2R, 2026-11-14)
+
+n=1 on one host (oracle), run by an examiner session on this candidate (`a80518d1`) with GLG typing `/compact` himself; the full record is in `docs/baseline-receipts.md`.
+
+- **BASELINE blind pass: PASS** (subject `262958`; the sibling it opened, `b3e007`, passed the carrier part with a NOTE). Both called themselves "Claude Code"; GLG ruled that is not a defect. A memory question drew an `update-config` mention: NOTE.
+- **VERIFY §1B.2–5 and §1B.8: pass. §1B.6 effort, §1B.7 ESC, §1B.9 gates, c6 cancel and footer %: not measured.**
+- **§1B.7a manual `/compact`:** c0 split turn with two summary children pass; c1 summary clean (0 notice or control characters) pass; **c2 old child closed before the next prompt: PASS** (two observers; the summary children's appearance is shown by transcript, not a live `ps`); c3 new bootstrap from the summary pass; c4 code word and latest fact correct (quality observation); c5 "non-use observed, provided tool set unobserved". Short context (Pi about 40k, Claude about 250k), so not long-run durability.
+- **Found and fixed here:** VERIFY's description of which bridge bytes are live was half true (D2), and the §1B.8 `jq` comment "notices only" also matched the new tool lines (D3). **Left for the next lane:** the source-checkout bridge runs `src/` through strip-types while AGENTS.md Rule 11 says `run_ts` is the sole TS crossing (D1, wording is GLG's).
+
+### Herdr preparation
+
+Carried from 0.53.0: while 0.53.1 is unpublished, `runtime-lock.json` stays on the closed `herdr-checkout` verification carrier and no npm 0.53.1 bytes or integrity are invented. The last published npm pin remains 0.52.0.
+
+### Not changed
+
+A steer or stop to a busy ACP sibling still waits for the whole ACP turn (§11-9); no steering injection and no stop verb were added. The stop means is the local ESC.
+
+### Release evidence
+
+The candidate is `a80518d1` (the documentation diet, WHY sections and manual `/compact` cell) on top of `7a100e89` (main after the #163 land) and the release-record edits of this section. Floors ran on that tree before this section's evidence was written; the seal below binds the tree they ran on, and the make step's M0 floor covers the committed prepared HEAD.
+
+- P4 (deterministic floor), seal `f9d5acae58318dd4` (before = after; sha256 of HEAD + `git diff --binary` + `git diff --cached --binary` + untracked sha256sums, first 16 hex; no untracked files): `pnpm run build-bridge` rc=0 and byte-identical to the preserved dist manifest, then `pnpm run check:full` exit 0 in 978s. Log SHA-256 `f661de593de259721452e8fd14bc541aee2760d10aedae780d2948e12108e9f8`. This change moved no gate, mutant or matrix, so no PARTIAL group applies.
+- P5 (LIVE `release-gate --cut`) on the same seal, 2026-11-14: MUST 24 PASS / 0 FAIL / 0 SKIP, BEHAVIOR 1 PASS / 0 FAIL / 0 SKIP; `cut: OK`, rc=0, 1280s. Log SHA-256 `2a0d59b799610cdf5bc3210f25363d2c47079b4b1e74993bcfaaea46853be2db`; scratch `/tmp/entwurf-release-gate-0.53.1.ie8IEn`.
+  - `smoke-codex-fresh-live` ran against an app-server started for this cut (`entwurf codex-app-server`, pid 1047942, in the tmux session `codex-as-0531`, separate from the gate's session), stopped after the run. Codex model `gpt-6.1-terra`, pi-side `openai-codex/gpt-6.1-terra`. No exception was used.
+- P9 after P5: reclaimable roots 0, nothing deleted. One reparented `/tmp` process, the Emacs daemon running since November 9. About 103 roots each of `mux-resume-call-pd`, `herdr-resume-pd-pkg`, `herdr-resume-pd-nolauncher` and `herdr-resume-call` remain (87 after the 0.53.0 gate); they come from the beside-behaviour `*resume-call.test.ts` files, outside the owned-prefix scan. Recorded, not deleted.
+- Kill-power re-measured at this shipped SHA: none (all committed claims not re-proved, #144).
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head f25c78dea35d surface 59cf75be0f02 -- ["bash","run.sh","check-acp-set-model-readback"] 44/44 receipt 32bd052290f7
+- Earlier-candidate PARTIAL (operator-attested, not this SHA): head f25c78dea35d surface 59cf75be0f02 -- ["bash","run.sh","check-acp-prompt-lifecycle"] 15/15 receipt e6cf8a16e881
+- Earlier checkpoints, binding their own trees: #163 branch frozen FULL green at `17244d48`; main `7a100e89`, exact-SHA CI run 43570025312, four required jobs success.
+- Exact prepared-SHA CI and the artifact acceptance belong to make and produce their own receipts.
+
 ## 0.53.0 — 2026-11-13
 
 ### Claude ACP 0.106 (#142)
