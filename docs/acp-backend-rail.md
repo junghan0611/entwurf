@@ -912,9 +912,18 @@ this file.
 - `[tool:running] <title>` without elapsed time names a call once its title is known: a Bash call
   opens as "Terminal" and its command arrives as a title-only update. A beat in the same update
   already names the title, so it prints alone.
-- `[tool:output]` shows at most 5 lines and 400 UTF-8 bytes of a finished call's output, with each
-  line passed through the notice sanitizer: the head on success, the tail on failure. When the
-  whole output fits on the one-line summary, it is not shown.
+- `[tool:output]` shows at most 5 lines and 400 UTF-8 bytes of a finished call's output: the head
+  on success, the tail on failure. A line keeps its indentation (tabs expand to three spaces), so a
+  stack trace or a diff reads as in Pi. When the whole output fits on the one-line summary, it is
+  not shown.
+- Every line, one-line or preview, is cleaned the way Pi cleans tool output before showing it
+  (pi-coding-agent 1.5.2 `getTextOutput`: `stripAnsi`, then `sanitizeBinaryOutput`, then CR
+  dropped), with DEL and C1 also removed. Pi's own range would leave an 8-bit OSC (`0x9D` … `0x9C`)
+  intact. Pi does not export these helpers from its root, so the mapper carries the same
+  expression, and a test compares it with Pi's installed functions. pi-tui's public
+  `stripTerminalSequences` is not a substitute: it ends a CSI only on `m/G/K/H/J` and scans ahead
+  for one, so on tool output it deletes text (`"\x1b[2A keep this text then Hm"` → `"m"`, measured
+  2026-11-14 at pi-tui 1.5.2). No strip-ansi or ansi-regex package is in the dependency tree.
 - `[acp: compaction <trigger>[ failed] <pre>[→<post>][ in <duration>]]` reports the backend's own
   compaction from the `rawOutput` facts of its `compact` tool call, once per compaction.
 

@@ -184,17 +184,60 @@ function pushNotice(state: AcpPiStreamState, text: string): void {
 	state.stream.push({ type: "text_end", contentIndex: index, content: text, partial: state.output });
 }
 
+// #163: terminal escape sequences, the same range Pi strips from tool output before it shows it
+// (pi-coding-agent 1.5.2 `dist/utils/ansi.js` `stripAnsi`, derived from chalk/ansi-regex, MIT,
+// Copyright (c) Sindre Sorhus). OSC runs to its first terminator (BEL, ESC \\ or 0x9C); CSI and
+// its relatives take optional parameters and one final byte. Pi does not export it from its
+// package root, and this bridge imports Pi only by the root (`check-pi-import-surface`).
+const ANSI_SEQUENCE = new RegExp(
+	"(?:\\u001B\\][\\s\\S]*?(?:\\u0007|\\u001B\\u005C|\\u009C))|" +
+		"(?:(?:\\u001B\\[|\\u009B)[<=>]|[\\u001B\\u009B][[\\]()#;?]*)(?:\\d{1,4}(?:[;:]\\d{0,4})*)?[\\dA-PR-TZcf-nq-uy=><~]",
+	"g",
+);
+// What is left that a terminal would act on: C0 except tab, LF and CR; DEL and C1; and
+// U+FFF9..U+FFFB, which Pi also drops because they crash width measurement
+// (`dist/utils/shell.js` `sanitizeBinaryOutput`).
+// biome-ignore lint/suspicious/noControlCharactersInRegex: matching these characters is the point.
+const CONTROL_CHARS = /[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F\uFFF9-\uFFFB]/g;
+
+/**
+ * #163: no text that a backend or a tool's output supplies reaches the operator's terminal as a
+ * control sequence. A window-title OSC 0 or a clipboard-write OSC 52 in a command's output would
+ * otherwise pass straight through the notice line and the pi-tui renderer. Every notice text
+ * goes through here: title, summary, preview and permission.
+ */
+function stripTerminalControls(text: string): string {
+	return text.replace(ANSI_SEQUENCE, "").replace(CONTROL_CHARS, "");
+}
+
+/** Neutralize backtick fences (which would swallow following lines in chat renderers) and clip with an ellipsis. */
+function fenceSafeClip(text: string, max: number): string {
+	const fenceSafe = text.replace(/`{3,}/g, "[fence]").replace(/`/g, "'");
+	if (fenceSafe.length <= max) return fenceSafe;
+	return `${fenceSafe.slice(0, max - 1)}…`;
+}
+
 /**
  * Sanitize an inline fragment for the one-line `[tool:*]` / `[permission:*]`
- * notice surface: collapse whitespace, neutralize backtick fences (which would
- * otherwise swallow following lines in chat renderers), truncate with ellipsis.
+ * notice surface: strip terminal controls, collapse whitespace, neutralize
+ * backtick fences, truncate with ellipsis.
  */
 export function sanitizeNoticeFragment(text: string | null | undefined, max: number): string {
 	if (!text) return "";
-	const collapsed = text.replace(/\s+/g, " ").trim();
-	const fenceSafe = collapsed.replace(/`{3,}/g, "[fence]").replace(/`/g, "'");
-	if (fenceSafe.length <= max) return fenceSafe;
-	return `${fenceSafe.slice(0, max - 1)}…`;
+	return fenceSafeClip(stripTerminalControls(text).replace(/\s+/g, " ").trim(), max);
+}
+
+/**
+ * #163: one line of an output preview. Unlike a notice fragment it keeps its indentation, so a
+ * stack trace, YAML or a diff reads as it does in Pi: controls stripped, CR dropped and tabs
+ * expanded to three spaces as Pi's tool renderer does (`dist/core/tools/render-utils.js`
+ * `replaceTabs`), trailing space trimmed.
+ */
+function sanitizePreviewLine(line: string): string {
+	return fenceSafeClip(
+		stripTerminalControls(line).replace(/\r/g, "").replace(/\t/g, "   ").trimEnd(),
+		PREVIEW_MAX_BYTES,
+	);
 }
 
 function firstTextItem(arr: unknown[]): string | undefined {
@@ -375,7 +418,7 @@ function clipBytes(text: string, maxBytes: number, fromTail: boolean): string {
 function previewOf(raw: string, failed: boolean): string | undefined {
 	const lines = unfence(raw)
 		.split("\n")
-		.map((line) => sanitizeNoticeFragment(line, PREVIEW_MAX_BYTES));
+		.map((line) => sanitizePreviewLine(line));
 	while (lines.length > 0 && lines[0] === "") lines.shift();
 	while (lines.length > 0 && lines[lines.length - 1] === "") lines.pop();
 	if (lines.length === 0) return undefined;

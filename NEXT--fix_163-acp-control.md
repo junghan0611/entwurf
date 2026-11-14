@@ -25,7 +25,11 @@
 - **Observation (기록만, 작업 아님):**
   - O3: 오라클은 pi `sdk`/`modelRuntime` 구간(`agent.streamFunction`이 provider로 가는 길)을 덮지 않는다. streamFn을 직접 꽂는다.
   - O5: `/new`나 fork 뒤에 `session_compact`의 sessionId 키가 어긋날 때 무해한 no-op인지는 확인하지 않았다.
-  - M2 미리보기의 줄 정리는 기존 `sanitizeNoticeFragment`를 그대로 쓴다. 이 규칙은 공백 이외의 제어문자(ANSI ESC 등)를 지우지 않는다. 지금은 기록만 한다.
+  - C3 리뷰(02055a → ff08d4, 2026-11-14)에서 나온 Observation:
+    - O-2: 미리보기 본문은 pi-tui가 Markdown으로 해석할 수 있다.
+    - O-3: Read/Edit 출력에서 fence를 벗긴 뒤에도 `'`가 남을 수 있다.
+    - O-4: 바이트 자르기는 grapheme이 아니라 code point 경계에서 한다.
+    - O-5: title이 여러 번 바뀌는 reporter는 running 줄을 여러 번 낼 수 있다.
   - M2b: done/failed summary의 `[fence]console …` 꼴은 replay 텍스트라 이번에 바꾸지 않는다(ff08d4 2026-11-14).
 - **C2 메모:** 내 abandon 리팩터 때문에 기존 mutant `acp-prompt-lifecycle/IDLE-DEATH-ANNOUNCED`의 find를 고쳤다(로컬 KILLED 확인). 이 lane도 RAIL 4 PARTIAL에 넣는다. PARTIAL 대상 lane: `acp-set-model-readback`(#163 새 19개, 합계 40), `acp-prompt-lifecycle`(find 수정 1개), SDK-surface 오라클.
 - **LIVE `/compact` n=1 측정 항목 (RAIL 4):** summary가 저장되는지, summary에 notice가 0인지, compact 직후 기존 자식이 닫히는지, 다음 턴이 새 자식을 여는지. 그리고 O6: `_meta.claudeCode.options.tools: []`가 실제로 도구 0으로 해석되는지(요약 자식이 도구를 부를 수 없는지).

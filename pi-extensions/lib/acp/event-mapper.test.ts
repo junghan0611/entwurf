@@ -20,7 +20,12 @@
 import type { AssistantMessage, AssistantMessageEvent } from "@earendil-works/pi-ai";
 import { createAssistantMessageEventStream } from "@earendil-works/pi-ai";
 import { describe, expect, it } from "vitest";
-import { applyAcpSessionUpdate, createAcpStreamState, finalizeAcpStreamState } from "./event-mapper.ts";
+import {
+	applyAcpSessionUpdate,
+	createAcpStreamState,
+	finalizeAcpStreamState,
+	pushPermissionNotice,
+} from "./event-mapper.ts";
 
 const LIFECYCLE_NOTICE_SIGNATURE = "entwurf:lifecycle-notice-v1";
 const ID = "toolu_0175FsHwjCbqYr9QAemUSDng";
@@ -71,7 +76,10 @@ async function drive(
 		},
 	);
 	stream.push({ type: "start", partial: state.output });
-	for (const u of updates) applyAcpSessionUpdate(state, u);
+	for (const u of updates) {
+		if (typeof u.permission === "string") pushPermissionNotice(state, u.permission, "approved");
+		else applyAcpSessionUpdate(state, u);
+	}
 	finalizeAcpStreamState(state);
 	stream.push({ type: "done", reason: "stop", message: state.output });
 	const events: AssistantMessageEvent[] = [];
@@ -229,5 +237,88 @@ describe("the backend's own compaction, in numbers (#163 M3)", () => {
 			compactEnd("failed", { trigger: "automatic", preTokens: 1_250_000, error: "prompt is too long" }),
 		]);
 		expect(acpLines(output)).toEqual(["[acp: compaction automatic failed 1.3M]"]);
+	});
+});
+
+// A command's output, or a title, that tries to act on the operator's terminal.
+const OSC52 = "\u001B]52;c;ZXZpbA==\u0007";
+const OSC0 = "\u001B]0;pwned\u001B\\";
+const CSI = (text: string) => `\u001B[31m${text}\u001B[0m`;
+const C1CSI = "\u009B2J";
+const LOOSE = "\u0008\u007F\u0085";
+const hostile = (label: string) => `${label}${OSC52}${OSC0}${CSI("red")}${C1CSI}${LOOSE}`;
+/** A character a terminal acts on: C0 except tab and LF (CR included), DEL and C1. */
+const terminalActive = (text: string) =>
+	Array.from(text).filter((ch) => {
+		const code = ch.codePointAt(0) ?? 0;
+		return (code < 0x20 && code !== 0x09 && code !== 0x0a) || (code >= 0x7f && code <= 0x9f);
+	});
+
+async function hostileTurn(): Promise<string[]> {
+	const out = [hostile("first"), ...lines("line", 7), hostile("last")].join("\n");
+	const { output } = await drive([
+		{ ...START, title: hostile("title") },
+		finished("failed", `\`\`\`\n${out}\n\`\`\``),
+		{ permission: hostile("perm") },
+	]);
+	return output.content.flatMap((c) => (c.type === "text" ? [c.text] : []));
+}
+
+describe("no output reaches the terminal as a control sequence (#163, 02055a review)", () => {
+	it("[QK:ACP-NOTICE-NO-TERMINAL-CONTROL] title, summary, preview and permission lines carry no escape or control character", async () => {
+		const blocks = await hostileTurn();
+		expect(blocks.some((t) => t.includes("[tool:output]"))).toBe(true);
+		expect(blocks.some((t) => t.includes("[permission:approved]"))).toBe(true);
+		for (const text of blocks) expect(terminalActive(text)).toEqual([]);
+	});
+
+	it("[QK:ACP-NOTICE-ANSI-WHOLE] an escape sequence goes whole, leaving neither its payload nor its parameters as text", async () => {
+		const text = (await hostileTurn()).join("");
+		for (const residue of ["]52;", "ZXZpbA==", "]0;", "pwned", "[31m", "[0m", "2J"])
+			expect(text).not.toContain(residue);
+		expect(text).toContain("titlered");
+		expect(text).toContain("lastred");
+	});
+});
+
+describe("a preview keeps the shape of the output (#163, 02055a review)", () => {
+	it("[QK:ACP-TOOL-OUTPUT-INDENT-KEPT] indentation survives and tabs expand, as Pi shows a stack trace", async () => {
+		const trace = ["TypeError: boom", "    at f (a.ts:1:1)", "\tat g (b.ts:2:2)", "  - key: value"].join("\n");
+		const { output } = await drive([START, TITLE, finished("failed", `\`\`\`\n${trace}\n\`\`\``)]);
+		expect(previewOf(output)).toBe(
+			`\n[tool:output] ${COMMAND}\nTypeError: boom\n    at f (a.ts:1:1)\n   at g (b.ts:2:2)\n  - key: value\n`,
+		);
+	});
+});
+
+// Pi's own tool-output path, read from the installed package as pi-durable-carrier.test.ts does:
+// `getTextOutput` applies `sanitizeBinaryOutput(stripAnsi(text)).replace(/\r/g, "")` (pi-coding-agent
+// 1.5.2 `dist/core/tools/render-utils.js:56`) and the renderer expands tabs to three spaces. Neither
+// helper is exported from the package root.
+const piDist = new URL(".", import.meta.resolve("@earendil-works/pi-coding-agent"));
+const { stripAnsi } = (await import(new URL("utils/ansi.js", piDist).href)) as { stripAnsi: (s: string) => string };
+const { sanitizeBinaryOutput } = (await import(new URL("utils/shell.js", piDist).href)) as {
+	sanitizeBinaryOutput: (s: string) => string;
+};
+const piShows = (line: string) => sanitizeBinaryOutput(stripAnsi(line)).replace(/\r/g, "").replace(/\t/g, "   ");
+
+describe("a preview line is what Pi shows for the same output (#163, GLG 2026-11-14)", () => {
+	it("[QK:ACP-PREVIEW-MATCHES-PI] each line equals Pi's own sanitizing, with DEL and C1 also removed", async () => {
+		const corpus = [
+			`ok ${OSC52}${OSC0}${CSI("red")} done`,
+			`\tindented\u0008 with BS and lone BEL\u0007 and CR\r`,
+			`8-bit CSI ${C1CSI} and 8-bit OSC \u009D52;c;eA==\u009C end`,
+			"annotation \uFFF9marks\uFFFA gone\uFFFB",
+			"unterminated \u001B]52;c;abc",
+		];
+		const { output } = await drive([START, TITLE, finished("completed", corpus.join("\n"))]);
+		const body = (previewOf(output) ?? "").split("\n").slice(2, -1);
+		expect(body).toEqual(
+			corpus.map((line) =>
+				piShows(line)
+					.replace(/[\u007F-\u009F]/g, "")
+					.trimEnd(),
+			),
+		);
 	});
 });

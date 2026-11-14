@@ -467,6 +467,50 @@
 			"timeoutSeconds": 60,
 			"signature": "[QK:ACP-COMPACTION-FAILED]",
 			"signatureSource": "pi-extensions/lib/acp/event-mapper.test.ts"
+		},
+		{
+			"claim": "ACP-NOTICE-NO-TERMINAL-CONTROL",
+			"title": "tool output and titles reach the terminal raw — an OSC 52 in a command's output writes the operator's clipboard, an OSC 0 retitles the window",
+			"subject": "pi-extensions/lib/acp/event-mapper.ts",
+			"find": ["\treturn text.replace(ANSI_SEQUENCE, \"\").replace(CONTROL_CHARS, \"\");"],
+			"replace": ["\treturn text;"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-NOTICE-NO-TERMINAL-CONTROL]",
+			"signatureSource": "pi-extensions/lib/acp/event-mapper.test.ts"
+		},
+		{
+			"claim": "ACP-NOTICE-ANSI-WHOLE",
+			"title": "only the escape byte is dropped — each sequence's parameters and payload (a clipboard base64, a colour code) stay on screen as text",
+			"subject": "pi-extensions/lib/acp/event-mapper.ts",
+			"find": ["\treturn text.replace(ANSI_SEQUENCE, \"\").replace(CONTROL_CHARS, \"\");"],
+			"replace": ["\treturn text.replace(CONTROL_CHARS, \"\");"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-NOTICE-ANSI-WHOLE]",
+			"signatureSource": "pi-extensions/lib/acp/event-mapper.test.ts"
+		},
+		{
+			"claim": "ACP-TOOL-OUTPUT-INDENT-KEPT",
+			"title": "a preview collapses each line's whitespace — a stack trace, YAML or diff loses its indentation",
+			"subject": "pi-extensions/lib/acp/event-mapper.ts",
+			"find": ["\t\t.map((line) => sanitizePreviewLine(line));"],
+			"replace": ["\t\t.map((line) => sanitizeNoticeFragment(line, PREVIEW_MAX_BYTES));"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-TOOL-OUTPUT-INDENT-KEPT]",
+			"signatureSource": "pi-extensions/lib/acp/event-mapper.test.ts"
+		},
+		{
+			"claim": "ACP-PREVIEW-MATCHES-PI",
+			"title": "a preview keeps characters Pi drops from tool output — U+FFF9..U+FFFB, which break width measurement, survive",
+			"subject": "pi-extensions/lib/acp/event-mapper.ts",
+			"find": ["/[\\x00-\\x08\\x0B\\x0C\\x0E-\\x1F\\x7F-\\x9F\\uFFF9-\\uFFFB]/g;"],
+			"replace": ["/[\\x00-\\x08\\x0B\\x0C\\x0E-\\x1F\\x7F-\\x9F]/g;"],
+			"gate": ["bash", "run.sh", "check-acp-set-model-readback"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:ACP-PREVIEW-MATCHES-PI]",
+			"signatureSource": "pi-extensions/lib/acp/event-mapper.test.ts"
 		}
 	]
 }
