@@ -92,11 +92,6 @@ Also: (a) if asked to commit something to memory, how do you handle it; (b) can 
 
 The optional rounds, the question-ID table and the per-question answer guide (Q-L1..Q-MCP) are retired material in [docs/baseline-receipts.md](./docs/baseline-receipts.md).
 
-> memory path / tools / context discovery / memory containment).
-> VERIFY.md's `L0–L5` are *evidence-quality levels*; DELIVERY.md's `D0–D8`
-> are *native async-delivery capability levels*. Same letters, different
-> axes — context disambiguates.
-
 
 ## Claude-specific surface
 
