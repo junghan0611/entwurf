@@ -18,7 +18,8 @@ import { birthOpenclawCitizen } from "../pi-extensions/lib/openclaw-birth.ts";
 import { openclawCitizensPath, readOpenclawCitizens } from "../pi-extensions/lib/openclaw-citizens.ts";
 import { OPENCLAW_BACKEND } from "../pi-extensions/lib/openclaw-send.ts";
 
-const USAGE = "usage: entwurf openclaw-birth --scope <scope> --session-key <agent:<id>:<key>> --cwd <absolute dir>";
+const USAGE =
+	"usage: entwurf openclaw-birth --scope <scope> --session-key <agent:<id>:<key>> --cwd <absolute normalized path>";
 const args = process.argv.slice(2);
 const flags = new Map<string, string>();
 for (let i = 0; i < args.length; i += 2) flags.set(args[i], args[i + 1]);

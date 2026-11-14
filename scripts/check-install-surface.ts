@@ -584,13 +584,13 @@ const operatorCmds = [...targets].filter(([cmd, ts]) => !isDevGate(cmd) && ts.le
 		// remote-pair-receive — receipts: the run.sh `openclaw-send)` / `openclaw-birth)` arms.
 		{
 			after: "  entwurf remote-pair-receive         # ",
-			line: "  entwurf openclaw-send               # #160, BRANCH candidate: the claim entry an OpenClaw plugin send tool runs once per call. Reads ONE JSON claim {v,scope,agentId,sessionKey,target,message,wantsReply} on stdin, refuses a (scope, key) outside this host's openclaw-citizens.json or a claim no single `openclaw` record carries before any mutation (a scope limit under the same-OS-account trust model, not authentication), then hands the record-backed sender to the existing v2 dispatch. Ambient sender carriers are never read. EXIT: 0 dispatched / 4 dispatched, the dispatch reported an error / 3 scope or record refused / 2 --decl is not this host's declaration, the declaration is absent or broken, or the claim is invalid (JSON receipt), or wrong argv (usage on stderr, no receipt) / 1 uncaught dispatch or store throw (no receipt; the plugin reads it as indeterminate) (--decl <absolute openclaw-citizens.json>)",
+			line: "  entwurf openclaw-send               # #160, BRANCH candidate: the claim entry an OpenClaw plugin send tool runs once per call. Reads ONE JSON claim {v,scope,agentId,sessionKey,target,message,wantsReply} on stdin, refuses a (scope, key) outside this host's openclaw-citizens.json or a claim no single `openclaw` record carries before any mutation (a scope limit under the same-OS-account trust model, not authentication), then hands the record-backed sender to the existing v2 dispatch. Ambient sender carriers are never read. EXIT: 0 dispatched / 4 dispatched, the dispatch reported an error / 3 scope refused, or no `openclaw` record carries the claim / 2 --decl is not this host's declaration, the declaration is absent or broken, or the claim is invalid (JSON receipt), or wrong argv (usage on stderr, no receipt) / 1 uncaught dispatch or store throw, including a store where two records carry one native id (the strict listing refuses; no receipt; the plugin reads it as indeterminate) (--decl <absolute openclaw-citizens.json>)",
 			receipt:
 				"run.sh `openclaw-send)` arm -> scripts/openclaw-send.ts: --decl must equal openclawCitizensPath(), absent/broken declaration or invalid claim -> invalid receipt exit 2, wrong argv exit 2 with usage, receiveOpenclawClaim scope + record join -> rejected exit 3, runAndRenderEntwurfV2FromSurface -> dispatched exit 0/4 (openclawSendExitCode), uncaught -> 1 (#160)",
 		},
 		{
 			after: "  entwurf openclaw-send               # ",
-			line: "  entwurf openclaw-birth              # #160, BRANCH candidate: the one writer of `openclaw` records. Checks the key against this host's openclaw-citizens.json, requires the declared Gateway's sessions.describe to answer alive, then upserts openclaw:<scope>:<sessionKey> idempotently (a re-birth attaches to the same garden id). --cwd is explicit: no OpenClaw read RPC returns a session root. Prints one JSON line {action,gardenId,nativeSessionId,cwd}; any refusal throws (exit 1); wrong argv exit 2 (--scope <s> --session-key <agent:<id>:<key>> --cwd <absolute dir>)",
+			line: "  entwurf openclaw-birth              # #160, BRANCH candidate: the one writer of `openclaw` records. Checks the key against this host's openclaw-citizens.json, requires the declared Gateway's sessions.describe to answer alive, then upserts openclaw:<scope>:<sessionKey> idempotently (a re-birth attaches to the same garden id). --cwd is explicit, absolute and normalized; the directory's existence is not checked (no OpenClaw read RPC returns a session root). Prints one JSON line {action,gardenId,nativeSessionId,cwd}; any refusal throws (exit 1); wrong argv exit 2 (--scope <s> --session-key <agent:<id>:<key>> --cwd <absolute normalized path>)",
 			receipt:
 				"run.sh `openclaw-birth)` arm -> scripts/openclaw-birth.ts: exactly --scope/--session-key/--cwd else usage exit 2; birthOpenclawCitizen declaration -> adapter probe alive -> upsert, refusals throw (exit 1); prints {action,gardenId,nativeSessionId,cwd} (#160)",
 		},
@@ -953,7 +953,7 @@ const operatorCmds = [...targets].filter(([cmd, ts]) => !isDevGate(cmd) && ts.le
 	// Coverage, read independently of the data. Operator commands are the case labels of the
 	// top-level dispatch: the `case "$cmd" in` after the `cmd=${1:-}` line, to the column-0 `esac`
 	// that closes it. That is a text read, so it is bound to the reviewed ce92dc7 case (plus its reviewed
-	// #153 two-arm amendment) by a byte pin
+	// amendments, each named beside the pin) by a byte pin
 	// — evidence for this change, not a ban on later dispatch work: a change to the case re-reviews
 	// its labels and moves the pin in the same change. The labels are not claimed to be
 	// runtime-proven. Gate commands are the check_/smoke_ functions bash itself defines when it reads
@@ -971,7 +971,7 @@ const operatorCmds = [...targets].filter(([cmd, ts]) => !isDevGate(cmd) && ts.le
 	// diff against the bfdafcfa… case is exactly those 13 added lines.
 	const REVIEWED_CASE_SHA256 = "6ca06d6809320e2879e8bf0eed8a9b93e1e525c3c77997cc70741b48299f70b0";
 	ok(
-		"[QK:CLI-HELP-DISPATCH-REVIEWED] S9h the case the operator labels are read from is the reviewed ce92dc7 case plus the reviewed #153 two-arm amendment, byte for byte",
+		"[QK:CLI-HELP-DISPATCH-REVIEWED] S9h the case the operator labels are read from is the reviewed ce92dc7 case plus its reviewed #153, #157 and #160 amendments, byte for byte",
 		start > 0 && caseAt > start && sha256(RUN_SH.slice(caseAt, end)) === REVIEWED_CASE_SHA256,
 		"the top-level case changed: re-review its labels against ENTWURF-CLI.json and the debt below, then move the pin",
 	);
