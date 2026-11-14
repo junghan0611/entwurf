@@ -1,39 +1,69 @@
-# NEXT — #142 마무리: 운영 dev판 실사용 담금질 → 릴리즈 준비
+# NEXT — 0.53.1: #163 ACP Claude 품질 레일 → 착지 → 실사용 검수 → 출하
+
+0.53.1은 아직 ACP Claude 품질을 올리는 레일이고 내용은 [#163](https://github.com/junghan0611/entwurf/issues/163)이다. 0.55.0은 #160이 준비될 때 간다(GLG 2026-11-14, ff08d4 전달).
 
 # RAIL — 현재 좌표
 
-- [x] **1. #142 일반 Pi ACP Claude main 착지.** 드라이버 0.106.0 · wire SDK 2.6.0 · effort 실설정/readback · ESC 경계. main `28f1dd8`, **미출하**(출하된 최신 0.52.0은 0.90.0 / 1.8.0).
-- [x] **2. 착지 정합과 #142 종결.** #142 close(종결 댓글 6842246704), 남은 검증 주제는 [#161](https://github.com/junghan0611/entwurf/issues/161).
-- [x] **3·4. 개발 checkout 운영 설치.** 2026-11-13 GLG가 사람 종료 창에서 실행했다. 설치 기록은 exit 4로 남는다: 당시 Claude 세션이 모두 닫혀 있어 `doctor-meta-bridge`가 live Claude MCP를 측정하지 못했다(NOT CERTIFIED). Pi 쪽 wiring과 writer parity는 통과했다. 재개 뒤 read-only doctor는 세 개 모두 green이었다: `doctor-meta-bridge` PASS, `doctor-pi-package` owned(checkout), `doctor-pi-provider` ok. 다만 `entwurf-statusline`이 아직 pnpm 0.52.0이라 exclusive는 아니다. 기록: `~/.cache/entwurf-devinstall-20261113/run-20261113T143126/`.
-- [x] **5. GLG baseline과 VERIFY 담금질.** baseline PASS, VERIFY·BASELINE 개정, §1B walk(n=1, Blocker 0), 소넷 인터뷰 PASS. 인터뷰에서 나온 D1을 `4ca9bb0`에서 고쳤고, LIVE n=1로 확인했다.
-- [ ] **6. 릴리즈 0.53.0.** ← CURRENT
-  - [x] land `234a92a` CI 4/4. prepare `1e487f7`에 이어 Cortex ACP 비활성화 `93eb879`를 넣었다. GLG가 make를 멈추고 Terra에게 맡겼고, 이어 ff08d4가 인계받았다.
-  - [x] 후보 `9c5fc2b`: #162 진행 표시 수정과 gate 경합 수정 `6402c6a`가 들어 있다. P4 green(998s), P5 r5는 MUST 24/0/0으로 `cut: OK`. Codex는 이번 cut을 위해 띄운 app-server(pid 3803464, `gpt-6.1-terra`)로 통과했다. 예외는 쓰지 않았다. 근거는 CHANGELOG 0.53.0 Release evidence에 있다.
-  - [ ] **다음 한 행동:** make. M0 FULL을 돌리고 push한 뒤 exact-SHA CI, M3w Windows carrier, container acceptance를 거친다. 그다음 tag, GitHub release 순이다. publish 명령 한 줄은 GLG에게 넘긴다.
-  - [ ] publish 후: Herdr에 npm 0.53.0을 re-pin하고 스냅샷 태그를 만든다. #161에 종결 댓글을 달고 닫는다.
-- Codex LIVE: vendor managed daemon(`--managed-daemon`)은 seat pane이 죽어 있으면 `smoke-codex-fresh-live`에서 A 좌표를 해석하지 못한다. 0.53.0 cut에서는 daemon을 멈추고 `entwurf codex-app-server`를 전용 tmux 세션에서 띄워 측정했다. daemon 복원은 `codex app-server daemon start`로 하고, GLG가 결정한다.
-- #163 다음 작업: 바쁜 ACP 형제에게 보낸 steer를 상류 `_session/steering`으로 실행 중인 턴에 주입한다. raw probe에서 약 1초 만에 닿는 것을 측정했다. 0.53.0을 출하한 뒤 별도 브랜치로 한다(GLG "162만넣자").
-- 관찰(이번 cut 밖): `check-acp-backend-preflight`는 thinking level 없이 backend를 부른다. 지금은 검사 순서 덕에 green이다(b3 O1). `*resume-call.test.ts`가 `/tmp` 디렉터리를 남긴다(P9).
-- **PAUSED:** #160 Oracle 실행(노트북 lane이 검수), durable ACP 통합.
+- [x] **1. 0.53.0 cut.** tag `v0.53.0`(`72975b0`)과 GitHub release(2026-11-13)까지 했다. npm에는 게시하지 않는다(GLG 결정). 2026-11-14 측정으로 npm `latest`는 0.52.0이다.
+- [x] **2. #163 브랜치 `fix/163-acp-control`.** claude-agent-acp 0.107.0 `7c98f8b4`, 정확한 manual `/compact` `5b7f7c24`·`7eb200a9`, Pi 같은 가시성 `e96403ec`·`f25c78de`. PARTIAL green(`f25c78de`), frozen FULL green(`17244d48`, rc=0, 1011s).
+- [ ] **3. land.** ← CURRENT: main으로 fast-forward한 뒤 push하고 exact-SHA CI를 확인한다. GLG가 승인했다(2026-11-14 16:1x KST, ff08d4 전달: "main land도 하면 된다. npm publish 전까지 쭉 가 봐").
+- [ ] **4. 전역 설치 → ACP Opus 5.5로 BASELINE·VERIFY 검수.** 수동 `/compact` 셀과 가시성을 본다. 하지 못한 셀은 UNMEASURED로 명시한다.
+- [ ] **5. prepare → make.** 문서·WHY 절·VERIFY compact 셀·CHANGELOG·버전 0.53.1. 작성자 바통은 Sonnet `20261114T155010-f17cd8`이 받는다. make의 M0 FULL이 prepared HEAD를 다시 덮는다. npm publish는 GLG가 직접 한다.
 
-현재 좌표: 1–5 완료 → 6 릴리즈 0.53.0 (후보 `9c5fc2b` P4/P5 green → make)
+현재 좌표: 1·2 완료 → 3 land(push·exact-SHA CI) → 4 실사용 검수 → 5 prepare/make
 
 # NOW
 
-- **증거:** walk 기록은 `.agent-reports/verify-1b-walk-20261113.md`(host-local)에 있고, #161 댓글에 요약했다.
-- **열린 후속:**
-  - O6: 0.106.0에서 system prompt가 어떻게 조립되는지 재측정하지 않았다. GLG 판단은 "홈 AGENTS를 봤다고 했으니 하지 않는다"이다.
-  - 형제 메시지(`custom_message` / tool result)는 임베딩에서 빠진다. GLG 판단은 "제외가 맞다"이고, agent-config가 `docs/memory-and-sessions.md`에 기록했다. entwurf는 바꾸지 않는다.
-  - **D1 수정 `4ca9bb0`(미push):** ACP Claude 모델(`entwurf/claude-*`)로 열린 pi 형제는 framing에서 Claude 표기 `mcp__entwurf-bridge__…`를 받는다. Cortex 표기는 미측정이라 그대로 두었다. PARTIAL 162/162, `check:full` green. ACP 모델로 여는 LIVE fresh-call 확인은 모델 호출이라 GLG go가 필요하다.
-  - autocompact: agent-config `9389087`에 반영됐다. Opus·Sonnet ACP에 `reserveTokens` 500000을 두었다. 운영 pi에는 `/reload` 또는 재기동해야 적용된다. entwurf 쪽 할 일은 없다.
-- **역할:**
-  - ff08d4: ACP 담당, 단일 writer, 실무 코디.
-  - b3fc7c: 독립 검수.
-  - c180ab(Terra): 넓은 readonly 검토.
-  - 68bd94: 운영 코디, GLG DM 단독.
-- **Do not touch:** 출하된 tag/npm bytes, 운영 profile·overlay·hook, credential, 회사 Cortex 실호출, worktree, `--no-verify`.
+- **다음 한 걸음:** main push의 exact-SHA CI 4개 job이 green이면 land가 닫힌다. 브랜치 `fix/163-acp-control`은 원격 반영을 확인한 뒤 지운다. 이 브랜치는 원격에 push된 적이 없다. 그 뒤 작성자 바통은 Sonnet(prepare 문서)에게 갔다가 b3fc7c(P4/P5 floor와 make)에게 돌아온다. Codex app-server는 ff08d4가 별도 tmux에서 띄우고, pid와 모델 triple을 전달한다.
+- **RAIL 4 LIVE 항목:**
+  - 수동 `/compact`는 c0–c6로 본다. 설계는 02055a, 초안은 oracle `/tmp/glg-0531/VERIFY-compact-cell.md`(휘발성)다.
+    - c0: would-compact 모양과 요약 자식 1–2개.
+    - c1: summary에 `[acp:`·`[tool:`·제어문자가 없다.
+    - c2: 다음 프롬프트 전에 옛 자식이 닫힌다.
+    - c3: 다음 턴이 `[acp: preparing claude session]`으로 summary에서 시작한다.
+    - c4: 이어지는 실제 작업에서 회상과 결정 구분이 되는지.
+    - c5: O6 `tools: []`. 전달 경로 읽기와 비사용 관측으로 적고, 제공된 도구 목록 자체는 관측되지 않는다고 적는다.
+    - c6(선택): ESC 취소.
+  - 수동 `/compact`의 문턱은 Pi transcript 추정치다. 첫 user 이후 `keepRecentTokens` 20000 이상이어야 하고, 목표는 30000 이상(약 8만 자)이다. footer의 %는 Claude 점유량이라 판정 기준이 아니다.
+  - 가시성: Bash가 "Terminal"에서 명령 이름으로 바뀌는 `[tool:running]` 줄, `[tool:output]` 미리보기(성공은 앞, 실패는 꼬리), 네이티브 compaction이 일어나면 `[acp: compaction …]` 줄.
+- **사용감 기록 (자문 a30dda 제안, 결재 조건 아님):** 평소 일 한 건을 ACP로 끝낸 뒤 GLG에게 묻는다.
+  1. 기다리는 동안 Claude가 무엇을 하는지 알았나.
+  2. ESC 뒤 상태를 알고 이어서 말할 수 있었나.
+  3. compact 뒤 최신 결정, 남은 일, 끝난 일이 구분됐나.
+  - 불편은 "하려던 일 / 화면 / 관측 / 수습" 네 칸으로 적는다.
+  - 관찰 항목: 턴이 끝난 뒤에도 사는 서브에이전트나 백그라운드 작업이 보이지 않는 사각.
+- **#163 Observation (기록만):**
+  - O3: 요약 오라클은 pi `sdk`/`modelRuntime` 구간을 덮지 않는다.
+  - O5: `/new`나 fork 뒤 `session_compact`의 sessionId 키가 어긋날 때 무해한 no-op인지 확인하지 않았다.
+  - M2b: done/failed summary의 fence 꼴은 replay 텍스트라 그대로 뒀다.
+  - O-2: 미리보기를 pi-tui가 Markdown으로 해석할 수 있다.
+  - O-3: fence를 벗긴 뒤에도 `'`가 남을 수 있다.
+  - O-4: 바이트 자르기는 code point 경계에서 한다.
+  - O-5: title이 여러 번 바뀌면 running 줄도 여러 번 나온다.
+  - 제어문자 정리는 pi 범위에 DEL·C1 제거를 더한 것이다(`ACP-PREVIEW-MATCHES-PI`가 대조한다).
+  - 계약 문서는 `docs/acp-backend-rail.md` §11-10·§11-11이다.
+- **0.53.0에서 이월 (출하 시점은 코디가 확인):** npm publish 뒤 Herdr re-pin과 스냅샷 태그, #161 종결 판단.
+- **범위 제외 (GLG 2026-11-14):** 실행 중인 턴에 `_session/steering` 주입, 정지 동사 노출. 정지 수단은 로컬 ESC다.
+- **운영 관찰:**
+  - Codex vendor managed daemon은 seat pane이 죽어 있으면 `smoke-codex-fresh-live`가 A 좌표를 해석하지 못한다. 0.53.0 cut은 `entwurf codex-app-server`를 전용 tmux에서 띄워 측정했다. daemon 복원은 GLG가 결정한다.
+  - `check-acp-backend-preflight`가 thinking level 없이 backend를 부른다(b3 O1).
+  - `*resume-call.test.ts`가 `/tmp` 디렉터리를 남긴다(P9).
+- **PAUSED:** #160(Oracle 실행, 0.55.0), durable ACP 통합.
+- **역할 (2026-11-14):**
+  - ff08d4: 실무 코디.
+  - b3fc7c: #163 작성자로 land까지 맡는다.
+  - Sonnet f17cd8: prepare 작성자.
+  - 02055a: 리뷰.
+  - a30dda: 자문.
+  - 68bd94: 운영 코디. GLG에게 DM하는 것은 68bd94뿐이다.
+- **Do not touch:**
+  - 출하된 tag/release bytes
+  - npm publish(GLG 직접)
+  - push(GLG 승인 시만), `--no-verify`, worktree
+  - 운영 profile·overlay·hook, credential
+  - 자동 compaction 기준 논의, #160, andenken 리포
 
 # 원자료
 
-- #142 thread, #161, `docs/acp-backend-rail.md`, VERIFY.md Part I, BASELINE.md core interview, `docs/baseline-receipts.md`(#147/#157 n=1 기록).
-- 0.52.0 출하 영수증은 `CHANGELOG.md`, Herdr tag `v2026.11.12-herdr.0.52.0`, `docs/setup-clean-host.md`. host-local 원본은 `~/.local/state/entwurf-releases/`.
+- #163 thread, #161, `docs/acp-backend-rail.md`, VERIFY.md Part I, BASELINE.md core interview, `docs/baseline-receipts.md`.
+- 0.53.0 증거는 `CHANGELOG.md` 0.53.0 Release evidence와 `.agent-reports/verify-1b-walk-20261113.md`(host-local)에 있다. 0.52.0 출하 영수증은 Herdr tag `v2026.11.12-herdr.0.52.0`, `docs/setup-clean-host.md`, `~/.local/state/entwurf-releases/`에 있다.
