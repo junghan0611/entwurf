@@ -167,7 +167,7 @@ describe("declared bin (#160 S5 1b)", () => {
 		}),
 	);
 
-	it("probe runs the declared bin as argv0, no env overlay, and stamps it on the route", async () => {
+	it("[QK:OPENCLAW-PROBE-USES-DECLARED-BIN] probe runs the declared bin as argv0, no env overlay, and stamps it on the route", async () => {
 		const r = runner({ code: 0, stdout: ALIVE, stderr: "" });
 		const probe = await adapter(r, () => withBin).probe(ID);
 		expect(probe).toEqual({

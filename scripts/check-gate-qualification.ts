@@ -3510,7 +3510,7 @@ let manifestCount: number;
 		"omp-birth": 13,
 		"omp-fresh": 25,
 		"omp-receive": 11,
-		openclaw: 4,
+		openclaw: 5,
 		"probe-ordering": 1,
 		"release-gate": 21,
 		"remote-pair-display": 3,

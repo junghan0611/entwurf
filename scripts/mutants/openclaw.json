@@ -14,6 +14,17 @@
 			"signatureSource": "pi-extensions/lib/openclaw-citizens.test.ts"
 		},
 		{
+			"claim": "OPENCLAW-PROBE-USES-DECLARED-BIN",
+			"title": "the receive adapter's probe runs the default openclaw instead of the declared bin, so it confirms some other Gateway alive while the send goes to the declared one",
+			"subject": "pi-extensions/lib/native-push/openclaw-gateway.ts",
+			"find": ["openclawDescribeArgv(programOf(route), route)"],
+			"replace": ["openclawDescribeArgv(defaultBinary, route)"],
+			"gate": ["bash", "run.sh", "check-openclaw-beside"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:OPENCLAW-PROBE-USES-DECLARED-BIN]",
+			"signatureSource": "pi-extensions/lib/native-push/openclaw-gateway.test.ts"
+		},
+		{
 			"claim": "OPENCLAW-SEND-USES-PROBED-BIN",
 			"title": "the receive adapter's send runs the default openclaw instead of the bin the probe confirmed, so a send can reach a different Gateway than the one probed alive",
 			"subject": "pi-extensions/lib/native-push/openclaw-gateway.ts",
